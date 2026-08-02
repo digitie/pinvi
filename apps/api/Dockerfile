@@ -62,6 +62,10 @@ COPY apps/api/alembic ./alembic
 COPY apps/api/alembic.ini ./alembic.ini
 COPY scripts/backup-db.sh ./scripts/backup-db.sh
 
+# 의존성 cache layer에서는 app source가 아직 없어 editable package mapping이 비어 있다.
+# source copy 뒤 project만 다시 설치해 console script가 작업 디렉터리에 의존하지 않게 한다.
+RUN pip install --no-deps -e .
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

@@ -32,6 +32,7 @@ from app.middleware.security_headers import (
     security_headers_exception_handler,
 )
 from app.services.bootstrap_admin import ensure_bootstrap_admin
+from app.services.cache_target_sync_worker import cache_target_sync_worker_lifespan
 from app.services.email_service import email_outbox_worker_lifespan
 from app.services.location_audit import location_audit_outbox_worker_lifespan
 from app.services.telegram_outbox import telegram_outbox_worker_lifespan
@@ -61,6 +62,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         email_outbox_worker_lifespan(app),
         location_audit_outbox_worker_lifespan(app),
         telegram_outbox_worker_lifespan(app),
+        cache_target_sync_worker_lifespan(app),
     ):
         yield
     log.info("pinvi.api.stop")

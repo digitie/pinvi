@@ -40,6 +40,9 @@ dev = [
   "vcrpy>=6.0",
 ]
 
+[project.scripts]
+pinvi-cache-target-initial-cutover = "app.commands.cache_target_initial_cutover:main"
+
 [build-system]
 requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"

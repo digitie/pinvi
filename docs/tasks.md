@@ -13,6 +13,17 @@
   브랜치는 `agent/claude-tdr-<task>`. 완료: T-306a(#396), T-301(#397), T-302(#398), T-303(#399),
   T-304(#400), T-309c(#402). 진행: T-305(PR #401 대기). **backend(T-301~305) 완료 임박, 남은 것=web UI.**
 
+## kor-travel-map compatible pair
+
+- [ ] **T-VN-41-P — cache-target generation·outbox paired consumer** — Map ADR-081 /
+      `T-VN-41A/B/C`와 맞물려 POI canonical source generation, transaction-coupled command
+      outbox, strict pull inbox/ACK/NACK/DLQ/replay, restore epoch barrier, fixed snapshot Merkle,
+      durable cache invalidation과 default-off fail-closed gate를 구현한다. admin 인증은 사용하지 않고
+      command/consumer/restore-fence/recovery principal을 분리한다. 실행 정본:
+      `docs/execplan/t-vn-41-cache-target-consumer.md`. production enable 전 snapshot replay lower-bound
+      inbox dedupe, DB advisory cross-process single-flight, snapshot 전용 timeout, 429/503 `Retry-After`,
+      exact 100,000개 latency/RSS와 100,001개 413 non-retry를 n150에서 증명한다.
+
 ## 보안·의존성
 
 - [x] **T-VN-SEC-01** — `npm audit` critical(`vitest<=3.2.5`)을 workspace 3곳(apps/web·packages/domain·

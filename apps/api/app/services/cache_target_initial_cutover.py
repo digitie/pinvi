@@ -1,0 +1,572 @@
+"""ordinary lifespan과 분리된 cache-target 최초 backfill cutover 도구."""
+
+from __future__ import annotations
+
+import asyncio
+import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from datetime import UTC, datetime
+
+from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession, async_sessionmaker
+
+from app.clients.kor_travel_map_cache_target import (
+    CacheTargetPreparingReconciliation,
+    CacheTargetRunningReconciliation,
+    CacheTargetServiceClient,
+    CacheTargetServiceProblem,
+)
+from app.core.cache_target_contract import CacheTargetMerkleRow, cache_target_snapshot_merkle_root
+from app.models.cache_target_sync import (
+    KtmCacheTargetCommand,
+    KtmCacheTargetConsumer,
+    KtmCacheTargetEvent,
+    KtmCacheTargetHead,
+    KtmCacheTargetReconciliationExpectation,
+)
+from app.services.cache_target_command_publisher import publish_cache_target_batch
+from app.services.cache_target_sync_worker import _adopt_stream_epoch, bootstrap_cache_target_sync
+
+_SOURCE_FENCE_NAMESPACE = 1263816009
+_SOURCE_FENCE_RESOURCE = 41
+_BEGIN_KEY_NAMESPACE = uuid.UUID("25610851-1644-4b3e-823a-782771ecf433")
+_SEAL_KEY_NAMESPACE = uuid.UUID("72e2d74e-267c-446f-9e14-9586225da863")
+
+
+@dataclass(frozen=True, slots=True)
+class CacheTargetSourceIdentity:
+    count: int
+    merkle_root: str
+
+
+@dataclass(frozen=True, slots=True)
+class InitialBackfillDrainResult:
+    source: CacheTargetSourceIdentity
+    succeeded: int
+    batches: int
+
+
+@dataclass(frozen=True, slots=True)
+class InitialCutoverResult:
+    cutover_id: uuid.UUID
+    reconciliation_request_id: uuid.UUID
+    source: CacheTargetSourceIdentity
+    published: int
+
+
+def _validate_reconciliation_receipt(
+    receipt: KtmCacheTargetEvent,
+    *,
+    external_system: str,
+    request_id: uuid.UUID,
+    snapshot_id: uuid.UUID,
+    expected_restore_epoch: int,
+    source: CacheTargetSourceIdentity,
+) -> None:
+    source_root = bytes.fromhex(source.merkle_root)
+    if (
+        receipt.event_type != "cache_target.reconciled"
+        or receipt.external_system != external_system
+        or receipt.target_key is not None
+        or receipt.target_id is not None
+        or receipt.source_generation is not None
+        or receipt.target_sequence is not None
+        or receipt.restore_epoch != expected_restore_epoch
+        or receipt.source_payload_fingerprint != source_root
+        or receipt.applied_at is None
+        or receipt.payload
+        != {
+            "actual_merkle_root": source.merkle_root,
+            "expected_merkle_root": source.merkle_root,
+            "request_id": str(request_id),
+            "snapshot_id": str(snapshot_id),
+            "status": "succeeded",
+            "version": "cache-target-reconciliation-v1",
+        }
+    ):
+        raise RuntimeError("원격 completion의 applied inbox receipt가 다릅니다.")
+
+
+async def _find_reconciliation_receipt(
+    db: AsyncSession,
+    *,
+    external_system: str,
+    request_id: uuid.UUID,
+    snapshot_id: uuid.UUID,
+    expected_restore_epoch: int,
+    source: CacheTargetSourceIdentity,
+) -> KtmCacheTargetEvent | None:
+    """같은 request의 유일한 applied terminal inbox를 잠가 복구 정본으로 채택한다."""
+    receipts = list(
+        await db.scalars(
+            select(KtmCacheTargetEvent)
+            .where(
+                KtmCacheTargetEvent.event_type == "cache_target.reconciled",
+                KtmCacheTargetEvent.payload.contains({"request_id": str(request_id)}),
+            )
+            .order_by(KtmCacheTargetEvent.relay_order, KtmCacheTargetEvent.event_id)
+            .limit(2)
+            .with_for_update()
+        )
+    )
+    if not receipts:
+        return None
+    if len(receipts) != 1:
+        raise RuntimeError("원격 completion request의 applied inbox receipt가 복수입니다.")
+    receipt = receipts[0]
+    _validate_reconciliation_receipt(
+        receipt,
+        external_system=external_system,
+        request_id=request_id,
+        snapshot_id=snapshot_id,
+        expected_restore_epoch=expected_restore_epoch,
+        source=source,
+    )
+    return receipt
+
+
+async def _finish_remote_completed_cutover(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    consumer_id: str,
+    cutover_id: uuid.UUID,
+    request_id: uuid.UUID,
+    expected_restore_epoch: int,
+    source: CacheTargetSourceIdentity,
+    stream_entity_tag: str,
+) -> None:
+    """원격 completion 뒤 유실된 마지막 local ready commit만 복구한다."""
+    async with session_factory() as db:
+        consumer = await db.scalar(
+            select(KtmCacheTargetConsumer)
+            .where(KtmCacheTargetConsumer.consumer_id == consumer_id)
+            .with_for_update()
+        )
+        source_root = bytes.fromhex(source.merkle_root)
+        if (
+            consumer is None
+            or consumer.initial_cutover_id != cutover_id
+            or consumer.initial_reconciliation_request_id != request_id
+            or consumer.active_restore_epoch != expected_restore_epoch
+            or consumer.snapshot_id is None
+            or consumer.snapshot_count != source.count
+            or consumer.snapshot_merkle_root != source_root
+            or not consumer.high_watermark_cursor
+            or consumer.reconcile_status != "matched"
+        ):
+            raise RuntimeError("원격 completion 뒤 local snapshot identity가 다릅니다.")
+        try:
+            snapshot_id = uuid.UUID(consumer.snapshot_id)
+        except ValueError as exc:
+            raise RuntimeError(
+                "원격 completion 뒤 local snapshot ID가 canonical UUID가 아닙니다."
+            ) from exc
+        if str(snapshot_id) != consumer.snapshot_id:
+            raise RuntimeError("원격 completion 뒤 local snapshot ID가 canonical UUID가 아닙니다.")
+        expectation = await db.scalar(
+            select(KtmCacheTargetReconciliationExpectation)
+            .where(KtmCacheTargetReconciliationExpectation.request_id == request_id)
+            .with_for_update()
+        )
+        if expectation is None:
+            snapshot_owner = await db.scalar(
+                select(KtmCacheTargetReconciliationExpectation.request_id)
+                .where(KtmCacheTargetReconciliationExpectation.snapshot_id == snapshot_id)
+                .with_for_update()
+            )
+            if snapshot_owner is not None:
+                raise RuntimeError(
+                    "원격 completion snapshot이 다른 durable expectation에 결박됐습니다."
+                )
+            receipt = await _find_reconciliation_receipt(
+                db,
+                external_system=consumer.external_system,
+                request_id=request_id,
+                snapshot_id=snapshot_id,
+                expected_restore_epoch=expected_restore_epoch,
+                source=source,
+            )
+            expectation = KtmCacheTargetReconciliationExpectation(
+                request_id=request_id,
+                external_system=consumer.external_system,
+                snapshot_id=snapshot_id,
+                restore_epoch=expected_restore_epoch,
+                snapshot_count=source.count,
+                snapshot_merkle_root=source_root,
+                high_watermark_cursor=consumer.high_watermark_cursor,
+                status="received" if receipt is not None else "pending",
+                receipt_event_id=receipt.event_id if receipt is not None else None,
+                resolved_at=receipt.applied_at if receipt is not None else None,
+            )
+            db.add(expectation)
+            await db.flush()
+        if (
+            expectation.external_system != consumer.external_system
+            or expectation.snapshot_id != snapshot_id
+            or expectation.restore_epoch != expected_restore_epoch
+            or expectation.snapshot_count != source.count
+            or expectation.snapshot_merkle_root != source_root
+            or expectation.high_watermark_cursor != consumer.high_watermark_cursor
+        ):
+            raise RuntimeError("원격 completion 뒤 request-bound durable expectation이 다릅니다.")
+        if expectation.status == "received":
+            receipt = (
+                await db.scalar(
+                    select(KtmCacheTargetEvent)
+                    .where(KtmCacheTargetEvent.event_id == expectation.receipt_event_id)
+                    .with_for_update()
+                )
+                if expectation.receipt_event_id is not None
+                else None
+            )
+            if receipt is None:
+                raise RuntimeError(
+                    "원격 completion의 received expectation이 durable inbox와 다릅니다."
+                )
+            _validate_reconciliation_receipt(
+                receipt,
+                external_system=consumer.external_system,
+                request_id=request_id,
+                snapshot_id=snapshot_id,
+                expected_restore_epoch=expected_restore_epoch,
+                source=source,
+            )
+        elif expectation.status != "pending":
+            raise RuntimeError(
+                "원격 completion 뒤 request-bound durable expectation이 종결됐습니다."
+            )
+        consumer.stream_control_etag = stream_entity_tag
+        consumer.ready = True
+        consumer.initial_cutover_completed_at = (
+            consumer.initial_cutover_completed_at or datetime.now(UTC)
+        )
+        await db.commit()
+
+
+async def read_cache_target_source_identity(db: AsyncSession) -> CacheTargetSourceIdentity:
+    heads = list(
+        await db.scalars(
+            select(KtmCacheTargetHead).order_by(
+                KtmCacheTargetHead.external_system,
+                KtmCacheTargetHead.target_key,
+            )
+        )
+    )
+    rows = [
+        CacheTargetMerkleRow(
+            external_system=head.external_system,
+            target_key=head.target_key,
+            state=head.desired_state,  # type: ignore[arg-type]
+            source_generation=head.source_generation,
+            source_payload_fingerprint=head.source_payload_fingerprint,
+        )
+        for head in heads
+    ]
+    return CacheTargetSourceIdentity(
+        count=len(rows),
+        merkle_root=cache_target_snapshot_merkle_root(rows).hex(),
+    )
+
+
+@asynccontextmanager
+async def cache_target_source_writer_fence(engine: AsyncEngine) -> AsyncIterator[AsyncConnection]:
+    """DB trigger의 shared xact lock과 짝인 session-level exclusive cutover lock."""
+    connection = engine.connect()
+    started = False
+    try:
+        await connection.start()
+        started = True
+        acquired = await connection.scalar(
+            text("SELECT pg_try_advisory_lock(:namespace, :resource)"),
+            {"namespace": _SOURCE_FENCE_NAMESPACE, "resource": _SOURCE_FENCE_RESOURCE},
+        )
+        if acquired is not True:
+            raise RuntimeError(
+                "cache target source writer가 active이거나 cutover가 이미 실행 중입니다."
+            )
+        # Lock 획득 직후 transaction을 종료해 body의 암묵적 transaction과
+        # session lock의 수명을 분리한다.
+        await connection.commit()
+        yield connection
+    finally:
+        if started:
+            # unlock query와 pool check-in 사이에 cancellation 창을 만들지 않는다.
+            # 획득/커밋/body 어느 경계에서 취소되든 전용 physical
+            # session을 폐기해 PostgreSQL이 session lock을 해제하게 한다.
+            async def discard_connection() -> None:
+                try:
+                    await connection.invalidate()
+                finally:
+                    await connection.close()
+
+            discard = asyncio.create_task(discard_connection())
+            try:
+                await asyncio.shield(discard)
+            except asyncio.CancelledError:
+                await discard
+                raise
+
+
+async def drain_initial_cache_target_puts(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    command_client: CacheTargetServiceClient,
+    consumer_id: str,
+    cutover_id: uuid.UUID,
+    batch_size: int,
+    lease_seconds: int,
+    max_attempts: int,
+    max_batches: int = 10_000,
+) -> InitialBackfillDrainResult:
+    """source fence 안에서 generation 순서의 pending PUT을 idempotent하게 drain한다."""
+    async with session_factory() as db:
+        source = await read_cache_target_source_identity(db)
+    succeeded = 0
+    for batch_number in range(1, max_batches + 1):
+        result = await publish_cache_target_batch(
+            session_factory,
+            client=command_client,
+            lease_owner=f"initial-cutover:{cutover_id}",
+            consumer_id=consumer_id,
+            limit=batch_size,
+            lease_seconds=lease_seconds,
+            max_attempts=max_attempts,
+            initial_cutover=True,
+        )
+        if result.halted or result.dead_lettered:
+            raise RuntimeError("initial cutover PUT이 terminal failure로 중단됐습니다.")
+        succeeded += result.succeeded
+        async with session_factory() as db:
+            current = await read_cache_target_source_identity(db)
+            if current != source:
+                raise RuntimeError("writer fence 중 cache target source identity가 바뀌었습니다.")
+            active_commands = int(
+                await db.scalar(
+                    select(func.count())
+                    .select_from(KtmCacheTargetCommand)
+                    .where(KtmCacheTargetCommand.status.in_(("pending", "leased", "dead_letter")))
+                )
+                or 0
+            )
+            non_put_commands = int(
+                await db.scalar(
+                    select(func.count())
+                    .select_from(KtmCacheTargetCommand)
+                    .where(
+                        KtmCacheTargetCommand.status.in_(("pending", "leased", "dead_letter")),
+                        KtmCacheTargetCommand.operation != "put",
+                    )
+                )
+                or 0
+            )
+        if non_put_commands:
+            raise RuntimeError("initial cutover에 PUT 이외의 미완료 command가 있습니다.")
+        if active_commands == 0:
+            return InitialBackfillDrainResult(
+                source=source,
+                succeeded=succeeded,
+                batches=batch_number,
+            )
+        if result.claimed == 0:
+            raise RuntimeError(
+                "initial cutover PUT이 retry lease 대기 상태입니다. 같은 cutover ID로 재개하세요."
+            )
+    raise RuntimeError("initial cutover PUT batch 한도를 초과했습니다.")
+
+
+async def run_initial_cache_target_cutover(
+    session_factory: async_sessionmaker[AsyncSession],
+    engine: AsyncEngine,
+    *,
+    command_client: CacheTargetServiceClient,
+    consumer_client: CacheTargetServiceClient,
+    recovery_client: CacheTargetServiceClient,
+    consumer_id: str,
+    cutover_id: uuid.UUID,
+    expected_restore_epoch: int,
+    reason: str,
+    batch_size: int,
+    lease_seconds: int,
+    max_attempts: int,
+) -> InitialCutoverResult:
+    """begin→PUT drain→seal→bound snapshot completion을 동일 cutover ID로 재개한다."""
+    if not reason or reason != reason.strip():
+        raise ValueError("initial cutover reason은 trim된 non-empty 문자열이어야 합니다.")
+    async with cache_target_source_writer_fence(engine):
+        try:
+            stream = await consumer_client.get_stream()
+        except CacheTargetServiceProblem as exc:
+            if exc.status_code != 404:
+                raise
+            stream = None
+        if stream is not None:
+            if stream.consumer_id not in {None, consumer_id} or stream.blocked_event_id is not None:
+                raise RuntimeError("Map initial cutover stream binding/block 상태가 다릅니다.")
+            if stream.restore_epoch != expected_restore_epoch:
+                raise RuntimeError("Map initial cutover restore epoch이 expected 값과 다릅니다.")
+
+        async with session_factory() as db:
+            source = await read_cache_target_source_identity(db)
+            consumer = await db.scalar(
+                select(KtmCacheTargetConsumer)
+                .where(KtmCacheTargetConsumer.consumer_id == consumer_id)
+                .with_for_update()
+            )
+            if consumer is None:
+                consumer = KtmCacheTargetConsumer(
+                    consumer_id=consumer_id,
+                    external_system="pinvi",
+                    active_restore_epoch=expected_restore_epoch,
+                    reconcile_status="checking",
+                    ready=False,
+                )
+                db.add(consumer)
+                await db.flush()
+            if consumer.initial_cutover_id is None:
+                consumer.initial_cutover_id = cutover_id
+                consumer.initial_begin_stream_etag = (
+                    stream.entity_tag if stream is not None else None
+                )
+                consumer.initial_source_count = source.count
+                consumer.initial_source_merkle_root = bytes.fromhex(source.merkle_root)
+            elif consumer.initial_cutover_id != cutover_id:
+                raise RuntimeError("다른 initial cutover ID가 이미 durable state를 소유합니다.")
+            elif (
+                consumer.initial_source_count != source.count
+                or consumer.initial_source_merkle_root != bytes.fromhex(source.merkle_root)
+            ):
+                raise RuntimeError("재개한 initial cutover의 source identity가 바뀌었습니다.")
+            if consumer.initial_cutover_completed_at is not None:
+                request_id = consumer.initial_reconciliation_request_id
+                if request_id is None or not consumer.ready:
+                    raise RuntimeError("완료된 initial cutover durable state가 모순됩니다.")
+                await db.commit()
+                return InitialCutoverResult(cutover_id, request_id, source, 0)
+            begin_stream_etag = consumer.initial_begin_stream_etag
+            await db.commit()
+
+        begin = await recovery_client.begin_initial_reconciliation(
+            consumer_id=consumer_id,
+            expected_restore_epoch=expected_restore_epoch,
+            reason=reason,
+            idempotency_key=uuid.uuid5(_BEGIN_KEY_NAMESPACE, str(cutover_id)),
+            stream_etag=begin_stream_etag,
+        )
+        request_id = begin.operation.operation_id
+        async with session_factory() as db:
+            consumer = await db.scalar(
+                select(KtmCacheTargetConsumer)
+                .where(KtmCacheTargetConsumer.consumer_id == consumer_id)
+                .with_for_update()
+            )
+            if consumer is None or consumer.initial_cutover_id != cutover_id:
+                raise RuntimeError("initial cutover durable owner가 사라졌습니다.")
+            if consumer.initial_reconciliation_request_id not in {None, request_id}:
+                raise RuntimeError("initial reconciliation request ID가 바뀌었습니다.")
+            consumer.initial_reconciliation_request_id = request_id
+            consumer.initial_reconciliation_etag = begin.etag
+            await db.commit()
+
+        preparing_stream = await consumer_client.get_stream()
+        active = preparing_stream.active_reconciliation
+        if preparing_stream.restore_epoch != expected_restore_epoch:
+            raise RuntimeError("begin 뒤 reconciliation restore epoch이 다릅니다.")
+        if active is None:
+            if preparing_stream.state != "ready":
+                raise RuntimeError(
+                    "active descriptor 없는 initial cutover stream이 ready가 아닙니다."
+                )
+            await _finish_remote_completed_cutover(
+                session_factory,
+                consumer_id=consumer_id,
+                cutover_id=cutover_id,
+                request_id=request_id,
+                expected_restore_epoch=expected_restore_epoch,
+                source=source,
+                stream_entity_tag=preparing_stream.entity_tag,
+            )
+            return InitialCutoverResult(cutover_id, request_id, source, 0)
+        if active.request_id != request_id or not isinstance(
+            active,
+            (CacheTargetPreparingReconciliation, CacheTargetRunningReconciliation),
+        ):
+            raise RuntimeError("begin 뒤 reconciliation discovery가 다릅니다.")
+        async with session_factory() as db:
+            await _adopt_stream_epoch(db, stream=preparing_stream, consumer_id=consumer_id)
+            await db.commit()
+
+        drained = await drain_initial_cache_target_puts(
+            session_factory,
+            command_client=command_client,
+            consumer_id=consumer_id,
+            cutover_id=cutover_id,
+            batch_size=batch_size,
+            lease_seconds=lease_seconds,
+            max_attempts=max_attempts,
+        )
+        if drained.source != source:
+            raise RuntimeError("initial cutover drain source identity가 바뀌었습니다.")
+
+        seal = await recovery_client.seal_initial_reconciliation(
+            request_id=request_id,
+            consumer_id=consumer_id,
+            expected_restore_epoch=expected_restore_epoch,
+            expected_item_count=source.count,
+            expected_merkle_root=source.merkle_root,
+            idempotency_key=uuid.uuid5(_SEAL_KEY_NAMESPACE, str(cutover_id)),
+            stream_etag=begin.etag,
+        )
+        async with session_factory() as db:
+            consumer = await db.get(KtmCacheTargetConsumer, consumer_id)
+            if consumer is None or consumer.initial_cutover_id != cutover_id:
+                raise RuntimeError("seal 뒤 initial cutover durable owner가 사라졌습니다.")
+            consumer.initial_reconciliation_etag = seal.etag
+            await db.commit()
+
+        running_stream = await consumer_client.get_stream()
+        running = running_stream.active_reconciliation
+        if running is None and running_stream.state == "ready":
+            await _finish_remote_completed_cutover(
+                session_factory,
+                consumer_id=consumer_id,
+                cutover_id=cutover_id,
+                request_id=request_id,
+                expected_restore_epoch=expected_restore_epoch,
+                source=source,
+                stream_entity_tag=running_stream.entity_tag,
+            )
+            return InitialCutoverResult(cutover_id, request_id, source, drained.succeeded)
+        if (
+            not isinstance(running, CacheTargetRunningReconciliation)
+            or running.request_id != request_id
+            or running.restore_epoch != expected_restore_epoch
+            or running.count != source.count
+            or running.merkle_root != source.merkle_root
+        ):
+            raise RuntimeError("seal 뒤 running fixed snapshot descriptor가 다릅니다.")
+        await bootstrap_cache_target_sync(
+            session_factory,
+            consumer_client=consumer_client,
+            consumer_id=consumer_id,
+            batch_size=batch_size,
+            lease_seconds=lease_seconds,
+            max_attempts=max_attempts,
+        )
+        async with session_factory() as db:
+            consumer = await db.scalar(
+                select(KtmCacheTargetConsumer)
+                .where(KtmCacheTargetConsumer.consumer_id == consumer_id)
+                .with_for_update()
+            )
+            if (
+                consumer is None
+                or consumer.initial_cutover_id != cutover_id
+                or consumer.initial_reconciliation_request_id != request_id
+                or not consumer.ready
+            ):
+                raise RuntimeError("initial cutover completion durable state가 다릅니다.")
+            consumer.initial_cutover_completed_at = datetime.now(UTC)
+            await db.commit()
+        return InitialCutoverResult(cutover_id, request_id, source, drained.succeeded)

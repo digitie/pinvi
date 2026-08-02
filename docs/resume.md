@@ -1,5 +1,348 @@
 # resume.md
 
+## 2026-08-02 (codex) — T-VN-41 snapshot replay/backpressure 소비자 게이트
+
+Map snapshot의 `high_watermark_cursor`를 `external_system`-scoped commit-safe replay lower-bound로
+해석한다. cursor 뒤 claim이 snapshot/local inbox와 겹칠 수 있으므로 immutable event ID와 payload
+fingerprint로 ACK를 재구성하고 side effect/cache generation은 한 번만 반영한다. generic/request-bound
+snapshot traversal은 PinVi DB session advisory lock으로 process/event loop 전체에서 직렬화하고 local
+system lock을 이중 방어로 둔다. snapshot 전용 70초 timeout은 Map 5초 barrier/30초 build budget을
+포괄한다. typed `429/503`만 canonical `Retry-After`를 지켜 최대 3회 재시도하고 `413
+SNAPSHOT_ITEM_LIMIT_EXCEEDED`는 즉시 fail-close한다. n150에서는 exact 100,000 성공의 latency/RSS와
+100,001 non-retry를 모두 측정한다. lock connection은 acquire 직후 commit해 idle transaction을 닫고,
+acquire/commit/body cancellation에도 physical session을 invalidate/close해 pool에 stale lock을 남기지 않는다.
+
+Map final service OpenAPI를 commit `5d9c42dfc7d908ace1129c7ca2682bac54d572d7`, SHA-256
+`aff24f12e4129c81cd58c96c696e6f900cc031df68e2858c3e4a63963e13baf3`, contract generation `6`으로
+exact 재핀했다. generation 6은 trim/NFC identity, 512자 key, refresh key uniqueness와 typed snapshot
+backpressure를 함께 고정한다.
+
+**다음 한 작업**: 양쪽 exact head 리뷰·CI와 n150 production-enable live gate를 완료한다.
+
+## 2026-08-01 (codex) — T-VN-41 Map generation 5 snapshot lifetime 계약
+
+Map PR #917의 generic snapshot 내구성 보강에 맞춰 service OpenAPI artifact owner를
+`2f7d5911eb7a377d02e71c4ef06b0003a748f301`, SHA-256을
+`12622362c46491d43a4639c7193c7dc959efdf5592e447c4f6558f443602eb73`로 갱신하고 contract
+generation을 `5`로 올렸다. PinVi는 모든 snapshot page에서 timezone-aware `created_at`/`expires_at`을
+요구하고 동일 snapshot의 page header가 바뀌면 거부한다. generic snapshot 첫 페이지는 최소 1시간의
+잔여 traversal window가 필요하지만 request-bound snapshot은 running reconciliation의 durable receipt이므로
+만료시각이 지나도 읽을 수 있다. artifact owner와 후속 functional owner는 분리해 CI ancestry로 결박한다.
+
+**다음 한 작업**: Map background snapshot GC의 exact final commit을 functional owner로 재핀하고 focused
+PostGIS/transport gate와 두 독립 적대적 리뷰를 마친 뒤 n150 isolated destructive Live UI E2E를 실행한다.
+
+## 2026-08-01 (codex) — T-VN-41 Map generation 4 exact pin
+
+Map PR #917의 immutable mutation receipt 보강을 commit
+`8af695efc69dffb8778be16a574c6e5c4828c169`로 확정했다. PinVi는 이 commit의 service OpenAPI
+SHA-256 `9b3986d84a1beab95ac11137d9f66c0aa993779fdfdf14c0dcf00497d2384985`를 vendor하고
+contract generation `4`를 요구한다. PUT/DELETE response는 commit된 target incarnation의 UUID와
+strong ETag, positive `target_sequence`가 항상 존재하고, GET tombstone projection만 nullable
+identity를 허용한다. If-Match PUT/DELETE는 응답 UUID를 요청 ETag의 target incarnation과 exact
+결박하고, 다른 UUID의 자기 일관적인 receipt도 fail-close한다. 집중 테스트 **74 passed**, Ruff,
+strict mypy, exact artifact 검사가 통과했고 두 독립 적대적 리뷰 모두 P0–P2 0으로 종료됐다.
+
+**다음 한 작업**: PR #423에 latest exact pin을 push한 뒤, Map/PinVi exact image로 n150 isolated
+destructive Live UI recovery E2E를 완료한다.
+
+## 2026-08-01 (codex) — T-VN-41 delete→put precondition lifecycle 정정
+
+n150 exact-image fixture에서 실제 DB trigger가 만든 DELETE→PUT을 publisher로 보낸 결과, DELETE 뒤
+PUT이 412로 멈추는 lifecycle 결함을 확인했다. tombstone 응답의 target ID/ETag는 더 이상 active
+resource precondition이 아니므로 DELETE completion은 remote generation/status/sequence만 보존하고
+`remote_target_id/remote_etag`를 비운다. 다음 PUT은 stale historical `If-Match` 대신
+`If-None-Match: *`로 재생성된다. event-first crash 경계는 strict `state_applied` receipt의
+`source_event_id`를 local command identity와 결박해 causal success로 종결하며, active/deleted
+identity와 ETag를 wire state에 맞게 원자적으로 반영한다. publisher/event consumer의 lock 순서는
+consumer→command→head로 통일했다. restore epoch 전환 뒤 돌아온 구 epoch HTTP 성공/실패는 command를
+terminal `superseded`로 닫고 publisher를 halt하며 old tuple이나 failure disposition을 새 epoch
+head/consumer에 적용하지 않는다. `state_applied`의 numeric/bool material과 ETag version은 coercion
+없이 exact 검증하며 direct HTTP mutation receipt도 strict int, lowercase canonical target UUID,
+positive canonical-decimal ETag version을 동일하게 강제한다. event envelope의 epoch/generation/sequence/
+relay order와 event/target UUID도 같은 exact wire 원칙으로 검증한다.
+
+실제 PostGIS 회귀 테스트가 direct completion과 event-first/late-completion 양쪽의 causal tuple 보존,
+active identity 제거, 다음 PUT lease의 `expected_etag=NULL`을 함께 검증한다. publisher/event
+consumer/sync worker **39 passed**, strict transport unit **19 passed**, Ruff, strict mypy가 통과했다.
+
+**다음 한 작업**: Map의 exact DELETE replay receipt 보강과 두 독립 적대적 재리뷰를 완료해 PR
+#917/#423에 incremental commit/push하고 exact image를 재빌드한 뒤, n150의 중단된 PUT command를 새
+semantics로 복구해 blocked fixture와 Live UI E2E를 완료한다.
+
+## 2026-08-01 (codex) — T-VN-41 Map rebase provenance 재핀
+
+Map PR #917을 최신 main에 rebase하고 cache-target migration을 단일 Alembic head `0075`로
+선형화했다. 서비스 OpenAPI exact bytes와 generation `3` 의미 계약은 변하지 않았지만 pre-rebase
+commit은 더 이상 release ancestry가 아니므로, export artifact를
+`42c7dbc2dd67fa59d4128b1f1c304ebd78f95ed7`, functional owner를
+`1f14bede3622615634bb3273fd6c6d2acd72fdae`, source golden을
+`2aa4e4bb121995612f7df9396b1639a52496a145`로 재핀한다. CI는 세 commit을 실제 checkout하고
+service artifact→functional owner ancestry와 두 vendored artifact의 exact bytes를 검증한다.
+
+**다음 한 작업**: 독립 적대적 리뷰어 2명의 provenance 계약 검토와 양쪽 exact-head CI를
+통과한 뒤 n150 isolated Live UI recovery E2E를 재실행한다.
+
+## 2026-08-01 (codex) — T-VN-41 blocked recovery crash-safe drain
+
+n150 destructive Live UI 회복에서 admin replay가 blocked delivery를 `retry`로 되돌린 뒤
+reconciliation을 `running`으로 열어도, PinVi bootstrap이 blocked stream을 무조건 거부해
+completion과 replay가 서로를 기다리는 교착을 확인했다. active running reconciliation과 exact하게
+결박된 blocked 상태만 회복 경로로 허용하고, request-bound snapshot 일치·completion·remote
+ready 확인 뒤 command publisher를 열지 않은 consumer-only drain으로 replay를 먼저 적용한다.
+
+Map completion 직후 drain 전 crash는 same-epoch `pending` reconciliation expectation을 durable 재개
+표식으로 삼아 `active_reconciliation=null` 재시작에서도 같은 drain을 강제한다. drain 후
+current-epoch expectation이 하나라도 `pending`이면, 예를 들어 transient NACK backoff로 receipt가
+아직 claim되지 않은 경우, local ready를 열지 않고 startup을 fail-close한다. local receipt
+apply commit 뒤 remote ACK 전 crash은 `received` expectation과 durable active claim을 유지하며,
+ordinary consumer가 command claim 없이 exact ACK를 먼저 재전송한다.
+
+**검증**: cache-target sync worker·initial cutover 실제 PostGIS **28 passed**, Ruff, strict mypy,
+`git diff --check`가 통과했다. 두 독립 적대적 리뷰의 런타임·설계·DB durable
+state·event receipt 계약 재검토에서 잔여 P0–P2는 없다.
+
+**다음 한 작업**: PinVi exact head를 PR #423에 push하고 CI green 후 n150 isolated blocked
+fixture를 재구성해 최종 Live UI replay·reconciliation·drain을 재검증한다.
+
+## 2026-08-01 (codex) — T-VN-41 restore epoch generation 3 pin
+
+두 독립 적대적 리뷰가 같은 P1을 발견했다. Map restore fence 뒤에도 이전 epoch의
+`pending/retry/leased/dead` delivery가 남아 새 epoch claim과 dead 판정을 오염시키므로, Map은 이를 terminal
+`superseded`로 원자적으로 종결하고 현재 epoch만 운영 집계에 포함하도록 수정했다.
+
+추가 적대적 리뷰에서 active reconciliation도 restore fence 뒤 남아 old completion과 new begin을 동시에
+막는 P1을 발견했다. Map은 preparing/running request를 terminal `superseded`로 원자 종결하고 fence receipt에
+영향 count와 request ID를 영속화한다. PinVi는 당시 Map functional owner
+`96ce969cea2560972d0f6125a4b56dcbd75ba7c2`, artifact
+`7451df426ce50efb0c6d753a9353f9bd74a08f0a`, generation `3`, service OpenAPI SHA-256
+`4bca03b2f67a24a9e36b628561a6e598955a208420eb8e9f30e7a0c16a701066`을 exact pin한다.
+최신 main rebase 뒤 현행 provenance는 이 문서 상단의 재핀 항목이 정본이다.
+strict recovery DTO에는 nullable snapshot ID와 terminal `superseded`를 추가하고 seal/completion receipt의
+snapshot identity 및 operation ID를 요청과 exact 대조한다. restore fence receipt의 superseded
+reconciliation count와 nullable request ID도 machine-readable `oneOf`에서 `0/null` 또는
+`1/UUID`로만 허용하며 recovery operation ID 자체도 UUID다.
+Map의 immutable fence audit와 superseded reconciliation은 `(external_system, request_id)` composite
+FK로 같은 stream에 결박된다.
+
+첫 재리뷰의 추가 P1에 따라 remote-completed initial cutover 재개도 request-bound durable expectation을
+필수화했다. `0047` 이전 upgrade 상태처럼 row가 없으면 durable consumer의 canonical
+request/snapshot/epoch/count/root/high-watermark를 검증해 같은 transaction에서 `pending` row를 복원한다.
+기존 row는 exact material을, `received` row는 applied inbox receipt 결박까지 확인한 뒤 ready와 완료 시각을
+원자적으로 확정한다. 불일치·invalidated 상태는 원격 ready 상태에서도 fail-close한다.
+expectation이 없더라도 동일 request의 exact applied inbox receipt가 이미 있으면 `received`와 receipt
+event ID를 복원하며, exact 후보가 없을 때만 `pending`을 만든다. 다중·불일치·미적용 후보는 fail-close한다.
+
+**다음 한 작업**: 양쪽 exact head를 두 독립 리뷰어가 재검토해 P1 종결을 확인한 뒤 n150 isolated
+cutover·crash/reclaim·destructive Live UI recovery를 실행한다.
+
+## 2026-08-01 (codex) — T-VN-41 request-bound receipt expectation 보강
+
+n150 crash/reclaim에서 relay 201~250 claim이 만료된 채 멈춘 원인을 확인했다. Map ADR-081과 pinned
+service OpenAPI는 stream-scoped `cache_target.reconciled.source_payload_fingerprint`에 fixed snapshot
+Merkle root를 필수로 보내지만, PinVi DTO/DB/execplan이 이 필드를 target tuple로 잘못 분류해 `null`만
+허용했다. claim response Pydantic 검증 예외가 consumer task를 종료하면서 durable health는 계속
+`ready=true`였으므로 false-green도 함께 있었다.
+
+DTO와 inbox를 producer 정본에 맞추고 `20260801_0046`에서 stream fingerprint를 `NOT NULL` 32-byte로
+강제했다. 이어 n150에서 request-bound snapshot ID가 ordinary startup의 generic snapshot ID로
+덮어써지는 두 번째 결함을 실증했다. `20260801_0047`의 durable reconciliation expectation 테이블에
+`request_id/snapshot_id/epoch/count/root/high-watermark`를 별도로 고정하고, Map terminal receipt가 exact
+expectation을 원자적으로 소비하게 바꿨다. 예상하지 못한 consumer 예외도 durable consumer를
+`blocked`로 닫아 health false-green을 차단한다.
+
+Map functional owner `c999a82c0e889806613e1af0e251337873e41fcc`와 export artifact
+`e315bfc4dcc58e466b11f93b3991d91e7b446cdf`의 exact service OpenAPI를 generation `2`, SHA-256
+`af1f15d68b7c503e7fadfbf0bd4dd8903e0fb6b7d7738479d6b0a75568b3ffab`로 재핀했다.
+
+**검증**: generic snapshot overwrite 회귀와 lease-expiry/new-claim 중복 side effect 방지를 포함한
+cache-target consumer/schema/worker PostGIS 집중 23건, Ruff, strict mypy가 통과했다. `0046`까지의 기존
+fingerprint migration은 actual/legacy backfill, invalid NULL fail-close, downgrade CHECK 복원과 재upgrade를
+커밋된 PostGIS 회귀 테스트로 고정했다.
+
+**다음 한 작업**: Map `request_id` producer 계약과 PinVi `0047` exact image를 n150 isolated 환경에 올려
+relay 250 receipt까지 ACK되는지 재확인한 뒤 destructive Live UI recovery gate를 실행한다.
+
+## 2026-08-01 (codex) — T-VN-41 n150 image command packaging
+
+n150 exact candidate image에서 `pinvi-cache-target-initial-cutover`가 `app`을 import하지 못하는 결함을
+재현했다. Docker dependency cache layer의 조기 editable install은 source가 없는 상태라 console script만
+만들고 package mapping을 등록하지 못했다. source copy 뒤 `pip install --no-deps -e .`로 project mapping을
+다시 등록하고 Dockerfile 순서 회귀 테스트를 추가했다.
+
+**다음 한 작업**: unit/Ruff와 exact production image의 console command `--help`를 확인한 뒤 n150
+initial cutover·crash/replay·Live UI gate를 계속한다. sync 기본값은 계속 off다.
+
+## 2026-07-31 (codex) — T-VN-41-P final service contract/recovery
+
+Map export commit `b54ea8aa450800e1ad5db1a71d14310a24cceb5b`의 service OpenAPI exact bytes를
+SHA-256 `11138dd42c6454d7dcb2e86e50a2286cd9bccc5471e9d4cbe2e60dfda62e402a`로 고정했다. enable은
+이 SHA, functional artifact owner `686a9b05beed384a8a9b202a515790c7770dd834`, contract generation `1`만
+허용하고 기본값은 계속 off다. owner revision은 export commit이나 배포 Map 이미지, `/version`의 git
+SHA와 비교하지 않는다.
+
+active reconciliation descriptor가 있으면 request-bound snapshot을 끝까지 page하고 descriptor와 exact
+검증한다. local commit 뒤 completion을 보내고 Map stream의 ready 전환과 descriptor 제거를 다시 확인해야
+local consumer가 ready가 된다. mid-claim semantic poison은 성공 prefix만 commit·ACK한 뒤 첫 미ACK event를
+NACK하며, prefix guard `409`는 local blocked 상태로 fail-close한다.
+
+최초 Map 0건·PinVi N건에서 ordinary bootstrap과 publisher가 서로 기다리던 교착은 `0045` DB
+source-writer advisory fence와 전용 initial-cutover runner로 닫았다. runner만 checking/unready 상태에서
+PUT을 generation 순서로 drain하고, recovery begin의 stream ETag와 seal의 reconciliation ETag를 분리한다.
+cutover/request/source identity와 precondition ETag는 durable하며 같은 UUID ledger로 crash resume한다.
+원격 completion 뒤 마지막 local ready commit이 유실돼도 durable snapshot identity를 검증해 재개한다.
+ordinary worker gate와 sync default-off, ordinary 컨테이너 recovery-token 금지는 유지한다.
+
+**검증**: cache-target 전체 61건, 전체 unit 778건, 전체 PostGIS integration 431건(환경 의존 3건 skip),
+Ruff, strict mypy(205개 source), Prettier가 통과했다. fresh DB `0045 → 0044 → 0045` 왕복과 package
+command `--help`, default-off, Map export commit blob과 vendored service artifact의 byte equality 및
+SHA-256도 확인했다.
+
+**다음 한 작업**: paired PR CI를 확인한다. n150 isolated proof는 별도 후속 단계이며 현재 실행하지 않는다.
+
+## 2026-07-31 (codex) — T-VN-41-P cache generation observer/health
+
+각 API process는 Trip feature cache를 읽기 전에 DB의 `(restore_epoch, feature_cache_generation)`을
+독립 관찰하고 값이 바뀌면 자기 process-local cache를 전부 비운다. `/health/cache-target-sync`는
+default-off/disabled reason, epoch, local/remote cursor, 실제 미ACK applied gap, pending/DLQ command,
+snapshot checksum과 reconcile/error code를 credential/host/detail 없이 보여 준다.
+
+Map correction에 따라 `cache_target.reconciled`는 target tuple이 없는 stream receipt로 검증·저장하고,
+fixed snapshot checksum/high-watermark만 적용한다. target event만 POI head와 cache generation을
+변경한다.
+
+cache-target 집중 33건, 전체 unit 772건, 전체 PostGIS integration 423건(환경 의존 3건 skip), 0044
+빈 스키마 downgrade/upgrade 왕복, Ruff format/check, Prettier, strict mypy(202개 source)가 통과했다.
+
+**다음 한 작업**: 전체 local gate 뒤 final Map OpenAPI fixture/SHA와 source revision을 pin한다.
+
+## 2026-07-31 (codex) — T-VN-41-P startup bootstrap/worker 연결
+
+FastAPI lifespan에 default-off cache target paired worker를 연결했다. enable startup은 stream
+principal/active state/epoch와 fixed snapshot을 먼저 읽고 remote snapshot 자체 Merkle와 PinVi
+active+tombstone desired Merkle가 모두 맞아야 `ready=true`로 채택한다. epoch 전환은 old cursor,
+snapshot marker, remote head tuple을 격리하고 cache generation을 증가시킨다.
+
+consumer는 restart durable ACK를 claim보다 먼저 재전송한다. 새 claim은 inbox/local checkpoint commit
+뒤 ACK하며 invariant는 permanent NACK+block, DB transient는 transient NACK한다. command/consumer task는
+각 하나이고 shutdown은 cancel 후 5초 bounded drain과 client close를 보장한다. focused transport+
+PostGIS **16 passed**, Ruff/strict mypy가 통과했다.
+
+**다음 한 작업**: final Map OpenAPI fixture/SHA를 pin하고 cache generation multi-worker 관찰,
+전체 gate와 n150 isolated proof를 완료한다.
+
+## 2026-07-31 (codex) — T-VN-41-P desired command publisher core
+
+outbox command는 snapshot `matched+ready`와 active epoch가 있을 때만 target별 generation 순서로 short
+lease된다. attempt/lease를 먼저 commit하고 HTTP는 lock/transaction 밖에서 실행하며 성공 또는
+retry/DLQ/halt 결과를 별도 CAS transaction에 기록한다. transient status와 network outcome만 bounded
+retry하고 401/403·409 generation/epoch·412·422·idempotency conflict는 각각 halt/reconcile/DLQ로
+고정해 blind retry를 막는다.
+
+성공 Map response와 ETag/target tuple은 command receipt와 head에 함께 반영한다. Ruff/strict mypy와
+실제 PostGIS publisher integration **5 passed**다.
+
+**다음 한 작업**: startup snapshot bootstrap과 command/claim/ACK-NACK lifespan loop를 연결한다.
+
+## 2026-07-31 (codex) — T-VN-41-P role-bound transport와 durable ACK 복구
+
+command/consumer role에 고정된 direct Map service transport를 추가했다. target mutation은 UUID
+idempotency key와 create/update/delete별 exact precondition만 보내며 source 정수를 float 없이 decimal
+string wire DTO로 바꾼다. response target identity, epoch/generation, canonical source fingerprint,
+ETag header/body가 모두 맞아야 성공이다. 인증·충돌·precondition·validation·transient status는
+halt/DLQ/reconcile/retry로 명시 분류한다.
+
+local commit 뒤 ACK 전에 재시작해도 durable claim/item/inbox receipt로 exact ACK applied list를 복원한다.
+원격 ACK 성공 전에는 remote cursor나 acked marker를 갱신하지 않는다. transport unit **10 passed**,
+restart ACK를 포함한 실제 PostGIS consumer **5 passed**, Ruff/strict mypy가 통과했다.
+
+**다음 한 작업**: command short lease/retry/DLQ publisher와 claim/apply/ACK-NACK worker loop를 연결한다.
+
+## 2026-07-31 (codex) — T-VN-41-P default-off principal gate 구현
+
+cache target HTTP worker는 기본 `false`이고 command/consumer credential과 exact OpenAPI SHA-256,
+full Map source revision, 양수 contract generation이 모두 없으면 enable 자체가 설정 검증에서 실패한다.
+command/consumer/restore/recovery token은 약한 값·whitespace·역할 간 재사용·기존 shared
+service/admin/ops token 재사용을 거부한다. ordinary API compose에는 command/consumer만 전달하며
+restore/recovery credential은 전용 job 경계에 남겼다.
+
+Ruff/strict mypy와 기존 ops 설정 회귀를 포함한 unit **44 passed**다. network worker는 아직 연결하지
+않았으므로 runtime outbound call은 없다.
+
+**다음 한 작업**: role-bound strict HTTP transport와 command publisher/claim ACK-NACK worker를
+연결한다.
+
+## 2026-07-31 (codex) — T-VN-41-P commit-before-ACK inbox 구현
+
+Map claim의 exact event type, canonical target key, 양수 epoch/generation/sequence/order, lowercase
+SHA-256 receipt를 strict decode한다. event inbox·target remote tuple·cache generation·local applied
+cursor와 reclaim별 claim/item receipt를 한 DB transaction에 반영한 뒤에만 ACK body를 만든다.
+따라서 local commit 후 ACK 전 process crash가 나도 새 claim은 inbox side effect를 반복하지 않는다.
+
+event payload fingerprint는 아직 공개 canonicalizer가 없으므로 Map이 생성한 opaque receipt로만
+`event_id`/delivery/ACK에 결박한다. 동일 ID의 material 충돌, relay gap, stale epoch는 전체 claim을
+rollback한다. fixed snapshot은 remote item 자체 Merkle와 PinVi desired head Merkle가 선언 count/root에
+동시에 일치할 때만 `ready=true`가 된다.
+
+Ruff/strict mypy와 실제 PostGIS crash-window·duplicate·gap·stale epoch·checksum 통합 **4 passed**다.
+network worker는 여전히 default-off이며 exact OpenAPI fixture는 Map API lane 완료 뒤 pin한다.
+
+**다음 한 작업**: 역할별 ServiceToken transport와 command lease/retry/DLQ publisher, ACK/NACK worker를
+연결한다.
+
+## 2026-07-31 (codex) — T-VN-41-P source generation/outbox 구현 완료
+
+당시 Map `5222536e55720103514852a0bb139fd2b4d488da`의 shared golden fixture를 exact bytes로 vendor했고,
+최신 main rebase 뒤 현행 source pin은 이 문서 상단의 재핀 항목이 정본이다. fixture의
+SHA-256 `4408ea19ab4853e91ff2c3e2d62920369f01f35e5b262955ab354909702b94a5`로 고정했다. PinVi 독립
+Python/SQL serializer가 source canonical UTF-8, fingerprint, NFC leaf order, empty/odd-promotion
+Merkle root 전체 vector를 통과한다.
+
+`20260731_0042` DB trigger는 user/admin/notice/copy/direct SQL을 포함한 모든 POI write에서 canonical
+fingerprint가 바뀔 때만 source generation을 증가시키고 같은 transaction에 PUT/DELETE command를
+남긴다. unrelated update는 no-op이며 hard-delete 뒤 tombstone도 남는다. 기존 active coordinate POI는
+generation 1 + PUT으로 idempotent backfill한다. source decimal을 column scale로 먼저 반올림하지 않고
+serializer에서만 `ROUND_HALF_EVEN`한다.
+
+Ruff/strict mypy, shared vector와 5개 direct-writer inventory, 실제 PostGIS trigger integration
+**14 passed**다. fresh PostGIS의 exact golden backfill과 `0041→0042→0041→0042`, 전체
+`0042→0040` cleanup catalog, 최종 head 복귀도 통과했다. network worker는 아직 default-off다.
+
+**다음 한 작업**: Map service OpenAPI/event fixture를 exact pin하고 strict command transport의
+lease/retry/DLQ/replay를 구현한다.
+
+## 2026-07-31 (codex) — T-VN-41-P durable schema 검증 완료
+
+PinVi desired source를 모든 `TripDayPoi` writer에서 동일하게 얻도록 snapshot 좌표를 DB
+generated column으로 정규화했다. nested/top-level 형태가 충돌하거나 좌표 pair·숫자·대한민국
+경계 계약을 어기면 write 자체가 실패한다. POI별 active/tombstone head, command outbox,
+at-least-once immutable inbox, local applied/remote ACK cursor를 분리한 consumer checkpoint도
+`20260731_0041` migration에 추가했다. head는 일자 cascade hard-delete 뒤 tombstone/outbox를
+보존하도록 POI UUID를 논리 참조하며 물리 FK를 두지 않는다. reclaim의 새 claim/lease는
+immutable event를 덮지 않고 claim/item receipt로 별도 보존한다.
+
+Ruff와 strict mypy, 실제 PostGIS integration **6 passed**, fresh DB의
+`upgrade head → downgrade 20260721_0040 → upgrade head` 왕복이 통과했다. network worker와
+projection trigger는 아직 활성화하지 않았으며 `ready=false`가 기본이다.
+
+**다음 한 작업**: Map 공유 `cache-target-source-v1` golden fixture의 commit SHA와 hash를
+고정한 뒤 PinVi 독립 serializer, source generation trigger/backfill, 78-symbol writer inventory
+gate를 구현한다.
+
+## 2026-07-31 (codex) — T-VN-41-P paired consumer docs-first 진입
+
+Map `T-VN-41A/B/C`의 source generation, restore epoch, transaction-coupled result outbox를
+소비하는 PinVi paired PR에 진입했다. CodeGraph로 `TripDayPoi` 영향 78 symbols와 user 함수 밖의
+admin/notice/copy direct writer를 확인했으며 application hook만으로는 누락을 막을 수 없어 DB canonical
+source projection과 command outbox를 같은 transaction 경계로 고정했다.
+
+ADR-058과 execplan은 exact service path, 네 event type, global relay prefix와 target semantic tuple,
+ACK crash window, poison/DLQ/replay, old epoch inbox/checkpoint/cache 격리, 역할별 principal, Merkle v1
+공동 fixture CI와 default-off fail-closed gate를 정본화한다.
+
+**다음 한 작업**: Map paired OpenAPI·Merkle golden fixture를 pin한 뒤 PinVi DDL/source projection과
+78-symbol write-path fail-hard integration gate를 구현한다.
+
 ## 2026-07-31 (codex agent B) — C6c/T-VN 운영 완료 항목 아카이브
 
 `docs/tasks.md`에 구현·머지·운영 검증이 끝난 뒤에도 열린 채 남아 있던

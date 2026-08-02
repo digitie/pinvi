@@ -2727,7 +2727,80 @@ process-local cache는 read path에 영속 부작용을 만들지 않고 기존 
   [`docs/execplan/t-vn-11-service-batch-consumer.md`](execplan/t-vn-11-service-batch-consumer.md)를
   따른다.
 
+## ADR-058: POI cache target은 DB source generation과 ServiceToken pull outbox로 동기화한다
+
+- **상태**: accepted
+- **날짜**: 2026-07-31
+- **결정자**: 사용자 + Codex
+- **참조**: kor-travel-map ADR-081, `T-VN-41A/B/C`
+
+### 컨텍스트
+
+PinVi POI는 여러 user/admin/copy 경로에서 생성·변경·soft delete되지만 현재 Map cache target에
+transactional하게 투영되지 않는다. Map 결과도 process-local cache revision만으로는 누락·중복·restore
+전환을 재구성할 수 없다. 사용자 write가 원격 Map 응답을 기다리게 하면 서비스 장애가 PinVi transaction에
+전파되고, callback push는 별도 inbound 인증·네트워크 경계를 만든다.
+
+### 결정
+
+- `TripDayPoi.attachment_id`의 lowercase UUID를 `target_key`, `pinvi`를 `external_system`으로 쓴다.
+- canonical POI state의 semantic change는 PinVi DB trigger가 source head의 양의
+  `source_generation`을 증가시키고 command outbox를 같은 transaction에 기록한다. 모든 원격 target/refresh
+  호출은 worker가 ServiceToken service API로 수행한다.
+- Map result는 callback이 아니라 external system별 단일 전역 pull stream으로 소비한다. delivery ACK는
+  `relay_order` contiguous prefix이고 target 상태 비교는
+  `(restore_epoch, source_generation, target_sequence)`다.
+- `cache_target.reconciled`는 target tuple을 갖지 않는 stream-scoped receipt다. source fingerprint와
+  payload의 request ID/fixed snapshot ID/expected·actual Merkle root를 앞서 고정한 durable reconciliation
+  expectation에 대조한다. 최신 일반 snapshot은 별도 관측값이므로 expectation을 덮어쓰지 않는다.
+  count/high-watermark는 expectation의 request-bound snapshot 값을 유지하고 가짜 target key나 POI
+  mutation을 만들지 않는다.
+- inbox insert, target tuple CAS, durable cache generation, local applied checkpoint를 한 transaction에 commit한
+  뒤 ACK한다. ACK 전 crash의 재전달은 같은 event ID로 side effect 없이 처리한다.
+- batch 중간 semantic poison은 전체 local transaction을 rollback하고 성공한 contiguous prefix만 다시
+  commit·ACK한 뒤 첫 미ACK event를 permanent NACK한다. Map의
+  `409 dead_letter_requires_prefix_ack`는 local consumer도 blocked로 fail-close한다.
+- Map-owned positive `restore_epoch`의 CAS/idempotent restore fence 뒤에만 restored writer를 열고, epoch가
+  바뀌면 old inbox/checkpoint/cache observation을 active state에서 격리한 뒤 fixed snapshot을 채택한다.
+- stream control의 `active_reconciliation` descriptor가 있으면 request-bound paged snapshot만 채택한다.
+  descriptor 일치와 local atomic commit 뒤 completion을 보내고, Map이 `ready`이며 descriptor를 제거한 것을
+  다시 확인하기 전에는 PinVi consumer를 ready로 열지 않는다.
+- command producer, consumer, restore fence, recovery replay principal을 서로 다른 credential/scope로 분리한다.
+  PinVi는 admin route나 AdminBFF credential을 사용하지 않는다.
+- relay는 기본 off다. compatible manifest, pinned OpenAPI/source revision, epoch handshake, backlog/DLQ,
+  active+tombstone Merkle count/root가 모두 맞을 때만 fail-closed로 켠다.
+- 최초 Map 0건·PinVi N건 backfill은 ordinary ready gate를 완화하지 않는다. 전용 runner가 DB source-writer
+  advisory fence를 잡고 recovery begin(preparing) → PUT drain → reconciliation ETag seal(running) → bound
+  snapshot/completion을 수행한다. cutover UUID와 source identity/precondition ETag를 durable하게 기록해
+  idempotent resume하며 ordinary API에는 recovery credential을 주입하지 않는다.
+- source serializer와 Merkle v1 정본은 Map ADR-081이고 PinVi는 byte fixture를 vendor한 독립 구현을 CI에서
+  계산한다.
+
+exact path, event type, DB 상태 전이와 live gate는
+[`docs/execplan/t-vn-41-cache-target-consumer.md`](execplan/t-vn-41-cache-target-consumer.md)가 정본이다.
+
+### 근거
+
+DB-owned generation과 transaction-coupled command outbox는 78-symbol POI write graph의 누락을 application
+hook보다 강하게 막는다. pull/ack는 사용자 write critical path에서 원격 장애를 제거하고 at-least-once
+복구를 가능하게 한다. epoch barrier와 active+tombstone Merkle는 두 DB를 직접 연결하지 않고 restore 뒤
+stale resurrection과 event omission을 검증한다.
+
+### 결과
+
+- **긍정**: POI write와 target command가 같이 commit/rollback하고 Map 장애가 사용자 write를 rollback하지
+  않는다.
+- **긍정**: 중복, ACK crash window, poison event, restore epoch와 checksum 불일치를 재생·감사할 수 있다.
+- **부정**: source head, command outbox, event inbox/checkpoint, 역할별 credential과 reconciliation 운영이
+  추가된다.
+- **부정**: 전역 prefix의 poison event가 해결될 때까지 같은 stream의 뒤 event 전파도 의도적으로 멈춘다.
+
+### 후속
+
+- paired Map OpenAPI와 Merkle golden fixture를 pin하고 DB/client/worker/cache gate를 구현한다.
+- n150 isolated restore clone과 synthetic private POI로 duplicate/omission/epoch/checksum을 증명한다.
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-058**
+- 다음 신규 ADR = **ADR-059**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

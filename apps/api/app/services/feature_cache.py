@@ -15,6 +15,9 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from typing import Any
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.config import settings
 
 
@@ -155,3 +158,35 @@ feature_cache = FeatureCache(
     ttl_seconds=settings.pinvi_feature_cache_ttl_seconds,
     max_size=settings.pinvi_feature_cache_max_size,
 )
+
+
+class FeatureCacheGenerationObserver:
+    """각 process가 DB generation/epoch 전이를 독립적으로 관측해 local cache를 비운다."""
+
+    def __init__(self, cache: FeatureCache) -> None:
+        self._cache = cache
+        self._observed: tuple[int | None, int] | None = None
+
+    async def observe(self, db: AsyncSession, *, consumer_id: str) -> tuple[int | None, int] | None:
+        from app.models.cache_target_sync import KtmCacheTargetConsumer
+
+        current = await db.execute(
+            select(
+                KtmCacheTargetConsumer.active_restore_epoch,
+                KtmCacheTargetConsumer.feature_cache_generation,
+            ).where(KtmCacheTargetConsumer.consumer_id == consumer_id)
+        )
+        row = current.one_or_none()
+        if row is None:
+            if self._observed is not None:
+                self._cache.clear()
+            self._observed = None
+            return None
+        generation = (row.active_restore_epoch, row.feature_cache_generation)
+        if self._observed is not None and generation != self._observed:
+            self._cache.clear()
+        self._observed = generation
+        return generation
+
+
+cache_generation_observer = FeatureCacheGenerationObserver(feature_cache)
