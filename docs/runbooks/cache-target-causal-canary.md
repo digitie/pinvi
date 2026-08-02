@@ -66,6 +66,12 @@ fail-close하되 row를 `running`으로 보존한다. 원인을 해소한 뒤 �
 foreign/mismatched durable material과 snapshot 자체 checksum 위반은 terminal `failed`이며 수동 개입 없이는
 다른 run ID로 덮어쓰지 않는다.
 
+`--timeout-seconds`는 command 전체의 monotonic deadline이다. 성공 transaction이 잡은 PostgreSQL
+`SHARE` writer fence 안의 `get_stream → get_snapshot → get_stream`, snapshot request와 `Retry-After` sleep도
+모두 남은 budget 안에서 취소된다. network/timeout과 pinned `429/503 SNAPSHOT_*`만 `running` 재개 대상으로
+분류한다. `401/403`, `413`, 그 밖의 4xx, 잘못된 `Retry-After`, snapshot schema/checksum/페이지 계약 오류는
+즉시 secret-free terminal code로 끝나며 같은 invocation에서 재시도하지 않는다.
+
 ## 5. forward boundary helper
 
 causal canary 성공 뒤 docker-manager의 writer fence를 유지한 채 다음 두 명령을 서로 다른 단계에서 실행한다.

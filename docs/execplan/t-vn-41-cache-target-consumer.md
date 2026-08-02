@@ -260,6 +260,9 @@ lock 전용 connection은 획득 직후 transaction을 commit하고, bootstrap �
 `503 SNAPSHOT_{BARRIER_TIMEOUT,BUILD_TIMEOUT,BUSY,TTL_TOO_SHORT}`는 canonical `Retry-After`를 지켜 최대
 3회 시도하고, header가 잘못됐거나 budget이 끝나면 fail-close한다. `413
 SNAPSHOT_ITEM_LIMIT_EXCEEDED`는 운영 개입이 필요한 materialization ceiling이므로 자동 재시도하지 않는다.
+causal canary는 transport별 70초/`Retry-After` budget보다 운영자가 준 전체 monotonic deadline을
+우선한다. 성공 transaction의 `get_stream → get_snapshot → get_stream` 전체를 남은 deadline으로 취소하며,
+긴 request나 `Retry-After` 대기 때문에 PostgreSQL `SHARE` writer fence를 deadline 밖까지 유지하지 않는다.
 
 ### 5.1 production causal canary
 
@@ -307,7 +310,9 @@ fail-close한다.
 
 bounded timeout, ACK 미완료, generic snapshot 일시 실패와 final backlog/cursor/Merkle 미수렴은 실행 row를
 `running`으로 보존하고 nonzero로 끝내 같은 run ID가 정확한 phase부터 재개한다. dead/halt와
-event/command/provenance 불변식 위반, snapshot 자체 checksum 위반만 terminal `failed`로 남긴다. 성공한
+event/command/provenance 불변식 위반, snapshot 자체 checksum·응답 계약 위반, `401/403` credential/scope
+오류, `413` materialization ceiling과 그 밖의 비재시도 service 거절은 terminal `failed`로 남긴다.
+일시 실패는 network/timeout 및 pinned allowlist의 `429/503 SNAPSHOT_*`만 허용한다. 성공한
 synthetic tombstone head와 run/command/event 감사 row는 삭제하지 않는다. stdout의 secret-free 단일 JSON은
 `status=succeeded`, canary/command/event ID, generation, relay order, cache generation before/after와 함께
 pending/leased/dead-letter command 수는 성공 transaction에서 각각 관측·저장한 typed column로,

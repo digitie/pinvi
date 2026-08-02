@@ -91,6 +91,11 @@ class CacheTargetServiceProblem(RuntimeError):
         self.disposition = classify_cache_target_failure(status_code=status_code, code=code)
 
 
+def is_retryable_snapshot_problem(problem: CacheTargetServiceProblem) -> bool:
+    """snapshot traversal에서 재시도할 수 있는 pinned problem인지 판별한다."""
+    return (problem.status_code, problem.code) in _SNAPSHOT_RETRYABLE_PROBLEMS
+
+
 @dataclass(frozen=True, slots=True)
 class CacheTargetMutationResult:
     status_code: int
@@ -938,8 +943,7 @@ class CacheTargetServiceClient:
                     request_timeout=_SNAPSHOT_REQUEST_TIMEOUT,
                 )
             except CacheTargetServiceProblem as problem:
-                identity = (problem.status_code, problem.code)
-                if identity not in _SNAPSHOT_RETRYABLE_PROBLEMS:
+                if not is_retryable_snapshot_problem(problem):
                     raise
                 if problem.retry_after is None:
                     raise CacheTargetContractError(

@@ -22,6 +22,7 @@ from app.clients.kor_travel_map_cache_target import (
     CacheTargetNetworkError,
     CacheTargetServiceClient,
     CacheTargetServiceProblem,
+    is_retryable_snapshot_problem,
 )
 from app.core.cache_target_contract import cache_target_source_fingerprint
 from app.models.cache_target_sync import (
@@ -714,16 +715,33 @@ async def _finish_run(
                 raise CacheTargetCanaryFailure("completed_run_drift", run.phase)
             return None
         local = await read_cache_target_source_identity(db)
+        remote_budget_seconds = deadline - time.monotonic()
+        if remote_budget_seconds <= 0:
+            return None
         try:
-            stream_before = await consumer_client.get_stream()
-            snapshot = await consumer_client.get_snapshot()
-            stream_after = await consumer_client.get_stream()
-        except (
-            CacheTargetContractError,
-            CacheTargetNetworkError,
-            CacheTargetServiceProblem,
-        ) as exc:
-            raise CacheTargetCanaryFailure("final_snapshot_unavailable", run.phase) from exc
+            async with asyncio.timeout(remote_budget_seconds):
+                stream_before = await consumer_client.get_stream()
+                snapshot = await consumer_client.get_snapshot()
+                stream_after = await consumer_client.get_stream()
+        except TimeoutError:
+            raise CacheTargetCanaryFailure("final_snapshot_unavailable", run.phase) from None
+        except CacheTargetNetworkError:
+            raise CacheTargetCanaryFailure("final_snapshot_unavailable", run.phase) from None
+        except CacheTargetServiceProblem as exc:
+            if is_retryable_snapshot_problem(exc):
+                raise CacheTargetCanaryFailure(
+                    "final_snapshot_unavailable",
+                    run.phase,
+                ) from None
+            if exc.status_code in {401, 403}:
+                code = "final_snapshot_authorization_failed"
+            elif exc.status_code == 413:
+                code = "final_snapshot_ceiling_exceeded"
+            else:
+                code = "final_snapshot_service_rejected"
+            raise CacheTargetCanaryFailure(code, run.phase) from None
+        except CacheTargetContractError:
+            raise CacheTargetCanaryFailure("final_snapshot_invalid", run.phase) from None
         except ValidationError:
             raise CacheTargetCanaryFailure("final_snapshot_invalid", run.phase) from None
         try:

@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-02 (codex) — T-VN-41 final remote deadline·terminal 분류
+
+**작업**: Pin #424 유일 적대 리뷰의 P1/P2를 반영해 causal canary가 PostgreSQL writer fence를 운영자
+timeout보다 오래 유지하는 경로와 비재시도 오류의 transient 오분류를 닫았다.
+**변경**: 성공 transaction의 remote stream/snapshot bracket을 남은 monotonic budget으로 취소한다.
+network/timeout과 exact `429/503 SNAPSHOT_*`만 resumable이며, `401/403`, `413`, other service rejection과
+contract/schema 오류는 별도 terminal code로 즉시 fail-close한다. raw exception context는 제거했다.
+**검증**: Ruff/format, strict mypy, unit/transport 60건, 실제 PostgreSQL causal integration 39건이 통과했다.
+slow snapshot에서 writer가 실제로 block된 뒤 0.3초 deadline 직후 재개되는 회귀와 terminal/resumable run
+상태를 포함한다.
+**다음**: 보안 감사·push·PR 코멘트 후 동일 리뷰어의 새 exact HEAD 1인 재리뷰를 받는다.
+
 ## 2026-08-02 (codex) — T-VN-41 final writer fence 이후 무-HTTP 증거 경계
 
 **작업**: forward commit 직전의 stopped-Map/Pin 증거와 commit 응답 유실 replay를 fail-close하도록 production

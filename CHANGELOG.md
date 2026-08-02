@@ -4,6 +4,9 @@
 
 ## Unreleased
 
+- Cache-target causal canary의 전체 timeout을 final remote snapshot request와 `Retry-After` 대기까지
+  적용해 PostgreSQL writer fence가 운영자 deadline을 넘어 유지되지 않게 했다. `401/403`, `413`, 응답
+  계약 오류는 일시 장애로 재시도하지 않고 즉시 typed terminal failure로 분류한다.
 - Cache-target generation 7 전환에 strict `preflight`/`finalize` 경계를 추가했다. final writer fence 뒤에는
   Map HTTP를 다시 호출하지 않고 stopped-Map DB typed evidence와 fresh Pin DB provenance를 한 transaction에서
   대조하며, canonical request/Map/fence/evidence digest를 append-only audit 한 행에 결박한다.

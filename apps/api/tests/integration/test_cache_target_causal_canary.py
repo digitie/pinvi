@@ -10,7 +10,12 @@ import pytest
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
-from app.clients.kor_travel_map_cache_target import CacheTargetStreamState
+from app.clients.kor_travel_map_cache_target import (
+    CacheTargetContractError,
+    CacheTargetNetworkError,
+    CacheTargetServiceProblem,
+    CacheTargetStreamState,
+)
 from app.core.cache_target_contract import CacheTargetMerkleRow, cache_target_snapshot_merkle_root
 from app.models.cache_target_sync import (
     KtmCacheTargetBoundaryAudit,
@@ -190,6 +195,26 @@ class _StreamControlDriftClient(_SnapshotClient):
                 }
             )
         return stream
+
+
+class _RemoteFailureClient(_SnapshotClient):
+    def __init__(self, session_factory, failure: Exception) -> None:  # type: ignore[no-untyped-def]
+        super().__init__(session_factory)
+        self._failure = failure
+
+    async def get_snapshot(self) -> CacheTargetSnapshot:
+        raise self._failure
+
+
+class _SlowSnapshotClient(_SnapshotClient):
+    def __init__(self, session_factory) -> None:  # type: ignore[no-untyped-def]
+        super().__init__(session_factory)
+        self.snapshot_started = asyncio.Event()
+
+    async def get_snapshot(self) -> CacheTargetSnapshot:
+        self.snapshot_started.set()
+        await asyncio.sleep(60)
+        raise AssertionError("deadline cancellation이 slow snapshot을 중단하지 않았습니다.")
 
 
 async def _seed_consumer(session_factory) -> None:  # type: ignore[no-untyped-def]
@@ -759,6 +784,148 @@ async def test_crash_after_success_replay_fetches_fresh_snapshot_before_receipt(
             run.final_leased_commands,
             run.final_dead_letter_commands,
         ) == (0, 0, 0)
+
+
+async def test_remote_bracket_obeys_global_deadline_and_releases_writer_lock(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    run_id, _ = await _complete_run(session_factory)
+    client = _SlowSnapshotClient(session_factory)
+    loop = asyncio.get_running_loop()
+    started_at = loop.time()
+    replay = asyncio.create_task(
+        run_cache_target_causal_canary(
+            session_factory,
+            session_factory.kw["bind"],
+            consumer_client=client,  # type: ignore[arg-type]
+            consumer_id=CONSUMER_ID,
+            run_id=run_id,
+            timeout_seconds=0.3,
+            poll_seconds=0.01,
+        )
+    )
+    await asyncio.wait_for(client.snapshot_started.wait(), timeout=1)
+
+    async def mutate_consumer() -> None:
+        async with session_factory() as db:
+            consumer = await db.get(KtmCacheTargetConsumer, CONSUMER_ID)
+            assert consumer is not None
+            consumer.feature_cache_generation += 1
+            await db.commit()
+
+    writer = asyncio.create_task(mutate_consumer())
+    await asyncio.sleep(0.02)
+    assert not writer.done()
+    with pytest.raises(CacheTargetCanaryFailure, match="final_snapshot_unavailable"):
+        await replay
+    await asyncio.wait_for(writer, timeout=1)
+    assert loop.time() - started_at < 1
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_code"),
+    (
+        (
+            CacheTargetServiceProblem(
+                status_code=403,
+                code="CACHE_TARGET_SCOPE_FORBIDDEN",
+                retry_after=None,
+            ),
+            "final_snapshot_authorization_failed",
+        ),
+        (
+            CacheTargetServiceProblem(
+                status_code=413,
+                code="SNAPSHOT_ITEM_LIMIT_EXCEEDED",
+                retry_after=None,
+            ),
+            "final_snapshot_ceiling_exceeded",
+        ),
+        (
+            CacheTargetServiceProblem(
+                status_code=422,
+                code="CACHE_TARGET_CONTRACT_INVALID",
+                retry_after=None,
+            ),
+            "final_snapshot_service_rejected",
+        ),
+        (
+            CacheTargetContractError("RAW-CONTRACT-SECRET"),
+            "final_snapshot_invalid",
+        ),
+    ),
+)
+async def test_non_retryable_remote_failure_is_terminal_and_secret_free(
+    session_factory,
+    failure: Exception,
+    expected_code: str,
+) -> None:  # type: ignore[no-untyped-def]
+    await _seed_consumer(session_factory)
+    run_id = uuid.uuid4()
+    task = asyncio.create_task(
+        run_cache_target_causal_canary(
+            session_factory,
+            session_factory.kw["bind"],
+            consumer_client=_RemoteFailureClient(session_factory, failure),  # type: ignore[arg-type]
+            consumer_id=CONSUMER_ID,
+            run_id=run_id,
+            timeout_seconds=5,
+            poll_seconds=0.01,
+        )
+    )
+    await _apply_command(session_factory, "put", 1)
+    await _apply_command(session_factory, "delete", 2)
+
+    with pytest.raises(CacheTargetCanaryFailure, match=expected_code) as raised:
+        await task
+    assert "SECRET" not in str(raised.value)
+    assert raised.value.__suppress_context__ is True
+    async with session_factory() as db:
+        run = await db.get(KtmCacheTargetCanaryRun, run_id)
+        assert run is not None
+        assert run.status == "failed"
+        assert run.terminal_error_code == expected_code
+
+
+@pytest.mark.parametrize(
+    "failure",
+    (
+        CacheTargetServiceProblem(
+            status_code=503,
+            code="SNAPSHOT_BUSY",
+            retry_after=1,
+        ),
+        CacheTargetNetworkError("RAW-NETWORK-SECRET"),
+    ),
+)
+async def test_retryable_remote_failure_preserves_running_run_until_deadline(
+    session_factory,
+    failure: Exception,
+) -> None:  # type: ignore[no-untyped-def]
+    await _seed_consumer(session_factory)
+    run_id = uuid.uuid4()
+    task = asyncio.create_task(
+        run_cache_target_causal_canary(
+            session_factory,
+            session_factory.kw["bind"],
+            consumer_client=_RemoteFailureClient(session_factory, failure),  # type: ignore[arg-type]
+            consumer_id=CONSUMER_ID,
+            run_id=run_id,
+            timeout_seconds=1,
+            poll_seconds=0.01,
+        )
+    )
+    await _apply_command(session_factory, "put", 1)
+    await _apply_command(session_factory, "delete", 2)
+
+    with pytest.raises(CacheTargetCanaryFailure, match="final_convergence_timeout") as raised:
+        await task
+    assert "SECRET" not in str(raised.value)
+    async with session_factory() as db:
+        run = await db.get(KtmCacheTargetCanaryRun, run_id)
+        assert run is not None
+        assert run.status == "running"
+        assert run.terminal_error_code is None
 
 
 async def test_final_boundary_appends_exact_audit_and_replays_only_exact_evidence(

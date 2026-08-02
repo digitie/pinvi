@@ -1,5 +1,17 @@
 # resume.md
 
+## 2026-08-02 (codex) — T-VN-41 canary absolute deadline·오류 분류 보강
+
+최종 적대 리뷰가 발견한 writer-fence 장기 점유를 수정했다. canary의 남은 monotonic deadline으로
+`get_stream → get_snapshot → get_stream` 전체를 감싸 transport의 70초 request와 최대 7,200초
+`Retry-After`도 실제 취소한다. network/timeout과 pinned `429/503 SNAPSHOT_*`만 `running` 재개 대상으로
+유지하고 `401/403`, `413`, other 4xx, contract/schema/checksum은 secret-free terminal code로 분리했다.
+실제 PostgreSQL에서 slow snapshot 중 writer가 막힌 뒤 0.3초 deadline 직후 commit되는 회귀와 terminal/
+resumable durable status를 검증했다.
+
+**다음 한 작업**: Pin #424 새 exact HEAD의 동일 독립 리뷰어 1인 GO를 받은 뒤 Map #924와 함께 병합하고
+Docker-manager release SHA pin 및 n150 paired live proof를 진행한다.
+
 ## 2026-08-02 (codex) — T-VN-41 stopped-Map final boundary와 append-only audit
 
 generation 7 forward 경계를 `csv5 → Map H35 gc → final all-writer fence → Map typed evidence → Pin finalize`로
