@@ -2,6 +2,17 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-02 (codex) — T-VN-41 durable causal canary docs-first
+
+**작업**: docker-manager가 running ordinary API container에서 호출하는 causal canary 계약과 운영 runbook을
+추가했다.
+**변경**: migration 0048의 typed durable run 정본, canary별 advisory lock, deterministic PUT/DELETE,
+state-applied apply·ACK·cache generation과 최종 count/Merkle/cursor/backlog 검증을 정의했다.
+**결정**: user POI를 건드리지 않고 stable synthetic tombstone을 감사 row로 유지한다. ordinary
+command/consumer token만 사용하며 recovery registry scope는 exact `cache-target:recovery`와
+`cache-target:recovery-replay` 두 개다.
+**다음**: migration/model/service/console과 crash/timeout/ACK/Merkle/concurrency 테스트를 구현한다.
+
 ## 2026-08-02 (codex) — T-VN-41 generation 7 최소 권한 계약
 
 **작업**: command endpoint를 exact `cache-target:command`로 분리하고 legacy

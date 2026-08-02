@@ -87,7 +87,8 @@ PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_RECOVERY_TOKEN=
 - consumer principal: exact `cache-target:read`, `cache-target:claim`, `cache-target:ack`,
   `cache-target:nack`, `cache-target:snapshot` 5개 배열; stream read, claim/ack/nack, fixed snapshot
 - restore-fence principal: exact `cache-target:restore-fence`; restore fence CAS만
-- recovery principal: `cache-target:recovery` 계열; 자기 stream dead-letter read/replay만
+- recovery principal: exact `cache-target:recovery`, `cache-target:recovery-replay`; 자기 stream
+  dead-letter read/replay만
 
 같은 token을 여러 역할에 재사용하거나 admin/ops token으로 fallback하면 설정 검증이 실패한다.
 generation 7부터 legacy `cache-target:consumer` scope 자체를 enum/auth에서 삭제한다. consumer는 역할

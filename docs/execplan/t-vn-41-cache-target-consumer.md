@@ -214,7 +214,7 @@ ordinary API runtime에는 역할별 credential만 주입한다.
 | command producer | `cache-target:command`                                                                          | target PUT/GET/DELETE와 refresh create/read                                    |
 | consumer         | `cache-target:read`, `cache-target:claim`, `cache-target:ack`, `cache-target:nack`, `cache-target:snapshot` | stream read, claim/ack/nack, fixed/request snapshot, reconciliation completion |
 | restore fence    | `cache-target:restore-fence`                                                                    | stream restore-fence CAS만; restore job에만 단기 주입                          |
-| recovery replay  | `cache-target:recovery` 계열                                                                     | 자기 stream DLQ read/replay만; 일반 worker에 미주입                            |
+| recovery replay  | `cache-target:recovery`, `cache-target:recovery-replay`                                            | 자기 stream DLQ read/replay만; 일반 worker에 미주입                            |
 
 한 token을 여러 역할에 재사용하면 startup/config validation이 실패한다. admin/ops credential fallback은
 없다. generation 7에서는 legacy `cache-target:consumer` scope 자체를 enum/auth에서 삭제한다. 여기서
@@ -257,6 +257,37 @@ lock 전용 connection은 획득 직후 transaction을 commit하고, bootstrap �
 `503 SNAPSHOT_{BARRIER_TIMEOUT,BUILD_TIMEOUT,BUSY,TTL_TOO_SHORT}`는 canonical `Retry-After`를 지켜 최대
 3회 시도하고, header가 잘못됐거나 budget이 끝나면 fail-close한다. `413
 SNAPSHOT_ITEM_LIMIT_EXCEEDED`는 운영 개입이 필요한 materialization ceiling이므로 자동 재시도하지 않는다.
+
+### 5.1 production causal canary
+
+`pinvi-cache-target-causal-canary`는 sync가 켜져 있고 ready인 ordinary PinVi API container 안에서
+docker-manager가 `docker exec`로 실행한다. API container에 이미 있는 command/consumer token만 사용하고
+restore/recovery token을 요구하거나 읽지 않는다. supplied UUID를 stable synthetic target identity로 쓰며
+`trip_day_pois`나 user trip/POI row를 만들거나 수정하지 않는다.
+
+migration `0048`의 `app.ktm_cache_target_canary_runs`가 실행 정본이다. `canary_id` PK와 동일한 stable
+target UUID, deterministic PUT/DELETE command UUID, 각 source generation, state-applied event/relay order,
+baseline/final cache generation·cursor·count·Merkle root, phase, terminal error와 시각을 typed column으로
+보존한다. command/event FK와 all-or-none phase CHECK를 두고 raw payload나 credential은 저장하지 않는다.
+같은 canary ID 재실행은 이 row를 잠가 정확히 중단 phase부터 재개한다. target/head/command/event material이
+기록과 다르거나 다른 provenance의 synthetic row가 선점했으면 추측해 덮어쓰지 않고 fail-close한다.
+
+canary별 PostgreSQL session advisory lock을 잡은 뒤 아래 causal chain을 검증한다.
+
+1. canonical active source/fingerprint로 head generation을 단조 증가시키고 deterministic PUT command를
+   같은 transaction에 enqueue한다.
+2. ordinary background worker가 PUT을 성공시키고 matching `cache_target.state_applied` inbox를 apply한 뒤
+   해당 claim item을 ACK하며 `feature_cache_generation`을 증가시킬 때까지 bounded wait한다.
+3. 같은 방식으로 tombstone generation과 deterministic DELETE를 enqueue하고 DELETE event apply/ACK/cache
+   generation 증가를 bounded wait한다.
+4. local desired head 전체 count/Merkle와 Map generic snapshot exact count/root, consumer
+   `local_applied_cursor == remote_acked_cursor`, 전역 pending/dead command 0을 확인한다.
+
+timeout, dead/halt, ACK 미완료, event/command mismatch, Merkle/cursor 불일치는 terminal failure다. 성공한
+synthetic tombstone head와 run/command/event 감사 row는 삭제하지 않는다. stdout은 canary/command/event ID,
+generation, relay order, cursor, cache generation before/after, count/root만 포함한 secret-free 단일 JSON
+receipt이고 URL, token, raw payload는 포함하지 않는다. 운영 절차는
+[`docs/runbooks/cache-target-causal-canary.md`](../runbooks/cache-target-causal-canary.md)를 따른다.
 
 generation 4는 generation 3의 restore epoch 경계에 mutation/read response 의미를 분리한다.
 PUT/DELETE는 commit된 target incarnation의 UUID, strong ETag, positive `target_sequence`를 반환하고, GET만 deleted

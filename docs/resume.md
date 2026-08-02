@@ -1,5 +1,17 @@
 # resume.md
 
+## 2026-08-02 (codex) — T-VN-41 durable causal production canary 설계
+
+running ordinary API container에서 실행하는 `pinvi-cache-target-causal-canary`를 설계했다. supplied UUID의
+synthetic head만 사용해 PUT→matching state-applied apply→claim ACK→cache generation 증가→DELETE를
+검증하고, 마지막에 local/Map count·Merkle와 applied/ACK cursor, pending/dead 0을 exact 대조한다. migration
+0048의 typed audit row가 phase와 command/event identity를 보존해 같은 canary ID crash 재개를 command row
+추측 없이 수행한다. ordinary command/consumer token만 사용하고 user POI와 restore/recovery credential은
+건드리지 않는다.
+
+**다음 한 작업**: migration/model/service/console과 unit·Postgres crash/timeout/ACK/Merkle/concurrency gate를
+구현한 뒤 두 독립 적대적 exact-head 리뷰를 받는다.
+
 ## 2026-08-02 (codex) — T-VN-41 generation 7 command scope clean-cut
 
 Map generation 7은 target mutation/refresh command를 exact `cache-target:command` scope로 분리하고,

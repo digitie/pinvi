@@ -25,7 +25,9 @@
       exact 100,000개 latency/RSS와 100,001개 413 non-retry를 n150에서 증명한다. generation 7에서는
       command=`cache-target:command`, consumer 역할=`cache-target:read/claim/ack/nack/snapshot` exact
       5개 배열로 clean-cut하고 legacy `cache-target:consumer` scope와 generation 6 조합, token swap을
-      fail-close한다(ADR-059).
+      fail-close한다(ADR-059). migration 0048의 durable run 정본과 ordinary command/consumer token만 쓰는
+      `pinvi-cache-target-causal-canary`로 PUT→event apply→ACK→cache generation→DELETE와 최종
+      count/Merkle/cursor/pending·dead 0을 production에서 증명한다.
 
 ## 보안·의존성
 
