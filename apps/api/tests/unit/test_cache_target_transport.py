@@ -183,6 +183,134 @@ async def test_command_transport_sends_only_role_token_and_exact_preconditions()
 
 
 @pytest.mark.asyncio
+async def test_consumer_target_read_returns_etag_for_command_cas_transition() -> None:
+    target_key = str(uuid.uuid4())
+    target_id = uuid.uuid4()
+    entity_tag = f'"{target_id}:4"'
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert request.url.path == f"/v1/service/cache-targets/pinvi/{target_key}"
+        assert request.url.params.get("include_deleted") == "true"
+        assert request.headers["X-Kor-Travel-Map-Service-Token"] == TOKEN
+        assert "Idempotency-Key" not in request.headers
+        return httpx.Response(
+            200,
+            headers={"ETag": entity_tag},
+            json={
+                "data": {
+                    "external_system": "pinvi",
+                    "target_key": target_key,
+                    "state": "deleted",
+                    "restore_epoch": 7,
+                    "source_generation": 4,
+                    "source_payload_fingerprint": "a" * 64,
+                    "entity_tag": entity_tag,
+                    "target_id": str(target_id),
+                    "target_sequence": 4,
+                    "occurred_at": "2026-08-02T00:00:00Z",
+                    "updated_at": "2026-08-02T00:00:01Z",
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client("consumer", handler)
+    try:
+        result = await client.get_target(
+            external_system="pinvi",
+            target_key=target_key,
+            include_deleted=True,
+        )
+    finally:
+        await client.aclose()
+
+    assert result.etag == entity_tag
+    assert result.data.state == "deleted"
+
+
+@pytest.mark.asyncio
+async def test_command_refresh_create_then_consumer_status_poll_use_separate_tokens() -> None:
+    request_id = uuid.uuid4()
+    target_key = str(uuid.uuid4())
+    command_token = "c" * 32
+    consumer_token = "r" * 32
+    status_url = f"/v1/service/refresh-requests/{request_id}"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        token = request.headers["X-Kor-Travel-Map-Service-Token"]
+        if request.method == "POST":
+            assert token == command_token
+            assert request.url.path == "/v1/service/refresh-requests"
+            assert request.headers["Idempotency-Key"] == str(request_id)
+            assert json.loads(request.content) == {
+                "external_system": "pinvi",
+                "target_keys": [target_key],
+                "reason": "causal canary refresh",
+            }
+            return httpx.Response(
+                202,
+                headers={"Location": status_url, "Retry-After": "5"},
+                json={
+                    "data": {
+                        "request_id": str(request_id),
+                        "status": "queued",
+                        "status_url": status_url,
+                        "retry_after_seconds": 5,
+                        "created_at": "2026-08-02T00:00:00Z",
+                        "updated_at": "2026-08-02T00:00:00Z",
+                    },
+                    "meta": {},
+                },
+            )
+        assert request.method == "GET"
+        assert token == consumer_token
+        assert request.url.path == status_url
+        assert "Idempotency-Key" not in request.headers
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "request_id": str(request_id),
+                    "status": "succeeded",
+                    "status_url": status_url,
+                    "retry_after_seconds": None,
+                    "created_at": "2026-08-02T00:00:00Z",
+                    "updated_at": "2026-08-02T00:00:05Z",
+                },
+                "meta": {},
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    command = CacheTargetServiceClient(
+        httpx.AsyncClient(base_url="http://map.test", transport=transport),
+        role="command",
+        token=command_token,
+    )
+    consumer = CacheTargetServiceClient(
+        httpx.AsyncClient(base_url="http://map.test", transport=transport),
+        role="consumer",
+        token=consumer_token,
+    )
+    try:
+        created = await command.create_refresh_request(
+            external_system="pinvi",
+            target_keys=[target_key],
+            reason="causal canary refresh",
+            idempotency_key=request_id,
+        )
+        status = await consumer.get_refresh_request(request_id=request_id)
+    finally:
+        await command.aclose()
+        await consumer.aclose()
+
+    assert created.location == status_url
+    assert created.retry_after == 5
+    assert status.data.status == "succeeded"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("operation", ["put", "delete"])
 async def test_if_match_mutation_rejects_other_target_incarnation(operation: str) -> None:
     command_id = uuid.uuid4()
@@ -278,6 +406,38 @@ async def test_principal_cannot_call_another_role_surface() -> None:
             expected_etag='"target-1"',
         )
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_command_consumer_transition_surfaces_fail_closed_before_http() -> None:
+    calls = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(500)
+
+    request_id = uuid.uuid4()
+    target_key = str(uuid.uuid4())
+    command = _client("command", handler)
+    consumer = _client("consumer", handler)
+    try:
+        with pytest.raises(PermissionError, match="consumer"):
+            await command.get_target(external_system="pinvi", target_key=target_key)
+        with pytest.raises(PermissionError, match="consumer"):
+            await command.get_refresh_request(request_id=request_id)
+        with pytest.raises(PermissionError, match="command"):
+            await consumer.create_refresh_request(
+                external_system="pinvi",
+                target_keys=[target_key],
+                reason="role split",
+                idempotency_key=request_id,
+            )
+    finally:
+        await command.aclose()
+        await consumer.aclose()
+
+    assert calls == 0
 
 
 @pytest.mark.asyncio

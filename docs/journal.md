@@ -2,6 +2,17 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-02 (codex) — T-VN-41 command/consumer 전환 transport 완결
+
+**작업**: generation 7 역할 분리에서 빠져 있던 target source GET, refresh 생성, refresh status GET을
+기존 role-bound Map service client에 추가했다.
+**변경**: target GET과 refresh status GET은 consumer principal, refresh 생성은 command principal로 HTTP
+호출 전에 fail-close한다. target GET의 nullable incarnation/ETag와 refresh request ID/status URL,
+202 Location/Retry-After를 strict DTO로 검증한다.
+**검증**: command/consumer 서로 다른 token의 생성→조회 전환, tombstone CAS source GET, 세 교차 역할
+호출의 HTTP 이전 거부를 포함한 transport 39개, Ruff, strict mypy가 통과했다.
+**다음**: 전체 API gate와 causal PostgreSQL gate를 재실행하고 Map generation 7 수정본 GO 뒤 exact pin한다.
+
 ## 2026-08-02 (codex) — T-VN-41 durable causal canary docs-first
 
 **작업**: docker-manager가 running ordinary API container에서 호출하는 causal canary 계약과 운영 runbook을
