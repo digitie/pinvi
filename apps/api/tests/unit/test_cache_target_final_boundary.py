@@ -108,9 +108,7 @@ def test_finalize_request_requires_prior_receipt_and_canary() -> None:
         lambda value: value["map_final_evidence"].update(extra="forbidden"),
         lambda value: value["map_final_evidence"].update(outbox_backlog_count=1),
         lambda value: value.update(map_final_evidence_sha256="0" * 64),
-        lambda value: value.update(
-            final_writer_fence_sha256=value["initial_writer_fence_sha256"]
-        ),
+        lambda value: value.update(final_writer_fence_sha256=value["initial_writer_fence_sha256"]),
     ],
     ids=("map-extra", "map-backlog", "map-digest", "same-fence"),
 )
@@ -168,9 +166,7 @@ def test_boundary_stdin_accepts_one_exact_json_line(monkeypatch: pytest.MonkeyPa
     assert parsed.transaction_id == uuid.UUID(str(value["transaction_id"]))
 
 
-def _initial_provenance() -> tuple[
-    KtmCacheTargetCommand, KtmCacheTargetHead, KtmCacheTargetEvent
-]:
+def _initial_provenance() -> tuple[KtmCacheTargetCommand, KtmCacheTargetHead, KtmCacheTargetEvent]:
     command_id = uuid.uuid4()
     poi_id = uuid.uuid4()
     target_id = uuid.uuid4()
@@ -252,9 +248,7 @@ def _initial_provenance() -> tuple[
         lambda _command, _head, event: setattr(event, "source_event_id", uuid.uuid4()),
         lambda _command, _head, event: setattr(event, "source_generation", 4),
         lambda _command, _head, event: setattr(event, "target_sequence", 10),
-        lambda _command, _head, event: setattr(
-            event, "source_payload_fingerprint", b"x" * 32
-        ),
+        lambda _command, _head, event: setattr(event, "source_payload_fingerprint", b"x" * 32),
         lambda _command, _head, event: setattr(event, "payload", {"version": "wrong"}),
         lambda _command, _head, event: setattr(event, "payload_fingerprint", b"x" * 32),
         lambda _command, _head, event: setattr(event, "applied_at", None),

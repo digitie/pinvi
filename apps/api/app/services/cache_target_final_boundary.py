@@ -143,9 +143,7 @@ class MapFinalEvidence:
             stream_control_etag=value["stream_control_etag"],
             high_watermark_cursor=value["high_watermark_cursor"],
             snapshot_count=count,
-            snapshot_merkle_root=_hex(
-                value["snapshot_merkle_root"], 64, "snapshot_merkle_root"
-            ),
+            snapshot_merkle_root=_hex(value["snapshot_merkle_root"], 64, "snapshot_merkle_root"),
             reconciliation_backlog_count=0,
             outbox_backlog_count=0,
             claim_backlog_count=0,
@@ -340,8 +338,7 @@ async def _validate_database_identity(db: AsyncSession, request: CacheTargetBoun
                 "(SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() "
                 "AND pid <> pg_backend_pid() AND state <> 'idle' "
                 "AND application_name <> :application_name)"
-            )
-            ,
+            ),
             {"application_name": _APPLICATION_NAME},
         )
     ).one()
@@ -370,8 +367,7 @@ async def _table_count(db: AsyncSession, table: str) -> int:
 
 async def _application_queue_counts(db: AsyncSession) -> tuple[int, int, int]:
     email = int(
-        await db.scalar(text("SELECT count(*) FROM app.email_queue WHERE status = 'pending'"))
-        or 0
+        await db.scalar(text("SELECT count(*) FROM app.email_queue WHERE status = 'pending'")) or 0
     )
     telegram = int(
         await db.scalar(
@@ -487,9 +483,7 @@ async def run_cache_target_boundary_preflight(
         raise CacheTargetBoundaryFailure("source_revision_mismatch", "preflight")
     async with session_factory() as db:
         await db.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
-        await db.execute(
-            text("SET LOCAL application_name = 'pinvi-cache-target-final-boundary'")
-        )
+        await db.execute(text("SET LOCAL application_name = 'pinvi-cache-target-final-boundary'"))
         revision = await _schema_revision(db)
         if revision != PREFLIGHT_SCHEMA_REVISION:
             raise CacheTargetBoundaryFailure("schema_revision_mismatch", "preflight")
@@ -750,9 +744,7 @@ async def run_cache_target_boundary_finalize(
             raise CacheTargetBoundaryFailure("schema_revision_mismatch", "finalize")
         await db.rollback()
         await db.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
-        await db.execute(
-            text("SET LOCAL application_name = 'pinvi-cache-target-final-boundary'")
-        )
+        await db.execute(text("SET LOCAL application_name = 'pinvi-cache-target-final-boundary'"))
         # REPEATABLE READ snapshot을 만들기 전에 직렬화해야 대기한 replay가 선행
         # transaction의 committed audit를 같은 실행에서 볼 수 있다.
         await db.execute(_AUDIT_SERIALIZE_LOCK)
@@ -811,8 +803,7 @@ async def run_cache_target_boundary_finalize(
             or map_evidence.stream_control_etag != run.final_stream_control_etag
             or map_evidence.high_watermark_cursor != consumer.local_applied_cursor
             or map_evidence.high_watermark_cursor != consumer.remote_acked_cursor
-            or map_evidence.high_watermark_cursor
-            != run.final_remote_snapshot_high_watermark_cursor
+            or map_evidence.high_watermark_cursor != run.final_remote_snapshot_high_watermark_cursor
             or map_evidence.snapshot_count != local.count
             or map_evidence.snapshot_merkle_root != local.merkle_root
             or consumer.feature_cache_generation != run.final_cache_generation
@@ -822,8 +813,7 @@ async def run_cache_target_boundary_finalize(
             or local.count != run.final_local_count
             or map_evidence.snapshot_count != run.final_remote_count
             or bytes.fromhex(local.merkle_root) != run.final_local_merkle_root
-            or bytes.fromhex(map_evidence.snapshot_merkle_root)
-            != run.final_remote_merkle_root
+            or bytes.fromhex(map_evidence.snapshot_merkle_root) != run.final_remote_merkle_root
         ):
             raise CacheTargetBoundaryFailure("local_remote_evidence_mismatch", "finalize")
         receipt = _receipt(
@@ -883,15 +873,9 @@ async def run_cache_target_boundary_finalize(
                 source_revision=request.source_revision,
                 database_identity=bytes.fromhex(request.database_identity),
                 writer_registry_sha256=bytes.fromhex(request.writer_registry_sha256),
-                initial_writer_fence_sha256=bytes.fromhex(
-                    request.initial_writer_fence_sha256
-                ),
-                final_writer_fence_sha256=bytes.fromhex(
-                    request.final_writer_fence_sha256
-                ),
-                map_final_evidence_sha256=bytes.fromhex(
-                    request.map_final_evidence_sha256
-                ),
+                initial_writer_fence_sha256=bytes.fromhex(request.initial_writer_fence_sha256),
+                final_writer_fence_sha256=bytes.fromhex(request.final_writer_fence_sha256),
+                map_final_evidence_sha256=bytes.fromhex(request.map_final_evidence_sha256),
                 audit_request_sha256=audit_request_sha,
                 prior_receipt_sha256=bytes.fromhex(request.prior_receipt_sha256),
                 schema_revision=revision,
