@@ -191,7 +191,7 @@ async def test_consumer_target_read_returns_etag_for_command_cas_transition() ->
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "GET"
         assert request.url.path == f"/v1/service/cache-targets/pinvi/{target_key}"
-        assert request.url.params.get("include_deleted") == "true"
+        assert request.url.params.get("include_deleted") == "false"
         assert request.headers["X-Kor-Travel-Map-Service-Token"] == TOKEN
         assert "Idempotency-Key" not in request.headers
         return httpx.Response(
@@ -201,7 +201,7 @@ async def test_consumer_target_read_returns_etag_for_command_cas_transition() ->
                 "data": {
                     "external_system": "pinvi",
                     "target_key": target_key,
-                    "state": "deleted",
+                    "state": "active",
                     "restore_epoch": 7,
                     "source_generation": 4,
                     "source_payload_fingerprint": "a" * 64,
@@ -220,13 +220,53 @@ async def test_consumer_target_read_returns_etag_for_command_cas_transition() ->
         result = await client.get_target(
             external_system="pinvi",
             target_key=target_key,
-            include_deleted=True,
         )
     finally:
         await client.aclose()
 
     assert result.etag == entity_tag
+    assert result.data.state == "active"
+
+
+@pytest.mark.asyncio
+async def test_consumer_target_read_accepts_tombstone_without_live_incarnation() -> None:
+    target_key = str(uuid.uuid4())
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params.get("include_deleted") == "true"
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "external_system": "pinvi",
+                    "target_key": target_key,
+                    "state": "deleted",
+                    "restore_epoch": 7,
+                    "source_generation": 4,
+                    "source_payload_fingerprint": "a" * 64,
+                    "entity_tag": None,
+                    "target_id": None,
+                    "target_sequence": 4,
+                    "occurred_at": "2026-08-02T00:00:00Z",
+                    "updated_at": "2026-08-02T00:00:01Z",
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client("consumer", handler)
+    try:
+        result = await client.get_target(
+            external_system="pinvi",
+            target_key=target_key,
+            include_deleted=True,
+        )
+    finally:
+        await client.aclose()
+
+    assert result.etag is None
     assert result.data.state == "deleted"
+    assert result.data.target_sequence == 4
 
 
 @pytest.mark.asyncio

@@ -194,11 +194,13 @@ class CacheTargetSourceReadRecord(BaseModel):
     def validate_identity(self) -> Self:
         if self.target_key != str(uuid.UUID(self.target_key)):
             raise ValueError("target_key가 canonical UUID가 아닙니다.")
-        identities = (self.entity_tag, self.target_id, self.target_sequence)
-        if all(value is None for value in identities):
+        incarnation = (self.entity_tag, self.target_id)
+        if all(value is None for value in incarnation):
+            if self.state != "deleted":
+                raise ValueError("active target read에 incarnation identity가 없습니다.")
             return self
-        if any(value is None for value in identities):
-            raise ValueError("target read incarnation identity가 all-or-none이 아닙니다.")
+        if any(value is None for value in incarnation):
+            raise ValueError("target read incarnation identity가 pair가 아닙니다.")
         assert self.entity_tag is not None
         assert self.target_id is not None
         canonical_target_id = str(uuid.UUID(self.target_id))

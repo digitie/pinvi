@@ -5,8 +5,8 @@
 generation 7의 endpoint 소유권을 PinVi role-bound client 전체에 적용했다. command token은 target
 PUT/DELETE와 refresh 생성만, consumer token은 target source GET과 refresh status GET 및 기존
 claim/ACK/NACK/snapshot만 호출한다. target GET의 nullable incarnation/strong ETag와 refresh
-ID/status URL/Location/Retry-After를 strict 검증하고 token swap은 HTTP 전에 실패한다. focused transport
-39개, Ruff, strict mypy가 통과했다.
+ID/status URL/Location/Retry-After를 strict 검증하고 token swap은 HTTP 전에 실패한다. active CAS와 live
+incarnation이 없는 tombstone GET을 포함한 focused transport 40개, Ruff, strict mypy가 통과했다.
 
 **다음 한 작업**: full API 및 실제 PostgreSQL causal gate를 재실행하고 Map PR #923 수정본의 exact-head
 적대적 재리뷰가 GO일 때만 generation 7 provenance/OpenAPI bytes를 pin한다.

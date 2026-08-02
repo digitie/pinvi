@@ -9,8 +9,9 @@
 **변경**: target GET과 refresh status GET은 consumer principal, refresh 생성은 command principal로 HTTP
 호출 전에 fail-close한다. target GET의 nullable incarnation/ETag와 refresh request ID/status URL,
 202 Location/Retry-After를 strict DTO로 검증한다.
-**검증**: command/consumer 서로 다른 token의 생성→조회 전환, tombstone CAS source GET, 세 교차 역할
-호출의 HTTP 이전 거부를 포함한 transport 39개, Ruff, strict mypy가 통과했다.
+**검증**: command/consumer 서로 다른 token의 생성→조회 전환, active CAS 및 live incarnation이 없는
+tombstone source GET, 세 교차 역할 호출의 HTTP 이전 거부를 포함한 transport 40개, Ruff, strict mypy가
+통과했다.
 **다음**: 전체 API gate와 causal PostgreSQL gate를 재실행하고 Map generation 7 수정본 GO 뒤 exact pin한다.
 
 ## 2026-08-02 (codex) — T-VN-41 durable causal canary docs-first
