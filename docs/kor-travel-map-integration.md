@@ -83,9 +83,10 @@ PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_RESTORE_FENCE_TOKEN=
 PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_RECOVERY_TOKEN=
 ```
 
-- command principal: exact `cache-target:command`; service target PUT/GET/DELETE와 refresh create/read
+- command principal: exact `cache-target:command`; service target PUT/DELETE와 refresh create
 - consumer principal: exact `cache-target:read`, `cache-target:claim`, `cache-target:ack`,
-  `cache-target:nack`, `cache-target:snapshot` 5개 배열; stream read, claim/ack/nack, fixed snapshot
+  `cache-target:nack`, `cache-target:snapshot` 5개 배열; target/refresh status GET, stream read,
+  claim/ack/nack, fixed snapshot
 - restore-fence principal: exact `cache-target:restore-fence`; restore fence CAS만
 - recovery principal: exact `cache-target:recovery`, `cache-target:recovery-replay`; 자기 stream
   dead-letter read/replay만

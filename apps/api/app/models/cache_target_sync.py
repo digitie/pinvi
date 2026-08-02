@@ -166,6 +166,133 @@ class KtmCacheTargetCommand(Base, TimestampMixin):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class KtmCacheTargetCanaryRun(Base, TimestampMixin):
+    """production causal canary의 crash-safe phase와 secret-free receipt."""
+
+    __tablename__ = "ktm_cache_target_canary_runs"
+    __table_args__ = (
+        UniqueConstraint("put_command_id", name="uq_ktm_ct_canary_put_command"),
+        UniqueConstraint("delete_command_id", name="uq_ktm_ct_canary_delete_command"),
+        UniqueConstraint("put_event_id", name="uq_ktm_ct_canary_put_event"),
+        UniqueConstraint("delete_event_id", name="uq_ktm_ct_canary_delete_event"),
+        Index(
+            "uq_ktm_ct_canary_running_target",
+            "target_poi_id",
+            unique=True,
+            postgresql_where=text("status = 'running'"),
+        ),
+        CheckConstraint(
+            "target_poi_id = '15f98050-27d7-5f85-be21-dc53eded5d7d'::uuid",
+            name=conv("ck_ktm_ct_canary_stable_target"),
+        ),
+        CheckConstraint(
+            "status IN ('running', 'succeeded', 'failed')",
+            name=conv("ck_ktm_ct_canary_status"),
+        ),
+        CheckConstraint(
+            "phase IN ('put_enqueued', 'put_applied', 'delete_enqueued', "
+            "'delete_applied', 'completed')",
+            name=conv("ck_ktm_ct_canary_phase"),
+        ),
+        CheckConstraint(
+            "put_generation > 0 AND delete_generation = put_generation + 1",
+            name=conv("ck_ktm_ct_canary_generations"),
+        ),
+        CheckConstraint(
+            "baseline_cache_generation >= 0 AND baseline_count >= 0 "
+            "AND octet_length(baseline_merkle_root) = 32 AND length(baseline_cursor) > 0",
+            name=conv("ck_ktm_ct_canary_baseline"),
+        ),
+        CheckConstraint(
+            "(put_event_id IS NULL AND put_relay_order IS NULL "
+            "AND put_cache_generation IS NULL AND put_cursor IS NULL) OR "
+            "(put_event_id IS NOT NULL AND put_relay_order > 0 "
+            "AND put_cache_generation > baseline_cache_generation AND length(put_cursor) > 0)",
+            name=conv("ck_ktm_ct_canary_put_material"),
+        ),
+        CheckConstraint(
+            "(delete_event_id IS NULL AND delete_relay_order IS NULL) OR "
+            "(delete_event_id IS NOT NULL AND delete_relay_order > put_relay_order)",
+            name=conv("ck_ktm_ct_canary_delete_material"),
+        ),
+        CheckConstraint(
+            "(final_cache_generation IS NULL AND final_cursor IS NULL "
+            "AND final_count IS NULL AND final_merkle_root IS NULL) OR "
+            "(final_cache_generation > put_cache_generation AND length(final_cursor) > 0 "
+            "AND final_count >= 0 AND octet_length(final_merkle_root) = 32)",
+            name=conv("ck_ktm_ct_canary_final_material"),
+        ),
+        CheckConstraint(
+            "(phase = 'put_enqueued' AND put_event_id IS NULL AND delete_command_id IS NULL "
+            "AND delete_event_id IS NULL AND final_cache_generation IS NULL) OR "
+            "(phase = 'put_applied' AND put_event_id IS NOT NULL AND delete_command_id IS NULL "
+            "AND delete_event_id IS NULL AND final_cache_generation IS NULL) OR "
+            "(phase = 'delete_enqueued' AND put_event_id IS NOT NULL "
+            "AND delete_command_id IS NOT NULL AND delete_event_id IS NULL "
+            "AND final_cache_generation IS NULL) OR "
+            "(phase = 'delete_applied' AND put_event_id IS NOT NULL "
+            "AND delete_command_id IS NOT NULL AND delete_event_id IS NOT NULL "
+            "AND final_cache_generation IS NULL) OR "
+            "(phase = 'completed' AND put_event_id IS NOT NULL "
+            "AND delete_command_id IS NOT NULL AND delete_event_id IS NOT NULL "
+            "AND final_cache_generation IS NOT NULL)",
+            name=conv("ck_ktm_ct_canary_phase_material"),
+        ),
+        CheckConstraint(
+            "(status = 'running' AND terminal_error_code IS NULL AND failed_at IS NULL "
+            "AND completed_at IS NULL AND phase <> 'completed') OR "
+            "(status = 'succeeded' AND terminal_error_code IS NULL AND failed_at IS NULL "
+            "AND completed_at IS NOT NULL AND phase = 'completed') OR "
+            "(status = 'failed' AND length(terminal_error_code) > 0 "
+            "AND failed_at IS NOT NULL AND completed_at IS NULL AND phase <> 'completed')",
+            name=conv("ck_ktm_ct_canary_terminal"),
+        ),
+    )
+
+    run_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True)
+    target_poi_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("app.ktm_cache_target_heads.poi_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="running")
+    phase: Mapped[str] = mapped_column(Text, nullable=False, server_default="put_enqueued")
+    put_command_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("app.ktm_cache_target_commands.command_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    delete_command_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("app.ktm_cache_target_commands.command_id", ondelete="RESTRICT"),
+    )
+    put_event_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("app.ktm_cache_target_events.event_id", ondelete="RESTRICT"),
+    )
+    delete_event_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("app.ktm_cache_target_events.event_id", ondelete="RESTRICT"),
+    )
+    put_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    delete_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    put_relay_order: Mapped[int | None] = mapped_column(BigInteger)
+    delete_relay_order: Mapped[int | None] = mapped_column(BigInteger)
+    baseline_cache_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    put_cache_generation: Mapped[int | None] = mapped_column(BigInteger)
+    final_cache_generation: Mapped[int | None] = mapped_column(BigInteger)
+    baseline_cursor: Mapped[str] = mapped_column(Text, nullable=False)
+    put_cursor: Mapped[str | None] = mapped_column(Text)
+    final_cursor: Mapped[str | None] = mapped_column(Text)
+    baseline_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    baseline_merkle_root: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    final_count: Mapped[int | None] = mapped_column(BigInteger)
+    final_merkle_root: Mapped[bytes | None] = mapped_column(LargeBinary)
+    terminal_error_code: Mapped[str | None] = mapped_column(Text)
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class KtmCacheTargetEvent(Base):
     """Map at-least-once event의 immutable inbox와 local apply marker."""
 

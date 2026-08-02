@@ -211,8 +211,8 @@ ordinary API runtime에는 역할별 credential만 주입한다.
 
 | principal        | exact scope 배열                                                                                | 허용 범위                                                                      |
 | ---------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| command producer | `cache-target:command`                                                                          | target PUT/GET/DELETE와 refresh create/read                                    |
-| consumer         | `cache-target:read`, `cache-target:claim`, `cache-target:ack`, `cache-target:nack`, `cache-target:snapshot` | stream read, claim/ack/nack, fixed/request snapshot, reconciliation completion |
+| command producer | `cache-target:command`                                                                          | target PUT/DELETE와 refresh create                                             |
+| consumer         | `cache-target:read`, `cache-target:claim`, `cache-target:ack`, `cache-target:nack`, `cache-target:snapshot` | target/refresh status GET, stream read, claim/ack/nack, snapshot/completion     |
 | restore fence    | `cache-target:restore-fence`                                                                    | stream restore-fence CAS만; restore job에만 단기 주입                          |
 | recovery replay  | `cache-target:recovery`, `cache-target:recovery-replay`                                            | 자기 stream DLQ read/replay만; 일반 worker에 미주입                            |
 
@@ -262,19 +262,23 @@ SNAPSHOT_ITEM_LIMIT_EXCEEDED`는 운영 개입이 필요한 materialization ceil
 
 `pinvi-cache-target-causal-canary`는 sync가 켜져 있고 ready인 ordinary PinVi API container 안에서
 docker-manager가 `docker exec`로 실행한다. API container에 이미 있는 command/consumer token만 사용하고
-restore/recovery token을 요구하거나 읽지 않는다. supplied UUID를 stable synthetic target identity로 쓰며
-`trip_day_pois`나 user trip/POI row를 만들거나 수정하지 않는다.
+restore/recovery token을 요구하거나 읽지 않는다. supplied UUID는 매 실행별 durable `run_id`이며 합성 target은
+별도 deterministic UUID 하나를 모든 실행이 재사용한다. `trip_day_pois`나 user trip/POI row를 만들거나
+수정하지 않는다.
 
-migration `0048`의 `app.ktm_cache_target_canary_runs`가 실행 정본이다. `canary_id` PK와 동일한 stable
+migration `0048`의 `app.ktm_cache_target_canary_runs`가 실행 정본이다. 실행별 `run_id` PK, 고정 synthetic
 target UUID, deterministic PUT/DELETE command UUID, 각 source generation, state-applied event/relay order,
 baseline/final cache generation·cursor·count·Merkle root, phase, terminal error와 시각을 typed column으로
 보존한다. command/event FK와 all-or-none phase CHECK를 두고 raw payload나 credential은 저장하지 않는다.
-같은 canary ID 재실행은 이 row를 잠가 정확히 중단 phase부터 재개한다. target/head/command/event material이
+같은 run ID 재실행은 이 row를 잠가 정확히 중단 phase부터 재개한다. target/head/command/event material이
 기록과 다르거나 다른 provenance의 synthetic row가 선점했으면 추측해 덮어쓰지 않고 fail-close한다.
+`target_poi_id WHERE status='running'` partial unique index가 process crash와 경합에서도 active run을 하나로
+제한한다. 기존 running row와 같은 run ID만 재개하며 다른 supplied run ID는 `active_run_conflict`로
+fail-close한다.
 
-canary별 PostgreSQL session advisory lock을 잡은 뒤 아래 causal chain을 검증한다.
+고정 target용 PostgreSQL session advisory lock으로 전체 run을 직렬화한 뒤 아래 causal chain을 검증한다.
 
-1. canonical active source/fingerprint로 head generation을 단조 증가시키고 deterministic PUT command를
+1. canonical active source/fingerprint로 기존 stable head generation을 단조 증가시키고 run별 deterministic PUT command를
    같은 transaction에 enqueue한다.
 2. ordinary background worker가 PUT을 성공시키고 matching `cache_target.state_applied` inbox를 apply한 뒤
    해당 claim item을 ACK하며 `feature_cache_generation`을 증가시킬 때까지 bounded wait한다.
