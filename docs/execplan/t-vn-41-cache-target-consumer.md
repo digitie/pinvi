@@ -267,10 +267,16 @@ restore/recovery token을 요구하거나 읽지 않는다. supplied UUID는 매
 수정하지 않는다.
 
 migration `0048`의 `app.ktm_cache_target_canary_runs`가 실행 정본이다. 실행별 `run_id` PK, 고정 synthetic
-target UUID, deterministic PUT/DELETE command UUID, 각 source generation, state-applied event/relay order,
-baseline/final cache generation·cursor·count·Merkle root, phase, terminal error와 시각을 typed column으로
-보존한다. command/event FK와 all-or-none phase CHECK를 두고 raw payload나 credential은 저장하지 않는다.
-같은 run ID 재실행은 이 row를 잠가 정확히 중단 phase부터 재개한다. target/head/command/event material이
+target UUID, deterministic PUT/DELETE command UUID, 각 source generation, state-applied event/claim ACK/relay order,
+baseline/final cache generation, local/remote cursor·count·Merkle root, pending/leased/dead-letter 실제 관측값,
+phase, terminal error와 시각을 typed column으로 보존한다. command `(ID, target, generation)`, event
+`(ID, generation)`, ACK `(claim ID, event ID)`를 composite FK로 결박하고 final 관측값은 all-or-none 및
+local/remote equality/backlog zero CHECK로 고정한다. raw payload나 credential은 저장하지 않는다.
+같은 run ID 재실행은 이 row를 잠가 정확히 중단 phase부터 재개한다. 이미 성공한 run ID도 저장 receipt를
+그대로 재출력하지 않고 current stable tombstone head, command/event/claim ACK provenance, ready consumer와
+epoch/cursor/cache generation, 실제 backlog, 새 Map snapshot의 self-Merkle와 local/remote identity가 저장된
+성공 관측값과 모두 같을 때만 재출력한다. 새 event나 restore 등으로 현재 상태가 바뀌었으면 새 run ID가
+필요하며 기존 receipt를 현재 증거처럼 반환하지 않는다. target/head/command/event material이
 기록과 다르거나 다른 provenance의 synthetic row가 선점했으면 추측해 덮어쓰지 않고 fail-close한다.
 `target_poi_id WHERE status='running'` partial unique index가 process crash와 경합에서도 active run을 하나로
 제한한다. 기존 running row와 같은 run ID만 재개하며 다른 supplied run ID는 `active_run_conflict`로
@@ -284,15 +290,18 @@ fail-close한다.
    해당 claim item을 ACK하며 `feature_cache_generation`을 증가시킬 때까지 bounded wait한다.
 3. 같은 방식으로 tombstone generation과 deterministic DELETE를 enqueue하고 DELETE event apply/ACK/cache
    generation 증가를 bounded wait한다.
-4. local desired head 전체 count/Merkle와 Map generic snapshot exact count/root, consumer
-   `local_applied_cursor == remote_acked_cursor`, 전역 pending/dead command 0을 확인한다.
+4. stable tombstone의 exact generation/fingerprint/remote deleted tuple, local desired head 전체 count/Merkle와
+   Map generic snapshot self-root 및 exact count/root, consumer ready/epoch와
+   `local_applied_cursor == remote_acked_cursor == snapshot.high_watermark_cursor`, 전역
+   pending/leased/dead-letter command 0을 확인한다.
 
 bounded timeout, ACK 미완료, generic snapshot 일시 실패와 final backlog/cursor/Merkle 미수렴은 실행 row를
 `running`으로 보존하고 nonzero로 끝내 같은 run ID가 정확한 phase부터 재개한다. dead/halt와
 event/command/provenance 불변식 위반, snapshot 자체 checksum 위반만 terminal `failed`로 남긴다. 성공한
 synthetic tombstone head와 run/command/event 감사 row는 삭제하지 않는다. stdout의 secret-free 단일 JSON은
 `status=succeeded`, canary/command/event ID, generation, relay order, cache generation before/after와 함께
-pending/leased/dead-letter command 수를 각각 `0`으로, local/remote cursor·count·Merkle root를 각각 담는다.
+pending/leased/dead-letter command 수는 성공 transaction에서 각각 관측·저장한 typed column로,
+local/remote cursor·count·Merkle root도 각 관측 column에서 그대로 담는다.
 양쪽 값을 하나의 필드로 축약하지 않으며 URL, token, raw payload는 포함하지 않는다. 운영 절차는
 [`docs/runbooks/cache-target-causal-canary.md`](../runbooks/cache-target-causal-canary.md)를 따른다.
 

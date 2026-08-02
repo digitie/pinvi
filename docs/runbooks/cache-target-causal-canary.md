@@ -12,7 +12,9 @@ cache generation의 실제 causal chain과 최종 snapshot 수렴을 한 번에 
 - 모든 실행은 별도 deterministic synthetic target UUID 하나를 재사용해 tombstone을 누적하지 않는다.
 - user trip, `trip_day_pois`, 실제 POI는 생성·수정·삭제하지 않는다.
 - ordinary API의 command/consumer token만 사용한다. restore/recovery token을 주입하지 않는다.
-- 같은 run ID는 crash 뒤 재개용이다. 새로운 liveness 증거에는 새 UUID를 쓴다.
+- 같은 run ID는 crash 뒤 재개용이다. 이미 성공한 ID의 재호출도 current head/consumer/backlog/snapshot을
+  새로 재검증하며, 저장 성공 관측치와 달라졌으면 receipt를 재출력하지 않는다. 새로운 liveness 증거에는
+  새 UUID를 쓴다.
 - 성공한 synthetic tombstone head와 audit row는 삭제하지 않는다.
 - stdout은 secret-free 단일 JSON receipt다. token, URL, raw payload를 출력하지 않는다.
 
@@ -35,14 +37,19 @@ credential이나 원격 응답 body를 포함하지 않는다. 동일 run ID가 
 - PUT/DELETE command가 deterministic identity와 연속 source generation을 가진다.
 - 각 command에 matching `cache_target.state_applied` event가 적용되고 claim item ACK가 완료된다.
 - PUT과 DELETE 뒤 `feature_cache_generation`이 각각 증가한다.
-- local desired head 전체 count/Merkle와 Map generic snapshot count/root가 exact 일치한다.
-- consumer의 local applied cursor와 remote ACK cursor가 같다.
+- synthetic stable head가 exact DELETE generation/fingerprint와 remote deleted tuple을 유지한다.
+- local desired head 전체 count/Merkle와 Map generic snapshot self-root/count/root가 exact 일치한다.
+- consumer가 ready이고 restore epoch가 snapshot과 같으며 local applied cursor, remote ACK cursor,
+  snapshot high-watermark cursor가 같다.
 - pending/leased/dead command가 모두 0이다.
 
 성공 JSON은 `status=succeeded`, run/target/PUT·DELETE command/event ID, generation, relay order,
 baseline/PUT/final cache generation을 포함한다. 또한 `pending_commands`, `leased_commands`,
 `dead_letter_commands`가 각각 `0`이고, `local_applied_cursor == remote_acked_cursor`,
 `local_count == remote_count`, `local_merkle_root == remote_merkle_root`임을 서로 다른 필드로 증명한다.
+이 값과 backlog 3종은 상수로 조립하지 않고 성공 transaction에서 각각 typed column에 관측·저장한 값을
+그대로 출력한다. command `(ID, target, generation)`, event `(ID, generation)`, claim ACK `(claim ID, event ID)`
+결박도 성공 및 동일-run 재검증에서 다시 확인한다.
 
 bounded timeout, ACK 미완료, generic snapshot 일시 실패, final backlog/cursor/Merkle 미수렴은 nonzero로
 fail-close하되 row를 `running`으로 보존한다. 원인을 해소한 뒤 반드시 같은 run ID로 재개한다. dead/halt,

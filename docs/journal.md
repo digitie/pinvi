@@ -2,6 +2,17 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-02 (codex) — T-VN-41 causal receipt·provenance 재설계
+
+**작업**: 적대적 리뷰에서 확인된 stale same-run receipt와 증거 복제 가능성을 없애도록 migration `0048`의
+정본을 서비스 전 단계에서 clean-cut 재설계했다.
+**변경**: final local/remote cursor·count·Merkle와 pending/leased/dead-letter 실제 관측값을 각각 typed
+column으로 분리하고 all-or-none, equality, backlog zero CHECK로 결박했다. PUT/DELETE command는 target과
+generation, event는 generation, ACK는 claim/event 합성키로 canary row에 연결한다. 이미 성공한 run도 current
+stable tombstone, provenance, consumer epoch/cursor/cache, backlog와 fresh snapshot/Merkle를 저장 관측값에
+재대조해야만 receipt를 다시 반환하는 계약으로 문서를 정정했다.
+**다음**: 서비스 재증명, credential trust-boundary startup gate와 secret-free CLI 회귀를 구현한다.
+
 ## 2026-08-02 (codex) — T-VN-41 generation 7 exact pair pin
 
 **작업**: 두 독립 적대적 리뷰가 GO한 Map 계약을 PinVi runtime과 vendored service OpenAPI에 exact pin했다.

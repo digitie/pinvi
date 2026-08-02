@@ -1,5 +1,14 @@
 # resume.md
 
+## 2026-08-02 (codex) — T-VN-41 리뷰 NO-GO 보강 진행
+
+적대적 리뷰 A/B의 NO-GO를 반영 중이다. migration `0048`은 final local/remote 관측값과 backlog 3종을
+각각 저장하고 command/event/claim ACK provenance를 composite FK로 결박하도록 재설계했다. 동일 성공 run은
+fresh current state와 snapshot을 다시 증명해야 하며, 다음은 서비스 상태기계·credential collision·CLI
+sanitization 회귀 구현과 PostgreSQL gate다.
+
+**다음 한 작업**: causal canary service/tests 보강 커밋을 만든다.
+
 ## 2026-08-02 (codex) — T-VN-41 generation 7 exact pair pin
 
 Map exact head `11d678167e2739b517b8c675f9a43304c985b6d9`의 두 독립 적대적 리뷰가 GO했다. OpenAPI

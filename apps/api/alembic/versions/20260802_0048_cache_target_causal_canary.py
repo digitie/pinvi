@@ -21,6 +21,18 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    op.create_unique_constraint(
+        "uq_ktm_ct_commands_provenance",
+        "ktm_cache_target_commands",
+        ["command_id", "poi_id", "source_generation"],
+        schema="app",
+    )
+    op.create_unique_constraint(
+        "uq_ktm_ct_events_provenance",
+        "ktm_cache_target_events",
+        ["event_id", "source_generation"],
+        schema="app",
+    )
     op.create_table(
         "ktm_cache_target_canary_runs",
         sa.Column("run_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -31,6 +43,8 @@ def upgrade() -> None:
         sa.Column("delete_command_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("put_event_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("delete_event_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("put_claim_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("delete_claim_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("put_generation", sa.BigInteger(), nullable=False),
         sa.Column("delete_generation", sa.BigInteger(), nullable=False),
         sa.Column("put_relay_order", sa.BigInteger(), nullable=True),
@@ -40,11 +54,17 @@ def upgrade() -> None:
         sa.Column("final_cache_generation", sa.BigInteger(), nullable=True),
         sa.Column("baseline_cursor", sa.Text(), nullable=False),
         sa.Column("put_cursor", sa.Text(), nullable=True),
-        sa.Column("final_cursor", sa.Text(), nullable=True),
+        sa.Column("final_local_cursor", sa.Text(), nullable=True),
+        sa.Column("final_remote_cursor", sa.Text(), nullable=True),
         sa.Column("baseline_count", sa.BigInteger(), nullable=False),
         sa.Column("baseline_merkle_root", sa.LargeBinary(), nullable=False),
-        sa.Column("final_count", sa.BigInteger(), nullable=True),
-        sa.Column("final_merkle_root", sa.LargeBinary(), nullable=True),
+        sa.Column("final_local_count", sa.BigInteger(), nullable=True),
+        sa.Column("final_remote_count", sa.BigInteger(), nullable=True),
+        sa.Column("final_local_merkle_root", sa.LargeBinary(), nullable=True),
+        sa.Column("final_remote_merkle_root", sa.LargeBinary(), nullable=True),
+        sa.Column("final_pending_commands", sa.BigInteger(), nullable=True),
+        sa.Column("final_leased_commands", sa.BigInteger(), nullable=True),
+        sa.Column("final_dead_letter_commands", sa.BigInteger(), nullable=True),
         sa.Column("terminal_error_code", sa.Text(), nullable=True),
         sa.Column("failed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
@@ -66,27 +86,59 @@ def upgrade() -> None:
             ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
-            ["put_command_id"],
-            ["app.ktm_cache_target_commands.command_id"],
+            ["put_command_id", "target_poi_id", "put_generation"],
+            [
+                "app.ktm_cache_target_commands.command_id",
+                "app.ktm_cache_target_commands.poi_id",
+                "app.ktm_cache_target_commands.source_generation",
+            ],
             name="fk_ktm_ct_canary_put_command",
             ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
-            ["delete_command_id"],
-            ["app.ktm_cache_target_commands.command_id"],
+            ["delete_command_id", "target_poi_id", "delete_generation"],
+            [
+                "app.ktm_cache_target_commands.command_id",
+                "app.ktm_cache_target_commands.poi_id",
+                "app.ktm_cache_target_commands.source_generation",
+            ],
             name="fk_ktm_ct_canary_delete_command",
             ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
-            ["put_event_id"],
-            ["app.ktm_cache_target_events.event_id"],
+            ["put_event_id", "put_generation"],
+            [
+                "app.ktm_cache_target_events.event_id",
+                "app.ktm_cache_target_events.source_generation",
+            ],
             name="fk_ktm_ct_canary_put_event",
             ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
-            ["delete_event_id"],
-            ["app.ktm_cache_target_events.event_id"],
+            ["delete_event_id", "delete_generation"],
+            [
+                "app.ktm_cache_target_events.event_id",
+                "app.ktm_cache_target_events.source_generation",
+            ],
             name="fk_ktm_ct_canary_delete_event",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["put_claim_id", "put_event_id"],
+            [
+                "app.ktm_cache_target_event_claim_items.claim_id",
+                "app.ktm_cache_target_event_claim_items.event_id",
+            ],
+            name="fk_ktm_ct_canary_put_ack",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["delete_claim_id", "delete_event_id"],
+            [
+                "app.ktm_cache_target_event_claim_items.claim_id",
+                "app.ktm_cache_target_event_claim_items.event_id",
+            ],
+            name="fk_ktm_ct_canary_delete_ack",
             ondelete="RESTRICT",
         ),
         sa.CheckConstraint(
@@ -112,22 +164,32 @@ def upgrade() -> None:
             name="ck_ktm_ct_canary_baseline",
         ),
         sa.CheckConstraint(
-            "(put_event_id IS NULL AND put_relay_order IS NULL "
+            "(put_event_id IS NULL AND put_claim_id IS NULL AND put_relay_order IS NULL "
             "AND put_cache_generation IS NULL AND put_cursor IS NULL) OR "
-            "(put_event_id IS NOT NULL AND put_relay_order > 0 "
+            "(put_event_id IS NOT NULL AND put_claim_id IS NOT NULL AND put_relay_order > 0 "
             "AND put_cache_generation > baseline_cache_generation AND length(put_cursor) > 0)",
             name="ck_ktm_ct_canary_put_material",
         ),
         sa.CheckConstraint(
-            "(delete_event_id IS NULL AND delete_relay_order IS NULL) OR "
-            "(delete_event_id IS NOT NULL AND delete_relay_order > put_relay_order)",
+            "(delete_event_id IS NULL AND delete_claim_id IS NULL AND delete_relay_order IS NULL) OR "
+            "(delete_event_id IS NOT NULL AND delete_claim_id IS NOT NULL "
+            "AND delete_relay_order > put_relay_order)",
             name="ck_ktm_ct_canary_delete_material",
         ),
         sa.CheckConstraint(
-            "(final_cache_generation IS NULL AND final_cursor IS NULL "
-            "AND final_count IS NULL AND final_merkle_root IS NULL) OR "
-            "(final_cache_generation > put_cache_generation AND length(final_cursor) > 0 "
-            "AND final_count >= 0 AND octet_length(final_merkle_root) = 32)",
+            "(final_cache_generation IS NULL AND final_local_cursor IS NULL "
+            "AND final_remote_cursor IS NULL AND final_local_count IS NULL "
+            "AND final_remote_count IS NULL AND final_local_merkle_root IS NULL "
+            "AND final_remote_merkle_root IS NULL AND final_pending_commands IS NULL "
+            "AND final_leased_commands IS NULL AND final_dead_letter_commands IS NULL) OR "
+            "(final_cache_generation > put_cache_generation "
+            "AND length(final_local_cursor) > 0 "
+            "AND final_local_cursor = final_remote_cursor "
+            "AND final_local_count >= 0 AND final_local_count = final_remote_count "
+            "AND octet_length(final_local_merkle_root) = 32 "
+            "AND final_local_merkle_root = final_remote_merkle_root "
+            "AND final_pending_commands = 0 AND final_leased_commands = 0 "
+            "AND final_dead_letter_commands = 0)",
             name="ck_ktm_ct_canary_final_material",
         ),
         sa.CheckConstraint(
@@ -174,3 +236,15 @@ def downgrade() -> None:
         schema="app",
     )
     op.drop_table("ktm_cache_target_canary_runs", schema="app")
+    op.drop_constraint(
+        "uq_ktm_ct_events_provenance",
+        "ktm_cache_target_events",
+        schema="app",
+        type_="unique",
+    )
+    op.drop_constraint(
+        "uq_ktm_ct_commands_provenance",
+        "ktm_cache_target_commands",
+        schema="app",
+        type_="unique",
+    )

@@ -13,6 +13,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     LargeBinary,
@@ -100,6 +101,12 @@ class KtmCacheTargetCommand(Base, TimestampMixin):
 
     __tablename__ = "ktm_cache_target_commands"
     __table_args__ = (
+        UniqueConstraint(
+            "command_id",
+            "poi_id",
+            "source_generation",
+            name="uq_ktm_ct_commands_provenance",
+        ),
         CheckConstraint(
             "operation IN ('put', 'delete', 'refresh')",
             name=conv("ck_ktm_ct_commands_operation"),
@@ -175,6 +182,62 @@ class KtmCacheTargetCanaryRun(Base, TimestampMixin):
         UniqueConstraint("delete_command_id", name="uq_ktm_ct_canary_delete_command"),
         UniqueConstraint("put_event_id", name="uq_ktm_ct_canary_put_event"),
         UniqueConstraint("delete_event_id", name="uq_ktm_ct_canary_delete_event"),
+        ForeignKeyConstraint(
+            ["put_command_id", "target_poi_id", "put_generation"],
+            [
+                "app.ktm_cache_target_commands.command_id",
+                "app.ktm_cache_target_commands.poi_id",
+                "app.ktm_cache_target_commands.source_generation",
+            ],
+            name="fk_ktm_ct_canary_put_command",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["delete_command_id", "target_poi_id", "delete_generation"],
+            [
+                "app.ktm_cache_target_commands.command_id",
+                "app.ktm_cache_target_commands.poi_id",
+                "app.ktm_cache_target_commands.source_generation",
+            ],
+            name="fk_ktm_ct_canary_delete_command",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["put_event_id", "put_generation"],
+            [
+                "app.ktm_cache_target_events.event_id",
+                "app.ktm_cache_target_events.source_generation",
+            ],
+            name="fk_ktm_ct_canary_put_event",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["delete_event_id", "delete_generation"],
+            [
+                "app.ktm_cache_target_events.event_id",
+                "app.ktm_cache_target_events.source_generation",
+            ],
+            name="fk_ktm_ct_canary_delete_event",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["put_claim_id", "put_event_id"],
+            [
+                "app.ktm_cache_target_event_claim_items.claim_id",
+                "app.ktm_cache_target_event_claim_items.event_id",
+            ],
+            name="fk_ktm_ct_canary_put_ack",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["delete_claim_id", "delete_event_id"],
+            [
+                "app.ktm_cache_target_event_claim_items.claim_id",
+                "app.ktm_cache_target_event_claim_items.event_id",
+            ],
+            name="fk_ktm_ct_canary_delete_ack",
+            ondelete="RESTRICT",
+        ),
         Index(
             "uq_ktm_ct_canary_running_target",
             "target_poi_id",
@@ -204,22 +267,32 @@ class KtmCacheTargetCanaryRun(Base, TimestampMixin):
             name=conv("ck_ktm_ct_canary_baseline"),
         ),
         CheckConstraint(
-            "(put_event_id IS NULL AND put_relay_order IS NULL "
+            "(put_event_id IS NULL AND put_claim_id IS NULL AND put_relay_order IS NULL "
             "AND put_cache_generation IS NULL AND put_cursor IS NULL) OR "
-            "(put_event_id IS NOT NULL AND put_relay_order > 0 "
+            "(put_event_id IS NOT NULL AND put_claim_id IS NOT NULL AND put_relay_order > 0 "
             "AND put_cache_generation > baseline_cache_generation AND length(put_cursor) > 0)",
             name=conv("ck_ktm_ct_canary_put_material"),
         ),
         CheckConstraint(
-            "(delete_event_id IS NULL AND delete_relay_order IS NULL) OR "
-            "(delete_event_id IS NOT NULL AND delete_relay_order > put_relay_order)",
+            "(delete_event_id IS NULL AND delete_claim_id IS NULL AND delete_relay_order IS NULL) OR "
+            "(delete_event_id IS NOT NULL AND delete_claim_id IS NOT NULL "
+            "AND delete_relay_order > put_relay_order)",
             name=conv("ck_ktm_ct_canary_delete_material"),
         ),
         CheckConstraint(
-            "(final_cache_generation IS NULL AND final_cursor IS NULL "
-            "AND final_count IS NULL AND final_merkle_root IS NULL) OR "
-            "(final_cache_generation > put_cache_generation AND length(final_cursor) > 0 "
-            "AND final_count >= 0 AND octet_length(final_merkle_root) = 32)",
+            "(final_cache_generation IS NULL AND final_local_cursor IS NULL "
+            "AND final_remote_cursor IS NULL AND final_local_count IS NULL "
+            "AND final_remote_count IS NULL AND final_local_merkle_root IS NULL "
+            "AND final_remote_merkle_root IS NULL AND final_pending_commands IS NULL "
+            "AND final_leased_commands IS NULL AND final_dead_letter_commands IS NULL) OR "
+            "(final_cache_generation > put_cache_generation "
+            "AND length(final_local_cursor) > 0 "
+            "AND final_local_cursor = final_remote_cursor "
+            "AND final_local_count >= 0 AND final_local_count = final_remote_count "
+            "AND octet_length(final_local_merkle_root) = 32 "
+            "AND final_local_merkle_root = final_remote_merkle_root "
+            "AND final_pending_commands = 0 AND final_leased_commands = 0 "
+            "AND final_dead_letter_commands = 0)",
             name=conv("ck_ktm_ct_canary_final_material"),
         ),
         CheckConstraint(
@@ -259,21 +332,19 @@ class KtmCacheTargetCanaryRun(Base, TimestampMixin):
     phase: Mapped[str] = mapped_column(Text, nullable=False, server_default="put_enqueued")
     put_command_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),
-        ForeignKey("app.ktm_cache_target_commands.command_id", ondelete="RESTRICT"),
         nullable=False,
     )
     delete_command_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True),
-        ForeignKey("app.ktm_cache_target_commands.command_id", ondelete="RESTRICT"),
     )
     put_event_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True),
-        ForeignKey("app.ktm_cache_target_events.event_id", ondelete="RESTRICT"),
     )
     delete_event_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True),
-        ForeignKey("app.ktm_cache_target_events.event_id", ondelete="RESTRICT"),
     )
+    put_claim_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True))
+    delete_claim_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True))
     put_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
     delete_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
     put_relay_order: Mapped[int | None] = mapped_column(BigInteger)
@@ -283,11 +354,17 @@ class KtmCacheTargetCanaryRun(Base, TimestampMixin):
     final_cache_generation: Mapped[int | None] = mapped_column(BigInteger)
     baseline_cursor: Mapped[str] = mapped_column(Text, nullable=False)
     put_cursor: Mapped[str | None] = mapped_column(Text)
-    final_cursor: Mapped[str | None] = mapped_column(Text)
+    final_local_cursor: Mapped[str | None] = mapped_column(Text)
+    final_remote_cursor: Mapped[str | None] = mapped_column(Text)
     baseline_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
     baseline_merkle_root: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-    final_count: Mapped[int | None] = mapped_column(BigInteger)
-    final_merkle_root: Mapped[bytes | None] = mapped_column(LargeBinary)
+    final_local_count: Mapped[int | None] = mapped_column(BigInteger)
+    final_remote_count: Mapped[int | None] = mapped_column(BigInteger)
+    final_local_merkle_root: Mapped[bytes | None] = mapped_column(LargeBinary)
+    final_remote_merkle_root: Mapped[bytes | None] = mapped_column(LargeBinary)
+    final_pending_commands: Mapped[int | None] = mapped_column(BigInteger)
+    final_leased_commands: Mapped[int | None] = mapped_column(BigInteger)
+    final_dead_letter_commands: Mapped[int | None] = mapped_column(BigInteger)
     terminal_error_code: Mapped[str | None] = mapped_column(Text)
     failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -298,6 +375,11 @@ class KtmCacheTargetEvent(Base):
 
     __tablename__ = "ktm_cache_target_events"
     __table_args__ = (
+        UniqueConstraint(
+            "event_id",
+            "source_generation",
+            name="uq_ktm_ct_events_provenance",
+        ),
         CheckConstraint("external_system = 'pinvi'", name=conv("ck_ktm_ct_events_system")),
         CheckConstraint(
             "event_type IN ('cache_target.state_applied', "
