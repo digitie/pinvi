@@ -209,20 +209,22 @@ OpenAPI/source revision과 함께 drift를 차단한다. 양쪽 fixture를 같�
 
 ordinary API runtime에는 역할별 credential만 주입한다.
 
-| principal        | exact scope                    | 허용 범위                                                                      |
-| ---------------- | ------------------------------ | ------------------------------------------------------------------------------ |
-| command producer | `cache-target:command`         | target PUT/GET/DELETE와 refresh create/read                                    |
-| consumer         | `cache-target:consumer`        | stream read, claim/ack/nack, fixed/request snapshot, reconciliation completion |
-| restore fence    | `cache-target:restore-fence`   | stream restore-fence CAS만; restore job에만 단기 주입                          |
-| recovery replay  | `cache-target:recovery` 계열   | 자기 stream DLQ read/replay만; 일반 worker에 미주입                            |
+| principal        | exact scope 배열                                                                                | 허용 범위                                                                      |
+| ---------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| command producer | `cache-target:command`                                                                          | target PUT/GET/DELETE와 refresh create/read                                    |
+| consumer         | `cache-target:read`, `cache-target:claim`, `cache-target:ack`, `cache-target:nack`, `cache-target:snapshot` | stream read, claim/ack/nack, fixed/request snapshot, reconciliation completion |
+| restore fence    | `cache-target:restore-fence`                                                                    | stream restore-fence CAS만; restore job에만 단기 주입                          |
+| recovery replay  | `cache-target:recovery` 계열                                                                     | 자기 stream DLQ read/replay만; 일반 worker에 미주입                            |
 
 한 token을 여러 역할에 재사용하면 startup/config validation이 실패한다. admin/ops credential fallback은
-없다. generation 7부터 `cache-target:consumer`는 command endpoint를 포함하는 umbrella scope가 아니다.
-command transport가 consumer token으로 성공하거나 consumer transport가 command token으로 성공하는 배포는
-호환 대상으로 다루지 않고 startup/live gate에서 거부한다.
+없다. generation 7에서는 legacy `cache-target:consumer` scope 자체를 enum/auth에서 삭제한다. 여기서
+consumer는 PinVi 역할 이름일 뿐 scope 문자열이 아니다. command transport가 consumer 역할 token으로
+성공하거나 consumer transport가 command token으로 성공하는 배포는 호환 대상으로 다루지 않고
+startup/live gate에서 거부한다.
 
-generation 7은 command endpoint를 exact `cache-target:command` scope로 분리하고 기존
-`cache-target:consumer` umbrella 권한을 clean-cut 삭제한다. PinVi role-bound client의 command/consumer
+generation 7은 command endpoint를 exact `cache-target:command` scope로 분리하고 legacy
+`cache-target:consumer` umbrella scope를 clean-cut 삭제한다. consumer 역할에는 exact
+`read/claim/ack/nack/snapshot` 5개 scope 배열만 부여한다. PinVi role-bound client의 command/consumer
 transport와 token은 계속 분리하며 generation 6 manifest/source 조합으로 sync를 켜지 않는다. paired Map
 functional owner와 service OpenAPI artifact가 확정되기 전에는 임시 SHA나 placeholder를 runtime pin에 넣지
 않는다. 최종 pin commit에서 artifact owner, functional owner, OpenAPI SHA-256, contract generation 7을

@@ -84,13 +84,15 @@ PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_RECOVERY_TOKEN=
 ```
 
 - command principal: exact `cache-target:command`; service target PUT/GET/DELETE와 refresh create/read
-- consumer principal: exact `cache-target:consumer`; stream read, claim/ack/nack, fixed snapshot
+- consumer principal: exact `cache-target:read`, `cache-target:claim`, `cache-target:ack`,
+  `cache-target:nack`, `cache-target:snapshot` 5개 배열; stream read, claim/ack/nack, fixed snapshot
 - restore-fence principal: exact `cache-target:restore-fence`; restore fence CAS만
 - recovery principal: `cache-target:recovery` 계열; 자기 stream dead-letter read/replay만
 
 같은 token을 여러 역할에 재사용하거나 admin/ops token으로 fallback하면 설정 검증이 실패한다.
-generation 7부터 `cache-target:consumer`의 command endpoint umbrella 권한은 삭제한다. command와
-consumer token을 바꿔 넣어도 동작하는 manifest는 잘못된 배포이며, generation 6 조합과 함께 fail-close한다.
+generation 7부터 legacy `cache-target:consumer` scope 자체를 enum/auth에서 삭제한다. consumer는 역할
+이름일 뿐 scope 문자열이 아니다. command와 consumer token을 바꿔 넣어도 동작하는 manifest는 잘못된
+배포이며, generation 6 조합과 함께 fail-close한다.
 `SYNC_ENABLED=false`여도 PinVi DB projection/command outbox는 계속 기록하며 network worker만 끈다.
 true는 compatible manifest, pinned OpenAPI/source revision, active epoch와 fixed snapshot
 count/Merkle/high-watermark 일치를 모두 요구한다. 자세한 exact 경로·event·Merkle 계약은 ADR-058과
@@ -202,7 +204,8 @@ typed snapshot backpressure 오류를 고정한다. generation 5는 snapshot pag
 `expires_at`이 지나도 읽을 수 있다.
 
 후속 generation 7은 command endpoint를 exact `cache-target:command` scope로 분리하고
-`cache-target:consumer`의 legacy umbrella 권한을 clean-cut 삭제한다. PinVi는 이미 분리된 role-bound
+legacy `cache-target:consumer` umbrella scope를 enum/auth에서 clean-cut 삭제한다. consumer 역할은 exact
+`cache-target:read/claim/ack/nack/snapshot` 5개 scope 배열만 받는다. PinVi는 이미 분리된 role-bound
 transport와 token을 유지하되 generation 6을 호환 fallback으로 허용하지 않는다. paired Map final
 functional owner와 service OpenAPI bytes가 확정되기 전에는 임시 provenance 값을 기록하지 않으며, 확정
 시 artifact owner·functional owner·OpenAPI SHA-256·generation 7을 동시에 재핀한다.

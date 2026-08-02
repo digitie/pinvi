@@ -2818,8 +2818,10 @@ command까지 허용하는 umbrella 권한이었다. PinVi는 command/consumer t
 
 - generation 7은 target PUT/GET/DELETE와 refresh create/read를 exact
   `cache-target:command` scope에만 허용한다.
-- `cache-target:consumer`는 stream read, claim/ack/nack, snapshot과 reconciliation completion만 허용하고
-  command endpoint 권한을 clean-cut 삭제한다.
+- legacy `cache-target:consumer` scope 자체를 enum/auth에서 clean-cut 삭제한다. consumer는 PinVi 역할
+  이름일 뿐 scope 문자열이 아니다.
+- consumer 역할에는 `cache-target:read`, `cache-target:claim`, `cache-target:ack`,
+  `cache-target:nack`, `cache-target:snapshot` exact 5개 scope 배열만 부여한다.
 - PinVi ordinary runtime은 서로 다른 command/consumer token과 role-bound client를 유지한다. 두 token의
   상호 교환 성공을 negative live/config gate 실패로 취급한다.
 - generation 6 manifest/source 조합은 호환 fallback 없이 fail-close한다. paired Map final artifact가
@@ -2834,7 +2836,7 @@ command까지 허용하는 umbrella 권한이었다. PinVi는 command/consumer t
 
 ### 결과
 
-- **긍정**: command와 consumer credential의 최소 권한이 HTTP authorization에서 강제된다.
+- **긍정**: command와 consumer 역할 credential의 최소 권한이 HTTP authorization에서 강제된다.
 - **긍정**: generation/source/OpenAPI 불일치가 startup 전에 명확히 실패한다.
 - **부정**: Map과 PinVi와 docker-manager manifest를 같은 cutover 단위로 갱신해야 한다.
 - **부정**: generation 6 배포와 혼합 운영할 수 없다.

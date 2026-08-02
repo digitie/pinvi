@@ -3,7 +3,8 @@
 ## 2026-08-02 (codex) — T-VN-41 generation 7 command scope clean-cut
 
 Map generation 7은 target mutation/refresh command를 exact `cache-target:command` scope로 분리하고,
-`cache-target:consumer`의 legacy command umbrella 권한을 삭제한다. PinVi는 기존 role-bound
+legacy `cache-target:consumer` scope 자체를 삭제한다. consumer 역할은
+`cache-target:read/claim/ack/nack/snapshot` exact 5개 배열만 받는다. PinVi는 기존 role-bound
 command/consumer transport와 서로 다른 token을 유지하며 generation 6 manifest/source 조합과 token swap을
 fail-close한다. paired Map final functional owner와 service OpenAPI bytes가 아직 확정되지 않았으므로 임시
 SHA나 placeholder는 runtime pin에 넣지 않는다.

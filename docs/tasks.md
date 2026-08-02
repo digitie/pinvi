@@ -23,8 +23,9 @@
       `docs/execplan/t-vn-41-cache-target-consumer.md`. production enable 전 snapshot replay lower-bound
       inbox dedupe, DB advisory cross-process single-flight, snapshot 전용 timeout, 429/503 `Retry-After`,
       exact 100,000개 latency/RSS와 100,001개 413 non-retry를 n150에서 증명한다. generation 7에서는
-      command=`cache-target:command`, consumer=`cache-target:consumer` exact scope로 clean-cut하고
-      generation 6 조합과 token swap을 fail-close한다(ADR-059).
+      command=`cache-target:command`, consumer 역할=`cache-target:read/claim/ack/nack/snapshot` exact
+      5개 배열로 clean-cut하고 legacy `cache-target:consumer` scope와 generation 6 조합, token swap을
+      fail-close한다(ADR-059).
 
 ## 보안·의존성
 
