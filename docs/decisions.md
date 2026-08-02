@@ -2800,7 +2800,113 @@ stale resurrection과 event omission을 검증한다.
 - paired Map OpenAPI와 Merkle golden fixture를 pin하고 DB/client/worker/cache gate를 구현한다.
 - n150 isolated restore clone과 synthetic private POI로 duplicate/omission/epoch/checksum을 증명한다.
 
+## ADR-059: cache target command와 consumer 권한을 generation 7에서 clean-cut 분리한다
+
+- **상태**: accepted
+- **날짜**: 2026-08-02
+- **결정자**: 사용자 + Codex
+- **참조**: ADR-058, `T-VN-41-P`
+
+### 컨텍스트
+
+generation 6까지 Map의 `cache-target:consumer` scope는 event 소비뿐 아니라 target mutation과 refresh
+command까지 허용하는 umbrella 권한이었다. PinVi는 command/consumer token과 transport를 이미 나눴지만,
+서버 scope가 이를 강제하지 않으면 credential 오배치가 정상 동작하고 침해 반경도 역할 경계를 넘는다.
+아직 서비스 전 단계이므로 기존 umbrella 계약을 호환 유지할 이유가 없다.
+
+### 결정
+
+- generation 7은 target PUT/DELETE와 refresh create를 exact `cache-target:command` scope에만 허용하고,
+  target GET과 refresh status GET은 consumer의 `cache-target:read`로 분리한다.
+- legacy `cache-target:consumer` scope 자체를 enum/auth에서 clean-cut 삭제한다. consumer는 PinVi 역할
+  이름일 뿐 scope 문자열이 아니다.
+- consumer 역할에는 `cache-target:read`, `cache-target:claim`, `cache-target:ack`,
+  `cache-target:nack`, `cache-target:snapshot` exact 5개 scope 배열만 부여한다.
+- PinVi ordinary runtime은 서로 다른 command/consumer token과 role-bound client를 유지한다. 두 token의
+  상호 교환 성공을 negative live/config gate 실패로 취급한다.
+- generation 6 manifest/source 조합은 호환 fallback 없이 fail-close한다. paired Map final artifact가
+  확정될 때 artifact owner, functional owner, OpenAPI SHA-256, generation 7을 함께 exact 재핀한다.
+- Map final provenance가 확정되기 전에는 placeholder나 임시 SHA를 runtime 상수에 넣지 않는다.
+
+### 근거
+
+클라이언트 구조뿐 아니라 서버 authorization까지 역할 경계를 강제해야 token 오배치와 탈취의 침해 반경을
+실제로 줄일 수 있다. 호환 shim 없이 세대를 올리면 잘못된 manifest가 조용히 권한을 넓히는 상태를
+방지하고 배포 pair를 단일한 검증 가능한 계약으로 유지한다.
+
+### 결과
+
+- **긍정**: command와 consumer 역할 credential의 최소 권한이 HTTP authorization에서 강제된다.
+- **긍정**: generation/source/OpenAPI 불일치가 startup 전에 명확히 실패한다.
+- **부정**: Map과 PinVi와 docker-manager manifest를 같은 cutover 단위로 갱신해야 한다.
+- **부정**: generation 6 배포와 혼합 운영할 수 없다.
+
+### 후속
+
+- paired Map exact scope/OpenAPI 변경을 확정하고 PinVi provenance 상수와 vendored artifact를 재핀했다.
+- config/contract/transport negative test와 n150 token swap live gate를 통과한다.
+
+## ADR-060: production causal receipt는 frozen local evidence와 bracketing remote attestation을 결합한다
+
+- **상태**: accepted
+- **날짜**: 2026-08-02
+- **결정자**: 사용자 + Codex
+- **참조**: ADR-058, ADR-059, `T-VN-41-P`
+
+### 컨텍스트
+
+성공 직전의 local count/Merkle가 remote snapshot과 같아도 remote stream에 미소비 event가 더 있으면 causal
+수렴을 증명하지 못한다. 특히 추가 event의 net target identity가 원래 상태로 돌아오면 count/Merkle만으로
+진행도 차이를 발견할 수 없다. observation 뒤 command/event/claim material이 바뀌는 경합도 resume 때만
+재검증하면 최초 성공 receipt가 생성된 순간의 provenance를 보장하지 못한다.
+
+### 결정
+
+- canary 성공과 성공 run replay는 consumer/command/head/event/claim/claim-item writer를 bounded PostgreSQL
+  `SHARE` table lock으로 고정한 하나의 transaction에서 local evidence를 fresh 재검증한다.
+- command fingerprint, event의 source command/generation/source·payload fingerprint, claim item의
+  cursor/fingerprint/ACK 시각과 claim의 consumer/status/ACK cursor/완료 시각을 typed run column과 composite
+  FK로 결박한다. phase/final nullable material은 `num_nonnulls`와 explicit `IS NOT NULL` 조건으로
+  all-or-none을 강제한다.
+- local evidence가 고정된 동안 consumer-role HTTP transport로 `get_stream → get_snapshot → get_stream`을
+  읽는다. 두 stream control tuple은 exact하게 같고 ready이며 blocked/active reconciliation이 없어야 한다.
+  remote epoch/control version/ETag와 snapshot high-watermark를 local mirror와 분리해 저장한다.
+- generic snapshot high-watermark의 일반 계약은 commit-safe replay lower-bound로 유지한다. 고립된 canary
+  성공 순간에는 미소비 event가 없어야 하므로 local applied, local remote-ACK mirror, 실제 remote snapshot
+  high-watermark 세 cursor의 exact equality를 더 강하게 요구한다.
+- 이미 성공한 run도 fresh remote live call과 전체 local provenance 재검증 없이는 receipt를 반환하지 않는다.
+- forward commit의 final boundary는 canary live call과 분리한다. Manager가 `csv5 → Map H35 gc → final
+  all-writer fence → stopped-Map DB typed evidence → Pin finalize` 순서를 소유하며, Pin finalize는 HTTP를
+  호출하지 않는다. Map evidence object/SHA-256과 fresh Pin provenance를 한 transaction에서 대조한다.
+- final audit는 outer transaction PK, cutover unique, canonical 13-field request SHA-256, initial/final writer
+  fence, Map evidence, prior receipt와 전체 evidence SHA-256을 typed column에 저장하고 UPDATE/DELETE/TRUNCATE를
+  거부한다. Manager는 receipt의 `audit_id`를 fresh 조회해 정확히 한 행임을 다시 증명한다.
+- config·CLI·service timeout/poll은 finite 양수만 허용하고, 잘못된 CLI argv는 supplied value나 usage 없이
+  typed JSON 한 줄로 종료한다.
+
+### 근거
+
+DB identity와 원격 stream 진행도는 서로 다른 trust source다. 각각 독립 관측한 뒤 동일 성공 transaction에
+결박해야 net-zero 상태 변화, restore/control race, observation 이후 변조를 모두 fail-close할 수 있다.
+
+### 결과
+
+- **긍정**: receipt가 성공한 순간의 command→event→ACK와 remote stream 수렴을 재현 가능한 typed 증거로
+  남긴다.
+- **긍정**: 동일 성공 run의 재호출도 stale receipt cache로 동작하지 않는다.
+- **긍정**: writer stop 뒤 final proof에는 네트워크 재진입이 없고, 응답 유실 replay도 동일 request/audit
+  한 행으로만 수렴한다.
+- **부정**: canary finalization의 세 remote read 동안 관련 local writer가 잠시 대기한다.
+- **부정**: 일반 consumer보다 강한 cursor exact equality 때문에 실제 미소비 event가 있으면 canary가
+  수렴할 때까지 성공하지 않는다.
+
+### 후속
+
+- migration `0048`, canary service/CLI, schema·race·remote drift 테스트와 운영 runbook을 같은 계약으로
+  갱신한다.
+- n150 paired live proof에서 remote control/cursor 독립 receipt를 확인한다.
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-059**
+- 다음 신규 ADR = **ADR-061**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

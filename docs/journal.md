@@ -2,6 +2,120 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-02 (codex) — T-VN-41 final remote deadline·terminal 분류
+
+**작업**: Pin #424 유일 적대 리뷰의 P1/P2를 반영해 causal canary가 PostgreSQL writer fence를 운영자
+timeout보다 오래 유지하는 경로와 비재시도 오류의 transient 오분류를 닫았다.
+**변경**: 성공 transaction의 remote stream/snapshot bracket을 남은 monotonic budget으로 취소한다.
+network/timeout과 exact `429/503 SNAPSHOT_*`만 resumable이며, `401/403`, `413`, other service rejection과
+contract/schema 오류는 별도 terminal code로 즉시 fail-close한다. raw exception context는 제거했다.
+**검증**: Ruff/format, strict mypy, unit/transport 60건, 실제 PostgreSQL causal integration 39건이 통과했다.
+slow snapshot에서 writer가 실제로 block된 뒤 0.3초 deadline 직후 재개되는 회귀와 terminal/resumable run
+상태를 포함한다.
+**다음**: 보안 감사·push·PR 코멘트 후 동일 리뷰어의 새 exact HEAD 1인 재리뷰를 받는다.
+
+## 2026-08-02 (codex) — T-VN-41 final writer fence 이후 무-HTTP 증거 경계
+
+**작업**: forward commit 직전의 stopped-Map/Pin 증거와 commit 응답 유실 replay를 fail-close하도록 production
+boundary helper와 append-only audit를 구현했다.
+**변경**: `preflight|finalize` strict JSON 계약, exact schema 0047/0048, Pin DB identity/in-flight 검증,
+initial/canary 전체 provenance, app queue 실제 count, Map final typed evidence를 결박했다. final request의
+canonical SHA-256, initial/final writer fence, Map/prior/evidence SHA-256을 audit row에 저장하고 모든 mutation을
+trigger로 거부한다. concurrent finalize는 선행 `SHARE ROW EXCLUSIVE` lock과 전용 helper session 식별로
+직렬화하며 동일 request/audit만 replay한다. causal 공통 검증은 전용 evidence 모듈로 분리했다.
+**검증**: Ruff, strict mypy 210 source, 관련 unit 142건, 실제 PostgreSQL causal/schema 37건과
+0047→0048→0047→0048 migration cycle이 통과했다.
+**다음**: 전체 gate, exact HEAD 독립 적대적 리뷰 1건, n150 paired live proof.
+
+## 2026-08-02 (codex) — T-VN-41 atomic finalization과 remote cursor 독립 증거
+
+**작업**: 적대적 리뷰 A/B가 발견한 net-zero 미소비 remote event와 최초 success provenance race를
+fail-close하도록 causal receipt 경계를 보강했다.
+**변경**: 성공 transaction이 local mutable table을 bounded writer-fence한 채 PUT/DELETE
+command→state-applied event→claim item ACK→claim terminal tuple를 fresh 재검증하고, Map
+`get_stream→get_snapshot→get_stream`을 bracket한다. remote restore epoch/control version/ETag와 HTTP snapshot
+high-watermark를 local applied/ACK mirror와 별도 typed column으로 저장하며 세 cursor exact 수렴을 요구한다.
+migration `0048`은 source command generated UUID, command/event fingerprint, ACK cursor/fingerprint/시각,
+claim consumer/status/completion composite FK와 phase/final explicit NULL all-or-none CHECK를 갖는다. CLI parse
+오류는 raw argv/usage 없이 typed JSON 한 줄, config/CLI/service timeout NaN/±Inf는 advisory lock 전에 거부한다.
+**검증**: CLI/config/service 단위 72건, 실제 PostgreSQL causal/schema 32건 중 remote-cursor test timeout을
+보정한 단독 재검증이 통과했다. full PostgreSQL focused 재실행과 strict mypy/CI 동등 gate가 남았다.
+**다음**: 전체 gate 후 exact head를 push하고 A/B 재리뷰와 n150 live proof를 수행한다.
+
+## 2026-08-02 (codex) — T-VN-41 적대적 리뷰 A/B NO-GO 반영
+
+**작업**: 성공한 동일 run의 stale receipt, 증거 column 복제, provenance/credential/CLI 누출 경계를
+fail-close하도록 보강했다.
+**변경**: 성공 재호출도 current stable tombstone, command/event/claim ACK, ready/epoch/cursor/cache,
+backlog와 fresh snapshot self-Merkle 및 local/remote identity를 저장 성공 관측값에 다시 대조한다. receipt는
+분리된 local/remote/backlog typed column에서만 출력한다. 네 cache-target 역할은 서로뿐 아니라 service,
+admin service/proxy, ops, public API, VWorld credential과도 달라야 한다. CLI의 예상하지 못한 Pydantic/URL/token
+오류는 raw cause/traceback 없이 고정 internal error JSON 한 줄로 닫는다.
+**검증**: strict mypy 207 source, focused unit 50건, PostgreSQL focused 23건을 통과했다. 성공 직후 출력 유실
+재호출과 head/ready/epoch/cursor/cache/backlog/valid snapshot identity/self-root drift, command/event/ACK 변조,
+DB final evidence/FK 위반을 포함한다.
+**다음**: 새 exact head의 CI와 두 독립 적대적 재리뷰를 통과한 뒤 n150 paired live proof를 수행한다.
+
+## 2026-08-02 (codex) — T-VN-41 causal receipt·provenance 재설계
+
+**작업**: 적대적 리뷰에서 확인된 stale same-run receipt와 증거 복제 가능성을 없애도록 migration `0048`의
+정본을 서비스 전 단계에서 clean-cut 재설계했다.
+**변경**: final local/remote cursor·count·Merkle와 pending/leased/dead-letter 실제 관측값을 각각 typed
+column으로 분리하고 all-or-none, equality, backlog zero CHECK로 결박했다. PUT/DELETE command는 target과
+generation, event는 generation, ACK는 claim/event 합성키로 canary row에 연결한다. 이미 성공한 run도 current
+stable tombstone, provenance, consumer epoch/cursor/cache, backlog와 fresh snapshot/Merkle를 저장 관측값에
+재대조해야만 receipt를 다시 반환하는 계약으로 문서를 정정했다.
+**다음**: 서비스 재증명, credential trust-boundary startup gate와 secret-free CLI 회귀를 구현한다.
+
+## 2026-08-02 (codex) — T-VN-41 generation 7 exact pair pin
+
+**작업**: 두 독립 적대적 리뷰가 GO한 Map 계약을 PinVi runtime과 vendored service OpenAPI에 exact pin했다.
+**변경**: artifact owner `1285ff4974a2fa8d4b71f810dc9fca249397e8fc`, functional owner
+`9b945ce832ecc3ed037d66c9d4e7bda9a1a69ae0`, OpenAPI SHA-256
+`622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2`, contract generation `7`을 함께
+갱신했다. generation 6은 config에서 거부하고 17-route scope/caller inventory와 command/consumer token
+swap `403`을 음성 회귀로 고정했다.
+**다음**: full gate와 n150 live token-swap/causal canary evidence를 완료한다.
+
+## 2026-08-02 (codex) — T-VN-41 command/consumer 전환 transport 완결
+
+**작업**: generation 7 역할 분리에서 빠져 있던 target source GET, refresh 생성, refresh status GET을
+기존 role-bound Map service client에 추가했다.
+**변경**: target GET과 refresh status GET은 consumer principal, refresh 생성은 command principal로 HTTP
+호출 전에 fail-close한다. target GET의 nullable incarnation/ETag와 refresh request ID/status URL,
+202 Location/Retry-After를 strict DTO로 검증한다.
+**검증**: command/consumer 서로 다른 token의 생성→조회 전환, active CAS 및 live incarnation이 없는
+tombstone source GET, 세 교차 역할 호출의 HTTP 이전 거부를 포함한 transport 40개, Ruff, strict mypy가
+통과했다.
+**다음**: 전체 API gate와 causal PostgreSQL gate를 재실행하고 Map generation 7 수정본 GO 뒤 exact pin한다.
+
+## 2026-08-02 (codex) — T-VN-41 durable causal canary docs-first
+
+**작업**: docker-manager가 running ordinary API container에서 호출하는 causal canary 계약과 운영 runbook을
+추가했다.
+**변경**: migration 0048의 typed durable run 정본, 고정 target advisory lock, run별 deterministic PUT/DELETE,
+state-applied apply·ACK·cache generation과 최종 count/Merkle/cursor/backlog 검증을 구현했다. timeout과 일시적
+최종 수렴 실패는 running을 보존해 같은 run ID로 재개하고 material/snapshot checksum 위반만 terminal로
+분류한다. Docker 독립 검증용 JSON은 양쪽 cursor/count/root와 backlog 3종을 각각 노출한다.
+**결정**: run UUID와 모든 실행이 재사용하는 deterministic target UUID를 분리해 tombstone 누적 없이
+user POI를 건드리지 않는다. stable synthetic tombstone과 실행 감사 row는 유지한다. ordinary
+command/consumer token만 사용하며 recovery registry scope는 exact `cache-target:recovery`와
+`cache-target:recovery-replay` 두 개다.
+**검증**: 실제 PostgreSQL에서 schema CHECK 3건과 PUT timeout 재개, ACK gap 재개, corrupt Merkle fail-close,
+concurrent advisory lock 4건이 통과했다.
+**다음**: Map generation 7 exact artifact 확정 뒤 pin/OpenAPI negative gate와 두 독립 적대적 리뷰를 완료한다.
+
+## 2026-08-02 (codex) — T-VN-41 generation 7 최소 권한 계약
+
+**작업**: command endpoint를 exact `cache-target:command`로 분리하고 legacy
+`cache-target:consumer` umbrella scope 자체를 clean-cut 삭제하는 generation 7 계획을 문서화했다.
+**변경**: ADR-059, T-VN-41 execplan, Map integration, tasks/resume를 같은 계약으로 정렬했다.
+**결정**: consumer는 역할 이름이고 scope는 `cache-target:read/claim/ack/nack/snapshot` exact 5개 배열이다.
+generation 6은 호환 fallback으로 인정하지 않고 command/consumer token swap도 실패해야 한다. Map final
+artifact가 확정되기 전에는 placeholder나 임시 provenance를 코드에 넣지 않는다.
+**다음**: exact OpenAPI/functional owner를 받은 뒤 runtime pin과 negative test를 추가하고 두 독립 적대적
+리뷰를 통과한다.
+
 ## 2026-08-02 (codex) — T-VN-41 snapshot lower-bound/backpressure 소비 계약
 
 Map snapshot high-watermark는 exact snapshot cutover가 아니라 system-scoped safe replay lower-bound다.

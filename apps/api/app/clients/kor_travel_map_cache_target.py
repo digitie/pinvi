@@ -91,11 +91,29 @@ class CacheTargetServiceProblem(RuntimeError):
         self.disposition = classify_cache_target_failure(status_code=status_code, code=code)
 
 
+def is_retryable_snapshot_problem(problem: CacheTargetServiceProblem) -> bool:
+    """snapshot traversal에서 재시도할 수 있는 pinned problem인지 판별한다."""
+    return (problem.status_code, problem.code) in _SNAPSHOT_RETRYABLE_PROBLEMS
+
+
 @dataclass(frozen=True, slots=True)
 class CacheTargetMutationResult:
     status_code: int
     data: CacheTargetStateResult
     etag: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class CacheTargetSourceReadResult:
+    data: CacheTargetSourceReadRecord
+    etag: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class CacheTargetRefreshResult:
+    data: CacheTargetRefreshRecord
+    location: str | None
+    retry_after: int | None
 
 
 class CacheTargetStateResult(BaseModel):
@@ -152,6 +170,89 @@ class CacheTargetStateResult(BaseModel):
             or str(int(version)) != version
         ):
             raise ValueError("entity_tag version이 canonical positive decimal이 아닙니다.")
+        return self
+
+
+class CacheTargetSourceReadRecord(BaseModel):
+    """consumer target GET의 nullable tombstone projection."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    external_system: Literal["pinvi"]
+    target_key: str
+    state: Literal["active", "deleted"]
+    restore_epoch: StrictInt = Field(gt=0)
+    source_generation: StrictInt = Field(gt=0)
+    source_payload_fingerprint: str
+    entity_tag: str | None = None
+    target_id: str | None = None
+    target_sequence: StrictInt | None = Field(default=None, ge=0)
+    occurred_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @field_validator("source_payload_fingerprint")
+    @classmethod
+    def validate_fingerprint(cls, value: str) -> str:
+        return CacheTargetStateResult.validate_fingerprint(value)
+
+    @model_validator(mode="after")
+    def validate_identity(self) -> Self:
+        if self.target_key != str(uuid.UUID(self.target_key)):
+            raise ValueError("target_key가 canonical UUID가 아닙니다.")
+        incarnation = (self.entity_tag, self.target_id)
+        if all(value is None for value in incarnation):
+            if self.state != "deleted":
+                raise ValueError("active target read에 incarnation identity가 없습니다.")
+            return self
+        if any(value is None for value in incarnation):
+            raise ValueError("target read incarnation identity가 pair가 아닙니다.")
+        assert self.entity_tag is not None
+        assert self.target_id is not None
+        canonical_target_id = str(uuid.UUID(self.target_id))
+        if self.target_id != canonical_target_id:
+            raise ValueError("target_id가 lowercase canonical UUID가 아닙니다.")
+        prefix = f'"{canonical_target_id}:'
+        if not self.entity_tag.startswith(prefix) or not self.entity_tag.endswith('"'):
+            raise ValueError("entity_tag가 target strong ETag 형식이 아닙니다.")
+        version = self.entity_tag[len(prefix) : -1]
+        if (
+            not version.isascii()
+            or not version.isdigit()
+            or int(version) < 1
+            or str(int(version)) != version
+        ):
+            raise ValueError("entity_tag version이 canonical positive decimal이 아닙니다.")
+        return self
+
+
+class CacheTargetRefreshRecord(BaseModel):
+    """refresh create/status GET의 strict operation projection."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: uuid.UUID
+    status: str
+    status_url: str
+    retry_after_seconds: StrictInt | None = Field(default=None, ge=1)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @field_validator("request_id", mode="before")
+    @classmethod
+    def validate_request_id(cls, value: object) -> object:
+        if isinstance(value, uuid.UUID):
+            return value
+        if not isinstance(value, str) or str(uuid.UUID(value)) != value:
+            raise ValueError("request_id가 lowercase canonical UUID가 아닙니다.")
+        return value
+
+    @model_validator(mode="after")
+    def validate_status_identity(self) -> Self:
+        if not self.status or self.status != self.status.strip():
+            raise ValueError("refresh status가 canonical non-empty 문자열이 아닙니다.")
+        expected_status_url = f"/v1/service/refresh-requests/{self.request_id}"
+        if self.status_url != expected_status_url:
+            raise ValueError("refresh status_url이 request identity와 다릅니다.")
         return self
 
 
@@ -534,6 +635,84 @@ class CacheTargetServiceClient:
         )
         return CacheTargetMutationResult(response.status_code, data, response.headers.get("ETag"))
 
+    async def get_target(
+        self,
+        *,
+        external_system: Literal["pinvi"],
+        target_key: str,
+        include_deleted: bool = False,
+    ) -> CacheTargetSourceReadResult:
+        self._require_role("consumer")
+        path = (
+            f"/v1/service/cache-targets/{quote(external_system, safe='')}"
+            f"/{quote(target_key, safe='')}"
+        )
+        response = await self._send(
+            "GET",
+            path,
+            params={"include_deleted": "true" if include_deleted else "false"},
+        )
+        data = CacheTargetSourceReadRecord.model_validate(_unwrap_data(response))
+        if data.target_key != target_key or (data.state == "deleted" and not include_deleted):
+            raise CacheTargetContractError("target read response가 요청 identity와 다릅니다.")
+        response_etag = response.headers.get("ETag")
+        if response_etag != data.entity_tag:
+            raise CacheTargetContractError("target read ETag header/body가 다릅니다.")
+        return CacheTargetSourceReadResult(data=data, etag=response_etag)
+
+    async def create_refresh_request(
+        self,
+        *,
+        external_system: Literal["pinvi"],
+        target_keys: list[str],
+        reason: str,
+        idempotency_key: uuid.UUID,
+    ) -> CacheTargetRefreshResult:
+        self._require_role("command")
+        if not 1 <= len(target_keys) <= 500 or len(target_keys) != len(set(target_keys)):
+            raise ValueError("refresh target_keys는 중복 없는 1..500개여야 합니다.")
+        if any(target_key != str(uuid.UUID(target_key)) for target_key in target_keys):
+            raise ValueError("refresh target_key가 canonical UUID가 아닙니다.")
+        if not 1 <= len(reason) <= 1000 or reason != reason.strip():
+            raise ValueError("refresh reason은 trim된 1..1000자여야 합니다.")
+        response = await self._send(
+            "POST",
+            "/v1/service/refresh-requests",
+            body={
+                "external_system": external_system,
+                "target_keys": target_keys,
+                "reason": reason,
+            },
+            idempotency_key=idempotency_key,
+        )
+        data = CacheTargetRefreshRecord.model_validate(_unwrap_data(response))
+        location = response.headers.get("Location")
+        retry_after = _retry_after(response)
+        if response.status_code != 202 or location != data.status_url:
+            raise CacheTargetContractError("refresh create status/Location이 다릅니다.")
+        if retry_after is None or retry_after != data.retry_after_seconds:
+            raise CacheTargetContractError("refresh create Retry-After가 body와 다릅니다.")
+        return CacheTargetRefreshResult(data=data, location=location, retry_after=retry_after)
+
+    async def get_refresh_request(
+        self,
+        *,
+        request_id: uuid.UUID,
+    ) -> CacheTargetRefreshResult:
+        self._require_role("consumer")
+        response = await self._send(
+            "GET",
+            f"/v1/service/refresh-requests/{request_id}",
+        )
+        data = CacheTargetRefreshRecord.model_validate(_unwrap_data(response))
+        if data.request_id != request_id:
+            raise CacheTargetContractError("refresh status request identity가 다릅니다.")
+        return CacheTargetRefreshResult(
+            data=data,
+            location=response.headers.get("Location"),
+            retry_after=_retry_after(response),
+        )
+
     @staticmethod
     def _validate_mutation_result(
         *,
@@ -764,8 +943,7 @@ class CacheTargetServiceClient:
                     request_timeout=_SNAPSHOT_REQUEST_TIMEOUT,
                 )
             except CacheTargetServiceProblem as problem:
-                identity = (problem.status_code, problem.code)
-                if identity not in _SNAPSHOT_RETRYABLE_PROBLEMS:
+                if not is_retryable_snapshot_problem(problem):
                     raise
                 if problem.retry_after is None:
                     raise CacheTargetContractError(

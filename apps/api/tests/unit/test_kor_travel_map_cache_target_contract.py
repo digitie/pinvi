@@ -17,9 +17,89 @@ from app.core.config import (
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-service.json"
 )
-_ARTIFACT_COMMIT = "5d9c42dfc7d908ace1129c7ca2682bac54d572d7"
-_FUNCTIONAL_OWNER_COMMIT = "5d9c42dfc7d908ace1129c7ca2682bac54d572d7"
-_SNAPSHOT_SHA256 = "aff24f12e4129c81cd58c96c696e6f900cc031df68e2858c3e4a63963e13baf3"
+_ARTIFACT_COMMIT = "1285ff4974a2fa8d4b71f810dc9fca249397e8fc"
+_FUNCTIONAL_OWNER_COMMIT = "9b945ce832ecc3ed037d66c9d4e7bda9a1a69ae0"
+_SNAPSHOT_SHA256 = "622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2"
+
+_GENERATION7_ROLE_SCOPES = {
+    "command": {"cache-target:command"},
+    "consumer": {
+        "cache-target:read",
+        "cache-target:claim",
+        "cache-target:ack",
+        "cache-target:nack",
+        "cache-target:snapshot",
+    },
+    "restore": {"cache-target:restore-fence"},
+    "recovery": {"cache-target:recovery", "cache-target:recovery-replay"},
+}
+_GENERATION7_OPERATION_CONTRACT = {
+    ("put", "/v1/service/cache-targets/{external_system}/{target_key}"): (
+        "cache-target:command",
+        "command",
+    ),
+    ("get", "/v1/service/cache-targets/{external_system}/{target_key}"): (
+        "cache-target:read",
+        "consumer",
+    ),
+    ("delete", "/v1/service/cache-targets/{external_system}/{target_key}"): (
+        "cache-target:command",
+        "command",
+    ),
+    ("get", "/v1/service/cache-target-streams/{external_system}"): (
+        "cache-target:read",
+        "consumer",
+    ),
+    ("post", "/v1/service/cache-target-streams/{external_system}/restore-fences"): (
+        "cache-target:restore-fence",
+        "restore",
+    ),
+    ("post", "/v1/service/refresh-requests"): ("cache-target:command", "command"),
+    ("get", "/v1/service/refresh-requests/{request_id}"): (
+        "cache-target:read",
+        "consumer",
+    ),
+    ("post", "/v1/service/cache-target-event-claims"): (
+        "cache-target:claim",
+        "consumer",
+    ),
+    ("post", "/v1/service/cache-target-event-acks"): (
+        "cache-target:ack",
+        "consumer",
+    ),
+    ("post", "/v1/service/cache-target-event-nacks"): (
+        "cache-target:nack",
+        "consumer",
+    ),
+    ("get", "/v1/service/cache-target-event-dead-letters/{event_id}"): (
+        "cache-target:recovery-replay",
+        "recovery",
+    ),
+    ("post", "/v1/service/cache-target-event-dead-letters/{event_id}/replays"): (
+        "cache-target:recovery-replay",
+        "recovery",
+    ),
+    ("post", "/v1/service/cache-target-reconciliations"): (
+        "cache-target:recovery",
+        "recovery",
+    ),
+    ("post", "/v1/service/cache-target-reconciliations/{request_id}/seals"): (
+        "cache-target:recovery",
+        "recovery",
+    ),
+    ("post", "/v1/service/cache-target-reconciliations/{request_id}/completions"): (
+        "cache-target:snapshot",
+        "consumer",
+    ),
+    ("get", "/v1/service/cache-target-snapshots/{external_system}"): (
+        "cache-target:snapshot",
+        "consumer",
+    ),
+    ("get", "/v1/service/cache-target-reconciliations/{request_id}/snapshot"): (
+        "cache-target:snapshot",
+        "consumer",
+    ),
+}
 
 
 def _spec() -> dict[str, Any]:
@@ -33,7 +113,24 @@ def test_service_snapshot_exact_bytes_and_runtime_pin_match_functional_owner() -
     assert CACHE_TARGET_SERVICE_OPENAPI_SHA256 == _SNAPSHOT_SHA256
     assert CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION == _ARTIFACT_COMMIT
     assert CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION == _FUNCTIONAL_OWNER_COMMIT
-    assert CACHE_TARGET_SERVICE_CONTRACT_GENERATION == 6
+    assert CACHE_TARGET_SERVICE_CONTRACT_GENERATION == 7
+
+
+def test_generation7_service_scope_and_caller_inventory_is_exact() -> None:
+    spec = _spec()
+    actual: dict[tuple[str, str], str] = {}
+    for path, path_item in spec["paths"].items():
+        if not path.startswith(("/v1/service/cache-target", "/v1/service/refresh-requests")):
+            continue
+        for method, operation in path_item.items():
+            if method not in {"get", "put", "post", "delete"}:
+                continue
+            actual[(method, path)] = operation["x-required-service-scope"]
+
+    assert set(actual) == set(_GENERATION7_OPERATION_CONTRACT)
+    for route, (required_scope, caller_role) in _GENERATION7_OPERATION_CONTRACT.items():
+        assert actual[route] == required_scope
+        assert required_scope in _GENERATION7_ROLE_SCOPES[caller_role]
 
 
 def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:

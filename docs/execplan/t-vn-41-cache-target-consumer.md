@@ -209,25 +209,39 @@ OpenAPI/source revision과 함께 drift를 차단한다. 양쪽 fixture를 같�
 
 ordinary API runtime에는 역할별 credential만 주입한다.
 
-| principal        | 허용 범위                                                                      |
-| ---------------- | ------------------------------------------------------------------------------ |
-| command producer | target PUT/GET/DELETE와 refresh create/read                                    |
-| consumer         | stream read, claim/ack/nack, fixed/request snapshot, reconciliation completion |
-| restore fence    | stream restore-fence CAS만; restore job에만 단기 주입                          |
-| recovery replay  | 자기 stream DLQ read/replay만; 일반 worker에 미주입                            |
+| principal        | exact scope 배열                                                                                | 허용 범위                                                                      |
+| ---------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| command producer | `cache-target:command`                                                                          | target PUT/DELETE와 refresh create                                             |
+| consumer         | `cache-target:read`, `cache-target:claim`, `cache-target:ack`, `cache-target:nack`, `cache-target:snapshot` | target/refresh status GET, stream read, claim/ack/nack, snapshot/completion     |
+| restore fence    | `cache-target:restore-fence`                                                                    | stream restore-fence CAS만; restore job에만 단기 주입                          |
+| recovery replay  | `cache-target:recovery`, `cache-target:recovery-replay`                                            | 자기 stream DLQ read/replay만; 일반 worker에 미주입                            |
 
-한 token을 여러 역할에 재사용하면 startup/config validation이 실패한다. admin/ops credential fallback은
-없다.
+한 token을 여러 역할에 재사용하면 startup/config validation이 실패한다. 네 역할 token은 service/admin
+service/ops credential뿐 아니라 admin proxy secret, explicit Map public API key, 모바일에 노출되는 VWorld
+key와도 달라야 한다. explicit public key가 있더라도 VWorld key는 별도 lower-trust 경계이므로 비교에서
+제외하지 않는다. admin/ops credential fallback은 없다. generation 7에서는 legacy
+`cache-target:consumer` scope 자체를 enum/auth에서 삭제한다. 여기서
+consumer는 PinVi 역할 이름일 뿐 scope 문자열이 아니다. command transport가 consumer 역할 token으로
+성공하거나 consumer transport가 command token으로 성공하는 배포는 호환 대상으로 다루지 않고
+startup/live gate에서 거부한다.
 
-서비스 계약은 Map artifact owner commit `5d9c42dfc7d908ace1129c7ca2682bac54d572d7`의
+generation 7은 command endpoint를 exact `cache-target:command` scope로 분리하고 legacy
+`cache-target:consumer` umbrella scope를 clean-cut 삭제한다. consumer 역할에는 exact
+`read/claim/ack/nack/snapshot` 5개 scope 배열만 부여한다. PinVi role-bound client의 command/consumer
+transport와 token은 계속 분리하며 generation 6 manifest/source 조합으로 sync를 켜지 않는다. 두 독립
+적대적 리뷰가 GO한 Map exact head에서 artifact owner, functional owner, OpenAPI SHA-256, contract
+generation 7을 한 transaction처럼 함께 갱신하고 exact byte/ancestry/config negative test를 통과시킨다.
+
+서비스 계약은 Map artifact owner commit `1285ff4974a2fa8d4b71f810dc9fca249397e8fc`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor하며 SHA-256은
-`aff24f12e4129c81cd58c96c696e6f900cc031df68e2858c3e4a63963e13baf3`다. 현재 functional owner는
-`5d9c42dfc7d908ace1129c7ca2682bac54d572d7`이며, sync를 켤 때 이 SHA, functional owner revision,
-contract generation `6`이 모두 exact하게 맞아야 한다. CI는 artifact owner가 functional owner의
+`622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2`다. functional owner는
+`9b945ce832ecc3ed037d66c9d4e7bda9a1a69ae0`이며, sync를 켤 때 이 SHA, functional owner revision,
+contract generation `7`이 모두 exact하게 맞아야 한다. CI는 artifact owner가 functional owner의
 ancestor임을 검증한다. functional owner는 기능 계약의 provenance이며 배포 Map 이미지나 `/version`의
 git SHA와 비교하지 않는다.
 
-generation 6은 generation 5의 snapshot lifetime 계약에 trim된 Unicode NFC identity, 512자
+generation 7은 generation 6 계약에 exact command/consumer 역할 분리와 17-route
+`x-required-service-scope` inventory를 추가한다. generation 6은 generation 5의 snapshot lifetime 계약에 trim된 Unicode NFC identity, 512자
 `target_key`, 중복 없는 refresh key 배열과 typed snapshot backpressure 오류 계약을 추가한다.
 generation 5는 generation 4에 snapshot의 timezone-aware `created_at`/`expires_at`을 필수화했다.
 generic snapshot은 첫 페이지 수신 시 최소 1시간의 traversal window가 남아야 하고, 이후 모든 페이지의
@@ -246,6 +260,96 @@ lock 전용 connection은 획득 직후 transaction을 commit하고, bootstrap �
 `503 SNAPSHOT_{BARRIER_TIMEOUT,BUILD_TIMEOUT,BUSY,TTL_TOO_SHORT}`는 canonical `Retry-After`를 지켜 최대
 3회 시도하고, header가 잘못됐거나 budget이 끝나면 fail-close한다. `413
 SNAPSHOT_ITEM_LIMIT_EXCEEDED`는 운영 개입이 필요한 materialization ceiling이므로 자동 재시도하지 않는다.
+causal canary는 transport별 70초/`Retry-After` budget보다 운영자가 준 전체 monotonic deadline을
+우선한다. 성공 transaction의 `get_stream → get_snapshot → get_stream` 전체를 남은 deadline으로 취소하며,
+긴 request나 `Retry-After` 대기 때문에 PostgreSQL `SHARE` writer fence를 deadline 밖까지 유지하지 않는다.
+
+### 5.1 production causal canary
+
+`pinvi-cache-target-causal-canary`는 sync가 켜져 있고 ready인 ordinary PinVi API container 안에서
+docker-manager가 `docker exec`로 실행한다. API container에 이미 있는 command/consumer token만 사용하고
+restore/recovery token을 요구하거나 읽지 않는다. supplied UUID는 매 실행별 durable `run_id`이며 합성 target은
+별도 deterministic UUID 하나를 모든 실행이 재사용한다. `trip_day_pois`나 user trip/POI row를 만들거나
+수정하지 않는다.
+
+migration `0048`의 `app.ktm_cache_target_canary_runs`가 실행 정본이다. 실행별 `run_id` PK, 고정 synthetic
+target UUID, consumer ID, deterministic PUT/DELETE command UUID, 각 source generation/fingerprint,
+state-applied event source command/fingerprint, claim ACK cursor/fingerprint/ACK·완료 시각,
+baseline/final cache generation, local applied/local ACK mirror/remote snapshot cursor, 양쪽 count·Merkle root,
+pending/leased/dead-letter 실제 관측값, remote restore epoch/control version/ETag, phase, terminal error와 시각을
+typed column으로 보존한다. command, event source command/fingerprint, claim item ACK terminal tuple과 claim
+terminal tuple을 composite FK로 결박하고 phase/final 관측값은 explicit all-or-none 및 equality/backlog zero
+CHECK로 고정한다. raw payload나 credential은 저장하지 않는다.
+같은 run ID 재실행은 이 row를 잠가 정확히 중단 phase부터 재개한다. 이미 성공한 run ID도 저장 receipt를
+그대로 재출력하지 않고 current stable tombstone head, command/event/claim ACK provenance, ready consumer와
+epoch/cursor/cache generation, 실제 backlog, 새 Map snapshot의 self-Merkle와 local/remote identity가 저장된
+성공 관측값과 모두 같을 때만 재출력한다. 새 event나 restore 등으로 현재 상태가 바뀌었으면 새 run ID가
+필요하며 기존 receipt를 현재 증거처럼 반환하지 않는다. target/head/command/event material이
+기록과 다르거나 다른 provenance의 synthetic row가 선점했으면 추측해 덮어쓰지 않고 fail-close한다.
+`target_poi_id WHERE status='running'` partial unique index가 process crash와 경합에서도 active run을 하나로
+제한한다. 기존 running row와 같은 run ID만 재개하며 다른 supplied run ID는 `active_run_conflict`로
+fail-close한다.
+
+고정 target용 PostgreSQL session advisory lock으로 전체 run을 직렬화한 뒤 아래 causal chain을 검증한다.
+
+1. canonical active source/fingerprint로 기존 stable head generation을 단조 증가시키고 run별 deterministic PUT command를
+   같은 transaction에 enqueue한다.
+2. ordinary background worker가 PUT을 성공시키고 matching `cache_target.state_applied` inbox를 apply한 뒤
+   해당 claim item을 ACK하며 `feature_cache_generation`을 증가시킬 때까지 bounded wait한다.
+3. 같은 방식으로 tombstone generation과 deterministic DELETE를 enqueue하고 DELETE event apply/ACK/cache
+   generation 증가를 bounded wait한다.
+4. 성공 직전 transaction에서 consumer/command/head/event/claim/claim-item writer를 bounded `SHARE` table
+   lock으로 고정하고 PUT·DELETE command→event→ACK provenance를 fresh 재검증한다. 이 transaction 안에서
+   Map `get_stream → get_snapshot → get_stream`을 읽어 두 stream control tuple이 같고 ready이며 active
+   reconciliation이 없음을 증명한다. stable tombstone의 exact generation/fingerprint/remote deleted tuple,
+   local desired head 전체 count/Merkle와 Map generic snapshot self-root 및 exact count/root, remote stream과
+   snapshot 및 local consumer의 restore epoch/ETag를 대조한다. 일반 소비 계약에서 snapshot
+   high-watermark는 commit-safe replay lower-bound지만, 고립된 canary 성공 순간에는 미소비 event가 없어야
+   하므로 `local_applied == local_remote_acked == remote_snapshot_high_watermark` exact 수렴을 추가로 요구한다.
+   전역 pending/leased/dead-letter command 0도 같은 성공 transaction에 저장한다.
+
+bounded timeout, ACK 미완료, generic snapshot 일시 실패와 final backlog/cursor/Merkle 미수렴은 실행 row를
+`running`으로 보존하고 nonzero로 끝내 같은 run ID가 정확한 phase부터 재개한다. dead/halt와
+event/command/provenance 불변식 위반, snapshot 자체 checksum·응답 계약 위반, `401/403` credential/scope
+오류, `413` materialization ceiling과 그 밖의 비재시도 service 거절은 terminal `failed`로 남긴다.
+일시 실패는 network/timeout 및 pinned allowlist의 `429/503 SNAPSHOT_*`만 허용한다. 성공한
+synthetic tombstone head와 run/command/event 감사 row는 삭제하지 않는다. stdout의 secret-free 단일 JSON은
+`status=succeeded`, canary/command/event ID, generation, relay order, cache generation before/after와 함께
+pending/leased/dead-letter command 수는 성공 transaction에서 각각 관측·저장한 typed column로,
+remote stream epoch/control version/ETag, local applied/local ACK mirror/remote snapshot high-watermark cursor와
+local/remote count·Merkle root도 각 독립 관측 column에서 그대로 담는다.
+typed canary failure는 stderr에 `error_code`와 `phase`만 단일 JSON line으로 출력한다. 그 밖의 Pydantic,
+URL, token parsing 및 예상하지 못한 `Exception`도 raw cause/traceback 없이 고정
+`internal_error/runtime` JSON으로 닫고, process cancellation과 `SystemExit`은 삼키지 않는다.
+argparse 자체의 UUID/float/unknown option 오류도 supplied argv와 usage를 echo하지 않고
+`invalid_arguments/startup` JSON 한 줄과 exit code `2`로 닫는다. timeout/poll은 config·CLI·service에서
+finite 양수만 허용해 advisory lock을 잡기 전에 NaN/±Inf를 거부한다.
+양쪽 값을 하나의 필드로 축약하지 않으며 URL, token, raw payload는 포함하지 않는다. 운영 절차는
+[`docs/runbooks/cache-target-causal-canary.md`](../runbooks/cache-target-causal-canary.md)를 따른다.
+
+forward commit 직전의 quiescence 증명은 destructive causal canary와 분리한
+`pinvi-cache-target-final-boundary {preflight,finalize}`가 소유한다. 이 명령은 subcommand 외 argv를 받지 않고
+stdin의 strict JSON 한 개만 읽어 stdout에 secret-free JSON 한 줄만 쓴다. `preflight`는 schema `0047`에서
+고정 5-writer registry digest와 manager의 initial writer-fence digest를 결박하고 Pin DB의 다른 in-flight
+transaction과 generation 7 command/event/claim material이 모두 0인지 read-only로 확인한다. 이후 Manager는
+`csv5 → Map H35 gc → final all-writer fence → Map final evidence → Pin finalize` 순서를 지킨다. `finalize`는
+HTTP를 호출하지 않는다. schema `0048`에서 initial reconciliation 1건과 causal canary PUT/DELETE 2건의
+command/event/terminal ACK provenance만 존재하는지 전수 확인하고, writer가 멈춘 Map DB에서 Map-owned
+helper가 만든 `ktm-cache-target-final-evidence/v1` typed object와 SHA-256을 fresh Pin local evidence에
+대조한 뒤 append-only terminal audit row를 기록한다.
+
+두 operation의 request는 `pinvi-cache-target-final-boundary/v1`, outer `transaction_id`/`cutover_id`, Pin image
+`source_revision`, `h35-db-identity-v1(role=pinvi)` digest, writer registry, initial/final fence, manager prior
+receipt digest를 exact field로 받는다. `finalize`만 `canary_run_id`, Map final evidence object/digest가 필수다.
+receipt는 입력
+identity, schema revision, command backlog와 DB in-flight, expected/unexpected generation 7 count, initial/canary/
+local-remote evidence SHA-256, `audit_id`, canonical 13-field `audit_request_sha256`, `audit_row_count=1`, 전체
+`evidence_sha256`, runtime/external mutation 0을 exact field set으로 반환한다. 같은 outer transaction과
+동일 request/evidence 재호출만 exact replay하며, 다른 material은 conflict다. Manager는 receipt만 신뢰하지
+않고 `app.ktm_cache_target_boundary_audits`에서 `transaction_id=audit_id`인 정확히 한 행을 fresh 조회해 request/
+evidence/Map/fence/prior digest를 대조한다. audit
+DELETE/rollback helper는 두지 않는다. forward boundary 전 rollback은 docker-manager가 schema `0047` Pin DB
+전체 backup을 복원해 `0048` table/row를 함께 제거한다.
 
 generation 4는 generation 3의 restore epoch 경계에 mutation/read response 의미를 분리한다.
 PUT/DELETE는 commit된 target incarnation의 UUID, strong ETag, positive `target_sequence`를 반환하고, GET만 deleted

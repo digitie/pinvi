@@ -132,6 +132,9 @@ async def session_factory(_database_url: str):  # type: ignore[no-untyped-def]
         tables = [r[0] for r in rows]
         if tables:
             joined = ", ".join(f'app."{t}"' for t in tables)
+            # 운영 append-only trigger도 실제 migration으로 검증하되, 테스트 격리용
+            # transaction에서만 user trigger를 일시적으로 건너뛴다.
+            await conn.execute(text("SET LOCAL session_replication_role = replica"))
             await conn.execute(text(f"TRUNCATE {joined} RESTART IDENTITY CASCADE"))
 
     try:

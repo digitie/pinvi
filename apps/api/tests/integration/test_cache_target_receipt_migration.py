@@ -45,6 +45,9 @@ async def _truncate_app(database_url: str) -> None:
             tables = [row[0] for row in rows]
             if tables:
                 quoted = ", ".join(f'app."{table}"' for table in tables)
+                # 운영 append-only trigger는 실제 테스트에서 그대로 검증하고, 이
+                # migration test의 격리용 초기화 transaction에서만 건너뛴다.
+                await connection.execute(text("SET LOCAL session_replication_role = replica"))
                 await connection.execute(text(f"TRUNCATE {quoted} RESTART IDENTITY CASCADE"))
     finally:
         await engine.dispose()

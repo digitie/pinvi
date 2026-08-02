@@ -14,13 +14,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PinviEnvironment = Literal["development", "test", "smoke", "staging", "production"]
 CACHE_TARGET_SERVICE_OPENAPI_SHA256 = (
-    "aff24f12e4129c81cd58c96c696e6f900cc031df68e2858c3e4a63963e13baf3"
+    "622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2"
 )
 # Vendored artifact의 immutable provenance다. 배포 이미지나 Map /version의 git SHA와 비교하지 않는다.
-CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION = "5d9c42dfc7d908ace1129c7ca2682bac54d572d7"
+CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION = "1285ff4974a2fa8d4b71f810dc9fca249397e8fc"
 # Artifact owner 이후 계약 동작을 보강한 exact Map revision이다. 배포 전 ancestry를 CI에서 증명한다.
-CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION = "5d9c42dfc7d908ace1129c7ca2682bac54d572d7"
-CACHE_TARGET_SERVICE_CONTRACT_GENERATION = 6
+CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION = "9b945ce832ecc3ed037d66c9d4e7bda9a1a69ae0"
+CACHE_TARGET_SERVICE_CONTRACT_GENERATION = 7
 
 
 class Settings(BaseSettings):
@@ -140,7 +140,11 @@ class Settings(BaseSettings):
     # read/cancel 자격을 분리하고 요청 actor 대신 map 서버의 고정 actor를 사용한다.
     pinvi_kor_travel_map_ops_read_token: SecretStr | None = None
     pinvi_kor_travel_map_ops_cancel_token: SecretStr | None = None
-    pinvi_kor_travel_map_timeout_seconds: float = 5.0
+    pinvi_kor_travel_map_timeout_seconds: float = Field(
+        default=5.0,
+        gt=0,
+        allow_inf_nan=False,
+    )
     pinvi_kor_travel_map_max_attempts: int = 3
     pinvi_kor_travel_map_batch_chunk_size: int = Field(
         default=200,
@@ -160,7 +164,12 @@ class Settings(BaseSettings):
     )
     pinvi_kor_travel_map_cache_target_batch_size: int = Field(default=100, ge=1, le=500)
     pinvi_kor_travel_map_cache_target_lease_seconds: int = Field(default=60, ge=10, le=300)
-    pinvi_kor_travel_map_cache_target_poll_seconds: float = Field(default=1.0, ge=0.1, le=60)
+    pinvi_kor_travel_map_cache_target_poll_seconds: float = Field(
+        default=1.0,
+        ge=0.1,
+        le=60,
+        allow_inf_nan=False,
+    )
     pinvi_kor_travel_map_cache_target_max_attempts: int = Field(default=5, ge=1, le=20)
     # paired OpenAPI가 확정될 때 배포 manifest가 exact 값을 넣는다. source revision은 vendored artifact
     # owner provenance이며 배포 이미지/Map /version revision이 아니다. 빈 값으로 enable할 수 없다.
@@ -413,11 +422,14 @@ class Settings(BaseSettings):
         if len(set(token_values)) != len(token_values):
             raise ValueError("kor-travel-map cache target role tokens must all differ")
 
-        legacy_tokens = {
+        protected_map_credentials = {
             value
             for value in (
                 self.pinvi_kor_travel_map_service_token.strip(),
                 self.pinvi_kor_travel_map_admin_service_token.strip(),
+                self.pinvi_kor_travel_map_admin_proxy_secret.strip(),
+                self.pinvi_kor_travel_map_public_api_key.strip(),
+                self.pinvi_vworld_api_key.strip(),
                 self.pinvi_kor_travel_map_ops_read_token.get_secret_value()
                 if self.pinvi_kor_travel_map_ops_read_token is not None
                 else "",
@@ -427,9 +439,9 @@ class Settings(BaseSettings):
             )
             if value
         }
-        if any(token in legacy_tokens for _, token in role_tokens):
+        if any(token in protected_map_credentials for _, token in role_tokens):
             raise ValueError(
-                "cache target role tokens must not reuse legacy admin/ops/service tokens"
+                "cache target role tokens must not reuse another Map trust-boundary credential"
             )
 
         if any(

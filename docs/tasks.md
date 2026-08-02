@@ -22,7 +22,24 @@
       command/consumer/restore-fence/recovery principal을 분리한다. 실행 정본:
       `docs/execplan/t-vn-41-cache-target-consumer.md`. production enable 전 snapshot replay lower-bound
       inbox dedupe, DB advisory cross-process single-flight, snapshot 전용 timeout, 429/503 `Retry-After`,
-      exact 100,000개 latency/RSS와 100,001개 413 non-retry를 n150에서 증명한다.
+      exact 100,000개 latency/RSS와 100,001개 413 non-retry를 n150에서 증명한다. generation 7에서는
+      command=`cache-target:command`, consumer 역할=`cache-target:read/claim/ack/nack/snapshot` exact
+      5개 배열로 clean-cut하고 legacy `cache-target:consumer` scope와 generation 6 조합, token swap을
+      fail-close한다(ADR-059). migration 0048의 durable run 정본과 ordinary command/consumer token만 쓰는
+      `pinvi-cache-target-causal-canary`로 PUT→event apply→ACK→cache generation→DELETE와 성공 transaction의
+      fresh command/event/ACK provenance, remote stream-before/snapshot/stream-after control, local/remote
+      cursor 3종·count·Merkle 및 pending/leased/dead 0을 production에서 증명한다. final commit은
+      `csv5 → Map H35 gc → final all-writer fence → Map typed evidence → Pin finalize` 순서이며 finalize는
+      HTTP 없이 stopped-Map evidence와 fresh Pin DB evidence를 대조한다. canonical request/Map/fence/evidence는
+      append-only audit 한 행과 fresh Manager 재조회로 결박한다. canary의 operator deadline은 final
+      remote bracket 내부 request와 `Retry-After`까지 취소해 writer fence를 bounded하게 해제하며,
+      재시도는 network/timeout과 pinned `429/503 SNAPSHOT_*`에만 허용한다.
+      - [x] Map generation 7 artifact owner `1285ff4974a2fa8d4b71f810dc9fca249397e8fc`, functional owner
+        `9b945ce832ecc3ed037d66c9d4e7bda9a1a69ae0`, service OpenAPI SHA-256
+        `622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2`를 vendored bytes/runtime
+        generation `7`과 함께 exact pin하고 generation 6, 17-route scope drift, command/consumer token swap
+        음성 gate를 고정했다.
+      - [ ] n150에서 generation 7 token-swap 음성과 causal canary receipt를 포함한 paired live proof를 남긴다.
 
 ## 보안·의존성
 

@@ -4,6 +4,12 @@
 
 ## Unreleased
 
+- Cache-target causal canary의 전체 timeout을 final remote snapshot request와 `Retry-After` 대기까지
+  적용해 PostgreSQL writer fence가 운영자 deadline을 넘어 유지되지 않게 했다. `401/403`, `413`, 응답
+  계약 오류는 일시 장애로 재시도하지 않고 즉시 typed terminal failure로 분류한다.
+- Cache-target generation 7 전환에 strict `preflight`/`finalize` 경계를 추가했다. final writer fence 뒤에는
+  Map HTTP를 다시 호출하지 않고 stopped-Map DB typed evidence와 fresh Pin DB provenance를 한 transaction에서
+  대조하며, canonical request/Map/fence/evidence digest를 append-only audit 한 행에 결박한다.
 - Cache-target source가 삭제된 뒤 다시 활성화될 때 tombstone target의 historical ETag를 재사용하지
   않는다. DELETE completion은 active target identity를 비워 다음 PUT이 `If-None-Match: *`로 새
   target을 생성하게 하며, stale `If-Match` 412로 전파가 중단되던 문제를 수정했다. HTTP 성공 뒤

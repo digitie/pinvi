@@ -282,6 +282,7 @@ def test_docker_and_deploy_files_bind_the_same_revision_contract() -> None:
     deploy = (ROOT / "scripts/deploy-node.sh").read_text(encoding="utf-8")
 
     assert "ARG PINVI_SOURCE_REVISION=development" in dockerfile
+    assert "PINVI_SOURCE_REVISION=${PINVI_SOURCE_REVISION}" in dockerfile
     assert 'org.opencontainers.image.revision="${PINVI_SOURCE_REVISION}"' in dockerfile
     assert 'io.pinvi.build.environment="${PINVI_BUILD_ENVIRONMENT}"' in dockerfile
     assert "staging|production" in dockerfile
