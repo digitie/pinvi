@@ -1,5 +1,17 @@
 # resume.md
 
+## 2026-08-04 (claude) — TDR-mobile 완료 (day 표시 mobile mirror)
+
+**방금**: **TDR-mobile** — 웹 TDR day 표시(day-color/공휴일/일출·일몰)를 `apps/mobile`에 mirror(PR #425).
+날짜/공휴일/시각 포맷터 6종을 `apps/web/lib/tripDateLabels.ts` → `@pinvi/domain`으로 이관(웹은 re-export,
+호출부 무변경), 신규 `apps/mobile/components/TripDayHeader.tsx`(색 swatch + effective_date + 기간 벗어남 +
+공휴일 뱃지 + 일출/일몰 KST)를 여행 상세·공유 화면에 소비. domain 72/web 97 vitest + 전 workspace
+typecheck + mobile typecheck + prettier clean. 적대적 리뷰 2명. TDR 에픽은 이로써 mobile까지 종료.
+
+**다음 한 작업**: **T-VN-SEC-03**(next-전파 transitive postcss@8.4.31·미사용 sharp + Expo SDK-56
+build-tooling transitive — next 상위 릴리스 pin 갱신 추적/정리). 그 외: T-VN-11-P(map 5-state),
+blocker **map issue #868** 해제 시 c6c 마이그레이션 → prod live e2e.
+
 ## 2026-08-02 (codex) — T-VN-41 canary absolute deadline·오류 분류 보강
 
 최종 적대 리뷰가 발견한 writer-fence 장기 점유를 수정했다. canary의 남은 monotonic deadline으로

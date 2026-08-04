@@ -45,6 +45,24 @@ export function paletteHex(color: string | null | undefined): string {
   return MARKER_PALETTE[FALLBACK_COLOR].hex;
 }
 
+/** 팔레트 색 수 — 일자 기본색 순환 주기(서버 `core/markers.py` 미러). */
+export const DAY_PALETTE_SIZE = 16;
+
+/**
+ * 일자 표시색 해석 — override(유효 P-xx)면 그것, 아니면 인덱스 기본색
+ * `P-{((day_index-1) % 16) + 1}`. 서버 `resolve_day_marker_color`와 결정론 동일(ADR-055 §3).
+ * `TripViewDay.marker_color`는 override 전용(null=기본)이라 클라이언트가 이걸로 해석해야 한다.
+ */
+export function resolveDayMarkerColor(
+  dayIndex: number,
+  override: string | null | undefined,
+): MarkerColorKey {
+  const key = markerColorKey(override);
+  if (key) return key;
+  const slot = ((dayIndex - 1) % DAY_PALETTE_SIZE) + 1;
+  return `P-${String(slot).padStart(2, '0')}` as MarkerColorKey;
+}
+
 /** 마커 라벨(텍스트) 대비 색 — 노랑(P-03)만 어두운 글자. */
 export function paletteLabelColor(color: string | null | undefined): string {
   if (color && isMarkerColorKey(color)) {

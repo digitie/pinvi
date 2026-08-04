@@ -2,6 +2,34 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-04 (claude) — TDR-mobile: day 표시(색/공휴일/일출·일몰) mobile mirror
+
+- **작업**: 웹 TDR의 day 표시 모델(ADR-055)을 `apps/mobile`에 미러했다. (1) 공용화 — 웹 전용
+  `apps/web/lib/tripDateLabels.ts`의 순수 포맷터 6종을 `packages/domain/src/tripDateLabels.ts`로 이관
+  (ADR-011 §2.1 platform-agnostic 규칙, `@pinvi/schemas` 타입만 의존). 웹 파일은 re-export로 축소해
+  `@/lib/tripDateLabels` 호출부 5곳은 무변경. (2) 신규 `apps/mobile/components/TripDayHeader.tsx` —
+  웹 `TripDayHeader` 대응 RN 컴포넌트: `paletteHex(day.marker_color)` 색 swatch, "Day N · title",
+  `formatTripDate(effective_date ?? date)` 라벨, `out_of_range` "기간 벗어남" 뱃지, 공휴일 이름 뱃지
+  (dedup), 일출/일몰(`rise_set.status==='success'`면 KST HH:MM + `rise_set_reference` "기준",
+  `pending_*`면 "일출·일몰 준비 중", failed/null은 미표시 — 웹과 동일 정책). (3) 소비 — 여행 상세
+  `(app)/trips/[tripId]/index.tsx`와 익명 공유 `shared/[tripId]/[token].tsx`의 기존 "Day N (date)"
+  Subheading 블록을 `<TripDayHeader day={day} />`로 교체.
+- **테스트**: `packages/domain/src/tripDateLabels.test.ts` 신설(7) — null→'미정', ko-KR 포맷,
+  KST +9h 변환(`2026-07-01T00:00:00Z`→`09:00`), holidayLabel dedup + '공휴일 · ' 접두, range 결합.
+- **검증**: domain typecheck + vitest 72(18 files), web typecheck + lint 무경고 + vitest 97(re-export
+  경유 기존 tripDateLabels 테스트 통과), mobile typecheck, schemas 8, prettier format:check clean.
+- **가정(문서화)**: `formatKstTime`은 `Intl.DateTimeFormat`의 `timeZone: 'Asia/Seoul'`을 쓴다 — Expo
+  SDK 56 Hermes는 ICU Intl을 지원하므로 성립. 미지원 런타임이면 throw가 아니라 잘못된 시각이 아닌
+  RangeError라 회귀는 명시적으로 드러난다.
+- **적대적 리뷰 2인 반영**: (P1, 양측 공통) `TripViewDay.marker_color`는 override 전용(null=기본)인데
+  `paletteHex(null)`이 회색(P-13)을 렌더 — 서버 `resolve_day_marker_color`를 미러한
+  `@pinvi/domain resolveDayMarkerColor(day_index, override)`(인덱스 기본색 `P-{((i-1)%16)+1}` 순환)를
+  신설해 swatch가 항상 일자 팔레트 색을 갖게 수정, 단위 테스트 6 케이스 추가. (P2) `formatTripDate`가
+  date-only ISO를 기기 timezone으로 포맷해 UTC 서쪽 기기에서 하루 이전 날짜가 표시 — `timeZone:'UTC'`
+  고정으로 수정(웹에서도 잠복하던 버그를 공용화 시점에 해소, 테스트도 timezone-불변으로 강화).
+- **문서**: tasks.md(TDR 선점 라인 정리 + T-305 stale `[~]`→`[x]` #401 머지 반영 + 보류 섹션 정리),
+  tasks-done.md/resume.md/journal.md 갱신.
+
 ## 2026-08-02 (codex) — T-VN-41 final remote deadline·terminal 분류
 
 **작업**: Pin #424 유일 적대 리뷰의 P1/P2를 반영해 causal canary가 PostgreSQL writer fence를 운영자
@@ -6581,7 +6609,7 @@ PR-C 전체 DoD 중 "viewport 기반 feature 로딩 + 클러스터 렌더 + 팔�
 - `api/v1/admin/notice_plans.py` 신규 — §5.3 plan 첨부(GET/POST/DELETE) + §5.4 POI 첨부
   (GET/POST/DELETE). `require_role("admin")`→비admin 404. plan/POI 없으면 404 `NOT_FOUND`,
   개수 초과 409. POST/DELETE 는 admin*audit chain 기록(`curated_plan.attachment*_`/`curated*poi.attachment*_`). DELETE 는 soft delete 만 — RustFS object 보존(§5.6, notice→trip
-  copy 시 `storage_key` 공유).
+copy 시 `storage_key` 공유).
 - 응답은 `AttachmentResponse`(curated*\* + notice*\* alias 항상 동기). 입력 `AttachmentCreate`
   (storage_key 위생 검증 재사용).
 - 테스트 4건(plan CRUD / POI CRUD / unknown-plan 404 / 비admin 404).

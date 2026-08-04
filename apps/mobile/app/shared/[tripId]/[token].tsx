@@ -12,8 +12,8 @@ import {
   Loading,
   Muted,
   Screen,
-  Subheading,
 } from '../../../components/ui';
+import { TripDayHeader } from '../../../components/TripDayHeader';
 
 function dateRange(start: string | null, end: string | null): string {
   if (!start && !end) return '날짜 미정';
@@ -76,11 +76,7 @@ export default function SharedTripScreen() {
         ) : (
           days.map((day) => (
             <Card key={day.day_index} className="gap-3">
-              <Subheading>
-                Day {day.day_index}
-                {day.title ? ` · ${day.title}` : ''}
-                {day.date ? ` (${day.date})` : ''}
-              </Subheading>
+              <TripDayHeader day={day} />
               {day.pois.length === 0 ? (
                 <Muted>이 날의 장소가 없습니다.</Muted>
               ) : (

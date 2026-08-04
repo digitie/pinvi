@@ -5,6 +5,7 @@ import {
   markerStyleFor,
   paletteHex,
   paletteLabelColor,
+  resolveDayMarkerColor,
   resolveMarkerStyle,
 } from './marker';
 
@@ -24,6 +25,15 @@ describe('markerPalette', () => {
     expect(paletteHex('P-99')).toBe('#757575');
     expect(paletteHex(null)).toBe('#757575');
     expect(paletteHex(undefined)).toBe('#757575');
+  });
+
+  it('resolveDayMarkerColor: override 우선, null이면 인덱스 기본색(16 순환) — 서버 미러', () => {
+    expect(resolveDayMarkerColor(1, null)).toBe('P-01');
+    expect(resolveDayMarkerColor(16, null)).toBe('P-16');
+    expect(resolveDayMarkerColor(17, null)).toBe('P-01');
+    expect(resolveDayMarkerColor(2, 'P-09')).toBe('P-09');
+    expect(resolveDayMarkerColor(2, 'P-99')).toBe('P-02');
+    expect(resolveDayMarkerColor(2, undefined)).toBe('P-02');
   });
 
   it('paletteLabelColor: 노랑(P-03)만 어두운 글자', () => {

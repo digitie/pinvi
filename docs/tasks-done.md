@@ -4,6 +4,25 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-08-04
+
+- [x] **TDR-mobile** — TDR day 표시(day-color/공휴일/일출·일몰)를 `apps/mobile`에 mirror.
+      (완료: 2026-08-04, PR #425, claude)
+      웹 전용이던 `apps/web/lib/tripDateLabels.ts`의 순수 포맷터 6종(formatTripDate/formatKstTime/
+      holidayLabel/holidaysByDate/formatTripDateWithHoliday/formatTripDateRange)을 `@pinvi/domain`
+      `tripDateLabels.ts`로 이관(ADR-011 §2.1 platform-agnostic)하고 웹은 re-export로 호환 유지(호출부
+      5곳 무변경). 신규 `apps/mobile/components/TripDayHeader.tsx`가 웹 `TripDayHeader`(ADR-055 §6, F8)를
+      RN으로 미러: 일자 팔레트 색 swatch(`paletteHex(marker_color)`) + `effective_date` 라벨 + 기간 벗어남
+      뱃지 + 공휴일 뱃지(dedup) + 일출/일몰(success시 KST HH:MM + 기준 라벨, `pending_*`시 "준비 중",
+      failed/null 미표시). 여행 상세 + 익명 공유 화면 양쪽 소비. domain vitest 7종 신설(KST +9h 변환 포함).
+      검증: domain typecheck+vitest, web typecheck+lint+vitest 97(re-export 경유), mobile typecheck,
+      전체 prettier clean. `formatKstTime`의 `Intl.DateTimeFormat(timeZone: 'Asia/Seoul')`은 Expo SDK 56
+      Hermes ICU 지원 전제(문서화된 가정). 적대적 리뷰 2인이 P1/P2를 잡아 반영: (P1) `marker_color`는
+      override 전용(null=기본)이라 회색 fallback이 렌더되던 것을 신규 `resolveDayMarkerColor`(서버
+      `resolve_day_marker_color` 미러, 인덱스 기본색 16 순환)로 해석; (P2) `formatTripDate`가 date-only를
+      기기 timezone으로 포맷해 UTC 서쪽에서 하루 밀리던 것을 `timeZone:'UTC'` 고정으로 수정(웹 latent
+      버그 동시 해소). 반영 후 승인.
+
 ## 2026-07-31
 
 - [x] **T-VN-20 / issue #394** — kor-travel-map 공개 API key의 header-only 소비 전환.
