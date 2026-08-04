@@ -59,12 +59,11 @@
       때문이며 앱에서 exploit 불가다. override는 next의 exact pin을 만족 못 해 `npm ci`가 거부→불가.
       해당 전파분은 T-VN-SEC-03로 이관. (완료: 2026-07-28, PR #414, claude → tasks-done.md)
 
-- [ ] **T-VN-SEC-03** — next-전파 transitive(exact-pin build-time postcss@8.4.31 + 미사용 optional
-      sharp@0.34.5)와 Expo SDK-56 build-tooling transitive(brace-expansion/form-data/js-yaml/shell-quote)를
-      정리한다. 전자는 next 상위 릴리스가 pin을 올릴 때 자연 해소되거나, **scoped nested override**
-      (`overrides.next.{postcss,sharp}`)로 audit-green 시도 가능(단 next build 회귀 검증 + `npm ci` 수용 확인
-      필수 — global override는 이미 미적용 확인). 후자는 `@pinvi/mobile` Expo peer graph ERESOLVE 때문에
-      Expo SDK 상향과 함께 Sprint M-1 모바일 하드닝에서 처리한다. 모두 앱 request-path 미노출/미사용.
+- [x] **T-VN-SEC-03** — `npm audit` **high 7→0**(critical 0 유지). in-range 표적 update 4종
+      (brace-expansion/form-data/js-yaml/shell-quote) + next-전파분(postcss@8.4.31 dedupe→8.5.23,
+      미사용 optional sharp/@img 제거)은 lockfile 수술로 처리(overrides는 npm workspace 조합에서
+      미적용 확인). 잔여 13 moderate는 Expo/maplibre major graph → Sprint M-1 이관.
+      (완료: 2026-08-04, PR #TBD, claude → tasks-done.md)
 
 - [x] **T-VN-STYLE-01** — `npm run format:check` baseline을 Prettier로 일괄 포맷했다(포맷 207개, 기능
       변경 0). vendored byte-pinned 파일 12개(`apps/api/tests/contract/` SHA-256 핀 + `.agents/skills/`·
