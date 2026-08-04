@@ -15,9 +15,13 @@
       RN으로 미러: 일자 팔레트 색 swatch(`paletteHex(marker_color)`) + `effective_date` 라벨 + 기간 벗어남
       뱃지 + 공휴일 뱃지(dedup) + 일출/일몰(success시 KST HH:MM + 기준 라벨, `pending_*`시 "준비 중",
       failed/null 미표시). 여행 상세 + 익명 공유 화면 양쪽 소비. domain vitest 7종 신설(KST +9h 변환 포함).
-      검증: domain typecheck+vitest 72, web typecheck+lint+vitest 97(re-export 경유), mobile typecheck,
+      검증: domain typecheck+vitest, web typecheck+lint+vitest 97(re-export 경유), mobile typecheck,
       전체 prettier clean. `formatKstTime`의 `Intl.DateTimeFormat(timeZone: 'Asia/Seoul')`은 Expo SDK 56
-      Hermes ICU 지원 전제(문서화된 가정). 적대적 리뷰 2명 승인.
+      Hermes ICU 지원 전제(문서화된 가정). 적대적 리뷰 2인이 P1/P2를 잡아 반영: (P1) `marker_color`는
+      override 전용(null=기본)이라 회색 fallback이 렌더되던 것을 신규 `resolveDayMarkerColor`(서버
+      `resolve_day_marker_color` 미러, 인덱스 기본색 16 순환)로 해석; (P2) `formatTripDate`가 date-only를
+      기기 timezone으로 포맷해 UTC 서쪽에서 하루 밀리던 것을 `timeZone:'UTC'` 고정으로 수정(웹 latent
+      버그 동시 해소). 반영 후 승인.
 
 ## 2026-07-28
 

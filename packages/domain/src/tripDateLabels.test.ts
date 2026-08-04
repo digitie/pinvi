@@ -5,11 +5,13 @@ describe('formatTripDate', () => {
   it('null이면 미정', () => {
     expect(formatTripDate(null)).toBe('미정');
   });
-  it('ISO 날짜를 ko-KR로 포맷', () => {
-    // 로케일 데이터 의존을 줄이려 연/일 숫자와 월 존재만 확인.
+  it('ISO 날짜를 ko-KR로 포맷 (UTC 고정 — 기기 timezone 무관)', () => {
+    // date-only는 UTC 자정 파싱 + timeZone:'UTC' 포맷이라 러너/기기 timezone에 무관하게
+    // 같은 민간일이 나온다(서쪽 timezone에서 하루 밀림 방지).
     const out = formatTripDate('2026-07-01');
     expect(out).toContain('2026');
-    expect(out).toContain('1');
+    expect(out).toContain('7');
+    expect(out).toMatch(/1\.?\s*$|1일/);
   });
 });
 

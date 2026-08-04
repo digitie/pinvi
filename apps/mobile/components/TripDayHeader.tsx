@@ -1,6 +1,6 @@
 import { Text, View } from 'react-native';
 import type { TripViewDay } from '@pinvi/schemas';
-import { formatKstTime, formatTripDate, paletteHex } from '@pinvi/domain';
+import { formatKstTime, formatTripDate, paletteHex, resolveDayMarkerColor } from '@pinvi/domain';
 
 export type TripDayHeaderDay = Pick<
   TripViewDay,
@@ -21,7 +21,8 @@ export type TripDayHeaderDay = Pick<
  */
 export function TripDayHeader({ day }: { day: TripDayHeaderDay }) {
   const dateLabel = formatTripDate(day.effective_date ?? day.date);
-  const dayColor = paletteHex(day.marker_color);
+  // marker_color는 override 전용(null=기본) — 인덱스 기본 팔레트 색으로 해석(ADR-055 §3).
+  const dayColor = paletteHex(resolveDayMarkerColor(day.day_index, day.marker_color));
   const holidayNames = Array.from(new Set(day.holidays.map((h) => h.name).filter(Boolean)));
 
   return (

@@ -4,10 +4,13 @@ import type { TripDayHoliday, TripViewDay } from '@pinvi/schemas';
 
 export function formatTripDate(value: string | null): string {
   if (!value) return '미정';
+  // date-only ISO('YYYY-MM-DD', KST 민간일)는 UTC 자정으로 파싱되므로 UTC로 포맷해
+  // 기기 timezone(UTC 서쪽)에서 하루 밀리는 표시를 막는다.
   return new Intl.DateTimeFormat('ko-KR', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
+    timeZone: 'UTC',
   }).format(new Date(value));
 }
 

@@ -21,6 +21,12 @@
 - **가정(문서화)**: `formatKstTime`은 `Intl.DateTimeFormat`의 `timeZone: 'Asia/Seoul'`을 쓴다 — Expo
   SDK 56 Hermes는 ICU Intl을 지원하므로 성립. 미지원 런타임이면 throw가 아니라 잘못된 시각이 아닌
   RangeError라 회귀는 명시적으로 드러난다.
+- **적대적 리뷰 2인 반영**: (P1, 양측 공통) `TripViewDay.marker_color`는 override 전용(null=기본)인데
+  `paletteHex(null)`이 회색(P-13)을 렌더 — 서버 `resolve_day_marker_color`를 미러한
+  `@pinvi/domain resolveDayMarkerColor(day_index, override)`(인덱스 기본색 `P-{((i-1)%16)+1}` 순환)를
+  신설해 swatch가 항상 일자 팔레트 색을 갖게 수정, 단위 테스트 6 케이스 추가. (P2) `formatTripDate`가
+  date-only ISO를 기기 timezone으로 포맷해 UTC 서쪽 기기에서 하루 이전 날짜가 표시 — `timeZone:'UTC'`
+  고정으로 수정(웹에서도 잠복하던 버그를 공용화 시점에 해소, 테스트도 timezone-불변으로 강화).
 - **문서**: tasks.md(TDR 선점 라인 정리 + T-305 stale `[~]`→`[x]` #401 머지 반영 + 보류 섹션 정리),
   tasks-done.md/resume.md/journal.md 갱신.
 
