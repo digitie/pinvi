@@ -12,12 +12,13 @@
       js-yaml 4.1.1→4.3.1, shell-quote 1.8.4→1.10.0 — 전부 DoS/CRLF-injection high. `npm audit fix`는
       Expo peer graph ERESOLVE로 불가라 `npm update <pkg>` 표적 실행. (2) next-전파분: next 15.5.22가
       exact-pin한 build-time postcss@8.4.31(fixed >8.5.22)은 nested lock 항목 제거로 root postcss@8.5.23에
-      dedupe, 미사용 optional sharp@0.34.5(fixed ≥0.35.0, 앱 `next/image` 미사용)는 sharp/@img 28항목
-      lock 제거로 미설치화. **npm overrides는 scoped nested(`next.{postcss,sharp}`)·버전-키
-      (`postcss@8.4.31`) 모두 이 workspace 조합(npm 11.12)에서 재해석에 미반영됨을 확인** — package.json에
-      버전-키 overrides를 의도 문서 겸 재발 가드로 유지하되 실효 수단은 lockfile이다. lockfile 의미 diff
-      검증: 제거 55(sharp/@img 30 + nested postcss + npm11의 redundant optional-peer pruning 24), 버전변경
-      8(표적 4 + transitive 4), 추가 0, 순서 동일. 검증: fresh `npm ci` exit 0 → web build(Compiled
+      dedupe, 미사용 optional sharp@0.34.5(fixed ≥0.35.0, 앱 `next/image` 미사용)는 sharp/@img 27항목
+      lock 제거로 미설치화. **npm 버전-키 overrides는 stale lock 항목 재해석에는 미반영이라 수술이
+      필요했지만, lockfile 재생성 시에는 정상 적용됨을 리뷰에서 재현** — package.json overrides가
+      재생성 경로의 실질 가드이므로 삭제 금지. 최종 상태는 npm 10/11 재해석-안정(up to date). lockfile
+      의미 diff 검증(리뷰 수치 정정): 제거 55(sharp 계열 27 + nested postcss 1 + esbuild optional-peer
+      27), 버전변경 8(표적 4 + transitive 4), 추가 0, 순서 동일 + 리뷰가 잡은 fsevents `dev:true` 유실
+      1건 복원. 검증: fresh `npm ci` exit 0 → web build(Compiled
       successfully, 57 static pages)/lint 무경고/vitest 100 + domain 79 + schemas 13 + web·domain·mobile
       typecheck 0. 잔여 13 moderate는 전부 Expo SDK-56/maplibre major graph(Sprint M-1 이관), next-intl
       moderate는 별도 major. 적대적 리뷰 2명.

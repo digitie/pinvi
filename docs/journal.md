@@ -11,16 +11,22 @@
   자연 해소 불가. postcss@8.4.31(exact-pin, fixed >8.5.22)은 nested lock 항목을 제거해 root
   postcss@8.5.23으로 dedupe. 미사용 optional sharp@0.34.5(fixed ≥0.35.0)는 sharp/@img 항목 제거로
   미설치화(앱은 `next/image` 미사용).
-- **overrides 실효성 판정(중요)**: scoped nested(`overrides.next.{postcss,sharp}`)와 버전-키
-  (`"postcss@8.4.31": "^8.5.23"`) 모두 이 monorepo(npm 11.12, workspaces)에서 lockfile 재해석에
-  반영되지 않았다(nested 8.4.31 재생성 관측). 실효 수단은 lockfile 수술 + 재설치이며, package.json의
-  버전-키 overrides는 의도 문서/재발 가드로 유지한다(`npm ls`가 invalid로 표시하나 `npm ci`는 수용).
-- **함정 기록**: `npm install --package-lock-only`는 전역 재해석(불필요 드리프트 ~550 항목)을 일으켜
-  사용 금지. lockfile을 스크립트로 수정할 때 PowerShell `ConvertFrom-Json`은 빈 문자열 key(root "")
-  때문에 실패 — Node로 수술. `npm install next --workspace`는 apps/web package.json을 부수적으로
-  재정렬+bump하므로 되돌렸다.
-- **의미 diff 검증**(HEAD 대비 스크립트 대조): 제거 55 / 버전변경 8 / 추가 0 / 키 순서 동일.
-  vitest nested @esbuild 플랫폼 항목 제거는 rolldown-vite의 optional peer라 무해(vitest 정상 구동 확인).
+- **overrides 실효성 판정(리뷰로 정정)**: 버전-키 overrides(`"postcss@8.4.31": "^8.5.23"`,
+  `"sharp@^0.34.3": "^0.35.0"`)는 **기존 stale lock 항목의 재해석에는 반영되지 않지만**(nested 8.4.31
+  잔존 관측 — 그래서 lock 항목 수술이 필요했다), **lockfile을 처음부터 재생성하면 정상 적용**된다
+  (리뷰어 재현: lock 삭제 후 npm 11.12 재생성 시 nested postcss 부재 + sharp 0.35.3). 즉 overrides는
+  죽은 가드가 아니라 재생성 경로의 실질 가드다 — 삭제 금지. 최종 커밋 상태는 npm 10/11 모두
+  `npm install --package-lock-only`가 "up to date"(드리프트 0)로 재해석-안정이다(`npm ls`의 invalid
+  표시는 무시 가능, `npm ci` 수용).
+- **함정 기록**: stale lock 위에서 `npm install --package-lock-only`를 돌리면 전역 재해석 드리프트
+  (~550 항목)가 생겼다 — 수술 후 안정 상태에서는 무해. lockfile을 스크립트로 수정할 때 PowerShell
+  `ConvertFrom-Json`은 빈 문자열 key(root "") 때문에 실패 — Node로 수술. `npm install next
+--workspace`는 apps/web package.json을 부수적으로 재정렬+bump하므로 되돌렸다.
+- **의미 diff 검증**(HEAD 대비 스크립트 대조, 리뷰로 수치 정정): 제거 55 = sharp 계열 27(@img 25 +
+  sharp + sharp/semver) + nested postcss 1 + esbuild 계열 27(vitest-nested 24 + niche 플랫폼 3) /
+  버전변경 8 / 추가 0 / 키 순서 동일. 수술이 유실시킨 playwright nested fsevents `dev:true` 플래그
+  1건은 리뷰에서 발견해 복원(macOS `npm ci --omit=dev` 프로덕션 설치에 install-script 패키지가
+  유입되는 것 방지). vitest nested @esbuild 제거는 rolldown-vite optional peer라 무해(구동 확인).
 - **검증**: fresh `npm ci` exit 0(수정 lockfile 수용) → web build Compiled successfully(57 static pages),
   lint 무경고, vitest web 100/domain 79/schemas 13, web·domain·mobile typecheck 0.
 - **잔여 정직 표기**: 13 moderate 전부 Expo SDK-56/maplibre/next-intl major graph — Sprint M-1

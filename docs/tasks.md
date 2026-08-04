@@ -61,8 +61,9 @@
 
 - [x] **T-VN-SEC-03** — `npm audit` **high 7→0**(critical 0 유지). in-range 표적 update 4종
       (brace-expansion/form-data/js-yaml/shell-quote) + next-전파분(postcss@8.4.31 dedupe→8.5.23,
-      미사용 optional sharp/@img 제거)은 lockfile 수술로 처리(overrides는 npm workspace 조합에서
-      미적용 확인). 잔여 13 moderate는 Expo/maplibre major graph → Sprint M-1 이관.
+      미사용 optional sharp/@img 제거)은 lockfile 수술로 처리(overrides는 stale lock 재해석에만
+      미반영, 재생성 시 정상 적용 — 가드로 유지). 잔여 13 moderate는 Expo/maplibre major graph →
+      Sprint M-1 이관.
       (완료: 2026-08-04, PR #TBD, claude → tasks-done.md)
 
 - [x] **T-VN-STYLE-01** — `npm run format:check` baseline을 Prettier로 일괄 포맷했다(포맷 207개, 기능

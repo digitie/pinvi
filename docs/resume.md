@@ -4,7 +4,7 @@
 
 **방금**: **T-VN-SEC-03** — npm audit **high 7→0**(PR #TBD). 표적 update 4종(brace-expansion/form-data/
 js-yaml/shell-quote) + next-전파분(postcss 8.4.31→8.5.23 dedupe, 미사용 sharp/@img 제거)을 lockfile
-수술로 처리(overrides는 npm workspace에서 미적용 확인, 의도 가드로만 유지). fresh `npm ci` + web
+수술로 처리(overrides는 stale lock 재해석에만 미반영, 재생성 시 정상 적용 — 가드로 유지). fresh `npm ci` + web
 build/lint/vitest 100 + domain 79 + schemas 13 + 전 typecheck 통과. 잔여 13 moderate = Expo/maplibre
 major graph(Sprint M-1 이관). 적대적 리뷰 2명.
 
