@@ -7,7 +7,7 @@
 ## 2026-08-04
 
 - [x] **TDR-mobile** — TDR day 표시(day-color/공휴일/일출·일몰)를 `apps/mobile`에 mirror.
-      (완료: 2026-08-04, PR #TBD, claude)
+      (완료: 2026-08-04, PR #425, claude)
       웹 전용이던 `apps/web/lib/tripDateLabels.ts`의 순수 포맷터 6종(formatTripDate/formatKstTime/
       holidayLabel/holidaysByDate/formatTripDateWithHoliday/formatTripDateRange)을 `@pinvi/domain`
       `tripDateLabels.ts`로 이관(ADR-011 §2.1 platform-agnostic)하고 웹은 re-export로 호환 유지(호출부

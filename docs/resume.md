@@ -2,7 +2,7 @@
 
 ## 2026-08-04 (claude) — TDR-mobile 완료 (day 표시 mobile mirror)
 
-**방금**: **TDR-mobile** — 웹 TDR day 표시(day-color/공휴일/일출·일몰)를 `apps/mobile`에 mirror(PR #TBD).
+**방금**: **TDR-mobile** — 웹 TDR day 표시(day-color/공휴일/일출·일몰)를 `apps/mobile`에 mirror(PR #425).
 날짜/공휴일/시각 포맷터 6종을 `apps/web/lib/tripDateLabels.ts` → `@pinvi/domain`으로 이관(웹은 re-export,
 호출부 무변경), 신규 `apps/mobile/components/TripDayHeader.tsx`(색 swatch + effective_date + 기간 벗어남 +
 공휴일 뱃지 + 일출/일몰 KST)를 여행 상세·공유 화면에 소비. domain 72/web 97 vitest + 전 workspace
