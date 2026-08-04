@@ -86,6 +86,9 @@ class TripDayPoi(Base, TimestampMixin):
     # LexoRank — JS ASCII와 PG 정렬 일관을 위해 COLLATE "C"
     sort_order: Mapped[str] = mapped_column(Text(collation="C"), nullable=False)
     feature_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    # T-VN-32C(Map ADR-068): legacy f_* 참조의 UUID shadow. 값 채움은 검증된
+    # alias map 이관(services/feature_uuid_cutover)만 수행한다.
+    feature_uuid: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     feature_link_broken_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     feature_snapshot: Mapped[dict[str, Any]] = mapped_column(
         JSONB(astext_type=Text()),

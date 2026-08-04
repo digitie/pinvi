@@ -75,6 +75,11 @@ class FeatureSuggestion(Base, TimestampMixin):
         server_default="new_place",
     )
     target_feature_id: Mapped[str | None] = mapped_column(Text())
+    # T-VN-32C(Map ADR-068): legacy f_* 참조의 UUID shadow — 검증된 alias map
+    # 이관만 채운다.
+    target_feature_uuid: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), nullable=True
+    )
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     lng: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)

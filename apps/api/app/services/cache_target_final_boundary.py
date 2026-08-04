@@ -40,7 +40,12 @@ CONTRACT_VERSION: Literal["pinvi-cache-target-final-boundary/v1"] = (
     "pinvi-cache-target-final-boundary/v1"
 )
 PREFLIGHT_SCHEMA_REVISION = "20260801_0047"
-FINALIZE_SCHEMA_REVISION = "20260802_0048"
+# 20260804_0049(T-VN-32C feature UUID shadow 컬럼)의 의식적 re-pin: 0049는
+# ktm_cache_target_* 테이블·writer registry·boundary 불변식을 건드리지 않는다
+# (trip_day_pois/curated_plan_pois/feature_suggestions에 nullable 컬럼 추가뿐).
+# 이 pin과 DB CHECK(ck_ktm_ct_boundary_contract)는 head migration마다 함께
+# 갱신해야 finalize가 열린다 — fail-close by design.
+FINALIZE_SCHEMA_REVISION = "20260804_0049"
 WRITER_REGISTRY_SHA256 = "526240609e2919357699b90244eb8cc8b9505f37db6c60552a98c7a37ed22d7c"
 _APPLICATION_NAME = "pinvi-cache-target-final-boundary"
 

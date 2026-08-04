@@ -111,12 +111,15 @@ jobs:
             apps/api/tests/unit/test_kor_travel_map_cache_target_contract.py)
           source_pin=$(grep -oP '_UPSTREAM_MAP_COMMIT = "\K[0-9a-f]{40}' \
             apps/api/tests/unit/test_cache_target_contract.py)
+          alias_pin=$(grep -oP '_UPSTREAM_MAP_COMMIT: str \| None = "\K[0-9a-f]{40}' \
+            apps/api/tests/unit/test_feature_alias_contract.py)
           echo "user_pin=$user_pin" >> "$GITHUB_OUTPUT"
           echo "admin_pin=$admin_pin" >> "$GITHUB_OUTPUT"
           echo "service_pin=$service_pin" >> "$GITHUB_OUTPUT"
           echo "service_owner=$service_owner" >> "$GITHUB_OUTPUT"
           echo "source_pin=$source_pin" >> "$GITHUB_OUTPUT"
-          echo "user=$user_pin admin=$admin_pin service=$service_pin owner=$service_owner source=$source_pin"
+          echo "alias_pin=$alias_pin" >> "$GITHUB_OUTPUT"
+          echo "user=$user_pin admin=$admin_pin service=$service_pin owner=$service_owner source=$source_pin alias=$alias_pin"
 
       - name: Checkout kor-travel-map at the user-surface pin
         uses: actions/checkout@v4
@@ -154,6 +157,13 @@ jobs:
           ref: ${{ steps.pins.outputs.source_pin }}
           path: .ktm-cache-target-source-pin
 
+      - name: Checkout kor-travel-map at the feature-alias-map pin
+        uses: actions/checkout@v4
+        with:
+          repository: digitie/kor-travel-map
+          ref: ${{ steps.pins.outputs.alias_pin }}
+          path: .ktm-feature-alias-pin
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -190,6 +200,14 @@ jobs:
           diff -q \
             apps/api/tests/contract/cache-target-source-v1-golden.json \
             .ktm-cache-target-source-pin/contracts/cache-target-source-v1-golden.json
+
+      # T-VN-32C: alias-map golden은 양 저장소 독립 구현이 같은 shared vector를
+      # 검증한다 — vendored bytes가 핀 커밋 원본과 byte 동일해야 한다.
+      - name: feature-alias-map golden bytes equal the pinned commit
+        run: |
+          diff -q \
+            apps/api/tests/contract/feature-alias-map-v1-golden.json \
+            .ktm-feature-alias-pin/contracts/feature-alias-map-v1-golden.json
 
   # staleness 신호: 핀이 Map main보다 뒤처졌는지 매일 확인한다. `if:` 가드로 PR/push에는 아예
   # 돌지 않으므로 PR을 막지 않는다(막으면 Map의 무관한 OpenAPI 변경마다 Pinvi PR이 red가 된다).

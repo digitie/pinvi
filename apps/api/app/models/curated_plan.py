@@ -103,6 +103,9 @@ class CuratedPlanPoi(Base, TimestampMixin):
     # LexoRank — COLLATE "C"
     sort_order: Mapped[str] = mapped_column(Text(collation="C"), nullable=False)
     feature_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    # T-VN-32C(Map ADR-068): legacy f_* 참조의 UUID shadow — 검증된 alias map
+    # 이관만 채운다.
+    feature_uuid: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     feature_snapshot: Mapped[dict[str, Any]] = mapped_column(
         JSONB(astext_type=Text()),
         nullable=False,

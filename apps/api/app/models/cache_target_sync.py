@@ -606,8 +606,11 @@ class KtmCacheTargetBoundaryAudit(Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint(
+            # schema_revision pin은 head migration마다 의식적 re-pin (0049에서
+            # 갱신 — services/cache_target_final_boundary.FINALIZE_SCHEMA_REVISION
+            # 과 반드시 동일).
             "contract_version = 'pinvi-cache-target-final-boundary/v1' "
-            "AND status = 'succeeded' AND schema_revision = '20260802_0048'",
+            "AND status = 'succeeded' AND schema_revision = '20260804_0049'",
             name=conv("ck_ktm_ct_boundary_contract"),
         ),
         CheckConstraint(
