@@ -1,5 +1,17 @@
 # resume.md
 
+## 2026-08-04 (codex) — T-VN-41-P n150 격리 paired live 증명 완료
+
+Map `96efac…` / PinVi `20b225…` generation 7 pair의 full-ancestry·OpenAPI preflight, command/consumer
+token 교차 `403`, initial cutover(`published=1`, count=1), causal canary의 cursor/count/Merkle 수렴을
+별도 n150 Docker network/DB에서 통과했다. 실제 Map admin UI recovery Playwright는 admin 로그인과
+BFF-only 경계를 포함해 **1 passed (53.9s)**였고, dead-letter replay/reconciliation 뒤 ready/backlog·dead=0을
+확인했다. 실제 claim duplicate는 cache generation `3→4→4`로 side effect 1회를 보였으며, restore fence의
+epoch `1→2`와 pre-fence ACK `409` 거부 뒤 새 snapshot/cursor ready 수렴도 확인했다.
+
+**다음 한 작업**: `T-VN-41-F` — `T-VN-H42`와 docker-manager 재pin이 완료될 때까지 production final
+boundary 및 consumer enable은 열지 않는다.
+
 ## 2026-08-04 (claude) — T-VN-SEC-03 완료 (npm audit high 0)
 
 **방금**: **T-VN-SEC-03** — npm audit **high 7→0**(PR #426). 표적 update 4종(brace-expansion/form-data/
