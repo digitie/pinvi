@@ -4,6 +4,21 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-08-04
+
+- [x] **TDR-mobile** — TDR day 표시(day-color/공휴일/일출·일몰)를 `apps/mobile`에 mirror.
+      (완료: 2026-08-04, PR #TBD, claude)
+      웹 전용이던 `apps/web/lib/tripDateLabels.ts`의 순수 포맷터 6종(formatTripDate/formatKstTime/
+      holidayLabel/holidaysByDate/formatTripDateWithHoliday/formatTripDateRange)을 `@pinvi/domain`
+      `tripDateLabels.ts`로 이관(ADR-011 §2.1 platform-agnostic)하고 웹은 re-export로 호환 유지(호출부
+      5곳 무변경). 신규 `apps/mobile/components/TripDayHeader.tsx`가 웹 `TripDayHeader`(ADR-055 §6, F8)를
+      RN으로 미러: 일자 팔레트 색 swatch(`paletteHex(marker_color)`) + `effective_date` 라벨 + 기간 벗어남
+      뱃지 + 공휴일 뱃지(dedup) + 일출/일몰(success시 KST HH:MM + 기준 라벨, `pending_*`시 "준비 중",
+      failed/null 미표시). 여행 상세 + 익명 공유 화면 양쪽 소비. domain vitest 7종 신설(KST +9h 변환 포함).
+      검증: domain typecheck+vitest 72, web typecheck+lint+vitest 97(re-export 경유), mobile typecheck,
+      전체 prettier clean. `formatKstTime`의 `Intl.DateTimeFormat(timeZone: 'Asia/Seoul')`은 Expo SDK 56
+      Hermes ICU 지원 전제(문서화된 가정). 적대적 리뷰 2명 승인.
+
 ## 2026-07-28
 
 - [x] **T-VN-SEC-02** — `next` 15.5.18→15.5.22 보안 패치(web CVE 8건 제거). (완료: 2026-07-28, PR #414, claude)

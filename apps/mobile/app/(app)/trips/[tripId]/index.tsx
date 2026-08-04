@@ -17,6 +17,7 @@ import {
   Screen,
   Subheading,
 } from '../../../../components/ui';
+import { TripDayHeader } from '../../../../components/TripDayHeader';
 
 const SHARE_VISIBILITY_LABELS: Record<string, string> = {
   view_only: '읽기 전용',
@@ -123,11 +124,7 @@ export default function TripDetailScreen() {
         ) : (
           days.map((day) => (
             <Card key={day.day_index} className="gap-3">
-              <Subheading>
-                Day {day.day_index}
-                {day.title ? ` · ${day.title}` : ''}
-                {day.date ? ` (${day.date})` : ''}
-              </Subheading>
+              <TripDayHeader day={day} />
               {day.pois.length === 0 ? (
                 <Muted>이 날의 장소가 없습니다.</Muted>
               ) : (

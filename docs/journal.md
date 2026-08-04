@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-04 (claude) — TDR-mobile: day 표시(색/공휴일/일출·일몰) mobile mirror
+
+- **작업**: 웹 TDR의 day 표시 모델(ADR-055)을 `apps/mobile`에 미러했다. (1) 공용화 — 웹 전용
+  `apps/web/lib/tripDateLabels.ts`의 순수 포맷터 6종을 `packages/domain/src/tripDateLabels.ts`로 이관
+  (ADR-011 §2.1 platform-agnostic 규칙, `@pinvi/schemas` 타입만 의존). 웹 파일은 re-export로 축소해
+  `@/lib/tripDateLabels` 호출부 5곳은 무변경. (2) 신규 `apps/mobile/components/TripDayHeader.tsx` —
+  웹 `TripDayHeader` 대응 RN 컴포넌트: `paletteHex(day.marker_color)` 색 swatch, "Day N · title",
+  `formatTripDate(effective_date ?? date)` 라벨, `out_of_range` "기간 벗어남" 뱃지, 공휴일 이름 뱃지
+  (dedup), 일출/일몰(`rise_set.status==='success'`면 KST HH:MM + `rise_set_reference` "기준",
+  `pending_*`면 "일출·일몰 준비 중", failed/null은 미표시 — 웹과 동일 정책). (3) 소비 — 여행 상세
+  `(app)/trips/[tripId]/index.tsx`와 익명 공유 `shared/[tripId]/[token].tsx`의 기존 "Day N (date)"
+  Subheading 블록을 `<TripDayHeader day={day} />`로 교체.
+- **테스트**: `packages/domain/src/tripDateLabels.test.ts` 신설(7) — null→'미정', ko-KR 포맷,
+  KST +9h 변환(`2026-07-01T00:00:00Z`→`09:00`), holidayLabel dedup + '공휴일 · ' 접두, range 결합.
+- **검증**: domain typecheck + vitest 72(18 files), web typecheck + lint 무경고 + vitest 97(re-export
+  경유 기존 tripDateLabels 테스트 통과), mobile typecheck, schemas 8, prettier format:check clean.
+- **가정(문서화)**: `formatKstTime`은 `Intl.DateTimeFormat`의 `timeZone: 'Asia/Seoul'`을 쓴다 — Expo
+  SDK 56 Hermes는 ICU Intl을 지원하므로 성립. 미지원 런타임이면 throw가 아니라 잘못된 시각이 아닌
+  RangeError라 회귀는 명시적으로 드러난다.
+- **문서**: tasks.md(TDR 선점 라인 정리 + T-305 stale `[~]`→`[x]` #401 머지 반영 + 보류 섹션 정리),
+  tasks-done.md/resume.md/journal.md 갱신.
+
 ## 2026-07-28 (claude) — T-VN-SEC-02 next 15.5.22 보안 패치 (Next 16 major 아님)
 
 - **작업**: `apps/web`의 `next`를 15.5.18→15.5.22(`^15.5.21` floor)로 올려 request-path web CVE 8건을

@@ -20,8 +20,9 @@
 - **TDR(Trip Detail Rewrite) = Claude 단독 진행**(2026-07-20 결정, 레인 A/B 분리 폐지).
   마스터 계획 `docs/execplan/trip-detail-rewrite.md`. Codex는 이 에픽 미사용. Claude가
   T-301→T-305(backend/ETL) 후 T-306~T-309c(web UI)를 DAG 순서로 직접 구현한다.
-  브랜치는 `agent/claude-tdr-<task>`. 완료: T-306a(#396), T-301(#397), T-302(#398), T-303(#399),
-  T-304(#400), T-309c(#402). 진행: T-305(PR #401 대기). **backend(T-301~305) 완료 임박, 남은 것=web UI.**
+  브랜치는 `agent/claude-tdr-<task>`. **TDR 본편(backend+web UI) 전부 머지 완료**: T-306a(#396),
+  T-301(#397), T-302(#398), T-303(#399), T-304(#400), T-305(#401), T-309c(#402), T-306(#404),
+  T-307(#405+#411), T-308(#406), T-309a/b(1 PR). 잔여는 mobile mirror(TDR-mobile, 별도 train)뿐.
 
 ## kor-travel-map batch 상태 계약
 
@@ -109,9 +110,8 @@
       **PR #399 머지 완료**(main d0a438b). (ADR-054)
 - [x] T-304 — detail-card kind별 + generic fallback + opt-in enrichment + in-bounds price.
       **PR #400 머지 완료**(main 77aedbd). **ADR-056**.
-- [~] T-305 — 전용 `app.trip_day_rise_sets` table + ETL asset + day-level rise/set read + batched
-  re-seed + 완료 시그널. **구현 완료·검증·단일 리뷰(ETL 경합 P2 반영) 통과, PR #401 대기.**
-  `agent/claude-tdr-day-rise-set`. (ADR-055)
+- [x] T-305 — 전용 `app.trip_day_rise_sets` table + ETL asset + day-level rise/set read + batched
+      re-seed + 완료 시그널. **PR #401 머지 완료**(2026-07-21). (ADR-055)
 
 ### 웹 UI (T-306~T-309c) — T-306a 모달 기반은 #396 머지 완료
 
@@ -145,5 +145,4 @@
 
 ## 보류 / 미래 작업
 
-- [ ] TDR-mobile — TDR day-color/공휴일/일출·일몰을 `apps/mobile`에 mirror(별도 release train,
-      T-284 scope gate). TDR 완료 후 착수.
+(현재 없음 — TDR-mobile은 완료, `docs/tasks-done.md` 참조.)

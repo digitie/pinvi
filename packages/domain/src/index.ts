@@ -15,6 +15,7 @@ export * from './poiRank';
 export * from './shareLink';
 export * from './shareUrl';
 export * from './suggestParam';
+export * from './tripDateLabels';
 export * from './tripEdit';
 export * from './tripMapPoints';
 export * from './upload';
