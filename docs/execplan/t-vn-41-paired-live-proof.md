@@ -62,3 +62,16 @@ PR 단위로 분리한 실행 정본이다.
   `docs/tasks-done.md`로 이관한다.
 - 이 결과만으로 production consumer enable을 완료 처리하지 않는다. Lane A 경계와 final boundary는
   열린 상태로 유지한다.
+
+## 실행 결과 (2026-08-04)
+
+- n150 격리 stack에서 Map `96efac…`, PinVi `20b225…`, generation `7` 및 service OpenAPI SHA-256
+  `622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2`의 full-ancestry preflight를 통과했다.
+- command/consumer token swap은 `403`; initial cutover는 fixture 1건을 먼저 durable outbox에 넣은 상태에서
+  `published=1`, fixed snapshot count=1로 성공했다. causal canary의 command/event/ACK provenance, cursor,
+  count/Merkle와 command backlog 0도 성공 receipt로 확인했다.
+- Map admin recovery UI live E2E는 실제 로그인과 BFF-only browser boundary를 포함해 **1 passed (53.9s)**였다.
+  replay/reconciliation 후 ready, backlog=0, dead=0 및 checksum 수렴을 확인했다. 동일 claim 재적용은 cache
+  generation `3→4→4`로 inbox side effect가 한 번만 적용됨을 증명했다.
+- restore fence epoch `1→2` 뒤 pre-fence ACK는 `409`으로 거부됐고, 새 request-bound snapshot/cursor의 ready
+  수렴을 확인했다. test stack·temporary credential·browser state는 종료 시 폐기했다.

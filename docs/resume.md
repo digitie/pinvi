@@ -1,15 +1,16 @@
 # resume.md
 
-## 2026-08-04 (codex) — T-VN-41-P n150 격리 paired live 증명 시작
+## 2026-08-04 (codex) — T-VN-41-P n150 격리 paired live 증명 완료
 
-Map producer PR #917/#935와 PinVi generation 7 consumer PR #424가 병합된 상태를 대조했다.
-`T-VN-41-P`의 남은 실제 작업은 구현 재작성 아니라 n150 격리 clone의 paired live 증명이다.
-문서화된 실행 단위는 `docs/execplan/t-vn-41-paired-live-proof.md`다. command/consumer token 교차
-음성, initial cutover·Merkle 수렴, causal canary, duplicate/gap/restore epoch, Map/PinVi live UI를
-격리 Compose project에서 확인한다. 운영 consumer enable과 final boundary는 `T-VN-H42` 및
-docker-manager 재pin 이후로 계속 닫아 둔다.
+Map `96efac…` / PinVi `20b225…` generation 7 pair의 full-ancestry·OpenAPI preflight, command/consumer
+token 교차 `403`, initial cutover(`published=1`, count=1), causal canary의 cursor/count/Merkle 수렴을
+별도 n150 Docker network/DB에서 통과했다. 실제 Map admin UI recovery Playwright는 admin 로그인과
+BFF-only 경계를 포함해 **1 passed (53.9s)**였고, dead-letter replay/reconciliation 뒤 ready/backlog·dead=0을
+확인했다. 실제 claim duplicate는 cache generation `3→4→4`로 side effect 1회를 보였으며, restore fence의
+epoch `1→2`와 pre-fence ACK `409` 거부 뒤 새 snapshot/cursor ready 수렴도 확인했다.
 
-**다음 한 작업**: n150의 격리 checkout/Compose 경계를 확인하고 contract pin preflight를 실행한다.
+**다음 한 작업**: `T-VN-41-F` — `T-VN-H42`와 docker-manager 재pin이 완료될 때까지 production final
+boundary 및 consumer enable은 열지 않는다.
 
 ## 2026-08-04 (claude) — T-VN-SEC-03 완료 (npm audit high 0)
 

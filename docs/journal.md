@@ -2,6 +2,21 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-04 (codex) — T-VN-41-P n150 격리 paired live 증명 완료
+
+- full clone의 Map `96efac…` / PinVi `20b225…`, generation `7`, vendored service OpenAPI SHA-256
+  `622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2`를 ancestry까지 대조했다.
+  command/consumer token swap은 source mutation과 event stream read 모두 `403`이었다.
+- fixture를 first initial cutover보다 먼저 PinVi durable command outbox에 넣어 `published=1`, count=1
+  fixed snapshot을 만들었다. causal canary는 command→state-applied→inbox→ACK→cache generation→tombstone,
+  cursor/count/Merkle exact equality와 command backlog 0을 receipt로 확인했다.
+- n150 Playwright Docker runner에서 실제 admin 로그인과 browser의 BFF-only 경계를 검증했다.
+  dead-letter replay + reconciliation + PinVi recovery drain은 **1 passed (53.9s)**, final ready/backlog·dead=0이다.
+  실 claim 재적용은 cache generation `3→4→4`라 duplicate side effect가 한 번임을 확인했다.
+- restore fence epoch `1→2`는 active claim 1건을 무효화했고 old ACK는 `409`으로 거부됐다. 이후 새 fixed
+  snapshot과 cursor가 ready로 수렴했다. 운영 컨테이너·DB·manifest는 건드리지 않았으며, 증적 요약만 남긴 뒤
+  격리 container/volume/image와 임시 token·browser 상태를 폐기했다. production final boundary는 계속 닫혀 있다.
+
 ## 2026-08-04 (codex) — T-VN-41-P n150 격리 paired live 증명 계획
 
 - Map producer PR #917/#935와 PinVi generation 7 consumer PR #424가 이미 병합됐음을 대조했다.

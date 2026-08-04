@@ -6,6 +6,21 @@
 
 ## 2026-08-04
 
+- [x] **T-VN-41-P** — n150 격리 generation 7 cache-target paired live 증명.
+      (완료: 2026-08-04, PR #427, codex) Map `96efac2494694bd504fb1f52b5d79388a2585db1`와
+      PinVi `20b225131de990fd907dbf6148ddcb875bf36ca7`, generation `7`, service OpenAPI SHA-256
+      `622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2`의 full-ancestry preflight를
+      통과했다. command/consumer token 교차 호출은 각각 `403`이었다. fixture를 initial cutover 전에
+      durable outbox에 넣어 `published=1`, count `1` fixed snapshot을 만들었고, causal canary는
+      PUT→event→ACK→cache generation→DELETE 및 cursor/count/Merkle 수렴, command pending/leased/dead `0`을
+      secret-free receipt로 확인했다. n150 Playwright Docker runner의 실제 admin 로그인·BFF-only recovery
+      UI는 `1 passed (53.9s)`였으며 dead-letter replay와 reconciliation 뒤 backlog/dead `0`, ready checksum에
+      도달했다. 같은 실제 claim을 local commit 뒤 한 번 더 적용해 cache generation이 `3→4→4`로 유지되는
+      duplicate inbox 불변식도 확인했다. restore fence는 epoch `1→2`, active claim 1건 무효화, old ACK `409`
+      거부 후 새 fixed snapshot·cursor의 ready 수렴까지 통과했다. 모든 실행은 별도 Docker network/DB와
+      loopback-only UI binding에서 했고, 운영 consumer enable·final boundary·docker-manager manifest는
+      변경하지 않았다. 종료 뒤 테스트 container/volume/image/임시 credential·browser 상태를 폐기했다.
+
 - [x] **T-VN-SEC-03** — `npm audit` high 7→0 (next-전파 transitive + build-tooling transitive 정리).
       (완료: 2026-08-04, PR #426, claude)
       (1) in-range 표적 update 4종: brace-expansion 1.1.14→1.1.18(+nested 5.0.9), form-data 4.0.5→4.0.6,
