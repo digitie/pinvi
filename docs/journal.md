@@ -53,6 +53,20 @@
   (`test_cache_target_causal_canary.py`) 재실행 **39 passed**로 수렴.
   contract-pin-consistency의 기존 4 스냅샷·핀은 무변경(green 유지).
 
+## 2026-08-04 — T-VN-32C boundary re-pin 적대 리뷰 판정: 무접촉 확인
+
+Map 쪽 T-VN-32 적대 리뷰 2가 `20260804_0049`의 T-VN-41 final boundary contract
+re-pin(`FINALIZE_SCHEMA_REVISION`·audit CHECK 0048→0049)을 8단계 실측으로 검증했다 —
+**판정: T-VN-41 계약 무접촉.** fresh head에서 audit 행 0 · shadow 컬럼 3개
+nullable/default 없음 · downgrade 왕복 무결 · `PREFLIGHT_SCHEMA_REVISION`(0047)과
+`WRITER_REGISTRY_SHA256` 무접촉 · 기존 audit 행이 있어도 CHECK 교체가 IntegrityError로
+**배포 차단**될 뿐 무결성 붕괴가 아님(fail-close).
+
+운영 주의 1건: N150은 컨테이너 기동 시 alembic 자동 실행이므로 **audit 행이 존재하는
+상태로 0049가 배포되면 crash-loop**가 된다 — 현재 production final boundary 미개방
+(행 0, #427)이라 현실 리스크는 낮지만, T-VN-41 소유자(codex)가 boundary 개방 전에
+이 재pin을 인지해야 한다.
+
 ## 2026-08-04 (codex) — T-VN-41-P n150 격리 paired live 증명 완료
 
 - full clone의 Map `96efac…` / PinVi `20b225…`, generation `7`, vendored service OpenAPI SHA-256
