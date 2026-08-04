@@ -4,6 +4,21 @@
 
 ## Unreleased
 
+- Cache-target causal canary의 전체 timeout을 final remote snapshot request와 `Retry-After` 대기까지
+  적용해 PostgreSQL writer fence가 운영자 deadline을 넘어 유지되지 않게 했다. `401/403`, `413`, 응답
+  계약 오류는 일시 장애로 재시도하지 않고 즉시 typed terminal failure로 분류한다.
+- Cache-target generation 7 전환에 strict `preflight`/`finalize` 경계를 추가했다. final writer fence 뒤에는
+  Map HTTP를 다시 호출하지 않고 stopped-Map DB typed evidence와 fresh Pin DB provenance를 한 transaction에서
+  대조하며, canonical request/Map/fence/evidence digest를 append-only audit 한 행에 결박한다.
+- Cache-target source가 삭제된 뒤 다시 활성화될 때 tombstone target의 historical ETag를 재사용하지
+  않는다. DELETE completion은 active target identity를 비워 다음 PUT이 `If-None-Match: *`로 새
+  target을 생성하게 하며, stale `If-Match` 412로 전파가 중단되던 문제를 수정했다. HTTP 성공 뒤
+  local completion 전에 event가 도착하는 crash 경계에서는 strict `state_applied` receipt가
+  `source_event_id`의 command를 causal success로 종결하고 active identity를 복원한다. restore epoch
+  전환 뒤 도착한 구 epoch HTTP 성공/실패는 command를 terminal `superseded`로 닫고 새 head나 consumer
+  readiness를 오염시키지 않는다. Map generation 4 계약을 exact pin해 PUT/DELETE receipt의 target
+  UUID·strong ETag·positive target sequence는 필수로, GET tombstone projection만 nullable로 검증한다. If-Match PUT/DELETE
+  receipt는 요청 precondition의 target UUID와도 exact하게 같아야 성공으로 수용한다.
 - 여행 상세의 kor-travel-map batch 조회가 실패하거나 불완전한 응답을 받았을 때 저장된 장소를
   사용할 수 없는 장소로 잘못 표시하지 않는다. 명시적인 `missing`은 “장소 정보 사용 불가”,
   transport/계약 실패는 저장본을 유지한 “최신 상태 확인 실패”로 구분한다. `@`를 포함한
@@ -51,7 +66,14 @@
   feature는 중복 표시하지 않고, feature marker 팝업에서 선택 일자에 추가할 수 있다. feature가 없는
   지도 지점은 PC 우클릭 또는 모바일 long-touch로 POI 생성 다이얼로그를 열고, `/geo/reverse` 주소를
   보여준 뒤 `feature_snapshot.address_label/address/region`에 저장한다.
-- 여행 상세 Day Plan의 날씨 조회가 `kor-travel-map` weather API의 `asof` 기준 조회를 사용한다.
+- 여행 상세 Day Plan의 POI별 단건 날씨 요청을 제거하고, 같은 여행 날짜의 feature를 최대
+  200개씩 `kor-travel-map` bitemporal weather batch로 조회한다. 공개 parent지만 날씨가 없는
+  상태, 종료된 parent, transport 실패를 각각 다른 안내로 표시하며 같은 Trip view 안에서는
+  단일 `known_at` snapshot을 사용한다. 날짜별 batch fanout과 31일 표시 상한도 제거해
+  장기 여행의 모든 일자를 하나의 크기 제한된 다중 날짜 요청으로 조회하며, 응답 일부가
+  잘못된 경우에는 부분 날씨를 섞지 않고 전체를 일시 사용 불가로 표시한다.
+  같은 일자·기상 격자의 날씨 카드는 `weather_cards`에 한 번만 두고 feature별 상태가
+  `card_key`로 참조해 장기 여행 응답의 중복 metric payload를 줄인다.
   화면에서는 중복된 레이어/일정 문구와 빈 장소 안내 문구를 제거하고, 일자 이름 변경은 별도 팝업에서
   처리한다. 모바일 상세 상단의 겹침을 줄이고, 여행 기간이 잘못된 상태에서는 일자를 추가하지 못하게
   검증한다. 모바일 드로워 상단에는 `일자 추가`를 `편집`/복사/삭제 액션 옆으로 올리고, 일자별

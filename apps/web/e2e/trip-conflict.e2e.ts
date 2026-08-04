@@ -53,7 +53,16 @@ function poiResponse(note: string | null, version: number) {
 function tripView(title: string, tripVersion: number, note: string | null, poiVersion: number) {
   return {
     trip: tripResponse(title, tripVersion),
-    days: [{ day_index: 1, date: null, title: '1일차', pois: [poiResponse(note, poiVersion)] }],
+    days: [
+      {
+        day_index: 1,
+        date: null,
+        title: '1일차',
+        weather_cards: {},
+        weather_by_feature_id: {},
+        pois: [poiResponse(note, poiVersion)],
+      },
+    ],
     companions: [],
     share_links: [],
     broken_feature_count: 0,

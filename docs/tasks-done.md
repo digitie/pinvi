@@ -23,6 +23,95 @@
       기기 timezone으로 포맷해 UTC 서쪽에서 하루 밀리던 것을 `timeZone:'UTC'` 고정으로 수정(웹 latent
       버그 동시 해소). 반영 후 승인.
 
+## 2026-07-31
+
+- [x] **T-VN-20 / issue #394** — kor-travel-map 공개 API key의 header-only 소비 전환.
+      (완료: 2026-07-20, PR #395, codex)
+      URL의 `key` query를 제거하고 public read allowlist에서만
+      `X-Kor-Travel-Map-Api-Key`를 전송한다. service token 우선순위와 batch의
+      ServiceToken-only 경계를 고정했으며, Map PR #794 merge commit의 전체 user OpenAPI를
+      SHA-256 및 byte equality로 vendor했다. focused **32 passed, 4 skipped**, API unit
+      **616 passed, 1 skipped**, Ruff·strict mypy·Compose·CI가 통과했고 단일 적대적 리뷰가
+      P0~P2 없음으로 승인했다. PR #395 merge commit은 `e60d1711…`이며 issue #394는 병합 뒤
+      닫혔다. 후속 n150 production 경계 검증에서도 public key의
+      valid **200** / wrong **401** / revoke **200** / revoked **401** lifecycle을 확인했다.
+
+- [x] **T-VN-03-P / issue #392** — 잔여 관측 read caller의 `ops:read` principal 결선.
+      (완료: 2026-07-27, PR #393·#408, codex)
+      `consistency/{issues,reports}`, `system-logs`, `api-call-logs` 네 caller를 닫힌
+      `ops:read` registry로 전환하고 Admin BFF/service/actor fallback 부재와
+      `/ops/metrics`·`health-deep` direct caller 부재를 계약으로 고정했다. PR #393
+      merge commit `61820f0a…`와 cancel 음성 계약을 보강한 PR #408 merge commit
+      `6a035695…`가 main에 반영됐다. n150 production exact pair
+      (Map `c8ed6164…` / PinVi `6a035695…`)에서 PinVi container-origin
+      `GET /v1/ops/consistency/reports`가 `ops:read`로 **200**, token 없이 **401**을
+      반환해 운영 활성화를 실증했고 issue #392를 닫았다.
+
+- [x] **T-ADM-C6c** — canonical dataset/pipeline caller와 production compatible-pair 활성화.
+      (완료: 2026-07-27, PR #387·#393·#408, codex)
+      삭제된 Dagster/provider/import-job 호출을 `/v1/ops/datasets`와
+      `/v1/ops/pipeline/{overview,executions}` 및 canonical cancellation으로 clean-cut하고,
+      read/cancel principal 분리, 취소 reconciliation, schedule source degraded projection을
+      완결했다. PR #387 merge commit `1b833ce8…` 뒤 #393/#408의 잔여 principal 계약까지
+      반영했으며 API unit/integration·Ruff·strict mypy·Web lint/typecheck/Vitest/build와 CI가
+      통과했다. n150 production에서 exact Map/PinVi source pair와 healthy runtime을 확인하고
+      public/ops/debug principal 경계 **14/14**를 통과했다. 삭제 route 복원·shim·route policy
+      예외는 모두 0건이며, 이 운영 증거로 canonical caller와 production activation 완료 조건을
+      닫았다.
+
+## 2026-07-30
+
+- [x] **T-VN-16C** — PinVi 다중 날짜 weather batch 소비 전환.
+      (완료: 2026-07-30, PR #421, codex)
+      Map PR #902의 sparse `targets[{target_at, feature_ids}]`와 target-local
+      `cards[]`/`card_key` 계약을 한 Trip view당 `POST /v1/features/weather/batch` 1회로
+      소비한다. target 366개·target당 ID 200개·전체 pair 2,000개·
+      `pair + 5 × unique feature` planning work 2,500·ID 256자 상한을 전송 전에
+      검증하고, target/card/item 순서·정확한 참조 집합·metric 타입과 aware datetime을
+      fail-closed한다. 성공 응답을 전부 decode한 뒤에만 투영하며 transport·timeout·계약
+      실패는 미결 weather 전체를 `unavailable`로 둔다. 날짜별 worker fanout과 31일 상한,
+      `not_requested` 상태를 제거했으며 10초 view budget과 부모 cancellation 전파는 유지한다.
+      Trip 응답은 일자별 `weather_cards`와 feature별 `found(card_key)`로 정규화해 같은
+      기상 격자의 metric payload를 feature 수만큼 반복하지 않으며, 누락·고아 참조를 거부한다.
+      DST 전환일의 1일 horizon은 응답의 고정 offset을 기준으로 검증한다.
+      소유자와 공유 여행 화면이 같은 정규화 계약을 렌더하며, producer OpenAPI의 제약 없는
+      `card_key`를 임의로 좁히지 않는다. 적대 리뷰 2인의 최종 재검토는 P0~P3 0건이다.
+      vendored OpenAPI는 Map main `94ace1a9…`, SHA-256 `0a7cabb3…`에 고정했다.
+      n150 재사용 `ktm-tvn45-db`의 40일·45 POI 파괴적 Live UI에서 한 view당 weather POST
+      1회, 다섯 parent 상태, weather found/no_data, weather-only 503→복구, 단건 weather
+      0회, 40일차 API 상태와 UI arm 일치, 활성 Trip 잔존 0건을 최종 **1 passed (11.9s)**로
+      확인했다. schema migration·새 clone·checkpoint·downgrade는 만들지 않았다.
+
+- [x] **T-VN-16B** — PinVi weather batch 소비 cutover. (완료: 2026-07-30, PR 예정, codex)
+      Trip view가 unique `effective_date`별로 `POST /v1/features/weather/batch`를 호출하고
+      날짜 안의 feature를 200개씩 dedupe한다. 브라우저 단건 N+1은 제거했으며
+      `found|no_data|retired|suppressed|missing|unavailable|not_requested`을 day-scoped
+      discriminated union으로 전달한다. 고유 날짜 31개·worker 4개·전체 10초 상한과 부모
+      요청 취소 전파로 outbound를 제한하고, 상한 초과와 실제 장애를 구분한다.
+      strict transport decoder와 vendored Map OpenAPI field contract, query-count integration,
+      pure UI 상태 test, 단건 요청 0회 mocked Playwright를 고정했다. 적대 리뷰 2인이 날짜
+      fanout·경계값 500·거대 JSON 정수·KST metric 선택·lifecycle 의미 소실·Live false-green·
+      부모 취소 orphan을 찾아 회귀와 함께 수정했다. 최종 실데이터 Live와 CI·merge evidence는
+      재사용 `ktm-tvn45-db`에서 여섯 parent 상태, weather found/no_data/retired,
+      weather-only 503→복구, 단건 weather 0회를 UI로 통과했으며 활성 Trip 잔존은 0건이다.
+      CI·merge evidence는 PR landing 뒤 journal에 보강한다.
+
+- [x] **T-VN-11-P** — kor-travel-map 5상태 batch typed consumer 전환.
+      `found|retired|suppressed|missing|unchanged`와 PostgreSQL `bigint` revision을 strict
+      decode하고, `1..200` chunk·bounded LRU·generation/revision fence로 최신 상태의
+      out-of-order rollback을 막았다. transport 실패만 stale snapshot을 `unverified`로
+      재사용한다. Web·Map·Mobile 공용 resolver와 canonical `coord` snapshot을 적용했다.
+      독립 적대 리뷰가 지도 마커 소실·cache rollback·동일 revision 복구를 막는 negative
+      fence·chunk 상한·생산자 DB 장애 500 누출·실패한 planner gate·문서 drift를 찾아 모두
+      보강했다. n150 재사용 실데이터 DB의 다섯 상태·503·복구와 지도 포인트 4곳을 파괴적
+      Live UI로 통과하고 fixture·격리 자원을 정리했다. Map 생산자와 저장소별 호환 PR 쌍으로
+      Map → PinVi 순서에 따라 landing한다.
+
+- [x] **T-VN-08** — kor-travel-map batch 실패 false-broken 방지. (완료: 2026-07-26, PR #409, codex)
+      `feature_resolution_state=not_linked|found|missing|unverified`를 도입하고 transport·인증·계약
+      실패는 저장 snapshot을 유지한 `unverified`로 분리했다. 불투명 `feature_id` exact 왕복,
+      중복 JSON member·비유한 수 fail-closed, n150 실데이터 정상→503→복구 Live UI를 검증했다.
+
 ## 2026-07-28
 
 - [x] **T-VN-SEC-02** — `next` 15.5.18→15.5.22 보안 패치(web CVE 8건 제거). (완료: 2026-07-28, PR #414, claude)

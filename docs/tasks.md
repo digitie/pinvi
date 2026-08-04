@@ -7,16 +7,6 @@
 
 ## 현재 선점 / 충돌 회피
 
-- **T-VN-08 = Codex**(`fix/t-vn-08-false-broken`):
-  batch client/builder와 공용 Trip schema/domain, Web·Mobile Trip 표시, 관련 unit/integration/
-  mocked/live E2E 및 계약 문서를 수정한다. TDR 검색 기능과 C6c admin client는 건드리지 않는다.
-- **T-VN-20 / issue #394 = Codex**(`fix/ktm-public-api-key-header`):
-  `apps/api/app/clients/kor_travel_map.py`의 public API 인증과 해당 unit/contract snapshot·통합 문서만
-  수정한다. service token 우선순위는 유지하고 `key` query를 제거하며
-  `X-Kor-Travel-Map-Api-Key` header-only 계약으로 전환한다.
-- **T-ADM-C6c = Codex**(`fix/c6c-ops-contract`): `apps/api`의 kor-travel-map admin
-  client·provider-sync/ETL projection, 공용 schema·provider-sync UI/E2E·문서를 수정한다. TDR
-  레인과 파일이 겹치면 C6c가 선행하며, provider-sync 밖의 Web 화면 구조는 바꾸지 않는다.
 - **TDR(Trip Detail Rewrite) = Claude 단독 진행**(2026-07-20 결정, 레인 A/B 분리 폐지).
   마스터 계획 `docs/execplan/trip-detail-rewrite.md`. Codex는 이 에픽 미사용. Claude가
   T-301→T-305(backend/ETL) 후 T-306~T-309c(web UI)를 DAG 순서로 직접 구현한다.
@@ -24,19 +14,33 @@
   T-301(#397), T-302(#398), T-303(#399), T-304(#400), T-305(#401), T-309c(#402), T-306(#404),
   T-307(#405+#411), T-308(#406), T-309a/b(1 PR). 잔여는 mobile mirror(TDR-mobile, 별도 train)뿐.
 
-## kor-travel-map batch 상태 계약
+## kor-travel-map compatible pair
 
-- [ ] **T-VN-08** — trip view의 batch transport/contract 실패를 feature 부재로 오인하지 않고
-      저장 snapshot을 유지한다. POI별 `feature_resolution_state`를
-      `not_linked|found|missing|unverified`로 노출하고, `missing`만 broken count에 반영한다.
-      `feature_id`는 `@`를 포함해 어떤 포맷도 해석하지 않는 불투명 문자열로 전달한다. 현재 2-state
-      decoder는 exact `found|missing` key와 완전·배타 partition, detail 내부 exact ID/표시 필드,
-      중복 JSON member를 fail-closed로 검증한다.
-
-- [ ] **T-VN-11-P** — kor-travel-map `T-VN-11`의
-      `found|retired|suppressed|missing|unchanged + revision` batch 응답을 typed PinVi consumer 계약으로
-      같은 cutover에서 전환한다. transport 실패는 upstream 상태값으로 축약하지 않고 소비자
-      `unverified` 경계를 유지하며, 현재 2-state exact partition 테스트를 5-state partition 테스트로 교체한다.
+- [ ] **T-VN-41-P — cache-target generation·outbox paired consumer** — Map ADR-081 /
+      `T-VN-41A/B/C`와 맞물려 POI canonical source generation, transaction-coupled command
+      outbox, strict pull inbox/ACK/NACK/DLQ/replay, restore epoch barrier, fixed snapshot Merkle,
+      durable cache invalidation과 default-off fail-closed gate를 구현한다. admin 인증은 사용하지 않고
+      command/consumer/restore-fence/recovery principal을 분리한다. 실행 정본:
+      `docs/execplan/t-vn-41-cache-target-consumer.md`. production enable 전 snapshot replay lower-bound
+      inbox dedupe, DB advisory cross-process single-flight, snapshot 전용 timeout, 429/503 `Retry-After`,
+      exact 100,000개 latency/RSS와 100,001개 413 non-retry를 n150에서 증명한다. generation 7에서는
+      command=`cache-target:command`, consumer 역할=`cache-target:read/claim/ack/nack/snapshot` exact
+      5개 배열로 clean-cut하고 legacy `cache-target:consumer` scope와 generation 6 조합, token swap을
+      fail-close한다(ADR-059). migration 0048의 durable run 정본과 ordinary command/consumer token만 쓰는
+      `pinvi-cache-target-causal-canary`로 PUT→event apply→ACK→cache generation→DELETE와 성공 transaction의
+      fresh command/event/ACK provenance, remote stream-before/snapshot/stream-after control, local/remote
+      cursor 3종·count·Merkle 및 pending/leased/dead 0을 production에서 증명한다. final commit은
+      `csv5 → Map H35 gc → final all-writer fence → Map typed evidence → Pin finalize` 순서이며 finalize는
+      HTTP 없이 stopped-Map evidence와 fresh Pin DB evidence를 대조한다. canonical request/Map/fence/evidence는
+      append-only audit 한 행과 fresh Manager 재조회로 결박한다. canary의 operator deadline은 final
+      remote bracket 내부 request와 `Retry-After`까지 취소해 writer fence를 bounded하게 해제하며,
+      재시도는 network/timeout과 pinned `429/503 SNAPSHOT_*`에만 허용한다.
+      - [x] Map generation 7 artifact owner `1285ff4974a2fa8d4b71f810dc9fca249397e8fc`, functional owner
+        `9b945ce832ecc3ed037d66c9d4e7bda9a1a69ae0`, service OpenAPI SHA-256
+        `622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2`를 vendored bytes/runtime
+        generation `7`과 함께 exact pin하고 generation 6, 17-route scope drift, command/consumer token swap
+        음성 gate를 고정했다.
+      - [ ] n150에서 generation 7 token-swap 음성과 causal canary receipt를 포함한 paired live proof를 남긴다.
 
 ## 보안·의존성
 
@@ -66,36 +70,6 @@
       변경 0). vendored byte-pinned 파일 12개(`apps/api/tests/contract/` SHA-256 핀 + `.agents/skills/`·
       `.claude/skills/` pg-aiguide 세트)는 원본 유지 + `.prettierignore`로 영구 제외했다.
       (완료: 2026-07-28, PR #413, claude → tasks-done.md)
-
-## kor-travel-map 공개 API 인증 계약 정합
-
-- [ ] **T-VN-20 / issue #394** — kor-travel-map PR #794의 clean-cut에 맞춰 public API key를
-      `X-Kor-Travel-Map-Api-Key` header로만 전송한다. URL `key` query를 제거하고 service token 우선순위,
-      batch의 ServiceToken-only allowlist, exact vendored OpenAPI hash/equality, 운영 Compose env 배선과
-      opt-in live HTTP smoke를 unit/contract gate로 고정한다. 단일 적대적 리뷰 승인과 로컬 gate는
-      완료했으며 draft PR·CI·N150 live smoke·머지가 남았다.
-
-## kor-travel-map admin ops 계약 복구
-
-- [ ] **T-VN-03-P / issue #392** — 잔여 관측 read
-      (`consistency/{issues,reports}`, `system-logs`, `api-call-logs`)를 PR #387의
-      `ops:read` principal로 결선한다. `/ops/metrics`·`health-deep` direct caller는 부재를 고정하고
-      새 caller를 만들지 않는다. PinVi [PR #393](https://github.com/digitie/pinvi/pull/393) head와
-      Map [PR #782](https://github.com/digitie/kor-travel-map/pull/782) head는 C6c manifest v4 exact
-      pair source에 포함해 동일 배포 단위로 전환한다. 설계는
-      [`docs/execplan/t-vn-03-ops-observability-principal.md`](execplan/t-vn-03-ops-observability-principal.md).
-
-- [ ] **T-ADM-C6c** — PR #724 이후 삭제된
-      `/v1/ops/dagster/summary`·`/v1/ops/providers*`·`/v1/ops/import-jobs*` 호출을 제거하고,
-      `/v1/ops/datasets`·`/v1/ops/pipeline/{overview,executions}`·canonical cancellation으로
-      전환한다. kor-travel-map 전용 service/operator principal은 read/cancel capability를 분리하며,
-      Pinvi server가 frontend BFF secret을 전송하거나 trusted CIDR 확대에 의존하지 않는다.
-      양 저장소 contract test, 배포 순서(map → Pinvi), 직전 image rollback smoke가 완료 조건이다.
-  - 구현 완료, 검증 대기: exact 운영 URL allowlist, canonical `PINVI_ENVIRONMENT`, 비운영 token pair
-    fail-close, 취소 detail/list reconciliation과 blind retry 잠금, provider schedule 출처 degraded 배너.
-    결정적 400/401/403/422/429와 exact `404 PIPELINE_EXECUTION_NOT_FOUND` 거절은 reconciliation에서
-    제외하고 사유 수정·재시도를 허용하며, 그 밖의 404는 미확정 잠금을 유지한다.
-  - 남은 완료 gate: WSL 정적/단위/통합/Web gate, map·Pinvi 동일 image 조합, N150 prod live UI E2E.
 
 ## TDR — Trip Detail Rewrite (T-300~T-309c)
 

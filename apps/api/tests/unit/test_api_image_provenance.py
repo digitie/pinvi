@@ -282,6 +282,7 @@ def test_docker_and_deploy_files_bind_the_same_revision_contract() -> None:
     deploy = (ROOT / "scripts/deploy-node.sh").read_text(encoding="utf-8")
 
     assert "ARG PINVI_SOURCE_REVISION=development" in dockerfile
+    assert "PINVI_SOURCE_REVISION=${PINVI_SOURCE_REVISION}" in dockerfile
     assert 'org.opencontainers.image.revision="${PINVI_SOURCE_REVISION}"' in dockerfile
     assert 'io.pinvi.build.environment="${PINVI_BUILD_ENVIRONMENT}"' in dockerfile
     assert "staging|production" in dockerfile
@@ -294,6 +295,15 @@ def test_docker_and_deploy_files_bind_the_same_revision_contract() -> None:
     )
     assert "build_images" in deploy
     assert "pinvi_verify_api_image_provenance" in deploy
+
+
+def test_api_image_installs_console_scripts_after_copying_app_source() -> None:
+    dockerfile = (ROOT / "apps/api/Dockerfile").read_text(encoding="utf-8")
+
+    source_copy = dockerfile.index("COPY apps/api/app ./app")
+    project_install = dockerfile.index("RUN pip install --no-deps -e .")
+
+    assert source_copy < project_install
 
 
 def test_immutable_context_uses_exact_archive_and_excludes_worktree_drift(

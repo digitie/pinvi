@@ -165,7 +165,12 @@ export const WeatherMetricSchema = z.object({
   metric_name: z.string().nullable().optional(),
   forecast_style: z.string(),
   timeline_bucket: z.string().nullable().optional(),
+  provider: z.string().nullable().optional(),
+  weather_domain: z.string().nullable().optional(),
   valid_at: Iso8601Schema.nullable().optional(),
+  valid_from: Iso8601Schema.nullable().optional(),
+  valid_until: Iso8601Schema.nullable().optional(),
+  effective_at: Iso8601Schema.nullable().optional(),
   issued_at: Iso8601Schema.nullable().optional(),
   observed_at: Iso8601Schema.nullable().optional(),
   value_number: z.number().nullable().optional(),
@@ -185,6 +190,16 @@ export const FeatureWeatherCardSchema = z.object({
   metrics: z.array(WeatherMetricSchema),
 });
 export type FeatureWeatherCard = z.infer<typeof FeatureWeatherCardSchema>;
+
+export const FeatureWeatherResolutionSchema = z.discriminatedUnion('state', [
+  z.object({ state: z.literal('found'), card: FeatureWeatherCardSchema }),
+  z.object({ state: z.literal('no_data') }),
+  z.object({ state: z.literal('retired') }),
+  z.object({ state: z.literal('suppressed') }),
+  z.object({ state: z.literal('missing') }),
+  z.object({ state: z.literal('unavailable') }),
+]);
+export type FeatureWeatherResolution = z.infer<typeof FeatureWeatherResolutionSchema>;
 
 /** 카테고리 카탈로그 1건 — 마커 범례 / 필터 칩 (kor_travel_map `CategorySummary` 투영). */
 export const FeatureCategorySchema = z.object({

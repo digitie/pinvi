@@ -1,13 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertTriangle, CloudOff, GripVertical, Pencil, Trash2 } from 'lucide-react';
-import type { PoiUpdate, TripViewPoi } from '@pinvi/schemas';
-import { arrayMove, paletteHex } from '@pinvi/domain';
+import { AlertTriangle, CloudOff, EyeOff, GripVertical, Pencil, Trash2 } from 'lucide-react';
+import type {
+  PoiUpdate,
+  TripViewPoi,
+  TripWeatherCard,
+  TripWeatherResolution,
+} from '@pinvi/schemas';
+import { arrayMove, featureResolutionNotice, paletteHex } from '@pinvi/domain';
 import { PoiEditor } from '@/components/trips/PoiEditor';
 import { TripAttachments } from '@/components/trips/TripAttachments';
 import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
-import { featureResolutionNotice } from '@/lib/tripFeatureResolution';
 
 function formatTime(value: string | null): string | null {
   if (!value) return null;
@@ -22,6 +26,8 @@ export interface TripPoiListProps {
   onSelectPoi?: (poiId: string) => void;
   tripId?: string;
   dayDate?: string | null;
+  weatherCards?: Record<string, TripWeatherCard>;
+  weatherByFeatureId?: Record<string, TripWeatherResolution>;
   showInlineAttachments?: boolean;
   showWeather?: boolean;
   compact?: boolean;
@@ -42,6 +48,8 @@ export function TripPoiList({
   onSelectPoi,
   tripId,
   dayDate = null,
+  weatherCards = {},
+  weatherByFeatureId = {},
   showInlineAttachments = false,
   showWeather = false,
   compact = false,
@@ -139,9 +147,16 @@ export function TripPoiList({
                       <span className="truncate text-sm font-semibold text-ink">
                         {poi.title ?? poi.feature_id ?? '장소'}
                       </span>
-                      {poi.feature_resolution_state === 'missing' && (
+                      {(poi.feature_resolution_state === 'missing' ||
+                        poi.feature_resolution_state === 'retired') && (
                         <AlertTriangle
                           className="h-3.5 w-3.5 shrink-0 text-error-text"
+                          aria-label={resolutionNotice ?? undefined}
+                        />
+                      )}
+                      {poi.feature_resolution_state === 'suppressed' && (
+                        <EyeOff
+                          className="h-3.5 w-3.5 shrink-0 text-muted"
                           aria-label={resolutionNotice ?? undefined}
                         />
                       )}
@@ -212,7 +227,8 @@ export function TripPoiList({
                 <div className={compact ? 'mt-2 space-y-2 pl-8' : 'mt-3 space-y-2 pl-9'}>
                   {showWeather && (
                     <TripWeatherSummary
-                      featureId={poi.feature_id}
+                      weather={poi.feature_id ? (weatherByFeatureId[poi.feature_id] ?? null) : null}
+                      weatherCards={weatherCards}
                       date={dayDate}
                       label="장소 날씨"
                       compact

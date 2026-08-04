@@ -159,6 +159,10 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
             pois={selectedDay?.pois ?? []}
             selectedPoiId={selectedPoiId}
             onSelectPoi={handleSelectPoi}
+            dayDate={selectedDay?.effective_date ?? selectedDay?.date ?? null}
+            weatherCards={selectedDay?.weather_cards}
+            weatherByFeatureId={selectedDay?.weather_by_feature_id}
+            showWeather
           />
         </aside>
       </div>

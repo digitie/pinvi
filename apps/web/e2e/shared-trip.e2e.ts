@@ -33,7 +33,29 @@ test('공유 링크로 읽기전용 여행 뷰가 로그인 없이 렌더링된�
             {
               day_index: 1,
               date: '2026-07-01',
+              effective_date: '2026-07-01',
               title: '1일차',
+              weather_cards: {
+                'card:shared-busan': {
+                  asof: '2026-07-01T00:00:00+09:00',
+                  latest_at: '2026-07-01T09:00:00+09:00',
+                  is_stale: false,
+                  source_styles: ['observed'],
+                  metrics: [
+                    {
+                      metric_key: 'T1H',
+                      metric_name: '기온',
+                      forecast_style: 'observed',
+                      effective_at: '2026-07-01T09:00:00+09:00',
+                      value_number: 24,
+                      unit: '℃',
+                    },
+                  ],
+                },
+              },
+              weather_by_feature_id: {
+                'feat-1': { state: 'found', card_key: 'card:shared-busan' },
+              },
               pois: [
                 {
                   poi_id: '44444444-4444-4444-8444-444444444444',
@@ -71,6 +93,7 @@ test('공유 링크로 읽기전용 여행 뷰가 로그인 없이 렌더링된�
   await expect(page.getByText('공유된 여행')).toBeVisible();
   await expect(page.getByRole('heading', { name: '공유된 부산 여행' })).toBeVisible();
   await expect(page.getByTestId('trip-poi-list')).toContainText('해운대 해수욕장');
+  await expect(page.getByLabel('장소 날씨')).toContainText('기온 24℃');
 
   // 읽기 전용 — 편집/삭제 버튼이 없다.
   await expect(page.getByRole('button', { name: '마커 편집' })).toHaveCount(0);

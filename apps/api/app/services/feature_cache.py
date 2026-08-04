@@ -1,58 +1,192 @@
 """Feature 조회 process-local TTL 캐시 (T-146 / D-26).
 
 trip view마다 kor-travel-map을 재호출하는 단일 노드 hotspot을 완화한다. feature_id(불투명 문자열,
-canonical) → feature dict를 짧은 TTL로 캐시하고, miss만 라이브러리에서 가져온다.
-멀티 워커 간 공유는 하지 않는다(프로세스 로컬). 동시성 race는 캐시 특성상 무해(중복 fetch 정도).
+canonical) → ``trip_card + row_revision``을 짧은 TTL로 캐시한다. 만료 entry는 버리지 않고
+conditional batch validator와 transport 실패 시 stale snapshot으로 재사용한다.
+멀티 워커 간 공유는 하지 않는다(프로세스 로컬). 같은 프로세스의 동시 refresh는 시작 sequence와
+revision fence로 늦은 이전 응답의 상태 역행을 막는다.
 """
 
 from __future__ import annotations
 
 import time
 from collections import OrderedDict
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, replace
 from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 
 
+@dataclass(frozen=True)
+class CachedFeature:
+    trip_card: dict[str, Any]
+    row_revision: int
+
+
+@dataclass(frozen=True)
+class _CacheRecord:
+    expires_at: float
+    feature: CachedFeature | None
+    latest_refresh: int
+    revision_fence: int | None
+
+
 class FeatureCache:
-    """단순 TTL + LRU(maxsize) 캐시. monotonic clock 기반."""
+    """revision/refresh 순서를 보존하는 TTL + LRU(maxsize) 캐시."""
 
     def __init__(self, *, ttl_seconds: float, max_size: int) -> None:
         self._ttl = ttl_seconds
         self._max_size = max(1, max_size)
-        # feature_id -> (expires_at_monotonic, feature)
-        self._store: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
+        self._store: OrderedDict[str, _CacheRecord] = OrderedDict()
+        self._refresh_sequence = 0
 
-    def get_many(self, feature_ids: Iterable[str]) -> tuple[dict[str, dict[str, Any]], list[str]]:
-        """캐시 hit(만료 안 된 것)과 miss(재조회 필요) 분리."""
+    def _trim(self) -> None:
+        while len(self._store) > self._max_size:
+            self._store.popitem(last=False)
+
+    def get_many(
+        self,
+        feature_ids: Iterable[str],
+    ) -> tuple[dict[str, CachedFeature], dict[str, CachedFeature], list[str]]:
+        """fresh hit, validator로 재검증할 stale hit, 완전 miss를 분리한다."""
         now = time.monotonic()
-        hits: dict[str, dict[str, Any]] = {}
+        fresh: dict[str, CachedFeature] = {}
+        stale: dict[str, CachedFeature] = {}
         misses: list[str] = []
         for fid in feature_ids:
             entry = self._store.get(fid)
-            if entry is not None and entry[0] > now:
-                self._store.move_to_end(fid)  # LRU 갱신
-                hits[fid] = entry[1]
-            else:
-                if entry is not None:
-                    self._store.pop(fid, None)  # 만료 정리
+            if entry is None or entry.feature is None:
                 misses.append(fid)
-        return hits, misses
+            else:
+                self._store.move_to_end(fid)
+                target = fresh if entry.expires_at > now else stale
+                target[fid] = entry.feature
+        return fresh, stale, misses
 
-    def put_many(self, features: dict[str, dict[str, Any]]) -> None:
+    def begin_refresh(self, feature_ids: Iterable[str]) -> int:
+        """refresh 시작 순서를 기록해 늦게 도착한 이전 응답의 적용을 막는다."""
+        self._refresh_sequence += 1
+        refresh = self._refresh_sequence
+        now = time.monotonic()
+        for feature_id in feature_ids:
+            current = self._store.get(feature_id)
+            if current is None:
+                current = _CacheRecord(
+                    expires_at=now,
+                    feature=None,
+                    latest_refresh=refresh,
+                    revision_fence=None,
+                )
+            else:
+                current = replace(current, latest_refresh=refresh)
+            self._store[feature_id] = current
+            self._store.move_to_end(feature_id)
+        self._trim()
+        return refresh
+
+    def put_many(
+        self,
+        features: Mapping[str, CachedFeature],
+        *,
+        refresh: int | None = None,
+    ) -> None:
+        """더 최신 refresh/revision을 되돌리지 않는 positive cache 갱신."""
         expires_at = time.monotonic() + self._ttl
         for fid, feature in features.items():
-            self._store[fid] = (expires_at, feature)
+            current = self._store.get(fid)
+            if refresh is not None and (current is None or current.latest_refresh != refresh):
+                continue
+            if current is not None:
+                if (
+                    current.feature is not None
+                    and current.feature.row_revision > feature.row_revision
+                ):
+                    continue
+                # refresh generation이 일치하면 현재 authoritative snapshot이다. 이전 요청은
+                # latest_refresh 비교에서 이미 차단되므로 negative fence는 무순서 write만 막는다.
+                if (
+                    current.revision_fence is not None
+                    and refresh is None
+                    and current.revision_fence >= feature.row_revision
+                ):
+                    continue
+            self._store[fid] = _CacheRecord(
+                expires_at=expires_at,
+                feature=feature,
+                latest_refresh=current.latest_refresh if current is not None else 0,
+                revision_fence=None,
+            )
             self._store.move_to_end(fid)
-        while len(self._store) > self._max_size:
-            self._store.popitem(last=False)  # 가장 오래된 것 evict
+        self._trim()
+
+    def invalidate_many(
+        self,
+        revisions: Mapping[str, int | None],
+        *,
+        refresh: int,
+    ) -> None:
+        """terminal/missing 응답을 revision fence로 남겨 이전 found 재삽입을 막는다."""
+        for feature_id, revision in revisions.items():
+            current = self._store.get(feature_id)
+            if current is None or current.latest_refresh != refresh:
+                continue
+            if (
+                revision is not None
+                and current.feature is not None
+                and current.feature.row_revision > revision
+            ):
+                continue
+            fences = [fence for fence in (current.revision_fence, revision) if fence is not None]
+            self._store[feature_id] = replace(
+                current,
+                feature=None,
+                revision_fence=max(fences) if fences else None,
+            )
+            self._store.move_to_end(feature_id)
+        self._trim()
 
     def clear(self) -> None:
         self._store.clear()
+        self._refresh_sequence = 0
 
 
 feature_cache = FeatureCache(
     ttl_seconds=settings.pinvi_feature_cache_ttl_seconds,
     max_size=settings.pinvi_feature_cache_max_size,
 )
+
+
+class FeatureCacheGenerationObserver:
+    """각 process가 DB generation/epoch 전이를 독립적으로 관측해 local cache를 비운다."""
+
+    def __init__(self, cache: FeatureCache) -> None:
+        self._cache = cache
+        self._observed: tuple[int | None, int] | None = None
+
+    async def observe(self, db: AsyncSession, *, consumer_id: str) -> tuple[int | None, int] | None:
+        from app.models.cache_target_sync import KtmCacheTargetConsumer
+
+        current = await db.execute(
+            select(
+                KtmCacheTargetConsumer.active_restore_epoch,
+                KtmCacheTargetConsumer.feature_cache_generation,
+            ).where(KtmCacheTargetConsumer.consumer_id == consumer_id)
+        )
+        row = current.one_or_none()
+        if row is None:
+            if self._observed is not None:
+                self._cache.clear()
+            self._observed = None
+            return None
+        generation = (row.active_restore_epoch, row.feature_cache_generation)
+        if self._observed is not None and generation != self._observed:
+            self._cache.clear()
+        self._observed = generation
+        return generation
+
+
+cache_generation_observer = FeatureCacheGenerationObserver(feature_cache)

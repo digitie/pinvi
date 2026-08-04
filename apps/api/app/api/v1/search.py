@@ -27,6 +27,7 @@ from app.models.poi import TripDayPoi
 from app.models.trip import Trip
 from app.schemas.envelope import Envelope
 from app.schemas.search import PlaceSearchResponse, PlaceSearchResult
+from app.services.admin_pois import extract_feature_coord
 from app.services.place_search import (
     address_candidate_to_result,
     feature_item_to_result,
@@ -45,12 +46,16 @@ def _escape_like(value: str) -> str:
 
 
 def _snapshot_coord(snapshot: dict[str, Any]) -> tuple[float | None, float | None]:
-    coord = snapshot.get("coord")
-    if isinstance(coord, dict):
-        lon = coord.get("lon", coord.get("longitude"))
-        lat = coord.get("lat", coord.get("latitude"))
-        return lon, lat
-    return None, None
+    """POI feature snapshot에서 `(lon, lat)`.
+
+    T-VN-H29: 과거 구현은 중첩 `coord` 하나만 봤다. kor-travel-map curated import로 들어온 POI의
+    snapshot은 좌표를 **top-level `lon`/`lat`**에 담고(`CuratedFeatureDetailFeatureSnapshotView`는
+    `extra="forbid"`이고 `coord` property가 아예 없다) 따라서 그 read는 **구조적으로 항상 None**이라
+    통합 검색에서만 좌표가 null로 나왔다. 같은 payload를 `admin_pois`/`kasi`는 정상 해석한다.
+    중복 구현 대신 그 정본 추출기를 재사용한다(top-level + coord/coordinate/location/geometry,
+    lon/lng/longitude/x 별칭, 숫자 강제 변환까지 처리).
+    """
+    return extract_feature_coord(snapshot)
 
 
 async def _search_my_pois(db: DbSession, *, user_id: uuid.UUID, q: str) -> list[dict[str, Any]]:

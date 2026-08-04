@@ -7,6 +7,8 @@ const snapshotPoiId = '44444444-4444-4444-8444-444444444445';
 const brokenPoiId = '44444444-4444-4444-8444-444444444446';
 const manualPoiId = '44444444-4444-4444-8444-444444444447';
 const unverifiedPoiId = '44444444-4444-4444-8444-444444444448';
+const retiredPoiId = '44444444-4444-4444-8444-444444444449';
+const suppressedPoiId = '44444444-4444-4444-8444-444444444450';
 const companionId = '55555555-5555-4555-8555-555555555555';
 
 const isFetch = (resourceType: string) => ['fetch', 'xhr'].includes(resourceType);
@@ -32,8 +34,11 @@ const TRIP_VIEW = {
     {
       day_index: 1,
       date: '2026-07-01',
+      effective_date: '2026-07-01',
       title: '1일차',
       holidays: [],
+      weather_cards: {},
+      weather_by_feature_id: {},
       pois: [
         {
           poi_id: poiId,
@@ -162,10 +167,32 @@ const MARKER_VIEW = {
           feature_resolution_state: 'unverified',
           feature_link_broken_at: null,
         },
+        {
+          ...BASE_MARKER_POI,
+          poi_id: retiredPoiId,
+          feature_id: 'feat-retired',
+          title: '종료된 장소 저장본',
+          feature: { coord: { lon: 127.04, lat: 37.58 }, category: '관광지' },
+          marker_color: null,
+          marker_icon: null,
+          feature_resolution_state: 'retired',
+          feature_link_broken_at: '2026-06-29T09:00:00+09:00',
+        },
+        {
+          ...BASE_MARKER_POI,
+          poi_id: suppressedPoiId,
+          feature_id: 'feat-suppressed',
+          title: '비공개 장소 저장본',
+          feature: { coord: { lon: 127.05, lat: 37.59 }, category: '관광지' },
+          marker_color: null,
+          marker_icon: null,
+          feature_resolution_state: 'suppressed',
+          feature_link_broken_at: null,
+        },
       ],
     },
   ],
-  broken_feature_count: 1,
+  broken_feature_count: 2,
 };
 
 const LAYER_VIEW = {
@@ -223,7 +250,6 @@ type MutableTripDetailView = Omit<typeof TRIP_VIEW, 'trip' | 'days'> & {
 
 interface MockTripDetailOptions {
   attachmentsByPath?: (pathname: string) => unknown[];
-  weatherByFeatureId?: Record<string, unknown>;
   onWeatherRequest?: (url: URL) => void;
   featuresInBounds?: unknown | (() => unknown);
 }
@@ -282,7 +308,7 @@ async function mockTripDetailRoutes(
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
-        data: options.weatherByFeatureId?.[featureId] ?? {
+        data: {
           feature_id: featureId,
           asof: null,
           latest_at: null,
@@ -542,7 +568,7 @@ test('상세 지도는 왼쪽 일자 레이어 표시 상태만 반영하고 오
   await expect(page.getByTestId('trip-detail-map').locator('aside')).toHaveCount(0);
 });
 
-test('여행 지도 marker는 missing/unverified 해석 상태를 구분한다', async ({ page }) => {
+test('여행 지도 marker는 5상태와 transport unverified를 구분한다', async ({ page }) => {
   await mockTripDetailRoutes(page, MARKER_VIEW);
 
   await page.goto(`/trips/${tripId}`);
@@ -556,6 +582,12 @@ test('여행 지도 marker는 missing/unverified 해석 상태를 구분한다',
   );
   const unverified = page.locator(
     `[data-testid="trip-map-marker-style"][data-poi-id="${unverifiedPoiId}"]`,
+  );
+  const retired = page.locator(
+    `[data-testid="trip-map-marker-style"][data-poi-id="${retiredPoiId}"]`,
+  );
+  const suppressed = page.locator(
+    `[data-testid="trip-map-marker-style"][data-poi-id="${suppressedPoiId}"]`,
   );
 
   await expect(custom).toHaveAttribute('data-marker-color', 'P-10');
@@ -579,6 +611,10 @@ test('여행 지도 marker는 missing/unverified 해석 상태를 구분한다',
   await expect(broken).toHaveAttribute('data-feature-resolution-state', 'missing');
 
   await expect(unverified).toHaveAttribute('data-feature-resolution-state', 'unverified');
+  await expect(retired).toHaveAttribute('data-feature-resolution-state', 'retired');
+  await expect(suppressed).toHaveAttribute('data-feature-resolution-state', 'suppressed');
+  await expect(page.getByLabel('종료된 장소 정보').first()).toBeVisible();
+  await expect(page.getByLabel('비공개 장소 정보').first()).toBeVisible();
   await expect(page.getByLabel('장소 정보 사용 불가').first()).toBeVisible();
   await expect(page.getByLabel('저장된 정보 · 최신 상태 확인 실패').first()).toBeVisible();
 
@@ -599,14 +635,18 @@ test('여행 지도 marker는 missing/unverified 해석 상태를 구분한다',
   // 실제 popup 문구는 trip-feature-resolution-live-mutating.live.ts에서 검증한다.
 });
 
-test('여행 목록은 missing과 transport unverified를 다른 안내로 표시한다', async ({ page }) => {
+test('여행 목록은 retired/suppressed/missing/unverified 안내와 broken count를 구분한다', async ({
+  page,
+}) => {
   await mockTripDetailRoutes(page, MARKER_VIEW);
 
   await page.goto(`/trips/${tripId}`);
 
+  await expect(page.getByLabel('종료된 장소 정보').first()).toBeVisible();
+  await expect(page.getByLabel('비공개 장소 정보').first()).toBeVisible();
   await expect(page.getByLabel('장소 정보 사용 불가').first()).toBeVisible();
   await expect(page.getByLabel('저장된 정보 · 최신 상태 확인 실패').first()).toBeVisible();
-  await expect(page.getByText('정보 사용 불가 1곳').first()).toBeVisible();
+  await expect(page.getByText('정보 사용 불가 2곳').first()).toBeVisible();
 });
 
 test('여행 지도는 feature를 보이고 빈 좌표에서 주소 포함 POI를 생성한다', async ({ page }) => {
@@ -823,7 +863,7 @@ test('날짜가 없는 여행도 Day Plan 내부 버튼으로 일자를 추가�
     };
     currentView = {
       ...currentView,
-      days: [{ ...day, pois: [] }],
+      days: [{ ...day, weather_cards: {}, weather_by_feature_id: {}, pois: [] }],
     };
     await route.fulfill({
       contentType: 'application/json',
@@ -921,6 +961,7 @@ test('일자 설정에서 날짜를 수정할 수 있다', async ({ page }) => {
     const updatedDay = {
       ...currentDay,
       ...patchedBody,
+      effective_date: patchedBody.date,
       trip_id: tripId,
       note: null,
       version: 2,
@@ -947,75 +988,85 @@ test('일자 설정에서 날짜를 수정할 수 있다', async ({ page }) => {
 
 test('Day Plan 안에서 날짜·장소 파일과 날짜에 맞는 날씨를 보여준다', async ({ page }) => {
   const weatherRequests: URL[] = [];
-  await mockTripDetailRoutes(page, TRIP_VIEW, {
+  const weatherCardKey = 'weather-card:haeundae';
+  const weatherCard = {
+    asof: '2026-07-01T00:00:00+09:00',
+    latest_at: '2026-07-01T09:00:00+09:00',
+    is_stale: false,
+    source_styles: ['observed', 'short'],
+    metrics: [
+      {
+        metric_key: 'T1H',
+        metric_name: '기온',
+        forecast_style: 'observed',
+        timeline_bucket: 'now',
+        valid_at: null,
+        issued_at: null,
+        observed_at: '2026-07-01T09:00:00+09:00',
+        value_number: 24,
+        value_text: null,
+        unit: '℃',
+        severity: null,
+      },
+      {
+        metric_key: 'TMP',
+        metric_name: '기온',
+        forecast_style: 'short',
+        timeline_bucket: 'forecast',
+        valid_at: '2026-07-01T15:00:00+09:00',
+        issued_at: '2026-07-01T05:00:00+09:00',
+        observed_at: null,
+        value_number: 27,
+        value_text: null,
+        unit: '℃',
+        severity: null,
+      },
+      {
+        metric_key: 'PM10',
+        metric_name: '미세',
+        forecast_style: 'observed',
+        timeline_bucket: 'now',
+        valid_at: null,
+        issued_at: null,
+        observed_at: '2026-07-01T09:00:00+09:00',
+        value_number: 32,
+        value_text: null,
+        unit: '㎍/㎥',
+        severity: '보통',
+      },
+      {
+        metric_key: 'TMP',
+        metric_name: '기온',
+        forecast_style: 'short',
+        timeline_bucket: 'forecast',
+        valid_at: '2026-07-02T15:00:00+09:00',
+        issued_at: '2026-07-01T05:00:00+09:00',
+        observed_at: null,
+        value_number: 99,
+        value_text: null,
+        unit: '℃',
+        severity: null,
+      },
+    ],
+  };
+  const weatherView = {
+    ...TRIP_VIEW,
+    days: [
+      {
+        ...BASE_MARKER_DAY,
+        weather_cards: { [weatherCardKey]: weatherCard },
+        weather_by_feature_id: {
+          'feat-haeundae': { state: 'found', card_key: weatherCardKey },
+        },
+      },
+    ],
+  };
+  await mockTripDetailRoutes(page, weatherView, {
     onWeatherRequest: (url) => weatherRequests.push(url),
     attachmentsByPath: (pathname) => {
       if (pathname.endsWith('/days/1/attachments')) return [DAY_ATTACHMENT];
       if (pathname.endsWith(`/pois/${poiId}/attachments`)) return [POI_ATTACHMENT];
       return [];
-    },
-    weatherByFeatureId: {
-      'feat-haeundae': {
-        feature_id: 'feat-haeundae',
-        asof: '2026-07-01T09:00:00+09:00',
-        latest_at: '2026-07-01T09:00:00+09:00',
-        is_stale: false,
-        source_styles: ['observed', 'short'],
-        metrics: [
-          {
-            metric_key: 'T1H',
-            metric_name: '기온',
-            forecast_style: 'observed',
-            timeline_bucket: 'now',
-            valid_at: null,
-            issued_at: null,
-            observed_at: '2026-07-01T09:00:00+09:00',
-            value_number: 24,
-            value_text: null,
-            unit: '℃',
-            severity: null,
-          },
-          {
-            metric_key: 'TMP',
-            metric_name: '기온',
-            forecast_style: 'short',
-            timeline_bucket: 'forecast',
-            valid_at: '2026-07-01T15:00:00+09:00',
-            issued_at: '2026-07-01T05:00:00+09:00',
-            observed_at: null,
-            value_number: 27,
-            value_text: null,
-            unit: '℃',
-            severity: null,
-          },
-          {
-            metric_key: 'PM10',
-            metric_name: '미세',
-            forecast_style: 'observed',
-            timeline_bucket: 'now',
-            valid_at: null,
-            issued_at: null,
-            observed_at: '2026-07-01T09:00:00+09:00',
-            value_number: 32,
-            value_text: null,
-            unit: '㎍/㎥',
-            severity: '보통',
-          },
-          {
-            metric_key: 'TMP',
-            metric_name: '기온',
-            forecast_style: 'short',
-            timeline_bucket: 'forecast',
-            valid_at: '2026-07-02T15:00:00+09:00',
-            issued_at: '2026-07-01T05:00:00+09:00',
-            observed_at: null,
-            value_number: 99,
-            value_text: null,
-            unit: '℃',
-            severity: null,
-          },
-        ],
-      },
     },
   });
 
@@ -1031,9 +1082,7 @@ test('Day Plan 안에서 날짜·장소 파일과 날짜에 맞는 날씨를 보
   await expect(plan).toContainText('예보');
   await expect(plan).toContainText('미세먼지');
   await expect(plan).not.toContainText('99℃');
-  expect(
-    weatherRequests.some((url) => url.searchParams.get('asof') === '2026-07-01T23:59:59+09:00'),
-  ).toBe(true);
+  expect(weatherRequests).toHaveLength(0);
 });
 
 test('실시간 권한 상실 close는 안내와 여행 목록 이동 링크를 보여준다', async ({ page }) => {

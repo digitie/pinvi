@@ -17,5 +17,6 @@ export * from './shareUrl';
 export * from './suggestParam';
 export * from './tripDateLabels';
 export * from './tripEdit';
+export * from './tripFeatureResolution';
 export * from './tripMapPoints';
 export * from './upload';

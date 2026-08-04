@@ -25,13 +25,17 @@
 > 이동했다. 당시 public REST 인증은 `key` query였으나, kor-travel-map PR #794에서
 > `X-Kor-Travel-Map-Api-Key` header-only로 clean-cut됐다(service token 요청은 우회).
 > `curated_features`의 item 포함 snapshot 경로는 이후 kor_travel_map
-> PR #533으로 admin `/v1/admin/curated-features/{id}/detail-snapshot`으로 이관됐다(ADR-049, §2.11).
+> PR #533으로 admin `/v1/admin/features/curated/{id}/detail-snapshot`으로 이관됐다(ADR-049, §2.11).
 > **정본 소스**: kor-travel-map `packages/kor-travel-map-api/openapi.user.json`(사용자 표면) +
 > `docs/architecture/rest-api.md`(prose 계약). 본 문서와 충돌 시 **openapi.user.json 우선**.
-> T-VN-20 vendored 정본은 kor-travel-map PR #794 merge commit
-> `cf1f0bba6a2ea18f23eb647216236b84fc7b5a80`의 전체 파일이며 SHA-256은
-> `91b30f4011509c30d2ba8284fad8bf1c0dad695bfc5f05557bec0165124a119f`다. 2026-07-20 최신
-> `origin/main`도 같은 hash임을 확인했다. Pinvi contract gate는 이 pinned hash와 선택적 live 전체
+> vendored 정본은 **2026-07-30(T-VN-16C) 기준 kor-travel-map
+> main commit `94ace1a9a27d204fabb9645d1ffd43c47ea60079`**(5-state service batch +
+> sparse 다중 날짜 bitemporal weather batch, int64 상한, DB 장애 503 포함)의
+> 전체 파일이며 SHA-256은
+> `0a7cabb3c10fedc55ff306fb3c0d856122108fe74da63877a02c8c8092209990`다.
+> (직전 핀은 PR #794 merge `cf1f0bba…`/`91b30f40…`으로, Map main보다 174 commits 뒤처져 있었다.
+> 재동기화 시 실제 drift는 `PublicCurationItemView.external_component_id` 추가(Map migration 0066)와 price series identity 문구 변경뿐이었고, Pinvi가 소비하는 스키마는 구조 변화 0건이었다.)
+> Pinvi contract gate는 이 pinned hash와 선택적 live 전체
 > 파일 equality를 검사하므로 일부 필드만 수기로 graft하지 않는다.
 > **관계**: 능력 격차 분석은 `docs/kor-travel-map-requirements.md`(이제 대부분 해소),
 > 통합 패턴 개요는 `docs/kor-travel-map-integration.md`(본 문서가 구체 계약으로 대체/보강).
@@ -88,7 +92,7 @@ Pinvi-facing `openapi.user.json`을 export하고, 다음 사용자 표면 엔드
 | ---------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
 | bbox + 클러스터  | `GET /features/in-bounds`                                                                    | 클러스터 미지원 → **서버 클러스터(`cluster_unit`) 지원** |
 | 단건 상세        | `GET /features/{feature_id}`                                                                 | ✅                                                       |
-| **배치**         | `POST /v1/features/batch` (구 `/pinvi/features/batch`)                                       | ❌ → **✅(cap ≤200, 응답 `data.found`)**                 |
+| **배치**         | `POST /v1/features/batch` (구 `/pinvi/features/batch`)                                       | ❌ → **✅(cap ≤200, 5-state `data.items`)**              |
 | 반경             | `GET /features/nearby` / `/nearby/by-target`                                                 | ❌ → **✅(cursor)**                                      |
 | 텍스트 검색      | `GET /features/search`                                                                       | ❌ → **✅(cursor)**                                      |
 | 날씨 카드        | `GET /features/{feature_id}/weather`                                                         | 미구현 → **✅(metric 목록)**                             |
@@ -164,7 +168,8 @@ beach/festival 표면도 소비 측에서 연결했다(T-130). 남은 큰 cross-
   `PIPELINE_EXECUTION_NOT_FOUND`의 code/details도 그대로 보존한다.
 - **응답 envelope (확정 — kor_travel_map 0e45bd7 라이브)**: 성공 = `{ "data": <payload>, "meta": <Meta> }`.
   `data`는 **payload만** — 단건 `<object>`, 목록 `{items:[]}`, in-bounds `{clusters:[],items:[]}`,
-  batch `{found:{<id>:Feature}, missing:[]}`. pagination·추적은 `meta`로 일원화:
+  batch `{items:[FeatureBatchFoundItem|FeatureBatchRetiredItem|FeatureBatchSuppressedItem|
+FeatureBatchMissingItem|FeatureBatchUnchangedItem]}`. pagination·추적은 `meta`로 일원화:
   `meta = { duration_ms, request_id, page?:{page_size, next_cursor, total}, cluster?:{cluster_unit} }`
   (`page`는 pageable 목록에만, `total`은 `?include_total=true` opt-in 기본 `null`,
   `cluster`는 in-bounds 클러스터 응답에만 — optional 취급). `meta`/`request_id`는 전 응답
@@ -220,28 +225,26 @@ detail(object), status, updated_at }`.
 - **주의**: `name`(Pinvi 코드의 `title` 아님), `address`는 **구조화 객체**(평면
   `address_road/address_jibun` 아님) → schema 정렬(§6-D).
 
-### 2.3 `POST /v1/features/batch` — 배치 조회 (성능 핵심)
+### 2.3 `POST /v1/features/batch` — 5상태 service batch (성능 핵심)
 
-- **body `FeatureBatchRequest`**: `{ feature_ids: [string] }` (**cap ≤200**, 초과 시 `TOO_MANY_IDS`).
-- **200 `FeatureBatchResponse`**: `data:{ found: { <feature_id>: <FeatureDetail> }, missing:[string] }, meta:{...}`.
-  (2026-06-10: id-keyed map 키가 `items`→**`found`**로 확정 — list `items[]`(배열)와
-  타입 분리, 우리 §7 제안 수용. **client `_data().get("items")` 파싱은 T-181에서 `found`로
-  교체 필수** — 현재는 전 결과가 조용히 missing 처리됨.)
+- **body `FeatureBatchRequest`**:
+  `{items:[{feature_id:string, known_row_revision?:integer}], projection:"trip_card"}`.
+  item은 1~200개이며 ID 중복은 422다. projection은 공개-안전 고정 `trip_card` 하나뿐이다.
+- **200 `FeatureBatchResponse`**:
+  `data:{items:[found|retired|suppressed|missing|unchanged]}`. 응답은 요청 ID와 순서를 정확히
+  보존한다. `found`만 `row_revision + trip_card`를 포함하고, `retired|suppressed|unchanged`는
+  `row_revision`, `missing`은 ID만 포함한다. 일치하는 `known_row_revision`의 공개 feature는
+  `unchanged`로 payload를 생략한다.
 - **소비처**: `GET /trips/{id}`의 `trip_view_builder` — trip POI들의 `feature_id[]`로 최신
-  feature 일괄 조회(N+1 방지). 성공 응답은 요청 ID 전체를 서로 겹치지 않는 `found|missing`으로
-  정확히 분할해야 한다. 현재 public 2-state의 `missing`은 물리 삭제가 아니라 public projection에서
-  조회할 수 없다는 뜻이다. PinVi는 POI별 `feature_resolution_state`를
-  `not_linked|found|missing|unverified`로 노출하고 missing POI만 broken count에 포함한다.
-  transport/rate-limit/contract 실패는 snapshot을 유지한 `unverified`다(T-VN-08).
-- **fail-closed**: 현 decoder는 data key가 exact `found|missing`이어야 한다. detail 내부
-  `feature_id`는 outer key와 exact 일치하고 `name`/`marker_*` 직접 소비 필드 타입이 유효해야 하며,
-  JSON object 중복 member도 거부한다. T-VN-11 key가 일부 섞인 응답을 조용히 부분 수용하지 않는다.
+  feature 일괄 조회(N+1 방지). PinVi는 `unchanged`를 유효한 stale cache와 결합해 `found`로
+  투영하고, 나머지를 `retired|suppressed|missing`으로 보존한다.
+  transport/rate-limit/contract 실패는 snapshot을 유지한 `unverified`다.
+- **broken count**: `retired|missing` POI만 포함한다. `suppressed`와 `unverified`는 포함하지 않는다.
+- **fail-closed**: decoder는 union arm의 exact field 집합, 양의 revision, `trip_card`의 고정 필드와
+  유한 좌표, 요청 ID·순서를 검증한다. 알 수 없는 미래 state와 JSON 중복 member를 거부한다.
 - **주의**: 200개 초과 trip은 **client에서 청크 분할** 호출.
 - **식별자**: `feature_id`는 `@` 같은 문자를 포함할 수 있는 불투명 문자열이다. PinVi는 suffix를
   분리하거나 포맷을 해석하지 않고 저장값과 응답 key를 exact 비교한다.
-- **후속(T-VN-11-P)**: kor-travel-map의 5-state
-  `found|retired|suppressed|missing|unchanged + revision` 전환과 같은 cutover에서 typed consumer
-  계약을 적용한다. transport 실패는 upstream state로 축약하지 않고 소비자 `unverified`로 둔다.
 
 ### 2.4 `GET /v1/features/nearby` — 반경 + `…/nearby/by-target`
 
@@ -269,13 +272,46 @@ detail(object), status, updated_at }`.
 - **200 `FeatureWeatherResponse`**: `data:WeatherCardData` =
   `{ feature_id, asof|null, latest_at|null, is_stale, source_styles:[string], metrics:[WeatherMetricOut] }`.
   `WeatherMetricOut` = `{ metric_key, metric_name|null, forecast_style, timeline_bucket|null,
-valid_at|null, issued_at|null, observed_at|null, value_number|null, value_text|null, unit|null, severity|null }`.
+provider|null, weather_domain|null, valid_at|null, valid_from|null, valid_until|null, effective_at|null,
+issued_at|null, observed_at|null, value_number|null, value_text|null, unit|null, severity|null }`.
 - **소비처**: feature 상세 날씨, 텔레그램 brief.
 - **주의(셰입 대수술)**: kor_travel_map는 **평탄한 metric 목록 + forecast_style 태그**를 준다.
   Pinvi 현재 schema는 `{short_term[], daily[], sources[]}`, features.md는
   `{nowcast, ultra_short, short, mid, advisories}`. → Pinvi가 `forecast_style`
   (nowcast/ultra_short/short/mid/observed/index/advisory)별로 metric을 **그룹핑해 카드 구성**
   (변환은 Pinvi 표현 계층, KMA provider 변환 직접 작성 아님 — 금지룰 준수)(§6-D).
+
+### 2.6a `POST /v1/features/weather/batch` — 여행 일자 날씨
+
+- **인증**: `ServiceToken` 전용. 브라우저가 Map 자격을 가지지 않고 PinVi API만 호출한다.
+- **요청**: `{ known_at, targets:[{target_at, feature_ids:[1..200 unique]}] }`. 두 시각은
+  UTC offset이 필수다. target은 최대 366개, 전체 `target × feature` pair는 2,000개,
+  planning work `pair + 5 × unique feature`는 2,500, ID는 256자까지다. target은
+  `target_at` 오름차순이어야 하고 시각 중복은 허용하지 않는다. PinVi는 여행
+  `effective_date`의 한국 시각 자정을 `target_at`으로, 한 Trip view를 만드는 시각을
+  단일 `known_at`으로 보낸다.
+- **200**: `data:{ known_at, targets:[{target_at, timeline_until, items, cards}] }`.
+  target과 item은 요청 순서대로이며 item은 `found|no_data|retired` discriminated union이다.
+  `found` item은 target-local `card_key`를 참조한다. card는
+  `{card_key, source_styles, current:[WeatherMetricOut], timeline:[WeatherMetricOut],
+latest_at, is_stale}`이고, 나머지 두 item arm은 `{state, feature_id}`다. card는 같은
+  target 안의 중복 payload만 공유하며 target 경계를 넘어 참조하지 않는다.
+- **413**: target·ID·pair·planning work 또는 예상 metric row budget 초과다. 소비자는
+  producer가 거절하기 전에 같은 공개 상한을 검증한다.
+- **PinVi 투영**: `TripViewDay.weather_by_feature_id`에는
+  `found(card_key)|no_data|retired|suppressed|missing|unavailable`을 저장하고,
+  일자별 `weather_cards`에는 feature ID가 없는 card 본문을 한 번만 둔다. 같은
+  일자·기상 격자의 여러 feature는 같은 `card_key`를 참조하며, 누락·고아 card를
+  Python과 Zod 경계에서 거부한다.
+  `suppressed|missing`은 선행 feature batch의 parent 상태를 보존하며 weather 요청에 넣지 않는다.
+  같은 날짜의 중복 feature는 한 번만 요청한다. 한 view의 모든 날짜를 한 요청으로 보내며
+  전체 10초 budget을 적용한다. transport·인증·입력·계약 실패와 시간 budget 미결은 parent
+  상태로 추측하지 않고 미결 weather 전체를 `unavailable`로 둔다. 성공 응답도 target/card/item
+  전체가 strict decode된 뒤에만 투영해 부분 결과를 섞지 않는다. 부모 요청 cancellation은
+  단일 outbound 요청으로 전파된다.
+- **UI**: 소유자·공유 여행의 `TripWeatherSummary`는 Trip view만 렌더하며 단건
+  `GET /features/{feature_id}/weather`를 호출하지 않는다. weather 없음, parent lifecycle,
+  transport 실패를 서로 다르게 표시한다.
 
 ### 2.7 `GET /v1/categories` — 카테고리 카탈로그
 
@@ -348,11 +384,12 @@ state, review_mode, payload, base_row_revision, applied_at, reviewed_at/by, crea
 
 ### 2.11 `curated_features` — Pinvi curated trip plan import (Admin 전용 detail snapshot)
 
-**상태**: Pinvi가 kor-travel-map `GET /v1/admin/curated-features/{curated_feature_id}/detail-snapshot`을
+**상태**: Pinvi가 kor-travel-map `GET /v1/admin/features/curated/{curated_feature_id}/detail-snapshot`을
 소비해 `curated_trip_plans` / `curated_plan_pois`로 1:1 import한다. 구 public 경로
 `GET /v1/curated-features/{id}/pinvi-copy`는 kor_travel_map PR #533로 제거됐고, item을
-담은 snapshot은 이제 admin 표면(`/v1/admin/*`, 헤더 `X-Kor-Travel-Map-Service-Token` 필요)에만
-존재한다(ADR-049).
+담은 snapshot은 이제 admin 표면(`/v1/admin/*`)에만 존재한다. AdminBFF gate가 켜진 환경은
+proxy secret과 actor가 필수이고 local dev에서만 opt-out한다. service token은 이와 별개의
+server-to-server pass-through 자격이다(ADR-049).
 
 제품 의미:
 
@@ -361,10 +398,11 @@ state, review_mode, payload, base_row_revision, applied_at, reviewed_at/by, crea
   `curated_trip_plans` 1건으로 1:1 복사한다.
 - 두 흐름은 모두 같은 `/notice-plans` 사용자 copy 흐름을 사용한다.
 
-사용하는 kor_travel_map REST 표면 (admin base :12701, 헤더 `X-Kor-Travel-Map-Service-Token` 필요):
+사용하는 kor_travel_map REST 표면(admin base :12701, 운영은 AdminBFF proxy secret + actor 필수,
+service token은 별도 pass-through):
 
 ```http
-GET /v1/admin/curated-features/{curated_feature_id}/detail-snapshot
+GET /v1/admin/features/curated/{curated_feature_id}/detail-snapshot
 ```
 
 snapshot plan-level 객체 키는 `plan` → `content`로 개명됐다(ADR-049). version/etag/
@@ -400,7 +438,7 @@ Pinvi는 kor-travel-map을 OpenAPI HTTP로만 호출한다. kor-travel-map Pytho
 | marker         | `marker_icon`(maki), `marker_color`(`P-01`~`P-16`)                                                               | 동일                                                      | OK                                                                   |
 | 클러스터       | `{cluster_key, feature_count, lon, lat}`                                                                         | `{cluster_id, center, feature_count, sample_kinds, bbox}` | 서버 셰입으로 정렬                                                   |
 | 날씨           | metric 목록 + `forecast_style` 태그                                                                              | `{short_term,daily}` / `{nowcast,…}`                      | 그룹핑 변환                                                          |
-| envelope       | `{data, meta}` — `data`=payload만(목록 `{items}`, batch `{found,missing}`), pagination은 `meta.page.next_cursor` | 자체 `{data}` + client가 `data`만 반환                    | client에서 `meta.page` threading 후 재투영(T-181)                    |
+| envelope       | `{data, meta}` — `data`=payload만(목록 `{items}`, batch 5-state `{items}`), pagination은 `meta.page.next_cursor` | 자체 `{data}` + client가 `data`만 반환                    | batch는 typed union, pageable read는 `meta.page`를 재투영            |
 
 ---
 
@@ -450,18 +488,16 @@ idempotency_key)`로 결정적 feature_id, 재시도 동일.
 - **[A] ✅ T-170 — httpx client 신설** (완료 PR #102): `apps/api/app/clients/kor_travel_map.py`
   - lifespan/dependency + MockTransport 계약 테스트.
 - **[B] ✅ T-171 — config 배선** (완료 PR #102): `Settings` `pinvi_kor_travel_map_*` + `.env.example`.
-- **[C] 구현·검증 중 T-172/T-VN-08 — feature_id 문자열 정합 마감**: #87 후속,
-  `features.py`/`schemas/feature.py`/`trip_view_builder`의 `uuid.UUID` 캐스트·`split("@")` 가정을
-  제거하고 batch 요청/응답 key를 exact 불투명 문자열로 처리한다. 구현·적대 리뷰 반영과 n150
-  실데이터 정상→503 outage→복구 live UI는 통과했으며, 최종 재리뷰/PR/CI/머지 후 완료로 전환한다.
+- **[C] ✅ T-172/T-VN-08 — feature_id 문자열 정합·false-broken 방지**:
+  batch 요청/응답 key를 불투명 문자열로 처리하고 transport/contract 실패를 `unverified`로
+  분리했다(PR #409).
 - **[D] T-173 — 응답 셰입 정렬**: `schemas/feature.py` + `docs/api/features.md`를 kor_travel_map
   실제 계약(`name`/평면 lon,lat/구조화 address/weather metric 그룹핑/cluster 셰입)에 맞춤.
 - **[E] T-174 — 클러스터링 서버 위임**: `/features/in-bounds`가 kor_travel_map `cluster_unit` 결과를
   쓰도록 변경. `services/cluster_query.py`(직접 `feature` schema SQL — 경계 위반) **제거**.
-- **[F] T-175 — trip view 배치 연결**: `GET /trips/{id}`에 `trip_view_builder` 연결(감사 C-05) +
-  `POST /v1/features/batch`(string ids, cap 200 청크) 호출 + `{found,missing}` → snapshot
-  fallback 매핑. 현재 2-state public projection의 unavailable은 원인 구분 없이 `missing`이며,
-  retired/suppressed 세분화는 T-VN-11 5-state cutover에서 함께 적용한다.
+- **[F] ✅ T-175 + T-VN-11-P — trip view 5상태 batch 연결**:
+  `GET /trips/{id}`의 `trip_view_builder`가 cap 200 typed batch와 revision-aware cache를 사용한다.
+  상태·fallback 매핑은 §2.3과 ADR-057이 정본이다.
 - **[G] T-176 — 검색/날씨/카테고리/근접 라우터 실연결**: `/features/{id}/weather`(metric 그룹핑),
   `/search`(feature=kor_travel_map + 주소=kor-travel-geo + 내 POI), `/features/nearby`, `/categories` 캐시.
 - **[H1 완료] T-177 — 사용자 feature 제안 큐(DEC-05, user 도메인)**:
@@ -553,13 +589,50 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
 
 ---
 
+## 8-A. admin detail-snapshot 계약 게이트 (T-VN-H07D, map#815, 2026-07-28)
+
+§8은 **user** 표면을 덮는다. 그런데 Pinvi의 큐레이션 import 런타임이 실제로 소비하는 것은
+admin `GET /v1/admin/features/curated/{id}/detail-snapshot`이고, 이 표면에는 그동안 **어떤 계약
+게이트도 없었다**.
+
+- **vendored 정본**: `apps/api/tests/contract/kor-travel-map-openapi-admin-detail-snapshot.json`.
+  Map full 스펙(1 MB+) 전체가 아니라 해당 경로와 응답 스키마의 **전이적 폐포 + 필요한
+  securityScheme**만 잘라낸 subset(약 19 KB)이다. 추출기
+  `apps/api/scripts/vendor_kor_travel_map_admin_snapshot.py`는 정렬 key·고정 indent로
+  **결정적**이라 같은 입력이면 같은 바이트가 나온다.
+- **계약 테스트**: `apps/api/tests/unit/test_kor_travel_map_admin_contract.py` —
+  pinned SHA-256, Pinvi가 실제로 읽는 필드의 type/nullable/required, 경로→200→`data` 결합,
+  admin 인증 헤더(`X-Kor-Travel-Map-Admin-Proxy-Secret`) header-only 계약.
+  exact property 집합은 고정하지 **않는다**(producer 소유 — consumer가 중복 고정하면 Map의 무해한
+  additive 변경마다 false-red).
+- **CI 게이트 2종**(`.github/workflows/api.yml`):
+  - `contract-pin-consistency` — **차단**(`aggregate-ci.yml`의 required check에 포함). Map을
+    **핀 커밋**으로 체크아웃해 user 표면은 byte 비교, admin 표면은 재추출 비교를 실제로 실행한다.
+    과거 live-compare가 sibling 체크아웃 부재로 skip되어 항상 green이던 맹점을 없앤다.
+    증명 대상은 **핀↔vendored 자기정합**(수기 graft·재-vendor 없는 핀 상승)이지 "최신"이 아니다.
+  - `contract-staleness` — 예약(매일)·비차단(PR에는 아예 돌지 않음). Map **main**과 비교해 핀
+    자체가 뒤처졌는지 알린다. 핀 기준 비교로는 구조상 알 수 없는 종류(T-VN-H07B에서 user
+    스냅샷이 174 commits 뒤처진 걸 뒤늦게 발견한 사례)를 담당한다.
+- **갱신 절차**: Map 스펙 변경 시 ① 추출기를 새 Map 커밋으로 재실행,
+  ② `_UPSTREAM_COMMIT`/`_SNAPSHOT_SHA256` 갱신, ③ 계약 테스트 실행, ④ 실패하면 client/매핑과
+  `_CONSUMED_FIELD_CONTRACTS`를 함께 고친다.
+
+> **해소됨 (T-VN-H29)**: 과거 `api/v1/search.py::_snapshot_coord`는 `feature_snapshot["coord"]`만
+> 읽었는데 Map view는 `extra="forbid"`이고 `coord` property가 없어 이 read가 **구조적으로 항상
+> None**이었고, map-curated import POI가 통합 검색에서만 좌표 null이었다(좌표는 top-level
+> `lon`/`lat`에 있고 `admin_pois`/`kasi`는 정상 해석). 이제 같은 정본 추출기
+> `services/admin_pois.py::extract_feature_coord`에 위임한다 — top-level과
+> `coord`/`coordinate`/`location`/`geometry` 중첩, `lon`/`lng`/`longitude`/`x` 별칭, 숫자 강제
+> 변환을 모두 처리하므로 기존 동작의 상위집합이다. 회귀 테스트는
+> `apps/api/tests/unit/test_search_snapshot_coord.py`.
+
 ## 8. 드리프트 게이트 (T-210e, 2026-06-11)
 
 수기 httpx client(kor_travel_map 권고)가 kor_travel_map `openapi.user.json`과 silent drift하는 것을 막는다.
 
 - **vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-user.json` — Pinvi가 구현 기준으로
-  삼은 kor_travel_map PR #794 merge commit의 **전체 파일**. pinned SHA-256은 본 문서 상단과
-  `test_kor_travel_map_contract.py`가 함께 고정한다.
+  삼은 kor_travel_map main commit의 **전체 파일**(현 핀 `8880c29b`, T-VN-H07B에서 재동기화).
+  pinned SHA-256은 본 문서 상단과 `test_kor_travel_map_contract.py`가 함께 고정한다.
 - **계약 테스트**: `apps/api/tests/unit/test_kor_travel_map_contract.py` (CI `pytest tests/unit`에서 실행) —
   (1) user client 경로(`/v1/features/*`·`/v1/categories`·`/v1/public/*`) ⊆ 스냅샷 paths,
   (2) 매핑(`features.py`/`public.py`가 읽는 FeatureSummary/ClusterSummary/
@@ -569,14 +642,35 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   (4) public route `PublicApiKey|ServiceToken` header security와 batch `ServiceToken`-only,
   (5) pinned SHA-256 및 표준 workspace sibling `kor-travel-map-*` 전체 파일 byte equality
   (sibling이 없는 CI에서는 pinned hash는 항상 실행, live equality만 skip —
-  `PINVI_KOR_TRAVEL_MAP_OPENAPI_USER_PATH`로 override 가능).
+  `PINVI_KOR_TRAVEL_MAP_OPENAPI_USER_PATH`로 override 가능),
+  (6) **(T-VN-H07B) typed consumer contract** — `_CONSUMED_FIELD_CONTRACTS`가 **단일 정본**이며,
+  Pinvi가 읽는 각 필드의 JSON type·format·enum·array item(type/`$ref`)·map value
+  (`additionalProperties.$ref`)·required/nullable을 스냅샷 기준으로 고정한다. 존재 검사용
+  `_SCHEMA_FIELDS`는 이 표에서 **파생**되므로 두 표가 어긋날 수 없다. 응답 컨테이너
+  (`PublicFeatureListData`/`FeaturesNearbyData`/`FeatureSearchData`/`CategoriesData`/
+  `FeatureBatchData`)의 item·map value `$ref`와 경로→컨테이너 link(`_ENDPOINT_DATA_SCHEMAS`)를
+  함께 고정해 경로부터 필드까지 하나의 사슬로 묶는다. envelope `meta`의 `ClusterMeta.cluster_unit`·
+  `PageMeta.next_cursor`/`total`도 client가 `data`로 re-projection해 소비하므로 함께 고정한다.
+  `model_validate`로 객체 전체를 검증하는 `/v1/public/*`는
+  `test_public_view_contracts_cover_every_validated_model_field`가 `app/schemas/public.py`
+  모델의 `model_fields` ⊆ 계약을 강제한다(모델에 필드를 추가하면 타입 계약도 함께 적어야 통과).
+
+  > **의도적 비대상**: consumer 쪽에서는 exact property 집합·`additionalProperties`를 고정하지
+  > 않는다. producer(Map) 쪽 exact 고정은 T-VN-H07A(Map PR #814)가 소유하며, consumer가 이를
+  > 중복 고정하면 Map의 무해한 additive 변경마다 Pinvi가 false-red가 된다(Map 0066의
+  > `external_component_id` 추가가 실제 사례). 공개 curated 표면(`PublicCurated*`/
+  > `PublicCuration*`)도 user client가 호출하지 않으므로 본 gate 대상이 아니다 — Pinvi의 실제
+  > 큐레이션 런타임 표면은 admin `/v1/admin/features/curated/{id}/detail-snapshot`이고 그
+  > 필드레벨 계약은 T-VN-H07D(#815)가 소유한다.
+
 - **갱신 절차** (kor_travel_map 스펙 변경 시):
   1. 검토한 upstream exact commit에서 `cp ../kor-travel-map/packages/kor-travel-map-api/openapi.user.json
 apps/api/tests/contract/kor-travel-map-openapi-user.json`
   2. `_UPSTREAM_COMMIT`과 `_SNAPSHOT_SHA256`을 같은 원본으로 갱신한다.
   3. `pytest apps/api/tests/unit/test_kor_travel_map_contract.py`를 실행한다.
-  4. 실패하면 사라진/바뀐 경로·필드·query/security를 `clients/kor_travel_map.py` +
+  4. 실패하면 사라진/바뀐 경로·필드·타입·query/security를 `clients/kor_travel_map.py` +
      `features.py`/`public.py` 매핑 + `_CLIENT_PATHS`/`_CLIENT_QUERY_PARAMETERS`/
-     `_SCHEMA_FIELDS`에 맞춰 갱신(= kor_travel_map drift 대응 PR).
+     `_CONSUMED_FIELD_CONTRACTS`에 맞춰 갱신(= kor_travel_map drift 대응 PR).
+     `_SCHEMA_FIELDS`는 파생 집합이므로 직접 편집하지 않는다.
 - **codegen(선택)**: frontend `openapi-typescript` + Zod mirror는 미도입(후속). 백엔드는 본
   스냅샷 게이트로 충분(kor_travel_map 권고: 수기 httpx 유지).

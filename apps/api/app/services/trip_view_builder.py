@@ -13,16 +13,26 @@ SPRINT-4 산출물 `apps/api/app/services/trip_view_builder.py`.
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from datetime import date, timedelta
-from typing import Any, cast
+from datetime import UTC, date, datetime, time, timedelta
+from typing import Any, assert_never
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.kor_travel_map import (
+    FoundFeatureBatchItem,
+    FoundWeatherBatchItem,
     KorTravelMapClient,
     KorTravelMapError,
+    MissingFeatureBatchItem,
+    NoDataWeatherBatchItem,
+    RetiredFeatureBatchItem,
+    RetiredWeatherBatchItem,
+    SuppressedFeatureBatchItem,
+    UnchangedFeatureBatchItem,
 )
 from app.core.config import settings
 from app.core.markers import resolve_display_marker_color
@@ -32,10 +42,44 @@ from app.models.poi import TripDayPoi
 from app.models.share_link import TripShareLink
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
-from app.services.feature_cache import feature_cache
+from app.services.feature_cache import CachedFeature, cache_generation_observer, feature_cache
 from app.services.poi import get_poi_rise_sets, poi_rise_set_to_dict
 
 logger = logging.getLogger(__name__)
+_SEOUL = ZoneInfo("Asia/Seoul")
+_WEATHER_BATCH_VIEW_BUDGET_SECONDS = 10.0
+
+
+def _weather_target_at(value: date) -> datetime:
+    """해당 한국 일자의 24시간 timeline이 시작되는 aware datetime을 만든다."""
+    return datetime.combine(value, time.min, tzinfo=_SEOUL)
+
+
+def _weather_resolution(
+    item: FoundWeatherBatchItem | NoDataWeatherBatchItem | RetiredWeatherBatchItem,
+    *,
+    target_at: datetime,
+    weather_cards: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    if isinstance(item, FoundWeatherBatchItem):
+        card = item.card
+        if card.card_key not in weather_cards:
+            weather_cards[card.card_key] = {
+                "asof": target_at,
+                "latest_at": card.latest_at,
+                "is_stale": card.is_stale,
+                "source_styles": list(card.source_styles),
+                "metrics": [metric.as_dict() for metric in (*card.current, *card.timeline)],
+            }
+        return {
+            "state": "found",
+            "card_key": card.card_key,
+        }
+    if isinstance(item, NoDataWeatherBatchItem):
+        return {"state": "no_data"}
+    if isinstance(item, RetiredWeatherBatchItem):
+        return {"state": "retired"}
+    assert_never(item)
 
 
 async def build_trip_view(
@@ -50,8 +94,9 @@ async def build_trip_view(
     동작:
     1. trip의 day 목록 + 모든 POI 로드 (`trip_id` 단일 인덱스로 batch query)
     2. feature-backed POI의 `feature_id` 수집 후 unique 리스트로
-    3. `kor_travel_map_client.get_features(ids)` 1회 batch 호출 (N+1 회피) → `{found, missing}`
-    4. POI에 feature 정보 merge — `found|missing|unverified|not_linked` 해석 상태를 명시
+    3. `kor_travel_map_client.get_features(ids, known_row_revisions=...)` 1회 batch 호출
+    4. unique effective date를 sparse multi-target weather batch 1회로 조회 후 일자별 상태 투영
+    5. POI에 feature 정보 merge — upstream 5-state를 소비자 상태로 exhaustively 투영
 
     transport 실패나 불완전 응답은 feature 부재의 근거가 아니다. 이 경우 저장 snapshot을
     유지하고 `feature_resolution_state=unverified`로 둔다.
@@ -169,46 +214,177 @@ async def build_trip_view(
             seen.add(feature_id)
             feature_ids.append(feature_id)
 
-    # kor_travel_map batch fetch — process-local TTL 캐시(T-146/D-26)로 miss만 재조회.
-    # kor_travel_map `POST /v1/features/batch`는 {found:{id:detail}, missing:[id]} 반환(cap 청크는 client).
-    fresh_features: dict[str, dict[str, Any]] = {}
-    explicitly_missing: set[str] = set()
+    # process-local cache의 fresh hit는 그대로 쓰고, 만료 entry는 row_revision을
+    # validator로 보내 unchanged payload를 생략한다. cache miss와 stale을 한
+    # set-based batch로 합치며 upstream 상태를 추측하지 않는다.
+    resolved_features: dict[str, dict[str, Any]] = {}
+    resolution_states: dict[str, str] = {}
+    feature_batch_failed = False
     if kor_travel_map_client is not None and feature_ids:
         use_cache = settings.pinvi_feature_cache_enabled
         if use_cache:
-            cached, uncached_ids = feature_cache.get_many(feature_ids)
-            fresh_features.update(cached)
+            await cache_generation_observer.observe(
+                db,
+                consumer_id=settings.pinvi_kor_travel_map_cache_target_consumer_id,
+            )
+            fresh_cache, stale_cache, missing_ids = feature_cache.get_many(feature_ids)
+            for feature_id, cached in fresh_cache.items():
+                resolved_features[feature_id] = cached.trip_card
+                resolution_states[feature_id] = "found"
         else:
-            uncached_ids = feature_ids
-        if uncached_ids:
+            stale_cache = {}
+            missing_ids = feature_ids
+        refresh_ids = [
+            feature_id
+            for feature_id in feature_ids
+            if feature_id in stale_cache or feature_id in missing_ids
+        ]
+        if refresh_ids:
+            refresh = feature_cache.begin_refresh(refresh_ids) if use_cache else None
             try:
-                batch = await kor_travel_map_client.get_features(uncached_ids)
-                fetched = cast(dict[str, dict[str, Any]], batch["found"])
-                fresh_features.update(fetched)
-                if use_cache and fetched:
-                    feature_cache.put_many(fetched)
-                explicitly_missing.update(cast(list[str], batch["missing"]))
+                feature_batch = await kor_travel_map_client.get_features(
+                    refresh_ids,
+                    known_row_revisions={
+                        feature_id: stale_cache[feature_id].row_revision
+                        for feature_id in refresh_ids
+                        if feature_id in stale_cache
+                    },
+                )
+                cache_updates: dict[str, CachedFeature] = {}
+                invalidated: dict[str, int | None] = {}
+                for feature_id in refresh_ids:
+                    item = feature_batch[feature_id]
+                    if isinstance(item, FoundFeatureBatchItem):
+                        snapshot = item.trip_card.as_snapshot()
+                        resolved_features[feature_id] = snapshot
+                        resolution_states[feature_id] = "found"
+                        cache_updates[feature_id] = CachedFeature(
+                            trip_card=snapshot,
+                            row_revision=item.row_revision,
+                        )
+                    elif isinstance(item, UnchangedFeatureBatchItem):
+                        cached = stale_cache[feature_id]
+                        resolved_features[feature_id] = cached.trip_card
+                        resolution_states[feature_id] = "found"
+                        cache_updates[feature_id] = cached
+                    elif isinstance(item, RetiredFeatureBatchItem):
+                        resolution_states[feature_id] = "retired"
+                        invalidated[feature_id] = item.row_revision
+                    elif isinstance(item, SuppressedFeatureBatchItem):
+                        resolution_states[feature_id] = "suppressed"
+                        invalidated[feature_id] = item.row_revision
+                    elif isinstance(item, MissingFeatureBatchItem):
+                        resolution_states[feature_id] = "missing"
+                        invalidated[feature_id] = (
+                            stale_cache[feature_id].row_revision
+                            if feature_id in stale_cache
+                            else None
+                        )
+                    else:
+                        assert_never(item)
+                if use_cache:
+                    assert refresh is not None
+                    feature_cache.invalidate_many(invalidated, refresh=refresh)
+                    feature_cache.put_many(cache_updates, refresh=refresh)
             except KorTravelMapError as exc:
+                feature_batch_failed = True
                 logger.error("get_features batch 실패: %s — snapshot 링크 상태 미확인", exc)
+                for feature_id in refresh_ids:
+                    resolution_states[feature_id] = "unverified"
+                    stale_feature = stale_cache.get(feature_id)
+                    if stale_feature is not None:
+                        resolved_features[feature_id] = stale_feature.trip_card
+
+    # weather는 POI의 영구 속성이 아니라 일자별 feature snapshot이다. 같은 날짜에 같은
+    # feature가 여러 번 등장해도 한 번만 요청하고, 동일 날짜의 여러 day에도 결과를 공유한다.
+    weather_by_day_index: dict[int, dict[str, dict[str, Any]]] = {day.day_index: {} for day in days}
+    weather_cards_by_day_index: dict[int, dict[str, dict[str, Any]]] = {
+        day.day_index: {} for day in days
+    }
+    pending_weather: dict[date, dict[str, list[int]]] = {}
+    for poi in pois:
+        feature_id = poi.feature_id
+        effective_date = day_effective_date.get(poi.day_index)
+        if feature_id is None or effective_date is None:
+            continue
+        resolution_state = resolution_states.get(feature_id, "unverified")
+        if resolution_state in {"missing", "retired", "suppressed"}:
+            weather_by_day_index[poi.day_index][feature_id] = {"state": resolution_state}
+            continue
+        if kor_travel_map_client is None or feature_batch_failed:
+            weather_by_day_index[poi.day_index][feature_id] = {"state": "unavailable"}
+            continue
+        day_indexes = pending_weather.setdefault(effective_date, {}).setdefault(feature_id, [])
+        if poi.day_index not in day_indexes:
+            day_indexes.append(poi.day_index)
+
+    known_at = datetime.now(UTC)
+    if pending_weather:
+        weather_client = kor_travel_map_client
+        assert weather_client is not None
+        weather_dates = sorted(pending_weather)
+        target_at_by_date = {
+            effective_date: _weather_target_at(effective_date) for effective_date in weather_dates
+        }
+        try:
+            async with asyncio.timeout(_WEATHER_BATCH_VIEW_BUDGET_SECONDS):
+                weather_batch_by_target = await weather_client.get_weather_batch(
+                    {
+                        target_at_by_date[effective_date]: list(pending_weather[effective_date])
+                        for effective_date in weather_dates
+                    },
+                    known_at=known_at,
+                )
+        except (KorTravelMapError, OverflowError, TimeoutError, ValueError) as exc:
+            logger.error(
+                "get_weather_batch 실패: %s — 전체 미결 weather를 unavailable 처리",
+                exc,
+            )
+        else:
+            for effective_date in weather_dates:
+                target_at = target_at_by_date[effective_date]
+                weather_batch = weather_batch_by_target[target_at]
+                target_weather_cards: dict[str, dict[str, Any]] = {}
+                for feature_id, day_indexes in pending_weather[effective_date].items():
+                    resolution = _weather_resolution(
+                        weather_batch[feature_id],
+                        target_at=target_at,
+                        weather_cards=target_weather_cards,
+                    )
+                    for day_index in day_indexes:
+                        weather_by_day_index[day_index][feature_id] = resolution
+                        if resolution["state"] == "found":
+                            card_key = resolution["card_key"]
+                            weather_cards_by_day_index[day_index][card_key] = target_weather_cards[
+                                card_key
+                            ]
+
+        for effective_date in weather_dates:
+            slots = pending_weather[effective_date]
+            for feature_id, day_indexes in slots.items():
+                for day_index in day_indexes:
+                    weather_by_day_index[day_index].setdefault(
+                        feature_id,
+                        {"state": "unavailable"},
+                    )
 
     # day_index → POI 리스트
     pois_by_day_index: dict[int, list[dict[str, Any]]] = {}
     broken_count = 0
     for poi in pois:
         feature_id = poi.feature_id
-        fresh = fresh_features.get(feature_id) if feature_id is not None else None
         if feature_id is None:
             resolution_state = "not_linked"
-        elif fresh is not None:
-            resolution_state = "found"
-        elif feature_id in explicitly_missing:
-            resolution_state = "missing"
         else:
-            resolution_state = "unverified"
-        if resolution_state == "missing":
+            resolution_state = resolution_states.get(feature_id, "unverified")
+        if resolution_state in {"missing", "retired"}:
             broken_count += 1
 
-        feature_view = fresh or poi.feature_snapshot or {}
+        feature_view = (
+            (resolved_features.get(feature_id, {}) if feature_id is not None else {})
+            or poi.feature_snapshot
+            or {}
+        )
         title = None
         if isinstance(feature_view, dict):
             title = feature_view.get("name") or feature_view.get("title")
@@ -262,6 +438,8 @@ async def build_trip_view(
                 "rise_set_reference": (
                     ref.reference_label if (ref := day_rise_sets.get(d.day_index)) else None
                 ),
+                "weather_cards": weather_cards_by_day_index[d.day_index],
+                "weather_by_feature_id": weather_by_day_index[d.day_index],
                 "pois": pois_by_day_index.get(d.day_index, []),
             }
             for d in days

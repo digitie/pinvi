@@ -3,20 +3,33 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from app.clients.kor_travel_map import (
+    FeatureTripCard,
+    FoundFeatureBatchItem,
+    FoundWeatherBatchItem,
     KorTravelMapBadRequest,
     KorTravelMapClient,
     KorTravelMapContractError,
     KorTravelMapError,
     KorTravelMapRateLimited,
     KorTravelMapUnavailable,
+    MissingFeatureBatchItem,
+    NoDataWeatherBatchItem,
+    RetiredFeatureBatchItem,
+    RetiredWeatherBatchItem,
+    SuppressedFeatureBatchItem,
+    UnchangedFeatureBatchItem,
 )
+from app.core.config import Settings
 
 Handler = Callable[[httpx.Request], httpx.Response]
 
@@ -29,6 +42,83 @@ def _client(handler: Handler, **kwargs: object) -> KorTravelMapClient:
     params: dict[str, object] = {"max_attempts": 2, "backoff_base_seconds": 0.0}
     params.update(kwargs)
     return KorTravelMapClient(http, **params)  # type: ignore[arg-type]
+
+
+def _trip_card(feature_id: str, *, lon: float | None = 126.977) -> dict[str, Any]:
+    return {
+        "feature_id": feature_id,
+        "kind": "place",
+        "name": f"{feature_id} 이름",
+        "category": "attraction",
+        "lon": lon,
+        "lat": 37.579,
+        "address": {"road_address": "서울특별시 종로구"},
+        "marker_icon": "monument",
+        "marker_color": "P-01",
+    }
+
+
+def _weather_metric() -> dict[str, Any]:
+    return {
+        "forecast_style": "short",
+        "metric_key": "TMP",
+        "metric_name": "기온",
+        "timeline_bucket": "forecast",
+        "value_number": 24.5,
+        "value_text": None,
+        "unit": "℃",
+        "severity": None,
+        "issued_at": "2026-07-30T00:00:00Z",
+        "valid_at": "2026-07-30T03:00:00Z",
+        "valid_from": "2026-07-30T03:00:00Z",
+        "valid_until": "2026-07-30T04:00:00Z",
+        "observed_at": None,
+        "effective_at": "2026-07-30T03:00:00Z",
+        "provider": "python-kma-api",
+        "weather_domain": "forecast",
+    }
+
+
+def test_feature_trip_card_snapshot_uses_trip_map_coordinate_shape() -> None:
+    snapshot = FeatureTripCard(
+        feature_id="f_1",
+        kind="place",
+        name="장소",
+        category="attraction",
+        lon=126.977,
+        lat=37.579,
+        address={"road": "서울"},
+        marker_icon="monument",
+        marker_color="P-01",
+    ).as_snapshot()
+
+    assert snapshot["coord"] == {"lon": 126.977, "lat": 37.579}
+    assert "lon" not in snapshot
+    assert "lat" not in snapshot
+
+
+@pytest.mark.parametrize("batch_chunk_size", [0, 201])
+def test_client_rejects_batch_chunk_size_outside_producer_cap(
+    batch_chunk_size: int,
+) -> None:
+    with pytest.raises(ValueError, match=r"1\.\.200"):
+        _client(lambda request: httpx.Response(500), batch_chunk_size=batch_chunk_size)
+
+
+@pytest.mark.parametrize("batch_chunk_size", [0, 201])
+def test_settings_reject_batch_chunk_size_outside_producer_cap(
+    batch_chunk_size: int,
+) -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            pinvi_kor_travel_map_batch_chunk_size=batch_chunk_size,
+        )
+
+
+async def test_client_accepts_producer_batch_cap() -> None:
+    client = _client(lambda request: httpx.Response(500), batch_chunk_size=200)
+    await client.aclose()
 
 
 async def test_features_in_bounds_unwraps_data_and_repeats_kind() -> None:
@@ -95,7 +185,7 @@ async def test_get_feature_returns_data() -> None:
 
 
 async def test_get_features_chunks_and_merges() -> None:
-    calls: list[list[str]] = []
+    calls: list[dict[str, Any]] = []
 
     seen_path: dict[str, str] = {}
 
@@ -104,54 +194,153 @@ async def test_get_features_chunks_and_merges() -> None:
 
         seen_path["path"] = request.url.path
         body = _json.loads(request.content)
-        ids = body["feature_ids"]
-        calls.append(ids)
-        found = {fid: {"feature_id": fid, "name": fid} for fid in ids if fid != "f_missing"}
-        missing = [fid for fid in ids if fid == "f_missing"]
-        # ADR-048: id-keyed map 키는 `found`(구 `items`).
-        return httpx.Response(200, json={"data": {"found": found, "missing": missing}, "meta": {}})
+        calls.append(body)
+        items = []
+        for request_item in body["items"]:
+            feature_id = request_item["feature_id"]
+            if feature_id == "f_found":
+                items.append(
+                    {
+                        "state": "found",
+                        "feature_id": feature_id,
+                        "row_revision": 10,
+                        "trip_card": _trip_card(feature_id),
+                    }
+                )
+            elif feature_id == "f_retired":
+                items.append({"state": "retired", "feature_id": feature_id, "row_revision": 11})
+            elif feature_id == "f_suppressed":
+                items.append({"state": "suppressed", "feature_id": feature_id, "row_revision": 12})
+            elif feature_id == "f_missing":
+                items.append({"state": "missing", "feature_id": feature_id})
+            else:
+                items.append(
+                    {
+                        "state": "unchanged",
+                        "feature_id": feature_id,
+                        "row_revision": request_item["known_row_revision"],
+                    }
+                )
+        return httpx.Response(200, json={"data": {"items": items}, "meta": {}})
 
     client = _client(handler, batch_chunk_size=2)
-    data = await client.get_features(["f_1", "f_2", "f_missing"])
+    data = await client.get_features(
+        ["f_found", "f_retired", "f_suppressed", "f_missing", "f_unchanged"],
+        known_row_revisions={"f_unchanged": 13},
+    )
     assert seen_path["path"] == "/v1/features/batch"  # #318: /pinvi 제거
-    assert len(calls) == 2  # 2 + 1 청크
-    assert set(data["found"]) == {"f_1", "f_2"}
-    assert data["missing"] == ["f_missing"]
+    assert len(calls) == 3
+    assert all(call["projection"] == "trip_card" for call in calls)
+    assert calls[-1]["items"] == [{"feature_id": "f_unchanged", "known_row_revision": 13}]
+    assert isinstance(data["f_found"], FoundFeatureBatchItem)
+    assert data["f_found"].trip_card.name == "f_found 이름"
+    assert isinstance(data["f_retired"], RetiredFeatureBatchItem)
+    assert isinstance(data["f_suppressed"], SuppressedFeatureBatchItem)
+    assert isinstance(data["f_missing"], MissingFeatureBatchItem)
+    assert isinstance(data["f_unchanged"], UnchangedFeatureBatchItem)
     await client.aclose()
 
 
 @pytest.mark.parametrize(
-    "batch_data",
+    ("batch_data", "known_row_revisions"),
     [
-        {"found": {}, "missing": []},
-        {"found": {"f_1": {"feature_id": "f_1", "name": "장소"}}, "missing": ["f_1"]},
-        {"found": {}, "missing": ["f_1", "f_1"]},
-        {"found": {}, "missing": ["f_other"]},
-        {"found": {"f_1": "not-an-object"}, "missing": []},
-        {"found": {"f_1": {"feature_id": "f_other", "name": "장소"}}, "missing": []},
-        {"found": {"f_1": {"feature_id": "f_1"}}, "missing": []},
-        {"found": {"f_1": {"feature_id": "f_1", "name": {"bad": True}}}, "missing": []},
-        {
-            "found": {"f_1": {"feature_id": "f_1", "name": "장소", "marker_color": {}}},
-            "missing": [],
-        },
-        {"found": {}, "missing": ["f_1"], "retired": [], "revision": 1},
+        ({}, None),
+        ({"items": "not-an-array"}, None),
+        ({"items": []}, None),
+        ({"items": [{"state": "missing", "feature_id": "f_other"}]}, None),
+        (
+            {"items": [{"state": "missing", "feature_id": "f_1", "row_revision": 1}]},
+            None,
+        ),
+        ({"items": [{"state": "future", "feature_id": "f_1"}]}, None),
+        (
+            {
+                "items": [
+                    {
+                        "state": "found",
+                        "feature_id": "f_1",
+                        "row_revision": 1,
+                        "trip_card": {"feature_id": "f_1"},
+                    }
+                ]
+            },
+            None,
+        ),
+        (
+            {
+                "items": [
+                    {
+                        "state": "found",
+                        "feature_id": "f_1",
+                        "row_revision": 1,
+                        "trip_card": _trip_card("f_other"),
+                    }
+                ]
+            },
+            None,
+        ),
+        (
+            {
+                "items": [
+                    {
+                        "state": "found",
+                        "feature_id": "f_1",
+                        "row_revision": 1,
+                        "trip_card": {**_trip_card("f_1"), "private_payload": "leak"},
+                    }
+                ]
+            },
+            None,
+        ),
+        (
+            {"items": [{"state": "unchanged", "feature_id": "f_1", "row_revision": 2}]},
+            {"f_1": 1},
+        ),
+        (
+            {
+                "items": [
+                    {
+                        "state": "found",
+                        "feature_id": "f_1",
+                        "row_revision": 9_223_372_036_854_775_808,
+                        "trip_card": _trip_card("f_1"),
+                    }
+                ]
+            },
+            None,
+        ),
+        (
+            {
+                "items": [
+                    {
+                        "state": "found",
+                        "feature_id": "f_1",
+                        "row_revision": 1,
+                        "trip_card": _trip_card("f_1"),
+                    }
+                ]
+            },
+            {"f_1": 1},
+        ),
     ],
     ids=[
-        "incomplete",
-        "overlap",
-        "duplicate",
-        "unknown",
-        "invalid-detail",
-        "mismatched-detail-id",
-        "missing-name",
-        "invalid-name",
-        "invalid-marker",
+        "missing-items",
+        "items-not-array",
+        "incomplete-partition",
+        "unknown-id",
+        "missing-extra-key",
         "future-state",
+        "incomplete-trip-card",
+        "mismatched-trip-card-id",
+        "extra-trip-card-field",
+        "wrong-unchanged-validator",
+        "row-revision-outside-bigint",
+        "ignored-matching-validator",
     ],
 )
 async def test_get_features_rejects_invalid_response_partition(
     batch_data: dict[str, Any],
+    known_row_revisions: dict[str, int] | None,
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -160,41 +349,44 @@ async def test_get_features_rejects_invalid_response_partition(
         )
 
     client = _client(handler)
-    with pytest.raises(KorTravelMapError, match=r"partition|정확히 분할"):
-        await client.get_features(["f_1"])
+    with pytest.raises(KorTravelMapContractError):
+        await client.get_features(["f_1"], known_row_revisions=known_row_revisions)
     await client.aclose()
 
 
 async def test_get_features_deduplicates_input_and_skips_empty_request() -> None:
-    calls: list[list[str]] = []
+    calls: list[list[dict[str, Any]]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         import json as _json
 
-        feature_ids = _json.loads(request.content)["feature_ids"]
-        calls.append(feature_ids)
+        request_items = _json.loads(request.content)["items"]
+        calls.append(request_items)
         return httpx.Response(
             200,
             json={
                 "data": {
-                    "found": {
-                        feature_id: {"feature_id": feature_id, "name": feature_id}
-                        for feature_id in feature_ids
-                    },
-                    "missing": [],
+                    "items": [
+                        {
+                            "state": "found",
+                            "feature_id": item["feature_id"],
+                            "row_revision": 1,
+                            "trip_card": _trip_card(item["feature_id"]),
+                        }
+                        for item in request_items
+                    ],
                 },
                 "meta": {},
             },
         )
 
     client = _client(handler)
-    assert await client.get_features([]) == {"found": {}, "missing": []}
+    assert await client.get_features([]) == {}
     assert calls == []
-    assert await client.get_features(["f_1", "f_1"]) == {
-        "found": {"f_1": {"feature_id": "f_1", "name": "f_1"}},
-        "missing": [],
-    }
-    assert calls == [["f_1"]]
+    result = await client.get_features(["f_1", "f_1"])
+    assert list(result) == ["f_1"]
+    assert isinstance(result["f_1"], FoundFeatureBatchItem)
+    assert calls == [[{"feature_id": "f_1"}]]
     await client.aclose()
 
 
@@ -203,8 +395,8 @@ async def test_get_features_rejects_duplicate_found_json_member() -> None:
         return httpx.Response(
             200,
             content=(
-                b'{"data":{"found":{"f_1":{"feature_id":"f_1","name":"first"},'
-                b'"f_1":{"feature_id":"f_1","name":"second"}},"missing":[]},"meta":{}}'
+                b'{"data":{"items":[{"state":"missing","state":"found",'
+                b'"feature_id":"f_1"}]},"meta":{}}'
             ),
             headers={"content-type": "application/json"},
         )
@@ -221,9 +413,12 @@ async def test_get_features_rejects_non_finite_json_numbers(raw_number: str) -> 
         return httpx.Response(
             200,
             content=(
-                '{"data":{"found":{"f_1":{"feature_id":"f_1","name":"장소","lon":'
+                '{"data":{"items":[{"state":"found","feature_id":"f_1","row_revision":1,'
+                '"trip_card":{"feature_id":"f_1","kind":"place","name":"장소",'
+                '"category":"attraction","lon":'
                 f"{raw_number}"
-                '}},"missing":[]},"meta":{}}'
+                ',"lat":37.5,"address":{},"marker_icon":null,"marker_color":null}}]},'
+                '"meta":{}}'
             ).encode(),
             headers={"content-type": "application/json"},
         )
@@ -234,6 +429,24 @@ async def test_get_features_rejects_non_finite_json_numbers(raw_number: str) -> 
     await client.aclose()
 
 
+@pytest.mark.parametrize(
+    "known_row_revisions",
+    [
+        {"f_other": 1},
+        {"f_1": 0},
+        {"f_1": True},
+        {"f_1": 9_223_372_036_854_775_808},
+    ],
+)
+async def test_get_features_rejects_invalid_known_revisions(
+    known_row_revisions: dict[str, int],
+) -> None:
+    client = _client(lambda request: httpx.Response(500))
+    with pytest.raises(ValueError, match="known_row_revisions"):
+        await client.get_features(["f_1"], known_row_revisions=known_row_revisions)
+    await client.aclose()
+
+
 async def test_get_features_is_all_or_nothing_across_chunks() -> None:
     calls = 0
 
@@ -241,15 +454,335 @@ async def test_get_features_is_all_or_nothing_across_chunks() -> None:
         nonlocal calls
         calls += 1
         if calls == 1:
-            data = {"found": {"f_1": {"feature_id": "f_1", "name": "first"}}, "missing": []}
+            data = {
+                "items": [
+                    {
+                        "state": "found",
+                        "feature_id": "f_1",
+                        "row_revision": 1,
+                        "trip_card": _trip_card("f_1"),
+                    }
+                ]
+            }
         else:
-            data = {"found": {}, "missing": [], "retired": ["f_2"]}
+            data = {"items": [{"state": "future", "feature_id": "f_2"}]}
         return httpx.Response(200, json={"data": data, "meta": {}})
 
     client = _client(handler, batch_chunk_size=1)
-    with pytest.raises(KorTravelMapError, match="partition"):
+    with pytest.raises(KorTravelMapContractError, match="state"):
         await client.get_features(["f_1", "f_2"])
     assert calls == 2
+    await client.aclose()
+
+
+async def test_get_weather_batch_decodes_sparse_targets_and_shared_cards() -> None:
+    first_target_at = datetime(2026, 7, 30, tzinfo=UTC)
+    second_target_at = datetime(2026, 7, 31, tzinfo=UTC)
+    known_at = datetime(2026, 7, 29, 12, tzinfo=UTC)
+    calls: list[dict[str, Any]] = []
+    headers: list[dict[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json as _json
+
+        body = _json.loads(request.content)
+        calls.append(body)
+        headers.append(dict(request.headers))
+        target_results: list[dict[str, Any]] = []
+        for target_index, target in enumerate(body["targets"]):
+            target_at = datetime.fromisoformat(target["target_at"])
+            found_ids = [
+                feature_id
+                for feature_id in target["feature_ids"]
+                if feature_id not in {"no_data", "retired"}
+            ]
+            card_key = f"card-{target_index}"
+            items = [
+                (
+                    {"state": feature_id, "feature_id": feature_id}
+                    if feature_id in {"no_data", "retired"}
+                    else {
+                        "state": "found",
+                        "feature_id": feature_id,
+                        "card_key": card_key,
+                    }
+                )
+                for feature_id in target["feature_ids"]
+            ]
+            cards = (
+                [
+                    {
+                        "card_key": card_key,
+                        "source_styles": ["short"],
+                        "current": [_weather_metric()],
+                        "timeline": [
+                            {
+                                **_weather_metric(),
+                                "valid_at": (target_at + timedelta(hours=3)).isoformat(),
+                            }
+                        ],
+                        "latest_at": (target_at + timedelta(hours=3)).isoformat(),
+                        "is_stale": False,
+                    }
+                ]
+                if found_ids
+                else []
+            )
+            target_results.append(
+                {
+                    "target_at": target["target_at"],
+                    "timeline_until": (target_at + timedelta(days=1)).isoformat(),
+                    "items": items,
+                    "cards": cards,
+                }
+            )
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "known_at": "2026-07-29T12:00:00Z",
+                    "targets": target_results,
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client(
+        handler,
+        service_token="service-token",
+        public_api_key="must-not-leak",
+    )
+    result = await client.get_weather_batch(
+        {
+            second_target_at: ["retired", "found-a"],
+            first_target_at: ["found-a", "found-b", "no_data", "found-a"],
+        },
+        known_at=known_at,
+    )
+
+    assert calls == [
+        {
+            "targets": [
+                {
+                    "target_at": first_target_at.isoformat(),
+                    "feature_ids": ["found-a", "found-b", "no_data"],
+                },
+                {
+                    "target_at": second_target_at.isoformat(),
+                    "feature_ids": ["retired", "found-a"],
+                },
+            ],
+            "known_at": known_at.isoformat(),
+        }
+    ]
+    assert all(header["x-kor-travel-map-service-token"] == "service-token" for header in headers)
+    assert all("x-kor-travel-map-api-key" not in header for header in headers)
+    assert isinstance(found := result[first_target_at]["found-a"], FoundWeatherBatchItem)
+    assert isinstance(found_peer := result[first_target_at]["found-b"], FoundWeatherBatchItem)
+    assert found.card is found_peer.card
+    assert found.card.current[0].as_dict() == {
+        "forecast_style": "short",
+        "metric_key": "TMP",
+        "metric_name": "기온",
+        "timeline_bucket": "forecast",
+        "value_number": 24.5,
+        "value_text": None,
+        "unit": "℃",
+        "severity": None,
+        "issued_at": datetime(2026, 7, 30, tzinfo=UTC),
+        "valid_at": datetime(2026, 7, 30, 3, tzinfo=UTC),
+        "valid_from": datetime(2026, 7, 30, 3, tzinfo=UTC),
+        "valid_until": datetime(2026, 7, 30, 4, tzinfo=UTC),
+        "observed_at": None,
+        "effective_at": datetime(2026, 7, 30, 3, tzinfo=UTC),
+        "provider": "python-kma-api",
+        "weather_domain": "forecast",
+    }
+    assert isinstance(result[first_target_at]["no_data"], NoDataWeatherBatchItem)
+    assert isinstance(result[second_target_at]["retired"], RetiredWeatherBatchItem)
+    await client.aclose()
+
+
+async def test_get_weather_batch_accepts_fixed_offset_timeline_across_dst_boundary() -> None:
+    target_at = datetime(2026, 3, 8, tzinfo=ZoneInfo("America/New_York"))
+    known_at = datetime(2026, 3, 7, tzinfo=UTC)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json as _json
+
+        body = _json.loads(request.content)
+        response_target_at = datetime.fromisoformat(body["targets"][0]["target_at"])
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "known_at": body["known_at"],
+                    "targets": [
+                        {
+                            "target_at": response_target_at.isoformat(),
+                            "timeline_until": (response_target_at + timedelta(days=1)).isoformat(),
+                            "items": [{"state": "no_data", "feature_id": "weather:none"}],
+                            "cards": [],
+                        }
+                    ],
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client(handler)
+    result = await client.get_weather_batch(
+        {target_at: ["weather:none"]},
+        known_at=known_at,
+    )
+
+    assert isinstance(result[target_at]["weather:none"], NoDataWeatherBatchItem)
+    await client.aclose()
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda data: data.update({"unexpected": True}),
+        lambda data: data.update({"known_at": "2026-07-28T12:00:00Z"}),
+        lambda data: data["targets"][0].update({"target_at": "2026-07-29T00:00:00Z"}),
+        lambda data: data["targets"][0].update({"timeline_until": "2026-08-01T00:00:00Z"}),
+        lambda data: data["targets"][0]["items"][0].update({"unexpected": True}),
+        lambda data: data["targets"][0]["cards"][0]["current"][0].pop("metric_key"),
+        lambda data: data["targets"][0]["cards"][0]["current"][0].update({"value_number": True}),
+        lambda data: data["targets"][0]["cards"][0]["current"][0].update({"value_number": 10**309}),
+        lambda data: data["targets"][0]["items"][0].update({"feature_id": "other"}),
+        lambda data: data["targets"][0]["items"][0].update({"card_key": "missing"}),
+        lambda data: data["targets"][0]["cards"].append({**data["targets"][0]["cards"][0]}),
+        lambda data: data["targets"][0]["cards"].append(
+            {
+                **data["targets"][0]["cards"][0],
+                "card_key": "orphan",
+            }
+        ),
+    ],
+    ids=[
+        "extra-data-field",
+        "wrong-known-at",
+        "wrong-target-at",
+        "wrong-timeline-horizon",
+        "extra-found-field",
+        "missing-required-metric-field",
+        "boolean-number",
+        "overflowing-integer",
+        "mismatched-order",
+        "missing-card-reference",
+        "duplicate-card-key",
+        "orphan-card",
+    ],
+)
+async def test_get_weather_batch_rejects_field_and_partition_drift(
+    mutate: Callable[[dict[str, Any]], object],
+) -> None:
+    target_at = datetime(2026, 7, 30, tzinfo=UTC)
+    known_at = datetime(2026, 7, 29, tzinfo=UTC)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        data = {
+            "known_at": known_at.isoformat(),
+            "targets": [
+                {
+                    "target_at": target_at.isoformat(),
+                    "timeline_until": (target_at + timedelta(days=1)).isoformat(),
+                    "items": [
+                        {
+                            "state": "found",
+                            "feature_id": "found",
+                            "card_key": "card-1",
+                        }
+                    ],
+                    "cards": [
+                        {
+                            "card_key": "card-1",
+                            "source_styles": ["short"],
+                            "current": [_weather_metric()],
+                            "timeline": [],
+                            "latest_at": None,
+                            "is_stale": False,
+                        }
+                    ],
+                }
+            ],
+        }
+        mutate(data)
+        return httpx.Response(200, json={"data": data, "meta": {}})
+
+    client = _client(handler)
+    with pytest.raises(KorTravelMapContractError):
+        await client.get_weather_batch(
+            {target_at: ["found"]},
+            known_at=known_at,
+        )
+    await client.aclose()
+
+
+async def test_get_weather_batch_rejects_invalid_targets_and_skips_empty_request() -> None:
+    client = _client(lambda request: httpx.Response(500))
+    assert (
+        await client.get_weather_batch(
+            {},
+            known_at=datetime(2026, 7, 29, tzinfo=UTC),
+        )
+        == {}
+    )
+    with pytest.raises(ValueError, match="UTC offset"):
+        await client.get_weather_batch(
+            {},
+            known_at=datetime(2026, 7, 29),
+        )
+    with pytest.raises(ValueError, match="UTC offset"):
+        await client.get_weather_batch(
+            {datetime(2026, 7, 30): ["f_1"]},
+            known_at=datetime(2026, 7, 29, tzinfo=UTC),
+        )
+    with pytest.raises(ValueError, match="비어"):
+        await client.get_weather_batch(
+            {datetime(2026, 7, 30, tzinfo=UTC): []},
+            known_at=datetime(2026, 7, 29, tzinfo=UTC),
+        )
+    with pytest.raises(ValueError, match="1~256자"):
+        await client.get_weather_batch(
+            {datetime(2026, 7, 30, tzinfo=UTC): ["x" * 257]},
+            known_at=datetime(2026, 7, 29, tzinfo=UTC),
+        )
+    await client.aclose()
+
+
+async def test_get_weather_batch_rejects_producer_budget_overflow_before_http() -> None:
+    client = _client(lambda request: httpx.Response(500))
+    known_at = datetime(2026, 7, 29, tzinfo=UTC)
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    with pytest.raises(ValueError, match="target은 최대 366개"):
+        await client.get_weather_batch(
+            {start + timedelta(days=offset): ["same"] for offset in range(367)},
+            known_at=known_at,
+        )
+    with pytest.raises(ValueError, match="target별 feature_id"):
+        await client.get_weather_batch(
+            {start: [f"f-{index}" for index in range(201)]},
+            known_at=known_at,
+        )
+    with pytest.raises(ValueError, match="pair"):
+        await client.get_weather_batch(
+            {
+                start + timedelta(days=offset): [f"f-{index}" for index in range(200)]
+                for offset in range(11)
+            },
+            known_at=known_at,
+        )
+    with pytest.raises(ValueError, match="planning work"):
+        await client.get_weather_batch(
+            {
+                start + timedelta(days=offset): [f"f-{offset}-{index}" for index in range(20)]
+                for offset in range(50)
+            },
+            known_at=known_at,
+        )
     await client.aclose()
 
 
@@ -609,7 +1142,10 @@ async def test_batch_is_service_token_only(
         seen["token"] = request.headers.get("X-Kor-Travel-Map-Service-Token")
         return httpx.Response(
             200,
-            json={"data": {"found": {}, "missing": ["f_1"]}, "meta": {}},
+            json={
+                "data": {"items": [{"state": "missing", "feature_id": "f_1"}]},
+                "meta": {},
+            },
         )
 
     client = _client(
@@ -617,7 +1153,8 @@ async def test_batch_is_service_token_only(
         service_token=service_token,
         public_api_key=public_api_key,
     )
-    assert await client.get_features(["f_1"]) == {"found": {}, "missing": ["f_1"]}
+    result = await client.get_features(["f_1"])
+    assert isinstance(result["f_1"], MissingFeatureBatchItem)
     assert seen == {"query_key": None, "api_key": None, "token": expected_token}
     await client.aclose()
 

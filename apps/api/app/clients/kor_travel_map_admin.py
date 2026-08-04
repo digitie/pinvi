@@ -603,7 +603,7 @@ class KorTravelMapAdminClient:
     # ── curated feature import (ADR-049) ───────────────────────────────────────
 
     async def get_curated_detail_snapshot(self, curated_feature_id: str) -> dict[str, Any]:
-        """GET /v1/admin/curated-features/{id}/detail-snapshot — 큐레이션 import용 snapshot.
+        """GET /v1/admin/features/curated/{id}/detail-snapshot — 큐레이션 import snapshot.
 
         data = {curated_feature_id, version, etag, updated_at, theme, content, source, items}.
         kor-travel-map PR #533이 public `/v1/curated-features/{id}/pinvi-copy`를 폐지하고
@@ -612,7 +612,8 @@ class KorTravelMapAdminClient:
         """
         return self._data(
             await self._send(
-                "GET", f"/v1/admin/curated-features/{curated_feature_id}/detail-snapshot"
+                "GET",
+                f"/v1/admin/features/curated/{curated_feature_id}/detail-snapshot",
             )
         )
 

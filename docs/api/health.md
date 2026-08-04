@@ -35,7 +35,14 @@ GET /health/db
 - `SELECT 1` 1회 + 시간 측정
 - 실패 → `503 SERVICE_UNAVAILABLE` + `{"error": {"code": "DB_UNAVAILABLE", "details": {"reason": "..."}}}`
 
-### 1.3 `GET /health/external`
+### 1.3 `GET /health/cache-target-sync`
+
+T-VN-41 paired worker의 durable 상태를 credential 없이 반환한다. `enabled`, `ready`,
+`disabled_reason`, current `restore_epoch`, local/remote ACK cursor, applied gap, pending/DLQ command,
+마지막 fixed snapshot ID/count/Merkle root와 reconcile status/error를 포함한다. token, host, problem
+detail은 노출하지 않는다. 기본 off는 `disabled_reason=network_disabled_by_default`로 구분한다.
+
+### 1.4 `GET /health/external`
 
 ```http
 GET /health/external

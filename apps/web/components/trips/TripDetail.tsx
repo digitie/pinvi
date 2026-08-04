@@ -1642,8 +1642,13 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                 {/* 일자 탭이 이미 날짜/공휴일/기간-벗어남을 보이므로 여기선 일출/일몰만. */}
                                 <TripDayHeader day={day} showSummary={false} />
                                 <TripWeatherSummary
-                                  featureId={day.pois[0]?.feature_id ?? null}
-                                  date={day.date}
+                                  weather={
+                                    day.pois[0]?.feature_id
+                                      ? (day.weather_by_feature_id[day.pois[0].feature_id] ?? null)
+                                      : null
+                                  }
+                                  weatherCards={day.weather_cards}
+                                  date={day.effective_date}
                                   label="날짜 날씨"
                                   compact={mobileWebLayout}
                                 />
@@ -1683,7 +1688,9 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                   selectedPoiId={selectedPoiId}
                                   onSelectPoi={handleSelectPoi}
                                   tripId={tripId}
-                                  dayDate={day.date}
+                                  dayDate={day.effective_date}
+                                  weatherCards={day.weather_cards}
+                                  weatherByFeatureId={day.weather_by_feature_id}
                                   showInlineAttachments
                                   showWeather
                                   compact={mobileWebLayout}

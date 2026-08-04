@@ -66,6 +66,8 @@ function tripView({
         day_index: 1,
         date: null,
         title: '1일차',
+        weather_cards: {},
+        weather_by_feature_id: {},
         pois: [
           poi('44444444-4444-4444-8444-444444444444', '0100', '장소 A', 126.9),
           poi('44444444-4444-4444-8444-444444444445', '0200', '장소 B', 127.1),

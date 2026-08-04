@@ -97,10 +97,17 @@ Telegram brief 질의에 쓰는 구조화 코드다. 2~10자리 숫자(sido/sigu
 (없거나 조회 실패 시 `feature_snapshot` 사용). feature 없는 POI는 snapshot만 사용한다.
 `rise_set`은 POI 생성 시 KASI 위치별 해달
 출몰시각 row가 있으면 포함하며, 아직 처리 전이면 `pending_*` 상태로 내려간다. row가
-없으면 `rise_set`은 `null`이다. `feature_resolution_state`는 `not_linked|found|missing|unverified`다.
-`missing`은 kor-travel-map public projection에서 정보 사용이 불가능하다는 뜻이고,
-`unverified`는 transport/인증/계약 실패로 최신 상태를 확인하지 못해 저장 snapshot을 썼다는 뜻이다.
-`broken_feature_count`는 `missing`만 집계한다.
+없으면 `rise_set`은 `null`이다. `feature_resolution_state`는
+`not_linked|found|retired|suppressed|missing|unverified`다. Map batch의 `unchanged`는
+revision이 같은 캐시를 재사용한 성공 상태이므로 소비자 응답에서는 `found`로 투영한다.
+`retired`는 종료·삭제된 장소, `suppressed`는 존재하지만 공개 projection에서 비공개인 장소,
+`missing`은 기준 row가 없는 장소다. `unverified`는 transport/인증/계약 실패로 최신 상태를
+확인하지 못해 저장 snapshot을 썼다는 뜻이다. `broken_feature_count`는 사용자가 고쳐야 하는
+`retired|missing`만 집계하며 `suppressed|unverified`는 포함하지 않는다.
+
+일자 날씨는 `weather_by_feature_id`의 상태와 `weather_cards`의 정규화된 카드로 나뉜다.
+`found` 상태는 `card_key`만 가지며, 같은 일자·기상 격자의 여러 feature가 같은 카드를
+참조한다. 참조된 card가 빠지거나 참조되지 않은 card가 있으면 응답 계약 오류다.
 
 응답 shape:
 
@@ -113,6 +120,18 @@ Telegram brief 질의에 쓰는 구조화 코드다. 2~10자리 숫자(sido/sigu
         "day_index": 1,
         "date": "2026-06-01",
         "title": "1일차",
+        "weather_cards": {
+          "weather-card-key": {
+            "asof": "2026-06-01T00:00:00+09:00",
+            "latest_at": "2026-06-01T09:00:00+09:00",
+            "is_stale": false,
+            "source_styles": ["observed", "short"],
+            "metrics": []
+          }
+        },
+        "weather_by_feature_id": {
+          "feature-id": { "state": "found", "card_key": "weather-card-key" }
+        },
         "pois": [
           {
             "poi_id": "uuid",

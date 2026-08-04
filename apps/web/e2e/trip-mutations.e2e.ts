@@ -78,7 +78,14 @@ function poiMutationResponse() {
 }
 
 function day(pois: ReturnType<typeof poi>[]) {
-  return { day_index: 1, date: null, title: '1일차', pois };
+  return {
+    day_index: 1,
+    date: null,
+    title: '1일차',
+    weather_cards: {},
+    weather_by_feature_id: {},
+    pois,
+  };
 }
 
 function companion() {

@@ -39,6 +39,8 @@ async function mockTripDetail(page: Page) {
               day_index: 1,
               date: '2026-06-20',
               title: '1일차',
+              weather_cards: {},
+              weather_by_feature_id: {},
               pois: [
                 {
                   poi_id: poiId,
