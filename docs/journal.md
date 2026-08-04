@@ -2,6 +2,57 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-04 (claude) — Map T-VN-32C 쌍: UUID+alias contract 소비 준비 (feat/tvn32c-uuid-alias)
+
+- **배경**: Map은 feature 정본 PK를 UUID surrogate로 전환 중(Map ADR-068,
+  T-VN-32A/B 착지)이고, 32C에서 PinVi가 "검증된 alias map으로 소비 데이터를
+  DB-to-DB 이관"한 뒤 양 저장소 checksum 일치 후 Map 응답 `feature_id` 값이
+  UUID로 전환된다. Map 쌍 branch가 이관 표면
+  (`GET /v1/service/feature-alias-maps`(+`/checksum`) — service token read)과
+  공용 golden(`contracts/feature-alias-map-v1-golden.json`)을 착지했다.
+- **독립 checksum 구현**: `app/core/feature_alias_contract.py` —
+  `feature-alias-map-v1` leaf/merkle/파생 계약을 cache-target 계약과 같은
+  패턴으로 독립 구현(namespace는 상수 복사가 아니라
+  `uuid5(NAMESPACE_URL,'kor-travel-map:feature-uuid:v1')` 재파생). vendored
+  golden(`tests/contract/feature-alias-map-v1-golden.json`, bytes sha 고정
+  `3138587c…`)을 `tests/unit/test_feature_alias_contract.py`가 재계산 대조.
+  **핀 유예**: `_UPSTREAM_MAP_COMMIT = None` — Map PR 머지 후 merge SHA로
+  고정하고 contract-pin-consistency에 byte-diff 단계를 추가한다(그 전에는
+  해당 테스트가 skip으로 표시해 잔여를 드러낸다).
+- **이관 실행기**: `clients/kor_travel_map_alias_map.py`(keyset 순회 —
+  전진하지 않는 keyset·계약 위반 응답 fail-close) +
+  `services/feature_uuid_cutover.py`(`pinvi-feature-uuid-cutover` CLI,
+  `--dry-run` 지원): pull → **독립 root/count 재계산 + row별 uuid5 파생 검증**
+  통과 시에만, 저장 legacy 참조 3열(`trip_day_pois.feature_id`,
+  `curated_plan_pois.feature_id`, `feature_suggestions.target_feature_id`)의
+  UUID shadow를 rewrite. 검증 실패는 아무것도 쓰지 않고 중단(운영자는 Map
+  write fence window에서 재시도), map에 없는 stale 참조는 NULL 유지 + 보고.
+- **schema**: alembic `20260804_0049` — 3 table에 nullable UUID shadow 컬럼
+  (`feature_uuid`/`target_feature_uuid`) 추가. migration은 backfill하지
+  않는다(로컬 파생만으로 채우면 "검증된" 조건 우회 — cutover 실행기 소관).
+  legacy 컬럼 제거는 Map T-VN-39 soak 이후 별도 결정.
+- **T-VN-41 final boundary contract 의식적 re-pin(동반)**: final boundary는
+  finalize 시점 head를 `FINALIZE_SCHEMA_REVISION` + audit DB CHECK
+  (`ck_ktm_ct_boundary_contract`)로 이중 pin한다 — head가 전진하면 어떤
+  migration이든 boundary 재검토를 강제받는 fail-close 설계라, 0049가 그대로
+  들어가면 finalize·canary 통합 4건이 `schema_revision_mismatch`로 죽는다
+  (첫 재현: 통합 suite 4 failed). 검토 결론: 0049는 `ktm_cache_target_*`·
+  writer registry·boundary 불변식 무접촉 → pin을 `20260804_0049`로 올리고
+  DB CHECK를 0049 migration에서 교체(기존 audit 행 0 — 무손실, downgrade는
+  0048 복원). production final boundary는 계속 닫혀 있다.
+- **소비 계약 문서화**: `schemas/feature.py` — `feature_id`는 불투명 문자열
+  (legacy `f_*`든 cutover 후 canonical UUID 문자열이든 byte-for-byte 보존,
+  파싱 금지)로 재명시. 기존 스냅샷/핀(user/service/admin-detail)은 **무변경**
+  — 재추출·핀 갱신은 Map PR 머지 후(핀이 merge SHA)만 가능하다.
+- **검증(CI-parity python:3.12 컨테이너, PostGIS 16-3.5)**: ruff check /
+  ruff format --check / mypy --strict app(214 files) clean · unit 912 passed,
+  2 skipped(1은 핀 유예 skip) · `alembic upgrade head`(0049 + boundary CHECK
+  교체 포함) 성공 · integration 전체 suite(testcontainers) 511 passed /
+  3 skipped / 4 failed — 4건 전부 boundary schema pin(위 re-pin 항목의 첫
+  재현)이 원인이었고, re-pin 후 해당 모듈
+  (`test_cache_target_causal_canary.py`) 재실행 **39 passed**로 수렴.
+  contract-pin-consistency의 기존 4 스냅샷·핀은 무변경(green 유지).
+
 ## 2026-08-04 (codex) — T-VN-41-P n150 격리 paired live 증명 완료
 
 - full clone의 Map `96efac…` / PinVi `20b225…`, generation `7`, vendored service OpenAPI SHA-256

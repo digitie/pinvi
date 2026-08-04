@@ -7,7 +7,11 @@ Pinvi는 응답 셰입을 소유하되 **kor_travel_map 실계약 field 명/의�
 
 - 사용자에게 노출할 필드만 (PII / 내부 metadata 제외)
 - Zod 측 `packages/schemas/src/feature.ts` 와 cross-validation
-- `feature_id` 는 kor_travel_map `make_feature_id` 출력 불투명 문자열(ADR-028, UUID 아님)
+- `feature_id` 는 불투명 문자열이다(ADR-028 — byte-for-byte 보존, 파싱 금지).
+  역사적으로 `make_feature_id` 출력(`f_*`)이었고, Map T-VN-32C(UUID identity
+  cutover, Map ADR-068) 이후에는 canonical UUID 문자열 값이 온다 — 두 형태 모두
+  불투명하게 다룬다. legacy 참조의 UUID shadow 이관은
+  `app.services.feature_uuid_cutover`(검증된 alias map) 소관.
 """
 
 from __future__ import annotations
