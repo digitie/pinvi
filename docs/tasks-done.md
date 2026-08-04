@@ -7,7 +7,7 @@
 ## 2026-08-04
 
 - [x] **T-VN-SEC-03** — `npm audit` high 7→0 (next-전파 transitive + build-tooling transitive 정리).
-      (완료: 2026-08-04, PR #TBD, claude)
+      (완료: 2026-08-04, PR #426, claude)
       (1) in-range 표적 update 4종: brace-expansion 1.1.14→1.1.18(+nested 5.0.9), form-data 4.0.5→4.0.6,
       js-yaml 4.1.1→4.3.1, shell-quote 1.8.4→1.10.0 — 전부 DoS/CRLF-injection high. `npm audit fix`는
       Expo peer graph ERESOLVE로 불가라 `npm update <pkg>` 표적 실행. (2) next-전파분: next 15.5.22가

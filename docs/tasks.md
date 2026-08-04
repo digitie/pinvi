@@ -34,13 +34,11 @@
       HTTP 없이 stopped-Map evidence와 fresh Pin DB evidence를 대조한다. canonical request/Map/fence/evidence는
       append-only audit 한 행과 fresh Manager 재조회로 결박한다. canary의 operator deadline은 final
       remote bracket 내부 request와 `Retry-After`까지 취소해 writer fence를 bounded하게 해제하며,
-      재시도는 network/timeout과 pinned `429/503 SNAPSHOT_*`에만 허용한다.
-      - [x] Map generation 7 artifact owner `1285ff4974a2fa8d4b71f810dc9fca249397e8fc`, functional owner
-        `9b945ce832ecc3ed037d66c9d4e7bda9a1a69ae0`, service OpenAPI SHA-256
-        `622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2`를 vendored bytes/runtime
-        generation `7`과 함께 exact pin하고 generation 6, 17-route scope drift, command/consumer token swap
-        음성 gate를 고정했다.
-      - [ ] n150에서 generation 7 token-swap 음성과 causal canary receipt를 포함한 paired live proof를 남긴다.
+      재시도는 network/timeout과 pinned `429/503 SNAPSHOT_*`에만 허용한다. - [x] Map generation 7 artifact owner `1285ff4974a2fa8d4b71f810dc9fca249397e8fc`, functional owner
+      `9b945ce832ecc3ed037d66c9d4e7bda9a1a69ae0`, service OpenAPI SHA-256
+      `622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2`를 vendored bytes/runtime
+      generation `7`과 함께 exact pin하고 generation 6, 17-route scope drift, command/consumer token swap
+      음성 gate를 고정했다. - [ ] n150에서 generation 7 token-swap 음성과 causal canary receipt를 포함한 paired live proof를 남긴다.
 
 ## 보안·의존성
 
@@ -64,7 +62,7 @@
       미사용 optional sharp/@img 제거)은 lockfile 수술로 처리(overrides는 stale lock 재해석에만
       미반영, 재생성 시 정상 적용 — 가드로 유지). 잔여 13 moderate는 Expo/maplibre major graph →
       Sprint M-1 이관.
-      (완료: 2026-08-04, PR #TBD, claude → tasks-done.md)
+      (완료: 2026-08-04, PR #426, claude → tasks-done.md)
 
 - [x] **T-VN-STYLE-01** — `npm run format:check` baseline을 Prettier로 일괄 포맷했다(포맷 207개, 기능
       변경 0). vendored byte-pinned 파일 12개(`apps/api/tests/contract/` SHA-256 핀 + `.agents/skills/`·
