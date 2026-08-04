@@ -1,5 +1,16 @@
 # resume.md
 
+## 2026-08-04 (codex) — T-VN-41-P n150 격리 paired live 증명 시작
+
+Map producer PR #917/#935와 PinVi generation 7 consumer PR #424가 병합된 상태를 대조했다.
+`T-VN-41-P`의 남은 실제 작업은 구현 재작성 아니라 n150 격리 clone의 paired live 증명이다.
+문서화된 실행 단위는 `docs/execplan/t-vn-41-paired-live-proof.md`다. command/consumer token 교차
+음성, initial cutover·Merkle 수렴, causal canary, duplicate/gap/restore epoch, Map/PinVi live UI를
+격리 Compose project에서 확인한다. 운영 consumer enable과 final boundary는 `T-VN-H42` 및
+docker-manager 재pin 이후로 계속 닫아 둔다.
+
+**다음 한 작업**: n150의 격리 checkout/Compose 경계를 확인하고 contract pin preflight를 실행한다.
+
 ## 2026-08-04 (claude) — T-VN-SEC-03 완료 (npm audit high 0)
 
 **방금**: **T-VN-SEC-03** — npm audit **high 7→0**(PR #426). 표적 update 4종(brace-expansion/form-data/

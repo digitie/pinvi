@@ -42,7 +42,8 @@
             generation `7`과 함께 exact pin하고 generation 6, 17-route scope drift, command/consumer
             token swap 음성 gate를 고정했다.
       - [ ] n150에서 generation 7 token-swap 음성과 causal canary receipt를 포함한 paired live proof를
-            남긴다.
+            남긴다. 실행 범위·중단 조건·증적 형식은
+            `docs/execplan/t-vn-41-paired-live-proof.md`를 정본으로 한다.
 
 ## 보안·의존성
 

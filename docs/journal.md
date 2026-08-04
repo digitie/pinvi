@@ -2,6 +2,15 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-04 (codex) — T-VN-41-P n150 격리 paired live 증명 계획
+
+- Map producer PR #917/#935와 PinVi generation 7 consumer PR #424가 이미 병합됐음을 대조했다.
+  남은 `T-VN-41-P`는 구현 중복이 아니라 n150 paired live 증명이다.
+- `docs/execplan/t-vn-41-paired-live-proof.md`에 격리 Compose만 사용하는 실행 범위, role 교차 음성,
+  causal canary·duplicate/gap/epoch·UI 증적, terminal fail-close 중단 조건을 고정했다.
+- production consumer enable, final boundary, docker-manager 운영 manifest와 PR #119는 이 실행 범위에서
+  제외한다. Lane A `T-VN-H42`와 docker-manager 재pin이 완료되기 전에는 그 경계를 열지 않는다.
+
 ## 2026-08-04 (claude) — T-VN-SEC-03: npm audit high 7→0 (transitive 정리)
 
 - **작업**: (1) in-range 표적 update — brace-expansion(지수 확장 DoS 3건), form-data(CRLF injection),
