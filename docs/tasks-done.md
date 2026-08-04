@@ -6,6 +6,23 @@
 
 ## 2026-08-04
 
+- [x] **T-VN-SEC-03** — `npm audit` high 7→0 (next-전파 transitive + build-tooling transitive 정리).
+      (완료: 2026-08-04, PR #426, claude)
+      (1) in-range 표적 update 4종: brace-expansion 1.1.14→1.1.18(+nested 5.0.9), form-data 4.0.5→4.0.6,
+      js-yaml 4.1.1→4.3.1, shell-quote 1.8.4→1.10.0 — 전부 DoS/CRLF-injection high. `npm audit fix`는
+      Expo peer graph ERESOLVE로 불가라 `npm update <pkg>` 표적 실행. (2) next-전파분: next 15.5.22가
+      exact-pin한 build-time postcss@8.4.31(fixed >8.5.22)은 nested lock 항목 제거로 root postcss@8.5.23에
+      dedupe, 미사용 optional sharp@0.34.5(fixed ≥0.35.0, 앱 `next/image` 미사용)는 sharp/@img 27항목
+      lock 제거로 미설치화. **npm 버전-키 overrides는 stale lock 항목 재해석에는 미반영이라 수술이
+      필요했지만, lockfile 재생성 시에는 정상 적용됨을 리뷰에서 재현** — package.json overrides가
+      재생성 경로의 실질 가드이므로 삭제 금지. 최종 상태는 npm 10/11 재해석-안정(up to date). lockfile
+      의미 diff 검증(리뷰 수치 정정): 제거 55(sharp 계열 27 + nested postcss 1 + esbuild optional-peer
+      27), 버전변경 8(표적 4 + transitive 4), 추가 0, 순서 동일 + 리뷰가 잡은 fsevents `dev:true` 유실
+      1건 복원. 검증: fresh `npm ci` exit 0 → web build(Compiled
+      successfully, 57 static pages)/lint 무경고/vitest 100 + domain 79 + schemas 13 + web·domain·mobile
+      typecheck 0. 잔여 13 moderate는 전부 Expo SDK-56/maplibre major graph(Sprint M-1 이관), next-intl
+      moderate는 별도 major. 적대적 리뷰 2명.
+
 - [x] **TDR-mobile** — TDR day 표시(day-color/공휴일/일출·일몰)를 `apps/mobile`에 mirror.
       (완료: 2026-08-04, PR #425, claude)
       웹 전용이던 `apps/web/lib/tripDateLabels.ts`의 순수 포맷터 6종(formatTripDate/formatKstTime/

@@ -23,6 +23,10 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,mjs,cjs,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,cjs,json,md}\""
   },
+  "overrides": {
+    "postcss@8.4.31": "^8.5.23",
+    "sharp@^0.34.3": "^0.35.0"
+  },
   "devDependencies": {
     "prettier": "^3.3.3",
     "typescript": "^5.6.0"

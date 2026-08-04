@@ -1,5 +1,19 @@
 # resume.md
 
+## 2026-08-04 (claude) — T-VN-SEC-03 완료 (npm audit high 0)
+
+**방금**: **T-VN-SEC-03** — npm audit **high 7→0**(PR #426). 표적 update 4종(brace-expansion/form-data/
+js-yaml/shell-quote) + next-전파분(postcss 8.4.31→8.5.23 dedupe, 미사용 sharp/@img 제거)을 lockfile
+수술로 처리(overrides는 stale lock 재해석에만 미반영, 재생성 시 정상 적용 — 가드로 유지). fresh `npm ci` + web
+build/lint/vitest 100 + domain 79 + schemas 13 + 전 typecheck 통과. 잔여 13 moderate = Expo/maplibre
+major graph(Sprint M-1 이관). 적대적 리뷰 2명.
+
+**병행 조사(T-273)**: repo 측 geofence 코드/템플릿/스크립트는 완료 — 잔여는 전부 운영 적용(Cloudflare
+WAF KR-only rule, edge secret header, kor-travel-docker-manager compose `PINVI_GEOFENCE_*` 주입,
+`BLOCK_UNKNOWN=true` 전환, US 451 증적). map #868은 T-273 blocker 아님(T-VN/C7 트랙). **다음 한 작업**:
+T-273 운영 적용은 사용자 결정 필요(Cloudflare/N150/secret) — Claude 단독 가능분은 runbook 체크리스트
+보강 + docker-manager env 블록 초안 + 법무 placeholder 인덱싱.
+
 ## 2026-08-04 (claude) — TDR-mobile 완료 (day 표시 mobile mirror)
 
 **방금**: **TDR-mobile** — 웹 TDR day 표시(day-color/공휴일/일출·일몰)를 `apps/mobile`에 mirror(PR #425).

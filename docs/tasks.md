@@ -35,12 +35,14 @@
       append-only audit 한 행과 fresh Manager 재조회로 결박한다. canary의 operator deadline은 final
       remote bracket 내부 request와 `Retry-After`까지 취소해 writer fence를 bounded하게 해제하며,
       재시도는 network/timeout과 pinned `429/503 SNAPSHOT_*`에만 허용한다.
+
       - [x] Map generation 7 artifact owner `1285ff4974a2fa8d4b71f810dc9fca249397e8fc`, functional owner
-        `9b945ce832ecc3ed037d66c9d4e7bda9a1a69ae0`, service OpenAPI SHA-256
-        `622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2`를 vendored bytes/runtime
-        generation `7`과 함께 exact pin하고 generation 6, 17-route scope drift, command/consumer token swap
-        음성 gate를 고정했다.
-      - [ ] n150에서 generation 7 token-swap 음성과 causal canary receipt를 포함한 paired live proof를 남긴다.
+            `9b945ce832ecc3ed037d66c9d4e7bda9a1a69ae0`, service OpenAPI SHA-256
+            `622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2`를 vendored bytes/runtime
+            generation `7`과 함께 exact pin하고 generation 6, 17-route scope drift, command/consumer
+            token swap 음성 gate를 고정했다.
+      - [ ] n150에서 generation 7 token-swap 음성과 causal canary receipt를 포함한 paired live proof를
+            남긴다.
 
 ## 보안·의존성
 
@@ -59,12 +61,12 @@
       때문이며 앱에서 exploit 불가다. override는 next의 exact pin을 만족 못 해 `npm ci`가 거부→불가.
       해당 전파분은 T-VN-SEC-03로 이관. (완료: 2026-07-28, PR #414, claude → tasks-done.md)
 
-- [ ] **T-VN-SEC-03** — next-전파 transitive(exact-pin build-time postcss@8.4.31 + 미사용 optional
-      sharp@0.34.5)와 Expo SDK-56 build-tooling transitive(brace-expansion/form-data/js-yaml/shell-quote)를
-      정리한다. 전자는 next 상위 릴리스가 pin을 올릴 때 자연 해소되거나, **scoped nested override**
-      (`overrides.next.{postcss,sharp}`)로 audit-green 시도 가능(단 next build 회귀 검증 + `npm ci` 수용 확인
-      필수 — global override는 이미 미적용 확인). 후자는 `@pinvi/mobile` Expo peer graph ERESOLVE 때문에
-      Expo SDK 상향과 함께 Sprint M-1 모바일 하드닝에서 처리한다. 모두 앱 request-path 미노출/미사용.
+- [x] **T-VN-SEC-03** — `npm audit` **high 7→0**(critical 0 유지). in-range 표적 update 4종
+      (brace-expansion/form-data/js-yaml/shell-quote) + next-전파분(postcss@8.4.31 dedupe→8.5.23,
+      미사용 optional sharp/@img 제거)은 lockfile 수술로 처리(overrides는 stale lock 재해석에만
+      미반영, 재생성 시 정상 적용 — 가드로 유지). 잔여 13 moderate는 Expo/maplibre major graph →
+      Sprint M-1 이관.
+      (완료: 2026-08-04, PR #426, claude → tasks-done.md)
 
 - [x] **T-VN-STYLE-01** — `npm run format:check` baseline을 Prettier로 일괄 포맷했다(포맷 207개, 기능
       변경 0). vendored byte-pinned 파일 12개(`apps/api/tests/contract/` SHA-256 핀 + `.agents/skills/`·
