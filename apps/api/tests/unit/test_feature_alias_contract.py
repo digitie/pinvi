@@ -26,7 +26,7 @@ from app.core.feature_alias_contract import (
 _GOLDEN = Path(__file__).resolve().parent.parent / "contract" / "feature-alias-map-v1-golden.json"
 # T-VN-32C 쌍 PR: Map 측 PR 머지 후 merge SHA로 고정하고 contract-pin-consistency
 # workflow에 byte-diff 단계를 추가한다. 그 전에는 vendored bytes sha만 고정한다.
-_UPSTREAM_MAP_COMMIT: str | None = None
+_UPSTREAM_MAP_COMMIT: str | None = "e12494bd5c4b5b2e1d51c72b6ddcf18eead0e53f"
 _GOLDEN_SHA256 = "3138587c6118849143d04e99fcb3263c54dd3b1f694408b5dc4a43dad12938ca"
 
 

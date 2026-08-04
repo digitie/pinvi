@@ -17,9 +17,9 @@ from app.core.config import (
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-service.json"
 )
-_ARTIFACT_COMMIT = "1285ff4974a2fa8d4b71f810dc9fca249397e8fc"
-_FUNCTIONAL_OWNER_COMMIT = "9b945ce832ecc3ed037d66c9d4e7bda9a1a69ae0"
-_SNAPSHOT_SHA256 = "622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2"
+_ARTIFACT_COMMIT = "e12494bd5c4b5b2e1d51c72b6ddcf18eead0e53f"
+_FUNCTIONAL_OWNER_COMMIT = "e12494bd5c4b5b2e1d51c72b6ddcf18eead0e53f"
+_SNAPSHOT_SHA256 = "144b4335d98fc021368b3297f5b8ed7b1c560e9850ebbdd8af71e45623ba7b3d"
 
 _GENERATION7_ROLE_SCOPES = {
     "command": {"cache-target:command"},

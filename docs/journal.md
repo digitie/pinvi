@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-04 (claude) — T-VN-32C 쌍 마무리: Map merge SHA 핀 고정 + service snapshot 재추출
+
+- Map 쌍 PR(#940, T-VN-32A/B/C)이 merge SHA
+  `e12494bd5c4b5b2e1d51c72b6ddcf18eead0e53f`로 착지 — 유예했던 마무리 절차 실행.
+- **alias-map golden 핀**: `_UPSTREAM_MAP_COMMIT` None → merge SHA. vendored
+  golden bytes(`3138587c…`)가 merge SHA 원본과 byte 동일함을 실측.
+  contract-pin-consistency에 alias 핀 checkout + byte-diff 단계 추가.
+- **service snapshot 재추출**: #940이 service 표면에 alias-map 2 endpoint +
+  batch item UUID 필드를 additive로 더해 재추출(sha `144b4335…`). cache-target
+  operation은 diff 실측 무변경 — 변경분 전부 T-VN-32 identity additive.
+  `_ARTIFACT_COMMIT`·`_FUNCTIONAL_OWNER_COMMIT`를 merge SHA로 회전
+  (ancestor 게이트: 직전 owner `9b945ce8…`는 merge SHA의 ancestor — 동일
+  commit 핀으로 게이트 유지). config 상수 + `.env.example` 동반 회전.
+- **배포 주의(codex T-VN-41-F 인지용)**: sync enable 환경은
+  `PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_OPENAPI_SHA256=144b4335…`,
+  `…_EXPECTED_SOURCE_REVISION=e12494bd…`로 같이 회전해야 startup fail-close에
+  걸리지 않는다. n150 paired live proof(Map `96efac…`)는 cache-target 표면
+  무변경이므로 결과 유효 — final boundary 전 재핀만 이 값으로.
+- 검증: 계약 3본 15 passed + config/env/contract 필터 155 passed + ruff clean.
+- **잔여(32C tail)**: PinVi deploy + `pinvi-feature-uuid-cutover` 실행 → 양
+  저장소 checksum 일치 → Map 응답 feature_id UUID 전환 tail PR 때 user/admin
+  스냅샷 재추출로 rollout 완결.
+
 ## 2026-08-04 (claude) — Map T-VN-32C 쌍: UUID+alias contract 소비 준비 (feat/tvn32c-uuid-alias)
 
 - **배경**: Map은 feature 정본 PK를 UUID surrogate로 전환 중(Map ADR-068,

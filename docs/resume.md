@@ -1,5 +1,15 @@
 # resume.md
 
+## 2026-08-04 (claude) — T-VN-32C 쌍 PR 마무리 (Map merge SHA 핀)
+
+Map #940(T-VN-32A/B/C)이 `e12494bd…`로 머지되어 유예분을 실행했다: alias-map golden 핀 고정 +
+contract-pin-consistency byte-diff 단계, service snapshot 재추출(sha `144b4335…`, cache-target 표면
+무변경 실측), artifact/functional owner·config·`.env.example` 동반 회전. sync enable 배포 env 2종도
+같은 값으로 회전 필요(T-VN-41-F 재핀과 같은 타이밍 권장).
+
+**다음 한 작업**: 이 branch PR 머지 후 PinVi deploy + `pinvi-feature-uuid-cutover`(dry-run 선행) →
+양 저장소 checksum 일치 보고. Map UUID 값 전환 tail PR 때 user/admin 스냅샷 재추출.
+
 ## 2026-08-04 (codex) — T-VN-41-P n150 격리 paired live 증명 완료
 
 Map `96efac…` / PinVi `20b225…` generation 7 pair의 full-ancestry·OpenAPI preflight, command/consumer

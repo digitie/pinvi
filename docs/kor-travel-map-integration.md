@@ -180,10 +180,12 @@ T-VN-41 source byte 계약은 Map commit
 leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
 commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
 
-서비스 계약은 Map artifact owner commit `1285ff4974a2fa8d4b71f810dc9fca249397e8fc`의
+서비스 계약은 Map artifact owner commit `e12494bd5c4b5b2e1d51c72b6ddcf18eead0e53f`(T-VN-32
+merge — alias-map 2 endpoint + batch UUID additive 재추출)의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor한다. SHA-256은
-`622ea54c98e9b0c09592cf84aced36227992c6bdf256742a3532b892f0efccf2`이고, functional owner는
-`9b945ce832ecc3ed037d66c9d4e7bda9a1a69ae0`이다. sync enable 설정은 functional owner revision과
+`144b4335d98fc021368b3297f5b8ed7b1c560e9850ebbdd8af71e45623ba7b3d`이고, functional owner는
+동일 commit `e12494bd5c4b5b2e1d51c72b6ddcf18eead0e53f`이다(직전 보안 경계 owner
+`9b945ce832…`는 이 commit의 ancestor). sync enable 설정은 functional owner revision과
 contract generation `7`도 exact하게 고정한다. CI는 artifact owner가 functional owner의 ancestor임을
 검증한다. functional owner는 배포 Map 이미지나 `/version`의 git SHA와 비교하지 않는 기능 계약
 provenance다. startup에서 stream control에
