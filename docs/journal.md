@@ -2,6 +2,30 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-05 (codex) — T-VN-41-F1 완료, F1A bootstrap 공백 확인
+
+- Docker-manager PR #130이 merge되고 trusted n150 Manager release에 설치됐다. installed release와
+  tracked manifest의 Map release·functional owner·OpenAPI artifact·PinVi candidate/release provenance를
+  read-only로 대조해 F1 완료를 확인했다.
+- 그 다음 `cache-target diagnose`는 Docker/DB mutation 전에 production canonical `.env`에 cache-target
+  API base URL, 4-role binding, `sync=false`, exact OpenAPI/source/generation pin이 아직 없음을
+  fail-close로 발견했다. 현재 CLI에는 이 최초 binding을 direct `.env` 편집 없이 생성하는 product
+  command가 없으므로 F2를 시작하지 않았다.
+- F1A를 별도 PR 단위로 추가한다. 명령은 root-only atomic env snapshot/lock 안에서 완전 미구성 상태만
+  default-off contract로 전환하고 secret-free evidence만 반환해야 한다. 구성 후에도 container/DB/final
+  audit을 변경하지 않는다.
+
+## 2026-08-05 (codex) — T-VN-41-F final boundary docs-first·stale pin 차단
+
+- H42 완료와 격리 paired proof 완료 뒤 production final boundary의 최신 Manager를 재검토했다.
+  durable writer-drain recovery의 이전 P1은 모두 current main에 반영돼 관련 회귀 150건도 통과했다.
+- production manifest는 old Map/PinVi/OpenAPI pair를 고정해 현재 deployed generation 7 pair와
+  다르다. 이것은 cutover 시작 전 fail-close해야 하는 release provenance drift이며 운영 env 수동 수정으로
+  우회하지 않는다.
+- `docs/execplan/t-vn-41-production-final-boundary.md`에 F1(Manager pair re-pin·배포)과 F2
+  (n150 diagnose·단일 durable cutover·append-only final audit)를 분리했다. F1이 끝나기 전에는
+  consumer enable이나 final boundary mutation을 실행하지 않는다.
+
 ## 2026-08-04 (claude) — T-VN-32C 쌍 마무리: Map merge SHA 핀 고정 + service snapshot 재추출
 
 - Map 쌍 PR(#940, T-VN-32A/B/C)이 merge SHA
