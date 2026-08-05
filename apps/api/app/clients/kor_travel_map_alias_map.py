@@ -46,6 +46,9 @@ class AliasMapChecksum:
 
     alias_count: int
     merkle_root: bytes
+    #: Map generator가 아직 uuid5 파생을 강제하는 세대인지 (Map 0083 이후 노출).
+    #: additive 필드 — 구 Map 응답에 없으면 None이며 계약 오류가 아니다.
+    derivation_enforced: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,7 +121,14 @@ class KorTravelMapAliasMapClient:
             or any(character not in _LOWER_HEX for character in merkle_root)
         ):
             raise AliasMapContractError("merkle_root는 lowercase SHA-256 hex여야 합니다.")
-        return AliasMapChecksum(alias_count=alias_count, merkle_root=bytes.fromhex(merkle_root))
+        derivation_enforced = data.get("derivation_enforced")
+        if derivation_enforced is not None and not isinstance(derivation_enforced, bool):
+            raise AliasMapContractError("derivation_enforced는 boolean 또는 부재여야 합니다.")
+        return AliasMapChecksum(
+            alias_count=alias_count,
+            merkle_root=bytes.fromhex(merkle_root),
+            derivation_enforced=derivation_enforced,
+        )
 
     async def fetch_page(
         self, *, after_alias: str | None, limit: int = _PAGE_LIMIT_MAX

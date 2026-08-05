@@ -73,6 +73,8 @@ class VerifiedAliasMap:
 
     mapping: dict[str, uuid.UUID]
     merkle_root: bytes
+    #: Map checksum 응답의 세대 표식 (없으면 None — 구 Map 서버).
+    derivation_enforced: bool | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +122,7 @@ async def pull_verified_alias_map(
     return VerifiedAliasMap(
         mapping={row.alias: row.feature_uuid for row in rows},
         merkle_root=recomputed_root,
+        derivation_enforced=checksum.derivation_enforced,
     )
 
 
@@ -202,6 +205,18 @@ async def run_feature_uuid_cutover(
     호출자가 transaction 경계를 소유한다 — 성공 시 commit, 예외 시 rollback.
     """
     verified = await pull_verified_alias_map(client)
+    # 자기-정본화 사전 검사 (리뷰 NEW-3): Map이 아직 파생 강제 세대
+    # (`derivation_enforced=True`)라면 값 전환(PR-2) 전이므로 정당한 UUID 리터럴
+    # 참조가 존재할 수 없다 — opt-in이어도 자기-정본화는 미검증 값의 정본화라
+    # fail-close로 거부한다. False는 비파생 세대(전환 후)라 통과. None은 표식이
+    # 없는 구 Map 서버 응답(additive 필드 부재)이므로 계약 오류 없이 통과하되,
+    # 세대를 증명하지 못한다는 한계는 opt-in 운영 판단에 남는다.
+    if accept_uuid_literals and verified.derivation_enforced is True:
+        raise FeatureUuidCutoverVerificationError(
+            "accept_uuid_literals가 켜졌지만 Map checksum이 derivation_enforced=True를 "
+            "보고합니다 — Map이 아직 파생 강제 세대(값 전환 전)라 정당한 UUID 리터럴이 "
+            "존재할 수 없습니다. 자기-정본화 없이 재실행하거나 Map PR-2 배포 후 재시도하십시오."
+        )
     reports = [
         await _rewrite_table(
             session,
