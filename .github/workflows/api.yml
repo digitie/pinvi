@@ -111,7 +111,7 @@ jobs:
             apps/api/tests/unit/test_kor_travel_map_cache_target_contract.py)
           source_pin=$(grep -oP '_UPSTREAM_MAP_COMMIT = "\K[0-9a-f]{40}' \
             apps/api/tests/unit/test_cache_target_contract.py)
-          alias_pin=$(grep -oP '_UPSTREAM_MAP_COMMIT: str \| None = "\K[0-9a-f]{40}' \
+          alias_pin=$(grep -oP '_UPSTREAM_MAP_COMMIT = "\K[0-9a-f]{40}' \
             apps/api/tests/unit/test_feature_alias_contract.py)
           echo "user_pin=$user_pin" >> "$GITHUB_OUTPUT"
           echo "admin_pin=$admin_pin" >> "$GITHUB_OUTPUT"
@@ -248,6 +248,18 @@ jobs:
           if ! diff -q apps/api/tests/contract/kor-travel-map-openapi-service.json \
                        .ktm-main/packages/kor-travel-map-api/openapi.service.json; then
             echo "::warning::service 스냅샷이 kor-travel-map main과 다르다 — 재-vendor 필요"
+            status=1
+          fi
+          # T-VN-32C: shared golden 2종도 같은 드리프트 감시에 넣는다 — Map이 벡터를
+          # 개정(예: 0083 nonderived_v1 추가)했는데 PinVi가 옛 사본으로 검증하는 맹점 방지.
+          if ! diff -q apps/api/tests/contract/feature-alias-map-v1-golden.json \
+                       .ktm-main/contracts/feature-alias-map-v1-golden.json; then
+            echo "::warning::feature-alias-map golden이 kor-travel-map main과 다르다 — 재-vendor 필요"
+            status=1
+          fi
+          if ! diff -q apps/api/tests/contract/cache-target-source-v1-golden.json \
+                       .ktm-main/contracts/cache-target-source-v1-golden.json; then
+            echo "::warning::cache-target-source golden이 kor-travel-map main과 다르다 — 재-vendor 필요"
             status=1
           fi
           if [ "$status" = 0 ]; then

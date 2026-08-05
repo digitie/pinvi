@@ -12,17 +12,21 @@
   존재할 수 없고, UUID 모양 미검증 값의 조용한 정본화는 poi 모델 불변식
   위반. Map측 적대 리뷰 F1) + `self_mapped_refs`/`self_mapped_samples` 분리
   집계. 기본 off·opt-in 양쪽 거동 테스트(17 passed·mypy strict·format green).
-- **유예 의무 3건(durable 기록 — Map PR-1 머지 SHA 확보 후 쌍 PR 머지 전
-  이행)**: ① vendored golden 재vendor + `_GOLDEN_SHA256`/`_UPSTREAM_MAP_COMMIT`
-  재핀 + 모듈 docstring·`models/poi.py` 주석 정정, ② CLI
-  `--accept-uuid-literals` 플래그 + runner 출력에 self_mapped 분리 표기(Map
-  PR-2와 동봉 — 리뷰 NEW-2), ③ `contract-staleness` 워크플로에 alias-map
-  golden(+cache-target-source golden) drift 감시 추가(리뷰 F5). 부가 후속:
-  Map checksum 응답의 `derivation_enforced` 표식을 cutover 사전 검사로 배선
-  (True면 경고/거부 — 리뷰 NEW-3).
+- **유예 의무 이행**: Map PR-1(#950)이 merge SHA
+  `2a8642bde10ef0cd384001fb72b1a3fc9fb5ae81`로 착지 → ① vendored golden
+  재vendor(bytes sha `dc0a6595…` — nonderived_v1 벡터 포함) +
+  `_UPSTREAM_MAP_COMMIT` 재핀 + 모듈 docstring·`models/poi.py` 주석 정정 +
+  golden `nonderived_v1` 독립 재계산 테스트(leaf·합산 root·정렬), ③
+  `contract-staleness`에 alias-map + cache-target-source golden drift 감시
+  추가(리뷰 F5) — 이 커밋으로 결선. 핀 과도기 `str | None` 스캐폴딩 제거
+  (workflow grep 동반 수정).
+- **잔여 유예(PR-2 동봉)**: ② CLI `--accept-uuid-literals` 플래그 + runner
+  출력에 self_mapped 분리 표기(리뷰 NEW-2). 부가 후속: Map checksum 응답의
+  `derivation_enforced` 표식을 cutover 사전 검사로 배선(True면 경고/거부 —
+  리뷰 NEW-3).
 
-**다음 한 작업**: Map PR-1 머지 SHA로 위 ① 이행 → 쌍 PR 생성·머지·배포 →
-그 후에만 Map 0083 배포(api 먼저 → dagster).
+**다음 한 작업**: 쌍 PR 머지+배포 → 그 후에만 Map 0083 배포(api 먼저 →
+dagster, dm#128 EXPECTED_HEAD=`0083_nonderived_uuid_generator` 재핀).
 
 ## 2026-08-04 (claude) — T-VN-32C 쌍 마무리: Map merge SHA 핀 고정 + service snapshot 재추출
 

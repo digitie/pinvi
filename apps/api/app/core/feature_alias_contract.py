@@ -16,10 +16,12 @@ canonical 규칙 (feature-alias-map-v1):
 - 정렬은 alias UTF-8 byte 오름차순, node는
   ``sha256(b"KTMFAMNODE\\x00" || left || right)``, 홀수 leaf는 승격, 빈 map은
   ``sha256(b"KTMFAMEMPTY\\x00")``.
-- ``legacy_feature_id`` 행은 ``feature_uuid == uuid5(namespace, alias)``
-  파생 검증을 함께 통과해야 "검증된 alias map"이다. namespace는 상수 복사가
-  아니라 ``uuid5(NAMESPACE_URL, 'kor-travel-map:feature-uuid:v1')``로 매번
-  재파생한다 — 두 저장소가 같은 basis에서 독립 계산함을 코드로 증명한다.
+- Map 0083 개정: per-row ``feature_uuid == uuid5(namespace, alias)`` 파생
+  등식은 더 이상 계약이 아니다(신규 행은 비파생 UUIDv7). "검증된 alias map"
+  판정 = row shape 검증 + merkle root/checksum 대조이며, 파생 일치는 backfill
+  세대 golden 벡터에만 역사 앵커로 남는다. ``derive_feature_uuid``와
+  namespace 재파생(``uuid5(NAMESPACE_URL, 'kor-travel-map:feature-uuid:v1')``)은
+  그 역사 앵커 대조 용도로만 유지한다.
 """
 
 from __future__ import annotations
