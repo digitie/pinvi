@@ -1,5 +1,15 @@
 # resume.md
 
+## 2026-08-05 (claude) — 32C 후속: 스냅샷 재핀+NEW-2/NEW-3 PR(#432, 리뷰 반영)
+
+user/admin 재핀(8c5bdcf8)·CLI --accept-uuid-literals·derivation_enforced
+양성 증명 게이트(적대 리뷰 F1: is not False — None(표식 이전 구 Map)도 거부).
+
+**즉시 후행(리뷰 F2 조건)**: service 스냅샷 재핀 PR — 8c5bdcf8의
+`FeatureAliasMapChecksumData.derivation_enforced`(required) 흡수 + config
+상수 회전 동반. NEW-3 근거 필드의 계약 게이트 공백을 닫는 선결 항목.
+
+
 ## 2026-08-05 (claude) — 32C 값 전환 수용 branch 준비 (파생 등식 폐기)
 
 `feat/tvn32c-nonderived-accept` — verify 파생 등식 제거·cutover 자기-정본화

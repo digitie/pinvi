@@ -205,17 +205,23 @@ async def run_feature_uuid_cutover(
     호출자가 transaction 경계를 소유한다 — 성공 시 commit, 예외 시 rollback.
     """
     verified = await pull_verified_alias_map(client)
-    # 자기-정본화 사전 검사 (리뷰 NEW-3): Map이 아직 파생 강제 세대
-    # (`derivation_enforced=True`)라면 값 전환(PR-2) 전이므로 정당한 UUID 리터럴
-    # 참조가 존재할 수 없다 — opt-in이어도 자기-정본화는 미검증 값의 정본화라
-    # fail-close로 거부한다. False는 비파생 세대(전환 후)라 통과. None은 표식이
-    # 없는 구 Map 서버 응답(additive 필드 부재)이므로 계약 오류 없이 통과하되,
-    # 세대를 증명하지 못한다는 한계는 opt-in 운영 판단에 남는다.
-    if accept_uuid_literals and verified.derivation_enforced is True:
+    # 자기-정본화 사전 검사 (리뷰 NEW-3, 재판정 F1로 양성 증명 강화): opt-in은
+    # Map이 비파생 세대임을 **증명한 경우에만**(derivation_enforced=False 명시)
+    # 허용한다. True는 파생 강제 세대(도달 시 거부), None(필드 부재)은 표식
+    # 도입(0083, 32C PR-1) 이전 구 Map — 바로 그 세대에서 정당한 UUID 리터럴이
+    # 존재할 수 없으므로 fail-close로 거부한다. 한계: False는 0083 세대의
+    # 증명이지 값 전환(PR-2) 배포 자체의 증명은 아니다 — 그 창의 판단은 운영
+    # runbook(PR-2 배포 확인 후 opt-in)에 남는다. dry-run에서도 동일 거부 —
+    # 선행 dry-run이 실행 전에 게이트 상태를 드러내는 것이 의도다.
+    if accept_uuid_literals and verified.derivation_enforced is not False:
+        observed = verified.derivation_enforced
         raise FeatureUuidCutoverVerificationError(
-            "accept_uuid_literals가 켜졌지만 Map checksum이 derivation_enforced=True를 "
-            "보고합니다 — Map이 아직 파생 강제 세대(값 전환 전)라 정당한 UUID 리터럴이 "
-            "존재할 수 없습니다. 자기-정본화 없이 재실행하거나 Map PR-2 배포 후 재시도하십시오."
+            "accept_uuid_literals가 켜졌지만 Map checksum이 비파생 세대를 증명하지 "
+            f"않습니다(derivation_enforced={observed!r}) — True는 파생 강제 세대, "
+            "None은 표식 이전 구 Map입니다. 두 세대 모두 정당한 UUID 리터럴이 "
+            "존재할 수 없습니다. 자기-정본화 없이 재실행하거나 Map 값 전환 배포를 "
+            "확인한 뒤 재시도하십시오. (이 거부는 checksum 불일치가 아니라 사전 "
+            "검사입니다.)"
         )
     reports = [
         await _rewrite_table(

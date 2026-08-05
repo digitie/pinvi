@@ -255,11 +255,11 @@ async def test_uuid_literal_refs_stay_unmatched_by_default() -> None:
 async def test_uuid_literal_refs_resolve_to_themselves_when_opted_in() -> None:
     """opt-in(accept_uuid_literals) — canonical 리터럴만 자기-정본화하고,
     분리 카운터·샘플로 판정 근거를 보존한다. 대문자/비정규 표기는 여전히
-    unmatched다."""
+    unmatched다. (opt-in은 비파생 세대 양성 증명이 전제 — F1 게이트.)"""
     import uuid as uuid_module
 
     rows = _rows()
-    client = _serve_alias_map(rows)
+    client = _serve_alias_map(rows, derivation_enforced=False)
     literal = "01890a5d-ac96-774b-bcce-b302099a8057"
     session = _FakeSession(
         {
@@ -309,6 +309,25 @@ async def test_opt_in_rejected_while_map_still_enforces_derivation() -> None:
     assert session.updates == []
 
 
+async def test_opt_in_rejected_when_checksum_lacks_derivation_field() -> None:
+    """재판정 F1 — 양성 증명 요구: 필드 부재(None)는 표식 도입(0083) **이전**
+    구 Map 세대라 파생이 실제로 강제되던 상태다. opt-in은 False 명시 증명이
+    있을 때만 통과하고, 부재는 fail-close로 거부한다."""
+    client = _serve_alias_map(_rows())  # derivation_enforced 필드 자체를 생략
+    checksum = await client.fetch_checksum()
+    assert checksum.derivation_enforced is None
+
+    session = _FakeSession({"trip_day_pois": ["01890a5d-ac96-774b-bcce-b302099a8057"]})
+    with pytest.raises(FeatureUuidCutoverVerificationError, match="derivation_enforced=None"):
+        await run_feature_uuid_cutover(
+            session,  # type: ignore[arg-type]
+            client,
+            accept_uuid_literals=True,
+        )
+    await client.aclose()
+    assert session.updates == []
+
+
 async def test_opt_in_passes_when_map_reports_nonderived_generation() -> None:
     """`derivation_enforced=False`(비파생 세대 = 값 전환 후)는 opt-in
     자기-정본화가 정당한 세대이므로 통과한다."""
@@ -326,24 +345,22 @@ async def test_opt_in_passes_when_map_reports_nonderived_generation() -> None:
     assert trip.updated_rows == 1
 
 
-async def test_opt_in_passes_when_checksum_lacks_derivation_field() -> None:
-    """additive 필드 부재(구 Map 서버) — 계약 오류가 아니며 None으로 파싱되어
-    통과한다. 세대를 증명하지 못하는 한계는 운영 판단(주석)으로 남는다."""
+async def test_default_path_unaffected_when_checksum_lacks_derivation_field() -> None:
+    """additive 필드 부재(구 Map 서버) — 계약 오류가 아니며 None으로 파싱된다.
+    기본 경로(opt-in off)는 표식과 무관하게 종전대로 동작한다(리터럴은
+    unmatched)."""
     client = _serve_alias_map(_rows())  # derivation_enforced 필드 자체를 생략
     checksum = await client.fetch_checksum()
     assert checksum.derivation_enforced is None
 
     literal = "01890a5d-ac96-774b-bcce-b302099a8057"
     session = _FakeSession({"trip_day_pois": [literal]})
-    report = await run_feature_uuid_cutover(
-        session,  # type: ignore[arg-type]
-        client,
-        accept_uuid_literals=True,
-    )
+    report = await run_feature_uuid_cutover(session, client)  # type: ignore[arg-type]
     await client.aclose()
     trip = {table.table: table for table in report.tables}["trip_day_pois"]
-    assert trip.self_mapped_refs == 1
-    assert trip.updated_rows == 1
+    assert trip.self_mapped_refs == 0
+    assert trip.unmatched_refs == (literal,)
+    assert session.updates == []
 
 
 async def test_run_cutover_dry_run_writes_nothing() -> None:
