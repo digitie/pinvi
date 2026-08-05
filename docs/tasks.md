@@ -19,9 +19,12 @@
 - [~] **T-VN-41-F — production final boundary** — 실행 정본은
       `docs/execplan/t-vn-41-production-final-boundary.md`다. `T-VN-41-P` 격리 증명과 H42는 완료됐으나,
       현재 production pair와 Docker-manager tracked pin이 달라 아래 PR 단위 선행 작업부터 한다.
-  - [ ] **T-VN-41-F1** — Docker-manager production pair re-pin: Map/PinVi release와 service OpenAPI
-        pin, regression, runbook을 현재 deployed generation 7 pair로 갱신·배포한다.
-  - [ ] **T-VN-41-F2** — n150 production Manager cutover: F1 배포 후 diagnose → 단일 durable
+  - [x] **T-VN-41-F1** — Docker-manager production pair re-pin: Map/PinVi release와 service OpenAPI
+        pin, regression, runbook을 현재 deployed generation 7 pair로 갱신·배포했다 (Manager PR #130).
+  - [ ] **T-VN-41-F1A** — Manager-owned default-off bootstrap: 최초 production 4-role binding·Map registry·
+        generation 7 pin을 direct `.env` 수정 없이 atomic provision하고 `sync=false` runtime attestation을
+        준비한다.
+  - [ ] **T-VN-41-F2** — n150 production Manager cutover: F1A 배포 후 diagnose → 단일 durable
         `cache-target cutover` → final audit/read-back과 live UI smoke를 수행한다.
 
 ## 보안·의존성

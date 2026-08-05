@@ -27,19 +27,28 @@ generation 7 cache-target consumer를 production에서 처음 활성화하고, M
 
 1. **T-VN-41-F1 — Docker-manager pair re-pin**: production manifest, cutover runbook,
    release/contract regression을 위 exact pair로 함께 갱신한다. Manager를 production에 배포한 뒤
-   read-only preflight가 같은 pair를 확인해야 한다.
-2. **T-VN-41-F2 — production boundary**: F1 merged·deployed 뒤 n150에서 사전 진단을 실행하고,
+   read-only preflight가 같은 pair를 확인해야 한다. 이 단계는 PR #130으로 merge·배포 완료했다.
+2. **T-VN-41-F1A — Manager-owned default-off bootstrap**: F1 뒤 최초 preflight가 production
+   canonical `.env`에 cache-target 4-role binding과 generation 7 contract가 전혀 없음을 fail-close로
+   확인했다. CLI가 없는 상태에서 운영자가 직접 `.env`를 편집하는 우회는 금지한다. Manager가 root-only
+   canonical env snapshot/lock 안에서 네 개의 독립 token과 Map digest registry를 생성하고, base URL·exact
+   static pin·`sync=false`를 한 번에 atomic write하는 별도 명령을 제품화한다. partial/이미 configured/
+   non-terminal journal은 거부하고 raw token·registry는 출력·journal·argv에 남기지 않는다. 구성 뒤에도
+   container/DB/finalize는 변경하지 않으며, generation 7 `sync=false` runtime attestation이 가능한 상태만
+   만든다.
+3. **T-VN-41-F2 — production boundary**: F1A merged·deployed 뒤 n150에서 사전 진단을 실행하고,
    새 canonical UUID로 `ktdctl cache-target cutover --json`을 정확히 한 번 시작한다. 결과를 이
    문서·작업 기록 PR에 secret-free 요약으로 추가한다.
 
-F1가 끝나기 전 F2 command를 실행하면 old manifest와 running pair가 달라 mutation 전에 중단돼야
+F1A가 끝나기 전 F2 command를 실행하면 incomplete production contract 때문에 mutation 전에 중단돼야
 한다. 그 fail-close를 우회하거나 manifest 값만 production에서 수동으로 바꾸지 않는다.
 
 ## F2 실행 gate
 
 1. n150에서 canonical production checkout의 Manager release, Map release, PinVi release, migration
-   head, pair manifest와 cache-target pin을 read-only로 대조한다. non-terminal window/enable/diagnostic
-   journal, active writer, stale runner, partial sync setting 하나라도 있으면 중단한다.
+   head, pair manifest와 cache-target pin을 read-only로 대조한다. F1A의 default-off 4-role binding과
+   runtime attestation, non-terminal window/enable/diagnostic journal, active writer, stale runner, partial
+   sync setting 하나라도 있으면 중단한다.
 2. `ktdctl cache-target diagnose --diagnostic-id <new-uuid> --json`으로 writer-drain, backup/archive,
    scratch restore, immutable pair와 authenticated smoke를 확인한다. 진단 receipt는 cutover backup으로
    재사용하지 않는다.

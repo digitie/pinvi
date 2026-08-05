@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-05 (codex) — T-VN-41-F1 완료, F1A bootstrap 공백 확인
+
+- Docker-manager PR #130이 merge되고 trusted n150 Manager release에 설치됐다. installed release와
+  tracked manifest의 Map release·functional owner·OpenAPI artifact·PinVi candidate/release provenance를
+  read-only로 대조해 F1 완료를 확인했다.
+- 그 다음 `cache-target diagnose`는 Docker/DB mutation 전에 production canonical `.env`에 cache-target
+  API base URL, 4-role binding, `sync=false`, exact OpenAPI/source/generation pin이 아직 없음을
+  fail-close로 발견했다. 현재 CLI에는 이 최초 binding을 direct `.env` 편집 없이 생성하는 product
+  command가 없으므로 F2를 시작하지 않았다.
+- F1A를 별도 PR 단위로 추가한다. 명령은 root-only atomic env snapshot/lock 안에서 완전 미구성 상태만
+  default-off contract로 전환하고 secret-free evidence만 반환해야 한다. 구성 후에도 container/DB/final
+  audit을 변경하지 않는다.
+
 ## 2026-08-05 (codex) — T-VN-41-F final boundary docs-first·stale pin 차단
 
 - H42 완료와 격리 paired proof 완료 뒤 production final boundary의 최신 Manager를 재검토했다.

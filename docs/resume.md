@@ -1,18 +1,18 @@
 # resume.md
 
-## 2026-08-05 (codex) — T-VN-41-F production final boundary 계획·re-pin 선행
+## 2026-08-05 (codex) — T-VN-41-F1 완료, default-off bootstrap 설계 선행
 
 H42와 n150 격리 paired proof는 완료됐고 Docker-manager durable writer-drain의 최신 재검토도
-P0/P1 없이 통과했다. 그러나 Manager tracked production manifest는 현재 deployed Map/PinVi
-generation 7 pair보다 이전 release/OpenAPI pin을 가리킨다. 이를 우회해 production consumer를
-열지 않는다.
+P0/P1 없이 통과했다. F1은 Manager PR #130으로 merge되어 trusted production release에도 배포됐다.
+installed manifest는 deployed Map/PinVi generation 7 pair와 OpenAPI artifact를 정확히 가리킨다.
 
-`docs/execplan/t-vn-41-production-final-boundary.md`에 F1(Manager exact pair re-pin·배포)과
-F2(n150 diagnose·단일 durable cutover·final audit)를 분리했다. F2는 F1이 merge·production
-deploy된 뒤에만 시작하며 raw Compose/직접 DB 조작은 금지한다.
+그 뒤 최초 n150 diagnostic은 production canonical `.env`에 4-role cache-target binding, exact
+contract pin, `sync=false` line이 전혀 없음을 fail-close로 확인했다. raw Compose/직접 DB 조작/직접
+`.env` 수정은 금지한다. 실행 정본에 F1A(Manager-owned atomic bootstrap)를 추가했고 F2는 F1A
+merge·production deploy·default-off runtime attestation 뒤에만 시작한다.
 
-**다음 한 작업**: `T-VN-41-F1` — Docker-manager manifest/runbook/regression을 deployed
-Map `c0afaa4e…` / PinVi `3ff54b8b…` / service OpenAPI `144b4335…` pair로 re-pin한다.
+**다음 한 작업**: `T-VN-41-F1A` — cache-target 4-role binding과 exact generation 7 default-off
+contract를 Manager-owned atomic bootstrap으로 제품화한다.
 
 ## 2026-08-04 (claude) — T-VN-32C 쌍 PR 마무리 (Map merge SHA 핀)
 
