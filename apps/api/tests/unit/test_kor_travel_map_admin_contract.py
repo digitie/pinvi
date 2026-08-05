@@ -34,8 +34,8 @@ _SNAPSHOT = (
     / "kor-travel-map-openapi-admin-detail-snapshot.json"
 )
 # 추출 원본 — kor-travel-map main. 갱신 절차는 docs/integrations/kor-travel-map-rest-api.md §8.
-_UPSTREAM_COMMIT = "5c0e0cae0cdb6009eb81c7c9030dcf5baf2719a2"
-_SNAPSHOT_SHA256 = "43afeba9ced588e5cd0fce410add45b4f3eaaef4a1c44227c5ff0dd245bd98b8"
+_UPSTREAM_COMMIT = "8c5bdcf8ce892439a8bb8e0013edf74127bf076a"
+_SNAPSHOT_SHA256 = "ea4adb6392a61d0df309e9cf3cf2ef0cdbb605784adc7812fe45cfdc3517b00a"
 
 # Map OpenAPI와 Pinvi 런타임이 함께 사용하는 canonical 경로.
 _SNAPSHOT_PATH = "/v1/admin/features/curated/{curated_feature_id}/detail-snapshot"

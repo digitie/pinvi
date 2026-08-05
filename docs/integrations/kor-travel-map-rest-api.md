@@ -28,13 +28,18 @@
 > PR #533으로 admin `/v1/admin/features/curated/{id}/detail-snapshot`으로 이관됐다(ADR-049, §2.11).
 > **정본 소스**: kor-travel-map `packages/kor-travel-map-api/openapi.user.json`(사용자 표면) +
 > `docs/architecture/rest-api.md`(prose 계약). 본 문서와 충돌 시 **openapi.user.json 우선**.
-> vendored 정본은 **2026-07-30(T-VN-16C) 기준 kor-travel-map
-> main commit `94ace1a9a27d204fabb9645d1ffd43c47ea60079`**(5-state service batch +
-> sparse 다중 날짜 bitemporal weather batch, int64 상한, DB 장애 503 포함)의
+> vendored 정본은 **2026-08-05(T-VN-32C PR-2) 기준 kor-travel-map
+> merge commit `8c5bdcf8ce892439a8bb8e0013edf74127bf076a`**(read 응답 feature_id
+> UUID 정본화 — 스펙 자체는 description-only 변경)의
 > 전체 파일이며 SHA-256은
-> `0a7cabb3c10fedc55ff306fb3c0d856122108fe74da63877a02c8c8092209990`다.
-> (직전 핀은 PR #794 merge `cf1f0bba…`/`91b30f40…`으로, Map main보다 174 commits 뒤처져 있었다.
-> 재동기화 시 실제 drift는 `PublicCurationItemView.external_component_id` 추가(Map migration 0066)와 price series identity 문구 변경뿐이었고, Pinvi가 소비하는 스키마는 구조 변화 0건이었다.)
+> `66fc83b3ae918b2f82ae9cf02bea162d8fa84967567e2a450493d93b1953e801`다.
+> (직전 핀 `94ace1a9…`(T-VN-16C)는 spec-touching 4 commits 뒤처져 있었다. 재동기화
+> 실제 drift는 ① Map `96814b2a`("split service openapi profile")가 ServiceToken 전용
+> batch 2경로(`/v1/features/batch`·`/v1/features/weather/batch`)와 batch schema를
+> user profile에서 `openapi.service.json`으로 분리 — user 게이트가 해당 경로·schema를
+> vendored **service** 스냅샷 기준으로 검증하도록 재배선했다(§8) — 와 ② admin subset의
+> `curation_status`/`reuse_policy`/`relation` enum 명시 additive 추가이며, Pinvi가
+> 소비하는 필드 타입 계약 자체는 무변경이었다.)
 > Pinvi contract gate는 이 pinned hash와 선택적 live 전체
 > 파일 equality를 검사하므로 일부 필드만 수기로 graft하지 않는다.
 > **관계**: 능력 격차 분석은 `docs/kor-travel-map-requirements.md`(이제 대부분 해소),
@@ -631,8 +636,14 @@ admin `GET /v1/admin/features/curated/{id}/detail-snapshot`이고, 이 표면에
 수기 httpx client(kor_travel_map 권고)가 kor_travel_map `openapi.user.json`과 silent drift하는 것을 막는다.
 
 - **vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-user.json` — Pinvi가 구현 기준으로
-  삼은 kor_travel_map main commit의 **전체 파일**(현 핀 `8880c29b`, T-VN-H07B에서 재동기화).
+  삼은 kor_travel_map main commit의 **전체 파일**(현 핀 `8c5bdcf8`, T-VN-32C PR-2에서 재동기화).
   pinned SHA-256은 본 문서 상단과 `test_kor_travel_map_contract.py`가 함께 고정한다.
+  **profile 분리(Map `96814b2a`)**: ServiceToken 전용 batch 2경로
+  (`/v1/features/batch`·`/v1/features/weather/batch`)는 user profile에서 분리돼
+  `openapi.service.json` 소속이다. user client는 여전히 두 경로를 호출하므로 같은 테스트가
+  해당 경로·batch schema 계약을 vendored `kor-travel-map-openapi-service.json`
+  (byte-핀 소유는 `test_kor_travel_map_cache_target_contract.py`) 기준으로 검증하고,
+  두 profile에 겹치는 schema(`Meta`/`WeatherMetricOut` 등)는 양쪽 모두에서 고정한다.
 - **계약 테스트**: `apps/api/tests/unit/test_kor_travel_map_contract.py` (CI `pytest tests/unit`에서 실행) —
   (1) user client 경로(`/v1/features/*`·`/v1/categories`·`/v1/public/*`) ⊆ 스냅샷 paths,
   (2) 매핑(`features.py`/`public.py`가 읽는 FeatureSummary/ClusterSummary/
