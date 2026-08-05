@@ -2,6 +2,17 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-05 (codex) — T-VN-41-F final boundary docs-first·stale pin 차단
+
+- H42 완료와 격리 paired proof 완료 뒤 production final boundary의 최신 Manager를 재검토했다.
+  durable writer-drain recovery의 이전 P1은 모두 current main에 반영돼 관련 회귀 150건도 통과했다.
+- production manifest는 old Map/PinVi/OpenAPI pair를 고정해 현재 deployed generation 7 pair와
+  다르다. 이것은 cutover 시작 전 fail-close해야 하는 release provenance drift이며 운영 env 수동 수정으로
+  우회하지 않는다.
+- `docs/execplan/t-vn-41-production-final-boundary.md`에 F1(Manager pair re-pin·배포)과 F2
+  (n150 diagnose·단일 durable cutover·append-only final audit)를 분리했다. F1이 끝나기 전에는
+  consumer enable이나 final boundary mutation을 실행하지 않는다.
+
 ## 2026-08-04 (claude) — T-VN-32C 쌍 마무리: Map merge SHA 핀 고정 + service snapshot 재추출
 
 - Map 쌍 PR(#940, T-VN-32A/B/C)이 merge SHA

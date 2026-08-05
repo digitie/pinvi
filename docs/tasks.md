@@ -16,10 +16,13 @@
 
 ## kor-travel-map compatible pair
 
-- [ ] **T-VN-41-F — production final boundary** — `T-VN-H42`와 docker-manager 재pin 뒤에만
-      `csv5 → Map H35 gc → final all-writer fence → Map typed evidence → Pin finalize`을 실행한다.
-      n150 격리 paired live 증명(`T-VN-41-P`)은 완료되어 `docs/tasks-done.md`로 이관했다. 이 task는
-      production consumer enable 또는 운영 데이터 변경을 포함하므로 현재 열지 않는다.
+- [~] **T-VN-41-F — production final boundary** — 실행 정본은
+      `docs/execplan/t-vn-41-production-final-boundary.md`다. `T-VN-41-P` 격리 증명과 H42는 완료됐으나,
+      현재 production pair와 Docker-manager tracked pin이 달라 아래 PR 단위 선행 작업부터 한다.
+  - [ ] **T-VN-41-F1** — Docker-manager production pair re-pin: Map/PinVi release와 service OpenAPI
+        pin, regression, runbook을 현재 deployed generation 7 pair로 갱신·배포한다.
+  - [ ] **T-VN-41-F2** — n150 production Manager cutover: F1 배포 후 diagnose → 단일 durable
+        `cache-target cutover` → final audit/read-back과 live UI smoke를 수행한다.
 
 ## 보안·의존성
 

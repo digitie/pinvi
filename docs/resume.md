@@ -1,5 +1,19 @@
 # resume.md
 
+## 2026-08-05 (codex) — T-VN-41-F production final boundary 계획·re-pin 선행
+
+H42와 n150 격리 paired proof는 완료됐고 Docker-manager durable writer-drain의 최신 재검토도
+P0/P1 없이 통과했다. 그러나 Manager tracked production manifest는 현재 deployed Map/PinVi
+generation 7 pair보다 이전 release/OpenAPI pin을 가리킨다. 이를 우회해 production consumer를
+열지 않는다.
+
+`docs/execplan/t-vn-41-production-final-boundary.md`에 F1(Manager exact pair re-pin·배포)과
+F2(n150 diagnose·단일 durable cutover·final audit)를 분리했다. F2는 F1이 merge·production
+deploy된 뒤에만 시작하며 raw Compose/직접 DB 조작은 금지한다.
+
+**다음 한 작업**: `T-VN-41-F1` — Docker-manager manifest/runbook/regression을 deployed
+Map `c0afaa4e…` / PinVi `3ff54b8b…` / service OpenAPI `144b4335…` pair로 re-pin한다.
+
 ## 2026-08-04 (claude) — T-VN-32C 쌍 PR 마무리 (Map merge SHA 핀)
 
 Map #940(T-VN-32A/B/C)이 `e12494bd…`로 머지되어 유예분을 실행했다: alias-map golden 핀 고정 +
