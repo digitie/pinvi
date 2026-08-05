@@ -216,13 +216,39 @@ async def test_run_cutover_rewrites_matched_refs_and_reports_unmatched() -> None
         assert params["feature_uuid"] == derive_feature_uuid(params["ref"])
 
 
-async def test_uuid_literal_refs_resolve_to_themselves() -> None:
-    """Map 값 전환(0083) 이후 저장된 canonical UUID 참조는 자기 자신이 정본이다.
+async def test_uuid_literal_refs_stay_unmatched_by_default() -> None:
+    """기본 경로(off) — UUID 리터럴은 자기-정본화되지 않고 unmatched로 보고된다.
 
-    alias map에는 legacy alias만 실리므로 UUID 리터럴은 map 미포함 — 종전에는
-    영구 unmatched로 방치됐다. canonical 형태만 인정하고 대문자/비정규 표기는
-    여전히 unmatched다.
+    feature_id는 클라이언트 자유 문자열이라 UUID 모양의 미검증 값을 조용히
+    정본화하면 "검증된 alias map만 채운다"는 모델 불변식이 깨진다(적대 리뷰
+    F1). Map 값 전환(PR-2) 배포 전에는 정당한 리터럴이 존재할 수 없으므로
+    기본 off가 안전 기본값이다.
     """
+    rows = _rows()
+    client = _serve_alias_map(rows)
+    literal = "01890a5d-ac96-774b-bcce-b302099a8057"
+    session = _FakeSession(
+        {
+            "trip_day_pois": [literal, "f_stale_gone"],
+            "curated_plan_pois": [],
+            "feature_suggestions": [],
+        }
+    )
+    report = await run_feature_uuid_cutover(session, client)  # type: ignore[arg-type]
+    await client.aclose()
+
+    trip = {table.table: table for table in report.tables}["trip_day_pois"]
+    assert trip.mapped_refs == 0
+    assert trip.self_mapped_refs == 0
+    assert trip.updated_rows == 0
+    assert set(trip.unmatched_refs) == {literal, "f_stale_gone"}
+    assert session.updates == []
+
+
+async def test_uuid_literal_refs_resolve_to_themselves_when_opted_in() -> None:
+    """opt-in(accept_uuid_literals) — canonical 리터럴만 자기-정본화하고,
+    분리 카운터·샘플로 판정 근거를 보존한다. 대문자/비정규 표기는 여전히
+    unmatched다."""
     import uuid as uuid_module
 
     rows = _rows()
@@ -239,11 +265,17 @@ async def test_uuid_literal_refs_resolve_to_themselves() -> None:
             "feature_suggestions": [],
         }
     )
-    report = await run_feature_uuid_cutover(session, client)  # type: ignore[arg-type]
+    report = await run_feature_uuid_cutover(
+        session,  # type: ignore[arg-type]
+        client,
+        accept_uuid_literals=True,
+    )
     await client.aclose()
 
     trip = {table.table: table for table in report.tables}["trip_day_pois"]
     assert trip.mapped_refs == 1
+    assert trip.self_mapped_refs == 1
+    assert trip.self_mapped_samples == (literal,)
     assert trip.updated_rows == 1
     assert set(trip.unmatched_refs) == {
         "01890A5D-AC96-774B-BCCE-B302099A8057",

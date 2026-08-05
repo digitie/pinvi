@@ -54,6 +54,7 @@ def _canonical_uuid_literal(ref: str) -> uuid.UUID | None:
         return None
     return parsed if str(parsed) == ref else None
 
+
 #: (table, legacy 참조 컬럼, UUID shadow 컬럼) — 전부 app schema.
 CUTOVER_TARGETS: Final[tuple[tuple[str, str, str], ...]] = (
     ("trip_day_pois", "feature_id", "feature_uuid"),
@@ -83,6 +84,8 @@ class CutoverTableReport:
     uuid_column: str
     distinct_refs: int
     mapped_refs: int
+    self_mapped_refs: int
+    self_mapped_samples: tuple[str, ...]
     updated_rows: int
     unmatched_refs: tuple[str, ...]
     unmatched_total: int
@@ -101,7 +104,7 @@ class FeatureUuidCutoverReport:
 async def pull_verified_alias_map(
     client: KorTravelMapAliasMapClient,
 ) -> VerifiedAliasMap:
-    """Map alias map 전체를 pull하고 독립 checksum·파생 검증을 통과시킨다."""
+    """Map alias map 전체를 pull하고 독립 checksum(shape+merkle) 검증을 통과시킨다."""
     checksum = await client.fetch_checksum()
     rows: list[FeatureAliasRow] = await client.fetch_all_rows()
     for row in rows:
@@ -128,6 +131,7 @@ async def _rewrite_table(
     uuid_column: str,
     mapping: dict[str, uuid.UUID],
     dry_run: bool,
+    accept_uuid_literals: bool,
 ) -> CutoverTableReport:
     refs = [
         str(value)
@@ -140,18 +144,24 @@ async def _rewrite_table(
             )
         ).scalars()
     ]
-    # Map 값 전환(0083) 이후 신규 저장 참조는 canonical UUID 리터럴이다 —
-    # alias map에는 legacy alias만 실리므로, UUID 리터럴 ref는 자기 자신이
-    # 정본 uuid다(shadow = ref). 이 분기가 없으면 값 전환 후 저장된 참조가
-    # 재실행마다 unmatched로 영구 방치된다.
+    # Map 값 전환(PR-2 배포) 이후 신규 저장 참조는 canonical UUID 리터럴이다 —
+    # alias map에는 legacy alias만 실리므로 리터럴은 map에서 해석되지 않는다.
+    # 자기-정본화(shadow = ref)는 **opt-in**(accept_uuid_literals)이며 기본
+    # off다: feature_id는 클라이언트 자유 문자열이라(스키마는 길이만 검증)
+    # UUID 모양의 미검증 값을 조용히 정본화하면 "검증된 alias map만 채운다"는
+    # 모델 불변식이 깨진다(적대 리뷰 F1). opt-in 시에도 alias-매칭과
+    # 자기-정본을 분리 집계·샘플 노출해 판정 근거를 보존한다.
     resolved: dict[str, uuid.UUID] = {}
+    self_mapped: list[str] = []
     for ref in refs:
         if ref in mapping:
             resolved[ref] = mapping[ref]
             continue
-        literal = _canonical_uuid_literal(ref)
-        if literal is not None:
-            resolved[ref] = literal
+        if accept_uuid_literals:
+            literal = _canonical_uuid_literal(ref)
+            if literal is not None:
+                resolved[ref] = literal
+                self_mapped.append(ref)
     matched = sorted(resolved)
     unmatched = sorted(ref for ref in refs if ref not in resolved)
     updated_rows = 0
@@ -172,6 +182,8 @@ async def _rewrite_table(
         uuid_column=uuid_column,
         distinct_refs=len(refs),
         mapped_refs=len(matched),
+        self_mapped_refs=len(self_mapped),
+        self_mapped_samples=tuple(sorted(self_mapped)[:_UNMATCHED_SAMPLE_LIMIT]),
         updated_rows=updated_rows,
         unmatched_refs=tuple(unmatched[:_UNMATCHED_SAMPLE_LIMIT]),
         unmatched_total=len(unmatched),
@@ -183,6 +195,7 @@ async def run_feature_uuid_cutover(
     client: KorTravelMapAliasMapClient,
     *,
     dry_run: bool = False,
+    accept_uuid_literals: bool = False,
 ) -> FeatureUuidCutoverReport:
     """검증된 alias map을 pull해 legacy 참조 3열의 UUID shadow를 채운다.
 
@@ -197,6 +210,7 @@ async def run_feature_uuid_cutover(
             uuid_column=uuid_column,
             mapping=verified.mapping,
             dry_run=dry_run,
+            accept_uuid_literals=accept_uuid_literals,
         )
         for table, ref_column, uuid_column in CUTOVER_TARGETS
     ]
