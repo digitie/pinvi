@@ -19,7 +19,7 @@ generation 7 cache-target consumer를 production에서 처음 활성화하고, M
 - 그러나 Docker-manager의 tracked production manifest는 이전 generation 7 pair를 고정한다.
   현재 배포 pair의 cache-target contract는 Map functional owner
   `e12494bd5c4b5b2e1d51c72b6ddcf18eead0e53f`, Map release
-  `c0afaa4e6f2051964db5a42f75b3744c8656fb0f`, PinVi release
+  `c0afaa4e318a2e2e6d85f53bb889af3e6adec8c1`, PinVi release
   `3ff54b8b15965c6ecd5c55b1419208e65831c7fe`, service OpenAPI SHA-256
   `144b4335d98fc021368b3297f5b8ed7b1c560e9850ebbdd8af71e45623ba7b3d`다.
 
