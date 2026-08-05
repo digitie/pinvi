@@ -89,17 +89,20 @@ class FeatureAliasRow:
 
 
 def verify_alias_row(row: FeatureAliasRow) -> None:
-    """canonical + 닫힌 kind + legacy 파생 검증 — 하나라도 어긋나면 거부."""
+    """canonical shape + 닫힌 kind 검증 — 하나라도 어긋나면 거부.
+
+    Map 0083(T-VN-32C 값 전환) 개정: 종전의 행별 uuid5 파생 등식은 폐기됐다 —
+    Map의 신규 행 ``feature_uuid``는 비파생 UUIDv7이고, 기존 backfill 세대의
+    파생값은 역사로 보존된다. "검증된 alias map"의 조건은 shape + merkle
+    재계산 일치이며, alias↔정본 사본 일치는 Map DB의 복합 FK가 선언적으로
+    보장한다(golden ``derivation.rule`` 개정판 정본).
+    ``derive_feature_uuid``는 역사 벡터 검증 참조로만 존속한다.
+    """
     validate_alias(row.alias)
     if not isinstance(row.feature_uuid, uuid.UUID):
         raise ValueError("feature_uuid는 uuid.UUID 타입이어야 합니다.")
     if row.alias_kind not in KNOWN_ALIAS_KINDS:
         raise ValueError(f"알 수 없는 alias_kind: {row.alias_kind!r}")
-    if row.alias_kind == LEGACY_ALIAS_KIND and row.feature_uuid != derive_feature_uuid(row.alias):
-        raise ValueError(
-            f"legacy alias 파생 불일치: alias={row.alias!r} "
-            f"feature_uuid={row.feature_uuid} expected={derive_feature_uuid(row.alias)}"
-        )
 
 
 def _leaf_parts(row: FeatureAliasRow) -> tuple[bytes, bytes]:

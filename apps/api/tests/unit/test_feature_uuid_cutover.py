@@ -208,11 +208,50 @@ async def test_run_cutover_rewrites_matched_refs_and_reports_unmatched() -> None
     assert by_table["trip_day_pois"].unmatched_total == 1
     assert by_table["curated_plan_pois"].mapped_refs == 1
     assert by_table["feature_suggestions"].distinct_refs == 0
-    # UPDATE는 매칭된 참조에만, 파생 검증을 통과한 map 값으로만 나간다.
+    # UPDATE는 매칭된 참조에만, 검증 통과한 map 값으로만 나간다 (이 fixture의
+    # map은 파생 세대 벡터라 파생값과 일치 — 역사 앵커).
     assert len(session.updates) == 2
     for sql, params in session.updates:
         assert "SET" in sql
         assert params["feature_uuid"] == derive_feature_uuid(params["ref"])
+
+
+async def test_uuid_literal_refs_resolve_to_themselves() -> None:
+    """Map 값 전환(0083) 이후 저장된 canonical UUID 참조는 자기 자신이 정본이다.
+
+    alias map에는 legacy alias만 실리므로 UUID 리터럴은 map 미포함 — 종전에는
+    영구 unmatched로 방치됐다. canonical 형태만 인정하고 대문자/비정규 표기는
+    여전히 unmatched다.
+    """
+    import uuid as uuid_module
+
+    rows = _rows()
+    client = _serve_alias_map(rows)
+    literal = "01890a5d-ac96-774b-bcce-b302099a8057"
+    session = _FakeSession(
+        {
+            "trip_day_pois": [
+                literal,
+                "01890A5D-AC96-774B-BCCE-B302099A8057",  # 대문자 — 비정규
+                "f_stale_gone",
+            ],
+            "curated_plan_pois": [],
+            "feature_suggestions": [],
+        }
+    )
+    report = await run_feature_uuid_cutover(session, client)  # type: ignore[arg-type]
+    await client.aclose()
+
+    trip = {table.table: table for table in report.tables}["trip_day_pois"]
+    assert trip.mapped_refs == 1
+    assert trip.updated_rows == 1
+    assert set(trip.unmatched_refs) == {
+        "01890A5D-AC96-774B-BCCE-B302099A8057",
+        "f_stale_gone",
+    }
+    [(_sql, params)] = session.updates
+    assert params["ref"] == literal
+    assert params["feature_uuid"] == uuid_module.UUID(literal)
 
 
 async def test_run_cutover_dry_run_writes_nothing() -> None:

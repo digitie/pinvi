@@ -78,16 +78,21 @@ def test_rows_match_independent_derivation_leaf_order_and_roots() -> None:
     assert alias_map_merkle_root(rows[:3]).hex() == fixture["odd_promotion_root_first3"]
 
 
-def test_derivation_mismatch_and_unknown_kind_are_rejected() -> None:
+def test_nonderived_uuid_row_is_accepted_and_unknown_kind_rejected() -> None:
+    """Map 0083 개정 — 비파생 UUIDv7 행 수용(파생 등식은 더 이상 계약이 아님).
+
+    기존 backfill 세대 행의 파생 일치는 위의 golden 벡터 테스트가 역사
+    앵커로 계속 고정한다(직접 ``derive_feature_uuid`` 대조).
+    """
     good = _rows()[0]
-    with pytest.raises(ValueError, match="파생 불일치"):
-        verify_alias_row(
-            FeatureAliasRow(
-                alias=good.alias,
-                feature_uuid=uuid.UUID("00000000-0000-4000-8000-000000000000"),
-                alias_kind=good.alias_kind,
-            )
+    verify_alias_row(
+        FeatureAliasRow(
+            alias=good.alias,
+            # 파생값이 아닌 canonical UUIDv7 — 0083 이후 신규 행 대표.
+            feature_uuid=uuid.UUID("01890a5d-ac96-774b-bcce-b302099a8057"),
+            alias_kind=good.alias_kind,
         )
+    )
     with pytest.raises(ValueError, match="alias_kind"):
         verify_alias_row(
             FeatureAliasRow(

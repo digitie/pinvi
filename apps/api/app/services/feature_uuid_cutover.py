@@ -39,6 +39,21 @@ from app.core.feature_alias_contract import (
 
 _UNMATCHED_SAMPLE_LIMIT: Final = 20
 
+
+def _canonical_uuid_literal(ref: str) -> uuid.UUID | None:
+    """ref가 canonical lowercase hyphenated UUID 리터럴이면 파싱값, 아니면 None.
+
+    표기 변형(hex-only/braced/대문자)은 수용하지 않는다 — Map 응답이 내보내는
+    canonical 형태만 자기-정본으로 인정한다(alias-map 계약과 동일 기준).
+    """
+    if len(ref) != 36:
+        return None
+    try:
+        parsed = uuid.UUID(ref)
+    except ValueError:
+        return None
+    return parsed if str(parsed) == ref else None
+
 #: (table, legacy 참조 컬럼, UUID shadow 컬럼) — 전부 app schema.
 CUTOVER_TARGETS: Final[tuple[tuple[str, str, str], ...]] = (
     ("trip_day_pois", "feature_id", "feature_uuid"),
@@ -125,8 +140,20 @@ async def _rewrite_table(
             )
         ).scalars()
     ]
-    matched = sorted(ref for ref in refs if ref in mapping)
-    unmatched = sorted(ref for ref in refs if ref not in mapping)
+    # Map 값 전환(0083) 이후 신규 저장 참조는 canonical UUID 리터럴이다 —
+    # alias map에는 legacy alias만 실리므로, UUID 리터럴 ref는 자기 자신이
+    # 정본 uuid다(shadow = ref). 이 분기가 없으면 값 전환 후 저장된 참조가
+    # 재실행마다 unmatched로 영구 방치된다.
+    resolved: dict[str, uuid.UUID] = {}
+    for ref in refs:
+        if ref in mapping:
+            resolved[ref] = mapping[ref]
+            continue
+        literal = _canonical_uuid_literal(ref)
+        if literal is not None:
+            resolved[ref] = literal
+    matched = sorted(resolved)
+    unmatched = sorted(ref for ref in refs if ref not in resolved)
     updated_rows = 0
     if not dry_run:
         for ref in matched:
@@ -136,7 +163,7 @@ async def _rewrite_table(
                     f"UPDATE app.{table} SET {uuid_column} = :feature_uuid "  # noqa: S608
                     f"WHERE {ref_column} = :ref RETURNING 1"
                 ),
-                {"feature_uuid": mapping[ref], "ref": ref},
+                {"feature_uuid": resolved[ref], "ref": ref},
             )
             updated_rows += len(list(result.scalars()))
     return CutoverTableReport(
