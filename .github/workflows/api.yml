@@ -98,17 +98,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Read pinned kor-travel-map commits
+      - name: Read pinned kor-travel-map commits and service metadata
         id: pins
         run: |
           user_pin=$(grep -oP '_UPSTREAM_COMMIT = "\K[0-9a-f]{40}' \
             apps/api/tests/unit/test_kor_travel_map_contract.py)
           admin_pin=$(grep -oP '_UPSTREAM_COMMIT = "\K[0-9a-f]{40}' \
             apps/api/tests/unit/test_kor_travel_map_admin_contract.py)
-          service_pin=$(grep -oP '_ARTIFACT_COMMIT = "\K[0-9a-f]{40}' \
-            apps/api/tests/unit/test_kor_travel_map_cache_target_contract.py)
-          service_owner=$(grep -oP '_FUNCTIONAL_OWNER_COMMIT = "\K[0-9a-f]{40}' \
-            apps/api/tests/unit/test_kor_travel_map_cache_target_contract.py)
+          service_pin=$(python -c 'import json; print(json.load(open("contracts/cache-target-upstream-map-v1.json"))["map_release_revision"])')
+          service_sha=$(python -c 'import json; print(json.load(open("contracts/cache-target-upstream-map-v1.json"))["service_openapi_sha256"])')
+          service_generation=$(python -c 'import json; print(json.load(open("contracts/cache-target-upstream-map-v1.json"))["contract_generation"])')
           source_pin=$(grep -oP '_UPSTREAM_MAP_COMMIT = "\K[0-9a-f]{40}' \
             apps/api/tests/unit/test_cache_target_contract.py)
           alias_pin=$(grep -oP '_UPSTREAM_MAP_COMMIT = "\K[0-9a-f]{40}' \
@@ -116,10 +115,45 @@ jobs:
           echo "user_pin=$user_pin" >> "$GITHUB_OUTPUT"
           echo "admin_pin=$admin_pin" >> "$GITHUB_OUTPUT"
           echo "service_pin=$service_pin" >> "$GITHUB_OUTPUT"
-          echo "service_owner=$service_owner" >> "$GITHUB_OUTPUT"
+          echo "service_sha=$service_sha" >> "$GITHUB_OUTPUT"
+          echo "service_generation=$service_generation" >> "$GITHUB_OUTPUT"
           echo "source_pin=$source_pin" >> "$GITHUB_OUTPUT"
           echo "alias_pin=$alias_pin" >> "$GITHUB_OUTPUT"
-          echo "user=$user_pin admin=$admin_pin service=$service_pin owner=$service_owner source=$source_pin alias=$alias_pin"
+          echo "user=$user_pin admin=$admin_pin service=$service_pin source=$source_pin alias=$alias_pin"
+
+      - name: service metadata and PinVi runtime contract are exact
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          import re
+          from pathlib import Path
+
+          metadata = json.loads(Path("contracts/cache-target-upstream-map-v1.json").read_text())
+          assert metadata.keys() == {
+              "contract_generation",
+              "map_release_revision",
+              "service_openapi_sha256",
+              "version",
+          }
+          assert metadata["version"] == 1
+          assert re.fullmatch(r"[0-9a-f]{40}", metadata["map_release_revision"])
+          assert re.fullmatch(r"[0-9a-f]{64}", metadata["service_openapi_sha256"])
+          assert metadata["contract_generation"] == 7
+
+          config = Path("apps/api/app/core/config.py").read_text()
+          assert (
+              f'CACHE_TARGET_SERVICE_MAP_RELEASE_REVISION = "{metadata["map_release_revision"]}"'
+              in config
+          )
+          assert f'"{metadata["service_openapi_sha256"]}"' in config
+          assert "CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION" not in config
+          assert "CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION" not in config
+          snapshot = Path("apps/api/tests/contract/kor-travel-map-openapi-service.json").read_bytes()
+          assert hashlib.sha256(snapshot).hexdigest() == metadata["service_openapi_sha256"]
+          PY
 
       - name: Checkout kor-travel-map at the user-surface pin
         uses: actions/checkout@v4
@@ -141,14 +175,6 @@ jobs:
           repository: digitie/kor-travel-map
           ref: ${{ steps.pins.outputs.service_pin }}
           path: .ktm-service-pin
-
-      - name: Checkout kor-travel-map at the service functional owner
-        uses: actions/checkout@v4
-        with:
-          repository: digitie/kor-travel-map
-          ref: ${{ steps.pins.outputs.service_owner }}
-          fetch-depth: 0
-          path: .ktm-service-owner
 
       - name: Checkout kor-travel-map at the cache-target source pin
         uses: actions/checkout@v4
@@ -188,12 +214,6 @@ jobs:
           diff -q \
             apps/api/tests/contract/kor-travel-map-openapi-service.json \
             .ktm-service-pin/packages/kor-travel-map-api/openapi.service.json
-
-      - name: service artifact is an ancestor of the functional owner
-        run: |
-          git -C .ktm-service-owner merge-base --is-ancestor \
-            "${{ steps.pins.outputs.service_pin }}" \
-            "${{ steps.pins.outputs.service_owner }}"
 
       - name: cache-target source bytes equal the pinned commit
         run: |

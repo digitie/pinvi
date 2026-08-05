@@ -1,35 +1,33 @@
 # resume.md
 
-## 2026-08-05 (claude) — T-VN-41-F 합류 지시: service 스냅샷 재핀 패키지 (codex 인수)
+## 2026-08-05 (codex) — T-VN-41-F1F-A: Map service artifact 재결박 구현·검증 완료, PR 대기
 
-**codex T-VN-41-F 재핀에 다음을 합류시킨다** (Claude측 32C 후속 리뷰 F2
-"즉시 후행 선결" — 같은 파일 세트라 PR 1회로 끝남). 기준 커밋 = Map
-`8c5bdcf8ce892439a8bb8e0013edf74127bf076a`(#952 값 전환 merge, prod 배포됨).
+F1D의 candidate static head가 live Map DB `0083_nonderived_uuid_generator`와 old Map release
+`c0af…`의 `0082_legacy_write_fence` 불일치를 mutation 전에 차단했다. manager F1F-B가
+Map/PinVi exact release·runtime contract·Map expected head를 하나의 pinset으로 원자 설치하려면,
+PinVi도 Map `8c5bdcf8ce892439a8bb8e0013edf74127bf076a`(#952, prod 배포)의 service artifact를
+독립적으로 증명해야 한다.
 
 1. **service 스냅샷 재vendor**: Map `8c5bdcf8`의
    `packages/kor-travel-map-api/openapi.service.json` → vendored
    `apps/api/tests/contract/kor-travel-map-openapi-service.json` byte-exact.
-   새 sha256 = `c7838b20bd70bf333590cb440a705dd7e893f9e366078d6c11200d701d40bdcd`.
-   구(144b4335) 대비 구조 diff는 `FeatureAliasMapChecksumData.derivation_enforced`
-   (required bool) 추가 1건 + FEATURE_ALIAS_MAP_INTEGRITY 문구 — **cache-target
-   operation 표면은 무변경**(2026-08-04 실측 유효). PinVi 소비측은 additive
-   파싱 기구현(#432)이라 코드 변경 불요.
-2. **핀·상수 회전** (전부 `8c5bdcf8` / 새 sha로):
-   `apps/api/tests/unit/test_kor_travel_map_cache_target_contract.py`의
-   `_ARTIFACT_COMMIT`·`_FUNCTIONAL_OWNER_COMMIT`·`_SNAPSHOT_SHA256`,
-   `app/core/config.py`의 `CACHE_TARGET_SERVICE_OPENAPI_SHA256`·
-   `CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION`·
-   `CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION`,
-   `.env.example`의 `PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION`.
-   `CACHE_TARGET_SERVICE_CONTRACT_GENERATION`(=7)·`…EXPECTED_CONTRACT_GENERATION`
-   (=7)은 cache-target 표면 무변경이므로 **유지**(diff 재실측으로 확인).
-   ancestry: `e12494bd`는 `8c5bdcf8`의 ancestor(실측) — CI ancestor 게이트 유지.
-3. **배포 동반 회전**: n150 sync-enable 배포 env 2종
-   (`…EXPECTED_SOURCE_REVISION`[현 prod `9b945ce8` — 구세대]·
-   `…EXPECTED_CONTRACT_GENERATION`)을 같은 값으로 회전. PinVi 배포 기준은
-   `2fdb02d4`(#432 merge — cutover CLI/게이트 포함) 이상.
-4. 검증: `ruff check`·`ruff format --check`·`mypy --strict app`·대상 unit +
-   CI `contract-pin-consistency`(user/admin/service 3핀 + alias golden).
+   SHA-256은 `c7838b20bd70bf333590cb440a705dd7e893f9e366078d6c11200d701d40bdcd`다.
+   `FeatureAliasMapChecksumData.derivation_enforced` required bool와 무파생 계약 문구만 추가됐고,
+   cache-target operation 표면과 generation은 `7`로 유지된다.
+2. **단일 Map release 정본화**: cache-target control-plane에서는 artifact/functional owner 이중 ref를
+   제거하고 exact Map release 하나를 source provenance로 쓴다. PinVi config, command gate,
+   `.env.example`, contract test가 같은 `8c5bdcf8`을 요구한다.
+3. **Manager가 읽을 메타데이터**: 버전 관리되는 비밀값 없는
+   `contracts/cache-target-upstream-map-v1.json`에 exact Map release, service SHA, generation을 기록하고
+   vendored bytes·runtime constants와 단위 테스트로 결박한다. Manager는 trusted exact PinVi worktree에서
+   이 file과 vendor artifact를 read-only로 검사한다.
+4. **배포 동반 회전**: PinVi exact release는 이 PR merge SHA 이상이어야 하며, Manager F1F-B가
+   source root/revision·Map expected head·PinVi expected SHA/source/generation을 one-shot canonical env
+   replace로 설치한다. ordinary runtime env 수동 편집은 허용하지 않는다.
+5. 검증: `ruff check`·`ruff format --check`·`mypy --strict app`·대상 unit 56건·metadata/runtime/vendor
+   gate가 통과했다. 전체 unit의 유일한 실패는 이 변경과 무관한 local Map user snapshot live-drift 1건이며,
+   이를 제외한 전체 unit은 통과했다. 다음은 이 release를 PR로 merge하고, 그 merge SHA를 Manager F1F-B
+   pinset의 exact PinVi release로 반영하는 일이다.
 
 ## 2026-08-05 (claude) — 32C 후속: 스냅샷 재핀+NEW-2/NEW-3 PR(#432, 리뷰 반영)
 

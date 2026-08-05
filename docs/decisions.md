@@ -2824,8 +2824,9 @@ command까지 허용하는 umbrella 권한이었다. PinVi는 command/consumer t
   `cache-target:nack`, `cache-target:snapshot` exact 5개 scope 배열만 부여한다.
 - PinVi ordinary runtime은 서로 다른 command/consumer token과 role-bound client를 유지한다. 두 token의
   상호 교환 성공을 negative live/config gate 실패로 취급한다.
-- generation 6 manifest/source 조합은 호환 fallback 없이 fail-close한다. paired Map final artifact가
-  확정될 때 artifact owner, functional owner, OpenAPI SHA-256, generation 7을 함께 exact 재핀한다.
+- generation 6 manifest/source 조합은 호환 fallback 없이 fail-close한다. paired Map final release가
+  확정될 때 Map exact release, OpenAPI SHA-256, generation 7을 하나의 pinset으로 exact 재핀한다.
+  artifact owner/functional owner 이중 provenance는 control-plane 정본으로 두지 않는다.
 - Map final provenance가 확정되기 전에는 placeholder나 임시 SHA를 runtime 상수에 넣지 않는다.
 
 ### 근거

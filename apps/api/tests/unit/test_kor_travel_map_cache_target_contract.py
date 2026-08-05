@@ -8,18 +8,19 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import (
-    CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION,
     CACHE_TARGET_SERVICE_CONTRACT_GENERATION,
-    CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION,
+    CACHE_TARGET_SERVICE_MAP_RELEASE_REVISION,
     CACHE_TARGET_SERVICE_OPENAPI_SHA256,
 )
 
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-service.json"
 )
-_ARTIFACT_COMMIT = "e12494bd5c4b5b2e1d51c72b6ddcf18eead0e53f"
-_FUNCTIONAL_OWNER_COMMIT = "e12494bd5c4b5b2e1d51c72b6ddcf18eead0e53f"
-_SNAPSHOT_SHA256 = "144b4335d98fc021368b3297f5b8ed7b1c560e9850ebbdd8af71e45623ba7b3d"
+_UPSTREAM_METADATA = (
+    Path(__file__).resolve().parents[4] / "contracts" / "cache-target-upstream-map-v1.json"
+)
+_MAP_RELEASE_REVISION = "8c5bdcf8ce892439a8bb8e0013edf74127bf076a"
+_SNAPSHOT_SHA256 = "c7838b20bd70bf333590cb440a705dd7e893f9e366078d6c11200d701d40bdcd"
 
 _GENERATION7_ROLE_SCOPES = {
     "command": {"cache-target:command"},
@@ -108,12 +109,17 @@ def _spec() -> dict[str, Any]:
     return loaded
 
 
-def test_service_snapshot_exact_bytes_and_runtime_pin_match_functional_owner() -> None:
+def test_service_snapshot_exact_bytes_runtime_pin_and_metadata_match_map_release() -> None:
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
     assert CACHE_TARGET_SERVICE_OPENAPI_SHA256 == _SNAPSHOT_SHA256
-    assert CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION == _ARTIFACT_COMMIT
-    assert CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION == _FUNCTIONAL_OWNER_COMMIT
+    assert CACHE_TARGET_SERVICE_MAP_RELEASE_REVISION == _MAP_RELEASE_REVISION
     assert CACHE_TARGET_SERVICE_CONTRACT_GENERATION == 7
+    assert json.loads(_UPSTREAM_METADATA.read_text()) == {
+        "contract_generation": CACHE_TARGET_SERVICE_CONTRACT_GENERATION,
+        "map_release_revision": CACHE_TARGET_SERVICE_MAP_RELEASE_REVISION,
+        "service_openapi_sha256": CACHE_TARGET_SERVICE_OPENAPI_SHA256,
+        "version": 1,
+    }
 
 
 def test_generation7_service_scope_and_caller_inventory_is_exact() -> None:
@@ -152,6 +158,13 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
         assert method in paths[path]
 
     schemas = spec["components"]["schemas"]
+    alias_map_checksum = schemas["FeatureAliasMapChecksumData"]
+    assert "derivation_enforced" in alias_map_checksum["required"]
+    assert alias_map_checksum["properties"]["derivation_enforced"] == {
+        "title": "Derivation Enforced",
+        "type": "boolean",
+    }
+
     snapshot = schemas["CacheTargetSnapshotData"]
     assert {"created_at", "expires_at"} <= set(snapshot["required"])
     assert snapshot["properties"]["created_at"]["format"] == "date-time"
