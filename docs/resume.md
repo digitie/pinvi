@@ -1,13 +1,44 @@
 # resume.md
 
+## 2026-08-05 (claude) — T-VN-41-F 합류 지시: service 스냅샷 재핀 패키지 (codex 인수)
+
+**codex T-VN-41-F 재핀에 다음을 합류시킨다** (Claude측 32C 후속 리뷰 F2
+"즉시 후행 선결" — 같은 파일 세트라 PR 1회로 끝남). 기준 커밋 = Map
+`8c5bdcf8ce892439a8bb8e0013edf74127bf076a`(#952 값 전환 merge, prod 배포됨).
+
+1. **service 스냅샷 재vendor**: Map `8c5bdcf8`의
+   `packages/kor-travel-map-api/openapi.service.json` → vendored
+   `apps/api/tests/contract/kor-travel-map-openapi-service.json` byte-exact.
+   새 sha256 = `c7838b20bd70bf333590cb440a705dd7e893f9e366078d6c11200d701d40bdcd`.
+   구(144b4335) 대비 구조 diff는 `FeatureAliasMapChecksumData.derivation_enforced`
+   (required bool) 추가 1건 + FEATURE_ALIAS_MAP_INTEGRITY 문구 — **cache-target
+   operation 표면은 무변경**(2026-08-04 실측 유효). PinVi 소비측은 additive
+   파싱 기구현(#432)이라 코드 변경 불요.
+2. **핀·상수 회전** (전부 `8c5bdcf8` / 새 sha로):
+   `apps/api/tests/unit/test_kor_travel_map_cache_target_contract.py`의
+   `_ARTIFACT_COMMIT`·`_FUNCTIONAL_OWNER_COMMIT`·`_SNAPSHOT_SHA256`,
+   `app/core/config.py`의 `CACHE_TARGET_SERVICE_OPENAPI_SHA256`·
+   `CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION`·
+   `CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION`,
+   `.env.example`의 `PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION`.
+   `CACHE_TARGET_SERVICE_CONTRACT_GENERATION`(=7)·`…EXPECTED_CONTRACT_GENERATION`
+   (=7)은 cache-target 표면 무변경이므로 **유지**(diff 재실측으로 확인).
+   ancestry: `e12494bd`는 `8c5bdcf8`의 ancestor(실측) — CI ancestor 게이트 유지.
+3. **배포 동반 회전**: n150 sync-enable 배포 env 2종
+   (`…EXPECTED_SOURCE_REVISION`[현 prod `9b945ce8` — 구세대]·
+   `…EXPECTED_CONTRACT_GENERATION`)을 같은 값으로 회전. PinVi 배포 기준은
+   `2fdb02d4`(#432 merge — cutover CLI/게이트 포함) 이상.
+4. 검증: `ruff check`·`ruff format --check`·`mypy --strict app`·대상 unit +
+   CI `contract-pin-consistency`(user/admin/service 3핀 + alias golden).
+
 ## 2026-08-05 (claude) — 32C 후속: 스냅샷 재핀+NEW-2/NEW-3 PR(#432, 리뷰 반영)
 
 user/admin 재핀(8c5bdcf8)·CLI --accept-uuid-literals·derivation_enforced
 양성 증명 게이트(적대 리뷰 F1: is not False — None(표식 이전 구 Map)도 거부).
 
-**즉시 후행(리뷰 F2 조건)**: service 스냅샷 재핀 PR — 8c5bdcf8의
-`FeatureAliasMapChecksumData.derivation_enforced`(required) 흡수 + config
-상수 회전 동반. NEW-3 근거 필드의 계약 게이트 공백을 닫는 선결 항목.
+**즉시 후행(리뷰 F2 조건)**: service 스냅샷 재핀 — 위 T-VN-41-F 합류
+패키지로 이행(codex 인수). NEW-3 근거 필드의 계약 게이트 공백을 닫는
+선결 항목.
 
 
 ## 2026-08-05 (claude) — 32C 값 전환 수용 branch 준비 (파생 등식 폐기)
