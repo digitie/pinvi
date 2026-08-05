@@ -25,8 +25,15 @@
   `derivation_enforced` 표식을 cutover 사전 검사로 배선(True면 경고/거부 —
   리뷰 NEW-3).
 
-**다음 한 작업**: 쌍 PR 머지+배포 → 그 후에만 Map 0083 배포(api 먼저 →
-dagster, dm#128 EXPECTED_HEAD=`0083_nonderived_uuid_generator` 재핀).
+- **쌍 PR #430 머지(`6325d814`, squash) + prod 배포(2026-08-05)**: release
+  export `pinvi-release-6325d81` + `.env` 2변수 회전 → api/web/dagster 3
+  컨테이너 healthy, `PINVI_SOURCE_REVISION=6325d814` 실측. 직후 Map 0083
+  배포 게이트 완주(api 먼저 → dagster, `derivation_enforced: false` 실측) —
+  Map journal 2026-08-05 (7)·dm#128 기록.
+
+**다음 한 작업**: Map PR-2(응답 값 전환)와 동봉 유예 이행 — CLI
+`--accept-uuid-literals`+runner self_mapped 출력, `derivation_enforced`
+cutover 사전 검사 배선, user/admin/service 스냅샷 재추출+핀 회전.
 
 ## 2026-08-04 (claude) — T-VN-32C 쌍 마무리: Map merge SHA 핀 고정 + service snapshot 재추출
 

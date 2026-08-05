@@ -7,8 +7,11 @@ opt-in(기본 off, 분리 집계). Map PR-1(#950, `2a8642bd…`) 머지 후 gold
 재vendor(`dc0a6595…`)+핀·nonderived_v1 독립 재계산 테스트·staleness golden
 감시(유예 ①③) 결선. 잔여 유예 ②(CLI 플래그, PR-2 동봉)는 journal 참조.
 
-**다음 한 작업**: 쌍 PR 머지+배포 → Map 0083 배포 게이트 해제(api 먼저 →
-dagster, dm#128 EXPECTED_HEAD 재핀).
+쌍 PR #430 머지(`6325d814`) + prod 배포 완료, Map 0083 배포 게이트 완주
+(2026-08-05, Map journal (7)·dm#128).
+
+**다음 한 작업**: Map PR-2(응답 값 전환) 동봉 유예 — CLI 플래그·
+`derivation_enforced` 배선·스냅샷 3종 재추출+핀 회전.
 
 ## 2026-08-04 (claude) — T-VN-32C 쌍 PR 마무리 (Map merge SHA 핀)
 
