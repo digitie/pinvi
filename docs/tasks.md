@@ -16,8 +16,10 @@
 
 ## kor-travel-map compatible pair
 
-- [ ] **T-VN-41-F — production final boundary** — `T-VN-H42`와 docker-manager 재pin 뒤에만
-      `csv5 → Map H35 gc → final all-writer fence → Map typed evidence → Pin finalize`을 실행한다.
+- [/] **T-VN-41-F — production final boundary** — F1F-A에서 Map `8c5bdcf8` service artifact를
+      PinVi release·metadata에 재결박하고, F1F-B docker-manager pinset/input installer가 이를 exact
+      source·env로 설치한 뒤에만 `csv5 → Map H35 gc → final all-writer fence → Map typed evidence → Pin
+      finalize`을 실행한다.
       n150 격리 paired live 증명(`T-VN-41-P`)은 완료되어 `docs/tasks-done.md`로 이관했다. 이 task는
       production consumer enable 또는 운영 데이터 변경을 포함하므로 현재 열지 않는다.
 

@@ -614,7 +614,9 @@ admin `GET /v1/admin/features/curated/{id}/detail-snapshot`이고, 이 표면에
   - `contract-pin-consistency` — **차단**(`aggregate-ci.yml`의 required check에 포함). Map을
     **핀 커밋**으로 체크아웃해 user 표면은 byte 비교, admin 표면은 재추출 비교를 실제로 실행한다.
     과거 live-compare가 sibling 체크아웃 부재로 skip되어 항상 green이던 맹점을 없앤다.
-    증명 대상은 **핀↔vendored 자기정합**(수기 graft·재-vendor 없는 핀 상승)이지 "최신"이 아니다.
+    cache-target service는 PinVi metadata의 단일 Map exact release를 checkout하고, metadata·runtime
+    constants·vendored bytes의 SHA-256/generation을 함께 대조한다. 증명 대상은 **핀↔vendored
+    자기정합**(수기 graft·재-vendor 없는 핀 상승)이지 "최신"이 아니다.
   - `contract-staleness` — 예약(매일)·비차단(PR에는 아예 돌지 않음). Map **main**과 비교해 핀
     자체가 뒤처졌는지 알린다. 핀 기준 비교로는 구조상 알 수 없는 종류(T-VN-H07B에서 user
     스냅샷이 174 commits 뒤처진 걸 뒤늦게 발견한 사례)를 담당한다.

@@ -14,12 +14,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PinviEnvironment = Literal["development", "test", "smoke", "staging", "production"]
 CACHE_TARGET_SERVICE_OPENAPI_SHA256 = (
-    "144b4335d98fc021368b3297f5b8ed7b1c560e9850ebbdd8af71e45623ba7b3d"
+    "c7838b20bd70bf333590cb440a705dd7e893f9e366078d6c11200d701d40bdcd"
 )
-# Vendored artifact의 immutable provenance다. 배포 이미지나 Map /version의 git SHA와 비교하지 않는다.
-CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION = "e12494bd5c4b5b2e1d51c72b6ddcf18eead0e53f"
-# Artifact owner 이후 계약 동작을 보강한 exact Map revision이다. 배포 전 ancestry를 CI에서 증명한다.
-CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION = "e12494bd5c4b5b2e1d51c72b6ddcf18eead0e53f"
+# service artifact, candidate source, runtime env가 공유하는 유일한 Map provenance다.
+CACHE_TARGET_SERVICE_MAP_RELEASE_REVISION = "8c5bdcf8ce892439a8bb8e0013edf74127bf076a"
 CACHE_TARGET_SERVICE_CONTRACT_GENERATION = 7
 
 
@@ -480,9 +478,9 @@ class Settings(BaseSettings):
             raise ValueError(
                 "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION must be a full lowercase git SHA"
             )
-        if source_revision != CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION:
+        if source_revision != CACHE_TARGET_SERVICE_MAP_RELEASE_REVISION:
             raise ValueError(
-                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION must match the service contract functional owner revision"
+                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION must match the service contract Map release revision"
             )
         if (
             self.pinvi_kor_travel_map_cache_target_expected_contract_generation

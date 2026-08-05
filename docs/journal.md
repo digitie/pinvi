@@ -2,6 +2,25 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-05 (codex) — T-VN-41-F1F-A: 단일 Map release service 계약 재결박
+
+- F1D가 old Map release `c0af…`의 static Alembic head `0082_legacy_write_fence`와 live DB
+  `0083_nonderived_uuid_generator`의 불일치를 mutation 전에 차단한 뒤, service 계약을 Map exact release
+  `8c5bdcf8ce892439a8bb8e0013edf74127bf076a`로 재vendor했다. vendored
+  `openapi.service.json`은 upstream bytes와 exact 동일하며 SHA-256은
+  `c7838b20bd70bf333590cb440a705dd7e893f9e366078d6c11200d701d40bdcd`다.
+- artifact owner/functional owner 이중 provenance를 control-plane에서 제거했다. runtime config,
+  `.env.example`, cutover/canary/final-boundary command gate가 같은 Map release 하나만 허용한다.
+  버전 관리되는 비밀값 없는 메타데이터 `contracts/cache-target-upstream-map-v1.json`이 Map release, service SHA,
+  generation `7`을 정본화하고 단위 테스트가 metadata·runtime constants·vendor bytes를 함께 대조한다.
+- `FeatureAliasMapChecksumData.derivation_enforced` required bool 및 0083 무파생 계약 문구를 service
+  snapshot에 반영했다. required CI `contract-pin-consistency`도 metadata를 읽어 service Map checkout과
+  byte equality를 검증하도록 전환해, 제거된 owner 상수 grep/ancestry gate를 남기지 않았다.
+- 단일 적대적 리뷰에서 CI의 구 owner grep/checkout 잔존 P1을 발견·반영했고 재검토 P0/P1 없음으로
+  수렴했다. 검증: `ruff check .`, `ruff format --check .`, `mypy --strict app` 통과; 대상 unit 56 passed;
+  전체 unit은 변경과 무관한 local Map user snapshot live-drift 1건에서만 실패(첫 실패 전 521 passed),
+  해당 기존 비교를 제외하면 전체 unit 통과; metadata/runtime/vendor 및 Map `8c5` bytes gate 통과.
+
 ## 2026-08-05 (claude) — 32C 값 전환 수용: 파생 등식 폐기·자기-정본화 opt-in (feat/tvn32c-nonderived-accept)
 
 - Map 0083(비파생 UUIDv7 generator) 개정 수용: `verify_alias_row`에서 행별
