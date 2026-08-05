@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import uuid
 from pathlib import Path
 from typing import Any, cast
 
@@ -24,10 +23,10 @@ from app.core.feature_alias_contract import (
 )
 
 _GOLDEN = Path(__file__).resolve().parent.parent / "contract" / "feature-alias-map-v1-golden.json"
-# T-VN-32C 쌍 PR: Map 측 PR 머지 후 merge SHA로 고정하고 contract-pin-consistency
-# workflow에 byte-diff 단계를 추가한다. 그 전에는 vendored bytes sha만 고정한다.
-_UPSTREAM_MAP_COMMIT: str | None = "e12494bd5c4b5b2e1d51c72b6ddcf18eead0e53f"
-_GOLDEN_SHA256 = "3138587c6118849143d04e99fcb3263c54dd3b1f694408b5dc4a43dad12938ca"
+# Map 0083 PR(#950) merge SHA 핀 — contract-pin-consistency workflow가 이 핀
+# 커밋 원본과 vendored bytes를 대조하고, contract-staleness가 main 드리프트를 감시한다.
+_UPSTREAM_MAP_COMMIT = "2a8642bde10ef0cd384001fb72b1a3fc9fb5ae81"
+_GOLDEN_SHA256 = "dc0a659500549061a98a2390bf8e225a122ec1639cc99d7a18b18a2f1c4984bc"
 
 
 def _fixture() -> dict[str, Any]:
@@ -47,8 +46,6 @@ def _rows() -> list[FeatureAliasRow]:
 
 def test_vendored_golden_bytes_are_pinned() -> None:
     assert hashlib.sha256(_GOLDEN.read_bytes()).hexdigest() == _GOLDEN_SHA256
-    if _UPSTREAM_MAP_COMMIT is None:
-        pytest.skip("Map T-VN-32C PR 머지 후 merge SHA 핀 고정 (쌍 PR 마무리 절차)")
     assert len(_UPSTREAM_MAP_COMMIT) == 40
 
 
@@ -78,16 +75,33 @@ def test_rows_match_independent_derivation_leaf_order_and_roots() -> None:
     assert alias_map_merkle_root(rows[:3]).hex() == fixture["odd_promotion_root_first3"]
 
 
-def test_derivation_mismatch_and_unknown_kind_are_rejected() -> None:
+def test_nonderived_golden_vector_matches_independent_derivation() -> None:
+    """Map 0083 개정 — 비파생 UUIDv7 행 수용(파생 등식은 더 이상 계약이 아님).
+
+    golden ``nonderived_v1`` 벡터를 독립 재계산으로 고정한다: leaf digest,
+    파생 세대 rows와 합친 merkle root·NFC UTF-8 정렬까지 Map과 동일해야 한다.
+    기존 backfill 세대 행의 파생 일치는 위의 golden 벡터 테스트가 역사
+    앵커로 계속 고정한다(직접 ``derive_feature_uuid`` 대조).
+    """
+    vector = _fixture()["nonderived_v1"]
+    row = FeatureAliasRow(
+        alias=vector["row"]["alias"],
+        feature_uuid=parse_canonical_feature_uuid(vector["row"]["feature_uuid"]),
+        alias_kind=vector["row"]["alias_kind"],
+    )
+    # 진짜 비파생 벡터임을 먼저 못박는다 — 파생값과 같으면 앵커가 무의미하다.
+    assert row.feature_uuid != derive_feature_uuid(row.alias)
+    verify_alias_row(row)
+    assert alias_leaf_digest(row).hex() == vector["leaf_sha256"]
+    combined = [*_rows(), row]
+    assert alias_map_merkle_root(combined).hex() == vector["root_with_merkle_v1_rows"]
+    assert [r.alias for r in sorted(combined, key=lambda r: r.alias.encode("utf-8"))] == vector[
+        "expected_nfc_utf8_order_with_merkle_v1_rows"
+    ]
+
+
+def test_unknown_alias_kind_rejected() -> None:
     good = _rows()[0]
-    with pytest.raises(ValueError, match="파생 불일치"):
-        verify_alias_row(
-            FeatureAliasRow(
-                alias=good.alias,
-                feature_uuid=uuid.UUID("00000000-0000-4000-8000-000000000000"),
-                alias_kind=good.alias_kind,
-            )
-        )
     with pytest.raises(ValueError, match="alias_kind"):
         verify_alias_row(
             FeatureAliasRow(

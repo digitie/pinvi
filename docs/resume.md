@@ -1,5 +1,15 @@
 # resume.md
 
+## 2026-08-05 (claude) — 32C 값 전환 수용 branch 준비 (파생 등식 폐기)
+
+`feat/tvn32c-nonderived-accept` — verify 파생 등식 제거·cutover 자기-정본화
+opt-in(기본 off, 분리 집계). Map PR-1(#950, `2a8642bd…`) 머지 후 golden
+재vendor(`dc0a6595…`)+핀·nonderived_v1 독립 재계산 테스트·staleness golden
+감시(유예 ①③) 결선. 잔여 유예 ②(CLI 플래그, PR-2 동봉)는 journal 참조.
+
+**다음 한 작업**: 쌍 PR 머지+배포 → Map 0083 배포 게이트 해제(api 먼저 →
+dagster, dm#128 EXPECTED_HEAD 재핀).
+
 ## 2026-08-04 (claude) — T-VN-32C 쌍 PR 마무리 (Map merge SHA 핀)
 
 Map #940(T-VN-32A/B/C)이 `e12494bd…`로 머지되어 유예분을 실행했다: alias-map golden 핀 고정 +

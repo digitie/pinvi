@@ -208,11 +208,82 @@ async def test_run_cutover_rewrites_matched_refs_and_reports_unmatched() -> None
     assert by_table["trip_day_pois"].unmatched_total == 1
     assert by_table["curated_plan_pois"].mapped_refs == 1
     assert by_table["feature_suggestions"].distinct_refs == 0
-    # UPDATE는 매칭된 참조에만, 파생 검증을 통과한 map 값으로만 나간다.
+    # UPDATE는 매칭된 참조에만, 검증 통과한 map 값으로만 나간다 (이 fixture의
+    # map은 파생 세대 벡터라 파생값과 일치 — 역사 앵커).
     assert len(session.updates) == 2
     for sql, params in session.updates:
         assert "SET" in sql
         assert params["feature_uuid"] == derive_feature_uuid(params["ref"])
+
+
+async def test_uuid_literal_refs_stay_unmatched_by_default() -> None:
+    """기본 경로(off) — UUID 리터럴은 자기-정본화되지 않고 unmatched로 보고된다.
+
+    feature_id는 클라이언트 자유 문자열이라 UUID 모양의 미검증 값을 조용히
+    정본화하면 "검증된 alias map만 채운다"는 모델 불변식이 깨진다(적대 리뷰
+    F1). Map 값 전환(PR-2) 배포 전에는 정당한 리터럴이 존재할 수 없으므로
+    기본 off가 안전 기본값이다.
+    """
+    rows = _rows()
+    client = _serve_alias_map(rows)
+    literal = "01890a5d-ac96-774b-bcce-b302099a8057"
+    session = _FakeSession(
+        {
+            "trip_day_pois": [literal, "f_stale_gone"],
+            "curated_plan_pois": [],
+            "feature_suggestions": [],
+        }
+    )
+    report = await run_feature_uuid_cutover(session, client)  # type: ignore[arg-type]
+    await client.aclose()
+
+    trip = {table.table: table for table in report.tables}["trip_day_pois"]
+    assert trip.mapped_refs == 0
+    assert trip.self_mapped_refs == 0
+    assert trip.updated_rows == 0
+    assert set(trip.unmatched_refs) == {literal, "f_stale_gone"}
+    assert session.updates == []
+
+
+async def test_uuid_literal_refs_resolve_to_themselves_when_opted_in() -> None:
+    """opt-in(accept_uuid_literals) — canonical 리터럴만 자기-정본화하고,
+    분리 카운터·샘플로 판정 근거를 보존한다. 대문자/비정규 표기는 여전히
+    unmatched다."""
+    import uuid as uuid_module
+
+    rows = _rows()
+    client = _serve_alias_map(rows)
+    literal = "01890a5d-ac96-774b-bcce-b302099a8057"
+    session = _FakeSession(
+        {
+            "trip_day_pois": [
+                literal,
+                "01890A5D-AC96-774B-BCCE-B302099A8057",  # 대문자 — 비정규
+                "f_stale_gone",
+            ],
+            "curated_plan_pois": [],
+            "feature_suggestions": [],
+        }
+    )
+    report = await run_feature_uuid_cutover(
+        session,  # type: ignore[arg-type]
+        client,
+        accept_uuid_literals=True,
+    )
+    await client.aclose()
+
+    trip = {table.table: table for table in report.tables}["trip_day_pois"]
+    assert trip.mapped_refs == 1
+    assert trip.self_mapped_refs == 1
+    assert trip.self_mapped_samples == (literal,)
+    assert trip.updated_rows == 1
+    assert set(trip.unmatched_refs) == {
+        "01890A5D-AC96-774B-BCCE-B302099A8057",
+        "f_stale_gone",
+    }
+    [(_sql, params)] = session.updates
+    assert params["ref"] == literal
+    assert params["feature_uuid"] == uuid_module.UUID(literal)
 
 
 async def test_run_cutover_dry_run_writes_nothing() -> None:

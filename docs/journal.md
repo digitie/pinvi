@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-05 (claude) — 32C 값 전환 수용: 파생 등식 폐기·자기-정본화 opt-in (feat/tvn32c-nonderived-accept)
+
+- Map 0083(비파생 UUIDv7 generator) 개정 수용: `verify_alias_row`에서 행별
+  uuid5 파생 등식 제거(검증 = canonical shape + closed kind + merkle 재계산.
+  backfill 세대 파생값은 golden 벡터 직접 대조가 역사 앵커로 고정).
+- cutover에 UUID 리터럴 자기-정본(shadow=ref) 능력 추가하되 **opt-in**
+  (`accept_uuid_literals`, 기본 off — Map PR-2 배포 전에는 정당한 리터럴이
+  존재할 수 없고, UUID 모양 미검증 값의 조용한 정본화는 poi 모델 불변식
+  위반. Map측 적대 리뷰 F1) + `self_mapped_refs`/`self_mapped_samples` 분리
+  집계. 기본 off·opt-in 양쪽 거동 테스트(17 passed·mypy strict·format green).
+- **유예 의무 이행**: Map PR-1(#950)이 merge SHA
+  `2a8642bde10ef0cd384001fb72b1a3fc9fb5ae81`로 착지 → ① vendored golden
+  재vendor(bytes sha `dc0a6595…` — nonderived_v1 벡터 포함) +
+  `_UPSTREAM_MAP_COMMIT` 재핀 + 모듈 docstring·`models/poi.py` 주석 정정 +
+  golden `nonderived_v1` 독립 재계산 테스트(leaf·합산 root·정렬), ③
+  `contract-staleness`에 alias-map + cache-target-source golden drift 감시
+  추가(리뷰 F5) — 이 커밋으로 결선. 핀 과도기 `str | None` 스캐폴딩 제거
+  (workflow grep 동반 수정).
+- **잔여 유예(PR-2 동봉)**: ② CLI `--accept-uuid-literals` 플래그 + runner
+  출력에 self_mapped 분리 표기(리뷰 NEW-2). 부가 후속: Map checksum 응답의
+  `derivation_enforced` 표식을 cutover 사전 검사로 배선(True면 경고/거부 —
+  리뷰 NEW-3).
+
+**다음 한 작업**: 쌍 PR 머지+배포 → 그 후에만 Map 0083 배포(api 먼저 →
+dagster, dm#128 EXPECTED_HEAD=`0083_nonderived_uuid_generator` 재핀).
+
 ## 2026-08-04 (claude) — T-VN-32C 쌍 마무리: Map merge SHA 핀 고정 + service snapshot 재추출
 
 - Map 쌍 PR(#940, T-VN-32A/B/C)이 merge SHA
