@@ -54,6 +54,10 @@ WORKDIR /app
 RUN mkdir -p /tmp/pinvi-prometheus
 
 # 의존성 캐시 layer
+# Hatch의 wheel ``force-include``는 pyproject root(/app) 기준으로 canonical
+# contract를 찾는다. 따라서 editable 설치 이전부터 정확한 source-relative 위치에
+# 둔다. 이후 runtime package destination으로도 한 번만 복사한다.
+COPY contracts/kor-travel-map-service-provenance-v1.json /contracts/kor-travel-map-service-provenance-v1.json
 COPY apps/api/pyproject.toml ./pyproject.toml
 RUN pip install --upgrade pip && pip install -e .
 

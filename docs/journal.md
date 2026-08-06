@@ -2,6 +2,16 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-06 (codex) — T-VN-41-F1J-D 격리 Docker wheel source 경로 보정
+
+- n150의 새 Compose project·DB·volume과 일회성 credential에서 Map API/UI 기동까지 통과했으나, PinVi API
+  Docker build의 첫 `pip install -e .`가 Hatch `force-include` source `../../contracts/...`를 `/contracts`에서
+  찾지 못해 실패했다. 이는 기존 DB나 운영 stack과 무관한 image build 결함이며, 격리 자원은 즉시 폐기했다.
+- Dockerfile은 canonical provenance source를 editable install 이전에 `/contracts`에 복사하고, 단위 검증은
+  그 copy가 install보다 앞서는지 고정한다. package destination `app/_contract_data`와 runtime loader는 유지해
+  source·wheel·Docker가 동일 bytes를 쓰게 한다. 이 fix merge 뒤 같은 exact pinset의 destructive rehearsal과
+  Playwright UI E2E를 재실행한다.
+
 ## 2026-08-06 (codex) — T-VN-41-F1J-C merge 완료, isolated rehearsal 전환
 
 - PinVi PR #435(`2d59855…`)와 docker-manager PR #160(`0ff7f8d…`)이 merge됐다. 일반 Map service

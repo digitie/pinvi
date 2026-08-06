@@ -30,7 +30,9 @@
         주입하지 않는다.
   - [/] **F1J-D n150 final isolated rehearsal/UI E2E** — F1J-C의 exact pinset만으로 별도 Compose
         project·DB·volume을 생성해 destructive rehearsal과 live UI E2E를 실행하고 즉시 폐기한다. 운영
-        stack·DB·backup/restore는 금지한다. code PR merge 뒤 격리 rehearsal 준비를 시작했다.
+        stack·DB·backup/restore는 금지한다. 첫 격리 build에서 wheel `force-include` source path가 Docker
+        filesystem에 없음을 확인했다. canonical contract를 editable install 전에 같은 source-relative 위치에
+        복사하는 PinVi Docker fix PR을 merge한 뒤 동일 pinset rehearsal을 재개한다.
 
 ## 보안·의존성
 
