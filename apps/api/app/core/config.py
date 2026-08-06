@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import re
 from functools import lru_cache
+from importlib.resources import files
 from pathlib import Path
 from typing import Literal, Self, cast
 from urllib.parse import urlsplit
@@ -17,13 +18,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PinviEnvironment = Literal["development", "test", "smoke", "staging", "production"]
 _SERVICE_PROVENANCE_FILENAME = "kor-travel-map-service-provenance-v1.json"
+_PACKAGED_SERVICE_PROVENANCE_PATH = f"_contract_data/{_SERVICE_PROVENANCE_FILENAME}"
 
 
-def _service_provenance_path() -> Path:
+def _service_provenance_text() -> str:
+    packaged = files("app").joinpath(_PACKAGED_SERVICE_PROVENANCE_PATH)
+    if packaged.is_file():
+        return packaged.read_text(encoding="utf-8")
+
     for directory in Path(__file__).resolve().parents:
         candidate = directory / "contracts" / _SERVICE_PROVENANCE_FILENAME
         if candidate.is_file():
-            return candidate
+            return candidate.read_text(encoding="utf-8")
     raise RuntimeError(f"Map service provenance file is missing: {_SERVICE_PROVENANCE_FILENAME}")
 
 
@@ -45,7 +51,7 @@ def _capability_generation(capabilities: dict[str, object], name: str) -> int:
 
 
 def _load_service_provenance() -> tuple[str, str, int, int]:
-    raw = json.loads(_service_provenance_path().read_text(encoding="utf-8"))
+    raw = json.loads(_service_provenance_text())
     if not isinstance(raw, dict):
         raise RuntimeError("Map service provenance must be an object")
     payload = cast(dict[str, object], raw)

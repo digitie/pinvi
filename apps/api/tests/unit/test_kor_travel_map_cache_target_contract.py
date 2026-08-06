@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
@@ -125,6 +126,18 @@ def test_service_snapshot_exact_bytes_runtime_pin_and_provenance_match_map_relea
         "service_openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
         "version": 1,
     }
+
+
+def test_wheel_build_includes_the_general_service_provenance() -> None:
+    package_artifact = files("app").joinpath(
+        "_contract_data/kor-travel-map-service-provenance-v1.json"
+    )
+    assert package_artifact.is_file() is False
+    pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    assert (
+        '"../../contracts/kor-travel-map-service-provenance-v1.json" = '
+        '"app/_contract_data/kor-travel-map-service-provenance-v1.json"'
+    ) in pyproject.read_text()
 
 
 def test_c6c_fixture_contract_is_pinned_but_not_a_pinvi_runtime_scope() -> None:

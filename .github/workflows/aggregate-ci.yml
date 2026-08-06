@@ -45,6 +45,7 @@ jobs:
             const requiredChecks = [];
             if (hasAny([
               startsWith("apps/api/"),
+              startsWith("contracts/"),
               equals(".github/workflows/api.yml"),
               equals("pyproject.toml"),
             ])) {

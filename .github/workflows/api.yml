@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - 'apps/api/**'
+      - 'contracts/**'
       - '.github/workflows/api.yml'
       - 'pyproject.toml'
   push:
     branches: [main]
     paths:
       - 'apps/api/**'
+      - 'contracts/**'
       - '.github/workflows/api.yml'
   # T-VN-H07D: vendored 스냅샷이 kor-travel-map main보다 뒤처졌는지 매일 비차단으로 확인한다.
   schedule:
@@ -85,6 +87,29 @@ jobs:
           PINVI_JWT_SECRET_KEY: pinvi-ci-jwt-secret-32-bytes-minimum-aaaa
           PINVI_DATABASE_URL: postgresql+asyncpg://pinvi:pinvi_ci_password@localhost:5432/pinvi_ci
         run: pytest tests/integration -q
+
+      - name: wheel install resolves the packaged Map service provenance
+        run: |
+          rm -rf /tmp/pinvi-api-wheel /tmp/pinvi-api-wheel-verify
+          mkdir -p /tmp/pinvi-api-wheel
+          python -m pip wheel --no-deps --wheel-dir /tmp/pinvi-api-wheel .
+          python -m venv --system-site-packages /tmp/pinvi-api-wheel-verify
+          /tmp/pinvi-api-wheel-verify/bin/pip install --no-deps --force-reinstall /tmp/pinvi-api-wheel/*.whl
+          (
+            cd /tmp
+            /tmp/pinvi-api-wheel-verify/bin/python - <<'PY'
+          from pathlib import Path
+
+          import app.core.config as config
+
+          assert Path(config.__file__).is_relative_to("/tmp/pinvi-api-wheel-verify")
+          assert config.KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256 == (
+              "6ad8c1c9c1d391c54e7592b64ed9f0225164b613a5c2824d8eafd3da9bd36f1e"
+          )
+          assert config.KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION == 7
+          assert config.KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION == 2
+          PY
+          )
 
   # T-VN-H07D: vendored 스냅샷의 live-compare가 sibling 체크아웃 부재로 CI에서 skip되어
   # 항상 green이던 맹점을 없앤다. kor-travel-map을 **핀 커밋**으로 체크아웃해 실제로 비교한다.
@@ -162,8 +187,13 @@ jobs:
           dockerfile = Path("apps/api/Dockerfile").read_text()
           assert (
               "COPY contracts/kor-travel-map-service-provenance-v1.json "
-              "./contracts/kor-travel-map-service-provenance-v1.json"
+              "./app/_contract_data/kor-travel-map-service-provenance-v1.json"
           ) in dockerfile
+          pyproject = Path("apps/api/pyproject.toml").read_text()
+          assert (
+              '"../../contracts/kor-travel-map-service-provenance-v1.json" = '
+              '"app/_contract_data/kor-travel-map-service-provenance-v1.json"'
+          ) in pyproject
           PY
 
       - name: Checkout kor-travel-map at the user-surface pin

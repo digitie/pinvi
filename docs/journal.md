@@ -2,6 +2,16 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-06 (codex) — T-VN-41-F1J: provenance CI·wheel 경계 보강
+
+- 단일 적대적 리뷰가 provenance JSON 단독 변경이 API/aggregate gate를 우회하는 P1과 non-editable wheel
+  console script가 root source artifact를 찾지 못하는 P2를 발견했다. `contracts/**`를 API workflow trigger와
+  aggregate required-check 범위에 넣고, wheel이 동일 provenance bytes를 `app/_contract_data` package data로
+  강제 포함하도록 고쳤다.
+- CI는 fresh wheel install에서 source checkout 밖의 `app.core.config` import와 cache-target/C6c generation을
+  직접 검증한다. Docker도 같은 package-data 위치에 artifact를 복사한다. source tree의 root artifact 탐색은
+  editable 개발 전용이며 installed runtime contract fallback이 아니다.
+
 ## 2026-08-06 (codex) — T-VN-41-F1J: C6c provenance docs-first
 
 - 서비스 전 단계라는 사용자 지시에 따라 T-VN-41-F의 범위를 production final boundary·운영 DB 보존에서

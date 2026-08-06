@@ -9,8 +9,8 @@ Map PR #960의 C6c dynamic cancel-probe lifecycle(Map release
 `cache_target=7`·`c6c_cancel_probe=2`를 단일 일반 provenance로 재vendor하는 F1J-C다.
 
 1. `contracts/cache-target-upstream-map-v1.json`을 제거하고 일반 service provenance에서 cache-target
-   runtime pin을 파생한다. service snapshot·CI checkout·runtime config·unit test가 one source를 exact
-   대조해야 한다.
+   runtime pin을 파생한다. service snapshot·CI checkout·runtime config·unit test·non-editable wheel이 one
+   source bytes를 exact 대조해야 하며, provenance 단독 변경도 API/aggregate gate를 반드시 통과해야 한다.
 2. PinVi ordinary runtime은 fixture principal/endpoint/token을 전혀 받지 않는다. existing admin cancel
    client가 canonical unsafe `409`을 typed conflict로 보존하는 regression만 강화한다.
 3. 그 뒤 Manager가 trusted PinVi provenance를 preflight input으로 쓰도록 바꾸고, 두 main head에서

@@ -12,7 +12,9 @@ stack에서만 실제 unsafe cancellation과 Admin UI를 끝까지 증명한다.
 
 1. `contracts/kor-travel-map-service-provenance-v1.json`이 PinVi가 vendor한 Map service artifact의
    유일한 provenance다. 이 파일은 `map_release_revision`, `service_openapi_sha256`와 capability
-   generation을 함께 가진다. 이번 release는 Map `1df45b57f55b8d517bb1f2c12a869d032d70453e`,
+   generation을 함께 가진다. wheel은 같은 immutable bytes를 package data로 포함하며 source/Docker/wheel이
+   서로 다른 contract를 읽는 fallback을 두지 않는다. provenance만 바뀌어도 API CI와 Aggregate required
+   gate가 반드시 실행된다. 이번 release는 Map `1df45b57f55b8d517bb1f2c12a869d032d70453e`,
    service SHA-256 `6ad8c1c9c1d391c54e7592b64ed9f0225164b613a5c2824d8eafd3da9bd36f1e`,
    `cache_target=7`, `c6c_cancel_probe=2`다.
 2. 기존 `contracts/cache-target-upstream-map-v1.json`은 제거한다. cache-target runtime 상수와

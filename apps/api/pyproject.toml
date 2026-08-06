@@ -53,6 +53,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"../../contracts/kor-travel-map-service-provenance-v1.json" = "app/_contract_data/kor-travel-map-service-provenance-v1.json"
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
