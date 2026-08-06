@@ -20,8 +20,9 @@
 ## T-VN-41 runtime rebootstrap
 
 - [/] **T-VN-41-F1D-C1a — PinVi 후보 migration head 검사** — `pinvi-admin-bootstrap head`가
-      후보 이미지의 Alembic graph에서 exact 단일 head를 JSON으로 반환하고, 0개·복수·설정 오류는
-      typed fail-closed error로 종료한다. DB·DSN·credential file은 읽지 않는다.
+      후보 이미지의 `__file__` 고정 루트에서 revision module을 실행하지 않는 AST literal graph로 exact
+      단일 head를 JSON으로 반환하고, 동적·0개·복수·설정 오류는 typed fail-closed error로 종료한다.
+      DB·DSN·credential file·현재 작업 디렉터리는 읽지 않는다.
 
 ## kor-travel-map compatible pair
 

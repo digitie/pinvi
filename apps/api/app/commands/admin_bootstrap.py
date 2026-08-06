@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import asyncio
 import json
 import os
+import re
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -13,7 +15,6 @@ from pathlib import Path
 from typing import Never, TextIO
 
 from alembic.config import Config
-from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +30,7 @@ from app.services.bootstrap_admin import (
 
 CREDENTIAL_FILE_ENV = "PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE"
 CANDIDATE_HEAD_SCHEMA = "pinvi.candidate-head.v1"
+_REVISION_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 _ERROR_PHASE_BY_CODE = {
     "alembic_config_missing": "migration",
     "credential_file_changed": "credential_file",
@@ -65,36 +67,127 @@ class PinviAdminBootstrapResult:
 
 
 def _api_project_root() -> Path:
-    for candidate in [Path.cwd(), *Path(__file__).resolve().parents]:
-        if (candidate / "alembic.ini").is_file() and (candidate / "alembic").is_dir():
-            return candidate
+    """Return the candidate image root derived only from this installed module."""
+
+    command_module = Path(__file__).resolve()
+    command_directory = command_module.parent
+    app_directory = command_directory.parent
+    candidate_root = app_directory.parent
+    if (
+        command_module.name == "admin_bootstrap.py"
+        and command_directory.name == "commands"
+        and app_directory.name == "app"
+        and (candidate_root / "alembic.ini").is_file()
+        and (candidate_root / "alembic" / "versions").is_dir()
+    ):
+        return candidate_root
     raise BootstrapAdminError("alembic_config_missing", "migration")
 
 
-def _alembic_config(api_root: Path | None = None) -> Config:
-    root = api_root or _api_project_root()
+def _alembic_config() -> Config:
+    root = _api_project_root()
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "alembic"))
     config.set_main_option("prepend_sys_path", str(root))
     return config
 
 
-def get_static_pinvi_head(api_root: Path | None = None) -> str:
-    """Return the candidate image's source-static Alembic head."""
+def _static_revision_identifier(value: object) -> str:
+    if not isinstance(value, str) or _REVISION_IDENTIFIER.fullmatch(value) is None:
+        raise ValueError("revision identifier is not a canonical literal")
+    return value
+
+
+def _literal_assignment(module: ast.Module, name: str) -> ast.expr:
+    assignments: list[ast.expr] = []
+    for statement in module.body:
+        if isinstance(statement, ast.Assign):
+            if len(statement.targets) == 1 and isinstance(statement.targets[0], ast.Name):
+                if statement.targets[0].id == name:
+                    assignments.append(statement.value)
+        elif isinstance(statement, ast.AnnAssign):
+            if isinstance(statement.target, ast.Name) and statement.target.id == name:
+                if statement.value is not None:
+                    assignments.append(statement.value)
+    if len(assignments) != 1:
+        raise ValueError(f"{name} must have exactly one module-level literal assignment")
+    return assignments[0]
+
+
+def _literal_revision(node: ast.expr) -> str:
+    if not isinstance(node, ast.Constant):
+        raise ValueError("revision must be a literal string")
+    return _static_revision_identifier(node.value)
+
+
+def _literal_down_revisions(node: ast.expr) -> tuple[str, ...]:
+    if isinstance(node, ast.Constant) and node.value is None:
+        return ()
+    values: tuple[ast.expr, ...]
+    if isinstance(node, ast.Constant):
+        values = (node,)
+    elif isinstance(node, (ast.List, ast.Tuple)) and node.elts:
+        values = tuple(node.elts)
+    else:
+        raise ValueError("down_revision must be a literal string, sequence, or None")
+    revisions = tuple(_literal_revision(value) for value in values)
+    if len(set(revisions)) != len(revisions):
+        raise ValueError("down_revision must not contain duplicates")
+    return revisions
+
+
+def _parse_static_revision_graph(versions_directory: Path) -> dict[str, tuple[str, ...]]:
+    graph: dict[str, tuple[str, ...]] = {}
+    revision_paths = sorted(
+        path for path in versions_directory.glob("*.py") if path.name != "__init__.py"
+    )
+    if not revision_paths:
+        raise ValueError("migration graph is empty")
+    for revision_path in revision_paths:
+        module = ast.parse(revision_path.read_text(encoding="utf-8"), filename=str(revision_path))
+        revision = _literal_revision(_literal_assignment(module, "revision"))
+        if revision in graph:
+            raise ValueError("migration graph has duplicate revisions")
+        graph[revision] = _literal_down_revisions(_literal_assignment(module, "down_revision"))
+    if any(parent not in graph for parents in graph.values() for parent in parents):
+        raise ValueError("migration graph has an unavailable parent")
+
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(revision: str) -> None:
+        if revision in visiting:
+            raise ValueError("migration graph is cyclic")
+        if revision in visited:
+            return
+        visiting.add(revision)
+        for parent in graph[revision]:
+            visit(parent)
+        visiting.remove(revision)
+        visited.add(revision)
+
+    for revision in graph:
+        visit(revision)
+    return graph
+
+
+def get_static_pinvi_head() -> str:
+    """Return the single head from literal migration metadata without importing revisions."""
 
     try:
-        script = ScriptDirectory.from_config(_alembic_config(api_root))
-        heads = script.get_heads()
+        graph = _parse_static_revision_graph(_api_project_root() / "alembic" / "versions")
     except Exception as exc:
         raise BootstrapAdminError("static_head_unavailable", "migration") from exc
+    parents = {parent for revisions in graph.values() for parent in revisions}
+    heads = sorted(set(graph).difference(parents))
     if len(heads) != 1 or not isinstance(heads[0], str) or not heads[0]:
         raise BootstrapAdminError("static_head_unavailable", "migration")
     return heads[0]
 
 
-def run_alembic_upgrade_head(api_root: Path | None = None) -> None:
+def run_alembic_upgrade_head() -> None:
     try:
-        command.upgrade(_alembic_config(api_root), "head")
+        command.upgrade(_alembic_config(), "head")
     except Exception as exc:
         raise BootstrapAdminError("migration_failed", "migration") from exc
 

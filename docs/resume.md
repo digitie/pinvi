@@ -4,12 +4,15 @@
 
 Manager C2가 source checkout이나 live DB를 신뢰하지 않고 후보 이미지 자신이 가진 Alembic graph를
 attest할 수 있도록 `pinvi-admin-bootstrap head`를 추가 중이다. 이 subcommand는 DB/DSN/credential
-file/bootstrap transaction을 전혀 읽지 않으며, exact 하나의 installed candidate head만
-`pinvi.candidate-head.v1` JSON으로 반환한다. graph가 없거나 head가 0개·복수이면 typed JSON으로
+file/bootstrap transaction을 전혀 읽지 않으며, `__file__`로 고정한 후보 이미지 루트의 revision file을
+AST로만 파싱한다. module import·실행이나 현재 작업 디렉터리 탐색 없이 exact 하나의 candidate head만
+`pinvi.candidate-head.v1` JSON으로 반환한다. graph가 동적·비어 있음·순환·0개/복수 head이면 typed JSON으로
 fail-closed한다.
 
-현재 브랜치 `feat/tvn41-pinvi-candidate-head`에서 CLI unit·static graph negative test·runbook을
-보강한다. 완료 뒤 Manager C2가 이 출력값을 PinVi bootstrap one-shot의 expected head로 사용한다.
+현재 브랜치 `feat/tvn41-pinvi-candidate-head`에서 CLI unit·static graph negative test·runbook 보강을
+마쳤다. focused unit 17건, bootstrap integration 12건, `ruff check .`, `mypy --strict app`을 통과했다.
+PR #441의 적대적 재리뷰가 끝나면 Manager C2가 이 출력값을 PinVi bootstrap one-shot의 expected head로
+사용한다.
 
 ## 2026-08-06 (codex) — T-VN-41-F1D-C PinVi admin bootstrap one-shot
 

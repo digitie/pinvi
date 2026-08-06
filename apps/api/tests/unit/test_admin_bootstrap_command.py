@@ -2,11 +2,38 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from app.commands import admin_bootstrap
 from app.commands.admin_bootstrap import CANDIDATE_HEAD_SCHEMA, PinviAdminBootstrapResult
 from app.services.bootstrap_admin import BootstrapAdminError
+
+
+def _candidate_image_root(
+    tmp_path: Path,
+    *,
+    revisions: dict[str, str],
+) -> Path:
+    root = tmp_path / "candidate-image"
+    command_module = root / "app" / "commands" / "admin_bootstrap.py"
+    command_module.parent.mkdir(parents=True)
+    command_module.write_text("# candidate image command module\n", encoding="utf-8")
+    (root / "alembic.ini").write_text("[alembic]\nscript_location = alembic\n", encoding="utf-8")
+    versions = root / "alembic" / "versions"
+    versions.mkdir(parents=True)
+    for filename, source in revisions.items():
+        (versions / filename).write_text(source, encoding="utf-8")
+    return root
+
+
+def _use_candidate_image_root(monkeypatch: pytest.MonkeyPatch, root: Path) -> None:
+    monkeypatch.setattr(
+        admin_bootstrap,
+        "__file__",
+        str(root / "app" / "commands" / "admin_bootstrap.py"),
+    )
 
 
 def test_cli_emits_typed_error_without_raw_secret(
@@ -132,20 +159,75 @@ def test_candidate_head_command_reads_no_credential_or_database(
     )
 
 
-@pytest.mark.parametrize("heads", [(), ("first", "second")])
-def test_static_candidate_head_requires_exactly_one_head(
+def test_static_candidate_head_never_executes_revision_modules(
     monkeypatch: pytest.MonkeyPatch,
-    heads: tuple[str, ...],
+    tmp_path: Path,
 ) -> None:
-    class _ScriptDirectory:
-        def get_heads(self) -> tuple[str, ...]:
-            return heads
-
-    monkeypatch.setattr(
-        admin_bootstrap.ScriptDirectory,
-        "from_config",
-        lambda _config: _ScriptDirectory(),
+    side_effect_marker = tmp_path / "revision-module-was-executed"
+    root = _candidate_image_root(
+        tmp_path,
+        revisions={
+            "base.py": 'revision = "base"\ndown_revision = None\n',
+            "tip.py": (
+                "from pathlib import Path\n"
+                f"Path({str(side_effect_marker)!r}).write_text('executed', encoding='utf-8')\n"
+                "raise RuntimeError('revision module executed')\n"
+                'revision = "tip"\ndown_revision = "base"\n'
+            ),
+        },
     )
+    _use_candidate_image_root(monkeypatch, root)
+
+    assert admin_bootstrap.get_static_pinvi_head() == "tip"
+    assert not side_effect_marker.exists()
+
+
+def test_static_candidate_head_ignores_cwd_decoy(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = _candidate_image_root(
+        tmp_path / "installed",
+        revisions={
+            "base.py": 'revision = "image_base"\ndown_revision = None\n',
+            "tip.py": 'revision = "image_tip"\ndown_revision = "image_base"\n',
+        },
+    )
+    decoy = _candidate_image_root(
+        tmp_path / "decoy",
+        revisions={"decoy.py": 'revision = "cwd_decoy"\ndown_revision = None\n'},
+    )
+    _use_candidate_image_root(monkeypatch, root)
+    monkeypatch.chdir(decoy)
+
+    assert admin_bootstrap.get_static_pinvi_head() == "image_tip"
+
+
+@pytest.mark.parametrize(
+    "revisions",
+    [
+        {},
+        {
+            "a.py": 'revision = "a"\ndown_revision = "b"\n',
+            "b.py": 'revision = "b"\ndown_revision = "a"\n',
+        },
+        {
+            "a.py": 'revision = "a"\ndown_revision = None\n',
+            "b.py": 'revision = "b"\ndown_revision = None\n',
+        },
+        {"tip.py": 'revision = "tip"\ndown_revision = "unavailable_parent"\n'},
+        {"tip.py": "revision = configured_revision\ndown_revision = None\n"},
+        {"tip.py": 'revision = "tip"\ndown_revision = configured_parent\n'},
+        {"tip.py": 'revision = "tip"\nrevision = "other"\ndown_revision = None\n'},
+    ],
+)
+def test_static_candidate_head_rejects_empty_ambiguous_and_dynamic_graphs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    revisions: dict[str, str],
+) -> None:
+    root = _candidate_image_root(tmp_path, revisions=revisions)
+    _use_candidate_image_root(monkeypatch, root)
 
     with pytest.raises(BootstrapAdminError, match="static_head_unavailable"):
         admin_bootstrap.get_static_pinvi_head()

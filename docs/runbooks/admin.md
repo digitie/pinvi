@@ -55,7 +55,9 @@ bootstrap credential file이나 password 환경변수를 주입하지 않는다.
 
 Docker-manager는 destructive rebuild 전에 **후보 PinVi API 이미지 안에서만** 아래 명령을 먼저
 실행한다. `head`는 DB 세션·DSN·credential file·bootstrap service를 전혀 읽지 않고, 설치된
-Alembic script graph에서 단 하나의 head를 검사한다.
+`app.commands.admin_bootstrap`의 `__file__`에서 도출한 이미지 루트의 migration 파일을 AST로만
+읽는다. revision module은 import·실행하지 않으며, literal `revision`/`down_revision` graph의
+단 하나의 head만 허용한다.
 
 ```bash
 pinvi-admin-bootstrap head
@@ -67,8 +69,9 @@ pinvi-admin-bootstrap head
 {"pinvi_head":"<exact-alembic-head>","schema":"pinvi.candidate-head.v1"}
 ```
 
-Alembic 설정이 없거나 head가 0개 또는 복수이면 `static_head_unavailable` typed error JSON으로
-fail-closed한다. 이 값은 이후 `pinvi-admin-bootstrap` migration/credential one-shot이 DB에서
+이미지 루트가 완전하지 않거나 graph가 비어 있음·동적/중복 assignment·순환·부모 누락·head 0개/복수이면
+`static_head_unavailable` typed error JSON으로 fail-closed한다. 현재 작업 디렉터리나 mount 경로는
+head 판정에 사용하지 않는다. 이 값은 이후 `pinvi-admin-bootstrap` migration/credential one-shot이 DB에서
 확인할 expected head이며, source checkout이나 live DB에서 추측하지 않는다.
 
 one-shot 입력은 `PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE` 하나뿐이다. 파일 내용은 다음 JSON
