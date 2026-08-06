@@ -8,19 +8,20 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import (
-    CACHE_TARGET_SERVICE_CONTRACT_GENERATION,
-    CACHE_TARGET_SERVICE_MAP_RELEASE_REVISION,
-    CACHE_TARGET_SERVICE_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION,
+    KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION,
+    KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
 )
 
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-service.json"
 )
-_UPSTREAM_METADATA = (
-    Path(__file__).resolve().parents[4] / "contracts" / "cache-target-upstream-map-v1.json"
+_SERVICE_PROVENANCE = (
+    Path(__file__).resolve().parents[4] / "contracts" / "kor-travel-map-service-provenance-v1.json"
 )
-_MAP_RELEASE_REVISION = "8c5bdcf8ce892439a8bb8e0013edf74127bf076a"
-_SNAPSHOT_SHA256 = "c7838b20bd70bf333590cb440a705dd7e893f9e366078d6c11200d701d40bdcd"
+_MAP_RELEASE_REVISION = "1df45b57f55b8d517bb1f2c12a869d032d70453e"
+_SNAPSHOT_SHA256 = "6ad8c1c9c1d391c54e7592b64ed9f0225164b613a5c2824d8eafd3da9bd36f1e"
 
 _GENERATION7_ROLE_SCOPES = {
     "command": {"cache-target:command"},
@@ -109,17 +110,51 @@ def _spec() -> dict[str, Any]:
     return loaded
 
 
-def test_service_snapshot_exact_bytes_runtime_pin_and_metadata_match_map_release() -> None:
+def test_service_snapshot_exact_bytes_runtime_pin_and_provenance_match_map_release() -> None:
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
-    assert CACHE_TARGET_SERVICE_OPENAPI_SHA256 == _SNAPSHOT_SHA256
-    assert CACHE_TARGET_SERVICE_MAP_RELEASE_REVISION == _MAP_RELEASE_REVISION
-    assert CACHE_TARGET_SERVICE_CONTRACT_GENERATION == 7
-    assert json.loads(_UPSTREAM_METADATA.read_text()) == {
-        "contract_generation": CACHE_TARGET_SERVICE_CONTRACT_GENERATION,
-        "map_release_revision": CACHE_TARGET_SERVICE_MAP_RELEASE_REVISION,
-        "service_openapi_sha256": CACHE_TARGET_SERVICE_OPENAPI_SHA256,
+    assert KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256 == _SNAPSHOT_SHA256
+    assert KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION == _MAP_RELEASE_REVISION
+    assert KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION == 7
+    assert KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION == 2
+    assert json.loads(_SERVICE_PROVENANCE.read_text()) == {
+        "capabilities": {
+            "c6c_cancel_probe": {"generation": 2},
+            "cache_target": {"generation": 7},
+        },
+        "map_release_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
+        "service_openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
         "version": 1,
     }
+
+
+def test_c6c_fixture_contract_is_pinned_but_not_a_pinvi_runtime_scope() -> None:
+    spec = _spec()
+    fixture_path = "/v1/ops/contract-fixtures/c6c-cancel-probe/{transaction_id}"
+    finalize_path = f"{fixture_path}/finalize"
+
+    operations = (
+        spec["paths"][fixture_path]["put"],
+        spec["paths"][fixture_path]["get"],
+        spec["paths"][finalize_path]["post"],
+    )
+    for operation in operations:
+        assert operation["security"] == [{"OpsScope": [], "OpsToken": []}]
+        scope_header = next(
+            parameter
+            for parameter in operation["parameters"]
+            if parameter["name"] == "X-Kor-Travel-Map-Ops-Scope"
+        )
+        assert scope_header["description"] == (
+            "C6c contract fixture service principal은 exact fixture route에서 `ops:fixture`가 "
+            "필수다. scope 문자열만으로는 권한이 되지 않는다."
+        )
+    record = spec["components"]["schemas"]["C6cCancelProbeFixtureRecord"]
+    assert record["properties"]["capability_generation"]["const"] == 2
+    app_sources = "\n".join(
+        path.read_text() for path in (Path(__file__).resolve().parents[2] / "app").rglob("*.py")
+    )
+    assert "ops:fixture" not in app_sources
+    assert "contract-fixtures" not in app_sources
 
 
 def test_generation7_service_scope_and_caller_inventory_is_exact() -> None:

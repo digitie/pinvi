@@ -105,9 +105,9 @@ jobs:
             apps/api/tests/unit/test_kor_travel_map_contract.py)
           admin_pin=$(grep -oP '_UPSTREAM_COMMIT = "\K[0-9a-f]{40}' \
             apps/api/tests/unit/test_kor_travel_map_admin_contract.py)
-          service_pin=$(python -c 'import json; print(json.load(open("contracts/cache-target-upstream-map-v1.json"))["map_release_revision"])')
-          service_sha=$(python -c 'import json; print(json.load(open("contracts/cache-target-upstream-map-v1.json"))["service_openapi_sha256"])')
-          service_generation=$(python -c 'import json; print(json.load(open("contracts/cache-target-upstream-map-v1.json"))["contract_generation"])')
+          service_pin=$(python -c 'import json; print(json.load(open("contracts/kor-travel-map-service-provenance-v1.json"))["map_release_revision"])')
+          service_sha=$(python -c 'import json; print(json.load(open("contracts/kor-travel-map-service-provenance-v1.json"))["service_openapi_sha256"])')
+          service_generation=$(python -c 'import json; print(json.load(open("contracts/kor-travel-map-service-provenance-v1.json"))["capabilities"]["cache_target"]["generation"])')
           source_pin=$(grep -oP '_UPSTREAM_MAP_COMMIT = "\K[0-9a-f]{40}' \
             apps/api/tests/unit/test_cache_target_contract.py)
           alias_pin=$(grep -oP '_UPSTREAM_MAP_COMMIT = "\K[0-9a-f]{40}' \
@@ -131,9 +131,11 @@ jobs:
           import re
           from pathlib import Path
 
-          metadata = json.loads(Path("contracts/cache-target-upstream-map-v1.json").read_text())
+          metadata = json.loads(
+              Path("contracts/kor-travel-map-service-provenance-v1.json").read_text()
+          )
           assert metadata.keys() == {
-              "contract_generation",
+              "capabilities",
               "map_release_revision",
               "service_openapi_sha256",
               "version",
@@ -141,18 +143,27 @@ jobs:
           assert metadata["version"] == 1
           assert re.fullmatch(r"[0-9a-f]{40}", metadata["map_release_revision"])
           assert re.fullmatch(r"[0-9a-f]{64}", metadata["service_openapi_sha256"])
-          assert metadata["contract_generation"] == 7
+          assert metadata["capabilities"] == {
+              "cache_target": {"generation": 7},
+              "c6c_cancel_probe": {"generation": 2},
+          }
 
           config = Path("apps/api/app/core/config.py").read_text()
           assert (
-              f'CACHE_TARGET_SERVICE_MAP_RELEASE_REVISION = "{metadata["map_release_revision"]}"'
+              '_SERVICE_PROVENANCE_FILENAME = "kor-travel-map-service-provenance-v1.json"'
               in config
           )
-          assert f'"{metadata["service_openapi_sha256"]}"' in config
-          assert "CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION" not in config
-          assert "CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION" not in config
+          assert "KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256" in config
+          assert "KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION" in config
+          assert "KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION" in config
+          assert "cache-target-upstream-map-v1.json" not in config
           snapshot = Path("apps/api/tests/contract/kor-travel-map-openapi-service.json").read_bytes()
           assert hashlib.sha256(snapshot).hexdigest() == metadata["service_openapi_sha256"]
+          dockerfile = Path("apps/api/Dockerfile").read_text()
+          assert (
+              "COPY contracts/kor-travel-map-service-provenance-v1.json "
+              "./contracts/kor-travel-map-service-provenance-v1.json"
+          ) in dockerfile
           PY
 
       - name: Checkout kor-travel-map at the user-surface pin

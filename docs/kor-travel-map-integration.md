@@ -180,15 +180,16 @@ T-VN-41 source byte 계약은 Map commit
 leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
 commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
 
-서비스 계약은 Map exact release `8c5bdcf8ce892439a8bb8e0013edf74127bf076a`(#952)의
+서비스 계약은 Map exact release `1df45b57f55b8d517bb1f2c12a869d032d70453e`(#960)의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor한다. SHA-256은
-`c7838b20bd70bf333590cb440a705dd7e893f9e366078d6c11200d701d40bdcd`이며 contract generation은
-`7`이다. artifact owner/functional owner 이중 provenance는 control-plane 정본이 아니다. PinVi의
-`contracts/cache-target-upstream-map-v1.json`은 위 Map release, SHA-256, generation을 비밀값 없이
-버전 관리되는 메타데이터로 고정하고, runtime constants 및 vendored bytes와 단위 테스트에서 exact 대조한다.
-sync enable 설정의 source revision도 이 Map exact release 하나만 허용한다. Manager는 trusted PinVi
-worktree에서 metadata와 vendor artifact를 읽어 Map worktree의 artifact/manifest/env와 모두 대조한 뒤에만
-원자적 env 교체를 수행한다. startup에서 stream control에
+`6ad8c1c9c1d391c54e7592b64ed9f0225164b613a5c2824d8eafd3da9bd36f1e`다. artifact owner/functional
+owner 이중 provenance는 control-plane 정본이 아니다. PinVi의
+`contracts/kor-travel-map-service-provenance-v1.json`은 위 Map release·SHA-256과 capability
+`cache_target=7`, `c6c_cancel_probe=2`를 비밀값 없이 한 번만 기록한다. cache-target runtime 상수와
+sync enable 설정의 source revision은 이 일반 provenance의 `cache_target`에서만 파생한다. C6c fixture의
+`ops:fixture` token·route는 Manager만 사용하며 PinVi ordinary runtime에는 주입하지 않는다. Manager는
+trusted PinVi worktree에서 일반 provenance와 vendor artifact를 읽어 Map worktree/image의 artifact와
+capability를 대조한 뒤에만 격리 rehearsal을 실행한다. startup에서 stream control에
 `active_reconciliation`이 있으면 그 `request_id`의 paged snapshot만 읽고 descriptor의 snapshot ID,
 epoch, count, Merkle root, high-watermark와 모두 대조한다. local snapshot commit 뒤 deterministic UUID
 idempotency key로 completion을 보고하고, Map stream이 `ready`이며 descriptor가 제거된 것을 다시 확인한

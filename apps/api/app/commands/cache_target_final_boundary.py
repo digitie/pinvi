@@ -11,9 +11,9 @@ from collections.abc import Sequence
 from typing import Literal, Never, cast
 
 from app.core.config import (
-    CACHE_TARGET_SERVICE_CONTRACT_GENERATION,
-    CACHE_TARGET_SERVICE_MAP_RELEASE_REVISION,
-    CACHE_TARGET_SERVICE_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION,
+    KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
     settings,
 )
 from app.db import session as db_session
@@ -101,11 +101,11 @@ async def _run(
             )
         if (
             settings.pinvi_kor_travel_map_cache_target_expected_openapi_sha256
-            != CACHE_TARGET_SERVICE_OPENAPI_SHA256
+            != KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256
             or settings.pinvi_kor_travel_map_cache_target_expected_source_revision
-            != CACHE_TARGET_SERVICE_MAP_RELEASE_REVISION
+            != KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION
             or settings.pinvi_kor_travel_map_cache_target_expected_contract_generation
-            != CACHE_TARGET_SERVICE_CONTRACT_GENERATION
+            != KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION
         ):
             raise CacheTargetBoundaryFailure("service_contract_pin_mismatch", "finalize")
         return await run_cache_target_boundary_finalize(
