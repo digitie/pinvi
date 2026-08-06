@@ -112,6 +112,8 @@ jobs:
           )
 
   docker-provenance-image:
+    # 예약 실행은 staleness 확인만 수행한다. Docker image 검증은 변경 가능한 PR/push에서만 한다.
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
