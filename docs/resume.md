@@ -1,5 +1,21 @@
 # resume.md
 
+## 2026-08-06 (codex) — T-VN-41-F1D-C PinVi admin bootstrap one-shot
+
+API startup password env bootstrap을 제거하고 `pinvi-admin-bootstrap`을 PinVi migration + 초기 admin
+보장의 유일한 runtime/deploy one-shot 경로로 추가했다. ordinary API/Web/Dagster에는 더 이상
+`PINVI_BOOTSTRAP_ADMIN_EMAIL/PASSWORD`나 bootstrap credential mount가 들어가지 않는다.
+
+one-shot은 `PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE` absolute path만 받는다. 파일은 regular file,
+owner=euid, mode `0600`, hardlink count 1, bounded size, `O_NOFOLLOW`, duplicate JSON key rejection을
+통과해야 하며, 성공 출력은 `action`, `pinvi_head`, `admin_email_sha256`만 포함한다. Docker/deploy fallback
+scripts의 `migrate`도 same-path one-shot 실행으로 바뀌었다.
+
+검증은 codegraph impact/sync, `ruff check .`, `ruff format --check .`, `mypy --strict app`, CLI unit 5건,
+bootstrap integration 12건을 통과했다. 전체 unit은 927 passed 뒤 기존 로컬 kor-travel-map live user
+snapshot drift 1건에서만 실패했다. 다음 Manager C2는 owner=euid `0600` credential file을 read-only로
+one-shot container에만 mount하고, 성공 exit 후 ordinary runtime을 credential 없이 기동해야 한다.
+
 ## 2026-08-06 (codex) — T-VN-41-F1J-D Docker wheel source 경로 보정 후 rehearsal 재개
 
 n150의 완전히 별도 Compose project·DB·volume에서 Map API/UI는 정상 기동했지만, PinVi API Docker build의

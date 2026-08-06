@@ -64,10 +64,10 @@ test "$(docker image inspect --format \
   pinvi-api:latest-main)" = "$(git -C ~/pinvi rev-parse --verify HEAD^{commit})"
 ```
 
-`PINVI_BOOTSTRAP_ADMIN_PASSWORD`는 첫 운영 진입용이다. 앱 startup이 이 값을 보고
-admin 계정을 생성/복구한다. 운영 admin을 별도로 만든 뒤에는 docker-manager `.env`에서
-이 값을 비우고 bootstrap 대상 계정은 비활성화한다. 실제 bootstrap 이메일/비밀번호는
-gitignore된 운영 env와 local-only runbook에만 둔다.
+Admin bootstrap은 ordinary API startup/env가 아니라 `pinvi-admin-bootstrap` one-shot으로만
+실행한다. Manager는 owner-only `0600` JSON credential file을 만들고
+`PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE` path만 one-shot container에 전달한다. API/Web/Dagster
+runtime에는 credential file mount나 password 환경변수를 전달하지 않는다.
 
 kor-travel-map canonical ops를 사용하는 배포는 API container에
 `PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL`과 서로 다른 32자 이상

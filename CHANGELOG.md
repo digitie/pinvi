@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+- PinVi migration과 초기 admin 보장을 `pinvi-admin-bootstrap` one-shot으로 통합했다. API
+  startup과 ordinary API/Web/Dagster runtime은 bootstrap password env나 credential mount를 받지 않으며,
+  one-shot은 owner-only `0600` JSON credential file만 읽고 성공/실패 출력에서 raw email/password를
+  redaction한다.
 - Cache-target causal canary의 전체 timeout을 final remote snapshot request와 `Retry-After` 대기까지
   적용해 PostgreSQL writer fence가 운영자 deadline을 넘어 유지되지 않게 했다. `401/403`, `413`, 응답
   계약 오류는 일시 장애로 재시도하지 않고 즉시 typed terminal failure로 분류한다.

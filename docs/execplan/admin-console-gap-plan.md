@@ -44,8 +44,8 @@ T-229는 별도 기능 추가가 아니라 완료 상태와 사용자 명시 요
   emails, backup, MCP tokens, RustFS 등
 - Live e2e foundation: Admin route matrix와 N150 live authenticated run 기반은 T-203에서
   추가됐다.
-- Bootstrap admin: T-206으로 `PINVI_BOOTSTRAP_ADMIN_PASSWORD` 기반 startup 생성/복구
-  경로가 main에 들어왔다.
+- Bootstrap admin: T-VN-41-F1D-C1에서 password env 기반 startup 생성/복구 경로를
+  제거하고, `pinvi-admin-bootstrap` one-shot credential-file contract로 전환했다.
 
 ### 초기 gap 해소 상태
 

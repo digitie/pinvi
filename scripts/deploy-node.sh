@@ -21,7 +21,7 @@ Usage:
   scripts/deploy-node.sh deploy
   scripts/deploy-node.sh build
   scripts/deploy-node.sh pull
-  scripts/deploy-node.sh migrate
+  scripts/deploy-node.sh migrate   # migration + one-shot admin bootstrap
   scripts/deploy-node.sh up
   scripts/deploy-node.sh dagster   # Dagster webserver(profile etl)만 기동
   scripts/deploy-node.sh smoke
@@ -36,6 +36,7 @@ Required on production nodes:
 Optional env:
   PINVI_ENV_FILE=infra/.env.prod   # 도메인/시크릿 주입(gitignore). 기본 .env
   PINVI_ENABLE_DAGSTER=1           # up/deploy 시 Dagster webserver(:12802)도 기동
+  PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/absolute/host/path/bootstrap-admin.json
 
 Run this script on the target node from /opt/pinvi or set PINVI_ROOT_DIR.
 EOF
@@ -92,10 +93,25 @@ build_images() {
 
 migrate() {
   pinvi_verify_api_image_provenance
+  local credential_file
+  credential_file="$(bootstrap_credential_file)"
   log "starting database dependencies"
   compose up -d app-postgres app-rustfs app-rustfs-init
-  log "running Pinvi Alembic migration"
-  compose run --rm app-api alembic upgrade head
+  log "running Pinvi admin bootstrap"
+  compose run --rm \
+    --user "$(id -u):$(id -g)" \
+    -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
+    -v "$credential_file:$credential_file:ro" \
+    app-api pinvi-admin-bootstrap
+}
+
+bootstrap_credential_file() {
+  local path="${PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE:-}"
+  if [[ -z "$path" || "$path" != /* || "$path" == *:* || ! -f "$path" ]]; then
+    echo "PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE must point to an absolute regular host file without ':'" >&2
+    exit 2
+  fi
+  printf '%s\n' "$path"
 }
 
 up() {

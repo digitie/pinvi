@@ -148,8 +148,15 @@ docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml build app-api 
 # 3) Postgres + RustFS 먼저
 docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml up -d app-postgres app-rustfs app-rustfs-init
 
-# 4) Alembic 명시 실행 (auto-migrate 안 함)
-docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml run --rm app-api alembic upgrade head
+# 4) PinVi migration + one-shot admin bootstrap (auto-migrate 안 함)
+install -m 600 /dev/null /tmp/pinvi-bootstrap-admin.json
+$EDITOR /tmp/pinvi-bootstrap-admin.json
+docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml run --rm \
+  --user "$(id -u):$(id -g)" \
+  -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/run/pinvi/bootstrap-admin.json \
+  -v /tmp/pinvi-bootstrap-admin.json:/run/pinvi/bootstrap-admin.json:ro \
+  app-api pinvi-admin-bootstrap
+rm -f /tmp/pinvi-bootstrap-admin.json
 
 # 5) API + Web
 docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml up -d app-api app-web
@@ -191,16 +198,17 @@ kor-travel-map/KASI 서비스와 함께 실행한다.
 
 ## 6. 기본 admin 계정
 
-- `PINVI_BOOTSTRAP_ADMIN_PASSWORD`가 설정된 API startup에서 생성/복구된다.
-- smoke/dev 로그인은 `PINVI_BOOTSTRAP_ADMIN_EMAIL`과 명시적으로 설정한
-  `PINVI_BOOTSTRAP_ADMIN_PASSWORD` 임시값으로만 검증한다.
-- 운영 환경은 별도 admin 계정 생성 후 `PINVI_BOOTSTRAP_ADMIN_PASSWORD`를 비우고
-  bootstrap 대상 계정을 비활성화한다.
+- `pinvi-admin-bootstrap` one-shot이 migration과 admin 생성을 함께 수행한다.
+- 입력은 `PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE` path 하나이며, 파일은 regular file,
+  owner=euid, `0600`, hardlink count 1, bounded JSON이어야 한다.
+- API startup은 admin bootstrap을 수행하지 않고, ordinary API/Web/Dagster에는 credential
+  mount나 password env를 전달하지 않는다.
 
 ## 7. 마이그레이션 분리 정책
 
-App 컨테이너는 **자동 마이그레이션 X**. `app-api`가 뜨기 전에 `alembic upgrade
-head`를 명시 실행. 이유:
+App 컨테이너는 **자동 마이그레이션 X**. `app-api`가 뜨기 전에 `pinvi-admin-bootstrap`
+one-shot을 명시 실행한다. 이 command가 PinVi Alembic migration과 초기 admin 보장을 함께 소유한다.
+이유:
 
 - 운영에서 새 이미지 배포 시 마이그레이션이 자동 실행되어 의도치 않은 schema 변경 차단
 - 두 alembic (Pinvi + kor-travel-map) 순서 명시 가능
@@ -321,7 +329,7 @@ CI에서:
 
 | 증상                                  | 원인                 | 해결                                                            |
 | ------------------------------------- | -------------------- | --------------------------------------------------------------- |
-| `app-api` 시작 후 즉시 종료           | Alembic 미실행       | `app-api run --rm alembic upgrade head` 먼저                    |
+| `app-api` 시작 후 즉시 종료           | migration/bootstrap 미실행 | `pinvi-admin-bootstrap` one-shot 먼저                    |
 | `app-web` 빌드 실패                   | `NEXT_PUBLIC_*` 누락 | `.env` 확인 + 재빌드                                            |
 | `app-rustfs-init` 무한 루프           | bucket 이미 존재     | down -v로 볼륨 삭제 후 재시작                                   |
 | `12805` / `12101` port already in use | 다른 컨테이너 점유   | `scripts/docker-app.sh up`이 정리. 수동 확인은 `lsof -i:<port>` |

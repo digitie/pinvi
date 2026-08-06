@@ -368,10 +368,6 @@ class Settings(BaseSettings):
     pinvi_docker_status_timeout_seconds: float = 2.0
     pinvi_docker_status_container_limit: int = 80
 
-    # 운영 부트스트랩
-    pinvi_bootstrap_admin_email: str = "bootstrap-admin@example.com"
-    pinvi_bootstrap_admin_password: str = ""
-
     # Backup / Restore (ADR-022)
     pinvi_backup_dir: str = ".tmp/backups"
     pinvi_backup_script_path: str = "scripts/backup-db.sh"

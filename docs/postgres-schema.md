@@ -1300,7 +1300,8 @@ CREATE INDEX ix_rate_limit_overrides_expires_at
 
 - 두 Alembic이 같은 DB를 친다 — 실행 순서:
   1. `kor-travel-map alembic upgrade head` (feature/provider_sync)
-  2. `pinvi alembic upgrade head` (app/ops)
+  2. PinVi deploy/runtime은 `pinvi-admin-bootstrap` one-shot (app/ops migration +
+     초기 admin 보장). 개발/CI schema smoke에서는 `pinvi alembic upgrade head`를 직접 실행할 수 있다.
 - 충돌 가능 항목: schema 이름 / 확장 설치 / 함수 정의.
 - 가능한 한 본 schema에서 `feature` schema 객체를 참조하지 않는다 (FK 없음).
 - backfill은 별도 Dagster job으로 분리 — DDL migration에 데이터 변환 섞지 않음.
