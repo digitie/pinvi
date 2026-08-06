@@ -1,5 +1,18 @@
 # resume.md
 
+## 2026-08-06 (codex) — T-VN-41-F1J-D Docker wheel source 경로 보정 후 rehearsal 재개
+
+n150의 완전히 별도 Compose project·DB·volume에서 Map API/UI는 정상 기동했지만, PinVi API Docker build의
+첫 editable install이 Hatch `force-include`가 가리키는 canonical `../../contracts/...` source를 컨테이너
+`/contracts`에서 찾지 못해 중단됐다. source/wheel/Docker 경계의 결함이므로 existing DB·backup/restore는
+전혀 사용하지 않았고, 격리 자원은 폐기했다.
+
+Dockerfile은 두 `pip install -e .` 전 canonical provenance를 source-relative `/contracts` 경로에 제공한 뒤
+runtime image에서 제거한다. API CI는 실제 Docker build·image package resource·exact bytes/SHA를 함께
+검증한다. 이 fix PR merge 뒤 Map `1df45b57…`/PinVi `2d59855…`/Manager `0ff7f8d…` exact pinset을 새 PinVi
+merge revision으로 재결박한 다음, 격리 destructive cancel rehearsal과 관리자·mutating Playwright E2E를 다시
+실행한다.
+
 ## 2026-08-06 (codex) — T-VN-41-F1J-C 완료, F1J-D isolated rehearsal 준비
 
 Map PR #960의 C6c dynamic cancel-probe lifecycle(Map release

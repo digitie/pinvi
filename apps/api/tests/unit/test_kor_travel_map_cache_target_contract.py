@@ -138,6 +138,17 @@ def test_wheel_build_includes_the_general_service_provenance() -> None:
         '"../../contracts/kor-travel-map-service-provenance-v1.json" = '
         '"app/_contract_data/kor-travel-map-service-provenance-v1.json"'
     ) in pyproject.read_text()
+    dockerfile = pyproject.parent / "Dockerfile"
+    dockerfile_text = dockerfile.read_text()
+    canonical_copy = (
+        "COPY contracts/kor-travel-map-service-provenance-v1.json "
+        "/contracts/kor-travel-map-service-provenance-v1.json"
+    )
+    assert canonical_copy in dockerfile_text
+    assert dockerfile_text.index(canonical_copy) < dockerfile_text.index(
+        "RUN pip install --upgrade pip && pip install -e ."
+    )
+    assert "RUN pip install --no-deps -e . && rm -rf /contracts" in dockerfile_text
 
 
 def test_c6c_fixture_contract_is_pinned_but_not_a_pinvi_runtime_scope() -> None:
