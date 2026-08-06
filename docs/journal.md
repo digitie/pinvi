@@ -15,7 +15,7 @@
   단일 적대적 재리뷰의 tag TOCTOU 지적도 반영해 검증된 image ID를 세 `PINVI_*_IMAGE` override에
   고정하고, 기동 뒤 API/Web/Dagster container `.Image`를 해당 ID와 대조한다. regression은
   resolved Compose와 shell fake image inspect까지 세 service 경로를 고정했다.
-  focused provenance 46건과 Dockerfile syntax check를 통과했다.
+  focused provenance 47건과 Dockerfile syntax check를 통과했다.
 - **다음**: PinVi PR의 적대적 리뷰·merge 뒤 frozen pinset을 새 PinVi merge SHA로 원자 갱신하고
   n150 F1D rebuild를 재개한다.
 

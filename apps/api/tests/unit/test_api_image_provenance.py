@@ -575,6 +575,109 @@ test -e "$PINVI_TEST_STATE_DIR/removed"
     assert result.returncode == 0, result.stderr
 
 
+def test_running_web_and_dagster_image_drift_is_removed_independently(
+    tmp_path: Path,
+) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    expected_image_id = f"sha256:{'a' * 64}"
+    drifted_image_id = f"sha256:{'b' * 64}"
+    _write_executable(
+        fake_bin / "docker",
+        r"""#!/usr/bin/env bash
+set -euo pipefail
+case "$1:$2:$3" in
+  container:inspect:--format)
+    case "$5" in
+      api-container-id) printf '%s\n' "$FAKE_API_RUNNING_IMAGE_ID" ;;
+      web-container-id) printf '%s\n' "$FAKE_WEB_RUNNING_IMAGE_ID" ;;
+      dagster-container-id) printf '%s\n' "$FAKE_DAGSTER_RUNNING_IMAGE_ID" ;;
+      *) exit 44 ;;
+    esac
+    ;;
+  container:rm:-f) exit 0 ;;
+  *) exit 45 ;;
+esac
+""",
+    )
+    shell = r"""
+set -euo pipefail
+ROOT_DIR="$1"
+COMPOSE_FILE="$ROOT_DIR/infra/docker-compose.app.yml"
+ENV_FILE="$ROOT_DIR/missing.env"
+compose() {
+  local profile=""
+  if [[ "$1 $2" == "--profile etl" ]]; then
+    profile=etl
+    shift 2
+  fi
+  case "$1 $2" in
+    "ps -q")
+      case "$3" in
+        app-api) [[ ! -e "$PINVI_TEST_STATE_DIR/app-cleaned" ]] && printf 'api-container-id\n' ;;
+        app-web) [[ ! -e "$PINVI_TEST_STATE_DIR/app-cleaned" ]] && printf 'web-container-id\n' ;;
+        app-dagster) [[ ! -e "$PINVI_TEST_STATE_DIR/dagster-cleaned" ]] && printf 'dagster-container-id\n' ;;
+        *) exit 46 ;;
+      esac
+      ;;
+    "ps -aq")
+      if [[ "$profile" == etl ]]; then
+        [[ ! -e "$PINVI_TEST_STATE_DIR/dagster-cleaned" ]] && printf 'dagster-container-id\n'
+      elif [[ ! -e "$PINVI_TEST_STATE_DIR/app-cleaned" ]]; then
+        printf 'api-container-id\nweb-container-id\n'
+      fi
+      ;;
+    "stop app-web") touch "$PINVI_TEST_STATE_DIR/app-cleaned" ;;
+    "stop app-dagster")
+      [[ "$profile" == etl ]]
+      touch "$PINVI_TEST_STATE_DIR/dagster-cleaned"
+      ;;
+    *) exit 47 ;;
+  esac
+}
+source "$2"
+PINVI_ATTESTED_API_IMAGE_ID="$3"
+PINVI_ATTESTED_WEB_IMAGE_ID="$3"
+PINVI_ATTESTED_DAGSTER_IMAGE_ID="$3"
+pinvi_verify_or_remove_running_app
+export FAKE_WEB_RUNNING_IMAGE_ID="$4"
+if pinvi_verify_or_remove_running_app; then
+  exit 48
+fi
+test -e "$PINVI_TEST_STATE_DIR/app-cleaned"
+if pinvi_verify_or_remove_running_dagster; then
+  exit 49
+fi
+test -e "$PINVI_TEST_STATE_DIR/dagster-cleaned"
+"""
+    result = subprocess.run(  # noqa: S603 - fixed local shell fixture
+        [
+            "/usr/bin/bash",
+            "-c",
+            shell,
+            "runtime-container-drift-test",
+            str(ROOT),
+            str(ROOT / "scripts/api-image-provenance.sh"),
+            expected_image_id,
+            drifted_image_id,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            "FAKE_API_RUNNING_IMAGE_ID": expected_image_id,
+            "FAKE_WEB_RUNNING_IMAGE_ID": expected_image_id,
+            "FAKE_DAGSTER_RUNNING_IMAGE_ID": drifted_image_id,
+            "PATH": f"{fake_bin}:/usr/bin:/bin",
+            "PINVI_TEST_STATE_DIR": str(state_dir),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_preflight_freezes_environment_across_env_file_drift(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     (repo / "apps/api").mkdir(parents=True)
