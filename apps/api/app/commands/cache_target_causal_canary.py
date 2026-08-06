@@ -15,9 +15,9 @@ import httpx
 
 from app.clients.kor_travel_map_cache_target import CacheTargetServiceClient
 from app.core.config import (
-    CACHE_TARGET_SERVICE_CONTRACT_GENERATION,
-    CACHE_TARGET_SERVICE_MAP_RELEASE_REVISION,
-    CACHE_TARGET_SERVICE_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION,
+    KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
     settings,
 )
 from app.db import session as db_session
@@ -32,11 +32,11 @@ async def _run(args: argparse.Namespace) -> dict[str, int | str]:
         raise CacheTargetCanaryFailure("cache_target_sync_disabled", "startup")
     if (
         settings.pinvi_kor_travel_map_cache_target_expected_openapi_sha256
-        != CACHE_TARGET_SERVICE_OPENAPI_SHA256
+        != KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256
         or settings.pinvi_kor_travel_map_cache_target_expected_source_revision
-        != CACHE_TARGET_SERVICE_MAP_RELEASE_REVISION
+        != KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION
         or settings.pinvi_kor_travel_map_cache_target_expected_contract_generation
-        != CACHE_TARGET_SERVICE_CONTRACT_GENERATION
+        != KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION
     ):
         raise CacheTargetCanaryFailure("service_contract_pin_mismatch", "startup")
     command = settings.pinvi_kor_travel_map_cache_target_command_token

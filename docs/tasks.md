@@ -16,12 +16,20 @@
 
 ## kor-travel-map compatible pair
 
-- [/] **T-VN-41-F — production final boundary** — F1F-A에서 Map `8c5bdcf8` service artifact를
-      PinVi release·metadata에 재결박하고, F1F-B docker-manager pinset/input installer가 이를 exact
-      source·env로 설치한 뒤에만 `csv5 → Map H35 gc → final all-writer fence → Map typed evidence → Pin
-      finalize`을 실행한다.
-      n150 격리 paired live 증명(`T-VN-41-P`)은 완료되어 `docs/tasks-done.md`로 이관했다. 이 task는
-      production consumer enable 또는 운영 데이터 변경을 포함하므로 현재 열지 않는다.
+- [/] **T-VN-41-F — C6c 격리 compatible-pair 증명** — 서비스 전 단계이므로 production consumer enable,
+      운영 데이터 보존·복원, 중간 DB 백업은 이 task의 범위가 아니다. 데이터가 필요하면 fixture 또는
+      ETL 재실행으로 새로 만든다. 설계 정본은
+      [`t-vn-41-f1j-contract-provenance.md`](execplan/t-vn-41-f1j-contract-provenance.md)다.
+  - [x] **F1J-A Map fixture lifecycle** — Map PR #960에서 동적 cancel-probe fixture의 arm/consume/finalize
+        lifecycle와 DB 불변식을 병합했다.
+  - [x] **F1J-B Manager orchestration** — docker-manager PR #159에서 정적 job ID를 제거하고 dynamic
+        fixture의 exact unsafe `409` 회수와 response-loss 복구를 병합했다.
+  - [/] **F1J-C service provenance 재결박** — Map `1df45b57`의 service OpenAPI exact bytes/SHA-256와
+        `cache_target=7`, `c6c_cancel_probe=2` capability를 하나의 일반 service provenance로 재vendor한다.
+        PinVi ordinary runtime에는 fixture scope/token/route를 주입하지 않는다.
+  - [ ] **F1J-D n150 final isolated rehearsal/UI E2E** — F1J-C의 exact pinset만으로 별도 Compose
+        project·DB·volume을 생성해 destructive rehearsal과 live UI E2E를 실행하고 즉시 폐기한다. 운영
+        stack·DB·backup/restore는 금지한다.
 
 ## 보안·의존성
 

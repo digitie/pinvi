@@ -1,5 +1,26 @@
 # resume.md
 
+## 2026-08-06 (codex) — T-VN-41-F1J-C: 일반 Map service provenance 구현 시작
+
+Map PR #960의 C6c dynamic cancel-probe lifecycle(Map release
+`1df45b57f55b8d517bb1f2c12a869d032d70453e`)와 Manager PR #159 orchestration이 병합됐다.
+다음은 Map service OpenAPI exact bytes SHA-256
+`6ad8c1c9c1d391c54e7592b64ed9f0225164b613a5c2824d8eafd3da9bd36f1e`와
+`cache_target=7`·`c6c_cancel_probe=2`를 단일 일반 provenance로 재vendor하는 F1J-C다.
+
+1. `contracts/cache-target-upstream-map-v1.json`을 제거하고 일반 service provenance에서 cache-target
+   runtime pin을 파생한다. service snapshot·CI checkout·runtime config·unit test·non-editable wheel이 one
+   source bytes를 exact 대조해야 하며, provenance 단독 변경도 API/aggregate gate를 반드시 통과해야 한다.
+2. PinVi ordinary runtime은 fixture principal/endpoint/token을 전혀 받지 않는다. existing admin cancel
+   client가 canonical unsafe `409`을 typed conflict로 보존하는 regression만 강화한다.
+3. 그 뒤 Manager가 trusted PinVi provenance를 preflight input으로 쓰도록 바꾸고, 두 main head에서
+   n150 별도 Compose stack의 destructive rehearsal 및 live UI E2E(F1J-D)를 실행한다. production stack,
+   중간 DB backup/restore, 기존 데이터 보존은 하지 않는다.
+
+설계·작업 단위 정본은
+[`docs/execplan/t-vn-41-f1j-contract-provenance.md`](execplan/t-vn-41-f1j-contract-provenance.md),
+결정은 ADR-061, 열린 체크는 `docs/tasks.md`다.
+
 ## 2026-08-05 (codex) — T-VN-41-F1F-A: Map service artifact 재결박 구현·검증 완료, PR 대기
 
 F1D의 candidate static head가 live Map DB `0083_nonderived_uuid_generator`와 old Map release

@@ -5,20 +5,85 @@
 
 from __future__ import annotations
 
+import json
+import re
 from functools import lru_cache
-from typing import Literal, Self
+from importlib.resources import files
+from pathlib import Path
+from typing import Literal, Self, cast
 from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PinviEnvironment = Literal["development", "test", "smoke", "staging", "production"]
-CACHE_TARGET_SERVICE_OPENAPI_SHA256 = (
-    "c7838b20bd70bf333590cb440a705dd7e893f9e366078d6c11200d701d40bdcd"
-)
-# service artifact, candidate source, runtime env가 공유하는 유일한 Map provenance다.
-CACHE_TARGET_SERVICE_MAP_RELEASE_REVISION = "8c5bdcf8ce892439a8bb8e0013edf74127bf076a"
-CACHE_TARGET_SERVICE_CONTRACT_GENERATION = 7
+_SERVICE_PROVENANCE_FILENAME = "kor-travel-map-service-provenance-v1.json"
+_PACKAGED_SERVICE_PROVENANCE_PATH = f"_contract_data/{_SERVICE_PROVENANCE_FILENAME}"
+
+
+def _service_provenance_text() -> str:
+    packaged = files("app").joinpath(_PACKAGED_SERVICE_PROVENANCE_PATH)
+    if packaged.is_file():
+        return packaged.read_text(encoding="utf-8")
+
+    for directory in Path(__file__).resolve().parents:
+        candidate = directory / "contracts" / _SERVICE_PROVENANCE_FILENAME
+        if candidate.is_file():
+            return candidate.read_text(encoding="utf-8")
+    raise RuntimeError(f"Map service provenance file is missing: {_SERVICE_PROVENANCE_FILENAME}")
+
+
+def _required_string(payload: dict[str, object], field: str, pattern: str) -> str:
+    value = payload.get(field)
+    if not isinstance(value, str) or re.fullmatch(pattern, value) is None:
+        raise RuntimeError(f"Map service provenance {field} is invalid")
+    return value
+
+
+def _capability_generation(capabilities: dict[str, object], name: str) -> int:
+    capability = capabilities.get(name)
+    if not isinstance(capability, dict):
+        raise RuntimeError(f"Map service provenance capability {name} is missing")
+    generation = capability.get("generation")
+    if type(generation) is not int or generation < 1:
+        raise RuntimeError(f"Map service provenance capability {name} generation is invalid")
+    return generation
+
+
+def _load_service_provenance() -> tuple[str, str, int, int]:
+    raw = json.loads(_service_provenance_text())
+    if not isinstance(raw, dict):
+        raise RuntimeError("Map service provenance must be an object")
+    payload = cast(dict[str, object], raw)
+    if set(payload) != {
+        "capabilities",
+        "map_release_revision",
+        "service_openapi_sha256",
+        "version",
+    }:
+        raise RuntimeError("Map service provenance fields are invalid")
+    if payload["version"] != 1:
+        raise RuntimeError("Map service provenance version is unsupported")
+    capabilities_value = payload["capabilities"]
+    if not isinstance(capabilities_value, dict):
+        raise RuntimeError("Map service provenance capabilities are invalid")
+    capabilities = cast(dict[str, object], capabilities_value)
+    if set(capabilities) != {"cache_target", "c6c_cancel_probe"}:
+        raise RuntimeError("Map service provenance capability inventory is invalid")
+    return (
+        _required_string(payload, "service_openapi_sha256", r"[0-9a-f]{64}"),
+        _required_string(payload, "map_release_revision", r"[0-9a-f]{40}"),
+        _capability_generation(capabilities, "cache_target"),
+        _capability_generation(capabilities, "c6c_cancel_probe"),
+    )
+
+
+(
+    KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
+    KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION,
+    KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION,
+) = _load_service_provenance()
 
 
 class Settings(BaseSettings):
@@ -465,7 +530,7 @@ class Settings(BaseSettings):
             raise ValueError(
                 "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_OPENAPI_SHA256 must be lowercase SHA-256 hex"
             ) from exc
-        if openapi_sha != CACHE_TARGET_SERVICE_OPENAPI_SHA256:
+        if openapi_sha != KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256:
             raise ValueError(
                 "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_OPENAPI_SHA256 must match the vendored service contract"
             )
@@ -478,13 +543,13 @@ class Settings(BaseSettings):
             raise ValueError(
                 "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION must be a full lowercase git SHA"
             )
-        if source_revision != CACHE_TARGET_SERVICE_MAP_RELEASE_REVISION:
+        if source_revision != KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION:
             raise ValueError(
                 "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION must match the service contract Map release revision"
             )
         if (
             self.pinvi_kor_travel_map_cache_target_expected_contract_generation
-            != CACHE_TARGET_SERVICE_CONTRACT_GENERATION
+            != KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION
         ):
             raise ValueError(
                 "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_CONTRACT_GENERATION must match the vendored service contract"
