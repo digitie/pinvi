@@ -10,10 +10,12 @@
 - 세 final Docker image가 하나의 validator를 통해 production/staging exact commit을 검증하고
   `org.opencontainers.image.revision`·`io.pinvi.build.environment` label을 기록하게 했다.
   API의 기존 inline 검증도 같은 validator로 통합해 drift를 없앴다.
-- regression은 세 Dockerfile의 argument/label wiring과 validator의 정상·비정상 입력을 고정했다.
-  focused provenance test와 Dockerfile syntax check를 통과했다.
-- **다음**: PinVi PR의 적대적 리뷰·merge 뒤 Manager Compose 세 build argument와 frozen pinset을
-  새 PinVi merge SHA로 원자 갱신하고 n150 F1D rebuild를 재개한다.
+- app Compose의 Web/Dagster build context도 immutable archive를 받게 하고, deploy wrapper가
+  build/pull/up 전 선택한 API/Web/Dagster image label을 build input과 대조하게 했다.
+  regression은 resolved Compose와 shell fake image inspect까지 세 service 경로를 고정했다.
+  focused provenance 46건과 Dockerfile syntax check를 통과했다.
+- **다음**: PinVi PR의 적대적 리뷰·merge 뒤 frozen pinset을 새 PinVi merge SHA로 원자 갱신하고
+  n150 F1D rebuild를 재개한다.
 
 ## 2026-08-06 (codex) — T-VN-41-F1D-C1a 후보 head 정적 판정 경계 보강
 

@@ -4,12 +4,12 @@
 
 n150 F1D candidate는 PinVi API의 OCI revision/environment label만 검증 가능했고 Web·Dagster에는
 동일 provenance가 없어 DB reset 전에 fail-close했다. 세 final Docker image가 shared validator로
-production/staging exact commit을 확인하고 동일 label을 기록하도록 정렬했다. API의 inline shell
-검증도 shared validator로 바꿔 세 image 사이의 drift를 없앴다.
+production/staging exact commit을 확인하고 동일 label을 기록하도록 정렬했다. PinVi app Compose와
+immutable archive build context도 세 runtime service에 같은 revision/environment를 전달하고, deploy
+wrapper가 build/pull/up 전에 해당 image label을 대조하게 했다.
 
-focused provenance unit과 Dockerfile syntax check는 통과했다. 다음은 단일 적대적 리뷰 후 PinVi
-merge SHA를 Manager의 Compose argument 계약 및 release pinset에 원자 반영하고 n150 F1D rebuild를
-재개하는 일이다.
+focused provenance unit·resolved Compose·Dockerfile syntax check는 통과했다. 다음은 단일 적대적
+리뷰 후 PinVi merge SHA를 Manager release pinset에 원자 반영하고 n150 F1D rebuild를 재개하는 일이다.
 
 ## 2026-08-06 (codex) — T-VN-41-F1D-C1a 후보 PinVi migration head 검사 진행
 

@@ -25,6 +25,7 @@
 - [/] **T-VN-41-F1D-C1b — PinVi seven-image provenance** — API뿐 아니라 Web·Dagster image도
       동일한 exact `PINVI_SOURCE_REVISION`과 `PINVI_BUILD_ENVIRONMENT` OCI label을 image 자체에
       기록한다. Manager candidate는 세 label이 모두 release pin과 일치할 때만 DB reset 단계로 진행한다.
+      PinVi deploy wrapper도 build/pull/up 전에 선택한 runtime image label을 같은 입력과 대조한다.
       DB·DSN·credential file·현재 작업 디렉터리는 읽지 않는다.
 
 ## kor-travel-map compatible pair

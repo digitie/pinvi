@@ -13,13 +13,16 @@ argument로 받고, production/staging에서는 소문자 40자리 commit만 수
 이 검증은 Dockerfile 내부에서 수행하므로 Manager가 주입한 candidate build argument가 누락되거나
 잘못된 경우 image 생성 자체가 실패한다.
 
-Manager Compose는 세 PinVi service 모두에 같은 두 argument를 명시하고, source 계약 테스트는
-세 build mapping과 image label을 함께 확인한다. PinVi merge SHA를 새 Manager release pinset에
-원자 갱신한 뒤 n150 F1D rebuild를 다시 실행한다.
+PinVi app Compose와 Manager Compose는 세 PinVi service 모두에 같은 두 argument를 명시한다.
+immutable deploy wrapper는 세 service의 build context를 한 exact archive로 고정하고, build/pull/up
+전에 선택된 runtime image label을 build 입력과 대조한다. source 계약 테스트는 실제 resolved
+Compose에서 세 build mapping을 확인한다. PinVi merge SHA를 새 Manager release pinset에 원자
+갱신한 뒤 n150 F1D rebuild를 다시 실행한다.
 
 ## 완료 기준
 
 - [ ] API·Web·Dagster final image가 동일한 OCI revision/environment label을 가진다.
 - [ ] production/staging의 비정상 revision이 각 image build에서 거부된다.
-- [ ] PinVi 및 Manager 계약 테스트가 세 service argument를 확인한다.
+- [ ] PinVi 및 Manager의 resolved Compose 계약 테스트가 세 service argument를 확인한다.
+- [ ] deploy wrapper가 기동 전 선택한 모든 runtime image label을 검증한다.
 - [ ] 새 PinVi merge SHA로 Manager pinset을 갱신하고 n150 candidate preflight를 통과한다.
