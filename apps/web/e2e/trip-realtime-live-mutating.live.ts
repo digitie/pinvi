@@ -37,7 +37,7 @@ async function createTrip(page: Page, title: string) {
   await page.getByTestId('trip-create-title').fill(title);
   await page.getByTestId('trip-create-region').fill('라이브 검증');
   await page.getByTestId('trip-create-submit').click();
-  await expect(page.getByText('새 여행을 만들었습니다.')).toBeVisible();
+  await expect(page.getByText('초안 여행을 저장했습니다.')).toBeVisible();
 
   const link = page.getByTestId('trip-list').getByRole('link').filter({ hasText: title }).first();
   await expect(link).toBeVisible();
