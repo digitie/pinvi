@@ -28,6 +28,26 @@ from app.services.bootstrap_admin import (
 )
 
 CREDENTIAL_FILE_ENV = "PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE"
+CANDIDATE_HEAD_SCHEMA = "pinvi.candidate-head.v1"
+_ERROR_PHASE_BY_CODE = {
+    "alembic_config_missing": "migration",
+    "credential_file_changed": "credential_file",
+    "credential_file_env_missing": "credential_file",
+    "credential_file_json_invalid": "credential_file",
+    "credential_file_link_count_invalid": "credential_file",
+    "credential_file_missing": "credential_file",
+    "credential_file_mode_invalid": "credential_file",
+    "credential_file_not_regular": "credential_file",
+    "credential_file_owner_mismatch": "credential_file",
+    "credential_file_path_invalid": "credential_file",
+    "credential_file_size_invalid": "credential_file",
+    "credential_file_unavailable": "credential_file",
+    "migration_failed": "migration",
+    "schema_revision_mismatch": "schema_check",
+    "schema_version_invalid": "schema_check",
+    "schema_version_unavailable": "schema_check",
+    "static_head_unavailable": "migration",
+}
 
 
 @dataclass(frozen=True)
@@ -64,12 +84,12 @@ def get_static_pinvi_head(api_root: Path | None = None) -> str:
 
     try:
         script = ScriptDirectory.from_config(_alembic_config(api_root))
-        head = script.get_current_head()
+        heads = script.get_heads()
     except Exception as exc:
         raise BootstrapAdminError("static_head_unavailable", "migration") from exc
-    if not head:
+    if len(heads) != 1 or not isinstance(heads[0], str) or not heads[0]:
         raise BootstrapAdminError("static_head_unavailable", "migration")
-    return head
+    return heads[0]
 
 
 def run_alembic_upgrade_head(api_root: Path | None = None) -> None:
@@ -146,9 +166,12 @@ class _SecretFreeArgumentParser(argparse.ArgumentParser):
         raise SystemExit(2)
 
 
-def _parse_args(argv: Sequence[str] | None = None) -> None:
+def _parse_args(argv: Sequence[str] | None = None) -> str:
     parser = _SecretFreeArgumentParser(description=__doc__)
-    parser.parse_args(argv)
+    parser.add_argument("command", nargs="?", choices=("head",))
+    parsed = parser.parse_args(argv)
+    command: str | None = parsed.command
+    return command or "bootstrap"
 
 
 def _print_json(payload: dict[str, str], *, stream: TextIO | None = None) -> None:
@@ -156,12 +179,27 @@ def _print_json(payload: dict[str, str], *, stream: TextIO | None = None) -> Non
     print(json.dumps(payload, sort_keys=True, separators=(",", ":")), file=output)
 
 
+def _typed_error_payload(error: BootstrapAdminError) -> dict[str, str]:
+    phase = _ERROR_PHASE_BY_CODE.get(error.code)
+    if phase is None:
+        return {"error_code": "internal_error", "phase": "runtime"}
+    return {"error_code": error.code, "phase": phase}
+
+
 def main(argv: Sequence[str] | None = None) -> None:
-    _parse_args(argv)
+    command = _parse_args(argv)
     try:
+        if command == "head":
+            _print_json(
+                {
+                    "pinvi_head": get_static_pinvi_head(),
+                    "schema": CANDIDATE_HEAD_SCHEMA,
+                }
+            )
+            return
         result = run_pinvi_admin_bootstrap()
     except BootstrapAdminError as exc:
-        _print_json({"error_code": exc.code, "phase": exc.phase}, stream=sys.stderr)
+        _print_json(_typed_error_payload(exc), stream=sys.stderr)
         raise SystemExit(1) from None
     except Exception:
         _print_json({"error_code": "internal_error", "phase": "runtime"}, stream=sys.stderr)

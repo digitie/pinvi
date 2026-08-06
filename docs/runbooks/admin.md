@@ -51,6 +51,26 @@ API startup은 admin 계정을 생성/복구하지 않는다. PinVi DB migration
 `pinvi-admin-bootstrap` one-shot CLI만 수행한다. ordinary API/Web/Dagster runtime에는
 bootstrap credential file이나 password 환경변수를 주입하지 않는다.
 
+### 후보 이미지 migration head 검사
+
+Docker-manager는 destructive rebuild 전에 **후보 PinVi API 이미지 안에서만** 아래 명령을 먼저
+실행한다. `head`는 DB 세션·DSN·credential file·bootstrap service를 전혀 읽지 않고, 설치된
+Alembic script graph에서 단 하나의 head를 검사한다.
+
+```bash
+pinvi-admin-bootstrap head
+```
+
+성공 출력은 정확히 한 줄의 다음 JSON이다.
+
+```json
+{"pinvi_head":"<exact-alembic-head>","schema":"pinvi.candidate-head.v1"}
+```
+
+Alembic 설정이 없거나 head가 0개 또는 복수이면 `static_head_unavailable` typed error JSON으로
+fail-closed한다. 이 값은 이후 `pinvi-admin-bootstrap` migration/credential one-shot이 DB에서
+확인할 expected head이며, source checkout이나 live DB에서 추측하지 않는다.
+
 one-shot 입력은 `PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE` 하나뿐이다. 파일 내용은 다음 JSON
 shape이며, 실제 값은 gitignore된 운영 env나 local-only runbook이 아니라 Manager가 만든 owner-only
 임시 파일에만 둔다.

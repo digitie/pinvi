@@ -13,6 +13,15 @@
   브랜치는 `agent/claude-tdr-<task>`. **TDR 본편(backend+web UI) 전부 머지 완료**: T-306a(#396),
   T-301(#397), T-302(#398), T-303(#399), T-304(#400), T-305(#401), T-309c(#402), T-306(#404),
   T-307(#405+#411), T-308(#406), T-309a/b(1 PR). 잔여는 mobile mirror(TDR-mobile, 별도 train)뿐.
+- **T-VN-41-F1D-C1a = Codex** — `feat/tvn41-pinvi-candidate-head`는 PinVi 후보 이미지의
+  DB·credential 비접근 static Alembic head 검사와 해당 CLI 계약만 변경한다. Manager/Map 파일과
+  ordinary API 동작은 이 PR 범위 밖이다.
+
+## T-VN-41 runtime rebootstrap
+
+- [/] **T-VN-41-F1D-C1a — PinVi 후보 migration head 검사** — `pinvi-admin-bootstrap head`가
+      후보 이미지의 Alembic graph에서 exact 단일 head를 JSON으로 반환하고, 0개·복수·설정 오류는
+      typed fail-closed error로 종료한다. DB·DSN·credential file은 읽지 않는다.
 
 ## kor-travel-map compatible pair
 
