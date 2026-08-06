@@ -1176,12 +1176,10 @@ def test_deploy_contract_wires_map_user_credentials_to_api_only() -> None:
             "${PINVI_KOR_TRAVEL_MAP_ADMIN_SERVICE_TOKEN:-}"
         ),
         "PINVI_KOR_TRAVEL_MAP_ADMIN_PROXY_SECRET": (
-            "PINVI_KOR_TRAVEL_MAP_ADMIN_PROXY_SECRET: "
-            "${PINVI_KOR_TRAVEL_MAP_ADMIN_PROXY_SECRET:-}"
+            "PINVI_KOR_TRAVEL_MAP_ADMIN_PROXY_SECRET: ${PINVI_KOR_TRAVEL_MAP_ADMIN_PROXY_SECRET:-}"
         ),
         "PINVI_KOR_TRAVEL_MAP_ADMIN_ACTOR": (
-            "PINVI_KOR_TRAVEL_MAP_ADMIN_ACTOR: "
-            "${PINVI_KOR_TRAVEL_MAP_ADMIN_ACTOR:-pinvi-admin}"
+            "PINVI_KOR_TRAVEL_MAP_ADMIN_ACTOR: ${PINVI_KOR_TRAVEL_MAP_ADMIN_ACTOR:-pinvi-admin}"
         ),
         "PINVI_KOR_TRAVEL_MAP_PUBLIC_API_KEY": (
             "PINVI_KOR_TRAVEL_MAP_PUBLIC_API_KEY: ${PINVI_KOR_TRAVEL_MAP_PUBLIC_API_KEY:-}"
