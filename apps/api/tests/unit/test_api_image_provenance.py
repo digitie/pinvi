@@ -277,6 +277,7 @@ def test_image_build_environment_must_equal_deploy_environment() -> None:
 
 def test_docker_and_deploy_files_bind_the_same_revision_contract() -> None:
     dockerfile = (ROOT / "apps/api/Dockerfile").read_text(encoding="utf-8")
+    validator = (ROOT / "scripts/validate-image-provenance.sh").read_text(encoding="utf-8")
     compose = (ROOT / "infra/docker-compose.app.yml").read_text(encoding="utf-8")
     docker_app = (ROOT / "scripts/docker-app.sh").read_text(encoding="utf-8")
     deploy = (ROOT / "scripts/deploy-node.sh").read_text(encoding="utf-8")
@@ -285,7 +286,7 @@ def test_docker_and_deploy_files_bind_the_same_revision_contract() -> None:
     assert "PINVI_SOURCE_REVISION=${PINVI_SOURCE_REVISION}" in dockerfile
     assert 'org.opencontainers.image.revision="${PINVI_SOURCE_REVISION}"' in dockerfile
     assert 'io.pinvi.build.environment="${PINVI_BUILD_ENVIRONMENT}"' in dockerfile
-    assert "staging|production" in dockerfile
+    assert "staging|production" in validator
     assert "- PINVI_SOURCE_REVISION" in compose
     assert "PINVI_BUILD_ENVIRONMENT=${PINVI_ENVIRONMENT:-smoke}" in compose
     assert "PINVI_API_BUILD_CONTEXT" in compose
@@ -295,6 +296,48 @@ def test_docker_and_deploy_files_bind_the_same_revision_contract() -> None:
     )
     assert "build_images" in deploy
     assert "pinvi_verify_api_image_provenance" in deploy
+
+
+def test_all_pinvi_runtime_images_have_the_same_provenance_contract() -> None:
+    validator = (ROOT / "scripts/validate-image-provenance.sh").read_text(encoding="utf-8")
+
+    assert "staging|production" in validator
+    assert "exact source commit" in validator
+    for dockerfile_path in (
+        ROOT / "apps/api/Dockerfile",
+        ROOT / "apps/web/Dockerfile",
+        ROOT / "apps/etl/Dockerfile",
+    ):
+        dockerfile = dockerfile_path.read_text(encoding="utf-8")
+        assert "ARG PINVI_BUILD_ENVIRONMENT=development" in dockerfile
+        assert "ARG PINVI_SOURCE_REVISION=development" in dockerfile
+        assert "COPY scripts/validate-image-provenance.sh /tmp/validate-image-provenance.sh" in dockerfile
+        assert 'org.opencontainers.image.revision="${PINVI_SOURCE_REVISION}"' in dockerfile
+        assert 'io.pinvi.build.environment="${PINVI_BUILD_ENVIRONMENT}"' in dockerfile
+
+
+@pytest.mark.parametrize(
+    ("environment", "revision", "returncode"),
+    [
+        ("production", "a" * 40, 0),
+        ("staging", "development", 2),
+        ("production", "A" * 40, 2),
+        ("unknown", "development", 2),
+    ],
+)
+def test_runtime_image_provenance_validator_is_fail_closed(
+    environment: str,
+    revision: str,
+    returncode: int,
+) -> None:
+    completed = subprocess.run(  # noqa: S603 - test inputs are fixed parametrize literals
+        ["/bin/sh", str(ROOT / "scripts/validate-image-provenance.sh"), environment, revision],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+
+    assert completed.returncode == returncode
 
 
 def test_api_image_installs_console_scripts_after_copying_app_source() -> None:
