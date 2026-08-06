@@ -137,6 +137,7 @@ dagster_up() {
   pinvi_verify_runtime_image_provenance app-dagster
   log "starting Dagster webserver (port ${DAGSTER_PORT})"
   compose --profile etl up -d app-dagster
+  pinvi_verify_or_remove_running_dagster
 }
 
 wait_for_url() {

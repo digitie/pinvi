@@ -12,7 +12,9 @@
   API의 기존 inline 검증도 같은 validator로 통합해 drift를 없앴다.
 - app Compose의 Web/Dagster build context도 immutable archive를 받게 하고, deploy wrapper가
   build/pull/up 전 선택한 API/Web/Dagster image label을 build input과 대조하게 했다.
-  regression은 resolved Compose와 shell fake image inspect까지 세 service 경로를 고정했다.
+  단일 적대적 재리뷰의 tag TOCTOU 지적도 반영해 검증된 image ID를 세 `PINVI_*_IMAGE` override에
+  고정하고, 기동 뒤 API/Web/Dagster container `.Image`를 해당 ID와 대조한다. regression은
+  resolved Compose와 shell fake image inspect까지 세 service 경로를 고정했다.
   focused provenance 46건과 Dockerfile syntax check를 통과했다.
 - **다음**: PinVi PR의 적대적 리뷰·merge 뒤 frozen pinset을 새 PinVi merge SHA로 원자 갱신하고
   n150 F1D rebuild를 재개한다.

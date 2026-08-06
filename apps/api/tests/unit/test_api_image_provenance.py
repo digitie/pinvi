@@ -538,6 +538,9 @@ source "$2"
 pinvi_verify_api_image_provenance
 test "$PINVI_API_IMAGE" = "$3"
 pinvi_verify_runtime_image_provenance app-api app-web app-dagster
+test "$PINVI_WEB_IMAGE" = "$3"
+test "$PINVI_DAGSTER_IMAGE" = "$3"
+pinvi_verify_or_remove_running_app
 touch "$PINVI_TEST_STATE_DIR/retagged"
 compose up -d app-api
 pinvi_verify_running_api_image_id

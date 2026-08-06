@@ -15,14 +15,15 @@ argument로 받고, production/staging에서는 소문자 40자리 commit만 수
 
 PinVi app Compose와 Manager Compose는 세 PinVi service 모두에 같은 두 argument를 명시한다.
 immutable deploy wrapper는 세 service의 build context를 한 exact archive로 고정하고, build/pull/up
-전에 선택된 runtime image label을 build 입력과 대조한다. source 계약 테스트는 실제 resolved
-Compose에서 세 build mapping을 확인한다. PinVi merge SHA를 새 Manager release pinset에 원자
-갱신한 뒤 n150 F1D rebuild를 다시 실행한다.
+전에 선택된 runtime image label을 build 입력과 대조한다. 검증한 image ID를 `PINVI_*_IMAGE`로
+재결박하고, 기동 뒤 각 container의 `.Image`가 그 ID와 같은지 대조한다. source 계약 테스트는 실제
+resolved Compose에서 세 build mapping을 확인한다. PinVi merge SHA를 새 Manager release pinset에
+원자 갱신한 뒤 n150 F1D rebuild를 다시 실행한다.
 
 ## 완료 기준
 
 - [ ] API·Web·Dagster final image가 동일한 OCI revision/environment label을 가진다.
 - [ ] production/staging의 비정상 revision이 각 image build에서 거부된다.
 - [ ] PinVi 및 Manager의 resolved Compose 계약 테스트가 세 service argument를 확인한다.
-- [ ] deploy wrapper가 기동 전 선택한 모든 runtime image label을 검증한다.
+- [ ] deploy wrapper가 기동 전 label을 검증하고 세 runtime image ID와 기동 뒤 container ID를 대조한다.
 - [ ] 새 PinVi merge SHA로 Manager pinset을 갱신하고 n150 candidate preflight를 통과한다.
