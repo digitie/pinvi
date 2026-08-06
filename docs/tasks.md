@@ -24,12 +24,13 @@
         lifecycle와 DB 불변식을 병합했다.
   - [x] **F1J-B Manager orchestration** — docker-manager PR #159에서 정적 job ID를 제거하고 dynamic
         fixture의 exact unsafe `409` 회수와 response-loss 복구를 병합했다.
-  - [/] **F1J-C service provenance 재결박** — Map `1df45b57`의 service OpenAPI exact bytes/SHA-256와
-        `cache_target=7`, `c6c_cancel_probe=2` capability를 하나의 일반 service provenance로 재vendor한다.
-        PinVi ordinary runtime에는 fixture scope/token/route를 주입하지 않는다.
-  - [ ] **F1J-D n150 final isolated rehearsal/UI E2E** — F1J-C의 exact pinset만으로 별도 Compose
+  - [x] **F1J-C service provenance 재결박** — PinVi PR #435와 docker-manager PR #160이 Map `1df45b57`의
+        service OpenAPI exact bytes/SHA-256와 `cache_target=7`, `c6c_cancel_probe=2` capability를 하나의 일반
+        service provenance로 재vendor·preflight 결박했다. PinVi ordinary runtime에는 fixture scope/token/route를
+        주입하지 않는다.
+  - [/] **F1J-D n150 final isolated rehearsal/UI E2E** — F1J-C의 exact pinset만으로 별도 Compose
         project·DB·volume을 생성해 destructive rehearsal과 live UI E2E를 실행하고 즉시 폐기한다. 운영
-        stack·DB·backup/restore는 금지한다.
+        stack·DB·backup/restore는 금지한다. code PR merge 뒤 격리 rehearsal 준비를 시작했다.
 
 ## 보안·의존성
 
