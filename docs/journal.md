@@ -2,6 +2,15 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-06 (codex) — T-VN-41-F1J-C merge 완료, isolated rehearsal 전환
+
+- PinVi PR #435(`2d59855…`)와 docker-manager PR #160(`0ff7f8d…`)이 merge됐다. 일반 Map service
+  provenance는 Map #960 release·service SHA·cache-target/C6c capability를 PinVi source/Docker/wheel/CI 및
+  Manager preflight에서 같은 bytes로 결박한다. C6c 필드를 기존 compatible-pair manifest v4에 추가하지 않았다.
+- 단일 적대적 리뷰는 CI path 우회·wheel package-data 경계, fixed Git artifact/provenance/Map migration drift,
+  root-owned worktree preflight와 capability 음성 경로를 검토해 P0/P1 없이 GO였다. 다음 F1J-D는 n150 새
+  isolated Compose project/DB/volume에서만 destructive rehearsal과 live UI E2E를 수행하고 즉시 폐기한다.
+
 ## 2026-08-06 (codex) — T-VN-41-F1J: provenance CI·wheel 경계 보강
 
 - 단일 적대적 리뷰가 provenance JSON 단독 변경이 API/aggregate gate를 우회하는 P1과 non-editable wheel
