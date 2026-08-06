@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-06 (codex) — T-VN-41-F1J: C6c provenance docs-first
+
+- 서비스 전 단계라는 사용자 지시에 따라 T-VN-41-F의 범위를 production final boundary·운영 DB 보존에서
+  C6c **격리** compatible-pair proof로 정정했다. 현재 DB의 backup/restore를 성공 조건으로 두지 않고,
+  F1J-D는 새 Compose project/DB/volume에서 destructive rehearsal 후 전부 폐기한다.
+- `docs/execplan/t-vn-41-f1j-contract-provenance.md`에 F1J-A(Map #960)·F1J-B(Manager #159) 이후
+  F1J-C provenance 재결박과 F1J-D n150 isolated live UI E2E를 PR 단위로 기록했다.
+- ADR-061은 cache-target 전용 metadata를 일반 Map service provenance로 clean-cut 전환한다. Map
+  `1df45b57…`, service SHA-256 `6ad8c1c9…`, `cache_target=7` 및 `c6c_cancel_probe=2`를 한
+  vendored artifact로 결박하되, PinVi ordinary runtime에는 fixture scope/token/route를 주입하지 않는다.
+  기존 compatible-pair manifest에는 C6c field를 추가하지 않는다.
+
 ## 2026-08-05 (codex) — T-VN-41-F1F-A: 단일 Map release service 계약 재결박
 
 - F1D가 old Map release `c0af…`의 static Alembic head `0082_legacy_write_fence`와 live DB
