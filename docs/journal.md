@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-06 (codex) — T-VN-41-F1D-C1a 후보 head 정적 판정 경계 보강
+
+- 적대적 리뷰 P1/P2를 반영해 candidate `head`가 Alembic `ScriptDirectory`로 revision module을 import하는
+  경로를 제거했다. installed `app.commands.admin_bootstrap.__file__`에서만 후보 이미지 루트를 도출하고,
+  migration의 module-level literal `revision`/`down_revision` assignment를 AST로 읽어 graph를 계산한다.
+- dynamic·중복 assignment, 없는 parent, 순환, empty/multiple head와 CWD decoy는 fail-closed한다. module
+  top-level side effect/exception이 실행되지 않는 회귀 test를 추가했다.
+- 검증: focused unit 17건, bootstrap integration 12건, `ruff check .`, `mypy --strict app`을 통과했다.
+- **다음**: PR #441에 수정 근거와 검증을 남기고 적대적 재리뷰를 받는다.
+
+## 2026-08-06 (codex) — T-VN-41-F1D-C1a 후보 PinVi migration head 검사 진행
+
+- Manager의 C2 rebootstrap이 source checkout 또는 live DB에서 Alembic head를 추측하지 않도록,
+  candidate PinVi API image에 `pinvi-admin-bootstrap head` static inspection subcommand를 추가 중이다.
+  이 경로는 installed candidate graph에서 exact 한 head만 허용하며 DB session, DSN, credential file,
+  bootstrap transaction에 진입하지 않는다.
+- 성공 계약은 `{"pinvi_head":"<exact-alembic-head>","schema":"pinvi.candidate-head.v1"}` 한 줄이고,
+  config 없음/0개/복수 head는 raw 경로나 credential을 반사하지 않는 typed error JSON으로 종료한다.
+- **다음**: CLI unit·static graph 음성 경로를 검증하고 draft PR을 올린 뒤 Manager C2가 candidate receipt에
+  이 head를 결박하도록 인계한다.
+
 ## 2026-08-06 (codex) — T-VN-41-F1D-C PinVi admin bootstrap one-shot
 
 - API startup의 `PINVI_BOOTSTRAP_ADMIN_EMAIL/PASSWORD` 기반 admin 생성/복구를 제거하고,
