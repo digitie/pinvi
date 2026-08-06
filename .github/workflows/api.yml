@@ -111,6 +111,44 @@ jobs:
           PY
           )
 
+  docker-provenance-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docker image resolves the packaged Map service provenance
+        run: |
+          image="pinvi-api-provenance:${GITHUB_SHA}"
+          docker build --file apps/api/Dockerfile --tag "${image}" .
+          docker run --rm -i --entrypoint python "${image}" - <<'PY'
+          import hashlib
+          import json
+          from importlib.resources import files
+          from pathlib import Path
+
+          import app.core.config as config
+
+          artifact = files("app").joinpath(
+              "_contract_data/kor-travel-map-service-provenance-v1.json"
+          )
+          assert artifact.is_file()
+          payload = json.loads(artifact.read_text(encoding="utf-8"))
+          assert hashlib.sha256(artifact.read_bytes()).hexdigest() == (
+              "6fb6dace1bfa7c8f5ecc0938cc1da255eea6bdb25a627c736cfa79c2f5f344dd"
+          )
+          assert payload == {
+              "capabilities": {
+                  "cache_target": {"generation": 7},
+                  "c6c_cancel_probe": {"generation": 2},
+              },
+              "map_release_revision": config.KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
+              "service_openapi_sha256": config.KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+              "version": 1,
+          }
+          assert not Path("/contracts/kor-travel-map-service-provenance-v1.json").exists()
+          PY
+
   # T-VN-H07D: vendored 스냅샷의 live-compare가 sibling 체크아웃 부재로 CI에서 skip되어
   # 항상 green이던 맹점을 없앤다. kor-travel-map을 **핀 커밋**으로 체크아웃해 실제로 비교한다.
   #

@@ -70,7 +70,8 @@ COPY scripts/backup-db.sh ./scripts/backup-db.sh
 
 # 의존성 cache layer에서는 app source가 아직 없어 editable package mapping이 비어 있다.
 # source copy 뒤 project만 다시 설치해 console script가 작업 디렉터리에 의존하지 않게 한다.
-RUN pip install --no-deps -e .
+# force-include source는 두 editable build가 끝난 뒤 runtime image에 남길 이유가 없다.
+RUN pip install --no-deps -e . && rm -rf /contracts
 
 EXPOSE 8000
 

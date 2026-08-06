@@ -7,9 +7,11 @@ n150의 완전히 별도 Compose project·DB·volume에서 Map API/UI는 정상 
 `/contracts`에서 찾지 못해 중단됐다. source/wheel/Docker 경계의 결함이므로 existing DB·backup/restore는
 전혀 사용하지 않았고, 격리 자원은 폐기했다.
 
-Dockerfile은 `pip install -e .` 전에 canonical provenance를 source-relative `/contracts` 경로에 복사하며,
-단위 검증이 그 순서를 고정한다. 이 fix PR merge 뒤 Map `1df45b57…`/PinVi `2d59855…`/Manager `0ff7f8d…`
-exact pinset으로 격리 destructive cancel rehearsal과 관리자·mutating Playwright E2E를 다시 실행한다.
+Dockerfile은 두 `pip install -e .` 전 canonical provenance를 source-relative `/contracts` 경로에 제공한 뒤
+runtime image에서 제거한다. API CI는 실제 Docker build·image package resource·exact bytes/SHA를 함께
+검증한다. 이 fix PR merge 뒤 Map `1df45b57…`/PinVi `2d59855…`/Manager `0ff7f8d…` exact pinset을 새 PinVi
+merge revision으로 재결박한 다음, 격리 destructive cancel rehearsal과 관리자·mutating Playwright E2E를 다시
+실행한다.
 
 ## 2026-08-06 (codex) — T-VN-41-F1J-C 완료, F1J-D isolated rehearsal 준비
 
