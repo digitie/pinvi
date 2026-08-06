@@ -311,7 +311,10 @@ def test_all_pinvi_runtime_images_have_the_same_provenance_contract() -> None:
         dockerfile = dockerfile_path.read_text(encoding="utf-8")
         assert "ARG PINVI_BUILD_ENVIRONMENT=development" in dockerfile
         assert "ARG PINVI_SOURCE_REVISION=development" in dockerfile
-        assert "COPY scripts/validate-image-provenance.sh /tmp/validate-image-provenance.sh" in dockerfile
+        assert (
+            "COPY scripts/validate-image-provenance.sh /tmp/validate-image-provenance.sh"
+            in dockerfile
+        )
         assert 'org.opencontainers.image.revision="${PINVI_SOURCE_REVISION}"' in dockerfile
         assert 'io.pinvi.build.environment="${PINVI_BUILD_ENVIRONMENT}"' in dockerfile
 
