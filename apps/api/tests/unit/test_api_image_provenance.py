@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -148,8 +151,11 @@ def _build_document(
 def _write_archive_control_files(context_root: Path) -> None:
     for relative, content in (
         (Path("apps/api/Dockerfile"), "FROM scratch\n"),
+        (Path("apps/web/Dockerfile"), "FROM scratch\n"),
+        (Path("apps/etl/Dockerfile"), "FROM scratch\n"),
         (Path("infra/docker-compose.app.yml"), "services: {}\n"),
         (Path("scripts/api_image_provenance.py"), "# fixture\n"),
+        (Path("scripts/validate-image-provenance.sh"), "#!/usr/bin/env sh\n"),
     ):
         path = context_root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -277,6 +283,7 @@ def test_image_build_environment_must_equal_deploy_environment() -> None:
 
 def test_docker_and_deploy_files_bind_the_same_revision_contract() -> None:
     dockerfile = (ROOT / "apps/api/Dockerfile").read_text(encoding="utf-8")
+    validator = (ROOT / "scripts/validate-image-provenance.sh").read_text(encoding="utf-8")
     compose = (ROOT / "infra/docker-compose.app.yml").read_text(encoding="utf-8")
     docker_app = (ROOT / "scripts/docker-app.sh").read_text(encoding="utf-8")
     deploy = (ROOT / "scripts/deploy-node.sh").read_text(encoding="utf-8")
@@ -285,16 +292,94 @@ def test_docker_and_deploy_files_bind_the_same_revision_contract() -> None:
     assert "PINVI_SOURCE_REVISION=${PINVI_SOURCE_REVISION}" in dockerfile
     assert 'org.opencontainers.image.revision="${PINVI_SOURCE_REVISION}"' in dockerfile
     assert 'io.pinvi.build.environment="${PINVI_BUILD_ENVIRONMENT}"' in dockerfile
-    assert "staging|production" in dockerfile
+    assert "staging|production" in validator
     assert "- PINVI_SOURCE_REVISION" in compose
     assert "PINVI_BUILD_ENVIRONMENT=${PINVI_ENVIRONMENT:-smoke}" in compose
     assert "PINVI_API_BUILD_CONTEXT" in compose
-    assert "pinvi_verify_api_image_provenance" in docker_app
+    assert "PINVI_APP_BUILD_CONTEXT" in compose
+    assert "pinvi_verify_runtime_image_provenance app-api app-web" in docker_app
     assert 'git -C "$ROOT_DIR" archive' in (ROOT / "scripts/api-image-provenance.sh").read_text(
         encoding="utf-8"
     )
     assert "build_images" in deploy
-    assert "pinvi_verify_api_image_provenance" in deploy
+    assert "pinvi_verify_runtime_image_provenance app-api app-web" in deploy
+
+
+def test_resolved_compose_passes_provenance_to_every_runtime_image() -> None:
+    environment = os.environ | {
+        "PINVI_ENVIRONMENT": "production",
+        "PINVI_SOURCE_REVISION": "a" * 40,
+    }
+    docker = shutil.which("docker")
+    assert docker is not None
+    completed = subprocess.run(  # noqa: S603 - checked-in compose contract only
+        [
+            docker,
+            "compose",
+            "--profile",
+            "etl",
+            "-f",
+            str(ROOT / "infra/docker-compose.app.yml"),
+            "config",
+            "--format",
+            "json",
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+        env=environment,
+    )
+    services = json.loads(completed.stdout)["services"]
+
+    for service in ("app-api", "app-web", "app-dagster"):
+        args = services[service]["build"]["args"]
+        assert args["PINVI_SOURCE_REVISION"] == "a" * 40
+        assert args["PINVI_BUILD_ENVIRONMENT"] == "production"
+
+
+def test_all_pinvi_runtime_images_have_the_same_provenance_contract() -> None:
+    validator = (ROOT / "scripts/validate-image-provenance.sh").read_text(encoding="utf-8")
+
+    assert "staging|production" in validator
+    assert "exact source commit" in validator
+    for dockerfile_path in (
+        ROOT / "apps/api/Dockerfile",
+        ROOT / "apps/web/Dockerfile",
+        ROOT / "apps/etl/Dockerfile",
+    ):
+        dockerfile = dockerfile_path.read_text(encoding="utf-8")
+        assert "ARG PINVI_BUILD_ENVIRONMENT=development" in dockerfile
+        assert "ARG PINVI_SOURCE_REVISION=development" in dockerfile
+        assert (
+            "COPY scripts/validate-image-provenance.sh /tmp/validate-image-provenance.sh"
+            in dockerfile
+        )
+        assert 'org.opencontainers.image.revision="${PINVI_SOURCE_REVISION}"' in dockerfile
+        assert 'io.pinvi.build.environment="${PINVI_BUILD_ENVIRONMENT}"' in dockerfile
+
+
+@pytest.mark.parametrize(
+    ("environment", "revision", "returncode"),
+    [
+        ("production", "a" * 40, 0),
+        ("staging", "development", 2),
+        ("production", "A" * 40, 2),
+        ("unknown", "development", 2),
+    ],
+)
+def test_runtime_image_provenance_validator_is_fail_closed(
+    environment: str,
+    revision: str,
+    returncode: int,
+) -> None:
+    completed = subprocess.run(  # noqa: S603 - test inputs are fixed parametrize literals
+        ["/bin/sh", str(ROOT / "scripts/validate-image-provenance.sh"), environment, revision],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+
+    assert completed.returncode == returncode
 
 
 def test_api_image_installs_console_scripts_after_copying_app_source() -> None:
@@ -311,9 +396,13 @@ def test_immutable_context_uses_exact_archive_and_excludes_worktree_drift(
 ) -> None:
     repo = tmp_path / "repo"
     (repo / "apps/api").mkdir(parents=True)
+    (repo / "apps/web").mkdir(parents=True)
+    (repo / "apps/etl").mkdir(parents=True)
     (repo / "infra").mkdir()
     (repo / "scripts").mkdir()
     (repo / "apps/api/Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    (repo / "apps/web/Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    (repo / "apps/etl/Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
     (repo / "infra/docker-compose.app.yml").write_text(
         """services:
   app-api:
@@ -327,6 +416,9 @@ def test_immutable_context_uses_exact_archive_and_excludes_worktree_drift(
         encoding="utf-8",
     )
     (repo / "scripts/api_image_provenance.py").write_bytes(SCRIPT_PATH.read_bytes())
+    (repo / "scripts/validate-image-provenance.sh").write_text(
+        "#!/usr/bin/env sh\n", encoding="utf-8"
+    )
     (repo / "tracked.txt").write_text("committed\n", encoding="utf-8")
     (repo / ".gitignore").write_text("ignored-secret\n", encoding="utf-8")
     for args in (
@@ -427,7 +519,7 @@ ENV_FILE="$ROOT_DIR/missing.env"
 EXPECTED_IMAGE_ID="$3"
 compose() {
   if [[ "$1" == config ]]; then
-    printf '%s\n' '{"services":{"app-api":{"environment":{"PINVI_ENVIRONMENT":"smoke"},"build":{"args":{"PINVI_SOURCE_REVISION":"development"}},"image":"pinvi-api:test"}}}'
+    printf '%s\n' '{"services":{"app-api":{"environment":{"PINVI_ENVIRONMENT":"smoke"},"build":{"args":{"PINVI_SOURCE_REVISION":"development"}},"image":"pinvi-api:test"},"app-web":{"image":"pinvi-web:test"},"app-dagster":{"image":"pinvi-dagster:test"}}}'
   elif [[ "$1 $2" == "ps -q" ]]; then
     printf 'api-container-id\n'
   elif [[ "$1 $2" == "ps -aq" ]]; then
@@ -445,6 +537,10 @@ compose() {
 source "$2"
 pinvi_verify_api_image_provenance
 test "$PINVI_API_IMAGE" = "$3"
+pinvi_verify_runtime_image_provenance app-api app-web app-dagster
+test "$PINVI_WEB_IMAGE" = "$3"
+test "$PINVI_DAGSTER_IMAGE" = "$3"
+pinvi_verify_or_remove_running_app
 touch "$PINVI_TEST_STATE_DIR/retagged"
 compose up -d app-api
 pinvi_verify_running_api_image_id
@@ -479,13 +575,123 @@ test -e "$PINVI_TEST_STATE_DIR/removed"
     assert result.returncode == 0, result.stderr
 
 
+def test_running_web_and_dagster_image_drift_is_removed_independently(
+    tmp_path: Path,
+) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    expected_image_id = f"sha256:{'a' * 64}"
+    drifted_image_id = f"sha256:{'b' * 64}"
+    _write_executable(
+        fake_bin / "docker",
+        r"""#!/usr/bin/env bash
+set -euo pipefail
+case "$1:$2:$3" in
+  container:inspect:--format)
+    case "$5" in
+      api-container-id) printf '%s\n' "$FAKE_API_RUNNING_IMAGE_ID" ;;
+      web-container-id) printf '%s\n' "$FAKE_WEB_RUNNING_IMAGE_ID" ;;
+      dagster-container-id) printf '%s\n' "$FAKE_DAGSTER_RUNNING_IMAGE_ID" ;;
+      *) exit 44 ;;
+    esac
+    ;;
+  container:rm:-f) exit 0 ;;
+  *) exit 45 ;;
+esac
+""",
+    )
+    shell = r"""
+set -euo pipefail
+ROOT_DIR="$1"
+COMPOSE_FILE="$ROOT_DIR/infra/docker-compose.app.yml"
+ENV_FILE="$ROOT_DIR/missing.env"
+compose() {
+  local profile=""
+  if [[ "$1 $2" == "--profile etl" ]]; then
+    profile=etl
+    shift 2
+  fi
+  case "$1 $2" in
+    "ps -q")
+      case "$3" in
+        app-api) [[ ! -e "$PINVI_TEST_STATE_DIR/app-cleaned" ]] && printf 'api-container-id\n' ;;
+        app-web) [[ ! -e "$PINVI_TEST_STATE_DIR/app-cleaned" ]] && printf 'web-container-id\n' ;;
+        app-dagster) [[ ! -e "$PINVI_TEST_STATE_DIR/dagster-cleaned" ]] && printf 'dagster-container-id\n' ;;
+        *) exit 46 ;;
+      esac
+      ;;
+    "ps -aq")
+      if [[ "$profile" == etl ]]; then
+        [[ ! -e "$PINVI_TEST_STATE_DIR/dagster-cleaned" ]] && printf 'dagster-container-id\n'
+      elif [[ ! -e "$PINVI_TEST_STATE_DIR/app-cleaned" ]]; then
+        printf 'api-container-id\nweb-container-id\n'
+      fi
+      ;;
+    "stop app-web") touch "$PINVI_TEST_STATE_DIR/app-cleaned" ;;
+    "stop app-dagster")
+      [[ "$profile" == etl ]]
+      touch "$PINVI_TEST_STATE_DIR/dagster-cleaned"
+      ;;
+    *) exit 47 ;;
+  esac
+}
+source "$2"
+PINVI_ATTESTED_API_IMAGE_ID="$3"
+PINVI_ATTESTED_WEB_IMAGE_ID="$3"
+PINVI_ATTESTED_DAGSTER_IMAGE_ID="$3"
+pinvi_verify_or_remove_running_app
+export FAKE_WEB_RUNNING_IMAGE_ID="$4"
+if pinvi_verify_or_remove_running_app; then
+  exit 48
+fi
+test -e "$PINVI_TEST_STATE_DIR/app-cleaned"
+if pinvi_verify_or_remove_running_dagster; then
+  exit 49
+fi
+test -e "$PINVI_TEST_STATE_DIR/dagster-cleaned"
+"""
+    result = subprocess.run(  # noqa: S603 - fixed local shell fixture
+        [
+            "/usr/bin/bash",
+            "-c",
+            shell,
+            "runtime-container-drift-test",
+            str(ROOT),
+            str(ROOT / "scripts/api-image-provenance.sh"),
+            expected_image_id,
+            drifted_image_id,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            "FAKE_API_RUNNING_IMAGE_ID": expected_image_id,
+            "FAKE_WEB_RUNNING_IMAGE_ID": expected_image_id,
+            "FAKE_DAGSTER_RUNNING_IMAGE_ID": drifted_image_id,
+            "PATH": f"{fake_bin}:/usr/bin:/bin",
+            "PINVI_TEST_STATE_DIR": str(state_dir),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_preflight_freezes_environment_across_env_file_drift(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     (repo / "apps/api").mkdir(parents=True)
+    (repo / "apps/web").mkdir(parents=True)
+    (repo / "apps/etl").mkdir(parents=True)
     (repo / "infra").mkdir()
     (repo / "scripts").mkdir()
     (repo / "apps/api/Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    (repo / "apps/web/Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    (repo / "apps/etl/Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
     (repo / "scripts/api_image_provenance.py").write_bytes(SCRIPT_PATH.read_bytes())
+    (repo / "scripts/validate-image-provenance.sh").write_text(
+        "#!/usr/bin/env sh\n", encoding="utf-8"
+    )
     (repo / "infra/docker-compose.app.yml").write_text(
         """services:
   app-api:
@@ -626,10 +832,17 @@ def test_pre_start_provenance_failure_leaves_no_container_or_temp_context(
 ) -> None:
     repo = tmp_path / "repo"
     (repo / "apps/api").mkdir(parents=True)
+    (repo / "apps/web").mkdir(parents=True)
+    (repo / "apps/etl").mkdir(parents=True)
     (repo / "infra").mkdir()
     (repo / "scripts").mkdir()
     (repo / "apps/api/Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    (repo / "apps/web/Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    (repo / "apps/etl/Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
     (repo / "scripts/api_image_provenance.py").write_bytes(SCRIPT_PATH.read_bytes())
+    (repo / "scripts/validate-image-provenance.sh").write_text(
+        "#!/usr/bin/env sh\n", encoding="utf-8"
+    )
     (repo / "infra/docker-compose.app.yml").write_text(
         """services:
   app-api:

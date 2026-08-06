@@ -127,7 +127,7 @@ build() {
   pinvi_prepare_api_image_provenance
   log "building app-api and app-web"
   compose build app-api app-web
-  pinvi_verify_api_image_provenance
+  pinvi_verify_runtime_image_provenance app-api app-web
 }
 
 require_python() {
@@ -146,7 +146,7 @@ up_deps() {
 migrate() {
   require_docker
   require_python
-  pinvi_verify_api_image_provenance
+  pinvi_verify_runtime_image_provenance app-api
   local credential_file
   credential_file="$(bootstrap_credential_file)"
   local attempt
@@ -177,7 +177,7 @@ bootstrap_credential_file() {
 up() {
   require_docker
   require_python
-  pinvi_verify_api_image_provenance
+  pinvi_verify_runtime_image_provenance app-api app-web
   free_app_ports
   up_deps
   migrate

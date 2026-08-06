@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-06 (codex) — T-VN-41-F1D-C1b PinVi seven-image provenance 보강
+
+- n150 F1D candidate가 DB 변경 전에 `pinvi-web image source revision label is invalid`으로
+  fail-close한 원인은 API만 OCI provenance label을 갖고 Web·Dagster build는 revision/environment
+  argument를 받지 않은 데 있었다. 기존 runtime/DB/journal은 변경하지 않았다.
+- 세 final Docker image가 하나의 validator를 통해 production/staging exact commit을 검증하고
+  `org.opencontainers.image.revision`·`io.pinvi.build.environment` label을 기록하게 했다.
+  API의 기존 inline 검증도 같은 validator로 통합해 drift를 없앴다.
+- app Compose의 Web/Dagster build context도 immutable archive를 받게 하고, deploy wrapper가
+  build/pull/up 전 선택한 API/Web/Dagster image label을 build input과 대조하게 했다.
+  단일 적대적 재리뷰의 tag TOCTOU 지적도 반영해 검증된 image ID를 세 `PINVI_*_IMAGE` override에
+  고정하고, 기동 뒤 API/Web/Dagster container `.Image`를 해당 ID와 대조한다. regression은
+  resolved Compose와 shell fake image inspect까지 세 service 경로를 고정했다.
+  focused provenance 47건과 Dockerfile syntax check를 통과했다.
+- **다음**: PinVi PR의 적대적 리뷰·merge 뒤 frozen pinset을 새 PinVi merge SHA로 원자 갱신하고
+  n150 F1D rebuild를 재개한다.
+
 ## 2026-08-06 (codex) — T-VN-41-F1D-C1a 후보 head 정적 판정 경계 보강
 
 - 적대적 리뷰 P1/P2를 반영해 candidate `head`가 Alembic `ScriptDirectory`로 revision module을 import하는

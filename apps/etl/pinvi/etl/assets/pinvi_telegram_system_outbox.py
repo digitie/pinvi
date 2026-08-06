@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from dagster import Backoff, RetryPolicy, asset
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -12,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from pinvi.etl.resources import PinviDatabaseResource
 from pinvi.etl.sql.outbox import (
     TELEGRAM_OUTBOX_CATEGORY_SQL as _TELEGRAM_OUTBOX_CATEGORY_SQL,
+)
+from pinvi.etl.sql.outbox import (
     TELEGRAM_OUTBOX_SUMMARY_SQL as _TELEGRAM_OUTBOX_SUMMARY_SQL,
 )
 

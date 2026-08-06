@@ -78,7 +78,12 @@ pull_images() {
   pinvi_prepare_api_image_provenance
   log "pulling app images"
   compose pull app-api app-web
-  pinvi_verify_api_image_provenance
+  if [[ "$ENABLE_DAGSTER" != "0" ]]; then
+    compose --profile etl pull app-dagster
+    pinvi_verify_runtime_image_provenance app-api app-web app-dagster
+  else
+    pinvi_verify_runtime_image_provenance app-api app-web
+  fi
 }
 
 build_images() {
@@ -88,11 +93,15 @@ build_images() {
   if [[ "$ENABLE_DAGSTER" != "0" ]]; then
     compose --profile etl build app-dagster
   fi
-  pinvi_verify_api_image_provenance
+  if [[ "$ENABLE_DAGSTER" != "0" ]]; then
+    pinvi_verify_runtime_image_provenance app-api app-web app-dagster
+  else
+    pinvi_verify_runtime_image_provenance app-api app-web
+  fi
 }
 
 migrate() {
-  pinvi_verify_api_image_provenance
+  pinvi_verify_runtime_image_provenance app-api
   local credential_file
   credential_file="$(bootstrap_credential_file)"
   log "starting database dependencies"
@@ -115,7 +124,7 @@ bootstrap_credential_file() {
 }
 
 up() {
-  pinvi_verify_api_image_provenance
+  pinvi_verify_runtime_image_provenance app-api app-web
   log "starting API + Web"
   compose up -d app-api app-web
   pinvi_verify_or_remove_running_app
@@ -125,8 +134,10 @@ up() {
 }
 
 dagster_up() {
+  pinvi_verify_runtime_image_provenance app-dagster
   log "starting Dagster webserver (port ${DAGSTER_PORT})"
   compose --profile etl up -d app-dagster
+  pinvi_verify_or_remove_running_dagster
 }
 
 wait_for_url() {
@@ -144,7 +155,7 @@ wait_for_url() {
 }
 
 smoke() {
-  pinvi_verify_api_image_provenance
+  pinvi_verify_runtime_image_provenance app-api app-web
   pinvi_verify_or_remove_running_app
   wait_for_url "http://127.0.0.1:${RUSTFS_PORT}/health/live" "RustFS"
   wait_for_url "http://127.0.0.1:${API_PORT}/health" "API"

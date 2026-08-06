@@ -2,11 +2,21 @@
 # Pinvi Dagster webserver — 고정 포트 12802 (CLAUDE.md 로컬 포트 정책 / ADR-047).
 FROM python:3.12-slim AS base
 
+ARG PINVI_BUILD_ENVIRONMENT=development
+ARG PINVI_SOURCE_REVISION=development
+
+COPY scripts/validate-image-provenance.sh /tmp/validate-image-provenance.sh
+RUN /bin/sh /tmp/validate-image-provenance.sh "$PINVI_BUILD_ENVIRONMENT" "$PINVI_SOURCE_REVISION" \
+    && rm /tmp/validate-image-provenance.sh
+LABEL org.opencontainers.image.revision="${PINVI_SOURCE_REVISION}" \
+      io.pinvi.build.environment="${PINVI_BUILD_ENVIRONMENT}"
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
-    DAGSTER_HOME=/opt/pinvi/.dagster
+    DAGSTER_HOME=/opt/pinvi/.dagster \
+    PINVI_SOURCE_REVISION=${PINVI_SOURCE_REVISION}
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

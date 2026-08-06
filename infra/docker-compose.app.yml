@@ -120,9 +120,12 @@ services:
 
   app-web:
     build:
-      context: ..
+      # immutable deploy wrapper는 API와 Web/Dagster 모두 같은 exact archive에서 빌드한다.
+      context: ${PINVI_APP_BUILD_CONTEXT:-..}
       dockerfile: apps/web/Dockerfile
       args:
+        PINVI_SOURCE_REVISION: ${PINVI_SOURCE_REVISION:-development}
+        PINVI_BUILD_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
         # 운영은 infra/.env.prod 의 NEXT_PUBLIC_* 값(빌드타임 embed)로 override.
         NEXT_PUBLIC_PINVI_API_URL: ${NEXT_PUBLIC_PINVI_API_URL:-http://127.0.0.1:${PINVI_API_PORT:-12801}}
         NEXT_PUBLIC_GRAFANA_URL: ${NEXT_PUBLIC_GRAFANA_URL:-http://127.0.0.1:${PINVI_GRAFANA_PORT:-12205}}
@@ -143,8 +146,11 @@ services:
   app-dagster:
     profiles: ["etl"]
     build:
-      context: ..
+      context: ${PINVI_APP_BUILD_CONTEXT:-..}
       dockerfile: apps/etl/Dockerfile
+      args:
+        - PINVI_SOURCE_REVISION
+        - PINVI_BUILD_ENVIRONMENT=${PINVI_ENVIRONMENT:-smoke}
     image: ${PINVI_DAGSTER_IMAGE:-pinvi-dagster:local}
     container_name: pinvi-app-dagster
     restart: unless-stopped
