@@ -2,6 +2,21 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-06 (codex) — T-VN-41-F1D-C PinVi admin bootstrap one-shot
+
+- API startup의 `PINVI_BOOTSTRAP_ADMIN_EMAIL/PASSWORD` 기반 admin 생성/복구를 제거하고,
+  `pinvi-admin-bootstrap` console script를 PinVi migration + 초기 admin 보장의 전용 one-shot
+  경로로 추가했다. command는 candidate source static Alembic head로 upgrade한 뒤 DB head를 같은
+  transaction에서 확인하고, 그 뒤 credential file을 읽어 admin 계정을 생성/복구한다.
+- credential 입력은 `PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE` 하나로 제한했다. 파일은 absolute path,
+  regular file, owner=euid, mode `0600`, hardlink count 1, bounded size, `O_NOFOLLOW`, duplicate-key
+  rejection을 통과해야 하며, CLI stdout/stderr는 raw email/password 대신 typed code와 email SHA-256만
+  출력한다. Docker/deploy fallback scripts의 `migrate`도 one-shot bootstrap으로 전환했다.
+- 검증: codegraph impact/sync, `ruff check .`, `ruff format --check .`, `mypy --strict app`,
+  `pytest tests/unit/test_admin_bootstrap_command.py -q`, `pytest tests/integration/test_bootstrap_admin.py -q`
+  통과. 전체 unit은 927 passed 후 기존 로컬 kor-travel-map live user snapshot drift 1건
+  (`test_vendored_snapshot_matches_live_kor_travel_map`)에서만 실패했다.
+
 ## 2026-08-06 (codex) — T-VN-41-F1J-D 격리 Docker wheel source 경로 보정
 
 - n150의 새 Compose project·DB·volume과 일회성 credential에서 Map API/UI 기동까지 통과했으나, PinVi API

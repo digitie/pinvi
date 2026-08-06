@@ -83,8 +83,8 @@
   - 두 Alembic을 따로 돌려야 한다. 운영 절차에 추가 단계.
   - schema 간 외래키 참조 시 alembic dependency 순서를 잘 정해야 한다.
 - **후속**:
-  - 운영 절차에 `kor-travel-map alembic upgrade head` → `pinvi alembic
-upgrade head` 순서 박음.
+  - 운영 절차에 `kor-travel-map alembic upgrade head` → PinVi
+    `pinvi-admin-bootstrap` one-shot 순서 박음(2026-08-06 T-VN-41-F1D-C 전환).
   - `docs/postgres-schema.md`에 `app` schema만 기록. `feature` / `provider_sync`는
     그쪽 저장소의 `docs/postgres-schema.md`를 참조.
 
