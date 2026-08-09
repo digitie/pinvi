@@ -165,7 +165,9 @@ def _weather_values_from_payload(
         return AdminFeatureWeatherValuesResponse.model_validate(
             {
                 "feature_id": str(payload.get("feature_id") or feature_id),
-                "asof": payload.get("asof"),
+                # Map current card는 selected_at, 명시 snapshot은 target_at을 준다.
+                # 과거 asof 필드는 없으므로 두 typed timestamp만 투영한다.
+                "asof": payload.get("target_at") or payload.get("selected_at"),
                 "latest_at": payload.get("latest_at"),
                 "is_stale": bool(payload.get("is_stale", False)),
                 "source_styles": payload.get("source_styles", []),

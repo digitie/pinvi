@@ -249,7 +249,7 @@ class _FakeWeatherClient:
         self.calls["feature_weather"] = {"feature_id": feature_id, "asof": asof}
         if self.unavailable:
             raise KorTravelMapUnavailable("kor-travel-map weather down")
-        return {
+        payload: dict[str, Any] = {
             "feature_id": feature_id,
             "selected_at": "2026-06-12T10:00:00+09:00",
             "latest_at": "2026-06-12T09:30:00+09:00",
@@ -267,6 +267,11 @@ class _FakeWeatherClient:
                 }
             ],
         }
+        if asof is not None:
+            payload.pop("selected_at")
+            payload["target_at"] = asof.isoformat()
+            payload["known_at"] = "2026-06-12T10:05:00+09:00"
+        return payload
 
 
 def _override(fake: Any) -> None:
@@ -409,8 +414,30 @@ async def test_get_admin_feature_weather_values_proxies_weather_card(
         "2026-06-12T10:00:00+09:00"
     )
     assert data["feature_id"] == "f_weather_1"
+    assert data["asof"] == "2026-06-12T10:00:00+09:00"
     assert data["source_styles"] == ["nowcast", "short"]
     assert data["items"][0]["metric_key"] == "T1H"
+
+
+async def test_get_admin_feature_weather_values_maps_current_selected_at(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin-current-weather@example.com", roles=["user", "admin"]
+    )
+    fake = _FakeWeatherClient()
+    _override_weather(fake)
+    try:
+        resp = await client.get(
+            "/admin/features/f_weather_1/weather-values",
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    assert fake.calls["feature_weather"]["asof"] is None
+    assert resp.json()["data"]["asof"] == "2026-06-12T10:00:00+09:00"
 
 
 async def test_get_admin_feature_weather_values_maps_upstream_unavailable(
