@@ -41,7 +41,7 @@ from app.schemas.public import (
 )
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
-_UPSTREAM_COMMIT = "f426c7b78c493035952ded5c2a13f61a2a351793"
+_UPSTREAM_COMMIT = "56d98fe4a07d143386be089cd1beac12b75342eb"
 _SNAPSHOT_SHA256 = "eca7eea1dff7aa1848e50428fb8da5507e4d636c3a979b04859ef43c7f7410e7"
 
 # service profile 스냅샷 — byte-핀·재추출 절차는 cache-target 계약 테스트
