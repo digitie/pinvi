@@ -2,6 +2,16 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-09 (codex) — T-VN-34C Map 상태 축 cutover PinVi 계약 재벤더링
+
+- Map `f426c7b78c493035952ded5c2a13f61a2a351793`의 `openapi.user.json`을 byte-exact로
+  재벤더링했다(SHA-256
+  `eca7eea1dff7aa1848e50428fb8da5507e4d636c3a979b04859ef43c7f7410e7`).
+- admin curated detail subset은 같은 Map full OpenAPI에서 결정적으로 재추출했고, source pin을
+  같은 commit으로 결박했다.
+- 공개 feature 응답은 Map의 `status`와 내부 세 상태 축을 PinVi가 재노출하지 않도록 user
+  contract, PinVi API 투영, shared schema를 함께 정리했다.
+
 ## 2026-08-06 (codex) — T-VN-41-F1D-C1b PinVi seven-image provenance 보강
 
 - n150 F1D candidate가 DB 변경 전에 `pinvi-web image source revision label is invalid`으로

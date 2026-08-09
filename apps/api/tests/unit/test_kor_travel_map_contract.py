@@ -1,6 +1,6 @@
 """kor_travel_map `openapi.user.json` 계약 드리프트 게이트 (T-210e).
 
-kor_travel_map `8c5bdcf8`(T-VN-32C PR-2 — read 응답 feature_id UUID 정본화, description-only 스펙 변경 포함)의 전체 스냅샷을 byte-for-byte
+kor_travel_map `f426c7b8`(T-VN-34C — 공개 feature에서 과거 `status`와 내부 상태 축을 제거)의 전체 스냅샷을 byte-for-byte
 vendor하고 pinned SHA-256으로 수기 graft를 차단한다. 스냅샷(`tests/contract/kor-travel-map-openapi-user.json`)에 Pinvi user client
 (`clients/kor_travel_map.py`) + 그 소비자(`api/v1/features.py`·`public.py`·`search.py`·
 `admin/category_mappings.py`, `services/place_search.py`·`feature_detail.py`)가 의존하는
@@ -41,8 +41,8 @@ from app.schemas.public import (
 )
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
-_UPSTREAM_COMMIT = "8c5bdcf8ce892439a8bb8e0013edf74127bf076a"
-_SNAPSHOT_SHA256 = "66fc83b3ae918b2f82ae9cf02bea162d8fa84967567e2a450493d93b1953e801"
+_UPSTREAM_COMMIT = "f426c7b78c493035952ded5c2a13f61a2a351793"
+_SNAPSHOT_SHA256 = "eca7eea1dff7aa1848e50428fb8da5507e4d636c3a979b04859ef43c7f7410e7"
 
 # service profile 스냅샷 — byte-핀·재추출 절차는 cache-target 계약 테스트
 # (`test_kor_travel_map_cache_target_contract.py`)가 소유하고 본 파일은 읽기만 한다.
@@ -144,7 +144,6 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "category": {"type": "string", "required": True, "nullable": False},
         "marker_color": {"type": "string", "required": False, "nullable": True},
         "marker_icon": {"type": "string", "required": False, "nullable": True},
-        "status": {"type": "string", "required": True, "nullable": False},
     },
     "NearbyFeatureSummary": {
         "feature_id": {"type": "string", "required": True, "nullable": False},
@@ -153,7 +152,6 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "lon": {"type": "number", "required": True, "nullable": False},
         "lat": {"type": "number", "required": True, "nullable": False},
         "category": {"type": "string", "required": True, "nullable": False},
-        "status": {"type": "string", "required": True, "nullable": False},
         "distance_m": {"type": "number", "required": True, "nullable": False},
     },
     "ClusterSummary": {
@@ -177,7 +175,6 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "marker_icon": {"type": "string", "required": False, "nullable": True},
         "urls": {"type": "object", "required": True, "nullable": False},
         "detail": {"type": "object", "required": True, "nullable": False},
-        "status": {"type": "string", "required": True, "nullable": False},
         "updated_at": {
             "type": "string",
             "format": "date-time",
@@ -790,6 +787,20 @@ def test_snapshot_is_kor_travel_map_user_surface() -> None:
     assert _spec()["info"]["title"] == "kor-travel-map-user"
     # service profile 스냅샷의 정체 확인 — byte-핀은 cache-target 계약 테스트 소유.
     assert _service_spec()["info"]["title"] == "kor-travel-map-service"
+
+
+def test_public_feature_schemas_do_not_reintroduce_legacy_state() -> None:
+    """T-VN-34C: 공개 Map 응답에는 상태 축이나 과거 ``status``가 없어야 한다."""
+    schemas = _spec()["components"]["schemas"]
+    forbidden = {
+        "status",
+        "lifecycle_state",
+        "publication_state",
+        "quality_state",
+    }
+    for schema_name in ("FeatureSummary", "NearbyFeatureSummary", "FeatureDetailResponse"):
+        properties = schemas[schema_name]["properties"]
+        assert not forbidden & set(properties), (schema_name, sorted(forbidden & set(properties)))
 
 
 def test_client_paths_exist_in_snapshot() -> None:

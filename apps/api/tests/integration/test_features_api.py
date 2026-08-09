@@ -36,7 +36,6 @@ class _FakeKorTravelMapClient:
                     "lat": 35.155,
                     "marker_color": "P-07",
                     "marker_icon": "swimming",
-                    "status": "active",
                 }
             ],
             "clusters": [
@@ -61,7 +60,6 @@ class _FakeKorTravelMapClient:
                     "category": None,
                     "lon": kwargs["lon"],
                     "lat": kwargs["lat"],
-                    "status": "active",
                     "distance_m": 123.4,
                 }
             ],
@@ -91,7 +89,6 @@ class _FakeKorTravelMapClient:
             "marker_icon": "cafe",
             "urls": {"homepage": "https://example.test"},
             "detail": {"phones": ["051-000-0000"]},
-            "status": "active",
             "updated_at": "2026-06-10T12:00:00+09:00",
         }
 
@@ -172,6 +169,9 @@ async def test_in_bounds_maps_kor_travel_map_shape(
     assert data["items"][0]["coord"] == {"lon": 129.118, "lat": 35.155}
     assert data["clusters"][0]["cluster_key"] == "11680"
     assert data["clusters"][0]["coord"] == {"lon": 127.04, "lat": 37.52}
+    assert not {"status", "lifecycle_state", "publication_state", "quality_state"} & set(
+        data["items"][0]
+    )
     # client 가 min_lon/.../max_items 로 호출됐는지 (구 limit/bbox tuple 폐기)
     assert fake.calls["in_bounds"]["min_lon"] == 129.0
     assert fake.calls["in_bounds"]["max_items"] == 500
@@ -195,6 +195,7 @@ async def test_nearby_uses_lon_lat_and_distance(
     body = resp.json()["data"]
     assert body[0]["coord"] == {"lon": 129.118, "lat": 35.155}
     assert body[0]["distance_m"] == 123.4
+    assert not {"status", "lifecycle_state", "publication_state", "quality_state"} & set(body[0])
     assert fake.calls["nearby"]["lon"] == 129.118
     assert fake.calls["nearby"]["page_size"] == 100
 
@@ -227,6 +228,7 @@ async def test_feature_detail_maps_structured_address(
 
     assert resp.status_code == 200, resp.text
     data = resp.json()["data"]
+    assert not {"status", "lifecycle_state", "publication_state", "quality_state"} & set(data)
     assert data["name"] == "상세 장소"
     assert data["address"] == {"road": "부산 광안로 1"}
     assert data["sigungu_code"] == "11680"

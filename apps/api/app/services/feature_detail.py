@@ -113,7 +113,6 @@ def build_detail_card(dto: dict[str, Any]) -> FeatureDetailCard:
         "marker_color": dto.get("marker_color") or "P-13",
         "marker_icon": dto.get("marker_icon") or "marker",
         "homepage_url": _pick(urls, "homepage", "website", "url", "home"),
-        "status": _clean(dto.get("status")),
     }
 
     if kind == "place":

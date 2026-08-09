@@ -30,7 +30,6 @@ class _FakeMapClient:
             "marker_icon": "cafe",
             "urls": {"homepage": "https://sb.example"},
             "detail": {"phone": "051-000-0000"},
-            "status": "active",
             "updated_at": "2026-06-10T12:00:00+09:00",
         }
 

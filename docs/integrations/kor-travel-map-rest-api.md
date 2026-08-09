@@ -28,18 +28,12 @@
 > PR #533으로 admin `/v1/admin/features/curated/{id}/detail-snapshot`으로 이관됐다(ADR-049, §2.11).
 > **정본 소스**: kor-travel-map `packages/kor-travel-map-api/openapi.user.json`(사용자 표면) +
 > `docs/architecture/rest-api.md`(prose 계약). 본 문서와 충돌 시 **openapi.user.json 우선**.
-> vendored 정본은 **2026-08-05(T-VN-32C PR-2) 기준 kor-travel-map
-> merge commit `8c5bdcf8ce892439a8bb8e0013edf74127bf076a`**(read 응답 feature_id
-> UUID 정본화 — 스펙 자체는 description-only 변경)의
-> 전체 파일이며 SHA-256은
-> `66fc83b3ae918b2f82ae9cf02bea162d8fa84967567e2a450493d93b1953e801`다.
-> (직전 핀 `94ace1a9…`(T-VN-16C)는 spec-touching 4 commits 뒤처져 있었다. 재동기화
-> 실제 drift는 ① Map `96814b2a`("split service openapi profile")가 ServiceToken 전용
-> batch 2경로(`/v1/features/batch`·`/v1/features/weather/batch`)와 batch schema를
-> user profile에서 `openapi.service.json`으로 분리 — user 게이트가 해당 경로·schema를
-> vendored **service** 스냅샷 기준으로 검증하도록 재배선했다(§8) — 와 ② admin subset의
-> `curation_status`/`reuse_policy`/`relation` enum 명시 additive 추가이며, Pinvi가
-> 소비하는 필드 타입 계약 자체는 무변경이었다.)
+> vendored 정본은 **2026-08-09(T-VN-34C) 기준 kor-travel-map
+> commit `f426c7b78c493035952ded5c2a13f61a2a351793`**의 전체 파일이며 SHA-256은
+> `eca7eea1dff7aa1848e50428fb8da5507e4d636c3a979b04859ef43c7f7410e7`다.
+> 이 cutover는 공개 feature 응답에서 과거 `status`와 세 내부 상태 축을 모두 제거했다.
+> 따라서 Pinvi는 해당 필드를 재노출하거나 상태 필터로 보내지 않으며, 아래 계약 테스트가
+> 스냅샷과 Pinvi 투영 양쪽을 함께 고정한다.
 > Pinvi contract gate는 이 pinned hash와 선택적 live 전체
 > 파일 equality를 검사하므로 일부 필드만 수기로 graft하지 않는다.
 > **관계**: 능력 격차 분석은 `docs/kor-travel-map-requirements.md`(이제 대부분 해소),
@@ -638,7 +632,7 @@ admin `GET /v1/admin/features/curated/{id}/detail-snapshot`이고, 이 표면에
 수기 httpx client(kor_travel_map 권고)가 kor_travel_map `openapi.user.json`과 silent drift하는 것을 막는다.
 
 - **vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-user.json` — Pinvi가 구현 기준으로
-  삼은 kor_travel_map main commit의 **전체 파일**(현 핀 `8c5bdcf8`, T-VN-32C PR-2에서 재동기화).
+  삼은 kor_travel_map commit `f426c7b8`의 **전체 파일**(T-VN-34C에서 재동기화).
   pinned SHA-256은 본 문서 상단과 `test_kor_travel_map_contract.py`가 함께 고정한다.
   **profile 분리(Map `96814b2a`)**: ServiceToken 전용 batch 2경로
   (`/v1/features/batch`·`/v1/features/weather/batch`)는 user profile에서 분리돼

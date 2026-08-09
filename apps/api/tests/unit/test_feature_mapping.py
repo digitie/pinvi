@@ -1,6 +1,6 @@
 """features.py kor_travel_map → Pinvi 매핑 helper 단위 테스트 (DB 불필요).
 
-kor_travel_map 평면 lon/lat·name·status·구조화 address·cluster_key·평탄 metrics 투영을 검증한다.
+kor_travel_map 평면 lon/lat·name·구조화 address·cluster_key·평탄 metrics 투영을 검증한다.
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ def test_summary_defaults_marker_and_name() -> None:
     assert summary.distance_m is None
 
 
-def test_summary_carries_status_and_distance() -> None:
+def test_summary_carries_distance_without_legacy_status() -> None:
     summary = _summary_from_kor_travel_map(
         {
             "feature_id": "f1",
@@ -69,11 +69,9 @@ def test_summary_carries_status_and_distance() -> None:
             "name": "근처",
             "lon": 129.1,
             "lat": 35.1,
-            "status": "active",
             "distance_m": 42.0,
         }
     )
-    assert summary.status == "active"
     assert summary.distance_m == 42.0
     assert summary.coord is not None
     assert summary.coord.lon == 129.1
@@ -100,7 +98,6 @@ def test_detail_maps_structured_address_and_codes() -> None:
             "sigungu_code": "11680",
             "urls": {"homepage": "h"},
             "detail": {"x": 1},
-            "status": "active",
             "updated_at": "2026-06-10T12:00:00+09:00",
         }
     )

@@ -33,7 +33,6 @@ def _place_dto(**over: Any) -> dict[str, Any]:
         "marker_icon": "cafe",
         "urls": {"homepage": "https://sb.example"},
         "detail": {"phone": "051-000-0000", "business_hours": "09:00-22:00"},
-        "status": "active",
         "updated_at": "2026-06-10T12:00:00+09:00",
     }
     base.update(over)

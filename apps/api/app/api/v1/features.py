@@ -155,7 +155,6 @@ def _summary_from_kor_travel_map(dto: dict[str, Any]) -> FeatureSummary:
         category=dto.get("category"),
         marker_color=dto.get("marker_color") or "P-13",
         marker_icon=dto.get("marker_icon") or "marker",
-        status=dto.get("status"),
         distance_m=float(distance) if distance is not None else None,
     )
 
@@ -186,7 +185,6 @@ def _detail_from_kor_travel_map(dto: dict[str, Any]) -> FeatureDetail:
         marker_icon=dto.get("marker_icon") or "marker",
         urls=dto.get("urls") if isinstance(dto.get("urls"), dict) else {},
         detail=dto.get("detail") if isinstance(dto.get("detail"), dict) else {},
-        status=dto.get("status"),
         updated_at=dto.get("updated_at") or datetime.now(UTC),
     )
 

@@ -72,7 +72,8 @@ class FeatureSummary(BaseModel):
     """마커/목록 표시용 (in-bounds items / nearby / search 응답).
 
     kor_travel_map `FeatureSummary`/`NearbyFeatureSummary` 투영. kor_travel_map는 평면 `lon`/`lat`,
-    `name`, `status`를 주고 `lon`/`lat`/`marker_*`는 nullable. nearby 응답에만
+    `name`을 주고 `lon`/`lat`/`marker_*`는 nullable. 공개 응답은 상태 축·과거 `status`를
+    노출하지 않는다. nearby 응답에만
     `distance_m`이 채워진다.
     """
 
@@ -83,7 +84,6 @@ class FeatureSummary(BaseModel):
     category: str | None = None
     marker_color: str = Field(default="P-13", pattern=r"^P-\d{2}$")  # 16색 P-01~P-16
     marker_icon: str = Field(default="marker", max_length=64)  # maki icon name
-    status: str | None = None  # active / inactive / hidden 등 (kor_travel_map lifecycle)
     distance_m: float | None = None  # nearby 응답에만
 
 
@@ -125,7 +125,6 @@ class FeatureDetail(BaseModel):
     marker_icon: str = Field(default="marker", max_length=64)
     urls: dict[str, Any] = Field(default_factory=dict)  # homepage/sns/review 등
     detail: dict[str, Any] = Field(default_factory=dict)  # kind별 PlaceDetail 등
-    status: str | None = None
     updated_at: datetime
 
 
@@ -156,7 +155,6 @@ class DetailCardBase(BaseModel):
     marker_color: str = Field(default="P-13", pattern=r"^P-\d{2}$")
     marker_icon: str = Field(default="marker", max_length=64)
     homepage_url: str | None = None
-    status: str | None = None
     # 옵트인 enrichment 결과 + provider별 degrade(내부 값으로 fallback).
     enrichment: list[ExternalEnrichment] = Field(default_factory=list)
     degraded_providers: list[str] = Field(default_factory=list)

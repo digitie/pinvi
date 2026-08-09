@@ -1,5 +1,13 @@
 # resume.md
 
+## 2026-08-09 (codex) — T-VN-34C Map 상태 축 cutover PinVi 계약 재벤더링
+
+kor-travel-map commit `f426c7b78c493035952ded5c2a13f61a2a351793`의 user OpenAPI를
+byte-exact로 재벤더링하고, admin curated detail subset도 같은 full OpenAPI에서 결정적으로 다시
+추출했다. 공개 feature의 과거 `status` 및 세 내부 상태 축이 Map 응답에 없음을 PinVi 계약
+테스트와 PinVi feature 투영에서 함께 고정한다. 다음은 user/admin contract, PinVi API/OpenAPI
+생성물, n150 isolated Playwright를 검증한 뒤 paired Map/PinVi SHA를 기록하는 일이다.
+
 ## 2026-08-06 (codex) — T-VN-41-F1D-C1b PinVi seven-image provenance PR 준비
 
 n150 F1D candidate는 PinVi API의 OCI revision/environment label만 검증 가능했고 Web·Dagster에는
