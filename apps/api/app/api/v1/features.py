@@ -219,7 +219,9 @@ def _weather_from_kor_travel_map(dto: dict[str, Any], *, feature_id: str) -> Fea
     ]
     return FeatureWeatherCard(
         feature_id=str(dto.get("feature_id") or feature_id),
-        asof=dto.get("asof"),
+        # current card는 selection 시각, explicit snapshot은 target 시각을 쓴다.
+        # 과거 ``asof`` query는 Map current route에서 무시되므로 쓰면 안 된다.
+        asof=dto.get("target_at") or dto.get("selected_at"),
         latest_at=dto.get("latest_at"),
         is_stale=bool(dto.get("is_stale", False)),
         source_styles=list(dto.get("source_styles", [])),

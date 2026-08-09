@@ -2,6 +2,14 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-09 (codex) — Map 날씨 `asof`를 typed snapshot으로 정렬
+
+- Map current 날씨 카드가 더 이상 `asof` query를 받지 않아 PinVi가 이를 그대로 전달하면
+  무시되는 계약 drift를 확인했다. PinVi의 공개 `asof` 의미는 유지하되, 값이 있으면 Map
+  `/weather/snapshot`의 `target_at`/`known_at` 계약으로 호출하도록 전환했다.
+- 현재 카드에는 query를 보내지 않고 `selected_at`을, snapshot에는 `target_at`을 PinVi card의
+  `asof`로 투영한다. Map user/admin 계약과 client·API 통합 검증 117건이 통과했다.
+
 ## 2026-08-09 (codex) — T-VN-34C Map 상태 축 cutover PinVi 계약 재벤더링
 
 - Map `f426c7b78c493035952ded5c2a13f61a2a351793`의 `openapi.user.json`을 byte-exact로

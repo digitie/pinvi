@@ -22,7 +22,7 @@ import math
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 
 import httpx
@@ -1044,14 +1044,24 @@ class KorTravelMapClient:
     async def feature_weather(
         self, feature_id: str, *, asof: datetime | None = None
     ) -> dict[str, Any]:
-        """날씨 카드. data = {feature_id, asof, is_stale, source_styles, metrics}."""
+        """날씨 카드 또는 명시된 business-time snapshot을 읽는다.
+
+        kor-travel-map current card는 query parameter를 받지 않고 ``selected_at``을
+        돌려준다. PinVi의 ``asof`` 요청은 무시하지 않고 typed snapshot의
+        ``target_at``으로 전환하며, 호출 시점의 UTC ``known_at``을 명시한다.
+        """
+        path = f"/v1/features/{feature_id}/weather"
         params: dict[str, Any] = {}
         if asof is not None:
-            params["asof"] = asof.isoformat()
+            path = f"{path}/snapshot"
+            params = {
+                "target_at": asof.isoformat(),
+                "known_at": datetime.now(UTC).isoformat(),
+            }
         return self._data(
             await self._send(
                 "GET",
-                f"/v1/features/{feature_id}/weather",
+                path,
                 params=params,
                 allow_public_api_key=True,
             )

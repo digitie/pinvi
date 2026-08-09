@@ -251,7 +251,7 @@ class _FakeWeatherClient:
             raise KorTravelMapUnavailable("kor-travel-map weather down")
         return {
             "feature_id": feature_id,
-            "asof": "2026-06-12T10:00:00+09:00",
+            "selected_at": "2026-06-12T10:00:00+09:00",
             "latest_at": "2026-06-12T09:30:00+09:00",
             "is_stale": False,
             "source_styles": ["nowcast", "short"],

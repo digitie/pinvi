@@ -121,6 +121,27 @@ async def test_client_accepts_producer_batch_cap() -> None:
     await client.aclose()
 
 
+async def test_feature_weather_uses_typed_snapshot_for_asof() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"data": {}, "meta": {}})
+
+    client = _client(handler)
+    target_at = datetime(2026, 8, 9, 9, 0, tzinfo=UTC)
+    await client.feature_weather("feature-1", asof=target_at)
+    await client.feature_weather("feature-2")
+    await client.aclose()
+
+    snapshot, current = requests
+    assert snapshot.url.path == "/v1/features/feature-1/weather/snapshot"
+    assert snapshot.url.params["target_at"] == target_at.isoformat()
+    assert datetime.fromisoformat(snapshot.url.params["known_at"]).tzinfo is not None
+    assert current.url.path == "/v1/features/feature-2/weather"
+    assert not current.url.params
+
+
 async def test_features_in_bounds_unwraps_data_and_repeats_kind() -> None:
     seen: dict[str, str] = {}
 

@@ -96,7 +96,7 @@ class _FakeKorTravelMapClient:
         self.calls["weather"] = {"feature_id": feature_id, "asof": asof}
         return {
             "feature_id": feature_id,
-            "asof": "2026-06-10T12:00:00+09:00",
+            "selected_at": "2026-06-10T12:00:00+09:00",
             "latest_at": "2026-06-10T11:00:00+09:00",
             "is_stale": False,
             "source_styles": ["nowcast", "short"],
@@ -265,6 +265,7 @@ async def test_weather_maps_flat_metrics(
     assert resp.status_code == 200, resp.text
     assert fake.calls["weather"]["asof"].isoformat() == "2026-07-01T23:59:59+09:00"
     data = resp.json()["data"]
+    assert data["asof"] == "2026-06-10T12:00:00+09:00"
     assert data["is_stale"] is False
     assert data["source_styles"] == ["nowcast", "short"]
     assert data["metrics"][0]["metric_key"] == "T1H"

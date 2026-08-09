@@ -63,6 +63,7 @@ _CLIENT_PATHS = [
     "/v1/features/search",
     "/v1/features/{feature_id}",
     "/v1/features/{feature_id}/weather",
+    "/v1/features/{feature_id}/weather/snapshot",
     "/v1/features/batch",  # service profile (_SERVICE_PROFILE_PATHS)
     "/v1/features/weather/batch",  # service profile (_SERVICE_PROFILE_PATHS)
     "/v1/categories",
@@ -77,6 +78,8 @@ _CLIENT_PATHS = [
 ]
 
 _CLIENT_QUERY_PARAMETERS: dict[str, set[str]] = {
+    "/v1/features/{feature_id}/weather": set(),
+    "/v1/features/{feature_id}/weather/snapshot": {"target_at", "known_at"},
     "/v1/public/beaches": {
         "sido_code",
         "sigungu_code",
@@ -184,7 +187,31 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
     },
     "WeatherCardData": {
         "feature_id": {"type": "string", "required": True, "nullable": False},
-        "asof": {"type": "string", "format": "date-time", "required": False, "nullable": True},
+        "selected_at": {
+            "type": "string",
+            "format": "date-time",
+            "required": False,
+            "nullable": True,
+        },
+        "latest_at": {"type": "string", "format": "date-time", "required": False, "nullable": True},
+        "is_stale": {"type": "boolean", "required": True, "nullable": False},
+        "source_styles": {
+            "type": "array",
+            "items_type": "string",
+            "required": True,
+            "nullable": False,
+        },
+        "metrics": {
+            "type": "array",
+            "items_ref": "WeatherMetricOut",
+            "required": True,
+            "nullable": False,
+        },
+    },
+    "WeatherSnapshotData": {
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+        "target_at": {"type": "string", "format": "date-time", "required": True, "nullable": False},
+        "known_at": {"type": "string", "format": "date-time", "required": True, "nullable": False},
         "latest_at": {"type": "string", "format": "date-time", "required": False, "nullable": True},
         "is_stale": {"type": "boolean", "required": True, "nullable": False},
         "source_styles": {
@@ -735,6 +762,7 @@ _ENDPOINT_DATA_SCHEMAS: dict[tuple[str, str], str] = {
     ("get", "/v1/features/search"): "FeatureSearchData",
     ("get", "/v1/features/{feature_id}"): "FeatureDetailResponse",
     ("get", "/v1/features/{feature_id}/weather"): "WeatherCardData",
+    ("get", "/v1/features/{feature_id}/weather/snapshot"): "WeatherSnapshotData",
     ("post", "/v1/features/batch"): "FeatureBatchData",
     ("post", "/v1/features/weather/batch"): "WeatherBatchData",
     ("get", "/v1/categories"): "CategoriesData",

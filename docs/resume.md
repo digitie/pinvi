@@ -1,5 +1,13 @@
 # resume.md
 
+## 2026-08-09 (codex) — Map 날씨 `asof` typed snapshot 정렬
+
+Map current 날씨 카드에는 `asof` query가 없으므로, PinVi가 같은 query를 전달하면 과거 시점
+요청이 조용히 무시된다. PinVi 공개 `asof`는 유지하되 값이 있으면 Map typed
+`/weather/snapshot`에 `target_at`과 현재 UTC `known_at`을 보내고 응답 `target_at`을 투영하도록
+고쳤다. 값이 없으면 기존 current card의 `selected_at`을 사용한다. 다음은 이 수정 commit을
+Map T-VN-34C paired receipt에 재결박하고 적대적 재리뷰·n150 destructive gate를 수행하는 일이다.
+
 ## 2026-08-09 (codex) — T-VN-34C Map 상태 축 cutover PinVi 계약 재벤더링
 
 kor-travel-map commit `f426c7b78c493035952ded5c2a13f61a2a351793`의 user OpenAPI를

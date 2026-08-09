@@ -267,9 +267,14 @@ detail(object), status, updated_at }`.
 
 ### 2.6 `GET /v1/features/{feature_id}/weather` — 날씨 카드
 
-- **params**: `feature_id*`, `asof`(선택).
+- **current params**: `feature_id*`만 허용한다. Map current card는 `selected_at|null`과
+  `refresh_after|null`을 준다.
+- PinVi의 `GET /features/{feature_id}/weather?asof=...`는 Map current route에 이 query를 넘기지
+  않는다. 대신 Map `GET /v1/features/{feature_id}/weather/snapshot?target_at=...&known_at=...`을
+  호출하며, 응답 `target_at`을 PinVi card의 `asof`로 투영한다. `asof`가 없으면 current 응답의
+  `selected_at`을 투영한다.
 - **200 `FeatureWeatherResponse`**: `data:WeatherCardData` =
-  `{ feature_id, asof|null, latest_at|null, is_stale, source_styles:[string], metrics:[WeatherMetricOut] }`.
+  `{ feature_id, selected_at|null, latest_at|null, is_stale, source_styles:[string], metrics:[WeatherMetricOut] }`.
   `WeatherMetricOut` = `{ metric_key, metric_name|null, forecast_style, timeline_bucket|null,
 provider|null, weather_domain|null, valid_at|null, valid_from|null, valid_until|null, effective_at|null,
 issued_at|null, observed_at|null, value_number|null, value_text|null, unit|null, severity|null }`.
