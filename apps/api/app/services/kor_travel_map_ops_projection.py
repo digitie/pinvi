@@ -18,9 +18,11 @@ from pydantic import (
 )
 
 from app.schemas.admin import (
+    AdminProviderCancellationSummary,
     AdminProviderDatasetSummary,
     AdminProviderImportJobCancellationResult,
     AdminProviderImportJobRecord,
+    AdminProviderLink,
 )
 
 OperationState = Literal["queued", "running", "done", "failed", "cancelled"]
@@ -150,9 +152,11 @@ class _CancellationSummary(_CanonicalModel):
 
 
 class _ProviderDatasetIdentity(_CanonicalModel):
+    provider_dataset_id: int = Field(ge=1)
     provider: str
     dataset_key: str
-    sync_scope: str | None
+    sync_scope: str
+    operation_key: str
     operation_member_id: UUID
     status: OperationState
 
@@ -406,7 +410,8 @@ class _DatasetExecution(_CanonicalModel):
     status: OperationState
     pair_status: OperationState
     operation_member_id: UUID
-    sync_scope: str | None
+    sync_scope: str
+    operation_key: str
     providers: list[str]
     dataset_keys: list[str]
     provider_datasets: list[_ProviderDatasetIdentity]
@@ -423,7 +428,10 @@ class _DatasetExecution(_CanonicalModel):
 
     @model_validator(mode="after")
     def execution_invariants(self) -> Self:
-        member_keys = [(item.provider, item.dataset_key) for item in self.provider_datasets]
+        member_keys = [
+            (item.provider_dataset_id, item.sync_scope, item.operation_key)
+            for item in self.provider_datasets
+        ]
         if len(member_keys) != len(set(member_keys)):
             raise ValueError("dataset execution members must be exact and unique")
         representative_providers = {item.provider for item in self.provider_datasets}
@@ -456,10 +464,12 @@ class _IssueSummary(_CanonicalModel):
 
 
 class _DatasetGridRow(_CanonicalModel):
+    provider_dataset_id: int = Field(ge=1)
     provider: str
     dataset_key: str
     detail_url: str
     sync_scope: str
+    operation_key: str | None
     status: str
     last_success_at: datetime | None
     last_failure_at: datetime | None
@@ -481,11 +491,14 @@ class _DatasetGridRow(_CanonicalModel):
     def exact_execution_members_match_row(self) -> Self:
         if not _is_canonical_sync_scope(self.sync_scope):
             raise ValueError("dataset row sync_scope must be canonical")
-        expected_detail_url = "/v1/ops/datasets/detail?" + urlencode(
+        expected_detail_url = f"/v1/ops/datasets/{self.provider_dataset_id}?" + urlencode(
             {
-                "provider": self.provider,
-                "dataset_key": self.dataset_key,
                 "sync_scope": self.sync_scope,
+                **(
+                    {"operation_key": self.operation_key}
+                    if self.operation_key is not None
+                    else {}
+                ),
             },
             quote_via=quote,
         )
@@ -533,22 +546,37 @@ class _DatasetGridRow(_CanonicalModel):
                 raise ValueError("poi target refresh capability must expose canonical scopes")
             if not self.catalog.is_refreshable and capability.selector != "none":
                 raise ValueError("non-refreshable catalog entry cannot expose scoped refresh")
+        if self.operation_key is None and (
+            self.latest_execution is not None or self.active_execution is not None
+        ):
+            raise ValueError("catalog-only dataset row cannot expose an execution")
         for execution in (self.latest_execution, self.active_execution):
             if execution is None:
                 continue
             matching_members = [
                 member
                 for member in execution.provider_datasets
-                if (member.provider, member.dataset_key) == (self.provider, self.dataset_key)
+                if (
+                    member.provider_dataset_id,
+                    member.sync_scope,
+                    member.operation_key,
+                )
+                == (
+                    self.provider_dataset_id,
+                    self.sync_scope,
+                    self.operation_key,
+                )
                 and member.operation_member_id == execution.operation_member_id
             ]
             if len(matching_members) != 1:
                 raise ValueError("dataset execution must contain the exact grid member")
             member = matching_members[0]
-            logical_scope_matches = execution.sync_scope == self.sync_scope or (
-                self.sync_scope == "dataset_wide" and execution.sync_scope is None
-            )
-            if not logical_scope_matches or member.sync_scope != execution.sync_scope:
+            if (
+                execution.sync_scope != self.sync_scope
+                or execution.operation_key != self.operation_key
+                or member.sync_scope != execution.sync_scope
+                or member.operation_key != execution.operation_key
+            ):
                 raise ValueError("dataset execution scope must match selected member")
             if member.status != execution.pair_status:
                 raise ValueError("dataset execution pair status must match exact member")
@@ -1298,9 +1326,11 @@ def project_dataset_grid_snapshot(
         needle = (key or "").strip().casefold()
         items = [
             AdminProviderDatasetSummary(
+                provider_dataset_id=item.provider_dataset_id,
                 provider=item.provider,
                 dataset_key=item.dataset_key,
                 sync_scope=item.sync_scope,
+                operation_key=item.operation_key,
                 status=item.status,
                 last_success_at=item.last_success_at,
                 last_failure_at=item.last_failure_at,
@@ -1308,11 +1338,11 @@ def project_dataset_grid_snapshot(
                 eligible_after=item.eligible_after,
                 schedule_next_scheduled_at=item.schedule.next_scheduled_at,
                 links=[
-                    {
-                        "rel": "detail",
-                        "href": item.detail_url,
-                        "label": "dataset detail",
-                    }
+                    AdminProviderLink(
+                        rel="detail",
+                        href=item.detail_url,
+                        label="dataset detail",
+                    )
                 ],
                 refresh_policy=(
                     item.refresh_policy.model_dump(mode="json")
@@ -1344,6 +1374,41 @@ def project_dataset_grid(
     return project_dataset_grid_snapshot(data, key=key).items
 
 
+def _admin_execution_links(*, detail_url: str, root_url: str | None = None) -> list[AdminProviderLink]:
+    links = [
+        AdminProviderLink(
+            rel="detail",
+            href=detail_url,
+            label="pipeline execution detail",
+        )
+    ]
+    if root_url is not None:
+        links.append(
+            AdminProviderLink(
+                rel="canonical_root",
+                href=root_url,
+                label="canonical pipeline root",
+            )
+        )
+    return links
+
+
+def _admin_cancellation_summary(
+    value: _CancellationSummary | None,
+) -> AdminProviderCancellationSummary | None:
+    if value is None:
+        return None
+    return AdminProviderCancellationSummary(
+        cancellation_id=str(value.cancellation_id),
+        status=value.status,
+        requested_at=value.requested_at,
+        requested_by=value.requested_by,
+        reason=value.reason,
+        retryable=value.retryable,
+        unresolved_member_count=value.unresolved_member_count,
+    )
+
+
 def _project_pipeline_execution(
     item: _PipelineExecutionRoot,
 ) -> AdminProviderImportJobRecord:
@@ -1365,9 +1430,7 @@ def _project_pipeline_execution(
         projected_job_parent_job_id=(
             str(projected.parent_job_id) if projected.parent_job_id is not None else None
         ),
-        cancellation=(
-            item.cancellation.model_dump(mode="json") if item.cancellation is not None else None
-        ),
+        cancellation=_admin_cancellation_summary(item.cancellation),
         payload={
             "provider": item.providers[0] if len(item.providers) == 1 else None,
             "dataset_key": item.dataset_keys[0] if len(item.dataset_keys) == 1 else None,
@@ -1383,13 +1446,7 @@ def _project_pipeline_execution(
         created_at=item.created_at,
         started_at=item.started_at,
         finished_at=item.finished_at,
-        links=[
-            {
-                "rel": "detail",
-                "href": item.detail_url,
-                "label": "pipeline execution detail",
-            }
-        ],
+        links=_admin_execution_links(detail_url=item.detail_url),
     )
 
 
@@ -1425,9 +1482,7 @@ def project_pipeline_execution(
             projected_job_parent_job_id=(
                 str(projected.parent_job_id) if projected.parent_job_id is not None else None
             ),
-            cancellation=(
-                root.cancellation.model_dump(mode="json") if root.cancellation is not None else None
-            ),
+            cancellation=_admin_cancellation_summary(root.cancellation),
             payload={
                 "provider": root.providers[0] if len(root.providers) == 1 else None,
                 "dataset_key": (root.dataset_keys[0] if len(root.dataset_keys) == 1 else None),
@@ -1445,18 +1500,10 @@ def project_pipeline_execution(
             created_at=execution.created_at,
             started_at=execution.started_at,
             finished_at=execution.finished_at,
-            links=[
-                {
-                    "rel": "detail",
-                    "href": execution.detail_url,
-                    "label": "pipeline execution detail",
-                },
-                {
-                    "rel": "canonical_root",
-                    "href": root.detail_url,
-                    "label": "canonical pipeline root",
-                },
-            ],
+            links=_admin_execution_links(
+                detail_url=execution.detail_url,
+                root_url=root.detail_url,
+            ),
         )
     except ValidationError as exc:
         raise _contract_error("pipeline execution", exc) from exc

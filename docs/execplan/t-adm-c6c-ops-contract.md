@@ -40,11 +40,14 @@ cookie, HSTS, dev safety, Resend webhook, rate-limit backend와 kor-travel-map c
    검증하고, legacy URL이나 누락된 pagination provenance를 502로 fail-close한다. UI는 cursor를
    실제 다음/이전 이동에 연결해 50개 이후 job도 상태 확인·취소할 수 있게 한다.
    `load_batch_id`와 `parent_job_id`는 Pinvi HTTP 경계에서 UUID로 parse하고 소문자 hyphen 정규형만
-   upstream query와 canonical provenance 대조에 사용한다.
+   upstream query와 canonical provenance 대조에 사용한다. dataset grid 행과 실행 member의
+   identity는 provider/dataset pair가 아니라 `provider_dataset_id × sync_scope × operation_key`다.
+   detail URL은 `/v1/ops/datasets/{provider_dataset_id}`와 exact query를 쓰며, catalog-only 행의
+   null `operation_key`만 query에서 생략한다.
 7. 모든 canonical ops 성공은 non-null `meta.duration_ms/request_id`를 요구하고, 전달한
    `X-Request-Id`와 응답 `meta.request_id`가 다르면 fail-close한다. non-exact update root의
    provider/dataset 배열은 filter이며 `provider_datasets=[]`일 수 있다. dataset grid의 detail URL,
-   preview/scope-refresh capability, canonical/orphan 조합과 pair 기준 active/latest 분류도 검증한다.
+   preview/scope-refresh capability, canonical/orphan 조합과 membership 기준 active/latest 분류도 검증한다.
 8. root의 effective provider/dataset vector는 request filter와 대표 pair의 합집합이다. 상세에서는 두
    출처를 재구성해 누락·무관 vector를 거부한다. standalone descendant는 직계 parent만 허용하지 않고
    Map의 recursive root projection과 non-null lineage 표식을 신뢰한다. dataset row scope는 canonical

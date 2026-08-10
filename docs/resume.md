@@ -1,5 +1,12 @@
 # resume.md
 
+## 2026-08-11 (codex) — T-VN-41 Map ops dataset triple 계약 정렬
+
+PinVi의 Map dataset grid projection을 provider/dataset pair에서
+`provider_dataset_id × sync_scope × operation_key` membership으로 전환했다. 다음은 Docker
+Manager의 동일 validator와 smoke를 같은 exact URL 계약으로 고정하고, 두 저장소의 focused
+검증·적대적 재리뷰 뒤 n150 Playwright live gate를 재개하는 일이다.
+
 ## 2026-08-09 (codex) — Map 날씨 `asof` typed snapshot 정렬
 
 Map current 날씨 카드에는 `asof` query가 없으므로, PinVi가 같은 query를 전달하면 과거 시점

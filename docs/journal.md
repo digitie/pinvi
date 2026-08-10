@@ -2,6 +2,16 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-11 (codex) — T-VN-41 Map ops dataset triple 계약 정렬
+
+- Map dataset grid의 identity가 `provider_dataset_id × sync_scope × operation_key`인데 PinVi가
+  폐기된 provider/dataset pair detail URL을 검증하던 drift를 제거했다.
+- PinVi projection과 admin summary는 triple을 보존하고 exact
+  `/v1/ops/datasets/{provider_dataset_id}` URL만 허용한다. 실행 가능한 operation이 없는
+  catalog-only 행의 `operation_key=null`은 보존하되 실행 projection은 거부한다.
+- 같은 parser가 operation이 다른 형제 행을 하나로 접거나 stale pair URL을 재도입하지 않도록
+  unit/integration fixture를 계약에 맞췄다. Docker Manager도 같은 exact URL validator로 정렬 중이다.
+
 ## 2026-08-09 (codex) — Map 날씨 `asof`를 typed snapshot으로 정렬
 
 - Map current 날씨 카드가 더 이상 `asof` query를 받지 않아 PinVi가 이를 그대로 전달하면

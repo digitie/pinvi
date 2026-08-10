@@ -308,16 +308,19 @@ async def _seed_pii_retention_candidates(session_factory: Any) -> None:
 
 def _provider_item() -> dict[str, Any]:
     return {
+        "provider_dataset_id": 41,
         "provider": "kma",
         "dataset_key": "special_days",
         "sync_scope": "dataset_wide",
+        "operation_key": "kma_special_days_refresh",
         "status": "healthy",
         "last_success_at": "2026-06-12T00:00:00+09:00",
         "last_failure_at": None,
         "consecutive_failures": 0,
         "eligible_after": "2026-06-13T03:30:00+09:00",
         "detail_url": (
-            "/v1/ops/datasets/detail?provider=kma&dataset_key=special_days&sync_scope=dataset_wide"
+            "/v1/ops/datasets/41?sync_scope=dataset_wide&"
+            "operation_key=kma_special_days_refresh"
         ),
         "freshness": {
             "state": "fresh",
@@ -395,9 +398,11 @@ def _import_job() -> dict[str, Any]:
         "dataset_keys": ["special_days"],
         "provider_datasets": [
             {
+                "provider_dataset_id": 41,
                 "provider": "kma",
                 "dataset_key": "special_days",
-                "sync_scope": None,
+                "sync_scope": "dataset_wide",
+                "operation_key": "kma_special_days_refresh",
                 "operation_member_id": "22222222-2222-4222-8222-222222222222",
                 "status": "running",
             }

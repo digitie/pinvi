@@ -2412,9 +2412,12 @@ result도 대조한다. attempt status와 `finished_at/error`, run result와 eng
 `requires_run_termination`은 Map DB lifecycle constraint와 exact하게 맞아야 한다. resolved run-backed
 member는 `cancelled↔CANCELED`, `done↔SUCCESS`, `failed↔FAILURE` mapping을 따르며 provider
 feature-load tracking failure 예외만 허용한다. 같은 검증을 상세 GET과
-취소 POST 성공 응답에 모두 적용한다. dataset grid의 실행 member는 provider/dataset pair별 유일해야
-하고 선택된 member의 scope/status가 행과 맞아야 한다. active/latest 분류는 root가 아닌 pair status를
-정본으로 하며 동일 root/member가 두 슬롯에 동시에 나타날 수 없다. detail URL, preview,
+취소 POST 성공 응답에 모두 적용한다. dataset grid의 실행 member는
+`provider_dataset_id × sync_scope × operation_key` membership별 유일해야 하고 선택된 member의
+scope/operation/status가 행과 맞아야 한다. 실행 가능한 operation이 없는 catalog-only 행은
+`operation_key=null`이며 active/latest 실행을 포함할 수 없다. active/latest 분류는 root가 아닌
+membership status를 정본으로 하며 동일 root/member가 두 슬롯에 동시에 나타날 수 없다. detail URL은
+`/v1/ops/datasets/{provider_dataset_id}?sync_scope=...&operation_key=...` exact membership을 가리킨다. preview,
 scope-refresh와 canonical/orphan capability 조합도 fail-close한다. 취소 POST 성공과 결과가 불확실한
 오류 뒤 이 endpoint가 reconciliation 정본이다. UI는 fresh GET이 terminal 또는 `retryable`을 확인할
 때까지 해당 job의 취소 재시도를 잠그고, `in_progress` 동안 주기적으로 다시 조회한다. stale 목록

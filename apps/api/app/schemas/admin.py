@@ -523,9 +523,13 @@ class AdminProviderImportJobCancellationResult(BaseModel):
 
 
 class AdminProviderDatasetSummary(BaseModel):
+    provider_dataset_id: int = Field(ge=1)
     provider: str
     dataset_key: str
     sync_scope: str
+    operation_key: str | None = Field(
+        description="Map dataset membership의 operation 축. catalog-only 행은 명시적으로 null이다."
+    )
     status: str
     last_success_at: datetime | None = None
     last_failure_at: datetime | None = None

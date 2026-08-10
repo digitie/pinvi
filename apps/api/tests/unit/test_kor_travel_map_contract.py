@@ -932,23 +932,14 @@ def _project_root() -> Path:
 
 
 def _find_live_spec_path(project_root: Path, override: str | None) -> Path | None:
-    """표준 workspace sibling 또는 명시 override에서 Map user spec을 찾는다."""
+    """명시 override에서만 user spec을 찾는다.
+
+    Map main과 agent worktree 모두 PinVi가 pin한 exact revision과 다를 수 있다.
+    release pin의 byte 동일성은 CI가 pinned checkout으로 검증하고, 개발자는 이
+    로컬 추가 검증을 하려면 `PINVI_KOR_TRAVEL_MAP_OPENAPI_USER_PATH`를 명시한다.
+    """
     if override:
         return Path(override)
-    for repo_name in (
-        "kor-travel-map-codex",
-        "kor-travel-map-claude",
-        "kor-travel-map-antigravity",
-        "kor-travel-map",
-    ):
-        repo = project_root.parent / repo_name
-        for relative in (
-            Path("packages/kor-travel-map-api/openapi.user.json"),
-            Path("packages/kor-travel-map-admin/openapi.user.json"),
-        ):
-            candidate = repo / relative
-            if candidate.exists():
-                return candidate
     return None
 
 
@@ -965,13 +956,22 @@ def test_live_spec_search_starts_at_repository_root() -> None:
     assert (project_root / "apps/api/tests/unit").is_dir()
 
 
-def test_live_spec_search_finds_standard_workspace_sibling(tmp_path: Path) -> None:
+def test_live_spec_search_requires_an_explicit_override(
+    tmp_path: Path,
+) -> None:
     project_root = tmp_path / "pinvi-codex"
-    candidate = tmp_path / "kor-travel-map-codex" / "packages/kor-travel-map-api/openapi.user.json"
+    agent_candidate = (
+        tmp_path / "kor-travel-map-codex" / "packages/kor-travel-map-api/openapi.user.json"
+    )
+    agent_candidate.parent.mkdir(parents=True)
+    agent_candidate.write_text("{}\n", encoding="utf-8")
+
+    candidate = tmp_path / "kor-travel-map" / "packages/kor-travel-map-api/openapi.user.json"
     candidate.parent.mkdir(parents=True)
     candidate.write_text("{}\n", encoding="utf-8")
 
-    assert _find_live_spec_path(project_root, None) == candidate
+    assert _find_live_spec_path(project_root, None) is None
+    assert _find_live_spec_path(project_root, str(candidate)) == candidate
 
 
 @pytest.mark.skipif(

@@ -5,7 +5,9 @@ from __future__ import annotations
 from copy import deepcopy
 
 import pytest
+from pydantic import ValidationError
 
+from app.schemas.admin import AdminProviderDatasetSummary
 from app.services.kor_travel_map_ops_projection import (
     KorTravelMapOpsContractError,
     project_dataset_grid,
@@ -92,9 +94,11 @@ def _execution(progress: int = 1) -> dict[str, object]:
         "dataset_keys": ["special_days"],
         "provider_datasets": [
             {
+                "provider_dataset_id": 41,
                 "provider": "kma",
                 "dataset_key": "special_days",
-                "sync_scope": None,
+                "sync_scope": "dataset_wide",
+                "operation_key": "kma_special_days_refresh",
                 "operation_member_id": PROJECTED_ID,
                 "status": "running",
             }
@@ -122,12 +126,15 @@ def _execution(progress: int = 1) -> dict[str, object]:
 
 def _dataset_row() -> dict[str, object]:
     return {
+        "provider_dataset_id": 41,
         "provider": "kma",
         "dataset_key": "special_days",
         "detail_url": (
-            "/v1/ops/datasets/detail?provider=kma&dataset_key=special_days&sync_scope=dataset_wide"
+            "/v1/ops/datasets/41?sync_scope=dataset_wide&"
+            "operation_key=kma_special_days_refresh"
         ),
         "sync_scope": "dataset_wide",
+        "operation_key": "kma_special_days_refresh",
         "status": "healthy",
         "last_success_at": "2026-07-18T00:00:00+09:00",
         "last_failure_at": None,
@@ -402,12 +409,14 @@ def _dataset_execution(
     *,
     status: str = "running",
     pair_status: str | None = None,
-    sync_scope: str | None = "dataset_wide",
+    sync_scope: str = "dataset_wide",
+    operation_key: str = "kma_special_days_refresh",
 ) -> dict[str, object]:
     root = _execution(progress=37)
     member = root["provider_datasets"][0]  # type: ignore[index]
     assert isinstance(member, dict)
     member["sync_scope"] = sync_scope
+    member["operation_key"] = operation_key
     member["status"] = pair_status or status
     projected_job = deepcopy(root["projected_job"])
     assert isinstance(projected_job, dict)
@@ -422,6 +431,7 @@ def _dataset_execution(
         "pair_status": pair_status or status,
         "operation_member_id": PROJECTED_ID,
         "sync_scope": sync_scope,
+        "operation_key": operation_key,
         "providers": root["providers"],
         "dataset_keys": root["dataset_keys"],
         "provider_datasets": root["provider_datasets"],
@@ -445,6 +455,24 @@ def test_dataset_grid_keeps_rate_limit_and_schedule_times_separate() -> None:
     assert records[0].sync_scope == "dataset_wide"
     assert records[0].eligible_after.isoformat() == "2026-07-18T01:00:00+09:00"
     assert records[0].schedule_next_scheduled_at.isoformat() == "2026-07-19T03:30:00+09:00"
+
+
+def test_dataset_grid_catalog_only_row_preserves_required_null_operation_key() -> None:
+    data = _dataset_grid()
+    row = data["items"][0]  # type: ignore[index]
+    assert isinstance(row, dict)
+    row["operation_key"] = None
+    row["detail_url"] = "/v1/ops/datasets/41?sync_scope=dataset_wide"
+    row["active_execution"] = None
+    row["latest_execution"] = None
+
+    record = project_dataset_grid(data)[0]
+    serialized = record.model_dump(mode="json")
+    assert serialized["operation_key"] is None
+
+    del serialized["operation_key"]
+    with pytest.raises(ValidationError, match="operation_key"):
+        AdminProviderDatasetSummary.model_validate(serialized)
 
 
 def test_dataset_grid_rejects_missing_schedule_source_contract() -> None:
@@ -475,14 +503,16 @@ def test_dataset_grid_accepts_exact_active_member_scope() -> None:
     assert len(project_dataset_grid(data)) == 1
 
 
-def test_dataset_grid_accepts_dataset_wide_nullable_execution_scope() -> None:
+def test_dataset_grid_rejects_nullable_execution_scope() -> None:
     data = _dataset_grid()
     row = data["items"][0]  # type: ignore[index]
     assert isinstance(row, dict)
     row["sync_scope"] = "dataset_wide"
-    row["active_execution"] = _dataset_execution(sync_scope=None)
+    row["active_execution"] = _dataset_execution()
+    row["active_execution"]["sync_scope"] = None  # type: ignore[index]
 
-    assert len(project_dataset_grid(data)) == 1
+    with pytest.raises(KorTravelMapOpsContractError, match="dataset grid"):
+        project_dataset_grid(data)
 
 
 def test_dataset_grid_rejects_duplicate_provider_dataset_members() -> None:
@@ -491,7 +521,6 @@ def test_dataset_grid_rejects_duplicate_provider_dataset_members() -> None:
     assert isinstance(row, dict)
     execution = _dataset_execution()
     duplicate = deepcopy(execution["provider_datasets"][0])  # type: ignore[index]
-    duplicate["sync_scope"] = "target_grids"
     duplicate["operation_member_id"] = CHILD_ID
     execution["provider_datasets"].append(duplicate)  # type: ignore[union-attr]
     row["active_execution"] = execution
@@ -632,7 +661,8 @@ def test_dataset_grid_rejects_noncanonical_row_scope(invalid_scope: str) -> None
     assert isinstance(row, dict)
     row["sync_scope"] = invalid_scope
     row["detail_url"] = (
-        f"/v1/ops/datasets/detail?provider=kma&dataset_key=special_days&sync_scope={invalid_scope}"
+        f"/v1/ops/datasets/41?sync_scope={invalid_scope}&"
+        "operation_key=kma_special_days_refresh"
     )
 
     with pytest.raises(KorTravelMapOpsContractError, match="dataset grid"):
@@ -930,9 +960,11 @@ def test_pipeline_execution_detail_rejects_frozen_topology_substitution(
     else:
         root["provider_datasets"].append(  # type: ignore[union-attr]
             {
+                "provider_dataset_id": 42,
                 "provider": "visitkorea",
                 "dataset_key": "places",
                 "sync_scope": "target_grids",
+                "operation_key": "visitkorea_places_refresh",
                 "operation_member_id": CHILD_ID,
                 "status": "running",
             }
@@ -1141,9 +1173,11 @@ def test_import_job_detail_accepts_update_root_with_child_provider_pairs() -> No
     assert isinstance(root, dict)
     root["provider_datasets"].append(  # type: ignore[union-attr]
         {
+            "provider_dataset_id": 42,
             "provider": "visitkorea",
             "dataset_key": "places",
             "sync_scope": "target_grids",
+            "operation_key": "visitkorea_places_refresh",
             "operation_member_id": CHILD_ID,
             "status": "running",
         }
@@ -1165,9 +1199,11 @@ def test_provider_dataset_root_rejects_effective_vector_drift(drift: str) -> Non
     assert isinstance(root, dict)
     root["provider_datasets"].append(  # type: ignore[union-attr]
         {
+            "provider_dataset_id": 42,
             "provider": "visitkorea",
             "dataset_key": "places",
             "sync_scope": "target_grids",
+            "operation_key": "visitkorea_places_refresh",
             "operation_member_id": CHILD_ID,
             "status": "running",
         }
@@ -1240,7 +1276,7 @@ def test_import_job_detail_accepts_non_exact_filter_and_representative_union() -
             "dataset_keys": ["filter-dataset", "special_days"],
         }
     )
-    root["provider_datasets"][0]["sync_scope"] = None  # type: ignore[index]
+    root["provider_datasets"][0]["sync_scope"] = "dataset_wide"  # type: ignore[index]
     root["provider_datasets"][0]["operation_member_id"] = CHILD_ID  # type: ignore[index]
     root["linked_job_count"] = 2
     execution.update({"provider": None, "dataset_key": None})
@@ -1281,7 +1317,7 @@ def test_import_job_detail_rejects_non_exact_effective_vector_drift(
             "dataset_keys": ["filter-dataset", "special_days"],
         }
     )
-    root["provider_datasets"][0]["sync_scope"] = None  # type: ignore[index]
+    root["provider_datasets"][0]["sync_scope"] = "dataset_wide"  # type: ignore[index]
     root["provider_datasets"][0]["operation_member_id"] = CHILD_ID  # type: ignore[index]
     root["linked_job_count"] = 2
     execution.update({"provider": None, "dataset_key": None})
@@ -1401,7 +1437,6 @@ def test_import_job_detail_rejects_duplicate_provider_dataset_pair() -> None:
     root = detail["root"]
     assert isinstance(root, dict)
     duplicate = deepcopy(root["provider_datasets"][0])  # type: ignore[index]
-    duplicate["sync_scope"] = "target_grids"
     duplicate["operation_member_id"] = CHILD_ID
     root["provider_datasets"].append(duplicate)  # type: ignore[union-attr]
     root["linked_job_count"] = 2
@@ -1420,9 +1455,11 @@ def test_import_job_detail_accepts_requested_child_execution() -> None:
     assert isinstance(import_job, dict)
     root["provider_datasets"].append(  # type: ignore[union-attr]
         {
+            "provider_dataset_id": 42,
             "provider": "visitkorea",
             "dataset_key": "places",
             "sync_scope": "target_grids",
+            "operation_key": "visitkorea_places_refresh",
             "operation_member_id": CHILD_ID,
             "status": "running",
         }
