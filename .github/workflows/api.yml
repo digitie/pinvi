@@ -104,7 +104,7 @@ jobs:
 
           assert Path(config.__file__).is_relative_to("/tmp/pinvi-api-wheel-verify")
           assert config.KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256 == (
-              "6ad8c1c9c1d391c54e7592b64ed9f0225164b613a5c2824d8eafd3da9bd36f1e"
+              "b442414471c97bcdb746b49d2d24c9ec2b319290084d971df524db87b3994cfd"
           )
           assert config.KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION == 7
           assert config.KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION == 2
@@ -137,7 +137,7 @@ jobs:
           assert artifact.is_file()
           payload = json.loads(artifact.read_text(encoding="utf-8"))
           assert hashlib.sha256(artifact.read_bytes()).hexdigest() == (
-              "6fb6dace1bfa7c8f5ecc0938cc1da255eea6bdb25a627c736cfa79c2f5f344dd"
+              "38861db9d5d8b250b64a3ef4211716957764a301234406b9235a77e5143922b7"
           )
           assert payload == {
               "capabilities": {

@@ -43,6 +43,7 @@ dev = [
 [project.scripts]
 pinvi-admin-bootstrap = "app.commands.admin_bootstrap:main"
 pinvi-cache-target-initial-cutover = "app.commands.cache_target_initial_cutover:main"
+pinvi-cache-target-restore-fence = "app.commands.cache_target_restore_fence:main"
 pinvi-cache-target-causal-canary = "app.commands.cache_target_causal_canary:main"
 pinvi-cache-target-final-boundary = "app.commands.cache_target_final_boundary:main"
 pinvi-feature-uuid-cutover = "app.commands.feature_uuid_cutover:main"

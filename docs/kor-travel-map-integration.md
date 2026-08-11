@@ -100,6 +100,15 @@ true는 compatible manifest, pinned OpenAPI/source revision, active epoch와 fix
 count/Merkle/high-watermark 일치를 모두 요구한다. 자세한 exact 경로·event·Merkle 계약은 ADR-058과
 [`execplan`](execplan/t-vn-41-cache-target-consumer.md)이 정본이다.
 
+restore clone을 다시 열 때는 ordinary worker를 먼저 기동하지 않는다. 전용 restore job은
+`PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED=false`와 command/consumer/restore-fence 세 token을
+명시해 `pinvi-cache-target-restore-fence --expected-restore-epoch <N> --idempotency-key <UUID>`를 한 번
+실행한다. 이 command는 raw stream ETag를 읽고 `If-Match`·expected epoch·Idempotency-Key로 Map restore
+fence를 요청한 뒤, `201` 최초 응답 또는 동일 key/body의 `200` replay 모두에서 새
+`restore_epoch=N+1`·control version·ETag와 `fenced` stream 상태를 재조회해 대조한다. 이 command는
+ordinary writer를 열지 않는다. 이어지는 reconciliation/cutover와 sync enable은 deployment control plane이
+별도 성공 증거를 확인한 뒤에만 수행한다.
+
 ## 3. Pinvi/user-facing OpenAPI
 
 최신 `openapi.user.json`의 Pinvi 사용 표면:
@@ -180,9 +189,9 @@ T-VN-41 source byte 계약은 Map commit
 leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
 commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
 
-서비스 계약은 Map exact release `1df45b57f55b8d517bb1f2c12a869d032d70453e`(#960)의
+서비스 계약은 Map exact release `63a5713deabec00ecbc9eb4e8513ca1d2f4cf8ad`(T-VN-41 ABC draft)의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor한다. SHA-256은
-`6ad8c1c9c1d391c54e7592b64ed9f0225164b613a5c2824d8eafd3da9bd36f1e`다. artifact owner/functional
+`b442414471c97bcdb746b49d2d24c9ec2b319290084d971df524db87b3994cfd`다. artifact owner/functional
 owner 이중 provenance는 control-plane 정본이 아니다. PinVi의
 `contracts/kor-travel-map-service-provenance-v1.json`은 위 Map release·SHA-256과 capability
 `cache_target=7`, `c6c_cancel_probe=2`를 비밀값 없이 한 번만 기록한다. cache-target runtime 상수와
