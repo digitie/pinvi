@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 import pytest
@@ -80,6 +81,34 @@ class _ResponseLostRestore:
             # Map은 CAS를 commit했지만 transport 응답만 잃은 상태를 재현한다.
             raise CacheTargetNetworkError("response lost after Map commit")
         return _receipt(status_code=200)
+
+
+class _ConcurrentRestore:
+    """동일 idempotency key의 최초 201과 Map exact-replay 200을 병렬 재현한다."""
+
+    def __init__(self) -> None:
+        self.barrier = asyncio.Barrier(2)
+        self.calls: list[dict[str, object]] = []
+        self._next_status = 201
+
+    async def advance_restore_fence(self, **kwargs: object) -> CacheTargetRestoreFenceResult:
+        self.calls.append(kwargs)
+        await self.barrier.wait()
+        status_code = self._next_status
+        self._next_status = 200
+        return _receipt(status_code=status_code)
+
+
+class _ConcurrentConsumer:
+    def __init__(self, restore: _ConcurrentRestore) -> None:
+        self.calls = 0
+        self._restore = restore
+
+    async def get_stream(self) -> CacheTargetStreamState:
+        self.calls += 1
+        if len(self._restore.calls) < 2:
+            return _stream(epoch=7, version=7, state="ready")
+        return _stream(epoch=8, version=8, state="fenced")
 
 
 async def _seed_consumer(session_factory) -> None:  # type: ignore[no-untyped-def]
@@ -229,3 +258,44 @@ async def test_restore_attempt_terminal_receipt_rejects_update_and_delete(
                 await db.execute(text(statement), {"key": idempotency_key})
                 await db.commit()
             await db.rollback()
+
+
+async def test_concurrent_same_key_accepts_map_201_and_exact_replay_200(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    await _seed_consumer(session_factory)
+    restore = _ConcurrentRestore()
+    consumer = _ConcurrentConsumer(restore)
+    idempotency_key = uuid.uuid4()
+
+    first, second = await asyncio.gather(
+        run_cache_target_restore_fence(
+            session_factory=session_factory,
+            consumer_client=consumer,  # type: ignore[arg-type]
+            restore_client=restore,  # type: ignore[arg-type]
+            consumer_id=CONSUMER_ID,
+            expected_restore_epoch=7,
+            idempotency_key=idempotency_key,
+            reason="restore after verified snapshot",
+        ),
+        run_cache_target_restore_fence(
+            session_factory=session_factory,
+            consumer_client=consumer,  # type: ignore[arg-type]
+            restore_client=restore,  # type: ignore[arg-type]
+            consumer_id=CONSUMER_ID,
+            expected_restore_epoch=7,
+            idempotency_key=idempotency_key,
+            reason="restore after verified snapshot",
+        ),
+    )
+
+    assert len(restore.calls) == 2
+    assert {call["stream_etag"] for call in restore.calls} == {'"pinvi:7"'}
+    assert first.receipt == second.receipt
+    assert first.receipt.status_code in {200, 201}
+
+    async with session_factory() as db:
+        completed = await db.get(KtmCacheTargetRestoreFenceAttempt, idempotency_key)
+        assert completed is not None
+        assert completed.status == "completed"
+        assert completed.response_status == first.receipt.status_code

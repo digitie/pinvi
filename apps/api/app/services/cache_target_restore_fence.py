@@ -139,7 +139,10 @@ async def _complete_attempt(
                 raise CacheTargetContractError("restore fence 영수증이 사라졌습니다.")
             if attempt.status == "completed":
                 stored = _receipt_from_attempt(attempt)
-                if stored != receipt:
+                # Map은 정확히 같은 Idempotency-Key의 최초 응답을 201, 재전송을
+                # 200으로 구분한다. 병렬 runner는 이 두 응답을 모두 받을 수 있으므로
+                # transport 상태가 아니라 immutable fence payload와 ETag만 비교한다.
+                if stored.data != receipt.data or stored.etag != receipt.etag:
                     raise CacheTargetContractError(
                         "같은 Idempotency-Key의 Map receipt가 달라졌습니다."
                     )

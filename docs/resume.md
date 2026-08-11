@@ -7,11 +7,11 @@ Map `56f00e072a433bbe219909f5289d479ec16586d9`의 service OpenAPI SHA-256
 snapshot에 재결박했다. restore clone에는 `pinvi-cache-target-restore-fence`가 sync disabled 상태에서
 expected epoch/ETag/Idempotency-Key CAS와 post-fence stream tuple을 검증하는 전용 one-shot 경로다.
 Map commit 뒤 응답이 유실된 경우에도 PinVi DB의 immutable pre-CAS receipt가 original ETag/control tuple을
-보존하여 같은 key로 `200` exact replay를 완료한다. 이 경로는 writer를 열지 않는다.
+보존하여 같은 key로 `200` exact replay를 완료한다. 같은 key를 병렬 실행해 Map의 `201`/`200`을 동시에
+받는 경우도 terminal payload와 ETag를 대조해 최초 durable receipt로 수렴한다. 이 경로는 writer를 열지 않는다.
 
-**다음 한 작업**: PinVi draft PR을 push한 뒤 Map draft PR에 양 repository SHA와 service artifact hash의
-paired receipt를 추가하고, 두 적대적 리뷰어의 고정 SHA 재검토를 통과한다. n150 final isolated rehearsal은
-이 코드/계약 gate 뒤에만 별도 실행한다.
+**다음 한 작업**: PinVi format-fix commit SHA를 Map paired receipt에 다시 결박하고, 두 적대적 리뷰어의
+고정 SHA 재검토를 통과한다. n150 final isolated rehearsal은 이 코드/계약 gate 뒤에만 별도 실행한다.
 
 ## 2026-08-06 (codex) — T-VN-41-F1D-C1b PinVi seven-image provenance PR 준비
 

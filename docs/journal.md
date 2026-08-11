@@ -2,6 +2,14 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-11 (codex) — T-VN-41 ABC 병렬 restore replay 영수증 수렴
+
+- 같은 `Idempotency-Key`의 병렬 restore runner가 Map의 최초 `201`과 exact replay `200`을
+  각각 받더라도, response status 차이만으로 실패하지 않게 했다. terminal receipt는 immutable
+  fence payload와 ETag가 같은지만 검증하고, 먼저 저장된 durable receipt를 두 실행 모두에 반환한다.
+- 실제 PostgreSQL 병렬 회귀는 두 POST가 같은 pre-CAS ETag를 보낸 뒤 하나의 terminal receipt로
+  수렴함을 검증한다. cache-target restore/command/consumer/worker 통합 49건도 통과했다.
+
 ## 2026-08-11 (codex) — T-VN-41 ABC restore 응답 유실 영수증과 Map service 재벤더
 
 - Map `56f00e072a433bbe219909f5289d479ec16586d9`의 service OpenAPI를 exact bytes로 재벤더했다.
