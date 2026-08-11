@@ -455,9 +455,9 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
     assert restore_headers["If-Match"]["required"] is True
     assert {"200", "201"} <= set(restore_path["responses"])
     assert restore_path["responses"]["200"]["description"] == "exact Idempotency-Key replay"
-    assert restore_path["responses"]["200"]["headers"] == restore_path["responses"]["201"][
-        "headers"
-    ]
+    assert (
+        restore_path["responses"]["200"]["headers"] == restore_path["responses"]["201"]["headers"]
+    )
     assert restore_path["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/CacheTargetRestoreFenceResponse"
     }
