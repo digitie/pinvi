@@ -21,8 +21,8 @@ _SNAPSHOT = (
 _SERVICE_PROVENANCE = (
     Path(__file__).resolve().parents[4] / "contracts" / "kor-travel-map-service-provenance-v1.json"
 )
-_MAP_RELEASE_REVISION = "63a5713deabec00ecbc9eb4e8513ca1d2f4cf8ad"
-_SNAPSHOT_SHA256 = "b442414471c97bcdb746b49d2d24c9ec2b319290084d971df524db87b3994cfd"
+_MAP_RELEASE_REVISION = "56f00e072a433bbe219909f5289d479ec16586d9"
+_SNAPSHOT_SHA256 = "53da6a3a1194b9de715e80ed69e016ae15885b81d2909bf2d128773d64f8b2f7"
 
 _GENERATION7_ROLE_SCOPES = {
     "command": {"cache-target:command"},
@@ -454,9 +454,12 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
     assert restore_headers["Idempotency-Key"]["schema"]["format"] == "uuid"
     assert restore_headers["If-Match"]["required"] is True
     assert {"200", "201"} <= set(restore_path["responses"])
-    assert restore_path["responses"]["200"] == {
-        "description": "exact Idempotency-Key replay",
-        "headers": restore_path["responses"]["201"]["headers"],
+    assert restore_path["responses"]["200"]["description"] == "exact Idempotency-Key replay"
+    assert restore_path["responses"]["200"]["headers"] == restore_path["responses"]["201"][
+        "headers"
+    ]
+    assert restore_path["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/CacheTargetRestoreFenceResponse"
     }
     assert "ETag" in restore_path["responses"]["201"]["headers"]
     assert {"412", "428", "default"} <= set(restore_path["responses"])

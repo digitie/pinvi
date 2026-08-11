@@ -32,8 +32,8 @@
 
 - [/] **T-VN-41-ABC — cache target relay producer/consumer 결박** — Map queued refresh의 source event/outbox
       원자화, restore exact replay `200` OpenAPI 선언, PinVi service artifact exact re-vendor와 restore-fence
-      one-shot command를 하나의 compatible pair로 고정한다. command는 sync disabled 상태에서 stream CAS
-      receipt를 재조회해 검증할 뿐 writer를 열지 않는다. Map/PinVi 두 draft PR의 exact SHA·artifact SHA와
+      one-shot command를 하나의 compatible pair로 고정한다. command는 sync disabled 상태에서 immutable
+      pre-CAS receipt로 응답 유실 exact replay까지 검증할 뿐 writer를 열지 않는다. Map/PinVi 두 draft PR의 exact SHA·artifact SHA와
       적대적 재리뷰 뒤 n150 isolated rehearsal을 별도 완료 조건으로 둔다.
 - [/] **T-VN-41-F — C6c 격리 compatible-pair 증명** — 서비스 전 단계이므로 production consumer enable,
       운영 데이터 보존·복원, 중간 DB 백업은 이 task의 범위가 아니다. 데이터가 필요하면 fixture 또는

@@ -2,11 +2,12 @@
 
 ## 2026-08-11 (codex) — T-VN-41 ABC compatible pair draft 준비
 
-Map `63a5713deabec00ecbc9eb4e8513ca1d2f4cf8ad`의 service OpenAPI SHA-256
-`b442414471c97bcdb746b49d2d24c9ec2b319290084d971df524db87b3994cfd`를 PinVi provenance와 vendored
+Map `56f00e072a433bbe219909f5289d479ec16586d9`의 service OpenAPI SHA-256
+`53da6a3a1194b9de715e80ed69e016ae15885b81d2909bf2d128773d64f8b2f7`를 PinVi provenance와 vendored
 snapshot에 재결박했다. restore clone에는 `pinvi-cache-target-restore-fence`가 sync disabled 상태에서
 expected epoch/ETag/Idempotency-Key CAS와 post-fence stream tuple을 검증하는 전용 one-shot 경로다.
-이 경로는 writer를 열지 않는다.
+Map commit 뒤 응답이 유실된 경우에도 PinVi DB의 immutable pre-CAS receipt가 original ETag/control tuple을
+보존하여 같은 key로 `200` exact replay를 완료한다. 이 경로는 writer를 열지 않는다.
 
 **다음 한 작업**: PinVi draft PR을 push한 뒤 Map draft PR에 양 repository SHA와 service artifact hash의
 paired receipt를 추가하고, 두 적대적 리뷰어의 고정 SHA 재검토를 통과한다. n150 final isolated rehearsal은

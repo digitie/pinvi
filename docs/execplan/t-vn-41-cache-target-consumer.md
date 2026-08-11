@@ -177,12 +177,14 @@ idempotency ledger, control CAS, epoch `N+1`, 기존 claim 무효화, barrier re
 commit한다. missing If-Match=`428`, stale=`412`, key/body 또는 expected epoch mismatch=`409`다.
 이미 높은 epoch이면 더 증가시키지 않고 current stream+full snapshot을 채택한다.
 
-실행 경계는 `pinvi-cache-target-restore-fence`다. 이 one-shot command는 sync disabled와 command/consumer/
-restore-fence principal을 모두 요구하고, 먼저 current stream ETag를 읽어 `expected_restore_epoch` 및 UUID
-`Idempotency-Key`와 함께 fence CAS를 호출한다. 최초 `201`과 exact replay `200`은 같은 receipt tuple로
-허용하지만, 이후 재조회한 stream의 epoch/control version/ETag/`fenced` 상태가 receipt와 하나라도 다르면
-fail-close한다. command 자신은 ordinary consumer/writer를 열거나 reconciliation 완료를 추측하지 않는다.
-후속 reconciliation과 sync enable은 deployment control plane의 별도 successful receipt 뒤에만 가능하다.
+실행 경계는 `pinvi-cache-target-restore-fence`다. 이 one-shot command는 sync disabled와 consumer/
+restore-fence principal을 요구하고, 최초 current stream ETag/control tuple을 immutable DB receipt에 먼저
+기록한 뒤 `expected_restore_epoch` 및 UUID `Idempotency-Key`와 함께 fence CAS를 호출한다. Map commit 뒤
+응답이 유실되면 다음 실행은 새 stream GET로 abort하지 않고 보존한 raw ETag/body로 exact replay를 호출한다.
+최초 `201`과 exact replay `200`은 같은 receipt tuple로 허용하지만, 이후 재조회한 stream의
+epoch/control version/ETag/`fenced` 상태가 receipt와 하나라도 다르면 fail-close한다. command 자신은 ordinary
+consumer/writer를 열거나 reconciliation 완료를 추측하지 않는다. 후속 reconciliation과 sync enable은 deployment
+control plane의 별도 successful receipt 뒤에만 가능하다.
 
 epoch mismatch가 관측되면 old epoch inbox, applied/acked checkpoint, remote target tuple과 process-local
 cache observation을 current epoch에 재사용하지 않는다. old inbox는 audit partition으로 보존하되

@@ -5576,6 +5576,13 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CacheTargetRestoreFenceResponse"
+                }
+              }
+            },
             "description": "exact Idempotency-Key replay",
             "headers": {
               "ETag": {

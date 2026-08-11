@@ -16,6 +16,7 @@ from app.core.config import (
     KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
     settings,
 )
+from app.db import session as db_session
 from app.services.cache_target_restore_fence import run_cache_target_restore_fence
 
 
@@ -52,6 +53,7 @@ async def _run(args: argparse.Namespace) -> dict[str, int | str]:
     )
     try:
         result = await run_cache_target_restore_fence(
+            session_factory=db_session.async_session_factory,
             consumer_client=consumer_client,
             restore_client=restore_client,
             consumer_id=settings.pinvi_kor_travel_map_cache_target_consumer_id,
@@ -62,6 +64,7 @@ async def _run(args: argparse.Namespace) -> dict[str, int | str]:
     finally:
         await consumer_client.aclose()
         await restore_client.aclose()
+        await db_session.engine.dispose()
     return {
         "control_version": result.receipt.data.control_version,
         "fence_id": str(result.receipt.data.fence_id),

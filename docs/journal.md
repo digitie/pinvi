@@ -2,17 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
-## 2026-08-11 (codex) — T-VN-41 ABC Map service 재벤더와 restore-fence 실행 경계
+## 2026-08-11 (codex) — T-VN-41 ABC restore 응답 유실 영수증과 Map service 재벤더
 
-- Map `63a5713deabec00ecbc9eb4e8513ca1d2f4cf8ad`의 service OpenAPI를 exact bytes로 재벤더했다.
+- Map `56f00e072a433bbe219909f5289d479ec16586d9`의 service OpenAPI를 exact bytes로 재벤더했다.
   `contracts/kor-travel-map-service-provenance-v1.json`과 package resource, `.env.example`, wheel/Docker
-  provenance gate는 SHA-256 `b442414471c97bcdb746b49d2d24c9ec2b319290084d971df524db87b3994cfd`를 함께
-  가리킨다. restore-fence route의 최초 `201`과 exact Idempotency-Key replay `200`도 OpenAPI 계약과
-  consumer test에 함께 고정했다.
+  provenance gate는 SHA-256 `53da6a3a1194b9de715e80ed69e016ae15885b81d2909bf2d128773d64f8b2f7`를 함께
+  가리킨다. restore-fence route의 최초 `201`과 exact Idempotency-Key replay `200`은 같은 JSON receipt
+  schema를 반환하도록 OpenAPI 계약과 consumer test에 함께 고정했다.
 - `pinvi-cache-target-restore-fence` one-shot command를 추가했다. sync disabled 상태에서 raw ETag와 expected
-  restore epoch로 fence CAS를 호출하고, receipt와 재조회 stream의 epoch/control version/ETag/`fenced` 상태를
-  대조한다. ordinary consumer/writer는 이 command가 열지 않으며, 별도 reconciliation/cutover 성공 뒤에만
-  deployment control plane이 sync를 켤 수 있다.
+  restore epoch로 fence CAS를 호출하고, **POST 전** DB receipt에 raw ETag/control tuple을 immutable하게
+  기록한다. Map commit 뒤 응답이 유실된 재실행은 동일 ETag/body를 다시 보내 `200` receipt를 받고, receipt와
+  재조회 stream의 epoch/control version/ETag/`fenced` 상태를 대조한다. ordinary consumer/writer는 이 command가
+  열지 않으며, 별도 reconciliation/cutover 성공 뒤에만 deployment control plane이 sync를 켤 수 있다.
 - 검증: cache-target transport·restore-fence·service contract·sync configuration unit 103건, changed source
   strict mypy, ruff check/format을 통과했다. 다음은 PinVi draft PR push, Map paired receipt 갱신, 두 적대적
   리뷰어의 고정 SHA 재검토와 n150 isolated rehearsal이다.
