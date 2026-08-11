@@ -2,7 +2,7 @@
 
 ## 2026-08-11 (codex) — T-VN-41 ABC compatible pair draft 준비
 
-Map `56f00e072a433bbe219909f5289d479ec16586d9`의 service OpenAPI SHA-256
+Map `9c5332bb7ede81ed199f7ad29bb0976a13eb8e5a`의 service OpenAPI SHA-256
 `53da6a3a1194b9de715e80ed69e016ae15885b81d2909bf2d128773d64f8b2f7`를 PinVi provenance와 vendored
 snapshot에 재결박했다. restore clone에는 `pinvi-cache-target-restore-fence`가 sync disabled 상태에서
 expected epoch/ETag/Idempotency-Key CAS와 post-fence stream tuple을 검증하는 전용 one-shot 경로다.

@@ -2,6 +2,15 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-11 (codex) — T-VN-41: rebased Map service provenance 재고정
+
+- T-VN-41 Map branch가 T-VN-36 final-fence rebase를 반영한 뒤 service OpenAPI를 다시
+  대조했다. vendored bytes SHA-256 `53da6a3a1194b9de715e80ed69e016ae15885b81d2909bf2d128773d64f8b2f7`는
+  변하지 않았고, runtime이 읽는 provenance와 contract gate의 source revision만 Map
+  `9c5332bb7ede81ed199f7ad29bb0976a13eb8e5a`로 함께 올렸다.
+- 이 pin은 service vendor, capability generation, restore-fence command의 동일 source를
+  fail-closed로 묶는다. paired receipt는 Map consumer rollout에서 PinVi commit을 받은 뒤 갱신한다.
+
 ## 2026-08-11 (codex) — T-VN-41 ABC 병렬 restore replay 영수증 수렴
 
 - 같은 `Idempotency-Key`의 병렬 restore runner가 Map의 최초 `201`과 exact replay `200`을

@@ -21,7 +21,7 @@ _SNAPSHOT = (
 _SERVICE_PROVENANCE = (
     Path(__file__).resolve().parents[4] / "contracts" / "kor-travel-map-service-provenance-v1.json"
 )
-_MAP_RELEASE_REVISION = "56f00e072a433bbe219909f5289d479ec16586d9"
+_MAP_RELEASE_REVISION = "9c5332bb7ede81ed199f7ad29bb0976a13eb8e5a"
 _SNAPSHOT_SHA256 = "53da6a3a1194b9de715e80ed69e016ae15885b81d2909bf2d128773d64f8b2f7"
 
 _GENERATION7_ROLE_SCOPES = {
