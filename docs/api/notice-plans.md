@@ -9,11 +9,10 @@ Admin이 작성한 **추천 여행 plan** 사용자 조회 + 사용자 trip으�
 > ADR-029 이후 DB/ORM 정본 이름은 `curated_trip_plans` /
 > `curated_plan_pois` / `curated_plan_attachments`다. `/notice-plans` 경로와
 > `notice_plan_id` / `notice_poi_id` 응답 필드는 Sprint 4 호환 alias로 유지한다.
-> ADR-036 이후 POI의 `feature_id`는 nullable이다. kor-travel-map import가 feature를 제공하면
-> 같은 curated plan의 feature-backed POI를 재사용하고, 없으면 새 POI를 만들어 연결한다.
-> 생성 소스는 Pinvi-native 큐레이션과 kor-travel-map `curated_features` 1:1 import가
-> 모두 정식이다. kor_travel_map import는 kor-travel-map REST API만 호출하며 Python import나 DB 직접
-> 접근을 쓰지 않는다.
+> ADR-036 이후 POI의 `feature_id`는 nullable이다. 생성 소스는 PinVi-native 큐레이션과
+> kor-travel-map canonical collection import다. canonical import는 service OpenAPI만 호출하며
+> Python import나 Map DB 직접 접근을 쓰지 않는다. `source_curated_feature_*`는 sealed legacy
+> backfill을 마칠 때까지만 유지하는 migration provenance다.
 
 ## 1. 사용자 API
 
@@ -227,61 +226,22 @@ trip 권한 검사 대신 admin 권한 검사.
 - kor_travel_map feature schema와 FK는 만들지 않는다. feature 최신 정보는 필요 시
   `/features/{feature_id}`로 조회한다.
 
-### 2.5.1 kor_travel_map `curated_features` import
+### 2.5.1 kor-travel-map canonical collection import
 
-kor-travel-map `curated_features`는 Pinvi의 **추가 큐레이션 소스**다. 이 흐름은
-Pinvi가 자체적으로 직접 만든 curated trip plan을 대체하지 않는다.
+PinVi는 Map admin `curated_features` snapshot을 더 이상 읽거나 새로 import하지 않는다.
+새 큐레이션은 service scope의 canonical collection/item snapshot만 소비한다. collection UUID는
+plan 하나에, item UUID는 POI 하나에 대응하고, source-derived POI만 authoritative set으로
+갱신·삭제한다. 수동 POI는 유지한다.
 
-import 원칙:
+- 일반 import: `POST /admin/notice-plans/curation-collections/imports`
+- legacy plan 변환: sealed mapping receipt를 전제로
+  `POST /admin/notice-plans/curation-cutover/backfills`
+- 변환 전 검사: `GET /admin/notice-plans/curation-cutover/legacy-preflight`
 
-- Pinvi가 kor-travel-map admin REST API
-  `GET /v1/admin/features/curated/{curated_feature_id}/detail-snapshot`으로
-  detail snapshot을 조회한다. 운영 AdminBFF gate에서는 proxy secret + actor가 필수이고 service
-  token은 별도 pass-through다(local dev만 gate opt-out)(ADR-049).
-- kor_travel_map curated feature 1건을 Pinvi `curated_trip_plans` 1건으로 1:1 복사한다.
-- 하위 항목/POI는 `curated_plan_pois`로 복사한다.
-- kor_travel_map 항목이 `feature_id`를 제공하면 feature-backed POI로 저장하고, 없으면
-  `feature_id = null`인 자유 curated POI로 저장한다.
-- 같은 plan 안에 이미 같은 `feature_id`의 active POI가 있으면 재사용하고, 없으면 새로 만든다.
-- plan에는 `source_system`, `source_curated_feature_id`,
-  `source_curated_feature_version`, `source_etag`, `source_imported_at`을 저장한다.
-- POI에는 `source_curated_feature_id`, `source_curated_feature_item_id`를 저장한다.
-
-Pinvi Admin endpoint:
-
-```http
-POST /admin/notice-plans/imports/kor-travel-map-curated-features
-Content-Type: application/json
-
-{
-  "curated_feature_id": "kor-travel-map-curated-feature-id",
-  "mode": "create",
-  "is_published": false // 생략 가능. 신규 생성은 false, 기존 upsert/refresh는 기존값 유지
-}
-```
-
-`mode`:
-
-- `create`: 같은 `source_curated_feature_id`의 active plan이 있으면 `409`.
-- `upsert`: 없으면 생성, 있으면 plan/POI snapshot과 provenance를 갱신.
-- `refresh`: 기존 import가 없으면 `404`.
-
-응답:
-
-```jsonc
-{
-  "data": {
-    "notice_plan_id": "uuid",
-    "created_plan": true,
-    "source_system": "kor-travel-map",
-    "source_curated_feature_id": "kor-travel-map-curated-feature-id",
-    "source_version": 3,
-    "source_etag": "sha256:...",
-    "copied_poi_count": 8,
-    "reused_feature_backed_poi_count": 1,
-  },
-}
-```
+모든 command는 UUID `Idempotency-Key`와 canonical ETag/item-set receipt를 사용한다. `304`는
+local mutation 및 audit이 없는 terminal no-op이고, `409`·`413`은 operator가 새 사전 점검 또는
+새 command로 수렴해야 한다. 정확한 HTTP·transaction·cutover 순서는
+[`t-vn-40-curation-consumer.md`](../execplan/t-vn-40-curation-consumer.md)가 정본이다.
 
 ### 2.6 첨부
 

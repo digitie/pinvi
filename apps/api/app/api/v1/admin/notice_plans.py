@@ -15,11 +15,6 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients.kor_travel_map import (
-    KorTravelMapError,
-    KorTravelMapFeatureNotFound,
-)
-from app.clients.kor_travel_map_admin import KorTravelMapAdminClientDep
 from app.clients.kor_travel_map_curation import (
     CurationCutoverMappingContractError,
     CurationCutoverMappingServiceClientDep,
@@ -37,8 +32,6 @@ from app.core.rbac import require_role
 from app.models.user import User
 from app.schemas.envelope import Envelope
 from app.schemas.notice import (
-    KorTravelMapCuratedFeatureImportRequest,
-    KorTravelMapCuratedFeatureImportResponse,
     KorTravelMapCurationCollectionImportRequest,
     KorTravelMapCurationCollectionImportResponse,
     KorTravelMapCurationCutoverBackfillRequest,
@@ -90,7 +83,6 @@ from app.services.curation_cutover_mapping_receipt import (
 )
 from app.services.notice_plan import (
     NoticePlanConflictError,
-    NoticePlanCopyError,
     NoticePlanNotFoundError,
     NoticePlanPolicyError,
     NoticePlanVersionConflictError,
@@ -98,7 +90,6 @@ from app.services.notice_plan import (
     create_admin_poi,
     get_admin_plan,
     get_admin_poi,
-    import_kor_travel_map_curated_feature,
     list_admin_plans,
     list_plan_pois,
     reorder_admin_pois,
@@ -359,9 +350,6 @@ async def _audit(
         user_agent=request.headers.get("user-agent"),
         request_id=_parse_request_id(x_request_id),
     )
-
-
-# ── kor-travel-map curated feature import (T-223d) ─────────────────────────────
 
 
 @router.get(
@@ -786,87 +774,6 @@ async def import_kor_travel_map_curation_collection_route(
                 detail={"code": exc.code, "message": str(exc)},
             ) from exc
     raise AssertionError("unreachable")
-
-
-@router.post(
-    "/imports/kor-travel-map-curated-features",
-    status_code=status.HTTP_201_CREATED,
-    response_model=Envelope[KorTravelMapCuratedFeatureImportResponse],
-)
-async def import_kor_travel_map_curated_feature_route(
-    body: KorTravelMapCuratedFeatureImportRequest,
-    admin: AdminDep,
-    db: DbSession,
-    kor_travel_map_client: KorTravelMapAdminClientDep,
-    request: Request,
-    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
-) -> Envelope[KorTravelMapCuratedFeatureImportResponse]:
-    try:
-        result = await import_kor_travel_map_curated_feature(
-            db,
-            admin_id=admin.user_id,
-            kor_travel_map_client=kor_travel_map_client,
-            curated_feature_id=body.curated_feature_id,
-            mode=body.mode,
-            is_published=body.is_published,
-        )
-    except KorTravelMapFeatureNotFound as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "KOR_TRAVEL_MAP_CURATED_FEATURE_NOT_FOUND", "message": str(exc)},
-        ) from exc
-    except KorTravelMapError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "KOR_TRAVEL_MAP_UNAVAILABLE", "message": str(exc)},
-        ) from exc
-    except NoticePlanNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": exc.code, "message": str(exc)},
-        ) from exc
-    except NoticePlanPolicyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"code": exc.code, "message": str(exc)},
-        ) from exc
-    except NoticePlanCopyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"code": exc.code, "message": str(exc)},
-        ) from exc
-
-    await _audit(
-        db,
-        admin,
-        request,
-        x_request_id,
-        action="curated_plan.kor_travel_map_imported",
-        resource_type="curated_plan",
-        resource_id=str(result.plan.curated_plan_id),
-        before=None,
-        after={
-            "source_system": result.source_system,
-            "source_curated_feature_id": result.source_curated_feature_id,
-            "source_version": result.source_version,
-            "source_etag": result.source_etag,
-            "copied_poi_count": result.copied_poi_count,
-            "created_plan": result.created_plan,
-        },
-    )
-    await db.commit()
-    return Envelope.of(
-        KorTravelMapCuratedFeatureImportResponse(
-            notice_plan_id=result.plan.curated_plan_id,
-            created_plan=result.created_plan,
-            source_system=result.source_system,
-            source_curated_feature_id=result.source_curated_feature_id,
-            source_version=result.source_version,
-            source_etag=result.source_etag,
-            copied_poi_count=result.copied_poi_count,
-            reused_feature_backed_poi_count=result.reused_feature_backed_poi_count,
-        )
-    )
 
 
 # ── Admin curated plan CRUD ─────────────────────────────────────────────────

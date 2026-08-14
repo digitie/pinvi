@@ -1,5 +1,18 @@
 # resume.md
 
+## 2026-08-15 (codex) — T-VN-40C legacy admin snapshot runtime 제거
+
+`POST /admin/notice-plans/imports/kor-travel-map-curated-features`와 그 service/client,
+vendored admin detail-snapshot 계약·CI 재추출 gate를 제거했다. 신규 Map 큐레이션 입력은
+canonical collection import와 sealed mapping 기반 typed backfill뿐이다. 다만
+`source_curated_feature_*` 데이터와 legacy integrity 검사는 기존 plan의 backfill을 완료하기 전
+제거하지 않는다.
+
+**다음 한 작업**: Map paired receipt를 complete로 결선하고, Manager의 전용 service token/vendor
+hash를 배포 이미지에 고정한 뒤 n150에서 legacy plan 전체 backfill→canonical refresh를 검증한다.
+이 운영 증거가 없으면 source column·legacy provenance·Map legacy route의 물리 삭제를 시작하지
+않는다.
+
 ## 2026-08-15 (codex) — T-VN-40C canonical backfill admin UI
 
 notice-plan admin 화면은 `legacy-preflight`를 읽어 ready 여부와 provenance issue를 보여 주고, ready일

@@ -5,10 +5,10 @@ ADR-029에 따라 DB/ORM 정본 이름은 `curated_trip_plans` 계열이고, 기
 경로(`/notice-plans`)와 응답 필드(`notice_plan_id` 등)는 Sprint 4 호환을 위해
 유지한다. `app.notice_plans`는 운영 공지(system notice) 전용이다.
 ADR-036에 따라 curated trip plan은 **POI 묶음**이며, 각 POI의 `feature_id`는
-nullable이다. 생성 소스는 Pinvi 자체 큐레이션과 kor-travel-map `curated_features`
-1:1 import가 모두 정식이다. Pinvi curated trip plan 생성에는 kor-travel-concierge가
-관여하지 않는다. kor-travel-map import가 kor_travel_map feature를 제공할 때만 feature-backed POI로
-연결하고, 같은 plan에 해당 feature POI가 없으면 새로 만든다.
+nullable이다. 생성 소스는 PinVi 자체 큐레이션과 kor-travel-map canonical collection import다.
+`source_curated_feature_*`는 paired cutover가 끝날 때까지 기존 plan을 canonical identity로
+전환하기 위한 읽기 전용 legacy provenance이며 신규 import에는 쓰지 않는다. Pinvi curated trip
+plan 생성에는 kor-travel-concierge가 관여하지 않는다.
 
 v1
 (`apps/api/app/services/notice_plan.py`, `app/models/trip.py`,
@@ -33,10 +33,10 @@ v1에서 같은 단어가 두 개의 별개 개념에 쓰여 혼동이 누적됐
 추천 여행 plan은 **Admin이 운영하는 "이렇게 여행해 보세요" 콘텐츠**다.
 
 - Admin/운영자가 slug + 제목 + 카테고리 + 요약 + 출처 + 기간으로 Pinvi-native plan 작성
-- Pinvi가 kor-travel-map `GET /v1/admin/features/curated/{curated_feature_id}/detail-snapshot`을
-  조회한다. 운영 AdminBFF gate에서는 proxy secret + actor가 필수이고 service token은
-  별도 pass-through다(local dev만 gate opt-out).
-  `curated_trip_plans` / `curated_plan_pois`로 1:1 복사 (ADR-049)
+- PinVi는 kor-travel-map service scope의 canonical collection/item snapshot을 읽어
+  `curated_trip_plans` / `curated_plan_pois`로 import한다. collection UUID는 plan 하나에,
+  item UUID는 POI 하나에 대응하며 source-derived POI만 authoritative set으로 갱신한다.
+  legacy curated-feature plan은 sealed mapping receipt와 typed backfill command로만 전환한다.
 - POI를 day별로 sort_order에 따라 배치 — 사용자 trip과 동일한 구조
 - POI는 `feature_id` 없이도 존재 가능. 단 kor-travel-map import가 feature를 제공하면
   `feature_id`로 기존 curated POI를 찾아 연결하고, 없으면 새 POI를 생성
@@ -71,10 +71,10 @@ v1에서 같은 단어가 두 개의 별개 개념에 쓰여 혼동이 누적됐
 | `updated_by_admin_id`            | `uuid` FK `app.users`            | RESTRICT                                         |
 | `version`                        | `int` NOT NULL DEFAULT 1         | optimistic lock                                  |
 | `source_system`                  | `text`                           | nullable. 예: `kor-travel-map`                   |
-| `source_curated_feature_id`      | `text`                           | nullable. kor_travel_map curated feature 원천 id |
-| `source_curated_feature_version` | `int`                            | nullable. kor_travel_map copy snapshot version   |
-| `source_etag`                    | `text`                           | nullable. kor_travel_map copy snapshot etag      |
-| `source_imported_at`             | `timestamptz`                    | nullable. 마지막 import 시각                     |
+| `source_curated_feature_id`      | `text`                           | cutover 전용 legacy plan identity                |
+| `source_curated_feature_version` | `int`                            | cutover 전용 legacy snapshot version             |
+| `source_etag`                    | `text`                           | cutover 전용 legacy snapshot ETag                |
+| `source_imported_at`             | `timestamptz`                    | cutover 전용 기존 import 시각                    |
 | `deleted_at`                     | `timestamptz`                    | soft delete                                      |
 | `created_at`, `updated_at`       | `timestamptz`                    |                                                  |
 
@@ -84,8 +84,8 @@ v1에서 같은 단어가 두 개의 별개 개념에 쓰여 혼동이 누적됐
 - `ix_curated_trip_plans_published (is_published, updated_at)`
 - `ix_curated_trip_plans_category (category, updated_at)`
 - `ix_curated_trip_plans_created_by_admin`, `ix_curated_trip_plans_updated_by_admin`
-- `uq_curated_trip_plans_source_active (source_system, source_curated_feature_id)`
-  partial unique (`deleted_at IS NULL`, source 컬럼 not null)
+- legacy `(source_system, source_curated_feature_id)` partial unique는 sealed backfill이 끝난 뒤
+  paired removal migration에서 함께 제거한다.
 
 CHECK:
 
@@ -110,8 +110,8 @@ CHECK:
 | `user_url`                       | `text`                           | 추천자가 참조할 외부 링크                                                               |
 | `custom_marker_color`            | `text`                           | P-01~P-16                                                                               |
 | `custom_marker_icon`             | `text`                           | maki id                                                                                 |
-| `source_curated_feature_id`      | `text`                           | nullable. kor_travel_map curated feature 원천 id                                        |
-| `source_curated_feature_item_id` | `text`                           | nullable. kor_travel_map copy item 원천 id                                              |
+| `source_curated_feature_id`      | `text`                           | nullable. cutover 전용 legacy plan identity                                             |
+| `source_curated_feature_item_id` | `text`                           | nullable. cutover 전용 legacy item identity                                             |
 | `version`                        | `int` NOT NULL DEFAULT 1         |                                                                                         |
 | `deleted_at`                     | `timestamptz`                    |                                                                                         |
 | `created_at`, `updated_at`       | `timestamptz`                    |                                                                                         |
@@ -129,29 +129,27 @@ CHECK:
 - 기존 POI가 없으면 새 `curated_plan_pois` row를 만들고 plan에 연결한다.
 - kor_travel_map feature schema와 cross-schema FK는 만들지 않는다.
 
-### 3.2.1 생성 소스와 kor_travel_map `curated_features` import
+### 3.2.1 생성 소스와 canonical collection import
 
 Curated trip plan의 생성 소스는 하나로 제한하지 않는다.
 
-| 소스                                     | 설명                                                                                             | 현재 상태      |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------ | -------------- |
-| Pinvi-native 큐레이션                    | Admin/운영자가 Pinvi 안에서 직접 기획·작성한 추천 여행 plan                                      | 현재 정본 흐름 |
-| kor_travel_map `curated_features` import | Pinvi가 kor-travel-map REST API로 curated feature copy snapshot을 가져와 Pinvi plan으로 1:1 복사 | 구현 완료      |
+| 소스                            | 설명                                                                                 | 현재 상태      |
+| ------------------------------- | ------------------------------------------------------------------------------------ | -------------- |
+| Pinvi-native 큐레이션           | Admin/운영자가 Pinvi 안에서 직접 기획·작성한 추천 여행 plan                          | 현재 정본 흐름 |
+| kor-travel-map canonical import | service collection snapshot을 receipt·idempotency로 검증해 PinVi plan/POI로 반영한다 | 현재 정본 흐름 |
 
-kor_travel_map import 매핑은 다음 원칙을 따른다.
+canonical import 매핑은 다음 원칙을 따른다.
 
-| kor-travel-map                            | Pinvi                                            |
-| ----------------------------------------- | ------------------------------------------------ |
-| curated feature 1건                       | `app.curated_trip_plans` 1건                     |
-| curated feature의 하위 항목/POI           | `app.curated_plan_pois` 여러 건                  |
-| 하위 항목의 `feature_id`                  | `curated_plan_pois.feature_id`에 nullable 저장   |
-| 하위 항목의 표시명/좌표/카테고리 snapshot | `curated_plan_pois.feature_snapshot`             |
-| 순서/일차 정보                            | `day_index`, `sort_order`                        |
-| snapshot `version` / `etag`               | `source_curated_feature_version` / `source_etag` |
-| copy item id                              | `source_curated_feature_item_id`                 |
+| kor-travel-map                  | PinVi                                                         |
+| ------------------------------- | ------------------------------------------------------------- |
+| canonical collection UUID       | `curated_trip_plans.source_curation_collection_id`            |
+| collection revision/ETag/hash   | plan의 canonical receipt tuple                                |
+| canonical item UUID             | `curated_plan_pois.source_curation_item_id`                   |
+| item revision/ETag/Feature UUID | immutable import receipt item과 source-derived POI provenance |
+| 수동 POI                        | source tuple을 비워 보존                                      |
 
-이 import는 Pinvi-native 큐레이션을 대체하지 않는다. kor_travel_map `curated_features`는
-추가 소스이며, Pinvi가 자체적으로 직접 만든 추천 plan도 같은 테이블에 계속 저장한다.
+이 import는 PinVi-native 큐레이션을 대체하지 않는다. legacy curated-feature provenance는
+sealed mapping receipt의 backfill에만 남으며, live backfill과 paired receipt가 완료된 뒤 제거한다.
 
 Pinvi는 kor-travel-map을 HTTP로만 호출하며, kor-travel-map DB나 Python 패키지를 직접 의존하지
 않는다. `kor-travel-concierge`는 Pinvi curated trip plan 생성 흐름에 관여하지 않는다.

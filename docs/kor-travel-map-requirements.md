@@ -1,5 +1,10 @@
 # kor-travel-map 요구사항 명세 — Pinvi가 필요로 하는 것
 
+> **2026-08-15 정정**: 이 문서 §7의 `curated_features` admin detail-snapshot 요구는 historical
+> 기록이다. PinVi runtime은 해당 표면을 제거했으며, T-VN-40의 canonical collection/item service
+> snapshot과 sealed backfill contract가 이를 대체한다. 현재 계약은
+> `docs/execplan/t-vn-40-curation-consumer.md` 및 service provenance가 정본이다.
+
 > **이 문서의 독자**: `kor-travel-map` 개발 에이전트.
 > **작성 목적**: Pinvi가 feature 도메인을 위해 `kor-travel-map`에 **구체적으로
 > 무엇을, 왜, 언제** 필요로 하는지를 한 곳에 모아, kor-travel-map 쪽에서 우선순위와

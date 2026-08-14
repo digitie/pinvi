@@ -118,3 +118,13 @@ def test_cutover_backfill_openapi_contract() -> None:
     assert response["properties"]["import_result"]["$ref"] == (
         "#/components/schemas/KorTravelMapCurationCollectionImportResponse"
     )
+
+
+def test_legacy_curated_feature_import_is_removed_from_openapi() -> None:
+    from app.main import app
+
+    openapi = app.openapi()
+    assert "/admin/notice-plans/imports/kor-travel-map-curated-features" not in openapi["paths"]
+    schemas = openapi["components"]["schemas"]
+    assert "KorTravelMapCuratedFeatureImportRequest" not in schemas
+    assert "KorTravelMapCuratedFeatureImportResponse" not in schemas

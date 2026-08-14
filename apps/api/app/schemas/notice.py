@@ -120,23 +120,6 @@ class NoticePlanCopyResponse(BaseModel):
     copied_attachment_count: int
 
 
-class KorTravelMapCuratedFeatureImportRequest(BaseModel):
-    curated_feature_id: str = Field(min_length=1, max_length=240)
-    mode: Literal["create", "upsert", "refresh"] = "create"
-    is_published: bool | None = None
-
-
-class KorTravelMapCuratedFeatureImportResponse(BaseModel):
-    notice_plan_id: uuid.UUID
-    created_plan: bool
-    source_system: str
-    source_curated_feature_id: str
-    source_version: int | None = None
-    source_etag: str | None = None
-    copied_poi_count: int
-    reused_feature_backed_poi_count: int
-
-
 class KorTravelMapCurationCollectionImportRequest(BaseModel):
     collection_id: uuid.UUID
     mode: Literal["create", "refresh"] = "create"

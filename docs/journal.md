@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-15 (codex) — T-VN-40C legacy admin snapshot runtime 제거
+
+- `POST /admin/notice-plans/imports/kor-travel-map-curated-features`와
+  `KorTravelMapAdminClient.get_curated_detail_snapshot()`을 제거했다. legacy snapshot을 plan/POI로
+  쓰던 단일 service writer와 request/response DTO도 함께 제거했다.
+- Map admin detail snapshot subset, 추출 스크립트, PinVi runtime consumer test와 CI의 별도 Map
+  admin checkout을 없앴다. user/service OpenAPI 계약과 canonical collection import/backfill 계약은
+  그대로 유지한다.
+- `source_curated_feature_*` ORM/DB 컬럼 및 preflight integrity rule은 sealed mapping에 따른 기존
+  legacy plan 변환용으로 보존한다. 이 커밋은 data drop이나 production route choreography를 수행하지
+  않는다.
+
 ## 2026-08-15 (codex) — T-VN-40C canonical backfill admin UI
 
 - admin notice-plan 화면은 sealed mapping/preflight 상태를 읽고, issue가 있으면 canonical backfill
