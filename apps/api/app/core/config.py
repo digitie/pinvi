@@ -50,7 +50,7 @@ def _capability_generation(capabilities: dict[str, object], name: str) -> int:
     return generation
 
 
-def _load_service_provenance() -> tuple[str, str, int, int]:
+def _load_service_provenance() -> tuple[str, str, int, int, int]:
     raw = json.loads(_service_provenance_text())
     if not isinstance(raw, dict):
         raise RuntimeError("Map service provenance must be an object")
@@ -68,13 +68,14 @@ def _load_service_provenance() -> tuple[str, str, int, int]:
     if not isinstance(capabilities_value, dict):
         raise RuntimeError("Map service provenance capabilities are invalid")
     capabilities = cast(dict[str, object], capabilities_value)
-    if set(capabilities) != {"cache_target", "c6c_cancel_probe"}:
+    if set(capabilities) != {"cache_target", "c6c_cancel_probe", "curation_snapshot"}:
         raise RuntimeError("Map service provenance capability inventory is invalid")
     return (
         _required_string(payload, "service_openapi_sha256", r"[0-9a-f]{64}"),
         _required_string(payload, "map_release_revision", r"[0-9a-f]{40}"),
         _capability_generation(capabilities, "cache_target"),
         _capability_generation(capabilities, "c6c_cancel_probe"),
+        _capability_generation(capabilities, "curation_snapshot"),
     )
 
 
@@ -83,6 +84,7 @@ def _load_service_provenance() -> tuple[str, str, int, int]:
     KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
     KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION,
     KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION,
+    KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION,
 ) = _load_service_provenance()
 
 
@@ -203,6 +205,12 @@ class Settings(BaseSettings):
     # read/cancel 자격을 분리하고 요청 actor 대신 map 서버의 고정 actor를 사용한다.
     pinvi_kor_travel_map_ops_read_token: SecretStr | None = None
     pinvi_kor_travel_map_ops_cancel_token: SecretStr | None = None
+    # canonical curation collection/item snapshot read 전용 exact-scope credential.
+    # admin/service/cache-target token으로 fallback하지 않는다.
+    pinvi_kor_travel_map_curation_snapshot_token: SecretStr | None = None
+    # T-VN-40C maintenance fence에서 legacy identity→canonical UUID mapping만 읽는 별도 principal.
+    # snapshot read token과 공유하면 Map이 403으로 fail-close한다.
+    pinvi_kor_travel_map_curation_cutover_mapping_token: SecretStr | None = None
     pinvi_kor_travel_map_timeout_seconds: float = Field(
         default=5.0,
         gt=0,
@@ -495,6 +503,12 @@ class Settings(BaseSettings):
                 self.pinvi_kor_travel_map_ops_cancel_token.get_secret_value()
                 if self.pinvi_kor_travel_map_ops_cancel_token is not None
                 else "",
+                self.pinvi_kor_travel_map_curation_snapshot_token.get_secret_value()
+                if self.pinvi_kor_travel_map_curation_snapshot_token is not None
+                else "",
+                self.pinvi_kor_travel_map_curation_cutover_mapping_token.get_secret_value()
+                if self.pinvi_kor_travel_map_curation_cutover_mapping_token is not None
+                else "",
             )
             if value
         }
@@ -550,6 +564,64 @@ class Settings(BaseSettings):
             raise ValueError(
                 "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_CONTRACT_GENERATION must match the vendored service contract"
             )
+        return self
+
+    @model_validator(mode="after")
+    def validate_curation_service_principals(self) -> Self:
+        """두 curation scope를 다른 Map trust boundary와 서로 분리한다."""
+
+        curation_tokens = (
+            (
+                "PINVI_KOR_TRAVEL_MAP_CURATION_SNAPSHOT_TOKEN",
+                self.pinvi_kor_travel_map_curation_snapshot_token,
+            ),
+            (
+                "PINVI_KOR_TRAVEL_MAP_CURATION_CUTOVER_MAPPING_TOKEN",
+                self.pinvi_kor_travel_map_curation_cutover_mapping_token,
+            ),
+        )
+        values = [secret.get_secret_value() for _, secret in curation_tokens if secret is not None]
+        if len(values) != len(set(values)):
+            raise ValueError("curation snapshot and cutover mapping tokens must differ")
+        protected = {
+            value
+            for value in (
+                self.pinvi_kor_travel_map_service_token.strip(),
+                self.pinvi_kor_travel_map_admin_service_token.strip(),
+                self.pinvi_kor_travel_map_admin_proxy_secret.strip(),
+                self.pinvi_kor_travel_map_public_api_key.strip(),
+                self.pinvi_vworld_api_key.strip(),
+                self.pinvi_kor_travel_map_ops_read_token.get_secret_value()
+                if self.pinvi_kor_travel_map_ops_read_token is not None
+                else "",
+                self.pinvi_kor_travel_map_ops_cancel_token.get_secret_value()
+                if self.pinvi_kor_travel_map_ops_cancel_token is not None
+                else "",
+                self.pinvi_kor_travel_map_cache_target_command_token.get_secret_value()
+                if self.pinvi_kor_travel_map_cache_target_command_token is not None
+                else "",
+                self.pinvi_kor_travel_map_cache_target_consumer_token.get_secret_value()
+                if self.pinvi_kor_travel_map_cache_target_consumer_token is not None
+                else "",
+                self.pinvi_kor_travel_map_cache_target_restore_fence_token.get_secret_value()
+                if self.pinvi_kor_travel_map_cache_target_restore_fence_token is not None
+                else "",
+                self.pinvi_kor_travel_map_cache_target_recovery_token.get_secret_value()
+                if self.pinvi_kor_travel_map_cache_target_recovery_token is not None
+                else "",
+            )
+            if value
+        }
+        for env_name, secret in curation_tokens:
+            if secret is None:
+                continue
+            token = secret.get_secret_value()
+            if len(token) < 32:
+                raise ValueError(f"{env_name} must contain at least 32 characters")
+            if any(character.isspace() for character in token):
+                raise ValueError(f"{env_name} must not contain whitespace")
+            if token in protected:
+                raise ValueError(f"{env_name} must not reuse another Map trust-boundary credential")
         return self
 
 

@@ -600,23 +600,6 @@ class KorTravelMapAdminClient:
             )
         )
 
-    # ── curated feature import (ADR-049) ───────────────────────────────────────
-
-    async def get_curated_detail_snapshot(self, curated_feature_id: str) -> dict[str, Any]:
-        """GET /v1/admin/features/curated/{id}/detail-snapshot — 큐레이션 import snapshot.
-
-        data = {curated_feature_id, version, etag, updated_at, theme, content, source, items}.
-        kor-travel-map PR #533이 public `/v1/curated-features/{id}/pinvi-copy`를 폐지하고
-        item 포함 snapshot을 admin 표면(서비스 토큰 필요)으로 옮겼다(ADR-049). plan-level 객체
-        키는 `plan`에서 `content`로 개명됐다.
-        """
-        return self._data(
-            await self._send(
-                "GET",
-                f"/v1/admin/features/curated/{curated_feature_id}/detail-snapshot",
-            )
-        )
-
     # ── ops/provider ETL read proxy (kor_travel_map admin 운영 화면) ────────────────
 
     async def get_ops_pipeline_overview(self, *, run_limit: int = 10) -> dict[str, Any]:

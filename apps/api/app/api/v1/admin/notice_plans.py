@@ -10,21 +10,34 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any, NoReturn
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients.kor_travel_map import (
-    KorTravelMapError,
-    KorTravelMapFeatureNotFound,
+from app.clients.kor_travel_map_curation import (
+    CurationCutoverMappingContractError,
+    CurationCutoverMappingServiceClientDep,
+    CurationCutoverMappingServiceProblem,
+    CurationCutoverMappingUnavailable,
+    CurationSnapshotContractError,
+    CurationSnapshotNotFound,
+    CurationSnapshotServiceClientDep,
+    CurationSnapshotServiceProblem,
+    CurationSnapshotTooLarge,
+    CurationSnapshotUnavailable,
 )
-from app.clients.kor_travel_map_admin import KorTravelMapAdminClientDep
 from app.core.deps import DbSession
 from app.core.rbac import require_role
 from app.models.user import User
 from app.schemas.envelope import Envelope
 from app.schemas.notice import (
-    KorTravelMapCuratedFeatureImportRequest,
-    KorTravelMapCuratedFeatureImportResponse,
+    KorTravelMapCurationCollectionImportRequest,
+    KorTravelMapCurationCollectionImportResponse,
+    KorTravelMapCurationCutoverBackfillRequest,
+    KorTravelMapCurationCutoverBackfillResponse,
+    KorTravelMapCurationCutoverLegacyPreflightResponse,
+    KorTravelMapCurationCutoverMappingReceiptResponse,
     NoticePlanCreate,
     NoticePlanResponse,
     NoticePlanUpdate,
@@ -46,9 +59,30 @@ from app.services.admin_curated_attachment import (
     ensure_poi,
     list_curated_attachments,
 )
+from app.services.curation_collection_import import (
+    CurationCollectionImportConflict,
+    CurationCollectionImportNotFound,
+    apply_curation_collection_import,
+    inspect_curation_collection_import,
+)
+from app.services.curation_cutover_backfill import (
+    CurationCutoverBackfillConflict,
+    CurationCutoverBackfillNotFound,
+    CurationCutoverBackfillResult,
+    apply_curation_cutover_backfill,
+    inspect_curation_cutover_backfill,
+)
+from app.services.curation_cutover_legacy_preflight import (
+    CurationCutoverLegacyPreflightResult,
+    inspect_curation_cutover_legacy_provenance,
+)
+from app.services.curation_cutover_mapping_receipt import (
+    CurationCutoverMappingReceiptConflict,
+    CurationCutoverMappingReceiptResult,
+    seal_curation_cutover_mapping_receipt,
+)
 from app.services.notice_plan import (
     NoticePlanConflictError,
-    NoticePlanCopyError,
     NoticePlanNotFoundError,
     NoticePlanPolicyError,
     NoticePlanVersionConflictError,
@@ -56,7 +90,6 @@ from app.services.notice_plan import (
     create_admin_poi,
     get_admin_plan,
     get_admin_poi,
-    import_kor_travel_map_curated_feature,
     list_admin_plans,
     list_plan_pois,
     reorder_admin_pois,
@@ -102,6 +135,7 @@ def _poi_to_response(poi) -> NoticePoiResponse:  # type: ignore[no-untyped-def]
     return NoticePoiResponse(
         notice_poi_id=poi.curated_poi_id,
         notice_plan_id=poi.curated_plan_id,
+        source_curation_item_id=poi.source_curation_item_id,
         day_index=poi.day_index,
         sort_order=poi.sort_order,
         feature_id=poi.feature_id,
@@ -130,6 +164,7 @@ def _plan_to_response(plan, pois) -> NoticePlanResponse:  # type: ignore[no-unty
         starts_on=plan.starts_on,
         ends_on=plan.ends_on,
         is_published=plan.is_published,
+        source_system=("kor-travel-map" if plan.source_system == "kor-travel-map" else None),
         version=plan.version,
         created_at=plan.created_at,
         updated_at=plan.updated_at,
@@ -143,6 +178,60 @@ def _snapshot_plan(plan) -> dict[str, Any]:  # type: ignore[no-untyped-def]
 
 def _snapshot_poi(poi) -> dict[str, Any]:  # type: ignore[no-untyped-def]
     return _poi_to_response(poi).model_dump(mode="json")
+
+
+def _cutover_mapping_receipt_response(
+    result: CurationCutoverMappingReceiptResult,
+) -> KorTravelMapCurationCutoverMappingReceiptResponse:
+    receipt = result.receipt
+    assert receipt.completed_at is not None
+    return KorTravelMapCurationCutoverMappingReceiptResponse(
+        receipt_id=receipt.receipt_id,
+        map_release_revision=receipt.map_release_revision,
+        mapping_root_version=receipt.mapping_root_version,
+        mapping_root=receipt.mapping_root,
+        mapping_count=receipt.mapping_count,
+        completed_at=receipt.completed_at,
+        replayed=result.replayed,
+    )
+
+
+def _cutover_legacy_preflight_response(
+    result: CurationCutoverLegacyPreflightResult,
+) -> KorTravelMapCurationCutoverLegacyPreflightResponse:
+    return KorTravelMapCurationCutoverLegacyPreflightResponse(
+        map_release_revision=result.map_release_revision,
+        mapping_receipt_id=result.receipt_id,
+        mapping_root=result.mapping_root,
+        mapping_count=result.mapping_count,
+        legacy_plan_count=result.legacy_plan_count,
+        legacy_source_poi_count=result.legacy_source_poi_count,
+        manual_poi_count=result.manual_poi_count,
+        backfillable_plan_count=len(result.plan_mappings),
+        ready=result.ready,
+        issues=[
+            {
+                "code": issue.code,
+                "detail": issue.detail,
+                "notice_plan_id": issue.curated_plan_id,
+                "notice_poi_id": issue.curated_poi_id,
+            }
+            for issue in result.issues
+        ],
+    )
+
+
+def _cutover_backfill_response(
+    result: CurationCutoverBackfillResult,
+) -> KorTravelMapCurationCutoverBackfillResponse:
+    receipt = result.receipt
+    return KorTravelMapCurationCutoverBackfillResponse(
+        backfill_receipt_id=receipt.receipt_id,
+        mapping_receipt_id=receipt.mapping_receipt_id,
+        legacy_curated_feature_id=receipt.legacy_curated_feature_id,
+        import_result=result.import_result.response,
+        replayed=result.replayed,
+    )
 
 
 def _parse_request_id(value: str | None) -> uuid.UUID:
@@ -261,88 +350,432 @@ async def _audit(
     )
 
 
-# ── kor-travel-map curated feature import (T-223d) ─────────────────────────────
+@router.get(
+    "/curation-cutover/legacy-preflight",
+    response_model=Envelope[KorTravelMapCurationCutoverLegacyPreflightResponse],
+)
+async def get_kor_travel_map_curation_cutover_legacy_preflight_route(
+    _admin: AdminDep,
+    db: DbSession,
+) -> Envelope[KorTravelMapCurationCutoverLegacyPreflightResponse]:
+    """legacy provenance가 canonical backfill을 허용하는지 읽기 전용으로 보고한다."""
+
+    result = await inspect_curation_cutover_legacy_provenance(db)
+    return Envelope.of(_cutover_legacy_preflight_response(result))
 
 
 @router.post(
-    "/imports/kor-travel-map-curated-features",
+    "/curation-cutover/mapping-receipts",
     status_code=status.HTTP_201_CREATED,
-    response_model=Envelope[KorTravelMapCuratedFeatureImportResponse],
+    response_model=Envelope[KorTravelMapCurationCutoverMappingReceiptResponse],
+    responses={
+        200: {"description": "같은 Map release/root의 sealed receipt replay"},
+        409: {"description": "Map release root 또는 local receipt conflict"},
+        502: {"description": "Map cutover mapping service contract violation"},
+        503: {"description": "Map cutover mapping service unavailable"},
+    },
 )
-async def import_kor_travel_map_curated_feature_route(
-    body: KorTravelMapCuratedFeatureImportRequest,
+async def capture_kor_travel_map_curation_cutover_mapping_receipt_route(
     admin: AdminDep,
     db: DbSession,
-    kor_travel_map_client: KorTravelMapAdminClientDep,
+    kor_travel_map_mapping_client: CurationCutoverMappingServiceClientDep,
     request: Request,
+    response: Response,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
-) -> Envelope[KorTravelMapCuratedFeatureImportResponse]:
+) -> Envelope[KorTravelMapCurationCutoverMappingReceiptResponse]:
+    """Map mapping root를 local immutable receipt로 봉인하는 maintenance-only admin command."""
+
+    actor_admin_id = admin.user_id
     try:
-        result = await import_kor_travel_map_curated_feature(
-            db,
-            admin_id=admin.user_id,
-            kor_travel_map_client=kor_travel_map_client,
-            curated_feature_id=body.curated_feature_id,
-            mode=body.mode,
-            is_published=body.is_published,
-        )
-    except KorTravelMapFeatureNotFound as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "KOR_TRAVEL_MAP_CURATED_FEATURE_NOT_FOUND", "message": str(exc)},
-        ) from exc
-    except KorTravelMapError as exc:
+        mapping_set = await kor_travel_map_mapping_client.get_identity_mappings()
+    except (CurationCutoverMappingUnavailable, CurationCutoverMappingServiceProblem) as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "KOR_TRAVEL_MAP_UNAVAILABLE", "message": str(exc)},
+            detail={"code": "CURATION_CUTOVER_MAPPING_UNAVAILABLE", "message": str(exc)},
         ) from exc
-    except NoticePlanNotFoundError as exc:
+    except CurationCutoverMappingContractError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": "CURATION_CUTOVER_MAPPING_CONTRACT_ERROR", "message": str(exc)},
+        ) from exc
+
+    # RBAC dependency와 remote fetch 전후에 쓴 session transaction을 끝낸다. 아래 SSI
+    # command는 receipt claim부터 audit까지의 transaction 첫 statement여야 한다.
+    await db.rollback()
+    request_id = _parse_request_id(x_request_id)
+    ip_hash_input = request.client.host if request.client else ""
+    user_agent = request.headers.get("user-agent")
+    for attempt in range(3):
+        try:
+            # remote keyset fetch 뒤 새 command transaction을 시작한다. 이 SQL이 첫 DB
+            # statement여서 receipt claim·member seal·audit가 같은 SSI 범위에 든다.
+            await db.execute(text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
+            result = await seal_curation_cutover_mapping_receipt(
+                db,
+                actor_admin_id=actor_admin_id,
+                mapping_set=mapping_set,
+            )
+            if not result.replayed:
+                sealed = result.receipt
+                await append_admin_audit(
+                    db,
+                    actor_user_id=actor_admin_id,
+                    action="curated_plan.kor_travel_map_cutover_mapping_sealed",
+                    resource_type="curation_cutover_mapping_receipt",
+                    resource_id=str(sealed.receipt_id),
+                    before_state=None,
+                    after_state={
+                        "map_release_revision": sealed.map_release_revision,
+                        "mapping_root_version": sealed.mapping_root_version,
+                        "mapping_root": sealed.mapping_root,
+                        "mapping_count": sealed.mapping_count,
+                    },
+                    access_reason=None,
+                    target_pii_fields=None,
+                    ip_hash_input=ip_hash_input,
+                    user_agent=user_agent,
+                    request_id=request_id,
+                )
+            await db.commit()
+            response.status_code = (
+                status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
+            )
+            return Envelope.of(_cutover_mapping_receipt_response(result))
+        except CurationCutoverMappingReceiptConflict as exc:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
+        except IntegrityError as exc:
+            await db.rollback()
+            if getattr(exc.orig, "sqlstate", None) == "23505" and attempt < 2:
+                continue
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "CURATION_CUTOVER_MAPPING_RECEIPT_CONFLICT",
+                    "message": "curation cutover mapping receipt 상태가 충돌했습니다.",
+                },
+            ) from exc
+        except DBAPIError as exc:
+            await db.rollback()
+            if getattr(exc.orig, "sqlstate", None) == "40001" and attempt < 2:
+                continue
+            if getattr(exc.orig, "sqlstate", None) == "40001":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "CURATION_CUTOVER_MAPPING_RETRY_EXHAUSTED",
+                        "message": "동시 변경으로 mapping receipt를 봉인하지 못했습니다.",
+                    },
+                ) from exc
+            raise
+    raise AssertionError("unreachable")
+
+
+@router.post(
+    "/curation-cutover/backfills",
+    status_code=status.HTTP_201_CREATED,
+    response_model=Envelope[KorTravelMapCurationCutoverBackfillResponse],
+    responses={
+        200: {"description": "같은 Idempotency-Key의 terminal backfill replay"},
+        404: {"description": "active legacy Map plan이 없음"},
+        409: {"description": "sealed mapping, idempotency 또는 local state conflict"},
+        413: {"description": "canonical collection item 상한 초과"},
+        502: {"description": "Map snapshot service contract violation"},
+        503: {"description": "Map snapshot service unavailable"},
+    },
+)
+async def backfill_kor_travel_map_curation_cutover_plan_route(
+    body: KorTravelMapCurationCutoverBackfillRequest,
+    admin: AdminDep,
+    db: DbSession,
+    kor_travel_map_client: CurationSnapshotServiceClientDep,
+    request: Request,
+    response: Response,
+    idempotency_key: Annotated[uuid.UUID, Header(alias="Idempotency-Key")],
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[KorTravelMapCurationCutoverBackfillResponse]:
+    """sealed Map mapping이 가리키는 legacy plan 하나를 canonical collection으로 전환한다."""
+
+    actor_admin_id = admin.user_id
+    request_id = _parse_request_id(x_request_id)
+    ip_hash_input = request.client.host if request.client else ""
+    user_agent = request.headers.get("user-agent")
+    try:
+        replay, preparation = await inspect_curation_cutover_backfill(
+            db,
+            actor_admin_id=actor_admin_id,
+            idempotency_key=idempotency_key,
+            curated_plan_id=body.notice_plan_id,
+        )
+    except CurationCutoverBackfillNotFound as exc:
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
-    except NoticePlanPolicyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"code": exc.code, "message": str(exc)},
-        ) from exc
-    except NoticePlanCopyError as exc:
+    except CurationCutoverBackfillConflict as exc:
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
+    replay_response = _cutover_backfill_response(replay) if replay is not None else None
+    await db.rollback()
+    if replay_response is not None:
+        response.status_code = status.HTTP_200_OK
+        return Envelope.of(replay_response)
 
-    await _audit(
-        db,
-        admin,
-        request,
-        x_request_id,
-        action="curated_plan.kor_travel_map_imported",
-        resource_type="curated_plan",
-        resource_id=str(result.plan.curated_plan_id),
-        before=None,
-        after={
-            "source_system": result.source_system,
-            "source_curated_feature_id": result.source_curated_feature_id,
-            "source_version": result.source_version,
-            "source_etag": result.source_etag,
-            "copied_poi_count": result.copied_poi_count,
-            "created_plan": result.created_plan,
-        },
-    )
-    await db.commit()
-    return Envelope.of(
-        KorTravelMapCuratedFeatureImportResponse(
-            notice_plan_id=result.plan.curated_plan_id,
-            created_plan=result.created_plan,
-            source_system=result.source_system,
-            source_curated_feature_id=result.source_curated_feature_id,
-            source_version=result.source_version,
-            source_etag=result.source_etag,
-            copied_poi_count=result.copied_poi_count,
-            reused_feature_backed_poi_count=result.reused_feature_backed_poi_count,
+    try:
+        fetched = await kor_travel_map_client.get_collection_snapshot(
+            preparation.collection_id,
+            if_none_match=None,
         )
-    )
+    except CurationSnapshotNotFound as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "CURATION_SNAPSHOT_NOT_FOUND", "message": str(exc)},
+        ) from exc
+    except CurationSnapshotTooLarge as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail={"code": "CURATION_SNAPSHOT_TOO_LARGE", "message": str(exc)},
+        ) from exc
+    except (CurationSnapshotUnavailable, CurationSnapshotServiceProblem) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "CURATION_SNAPSHOT_UNAVAILABLE", "message": str(exc)},
+        ) from exc
+    except CurationSnapshotContractError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": "CURATION_SNAPSHOT_CONTRACT_ERROR", "message": str(exc)},
+        ) from exc
+
+    for attempt in range(3):
+        try:
+            # remote fetch 뒤 새로운 transaction의 첫 SQL이다. backfill receipt, generic
+            # import proof와 audit까지 동일 SSI command boundary로 닫는다.
+            await db.execute(text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
+            result = await apply_curation_cutover_backfill(
+                db,
+                actor_admin_id=actor_admin_id,
+                idempotency_key=idempotency_key,
+                curated_plan_id=body.notice_plan_id,
+                fetched=fetched,
+            )
+            result_response = _cutover_backfill_response(result)
+            if not result.replayed:
+                sealed = result.receipt
+                await append_admin_audit(
+                    db,
+                    actor_user_id=actor_admin_id,
+                    action="curated_plan.kor_travel_map_cutover_backfilled",
+                    resource_type="curation_cutover_backfill_receipt",
+                    resource_id=str(sealed.receipt_id),
+                    before_state=None,
+                    after_state=result_response.model_dump(mode="json"),
+                    access_reason=None,
+                    target_pii_fields=None,
+                    ip_hash_input=ip_hash_input,
+                    user_agent=user_agent,
+                    request_id=request_id,
+                )
+            await db.commit()
+            response.status_code = (
+                status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
+            )
+            return Envelope.of(result_response)
+        except CurationCutoverBackfillNotFound as exc:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
+        except CurationCutoverBackfillConflict as exc:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
+        except IntegrityError as exc:
+            await db.rollback()
+            if getattr(exc.orig, "sqlstate", None) == "23505" and attempt < 2:
+                continue
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "CURATION_CUTOVER_BACKFILL_CONFLICT",
+                    "message": "canonical cutover backfill 상태가 충돌했습니다.",
+                },
+            ) from exc
+        except DBAPIError as exc:
+            await db.rollback()
+            if getattr(exc.orig, "sqlstate", None) == "40001" and attempt < 2:
+                continue
+            if getattr(exc.orig, "sqlstate", None) == "40001":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "CURATION_CUTOVER_BACKFILL_RETRY_EXHAUSTED",
+                        "message": "동시 변경으로 canonical cutover backfill을 완료하지 못했습니다.",
+                    },
+                ) from exc
+            raise
+    raise AssertionError("unreachable")
+
+
+@router.post(
+    "/imports/kor-travel-map-curation-collections",
+    status_code=status.HTTP_201_CREATED,
+    response_model=Envelope[KorTravelMapCurationCollectionImportResponse],
+    responses={
+        200: {"description": "refresh 또는 exact Idempotency-Key replay"},
+        404: {"description": "공개 collection 또는 refresh 대상 없음"},
+        409: {"description": "idempotency/source/local state conflict"},
+        413: {"description": "collection item 상한 초과"},
+        502: {"description": "Map snapshot service contract violation"},
+        503: {"description": "Map snapshot service unavailable"},
+    },
+)
+async def import_kor_travel_map_curation_collection_route(
+    body: KorTravelMapCurationCollectionImportRequest,
+    admin: AdminDep,
+    db: DbSession,
+    kor_travel_map_client: CurationSnapshotServiceClientDep,
+    request: Request,
+    response: Response,
+    idempotency_key: Annotated[uuid.UUID, Header(alias="Idempotency-Key")],
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[KorTravelMapCurationCollectionImportResponse]:
+    actor_admin_id = admin.user_id
+    request_id = _parse_request_id(x_request_id)
+    ip_hash_input = request.client.host if request.client else ""
+    user_agent = request.headers.get("user-agent")
+
+    try:
+        replay, conditional_etag = await inspect_curation_collection_import(
+            db,
+            actor_admin_id=actor_admin_id,
+            idempotency_key=idempotency_key,
+            collection_id=body.collection_id,
+            mode=body.mode,
+            is_published=body.is_published,
+        )
+    except CurationCollectionImportNotFound as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except CurationCollectionImportConflict as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    await db.rollback()
+    if replay is not None:
+        response.status_code = replay.status_code
+        return Envelope.of(replay.response)
+
+    try:
+        fetched = await kor_travel_map_client.get_collection_snapshot(
+            body.collection_id,
+            if_none_match=conditional_etag,
+        )
+    except CurationSnapshotNotFound as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "CURATION_SNAPSHOT_NOT_FOUND", "message": str(exc)},
+        ) from exc
+    except CurationSnapshotTooLarge as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail={"code": "CURATION_SNAPSHOT_TOO_LARGE", "message": str(exc)},
+        ) from exc
+    except (CurationSnapshotUnavailable, CurationSnapshotServiceProblem) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "CURATION_SNAPSHOT_UNAVAILABLE", "message": str(exc)},
+        ) from exc
+    except CurationSnapshotContractError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": "CURATION_SNAPSHOT_CONTRACT_ERROR", "message": str(exc)},
+        ) from exc
+
+    for attempt in range(3):
+        try:
+            # 인증 dependency가 연 transaction은 위에서 끝냈다. isolation 설정이
+            # 이 command transaction의 첫 SQL이어야 claim부터 audit까지 SSI 대상이다.
+            await db.execute(text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
+            result = await apply_curation_collection_import(
+                db,
+                actor_admin_id=actor_admin_id,
+                idempotency_key=idempotency_key,
+                collection_id=body.collection_id,
+                mode=body.mode,
+                is_published=body.is_published,
+                fetched=fetched,
+            )
+            if result.mutated:
+                await append_admin_audit(
+                    db,
+                    actor_user_id=actor_admin_id,
+                    action="curated_plan.kor_travel_map_collection_imported",
+                    resource_type="curated_plan",
+                    resource_id=str(result.response.notice_plan_id),
+                    before_state=None,
+                    after_state=result.response.model_dump(mode="json"),
+                    access_reason=None,
+                    target_pii_fields=None,
+                    ip_hash_input=ip_hash_input,
+                    user_agent=user_agent,
+                    request_id=request_id,
+                )
+            await db.commit()
+            response.status_code = result.status_code
+            return Envelope.of(result.response)
+        except IntegrityError as exc:
+            await db.rollback()
+            if getattr(exc.orig, "sqlstate", None) == "23505" and attempt < 2:
+                continue
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "CURATION_COLLECTION_IMPORT_CONFLICT",
+                    "message": "canonical collection import 상태가 충돌했습니다.",
+                },
+            ) from exc
+        except DBAPIError as exc:
+            await db.rollback()
+            if getattr(exc.orig, "sqlstate", None) == "40001" and attempt < 2:
+                continue
+            if getattr(exc.orig, "sqlstate", None) == "40001":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "CURATION_COLLECTION_IMPORT_RETRY_EXHAUSTED",
+                        "message": "동시 변경으로 import를 완료하지 못했습니다.",
+                    },
+                ) from exc
+            raise
+        except CurationCollectionImportNotFound as exc:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
+        except CurationCollectionImportConflict as exc:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
+    raise AssertionError("unreachable")
 
 
 # ── Admin curated plan CRUD ─────────────────────────────────────────────────
@@ -433,10 +866,10 @@ async def update_notice_plan(
         _raise_notice_not_found(exc)
     except NoticePlanVersionConflictError as exc:
         _raise_version_conflict(exc)
-    except NoticePlanConflictError as exc:
-        _raise_conflict(exc)
     except NoticePlanPolicyError as exc:
         _raise_notice_policy(exc)
+    except NoticePlanConflictError as exc:
+        _raise_conflict(exc)
     await _audit(
         db,
         admin,
@@ -475,6 +908,8 @@ async def delete_notice_plan(
         _raise_notice_not_found(exc)
     except NoticePlanVersionConflictError as exc:
         _raise_version_conflict(exc)
+    except NoticePlanPolicyError as exc:
+        _raise_notice_policy(exc)
     await _audit(
         db,
         admin,
@@ -639,6 +1074,8 @@ async def delete_notice_poi(
         _raise_notice_not_found(exc)
     except NoticePlanVersionConflictError as exc:
         _raise_version_conflict(exc)
+    except NoticePlanPolicyError as exc:
+        _raise_notice_policy(exc)
     await _audit(
         db,
         admin,

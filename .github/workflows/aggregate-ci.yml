@@ -51,7 +51,7 @@ jobs:
             ])) {
               requiredChecks.push("lint-typecheck-test");
               requiredChecks.push("docker-provenance-image");
-              // T-VN-H07D: kor-travel-map 계약 스냅샷의 핀↔vendored 정합 게이트.
+              // kor-travel-map 계약 스냅샷의 핀↔vendored 정합 게이트.
               // `Aggregate CI gate`가 유일한 required check이므로 여기에 넣지 않으면
               // job이 red여도 머지가 막히지 않는다(= 과거 항상-skip 테스트와 같은 강도).
               requiredChecks.push("contract-pin-consistency");

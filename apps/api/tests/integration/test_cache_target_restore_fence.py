@@ -117,6 +117,28 @@ async def _seed_consumer(session_factory) -> None:  # type: ignore[no-untyped-de
         await db.commit()
 
 
+async def test_restore_attempt_cannot_be_inserted_terminal(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    await _seed_consumer(session_factory)
+    async with session_factory() as db:
+        with pytest.raises(DBAPIError, match="must start pending"):
+            await db.execute(
+                text(
+                    "INSERT INTO app.ktm_cache_target_restore_fence_attempts ("
+                    "idempotency_key, consumer_id, expected_restore_epoch, "
+                    "expected_control_version, stream_etag, reason, status, "
+                    "response_status, response_etag, response_body, completed_at"
+                    ") VALUES ("
+                    ":key, :consumer_id, 7, 7, '\"pinvi:7\"', 'forged', "
+                    "'completed', 200, '\"pinvi:8\"', '{}'::jsonb, clock_timestamp()"
+                    ")"
+                ),
+                {"key": uuid.uuid4(), "consumer_id": CONSUMER_ID},
+            )
+            await db.commit()
+
+
 async def test_response_loss_reuses_durable_pre_cas_tuple_and_receives_exact_replay(
     session_factory,
 ) -> None:  # type: ignore[no-untyped-def]

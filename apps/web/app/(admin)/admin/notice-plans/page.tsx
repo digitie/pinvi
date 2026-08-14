@@ -14,6 +14,8 @@ import type { NoticePlan } from '@pinvi/schemas';
 import { Edit3, Plus, RefreshCw, Search } from 'lucide-react';
 import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { KorTravelMapCurationCollectionImportPanel } from '@/components/admin/KorTravelMapCurationCollectionImportPanel';
+import { KorTravelMapCurationCutoverBackfillPanel } from '@/components/admin/KorTravelMapCurationCutoverBackfillPanel';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -164,6 +166,9 @@ export default function AdminNoticePlansPage() {
           </button>
         </FilterBar>
       </form>
+
+      <KorTravelMapCurationCollectionImportPanel />
+      <KorTravelMapCurationCutoverBackfillPanel />
 
       {plansQuery.isError && (
         <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text">
