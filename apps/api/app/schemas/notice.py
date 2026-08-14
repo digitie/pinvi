@@ -7,7 +7,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, StrictBool, StrictInt, model_validator
 
 
 class NoticePlanBase(BaseModel):
@@ -145,8 +145,8 @@ class KorTravelMapCurationCollectionImportRequest(BaseModel):
 
 class KorTravelMapCurationCollectionImportResponse(BaseModel):
     notice_plan_id: uuid.UUID
-    created_plan: bool
-    not_modified: bool
+    created_plan: StrictBool
+    not_modified: StrictBool
     source_system: Literal["kor-travel-map"]
     source_curation_collection_id: uuid.UUID
     source_curation_collection_revision: str = Field(pattern=r"^[1-9][0-9]*$")
@@ -155,6 +155,6 @@ class KorTravelMapCurationCollectionImportResponse(BaseModel):
     )
     source_curation_item_set_hash_version: Literal["ktm-db-item-set-v1"]
     source_curation_item_set_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
-    source_curation_item_count: int = Field(ge=0, le=2_000)
-    copied_poi_count: int = Field(ge=0, le=2_000)
-    removed_poi_count: int = Field(ge=0, le=2_000)
+    source_curation_item_count: StrictInt = Field(ge=0, le=2_000)
+    copied_poi_count: StrictInt = Field(ge=0, le=2_000)
+    removed_poi_count: StrictInt = Field(ge=0, le=2_000)

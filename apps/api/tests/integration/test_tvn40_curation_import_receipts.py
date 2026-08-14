@@ -503,10 +503,11 @@ async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
                         "response_body": json.dumps(
                             {
                                 "notice_plan_id": str(plan_id),
-                                "created_plan": True,
-                                # 0056 전에는 JSON boolean type guard가 없어 이런
-                                # malformed terminal body가 실제 history에 남을 수 있었다.
-                                "not_modified": "bogus",
+                                # 0056 전에는 JSON type guard가 없어 coercible string이
+                                # terminal history에 남을 수 있었다. replay는 이를
+                                # bool/int로 조용히 정규화하지 않고 typed conflict여야 한다.
+                                "created_plan": "true",
+                                "not_modified": "false",
                                 "source_system": "kor-travel-map",
                                 "source_curation_collection_id": str(_COLLECTION_ID),
                                 "source_curation_collection_revision": "1",
@@ -515,9 +516,9 @@ async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
                                     "ktm-db-item-set-v1"
                                 ),
                                 "source_curation_item_set_hash": _ITEM_SET_HASH,
-                                "source_curation_item_count": 0,
-                                "copied_poi_count": 0,
-                                "removed_poi_count": 0,
+                                "source_curation_item_count": "0",
+                                "copied_poi_count": "0",
+                                "removed_poi_count": "0",
                             }
                         ),
                     },
