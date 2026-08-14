@@ -15,6 +15,10 @@ from app.models.curated_plan import (
     KtmCurationCutoverMappingReceiptItem,
 )
 from app.models.user import User
+from app.services.curation_cutover_mapping_receipt import (
+    CurationCutoverMappingReceiptConflict,
+    seal_curation_cutover_mapping_receipt,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -53,6 +57,35 @@ def _item(receipt_id: uuid.UUID) -> KtmCurationCutoverMappingReceiptItem:
         curation_item_id=uuid.uuid4(),
         mapping_kind="legacy_projection",
         source_row_hash=_SOURCE_ROW_HASH,
+    )
+
+
+def _mapping_set(*, root: str = _MAPPING_ROOT):  # type: ignore[no-untyped-def]
+    from app.clients.kor_travel_map_curation import (
+        CurationCutoverIdentityMapping,
+        CurationCutoverMappingSet,
+    )
+
+    return CurationCutoverMappingSet(
+        mapping_root_version="ktm-curation-cutover-mapping-v1",
+        mapping_count=2,
+        mapping_root=root,
+        mappings=(
+            CurationCutoverIdentityMapping(
+                legacy_curated_feature_id=uuid.UUID("10000000-0000-0000-0000-000000000001"),
+                collection_id=uuid.UUID("20000000-0000-0000-0000-000000000001"),
+                curation_item_id=uuid.UUID("30000000-0000-0000-0000-000000000001"),
+                mapping_kind="legacy_projection",
+                source_row_hash="1" * 64,
+            ),
+            CurationCutoverIdentityMapping(
+                legacy_curated_feature_id=uuid.UUID("10000000-0000-0000-0000-000000000002"),
+                collection_id=uuid.UUID("20000000-0000-0000-0000-000000000001"),
+                curation_item_id=uuid.UUID("30000000-0000-0000-0000-000000000002"),
+                mapping_kind="official_membership",
+                source_row_hash="2" * 64,
+            ),
+        ),
     )
 
 
@@ -114,6 +147,40 @@ async def test_cutover_mapping_receipt_rejects_incomplete_terminal_set(
         assert persisted is None
 
 
+async def test_cutover_mapping_capture_is_release_singleton_and_exact_replay(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    async with session_factory() as db:
+        admin = await _create_admin(db)
+        captured = await seal_curation_cutover_mapping_receipt(
+            db,
+            actor_admin_id=admin.user_id,
+            mapping_set=_mapping_set(),
+        )
+        assert captured.replayed is False
+        await db.commit()
+        sealed_id = captured.receipt.receipt_id
+
+    async with session_factory() as db:
+        replay = await seal_curation_cutover_mapping_receipt(
+            db,
+            actor_admin_id=admin.user_id,
+            mapping_set=_mapping_set(),
+        )
+        assert replay.replayed is True
+        assert replay.receipt.receipt_id == sealed_id
+        await db.commit()
+
+    async with session_factory() as db:
+        with pytest.raises(CurationCutoverMappingReceiptConflict, match="sealed mapping root"):
+            await seal_curation_cutover_mapping_receipt(
+                db,
+                actor_admin_id=admin.user_id,
+                mapping_set=_mapping_set(root="d" * 64),
+            )
+        await db.rollback()
+
+
 async def test_cutover_mapping_receipt_catalog_has_exact_terminal_guards(
     session_factory,
 ) -> None:  # type: ignore[no-untyped-def]
@@ -135,6 +202,7 @@ async def test_cutover_mapping_receipt_catalog_has_exact_terminal_guards(
                             "ck_ktm_curation_cutover_mapping_receipts_terminal",
                             "fk_ktm_curation_cutover_mapping_receipts_actor",
                             "pk_ktm_curation_cutover_mapping_receipts",
+                            "uq_ktm_curation_cutover_mapping_receipts_map_release",
                             "uq_ktm_curation_cutover_mapping_receipts_map_root",
                             "ck_ktm_curation_cutover_mapping_receipt_items_source",
                             "fk_ktm_curation_cutover_mapping_receipt_items_receipt",
@@ -151,12 +219,23 @@ async def test_cutover_mapping_receipt_catalog_has_exact_terminal_guards(
             "ck_ktm_curation_cutover_mapping_receipts_terminal",
             "fk_ktm_curation_cutover_mapping_receipts_actor",
             "pk_ktm_curation_cutover_mapping_receipts",
+            "uq_ktm_curation_cutover_mapping_receipts_map_release",
             "uq_ktm_curation_cutover_mapping_receipts_map_root",
             "ck_ktm_curation_cutover_mapping_receipt_items_source",
             "fk_ktm_curation_cutover_mapping_receipt_items_receipt",
             "pk_ktm_curation_cutover_mapping_receipt_items",
             "uq_ktm_curation_cutover_mapping_receipt_items_curation_item",
         }
+        release_unique = await db.scalar(
+            text(
+                "SELECT pg_catalog.pg_get_constraintdef(con.oid, true) "
+                "FROM pg_catalog.pg_constraint AS con "
+                "JOIN pg_catalog.pg_namespace AS n ON n.oid = con.connamespace "
+                "WHERE n.nspname = 'app' "
+                "AND con.conname = 'uq_ktm_curation_cutover_mapping_receipts_map_release'"
+            )
+        )
+        assert release_unique == "UNIQUE (map_release_revision)"
         trigger_rows = await db.execute(
             text(
                 "SELECT tgname FROM pg_catalog.pg_trigger AS trigger "

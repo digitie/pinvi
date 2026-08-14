@@ -384,6 +384,10 @@ class KtmCurationCutoverMappingReceipt(Base, TimestampMixin):
             "mapping_root",
             name="uq_ktm_curation_cutover_mapping_receipts_map_root",
         ),
+        UniqueConstraint(
+            "map_release_revision",
+            name="uq_ktm_curation_cutover_mapping_receipts_map_release",
+        ),
         CheckConstraint(
             "map_release_revision ~ '^[0-9a-f]{40}$'",
             name=conv("ck_ktm_curation_cutover_mapping_receipts_release"),

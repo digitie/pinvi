@@ -324,7 +324,7 @@ async def _assert_0053_catalog_contract(db: AsyncSession) -> None:
         )
     )
     assert boundary_definition is not None
-    assert "schema_revision = '20260814_0057'::text" in boundary_definition
+    assert "schema_revision = '20260814_0058'::text" in boundary_definition
 
     indexes = dict(
         (
@@ -735,7 +735,7 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
                     await connection.scalar(
                         text("SELECT version_num FROM app.alembic_version")
                     )
-                    == "20260814_0057"
+                    == "20260814_0058"
                 )
                 new_body = await connection.scalar(
                     text(
@@ -928,8 +928,8 @@ async def test_conditional_snapshot_rejects_legacy_not_modified_proof_chain(
         await db.rollback()
 
 
-async def test_0057_downgrade_is_fail_closed(_database_url: str) -> None:
-    with pytest.raises(RuntimeError, match="0057 downgrade would discard"):
+async def test_0058_downgrade_is_fail_closed(_database_url: str) -> None:
+    with pytest.raises(RuntimeError, match="0058 downgrade would reopen"):
         _alembic(_database_url, "downgrade", "20260814_0055")
 
 

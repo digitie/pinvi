@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-14 (codex) — T-VN-40C Map mapping root capture command
+
+- `POST /admin/notice-plans/curation-cutover/mapping-receipts`는 Map maintenance mapping client의
+  closed keyset을 local immutable receipt로 봉인한다. remote call 뒤 auth transaction을 명시적으로
+  끝내고, receipt claim·member write·terminal seal·admin audit를 하나의 `SERIALIZABLE` transaction에
+  둔다.
+- `20260814_0058`은 `map_release_revision` 단일 unique constraint를 추가해 같은 vendored Map release가
+  서로 다른 mapping root를 local backfill evidence로 만들지 못하게 한다. exact root/member replay는
+  `200`, root/member/pending conflict는 `409`이며, 새 seal은 `201`이다.
+- 실제 PostgreSQL integration은 release singleton과 member equality replay, terminal guards, HTTP
+  `201→200→409`, 기존 0053 database의 head forward upgrade를 검증했다. cache-target final boundary
+  schema pin도 0058로 re-pin했다.
+
 ## 2026-08-14 (codex) — T-VN-40C Map identity mapping local receipt seal
 
 - `20260814_0057`은 Map maintenance mapping export의 release revision, root version/root,

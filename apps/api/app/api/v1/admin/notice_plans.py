@@ -21,6 +21,10 @@ from app.clients.kor_travel_map import (
 )
 from app.clients.kor_travel_map_admin import KorTravelMapAdminClientDep
 from app.clients.kor_travel_map_curation import (
+    CurationCutoverMappingContractError,
+    CurationCutoverMappingServiceClientDep,
+    CurationCutoverMappingServiceProblem,
+    CurationCutoverMappingUnavailable,
     CurationSnapshotContractError,
     CurationSnapshotNotFound,
     CurationSnapshotServiceClientDep,
@@ -37,6 +41,7 @@ from app.schemas.notice import (
     KorTravelMapCuratedFeatureImportResponse,
     KorTravelMapCurationCollectionImportRequest,
     KorTravelMapCurationCollectionImportResponse,
+    KorTravelMapCurationCutoverMappingReceiptResponse,
     NoticePlanCreate,
     NoticePlanResponse,
     NoticePlanUpdate,
@@ -63,6 +68,11 @@ from app.services.curation_collection_import import (
     CurationCollectionImportNotFound,
     apply_curation_collection_import,
     inspect_curation_collection_import,
+)
+from app.services.curation_cutover_mapping_receipt import (
+    CurationCutoverMappingReceiptConflict,
+    CurationCutoverMappingReceiptResult,
+    seal_curation_cutover_mapping_receipt,
 )
 from app.services.notice_plan import (
     NoticePlanConflictError,
@@ -165,6 +175,22 @@ def _snapshot_plan(plan) -> dict[str, Any]:  # type: ignore[no-untyped-def]
 
 def _snapshot_poi(poi) -> dict[str, Any]:  # type: ignore[no-untyped-def]
     return _poi_to_response(poi).model_dump(mode="json")
+
+
+def _cutover_mapping_receipt_response(
+    result: CurationCutoverMappingReceiptResult,
+) -> KorTravelMapCurationCutoverMappingReceiptResponse:
+    receipt = result.receipt
+    assert receipt.completed_at is not None
+    return KorTravelMapCurationCutoverMappingReceiptResponse(
+        receipt_id=receipt.receipt_id,
+        map_release_revision=receipt.map_release_revision,
+        mapping_root_version=receipt.mapping_root_version,
+        mapping_root=receipt.mapping_root,
+        mapping_count=receipt.mapping_count,
+        completed_at=receipt.completed_at,
+        replayed=result.replayed,
+    )
 
 
 def _parse_request_id(value: str | None) -> uuid.UUID:
@@ -284,6 +310,114 @@ async def _audit(
 
 
 # ── kor-travel-map curated feature import (T-223d) ─────────────────────────────
+
+
+@router.post(
+    "/curation-cutover/mapping-receipts",
+    status_code=status.HTTP_201_CREATED,
+    response_model=Envelope[KorTravelMapCurationCutoverMappingReceiptResponse],
+    responses={
+        200: {"description": "같은 Map release/root의 sealed receipt replay"},
+        409: {"description": "Map release root 또는 local receipt conflict"},
+        502: {"description": "Map cutover mapping service contract violation"},
+        503: {"description": "Map cutover mapping service unavailable"},
+    },
+)
+async def capture_kor_travel_map_curation_cutover_mapping_receipt_route(
+    admin: AdminDep,
+    db: DbSession,
+    kor_travel_map_mapping_client: CurationCutoverMappingServiceClientDep,
+    request: Request,
+    response: Response,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[KorTravelMapCurationCutoverMappingReceiptResponse]:
+    """Map mapping root를 local immutable receipt로 봉인하는 maintenance-only admin command."""
+
+    actor_admin_id = admin.user_id
+    try:
+        mapping_set = await kor_travel_map_mapping_client.get_identity_mappings()
+    except (CurationCutoverMappingUnavailable, CurationCutoverMappingServiceProblem) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "CURATION_CUTOVER_MAPPING_UNAVAILABLE", "message": str(exc)},
+        ) from exc
+    except CurationCutoverMappingContractError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": "CURATION_CUTOVER_MAPPING_CONTRACT_ERROR", "message": str(exc)},
+        ) from exc
+
+    # RBAC dependency와 remote fetch 전후에 쓴 session transaction을 끝낸다. 아래 SSI
+    # command는 receipt claim부터 audit까지의 transaction 첫 statement여야 한다.
+    await db.rollback()
+    request_id = _parse_request_id(x_request_id)
+    ip_hash_input = request.client.host if request.client else ""
+    user_agent = request.headers.get("user-agent")
+    for attempt in range(3):
+        try:
+            # remote keyset fetch 뒤 새 command transaction을 시작한다. 이 SQL이 첫 DB
+            # statement여서 receipt claim·member seal·audit가 같은 SSI 범위에 든다.
+            await db.execute(text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
+            result = await seal_curation_cutover_mapping_receipt(
+                db,
+                actor_admin_id=actor_admin_id,
+                mapping_set=mapping_set,
+            )
+            if not result.replayed:
+                sealed = result.receipt
+                await append_admin_audit(
+                    db,
+                    actor_user_id=actor_admin_id,
+                    action="curated_plan.kor_travel_map_cutover_mapping_sealed",
+                    resource_type="curation_cutover_mapping_receipt",
+                    resource_id=str(sealed.receipt_id),
+                    before_state=None,
+                    after_state={
+                        "map_release_revision": sealed.map_release_revision,
+                        "mapping_root_version": sealed.mapping_root_version,
+                        "mapping_root": sealed.mapping_root,
+                        "mapping_count": sealed.mapping_count,
+                    },
+                    access_reason=None,
+                    target_pii_fields=None,
+                    ip_hash_input=ip_hash_input,
+                    user_agent=user_agent,
+                    request_id=request_id,
+                )
+            await db.commit()
+            response.status_code = status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
+            return Envelope.of(_cutover_mapping_receipt_response(result))
+        except CurationCutoverMappingReceiptConflict as exc:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
+        except IntegrityError as exc:
+            await db.rollback()
+            if getattr(exc.orig, "sqlstate", None) == "23505" and attempt < 2:
+                continue
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "CURATION_CUTOVER_MAPPING_RECEIPT_CONFLICT",
+                    "message": "curation cutover mapping receipt 상태가 충돌했습니다.",
+                },
+            ) from exc
+        except DBAPIError as exc:
+            await db.rollback()
+            if getattr(exc.orig, "sqlstate", None) == "40001" and attempt < 2:
+                continue
+            if getattr(exc.orig, "sqlstate", None) == "40001":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "CURATION_CUTOVER_MAPPING_RETRY_EXHAUSTED",
+                        "message": "동시 변경으로 mapping receipt를 봉인하지 못했습니다.",
+                    },
+                ) from exc
+            raise
+    raise AssertionError("unreachable")
 
 
 @router.post(

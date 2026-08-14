@@ -43,3 +43,20 @@ def test_canonical_collection_import_openapi_contract() -> None:
         "anyOf": [{"type": "string", "format": "uuid"}, {"type": "null"}],
         "title": "Source Curation Item Id",
     }
+
+
+def test_cutover_mapping_receipt_openapi_contract() -> None:
+    from app.main import app
+
+    operation = app.openapi()["paths"][
+        "/admin/notice-plans/curation-cutover/mapping-receipts"
+    ]["post"]
+    assert set(operation["responses"]) >= {"200", "201", "409", "502", "503"}
+    response = app.openapi()["components"]["schemas"][
+        "KorTravelMapCurationCutoverMappingReceiptResponse"
+    ]
+    assert response["properties"]["map_release_revision"]["pattern"] == "^[0-9a-f]{40}$"
+    assert response["properties"]["mapping_root_version"]["const"] == (
+        "ktm-curation-cutover-mapping-v1"
+    )
+    assert response["properties"]["mapping_root"]["pattern"] == "^[0-9a-f]{64}$"

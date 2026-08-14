@@ -158,3 +158,13 @@ class KorTravelMapCurationCollectionImportResponse(BaseModel):
     source_curation_item_count: StrictInt = Field(ge=0, le=2_000)
     copied_poi_count: StrictInt = Field(ge=0, le=2_000)
     removed_poi_count: StrictInt = Field(ge=0, le=2_000)
+
+
+class KorTravelMapCurationCutoverMappingReceiptResponse(BaseModel):
+    receipt_id: uuid.UUID
+    map_release_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
+    mapping_root_version: Literal["ktm-curation-cutover-mapping-v1"]
+    mapping_root: str = Field(pattern=r"^[0-9a-f]{64}$")
+    mapping_count: StrictInt = Field(ge=0)
+    completed_at: datetime
+    replayed: StrictBool
