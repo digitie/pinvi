@@ -1,5 +1,15 @@
 # resume.md
 
+## 2026-08-15 (codex) — T-VN-40C canonical curation token scope 결선
+
+PinVi API compose와 sample env가 canonical collection snapshot·cutover mapping의 서로 다른
+두 service token을 명시적으로 받도록 했다. 두 원문 token은 API runtime에만 전달하며 web·Dagster와
+공유하지 않는다. isolated n150 runner의 Map digest-only 경계와 같은 네 값 결선을 이룬다.
+
+**다음 한 작업**: Docker Manager production compose도 Map API digest 두 개와 PinVi API 원문
+token 두 개를 같은 immutable release transaction에서 주입하고, n150 canonical import/backfill
+live acceptance를 receipt complete의 전제 조건으로 고정한다.
+
 ## 2026-08-15 (codex) — T-VN-40C legacy admin snapshot runtime 제거
 
 `POST /admin/notice-plans/imports/kor-travel-map-curated-features`와 그 service/client,

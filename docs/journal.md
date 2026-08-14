@@ -2,6 +2,15 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-15 (codex) — T-VN-40C canonical curation token scope 결선
+
+- compose의 `app-api`에 canonical snapshot과 cutover mapping의 서로 다른 두 원문 token을
+  전달하고, `app-web`·Dagster에는 어느 token도 전달하지 않게 했다.
+- root/API/production example env가 두 이름을 모두 선언한다. scope를 합치거나 ordinary
+  service token으로 대체하지 않는다.
+- Map isolated n150 runner는 이 두 원문과 대응하는 Map API digest 두 개를 매 실행 새로 만든다.
+  production/Manager 결선과 paired live acceptance가 끝날 때까지 rollout receipt는 pending이다.
+
 ## 2026-08-15 (codex) — T-VN-40C legacy admin snapshot runtime 제거
 
 - `POST /admin/notice-plans/imports/kor-travel-map-curated-features`와

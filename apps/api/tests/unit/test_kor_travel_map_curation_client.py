@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -408,3 +409,27 @@ def test_curation_snapshot_token_is_optional_but_strict_and_role_distinct() -> N
             pinvi_kor_travel_map_curation_snapshot_token=TOKEN,
             pinvi_kor_travel_map_curation_cutover_mapping_token=TOKEN,
         )
+
+
+def test_deploy_compose_passes_distinct_curation_tokens_to_api_only() -> None:
+    root = Path(__file__).resolve().parents[4]
+    compose = (root / "infra/docker-compose.app.yml").read_text(encoding="utf-8")
+    api_block, non_api_block = compose.split("  app-web:", maxsplit=1)
+    expected_compose_lines = {
+        "PINVI_KOR_TRAVEL_MAP_CURATION_SNAPSHOT_TOKEN": (
+            "PINVI_KOR_TRAVEL_MAP_CURATION_SNAPSHOT_TOKEN: "
+            "${PINVI_KOR_TRAVEL_MAP_CURATION_SNAPSHOT_TOKEN:-}"
+        ),
+        "PINVI_KOR_TRAVEL_MAP_CURATION_CUTOVER_MAPPING_TOKEN": (
+            "PINVI_KOR_TRAVEL_MAP_CURATION_CUTOVER_MAPPING_TOKEN: "
+            "${PINVI_KOR_TRAVEL_MAP_CURATION_CUTOVER_MAPPING_TOKEN:-}"
+        ),
+    }
+    for env_name, compose_line in expected_compose_lines.items():
+        assert compose_line in api_block
+        assert env_name not in non_api_block
+
+    for relative in (".env.example", "apps/api/.env.example", "infra/.env.prod.example"):
+        example = (root / relative).read_text(encoding="utf-8")
+        for env_name in expected_compose_lines:
+            assert f"{env_name}=" in example

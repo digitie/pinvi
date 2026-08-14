@@ -110,6 +110,9 @@ services:
       PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION: ${PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION:-}
       PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_CONTRACT_GENERATION: ${PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_CONTRACT_GENERATION:-}
       PINVI_KOR_TRAVEL_MAP_CURATION_SNAPSHOT_TOKEN: ${PINVI_KOR_TRAVEL_MAP_CURATION_SNAPSHOT_TOKEN:-}
+      # T-VN-40C sealed legacy plan backfill은 snapshot과 다른 maintenance mapping scope를
+      # 필요로 한다. 원문은 API runtime에만 전달하며 web/dagster에는 전달하지 않는다.
+      PINVI_KOR_TRAVEL_MAP_CURATION_CUTOVER_MAPPING_TOKEN: ${PINVI_KOR_TRAVEL_MAP_CURATION_CUTOVER_MAPPING_TOKEN:-}
       # restore/recovery token은 이 ordinary API container에 전달하지 않는다.
       # ADR-035: Trip WebSocket broker는 process-local in-memory다. Redis/LISTEN fan-out 전까지
       # API worker는 1로 고정한다. 값을 올리면 HTTP mutation broadcast가 다른 worker의 WebSocket에
