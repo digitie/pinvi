@@ -1,5 +1,20 @@
 # resume.md
 
+## 2026-08-14 (codex) — T-VN-40C legacy provenance preflight
+
+`inspect_curation_cutover_legacy_provenance()`는 현재 vendored Map release의 completed mapping
+receipt와 active legacy Map plan/POI를 읽기 전용으로 대조한다. legacy plan의 UUID 아닌
+identity·receipt orphan·UUID 정규화 뒤 duplicate와 POI의 partial·blank·parent mismatch
+provenance를 모두 report하고, 한 건이라도 있으면 `require_ready()`가 fail-close한다. manual
+POI는 provenance가 둘 다 `NULL`일 때만 보존 대상으로 분리한다.
+
+**다음 한 작업**: typed canonical backfill command를 설계·구현한다. 이 command는 같은
+`SERIALIZABLE` transaction에서 preflight를 재실행하고 sealed mapping의 collection별 canonical
+snapshot/import receipt를 exact 대조해야 한다. source POI를 legacy item 문자열로 추정하지 않고
+canonical collection snapshot에서 재생성하며, manual POI만 보존한다. snapshot·mapping·local
+write 중 어느 하나가 drift하면 전체 rollback해야 하며, 이 경계를 통과하기 전 legacy route/column
+제거는 금지한다.
+
 ## 2026-08-14 (codex) — T-VN-40C Map mapping root capture command
 
 관리자 maintenance endpoint는 전용 `pinvi:curation-cutover:read` client가 읽은 Map mapping
