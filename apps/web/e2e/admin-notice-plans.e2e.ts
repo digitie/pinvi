@@ -145,7 +145,17 @@ test('Admin이 canonical collection import의 idempotency와 오류 복구를 �
           idempotencyKey: request.headers()['idempotency-key'] ?? null,
         });
         importAttempt += 1;
-        if (importAttempt <= 2) {
+        if (importAttempt === 1) {
+          await route.fulfill({
+            status: 201,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              data: canonicalImportResult({ not_modified: false, created_plan: true }),
+            }),
+          });
+          return;
+        }
+        if (importAttempt === 2 || importAttempt === 3) {
           await route.fulfill({
             status: 200,
             contentType: 'application/json',
@@ -177,7 +187,7 @@ test('Admin이 canonical collection import의 idempotency와 오류 복구를 �
   await page.getByTestId('admin-notice-canonical-import-submit').click();
 
   await expect(page.getByTestId('admin-notice-canonical-import-result')).toContainText(
-    'Map snapshot이 변경되지 않아',
+    '새 추천 여행을 만들었습니다.',
   );
   expect(importRequests).toHaveLength(1);
   expect(importRequests[0]?.body).toEqual({
@@ -189,25 +199,98 @@ test('Admin이 canonical collection import의 idempotency와 오류 복구를 �
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
   );
 
-  // 성공 terminal 뒤의 새 반영은 replay가 아니라 새 Map snapshot을 읽어야 한다.
+  // create 뒤 refresh로 전환한 뒤의 반영은 replay가 아니라 새 Map snapshot을 읽어야 한다.
+  await page.getByTestId('admin-notice-canonical-import-mode').selectOption('refresh');
   await page.getByTestId('admin-notice-canonical-import-submit').click();
   await expect.poll(() => importRequests).toHaveLength(2);
   expect(importRequests[1]?.idempotencyKey).not.toBe(importRequests[0]?.idempotencyKey);
+  expect(importRequests[1]?.body).toMatchObject({ mode: 'refresh' });
+  await expect(page.getByTestId('admin-notice-canonical-import-result')).toContainText(
+    'Map snapshot이 변경되지 않아',
+  );
+
+  // 같은 refresh를 다시 실행해도 terminal command key는 재사용하지 않는다.
+  await page.getByTestId('admin-notice-canonical-import-submit').click();
+  await expect.poll(() => importRequests).toHaveLength(3);
+  expect(importRequests[2]?.idempotencyKey).not.toBe(importRequests[1]?.idempotencyKey);
 
   await page
     .getByTestId('admin-notice-canonical-import-collection-id')
     .fill('55555555-5555-4555-8555-555555555555');
-  await page.getByTestId('admin-notice-canonical-import-mode').selectOption('refresh');
   await page.getByTestId('admin-notice-canonical-import-submit').click();
   await expect(page.getByTestId('admin-notice-canonical-import-error')).toContainText(
     '입력을 확인한 뒤 새 요청으로 다시 실행하세요.',
   );
-  expect(importRequests).toHaveLength(3);
-  expect(importRequests[2]?.idempotencyKey).not.toBe(importRequests[1]?.idempotencyKey);
+  expect(importRequests).toHaveLength(4);
+  expect(importRequests[3]?.idempotencyKey).not.toBe(importRequests[2]?.idempotencyKey);
+  await expect(page.getByTestId('admin-notice-canonical-import-retry')).toHaveCount(0);
 
-  await page.getByTestId('admin-notice-canonical-import-retry').click();
-  await expect.poll(() => importRequests).toHaveLength(4);
-  expect(importRequests[3]?.idempotencyKey).toBe(importRequests[2]?.idempotencyKey);
+  // terminal 409도 새 명령으로만 다시 시도한다.
+  const conflictKey = importRequests[3]?.idempotencyKey;
+  await page.getByTestId('admin-notice-canonical-import-submit').click();
+  await expect.poll(() => importRequests).toHaveLength(5);
+  expect(importRequests[4]?.idempotencyKey).not.toBe(conflictKey);
+});
+
+test('Admin UI는 Map canonical plan과 POI의 source-derived 작업을 노출하지 않는다', async ({
+  page,
+}) => {
+  const canonicalPoi = {
+    ...basePoi(),
+    source_curation_item_id: '66666666-6666-4666-8666-666666666666',
+  };
+  let plan = {
+    ...basePlan(),
+    source_system: 'kor-travel-map' as const,
+    pois: [canonicalPoi],
+  };
+  let patchBody: Record<string, unknown> | null = null;
+
+  await page.route(
+    (url) => url.port === '12801' && url.pathname.startsWith('/admin/notice-plans'),
+    async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (path === `/admin/notice-plans/${planId}` && request.method() === 'GET') {
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ data: plan }),
+        });
+        return;
+      }
+      if (path === '/admin/notice-plans' && request.method() === 'GET') {
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ data: [plan] }),
+        });
+        return;
+      }
+      if (path === `/admin/notice-plans/${planId}` && request.method() === 'PATCH') {
+        patchBody = request.postDataJSON() as Record<string, unknown>;
+        expect(patchBody).toEqual({ is_published: true });
+        plan = { ...plan, is_published: true, version: plan.version + 1 };
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ data: plan }),
+        });
+        return;
+      }
+      await route.fulfill({ status: 404, body: JSON.stringify({ detail: 'mock' }) });
+    },
+  );
+
+  await page.goto(`/admin/notice-plans/${planId}`);
+  await expect(page.getByTestId('admin-notice-title')).toBeDisabled();
+  await expect(page.getByTestId('admin-notice-category')).toBeDisabled();
+  await expect(page.getByTestId('admin-notice-destination')).toBeDisabled();
+  await expect(page.getByRole('button', { name: '삭제' })).toHaveCount(0);
+  await expect(page.getByTestId(`admin-notice-poi-edit-${poiId}`)).toHaveCount(0);
+  await expect(page.getByText('Map refresh 관리')).toBeVisible();
+  await expect(page.getByTestId('admin-notice-poi-add')).toBeVisible();
+
+  await page.getByTestId('admin-notice-published').check();
+  await page.getByTestId('admin-notice-save').click();
+  await expect.poll(() => patchBody).toEqual({ is_published: true });
 });
 
 test('Admin notice plan 생성, 편집, POI 추가, 첨부 업로드를 수행한다', async ({ page }) => {

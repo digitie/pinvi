@@ -2,6 +2,20 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-14 (codex) — T-VN-40 304 proof 정본과 UI command lifecycle 보강
+
+- `20260814_0056` forward migration으로 cache-target boundary pin을 전진시키고, terminal response의
+  `not_modified` boolean을 DB guard에서 명시적으로 요구했다. fresh-key `304`는 같은 source tuple의
+  이전 authoritative (`not_modified=false`) receipt proof만 복제하며, 과거 잘못된 304 proof가 현재 POI와
+  같은 count만 맞춰 재봉인되는 경로를 conflict로 닫았다.
+- legacy 0051 terminal response가 최신 typed DTO를 만족하지 않아도 replay에서 raw validation 예외가
+  나지 않게 typed conflict로 변환했다. dataful `0051→head` replay와 poisoned 304 proof chain 회귀를
+  PostgreSQL integration으로 추가했다.
+- Map canonical plan은 공개 상태만 PATCH하고 source-derived POI 작업은 UI에서 숨긴다. canonical import
+  terminal 성공과 4xx 뒤에는 새 `Idempotency-Key`를 생성하고, network/5xx에서만 운영자가 같은 요청을
+  명시적으로 재시도할 수 있게 했다. mocked E2E는 create `201`, refresh/304 `200`, terminal `409`의 실제
+  HTTP 결과만 사용하도록 정정했다.
+
 ## 2026-08-14 (codex) — T-VN-40 canonical collection importer 원자 반영
 
 - 새 admin import endpoint가 Map canonical collection snapshot을 collection UUID로 가져와 plan·canonical

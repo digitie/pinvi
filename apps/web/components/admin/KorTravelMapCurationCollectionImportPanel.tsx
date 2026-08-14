@@ -73,6 +73,14 @@ export function KorTravelMapCurationCollectionImportPanel() {
       setIdempotencyKey(null);
       await queryClient.invalidateQueries({ queryKey: queryKeys.admin.noticePlansAll() });
     },
+    onError: (nextError) => {
+      // 4xx는 server가 terminal outcome으로 확정한 요청이다. 다음 submit은 반드시
+      // 새 command여야 하므로 같은 key를 보존하지 않는다. 네트워크·5xx만 수동 replay를
+      // 허용한다.
+      if (nextError instanceof ApiError && nextError.status < 500) {
+        setIdempotencyKey(null);
+      }
+    },
   });
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -97,6 +105,10 @@ export function KorTravelMapCurationCollectionImportPanel() {
 
   const error =
     validationError ?? (importMutation.error ? importErrorMessage(importMutation.error) : null);
+  const canRetrySameCommand =
+    idempotencyKey !== null &&
+    importMutation.error !== null &&
+    (!(importMutation.error instanceof ApiError) || importMutation.error.status >= 500);
 
   return (
     <section
@@ -170,7 +182,7 @@ export function KorTravelMapCurationCollectionImportPanel() {
             <Download className="h-4 w-4" aria-hidden="true" />
             {importMutation.isPending ? '가져오는 중…' : '가져오기'}
           </button>
-          {importMutation.error && idempotencyKey && (
+          {canRetrySameCommand && (
             <button
               type="button"
               className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline px-3 text-sm font-semibold"

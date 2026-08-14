@@ -1,5 +1,21 @@
 # resume.md
 
+## 2026-08-14 (codex) — T-VN-40 authoritative 304 proof·관리 UI 수렴
+
+`20260814_0056`은 `304` fresh-key receipt가 같은 tuple의 이전 authoritative
+(`not_modified=false`) proof만 계승하게 하고, legacy terminal response가 현재 DTO에 맞지 않을 때는
+raw `500` 대신 typed conflict로 fail-close하게 했다. 0051에서 온 최소 terminal body도 dataful
+upgrade 뒤 same-key replay에서 명시적 conflict로 수렴한다. cache-target final boundary pin은 0056으로
+함께 전진했으며 downgrade는 계속 fail-close한다.
+
+관리 UI는 Map canonical plan의 source-derived 필드를 비활성화하고 `is_published`만 exact PATCH하며,
+source POI의 edit/delete를 숨긴다. 수동 POI 추가·편집·삭제는 유지한다. canonical import는 terminal
+성공 및 terminal 4xx 후 command key를 폐기하므로 같은 refresh를 다시 누르면 현재 Map snapshot을 읽는
+새 요청이 되고, transport/5xx만 같은 key의 수동 재시도를 허용한다.
+
+**다음 한 작업**: legacy curated-feature importer/UI/API를 canonical collection importer로 완전히 전환·제거하고,
+paired deploy receipt·Manager secret wiring·n150 live import/refresh를 완료한다.
+
 ## 2026-08-14 (codex) — T-VN-40 canonical importer·관리 UI 보호 경계
 
 관리자 UI와 typed web client를 canonical collection import endpoint에 연결했다. 입력이 바뀌면 새
