@@ -28,6 +28,9 @@ _PINNED_MIGRATION_SHA256 = {
     "20260814_0056_curation_import_authority.py": (
         "6b937cc2a395c4b180f77a86e718ab0e4c4da2e315a86a3a50f1b607013ac32a"
     ),
+    "20260814_0057_curation_cutover_mapping_receipts.py": (
+        "182b4b65c25a4144327d822533b7ecb0e2069b8c89201bedbd8d0104e58a9ae8"
+    ),
 }
 
 

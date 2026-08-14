@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-14 (codex) — T-VN-40C Map identity mapping local receipt seal
+
+- `20260814_0057`은 Map maintenance mapping export의 release revision, root version/root,
+  count를 PinVi의 pending→completed receipt로 보관한다. member는 legacy curated-feature UUID와
+  canonical collection/item UUID, mapping kind, source row hash를 immutable relation으로 저장한다.
+- member INSERT와 terminal completion은 같은 parent receipt를 `FOR UPDATE`로 직렬화한다. 완료
+  뒤 member 추가·변경·삭제·truncate는 trigger가 거부하고, terminal은 exact member count가 Map root
+  envelope의 count와 다르면 rollback한다. 따라서 partial/late mapping set을 backfill 정본으로 쓸 수 없다.
+- cache-target final boundary schema pin도 0057로 함께 전진했고, 실제 PostgreSQL integration은
+  정상 terminal seal, incomplete set rollback, 완료 뒤 late insert 거부와 physical constraint/trigger
+  이름을 검증한다.
+
 ## 2026-08-14 (codex) — T-VN-40C Map identity mapping service artifact vendor
 
 - Map `0c85248a`의 `GET /v1/service/curation-cutover/identity-mappings`를 byte-exact service

@@ -610,7 +610,7 @@ class KtmCacheTargetBoundaryAudit(Base):
             # 갱신 — services/cache_target_final_boundary.FINALIZE_SCHEMA_REVISION
             # 과 반드시 동일).
             "contract_version = 'pinvi-cache-target-final-boundary/v1' "
-            "AND status = 'succeeded' AND schema_revision = '20260814_0056'",
+            "AND status = 'succeeded' AND schema_revision = '20260814_0057'",
             name=conv("ck_ktm_ct_boundary_contract"),
         ),
         CheckConstraint(

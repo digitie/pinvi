@@ -371,3 +371,95 @@ class KtmCurationImportReceiptItem(Base, TimestampMixin):
     source_curation_item_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
     source_curation_item_etag: Mapped[str] = mapped_column(String(128), nullable=False)
     feature_uuid: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+
+
+class KtmCurationCutoverMappingReceipt(Base, TimestampMixin):
+    """T-VN-40C legacy identity backfill 전 Map mapping export의 sealed receipt."""
+
+    __tablename__ = "ktm_curation_cutover_mapping_receipts"
+    __table_args__ = (
+        UniqueConstraint(
+            "map_release_revision",
+            "mapping_root_version",
+            "mapping_root",
+            name="uq_ktm_curation_cutover_mapping_receipts_map_root",
+        ),
+        CheckConstraint(
+            "map_release_revision ~ '^[0-9a-f]{40}$'",
+            name=conv("ck_ktm_curation_cutover_mapping_receipts_release"),
+        ),
+        CheckConstraint(
+            "mapping_root_version = 'ktm-curation-cutover-mapping-v1' AND "
+            "mapping_root ~ '^[0-9a-f]{64}$' AND mapping_count >= 0",
+            name=conv("ck_ktm_curation_cutover_mapping_receipts_root"),
+        ),
+        CheckConstraint(
+            "(status = 'pending' AND completed_at IS NULL) OR "
+            "(status = 'completed' AND completed_at IS NOT NULL)",
+            name=conv("ck_ktm_curation_cutover_mapping_receipts_terminal"),
+        ),
+        Index(
+            "ix_ktm_curation_cutover_mapping_receipts_actor_created",
+            "actor_admin_id",
+            "created_at",
+        ),
+    )
+
+    receipt_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    actor_admin_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey(
+            "app.users.user_id",
+            name="fk_ktm_curation_cutover_mapping_receipts_actor",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+    )
+    map_release_revision: Mapped[str] = mapped_column(String(40), nullable=False)
+    mapping_root_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    mapping_root: Mapped[str] = mapped_column(String(64), nullable=False)
+    mapping_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class KtmCurationCutoverMappingReceiptItem(Base, TimestampMixin):
+    """Sealed mapping receipt의 legacy UUID→canonical UUID one-to-one member."""
+
+    __tablename__ = "ktm_curation_cutover_mapping_receipt_items"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["receipt_id"],
+            ["app.ktm_curation_cutover_mapping_receipts.receipt_id"],
+            name="fk_ktm_curation_cutover_mapping_receipt_items_receipt",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "mapping_kind IN "
+            "('legacy_projection', 'official_membership', 'manual_membership') AND "
+            "source_row_hash ~ '^[0-9a-f]{64}$'",
+            name=conv("ck_ktm_curation_cutover_mapping_receipt_items_source"),
+        ),
+        UniqueConstraint(
+            "receipt_id",
+            "curation_item_id",
+            name="uq_ktm_curation_cutover_mapping_receipt_items_curation_item",
+        ),
+    )
+
+    receipt_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        primary_key=True,
+    )
+    legacy_curated_feature_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        primary_key=True,
+    )
+    collection_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    curation_item_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    mapping_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_row_hash: Mapped[str] = mapped_column(String(64), nullable=False)

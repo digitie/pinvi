@@ -1,5 +1,18 @@
 # resume.md
 
+## 2026-08-14 (codex) — T-VN-40C local identity mapping receipt seal
+
+Map cutover mapping export는 PinVi DB의 `20260814_0057` immutable receipt로 먼저 봉인한다.
+receipt는 Map release revision, root version/root/count를, member relation은 legacy curated-feature
+UUID→canonical collection/item UUID와 row hash를 보관한다. pending receipt에만 member를 쓸 수 있고,
+completion은 parent/member 행을 함께 잠가 exact count를 검증한다. completed receipt에는 late insert,
+update/delete/truncate가 모두 fail-close한다.
+
+**다음 한 작업**: sealed receipt를 유일한 cross-DB evidence로 사용해 기존
+`source_curated_feature_*` plan/POI provenance를 exact mapping에 backfill한다. canonical source POI는
+collection snapshot에서 재생성하고, manual POI는 유지하며, orphan·duplicate·root/count 불일치는
+legacy route/column 삭제 전에 fail-close한다.
+
 ## 2026-08-14 (codex) — T-VN-40C Map identity mapping service artifact vendor
 
 Map `0c85248a8ba1f4115b84d923f3b0fdc3f8d2f421`가 maintenance fence 전용

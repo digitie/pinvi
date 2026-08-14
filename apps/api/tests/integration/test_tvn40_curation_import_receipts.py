@@ -324,7 +324,7 @@ async def _assert_0053_catalog_contract(db: AsyncSession) -> None:
         )
     )
     assert boundary_definition is not None
-    assert "schema_revision = '20260814_0056'::text" in boundary_definition
+    assert "schema_revision = '20260814_0057'::text" in boundary_definition
 
     indexes = dict(
         (
@@ -701,6 +701,22 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
             )
             assert "poi.deleted_at IS NULL" in old_definition
             await connection.execute(text(old_definition))
+            # 이 regression은 head DB에서 historical 0053 catalog를 의도적으로
+            # 합성한다. 0057의 새 mapping receipt relation/function은 0053에는
+            # 없었으므로 제거한 뒤 실제 forward create 경로를 검증한다.
+            await connection.execute(
+                text(
+                    "DROP TABLE app.ktm_curation_cutover_mapping_receipt_items, "
+                    "app.ktm_curation_cutover_mapping_receipts"
+                )
+            )
+            await connection.execute(
+                text(
+                    "DROP FUNCTION "
+                    "app.guard_ktm_curation_cutover_mapping_receipt(), "
+                    "app.guard_ktm_curation_cutover_mapping_receipt_item()"
+                )
+            )
             await connection.execute(
                 text(
                     "UPDATE app.alembic_version "
@@ -719,7 +735,7 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
                     await connection.scalar(
                         text("SELECT version_num FROM app.alembic_version")
                     )
-                    == "20260814_0056"
+                    == "20260814_0057"
                 )
                 new_body = await connection.scalar(
                     text(
@@ -912,8 +928,8 @@ async def test_conditional_snapshot_rejects_legacy_not_modified_proof_chain(
         await db.rollback()
 
 
-async def test_0056_downgrade_is_fail_closed(_database_url: str) -> None:
-    with pytest.raises(RuntimeError, match="0056 downgrade would reopen"):
+async def test_0057_downgrade_is_fail_closed(_database_url: str) -> None:
+    with pytest.raises(RuntimeError, match="0057 downgrade would discard"):
         _alembic(_database_url, "downgrade", "20260814_0055")
 
 
