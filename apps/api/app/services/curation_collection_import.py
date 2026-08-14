@@ -102,10 +102,30 @@ def _completed_result(
         raise CurationCollectionImportConflict(
             "같은 Idempotency-Key의 canonical collection import가 완료되지 않았습니다."
         )
+    response = KorTravelMapCurationCollectionImportResponse.model_validate(
+        receipt.response_body
+    )
+    if (
+        response.notice_plan_id != receipt.result_plan_id
+        or response.source_system != receipt.source_system
+        or response.source_curation_collection_id
+        != receipt.source_curation_collection_id
+        or response.source_curation_collection_revision
+        != str(receipt.source_curation_collection_revision)
+        or response.source_curation_collection_etag
+        != receipt.source_curation_collection_etag
+        or response.source_curation_item_set_hash_version
+        != receipt.source_curation_item_set_hash_version
+        or response.source_curation_item_set_hash
+        != receipt.source_curation_item_set_hash
+        or response.source_curation_item_count
+        != receipt.source_curation_item_count
+    ):
+        raise CurationCollectionImportConflict(
+            "terminal canonical collection import response가 receipt source tuple과 다릅니다."
+        )
     return CurationCollectionImportResult(
-        response=KorTravelMapCurationCollectionImportResponse.model_validate(
-            receipt.response_body
-        ),
+        response=response,
         status_code=receipt.response_status,
         replayed=replayed,
         mutated=False,
@@ -441,6 +461,47 @@ async def _apply_not_modified(
         raise CurationCollectionImportConflict(
             "conditional snapshot 이후 local collection ETag가 바뀌었습니다."
         )
+    prior_receipt = await db.scalar(
+        select(KtmCurationImportReceipt)
+        .where(
+            KtmCurationImportReceipt.status == "completed",
+            KtmCurationImportReceipt.result_plan_id == plan.curated_plan_id,
+            KtmCurationImportReceipt.source_system == _SOURCE_SYSTEM,
+            KtmCurationImportReceipt.source_curation_collection_id
+            == plan.source_curation_collection_id,
+            KtmCurationImportReceipt.source_curation_collection_revision
+            == plan.source_curation_collection_revision,
+            KtmCurationImportReceipt.source_curation_collection_etag
+            == plan.source_curation_collection_etag,
+            KtmCurationImportReceipt.source_curation_item_set_hash_version
+            == plan.source_curation_item_set_hash_version,
+            KtmCurationImportReceipt.source_curation_item_set_hash
+            == plan.source_curation_item_set_hash,
+            KtmCurationImportReceipt.source_curation_item_count
+            == plan.source_curation_item_count,
+        )
+        .order_by(
+            KtmCurationImportReceipt.completed_at.desc(),
+            KtmCurationImportReceipt.receipt_id.desc(),
+        )
+        .limit(1)
+        .with_for_update()
+    )
+    if prior_receipt is None:
+        raise CurationCollectionImportConflict(
+            "conditional snapshot에 대응하는 immutable import proof가 없습니다."
+        )
+    prior_items = (
+        await db.scalars(
+            select(KtmCurationImportReceiptItem)
+            .where(KtmCurationImportReceiptItem.receipt_id == prior_receipt.receipt_id)
+            .order_by(KtmCurationImportReceiptItem.source_curation_item_id)
+        )
+    ).all()
+    if len(prior_items) != plan.source_curation_item_count:
+        raise CurationCollectionImportConflict(
+            "immutable import proof의 item count가 local plan과 다릅니다."
+        )
     pois = (
         (
             await db.execute(
@@ -461,20 +522,50 @@ async def _apply_not_modified(
         raise CurationCollectionImportConflict(
             "local canonical POI set이 conditional snapshot receipt와 다릅니다."
         )
+    prior_proofs = {
+        (
+            item.source_curation_collection_id,
+            item.source_curation_item_id,
+            item.source_curation_item_revision,
+            item.source_curation_item_etag,
+            item.feature_uuid,
+        )
+        for item in prior_items
+    }
+    current_proofs = set()
     for poi in pois:
-        assert poi.source_curation_collection_id is not None
-        assert poi.source_curation_item_id is not None
-        assert poi.source_curation_item_revision is not None
-        assert poi.source_curation_item_etag is not None
-        assert poi.feature_uuid is not None
+        if (
+            poi.source_curation_collection_id is None
+            or poi.source_curation_item_id is None
+            or poi.source_curation_item_revision is None
+            or poi.source_curation_item_etag is None
+            or poi.feature_uuid is None
+        ):
+            raise CurationCollectionImportConflict(
+                "local canonical POI provenance가 불완전합니다."
+            )
+        current_proofs.add(
+            (
+                poi.source_curation_collection_id,
+                poi.source_curation_item_id,
+                poi.source_curation_item_revision,
+                poi.source_curation_item_etag,
+                poi.feature_uuid,
+            )
+        )
+    if current_proofs != prior_proofs:
+        raise CurationCollectionImportConflict(
+            "local canonical POI set이 immutable conditional snapshot proof와 다릅니다."
+        )
+    for item in prior_items:
         db.add(
             KtmCurationImportReceiptItem(
                 receipt_id=receipt.receipt_id,
-                source_curation_collection_id=poi.source_curation_collection_id,
-                source_curation_item_id=poi.source_curation_item_id,
-                source_curation_item_revision=poi.source_curation_item_revision,
-                source_curation_item_etag=poi.source_curation_item_etag,
-                feature_uuid=poi.feature_uuid,
+                source_curation_collection_id=item.source_curation_collection_id,
+                source_curation_item_id=item.source_curation_item_id,
+                source_curation_item_revision=item.source_curation_item_revision,
+                source_curation_item_etag=item.source_curation_item_etag,
+                feature_uuid=item.feature_uuid,
             )
         )
     await db.flush()

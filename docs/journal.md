@@ -20,7 +20,7 @@
 
 ## 2026-08-14 (codex) — T-VN-40 paired snapshot 경계와 terminal seal 재검증
 
-- Map `6c0f110a`의 service spec을 exact vendor하고 collection metadata 128/200/300/100 상한을
+- Map `13e1852b`의 service spec을 exact vendor하고 collection metadata 128/200/300/100 상한을
   PinVi typed client와 contract test에 mirror했다.
 - 미배포 0052 preflight의 active POI 판정을 canonical provenance 행으로 한정해 0051의 수동 PO이가
   0053 upgrade를 막지 않게 했고 byte pin을 재고정했다.
@@ -10242,3 +10242,12 @@ back to WSL test mirror workflow` 커밋 + origin push.
   첫 PR (`docs/sprints/SPRINT-1.md` 참고).
 - v1의 자산(Resend 통합, 소셜 로그인, Notice plan, RustFS Storage API 등)은 v2에서
   한 건씩 ADR로 결정하고 가져온다.
+## 2026-08-14 — T-VN-40 canonical importer response seal·관리 UI
+
+- `20260814_0055`가 terminal import response의 source tuple을 DB trigger로 결박하고 downgrade를
+  fail-close했다. 304 receipt는 동일 collection/revision/ETag/hash/count의 prior immutable proof를
+  재사용한 뒤 current canonical POI와 exact 대조한다.
+- Map canonical projection은 generic plan/POI PATCH·DELETE·reorder로 변경할 수 없도록 하고, admin
+  response에 source discriminator를 노출했다. canonical import API/UI typed contract와 Playwright
+  idempotency·409 recovery 시나리오를 추가했다.
+- paired Map service provenance revision을 `13e1852b8049ebd3e1ce6eb58fe16e208cea45e0`로 갱신했다.

@@ -16,7 +16,15 @@ def test_canonical_collection_import_openapi_contract() -> None:
     }
     assert headers["Idempotency-Key"]["required"] is True
     assert headers["Idempotency-Key"]["schema"]["format"] == "uuid"
-    assert set(operation["responses"]) >= {"200", "201", "404", "409", "413", "503"}
+    assert set(operation["responses"]) >= {
+        "200",
+        "201",
+        "404",
+        "409",
+        "413",
+        "502",
+        "503",
+    }
 
     schemas = app.openapi()["components"]["schemas"]
     request = schemas["KorTravelMapCurationCollectionImportRequest"]
@@ -27,3 +35,11 @@ def test_canonical_collection_import_openapi_contract() -> None:
         "^[1-9][0-9]*$"
     )
     assert response["properties"]["source_curation_item_count"]["maximum"] == 2000
+    assert schemas["NoticePlanResponse"]["properties"]["source_system"] == {
+        "anyOf": [{"type": "string", "const": "kor-travel-map"}, {"type": "null"}],
+        "title": "Source System",
+    }
+    assert schemas["NoticePoiResponse"]["properties"]["source_curation_item_id"] == {
+        "anyOf": [{"type": "string", "format": "uuid"}, {"type": "null"}],
+        "title": "Source Curation Item Id",
+    }

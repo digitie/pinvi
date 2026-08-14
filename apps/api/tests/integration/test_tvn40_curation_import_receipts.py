@@ -34,6 +34,35 @@ _ITEM_SET_HASH = "b" * 64
 _FINGERPRINT = "c" * 64
 
 
+def _terminal_response(
+    receipt: KtmCurationImportReceipt,
+    plan_id: uuid.UUID,
+    *,
+    created_plan: bool,
+    not_modified: bool = False,
+) -> dict[str, object]:
+    """terminal receipt guard가 요구하는 source tuple 전체를 만든다."""
+
+    return {
+        "notice_plan_id": str(plan_id),
+        "created_plan": created_plan,
+        "not_modified": not_modified,
+        "source_system": receipt.source_system,
+        "source_curation_collection_id": str(receipt.source_curation_collection_id),
+        "source_curation_collection_revision": str(
+            receipt.source_curation_collection_revision
+        ),
+        "source_curation_collection_etag": receipt.source_curation_collection_etag,
+        "source_curation_item_set_hash_version": (
+            receipt.source_curation_item_set_hash_version
+        ),
+        "source_curation_item_set_hash": receipt.source_curation_item_set_hash,
+        "source_curation_item_count": receipt.source_curation_item_count,
+        "copied_poi_count": 0,
+        "removed_poi_count": 0,
+    }
+
+
 def _alembic(database_url: str, *args: str) -> None:
     env = dict(os.environ)
     env["PINVI_DATABASE_URL"] = database_url
@@ -289,7 +318,7 @@ async def _assert_0053_catalog_contract(db: AsyncSession) -> None:
         )
     )
     assert boundary_definition is not None
-    assert "schema_revision = '20260814_0054'::text" in boundary_definition
+    assert "schema_revision = '20260814_0055'::text" in boundary_definition
 
     indexes = dict(
         (
@@ -363,8 +392,14 @@ async def test_tvn40_curation_receipt_catalog_is_exact_and_detects_semantic_drif
 async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
     _database_url: str,
 ) -> None:
-    _alembic(_database_url, "downgrade", "20260814_0051")
+    # 0055부터 downgrade가 forward-only로 fail-close한다. 같은 disposable
+    # integration DB에서 app schema만 다시 만들고 실제 0051→head를 검증한다.
+    reset_engine = create_async_engine(_database_url, poolclass=NullPool)
     try:
+        async with reset_engine.begin() as connection:
+            await connection.execute(text("DROP SCHEMA app CASCADE"))
+            await connection.execute(text("CREATE SCHEMA app"))
+        _alembic(_database_url, "upgrade", "20260814_0051")
         engine = create_async_engine(_database_url, poolclass=NullPool)
         try:
             async with engine.begin() as connection:
@@ -474,7 +509,7 @@ async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
         finally:
             await engine.dispose()
 
-        _alembic(_database_url, "upgrade", "20260814_0053")
+        _alembic(_database_url, "upgrade", "head")
         engine = create_async_engine(_database_url, poolclass=NullPool)
         try:
             async with engine.begin() as connection:
@@ -540,7 +575,10 @@ async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
         finally:
             await engine.dispose()
     finally:
-        _alembic(_database_url, "upgrade", "head")
+        try:
+            _alembic(_database_url, "upgrade", "head")
+        finally:
+            await reset_engine.dispose()
 
 
 async def _seed_admin(session_factory) -> uuid.UUID:  # type: ignore[no-untyped-def]
@@ -561,24 +599,36 @@ async def _seed_admin(session_factory) -> uuid.UUID:  # type: ignore[no-untyped-
 async def test_existing_0053_database_receives_0054_undelete_lock(
     _database_url: str,
 ) -> None:
-    """구 0053 catalog도 0-step에 머물지 않고 V4 guard로 전진한다."""
+    """구 0053 catalog가 forward upgrade에서 V4 lock을 받는다."""
 
-    _alembic(_database_url, "downgrade", "20260814_0053")
     engine = create_async_engine(_database_url, poolclass=NullPool)
     try:
-        async with engine.connect() as connection:
-            old_body = await connection.scalar(
+        async with engine.begin() as connection:
+            old_definition = await connection.scalar(
                 text(
-                    "SELECT prosrc FROM pg_catalog.pg_proc AS p "
+                    "SELECT pg_catalog.pg_get_functiondef(p.oid) "
+                    "FROM pg_catalog.pg_proc AS p "
                     "JOIN pg_catalog.pg_namespace AS n ON n.oid = p.pronamespace "
                     "WHERE n.nspname = 'app' "
                     "AND p.proname = 'guard_ktm_curation_import_receipt'"
                 )
             )
-            assert old_body is not None
-            assert (
-                "poi.deleted_at IS NULL\n       AND poi.source_curation_item_id IS NOT NULL"
-                in old_body
+            assert old_definition is not None
+            old_definition = old_definition.replace(
+                "     WHERE poi.curated_plan_id = NEW.result_plan_id\n"
+                "       AND poi.source_curation_item_id IS NOT NULL\n",
+                "     WHERE poi.curated_plan_id = NEW.result_plan_id\n"
+                "       AND poi.deleted_at IS NULL\n"
+                "       AND poi.source_curation_item_id IS NOT NULL\n",
+                1,
+            )
+            assert "poi.deleted_at IS NULL" in old_definition
+            await connection.execute(text(old_definition))
+            await connection.execute(
+                text(
+                    "UPDATE app.alembic_version "
+                    "SET version_num = '20260814_0053'"
+                )
             )
     finally:
         await engine.dispose()
@@ -592,7 +642,7 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
                     await connection.scalar(
                         text("SELECT version_num FROM app.alembic_version")
                     )
-                    == "20260814_0054"
+                    == "20260814_0055"
                 )
                 new_body = await connection.scalar(
                     text(
@@ -610,6 +660,11 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
             await engine.dispose()
     finally:
         _alembic(_database_url, "upgrade", "head")
+
+
+async def test_0055_downgrade_is_fail_closed(_database_url: str) -> None:
+    with pytest.raises(RuntimeError, match="0055 downgrade would reopen"):
+        _alembic(_database_url, "downgrade", "20260814_0054")
 
 
 async def _seed_receipt_with_deleted_canonical_poi(
@@ -807,10 +862,9 @@ async def test_canonical_provenance_and_receipt_are_constrained_and_append_only(
         receipt.status = "completed"
         receipt.result_plan_id = plan_id
         receipt.response_status = 201
-        receipt.response_body = {
-            "notice_plan_id": str(plan_id),
-            "source_curation_collection_id": str(_COLLECTION_ID),
-        }
+        receipt.response_body = _terminal_response(
+            receipt, plan_id, created_plan=True
+        )
         receipt.completed_at = datetime.now(UTC)
         await db.commit()
 
@@ -851,10 +905,9 @@ async def test_canonical_provenance_and_receipt_are_constrained_and_append_only(
         no_op_receipt.status = "completed"
         no_op_receipt.result_plan_id = plan_id
         no_op_receipt.response_status = 200
-        no_op_receipt.response_body = {
-            "notice_plan_id": str(plan_id),
-            "source_curation_collection_id": str(_COLLECTION_ID),
-        }
+        no_op_receipt.response_body = _terminal_response(
+            no_op_receipt, plan_id, created_plan=False, not_modified=True
+        )
         no_op_receipt.completed_at = datetime.now(UTC)
         await db.commit()
 
@@ -894,8 +947,6 @@ async def test_canonical_provenance_and_receipt_are_constrained_and_append_only(
         )
         with pytest.raises(IntegrityError):
             await db.commit()
-        await db.rollback()
-
     async with session_factory() as db:
         native_plan = CuratedTripPlan(
             slug="native-plan",
@@ -1069,10 +1120,9 @@ async def test_receipt_completion_serializes_member_insert(
         receipt.status = "completed"
         receipt.result_plan_id = plan_id
         receipt.response_status = 201
-        receipt.response_body = {
-            "notice_plan_id": str(plan_id),
-            "source_curation_collection_id": str(_COLLECTION_ID),
-        }
+        receipt.response_body = _terminal_response(
+            receipt, plan_id, created_plan=True
+        )
         receipt.completed_at = datetime.now(UTC)
         await completing.flush()
 
@@ -1127,10 +1177,9 @@ async def test_receipt_completion_serializes_deleted_canonical_poi_reactivation(
         receipt.status = "completed"
         receipt.result_plan_id = plan_id
         receipt.response_status = 200
-        receipt.response_body = {
-            "notice_plan_id": str(plan_id),
-            "source_curation_collection_id": str(receipt.source_curation_collection_id),
-        }
+        receipt.response_body = _terminal_response(
+            receipt, plan_id, created_plan=False
+        )
         receipt.completed_at = datetime.now(UTC)
         await completing.flush()
 
@@ -1169,12 +1218,9 @@ async def test_receipt_completion_serializes_deleted_canonical_poi_reactivation(
             receipt.status = "completed"
             receipt.result_plan_id = second_plan_id
             receipt.response_status = 200
-            receipt.response_body = {
-                "notice_plan_id": str(second_plan_id),
-                "source_curation_collection_id": str(
-                    receipt.source_curation_collection_id
-                ),
-            }
+            receipt.response_body = _terminal_response(
+                receipt, second_plan_id, created_plan=False
+            )
             receipt.completed_at = datetime.now(UTC)
             try:
                 await db.commit()
@@ -1252,10 +1298,9 @@ async def test_terminal_receipt_is_bound_to_source_plan_body_and_item_set(
         receipt.status = "completed"
         receipt.result_plan_id = native_plan.curated_plan_id
         receipt.response_status = 201
-        receipt.response_body = {
-            "notice_plan_id": str(native_plan.curated_plan_id),
-            "source_curation_collection_id": str(_COLLECTION_ID),
-        }
+        receipt.response_body = _terminal_response(
+            receipt, native_plan.curated_plan_id, created_plan=True
+        )
         receipt.completed_at = datetime.now(UTC)
         with pytest.raises(IntegrityError):
             await db.commit()
@@ -1297,10 +1342,9 @@ async def test_terminal_receipt_is_bound_to_source_plan_body_and_item_set(
         receipt.status = "completed"
         receipt.result_plan_id = plan.curated_plan_id
         receipt.response_status = 200
-        receipt.response_body = {
-            "notice_plan_id": str(plan.curated_plan_id),
-            "source_curation_collection_id": str(_COLLECTION_ID),
-        }
+        receipt.response_body = _terminal_response(
+            receipt, plan.curated_plan_id, created_plan=False
+        )
         receipt.completed_at = datetime.now(UTC)
         with pytest.raises(DBAPIError, match="result plan proof does not match"):
             await db.commit()
@@ -1341,10 +1385,9 @@ async def test_terminal_receipt_is_bound_to_source_plan_body_and_item_set(
         receipt.status = "completed"
         receipt.result_plan_id = plan.curated_plan_id
         receipt.response_status = 201
-        receipt.response_body = {
-            "notice_plan_id": str(plan.curated_plan_id),
-            "source_curation_collection_id": str(_COLLECTION_ID),
-        }
+        receipt.response_body = _terminal_response(
+            receipt, plan.curated_plan_id, created_plan=True
+        )
         receipt.completed_at = datetime.now(UTC)
         with pytest.raises(DBAPIError, match="item set is incomplete"):
             await db.commit()
@@ -1396,10 +1439,9 @@ async def test_terminal_receipt_is_bound_to_source_plan_body_and_item_set(
         receipt.status = "completed"
         receipt.result_plan_id = plan.curated_plan_id
         receipt.response_status = 201
-        receipt.response_body = {
-            "notice_plan_id": str(plan.curated_plan_id),
-            "source_curation_collection_id": str(_COLLECTION_ID),
-        }
+        receipt.response_body = _terminal_response(
+            receipt, plan.curated_plan_id, created_plan=True
+        )
         receipt.completed_at = datetime.now(UTC)
         with pytest.raises(DBAPIError, match="POI set does not match"):
             await db.commit()
@@ -1440,10 +1482,10 @@ async def test_terminal_receipt_is_bound_to_source_plan_body_and_item_set(
         receipt.status = "completed"
         receipt.result_plan_id = plan.curated_plan_id
         receipt.response_status = 201
-        receipt.response_body = {
-            "notice_plan_id": str(uuid.uuid4()),
-            "source_curation_collection_id": str(_COLLECTION_ID),
-        }
+        receipt.response_body = _terminal_response(
+            receipt, plan.curated_plan_id, created_plan=True
+        )
+        receipt.response_body["notice_plan_id"] = str(uuid.uuid4())
         receipt.completed_at = datetime.now(UTC)
         with pytest.raises(IntegrityError):
             await db.commit()

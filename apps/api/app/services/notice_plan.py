@@ -241,6 +241,26 @@ def _require_values(values: Mapping[str, Any]) -> None:
         raise NoticePlanPolicyError("수정할 필드가 필요합니다.")
 
 
+def _is_canonical_map_plan(plan: CuratedTripPlan) -> bool:
+    return plan.source_system == "kor-travel-map"
+
+
+def _reject_canonical_plan_projection_edit(
+    plan: CuratedTripPlan, values: Mapping[str, Any]
+) -> None:
+    if _is_canonical_map_plan(plan) and set(values) - {"is_published"}:
+        raise NoticePlanPolicyError(
+            "Map canonical collection의 source-derived plan 필드는 import refresh만 변경할 수 있습니다."
+        )
+
+
+def _reject_canonical_poi_projection_edit(poi: CuratedPlanPoi) -> None:
+    if poi.source_curation_item_id is not None:
+        raise NoticePlanPolicyError(
+            "Map canonical POI는 import refresh만 변경·삭제·재정렬할 수 있습니다."
+        )
+
+
 async def create_admin_plan(
     db: AsyncSession,
     *,
@@ -285,6 +305,7 @@ async def update_admin_plan(
 ) -> CuratedTripPlan:
     _require_values(values)
     _check_version(actual=plan.version, expected=expected_version)
+    _reject_canonical_plan_projection_edit(plan, values)
     next_starts_on = cast(date | None, values.get("starts_on", plan.starts_on))
     next_ends_on = cast(date | None, values.get("ends_on", plan.ends_on))
     _validate_plan_period(next_starts_on, next_ends_on)
@@ -319,6 +340,10 @@ async def soft_delete_admin_plan(
     expected_version: int | None = None,
 ) -> CuratedTripPlan:
     _check_version(actual=plan.version, expected=expected_version)
+    if _is_canonical_map_plan(plan):
+        raise NoticePlanPolicyError(
+            "Map canonical collection plan은 generic delete로 제거할 수 없습니다."
+        )
     plan.deleted_at = datetime.now(UTC)
     plan.updated_by_admin_id = admin_id
     plan.version += 1
@@ -391,6 +416,7 @@ async def update_admin_poi(
 ) -> CuratedPlanPoi:
     _require_values(values)
     _check_version(actual=poi.version, expected=expected_version)
+    _reject_canonical_poi_projection_edit(poi)
     if "feature_id" in values:
         poi.feature_id = _optional_feature_id(values.get("feature_id"))
     if "feature_snapshot" in values:
@@ -430,6 +456,7 @@ async def soft_delete_admin_poi(
     expected_version: int | None = None,
 ) -> CuratedPlanPoi:
     _check_version(actual=poi.version, expected=expected_version)
+    _reject_canonical_poi_projection_edit(poi)
     poi.deleted_at = datetime.now(UTC)
     poi.version += 1
     plan.updated_by_admin_id = admin_id
@@ -460,6 +487,10 @@ async def reorder_admin_pois(
     by_id = {row.curated_poi_id: row for row in rows}
     if set(by_id) != set(ids):
         raise NoticePlanNotFoundError("추천 여행 POI를 찾을 수 없습니다.")
+    if any(row.source_curation_item_id is not None for row in rows):
+        raise NoticePlanPolicyError(
+            "Map canonical POI는 import refresh만 변경·삭제·재정렬할 수 있습니다."
+        )
 
     # `uq_curated_plan_pois_plan_day_sort`는 partial unique index라 non-deferrable —
     # row-by-row UPDATE 중간 상태에서 검사된다. 두 POI를 swap(A:001↔B:002)하면

@@ -1,16 +1,19 @@
 # resume.md
 
-## 2026-08-14 (codex) — T-VN-40 canonical collection importer 원자 전환
+## 2026-08-14 (codex) — T-VN-40 canonical importer·관리 UI 보호 경계
 
-관리자 canonical collection import는 Map service snapshot을 읽고 PinVi plan·canonical POI·immutable
-receipt proof·admin audit를 route 소유의 단일 `SERIALIZABLE` transaction으로 반영한다. actor-scoped
-`Idempotency-Key`는 terminal replay와 다른 body의 409을 구분하며, fresh-key `304`는 plan/POI/audit을
-바꾸지 않고 natural proof만 새 receipt에 보존한다. refresh는 source canonical POI만 제거하고 수동
-POI를 보존한다. audit append 실패와 같은 key의 병렬 요청은 전체 rollback 또는 한 terminal effect로
-수렴한다.
+관리자 UI와 typed web client를 canonical collection import endpoint에 연결했다. 입력이 바뀌면 새
+`Idempotency-Key`를 만들고, `304`·`409`·`413`·Map service 오류를 자동 재시도하지 않는다. 같은 입력의
+명시적 재시도만 동일 key를 보존하며 mocked Playwright E2E가 이 흐름을 검증한다.
 
-**다음 한 작업**: admin UI를 canonical collection import endpoint에 연결하고 304·409·413·stale
-re-preview UX 및 mocked/live E2E를 구현한다.
+`20260814_0055`는 terminal response의 plan/source revision·ETag·item-set hash/count를 immutable receipt
+tuple과 DB trigger에서 정확히 결박하고, downgrade를 fail-close한다. fresh-key `304`는 현재 POI를 새
+정본으로 삼지 않고 같은 Map tuple의 이전 completed receipt proof를 복제한 뒤 현재 canonical POI set과
+대조한다. Map provenance plan·POI는 generic admin 수정·삭제·재정렬로 바꿀 수 없고, 수동 POI 및 publish
+state만 별도 관리한다. paired service provenance는 Map `13e1852b8049ebd3e1ce6eb58fe16e208cea45e0`로 재고정했다.
+
+**다음 한 작업**: legacy curated-feature importer/UI/API를 canonical collection importer로 완전히 전환·제거하고,
+paired deploy receipt·Manager secret wiring·n150 live import/refresh를 완료한다.
 
 ## 2026-08-14 (codex) — T-VN-40 기적용 receipt guard forward 수렴
 
@@ -24,7 +27,7 @@ actor-scoped Idempotency-Key replay/409/304 local tuple 재검증을 구현한�
 
 ## 2026-08-14 (codex) — T-VN-40 paired 문자열·receipt 경합 폐쇄
 
-Map `6c0f110ab4b9c04e9acb6c66c2b7afb3e32291b9`의 service OpenAPI를 byte-exact로
+Map `13e1852b8049ebd3e1ce6eb58fe16e208cea45e0`의 service OpenAPI를 byte-exact로
 재vendor하고 snapshot client에 `theme_slug 128`, `theme_name 200`, `title 300`,
 `edition_key 100`을 동일하게 강제했다. 초과 값은 저장 단계에서 자르지 않고 transport validation에서
 거부한다. 0052 preflight는 completed receipt의 canonical POI만 검사해 기존 수동 POI를 보존하며,

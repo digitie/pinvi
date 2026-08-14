@@ -120,6 +120,7 @@ def _poi_to_response(poi) -> NoticePoiResponse:  # type: ignore[no-untyped-def]
     return NoticePoiResponse(
         notice_poi_id=poi.curated_poi_id,
         notice_plan_id=poi.curated_plan_id,
+        source_curation_item_id=poi.source_curation_item_id,
         day_index=poi.day_index,
         sort_order=poi.sort_order,
         feature_id=poi.feature_id,
@@ -148,6 +149,9 @@ def _plan_to_response(plan, pois) -> NoticePlanResponse:  # type: ignore[no-unty
         starts_on=plan.starts_on,
         ends_on=plan.ends_on,
         is_published=plan.is_published,
+        source_system=(
+            "kor-travel-map" if plan.source_system == "kor-travel-map" else None
+        ),
         version=plan.version,
         created_at=plan.created_at,
         updated_at=plan.updated_at,
@@ -291,6 +295,7 @@ async def _audit(
         404: {"description": "공개 collection 또는 refresh 대상 없음"},
         409: {"description": "idempotency/source/local state conflict"},
         413: {"description": "collection item 상한 초과"},
+        502: {"description": "Map snapshot service contract violation"},
         503: {"description": "Map snapshot service unavailable"},
     },
 )
@@ -601,10 +606,10 @@ async def update_notice_plan(
         _raise_notice_not_found(exc)
     except NoticePlanVersionConflictError as exc:
         _raise_version_conflict(exc)
-    except NoticePlanConflictError as exc:
-        _raise_conflict(exc)
     except NoticePlanPolicyError as exc:
         _raise_notice_policy(exc)
+    except NoticePlanConflictError as exc:
+        _raise_conflict(exc)
     await _audit(
         db,
         admin,
@@ -643,6 +648,8 @@ async def delete_notice_plan(
         _raise_notice_not_found(exc)
     except NoticePlanVersionConflictError as exc:
         _raise_version_conflict(exc)
+    except NoticePlanPolicyError as exc:
+        _raise_notice_policy(exc)
     await _audit(
         db,
         admin,
@@ -807,6 +814,8 @@ async def delete_notice_poi(
         _raise_notice_not_found(exc)
     except NoticePlanVersionConflictError as exc:
         _raise_version_conflict(exc)
+    except NoticePlanPolicyError as exc:
+        _raise_notice_policy(exc)
     await _audit(
         db,
         admin,

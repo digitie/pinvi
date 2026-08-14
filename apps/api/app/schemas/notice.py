@@ -90,6 +90,7 @@ class NoticePoiReorderRequest(BaseModel):
 class NoticePoiResponse(NoticePoiBase):
     notice_poi_id: uuid.UUID
     notice_plan_id: uuid.UUID
+    source_curation_item_id: uuid.UUID | None = None
     version: int
     created_at: datetime
     updated_at: datetime
@@ -97,6 +98,7 @@ class NoticePoiResponse(NoticePoiBase):
 
 class NoticePlanResponse(NoticePlanBase):
     notice_plan_id: uuid.UUID
+    source_system: Literal["kor-travel-map"] | None = None
     version: int
     created_at: datetime
     updated_at: datetime

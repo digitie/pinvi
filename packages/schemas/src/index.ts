@@ -209,6 +209,8 @@ export {
   NoticePoiReorderRequestSchema,
   NoticePlanCopyRequestSchema,
   NoticePlanCopyResponseSchema,
+  KorTravelMapCurationCollectionImportRequestSchema,
+  KorTravelMapCurationCollectionImportResponseSchema,
 } from './notice-plan';
 export type {
   NoticePoi,
@@ -221,6 +223,8 @@ export type {
   NoticePoiReorderRequest,
   NoticePlanCopyRequest,
   NoticePlanCopyResponse,
+  KorTravelMapCurationCollectionImportRequest,
+  KorTravelMapCurationCollectionImportResponse,
 } from './notice-plan';
 
 export {

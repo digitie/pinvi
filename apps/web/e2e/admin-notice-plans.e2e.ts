@@ -55,6 +55,26 @@ function basePoi() {
   };
 }
 
+function canonicalImportResult(overrides: Record<string, unknown> = {}) {
+  return {
+    notice_plan_id: planId,
+    created_plan: true,
+    not_modified: false,
+    source_system: 'kor-travel-map',
+    source_curation_collection_id: '44444444-4444-4444-8444-444444444444',
+    source_curation_collection_revision: '7',
+    source_curation_collection_etag:
+      '"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
+    source_curation_item_set_hash_version: 'ktm-db-item-set-v1',
+    source_curation_item_set_hash:
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    source_curation_item_count: 2,
+    copied_poi_count: 2,
+    removed_poi_count: 0,
+    ...overrides,
+  };
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route(
     (url) => url.port === '12801' && url.pathname === '/auth/me',
@@ -93,6 +113,96 @@ test('Admin notice plan 목록이 필터와 편집 링크를 제공한다', asyn
   expect(lastUrl.searchParams.get('q')).toBe('서울');
   expect(lastUrl.searchParams.get('category')).toBe('cafe');
   expect(lastUrl.searchParams.get('is_published')).toBe('false');
+});
+
+test('Admin이 canonical collection import의 idempotency와 오류 복구를 제어한다', async ({
+  page,
+}) => {
+  const importRequests: Array<{ body: Record<string, unknown>; idempotencyKey: string | null }> =
+    [];
+  let importAttempt = 0;
+  await page.route(
+    (url) =>
+      url.port === '12801' &&
+      (url.pathname === '/admin/notice-plans' ||
+        url.pathname === '/admin/notice-plans/imports/kor-travel-map-curation-collections'),
+    async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (path === '/admin/notice-plans' && request.method() === 'GET') {
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ data: [basePlan()] }),
+        });
+        return;
+      }
+      if (
+        path === '/admin/notice-plans/imports/kor-travel-map-curation-collections' &&
+        request.method() === 'POST'
+      ) {
+        importRequests.push({
+          body: request.postDataJSON() as Record<string, unknown>,
+          idempotencyKey: request.headers()['idempotency-key'] ?? null,
+        });
+        importAttempt += 1;
+        if (importAttempt === 1) {
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              data: canonicalImportResult({ not_modified: true, created_plan: false }),
+            }),
+          });
+          return;
+        }
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            detail: {
+              code: 'CURATION_COLLECTION_IMPORT_CONFLICT',
+              message: 'snapshot이 달라졌습니다.',
+            },
+          }),
+        });
+      }
+    },
+  );
+
+  await page.goto('/admin/notice-plans');
+  await page
+    .getByTestId('admin-notice-canonical-import-collection-id')
+    .fill('44444444-4444-4444-8444-444444444444');
+  await page.getByTestId('admin-notice-canonical-import-published').selectOption('published');
+  await page.getByTestId('admin-notice-canonical-import-submit').click();
+
+  await expect(page.getByTestId('admin-notice-canonical-import-result')).toContainText(
+    'Map snapshot이 변경되지 않아',
+  );
+  expect(importRequests).toHaveLength(1);
+  expect(importRequests[0]?.body).toEqual({
+    collection_id: '44444444-4444-4444-8444-444444444444',
+    mode: 'create',
+    is_published: true,
+  });
+  expect(importRequests[0]?.idempotencyKey).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  );
+
+  await page
+    .getByTestId('admin-notice-canonical-import-collection-id')
+    .fill('55555555-5555-4555-8555-555555555555');
+  await page.getByTestId('admin-notice-canonical-import-mode').selectOption('refresh');
+  await page.getByTestId('admin-notice-canonical-import-submit').click();
+  await expect(page.getByTestId('admin-notice-canonical-import-error')).toContainText(
+    '입력을 확인한 뒤 새 요청으로 다시 실행하세요.',
+  );
+  expect(importRequests).toHaveLength(2);
+  expect(importRequests[1]?.idempotencyKey).not.toBe(importRequests[0]?.idempotencyKey);
+
+  await page.getByTestId('admin-notice-canonical-import-retry').click();
+  await expect.poll(() => importRequests).toHaveLength(3);
+  expect(importRequests[2]?.idempotencyKey).toBe(importRequests[1]?.idempotencyKey);
 });
 
 test('Admin notice plan 생성, 편집, POI 추가, 첨부 업로드를 수행한다', async ({ page }) => {

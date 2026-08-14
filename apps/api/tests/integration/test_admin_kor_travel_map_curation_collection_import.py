@@ -152,6 +152,11 @@ async def test_canonical_collection_import_replay_refresh_and_manual_poi_preserv
                 source_etag=ETAG_2,
                 snapshot=_snapshot(revision=2, etag=ETAG_2, item_numbers=(2, 3)),
             ),
+            CurationCollectionFetchResult(
+                not_modified=True,
+                source_etag=ETAG_2,
+                snapshot=None,
+            ),
         ]
     )
     app.dependency_overrides[get_curation_snapshot_service_client] = lambda: fake
@@ -173,6 +178,59 @@ async def test_canonical_collection_import_replay_refresh_and_manual_poi_preserv
         assert created_data["not_modified"] is False
         assert created_data["copied_poi_count"] == 2
         plan_id = uuid.UUID(created_data["notice_plan_id"])
+
+        async with session_factory() as db:
+            plan = await db.get(CuratedTripPlan, plan_id)
+            assert plan is not None
+            canonical_poi = await db.scalar(
+                select(CuratedPlanPoi).where(
+                    CuratedPlanPoi.curated_plan_id == plan_id,
+                    CuratedPlanPoi.source_curation_item_id.is_not(None),
+                )
+            )
+            assert canonical_poi is not None
+            plan_version = plan.version
+            poi_id = canonical_poi.curated_poi_id
+            poi_version = canonical_poi.version
+
+        # canonical projection은 generic admin CRUD로 변조·삭제·재정렬할 수 없다.
+        for path, payload, headers in (
+            (
+                f"/admin/notice-plans/{plan_id}",
+                {"title": "수동 변조"},
+                {"If-Match": str(plan_version)},
+            ),
+            (
+                f"/admin/notice-plans/{plan_id}/pois/{poi_id}",
+                {"memo": "수동 변조"},
+                {"If-Match": str(poi_version)},
+            ),
+        ):
+            changed = await client.patch(
+                path,
+                json=payload,
+                headers=headers,
+                cookies=auth_cookies(admin_id),
+            )
+            assert changed.status_code == 422, changed.text
+        reordered = await client.post(
+            f"/admin/notice-plans/{plan_id}/pois/reorder",
+            json={"items": [{"notice_poi_id": str(poi_id), "day_index": 1, "sort_order": "x"}]},
+            cookies=auth_cookies(admin_id),
+        )
+        assert reordered.status_code == 422, reordered.text
+        deleted_poi = await client.delete(
+            f"/admin/notice-plans/{plan_id}/pois/{poi_id}",
+            headers={"If-Match": str(poi_version)},
+            cookies=auth_cookies(admin_id),
+        )
+        assert deleted_poi.status_code == 422, deleted_poi.text
+        deleted_plan = await client.delete(
+            f"/admin/notice-plans/{plan_id}",
+            headers={"If-Match": str(plan_version)},
+            cookies=auth_cookies(admin_id),
+        )
+        assert deleted_plan.status_code == 422, deleted_plan.text
 
         replay = await client.post(
             "/admin/notice-plans/imports/kor-travel-map-curation-collections",
@@ -280,6 +338,45 @@ async def test_canonical_collection_import_replay_refresh_and_manual_poi_preserv
                 await db.scalar(select(func.count(KtmCurationImportReceiptItem.receipt_id)))
                 == 6
             )
+            assert await db.scalar(select(func.count(AdminAuditLog.log_id))) == 2
+
+        # revision 2의 immutable proof는 item 2·3이다. 같은 item count로 item 1을
+        # 되살리고 item 3을 숨겨도 fresh-key 304가 local 상태를 정본으로 재봉인하면 안 된다.
+        async with session_factory() as db:
+            canonical = (
+                await db.scalars(
+                    select(CuratedPlanPoi).where(
+                        CuratedPlanPoi.curated_plan_id == plan_id,
+                        CuratedPlanPoi.source_curation_item_id.is_not(None),
+                    )
+                )
+            ).all()
+            stale_item = next(
+                poi
+                for poi in canonical
+                if poi.source_curation_item_id
+                == uuid.UUID("20000000-0000-0000-0000-000000000001")
+            )
+            current_item = next(
+                poi
+                for poi in canonical
+                if poi.source_curation_item_id
+                == uuid.UUID("20000000-0000-0000-0000-000000000003")
+            )
+            stale_item.deleted_at = None
+            current_item.deleted_at = datetime.now(UTC)
+            await db.commit()
+
+        stale_conditional = await client.post(
+            "/admin/notice-plans/imports/kor-travel-map-curation-collections",
+            json={"collection_id": str(COLLECTION_ID), "mode": "refresh"},
+            headers={"Idempotency-Key": str(uuid.uuid4())},
+            cookies=auth_cookies(admin_id),
+        )
+        assert stale_conditional.status_code == 409, stale_conditional.text
+        assert fake.calls[3] == (COLLECTION_ID, ETAG_2)
+        async with session_factory() as db:
+            assert await db.scalar(select(func.count(KtmCurationImportReceipt.receipt_id))) == 3
             assert await db.scalar(select(func.count(AdminAuditLog.log_id))) == 2
     finally:
         app.dependency_overrides.pop(get_curation_snapshot_service_client, None)
