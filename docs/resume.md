@@ -4,9 +4,10 @@
 
 `inspect_curation_cutover_legacy_provenance()`는 현재 vendored Map release의 completed mapping
 receipt와 active legacy Map plan/POI를 읽기 전용으로 대조한다. legacy plan의 UUID 아닌
-identity·receipt orphan·UUID 정규화 뒤 duplicate와 POI의 partial·blank·parent mismatch
-provenance를 모두 report하고, 한 건이라도 있으면 `require_ready()`가 fail-close한다. manual
-POI는 provenance가 둘 다 `NULL`일 때만 보존 대상으로 분리한다.
+identity·receipt orphan·UUID 정규화 뒤 duplicate·같은 canonical collection으로 수렴하는 다중
+legacy plan과 POI의 partial·blank·parent mismatch provenance를 모두 report하고, 한 건이라도
+있으면 `require_ready()`가 fail-close한다. manual POI는 provenance가 둘 다 `NULL`일 때만 보존
+대상으로 분리한다.
 
 **다음 한 작업**: typed canonical backfill command를 설계·구현한다. 이 command는 같은
 `SERIALIZABLE` transaction에서 preflight를 재실행하고 sealed mapping의 collection별 canonical
@@ -26,8 +27,9 @@ boundary schema pin도 `20260814_0058`로 함께 전진했다.
 
 **다음 한 작업**: sealed receipt를 읽는 legacy provenance preflight/backfill command를 구현한다.
 기존 `source_curated_feature_id`는 먼저 UUID로 엄격히 해석하고, live plan/POI의 orphan·중복·non-UUID
-identity와 receipt root/count 불일치를 모두 보고·fail-close해야 한다. 이 검증을 통과하기 전에는 old
-admin snapshot route·column·runtime caller를 삭제하거나 canonical identity로 추정 변환하지 않는다.
+identity, 동일 canonical collection 다중 plan, receipt root/count 불일치를 모두 보고·fail-close해야
+한다. 이 검증을 통과하기 전에는 old admin snapshot route·column·runtime caller를 삭제하거나 canonical
+identity로 추정 변환하지 않는다.
 
 ## 2026-08-14 (codex) — T-VN-40C local identity mapping receipt seal
 

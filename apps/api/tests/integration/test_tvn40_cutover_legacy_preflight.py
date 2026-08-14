@@ -49,30 +49,46 @@ async def _seal_mapping(
 ) -> tuple[uuid.UUID, uuid.UUID]:
     collection_id = uuid.uuid4()
     curation_item_id = uuid.uuid4()
+    await _seal_mapping_set(
+        db,
+        admin_id=admin_id,
+        mappings=((legacy_id, collection_id, curation_item_id),),
+    )
+    return collection_id, curation_item_id
+
+
+async def _seal_mapping_set(
+    db: AsyncSession,
+    *,
+    admin_id: uuid.UUID,
+    mappings: tuple[tuple[uuid.UUID, uuid.UUID, uuid.UUID], ...],
+) -> None:
     receipt = KtmCurationCutoverMappingReceipt(
         actor_admin_id=admin_id,
         map_release_revision=KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
         mapping_root_version="ktm-curation-cutover-mapping-v1",
         mapping_root=_ROOT,
-        mapping_count=1,
+        mapping_count=len(mappings),
     )
     db.add(receipt)
     await db.flush()
-    db.add(
-        KtmCurationCutoverMappingReceiptItem(
-            receipt_id=receipt.receipt_id,
-            legacy_curated_feature_id=legacy_id,
-            collection_id=collection_id,
-            curation_item_id=curation_item_id,
-            mapping_kind="legacy_projection",
-            source_row_hash=_ROW_HASH,
-        )
+    db.add_all(
+        [
+            KtmCurationCutoverMappingReceiptItem(
+                receipt_id=receipt.receipt_id,
+                legacy_curated_feature_id=legacy_id,
+                collection_id=collection_id,
+                curation_item_id=curation_item_id,
+                mapping_kind="legacy_projection",
+                source_row_hash=_ROW_HASH,
+            )
+            for legacy_id, collection_id, curation_item_id in mappings
+        ]
     )
     await db.flush()
     receipt.status = "completed"
     receipt.completed_at = datetime.now(UTC)
     await db.flush()
-    return collection_id, curation_item_id
 
 
 async def _legacy_plan(
@@ -219,6 +235,7 @@ async def test_legacy_preflight_reports_all_identity_and_poi_provenance_conflict
     assert result.legacy_source_poi_count == 5
     assert result.manual_poi_count == 0
     assert {issue.code for issue in result.issues} == {
+        "legacy-plan-canonical-collection-duplicate",
         "legacy-plan-source-id-duplicate",
         "legacy-plan-source-id-invalid",
         "legacy-plan-mapping-missing",
@@ -248,3 +265,37 @@ async def test_legacy_preflight_requires_a_completed_current_mapping_receipt(
             detail="현재 vendored Map release의 sealed mapping receipt가 없습니다.",
         ),
     )
+
+
+async def test_legacy_preflight_rejects_multiple_plans_for_one_canonical_collection(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    first_legacy_id = uuid.uuid4()
+    second_legacy_id = uuid.uuid4()
+    collection_id = uuid.uuid4()
+    async with session_factory() as db:
+        admin = await _admin(db)
+        await _seal_mapping_set(
+            db,
+            admin_id=admin.user_id,
+            mappings=(
+                (first_legacy_id, collection_id, uuid.uuid4()),
+                (second_legacy_id, collection_id, uuid.uuid4()),
+            ),
+        )
+        await _legacy_plan(
+            db, admin_id=admin.user_id, source_curated_feature_id=str(first_legacy_id)
+        )
+        await _legacy_plan(
+            db, admin_id=admin.user_id, source_curated_feature_id=str(second_legacy_id)
+        )
+        await db.commit()
+
+    async with session_factory() as db:
+        result = await inspect_curation_cutover_legacy_provenance(db)
+
+    assert result.ready is False
+    assert {issue.code for issue in result.issues} == {
+        "legacy-plan-canonical-collection-duplicate"
+    }
+    assert len(result.plan_mappings) == 2

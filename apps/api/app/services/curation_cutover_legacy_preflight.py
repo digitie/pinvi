@@ -203,6 +203,28 @@ async def inspect_curation_cutover_legacy_provenance(
                 )
             )
 
+    plans_by_collection: dict[uuid.UUID, list[CuratedTripPlan]] = {}
+    if receipt is not None and not receipt_issues:
+        for plan in plans:
+            legacy_id = parsed_plan_ids.get(plan.curated_plan_id)
+            mapping = mapping_by_legacy_id.get(legacy_id) if legacy_id is not None else None
+            if mapping is not None:
+                plans_by_collection.setdefault(mapping.collection_id, []).append(plan)
+    for collection_id, same_collection_plans in plans_by_collection.items():
+        if len(same_collection_plans) <= 1:
+            continue
+        for plan in same_collection_plans:
+            issues.append(
+                CurationCutoverLegacyPreflightIssue(
+                    code="legacy-plan-canonical-collection-duplicate",
+                    detail=(
+                        f"canonical collection {collection_id}로 활성 legacy plan이 둘 이상 "
+                        "수렴합니다. 명시적 merge 정책 없이는 자동 backfill할 수 없습니다."
+                    ),
+                    curated_plan_id=plan.curated_plan_id,
+                )
+            )
+
     plan_ids = tuple(plan.curated_plan_id for plan in plans)
     pois: tuple[CuratedPlanPoi, ...]
     if plan_ids:

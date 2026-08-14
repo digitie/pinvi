@@ -9,10 +9,10 @@
   불일치는 즉시 fail-close하며, 미래 backfill은 별도 `SERIALIZABLE` transaction에서 이 검증을
   다시 실행해야 한다.
 - active legacy Map plan의 `source_curated_feature_id`는 UUID로 엄격 해석한다. non-UUID,
-  sealed mapping orphan, 문자열 대소문자와 무관한 UUID duplicate를 한 report에 모두 수집한다.
-  legacy source POI는 parent UUID와 같은 source identity와 비어 있지 않은 legacy item identity를
-  함께 가져야 하고, partial·blank·mismatch는 fail-close한다. 두 provenance 값이 모두 `NULL`인
-  manual POI는 보존 대상으로 따로 센다.
+  sealed mapping orphan, 문자열 대소문자와 무관한 UUID duplicate, 동일 canonical collection으로
+  수렴하는 다중 active plan을 한 report에 모두 수집한다. legacy source POI는 parent UUID와 같은
+  source identity와 비어 있지 않은 legacy item identity를 함께 가져야 하고, partial·blank·mismatch는
+  fail-close한다. 두 provenance 값이 모두 `NULL`인 manual POI는 보존 대상으로 따로 센다.
 - 실제 PostgreSQL integration은 exact mapping+source/manual POI 통과, non-UUID·orphan·duplicate와
   POI partial/blank/mismatch의 동시 report, sealed receipt 부재 차단을 고정했다. 이 report만으로
   쓰기를 허용하지 않으며, canonical collection snapshot을 쓰는 typed backfill command가 같은
