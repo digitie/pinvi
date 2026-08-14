@@ -45,6 +45,19 @@ BEGIN
         RAISE EXCEPTION 'cache target restore fence attempt is append-only' USING ERRCODE = '55000';
     END IF;
 
+    IF TG_OP = 'INSERT' THEN
+        IF NEW.status <> 'pending'
+           OR NEW.response_status IS NOT NULL
+           OR NEW.response_etag IS NOT NULL
+           OR NEW.response_body IS NOT NULL
+           OR NEW.completed_at IS NOT NULL
+        THEN
+            RAISE EXCEPTION 'cache target restore fence attempt must start pending'
+                USING ERRCODE = '55000';
+        END IF;
+        RETURN NEW;
+    END IF;
+
     IF OLD.status <> 'pending' THEN
         RAISE EXCEPTION 'completed cache target restore fence attempt is immutable' USING ERRCODE = '55000';
     END IF;
@@ -149,7 +162,7 @@ def upgrade() -> None:
     op.execute(
         sa.text(
             "CREATE TRIGGER trg_ktm_ct_restore_attempt_row_guard "
-            "BEFORE UPDATE OR DELETE ON app.ktm_cache_target_restore_fence_attempts "
+            "BEFORE INSERT OR UPDATE OR DELETE ON app.ktm_cache_target_restore_fence_attempts "
             "FOR EACH ROW EXECUTE FUNCTION app.guard_ktm_cache_target_restore_fence_attempt()"
         )
     )

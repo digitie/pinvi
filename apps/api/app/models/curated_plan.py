@@ -18,6 +18,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
@@ -65,6 +66,11 @@ class CuratedTripPlan(Base, TimestampMixin):
                 "AND source_curation_collection_id IS NOT NULL"
             ),
         ),
+        UniqueConstraint(
+            "curated_plan_id",
+            "source_curation_collection_id",
+            name="uq_curated_trip_plans_curation_identity",
+        ),
     )
 
     curated_plan_id: Mapped[uuid.UUID] = mapped_column(
@@ -73,8 +79,8 @@ class CuratedTripPlan(Base, TimestampMixin):
         server_default=text("gen_random_uuid()"),
     )
     slug: Mapped[str] = mapped_column(String(160), nullable=False)
-    title: Mapped[str] = mapped_column(String(200), nullable=False)
-    category: Mapped[str] = mapped_column(String(80), nullable=False, server_default="recommended")
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    category: Mapped[str] = mapped_column(String(128), nullable=False, server_default="recommended")
     summary: Mapped[str | None] = mapped_column(Text())
     source_name: Mapped[str | None] = mapped_column(String(200))
     destination: Mapped[str | None] = mapped_column(String(120))
@@ -126,10 +132,13 @@ class CuratedPlanPoi(Base, TimestampMixin):
             name=conv("ck_curated_plan_pois_currency"),
         ),
         CheckConstraint(
-            "num_nonnulls(source_curation_item_id, source_curation_item_revision, "
-            "source_curation_item_etag) = 0 OR "
-            "(num_nonnulls(source_curation_item_id, source_curation_item_revision, "
-            "source_curation_item_etag) = 3 AND source_curation_item_revision > 0 AND "
+            "num_nonnulls(source_curation_import_receipt_id, "
+            "source_curation_collection_id, source_curation_item_id, "
+            "source_curation_item_revision, source_curation_item_etag) = 0 OR "
+            "(num_nonnulls(source_curation_import_receipt_id, "
+            "source_curation_collection_id, source_curation_item_id, "
+            "source_curation_item_revision, source_curation_item_etag) = 5 AND "
+            "feature_uuid IS NOT NULL AND source_curation_item_revision > 0 AND "
             "source_curation_item_etag ~ '^\"sha256:[0-9a-f]{64}\"$')",
             name=conv("ck_curated_plan_pois_curation_source"),
         ),
@@ -137,6 +146,35 @@ class CuratedPlanPoi(Base, TimestampMixin):
             "curated_plan_id",
             "source_curation_item_id",
             name="uq_curated_plan_pois_curation_item",
+        ),
+        ForeignKeyConstraint(
+            ["curated_plan_id", "source_curation_collection_id"],
+            [
+                "app.curated_trip_plans.curated_plan_id",
+                "app.curated_trip_plans.source_curation_collection_id",
+            ],
+            name="fk_curated_plan_pois_curation_parent",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            [
+                "source_curation_import_receipt_id",
+                "source_curation_collection_id",
+                "source_curation_item_id",
+                "source_curation_item_revision",
+                "source_curation_item_etag",
+                "feature_uuid",
+            ],
+            [
+                "app.ktm_curation_import_receipt_items.receipt_id",
+                "app.ktm_curation_import_receipt_items.source_curation_collection_id",
+                "app.ktm_curation_import_receipt_items.source_curation_item_id",
+                "app.ktm_curation_import_receipt_items.source_curation_item_revision",
+                "app.ktm_curation_import_receipt_items.source_curation_item_etag",
+                "app.ktm_curation_import_receipt_items.feature_uuid",
+            ],
+            name="fk_curated_plan_pois_curation_receipt_item",
+            ondelete="RESTRICT",
         ),
     )
 
@@ -170,6 +208,10 @@ class CuratedPlanPoi(Base, TimestampMixin):
     custom_marker_icon: Mapped[str | None] = mapped_column(String(64))
     source_curated_feature_id: Mapped[str | None] = mapped_column(Text())
     source_curated_feature_item_id: Mapped[str | None] = mapped_column(Text())
+    source_curation_import_receipt_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True)
+    )
+    source_curation_collection_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True))
     source_curation_item_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True))
     source_curation_item_revision: Mapped[int | None] = mapped_column(BigInteger)
     source_curation_item_etag: Mapped[str | None] = mapped_column(String(128))
@@ -199,6 +241,20 @@ class KtmCurationImportReceipt(Base, TimestampMixin):
             "idempotency_key",
             name="uq_ktm_curation_import_receipts_actor_key",
         ),
+        UniqueConstraint(
+            "receipt_id",
+            "source_curation_collection_id",
+            name="uq_ktm_curation_import_receipts_collection",
+        ),
+        ForeignKeyConstraint(
+            ["result_plan_id", "source_curation_collection_id"],
+            [
+                "app.curated_trip_plans.curated_plan_id",
+                "app.curated_trip_plans.source_curation_collection_id",
+            ],
+            name="fk_ktm_curation_import_receipts_result_source",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "request_fingerprint ~ '^[0-9a-f]{64}$'",
             name=conv("ck_ktm_curation_import_receipts_fingerprint"),
@@ -220,6 +276,9 @@ class KtmCurationImportReceipt(Base, TimestampMixin):
             "AND response_body IS NULL AND completed_at IS NULL) OR "
             "(status = 'completed' AND result_plan_id IS NOT NULL "
             "AND response_status IN (200, 201) AND jsonb_typeof(response_body) = 'object' "
+            "AND response_body ->> 'notice_plan_id' = result_plan_id::text "
+            "AND response_body ->> 'source_curation_collection_id' = "
+            "source_curation_collection_id::text "
             "AND completed_at IS NOT NULL)",
             name=conv("ck_ktm_curation_import_receipts_terminal"),
         ),
@@ -237,7 +296,11 @@ class KtmCurationImportReceipt(Base, TimestampMixin):
     )
     actor_admin_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),
-        ForeignKey("app.users.user_id", ondelete="RESTRICT"),
+        ForeignKey(
+            "app.users.user_id",
+            name="fk_ktm_curation_import_receipts_actor",
+            ondelete="RESTRICT",
+        ),
         nullable=False,
     )
     idempotency_key: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
@@ -258,8 +321,53 @@ class KtmCurationImportReceipt(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
     result_plan_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True),
-        ForeignKey("app.curated_trip_plans.curated_plan_id", ondelete="RESTRICT"),
     )
     response_status: Mapped[int | None] = mapped_column(Integer)
     response_body: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class KtmCurationImportReceiptItem(Base, TimestampMixin):
+    """한 import receipt가 검증한 exact Map item membership."""
+
+    __tablename__ = "ktm_curation_import_receipt_items"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["receipt_id", "source_curation_collection_id"],
+            [
+                "app.ktm_curation_import_receipts.receipt_id",
+                "app.ktm_curation_import_receipts.source_curation_collection_id",
+            ],
+            name="fk_ktm_curation_import_receipt_items_receipt",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "source_curation_item_revision > 0 AND "
+            "source_curation_item_etag ~ '^\"sha256:[0-9a-f]{64}\"$'",
+            name=conv("ck_ktm_curation_import_receipt_items_source"),
+        ),
+        UniqueConstraint(
+            "receipt_id",
+            "source_curation_collection_id",
+            "source_curation_item_id",
+            "source_curation_item_revision",
+            "source_curation_item_etag",
+            "feature_uuid",
+            name="uq_ktm_curation_import_receipt_items_proof",
+        ),
+    )
+
+    receipt_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        primary_key=True,
+    )
+    source_curation_collection_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), nullable=False
+    )
+    source_curation_item_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        primary_key=True,
+    )
+    source_curation_item_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    source_curation_item_etag: Mapped[str] = mapped_column(String(128), nullable=False)
+    feature_uuid: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)

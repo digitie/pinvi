@@ -12,8 +12,8 @@ from pydantic import BaseModel, Field, model_validator
 
 class NoticePlanBase(BaseModel):
     slug: str = Field(min_length=1, max_length=160, pattern=r"^[a-z0-9][a-z0-9-]*$")
-    title: str = Field(min_length=1, max_length=200)
-    category: str = Field(default="recommended", min_length=1, max_length=80)
+    title: str = Field(min_length=1, max_length=300)
+    category: str = Field(default="recommended", min_length=1, max_length=128)
     summary: str | None = None
     source_name: str | None = Field(default=None, max_length=200)
     destination: str | None = Field(default=None, max_length=120)
@@ -37,8 +37,8 @@ class NoticePlanCreate(NoticePlanBase):
 
 
 class NoticePlanUpdate(BaseModel):
-    title: str | None = Field(default=None, min_length=1, max_length=200)
-    category: str | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    category: str | None = Field(default=None, min_length=1, max_length=128)
     summary: str | None = None
     source_name: str | None = None
     destination: str | None = None

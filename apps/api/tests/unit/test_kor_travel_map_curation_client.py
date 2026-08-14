@@ -70,7 +70,13 @@ def _item(number: int) -> dict[str, Any]:
     }
 
 
-def _page(*, items: list[dict[str, Any]], cursor: str | None, etag_digit: str) -> dict[str, Any]:
+def _page(
+    *,
+    items: list[dict[str, Any]],
+    cursor: str | None,
+    etag_digit: str,
+    item_count: int = 2,
+) -> dict[str, Any]:
     return {
         "collection_id": str(COLLECTION_ID),
         "row_revision": "7",
@@ -82,7 +88,7 @@ def _page(*, items: list[dict[str, Any]], cursor: str | None, etag_digit: str) -
             "title": "서울 카페",
             "edition_key": "2026",
         },
-        "item_count": 2,
+        "item_count": item_count,
         "item_set_hash_version": "ktm-db-item-set-v1",
         "item_set_hash": "f" * 64,
         "items": items,
@@ -183,6 +189,62 @@ async def test_collection_snapshot_rejects_page_receipt_drift() -> None:
     await client.aclose()
 
 
+@pytest.mark.asyncio
+async def test_collection_snapshot_rejects_over_contract_item_count() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        payload = _page(
+            items=[],
+            cursor=None,
+            etag_digit="a",
+            item_count=2_001,
+        )
+        return httpx.Response(200, json=payload, headers={"ETag": f'"{payload["etag"]}"'})
+
+    client = _client(handler)
+    with pytest.raises(CurationSnapshotContractError, match="response shape"):
+        await client.get_collection_snapshot(COLLECTION_ID)
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_collection_snapshot_rejects_excessive_page_chain() -> None:
+    calls = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        payload = _page(
+            items=[_item(calls)],
+            cursor=f"cursor-{calls}",
+            etag_digit="a",
+            item_count=11,
+        )
+        return httpx.Response(200, json=payload, headers={"ETag": f'"{payload["etag"]}"'})
+
+    client = _client(handler)
+    with pytest.raises(CurationSnapshotContractError, match="page 수"):
+        await client.get_collection_snapshot(COLLECTION_ID)
+    await client.aclose()
+    assert calls == 10
+
+
+@pytest.mark.asyncio
+async def test_collection_snapshot_rejects_nonprogressing_page() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        payload = _page(
+            items=[],
+            cursor="cursor-empty",
+            etag_digit="a",
+            item_count=1,
+        )
+        return httpx.Response(200, json=payload, headers={"ETag": f'"{payload["etag"]}"'})
+
+    client = _client(handler)
+    with pytest.raises(CurationSnapshotContractError, match="진행하지"):
+        await client.get_collection_snapshot(COLLECTION_ID)
+    await client.aclose()
+
+
 def test_curation_snapshot_token_is_optional_but_strict_and_role_distinct() -> None:
     loaded = Settings(
         _env_file=None,
@@ -204,4 +266,3 @@ def test_curation_snapshot_token_is_optional_but_strict_and_role_distinct() -> N
             pinvi_kor_travel_map_curation_snapshot_token=TOKEN,
             pinvi_kor_travel_map_admin_proxy_secret=TOKEN,
         )
-

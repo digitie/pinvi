@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 _SERVICE_TOKEN_HEADER = "X-Kor-Travel-Map-Service-Token"  # noqa: S105
 _ETAG_RE = re.compile(r'^"(sha256:[0-9a-f]{64})"$')
 _POSTGRES_BIGINT_MAX = 9_223_372_036_854_775_807
+_COLLECTION_PAGE_SIZE = 200
+_COLLECTION_MAX_ITEMS = 2_000
+_COLLECTION_MAX_PAGES = _COLLECTION_MAX_ITEMS // _COLLECTION_PAGE_SIZE
 
 
 class CurationSnapshotError(Exception):
@@ -127,7 +130,7 @@ class CurationCollectionDetailSnapshotPage(_ClosedModel):
     etag: SnapshotEtag
     updated_at: datetime
     collection: CurationSnapshotCollection
-    item_count: int = Field(ge=0)
+    item_count: int = Field(ge=0, le=_COLLECTION_MAX_ITEMS)
     item_set_hash_version: Literal["ktm-db-item-set-v1"]
     item_set_hash: ItemSetHash
     items: list[CurationItemDetailSnapshot] = Field(max_length=200)
@@ -213,7 +216,7 @@ class CurationSnapshotServiceClient:
             if _ETAG_RE.fullmatch(if_none_match) is None:
                 raise ValueError("If-None-Match는 raw strong snapshot ETag여야 합니다.")
             headers["If-None-Match"] = if_none_match
-        params: dict[str, str | int] = {"page_size": 200}
+        params: dict[str, str | int] = {"page_size": _COLLECTION_PAGE_SIZE}
         if cursor is not None:
             params["cursor"] = cursor
 
@@ -271,8 +274,14 @@ class CurationSnapshotServiceClient:
         items: list[CurationItemDetailSnapshot] = []
         first_page: CurationCollectionDetailSnapshotPage | None = None
         source_etag = ""
+        page_count = 0
 
         while True:
+            page_count += 1
+            if page_count > _COLLECTION_MAX_PAGES:
+                raise CurationSnapshotContractError(
+                    "collection snapshot page 수가 2,000-item 계약을 초과합니다."
+                )
             response = await self._get(
                 collection_id=collection_id,
                 cursor=cursor,
@@ -280,7 +289,9 @@ class CurationSnapshotServiceClient:
             )
             if response.status_code == status.HTTP_304_NOT_MODIFIED:
                 if cursor is not None or if_none_match is None:
-                    raise CurationSnapshotContractError("304가 first conditional page 밖에서 왔습니다.")
+                    raise CurationSnapshotContractError(
+                        "304가 first conditional page 밖에서 왔습니다."
+                    )
                 response_etag, _ = _response_etag(response)
                 if response_etag != if_none_match:
                     raise CurationSnapshotContractError("304 ETag가 요청 validator와 다릅니다.")
@@ -313,9 +324,13 @@ class CurationSnapshotServiceClient:
                     "collection snapshot response shape가 contract와 다릅니다."
                 ) from exc
             if page.etag != body_etag:
-                raise CurationSnapshotContractError("collection snapshot ETag header/body가 다릅니다.")
+                raise CurationSnapshotContractError(
+                    "collection snapshot ETag header/body가 다릅니다."
+                )
             if page.collection_id != collection_id:
-                raise CurationSnapshotContractError("collection snapshot identity가 요청과 다릅니다.")
+                raise CurationSnapshotContractError(
+                    "collection snapshot identity가 요청과 다릅니다."
+                )
 
             if first_page is None:
                 first_page = page
@@ -328,17 +343,27 @@ class CurationSnapshotServiceClient:
                 or page.item_set_hash_version != first_page.item_set_hash_version
                 or page.item_set_hash != first_page.item_set_hash
             ):
-                raise CurationSnapshotContractError("collection snapshot page receipt가 바뀌었습니다.")
+                raise CurationSnapshotContractError(
+                    "collection snapshot page receipt가 바뀌었습니다."
+                )
 
             for item in page.items:
                 if item.curation_item_id in seen_items:
-                    raise CurationSnapshotContractError("collection snapshot item identity가 중복됐습니다.")
+                    raise CurationSnapshotContractError(
+                        "collection snapshot item identity가 중복됐습니다."
+                    )
                 seen_items.add(item.curation_item_id)
                 items.append(item)
+            if len(items) > page.item_count or len(items) > _COLLECTION_MAX_ITEMS:
+                raise CurationSnapshotContractError(
+                    "collection snapshot 누적 item 수가 receipt 상한을 초과합니다."
+                )
 
             if page.complete:
                 if len(items) != page.item_count:
-                    raise CurationSnapshotContractError("collection snapshot item_count가 실제 set과 다릅니다.")
+                    raise CurationSnapshotContractError(
+                        "collection snapshot item_count가 실제 set과 다릅니다."
+                    )
                 assert first_page is not None
                 return CurationCollectionFetchResult(
                     not_modified=False,
@@ -357,8 +382,14 @@ class CurationSnapshotServiceClient:
                 )
 
             next_cursor = page.next_cursor
+            if not page.items:
+                raise CurationSnapshotContractError(
+                    "collection snapshot continuation page가 진행하지 않습니다."
+                )
             if next_cursor is None or next_cursor in seen_cursors:
-                raise CurationSnapshotContractError("collection snapshot cursor가 없거나 반복됐습니다.")
+                raise CurationSnapshotContractError(
+                    "collection snapshot cursor가 없거나 반복됐습니다."
+                )
             seen_cursors.add(next_cursor)
             cursor = next_cursor
 

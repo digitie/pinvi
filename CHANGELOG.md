@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+- kor-travel-map canonical collection import의 2,000 item/10 page 소비자 상한을 검증하고,
+  PinVi plan/POI가 collection UUID와 immutable import receipt item proof에 결박되도록 DB 경계를
+  강화했다. 완료 receipt는 source collection·result plan·response identity·exact item count가 모두
+  일치해야 하며 직접 terminal INSERT나 완료 뒤 변경을 거부한다.
 - PinVi migration과 초기 admin 보장을 `pinvi-admin-bootstrap` one-shot으로 통합했다. API
   startup과 ordinary API/Web/Dagster runtime은 bootstrap password env나 credential mount를 받지 않으며,
   one-shot은 owner-only `0600` JSON credential file만 읽고 성공/실패 출력에서 raw email/password를
