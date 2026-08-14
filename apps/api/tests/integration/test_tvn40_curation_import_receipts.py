@@ -773,9 +773,7 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
             # 합성한다. 0057의 새 mapping receipt relation/function은 0053에는
             # 없었다. 0059 backfill receipt가 mapping relation을 FK로 참조하므로
             # 먼저 해당 후속 table을 제거한 뒤 실제 forward create 경로를 검증한다.
-            await connection.execute(
-                text("DROP TABLE app.ktm_curation_cutover_backfill_receipts")
-            )
+            await connection.execute(text("DROP TABLE app.ktm_curation_cutover_backfill_receipts"))
             await connection.execute(
                 text(
                     "DROP TABLE app.ktm_curation_cutover_mapping_receipt_items, "
