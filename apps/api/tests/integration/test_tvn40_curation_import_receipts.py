@@ -320,6 +320,22 @@ async def _assert_0053_catalog_contract(db: AsyncSession) -> None:
         "(source_curation_collection_id, created_at)"
         in indexes["ix_ktm_curation_import_receipts_collection_created"]
     )
+    guard_definition = await db.scalar(
+        text(
+            "SELECT pg_catalog.pg_get_functiondef(p.oid) "
+            "FROM pg_catalog.pg_proc AS p "
+            "JOIN pg_catalog.pg_namespace AS n ON n.oid = p.pronamespace "
+            "WHERE n.nspname = 'app' "
+            "AND p.proname = 'guard_ktm_curation_import_receipt'"
+        )
+    )
+    assert guard_definition is not None
+    normalized_guard = " ".join(guard_definition.split())
+    assert (
+        "FROM app.curated_plan_pois AS poi WHERE poi.curated_plan_id = "
+        "NEW.result_plan_id AND poi.source_curation_item_id IS NOT NULL "
+        "ORDER BY poi.curated_poi_id FOR UPDATE"
+    ) in normalized_guard
 
 
 async def test_tvn40_curation_receipt_catalog_is_exact_and_detects_semantic_drift(
@@ -446,6 +462,15 @@ async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
                         ),
                     },
                 )
+                manual_poi_id = await connection.scalar(
+                    text(
+                        "INSERT INTO app.curated_plan_pois ("
+                        "curated_plan_id, sort_order, feature_uuid, feature_snapshot) "
+                        "VALUES (:plan_id, 'manual', :feature_uuid, '{}'::jsonb) "
+                        "RETURNING curated_poi_id"
+                    ),
+                    {"plan_id": plan_id, "feature_uuid": uuid.uuid4()},
+                )
         finally:
             await engine.dispose()
 
@@ -483,6 +508,17 @@ async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
                     )
                     == 1
                 )
+                assert (
+                    await connection.scalar(
+                        text(
+                            "SELECT count(*) FROM app.curated_plan_pois "
+                            "WHERE curated_poi_id = :poi_id "
+                            "AND source_curation_item_id IS NULL"
+                        ),
+                        {"poi_id": manual_poi_id},
+                    )
+                    == 1
+                )
                 trigger_definition = await connection.scalar(
                     text(
                         "SELECT pg_catalog.pg_get_triggerdef(oid, true) "
@@ -498,7 +534,9 @@ async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
                 )
                 assert orm_plan is not None
                 assert orm_plan.source_curation_collection_id == _COLLECTION_ID
-                assert (await db.scalars(select(CuratedPlanPoi))).all() == []
+                orm_pois = (await db.scalars(select(CuratedPlanPoi))).all()
+                assert [poi.curated_poi_id for poi in orm_pois] == [manual_poi_id]
+                assert orm_pois[0].source_curation_item_id is None
         finally:
             await engine.dispose()
     finally:
@@ -518,6 +556,115 @@ async def _seed_admin(session_factory) -> uuid.UUID:  # type: ignore[no-untyped-
         db.add(admin)
         await db.commit()
         return admin.user_id
+
+
+async def _seed_receipt_with_deleted_canonical_poi(
+    session_factory,
+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:  # type: ignore[no-untyped-def]
+    """active 1건과 soft-deleted canonical POI 1건을 가진 pending receipt를 만든다."""
+
+    admin_id = await _seed_admin(session_factory)
+    collection_id = uuid.uuid4()
+    receipt_id = uuid.uuid4()
+    supporting_receipt_id = uuid.uuid4()
+    plan_id = uuid.uuid4()
+    deleted_poi_id = uuid.uuid4()
+    active_item_id = uuid.uuid4()
+    deleted_item_id = uuid.uuid4()
+    async with session_factory() as db:
+        db.add(
+            CuratedTripPlan(
+                curated_plan_id=plan_id,
+                slug=f"receipt-deleted-lock-{plan_id}",
+                title="삭제 POI 락",
+                category="recommended",
+                source_system="kor-travel-map",
+                source_curation_collection_id=collection_id,
+                source_curation_collection_revision=1,
+                source_curation_collection_etag=_ETAG,
+                source_curation_item_set_hash_version="ktm-db-item-set-v1",
+                source_curation_item_set_hash=_ITEM_SET_HASH,
+                source_curation_item_count=1,
+                created_by_admin_id=admin_id,
+                updated_by_admin_id=admin_id,
+            )
+        )
+        for current_receipt_id, current_key in (
+            (receipt_id, uuid.uuid4()),
+            (supporting_receipt_id, uuid.uuid4()),
+        ):
+            db.add(
+                KtmCurationImportReceipt(
+                    receipt_id=current_receipt_id,
+                    actor_admin_id=admin_id,
+                    idempotency_key=current_key,
+                    request_fingerprint=_FINGERPRINT,
+                    source_curation_collection_id=collection_id,
+                    source_curation_collection_revision=1,
+                    source_curation_collection_etag=_ETAG,
+                    source_curation_item_set_hash_version="ktm-db-item-set-v1",
+                    source_curation_item_set_hash=_ITEM_SET_HASH,
+                    source_curation_item_count=1,
+                    mode="refresh",
+                    requested_is_published=False,
+                )
+            )
+        await db.flush()
+        active_feature_id = uuid.uuid4()
+        deleted_feature_id = uuid.uuid4()
+        db.add_all(
+            [
+                KtmCurationImportReceiptItem(
+                    receipt_id=receipt_id,
+                    source_curation_collection_id=collection_id,
+                    source_curation_item_id=active_item_id,
+                    source_curation_item_revision=1,
+                    source_curation_item_etag=_ETAG,
+                    feature_uuid=active_feature_id,
+                ),
+                KtmCurationImportReceiptItem(
+                    receipt_id=supporting_receipt_id,
+                    source_curation_collection_id=collection_id,
+                    source_curation_item_id=deleted_item_id,
+                    source_curation_item_revision=1,
+                    source_curation_item_etag=_ETAG,
+                    feature_uuid=deleted_feature_id,
+                ),
+            ]
+        )
+        await db.flush()
+        db.add_all(
+            [
+                CuratedPlanPoi(
+                    curated_plan_id=plan_id,
+                    day_index=1,
+                    sort_order="a",
+                    feature_uuid=active_feature_id,
+                    feature_snapshot={},
+                    source_curation_import_receipt_id=receipt_id,
+                    source_curation_collection_id=collection_id,
+                    source_curation_item_id=active_item_id,
+                    source_curation_item_revision=1,
+                    source_curation_item_etag=_ETAG,
+                ),
+                CuratedPlanPoi(
+                    curated_poi_id=deleted_poi_id,
+                    curated_plan_id=plan_id,
+                    day_index=1,
+                    sort_order="b",
+                    feature_uuid=deleted_feature_id,
+                    feature_snapshot={},
+                    source_curation_import_receipt_id=supporting_receipt_id,
+                    source_curation_collection_id=collection_id,
+                    source_curation_item_id=deleted_item_id,
+                    source_curation_item_revision=1,
+                    source_curation_item_etag=_ETAG,
+                    deleted_at=datetime.now(UTC),
+                ),
+            ]
+        )
+        await db.commit()
+    return receipt_id, plan_id, deleted_poi_id
 
 
 async def test_canonical_provenance_and_receipt_are_constrained_and_append_only(
@@ -894,6 +1041,107 @@ async def test_receipt_completion_serializes_member_insert(
             )
             == 1
         )
+
+
+async def test_receipt_completion_serializes_deleted_canonical_poi_reactivation(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    """soft-deleted canonical POI도 terminal exact-set lock에 포함한다."""
+
+    receipt_id, plan_id, deleted_poi_id = await _seed_receipt_with_deleted_canonical_poi(
+        session_factory
+    )
+    writer_started = asyncio.Event()
+
+    async def _reactivate_deleted_poi() -> str:
+        async with session_factory() as db:
+            writer_started.set()
+            await db.execute(
+                text(
+                    "UPDATE app.curated_plan_pois SET deleted_at = NULL "
+                    "WHERE curated_poi_id = :poi_id"
+                ),
+                {"poi_id": deleted_poi_id},
+            )
+            await db.commit()
+        return "updated"
+
+    # Completer가 먼저 exact set을 seal하면 undelete는 commit까지 기다린다.
+    async with session_factory() as completing:
+        receipt = await completing.get(KtmCurationImportReceipt, receipt_id)
+        assert receipt is not None
+        receipt.status = "completed"
+        receipt.result_plan_id = plan_id
+        receipt.response_status = 200
+        receipt.response_body = {
+            "notice_plan_id": str(plan_id),
+            "source_curation_collection_id": str(receipt.source_curation_collection_id),
+        }
+        receipt.completed_at = datetime.now(UTC)
+        await completing.flush()
+
+        writer = asyncio.create_task(_reactivate_deleted_poi())
+        await writer_started.wait()
+        await asyncio.sleep(0.1)
+        assert not writer.done()
+        await completing.commit()
+    assert await asyncio.wait_for(writer, timeout=5) == "updated"
+
+    # Writer-first interleaving은 completion이 기다린 뒤 변경된 active set을 다시 읽어
+    # pending receipt를 terminal로 만들지 않는다.
+    second_receipt_id, second_plan_id, second_deleted_poi_id = (
+        await _seed_receipt_with_deleted_canonical_poi(session_factory)
+    )
+    writer_holds_row = asyncio.Event()
+    release_writer = asyncio.Event()
+
+    async def _reactivate_and_hold() -> None:
+        async with session_factory() as db:
+            await db.execute(
+                text(
+                    "UPDATE app.curated_plan_pois SET deleted_at = NULL "
+                    "WHERE curated_poi_id = :poi_id"
+                ),
+                {"poi_id": second_deleted_poi_id},
+            )
+            writer_holds_row.set()
+            await release_writer.wait()
+            await db.commit()
+
+    async def _complete_after_writer() -> str:
+        async with session_factory() as db:
+            receipt = await db.get(KtmCurationImportReceipt, second_receipt_id)
+            assert receipt is not None
+            receipt.status = "completed"
+            receipt.result_plan_id = second_plan_id
+            receipt.response_status = 200
+            receipt.response_body = {
+                "notice_plan_id": str(second_plan_id),
+                "source_curation_collection_id": str(
+                    receipt.source_curation_collection_id
+                ),
+            }
+            receipt.completed_at = datetime.now(UTC)
+            try:
+                await db.commit()
+            except DBAPIError as exc:
+                await db.rollback()
+                return str(exc)
+        return "unexpected success"
+
+    holding_writer = asyncio.create_task(_reactivate_and_hold())
+    await writer_holds_row.wait()
+    completion = asyncio.create_task(_complete_after_writer())
+    await asyncio.sleep(0.1)
+    assert not completion.done()
+    release_writer.set()
+    await asyncio.wait_for(holding_writer, timeout=5)
+    error = await asyncio.wait_for(completion, timeout=5)
+    assert "POI set does not match" in error
+    async with session_factory() as db:
+        second_receipt = await db.get(KtmCurationImportReceipt, second_receipt_id)
+        assert second_receipt is not None
+        assert second_receipt.status == "pending"
 
 
 async def test_partial_or_duplicate_canonical_provenance_is_rejected(

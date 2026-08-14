@@ -22,8 +22,8 @@ _SNAPSHOT = (
 _SERVICE_PROVENANCE = (
     Path(__file__).resolve().parents[4] / "contracts" / "kor-travel-map-service-provenance-v1.json"
 )
-_MAP_RELEASE_REVISION = "98489eb4e81fc736c4bb6d16deec0d2033d2e990"
-_SNAPSHOT_SHA256 = "b3211235a0a1fcd16c67772aa651a23e4ccbc66c8b82e618815ee7137267f268"
+_MAP_RELEASE_REVISION = "6c0f110ab4b9c04e9acb6c66c2b7afb3e32291b9"
+_SNAPSHOT_SHA256 = "e71e7b1112f98857a6deefe20a1ca48c689cb04647f2e9dc71664fdb69634a7b"
 
 _GENERATION7_ROLE_SCOPES = {
     "command": {"cache-target:command"},
@@ -224,6 +224,16 @@ def test_curation_snapshot_generation1_service_contract_is_exact() -> None:
     assert collection["properties"]["etag"]["pattern"] == r"^sha256:[0-9a-f]{64}$"
     assert collection["properties"]["item_set_hash"]["pattern"] == r"^[0-9a-f]{64}$"
     assert collection["properties"]["items"]["maxItems"] == 200
+    collection_metadata = spec["components"]["schemas"]["CurationSnapshotCollection"][
+        "properties"
+    ]
+    assert collection_metadata["theme_slug"]["minLength"] == 1
+    assert collection_metadata["theme_slug"]["maxLength"] == 128
+    assert collection_metadata["theme_name"]["minLength"] == 1
+    assert collection_metadata["theme_name"]["maxLength"] == 200
+    assert collection_metadata["title"]["minLength"] == 1
+    assert collection_metadata["title"]["maxLength"] == 300
+    assert collection_metadata["edition_key"]["maxLength"] == 100
 
 
 def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:

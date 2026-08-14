@@ -1,5 +1,18 @@
 # resume.md
 
+## 2026-08-14 (codex) — T-VN-40 paired 문자열·receipt 경합 폐쇄
+
+Map `6c0f110ab4b9c04e9acb6c66c2b7afb3e32291b9`의 service OpenAPI를 byte-exact로
+재vendor하고 snapshot client에 `theme_slug 128`, `theme_name 200`, `title 300`,
+`edition_key 100`을 동일하게 강제했다. 초과 값은 저장 단계에서 자르지 않고 transport validation에서
+거부한다. 0052 preflight는 completed receipt의 canonical POI만 검사해 기존 수동 POI를 보존하며,
+0053 terminal seal은 soft-deleted canonical POI까지 잠가 undelete가 검증과 commit 사이에 끼어들지
+못하게 한다. dataful 0051→0053 수동 POI 보존과 양방향 2-session undelete 경합을 실제 PostgreSQL에서
+검증했다.
+
+**다음 한 작업**: canonical collection importer의 plan/POI·receipt·admin audit 단일 transaction과
+actor-scoped Idempotency-Key replay/409/304 local tuple 재검증을 구현한다.
+
 ## 2026-08-14 (codex) — T-VN-40 receipt terminal set 원자 봉인
 
 배포 가능한 `0052`는 byte 불변으로 고정하고 forward-only `20260814_0053`을 추가했다. receipt

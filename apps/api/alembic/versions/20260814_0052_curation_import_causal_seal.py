@@ -338,7 +338,8 @@ def upgrade() -> None:
             "IS DISTINCT FROM receipt.source_curation_collection_id::text "
             "OR EXISTS (SELECT 1 FROM app.curated_plan_pois AS poi "
             "WHERE poi.curated_plan_id = receipt.result_plan_id "
-            "AND poi.deleted_at IS NULL))) THEN "
+            "AND poi.deleted_at IS NULL "
+            "AND poi.source_curation_item_id IS NOT NULL))) THEN "
             "RAISE EXCEPTION '0052 existing completed receipt proof is inconsistent' "
             "USING ERRCODE = '23514'; END IF; END $$"
         )

@@ -2,6 +2,16 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-14 (codex) — T-VN-40 paired snapshot 경계와 terminal seal 재검증
+
+- Map `6c0f110a`의 service spec을 exact vendor하고 collection metadata 128/200/300/100 상한을
+  PinVi typed client와 contract test에 mirror했다.
+- 미배포 0052 preflight의 active POI 판정을 canonical provenance 행으로 한정해 0051의 수동 PO이가
+  0053 upgrade를 막지 않게 했고 byte pin을 재고정했다.
+- 0053 completion은 result plan의 active/deleted canonical POI를 모두 고정 순서로 잠근 뒤 active set만
+  proof와 비교한다. completer-first undelete 차단과 writer-first undelete 후 terminal 거부를 두 세션
+  PostgreSQL 회귀로 고정했다.
+
 ## 2026-08-14 (codex) — T-VN-40 receipt terminal lock·304 no-op proof
 
 - `20260814_0053`에서 receipt item INSERT가 parent receipt를 `FOR UPDATE`로 잠그게 해 completion 뒤

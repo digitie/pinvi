@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from app.clients.kor_travel_map_curation import (
     CurationCollectionFetchResult,
+    CurationSnapshotCollection,
     CurationSnapshotContractError,
     CurationSnapshotServiceClient,
 )
@@ -95,6 +96,42 @@ def _page(
         "next_cursor": cursor,
         "complete": cursor is None,
     }
+
+
+def test_collection_metadata_accepts_map_contract_boundaries() -> None:
+    collection = CurationSnapshotCollection(
+        theme_slug="s" * 128,
+        theme_name="n" * 200,
+        title="t" * 300,
+        edition_key="e" * 100,
+    )
+    assert len(collection.theme_slug) == 128
+    assert len(collection.theme_name) == 200
+    assert len(collection.title) == 300
+    assert len(collection.edition_key) == 100
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"theme_slug": "s" * 129},
+        {"theme_name": "n" * 201},
+        {"title": "t" * 301},
+        {"edition_key": "e" * 101},
+    ],
+)
+def test_collection_metadata_rejects_values_beyond_map_contract(
+    override: dict[str, str],
+) -> None:
+    payload = {
+        "theme_slug": "s" * 128,
+        "theme_name": "n" * 200,
+        "title": "t" * 300,
+        "edition_key": "e" * 100,
+        **override,
+    }
+    with pytest.raises(ValidationError):
+        CurationSnapshotCollection.model_validate(payload)
 
 
 @pytest.mark.asyncio

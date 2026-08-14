@@ -113,7 +113,6 @@ BEGIN
     PERFORM 1
       FROM app.curated_plan_pois AS poi
      WHERE poi.curated_plan_id = NEW.result_plan_id
-       AND poi.deleted_at IS NULL
        AND poi.source_curation_item_id IS NOT NULL
      ORDER BY poi.curated_poi_id
      FOR UPDATE;

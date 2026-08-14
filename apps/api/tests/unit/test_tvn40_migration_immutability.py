@@ -14,7 +14,10 @@ _PINNED_MIGRATION_SHA256 = {
         "d36f5f4a0c6133b4d2e2554fa5a26d176614a51f05b415e94c3015f779dd21c9"
     ),
     "20260814_0052_curation_import_causal_seal.py": (
-        "b957ee19805c5b4560ea0dabe8a72b68f01a7a6fe31721828607c266a092a49e"
+        "47fe6ec05e1c239372cfd7c9b725ff748ed86f28bff41d0ad3248e675a8da198"
+    ),
+    "20260814_0053_curation_import_receipt_lock.py": (
+        "4f970fb4bb7e650c10eb99c2effdb144482e4e4f6690ef8cc3f72904df025cb2"
     ),
 }
 

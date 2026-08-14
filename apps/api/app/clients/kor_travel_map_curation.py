@@ -64,10 +64,10 @@ class _ClosedModel(BaseModel):
 
 
 class CurationSnapshotCollection(_ClosedModel):
-    theme_slug: str
-    theme_name: str
-    title: str
-    edition_key: str
+    theme_slug: Annotated[str, Field(min_length=1, max_length=128)]
+    theme_name: Annotated[str, Field(min_length=1, max_length=200)]
+    title: Annotated[str, Field(min_length=1, max_length=300)]
+    edition_key: Annotated[str, Field(max_length=100)]
 
 
 class CurationSnapshotItem(_ClosedModel):
