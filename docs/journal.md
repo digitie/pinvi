@@ -2,6 +2,20 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-14 (codex) — T-VN-40C sealed legacy plan canonical backfill service
+
+- `apply_curation_cutover_backfill()`은 remote full snapshot을 받은 뒤 새
+  `SERIALIZABLE` transaction에서 legacy provenance preflight와 sealed mapping member를 다시
+  잠그고 대조한다. Map collection UUID가 mapping과 다르거나 plan identity·중복 canonical plan·기존
+  actor/key receipt가 다르면 mutation 전에 fail-close한다.
+- 같은 actor/key·collection advisory fence와 legacy plan fence를 잡은 뒤, 기존 active legacy
+  source POI만 soft-delete하고 provenance가 모두 `NULL`인 manual POI는 유지한다. 이어 canonical
+  snapshot으로 generic `cutover-backfill` import receipt와 canonical POI proof를 만들며, 별도
+  backfill receipt까지 같은 transaction에서 terminal seal한다.
+- 실제 PostgreSQL integration은 exact mapping 전환, source POI 제거·manual POI 보존,
+  generic/backfill receipt 결박, same-key replay와 sealed mapping 밖 snapshot의 전체 rollback을
+  검증했다.
+
 ## 2026-08-14 (codex) — T-VN-40C typed canonical backfill receipt 경계
 
 - `20260814_0059`은 canonical generic import receipt에 `cutover-backfill` mode를 추가하고,

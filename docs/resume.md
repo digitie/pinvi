@@ -1,5 +1,20 @@
 # resume.md
 
+## 2026-08-14 (codex) — T-VN-40C sealed legacy plan canonical backfill service
+
+`apply_curation_cutover_backfill()`은 remote complete collection snapshot을 받은 다음 새
+`SERIALIZABLE` transaction에서 sealed legacy provenance preflight를 다시 실행한다. actor/key와
+canonical collection·기존 legacy plan을 advisory/row lock으로 닫고, mapping member와 snapshot
+collection UUID를 exact 대조한다. active legacy source POI만 soft-delete한 뒤 manual POI는 보존하고,
+generic `cutover-backfill` receipt 및 canonical POI proof와 전용 backfill receipt를 같은 transaction에서
+완료시킨다. 재호출은 terminal receipt의 exact generic response만 replay하며, mapping 밖 snapshot이나
+중복 canonical plan은 mutation 전에 fail-close한다.
+
+**다음 한 작업**: 이 service를 admin maintenance endpoint로 노출한다. endpoint는 remote fetch 전
+terminal idempotency replay를 판정하고, 새 command에서는 snapshot fetch 뒤 transaction 첫 SQL로
+`SERIALIZABLE`을 설정해 backfill·admin audit을 원자 commit해야 한다. 새 backfill response/OpenAPI와
+HTTP `201→200` replay·`404/409/413/502/503` 오류를 고정한 뒤 legacy importer 제거 단계로 진행한다.
+
 ## 2026-08-14 (codex) — T-VN-40C typed backfill receipt boundary
 
 `20260814_0059`은 generic canonical import receipt의 mode에 `cutover-backfill`을 명시적으로
