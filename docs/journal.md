@@ -7,12 +7,15 @@
 - Map `98489eb4e81fc736c4bb6d16deec0d2033d2e990`의 service OpenAPI를 exact bytes로
   재vendor했다. client는 `item_count <= 2000`, 최대 10 page, 누적 count와 cursor 진행성을 검증해
   over-cap/무한 pagination 응답을 거부한다.
-- `20260814_0051`의 import receipt에 immutable item proof relation을 추가했다. canonical POI는
+- 배포 가능한 `0050/0051` migration을 원문 SHA-256으로 복원·고정하고, 새 forward-only
+  `20260814_0052`에 immutable item proof relation과 INSERT guard를 추가했다. canonical POI는
   canonical collection parent와 동일 receipt item에 composite FK로 결박되고, receipt terminal 전이는
-  exact item count와 result plan/source tuple/response identity가 모두 맞아야 한다. 완료행 직접 INSERT와
-  terminal UPDATE/DELETE/TRUNCATE도 trigger가 거부한다.
-- Map producer의 최대 길이에 맞춰 plan title/category를 300/128로 확장했다. 실제 PostgreSQL에서
-  0051→0050→0051 왕복, catalog semantic mutation 검출, restore/curation receipt 음성 경계를 포함한
+  exact item count와 result plan/source tuple/revision/ETag/hash/response identity 및 실제 active POI
+  set이 모두 맞아야 한다. 완료행 직접 INSERT와 terminal UPDATE/DELETE/TRUNCATE도 trigger가 거부한다.
+- plan title/category를 기존 200/80에서 300/128로 확장했다. Map producer의 무제한 TEXT와의 최종
+  paired 길이 계약은 importer 전 별도 gate로 닫는다. 실제 PostgreSQL에서
+  구 c614 bytes의 dataful 0051→0052 upgrade와 ORM 조회, catalog semantic mutation 검출,
+  restore/curation receipt 음성 경계를 포함한
   통합 10건과 service client/contract 단위 14건, 변경 Python ruff/mypy를 통과했다.
 
 ## 2026-08-14 (codex) — T-VN-40 canonical curation provenance/receipt expand

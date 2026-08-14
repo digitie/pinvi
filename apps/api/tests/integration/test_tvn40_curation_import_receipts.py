@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import uuid
@@ -9,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
@@ -47,7 +48,7 @@ def _alembic(database_url: str, *args: str) -> None:
         raise RuntimeError(f"alembic {' '.join(args)} 실패:\n{result.stdout}\n{result.stderr}")
 
 
-async def _assert_0051_catalog_contract(db: AsyncSession) -> None:
+async def _assert_0052_catalog_contract(db: AsyncSession) -> None:
     assert CuratedTripPlan.__table__.c.title.type.length == 300
     assert CuratedTripPlan.__table__.c.category.type.length == 128
     assert {
@@ -287,7 +288,7 @@ async def _assert_0051_catalog_contract(db: AsyncSession) -> None:
         )
     )
     assert boundary_definition is not None
-    assert "schema_revision = '20260814_0051'::text" in boundary_definition
+    assert "schema_revision = '20260814_0052'::text" in boundary_definition
 
     indexes = dict(
         (
@@ -324,7 +325,7 @@ async def test_tvn40_curation_receipt_catalog_is_exact_and_detects_semantic_drif
     session_factory,
 ) -> None:  # type: ignore[no-untyped-def]
     async with session_factory() as db:
-        await _assert_0051_catalog_contract(db)
+        await _assert_0052_catalog_contract(db)
         await db.execute(
             text(
                 "ALTER TABLE app.curated_trip_plans "
@@ -338,21 +339,27 @@ async def test_tvn40_curation_receipt_catalog_is_exact_and_detects_semantic_drif
             )
         )
         with pytest.raises(AssertionError):
-            await _assert_0051_catalog_contract(db)
+            await _assert_0052_catalog_contract(db)
         await db.rollback()
 
 
-async def test_0051_schema_round_trips_to_0050(
+async def test_existing_0051_schema_and_data_upgrade_forward_to_0052(
     _database_url: str,
 ) -> None:
-    _alembic(_database_url, "downgrade", "20260811_0050")
+    _alembic(_database_url, "downgrade", "20260814_0051")
     try:
         engine = create_async_engine(_database_url, poolclass=NullPool)
         try:
-            async with engine.connect() as connection:
+            async with engine.begin() as connection:
                 assert (
                     await connection.scalar(
                         text("SELECT to_regclass('app.ktm_curation_import_receipts')")
+                    )
+                    == "app.ktm_curation_import_receipts"
+                )
+                assert (
+                    await connection.scalar(
+                        text("SELECT to_regclass('app.ktm_curation_import_receipt_items')")
                     )
                     is None
                 )
@@ -370,18 +377,86 @@ async def test_0051_schema_round_trips_to_0050(
                     ).all()
                 )
                 assert widths == {"category": 80, "title": 200}
+                poi_causal_column_count = await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM information_schema.columns "
+                        "WHERE table_schema = 'app' AND table_name = 'curated_plan_pois' "
+                        "AND column_name IN ('source_curation_import_receipt_id', "
+                        "'source_curation_collection_id')"
+                    )
+                )
+                assert poi_causal_column_count == 0
+                actor_id = uuid.uuid4()
+                plan_id = uuid.uuid4()
+                receipt_id = uuid.uuid4()
+                await connection.execute(
+                    text("INSERT INTO app.users (user_id, email) VALUES (:actor_id, :email)"),
+                    {"actor_id": actor_id, "email": f"old-0051-{actor_id}@pinvi.test"},
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO app.curated_trip_plans ("
+                        "curated_plan_id, slug, title, category, source_system, "
+                        "source_curation_collection_id, source_curation_collection_revision, "
+                        "source_curation_collection_etag, source_curation_item_set_hash_version, "
+                        "source_curation_item_set_hash, source_curation_item_count, "
+                        "created_by_admin_id, updated_by_admin_id) VALUES ("
+                        ":plan_id, :slug, '구 0051 정본', 'recommended', 'kor-travel-map', "
+                        ":collection_id, 1, :etag, 'ktm-db-item-set-v1', :item_hash, 0, "
+                        ":actor_id, :actor_id)"
+                    ),
+                    {
+                        "plan_id": plan_id,
+                        "slug": f"old-0051-{plan_id}",
+                        "collection_id": _COLLECTION_ID,
+                        "etag": _ETAG,
+                        "item_hash": _ITEM_SET_HASH,
+                        "actor_id": actor_id,
+                    },
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO app.ktm_curation_import_receipts ("
+                        "receipt_id, actor_admin_id, idempotency_key, request_fingerprint, "
+                        "source_curation_collection_id, source_curation_collection_revision, "
+                        "source_curation_collection_etag, source_curation_item_set_hash_version, "
+                        "source_curation_item_set_hash, source_curation_item_count, mode, "
+                        "requested_is_published, status, result_plan_id, response_status, "
+                        "response_body, completed_at) VALUES ("
+                        ":receipt_id, :actor_id, :idempotency_key, :fingerprint, "
+                        ":collection_id, 1, :etag, 'ktm-db-item-set-v1', :item_hash, 0, "
+                        "'create', false, 'completed', :plan_id, 201, "
+                        "CAST(:response_body AS jsonb), now())"
+                    ),
+                    {
+                        "receipt_id": receipt_id,
+                        "actor_id": actor_id,
+                        "idempotency_key": uuid.uuid4(),
+                        "fingerprint": _FINGERPRINT,
+                        "collection_id": _COLLECTION_ID,
+                        "etag": _ETAG,
+                        "item_hash": _ITEM_SET_HASH,
+                        "plan_id": plan_id,
+                        "response_body": json.dumps(
+                            {
+                                "notice_plan_id": str(plan_id),
+                                "source_curation_collection_id": str(_COLLECTION_ID),
+                            }
+                        ),
+                    },
+                )
         finally:
             await engine.dispose()
 
-        _alembic(_database_url, "upgrade", "20260814_0051")
+        _alembic(_database_url, "upgrade", "20260814_0052")
         engine = create_async_engine(_database_url, poolclass=NullPool)
         try:
-            async with engine.connect() as connection:
+            async with engine.begin() as connection:
                 assert (
                     await connection.scalar(
-                        text("SELECT to_regclass('app.ktm_curation_import_receipts')")
+                        text("SELECT to_regclass('app.ktm_curation_import_receipt_items')")
                     )
-                    == "app.ktm_curation_import_receipts"
+                    == "app.ktm_curation_import_receipt_items"
                 )
                 widths = dict(
                     (
@@ -397,6 +472,32 @@ async def test_0051_schema_round_trips_to_0050(
                     ).all()
                 )
                 assert widths == {"category": 128, "title": 300}
+                assert (
+                    await connection.scalar(
+                        text(
+                            "SELECT count(*) FROM app.ktm_curation_import_receipts "
+                            "WHERE receipt_id = :receipt_id AND status = 'completed'"
+                        ),
+                        {"receipt_id": receipt_id},
+                    )
+                    == 1
+                )
+                trigger_definition = await connection.scalar(
+                    text(
+                        "SELECT pg_catalog.pg_get_triggerdef(oid, true) "
+                        "FROM pg_catalog.pg_trigger "
+                        "WHERE tgname = 'trg_ktm_curation_import_receipt_row_guard'"
+                    )
+                )
+                assert trigger_definition is not None
+                assert "BEFORE INSERT OR DELETE OR UPDATE" in trigger_definition
+            async with AsyncSession(engine) as db:
+                orm_plan = await db.scalar(
+                    select(CuratedTripPlan).where(CuratedTripPlan.curated_plan_id == plan_id)
+                )
+                assert orm_plan is not None
+                assert orm_plan.source_curation_collection_id == _COLLECTION_ID
+                assert (await db.scalars(select(CuratedPlanPoi))).all() == []
         finally:
             await engine.dispose()
     finally:
@@ -656,6 +757,50 @@ async def test_terminal_receipt_is_bound_to_source_plan_body_and_item_set(
 
     async with session_factory() as db:
         plan = CuratedTripPlan(
+            slug="canonical-plan-for-tuple-mismatch",
+            title="정본 tuple 불일치 plan",
+            category="recommended",
+            source_system="kor-travel-map",
+            source_curation_collection_id=_COLLECTION_ID,
+            source_curation_collection_revision=1,
+            source_curation_collection_etag=_ETAG,
+            source_curation_item_set_hash_version="ktm-db-item-set-v1",
+            source_curation_item_set_hash=_ITEM_SET_HASH,
+            source_curation_item_count=0,
+            created_by_admin_id=admin_id,
+            updated_by_admin_id=admin_id,
+        )
+        db.add(plan)
+        await db.flush()
+        receipt = KtmCurationImportReceipt(
+            actor_admin_id=admin_id,
+            idempotency_key=uuid.uuid4(),
+            request_fingerprint=_FINGERPRINT,
+            source_curation_collection_id=_COLLECTION_ID,
+            source_curation_collection_revision=2,
+            source_curation_collection_etag='"sha256:' + ("d" * 64) + '"',
+            source_curation_item_set_hash_version="ktm-db-item-set-v1",
+            source_curation_item_set_hash="e" * 64,
+            source_curation_item_count=0,
+            mode="refresh",
+            requested_is_published=False,
+        )
+        db.add(receipt)
+        await db.flush()
+        receipt.status = "completed"
+        receipt.result_plan_id = plan.curated_plan_id
+        receipt.response_status = 200
+        receipt.response_body = {
+            "notice_plan_id": str(plan.curated_plan_id),
+            "source_curation_collection_id": str(_COLLECTION_ID),
+        }
+        receipt.completed_at = datetime.now(UTC)
+        with pytest.raises(DBAPIError, match="result plan proof does not match"):
+            await db.commit()
+        await db.rollback()
+
+    async with session_factory() as db:
+        plan = CuratedTripPlan(
             slug="canonical-plan-for-receipt",
             title="정본 plan",
             category="recommended",
@@ -695,6 +840,61 @@ async def test_terminal_receipt_is_bound_to_source_plan_body_and_item_set(
         }
         receipt.completed_at = datetime.now(UTC)
         with pytest.raises(DBAPIError, match="item set is incomplete"):
+            await db.commit()
+        await db.rollback()
+
+    async with session_factory() as db:
+        plan = CuratedTripPlan(
+            slug="canonical-plan-for-missing-poi",
+            title="POI 누락 plan",
+            category="recommended",
+            source_system="kor-travel-map",
+            source_curation_collection_id=_COLLECTION_ID,
+            source_curation_collection_revision=1,
+            source_curation_collection_etag=_ETAG,
+            source_curation_item_set_hash_version="ktm-db-item-set-v1",
+            source_curation_item_set_hash=_ITEM_SET_HASH,
+            source_curation_item_count=1,
+            created_by_admin_id=admin_id,
+            updated_by_admin_id=admin_id,
+        )
+        db.add(plan)
+        await db.flush()
+        receipt = KtmCurationImportReceipt(
+            actor_admin_id=admin_id,
+            idempotency_key=uuid.uuid4(),
+            request_fingerprint=_FINGERPRINT,
+            source_curation_collection_id=_COLLECTION_ID,
+            source_curation_collection_revision=1,
+            source_curation_collection_etag=_ETAG,
+            source_curation_item_set_hash_version="ktm-db-item-set-v1",
+            source_curation_item_set_hash=_ITEM_SET_HASH,
+            source_curation_item_count=1,
+            mode="create",
+            requested_is_published=False,
+        )
+        db.add(receipt)
+        await db.flush()
+        db.add(
+            KtmCurationImportReceiptItem(
+                receipt_id=receipt.receipt_id,
+                source_curation_collection_id=_COLLECTION_ID,
+                source_curation_item_id=_ITEM_ID,
+                source_curation_item_revision=1,
+                source_curation_item_etag=_ETAG,
+                feature_uuid=uuid.uuid4(),
+            )
+        )
+        await db.flush()
+        receipt.status = "completed"
+        receipt.result_plan_id = plan.curated_plan_id
+        receipt.response_status = 201
+        receipt.response_body = {
+            "notice_plan_id": str(plan.curated_plan_id),
+            "source_curation_collection_id": str(_COLLECTION_ID),
+        }
+        receipt.completed_at = datetime.now(UTC)
+        with pytest.raises(DBAPIError, match="POI set does not match"):
             await db.commit()
         await db.rollback()
 

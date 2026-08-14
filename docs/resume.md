@@ -4,11 +4,16 @@
 
 Map `98489eb4e81fc736c4bb6d16deec0d2033d2e990`의 service OpenAPI를 byte-exact로
 재vendor하고, collection snapshot client는 2,000 item·10 page 상한과 continuation 진행성을
-fail-close한다. PinVi `20260814_0051`은 receipt별 exact item proof를 immutable relation으로 저장하고,
+fail-close한다. 배포 가능한 `0050/0051`은 byte 불변으로 복원·고정했고, 새 forward-only
+`20260814_0052`가 receipt별 exact item proof를 immutable relation으로 저장하고,
 POI provenance가 같은 canonical collection plan과 그 receipt item에 모두 결박되도록 composite FK를
 추가했다. terminal receipt는 source collection과 실제 result plan/response body가 일치하고 item proof
-수가 snapshot count와 같을 때만 완료된다. plan title/category 폭도 producer 계약의 300/128에 맞췄다.
-0051→0050→0051 실제 왕복과 direct-completed INSERT·고아/mismatch provenance 음성 검증을 통과했다.
+수가 snapshot count와 같으며 plan의 revision/ETag/hash와 실제 active POI set까지 일치할 때만 완료된다.
+구 c614 bytes의 dataful `0051→0052` 실제 upgrade와 ORM 조회, direct-completed INSERT,
+고아/mismatch/proof-without-POI 음성 검증을 통과했다.
+
+Map snapshot의 무제한 문자열과 PinVi 저장 상한은 아직 paired contract로 수렴하지 않았으므로,
+canonical importer를 연결하기 전에 producer bound 또는 무손실 consumer 저장 정책을 확정한다.
 
 **다음 한 작업**: canonical service snapshot importer가 새 provenance와 receipt를 사용해 plan/POI
 mutation·admin audit·terminal response를 한 transaction으로 commit하도록 바꾸고, legacy admin snapshot
