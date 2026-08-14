@@ -2,6 +2,14 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-15 (codex) — T-VN-40C Manager principal 결선 PR 대기
+
+- Docker Manager PR #174가 Map API에는 canonical snapshot·cutover mapping digest 두 개만,
+  PinVi API에는 대응 원문 token 두 개만 전달하는 immutable compose 경계를 구현했다.
+- 이 PinVi 브랜치의 API-only token 결선과 쌍을 이루지만, PR은 아직 draft·미병합이다. n150의
+  canonical import/backfill live acceptance와 exact paired receipt 전에는 rollout receipt를 pending으로
+  유지하고 legacy source column·route를 물리 삭제하지 않는다.
+
 ## 2026-08-15 (codex) — T-VN-40C canonical curation token scope 결선
 
 - compose의 `app-api`에 canonical snapshot과 cutover mapping의 서로 다른 두 원문 token을

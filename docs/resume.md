@@ -6,9 +6,12 @@ PinVi API compose와 sample env가 canonical collection snapshot·cutover mappin
 두 service token을 명시적으로 받도록 했다. 두 원문 token은 API runtime에만 전달하며 web·Dagster와
 공유하지 않는다. isolated n150 runner의 Map digest-only 경계와 같은 네 값 결선을 이룬다.
 
-**다음 한 작업**: Docker Manager production compose도 Map API digest 두 개와 PinVi API 원문
-token 두 개를 같은 immutable release transaction에서 주입하고, n150 canonical import/backfill
-live acceptance를 receipt complete의 전제 조건으로 고정한다.
+**현재 상태**: Docker Manager PR #174가 Map API digest 두 개와 PinVi API 원문 token 두 개를
+같은 immutable release transaction에 주입하도록 구현했지만 아직 draft·미병합이다.
+
+**다음 한 작업**: PR #174 병합 뒤 n150에서 canonical import/backfill live acceptance와 exact paired
+receipt를 검증한다. 이 운영 증거 전에는 receipt를 complete로 바꾸거나 legacy source column·route의
+물리 삭제를 시작하지 않는다.
 
 ## 2026-08-15 (codex) — T-VN-40C legacy admin snapshot runtime 제거
 
