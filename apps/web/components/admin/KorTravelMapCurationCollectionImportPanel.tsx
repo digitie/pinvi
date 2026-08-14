@@ -68,6 +68,9 @@ export function KorTravelMapCurationCollectionImportPanel() {
     onSuccess: async (nextResult) => {
       setResult(nextResult);
       setValidationError(null);
+      // 성공한 command는 terminal replay가 끝났다. 같은 입력을 다시 반영하려면
+      // 새 Idempotency-Key를 만들어 현재 Map snapshot을 다시 읽어야 한다.
+      setIdempotencyKey(null);
       await queryClient.invalidateQueries({ queryKey: queryKeys.admin.noticePlansAll() });
     },
   });

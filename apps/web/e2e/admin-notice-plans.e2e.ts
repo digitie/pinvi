@@ -145,7 +145,7 @@ test('Admin이 canonical collection import의 idempotency와 오류 복구를 �
           idempotencyKey: request.headers()['idempotency-key'] ?? null,
         });
         importAttempt += 1;
-        if (importAttempt === 1) {
+        if (importAttempt <= 2) {
           await route.fulfill({
             status: 200,
             contentType: 'application/json',
@@ -189,6 +189,11 @@ test('Admin이 canonical collection import의 idempotency와 오류 복구를 �
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
   );
 
+  // 성공 terminal 뒤의 새 반영은 replay가 아니라 새 Map snapshot을 읽어야 한다.
+  await page.getByTestId('admin-notice-canonical-import-submit').click();
+  await expect.poll(() => importRequests).toHaveLength(2);
+  expect(importRequests[1]?.idempotencyKey).not.toBe(importRequests[0]?.idempotencyKey);
+
   await page
     .getByTestId('admin-notice-canonical-import-collection-id')
     .fill('55555555-5555-4555-8555-555555555555');
@@ -197,12 +202,12 @@ test('Admin이 canonical collection import의 idempotency와 오류 복구를 �
   await expect(page.getByTestId('admin-notice-canonical-import-error')).toContainText(
     '입력을 확인한 뒤 새 요청으로 다시 실행하세요.',
   );
-  expect(importRequests).toHaveLength(2);
-  expect(importRequests[1]?.idempotencyKey).not.toBe(importRequests[0]?.idempotencyKey);
+  expect(importRequests).toHaveLength(3);
+  expect(importRequests[2]?.idempotencyKey).not.toBe(importRequests[1]?.idempotencyKey);
 
   await page.getByTestId('admin-notice-canonical-import-retry').click();
-  await expect.poll(() => importRequests).toHaveLength(3);
-  expect(importRequests[2]?.idempotencyKey).toBe(importRequests[1]?.idempotencyKey);
+  await expect.poll(() => importRequests).toHaveLength(4);
+  expect(importRequests[3]?.idempotencyKey).toBe(importRequests[2]?.idempotencyKey);
 });
 
 test('Admin notice plan 생성, 편집, POI 추가, 첨부 업로드를 수행한다', async ({ page }) => {
