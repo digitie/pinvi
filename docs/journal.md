@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-15 (codex) — T-VN-40C canonical backfill admin command
+
+- `POST /admin/notice-plans/curation-cutover/backfills`는 `notice_plan_id`와 admin-scoped
+  `Idempotency-Key`만 받는다. terminal key는 remote fetch 전에 `200`으로 replay하며, 새 command는
+  sealed mapping이 정한 collection의 complete snapshot만 요청한다. `304`·mapping 밖 collection·local
+  provenance drift는 `409`으로 fail-close한다.
+- remote fetch 뒤 새 transaction의 첫 SQL에서 `SERIALIZABLE`을 설정하고 backfill/generic import
+  receipt·canonical POI proof·admin audit를 함께 commit한다. `404/409/413/502/503`을 OpenAPI에
+  고정했으며, replay response는 rollback 전에 typed DTO로 materialize해 async ORM expiration 경로를
+  열지 않는다.
+- 실제 HTTP integration은 sealed collection fetch, `201→200` exact replay, remote fetch 1회와
+  backfill/audit receipt 각 1개를 검증했다.
+
 ## 2026-08-14 (codex) — T-VN-40C sealed legacy plan canonical backfill service
 
 - `apply_curation_cutover_backfill()`은 remote full snapshot을 받은 뒤 새

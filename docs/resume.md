@@ -1,5 +1,19 @@
 # resume.md
 
+## 2026-08-15 (codex) — T-VN-40C canonical backfill admin command
+
+admin은 `POST /admin/notice-plans/curation-cutover/backfills`로 sealed legacy plan 하나를 canonical
+collection으로 전환한다. request는 plan UUID와 actor-scoped `Idempotency-Key`뿐이며, terminal key는
+remote call 없이 `200` exact replay한다. 새 command만 sealed mapping의 collection snapshot을 complete
+fetch하고, transaction 첫 SQL의 `SERIALIZABLE` 범위에서 legacy preflight 재검증·backfill/generic
+receipt·canonical POI proof·audit을 원자 commit한다. backfill response는 dedicated receipt IDs와 nested
+canonical import tuple을 반환하며 HTTP/OpenAPI `201→200`, `404/409/413/502/503`을 고정했다.
+
+**다음 한 작업**: admin UI를 이 typed endpoint로 전환한다. cutover preflight 목록에서 ready plan을
+선택하고, terminal 성공 뒤 새 key를 생성하며 `409/413/502/503`에는 stale retry 없이 명시적 재검증을
+요구해야 한다. 모든 legacy curated-feature import UI/API caller를 제거하기 전 mocked/live E2E로
+legacy source POI 제거·manual POI 보존·canonical refresh를 검증한다.
+
 ## 2026-08-14 (codex) — T-VN-40C sealed legacy plan canonical backfill service
 
 `apply_curation_cutover_backfill()`은 remote complete collection snapshot을 받은 다음 새

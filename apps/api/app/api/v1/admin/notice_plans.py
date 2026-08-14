@@ -41,6 +41,8 @@ from app.schemas.notice import (
     KorTravelMapCuratedFeatureImportResponse,
     KorTravelMapCurationCollectionImportRequest,
     KorTravelMapCurationCollectionImportResponse,
+    KorTravelMapCurationCutoverBackfillRequest,
+    KorTravelMapCurationCutoverBackfillResponse,
     KorTravelMapCurationCutoverLegacyPreflightResponse,
     KorTravelMapCurationCutoverMappingReceiptResponse,
     NoticePlanCreate,
@@ -69,6 +71,13 @@ from app.services.curation_collection_import import (
     CurationCollectionImportNotFound,
     apply_curation_collection_import,
     inspect_curation_collection_import,
+)
+from app.services.curation_cutover_backfill import (
+    CurationCutoverBackfillConflict,
+    CurationCutoverBackfillNotFound,
+    CurationCutoverBackfillResult,
+    apply_curation_cutover_backfill,
+    inspect_curation_cutover_backfill,
 )
 from app.services.curation_cutover_legacy_preflight import (
     CurationCutoverLegacyPreflightResult,
@@ -220,6 +229,19 @@ def _cutover_legacy_preflight_response(
             }
             for issue in result.issues
         ],
+    )
+
+
+def _cutover_backfill_response(
+    result: CurationCutoverBackfillResult,
+) -> KorTravelMapCurationCutoverBackfillResponse:
+    receipt = result.receipt
+    return KorTravelMapCurationCutoverBackfillResponse(
+        backfill_receipt_id=receipt.receipt_id,
+        mapping_receipt_id=receipt.mapping_receipt_id,
+        legacy_curated_feature_id=receipt.legacy_curated_feature_id,
+        import_result=result.import_result.response,
+        replayed=result.replayed,
     )
 
 
@@ -458,6 +480,157 @@ async def capture_kor_travel_map_curation_cutover_mapping_receipt_route(
                     detail={
                         "code": "CURATION_CUTOVER_MAPPING_RETRY_EXHAUSTED",
                         "message": "동시 변경으로 mapping receipt를 봉인하지 못했습니다.",
+                    },
+                ) from exc
+            raise
+    raise AssertionError("unreachable")
+
+
+@router.post(
+    "/curation-cutover/backfills",
+    status_code=status.HTTP_201_CREATED,
+    response_model=Envelope[KorTravelMapCurationCutoverBackfillResponse],
+    responses={
+        200: {"description": "같은 Idempotency-Key의 terminal backfill replay"},
+        404: {"description": "active legacy Map plan이 없음"},
+        409: {"description": "sealed mapping, idempotency 또는 local state conflict"},
+        413: {"description": "canonical collection item 상한 초과"},
+        502: {"description": "Map snapshot service contract violation"},
+        503: {"description": "Map snapshot service unavailable"},
+    },
+)
+async def backfill_kor_travel_map_curation_cutover_plan_route(
+    body: KorTravelMapCurationCutoverBackfillRequest,
+    admin: AdminDep,
+    db: DbSession,
+    kor_travel_map_client: CurationSnapshotServiceClientDep,
+    request: Request,
+    response: Response,
+    idempotency_key: Annotated[uuid.UUID, Header(alias="Idempotency-Key")],
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[KorTravelMapCurationCutoverBackfillResponse]:
+    """sealed Map mapping이 가리키는 legacy plan 하나를 canonical collection으로 전환한다."""
+
+    actor_admin_id = admin.user_id
+    request_id = _parse_request_id(x_request_id)
+    ip_hash_input = request.client.host if request.client else ""
+    user_agent = request.headers.get("user-agent")
+    try:
+        replay, preparation = await inspect_curation_cutover_backfill(
+            db,
+            actor_admin_id=actor_admin_id,
+            idempotency_key=idempotency_key,
+            curated_plan_id=body.notice_plan_id,
+        )
+    except CurationCutoverBackfillNotFound as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except CurationCutoverBackfillConflict as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    replay_response = _cutover_backfill_response(replay) if replay is not None else None
+    await db.rollback()
+    if replay_response is not None:
+        response.status_code = status.HTTP_200_OK
+        return Envelope.of(replay_response)
+
+    try:
+        fetched = await kor_travel_map_client.get_collection_snapshot(
+            preparation.collection_id,
+            if_none_match=None,
+        )
+    except CurationSnapshotNotFound as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "CURATION_SNAPSHOT_NOT_FOUND", "message": str(exc)},
+        ) from exc
+    except CurationSnapshotTooLarge as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail={"code": "CURATION_SNAPSHOT_TOO_LARGE", "message": str(exc)},
+        ) from exc
+    except (CurationSnapshotUnavailable, CurationSnapshotServiceProblem) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "CURATION_SNAPSHOT_UNAVAILABLE", "message": str(exc)},
+        ) from exc
+    except CurationSnapshotContractError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": "CURATION_SNAPSHOT_CONTRACT_ERROR", "message": str(exc)},
+        ) from exc
+
+    for attempt in range(3):
+        try:
+            # remote fetch 뒤 새로운 transaction의 첫 SQL이다. backfill receipt, generic
+            # import proof와 audit까지 동일 SSI command boundary로 닫는다.
+            await db.execute(text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
+            result = await apply_curation_cutover_backfill(
+                db,
+                actor_admin_id=actor_admin_id,
+                idempotency_key=idempotency_key,
+                curated_plan_id=body.notice_plan_id,
+                fetched=fetched,
+            )
+            result_response = _cutover_backfill_response(result)
+            if not result.replayed:
+                sealed = result.receipt
+                await append_admin_audit(
+                    db,
+                    actor_user_id=actor_admin_id,
+                    action="curated_plan.kor_travel_map_cutover_backfilled",
+                    resource_type="curation_cutover_backfill_receipt",
+                    resource_id=str(sealed.receipt_id),
+                    before_state=None,
+                    after_state=result_response.model_dump(mode="json"),
+                    access_reason=None,
+                    target_pii_fields=None,
+                    ip_hash_input=ip_hash_input,
+                    user_agent=user_agent,
+                    request_id=request_id,
+                )
+            await db.commit()
+            response.status_code = status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
+            return Envelope.of(result_response)
+        except CurationCutoverBackfillNotFound as exc:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
+        except CurationCutoverBackfillConflict as exc:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
+        except IntegrityError as exc:
+            await db.rollback()
+            if getattr(exc.orig, "sqlstate", None) == "23505" and attempt < 2:
+                continue
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "CURATION_CUTOVER_BACKFILL_CONFLICT",
+                    "message": "canonical cutover backfill 상태가 충돌했습니다.",
+                },
+            ) from exc
+        except DBAPIError as exc:
+            await db.rollback()
+            if getattr(exc.orig, "sqlstate", None) == "40001" and attempt < 2:
+                continue
+            if getattr(exc.orig, "sqlstate", None) == "40001":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "CURATION_CUTOVER_BACKFILL_RETRY_EXHAUSTED",
+                        "message": "동시 변경으로 canonical cutover backfill을 완료하지 못했습니다.",
                     },
                 ) from exc
             raise

@@ -188,3 +188,15 @@ class KorTravelMapCurationCutoverLegacyPreflightResponse(BaseModel):
     backfillable_plan_count: StrictInt = Field(ge=0)
     ready: StrictBool
     issues: list[KorTravelMapCurationCutoverLegacyPreflightIssueResponse]
+
+
+class KorTravelMapCurationCutoverBackfillRequest(BaseModel):
+    notice_plan_id: uuid.UUID
+
+
+class KorTravelMapCurationCutoverBackfillResponse(BaseModel):
+    backfill_receipt_id: uuid.UUID
+    mapping_receipt_id: uuid.UUID
+    legacy_curated_feature_id: uuid.UUID
+    import_result: KorTravelMapCurationCollectionImportResponse
+    replayed: StrictBool

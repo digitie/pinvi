@@ -82,3 +82,39 @@ def test_cutover_legacy_preflight_openapi_contract() -> None:
         {"type": "string", "format": "uuid"},
         {"type": "null"},
     ]
+
+
+def test_cutover_backfill_openapi_contract() -> None:
+    from app.main import app
+
+    operation = app.openapi()["paths"][
+        "/admin/notice-plans/curation-cutover/backfills"
+    ]["post"]
+    headers = {
+        parameter["name"]: parameter
+        for parameter in operation["parameters"]
+        if parameter["in"] == "header"
+    }
+    assert headers["Idempotency-Key"]["required"] is True
+    assert headers["Idempotency-Key"]["schema"]["format"] == "uuid"
+    assert set(operation["responses"]) >= {
+        "200",
+        "201",
+        "404",
+        "409",
+        "413",
+        "502",
+        "503",
+    }
+
+    schemas = app.openapi()["components"]["schemas"]
+    request = schemas["KorTravelMapCurationCutoverBackfillRequest"]
+    assert request["properties"]["notice_plan_id"]["format"] == "uuid"
+    response = schemas["KorTravelMapCurationCutoverBackfillResponse"]
+    assert response["properties"]["backfill_receipt_id"]["format"] == "uuid"
+    assert response["properties"]["mapping_receipt_id"]["format"] == "uuid"
+    assert response["properties"]["legacy_curated_feature_id"]["format"] == "uuid"
+    assert response["properties"]["replayed"]["type"] == "boolean"
+    assert response["properties"]["import_result"]["$ref"] == (
+        "#/components/schemas/KorTravelMapCurationCollectionImportResponse"
+    )

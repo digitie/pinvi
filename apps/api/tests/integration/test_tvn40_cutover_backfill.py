@@ -141,6 +141,21 @@ def _snapshot(
     )
 
 
+class _FakeSnapshotClient:
+    def __init__(self, result: CurationCollectionFetchResult) -> None:
+        self.result = result
+        self.calls: list[tuple[uuid.UUID, str | None]] = []
+
+    async def get_collection_snapshot(
+        self,
+        collection_id: uuid.UUID,
+        *,
+        if_none_match: str | None = None,
+    ) -> CurationCollectionFetchResult:
+        self.calls.append((collection_id, if_none_match))
+        return self.result
+
+
 async def test_cutover_backfill_promotes_exact_mapping_and_preserves_manual_poi(
     session_factory,
 ) -> None:  # type: ignore[no-untyped-def]
@@ -310,3 +325,88 @@ async def test_cutover_backfill_rejects_snapshot_outside_sealed_mapping(
                 ),
             )
         await db.rollback()
+
+
+async def test_admin_cutover_backfill_fetches_sealed_collection_and_replays(
+    client,
+    session_factory,
+    auth_cookies,
+) -> None:  # type: ignore[no-untyped-def]
+    from app.clients.kor_travel_map_curation import get_curation_snapshot_service_client
+    from app.main import app
+    from app.models.audit import AdminAuditLog
+
+    legacy_id = uuid.uuid4()
+    collection_id = uuid.uuid4()
+    curation_item_id = uuid.uuid4()
+    command_key = uuid.uuid4()
+    async with session_factory() as db:
+        admin = await _admin(db)
+        mapping_receipt = await _sealed_mapping(
+            db,
+            admin_id=admin.user_id,
+            legacy_id=legacy_id,
+            collection_id=collection_id,
+            curation_item_id=curation_item_id,
+        )
+        plan = CuratedTripPlan(
+            slug=f"legacy-route-{legacy_id}",
+            title="legacy route title",
+            category="recommended",
+            source_system="kor-travel-map",
+            source_curated_feature_id=str(legacy_id),
+            created_by_admin_id=admin.user_id,
+            updated_by_admin_id=admin.user_id,
+        )
+        db.add(plan)
+        await db.flush()
+        db.add(
+            CuratedPlanPoi(
+                curated_plan_id=plan.curated_plan_id,
+                day_index=1,
+                sort_order="legacy-route",
+                feature_snapshot={},
+                source_curated_feature_id=str(legacy_id),
+                source_curated_feature_item_id="legacy-route-item",
+            )
+        )
+        await db.commit()
+        admin_id = admin.user_id
+        plan_id = plan.curated_plan_id
+        mapping_receipt_id = mapping_receipt.receipt_id
+
+    fake = _FakeSnapshotClient(
+        _snapshot(collection_id=collection_id, curation_item_id=curation_item_id)
+    )
+    app.dependency_overrides[get_curation_snapshot_service_client] = lambda: fake
+    try:
+        created = await client.post(
+            "/admin/notice-plans/curation-cutover/backfills",
+            json={"notice_plan_id": str(plan_id)},
+            headers={"Idempotency-Key": str(command_key)},
+            cookies=auth_cookies(str(admin_id)),
+        )
+        assert created.status_code == 201, created.text
+        created_data = created.json()["data"]
+        assert created_data["replayed"] is False
+        assert created_data["mapping_receipt_id"] == str(mapping_receipt_id)
+        assert created_data["legacy_curated_feature_id"] == str(legacy_id)
+        assert created_data["import_result"]["notice_plan_id"] == str(plan_id)
+        assert created_data["import_result"]["created_plan"] is False
+        assert fake.calls == [(collection_id, None)]
+
+        replay = await client.post(
+            "/admin/notice-plans/curation-cutover/backfills",
+            json={"notice_plan_id": str(plan_id)},
+            headers={"Idempotency-Key": str(command_key)},
+            cookies=auth_cookies(str(admin_id)),
+        )
+        assert replay.status_code == 200, replay.text
+        assert replay.json()["data"] == {**created_data, "replayed": True}
+        assert fake.calls == [(collection_id, None)]
+
+        async with session_factory() as db:
+            assert await db.scalar(select(func.count(KtmCurationCutoverBackfillReceipt.receipt_id))) == 1
+            assert await db.scalar(select(func.count(AdminAuditLog.log_id))) == 1
+    finally:
+        app.dependency_overrides.pop(get_curation_snapshot_service_client, None)
