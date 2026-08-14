@@ -246,9 +246,10 @@ async def test_legacy_preflight_reports_all_identity_and_poi_provenance_conflict
         "legacy-poi-source-item-id-invalid",
         "legacy-poi-source-id-mismatch",
     }
-    assert len(
-        [issue for issue in result.issues if issue.code == "legacy-plan-source-id-duplicate"]
-    ) == 2
+    assert (
+        len([issue for issue in result.issues if issue.code == "legacy-plan-source-id-duplicate"])
+        == 2
+    )
     with pytest.raises(CurationCutoverLegacyPreflightConflict, match="legacy-plan"):
         result.require_ready()
 
@@ -331,7 +332,5 @@ async def test_legacy_preflight_rejects_multiple_plans_for_one_canonical_collect
         result = await inspect_curation_cutover_legacy_provenance(db)
 
     assert result.ready is False
-    assert {issue.code for issue in result.issues} == {
-        "legacy-plan-canonical-collection-duplicate"
-    }
+    assert {issue.code for issue in result.issues} == {"legacy-plan-canonical-collection-duplicate"}
     assert len(result.plan_mappings) == 2

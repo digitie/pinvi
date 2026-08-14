@@ -2,6 +2,13 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-15 (codex) — PinVi API provenance CI 정합 복구
+
+- wheel·Docker image provenance 검사가 현재 vendored Map service SHA와 artifact SHA를 확인하도록
+  재고정했다. 오래된 SHA를 비교해 정상 artifact를 거절하던 CI 경로를 닫는다.
+- 적용 이력이 있는 Alembic revision은 Ruff formatter 대상에서 제외하고, API 코드·테스트는 현재
+  formatter 결과로 정렬했다. revision byte 불변성과 CI format gate를 함께 유지한다.
+
 ## 2026-08-15 (codex) — T-VN-40C Manager principal 결선 PR 대기
 
 - Docker Manager PR #174가 Map API에는 canonical snapshot·cutover mapping digest 두 개만,

@@ -546,7 +546,9 @@ class KtmCurationCutoverBackfillReceipt(Base, TimestampMixin):
     idempotency_key: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
     request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     mapping_receipt_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
-    legacy_curated_feature_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    legacy_curated_feature_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), nullable=False
+    )
     curated_plan_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
     import_receipt_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True))
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")

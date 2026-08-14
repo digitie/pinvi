@@ -56,13 +56,9 @@ def _terminal_response(
         "not_modified": not_modified,
         "source_system": receipt.source_system,
         "source_curation_collection_id": str(receipt.source_curation_collection_id),
-        "source_curation_collection_revision": str(
-            receipt.source_curation_collection_revision
-        ),
+        "source_curation_collection_revision": str(receipt.source_curation_collection_revision),
         "source_curation_collection_etag": receipt.source_curation_collection_etag,
-        "source_curation_item_set_hash_version": (
-            receipt.source_curation_item_set_hash_version
-        ),
+        "source_curation_item_set_hash_version": (receipt.source_curation_item_set_hash_version),
         "source_curation_item_set_hash": receipt.source_curation_item_set_hash,
         "source_curation_item_count": receipt.source_curation_item_count,
         "copied_poi_count": 0,
@@ -410,15 +406,15 @@ async def _assert_0059_cutover_backfill_catalog_contract(db: AsyncSession) -> No
         ).all()
     )
     assert set(constraints) == expected_constraint_names
-    assert "request_fingerprint::text ~" in constraints[
-        "ck_ktm_curation_cutover_backfill_receipts_fingerprint"
-    ]
-    assert "status::text = 'pending'::text" in constraints[
-        "ck_ktm_curation_cutover_backfill_receipts_terminal"
-    ]
-    assert constraints[
-        "fk_ktm_curation_cutover_backfill_receipts_mapping_item"
-    ].startswith(
+    assert (
+        "request_fingerprint::text ~"
+        in constraints["ck_ktm_curation_cutover_backfill_receipts_fingerprint"]
+    )
+    assert (
+        "status::text = 'pending'::text"
+        in constraints["ck_ktm_curation_cutover_backfill_receipts_terminal"]
+    )
+    assert constraints["fk_ktm_curation_cutover_backfill_receipts_mapping_item"].startswith(
         "FOREIGN KEY (mapping_receipt_id, legacy_curated_feature_id) "
         "REFERENCES app.ktm_curation_cutover_mapping_receipt_items"
     )
@@ -587,9 +583,7 @@ async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
                                 "source_curation_collection_id": str(_COLLECTION_ID),
                                 "source_curation_collection_revision": "1",
                                 "source_curation_collection_etag": _ETAG,
-                                "source_curation_item_set_hash_version": (
-                                    "ktm-db-item-set-v1"
-                                ),
+                                "source_curation_item_set_hash_version": ("ktm-db-item-set-v1"),
                                 "source_curation_item_set_hash": _ITEM_SET_HASH,
                                 "source_curation_item_count": "0",
                                 "copied_poi_count": "0",
@@ -717,8 +711,7 @@ async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
                 assert (
                     await db.scalar(
                         select(KtmCurationImportReceiptItem).where(
-                            KtmCurationImportReceiptItem.receipt_id
-                            == fresh_receipt.receipt_id
+                            KtmCurationImportReceiptItem.receipt_id == fresh_receipt.receipt_id
                         )
                     )
                     is None
@@ -793,10 +786,7 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
                 )
             )
             await connection.execute(
-                text(
-                    "UPDATE app.alembic_version "
-                    "SET version_num = '20260814_0053'"
-                )
+                text("UPDATE app.alembic_version SET version_num = '20260814_0053'")
             )
     finally:
         await engine.dispose()
@@ -807,9 +797,7 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
         try:
             async with engine.connect() as connection:
                 assert (
-                    await connection.scalar(
-                        text("SELECT version_num FROM app.alembic_version")
-                    )
+                    await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
                     == "20260814_0059"
                 )
                 new_body = await connection.scalar(
@@ -907,9 +895,7 @@ async def test_conditional_snapshot_rejects_legacy_not_modified_proof_chain(
         authoritative.status = "completed"
         authoritative.result_plan_id = plan_id
         authoritative.response_status = 200
-        authoritative.response_body = _terminal_response(
-            authoritative, plan_id, created_plan=False
-        )
+        authoritative.response_body = _terminal_response(authoritative, plan_id, created_plan=False)
         authoritative.completed_at = datetime.now(UTC)
         await db.commit()
 
@@ -1203,9 +1189,7 @@ async def test_canonical_provenance_and_receipt_are_constrained_and_append_only(
         receipt.status = "completed"
         receipt.result_plan_id = plan_id
         receipt.response_status = 201
-        receipt.response_body = _terminal_response(
-            receipt, plan_id, created_plan=True
-        )
+        receipt.response_body = _terminal_response(receipt, plan_id, created_plan=True)
         receipt.completed_at = datetime.now(UTC)
         await db.commit()
 
@@ -1263,9 +1247,9 @@ async def test_canonical_provenance_and_receipt_are_constrained_and_append_only(
         assert len(pois) == 2
         canonical_poi = next(poi for poi in pois if poi.source_curation_item_id is not None)
         assert canonical_poi.source_curation_import_receipt_id == receipt_id
-        assert next(poi for poi in pois if poi.curated_poi_id == manual_poi_id).feature_snapshot == {
-            "title": "수동 POI"
-        }
+        assert next(
+            poi for poi in pois if poi.curated_poi_id == manual_poi_id
+        ).feature_snapshot == {"title": "수동 POI"}
         no_op_receipt = await db.get(KtmCurationImportReceipt, no_op_receipt_id)
         assert no_op_receipt is not None
         assert no_op_receipt.status == "completed"
@@ -1461,9 +1445,7 @@ async def test_receipt_completion_serializes_member_insert(
         receipt.status = "completed"
         receipt.result_plan_id = plan_id
         receipt.response_status = 201
-        receipt.response_body = _terminal_response(
-            receipt, plan_id, created_plan=True
-        )
+        receipt.response_body = _terminal_response(receipt, plan_id, created_plan=True)
         receipt.completed_at = datetime.now(UTC)
         await completing.flush()
 
@@ -1518,9 +1500,7 @@ async def test_receipt_completion_serializes_deleted_canonical_poi_reactivation(
         receipt.status = "completed"
         receipt.result_plan_id = plan_id
         receipt.response_status = 200
-        receipt.response_body = _terminal_response(
-            receipt, plan_id, created_plan=False
-        )
+        receipt.response_body = _terminal_response(receipt, plan_id, created_plan=False)
         receipt.completed_at = datetime.now(UTC)
         await completing.flush()
 
@@ -1533,9 +1513,11 @@ async def test_receipt_completion_serializes_deleted_canonical_poi_reactivation(
 
     # Writer-first interleaving은 completion이 기다린 뒤 변경된 active set을 다시 읽어
     # pending receipt를 terminal로 만들지 않는다.
-    second_receipt_id, second_plan_id, second_deleted_poi_id = (
-        await _seed_receipt_with_deleted_canonical_poi(session_factory)
-    )
+    (
+        second_receipt_id,
+        second_plan_id,
+        second_deleted_poi_id,
+    ) = await _seed_receipt_with_deleted_canonical_poi(session_factory)
     writer_holds_row = asyncio.Event()
     release_writer = asyncio.Event()
 
@@ -1559,9 +1541,7 @@ async def test_receipt_completion_serializes_deleted_canonical_poi_reactivation(
             receipt.status = "completed"
             receipt.result_plan_id = second_plan_id
             receipt.response_status = 200
-            receipt.response_body = _terminal_response(
-                receipt, second_plan_id, created_plan=False
-            )
+            receipt.response_body = _terminal_response(receipt, second_plan_id, created_plan=False)
             receipt.completed_at = datetime.now(UTC)
             try:
                 await db.commit()
@@ -1647,7 +1627,6 @@ async def test_terminal_receipt_is_bound_to_source_plan_body_and_item_set(
             await db.commit()
         await db.rollback()
 
-
     async with session_factory() as db:
         plan = CuratedTripPlan(
             slug="canonical-plan-for-tuple-mismatch",
@@ -1726,9 +1705,7 @@ async def test_terminal_receipt_is_bound_to_source_plan_body_and_item_set(
         receipt.status = "completed"
         receipt.result_plan_id = plan.curated_plan_id
         receipt.response_status = 201
-        receipt.response_body = _terminal_response(
-            receipt, plan.curated_plan_id, created_plan=True
-        )
+        receipt.response_body = _terminal_response(receipt, plan.curated_plan_id, created_plan=True)
         receipt.completed_at = datetime.now(UTC)
         with pytest.raises(DBAPIError, match="item set is incomplete"):
             await db.commit()
@@ -1780,9 +1757,7 @@ async def test_terminal_receipt_is_bound_to_source_plan_body_and_item_set(
         receipt.status = "completed"
         receipt.result_plan_id = plan.curated_plan_id
         receipt.response_status = 201
-        receipt.response_body = _terminal_response(
-            receipt, plan.curated_plan_id, created_plan=True
-        )
+        receipt.response_body = _terminal_response(receipt, plan.curated_plan_id, created_plan=True)
         receipt.completed_at = datetime.now(UTC)
         with pytest.raises(DBAPIError, match="POI set does not match"):
             await db.commit()
@@ -1823,9 +1798,7 @@ async def test_terminal_receipt_is_bound_to_source_plan_body_and_item_set(
         receipt.status = "completed"
         receipt.result_plan_id = plan.curated_plan_id
         receipt.response_status = 201
-        receipt.response_body = _terminal_response(
-            receipt, plan.curated_plan_id, created_plan=True
-        )
+        receipt.response_body = _terminal_response(receipt, plan.curated_plan_id, created_plan=True)
         receipt.response_body["notice_plan_id"] = str(uuid.uuid4())
         receipt.completed_at = datetime.now(UTC)
         with pytest.raises(IntegrityError):

@@ -224,9 +224,7 @@ def test_curation_snapshot_generation1_service_contract_is_exact() -> None:
     assert collection["properties"]["etag"]["pattern"] == r"^sha256:[0-9a-f]{64}$"
     assert collection["properties"]["item_set_hash"]["pattern"] == r"^[0-9a-f]{64}$"
     assert collection["properties"]["items"]["maxItems"] == 200
-    collection_metadata = spec["components"]["schemas"]["CurationSnapshotCollection"][
-        "properties"
-    ]
+    collection_metadata = spec["components"]["schemas"]["CurationSnapshotCollection"]["properties"]
     assert collection_metadata["theme_slug"]["minLength"] == 1
     assert collection_metadata["theme_slug"]["maxLength"] == 128
     assert collection_metadata["theme_name"]["minLength"] == 1

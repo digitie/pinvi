@@ -136,10 +136,7 @@ async def _completed_backfill_result(
     curated_plan_id: uuid.UUID,
     fingerprint: str,
 ) -> CurationCutoverBackfillResult:
-    if (
-        receipt.curated_plan_id != curated_plan_id
-        or receipt.request_fingerprint != fingerprint
-    ):
+    if receipt.curated_plan_id != curated_plan_id or receipt.request_fingerprint != fingerprint:
         raise CurationCutoverBackfillConflict(
             "Idempotency-Key가 다른 canonical cutover backfill 요청에 결박됐습니다."
         )
@@ -179,9 +176,7 @@ async def inspect_curation_cutover_backfill(
 ) -> tuple[CurationCutoverBackfillResult | None, CurationCutoverBackfillPreparation]:
     """remote snapshot 전 terminal replay 또는 sealed mapping collection을 판정한다."""
 
-    fingerprint = curation_cutover_backfill_request_fingerprint(
-        curated_plan_id=curated_plan_id
-    )
+    fingerprint = curation_cutover_backfill_request_fingerprint(curated_plan_id=curated_plan_id)
     existing = await db.scalar(
         select(KtmCurationCutoverBackfillReceipt).where(
             KtmCurationCutoverBackfillReceipt.actor_admin_id == actor_admin_id,
@@ -236,9 +231,7 @@ async def apply_curation_cutover_backfill(
         raise CurationCutoverBackfillConflict(
             "legacy plan의 최초 canonical backfill에는 complete snapshot이 필요합니다."
         )
-    fingerprint = curation_cutover_backfill_request_fingerprint(
-        curated_plan_id=curated_plan_id
-    )
+    fingerprint = curation_cutover_backfill_request_fingerprint(curated_plan_id=curated_plan_id)
 
     # Existing canonical import와 actor/key 및 collection fence를 공유한다.
     await _lock_command_scope(
@@ -275,8 +268,7 @@ async def apply_curation_cutover_backfill(
     mapping_item = await db.scalar(
         select(KtmCurationCutoverMappingReceiptItem)
         .where(
-            KtmCurationCutoverMappingReceiptItem.receipt_id
-            == preparation.mapping_receipt_id,
+            KtmCurationCutoverMappingReceiptItem.receipt_id == preparation.mapping_receipt_id,
             KtmCurationCutoverMappingReceiptItem.legacy_curated_feature_id
             == preparation.legacy_curated_feature_id,
             KtmCurationCutoverMappingReceiptItem.collection_id == snapshot.collection_id,

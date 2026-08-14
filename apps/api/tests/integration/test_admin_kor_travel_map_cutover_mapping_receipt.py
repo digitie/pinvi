@@ -89,7 +89,10 @@ async def test_admin_capture_seals_mapping_root_and_replays_exactly(
         assert replay.json()["data"] == {**created_data, "replayed": True}
 
         async with session_factory() as db:
-            assert await db.scalar(select(func.count(KtmCurationCutoverMappingReceipt.receipt_id))) == 1
+            assert (
+                await db.scalar(select(func.count(KtmCurationCutoverMappingReceipt.receipt_id)))
+                == 1
+            )
             assert await db.scalar(select(func.count(AdminAuditLog.log_id))) == 1
 
         fake.mapping_set = _mapping_set(root="c" * 64)
@@ -115,8 +118,8 @@ async def test_admin_capture_audit_failure_rolls_back_mapping_receipt(
         raise RuntimeError("audit unavailable")
 
     admin_id = await _admin(session_factory)
-    app.dependency_overrides[get_curation_cutover_mapping_service_client] = lambda: _FakeMappingClient(
-        _mapping_set()
+    app.dependency_overrides[get_curation_cutover_mapping_service_client] = lambda: (
+        _FakeMappingClient(_mapping_set())
     )
     monkeypatch.setattr(router_module, "append_admin_audit", _fail_audit)
     try:
@@ -126,6 +129,9 @@ async def test_admin_capture_audit_failure_rolls_back_mapping_receipt(
                 cookies=auth_cookies(admin_id),
             )
         async with session_factory() as db:
-            assert await db.scalar(select(func.count(KtmCurationCutoverMappingReceipt.receipt_id))) == 0
+            assert (
+                await db.scalar(select(func.count(KtmCurationCutoverMappingReceipt.receipt_id)))
+                == 0
+            )
     finally:
         app.dependency_overrides.pop(get_curation_cutover_mapping_service_client, None)

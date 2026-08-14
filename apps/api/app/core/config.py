@@ -621,9 +621,7 @@ class Settings(BaseSettings):
             if any(character.isspace() for character in token):
                 raise ValueError(f"{env_name} must not contain whitespace")
             if token in protected:
-                raise ValueError(
-                    f"{env_name} must not reuse another Map trust-boundary credential"
-                )
+                raise ValueError(f"{env_name} must not reuse another Map trust-boundary credential")
         return self
 
 

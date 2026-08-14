@@ -133,9 +133,7 @@ class KorTravelMapCurationCollectionImportResponse(BaseModel):
     source_system: Literal["kor-travel-map"]
     source_curation_collection_id: uuid.UUID
     source_curation_collection_revision: str = Field(pattern=r"^[1-9][0-9]*$")
-    source_curation_collection_etag: str = Field(
-        pattern=r'^"sha256:[0-9a-f]{64}"$'
-    )
+    source_curation_collection_etag: str = Field(pattern=r'^"sha256:[0-9a-f]{64}"$')
     source_curation_item_set_hash_version: Literal["ktm-db-item-set-v1"]
     source_curation_item_set_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_curation_item_count: StrictInt = Field(ge=0, le=2_000)

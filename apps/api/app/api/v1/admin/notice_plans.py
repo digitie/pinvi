@@ -164,9 +164,7 @@ def _plan_to_response(plan, pois) -> NoticePlanResponse:  # type: ignore[no-unty
         starts_on=plan.starts_on,
         ends_on=plan.ends_on,
         is_published=plan.is_published,
-        source_system=(
-            "kor-travel-map" if plan.source_system == "kor-travel-map" else None
-        ),
+        source_system=("kor-travel-map" if plan.source_system == "kor-travel-map" else None),
         version=plan.version,
         created_at=plan.created_at,
         updated_at=plan.updated_at,
@@ -439,7 +437,9 @@ async def capture_kor_travel_map_curation_cutover_mapping_receipt_route(
                     request_id=request_id,
                 )
             await db.commit()
-            response.status_code = status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
+            response.status_code = (
+                status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
+            )
             return Envelope.of(_cutover_mapping_receipt_response(result))
         except CurationCutoverMappingReceiptConflict as exc:
             await db.rollback()
@@ -584,7 +584,9 @@ async def backfill_kor_travel_map_curation_cutover_plan_route(
                     request_id=request_id,
                 )
             await db.commit()
-            response.status_code = status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
+            response.status_code = (
+                status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
+            )
             return Envelope.of(result_response)
         except CurationCutoverBackfillNotFound as exc:
             await db.rollback()

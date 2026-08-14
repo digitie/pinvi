@@ -61,6 +61,8 @@ packages = ["app"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# 적용 이력이 있는 Alembic revision은 byte 불변이다. 포맷터가 revision 본문을 바꾸지 않는다.
+exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
 select = [

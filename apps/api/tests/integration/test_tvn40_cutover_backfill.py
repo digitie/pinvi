@@ -245,9 +245,7 @@ async def test_cutover_backfill_promotes_exact_mapping_and_preserves_manual_poi(
         assert backfill_receipt.mapping_receipt_id == mapping_receipt_id
         assert backfill_receipt.status == "completed"
         assert backfill_receipt.import_receipt_id is not None
-        import_receipt = await db.get(
-            KtmCurationImportReceipt, backfill_receipt.import_receipt_id
-        )
+        import_receipt = await db.get(KtmCurationImportReceipt, backfill_receipt.import_receipt_id)
         assert import_receipt is not None
         assert import_receipt.mode == "cutover-backfill"
         assert import_receipt.status == "completed"
@@ -406,7 +404,10 @@ async def test_admin_cutover_backfill_fetches_sealed_collection_and_replays(
         assert fake.calls == [(collection_id, None)]
 
         async with session_factory() as db:
-            assert await db.scalar(select(func.count(KtmCurationCutoverBackfillReceipt.receipt_id))) == 1
+            assert (
+                await db.scalar(select(func.count(KtmCurationCutoverBackfillReceipt.receipt_id)))
+                == 1
+            )
             assert await db.scalar(select(func.count(AdminAuditLog.log_id))) == 1
     finally:
         app.dependency_overrides.pop(get_curation_snapshot_service_client, None)

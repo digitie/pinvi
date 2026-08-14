@@ -459,7 +459,9 @@ class CurationCutoverMappingServiceClient:
 
     def __init__(self, http: httpx.AsyncClient, *, token: str, max_attempts: int = 3) -> None:
         if len(token) < 32 or any(character.isspace() for character in token):
-            raise ValueError("curation cutover mapping token은 whitespace 없는 32자 이상이어야 합니다.")
+            raise ValueError(
+                "curation cutover mapping token은 whitespace 없는 32자 이상이어야 합니다."
+            )
         if max_attempts < 1:
             raise ValueError("max_attempts는 1 이상이어야 합니다.")
         self._http = http

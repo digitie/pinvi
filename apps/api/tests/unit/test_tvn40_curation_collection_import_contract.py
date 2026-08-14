@@ -48,9 +48,9 @@ def test_canonical_collection_import_openapi_contract() -> None:
 def test_cutover_mapping_receipt_openapi_contract() -> None:
     from app.main import app
 
-    operation = app.openapi()["paths"][
-        "/admin/notice-plans/curation-cutover/mapping-receipts"
-    ]["post"]
+    operation = app.openapi()["paths"]["/admin/notice-plans/curation-cutover/mapping-receipts"][
+        "post"
+    ]
     assert set(operation["responses"]) >= {"200", "201", "409", "502", "503"}
     response = app.openapi()["components"]["schemas"][
         "KorTravelMapCurationCutoverMappingReceiptResponse"
@@ -65,9 +65,9 @@ def test_cutover_mapping_receipt_openapi_contract() -> None:
 def test_cutover_legacy_preflight_openapi_contract() -> None:
     from app.main import app
 
-    operation = app.openapi()["paths"][
-        "/admin/notice-plans/curation-cutover/legacy-preflight"
-    ]["get"]
+    operation = app.openapi()["paths"]["/admin/notice-plans/curation-cutover/legacy-preflight"][
+        "get"
+    ]
     assert set(operation["responses"]) >= {"200", "422"}
     schemas = app.openapi()["components"]["schemas"]
     response = schemas["KorTravelMapCurationCutoverLegacyPreflightResponse"]
@@ -87,9 +87,7 @@ def test_cutover_legacy_preflight_openapi_contract() -> None:
 def test_cutover_backfill_openapi_contract() -> None:
     from app.main import app
 
-    operation = app.openapi()["paths"][
-        "/admin/notice-plans/curation-cutover/backfills"
-    ]["post"]
+    operation = app.openapi()["paths"]["/admin/notice-plans/curation-cutover/backfills"]["post"]
     headers = {
         parameter["name"]: parameter
         for parameter in operation["parameters"]

@@ -148,9 +148,7 @@ async def inspect_curation_cutover_legacy_provenance(
 
     receipt, receipt_items, receipt_issues = await _sealed_mapping_receipt(db)
     issues = list(receipt_issues)
-    mapping_by_legacy_id = {
-        item.legacy_curated_feature_id: item for item in receipt_items
-    }
+    mapping_by_legacy_id = {item.legacy_curated_feature_id: item for item in receipt_items}
 
     plans = tuple(
         (

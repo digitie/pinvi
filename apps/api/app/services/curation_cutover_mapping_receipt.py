@@ -23,9 +23,7 @@ from app.models.curated_plan import (
 _MAPPING_ROOT_VERSION = "ktm-curation-cutover-mapping-v1"
 _MAPPING_LOCK_NAMESPACE = "KTMC"
 _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
-_MAPPING_KINDS = frozenset(
-    {"legacy_projection", "official_membership", "manual_membership"}
-)
+_MAPPING_KINDS = frozenset({"legacy_projection", "official_membership", "manual_membership"})
 
 
 class CurationCutoverMappingReceiptConflict(Exception):
@@ -48,7 +46,9 @@ def _validate_mapping_set(mapping_set: CurationCutoverMappingSet) -> None:
         or len(mapping_set.mappings) != mapping_set.mapping_count
         or _HEX64_RE.fullmatch(mapping_set.mapping_root) is None
     ):
-        raise CurationCutoverMappingReceiptConflict("Map mapping root/count envelope이 유효하지 않습니다.")
+        raise CurationCutoverMappingReceiptConflict(
+            "Map mapping root/count envelope이 유효하지 않습니다."
+        )
 
     seen_legacy_ids: set[uuid.UUID] = set()
     seen_item_ids: set[uuid.UUID] = set()
@@ -57,16 +57,22 @@ def _validate_mapping_set(mapping_set: CurationCutoverMappingSet) -> None:
         if mapping.mapping_kind not in _MAPPING_KINDS:
             raise CurationCutoverMappingReceiptConflict("Map mapping kind가 지원되지 않습니다.")
         if _HEX64_RE.fullmatch(mapping.source_row_hash) is None:
-            raise CurationCutoverMappingReceiptConflict("Map mapping source row hash가 유효하지 않습니다.")
+            raise CurationCutoverMappingReceiptConflict(
+                "Map mapping source row hash가 유효하지 않습니다."
+            )
         if mapping.legacy_curated_feature_id in seen_legacy_ids:
             raise CurationCutoverMappingReceiptConflict("Map legacy identity가 중복됐습니다.")
         if mapping.curation_item_id in seen_item_ids:
-            raise CurationCutoverMappingReceiptConflict("Map canonical item identity가 중복됐습니다.")
+            raise CurationCutoverMappingReceiptConflict(
+                "Map canonical item identity가 중복됐습니다."
+            )
         if (
             previous_legacy_id is not None
             and mapping.legacy_curated_feature_id.bytes <= previous_legacy_id.bytes
         ):
-            raise CurationCutoverMappingReceiptConflict("Map mapping keyset 순서가 전진하지 않습니다.")
+            raise CurationCutoverMappingReceiptConflict(
+                "Map mapping keyset 순서가 전진하지 않습니다."
+            )
         seen_legacy_ids.add(mapping.legacy_curated_feature_id)
         seen_item_ids.add(mapping.curation_item_id)
         previous_legacy_id = mapping.legacy_curated_feature_id
@@ -87,7 +93,9 @@ def _mapping_tuple(
 async def _lock_release_scope(db: AsyncSession) -> None:
     await db.execute(
         text("SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"),
-        {"identity": f"{_MAPPING_LOCK_NAMESPACE}:release:{KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION}"},
+        {
+            "identity": f"{_MAPPING_LOCK_NAMESPACE}:release:{KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION}"
+        },
     )
 
 
@@ -132,7 +140,9 @@ async def seal_curation_cutover_mapping_receipt(
                 .with_for_update()
             )
         ).all()
-        if tuple(map(_mapping_tuple, stored_items)) != tuple(map(_mapping_tuple, mapping_set.mappings)):
+        if tuple(map(_mapping_tuple, stored_items)) != tuple(
+            map(_mapping_tuple, mapping_set.mappings)
+        ):
             raise CurationCutoverMappingReceiptConflict(
                 "sealed local mapping member set이 현재 Map export와 다릅니다."
             )

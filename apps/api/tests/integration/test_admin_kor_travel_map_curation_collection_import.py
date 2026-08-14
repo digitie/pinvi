@@ -334,10 +334,7 @@ async def test_canonical_collection_import_replay_refresh_and_manual_poi_preserv
                 for poi_id, version in initial_poi_versions.items()
             )
             assert await db.scalar(select(func.count(KtmCurationImportReceipt.receipt_id))) == 3
-            assert (
-                await db.scalar(select(func.count(KtmCurationImportReceiptItem.receipt_id)))
-                == 6
-            )
+            assert await db.scalar(select(func.count(KtmCurationImportReceiptItem.receipt_id))) == 6
             assert await db.scalar(select(func.count(AdminAuditLog.log_id))) == 2
 
         # revision 2의 immutable proof는 item 2·3이다. 같은 item count로 item 1을
@@ -354,14 +351,12 @@ async def test_canonical_collection_import_replay_refresh_and_manual_poi_preserv
             stale_item = next(
                 poi
                 for poi in canonical
-                if poi.source_curation_item_id
-                == uuid.UUID("20000000-0000-0000-0000-000000000001")
+                if poi.source_curation_item_id == uuid.UUID("20000000-0000-0000-0000-000000000001")
             )
             current_item = next(
                 poi
                 for poi in canonical
-                if poi.source_curation_item_id
-                == uuid.UUID("20000000-0000-0000-0000-000000000003")
+                if poi.source_curation_item_id == uuid.UUID("20000000-0000-0000-0000-000000000003")
             )
             stale_item.deleted_at = None
             current_item.deleted_at = datetime.now(UTC)

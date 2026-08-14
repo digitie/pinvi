@@ -114,18 +114,14 @@ def _completed_result(
     if (
         response.notice_plan_id != receipt.result_plan_id
         or response.source_system != receipt.source_system
-        or response.source_curation_collection_id
-        != receipt.source_curation_collection_id
+        or response.source_curation_collection_id != receipt.source_curation_collection_id
         or response.source_curation_collection_revision
         != str(receipt.source_curation_collection_revision)
-        or response.source_curation_collection_etag
-        != receipt.source_curation_collection_etag
+        or response.source_curation_collection_etag != receipt.source_curation_collection_etag
         or response.source_curation_item_set_hash_version
         != receipt.source_curation_item_set_hash_version
-        or response.source_curation_item_set_hash
-        != receipt.source_curation_item_set_hash
-        or response.source_curation_item_count
-        != receipt.source_curation_item_count
+        or response.source_curation_item_set_hash != receipt.source_curation_item_set_hash
+        or response.source_curation_item_count != receipt.source_curation_item_count
     ):
         raise CurationCollectionImportConflict(
             "terminal canonical collection import response가 receipt source tuple과 다릅니다."
@@ -180,13 +176,9 @@ async def inspect_curation_collection_import(
     if mode == "create" and plan is not None:
         raise CurationCollectionImportConflict("이미 가져온 canonical collection입니다.")
     if mode == "refresh" and plan is None:
-        raise CurationCollectionImportNotFound(
-            "refresh할 canonical collection import가 없습니다."
-        )
+        raise CurationCollectionImportNotFound("refresh할 canonical collection import가 없습니다.")
     conditional_etag = None
-    if plan is not None and (
-        is_published is None or plan.is_published is is_published
-    ):
+    if plan is not None and (is_published is None or plan.is_published is is_published):
         conditional_etag = plan.source_curation_collection_etag
     return None, conditional_etag
 
@@ -199,28 +191,20 @@ async def _lock_command_scope(
     collection_id: uuid.UUID,
 ) -> None:
     await db.execute(
-        text(
-            "SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"
-        ),
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"),
         {
-            "identity": (
-                f"{_IMPORT_LOCK_NAMESPACE}:actor:{actor_admin_id}:key:{idempotency_key}"
-            ),
+            "identity": (f"{_IMPORT_LOCK_NAMESPACE}:actor:{actor_admin_id}:key:{idempotency_key}"),
         },
     )
     await db.execute(
-        text(
-            "SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"
-        ),
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"),
         {
             "identity": f"{_IMPORT_LOCK_NAMESPACE}:collection:{collection_id}",
         },
     )
 
 
-async def _locked_plan(
-    db: AsyncSession, collection_id: uuid.UUID
-) -> CuratedTripPlan | None:
+async def _locked_plan(db: AsyncSession, collection_id: uuid.UUID) -> CuratedTripPlan | None:
     return cast(
         CuratedTripPlan | None,
         await db.scalar(
@@ -255,9 +239,7 @@ def _response(
         not_modified=not_modified,
         source_system=_SOURCE_SYSTEM,
         source_curation_collection_id=plan.source_curation_collection_id,
-        source_curation_collection_revision=str(
-            plan.source_curation_collection_revision
-        ),
+        source_curation_collection_revision=str(plan.source_curation_collection_revision),
         source_curation_collection_etag=plan.source_curation_collection_etag,
         source_curation_item_set_hash_version=cast(
             Literal["ktm-db-item-set-v1"],
@@ -487,8 +469,7 @@ async def _apply_not_modified(
             == plan.source_curation_item_set_hash_version,
             KtmCurationImportReceipt.source_curation_item_set_hash
             == plan.source_curation_item_set_hash,
-            KtmCurationImportReceipt.source_curation_item_count
-            == plan.source_curation_item_count,
+            KtmCurationImportReceipt.source_curation_item_count == plan.source_curation_item_count,
         )
         .order_by(
             KtmCurationImportReceipt.completed_at.desc(),
@@ -551,9 +532,7 @@ async def _apply_not_modified(
             or poi.source_curation_item_etag is None
             or poi.feature_uuid is None
         ):
-            raise CurationCollectionImportConflict(
-                "local canonical POI provenance가 불완전합니다."
-            )
+            raise CurationCollectionImportConflict("local canonical POI provenance가 불완전합니다.")
         current_proofs.add(
             (
                 poi.source_curation_collection_id,
@@ -626,9 +605,7 @@ async def apply_curation_collection_import(
     if mode == "create" and plan is not None:
         raise CurationCollectionImportConflict("이미 가져온 canonical collection입니다.")
     if mode == "refresh" and plan is None:
-        raise CurationCollectionImportNotFound(
-            "refresh할 canonical collection import가 없습니다."
-        )
+        raise CurationCollectionImportNotFound("refresh할 canonical collection import가 없습니다.")
 
     created_plan = plan is None
     if fetched.not_modified:
@@ -651,9 +628,7 @@ async def apply_curation_collection_import(
                 source_curation_collection_id=collection_id,
                 source_curation_collection_revision=fetched.snapshot.row_revision,
                 source_curation_collection_etag=fetched.snapshot.source_etag,
-                source_curation_item_set_hash_version=(
-                    fetched.snapshot.item_set_hash_version
-                ),
+                source_curation_item_set_hash_version=(fetched.snapshot.item_set_hash_version),
                 source_curation_item_set_hash=fetched.snapshot.item_set_hash,
                 source_curation_item_count=fetched.snapshot.item_count,
                 created_by_admin_id=actor_admin_id,

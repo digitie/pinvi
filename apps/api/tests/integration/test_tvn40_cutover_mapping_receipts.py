@@ -109,11 +109,14 @@ async def test_cutover_mapping_receipt_seals_exact_members_and_rejects_late_inse
         sealed = await db.get(KtmCurationCutoverMappingReceipt, sealed_id)
         assert sealed is not None
         assert sealed.status == "completed"
-        assert await db.scalar(
-            select(func.count())
-            .select_from(KtmCurationCutoverMappingReceiptItem)
-            .where(KtmCurationCutoverMappingReceiptItem.receipt_id == sealed_id)
-        ) == 1
+        assert (
+            await db.scalar(
+                select(func.count())
+                .select_from(KtmCurationCutoverMappingReceiptItem)
+                .where(KtmCurationCutoverMappingReceiptItem.receipt_id == sealed_id)
+            )
+            == 1
+        )
         db.add(_item(sealed_id))
         with pytest.raises(DBAPIError) as raised:
             await db.commit()
@@ -211,7 +214,9 @@ async def test_cutover_mapping_receipt_catalog_has_exact_terminal_guards(
                         ]
                     },
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
         assert names == {
             "ck_ktm_curation_cutover_mapping_receipts_release",
