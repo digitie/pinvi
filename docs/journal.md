@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-14 (codex) — T-VN-40 receipt terminal lock·304 no-op proof
+
+- `20260814_0053`에서 receipt item INSERT가 parent receipt를 `FOR UPDATE`로 잠그게 해 completion 뒤
+  member가 끼어드는 TOCTOU를 제거했다. completion은 receipt→result plan→canonical POI 순으로 잠그고
+  exact source proof를 검증한다.
+- exact count에서 provenance 없는 수동 PO이를 제외했다. 304 fresh-key receipt는 기존 canonical POI의
+  originating receipt id를 갱신하지 않고 collection/item/revision/ETag/Feature natural tuple을 다시
+  증명하므로 plan/POI/audit no-op과 terminal replay를 함께 만족한다.
+- `0052` SHA-256을 immutable migration gate에 추가했다. dataful `0051→0053`, catalog drift,
+  manual+canonical, 304 no-op, late proof 2-session 경합을 포함한 integration 6건과 boundary/unit 31건,
+  변경 파일 Ruff를 통과했다.
+
 ## 2026-08-14 (codex) — T-VN-40 canonical receipt 인과성·bounded consumer 보강
 
 - Map `98489eb4e81fc736c4bb6d16deec0d2033d2e990`의 service OpenAPI를 exact bytes로

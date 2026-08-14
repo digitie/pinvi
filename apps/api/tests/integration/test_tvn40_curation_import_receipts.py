@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import subprocess
@@ -48,7 +49,7 @@ def _alembic(database_url: str, *args: str) -> None:
         raise RuntimeError(f"alembic {' '.join(args)} 실패:\n{result.stdout}\n{result.stderr}")
 
 
-async def _assert_0052_catalog_contract(db: AsyncSession) -> None:
+async def _assert_0053_catalog_contract(db: AsyncSession) -> None:
     assert CuratedTripPlan.__table__.c.title.type.length == 300
     assert CuratedTripPlan.__table__.c.category.type.length == 128
     assert {
@@ -288,7 +289,7 @@ async def _assert_0052_catalog_contract(db: AsyncSession) -> None:
         )
     )
     assert boundary_definition is not None
-    assert "schema_revision = '20260814_0052'::text" in boundary_definition
+    assert "schema_revision = '20260814_0053'::text" in boundary_definition
 
     indexes = dict(
         (
@@ -325,7 +326,7 @@ async def test_tvn40_curation_receipt_catalog_is_exact_and_detects_semantic_drif
     session_factory,
 ) -> None:  # type: ignore[no-untyped-def]
     async with session_factory() as db:
-        await _assert_0052_catalog_contract(db)
+        await _assert_0053_catalog_contract(db)
         await db.execute(
             text(
                 "ALTER TABLE app.curated_trip_plans "
@@ -339,11 +340,11 @@ async def test_tvn40_curation_receipt_catalog_is_exact_and_detects_semantic_drif
             )
         )
         with pytest.raises(AssertionError):
-            await _assert_0052_catalog_contract(db)
+            await _assert_0053_catalog_contract(db)
         await db.rollback()
 
 
-async def test_existing_0051_schema_and_data_upgrade_forward_to_0052(
+async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
     _database_url: str,
 ) -> None:
     _alembic(_database_url, "downgrade", "20260814_0051")
@@ -448,7 +449,7 @@ async def test_existing_0051_schema_and_data_upgrade_forward_to_0052(
         finally:
             await engine.dispose()
 
-        _alembic(_database_url, "upgrade", "20260814_0052")
+        _alembic(_database_url, "upgrade", "20260814_0053")
         engine = create_async_engine(_database_url, poolclass=NullPool)
         try:
             async with engine.begin() as connection:
@@ -586,9 +587,18 @@ async def test_canonical_provenance_and_receipt_are_constrained_and_append_only(
                 source_curation_item_etag=_ETAG,
             )
         )
+        manual_poi = CuratedPlanPoi(
+            curated_plan_id=plan.curated_plan_id,
+            day_index=1,
+            sort_order="z",
+            feature_uuid=uuid.uuid4(),
+            feature_snapshot={"title": "수동 POI"},
+        )
+        db.add(manual_poi)
         await db.commit()
         plan_id = plan.curated_plan_id
         receipt_id = receipt.receipt_id
+        manual_poi_id = manual_poi.curated_poi_id
 
     async with session_factory() as db:
         receipt = await db.get(KtmCurationImportReceipt, receipt_id)
@@ -602,6 +612,68 @@ async def test_canonical_provenance_and_receipt_are_constrained_and_append_only(
         }
         receipt.completed_at = datetime.now(UTC)
         await db.commit()
+
+    # 같은 Map ETag가 304를 반환한 fresh idempotency command는 receipt/proof만
+    # 새로 보존한다. 기존 canonical POI의 originating receipt와 수동 PO이는 바꾸지 않는다.
+    no_op_receipt_id = uuid.uuid4()
+    async with session_factory() as db:
+        db.add(
+            KtmCurationImportReceipt(
+                receipt_id=no_op_receipt_id,
+                actor_admin_id=admin_id,
+                idempotency_key=uuid.uuid4(),
+                request_fingerprint="d" * 64,
+                source_curation_collection_id=_COLLECTION_ID,
+                source_curation_collection_revision=7,
+                source_curation_collection_etag=_ETAG,
+                source_curation_item_set_hash_version="ktm-db-item-set-v1",
+                source_curation_item_set_hash=_ITEM_SET_HASH,
+                source_curation_item_count=1,
+                mode="refresh",
+                requested_is_published=False,
+            )
+        )
+        await db.flush()
+        db.add(
+            KtmCurationImportReceiptItem(
+                receipt_id=no_op_receipt_id,
+                source_curation_collection_id=_COLLECTION_ID,
+                source_curation_item_id=_ITEM_ID,
+                source_curation_item_revision=3,
+                source_curation_item_etag=_ETAG,
+                feature_uuid=feature_uuid,
+            )
+        )
+        await db.flush()
+        no_op_receipt = await db.get(KtmCurationImportReceipt, no_op_receipt_id)
+        assert no_op_receipt is not None
+        no_op_receipt.status = "completed"
+        no_op_receipt.result_plan_id = plan_id
+        no_op_receipt.response_status = 200
+        no_op_receipt.response_body = {
+            "notice_plan_id": str(plan_id),
+            "source_curation_collection_id": str(_COLLECTION_ID),
+        }
+        no_op_receipt.completed_at = datetime.now(UTC)
+        await db.commit()
+
+    async with session_factory() as db:
+        pois = (
+            await db.scalars(
+                select(CuratedPlanPoi)
+                .where(CuratedPlanPoi.curated_plan_id == plan_id)
+                .order_by(CuratedPlanPoi.sort_order)
+            )
+        ).all()
+        assert len(pois) == 2
+        canonical_poi = next(poi for poi in pois if poi.source_curation_item_id is not None)
+        assert canonical_poi.source_curation_import_receipt_id == receipt_id
+        assert next(poi for poi in pois if poi.curated_poi_id == manual_poi_id).feature_snapshot == {
+            "title": "수동 POI"
+        }
+        no_op_receipt = await db.get(KtmCurationImportReceipt, no_op_receipt_id)
+        assert no_op_receipt is not None
+        assert no_op_receipt.status == "completed"
 
     async with session_factory() as db:
         db.add(
@@ -692,6 +764,138 @@ async def test_canonical_provenance_and_receipt_are_constrained_and_append_only(
             await db.commit()
 
 
+async def test_receipt_completion_serializes_member_insert(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    admin_id = await _seed_admin(session_factory)
+    receipt_id = uuid.uuid4()
+    plan_id = uuid.uuid4()
+    feature_uuid = uuid.uuid4()
+
+    async with session_factory() as db:
+        db.add(
+            CuratedTripPlan(
+                curated_plan_id=plan_id,
+                slug=f"receipt-lock-{plan_id}",
+                title="영수증 락",
+                category="recommended",
+                source_system="kor-travel-map",
+                source_curation_collection_id=_COLLECTION_ID,
+                source_curation_collection_revision=1,
+                source_curation_collection_etag=_ETAG,
+                source_curation_item_set_hash_version="ktm-db-item-set-v1",
+                source_curation_item_set_hash=_ITEM_SET_HASH,
+                source_curation_item_count=1,
+                created_by_admin_id=admin_id,
+                updated_by_admin_id=admin_id,
+            )
+        )
+        db.add(
+            KtmCurationImportReceipt(
+                receipt_id=receipt_id,
+                actor_admin_id=admin_id,
+                idempotency_key=uuid.uuid4(),
+                request_fingerprint=_FINGERPRINT,
+                source_curation_collection_id=_COLLECTION_ID,
+                source_curation_collection_revision=1,
+                source_curation_collection_etag=_ETAG,
+                source_curation_item_set_hash_version="ktm-db-item-set-v1",
+                source_curation_item_set_hash=_ITEM_SET_HASH,
+                source_curation_item_count=1,
+                mode="create",
+                requested_is_published=False,
+            )
+        )
+        await db.flush()
+        db.add(
+            KtmCurationImportReceiptItem(
+                receipt_id=receipt_id,
+                source_curation_collection_id=_COLLECTION_ID,
+                source_curation_item_id=_ITEM_ID,
+                source_curation_item_revision=1,
+                source_curation_item_etag=_ETAG,
+                feature_uuid=feature_uuid,
+            )
+        )
+        await db.flush()
+        db.add(
+            CuratedPlanPoi(
+                curated_plan_id=plan_id,
+                day_index=1,
+                sort_order="a",
+                feature_uuid=feature_uuid,
+                feature_snapshot={},
+                source_curation_import_receipt_id=receipt_id,
+                source_curation_collection_id=_COLLECTION_ID,
+                source_curation_item_id=_ITEM_ID,
+                source_curation_item_revision=1,
+                source_curation_item_etag=_ETAG,
+            )
+        )
+        await db.commit()
+
+    started = asyncio.Event()
+
+    async def _insert_late_member() -> str:
+        async with session_factory() as db:
+            started.set()
+            try:
+                await db.execute(
+                    text(
+                        "INSERT INTO app.ktm_curation_import_receipt_items ("
+                        "receipt_id, source_curation_collection_id, "
+                        "source_curation_item_id, source_curation_item_revision, "
+                        "source_curation_item_etag, feature_uuid) VALUES ("
+                        ":receipt_id, :collection_id, :item_id, 1, :etag, :feature_uuid)"
+                    ),
+                    {
+                        "receipt_id": receipt_id,
+                        "collection_id": _COLLECTION_ID,
+                        "item_id": uuid.uuid4(),
+                        "etag": _ETAG,
+                        "feature_uuid": uuid.uuid4(),
+                    },
+                )
+                await db.commit()
+            except DBAPIError as exc:
+                await db.rollback()
+                return str(exc)
+        return "unexpected success"
+
+    async with session_factory() as completing:
+        receipt = await completing.get(KtmCurationImportReceipt, receipt_id)
+        assert receipt is not None
+        receipt.status = "completed"
+        receipt.result_plan_id = plan_id
+        receipt.response_status = 201
+        receipt.response_body = {
+            "notice_plan_id": str(plan_id),
+            "source_curation_collection_id": str(_COLLECTION_ID),
+        }
+        receipt.completed_at = datetime.now(UTC)
+        await completing.flush()
+
+        late_insert = asyncio.create_task(_insert_late_member())
+        await started.wait()
+        await asyncio.sleep(0.1)
+        assert not late_insert.done()
+        await completing.commit()
+
+    error = await asyncio.wait_for(late_insert, timeout=5)
+    assert "requires pending receipt" in error
+    async with session_factory() as db:
+        assert (
+            await db.scalar(
+                text(
+                    "SELECT count(*) FROM app.ktm_curation_import_receipt_items "
+                    "WHERE receipt_id = :receipt_id"
+                ),
+                {"receipt_id": receipt_id},
+            )
+            == 1
+        )
+
+
 async def test_partial_or_duplicate_canonical_provenance_is_rejected(
     session_factory,
 ) -> None:  # type: ignore[no-untyped-def]
@@ -754,6 +958,7 @@ async def test_terminal_receipt_is_bound_to_source_plan_body_and_item_set(
         with pytest.raises(IntegrityError):
             await db.commit()
         await db.rollback()
+
 
     async with session_factory() as db:
         plan = CuratedTripPlan(

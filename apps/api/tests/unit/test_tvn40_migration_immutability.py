@@ -13,6 +13,9 @@ _PINNED_MIGRATION_SHA256 = {
     "20260814_0051_curation_collection_import_receipts.py": (
         "d36f5f4a0c6133b4d2e2554fa5a26d176614a51f05b415e94c3015f779dd21c9"
     ),
+    "20260814_0052_curation_import_causal_seal.py": (
+        "b957ee19805c5b4560ea0dabe8a72b68f01a7a6fe31721828607c266a092a49e"
+    ),
 }
 
 

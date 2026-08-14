@@ -1,5 +1,20 @@
 # resume.md
 
+## 2026-08-14 (codex) — T-VN-40 receipt terminal set 원자 봉인
+
+배포 가능한 `0052`는 byte 불변으로 고정하고 forward-only `20260814_0053`을 추가했다. receipt
+member INSERT와 terminal UPDATE가 같은 parent receipt 배타 락을 사용하며, completion은 result plan과
+canonical POI set을 잠근 뒤 exact proof를 검증한다. exact set은 Map provenance가 있는 POI만 포함해
+수동 PO이를 보존한다. 새 idempotency key의 Map `304`는 기존 POI의 originating receipt를 바꾸지 않고
+동일 natural proof를 새 immutable receipt에 저장해 terminal replay가 가능하다. dataful
+`0051→0053`, 수동+canonical 혼합, 304 no-op, 2-session late-member 경쟁을 실제 PostgreSQL에서 검증했다.
+
+Map snapshot 문자열 상한은 아직 producer DB/OpenAPI와 PinVi client 사이에 고정되지 않았으므로 importer
+연결 전에 `theme_slug 128`, `theme_name 200`, `title 300`, `edition_key 100` 경계를 먼저 닫는다.
+
+**다음 한 작업**: Map producer 문자열 상한과 vendored OpenAPI를 재고정한 뒤 canonical importer의
+plan/POI·receipt·admin audit 단일 transaction을 구현한다.
+
 ## 2026-08-14 (codex) — T-VN-40 canonical import 인과성 경계 보강
 
 Map `98489eb4e81fc736c4bb6d16deec0d2033d2e990`의 service OpenAPI를 byte-exact로
