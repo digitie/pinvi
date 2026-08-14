@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-14 (codex) — T-VN-40 canonical curation provenance/receipt expand
+
+- `curated_trip_plans`에 Map `collection_id`, bigint revision, raw strong ETag, bounded item-set
+  receipt를 추가하고, `curated_plan_pois`에는 stable `curation_item_id`와 bigint revision/ETag를
+  추가했다. partial tuple, 잘못된 digest/ETag, 2,000건 초과는 DB가 거부한다.
+- `app.ktm_curation_import_receipts`는 admin actor+idempotency key를 unique하게 결박하고,
+  request fingerprint/source receipt를 바꾸거나 completed row를 갱신·삭제·truncate하지 못하게 한다.
+- 실제 Postgres에서 Alembic head/ORM metadata 일치, partial/duplicate provenance 거부,
+  pending→completed 단일 전이와 terminal append-only를 검증했다.
+- 다음 checkpoint는 Map canonical collection snapshot client를 이 schema에 연결하고 내부 commit을
+  없애 import mutation·audit·receipt를 한 transaction으로 수렴시키는 것이다.
+
 ## 2026-08-11 (codex) — T-VN-41: rebased Map service provenance 재고정
 
 - T-VN-41 Map branch가 T-VN-36 final-fence rebase를 반영한 뒤 service OpenAPI를 다시

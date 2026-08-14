@@ -1,5 +1,18 @@
 # resume.md
 
+## 2026-08-14 (codex) — T-VN-40 canonical curation import DB 경계 진행
+
+Map collection/item UUID snapshot을 PinVi plan/POI에 보존하기 위한 expand migration
+`20260814_0051`을 추가했다. collection/item revision은 `bigint`, strong ETag와 item-set hash는
+형식·2,000건 상한을 DB CHECK로 고정하고, active collection→plan 및 item→POI identity는 unique
+constraint로 보장한다. actor-scoped `Idempotency-Key` import receipt는 pending→completed 한 번만
+허용하며 입력 tuple과 terminal 응답은 append-only다. 기존 legacy 열은 canonical importer가 완전히
+전환될 때까지 이 expand checkpoint에서만 유지한다.
+
+**다음 한 작업**: canonical service snapshot importer가 새 provenance와 receipt를 사용해 plan/POI
+mutation·admin audit·terminal response를 한 transaction으로 commit하도록 바꾸고, legacy admin snapshot
+route/client/import 계약을 제거한다.
+
 ## 2026-08-11 (codex) — T-VN-41 ABC compatible pair draft 준비
 
 Map `9c5332bb7ede81ed199f7ad29bb0976a13eb8e5a`의 service OpenAPI SHA-256

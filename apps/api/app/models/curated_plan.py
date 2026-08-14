@@ -12,15 +12,18 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -34,6 +37,35 @@ from app.models.mixins import TimestampMixin
 
 class CuratedTripPlan(Base, TimestampMixin):
     __tablename__ = "curated_trip_plans"
+    __table_args__ = (
+        CheckConstraint(
+            "num_nonnulls(source_curation_collection_id, "
+            "source_curation_collection_revision, source_curation_collection_etag, "
+            "source_curation_item_set_hash_version, source_curation_item_set_hash, "
+            "source_curation_item_count) = 0 OR "
+            "(source_system = 'kor-travel-map' AND "
+            "num_nonnulls(source_curation_collection_id, "
+            "source_curation_collection_revision, source_curation_collection_etag, "
+            "source_curation_item_set_hash_version, source_curation_item_set_hash, "
+            "source_curation_item_count) = 6 AND "
+            "source_curation_collection_revision > 0 AND "
+            "source_curation_collection_etag ~ '^\"sha256:[0-9a-f]{64}\"$' AND "
+            "source_curation_item_set_hash_version = 'ktm-db-item-set-v1' AND "
+            "source_curation_item_set_hash ~ '^[0-9a-f]{64}$' AND "
+            "source_curation_item_count BETWEEN 0 AND 2000)",
+            name=conv("ck_curated_trip_plans_curation_source"),
+        ),
+        Index(
+            "uq_curated_trip_plans_curation_collection_active",
+            "source_system",
+            "source_curation_collection_id",
+            unique=True,
+            postgresql_where=text(
+                "deleted_at IS NULL AND source_system = 'kor-travel-map' "
+                "AND source_curation_collection_id IS NOT NULL"
+            ),
+        ),
+    )
 
     curated_plan_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),
@@ -52,6 +84,12 @@ class CuratedTripPlan(Base, TimestampMixin):
     source_curated_feature_id: Mapped[str | None] = mapped_column(Text())
     source_curated_feature_version: Mapped[int | None] = mapped_column(Integer)
     source_etag: Mapped[str | None] = mapped_column(String(128))
+    source_curation_collection_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True))
+    source_curation_collection_revision: Mapped[int | None] = mapped_column(BigInteger)
+    source_curation_collection_etag: Mapped[str | None] = mapped_column(String(128))
+    source_curation_item_set_hash_version: Mapped[str | None] = mapped_column(String(64))
+    source_curation_item_set_hash: Mapped[str | None] = mapped_column(String(64))
+    source_curation_item_count: Mapped[int | None] = mapped_column(BigInteger)
     source_imported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     is_published: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
@@ -87,6 +125,19 @@ class CuratedPlanPoi(Base, TimestampMixin):
             "currency ~ '^[A-Z]{3}$'",
             name=conv("ck_curated_plan_pois_currency"),
         ),
+        CheckConstraint(
+            "num_nonnulls(source_curation_item_id, source_curation_item_revision, "
+            "source_curation_item_etag) = 0 OR "
+            "(num_nonnulls(source_curation_item_id, source_curation_item_revision, "
+            "source_curation_item_etag) = 3 AND source_curation_item_revision > 0 AND "
+            "source_curation_item_etag ~ '^\"sha256:[0-9a-f]{64}\"$')",
+            name=conv("ck_curated_plan_pois_curation_source"),
+        ),
+        UniqueConstraint(
+            "curated_plan_id",
+            "source_curation_item_id",
+            name="uq_curated_plan_pois_curation_item",
+        ),
     )
 
     curated_poi_id: Mapped[uuid.UUID] = mapped_column(
@@ -119,6 +170,9 @@ class CuratedPlanPoi(Base, TimestampMixin):
     custom_marker_icon: Mapped[str | None] = mapped_column(String(64))
     source_curated_feature_id: Mapped[str | None] = mapped_column(Text())
     source_curated_feature_item_id: Mapped[str | None] = mapped_column(Text())
+    source_curation_item_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True))
+    source_curation_item_revision: Mapped[int | None] = mapped_column(BigInteger)
+    source_curation_item_etag: Mapped[str | None] = mapped_column(String(128))
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -133,3 +187,79 @@ class CuratedPlanPoi(Base, TimestampMixin):
         """Deprecated API alias retained for `/notice-plans` response compatibility."""
 
         return self.curated_plan_id
+
+
+class KtmCurationImportReceipt(Base, TimestampMixin):
+    """Map canonical collection import의 actor-scoped terminal replay 영수증."""
+
+    __tablename__ = "ktm_curation_import_receipts"
+    __table_args__ = (
+        UniqueConstraint(
+            "actor_admin_id",
+            "idempotency_key",
+            name="uq_ktm_curation_import_receipts_actor_key",
+        ),
+        CheckConstraint(
+            "request_fingerprint ~ '^[0-9a-f]{64}$'",
+            name=conv("ck_ktm_curation_import_receipts_fingerprint"),
+        ),
+        CheckConstraint(
+            "source_system = 'kor-travel-map' AND mode IN ('create', 'refresh')",
+            name=conv("ck_ktm_curation_import_receipts_request"),
+        ),
+        CheckConstraint(
+            "source_curation_collection_revision > 0 AND "
+            "source_curation_collection_etag ~ '^\"sha256:[0-9a-f]{64}\"$' AND "
+            "source_curation_item_set_hash_version = 'ktm-db-item-set-v1' AND "
+            "source_curation_item_set_hash ~ '^[0-9a-f]{64}$' AND "
+            "source_curation_item_count BETWEEN 0 AND 2000",
+            name=conv("ck_ktm_curation_import_receipts_source"),
+        ),
+        CheckConstraint(
+            "(status = 'pending' AND result_plan_id IS NULL AND response_status IS NULL "
+            "AND response_body IS NULL AND completed_at IS NULL) OR "
+            "(status = 'completed' AND result_plan_id IS NOT NULL "
+            "AND response_status IN (200, 201) AND jsonb_typeof(response_body) = 'object' "
+            "AND completed_at IS NOT NULL)",
+            name=conv("ck_ktm_curation_import_receipts_terminal"),
+        ),
+        Index(
+            "ix_ktm_curation_import_receipts_collection_created",
+            "source_curation_collection_id",
+            "created_at",
+        ),
+    )
+
+    receipt_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    actor_admin_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("app.users.user_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    idempotency_key: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_system: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="kor-travel-map"
+    )
+    source_curation_collection_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), nullable=False
+    )
+    source_curation_collection_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    source_curation_collection_etag: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_curation_item_set_hash_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_curation_item_set_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_curation_item_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    requested_is_published: Mapped[bool | None] = mapped_column(Boolean)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
+    result_plan_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("app.curated_trip_plans.curated_plan_id", ondelete="RESTRICT"),
+    )
+    response_status: Mapped[int | None] = mapped_column(Integer)
+    response_body: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

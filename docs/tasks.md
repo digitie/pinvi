@@ -30,6 +30,10 @@
 
 ## kor-travel-map compatible pair
 
+- [/] **T-VN-40 PinVi canonical curation consumer** — Map legacy curated-feature snapshot 대신
+      collection/item UUID service snapshot을 소비한다. bigint revision/strong ETag/item-set receipt,
+      actor-scoped import idempotency, plan/POI mutation+audit 단일 transaction을 먼저 완료하고 legacy
+      admin snapshot/client/source ID 열을 제거한 뒤 paired service receipt와 n150 live import를 닫는다.
 - [/] **T-VN-41-ABC — cache target relay producer/consumer 결박** — Map queued refresh의 source event/outbox
       원자화, restore exact replay `200` OpenAPI 선언, PinVi service artifact exact re-vendor와 restore-fence
       one-shot command를 하나의 compatible pair로 고정한다. command는 sync disabled 상태에서 immutable
