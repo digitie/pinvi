@@ -11,6 +11,7 @@ from typing import Any
 from app.core.config import (
     KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION,
     KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION,
+    KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION,
     KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
     KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
 )
@@ -21,8 +22,8 @@ _SNAPSHOT = (
 _SERVICE_PROVENANCE = (
     Path(__file__).resolve().parents[4] / "contracts" / "kor-travel-map-service-provenance-v1.json"
 )
-_MAP_RELEASE_REVISION = "9c5332bb7ede81ed199f7ad29bb0976a13eb8e5a"
-_SNAPSHOT_SHA256 = "53da6a3a1194b9de715e80ed69e016ae15885b81d2909bf2d128773d64f8b2f7"
+_MAP_RELEASE_REVISION = "4b7ef67e383ac59a223c24a87640ca3557c7dbb9"
+_SNAPSHOT_SHA256 = "5d3809115b96daa20b0d9ab37583cc2f1a9866b9f56db914f9cd63c11a4dcdc2"
 
 _GENERATION7_ROLE_SCOPES = {
     "command": {"cache-target:command"},
@@ -117,10 +118,12 @@ def test_service_snapshot_exact_bytes_runtime_pin_and_provenance_match_map_relea
     assert KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION == _MAP_RELEASE_REVISION
     assert KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION == 7
     assert KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION == 2
+    assert KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION == 1
     assert json.loads(_SERVICE_PROVENANCE.read_text()) == {
         "capabilities": {
             "c6c_cancel_probe": {"generation": 2},
             "cache_target": {"generation": 7},
+            "curation_snapshot": {"generation": 1},
         },
         "map_release_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
         "service_openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
@@ -196,6 +199,31 @@ def test_generation7_service_scope_and_caller_inventory_is_exact() -> None:
     for route, (required_scope, caller_role) in _GENERATION7_OPERATION_CONTRACT.items():
         assert actual[route] == required_scope
         assert required_scope in _GENERATION7_ROLE_SCOPES[caller_role]
+
+
+def test_curation_snapshot_generation1_service_contract_is_exact() -> None:
+    spec = _spec()
+    expected = {
+        "/v1/service/curation-collections/{collection_id}/detail-snapshot",
+        "/v1/service/curation-items/{curation_item_id}/detail-snapshot",
+    }
+    actual = {
+        path
+        for path in spec["paths"]
+        if path.startswith(("/v1/service/curation-collections", "/v1/service/curation-items"))
+    }
+    assert actual == expected
+    for path in expected:
+        operation = spec["paths"][path]["get"]
+        assert operation["security"] == [{"ServiceToken": []}]
+        assert operation["x-required-service-scope"] == "pinvi:curation-snapshot:read"
+
+    collection = spec["components"]["schemas"]["CurationCollectionDetailSnapshot"]
+    assert collection["additionalProperties"] is False
+    assert collection["properties"]["row_revision"]["pattern"] == r"^[1-9][0-9]*$"
+    assert collection["properties"]["etag"]["pattern"] == r"^sha256:[0-9a-f]{64}$"
+    assert collection["properties"]["item_set_hash"]["pattern"] == r"^[0-9a-f]{64}$"
+    assert collection["properties"]["items"]["maxItems"] == 200
 
 
 def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
@@ -453,7 +481,8 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
     assert restore_headers["Idempotency-Key"]["required"] is True
     assert restore_headers["Idempotency-Key"]["schema"]["format"] == "uuid"
     assert restore_headers["If-Match"]["required"] is True
-    assert {"200", "201"} <= set(restore_path["responses"])
+    assert "201" in restore_path["responses"]
+    assert "200" in restore_path["responses"]
     assert restore_path["responses"]["200"]["description"] == "exact Idempotency-Key replay"
     assert (
         restore_path["responses"]["200"]["headers"] == restore_path["responses"]["201"]["headers"]

@@ -5,9 +5,12 @@
     },
     "cache_target": {
       "generation": 7
+    },
+    "curation_snapshot": {
+      "generation": 1
     }
   },
-  "map_release_revision": "9c5332bb7ede81ed199f7ad29bb0976a13eb8e5a",
-  "service_openapi_sha256": "53da6a3a1194b9de715e80ed69e016ae15885b81d2909bf2d128773d64f8b2f7",
+  "map_release_revision": "4b7ef67e383ac59a223c24a87640ca3557c7dbb9",
+  "service_openapi_sha256": "5d3809115b96daa20b0d9ab37583cc2f1a9866b9f56db914f9cd63c11a4dcdc2",
   "version": 1
 }
