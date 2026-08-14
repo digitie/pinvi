@@ -10,7 +10,7 @@
 tuple과 DB trigger에서 정확히 결박하고, downgrade를 fail-close한다. fresh-key `304`는 현재 POI를 새
 정본으로 삼지 않고 같은 Map tuple의 이전 completed receipt proof를 복제한 뒤 현재 canonical POI set과
 대조한다. Map provenance plan·POI는 generic admin 수정·삭제·재정렬로 바꿀 수 없고, 수동 POI 및 publish
-state만 별도 관리한다. paired service provenance는 Map `13e1852b8049ebd3e1ce6eb58fe16e208cea45e0`로 재고정했다.
+state만 별도 관리한다. paired service provenance는 Map `a345ae75c7f58ed5b513cde69d07d90233ad6572`로 재고정했다.
 
 **다음 한 작업**: legacy curated-feature importer/UI/API를 canonical collection importer로 완전히 전환·제거하고,
 paired deploy receipt·Manager secret wiring·n150 live import/refresh를 완료한다.
@@ -27,7 +27,7 @@ actor-scoped Idempotency-Key replay/409/304 local tuple 재검증을 구현한�
 
 ## 2026-08-14 (codex) — T-VN-40 paired 문자열·receipt 경합 폐쇄
 
-Map `13e1852b8049ebd3e1ce6eb58fe16e208cea45e0`의 service OpenAPI를 byte-exact로
+Map `a345ae75c7f58ed5b513cde69d07d90233ad6572`의 service OpenAPI를 byte-exact로
 재vendor하고 snapshot client에 `theme_slug 128`, `theme_name 200`, `title 300`,
 `edition_key 100`을 동일하게 강제했다. 초과 값은 저장 단계에서 자르지 않고 transport validation에서
 거부한다. 0052 preflight는 completed receipt의 canonical POI만 검사해 기존 수동 POI를 보존하며,

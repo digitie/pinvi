@@ -20,7 +20,7 @@
 
 ## 2026-08-14 (codex) — T-VN-40 paired snapshot 경계와 terminal seal 재검증
 
-- Map `13e1852b`의 service spec을 exact vendor하고 collection metadata 128/200/300/100 상한을
+- Map `a345ae75`의 service spec을 exact vendor하고 collection metadata 128/200/300/100 상한을
   PinVi typed client와 contract test에 mirror했다.
 - 미배포 0052 preflight의 active POI 판정을 canonical provenance 행으로 한정해 0051의 수동 PO이가
   0053 upgrade를 막지 않게 했고 byte pin을 재고정했다.
