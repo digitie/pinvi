@@ -25,6 +25,9 @@ _PINNED_MIGRATION_SHA256 = {
     "20260814_0055_curation_import_response_correlation.py": (
         "ef08e2e3307736731ddc62fe8b2df96762ac605c52aa92a5f538f863808abdca"
     ),
+    "20260814_0056_curation_import_authority.py": (
+        "6b937cc2a395c4b180f77a86e718ab0e4c4da2e315a86a3a50f1b607013ac32a"
+    ),
 }
 
 

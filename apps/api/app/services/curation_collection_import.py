@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal, cast
 
+from pydantic import ValidationError
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -102,9 +103,14 @@ def _completed_result(
         raise CurationCollectionImportConflict(
             "같은 Idempotency-Key의 canonical collection import가 완료되지 않았습니다."
         )
-    response = KorTravelMapCurationCollectionImportResponse.model_validate(
-        receipt.response_body
-    )
+    try:
+        response = KorTravelMapCurationCollectionImportResponse.model_validate(
+            receipt.response_body
+        )
+    except ValidationError as exc:
+        raise CurationCollectionImportConflict(
+            "terminal canonical collection import response가 현재 계약에 맞지 않습니다."
+        ) from exc
     if (
         response.notice_plan_id != receipt.result_plan_id
         or response.source_system != receipt.source_system
@@ -465,6 +471,9 @@ async def _apply_not_modified(
         select(KtmCurationImportReceipt)
         .where(
             KtmCurationImportReceipt.status == "completed",
+            KtmCurationImportReceipt.response_body["not_modified"].as_boolean().is_(
+                False
+            ),
             KtmCurationImportReceipt.result_plan_id == plan.curated_plan_id,
             KtmCurationImportReceipt.source_system == _SOURCE_SYSTEM,
             KtmCurationImportReceipt.source_curation_collection_id

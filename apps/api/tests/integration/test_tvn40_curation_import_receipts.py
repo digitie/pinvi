@@ -23,6 +23,11 @@ from app.models.curated_plan import (
     KtmCurationImportReceiptItem,
 )
 from app.models.user import User
+from app.services.curation_collection_import import (
+    CurationCollectionImportConflict,
+    _apply_not_modified,
+    inspect_curation_collection_import,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -318,7 +323,7 @@ async def _assert_0053_catalog_contract(db: AsyncSession) -> None:
         )
     )
     assert boundary_definition is not None
-    assert "schema_revision = '20260814_0055'::text" in boundary_definition
+    assert "schema_revision = '20260814_0056'::text" in boundary_definition
 
     indexes = dict(
         (
@@ -392,7 +397,7 @@ async def test_tvn40_curation_receipt_catalog_is_exact_and_detects_semantic_drif
 async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
     _database_url: str,
 ) -> None:
-    # 0055부터 downgrade가 forward-only로 fail-close한다. 같은 disposable
+    # 0056부터 downgrade가 forward-only로 fail-close한다. 같은 disposable
     # integration DB에서 app schema만 다시 만들고 실제 0051→head를 검증한다.
     reset_engine = create_async_engine(_database_url, poolclass=NullPool)
     try:
@@ -441,6 +446,7 @@ async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
                 actor_id = uuid.uuid4()
                 plan_id = uuid.uuid4()
                 receipt_id = uuid.uuid4()
+                idempotency_key = uuid.uuid4()
                 await connection.execute(
                     text("INSERT INTO app.users (user_id, email) VALUES (:actor_id, :email)"),
                     {"actor_id": actor_id, "email": f"old-0051-{actor_id}@pinvi.test"},
@@ -483,7 +489,7 @@ async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
                     {
                         "receipt_id": receipt_id,
                         "actor_id": actor_id,
-                        "idempotency_key": uuid.uuid4(),
+                        "idempotency_key": idempotency_key,
                         "fingerprint": _FINGERPRINT,
                         "collection_id": _COLLECTION_ID,
                         "etag": _ETAG,
@@ -572,6 +578,18 @@ async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
                 orm_pois = (await db.scalars(select(CuratedPlanPoi))).all()
                 assert [poi.curated_poi_id for poi in orm_pois] == [manual_poi_id]
                 assert orm_pois[0].source_curation_item_id is None
+                with pytest.raises(
+                    CurationCollectionImportConflict,
+                    match="현재 계약에 맞지 않습니다",
+                ):
+                    await inspect_curation_collection_import(
+                        db,
+                        actor_admin_id=actor_id,
+                        idempotency_key=idempotency_key,
+                        collection_id=_COLLECTION_ID,
+                        mode="create",
+                        is_published=False,
+                    )
         finally:
             await engine.dispose()
     finally:
@@ -642,7 +660,7 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
                     await connection.scalar(
                         text("SELECT version_num FROM app.alembic_version")
                     )
-                    == "20260814_0055"
+                    == "20260814_0056"
                 )
                 new_body = await connection.scalar(
                     text(
@@ -662,9 +680,182 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
         _alembic(_database_url, "upgrade", "head")
 
 
-async def test_0055_downgrade_is_fail_closed(_database_url: str) -> None:
-    with pytest.raises(RuntimeError, match="0055 downgrade would reopen"):
-        _alembic(_database_url, "downgrade", "20260814_0054")
+async def test_conditional_snapshot_rejects_legacy_not_modified_proof_chain(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    """304은 과거 304 receipt가 아니라 마지막 authoritative receipt만 계승한다."""
+
+    admin_id = await _seed_admin(session_factory)
+    plan_id = uuid.uuid4()
+    authoritative_receipt_id = uuid.uuid4()
+    poisoned_receipt_id = uuid.uuid4()
+    fresh_receipt_id = uuid.uuid4()
+    authoritative_item_id = uuid.uuid4()
+    poisoned_item_id = uuid.uuid4()
+    feature_uuid = uuid.uuid4()
+
+    async with session_factory() as db:
+        plan = CuratedTripPlan(
+            curated_plan_id=plan_id,
+            slug=f"conditional-proof-{plan_id}",
+            title="conditional immutable proof",
+            category="recommended",
+            source_system="kor-travel-map",
+            source_curation_collection_id=_COLLECTION_ID,
+            source_curation_collection_revision=2,
+            source_curation_collection_etag=_ETAG,
+            source_curation_item_set_hash_version="ktm-db-item-set-v1",
+            source_curation_item_set_hash=_ITEM_SET_HASH,
+            source_curation_item_count=1,
+            created_by_admin_id=admin_id,
+            updated_by_admin_id=admin_id,
+        )
+        db.add(plan)
+        await db.flush()
+
+        authoritative = KtmCurationImportReceipt(
+            receipt_id=authoritative_receipt_id,
+            actor_admin_id=admin_id,
+            idempotency_key=uuid.uuid4(),
+            request_fingerprint="a" * 64,
+            source_curation_collection_id=_COLLECTION_ID,
+            source_curation_collection_revision=2,
+            source_curation_collection_etag=_ETAG,
+            source_curation_item_set_hash_version="ktm-db-item-set-v1",
+            source_curation_item_set_hash=_ITEM_SET_HASH,
+            source_curation_item_count=1,
+            mode="refresh",
+            requested_is_published=False,
+        )
+        db.add(authoritative)
+        await db.flush()
+        db.add(
+            KtmCurationImportReceiptItem(
+                receipt_id=authoritative.receipt_id,
+                source_curation_collection_id=_COLLECTION_ID,
+                source_curation_item_id=authoritative_item_id,
+                source_curation_item_revision=2,
+                source_curation_item_etag=_ETAG,
+                feature_uuid=feature_uuid,
+            )
+        )
+        await db.flush()
+        canonical_poi = CuratedPlanPoi(
+            curated_plan_id=plan_id,
+            day_index=1,
+            sort_order="authoritative",
+            feature_uuid=feature_uuid,
+            feature_snapshot={},
+            source_curation_import_receipt_id=authoritative.receipt_id,
+            source_curation_collection_id=_COLLECTION_ID,
+            source_curation_item_id=authoritative_item_id,
+            source_curation_item_revision=2,
+            source_curation_item_etag=_ETAG,
+        )
+        db.add(canonical_poi)
+        await db.flush()
+        authoritative.status = "completed"
+        authoritative.result_plan_id = plan_id
+        authoritative.response_status = 200
+        authoritative.response_body = _terminal_response(
+            authoritative, plan_id, created_plan=False
+        )
+        authoritative.completed_at = datetime.now(UTC)
+        await db.commit()
+
+    # 0055 이전 구현이 만들 수 있었던 poisoned 304 terminal: plan은 revision 2지만
+    # 현재 POI는 revision 1 item으로 교체된 상태에서 304 proof를 다시 봉인했다.
+    async with session_factory() as db:
+        plan = await db.get(CuratedTripPlan, plan_id)
+        canonical_poi = await db.scalar(
+            select(CuratedPlanPoi).where(CuratedPlanPoi.curated_plan_id == plan_id)
+        )
+        assert plan is not None
+        assert canonical_poi is not None
+        poisoned = KtmCurationImportReceipt(
+            receipt_id=poisoned_receipt_id,
+            actor_admin_id=admin_id,
+            idempotency_key=uuid.uuid4(),
+            request_fingerprint="b" * 64,
+            source_curation_collection_id=_COLLECTION_ID,
+            source_curation_collection_revision=2,
+            source_curation_collection_etag=_ETAG,
+            source_curation_item_set_hash_version="ktm-db-item-set-v1",
+            source_curation_item_set_hash=_ITEM_SET_HASH,
+            source_curation_item_count=1,
+            mode="refresh",
+            requested_is_published=False,
+        )
+        db.add(poisoned)
+        await db.flush()
+        db.add(
+            KtmCurationImportReceiptItem(
+                receipt_id=poisoned.receipt_id,
+                source_curation_collection_id=_COLLECTION_ID,
+                source_curation_item_id=poisoned_item_id,
+                source_curation_item_revision=1,
+                source_curation_item_etag=_ETAG,
+                feature_uuid=feature_uuid,
+            )
+        )
+        await db.flush()
+        canonical_poi.source_curation_import_receipt_id = poisoned.receipt_id
+        canonical_poi.source_curation_item_id = poisoned_item_id
+        canonical_poi.source_curation_item_revision = 1
+        canonical_poi.source_curation_item_etag = _ETAG
+        await db.flush()
+        poisoned.status = "completed"
+        poisoned.result_plan_id = plan_id
+        poisoned.response_status = 200
+        poisoned.response_body = _terminal_response(
+            poisoned, plan_id, created_plan=False, not_modified=True
+        )
+        poisoned.completed_at = datetime.now(UTC)
+        await db.commit()
+
+    async with session_factory() as db:
+        plan = await db.get(CuratedTripPlan, plan_id)
+        assert plan is not None
+        fresh = KtmCurationImportReceipt(
+            receipt_id=fresh_receipt_id,
+            actor_admin_id=admin_id,
+            idempotency_key=uuid.uuid4(),
+            request_fingerprint="d" * 64,
+            source_curation_collection_id=_COLLECTION_ID,
+            source_curation_collection_revision=2,
+            source_curation_collection_etag=_ETAG,
+            source_curation_item_set_hash_version="ktm-db-item-set-v1",
+            source_curation_item_set_hash=_ITEM_SET_HASH,
+            source_curation_item_count=1,
+            mode="refresh",
+            requested_is_published=False,
+        )
+        db.add(fresh)
+        await db.flush()
+        with pytest.raises(
+            CurationCollectionImportConflict,
+            match="immutable conditional snapshot proof",
+        ):
+            await _apply_not_modified(
+                db,
+                receipt=fresh,
+                plan=plan,
+                source_etag=_ETAG,
+            )
+        assert (
+            await db.scalar(
+                select(KtmCurationImportReceiptItem).where(
+                    KtmCurationImportReceiptItem.receipt_id == fresh_receipt_id
+                )
+            )
+            is None
+        )
+        await db.rollback()
+
+
+async def test_0056_downgrade_is_fail_closed(_database_url: str) -> None:
+    with pytest.raises(RuntimeError, match="0056 downgrade would reopen"):
+        _alembic(_database_url, "downgrade", "20260814_0055")
 
 
 async def _seed_receipt_with_deleted_canonical_poi(
