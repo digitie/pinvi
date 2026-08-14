@@ -32,23 +32,14 @@ def _alembic(database_url: str, *args: str, check: bool = True) -> subprocess.Co
     )
 
 
-async def _truncate_app(database_url: str) -> None:
+async def _reset_app_schema(database_url: str) -> None:
+    """forward-only head를 내려가지 않고 historical migration을 격리한다."""
+
     engine = create_async_engine(database_url, poolclass=NullPool)
     try:
         async with engine.begin() as connection:
-            rows = await connection.execute(
-                text(
-                    "SELECT tablename FROM pg_tables "
-                    "WHERE schemaname = 'app' AND tablename <> 'alembic_version'"
-                )
-            )
-            tables = [row[0] for row in rows]
-            if tables:
-                quoted = ", ".join(f'app."{table}"' for table in tables)
-                # 운영 append-only trigger는 실제 테스트에서 그대로 검증하고, 이
-                # migration test의 격리용 초기화 transaction에서만 건너뛴다.
-                await connection.execute(text("SET LOCAL session_replication_role = replica"))
-                await connection.execute(text(f"TRUNCATE {quoted} RESTART IDENTITY CASCADE"))
+            await connection.execute(text("DROP SCHEMA app CASCADE"))
+            await connection.execute(text("CREATE SCHEMA app"))
     finally:
         await engine.dispose()
 
@@ -97,8 +88,10 @@ async def _seed_0045_receipts(database_url: str) -> tuple[uuid.UUID, uuid.UUID, 
 async def test_0046_backfill_fails_closed_and_round_trips(_database_url: str) -> None:
     """actual/legacy payload를 복구하고 invalid NULL은 upgrade 전체를 거부한다."""
 
-    await _truncate_app(_database_url)
-    _alembic(_database_url, "downgrade", "20260731_0045")
+    # 0055 이후 migration은 intentionally forward-only다. 최신 head를 내려
+    # 0045 왕복을 흉내 내지 않고, disposable app schema를 실제 0045로 올린다.
+    await _reset_app_schema(_database_url)
+    _alembic(_database_url, "upgrade", "20260731_0045")
     actual_id, legacy_id, invalid_id = await _seed_0045_receipts(_database_url)
 
     try:

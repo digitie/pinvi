@@ -2,6 +2,13 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-15 (codex) — PinVi historical migration CI 격리 정렬
+
+- 0046 receipt backfill 회귀는 forward-only 최신 head를 낮추지 않고 disposable `app` schema를
+  실제 0045 revision으로 올려서 검증한다.
+- 0053 catalog 합성은 0059 backfill receipt FK를 먼저 제거한 뒤 mapping receipt relation을
+  제거한다. 이후 0054~0059 forward migration이 현재 catalog를 다시 만든다.
+
 ## 2026-08-15 (codex) — PinVi notice-plan Web E2E locator 안정화
 
 - 목록의 주 제목과 canonical backfill 보조 제목이 모두 `추천 여행`을 포함하므로, Playwright가

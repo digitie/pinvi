@@ -7,7 +7,9 @@
 수용 검사가 보조 설명의 문구와 독립적으로 실행된다.
 
 **현재 상태**: PinVi CI의 provenance·formatter gate는 현재 artifact 기준으로 정렬됐고, Web
-Playwright 목록 시나리오도 수정 후 통과했다. Manager PR #174는 계속 draft·미병합이다.
+Playwright 목록 시나리오도 수정 후 통과했다. historical Alembic integration은 forward-only
+revision을 downgrade하지 않고 disposable schema를 해당 revision으로 올려 검증한다. Manager PR
+#174는 계속 draft·미병합이다.
 
 **다음 한 작업**: PinVi와 Map PR의 원격 CI 완료를 확인한다. 두 PR과 Manager principal 결선이
 병합되기 전에는 n150 receipt를 complete로 바꾸거나 legacy source column·route의 물리 삭제를
