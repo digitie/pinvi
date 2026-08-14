@@ -19,6 +19,9 @@ _PINNED_MIGRATION_SHA256 = {
     "20260814_0053_curation_import_receipt_lock.py": (
         "4f970fb4bb7e650c10eb99c2effdb144482e4e4f6690ef8cc3f72904df025cb2"
     ),
+    "20260814_0054_curation_import_receipt_undelete_lock.py": (
+        "430b4bc1ea214c4e89c9824f5dc97687f7f1386bd74a35b9819352b18238f9df"
+    ),
 }
 
 

@@ -133,3 +133,26 @@ class KorTravelMapCuratedFeatureImportResponse(BaseModel):
     source_etag: str | None = None
     copied_poi_count: int
     reused_feature_backed_poi_count: int
+
+
+class KorTravelMapCurationCollectionImportRequest(BaseModel):
+    collection_id: uuid.UUID
+    mode: Literal["create", "refresh"] = "create"
+    is_published: bool | None = None
+
+
+class KorTravelMapCurationCollectionImportResponse(BaseModel):
+    notice_plan_id: uuid.UUID
+    created_plan: bool
+    not_modified: bool
+    source_system: Literal["kor-travel-map"]
+    source_curation_collection_id: uuid.UUID
+    source_curation_collection_revision: str = Field(pattern=r"^[1-9][0-9]*$")
+    source_curation_collection_etag: str = Field(
+        pattern=r'^"sha256:[0-9a-f]{64}"$'
+    )
+    source_curation_item_set_hash_version: Literal["ktm-db-item-set-v1"]
+    source_curation_item_set_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_curation_item_count: int = Field(ge=0, le=2_000)
+    copied_poi_count: int = Field(ge=0, le=2_000)
+    removed_poi_count: int = Field(ge=0, le=2_000)

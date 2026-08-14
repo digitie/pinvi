@@ -1,0 +1,29 @@
+"""canonical collection import HTTP 계약을 OpenAPI에 고정한다."""
+
+from __future__ import annotations
+
+
+def test_canonical_collection_import_openapi_contract() -> None:
+    from app.main import app
+
+    operation = app.openapi()["paths"][
+        "/admin/notice-plans/imports/kor-travel-map-curation-collections"
+    ]["post"]
+    headers = {
+        parameter["name"]: parameter
+        for parameter in operation["parameters"]
+        if parameter["in"] == "header"
+    }
+    assert headers["Idempotency-Key"]["required"] is True
+    assert headers["Idempotency-Key"]["schema"]["format"] == "uuid"
+    assert set(operation["responses"]) >= {"200", "201", "404", "409", "413", "503"}
+
+    schemas = app.openapi()["components"]["schemas"]
+    request = schemas["KorTravelMapCurationCollectionImportRequest"]
+    assert request["properties"]["collection_id"]["format"] == "uuid"
+    assert request["properties"]["mode"]["enum"] == ["create", "refresh"]
+    response = schemas["KorTravelMapCurationCollectionImportResponse"]
+    assert response["properties"]["source_curation_collection_revision"]["pattern"] == (
+        "^[1-9][0-9]*$"
+    )
+    assert response["properties"]["source_curation_item_count"]["maximum"] == 2000

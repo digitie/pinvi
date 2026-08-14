@@ -289,7 +289,7 @@ async def _assert_0053_catalog_contract(db: AsyncSession) -> None:
         )
     )
     assert boundary_definition is not None
-    assert "schema_revision = '20260814_0053'::text" in boundary_definition
+    assert "schema_revision = '20260814_0054'::text" in boundary_definition
 
     indexes = dict(
         (
@@ -556,6 +556,60 @@ async def _seed_admin(session_factory) -> uuid.UUID:  # type: ignore[no-untyped-
         db.add(admin)
         await db.commit()
         return admin.user_id
+
+
+async def test_existing_0053_database_receives_0054_undelete_lock(
+    _database_url: str,
+) -> None:
+    """구 0053 catalog도 0-step에 머물지 않고 V4 guard로 전진한다."""
+
+    _alembic(_database_url, "downgrade", "20260814_0053")
+    engine = create_async_engine(_database_url, poolclass=NullPool)
+    try:
+        async with engine.connect() as connection:
+            old_body = await connection.scalar(
+                text(
+                    "SELECT prosrc FROM pg_catalog.pg_proc AS p "
+                    "JOIN pg_catalog.pg_namespace AS n ON n.oid = p.pronamespace "
+                    "WHERE n.nspname = 'app' "
+                    "AND p.proname = 'guard_ktm_curation_import_receipt'"
+                )
+            )
+            assert old_body is not None
+            assert (
+                "poi.deleted_at IS NULL\n       AND poi.source_curation_item_id IS NOT NULL"
+                in old_body
+            )
+    finally:
+        await engine.dispose()
+
+    try:
+        _alembic(_database_url, "upgrade", "head")
+        engine = create_async_engine(_database_url, poolclass=NullPool)
+        try:
+            async with engine.connect() as connection:
+                assert (
+                    await connection.scalar(
+                        text("SELECT version_num FROM app.alembic_version")
+                    )
+                    == "20260814_0054"
+                )
+                new_body = await connection.scalar(
+                    text(
+                        "SELECT prosrc FROM pg_catalog.pg_proc AS p "
+                        "JOIN pg_catalog.pg_namespace AS n ON n.oid = p.pronamespace "
+                        "WHERE n.nspname = 'app' "
+                        "AND p.proname = 'guard_ktm_curation_import_receipt'"
+                    )
+                )
+                assert new_body is not None
+                lock_clause = new_body.split("SELECT count(*)", maxsplit=1)[0]
+                assert "poi.source_curation_item_id IS NOT NULL" in lock_clause
+                assert "poi.deleted_at IS NULL" not in lock_clause
+        finally:
+            await engine.dispose()
+    finally:
+        _alembic(_database_url, "upgrade", "head")
 
 
 async def _seed_receipt_with_deleted_canonical_poi(

@@ -1,5 +1,27 @@
 # resume.md
 
+## 2026-08-14 (codex) — T-VN-40 canonical collection importer 원자 전환
+
+관리자 canonical collection import는 Map service snapshot을 읽고 PinVi plan·canonical POI·immutable
+receipt proof·admin audit를 route 소유의 단일 `SERIALIZABLE` transaction으로 반영한다. actor-scoped
+`Idempotency-Key`는 terminal replay와 다른 body의 409을 구분하며, fresh-key `304`는 plan/POI/audit을
+바꾸지 않고 natural proof만 새 receipt에 보존한다. refresh는 source canonical POI만 제거하고 수동
+POI를 보존한다. audit append 실패와 같은 key의 병렬 요청은 전체 rollback 또는 한 terminal effect로
+수렴한다.
+
+**다음 한 작업**: admin UI를 canonical collection import endpoint에 연결하고 304·409·413·stale
+re-preview UX 및 mocked/live E2E를 구현한다.
+
+## 2026-08-14 (codex) — T-VN-40 기적용 receipt guard forward 수렴
+
+이전 원격 체크포인트에서 `20260814_0053`을 적용한 개발 DB도 canonical POI undelete lock을
+받도록 forward-only `20260814_0054`를 추가했다. 새 revision은 receipt guard와 member guard를
+재설치하고 cache-target boundary schema pin을 함께 전진시킨다. 따라서 같은 revision 파일 변경을
+Alembic이 0-step으로 건너뛰는 경로 없이 기존 0053 DB와 fresh DB가 같은 terminal seal로 수렴한다.
+
+**다음 한 작업**: canonical collection importer의 plan/POI·receipt·admin audit 단일 transaction과
+actor-scoped Idempotency-Key replay/409/304 local tuple 재검증을 구현한다.
+
 ## 2026-08-14 (codex) — T-VN-40 paired 문자열·receipt 경합 폐쇄
 
 Map `6c0f110ab4b9c04e9acb6c66c2b7afb3e32291b9`의 service OpenAPI를 byte-exact로

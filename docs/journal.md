@@ -2,6 +2,22 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-14 (codex) — T-VN-40 canonical collection importer 원자 반영
+
+- 새 admin import endpoint가 Map canonical collection snapshot을 collection UUID로 가져와 plan·canonical
+  POI·immutable receipt proof·admin audit를 하나의 `SERIALIZABLE` transaction으로 commit한다.
+- actor-scoped `Idempotency-Key` terminal replay, 동일 key 다른 request의 409, source revision 역행
+  거부, `304` fresh-key no-op proof를 typed response로 고정했다.
+- refresh는 stale canonical POI만 soft-delete하고 수동 POI를 보존한다. audit failure와 같은 key의
+  병렬 import는 rollback 또는 하나의 terminal effect로 수렴하는 실제 PostgreSQL integration을 추가했다.
+
+## 2026-08-14 (codex) — T-VN-40 0053 기적용 DB forward repair
+
+- `20260814_0054`가 receipt/receipt-item guard를 재설치해 이전 0053 적용 DB도 soft-deleted
+  canonical POI를 포함한 terminal lock 규칙을 받는다.
+- cache-target final boundary schema revision과 ORM CHECK를 0054로 함께 전진시켰다.
+- 0054 byte hash를 migration immutability gate에 추가했다.
+
 ## 2026-08-14 (codex) — T-VN-40 paired snapshot 경계와 terminal seal 재검증
 
 - Map `6c0f110a`의 service spec을 exact vendor하고 collection metadata 128/200/300/100 상한을

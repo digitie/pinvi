@@ -10,7 +10,9 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any, NoReturn
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.kor_travel_map import (
@@ -18,6 +20,14 @@ from app.clients.kor_travel_map import (
     KorTravelMapFeatureNotFound,
 )
 from app.clients.kor_travel_map_admin import KorTravelMapAdminClientDep
+from app.clients.kor_travel_map_curation import (
+    CurationSnapshotContractError,
+    CurationSnapshotNotFound,
+    CurationSnapshotServiceClientDep,
+    CurationSnapshotServiceProblem,
+    CurationSnapshotTooLarge,
+    CurationSnapshotUnavailable,
+)
 from app.core.deps import DbSession
 from app.core.rbac import require_role
 from app.models.user import User
@@ -25,6 +35,8 @@ from app.schemas.envelope import Envelope
 from app.schemas.notice import (
     KorTravelMapCuratedFeatureImportRequest,
     KorTravelMapCuratedFeatureImportResponse,
+    KorTravelMapCurationCollectionImportRequest,
+    KorTravelMapCurationCollectionImportResponse,
     NoticePlanCreate,
     NoticePlanResponse,
     NoticePlanUpdate,
@@ -45,6 +57,12 @@ from app.services.admin_curated_attachment import (
     ensure_plan,
     ensure_poi,
     list_curated_attachments,
+)
+from app.services.curation_collection_import import (
+    CurationCollectionImportConflict,
+    CurationCollectionImportNotFound,
+    apply_curation_collection_import,
+    inspect_curation_collection_import,
 )
 from app.services.notice_plan import (
     NoticePlanConflictError,
@@ -262,6 +280,156 @@ async def _audit(
 
 
 # ── kor-travel-map curated feature import (T-223d) ─────────────────────────────
+
+
+@router.post(
+    "/imports/kor-travel-map-curation-collections",
+    status_code=status.HTTP_201_CREATED,
+    response_model=Envelope[KorTravelMapCurationCollectionImportResponse],
+    responses={
+        200: {"description": "refresh 또는 exact Idempotency-Key replay"},
+        404: {"description": "공개 collection 또는 refresh 대상 없음"},
+        409: {"description": "idempotency/source/local state conflict"},
+        413: {"description": "collection item 상한 초과"},
+        503: {"description": "Map snapshot service unavailable"},
+    },
+)
+async def import_kor_travel_map_curation_collection_route(
+    body: KorTravelMapCurationCollectionImportRequest,
+    admin: AdminDep,
+    db: DbSession,
+    kor_travel_map_client: CurationSnapshotServiceClientDep,
+    request: Request,
+    response: Response,
+    idempotency_key: Annotated[uuid.UUID, Header(alias="Idempotency-Key")],
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[KorTravelMapCurationCollectionImportResponse]:
+    actor_admin_id = admin.user_id
+    request_id = _parse_request_id(x_request_id)
+    ip_hash_input = request.client.host if request.client else ""
+    user_agent = request.headers.get("user-agent")
+
+    try:
+        replay, conditional_etag = await inspect_curation_collection_import(
+            db,
+            actor_admin_id=actor_admin_id,
+            idempotency_key=idempotency_key,
+            collection_id=body.collection_id,
+            mode=body.mode,
+            is_published=body.is_published,
+        )
+    except CurationCollectionImportNotFound as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except CurationCollectionImportConflict as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    await db.rollback()
+    if replay is not None:
+        response.status_code = replay.status_code
+        return Envelope.of(replay.response)
+
+    try:
+        fetched = await kor_travel_map_client.get_collection_snapshot(
+            body.collection_id,
+            if_none_match=conditional_etag,
+        )
+    except CurationSnapshotNotFound as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "CURATION_SNAPSHOT_NOT_FOUND", "message": str(exc)},
+        ) from exc
+    except CurationSnapshotTooLarge as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail={"code": "CURATION_SNAPSHOT_TOO_LARGE", "message": str(exc)},
+        ) from exc
+    except (CurationSnapshotUnavailable, CurationSnapshotServiceProblem) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "CURATION_SNAPSHOT_UNAVAILABLE", "message": str(exc)},
+        ) from exc
+    except CurationSnapshotContractError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": "CURATION_SNAPSHOT_CONTRACT_ERROR", "message": str(exc)},
+        ) from exc
+
+    for attempt in range(3):
+        try:
+            # 인증 dependency가 연 transaction은 위에서 끝냈다. isolation 설정이
+            # 이 command transaction의 첫 SQL이어야 claim부터 audit까지 SSI 대상이다.
+            await db.execute(text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
+            result = await apply_curation_collection_import(
+                db,
+                actor_admin_id=actor_admin_id,
+                idempotency_key=idempotency_key,
+                collection_id=body.collection_id,
+                mode=body.mode,
+                is_published=body.is_published,
+                fetched=fetched,
+            )
+            if result.mutated:
+                await append_admin_audit(
+                    db,
+                    actor_user_id=actor_admin_id,
+                    action="curated_plan.kor_travel_map_collection_imported",
+                    resource_type="curated_plan",
+                    resource_id=str(result.response.notice_plan_id),
+                    before_state=None,
+                    after_state=result.response.model_dump(mode="json"),
+                    access_reason=None,
+                    target_pii_fields=None,
+                    ip_hash_input=ip_hash_input,
+                    user_agent=user_agent,
+                    request_id=request_id,
+                )
+            await db.commit()
+            response.status_code = result.status_code
+            return Envelope.of(result.response)
+        except IntegrityError as exc:
+            await db.rollback()
+            if getattr(exc.orig, "sqlstate", None) == "23505" and attempt < 2:
+                continue
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "CURATION_COLLECTION_IMPORT_CONFLICT",
+                    "message": "canonical collection import 상태가 충돌했습니다.",
+                },
+            ) from exc
+        except DBAPIError as exc:
+            await db.rollback()
+            if getattr(exc.orig, "sqlstate", None) == "40001" and attempt < 2:
+                continue
+            if getattr(exc.orig, "sqlstate", None) == "40001":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "CURATION_COLLECTION_IMPORT_RETRY_EXHAUSTED",
+                        "message": "동시 변경으로 import를 완료하지 못했습니다.",
+                    },
+                ) from exc
+            raise
+        except CurationCollectionImportNotFound as exc:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
+        except CurationCollectionImportConflict as exc:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
+    raise AssertionError("unreachable")
 
 
 @router.post(
