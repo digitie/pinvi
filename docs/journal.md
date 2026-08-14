@@ -29,7 +29,7 @@
 
 ## 2026-08-14 (codex) — T-VN-40C Map identity mapping service artifact vendor
 
-- Map `0c85248a`의 `GET /v1/service/curation-cutover/identity-mappings`를 byte-exact service
+- Map `e31c1c73`의 `GET /v1/service/curation-cutover/identity-mappings`를 byte-exact service
   OpenAPI로 재vendor했다(SHA-256 `c6f9aba6…aebd`). 이 endpoint는 legacy
   `curated_feature_id`에서 canonical collection/item UUID로의 immutable mapping을 maintenance
   fence 동안만 signed keyset, row hash, 전체 root/count와 함께 제공한다.

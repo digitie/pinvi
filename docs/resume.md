@@ -29,7 +29,7 @@ legacy route/column 삭제 전에 fail-close한다.
 
 ## 2026-08-14 (codex) — T-VN-40C Map identity mapping service artifact vendor
 
-Map `0c85248a8ba1f4115b84d923f3b0fdc3f8d2f421`가 maintenance fence 전용
+Map `e31c1c7374c23f72e32480a4a6412810ceaaccef`가 maintenance fence 전용
 `/v1/service/curation-cutover/identity-mappings`를 service contract에 추가했다. legacy
 `curated_feature_id`와 canonical collection/item UUID의 immutable mapping을 signed keyset과
 closed root/count로 내보내므로 PinVi는 Map DB나 폐기할 admin route에 직접 접근하지 않는다.
