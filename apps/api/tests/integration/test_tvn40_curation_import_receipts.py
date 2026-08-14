@@ -26,6 +26,7 @@ from app.models.user import User
 from app.services.curation_collection_import import (
     CurationCollectionImportConflict,
     _apply_not_modified,
+    curation_collection_request_fingerprint,
     inspect_curation_collection_import,
 )
 
@@ -490,7 +491,11 @@ async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
                         "receipt_id": receipt_id,
                         "actor_id": actor_id,
                         "idempotency_key": idempotency_key,
-                        "fingerprint": _FINGERPRINT,
+                        "fingerprint": curation_collection_request_fingerprint(
+                            collection_id=_COLLECTION_ID,
+                            mode="create",
+                            is_published=False,
+                        ),
                         "collection_id": _COLLECTION_ID,
                         "etag": _ETAG,
                         "item_hash": _ITEM_SET_HASH,
@@ -498,7 +503,21 @@ async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
                         "response_body": json.dumps(
                             {
                                 "notice_plan_id": str(plan_id),
+                                "created_plan": True,
+                                # 0056 전에는 JSON boolean type guard가 없어 이런
+                                # malformed terminal body가 실제 history에 남을 수 있었다.
+                                "not_modified": "bogus",
+                                "source_system": "kor-travel-map",
                                 "source_curation_collection_id": str(_COLLECTION_ID),
+                                "source_curation_collection_revision": "1",
+                                "source_curation_collection_etag": _ETAG,
+                                "source_curation_item_set_hash_version": (
+                                    "ktm-db-item-set-v1"
+                                ),
+                                "source_curation_item_set_hash": _ITEM_SET_HASH,
+                                "source_curation_item_count": 0,
+                                "copied_poi_count": 0,
+                                "removed_poi_count": 0,
                             }
                         ),
                     },
@@ -590,6 +609,45 @@ async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
                         mode="create",
                         is_published=False,
                     )
+                fresh_receipt = KtmCurationImportReceipt(
+                    actor_admin_id=actor_id,
+                    idempotency_key=uuid.uuid4(),
+                    request_fingerprint=curation_collection_request_fingerprint(
+                        collection_id=_COLLECTION_ID,
+                        mode="refresh",
+                        is_published=False,
+                    ),
+                    source_curation_collection_id=_COLLECTION_ID,
+                    source_curation_collection_revision=1,
+                    source_curation_collection_etag=_ETAG,
+                    source_curation_item_set_hash_version="ktm-db-item-set-v1",
+                    source_curation_item_set_hash=_ITEM_SET_HASH,
+                    source_curation_item_count=0,
+                    mode="refresh",
+                    requested_is_published=False,
+                )
+                db.add(fresh_receipt)
+                await db.flush()
+                with pytest.raises(
+                    CurationCollectionImportConflict,
+                    match="immutable import proof가 없습니다",
+                ):
+                    await _apply_not_modified(
+                        db,
+                        receipt=fresh_receipt,
+                        plan=orm_plan,
+                        source_etag=_ETAG,
+                    )
+                assert (
+                    await db.scalar(
+                        select(KtmCurationImportReceiptItem).where(
+                            KtmCurationImportReceiptItem.receipt_id
+                            == fresh_receipt.receipt_id
+                        )
+                    )
+                    is None
+                )
+                await db.rollback()
         finally:
             await engine.dispose()
     finally:

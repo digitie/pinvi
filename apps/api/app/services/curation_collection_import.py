@@ -471,9 +471,10 @@ async def _apply_not_modified(
         select(KtmCurationImportReceipt)
         .where(
             KtmCurationImportReceipt.status == "completed",
-            KtmCurationImportReceipt.response_body["not_modified"].as_boolean().is_(
-                False
-            ),
+            # 0056 이전 terminal row는 JSON type guard가 없었다. `as_boolean()`은
+            # malformed legacy string을 cast하면서 22P02를 낼 수 있으므로, exact
+            # JSON boolean `false`만 authoritative proof 후보로 인정한다.
+            KtmCurationImportReceipt.response_body.contains({"not_modified": False}),
             KtmCurationImportReceipt.result_plan_id == plan.curated_plan_id,
             KtmCurationImportReceipt.source_system == _SOURCE_SYSTEM,
             KtmCurationImportReceipt.source_curation_collection_id
