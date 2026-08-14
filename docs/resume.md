@@ -1,5 +1,17 @@
 # resume.md
 
+## 2026-08-14 (codex) — T-VN-40C Map identity mapping service artifact vendor
+
+Map `0c85248a8ba1f4115b84d923f3b0fdc3f8d2f421`가 maintenance fence 전용
+`/v1/service/curation-cutover/identity-mappings`를 service contract에 추가했다. legacy
+`curated_feature_id`와 canonical collection/item UUID의 immutable mapping을 signed keyset과
+closed root/count로 내보내므로 PinVi는 Map DB나 폐기할 admin route에 직접 접근하지 않는다.
+service OpenAPI bytes는 `c6f9aba6…aebd`로 재vendor했다.
+
+**다음 한 작업**: 전용 cutover mapping token client와 local immutable mapping receipt를 구현하고,
+기존 `source_curated_feature_*` provenance의 정확한 1:1 backfill을 mapping root/count에 결박한다.
+누락·중복·checksum 불일치는 legacy 제거 전 반드시 fail-close한다.
+
 ## 2026-08-14 (codex) — T-VN-40 authoritative 304 proof·관리 UI 수렴
 
 `20260814_0056`은 `304` fresh-key receipt가 같은 tuple의 이전 authoritative

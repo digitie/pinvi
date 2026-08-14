@@ -2,6 +2,15 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-14 (codex) — T-VN-40C Map identity mapping service artifact vendor
+
+- Map `0c85248a`의 `GET /v1/service/curation-cutover/identity-mappings`를 byte-exact service
+  OpenAPI로 재vendor했다(SHA-256 `c6f9aba6…aebd`). 이 endpoint는 legacy
+  `curated_feature_id`에서 canonical collection/item UUID로의 immutable mapping을 maintenance
+  fence 동안만 signed keyset, row hash, 전체 root/count와 함께 제공한다.
+- 다음 consumer migration은 이 artifact만 읽어 PinVi legacy plan/POI provenance를 backfill해야
+  하며, Map DB 직접 접근이나 legacy admin snapshot 재호출은 허용하지 않는다.
+
 ## 2026-08-14 (codex) — T-VN-40 304 proof 정본과 UI command lifecycle 보강
 
 - `20260814_0056` forward migration으로 cache-target boundary pin을 전진시키고, terminal response의
