@@ -260,7 +260,8 @@ class KtmCurationImportReceipt(Base, TimestampMixin):
             name=conv("ck_ktm_curation_import_receipts_fingerprint"),
         ),
         CheckConstraint(
-            "source_system = 'kor-travel-map' AND mode IN ('create', 'refresh')",
+            "source_system = 'kor-travel-map' AND "
+            "mode IN ('create', 'refresh', 'cutover-backfill')",
             name=conv("ck_ktm_curation_import_receipts_request"),
         ),
         CheckConstraint(
@@ -467,3 +468,86 @@ class KtmCurationCutoverMappingReceiptItem(Base, TimestampMixin):
     curation_item_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
     mapping_kind: Mapped[str] = mapped_column(String(32), nullable=False)
     source_row_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class KtmCurationCutoverBackfillReceipt(Base, TimestampMixin):
+    """legacy Map plan을 canonical collection import로 전환한 immutable command receipt."""
+
+    __tablename__ = "ktm_curation_cutover_backfill_receipts"
+    __table_args__ = (
+        UniqueConstraint(
+            "actor_admin_id",
+            "idempotency_key",
+            name="uq_ktm_curation_cutover_backfill_receipts_actor_key",
+        ),
+        UniqueConstraint(
+            "curated_plan_id",
+            name="uq_ktm_curation_cutover_backfill_receipts_plan",
+        ),
+        UniqueConstraint(
+            "import_receipt_id",
+            name="uq_ktm_curation_cutover_backfill_receipts_import",
+        ),
+        ForeignKeyConstraint(
+            ["actor_admin_id"],
+            ["app.users.user_id"],
+            name="fk_ktm_curation_cutover_backfill_receipts_actor",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["mapping_receipt_id"],
+            ["app.ktm_curation_cutover_mapping_receipts.receipt_id"],
+            name="fk_ktm_curation_cutover_backfill_receipts_mapping",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["mapping_receipt_id", "legacy_curated_feature_id"],
+            [
+                "app.ktm_curation_cutover_mapping_receipt_items.receipt_id",
+                "app.ktm_curation_cutover_mapping_receipt_items.legacy_curated_feature_id",
+            ],
+            name="fk_ktm_curation_cutover_backfill_receipts_mapping_item",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["curated_plan_id"],
+            ["app.curated_trip_plans.curated_plan_id"],
+            name="fk_ktm_curation_cutover_backfill_receipts_plan",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["import_receipt_id"],
+            ["app.ktm_curation_import_receipts.receipt_id"],
+            name="fk_ktm_curation_cutover_backfill_receipts_import",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "request_fingerprint ~ '^[0-9a-f]{64}$'",
+            name=conv("ck_ktm_curation_cutover_backfill_receipts_fingerprint"),
+        ),
+        CheckConstraint(
+            "(status = 'pending' AND import_receipt_id IS NULL AND completed_at IS NULL) OR "
+            "(status = 'completed' AND import_receipt_id IS NOT NULL AND completed_at IS NOT NULL)",
+            name=conv("ck_ktm_curation_cutover_backfill_receipts_terminal"),
+        ),
+        Index(
+            "ix_ktm_curation_cutover_backfill_receipts_mapping_created",
+            "mapping_receipt_id",
+            "created_at",
+        ),
+    )
+
+    receipt_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    actor_admin_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    idempotency_key: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    mapping_receipt_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    legacy_curated_feature_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    curated_plan_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
+    import_receipt_id: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True))
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -34,6 +34,9 @@ _PINNED_MIGRATION_SHA256 = {
     "20260814_0058_curation_cutover_mapping_capture.py": (
         "84591b5af9b65112762167c001d3d6abd2e756e346e9a2a2283460a5135a867e"
     ),
+    "20260814_0059_curation_cutover_backfill_receipts.py": (
+        "ee8e9467c048518c0f0e19a34ad937528dec3e578fb85d277938015d83c110d9"
+    ),
 }
 
 

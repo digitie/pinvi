@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-14 (codex) — T-VN-40C typed canonical backfill receipt 경계
+
+- `20260814_0059`은 canonical generic import receipt에 `cutover-backfill` mode를 추가하고,
+  `ktm_curation_cutover_backfill_receipts`로 legacy backfill command 자체를 append-only
+  terminal evidence로 분리했다. actor/key, request hash, mapping receipt/member, legacy UUID,
+  기존 plan 및 generic import receipt는 update 뒤 바꿀 수 없다.
+- terminal guard는 sealed mapping member의 collection과 completed generic receipt의
+  collection/result plan/actor/mode를 exact 대조하고, plan의 legacy UUID provenance도 엄격히
+  확인한다. 모든 plan POI를 순서대로 잠근 뒤 active legacy source POI가 남아 있으면 completion을
+  거부한다. manual POI는 legacy provenance가 모두 `NULL`이므로 보존한다.
+- historical naming-convention catalog에서 boundary CHECK physical name이 이중 확장된 경우와
+  exact name인 경우를 definition으로 식별해 forward migration에서 하나로 수렴시켰다. 0059부터
+  final-boundary pin은 head revision과 함께 `20260814_0059`다.
+- 다음 서비스 단계는 remote snapshot fetch 뒤 fresh SSI transaction에서 preflight를 재실행하고,
+  기존 plan과 legacy/manual POI를 canonical collection import로 전환한 뒤 generic/backfill receipt와
+  audit을 하나로 seal해야 한다. 이 command가 완료되기 전 legacy route/column removal은 금지한다.
+
 ## 2026-08-14 (codex) — T-VN-40C legacy provenance preflight
 
 - `inspect_curation_cutover_legacy_provenance()`는 현재 vendored Map release의 completed local

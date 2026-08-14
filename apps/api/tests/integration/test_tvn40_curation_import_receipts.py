@@ -19,6 +19,7 @@ from sqlalchemy.pool import NullPool
 from app.models.curated_plan import (
     CuratedPlanPoi,
     CuratedTripPlan,
+    KtmCurationCutoverBackfillReceipt,
     KtmCurationImportReceipt,
     KtmCurationImportReceiptItem,
 )
@@ -292,6 +293,7 @@ async def _assert_0053_catalog_contract(db: AsyncSession) -> None:
     assert "mode::text = ANY" in request_definition
     assert "'create'" in request_definition
     assert "'refresh'" in request_definition
+    assert "'cutover-backfill'" in request_definition
     assert (
         "response_status = ANY (ARRAY[200, 201])"
         in constraints["ck_ktm_curation_import_receipts_terminal"]
@@ -324,7 +326,7 @@ async def _assert_0053_catalog_contract(db: AsyncSession) -> None:
         )
     )
     assert boundary_definition is not None
-    assert "schema_revision = '20260814_0058'::text" in boundary_definition
+    assert "schema_revision = '20260814_0059'::text" in boundary_definition
 
     indexes = dict(
         (
@@ -371,6 +373,79 @@ async def _assert_0053_catalog_contract(db: AsyncSession) -> None:
         "NEW.result_plan_id AND poi.source_curation_item_id IS NOT NULL "
         "ORDER BY poi.curated_poi_id FOR UPDATE"
     ) in normalized_guard
+
+
+async def _assert_0059_cutover_backfill_catalog_contract(db: AsyncSession) -> None:
+    expected_constraint_names = {
+        "ck_ktm_curation_cutover_backfill_receipts_fingerprint",
+        "ck_ktm_curation_cutover_backfill_receipts_terminal",
+        "fk_ktm_curation_cutover_backfill_receipts_actor",
+        "fk_ktm_curation_cutover_backfill_receipts_import",
+        "fk_ktm_curation_cutover_backfill_receipts_mapping",
+        "fk_ktm_curation_cutover_backfill_receipts_mapping_item",
+        "fk_ktm_curation_cutover_backfill_receipts_plan",
+        "pk_ktm_curation_cutover_backfill_receipts",
+        "uq_ktm_curation_cutover_backfill_receipts_actor_key",
+        "uq_ktm_curation_cutover_backfill_receipts_import",
+        "uq_ktm_curation_cutover_backfill_receipts_plan",
+    }
+    assert {
+        constraint.name
+        for constraint in KtmCurationCutoverBackfillReceipt.__table__.constraints
+        if constraint.name is not None
+    } == expected_constraint_names
+    constraints = dict(
+        (
+            await db.execute(
+                text(
+                    "SELECT con.conname, pg_catalog.pg_get_constraintdef(con.oid, true) "
+                    "FROM pg_catalog.pg_constraint AS con "
+                    "JOIN pg_catalog.pg_class AS relation ON relation.oid = con.conrelid "
+                    "JOIN pg_catalog.pg_namespace AS namespace "
+                    "ON namespace.oid = relation.relnamespace "
+                    "WHERE namespace.nspname = 'app' "
+                    "AND relation.relname = 'ktm_curation_cutover_backfill_receipts'"
+                )
+            )
+        ).all()
+    )
+    assert set(constraints) == expected_constraint_names
+    assert "request_fingerprint::text ~" in constraints[
+        "ck_ktm_curation_cutover_backfill_receipts_fingerprint"
+    ]
+    assert "status::text = 'pending'::text" in constraints[
+        "ck_ktm_curation_cutover_backfill_receipts_terminal"
+    ]
+    assert constraints[
+        "fk_ktm_curation_cutover_backfill_receipts_mapping_item"
+    ].startswith(
+        "FOREIGN KEY (mapping_receipt_id, legacy_curated_feature_id) "
+        "REFERENCES app.ktm_curation_cutover_mapping_receipt_items"
+    )
+    assert constraints["fk_ktm_curation_cutover_backfill_receipts_import"].startswith(
+        "FOREIGN KEY (import_receipt_id) REFERENCES app.ktm_curation_import_receipts"
+    )
+    guard_definition = await db.scalar(
+        text(
+            "SELECT pg_catalog.pg_get_functiondef(p.oid) "
+            "FROM pg_catalog.pg_proc AS p "
+            "JOIN pg_catalog.pg_namespace AS n ON n.oid = p.pronamespace "
+            "WHERE n.nspname = 'app' "
+            "AND p.proname = 'guard_ktm_curation_cutover_backfill_receipt'"
+        )
+    )
+    assert guard_definition is not None
+    normalized_guard = " ".join(guard_definition.split())
+    assert "v_import_mode <> 'cutover-backfill'" in normalized_guard
+    assert "curation cutover backfill leaves active legacy source POI" in normalized_guard
+    assert "ORDER BY poi.curated_poi_id FOR UPDATE" in normalized_guard
+
+
+async def test_tvn40_cutover_backfill_receipt_catalog_is_exact(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    async with session_factory() as db:
+        await _assert_0059_cutover_backfill_catalog_contract(db)
 
 
 async def test_tvn40_curation_receipt_catalog_is_exact_and_detects_semantic_drift(
@@ -735,7 +810,7 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
                     await connection.scalar(
                         text("SELECT version_num FROM app.alembic_version")
                     )
-                    == "20260814_0058"
+                    == "20260814_0059"
                 )
                 new_body = await connection.scalar(
                     text(
@@ -928,9 +1003,9 @@ async def test_conditional_snapshot_rejects_legacy_not_modified_proof_chain(
         await db.rollback()
 
 
-async def test_0058_downgrade_is_fail_closed(_database_url: str) -> None:
-    with pytest.raises(RuntimeError, match="0058 downgrade would reopen"):
-        _alembic(_database_url, "downgrade", "20260814_0055")
+async def test_0059_downgrade_is_fail_closed(_database_url: str) -> None:
+    with pytest.raises(RuntimeError, match="0059 downgrade would discard"):
+        _alembic(_database_url, "downgrade", "20260814_0058")
 
 
 async def _seed_receipt_with_deleted_canonical_poi(
