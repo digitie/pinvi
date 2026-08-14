@@ -1,5 +1,18 @@
 # resume.md
 
+## 2026-08-15 (codex) — T-VN-40C notice-plan Web E2E locator 안정화
+
+목록 화면의 canonical backfill 보조 제목이 주 제목과 같은 텍스트를 가져 Web E2E의 role locator가
+두 요소를 찾던 문제를 수정했다. 최상위 `h1`의 정확한 이름만 선택하므로 목록·필터·편집 링크
+수용 검사가 보조 설명의 문구와 독립적으로 실행된다.
+
+**현재 상태**: PinVi CI의 provenance·formatter gate는 현재 artifact 기준으로 정렬됐고, Web
+Playwright 목록 시나리오도 수정 후 통과했다. Manager PR #174는 계속 draft·미병합이다.
+
+**다음 한 작업**: PinVi와 Map PR의 원격 CI 완료를 확인한다. 두 PR과 Manager principal 결선이
+병합되기 전에는 n150 receipt를 complete로 바꾸거나 legacy source column·route의 물리 삭제를
+시작하지 않는다.
+
 ## 2026-08-15 (codex) — T-VN-40C canonical curation token scope 결선
 
 PinVi API compose와 sample env가 canonical collection snapshot·cutover mapping의 서로 다른

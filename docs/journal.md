@@ -2,6 +2,13 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-15 (codex) — PinVi notice-plan Web E2E locator 안정화
+
+- 목록의 주 제목과 canonical backfill 보조 제목이 모두 `추천 여행`을 포함하므로, Playwright가
+  정확한 주 `h1`만 선택하도록 locator를 닫았다.
+- 이 변경은 화면·API 계약을 바꾸지 않으며, CI가 실제 목록/필터/편집 링크 시나리오를 계속
+  검증하게 한다.
+
 ## 2026-08-15 (codex) — PinVi API provenance CI 정합 복구
 
 - wheel·Docker image provenance 검사가 현재 vendored Map service SHA와 artifact SHA를 확인하도록

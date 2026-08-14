@@ -141,7 +141,7 @@ test('Admin notice plan 목록이 필터와 편집 링크를 제공한다', asyn
   );
 
   await page.goto('/admin/notice-plans');
-  await expect(page.getByRole('heading', { name: '추천 여행' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '추천 여행', exact: true })).toBeVisible();
   await expect(page.getByTestId(`admin-notice-row-${planId}`)).toContainText('서울 카페 산책');
 
   await page.getByTestId('admin-notice-search').fill('서울');
