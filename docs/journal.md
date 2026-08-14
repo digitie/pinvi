@@ -17,6 +17,9 @@
   POI partial/blank/mismatch의 동시 report, sealed receipt 부재 차단을 고정했다. 이 report만으로
   쓰기를 허용하지 않으며, canonical collection snapshot을 쓰는 typed backfill command가 같은
   transaction에서 재검증할 때까지 legacy 경로 제거는 금지한다.
+- admin은 `GET /admin/notice-plans/curation-cutover/legacy-preflight`로 이 report를 read-only로
+  받는다. response는 receipt/root/count·plan/source/manual POI count·모든 issue를 반환하지만,
+  backfillable candidate UUID set은 후속 typed write command 내부 evidence로만 유지한다.
 
 ## 2026-08-14 (codex) — T-VN-40C Map mapping root capture command
 

@@ -7,7 +7,10 @@ receipt와 active legacy Map plan/POI를 읽기 전용으로 대조한다. legac
 identity·receipt orphan·UUID 정규화 뒤 duplicate·같은 canonical collection으로 수렴하는 다중
 legacy plan과 POI의 partial·blank·parent mismatch provenance를 모두 report하고, 한 건이라도
 있으면 `require_ready()`가 fail-close한다. manual POI는 provenance가 둘 다 `NULL`일 때만 보존
-대상으로 분리한다.
+대상으로 분리한다. admin은 `GET /admin/notice-plans/curation-cutover/legacy-preflight`로 mutation
+없이 이 report를 읽는다. 결과는 ready 여부·sealed receipt/root/count·legacy plan/source/manual POI
+count와 각 차단 사유를 함께 반환하며, backfillable candidate identity 자체는 이후 typed command
+내부에서만 사용한다.
 
 **다음 한 작업**: typed canonical backfill command를 설계·구현한다. 이 command는 같은
 `SERIALIZABLE` transaction에서 preflight를 재실행하고 sealed mapping의 collection별 canonical

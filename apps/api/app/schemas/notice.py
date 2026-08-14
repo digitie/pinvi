@@ -168,3 +168,23 @@ class KorTravelMapCurationCutoverMappingReceiptResponse(BaseModel):
     mapping_count: StrictInt = Field(ge=0)
     completed_at: datetime
     replayed: StrictBool
+
+
+class KorTravelMapCurationCutoverLegacyPreflightIssueResponse(BaseModel):
+    code: str = Field(min_length=1, max_length=128)
+    detail: str = Field(min_length=1, max_length=500)
+    notice_plan_id: uuid.UUID | None = None
+    notice_poi_id: uuid.UUID | None = None
+
+
+class KorTravelMapCurationCutoverLegacyPreflightResponse(BaseModel):
+    map_release_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
+    mapping_receipt_id: uuid.UUID | None = None
+    mapping_root: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    mapping_count: StrictInt = Field(ge=0)
+    legacy_plan_count: StrictInt = Field(ge=0)
+    legacy_source_poi_count: StrictInt = Field(ge=0)
+    manual_poi_count: StrictInt = Field(ge=0)
+    backfillable_plan_count: StrictInt = Field(ge=0)
+    ready: StrictBool
+    issues: list[KorTravelMapCurationCutoverLegacyPreflightIssueResponse]

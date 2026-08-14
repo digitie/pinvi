@@ -32,8 +32,10 @@ _ROW_HASH = "b" * 64
 async def _admin(db: AsyncSession) -> User:
     admin = User(
         email=f"legacy-preflight-{uuid.uuid4().hex}@pinvi.test",
+        password_hash="x",
         nickname="legacy preflight test",
         status="active",
+        roles=["user", "admin"],
         email_verified_at=datetime.now(UTC),
     )
     db.add(admin)
@@ -265,6 +267,40 @@ async def test_legacy_preflight_requires_a_completed_current_mapping_receipt(
             detail="현재 vendored Map release의 sealed mapping receipt가 없습니다.",
         ),
     )
+
+
+async def test_admin_legacy_preflight_route_reports_fail_closed_summary(
+    client, session_factory, auth_cookies
+) -> None:  # type: ignore[no-untyped-def]
+    async with session_factory() as db:
+        admin = await _admin(db)
+        await db.commit()
+
+    response = await client.get(
+        "/admin/notice-plans/curation-cutover/legacy-preflight",
+        cookies=auth_cookies(str(admin.user_id)),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"] == {
+        "map_release_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
+        "mapping_receipt_id": None,
+        "mapping_root": None,
+        "mapping_count": 0,
+        "legacy_plan_count": 0,
+        "legacy_source_poi_count": 0,
+        "manual_poi_count": 0,
+        "backfillable_plan_count": 0,
+        "ready": False,
+        "issues": [
+            {
+                "code": "mapping-receipt-missing",
+                "detail": "현재 vendored Map release의 sealed mapping receipt가 없습니다.",
+                "notice_plan_id": None,
+                "notice_poi_id": None,
+            }
+        ],
+    }
 
 
 async def test_legacy_preflight_rejects_multiple_plans_for_one_canonical_collection(

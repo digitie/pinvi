@@ -60,3 +60,25 @@ def test_cutover_mapping_receipt_openapi_contract() -> None:
         "ktm-curation-cutover-mapping-v1"
     )
     assert response["properties"]["mapping_root"]["pattern"] == "^[0-9a-f]{64}$"
+
+
+def test_cutover_legacy_preflight_openapi_contract() -> None:
+    from app.main import app
+
+    operation = app.openapi()["paths"][
+        "/admin/notice-plans/curation-cutover/legacy-preflight"
+    ]["get"]
+    assert set(operation["responses"]) >= {"200", "422"}
+    schemas = app.openapi()["components"]["schemas"]
+    response = schemas["KorTravelMapCurationCutoverLegacyPreflightResponse"]
+    assert response["properties"]["map_release_revision"]["pattern"] == "^[0-9a-f]{40}$"
+    assert response["properties"]["mapping_root"]["anyOf"] == [
+        {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        {"type": "null"},
+    ]
+    assert response["properties"]["ready"]["type"] == "boolean"
+    issue = schemas["KorTravelMapCurationCutoverLegacyPreflightIssueResponse"]
+    assert issue["properties"]["notice_plan_id"]["anyOf"] == [
+        {"type": "string", "format": "uuid"},
+        {"type": "null"},
+    ]

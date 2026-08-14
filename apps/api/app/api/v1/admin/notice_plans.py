@@ -41,6 +41,7 @@ from app.schemas.notice import (
     KorTravelMapCuratedFeatureImportResponse,
     KorTravelMapCurationCollectionImportRequest,
     KorTravelMapCurationCollectionImportResponse,
+    KorTravelMapCurationCutoverLegacyPreflightResponse,
     KorTravelMapCurationCutoverMappingReceiptResponse,
     NoticePlanCreate,
     NoticePlanResponse,
@@ -68,6 +69,10 @@ from app.services.curation_collection_import import (
     CurationCollectionImportNotFound,
     apply_curation_collection_import,
     inspect_curation_collection_import,
+)
+from app.services.curation_cutover_legacy_preflight import (
+    CurationCutoverLegacyPreflightResult,
+    inspect_curation_cutover_legacy_provenance,
 )
 from app.services.curation_cutover_mapping_receipt import (
     CurationCutoverMappingReceiptConflict,
@@ -193,6 +198,31 @@ def _cutover_mapping_receipt_response(
     )
 
 
+def _cutover_legacy_preflight_response(
+    result: CurationCutoverLegacyPreflightResult,
+) -> KorTravelMapCurationCutoverLegacyPreflightResponse:
+    return KorTravelMapCurationCutoverLegacyPreflightResponse(
+        map_release_revision=result.map_release_revision,
+        mapping_receipt_id=result.receipt_id,
+        mapping_root=result.mapping_root,
+        mapping_count=result.mapping_count,
+        legacy_plan_count=result.legacy_plan_count,
+        legacy_source_poi_count=result.legacy_source_poi_count,
+        manual_poi_count=result.manual_poi_count,
+        backfillable_plan_count=len(result.plan_mappings),
+        ready=result.ready,
+        issues=[
+            {
+                "code": issue.code,
+                "detail": issue.detail,
+                "notice_plan_id": issue.curated_plan_id,
+                "notice_poi_id": issue.curated_poi_id,
+            }
+            for issue in result.issues
+        ],
+    )
+
+
 def _parse_request_id(value: str | None) -> uuid.UUID:
     if value is None:
         return uuid.uuid4()
@@ -310,6 +340,20 @@ async def _audit(
 
 
 # ── kor-travel-map curated feature import (T-223d) ─────────────────────────────
+
+
+@router.get(
+    "/curation-cutover/legacy-preflight",
+    response_model=Envelope[KorTravelMapCurationCutoverLegacyPreflightResponse],
+)
+async def get_kor_travel_map_curation_cutover_legacy_preflight_route(
+    _admin: AdminDep,
+    db: DbSession,
+) -> Envelope[KorTravelMapCurationCutoverLegacyPreflightResponse]:
+    """legacy provenance가 canonical backfill을 허용하는지 읽기 전용으로 보고한다."""
+
+    result = await inspect_curation_cutover_legacy_provenance(db)
+    return Envelope.of(_cutover_legacy_preflight_response(result))
 
 
 @router.post(
