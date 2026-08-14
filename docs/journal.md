@@ -8,6 +8,9 @@
   OpenAPI로 재vendor했다(SHA-256 `c6f9aba6…aebd`). 이 endpoint는 legacy
   `curated_feature_id`에서 canonical collection/item UUID로의 immutable mapping을 maintenance
   fence 동안만 signed keyset, row hash, 전체 root/count와 함께 제공한다.
+- PinVi client는 전용 cutover ServiceToken으로만 이 endpoint를 읽고, page receipt 변화·UUID
+  중복·keyset 역행·count 불일치를 fail-close한다. snapshot token 또는 다른 Map credential의
+  재사용은 Settings validation에서 막는다.
 - 다음 consumer migration은 이 artifact만 읽어 PinVi legacy plan/POI provenance를 backfill해야
   하며, Map DB 직접 접근이나 legacy admin snapshot 재호출은 허용하지 않는다.
 

@@ -8,8 +8,12 @@ Map `0c85248a8ba1f4115b84d923f3b0fdc3f8d2f421`가 maintenance fence 전용
 closed root/count로 내보내므로 PinVi는 Map DB나 폐기할 admin route에 직접 접근하지 않는다.
 service OpenAPI bytes는 `c6f9aba6…aebd`로 재vendor했다.
 
-**다음 한 작업**: 전용 cutover mapping token client와 local immutable mapping receipt를 구현하고,
-기존 `source_curated_feature_*` provenance의 정확한 1:1 backfill을 mapping root/count에 결박한다.
+전용 `pinvi:curation-cutover:read` token client도 snapshot token과 분리했다. 모든 page의
+root/count/version, UUID keyset 순서, legacy/item identity의 양쪽 중복을 검증하고, `409`은 전체
+재시작한다. token은 다른 Map credential이나 snapshot token을 재사용할 수 없다.
+
+**다음 한 작업**: local immutable mapping receipt를 구현하고, 기존
+`source_curated_feature_*` provenance의 정확한 1:1 backfill을 mapping root/count에 결박한다.
 누락·중복·checksum 불일치는 legacy 제거 전 반드시 fail-close한다.
 
 ## 2026-08-14 (codex) — T-VN-40 authoritative 304 proof·관리 UI 수렴

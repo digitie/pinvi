@@ -28,6 +28,8 @@ _POSTGRES_BIGINT_MAX = 9_223_372_036_854_775_807
 _COLLECTION_PAGE_SIZE = 200
 _COLLECTION_MAX_ITEMS = 2_000
 _COLLECTION_MAX_PAGES = _COLLECTION_MAX_ITEMS // _COLLECTION_PAGE_SIZE
+_CUTOVER_MAPPING_PAGE_SIZE = 200
+_CUTOVER_MAPPING_ROOT_VERSION = "ktm-curation-cutover-mapping-v1"
 
 
 class CurationSnapshotError(Exception):
@@ -55,6 +57,27 @@ class CurationSnapshotServiceProblem(CurationSnapshotError):
 
     def __init__(self, *, status_code: int, code: str) -> None:
         super().__init__(f"kor-travel-map curation snapshot problem: {status_code} {code}")
+        self.status_code = status_code
+        self.code = code
+
+
+class CurationCutoverMappingError(Exception):
+    """T-VN-40C maintenance mapping export 호출/계약 오류의 공통 기반."""
+
+
+class CurationCutoverMappingUnavailable(CurationCutoverMappingError):
+    """network 또는 upstream 5xx."""
+
+
+class CurationCutoverMappingContractError(CurationCutoverMappingError):
+    """mapping keyset/root/count가 vendored contract와 다름."""
+
+
+class CurationCutoverMappingServiceProblem(CurationCutoverMappingError):
+    """cursor restart 외의 typed upstream 4xx."""
+
+    def __init__(self, *, status_code: int, code: str) -> None:
+        super().__init__(f"kor-travel-map curation cutover mapping problem: {status_code} {code}")
         self.status_code = status_code
         self.code = code
 
@@ -150,6 +173,33 @@ class CurationCollectionDetailSnapshotPage(_ClosedModel):
         return self
 
 
+class CurationCutoverIdentityMapping(_ClosedModel):
+    """Map immutable legacy identity에서 canonical UUID로의 one-to-one evidence."""
+
+    legacy_curated_feature_id: uuid.UUID
+    collection_id: uuid.UUID
+    curation_item_id: uuid.UUID
+    mapping_kind: Literal["legacy_projection", "official_membership", "manual_membership"]
+    source_row_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+
+
+class CurationCutoverIdentityMappingExportPage(_ClosedModel):
+    """Map maintenance endpoint가 반환하는 root-bound keyset page."""
+
+    mapping_root_version: Literal["ktm-curation-cutover-mapping-v1"]
+    mapping_count: Annotated[int, Field(ge=0)]
+    mapping_root: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    mappings: list[CurationCutoverIdentityMapping] = Field(max_length=_CUTOVER_MAPPING_PAGE_SIZE)
+    next_cursor: str | None
+    complete: bool
+
+    @model_validator(mode="after")
+    def validate_page(self) -> CurationCutoverIdentityMappingExportPage:
+        if self.complete != (self.next_cursor is None):
+            raise ValueError("mapping complete/next_cursor shape가 다릅니다.")
+        return self
+
+
 @dataclass(frozen=True)
 class CurationCollectionSnapshotSet:
     collection_id: uuid.UUID
@@ -168,6 +218,16 @@ class CurationCollectionFetchResult:
     not_modified: bool
     source_etag: str
     snapshot: CurationCollectionSnapshotSet | None
+
+
+@dataclass(frozen=True)
+class CurationCutoverMappingSet:
+    """PinVi backfill receipt가 그대로 저장할 immutable Map mapping snapshot."""
+
+    mapping_root_version: Literal["ktm-curation-cutover-mapping-v1"]
+    mapping_count: int
+    mapping_root: str
+    mappings: tuple[CurationCutoverIdentityMapping, ...]
 
 
 def _problem_code(response: httpx.Response) -> str:
@@ -394,6 +454,150 @@ class CurationSnapshotServiceClient:
             cursor = next_cursor
 
 
+class CurationCutoverMappingServiceClient:
+    """`pinvi:curation-cutover:read` principal에 고정된 maintenance-only client."""
+
+    def __init__(self, http: httpx.AsyncClient, *, token: str, max_attempts: int = 3) -> None:
+        if len(token) < 32 or any(character.isspace() for character in token):
+            raise ValueError("curation cutover mapping token은 whitespace 없는 32자 이상이어야 합니다.")
+        if max_attempts < 1:
+            raise ValueError("max_attempts는 1 이상이어야 합니다.")
+        self._http = http
+        self._token = token
+        self._max_attempts = max_attempts
+
+    async def aclose(self) -> None:
+        await self._http.aclose()
+
+    async def _get(self, *, cursor: str | None) -> httpx.Response:
+        params: dict[str, str | int] = {"page_size": _CUTOVER_MAPPING_PAGE_SIZE}
+        if cursor is not None:
+            params["cursor"] = cursor
+        for attempt in range(1, self._max_attempts + 1):
+            try:
+                response = await self._http.get(
+                    "/v1/service/curation-cutover/identity-mappings",
+                    params=params,
+                    headers={_SERVICE_TOKEN_HEADER: self._token},
+                )
+            except httpx.RequestError as exc:
+                if attempt == self._max_attempts:
+                    raise CurationCutoverMappingUnavailable(
+                        "kor-travel-map curation cutover mapping network failure"
+                    ) from exc
+                await asyncio.sleep(0)
+                continue
+            if response.status_code >= 500 and attempt < self._max_attempts:
+                await asyncio.sleep(0)
+                continue
+            return response
+        raise AssertionError("unreachable")
+
+    async def get_identity_mappings(self) -> CurationCutoverMappingSet:
+        """Read one closed mapping root; a changing cursor root restarts as a whole."""
+
+        for restart in range(self._max_attempts):
+            result = await self._get_once()
+            if result is not None:
+                return result
+            if restart + 1 < self._max_attempts:
+                await asyncio.sleep(0)
+        raise CurationCutoverMappingServiceProblem(
+            status_code=status.HTTP_409_CONFLICT,
+            code="CURATION_CUTOVER_MAPPING_CHANGED",
+        )
+
+    async def _get_once(self) -> CurationCutoverMappingSet | None:
+        cursor: str | None = None
+        seen_cursors: set[str] = set()
+        seen_legacy_ids: set[uuid.UUID] = set()
+        seen_item_ids: set[uuid.UUID] = set()
+        mappings: list[CurationCutoverIdentityMapping] = []
+        first_page: CurationCutoverIdentityMappingExportPage | None = None
+        last_legacy_id: uuid.UUID | None = None
+
+        while True:
+            response = await self._get(cursor=cursor)
+            if response.status_code == status.HTTP_409_CONFLICT:
+                return None
+            if response.status_code >= 500:
+                raise CurationCutoverMappingUnavailable(
+                    f"kor-travel-map curation cutover mapping HTTP {response.status_code}"
+                )
+            if response.status_code != status.HTTP_200_OK:
+                raise CurationCutoverMappingServiceProblem(
+                    status_code=response.status_code,
+                    code=_problem_code(response),
+                )
+            try:
+                page = CurationCutoverIdentityMappingExportPage.model_validate(response.json())
+            except (ValueError, TypeError) as exc:
+                raise CurationCutoverMappingContractError(
+                    "curation cutover mapping response shape가 contract와 다릅니다."
+                ) from exc
+
+            if first_page is None:
+                first_page = page
+            elif (
+                page.mapping_root_version != first_page.mapping_root_version
+                or page.mapping_count != first_page.mapping_count
+                or page.mapping_root != first_page.mapping_root
+            ):
+                raise CurationCutoverMappingContractError(
+                    "curation cutover mapping page receipt가 바뀌었습니다."
+                )
+
+            for mapping in page.mappings:
+                if mapping.legacy_curated_feature_id in seen_legacy_ids:
+                    raise CurationCutoverMappingContractError(
+                        "curation cutover mapping legacy identity가 중복됐습니다."
+                    )
+                if mapping.curation_item_id in seen_item_ids:
+                    raise CurationCutoverMappingContractError(
+                        "curation cutover mapping item identity가 중복됐습니다."
+                    )
+                if (
+                    last_legacy_id is not None
+                    and mapping.legacy_curated_feature_id.bytes <= last_legacy_id.bytes
+                ):
+                    raise CurationCutoverMappingContractError(
+                        "curation cutover mapping keyset order가 전진하지 않습니다."
+                    )
+                seen_legacy_ids.add(mapping.legacy_curated_feature_id)
+                seen_item_ids.add(mapping.curation_item_id)
+                last_legacy_id = mapping.legacy_curated_feature_id
+                mappings.append(mapping)
+
+            assert first_page is not None
+            if len(mappings) > first_page.mapping_count:
+                raise CurationCutoverMappingContractError(
+                    "curation cutover mapping 누적 수가 receipt count를 초과합니다."
+                )
+            if page.complete:
+                if len(mappings) != first_page.mapping_count:
+                    raise CurationCutoverMappingContractError(
+                        "curation cutover mapping count가 실제 set과 다릅니다."
+                    )
+                return CurationCutoverMappingSet(
+                    mapping_root_version=first_page.mapping_root_version,
+                    mapping_count=first_page.mapping_count,
+                    mapping_root=first_page.mapping_root,
+                    mappings=tuple(mappings),
+                )
+
+            if not page.mappings:
+                raise CurationCutoverMappingContractError(
+                    "curation cutover mapping continuation page가 진행하지 않습니다."
+                )
+            next_cursor = page.next_cursor
+            if next_cursor is None or next_cursor in seen_cursors:
+                raise CurationCutoverMappingContractError(
+                    "curation cutover mapping cursor가 없거나 반복됐습니다."
+                )
+            seen_cursors.add(next_cursor)
+            cursor = next_cursor
+
+
 def create_curation_snapshot_service_client(
     app_settings: Settings,
 ) -> CurationSnapshotServiceClient | None:
@@ -409,6 +613,29 @@ def create_curation_snapshot_service_client(
         ),
     )
     return CurationSnapshotServiceClient(
+        http,
+        token=secret.get_secret_value(),
+        max_attempts=app_settings.pinvi_kor_travel_map_max_attempts,
+    )
+
+
+def create_curation_cutover_mapping_service_client(
+    app_settings: Settings,
+) -> CurationCutoverMappingServiceClient | None:
+    """Create the distinct maintenance-fence mapping client only when configured."""
+
+    secret = app_settings.pinvi_kor_travel_map_curation_cutover_mapping_token
+    if secret is None:
+        return None
+    http = httpx.AsyncClient(
+        base_url=app_settings.pinvi_kor_travel_map_api_base_url,
+        timeout=app_settings.pinvi_kor_travel_map_timeout_seconds,
+        event_hooks=api_call_event_hooks(
+            db_session.async_session_factory,
+            provider="kor_travel_map_curation_cutover_mapping",
+        ),
+    )
+    return CurationCutoverMappingServiceClient(
         http,
         token=secret.get_secret_value(),
         max_attempts=app_settings.pinvi_kor_travel_map_max_attempts,
@@ -434,6 +661,25 @@ async def curation_snapshot_service_client_lifespan(app: FastAPI) -> AsyncIterat
         app.state.curation_snapshot_service_client = None
 
 
+@asynccontextmanager
+async def curation_cutover_mapping_service_client_lifespan(app: FastAPI) -> AsyncIterator[None]:
+    client = create_curation_cutover_mapping_service_client(settings)
+    app.state.curation_cutover_mapping_service_client = client
+    if client is None:
+        logger.info("kor_travel_map_curation_cutover_mapping.client_disabled")
+    else:
+        logger.info(
+            "kor_travel_map_curation_cutover_mapping.client_ready",
+            extra={"base_url": settings.pinvi_kor_travel_map_api_base_url},
+        )
+    try:
+        yield
+    finally:
+        if client is not None:
+            await client.aclose()
+        app.state.curation_cutover_mapping_service_client = None
+
+
 def get_curation_snapshot_service_client(request: Request) -> CurationSnapshotServiceClient:
     client = getattr(request.app.state, "curation_snapshot_service_client", None)
     if not isinstance(client, CurationSnapshotServiceClient):
@@ -447,7 +693,26 @@ def get_curation_snapshot_service_client(request: Request) -> CurationSnapshotSe
     return client
 
 
+def get_curation_cutover_mapping_service_client(
+    request: Request,
+) -> CurationCutoverMappingServiceClient:
+    client = getattr(request.app.state, "curation_cutover_mapping_service_client", None)
+    if not isinstance(client, CurationCutoverMappingServiceClient):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "CURATION_CUTOVER_MAPPING_SERVICE_UNAVAILABLE",
+                "message": "지도 curation cutover mapping 서비스가 구성되지 않았습니다.",
+            },
+        )
+    return client
+
+
 CurationSnapshotServiceClientDep = Annotated[
     CurationSnapshotServiceClient,
     Depends(get_curation_snapshot_service_client),
+]
+CurationCutoverMappingServiceClientDep = Annotated[
+    CurationCutoverMappingServiceClient,
+    Depends(get_curation_cutover_mapping_service_client),
 ]

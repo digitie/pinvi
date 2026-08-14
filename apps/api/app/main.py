@@ -18,7 +18,10 @@ from app.clients.kakao_local import kakao_local_client_lifespan
 from app.clients.kor_travel_geo import kor_travel_geo_client_lifespan
 from app.clients.kor_travel_map import kor_travel_map_client_lifespan
 from app.clients.kor_travel_map_admin import kor_travel_map_admin_client_lifespan
-from app.clients.kor_travel_map_curation import curation_snapshot_service_client_lifespan
+from app.clients.kor_travel_map_curation import (
+    curation_cutover_mapping_service_client_lifespan,
+    curation_snapshot_service_client_lifespan,
+)
 from app.clients.naver_local import naver_local_client_lifespan
 from app.core.config import settings
 from app.core.errors import http_exception_handler, validation_exception_handler
@@ -56,6 +59,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         kor_travel_map_client_lifespan(app),
         kor_travel_map_admin_client_lifespan(app),
         curation_snapshot_service_client_lifespan(app),
+        curation_cutover_mapping_service_client_lifespan(app),
         kor_travel_geo_client_lifespan(app),
         kakao_local_client_lifespan(app),
         naver_local_client_lifespan(app),

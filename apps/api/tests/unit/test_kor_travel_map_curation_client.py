@@ -12,6 +12,8 @@ from pydantic import ValidationError
 
 from app.clients.kor_travel_map_curation import (
     CurationCollectionFetchResult,
+    CurationCutoverMappingContractError,
+    CurationCutoverMappingServiceClient,
     CurationSnapshotCollection,
     CurationSnapshotContractError,
     CurationSnapshotServiceClient,
@@ -30,6 +32,21 @@ def _client(handler: Handler, *, max_attempts: int = 3) -> CurationSnapshotServi
             transport=httpx.MockTransport(handler),
         ),
         token=TOKEN,
+        max_attempts=max_attempts,
+    )
+
+
+def _mapping_client(
+    handler: Handler,
+    *,
+    max_attempts: int = 3,
+) -> CurationCutoverMappingServiceClient:
+    return CurationCutoverMappingServiceClient(
+        httpx.AsyncClient(
+            base_url="http://kor-travel-map.test",
+            transport=httpx.MockTransport(handler),
+        ),
+        token="d" * 32,
         max_attempts=max_attempts,
     )
 
@@ -93,6 +110,33 @@ def _page(
         "item_set_hash_version": "ktm-db-item-set-v1",
         "item_set_hash": "f" * 64,
         "items": items,
+        "next_cursor": cursor,
+        "complete": cursor is None,
+    }
+
+
+def _mapping(number: int) -> dict[str, Any]:
+    return {
+        "legacy_curated_feature_id": f"40000000-0000-0000-0000-{number:012d}",
+        "collection_id": str(COLLECTION_ID),
+        "curation_item_id": f"50000000-0000-0000-0000-{number:012d}",
+        "mapping_kind": "legacy_projection",
+        "source_row_hash": f"{number:064x}",
+    }
+
+
+def _mapping_page(
+    *,
+    mappings: list[dict[str, Any]],
+    cursor: str | None,
+    mapping_root: str = "a" * 64,
+    mapping_count: int = 2,
+) -> dict[str, Any]:
+    return {
+        "mapping_root_version": "ktm-curation-cutover-mapping-v1",
+        "mapping_count": mapping_count,
+        "mapping_root": mapping_root,
+        "mappings": mappings,
         "next_cursor": cursor,
         "complete": cursor is None,
     }
@@ -166,6 +210,52 @@ async def test_collection_snapshot_reads_exact_paged_set_and_uses_first_etag_onl
     assert requests[0].url.params["page_size"] == "200"
     assert "if-none-match" not in requests[0].headers
     assert "if-none-match" not in requests[1].headers
+
+
+@pytest.mark.asyncio
+async def test_cutover_mapping_reads_one_closed_keyset_receipt() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert request.headers["X-Kor-Travel-Map-Service-Token"] == "d" * 32
+        cursor = request.url.params.get("cursor")
+        payload = (
+            _mapping_page(mappings=[_mapping(1)], cursor="mapping-cursor")
+            if cursor is None
+            else _mapping_page(mappings=[_mapping(2)], cursor=None)
+        )
+        return httpx.Response(200, json=payload)
+
+    client = _mapping_client(handler)
+    result = await client.get_identity_mappings()
+    await client.aclose()
+
+    assert result.mapping_count == 2
+    assert result.mapping_root == "a" * 64
+    assert tuple(mapping.legacy_curated_feature_id for mapping in result.mappings) == (
+        uuid.UUID("40000000-0000-0000-0000-000000000001"),
+        uuid.UUID("40000000-0000-0000-0000-000000000002"),
+    )
+    assert len(requests) == 2
+    assert requests[0].url.params["page_size"] == "200"
+
+
+@pytest.mark.asyncio
+async def test_cutover_mapping_rejects_changed_page_receipt() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        cursor = request.url.params.get("cursor")
+        payload = (
+            _mapping_page(mappings=[_mapping(1)], cursor="mapping-cursor")
+            if cursor is None
+            else _mapping_page(mappings=[_mapping(2)], cursor=None, mapping_root="b" * 64)
+        )
+        return httpx.Response(200, json=payload)
+
+    client = _mapping_client(handler)
+    with pytest.raises(CurationCutoverMappingContractError, match="page receipt"):
+        await client.get_identity_mappings()
+    await client.aclose()
 
 
 @pytest.mark.asyncio
@@ -290,6 +380,14 @@ def test_curation_snapshot_token_is_optional_but_strict_and_role_distinct() -> N
     )
     assert loaded.pinvi_kor_travel_map_curation_snapshot_token is not None
 
+    paired = Settings(
+        _env_file=None,
+        pinvi_environment="test",
+        pinvi_kor_travel_map_curation_snapshot_token=TOKEN,
+        pinvi_kor_travel_map_curation_cutover_mapping_token="d" * 32,
+    )
+    assert paired.pinvi_kor_travel_map_curation_cutover_mapping_token is not None
+
     with pytest.raises(ValidationError, match="at least 32"):
         Settings(
             _env_file=None,
@@ -302,4 +400,11 @@ def test_curation_snapshot_token_is_optional_but_strict_and_role_distinct() -> N
             pinvi_environment="test",
             pinvi_kor_travel_map_curation_snapshot_token=TOKEN,
             pinvi_kor_travel_map_admin_proxy_secret=TOKEN,
+        )
+    with pytest.raises(ValidationError, match="must differ"):
+        Settings(
+            _env_file=None,
+            pinvi_environment="test",
+            pinvi_kor_travel_map_curation_snapshot_token=TOKEN,
+            pinvi_kor_travel_map_curation_cutover_mapping_token=TOKEN,
         )

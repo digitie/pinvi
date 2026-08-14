@@ -208,6 +208,9 @@ class Settings(BaseSettings):
     # canonical curation collection/item snapshot read 전용 exact-scope credential.
     # admin/service/cache-target token으로 fallback하지 않는다.
     pinvi_kor_travel_map_curation_snapshot_token: SecretStr | None = None
+    # T-VN-40C maintenance fence에서 legacy identity→canonical UUID mapping만 읽는 별도 principal.
+    # snapshot read token과 공유하면 Map이 403으로 fail-close한다.
+    pinvi_kor_travel_map_curation_cutover_mapping_token: SecretStr | None = None
     pinvi_kor_travel_map_timeout_seconds: float = Field(
         default=5.0,
         gt=0,
@@ -503,6 +506,9 @@ class Settings(BaseSettings):
                 self.pinvi_kor_travel_map_curation_snapshot_token.get_secret_value()
                 if self.pinvi_kor_travel_map_curation_snapshot_token is not None
                 else "",
+                self.pinvi_kor_travel_map_curation_cutover_mapping_token.get_secret_value()
+                if self.pinvi_kor_travel_map_curation_cutover_mapping_token is not None
+                else "",
             )
             if value
         }
@@ -561,21 +567,22 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def validate_curation_snapshot_principal(self) -> Self:
-        """curation snapshot principal을 다른 Map trust boundary와 분리한다."""
+    def validate_curation_service_principals(self) -> Self:
+        """두 curation scope를 다른 Map trust boundary와 서로 분리한다."""
 
-        secret = self.pinvi_kor_travel_map_curation_snapshot_token
-        if secret is None:
-            return self
-        token = secret.get_secret_value()
-        if len(token) < 32:
-            raise ValueError(
-                "PINVI_KOR_TRAVEL_MAP_CURATION_SNAPSHOT_TOKEN must contain at least 32 characters"
-            )
-        if any(character.isspace() for character in token):
-            raise ValueError(
-                "PINVI_KOR_TRAVEL_MAP_CURATION_SNAPSHOT_TOKEN must not contain whitespace"
-            )
+        curation_tokens = (
+            (
+                "PINVI_KOR_TRAVEL_MAP_CURATION_SNAPSHOT_TOKEN",
+                self.pinvi_kor_travel_map_curation_snapshot_token,
+            ),
+            (
+                "PINVI_KOR_TRAVEL_MAP_CURATION_CUTOVER_MAPPING_TOKEN",
+                self.pinvi_kor_travel_map_curation_cutover_mapping_token,
+            ),
+        )
+        values = [secret.get_secret_value() for _, secret in curation_tokens if secret is not None]
+        if len(values) != len(set(values)):
+            raise ValueError("curation snapshot and cutover mapping tokens must differ")
         protected = {
             value
             for value in (
@@ -605,10 +612,18 @@ class Settings(BaseSettings):
             )
             if value
         }
-        if token in protected:
-            raise ValueError(
-                "curation snapshot token must not reuse another Map trust-boundary credential"
-            )
+        for env_name, secret in curation_tokens:
+            if secret is None:
+                continue
+            token = secret.get_secret_value()
+            if len(token) < 32:
+                raise ValueError(f"{env_name} must contain at least 32 characters")
+            if any(character.isspace() for character in token):
+                raise ValueError(f"{env_name} must not contain whitespace")
+            if token in protected:
+                raise ValueError(
+                    f"{env_name} must not reuse another Map trust-boundary credential"
+                )
         return self
 
 

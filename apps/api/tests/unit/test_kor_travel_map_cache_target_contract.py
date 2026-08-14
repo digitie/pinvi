@@ -236,6 +236,39 @@ def test_curation_snapshot_generation1_service_contract_is_exact() -> None:
     assert collection_metadata["edition_key"]["maxLength"] == 100
 
 
+def test_curation_cutover_mapping_service_contract_is_exact() -> None:
+    """T-VN-40C backfill은 Map DB가 아닌 dedicated service artifact만 읽는다."""
+
+    spec = _spec()
+    operation = spec["paths"]["/v1/service/curation-cutover/identity-mappings"]["get"]
+    assert operation["security"] == [{"ServiceToken": []}]
+    assert operation["x-required-service-scope"] == "pinvi:curation-cutover:read"
+    assert operation["parameters"][0]["name"] == "page_size"
+    assert operation["parameters"][0]["schema"]["maximum"] == 200
+    assert operation["parameters"][1]["name"] == "cursor"
+    assert "409" in operation["responses"]
+
+    mapping = spec["components"]["schemas"]["CurationCutoverIdentityMapping"]
+    assert mapping["additionalProperties"] is False
+    assert mapping["required"] == [
+        "legacy_curated_feature_id",
+        "collection_id",
+        "curation_item_id",
+        "mapping_kind",
+        "source_row_hash",
+    ]
+    assert mapping["properties"]["legacy_curated_feature_id"]["format"] == "uuid"
+    assert mapping["properties"]["source_row_hash"]["pattern"] == r"^[0-9a-f]{64}$"
+
+    export = spec["components"]["schemas"]["CurationCutoverIdentityMappingExport"]
+    assert export["additionalProperties"] is False
+    assert export["properties"]["mapping_root_version"]["const"] == (
+        "ktm-curation-cutover-mapping-v1"
+    )
+    assert export["properties"]["mapping_root"]["pattern"] == r"^[0-9a-f]{64}$"
+    assert export["properties"]["mappings"]["maxItems"] == 200
+
+
 def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
     spec = _spec()
     paths = spec["paths"]
