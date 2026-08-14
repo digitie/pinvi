@@ -1,5 +1,19 @@
 # resume.md
 
+## 2026-08-15 (codex) — T-VN-40C canonical backfill admin UI
+
+notice-plan admin 화면은 `legacy-preflight`를 읽어 ready 여부와 provenance issue를 보여 주고, ready일
+때만 legacy plan UUID로 typed backfill을 실행한다. sealed candidate set은 read surface에 노출하지 않으며
+server가 command transaction에서 다시 판정한다. UI는 terminal success 및 4xx에서 key를 버리고 다음
+explicit action만 새 command로 보내며, transport/5xx에만 same-key replay button을 남긴다. 409은
+자동 stale retry 없이 운영자가 preflight를 다시 실행하게 한다.
+
+**다음 한 작업**: legacy curated-feature import route/client/UI를 삭제하고 canonical collection+cutover
+backfill만 남긴다. 이 제거는 Map receipt state complete, PinVi production importer routing, Manager
+secret/vendor hash 결선 및 n150 live backfill→canonical refresh verification과 한 release choreography로
+묶어야 한다. UI browser E2E는 cold Next server 대신 warm CI/n150에서 재실행해 새 preflight/backfill
+scenario까지 green을 확인한다.
+
 ## 2026-08-15 (codex) — T-VN-40C canonical backfill admin command
 
 admin은 `POST /admin/notice-plans/curation-cutover/backfills`로 sealed legacy plan 하나를 canonical
@@ -338,7 +352,6 @@ user/admin 재핀(8c5bdcf8)·CLI --accept-uuid-literals·derivation_enforced
 **즉시 후행(리뷰 F2 조건)**: service 스냅샷 재핀 — 위 T-VN-41-F 합류
 패키지로 이행(codex 인수). NEW-3 근거 필드의 계약 게이트 공백을 닫는
 선결 항목.
-
 
 ## 2026-08-05 (claude) — 32C 값 전환 수용 branch 준비 (파생 등식 폐기)
 

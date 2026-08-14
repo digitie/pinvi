@@ -147,3 +147,50 @@ export const KorTravelMapCurationCollectionImportResponseSchema = z.object({
 export type KorTravelMapCurationCollectionImportResponse = z.infer<
   typeof KorTravelMapCurationCollectionImportResponseSchema
 >;
+
+export const KorTravelMapCurationCutoverLegacyPreflightIssueSchema = z.object({
+  code: z.string().min(1).max(128),
+  detail: z.string().min(1).max(500),
+  notice_plan_id: z.string().uuid().nullable(),
+  notice_poi_id: z.string().uuid().nullable(),
+});
+export type KorTravelMapCurationCutoverLegacyPreflightIssue = z.infer<
+  typeof KorTravelMapCurationCutoverLegacyPreflightIssueSchema
+>;
+
+export const KorTravelMapCurationCutoverLegacyPreflightResponseSchema = z.object({
+  map_release_revision: z.string().regex(/^[0-9a-f]{40}$/),
+  mapping_receipt_id: z.string().uuid().nullable(),
+  mapping_root: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .nullable(),
+  mapping_count: z.number().int().min(0),
+  legacy_plan_count: z.number().int().min(0),
+  legacy_source_poi_count: z.number().int().min(0),
+  manual_poi_count: z.number().int().min(0),
+  backfillable_plan_count: z.number().int().min(0),
+  ready: z.boolean(),
+  issues: z.array(KorTravelMapCurationCutoverLegacyPreflightIssueSchema),
+});
+export type KorTravelMapCurationCutoverLegacyPreflightResponse = z.infer<
+  typeof KorTravelMapCurationCutoverLegacyPreflightResponseSchema
+>;
+
+export const KorTravelMapCurationCutoverBackfillRequestSchema = z.object({
+  notice_plan_id: z.string().uuid(),
+});
+export type KorTravelMapCurationCutoverBackfillRequest = z.infer<
+  typeof KorTravelMapCurationCutoverBackfillRequestSchema
+>;
+
+export const KorTravelMapCurationCutoverBackfillResponseSchema = z.object({
+  backfill_receipt_id: z.string().uuid(),
+  mapping_receipt_id: z.string().uuid(),
+  legacy_curated_feature_id: z.string().uuid(),
+  import_result: KorTravelMapCurationCollectionImportResponseSchema,
+  replayed: z.boolean(),
+});
+export type KorTravelMapCurationCutoverBackfillResponse = z.infer<
+  typeof KorTravelMapCurationCutoverBackfillResponseSchema
+>;

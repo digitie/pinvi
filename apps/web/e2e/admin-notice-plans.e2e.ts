@@ -75,6 +75,22 @@ function canonicalImportResult(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function cutoverBackfillResult(overrides: Record<string, unknown> = {}) {
+  return {
+    backfill_receipt_id: '55555555-5555-4555-8555-555555555555',
+    mapping_receipt_id: '66666666-6666-4666-8666-666666666666',
+    legacy_curated_feature_id: '77777777-7777-4777-8777-777777777777',
+    import_result: canonicalImportResult({
+      notice_plan_id: planId,
+      created_plan: false,
+      copied_poi_count: 2,
+      removed_poi_count: 1,
+    }),
+    replayed: false,
+    ...overrides,
+  };
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route(
     (url) => url.port === '12801' && url.pathname === '/auth/me',
@@ -82,6 +98,30 @@ test.beforeEach(async ({ page }) => {
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({ data: adminUser }),
+      });
+    },
+  );
+  await page.route(
+    (url) =>
+      url.port === '12801' &&
+      url.pathname === '/admin/notice-plans/curation-cutover/legacy-preflight',
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            map_release_revision: 'a'.repeat(40),
+            mapping_receipt_id: '88888888-8888-4888-8888-888888888888',
+            mapping_root: 'b'.repeat(64),
+            mapping_count: 1,
+            legacy_plan_count: 1,
+            legacy_source_poi_count: 1,
+            manual_poi_count: 1,
+            backfillable_plan_count: 1,
+            ready: true,
+            issues: [],
+          },
+        }),
       });
     },
   );
@@ -230,6 +270,82 @@ test('Admin이 canonical collection import의 idempotency와 오류 복구를 �
   await page.getByTestId('admin-notice-canonical-import-submit').click();
   await expect.poll(() => importRequests).toHaveLength(5);
   expect(importRequests[4]?.idempotencyKey).not.toBe(conflictKey);
+});
+
+test('Admin이 sealed cutover backfill을 별도 command key와 사전 점검으로 실행한다', async ({
+  page,
+}) => {
+  const backfillRequests: Array<{ body: Record<string, unknown>; idempotencyKey: string | null }> =
+    [];
+  await page.route(
+    (url) =>
+      url.port === '12801' &&
+      (url.pathname === '/admin/notice-plans' ||
+        url.pathname === '/admin/notice-plans/curation-cutover/backfills'),
+    async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (path === '/admin/notice-plans' && request.method() === 'GET') {
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ data: [basePlan()] }),
+        });
+        return;
+      }
+      if (
+        path === '/admin/notice-plans/curation-cutover/backfills' &&
+        request.method() === 'POST'
+      ) {
+        backfillRequests.push({
+          body: request.postDataJSON() as Record<string, unknown>,
+          idempotencyKey: request.headers()['idempotency-key'] ?? null,
+        });
+        if (backfillRequests.length === 1) {
+          await route.fulfill({
+            status: 201,
+            contentType: 'application/json',
+            body: JSON.stringify({ data: cutoverBackfillResult() }),
+          });
+          return;
+        }
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            detail: {
+              code: 'CURATION_CUTOVER_BACKFILL_CONFLICT',
+              message: 'sealed mapping이 변경됐습니다.',
+            },
+          }),
+        });
+      }
+    },
+  );
+
+  await page.goto('/admin/notice-plans');
+  await expect(page.getByTestId('admin-notice-cutover-preflight-result')).toContainText(
+    'backfill 준비 상태',
+  );
+  await page
+    .getByTestId('admin-notice-cutover-backfill-plan-id')
+    .fill('99999999-9999-4999-8999-999999999999');
+  await page.getByTestId('admin-notice-cutover-backfill-submit').click();
+  await expect(page.getByTestId('admin-notice-cutover-backfill-result')).toContainText(
+    'canonical backfill을 완료했습니다.',
+  );
+  expect(backfillRequests).toHaveLength(1);
+  expect(backfillRequests[0]?.body).toEqual({
+    notice_plan_id: '99999999-9999-4999-8999-999999999999',
+  });
+
+  // terminal success 후 같은 plan도 새 command로만 다시 시도한다.
+  await page.getByTestId('admin-notice-cutover-backfill-submit').click();
+  await expect.poll(() => backfillRequests).toHaveLength(2);
+  expect(backfillRequests[1]?.idempotencyKey).not.toBe(backfillRequests[0]?.idempotencyKey);
+  await expect(page.getByTestId('admin-notice-cutover-backfill-error')).toContainText(
+    '사전 점검을 다시 실행한 뒤 새 요청으로 확인하세요.',
+  );
+  await expect(page.getByTestId('admin-notice-cutover-backfill-retry')).toHaveCount(0);
 });
 
 test('Admin UI는 Map canonical plan과 POI의 source-derived 작업을 노출하지 않는다', async ({

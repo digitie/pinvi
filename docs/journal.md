@@ -2,6 +2,20 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-15 (codex) — T-VN-40C canonical backfill admin UI
+
+- admin notice-plan 화면은 sealed mapping/preflight 상태를 읽고, issue가 있으면 canonical backfill
+  submit을 잠근다. receipt candidate UUID 목록은 read API에 노출하지 않고, 운영자가 legacy plan UUID를
+  입력하면 typed command가 mapping/member를 다시 검증한다.
+- `@pinvi/schemas`와 `@pinvi/api-client`에 preflight/backfill request·response를 동일한 UUID,
+  digest/count 범위로 추가했다. UI는 terminal success·4xx 뒤 key를 폐기하고 network/5xx에서만
+  같은 `Idempotency-Key` replay를 명시적으로 허용한다. `409`은 자동 retry하지 않고 사전 점검을
+  다시 실행하도록 안내한다.
+- mocked Playwright는 preflight ready·backfill `201`·같은 plan의 다음 terminal command가 새 key를
+  쓰고 `409` retry button을 노출하지 않는 경로를 추가했다. workspace TypeScript와 schema Vitest는
+  통과했으며, cold Next dev server가 반복 worker를 만들며 준비 시간 제한을 넘겨 Playwright browser
+  run은 별도 warm CI/n150 runner에서 재실행해야 한다.
+
 ## 2026-08-15 (codex) — T-VN-40C canonical backfill admin command
 
 - `POST /admin/notice-plans/curation-cutover/backfills`는 `notice_plan_id`와 admin-scoped
@@ -10356,6 +10370,7 @@ back to WSL test mirror workflow` 커밋 + origin push.
   첫 PR (`docs/sprints/SPRINT-1.md` 참고).
 - v1의 자산(Resend 통합, 소셜 로그인, Notice plan, RustFS Storage API 등)은 v2에서
   한 건씩 ADR로 결정하고 가져온다.
+
 ## 2026-08-14 — T-VN-40 canonical importer response seal·관리 UI
 
 - `20260814_0055`가 terminal import response의 source tuple을 DB trigger로 결박하고 downgrade를
