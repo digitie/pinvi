@@ -784,7 +784,56 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
                 text(
                     "DROP FUNCTION "
                     "app.guard_ktm_curation_cutover_mapping_receipt(), "
-                    "app.guard_ktm_curation_cutover_mapping_receipt_item()"
+                    "app.guard_ktm_curation_cutover_mapping_receipt_item(), "
+                    "app.guard_ktm_curation_cutover_backfill_receipt()"
+                )
+            )
+            # 0054가 적용되기 직전의 catalog에는 naming convention이 physical
+            # CHECK 이름에 다시 적용돼 있었다. 0059의 exact-name 수렴 이후 head
+            # catalog를 0053으로만 stamp하면 0054의 drop 대상이 없어지므로, 이
+            # synthetic historical state에서는 당시 CHECK 정의와 물리명을 함께
+            # 복원한다.
+            await connection.execute(
+                text(
+                    """
+                    DO $$
+                    DECLARE
+                        v_constraint_name text;
+                    BEGIN
+                        SELECT con.conname
+                          INTO v_constraint_name
+                          FROM pg_catalog.pg_constraint AS con
+                          JOIN pg_catalog.pg_class AS relation
+                            ON relation.oid = con.conrelid
+                          JOIN pg_catalog.pg_namespace AS namespace
+                            ON namespace.oid = relation.relnamespace
+                         WHERE namespace.nspname = 'app'
+                           AND relation.relname = 'ktm_cache_target_boundary_audits'
+                           AND con.contype = 'c'
+                           AND pg_catalog.pg_get_constraintdef(con.oid, true)
+                               LIKE '%pinvi-cache-target-final-boundary/v1%';
+                        IF v_constraint_name IS NULL THEN
+                            RAISE EXCEPTION 'cache target boundary CHECK is missing';
+                        END IF;
+                        EXECUTE format(
+                            'ALTER TABLE app.ktm_cache_target_boundary_audits '
+                            'DROP CONSTRAINT %I',
+                            v_constraint_name
+                        );
+                    END;
+                    $$;
+                    """
+                )
+            )
+            await connection.execute(
+                text(
+                    "ALTER TABLE app.ktm_cache_target_boundary_audits "
+                    "ADD CONSTRAINT "
+                    "ck_ktm_cache_target_boundary_audits_"
+                    "ck_ktm_ct_boundary_contract "
+                    "CHECK (contract_version = 'pinvi-cache-target-final-boundary/v1' "
+                    "AND status = 'succeeded' "
+                    "AND schema_revision = '20260814_0053')"
                 )
             )
             await connection.execute(

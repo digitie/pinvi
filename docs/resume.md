@@ -1,5 +1,20 @@
 # resume.md
 
+## 2026-08-15 (codex) — PinVi 0053 synthetic catalog forward-upgrade CI 복구
+
+historical 0053 catalog regression은 현재 head를 단순 stamp하지 않고, 0054가 실제로 제거할
+당시 physical CHECK 이름·0053 boundary revision과 0057·0059 이전 mapping/backfill guard function을
+함께 복원한다. 이로써 0053→0059 forward path가 historical catalog에 없는 후속 object를 남겨
+중단하지 않으며, runtime migration 자체가 아니라 CI synthetic fixture만 변경한다.
+
+**현재 상태**: `test_existing_0053_database_receives_0054_undelete_lock`과 canonical importer/receipt
+통합 묶음 14개가 통과했다. PinVi API 원격 CI의 integration 재실행 결과를 확인한 뒤 PR의 남은
+check를 정리한다.
+
+**다음 한 작업**: PinVi와 Map PR의 원격 CI 완료를 확인한다. 두 PR과 Manager principal 결선이
+병합되기 전에는 n150 receipt를 complete로 바꾸거나 legacy source column·route의 물리 삭제를
+시작하지 않는다.
+
 ## 2026-08-15 (codex) — T-VN-40C notice-plan Web E2E locator 안정화
 
 목록 화면의 canonical backfill 보조 제목이 주 제목과 같은 텍스트를 가져 Web E2E의 role locator가

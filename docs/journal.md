@@ -2,6 +2,15 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-15 (codex) — PinVi 0053 synthetic catalog forward-upgrade CI 복구
+
+- 0053 historical catalog regression은 0059 뒤의 head에서 revision만 낮춰 stamp하지 않는다.
+  0054가 제거할 당시 naming-convention physical boundary CHECK와 0057·0059에만 존재하는
+  mapping/backfill guard function을 함께 0053 상태로 되돌린다.
+- 따라서 0054~0059 forward migration은 오래된 DB에 없던 object의 존재·이름을 잘못 가정하지
+  않고 실제 생성 경로를 재현한다. 실제 0053→head fixture와 canonical importer/receipt integration
+  14개가 통과했다.
+
 ## 2026-08-15 (codex) — PinVi historical migration CI 격리 정렬
 
 - 0046 receipt backfill 회귀는 forward-only 최신 head를 낮추지 않고 disposable `app` schema를
