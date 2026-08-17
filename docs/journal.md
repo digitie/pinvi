@@ -4,12 +4,15 @@
 
 ## 2026-08-17 (codex) — T-VN-41 ABC Map service provenance 재핀
 
-- Map PR #975의 current-main 후보 `b6548812bc1a17cd51f6768cf6a188efab78ebec`를
+- Map PR #975의 current-main 후보 `a27db428c6039779be80b6a331a39994a1eaaca7`를
   PinVi service provenance의 release revision으로 고정했다. vendored service OpenAPI는
   현재 Map artifact와 SHA-256 `c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`가
   이미 byte-for-byte 일치함을 다시 검증했다.
+- production cache-target sync는 final C7 root enable boundary 전까지 Settings validation에서
+  거부한다. n150 live proof는 `PINVI_ENVIRONMENT=smoke`의 독립 Compose project에서만 sync를
+  켤 수 있으며, 이 격리 evidence는 production enable을 대체하지 않는다.
 - provenance payload, runtime contract test, Docker provenance CI digest를 한 변경으로
-  갱신했다. paired CI·적대적 재리뷰·n150 isolated Live UI E2E 전에는 sync enable,
+  갱신했다. paired CI·적대적 재리뷰·n150 isolated Live UI E2E 전에는 production sync enable,
   완료 receipt, PR 병합을 수행하지 않는다.
 
 ## 2026-08-15 (codex) — PinVi 0053 synthetic catalog forward-upgrade CI 복구

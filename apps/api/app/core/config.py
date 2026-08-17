@@ -525,6 +525,11 @@ class Settings(BaseSettings):
             )
         if not self.pinvi_kor_travel_map_cache_target_sync_enabled:
             return self
+        if self.pinvi_environment == "production":
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED is forbidden in production "
+                "until the root-owned final C7 enable boundary is implemented"
+            )
         if self.pinvi_kor_travel_map_cache_target_command_token is None:
             raise ValueError("PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_COMMAND_TOKEN is required")
         if self.pinvi_kor_travel_map_cache_target_consumer_token is None:

@@ -101,7 +101,8 @@ services:
       PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL: ${PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL:-http://host.docker.internal:12701}
       PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN: ${PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN:-}
       PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN: ${PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN:-}
-      # cache target HTTP worker는 compatible pair pin이 모두 있을 때만 명시적으로 켠다.
+      # cache target HTTP worker는 non-production 격리 stack에서 compatible pair pin이 모두 있을
+      # 때만 명시적으로 켠다. production enable은 final C7 root boundary 전까지 앱이 거부한다.
       PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED: ${PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED:-false}
       PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_COMMAND_TOKEN: ${PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_COMMAND_TOKEN:-}
       PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_CONSUMER_TOKEN: ${PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_CONSUMER_TOKEN:-}

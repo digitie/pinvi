@@ -454,6 +454,6 @@ synthetic `429/503`은 `Retry-After` 뒤 재시도되는 증거를 남긴다. �
 - [x] relay inbox commit-before-ACK, duplicate/gap/epoch/checksum core
 - [x] service transport/worker, command publisher, default-off principal gate
 - [x] final OpenAPI pin, cache generation observer
-- [/] 2026-08-17 current-main Map candidate `b6548812bc1a17cd51f6768cf6a188efab78ebec`와
+- [/] 2026-08-17 current-main Map candidate `a27db428c6039779be80b6a331a39994a1eaaca7`와
       vendored service SHA-256 `c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`를
       provenance에 재결박했다. paired CI·적대적 재리뷰·n150 live proof가 남아 있다.
