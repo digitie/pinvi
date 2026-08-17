@@ -15,3 +15,6 @@ android/
 *.p12
 *.key
 *.mobileprovision
+
+# EAS Simulator 세션(토큰 포함) — eas-cli가 관리, 커밋 금지
+.env.eas-simulator
