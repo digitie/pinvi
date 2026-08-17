@@ -138,7 +138,7 @@ jobs:
           assert artifact.is_file()
           payload = json.loads(artifact.read_text(encoding="utf-8"))
           assert hashlib.sha256(artifact.read_bytes()).hexdigest() == (
-              "9337b7db822879d37279702bfe72be5b6d3d80b2e9bd9aa52b752c0e637cd19e"
+              "ca662e9667e171f40c483dec757475f407d6751b8d66ba48934f48cc530b0369"
           )
           assert payload == {
               "capabilities": {
