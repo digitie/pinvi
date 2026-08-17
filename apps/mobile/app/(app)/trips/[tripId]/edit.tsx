@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,9 +12,12 @@ import {
   friendlyErrorText,
   paletteHex,
   reorderMoves,
+  validateTripDateRange,
+  type TripDateRangeError,
   type TripEditForm,
 } from '@pinvi/domain';
 import { api } from '../../../../lib/api';
+import { confirmDestructive } from '../../../../lib/confirm';
 import {
   Body,
   Button,
@@ -54,34 +57,38 @@ export default function TripEditScreen() {
     enabled: Boolean(tripId),
   });
 
-  const [form, setForm] = useState<TripEditForm | null>(null);
+  // 폼 = 사용자 편집본(있으면) ?? 서버 값에서 파생(렌더 중 파생 — effect로 seed하지 않는다).
+  const [formEdits, setFormEdits] = useState<TripEditForm | null>(null);
+  const serverTrip = tripQuery.data?.trip;
+  const serverForm = useMemo<TripEditForm | null>(
+    () =>
+      serverTrip
+        ? {
+            title: serverTrip.title,
+            regionHint: serverTrip.region_hint ?? '',
+            startDate: serverTrip.start_date ?? '',
+            endDate: serverTrip.end_date ?? '',
+            visibility: serverTrip.visibility,
+            status: serverTrip.status,
+          }
+        : null,
+    [serverTrip],
+  );
+  const form = formEdits ?? serverForm;
+  const setForm = setFormEdits;
   const [formError, setFormError] = useState<string | null>(null);
-  // 일자별 POI 순서(낙관적). 서버 데이터 로드 시 시드.
+  const [dateError, setDateError] = useState<TripDateRangeError | null>(null);
+  // 일자별 POI 순서 **낙관 override**(issue #215/#204). 표시 순서 = override ?? 서버 순서.
+  // mutation 성공 시 서버 재조회가 끝난 뒤 override를 걷어 서버 정본으로 돌아가고,
+  // 실패 시 즉시 걷어 rollback한다(웹은 서버 재조회 기반이라 낙관 상태가 없음).
   const [order, setOrder] = useState<Record<number, string[]>>({});
-
-  useEffect(() => {
-    if (!tripQuery.data) return;
-    const { trip, days } = tripQuery.data;
-    setForm(
-      (current) =>
-        current ?? {
-          title: trip.title,
-          regionHint: trip.region_hint ?? '',
-          startDate: trip.start_date ?? '',
-          endDate: trip.end_date ?? '',
-          visibility: trip.visibility,
-          status: trip.status,
-        },
-    );
-    setOrder((current) => {
-      if (Object.keys(current).length > 0) return current;
-      const seeded: Record<number, string[]> = {};
-      for (const day of days) {
-        seeded[day.day_index] = day.pois.map((p) => p.poi_id);
-      }
-      return seeded;
+  const clearOrder = (dayIndex: number) =>
+    setOrder((prev) => {
+      if (!(dayIndex in prev)) return prev;
+      const next = { ...prev };
+      delete next[dayIndex];
+      return next;
     });
-  }, [tripQuery.data]);
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -97,16 +104,33 @@ export default function TripEditScreen() {
   });
 
   const reorderMutation = useMutation({
-    mutationFn: (moves: { poi_id: string; new_sort_order: string }[]) =>
-      api.pois.reorder(tripId, { moves }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) }),
-    onError: (err) => Alert.alert('재정렬 실패', friendlyErrorText(err)),
+    mutationFn: ({
+      moves,
+    }: {
+      dayIndex: number;
+      moves: { poi_id: string; new_sort_order: string }[];
+    }) => api.pois.reorder(tripId, { moves }),
+    onSuccess: async (_data, { dayIndex }) => {
+      // 서버 순서를 받은 다음 override를 걷어야 순서가 튀지 않는다.
+      await queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) });
+      clearOrder(dayIndex);
+    },
+    onError: (err, { dayIndex }) => {
+      clearOrder(dayIndex); // rollback → 서버 순서
+      Alert.alert('재정렬 실패', friendlyErrorText(err));
+    },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (poiId: string) => api.pois.delete(tripId, poiId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) }),
-    onError: (err) => Alert.alert('삭제 실패', friendlyErrorText(err)),
+    mutationFn: ({ poiId }: { poiId: string; dayIndex: number }) => api.pois.delete(tripId, poiId),
+    onSuccess: async (_data, { dayIndex }) => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) });
+      clearOrder(dayIndex);
+    },
+    onError: (err, { dayIndex }) => {
+      clearOrder(dayIndex); // rollback → 삭제 전 목록
+      Alert.alert('삭제 실패', friendlyErrorText(err));
+    },
   });
 
   const addDayMutation = useMutation({
@@ -157,25 +181,32 @@ export default function TripEditScreen() {
   const nextDayIndex = days.reduce((max, d) => Math.max(max, d.day_index), 0) + 1;
 
   const onDeleteDay = (dayIndex: number, version: number) => {
-    Alert.alert('일자 삭제', `Day ${dayIndex}와(과) 그 안의 장소를 삭제할까요?`, [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '삭제',
-        style: 'destructive',
-        onPress: () => deleteDayMutation.mutate({ dayIndex, version }),
-      },
-    ]);
+    confirmDestructive({
+      title: '일자 삭제',
+      message: `Day ${dayIndex}와(과) 그 안의 장소를 삭제할까요?`,
+      confirmLabel: '삭제',
+      onConfirm: () => deleteDayMutation.mutate({ dayIndex, version }),
+    });
   };
 
   const onDeleteTrip = () => {
-    Alert.alert('여행 삭제', '이 여행을 삭제할까요? 되돌릴 수 없습니다.', [
-      { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: () => deleteTripMutation.mutate() },
-    ]);
+    confirmDestructive({
+      title: '여행 삭제',
+      message: '이 여행을 삭제할까요? 되돌릴 수 없습니다.',
+      confirmLabel: '삭제',
+      onConfirm: () => deleteTripMutation.mutate(),
+    });
+  };
+
+  // 표시 순서: 낙관 override가 있으면 그것, 없으면 서버 순서.
+  const idsForDay = (dayIndex: number): string[] => {
+    const override = order[dayIndex];
+    if (override) return override;
+    return days.find((d) => d.day_index === dayIndex)?.pois.map((p) => p.poi_id) ?? [];
   };
 
   const move = (dayIndex: number, from: number, to: number) => {
-    const current = order[dayIndex] ?? [];
+    const current = idsForDay(dayIndex);
     if (to < 0 || to >= current.length) return;
     const next = arrayMove(current, from, to);
     setOrder((prev) => ({ ...prev, [dayIndex]: next }));
@@ -183,32 +214,35 @@ export default function TripEditScreen() {
     const currentSortById = new Map<string, string>();
     for (const p of day?.pois ?? []) currentSortById.set(p.poi_id, p.sort_order);
     const moves = reorderMoves(next, currentSortById);
-    if (moves.length > 0) reorderMutation.mutate(moves);
+    if (moves.length > 0) reorderMutation.mutate({ dayIndex, moves });
+    else clearOrder(dayIndex);
   };
 
-  const onDelete = (poiId: string, title: string) => {
-    Alert.alert('장소 삭제', `"${title}"을(를) 삭제할까요?`, [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '삭제',
-        style: 'destructive',
-        onPress: () => {
-          setOrder((prev) => {
-            const next: Record<number, string[]> = {};
-            for (const [k, ids] of Object.entries(prev)) {
-              next[Number(k)] = ids.filter((id) => id !== poiId);
-            }
-            return next;
-          });
-          deleteMutation.mutate(poiId);
-        },
+  const onDelete = (dayIndex: number, poiId: string, title: string) => {
+    confirmDestructive({
+      title: '장소 삭제',
+      message: `"${title}"을(를) 삭제할까요?`,
+      confirmLabel: '삭제',
+      onConfirm: () => {
+        setOrder((prev) => ({
+          ...prev,
+          [dayIndex]: idsForDay(dayIndex).filter((id) => id !== poiId),
+        }));
+        deleteMutation.mutate({ poiId, dayIndex });
       },
-    ]);
+    });
   };
 
   const onSave = () => {
     if (!form.title.trim()) {
       setFormError('제목을 입력해 주세요.');
+      return;
+    }
+    // 날짜 검증(웹 TripDashboard.validateDateRange 대응, issue #215/#205).
+    const nextDateError = validateTripDateRange(form.startDate, form.endDate);
+    setDateError(nextDateError);
+    if (nextDateError) {
+      setFormError(null);
       return;
     }
     setFormError(null);
@@ -239,7 +273,11 @@ export default function TripEditScreen() {
           <Field
             label="시작일 (YYYY-MM-DD)"
             value={form.startDate}
-            onChangeText={(startDate) => setForm({ ...form, startDate })}
+            onChangeText={(startDate) => {
+              setForm({ ...form, startDate });
+              setDateError(null);
+            }}
+            error={dateError?.field === 'startDate' ? dateError.message : undefined}
             autoCapitalize="none"
             keyboardType="numbers-and-punctuation"
             placeholder="2026-07-01"
@@ -247,7 +285,11 @@ export default function TripEditScreen() {
           <Field
             label="종료일 (YYYY-MM-DD)"
             value={form.endDate}
-            onChangeText={(endDate) => setForm({ ...form, endDate })}
+            onChangeText={(endDate) => {
+              setForm({ ...form, endDate });
+              setDateError(null);
+            }}
+            error={dateError?.field === 'endDate' ? dateError.message : undefined}
             autoCapitalize="none"
             keyboardType="numbers-and-punctuation"
             placeholder="2026-07-03"
@@ -278,7 +320,7 @@ export default function TripEditScreen() {
           <Muted>아직 일정이 없습니다.</Muted>
         ) : (
           days.map((day) => {
-            const ids = order[day.day_index] ?? day.pois.map((p) => p.poi_id);
+            const ids = idsForDay(day.day_index);
             return (
               <Card key={day.day_index} className="gap-3">
                 <View className="flex-row items-center gap-2">
@@ -336,7 +378,11 @@ export default function TripEditScreen() {
                             label="삭제"
                             variant="danger"
                             className="flex-1"
-                            onPress={() => onDelete(poiId, poi.title ?? '이 장소')}
+                            disabled={deleteMutation.isPending || reorderMutation.isPending}
+                            loading={
+                              deleteMutation.isPending && deleteMutation.variables?.poiId === poiId
+                            }
+                            onPress={() => onDelete(day.day_index, poiId, poi.title ?? '이 장소')}
                           />
                         </View>
                       </View>

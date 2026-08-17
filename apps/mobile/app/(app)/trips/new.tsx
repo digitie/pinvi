@@ -4,7 +4,12 @@ import { useRouter } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@pinvi/api-client';
 import type { TripVisibility } from '@pinvi/schemas';
-import { VISIBILITY_LABEL, friendlyErrorText } from '@pinvi/domain';
+import {
+  VISIBILITY_LABEL,
+  friendlyErrorText,
+  validateTripDateRange,
+  type TripDateRangeError,
+} from '@pinvi/domain';
 import { api } from '../../../lib/api';
 import {
   Body,
@@ -32,14 +37,16 @@ export default function NewTripScreen() {
   const [endDate, setEndDate] = useState('');
   const [visibility, setVisibility] = useState<TripVisibility>('private');
   const [error, setError] = useState<string | null>(null);
+  // 날짜 검증(웹 TripDashboard.validateDateRange 대응) — 형식/함께 입력/순서. 필드에 붙여 표시.
+  const [dateError, setDateError] = useState<TripDateRangeError | null>(null);
 
   const createMutation = useMutation({
     mutationFn: () =>
       api.trips.create({
         title: title.trim(),
         region_hint: regionHint.trim() || null,
-        start_date: startDate || null,
-        end_date: endDate || null,
+        start_date: startDate.trim() || null,
+        end_date: endDate.trim() || null,
         visibility,
         companions: [],
       }),
@@ -53,6 +60,12 @@ export default function NewTripScreen() {
   const onSubmit = () => {
     if (!title.trim()) {
       setError('제목을 입력해 주세요.');
+      return;
+    }
+    const nextDateError = validateTripDateRange(startDate, endDate);
+    setDateError(nextDateError);
+    if (nextDateError) {
+      setError(null);
       return;
     }
     setError(null);
@@ -87,7 +100,11 @@ export default function NewTripScreen() {
           <Field
             label="시작일 (YYYY-MM-DD, 선택)"
             value={startDate}
-            onChangeText={setStartDate}
+            onChangeText={(v) => {
+              setStartDate(v);
+              setDateError(null);
+            }}
+            error={dateError?.field === 'startDate' ? dateError.message : undefined}
             autoCapitalize="none"
             keyboardType="numbers-and-punctuation"
             placeholder="2026-07-01"
@@ -95,7 +112,11 @@ export default function NewTripScreen() {
           <Field
             label="종료일 (YYYY-MM-DD, 선택)"
             value={endDate}
-            onChangeText={setEndDate}
+            onChangeText={(v) => {
+              setEndDate(v);
+              setDateError(null);
+            }}
+            error={dateError?.field === 'endDate' ? dateError.message : undefined}
             autoCapitalize="none"
             keyboardType="numbers-and-punctuation"
             placeholder="2026-07-03"

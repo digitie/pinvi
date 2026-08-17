@@ -75,6 +75,7 @@ jobs:
               equals(".github/workflows/mobile.yml"),
             ])) {
               requiredChecks.push("mobile-typecheck");
+              requiredChecks.push("mobile-lint");
             }
             if (hasAny([
               startsWith("apps/etl/"),

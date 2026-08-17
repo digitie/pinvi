@@ -19,8 +19,11 @@ React Native 앱이다.
 3. **`tsc --noEmit` 통과** — 루트 `npm run typecheck`(전 workspace)에 `apps/mobile`이 포함된다.
 
 > CI(`web.yml`)의 `npm ci`가 이제 Expo 트리를 설치하고 typecheck에 `apps/mobile`을 포함한다
-> (ADR-041 활성화 — 의도적 CI-safe 유예 종료, web CI가 다소 무거워짐). `apps/mobile`은 자체
-> `lint`/`build` 스크립트가 없어 루트 `npm run lint`/`build --if-present`에서는 건너뛴다.
+> (ADR-041 활성화 — 의도적 CI-safe 유예 종료, web CI가 다소 무거워짐). `apps/mobile`은
+> `lint`(`eslint . --max-warnings 0`, Expo 표준 `eslint-config-expo` flat config, issue #215)와
+> `typecheck` 스크립트를 갖고, 전용 `mobile.yml`에서 `mobile-typecheck` + `mobile-lint`가 Aggregate
+> gate 필수 check다(`mobile-doctor`는 `expo-doctor` 정보성). `build` 스크립트는 없어 루트
+> `npm run build --if-present`에서는 건너뛴다.
 
 남은 작업: development build 생성(아래) + 화면 구현(`docs/architecture/expo-implementation-plan.md`).
 
