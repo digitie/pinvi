@@ -4,7 +4,7 @@
 
 PinVi #444의 service vendor bytes가 Map PR #975의 현행 service OpenAPI와 이미 같음을
 재검증하고, service provenance의 Map release revision을 candidate
-`74383a0dd78f72141e1c7d74b29d79c90ceefa95`로 재고정했다. artifact SHA-256은
+`b6685ceb558f41420028e9f1f2488117a73b3e00`로 재고정했다. artifact SHA-256은
 `c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`다.
 
 production cache-target sync는 final C7 root enable boundary 전까지 fail-close한다. 후보 live

@@ -4,7 +4,7 @@
 
 ## 2026-08-17 (codex) — T-VN-41 ABC Map service provenance 재핀
 
-- Map PR #975의 current-main 후보 `74383a0dd78f72141e1c7d74b29d79c90ceefa95`를
+- Map PR #975의 current-main 후보 `b6685ceb558f41420028e9f1f2488117a73b3e00`를
   PinVi service provenance의 release revision으로 고정했다. vendored service OpenAPI는
   현재 Map artifact와 SHA-256 `c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`가
   이미 byte-for-byte 일치함을 다시 검증했다.
