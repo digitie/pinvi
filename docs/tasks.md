@@ -42,6 +42,10 @@
       one-shot command를 하나의 compatible pair로 고정한다. command는 sync disabled 상태에서 immutable
       pre-CAS receipt로 응답 유실 exact replay까지 검증할 뿐 writer를 열지 않는다. Map/PinVi 두 draft PR의 exact SHA·artifact SHA와
       적대적 재리뷰 뒤 n150 isolated rehearsal을 별도 완료 조건으로 둔다.
+  - current-main 후보 Map `2e8d009e9512bdc595cdb7bd082e6247baf4948e`와 service OpenAPI
+        `c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`를 PinVi
+        provenance에 재핀했다. paired CI·재리뷰·n150 isolated Live UI E2E가 모두 성공할 때까지
+        완료 receipt와 병합은 금지한다.
 - [/] **T-VN-41-F — C6c 격리 compatible-pair 증명** — 서비스 전 단계이므로 production consumer enable,
       운영 데이터 보존·복원, 중간 DB 백업은 이 task의 범위가 아니다. 데이터가 필요하면 fixture 또는
       ETL 재실행으로 새로 만든다. 설계 정본은

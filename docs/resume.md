@@ -1,5 +1,16 @@
 # resume.md
 
+## 2026-08-17 (codex) — T-VN-41 ABC current-main Map artifact 재결박
+
+PinVi #444의 service vendor bytes가 Map PR #975의 현행 service OpenAPI와 이미 같음을
+재검증하고, service provenance의 Map release revision을 candidate
+`2e8d009e9512bdc595cdb7bd082e6247baf4948e`로 재고정했다. artifact SHA-256은
+`c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`다.
+
+**다음 한 작업**: PinVi #444와 Map #975의 paired contract CI 및 적대적 재리뷰를 통과한
+candidate만 n150 isolated Live UI E2E에 올린다. 성공 전에는 sync enable·완료 receipt·PR
+병합을 하지 않으며, #967은 #975 병합 뒤 재배치한다.
+
 ## 2026-08-15 (codex) — PinVi 0053 synthetic catalog forward-upgrade CI 복구
 
 historical 0053 catalog regression은 현재 head를 단순 stamp하지 않고, 0054가 실제로 제거할
