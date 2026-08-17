@@ -155,20 +155,21 @@ export default function TripEditScreen() {
     onError: (err) => Alert.alert('여행 삭제 실패', friendlyErrorText(err)),
   });
 
-  if (tripQuery.isLoading || !form) {
-    return (
-      <Screen scroll={false}>
-        <Loading />
-      </Screen>
-    );
-  }
-  if (tripQuery.isError || !tripQuery.data) {
+  // 오류를 로딩보다 먼저 판정 — 캐시 없이 GET이 실패하면 form도 null이라 로딩만 도는 것을 막는다.
+  if (tripQuery.isError) {
     return (
       <Screen>
         <ErrorView
           message={friendlyErrorText(tripQuery.error)}
           onRetry={() => tripQuery.refetch()}
         />
+      </Screen>
+    );
+  }
+  if (!tripQuery.data || !form || !serverForm) {
+    return (
+      <Screen scroll={false}>
+        <Loading />
       </Screen>
     );
   }
@@ -238,8 +239,12 @@ export default function TripEditScreen() {
       setFormError('제목을 입력해 주세요.');
       return;
     }
-    // 날짜 검증(웹 TripDashboard.validateDateRange 대응, issue #215/#205).
-    const nextDateError = validateTripDateRange(form.startDate, form.endDate);
+    // 날짜 검증(웹 TripDashboard.validateDateRange 대응, issue #215/#205) — 날짜를 실제로 고친
+    // 경우에만. 서버는 한쪽 날짜만 있는 trip을 허용하고 PATCH null로는 날짜를 지우지 못하므로
+    // (services/trip.py update_trip), 제목/상태만 바꾸는 저장까지 막으면 벗어날 길이 없다.
+    const datesChanged =
+      form.startDate.trim() !== serverForm.startDate || form.endDate.trim() !== serverForm.endDate;
+    const nextDateError = datesChanged ? validateTripDateRange(form.startDate, form.endDate) : null;
     setDateError(nextDateError);
     if (nextDateError) {
       setFormError(null);
@@ -364,14 +369,20 @@ export default function TripEditScreen() {
                             label="↑"
                             variant="secondary"
                             className="flex-1"
-                            disabled={index === 0 || reorderMutation.isPending}
+                            disabled={
+                              index === 0 || reorderMutation.isPending || deleteMutation.isPending
+                            }
                             onPress={() => move(day.day_index, index, index - 1)}
                           />
                           <Button
                             label="↓"
                             variant="secondary"
                             className="flex-1"
-                            disabled={index === ids.length - 1 || reorderMutation.isPending}
+                            disabled={
+                              index === ids.length - 1 ||
+                              reorderMutation.isPending ||
+                              deleteMutation.isPending
+                            }
                             onPress={() => move(day.day_index, index, index + 1)}
                           />
                           <Button

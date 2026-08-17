@@ -16,10 +16,15 @@ import { Body, Button, ErrorBanner, Heading, Loading, Muted, Screen } from '../.
  */
 type VerifyState = 'pending' | 'verifying' | 'error';
 
+/** 딥링크 토큰 형식 오류(전송 전) — 이 경우에만 전용 문구, 그 외 non-ApiError는 일반 문구. */
+class InvalidLinkError extends Error {}
+
 function verifyErrorText(err: unknown): string {
+  if (err instanceof InvalidLinkError) return err.message;
   if (err instanceof ApiError && err.code === 'VERIFICATION_TOKEN_INVALID') {
     return '인증 링크가 만료되었거나 이미 사용되었습니다. 다시 요청해 주세요.';
   }
+  // 네트워크 TypeError·SecureStore 실패 등은 원문(영문/내부 메시지)을 노출하지 않는다.
   return '이메일 인증에 실패했습니다. 잠시 후 다시 시도해 주세요.';
 }
 
@@ -35,7 +40,9 @@ export default function VerifyEmailScreen() {
     mutationFn: async (rawToken: string) => {
       const parsed = VerifyEmailRequestSchema.safeParse({ token: rawToken });
       if (!parsed.success) {
-        throw new Error('인증 링크가 올바르지 않습니다. 메일의 링크를 다시 확인해 주세요.');
+        throw new InvalidLinkError(
+          '인증 링크가 올바르지 않습니다. 메일의 링크를 다시 확인해 주세요.',
+        );
       }
       const result = await api.mobileAuth.verifyEmail(parsed.data);
       await adoptSession(result);
@@ -54,11 +61,7 @@ export default function VerifyEmailScreen() {
     : token && (verifyMutation.isPending || verifyMutation.isIdle)
       ? 'verifying'
       : 'pending';
-  const error = verifyMutation.isError
-    ? verifyMutation.error instanceof ApiError
-      ? verifyErrorText(verifyMutation.error)
-      : verifyMutation.error.message
-    : null;
+  const error = verifyMutation.isError ? verifyErrorText(verifyMutation.error) : null;
 
   if (state === 'verifying') {
     return (

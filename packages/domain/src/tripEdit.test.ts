@@ -34,6 +34,12 @@ describe('tripEdit', () => {
     expect(patch.end_date).toBeNull();
   });
 
+  it('buildTripUpdate: 날짜 공백은 trim(검증과 동일 값 전송), 공백만이면 null', () => {
+    const patch = buildTripUpdate({ ...base, startDate: ' 2026-07-01 ', endDate: '   ' });
+    expect(patch.start_date).toBe('2026-07-01');
+    expect(patch.end_date).toBeNull();
+  });
+
   it('isValidIsoDate: 형식 + 실제 달력 날짜', () => {
     expect(isValidIsoDate('2026-07-01')).toBe(true);
     expect(isValidIsoDate('2024-02-29')).toBe(true);

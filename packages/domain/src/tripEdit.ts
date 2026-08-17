@@ -82,8 +82,9 @@ export function buildTripUpdate(form: TripEditForm): TripUpdate {
   return {
     title: form.title.trim(),
     region_hint: form.regionHint.trim() || null,
-    start_date: form.startDate || null,
-    end_date: form.endDate || null,
+    // 자유 텍스트 입력(모바일)의 공백을 정규화 — `validateTripDateRange`와 같은 값이 전송되게.
+    start_date: form.startDate.trim() || null,
+    end_date: form.endDate.trim() || null,
     visibility: form.visibility,
     status: form.status,
   };
