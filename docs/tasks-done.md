@@ -6,6 +6,27 @@
 
 ## 2026-08-18
 
+- [x] **T-314** — Hallmark PR-3: 앱 셸·대시보드·탐색 지도 재설계. (완료: 2026-08-18, PR #450, claude)
+      `AppShell`: ground를 `bg-surface-soft`→`bg-canvas`, 모바일(<lg) 하단 탭바 신설(주요 4 + `더보기` 시트,
+      `min-h-14`·safe-area, 320px 가로 스크롤 nav 폐기)·데스크톱은 ink 밑줄 탭 유지, main 하단 패딩으로 탭바 회피.
+      `useMobileWebLayout`: UA 정규식(SamsungBrowser|Android|…) 제거 → `(max-width:1023px), (pointer:coarse) and
+  (hover:none)` 단일 미디어쿼리(SSR/클라이언트 판정 분기 해소, Mj9). eyebrow 5곳(`Trips`·`Notice Plans`·
+      `Pinvi`(map)·`Pinvi`(map-shell)·`Settings`) 삭제, 탐색 지도/맵 셸의 장식 칩 6개 삭제(C13), 추천 shelf에 설명 1줄 추가.
+      TripDashboard: 필터를 `role=tab/aria-selected`→`role=group`+`aria-pressed`(44px, Mj10), 목록 로딩은
+      skeleton 3행, 오류는 목록 자리를 대체하는 패널(원인 + `다시 시도`), 빈 상태는 버킷별 문구 + `새 여행 만들기`
+      CTA로 분리(Mj5~Mj7). e2e 셀렉터 동기(trips-dashboard).
+      **적대적 리뷰 2인 반영**: (P1) main 하단 패딩이 `md:py-8`에 덮여 768~1023px에서 탭바가 콘텐츠를 가리던 문제 →
+      하단 패딩을 `.app-shell-main`(+`--app-tabbar-h`)으로 분리; (P1) 저장 실패가 정상 로드된 목록을 지우던 문제 →
+      `listError`/`formError` 분리(배너=쓰기, 목록 자리 패널=로드, 패널에 `role=alert`); (P2) `더보기` 시트를
+      `<details>`→제어 `button aria-expanded/aria-controls`(라우팅·바깥 클릭·Escape로 닫힘, Blink disclosure
+      시맨틱 상실 해소); (P2) 셸 모바일 판정을 `data-mobile-layout`으로 `useMobileWebLayout`과 일치(넓은 layout
+      viewport 폰); (P2) 빈 상태 CTA의 죽은 `scrollIntoView` → 폼 노출 후 effect에서 스크롤+포커스, variant는
+      secondary(채운 primary 1개 규칙); (P3) `/`·`/profile`을 탭바 1순위에서 더보기로 내림(셸 밖 dead-end),
+      `/settings/*` 활성 매칭, 지도 페이지 `min-h-[calc(100dvh-120px)]` 상수 제거(셸이 높이 전달),
+      NoticePlanShelf 필터·로딩·빈 상태를 `/trips`와 동일 계약으로 통일, DESIGN.md 잔여 이탈 갱신.
+      회귀 e2e 신설 `app-shell-mobile.e2e.ts` 5건(768px 가림·시트 닫힘·1180px 모바일 셸·저장 실패·로드 실패).
+      검증: typecheck 0, next lint 0, vitest 100, 관련 Playwright 27 passed/1 skipped, 375px 실렌더.
+
 - [x] **T-313** — Hallmark PR-1b 토큰 우회 코드모드(apps/web 89파일, +328/−320, 로직·testid·문구 의미 변경 0).
       (완료: 2026-08-18, PR #448, claude)
       `bg-white→bg-canvas`(131), `text-white`(92)→색 채움 위 `text-on-primary`/ink·scrim 위 `text-canvas`(마커 팔레트

@@ -1,20 +1,18 @@
 import { MapView } from '@/components/map/MapView';
 
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench(app) · design-system: DESIGN.md
+ * 전체 화면 지도 — 높이는 셸이 흘려보낸다(flex-1 min-h-0), 100dvh 상수 금지.
+ */
+
 export default function TripMapShellPage() {
   return (
-    <div className="flex min-h-[calc(100dvh-120px)] flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <header className="flex flex-col gap-3 border-b border-hairline pb-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-normal text-primary">Pinvi</p>
-          <h1 className="mt-1 text-2xl font-bold text-ink md:text-3xl">지도</h1>
-        </div>
-        <div className="grid grid-cols-3 gap-2 text-xs text-muted">
-          <span className="rounded-sm border border-hairline bg-canvas px-3 py-2">서울</span>
-          <span className="rounded-sm border border-hairline bg-canvas px-3 py-2">VWorld</span>
-          <span className="rounded-sm border border-hairline bg-canvas px-3 py-2">Shell</span>
+          <h1 className="text-2xl font-bold tracking-tight text-ink md:text-3xl">지도</h1>
         </div>
       </header>
-      <section className="min-h-[520px] flex-1">
+      <section className="min-h-[320px] flex-1">
         <MapView apiKey={process.env.NEXT_PUBLIC_VWORLD_API_KEY ?? ''} className="h-full" />
       </section>
     </div>

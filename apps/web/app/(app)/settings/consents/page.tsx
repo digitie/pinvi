@@ -79,8 +79,7 @@ export default function ConsentsSettingsPage() {
   return (
     <div className="space-y-5">
       <header className="border-b border-hairline pb-4">
-        <p className="text-xs font-semibold uppercase tracking-normal text-primary">Settings</p>
-        <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-ink md:text-3xl">
+        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-ink md:text-3xl">
           <ShieldCheck className="h-6 w-6 text-primary" aria-hidden="true" />
           동의 관리
         </h1>
