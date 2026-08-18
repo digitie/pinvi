@@ -6,6 +6,17 @@
 
 ## 2026-08-18
 
+- [x] **T-314** — Hallmark PR-3: 앱 셸·대시보드·탐색 지도 재설계. (완료: 2026-08-18, PR #TBD, claude)
+      `AppShell`: ground를 `bg-surface-soft`→`bg-canvas`, 모바일(<lg) 하단 탭바 신설(주요 4 + `더보기` 시트,
+      `min-h-14`·safe-area, 320px 가로 스크롤 nav 폐기)·데스크톱은 ink 밑줄 탭 유지, main 하단 패딩으로 탭바 회피.
+      `useMobileWebLayout`: UA 정규식(SamsungBrowser|Android|…) 제거 → `(max-width:1023px), (pointer:coarse) and
+    (hover:none)` 단일 미디어쿼리(SSR/클라이언트 판정 분기 해소, Mj9). eyebrow 4곳(`Trips`·`Notice Plans`·
+      `Pinvi`·`Settings`) 삭제, 탐색 지도/맵 셸의 장식 칩 6개 삭제(C13), 추천 shelf에 설명 1줄 추가.
+      TripDashboard: 필터를 `role=tab/aria-selected`→`role=group`+`aria-pressed`(44px, Mj10), 목록 로딩은
+      skeleton 3행, 오류는 목록 자리를 대체하는 패널(원인 + `다시 시도`), 빈 상태는 버킷별 문구 + `새 여행 만들기`
+      CTA로 분리(Mj5~Mj7), 상단 오류 배너는 목록이 있을 때만. e2e 셀렉터 동기(trips-dashboard).
+      검증: typecheck 0, next lint 0, vitest 100, next build, **Playwright 전체 119 passed/3 skipped**, 375px 실렌더.
+
 - [x] **T-313** — Hallmark PR-1b 토큰 우회 코드모드(apps/web 89파일, +328/−320, 로직·testid·문구 의미 변경 0).
       (완료: 2026-08-18, PR #448, claude)
       `bg-white→bg-canvas`(131), `text-white`(92)→색 채움 위 `text-on-primary`/ink·scrim 위 `text-canvas`(마커 팔레트

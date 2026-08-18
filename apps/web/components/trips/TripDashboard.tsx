@@ -18,6 +18,7 @@ import { apiClient } from '@/lib/api';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 import { FormField } from '@/components/forms/FormField';
 import { TripMapView } from '@/components/trips/TripMapView';
+import { buttonClassName } from '@/components/ui/Button';
 import { formatTripDateRange } from '@/lib/tripDateLabels';
 
 const VWORLD_API_KEY = process.env.NEXT_PUBLIC_VWORLD_API_KEY ?? '';
@@ -262,8 +263,7 @@ export function TripDashboard() {
     <div className="space-y-5">
       <header className="flex flex-col gap-3 border-b border-hairline pb-5 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-normal text-primary">Trips</p>
-          <h1 className="mt-1 text-2xl font-bold text-ink md:text-3xl">여행</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink md:text-3xl">여행</h1>
           <p className="mt-2 text-sm text-muted">
             예정 {upcomingCount} · 지난 여행 {pastCount} · 초안 {draftCount}
           </p>
@@ -300,7 +300,8 @@ export function TripDashboard() {
       {message && (
         <p className="rounded-sm bg-success-bg px-3 py-2 text-sm text-success-text">{message}</p>
       )}
-      {error && (
+      {error && !loading && filteredTrips.length > 0 && (
+        // 목록이 이미 있을 때만 상단 배너 — 목록이 비면 아래 오류 패널이 자리를 대체한다(중복 금지).
         <p
           role="alert"
           className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
@@ -437,7 +438,8 @@ export function TripDashboard() {
           </section>
 
           <section className="space-y-3">
-            <div className="flex flex-wrap gap-2" role="tablist" aria-label="여행 필터">
+            {/* 필터는 탭이 아니라 토글 그룹 — role=tab은 tabpanel/roving tabindex 계약을 요구한다. */}
+            <div className="flex flex-wrap gap-2" role="group" aria-label="여행 필터">
               {BUCKETS.map((item) => (
                 <button
                   key={item.value}
@@ -445,11 +447,10 @@ export function TripDashboard() {
                   onClick={() => setBucket(item.value)}
                   className={
                     bucket === item.value
-                      ? 'h-9 rounded-sm bg-ink px-3 text-sm font-semibold text-canvas'
-                      : 'h-9 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft'
+                      ? 'focus-ring min-h-11 rounded-sm bg-ink px-4 text-sm font-semibold text-canvas'
+                      : 'focus-ring min-h-11 rounded-sm border border-hairline bg-canvas px-4 text-sm font-semibold text-ink hover:bg-surface-soft'
                   }
-                  role="tab"
-                  aria-selected={bucket === item.value}
+                  aria-pressed={bucket === item.value}
                 >
                   {item.label}
                 </button>
@@ -457,15 +458,64 @@ export function TripDashboard() {
             </div>
 
             {loading ? (
-              <div className="flex min-h-48 items-center justify-center rounded-sm border border-hairline bg-canvas text-sm text-muted">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                불러오는 중…
+              // 형태가 정해진 목록은 spinner 대신 skeleton(DESIGN.md 상태 UI).
+              <div className="space-y-2" aria-busy="true" aria-live="polite">
+                <span className="sr-only">여행 목록을 불러오는 중…</span>
+                {[0, 1, 2].map((row) => (
+                  <div
+                    key={row}
+                    className="animate-pulse rounded-sm border border-hairline bg-canvas p-4"
+                  >
+                    <div className="h-4 w-2/5 rounded-sm bg-surface-strong" />
+                    <div className="mt-3 h-3 w-3/5 rounded-sm bg-surface-soft" />
+                  </div>
+                ))}
+              </div>
+            ) : error ? (
+              // 오류일 때 "없습니다"를 함께 띄우지 않는다 — 원인 + 회복 행동으로 목록 자리를 대체.
+              <div
+                className="rounded-sm border border-hairline bg-canvas p-4"
+                data-testid="trip-list-error"
+              >
+                <p className="text-sm font-semibold text-ink">여행 목록을 불러오지 못했습니다.</p>
+                <p className="mt-1 text-sm text-muted">
+                  {error === '여행 목록을 불러오지 못했습니다.'
+                    ? '네트워크나 서버 상태를 확인한 뒤 다시 시도해 주세요.'
+                    : error}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void loadTrips()}
+                  className={buttonClassName({ variant: 'secondary', className: 'mt-3' })}
+                >
+                  다시 시도
+                </button>
               </div>
             ) : filteredTrips.length === 0 ? (
-              <div className="flex min-h-48 flex-col items-center justify-center rounded-sm border border-hairline bg-canvas px-4 text-center">
-                <CalendarDays className="h-8 w-8 text-muted" aria-hidden="true" />
-                <p className="mt-3 text-sm font-semibold text-ink">표시할 여행이 없습니다.</p>
-                <p className="mt-1 text-xs text-muted">첫 여행을 저장하면 이곳에 나타납니다.</p>
+              <div className="rounded-sm border border-hairline bg-canvas p-6">
+                <p className="text-sm font-semibold text-ink">
+                  {bucket === 'past' ? '지난 여행이 없습니다.' : '아직 여행이 없습니다.'}
+                </p>
+                <p className="mt-1 text-sm text-muted">
+                  {bucket === 'past'
+                    ? '종료된 여행이 생기면 여기에 모입니다.'
+                    : '제목만 있으면 시작할 수 있어요. 지도에서 장소를 담고 일자별로 정리해 보세요.'}
+                </p>
+                {bucket !== 'past' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileToolsOpen(true);
+                      document.getElementById('trip-dashboard-create')?.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center',
+                      });
+                    }}
+                    className={buttonClassName({ className: 'mt-4' })}
+                  >
+                    새 여행 만들기
+                  </button>
+                ) : null}
               </div>
             ) : (
               <div className="space-y-2" data-testid="trip-list">

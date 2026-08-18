@@ -20,42 +20,42 @@
 ## T-VN-41 runtime rebootstrap
 
 - [/] **T-VN-41-F1D-C1a — PinVi 후보 migration head 검사** — `pinvi-admin-bootstrap head`가
-      후보 이미지의 `__file__` 고정 루트에서 revision module을 실행하지 않는 AST literal graph로 exact
-      단일 head를 JSON으로 반환하고, 동적·0개·복수·설정 오류는 typed fail-closed error로 종료한다.
+  후보 이미지의 `__file__` 고정 루트에서 revision module을 실행하지 않는 AST literal graph로 exact
+  단일 head를 JSON으로 반환하고, 동적·0개·복수·설정 오류는 typed fail-closed error로 종료한다.
 - [/] **T-VN-41-F1D-C1b — PinVi seven-image provenance** — API뿐 아니라 Web·Dagster image도
-      동일한 exact `PINVI_SOURCE_REVISION`과 `PINVI_BUILD_ENVIRONMENT` OCI label을 image 자체에
-      기록한다. Manager candidate는 세 label이 모두 release pin과 일치할 때만 DB reset 단계로 진행한다.
-      PinVi deploy wrapper도 build/pull/up 전에 선택한 runtime image label을 같은 입력과 대조한다.
-      DB·DSN·credential file·현재 작업 디렉터리는 읽지 않는다.
+  동일한 exact `PINVI_SOURCE_REVISION`과 `PINVI_BUILD_ENVIRONMENT` OCI label을 image 자체에
+  기록한다. Manager candidate는 세 label이 모두 release pin과 일치할 때만 DB reset 단계로 진행한다.
+  PinVi deploy wrapper도 build/pull/up 전에 선택한 runtime image label을 같은 입력과 대조한다.
+  DB·DSN·credential file·현재 작업 디렉터리는 읽지 않는다.
 
 ## kor-travel-map compatible pair
 
 - [/] **T-VN-40 PinVi canonical curation consumer** — Map legacy curated-feature snapshot 대신
-      collection/item UUID service snapshot을 소비한다. bigint revision/strong ETag/item-set receipt,
-      actor-scoped import idempotency, plan/POI mutation+audit 단일 transaction을 먼저 완료하고 legacy
-      admin snapshot/client/source ID 열을 제거한 뒤 paired service receipt와 n150 live import를 닫는다.
+  collection/item UUID service snapshot을 소비한다. bigint revision/strong ETag/item-set receipt,
+  actor-scoped import idempotency, plan/POI mutation+audit 단일 transaction을 먼저 완료하고 legacy
+  admin snapshot/client/source ID 열을 제거한 뒤 paired service receipt와 n150 live import를 닫는다.
   - Docker Manager PR #174의 raw PinVi token→Map digest 경계는 draft 상태다. 병합 후 n150 canonical
-        import/backfill live acceptance와 exact paired receipt를 확인하기 전에는 receipt complete와 legacy
-        source column·route의 물리 삭제를 금지한다.
+    import/backfill live acceptance와 exact paired receipt를 확인하기 전에는 receipt complete와 legacy
+    source column·route의 물리 삭제를 금지한다.
 - [/] **T-VN-41-ABC — cache target relay producer/consumer 결박** — Map queued refresh의 source event/outbox
-      원자화, restore exact replay `200` OpenAPI 선언, PinVi service artifact exact re-vendor와 restore-fence
-      one-shot command를 하나의 compatible pair로 고정한다. command는 sync disabled 상태에서 immutable
-      pre-CAS receipt로 응답 유실 exact replay까지 검증할 뿐 writer를 열지 않는다. Map/PinVi 두 draft PR의 exact SHA·artifact SHA와
-      적대적 재리뷰 뒤 n150 isolated rehearsal을 별도 완료 조건으로 둔다.
+  원자화, restore exact replay `200` OpenAPI 선언, PinVi service artifact exact re-vendor와 restore-fence
+  one-shot command를 하나의 compatible pair로 고정한다. command는 sync disabled 상태에서 immutable
+  pre-CAS receipt로 응답 유실 exact replay까지 검증할 뿐 writer를 열지 않는다. Map/PinVi 두 draft PR의 exact SHA·artifact SHA와
+  적대적 재리뷰 뒤 n150 isolated rehearsal을 별도 완료 조건으로 둔다.
   - [ ] **docker-manager pair 재핀(F1J-D 전제)** — Manager tracked v5 pinset은 아직 옛 pair를 고정한다.
         `MAP_PINNED_RUNTIME_SOURCE`=`4672aa96…`, `PINVI_PINNED_RUNTIME_SOURCE`=PinVi 재핀 머지 SHA,
         `pinset_sha256` 재계산 후 trusted Manager release를 배포해야 n150 격리 rehearsal이 fail-close를 통과한다.
   - Map #975 **머지 SHA** `4672aa966cd473f17fd4f69ee8066276f7be900d`(2026-08-18 재핀 — 이전 dangling 후보
-        `e093e555…` 대체, service OpenAPI 바이트 동일)와 service OpenAPI
-        `c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`를 PinVi
-        provenance에 재핀했다. paired CI·재리뷰·n150 isolated Live UI E2E가 모두 성공할 때까지
-        완료 receipt와 병합은 금지한다. production `SYNC_ENABLED=true`는 final C7 root enable
-        boundary 전까지 Settings validation이 거부하며, 격리 n150 live proof는 `smoke` stack에서만
-        실행한다.
+    `e093e555…` 대체, service OpenAPI 바이트 동일)와 service OpenAPI
+    `c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`를 PinVi
+    provenance에 재핀했다. paired CI·재리뷰·n150 isolated Live UI E2E가 모두 성공할 때까지
+    완료 receipt와 병합은 금지한다. production `SYNC_ENABLED=true`는 final C7 root enable
+    boundary 전까지 Settings validation이 거부하며, 격리 n150 live proof는 `smoke` stack에서만
+    실행한다.
 - [/] **T-VN-41-F — C6c 격리 compatible-pair 증명** — 서비스 전 단계이므로 production consumer enable,
-      운영 데이터 보존·복원, 중간 DB 백업은 이 task의 범위가 아니다. 데이터가 필요하면 fixture 또는
-      ETL 재실행으로 새로 만든다. 설계 정본은
-      [`t-vn-41-f1j-contract-provenance.md`](execplan/t-vn-41-f1j-contract-provenance.md)다.
+  운영 데이터 보존·복원, 중간 DB 백업은 이 task의 범위가 아니다. 데이터가 필요하면 fixture 또는
+  ETL 재실행으로 새로 만든다. 설계 정본은
+  [`t-vn-41-f1j-contract-provenance.md`](execplan/t-vn-41-f1j-contract-provenance.md)다.
   - [x] **F1J-A Map fixture lifecycle** — Map PR #960에서 동적 cancel-probe fixture의 arm/consume/finalize
         lifecycle와 DB 불변식을 병합했다.
   - [x] **F1J-B Manager orchestration** — docker-manager PR #159에서 정적 job ID를 제거하고 dynamic
@@ -65,15 +65,15 @@
         service provenance로 재vendor·preflight 결박했다. PinVi ordinary runtime에는 fixture scope/token/route를
         주입하지 않는다.
   - [/] **F1J-D n150 final isolated rehearsal/UI E2E** — F1J-C의 exact pinset만으로 별도 Compose
-        project·DB·volume을 생성해 destructive rehearsal과 live UI E2E를 실행하고 즉시 폐기한다. 운영
-        stack·DB·backup/restore는 금지한다. 첫 격리 build에서 wheel `force-include` source path가 Docker
-        filesystem에 없음을 확인했다. canonical contract를 editable install 전에 같은 source-relative 위치에
-        복사하는 PinVi Docker fix PR을 merge한 뒤 동일 pinset rehearsal을 재개한다.
+    project·DB·volume을 생성해 destructive rehearsal과 live UI E2E를 실행하고 즉시 폐기한다. 운영
+    stack·DB·backup/restore는 금지한다. 첫 격리 build에서 wheel `force-include` source path가 Docker
+    filesystem에 없음을 확인했다. canonical contract를 editable install 전에 같은 source-relative 위치에
+    복사하는 PinVi Docker fix PR을 merge한 뒤 동일 pinset rehearsal을 재개한다.
 - (역사·참조) **T-VN-41-F production final boundary 초안(2026-08-05, PR #429)** —
-      [`t-vn-41-production-final-boundary.md`](execplan/t-vn-41-production-final-boundary.md). 당시 F1 re-pin은
-      Manager PR #130으로 됐으나 그 pin(`c0afaa4e…`)은 F1F-A에서 old release로 판정돼 재핀됐고, F1A(default-off
-      bootstrap)는 착수되지 않은 채 F1D-C one-shot·F1F-B canonical env replace로 대체됐으며, F2 cutover는 미착수다.
-      문서 헤더에 역사 기록으로 표기했다. 현행 실행 정본은 위 F1J 항목이며 두 문서가 어긋나면 F1J(신규)를 따른다.
+  [`t-vn-41-production-final-boundary.md`](execplan/t-vn-41-production-final-boundary.md). 당시 F1 re-pin은
+  Manager PR #130으로 됐으나 그 pin(`c0afaa4e…`)은 F1F-A에서 old release로 판정돼 재핀됐고, F1A(default-off
+  bootstrap)는 착수되지 않은 채 F1D-C one-shot·F1F-B canonical env replace로 대체됐으며, F2 cutover는 미착수다.
+  문서 헤더에 역사 기록으로 표기했다. 현행 실행 정본은 위 F1J 항목이며 두 문서가 어긋나면 F1J(신규)를 따른다.
 
 ## 보안·의존성
 
@@ -143,8 +143,7 @@
 
 - [x] **T-312** — Hallmark PR-1+PR-2: 시스템 잠금(`DESIGN.md` 섹션 추가, `cta`/`focus`/`shadow-overlay`/`zIndex`
       토큰 + spring 삭제, Pretendard self-host, `.focus-ring` outline, `html/body overflow-x: clip`, keep-all) +
-      프리미티브(`components/ui/Button.tsx` Button/ButtonLink 8상태·44px, `FormField/Select/TextArea` 44px·16px)
-      + 공개 표면(랜딩 Narrative Workflow 재구성, `PublicMasthead/PublicColophon/Wordmark`, auth 레이아웃·
+      프리미티브(`components/ui/Button.tsx` Button/ButtonLink 8상태·44px, `FormField/Select/TextArea` 44px·16px) + 공개 표면(랜딩 Narrative Workflow 재구성, `PublicMasthead/PublicColophon/Wordmark`, auth 레이아웃·
       로그인·회원가입·verify-pending 재발송·verify-email, 공유 뷰 chrome+오류 상태, 404/FullPageMessage,
       favicon·앱 아이콘·themeColor Rausch/canvas, 내부 문구 제거). (완료: 2026-08-18, PR #447, claude → tasks-done.md)
 - [x] **T-313** — Hallmark PR-1b(코드모드, 89파일): `bg-white→bg-canvas`, `text-white`→채움 위 `text-on-primary`/
@@ -153,9 +152,11 @@
       `'...'→'…'`, `vh→dvh`(풀스크린 지도 표면의 `100svh`는 의도적으로 유지 — 모바일 chrome 토글 리사이즈 방지),
       `text-[NNpx]`→스케일, 본문 `text-muted-soft→text-muted`. eslint-plugin-tailwindcss 도입은 후속(T-317).
       (완료: 2026-08-18, PR #448, claude → tasks-done.md)
-- [ ] **T-314** — Hallmark PR-3(앱 셸+대시보드+추천 shelf): `AppShell` ground `bg-canvas`, <md 하단 탭바,
-      /trips·/notice-plans eyebrow 삭제·accent 1개, skeleton/empty/error 3종, `role=tab`→`aria-pressed` 세그먼트,
-      `useMobileWebLayout` UA 스니핑→`matchMedia`, TripDashboard 링크 안 버튼 span 제거(Mj24).
+- [x] **T-314** — Hallmark PR-3(앱 셸·대시보드·탐색 지도): `AppShell` ground `bg-canvas` + 모바일 하단 탭바
+      (주요 4 + 더보기 시트, 가로 스크롤 nav 폐기)·데스크톱 ink 밑줄 탭, `useMobileWebLayout` UA 정규식 제거
+      (뷰포트·pointer 미디어쿼리만), eyebrow(uppercase accent 라벨) 4곳 삭제, 탐색/지도 shell 장식 칩 6개 삭제,
+      TripDashboard 필터를 `role=tab`→`aria-pressed` 토글 그룹(44px)·목록 skeleton·오류 패널(회복 행동)과
+      빈 상태(다음 행동 CTA) 분리. (완료: 2026-08-18, PR #TBD, claude → tasks-done.md)
 - [ ] **T-315** — Hallmark PR-4(여행 상세): 3중 컨테인먼트 해소, `components/ui/Dialog.tsx`(useModalDialog 내장,
       scrim/overlay 토큰) 신설 후 모달 10곳 이관, 컨트롤 중복(일자 추가 ×4) 정리, 마커 팔레트 UI 오용
       (TripDayHeader 일출/일몰) 제거, `bg-primary/10` accent 배경 제거.

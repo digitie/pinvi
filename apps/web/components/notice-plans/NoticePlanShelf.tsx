@@ -63,10 +63,10 @@ export function NoticePlanShelf() {
     <div className="space-y-6">
       <header className="flex flex-col gap-3 border-b border-hairline pb-5 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-normal text-primary">
-            Notice Plans
+          <h1 className="text-2xl font-bold tracking-tight text-ink md:text-3xl">추천 여행</h1>
+          <p className="mt-2 text-sm text-muted">
+            공공 공지·행사에서 만든 일정을 내 여행으로 복사해 쓸 수 있어요.
           </p>
-          <h1 className="mt-1 text-2xl font-bold text-ink md:text-3xl">추천 여행</h1>
         </div>
         <button
           type="button"
