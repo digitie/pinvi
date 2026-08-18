@@ -131,6 +131,20 @@ def test_service_snapshot_exact_bytes_runtime_pin_and_provenance_match_map_relea
     }
 
 
+def test_cache_target_example_runtime_pin_matches_service_provenance() -> None:
+    example = (Path(__file__).resolve().parents[4] / ".env.example").read_text()
+    pins = [
+        line
+        for line in example.splitlines()
+        if line.startswith("PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_")
+    ]
+    assert pins == [
+        f"PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_OPENAPI_SHA256={_SNAPSHOT_SHA256}",
+        f"PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION={_MAP_RELEASE_REVISION}",
+        "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_CONTRACT_GENERATION=7",
+    ]
+
+
 def test_wheel_build_includes_the_general_service_provenance() -> None:
     package_artifact = files("app").joinpath(
         "_contract_data/kor-travel-map-service-provenance-v1.json"

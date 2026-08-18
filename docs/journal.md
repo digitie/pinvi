@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-19 (codex) — T-VN-41S typed snapshot error 소비
+
+- **변경**: 선행 #453이 Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의 service
+  OpenAPI(SHA-256 `8019e36f150ed006f5580e5ff224a0ba72030808b5303273f8c4c51aa0496431`)를
+  재vendor·재핀한 뒤, PinVi transport와 root `.env.example`을 같은 final release에 정렬했다.
+- **계약**: generic/reconciliation seal `413`은 item 1,000,000개와 canonical material 512 MiB를
+  code discriminator로 구분한다. request-bound material compaction `410`은 snapshot UUID/count/root/
+  compacted-at receipt를 보존한다. PinVi transport는 두 `413`과 `410`을 자동 재시도하지 않고 fail-close한다.
+- **회귀 방어**: typed problem shape와 transport disposition을 고정하고, `.env.example`의 hash/revision/
+  generation 3종이 service provenance와 exact 일치하도록 단언한다.
+- **증거 경계**: 이전 Map/PinVi 후보의 paired CI·n150 live 결과는 새 artifact의 증거로 재사용하지 않는다.
+  #454 CI·리뷰와 새 exact pair live proof 전에는 completion receipt나 production sync enable을 수행하지 않는다.
+
 ## 2026-08-19 (claude) — Map service 계약 재vendor + provenance 재핀 (8019e36f / f637f3ad)
 
 - Map `#1000`(T-VN-41S: stream snapshot materialization)이 `openapi.service.json`을 바꿨다
@@ -18,19 +31,6 @@
 - 왜 지금: Map T-VN-40 인수 ④ receipt가 `map_service_openapi_sha256 == pinvi_service_vendor_sha256`을
   강제하고, cutover(S3~S6)의 pair commit이 `f637f3ad`로 확정됐다. mapping receipt 봉인(S4)은 이 재핀
   **뒤에** 한 번만 한다 — 먼저 봉인하면 preflight가 새 revision 기준으로 `ready=false`가 된다.
-
-## 2026-08-18 (codex) — T-VN-41S Map service artifact exact 재vendor
-
-- **변경**: Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의 service OpenAPI를 byte-exact로
-  재vendor하고 provenance·runtime env·contract unit·wheel/Docker CI pin을 SHA-256
-  `8019e36f150ed006f5580e5ff224a0ba72030808b5303273f8c4c51aa0496431`로 함께 회전했다.
-- **계약**: generic/reconciliation seal `413`은 item 1,000,000개와 canonical material 512 MiB를
-  code discriminator로 구분한다. request-bound material compaction `410`은 snapshot UUID/count/root/
-  compacted-at receipt를 보존한다. PinVi transport는 두 `413`과 `410`을 자동 재시도하지 않고 fail-close한다.
-- **증거 경계**: 이전 Map/PinVi 후보의 paired CI·n150 live 결과는 새 artifact의 증거로 재사용하지 않는다.
-  새 exact pair의 CI와 live proof 전에는 completion receipt나 production sync enable을 수행하지 않는다.
-- **다음**: Map candidate commit 원격 고정 뒤 PinVi contract CI를 통과하고, Map squash merge SHA 확정 뒤
-  provenance를 final release commit으로 재핀한다.
 
 ## 2026-08-18 (claude) — T-VN-42 라운드 2: 재리뷰 P1 4건 해소(CI red / admin 500 / 문서 모순 / 유령 query)
 

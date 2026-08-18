@@ -1,16 +1,15 @@
 # resume.md
 
-## 2026-08-18 (codex) — T-VN-41S Map service artifact exact 재vendor
+## 2026-08-19 (codex) — T-VN-41S typed snapshot error 소비
 
-Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의 `openapi.service.json`을 byte-exact로
-재vendor했다(SHA-256 `8019e36f…96431`). 새 계약은 snapshot item 1,000,000개와 canonical material
-512 MiB 상한을 code-discriminated typed `413`으로, request-bound material compaction을 immutable
-receipt가 포함된 typed `410`으로 고정한다. provenance/runtime env/contract test/wheel·Docker CI pin을
-같은 artifact로 회전했다.
+선행 #453이 Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의 service artifact
+(SHA-256 `8019e36f…96431`)를 재vendor·재핀했다. #454는 PinVi transport가 item/byte typed `413`과
+request-bound compacted-material typed `410`을 자동 재시도하지 않고 fail-close하도록 회귀 테스트를
+보강하고, root `.env.example`의 hash/revision/generation을 같은 final release와 exact 결박한다.
 
-**다음 한 작업**: Map candidate를 원격에서 고정한 뒤 PinVi contract CI와 byte-equality gate를 통과한다.
-Map PR의 squash merge SHA가 확정되면 provenance를 그 머지 SHA로 다시 고정하고 새 exact pair로만 n150
-증거를 만든다. 이전 pair의 live 증거는 이 계약의 증거로 재사용하지 않는다.
+**다음 한 작업**: #454의 원격 CI와 리뷰를 통과한 뒤 새 exact Map/PinVi pair로만 n150 격리 live proof를
+만든다. 이전 pair의 live 증거는 이 계약의 증거로 재사용하지 않으며, 새 proof 전 completion receipt와
+production sync enable은 금지한다.
 
 ## 2026-08-18 (claude) — T-VN-42 라운드 2: 재리뷰 P1 4건 해소
 
