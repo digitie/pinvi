@@ -319,8 +319,7 @@ def _provider_item() -> dict[str, Any]:
         "consecutive_failures": 0,
         "eligible_after": "2026-06-13T03:30:00+09:00",
         "detail_url": (
-            "/v1/ops/datasets/41?sync_scope=dataset_wide&"
-            "operation_key=kma_special_days_refresh"
+            "/v1/ops/datasets/41?sync_scope=dataset_wide&operation_key=kma_special_days_refresh"
         ),
         "freshness": {
             "state": "fresh",

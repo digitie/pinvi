@@ -494,11 +494,7 @@ class _DatasetGridRow(_CanonicalModel):
         expected_detail_url = f"/v1/ops/datasets/{self.provider_dataset_id}?" + urlencode(
             {
                 "sync_scope": self.sync_scope,
-                **(
-                    {"operation_key": self.operation_key}
-                    if self.operation_key is not None
-                    else {}
-                ),
+                **({"operation_key": self.operation_key} if self.operation_key is not None else {}),
             },
             quote_via=quote,
         )
@@ -1374,7 +1370,9 @@ def project_dataset_grid(
     return project_dataset_grid_snapshot(data, key=key).items
 
 
-def _admin_execution_links(*, detail_url: str, root_url: str | None = None) -> list[AdminProviderLink]:
+def _admin_execution_links(
+    *, detail_url: str, root_url: str | None = None
+) -> list[AdminProviderLink]:
     links = [
         AdminProviderLink(
             rel="detail",

@@ -130,8 +130,7 @@ def _dataset_row() -> dict[str, object]:
         "provider": "kma",
         "dataset_key": "special_days",
         "detail_url": (
-            "/v1/ops/datasets/41?sync_scope=dataset_wide&"
-            "operation_key=kma_special_days_refresh"
+            "/v1/ops/datasets/41?sync_scope=dataset_wide&operation_key=kma_special_days_refresh"
         ),
         "sync_scope": "dataset_wide",
         "operation_key": "kma_special_days_refresh",
@@ -661,8 +660,7 @@ def test_dataset_grid_rejects_noncanonical_row_scope(invalid_scope: str) -> None
     assert isinstance(row, dict)
     row["sync_scope"] = invalid_scope
     row["detail_url"] = (
-        f"/v1/ops/datasets/41?sync_scope={invalid_scope}&"
-        "operation_key=kma_special_days_refresh"
+        f"/v1/ops/datasets/41?sync_scope={invalid_scope}&operation_key=kma_special_days_refresh"
     )
 
     with pytest.raises(KorTravelMapOpsContractError, match="dataset grid"):
