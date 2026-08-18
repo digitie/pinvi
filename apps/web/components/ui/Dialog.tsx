@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import type { ReactNode, RefObject } from 'react';
 import { X } from 'lucide-react';
 import { useModalDialog } from '@/lib/useModalDialog';
@@ -85,7 +86,7 @@ export function Dialog({
   // busy 중 닫기는 "진행 중 요청 취소"라는 다른 의미다 — 호출부가 그 경로를 줬을 때만 연다.
   const closeWhileBusy = busy ? onCancelBusy : undefined;
   const closeDisabled = busy && !closeWhileBusy;
-  const { titleId, backdropProps, dialogProps } = useModalDialog({
+  const { titleId, portalContainer, backdropProps, dialogProps } = useModalDialog({
     onClose,
     active: open,
     // 저장 중에는 실수로 닫혀 작업이 사라지지 않게 잠근다(T-315 2차 리뷰: 닫기만 열어 두면
@@ -98,10 +99,13 @@ export function Dialog({
   });
 
   if (!open) return null;
+  // portal 컨테이너는 마운트 effect에서 생긴다 — 생기기 전에는 렌더하지 않는다
+  // (앱 트리 안에서 잠깐 떴다가 옮겨지면 배경 inert가 자기 자신을 잠근다).
+  if (!portalContainer) return null;
 
   const sheet = variant === 'sheet';
 
-  return (
+  return createPortal(
     <div
       className={`fixed inset-0 z-modal flex justify-center bg-scrim/50 ${
         sheet ? 'items-end p-0 sm:items-center sm:p-4' : 'items-center p-4'
@@ -153,6 +157,7 @@ export function Dialog({
           </div>
         ) : null}
       </div>
-    </div>
+    </div>,
+    portalContainer,
   );
 }

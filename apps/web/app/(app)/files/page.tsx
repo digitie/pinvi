@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Download, Loader2, Trash2 } from 'lucide-react';
 import { ApiError, authApi } from '@pinvi/api-client';
 import type { AttachmentLibraryItem } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -25,6 +26,8 @@ export default function MyFilesPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<AttachmentLibraryItem | null>(null);
+  const deleteTriggerRef = useRef<HTMLElement | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const reload = async () => {
@@ -62,17 +65,27 @@ export default function MyFilesPage() {
     }
   };
 
-  const remove = async (attachmentId: string) => {
-    if (!window.confirm('이 파일 연결을 삭제할까요?')) return;
-    setBusyId(attachmentId);
+  // 파괴적·비가역(서버 삭제) — native confirm 대신 공용 확인 다이얼로그(DESIGN.md 확인 정책).
+  const requestRemove = (item: AttachmentLibraryItem, trigger: HTMLElement | null) => {
+    deleteTriggerRef.current = trigger;
+    setError(null);
+    setPendingDelete(item);
+  };
+
+  const confirmRemove = async () => {
+    const target = pendingDelete;
+    if (!target) return;
+    setBusyId(target.attachment_id);
     setError(null);
     try {
-      await authApi(apiClient).deleteFile(attachmentId);
+      await authApi(apiClient).deleteFile(target.attachment_id);
       await reload();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '삭제하지 못했습니다.');
     } finally {
       setBusyId(null);
+      // 요청이 끝난 뒤 닫는다 — 먼저 닫으면 busy 표시가 죽고 포커스 복원 폴백도 건너뛴다.
+      setPendingDelete(null);
     }
   };
 
@@ -123,7 +136,7 @@ export default function MyFilesPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => void remove(item.attachment_id)}
+                    onClick={(event) => requestRemove(item, event.currentTarget)}
                     disabled={busyId === item.attachment_id}
                     aria-label="삭제"
                     className="rounded-sm p-2 text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
@@ -136,6 +149,24 @@ export default function MyFilesPage() {
           </ul>
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingDelete != null}
+        tone="danger"
+        title="이 파일 연결을 삭제할까요?"
+        description={
+          pendingDelete
+            ? `${pendingDelete.original_filename} · 삭제하면 되돌릴 수 없습니다.`
+            : undefined
+        }
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        busy={busyId != null}
+        onConfirm={() => void confirmRemove()}
+        onCancel={() => setPendingDelete(null)}
+        returnFocusRef={deleteTriggerRef}
+        testId="file-delete-confirm"
+      />
     </div>
   );
 }

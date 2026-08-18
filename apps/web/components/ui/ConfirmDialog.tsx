@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import { useRef, type ReactNode, type RefObject } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useModalDialog } from '@/lib/useModalDialog';
@@ -51,7 +52,7 @@ export function ConfirmDialog({
   testId = 'confirm-dialog',
 }: ConfirmDialogProps) {
   const cancelRef = useRef<HTMLButtonElement | null>(null);
-  const { titleId, backdropProps, dialogProps } = useModalDialog({
+  const { titleId, portalContainer, backdropProps, dialogProps } = useModalDialog({
     onClose: onCancel,
     active: open,
     // 파괴적 확인은 취소 버튼에 기본 포커스를 둬 실수로 Enter를 눌러도 안전하게.
@@ -64,10 +65,13 @@ export function ConfirmDialog({
   });
 
   if (!open) return null;
+  // portal 컨테이너는 마운트 effect에서 생긴다 — 생기기 전에는 렌더하지 않는다
+  // (앱 트리 안에서 잠깐 떴다가 옮겨지면 배경 inert가 자기 자신을 잠근다).
+  if (!portalContainer) return null;
 
   const isDanger = tone === 'danger';
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-modal flex items-center justify-center bg-scrim/50 p-4"
       data-testid={`${testId}-backdrop`}
@@ -121,6 +125,7 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    portalContainer,
   );
 }

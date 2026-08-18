@@ -110,8 +110,6 @@ test('내 파일함에서 파일을 다운로드하고 삭제한다', async ({ p
     },
   );
 
-  page.on('dialog', (dialog) => dialog.accept());
-
   await page.goto('/files');
   await expect(page.getByRole('heading', { name: '파일' })).toBeVisible();
   await expect(page.getByTestId('my-file-list')).toContainText('day.jpg');
@@ -124,6 +122,16 @@ test('내 파일함에서 파일을 다운로드하고 삭제한다', async ({ p
     )
     .toContain('X-Amz-Signature=get');
 
+  // 파괴적 액션은 공용 확인 다이얼로그를 거친다(native confirm 제거, T-316).
   await page.getByRole('button', { name: '삭제' }).click();
+  await expect(page.getByTestId('file-delete-confirm')).toBeVisible();
+
+  // 취소하면 요청이 나가지 않는다.
+  await page.getByTestId('file-delete-confirm-cancel').click();
+  await expect(page.getByTestId('file-delete-confirm')).toHaveCount(0);
+  await expect(page.getByTestId('my-file-list')).toContainText('day.jpg');
+
+  await page.getByRole('button', { name: '삭제' }).click();
+  await page.getByTestId('file-delete-confirm-confirm').click();
   await expect(page.getByText('업로드한 파일이 없습니다.')).toBeVisible();
 });
