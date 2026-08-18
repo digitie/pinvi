@@ -31,13 +31,17 @@ export interface DialogProps {
   variant?: DialogVariant;
   /**
    * 진행 중이면 닫기 경로(Escape·backdrop·×)를 잠근다 — 저장 중 이탈로 결과를 놓치지 않게.
-   * 무한 잠금이 되지 않도록 요청 타임아웃(`DEFAULT_REQUEST_TIMEOUT_MS`)이 busy를 반드시 끝낸다.
+   * 닫기만 열어 두면 진행 중 요청이 취소되지 않아 닫은 다이얼로그가 늦은 응답으로 되살아나거나
+   * 비멱등 POST가 중복된다(T-315 2차 리뷰에서 실측). 요청이 끝내 응답하지 않는 경우의 탈출은
+   * 데이터 계층(요청 타임아웃 + in-flight 취소)이 풀어야 하며 T-316에서 다룬다.
    */
   busy?: boolean;
   /** 헤더 우측 닫기(×) 버튼. 기본 true. */
   showClose?: boolean;
   /** 열릴 때 포커스를 옮길 대상. 생략하면 패널. */
   initialFocusRef?: RefObject<HTMLElement | null>;
+  /** 닫힐 때 포커스를 돌려줄 트리거. 직전 포커스가 disabled/제거됐을 때의 폴백. */
+  returnFocusRef?: RefObject<HTMLElement | null>;
   /** 하단 액션 행(버튼들). */
   footer?: ReactNode;
   children?: ReactNode;
@@ -63,6 +67,7 @@ export function Dialog({
   busy = false,
   showClose = true,
   initialFocusRef,
+  returnFocusRef,
   footer,
   children,
   testId = 'dialog',
@@ -71,12 +76,12 @@ export function Dialog({
   const { titleId, backdropProps, dialogProps } = useModalDialog({
     onClose,
     active: open,
-    // 저장 중에는 실수로 닫혀 작업이 사라지지 않게 잠근다. 요청이 매달려도 영구 잠금이 되지
-    // 않는 근거는 api-client의 요청 타임아웃이다(닫기만 열어 두면 진행 중 요청이 취소되지 않아
-    // 닫은 다이얼로그가 되살아나거나 비멱등 POST가 중복될 수 있다 — T-315 2차 리뷰).
+    // 저장 중에는 실수로 닫혀 작업이 사라지지 않게 잠근다(T-315 2차 리뷰: 닫기만 열어 두면
+    // 늦은 응답이 닫은 다이얼로그를 되살리고 비멱등 POST가 중복된다).
     closeOnEscape: !busy,
     closeOnBackdrop: !busy,
     initialFocusRef,
+    returnFocusRef,
     ariaDescribedBy: description != null ? descriptionId : undefined,
   });
 

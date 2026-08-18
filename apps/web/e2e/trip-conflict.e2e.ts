@@ -214,8 +214,8 @@ test('편집 다이얼로그 위에 뜬 충돌 다이얼로그에 키보드로 �
 
 test('저장 중에는 닫기 경로가 잠기고 포커스는 다이얼로그 안에 남는다', async ({ page }) => {
   // busy 동안 Escape·backdrop·×가 모두 잠긴다 — 닫기만 열어 두면 진행 중 요청이 취소되지 않아
-  // 닫은 다이얼로그가 되살아나거나 비멱등 POST가 중복된다(T-315 2차 리뷰). 영구 잠금이 되지
-  // 않는 근거는 api-client 요청 타임아웃이며 그 계약은 tests/apiClientTimeout.test.ts가 고정한다.
+  // 닫은 다이얼로그가 되살아나거나 비멱등 POST가 중복된다(T-315 2차 리뷰). 응답이 끝내 오지
+  // 않는 경우의 탈출(요청 타임아웃 + in-flight 취소)은 데이터 계층 과제로 T-316이 맡는다.
   await commonRoutes(page);
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
     if (request.method() === 'PATCH') {

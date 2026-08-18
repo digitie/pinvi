@@ -327,10 +327,11 @@ There are no progressive elevation tiers — the system either has the one shado
 스택(`modalStack`)에 등록돼 **최상단 하나만** Escape/Tab을 처리하고, 포커스는 패널 안에 격납된다
 (안의 버튼이 disabled/언마운트돼 포커스가 body로 떨어지면 회수). `busy`(저장 중)에는 Escape·backdrop·
 닫기(×)를 **모두** 잠근다 — 닫기만 열어 두면 진행 중 요청이 취소되지 않아 닫은 모달이 되살아나거나
-비멱등 POST가 중복된다. 영구 잠금이 되지 않는 근거는 프리미티브가 아니라 데이터 계층이다:
-`@pinvi/api-client`가 요청 타임아웃(`DEFAULT_REQUEST_TIMEOUT_MS` 30초, 백업/복구 등 장시간 호출은
-`timeoutMs`로 상향)을 걸어 busy를 반드시 끝낸다. 예외: `RestoreHotswapDialog`(admin schema-swap)는
-body portal + 배경 `inert`를 쓰는 더 강한 격리라 아직 프리미티브 밖이다(T-316에서 수렴).
+비멱등 POST가 중복된다(T-315 2차 리뷰 실측). 요청이 끝내 응답하지 않는 경우의 탈출구는 UI가 아니라
+데이터 계층(요청 타임아웃 + in-flight 취소)이 풀어야 할 문제이며 T-316이 맡는다 — 3차 리뷰가 보여준
+대로 헤더만 덮는 타임아웃이나 4xx로 표면화하는 타임아웃은 취소 계약·Idempotency-Key 계약을 깨뜨린다.
+예외: `RestoreHotswapDialog`(admin schema-swap)는 body portal + 배경 `inert`를 쓰는 더 강한 격리라
+아직 프리미티브 밖이다(T-316에서 수렴).
 
 **T-314에서 해소**: `useMobileWebLayout` UA 스니핑(뷰포트·포인터 미디어쿼리로 교체), 앱 셸 회색 ground(→ `bg-canvas` + 모바일 하단 탭바), 목록 skeleton 부재(`/trips`·`/notice-plans`), 필터 탭 시맨틱(패널을 바꾸지 않는 필터는 `role=group` + `aria-pressed` + 44px). 단 **실제 패널을 전환하는** `TripDetail`·`SharedTripView`의 일자·작업 탭은 `role=tab`을 유지하는 것이 맞다.
 

@@ -119,6 +119,8 @@ export function ConflictDialog({
                   type="button"
                   aria-pressed={!mineSelected}
                   onClick={() => selectField(field.key, 'server')}
+                  // 저장 중에는 선택도 얼린다 — 전송된 스냅샷과 화면이 갈리면 안 된다.
+                  disabled={saving}
                   data-testid={`conflict-field-${field.key}-server`}
                   className={
                     mineSelected
@@ -132,6 +134,7 @@ export function ConflictDialog({
                   type="button"
                   aria-pressed={mineSelected}
                   onClick={() => selectField(field.key, 'mine')}
+                  disabled={saving}
                   data-testid={`conflict-field-${field.key}-mine`}
                   className={
                     mineSelected

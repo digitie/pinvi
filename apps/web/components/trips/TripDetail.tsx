@@ -893,13 +893,15 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const dayConflictNotice = () =>
     setMutationError('다른 사용자가 이 일자를 먼저 변경했습니다. 최신 내용으로 다시 불러왔어요.');
 
-  const handleUpdateDay = (
+  // 성공 여부를 돌려준다 — 일자 설정 다이얼로그가 **성공했을 때만** 닫히게 하기 위해서다
+  // (실패/충돌 시 닫으면 사용자가 입력한 이름·날짜·색이 사라진다, T-315 3차 리뷰).
+  const handleUpdateDay = async (
     dayIndex: number,
     next: { title: string; date: string | null; marker_color: string | null },
-  ) => {
-    if (!view) return;
+  ): Promise<boolean> => {
+    if (!view) return false;
     const day = view.days.find((d) => d.day_index === dayIndex);
-    if (!day) return;
+    if (!day) return false;
     // 날짜는 실제로 바뀔 때만 검증한다. 색/이름만 바꾸는 업데이트는 파생 effective_date(ADR-055)를
     // 쓰는 일자에서 명시 날짜를 강제하면 안 된다(날짜 필드가 빈 채 색만 저장 시 "날짜 필요" 오류 방지).
     const dateChanged = next.date !== (day.date ?? null);
@@ -907,7 +909,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
       const validationMessage = dayDateUpdateValidation(view, dayIndex, next.date);
       if (validationMessage) {
         setMutationError(validationMessage);
-        return;
+        return false;
       }
     }
     const patch: TripDayUpdate = {};
@@ -916,11 +918,14 @@ export function TripDetail({ tripId }: TripDetailProps) {
     if (dateChanged) patch.date = next.date;
     // ADR-055 F6: 일자 색 override(팔레트 키 또는 null=기본색).
     if (next.marker_color !== (day.marker_color ?? null)) patch.marker_color = next.marker_color;
-    if (!hasPatchFields(patch)) return;
-    void runMutation(() => tripApi(apiClient).updateDay(tripId, dayIndex, day.version, patch), {
+    // 바뀐 게 없으면 요청 없이 닫아도 된다(성공으로 본다).
+    if (!hasPatchFields(patch)) return true;
+    return runMutation(() => tripApi(apiClient).updateDay(tripId, dayIndex, day.version, patch), {
       onConflict: dayConflictNotice,
     });
   };
+
+  const dayDeleteTriggerRef = useRef<HTMLElement | null>(null);
 
   const dayVersion = (dayIndex: number) =>
     view?.days.find((d) => d.day_index === dayIndex)?.version ?? 0;
@@ -935,6 +940,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
     );
 
   const handleDeleteDay = (dayIndex: number) => {
+    // 트리거를 busy로 disabled되기 **전에** 잡아 둔다 — 확인 다이얼로그가 닫힐 때 여기로 포커스를
+    // 돌려준다(직전 포커스는 이미 body로 떨어진 뒤다, T-315 3차 리뷰).
+    dayDeleteTriggerRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     // POI가 없으면 바로 삭제. 있으면(409 DAY_HAS_POIS) 확인 다이얼로그를 띄운다(F2).
     void (async () => {
       setMutationError(null);
@@ -1918,6 +1927,9 @@ export function TripDetail({ tripId }: TripDetailProps) {
         busy={busy}
         onConfirm={confirmForceDeleteDay}
         onCancel={() => setDayDeleteConfirm(null)}
+        // 트리거(일자 삭제)는 busy로 disabled된 채 이 다이얼로그가 열리므로 직전 포커스가 body다.
+        // 닫힐 때 돌아갈 자리를 명시한다(T-315 3차 리뷰).
+        returnFocusRef={dayDeleteTriggerRef}
         testId="day-delete-confirm"
       />
     </div>

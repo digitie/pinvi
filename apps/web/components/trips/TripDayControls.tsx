@@ -20,10 +20,11 @@ export interface TripDayControlsProps {
     marker_color?: string | null;
   } | null;
   onAdd: () => void;
+  /** 성공하면 true — 다이얼로그는 **성공했을 때만** 닫는다(실패 시 입력값 보존). */
   onUpdate: (
     dayIndex: number,
     patch: { title: string; date: string | null; marker_color: string | null },
-  ) => void;
+  ) => Promise<boolean>;
   onDelete: (dayIndex: number) => void;
   canAdd?: boolean;
   addDisabledReason?: string | null;
@@ -54,14 +55,15 @@ export function TripDayControls({
     setSettingsOpen(false);
   }, [selectedDay?.date, selectedDay?.day_index, selectedDay?.title, selectedDay?.marker_color]);
 
-  const saveSettings = () => {
+  const saveSettings = async () => {
     if (!selectedDay) return;
-    onUpdate(selectedDay.day_index, {
+    // 저장이 끝나기 전에 닫으면 busy 잠금이 무의미해지고, 실패 시 입력값이 사라진다.
+    const ok = await onUpdate(selectedDay.day_index, {
       title: title.trim(),
       date: date || null,
       marker_color: color,
     });
-    setSettingsOpen(false);
+    if (ok) setSettingsOpen(false);
   };
   const closeSettings = () => {
     setTitle(selectedDay?.title ?? '');
@@ -149,7 +151,7 @@ interface DaySettingsDialogProps {
   onTitleChange: (title: string) => void;
   onDateChange: (date: string) => void;
   onColorChange: (color: string | null) => void;
-  onSave: () => void;
+  onSave: () => void | Promise<void>;
   onClose: () => void;
 }
 
@@ -200,7 +202,7 @@ function DaySettingsDialog({
         className="space-y-3"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!unchanged) onSave();
+          if (!unchanged) void onSave();
         }}
       >
         <FormField

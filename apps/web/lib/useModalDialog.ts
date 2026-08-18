@@ -37,6 +37,11 @@ export interface UseModalDialogOptions {
   lockScroll?: boolean;
   /** 열릴 때 포커스를 옮길 대상. 생략하면 패널 자체로 이동한다. */
   initialFocusRef?: RefObject<HTMLElement | null>;
+  /**
+   * 닫힐 때 포커스를 돌려줄 대상(트리거 버튼). 직전 포커스 요소가 마운트 시점에 이미
+   * disabled였거나(공유 busy 플래그) 사라진 경우의 폴백이다 — 없으면 포커스가 body에 남는다.
+   */
+  returnFocusRef?: RefObject<HTMLElement | null>;
   /** aria-label로 쓸 제목 텍스트. 주면 `aria-labelledby` 대신 이걸 쓴다. */
   ariaLabel?: string;
   /** aria-labelledby로 쓸 heading의 id. 생략하면 훅이 만든 `titleId`를 쓴다. */
@@ -94,6 +99,7 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     closeOnBackdrop = true,
     lockScroll = true,
     initialFocusRef,
+    returnFocusRef,
     ariaLabel,
     ariaLabelledBy,
     ariaDescribedBy,
@@ -119,6 +125,11 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     initialFocusRefRef.current = initialFocusRef;
   }, [initialFocusRef]);
 
+  const returnFocusRefRef = useRef(returnFocusRef);
+  useEffect(() => {
+    returnFocusRefRef.current = returnFocusRef;
+  }, [returnFocusRef]);
+
   // 포커스: 열릴 때 패널/초기 대상으로, 닫힐 때 직전 요소로 복원.
   useEffect(() => {
     if (!active) return;
@@ -135,19 +146,30 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     });
     return () => {
       window.cancelAnimationFrame(raf);
-      // 중첩 모달에서 위가 닫힐 때 previouslyFocused가 body일 수 있다(저장 중 버튼이 disabled되며
-      // 포커스가 떨어진 경우). 그때는 body가 아니라 **남아 있는 최상단 모달**로 넘긴다.
-      const restorable =
-        previouslyFocused &&
-        previouslyFocused !== document.body &&
-        document.contains(previouslyFocused);
-      if (restorable) {
+      // previouslyFocused는 body이거나(트리거가 공유 busy로 이미 disabled된 채 열린 경우)
+      // 이미 사라졌을 수 있다. 그러면 (1) 남아 있는 최상단 모달 → (2) 호출부가 준 트리거 순으로
+      // 넘긴다. 어느 쪽도 없으면 body에 남는 것을 감수한다(그 이상은 훅이 알 수 없다).
+      const focusable = (el: HTMLElement | null | undefined): el is HTMLElement =>
+        Boolean(
+          el &&
+          el !== document.body &&
+          document.contains(el) &&
+          !(el as HTMLElement & { disabled?: boolean }).disabled &&
+          !el.hasAttribute('inert'),
+        );
+
+      if (focusable(previouslyFocused)) {
         previouslyFocused.focus();
         return;
       }
       const belowId = modalStack.filter((id) => id !== generatedTitleId).pop();
       const below = belowId ? modalPanels.get(belowId) : null;
-      if (below && document.contains(below)) below.focus();
+      if (below && document.contains(below)) {
+        below.focus();
+        return;
+      }
+      const fallback = returnFocusRefRef.current?.current;
+      if (focusable(fallback)) fallback.focus();
     };
   }, [active, generatedTitleId]);
 

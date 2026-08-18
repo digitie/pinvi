@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, type ReactNode } from 'react';
+import { useRef, type ReactNode, type RefObject } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useModalDialog } from '@/lib/useModalDialog';
 import { buttonClassName } from '@/components/ui/Button';
@@ -30,6 +30,8 @@ export interface ConfirmDialogProps {
   onCancel: () => void;
   /** 본문 아래 부가 내용(예: 삭제될 항목 목록). */
   children?: ReactNode;
+  /** 닫힐 때 포커스를 돌려줄 트리거. 트리거가 busy로 disabled된 채 열렸을 때의 폴백. */
+  returnFocusRef?: RefObject<HTMLElement | null>;
   /** e2e용 testid 접두어. 기본 'confirm-dialog'. */
   testId?: string;
 }
@@ -45,6 +47,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   children,
+  returnFocusRef,
   testId = 'confirm-dialog',
 }: ConfirmDialogProps) {
   const cancelRef = useRef<HTMLButtonElement | null>(null);
@@ -53,6 +56,7 @@ export function ConfirmDialog({
     active: open,
     // 파괴적 확인은 취소 버튼에 기본 포커스를 둬 실수로 Enter를 눌러도 안전하게.
     initialFocusRef: cancelRef,
+    returnFocusRef,
     // Dialog 프리미티브와 같은 계약 — 진행 중에는 Escape/backdrop도 잠근다
     // (버튼만 잠그고 Escape는 열려 있으면 '취소는 못 누르는데 Escape는 먹는' 모순).
     closeOnEscape: !busy,
