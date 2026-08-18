@@ -131,6 +131,8 @@ export function TripPoiList({
                   className="flex min-w-0 flex-1 items-start gap-3 text-left"
                 >
                   <span
+                    // 마커 팔레트 인라인 색 위 순번이라 순백이 맞다(T-313 예외).
+                    // eslint-disable-next-line no-restricted-syntax
                     className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
                     // ADR-055: 지도 핀과 동일한 서버 계산 display_marker_color로 뱃지 색을 맞춘다(parity).
                     style={{

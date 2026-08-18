@@ -1233,8 +1233,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
           onClick={() => setActivePanel(tab.id)}
           className={
             active
-              ? 'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-sm bg-ink px-3 text-sm font-semibold text-canvas'
-              : 'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-sm px-3 text-sm font-semibold text-muted hover:bg-surface-soft hover:text-ink'
+              ? 'inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-sm bg-ink px-3 text-sm font-semibold text-canvas'
+              : 'inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-sm px-3 text-sm font-semibold text-muted hover:bg-surface-soft hover:text-ink'
           }
         >
           <Icon className="h-4 w-4" aria-hidden="true" />
@@ -1286,7 +1286,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           <div className="pointer-events-auto flex h-12 items-center gap-1.5 rounded-sm border border-hairline bg-canvas/95 p-1.5 shadow-card backdrop-blur">
             <Link
               href="/trips"
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink"
+              className="inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink"
               aria-label="여행 목록"
               title="여행 목록"
             >
@@ -1315,7 +1315,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
               aria-expanded={mobilePanelOpen}
               aria-label={mobilePanelOpen ? '패널 닫기' : '패널 열기'}
               title={mobilePanelOpen ? '패널 닫기' : '패널 열기'}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-ink hover:bg-surface-soft"
+              className="inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-ink hover:bg-surface-soft"
             >
               {mobilePanelOpen ? (
                 <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
@@ -1362,7 +1362,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
             <div className="flex min-w-0 items-start gap-3">
               <Link
                 href="/trips"
-                className="mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-surface-soft hover:text-ink"
+                className="mt-1 inline-flex size-11 shrink-0 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-surface-soft hover:text-ink"
                 aria-label="여행 목록"
               >
                 <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -1398,7 +1398,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 onClick={() => setDesktopPanelCollapsed((collapsed) => !collapsed)}
                 aria-controls="trip-detail-panel"
                 aria-expanded={!desktopPanelCollapsed}
-                className="hidden h-9 items-center gap-1.5 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft lg:inline-flex"
+                className="hidden min-h-11 items-center gap-1.5 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft lg:inline-flex"
               >
                 {desktopPanelCollapsed ? (
                   <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
@@ -1415,7 +1415,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 aria-describedby={
                   addDayDisabledReason ? 'trip-layer-add-disabled-reason' : undefined
                 }
-                className="inline-flex h-9 items-center gap-1.5 rounded-sm bg-ink px-3 text-sm font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-sm bg-ink px-3 text-sm font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
                 data-testid="trip-add-layer"
               >
                 <Plus className="h-4 w-4" aria-hidden="true" />
@@ -1424,7 +1424,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
               <button
                 type="button"
                 onClick={openTripEdit}
-                className="h-9 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+                className="min-h-11 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
               >
                 편집
               </button>
@@ -1471,7 +1471,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 <button
                   type="button"
                   onClick={() => realtimeClientRef.current?.reconnect()}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-hairline px-2.5 text-xs font-semibold text-ink hover:bg-surface-soft"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-sm border border-hairline px-2.5 text-sm font-semibold text-ink hover:bg-surface-soft"
                   data-testid="trip-realtime-reconnect"
                 >
                   <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1526,7 +1526,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                   type="button"
                   onClick={() => setMobilePanelOpen(false)}
                   aria-label="패널 닫기"
-                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink"
+                  className="inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink"
                 >
                   <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
                 </button>
@@ -1535,7 +1535,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 <button
                   type="button"
                   onClick={openTripEdit}
-                  className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline bg-canvas px-2.5 text-xs font-semibold text-ink hover:bg-surface-soft"
+                  className="inline-flex min-h-11 items-center gap-1 rounded-sm border border-hairline bg-canvas px-2.5 text-sm font-semibold text-ink hover:bg-surface-soft"
                 >
                   <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                   편집
@@ -1549,7 +1549,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                   aria-describedby={
                     addDayDisabledReason ? 'trip-drawer-add-disabled-reason' : undefined
                   }
-                  className="inline-flex h-8 items-center gap-1 rounded-sm bg-ink px-2.5 text-xs font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
+                  className="inline-flex min-h-11 items-center gap-1 rounded-sm bg-ink px-2.5 text-sm font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
                   data-testid="trip-add-day-drawer"
                 >
                   <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1588,7 +1588,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                   <button
                     type="button"
                     onClick={() => realtimeClientRef.current?.reconnect()}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-hairline px-2.5 text-xs font-semibold text-ink hover:bg-surface-soft"
+                    className="inline-flex min-h-11 items-center gap-1.5 rounded-sm border border-hairline px-2.5 text-sm font-semibold text-ink hover:bg-surface-soft"
                     data-testid="trip-realtime-reconnect"
                   >
                     <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1785,6 +1785,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                       className="flex w-full items-center gap-2 rounded-sm px-1 py-1 text-left hover:bg-surface-soft"
                                     >
                                       <span
+                                        // 마커 팔레트 인라인 색 위 숫자라 순백이 맞다(T-313 예외).
+                                        // eslint-disable-next-line no-restricted-syntax
                                         className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
                                         style={{ backgroundColor: paletteHex(poi.marker_color) }}
                                         aria-hidden="true"

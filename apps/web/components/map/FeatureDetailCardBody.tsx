@@ -188,7 +188,7 @@ export function FeatureDetailCardBody({
               onClick={onLoadEnrichment}
               disabled={enriching}
               data-testid={`${testId}-load-enrichment`}
-              className="inline-flex h-9 items-center gap-1.5 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
             >
               카카오·네이버에서 더 보기
             </button>

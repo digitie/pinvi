@@ -512,7 +512,7 @@ export function FeatureMapView({
               onClick={() => void handleMyLocation()}
               aria-label="내 위치로 이동"
               data-testid="map-my-location"
-              className="pointer-events-auto absolute bottom-4 right-3 flex h-10 w-10 items-center justify-center rounded-full border border-hairline bg-canvas text-ink shadow-card hover:bg-surface-soft"
+              className="pointer-events-auto absolute bottom-4 right-3 flex size-11 items-center justify-center rounded-full border border-hairline bg-canvas text-ink shadow-card hover:bg-surface-soft"
             >
               <LocateFixed className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -602,7 +602,7 @@ export function FeatureMapView({
                       type="button"
                       onClick={() => setDetailFeatureId(selected.featureId ?? null)}
                       data-testid="feature-map-detail-open"
-                      className="h-8 w-full rounded-sm bg-ink px-3 text-xs font-semibold text-canvas hover:bg-ink/90"
+                      className="min-h-11 w-full rounded-sm bg-ink px-3 text-sm font-semibold text-canvas hover:bg-ink/90"
                     >
                       상세보기
                     </button>

@@ -102,17 +102,17 @@
 - [/] **T-316 = Claude** — Hallmark PR-5(모달 격리·확인 정책 + 여행 상세 + 설정/법무/지도/파일) +
   요청 수명 계약. 브랜치 `agent/claude-hallmark-t316`, PR #455. 범위는 `apps/web` +
   `packages/api-client`. 조사 3인 매핑(48항목) 기준.
-  - [x] **(1/4) 요청 수명 계약 + 모달 오류 소유권** — api-client 5요구사항(타이머가 body 소비
+  - [x] **(1/5) 요청 수명 계약 + 모달 오류 소유권** — api-client 5요구사항(타이머가 body 소비
         완료까지 유지·abort가 전 생애주기 전파·`status 0`으로 타임아웃과 서버 확정 4xx 구분·장시간
         admin 호출 9종 `timeoutMs: 0`·`Dialog.onCancelBusy` 취소 탈출구)과 6차 적대적 리뷰가 main에서
         잡은 잔여 결함 4건(일자 409 재시도 막다른 길·포커스 폴백 no-op·전역 오류 누수·날짜 오류 잔존).
-  - [x] **(2/4) 모달 격리·확인 정책** — `useModalDialog` body portal + 스택 인지형 배경 inert
+  - [x] **(2/5) 모달 격리·확인 정책** — `useModalDialog` body portal + 스택 인지형 배경 inert
         (+ `focusable`이 inert 상속을 보게 수정), `RestoreHotswapDialog` 프리미티브 수렴(407→265줄,
         마지막 손복사 셸 제거), `window.confirm` 6곳·`window.prompt` 1곳 제거 → `ConfirmDialog`/
         사유 입력 Dialog(저장소 전역 native dialog 0건), e2e의 `page.on('dialog')` 5곳 재작성.
-  - [x] **(3/4) TripDetail** — 4겹 컨테인먼트(패널→일자 카드→POI 카드→tinted 첨부/날씨, 320px에서
+  - [x] **(3/5) TripDetail** — 4겹 컨테인먼트(패널→일자 카드→POI 카드→tinted 첨부/날씨, 320px에서
         유효 폭 −35.3% 실측) 해체와 중복 컨트롤(일자 추가 4곳·개수 배지 5곳·공유 2곳) 정리.
-  - [x] **(4/4) 나머지 표면** — `FeatureMapView` 상시 오류 dl 삭제(모바일에서 지도의 33% 점유) +
+  - [x] **(4/5) 나머지 표면** — `FeatureMapView` 상시 오류 dl 삭제(모바일에서 지도의 33% 점유) +
         조건부 오류/로딩/빈 상태, `MapView` 디버그 dl 삭제, nav '지도'를 데모 셸 대신 실제 탐색
         지도(`/map`)로 교정, DSR/신고 raw JSON textarea → 일반 폼 필드(서버 자유형 record 위에 프런트
         계약을 세우고 전송 리터럴은 보존), 법무 measure 65ch·본문 16px·초안 배너 중립화·공개 chrome
@@ -120,7 +120,14 @@
         (`components/app/SettingsSurface`: uppercase eyebrow h2·12px 표 헤더·카드 안 카드 제거,
         표 → hairline row 리스트, skeleton/빈 상태 CTA), 파일 화면 상태 UI(skeleton·회복 행동·44px·
         100건 절단 표시).
-- [ ] **T-317** — `eslint-plugin-tailwindcss` 도입(토큰 우회 재발 방지). T-313에서 후속으로 분리했다.
+  - [x] **(5/5) Hallmark 잔여 이탈 종결** — 사용자 표면의 44px 미달 컨트롤 53곳을 `min-h-11`/`size-11`로
+        올리고 컨트롤 라벨 12px → 14px, 입력 14px → 16px(iOS 자동 확대 방지). 재발 방지는 새 lint 가드가
+        맡는다(T-317 흡수): `eslint.config.mjs`의 `no-restricted-syntax`가 토큰 우회(`bg-white`/`text-white`/
+        `bg-black/`), 그림자 티어 이탈(`shadow-sm|md|lg|xl|2xl`), 임의 z-index(`z-[`), 임의 타이포(`text-[Npx]`),
+        44px 미달 컨트롤을 **사용자 표면에서** 차단한다(밀도가 다른 `(admin)`은 제외). 마커 팔레트 인라인 색
+        위 텍스트 3곳만 사유 주석과 함께 예외로 남겼다.
+        ※ `eslint-plugin-tailwindcss` 대신 자체 규칙을 썼다 — 필요한 것은 클래스 정렬이 아니라 **토큰 정책
+        집행**이고, 새 의존성 없이 DESIGN.md 규칙을 그대로 표현할 수 있다.
 
 ## 모바일
 

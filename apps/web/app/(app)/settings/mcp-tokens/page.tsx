@@ -157,7 +157,7 @@ export default function McpTokensSettingsPage() {
               onClick={onCopy}
               title="복사"
               aria-label="토큰 복사"
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-sm border border-hairline"
+              className="inline-flex size-11 shrink-0 items-center justify-center rounded-sm border border-hairline"
             >
               <Copy className="h-4 w-4" aria-hidden="true" />
             </button>

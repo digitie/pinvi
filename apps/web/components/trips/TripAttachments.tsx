@@ -203,7 +203,7 @@ export function TripAttachments({
             className={
               compact
                 ? 'inline-flex h-7 w-7 items-center justify-center rounded-sm border border-hairline bg-canvas text-muted hover:bg-surface-soft hover:text-ink'
-                : 'inline-flex h-8 w-8 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-surface-soft hover:text-ink'
+                : 'inline-flex size-11 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-surface-soft hover:text-ink'
             }
             data-testid="trip-attachment-toggle"
           >
@@ -219,7 +219,7 @@ export function TripAttachments({
             className={
               compact
                 ? 'inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-sm bg-cta text-on-primary hover:bg-cta-hover'
-                : 'inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-sm bg-cta text-on-primary hover:bg-cta-hover'
+                : 'inline-flex size-11 cursor-pointer items-center justify-center rounded-sm bg-cta text-on-primary hover:bg-cta-hover'
             }
           >
             {uploading ? (
@@ -255,7 +255,7 @@ export function TripAttachments({
             <div
               className={
                 compact
-                  ? 'flex h-8 items-center justify-center text-xs text-muted'
+                  ? 'flex min-h-11 items-center justify-center text-xs text-muted'
                   : 'flex h-16 items-center justify-center text-sm text-muted'
               }
             >

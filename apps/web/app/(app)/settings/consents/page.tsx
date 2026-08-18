@@ -143,7 +143,7 @@ export default function ConsentsSettingsPage() {
                     type="button"
                     onClick={() => void withdraw(meta.type)}
                     disabled={pending === meta.type}
-                    className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline px-3 text-sm font-semibold text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
+                    className="inline-flex min-h-11 items-center gap-1 rounded-sm border border-hairline px-3 text-sm font-semibold text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
                   >
                     {pending === meta.type && (
                       <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />

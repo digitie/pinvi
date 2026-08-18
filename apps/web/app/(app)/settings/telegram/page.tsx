@@ -154,7 +154,7 @@ export default function TelegramTargetsSettingsPage() {
           />
           <label
             htmlFor="telegram-default"
-            className="mt-7 inline-flex h-9 items-center gap-2 text-sm text-ink"
+            className="mt-7 inline-flex min-h-11 items-center gap-2 text-sm text-ink"
           >
             <input
               id="telegram-default"

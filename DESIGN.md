@@ -321,7 +321,17 @@ There are no progressive elevation tiers — the system either has the one shado
 
 ### 잔여 이탈(감사 기준, 후속 PR로 수렴)
 
-`bg-white`/`text-white`/`bg-black/NN` 토큰 우회(코드모드), `shadow-lg/xl`, 44px 미달 버튼 — `docs/tasks.md` T-317(`eslint-plugin-tailwindcss`) 참조. **T-316에서 해소**: 관리자 chrome 유출(설정 4쪽 → `components/app/SettingsSurface`), 여행 상세 4겹 컨테인먼트, 지도 상시 상태 dl, 법무 measure/배너, `window.confirm`/`prompt`(저장소 전역 0건).
+**T-316에서 전부 해소됐다**(감사 항목 잔여 0):
+
+- 토큰 우회 `bg-white`/`text-white`/`bg-black/NN` — 사용자 표면 0건(마커 팔레트 인라인 색 위 텍스트 3곳만
+  사유 주석과 함께 예외), `shadow-sm|md|lg|xl` 0건, 임의 `z-[` 0건, 임의 `text-[Npx]` 0건.
+- 44px 미달 컨트롤 — 사용자 표면 0건(컨트롤 라벨 ≥14px, 입력 16px).
+- 관리자 chrome 유출(설정 4쪽) → `components/app/SettingsSurface`, 여행 상세 4겹 컨테인먼트,
+  지도 상시 상태 dl, 법무 measure/초안 배너, `window.confirm`/`prompt`(저장소 전역 0건).
+
+**집행**: 위 규칙은 문서만이 아니라 `apps/web/eslint.config.mjs`의 `no-restricted-syntax` 가드가 막는다
+(사용자 표면 한정 — 밀도 규칙이 다른 `(admin)`·`components/admin`은 제외). 규칙을 바꾸려면 이 문서와
+가드를 함께 고친다.
 
 **모달 계약**(T-315/T-316, `components/ui/Dialog` + `lib/useModalDialog`): **모든** 모달은 프리미티브로
 뜬다(예외 없음 — `RestoreHotswapDialog`도 T-316에서 수렴했다).

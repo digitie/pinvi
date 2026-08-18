@@ -116,7 +116,7 @@ export function TripDayControls({
           disabled={addDisabled}
           title={addDisabledReason ?? undefined}
           aria-describedby={addDisabledReason ? 'trip-day-add-disabled-reason' : undefined}
-          className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
+          className="inline-flex min-h-11 items-center gap-1 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           일자 추가
@@ -135,7 +135,7 @@ export function TripDayControls({
             disabled={busy}
             aria-label={`${selectedDay.day_index}일차 설정`}
             title="일자 설정"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-hairline text-ink hover:bg-surface-soft disabled:opacity-50"
+            className="inline-flex size-11 items-center justify-center rounded-sm border border-hairline text-ink hover:bg-surface-soft disabled:opacity-50"
             data-testid="trip-day-rename"
           >
             <Pencil className="h-4 w-4" aria-hidden="true" />
@@ -146,7 +146,7 @@ export function TripDayControls({
             disabled={busy}
             aria-label={`${selectedDay.day_index}일차 삭제`}
             title="삭제"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
+            className="inline-flex size-11 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
             data-testid="trip-day-delete"
           >
             <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -332,7 +332,14 @@ function DaySettingsDialog({
                   : 'h-7 w-7 rounded-full'
               }`}
             >
-              {color === key && <Check className="h-4 w-4 text-white" aria-hidden="true" />}
+              {/* 마커 팔레트 인라인 배경색 위의 체크라 토큰이 아니라 순백이 맞다(T-313 확정 예외). */}
+              {color === key && (
+                <Check
+                  // eslint-disable-next-line no-restricted-syntax -- 위 주석 참조(마커 팔레트 예외)
+                  className="h-4 w-4 text-white"
+                  aria-hidden="true"
+                />
+              )}
             </button>
           ))}
         </div>
