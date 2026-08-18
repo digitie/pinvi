@@ -2,7 +2,7 @@
 
 ## 2026-08-18 (codex) — T-VN-41S Map service artifact exact 재vendor
 
-Map candidate `add81e8b0ef6ecd57b87e9d922745517dda3070e`의 `openapi.service.json`을 byte-exact로
+Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의 `openapi.service.json`을 byte-exact로
 재vendor했다(SHA-256 `8019e36f…96431`). 새 계약은 snapshot item 1,000,000개와 canonical material
 512 MiB 상한을 code-discriminated typed `413`으로, request-bound material compaction을 immutable
 receipt가 포함된 typed `410`으로 고정한다. provenance/runtime env/contract test/wheel·Docker CI pin을

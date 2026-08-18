@@ -455,7 +455,7 @@ audit 보존 기간 뒤 compact되면 immutable receipt를 포함한 typed `410`
 - [x] relay inbox commit-before-ACK, duplicate/gap/epoch/checksum core
 - [x] service transport/worker, command publisher, default-off principal gate
 - [x] final OpenAPI pin, cache generation observer
-- [/] 2026-08-18 T-VN-41S Map candidate `add81e8b0ef6ecd57b87e9d922745517dda3070e`과 vendored service
+- [/] 2026-08-18 T-VN-41S Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`과 vendored service
       SHA-256 `8019e36f150ed006f5580e5ff224a0ba72030808b5303273f8c4c51aa0496431`을 provenance에 재결박했다.
       item/byte typed `413`과 compacted-material typed `410`을 포함한 새 artifact이므로 이전 pair의
       paired CI·n150 live proof는 재사용하지 않는다. 새 exact pair의 CI와 live proof가 남아 있다.

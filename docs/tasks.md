@@ -78,7 +78,7 @@
   - [ ] **docker-manager pair 재핀(F1J-D 전제)** — Manager tracked v5 pinset은 아직 옛 pair를 고정한다.
         `MAP_PINNED_RUNTIME_SOURCE`=`4672aa96…`, `PINVI_PINNED_RUNTIME_SOURCE`=PinVi 재핀 머지 SHA,
         `pinset_sha256` 재계산 후 trusted Manager release를 배포해야 n150 격리 rehearsal이 fail-close를 통과한다.
-  - T-VN-41S Map candidate `add81e8b0ef6ecd57b87e9d922745517dda3070e`의 service OpenAPI
+  - T-VN-41S Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의 service OpenAPI
     `8019e36f150ed006f5580e5ff224a0ba72030808b5303273f8c4c51aa0496431`을 PinVi provenance에
     재핀했다. typed item/byte `413`과 compacted-material `410`이 추가된 새 계약이므로 이전 paired
     CI·n150 증거는 재사용하지 않는다. 새 exact pair의 검증 전에는 완료 receipt를 만들지 않는다.

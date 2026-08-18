@@ -190,7 +190,7 @@ T-VN-41 source byte 계약은 Map commit
 leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
 commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
 
-서비스 계약은 Map exact candidate `add81e8b0ef6ecd57b87e9d922745517dda3070e`의
+서비스 계약은 Map exact merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor한다. SHA-256은
 `8019e36f150ed006f5580e5ff224a0ba72030808b5303273f8c4c51aa0496431`다. artifact owner/functional
 owner 이중 provenance는 control-plane 정본이 아니다. PinVi의

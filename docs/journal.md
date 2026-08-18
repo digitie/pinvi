@@ -21,7 +21,7 @@
 
 ## 2026-08-18 (codex) — T-VN-41S Map service artifact exact 재vendor
 
-- **변경**: Map candidate `add81e8b0ef6ecd57b87e9d922745517dda3070e`의 service OpenAPI를 byte-exact로
+- **변경**: Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의 service OpenAPI를 byte-exact로
   재vendor하고 provenance·runtime env·contract unit·wheel/Docker CI pin을 SHA-256
   `8019e36f150ed006f5580e5ff224a0ba72030808b5303273f8c4c51aa0496431`로 함께 회전했다.
 - **계약**: generic/reconciliation seal `413`은 item 1,000,000개와 canonical material 512 MiB를
