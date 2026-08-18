@@ -101,7 +101,7 @@ export function ConflictDialog({
       }
     >
       <div className="overflow-hidden rounded-sm border border-hairline">
-        <div className="grid grid-cols-[112px_minmax(0,1fr)_minmax(0,1fr)] bg-surface-soft text-xs font-semibold text-muted">
+        <div className="grid grid-cols-1 sm:grid-cols-[minmax(72px,112px)_minmax(0,1fr)_minmax(0,1fr)] bg-surface-soft text-xs font-semibold text-muted">
           <span className="px-3 py-2">필드</span>
           <span className="px-3 py-2">서버 값</span>
           <span className="px-3 py-2">내 값</span>
@@ -112,7 +112,7 @@ export function ConflictDialog({
             return (
               <div
                 key={field.key}
-                className="grid grid-cols-[112px_minmax(0,1fr)_minmax(0,1fr)] text-sm"
+                className="grid grid-cols-1 sm:grid-cols-[minmax(72px,112px)_minmax(0,1fr)_minmax(0,1fr)] text-sm"
               >
                 <span className="px-3 py-3 text-xs font-semibold text-ink">{field.label}</span>
                 <button

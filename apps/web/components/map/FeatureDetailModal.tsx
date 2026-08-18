@@ -47,8 +47,11 @@ export function FeatureDetailModal({
     <Dialog
       open={open}
       onClose={onClose}
-      title={title}
-      description={subtitle}
+      // 이관 전 헤더와 동일하게 한 줄 유지 — 긴 POI명/주소가 본문 영역을 밀어내지 않는다.
+      title={<span className="block truncate">{title}</span>}
+      description={
+        subtitle != null ? <span className="block truncate">{subtitle}</span> : undefined
+      }
       variant="sheet"
       size="md"
       testId={testId}

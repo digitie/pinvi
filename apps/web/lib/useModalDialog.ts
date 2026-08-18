@@ -83,6 +83,8 @@ const FOCUSABLE_SELECTOR = [
 // 중첩 모달에서 최상단 하나만 Escape/Tab에 반응하도록 활성 인스턴스를 쌓는다.
 // (document 리스너는 stopPropagation으로 서로 막을 수 없으므로 최상단 가드가 필요.)
 const modalStack: string[] = [];
+// 닫히는 모달이 포커스를 아래 모달로 넘길 수 있도록 id→패널을 들고 있는다.
+const modalPanels = new Map<string, HTMLElement>();
 
 export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y {
   const {
@@ -133,27 +135,52 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     });
     return () => {
       window.cancelAnimationFrame(raf);
-      if (previouslyFocused && document.contains(previouslyFocused)) {
+      // 중첩 모달에서 위가 닫힐 때 previouslyFocused가 body일 수 있다(저장 중 버튼이 disabled되며
+      // 포커스가 떨어진 경우). 그때는 body가 아니라 **남아 있는 최상단 모달**로 넘긴다.
+      const restorable =
+        previouslyFocused &&
+        previouslyFocused !== document.body &&
+        document.contains(previouslyFocused);
+      if (restorable) {
         previouslyFocused.focus();
+        return;
       }
+      const belowId = modalStack.filter((id) => id !== generatedTitleId).pop();
+      const below = belowId ? modalPanels.get(belowId) : null;
+      if (below && document.contains(below)) below.focus();
     };
-  }, [active]);
+  }, [active, generatedTitleId]);
 
   // 포커스 격납 — 안에 있던 요소가 disabled/언마운트되면(저장 중 버튼, 완료 화면 전환)
-  // 포커스가 body로 떨어져 aria-modal 밖에 놓인다. 최상단 모달이면 패널로 되돌린다.
+  // 포커스가 body로 떨어져 aria-modal 밖에 놓인다. **이때 브라우저는 focusin을 쏘지 않으므로**
+  // focusout(다음 프레임에 확인) + focusin(명시적 외부 focus) 둘 다 듣고 최상단 모달이 회수한다.
   useEffect(() => {
     if (!active) return;
-    const handler = (event: FocusEvent) => {
+    const recapture = () => {
       if (modalStack[modalStack.length - 1] !== generatedTitleId) return;
+      const panel = dialogRef.current;
+      if (!panel) return;
+      const activeEl = document.activeElement;
+      if (activeEl instanceof Node && panel.contains(activeEl)) return;
+      panel.focus();
+    };
+    const onFocusOut = () => {
+      // focusout은 새 포커스가 자리 잡기 전에 온다 — 다음 프레임에 결과를 본다.
+      window.requestAnimationFrame(recapture);
+    };
+    const onFocusIn = (event: FocusEvent) => {
       const panel = dialogRef.current;
       if (!panel) return;
       const target = event.target;
       if (target instanceof Node && panel.contains(target)) return;
-      // 포커스가 body(또는 배경)로 나갔다 — 패널로 회수한다.
-      panel.focus();
+      recapture();
     };
-    document.addEventListener('focusin', handler);
-    return () => document.removeEventListener('focusin', handler);
+    document.addEventListener('focusout', onFocusOut);
+    document.addEventListener('focusin', onFocusIn);
+    return () => {
+      document.removeEventListener('focusout', onFocusOut);
+      document.removeEventListener('focusin', onFocusIn);
+    };
   }, [active, generatedTitleId]);
 
   // body 스크롤 잠금(참조 카운트).
@@ -174,9 +201,22 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
   }, [active, lockScroll]);
 
   // Escape 닫기 + Tab focus-trap. 최상단 모달만 반응한다.
+  // 스택 등록은 **마운트 생명주기에만** 연동한다 — closeOnEscape(=!busy) 같은 값이 바뀔 때
+  // 재등록되면 busy 토글만으로 스택 최상단이 뒤집혀 Escape/Tab이 엉뚱한 모달로 간다.
   useEffect(() => {
     if (!active) return;
     modalStack.push(generatedTitleId);
+    const panel = dialogRef.current;
+    if (panel) modalPanels.set(generatedTitleId, panel);
+    return () => {
+      const idx = modalStack.lastIndexOf(generatedTitleId);
+      if (idx !== -1) modalStack.splice(idx, 1);
+      modalPanels.delete(generatedTitleId);
+    };
+  }, [active, generatedTitleId]);
+
+  useEffect(() => {
+    if (!active) return;
     const handler = (event: KeyboardEvent) => {
       // 중첩 시 최상단 모달만 키를 처리(Escape가 전체를 닫거나 Tab을 서로 뺏는 것 방지).
       if (modalStack[modalStack.length - 1] !== generatedTitleId) return;
@@ -215,11 +255,7 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
       }
     };
     document.addEventListener('keydown', handler);
-    return () => {
-      document.removeEventListener('keydown', handler);
-      const idx = modalStack.lastIndexOf(generatedTitleId);
-      if (idx !== -1) modalStack.splice(idx, 1);
-    };
+    return () => document.removeEventListener('keydown', handler);
   }, [active, closeOnEscape, generatedTitleId]);
 
   const dialogProps: ModalDialogA11y['dialogProps'] = {

@@ -1531,6 +1531,8 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminBackupSnapshotRequestSchema.parse(body)),
       schema: AdminBackupSnapshotSchema,
+      // pg_dump는 분 단위 — 기본 30초 타임아웃을 늘린다.
+      timeoutMs: 15 * 60_000,
     }),
 
   restoreBackupHotswap: (body: z.infer<typeof AdminBackupRestoreRequestSchema>) =>
@@ -1538,6 +1540,8 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminBackupRestoreRequestSchema.parse(body)),
       schema: AdminBackupRestoreRunSchema,
+      // pg_restore + schema swap도 분 단위다.
+      timeoutMs: 30 * 60_000,
     }),
 
   listMcpTokens: (

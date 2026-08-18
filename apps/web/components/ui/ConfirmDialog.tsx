@@ -53,6 +53,10 @@ export function ConfirmDialog({
     active: open,
     // 파괴적 확인은 취소 버튼에 기본 포커스를 둬 실수로 Enter를 눌러도 안전하게.
     initialFocusRef: cancelRef,
+    // Dialog 프리미티브와 같은 계약 — 진행 중에는 Escape/backdrop도 잠근다
+    // (버튼만 잠그고 Escape는 열려 있으면 '취소는 못 누르는데 Escape는 먹는' 모순).
+    closeOnEscape: !busy,
+    closeOnBackdrop: !busy,
   });
 
   if (!open) return null;
@@ -61,7 +65,7 @@ export function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-toast flex items-center justify-center bg-scrim/50 p-4"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-scrim/50 p-4"
       data-testid={`${testId}-backdrop`}
       {...backdropProps}
     >

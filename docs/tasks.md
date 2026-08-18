@@ -197,7 +197,10 @@
   (`z-[50]/[60]/[70]`) 전면 토큰화, 마커 팔레트 UI 오용(TripDayHeader 일출/일몰)·`bg-primary/10`
   accent tint 제거, 죽은 훅(`useEscapeKey`/`useDialogAutoFocus`) 삭제. `RestoreHotswapDialog`(admin
   파괴적 흐름)는 portal + 배경 `inert`까지 쓰는 더 강한 격리라 토큰만 맞추고 이관은 보류 — 훅에
-  inert/portal을 추가하는 T-316에서 수렴.
+  inert/portal을 추가하는 T-316에서 수렴. 적대적 리뷰 2라운드(4인): 중첩 모달 키보드 도달(ConflictDialog
+  이관), 포커스 격납(focusout 기반), 모달 스택을 마운트 생명주기에만 연동, `FeatureDetailModal` sheet 이관,
+  그리고 **busy 무한 잠금의 근본 원인**인 api-client 요청 타임아웃(`DEFAULT_REQUEST_TIMEOUT_MS` 30초 +
+  백업/복구 상향) 도입.
 - [ ] **T-316** — Hallmark PR-5(여행 상세·지도·설정·파일·법무): TripDetail 3중 컨테인먼트·컨트롤 중복(일자
       추가·개수 배지) 정리, `useModalDialog`에 배경 inert + portal 옵션 추가 후 `RestoreHotswapDialog` 수렴,
       파괴적 액션 확인 정책(토큰 회수·동의 철회·연결 해제 = Dialog, 가역 = 즉시+Undo, `window.confirm` 제거),

@@ -179,17 +179,32 @@ test('편집 다이얼로그 위에 뜬 충돌 다이얼로그에 키보드로 �
   await page.getByTestId('trip-edit-save').click();
   await expect(page.getByTestId('conflict-dialog')).toBeVisible();
 
-  let reached = false;
-  for (let i = 0; i < 20 && !reached; i += 1) {
-    await page.keyboard.press('Tab');
-    reached = await page.evaluate(() => {
+  const insideConflict = () =>
+    page.evaluate(() => {
       const conflict = document.querySelector('[data-testid="conflict-dialog"]');
       return Boolean(
         conflict && document.activeElement && conflict.contains(document.activeElement),
       );
     });
+
+  let reached = false;
+  for (let i = 0; i < 20 && !reached; i += 1) {
+    await page.keyboard.press('Tab');
+    reached = await insideConflict();
   }
   expect(reached).toBe(true);
+
+  // 도달만이 아니라 **가둬져 있어야** 한다 — 양방향으로 돌려 포커스가 밖으로 새지 않는지 본다.
+  let escaped = 0;
+  for (let i = 0; i < 12; i += 1) {
+    await page.keyboard.press('Tab');
+    if (!(await insideConflict())) escaped += 1;
+  }
+  for (let i = 0; i < 12; i += 1) {
+    await page.keyboard.press('Shift+Tab');
+    if (!(await insideConflict())) escaped += 1;
+  }
+  expect(escaped).toBe(0);
 
   // Escape는 최상단(충돌)만 닫고 아래 편집 다이얼로그는 남는다.
   await page.keyboard.press('Escape');
@@ -197,8 +212,10 @@ test('편집 다이얼로그 위에 뜬 충돌 다이얼로그에 키보드로 �
   await expect(page.getByTestId('trip-edit-dialog')).toBeVisible();
 });
 
-test('저장이 매달려도 다이얼로그를 닫을 수 있다', async ({ page }) => {
-  // busy에서 Escape/backdrop은 잠기지만 명시적 닫기(×)는 살아 있어야 한다(T-315 리뷰 P2).
+test('저장 중에는 닫기 경로가 잠기고 포커스는 다이얼로그 안에 남는다', async ({ page }) => {
+  // busy 동안 Escape·backdrop·×가 모두 잠긴다 — 닫기만 열어 두면 진행 중 요청이 취소되지 않아
+  // 닫은 다이얼로그가 되살아나거나 비멱등 POST가 중복된다(T-315 2차 리뷰). 영구 잠금이 되지
+  // 않는 근거는 api-client 요청 타임아웃이며 그 계약은 tests/apiClientTimeout.test.ts가 고정한다.
   await commonRoutes(page);
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
     if (request.method() === 'PATCH') {
@@ -217,11 +234,21 @@ test('저장이 매달려도 다이얼로그를 닫을 수 있다', async ({ pag
   await page.getByLabel('제목').fill('내 제목');
   await page.getByTestId('trip-edit-save').click();
 
-  await expect(page.getByTestId('trip-edit-dialog-close')).toBeEnabled();
+  await expect(page.getByTestId('trip-edit-dialog-close')).toBeDisabled();
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('trip-edit-dialog')).toBeVisible();
-  await page.getByTestId('trip-edit-dialog-close').click();
-  await expect(page.getByTestId('trip-edit-dialog')).toHaveCount(0);
+  await page.getByTestId('trip-edit-dialog-backdrop').click({ position: { x: 5, y: 5 } });
+  await expect(page.getByTestId('trip-edit-dialog')).toBeVisible();
+
+  // 저장 버튼이 disabled 되어도 포커스는 다이얼로그 안에 남아야 한다(격납 가드).
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const panel = document.querySelector('[data-testid="trip-edit-dialog"]');
+        return Boolean(panel && document.activeElement && panel.contains(document.activeElement));
+      }),
+    )
+    .toBe(true);
 });
 
 test('POI 409 충돌에서 내 메모를 최신 version으로 다시 저장한다', async ({ page }) => {

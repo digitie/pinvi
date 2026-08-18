@@ -1,5 +1,10 @@
-export { ApiClient, ApiError, isVersionConflictError } from './client';
-export type { ApiClientOptions, ApiEnvelope, ApiResponseMeta } from './client';
+export { ApiClient, ApiError, DEFAULT_REQUEST_TIMEOUT_MS, isVersionConflictError } from './client';
+export type {
+  ApiClientOptions,
+  ApiEnvelope,
+  ApiResponseMeta,
+  RequestTimeoutOption,
+} from './client';
 export { TripRealtimeClient, classifyTripRealtimeClose, tripWebSocketUrl } from './websocket';
 export type {
   TripRealtimeCloseCategory,

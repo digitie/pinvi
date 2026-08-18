@@ -29,7 +29,10 @@ export interface DialogProps {
   description?: ReactNode;
   size?: DialogSize;
   variant?: DialogVariant;
-  /** 진행 중이면 backdrop/Escape 닫기를 막는다(저장 중 **실수** 이탈 방지 — 명시적 닫기는 계속 열려 있다). */
+  /**
+   * 진행 중이면 닫기 경로(Escape·backdrop·×)를 잠근다 — 저장 중 이탈로 결과를 놓치지 않게.
+   * 무한 잠금이 되지 않도록 요청 타임아웃(`DEFAULT_REQUEST_TIMEOUT_MS`)이 busy를 반드시 끝낸다.
+   */
   busy?: boolean;
   /** 헤더 우측 닫기(×) 버튼. 기본 true. */
   showClose?: boolean;
@@ -68,8 +71,9 @@ export function Dialog({
   const { titleId, backdropProps, dialogProps } = useModalDialog({
     onClose,
     active: open,
-    // 저장 중에는 실수(Escape·backdrop)로 닫혀 작업이 사라지지 않게 잠근다.
-    // 명시적 닫기(헤더 ×)는 잠그지 않는다 — 요청이 지연·정지해도 빠져나갈 길이 하나는 남아야 한다.
+    // 저장 중에는 실수로 닫혀 작업이 사라지지 않게 잠근다. 요청이 매달려도 영구 잠금이 되지
+    // 않는 근거는 api-client의 요청 타임아웃이다(닫기만 열어 두면 진행 중 요청이 취소되지 않아
+    // 닫은 다이얼로그가 되살아나거나 비멱등 POST가 중복될 수 있다 — T-315 2차 리뷰).
     closeOnEscape: !busy,
     closeOnBackdrop: !busy,
     initialFocusRef,
@@ -113,12 +117,11 @@ export function Dialog({
           {showClose ? (
             <button
               type="button"
-              // busy에도 비활성화하지 않는다 — 취소/닫기 경로가 전부 잠기면(요청이 매달릴 때)
-              // 새로고침 말고는 모달을 벗어날 방법이 없다.
               onClick={onClose}
+              disabled={busy}
               aria-label="닫기"
               data-testid={`${testId}-close`}
-              className="focus-ring -mr-2 -mt-1 inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-muted transition-colors duration-normal ease-pinvi hover:bg-surface-soft hover:text-ink"
+              className="focus-ring -mr-2 -mt-1 inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-muted transition-colors duration-normal ease-pinvi hover:bg-surface-soft hover:text-ink disabled:cursor-not-allowed"
             >
               <X className="size-5" aria-hidden="true" />
             </button>
