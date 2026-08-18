@@ -27,7 +27,9 @@ ROLE_FIELDS = (
 
 
 def _settings(**overrides: object) -> Settings:
-    return Settings(_env_file=None, pinvi_environment="test", **overrides)  # type: ignore[arg-type]
+    values: dict[str, object] = {"pinvi_environment": "test"}
+    values.update(overrides)
+    return Settings(_env_file=None, **values)  # type: ignore[arg-type]
 
 
 def test_cache_target_network_is_default_off_without_credentials() -> None:
@@ -97,6 +99,26 @@ def test_enabled_cache_target_sync_accepts_only_exact_vendored_service_pin() -> 
                 KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION
             ),
         )
+
+
+def test_production_cache_target_sync_is_fail_closed_before_final_c7_boundary() -> None:
+    enabled = _settings(
+        pinvi_kor_travel_map_cache_target_sync_enabled=True,
+        pinvi_kor_travel_map_cache_target_command_token=COMMAND,
+        pinvi_kor_travel_map_cache_target_consumer_token=CONSUMER,
+        pinvi_kor_travel_map_cache_target_expected_openapi_sha256=(
+            KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256
+        ),
+        pinvi_kor_travel_map_cache_target_expected_source_revision=(
+            KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION
+        ),
+        pinvi_kor_travel_map_cache_target_expected_contract_generation=(
+            KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION
+        ),
+    )
+
+    with pytest.raises(ValueError, match="forbidden in production"):
+        enabled.model_copy(update={"pinvi_environment": "production"}).validate_cache_target_sync()
 
 
 def test_generation6_manifest_is_not_a_compatible_fallback() -> None:

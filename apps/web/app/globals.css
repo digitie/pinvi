@@ -1,5 +1,11 @@
-/* Pretendard 한글 폰트 (CDN — 운영은 self-host 권장) */
-@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
+/* Hallmark · genre: modern-minimal · design-system: DESIGN.md("Hallmark 잠금 시스템") + docs/design/styleseed-rules.md · designed-as-app
+ * theme: pinvi-locked (paper oklch(100% 0 0) · ink oklch(25.2% 0 0) · accent Rausch oklch(65.8% 0.231 17) · cta oklch(57.7% 0.228 18.5))
+ * type: "Pretendard Variable" display 700 / body 400 · macrostructure: Narrative Workflow(/) · Workbench(app) · Long Document(legal·shared)
+ * nav: N1(공개 masthead) · footer: Ft2(colophon 1줄) · enrichment: Tier-B 손그림 SVG(랜딩 한정) · motion: fade ≤200ms, reduced-motion 전역
+ * pre-emit critique: P4 H4 E4 S4 R5 V4 */
+
+/* Pretendard Variable — npm `pretendard` dynamic subset(한글 서브셋 분할, font-display: swap). 외부 CDN·render-blocking @import 없음. */
+@import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
 
 @tailwind base;
 @tailwind components;
@@ -15,12 +21,15 @@
 html,
 body {
   height: 100%;
+  /* 가로 스크롤 누출 차단 — `hidden`이 아니라 `clip`(sticky/overflow-anchor 유지). */
+  overflow-x: clip;
 }
 
 @layer base {
   body {
     @apply bg-canvas text-ink;
     font-family:
+      'Pretendard Variable',
       'Pretendard',
       'Apple SD Gothic Neo',
       system-ui,
@@ -28,6 +37,23 @@ body {
       Roboto,
       sans-serif;
     -webkit-font-smoothing: antialiased;
+    /* 한글 줄바꿈 — 어절 단위(keep-all). 긴 영문 토큰/URL만 overflow 시 강제 개행. */
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
+}
+
+@layer components {
+  /* 20px 커스텀 체크박스 — 네이티브 13px는 44px 터치 타깃·시스템 톤에 못 미친다. 체크 마크는 인라인 SVG. */
+  .checkbox {
+    @apply size-5 shrink-0 cursor-pointer appearance-none rounded-[4px] border border-border-strong bg-canvas transition-colors duration-normal ease-pinvi checked:border-ink checked:bg-ink disabled:cursor-not-allowed disabled:bg-surface-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 14px 14px;
+  }
+  .checkbox:checked {
+    /* stroke %23ffffff = 토큰 on-primary(#ffffff). data URI 안에서는 var()를 못 써 값 리터럴로 둔다. */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23ffffff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-6'/%3E%3C/svg%3E");
   }
 }
 
@@ -36,8 +62,10 @@ body {
     @apply min-h-touch min-w-touch;
   }
 
+  /* 포커스 링은 outline(즉시 표시, transition 무관·레이아웃 불변). ring 대신 outline인 이유:
+     `transition-*` 유틸이 붙은 요소에서 ring이 페이드인되며 늦게 보이는 것을 막는다. */
   .focus-ring {
-    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-canvas;
+    @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus;
   }
 }
 

@@ -11,6 +11,7 @@ from typing import Any
 from app.core.config import (
     KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION,
     KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION,
+    KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION,
     KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
     KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
 )
@@ -21,8 +22,8 @@ _SNAPSHOT = (
 _SERVICE_PROVENANCE = (
     Path(__file__).resolve().parents[4] / "contracts" / "kor-travel-map-service-provenance-v1.json"
 )
-_MAP_RELEASE_REVISION = "1df45b57f55b8d517bb1f2c12a869d032d70453e"
-_SNAPSHOT_SHA256 = "6ad8c1c9c1d391c54e7592b64ed9f0225164b613a5c2824d8eafd3da9bd36f1e"
+_MAP_RELEASE_REVISION = "e093e5555329234a539a3802566eb5666411b06f"
+_SNAPSHOT_SHA256 = "c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd"
 
 _GENERATION7_ROLE_SCOPES = {
     "command": {"cache-target:command"},
@@ -117,10 +118,12 @@ def test_service_snapshot_exact_bytes_runtime_pin_and_provenance_match_map_relea
     assert KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION == _MAP_RELEASE_REVISION
     assert KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION == 7
     assert KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION == 2
+    assert KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION == 1
     assert json.loads(_SERVICE_PROVENANCE.read_text()) == {
         "capabilities": {
             "c6c_cancel_probe": {"generation": 2},
             "cache_target": {"generation": 7},
+            "curation_snapshot": {"generation": 1},
         },
         "map_release_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
         "service_openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
@@ -196,6 +199,72 @@ def test_generation7_service_scope_and_caller_inventory_is_exact() -> None:
     for route, (required_scope, caller_role) in _GENERATION7_OPERATION_CONTRACT.items():
         assert actual[route] == required_scope
         assert required_scope in _GENERATION7_ROLE_SCOPES[caller_role]
+
+
+def test_curation_snapshot_generation1_service_contract_is_exact() -> None:
+    spec = _spec()
+    expected = {
+        "/v1/service/curation-collections/{collection_id}/detail-snapshot",
+        "/v1/service/curation-items/{curation_item_id}/detail-snapshot",
+    }
+    actual = {
+        path
+        for path in spec["paths"]
+        if path.startswith(("/v1/service/curation-collections", "/v1/service/curation-items"))
+    }
+    assert actual == expected
+    for path in expected:
+        operation = spec["paths"][path]["get"]
+        assert operation["security"] == [{"ServiceToken": []}]
+        assert operation["x-required-service-scope"] == "pinvi:curation-snapshot:read"
+
+    collection = spec["components"]["schemas"]["CurationCollectionDetailSnapshot"]
+    assert collection["additionalProperties"] is False
+    assert collection["properties"]["row_revision"]["pattern"] == r"^[1-9][0-9]*$"
+    assert collection["properties"]["etag"]["pattern"] == r"^sha256:[0-9a-f]{64}$"
+    assert collection["properties"]["item_set_hash"]["pattern"] == r"^[0-9a-f]{64}$"
+    assert collection["properties"]["items"]["maxItems"] == 200
+    collection_metadata = spec["components"]["schemas"]["CurationSnapshotCollection"]["properties"]
+    assert collection_metadata["theme_slug"]["minLength"] == 1
+    assert collection_metadata["theme_slug"]["maxLength"] == 128
+    assert collection_metadata["theme_name"]["minLength"] == 1
+    assert collection_metadata["theme_name"]["maxLength"] == 200
+    assert collection_metadata["title"]["minLength"] == 1
+    assert collection_metadata["title"]["maxLength"] == 300
+    assert collection_metadata["edition_key"]["maxLength"] == 100
+
+
+def test_curation_cutover_mapping_service_contract_is_exact() -> None:
+    """T-VN-40C backfill은 Map DB가 아닌 dedicated service artifact만 읽는다."""
+
+    spec = _spec()
+    operation = spec["paths"]["/v1/service/curation-cutover/identity-mappings"]["get"]
+    assert operation["security"] == [{"ServiceToken": []}]
+    assert operation["x-required-service-scope"] == "pinvi:curation-cutover:read"
+    assert operation["parameters"][0]["name"] == "page_size"
+    assert operation["parameters"][0]["schema"]["maximum"] == 200
+    assert operation["parameters"][1]["name"] == "cursor"
+    assert "409" in operation["responses"]
+
+    mapping = spec["components"]["schemas"]["CurationCutoverIdentityMapping"]
+    assert mapping["additionalProperties"] is False
+    assert mapping["required"] == [
+        "legacy_curated_feature_id",
+        "collection_id",
+        "curation_item_id",
+        "mapping_kind",
+        "source_row_hash",
+    ]
+    assert mapping["properties"]["legacy_curated_feature_id"]["format"] == "uuid"
+    assert mapping["properties"]["source_row_hash"]["pattern"] == r"^[0-9a-f]{64}$"
+
+    export = spec["components"]["schemas"]["CurationCutoverIdentityMappingExport"]
+    assert export["additionalProperties"] is False
+    assert export["properties"]["mapping_root_version"]["const"] == (
+        "ktm-curation-cutover-mapping-v1"
+    )
+    assert export["properties"]["mapping_root"]["pattern"] == r"^[0-9a-f]{64}$"
+    assert export["properties"]["mappings"]["maxItems"] == 200
 
 
 def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
@@ -453,6 +522,15 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
     assert restore_headers["Idempotency-Key"]["required"] is True
     assert restore_headers["Idempotency-Key"]["schema"]["format"] == "uuid"
     assert restore_headers["If-Match"]["required"] is True
+    assert "201" in restore_path["responses"]
+    assert "200" in restore_path["responses"]
+    assert restore_path["responses"]["200"]["description"] == "exact Idempotency-Key replay"
+    assert (
+        restore_path["responses"]["200"]["headers"] == restore_path["responses"]["201"]["headers"]
+    )
+    assert restore_path["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/CacheTargetRestoreFenceResponse"
+    }
     assert "ETag" in restore_path["responses"]["201"]["headers"]
     assert {"412", "428", "default"} <= set(restore_path["responses"])
     assert restore_path["responses"]["201"]["content"]["application/json"]["schema"] == {

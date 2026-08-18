@@ -1,5 +1,6 @@
 import type { TextareaHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
+import { inputClassName } from './FormField';
 
 export interface FormTextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   /** label·textarea·error를 잇는 고유 id (필수) */
@@ -24,34 +25,36 @@ export const FormTextArea = forwardRef<HTMLTextAreaElement, FormTextAreaProps>(
   ) {
     const errorId = `${id}-error`;
     const hintId = `${id}-hint`;
-    const describedBy =
-      [error ? errorId : null, hint ? hintId : null].filter(Boolean).join(' ') || undefined;
+    // 오류가 있으면 hint 대신 오류만 렌더하므로 참조도 하나만 건다(FormField와 동일 규칙).
+    const describedBy = error ? errorId : hint ? hintId : undefined;
 
     return (
-      <div className="space-y-1">
-        <label htmlFor={id} className={labelClassName ?? 'block text-sm text-ink'}>
+      <div className="space-y-1.5">
+        <label htmlFor={id} className={labelClassName ?? 'block text-sm font-medium text-ink'}>
           {label}
         </label>
-        {hint ? (
-          <p id={hintId} className="text-xs text-muted">
-            {hint}
-          </p>
-        ) : null}
         <textarea
           ref={ref}
           id={id}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy}
-          className={`w-full rounded-sm border px-3 py-2 text-sm ${
-            error ? 'border-error-text' : 'border-hairline'
-          }${className ? ` ${className}` : ''}`}
+          className={inputClassName({
+            error: Boolean(error),
+            className: `min-h-24 ${className ?? ''}`,
+          })}
           {...textareaProps}
         />
         {error ? (
-          <p id={errorId} role="alert" className="text-sm text-error-text">
+          <p id={errorId} role="alert" className="min-h-5 text-sm text-error-text">
             {error}
           </p>
-        ) : null}
+        ) : hint ? (
+          <p id={hintId} className="min-h-5 text-sm text-muted">
+            {hint}
+          </p>
+        ) : (
+          <p className="min-h-5 text-sm" aria-hidden="true" />
+        )}
       </div>
     );
   },

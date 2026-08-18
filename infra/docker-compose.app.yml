@@ -101,7 +101,8 @@ services:
       PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL: ${PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL:-http://host.docker.internal:12701}
       PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN: ${PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN:-}
       PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN: ${PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN:-}
-      # cache target HTTP worker는 compatible pair pin이 모두 있을 때만 명시적으로 켠다.
+      # cache target HTTP worker는 non-production 격리 stack에서 compatible pair pin이 모두 있을
+      # 때만 명시적으로 켠다. production enable은 final C7 root boundary 전까지 앱이 거부한다.
       PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED: ${PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED:-false}
       PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_COMMAND_TOKEN: ${PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_COMMAND_TOKEN:-}
       PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_CONSUMER_TOKEN: ${PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_CONSUMER_TOKEN:-}
@@ -109,6 +110,10 @@ services:
       PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_OPENAPI_SHA256: ${PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_OPENAPI_SHA256:-}
       PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION: ${PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION:-}
       PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_CONTRACT_GENERATION: ${PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_CONTRACT_GENERATION:-}
+      PINVI_KOR_TRAVEL_MAP_CURATION_SNAPSHOT_TOKEN: ${PINVI_KOR_TRAVEL_MAP_CURATION_SNAPSHOT_TOKEN:-}
+      # T-VN-40C sealed legacy plan backfill은 snapshot과 다른 maintenance mapping scope를
+      # 필요로 한다. 원문은 API runtime에만 전달하며 web/dagster에는 전달하지 않는다.
+      PINVI_KOR_TRAVEL_MAP_CURATION_CUTOVER_MAPPING_TOKEN: ${PINVI_KOR_TRAVEL_MAP_CURATION_CUTOVER_MAPPING_TOKEN:-}
       # restore/recovery token은 이 ordinary API container에 전달하지 않는다.
       # ADR-035: Trip WebSocket broker는 process-local in-memory다. Redis/LISTEN fan-out 전까지
       # API worker는 1로 고정한다. 값을 올리면 HTTP mutation broadcast가 다른 worker의 WebSocket에

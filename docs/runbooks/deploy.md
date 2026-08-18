@@ -92,6 +92,16 @@ docker compose exec app-api sh -lc \
    esac'
 ```
 
+**마이그레이션이 포함된 릴리스**(예: PR #444 — Alembic 0050~0059)는 일반 경로(`ktdctl pinvi --build`)가
+schema mutation을 수행하지 않으므로 컨테이너 재생성 **전에** 명시적으로 적용한다(신규 코드가 새 컬럼을 select).
+DB 스냅샷(`docs/runbooks/backup-restore.md`) 후:
+
+```bash
+cd ~/kor-travel-docker-manager
+docker compose run --rm --no-deps pinvi-api alembic upgrade head   # 또는 pinvi-admin-bootstrap one-shot
+docker exec pinvi-postgres psql -U pinvi -d pinvi -c 'select version_num from alembic_version;'
+```
+
 검증(smoke):
 
 ```bash

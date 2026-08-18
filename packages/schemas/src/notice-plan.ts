@@ -7,6 +7,7 @@ const MarkerColorPattern = /^P-\d{2}$/;
 export const NoticePoiSchema = z.object({
   notice_poi_id: z.string().uuid(),
   notice_plan_id: z.string().uuid(),
+  source_curation_item_id: z.string().uuid().nullable().optional(),
   day_index: z.number().int(),
   sort_order: z.string(),
   feature_id: z.string().nullable(),
@@ -36,6 +37,7 @@ export const NoticePlanResponseSchema = z.object({
   starts_on: z.string().date().nullable(),
   ends_on: z.string().date().nullable(),
   is_published: z.boolean(),
+  source_system: z.literal('kor-travel-map').nullable().optional(),
   version: z.number().int(),
   created_at: Iso8601Schema,
   updated_at: Iso8601Schema,
@@ -49,8 +51,8 @@ export const NoticePlanCreateSchema = z.object({
     .min(1)
     .max(160)
     .regex(/^[a-z0-9][a-z0-9-]*$/),
-  title: z.string().min(1).max(200),
-  category: z.string().min(1).max(80).default('recommended'),
+  title: z.string().min(1).max(300),
+  category: z.string().min(1).max(128).default('recommended'),
   summary: z.string().nullable().optional(),
   source_name: z.string().max(200).nullable().optional(),
   destination: z.string().max(120).nullable().optional(),
@@ -61,8 +63,8 @@ export const NoticePlanCreateSchema = z.object({
 export type NoticePlanCreate = z.infer<typeof NoticePlanCreateSchema>;
 
 export const NoticePlanUpdateSchema = z.object({
-  title: z.string().min(1).max(200).optional(),
-  category: z.string().min(1).max(80).optional(),
+  title: z.string().min(1).max(300).optional(),
+  category: z.string().min(1).max(128).optional(),
   summary: z.string().nullable().optional(),
   source_name: z.string().max(200).nullable().optional(),
   destination: z.string().max(120).nullable().optional(),
@@ -118,3 +120,77 @@ export const NoticePlanCopyResponseSchema = z.object({
   copied_attachment_count: z.number().int(),
 });
 export type NoticePlanCopyResponse = z.infer<typeof NoticePlanCopyResponseSchema>;
+
+export const KorTravelMapCurationCollectionImportRequestSchema = z.object({
+  collection_id: z.string().uuid(),
+  mode: z.enum(['create', 'refresh']).default('create'),
+  is_published: z.boolean().nullable().optional(),
+});
+export type KorTravelMapCurationCollectionImportRequest = z.infer<
+  typeof KorTravelMapCurationCollectionImportRequestSchema
+>;
+
+export const KorTravelMapCurationCollectionImportResponseSchema = z.object({
+  notice_plan_id: z.string().uuid(),
+  created_plan: z.boolean(),
+  not_modified: z.boolean(),
+  source_system: z.literal('kor-travel-map'),
+  source_curation_collection_id: z.string().uuid(),
+  source_curation_collection_revision: z.string().regex(/^[1-9][0-9]*$/),
+  source_curation_collection_etag: z.string().regex(/^"sha256:[0-9a-f]{64}"$/),
+  source_curation_item_set_hash_version: z.literal('ktm-db-item-set-v1'),
+  source_curation_item_set_hash: z.string().regex(/^[0-9a-f]{64}$/),
+  source_curation_item_count: z.number().int().min(0).max(2_000),
+  copied_poi_count: z.number().int().min(0).max(2_000),
+  removed_poi_count: z.number().int().min(0).max(2_000),
+});
+export type KorTravelMapCurationCollectionImportResponse = z.infer<
+  typeof KorTravelMapCurationCollectionImportResponseSchema
+>;
+
+export const KorTravelMapCurationCutoverLegacyPreflightIssueSchema = z.object({
+  code: z.string().min(1).max(128),
+  detail: z.string().min(1).max(500),
+  notice_plan_id: z.string().uuid().nullable(),
+  notice_poi_id: z.string().uuid().nullable(),
+});
+export type KorTravelMapCurationCutoverLegacyPreflightIssue = z.infer<
+  typeof KorTravelMapCurationCutoverLegacyPreflightIssueSchema
+>;
+
+export const KorTravelMapCurationCutoverLegacyPreflightResponseSchema = z.object({
+  map_release_revision: z.string().regex(/^[0-9a-f]{40}$/),
+  mapping_receipt_id: z.string().uuid().nullable(),
+  mapping_root: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .nullable(),
+  mapping_count: z.number().int().min(0),
+  legacy_plan_count: z.number().int().min(0),
+  legacy_source_poi_count: z.number().int().min(0),
+  manual_poi_count: z.number().int().min(0),
+  backfillable_plan_count: z.number().int().min(0),
+  ready: z.boolean(),
+  issues: z.array(KorTravelMapCurationCutoverLegacyPreflightIssueSchema),
+});
+export type KorTravelMapCurationCutoverLegacyPreflightResponse = z.infer<
+  typeof KorTravelMapCurationCutoverLegacyPreflightResponseSchema
+>;
+
+export const KorTravelMapCurationCutoverBackfillRequestSchema = z.object({
+  notice_plan_id: z.string().uuid(),
+});
+export type KorTravelMapCurationCutoverBackfillRequest = z.infer<
+  typeof KorTravelMapCurationCutoverBackfillRequestSchema
+>;
+
+export const KorTravelMapCurationCutoverBackfillResponseSchema = z.object({
+  backfill_receipt_id: z.string().uuid(),
+  mapping_receipt_id: z.string().uuid(),
+  legacy_curated_feature_id: z.string().uuid(),
+  import_result: KorTravelMapCurationCollectionImportResponseSchema,
+  replayed: z.boolean(),
+});
+export type KorTravelMapCurationCutoverBackfillResponse = z.infer<
+  typeof KorTravelMapCurationCutoverBackfillResponseSchema
+>;

@@ -39,6 +39,7 @@ export type {
   AdminDsrRequestListParams,
   AdminFeatureChangeRequestListParams,
   AdminNoticeAttachmentCreateBody,
+  AdminKorTravelMapCurationCollectionImportBody,
   AdminNoticePlanCreateBody,
   AdminNoticePlanListParams,
   AdminNoticePlanUpdateBody,

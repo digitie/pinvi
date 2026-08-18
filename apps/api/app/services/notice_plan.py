@@ -6,13 +6,10 @@
 
 from __future__ import annotations
 
-import hashlib
-import re
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from typing import Any, Protocol, cast
+from typing import Any, cast
 
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
@@ -52,28 +49,6 @@ class NoticePlanConflictError(NoticePlanError):
     code = "CONFLICT"
 
 
-class KorTravelMapCuratedSnapshotClient(Protocol):
-    async def get_curated_detail_snapshot(self, curated_feature_id: str) -> dict[str, Any]:
-        """kor-travel-map curated detail snapshot 조회 (admin 표면, ADR-049)."""
-        ...
-
-
-@dataclass(frozen=True)
-class KorTravelMapCuratedImportResult:
-    plan: CuratedTripPlan
-    created_plan: bool
-    copied_poi_count: int
-    reused_feature_backed_poi_count: int
-    source_system: str
-    source_curated_feature_id: str
-    source_version: int | None
-    source_etag: str | None
-
-
-_KOR_TRAVEL_MAP_SOURCE_SYSTEM = "kor-travel-map"
-_SLUG_TOKEN_RE = re.compile(r"[^a-z0-9]+")
-
-
 def _optional_feature_id(value: object) -> str | None:
     if value is None:
         return None
@@ -96,35 +71,6 @@ def _optional_text(value: object, *, max_length: int | None = None) -> str | Non
 
 def _mapping(value: object) -> Mapping[str, Any]:
     return cast(Mapping[str, Any], value) if isinstance(value, Mapping) else {}
-
-
-def _int_or_none(value: object) -> int | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str):
-        try:
-            return int(value)
-        except ValueError:
-            return None
-    return None
-
-
-def _slug_for_kor_travel_map_curated_feature(curated_feature_id: str) -> str:
-    token = _SLUG_TOKEN_RE.sub("-", curated_feature_id.lower()).strip("-")
-    digest = hashlib.sha256(curated_feature_id.encode("utf-8")).hexdigest()[:10]
-    if not token:
-        return f"kor_travel_map-{digest}"
-    token = token[:140].strip("-")
-    return f"kor_travel_map-{token}-{digest}"
-
-
-def _snapshot_items(snapshot: Mapping[str, Any]) -> list[Mapping[str, Any]]:
-    raw_items = snapshot.get("items")
-    if not isinstance(raw_items, list):
-        return []
-    return [cast(Mapping[str, Any], item) for item in raw_items if isinstance(item, Mapping)]
 
 
 async def list_published_plans(
@@ -241,6 +187,26 @@ def _require_values(values: Mapping[str, Any]) -> None:
         raise NoticePlanPolicyError("수정할 필드가 필요합니다.")
 
 
+def _is_canonical_map_plan(plan: CuratedTripPlan) -> bool:
+    return plan.source_system == "kor-travel-map"
+
+
+def _reject_canonical_plan_projection_edit(
+    plan: CuratedTripPlan, values: Mapping[str, Any]
+) -> None:
+    if _is_canonical_map_plan(plan) and set(values) - {"is_published"}:
+        raise NoticePlanPolicyError(
+            "Map canonical collection의 source-derived plan 필드는 import refresh만 변경할 수 있습니다."
+        )
+
+
+def _reject_canonical_poi_projection_edit(poi: CuratedPlanPoi) -> None:
+    if poi.source_curation_item_id is not None:
+        raise NoticePlanPolicyError(
+            "Map canonical POI는 import refresh만 변경·삭제·재정렬할 수 있습니다."
+        )
+
+
 async def create_admin_plan(
     db: AsyncSession,
     *,
@@ -285,6 +251,7 @@ async def update_admin_plan(
 ) -> CuratedTripPlan:
     _require_values(values)
     _check_version(actual=plan.version, expected=expected_version)
+    _reject_canonical_plan_projection_edit(plan, values)
     next_starts_on = cast(date | None, values.get("starts_on", plan.starts_on))
     next_ends_on = cast(date | None, values.get("ends_on", plan.ends_on))
     _validate_plan_period(next_starts_on, next_ends_on)
@@ -319,6 +286,10 @@ async def soft_delete_admin_plan(
     expected_version: int | None = None,
 ) -> CuratedTripPlan:
     _check_version(actual=plan.version, expected=expected_version)
+    if _is_canonical_map_plan(plan):
+        raise NoticePlanPolicyError(
+            "Map canonical collection plan은 generic delete로 제거할 수 없습니다."
+        )
     plan.deleted_at = datetime.now(UTC)
     plan.updated_by_admin_id = admin_id
     plan.version += 1
@@ -391,6 +362,7 @@ async def update_admin_poi(
 ) -> CuratedPlanPoi:
     _require_values(values)
     _check_version(actual=poi.version, expected=expected_version)
+    _reject_canonical_poi_projection_edit(poi)
     if "feature_id" in values:
         poi.feature_id = _optional_feature_id(values.get("feature_id"))
     if "feature_snapshot" in values:
@@ -430,6 +402,7 @@ async def soft_delete_admin_poi(
     expected_version: int | None = None,
 ) -> CuratedPlanPoi:
     _check_version(actual=poi.version, expected=expected_version)
+    _reject_canonical_poi_projection_edit(poi)
     poi.deleted_at = datetime.now(UTC)
     poi.version += 1
     plan.updated_by_admin_id = admin_id
@@ -460,6 +433,10 @@ async def reorder_admin_pois(
     by_id = {row.curated_poi_id: row for row in rows}
     if set(by_id) != set(ids):
         raise NoticePlanNotFoundError("추천 여행 POI를 찾을 수 없습니다.")
+    if any(row.source_curation_item_id is not None for row in rows):
+        raise NoticePlanPolicyError(
+            "Map canonical POI는 import refresh만 변경·삭제·재정렬할 수 있습니다."
+        )
 
     # `uq_curated_plan_pois_plan_day_sort`는 partial unique index라 non-deferrable —
     # row-by-row UPDATE 중간 상태에서 검사된다. 두 POI를 swap(A:001↔B:002)하면
@@ -679,224 +656,6 @@ async def ensure_plan_poi_for_feature(
     return poi
 
 
-async def import_kor_travel_map_curated_feature(
-    db: AsyncSession,
-    *,
-    admin_id: uuid.UUID,
-    kor_travel_map_client: KorTravelMapCuratedSnapshotClient,
-    curated_feature_id: str,
-    mode: str = "create",
-    is_published: bool | None = None,
-) -> KorTravelMapCuratedImportResult:
-    """kor-travel-map curated feature snapshot을 Pinvi curated plan으로 복사."""
-    if mode not in {"create", "upsert", "refresh"}:
-        raise NoticePlanPolicyError("지원하지 않는 import mode 입니다.")
-
-    snapshot = _mapping(await kor_travel_map_client.get_curated_detail_snapshot(curated_feature_id))
-    source_curated_feature_id = _optional_text(snapshot.get("curated_feature_id"))
-    if source_curated_feature_id is None:
-        raise NoticePlanCopyError(
-            "kor-travel-map curated snapshot에 curated_feature_id가 없습니다."
-        )
-    # PR #533(ADR-049): plan-level 객체 키가 `plan` → `content`로 개명됨.
-    plan_payload = _mapping(snapshot.get("content"))
-    source_payload = _mapping(snapshot.get("source"))
-    theme_payload = _mapping(snapshot.get("theme"))
-    items = _snapshot_items(snapshot)
-    if not items:
-        raise NoticePlanCopyError("kor-travel-map copy snapshot에 복사할 item이 없습니다.")
-
-    existing = await _get_kor_travel_map_imported_plan(
-        db, source_curated_feature_id=source_curated_feature_id
-    )
-    if existing is not None and mode == "create":
-        raise NoticePlanCopyError("이미 가져온 kor_travel_map curated feature 입니다.")
-    if existing is None and mode == "refresh":
-        raise NoticePlanNotFoundError("refresh할 kor_travel_map curated feature import가 없습니다.")
-
-    created_plan = existing is None
-    plan = existing or CuratedTripPlan(
-        slug=_slug_for_kor_travel_map_curated_feature(source_curated_feature_id),
-        title=_optional_text(plan_payload.get("title"), max_length=200)
-        or source_curated_feature_id,
-        category=_category_from_snapshot(plan_payload, theme_payload),
-        created_by_admin_id=admin_id,
-        updated_by_admin_id=admin_id,
-    )
-    if created_plan:
-        db.add(plan)
-
-    _apply_kor_travel_map_plan_snapshot(
-        plan,
-        admin_id=admin_id,
-        plan_payload=plan_payload,
-        source_payload=source_payload,
-        theme_payload=theme_payload,
-        snapshot=snapshot,
-        source_curated_feature_id=source_curated_feature_id,
-        is_published=is_published
-        if is_published is not None
-        else (False if created_plan else plan.is_published),
-    )
-    await db.flush()
-
-    copied_count = 0
-    reused_count = 0
-    last_sort_by_day: dict[int, str | None] = {}
-    ordered_items = sorted(
-        items,
-        key=lambda item: (
-            _int_or_none(item.get("day_index")) or 1,
-            _int_or_none(item.get("sort_order")) or 0,
-            _optional_text(item.get("curated_feature_item_id")) or "",
-        ),
-    )
-    for item in ordered_items:
-        poi, reused = await _ensure_kor_travel_map_import_poi(
-            db,
-            plan=plan,
-            source_curated_feature_id=source_curated_feature_id,
-            item=item,
-            last_sort_by_day=last_sort_by_day,
-        )
-        _apply_kor_travel_map_poi_snapshot(
-            poi,
-            source_curated_feature_id=source_curated_feature_id,
-            item=item,
-        )
-        copied_count += 1
-        if reused and poi.feature_id is not None:
-            reused_count += 1
-
-    await db.commit()
-    await db.refresh(plan)
-    return KorTravelMapCuratedImportResult(
-        plan=plan,
-        created_plan=created_plan,
-        copied_poi_count=copied_count,
-        reused_feature_backed_poi_count=reused_count,
-        source_system=_KOR_TRAVEL_MAP_SOURCE_SYSTEM,
-        source_curated_feature_id=source_curated_feature_id,
-        source_version=_int_or_none(snapshot.get("version")),
-        source_etag=_optional_text(snapshot.get("etag"), max_length=128),
-    )
-
-
-async def _get_kor_travel_map_imported_plan(
-    db: AsyncSession, *, source_curated_feature_id: str
-) -> CuratedTripPlan | None:
-    return cast(
-        CuratedTripPlan | None,
-        await db.scalar(
-            select(CuratedTripPlan).where(
-                CuratedTripPlan.source_system == _KOR_TRAVEL_MAP_SOURCE_SYSTEM,
-                CuratedTripPlan.source_curated_feature_id == source_curated_feature_id,
-                CuratedTripPlan.deleted_at.is_(None),
-            )
-        ),
-    )
-
-
-def _category_from_snapshot(
-    plan_payload: Mapping[str, Any], theme_payload: Mapping[str, Any]
-) -> str:
-    return (
-        _optional_text(plan_payload.get("category"), max_length=80)
-        or _optional_text(theme_payload.get("theme_slug"), max_length=80)
-        or "recommended"
-    )
-
-
-def _apply_kor_travel_map_plan_snapshot(
-    plan: CuratedTripPlan,
-    *,
-    admin_id: uuid.UUID,
-    plan_payload: Mapping[str, Any],
-    source_payload: Mapping[str, Any],
-    theme_payload: Mapping[str, Any],
-    snapshot: Mapping[str, Any],
-    source_curated_feature_id: str,
-    is_published: bool,
-) -> None:
-    plan.title = _optional_text(plan_payload.get("title"), max_length=200) or plan.title
-    plan.category = _category_from_snapshot(plan_payload, theme_payload)
-    plan.summary = _optional_text(plan_payload.get("summary"))
-    plan.source_name = (
-        _optional_text(source_payload.get("source_name"), max_length=200)
-        or _optional_text(source_payload.get("provider"), max_length=200)
-        or _KOR_TRAVEL_MAP_SOURCE_SYSTEM
-    )
-    plan.destination = _optional_text(
-        plan_payload.get("destination_name"), max_length=120
-    ) or _optional_text(plan_payload.get("region_code"), max_length=120)
-    plan.is_published = is_published
-    plan.updated_by_admin_id = admin_id
-    plan.source_system = _KOR_TRAVEL_MAP_SOURCE_SYSTEM
-    plan.source_curated_feature_id = source_curated_feature_id
-    plan.source_curated_feature_version = _int_or_none(snapshot.get("version"))
-    plan.source_etag = _optional_text(snapshot.get("etag"), max_length=128)
-    plan.source_imported_at = datetime.now(UTC)
-
-
-async def _ensure_kor_travel_map_import_poi(
-    db: AsyncSession,
-    *,
-    plan: CuratedTripPlan,
-    source_curated_feature_id: str,
-    item: Mapping[str, Any],
-    last_sort_by_day: dict[int, str | None],
-) -> tuple[CuratedPlanPoi, bool]:
-    source_item_id = _optional_text(item.get("curated_feature_item_id"))
-    if source_item_id is not None:
-        existing_by_item = await db.scalar(
-            select(CuratedPlanPoi).where(
-                CuratedPlanPoi.curated_plan_id == plan.curated_plan_id,
-                CuratedPlanPoi.source_curated_feature_id == source_curated_feature_id,
-                CuratedPlanPoi.source_curated_feature_item_id == source_item_id,
-                CuratedPlanPoi.deleted_at.is_(None),
-            )
-        )
-        if existing_by_item is not None:
-            return existing_by_item, True
-
-    day_index = _int_or_none(item.get("day_index")) or 1
-    feature_id = _optional_feature_id(item.get("feature_id"))
-    if feature_id is not None:
-        existing_by_feature = await db.scalar(
-            select(CuratedPlanPoi).where(
-                CuratedPlanPoi.curated_plan_id == plan.curated_plan_id,
-                CuratedPlanPoi.feature_id == feature_id,
-                CuratedPlanPoi.deleted_at.is_(None),
-            )
-        )
-        sort_order = existing_by_feature.sort_order if existing_by_feature else None
-        if sort_order is None:
-            sort_order = await _next_curated_sort_order(
-                db, plan.curated_plan_id, day_index, last_sort_by_day
-            )
-        poi = await ensure_plan_poi_for_feature(
-            db,
-            curated_plan_id=plan.curated_plan_id,
-            feature_id=feature_id,
-            day_index=day_index,
-            sort_order=sort_order,
-        )
-        return poi, existing_by_feature is not None
-
-    sort_order = await _next_curated_sort_order(
-        db, plan.curated_plan_id, day_index, last_sort_by_day
-    )
-    poi = CuratedPlanPoi(
-        curated_plan_id=plan.curated_plan_id,
-        day_index=day_index,
-        sort_order=sort_order,
-        feature_id=None,
-    )
-    db.add(poi)
-    await db.flush()
-    return poi, False
-
-
 async def _next_curated_sort_order(
     db: AsyncSession,
     curated_plan_id: uuid.UUID,
@@ -924,23 +683,6 @@ async def _max_curated_sort_order(
         .limit(1)
     )
     return result.scalar_one_or_none()
-
-
-def _apply_kor_travel_map_poi_snapshot(
-    poi: CuratedPlanPoi,
-    *,
-    source_curated_feature_id: str,
-    item: Mapping[str, Any],
-) -> None:
-    day_index = _int_or_none(item.get("day_index"))
-    if day_index is not None:
-        poi.day_index = day_index
-    poi.feature_id = _optional_feature_id(item.get("feature_id"))
-    snapshot = item.get("feature_snapshot")
-    poi.feature_snapshot = dict(_mapping(snapshot))
-    poi.memo = _optional_text(item.get("memo"))
-    poi.source_curated_feature_id = source_curated_feature_id
-    poi.source_curated_feature_item_id = _optional_text(item.get("curated_feature_item_id"))
 
 
 # Admin 용 생성 helper (Sprint 3 admin UI 보강 전 최소 — seed/테스트용)

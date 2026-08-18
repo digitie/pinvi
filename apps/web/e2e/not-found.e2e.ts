@@ -13,5 +13,6 @@ test('not-found 페이지의 홈 링크로 이동한다', async ({ page }) => {
   await page.goto('/nope-nope-nope');
   await page.getByTestId('not-found-page').getByRole('link', { name: '홈으로' }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole('heading', { name: 'Pinvi', exact: true })).toBeVisible();
+  // 랜딩 hero(h1은 가치 문장, 워드마크는 링크) — Hallmark 재설계 후 셀렉터.
+  await expect(page.getByTestId('home-hero').getByRole('heading', { level: 1 })).toBeVisible();
 });

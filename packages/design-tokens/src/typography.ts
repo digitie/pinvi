@@ -4,9 +4,9 @@
  */
 
 export const fonts = {
-  sans: 'Pretendard, "Apple SD Gothic Neo", system-ui, -apple-system, Roboto, sans-serif',
-  display: 'Pretendard, "Apple SD Gothic Neo", system-ui, sans-serif',
-  mono: '"JetBrains Mono", ui-monospace, "SF Mono", monospace',
+  sans: '"Pretendard Variable", Pretendard, "Apple SD Gothic Neo", system-ui, -apple-system, Roboto, sans-serif',
+  display: '"Pretendard Variable", Pretendard, "Apple SD Gothic Neo", system-ui, sans-serif',
+  mono: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
 } as const;
 
 export const fontSize = {

@@ -606,11 +606,11 @@ class KtmCacheTargetBoundaryAudit(Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint(
-            # schema_revision pin은 head migration마다 의식적 re-pin (0049에서
+            # schema_revision pin은 head migration마다 의식적 re-pin (0059에서
             # 갱신 — services/cache_target_final_boundary.FINALIZE_SCHEMA_REVISION
             # 과 반드시 동일).
             "contract_version = 'pinvi-cache-target-final-boundary/v1' "
-            "AND status = 'succeeded' AND schema_revision = '20260804_0049'",
+            "AND status = 'succeeded' AND schema_revision = '20260814_0059'",
             name=conv("ck_ktm_ct_boundary_contract"),
         ),
         CheckConstraint(
@@ -857,6 +857,60 @@ class KtmCacheTargetConsumer(Base, TimestampMixin):
     initial_source_count: Mapped[int | None] = mapped_column(BigInteger)
     initial_source_merkle_root: Mapped[bytes | None] = mapped_column(LargeBinary)
     initial_cutover_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class KtmCacheTargetRestoreFenceAttempt(Base, TimestampMixin):
+    """응답 유실 뒤에도 동일 Map CAS를 재실행할 restore-fence 영수증.
+
+    ``idempotency_key``가 pre-CAS ETag·control tuple과 한 번 결박되면 이를 바꿀 수
+    없다. pending 행은 원격 POST의 outcome이 불확실한 상태를 보존하고, completed
+    행은 Map의 200/201 영수증을 append-only로 보존한다.
+    """
+
+    __tablename__ = "ktm_cache_target_restore_fence_attempts"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["consumer_id"],
+            ["app.ktm_cache_target_consumers.consumer_id"],
+            name="fk_ktm_ct_restore_attempt_consumer",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "external_system = 'pinvi'",
+            name=conv("ck_ktm_ct_restore_attempt_system"),
+        ),
+        CheckConstraint(
+            "expected_restore_epoch > 0 AND expected_control_version > 0",
+            name=conv("ck_ktm_ct_restore_attempt_control"),
+        ),
+        CheckConstraint(
+            "btrim(consumer_id) = consumer_id AND consumer_id <> '' "
+            "AND btrim(stream_etag) = stream_etag AND stream_etag <> '' "
+            "AND btrim(reason) = reason AND char_length(reason) BETWEEN 1 AND 1000",
+            name=conv("ck_ktm_ct_restore_attempt_input"),
+        ),
+        CheckConstraint(
+            "(status = 'pending' AND response_status IS NULL AND response_etag IS NULL "
+            "AND response_body IS NULL AND completed_at IS NULL) OR "
+            "(status = 'completed' AND response_status IN (200, 201) "
+            "AND btrim(response_etag) = response_etag AND response_etag <> '' "
+            "AND jsonb_typeof(response_body) = 'object' AND completed_at IS NOT NULL)",
+            name=conv("ck_ktm_ct_restore_attempt_terminal"),
+        ),
+    )
+
+    idempotency_key: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True)
+    consumer_id: Mapped[str] = mapped_column(Text, nullable=False)
+    external_system: Mapped[str] = mapped_column(Text, nullable=False, server_default="pinvi")
+    expected_restore_epoch: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    expected_control_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    stream_etag: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
+    response_status: Mapped[int | None] = mapped_column(Integer)
+    response_etag: Mapped[str | None] = mapped_column(Text)
+    response_body: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class KtmCacheTargetReconciliationExpectation(Base, TimestampMixin):

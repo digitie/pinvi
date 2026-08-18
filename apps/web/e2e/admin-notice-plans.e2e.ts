@@ -55,6 +55,42 @@ function basePoi() {
   };
 }
 
+function canonicalImportResult(overrides: Record<string, unknown> = {}) {
+  return {
+    notice_plan_id: planId,
+    created_plan: true,
+    not_modified: false,
+    source_system: 'kor-travel-map',
+    source_curation_collection_id: '44444444-4444-4444-8444-444444444444',
+    source_curation_collection_revision: '7',
+    source_curation_collection_etag:
+      '"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
+    source_curation_item_set_hash_version: 'ktm-db-item-set-v1',
+    source_curation_item_set_hash:
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    source_curation_item_count: 2,
+    copied_poi_count: 2,
+    removed_poi_count: 0,
+    ...overrides,
+  };
+}
+
+function cutoverBackfillResult(overrides: Record<string, unknown> = {}) {
+  return {
+    backfill_receipt_id: '55555555-5555-4555-8555-555555555555',
+    mapping_receipt_id: '66666666-6666-4666-8666-666666666666',
+    legacy_curated_feature_id: '77777777-7777-4777-8777-777777777777',
+    import_result: canonicalImportResult({
+      notice_plan_id: planId,
+      created_plan: false,
+      copied_poi_count: 2,
+      removed_poi_count: 1,
+    }),
+    replayed: false,
+    ...overrides,
+  };
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route(
     (url) => url.port === '12801' && url.pathname === '/auth/me',
@@ -62,6 +98,30 @@ test.beforeEach(async ({ page }) => {
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({ data: adminUser }),
+      });
+    },
+  );
+  await page.route(
+    (url) =>
+      url.port === '12801' &&
+      url.pathname === '/admin/notice-plans/curation-cutover/legacy-preflight',
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            map_release_revision: 'a'.repeat(40),
+            mapping_receipt_id: '88888888-8888-4888-8888-888888888888',
+            mapping_root: 'b'.repeat(64),
+            mapping_count: 1,
+            legacy_plan_count: 1,
+            legacy_source_poi_count: 1,
+            manual_poi_count: 1,
+            backfillable_plan_count: 1,
+            ready: true,
+            issues: [],
+          },
+        }),
       });
     },
   );
@@ -81,7 +141,7 @@ test('Admin notice plan 목록이 필터와 편집 링크를 제공한다', asyn
   );
 
   await page.goto('/admin/notice-plans');
-  await expect(page.getByRole('heading', { name: '추천 여행' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '추천 여행', exact: true })).toBeVisible();
   await expect(page.getByTestId(`admin-notice-row-${planId}`)).toContainText('서울 카페 산책');
 
   await page.getByTestId('admin-notice-search').fill('서울');
@@ -93,6 +153,260 @@ test('Admin notice plan 목록이 필터와 편집 링크를 제공한다', asyn
   expect(lastUrl.searchParams.get('q')).toBe('서울');
   expect(lastUrl.searchParams.get('category')).toBe('cafe');
   expect(lastUrl.searchParams.get('is_published')).toBe('false');
+});
+
+test('Admin이 canonical collection import의 idempotency와 오류 복구를 제어한다', async ({
+  page,
+}) => {
+  const importRequests: Array<{ body: Record<string, unknown>; idempotencyKey: string | null }> =
+    [];
+  let importAttempt = 0;
+  await page.route(
+    (url) =>
+      url.port === '12801' &&
+      (url.pathname === '/admin/notice-plans' ||
+        url.pathname === '/admin/notice-plans/imports/kor-travel-map-curation-collections'),
+    async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (path === '/admin/notice-plans' && request.method() === 'GET') {
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ data: [basePlan()] }),
+        });
+        return;
+      }
+      if (
+        path === '/admin/notice-plans/imports/kor-travel-map-curation-collections' &&
+        request.method() === 'POST'
+      ) {
+        importRequests.push({
+          body: request.postDataJSON() as Record<string, unknown>,
+          idempotencyKey: request.headers()['idempotency-key'] ?? null,
+        });
+        importAttempt += 1;
+        if (importAttempt === 1) {
+          await route.fulfill({
+            status: 201,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              data: canonicalImportResult({ not_modified: false, created_plan: true }),
+            }),
+          });
+          return;
+        }
+        if (importAttempt === 2 || importAttempt === 3) {
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              data: canonicalImportResult({ not_modified: true, created_plan: false }),
+            }),
+          });
+          return;
+        }
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            detail: {
+              code: 'CURATION_COLLECTION_IMPORT_CONFLICT',
+              message: 'snapshot이 달라졌습니다.',
+            },
+          }),
+        });
+      }
+    },
+  );
+
+  await page.goto('/admin/notice-plans');
+  await page
+    .getByTestId('admin-notice-canonical-import-collection-id')
+    .fill('44444444-4444-4444-8444-444444444444');
+  await page.getByTestId('admin-notice-canonical-import-published').selectOption('published');
+  await page.getByTestId('admin-notice-canonical-import-submit').click();
+
+  await expect(page.getByTestId('admin-notice-canonical-import-result')).toContainText(
+    '새 추천 여행을 만들었습니다.',
+  );
+  expect(importRequests).toHaveLength(1);
+  expect(importRequests[0]?.body).toEqual({
+    collection_id: '44444444-4444-4444-8444-444444444444',
+    mode: 'create',
+    is_published: true,
+  });
+  expect(importRequests[0]?.idempotencyKey).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  );
+
+  // create 뒤 refresh로 전환한 뒤의 반영은 replay가 아니라 새 Map snapshot을 읽어야 한다.
+  await page.getByTestId('admin-notice-canonical-import-mode').selectOption('refresh');
+  await page.getByTestId('admin-notice-canonical-import-submit').click();
+  await expect.poll(() => importRequests).toHaveLength(2);
+  expect(importRequests[1]?.idempotencyKey).not.toBe(importRequests[0]?.idempotencyKey);
+  expect(importRequests[1]?.body).toMatchObject({ mode: 'refresh' });
+  await expect(page.getByTestId('admin-notice-canonical-import-result')).toContainText(
+    'Map snapshot이 변경되지 않아',
+  );
+
+  // 같은 refresh를 다시 실행해도 terminal command key는 재사용하지 않는다.
+  await page.getByTestId('admin-notice-canonical-import-submit').click();
+  await expect.poll(() => importRequests).toHaveLength(3);
+  expect(importRequests[2]?.idempotencyKey).not.toBe(importRequests[1]?.idempotencyKey);
+
+  await page
+    .getByTestId('admin-notice-canonical-import-collection-id')
+    .fill('55555555-5555-4555-8555-555555555555');
+  await page.getByTestId('admin-notice-canonical-import-submit').click();
+  await expect(page.getByTestId('admin-notice-canonical-import-error')).toContainText(
+    '입력을 확인한 뒤 새 요청으로 다시 실행하세요.',
+  );
+  expect(importRequests).toHaveLength(4);
+  expect(importRequests[3]?.idempotencyKey).not.toBe(importRequests[2]?.idempotencyKey);
+  await expect(page.getByTestId('admin-notice-canonical-import-retry')).toHaveCount(0);
+
+  // terminal 409도 새 명령으로만 다시 시도한다.
+  const conflictKey = importRequests[3]?.idempotencyKey;
+  await page.getByTestId('admin-notice-canonical-import-submit').click();
+  await expect.poll(() => importRequests).toHaveLength(5);
+  expect(importRequests[4]?.idempotencyKey).not.toBe(conflictKey);
+});
+
+test('Admin이 sealed cutover backfill을 별도 command key와 사전 점검으로 실행한다', async ({
+  page,
+}) => {
+  const backfillRequests: Array<{ body: Record<string, unknown>; idempotencyKey: string | null }> =
+    [];
+  await page.route(
+    (url) =>
+      url.port === '12801' &&
+      (url.pathname === '/admin/notice-plans' ||
+        url.pathname === '/admin/notice-plans/curation-cutover/backfills'),
+    async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (path === '/admin/notice-plans' && request.method() === 'GET') {
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ data: [basePlan()] }),
+        });
+        return;
+      }
+      if (
+        path === '/admin/notice-plans/curation-cutover/backfills' &&
+        request.method() === 'POST'
+      ) {
+        backfillRequests.push({
+          body: request.postDataJSON() as Record<string, unknown>,
+          idempotencyKey: request.headers()['idempotency-key'] ?? null,
+        });
+        if (backfillRequests.length === 1) {
+          await route.fulfill({
+            status: 201,
+            contentType: 'application/json',
+            body: JSON.stringify({ data: cutoverBackfillResult() }),
+          });
+          return;
+        }
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            detail: {
+              code: 'CURATION_CUTOVER_BACKFILL_CONFLICT',
+              message: 'sealed mapping이 변경됐습니다.',
+            },
+          }),
+        });
+      }
+    },
+  );
+
+  await page.goto('/admin/notice-plans');
+  await expect(page.getByTestId('admin-notice-cutover-preflight-result')).toContainText(
+    'backfill 준비 상태',
+  );
+  await page
+    .getByTestId('admin-notice-cutover-backfill-plan-id')
+    .fill('99999999-9999-4999-8999-999999999999');
+  await page.getByTestId('admin-notice-cutover-backfill-submit').click();
+  await expect(page.getByTestId('admin-notice-cutover-backfill-result')).toContainText(
+    'canonical backfill을 완료했습니다.',
+  );
+  expect(backfillRequests).toHaveLength(1);
+  expect(backfillRequests[0]?.body).toEqual({
+    notice_plan_id: '99999999-9999-4999-8999-999999999999',
+  });
+
+  // terminal success 후 같은 plan도 새 command로만 다시 시도한다.
+  await page.getByTestId('admin-notice-cutover-backfill-submit').click();
+  await expect.poll(() => backfillRequests).toHaveLength(2);
+  expect(backfillRequests[1]?.idempotencyKey).not.toBe(backfillRequests[0]?.idempotencyKey);
+  await expect(page.getByTestId('admin-notice-cutover-backfill-error')).toContainText(
+    '사전 점검을 다시 실행한 뒤 새 요청으로 확인하세요.',
+  );
+  await expect(page.getByTestId('admin-notice-cutover-backfill-retry')).toHaveCount(0);
+});
+
+test('Admin UI는 Map canonical plan과 POI의 source-derived 작업을 노출하지 않는다', async ({
+  page,
+}) => {
+  const canonicalPoi = {
+    ...basePoi(),
+    source_curation_item_id: '66666666-6666-4666-8666-666666666666',
+  };
+  let plan = {
+    ...basePlan(),
+    source_system: 'kor-travel-map' as const,
+    pois: [canonicalPoi],
+  };
+  let patchBody: Record<string, unknown> | null = null;
+
+  await page.route(
+    (url) => url.port === '12801' && url.pathname.startsWith('/admin/notice-plans'),
+    async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (path === `/admin/notice-plans/${planId}` && request.method() === 'GET') {
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ data: plan }),
+        });
+        return;
+      }
+      if (path === '/admin/notice-plans' && request.method() === 'GET') {
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ data: [plan] }),
+        });
+        return;
+      }
+      if (path === `/admin/notice-plans/${planId}` && request.method() === 'PATCH') {
+        patchBody = request.postDataJSON() as Record<string, unknown>;
+        expect(patchBody).toEqual({ is_published: true });
+        plan = { ...plan, is_published: true, version: plan.version + 1 };
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ data: plan }),
+        });
+        return;
+      }
+      await route.fulfill({ status: 404, body: JSON.stringify({ detail: 'mock' }) });
+    },
+  );
+
+  await page.goto(`/admin/notice-plans/${planId}`);
+  await expect(page.getByTestId('admin-notice-title')).toBeDisabled();
+  await expect(page.getByTestId('admin-notice-category')).toBeDisabled();
+  await expect(page.getByTestId('admin-notice-destination')).toBeDisabled();
+  await expect(page.getByRole('button', { name: '삭제' })).toHaveCount(0);
+  await expect(page.getByTestId(`admin-notice-poi-edit-${poiId}`)).toHaveCount(0);
+  await expect(page.getByText('Map refresh 관리')).toBeVisible();
+  await expect(page.getByTestId('admin-notice-poi-add')).toBeVisible();
+
+  await page.getByTestId('admin-notice-published').check();
+  await page.getByTestId('admin-notice-save').click();
+  await expect.poll(() => patchBody).toEqual({ is_published: true });
 });
 
 test('Admin notice plan 생성, 편집, POI 추가, 첨부 업로드를 수행한다', async ({ page }) => {

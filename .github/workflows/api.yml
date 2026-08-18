@@ -104,10 +104,11 @@ jobs:
 
           assert Path(config.__file__).is_relative_to("/tmp/pinvi-api-wheel-verify")
           assert config.KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256 == (
-              "6ad8c1c9c1d391c54e7592b64ed9f0225164b613a5c2824d8eafd3da9bd36f1e"
+              "c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd"
           )
           assert config.KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION == 7
           assert config.KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION == 2
+          assert config.KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION == 1
           PY
           )
 
@@ -137,12 +138,13 @@ jobs:
           assert artifact.is_file()
           payload = json.loads(artifact.read_text(encoding="utf-8"))
           assert hashlib.sha256(artifact.read_bytes()).hexdigest() == (
-              "6fb6dace1bfa7c8f5ecc0938cc1da255eea6bdb25a627c736cfa79c2f5f344dd"
+              "a6d501b4f508b09ae1e33e98cb5f072246a409236668a70d2646a0536fa9f039"
           )
           assert payload == {
               "capabilities": {
                   "cache_target": {"generation": 7},
                   "c6c_cancel_probe": {"generation": 2},
+                  "curation_snapshot": {"generation": 1},
               },
               "map_release_revision": config.KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
               "service_openapi_sha256": config.KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
@@ -151,8 +153,8 @@ jobs:
           assert not Path("/contracts/kor-travel-map-service-provenance-v1.json").exists()
           PY
 
-  # T-VN-H07D: vendored 스냅샷의 live-compare가 sibling 체크아웃 부재로 CI에서 skip되어
-  # 항상 green이던 맹점을 없앤다. kor-travel-map을 **핀 커밋**으로 체크아웃해 실제로 비교한다.
+  # vendored Map 계약의 live-compare가 sibling 체크아웃 부재로 CI에서 skip되어 항상
+  # green이던 맹점을 없앤다. kor-travel-map을 **핀 커밋**으로 체크아웃해 실제로 비교한다.
   #
   # 이름 주의: 이 job이 증명하는 것은 **핀↔vendored 자기정합**(수기 graft, 재-vendor 없이
   # 핀만 올린 경우를 잡는다)이지 "최신인가"가 아니다. 핀 자체가 뒤처졌는지는 구조상 알 수 없고,
@@ -168,8 +170,6 @@ jobs:
         run: |
           user_pin=$(grep -oP '_UPSTREAM_COMMIT = "\K[0-9a-f]{40}' \
             apps/api/tests/unit/test_kor_travel_map_contract.py)
-          admin_pin=$(grep -oP '_UPSTREAM_COMMIT = "\K[0-9a-f]{40}' \
-            apps/api/tests/unit/test_kor_travel_map_admin_contract.py)
           service_pin=$(python -c 'import json; print(json.load(open("contracts/kor-travel-map-service-provenance-v1.json"))["map_release_revision"])')
           service_sha=$(python -c 'import json; print(json.load(open("contracts/kor-travel-map-service-provenance-v1.json"))["service_openapi_sha256"])')
           service_generation=$(python -c 'import json; print(json.load(open("contracts/kor-travel-map-service-provenance-v1.json"))["capabilities"]["cache_target"]["generation"])')
@@ -178,13 +178,12 @@ jobs:
           alias_pin=$(grep -oP '_UPSTREAM_MAP_COMMIT = "\K[0-9a-f]{40}' \
             apps/api/tests/unit/test_feature_alias_contract.py)
           echo "user_pin=$user_pin" >> "$GITHUB_OUTPUT"
-          echo "admin_pin=$admin_pin" >> "$GITHUB_OUTPUT"
           echo "service_pin=$service_pin" >> "$GITHUB_OUTPUT"
           echo "service_sha=$service_sha" >> "$GITHUB_OUTPUT"
           echo "service_generation=$service_generation" >> "$GITHUB_OUTPUT"
           echo "source_pin=$source_pin" >> "$GITHUB_OUTPUT"
           echo "alias_pin=$alias_pin" >> "$GITHUB_OUTPUT"
-          echo "user=$user_pin admin=$admin_pin service=$service_pin source=$source_pin alias=$alias_pin"
+          echo "user=$user_pin service=$service_pin source=$source_pin alias=$alias_pin"
 
       - name: service metadata and PinVi runtime contract are exact
         run: |
@@ -211,6 +210,7 @@ jobs:
           assert metadata["capabilities"] == {
               "cache_target": {"generation": 7},
               "c6c_cancel_probe": {"generation": 2},
+              "curation_snapshot": {"generation": 1},
           }
 
           config = Path("apps/api/app/core/config.py").read_text()
@@ -221,6 +221,7 @@ jobs:
           assert "KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256" in config
           assert "KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION" in config
           assert "KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION" in config
+          assert "KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION" in config
           assert "cache-target-upstream-map-v1.json" not in config
           snapshot = Path("apps/api/tests/contract/kor-travel-map-openapi-service.json").read_bytes()
           assert hashlib.sha256(snapshot).hexdigest() == metadata["service_openapi_sha256"]
@@ -242,13 +243,6 @@ jobs:
           repository: digitie/kor-travel-map
           ref: ${{ steps.pins.outputs.user_pin }}
           path: .ktm-user-pin
-
-      - name: Checkout kor-travel-map at the admin-surface pin
-        uses: actions/checkout@v4
-        with:
-          repository: digitie/kor-travel-map
-          ref: ${{ steps.pins.outputs.admin_pin }}
-          path: .ktm-admin-pin
 
       - name: Checkout kor-travel-map at the service-surface pin
         uses: actions/checkout@v4
@@ -281,14 +275,6 @@ jobs:
           diff -q \
             apps/api/tests/contract/kor-travel-map-openapi-user.json \
             .ktm-user-pin/packages/kor-travel-map-api/openapi.user.json
-
-      # admin 표면: 결정적 추출을 다시 돌려 vendored subset과 비교한다.
-      - name: admin subset re-extraction matches vendored file
-        run: |
-          python apps/api/scripts/vendor_kor_travel_map_admin_snapshot.py \
-            --source .ktm-admin-pin/packages/kor-travel-map-api/openapi.json \
-            --output apps/api/tests/contract/kor-travel-map-openapi-admin-detail-snapshot.json \
-            --check
 
       - name: service snapshot byte equality vs pinned commit
         run: |
@@ -337,13 +323,6 @@ jobs:
           if ! diff -q apps/api/tests/contract/kor-travel-map-openapi-user.json \
                        .ktm-main/packages/kor-travel-map-api/openapi.user.json; then
             echo "::warning::user 스냅샷이 kor-travel-map main과 다르다 — 재-vendor 필요"
-            status=1
-          fi
-          if ! python apps/api/scripts/vendor_kor_travel_map_admin_snapshot.py \
-                 --source .ktm-main/packages/kor-travel-map-api/openapi.json \
-                 --output apps/api/tests/contract/kor-travel-map-openapi-admin-detail-snapshot.json \
-                 --check; then
-            echo "::warning::admin subset이 kor-travel-map main과 다르다 — 재-vendor 필요"
             status=1
           fi
           if ! diff -q apps/api/tests/contract/kor-travel-map-openapi-service.json \
