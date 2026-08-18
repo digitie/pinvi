@@ -7,13 +7,13 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, StrictBool, StrictInt, model_validator
 
 
 class NoticePlanBase(BaseModel):
     slug: str = Field(min_length=1, max_length=160, pattern=r"^[a-z0-9][a-z0-9-]*$")
-    title: str = Field(min_length=1, max_length=200)
-    category: str = Field(default="recommended", min_length=1, max_length=80)
+    title: str = Field(min_length=1, max_length=300)
+    category: str = Field(default="recommended", min_length=1, max_length=128)
     summary: str | None = None
     source_name: str | None = Field(default=None, max_length=200)
     destination: str | None = Field(default=None, max_length=120)
@@ -37,8 +37,8 @@ class NoticePlanCreate(NoticePlanBase):
 
 
 class NoticePlanUpdate(BaseModel):
-    title: str | None = Field(default=None, min_length=1, max_length=200)
-    category: str | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    category: str | None = Field(default=None, min_length=1, max_length=128)
     summary: str | None = None
     source_name: str | None = None
     destination: str | None = None
@@ -90,6 +90,7 @@ class NoticePoiReorderRequest(BaseModel):
 class NoticePoiResponse(NoticePoiBase):
     notice_poi_id: uuid.UUID
     notice_plan_id: uuid.UUID
+    source_curation_item_id: uuid.UUID | None = None
     version: int
     created_at: datetime
     updated_at: datetime
@@ -97,6 +98,7 @@ class NoticePoiResponse(NoticePoiBase):
 
 class NoticePlanResponse(NoticePlanBase):
     notice_plan_id: uuid.UUID
+    source_system: Literal["kor-travel-map"] | None = None
     version: int
     created_at: datetime
     updated_at: datetime
@@ -118,18 +120,64 @@ class NoticePlanCopyResponse(BaseModel):
     copied_attachment_count: int
 
 
-class KorTravelMapCuratedFeatureImportRequest(BaseModel):
-    curated_feature_id: str = Field(min_length=1, max_length=240)
-    mode: Literal["create", "upsert", "refresh"] = "create"
+class KorTravelMapCurationCollectionImportRequest(BaseModel):
+    collection_id: uuid.UUID
+    mode: Literal["create", "refresh"] = "create"
     is_published: bool | None = None
 
 
-class KorTravelMapCuratedFeatureImportResponse(BaseModel):
+class KorTravelMapCurationCollectionImportResponse(BaseModel):
     notice_plan_id: uuid.UUID
-    created_plan: bool
-    source_system: str
-    source_curated_feature_id: str
-    source_version: int | None = None
-    source_etag: str | None = None
-    copied_poi_count: int
-    reused_feature_backed_poi_count: int
+    created_plan: StrictBool
+    not_modified: StrictBool
+    source_system: Literal["kor-travel-map"]
+    source_curation_collection_id: uuid.UUID
+    source_curation_collection_revision: str = Field(pattern=r"^[1-9][0-9]*$")
+    source_curation_collection_etag: str = Field(pattern=r'^"sha256:[0-9a-f]{64}"$')
+    source_curation_item_set_hash_version: Literal["ktm-db-item-set-v1"]
+    source_curation_item_set_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_curation_item_count: StrictInt = Field(ge=0, le=2_000)
+    copied_poi_count: StrictInt = Field(ge=0, le=2_000)
+    removed_poi_count: StrictInt = Field(ge=0, le=2_000)
+
+
+class KorTravelMapCurationCutoverMappingReceiptResponse(BaseModel):
+    receipt_id: uuid.UUID
+    map_release_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
+    mapping_root_version: Literal["ktm-curation-cutover-mapping-v1"]
+    mapping_root: str = Field(pattern=r"^[0-9a-f]{64}$")
+    mapping_count: StrictInt = Field(ge=0)
+    completed_at: datetime
+    replayed: StrictBool
+
+
+class KorTravelMapCurationCutoverLegacyPreflightIssueResponse(BaseModel):
+    code: str = Field(min_length=1, max_length=128)
+    detail: str = Field(min_length=1, max_length=500)
+    notice_plan_id: uuid.UUID | None = None
+    notice_poi_id: uuid.UUID | None = None
+
+
+class KorTravelMapCurationCutoverLegacyPreflightResponse(BaseModel):
+    map_release_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
+    mapping_receipt_id: uuid.UUID | None = None
+    mapping_root: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    mapping_count: StrictInt = Field(ge=0)
+    legacy_plan_count: StrictInt = Field(ge=0)
+    legacy_source_poi_count: StrictInt = Field(ge=0)
+    manual_poi_count: StrictInt = Field(ge=0)
+    backfillable_plan_count: StrictInt = Field(ge=0)
+    ready: StrictBool
+    issues: list[KorTravelMapCurationCutoverLegacyPreflightIssueResponse]
+
+
+class KorTravelMapCurationCutoverBackfillRequest(BaseModel):
+    notice_plan_id: uuid.UUID
+
+
+class KorTravelMapCurationCutoverBackfillResponse(BaseModel):
+    backfill_receipt_id: uuid.UUID
+    mapping_receipt_id: uuid.UUID
+    legacy_curated_feature_id: uuid.UUID
+    import_result: KorTravelMapCurationCollectionImportResponse
+    replayed: StrictBool

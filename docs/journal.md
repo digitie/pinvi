@@ -2,6 +2,314 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-18 (codex) — T-VN-41 ABC rebase Map provenance 재핀
+
+- Map PR #975의 rebase 후 head `e093e5555329234a539a3802566eb5666411b06f`를 PinVi service
+  provenance·runtime contract test·Docker packaged-provenance digest에 함께 재핀했다.
+  service OpenAPI vendor bytes는 Map artifact와 계속 SHA-256
+  `c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`로 일치한다.
+- 이 변경은 exact candidate pair만 바꾸며, production sync enable·완료 receipt·PR 병합은
+  여전히 final C7 boundary 밖에서 금지한다. paired CI·적대적 재리뷰·n150 isolated Live UI E2E가
+  다음 gate다.
+
+## 2026-08-17 (codex) — T-VN-41 ABC Map service provenance 재핀
+
+- Map PR #975의 current-main 후보 `b6685ceb558f41420028e9f1f2488117a73b3e00`를
+  PinVi service provenance의 release revision으로 고정했다. vendored service OpenAPI는
+  현재 Map artifact와 SHA-256 `c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`가
+  이미 byte-for-byte 일치함을 다시 검증했다.
+- production cache-target sync는 final C7 root enable boundary 전까지 Settings validation에서
+  거부한다. n150 live proof는 `PINVI_ENVIRONMENT=smoke`의 독립 Compose project에서만 sync를
+  켤 수 있으며, 이 격리 evidence는 production enable을 대체하지 않는다.
+- provenance payload, runtime contract test, Docker provenance CI digest를 한 변경으로
+  갱신했다. paired CI·적대적 재리뷰·n150 isolated Live UI E2E 전에는 production sync enable,
+  완료 receipt, PR 병합을 수행하지 않는다.
+
+## 2026-08-15 (codex) — PinVi 0053 synthetic catalog forward-upgrade CI 복구
+
+- 0053 historical catalog regression은 0059 뒤의 head에서 revision만 낮춰 stamp하지 않는다.
+  0054가 제거할 당시 naming-convention physical boundary CHECK와 0057·0059에만 존재하는
+  mapping/backfill guard function을 함께 0053 상태로 되돌린다.
+- 따라서 0054~0059 forward migration은 오래된 DB에 없던 object의 존재·이름을 잘못 가정하지
+  않고 실제 생성 경로를 재현한다. 실제 0053→head fixture와 canonical importer/receipt integration
+  14개가 통과했다.
+
+## 2026-08-15 (codex) — PinVi historical migration CI 격리 정렬
+
+- 0046 receipt backfill 회귀는 forward-only 최신 head를 낮추지 않고 disposable `app` schema를
+  실제 0045 revision으로 올려서 검증한다.
+- 0053 catalog 합성은 0059 backfill receipt FK를 먼저 제거한 뒤 mapping receipt relation을
+  제거한다. 이후 0054~0059 forward migration이 현재 catalog를 다시 만든다.
+
+## 2026-08-15 (codex) — PinVi notice-plan Web E2E locator 안정화
+
+- 목록의 주 제목과 canonical backfill 보조 제목이 모두 `추천 여행`을 포함하므로, Playwright가
+  정확한 주 `h1`만 선택하도록 locator를 닫았다.
+- 이 변경은 화면·API 계약을 바꾸지 않으며, CI가 실제 목록/필터/편집 링크 시나리오를 계속
+  검증하게 한다.
+
+## 2026-08-15 (codex) — PinVi API provenance CI 정합 복구
+
+- wheel·Docker image provenance 검사가 현재 vendored Map service SHA와 artifact SHA를 확인하도록
+  재고정했다. 오래된 SHA를 비교해 정상 artifact를 거절하던 CI 경로를 닫는다.
+- 적용 이력이 있는 Alembic revision은 Ruff formatter 대상에서 제외하고, API 코드·테스트는 현재
+  formatter 결과로 정렬했다. revision byte 불변성과 CI format gate를 함께 유지한다.
+
+## 2026-08-15 (codex) — T-VN-40C Manager principal 결선 PR 대기
+
+- Docker Manager PR #174가 Map API에는 canonical snapshot·cutover mapping digest 두 개만,
+  PinVi API에는 대응 원문 token 두 개만 전달하는 immutable compose 경계를 구현했다.
+- 이 PinVi 브랜치의 API-only token 결선과 쌍을 이루지만, PR은 아직 draft·미병합이다. n150의
+  canonical import/backfill live acceptance와 exact paired receipt 전에는 rollout receipt를 pending으로
+  유지하고 legacy source column·route를 물리 삭제하지 않는다.
+
+## 2026-08-15 (codex) — T-VN-40C canonical curation token scope 결선
+
+- compose의 `app-api`에 canonical snapshot과 cutover mapping의 서로 다른 두 원문 token을
+  전달하고, `app-web`·Dagster에는 어느 token도 전달하지 않게 했다.
+- root/API/production example env가 두 이름을 모두 선언한다. scope를 합치거나 ordinary
+  service token으로 대체하지 않는다.
+- Map isolated n150 runner는 이 두 원문과 대응하는 Map API digest 두 개를 매 실행 새로 만든다.
+  production/Manager 결선과 paired live acceptance가 끝날 때까지 rollout receipt는 pending이다.
+
+## 2026-08-15 (codex) — T-VN-40C legacy admin snapshot runtime 제거
+
+- `POST /admin/notice-plans/imports/kor-travel-map-curated-features`와
+  `KorTravelMapAdminClient.get_curated_detail_snapshot()`을 제거했다. legacy snapshot을 plan/POI로
+  쓰던 단일 service writer와 request/response DTO도 함께 제거했다.
+- Map admin detail snapshot subset, 추출 스크립트, PinVi runtime consumer test와 CI의 별도 Map
+  admin checkout을 없앴다. user/service OpenAPI 계약과 canonical collection import/backfill 계약은
+  그대로 유지한다.
+- `source_curated_feature_*` ORM/DB 컬럼 및 preflight integrity rule은 sealed mapping에 따른 기존
+  legacy plan 변환용으로 보존한다. 이 커밋은 data drop이나 production route choreography를 수행하지
+  않는다.
+
+## 2026-08-15 (codex) — T-VN-40C canonical backfill admin UI
+
+- admin notice-plan 화면은 sealed mapping/preflight 상태를 읽고, issue가 있으면 canonical backfill
+  submit을 잠근다. receipt candidate UUID 목록은 read API에 노출하지 않고, 운영자가 legacy plan UUID를
+  입력하면 typed command가 mapping/member를 다시 검증한다.
+- `@pinvi/schemas`와 `@pinvi/api-client`에 preflight/backfill request·response를 동일한 UUID,
+  digest/count 범위로 추가했다. UI는 terminal success·4xx 뒤 key를 폐기하고 network/5xx에서만
+  같은 `Idempotency-Key` replay를 명시적으로 허용한다. `409`은 자동 retry하지 않고 사전 점검을
+  다시 실행하도록 안내한다.
+- mocked Playwright는 preflight ready·backfill `201`·같은 plan의 다음 terminal command가 새 key를
+  쓰고 `409` retry button을 노출하지 않는 경로를 추가했다. workspace TypeScript와 schema Vitest는
+  통과했으며, cold Next dev server가 반복 worker를 만들며 준비 시간 제한을 넘겨 Playwright browser
+  run은 별도 warm CI/n150 runner에서 재실행해야 한다.
+
+## 2026-08-15 (codex) — T-VN-40C canonical backfill admin command
+
+- `POST /admin/notice-plans/curation-cutover/backfills`는 `notice_plan_id`와 admin-scoped
+  `Idempotency-Key`만 받는다. terminal key는 remote fetch 전에 `200`으로 replay하며, 새 command는
+  sealed mapping이 정한 collection의 complete snapshot만 요청한다. `304`·mapping 밖 collection·local
+  provenance drift는 `409`으로 fail-close한다.
+- remote fetch 뒤 새 transaction의 첫 SQL에서 `SERIALIZABLE`을 설정하고 backfill/generic import
+  receipt·canonical POI proof·admin audit를 함께 commit한다. `404/409/413/502/503`을 OpenAPI에
+  고정했으며, replay response는 rollback 전에 typed DTO로 materialize해 async ORM expiration 경로를
+  열지 않는다.
+- 실제 HTTP integration은 sealed collection fetch, `201→200` exact replay, remote fetch 1회와
+  backfill/audit receipt 각 1개를 검증했다.
+
+## 2026-08-14 (codex) — T-VN-40C sealed legacy plan canonical backfill service
+
+- `apply_curation_cutover_backfill()`은 remote full snapshot을 받은 뒤 새
+  `SERIALIZABLE` transaction에서 legacy provenance preflight와 sealed mapping member를 다시
+  잠그고 대조한다. Map collection UUID가 mapping과 다르거나 plan identity·중복 canonical plan·기존
+  actor/key receipt가 다르면 mutation 전에 fail-close한다.
+- 같은 actor/key·collection advisory fence와 legacy plan fence를 잡은 뒤, 기존 active legacy
+  source POI만 soft-delete하고 provenance가 모두 `NULL`인 manual POI는 유지한다. 이어 canonical
+  snapshot으로 generic `cutover-backfill` import receipt와 canonical POI proof를 만들며, 별도
+  backfill receipt까지 같은 transaction에서 terminal seal한다.
+- 실제 PostgreSQL integration은 exact mapping 전환, source POI 제거·manual POI 보존,
+  generic/backfill receipt 결박, same-key replay와 sealed mapping 밖 snapshot의 전체 rollback을
+  검증했다.
+
+## 2026-08-14 (codex) — T-VN-40C typed canonical backfill receipt 경계
+
+- `20260814_0059`은 canonical generic import receipt에 `cutover-backfill` mode를 추가하고,
+  `ktm_curation_cutover_backfill_receipts`로 legacy backfill command 자체를 append-only
+  terminal evidence로 분리했다. actor/key, request hash, mapping receipt/member, legacy UUID,
+  기존 plan 및 generic import receipt는 update 뒤 바꿀 수 없다.
+- terminal guard는 sealed mapping member의 collection과 completed generic receipt의
+  collection/result plan/actor/mode를 exact 대조하고, plan의 legacy UUID provenance도 엄격히
+  확인한다. 모든 plan POI를 순서대로 잠근 뒤 active legacy source POI가 남아 있으면 completion을
+  거부한다. manual POI는 legacy provenance가 모두 `NULL`이므로 보존한다.
+- historical naming-convention catalog에서 boundary CHECK physical name이 이중 확장된 경우와
+  exact name인 경우를 definition으로 식별해 forward migration에서 하나로 수렴시켰다. 0059부터
+  final-boundary pin은 head revision과 함께 `20260814_0059`다.
+- 다음 서비스 단계는 remote snapshot fetch 뒤 fresh SSI transaction에서 preflight를 재실행하고,
+  기존 plan과 legacy/manual POI를 canonical collection import로 전환한 뒤 generic/backfill receipt와
+  audit을 하나로 seal해야 한다. 이 command가 완료되기 전 legacy route/column removal은 금지한다.
+
+## 2026-08-14 (codex) — T-VN-40C legacy provenance preflight
+
+- `inspect_curation_cutover_legacy_provenance()`는 현재 vendored Map release의 completed local
+  mapping receipt만 cross-DB identity 정본으로 인정한다. receipt 없음·pending·member count
+  불일치는 즉시 fail-close하며, 미래 backfill은 별도 `SERIALIZABLE` transaction에서 이 검증을
+  다시 실행해야 한다.
+- active legacy Map plan의 `source_curated_feature_id`는 UUID로 엄격 해석한다. non-UUID,
+  sealed mapping orphan, 문자열 대소문자와 무관한 UUID duplicate, 동일 canonical collection으로
+  수렴하는 다중 active plan을 한 report에 모두 수집한다. legacy source POI는 parent UUID와 같은
+  source identity와 비어 있지 않은 legacy item identity를 함께 가져야 하고, partial·blank·mismatch는
+  fail-close한다. 두 provenance 값이 모두 `NULL`인 manual POI는 보존 대상으로 따로 센다.
+- 실제 PostgreSQL integration은 exact mapping+source/manual POI 통과, non-UUID·orphan·duplicate와
+  POI partial/blank/mismatch의 동시 report, sealed receipt 부재 차단을 고정했다. 이 report만으로
+  쓰기를 허용하지 않으며, canonical collection snapshot을 쓰는 typed backfill command가 같은
+  transaction에서 재검증할 때까지 legacy 경로 제거는 금지한다.
+- admin은 `GET /admin/notice-plans/curation-cutover/legacy-preflight`로 이 report를 read-only로
+  받는다. response는 receipt/root/count·plan/source/manual POI count·모든 issue를 반환하지만,
+  backfillable candidate UUID set은 후속 typed write command 내부 evidence로만 유지한다.
+
+## 2026-08-14 (codex) — T-VN-40C Map mapping root capture command
+
+- `POST /admin/notice-plans/curation-cutover/mapping-receipts`는 Map maintenance mapping client의
+  closed keyset을 local immutable receipt로 봉인한다. remote call 뒤 auth transaction을 명시적으로
+  끝내고, receipt claim·member write·terminal seal·admin audit를 하나의 `SERIALIZABLE` transaction에
+  둔다.
+- `20260814_0058`은 `map_release_revision` 단일 unique constraint를 추가해 같은 vendored Map release가
+  서로 다른 mapping root를 local backfill evidence로 만들지 못하게 한다. exact root/member replay는
+  `200`, root/member/pending conflict는 `409`이며, 새 seal은 `201`이다.
+- 실제 PostgreSQL integration은 release singleton과 member equality replay, terminal guards, HTTP
+  `201→200→409`, 기존 0053 database의 head forward upgrade를 검증했다. cache-target final boundary
+  schema pin도 0058로 re-pin했다.
+
+## 2026-08-14 (codex) — T-VN-40C Map identity mapping local receipt seal
+
+- `20260814_0057`은 Map maintenance mapping export의 release revision, root version/root,
+  count를 PinVi의 pending→completed receipt로 보관한다. member는 legacy curated-feature UUID와
+  canonical collection/item UUID, mapping kind, source row hash를 immutable relation으로 저장한다.
+- member INSERT와 terminal completion은 같은 parent receipt를 `FOR UPDATE`로 직렬화한다. 완료
+  뒤 member 추가·변경·삭제·truncate는 trigger가 거부하고, terminal은 exact member count가 Map root
+  envelope의 count와 다르면 rollback한다. 따라서 partial/late mapping set을 backfill 정본으로 쓸 수 없다.
+- cache-target final boundary schema pin도 0057로 함께 전진했고, 실제 PostgreSQL integration은
+  정상 terminal seal, incomplete set rollback, 완료 뒤 late insert 거부와 physical constraint/trigger
+  이름을 검증한다.
+
+## 2026-08-14 (codex) — T-VN-40C Map identity mapping service artifact vendor
+
+- Map `e31c1c73`의 `GET /v1/service/curation-cutover/identity-mappings`를 byte-exact service
+  OpenAPI로 재vendor했다(SHA-256 `c6f9aba6…aebd`). 이 endpoint는 legacy
+  `curated_feature_id`에서 canonical collection/item UUID로의 immutable mapping을 maintenance
+  fence 동안만 signed keyset, row hash, 전체 root/count와 함께 제공한다.
+- PinVi client는 전용 cutover ServiceToken으로만 이 endpoint를 읽고, page receipt 변화·UUID
+  중복·keyset 역행·count 불일치를 fail-close한다. snapshot token 또는 다른 Map credential의
+  재사용은 Settings validation에서 막는다.
+- 다음 consumer migration은 이 artifact만 읽어 PinVi legacy plan/POI provenance를 backfill해야
+  하며, Map DB 직접 접근이나 legacy admin snapshot 재호출은 허용하지 않는다.
+
+## 2026-08-14 (codex) — T-VN-40 304 proof 정본과 UI command lifecycle 보강
+
+- `20260814_0056` forward migration으로 cache-target boundary pin을 전진시키고, terminal response의
+  `not_modified` boolean을 DB guard에서 명시적으로 요구했다. fresh-key `304`는 같은 source tuple의
+  이전 authoritative (`not_modified=false`) receipt proof만 복제하며, 과거 잘못된 304 proof가 현재 POI와
+  같은 count만 맞춰 재봉인되는 경로를 conflict로 닫았다.
+- legacy 0051 terminal response가 최신 typed DTO를 만족하지 않아도 replay에서 raw validation 예외가
+  나지 않게 typed conflict로 변환했다. dataful `0051→head` replay와 poisoned 304 proof chain 회귀를
+  PostgreSQL integration으로 추가했다.
+- Map canonical plan은 공개 상태만 PATCH하고 source-derived POI 작업은 UI에서 숨긴다. canonical import
+  terminal 성공과 4xx 뒤에는 새 `Idempotency-Key`를 생성하고, network/5xx에서만 운영자가 같은 요청을
+  명시적으로 재시도할 수 있게 했다. mocked E2E는 create `201`, refresh/304 `200`, terminal `409`의 실제
+  HTTP 결과만 사용하도록 정정했다.
+
+## 2026-08-14 (codex) — T-VN-40 canonical collection importer 원자 반영
+
+- 새 admin import endpoint가 Map canonical collection snapshot을 collection UUID로 가져와 plan·canonical
+  POI·immutable receipt proof·admin audit를 하나의 `SERIALIZABLE` transaction으로 commit한다.
+- actor-scoped `Idempotency-Key` terminal replay, 동일 key 다른 request의 409, source revision 역행
+  거부, `304` fresh-key no-op proof를 typed response로 고정했다.
+- refresh는 stale canonical POI만 soft-delete하고 수동 POI를 보존한다. audit failure와 같은 key의
+  병렬 import는 rollback 또는 하나의 terminal effect로 수렴하는 실제 PostgreSQL integration을 추가했다.
+
+## 2026-08-14 (codex) — T-VN-40 0053 기적용 DB forward repair
+
+- `20260814_0054`가 receipt/receipt-item guard를 재설치해 이전 0053 적용 DB도 soft-deleted
+  canonical POI를 포함한 terminal lock 규칙을 받는다.
+- cache-target final boundary schema revision과 ORM CHECK를 0054로 함께 전진시켰다.
+- 0054 byte hash를 migration immutability gate에 추가했다.
+
+## 2026-08-14 (codex) — T-VN-40 paired snapshot 경계와 terminal seal 재검증
+
+- Map `a345ae75`의 service spec을 exact vendor하고 collection metadata 128/200/300/100 상한을
+  PinVi typed client와 contract test에 mirror했다.
+- 미배포 0052 preflight의 active POI 판정을 canonical provenance 행으로 한정해 0051의 수동 PO이가
+  0053 upgrade를 막지 않게 했고 byte pin을 재고정했다.
+- 0053 completion은 result plan의 active/deleted canonical POI를 모두 고정 순서로 잠근 뒤 active set만
+  proof와 비교한다. completer-first undelete 차단과 writer-first undelete 후 terminal 거부를 두 세션
+  PostgreSQL 회귀로 고정했다.
+
+## 2026-08-14 (codex) — T-VN-40 receipt terminal lock·304 no-op proof
+
+- `20260814_0053`에서 receipt item INSERT가 parent receipt를 `FOR UPDATE`로 잠그게 해 completion 뒤
+  member가 끼어드는 TOCTOU를 제거했다. completion은 receipt→result plan→canonical POI 순으로 잠그고
+  exact source proof를 검증한다.
+- exact count에서 provenance 없는 수동 PO이를 제외했다. 304 fresh-key receipt는 기존 canonical POI의
+  originating receipt id를 갱신하지 않고 collection/item/revision/ETag/Feature natural tuple을 다시
+  증명하므로 plan/POI/audit no-op과 terminal replay를 함께 만족한다.
+- `0052` SHA-256을 immutable migration gate에 추가했다. dataful `0051→0053`, catalog drift,
+  manual+canonical, 304 no-op, late proof 2-session 경합을 포함한 integration 6건과 boundary/unit 31건,
+  변경 파일 Ruff를 통과했다.
+
+## 2026-08-14 (codex) — T-VN-40 canonical receipt 인과성·bounded consumer 보강
+
+- Map `98489eb4e81fc736c4bb6d16deec0d2033d2e990`의 service OpenAPI를 exact bytes로
+  재vendor했다. client는 `item_count <= 2000`, 최대 10 page, 누적 count와 cursor 진행성을 검증해
+  over-cap/무한 pagination 응답을 거부한다.
+- 배포 가능한 `0050/0051` migration을 원문 SHA-256으로 복원·고정하고, 새 forward-only
+  `20260814_0052`에 immutable item proof relation과 INSERT guard를 추가했다. canonical POI는
+  canonical collection parent와 동일 receipt item에 composite FK로 결박되고, receipt terminal 전이는
+  exact item count와 result plan/source tuple/revision/ETag/hash/response identity 및 실제 active POI
+  set이 모두 맞아야 한다. 완료행 직접 INSERT와 terminal UPDATE/DELETE/TRUNCATE도 trigger가 거부한다.
+- plan title/category를 기존 200/80에서 300/128로 확장했다. Map producer의 무제한 TEXT와의 최종
+  paired 길이 계약은 importer 전 별도 gate로 닫는다. 실제 PostgreSQL에서
+  구 c614 bytes의 dataful 0051→0052 upgrade와 ORM 조회, catalog semantic mutation 검출,
+  restore/curation receipt 음성 경계를 포함한
+  통합 10건과 service client/contract 단위 14건, 변경 Python ruff/mypy를 통과했다.
+
+## 2026-08-14 (codex) — T-VN-40 canonical curation provenance/receipt expand
+
+- `curated_trip_plans`에 Map `collection_id`, bigint revision, raw strong ETag, bounded item-set
+  receipt를 추가하고, `curated_plan_pois`에는 stable `curation_item_id`와 bigint revision/ETag를
+  추가했다. partial tuple, 잘못된 digest/ETag, 2,000건 초과는 DB가 거부한다.
+- `app.ktm_curation_import_receipts`는 admin actor+idempotency key를 unique하게 결박하고,
+  request fingerprint/source receipt를 바꾸거나 completed row를 갱신·삭제·truncate하지 못하게 한다.
+- 실제 Postgres에서 Alembic head/ORM metadata 일치, partial/duplicate provenance 거부,
+  pending→completed 단일 전이와 terminal append-only를 검증했다.
+- 다음 checkpoint는 Map canonical collection snapshot client를 이 schema에 연결하고 내부 commit을
+  없애 import mutation·audit·receipt를 한 transaction으로 수렴시키는 것이다.
+
+## 2026-08-11 (codex) — T-VN-41: rebased Map service provenance 재고정
+
+- T-VN-41 Map branch가 T-VN-36 final-fence rebase를 반영한 뒤 service OpenAPI를 다시
+  대조했다. vendored bytes SHA-256 `53da6a3a1194b9de715e80ed69e016ae15885b81d2909bf2d128773d64f8b2f7`는
+  변하지 않았고, runtime이 읽는 provenance와 contract gate의 source revision만 Map
+  `9c5332bb7ede81ed199f7ad29bb0976a13eb8e5a`로 함께 올렸다.
+- 이 pin은 service vendor, capability generation, restore-fence command의 동일 source를
+  fail-closed로 묶는다. paired receipt는 Map consumer rollout에서 PinVi commit을 받은 뒤 갱신한다.
+
+## 2026-08-11 (codex) — T-VN-41 ABC 병렬 restore replay 영수증 수렴
+
+- 같은 `Idempotency-Key`의 병렬 restore runner가 Map의 최초 `201`과 exact replay `200`을
+  각각 받더라도, response status 차이만으로 실패하지 않게 했다. terminal receipt는 immutable
+  fence payload와 ETag가 같은지만 검증하고, 먼저 저장된 durable receipt를 두 실행 모두에 반환한다.
+- 실제 PostgreSQL 병렬 회귀는 두 POST가 같은 pre-CAS ETag를 보낸 뒤 하나의 terminal receipt로
+  수렴함을 검증한다. cache-target restore/command/consumer/worker 통합 49건도 통과했다.
+
+## 2026-08-11 (codex) — T-VN-41 ABC restore 응답 유실 영수증과 Map service 재벤더
+
+- Map `56f00e072a433bbe219909f5289d479ec16586d9`의 service OpenAPI를 exact bytes로 재벤더했다.
+  `contracts/kor-travel-map-service-provenance-v1.json`과 package resource, `.env.example`, wheel/Docker
+  provenance gate는 SHA-256 `53da6a3a1194b9de715e80ed69e016ae15885b81d2909bf2d128773d64f8b2f7`를 함께
+  가리킨다. restore-fence route의 최초 `201`과 exact Idempotency-Key replay `200`은 같은 JSON receipt
+  schema를 반환하도록 OpenAPI 계약과 consumer test에 함께 고정했다.
+- `pinvi-cache-target-restore-fence` one-shot command를 추가했다. sync disabled 상태에서 raw ETag와 expected
+  restore epoch로 fence CAS를 호출하고, **POST 전** DB receipt에 raw ETag/control tuple을 immutable하게
+  기록한다. Map commit 뒤 응답이 유실된 재실행은 동일 ETag/body를 다시 보내 `200` receipt를 받고, receipt와
+  재조회 stream의 epoch/control version/ETag/`fenced` 상태를 대조한다. ordinary consumer/writer는 이 command가
+  열지 않으며, 별도 reconciliation/cutover 성공 뒤에만 deployment control plane이 sync를 켤 수 있다.
+- 검증: cache-target transport·restore-fence·service contract·sync configuration unit 103건, changed source
+  strict mypy, ruff check/format을 통과했다. 다음은 PinVi draft PR push, Map paired receipt 갱신, 두 적대적
+  리뷰어의 고정 SHA 재검토와 n150 isolated rehearsal이다.
 ## 2026-08-18 (claude) — T-312: Hallmark 감사(웹 7표면) → 시스템 잠금 + 공개 표면 재설계
 
 - **감사(`hallmark audit`)**: apps/web 사용자 표면 6개(랜딩·인증·앱셸/대시보드·여행 상세·공유/지도/설정/파일/법무·
@@ -10186,3 +10494,13 @@ back to WSL test mirror workflow` 커밋 + origin push.
   첫 PR (`docs/sprints/SPRINT-1.md` 참고).
 - v1의 자산(Resend 통합, 소셜 로그인, Notice plan, RustFS Storage API 등)은 v2에서
   한 건씩 ADR로 결정하고 가져온다.
+
+## 2026-08-14 — T-VN-40 canonical importer response seal·관리 UI
+
+- `20260814_0055`가 terminal import response의 source tuple을 DB trigger로 결박하고 downgrade를
+  fail-close했다. 304 receipt는 동일 collection/revision/ETag/hash/count의 prior immutable proof를
+  재사용한 뒤 current canonical POI와 exact 대조한다.
+- Map canonical projection은 generic plan/POI PATCH·DELETE·reorder로 변경할 수 없도록 하고, admin
+  response에 source discriminator를 노출했다. canonical import API/UI typed contract와 Playwright
+  idempotency·409 recovery 시나리오를 추가했다.
+- paired Map service provenance revision을 `13e1852b8049ebd3e1ce6eb58fe16e208cea45e0`로 갱신했다.

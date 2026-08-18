@@ -72,8 +72,7 @@ _CLIENT_PATHS = [
     "/v1/public/festivals/monthly",
     "/v1/public/festivals/map-markers",
     "/v1/public/festivals/{feature_id}",
-    # 큐레이션 import는 user 표면이 아니라 admin `/v1/admin/features/curated/{id}/detail-snapshot`을
-    # 쓴다(ADR-049 — kor_travel_map PR #533이 public `*-copy` 표면을 폐지). user-contract gate 범위 밖.
+    # 큐레이션 import는 canonical service snapshot을 사용하며 user-contract gate 범위 밖이다.
 ]
 
 _CLIENT_QUERY_PARAMETERS: dict[str, set[str]] = {
@@ -121,9 +120,8 @@ _PUBLIC_API_KEY_SECURITY = [{"PublicApiKey": []}, {"ServiceToken": []}]
 # Map의 무해한 additive 변경마다 Pinvi가 false-red가 된다(Map migration 0066의
 # `external_component_id` 추가가 실제 사례). consumer는 "우리가 읽는 필드의 shape"만 본다.
 #
-# 공개 curated 표면(`PublicCurated*`/`PublicCuration*`)은 대상이 아니다 — user client가 호출하지
-# 않으며(ADR-049, Map PR #533이 public `*-copy` 폐지), Pinvi의 큐레이션 런타임 표면은 admin
-# `/v1/admin/features/curated/{id}/detail-snapshot`이라 T-VN-H07D(#815)가 소유한다.
+# 공개 curated 표면(`PublicCurated*`/`PublicCuration*`)은 대상이 아니다. PinVi의 큐레이션 런타임은
+# 별도 canonical service snapshot 계약이 소유한다.
 #
 # 참고(항상 None인 방어적 read — 대응 property가 user 표면에 없어 고정할 계약이 없다):
 #   * `dto.get("title")` — `_summary_from_kor_travel_map`/`_detail_from_kor_travel_map`/

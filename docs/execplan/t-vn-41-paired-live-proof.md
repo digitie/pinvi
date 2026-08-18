@@ -29,7 +29,9 @@ PR 단위로 분리한 실행 정본이다.
 3. command/consumer token을 교차한 negative probe가 source mutation과 consumer read/claim을
    모두 `403`으로 거부하고 원격 상태를 바꾸지 않는지 확인한다.
 4. 정상 역할 token으로 initial cutover/backfill과 snapshot Merkle/count/high-watermark 수렴을
-   확인한 뒤 sync를 격리 stack에서만 활성화한다.
+   확인한 뒤 sync를 **`PINVI_ENVIRONMENT=smoke` 격리 stack에서만** 활성화한다. production
+   runtime은 final C7 root enable boundary가 구현되기 전 `SYNC_ENABLED=true`를 startup에서
+   fail-close한다.
 5. UUID가 새로 발급된 `pinvi-cache-target-causal-canary --timeout-seconds 180`을 실행한다.
    PUT·event·ACK·cache generation·DELETE, pending/leased/dead=0, local applied/ACK/remote snapshot
    cursor의 exact equality, count/Merkle equality를 receipt로 확인한다.

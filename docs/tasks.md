@@ -30,6 +30,24 @@
 
 ## kor-travel-map compatible pair
 
+- [/] **T-VN-40 PinVi canonical curation consumer** — Map legacy curated-feature snapshot 대신
+      collection/item UUID service snapshot을 소비한다. bigint revision/strong ETag/item-set receipt,
+      actor-scoped import idempotency, plan/POI mutation+audit 단일 transaction을 먼저 완료하고 legacy
+      admin snapshot/client/source ID 열을 제거한 뒤 paired service receipt와 n150 live import를 닫는다.
+  - Docker Manager PR #174의 raw PinVi token→Map digest 경계는 draft 상태다. 병합 후 n150 canonical
+        import/backfill live acceptance와 exact paired receipt를 확인하기 전에는 receipt complete와 legacy
+        source column·route의 물리 삭제를 금지한다.
+- [/] **T-VN-41-ABC — cache target relay producer/consumer 결박** — Map queued refresh의 source event/outbox
+      원자화, restore exact replay `200` OpenAPI 선언, PinVi service artifact exact re-vendor와 restore-fence
+      one-shot command를 하나의 compatible pair로 고정한다. command는 sync disabled 상태에서 immutable
+      pre-CAS receipt로 응답 유실 exact replay까지 검증할 뿐 writer를 열지 않는다. Map/PinVi 두 draft PR의 exact SHA·artifact SHA와
+      적대적 재리뷰 뒤 n150 isolated rehearsal을 별도 완료 조건으로 둔다.
+  - rebase 후 후보 Map `e093e5555329234a539a3802566eb5666411b06f`와 service OpenAPI
+        `c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`를 PinVi
+        provenance에 재핀했다. paired CI·재리뷰·n150 isolated Live UI E2E가 모두 성공할 때까지
+        완료 receipt와 병합은 금지한다. production `SYNC_ENABLED=true`는 final C7 root enable
+        boundary 전까지 Settings validation이 거부하며, 격리 n150 live proof는 `smoke` stack에서만
+        실행한다.
 - [/] **T-VN-41-F — C6c 격리 compatible-pair 증명** — 서비스 전 단계이므로 production consumer enable,
       운영 데이터 보존·복원, 중간 DB 백업은 이 task의 범위가 아니다. 데이터가 필요하면 fixture 또는
       ETL 재실행으로 새로 만든다. 설계 정본은

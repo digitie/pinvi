@@ -120,6 +120,11 @@ import {
   McpTokenRevokeRequestSchema,
   McpTokenIssueResponseSchema,
   McpTokenSchema,
+  KorTravelMapCurationCollectionImportRequestSchema,
+  KorTravelMapCurationCollectionImportResponseSchema,
+  KorTravelMapCurationCutoverBackfillRequestSchema,
+  KorTravelMapCurationCutoverBackfillResponseSchema,
+  KorTravelMapCurationCutoverLegacyPreflightResponseSchema,
   NoticePlanCreateSchema,
   NoticePlanResponseSchema,
   NoticePlanUpdateSchema,
@@ -208,6 +213,12 @@ export type AdminCategoryMappingRollbackBody = z.infer<
 >;
 export type AdminNoticePlanCreateBody = z.infer<typeof NoticePlanCreateSchema>;
 export type AdminNoticePlanUpdateBody = z.infer<typeof NoticePlanUpdateSchema>;
+export type AdminKorTravelMapCurationCollectionImportBody = z.infer<
+  typeof KorTravelMapCurationCollectionImportRequestSchema
+>;
+export type AdminKorTravelMapCurationCutoverBackfillBody = z.infer<
+  typeof KorTravelMapCurationCutoverBackfillRequestSchema
+>;
 export type AdminNoticePoiCreateBody = z.infer<typeof NoticePoiCreateSchema>;
 export type AdminNoticePoiUpdateBody = z.infer<typeof NoticePoiUpdateSchema>;
 export type AdminNoticePoiReorderBody = z.infer<typeof NoticePoiReorderRequestSchema>;
@@ -468,6 +479,34 @@ export const adminApi = (client: ApiClient) => ({
       schema: z.array(NoticePlanResponseSchema),
     });
   },
+
+  importKorTravelMapCurationCollection: (
+    body: AdminKorTravelMapCurationCollectionImportBody,
+    idempotencyKey: string,
+  ) =>
+    client.request('/admin/notice-plans/imports/kor-travel-map-curation-collections', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
+      body: JSON.stringify(KorTravelMapCurationCollectionImportRequestSchema.parse(body)),
+      schema: KorTravelMapCurationCollectionImportResponseSchema,
+    }),
+
+  getKorTravelMapCurationCutoverLegacyPreflight: () =>
+    client.request('/admin/notice-plans/curation-cutover/legacy-preflight', {
+      method: 'GET',
+      schema: KorTravelMapCurationCutoverLegacyPreflightResponseSchema,
+    }),
+
+  backfillKorTravelMapCurationCutover: (
+    body: AdminKorTravelMapCurationCutoverBackfillBody,
+    idempotencyKey: string,
+  ) =>
+    client.request('/admin/notice-plans/curation-cutover/backfills', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
+      body: JSON.stringify(KorTravelMapCurationCutoverBackfillRequestSchema.parse(body)),
+      schema: KorTravelMapCurationCutoverBackfillResponseSchema,
+    }),
 
   createNoticePlan: (body: AdminNoticePlanCreateBody) =>
     client.request('/admin/notice-plans', {

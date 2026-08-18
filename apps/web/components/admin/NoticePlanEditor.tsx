@@ -88,6 +88,10 @@ function updateBody(draft: PlanDraft): NoticePlanUpdate {
   };
 }
 
+function canonicalUpdateBody(draft: PlanDraft): NoticePlanUpdate {
+  return { is_published: draft.is_published };
+}
+
 export function NoticePlanEditor({ planId }: { planId?: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -103,6 +107,7 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
   });
 
   const plan = planQuery.data ?? null;
+  const isCanonicalPlan = plan?.source_system === 'kor-travel-map';
 
   useEffect(() => {
     if (plan) setDraft(draftFromPlan(plan));
@@ -121,7 +126,11 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
     mutationFn: () =>
       isNew
         ? adminApi(apiClient).createNoticePlan(createBody(draft))
-        : adminApi(apiClient).updateNoticePlan(planId!, updateBody(draft), plan?.version),
+        : adminApi(apiClient).updateNoticePlan(
+            planId!,
+            isCanonicalPlan ? canonicalUpdateBody(draft) : updateBody(draft),
+            plan?.version,
+          ),
     onSuccess: async (saved) => {
       setError(null);
       setMessage('추천 여행을 저장했습니다.');
@@ -207,6 +216,11 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
       )}
 
       <form onSubmit={submit} className="space-y-4 rounded-sm border border-hairline bg-white p-4">
+        {isCanonicalPlan && (
+          <p className="rounded-sm bg-surface-soft px-3 py-2 text-sm text-muted">
+            Map에서 가져온 필드는 refresh로만 갱신됩니다. 여기에서는 공개 상태만 바꿀 수 있습니다.
+          </p>
+        )}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <label className="block text-xs text-muted">
             slug
@@ -214,7 +228,7 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
               value={draft.slug}
               onChange={(event) => update({ slug: event.target.value })}
               className={inputClass}
-              disabled={!isNew}
+              disabled={!isNew || isCanonicalPlan}
               data-testid="admin-notice-slug"
             />
           </label>
@@ -224,6 +238,7 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
               value={draft.category}
               onChange={(event) => update({ category: event.target.value })}
               className={inputClass}
+              disabled={isCanonicalPlan}
               data-testid="admin-notice-category"
             />
           </label>
@@ -233,6 +248,7 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
               value={draft.title}
               onChange={(event) => update({ title: event.target.value })}
               className={inputClass}
+              disabled={isCanonicalPlan}
               data-testid="admin-notice-title"
             />
           </label>
@@ -242,6 +258,7 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
               value={draft.summary}
               onChange={(event) => update({ summary: event.target.value })}
               className={`${inputClass} min-h-20`}
+              disabled={isCanonicalPlan}
               data-testid="admin-notice-summary"
             />
           </label>
@@ -251,6 +268,7 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
               value={draft.source_name}
               onChange={(event) => update({ source_name: event.target.value })}
               className={inputClass}
+              disabled={isCanonicalPlan}
             />
           </label>
           <label className="block text-xs text-muted">
@@ -259,6 +277,7 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
               value={draft.destination}
               onChange={(event) => update({ destination: event.target.value })}
               className={inputClass}
+              disabled={isCanonicalPlan}
               data-testid="admin-notice-destination"
             />
           </label>
@@ -269,6 +288,7 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
               value={draft.starts_on}
               onChange={(event) => update({ starts_on: event.target.value })}
               className={inputClass}
+              disabled={isCanonicalPlan}
             />
           </label>
           <label className="block text-xs text-muted">
@@ -278,6 +298,7 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
               value={draft.ends_on}
               onChange={(event) => update({ ends_on: event.target.value })}
               className={inputClass}
+              disabled={isCanonicalPlan}
             />
           </label>
           <label className="flex items-center gap-2 text-sm text-ink">
@@ -305,7 +326,7 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
             )}
             저장
           </button>
-          {!isNew && (
+          {!isNew && !isCanonicalPlan && (
             <button
               type="button"
               disabled={busy}
