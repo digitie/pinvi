@@ -468,7 +468,7 @@ export default function AdminUserDetailPage() {
   if (!user) {
     return (
       <AdminPage title="사용자 상세">
-        <p className="text-sm text-muted">불러오는 중...</p>
+        <p className="text-sm text-muted">불러오는 중…</p>
       </AdminPage>
     );
   }
@@ -552,7 +552,7 @@ export default function AdminUserDetailPage() {
               {user.roles.map((role) => (
                 <span
                   key={role}
-                  className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-white px-2 py-1 text-xs font-semibold text-ink"
+                  className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-canvas px-2 py-1 text-xs font-semibold text-ink"
                 >
                   <ShieldCheck className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
                   {role}
@@ -589,7 +589,7 @@ export default function AdminUserDetailPage() {
               type="button"
               disabled={roleBusy !== null || user.roles.includes(roleDraft)}
               onClick={() => void onRoleMutation('grant')}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-primary px-3 text-sm font-semibold text-white disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 text-sm font-semibold text-on-primary disabled:opacity-50"
               data-testid="admin-user-role-grant"
             >
               {roleBusy === 'grant' && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -722,7 +722,7 @@ export default function AdminUserDetailPage() {
                   lifecycleReason.trim().length < 1
                 }
                 onClick={() => void onLifecycleAction('anonymize')}
-                className="inline-flex h-10 items-center gap-2 rounded-sm bg-error-text px-3 text-sm font-semibold text-white disabled:opacity-50"
+                className="inline-flex h-10 items-center gap-2 rounded-sm bg-error-text px-3 text-sm font-semibold text-on-primary disabled:opacity-50"
                 data-testid="admin-user-anonymize"
               >
                 {lifecycleBusy === 'anonymize' ? (
@@ -778,7 +778,7 @@ export default function AdminUserDetailPage() {
                           className="rounded-sm border border-hairline px-2 py-1 text-xs disabled:opacity-50"
                           data-testid={`admin-user-session-revoke-${session.session_id}`}
                         >
-                          {sessionBusy === session.session_id ? '처리 중...' : '강제 로그아웃'}
+                          {sessionBusy === session.session_id ? '처리 중…' : '강제 로그아웃'}
                         </button>
                       </td>
                     </tr>
@@ -837,7 +837,7 @@ export default function AdminUserDetailPage() {
                 data-testid="admin-user-avatar-reason"
               />
               <div className="flex flex-wrap gap-2">
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-sm bg-primary px-3 py-2 text-sm font-semibold text-white">
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm font-semibold text-on-primary">
                   {avatarAction === 'upload' ? (
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                   ) : (
@@ -897,7 +897,7 @@ export default function AdminUserDetailPage() {
               type="button"
               disabled={avatarAction !== null}
               onClick={onSaveAvatarSettings}
-              className="inline-flex items-center justify-center gap-2 rounded-sm bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm font-semibold text-on-primary disabled:opacity-50"
               data-testid="admin-avatar-settings-save"
             >
               {avatarAction === 'settings' && (
@@ -960,7 +960,7 @@ export default function AdminUserDetailPage() {
               type="button"
               disabled={quotaBusy || quotaReason.trim().length < 1}
               onClick={onSaveQuota}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-primary px-3 text-sm font-semibold text-white disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 text-sm font-semibold text-on-primary disabled:opacity-50"
               data-testid="admin-user-file-quota-save"
             >
               {quotaBusy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
@@ -1005,8 +1005,8 @@ export default function AdminUserDetailPage() {
       </Section>
 
       {actionDialog && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md space-y-4 rounded-sm bg-white p-6">
+        <div className="fixed inset-0 flex items-center justify-center bg-scrim/50 p-4">
+          <div className="w-full max-w-md space-y-4 rounded-sm bg-canvas p-6">
             <h3 className="text-lg font-bold text-ink">
               {actionDialog === 'reveal-email'
                 ? '이메일 원본 보기'
@@ -1039,10 +1039,10 @@ export default function AdminUserDetailPage() {
                 type="button"
                 disabled={acting || reason.trim().length < 1}
                 onClick={onAction}
-                className="rounded-sm bg-primary px-3 py-2 text-sm text-white disabled:opacity-50"
+                className="rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm text-on-primary disabled:opacity-50"
                 data-testid="admin-user-action-confirm"
               >
-                {acting ? '처리 중...' : '확인'}
+                {acting ? '처리 중…' : '확인'}
               </button>
             </div>
           </div>

@@ -119,7 +119,7 @@ test.describe('admin backup staging live mutating e2e', () => {
     await throttle();
     await page.goto('/admin/backup');
     await expect(page.getByRole('heading', { name: 'Backup' })).toBeVisible();
-    await expect(page.getByText('불러오는 중...')).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByText('불러오는 중…')).toHaveCount(0, { timeout: 15_000 });
     await expect(page.getByTestId('admin-backup-error')).toHaveCount(0);
 
     const reason = `${reasonPrefix} ${new Date().toISOString()}`;
@@ -153,7 +153,7 @@ test.describe('admin backup staging live mutating e2e', () => {
     await throttle();
     await page.goto('/admin/audit');
     await expect(page.getByRole('heading', { name: '감사 로그' })).toBeVisible();
-    await expect(page.getByText('불러오는 중...')).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByText('불러오는 중…')).toHaveCount(0, { timeout: 15_000 });
     await expect(page.getByText('backup.snapshot').first()).toBeVisible();
     await expect(page.getByText(reason).first()).toBeVisible();
     await expectNoRawBackupLeaks(page);

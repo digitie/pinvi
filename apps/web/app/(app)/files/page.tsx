@@ -88,14 +88,14 @@ export default function MyFilesPage() {
       {loading ? (
         <div className="flex h-32 items-center justify-center text-sm text-muted">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-          불러오는 중...
+          불러오는 중…
         </div>
       ) : items.length === 0 ? (
-        <p className="rounded-sm border border-hairline bg-white p-5 text-sm text-muted">
+        <p className="rounded-sm border border-hairline bg-canvas p-5 text-sm text-muted">
           업로드한 파일이 없습니다.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-sm border border-hairline bg-white">
+        <div className="overflow-hidden rounded-sm border border-hairline bg-canvas">
           <ul className="divide-y divide-hairline" data-testid="my-file-list">
             {items.map((item) => (
               <li

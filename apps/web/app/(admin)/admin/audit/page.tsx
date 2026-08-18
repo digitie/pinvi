@@ -91,7 +91,7 @@ export default function AdminAuditPage() {
         <>
           <Link
             href="/admin/audit/location"
-            className="rounded-sm border border-hairline bg-white px-3 py-2 text-sm font-semibold text-ink"
+            className="rounded-sm border border-hairline bg-canvas px-3 py-2 text-sm font-semibold text-ink"
           >
             위치 감사
           </Link>
@@ -102,7 +102,7 @@ export default function AdminAuditPage() {
             className="rounded-sm border border-primary px-3 py-2 text-sm text-primary disabled:opacity-50"
             data-testid="admin-audit-verify"
           >
-            {verifying ? '검증 중...' : 'chain 검증'}
+            {verifying ? '검증 중…' : 'chain 검증'}
           </button>
         </>
       }

@@ -84,7 +84,7 @@ export default function AdminGrafanaPage() {
           <button
             type="button"
             onClick={refresh}
-            className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+            className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
             data-testid="admin-grafana-refresh"
           >
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
@@ -94,7 +94,7 @@ export default function AdminGrafanaPage() {
             href={grafanaUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex h-10 items-center gap-2 rounded-sm bg-primary px-3 text-sm font-semibold text-white"
+            className="inline-flex h-10 items-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 text-sm font-semibold text-on-primary"
           >
             <ExternalLink className="h-4 w-4" aria-hidden="true" />새 창
           </a>
@@ -129,8 +129,8 @@ export default function AdminGrafanaPage() {
                 }}
                 className={`h-9 rounded-sm border px-3 text-sm font-semibold ${
                   selected
-                    ? 'border-primary bg-primary text-white'
-                    : 'border-hairline bg-white text-ink hover:bg-surface-soft'
+                    ? 'border-cta bg-cta hover:bg-cta-hover text-on-primary'
+                    : 'border-hairline bg-canvas text-ink hover:bg-surface-soft'
                 }`}
                 data-testid={`admin-grafana-dashboard-${dashboard.key}`}
               >
@@ -141,7 +141,7 @@ export default function AdminGrafanaPage() {
         </div>
       </Section>
 
-      <section className="h-[calc(100vh-220px)] min-h-[560px] overflow-hidden rounded-sm border border-hairline bg-white">
+      <section className="h-[calc(100dvh-220px)] min-h-[560px] overflow-hidden rounded-sm border border-hairline bg-canvas">
         <iframe
           key={frameKey}
           src={grafanaUrl}

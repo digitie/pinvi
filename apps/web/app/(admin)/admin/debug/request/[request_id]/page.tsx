@@ -159,19 +159,19 @@ export default function AdminRequestTimelinePage() {
 
       {timeline && (
         <section className="grid gap-3 md:grid-cols-4" data-testid="admin-request-timeline-summary">
-          <div className="rounded-sm border border-hairline bg-white p-3">
+          <div className="rounded-sm border border-hairline bg-canvas p-3">
             <div className="text-xs uppercase text-muted">status</div>
             <div className="mt-1 font-mono text-sm">{timeline.status}</div>
           </div>
-          <div className="rounded-sm border border-hairline bg-white p-3">
+          <div className="rounded-sm border border-hairline bg-canvas p-3">
             <div className="text-xs uppercase text-muted">events</div>
             <div className="mt-1 font-mono text-sm">{timeline.events.length}</div>
           </div>
-          <div className="rounded-sm border border-hairline bg-white p-3">
+          <div className="rounded-sm border border-hairline bg-canvas p-3">
             <div className="text-xs uppercase text-muted">started</div>
             <div className="mt-1 text-sm">{formatDateTime(timeline.started_at)}</div>
           </div>
-          <div className="rounded-sm border border-hairline bg-white p-3">
+          <div className="rounded-sm border border-hairline bg-canvas p-3">
             <div className="text-xs uppercase text-muted">duration</div>
             <div className="mt-1 font-mono text-sm">
               {timeline.duration_ms === null ? '—' : `${timeline.duration_ms}ms`}

@@ -29,7 +29,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
               href={tab.href}
               className={
                 active
-                  ? 'h-9 shrink-0 rounded-sm bg-ink px-3 leading-9 font-semibold text-white'
+                  ? 'h-9 shrink-0 rounded-sm bg-ink px-3 leading-9 font-semibold text-canvas'
                   : 'h-9 shrink-0 rounded-sm px-3 leading-9 font-semibold text-ink hover:bg-surface-soft'
               }
               data-testid={`settings-tab-${tab.href.split('/').pop()}`}

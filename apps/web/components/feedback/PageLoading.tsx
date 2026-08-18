@@ -19,7 +19,7 @@ export function PageLoading({ label = '불러오는 중…', 'data-testid': test
         data-testid={testId}
       >
         <Loader2 className="size-6 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-        <span className="text-[14px]">{label}</span>
+        <span className="text-sm">{label}</span>
       </div>
     </div>
   );

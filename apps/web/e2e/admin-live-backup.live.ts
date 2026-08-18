@@ -90,7 +90,7 @@ test.describe('admin backup live read-only e2e', () => {
     await page.goto('/admin/backup');
     await expect(page.getByRole('heading', { name: 'Backup' })).toBeVisible();
     await expect(page.getByTestId('admin-table-scroll')).toBeVisible();
-    await expect(page.getByText('불러오는 중...')).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByText('불러오는 중…')).toHaveCount(0, { timeout: 15_000 });
     await expect(page.getByTestId('admin-backup-error')).toHaveCount(0);
 
     await page.getByTestId('admin-table-sort-filename').click();

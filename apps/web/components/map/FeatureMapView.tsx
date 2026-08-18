@@ -457,7 +457,7 @@ export function FeatureMapView({
             <div className="pointer-events-auto absolute left-3 top-3 w-72 max-w-[80vw]">
               <MapSearchBox onSelect={handleSearchSelect} />
               {notice && (
-                <p className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-sm">
+                <p className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card">
                   {notice}
                 </p>
               )}
@@ -467,7 +467,7 @@ export function FeatureMapView({
               onClick={() => void handleMyLocation()}
               aria-label="내 위치로 이동"
               data-testid="map-my-location"
-              className="pointer-events-auto absolute bottom-4 right-3 flex h-10 w-10 items-center justify-center rounded-full border border-hairline bg-white text-ink shadow-sm hover:bg-surface-soft"
+              className="pointer-events-auto absolute bottom-4 right-3 flex h-10 w-10 items-center justify-center rounded-full border border-hairline bg-canvas text-ink shadow-card hover:bg-surface-soft"
             >
               <LocateFixed className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -557,7 +557,7 @@ export function FeatureMapView({
                       type="button"
                       onClick={() => setDetailFeatureId(selected.featureId ?? null)}
                       data-testid="feature-map-detail-open"
-                      className="h-8 w-full rounded-sm bg-ink px-3 text-xs font-semibold text-white hover:bg-ink/90"
+                      className="h-8 w-full rounded-sm bg-ink px-3 text-xs font-semibold text-canvas hover:bg-ink/90"
                     >
                       상세보기
                     </button>
@@ -596,7 +596,7 @@ export function FeatureMapView({
               y={contextMenu.y}
               onClose={() => setContextMenu(null)}
             >
-              <div className="min-w-44 overflow-hidden rounded-sm border border-hairline bg-white py-1 text-sm shadow-md">
+              <div className="min-w-44 overflow-hidden rounded-sm border border-hairline bg-canvas py-1 text-sm shadow-card">
                 <button
                   type="button"
                   className="block w-full px-3 py-2 text-left text-ink hover:bg-surface-soft"

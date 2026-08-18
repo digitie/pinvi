@@ -56,7 +56,7 @@ export function TripCompanions({ tripId, companions, onChanged }: TripCompanions
 
   return (
     <section
-      className="space-y-3 rounded-sm border border-hairline bg-white p-4"
+      className="space-y-3 rounded-sm border border-hairline bg-canvas p-4"
       aria-label="동반자"
     >
       <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
@@ -93,7 +93,7 @@ export function TripCompanions({ tripId, companions, onChanged }: TripCompanions
           type="button"
           onClick={() => void invite()}
           disabled={inviting || !email.trim()}
-          className="inline-flex h-9 items-center gap-1 rounded-sm bg-primary px-3 text-sm font-semibold text-white disabled:opacity-50"
+          className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
         >
           {inviting ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />

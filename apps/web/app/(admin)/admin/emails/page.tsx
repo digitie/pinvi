@@ -47,7 +47,7 @@ function MetricBox({
   testId?: string;
 }) {
   return (
-    <div className="rounded-sm border border-hairline bg-white p-3" data-testid={testId}>
+    <div className="rounded-sm border border-hairline bg-canvas p-3" data-testid={testId}>
       <div className="text-xs text-muted">{label}</div>
       <div className="mt-1 truncate text-lg font-semibold text-ink">
         {typeof value === 'number' ? formatMetric(value) : (value ?? '-')}
@@ -151,7 +151,7 @@ export default function AdminEmailsPage() {
           className="rounded-sm border border-primary px-2 py-1 text-xs text-primary disabled:opacity-50"
           data-testid={`admin-email-resend-${r.email_id}`}
         >
-          {resendingId === r.email_id ? '...' : '재발송'}
+          {resendingId === r.email_id ? '…' : '재발송'}
         </button>
       ),
     },

@@ -161,7 +161,7 @@ export function TripWeatherSummary({
         aria-label={label}
         data-testid="trip-weather-status"
       >
-        <p className="text-[11px] text-muted">{statusText}</p>
+        <p className="text-xs text-muted">{statusText}</p>
       </section>
     );
   }
@@ -176,14 +176,14 @@ export function TripWeatherSummary({
       aria-label={label}
       data-testid="trip-weather-summary"
     >
-      <p className="text-[11px] font-semibold text-muted">{label}</p>
+      <p className="text-xs font-semibold text-muted">{label}</p>
       <div className="flex flex-wrap gap-1.5">
         {groups.map((group) => {
           const Icon = group.icon;
           return (
             <span
               key={group.key}
-              className="inline-flex max-w-full items-center gap-1 rounded-sm bg-white px-2 py-1 text-[11px] text-body"
+              className="inline-flex max-w-full items-center gap-1 rounded-sm bg-canvas px-2 py-1 text-xs text-body"
             >
               <Icon className="h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
               <span className="shrink-0 font-semibold text-ink">{group.label}</span>

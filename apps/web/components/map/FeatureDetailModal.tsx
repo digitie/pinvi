@@ -54,14 +54,14 @@ export function FeatureDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[70] flex items-end justify-center bg-scrim/50 p-0 sm:items-center sm:p-4"
       data-testid={`${testId}-backdrop`}
       {...backdropProps}
     >
       <div
         {...dialogProps}
         data-testid={testId}
-        className="flex max-h-[88vh] w-full flex-col overflow-hidden rounded-t-xl border border-hairline bg-white shadow-lg outline-none sm:max-h-[85vh] sm:max-w-lg sm:rounded-md"
+        className="flex max-h-[88vh] w-full flex-col overflow-hidden rounded-t-xl border border-hairline bg-canvas shadow-overlay outline-none sm:max-h-[85vh] sm:max-w-lg sm:rounded-md"
       >
         <header className="flex items-start justify-between gap-3 border-b border-hairline px-5 py-4">
           <div className="min-w-0">
@@ -93,7 +93,7 @@ export function FeatureDetailModal({
               data-testid={`${testId}-loading`}
             >
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              불러오는 중...
+              불러오는 중…
             </div>
           ) : error != null ? (
             <div

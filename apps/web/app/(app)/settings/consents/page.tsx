@@ -100,7 +100,7 @@ export default function ConsentsSettingsPage() {
       )}
 
       {loading ? (
-        <div className="flex min-h-32 items-center justify-center rounded-sm border border-hairline bg-white text-sm text-muted">
+        <div className="flex min-h-32 items-center justify-center rounded-sm border border-hairline bg-canvas text-sm text-muted">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
           불러오는 중…
         </div>
@@ -112,7 +112,7 @@ export default function ConsentsSettingsPage() {
             return (
               <li
                 key={meta.type}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-hairline bg-white p-4"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-hairline bg-canvas p-4"
               >
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 text-sm font-semibold text-ink">

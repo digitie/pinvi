@@ -14,6 +14,7 @@ import {
   isAllowedUploadContentType,
   putToPresigned,
 } from '@pinvi/domain';
+import { buttonClassName } from '@/components/ui/Button';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -249,7 +250,7 @@ export default function ProfilePage() {
     return (
       <div className="flex min-h-40 items-center justify-center text-sm text-muted">
         <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-        불러오는 중...
+        불러오는 중…
       </div>
     );
   }
@@ -278,7 +279,7 @@ export default function ProfilePage() {
       )}
 
       <section
-        className="space-y-3 rounded-sm border border-hairline bg-white p-4"
+        className="space-y-3 rounded-sm border border-hairline bg-canvas p-4"
         data-testid="profile-avatar-section"
       >
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -306,7 +307,7 @@ export default function ProfilePage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-sm bg-primary px-3 py-2 text-sm font-semibold text-white">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-sm bg-cta px-3 py-2 text-sm font-semibold text-on-primary hover:bg-cta-hover">
               {avatarAction === 'upload' ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
               ) : (
@@ -348,7 +349,7 @@ export default function ProfilePage() {
         return (
           <section
             key={provider}
-            className="space-y-3 rounded-sm border border-hairline bg-white p-4"
+            className="space-y-3 rounded-sm border border-hairline bg-canvas p-4"
           >
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -382,7 +383,7 @@ export default function ProfilePage() {
                   type="button"
                   onClick={() => onLinkProvider(provider)}
                   disabled={action !== null || !enabledProviders[provider]}
-                  className="inline-flex shrink-0 items-center gap-2 rounded-sm bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  className={buttonClassName({ size: 'sm', className: 'shrink-0' })}
                   data-testid={`${provider}-oauth-link`}
                 >
                   {action === linkAction ? (

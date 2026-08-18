@@ -75,7 +75,7 @@ export function TripDayControls({
           disabled={addDisabled}
           title={addDisabledReason ?? undefined}
           aria-describedby={addDisabledReason ? 'trip-day-add-disabled-reason' : undefined}
-          className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
+          className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           일자 추가
@@ -175,14 +175,14 @@ function DaySettingsDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/50 p-4"
       role="dialog"
       aria-modal="true"
       aria-label="일자 설정"
       data-testid="trip-day-title-dialog"
     >
       <form
-        className="w-full max-w-sm space-y-3 rounded-md border border-hairline bg-white p-5 shadow-lg"
+        className="w-full max-w-sm space-y-3 rounded-md border border-hairline bg-canvas p-5 shadow-overlay"
         onSubmit={(event) => {
           event.preventDefault();
           if (!unchanged) onSave();
@@ -227,8 +227,8 @@ function DaySettingsDialog({
             title="기본 색(일자 순서 팔레트)"
             className={
               color === null
-                ? 'flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-border-strong text-[10px] font-bold text-muted ring-2 ring-primary ring-offset-1'
-                : 'flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-border-strong text-[10px] font-bold text-muted'
+                ? 'flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-border-strong text-xs font-bold text-muted ring-2 ring-primary ring-offset-1'
+                : 'flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-border-strong text-xs font-bold text-muted'
             }
           >
             기본
@@ -264,7 +264,7 @@ function DaySettingsDialog({
           <button
             type="submit"
             disabled={busy || unchanged}
-            className="h-9 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+            className="h-9 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
           >
             저장
           </button>

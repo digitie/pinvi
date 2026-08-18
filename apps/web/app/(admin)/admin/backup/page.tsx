@@ -165,7 +165,7 @@ export default function AdminBackupPage() {
         <button
           type="button"
           onClick={() => void snapshotsQuery.refetch()}
-          className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
           disabled={snapshotsQuery.isFetching}
         >
           {snapshotsQuery.isFetching ? (
@@ -205,7 +205,7 @@ export default function AdminBackupPage() {
             type="button"
             onClick={createSnapshot}
             disabled={createMutation.isPending}
-            className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50 md:mt-auto"
+            className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-4 text-sm font-semibold text-on-primary disabled:opacity-50 md:mt-auto"
             data-testid="admin-backup-create"
           >
             {createMutation.isPending ? (

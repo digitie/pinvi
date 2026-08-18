@@ -2,7 +2,7 @@ import { MapView } from '@/components/map/MapView';
 
 export default function TripMapShellPage() {
   return (
-    <div className="flex min-h-[calc(100vh-120px)] flex-col gap-4">
+    <div className="flex min-h-[calc(100dvh-120px)] flex-col gap-4">
       <header className="flex flex-col gap-3 border-b border-hairline pb-4 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-normal text-primary">Pinvi</p>

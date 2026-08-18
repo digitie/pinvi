@@ -46,7 +46,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     pathParts[1] !== 'map-shell';
 
   return (
-    <div className="min-h-screen bg-surface-soft">
+    <div className="min-h-dvh bg-surface-soft">
       {!mobileTripDetail && (
         <header className="border-b border-hairline bg-canvas">
           <div className="flex w-full flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6">

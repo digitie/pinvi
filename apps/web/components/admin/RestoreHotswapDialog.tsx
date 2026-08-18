@@ -232,7 +232,7 @@ export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreH
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/50 p-4"
       data-testid="restore-hotswap-overlay"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) closeIfIdle();
@@ -246,7 +246,7 @@ export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreH
         aria-describedby="restore-hotswap-description"
         tabIndex={-1}
         onKeyDown={handleDialogKeyDown}
-        className="w-full max-w-2xl rounded-sm bg-white shadow-xl outline-none"
+        className="w-full max-w-2xl rounded-sm bg-canvas shadow-overlay outline-none"
         data-testid="restore-hotswap-dialog"
       >
         <div className="flex items-start justify-between gap-3 border-b border-hairline p-4">
@@ -384,7 +384,7 @@ export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreH
             <button
               type="submit"
               disabled={!canSubmit}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-error-text px-4 text-sm font-semibold text-white hover:bg-error-text-hover disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-error-text px-4 text-sm font-semibold text-on-primary hover:bg-error-text-hover disabled:opacity-50"
               data-testid="restore-submit"
             >
               {restoring ? (

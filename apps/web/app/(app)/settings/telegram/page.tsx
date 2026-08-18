@@ -8,6 +8,7 @@ import { apiClient } from '@/lib/api';
 import { Section } from '@/components/admin/AdminPage';
 import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
 import { FormField } from '@/components/forms/FormField';
+import { buttonClassName } from '@/components/ui/Button';
 
 function targetStatus(target: TelegramTarget): string {
   if (!target.is_enabled) return '비활성';
@@ -227,7 +228,7 @@ export default function TelegramTargetsSettingsPage() {
           <button
             type="submit"
             disabled={saving}
-            className="mt-7 inline-flex h-9 items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+            className={buttonClassName({ className: 'mt-7' })}
             data-testid="telegram-create"
           >
             {saving ? (

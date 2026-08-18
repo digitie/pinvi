@@ -301,10 +301,10 @@ export default function AdminMcpTokensPage() {
           <button
             type="submit"
             disabled={issueMutation.isPending}
-            className="mt-7 inline-flex h-9 items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+            className="mt-7 inline-flex h-9 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-4 text-sm font-semibold text-on-primary disabled:opacity-50"
           >
             <KeyRound className="h-4 w-4" aria-hidden="true" />
-            {issueMutation.isPending ? '발급 중...' : '발급'}
+            {issueMutation.isPending ? '발급 중…' : '발급'}
           </button>
         </form>
       </Section>

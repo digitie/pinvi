@@ -522,7 +522,7 @@ export default function AdminProviderSyncPage() {
               value={keyInput}
               onChange={(event) => setKeyInput(event.target.value)}
               className={`${inputClass} w-56 pl-7`}
-              placeholder="kma, visitkorea..."
+              placeholder="kma, visitkorea…"
               data-testid="admin-provider-sync-key"
             />
           </div>
@@ -671,7 +671,7 @@ export default function AdminProviderSyncPage() {
 
       {cancelJob && (
         <section
-          className="space-y-3 rounded-sm border border-hairline bg-white p-4 text-sm"
+          className="space-y-3 rounded-sm border border-hairline bg-canvas p-4 text-sm"
           data-testid="admin-provider-job-cancel-panel"
         >
           <div className="flex items-start justify-between gap-3">
@@ -701,7 +701,7 @@ export default function AdminProviderSyncPage() {
                 data-testid="admin-provider-job-cancel-reason"
               />
               <span
-                className="mt-1 block text-right text-[11px]"
+                className="mt-1 block text-right text-xs"
                 data-testid="admin-provider-job-cancel-reason-count"
               >
                 {cancelReason.length}/{CANCEL_REASON_MAX_LENGTH}
@@ -718,7 +718,7 @@ export default function AdminProviderSyncPage() {
                 data-testid="admin-provider-job-cancel-map-reason"
               />
               <span
-                className="mt-1 block text-right text-[11px]"
+                className="mt-1 block text-right text-xs"
                 data-testid="admin-provider-job-cancel-map-reason-count"
               >
                 {cancelMapReason.length}/{CANCEL_REASON_MAX_LENGTH}
@@ -736,7 +736,7 @@ export default function AdminProviderSyncPage() {
               <button
                 type="submit"
                 disabled={cancelMutation.isPending || jobPaginationLocked}
-                className="inline-flex items-center gap-1 rounded-sm border border-ink bg-ink px-3 py-1 text-sm text-white disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-sm border border-ink bg-ink px-3 py-1 text-sm text-canvas disabled:opacity-50"
                 data-testid="admin-provider-job-cancel-submit"
               >
                 <Ban className="h-3.5 w-3.5" aria-hidden="true" />

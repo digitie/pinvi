@@ -66,7 +66,7 @@ function MetricBox({
   testId?: string;
 }) {
   return (
-    <div className="rounded-sm border border-hairline bg-white p-3" data-testid={testId}>
+    <div className="rounded-sm border border-hairline bg-canvas p-3" data-testid={testId}>
       <div className="text-xs text-muted">{label}</div>
       <div className="mt-1 truncate text-lg font-semibold text-ink">
         {typeof value === 'number' ? formatMetric(value) : (value ?? '-')}
@@ -374,7 +374,7 @@ export default function AdminRetentionPage() {
             <button
               type="submit"
               disabled={dryRunMutation.isPending || !dryReason.trim()}
-              className="inline-flex h-10 items-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+              className="inline-flex h-10 items-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-4 text-sm font-semibold text-on-primary disabled:opacity-50"
               data-testid="admin-retention-dry-run"
             >
               {dryRunMutation.isPending ? (
@@ -418,7 +418,7 @@ export default function AdminRetentionPage() {
             <button
               type="submit"
               disabled={executeDisabled}
-              className="inline-flex h-10 items-center gap-2 rounded-sm bg-error-text px-4 text-sm font-semibold text-white disabled:opacity-50"
+              className="inline-flex h-10 items-center gap-2 rounded-sm bg-error-text px-4 text-sm font-semibold text-on-primary disabled:opacity-50"
               data-testid="admin-retention-execute"
             >
               {executeMutation.isPending ? (

@@ -46,7 +46,7 @@ describe('AdminTable', () => {
 
   it('loading 상태를 표시한다', () => {
     render(<AdminTable columns={COLUMNS} rows={[]} rowKey={(r) => r.id} loading />);
-    expect(screen.getByText('불러오는 중...')).toBeInTheDocument();
+    expect(screen.getByText('불러오는 중…')).toBeInTheDocument();
   });
 
   it('빈 상태 메시지를 표시한다', () => {

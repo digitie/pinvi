@@ -63,7 +63,7 @@ export function ConflictDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-scrim/50 p-4"
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -75,7 +75,7 @@ export function ConflictDialog({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="w-full max-w-2xl space-y-4 rounded-md border border-hairline bg-white p-5 shadow-lg outline-none"
+        className="w-full max-w-2xl space-y-4 rounded-md border border-hairline bg-canvas p-5 shadow-overlay outline-none"
       >
         <div className="flex items-start gap-3">
           <span className="mt-0.5 rounded-sm bg-error-bg p-2 text-error-text">
@@ -168,7 +168,7 @@ export function ConflictDialog({
             onClick={() => onApply(selectedKeys)}
             disabled={saving || !canApply}
             data-testid="conflict-apply-selected"
-            className="inline-flex h-9 items-center gap-1 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
             선택값 저장

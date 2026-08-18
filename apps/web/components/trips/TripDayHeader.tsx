@@ -37,7 +37,7 @@ export function TripDayHeader({ day, className, showSummary = true }: TripDayHea
           <span className="text-sm font-semibold text-ink">{dateLabel}</span>
           {day.out_of_range && (
             <span
-              className="inline-flex items-center gap-1 rounded-sm bg-error-bg px-1.5 py-0.5 text-[11px] font-semibold text-error-text"
+              className="inline-flex items-center gap-1 rounded-sm bg-error-bg px-1.5 py-0.5 text-xs font-semibold text-error-text"
               data-testid="trip-day-header-out-of-range"
               title="이 일자의 날짜가 여행 기간을 벗어났습니다."
             >
@@ -48,7 +48,7 @@ export function TripDayHeader({ day, className, showSummary = true }: TripDayHea
           {holidayNames.map((name) => (
             <span
               key={name}
-              className="inline-flex rounded-sm bg-error-bg px-1.5 py-0.5 text-[11px] font-semibold text-error-text"
+              className="inline-flex rounded-sm bg-error-bg px-1.5 py-0.5 text-xs font-semibold text-error-text"
               data-testid="trip-day-header-holiday"
             >
               {name}
@@ -86,14 +86,14 @@ function TripDayRiseSet({ day }: { day: TripDayHeaderProps['day'] }) {
             일몰 {sunset}
           </span>
         )}
-        {reference && <span className="text-muted-soft">{reference} 기준</span>}
+        {reference && <span className="text-muted">{reference} 기준</span>}
       </div>
     );
   }
   // 준비 중(pending_*)일 때만 안내. failed / success-무값 / null은 표시하지 않는다(잘못된 "준비 중" 방지).
   if (rs != null && rs.status.startsWith('pending')) {
     return (
-      <p className="mt-1 text-xs text-muted-soft" data-testid="trip-day-rise-set-pending">
+      <p className="mt-1 text-xs text-muted" data-testid="trip-day-rise-set-pending">
         일출·일몰 준비 중
       </p>
     );

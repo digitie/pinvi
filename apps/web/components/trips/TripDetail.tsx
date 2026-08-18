@@ -1059,7 +1059,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
   if (loading) {
     return (
-      <div className="flex min-h-64 items-center justify-center rounded-sm border border-hairline bg-white text-sm text-muted">
+      <div className="flex min-h-64 items-center justify-center rounded-sm border border-hairline bg-canvas text-sm text-muted">
         <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
         불러오는 중…
       </div>
@@ -1116,7 +1116,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           onClick={() => setActivePanel(tab.id)}
           className={
             active
-              ? 'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-sm bg-ink px-3 text-sm font-semibold text-white'
+              ? 'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-sm bg-ink px-3 text-sm font-semibold text-canvas'
               : 'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-sm px-3 text-sm font-semibold text-muted hover:bg-surface-soft hover:text-ink'
           }
         >
@@ -1126,7 +1126,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
             <span
               className={
                 active
-                  ? 'rounded-sm bg-white/20 px-1.5 text-xs text-white'
+                  ? 'rounded-sm bg-canvas/20 px-1.5 text-xs text-canvas'
                   : 'rounded-sm bg-surface-soft px-1.5 text-xs text-muted'
               }
             >
@@ -1144,10 +1144,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const detailPanelClassName = mobileWebLayout
     ? `${
         mobilePanelOpen ? 'flex' : 'hidden'
-      } absolute inset-y-0 left-0 z-30 w-[min(86vw,360px)] max-w-[calc(100%-2.5rem)] min-h-0 flex-col border-r border-hairline bg-white shadow-card`
+      } absolute inset-y-0 left-0 z-30 w-[min(86vw,360px)] max-w-[calc(100%-2.5rem)] min-h-0 flex-col border-r border-hairline bg-canvas shadow-card`
     : `${
         mobilePanelOpen ? 'flex' : 'hidden'
-      } absolute inset-y-0 left-0 z-30 w-[min(82vw,360px)] max-w-[calc(100%-3rem)] min-h-0 flex-col border-r border-hairline bg-white shadow-card lg:static lg:h-full lg:w-auto lg:max-w-none lg:shadow-none ${
+      } absolute inset-y-0 left-0 z-30 w-[min(82vw,360px)] max-w-[calc(100%-3rem)] min-h-0 flex-col border-r border-hairline bg-canvas shadow-card lg:static lg:h-full lg:w-auto lg:max-w-none lg:shadow-none ${
         desktopPanelCollapsed ? 'lg:hidden' : 'lg:flex'
       }`;
 
@@ -1156,7 +1156,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
       className={
         mobileWebLayout
           ? 'relative flex h-[100svh] min-h-[100svh] flex-col overflow-hidden bg-canvas'
-          : '-mx-4 -my-6 flex min-h-[calc(100vh-4rem)] flex-col bg-surface-soft md:-mx-6 md:-my-8'
+          : '-mx-4 -my-6 flex min-h-[calc(100svh-4rem)] flex-col bg-surface-soft md:-mx-6 md:-my-8'
       }
       data-testid="trip-detail-shell"
     >
@@ -1166,7 +1166,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           aria-label="여행 작업 패널"
           data-testid="trip-top-panel"
         >
-          <div className="pointer-events-auto flex h-12 items-center gap-1.5 rounded-sm border border-hairline bg-white/95 p-1.5 shadow-card backdrop-blur">
+          <div className="pointer-events-auto flex h-12 items-center gap-1.5 rounded-sm border border-hairline bg-canvas/95 p-1.5 shadow-card backdrop-blur">
             <Link
               href="/trips"
               className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink"
@@ -1178,11 +1178,11 @@ export function TripDetail({ tripId }: TripDetailProps) {
             <div className="min-w-0 flex-1 px-1">
               <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
                 <h1 className="truncate text-sm font-bold text-ink">{trip.title}</h1>
-                <span className="hidden shrink-0 rounded-sm bg-surface-soft px-1.5 py-0.5 text-[11px] font-semibold text-muted min-[390px]:inline">
+                <span className="hidden shrink-0 rounded-sm bg-surface-soft px-1.5 py-0.5 text-xs font-semibold text-muted min-[390px]:inline">
                   {STATUS_LABEL[trip.status]}
                 </span>
               </div>
-              <p className="mt-0.5 flex min-w-0 items-center gap-2 text-[11px] text-muted">
+              <p className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-muted">
                 <span className="shrink-0">
                   {view.days.length}일 · {totalPoiCount}곳
                 </span>
@@ -1213,7 +1213,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
               title={addDayTitle}
               aria-label={addDayLabel}
               aria-describedby={addDayDisabledReason ? 'trip-layer-add-disabled-reason' : undefined}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-ink text-white hover:bg-ink/90 disabled:opacity-50"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-ink text-canvas hover:bg-ink/90 disabled:opacity-50"
               data-testid="trip-add-layer"
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
@@ -1235,7 +1235,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           {showRealtimeBackoffNotice && (
             <p
               role="status"
-              className="pointer-events-auto inline-flex items-center gap-1.5 rounded-sm bg-white/95 px-3 py-2 text-xs text-muted shadow-card"
+              className="pointer-events-auto inline-flex items-center gap-1.5 rounded-sm bg-canvas/95 px-3 py-2 text-xs text-muted shadow-card"
               data-testid="trip-realtime-backoff-notice"
             >
               실시간 연결을 잠시 늦춰 다시 시도합니다.
@@ -1249,7 +1249,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
         </header>
       ) : (
         <header
-          className="z-20 border-b border-hairline bg-white"
+          className="z-20 border-b border-hairline bg-canvas"
           aria-label="여행 작업 패널"
           data-testid="trip-top-panel"
         >
@@ -1293,7 +1293,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 onClick={() => setDesktopPanelCollapsed((collapsed) => !collapsed)}
                 aria-controls="trip-detail-panel"
                 aria-expanded={!desktopPanelCollapsed}
-                className="hidden h-9 items-center gap-1.5 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft lg:inline-flex"
+                className="hidden h-9 items-center gap-1.5 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft lg:inline-flex"
               >
                 {desktopPanelCollapsed ? (
                   <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
@@ -1310,7 +1310,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 aria-describedby={
                   addDayDisabledReason ? 'trip-layer-add-disabled-reason' : undefined
                 }
-                className="inline-flex h-9 items-center gap-1.5 rounded-sm bg-ink px-3 text-sm font-semibold text-white hover:bg-ink/90 disabled:opacity-50"
+                className="inline-flex h-9 items-center gap-1.5 rounded-sm bg-ink px-3 text-sm font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
                 data-testid="trip-add-layer"
               >
                 <Plus className="h-4 w-4" aria-hidden="true" />
@@ -1319,14 +1319,14 @@ export function TripDetail({ tripId }: TripDetailProps) {
               <button
                 type="button"
                 onClick={() => setActivePanel('share')}
-                className="inline-flex h-9 items-center gap-1.5 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+                className="inline-flex h-9 items-center gap-1.5 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
               >
                 <Share2 className="h-4 w-4" aria-hidden="true" />
                 공유
               </button>
               <a
                 href="#trip-map-canvas"
-                className="inline-flex h-9 items-center gap-1.5 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+                className="inline-flex h-9 items-center gap-1.5 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
               >
                 <Eye className="h-4 w-4" aria-hidden="true" />
                 미리보기
@@ -1334,7 +1334,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
               <button
                 type="button"
                 onClick={() => setTripEditOpen(true)}
-                className="h-9 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+                className="h-9 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
               >
                 편집
               </button>
@@ -1424,7 +1424,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           data-testid="trip-detail-panel"
         >
           {mobileWebLayout && (
-            <div className="shrink-0 border-b border-hairline bg-white p-3">
+            <div className="shrink-0 border-b border-hairline bg-canvas p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-bold text-ink">{trip.title}</p>
@@ -1445,7 +1445,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 <button
                   type="button"
                   onClick={() => setTripEditOpen(true)}
-                  className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline bg-white px-2.5 text-xs font-semibold text-ink hover:bg-surface-soft"
+                  className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline bg-canvas px-2.5 text-xs font-semibold text-ink hover:bg-surface-soft"
                 >
                   <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                   편집
@@ -1459,7 +1459,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                   aria-describedby={
                     addDayDisabledReason ? 'trip-drawer-add-disabled-reason' : undefined
                   }
-                  className="inline-flex h-8 items-center gap-1 rounded-sm bg-ink px-2.5 text-xs font-semibold text-white hover:bg-ink/90 disabled:opacity-50"
+                  className="inline-flex h-8 items-center gap-1 rounded-sm bg-ink px-2.5 text-xs font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
                   data-testid="trip-add-day-drawer"
                 >
                   <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1527,7 +1527,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                         aria-describedby={
                           addDayDisabledReason ? 'trip-plan-add-disabled-reason' : undefined
                         }
-                        className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm bg-ink px-2.5 text-xs font-semibold text-white hover:bg-ink/90 disabled:opacity-50"
+                        className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm bg-ink px-2.5 text-xs font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
                         data-testid="trip-add-day-inline"
                       >
                         <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1570,8 +1570,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
                             key={day.day_index}
                             className={
                               active
-                                ? 'rounded-sm bg-white shadow-card ring-1 ring-primary/35'
-                                : 'rounded-sm bg-white'
+                                ? 'rounded-sm bg-canvas shadow-card ring-1 ring-primary/35'
+                                : 'rounded-sm bg-canvas'
                             }
                           >
                             <div className="flex items-start gap-3 p-3">
@@ -1597,7 +1597,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                       <span className="truncate text-sm font-bold text-ink">
                                         {dayLabel}
                                       </span>
-                                      <span className="shrink-0 rounded-sm bg-surface-soft px-1.5 py-0.5 text-[11px] font-semibold text-muted">
+                                      <span className="shrink-0 rounded-sm bg-surface-soft px-1.5 py-0.5 text-xs font-semibold text-muted">
                                         {day.pois.length}곳
                                       </span>
                                     </span>
@@ -1608,7 +1608,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                     </span>
                                     {day.out_of_range && (
                                       <span
-                                        className="mt-1 inline-flex w-fit items-center gap-1 rounded-sm bg-error-bg px-1.5 py-0.5 text-[11px] font-semibold text-error-text"
+                                        className="mt-1 inline-flex w-fit items-center gap-1 rounded-sm bg-error-bg px-1.5 py-0.5 text-xs font-semibold text-error-text"
                                         data-testid="trip-day-out-of-range"
                                         title="이 일자의 날짜가 여행 기간을 벗어났습니다."
                                       >
@@ -1618,7 +1618,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                     )}
                                     {dayHolidayLabel && (
                                       <span
-                                        className="mt-1 inline-flex w-fit rounded-sm bg-error-bg px-1.5 py-0.5 text-[11px] font-semibold text-error-text"
+                                        className="mt-1 inline-flex w-fit rounded-sm bg-error-bg px-1.5 py-0.5 text-xs font-semibold text-error-text"
                                         data-testid="trip-day-holiday"
                                       >
                                         {dayHolidayLabel}
@@ -1714,7 +1714,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                       className="flex w-full items-center gap-2 rounded-sm px-1 py-1 text-left hover:bg-surface-soft"
                                     >
                                       <span
-                                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
+                                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
                                         style={{ backgroundColor: paletteHex(poi.marker_color) }}
                                         aria-hidden="true"
                                       >
@@ -1726,7 +1726,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                     </button>
                                   ))}
                                 {day.pois.length > 4 && (
-                                  <p className="pl-7 text-[11px] text-muted">
+                                  <p className="pl-7 text-xs text-muted">
                                     외 {day.pois.length - 4}곳
                                   </p>
                                 )}
@@ -1826,7 +1826,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
             }
           >
             <div
-              className="pointer-events-auto rounded-sm border border-hairline bg-white/95 p-2 shadow-card backdrop-blur"
+              className="pointer-events-auto rounded-sm border border-hairline bg-canvas/95 p-2 shadow-card backdrop-blur"
               data-testid="trip-map-place-search"
             >
               {selectedDay ? (
@@ -1859,10 +1859,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 : 'pointer-events-none absolute bottom-3 left-3 z-10 flex flex-wrap gap-2 md:bottom-4 md:left-4'
             }
           >
-            <span className="rounded-sm bg-white/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
+            <span className="rounded-sm bg-canvas/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
               {visibleLayerCount}일 표시
             </span>
-            <span className="rounded-sm bg-white/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
+            <span className="rounded-sm bg-canvas/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
               장소 {mapPoints.length}곳
             </span>
           </div>

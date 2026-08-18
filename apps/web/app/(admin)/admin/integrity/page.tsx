@@ -542,7 +542,7 @@ export default function AdminIntegrityPage() {
 
       {selectedIssue && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/50 p-4"
           role="presentation"
           onClick={closeIssueActionDialog}
           data-testid="admin-integrity-action-overlay"
@@ -552,7 +552,7 @@ export default function AdminIntegrityPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="admin-integrity-action-title"
-            className="w-full max-w-lg rounded-sm border border-hairline bg-white p-4 shadow-xl"
+            className="w-full max-w-lg rounded-sm border border-hairline bg-canvas p-4 shadow-overlay"
             data-testid="admin-integrity-action-dialog"
             onClick={(event) => event.stopPropagation()}
             onKeyDown={handleDialogKeyDown}
@@ -620,7 +620,7 @@ export default function AdminIntegrityPage() {
                 <button
                   type="submit"
                   disabled={actionMutation.isPending}
-                  className="inline-flex items-center gap-1 rounded-sm border border-ink bg-ink px-3 py-1 text-sm text-white disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded-sm border border-ink bg-ink px-3 py-1 text-sm text-canvas disabled:opacity-50"
                   data-testid="admin-integrity-action-submit"
                 >
                   <IssueActionIcon action={selectedAction} />

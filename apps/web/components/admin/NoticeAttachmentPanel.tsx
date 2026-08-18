@@ -103,13 +103,13 @@ export function NoticeAttachmentPanel({
   const busy = uploadMutation.isPending || deleteMutation.isPending;
 
   return (
-    <section className="space-y-3 rounded-sm border border-hairline bg-white p-4">
+    <section className="space-y-3 rounded-sm border border-hairline bg-canvas p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
           <Paperclip className="h-4 w-4 text-primary" aria-hidden="true" />
           {title}
         </h2>
-        <label className="inline-flex h-9 cursor-pointer items-center gap-1 rounded-sm bg-primary px-3 text-sm font-semibold text-white disabled:opacity-50">
+        <label className="inline-flex h-9 cursor-pointer items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50">
           {uploadMutation.isPending ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           ) : (
@@ -143,7 +143,7 @@ export function NoticeAttachmentPanel({
       )}
 
       {attachmentsQuery.isLoading ? (
-        <p className="rounded-sm bg-surface-soft px-3 py-2 text-sm text-muted">불러오는 중...</p>
+        <p className="rounded-sm bg-surface-soft px-3 py-2 text-sm text-muted">불러오는 중…</p>
       ) : items.length === 0 ? (
         <p className="rounded-sm bg-surface-soft px-3 py-2 text-sm text-muted">첨부가 없습니다.</p>
       ) : (
