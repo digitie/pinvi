@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
 
 export interface ConflictField {
   key: string;
@@ -15,6 +17,8 @@ export interface ConflictDialogProps {
   description: string;
   fields: ConflictField[];
   saving?: boolean;
+  /** 충돌 해결 저장 실패 — 다이얼로그가 열린 채 남으므로 모달 안에서 알린다(T-315 5차 리뷰). */
+  error?: string | null;
   onApply: (selectedKeys: string[]) => void;
   onUseServer: () => void;
   onKeepEditing: () => void;
@@ -25,6 +29,7 @@ export function ConflictDialog({
   description,
   fields,
   saving = false,
+  error = null,
   onApply,
   onUseServer,
   onKeepEditing,
@@ -34,23 +39,6 @@ export function ConflictDialog({
 
   const selectedKeys = Array.from(selectedMineKeys);
   const canApply = selectedKeys.length > 0;
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-
-  // Move focus into the modal on open and let Escape dismiss it (a11y, T-290).
-  useEffect(() => {
-    dialogRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        onKeepEditing();
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onKeepEditing]);
 
   const selectField = (key: string, source: 'server' | 'mine') => {
     setSelectedMineKeys((current) => {
@@ -62,119 +50,117 @@ export function ConflictDialog({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-scrim/50 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-      data-testid="conflict-dialog"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onKeepEditing();
-      }}
-    >
-      <div
-        ref={dialogRef}
-        tabIndex={-1}
-        className="w-full max-w-2xl space-y-4 rounded-md border border-hairline bg-canvas p-5 shadow-overlay outline-none"
-      >
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 rounded-sm bg-error-bg p-2 text-error-text">
-            <AlertTriangle className="h-5 w-5" aria-hidden="true" />
+    // 중첩(편집 다이얼로그 위에 뜨는 충돌 해결) 시 최상단만 Escape/Tab을 처리하도록
+    // 프리미티브(useModalDialog의 modalStack)를 통해 뜬다 — 손수 만든 셸은 스택에 참여하지 못해
+    // 아래 다이얼로그의 focus trap이 이 다이얼로그를 키보드로 도달 불가능하게 만들었다.
+    <Dialog
+      open
+      onClose={onKeepEditing}
+      size="lg"
+      busy={saving}
+      title={
+        <span className="flex items-start gap-2" data-testid="conflict-title">
+          <span className="mt-0.5 shrink-0 rounded-sm bg-error-bg p-1 text-error-text">
+            <AlertTriangle className="size-4" aria-hidden="true" />
           </span>
-          <div className="min-w-0">
-            <h2 className="text-base font-bold text-ink" data-testid="conflict-title">
-              {title}
-            </h2>
-            <p className="mt-1 text-sm text-muted">{description}</p>
-          </div>
-        </div>
-
-        <div className="overflow-hidden rounded-sm border border-hairline">
-          <div className="grid grid-cols-[112px_minmax(0,1fr)_minmax(0,1fr)] bg-surface-soft text-xs font-semibold text-muted">
-            <span className="px-3 py-2">필드</span>
-            <span className="px-3 py-2">서버 값</span>
-            <span className="px-3 py-2">내 값</span>
-          </div>
-          <div className="divide-y divide-hairline">
-            {fields.map((field) => {
-              const mineSelected = selectedMineKeys.has(field.key);
-              return (
-                <div
-                  key={field.key}
-                  className="grid grid-cols-[112px_minmax(0,1fr)_minmax(0,1fr)] text-sm"
-                >
-                  <span className="px-3 py-3 text-xs font-semibold text-ink">{field.label}</span>
-                  <button
-                    type="button"
-                    aria-pressed={!mineSelected}
-                    onClick={() => selectField(field.key, 'server')}
-                    data-testid={`conflict-field-${field.key}-server`}
-                    className={
-                      mineSelected
-                        ? 'min-h-12 px-3 py-2 text-left text-muted hover:bg-surface-soft'
-                        : 'min-h-12 bg-primary/10 px-3 py-2 text-left font-semibold text-ink ring-1 ring-inset ring-primary'
-                    }
-                  >
-                    <span className="block break-words">{field.serverValue}</span>
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={mineSelected}
-                    onClick={() => selectField(field.key, 'mine')}
-                    data-testid={`conflict-field-${field.key}-mine`}
-                    className={
-                      mineSelected
-                        ? 'min-h-12 bg-primary/10 px-3 py-2 text-left font-semibold text-ink ring-1 ring-inset ring-primary'
-                        : 'min-h-12 px-3 py-2 text-left text-muted hover:bg-surface-soft'
-                    }
-                  >
-                    <span className="block break-words">{field.myValue}</span>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap justify-end gap-2">
-          <button
-            type="button"
-            onClick={onKeepEditing}
-            disabled={saving}
-            className="h-9 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
-          >
+          {title}
+        </span>
+      }
+      description={description}
+      testId="conflict-dialog"
+      footer={
+        <>
+          <Button variant="secondary" size="sm" onClick={onKeepEditing} disabled={saving}>
             직접 수정 계속
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onUseServer}
             disabled={saving}
             data-testid="conflict-use-server"
-            className="h-9 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
           >
             서버 값 사용
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => onApply(allMineKeys)}
             disabled={saving || fields.length === 0}
             data-testid="conflict-use-mine"
-            className="h-9 rounded-sm border border-primary px-3 text-sm font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
           >
             내 값 전체
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            size="sm"
             onClick={() => onApply(selectedKeys)}
-            disabled={saving || !canApply}
+            disabled={!canApply}
+            loading={saving}
             data-testid="conflict-apply-selected"
-            className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
           >
-            {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
             선택값 저장
-          </button>
+          </Button>
+        </>
+      }
+    >
+      {error && (
+        <p
+          role="alert"
+          data-testid="conflict-dialog-error"
+          className="mb-3 rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
+        >
+          {error}
+        </p>
+      )}
+      <div className="overflow-hidden rounded-sm border border-hairline">
+        <div className="grid grid-cols-1 sm:grid-cols-[minmax(72px,112px)_minmax(0,1fr)_minmax(0,1fr)] bg-surface-soft text-xs font-semibold text-muted">
+          <span className="px-3 py-2">필드</span>
+          <span className="px-3 py-2">서버 값</span>
+          <span className="px-3 py-2">내 값</span>
+        </div>
+        <div className="divide-y divide-hairline">
+          {fields.map((field) => {
+            const mineSelected = selectedMineKeys.has(field.key);
+            return (
+              <div
+                key={field.key}
+                className="grid grid-cols-1 sm:grid-cols-[minmax(72px,112px)_minmax(0,1fr)_minmax(0,1fr)] text-sm"
+              >
+                <span className="px-3 py-3 text-xs font-semibold text-ink">{field.label}</span>
+                <button
+                  type="button"
+                  aria-pressed={!mineSelected}
+                  onClick={() => selectField(field.key, 'server')}
+                  // 저장 중에는 선택도 얼린다 — 전송된 스냅샷과 화면이 갈리면 안 된다.
+                  disabled={saving}
+                  data-testid={`conflict-field-${field.key}-server`}
+                  className={
+                    mineSelected
+                      ? 'min-h-12 px-3 py-2 text-left text-muted hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent'
+                      : 'min-h-12 bg-surface-soft px-3 py-2 text-left font-semibold text-ink ring-1 ring-inset ring-ink disabled:cursor-not-allowed disabled:opacity-60'
+                  }
+                >
+                  <span className="block break-words">{field.serverValue}</span>
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={mineSelected}
+                  onClick={() => selectField(field.key, 'mine')}
+                  disabled={saving}
+                  data-testid={`conflict-field-${field.key}-mine`}
+                  className={
+                    mineSelected
+                      ? 'min-h-12 bg-surface-soft px-3 py-2 text-left font-semibold text-ink ring-1 ring-inset ring-ink disabled:cursor-not-allowed disabled:opacity-60'
+                      : 'min-h-12 px-3 py-2 text-left text-muted hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent'
+                  }
+                >
+                  <span className="block break-words">{field.myValue}</span>
+                </button>
+              </div>
+            );
+          })}
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

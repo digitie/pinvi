@@ -37,10 +37,17 @@ export interface UseModalDialogOptions {
   lockScroll?: boolean;
   /** 열릴 때 포커스를 옮길 대상. 생략하면 패널 자체로 이동한다. */
   initialFocusRef?: RefObject<HTMLElement | null>;
+  /**
+   * 닫힐 때 포커스를 돌려줄 대상(트리거 버튼). 직전 포커스 요소가 마운트 시점에 이미
+   * disabled였거나(공유 busy 플래그) 사라진 경우의 폴백이다 — 없으면 포커스가 body에 남는다.
+   */
+  returnFocusRef?: RefObject<HTMLElement | null>;
   /** aria-label로 쓸 제목 텍스트. 주면 `aria-labelledby` 대신 이걸 쓴다. */
   ariaLabel?: string;
   /** aria-labelledby로 쓸 heading의 id. 생략하면 훅이 만든 `titleId`를 쓴다. */
   ariaLabelledBy?: string;
+  /** aria-describedby로 쓸 설명 요소의 id. */
+  ariaDescribedBy?: string;
 }
 
 export interface ModalDialogA11y {
@@ -61,6 +68,7 @@ export interface ModalDialogA11y {
     'aria-modal': true;
     'aria-label'?: string;
     'aria-labelledby'?: string;
+    'aria-describedby'?: string;
   };
 }
 
@@ -80,6 +88,8 @@ const FOCUSABLE_SELECTOR = [
 // 중첩 모달에서 최상단 하나만 Escape/Tab에 반응하도록 활성 인스턴스를 쌓는다.
 // (document 리스너는 stopPropagation으로 서로 막을 수 없으므로 최상단 가드가 필요.)
 const modalStack: string[] = [];
+// 닫히는 모달이 포커스를 아래 모달로 넘길 수 있도록 id→패널을 들고 있는다.
+const modalPanels = new Map<string, HTMLElement>();
 
 export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y {
   const {
@@ -89,8 +99,10 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     closeOnBackdrop = true,
     lockScroll = true,
     initialFocusRef,
+    returnFocusRef,
     ariaLabel,
     ariaLabelledBy,
+    ariaDescribedBy,
   } = options;
 
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -105,13 +117,26 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     onCloseRef.current = onClose;
   }, [onClose]);
 
+  // initialFocusRef는 값이 아니라 ref로 읽는다 — 호출부가 상태에 따라 다른 ref를 넘겨도
+  // (예: 완료 화면에서 닫기 버튼) focus effect가 재실행되며 cleanup이 포커스를 모달 밖으로
+  // 되돌렸다 다시 들어오는 왕복이 생기지 않는다.
+  const initialFocusRefRef = useRef(initialFocusRef);
+  useEffect(() => {
+    initialFocusRefRef.current = initialFocusRef;
+  }, [initialFocusRef]);
+
+  const returnFocusRefRef = useRef(returnFocusRef);
+  useEffect(() => {
+    returnFocusRefRef.current = returnFocusRef;
+  }, [returnFocusRef]);
+
   // 포커스: 열릴 때 패널/초기 대상으로, 닫힐 때 직전 요소로 복원.
   useEffect(() => {
     if (!active) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
     // paint 이후 요소가 마운트된 상태에서 포커스하도록 rAF로 지연.
     const raf = window.requestAnimationFrame(() => {
-      (initialFocusRef?.current ?? dialogRef.current)?.focus();
+      (initialFocusRefRef.current?.current ?? dialogRef.current)?.focus();
       // 초기 대상이 포커스 불가(예: busy로 disabled된 버튼)라 포커스가 안 들어갔으면
       // 패널로 폴백해 항상 다이얼로그 안에 포커스가 놓이게 한다(WCAG 2.4.3).
       const panel = dialogRef.current;
@@ -121,11 +146,64 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     });
     return () => {
       window.cancelAnimationFrame(raf);
-      if (previouslyFocused && document.contains(previouslyFocused)) {
+      // previouslyFocused는 body이거나(트리거가 공유 busy로 이미 disabled된 채 열린 경우)
+      // 이미 사라졌을 수 있다. 그러면 (1) 남아 있는 최상단 모달 → (2) 호출부가 준 트리거 순으로
+      // 넘긴다. 어느 쪽도 없으면 body에 남는 것을 감수한다(그 이상은 훅이 알 수 없다).
+      const focusable = (el: HTMLElement | null | undefined): el is HTMLElement =>
+        Boolean(
+          el &&
+          el !== document.body &&
+          document.contains(el) &&
+          !(el as HTMLElement & { disabled?: boolean }).disabled &&
+          !el.hasAttribute('inert'),
+        );
+
+      if (focusable(previouslyFocused)) {
         previouslyFocused.focus();
+        return;
       }
+      const belowId = modalStack.filter((id) => id !== generatedTitleId).pop();
+      const below = belowId ? modalPanels.get(belowId) : null;
+      if (below && document.contains(below)) {
+        below.focus();
+        return;
+      }
+      const fallback = returnFocusRefRef.current?.current;
+      if (focusable(fallback)) fallback.focus();
     };
-  }, [active, initialFocusRef]);
+  }, [active, generatedTitleId]);
+
+  // 포커스 격납 — 안에 있던 요소가 disabled/언마운트되면(저장 중 버튼, 완료 화면 전환)
+  // 포커스가 body로 떨어져 aria-modal 밖에 놓인다. **이때 브라우저는 focusin을 쏘지 않으므로**
+  // focusout(다음 프레임에 확인) + focusin(명시적 외부 focus) 둘 다 듣고 최상단 모달이 회수한다.
+  useEffect(() => {
+    if (!active) return;
+    const recapture = () => {
+      if (modalStack[modalStack.length - 1] !== generatedTitleId) return;
+      const panel = dialogRef.current;
+      if (!panel) return;
+      const activeEl = document.activeElement;
+      if (activeEl instanceof Node && panel.contains(activeEl)) return;
+      panel.focus();
+    };
+    const onFocusOut = () => {
+      // focusout은 새 포커스가 자리 잡기 전에 온다 — 다음 프레임에 결과를 본다.
+      window.requestAnimationFrame(recapture);
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      const panel = dialogRef.current;
+      if (!panel) return;
+      const target = event.target;
+      if (target instanceof Node && panel.contains(target)) return;
+      recapture();
+    };
+    document.addEventListener('focusout', onFocusOut);
+    document.addEventListener('focusin', onFocusIn);
+    return () => {
+      document.removeEventListener('focusout', onFocusOut);
+      document.removeEventListener('focusin', onFocusIn);
+    };
+  }, [active, generatedTitleId]);
 
   // body 스크롤 잠금(참조 카운트).
   useEffect(() => {
@@ -145,9 +223,22 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
   }, [active, lockScroll]);
 
   // Escape 닫기 + Tab focus-trap. 최상단 모달만 반응한다.
+  // 스택 등록은 **마운트 생명주기에만** 연동한다 — closeOnEscape(=!busy) 같은 값이 바뀔 때
+  // 재등록되면 busy 토글만으로 스택 최상단이 뒤집혀 Escape/Tab이 엉뚱한 모달로 간다.
   useEffect(() => {
     if (!active) return;
     modalStack.push(generatedTitleId);
+    const panel = dialogRef.current;
+    if (panel) modalPanels.set(generatedTitleId, panel);
+    return () => {
+      const idx = modalStack.lastIndexOf(generatedTitleId);
+      if (idx !== -1) modalStack.splice(idx, 1);
+      modalPanels.delete(generatedTitleId);
+    };
+  }, [active, generatedTitleId]);
+
+  useEffect(() => {
+    if (!active) return;
     const handler = (event: KeyboardEvent) => {
       // 중첩 시 최상단 모달만 키를 처리(Escape가 전체를 닫거나 Tab을 서로 뺏는 것 방지).
       if (modalStack[modalStack.length - 1] !== generatedTitleId) return;
@@ -186,11 +277,7 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
       }
     };
     document.addEventListener('keydown', handler);
-    return () => {
-      document.removeEventListener('keydown', handler);
-      const idx = modalStack.lastIndexOf(generatedTitleId);
-      if (idx !== -1) modalStack.splice(idx, 1);
-    };
+    return () => document.removeEventListener('keydown', handler);
   }, [active, closeOnEscape, generatedTitleId]);
 
   const dialogProps: ModalDialogA11y['dialogProps'] = {
@@ -203,6 +290,9 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     dialogProps['aria-label'] = ariaLabel;
   } else {
     dialogProps['aria-labelledby'] = titleId;
+  }
+  if (ariaDescribedBy) {
+    dialogProps['aria-describedby'] = ariaDescribedBy;
   }
 
   return {

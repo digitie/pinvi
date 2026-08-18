@@ -307,12 +307,14 @@ test('Admin backup restore dialog가 restore POST 500 오류를 표시하고 재
   // retry is re-enabled: inputs editable again and submit clickable.
   await expect(page.getByTestId('restore-submit')).toBeEnabled();
   await expect(page.getByTestId('restore-close')).toBeEnabled();
-  await page.getByTestId('restore-submit').click();
-  await page.waitForResponse(
+  // 재시도 응답 waiter는 클릭 **전에** 등록한다 — mock 응답이 즉시 와서 클릭 뒤 등록하면 놓친다.
+  const retryResponse = page.waitForResponse(
     (response) =>
       response.url().includes('/admin/backup/restore-hotswap') &&
       response.request().method() === 'POST',
   );
+  await page.getByTestId('restore-submit').click();
+  await retryResponse;
   expect(restoreCalls).toBe(2);
 });
 

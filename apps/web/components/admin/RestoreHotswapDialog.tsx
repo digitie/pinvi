@@ -47,6 +47,10 @@ function phaseIcon(phase: AdminBackupRestorePhase) {
   return <span className="h-4 w-4 rounded-full border border-hairline" aria-hidden="true" />;
 }
 
+/* Hallmark · component: dialog(admin, destructive) · design-system: DESIGN.md
+ * `components/ui/Dialog`로 이관하지 않는다 — 이 다이얼로그는 body portal + 배경 `inert`/`aria-hidden`까지
+ * 거는 더 강한 격리를 쓰고, 프리미티브(useModalDialog)는 아직 inert/portal을 제공하지 않는다.
+ * 토큰(z-modal·shadow-overlay·44px 닫기)만 시스템에 맞춘다. 수렴은 T-316에서 훅에 inert/portal을 추가한 뒤. */
 export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreHotswapDialogProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const reasonRef = useRef<HTMLTextAreaElement | null>(null);
@@ -232,7 +236,7 @@ export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreH
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/50 p-4"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-scrim/50 p-4"
       data-testid="restore-hotswap-overlay"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) closeIfIdle();
@@ -246,7 +250,7 @@ export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreH
         aria-describedby="restore-hotswap-description"
         tabIndex={-1}
         onKeyDown={handleDialogKeyDown}
-        className="w-full max-w-2xl rounded-sm bg-canvas shadow-overlay outline-none"
+        className="max-h-[88dvh] w-full max-w-2xl overflow-auto rounded-md border border-hairline bg-canvas shadow-overlay outline-none"
         data-testid="restore-hotswap-dialog"
       >
         <div className="flex items-start justify-between gap-3 border-b border-hairline p-4">
@@ -266,7 +270,7 @@ export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreH
             type="button"
             onClick={closeIfIdle}
             disabled={restoring}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-surface-soft"
+            className="focus-ring inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink disabled:cursor-not-allowed"
             aria-label="닫기"
             data-testid="restore-close"
           >

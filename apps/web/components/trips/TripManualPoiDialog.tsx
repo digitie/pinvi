@@ -1,16 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, MapPin } from 'lucide-react';
 import { ApiError, geoApi } from '@pinvi/api-client';
 import { apiClient } from '@/lib/api';
 import { isAbortError } from '@/lib/abort';
-import { useDialogAutoFocus } from '@/lib/useDialogAutoFocus';
-import { useEscapeKey } from '@/lib/useEscapeKey';
 import { FormField } from '@/components/forms/FormField';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
 
 const DIALOG_LABEL = 'block text-sm font-semibold text-ink';
-const DIALOG_INPUT = 'h-9 px-2 focus:border-primary';
 
 export type GeoCandidate = Record<string, unknown>;
 
@@ -108,9 +106,6 @@ export function TripManualPoiDialog({
   const [geoError, setGeoError] = useState<string | null>(null);
   const [titleError, setTitleError] = useState<string | null>(null);
 
-  useEscapeKey(onClose);
-  useDialogAutoFocus(titleRef);
-
   useEffect(() => {
     const controller = new AbortController();
     setCandidate(null);
@@ -158,19 +153,31 @@ export function TripManualPoiDialog({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/50 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="POI 생성"
-      data-testid="manual-poi-dialog"
+    <Dialog
+      open
+      onClose={onClose}
+      title="POI 생성"
+      size="sm"
+      busy={saving}
+      initialFocusRef={titleRef}
+      testId="manual-poi-dialog"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={saving}>
+            취소
+          </Button>
+          <Button
+            onClick={() => void submit()}
+            disabled={geoLoading}
+            loading={saving}
+            data-testid="manual-poi-submit"
+          >
+            생성
+          </Button>
+        </>
+      }
     >
-      <div className="w-full max-w-md space-y-4 rounded-md border border-hairline bg-canvas p-5 shadow-overlay">
-        <div className="flex items-center gap-2">
-          <MapPin className="h-5 w-5 text-primary" aria-hidden="true" />
-          <h2 className="text-base font-bold text-ink">POI 생성</h2>
-        </div>
-
+      <div className="space-y-4">
         <div className="rounded-sm bg-surface-soft px-3 py-2 text-xs text-muted">
           <p className="font-semibold text-ink">{dayLabel}</p>
           <p className="mt-1 font-mono">
@@ -181,10 +188,11 @@ export function TripManualPoiDialog({
         <div className="space-y-1">
           <p className={DIALOG_LABEL}>주소</p>
           <p
-            className="min-h-9 rounded-sm border border-hairline bg-canvas px-3 py-2 text-sm text-body"
+            className="min-h-11 rounded-sm border border-hairline bg-canvas px-3 py-2 text-sm text-body"
             data-testid="manual-poi-address"
+            aria-busy={geoLoading || undefined}
           >
-            {geoLoading ? '주소 확인 중' : (addressLabel ?? '주소 결과 없음')}
+            {geoLoading ? '주소 확인 중…' : (addressLabel ?? '주소 결과 없음')}
           </p>
           {geoError && <p className="text-xs text-error-text">{geoError}</p>}
         </div>
@@ -194,7 +202,6 @@ export function TripManualPoiDialog({
           id="manual-poi-title"
           label="이름"
           labelClassName={DIALOG_LABEL}
-          className={DIALOG_INPUT}
           value={title}
           onChange={(event) => {
             setTitle(event.target.value);
@@ -205,32 +212,11 @@ export function TripManualPoiDialog({
         />
 
         {error && (
-          <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">
+          <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text">
             {error}
           </p>
         )}
-
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="h-9 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            onClick={() => void submit()}
-            disabled={saving || geoLoading}
-            data-testid="manual-poi-submit"
-            className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
-          >
-            {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-            생성
-          </button>
-        </div>
       </div>
-    </div>
+    </Dialog>
   );
 }
