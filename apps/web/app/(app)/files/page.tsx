@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Download, Loader2, Trash2 } from 'lucide-react';
+import { Download, Trash2 } from 'lucide-react';
 import { ApiError, authApi } from '@pinvi/api-client';
 import type { AttachmentLibraryItem } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { ButtonLink, buttonClassName } from '@/components/ui/Button';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -93,20 +94,66 @@ export default function MyFilesPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold text-ink">파일</h1>
-        <p className="mt-1 text-sm text-muted">{total.toLocaleString('ko-KR')}개</p>
+        <p className="mt-1 text-sm text-muted">
+          {total.toLocaleString('ko-KR')}개
+          {!loading && total > items.length
+            ? ` · 최근 ${items.length.toLocaleString('ko-KR')}개 표시`
+            : ''}
+        </p>
       </div>
 
-      {error && <p className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text">{error}</p>}
+      {error && (
+        // 실패는 원인 + 회복 행동(DESIGN.md 상태 UI). role=alert로 스크린리더에도 전달한다.
+        <p
+          role="alert"
+          className="flex flex-wrap items-center gap-3 rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
+          data-testid="my-file-error"
+        >
+          <span className="min-w-0">{error}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setLoading(true);
+              void reload()
+                .catch((err) =>
+                  setError(err instanceof ApiError ? err.message : '파일을 불러오지 못했습니다.'),
+                )
+                .finally(() => setLoading(false));
+            }}
+            className={buttonClassName({ variant: 'secondary', size: 'sm' })}
+          >
+            다시 시도
+          </button>
+        </p>
+      )}
 
       {loading ? (
-        <div className="flex h-32 items-center justify-center text-sm text-muted">
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-          불러오는 중…
+        // 형태가 정해진 목록은 spinner가 아니라 skeleton.
+        <div
+          className="overflow-hidden rounded-sm border border-hairline bg-canvas"
+          aria-busy="true"
+        >
+          <span className="sr-only">파일 목록을 불러오는 중…</span>
+          <ul className="m-0 list-none divide-y divide-hairline p-0">
+            {[0, 1, 2].map((row) => (
+              <li key={row} className="animate-pulse space-y-2 px-4 py-4">
+                <div className="h-4 w-2/5 rounded-sm bg-surface-strong" />
+                <div className="h-3 w-3/5 rounded-sm bg-surface-soft" />
+              </li>
+            ))}
+          </ul>
         </div>
       ) : items.length === 0 ? (
-        <p className="rounded-sm border border-hairline bg-canvas p-5 text-sm text-muted">
-          업로드한 파일이 없습니다.
-        </p>
+        <div className="rounded-sm border border-hairline bg-canvas p-6">
+          <p className="text-sm font-semibold text-ink">업로드한 파일이 없습니다.</p>
+          <p className="mt-1 text-sm text-muted">
+            여행 상세에서 사진·영수증을 올리면 여기에 모입니다.
+          </p>
+          <ButtonLink href="/trips" variant="secondary" className="mt-4">
+            여행으로 가기
+          </ButtonLink>
+        </div>
       ) : (
         <div className="overflow-hidden rounded-sm border border-hairline bg-canvas">
           <ul className="divide-y divide-hairline" data-testid="my-file-list">
@@ -130,7 +177,7 @@ export default function MyFilesPage() {
                     onClick={() => void download(item.attachment_id)}
                     disabled={busyId === item.attachment_id}
                     aria-label="다운로드"
-                    className="rounded-sm p-2 text-muted hover:bg-surface-soft hover:text-ink disabled:opacity-50"
+                    className="focus-ring inline-flex size-11 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink disabled:opacity-50"
                   >
                     <Download className="h-4 w-4" aria-hidden="true" />
                   </button>
@@ -139,7 +186,7 @@ export default function MyFilesPage() {
                     onClick={(event) => requestRemove(item, event.currentTarget)}
                     disabled={busyId === item.attachment_id}
                     aria-label="삭제"
-                    className="rounded-sm p-2 text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
+                    className="focus-ring inline-flex size-11 items-center justify-center rounded-sm text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
                   >
                     <Trash2 className="h-4 w-4" aria-hidden="true" />
                   </button>

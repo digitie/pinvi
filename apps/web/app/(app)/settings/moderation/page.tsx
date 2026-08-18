@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Gavel, Loader2, RefreshCw, RotateCcw, Send } from 'lucide-react';
 import { ApiError, userApi } from '@pinvi/api-client';
 import type {
@@ -8,8 +8,7 @@ import type {
   ContentReportRecord,
   ContentReportTargetType,
 } from '@pinvi/schemas';
-import { Section } from '@/components/admin/AdminPage';
-import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
+import { SettingsList, SettingsSection } from '@/components/app/SettingsSurface';
 import { FormField } from '@/components/forms/FormField';
 import { FormTextArea } from '@/components/forms/FormTextArea';
 import { FormSelect } from '@/components/forms/FormSelect';
@@ -157,52 +156,6 @@ export default function ModerationSettingsPage() {
     }
   };
 
-  const columns = useMemo<DataTableColumn<ContentReportRecord>[]>(
-    () => [
-      {
-        key: 'target',
-        header: '대상',
-        cell: (row) => (
-          <div>
-            <div className="font-mono text-xs">{row.target_id}</div>
-            <div className="text-xs text-muted">{row.target_type}</div>
-          </div>
-        ),
-      },
-      { key: 'reason', header: '사유', cell: (row) => row.reason_code },
-      { key: 'status', header: '상태', cell: (row) => row.status },
-      { key: 'created', header: '접수', cell: (row) => formatDateTime(row.created_at) },
-      {
-        key: 'summary',
-        header: '처리',
-        cell: (row) => row.resolution_summary ?? row.appeal_summary ?? '-',
-      },
-      {
-        key: 'actions',
-        header: '',
-        width: '80px',
-        cell: (row) =>
-          APPEALABLE.has(row.status) ? (
-            <button
-              type="button"
-              title="이의제기"
-              aria-label={`${row.report_id} 신고 이의제기`}
-              onClick={() => {
-                setAppealReportId(row.report_id);
-                setAppealReason(row.appeal_summary ?? '');
-              }}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-hairline text-ink hover:bg-surface-soft"
-            >
-              <RotateCcw className="h-4 w-4" aria-hidden="true" />
-            </button>
-          ) : (
-            '-'
-          ),
-      },
-    ],
-    [],
-  );
-
   return (
     <div className="space-y-6">
       <header>
@@ -221,7 +174,7 @@ export default function ModerationSettingsPage() {
         </p>
       )}
 
-      <Section title="새 신고">
+      <SettingsSection title="새 신고">
         <form onSubmit={onCreate} className="grid gap-3 lg:grid-cols-[180px_minmax(0,1fr)]">
           <FormSelect
             id="settings-moderation-target-type"
@@ -310,10 +263,10 @@ export default function ModerationSettingsPage() {
             접수
           </button>
         </form>
-      </Section>
+      </SettingsSection>
 
       {appealReportId && (
-        <Section title="이의제기">
+        <SettingsSection title="이의제기">
           <form onSubmit={onAppeal} className="grid gap-3">
             <div className="font-mono text-xs text-muted">{appealReportId}</div>
             <FormTextArea
@@ -348,10 +301,10 @@ export default function ModerationSettingsPage() {
               </button>
             </div>
           </form>
-        </Section>
+        </SettingsSection>
       )}
 
-      <Section title="신고 목록">
+      <SettingsSection title="신고 목록">
         <div className="mb-3 flex justify-end">
           <button
             type="button"
@@ -367,14 +320,45 @@ export default function ModerationSettingsPage() {
             새로고침
           </button>
         </div>
-        <DataTable
-          columns={columns}
-          rows={reports}
+        <SettingsList
+          items={reports}
           loading={loading}
+          aria-label="신고 목록"
           rowKey={(row) => row.report_id}
           rowTestId={(row) => `settings-moderation-row-${row.report_id}`}
+          empty="접수한 신고가 없습니다."
+          renderRow={(row) => (
+            <>
+              <p className="font-mono text-sm text-ink">{row.target_id}</p>
+              <p className="mt-1 text-sm text-muted">
+                {row.target_type} · {row.reason_code} · {row.status} · 접수{' '}
+                {formatDateTime(row.created_at)}
+              </p>
+              {(row.resolution_summary ?? row.appeal_summary) && (
+                <p className="mt-1 text-sm text-body">
+                  {row.resolution_summary ?? row.appeal_summary}
+                </p>
+              )}
+            </>
+          )}
+          renderActions={(row) =>
+            APPEALABLE.has(row.status) ? (
+              <button
+                type="button"
+                title="이의제기"
+                aria-label={`${row.report_id} 신고 이의제기`}
+                onClick={() => {
+                  setAppealReportId(row.report_id);
+                  setAppealReason(row.appeal_summary ?? '');
+                }}
+                className="focus-ring inline-flex size-11 items-center justify-center rounded-sm text-ink hover:bg-surface-soft"
+              >
+                <RotateCcw className="h-4 w-4" aria-hidden="true" />
+              </button>
+            ) : null
+          }
         />
-      </Section>
+      </SettingsSection>
     </div>
   );
 }

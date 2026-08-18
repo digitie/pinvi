@@ -1,11 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ClipboardCheck, Loader2, RefreshCw, Send, XCircle } from 'lucide-react';
 import { ApiError, userApi } from '@pinvi/api-client';
 import type { DsrRequestRecord, DsrRequestType } from '@pinvi/schemas';
-import { Section } from '@/components/admin/AdminPage';
-import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
+import { SettingsList, SettingsSection } from '@/components/app/SettingsSurface';
 import { FormField } from '@/components/forms/FormField';
 import { FormSelect } from '@/components/forms/FormSelect';
 import { FormTextArea } from '@/components/forms/FormTextArea';
@@ -130,62 +129,6 @@ export default function DsrSettingsPage() {
     [load],
   );
 
-  const columns = useMemo<DataTableColumn<DsrRequestRecord>[]>(
-    () => [
-      {
-        key: 'request',
-        header: '요청',
-        cell: (row) => (
-          <div>
-            <div className="font-mono text-xs">{row.request_id}</div>
-            <div className="max-w-xl truncate text-xs text-muted">{row.request_summary}</div>
-          </div>
-        ),
-      },
-      { key: 'type', header: '유형', cell: (row) => row.request_type },
-      { key: 'status', header: '상태', cell: (row) => row.status },
-      {
-        key: 'due',
-        header: '마감',
-        cell: (row) => (
-          <span className={row.response_overdue ? 'text-error-text' : undefined}>
-            {formatDateTime(row.due_at)}
-          </span>
-        ),
-      },
-      {
-        key: 'result',
-        header: '결과',
-        cell: (row) => row.result_summary ?? row.rejection_reason ?? '-',
-      },
-      {
-        key: 'actions',
-        header: '',
-        width: '80px',
-        cell: (row) =>
-          OPEN_STATUSES.has(row.status) ? (
-            <button
-              type="button"
-              title="철회"
-              aria-label={`${row.request_id} 요청 철회`}
-              disabled={pendingWithdraw === row.request_id}
-              onClick={() => void onWithdraw(row.request_id)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-hairline text-error-text disabled:opacity-40"
-            >
-              {pendingWithdraw === row.request_id ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <XCircle className="h-4 w-4" aria-hidden="true" />
-              )}
-            </button>
-          ) : (
-            '-'
-          ),
-      },
-    ],
-    [onWithdraw, pendingWithdraw],
-  );
-
   return (
     <div className="space-y-6">
       <header>
@@ -204,7 +147,7 @@ export default function DsrSettingsPage() {
         </p>
       )}
 
-      <Section title="새 요청">
+      <SettingsSection title="새 요청">
         <form onSubmit={onCreate} className="grid gap-3 lg:grid-cols-[180px_minmax(0,1fr)]">
           <FormSelect
             id="settings-dsr-type"
@@ -282,9 +225,9 @@ export default function DsrSettingsPage() {
             접수
           </button>
         </form>
-      </Section>
+      </SettingsSection>
 
-      <Section title="요청 목록">
+      <SettingsSection title="요청 목록">
         <div className="mb-3 flex justify-end">
           <button
             type="button"
@@ -300,14 +243,50 @@ export default function DsrSettingsPage() {
             새로고침
           </button>
         </div>
-        <DataTable
-          columns={columns}
-          rows={requests}
+        <SettingsList
+          items={requests}
           loading={loading}
+          aria-label="DSR 요청 목록"
           rowKey={(row) => row.request_id}
           rowTestId={(row) => `settings-dsr-row-${row.request_id}`}
+          empty="접수한 요청이 없습니다. 위 폼에서 열람·정정·삭제를 요청할 수 있습니다."
+          renderRow={(row) => (
+            <>
+              <p className="text-base font-semibold text-ink">{row.request_summary}</p>
+              <p className="mt-1 font-mono text-xs text-muted">{row.request_id}</p>
+              <p className="mt-1 text-sm text-muted">
+                {row.request_type} · {row.status} · 마감{' '}
+                <span className={row.response_overdue ? 'text-error-text' : undefined}>
+                  {formatDateTime(row.due_at)}
+                </span>
+              </p>
+              {(row.result_summary ?? row.rejection_reason) && (
+                <p className="mt-1 text-sm text-body">
+                  {row.result_summary ?? row.rejection_reason}
+                </p>
+              )}
+            </>
+          )}
+          renderActions={(row) =>
+            OPEN_STATUSES.has(row.status) ? (
+              <button
+                type="button"
+                title="철회"
+                aria-label={`${row.request_id} 요청 철회`}
+                disabled={pendingWithdraw === row.request_id}
+                onClick={() => void onWithdraw(row.request_id)}
+                className="focus-ring inline-flex size-11 items-center justify-center rounded-sm text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
+              >
+                {pendingWithdraw === row.request_id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <XCircle className="h-4 w-4" aria-hidden="true" />
+                )}
+              </button>
+            ) : null
+          }
         />
-      </Section>
+      </SettingsSection>
     </div>
   );
 }

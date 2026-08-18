@@ -112,12 +112,14 @@
         사유 입력 Dialog(저장소 전역 native dialog 0건), e2e의 `page.on('dialog')` 5곳 재작성.
   - [x] **(3/4) TripDetail** — 4겹 컨테인먼트(패널→일자 카드→POI 카드→tinted 첨부/날씨, 320px에서
         유효 폭 −35.3% 실측) 해체와 중복 컨트롤(일자 추가 4곳·개수 배지 5곳·공유 2곳) 정리.
-  - [/] **(4/4) 나머지 표면** — `FeatureMapView` 상시 오류 dl 삭제(모바일에서 지도의 33% 점유) +
-    조건부 오류/로딩/빈 상태, `MapView` 디버그 dl 삭제, nav '지도'를 데모 셸 대신 실제 탐색
-    지도(`/map`)로 교정, DSR/신고 raw JSON textarea → 일반 폼 필드(서버 자유형 record 위에 프런트
-    계약을 세우고 전송 리터럴은 보존), 법무 measure 65ch·본문 16px·초안 배너 중립화·공개 chrome
-    (`app/legal/layout.tsx`, 문서 간 이동 링크 0개 해소)까지 완료. 남은 것: 설정 admin chrome 분리
-    (`SettingsHeader`), 파일 화면 상태 UI(skeleton·회복 행동·44px).
+  - [x] **(4/4) 나머지 표면** — `FeatureMapView` 상시 오류 dl 삭제(모바일에서 지도의 33% 점유) +
+        조건부 오류/로딩/빈 상태, `MapView` 디버그 dl 삭제, nav '지도'를 데모 셸 대신 실제 탐색
+        지도(`/map`)로 교정, DSR/신고 raw JSON textarea → 일반 폼 필드(서버 자유형 record 위에 프런트
+        계약을 세우고 전송 리터럴은 보존), 법무 measure 65ch·본문 16px·초안 배너 중립화·공개 chrome
+        (`app/legal/layout.tsx`, 문서 간 이동 링크 0개 해소), 설정 4쪽의 admin chrome 분리
+        (`components/app/SettingsSurface`: uppercase eyebrow h2·12px 표 헤더·카드 안 카드 제거,
+        표 → hairline row 리스트, skeleton/빈 상태 CTA), 파일 화면 상태 UI(skeleton·회복 행동·44px·
+        100건 절단 표시).
 - [ ] **T-317** — `eslint-plugin-tailwindcss` 도입(토큰 우회 재발 방지). T-313에서 후속으로 분리했다.
 
 ## 모바일
