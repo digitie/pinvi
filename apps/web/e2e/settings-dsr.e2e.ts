@@ -84,10 +84,11 @@ test('사용자 DSR 설정 화면에서 접수와 철회를 수행한다', async
   await expect(page.getByTestId('settings-tab-dsr')).toBeVisible();
   await expect(page.getByLabel('유형')).toBeVisible();
   await expect(page.getByLabel('요약')).toBeVisible();
-  await expect(page.getByLabel('상세 내용')).toBeVisible();
+  await expect(page.getByLabel('대상 범위')).toBeVisible();
 
   await page.getByLabel('요약').fill('최근 위치 접근 로그 열람');
-  await page.getByLabel('상세 내용').fill('{"scope":"location_audit"}');
+  // raw JSON 대신 일반 폼 필드 — 전송되는 request_details 리터럴은 그대로 유지된다(T-316).
+  await page.getByLabel('대상 범위').selectOption('location_audit');
   await page.getByTestId('settings-dsr-submit').click();
 
   await expect(page.getByText(`${requestId} 요청을 접수했습니다.`)).toBeVisible();

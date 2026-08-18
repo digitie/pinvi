@@ -114,8 +114,10 @@
         유효 폭 −35.3% 실측) 해체와 중복 컨트롤(일자 추가 4곳·개수 배지 5곳·공유 2곳) 정리.
   - [/] **(4/4) 나머지 표면** — `FeatureMapView` 상시 오류 dl 삭제(모바일에서 지도의 33% 점유) +
     조건부 오류/로딩/빈 상태, `MapView` 디버그 dl 삭제, nav '지도'를 데모 셸 대신 실제 탐색
-    지도(`/map`)로 교정. 남은 것: 설정 admin chrome 분리(`SettingsHeader`), DSR/신고 raw JSON
-    textarea → 일반 필드, 법무 measure 65ch·초안 배너 중립화·공개 chrome, 파일 화면 상태 UI.
+    지도(`/map`)로 교정, DSR/신고 raw JSON textarea → 일반 폼 필드(서버 자유형 record 위에 프런트
+    계약을 세우고 전송 리터럴은 보존), 법무 measure 65ch·본문 16px·초안 배너 중립화·공개 chrome
+    (`app/legal/layout.tsx`, 문서 간 이동 링크 0개 해소)까지 완료. 남은 것: 설정 admin chrome 분리
+    (`SettingsHeader`), 파일 화면 상태 UI(skeleton·회복 행동·44px).
 - [ ] **T-317** — `eslint-plugin-tailwindcss` 도입(토큰 우회 재발 방지). T-313에서 후속으로 분리했다.
 
 ## 모바일

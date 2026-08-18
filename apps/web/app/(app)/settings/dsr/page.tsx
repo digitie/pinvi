@@ -8,6 +8,7 @@ import { Section } from '@/components/admin/AdminPage';
 import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
 import { FormField } from '@/components/forms/FormField';
 import { FormSelect } from '@/components/forms/FormSelect';
+import { FormTextArea } from '@/components/forms/FormTextArea';
 import { buttonClassName } from '@/components/ui/Button';
 import { apiClient } from '@/lib/api';
 
@@ -19,26 +20,46 @@ const REQUEST_TYPE_OPTIONS: { value: DsrRequestType; label: string }[] = [
 ];
 
 const OPEN_STATUSES = new Set(['received', 'identity_check', 'processing']);
-const textareaClass =
-  'min-h-24 rounded-sm border border-hairline px-3 py-2 text-sm outline-none focus:border-primary';
+
+/**
+ * 요청 대상 범위 — 서버 스키마(`request_details`)는 자유형 record라 프런트가 계약을 정한다.
+ * 예약 키 `withdrawal`/`processing`은 서버가 같은 bag에 병합하므로 여기서 절대 쓰지 않는다.
+ */
+const DSR_SCOPES: { value: string; label: string }[] = [
+  { value: 'profile', label: '프로필 정보' },
+  { value: 'location_audit', label: '위치 접근 로그' },
+  { value: 'trips', label: '여행 기록' },
+  { value: 'attachments', label: '첨부 파일' },
+  { value: 'all', label: '전체' },
+];
+
+/** 빈 값은 넣지 않는다 — 서버가 키 유무로 범위를 판단한다. */
+export function buildDsrRequestDetails(input: {
+  scope: string;
+  periodFrom: string;
+  periodTo: string;
+  note: string;
+}): Record<string, unknown> {
+  return {
+    scope: input.scope,
+    ...(input.periodFrom ? { period_from: input.periodFrom } : {}),
+    ...(input.periodTo ? { period_to: input.periodTo } : {}),
+    ...(input.note.trim() ? { note: input.note.trim() } : {}),
+  };
+}
 
 function formatDateTime(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString('ko-KR') : '-';
-}
-
-function parseJsonObject(value: string): Record<string, unknown> {
-  const parsed = JSON.parse(value) as unknown;
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('상세 내용은 JSON object여야 합니다.');
-  }
-  return parsed as Record<string, unknown>;
 }
 
 export default function DsrSettingsPage() {
   const [requests, setRequests] = useState<DsrRequestRecord[]>([]);
   const [requestType, setRequestType] = useState<DsrRequestType>('access');
   const [summary, setSummary] = useState('');
-  const [details, setDetails] = useState('{"scope":"profile"}');
+  const [scope, setScope] = useState('profile');
+  const [periodFrom, setPeriodFrom] = useState('');
+  const [periodTo, setPeriodTo] = useState('');
+  const [note, setNote] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [pendingWithdraw, setPendingWithdraw] = useState<string | null>(null);
@@ -71,11 +92,14 @@ export default function DsrSettingsPage() {
       const created = await userApi(apiClient).createDsrRequest({
         request_type: requestType,
         request_summary: summary.trim(),
-        request_details: parseJsonObject(details),
+        request_details: buildDsrRequestDetails({ scope, periodFrom, periodTo, note }),
       });
       setNotice(`${created.request_id} 요청을 접수했습니다.`);
       setSummary('');
-      setDetails('{"scope":"profile"}');
+      setScope('profile');
+      setPeriodFrom('');
+      setPeriodTo('');
+      setNote('');
       await load();
     } catch (err) {
       setError(
@@ -204,15 +228,46 @@ export default function DsrSettingsPage() {
             maxLength={500}
             required
           />
-          <label className="grid gap-1 text-sm font-semibold text-ink lg:col-span-2">
-            상세 내용
-            <textarea
-              value={details}
-              onChange={(event) => setDetails(event.target.value)}
-              className={textareaClass}
-              required
+          {/* raw JSON 입력을 일반 폼 필드로 — 사용자에게 JSON 문법을 요구하지 않는다(T-316). */}
+          <FormSelect
+            id="settings-dsr-scope"
+            label="대상 범위"
+            value={scope}
+            onChange={(event) => setScope(event.target.value)}
+            required
+          >
+            {DSR_SCOPES.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </FormSelect>
+          <div className="grid gap-3 sm:grid-cols-2 lg:col-span-2">
+            <FormField
+              id="settings-dsr-period-from"
+              label="대상 기간 시작(선택)"
+              type="date"
+              value={periodFrom}
+              onChange={(event) => setPeriodFrom(event.target.value)}
             />
-          </label>
+            <FormField
+              id="settings-dsr-period-to"
+              label="대상 기간 종료(선택)"
+              type="date"
+              value={periodTo}
+              onChange={(event) => setPeriodTo(event.target.value)}
+            />
+          </div>
+          <div className="lg:col-span-2">
+            <FormTextArea
+              id="settings-dsr-note"
+              label="추가 설명(선택)"
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              maxLength={1000}
+              rows={3}
+            />
+          </div>
           <button
             type="submit"
             disabled={saving}

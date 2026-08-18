@@ -11,6 +11,7 @@ import type {
 import { Section } from '@/components/admin/AdminPage';
 import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
 import { FormField } from '@/components/forms/FormField';
+import { FormTextArea } from '@/components/forms/FormTextArea';
 import { FormSelect } from '@/components/forms/FormSelect';
 import { buttonClassName } from '@/components/ui/Button';
 import { apiClient } from '@/lib/api';
@@ -32,19 +33,40 @@ const REASON_OPTIONS: { value: ContentReportReasonCode; label: string }[] = [
 ];
 
 const APPEALABLE = new Set(['hidden', 'taken_down', 'rejected']);
-const textareaClass =
-  'min-h-24 rounded-sm border border-hairline px-3 py-2 text-sm outline-none focus:border-primary';
+
+/**
+ * 증빙 정보 — 서버 스키마(`evidence`)는 자유형 record라 프런트가 계약을 정한다.
+ * 일반 사용자에게 JSON 문법을 요구하지 않고 선택 입력 3개로 받아 조립한다(T-316).
+ */
+const EVIDENCE_FIELDS: Record<string, { value: string; label: string }[]> = {
+  trip: [
+    { value: 'title', label: '제목' },
+    { value: 'description', label: '설명' },
+    { value: 'memo', label: '메모' },
+  ],
+  comment: [{ value: 'body', label: '댓글 본문' }],
+  attachment: [
+    { value: 'filename', label: '파일명' },
+    { value: 'description', label: '설명' },
+  ],
+  share_link: [{ value: 'link', label: '공유 링크' }],
+};
+
+export function buildReportEvidence(input: {
+  field: string;
+  url: string;
+  note: string;
+}): Record<string, unknown> {
+  return {
+    source: 'user_report',
+    ...(input.field ? { field: input.field } : {}),
+    ...(input.url.trim() ? { url: input.url.trim() } : {}),
+    ...(input.note.trim() ? { note: input.note.trim() } : {}),
+  };
+}
 
 function formatDateTime(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString('ko-KR') : '-';
-}
-
-function parseJsonObject(value: string): Record<string, unknown> {
-  const parsed = JSON.parse(value) as unknown;
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('증빙 정보는 JSON object여야 합니다.');
-  }
-  return parsed as Record<string, unknown>;
 }
 
 export default function ModerationSettingsPage() {
@@ -53,7 +75,9 @@ export default function ModerationSettingsPage() {
   const [targetId, setTargetId] = useState('');
   const [reasonCode, setReasonCode] = useState<ContentReportReasonCode>('privacy');
   const [reasonText, setReasonText] = useState('');
-  const [evidence, setEvidence] = useState('{}');
+  const [evidenceField, setEvidenceField] = useState('');
+  const [evidenceUrl, setEvidenceUrl] = useState('');
+  const [evidenceNote, setEvidenceNote] = useState('');
   const [appealReportId, setAppealReportId] = useState<string | null>(null);
   const [appealReason, setAppealReason] = useState('');
   const [loading, setLoading] = useState(true);
@@ -90,12 +114,18 @@ export default function ModerationSettingsPage() {
         target_id: targetId.trim(),
         reason_code: reasonCode,
         reason_text: reasonText.trim(),
-        evidence: parseJsonObject(evidence),
+        evidence: buildReportEvidence({
+          field: evidenceField,
+          url: evidenceUrl,
+          note: evidenceNote,
+        }),
       });
       setNotice(`${created.report_id} 신고를 접수했습니다.`);
       setTargetId('');
       setReasonText('');
-      setEvidence('{}');
+      setEvidenceField('');
+      setEvidenceUrl('');
+      setEvidenceNote('');
       await load();
     } catch (err) {
       setError(
@@ -225,25 +255,47 @@ export default function ModerationSettingsPage() {
               </option>
             ))}
           </FormSelect>
-          <label className="grid gap-1 text-sm font-semibold text-ink">
-            신고 내용
-            <textarea
-              value={reasonText}
-              onChange={(event) => setReasonText(event.target.value)}
-              className={textareaClass}
-              maxLength={2000}
-              required
+          <FormTextArea
+            id="settings-moderation-reason-text"
+            label="신고 내용"
+            value={reasonText}
+            onChange={(event) => setReasonText(event.target.value)}
+            maxLength={2000}
+            rows={4}
+            required
+          />
+          <div className="grid gap-3 lg:col-span-2 lg:grid-cols-2">
+            <FormSelect
+              id="settings-moderation-evidence-field"
+              label="문제가 된 부분(선택)"
+              value={evidenceField}
+              onChange={(event) => setEvidenceField(event.target.value)}
+            >
+              <option value="">선택 안 함</option>
+              {(EVIDENCE_FIELDS[targetType] ?? []).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </FormSelect>
+            <FormField
+              id="settings-moderation-evidence-url"
+              label="관련 링크(선택)"
+              type="url"
+              value={evidenceUrl}
+              onChange={(event) => setEvidenceUrl(event.target.value)}
             />
-          </label>
-          <label className="grid gap-1 text-sm font-semibold text-ink lg:col-span-2">
-            증빙 정보
-            <textarea
-              value={evidence}
-              onChange={(event) => setEvidence(event.target.value)}
-              className={textareaClass}
-              required
-            />
-          </label>
+            <div className="lg:col-span-2">
+              <FormTextArea
+                id="settings-moderation-evidence-note"
+                label="추가 설명(선택)"
+                value={evidenceNote}
+                onChange={(event) => setEvidenceNote(event.target.value)}
+                maxLength={1000}
+                rows={3}
+              />
+            </div>
+          </div>
           <button
             type="submit"
             disabled={saving}
@@ -264,16 +316,15 @@ export default function ModerationSettingsPage() {
         <Section title="이의제기">
           <form onSubmit={onAppeal} className="grid gap-3">
             <div className="font-mono text-xs text-muted">{appealReportId}</div>
-            <label className="grid gap-1 text-sm font-semibold text-ink">
-              이의제기 사유
-              <textarea
-                value={appealReason}
-                onChange={(event) => setAppealReason(event.target.value)}
-                className={textareaClass}
-                maxLength={2000}
-                required
-              />
-            </label>
+            <FormTextArea
+              id="settings-moderation-appeal-reason"
+              label="이의제기 사유"
+              value={appealReason}
+              onChange={(event) => setAppealReason(event.target.value)}
+              maxLength={2000}
+              rows={4}
+              required
+            />
             <div className="flex gap-2">
               <button
                 type="submit"
