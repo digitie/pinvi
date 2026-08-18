@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+- kor-travel-map service 계약 스냅샷을 Map `f637f3ad`(#1000 stream snapshot materialization)로 재vendor했다.
+  사용자에게 보이는 동작 변화는 없다(경로 추가·삭제 없음, snapshot 한도 초과를 설명하는 problem 스키마 6개만
+  추가됐다). 계약 핀(provenance revision·sha, 테스트 상수)을 같은 커밋에서 함께 옮겼다.
+
 - 날씨 카드의 시점 조회(`GET /features/{id}/weather?asof=`)가 실제로 그 시점을 조회한다.
   kor-travel-map이 시점 조회를 별도 bitemporal 경로로 옮긴 뒤에도 PinVi는 옛 경로에 `asof`를
   붙여 보냈고, 서버가 모르는 query를 조용히 버려 **어떤 시점을 요청하든 늘 최신 카드**가
