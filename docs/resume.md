@@ -2,7 +2,7 @@
 
 ## 2026-08-18 (codex) — T-VN-41 ABC rebase pair 재결박
 
-Map #975 rebase head `302274b3621590a14b6928fffcc0c907a2dafb0f`를 PinVi #444 service
+Map #975 rebase head `e093e5555329234a539a3802566eb5666411b06f`를 PinVi #444 service
 provenance·runtime contract·Docker packaged provenance에 함께 반영했다. service OpenAPI SHA-256은
 `c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`로 byte-identical하다.
 

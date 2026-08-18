@@ -4,7 +4,7 @@
 
 ## 2026-08-18 (codex) — T-VN-41 ABC rebase Map provenance 재핀
 
-- Map PR #975의 rebase 후 head `302274b3621590a14b6928fffcc0c907a2dafb0f`를 PinVi service
+- Map PR #975의 rebase 후 head `e093e5555329234a539a3802566eb5666411b06f`를 PinVi service
   provenance·runtime contract test·Docker packaged-provenance digest에 함께 재핀했다.
   service OpenAPI vendor bytes는 Map artifact와 계속 SHA-256
   `c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`로 일치한다.
