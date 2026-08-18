@@ -17,6 +17,8 @@ export interface ConflictDialogProps {
   description: string;
   fields: ConflictField[];
   saving?: boolean;
+  /** 충돌 해결 저장 실패 — 다이얼로그가 열린 채 남으므로 모달 안에서 알린다(T-315 5차 리뷰). */
+  error?: string | null;
   onApply: (selectedKeys: string[]) => void;
   onUseServer: () => void;
   onKeepEditing: () => void;
@@ -27,6 +29,7 @@ export function ConflictDialog({
   description,
   fields,
   saving = false,
+  error = null,
   onApply,
   onUseServer,
   onKeepEditing,
@@ -100,6 +103,15 @@ export function ConflictDialog({
         </>
       }
     >
+      {error && (
+        <p
+          role="alert"
+          data-testid="conflict-dialog-error"
+          className="mb-3 rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
+        >
+          {error}
+        </p>
+      )}
       <div className="overflow-hidden rounded-sm border border-hairline">
         <div className="grid grid-cols-1 sm:grid-cols-[minmax(72px,112px)_minmax(0,1fr)_minmax(0,1fr)] bg-surface-soft text-xs font-semibold text-muted">
           <span className="px-3 py-2">필드</span>

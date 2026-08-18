@@ -125,7 +125,12 @@ type TripDetailPanelTab = 'plan' | 'files' | 'share' | 'people' | 'comments';
 
 interface MutationOptions {
   onConflict?: (latest: TripView | null) => void;
+  /** 주면 전역 배너 대신 이 콜백으로 오류를 넘긴다(다이얼로그 소유 오류). */
+  captureError?: (message: string) => void;
 }
+
+/** 일자 설정 저장 결과 — 실패 원인을 다이얼로그가 자기 안에서 표시할 수 있게 돌려준다. */
+export type DayUpdateResult = { ok: true } | { ok: false; message: string; field?: 'date' };
 
 function tripDurationDays(startDate: string | null, endDate: string | null): number | null {
   if (!startDate || !endDate) return null;
@@ -410,6 +415,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const [manualPoiCoord, setManualPoiCoord] = useState<{ lon: number; lat: number } | null>(null);
   const [tripEditOpen, setTripEditOpen] = useState(false);
   const [conflict, setConflict] = useState<ConflictState | null>(null);
+  // 충돌 다이얼로그 전용 오류(전역 배너와 분리 — 다른 실패가 새 다이얼로그로 새지 않게).
+  const [conflictError, setConflictError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const realtimeClientRef = useRef<TripRealtimeClient | null>(null);
   const realtimeReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -687,7 +694,11 @@ export function TripDetail({ tripId }: TripDetailProps) {
           options.onConflict(latest);
           return false;
         }
-        setMutationError(err instanceof ApiError ? err.message : '변경에 실패했습니다.');
+        const message = err instanceof ApiError ? err.message : '변경에 실패했습니다.';
+        // captureError를 준 호출부(다이얼로그)는 오류를 **자기 모달 안에서** 보여준다 —
+        // 전역 배너는 scrim 뒤라 보이지도, aria-modal 안에서 읽히지도 않는다(T-315 4·5차 리뷰).
+        if (options.captureError) options.captureError(message);
+        else setMutationError(message);
         await reload();
         return false;
       } finally {
@@ -890,26 +901,30 @@ export function TripDetail({ tripId }: TripDetailProps) {
     });
   };
 
-  const dayConflictNotice = () =>
-    setMutationError('다른 사용자가 이 일자를 먼저 변경했습니다. 최신 내용으로 다시 불러왔어요.');
+  const DAY_CONFLICT_MESSAGE =
+    '다른 사용자가 이 일자를 먼저 변경했습니다. 최신 내용으로 다시 불러왔어요.';
+  const dayConflictNotice = () => setMutationError(DAY_CONFLICT_MESSAGE);
 
-  // 성공 여부를 돌려준다 — 일자 설정 다이얼로그가 **성공했을 때만** 닫히게 하기 위해서다
-  // (실패/충돌 시 닫으면 사용자가 입력한 이름·날짜·색이 사라진다, T-315 3차 리뷰).
+  // 결과를 돌려준다 — 일자 설정 다이얼로그가 **성공했을 때만** 닫히고(3차 리뷰), 실패 원인은
+  // 모달 안에서 보여 주기 위해서다(4·5차 리뷰). `expectedVersion`은 다이얼로그를 연 시점의
+  // version 스냅샷이다: 열려 있는 동안 다른 곳의 변경이 reload로 들어와도 그 version으로
+  // 저장하면 안 된다 — 409가 안 나고 남의 변경을 조용히 덮는다(lost update, 5차 리뷰 P1).
   const handleUpdateDay = async (
     dayIndex: number,
     next: { title: string; date: string | null; marker_color: string | null },
-  ): Promise<boolean> => {
-    if (!view) return false;
+    expectedVersion?: number,
+  ): Promise<DayUpdateResult> => {
+    if (!view) return { ok: false, message: '여행 정보를 불러오지 못했습니다.' };
     const day = view.days.find((d) => d.day_index === dayIndex);
-    if (!day) return false;
+    if (!day) return { ok: false, message: '일자를 찾지 못했습니다.' };
     // 날짜는 실제로 바뀔 때만 검증한다. 색/이름만 바꾸는 업데이트는 파생 effective_date(ADR-055)를
     // 쓰는 일자에서 명시 날짜를 강제하면 안 된다(날짜 필드가 빈 채 색만 저장 시 "날짜 필요" 오류 방지).
     const dateChanged = next.date !== (day.date ?? null);
     if (dateChanged) {
       const validationMessage = dayDateUpdateValidation(view, dayIndex, next.date);
       if (validationMessage) {
-        setMutationError(validationMessage);
-        return false;
+        // 날짜 필드가 원인이므로 필드에 붙여 돌려준다(FormField가 aria-invalid/describedby 배선).
+        return { ok: false, message: validationMessage, field: 'date' };
       }
     }
     const patch: TripDayUpdate = {};
@@ -919,13 +934,30 @@ export function TripDetail({ tripId }: TripDetailProps) {
     // ADR-055 F6: 일자 색 override(팔레트 키 또는 null=기본색).
     if (next.marker_color !== (day.marker_color ?? null)) patch.marker_color = next.marker_color;
     // 바뀐 게 없으면 요청 없이 닫아도 된다(성공으로 본다).
-    if (!hasPatchFields(patch)) return true;
-    return runMutation(() => tripApi(apiClient).updateDay(tripId, dayIndex, day.version, patch), {
-      onConflict: dayConflictNotice,
-    });
+    if (!hasPatchFields(patch)) return { ok: true };
+    let failure: string | null = null;
+    let conflicted = false;
+    const ok = await runMutation(
+      () => tripApi(apiClient).updateDay(tripId, dayIndex, expectedVersion ?? day.version, patch),
+      {
+        onConflict: () => {
+          conflicted = true;
+        },
+        captureError: (message) => {
+          failure = message;
+        },
+      },
+    );
+    if (ok) return { ok: true };
+    return {
+      ok: false,
+      message: conflicted ? DAY_CONFLICT_MESSAGE : (failure ?? '변경에 실패했습니다.'),
+    };
   };
 
   const dayDeleteTriggerRef = useRef<HTMLElement | null>(null);
+  // 일자 목록 컨테이너 — 삭제로 트리거가 사라졌을 때 포커스를 받아 준다.
+  const dayListRef = useRef<HTMLElement | null>(null);
 
   const dayVersion = (dayIndex: number) =>
     view?.days.find((d) => d.day_index === dayIndex)?.version ?? 0;
@@ -976,7 +1008,14 @@ export function TripDetail({ tripId }: TripDetailProps) {
     if (!target) return;
     // 요청이 끝난 **뒤에** 닫는다 — 먼저 닫으면 `busy` prop이 관측되지 않아 진행 표시가 죽고,
     // 언마운트 시점에 트리거가 아직 disabled라 포커스 복원 폴백도 건너뛰어진다(T-315 4차 리뷰).
-    void deleteDayRequest(target.dayIndex, true).finally(() => setDayDeleteConfirm(null));
+    void deleteDayRequest(target.dayIndex, true).finally(() => {
+      // 삭제에 성공하면 트리거 버튼이 일자와 함께 사라진다 — 남는 일자 목록으로 포커스를 넘긴다
+      // (그대로 두면 복원 후보가 전부 탈락해 포커스가 body에 남는다, 5차 리뷰).
+      if (!dayDeleteTriggerRef.current?.isConnected) {
+        dayDeleteTriggerRef.current = dayListRef.current;
+      }
+      setDayDeleteConfirm(null);
+    });
   };
 
   const handleEditTrip = (patch: TripUpdate) => {
@@ -990,9 +1029,14 @@ export function TripDetail({ tripId }: TripDetailProps) {
     );
   };
 
+  const clearConflict = () => {
+    setConflictError(null);
+    setConflict(null);
+  };
+
   const handleUseServerConflict = () => {
     const current = conflict;
-    setConflict(null);
+    clearConflict();
     setMutationError(null);
     if (current?.target === 'trip') setTripEditOpen(false);
     if (current?.target === 'poi') setEditingPoiId(null);
@@ -1001,7 +1045,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
   const handleKeepEditingConflict = () => {
     const current = conflict;
-    setConflict(null);
+    clearConflict();
     if (current?.target === 'trip') setTripEditOpen(true);
     if (current?.target === 'poi') setEditingPoiId(current.poiId);
   };
@@ -1021,6 +1065,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
     void (async () => {
       setBusy(true);
       setMutationError(null);
+      setConflictError(null);
       try {
         if (current.target === 'trip') {
           const patch = pickConflictPatch(
@@ -1032,7 +1077,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
             return;
           }
           await tripApi(apiClient).update(tripId, current.version, patch);
-          setConflict(null);
+          clearConflict();
           setTripEditOpen(false);
           await reload();
           return;
@@ -1047,7 +1092,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           return;
         }
         await poiApi(apiClient).update(tripId, current.poiId, current.version, patch);
-        setConflict(null);
+        clearConflict();
         setEditingPoiId(null);
         await reload();
       } catch (err) {
@@ -1060,7 +1105,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
           }
           return;
         }
-        setMutationError(err instanceof ApiError ? err.message : '충돌 해결에 실패했습니다.');
+        // 충돌 다이얼로그는 실패해도 열린 채 남는다 — 원인을 모달 안에서 알린다(5차 리뷰).
+        setConflictError(err instanceof ApiError ? err.message : '충돌 해결에 실패했습니다.');
       } finally {
         setBusy(false);
       }
@@ -1566,7 +1612,13 @@ export function TripDetail({ tripId }: TripDetailProps) {
                   )}
                 </section>
 
-                <section className="space-y-3" aria-label="일자 목록" data-testid="trip-layer-list">
+                <section
+                  ref={dayListRef}
+                  tabIndex={-1}
+                  className="space-y-3 outline-none"
+                  aria-label="일자 목록"
+                  data-testid="trip-layer-list"
+                >
                   {view.days.length > 0 && (
                     <div className="space-y-2" role="tablist" aria-label="일자 목록">
                       {view.days.map((day) => {
@@ -1642,7 +1694,6 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                     onDelete={handleDeleteDay}
                                     showAdd={false}
                                     busy={busy}
-                                    error={mutationError}
                                   />
                                 </div>
                               </div>
@@ -1908,6 +1959,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           description="다른 변경이 먼저 저장되었습니다. 각 필드에서 서버 값 또는 내 값을 고른 뒤 저장할 수 있습니다."
           fields={conflict.fields}
           saving={busy}
+          error={conflictError}
           onApply={handleApplyConflict}
           onUseServer={handleUseServerConflict}
           onKeepEditing={handleKeepEditingConflict}

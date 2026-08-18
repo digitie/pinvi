@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Pencil, Plus, Trash2 } from 'lucide-react';
 import { MARKER_PALETTE, type MarkerColorKey, paletteHex } from '@pinvi/domain';
+import type { DayUpdateResult } from '@/components/trips/TripDetail';
 import { FormField } from '@/components/forms/FormField';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
@@ -18,20 +19,25 @@ export interface TripDayControlsProps {
     title: string | null;
     date: string | null;
     marker_color?: string | null;
+    /** 다이얼로그를 연 시점의 version 스냅샷 원본 — 저장 시 If-Match로 쓴다. */
+    version?: number;
   } | null;
   onAdd: () => void;
-  /** 성공하면 true — 다이얼로그는 **성공했을 때만** 닫는다(실패 시 입력값 보존). */
+  /**
+   * 저장 결과 — 다이얼로그는 **성공했을 때만** 닫고(실패 시 입력값 보존) 실패 원인은 모달 안에서
+   * 보여 준다. `expectedVersion`은 다이얼로그를 연 시점의 version이다(열려 있는 동안 들어온
+   * 서버 갱신 버전으로 저장하면 남의 변경을 조용히 덮는다).
+   */
   onUpdate: (
     dayIndex: number,
     patch: { title: string; date: string | null; marker_color: string | null },
-  ) => Promise<boolean>;
+    expectedVersion?: number,
+  ) => Promise<DayUpdateResult>;
   onDelete: (dayIndex: number) => void;
   canAdd?: boolean;
   addDisabledReason?: string | null;
   showAdd?: boolean;
   busy?: boolean;
-  /** 저장 실패/검증 오류 — 다이얼로그가 열린 채 남으므로 **모달 안에서** 보여야 한다. */
-  error?: string | null;
 }
 
 export function TripDayControls({
@@ -43,45 +49,51 @@ export function TripDayControls({
   addDisabledReason = null,
   showAdd = true,
   busy = false,
-  error = null,
 }: TripDayControlsProps) {
   const [title, setTitle] = useState(selectedDay?.title ?? '');
   const [date, setDate] = useState(selectedDay?.date ?? '');
   const [color, setColor] = useState<string | null>(selectedDay?.marker_color ?? null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 오류는 **이 다이얼로그 세션**이 소유한다 — 전역 오류를 그대로 넘기면 아무것도 하지 않은
+  // 새 다이얼로그가 이전(또는 무관한) 실패를 띄운다(T-315 5차 리뷰).
+  const [saveError, setSaveError] = useState<{ message: string; field?: 'date' } | null>(null);
+  // 연 시점의 version — 열려 있는 동안 reload가 들어와도 이 값으로 저장해 409를 살린다.
+  const openedVersionRef = useRef<number | undefined>(undefined);
   const addDisabled = busy || !canAdd;
 
-  const lastDayIndexRef = useRef(selectedDay?.day_index);
-
+  // 열려 있는 폼은 서버 갱신으로 덮지 않는다 — 409 후 reload가 사용자가 입력한 이름·날짜·색을
+  // 지우고 다이얼로그까지 닫던 문제(T-315 4차 리뷰). 닫혀 있을 때만 서버 값과 동기화한다.
+  // (인스턴스는 일자마다 key={day_index}로 분리돼 있어 '다른 일자로 전환' 분기는 필요 없다.)
   useEffect(() => {
-    const dayChanged = lastDayIndexRef.current !== selectedDay?.day_index;
-    lastDayIndexRef.current = selectedDay?.day_index;
-    // 열려 있는 폼은 **같은 일자**의 서버 갱신으로 덮지 않는다 — 409 충돌 후 reload가 사용자가
-    // 입력한 이름·날짜·색을 지우고 다이얼로그까지 닫던 문제(T-315 4차 리뷰).
-    if (settingsOpen && !dayChanged) return;
+    if (settingsOpen) return;
     setTitle(selectedDay?.title ?? '');
     setDate(selectedDay?.date ?? '');
     setColor(selectedDay?.marker_color ?? null);
-    if (dayChanged) setSettingsOpen(false);
-  }, [
-    settingsOpen,
-    selectedDay?.day_index,
-    selectedDay?.title,
-    selectedDay?.date,
-    selectedDay?.marker_color,
-  ]);
+  }, [settingsOpen, selectedDay?.title, selectedDay?.date, selectedDay?.marker_color]);
+
+  const openSettings = () => {
+    setSaveError(null);
+    openedVersionRef.current = selectedDay?.version;
+    setSettingsOpen(true);
+  };
 
   const saveSettings = async () => {
     if (!selectedDay) return;
     // 저장이 끝나기 전에 닫으면 busy 잠금이 무의미해지고, 실패 시 입력값이 사라진다.
-    const ok = await onUpdate(selectedDay.day_index, {
-      title: title.trim(),
-      date: date || null,
-      marker_color: color,
-    });
-    if (ok) setSettingsOpen(false);
+    const result = await onUpdate(
+      selectedDay.day_index,
+      { title: title.trim(), date: date || null, marker_color: color },
+      openedVersionRef.current,
+    );
+    if (result.ok) {
+      setSaveError(null);
+      setSettingsOpen(false);
+      return;
+    }
+    setSaveError({ message: result.message, field: result.field });
   };
   const closeSettings = () => {
+    setSaveError(null);
     setTitle(selectedDay?.title ?? '');
     setDate(selectedDay?.date ?? '');
     setColor(selectedDay?.marker_color ?? null);
@@ -112,7 +124,7 @@ export function TripDayControls({
         <>
           <button
             type="button"
-            onClick={() => setSettingsOpen(true)}
+            onClick={openSettings}
             disabled={busy}
             aria-label={`${selectedDay.day_index}일차 설정`}
             title="일자 설정"
@@ -145,7 +157,7 @@ export function TripDayControls({
               onTitleChange={setTitle}
               onDateChange={setDate}
               onColorChange={setColor}
-              busyError={error}
+              saveError={saveError}
               onSave={saveSettings}
               onClose={closeSettings}
             />
@@ -165,8 +177,8 @@ interface DaySettingsDialogProps {
   date: string;
   color: string | null;
   busy: boolean;
-  /** 저장 실패/검증 오류 메시지(모달 안 표시). */
-  busyError?: string | null;
+  /** 이 다이얼로그 세션에서 난 저장 실패/검증 오류(모달 안 표시). */
+  saveError?: { message: string; field?: 'date' } | null;
   onTitleChange: (title: string) => void;
   onDateChange: (date: string) => void;
   onColorChange: (color: string | null) => void;
@@ -183,7 +195,7 @@ function DaySettingsDialog({
   date,
   color,
   busy,
-  busyError = null,
+  saveError = null,
   onTitleChange,
   onDateChange,
   onColorChange,
@@ -225,15 +237,16 @@ function DaySettingsDialog({
           if (!unchanged) void onSave();
         }}
       >
-        {busyError && (
+        {saveError && !saveError.field && (
           // 실패해도 다이얼로그가 열린 채 남으므로 오류는 **모달 안**에 있어야 한다 —
           // 바깥 배너는 scrim 뒤라 보이지도, aria-modal 안에서 읽히지도 않는다(4차 리뷰).
+          // 필드 원인이 분명한 오류는 아래 해당 FormField가 대신 announce한다(중복 방지).
           <p
             role="alert"
             data-testid="trip-day-settings-error"
             className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
           >
-            {busyError}
+            {saveError.message}
           </p>
         )}
         <FormField
@@ -255,6 +268,7 @@ function DaySettingsDialog({
           value={date}
           onChange={(event) => onDateChange(event.target.value)}
           disabled={busy}
+          error={saveError?.field === 'date' ? saveError.message : undefined}
         />
         <span className="block text-sm font-semibold text-ink">일자 색</span>
         <div
@@ -271,11 +285,11 @@ function DaySettingsDialog({
             disabled={busy}
             aria-label="기본 색"
             title="기본 색(일자 순서 팔레트)"
-            className={
+            className={`disabled:cursor-not-allowed disabled:opacity-60 ${
               color === null
                 ? 'flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-border-strong text-xs font-bold text-muted ring-2 ring-primary ring-offset-1'
                 : 'flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-border-strong text-xs font-bold text-muted'
-            }
+            }`}
           >
             기본
           </button>
@@ -290,11 +304,11 @@ function DaySettingsDialog({
               title={MARKER_PALETTE[key].name}
               data-testid={`trip-day-color-${key}`}
               style={{ backgroundColor: paletteHex(key) }}
-              className={
+              className={`disabled:cursor-not-allowed disabled:opacity-60 ${
                 color === key
                   ? 'flex h-7 w-7 items-center justify-center rounded-full ring-2 ring-primary ring-offset-1'
                   : 'h-7 w-7 rounded-full'
-              }
+              }`}
             >
               {color === key && <Check className="h-4 w-4 text-white" aria-hidden="true" />}
             </button>

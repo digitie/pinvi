@@ -192,8 +192,9 @@
       빈 상태(다음 행동 CTA) 분리. (완료: 2026-08-18, PR #450, claude → tasks-done.md)
 - [/] **T-315** — Hallmark PR-4(모달 셸 수렴): `components/ui/Dialog.tsx` 프리미티브 신설
   (scrim/overlay/z-modal 토큰 + `useModalDialog` 내장 + 헤더/본문/푸터 슬롯 + busy 잠금),
-  손복사 모달 7종 이관(`LocationConsentDialog`(focus trap 없던 것)·`NoticePlanCopyDialog`·
-  `TripEditDialog`·`TripManualPoiDialog`·`FeatureRequestDialog`·`DaySettingsDialog`), 임의 z-index
+  손복사 모달 8종 이관(`LocationConsentDialog`(focus trap 없던 것)·`NoticePlanCopyDialog`·
+  `TripEditDialog`·`TripManualPoiDialog`·`FeatureRequestDialog`·`DaySettingsDialog`·`ConflictDialog`·
+  `FeatureDetailModal`(sheet)), 임의 z-index
   (`z-[50]/[60]/[70]`) 전면 토큰화, 마커 팔레트 UI 오용(TripDayHeader 일출/일몰)·`bg-primary/10`
   accent tint 제거, 죽은 훅(`useEscapeKey`/`useDialogAutoFocus`) 삭제. `RestoreHotswapDialog`(admin
   파괴적 흐름)는 portal + 배경 `inert`까지 쓰는 더 강한 격리라 토큰만 맞추고 이관은 보류 — 훅에
@@ -202,7 +203,12 @@
   (남은 최상단 모달 → `returnFocusRef`), 모달 스택을 마운트 생명주기에만 연동, `FeatureDetailModal` sheet
   이관, 일자 설정 저장을 await해 성공에만 닫기(busy가 죽은 prop이던 문제) + 그에 따라 오류를 **모달 안**
   에 표시·저장 중 입력 잠금·409 reload가 열린 폼을 덮지 않게 리셋 effect 축소, 일자 삭제 확인은 요청 완료
-  후 닫아 busy/포커스 복원을 살림, 충돌 다이얼로그 필드 토글도 저장 중 잠금(+disabled 시각 상태). **api-client 요청 타임아웃은 이 PR에서 뺐다** — 3차 리뷰가 헤더까지만 덮는 범위, 헤더 이후
+  후 닫아 busy/포커스 복원을 살림, 충돌 다이얼로그 필드 토글도 저장 중 잠금(+disabled 시각 상태).
+  5차: **일자 설정 lost update**(열려 있는 동안 들어온 서버 version으로 저장해 409 없이 남의 변경을
+  덮던 문제) → 연 시점 version 스냅샷으로 If-Match 고정, 오류를 전역 `mutationError`에서 떼어 각
+  다이얼로그 세션 소유로(열 때/닫을 때 초기화, 날짜 검증 오류는 해당 FormField에 연결), `ConflictDialog`
+  에도 모달 안 오류 슬롯 추가, 삭제 성공 시 사라진 트리거 대신 일자 목록으로 포커스 복원, 색 팔레트
+  disabled 시각 상태. **api-client 요청 타임아웃은 이 PR에서 뺐다** — 3차 리뷰가 헤더까지만 덮는 범위, 헤더 이후
   호출부 abort 미전파, 408(4xx)이 Idempotency-Key 폐기 로직을 오작동시켜 큐레이션 import를 중복 실행,
   admin 예산(restore 30분 < 서버 60분) 불일치를 실측했다. 설계를 갖춘 뒤 T-316에서 다시 넣는다.
 - [ ] **T-316** — Hallmark PR-5(여행 상세·지도·설정·파일·법무) + **요청 수명 계약**: TripDetail 3중
