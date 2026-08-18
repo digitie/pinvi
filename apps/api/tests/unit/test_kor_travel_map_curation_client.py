@@ -411,6 +411,44 @@ def test_curation_snapshot_token_is_optional_but_strict_and_role_distinct() -> N
         )
 
 
+def test_empty_curation_tokens_are_treated_as_unset_in_production() -> None:
+    """compose `${VAR:-}` 미설정 주입(빈 문자열)으로 production API가 부팅하지 못하면 안 된다."""
+
+    ops = {
+        "pinvi_kor_travel_map_admin_base_url": "http://host.docker.internal:12701",
+        "pinvi_kor_travel_map_ops_read_token": "r" * 32,
+        "pinvi_kor_travel_map_ops_cancel_token": "x" * 32,
+    }
+    both_empty = Settings(
+        _env_file=None,
+        pinvi_environment="production",
+        pinvi_kor_travel_map_curation_snapshot_token="",
+        pinvi_kor_travel_map_curation_cutover_mapping_token="",
+        **ops,
+    )
+    assert both_empty.pinvi_kor_travel_map_curation_snapshot_token is None
+    assert both_empty.pinvi_kor_travel_map_curation_cutover_mapping_token is None
+
+    one_empty = Settings(
+        _env_file=None,
+        pinvi_environment="production",
+        pinvi_kor_travel_map_curation_snapshot_token=TOKEN,
+        pinvi_kor_travel_map_curation_cutover_mapping_token="",
+        **ops,
+    )
+    assert one_empty.pinvi_kor_travel_map_curation_snapshot_token is not None
+    assert one_empty.pinvi_kor_travel_map_curation_cutover_mapping_token is None
+
+    # 공백만 있는 값은 미설정이 아니라 명시적 오류다(운영 오설정을 조용히 넘기지 않는다).
+    with pytest.raises(ValidationError, match=r"whitespace|at least 32"):
+        Settings(
+            _env_file=None,
+            pinvi_environment="production",
+            pinvi_kor_travel_map_curation_snapshot_token=" " * 32,
+            **ops,
+        )
+
+
 def test_deploy_compose_passes_distinct_curation_tokens_to_api_only() -> None:
     root = Path(__file__).resolve().parents[4]
     compose = (root / "infra/docker-compose.app.yml").read_text(encoding="utf-8")

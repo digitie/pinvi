@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Literal, Self, cast
 from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PinviEnvironment = Literal["development", "test", "smoke", "staging", "production"]
@@ -570,6 +570,27 @@ class Settings(BaseSettings):
                 "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_CONTRACT_GENERATION must match the vendored service contract"
             )
         return self
+
+    @field_validator(
+        "pinvi_kor_travel_map_curation_snapshot_token",
+        "pinvi_kor_travel_map_curation_cutover_mapping_token",
+        mode="before",
+    )
+    @classmethod
+    def _empty_curation_token_is_unset(cls, value: object) -> object:
+        """빈 문자열은 미설정으로 본다.
+
+        docker-manager/`infra/docker-compose.app.yml`은 미설정 토큰을 `${VAR:-}`(빈 문자열)로 주입한다.
+        빈 값을 '설정된 토큰'으로 다루면 두 토큰이 모두 비어 있을 때 `must differ`로 production API가
+        부팅하지 못한다(2026-08-18 리뷰 P0). 공백 포함 값은 그대로 두어 아래 검증이 명시적으로 거부한다.
+        """
+
+        if value is None:
+            return None
+        raw = value.get_secret_value() if isinstance(value, SecretStr) else value
+        if isinstance(raw, str) and raw == "":
+            return None
+        return value
 
     @model_validator(mode="after")
     def validate_curation_service_principals(self) -> Self:
