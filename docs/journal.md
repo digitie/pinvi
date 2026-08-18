@@ -2,8 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-18 (claude) — #444 후속: service provenance `map_release_revision` 재핀(dangling → Map #975 머지 SHA)
+
+- **문제**: #444가 핀한 Map 후보 `e093e555…`는 어떤 Map 브랜치에도 없는 dangling 커밋(리뷰 P1). Map #975가
+  `4672aa96…`로 squash 머지됐고, 그 커밋의 `packages/kor-travel-map-api/openapi.service.json`은 PinVi vendored
+  스냅샷과 **바이트 동일**(SHA-256 `c6f9aba6…`, GitHub API로 재계산 확인; Map main HEAD도 동일).
+- **변경**: `contracts/kor-travel-map-service-provenance-v1.json` `map_release_revision`, 단위 테스트
+  `_MAP_RELEASE_REVISION`, `.env.example` `EXPECTED_SOURCE_REVISION`(+ `EXPECTED_OPENAPI_SHA256`를 vendored 값
+  `c6f9aba6…`로 정정 — 이전 값 `5d380911…`/`4b7ef67e…`는 stale), tasks/execplan 서술을 `4672aa96…`로 갱신.
+  vendored 바이트·capability는 그대로(재vendor 불필요).
+- **CI digest 동반 회전**: `.github/workflows/api.yml` `docker-provenance-image`가 packaged provenance JSON의
+  SHA-256을 하드코딩하므로 `a6d501b4…`→`a2d3db8e…`로 함께 갱신했다(리뷰 P1 — 재핀 시 항상 동반되어야 하는 gate).
+- **후속(Manager)**: docker-manager tracked v5 pinset은 아직 이 SHA를 모른다 — `MAP_PINNED_RUNTIME_SOURCE`/
+  `PINVI_PINNED_RUNTIME_SOURCE`/`pinset_sha256` 재핀 후 trusted release 배포가 F1J-D 재개 전제다.
+- **검증**: pin 관련 unit(cache_target_contract·sync_config·kor_travel_map_contract) 75 passed(로컬 sibling
+  live 비교 1건은 환경 의존 pre-existing 실패). CI `contract-pin-consistency`가 새 SHA를 checkout해 바이트 동등을
+  다시 확인한다.
+
 ## 2026-08-18 (codex) — T-VN-41 ABC rebase Map provenance 재핀
 
+- (2026-08-18 재핀으로 **대체됨** — 아래 후보 SHA는 dangling이며 현행 핀은 Map #975 머지 SHA `4672aa96…`다.)
 - Map PR #975의 rebase 후 head `e093e5555329234a539a3802566eb5666411b06f`를 PinVi service
   provenance·runtime contract test·Docker packaged-provenance digest에 함께 재핀했다.
   service OpenAPI vendor bytes는 Map artifact와 계속 SHA-256
@@ -310,19 +328,6 @@
 - 검증: cache-target transport·restore-fence·service contract·sync configuration unit 103건, changed source
   strict mypy, ruff check/format을 통과했다. 다음은 PinVi draft PR push, Map paired receipt 갱신, 두 적대적
   리뷰어의 고정 SHA 재검토와 n150 isolated rehearsal이다.
-
-## 2026-08-18 (claude) — #444 후속: service provenance `map_release_revision` 재핀(dangling → Map #975 머지 SHA)
-
-- **문제**: #444가 핀한 Map 후보 `e093e555…`는 어떤 Map 브랜치에도 없는 dangling 커밋(리뷰 P1). Map #975가
-  `4672aa96…`로 squash 머지됐고, 그 커밋의 `packages/kor-travel-map-api/openapi.service.json`은 PinVi vendored
-  스냅샷과 **바이트 동일**(SHA-256 `c6f9aba6…`, GitHub API로 재계산 확인; Map main HEAD도 동일).
-- **변경**: `contracts/kor-travel-map-service-provenance-v1.json` `map_release_revision`, 단위 테스트
-  `_MAP_RELEASE_REVISION`, `.env.example` `EXPECTED_SOURCE_REVISION`(+ `EXPECTED_OPENAPI_SHA256`를 vendored 값
-  `c6f9aba6…`로 정정 — 이전 값 `5d380911…`/`4b7ef67e…`는 stale), tasks/execplan 서술을 `4672aa96…`로 갱신.
-  vendored 바이트·capability는 그대로(재vendor 불필요).
-- **검증**: pin 관련 unit(cache_target_contract·sync_config·kor_travel_map_contract) 75 passed(로컬 sibling
-  live 비교 1건은 환경 의존 pre-existing 실패). CI `contract-pin-consistency`가 새 SHA를 checkout해 바이트 동등을
-  다시 확인한다.
 
 ## 2026-08-18 (claude) — T-312: Hallmark 감사(웹 7표면) → 시스템 잠금 + 공개 표면 재설계
 
