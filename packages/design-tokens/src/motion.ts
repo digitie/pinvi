@@ -14,6 +14,6 @@ export const motion = {
   easing: {
     default: 'cubic-bezier(0.2, 0, 0, 1)',
     pinvi: 'cubic-bezier(0.2, 0, 0, 1)',
-    spring: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+    // overshoot(spring)는 UI 상태 전환에 쓰지 않는다 — DESIGN.md "Hallmark 잠금 시스템".
   },
 } as const;

@@ -243,8 +243,8 @@ fallback chain에 system stack을 둔다. 사용자 브랜드 확정 시 ADR로 
 ```ts
 // packages/design-tokens/src/typography.ts
 export const fonts = {
-  sans: 'Pretendard, "Apple SD Gothic Neo", system-ui, -apple-system, Roboto, sans-serif',
-  display: 'Pretendard, "Apple SD Gothic Neo", system-ui, sans-serif', // 동일 패밀리
+  sans: '"Pretendard Variable", Pretendard, "Apple SD Gothic Neo", system-ui, -apple-system, Roboto, sans-serif',
+  display: '"Pretendard Variable", Pretendard, "Apple SD Gothic Neo", system-ui, sans-serif', // 동일 패밀리
   mono: '"JetBrains Mono", ui-monospace, "SF Mono", monospace',
 } as const;
 

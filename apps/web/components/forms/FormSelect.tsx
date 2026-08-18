@@ -1,5 +1,6 @@
 import type { SelectHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
+import { inputClassName } from './FormField';
 
 export interface FormSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   /** label·select·error를 잇는 고유 id (필수) */
@@ -22,8 +23,8 @@ export const FormSelect = forwardRef<HTMLSelectElement, FormSelectProps>(functio
   const errorId = `${id}-error`;
 
   return (
-    <div className="space-y-1">
-      <label htmlFor={id} className={labelClassName ?? 'block text-sm text-ink'}>
+    <div className="space-y-1.5">
+      <label htmlFor={id} className={labelClassName ?? 'block text-sm font-medium text-ink'}>
         {label}
       </label>
       <select
@@ -31,18 +32,18 @@ export const FormSelect = forwardRef<HTMLSelectElement, FormSelectProps>(functio
         id={id}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
-        className={`w-full rounded-sm border px-3 py-2 text-sm ${
-          error ? 'border-error-text' : 'border-hairline'
-        }${className ? ` ${className}` : ''}`}
+        className={inputClassName({ error: Boolean(error), className })}
         {...selectProps}
       >
         {children}
       </select>
       {error ? (
-        <p id={errorId} role="alert" className="text-sm text-error-text">
+        <p id={errorId} role="alert" className="min-h-5 text-sm text-error-text">
           {error}
         </p>
-      ) : null}
+      ) : (
+        <p className="min-h-5 text-sm" aria-hidden="true" />
+      )}
     </div>
   );
 });

@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from 'react';
 import { AlertTriangle, RotateCcw } from 'lucide-react';
 import { FullPageMessage } from '@/components/feedback/FullPageMessage';
+import { Button, buttonClassName } from '@/components/ui/Button';
 import { DocumentNavLink } from '@/components/navigation/DocumentNavLink';
 import {
   claimErrorReloadAttempt,
@@ -64,19 +65,10 @@ export function RouteError({
       detail={errorDigest(error)}
       data-testid={testId}
     >
-      <button
-        type="button"
-        onClick={retry}
-        className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-sm bg-primary px-6 py-3 text-sm font-semibold text-white transition duration-fast ease-pinvi hover:bg-primary-active"
-        data-testid={`${testId}-retry`}
-      >
-        <RotateCcw className="size-4" aria-hidden="true" />
+      <Button onClick={retry} leadingIcon={<RotateCcw />} data-testid={`${testId}-retry`}>
         다시 시도
-      </button>
-      <DocumentNavLink
-        href="/"
-        className="focus-ring inline-flex min-h-11 items-center rounded-sm border border-hairline px-6 py-3 text-sm font-semibold text-ink transition duration-fast ease-pinvi hover:bg-surface-soft"
-      >
+      </Button>
+      <DocumentNavLink href="/" className={buttonClassName({ variant: 'secondary' })}>
         홈으로
       </DocumentNavLink>
     </FullPageMessage>
