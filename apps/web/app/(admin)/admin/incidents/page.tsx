@@ -342,7 +342,7 @@ export default function AdminIncidentsPage() {
           type="button"
           onClick={() => void incidentsQuery.refetch()}
           disabled={incidentsQuery.isFetching}
-          className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
         >
           {incidentsQuery.isFetching ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -480,7 +480,7 @@ export default function AdminIncidentsPage() {
               <button
                 type="submit"
                 disabled={createMutation.isPending}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-4 text-sm font-semibold text-on-primary disabled:opacity-50"
                 data-testid="admin-incidents-create"
               >
                 {createMutation.isPending ? (
@@ -594,7 +594,7 @@ export default function AdminIncidentsPage() {
                   <button
                     type="submit"
                     disabled={actionMutation.isPending}
-                    className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+                    className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-4 text-sm font-semibold text-on-primary disabled:opacity-50"
                     data-testid="admin-incidents-action-submit"
                   >
                     {actionMutation.isPending ? (

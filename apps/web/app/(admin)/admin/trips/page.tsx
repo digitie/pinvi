@@ -188,10 +188,10 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="admin-trip-create-heading"
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-12"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-scrim/50 p-4 pt-12"
       data-testid="admin-trip-create-dialog"
     >
-      <div className="max-h-[calc(100vh-6rem)] w-full max-w-3xl overflow-auto rounded-sm bg-surface p-5 shadow-lg">
+      <div className="max-h-[calc(100dvh-6rem)] w-full max-w-3xl overflow-auto rounded-sm bg-canvas p-5 shadow-overlay">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h2 id="admin-trip-create-heading" className="text-lg font-semibold text-ink">
@@ -241,7 +241,7 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
 
         {ownerQuery.length > 0 && (
           <div className="mb-4 max-h-40 overflow-auto border-y border-hairline py-2">
-            {ownerQueryResult.isLoading && <p className="text-sm text-muted">검색 중...</p>}
+            {ownerQueryResult.isLoading && <p className="text-sm text-muted">검색 중…</p>}
             {ownerQueryResult.data?.items.length === 0 && (
               <p className="text-sm text-muted">검색 결과 없음</p>
             )}
@@ -392,7 +392,7 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
             <button
               type="submit"
               disabled={createMutation.isPending}
-              className="inline-flex items-center gap-2 rounded-sm bg-primary px-3 py-2 text-sm text-white disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm text-on-primary disabled:opacity-60"
               data-testid="admin-trip-create-submit"
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
@@ -455,7 +455,7 @@ export default function AdminTripsPage() {
         <button
           type="button"
           onClick={() => setShowCreateDialog(true)}
-          className="inline-flex items-center gap-2 rounded-sm bg-primary px-3 py-2 text-sm text-white"
+          className="inline-flex items-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm text-on-primary"
           data-testid="admin-trip-create-open"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />

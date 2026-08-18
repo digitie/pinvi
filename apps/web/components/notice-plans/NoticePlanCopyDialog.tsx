@@ -74,13 +74,13 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/50 p-4"
       role="dialog"
       aria-modal="true"
       aria-label="추천 여행 가져오기"
       data-testid="notice-copy-dialog"
     >
-      <div className="w-full max-w-md space-y-4 rounded-md border border-hairline bg-white p-5 shadow-lg">
+      <div className="w-full max-w-md space-y-4 rounded-md border border-hairline bg-canvas p-5 shadow-overlay">
         <h2 className="text-base font-bold text-ink">추천 여행 가져오기</h2>
         <p className="truncate text-sm text-muted">{plan.title}</p>
 
@@ -102,7 +102,7 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
               </button>
               <Link
                 href={`/trips/${result.trip_id}`}
-                className="inline-flex h-9 items-center rounded-sm bg-primary px-4 text-sm font-semibold text-white"
+                className="inline-flex h-9 items-center rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover"
               >
                 여행 열기
               </Link>
@@ -120,8 +120,8 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
                   onClick={() => update({ mode })}
                   className={
                     form.mode === mode
-                      ? 'h-9 flex-1 rounded-sm bg-ink text-sm font-semibold text-white'
-                      : 'h-9 flex-1 rounded-sm border border-hairline bg-white text-sm font-semibold text-ink hover:bg-surface-soft'
+                      ? 'h-9 flex-1 rounded-sm bg-ink text-sm font-semibold text-canvas'
+                      : 'h-9 flex-1 rounded-sm border border-hairline bg-canvas text-sm font-semibold text-ink hover:bg-surface-soft'
                   }
                 >
                   {mode === 'new' ? '새 여행으로' : '기존 여행에 추가'}
@@ -211,7 +211,7 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
                 onClick={() => void copy()}
                 disabled={copying || !canCopy(form)}
                 data-testid="notice-copy-confirm"
-                className="inline-flex h-9 items-center gap-1 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+                className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
               >
                 {copying && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                 복사

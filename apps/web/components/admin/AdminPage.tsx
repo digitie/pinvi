@@ -43,7 +43,7 @@ export interface SectionProps {
 
 export function Section({ title, children }: SectionProps) {
   return (
-    <section className="space-y-3 rounded-sm border border-hairline bg-white p-4">
+    <section className="space-y-3 rounded-sm border border-hairline bg-canvas p-4">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">{title}</h2>
       <div>{children}</div>
     </section>

@@ -195,7 +195,7 @@ export function FeatureDetailCardBody({
           ) : enriching ? (
             <div className="flex items-center gap-2 text-sm text-muted">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              외부 정보 불러오는 중...
+              외부 정보 불러오는 중…
             </div>
           ) : (
             <div className="space-y-2">

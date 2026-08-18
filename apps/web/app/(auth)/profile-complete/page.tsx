@@ -8,6 +8,7 @@ import type { ConsentType } from '@pinvi/schemas';
 import { ApiClient, ApiError } from '@pinvi/api-client';
 import { z } from 'zod';
 import { FormField } from '@/components/forms/FormField';
+import { buttonClassName } from '@/components/ui/Button';
 import { CONSENT_LEGAL_SLUG } from '@/lib/legalDocs';
 import { validateForm, type FieldErrors } from '@pinvi/domain';
 
@@ -169,10 +170,10 @@ export default function ProfileCompletePage() {
         <button
           type="submit"
           disabled={loading || !allRequired}
-          className="w-full rounded-sm bg-primary py-3 text-sm font-semibold text-white hover:bg-primary-active disabled:opacity-60"
+          className={buttonClassName({ fullWidth: true })}
           data-testid="profile-submit"
         >
-          {loading ? '저장 중...' : '완료'}
+          {loading ? '저장 중…' : '완료'}
         </button>
       </form>
     </div>

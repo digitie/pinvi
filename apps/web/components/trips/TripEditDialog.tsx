@@ -45,13 +45,13 @@ export function TripEditDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/50 p-4"
       role="dialog"
       aria-modal="true"
       aria-label="여행 편집"
       data-testid="trip-edit-dialog"
     >
-      <div className="w-full max-w-md space-y-3 rounded-md border border-hairline bg-white p-5 shadow-lg">
+      <div className="w-full max-w-md space-y-3 rounded-md border border-hairline bg-canvas p-5 shadow-overlay">
         <h2 className="text-base font-bold text-ink">여행 편집</h2>
 
         <FormField
@@ -143,7 +143,7 @@ export function TripEditDialog({
             onClick={() => onSave(buildTripUpdate(form))}
             disabled={saving || !form.title.trim()}
             data-testid="trip-edit-save"
-            className="inline-flex h-9 items-center gap-1 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
             저장

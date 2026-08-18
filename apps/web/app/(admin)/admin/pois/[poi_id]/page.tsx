@@ -69,7 +69,7 @@ const auditColumns: AdminTableColumn<AdminAuditEntry>[] = [
 
 function OperationImpactPanel({ impact }: { impact: AdminOperationImpact | null }) {
   if (!impact) {
-    return <p className="text-sm text-muted">영향도를 불러오는 중...</p>;
+    return <p className="text-sm text-muted">영향도를 불러오는 중…</p>;
   }
 
   return (
@@ -285,7 +285,7 @@ export default function AdminPoiDetailPage() {
   if (!poi) {
     return (
       <AdminPage title="POI 상세">
-        <p className="text-sm text-muted">불러오는 중...</p>
+        <p className="text-sm text-muted">불러오는 중…</p>
       </AdminPage>
     );
   }
@@ -462,12 +462,12 @@ export default function AdminPoiDetailPage() {
       </Section>
 
       {showOperationDialog && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-scrim/50 p-4">
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="admin-poi-operation-title"
-            className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-sm bg-white p-6 shadow-lg"
+            className="max-h-[90dvh] w-full max-w-3xl overflow-auto rounded-sm bg-canvas p-6 shadow-overlay"
             data-testid="admin-poi-operation-dialog"
           >
             <div className="flex items-start justify-between gap-3">
@@ -636,10 +636,10 @@ export default function AdminPoiDetailPage() {
                 type="button"
                 disabled={operationConfirmDisabled}
                 onClick={onOperationSave}
-                className="rounded-sm bg-primary px-3 py-2 text-sm text-white disabled:opacity-50"
+                className="rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm text-on-primary disabled:opacity-50"
                 data-testid="admin-poi-operation-confirm"
               >
-                {acting ? '처리 중...' : '실행'}
+                {acting ? '처리 중…' : '실행'}
               </button>
             </div>
           </div>
@@ -647,8 +647,8 @@ export default function AdminPoiDetailPage() {
       )}
 
       {showStatusDialog && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md space-y-4 rounded-sm bg-white p-6">
+        <div className="fixed inset-0 flex items-center justify-center bg-scrim/50 p-4">
+          <div className="w-full max-w-md space-y-4 rounded-sm bg-canvas p-6">
             <h3 className="text-lg font-bold text-ink">POI 연결 상태 변경</h3>
             <p className="text-xs text-muted">
               {currentBroken ? '끊김' : '정상'} → {brokenDraft ? '끊김' : '정상'}
@@ -677,10 +677,10 @@ export default function AdminPoiDetailPage() {
                 type="button"
                 disabled={acting || reason.trim().length < 1}
                 onClick={onLinkStatusSave}
-                className="rounded-sm bg-primary px-3 py-2 text-sm text-white disabled:opacity-50"
+                className="rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm text-on-primary disabled:opacity-50"
                 data-testid="admin-poi-action-confirm"
               >
-                {acting ? '처리 중...' : '확인'}
+                {acting ? '처리 중…' : '확인'}
               </button>
             </div>
           </div>

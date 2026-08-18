@@ -3,6 +3,7 @@
 import { useRef, type ReactNode } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useModalDialog } from '@/lib/useModalDialog';
+import { buttonClassName } from '@/components/ui/Button';
 
 /**
  * 제네릭 확인 다이얼로그(TDR, ADR-056).
@@ -60,14 +61,14 @@ export function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-scrim/50 p-4"
       data-testid={`${testId}-backdrop`}
       {...backdropProps}
     >
       <div
         {...dialogProps}
         data-testid={testId}
-        className="w-full max-w-md space-y-4 rounded-md border border-hairline bg-white p-5 shadow-lg outline-none"
+        className="w-full max-w-md space-y-4 rounded-md border border-hairline bg-canvas p-5 shadow-overlay outline-none"
       >
         <div className="flex items-start gap-3">
           {isDanger && (
@@ -96,7 +97,7 @@ export function ConfirmDialog({
             onClick={onCancel}
             disabled={busy}
             data-testid={`${testId}-cancel`}
-            className="h-9 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
+            className={buttonClassName({ variant: 'secondary', size: 'sm' })}
           >
             {cancelLabel}
           </button>
@@ -105,11 +106,7 @@ export function ConfirmDialog({
             onClick={onConfirm}
             disabled={busy}
             data-testid={`${testId}-confirm`}
-            className={
-              isDanger
-                ? 'inline-flex h-9 items-center gap-1 rounded-sm bg-error-text px-4 text-sm font-semibold text-white hover:bg-error-text-hover disabled:opacity-50'
-                : 'inline-flex h-9 items-center gap-1 rounded-sm bg-primary px-4 text-sm font-semibold text-white hover:bg-primary-active disabled:opacity-50'
-            }
+            className={buttonClassName({ variant: isDanger ? 'danger' : 'primary', size: 'sm' })}
           >
             {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
             {confirmLabel}

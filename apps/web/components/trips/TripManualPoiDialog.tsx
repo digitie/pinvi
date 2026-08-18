@@ -159,13 +159,13 @@ export function TripManualPoiDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/50 p-4"
       role="dialog"
       aria-modal="true"
       aria-label="POI 생성"
       data-testid="manual-poi-dialog"
     >
-      <div className="w-full max-w-md space-y-4 rounded-md border border-hairline bg-white p-5 shadow-lg">
+      <div className="w-full max-w-md space-y-4 rounded-md border border-hairline bg-canvas p-5 shadow-overlay">
         <div className="flex items-center gap-2">
           <MapPin className="h-5 w-5 text-primary" aria-hidden="true" />
           <h2 className="text-base font-bold text-ink">POI 생성</h2>
@@ -181,7 +181,7 @@ export function TripManualPoiDialog({
         <div className="space-y-1">
           <p className={DIALOG_LABEL}>주소</p>
           <p
-            className="min-h-9 rounded-sm border border-hairline bg-white px-3 py-2 text-sm text-body"
+            className="min-h-9 rounded-sm border border-hairline bg-canvas px-3 py-2 text-sm text-body"
             data-testid="manual-poi-address"
           >
             {geoLoading ? '주소 확인 중' : (addressLabel ?? '주소 결과 없음')}
@@ -224,7 +224,7 @@ export function TripManualPoiDialog({
             onClick={() => void submit()}
             disabled={saving || geoLoading}
             data-testid="manual-poi-submit"
-            className="inline-flex h-9 items-center gap-1 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
             생성

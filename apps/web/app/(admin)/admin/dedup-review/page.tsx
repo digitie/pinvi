@@ -242,7 +242,7 @@ export default function AdminDedupReviewPage() {
               value={queryInput}
               onChange={(event) => setQueryInput(event.target.value)}
               className={`${inputClass} w-56 pl-7`}
-              placeholder="feature, provider..."
+              placeholder="feature, provider…"
               data-testid="admin-dedup-search"
             />
           </div>
@@ -297,7 +297,7 @@ export default function AdminDedupReviewPage() {
           empty="dedup 후보가 없습니다."
         />
         <section
-          className="space-y-4 rounded-sm border border-hairline bg-white p-4 text-sm"
+          className="space-y-4 rounded-sm border border-hairline bg-canvas p-4 text-sm"
           data-testid="admin-dedup-detail"
         >
           {selected ? (
@@ -410,7 +410,7 @@ export default function AdminDedupReviewPage() {
                   <button
                     type="submit"
                     disabled={decisionMutation.isPending}
-                    className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-ink px-3 py-1 text-sm text-white disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-ink px-3 py-1 text-sm text-canvas disabled:opacity-50"
                     data-testid="admin-dedup-submit-verdict"
                   >
                     {decision === 'merged' ? (

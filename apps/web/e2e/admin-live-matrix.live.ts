@@ -412,7 +412,7 @@ function backupMutationPath(value: string, method: string) {
 
 async function waitForAdminTable(page: Page) {
   await expect(page.getByTestId('admin-table-scroll').first()).toBeVisible();
-  await expect(page.getByText('불러오는 중...')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByText('불러오는 중…')).toHaveCount(0, { timeout: 15_000 });
   await expectNoBlockingErrors(page);
 }
 
@@ -869,7 +869,7 @@ function pushDebugRequestTimelineCases(cases: AdminUiCase[]) {
         await reloginIfNeeded(page, `/admin/debug/request/${requestId}`);
         await expectAdminShell(page, 'Request timeline');
         await expect(page.getByTestId('admin-request-timeline-refresh')).toBeVisible();
-        await expect(page.getByText('불러오는 중...')).toHaveCount(0, { timeout: 15_000 });
+        await expect(page.getByText('불러오는 중…')).toHaveCount(0, { timeout: 15_000 });
 
         const summaryVisible = await page
           .getByTestId('admin-request-timeline-summary')

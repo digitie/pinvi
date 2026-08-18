@@ -71,7 +71,7 @@ export function NoticePlanShelf() {
         <button
           type="button"
           onClick={() => void loadPlans()}
-          className="inline-flex h-10 w-fit items-center gap-2 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+          className="inline-flex h-10 w-fit items-center gap-2 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
           disabled={loading}
         >
           {loading ? (
@@ -104,8 +104,8 @@ export function NoticePlanShelf() {
             onClick={() => setCategory(item.value)}
             className={
               category === item.value
-                ? 'h-10 rounded-sm bg-ink px-4 text-sm font-semibold text-white'
-                : 'h-10 rounded-sm border border-hairline bg-white px-4 text-sm font-semibold text-ink hover:bg-surface-soft'
+                ? 'h-10 rounded-sm bg-ink px-4 text-sm font-semibold text-canvas'
+                : 'h-10 rounded-sm border border-hairline bg-canvas px-4 text-sm font-semibold text-ink hover:bg-surface-soft'
             }
             role="tab"
             aria-selected={category === item.value}
@@ -116,12 +116,12 @@ export function NoticePlanShelf() {
       </div>
 
       {loading ? (
-        <div className="flex min-h-56 items-center justify-center rounded-sm border border-hairline bg-white text-sm text-muted">
+        <div className="flex min-h-56 items-center justify-center rounded-sm border border-hairline bg-canvas text-sm text-muted">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-          불러오는 중...
+          불러오는 중…
         </div>
       ) : visiblePlans.length === 0 ? (
-        <div className="flex min-h-56 flex-col items-center justify-center rounded-sm border border-hairline bg-white px-4 text-center">
+        <div className="flex min-h-56 flex-col items-center justify-center rounded-sm border border-hairline bg-canvas px-4 text-center">
           <Newspaper className="h-8 w-8 text-muted" aria-hidden="true" />
           <p className="mt-3 text-sm font-semibold text-ink">표시할 추천 여행이 없습니다.</p>
           <p className="mt-1 text-xs text-muted">공개된 추천 여행이 생기면 이곳에 나타납니다.</p>
@@ -134,7 +134,7 @@ export function NoticePlanShelf() {
           {visiblePlans.map((plan) => (
             <article
               key={plan.notice_plan_id}
-              className="rounded-sm border border-hairline bg-white p-4"
+              className="rounded-sm border border-hairline bg-canvas p-4"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -160,7 +160,7 @@ export function NoticePlanShelf() {
               <button
                 type="button"
                 onClick={() => setCopyPlan(plan)}
-                className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white"
+                className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover"
                 data-testid={`notice-plan-copy-${plan.notice_plan_id}`}
               >
                 <CopyPlus className="h-4 w-4" aria-hidden="true" />내 여행으로 가져오기

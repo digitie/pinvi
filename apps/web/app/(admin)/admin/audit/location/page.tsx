@@ -121,7 +121,7 @@ export default function AdminLocationAuditPage() {
       actions={
         <Link
           href="/admin/audit"
-          className="rounded-sm border border-hairline bg-white px-3 py-2 text-sm font-semibold text-ink"
+          className="rounded-sm border border-hairline bg-canvas px-3 py-2 text-sm font-semibold text-ink"
         >
           일반 감사 로그
         </Link>
@@ -184,7 +184,7 @@ export default function AdminLocationAuditPage() {
         rowKey={(row) => String(row.log_id)}
         rowTestId={(row) => `admin-location-row-${row.log_id}`}
         virtualized
-        maxHeight="70vh"
+        maxHeight="70dvh"
       />
     </AdminPage>
   );

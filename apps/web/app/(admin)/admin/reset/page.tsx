@@ -86,7 +86,7 @@ export default function AdminResetPage() {
         </p>
       ) : (
         <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_28rem]">
-          <div className="space-y-3 rounded-sm border border-hairline bg-white p-4 text-sm">
+          <div className="space-y-3 rounded-sm border border-hairline bg-canvas p-4 text-sm">
             {error && (
               <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">
                 {error}
@@ -105,7 +105,7 @@ export default function AdminResetPage() {
           </div>
 
           <form
-            className="space-y-3 rounded-sm border border-hairline bg-white p-4 text-sm"
+            className="space-y-3 rounded-sm border border-hairline bg-canvas p-4 text-sm"
             onSubmit={submit}
           >
             <label className="block text-xs text-muted">
@@ -156,7 +156,7 @@ export default function AdminResetPage() {
             <button
               type="submit"
               disabled={resetMutation.isPending}
-              className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-ink px-3 py-1 text-sm text-white disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-ink px-3 py-1 text-sm text-canvas disabled:opacity-50"
               data-testid="admin-reset-run"
             >
               <Play className="h-3.5 w-3.5" aria-hidden="true" />

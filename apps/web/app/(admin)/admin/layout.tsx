@@ -163,12 +163,12 @@ function AdminGuard({ children }: { children: ReactNode }) {
   }, [isLoginPage, meQuery.isError, meQuery.isSuccess, meQuery.error, me, hasAdmin, router]);
 
   if (isLoginPage) {
-    return <div className="min-h-screen bg-surface-soft">{children}</div>;
+    return <div className="min-h-dvh bg-surface-soft">{children}</div>;
   }
   if (meQuery.isPending) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-muted">
-        권한 확인 중...
+      <div className="flex min-h-dvh items-center justify-center text-sm text-muted">
+        권한 확인 중…
       </div>
     );
   }
@@ -178,9 +178,9 @@ function AdminGuard({ children }: { children: ReactNode }) {
   const activeHref = getActiveNavHref(pathname);
 
   return (
-    <div className="flex min-h-screen flex-col bg-surface-soft lg:flex-row">
+    <div className="flex min-h-dvh flex-col bg-surface-soft lg:flex-row">
       <aside
-        className={`shrink-0 border-b border-hairline bg-white transition-[width] duration-200 lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto lg:border-b-0 lg:border-r ${
+        className={`shrink-0 border-b border-hairline bg-canvas transition-[width] duration-200 lg:sticky lg:top-0 lg:h-dvh lg:overflow-y-auto lg:border-b-0 lg:border-r ${
           sidebarCollapsed ? 'lg:w-20' : 'lg:w-64'
         }`}
         data-collapsed={sidebarCollapsed ? 'true' : 'false'}
@@ -195,7 +195,7 @@ function AdminGuard({ children }: { children: ReactNode }) {
             href="/admin"
             aria-label="Pinvi Admin"
             title="Pinvi Admin"
-            className="flex h-11 w-11 items-center justify-center rounded-sm bg-ink text-sm font-bold text-white"
+            className="flex h-11 w-11 items-center justify-center rounded-sm bg-ink text-sm font-bold text-canvas"
           >
             PA
           </DocumentNavLink>
@@ -276,7 +276,7 @@ function AdminGuard({ children }: { children: ReactNode }) {
                       data-sprint={item.sprint}
                       className={
                         active
-                          ? `flex ${linkSize} rounded-sm bg-primary text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`
+                          ? `flex ${linkSize} rounded-sm bg-ink text-canvas focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus`
                           : `flex ${linkSize} rounded-sm text-ink hover:bg-surface-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`
                       }
                       data-testid={`admin-nav-${item.href.replace(/[^a-z0-9]+/gi, '-')}`}

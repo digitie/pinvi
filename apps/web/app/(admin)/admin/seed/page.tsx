@@ -145,7 +145,7 @@ export default function AdminSeedPage() {
               empty="seed scenario가 없습니다."
             />
             <section
-              className="space-y-4 rounded-sm border border-hairline bg-white p-4 text-sm"
+              className="space-y-4 rounded-sm border border-hairline bg-canvas p-4 text-sm"
               data-testid="admin-seed-detail"
             >
               {selected ? (
@@ -199,7 +199,7 @@ export default function AdminSeedPage() {
                     <button
                       type="submit"
                       disabled={runMutation.isPending}
-                      className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-ink px-3 py-1 text-sm text-white disabled:opacity-50"
+                      className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-ink px-3 py-1 text-sm text-canvas disabled:opacity-50"
                       data-testid="admin-seed-run"
                     >
                       <Play className="h-3.5 w-3.5" aria-hidden="true" />

@@ -87,7 +87,9 @@ function TabNav({ featureId, activeTab }: { featureId: string; activeTab: Featur
           key={tab}
           href={featureTabHref(featureId, tab)}
           className={`inline-flex items-center gap-1 rounded-sm border px-3 py-1 text-sm ${
-            activeTab === tab ? 'border-ink bg-ink text-white' : 'border-hairline bg-white text-ink'
+            activeTab === tab
+              ? 'border-ink bg-ink text-canvas'
+              : 'border-hairline bg-canvas text-ink'
           }`}
           aria-current={activeTab === tab ? 'page' : undefined}
           data-testid={`admin-feature-tab-${tab}`}

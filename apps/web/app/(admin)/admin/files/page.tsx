@@ -252,7 +252,7 @@ export default function AdminFilesPage() {
               type="button"
               onClick={saveSettings}
               disabled={settingsBusy || settingsReason.trim().length < 1}
-              className="inline-flex h-10 items-center gap-2 rounded-sm bg-primary px-3 text-sm font-semibold text-white disabled:opacity-50"
+              className="inline-flex h-10 items-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 text-sm font-semibold text-on-primary disabled:opacity-50"
               data-testid="admin-file-settings-save"
             >
               {settingsBusy ? (
@@ -300,7 +300,7 @@ export default function AdminFilesPage() {
       {loading ? (
         <div className="flex h-32 items-center justify-center text-sm text-muted">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-          불러오는 중...
+          불러오는 중…
         </div>
       ) : (
         <AdminTable

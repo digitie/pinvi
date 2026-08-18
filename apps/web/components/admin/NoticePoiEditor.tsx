@@ -253,7 +253,7 @@ export function NoticePoiEditor({
   const busy = createMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
 
   return (
-    <section className="space-y-4 rounded-sm border border-hairline bg-white p-4">
+    <section className="space-y-4 rounded-sm border border-hairline bg-canvas p-4">
       <header>
         <h2 className="text-sm font-semibold text-ink">POI 편집</h2>
         <p className="mt-1 text-xs text-muted">
@@ -280,7 +280,7 @@ export function NoticePoiEditor({
           <button
             type="submit"
             disabled={busy}
-            className="inline-flex h-9 items-center gap-1 rounded-sm bg-primary px-3 text-sm font-semibold text-white disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
             data-testid="admin-notice-poi-add"
           >
             <Plus className="h-4 w-4" aria-hidden="true" />
@@ -322,7 +322,7 @@ export function NoticePoiEditor({
           <button
             type="submit"
             disabled={busy}
-            className="inline-flex h-9 items-center gap-1 rounded-sm bg-ink px-3 text-sm font-semibold text-white disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-1 rounded-sm bg-ink px-3 text-sm font-semibold text-canvas disabled:opacity-50"
             data-testid="admin-notice-poi-save"
           >
             <Save className="h-4 w-4" aria-hidden="true" />

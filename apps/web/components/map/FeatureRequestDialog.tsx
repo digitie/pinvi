@@ -64,13 +64,13 @@ export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureReq
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/50 p-4"
       role="dialog"
       aria-modal="true"
       aria-label="장소 제안"
       data-testid="feature-request-dialog"
     >
-      <div className="w-full max-w-md space-y-4 rounded-md border border-hairline bg-white p-5 shadow-lg">
+      <div className="w-full max-w-md space-y-4 rounded-md border border-hairline bg-canvas p-5 shadow-overlay">
         <h2 className="text-base font-bold text-ink">이 위치 장소 제안</h2>
         <p className="flex items-center gap-1 text-xs text-muted">
           <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
@@ -87,7 +87,7 @@ export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureReq
               <button
                 type="button"
                 onClick={onClose}
-                className="h-9 rounded-sm bg-primary px-4 text-sm font-semibold text-white"
+                className="h-9 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover"
               >
                 닫기
               </button>
@@ -105,8 +105,8 @@ export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureReq
                   onClick={() => update({ kind: k.value })}
                   className={
                     form.kind === k.value
-                      ? 'h-9 flex-1 rounded-sm bg-ink text-sm font-semibold text-white'
-                      : 'h-9 flex-1 rounded-sm border border-hairline bg-white text-sm font-semibold text-ink hover:bg-surface-soft'
+                      ? 'h-9 flex-1 rounded-sm bg-ink text-sm font-semibold text-canvas'
+                      : 'h-9 flex-1 rounded-sm border border-hairline bg-canvas text-sm font-semibold text-ink hover:bg-surface-soft'
                   }
                 >
                   {k.label}
@@ -165,7 +165,7 @@ export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureReq
                 onClick={() => void submit()}
                 disabled={submitting}
                 data-testid="feature-request-submit"
-                className="inline-flex h-9 items-center gap-1 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+                className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
               >
                 {submitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                 제안하기

@@ -47,7 +47,7 @@ export function TripActions({ tripId }: TripActionsProps) {
           type="button"
           onClick={() => void copy()}
           disabled={busy !== null}
-          className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline bg-white px-2.5 text-xs font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
+          className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline bg-canvas px-2.5 text-xs font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
         >
           {busy === 'copy' ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -63,7 +63,7 @@ export function TripActions({ tripId }: TripActionsProps) {
               onClick={() => void remove()}
               disabled={busy !== null}
               data-testid="trip-delete-confirm"
-              className="inline-flex h-8 items-center gap-1 rounded-sm bg-error-text px-2.5 text-xs font-semibold text-white disabled:opacity-50"
+              className="inline-flex h-8 items-center gap-1 rounded-sm bg-error-text px-2.5 text-xs font-semibold text-on-primary disabled:opacity-50"
             >
               {busy === 'delete' && (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -83,7 +83,7 @@ export function TripActions({ tripId }: TripActionsProps) {
             type="button"
             onClick={() => setConfirming(true)}
             disabled={busy !== null}
-            className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline bg-white px-2.5 text-xs font-semibold text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
+            className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline bg-canvas px-2.5 text-xs font-semibold text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
           >
             <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
             삭제

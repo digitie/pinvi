@@ -107,7 +107,7 @@ function DetailInspector({ featureId }: { featureId: string | null }) {
   if (!featureId) {
     return (
       <section
-        className="rounded-sm border border-hairline bg-white p-4 text-sm text-muted"
+        className="rounded-sm border border-hairline bg-canvas p-4 text-sm text-muted"
         data-testid="admin-features-detail-empty"
       >
         목록에서 feature를 선택하면 상세 정보가 표시됩니다.
@@ -124,7 +124,7 @@ function DetailInspector({ featureId }: { featureId: string | null }) {
 
   return (
     <section
-      className="space-y-4 rounded-sm border border-hairline bg-white p-4"
+      className="space-y-4 rounded-sm border border-hairline bg-canvas p-4"
       data-testid="admin-features-detail"
     >
       <header className="flex items-start justify-between gap-3">
@@ -145,7 +145,7 @@ function DetailInspector({ featureId }: { featureId: string | null }) {
         </button>
       </header>
 
-      {detailQuery.isLoading && <p className="text-sm text-muted">불러오는 중...</p>}
+      {detailQuery.isLoading && <p className="text-sm text-muted">불러오는 중…</p>}
       {error && (
         <p
           role="alert"

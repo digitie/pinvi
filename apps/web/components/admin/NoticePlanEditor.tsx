@@ -174,7 +174,7 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
       <AdminPage title="추천 여행 편집">
         <div className="flex min-h-40 items-center justify-center text-sm text-muted">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-          불러오는 중...
+          불러오는 중…
         </div>
       </AdminPage>
     );
@@ -215,7 +215,7 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
         </p>
       )}
 
-      <form onSubmit={submit} className="space-y-4 rounded-sm border border-hairline bg-white p-4">
+      <form onSubmit={submit} className="space-y-4 rounded-sm border border-hairline bg-canvas p-4">
         {isCanonicalPlan && (
           <p className="rounded-sm bg-surface-soft px-3 py-2 text-sm text-muted">
             Map에서 가져온 필드는 refresh로만 갱신됩니다. 여기에서는 공개 상태만 바꿀 수 있습니다.
@@ -316,7 +316,7 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
           <button
             type="submit"
             disabled={busy}
-            className="inline-flex h-9 items-center gap-1 rounded-sm bg-ink px-3 text-sm font-semibold text-white disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-1 rounded-sm bg-ink px-3 text-sm font-semibold text-canvas disabled:opacity-50"
             data-testid="admin-notice-save"
           >
             {saveMutation.isPending ? (

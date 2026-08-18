@@ -202,7 +202,7 @@ function ReviewPanel({
             <button
               type="submit"
               disabled={busy}
-              className="rounded-sm border border-hairline bg-ink px-3 py-1 text-sm text-white disabled:opacity-50"
+              className="rounded-sm border border-hairline bg-ink px-3 py-1 text-sm text-canvas disabled:opacity-50"
               data-testid="admin-fr-approve"
             >
               승인

@@ -12,6 +12,7 @@ import { Section } from '@/components/admin/AdminPage';
 import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
 import { FormField } from '@/components/forms/FormField';
 import { FormSelect } from '@/components/forms/FormSelect';
+import { buttonClassName } from '@/components/ui/Button';
 import { apiClient } from '@/lib/api';
 
 const TARGET_OPTIONS: { value: ContentReportTargetType; label: string }[] = [
@@ -246,7 +247,7 @@ export default function ModerationSettingsPage() {
           <button
             type="submit"
             disabled={saving}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50 lg:col-start-2 lg:justify-self-start"
+            className={buttonClassName({ className: 'lg:col-start-2 lg:justify-self-start' })}
             data-testid="settings-moderation-submit"
           >
             {saving ? (
@@ -277,7 +278,7 @@ export default function ModerationSettingsPage() {
               <button
                 type="submit"
                 disabled={appealing}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+                className={buttonClassName()}
                 data-testid="settings-moderation-appeal-submit"
               >
                 {appealing ? (
@@ -290,7 +291,7 @@ export default function ModerationSettingsPage() {
               <button
                 type="button"
                 onClick={() => setAppealReportId(null)}
-                className="h-10 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+                className={buttonClassName({ variant: 'secondary' })}
               >
                 취소
               </button>

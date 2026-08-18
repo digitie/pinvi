@@ -184,7 +184,7 @@ function DetailPanel({
 
   return (
     <section
-      className="space-y-4 rounded-sm border border-hairline bg-white p-4"
+      className="space-y-4 rounded-sm border border-hairline bg-canvas p-4"
       data-testid="admin-fcr-detail"
     >
       <header className="flex items-start justify-between gap-3">
@@ -274,7 +274,7 @@ function DetailPanel({
               type="button"
               disabled={busy}
               onClick={() => submit('approve')}
-              className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-ink px-3 py-1 text-sm text-white disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-ink px-3 py-1 text-sm text-canvas disabled:opacity-50"
               data-testid="admin-fcr-approve"
             >
               <Check className="h-3.5 w-3.5" aria-hidden="true" />
@@ -520,7 +520,7 @@ export default function AdminFeatureChangeRequestsPage() {
           <DetailPanel record={selected} onClose={() => setSelectedRequestId(null)} />
         ) : (
           <section
-            className="rounded-sm border border-hairline bg-white p-4 text-sm text-muted"
+            className="rounded-sm border border-hairline bg-canvas p-4 text-sm text-muted"
             data-testid="admin-fcr-detail-empty"
           >
             목록에서 변경 요청을 선택하면 payload와 검수 액션이 표시됩니다.

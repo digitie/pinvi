@@ -110,10 +110,10 @@ export function TripPoiList({
                 compact
                   ? selected
                     ? 'rounded-sm bg-primary/5 p-2 ring-1 ring-primary/35'
-                    : 'rounded-sm bg-white p-2'
+                    : 'rounded-sm bg-canvas p-2'
                   : selected
                     ? 'rounded-sm border border-primary bg-surface-soft p-3'
-                    : 'rounded-sm border border-hairline bg-white p-3'
+                    : 'rounded-sm border border-hairline bg-canvas p-3'
               }
             >
               <div className="flex items-start gap-2">

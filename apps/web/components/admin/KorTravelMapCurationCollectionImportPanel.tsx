@@ -112,7 +112,7 @@ export function KorTravelMapCurationCollectionImportPanel() {
 
   return (
     <section
-      className="rounded-sm border border-hairline bg-surface p-4"
+      className="rounded-sm border border-hairline bg-surface-soft p-4"
       aria-labelledby="canonical-import-heading"
       data-testid="admin-notice-canonical-import"
     >
@@ -176,7 +176,7 @@ export function KorTravelMapCurationCollectionImportPanel() {
           <button
             type="submit"
             disabled={importMutation.isPending}
-            className="inline-flex h-9 items-center gap-1 rounded-sm bg-primary px-3 text-sm font-semibold text-white disabled:opacity-60"
+            className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-60"
             data-testid="admin-notice-canonical-import-submit"
           >
             <Download className="h-4 w-4" aria-hidden="true" />

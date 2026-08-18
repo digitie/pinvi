@@ -114,7 +114,7 @@ async function expectAdminDebugReady(page: Page) {
   await expect(page.getByRole('heading', { name: 'Debug logs' })).toBeVisible();
   await expect(page.getByTestId('admin-debug-live-status')).toContainText('polling');
   await expect(page.getByTestId('admin-debug-live-status')).toContainText('off');
-  await expect(page.getByText('불러오는 중...')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByText('불러오는 중…')).toHaveCount(0, { timeout: 15_000 });
   await expect(
     page.getByText(/조회 실패|불러오지 못했습니다|Internal Server Error|Forbidden/),
   ).toHaveCount(0);
@@ -179,7 +179,7 @@ test.describe('admin debug live UI e2e', () => {
     await expect(page.getByTestId('admin-debug-method')).toHaveValue('GET');
     await expect(page.getByTestId('admin-debug-min-status')).toHaveValue('200');
     await expect(page.getByTestId('admin-debug-path')).toHaveValue('/v1');
-    await expect(page.getByText('불러오는 중...')).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByText('불러오는 중…')).toHaveCount(0, { timeout: 15_000 });
 
     await waitForDebugUrl(
       captured,
@@ -212,7 +212,7 @@ test.describe('admin debug live UI e2e', () => {
     await page.getByTestId('admin-debug-request-submit').click();
     await expect(page).toHaveURL(new RegExp(`/admin/debug/request/${requestId}(?:[?#].*)?$`));
     await expect(page.getByRole('heading', { name: 'Request timeline' })).toBeVisible();
-    await expect(page.getByText('불러오는 중...')).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByText('불러오는 중…')).toHaveCount(0, { timeout: 15_000 });
     const summaryVisible = await page
       .getByTestId('admin-request-timeline-summary')
       .isVisible({ timeout: 15_000 })

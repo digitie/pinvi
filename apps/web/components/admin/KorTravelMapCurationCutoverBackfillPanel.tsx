@@ -118,7 +118,7 @@ export function KorTravelMapCurationCutoverBackfillPanel() {
 
   return (
     <section
-      className="rounded-sm border border-hairline bg-surface p-4"
+      className="rounded-sm border border-hairline bg-surface-soft p-4"
       aria-labelledby="cutover-backfill-heading"
       data-testid="admin-notice-cutover-backfill"
     >
@@ -200,7 +200,7 @@ export function KorTravelMapCurationCutoverBackfillPanel() {
           <button
             type="submit"
             disabled={backfillMutation.isPending || !ready}
-            className="inline-flex h-9 items-center gap-1 rounded-sm bg-primary px-3 text-sm font-semibold text-white disabled:opacity-60"
+            className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-60"
             data-testid="admin-notice-cutover-backfill-submit"
           >
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />

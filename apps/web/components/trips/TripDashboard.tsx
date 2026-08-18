@@ -274,7 +274,7 @@ export function TripDashboard() {
             onClick={() => setMobileToolsOpen((open) => !open)}
             aria-controls="trip-dashboard-create"
             aria-expanded={mobileToolsOpen}
-            className={`h-10 w-fit items-center gap-2 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft ${
+            className={`h-10 w-fit items-center gap-2 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft ${
               mobileWebLayout ? 'inline-flex' : 'inline-flex lg:hidden'
             }`}
           >
@@ -284,7 +284,7 @@ export function TripDashboard() {
           <button
             type="button"
             onClick={() => void loadTrips()}
-            className="inline-flex h-10 w-fit items-center gap-2 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+            className="inline-flex h-10 w-fit items-center gap-2 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
             disabled={loading}
           >
             {loading ? (
@@ -326,20 +326,20 @@ export function TripDashboard() {
             points={filteredMapPoints}
             selectedPoiId={selectedPoiId}
             onSelectPoi={setSelectedPoiId}
-            className="h-[calc(100svh-14rem)] min-h-[520px] lg:h-[calc(100vh-14rem)]"
+            className="h-[calc(100svh-14rem)] min-h-[520px] lg:h-[calc(100svh-14rem)]"
           />
 
           <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap gap-2">
-            <span className="rounded-sm bg-white/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
+            <span className="rounded-sm bg-canvas/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
               {filteredTrips.length}개 여행
             </span>
-            <span className="rounded-sm bg-white/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
+            <span className="rounded-sm bg-canvas/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
               {mapLoading ? '장소 불러오는 중' : `${filteredMapPoints.length}개 장소`}
             </span>
           </div>
 
           {(mapError || selectedMapPoint) && (
-            <div className="pointer-events-auto absolute bottom-3 left-3 right-3 max-w-md rounded-sm border border-hairline bg-white/95 p-3 shadow-card">
+            <div className="pointer-events-auto absolute bottom-3 left-3 right-3 max-w-md rounded-sm border border-hairline bg-canvas/95 p-3 shadow-card">
               {mapError && <p className="text-xs text-error-text">{mapError}</p>}
               {selectedMapPoint && (
                 <div className={mapError ? 'mt-2 border-t border-hairline pt-2' : ''}>
@@ -350,7 +350,7 @@ export function TripDashboard() {
                   </p>
                   <Link
                     href={`/trips/${selectedMapPoint.tripId}`}
-                    className="mt-2 inline-flex h-8 items-center rounded-sm bg-primary px-3 text-xs font-semibold text-white"
+                    className="mt-2 inline-flex h-8 items-center rounded-sm bg-cta px-3 text-xs font-semibold text-on-primary hover:bg-cta-hover"
                   >
                     여행 열기
                   </Link>
@@ -365,7 +365,7 @@ export function TripDashboard() {
             id="trip-dashboard-create"
             className={`${
               mobileToolsOpen ? 'block' : 'hidden'
-            } rounded-sm border border-hairline bg-white p-4 ${mobileWebLayout ? '' : 'lg:block'}`}
+            } rounded-sm border border-hairline bg-canvas p-4 ${mobileWebLayout ? '' : 'lg:block'}`}
           >
             <form onSubmit={onCreate} className="space-y-3">
               <div className="flex items-center gap-2 text-sm font-bold text-ink">
@@ -422,7 +422,7 @@ export function TripDashboard() {
               </div>
               <button
                 type="submit"
-                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
                 disabled={creating}
                 data-testid="trip-create-submit"
               >
@@ -445,8 +445,8 @@ export function TripDashboard() {
                   onClick={() => setBucket(item.value)}
                   className={
                     bucket === item.value
-                      ? 'h-9 rounded-sm bg-ink px-3 text-sm font-semibold text-white'
-                      : 'h-9 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft'
+                      ? 'h-9 rounded-sm bg-ink px-3 text-sm font-semibold text-canvas'
+                      : 'h-9 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft'
                   }
                   role="tab"
                   aria-selected={bucket === item.value}
@@ -457,12 +457,12 @@ export function TripDashboard() {
             </div>
 
             {loading ? (
-              <div className="flex min-h-48 items-center justify-center rounded-sm border border-hairline bg-white text-sm text-muted">
+              <div className="flex min-h-48 items-center justify-center rounded-sm border border-hairline bg-canvas text-sm text-muted">
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                불러오는 중...
+                불러오는 중…
               </div>
             ) : filteredTrips.length === 0 ? (
-              <div className="flex min-h-48 flex-col items-center justify-center rounded-sm border border-hairline bg-white px-4 text-center">
+              <div className="flex min-h-48 flex-col items-center justify-center rounded-sm border border-hairline bg-canvas px-4 text-center">
                 <CalendarDays className="h-8 w-8 text-muted" aria-hidden="true" />
                 <p className="mt-3 text-sm font-semibold text-ink">표시할 여행이 없습니다.</p>
                 <p className="mt-1 text-xs text-muted">첫 여행을 저장하면 이곳에 나타납니다.</p>
@@ -478,8 +478,8 @@ export function TripDashboard() {
                       href={`/trips/${trip.trip_id}`}
                       className={
                         selected
-                          ? 'block rounded-sm border border-primary bg-white p-4 shadow-card'
-                          : 'block rounded-sm border border-hairline bg-white p-4 transition hover:border-primary hover:bg-surface-soft'
+                          ? 'block rounded-sm border border-primary bg-canvas p-4 shadow-card'
+                          : 'block rounded-sm border border-hairline bg-canvas p-4 transition hover:border-primary hover:bg-surface-soft'
                       }
                     >
                       <div className="flex items-start justify-between gap-3">

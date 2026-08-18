@@ -147,9 +147,12 @@
       + 공개 표면(랜딩 Narrative Workflow 재구성, `PublicMasthead/PublicColophon/Wordmark`, auth 레이아웃·
       로그인·회원가입·verify-pending 재발송·verify-email, 공유 뷰 chrome+오류 상태, 404/FullPageMessage,
       favicon·앱 아이콘·themeColor Rausch/canvas, 내부 문구 제거). (완료: 2026-08-18, PR #447, claude → tasks-done.md)
-- [ ] **T-313** — Hallmark PR-1b(기계적 코드모드): `bg-white→bg-canvas`(136), `text-white→text-on-primary`(96),
-      `bg-black/NN→bg-scrim/50`, `shadow-sm/md/lg/xl→shadow-card|shadow-overlay`(21), `'...'→'…'`, `vh/svh→dvh`,
-      미정의 `bg-surface`(4) 정정. 판단 없는 diff — 별도 PR로 리뷰 크기 관리. eslint-plugin-tailwindcss `no-custom-classname`·`text-[NNpx]` 차단 검토.
+- [x] **T-313** — Hallmark PR-1b(코드모드, 89파일): `bg-white→bg-canvas`, `text-white`→채움 위 `text-on-primary`/
+      ink 위 `text-canvas`(마커 인라인 색 위는 유지), 채운 primary CTA→`bg-cta … hover:bg-cta-hover`,
+      `bg-black/NN→bg-scrim/50`, `shadow-*→shadow-card|overlay`, 미정의 `bg-surface`→`bg-surface-soft`,
+      `'...'→'…'`, `vh→dvh`(풀스크린 지도 표면의 `100svh`는 의도적으로 유지 — 모바일 chrome 토글 리사이즈 방지),
+      `text-[NNpx]`→스케일, 본문 `text-muted-soft→text-muted`. eslint-plugin-tailwindcss 도입은 후속(T-317).
+      (완료: 2026-08-18, PR #448, claude → tasks-done.md)
 - [ ] **T-314** — Hallmark PR-3(앱 셸+대시보드+추천 shelf): `AppShell` ground `bg-canvas`, <md 하단 탭바,
       /trips·/notice-plans eyebrow 삭제·accent 1개, skeleton/empty/error 3종, `role=tab`→`aria-pressed` 세그먼트,
       `useMobileWebLayout` UA 스니핑→`matchMedia`, TripDashboard 링크 안 버튼 span 제거(Mj24).

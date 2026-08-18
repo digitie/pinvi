@@ -6,6 +6,16 @@
 
 ## 2026-08-18
 
+- [x] **T-313** — Hallmark PR-1b 토큰 우회 코드모드(apps/web 89파일, +328/−320, 로직·testid·문구 의미 변경 0).
+      (완료: 2026-08-18, PR #448, claude)
+      `bg-white→bg-canvas`(131), `text-white`(92)→색 채움 위 `text-on-primary`/ink·scrim 위 `text-canvas`(마커 팔레트
+      인라인 색 위 3곳은 유지), 텍스트 있는 채운 `bg-primary` CTA→`bg-cta text-on-primary hover:bg-cta-hover`(DESIGN.md
+      대비 결정), `bg-black/35~60`→`bg-scrim/50`, 모달·시트 `shadow-lg/xl`→`shadow-overlay`·드롭다운/카드→`shadow-card`,
+      미정의 `bg-surface`(4)→`bg-surface-soft`, 사용자 문구 `...`→`…`(e2e/vitest 어서션 동기), `min-h-screen/h-screen/
+vh`→`dvh`(풀스크린 지도 표면 `100svh`는 유지), `text-[10~24px]`→스케일, 본문 `text-muted-soft→text-muted`, 일부
+      버튼은 `buttonClassName`으로. 검증 에이전트가 잡은 4건(지도 svh 회귀·컨텍스트 메뉴 shadow 티어·업로드 label
+      cta·admin 다이얼로그 표면·설정 인라인 버튼 크기) 반영. typecheck/lint 0, vitest 100, next build 통과.
+
 - [x] **T-312** — Hallmark 감사(웹 7표면 13C/26M/19m) → 디자인 시스템 잠금 + 공개 표면 재설계(PR-1+PR-2).
       (완료: 2026-08-18, PR #447, claude)
       `DESIGN.md` "Hallmark 잠금 시스템"(modern-minimal · Narrative Workflow/Workbench/Long Document · N1/Ft2 · OKLCH

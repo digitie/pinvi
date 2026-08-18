@@ -518,7 +518,7 @@ export function TripMapView({
                     onAddFeature?.(selectedFeature);
                     setSelectedFeature(null);
                   }}
-                  className="h-8 w-full rounded-sm bg-ink px-3 text-xs font-semibold text-white hover:bg-ink/90 disabled:opacity-50"
+                  className="h-8 w-full rounded-sm bg-ink px-3 text-xs font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
                 >
                   일정에 추가
                 </button>

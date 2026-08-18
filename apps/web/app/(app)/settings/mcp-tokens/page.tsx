@@ -9,6 +9,7 @@ import { Section } from '@/components/admin/AdminPage';
 import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
 import { FormField } from '@/components/forms/FormField';
 import { FormSelect } from '@/components/forms/FormSelect';
+import { buttonClassName } from '@/components/ui/Button';
 
 const EXPIRY_OPTIONS = [
   { value: '30', label: '30일' },
@@ -173,10 +174,10 @@ export default function McpTokensSettingsPage() {
           <button
             type="submit"
             disabled={saving}
-            className="mt-7 inline-flex h-9 items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+            className={buttonClassName({ className: 'mt-7' })}
           >
             <KeyRound className="h-4 w-4" aria-hidden="true" />
-            {saving ? '발급 중...' : '발급'}
+            {saving ? '발급 중…' : '발급'}
           </button>
         </form>
       </Section>
