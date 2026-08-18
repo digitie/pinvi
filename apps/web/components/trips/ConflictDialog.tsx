@@ -124,8 +124,8 @@ export function ConflictDialog({
                   data-testid={`conflict-field-${field.key}-server`}
                   className={
                     mineSelected
-                      ? 'min-h-12 px-3 py-2 text-left text-muted hover:bg-surface-soft'
-                      : 'min-h-12 bg-surface-soft px-3 py-2 text-left font-semibold text-ink ring-1 ring-inset ring-ink'
+                      ? 'min-h-12 px-3 py-2 text-left text-muted hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent'
+                      : 'min-h-12 bg-surface-soft px-3 py-2 text-left font-semibold text-ink ring-1 ring-inset ring-ink disabled:cursor-not-allowed disabled:opacity-60'
                   }
                 >
                   <span className="block break-words">{field.serverValue}</span>
@@ -138,8 +138,8 @@ export function ConflictDialog({
                   data-testid={`conflict-field-${field.key}-mine`}
                   className={
                     mineSelected
-                      ? 'min-h-12 bg-surface-soft px-3 py-2 text-left font-semibold text-ink ring-1 ring-inset ring-ink'
-                      : 'min-h-12 px-3 py-2 text-left text-muted hover:bg-surface-soft'
+                      ? 'min-h-12 bg-surface-soft px-3 py-2 text-left font-semibold text-ink ring-1 ring-inset ring-ink disabled:cursor-not-allowed disabled:opacity-60'
+                      : 'min-h-12 px-3 py-2 text-left text-muted hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent'
                   }
                 >
                   <span className="block break-words">{field.myValue}</span>

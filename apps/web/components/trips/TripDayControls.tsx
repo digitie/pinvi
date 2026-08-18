@@ -30,6 +30,8 @@ export interface TripDayControlsProps {
   addDisabledReason?: string | null;
   showAdd?: boolean;
   busy?: boolean;
+  /** 저장 실패/검증 오류 — 다이얼로그가 열린 채 남으므로 **모달 안에서** 보여야 한다. */
+  error?: string | null;
 }
 
 export function TripDayControls({
@@ -41,6 +43,7 @@ export function TripDayControls({
   addDisabledReason = null,
   showAdd = true,
   busy = false,
+  error = null,
 }: TripDayControlsProps) {
   const [title, setTitle] = useState(selectedDay?.title ?? '');
   const [date, setDate] = useState(selectedDay?.date ?? '');
@@ -48,12 +51,25 @@ export function TripDayControls({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const addDisabled = busy || !canAdd;
 
+  const lastDayIndexRef = useRef(selectedDay?.day_index);
+
   useEffect(() => {
+    const dayChanged = lastDayIndexRef.current !== selectedDay?.day_index;
+    lastDayIndexRef.current = selectedDay?.day_index;
+    // 열려 있는 폼은 **같은 일자**의 서버 갱신으로 덮지 않는다 — 409 충돌 후 reload가 사용자가
+    // 입력한 이름·날짜·색을 지우고 다이얼로그까지 닫던 문제(T-315 4차 리뷰).
+    if (settingsOpen && !dayChanged) return;
     setTitle(selectedDay?.title ?? '');
     setDate(selectedDay?.date ?? '');
     setColor(selectedDay?.marker_color ?? null);
-    setSettingsOpen(false);
-  }, [selectedDay?.date, selectedDay?.day_index, selectedDay?.title, selectedDay?.marker_color]);
+    if (dayChanged) setSettingsOpen(false);
+  }, [
+    settingsOpen,
+    selectedDay?.day_index,
+    selectedDay?.title,
+    selectedDay?.date,
+    selectedDay?.marker_color,
+  ]);
 
   const saveSettings = async () => {
     if (!selectedDay) return;
@@ -129,6 +145,7 @@ export function TripDayControls({
               onTitleChange={setTitle}
               onDateChange={setDate}
               onColorChange={setColor}
+              busyError={error}
               onSave={saveSettings}
               onClose={closeSettings}
             />
@@ -148,6 +165,8 @@ interface DaySettingsDialogProps {
   date: string;
   color: string | null;
   busy: boolean;
+  /** 저장 실패/검증 오류 메시지(모달 안 표시). */
+  busyError?: string | null;
   onTitleChange: (title: string) => void;
   onDateChange: (date: string) => void;
   onColorChange: (color: string | null) => void;
@@ -164,6 +183,7 @@ function DaySettingsDialog({
   date,
   color,
   busy,
+  busyError = null,
   onTitleChange,
   onDateChange,
   onColorChange,
@@ -205,6 +225,17 @@ function DaySettingsDialog({
           if (!unchanged) void onSave();
         }}
       >
+        {busyError && (
+          // 실패해도 다이얼로그가 열린 채 남으므로 오류는 **모달 안**에 있어야 한다 —
+          // 바깥 배너는 scrim 뒤라 보이지도, aria-modal 안에서 읽히지도 않는다(4차 리뷰).
+          <p
+            role="alert"
+            data-testid="trip-day-settings-error"
+            className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
+          >
+            {busyError}
+          </p>
+        )}
         <FormField
           ref={inputRef}
           id="trip-day-title-input"
@@ -212,6 +243,7 @@ function DaySettingsDialog({
           labelClassName={DIALOG_LABEL}
           value={title}
           onChange={(event) => onTitleChange(event.target.value)}
+          disabled={busy}
           maxLength={200}
           placeholder={`${dayIndex}일차`}
         />
@@ -222,6 +254,7 @@ function DaySettingsDialog({
           labelClassName={DIALOG_LABEL}
           value={date}
           onChange={(event) => onDateChange(event.target.value)}
+          disabled={busy}
         />
         <span className="block text-sm font-semibold text-ink">일자 색</span>
         <div
@@ -235,6 +268,7 @@ function DaySettingsDialog({
             type="button"
             onClick={() => onColorChange(null)}
             aria-pressed={color === null}
+            disabled={busy}
             aria-label="기본 색"
             title="기본 색(일자 순서 팔레트)"
             className={
@@ -251,6 +285,7 @@ function DaySettingsDialog({
               type="button"
               onClick={() => onColorChange(key)}
               aria-pressed={color === key}
+              disabled={busy}
               aria-label={`${MARKER_PALETTE[key].name} 색`}
               title={MARKER_PALETTE[key].name}
               data-testid={`trip-day-color-${key}`}

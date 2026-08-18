@@ -31,19 +31,19 @@
 ## kor-travel-map compatible pair
 
 - [/] **T-VN-42 — Map user OpenAPI 재vendor(`95d2c128`) 소비 정렬** —
-      브랜치 `chore/revendor-map-user-spec`. 스냅샷 SHA-256 `6a2ee0f9…`(Map `95d2c128`·`origin/main`
-      284fd10c와 바이트 동일). consumer drift 2건을 흡수한다: ① 3축 feature state cutover(`1f2bdc3a`)로
-      user 표면에서 사라진 `status` 소비 절단, ② bitemporal cutover(`6650aa71`)로 옮겨간 시점 조회
-      (`…/weather/snapshot`, `target_at`/`known_at`)와 `WeatherCardData.asof` → `selected_at` 개명.
-      곁들여 transport 시간대 정책을 하나로 통일했다(aware만 수용 + 라우터에서 KST 보정).
+  브랜치 `chore/revendor-map-user-spec`. 스냅샷 SHA-256 `6a2ee0f9…`(Map `95d2c128`·`origin/main`
+  284fd10c와 바이트 동일). consumer drift 2건을 흡수한다: ① 3축 feature state cutover(`1f2bdc3a`)로
+  user 표면에서 사라진 `status` 소비 절단, ② bitemporal cutover(`6650aa71`)로 옮겨간 시점 조회
+  (`…/weather/snapshot`, `target_at`/`known_at`)와 `WeatherCardData.asof` → `selected_at` 개명.
+  곁들여 transport 시간대 정책을 하나로 통일했다(aware만 수용 + 라우터에서 KST 보정).
   - [x] user 표면 `status` 소비 절단 + **누출 방지 회귀 테스트**(단위/통합, 되돌리면 red).
   - [x] 시점 조회 snapshot 경로 복구 + query 계약 exact 핀(`/weather`는 빈 집합).
   - [x] 공개 문서 정정(`docs/api/features.md` §1.1·§2.3, `docs/integrations/kor-travel-map-rest-api.md`).
   - [/] **admin 표면 3축 정렬(같은 PR, 병렬 레인)** — Map admin `AdminFeatureRecord`/
-        `AdminFeatureDetailFeatureRecord`에도 `status`가 없다. `schemas/admin.py`가 이를 required로
-        두고 있어 PinVi admin의 feature 목록/상세가 502 `FEATURE_SERVICE_BAD_GATEWAY`였고,
-        `lifecycle_state`/`publication_state`/`quality_state` 3축 + admin client query 이름
-        (`status`/`provider`/`dataset_key` → 3축/`provider_dataset_id`)으로 재배선 중이다.
+    `AdminFeatureDetailFeatureRecord`에도 `status`가 없다. `schemas/admin.py`가 이를 required로
+    두고 있어 PinVi admin의 feature 목록/상세가 502 `FEATURE_SERVICE_BAD_GATEWAY`였고,
+    `lifecycle_state`/`publication_state`/`quality_state` 3축 + admin client query 이름
+    (`status`/`provider`/`dataset_key` → 3축/`provider_dataset_id`)으로 재배선 중이다.
   - [x] **user client query 폐쇄 게이트** — `_CLIENT_QUERY_PARAMETERS`가 `_CLIENT_PATHS` 전체를
         덮도록 폐쇄 단언을 걸고(면제 없음), "client가 스냅샷에 없는 query를 보내는지"를 MockTransport로
         보는 반대 방향 게이트를 신설했다. 그 구멍으로 살아 있던 `/v1/categories?active_only=` 전송을
@@ -200,8 +200,9 @@
   inert/portal을 추가하는 T-316에서 수렴. 적대적 리뷰 3라운드(6인): 중첩 모달 키보드 도달(ConflictDialog
   이관), 포커스 격납(focusout 기반 — focusin만으로는 body 낙하를 못 잡음), 닫힐 때 포커스 복원 폴백
   (남은 최상단 모달 → `returnFocusRef`), 모달 스택을 마운트 생명주기에만 연동, `FeatureDetailModal` sheet
-  이관, 일자 설정 저장을 await해 성공에만 닫기(busy가 죽은 prop이던 문제), 충돌 다이얼로그 필드 토글도
-  저장 중 잠금. **api-client 요청 타임아웃은 이 PR에서 뺐다** — 3차 리뷰가 헤더까지만 덮는 범위, 헤더 이후
+  이관, 일자 설정 저장을 await해 성공에만 닫기(busy가 죽은 prop이던 문제) + 그에 따라 오류를 **모달 안**
+  에 표시·저장 중 입력 잠금·409 reload가 열린 폼을 덮지 않게 리셋 effect 축소, 일자 삭제 확인은 요청 완료
+  후 닫아 busy/포커스 복원을 살림, 충돌 다이얼로그 필드 토글도 저장 중 잠금(+disabled 시각 상태). **api-client 요청 타임아웃은 이 PR에서 뺐다** — 3차 리뷰가 헤더까지만 덮는 범위, 헤더 이후
   호출부 abort 미전파, 408(4xx)이 Idempotency-Key 폐기 로직을 오작동시켜 큐레이션 import를 중복 실행,
   admin 예산(restore 30분 < 서버 60분) 불일치를 실측했다. 설계를 갖춘 뒤 T-316에서 다시 넣는다.
 - [ ] **T-316** — Hallmark PR-5(여행 상세·지도·설정·파일·법무) + **요청 수명 계약**: TripDetail 3중

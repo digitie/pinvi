@@ -974,8 +974,9 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const confirmForceDeleteDay = () => {
     const target = dayDeleteConfirm;
     if (!target) return;
-    setDayDeleteConfirm(null);
-    void deleteDayRequest(target.dayIndex, true);
+    // 요청이 끝난 **뒤에** 닫는다 — 먼저 닫으면 `busy` prop이 관측되지 않아 진행 표시가 죽고,
+    // 언마운트 시점에 트리거가 아직 disabled라 포커스 복원 폴백도 건너뛰어진다(T-315 4차 리뷰).
+    void deleteDayRequest(target.dayIndex, true).finally(() => setDayDeleteConfirm(null));
   };
 
   const handleEditTrip = (patch: TripUpdate) => {
@@ -1641,6 +1642,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                     onDelete={handleDeleteDay}
                                     showAdd={false}
                                     busy={busy}
+                                    error={mutationError}
                                   />
                                 </div>
                               </div>

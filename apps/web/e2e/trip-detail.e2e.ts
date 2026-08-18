@@ -986,6 +986,39 @@ test('일자 설정에서 날짜를 수정할 수 있다', async ({ page }) => {
   expect(patchedBody).toMatchObject({ date: '2026-07-02' });
 });
 
+test('일자 설정 저장이 실패하면 다이얼로그가 열린 채 모달 안에 원인을 보여준다', async ({
+  page,
+}) => {
+  // T-315 4차 리뷰: 실패 시 다이얼로그를 유지하도록 바꾼 뒤에는 오류가 **모달 안**에 있어야 한다
+  // (바깥 배너는 scrim 뒤라 보이지도, aria-modal 안에서 읽히지도 않는다).
+  const currentView: MutableTripDetailView = {
+    ...TRIP_VIEW,
+    days: [{ ...BASE_MARKER_DAY, title: '첫날', pois: [] }],
+  };
+
+  await page.route(/.*\/trips\/[0-9a-f-]{36}\/days\/1$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.continue();
+    if (request.method() !== 'PATCH') return route.continue();
+    await route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: { code: 'INTERNAL', message: '서버 오류입니다.' } }),
+    });
+  });
+  await mockTripDetailRoutes(page, () => currentView);
+
+  await page.goto(`/trips/${tripId}`);
+  await page.getByTestId('trip-day-rename').click();
+  await page.locator('#trip-day-title-input').fill('바뀐 이름');
+  await page.getByRole('button', { name: '저장' }).click();
+
+  const dialog = page.getByTestId('trip-day-title-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(page.getByTestId('trip-day-settings-error')).toBeVisible();
+  // 입력값은 보존된다.
+  await expect(page.locator('#trip-day-title-input')).toHaveValue('바뀐 이름');
+});
+
 test('Day Plan 안에서 날짜·장소 파일과 날짜에 맞는 날씨를 보여준다', async ({ page }) => {
   const weatherRequests: URL[] = [];
   const weatherCardKey = 'weather-card:haeundae';
