@@ -14,6 +14,12 @@ module.exports = {
           active: '#e00b41',
           disabled: '#ffd1da',
         },
+        // 채운 CTA 배경(white 라벨 4.9:1) — 본문 크기 CTA는 primary 대신 이것(DESIGN.md 잠금 시스템).
+        cta: {
+          DEFAULT: '#e00b41',
+          hover: '#c8093a',
+        },
+        focus: '#ff385c',
         luxe: '#460479',
         plus: '#92174d',
         // 표면
@@ -61,6 +67,7 @@ module.exports = {
       },
       fontFamily: {
         sans: [
+          '"Pretendard Variable"',
           'Pretendard',
           '"Apple SD Gothic Neo"',
           'system-ui',
@@ -68,7 +75,8 @@ module.exports = {
           'Roboto',
           'sans-serif',
         ],
-        mono: ['"JetBrains Mono"', 'ui-monospace', '"SF Mono"', 'monospace'],
+        // 로드하지 않는 웹폰트 이름을 1순위에 두지 않는다 — 시스템 mono 스택(DESIGN.md Typography).
+        mono: ['ui-monospace', '"SF Mono"', 'Menlo', 'Consolas', 'monospace'],
       },
       borderRadius: {
         sm: '8px',
@@ -76,8 +84,18 @@ module.exports = {
         lg: '20px',
         xl: '32px',
       },
+      // 그림자 티어는 둘뿐(≤8% opacity, DESIGN.md/StyleSeed): card(hover 카드·드롭다운) / overlay(모달·시트).
       boxShadow: {
         card: '0 0 0 1px rgba(0,0,0,0.02), 0 2px 6px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.08)',
+        overlay: '0 0 0 1px rgba(0,0,0,0.02), 0 8px 24px rgba(0,0,0,0.08)',
+      },
+      // 이름 있는 z-index 5단 — 임의 숫자(z-[70]) 대신.
+      zIndex: {
+        nav: '30',
+        panel: '40',
+        overlay: '50',
+        modal: '60',
+        toast: '70',
       },
       spacing: {
         section: '64px',
@@ -93,9 +111,9 @@ module.exports = {
         normal: '200ms',
         moderate: '300ms',
       },
+      // overshoot(spring)는 UI 상태 전환에 쓰지 않는다 — Hallmark 잠금 시스템(DESIGN.md).
       transitionTimingFunction: {
         pinvi: 'cubic-bezier(0.2, 0, 0, 1)',
-        spring: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
       },
     },
   },

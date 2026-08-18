@@ -310,6 +310,48 @@
 - 검증: cache-target transport·restore-fence·service contract·sync configuration unit 103건, changed source
   strict mypy, ruff check/format을 통과했다. 다음은 PinVi draft PR push, Map paired receipt 갱신, 두 적대적
   리뷰어의 고정 SHA 재검토와 n150 isolated rehearsal이다.
+## 2026-08-18 (claude) — T-312: Hallmark 감사(웹 7표면) → 시스템 잠금 + 공개 표면 재설계
+
+- **감사(`hallmark audit`)**: apps/web 사용자 표면 6개(랜딩·인증·앱셸/대시보드·여행 상세·공유/지도/설정/파일/법무·
+  프리미티브/토큰) 코드 감사 + prod 공개 페이지(/, /login, /signup, /legal, 공유 오류) 실렌더 시각 감사를 병렬로
+  돌려 병합: **13 critical · 26 major · 19 minor**. 핵심 — (C11) 랜딩이 AI 템플릿 지문 그대로(뷰포트 중앙 hero
+  카드 → 동일 아이콘 카드 3장, nav/footer 없음), (C8) 내부 개발 문구 노출("Sprint 4 릴리즈 게이트 충족", "Sprint 1
+  scaffolding", "shell로 이동", description "— v2"), (C9) 공개 표면 브랜드 접점 0 + themeColor/favicon이 시스템 밖
+  네이비·민트·앰버, (C1) UI 프리미티브 부재(`<button` 290개/79파일, primary 변형 24종+), (C2) 토큰 우회
+  (`bg-white` 136 vs `bg-canvas` 20, 유령 `bg-surface`), (C3) 그림자 2단 티어 21곳, (C4) 44px 터치타깃 전면 미달,
+  **(C5) white on Rausch #ff385c = 3.5:1(모든 primary CTA AA 미달)**, (C6) Rausch 남발+1차 액션은 ink fill, (C7)
+  회색 ground 위 카드 남발·card-in-card, (C10) 파괴적 액션 확인 정책 부재. 전문은 세션 스크래치패드
+  `hallmark-audit-punchlist.md`, 요약은 `DESIGN.md` 잠금 섹션 "잔여 이탈"과 `docs/tasks.md` T-313~T-316.
+- **시스템 잠금(`hallmark redesign`, design.md-managed 다중 페이지 → 다양화 규칙 역전)**: `DESIGN.md`에 "Hallmark 잠금
+  시스템" 섹션을 **추가**(기존 Airbnb reference 보존). genre modern-minimal; family = 마케팅 Narrative Workflow /
+  앱 Workbench / 콘텐츠 Long Document; nav N1 + footer Ft2; 토큰 OKLCH 병기. **대비 결정**: 채운 CTA는 새 토큰
+  `cta`(#e00b41, 4.9:1)/`cta-hover`(#c8093a), Rausch는 아이콘·워드마크·포커스 링·≥24px 전용, 인라인 링크는 ink
+  underline. `focus`, `shadow-overlay`, `zIndex` 5단 추가, `ease-spring` 삭제(사용 0). Pretendard는 CDN @import →
+  npm `pretendard` dynamic subset self-host(`font-display: swap`), `html/body overflow-x: clip`, `word-break: keep-all`.
+- **프리미티브**: `components/ui/Button.tsx`(Button/ButtonLink — variant primary/secondary/ghost/danger, size md/sm/lg,
+  8상태: hover·focus-visible outline·active·disabled 3채널·loading(aria-busy 스피너, 라벨 유지)·error/success
+  `data-state`; 44px 기본, `sm`은 coarse pointer에서 44px 승격), `FormField/FormSelect/FormTextArea` →
+  `inputClassName`(44px·16px·focus outline·hint/error 단일 슬롯·label 500), globals `.checkbox`(20px 커스텀),
+  `.focus-ring`을 ring→outline(transition에 안 묶여 즉시 표시).
+- **공개 표면**: 랜딩 `/`을 Narrative Workflow로 재구성 — H2 diptych hero(문장 + 단계 색인 nav) → F4 step
+  sequence(1.0 계획 / 2.0 기록 / 3.0 공유, 두꺼운 ink rule, 단계별 Tier-B 손그림 SVG, 사실만: VWorld·카카오/네이버
+  검색·일자·공휴일·일출/일몰·날씨·첨부·공유 링크·동행자·Telegram) → 하단 단일 CTA → colophon. 3카드·hover lift·
+  Sparkles·"Sprint 4" 배지 삭제. 공용 `PublicMasthead/PublicColophon/Wordmark`(핀 마크 SVG = favicon/앱 아이콘 동일
+  path)를 랜딩·(auth) 레이아웃·공유 뷰·404에 적용. (auth) 좌패널을 flat 문장+사실 3줄로(스캐폴딩 문구 삭제, h2>h1
+  역전 해소). 로그인: 프리미티브 전환, provider 0개면 '또는' 구분선·섹션 미렌더(로딩 중 44px skeleton으로 layout
+  shift 방지), 가짜 글자-원 아이콘 제거, 12px primary 링크 → 14px ink underline, oauth 오류 `role=alert`. 회원가입:
+  필드 순서 email→password→nickname→동의, 20px 체크박스 44px 행, 항목별 '전문'(/legal/<slug>) 링크, disabled 사유
+  문장. verify-pending dead end → `ResendVerificationButton`(60s 쿨다운, `role=status`, 429 안내), dev 문구
+  `NODE_ENV` 가드. 공유 뷰: chrome + h1 truncate→wrap + eyebrow→muted 1줄 + 오류를 h1/원인/홈·로그인 버튼 구조로.
+  `FullPageMessage`를 중앙 카드+원형 아이콘 → 좌정렬 flat(ink top rule)로, 404에 chrome. `AppShell` 워드마크 공용화
+  - 활성 탭 Rausch pill → ink 밑줄(`aria-current`). themeColor/manifest `#03163B`→canvas, favicon/앱 아이콘 SVG를
+    Rausch+white 핀 마크로 재제작하고 PNG 192/512·apple-touch 180·favicon.ico(PNG-in-ICO 16/32/48)를 Playwright
+    chromium으로 rasterize(스크립트는 세션 스크래치패드 `render-icons.mjs`; 정본은 SVG).
+- **검증**: web typecheck/lint 0, vitest 100, next build 통과(pretendard @import 번들), 로컬 dev 서버 + Playwright
+  e2e 9(auth-form-a11y·signup-consents·not-found·shared-trip·oauth-account-match) 통과, 375/1280 실렌더 확인(가로
+  스크롤 0, 두 줄 버튼 0, keep-all). not-found e2e는 홈 h1 셀렉터 갱신. Pre-emit critique P4 H4 E4 S4 R5 V4.
+- **범위 밖(후속 T-313~T-316)**: 코드모드(bg-white 등), 앱 셸 ground/하단 탭바, 여행 상세 컨테인먼트·Dialog
+  프리미티브, 지도/설정/파일/법무.
 
 ## 2026-08-06 (codex) — T-VN-41-F1D-C1b PinVi seven-image provenance 보강
 

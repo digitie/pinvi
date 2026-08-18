@@ -7,6 +7,7 @@ import { RegisterRequestSchema } from '@pinvi/schemas';
 import type { ConsentType } from '@pinvi/schemas';
 import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
 import { FormField } from '@/components/forms/FormField';
+import { Button } from '@/components/ui/Button';
 import { validateForm, type FieldErrors } from '@pinvi/domain';
 
 const apiClient = new ApiClient({
@@ -15,30 +16,37 @@ const apiClient = new ApiClient({
 
 const CONSENT_VERSION = 'v1.0';
 
-const REQUIRED_CONSENTS: { type: ConsentType; label: string; summary: string }[] = [
+type ConsentItem = { type: ConsentType; label: string; summary: string; legalSlug?: string };
+
+// 전문은 /legal/<slug>(lib/legalDocs.ts) — 동의 항목에서 바로 열 수 있어야 한다(Hallmark audit Mj14).
+const REQUIRED_CONSENTS: ConsentItem[] = [
   {
     type: 'tos',
     label: '이용약관',
     summary: '서비스 이용 조건과 계정 운영 기준',
+    legalSlug: 'terms-of-service',
   },
   {
     type: 'privacy',
     label: '개인정보 처리방침',
     summary: '계정, 여행계획, 첨부파일 처리 기준',
+    legalSlug: 'privacy-policy',
   },
   {
     type: 'lbs_tos',
     label: '위치기반서비스 이용약관',
     summary: '여행 지도와 위치 기반 기능 이용 조건',
+    legalSlug: 'lbs-terms',
   },
   {
     type: 'location_collection',
     label: '개인위치정보 수집·이용',
     summary: '현재 위치 기반 검색과 여행 일정 표시',
+    legalSlug: 'location-consent',
   },
 ];
 
-const OPTIONAL_CONSENTS: { type: ConsentType; label: string; summary: string }[] = [
+const OPTIONAL_CONSENTS: ConsentItem[] = [
   {
     type: 'marketing',
     label: '마케팅·이벤트 이메일 수신',
@@ -54,6 +62,54 @@ const INITIAL_CONSENTS: Record<ConsentType, boolean> = {
   demographic_use: false,
   marketing: false,
 };
+
+// 20px 커스텀 체크박스 — 스타일은 globals.css `.checkbox`(네이티브 13px는 터치 타깃 미달).
+const CHECKBOX_CLASS = 'checkbox';
+
+/** 동의 항목 한 행 — 44px 행, 라벨 전체가 클릭 영역, 전문 링크는 새 창. */
+function ConsentRow({
+  item,
+  required,
+  checked,
+  onChange,
+}: {
+  item: ConsentItem;
+  required: boolean;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const inputId = `signup-consent-${item.type}`;
+  return (
+    <div className="flex items-start gap-3 py-2">
+      <input
+        id={inputId}
+        type="checkbox"
+        className={`${CHECKBOX_CLASS} mt-0.5`}
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        data-testid={inputId}
+      />
+      <label htmlFor={inputId} className="min-h-6 flex-1 cursor-pointer text-sm text-ink">
+        <span className="font-medium">
+          {required ? '(필수) ' : '(선택) '}
+          {item.label}
+        </span>
+        <span className="block text-sm text-muted">{item.summary}</span>
+      </label>
+      {item.legalSlug ? (
+        <Link
+          href={`/legal/${item.legalSlug}`}
+          target="_blank"
+          rel="noopener"
+          className="focus-ring inline-flex min-h-11 shrink-0 items-center rounded-sm px-1 text-sm text-ink underline decoration-hairline underline-offset-4 hover:decoration-ink"
+          aria-label={`${item.label} 전문 보기(새 창)`}
+        >
+          전문
+        </Link>
+      ) : null}
+    </div>
+  );
+}
 
 export default function SignupPage() {
   const router = useRouter();
@@ -138,9 +194,13 @@ export default function SignupPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-ink">회원가입</h1>
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold tracking-tight text-ink">회원가입</h1>
+        <p className="text-sm text-muted">이메일 인증을 마치면 바로 여행을 만들 수 있어요.</p>
+      </div>
 
-      <form onSubmit={onSubmit} className="space-y-4" data-testid="signup-form" noValidate>
+      <form onSubmit={onSubmit} className="space-y-5" data-testid="signup-form" noValidate>
+        {/* 입력 3개를 먼저, 동의는 제출 직전에 — 필드 순서를 끊지 않는다. */}
         <FormField
           ref={emailRef}
           id="signup-email"
@@ -153,55 +213,6 @@ export default function SignupPage() {
           error={fieldErrors.email}
           data-testid="signup-email"
         />
-
-        <fieldset className="space-y-3 rounded-sm border border-hairline p-3">
-          <legend className="px-1 text-sm font-semibold text-ink">필수 약관 동의</legend>
-          <label className="flex items-center gap-2 text-sm font-semibold text-ink">
-            <input
-              type="checkbox"
-              checked={allRequiredConsents}
-              onChange={(event) => setAllRequired(event.target.checked)}
-              data-testid="signup-consent-required-all"
-            />
-            <span>필수 항목 전체 동의</span>
-          </label>
-          <div className="space-y-2">
-            {REQUIRED_CONSENTS.map((item) => (
-              <label key={item.type} className="flex items-start gap-2 text-sm text-ink">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={consents[item.type]}
-                  onChange={(event) => toggleConsent(item.type, event.target.checked)}
-                  data-testid={`signup-consent-${item.type}`}
-                />
-                <span>
-                  <span className="font-semibold">(필수) {item.label}</span>
-                  <span className="block text-xs text-muted">{item.summary}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-
-        <fieldset className="space-y-2 rounded-sm border border-hairline p-3">
-          <legend className="px-1 text-sm font-semibold text-ink">선택 동의</legend>
-          {OPTIONAL_CONSENTS.map((item) => (
-            <label key={item.type} className="flex items-start gap-2 text-sm text-ink">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={consents[item.type]}
-                onChange={(event) => toggleConsent(item.type, event.target.checked)}
-                data-testid={`signup-consent-${item.type}`}
-              />
-              <span>
-                <span className="font-semibold">(선택) {item.label}</span>
-                <span className="block text-xs text-muted">{item.summary}</span>
-              </span>
-            </label>
-          ))}
-        </fieldset>
 
         <FormField
           ref={passwordRef}
@@ -232,32 +243,77 @@ export default function SignupPage() {
           data-testid="signup-nickname"
         />
 
+        <fieldset className="space-y-1 border-t border-hairline pt-4">
+          <legend className="sr-only">약관 동의</legend>
+          <div className="flex items-center gap-3 border-b border-hairline pb-2">
+            <input
+              id="signup-consent-required-all"
+              type="checkbox"
+              className={CHECKBOX_CLASS}
+              checked={allRequiredConsents}
+              onChange={(event) => setAllRequired(event.target.checked)}
+              data-testid="signup-consent-required-all"
+            />
+            <label
+              htmlFor="signup-consent-required-all"
+              className="min-h-11 flex-1 cursor-pointer py-2.5 text-sm font-semibold text-ink"
+            >
+              필수 항목 전체 동의
+            </label>
+          </div>
+          {REQUIRED_CONSENTS.map((item) => (
+            <ConsentRow
+              key={item.type}
+              item={item}
+              required
+              checked={consents[item.type]}
+              onChange={(checked) => toggleConsent(item.type, checked)}
+            />
+          ))}
+          {OPTIONAL_CONSENTS.map((item) => (
+            <ConsentRow
+              key={item.type}
+              item={item}
+              required={false}
+              checked={consents[item.type]}
+              onChange={(checked) => toggleConsent(item.type, checked)}
+            />
+          ))}
+        </fieldset>
+
         {error && (
           <p className="text-sm text-error-text" role="alert" data-testid="signup-error">
             {error}
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={loading || !allRequiredConsents}
-          className="w-full rounded-sm bg-primary py-3 text-sm font-semibold text-white hover:bg-primary-active disabled:opacity-60"
-          data-testid="signup-submit"
-        >
-          {loading ? '가입 중...' : '회원가입'}
-        </button>
+        <div className="space-y-2">
+          <Button
+            type="submit"
+            fullWidth
+            loading={loading}
+            disabled={!allRequiredConsents}
+            data-testid="signup-submit"
+          >
+            {loading ? '가입 중…' : '회원가입'}
+          </Button>
+          {/* disabled 사유는 색이 아니라 문장으로. */}
+          {!allRequiredConsents ? (
+            <p className="text-sm text-muted" role="status">
+              필수 약관 4개에 동의하면 가입할 수 있어요.
+            </p>
+          ) : null}
+        </div>
       </form>
 
-      <p className="text-center text-xs text-muted">
+      <p className="text-center text-sm text-muted">
         이미 계정이 있으신가요?{' '}
-        <Link href="/login" className="text-primary underline">
+        <Link
+          href="/login"
+          className="focus-ring rounded-sm font-medium text-ink underline decoration-hairline underline-offset-4 hover:decoration-ink"
+        >
           로그인
         </Link>
-      </p>
-
-      <p className="text-xs text-muted-soft">
-        회원가입 후 이메일 인증을 거치면 여행계획을 만들 수 있습니다. Google OAuth는 로그인 화면에서
-        시작할 수 있습니다.
       </p>
     </div>
   );
