@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   CalendarDays,
-  Eye,
   Layers,
   Loader2,
   MapPin,
@@ -1201,7 +1200,6 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
   const { trip, companions } = view;
   const totalPoiCount = view.days.reduce((count, day) => count + day.pois.length, 0);
-  const selectedDayLabel = selectedDay?.title ?? `${selectedDay?.day_index ?? ''}일차`;
   const panelTabs: Array<{
     id: TripDetailPanelTab;
     label: string;
@@ -1318,18 +1316,6 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
               )}
             </button>
-            <button
-              type="button"
-              onClick={handleAddDay}
-              disabled={!canAddDay || busy}
-              title={addDayTitle}
-              aria-label={addDayLabel}
-              aria-describedby={addDayDisabledReason ? 'trip-layer-add-disabled-reason' : undefined}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-ink text-canvas hover:bg-ink/90 disabled:opacity-50"
-              data-testid="trip-add-layer"
-            >
-              <Plus className="h-4 w-4" aria-hidden="true" />
-            </button>
           </div>
 
           {realtimeStatus === 'permission-denied' && (
@@ -1428,21 +1414,6 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 <Plus className="h-4 w-4" aria-hidden="true" />
                 {addDayLabel}
               </button>
-              <button
-                type="button"
-                onClick={() => setActivePanel('share')}
-                className="inline-flex h-9 items-center gap-1.5 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
-              >
-                <Share2 className="h-4 w-4" aria-hidden="true" />
-                공유
-              </button>
-              <a
-                href="#trip-map-canvas"
-                className="inline-flex h-9 items-center gap-1.5 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
-              >
-                <Eye className="h-4 w-4" aria-hidden="true" />
-                미리보기
-              </a>
               <button
                 type="button"
                 onClick={openTripEdit}
@@ -1628,45 +1599,13 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 aria-label="일정"
                 className={mobileWebLayout ? 'space-y-3 p-3' : 'space-y-4 p-4 md:p-5'}
               >
-                <section className="space-y-3">
-                  {!mobileWebLayout && (
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        onClick={handleAddDay}
-                        disabled={!canAddDay || busy}
-                        title={addDayTitle}
-                        aria-describedby={
-                          addDayDisabledReason ? 'trip-plan-add-disabled-reason' : undefined
-                        }
-                        className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm bg-ink px-2.5 text-xs font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
-                        data-testid="trip-add-day-inline"
-                      >
-                        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                        {addDayLabel}
-                      </button>
-                    </div>
-                  )}
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="rounded-sm bg-surface-soft px-2 py-1 font-semibold text-muted">
-                      {visibleLayerCount}/{view.days.length} 표시
-                    </span>
-                    <span className="rounded-sm bg-surface-soft px-2 py-1 text-muted">
-                      일자 {view.days.length}
-                    </span>
-                    <span className="rounded-sm bg-surface-soft px-2 py-1 text-muted">
-                      장소 {totalPoiCount}
-                    </span>
-                    <span className="min-w-0 rounded-sm bg-surface-soft px-2 py-1 text-muted">
-                      선택 {selectedDay ? selectedDayLabel : '없음'}
-                    </span>
-                  </div>
-                  {!mobileWebLayout && addDayDisabledReason && (
-                    <p id="trip-plan-add-disabled-reason" className="text-xs text-muted">
-                      {addDayDisabledReason}
-                    </p>
-                  )}
-                </section>
+                {/* TD-04/TD-05: 일자 추가는 헤더(데스크톱)·드로어 헤더(모바일) 1곳으로, 개수는
+                    헤더 요약과 탭 배지가 정본이다 — 같은 수치를 칩으로 4중 표기하지 않는다. */}
+                {!mobileWebLayout && addDayDisabledReason && (
+                  <p id="trip-plan-add-disabled-reason" className="text-xs text-muted">
+                    {addDayDisabledReason}
+                  </p>
+                )}
 
                 <section
                   ref={dayListRef}
@@ -1676,7 +1615,11 @@ export function TripDetail({ tripId }: TripDetailProps) {
                   data-testid="trip-layer-list"
                 >
                   {view.days.length > 0 && (
-                    <div className="space-y-2" role="tablist" aria-label="일자 목록">
+                    <div
+                      className="divide-y divide-hairline border-y border-hairline"
+                      role="tablist"
+                      aria-label="일자 목록"
+                    >
                       {view.days.map((day) => {
                         const active = day.day_index === selectedDayIndex;
                         const visible =
@@ -1686,10 +1629,12 @@ export function TripDetail({ tripId }: TripDetailProps) {
                         return (
                           <article
                             key={day.day_index}
+                            // 패널 안 카드 금지(DESIGN.md Workbench 컨테인먼트 1층) — 리스트 row로
+                            // 강등하고 선택은 accent ring이 아니라 ink rule + 중립 surface로 표시한다.
                             className={
                               active
-                                ? 'rounded-sm bg-canvas shadow-card ring-1 ring-primary/35'
-                                : 'rounded-sm bg-canvas'
+                                ? 'border-l-2 border-ink bg-surface-soft'
+                                : 'border-l-2 border-transparent'
                             }
                           >
                             <div className="flex items-start gap-3 p-3">

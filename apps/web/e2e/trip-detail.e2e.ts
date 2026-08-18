@@ -534,7 +534,7 @@ test.describe('Samsung Internet 모바일 상세 레이아웃', () => {
     await expect(page.getByTestId('trip-detail-panel')).not.toContainText('지도 레이어');
     await expect(page.getByTestId('trip-detail-panel')).not.toContainText('장소 추가');
     await expect(page.getByTestId('trip-add-day-drawer')).toBeVisible();
-    await expect(page.getByTestId('trip-add-day-inline')).toHaveCount(0);
+    await expect(page.getByTestId('trip-add-layer')).toHaveCount(0);
     await expect(page.getByTestId('trip-layer-list')).not.toContainText('이름 변경');
     const drawerAddBox = await page.getByTestId('trip-add-day-drawer').boundingBox();
     const tabsBox = await page.getByRole('tablist', { name: '여행 작업 탭' }).boundingBox();
@@ -811,7 +811,6 @@ test('여행 기간보다 많은 일자는 추가할 수 없다', async ({ page 
   await page.goto(`/trips/${tripId}`);
 
   await expect(page.getByTestId('trip-add-layer')).toBeDisabled();
-  await expect(page.getByTestId('trip-add-day-inline')).toBeDisabled();
   await expect(page.getByTestId('trip-top-panel')).toContainText(
     '여행 기간은 최대 1일입니다. 기간을 먼저 늘려주세요.',
   );
@@ -831,7 +830,6 @@ test('여행 기간이 올바르지 않으면 일자를 추가할 수 없다', a
   await page.goto(`/trips/${tripId}`);
 
   await expect(page.getByTestId('trip-add-layer')).toBeDisabled();
-  await expect(page.getByTestId('trip-add-day-inline')).toBeDisabled();
   await expect(page.getByTestId('trip-top-panel')).toContainText(
     '종료일이 시작일보다 빠릅니다. 여행 기간을 먼저 수정해주세요.',
   );
@@ -877,7 +875,7 @@ test('날짜가 없는 여행도 Day Plan 내부 버튼으로 일자를 추가�
   await expect(page.getByTestId('trip-layer-list')).not.toContainText('아직');
   await expect(page.getByTestId('trip-detail-panel')).not.toContainText('Day plan');
   await expect(page.getByTestId('trip-layer-list')).not.toContainText('일정 레이어');
-  await page.getByTestId('trip-add-day-inline').click();
+  await page.getByTestId('trip-add-layer').click();
   await expect(page.getByRole('tab', { name: '1일차' })).toBeVisible();
   await expect(page.getByTestId('trip-layer-list')).toContainText('미정');
 });
@@ -939,8 +937,8 @@ test('삭제로 비어 있는 가장 빠른 일자를 다시 생성한다', asyn
   await page.goto(`/trips/${tripId}`);
 
   await expect(page.getByTestId('trip-layer-list')).not.toContainText('1일차');
-  await expect(page.getByTestId('trip-add-day-inline')).toContainText('1일차 추가');
-  await page.getByTestId('trip-add-day-inline').click();
+  await expect(page.getByTestId('trip-add-layer')).toContainText('1일차 추가');
+  await page.getByTestId('trip-add-layer').click();
   await expect(page.getByRole('tab', { name: '1일차' })).toBeVisible();
   expect(createdBody).toMatchObject({ day_index: 1, date: '2026-07-01' });
 });

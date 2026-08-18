@@ -106,14 +106,12 @@ export function TripPoiList({
             className={dragIndex === index ? 'opacity-50' : undefined}
           >
             <div
+              // 카드 안 카드 금지 — row는 표면 없이 padding + 선택 시 ink rule만 쓴다(T-316).
               className={
-                compact
-                  ? selected
-                    ? 'rounded-sm bg-primary/5 p-2 ring-1 ring-primary/35'
-                    : 'rounded-sm bg-canvas p-2'
-                  : selected
-                    ? 'rounded-sm border border-primary bg-surface-soft p-3'
-                    : 'rounded-sm border border-hairline bg-canvas p-3'
+                (compact ? 'p-2 ' : 'p-3 ') +
+                (selected
+                  ? 'border-l-2 border-ink bg-surface-soft'
+                  : 'border-l-2 border-transparent')
               }
             >
               <div className="flex items-start gap-2">

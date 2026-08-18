@@ -173,7 +173,7 @@ export function TripAttachments({
     <section
       className={
         compact
-          ? 'space-y-2 rounded-sm bg-surface-soft/70 p-2'
+          ? 'space-y-2 border-t border-hairline pt-2'
           : 'space-y-3 rounded-sm border border-hairline bg-canvas p-4'
       }
       aria-label="첨부"

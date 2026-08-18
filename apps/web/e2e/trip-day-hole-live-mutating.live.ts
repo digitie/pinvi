@@ -96,20 +96,20 @@ test.describe('Trip day hole live mutating flow', () => {
       await expectVisibleDays(page, ['1일차', '2일차', '3일차', '4일차']);
       await expect(page.getByTestId('trip-layer-list')).toContainText('2026년 11월 1일');
       await expect(page.getByTestId('trip-layer-list')).toContainText('2026년 11월 4일');
-      await expect(page.getByTestId('trip-add-day-inline')).toBeDisabled();
+      await expect(page.getByTestId('trip-add-layer')).toBeDisabled();
       await screenshot(page, '01-auto-created-1-to-4-days.png');
 
       await page.getByRole('tab', { name: '1일차' }).click();
       await page.getByRole('button', { name: '1일차 삭제' }).click();
       await expect(page.getByRole('tab', { name: '1일차' })).toHaveCount(0);
-      await expect(page.getByTestId('trip-add-day-inline')).toBeEnabled();
-      await expect(page.getByTestId('trip-add-day-inline')).toContainText('1일차 추가');
+      await expect(page.getByTestId('trip-add-layer')).toBeEnabled();
+      await expect(page.getByTestId('trip-add-layer')).toContainText('1일차 추가');
       await screenshot(page, '02-deleted-day-1-gap.png');
 
-      await page.getByTestId('trip-add-day-inline').click();
+      await page.getByTestId('trip-add-layer').click();
       await expect(page.getByRole('tab', { name: '1일차' })).toBeVisible();
       await expect(page.getByTestId('trip-layer-list')).toContainText('2026년 11월 1일');
-      await expect(page.getByTestId('trip-add-day-inline')).toBeDisabled();
+      await expect(page.getByTestId('trip-add-layer')).toBeDisabled();
       await screenshot(page, '03-recreated-day-1.png');
 
       await page.getByRole('tab', { name: '4일차' }).click();
