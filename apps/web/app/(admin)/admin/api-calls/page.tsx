@@ -156,7 +156,7 @@ export default function AdminApiCallsPage() {
         rowKey={(row) => String(row.log_id)}
         rowTestId={(row) => `admin-api-calls-row-${row.request_id ?? row.occurred_at}`}
         virtualized
-        maxHeight="70vh"
+        maxHeight="70dvh"
       />
     </AdminPage>
   );

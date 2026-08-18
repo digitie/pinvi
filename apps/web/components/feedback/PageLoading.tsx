@@ -11,7 +11,7 @@ export interface PageLoadingProps {
  */
 export function PageLoading({ label = '불러오는 중…', 'data-testid': testId }: PageLoadingProps) {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center px-6 py-16 text-center">
+    <div className="flex min-h-[60dvh] items-center justify-center px-6 py-16 text-center">
       <div
         className="flex w-full max-w-sm flex-col items-center gap-3 rounded-md border border-hairline bg-canvas p-6 text-muted shadow-card"
         role="status"

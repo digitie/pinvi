@@ -184,7 +184,7 @@ export default function AdminLocationAuditPage() {
         rowKey={(row) => String(row.log_id)}
         rowTestId={(row) => `admin-location-row-${row.log_id}`}
         virtualized
-        maxHeight="70vh"
+        maxHeight="70dvh"
       />
     </AdminPage>
   );

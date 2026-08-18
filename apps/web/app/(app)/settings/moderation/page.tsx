@@ -291,7 +291,7 @@ export default function ModerationSettingsPage() {
               <button
                 type="button"
                 onClick={() => setAppealReportId(null)}
-                className="h-10 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+                className={buttonClassName({ variant: 'secondary' })}
               >
                 취소
               </button>

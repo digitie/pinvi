@@ -276,7 +276,7 @@ function AdminGuard({ children }: { children: ReactNode }) {
                       data-sprint={item.sprint}
                       className={
                         active
-                          ? `flex ${linkSize} rounded-sm bg-cta hover:bg-cta-hover text-on-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`
+                          ? `flex ${linkSize} rounded-sm bg-ink text-canvas focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus`
                           : `flex ${linkSize} rounded-sm text-ink hover:bg-surface-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`
                       }
                       data-testid={`admin-nav-${item.href.replace(/[^a-z0-9]+/gi, '-')}`}

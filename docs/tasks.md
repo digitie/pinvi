@@ -148,7 +148,7 @@
       `bg-black/NN→bg-scrim/50`, `shadow-*→shadow-card|overlay`, 미정의 `bg-surface`→`bg-surface-soft`,
       `'...'→'…'`, `vh→dvh`(풀스크린 지도 표면의 `100svh`는 의도적으로 유지 — 모바일 chrome 토글 리사이즈 방지),
       `text-[NNpx]`→스케일, 본문 `text-muted-soft→text-muted`. eslint-plugin-tailwindcss 도입은 후속(T-317).
-      (완료: 2026-08-18, PR #TBD, claude → tasks-done.md)
+      (완료: 2026-08-18, PR #448, claude → tasks-done.md)
 - [ ] **T-314** — Hallmark PR-3(앱 셸+대시보드+추천 shelf): `AppShell` ground `bg-canvas`, <md 하단 탭바,
       /trips·/notice-plans eyebrow 삭제·accent 1개, skeleton/empty/error 3종, `role=tab`→`aria-pressed` 세그먼트,
       `useMobileWebLayout` UA 스니핑→`matchMedia`, TripDashboard 링크 안 버튼 span 제거(Mj24).

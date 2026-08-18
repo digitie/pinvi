@@ -129,7 +129,7 @@ export default function AdminGrafanaPage() {
                 }}
                 className={`h-9 rounded-sm border px-3 text-sm font-semibold ${
                   selected
-                    ? 'border-cta bg-cta hover:bg-cta-hover text-on-primary'
+                    ? 'border-ink bg-ink text-canvas'
                     : 'border-hairline bg-canvas text-ink hover:bg-surface-soft'
                 }`}
                 data-testid={`admin-grafana-dashboard-${dashboard.key}`}

@@ -7,12 +7,12 @@
 ## 2026-08-18
 
 - [x] **T-313** — Hallmark PR-1b 토큰 우회 코드모드(apps/web 89파일, +328/−320, 로직·testid·문구 의미 변경 0).
-      (완료: 2026-08-18, PR #TBD, claude)
+      (완료: 2026-08-18, PR #448, claude)
       `bg-white→bg-canvas`(131), `text-white`(92)→색 채움 위 `text-on-primary`/ink·scrim 위 `text-canvas`(마커 팔레트
       인라인 색 위 3곳은 유지), 텍스트 있는 채운 `bg-primary` CTA→`bg-cta text-on-primary hover:bg-cta-hover`(DESIGN.md
       대비 결정), `bg-black/35~60`→`bg-scrim/50`, 모달·시트 `shadow-lg/xl`→`shadow-overlay`·드롭다운/카드→`shadow-card`,
       미정의 `bg-surface`(4)→`bg-surface-soft`, 사용자 문구 `...`→`…`(e2e/vitest 어서션 동기), `min-h-screen/h-screen/
-    vh`→`dvh`(풀스크린 지도 표면 `100svh`는 유지), `text-[10~24px]`→스케일, 본문 `text-muted-soft→text-muted`, 일부
+vh`→`dvh`(풀스크린 지도 표면 `100svh`는 유지), `text-[10~24px]`→스케일, 본문 `text-muted-soft→text-muted`, 일부
       버튼은 `buttonClassName`으로. 검증 에이전트가 잡은 4건(지도 svh 회귀·컨텍스트 메뉴 shadow 티어·업로드 label
       cta·admin 다이얼로그 표면·설정 인라인 버튼 크기) 반영. typecheck/lint 0, vitest 100, next build 통과.
 

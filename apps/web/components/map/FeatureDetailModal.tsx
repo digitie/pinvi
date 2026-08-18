@@ -61,7 +61,7 @@ export function FeatureDetailModal({
       <div
         {...dialogProps}
         data-testid={testId}
-        className="flex max-h-[88vh] w-full flex-col overflow-hidden rounded-t-xl border border-hairline bg-canvas shadow-overlay outline-none sm:max-h-[85vh] sm:max-w-lg sm:rounded-md"
+        className="flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-xl border border-hairline bg-canvas shadow-overlay outline-none sm:max-h-[85dvh] sm:max-w-lg sm:rounded-md"
       >
         <header className="flex items-start justify-between gap-3 border-b border-hairline px-5 py-4">
           <div className="min-w-0">

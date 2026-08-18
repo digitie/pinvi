@@ -131,7 +131,7 @@ export default function AdminAuditPage() {
         rowKey={(r) => String(r.log_id)}
         rowTestId={(r) => `admin-audit-row-${r.log_id}`}
         virtualized
-        maxHeight="70vh"
+        maxHeight="70dvh"
       />
     </AdminPage>
   );

@@ -112,7 +112,7 @@ export function AdminTable<R>({
   onRowClick,
   rowTestId,
   virtualized = false,
-  maxHeight = '70vh',
+  maxHeight = '70dvh',
   virtualizeThreshold = 30,
   enableSorting = true,
   initialSort,
