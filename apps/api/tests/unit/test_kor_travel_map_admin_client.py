@@ -283,6 +283,7 @@ async def test_list_features_uses_admin_read_path_filters_and_returns_payload() 
         has_coord=True,
         has_issue=False,
         issue_types=["missing_coord"],
+        include_ended=True,
         page_size=100,
         cursor="cur-1",
         sort="updated_at",
@@ -299,6 +300,7 @@ async def test_list_features_uses_admin_read_path_filters_and_returns_payload() 
     assert ("provider_dataset_id", "42") in seen["query"]
     assert ("has_coord", "true") in seen["query"]
     assert ("has_issue", "false") in seen["query"]
+    assert ("include_ended", "true") in seen["query"]
     assert ("sort", "updated_at") in seen["query"]
     # Map `GET /v1/admin/features`가 선언하지 않는 이름은 나가면 안 된다 — FastAPI가
     # 조용히 버려 필터가 걸린 척하기 때문이다(3축 cutover `1f2bdc3a`).
@@ -332,6 +334,7 @@ def test_list_features_signature_drops_pre_cutover_filter_arguments() -> None:
     parameters = set(inspect.signature(KorTravelMapAdminClient.list_features).parameters)
     assert {"lifecycle_states", "publication_states", "quality_states"} <= parameters
     assert "provider_dataset_id" in parameters
+    assert "include_ended" in parameters
     assert not {"statuses", "providers", "dataset_keys"} & parameters
 
 
@@ -381,6 +384,39 @@ async def test_get_feature_detail_uses_admin_detail_path() -> None:
     assert seen["path"] == "/v1/admin/features/f_1"
     assert data["feature"]["feature_id"] == "f_1"
     assert "status" not in data["feature"]
+    await client.aclose()
+
+
+async def test_get_feature_weather_uses_admin_path_without_query() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        seen["query"] = list(request.url.params.multi_items())
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "feature_id": "f_private_1",
+                    "selected_at": "2026-06-12T10:00:00+09:00",
+                    "latest_at": "2026-06-12T09:30:00+09:00",
+                    "is_stale": False,
+                    "source_styles": ["nowcast"],
+                    "metrics": [],
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client(handler)
+    data = await client.get_feature_weather("f_private_1")
+    assert seen == {
+        "method": "GET",
+        "path": "/v1/admin/features/f_private_1/weather",
+        "query": [],
+    }
+    assert data["feature_id"] == "f_private_1"
     await client.aclose()
 
 

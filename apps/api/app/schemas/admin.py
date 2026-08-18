@@ -1274,14 +1274,70 @@ class AdminFeatureDetailFile(BaseModel):
     updated_at: datetime
 
 
+class AdminFeatureDetailStateTransition(BaseModel):
+    transition_id: int
+    from_lifecycle_state: AdminFeatureLifecycleState | None = None
+    from_publication_state: AdminFeaturePublicationState | None = None
+    from_quality_state: AdminFeatureQualityState | None = None
+    to_lifecycle_state: AdminFeatureLifecycleState
+    to_publication_state: AdminFeaturePublicationState
+    to_quality_state: AdminFeatureQualityState
+    transition_kind: str
+    reason_code: str
+    principal: str
+    provider_dataset_id: int | None = None
+    source_entity_key: str | None = None
+    source_record_key: str | None = None
+    causation_ref: str | None = None
+    occurred_at: datetime
+    row_revision: int = Field(ge=1)
+
+
+class AdminFeatureDetailCuration(BaseModel):
+    curation_item_id: uuid.UUID
+    collection_id: uuid.UUID
+    collection_key: str
+    title: str
+    edition_key: str
+    theme_slug: str
+    theme_name: str
+    theme_group: str
+    feature_id: str | None
+    feature_name: str | None
+    feature_kind: str | None
+    feature_category: str | None
+    place_name: str
+    address_hint: str | None
+    status: Literal["candidate", "included", "rejected", "archived"]
+    sort_order: int
+    item_title: str | None
+    item_summary: str | None
+    curation_relation: Literal[
+        "primary_stop",
+        "food_stop",
+        "cafe_stop",
+        "bookstore_stop",
+        "nearby_option",
+        "accessibility_support",
+        "pet_support",
+        "family_support",
+        "theme_area_anchor",
+    ]
+    reuse_policy: Literal["allowed", "blocked", "manual_review"]
+    row_revision: str = Field(pattern=r"^[1-9][0-9]*$")
+    updated_at: datetime
+
+
 class AdminFeatureDetail(BaseModel):
     feature: AdminFeatureDetailFeature
     sources: list[AdminFeatureDetailSource] = Field(default_factory=list)
     issues: list[AdminFeatureDetailIssue] = Field(default_factory=list)
     overrides: list[AdminFeatureDetailOverride] = Field(default_factory=list)
+    state_transitions: list[AdminFeatureDetailStateTransition] = Field(default_factory=list)
     versions: list[AdminFeatureDetailVersion] = Field(default_factory=list)
     change_requests: list[AdminFeatureChangeRequestRecord] = Field(default_factory=list)
     files: list[AdminFeatureDetailFile] = Field(default_factory=list)
+    curations: list[AdminFeatureDetailCuration] = Field(default_factory=list)
 
 
 class AdminFeatureSourcesResponse(BaseModel):

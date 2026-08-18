@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+- Admin feature 날씨 탭을 kor-travel-map의 Admin 전용 경로로 전환해 공개되지 않은 feature도 최신
+  날씨를 조회할 수 있다. Map Admin 계약에 없는 `asof`는 조용히 무시하지 않고 422로 알린다.
+  상세 화면은 실제 `state_transitions`와 `curations` 개수를 표시하며, Admin OpenAPI 전체 스냅샷을
+  고정해 경로·query·응답 필드 drift를 CI에서 탐지한다.
 - kor-travel-map service 계약 스냅샷을 Map `f637f3ad`(#1000 stream snapshot materialization)로 재vendor했다.
   사용자에게 보이는 동작 변화는 없다(경로 추가·삭제 없음, snapshot 한도 초과를 설명하는 problem 스키마 6개만
   추가됐다). 계약 핀(provenance revision·sha, 테스트 상수)을 같은 커밋에서 함께 옮겼다.
@@ -19,8 +23,6 @@
   서버가 모르는 query라 조용히 버려졌고(그리고 삭제되기 전에도 목록을 거르지 않았다) `active_only=true`가
   전체 목록을 돌려주고 있었다. 이제 PinVi가 카테고리의 활성 여부로 직접 거른다. 지금 카탈로그는 전부
   활성이라 응답은 이전과 같고, 앞으로 비활성 카테고리가 생기면 필터가 의미를 갖는다.
-- Admin 날씨 탭에서 시간대(offset) 없이 `asof`를 넘기면 **500**이 나던 것을 고쳤다. 사용자 화면과 같은
-  규칙으로 KST(Asia/Seoul)로 읽는다.
 - feature 응답의 `status` 필드는 **항상 `null`**이다. kor-travel-map이 feature 상태를 3축
   (lifecycle/publication/quality)으로 재편하면서 일반 사용자 표면에서 `status`를 제거했고 대체
   필드가 없다. 필드 자체는 클라이언트 호환을 위해 남겨 두지만 값이 채워지지 않으므로 이 값으로

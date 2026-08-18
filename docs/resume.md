@@ -1,5 +1,22 @@
 # resume.md
 
+## 2026-08-19 (codex) — T-VN-42 Admin 계약 소비 폐쇄
+
+PR #451이 user OpenAPI 재vendor뿐 아니라 3축·bitemporal consumer 수정까지 이미 병합했음을 확인해
+중복 cherry-pick을 중단했다. 남은 Admin 3건을 후속 변경으로 닫았다. Map
+`da2c740aa4b4239821075519959c38534cc65d2f`의 Admin OpenAPI 전체 파일(SHA-256
+`22e3f2f0…746d32`)을 vendor하고, feature 목록/상세/weather path·security·query·응답 shape를 CI에
+고정했다. weather-values는 비공개 feature도 읽는 Admin 전용 최신 카드 경로로 전환했으며, upstream에
+없는 `asof`는 최신값으로 가장하지 않고 422로 거부한다. 상세의 `state_transitions`/`curations`는
+Python/Zod를 거쳐 실제로 투영하고 Web에 실제 개수를 표시한다.
+
+작업 전 `/mnt/f`의 Pinvi 미사용 생성물과 병합 완료 worktree를 정리해 약 3.4 GB를 확보했고,
+깨진 Codex worktree를 최신 `origin/main` 기준으로 재생성했다. 비밀 설정·세션·backup이 있는 기존
+내용은 `/mnt/f/dev/pinvi-codex-orphan-20260819`에 보존했으며 자동 삭제하지 않는다.
+
+**다음 한 작업**: 로컬·n150 CI-parity와 원격 PR CI/리뷰를 통과시킨다. 공개 응답의 항상-null
+`status` 제거는 web/mobile 소비자를 함께 옮겨야 하는 breaking cutover이므로 별도 PR로 진행한다.
+
 ## 2026-08-19 (codex) — T-VN-41S typed snapshot error 소비
 
 선행 #453이 Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의 service artifact
@@ -50,11 +67,12 @@ docstring에 명시 + 통합 fake 시그니처 정렬, ⑤ `schemas/feature.py` 
 `features.py normalize_asof_query()`에 통과시키도록 한다(지금은 naive 입력에서 transport ValueError).
 그 뒤 PR을 연다(PR은 머지 직전에만 연다). admin 표면 3축 정렬·유령 query 제거는 병렬 레인이 이미 진행했고,
 admin weather 경로 전환·admin OpenAPI vendoring·공개 `status` 필드 제거는 후속 과제로 `docs/tasks.md` T-VN-42에 있다.
+
 ## 2026-08-18 (claude) — #444 service provenance 재핀(Map #975 머지 SHA) + Hallmark T-313
 
 **방금**: #444 리뷰 P1(핀이 dangling 커밋) 해소 — Map #975가 `4672aa966cd473f17fd4f69ee8066276f7be900d`로 squash
 머지됐고 그 커밋의 `openapi.service.json`이 vendored 스냅샷과 바이트 동일(SHA-256 `c6f9aba6…`)임을 확인해
-provenance·runtime contract test·`.env.example` EXPECTED_*(stale 값 정정)·CI packaged-provenance digest
+provenance·runtime contract test·`.env.example` EXPECTED\_\*(stale 값 정정)·CI packaged-provenance digest
 (`a6d501b4…`→`a2d3db8e…`)를 함께 재핀했다(PR #449). 병행: Hallmark T-313 토큰 코드모드 89파일(PR #448).
 
 **다음 한 작업**: #449/#448 CI green 후 머지 → **docker-manager pair 재핀**(`MAP_PINNED_RUNTIME_SOURCE`=4672aa96…,
@@ -381,6 +399,7 @@ Map commit 뒤 응답이 유실된 경우에도 PinVi DB의 immutable pre-CAS re
 
 **다음 한 작업**: PinVi format-fix commit SHA를 Map paired receipt에 다시 결박하고, 두 적대적 리뷰어의
 고정 SHA 재검토를 통과한다. n150 final isolated rehearsal은 이 코드/계약 gate 뒤에만 별도 실행한다.
+
 ## 2026-08-18 (claude) — T-312 Hallmark 감사 → 시스템 잠금 + 공개 표면 재설계
 
 **방금**: `hallmark audit`(웹 7표면 + prod 실렌더) 13C/26M/19m → `DESIGN.md`에 "Hallmark 잠금 시스템" 추가(genre

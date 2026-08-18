@@ -456,6 +456,7 @@ class KorTravelMapAdminClient:
         issue_types: list[str] | None = None,
         updated_from: str | None = None,
         updated_to: str | None = None,
+        include_ended: bool | None = None,
         page_size: int | None = None,
         cursor: str | None = None,
         sort: str | None = None,
@@ -490,6 +491,8 @@ class KorTravelMapAdminClient:
             params["updated_from"] = updated_from
         if updated_to:
             params["updated_to"] = updated_to
+        if include_ended is not None:
+            params["include_ended"] = include_ended
         if page_size is not None:
             params["page_size"] = page_size
         if cursor:
@@ -503,6 +506,10 @@ class KorTravelMapAdminClient:
     async def get_feature_detail(self, feature_id: str) -> dict[str, Any]:
         """GET /v1/admin/features/{id} — admin feature 상세 data 반환."""
         return self._data(await self._send("GET", f"/v1/admin/features/{feature_id}"))
+
+    async def get_feature_weather(self, feature_id: str) -> dict[str, Any]:
+        """GET /v1/admin/features/{id}/weather — 비공개 feature 포함 최신 weather card."""
+        return self._data(await self._send("GET", f"/v1/admin/features/{feature_id}/weather"))
 
     async def _feature_revision_etag(self, feature_id: str) -> str:
         """stable revision GET의 canonical ETag를 mutation precondition으로 보존한다."""

@@ -214,12 +214,58 @@ const featureDetail: AdminFeatureDetail = {
   ],
   issues: [],
   overrides: [],
+  state_transitions: [
+    {
+      transition_id: 1,
+      from_lifecycle_state: null,
+      from_publication_state: null,
+      from_quality_state: null,
+      to_lifecycle_state: 'active',
+      to_publication_state: 'published',
+      to_quality_state: 'valid',
+      transition_kind: 'provider_import',
+      reason_code: 'initial_load',
+      principal: 'service:kortravelmap',
+      provider_dataset_id: 42,
+      source_entity_key: 'visitkorea:places:content:1',
+      source_record_key: 'visitkorea:places:1',
+      causation_ref: null,
+      occurred_at: '2026-06-11T00:00:00+09:00',
+      row_revision: 1,
+    },
+  ],
   // Map admin 상세 payload에는 `versions`/`change_requests`가 없다(있는 list는 sources /
   // issues / overrides / files / state_transitions / curations). Pinvi는 두 키를 소비자
   // 호환용으로 남겨 두지만 값은 늘 비어 있으므로 fixture도 비운다.
   versions: [],
   change_requests: [],
   files: [],
+  curations: [
+    {
+      curation_item_id: '11111111-1111-4111-8111-111111111111',
+      collection_id: '22222222-2222-4222-8222-222222222222',
+      collection_key: 'summer-busan',
+      title: '부산 여름 여행',
+      edition_key: '2026-summer',
+      theme_slug: 'busan-cafe',
+      theme_name: '부산 카페',
+      theme_group: 'seasonal',
+      feature_id: 'f_place_1',
+      feature_name: '해운대 카페',
+      feature_kind: 'place',
+      feature_category: '01070100',
+      place_name: '해운대 카페',
+      address_hint: '부산 해운대구',
+      status: 'included',
+      sort_order: 1,
+      item_title: '바다 앞 카페',
+      item_summary: '해변 산책 뒤 쉬기 좋은 곳',
+      curation_relation: 'cafe_stop',
+      reuse_policy: 'allowed',
+      row_revision: '2',
+      updated_at: '2026-06-12T00:00:00+09:00',
+    },
+  ],
 };
 
 test.beforeEach(async ({ page }) => {
@@ -297,6 +343,8 @@ test('Admin Features가 Pinvi proxy로 목록 필터와 상세를 조회한다',
   await page.getByTestId('admin-features-detail-f_place_1').click();
   await expect(page.getByTestId('admin-features-detail')).toContainText('visitkorea / places');
   await expect(page.getByTestId('admin-features-detail')).toContainText('해운대해변로');
+  await expect(page.getByTestId('admin-features-detail')).toContainText('transitions 1');
+  await expect(page.getByTestId('admin-features-detail')).toContainText('curations 1');
   expect(requests.some((url) => url.includes('12701'))).toBe(false);
 });
 

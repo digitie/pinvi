@@ -2,6 +2,30 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-19 (codex) — T-VN-42 Admin 계약 폐쇄 + Codex worktree 복구
+
+- **중복 방지 감사**: 로컬 `d978eff2`의 consumer 수정은 이미 squash PR #451(`c13ea5d6`)에 전부
+  포함돼 있었다. 이를 다시 cherry-pick하지 않고, `docs/tasks.md`에 남은 Admin 3건만 후속 범위로
+  확정했다. 공개 `status` 제거는 별도 breaking cutover로 유지한다.
+- **저장공간/복구**: 병합 완료·clean worktree와 Pinvi가 재생성할 수 있는 `node_modules`, `.venv`,
+  CodeGraph/test cache만 정리해 `/mnt/f` 여유 공간을 약 9.6 GB → 13 GB로 늘렸다. Windows lock 때문에
+  상위 디렉터리 rename은 하지 못해 기존 내용을 `pinvi-codex-orphan-20260819`에 보존하고, Codex
+  worktree를 최신 `origin/main`에서 `agent/codex-tvn42`로 재생성했다. orphan의 `.env`, Telegram
+  session, DB dump는 실제 local state이므로 삭제하지 않았다.
+- **Admin weather**: Pinvi `/admin/features/{id}/weather-values`가 user 경로를 호출해 비공개 feature를
+  404로 만들던 것을 Map Admin 전용 `/v1/admin/features/{id}/weather`로 전환했다. 이 upstream 경로는
+  query가 없으므로 기존 `asof`는 422로 명시 거부한다. 모르는 query를 upstream이 조용히 버려 최신값을
+  과거값처럼 반환하는 실패를 차단한다.
+- **상세 투영**: Map의 실제 `state_transitions`와 `curations` 중 Pinvi가 소비하는 필드를 Python
+  Pydantic과 공유 Zod 계약에 추가하고, Admin Web 상세의 실제 count chip과 API/Web 회귀 fixture를
+  연결했다. upstream에
+  없는 legacy `versions`/`change_requests`는 호환용 빈 배열로만 유지한다.
+- **계약 게이트**: Map `da2c740aa4b4239821075519959c38534cc65d2f`의
+  `packages/kor-travel-map-api/openapi.json` 전체 1,501,480 bytes를 SHA-256
+  `22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32`로 고정했다. Admin feature
+  3경로의 AdminBFF security, exact query 집합, response/container ref, 3축·transition·curation·weather
+  소비 shape를 별도 unit gate로 검증한다.
+
 ## 2026-08-19 (codex) — T-VN-41S typed snapshot error 소비
 
 - **변경**: 선행 #453이 Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의 service
@@ -44,7 +68,7 @@
   명시 offset 보존). docstring도 현재 정책으로 갈아끼웠다.
 - **P1 ② admin weather-values가 naive `?asof=`에서 500**: `api/v1/admin/features.py`가
   `normalize_asof_query()`를 건너뛰고 raw query를 client에 넘겨 transport `ValueError`가
-  `_map_admin_errors()`(KorTravelMap* 계열만 포착)를 뚫었다. user 라우터와 **같은 helper**를
+  `_map_admin_errors()`(KorTravelMap\* 계열만 포착)를 뚫었다. user 라우터와 **같은 helper**를
   통과시키도록 고쳤고(순환 import 없음 — `app/api/v1/__init__.py`가 `features`를 `admin`보다 먼저
   import), 통합 테스트로 naive `?asof=` 200 + client가 받은 값이 aware KST임을 고정했다. 통합 fake의
   `feature_weather`도 실제 transport 정책(naive 거절)을 흉내내게 해서, 라우터가 다시 보정을 빼먹으면
@@ -149,6 +173,7 @@
   검증까지 마친 교체본을 인수인계했다(naive는 `pytest.raises(ValueError, match="UTC offset")`,
   aware KST는 그대로 통과). `api/v1/admin/features.py`의 weather-values도 `asof`를
   `normalize_asof_query()`에 통과시켜야 한다.
+
 ## 2026-08-18 (claude) — #444 후속: service provenance `map_release_revision` 재핀(dangling → Map #975 머지 SHA)
 
 - **문제**: #444가 핀한 Map 후보 `e093e555…`는 어떤 Map 브랜치에도 없는 dangling 커밋(리뷰 P1). Map #975가

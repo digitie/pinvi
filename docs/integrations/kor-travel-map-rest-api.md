@@ -65,16 +65,19 @@ sort, order]`이며 `status`·`provider`·`dataset_key`는 **없다**(보내면 
 > (query 없음, 응답 `FeatureWeatherResponse`/`WeatherCardData`; user 경로는 `public_features`
 > 기반이라 비공개 feature가 404지만 admin 경로는 base `features`(lifecycle=active) 기반이다).
 >
-> **후속 과제(이번 PR 범위 밖)**:
+> **2026-08-19 Admin 소비 폐쇄(Map `da2c740aa4b4239821075519959c38534cc65d2f`)**:
+> Admin OpenAPI 전체 파일을 `apps/api/tests/contract/kor-travel-map-openapi-admin.json`
+> (SHA-256 `22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32`)으로 vendor했다.
+> Pinvi weather-values는 Admin 전용 최신 카드 경로로 전환해 비공개 feature를 지원하고, Admin 계약에
+> 없는 `asof`는 422로 거부한다. 상세의 `state_transitions`/`curations`도 실제 응답으로 투영한다.
+>
+> **후속 과제**:
 >
 > 1. Pinvi 공개 응답에서 항상 None인 `status` 필드를 실제로 제거한다 —
 >    `FeatureSummary`/`FeatureDetail`/`DetailCardBase`(`app/schemas/feature.py`)와 web/mobile
 >    소비처를 함께 정리해야 하는 breaking change라 별도 cutover로 뺀다.
-> 2. Pinvi admin weather-values(`api/v1/admin/features.py`)를 user 경로 대신 **admin weather
->    경로**로 전환한다 — 지금은 user 경로를 쓰기 때문에 비공개 feature의 admin 조회가 404가 된다.
-> 3. **admin OpenAPI 스냅샷을 vendoring**한다. 현재 계약 게이트는 user 스냅샷만 검사해서
->    admin 표면 드리프트(위 ③)가 CI에 잡히지 않는다.
-> 4. 필요하면 `refresh_after` 소비(카드 캐시 TTL) 도입도 같은 과제에서 검토한다.
+> 2. Map이 Admin bitemporal snapshot 계약을 제공하면 비공개 feature의 `asof` 조회를 복원한다.
+> 3. 필요하면 `refresh_after` 소비(카드 캐시 TTL)를 검토한다.
 >    **관계**: 능력 격차 분석은 `docs/kor-travel-map-requirements.md`(이제 대부분 해소),
 >    통합 패턴 개요는 `docs/kor-travel-map-integration.md`(본 문서가 구체 계약으로 대체/보강).
 >
@@ -632,7 +635,7 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
 
 ## 8. 드리프트 게이트 (T-210e, 2026-06-11)
 
-수기 httpx client(kor_travel_map 권고)가 kor_travel_map `openapi.user.json`과 silent drift하는 것을 막는다.
+수기 httpx client(kor_travel_map 권고)가 kor_travel_map OpenAPI profile과 silent drift하는 것을 막는다.
 
 - **vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-user.json` — Pinvi가 구현 기준으로
   삼은 kor_travel_map main commit의 **전체 파일**(현 핀 `95d2c128`, 2026-08-17 재vendor —
@@ -669,6 +672,11 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   `model_validate`로 객체 전체를 검증하는 `/v1/public/*`는
   `test_public_view_contracts_cover_every_validated_model_field`가 `app/schemas/public.py`
   모델의 `model_fields` ⊆ 계약을 강제한다(모델에 필드를 추가하면 타입 계약도 함께 적어야 통과).
+- **Admin vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map
+  `da2c740aa4b4239821075519959c38534cc65d2f`의 `packages/kor-travel-map-api/openapi.json` 전체 파일,
+  SHA-256 `22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32`.
+  `test_kor_travel_map_admin_contract.py`가 Admin feature 목록/상세/weather의 path·AdminBFF security,
+  query exact 집합, 응답 container `$ref`, 3축·state transition·curation·weather 소비 shape를 고정한다.
 
   > **의도적 비대상**: consumer 쪽에서는 exact property 집합·`additionalProperties`를 고정하지
   > 않는다. producer(Map) 쪽 exact 고정은 T-VN-H07A(Map PR #814)가 소유하며, consumer가 이를
@@ -687,5 +695,8 @@ apps/api/tests/contract/kor-travel-map-openapi-user.json`
      `features.py`/`public.py` 매핑 + `_CLIENT_PATHS`/`_CLIENT_QUERY_PARAMETERS`/
      `_CONSUMED_FIELD_CONTRACTS`에 맞춰 갱신(= kor_travel_map drift 대응 PR).
      `_SCHEMA_FIELDS`는 파생 집합이므로 직접 편집하지 않는다.
+  5. Admin feature 계약이 바뀌면 같은 exact commit의 `openapi.json` 전체 파일을
+     `kor-travel-map-openapi-admin.json`으로 교체하고 `test_kor_travel_map_admin_contract.py`의
+     commit/hash와 소비 가정을 함께 갱신한다.
 - **codegen(선택)**: frontend `openapi-typescript` + Zod mirror는 미도입(후속). 백엔드는 본
   스냅샷 게이트로 충분(kor_travel_map 권고: 수기 httpx 유지).
