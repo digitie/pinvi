@@ -1677,7 +1677,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                 {addNotice && !mutationError && (
                                   <p
                                     role="status"
-                                    className="rounded-sm bg-primary/10 px-3 py-2 text-xs text-primary"
+                                    className="rounded-sm bg-surface-soft px-3 py-2 text-sm text-ink"
                                     data-testid="poi-add-notice"
                                   >
                                     {addNotice}

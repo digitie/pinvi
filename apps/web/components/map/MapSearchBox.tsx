@@ -21,7 +21,7 @@ const DEBOUNCE_MS = 250;
 const SOURCE_META: Record<Source, { label: string; badgeClass: string; icon: 'pin' | 'bookmark' }> =
   {
     feature: { label: '장소', badgeClass: 'bg-surface-soft text-muted', icon: 'pin' },
-    my_poi: { label: '내 여행', badgeClass: 'bg-primary/10 text-primary', icon: 'bookmark' },
+    my_poi: { label: '내 여행', badgeClass: 'bg-surface-strong text-ink', icon: 'bookmark' },
     address: { label: '주소', badgeClass: 'bg-surface-soft text-muted', icon: 'pin' },
     kakao: { label: '카카오', badgeClass: 'bg-marker-p-03/20 text-ink', icon: 'pin' },
     naver: { label: '네이버 검색', badgeClass: 'bg-marker-p-05/15 text-ink', icon: 'pin' },

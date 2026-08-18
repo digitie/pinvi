@@ -76,13 +76,13 @@ function TripDayRiseSet({ day }: { day: TripDayHeaderProps['day'] }) {
       >
         {sunrise && (
           <span className="inline-flex items-center gap-1">
-            <Sunrise className="h-3.5 w-3.5 text-marker-p-02" aria-hidden="true" />
+            <Sunrise className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
             일출 {sunrise}
           </span>
         )}
         {sunset && (
           <span className="inline-flex items-center gap-1">
-            <Sunset className="h-3.5 w-3.5 text-marker-p-15" aria-hidden="true" />
+            <Sunset className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
             일몰 {sunset}
           </span>
         )}

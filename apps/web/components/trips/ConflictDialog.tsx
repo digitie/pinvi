@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
+import { buttonClassName } from '@/components/ui/Button';
 
 export interface ConflictField {
   key: string;
@@ -63,7 +64,7 @@ export function ConflictDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-scrim/50 p-4"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-scrim/50 p-4"
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -112,7 +113,7 @@ export function ConflictDialog({
                     className={
                       mineSelected
                         ? 'min-h-12 px-3 py-2 text-left text-muted hover:bg-surface-soft'
-                        : 'min-h-12 bg-primary/10 px-3 py-2 text-left font-semibold text-ink ring-1 ring-inset ring-primary'
+                        : 'min-h-12 bg-surface-soft px-3 py-2 text-left font-semibold text-ink ring-1 ring-inset ring-ink'
                     }
                   >
                     <span className="block break-words">{field.serverValue}</span>
@@ -124,7 +125,7 @@ export function ConflictDialog({
                     data-testid={`conflict-field-${field.key}-mine`}
                     className={
                       mineSelected
-                        ? 'min-h-12 bg-primary/10 px-3 py-2 text-left font-semibold text-ink ring-1 ring-inset ring-primary'
+                        ? 'min-h-12 bg-surface-soft px-3 py-2 text-left font-semibold text-ink ring-1 ring-inset ring-ink'
                         : 'min-h-12 px-3 py-2 text-left text-muted hover:bg-surface-soft'
                     }
                   >
@@ -159,7 +160,7 @@ export function ConflictDialog({
             onClick={() => onApply(allMineKeys)}
             disabled={saving || fields.length === 0}
             data-testid="conflict-use-mine"
-            className="h-9 rounded-sm border border-primary px-3 text-sm font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
+            className={buttonClassName({ variant: 'secondary', size: 'sm' })}
           >
             내 값 전체
           </button>

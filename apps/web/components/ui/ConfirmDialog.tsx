@@ -61,7 +61,7 @@ export function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-scrim/50 p-4"
+      className="fixed inset-0 z-toast flex items-center justify-center bg-scrim/50 p-4"
       data-testid={`${testId}-backdrop`}
       {...backdropProps}
     >

@@ -1,7 +1,8 @@
 'use client';
 
-import { Loader2, MapPin } from 'lucide-react';
-import { useEscapeKey } from '@/lib/useEscapeKey';
+import { MapPin } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
 
 export interface LocationConsentDialogProps {
   open: boolean;
@@ -11,6 +12,10 @@ export interface LocationConsentDialogProps {
   onCancel: () => void;
 }
 
+/**
+ * 위치 기능 사용 전 동의 게이트(위치정보법 제16조). 모달 셸·focus trap·scroll lock은
+ * `Dialog` 프리미티브가 담당한다(이전에는 `useEscapeKey`만 있어 focus trap이 없었다).
+ */
 export function LocationConsentDialog({
   open,
   saving = false,
@@ -18,57 +23,46 @@ export function LocationConsentDialog({
   onAgree,
   onCancel,
 }: LocationConsentDialogProps) {
-  useEscapeKey(onCancel, open);
-  if (!open) return null;
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/50 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="위치정보 이용 동의"
-      data-testid="location-consent-dialog"
-    >
-      <div className="w-full max-w-md space-y-4 rounded-md border border-hairline bg-canvas p-5 shadow-overlay">
-        <div className="flex items-center gap-2">
-          <MapPin className="h-5 w-5 text-primary" aria-hidden="true" />
-          <h2 className="text-base font-bold text-ink">위치정보 이용 동의</h2>
-        </div>
-        <div className="space-y-2 text-sm text-body">
-          <p>내 위치 표시·주변 검색 등 위치 기반 기능을 사용하려면 아래 동의가 필요합니다.</p>
-          <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
-            <li>위치기반서비스 이용약관(필수)</li>
-            <li>개인위치정보 수집·이용(필수)</li>
-          </ul>
-          <p className="text-xs text-muted">
-            동의는 설정에서 언제든 철회할 수 있으며, 철회 시 위치 기능이 비활성화됩니다(위치정보법
-            제16조).
-          </p>
-        </div>
-        {error && (
-          <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">
-            {error}
-          </p>
-        )}
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="h-9 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
-          >
+    <Dialog
+      open={open}
+      onClose={onCancel}
+      busy={saving}
+      size="sm"
+      testId="location-consent-dialog"
+      title={
+        <span className="flex items-center gap-2">
+          <MapPin className="size-5 text-primary" aria-hidden="true" />
+          위치정보 이용 동의
+        </span>
+      }
+      footer={
+        <>
+          <Button variant="secondary" onClick={onCancel} disabled={saving}>
             취소
-          </button>
-          <button
-            type="button"
-            onClick={onAgree}
-            disabled={saving}
-            data-testid="location-consent-agree"
-            className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
-          >
-            {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+          </Button>
+          <Button onClick={onAgree} loading={saving} data-testid="location-consent-agree">
             동의하고 사용
-          </button>
-        </div>
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-2 text-sm text-body">
+        <p>내 위치 표시·주변 검색 등 위치 기반 기능을 사용하려면 아래 동의가 필요합니다.</p>
+        <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
+          <li>위치기반서비스 이용약관(필수)</li>
+          <li>개인위치정보 수집·이용(필수)</li>
+        </ul>
+        <p className="text-sm text-muted">
+          동의는 설정에서 언제든 철회할 수 있으며, 철회 시 위치 기능이 비활성화됩니다(위치정보법
+          제16조).
+        </p>
       </div>
-    </div>
+      {error ? (
+        <p role="alert" className="mt-3 rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text">
+          {error}
+        </p>
+      ) : null}
+    </Dialog>
   );
 }
