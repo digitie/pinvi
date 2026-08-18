@@ -65,10 +65,11 @@
         stack·DB·backup/restore는 금지한다. 첫 격리 build에서 wheel `force-include` source path가 Docker
         filesystem에 없음을 확인했다. canonical contract를 editable install 전에 같은 source-relative 위치에
         복사하는 PinVi Docker fix PR을 merge한 뒤 동일 pinset rehearsal을 재개한다.
-- (역사·참조) **T-VN-41-F production final boundary 초안(2026-08-05, PR #429)** — F1 re-pin(Manager PR #130 완료)·
-      F1A Manager-owned default-off bootstrap·F2 단일 production cutover 순서와 abort/rollback·secret-free evidence
-      기준을 [`t-vn-41-production-final-boundary.md`](execplan/t-vn-41-production-final-boundary.md)에 둔다. 현행
-      실행 정본은 위 F1J 항목이며 두 문서가 어긋나면 F1J(신규)를 따른다.
+- (역사·참조) **T-VN-41-F production final boundary 초안(2026-08-05, PR #429)** —
+      [`t-vn-41-production-final-boundary.md`](execplan/t-vn-41-production-final-boundary.md). 당시 F1 re-pin은
+      Manager PR #130으로 됐으나 그 pin(`c0afaa4e…`)은 F1F-A에서 old release로 판정돼 재핀됐고, F1A(default-off
+      bootstrap)는 착수되지 않은 채 F1D-C one-shot·F1F-B canonical env replace로 대체됐으며, F2 cutover는 미착수다.
+      문서 헤더에 역사 기록으로 표기했다. 현행 실행 정본은 위 F1J 항목이며 두 문서가 어긋나면 F1J(신규)를 따른다.
 
 ## 보안·의존성
 

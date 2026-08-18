@@ -1,4 +1,14 @@
-# T-VN-41-F — production final boundary 실행 계획
+# T-VN-41-F — production final boundary 실행 계획 (2026-08-05 초안 · **역사 기록**)
+
+> **상태(2026-08-18 병합 시 표기)**: 이 문서는 2026-08-05 시점의 계획 초안이다. 아래 "현재 배포 pair"의 pin
+> (Map release `c0afaa4e…`, functional owner `e12494bd…`, PinVi `3ff54b8b…`, service SHA `144b4335…`)과
+> `ktdctl cache-target diagnose/cutover` 명령·journal 상태명은 이후 main에서 **F1F-A(재핀)·F1D-C·F1F-B·F1J-A~D**
+> 흐름으로 대체됐고 현행 Manager CLI에는 없다. **실행 근거로 쓰지 말 것** — 현행 정본은
+> `docs/tasks.md` "kor-travel-map compatible pair"의 T-VN-41-F F1J 항목,
+> `docs/execplan/t-vn-41-f1j-contract-provenance.md`, `docs/execplan/t-vn-41-paired-live-proof.md`,
+> `docs/runbooks/cache-target-causal-canary.md`다. production 절차는 어떤 경우든 DB 스냅샷·마이그레이션·롤백
+> 경로(`docs/runbooks/backup-restore.md`)를 먼저 확보한 뒤 진행한다.
+
 
 ## 목적과 범위
 

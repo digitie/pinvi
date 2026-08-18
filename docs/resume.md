@@ -459,6 +459,7 @@ opt-in(기본 off, 분리 집계). Map PR-1(#950, `2a8642bd…`) 머지 후 gold
 
 **다음 한 작업**: Map PR-2(응답 값 전환) 동봉 유예 — CLI 플래그·
 `derivation_enforced` 배선·스냅샷 3종 재추출+핀 회전.
+
 ## 2026-08-05 (codex) — T-VN-41-F1 완료, default-off bootstrap 설계 선행
 
 H42와 n150 격리 paired proof는 완료됐고 Docker-manager durable writer-drain의 최신 재검토도
