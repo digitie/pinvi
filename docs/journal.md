@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-19 (claude) — Map service 계약 재vendor + provenance 재핀 (8019e36f / f637f3ad)
+
+- Map `#1000`(T-VN-41S: stream snapshot materialization)이 `openapi.service.json`을 바꿨다
+  (`c6f9aba6…` → `8019e36f…`). diff는 **순수 additive** — path 추가/삭제 0, schema 6개 추가
+  (`CacheTargetSnapshot{ByteLimit,ItemLimit,MaterialCompacted}{Details,Problem}`), 삭제 0.
+  따라서 현행 consumer가 깨지지는 않는다. 새 problem 유형의 소비는 T-VN-41 후속이다.
+- lockstep 3곳을 한 커밋에서 옮겼다: vendored 스냅샷 바이트 ·
+  `contracts/kor-travel-map-service-provenance-v1.json`(`service_openapi_sha256` +
+  `map_release_revision` → Map pair commit `f637f3ad`) ·
+  `tests/unit/test_kor_travel_map_cache_target_contract.py`의 `_MAP_RELEASE_REVISION`/`_SNAPSHOT_SHA256`.
+- **prod env는 건드릴 필요가 없다**: n150 `.env`가 `PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED=false`이고
+  `..._EXPECTED_SOURCE_REVISION`이 빈 값이라 `config.py`의 lockstep 검증 블록 자체가 돌지 않는다
+  (sync가 켜진 환경에서는 그 env도 같은 순간에 옮겨야 한다).
+- 왜 지금: Map T-VN-40 인수 ④ receipt가 `map_service_openapi_sha256 == pinvi_service_vendor_sha256`을
+  강제하고, cutover(S3~S6)의 pair commit이 `f637f3ad`로 확정됐다. mapping receipt 봉인(S4)은 이 재핀
+  **뒤에** 한 번만 한다 — 먼저 봉인하면 preflight가 새 revision 기준으로 `ready=false`가 된다.
+
 ## 2026-08-18 (claude) — T-VN-42 라운드 2: 재리뷰 P1 4건 해소(CI red / admin 500 / 문서 모순 / 유령 query)
 
 - **P1 ① 브랜치가 CI red였다**: `test_feature_weather_defaults_known_at_to_now_and_normalises_naive_asof`가
