@@ -2,6 +2,16 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-18 (codex) — T-VN-41 ABC rebase Map provenance 재핀
+
+- Map PR #975의 rebase 후 head `302274b3621590a14b6928fffcc0c907a2dafb0f`를 PinVi service
+  provenance·runtime contract test·Docker packaged-provenance digest에 함께 재핀했다.
+  service OpenAPI vendor bytes는 Map artifact와 계속 SHA-256
+  `c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`로 일치한다.
+- 이 변경은 exact candidate pair만 바꾸며, production sync enable·완료 receipt·PR 병합은
+  여전히 final C7 boundary 밖에서 금지한다. paired CI·적대적 재리뷰·n150 isolated Live UI E2E가
+  다음 gate다.
+
 ## 2026-08-17 (codex) — T-VN-41 ABC Map service provenance 재핀
 
 - Map PR #975의 current-main 후보 `b6685ceb558f41420028e9f1f2488117a73b3e00`를

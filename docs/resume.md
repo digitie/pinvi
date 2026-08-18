@@ -1,5 +1,15 @@
 # resume.md
 
+## 2026-08-18 (codex) — T-VN-41 ABC rebase pair 재결박
+
+Map #975 rebase head `302274b3621590a14b6928fffcc0c907a2dafb0f`를 PinVi #444 service
+provenance·runtime contract·Docker packaged provenance에 함께 반영했다. service OpenAPI SHA-256은
+`c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`로 byte-identical하다.
+
+**다음 한 작업**: paired Map/PinVi 원격 CI와 새 exact pair의 적대적 재리뷰를 통과한 뒤 n150
+isolated Live UI E2E를 다시 실행한다. 이 후보 증거는 production sync enable·complete receipt 또는
+PR 병합 권한이 아니다.
+
 ## 2026-08-17 (codex) — T-VN-41 ABC current-main Map artifact 재결박
 
 PinVi #444의 service vendor bytes가 Map PR #975의 현행 service OpenAPI와 이미 같음을
