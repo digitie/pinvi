@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, MapPin } from 'lucide-react';
 import { ApiError, featureApi } from '@pinvi/api-client';
 import type { FeatureSuggestionKind } from '@pinvi/schemas';
@@ -37,6 +37,11 @@ export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureReq
   const [done, setDone] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+
+  // 접수 완료로 바뀌면 제출 버튼이 사라져 포커스가 body로 떨어진다 — 닫기로 옮긴다.
+  useEffect(() => {
+    if (done) closeRef.current?.focus();
+  }, [done]);
 
   const update = (patch: Partial<NewPlaceForm>) => setForm((prev) => ({ ...prev, ...patch }));
 
@@ -75,7 +80,7 @@ export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureReq
       }
       size="sm"
       busy={submitting}
-      initialFocusRef={done ? closeRef : titleRef}
+      initialFocusRef={titleRef}
       testId="feature-request-dialog"
       footer={
         done ? (

@@ -29,7 +29,7 @@ export interface DialogProps {
   description?: ReactNode;
   size?: DialogSize;
   variant?: DialogVariant;
-  /** 진행 중이면 backdrop/Escape 닫기를 막는다(저장 중 이탈 방지). */
+  /** 진행 중이면 backdrop/Escape 닫기를 막는다(저장 중 **실수** 이탈 방지 — 명시적 닫기는 계속 열려 있다). */
   busy?: boolean;
   /** 헤더 우측 닫기(×) 버튼. 기본 true. */
   showClose?: boolean;
@@ -64,13 +64,16 @@ export function Dialog({
   children,
   testId = 'dialog',
 }: DialogProps) {
+  const descriptionId = `${testId}-desc`;
   const { titleId, backdropProps, dialogProps } = useModalDialog({
     onClose,
     active: open,
-    // 저장 중에는 실수로 닫혀 작업이 사라지지 않게 잠근다.
+    // 저장 중에는 실수(Escape·backdrop)로 닫혀 작업이 사라지지 않게 잠근다.
+    // 명시적 닫기(헤더 ×)는 잠그지 않는다 — 요청이 지연·정지해도 빠져나갈 길이 하나는 남아야 한다.
     closeOnEscape: !busy,
     closeOnBackdrop: !busy,
     initialFocusRef,
+    ariaDescribedBy: description != null ? descriptionId : undefined,
   });
 
   if (!open) return null;
@@ -101,16 +104,21 @@ export function Dialog({
             >
               {title}
             </h2>
-            {description != null ? <p className="mt-1 text-sm text-muted">{description}</p> : null}
+            {description != null ? (
+              <p id={descriptionId} className="mt-1 text-sm text-muted">
+                {description}
+              </p>
+            ) : null}
           </div>
           {showClose ? (
             <button
               type="button"
+              // busy에도 비활성화하지 않는다 — 취소/닫기 경로가 전부 잠기면(요청이 매달릴 때)
+              // 새로고침 말고는 모달을 벗어날 방법이 없다.
               onClick={onClose}
-              disabled={busy}
               aria-label="닫기"
               data-testid={`${testId}-close`}
-              className="focus-ring -mr-2 -mt-1 inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-muted transition-colors duration-normal ease-pinvi hover:bg-surface-soft hover:text-ink disabled:cursor-not-allowed"
+              className="focus-ring -mr-2 -mt-1 inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-muted transition-colors duration-normal ease-pinvi hover:bg-surface-soft hover:text-ink"
             >
               <X className="size-5" aria-hidden="true" />
             </button>

@@ -32,6 +32,7 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<NoticePlanCopyResponse | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
+  const successCloseRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +54,11 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
 
   const update = (patch: Partial<CopyForm>) => setForm((prev) => ({ ...prev, ...patch }));
 
+  // 성공 화면으로 바뀌면 눌렀던 복사 버튼이 사라져 포커스가 body로 떨어진다 — 닫기로 옮긴다.
+  useEffect(() => {
+    if (result) successCloseRef.current?.focus();
+  }, [result]);
+
   const copy = async () => {
     setCopying(true);
     setError(null);
@@ -69,7 +75,7 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
 
   const footer = result ? (
     <>
-      <Button variant="secondary" onClick={onClose}>
+      <Button ref={successCloseRef} variant="secondary" onClick={onClose}>
         닫기
       </Button>
       <ButtonLink href={`/trips/${result.trip_id}`}>여행 열기</ButtonLink>

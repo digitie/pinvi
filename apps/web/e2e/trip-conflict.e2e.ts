@@ -153,6 +153,77 @@ test('여행 정보 409 충돌에서 내 값 전체를 최신 version으로 다�
   expect(patchCount).toBe(2);
 });
 
+test('편집 다이얼로그 위에 뜬 충돌 다이얼로그에 키보드로 도달할 수 있다', async ({ page }) => {
+  // 중첩 모달 회귀 방지 — 아래(편집) 다이얼로그의 focus trap이 위(충돌) 다이얼로그를
+  // 가두면 키보드 사용자는 충돌을 해결할 수 없다(T-315 리뷰 P1).
+  await commonRoutes(page);
+  await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
+    if (request.method() === 'PATCH') {
+      await route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify(conflictBody()),
+      });
+      return;
+    }
+    if (!isFetch(request.resourceType())) return route.continue();
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ data: tripView('서버 제목', 2, null, 1) }),
+    });
+  });
+
+  await page.goto(`/trips/${tripId}`);
+  await page.getByRole('button', { name: '편집', exact: true }).click();
+  await page.getByLabel('제목').fill('내 제목');
+  await page.getByTestId('trip-edit-save').click();
+  await expect(page.getByTestId('conflict-dialog')).toBeVisible();
+
+  let reached = false;
+  for (let i = 0; i < 20 && !reached; i += 1) {
+    await page.keyboard.press('Tab');
+    reached = await page.evaluate(() => {
+      const conflict = document.querySelector('[data-testid="conflict-dialog"]');
+      return Boolean(
+        conflict && document.activeElement && conflict.contains(document.activeElement),
+      );
+    });
+  }
+  expect(reached).toBe(true);
+
+  // Escape는 최상단(충돌)만 닫고 아래 편집 다이얼로그는 남는다.
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('conflict-dialog')).toHaveCount(0);
+  await expect(page.getByTestId('trip-edit-dialog')).toBeVisible();
+});
+
+test('저장이 매달려도 다이얼로그를 닫을 수 있다', async ({ page }) => {
+  // busy에서 Escape/backdrop은 잠기지만 명시적 닫기(×)는 살아 있어야 한다(T-315 리뷰 P2).
+  await commonRoutes(page);
+  await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
+    if (request.method() === 'PATCH') {
+      // 응답을 주지 않는다 — 정지한 네트워크.
+      return;
+    }
+    if (!isFetch(request.resourceType())) return route.continue();
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ data: tripView('원래 제목', 1, null, 1) }),
+    });
+  });
+
+  await page.goto(`/trips/${tripId}`);
+  await page.getByRole('button', { name: '편집', exact: true }).click();
+  await page.getByLabel('제목').fill('내 제목');
+  await page.getByTestId('trip-edit-save').click();
+
+  await expect(page.getByTestId('trip-edit-dialog-close')).toBeEnabled();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('trip-edit-dialog')).toBeVisible();
+  await page.getByTestId('trip-edit-dialog-close').click();
+  await expect(page.getByTestId('trip-edit-dialog')).toHaveCount(0);
+});
+
 test('POI 409 충돌에서 내 메모를 최신 version으로 다시 저장한다', async ({ page }) => {
   let patchCount = 0;
   let serverChanged = false;

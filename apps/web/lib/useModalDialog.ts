@@ -41,6 +41,8 @@ export interface UseModalDialogOptions {
   ariaLabel?: string;
   /** aria-labelledby로 쓸 heading의 id. 생략하면 훅이 만든 `titleId`를 쓴다. */
   ariaLabelledBy?: string;
+  /** aria-describedby로 쓸 설명 요소의 id. */
+  ariaDescribedBy?: string;
 }
 
 export interface ModalDialogA11y {
@@ -61,6 +63,7 @@ export interface ModalDialogA11y {
     'aria-modal': true;
     'aria-label'?: string;
     'aria-labelledby'?: string;
+    'aria-describedby'?: string;
   };
 }
 
@@ -91,6 +94,7 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     initialFocusRef,
     ariaLabel,
     ariaLabelledBy,
+    ariaDescribedBy,
   } = options;
 
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -105,13 +109,21 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     onCloseRef.current = onClose;
   }, [onClose]);
 
+  // initialFocusRef는 값이 아니라 ref로 읽는다 — 호출부가 상태에 따라 다른 ref를 넘겨도
+  // (예: 완료 화면에서 닫기 버튼) focus effect가 재실행되며 cleanup이 포커스를 모달 밖으로
+  // 되돌렸다 다시 들어오는 왕복이 생기지 않는다.
+  const initialFocusRefRef = useRef(initialFocusRef);
+  useEffect(() => {
+    initialFocusRefRef.current = initialFocusRef;
+  }, [initialFocusRef]);
+
   // 포커스: 열릴 때 패널/초기 대상으로, 닫힐 때 직전 요소로 복원.
   useEffect(() => {
     if (!active) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
     // paint 이후 요소가 마운트된 상태에서 포커스하도록 rAF로 지연.
     const raf = window.requestAnimationFrame(() => {
-      (initialFocusRef?.current ?? dialogRef.current)?.focus();
+      (initialFocusRefRef.current?.current ?? dialogRef.current)?.focus();
       // 초기 대상이 포커스 불가(예: busy로 disabled된 버튼)라 포커스가 안 들어갔으면
       // 패널로 폴백해 항상 다이얼로그 안에 포커스가 놓이게 한다(WCAG 2.4.3).
       const panel = dialogRef.current;
@@ -125,7 +137,24 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
         previouslyFocused.focus();
       }
     };
-  }, [active, initialFocusRef]);
+  }, [active]);
+
+  // 포커스 격납 — 안에 있던 요소가 disabled/언마운트되면(저장 중 버튼, 완료 화면 전환)
+  // 포커스가 body로 떨어져 aria-modal 밖에 놓인다. 최상단 모달이면 패널로 되돌린다.
+  useEffect(() => {
+    if (!active) return;
+    const handler = (event: FocusEvent) => {
+      if (modalStack[modalStack.length - 1] !== generatedTitleId) return;
+      const panel = dialogRef.current;
+      if (!panel) return;
+      const target = event.target;
+      if (target instanceof Node && panel.contains(target)) return;
+      // 포커스가 body(또는 배경)로 나갔다 — 패널로 회수한다.
+      panel.focus();
+    };
+    document.addEventListener('focusin', handler);
+    return () => document.removeEventListener('focusin', handler);
+  }, [active, generatedTitleId]);
 
   // body 스크롤 잠금(참조 카운트).
   useEffect(() => {
@@ -203,6 +232,9 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     dialogProps['aria-label'] = ariaLabel;
   } else {
     dialogProps['aria-labelledby'] = titleId;
+  }
+  if (ariaDescribedBy) {
+    dialogProps['aria-describedby'] = ariaDescribedBy;
   }
 
   return {
