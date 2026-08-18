@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-19 (codex) — T-VN-41S typed snapshot error 소비
+
+- **변경**: 선행 #453이 Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의 service
+  OpenAPI(SHA-256 `8019e36f150ed006f5580e5ff224a0ba72030808b5303273f8c4c51aa0496431`)를
+  재vendor·재핀한 뒤, PinVi transport와 root `.env.example`을 같은 final release에 정렬했다.
+- **계약**: generic/reconciliation seal `413`은 item 1,000,000개와 canonical material 512 MiB를
+  code discriminator로 구분한다. request-bound material compaction `410`은 snapshot UUID/count/root/
+  compacted-at receipt를 보존한다. PinVi transport는 두 `413`과 `410`을 자동 재시도하지 않고 fail-close한다.
+- **회귀 방어**: typed problem shape와 transport disposition을 고정하고, `.env.example`의 hash/revision/
+  generation 3종이 service provenance와 exact 일치하도록 단언한다.
+- **증거 경계**: 이전 Map/PinVi 후보의 paired CI·n150 live 결과는 새 artifact의 증거로 재사용하지 않는다.
+  #454 CI·리뷰와 새 exact pair live proof 전에는 completion receipt나 production sync enable을 수행하지 않는다.
+
 ## 2026-08-19 (claude) — Map service 계약 재vendor + provenance 재핀 (8019e36f / f637f3ad)
 
 - Map `#1000`(T-VN-41S: stream snapshot materialization)이 `openapi.service.json`을 바꿨다
@@ -136,7 +149,6 @@
   검증까지 마친 교체본을 인수인계했다(naive는 `pytest.raises(ValueError, match="UTC offset")`,
   aware KST는 그대로 통과). `api/v1/admin/features.py`의 weather-values도 `asof`를
   `normalize_asof_query()`에 통과시켜야 한다.
-
 ## 2026-08-18 (claude) — #444 후속: service provenance `map_release_revision` 재핀(dangling → Map #975 머지 SHA)
 
 - **문제**: #444가 핀한 Map 후보 `e093e555…`는 어떤 Map 브랜치에도 없는 dangling 커밋(리뷰 P1). Map #975가

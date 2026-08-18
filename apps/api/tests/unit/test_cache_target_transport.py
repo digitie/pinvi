@@ -1117,8 +1117,13 @@ async def test_snapshot_retries_only_typed_capacity_and_unavailable_problems(
 
 
 @pytest.mark.asyncio
-async def test_snapshot_item_limit_is_non_retryable_and_fail_closed(
+@pytest.mark.parametrize(
+    "code",
+    ["SNAPSHOT_ITEM_LIMIT_EXCEEDED", "SNAPSHOT_BYTE_LIMIT_EXCEEDED"],
+)
+async def test_snapshot_admission_limit_is_non_retryable_and_fail_closed(
     monkeypatch: pytest.MonkeyPatch,
+    code: str,
 ) -> None:
     calls = 0
 
@@ -1127,7 +1132,7 @@ async def test_snapshot_item_limit_is_non_retryable_and_fail_closed(
         calls += 1
         return httpx.Response(
             413,
-            json={"code": "SNAPSHOT_ITEM_LIMIT_EXCEEDED"},
+            json={"code": code},
         )
 
     sleep = AsyncMock()
@@ -1144,7 +1149,41 @@ async def test_snapshot_item_limit_is_non_retryable_and_fail_closed(
 
     assert calls == 1
     assert raised.value.status_code == 413
-    assert raised.value.code == "SNAPSHOT_ITEM_LIMIT_EXCEEDED"
+    assert raised.value.code == code
+    assert raised.value.disposition == "dead_letter"
+    sleep.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_snapshot_compaction_is_terminal_and_non_retryable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request_id = uuid.uuid4()
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        assert request.url.path == (
+            f"/v1/service/cache-target-reconciliations/{request_id}/snapshot"
+        )
+        return httpx.Response(410, json={"code": "SNAPSHOT_MATERIAL_COMPACTED"})
+
+    sleep = AsyncMock()
+    monkeypatch.setattr(
+        "app.clients.kor_travel_map_cache_target.asyncio.sleep",
+        sleep,
+    )
+    client = _client("consumer", handler)
+    try:
+        with pytest.raises(CacheTargetServiceProblem) as raised:
+            await client.get_reconciliation_snapshot(request_id)
+    finally:
+        await client.aclose()
+
+    assert calls == 1
+    assert raised.value.status_code == 410
+    assert raised.value.code == "SNAPSHOT_MATERIAL_COMPACTED"
     assert raised.value.disposition == "dead_letter"
     sleep.assert_not_awaited()
 

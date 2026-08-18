@@ -1,5 +1,16 @@
 # resume.md
 
+## 2026-08-19 (codex) — T-VN-41S typed snapshot error 소비
+
+선행 #453이 Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의 service artifact
+(SHA-256 `8019e36f…96431`)를 재vendor·재핀했다. #454는 PinVi transport가 item/byte typed `413`과
+request-bound compacted-material typed `410`을 자동 재시도하지 않고 fail-close하도록 회귀 테스트를
+보강하고, root `.env.example`의 hash/revision/generation을 같은 final release와 exact 결박한다.
+
+**다음 한 작업**: #454의 원격 CI와 리뷰를 통과한 뒤 새 exact Map/PinVi pair로만 n150 격리 live proof를
+만든다. 이전 pair의 live 증거는 이 계약의 증거로 재사용하지 않으며, 새 proof 전 completion receipt와
+production sync enable은 금지한다.
+
 ## 2026-08-18 (claude) — T-VN-42 라운드 2: 재리뷰 P1 4건 해소
 
 **방금**: `chore/revendor-map-user-spec`(87c3a574 위 미커밋)에서 2라운드 재리뷰 P1을 전부 고쳤다.
@@ -39,7 +50,6 @@ docstring에 명시 + 통합 fake 시그니처 정렬, ⑤ `schemas/feature.py` 
 `features.py normalize_asof_query()`에 통과시키도록 한다(지금은 naive 입력에서 transport ValueError).
 그 뒤 PR을 연다(PR은 머지 직전에만 연다). admin 표면 3축 정렬·유령 query 제거는 병렬 레인이 이미 진행했고,
 admin weather 경로 전환·admin OpenAPI vendoring·공개 `status` 필드 제거는 후속 과제로 `docs/tasks.md` T-VN-42에 있다.
-
 ## 2026-08-18 (claude) — #444 service provenance 재핀(Map #975 머지 SHA) + Hallmark T-313
 
 **방금**: #444 리뷰 P1(핀이 dangling 커밋) 해소 — Map #975가 `4672aa966cd473f17fd4f69ee8066276f7be900d`로 squash

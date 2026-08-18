@@ -131,6 +131,20 @@ def test_service_snapshot_exact_bytes_runtime_pin_and_provenance_match_map_relea
     }
 
 
+def test_cache_target_example_runtime_pin_matches_service_provenance() -> None:
+    example = (Path(__file__).resolve().parents[4] / ".env.example").read_text()
+    pins = [
+        line
+        for line in example.splitlines()
+        if line.startswith("PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_")
+    ]
+    assert pins == [
+        f"PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_OPENAPI_SHA256={_SNAPSHOT_SHA256}",
+        f"PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION={_MAP_RELEASE_REVISION}",
+        "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_CONTRACT_GENERATION=7",
+    ]
+
+
 def test_wheel_build_includes_the_general_service_provenance() -> None:
     package_artifact = files("app").joinpath(
         "_contract_data/kor-travel-map-service-provenance-v1.json"
@@ -330,8 +344,52 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
 
     generic_snapshot = paths["/v1/service/cache-target-snapshots/{external_system}"]["get"]
     assert {"413", "429", "503"} <= set(generic_snapshot["responses"])
+    snapshot_limit_union = {
+        "discriminator": {
+            "mapping": {
+                "SNAPSHOT_BYTE_LIMIT_EXCEEDED": (
+                    "#/components/schemas/CacheTargetSnapshotByteLimitProblem"
+                ),
+                "SNAPSHOT_ITEM_LIMIT_EXCEEDED": (
+                    "#/components/schemas/CacheTargetSnapshotItemLimitProblem"
+                ),
+            },
+            "propertyName": "code",
+        },
+        "oneOf": [
+            {"$ref": "#/components/schemas/CacheTargetSnapshotItemLimitProblem"},
+            {"$ref": "#/components/schemas/CacheTargetSnapshotByteLimitProblem"},
+        ],
+    }
+    generic_limit_schema = generic_snapshot["responses"]["413"]["content"][
+        "application/problem+json"
+    ]["schema"]
+    assert {key: generic_limit_schema[key] for key in snapshot_limit_union} == snapshot_limit_union
+    assert "1,000,000" in generic_snapshot["responses"]["413"]["description"]
+    assert "512 MiB" in generic_snapshot["responses"]["413"]["description"]
     for response_code in ("429", "503"):
         assert "Retry-After" in generic_snapshot["responses"][response_code]["headers"]
+
+    item_limit_problem = schemas["CacheTargetSnapshotItemLimitProblem"]
+    assert item_limit_problem["properties"]["code"]["const"] == ("SNAPSHOT_ITEM_LIMIT_EXCEEDED")
+    assert item_limit_problem["properties"]["status"]["const"] == 413
+    assert item_limit_problem["properties"]["details"] == {
+        "$ref": "#/components/schemas/CacheTargetSnapshotItemLimitDetails"
+    }
+    assert set(schemas["CacheTargetSnapshotItemLimitDetails"]["required"]) == {
+        "item_count_lower_bound",
+        "item_limit",
+    }
+    byte_limit_problem = schemas["CacheTargetSnapshotByteLimitProblem"]
+    assert byte_limit_problem["properties"]["code"]["const"] == ("SNAPSHOT_BYTE_LIMIT_EXCEEDED")
+    assert byte_limit_problem["properties"]["status"]["const"] == 413
+    assert byte_limit_problem["properties"]["details"] == {
+        "$ref": "#/components/schemas/CacheTargetSnapshotByteLimitDetails"
+    }
+    assert set(schemas["CacheTargetSnapshotByteLimitDetails"]["required"]) == {
+        "material_bytes_lower_bound",
+        "material_byte_limit",
+    }
 
     mutation_response = schemas["CacheTargetSourceMutationResponse"]
     assert mutation_response["properties"]["data"] == {
@@ -430,6 +488,10 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
     assert "If-None-Match" not in seal_headers
     assert "ETag" in seal_path["responses"]["200"]["headers"]
     assert {"412", "428", "default"} <= set(seal_path["responses"])
+    seal_limit_schema = seal_path["responses"]["413"]["content"]["application/problem+json"][
+        "schema"
+    ]
+    assert {key: seal_limit_schema[key] for key in snapshot_limit_union} == snapshot_limit_union
 
     begin = schemas["CacheTargetReconciliationBeginRequest"]
     assert begin["additionalProperties"] is False
@@ -606,6 +668,25 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
         "get"
     ]
     assert request_snapshot_path["security"] == [{"ServiceToken": []}]
+    assert request_snapshot_path["responses"]["410"]["content"]["application/problem+json"][
+        "schema"
+    ] == {"$ref": "#/components/schemas/CacheTargetSnapshotMaterialCompactedProblem"}
+    compacted_problem = schemas["CacheTargetSnapshotMaterialCompactedProblem"]
+    assert compacted_problem["properties"]["code"]["const"] == ("SNAPSHOT_MATERIAL_COMPACTED")
+    assert compacted_problem["properties"]["status"]["const"] == 410
+    assert compacted_problem["properties"]["details"] == {
+        "$ref": "#/components/schemas/CacheTargetSnapshotMaterialCompactedDetails"
+    }
+    compacted_details = schemas["CacheTargetSnapshotMaterialCompactedDetails"]
+    assert set(compacted_details["required"]) == {
+        "snapshot_id",
+        "item_count",
+        "merkle_root",
+        "compacted_at",
+    }
+    assert compacted_details["properties"]["snapshot_id"]["format"] == "uuid"
+    assert compacted_details["properties"]["merkle_root"]["pattern"] == "^[0-9a-f]{64}$"
+    assert compacted_details["properties"]["compacted_at"]["format"] == "date-time"
     assert completion_path["security"] == [{"ServiceToken": []}]
 
     problem = schemas["ProblemDetail"]
