@@ -1,7 +1,20 @@
 # resume.md
 
+## 2026-08-18 (claude) — #444 service provenance 재핀(Map #975 머지 SHA) + Hallmark T-313
+
+**방금**: #444 리뷰 P1(핀이 dangling 커밋) 해소 — Map #975가 `4672aa966cd473f17fd4f69ee8066276f7be900d`로 squash
+머지됐고 그 커밋의 `openapi.service.json`이 vendored 스냅샷과 바이트 동일(SHA-256 `c6f9aba6…`)임을 확인해
+provenance·runtime contract test·`.env.example` EXPECTED_*(stale 값 정정)·CI packaged-provenance digest
+(`a6d501b4…`→`a2d3db8e…`)를 함께 재핀했다(PR #449). 병행: Hallmark T-313 토큰 코드모드 89파일(PR #448).
+
+**다음 한 작업**: #449/#448 CI green 후 머지 → **docker-manager pair 재핀**(`MAP_PINNED_RUNTIME_SOURCE`=4672aa96…,
+`PINVI_PINNED_RUNTIME_SOURCE`=#449 머지 SHA, `pinset_sha256` 재계산 + trusted release 배포)이 F1J-D n150 격리
+rehearsal 재개 전제다. prod 배포는 `~/kor-travel-docker-manager/.env` 소유권(uid 1000, 0600) 복구 대기 →
+스냅샷 → `alembic upgrade head`(0050~0059) → `ktdctl pinvi --build` → smoke.
+
 ## 2026-08-18 (codex) — T-VN-41 ABC rebase pair 재결박
 
+(**대체됨**: 아래 후보 SHA는 dangling — 현행 핀은 Map #975 머지 SHA `4672aa96…`, 위 항목 참조.)
 Map #975 rebase head `e093e5555329234a539a3802566eb5666411b06f`를 PinVi #444 service
 provenance·runtime contract·Docker packaged provenance에 함께 반영했다. service OpenAPI SHA-256은
 `c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`로 byte-identical하다.
@@ -327,9 +340,8 @@ self-host, focus outline) + `components/ui/Button.tsx`·입력 프리미티브 +
 
 **다음 한 작업**: PR #447 적대적 리뷰 2인 → CI → N150 prod 배포(`ktdctl pinvi --build`, web 변경만) → prod 공개
 페이지 live UI e2e(375/1280 스크린샷 + not-found/shared/legal/login) → 머지 → T-313(코드모드) → T-314(앱 셸).
-**#444(codex T-VN-40/41)는 리뷰 2인 request_changes·deploy unsafe(P0: 빈 curation 토큰 → prod API 부팅 실패, P1:
-provenance가 dangling Map 커밋·Map #975 미머지, 마이그레이션 10건 수동 적용 필요)** — Map #975 머지·재핀 전 머지 금지,
-P0/P2/P3는 브랜치 fix 커밋 가능(코멘트 참조).
+#444는 P0 수정 후 머지됐고(`dc8a683f`), Map #975 머지 SHA `4672aa96…`로 provenance 재핀 PR을 올렸다(P1 해소).
+남은 #444 후속: P2 legacy 플랜 편집 잠금 건수 확인, prod 배포 시 `alembic upgrade head`(0050~0059) 선행.
 
 ## 2026-08-06 (codex) — T-VN-41-F1D-C1b PinVi seven-image provenance PR 준비
 

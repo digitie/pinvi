@@ -42,7 +42,11 @@
       one-shot command를 하나의 compatible pair로 고정한다. command는 sync disabled 상태에서 immutable
       pre-CAS receipt로 응답 유실 exact replay까지 검증할 뿐 writer를 열지 않는다. Map/PinVi 두 draft PR의 exact SHA·artifact SHA와
       적대적 재리뷰 뒤 n150 isolated rehearsal을 별도 완료 조건으로 둔다.
-  - rebase 후 후보 Map `e093e5555329234a539a3802566eb5666411b06f`와 service OpenAPI
+  - [ ] **docker-manager pair 재핀(F1J-D 전제)** — Manager tracked v5 pinset은 아직 옛 pair를 고정한다.
+        `MAP_PINNED_RUNTIME_SOURCE`=`4672aa96…`, `PINVI_PINNED_RUNTIME_SOURCE`=PinVi 재핀 머지 SHA,
+        `pinset_sha256` 재계산 후 trusted Manager release를 배포해야 n150 격리 rehearsal이 fail-close를 통과한다.
+  - Map #975 **머지 SHA** `4672aa966cd473f17fd4f69ee8066276f7be900d`(2026-08-18 재핀 — 이전 dangling 후보
+        `e093e555…` 대체, service OpenAPI 바이트 동일)와 service OpenAPI
         `c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`를 PinVi
         provenance에 재핀했다. paired CI·재리뷰·n150 isolated Live UI E2E가 모두 성공할 때까지
         완료 receipt와 병합은 금지한다. production `SYNC_ENABLED=true`는 final C7 root enable
