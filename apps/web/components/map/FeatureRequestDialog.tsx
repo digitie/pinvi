@@ -17,6 +17,8 @@ export interface FeatureRequestDialogProps {
   coord: { lon: number; lat: number };
   onClose: () => void;
   onSubmitted?: () => void;
+  /** 진행 중 제안을 취소하고 닫았을 때 — 서버 접수 여부가 불확실함을 호출부가 안내한다. */
+  onSubmitCancelled?: () => void;
 }
 
 const KINDS: { value: FeatureSuggestionKind; label: string }[] = [
@@ -24,7 +26,12 @@ const KINDS: { value: FeatureSuggestionKind; label: string }[] = [
   { value: 'event', label: '이벤트' },
 ];
 
-export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureRequestDialogProps) {
+export function FeatureRequestDialog({
+  coord,
+  onClose,
+  onSubmitted,
+  onSubmitCancelled,
+}: FeatureRequestDialogProps) {
   const [form, setForm] = useState<NewPlaceForm>({
     kind: 'place',
     title: '',
@@ -73,11 +80,14 @@ export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureReq
   };
 
   // busy 중 닫기 = 진행 중 제안 등록 취소(T-316 요청 수명 계약 ⑤).
+  // 서버가 이미 받았을 수 있으므로 호출부에 "결과 불확실"을 알린다(비멱등 POST, 리뷰 P1).
   const cancelSubmitAndClose = () => {
+    const wasInFlight = submitAbortRef.current !== null;
     submitAbortRef.current?.abort();
     submitAbortRef.current = null;
     setSubmitting(false);
     onClose();
+    if (wasInFlight) onSubmitCancelled?.();
   };
 
   return (

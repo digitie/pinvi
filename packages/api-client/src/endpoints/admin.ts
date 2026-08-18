@@ -1228,7 +1228,8 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminUserLifecycleConfirmRequestSchema.parse(body)),
       schema: AdminUserDetailSchema,
-      timeoutMs: NO_CLIENT_DEADLINE,
+      // 기본 예산을 유지한다 — 확인 다이얼로그가 busy 동안 잠기므로 예산까지 끄면 응답이 멈출 때
+      // 새로고침 말고는 화면을 풀 수 없다(T-316 리뷰 P2). 서버는 요청 스코프 안에서 끝낸다.
     }),
 
   grantUserRole: (userId: string, body: z.infer<typeof AdminUserRoleMutationRequestSchema>) =>

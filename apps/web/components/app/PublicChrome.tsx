@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Wordmark } from './Wordmark';
+import { LEGAL_DOC_TITLES, LEGAL_SLUGS } from '@/lib/legalDocs';
 
 /**
  * 공개 표면(랜딩·인증·공유 뷰·404) 공용 chrome — DESIGN.md "Hallmark 잠금 시스템" nav N1a + footer Ft2.
@@ -18,11 +19,12 @@ export function PublicMasthead({ actions }: { actions?: ReactNode }) {
   );
 }
 
-const LEGAL_LINKS: { href: string; label: string }[] = [
-  { href: '/legal/terms-of-service', label: '이용약관' },
-  { href: '/legal/privacy-policy', label: '개인정보 처리방침' },
-  { href: '/legal/lbs-terms', label: '위치기반서비스 이용약관' },
-];
+// 법무 문서 목록에서 파생한다 — 문서를 추가하면 colophon 링크가 자동으로 따라온다
+// (수기 목록이라 `location-consent`가 빠져 그 문서만 도달 불가였다, T-316 리뷰 P3).
+const LEGAL_LINKS = LEGAL_SLUGS.map((slug) => ({
+  href: `/legal/${slug}`,
+  label: LEGAL_DOC_TITLES[slug],
+}));
 
 export function PublicColophon() {
   return (

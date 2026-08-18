@@ -21,10 +21,10 @@ export default async function ExploreMapPage({
           </p>
         </div>
       </header>
-      <section className="min-h-[320px] flex-1">
+      <section className="flex min-h-[320px] flex-1 flex-col">
         <FeatureMapView
           apiKey={process.env.NEXT_PUBLIC_VWORLD_API_KEY ?? ''}
-          className="h-full"
+          className="flex-1"
           initialSuggestCoord={suggestCoord}
         />
       </section>

@@ -92,6 +92,7 @@ export default function ProfilePage() {
     { kind: 'unlink'; provider: OAuthProviderName } | { kind: 'avatar' } | null
   >(null);
   const confirmTriggerRef = useRef<HTMLElement | null>(null);
+  const accountSectionRef = useRef<HTMLDivElement | null>(null);
 
   const oauthIdentities = useMemo(
     () =>
@@ -259,6 +260,8 @@ export default function ProfilePage() {
       setError(err instanceof ApiError ? err.message : '아바타를 삭제하지 못했습니다.');
     } finally {
       setAvatarAction(null);
+      // 삭제 성공 시 트리거(삭제 버튼)가 disabled로 바뀐다 — 포커스는 섹션이 받는다.
+      if (!confirmTriggerRef.current?.isConnected) confirmTriggerRef.current = accountSectionRef.current;
       // 요청이 끝난 뒤 닫는다 — busy 표시와 포커스 복원을 살리기 위해(T-315 5차 리뷰 패턴).
       setPendingConfirm(null);
     }
@@ -300,7 +303,12 @@ export default function ProfilePage() {
         className="space-y-3 rounded-sm border border-hairline bg-canvas p-4"
         data-testid="profile-avatar-section"
       >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* 삭제 성공 후 트리거가 사라지거나 비활성이면 포커스가 이 컨테이너로 돌아온다. */}
+        <div
+          ref={accountSectionRef}
+          tabIndex={-1}
+          className="flex flex-col gap-4 outline-none sm:flex-row sm:items-center sm:justify-between"
+        >
           <div className="flex items-center gap-3">
             {avatarSrc ? (
               <img

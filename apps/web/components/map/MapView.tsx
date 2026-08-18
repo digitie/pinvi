@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { ClusterPoint, MapLibreEvent, MapLibreMap } from '@/components/map/vworldPrimitives';
 import {
   ClusterLayer,
@@ -83,14 +83,17 @@ export function MapView({
   initialCenter = DEFAULT_CENTER,
   initialZoom = DEFAULT_ZOOM,
 }: MapViewProps) {
-  // 뷰포트 스냅샷은 화면에 노출하지 않고(디버그 dl 삭제, T-316) 이벤트 배선만 유지한다 —
-  // VWorld 지도 스모크(map-shell.e2e.ts)가 load/moveend/zoomend 경로를 계속 타야 한다.
-  const [, setViewport] = useState<MapViewportSnapshot>(() => ({
+  // 뷰포트 스냅샷은 화면에 노출하지 않는다(디버그 dl 삭제, T-316). state로 두면 moveend/zoomend마다
+  // 반영되는 DOM 없이 리렌더만 나므로 ref로 유지한다 — 이벤트 배선(스모크 경로)은 그대로다.
+  const viewportRef = useRef<MapViewportSnapshot>({
     center: initialCenter,
     zoom: initialZoom,
     bounds: '계산 대기',
     lastEvent: 'init',
-  }));
+  });
+  const setViewport = (next: MapViewportSnapshot) => {
+    viewportRef.current = next;
+  };
   const [selectedPointId, setSelectedPointId] = useState<string>(
     DEFAULT_SELECTED_POINT.id.toString(),
   );
@@ -114,9 +117,9 @@ export function MapView({
   }, []);
 
   return (
-    <div className={className} data-testid="trip-map-shell">
-      <div className="grid h-full min-h-[560px] grid-rows-[1fr_auto] overflow-hidden rounded-sm border border-hairline bg-canvas md:min-h-[680px]">
-        <div className="relative min-h-0">
+    <div className={`flex min-h-0 flex-col ${className ?? ''}`} data-testid="trip-map-shell">
+      <div className="flex min-h-[320px] flex-1 flex-col overflow-hidden rounded-sm border border-hairline bg-canvas">
+        <div className="relative min-h-0 flex-1">
           <VWorldMap
             apiKey={apiKey}
             center={initialCenter}

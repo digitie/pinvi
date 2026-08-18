@@ -222,6 +222,10 @@ export function FeatureMapView({
   );
   const [notice, setNotice] = useState<string | null>(null);
 
+  // 최소 1회 조회가 끝났는지 — 조회 전에는 "표시할 장소가 없습니다"라고 단언하지 않는다
+  // (지도 키 미설정·초기화 실패 시 지도 fallback과 모순되는 문구가 겹쳐 떴다, T-316 리뷰 P2).
+  const [loaded, setLoaded] = useState(false);
+
   const fetchInBounds = useCallback(async (map: MapLibreMap) => {
     const zoom = clampZoom(map.getZoom());
     const bbox = boundsToBbox(map.getBounds(), zoom);
@@ -237,6 +241,7 @@ export function FeatureMapView({
       setPoints(toPoints(cached));
       setError(null);
       setLoading(false);
+      setLoaded(true);
       return;
     }
 
@@ -252,6 +257,7 @@ export function FeatureMapView({
       rememberViewport(viewportCache.current, cacheKey, data);
       setPoints(toPoints(data));
       setError(null);
+      setLoaded(true);
     } catch (err) {
       if (isAbortError(err) || requestId !== latestRequest.current) return;
       setError(err instanceof ApiError ? err.message : '지도 데이터를 불러오지 못했습니다.');
@@ -450,9 +456,11 @@ export function FeatureMapView({
   const detailAddress = addressLine(detail);
 
   return (
-    <div className={className} data-testid="feature-map">
-      <div className="flex h-full min-h-[320px] flex-col overflow-hidden rounded-sm border border-hairline bg-canvas">
-        <div className="relative min-h-0">
+    // 높이는 셸이 흘려보낸다 — 바깥 래퍼까지 flex 사슬을 이어야 `h-full`이 실제로 해소된다
+    // (사슬이 끊기면 content 높이로 붕괴한다, T-316 리뷰 P1).
+    <div className={`flex min-h-0 flex-col ${className ?? ''}`} data-testid="feature-map">
+      <div className="flex min-h-[320px] flex-1 flex-col overflow-hidden rounded-sm border border-hairline bg-canvas">
+        <div className="relative min-h-0 flex-1">
           <div className="pointer-events-none absolute inset-0 z-10">
             <div className="pointer-events-auto absolute left-3 top-3 w-72 max-w-[80vw]">
               <MapSearchBox onSelect={handleSearchSelect} />
@@ -484,7 +492,7 @@ export function FeatureMapView({
                 >
                   장소를 불러오는 중…
                 </p>
-              ) : points.length === 0 ? (
+              ) : loaded && points.length === 0 ? (
                 <p
                   className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card"
                   role="status"

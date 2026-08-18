@@ -17,7 +17,7 @@
 ## kor-travel-map compatible pair
 
 - [/] **T-VN-42 — Map user OpenAPI 재vendor(`95d2c128`) 소비 정렬** —
-  1차 묶음 **PR #451 머지 완료**(2026-08-18). 스냅샷 SHA-256 `6a2ee0f9…`(Map `95d2c128`·`origin/main`
+  1차 묶음 **PR #451 머지 완료**(2026-08-19 KST). 스냅샷 SHA-256 `6a2ee0f9…`(Map `95d2c128`·`origin/main`
   284fd10c와 바이트 동일). consumer drift 2건을 흡수한다: ① 3축 feature state cutover(`1f2bdc3a`)로
   user 표면에서 사라진 `status` 소비 절단, ② bitemporal cutover(`6650aa71`)로 옮겨간 시점 조회
   (`…/weather/snapshot`, `target_at`/`known_at`)와 `WeatherCardData.asof` → `selected_at` 개명.

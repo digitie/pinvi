@@ -54,6 +54,7 @@ export default function AdminFilesPage() {
   const [deleteReason, setDeleteReason] = useState('');
   const [deleteReasonError, setDeleteReasonError] = useState<string | null>(null);
   const deleteTriggerRef = useRef<HTMLElement | null>(null);
+  const fileSectionRef = useRef<HTMLDivElement | null>(null);
   const deleteReasonRef = useRef<HTMLTextAreaElement | null>(null);
 
   const loadFiles = async () => {
@@ -146,6 +147,8 @@ export default function AdminFilesPage() {
     try {
       await adminApi(apiClient).deleteFile(target.attachment_id, { access_reason: reason });
       await loadFiles();
+      // 삭제된 행의 버튼은 사라진다 — 포커스는 표 컨테이너가 받는다.
+      if (!deleteTriggerRef.current?.isConnected) deleteTriggerRef.current = fileSectionRef.current;
       setPendingDelete(null);
     } catch (err) {
       // 실패하면 다이얼로그를 열어 둔 채 원인을 그 안에서 알린다(입력 보존).
@@ -327,12 +330,15 @@ export default function AdminFilesPage() {
           불러오는 중…
         </div>
       ) : (
-        <AdminTable
-          columns={columns}
-          rows={items}
-          rowKey={(row) => row.attachment_id}
-          empty="파일이 없습니다."
-        />
+        // 삭제 성공 후 행 버튼이 사라지면 포커스가 이 컨테이너로 돌아온다.
+        <div ref={fileSectionRef} tabIndex={-1} className="outline-none">
+          <AdminTable
+            columns={columns}
+            rows={items}
+            rowKey={(row) => row.attachment_id}
+            empty="파일이 없습니다."
+          />
+        </div>
       )}
       <Dialog
         open={pendingDelete != null}

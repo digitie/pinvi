@@ -1076,6 +1076,13 @@ export function TripDetail({ tripId }: TripDetailProps) {
     setTripEditOpen(false);
   };
 
+  // 일자 설정 저장 취소 — dayUpdateAbortRef를 실제로 끊는다(배선만 있고 호출부가 없던 결함, 리뷰 P2).
+  const cancelDayUpdate = () => {
+    dayUpdateAbortRef.current?.abort();
+    dayUpdateAbortRef.current = null;
+    setBusy(false);
+  };
+
   // busy 중 닫기 = 진행 중 저장 취소(T-316 요청 수명 계약 ⑤).
   const cancelTripEditAndClose = () => {
     tripEditAbortRef.current?.abort();
@@ -1695,6 +1702,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                     onDelete={handleDeleteDay}
                                     showAdd={false}
                                     busy={busy}
+                                    onCancelBusy={cancelDayUpdate}
                                   />
                                 </div>
                               </div>

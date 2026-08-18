@@ -180,7 +180,11 @@ export default function ModerationSettingsPage() {
             id="settings-moderation-target-type"
             label="대상"
             value={targetType}
-            onChange={(event) => setTargetType(event.target.value as ContentReportTargetType)}
+            onChange={(event) => {
+              // 대상이 바뀌면 이전 대상의 필드가 payload에 남지 않게 초기화한다(T-316 리뷰 P2).
+              setEvidenceField('');
+              setTargetType(event.target.value as ContentReportTargetType);
+            }}
           >
             {TARGET_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>

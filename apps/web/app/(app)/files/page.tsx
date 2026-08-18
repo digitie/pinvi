@@ -29,6 +29,7 @@ export default function MyFilesPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<AttachmentLibraryItem | null>(null);
   const deleteTriggerRef = useRef<HTMLElement | null>(null);
+  const fileListRef = useRef<HTMLUListElement | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const reload = async () => {
@@ -85,6 +86,9 @@ export default function MyFilesPage() {
       setError(err instanceof ApiError ? err.message : '삭제하지 못했습니다.');
     } finally {
       setBusyId(null);
+      // 삭제에 성공하면 트리거(행 버튼)가 사라진다 — 포커스 복원 후보를 목록으로 바꾼다
+      // (그대로 두면 분리된 노드라 폴백이 전부 탈락해 포커스가 body에 남는다, T-316 리뷰 P2).
+      if (!deleteTriggerRef.current?.isConnected) deleteTriggerRef.current = fileListRef.current;
       // 요청이 끝난 뒤 닫는다 — 먼저 닫으면 busy 표시가 죽고 포커스 복원 폴백도 건너뛴다.
       setPendingDelete(null);
     }
@@ -156,7 +160,12 @@ export default function MyFilesPage() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-sm border border-hairline bg-canvas">
-          <ul className="divide-y divide-hairline" data-testid="my-file-list">
+          <ul
+            ref={fileListRef}
+            tabIndex={-1}
+            className="divide-y divide-hairline outline-none"
+            data-testid="my-file-list"
+          >
             {items.map((item) => (
               <li
                 key={item.attachment_id}

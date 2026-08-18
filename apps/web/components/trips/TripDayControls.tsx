@@ -38,6 +38,8 @@ export interface TripDayControlsProps {
   addDisabledReason?: string | null;
   showAdd?: boolean;
   busy?: boolean;
+  /** 저장 중 명시적 닫기 — 진행 중 요청을 취소하고 닫는다(다른 저장 다이얼로그와 같은 계약). */
+  onCancelBusy?: () => void;
 }
 
 export function TripDayControls({
@@ -49,6 +51,7 @@ export function TripDayControls({
   addDisabledReason = null,
   showAdd = true,
   busy = false,
+  onCancelBusy,
 }: TripDayControlsProps) {
   const [title, setTitle] = useState(selectedDay?.title ?? '');
   const [date, setDate] = useState(selectedDay?.date ?? '');
@@ -169,6 +172,7 @@ export function TripDayControls({
               }}
               onColorChange={setColor}
               saveError={saveError}
+              onCancelBusy={onCancelBusy}
               onSave={saveSettings}
               onClose={closeSettings}
             />
@@ -190,6 +194,7 @@ interface DaySettingsDialogProps {
   busy: boolean;
   /** 이 다이얼로그 세션에서 난 저장 실패/검증 오류(모달 안 표시). */
   saveError?: { message: string; field?: 'date' } | null;
+  onCancelBusy?: () => void;
   onTitleChange: (title: string) => void;
   onDateChange: (date: string) => void;
   onColorChange: (color: string | null) => void;
@@ -207,6 +212,7 @@ function DaySettingsDialog({
   color,
   busy,
   saveError = null,
+  onCancelBusy,
   onTitleChange,
   onDateChange,
   onColorChange,
@@ -227,11 +233,16 @@ function DaySettingsDialog({
       title={`${dayIndex}일차 설정`}
       size="sm"
       busy={busy}
+      onCancelBusy={onCancelBusy}
       initialFocusRef={inputRef}
       testId="trip-day-title-dialog"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={busy}>
+          <Button
+            variant="secondary"
+            onClick={onCancelBusy && busy ? onCancelBusy : onClose}
+            disabled={busy && !onCancelBusy}
+          >
             취소
           </Button>
           <Button type="submit" form={FORM_ID} disabled={unchanged} loading={busy}>

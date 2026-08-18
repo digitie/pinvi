@@ -189,6 +189,14 @@ export const LEGAL_DOCS: Record<string, LegalDoc> = {
 
 export const LEGAL_SLUGS = Object.keys(LEGAL_DOCS);
 
+/** colophon·링크용 짧은 라벨(문서 title은 'Pinvi …'로 길어 한 줄 colophon에 맞지 않는다). */
+export const LEGAL_DOC_TITLES: Record<string, string> = {
+  [TERMS.slug]: '이용약관',
+  [PRIVACY.slug]: '개인정보 처리방침',
+  [LBS.slug]: '위치기반서비스 이용약관',
+  [LOCATION.slug]: '개인위치정보 수집·이용',
+};
+
 /** 동의 type → 법무 문서 slug (필수 4항목). 선택 항목은 처리방침에 포함되어 별도 문서 없음. */
 export const CONSENT_LEGAL_SLUG: Partial<Record<ConsentType, string>> = {
   tos: TERMS.slug,
