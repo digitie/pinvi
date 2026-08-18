@@ -1,5 +1,17 @@
 # resume.md
 
+## 2026-08-18 (codex) — T-VN-41S Map service artifact exact 재vendor
+
+Map candidate `add81e8b0ef6ecd57b87e9d922745517dda3070e`의 `openapi.service.json`을 byte-exact로
+재vendor했다(SHA-256 `8019e36f…96431`). 새 계약은 snapshot item 1,000,000개와 canonical material
+512 MiB 상한을 code-discriminated typed `413`으로, request-bound material compaction을 immutable
+receipt가 포함된 typed `410`으로 고정한다. provenance/runtime env/contract test/wheel·Docker CI pin을
+같은 artifact로 회전했다.
+
+**다음 한 작업**: Map candidate를 원격에서 고정한 뒤 PinVi contract CI와 byte-equality gate를 통과한다.
+Map PR의 squash merge SHA가 확정되면 provenance를 그 머지 SHA로 다시 고정하고 새 exact pair로만 n150
+증거를 만든다. 이전 pair의 live 증거는 이 계약의 증거로 재사용하지 않는다.
+
 ## 2026-08-18 (claude) — T-VN-42 라운드 2: 재리뷰 P1 4건 해소
 
 **방금**: `chore/revendor-map-user-spec`(87c3a574 위 미커밋)에서 2라운드 재리뷰 P1을 전부 고쳤다.
@@ -39,7 +51,6 @@ docstring에 명시 + 통합 fake 시그니처 정렬, ⑤ `schemas/feature.py` 
 `features.py normalize_asof_query()`에 통과시키도록 한다(지금은 naive 입력에서 transport ValueError).
 그 뒤 PR을 연다(PR은 머지 직전에만 연다). admin 표면 3축 정렬·유령 query 제거는 병렬 레인이 이미 진행했고,
 admin weather 경로 전환·admin OpenAPI vendoring·공개 `status` 필드 제거는 후속 과제로 `docs/tasks.md` T-VN-42에 있다.
-
 ## 2026-08-18 (claude) — #444 service provenance 재핀(Map #975 머지 SHA) + Hallmark T-313
 
 **방금**: #444 리뷰 P1(핀이 dangling 커밋) 해소 — Map #975가 `4672aa966cd473f17fd4f69ee8066276f7be900d`로 squash

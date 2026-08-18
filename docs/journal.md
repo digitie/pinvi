@@ -19,6 +19,19 @@
   강제하고, cutover(S3~S6)의 pair commit이 `f637f3ad`로 확정됐다. mapping receipt 봉인(S4)은 이 재핀
   **뒤에** 한 번만 한다 — 먼저 봉인하면 preflight가 새 revision 기준으로 `ready=false`가 된다.
 
+## 2026-08-18 (codex) — T-VN-41S Map service artifact exact 재vendor
+
+- **변경**: Map candidate `add81e8b0ef6ecd57b87e9d922745517dda3070e`의 service OpenAPI를 byte-exact로
+  재vendor하고 provenance·runtime env·contract unit·wheel/Docker CI pin을 SHA-256
+  `8019e36f150ed006f5580e5ff224a0ba72030808b5303273f8c4c51aa0496431`로 함께 회전했다.
+- **계약**: generic/reconciliation seal `413`은 item 1,000,000개와 canonical material 512 MiB를
+  code discriminator로 구분한다. request-bound material compaction `410`은 snapshot UUID/count/root/
+  compacted-at receipt를 보존한다. PinVi transport는 두 `413`과 `410`을 자동 재시도하지 않고 fail-close한다.
+- **증거 경계**: 이전 Map/PinVi 후보의 paired CI·n150 live 결과는 새 artifact의 증거로 재사용하지 않는다.
+  새 exact pair의 CI와 live proof 전에는 completion receipt나 production sync enable을 수행하지 않는다.
+- **다음**: Map candidate commit 원격 고정 뒤 PinVi contract CI를 통과하고, Map squash merge SHA 확정 뒤
+  provenance를 final release commit으로 재핀한다.
+
 ## 2026-08-18 (claude) — T-VN-42 라운드 2: 재리뷰 P1 4건 해소(CI red / admin 500 / 문서 모순 / 유령 query)
 
 - **P1 ① 브랜치가 CI red였다**: `test_feature_weather_defaults_known_at_to_now_and_normalises_naive_asof`가
@@ -136,7 +149,6 @@
   검증까지 마친 교체본을 인수인계했다(naive는 `pytest.raises(ValueError, match="UTC offset")`,
   aware KST는 그대로 통과). `api/v1/admin/features.py`의 weather-values도 `asof`를
   `normalize_asof_query()`에 통과시켜야 한다.
-
 ## 2026-08-18 (claude) — #444 후속: service provenance `map_release_revision` 재핀(dangling → Map #975 머지 SHA)
 
 - **문제**: #444가 핀한 Map 후보 `e093e555…`는 어떤 Map 브랜치에도 없는 dangling 커밋(리뷰 P1). Map #975가
