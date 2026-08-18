@@ -83,7 +83,9 @@ export function MapView({
   initialCenter = DEFAULT_CENTER,
   initialZoom = DEFAULT_ZOOM,
 }: MapViewProps) {
-  const [viewport, setViewport] = useState<MapViewportSnapshot>(() => ({
+  // 뷰포트 스냅샷은 화면에 노출하지 않고(디버그 dl 삭제, T-316) 이벤트 배선만 유지한다 —
+  // VWorld 지도 스모크(map-shell.e2e.ts)가 load/moveend/zoomend 경로를 계속 타야 한다.
+  const [, setViewport] = useState<MapViewportSnapshot>(() => ({
     center: initialCenter,
     zoom: initialZoom,
     bounds: '계산 대기',
@@ -162,24 +164,6 @@ export function MapView({
             )}
           </VWorldMap>
         </div>
-        <dl className="grid gap-0 border-t border-hairline bg-canvas text-xs text-muted sm:grid-cols-4">
-          <div className="border-b border-hairline px-4 py-3 sm:border-b-0 sm:border-r">
-            <dt className="font-semibold text-ink">중심</dt>
-            <dd className="mt-1">{formatLngLat(viewport.center)}</dd>
-          </div>
-          <div className="border-b border-hairline px-4 py-3 sm:border-b-0 sm:border-r">
-            <dt className="font-semibold text-ink">줌</dt>
-            <dd className="mt-1">{viewport.zoom.toFixed(1)}</dd>
-          </div>
-          <div className="border-b border-hairline px-4 py-3 sm:border-b-0 sm:border-r">
-            <dt className="font-semibold text-ink">이벤트</dt>
-            <dd className="mt-1">{viewport.lastEvent}</dd>
-          </div>
-          <div className="px-4 py-3">
-            <dt className="font-semibold text-ink">경계</dt>
-            <dd className="mt-1 truncate">{viewport.bounds}</dd>
-          </div>
-        </dl>
       </div>
     </div>
   );

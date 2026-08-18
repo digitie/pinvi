@@ -74,6 +74,21 @@ vh`→`dvh`(풀스크린 지도 표면 `100svh`는 유지), `text-[10~24px]`→�
       워드마크·밑줄 탭, favicon/앱 아이콘/themeColor Rausch·canvas. 검증: typecheck/lint 0, vitest 100, build,
       e2e 9, 375/1280 실렌더. 적대적 리뷰 2인. 후속 T-313~T-316.
 
+## 2026-08-06
+
+- [x] **T-VN-41-F1D-C1b** — PinVi seven-image provenance. (완료: 2026-08-06, PR #442, codex)
+      n150 F1D candidate가 `pinvi-web image source revision label is invalid`로 fail-close한 원인은
+      API만 OCI provenance label을 갖고 Web·Dagster build가 revision/environment argument를 받지 않은
+      데 있었다. 세 final Docker image가 하나의 validator로 exact commit을 검증하고
+      `org.opencontainers.image.revision`·`io.pinvi.build.environment` label을 기록하게 했다. tag
+      TOCTOU 지적을 반영해 검증된 image ID를 `PINVI_*_IMAGE` override에 고정하고 기동 뒤 container
+      `.Image`를 재대조한다.
+
+- [x] **T-VN-41-F1D-C1a** — PinVi 후보 migration head 정적 검사. (완료: 2026-08-06, PR #441, codex)
+      `pinvi-admin-bootstrap head`가 revision module을 실행하지 않는 AST literal graph로 exact 단일
+      head를 JSON으로 반환하고, dynamic·0개·복수·CWD decoy·설정 오류는 raw 경로나 credential을
+      반사하지 않는 typed fail-closed error로 종료한다. DB session/DSN/credential file에 진입하지 않는다.
+
 ## 2026-08-04
 
 - [x] **T-VN-41-P** — n150 격리 generation 7 cache-target paired live 증명.
@@ -184,7 +199,7 @@ vh`→`dvh`(풀스크린 지도 표면 `100svh`는 유지), `text-[10~24px]`→�
       0회, 40일차 API 상태와 UI arm 일치, 활성 Trip 잔존 0건을 최종 **1 passed (11.9s)**로
       확인했다. schema migration·새 clone·checkpoint·downgrade는 만들지 않았다.
 
-- [x] **T-VN-16B** — PinVi weather batch 소비 cutover. (완료: 2026-07-30, PR 예정, codex)
+- [x] **T-VN-16B** — PinVi weather batch 소비 cutover. (완료: 2026-07-30, PR #420, codex)
       Trip view가 unique `effective_date`별로 `POST /v1/features/weather/batch`를 호출하고
       날짜 안의 feature를 200개씩 dedupe한다. 브라우저 단건 N+1은 제거했으며
       `found|no_data|retired|suppressed|missing|unavailable|not_requested`을 day-scoped
@@ -199,6 +214,7 @@ vh`→`dvh`(풀스크린 지도 표면 `100svh`는 유지), `text-[10~24px]`→�
       CI·merge evidence는 PR landing 뒤 journal에 보강한다.
 
 - [x] **T-VN-11-P** — kor-travel-map 5상태 batch typed consumer 전환.
+      (완료: 2026-07-30, PR #419, codex)
       `found|retired|suppressed|missing|unchanged`와 PostgreSQL `bigint` revision을 strict
       decode하고, `1..200` chunk·bounded LRU·generation/revision fence로 최신 상태의
       out-of-order rollback을 막았다. transport 실패만 stale snapshot을 `unverified`로
@@ -263,10 +279,31 @@ vh`→`dvh`(풀스크린 지도 표면 `100svh`는 유지), `text-[10~24px]`→�
 
 ## 2026-07-21
 
+- [x] **T-309a/T-309b** — 통합 검색 autocomplete + 외부 pick add-POI. (완료: 2026-07-21, PR #407, claude)
+      T-309a: `MapSearchBox` `onSelect` union + address + source 아이콘 + 정렬 + debounce +
+      attribution + back-link(F3-UI). T-309b: 외부 pick add-POI + best-effort auto-request UX +
+      snapshot POI 렌더(F4-UI) + provider 파생 콘텐츠 미저장(§5.1). 두 task를 1 PR로 진행했다. ADR-054.
+
+- [x] **T-308** — `TripDayHeader` — effective date + 공휴일 + 일출/일몰. (완료: 2026-07-21, PR #406, claude)
+      신규 `TripDayHeader.tsx`와 SharedTripView 렌더(F8-UI, F1 empty-date). ADR-055.
+
+- [x] **T-307** — 일자 색 picker + `display_marker_color` 지도/리스트 parity.
+      (완료: 2026-07-21, PR #405, claude)
+      `TripDayControls` per-day color picker + 지도 마커/리스트 뱃지 색 parity + PoiEditor F7 polish +
+      fit-bounds 확인(F6/F7). ADR-055. 날짜 강제 friction 후속은 PR #411.
+
+- [x] **T-306** — 일자 삭제 확인(F2) + 기간 벗어남 표시(F1). (완료: 2026-07-21, PR #404, claude)
+      day-delete confirm은 T-306a의 `ConfirmDialog`를 소비하고, 기간을 벗어난 일자는 actionable
+      배너/아이콘으로 표시한다. ADR-055/056.
+
 - [x] **T-309c** — FeatureDetailModal 본문 + 마커→상세 모달. (완료: 2026-07-21, PR #402, claude)
       #396 shell 위 kind별 detail-card 본문(place/event/notice/price/generic) + 양 지도 마커→상세 모달
       (모바일 bottom-sheet, weather 제외) + 옵트인 Kakao/Naver enrichment UI(attribution+back-link,
       matched=false 처리). T-305와 병행(fork worktree agent) 후 cherry-pick verify + 링크 보안 검토 후 머지. ADR-056.
+
+- [x] **T-305** — 일자 단위 일출/일몰 — `app.trip_day_rise_sets` + ETL asset.
+      (완료: 2026-07-21, PR #401, claude)
+      전용 table + Dagster asset + day-level rise/set read + batched re-seed + 완료 시그널. ADR-055.
 
 - [x] **T-304** — feature detail-card kind별 투영 + 옵트인 외부 enrichment. (완료: 2026-07-21, PR #400, claude)
       `GET /features/{id}/detail-card` discriminated union(place/event/notice/price + generic) + 서버 투영
@@ -310,6 +347,12 @@ vh`→`dvh`(풀스크린 지도 표면 `100svh`는 유지), `text-[10~24px]`→�
       적대적 리뷰 승인, focused unit 39개, 전체 unit 605개(1 skipped), Ruff/format/mypy/Bash/Compose와
       실제 production Docker 양·음성 검증 및 CI를 통과해 `1c5c89c`로 squash merge했다. 외부
       docker-manager의 동일 계약 연동과 N150 운영 실증은 cross-repo C6c/C7 gate에서 계속한다.
+
+## 2026-07-11
+
+- [x] **T-300** — Admin 메뉴 정렬 + 여행 날짜 공휴일 표시. (완료: 2026-07-11, PR #383, codex)
+      Admin 좌측 메뉴 선택 항목의 세로 정렬 보정 + TripView day에 KASI 공휴일 metadata를 포함해
+      여행 상세/공유/목록 날짜 UI에서 공휴일명을 표시한다. TDR(T-301~T-309c) 선행 작업.
 
 ## 2026-07-01
 

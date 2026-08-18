@@ -451,11 +451,48 @@ export function FeatureMapView({
 
   return (
     <div className={className} data-testid="feature-map">
-      <div className="grid h-full min-h-[560px] grid-rows-[1fr_auto] overflow-hidden rounded-sm border border-hairline bg-canvas md:min-h-[680px]">
+      <div className="flex h-full min-h-[320px] flex-col overflow-hidden rounded-sm border border-hairline bg-canvas">
         <div className="relative min-h-0">
           <div className="pointer-events-none absolute inset-0 z-10">
             <div className="pointer-events-auto absolute left-3 top-3 w-72 max-w-[80vw]">
               <MapSearchBox onSelect={handleSearchSelect} />
+              {/* 상태는 상시 표가 아니라 **일이 생겼을 때만** 뜬다(DESIGN.md 상태 UI). */}
+              {error ? (
+                <p
+                  role="alert"
+                  className="mt-1 flex flex-wrap items-center gap-2 rounded-sm bg-error-bg px-2 py-1.5 text-xs text-error-text shadow-card"
+                  data-testid="feature-map-error"
+                >
+                  <span className="min-w-0">{error}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const map = mapRef.current;
+                      if (map) void fetchInBounds(map);
+                    }}
+                    className="focus-ring shrink-0 rounded-sm border border-error-text px-2 py-0.5 font-semibold"
+                  >
+                    다시 불러오기
+                  </button>
+                </p>
+              ) : loading ? (
+                <p
+                  className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card"
+                  role="status"
+                  aria-busy="true"
+                  data-testid="feature-map-loading"
+                >
+                  장소를 불러오는 중…
+                </p>
+              ) : points.length === 0 ? (
+                <p
+                  className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card"
+                  role="status"
+                  data-testid="feature-map-empty"
+                >
+                  이 범위에 표시할 장소가 없습니다 — 지도를 움직여 보세요.
+                </p>
+              ) : null}
               {notice && (
                 <p className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card">
                   {notice}
@@ -631,23 +668,6 @@ export function FeatureMapView({
             </MapContextMenu>
           )}
         </div>
-        <dl
-          className="grid gap-0 border-t border-hairline bg-canvas text-xs text-muted sm:grid-cols-3"
-          data-testid="feature-map-status"
-        >
-          <div className="border-b border-hairline px-4 py-3 sm:border-b-0 sm:border-r">
-            <dt className="font-semibold text-ink">표시</dt>
-            <dd className="mt-1">{points.length}개</dd>
-          </div>
-          <div className="border-b border-hairline px-4 py-3 sm:border-b-0 sm:border-r">
-            <dt className="font-semibold text-ink">상태</dt>
-            <dd className="mt-1">{loading ? '불러오는 중…' : '대기'}</dd>
-          </div>
-          <div className="px-4 py-3">
-            <dt className="font-semibold text-ink">오류</dt>
-            <dd className="mt-1 truncate text-error-text">{error ?? '없음'}</dd>
-          </div>
-        </dl>
       </div>
       <LocationConsentDialog
         open={consentOpen}
