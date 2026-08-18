@@ -83,8 +83,8 @@
   - 두 Alembic을 따로 돌려야 한다. 운영 절차에 추가 단계.
   - schema 간 외래키 참조 시 alembic dependency 순서를 잘 정해야 한다.
 - **후속**:
-  - 운영 절차에 `kor-travel-map alembic upgrade head` → `pinvi alembic
-upgrade head` 순서 박음.
+  - 운영 절차에 `kor-travel-map alembic upgrade head` → PinVi
+    `pinvi-admin-bootstrap` one-shot 순서 박음(2026-08-06 T-VN-41-F1D-C 전환).
   - `docs/postgres-schema.md`에 `app` schema만 기록. `feature` / `provider_sync`는
     그쪽 저장소의 `docs/postgres-schema.md`를 참조.
 
@@ -2824,8 +2824,9 @@ command까지 허용하는 umbrella 권한이었다. PinVi는 command/consumer t
   `cache-target:nack`, `cache-target:snapshot` exact 5개 scope 배열만 부여한다.
 - PinVi ordinary runtime은 서로 다른 command/consumer token과 role-bound client를 유지한다. 두 token의
   상호 교환 성공을 negative live/config gate 실패로 취급한다.
-- generation 6 manifest/source 조합은 호환 fallback 없이 fail-close한다. paired Map final artifact가
-  확정될 때 artifact owner, functional owner, OpenAPI SHA-256, generation 7을 함께 exact 재핀한다.
+- generation 6 manifest/source 조합은 호환 fallback 없이 fail-close한다. paired Map final release가
+  확정될 때 Map exact release, OpenAPI SHA-256, generation 7을 하나의 pinset으로 exact 재핀한다.
+  artifact owner/functional owner 이중 provenance는 control-plane 정본으로 두지 않는다.
 - Map final provenance가 확정되기 전에는 placeholder나 임시 SHA를 runtime 상수에 넣지 않는다.
 
 ### 근거
@@ -2906,7 +2907,56 @@ DB identity와 원격 stream 진행도는 서로 다른 trust source다. 각각 
   갱신한다.
 - n150 paired live proof에서 remote control/cursor 독립 receipt를 확인한다.
 
+## ADR-061: Map service provenance는 capability별 metadata가 아닌 단일 vendor artifact로 고정한다
+
+- **상태**: accepted
+- **날짜**: 2026-08-06
+- **결정자**: 사용자 + Codex
+- **참조**: `T-VN-41-F1J`, kor-travel-map ADR-079
+
+### 컨텍스트
+
+기존 PinVi의 `cache-target-upstream-map-v1.json`은 cache-target generation만 Map service
+artifact와 결박했다. C6c cancel-probe fixture는 같은 Map service release에 속하지만, 이를
+cache-target compatible-pair manifest에 덧붙이면 두 기능의 독립적인 rollback·preflight 경계를
+혼합하게 된다. 반대로 각 consumer가 release SHA를 따로 복사하면 source-of-truth drift를
+감지하기 어렵고, 서비스 전 단계에서는 그런 호환 shim을 유지할 이유가 없다.
+
+### 결정
+
+- PinVi는 `contracts/kor-travel-map-service-provenance-v1.json` 하나에 Map release revision,
+  exact service OpenAPI SHA-256, named capability generation을 기록한다.
+- cache-target runtime pin은 그 파일의 `cache_target` capability에서만 파생한다. 기존
+  cache-target 전용 upstream metadata는 clean-cut 삭제한다.
+- `c6c_cancel_probe` capability는 같은 artifact에 기록하지만, 기존 compatible-pair manifest의
+  schema/version을 바꾸지 않는다. Manager preflight는 trusted PinVi checkout의 일반 provenance와
+  vendored bytes를 읽어 별도 fixture 권한 경계를 검증한다.
+- PinVi ordinary runtime은 C6c fixture scope/token/route를 받지 않는다. canonical unsafe cancellation
+  `409`을 typed conflict로 보존하는 client 계약만 유지한다.
+- 현재는 production이 아니므로 data preservation·backup·restore는 이 결정의 범위가 아니다. 모든
+  live proof는 새로 만든 격리 stack에서 실행하고 데이터와 credential을 폐기한다.
+
+### 근거
+
+서비스 artifact의 release와 bytes는 capability마다 분리되지 않는다. 일반 provenance가 한 release를
+한 번만 선언하면 cache-target과 C6c 모두 Map exact head를 강제하면서도 권한·운영 manifest·rollback
+판단을 섞지 않는다. capability generation을 명시하면 old image의 404나 새 image의 의미 변경도
+fixture mutation 전에 fail-close할 수 있다.
+
+### 결과
+
+- **긍정**: Map release/SHA/capability drift가 vendor byte, runtime config, Manager preflight에서
+  같은 방식으로 실패한다.
+- **긍정**: PinVi에는 fixture 권한이나 endpoint가 추가되지 않아 ordinary runtime의 권한면이 늘지 않는다.
+- **부정**: Map service artifact가 바뀔 때 cache-target pin도 같은 artifact revision으로 함께 재vendor해야 한다.
+- **부정**: Manager는 trusted PinVi checkout을 preflight 입력으로 가져야 하며 임의 수기 SHA를 허용하지 않는다.
+
+### 후속
+
+- F1J-C에서 general provenance migration, snapshot/runtime/CI regression과 Manager input preflight를 구현한다.
+- F1J-D에서 n150 isolated dynamic fixture와 Admin UI E2E로 정확한 provenance를 검증한다.
+
 ## 다음 ADR 번호
 
-- 다음 신규 ADR = **ADR-061**
+- 다음 신규 ADR = **ADR-062**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

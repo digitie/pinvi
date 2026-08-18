@@ -445,6 +445,14 @@ async def test_principal_cannot_call_another_role_surface() -> None:
             source_payload={"version": "cache-target-source-v1", "state": "deleted"},
             expected_etag='"target-1"',
         )
+    with pytest.raises(PermissionError, match="restore"):
+        await client.advance_restore_fence(
+            consumer_id="pinvi-cache-target-consumer",
+            expected_restore_epoch=7,
+            reason="wrong role",
+            idempotency_key=uuid.uuid4(),
+            stream_etag='"pinvi:7"',
+        )
     await client.aclose()
 
 
@@ -478,6 +486,67 @@ async def test_command_consumer_transition_surfaces_fail_closed_before_http() ->
         await consumer.aclose()
 
     assert calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [200, 201])
+async def test_restore_fence_binds_cas_receipt_and_allows_exact_replay(status_code: int) -> None:
+    fence_id = uuid.uuid4()
+    idempotency_key = uuid.uuid4()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/v1/service/cache-target-streams/pinvi/restore-fences"
+        assert request.headers["X-Kor-Travel-Map-Service-Token"] == TOKEN
+        assert request.headers["Idempotency-Key"] == str(idempotency_key)
+        assert request.headers["If-Match"] == '"pinvi:7"'
+        assert json.loads(request.content) == {
+            "consumer_id": "pinvi-cache-target-consumer",
+            "expected_restore_epoch": 7,
+            "reason": "restore after verified snapshot",
+        }
+        return httpx.Response(
+            status_code,
+            headers={"ETag": '"pinvi:8"'},
+            json={
+                "data": {
+                    "external_system": "pinvi",
+                    "restore_epoch": 8,
+                    "control_version": 8,
+                    "entity_tag": '"pinvi:8"',
+                    "state": "fenced",
+                    "consumer_id": "pinvi-cache-target-consumer",
+                    "blocked_event_id": None,
+                    "active_reconciliation": None,
+                    "updated_at": None,
+                    "fence_id": str(fence_id),
+                    "previous_restore_epoch": 7,
+                    "previous_control_version": 7,
+                    "invalidated_claim_count": 0,
+                    "superseded_delivery_count": 0,
+                    "superseded_reconciliation_count": 0,
+                    "superseded_reconciliation_request_id": None,
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client("restore", handler)
+    try:
+        result = await client.advance_restore_fence(
+            consumer_id="pinvi-cache-target-consumer",
+            expected_restore_epoch=7,
+            reason="restore after verified snapshot",
+            idempotency_key=idempotency_key,
+            stream_etag='"pinvi:7"',
+        )
+    finally:
+        await client.aclose()
+
+    assert result.status_code == status_code
+    assert result.etag == '"pinvi:8"'
+    assert result.data.fence_id == fence_id
+    assert result.data.restore_epoch == 8
 
 
 @pytest.mark.asyncio

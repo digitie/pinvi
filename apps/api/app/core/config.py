@@ -5,22 +5,87 @@
 
 from __future__ import annotations
 
+import json
+import re
 from functools import lru_cache
-from typing import Literal, Self
+from importlib.resources import files
+from pathlib import Path
+from typing import Literal, Self, cast
 from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PinviEnvironment = Literal["development", "test", "smoke", "staging", "production"]
-CACHE_TARGET_SERVICE_OPENAPI_SHA256 = (
-    "144b4335d98fc021368b3297f5b8ed7b1c560e9850ebbdd8af71e45623ba7b3d"
-)
-# Vendored artifact의 immutable provenance다. 배포 이미지나 Map /version의 git SHA와 비교하지 않는다.
-CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION = "e12494bd5c4b5b2e1d51c72b6ddcf18eead0e53f"
-# Artifact owner 이후 계약 동작을 보강한 exact Map revision이다. 배포 전 ancestry를 CI에서 증명한다.
-CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION = "e12494bd5c4b5b2e1d51c72b6ddcf18eead0e53f"
-CACHE_TARGET_SERVICE_CONTRACT_GENERATION = 7
+_SERVICE_PROVENANCE_FILENAME = "kor-travel-map-service-provenance-v1.json"
+_PACKAGED_SERVICE_PROVENANCE_PATH = f"_contract_data/{_SERVICE_PROVENANCE_FILENAME}"
+
+
+def _service_provenance_text() -> str:
+    packaged = files("app").joinpath(_PACKAGED_SERVICE_PROVENANCE_PATH)
+    if packaged.is_file():
+        return packaged.read_text(encoding="utf-8")
+
+    for directory in Path(__file__).resolve().parents:
+        candidate = directory / "contracts" / _SERVICE_PROVENANCE_FILENAME
+        if candidate.is_file():
+            return candidate.read_text(encoding="utf-8")
+    raise RuntimeError(f"Map service provenance file is missing: {_SERVICE_PROVENANCE_FILENAME}")
+
+
+def _required_string(payload: dict[str, object], field: str, pattern: str) -> str:
+    value = payload.get(field)
+    if not isinstance(value, str) or re.fullmatch(pattern, value) is None:
+        raise RuntimeError(f"Map service provenance {field} is invalid")
+    return value
+
+
+def _capability_generation(capabilities: dict[str, object], name: str) -> int:
+    capability = capabilities.get(name)
+    if not isinstance(capability, dict):
+        raise RuntimeError(f"Map service provenance capability {name} is missing")
+    generation = capability.get("generation")
+    if type(generation) is not int or generation < 1:
+        raise RuntimeError(f"Map service provenance capability {name} generation is invalid")
+    return generation
+
+
+def _load_service_provenance() -> tuple[str, str, int, int, int]:
+    raw = json.loads(_service_provenance_text())
+    if not isinstance(raw, dict):
+        raise RuntimeError("Map service provenance must be an object")
+    payload = cast(dict[str, object], raw)
+    if set(payload) != {
+        "capabilities",
+        "map_release_revision",
+        "service_openapi_sha256",
+        "version",
+    }:
+        raise RuntimeError("Map service provenance fields are invalid")
+    if payload["version"] != 1:
+        raise RuntimeError("Map service provenance version is unsupported")
+    capabilities_value = payload["capabilities"]
+    if not isinstance(capabilities_value, dict):
+        raise RuntimeError("Map service provenance capabilities are invalid")
+    capabilities = cast(dict[str, object], capabilities_value)
+    if set(capabilities) != {"cache_target", "c6c_cancel_probe", "curation_snapshot"}:
+        raise RuntimeError("Map service provenance capability inventory is invalid")
+    return (
+        _required_string(payload, "service_openapi_sha256", r"[0-9a-f]{64}"),
+        _required_string(payload, "map_release_revision", r"[0-9a-f]{40}"),
+        _capability_generation(capabilities, "cache_target"),
+        _capability_generation(capabilities, "c6c_cancel_probe"),
+        _capability_generation(capabilities, "curation_snapshot"),
+    )
+
+
+(
+    KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
+    KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION,
+    KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION,
+    KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION,
+) = _load_service_provenance()
 
 
 class Settings(BaseSettings):
@@ -140,6 +205,12 @@ class Settings(BaseSettings):
     # read/cancel 자격을 분리하고 요청 actor 대신 map 서버의 고정 actor를 사용한다.
     pinvi_kor_travel_map_ops_read_token: SecretStr | None = None
     pinvi_kor_travel_map_ops_cancel_token: SecretStr | None = None
+    # canonical curation collection/item snapshot read 전용 exact-scope credential.
+    # admin/service/cache-target token으로 fallback하지 않는다.
+    pinvi_kor_travel_map_curation_snapshot_token: SecretStr | None = None
+    # T-VN-40C maintenance fence에서 legacy identity→canonical UUID mapping만 읽는 별도 principal.
+    # snapshot read token과 공유하면 Map이 403으로 fail-close한다.
+    pinvi_kor_travel_map_curation_cutover_mapping_token: SecretStr | None = None
     pinvi_kor_travel_map_timeout_seconds: float = Field(
         default=5.0,
         gt=0,
@@ -305,10 +376,6 @@ class Settings(BaseSettings):
     pinvi_docker_status_timeout_seconds: float = 2.0
     pinvi_docker_status_container_limit: int = 80
 
-    # 운영 부트스트랩
-    pinvi_bootstrap_admin_email: str = "bootstrap-admin@example.com"
-    pinvi_bootstrap_admin_password: str = ""
-
     # Backup / Restore (ADR-022)
     pinvi_backup_dir: str = ".tmp/backups"
     pinvi_backup_script_path: str = "scripts/backup-db.sh"
@@ -436,6 +503,12 @@ class Settings(BaseSettings):
                 self.pinvi_kor_travel_map_ops_cancel_token.get_secret_value()
                 if self.pinvi_kor_travel_map_ops_cancel_token is not None
                 else "",
+                self.pinvi_kor_travel_map_curation_snapshot_token.get_secret_value()
+                if self.pinvi_kor_travel_map_curation_snapshot_token is not None
+                else "",
+                self.pinvi_kor_travel_map_curation_cutover_mapping_token.get_secret_value()
+                if self.pinvi_kor_travel_map_curation_cutover_mapping_token is not None
+                else "",
             )
             if value
         }
@@ -452,6 +525,11 @@ class Settings(BaseSettings):
             )
         if not self.pinvi_kor_travel_map_cache_target_sync_enabled:
             return self
+        if self.pinvi_environment == "production":
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED is forbidden in production "
+                "until the root-owned final C7 enable boundary is implemented"
+            )
         if self.pinvi_kor_travel_map_cache_target_command_token is None:
             raise ValueError("PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_COMMAND_TOKEN is required")
         if self.pinvi_kor_travel_map_cache_target_consumer_token is None:
@@ -467,7 +545,7 @@ class Settings(BaseSettings):
             raise ValueError(
                 "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_OPENAPI_SHA256 must be lowercase SHA-256 hex"
             ) from exc
-        if openapi_sha != CACHE_TARGET_SERVICE_OPENAPI_SHA256:
+        if openapi_sha != KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256:
             raise ValueError(
                 "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_OPENAPI_SHA256 must match the vendored service contract"
             )
@@ -480,17 +558,96 @@ class Settings(BaseSettings):
             raise ValueError(
                 "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION must be a full lowercase git SHA"
             )
-        if source_revision != CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION:
+        if source_revision != KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION:
             raise ValueError(
-                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION must match the service contract functional owner revision"
+                "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION must match the service contract Map release revision"
             )
         if (
             self.pinvi_kor_travel_map_cache_target_expected_contract_generation
-            != CACHE_TARGET_SERVICE_CONTRACT_GENERATION
+            != KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION
         ):
             raise ValueError(
                 "PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_CONTRACT_GENERATION must match the vendored service contract"
             )
+        return self
+
+    @field_validator(
+        "pinvi_kor_travel_map_curation_snapshot_token",
+        "pinvi_kor_travel_map_curation_cutover_mapping_token",
+        mode="before",
+    )
+    @classmethod
+    def _empty_curation_token_is_unset(cls, value: object) -> object:
+        """빈 문자열은 미설정으로 본다.
+
+        docker-manager/`infra/docker-compose.app.yml`은 미설정 토큰을 `${VAR:-}`(빈 문자열)로 주입한다.
+        빈 값을 '설정된 토큰'으로 다루면 두 토큰이 모두 비어 있을 때 `must differ`로 production API가
+        부팅하지 못한다(2026-08-18 리뷰 P0). 공백 포함 값은 그대로 두어 아래 검증이 명시적으로 거부한다.
+        """
+
+        if value is None:
+            return None
+        raw = value.get_secret_value() if isinstance(value, SecretStr) else value
+        if isinstance(raw, str) and raw == "":
+            return None
+        return value
+
+    @model_validator(mode="after")
+    def validate_curation_service_principals(self) -> Self:
+        """두 curation scope를 다른 Map trust boundary와 서로 분리한다."""
+
+        curation_tokens = (
+            (
+                "PINVI_KOR_TRAVEL_MAP_CURATION_SNAPSHOT_TOKEN",
+                self.pinvi_kor_travel_map_curation_snapshot_token,
+            ),
+            (
+                "PINVI_KOR_TRAVEL_MAP_CURATION_CUTOVER_MAPPING_TOKEN",
+                self.pinvi_kor_travel_map_curation_cutover_mapping_token,
+            ),
+        )
+        values = [secret.get_secret_value() for _, secret in curation_tokens if secret is not None]
+        if len(values) != len(set(values)):
+            raise ValueError("curation snapshot and cutover mapping tokens must differ")
+        protected = {
+            value
+            for value in (
+                self.pinvi_kor_travel_map_service_token.strip(),
+                self.pinvi_kor_travel_map_admin_service_token.strip(),
+                self.pinvi_kor_travel_map_admin_proxy_secret.strip(),
+                self.pinvi_kor_travel_map_public_api_key.strip(),
+                self.pinvi_vworld_api_key.strip(),
+                self.pinvi_kor_travel_map_ops_read_token.get_secret_value()
+                if self.pinvi_kor_travel_map_ops_read_token is not None
+                else "",
+                self.pinvi_kor_travel_map_ops_cancel_token.get_secret_value()
+                if self.pinvi_kor_travel_map_ops_cancel_token is not None
+                else "",
+                self.pinvi_kor_travel_map_cache_target_command_token.get_secret_value()
+                if self.pinvi_kor_travel_map_cache_target_command_token is not None
+                else "",
+                self.pinvi_kor_travel_map_cache_target_consumer_token.get_secret_value()
+                if self.pinvi_kor_travel_map_cache_target_consumer_token is not None
+                else "",
+                self.pinvi_kor_travel_map_cache_target_restore_fence_token.get_secret_value()
+                if self.pinvi_kor_travel_map_cache_target_restore_fence_token is not None
+                else "",
+                self.pinvi_kor_travel_map_cache_target_recovery_token.get_secret_value()
+                if self.pinvi_kor_travel_map_cache_target_recovery_token is not None
+                else "",
+            )
+            if value
+        }
+        for env_name, secret in curation_tokens:
+            if secret is None:
+                continue
+            token = secret.get_secret_value()
+            if len(token) < 32:
+                raise ValueError(f"{env_name} must contain at least 32 characters")
+            if any(character.isspace() for character in token):
+                raise ValueError(f"{env_name} must not contain whitespace")
+            if token in protected:
+                raise ValueError(f"{env_name} must not reuse another Map trust-boundary credential")
         return self
 
 

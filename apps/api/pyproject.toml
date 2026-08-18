@@ -41,7 +41,9 @@ dev = [
 ]
 
 [project.scripts]
+pinvi-admin-bootstrap = "app.commands.admin_bootstrap:main"
 pinvi-cache-target-initial-cutover = "app.commands.cache_target_initial_cutover:main"
+pinvi-cache-target-restore-fence = "app.commands.cache_target_restore_fence:main"
 pinvi-cache-target-causal-canary = "app.commands.cache_target_causal_canary:main"
 pinvi-cache-target-final-boundary = "app.commands.cache_target_final_boundary:main"
 pinvi-feature-uuid-cutover = "app.commands.feature_uuid_cutover:main"
@@ -53,9 +55,14 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"../../contracts/kor-travel-map-service-provenance-v1.json" = "app/_contract_data/kor-travel-map-service-provenance-v1.json"
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# 적용 이력이 있는 Alembic revision은 byte 불변이다. 포맷터가 revision 본문을 바꾸지 않는다.
+exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
 select = [

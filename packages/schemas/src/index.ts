@@ -209,6 +209,12 @@ export {
   NoticePoiReorderRequestSchema,
   NoticePlanCopyRequestSchema,
   NoticePlanCopyResponseSchema,
+  KorTravelMapCurationCollectionImportRequestSchema,
+  KorTravelMapCurationCollectionImportResponseSchema,
+  KorTravelMapCurationCutoverLegacyPreflightIssueSchema,
+  KorTravelMapCurationCutoverLegacyPreflightResponseSchema,
+  KorTravelMapCurationCutoverBackfillRequestSchema,
+  KorTravelMapCurationCutoverBackfillResponseSchema,
 } from './notice-plan';
 export type {
   NoticePoi,
@@ -221,6 +227,12 @@ export type {
   NoticePoiReorderRequest,
   NoticePlanCopyRequest,
   NoticePlanCopyResponse,
+  KorTravelMapCurationCollectionImportRequest,
+  KorTravelMapCurationCollectionImportResponse,
+  KorTravelMapCurationCutoverLegacyPreflightIssue,
+  KorTravelMapCurationCutoverLegacyPreflightResponse,
+  KorTravelMapCurationCutoverBackfillRequest,
+  KorTravelMapCurationCutoverBackfillResponse,
 } from './notice-plan';
 
 export {

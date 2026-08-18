@@ -177,6 +177,15 @@ idempotency ledger, control CAS, epoch `N+1`, 기존 claim 무효화, barrier re
 commit한다. missing If-Match=`428`, stale=`412`, key/body 또는 expected epoch mismatch=`409`다.
 이미 높은 epoch이면 더 증가시키지 않고 current stream+full snapshot을 채택한다.
 
+실행 경계는 `pinvi-cache-target-restore-fence`다. 이 one-shot command는 sync disabled와 consumer/
+restore-fence principal을 요구하고, 최초 current stream ETag/control tuple을 immutable DB receipt에 먼저
+기록한 뒤 `expected_restore_epoch` 및 UUID `Idempotency-Key`와 함께 fence CAS를 호출한다. Map commit 뒤
+응답이 유실되면 다음 실행은 새 stream GET로 abort하지 않고 보존한 raw ETag/body로 exact replay를 호출한다.
+최초 `201`과 exact replay `200`은 같은 receipt tuple로 허용하지만, 이후 재조회한 stream의
+epoch/control version/ETag/`fenced` 상태가 receipt와 하나라도 다르면 fail-close한다. command 자신은 ordinary
+consumer/writer를 열거나 reconciliation 완료를 추측하지 않는다. 후속 reconciliation과 sync enable은 deployment
+control plane의 별도 successful receipt 뒤에만 가능하다.
+
 epoch mismatch가 관측되면 old epoch inbox, applied/acked checkpoint, remote target tuple과 process-local
 cache observation을 current epoch에 재사용하지 않는다. old inbox는 audit partition으로 보존하되
 active consumer query에서 epoch로 격리한다. 새 epoch snapshot과 Merkle가 commit될 때 새 checkpoint와
@@ -445,4 +454,6 @@ synthetic `429/503`은 `Retry-After` 뒤 재시도되는 증거를 남긴다. �
 - [x] relay inbox commit-before-ACK, duplicate/gap/epoch/checksum core
 - [x] service transport/worker, command publisher, default-off principal gate
 - [x] final OpenAPI pin, cache generation observer
-- [ ] paired CI와 n150 live proof
+- [/] 2026-08-18 rebase 후 Map candidate `e093e5555329234a539a3802566eb5666411b06f`와
+      vendored service SHA-256 `c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`를
+      provenance에 재결박했다. paired CI·적대적 재리뷰·n150 live proof가 남아 있다.

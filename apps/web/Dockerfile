@@ -38,13 +38,21 @@ RUN npm --workspace apps/web run build
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 
+ARG PINVI_BUILD_ENVIRONMENT=development
+ARG PINVI_SOURCE_REVISION=development
 ARG NEXT_PUBLIC_PINVI_API_URL=http://localhost:12801
 ARG NEXT_PUBLIC_GRAFANA_URL=http://localhost:12205
 ARG NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH=/d/pinvi/overview?orgId=1&kiosk=tv
 ARG NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=0
 ARG NEXT_PUBLIC_VWORLD_API_KEY=
+COPY scripts/validate-image-provenance.sh /tmp/validate-image-provenance.sh
+RUN /bin/sh /tmp/validate-image-provenance.sh "$PINVI_BUILD_ENVIRONMENT" "$PINVI_SOURCE_REVISION" \
+    && rm /tmp/validate-image-provenance.sh
+LABEL org.opencontainers.image.revision="${PINVI_SOURCE_REVISION}" \
+      io.pinvi.build.environment="${PINVI_BUILD_ENVIRONMENT}"
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV PINVI_SOURCE_REVISION=${PINVI_SOURCE_REVISION}
 ENV NEXT_PUBLIC_PINVI_API_URL=${NEXT_PUBLIC_PINVI_API_URL}
 ENV NEXT_PUBLIC_GRAFANA_URL=${NEXT_PUBLIC_GRAFANA_URL}
 ENV NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH=${NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH}

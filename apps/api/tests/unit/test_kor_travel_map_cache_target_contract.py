@@ -4,22 +4,26 @@ from __future__ import annotations
 
 import hashlib
 import json
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
 from app.core.config import (
-    CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION,
-    CACHE_TARGET_SERVICE_CONTRACT_GENERATION,
-    CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION,
-    CACHE_TARGET_SERVICE_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION,
+    KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION,
+    KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION,
+    KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
 )
 
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-service.json"
 )
-_ARTIFACT_COMMIT = "e12494bd5c4b5b2e1d51c72b6ddcf18eead0e53f"
-_FUNCTIONAL_OWNER_COMMIT = "e12494bd5c4b5b2e1d51c72b6ddcf18eead0e53f"
-_SNAPSHOT_SHA256 = "144b4335d98fc021368b3297f5b8ed7b1c560e9850ebbdd8af71e45623ba7b3d"
+_SERVICE_PROVENANCE = (
+    Path(__file__).resolve().parents[4] / "contracts" / "kor-travel-map-service-provenance-v1.json"
+)
+_MAP_RELEASE_REVISION = "e093e5555329234a539a3802566eb5666411b06f"
+_SNAPSHOT_SHA256 = "c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd"
 
 _GENERATION7_ROLE_SCOPES = {
     "command": {"cache-target:command"},
@@ -108,12 +112,76 @@ def _spec() -> dict[str, Any]:
     return loaded
 
 
-def test_service_snapshot_exact_bytes_and_runtime_pin_match_functional_owner() -> None:
+def test_service_snapshot_exact_bytes_runtime_pin_and_provenance_match_map_release() -> None:
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
-    assert CACHE_TARGET_SERVICE_OPENAPI_SHA256 == _SNAPSHOT_SHA256
-    assert CACHE_TARGET_SERVICE_ARTIFACT_OWNER_REVISION == _ARTIFACT_COMMIT
-    assert CACHE_TARGET_SERVICE_FUNCTIONAL_OWNER_REVISION == _FUNCTIONAL_OWNER_COMMIT
-    assert CACHE_TARGET_SERVICE_CONTRACT_GENERATION == 7
+    assert KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256 == _SNAPSHOT_SHA256
+    assert KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION == _MAP_RELEASE_REVISION
+    assert KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION == 7
+    assert KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION == 2
+    assert KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION == 1
+    assert json.loads(_SERVICE_PROVENANCE.read_text()) == {
+        "capabilities": {
+            "c6c_cancel_probe": {"generation": 2},
+            "cache_target": {"generation": 7},
+            "curation_snapshot": {"generation": 1},
+        },
+        "map_release_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
+        "service_openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+        "version": 1,
+    }
+
+
+def test_wheel_build_includes_the_general_service_provenance() -> None:
+    package_artifact = files("app").joinpath(
+        "_contract_data/kor-travel-map-service-provenance-v1.json"
+    )
+    assert package_artifact.is_file() is False
+    pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    assert (
+        '"../../contracts/kor-travel-map-service-provenance-v1.json" = '
+        '"app/_contract_data/kor-travel-map-service-provenance-v1.json"'
+    ) in pyproject.read_text()
+    dockerfile = pyproject.parent / "Dockerfile"
+    dockerfile_text = dockerfile.read_text()
+    canonical_copy = (
+        "COPY contracts/kor-travel-map-service-provenance-v1.json "
+        "/contracts/kor-travel-map-service-provenance-v1.json"
+    )
+    assert canonical_copy in dockerfile_text
+    assert dockerfile_text.index(canonical_copy) < dockerfile_text.index(
+        "RUN pip install --upgrade pip && pip install -e ."
+    )
+    assert "RUN pip install --no-deps -e . && rm -rf /contracts" in dockerfile_text
+
+
+def test_c6c_fixture_contract_is_pinned_but_not_a_pinvi_runtime_scope() -> None:
+    spec = _spec()
+    fixture_path = "/v1/ops/contract-fixtures/c6c-cancel-probe/{transaction_id}"
+    finalize_path = f"{fixture_path}/finalize"
+
+    operations = (
+        spec["paths"][fixture_path]["put"],
+        spec["paths"][fixture_path]["get"],
+        spec["paths"][finalize_path]["post"],
+    )
+    for operation in operations:
+        assert operation["security"] == [{"OpsScope": [], "OpsToken": []}]
+        scope_header = next(
+            parameter
+            for parameter in operation["parameters"]
+            if parameter["name"] == "X-Kor-Travel-Map-Ops-Scope"
+        )
+        assert scope_header["description"] == (
+            "C6c contract fixture service principal은 exact fixture route에서 `ops:fixture`가 "
+            "필수다. scope 문자열만으로는 권한이 되지 않는다."
+        )
+    record = spec["components"]["schemas"]["C6cCancelProbeFixtureRecord"]
+    assert record["properties"]["capability_generation"]["const"] == 2
+    app_sources = "\n".join(
+        path.read_text() for path in (Path(__file__).resolve().parents[2] / "app").rglob("*.py")
+    )
+    assert "ops:fixture" not in app_sources
+    assert "contract-fixtures" not in app_sources
 
 
 def test_generation7_service_scope_and_caller_inventory_is_exact() -> None:
@@ -131,6 +199,72 @@ def test_generation7_service_scope_and_caller_inventory_is_exact() -> None:
     for route, (required_scope, caller_role) in _GENERATION7_OPERATION_CONTRACT.items():
         assert actual[route] == required_scope
         assert required_scope in _GENERATION7_ROLE_SCOPES[caller_role]
+
+
+def test_curation_snapshot_generation1_service_contract_is_exact() -> None:
+    spec = _spec()
+    expected = {
+        "/v1/service/curation-collections/{collection_id}/detail-snapshot",
+        "/v1/service/curation-items/{curation_item_id}/detail-snapshot",
+    }
+    actual = {
+        path
+        for path in spec["paths"]
+        if path.startswith(("/v1/service/curation-collections", "/v1/service/curation-items"))
+    }
+    assert actual == expected
+    for path in expected:
+        operation = spec["paths"][path]["get"]
+        assert operation["security"] == [{"ServiceToken": []}]
+        assert operation["x-required-service-scope"] == "pinvi:curation-snapshot:read"
+
+    collection = spec["components"]["schemas"]["CurationCollectionDetailSnapshot"]
+    assert collection["additionalProperties"] is False
+    assert collection["properties"]["row_revision"]["pattern"] == r"^[1-9][0-9]*$"
+    assert collection["properties"]["etag"]["pattern"] == r"^sha256:[0-9a-f]{64}$"
+    assert collection["properties"]["item_set_hash"]["pattern"] == r"^[0-9a-f]{64}$"
+    assert collection["properties"]["items"]["maxItems"] == 200
+    collection_metadata = spec["components"]["schemas"]["CurationSnapshotCollection"]["properties"]
+    assert collection_metadata["theme_slug"]["minLength"] == 1
+    assert collection_metadata["theme_slug"]["maxLength"] == 128
+    assert collection_metadata["theme_name"]["minLength"] == 1
+    assert collection_metadata["theme_name"]["maxLength"] == 200
+    assert collection_metadata["title"]["minLength"] == 1
+    assert collection_metadata["title"]["maxLength"] == 300
+    assert collection_metadata["edition_key"]["maxLength"] == 100
+
+
+def test_curation_cutover_mapping_service_contract_is_exact() -> None:
+    """T-VN-40C backfill은 Map DB가 아닌 dedicated service artifact만 읽는다."""
+
+    spec = _spec()
+    operation = spec["paths"]["/v1/service/curation-cutover/identity-mappings"]["get"]
+    assert operation["security"] == [{"ServiceToken": []}]
+    assert operation["x-required-service-scope"] == "pinvi:curation-cutover:read"
+    assert operation["parameters"][0]["name"] == "page_size"
+    assert operation["parameters"][0]["schema"]["maximum"] == 200
+    assert operation["parameters"][1]["name"] == "cursor"
+    assert "409" in operation["responses"]
+
+    mapping = spec["components"]["schemas"]["CurationCutoverIdentityMapping"]
+    assert mapping["additionalProperties"] is False
+    assert mapping["required"] == [
+        "legacy_curated_feature_id",
+        "collection_id",
+        "curation_item_id",
+        "mapping_kind",
+        "source_row_hash",
+    ]
+    assert mapping["properties"]["legacy_curated_feature_id"]["format"] == "uuid"
+    assert mapping["properties"]["source_row_hash"]["pattern"] == r"^[0-9a-f]{64}$"
+
+    export = spec["components"]["schemas"]["CurationCutoverIdentityMappingExport"]
+    assert export["additionalProperties"] is False
+    assert export["properties"]["mapping_root_version"]["const"] == (
+        "ktm-curation-cutover-mapping-v1"
+    )
+    assert export["properties"]["mapping_root"]["pattern"] == r"^[0-9a-f]{64}$"
+    assert export["properties"]["mappings"]["maxItems"] == 200
 
 
 def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
@@ -152,6 +286,13 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
         assert method in paths[path]
 
     schemas = spec["components"]["schemas"]
+    alias_map_checksum = schemas["FeatureAliasMapChecksumData"]
+    assert "derivation_enforced" in alias_map_checksum["required"]
+    assert alias_map_checksum["properties"]["derivation_enforced"] == {
+        "title": "Derivation Enforced",
+        "type": "boolean",
+    }
+
     snapshot = schemas["CacheTargetSnapshotData"]
     assert {"created_at", "expires_at"} <= set(snapshot["required"])
     assert snapshot["properties"]["created_at"]["format"] == "date-time"
@@ -381,6 +522,15 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
     assert restore_headers["Idempotency-Key"]["required"] is True
     assert restore_headers["Idempotency-Key"]["schema"]["format"] == "uuid"
     assert restore_headers["If-Match"]["required"] is True
+    assert "201" in restore_path["responses"]
+    assert "200" in restore_path["responses"]
+    assert restore_path["responses"]["200"]["description"] == "exact Idempotency-Key replay"
+    assert (
+        restore_path["responses"]["200"]["headers"] == restore_path["responses"]["201"]["headers"]
+    )
+    assert restore_path["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/CacheTargetRestoreFenceResponse"
+    }
     assert "ETag" in restore_path["responses"]["201"]["headers"]
     assert {"412", "428", "default"} <= set(restore_path["responses"])
     assert restore_path["responses"]["201"]["content"]["application/json"]["schema"] == {

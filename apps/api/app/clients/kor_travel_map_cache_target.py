@@ -321,6 +321,36 @@ class CacheTargetStreamState(BaseModel):
     updated_at: datetime | None = None
 
 
+class CacheTargetRestoreFenceRecord(CacheTargetStreamState):
+    """restore fence의 immutable receipt와 다음 stream control tuple."""
+
+    fence_id: uuid.UUID
+    previous_restore_epoch: StrictInt = Field(gt=0)
+    previous_control_version: StrictInt = Field(gt=0)
+    invalidated_claim_count: StrictInt = Field(ge=0)
+    superseded_delivery_count: StrictInt = Field(ge=0)
+    superseded_reconciliation_count: StrictInt = Field(ge=0, le=1)
+    superseded_reconciliation_request_id: uuid.UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_restore_advance(self) -> Self:
+        if self.restore_epoch != self.previous_restore_epoch + 1:
+            raise ValueError("restore fence epoch가 정확히 한 단계 전진하지 않았습니다.")
+        if self.control_version != self.previous_control_version + 1:
+            raise ValueError("restore fence control version이 정확히 한 단계 전진하지 않았습니다.")
+        has_superseded_reconciliation = self.superseded_reconciliation_request_id is not None
+        if has_superseded_reconciliation != (self.superseded_reconciliation_count == 1):
+            raise ValueError("restore fence superseded reconciliation receipt가 일관되지 않습니다.")
+        return self
+
+
+@dataclass(frozen=True, slots=True)
+class CacheTargetRestoreFenceResult:
+    status_code: int
+    data: CacheTargetRestoreFenceRecord
+    etag: str
+
+
 class CacheTargetRecoveryOperation(BaseModel):
     """reconciliation completion의 strict operation receipt."""
 
@@ -711,6 +741,55 @@ class CacheTargetServiceClient:
             data=data,
             location=response.headers.get("Location"),
             retry_after=_retry_after(response),
+        )
+
+    async def advance_restore_fence(
+        self,
+        *,
+        consumer_id: str,
+        expected_restore_epoch: int,
+        reason: str,
+        idempotency_key: uuid.UUID,
+        stream_etag: str,
+    ) -> CacheTargetRestoreFenceResult:
+        """restore principal로 stream CAS를 한 번 전진시키고 receipt를 검증한다."""
+        self._require_role("restore")
+        if type(expected_restore_epoch) is not int or expected_restore_epoch <= 0:
+            raise ValueError("expected_restore_epoch은 positive integer여야 합니다.")
+        if not consumer_id or consumer_id != consumer_id.strip():
+            raise ValueError("consumer_id는 trim된 non-empty 문자열이어야 합니다.")
+        if not reason or reason != reason.strip() or len(reason) > 1000:
+            raise ValueError("restore reason은 trim된 1..1000자 문자열이어야 합니다.")
+        response = await self._send(
+            "POST",
+            "/v1/service/cache-target-streams/pinvi/restore-fences",
+            body={
+                "consumer_id": consumer_id,
+                "expected_restore_epoch": expected_restore_epoch,
+                "reason": reason,
+            },
+            idempotency_key=idempotency_key,
+            if_match=stream_etag,
+        )
+        if response.status_code not in {200, 201}:
+            raise CacheTargetContractError("restore fence status가 200 또는 201이 아닙니다.")
+        data = CacheTargetRestoreFenceRecord.model_validate(_unwrap_data(response))
+        etag = response.headers.get("ETag")
+        if (
+            data.external_system != "pinvi"
+            or data.consumer_id != consumer_id
+            or data.previous_restore_epoch != expected_restore_epoch
+            or data.entity_tag != etag
+        ):
+            raise CacheTargetContractError(
+                "restore fence receipt가 요청 stream identity와 다릅니다."
+            )
+        if etag is None:
+            raise CacheTargetContractError("restore fence response에 ETag가 없습니다.")
+        return CacheTargetRestoreFenceResult(
+            status_code=response.status_code,
+            data=data,
+            etag=etag,
         )
 
     @staticmethod

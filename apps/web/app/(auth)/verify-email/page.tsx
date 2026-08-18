@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { ButtonLink } from '@/components/ui/Button';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
@@ -19,9 +19,11 @@ export default function VerifyEmailPage() {
 
 function VerifyEmailPending() {
   return (
-    <div className="space-y-6 text-sm">
-      <h1 className="text-2xl font-bold text-ink">이메일 인증</h1>
-      <p className="text-muted">인증 처리 중입니다…</p>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold tracking-tight text-ink">이메일 인증</h1>
+      <p className="text-base text-muted" role="status" aria-live="polite">
+        인증 처리 중입니다…
+      </p>
     </div>
   );
 }
@@ -44,7 +46,7 @@ function VerifyEmailContent() {
       try {
         await authApi(apiClient).verifyEmail({ token });
         setStatus('success');
-        // 3초 후 trips로 이동 (현재는 / 로 — Sprint 4 진입 후 /trips)
+        // 인증 완료 3초 후 홈으로(로그인은 별도) — 안내 문구와 동일.
         setTimeout(() => router.push('/'), 3000);
       } catch (err) {
         setStatus('error');
@@ -60,23 +62,27 @@ function VerifyEmailContent() {
   }, [token, router]);
 
   return (
-    <div className="space-y-6 text-sm">
-      <h1 className="text-2xl font-bold text-ink">이메일 인증</h1>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold tracking-tight text-ink">이메일 인증</h1>
 
-      {status === 'pending' && <p className="text-muted">인증 처리 중입니다…</p>}
+      {status === 'pending' && (
+        <p className="text-base text-muted" role="status" aria-live="polite">
+          인증 처리 중입니다…
+        </p>
+      )}
       {status === 'success' && (
-        <p className="text-ink" data-testid="verify-success">
+        <p className="text-base text-ink" role="status" data-testid="verify-success">
           인증이 완료되었습니다. 잠시 후 메인으로 이동합니다.
         </p>
       )}
       {status === 'error' && (
         <>
-          <p className="text-error-text" data-testid="verify-error">
+          <p className="text-base text-error-text" role="alert" data-testid="verify-error">
             {error}
           </p>
-          <Link href="/login" className="text-primary underline">
+          <ButtonLink href="/login" variant="secondary">
             로그인 화면으로
-          </Link>
+          </ButtonLink>
         </>
       )}
     </div>

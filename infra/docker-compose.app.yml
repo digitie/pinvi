@@ -101,7 +101,8 @@ services:
       PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL: ${PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL:-http://host.docker.internal:12701}
       PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN: ${PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN:-}
       PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN: ${PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN:-}
-      # cache target HTTP worker는 compatible pair pin이 모두 있을 때만 명시적으로 켠다.
+      # cache target HTTP worker는 non-production 격리 stack에서 compatible pair pin이 모두 있을
+      # 때만 명시적으로 켠다. production enable은 final C7 root boundary 전까지 앱이 거부한다.
       PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED: ${PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED:-false}
       PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_COMMAND_TOKEN: ${PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_COMMAND_TOKEN:-}
       PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_CONSUMER_TOKEN: ${PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_CONSUMER_TOKEN:-}
@@ -109,22 +110,27 @@ services:
       PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_OPENAPI_SHA256: ${PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_OPENAPI_SHA256:-}
       PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION: ${PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_SOURCE_REVISION:-}
       PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_CONTRACT_GENERATION: ${PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_CONTRACT_GENERATION:-}
+      PINVI_KOR_TRAVEL_MAP_CURATION_SNAPSHOT_TOKEN: ${PINVI_KOR_TRAVEL_MAP_CURATION_SNAPSHOT_TOKEN:-}
+      # T-VN-40C sealed legacy plan backfill은 snapshot과 다른 maintenance mapping scope를
+      # 필요로 한다. 원문은 API runtime에만 전달하며 web/dagster에는 전달하지 않는다.
+      PINVI_KOR_TRAVEL_MAP_CURATION_CUTOVER_MAPPING_TOKEN: ${PINVI_KOR_TRAVEL_MAP_CURATION_CUTOVER_MAPPING_TOKEN:-}
       # restore/recovery token은 이 ordinary API container에 전달하지 않는다.
       # ADR-035: Trip WebSocket broker는 process-local in-memory다. Redis/LISTEN fan-out 전까지
       # API worker는 1로 고정한다. 값을 올리면 HTTP mutation broadcast가 다른 worker의 WebSocket에
       # 전달되지 않는다.
       PINVI_API_WORKERS: ${PINVI_API_WORKERS:-1}
       PINVI_VWORLD_API_KEY: ${PINVI_VWORLD_API_KEY:-}
-      PINVI_BOOTSTRAP_ADMIN_EMAIL: ${PINVI_BOOTSTRAP_ADMIN_EMAIL:-bootstrap-admin@example.com}
-      PINVI_BOOTSTRAP_ADMIN_PASSWORD: ${PINVI_BOOTSTRAP_ADMIN_PASSWORD:-}
     ports:
       - "${PINVI_API_PORT:-12801}:8000"
 
   app-web:
     build:
-      context: ..
+      # immutable deploy wrapper는 API와 Web/Dagster 모두 같은 exact archive에서 빌드한다.
+      context: ${PINVI_APP_BUILD_CONTEXT:-..}
       dockerfile: apps/web/Dockerfile
       args:
+        PINVI_SOURCE_REVISION: ${PINVI_SOURCE_REVISION:-development}
+        PINVI_BUILD_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
         # 운영은 infra/.env.prod 의 NEXT_PUBLIC_* 값(빌드타임 embed)로 override.
         NEXT_PUBLIC_PINVI_API_URL: ${NEXT_PUBLIC_PINVI_API_URL:-http://127.0.0.1:${PINVI_API_PORT:-12801}}
         NEXT_PUBLIC_GRAFANA_URL: ${NEXT_PUBLIC_GRAFANA_URL:-http://127.0.0.1:${PINVI_GRAFANA_PORT:-12205}}
@@ -145,8 +151,11 @@ services:
   app-dagster:
     profiles: ["etl"]
     build:
-      context: ..
+      context: ${PINVI_APP_BUILD_CONTEXT:-..}
       dockerfile: apps/etl/Dockerfile
+      args:
+        - PINVI_SOURCE_REVISION
+        - PINVI_BUILD_ENVIRONMENT=${PINVI_ENVIRONMENT:-smoke}
     image: ${PINVI_DAGSTER_IMAGE:-pinvi-dagster:local}
     container_name: pinvi-app-dagster
     restart: unless-stopped

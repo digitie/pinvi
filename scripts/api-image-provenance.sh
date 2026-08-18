@@ -8,6 +8,9 @@ PINVI_PROVENANCE_PREPARED=0
 PINVI_PROVENANCE_ENVIRONMENT=""
 PINVI_PROVENANCE_ARCHIVE_ROOT=""
 PINVI_ATTESTED_API_IMAGE_ID=""
+PINVI_ATTESTED_WEB_IMAGE_ID=""
+PINVI_ATTESTED_DAGSTER_IMAGE_ID=""
+PINVI_APP_BUILD_CONTEXT=""
 PINVI_PROVENANCE_PY="$ROOT_DIR/scripts/api_image_provenance.py"
 PINVI_ORIGINAL_COMPOSE_FILE="$COMPOSE_FILE"
 
@@ -18,6 +21,7 @@ pinvi_cleanup_api_build_context() {
     PINVI_PROVENANCE_ARCHIVE_ROOT=""
   fi
   unset PINVI_API_BUILD_CONTEXT
+  unset PINVI_APP_BUILD_CONTEXT
   COMPOSE_FILE="$PINVI_ORIGINAL_COMPOSE_FILE"
   PINVI_PROVENANCE_PY="$ROOT_DIR/scripts/api_image_provenance.py"
 }
@@ -80,8 +84,11 @@ pinvi_materialize_api_build_context() {
   fi
   for relative in \
     apps/api/Dockerfile \
+    apps/web/Dockerfile \
+    apps/etl/Dockerfile \
     infra/docker-compose.app.yml \
-    scripts/api_image_provenance.py; do
+    scripts/api_image_provenance.py \
+    scripts/validate-image-provenance.sh; do
     control_file="$context_root/$relative"
     if [[ \
       ! -f "$control_file" || \
@@ -96,6 +103,7 @@ pinvi_materialize_api_build_context() {
 
   PINVI_PROVENANCE_ARCHIVE_ROOT="$archive_root"
   export PINVI_API_BUILD_CONTEXT="$context_root"
+  export PINVI_APP_BUILD_CONTEXT="$context_root"
   COMPOSE_FILE="$context_root/infra/docker-compose.app.yml"
   PINVI_PROVENANCE_PY="$context_root/scripts/api_image_provenance.py"
 
@@ -180,58 +188,117 @@ pinvi_prepare_api_image_provenance() {
 }
 
 pinvi_verify_api_image_provenance() {
-  pinvi_prepare_api_image_provenance
-
-  local image_reference image_id actual_revision actual_environment
-  if [[ -n "$PINVI_ATTESTED_API_IMAGE_ID" ]]; then
-    image_id="$PINVI_ATTESTED_API_IMAGE_ID"
-  else
-    image_reference="$({ compose config --format json; } | \
-      python3 "$PINVI_PROVENANCE_PY" compose-image-reference)"
-    image_id="$(docker image inspect --format '{{.Id}}' "$image_reference")"
-    if [[ ! "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-      echo "api image provenance preflight failed: app-api image ID is not canonical" >&2
-      return 2
-    fi
-  fi
-  actual_revision="$(
-    docker image inspect \
-      --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' \
-      "$image_id"
-  )"
-  actual_environment="$(
-    docker image inspect \
-      --format '{{ index .Config.Labels "io.pinvi.build.environment" }}' \
-      "$image_id"
-  )"
-  python3 "$PINVI_PROVENANCE_PY" verify-label \
-    --expected-revision "$PINVI_SOURCE_REVISION" \
-    --actual-revision "$actual_revision" \
-    --expected-environment "$PINVI_PROVENANCE_ENVIRONMENT" \
-    --actual-environment "$actual_environment"
-  PINVI_ATTESTED_API_IMAGE_ID="$image_id"
-  export PINVI_API_IMAGE="$image_id"
+  pinvi_verify_runtime_image_provenance app-api
 }
 
-pinvi_verify_running_api_image_id() {
-  if [[ -z "$PINVI_ATTESTED_API_IMAGE_ID" ]]; then
-    echo "api image provenance preflight failed: API image is not attested" >&2
+pinvi_attested_runtime_image_id() {
+  case "$1" in
+    app-api) printf '%s\n' "$PINVI_ATTESTED_API_IMAGE_ID" ;;
+    app-web) printf '%s\n' "$PINVI_ATTESTED_WEB_IMAGE_ID" ;;
+    app-dagster) printf '%s\n' "$PINVI_ATTESTED_DAGSTER_IMAGE_ID" ;;
+    *) return 2 ;;
+  esac
+}
+
+pinvi_bind_attested_runtime_image_id() {
+  local service="$1"
+  local image_id="$2"
+  case "$service" in
+    app-api)
+      PINVI_ATTESTED_API_IMAGE_ID="$image_id"
+      export PINVI_API_IMAGE="$image_id"
+      ;;
+    app-web)
+      PINVI_ATTESTED_WEB_IMAGE_ID="$image_id"
+      export PINVI_WEB_IMAGE="$image_id"
+      ;;
+    app-dagster)
+      PINVI_ATTESTED_DAGSTER_IMAGE_ID="$image_id"
+      export PINVI_DAGSTER_IMAGE="$image_id"
+      ;;
+    *) return 2 ;;
+  esac
+}
+
+pinvi_verify_runtime_image_provenance() {
+  pinvi_prepare_api_image_provenance
+
+  if (( $# == 0 )); then
+    echo "api image provenance preflight failed: runtime service를 지정해야 합니다" >&2
     return 2
   fi
 
-  local container_id running_image_id
+  local service image_reference image_id actual_revision actual_environment
+  for service in "$@"; do
+    case "$service" in
+      app-api|app-web|app-dagster) ;;
+      *)
+        echo "api image provenance preflight failed: attestation 대상 runtime service가 아닙니다" >&2
+        return 2
+        ;;
+    esac
+    image_id="$(pinvi_attested_runtime_image_id "$service")"
+    if [[ -n "$image_id" ]]; then
+      :
+    else
+      image_reference="$({ compose config --format json; } | \
+        python3 "$PINVI_PROVENANCE_PY" compose-image-reference --service "$service")"
+      image_id="$(docker image inspect --format '{{.Id}}' "$image_reference")"
+      if [[ ! "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+        echo "api image provenance preflight failed: ${service} image ID가 canonical 값이 아닙니다" >&2
+        return 2
+      fi
+    fi
+    actual_revision="$(
+      docker image inspect \
+        --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' \
+        "$image_id"
+    )"
+    actual_environment="$(
+      docker image inspect \
+        --format '{{ index .Config.Labels "io.pinvi.build.environment" }}' \
+        "$image_id"
+    )"
+    python3 "$PINVI_PROVENANCE_PY" verify-label \
+      --expected-revision "$PINVI_SOURCE_REVISION" \
+      --actual-revision "$actual_revision" \
+      --expected-environment "$PINVI_PROVENANCE_ENVIRONMENT" \
+      --actual-environment "$actual_environment"
+    pinvi_bind_attested_runtime_image_id "$service" "$image_id"
+  done
+}
+
+pinvi_verify_running_runtime_image_id() {
+  local service="$1"
+  local image_id container_id running_image_id
   local -a container_ids
-  mapfile -t container_ids < <(compose ps -q app-api | sed '/^[[:space:]]*$/d')
+  image_id="$(pinvi_attested_runtime_image_id "$service")"
+  if [[ -z "$image_id" ]]; then
+    echo "api image provenance preflight failed: ${service} image is not attested" >&2
+    return 2
+  fi
+
+  if [[ "$service" == "app-dagster" ]]; then
+    mapfile -t container_ids < <(
+      compose --profile etl ps -q "$service" | sed '/^[[:space:]]*$/d'
+    )
+  else
+    mapfile -t container_ids < <(compose ps -q "$service" | sed '/^[[:space:]]*$/d')
+  fi
   if (( ${#container_ids[@]} != 1 )); then
-    echo "api image provenance preflight failed: app-api container must resolve exactly once" >&2
+    echo "api image provenance preflight failed: ${service} container must resolve exactly once" >&2
     return 2
   fi
   container_id="${container_ids[0]}"
   running_image_id="$(docker container inspect --format '{{.Image}}' "$container_id")"
-  if [[ "$running_image_id" != "$PINVI_ATTESTED_API_IMAGE_ID" ]]; then
-    echo "api image provenance preflight failed: running API image ID drifted" >&2
+  if [[ "$running_image_id" != "$image_id" ]]; then
+    echo "api image provenance preflight failed: running ${service} image ID drifted" >&2
     return 2
   fi
+}
+
+pinvi_verify_running_api_image_id() {
+  pinvi_verify_running_runtime_image_id app-api
 }
 
 pinvi_verify_or_remove_running_app() {
@@ -240,7 +307,8 @@ pinvi_verify_or_remove_running_app() {
   mapfile -t container_ids < <(
     compose ps -aq app-api app-web | sed '/^[[:space:]]*$/d' | sort -u
   )
-  if pinvi_verify_running_api_image_id; then
+  if pinvi_verify_running_runtime_image_id app-api && \
+    pinvi_verify_running_runtime_image_id app-web; then
     return 0
   else
     verification_status="$?"
@@ -256,6 +324,32 @@ pinvi_verify_or_remove_running_app() {
   )
   if (( ${#remaining_ids[@]} > 0 )); then
     echo "api image provenance preflight failed: unverified app container remains" >&2
+    return 2
+  fi
+  return "$verification_status"
+}
+
+pinvi_verify_or_remove_running_dagster() {
+  local verification_status
+  local -a container_ids remaining_ids
+  mapfile -t container_ids < <(
+    compose --profile etl ps -aq app-dagster | sed '/^[[:space:]]*$/d' | sort -u
+  )
+  if pinvi_verify_running_runtime_image_id app-dagster; then
+    return 0
+  else
+    verification_status="$?"
+  fi
+
+  compose --profile etl stop app-dagster >/dev/null 2>&1 || true
+  if (( ${#container_ids[@]} > 0 )); then
+    docker container rm -f "${container_ids[@]}" >/dev/null 2>&1 || true
+  fi
+  mapfile -t remaining_ids < <(
+    compose --profile etl ps -aq app-dagster | sed '/^[[:space:]]*$/d' | sort -u
+  )
+  if (( ${#remaining_ids[@]} > 0 )); then
+    echo "api image provenance preflight failed: unverified Dagster container remains" >&2
     return 2
   fi
   return "$verification_status"

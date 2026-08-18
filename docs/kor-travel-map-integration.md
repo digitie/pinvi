@@ -100,6 +100,16 @@ true는 compatible manifest, pinned OpenAPI/source revision, active epoch와 fix
 count/Merkle/high-watermark 일치를 모두 요구한다. 자세한 exact 경로·event·Merkle 계약은 ADR-058과
 [`execplan`](execplan/t-vn-41-cache-target-consumer.md)이 정본이다.
 
+restore clone을 다시 열 때는 ordinary worker를 먼저 기동하지 않는다. 전용 restore job은
+`PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED=false`와 consumer/restore-fence 두 token을
+명시해 `pinvi-cache-target-restore-fence --expected-restore-epoch <N> --idempotency-key <UUID>`를 한 번
+실행한다. 이 command는 최초 raw stream ETag·control version을 local durable receipt에 먼저 결박하고
+`If-Match`·expected epoch·Idempotency-Key로 Map restore fence를 요청한다. Map commit 뒤 응답이 유실되면
+같은 key로 재실행해도 새 stream GET로 중단하지 않고 보존한 raw ETag/body를 재사용하여 `200` exact replay를
+받는다. `201` 최초 응답 또는 `200` replay 모두에서 새 `restore_epoch=N+1`·control version·ETag와
+`fenced` stream 상태를 재조회해 대조한다. 이 command는 ordinary writer를 열지 않는다. 이어지는
+reconciliation/cutover와 sync enable은 deployment control plane이 별도 성공 증거를 확인한 뒤에만 수행한다.
+
 ## 3. Pinvi/user-facing OpenAPI
 
 최신 `openapi.user.json`의 Pinvi 사용 표면:
@@ -180,15 +190,16 @@ T-VN-41 source byte 계약은 Map commit
 leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
 commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
 
-서비스 계약은 Map artifact owner commit `e12494bd5c4b5b2e1d51c72b6ddcf18eead0e53f`(T-VN-32
-merge — alias-map 2 endpoint + batch UUID additive 재추출)의
+서비스 계약은 Map exact release `98489eb4e81fc736c4bb6d16deec0d2033d2e990`(T-VN-40 paired draft)의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor한다. SHA-256은
-`144b4335d98fc021368b3297f5b8ed7b1c560e9850ebbdd8af71e45623ba7b3d`이고, functional owner는
-동일 commit `e12494bd5c4b5b2e1d51c72b6ddcf18eead0e53f`이다(직전 보안 경계 owner
-`9b945ce832…`는 이 commit의 ancestor). sync enable 설정은 functional owner revision과
-contract generation `7`도 exact하게 고정한다. CI는 artifact owner가 functional owner의 ancestor임을
-검증한다. functional owner는 배포 Map 이미지나 `/version`의 git SHA와 비교하지 않는 기능 계약
-provenance다. startup에서 stream control에
+`b3211235a0a1fcd16c67772aa651a23e4ccbc66c8b82e618815ee7137267f268`다. artifact owner/functional
+owner 이중 provenance는 control-plane 정본이 아니다. PinVi의
+`contracts/kor-travel-map-service-provenance-v1.json`은 위 Map release·SHA-256과 capability
+`cache_target=7`, `c6c_cancel_probe=2`를 비밀값 없이 한 번만 기록한다. cache-target runtime 상수와
+sync enable 설정의 source revision은 이 일반 provenance의 `cache_target`에서만 파생한다. C6c fixture의
+`ops:fixture` token·route는 Manager만 사용하며 PinVi ordinary runtime에는 주입하지 않는다. Manager는
+trusted PinVi worktree에서 일반 provenance와 vendor artifact를 읽어 Map worktree/image의 artifact와
+capability를 대조한 뒤에만 격리 rehearsal을 실행한다. startup에서 stream control에
 `active_reconciliation`이 있으면 그 `request_id`의 paged snapshot만 읽고 descriptor의 snapshot ID,
 epoch, count, Merkle root, high-watermark와 모두 대조한다. local snapshot commit 뒤 deterministic UUID
 idempotency key로 completion을 보고하고, Map stream이 `ready`이며 descriptor가 제거된 것을 다시 확인한
@@ -211,8 +222,8 @@ typed snapshot backpressure 오류를 고정한다. generation 5는 snapshot pag
 generation 7은 command endpoint를 exact `cache-target:command` scope로 분리하고
 legacy `cache-target:consumer` umbrella scope를 enum/auth에서 clean-cut 삭제한다. consumer 역할은 exact
 `cache-target:read/claim/ack/nack/snapshot` 5개 scope 배열만 받는다. PinVi는 이미 분리된 role-bound
-transport와 token을 유지하되 generation 6을 호환 fallback으로 허용하지 않는다. 위 artifact owner,
-functional owner, OpenAPI SHA-256과 generation 7은 두 독립 exact-head 리뷰 GO 뒤 함께 재핀했다.
+transport와 token을 유지하되 generation 6을 호환 fallback으로 허용하지 않는다. 위 Map exact release,
+OpenAPI SHA-256과 generation 7은 동일 pinset으로 함께 재핀한다.
 
 `high_watermark_cursor`는 snapshot 전체와 정확히 같은 시점이라는 뜻이 아니라, 해당
 `external_system` outbox의 commit-safe replay lower-bound다. 따라서 그 cursor 이후 claim에는 snapshot에

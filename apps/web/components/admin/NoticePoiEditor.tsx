@@ -94,6 +94,10 @@ function nextSortOrder(plan: NoticePlan): string {
   return String(max + 1000).padStart(6, '0');
 }
 
+function isCanonicalPoi(poi: NoticePoi): boolean {
+  return poi.source_curation_item_id !== null && poi.source_curation_item_id !== undefined;
+}
+
 export function NoticePoiEditor({
   plan,
   onReload,
@@ -154,6 +158,7 @@ export function NoticePoiEditor({
   });
 
   const startEdit = (poi: NoticePoi) => {
+    if (isCanonicalPoi(poi)) return;
     setEditing(poi);
     setEditDraft(draftFromPoi(poi));
     setSelectedAttachmentPoiId(poi.notice_poi_id);
@@ -190,27 +195,30 @@ export function NoticePoiEditor({
       {
         key: 'actions',
         header: '작업',
-        cell: (row) => (
-          <div className="flex gap-1">
-            <button
-              type="button"
-              onClick={() => startEdit(row)}
-              className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline px-2 text-xs font-semibold"
-              data-testid={`admin-notice-poi-edit-${row.notice_poi_id}`}
-            >
-              <Edit3 className="h-3.5 w-3.5" aria-hidden="true" />
-              편집
-            </button>
-            <button
-              type="button"
-              onClick={() => deleteMutation.mutate(row)}
-              className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline px-2 text-xs font-semibold text-error-text"
-            >
-              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-              삭제
-            </button>
-          </div>
-        ),
+        cell: (row) =>
+          isCanonicalPoi(row) ? (
+            <span className="text-xs text-muted">Map refresh 관리</span>
+          ) : (
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={() => startEdit(row)}
+                className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline px-2 text-xs font-semibold"
+                data-testid={`admin-notice-poi-edit-${row.notice_poi_id}`}
+              >
+                <Edit3 className="h-3.5 w-3.5" aria-hidden="true" />
+                편집
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteMutation.mutate(row)}
+                className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline px-2 text-xs font-semibold text-error-text"
+              >
+                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                삭제
+              </button>
+            </div>
+          ),
       },
     ],
     [deleteMutation],

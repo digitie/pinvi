@@ -8,8 +8,9 @@ import json
 import re
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import NoReturn, Sequence
+from typing import NoReturn
 
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 _ENVIRONMENTS = {"development", "test", "smoke", "staging", "production"}
@@ -22,7 +23,7 @@ class ProvenanceError(ValueError):
 
 def _run_git(repo_root: Path, args: Sequence[str]) -> str:
     try:
-        completed = subprocess.run(  # noqa: S603
+        completed = subprocess.run(
             ["git", "-C", str(repo_root), *args],
             check=True,
             capture_output=True,
@@ -120,13 +121,13 @@ def compose_requested_revision(document: object) -> str | None:
     return value
 
 
-def compose_image_reference(document: object) -> str:
-    """resolved compose에서 API image reference를 읽는다."""
+def compose_image_reference(document: object, *, service: str = "app-api") -> str:
+    """resolved compose에서 runtime image reference를 읽는다."""
 
-    value = _compose_app_api(document).get("image")
+    value = _compose_service(document, service).get("image")
     if not isinstance(value, str) or not value or "\n" in value or "\r" in value:
         raise ProvenanceError(
-            "compose app-api image reference 형식이 올바르지 않습니다."
+            f"compose {service} image reference 형식이 올바르지 않습니다."
         )
     return value
 
@@ -237,15 +238,19 @@ def _regular_archive_file(context_root: Path, relative: Path) -> Path:
 
 
 def _compose_app_api(document: object) -> dict[object, object]:
+    return _compose_service(document, "app-api")
+
+
+def _compose_service(document: object, service_name: str) -> dict[object, object]:
     if not isinstance(document, dict):
         raise ProvenanceError("compose document 형식이 올바르지 않습니다.")
     services = document.get("services")
     if not isinstance(services, dict):
         raise ProvenanceError("compose services를 확인할 수 없습니다.")
-    app_api = services.get("app-api")
-    if not isinstance(app_api, dict):
-        raise ProvenanceError("compose app-api service를 확인할 수 없습니다.")
-    return app_api
+    service = services.get(service_name)
+    if not isinstance(service, dict):
+        raise ProvenanceError(f"compose {service_name} service를 확인할 수 없습니다.")
+    return service
 
 
 def verify_labels(
@@ -281,7 +286,12 @@ def _parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("compose-environment")
     subparsers.add_parser("compose-requested-revision")
-    subparsers.add_parser("compose-image-reference")
+    image_reference = subparsers.add_parser("compose-image-reference")
+    image_reference.add_argument(
+        "--service",
+        choices=("app-api", "app-web", "app-dagster"),
+        default="app-api",
+    )
 
     provenance_input = subparsers.add_parser("compose-provenance-input")
     provenance_input.add_argument("--name", required=True)
@@ -320,7 +330,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "compose-requested-revision":
             print(compose_requested_revision(json.load(sys.stdin)) or "")
         elif args.command == "compose-image-reference":
-            print(compose_image_reference(json.load(sys.stdin)))
+            print(compose_image_reference(json.load(sys.stdin), service=args.service))
         elif args.command == "compose-provenance-input":
             print(compose_provenance_input(json.load(sys.stdin), name=args.name) or "")
         elif args.command == "verify-compose-build":

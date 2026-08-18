@@ -47,27 +47,55 @@ WHERE email = 'admin@example.com' AND deleted_at IS NULL;
 
 ## 2. 초기 admin 계정
 
-API startup은 `PINVI_BOOTSTRAP_ADMIN_PASSWORD`가 **비어 있지 않을 때만**
-`PINVI_BOOTSTRAP_ADMIN_EMAIL` 계정을 생성/복구한다. 이 값이 비어 있으면 의도적으로
-skip한다. 운영에서 기본 비밀번호가 우연히 살아나는 일을 막기 위한 안전장치다.
+API startup은 admin 계정을 생성/복구하지 않는다. PinVi DB migration과 fresh admin 생성은
+`pinvi-admin-bootstrap` one-shot CLI만 수행한다. ordinary API/Web/Dagster runtime에는
+bootstrap credential file이나 password 환경변수를 주입하지 않는다.
 
-| 환경변수                         | 기본/예시        | 설명                                      |
-| -------------------------------- | ---------------- | ----------------------------------------- |
-| `PINVI_BOOTSTRAP_ADMIN_EMAIL`    | dev/smoke 예시값 | bootstrap 대상 이메일                     |
-| `PINVI_BOOTSTRAP_ADMIN_PASSWORD` | 비어 있음        | 설정된 경우에만 Argon2id hash로 저장/복구 |
+### 후보 이미지 migration head 검사
 
-동작:
+Docker-manager는 destructive rebuild 전에 **후보 PinVi API 이미지 안에서만** 아래 명령을 먼저
+실행한다. `head`는 DB 세션·DSN·credential file·bootstrap service를 전혀 읽지 않고, 설치된
+`app.commands.admin_bootstrap`의 `__file__`에서 도출한 이미지 루트의 migration 파일을 AST로만
+읽는다. revision module은 import·실행하지 않으며, literal `revision`/`down_revision` graph의
+단 하나의 head만 허용한다.
 
-- 계정이 없으면 `status='active'`, `roles=['user','admin']`, `email_verified_at=now()`로 생성한다.
-- 계정이 있으나 비활성/미인증/admin role 누락/password 불일치면 복구한다.
-- password hash가 바뀌면 기존 active session을 폐기한다.
-- 비밀번호 원문은 로그나 DB에 저장하지 않는다.
+```bash
+pinvi-admin-bootstrap head
+```
 
-개발/smoke에서는 `PINVI_BOOTSTRAP_ADMIN_PASSWORD`에 명시적으로 설정한 임시값으로만
-bootstrap 로그인을 검증한다. 운영 환경에서는 첫 진입 후 별도 admin 계정을 만들거나
-기존 실사용 계정에 `admin` role을 부여한 뒤, `PINVI_BOOTSTRAP_ADMIN_PASSWORD`를
-비우고 bootstrap 대상 계정을 비활성화한다. 공개 문서에는 이메일/비밀번호 조합을
-고정하지 않는다.
+성공 출력은 정확히 한 줄의 다음 JSON이다.
+
+```json
+{"pinvi_head":"<exact-alembic-head>","schema":"pinvi.candidate-head.v1"}
+```
+
+이미지 루트가 완전하지 않거나 graph가 비어 있음·동적/중복 assignment·순환·부모 누락·head 0개/복수이면
+`static_head_unavailable` typed error JSON으로 fail-closed한다. 현재 작업 디렉터리나 mount 경로는
+head 판정에 사용하지 않는다. 이 값은 이후 `pinvi-admin-bootstrap` migration/credential one-shot이 DB에서
+확인할 expected head이며, source checkout이나 live DB에서 추측하지 않는다.
+
+one-shot 입력은 `PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE` 하나뿐이다. 파일 내용은 다음 JSON
+shape이며, 실제 값은 gitignore된 운영 env나 local-only runbook이 아니라 Manager가 만든 owner-only
+임시 파일에만 둔다.
+
+```json
+{"email":"<bootstrap-admin-email>","password":"<temporary-bootstrap-password>"}
+```
+
+CLI는 파일을 읽기 전에 PinVi Alembic migration을 candidate source의 static head까지 적용하고,
+같은 transaction에서 `app.alembic_version`이 그 head와 정확히 같은지 확인한다. 그 뒤에만 credential
+file을 `O_NOFOLLOW`로 열어 regular file, owner=euid, mode `0600`, hardlink count 1, bounded size를
+검증한다. 계정이 없으면 `status='active'`, `roles=['user','admin']`,
+`email_verified_at=now()`로 생성한다. 같은 credential 재실행은 idempotent `unchanged`로 끝난다.
+기존 계정을 복구하며 password hash가 바뀌면 active session을 폐기한다.
+
+```bash
+PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/run/pinvi/bootstrap-admin.json \
+  pinvi-admin-bootstrap
+```
+
+성공/실패 출력은 JSON이며 password 원문과 raw email을 출력하지 않는다. 성공 시 `action`,
+`pinvi_head`, `admin_email_sha256`만 남긴다.
 
 N150에서 계정 존재 여부만 확인:
 

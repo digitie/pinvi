@@ -23,7 +23,7 @@ Usage:
   scripts/docker-app.sh reset
   scripts/docker-app.sh status
   scripts/docker-app.sh logs [api|web|postgres|rustfs]
-  scripts/docker-app.sh migrate
+  scripts/docker-app.sh migrate   # migration + one-shot admin bootstrap
   scripts/docker-app.sh smoke [--keep-running]
 
 Defaults:
@@ -39,6 +39,7 @@ Environment overrides:
   PINVI_WEB_PORT=12805
   PINVI_RUSTFS_PORT=12101
   PINVI_RUSTFS_CONSOLE_PORT=12105
+  PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/absolute/host/path/bootstrap-admin.json
 EOF
 }
 
@@ -126,7 +127,7 @@ build() {
   pinvi_prepare_api_image_provenance
   log "building app-api and app-web"
   compose build app-api app-web
-  pinvi_verify_api_image_provenance
+  pinvi_verify_runtime_image_provenance app-api app-web
 }
 
 require_python() {
@@ -145,23 +146,38 @@ up_deps() {
 migrate() {
   require_docker
   require_python
-  pinvi_verify_api_image_provenance
+  pinvi_verify_runtime_image_provenance app-api
+  local credential_file
+  credential_file="$(bootstrap_credential_file)"
   local attempt
   for attempt in 1 2 3 4 5; do
-    log "running Alembic upgrade head (attempt ${attempt}/5)"
-    if compose run --rm app-api alembic upgrade head; then
+    log "running Pinvi admin bootstrap (attempt ${attempt}/5)"
+    if compose run --rm \
+      --user "$(id -u):$(id -g)" \
+      -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
+      -v "$credential_file:$credential_file:ro" \
+      app-api pinvi-admin-bootstrap; then
       return 0
     fi
     sleep 3
   done
-  echo "alembic upgrade head failed after 5 attempts" >&2
+  echo "pinvi-admin-bootstrap failed after 5 attempts" >&2
   return 1
+}
+
+bootstrap_credential_file() {
+  local path="${PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE:-}"
+  if [[ -z "$path" || "$path" != /* || "$path" == *:* || ! -f "$path" ]]; then
+    echo "PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE must point to an absolute regular host file without ':'" >&2
+    exit 2
+  fi
+  printf '%s\n' "$path"
 }
 
 up() {
   require_docker
   require_python
-  pinvi_verify_api_image_provenance
+  pinvi_verify_runtime_image_provenance app-api app-web
   free_app_ports
   up_deps
   migrate

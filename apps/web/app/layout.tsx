@@ -4,7 +4,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Pinvi',
-  description: '한국 여행 계획·기록·공유 — v2',
+  description: '한국 여행 계획·기록·공유 — 지도에서 고르고, 하루씩 담고, 링크로 나눠요.',
   manifest: '/site.webmanifest',
   icons: {
     icon: [
@@ -25,7 +25,8 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  themeColor: '#03163B',
+  // 브라우저 chrome 색 = 시스템 canvas(DESIGN.md). 시스템 밖 네이비 팔레트는 폐기(Hallmark audit C9).
+  themeColor: '#ffffff',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

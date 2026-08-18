@@ -28,13 +28,18 @@
 > PR #533으로 admin `/v1/admin/features/curated/{id}/detail-snapshot`으로 이관됐다(ADR-049, §2.11).
 > **정본 소스**: kor-travel-map `packages/kor-travel-map-api/openapi.user.json`(사용자 표면) +
 > `docs/architecture/rest-api.md`(prose 계약). 본 문서와 충돌 시 **openapi.user.json 우선**.
-> vendored 정본은 **2026-07-30(T-VN-16C) 기준 kor-travel-map
-> main commit `94ace1a9a27d204fabb9645d1ffd43c47ea60079`**(5-state service batch +
-> sparse 다중 날짜 bitemporal weather batch, int64 상한, DB 장애 503 포함)의
+> vendored 정본은 **2026-08-05(T-VN-32C PR-2) 기준 kor-travel-map
+> merge commit `8c5bdcf8ce892439a8bb8e0013edf74127bf076a`**(read 응답 feature_id
+> UUID 정본화 — 스펙 자체는 description-only 변경)의
 > 전체 파일이며 SHA-256은
-> `0a7cabb3c10fedc55ff306fb3c0d856122108fe74da63877a02c8c8092209990`다.
-> (직전 핀은 PR #794 merge `cf1f0bba…`/`91b30f40…`으로, Map main보다 174 commits 뒤처져 있었다.
-> 재동기화 시 실제 drift는 `PublicCurationItemView.external_component_id` 추가(Map migration 0066)와 price series identity 문구 변경뿐이었고, Pinvi가 소비하는 스키마는 구조 변화 0건이었다.)
+> `66fc83b3ae918b2f82ae9cf02bea162d8fa84967567e2a450493d93b1953e801`다.
+> (직전 핀 `94ace1a9…`(T-VN-16C)는 spec-touching 4 commits 뒤처져 있었다. 재동기화
+> 실제 drift는 ① Map `96814b2a`("split service openapi profile")가 ServiceToken 전용
+> batch 2경로(`/v1/features/batch`·`/v1/features/weather/batch`)와 batch schema를
+> user profile에서 `openapi.service.json`으로 분리 — user 게이트가 해당 경로·schema를
+> vendored **service** 스냅샷 기준으로 검증하도록 재배선했다(§8) — 와 ② admin subset의
+> `curation_status`/`reuse_policy`/`relation` enum 명시 additive 추가이며, Pinvi가
+> 소비하는 필드 타입 계약 자체는 무변경이었다.)
 > Pinvi contract gate는 이 pinned hash와 선택적 live 전체
 > 파일 equality를 검사하므로 일부 필드만 수기로 graft하지 않는다.
 > **관계**: 능력 격차 분석은 `docs/kor-travel-map-requirements.md`(이제 대부분 해소),
@@ -382,47 +387,19 @@ state, review_mode, payload, base_row_revision, applied_at, reviewed_at/by, crea
 - provider 신선도(brief/Admin 상태판), liveness, 버전. Pinvi Admin 상태판·헬스 체크용.
   `/health`·`/version`만 비버전 경로 (구 `/debug/health|version`은 kor_travel_map T-214h로 제거).
 
-### 2.11 `curated_features` — Pinvi curated trip plan import (Admin 전용 detail snapshot)
+### 2.11 canonical curation collection snapshot
 
-**상태**: Pinvi가 kor-travel-map `GET /v1/admin/features/curated/{curated_feature_id}/detail-snapshot`을
-소비해 `curated_trip_plans` / `curated_plan_pois`로 1:1 import한다. 구 public 경로
-`GET /v1/curated-features/{id}/pinvi-copy`는 kor_travel_map PR #533로 제거됐고, item을
-담은 snapshot은 이제 admin 표면(`/v1/admin/*`)에만 존재한다. AdminBFF gate가 켜진 환경은
-proxy secret과 actor가 필수이고 local dev에서만 opt-out한다. service token은 이와 별개의
-server-to-server pass-through 자격이다(ADR-049).
+**상태**: PinVi는 Map admin `curated_features` detail snapshot을 소비하지 않는다. service scope의
+collection/item snapshot만 HTTP로 읽고, collection UUID 하나를 curated plan 하나에, item UUID 하나를
+POI 하나에 대응한다. 모든 page의 revision·ETag·item-set receipt를 검증한 뒤 한 local transaction에서
+plan·POI·immutable import receipt·admin audit를 함께 확정한다.
 
-제품 의미:
+legacy Map plan은 새 admin snapshot으로 갱신하지 않는다. sealed mapping receipt와 typed backfill
+command가 canonical identity를 재검증한 다음 source-derived legacy POI를 soft delete하고 canonical
+POI를 만든다. 수동 POI는 보존한다. Map Python package import와 Map DB 직접 접근은 계속 금지한다.
 
-- Pinvi-native 큐레이션: Admin/운영자가 Pinvi 안에서 직접 만든다.
-- kor_travel_map `curated_features` import: kor_travel_map curated feature 1건을 Pinvi
-  `curated_trip_plans` 1건으로 1:1 복사한다.
-- 두 흐름은 모두 같은 `/notice-plans` 사용자 copy 흐름을 사용한다.
-
-사용하는 kor_travel_map REST 표면(admin base :12701, 운영은 AdminBFF proxy secret + actor 필수,
-service token은 별도 pass-through):
-
-```http
-GET /v1/admin/features/curated/{curated_feature_id}/detail-snapshot
-```
-
-snapshot plan-level 객체 키는 `plan` → `content`로 개명됐다(ADR-049). version/etag/
-updated_at/theme/source/items[]는 그대로다.
-
-Pinvi import 매핑:
-
-| kor_travel_map              | Pinvi                                            |
-| --------------------------- | ------------------------------------------------ |
-| curated feature 1건         | `app.curated_trip_plans` 1건                     |
-| curated feature item/POI    | `app.curated_plan_pois`                          |
-| item `feature_id`           | `curated_plan_pois.feature_id` nullable 저장     |
-| item 표시 snapshot          | `feature_snapshot`                               |
-| item day/order              | `day_index` / `sort_order`                       |
-| snapshot `version` / `etag` | `source_curated_feature_version` / `source_etag` |
-| item id                     | `source_curated_feature_item_id`                 |
-
-Pinvi는 kor-travel-map을 OpenAPI HTTP로만 호출한다. kor-travel-map Python 패키지 import나 DB
-직접 접근은 금지한다. `kor-travel-concierge`는 Pinvi curated trip plan 생성 흐름에 관여하지
-않는다.
+정확한 service path, token scope, pagination, `304`/`409`/`413`, idempotency 및 cutover choreography는
+[`t-vn-40-curation-consumer.md`](../execplan/t-vn-40-curation-consumer.md)가 정본이다.
 
 ---
 
@@ -589,50 +566,19 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
 
 ---
 
-## 8-A. admin detail-snapshot 계약 게이트 (T-VN-H07D, map#815, 2026-07-28)
-
-§8은 **user** 표면을 덮는다. 그런데 Pinvi의 큐레이션 import 런타임이 실제로 소비하는 것은
-admin `GET /v1/admin/features/curated/{id}/detail-snapshot`이고, 이 표면에는 그동안 **어떤 계약
-게이트도 없었다**.
-
-- **vendored 정본**: `apps/api/tests/contract/kor-travel-map-openapi-admin-detail-snapshot.json`.
-  Map full 스펙(1 MB+) 전체가 아니라 해당 경로와 응답 스키마의 **전이적 폐포 + 필요한
-  securityScheme**만 잘라낸 subset(약 19 KB)이다. 추출기
-  `apps/api/scripts/vendor_kor_travel_map_admin_snapshot.py`는 정렬 key·고정 indent로
-  **결정적**이라 같은 입력이면 같은 바이트가 나온다.
-- **계약 테스트**: `apps/api/tests/unit/test_kor_travel_map_admin_contract.py` —
-  pinned SHA-256, Pinvi가 실제로 읽는 필드의 type/nullable/required, 경로→200→`data` 결합,
-  admin 인증 헤더(`X-Kor-Travel-Map-Admin-Proxy-Secret`) header-only 계약.
-  exact property 집합은 고정하지 **않는다**(producer 소유 — consumer가 중복 고정하면 Map의 무해한
-  additive 변경마다 false-red).
-- **CI 게이트 2종**(`.github/workflows/api.yml`):
-  - `contract-pin-consistency` — **차단**(`aggregate-ci.yml`의 required check에 포함). Map을
-    **핀 커밋**으로 체크아웃해 user 표면은 byte 비교, admin 표면은 재추출 비교를 실제로 실행한다.
-    과거 live-compare가 sibling 체크아웃 부재로 skip되어 항상 green이던 맹점을 없앤다.
-    증명 대상은 **핀↔vendored 자기정합**(수기 graft·재-vendor 없는 핀 상승)이지 "최신"이 아니다.
-  - `contract-staleness` — 예약(매일)·비차단(PR에는 아예 돌지 않음). Map **main**과 비교해 핀
-    자체가 뒤처졌는지 알린다. 핀 기준 비교로는 구조상 알 수 없는 종류(T-VN-H07B에서 user
-    스냅샷이 174 commits 뒤처진 걸 뒤늦게 발견한 사례)를 담당한다.
-- **갱신 절차**: Map 스펙 변경 시 ① 추출기를 새 Map 커밋으로 재실행,
-  ② `_UPSTREAM_COMMIT`/`_SNAPSHOT_SHA256` 갱신, ③ 계약 테스트 실행, ④ 실패하면 client/매핑과
-  `_CONSUMED_FIELD_CONTRACTS`를 함께 고친다.
-
-> **해소됨 (T-VN-H29)**: 과거 `api/v1/search.py::_snapshot_coord`는 `feature_snapshot["coord"]`만
-> 읽었는데 Map view는 `extra="forbid"`이고 `coord` property가 없어 이 read가 **구조적으로 항상
-> None**이었고, map-curated import POI가 통합 검색에서만 좌표 null이었다(좌표는 top-level
-> `lon`/`lat`에 있고 `admin_pois`/`kasi`는 정상 해석). 이제 같은 정본 추출기
-> `services/admin_pois.py::extract_feature_coord`에 위임한다 — top-level과
-> `coord`/`coordinate`/`location`/`geometry` 중첩, `lon`/`lng`/`longitude`/`x` 별칭, 숫자 강제
-> 변환을 모두 처리하므로 기존 동작의 상위집합이다. 회귀 테스트는
-> `apps/api/tests/unit/test_search_snapshot_coord.py`.
-
 ## 8. 드리프트 게이트 (T-210e, 2026-06-11)
 
 수기 httpx client(kor_travel_map 권고)가 kor_travel_map `openapi.user.json`과 silent drift하는 것을 막는다.
 
 - **vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-user.json` — Pinvi가 구현 기준으로
-  삼은 kor_travel_map main commit의 **전체 파일**(현 핀 `8880c29b`, T-VN-H07B에서 재동기화).
+  삼은 kor_travel_map main commit의 **전체 파일**(현 핀 `8c5bdcf8`, T-VN-32C PR-2에서 재동기화).
   pinned SHA-256은 본 문서 상단과 `test_kor_travel_map_contract.py`가 함께 고정한다.
+  **profile 분리(Map `96814b2a`)**: ServiceToken 전용 batch 2경로
+  (`/v1/features/batch`·`/v1/features/weather/batch`)는 user profile에서 분리돼
+  `openapi.service.json` 소속이다. user client는 여전히 두 경로를 호출하므로 같은 테스트가
+  해당 경로·batch schema 계약을 vendored `kor-travel-map-openapi-service.json`
+  (byte-핀 소유는 `test_kor_travel_map_cache_target_contract.py`) 기준으로 검증하고,
+  두 profile에 겹치는 schema(`Meta`/`WeatherMetricOut` 등)는 양쪽 모두에서 고정한다.
 - **계약 테스트**: `apps/api/tests/unit/test_kor_travel_map_contract.py` (CI `pytest tests/unit`에서 실행) —
   (1) user client 경로(`/v1/features/*`·`/v1/categories`·`/v1/public/*`) ⊆ 스냅샷 paths,
   (2) 매핑(`features.py`/`public.py`가 읽는 FeatureSummary/ClusterSummary/
@@ -660,8 +606,8 @@ admin `GET /v1/admin/features/curated/{id}/detail-snapshot`이고, 이 표면에
   > 중복 고정하면 Map의 무해한 additive 변경마다 Pinvi가 false-red가 된다(Map 0066의
   > `external_component_id` 추가가 실제 사례). 공개 curated 표면(`PublicCurated*`/
   > `PublicCuration*`)도 user client가 호출하지 않으므로 본 gate 대상이 아니다 — Pinvi의 실제
-  > 큐레이션 런타임 표면은 admin `/v1/admin/features/curated/{id}/detail-snapshot`이고 그
-  > 필드레벨 계약은 T-VN-H07D(#815)가 소유한다.
+  > 큐레이션 runtime은 user profile 대상이 아니다. 별도 service OpenAPI provenance가
+  > canonical collection/item snapshot 계약을 소유한다.
 
 - **갱신 절차** (kor_travel_map 스펙 변경 시):
   1. 검토한 upstream exact commit에서 `cp ../kor-travel-map/packages/kor-travel-map-api/openapi.user.json

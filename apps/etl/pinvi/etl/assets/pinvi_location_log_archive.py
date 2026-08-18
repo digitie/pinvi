@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from calendar import monthrange
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from dagster import Backoff, RetryPolicy, asset
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -13,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from pinvi.etl.resources import PinviDatabaseResource
 from pinvi.etl.sql.retention import (
     LOCATION_LOG_ARCHIVE_PURPOSE_SQL as _LOCATION_LOG_ARCHIVE_PURPOSE_SQL,
+)
+from pinvi.etl.sql.retention import (
     LOCATION_LOG_ARCHIVE_SUMMARY_SQL as _LOCATION_LOG_ARCHIVE_SUMMARY_SQL,
 )
 

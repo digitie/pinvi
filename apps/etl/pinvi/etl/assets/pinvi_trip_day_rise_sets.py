@@ -117,7 +117,8 @@ async def _fill_one(*, conn_engine: Any, client: Any, row: dict[str, Any]) -> st
                 },
             )
         return "success"
-    except Exception as exc:
+    # Provider exception은 source row failure로 기록해야 한다.
+    except Exception as exc:  # noqa: BLE001
         async with conn_engine.begin() as conn:
             await conn.execute(
                 _MARK_FAILED,

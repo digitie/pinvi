@@ -1,11 +1,20 @@
 """kor_travel_map `openapi.user.json` 계약 드리프트 게이트 (T-210e).
 
-kor_travel_map `94ace1a9`(T-VN-16C 다중 날짜 weather batch 포함)의 전체 스냅샷을 byte-for-byte
+kor_travel_map `8c5bdcf8`(T-VN-32C PR-2 — read 응답 feature_id UUID 정본화, description-only 스펙 변경 포함)의 전체 스냅샷을 byte-for-byte
 vendor하고 pinned SHA-256으로 수기 graft를 차단한다. 스냅샷(`tests/contract/kor-travel-map-openapi-user.json`)에 Pinvi user client
 (`clients/kor_travel_map.py`) + 그 소비자(`api/v1/features.py`·`public.py`·`search.py`·
 `admin/category_mappings.py`, `services/place_search.py`·`feature_detail.py`)가 의존하는
 **경로·응답 필드**가 존재하는지, 그리고 그 필드의 **타입 계약**
 (type/format/enum/array item/map value/required/nullable)이 유지되는지 검증한다(T-VN-H07B).
+
+**profile 분리(Map `96814b2a` "split service openapi profile")**: ServiceToken 전용
+batch 2경로(`/v1/features/batch`·`/v1/features/weather/batch`)는 user profile에서
+분리돼 `openapi.service.json` 소속이 됐다. user client는 여전히 두 경로를 호출하므로
+본 게이트는 해당 경로·batch schema 계약을 vendored **service** 스냅샷
+(`tests/contract/kor-travel-map-openapi-service.json` — byte-핀은
+`test_kor_travel_map_cache_target_contract.py` 소유)에서 검증하고, 나머지는 user
+스냅샷에서 검증한다. 두 스냅샷에 모두 있는 schema는 양쪽 모두에서 계약을 고정한다
+(profile 간 silent 분화 차단).
 
 운영: kor_travel_map 스펙이 갱신되면 스냅샷을 교체(`docs/integrations/kor-travel-map-rest-api.md`
 "드리프트 게이트" 절)하고 본 테스트를 돌린다. 우리 가정이 깨졌으면 여기서 실패 → client/매핑을
@@ -32,8 +41,20 @@ from app.schemas.public import (
 )
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
-_UPSTREAM_COMMIT = "94ace1a9a27d204fabb9645d1ffd43c47ea60079"
-_SNAPSHOT_SHA256 = "0a7cabb3c10fedc55ff306fb3c0d856122108fe74da63877a02c8c8092209990"
+_UPSTREAM_COMMIT = "8c5bdcf8ce892439a8bb8e0013edf74127bf076a"
+_SNAPSHOT_SHA256 = "66fc83b3ae918b2f82ae9cf02bea162d8fa84967567e2a450493d93b1953e801"
+
+# service profile 스냅샷 — byte-핀·재추출 절차는 cache-target 계약 테스트
+# (`test_kor_travel_map_cache_target_contract.py`)가 소유하고 본 파일은 읽기만 한다.
+_SERVICE_SNAPSHOT = (
+    Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-service.json"
+)
+
+# Map `96814b2a`가 user profile에서 분리한 ServiceToken 전용 경로 — user client가
+# 여전히 호출하므로 계약은 service 스냅샷 기준으로 검증한다.
+_SERVICE_PROFILE_PATHS: frozenset[str] = frozenset(
+    {"/v1/features/batch", "/v1/features/weather/batch"}
+)
 
 # Pinvi user client(`clients/kor_travel_map.py`)가 호출하는 kor_travel_map 경로.
 _CLIENT_PATHS = [
@@ -42,8 +63,8 @@ _CLIENT_PATHS = [
     "/v1/features/search",
     "/v1/features/{feature_id}",
     "/v1/features/{feature_id}/weather",
-    "/v1/features/batch",
-    "/v1/features/weather/batch",
+    "/v1/features/batch",  # service profile (_SERVICE_PROFILE_PATHS)
+    "/v1/features/weather/batch",  # service profile (_SERVICE_PROFILE_PATHS)
     "/v1/categories",
     "/v1/public/beaches",
     "/v1/public/beaches/map-markers",
@@ -51,8 +72,7 @@ _CLIENT_PATHS = [
     "/v1/public/festivals/monthly",
     "/v1/public/festivals/map-markers",
     "/v1/public/festivals/{feature_id}",
-    # 큐레이션 import는 user 표면이 아니라 admin `/v1/admin/features/curated/{id}/detail-snapshot`을
-    # 쓴다(ADR-049 — kor_travel_map PR #533이 public `*-copy` 표면을 폐지). user-contract gate 범위 밖.
+    # 큐레이션 import는 canonical service snapshot을 사용하며 user-contract gate 범위 밖이다.
 ]
 
 _CLIENT_QUERY_PARAMETERS: dict[str, set[str]] = {
@@ -100,9 +120,8 @@ _PUBLIC_API_KEY_SECURITY = [{"PublicApiKey": []}, {"ServiceToken": []}]
 # Map의 무해한 additive 변경마다 Pinvi가 false-red가 된다(Map migration 0066의
 # `external_component_id` 추가가 실제 사례). consumer는 "우리가 읽는 필드의 shape"만 본다.
 #
-# 공개 curated 표면(`PublicCurated*`/`PublicCuration*`)은 대상이 아니다 — user client가 호출하지
-# 않으며(ADR-049, Map PR #533이 public `*-copy` 폐지), Pinvi의 큐레이션 런타임 표면은 admin
-# `/v1/admin/features/curated/{id}/detail-snapshot`이라 T-VN-H07D(#815)가 소유한다.
+# 공개 curated 표면(`PublicCurated*`/`PublicCuration*`)은 대상이 아니다. PinVi의 큐레이션 런타임은
+# 별도 canonical service snapshot 계약이 소유한다.
 #
 # 참고(항상 None인 방어적 read — 대응 property가 user 표면에 없어 고정할 계약이 없다):
 #   * `dto.get("title")` — `_summary_from_kor_travel_map`/`_detail_from_kor_travel_map`/
@@ -742,18 +761,47 @@ def _spec() -> dict[str, Any]:
     return json.loads(_SNAPSHOT.read_text(encoding="utf-8"))
 
 
+def _service_spec() -> dict[str, Any]:
+    return json.loads(_SERVICE_SNAPSHOT.read_text(encoding="utf-8"))
+
+
+def _spec_for_path(
+    path: str, user_spec: dict[str, Any], service_spec: dict[str, Any]
+) -> dict[str, Any]:
+    """경로가 속한 profile의 스냅샷 — batch 2경로만 service, 나머지는 user."""
+    return service_spec if path in _SERVICE_PROFILE_PATHS else user_spec
+
+
+def _specs_containing_schema(
+    schema_name: str, user_spec: dict[str, Any], service_spec: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """schema를 선언한 모든 profile 스냅샷 — 겹치는 schema는 양쪽 다 고정한다."""
+    return [
+        spec for spec in (user_spec, service_spec) if schema_name in spec["components"]["schemas"]
+    ]
+
+
 def test_snapshot_is_kor_travel_map_user_surface() -> None:
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256, (
         f"vendored openapi.user.json이 kor_travel_map {_UPSTREAM_COMMIT} 원본과 다름"
     )
     assert _spec()["info"]["title"] == "kor-travel-map-user"
+    # service profile 스냅샷의 정체 확인 — byte-핀은 cache-target 계약 테스트 소유.
+    assert _service_spec()["info"]["title"] == "kor-travel-map-service"
 
 
 def test_client_paths_exist_in_snapshot() -> None:
-    paths = set(_spec()["paths"])
-    missing = [p for p in _CLIENT_PATHS if p not in paths]
+    user_spec, service_spec = _spec(), _service_spec()
+    missing = [
+        p for p in _CLIENT_PATHS if p not in _spec_for_path(p, user_spec, service_spec)["paths"]
+    ]
     assert not missing, (
         f"client가 의존하는 kor_travel_map 경로가 스냅샷에 없음(드리프트): {missing}"
+    )
+    # profile 분리 유지 확인 — batch가 user profile로 되돌아오면 이 분기 로직이 죽은
+    # 코드가 되므로 명시적으로 고정한다.
+    assert not _SERVICE_PROFILE_PATHS & set(user_spec["paths"]), (
+        "service profile 경로가 user 스냅샷에 다시 나타남 — profile 분기 재검토 필요"
     )
 
 
@@ -776,8 +824,8 @@ def test_client_query_parameters_match_snapshot() -> None:
 
 
 def test_public_api_key_contract_is_header_only() -> None:
-    spec = _spec()
-    actual_scheme = spec["components"]["securitySchemes"].get("PublicApiKey")
+    user_spec, service_spec = _spec(), _service_spec()
+    actual_scheme = user_spec["components"]["securitySchemes"].get("PublicApiKey")
     assert isinstance(actual_scheme, dict)
     assert {key: actual_scheme.get(key) for key in _PUBLIC_API_KEY_SCHEME} == (
         _PUBLIC_API_KEY_SCHEME
@@ -787,7 +835,9 @@ def test_public_api_key_contract_is_header_only() -> None:
         path: sorted(
             {
                 parameter["name"]
-                for operation in spec["paths"][path].values()
+                for operation in _spec_for_path(path, user_spec, service_spec)["paths"][
+                    path
+                ].values()
                 if isinstance(operation, dict)
                 for parameter in operation.get("parameters", [])
                 if parameter.get("in") == "query" and parameter.get("name") == "key"
@@ -802,8 +852,8 @@ def test_public_api_key_contract_is_header_only() -> None:
     security_problems = {
         path: operation.get("security")
         for path in _CLIENT_PATHS
-        if path not in {"/v1/features/batch", "/v1/features/weather/batch"}
-        for method, operation in spec["paths"][path].items()
+        if path not in _SERVICE_PROFILE_PATHS
+        for method, operation in user_spec["paths"][path].items()
         if method in {"get", "post"}
         if operation.get("security") != _PUBLIC_API_KEY_SECURITY
     }
@@ -811,18 +861,26 @@ def test_public_api_key_contract_is_header_only() -> None:
         f"public client 경로의 header security 계약이 다름: {security_problems}"
     )
 
-    for path in ("/v1/features/batch", "/v1/features/weather/batch"):
-        assert spec["paths"][path]["post"].get("security") == [{"ServiceToken": []}]
+    # batch 2경로는 service profile 소속 — ServiceToken 전용 계약을 service 스냅샷에서
+    # 고정하고, service profile에 PublicApiKey scheme 자체가 없음을 함께 고정한다.
+    for path in sorted(_SERVICE_PROFILE_PATHS):
+        assert service_spec["paths"][path]["post"].get("security") == [{"ServiceToken": []}]
+    assert "PublicApiKey" not in service_spec["components"]["securitySchemes"]
 
 
 def test_mapped_response_fields_exist_in_snapshot() -> None:
-    schemas = _spec()["components"]["schemas"]
+    user_spec, service_spec = _spec(), _service_spec()
     problems: list[str] = []
     for schema_name, fields in _SCHEMA_FIELDS.items():
-        props = set(schemas.get(schema_name, {}).get("properties", {}))
-        gone = fields - props
-        if gone:
-            problems.append(f"{schema_name}: {sorted(gone)}")
+        specs = _specs_containing_schema(schema_name, user_spec, service_spec)
+        if not specs:
+            problems.append(f"{schema_name}: schema가 어느 profile 스냅샷에도 없음")
+            continue
+        for spec in specs:
+            props = set(spec["components"]["schemas"][schema_name].get("properties", {}))
+            gone = fields - props
+            if gone:
+                problems.append(f"{schema_name}: {sorted(gone)}")
     assert not problems, (
         f"매핑이 의존하는 kor_travel_map 응답 필드가 스냅샷에 없음(드리프트): {problems}"
     )
@@ -1042,11 +1100,18 @@ def _assert_consumed_field(
 
 
 def test_consumed_response_fields_pin_types_formats_and_enums() -> None:
-    """Pinvi가 읽는 모든 필드의 type/format/enum/item/map value/required/nullable을 고정한다."""
-    spec = _spec()
+    """Pinvi가 읽는 모든 필드의 type/format/enum/item/map value/required/nullable을 고정한다.
+
+    schema를 선언한 **모든** profile 스냅샷(user·service)에서 검사한다 — 겹치는
+    schema(`Meta`/`WeatherMetricOut` 등)가 profile 간에 조용히 분화하면 여기서 드러난다.
+    """
+    user_spec, service_spec = _spec(), _service_spec()
     for schema_name, fields in _CONSUMED_FIELD_CONTRACTS.items():
-        for field, expected in fields.items():
-            _assert_consumed_field(spec, schema_name, field, expected)
+        specs = _specs_containing_schema(schema_name, user_spec, service_spec)
+        assert specs, f"{schema_name}: schema가 어느 profile 스냅샷에도 없음(consumer breaking)"
+        for spec in specs:
+            for field, expected in fields.items():
+                _assert_consumed_field(spec, schema_name, field, expected)
 
 
 def test_endpoint_data_schemas_bind_paths_to_pinned_containers() -> None:
@@ -1055,12 +1120,13 @@ def test_endpoint_data_schemas_bind_paths_to_pinned_containers() -> None:
     필드 계약은 schema 이름 기준이라, 경로가 다른 컨테이너를 가리키도록 바뀌면 모든 필드
     assertion이 green인 채로 소비만 깨진다. 이 테스트가 경로→컨테이너 link를 닫는다.
     """
-    spec = _spec()
-    schemas = spec["components"]["schemas"]
+    user_spec, service_spec = _spec(), _service_spec()
     assert {path for _method, path in _ENDPOINT_DATA_SCHEMAS} == set(_CLIENT_PATHS), (
         "client 경로와 컨테이너 link 표가 어긋남"
     )
     for (method, path), expected_container in _ENDPOINT_DATA_SCHEMAS.items():
+        spec = _spec_for_path(path, user_spec, service_spec)
+        schemas = spec["components"]["schemas"]
         operation = spec["paths"][path][method]
         response_schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
         response_name = str(response_schema.get("$ref", "")).rsplit("/", 1)[-1]
@@ -1078,7 +1144,7 @@ def test_endpoint_data_schemas_bind_paths_to_pinned_containers() -> None:
 
 def test_feature_batch_request_binds_to_pinned_container() -> None:
     """batch 요청 body도 5-state validator 계약의 request component에 결합한다."""
-    spec = _spec()
+    spec = _service_spec()
     request_schema = spec["paths"]["/v1/features/batch"]["post"]["requestBody"]["content"][
         "application/json"
     ]["schema"]
@@ -1090,7 +1156,7 @@ def test_feature_batch_request_binds_to_pinned_container() -> None:
 
 def test_weather_batch_request_binds_to_pinned_container() -> None:
     """weather batch body가 bitemporal request component에 결합되는지 고정한다."""
-    spec = _spec()
+    spec = _service_spec()
     request_schema = spec["paths"]["/v1/features/weather/batch"]["post"]["requestBody"]["content"][
         "application/json"
     ]["schema"]
@@ -1102,8 +1168,8 @@ def test_weather_batch_request_binds_to_pinned_container() -> None:
 
 def test_feature_batch_declares_service_unavailable_problem() -> None:
     """batch DB/transport 장애는 원천 상태가 아니라 명시적 RFC7807 503이다."""
-    spec = _spec()
-    for path in ("/v1/features/batch", "/v1/features/weather/batch"):
+    spec = _service_spec()
+    for path in sorted(_SERVICE_PROFILE_PATHS):
         response = spec["paths"][path]["post"]["responses"]["503"]
         schema = response["content"]["application/problem+json"]["schema"]
         assert schema["$ref"].rsplit("/", 1)[-1] == "ProblemDetail"
@@ -1115,9 +1181,10 @@ def test_response_meta_binds_to_pinned_meta_schemas() -> None:
     `data` 쪽과 대칭으로, 응답→`Meta`와 `Meta.cluster`/`Meta.page`→`ClusterMeta`/`PageMeta`
     link이 없으면 `ClusterMeta`/`PageMeta` 필드 계약이 응답과 결합되지 않는다.
     """
-    spec = _spec()
-    schemas = spec["components"]["schemas"]
+    user_spec, service_spec = _spec(), _service_spec()
     for method, path in _ENDPOINT_DATA_SCHEMAS:
+        spec = _spec_for_path(path, user_spec, service_spec)
+        schemas = spec["components"]["schemas"]
         operation = spec["paths"][path][method]
         response_schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
         response_name = str(response_schema.get("$ref", "")).rsplit("/", 1)[-1]
@@ -1125,13 +1192,16 @@ def test_response_meta_binds_to_pinned_meta_schemas() -> None:
         resolved, _nullable = _resolve_property(meta_property, f"{response_name}.meta")
         assert str(resolved.get("$ref", "")).rsplit("/", 1)[-1] == "Meta", (method, path, "meta")
 
-    for field, expected in (("cluster", "ClusterMeta"), ("page", "PageMeta")):
-        resolved, nullable = _resolve_property(
-            schemas["Meta"]["properties"][field], f"Meta.{field}"
-        )
-        assert str(resolved.get("$ref", "")).rsplit("/", 1)[-1] == expected, (field, expected)
-        assert nullable is True, (field, "nullable")
-        assert expected in _CONSUMED_FIELD_CONTRACTS, (field, f"{expected} 필드 계약 없음")
+    # `Meta` 자체는 두 profile에 모두 있으므로 cluster/page link도 양쪽에서 고정한다.
+    for spec in (user_spec, service_spec):
+        schemas = spec["components"]["schemas"]
+        for field, expected in (("cluster", "ClusterMeta"), ("page", "PageMeta")):
+            resolved, nullable = _resolve_property(
+                schemas["Meta"]["properties"][field], f"Meta.{field}"
+            )
+            assert str(resolved.get("$ref", "")).rsplit("/", 1)[-1] == expected, (field, expected)
+            assert nullable is True, (field, "nullable")
+            assert expected in _CONSUMED_FIELD_CONTRACTS, (field, f"{expected} 필드 계약 없음")
 
 
 def test_public_view_contracts_cover_every_validated_model_field() -> None:
