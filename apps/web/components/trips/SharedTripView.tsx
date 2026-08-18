@@ -1,8 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Loader2, MapPin, Share2 } from 'lucide-react';
+import { CalendarDays, Loader2, MapPin } from 'lucide-react';
 import { ApiError, tripApi } from '@pinvi/api-client';
 import type { TripSharedView } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
@@ -10,6 +9,7 @@ import { tripDaysToMapPoints } from '@pinvi/domain';
 import { TripDayHeader } from '@/components/trips/TripDayHeader';
 import { TripMapView } from '@/components/trips/TripMapView';
 import { TripPoiList } from '@/components/trips/TripPoiList';
+import { ButtonLink } from '@/components/ui/Button';
 import { formatTripDateRange, holidayLabel, holidaysByDate } from '@/lib/tripDateLabels';
 
 const VWORLD_API_KEY = process.env.NEXT_PUBLIC_VWORLD_API_KEY ?? '';
@@ -66,26 +66,40 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
 
   if (loading) {
     return (
-      <div className="flex min-h-64 items-center justify-center rounded-sm border border-hairline bg-white text-sm text-muted">
+      <div
+        className="flex min-h-64 items-center justify-center rounded-sm bg-surface-soft text-sm text-muted"
+        role="status"
+        aria-live="polite"
+      >
         <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-        불러오는 중…
+        여행을 불러오는 중…
       </div>
     );
   }
 
   if (error || !view) {
+    // 오류는 dead end가 아니라 원인 + 다음 행동(홈/로그인) — 404 페이지와 같은 구조·언어.
     return (
-      <div className="space-y-3">
-        <p
-          role="alert"
-          className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
-          data-testid="shared-error"
-        >
-          {error ?? '공유 링크가 만료되었거나 유효하지 않습니다.'}
-        </p>
-        <Link href="/" className="inline-block text-sm font-semibold text-primary hover:underline">
-          Pinvi 홈으로
-        </Link>
+      <div
+        className="max-w-md space-y-6 border-t-2 border-ink pt-6"
+        role="alert"
+        data-testid="shared-error"
+      >
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold tracking-tight text-ink">공유 링크를 열 수 없어요</h1>
+          <p className="text-base text-body">
+            {error ?? '공유 링크가 만료되었거나 유효하지 않습니다.'} 링크를 보낸 사람에게 새 링크를
+            요청하거나, 내 여행에서 직접 확인해 주세요.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <ButtonLink href="/" variant="primary">
+            홈으로
+          </ButtonLink>
+          <ButtonLink href="/login" variant="secondary">
+            로그인
+          </ButtonLink>
+        </div>
       </div>
     );
   }
@@ -95,11 +109,10 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
   return (
     <div className="space-y-5">
       <header className="space-y-2 border-b border-hairline pb-4">
-        <p className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-normal text-primary">
-          <Share2 className="h-3.5 w-3.5" aria-hidden="true" />
-          공유된 여행
-        </p>
-        <h1 className="truncate text-2xl font-bold text-ink md:text-3xl">{trip.title}</h1>
+        <p className="text-sm text-muted">공유된 여행 · 읽기 전용</p>
+        <h1 className="text-2xl font-bold tracking-tight text-ink [overflow-wrap:anywhere] md:text-3xl">
+          {trip.title}
+        </h1>
         <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
           <span className="inline-flex items-center gap-1">
             <CalendarDays className="h-4 w-4" aria-hidden="true" />
@@ -126,8 +139,8 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
                 onClick={() => setSelectedDayIndex(day.day_index)}
                 className={
                   active
-                    ? 'h-9 rounded-sm bg-ink px-3 text-sm font-semibold text-white'
-                    : 'h-9 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft'
+                    ? 'focus-ring min-h-11 rounded-sm bg-ink px-3 text-sm font-semibold text-on-primary'
+                    : 'focus-ring min-h-11 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft'
                 }
               >
                 {day.title ?? `${day.day_index}일차`}
@@ -141,7 +154,7 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
       )}
 
       {selectedDay && (
-        <TripDayHeader day={selectedDay} className="mb-3 rounded-sm bg-white p-3 shadow-card" />
+        <TripDayHeader day={selectedDay} className="mb-3 rounded-sm bg-surface-soft p-3" />
       )}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">

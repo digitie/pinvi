@@ -1,0 +1,13 @@
+[
+  {
+    "date": "2026-08-18",
+    "scope": "app",
+    "genre": "modern-minimal",
+    "macrostructure": "Narrative Workflow(/) · Workbench(app) · Long Document(legal·shared·404)",
+    "theme": "pinvi-locked (DESIGN.md Hallmark 잠금 시스템)",
+    "nav": "N1 (PublicMasthead)",
+    "footer": "Ft2 (PublicColophon)",
+    "enrichment": "Tier-B hand-built SVG (stage figures)",
+    "brief": "Pinvi 웹 공개 표면 재설계 — 감사 13C/26M/19m 후 시스템 잠금 + 랜딩·인증·공유·404 (PR-1+PR-2)"
+  }
+]

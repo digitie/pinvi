@@ -109,6 +109,31 @@
 - [x] T-309c — `FeatureDetailModal` 본문 + 마커→상세 모달(양 지도, opt-in enrichment, weather 제외).
       **PR #402 머지 완료**. feature-less POI 모달은 T-309b 통합. (ADR-056)
 
+## 웹 디자인 시스템 — Hallmark 감사·재설계 (2026-08-18)
+
+> 감사 정본: `docs/journal.md` 2026-08-18 항목(13 critical · 26 major · 19 minor, 7표면). 잠금 시스템:
+> `DESIGN.md` "Hallmark 잠금 시스템". 재설계는 시스템 → 공개 표면 → 앱 셸 → 여행 상세 → 나머지 순서의 PR 단위.
+
+- [x] **T-312** — Hallmark PR-1+PR-2: 시스템 잠금(`DESIGN.md` 섹션 추가, `cta`/`focus`/`shadow-overlay`/`zIndex`
+      토큰 + spring 삭제, Pretendard self-host, `.focus-ring` outline, `html/body overflow-x: clip`, keep-all) +
+      프리미티브(`components/ui/Button.tsx` Button/ButtonLink 8상태·44px, `FormField/Select/TextArea` 44px·16px)
+      + 공개 표면(랜딩 Narrative Workflow 재구성, `PublicMasthead/PublicColophon/Wordmark`, auth 레이아웃·
+      로그인·회원가입·verify-pending 재발송·verify-email, 공유 뷰 chrome+오류 상태, 404/FullPageMessage,
+      favicon·앱 아이콘·themeColor Rausch/canvas, 내부 문구 제거). (완료: 2026-08-18, PR #TBD, claude → tasks-done.md)
+- [ ] **T-313** — Hallmark PR-1b(기계적 코드모드): `bg-white→bg-canvas`(136), `text-white→text-on-primary`(96),
+      `bg-black/NN→bg-scrim/50`, `shadow-sm/md/lg/xl→shadow-card|shadow-overlay`(21), `'...'→'…'`, `vh/svh→dvh`,
+      미정의 `bg-surface`(4) 정정, favicon/앱 아이콘 PNG(192/512/apple-touch) rasterize. 판단 없는 diff — 별도
+      PR로 리뷰 크기 관리. eslint-plugin-tailwindcss `no-custom-classname`·`text-[NNpx]` 차단 검토.
+- [ ] **T-314** — Hallmark PR-3(앱 셸+대시보드+추천 shelf): `AppShell` ground `bg-canvas`, <md 하단 탭바,
+      /trips·/notice-plans eyebrow 삭제·accent 1개, skeleton/empty/error 3종, `role=tab`→`aria-pressed` 세그먼트,
+      `useMobileWebLayout` UA 스니핑→`matchMedia`, TripDashboard 링크 안 버튼 span 제거(Mj24).
+- [ ] **T-315** — Hallmark PR-4(여행 상세): 3중 컨테인먼트 해소, `components/ui/Dialog.tsx`(useModalDialog 내장,
+      scrim/overlay 토큰) 신설 후 모달 10곳 이관, 컨트롤 중복(일자 추가 ×4) 정리, 마커 팔레트 UI 오용
+      (TripDayHeader 일출/일몰) 제거, `bg-primary/10` accent 배경 제거.
+- [ ] **T-316** — Hallmark PR-5(지도·설정·파일·법무): 파괴적 액션 확인 정책(토큰 회수·동의 철회·연결 해제 =
+      Dialog, 가역 = 즉시+Undo, `window.confirm` 제거), 탐색 지도 장식 칩·상시 오류 dl 삭제, 설정 Admin chrome
+      분리(`SettingsHeader`), DSR/신고 raw JSON textarea → 일반 필드, 법무 measure 65ch·초안 배너 중립화.
+
 ## 실시간 WebSocket
 
 - [x] T-WS-C7 — trip WebSocket reject(`accept→close`)에 env-tunable settle(기본 0.25s)을 넣어 101

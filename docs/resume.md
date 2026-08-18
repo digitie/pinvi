@@ -1,5 +1,18 @@
 # resume.md
 
+## 2026-08-18 (claude) — T-312 Hallmark 감사 → 시스템 잠금 + 공개 표면 재설계
+
+**방금**: `hallmark audit`(웹 7표면 + prod 실렌더) 13C/26M/19m → `DESIGN.md`에 "Hallmark 잠금 시스템" 추가(genre
+modern-minimal, family Narrative Workflow/Workbench/Long Document, `cta` 토큰으로 CTA 대비 4.9:1, Pretendard
+self-host, focus outline) + `components/ui/Button.tsx`·입력 프리미티브 + 랜딩(Narrative Workflow)·인증·공유 뷰·404
+재설계 + 브랜드 자산(Rausch 핀 마크). PR #TBD. 검증: typecheck/lint/vitest 100/build/e2e 9 + 375/1280 렌더.
+
+**다음 한 작업**: PR #TBD 적대적 리뷰 2인 → CI → N150 prod 배포(`ktdctl pinvi --build`, web 변경만) → prod 공개
+페이지 live UI e2e(375/1280 스크린샷 + not-found/shared/legal/login) → 머지 → T-313(코드모드) → T-314(앱 셸).
+**#444(codex T-VN-40/41)는 리뷰 2인 request_changes·deploy unsafe(P0: 빈 curation 토큰 → prod API 부팅 실패, P1:
+provenance가 dangling Map 커밋·Map #975 미머지, 마이그레이션 10건 수동 적용 필요)** — Map #975 머지·재핀 전 머지 금지,
+P0/P2/P3는 브랜치 fix 커밋 가능(코멘트 참조).
+
 ## 2026-08-06 (codex) — T-VN-41-F1D-C1b PinVi seven-image provenance PR 준비
 
 n150 F1D candidate는 PinVi API의 OCI revision/environment label만 검증 가능했고 Web·Dagster에는

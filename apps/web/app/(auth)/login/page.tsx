@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { LoginRequestSchema } from '@pinvi/schemas';
 import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
 import { FormField } from '@/components/forms/FormField';
+import { Button } from '@/components/ui/Button';
 import { validateForm, type FieldErrors } from '@pinvi/domain';
 
 const apiClient = new ApiClient({
@@ -189,13 +190,17 @@ export default function LoginPage() {
 
   const oauthDisabled = (provider: OAuthProviderName) =>
     oauthProvidersLoading || !oauthProviders[provider] || oauthLoading !== null;
+  // 로딩 중에는 skeleton만, 완료 후에는 활성 provider만 — 도착 뒤 버튼이 사라지는 layout shift 방지.
   const visibleOAuthProviders = (['google', 'naver', 'kakao'] as const).filter(
-    (provider) => oauthProvidersLoading || oauthProviders[provider],
+    (provider) => !oauthProvidersLoading && oauthProviders[provider],
   );
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-ink">로그인</h1>
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold tracking-tight text-ink">로그인</h1>
+        <p className="text-sm text-muted">이메일과 비밀번호로 로그인하세요.</p>
+      </div>
 
       <form onSubmit={onSubmit} className="space-y-4" data-testid="login-form" noValidate>
         <FormField
@@ -232,21 +237,21 @@ export default function LoginPage() {
 
         {unverifiedEmail && (
           <div
-            className="space-y-2 rounded-sm border border-hairline bg-surface p-3"
+            className="space-y-2 rounded-sm bg-surface-soft p-3"
             data-testid="resend-verification"
           >
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={onResend}
-              disabled={resendLoading}
-              className="text-sm font-semibold text-primary underline disabled:opacity-60"
+              loading={resendLoading}
               data-testid="resend-verification-button"
             >
-              {resendLoading ? '인증 메일 보내는 중...' : '인증 메일 다시 보내기'}
-            </button>
+              {resendLoading ? '인증 메일 보내는 중…' : '인증 메일 다시 보내기'}
+            </Button>
             {resendNotice && (
               <p
-                className="text-xs text-muted"
+                className="text-sm text-muted"
                 role="status"
                 data-testid="resend-verification-notice"
               >
@@ -256,59 +261,64 @@ export default function LoginPage() {
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-sm bg-primary py-3 text-sm font-semibold text-white hover:bg-primary-active disabled:opacity-60"
-          data-testid="login-submit"
-        >
-          {loading ? '로그인 중...' : '로그인'}
-        </button>
+        <Button type="submit" fullWidth loading={loading} data-testid="login-submit">
+          {loading ? '로그인 중…' : '로그인'}
+        </Button>
       </form>
 
-      <p className="text-center text-xs text-muted">
+      <p className="text-center text-sm text-muted">
         계정이 없으신가요?{' '}
-        <Link href="/signup" className="text-primary underline">
+        <Link
+          href="/signup"
+          className="focus-ring rounded-sm font-medium text-ink underline decoration-hairline underline-offset-4 hover:decoration-ink"
+        >
           회원가입
         </Link>
       </p>
 
-      <div className="flex items-center gap-3" aria-hidden="true">
-        <span className="h-px flex-1 bg-hairline" />
-        <span className="text-xs text-muted">또는</span>
-        <span className="h-px flex-1 bg-hairline" />
-      </div>
+      {/* 소셜 로그인 — provider가 하나도 없으면(로딩 완료 후) 구분선·섹션을 렌더하지 않는다. */}
+      {oauthProvidersLoading || visibleOAuthProviders.length > 0 || oauthError ? (
+        <>
+          <div className="flex items-center gap-3" aria-hidden="true">
+            <span className="h-px flex-1 bg-hairline" />
+            <span className="text-sm text-muted">또는</span>
+            <span className="h-px flex-1 bg-hairline" />
+          </div>
 
-      <div className="space-y-2">
-        {oauthError && (
-          <p className="text-sm text-error-text" data-testid="oauth-error">
-            {oauthError}
-          </p>
-        )}
+          <div className="space-y-2" aria-busy={oauthProvidersLoading || undefined}>
+            {oauthError && (
+              <p className="text-sm text-error-text" role="alert" data-testid="oauth-error">
+                {oauthError}
+              </p>
+            )}
 
-        {visibleOAuthProviders.map((provider) => {
-          const label = OAUTH_PROVIDER_LABELS[provider];
-          return (
-            <button
-              key={provider}
-              type="button"
-              disabled={oauthDisabled(provider)}
-              onClick={() => onOAuthStart(provider)}
-              className="flex w-full items-center justify-center gap-2 rounded-sm border border-hairline bg-white px-3 py-3 text-sm font-semibold text-ink hover:bg-surface disabled:opacity-60"
-              data-testid={`${provider}-oauth-start`}
-              aria-busy={oauthLoading === provider}
-            >
-              <span
-                className="flex h-5 w-5 items-center justify-center rounded-full border border-hairline text-xs font-bold"
+            {oauthProvidersLoading ? (
+              // 로딩 중 자리 고정 — 버튼 1개 높이(44px)만큼 skeleton, 도착 후 layout shift 없음.
+              <div
+                className="min-h-11 animate-pulse rounded-sm bg-surface-soft"
                 aria-hidden="true"
-              >
-                {label[0]}
-              </span>
-              {oauthLoading === provider ? `${label} 연결 중...` : `${label}로 시작`}
-            </button>
-          );
-        })}
-      </div>
+              />
+            ) : null}
+
+            {visibleOAuthProviders.map((provider) => {
+              const label = OAUTH_PROVIDER_LABELS[provider];
+              return (
+                <Button
+                  key={provider}
+                  variant="secondary"
+                  fullWidth
+                  disabled={oauthDisabled(provider)}
+                  loading={oauthLoading === provider}
+                  onClick={() => onOAuthStart(provider)}
+                  data-testid={`${provider}-oauth-start`}
+                >
+                  {oauthLoading === provider ? `${label} 연결 중…` : `${label}로 계속하기`}
+                </Button>
+              );
+            })}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

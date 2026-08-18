@@ -239,3 +239,175 @@ There are no progressive elevation tiers — the system either has the one shado
 - **Map view styling:** the search-results map uses Mapbox-tinted tiles with custom Rausch markers; not captured here.
 - **Form input error states:** error text color (`{colors.primary-error-text}`) is documented, but the full input outline + helper-text combination on validation failure was not visible in the captured surfaces.
 - **Sub-brand palettes:** Luxe (`{colors.luxe}`) and Plus (`{colors.plus}`) are documented as tokens, but their full sub-system (typography overrides, surface treatment) lives on separate sub-domains and is not captured here.
+
+## Hallmark 잠금 시스템 (2026-08-18, design-system-managed)
+
+> 이 섹션은 위 Airbnb reference를 Pinvi 웹·모바일에 **잠근** 결과다. Hallmark(`hallmark audit`/`redesign`)와
+> 모든 UI 작업은 이 섹션 + `docs/design/styleseed-rules.md`를 정본으로 읽는다. 페이지마다 다른 테마·구조를 고르지
+> 않는다(다양화 규칙 역전 — 페이지 간 **일관성**이 목표). 시스템을 바꾸려면 페이지에서 override하지 말고 이 섹션을 먼저 고친다.
+> 근거: 2026-08-18 Hallmark 감사(13 critical · 26 major · 19 minor, `docs/journal.md`).
+
+### Genre
+
+**modern-minimal** — 흰 canvas, 단일 accent, sans 일관, 절제된 카드 표면, 모션 최소. (playful/editorial 아님.)
+
+### Macrostructure family
+
+- **마케팅(`/`)**: Narrative Workflow(1.0 계획 → 2.0 기록 → 3.0 공유) — 비대칭 hero(H2 diptych) + F4 step sequence + 하단 단일 CTA. 3장 동일 카드·뷰포트 중앙 hero 금지.
+- **앱(`/trips`, `/trips/[id]`, `/map`, 설정, 파일)**: Workbench — 콘텐츠 우선, hero 없음. 컨테인먼트 1층 규칙(카드 안 카드 금지, 리스트는 hairline row divider, 패널은 `surface-soft` 1층). 상단은 요약, 아래로 갈수록 밀도↑.
+- **콘텐츠(법무, 공유 뷰, 404/오류)**: Long Document — 좌정렬 문단, `max-w-[65ch]`, hairline/ink top rule, 카드·그림자 없음.
+- 공개 chrome: nav **N1**(워드마크 + 최대 2 액션, `components/app/PublicChrome.tsx`), footer **Ft2**(1줄 colophon + 법무 링크). 앱 셸은 `AppShell`(활성 탭 = ink 2px 밑줄, Rausch pill 아님).
+
+### Theme (토큰은 `@pinvi/design-tokens`가 정본 — hex/OKLCH 병기)
+
+| 역할              | 토큰                                           | hex                                   | OKLCH                                                                   |
+| ----------------- | ---------------------------------------------- | ------------------------------------- | ----------------------------------------------------------------------- |
+| paper             | `canvas`                                       | #ffffff                               | oklch(100% 0 0)                                                         |
+| paper-2           | `surface-soft` / `surface-strong`              | #f7f7f7 / #f2f2f2                     | oklch(97.6% 0 0) / oklch(96.1% 0 0)                                     |
+| rule              | `hairline` / `hairline-soft` / `border-strong` | #dddddd / #ebebeb / #c1c1c1           | oklch(89.8% 0 0) / oklch(94% 0 0) / oklch(81.1% 0 0)                    |
+| ink               | `ink` / `body` / `muted` / `muted-soft`        | #222222 / #3f3f3f / #6a6a6a / #929292 | oklch(25.2% 0 0) / oklch(36.8% 0 0) / oklch(52.4% 0 0) / oklch(66% 0 0) |
+| accent(브랜드)    | `primary` (Rausch)                             | #ff385c                               | oklch(65.8% 0.231 17)                                                   |
+| **cta(채운 CTA)** | `cta` / `cta-hover`                            | #e00b41 / #c8093a                     | oklch(57.7% 0.228 18.5) / oklch(53% 0.209 18.2)                         |
+| focus             | `focus`                                        | #ff385c                               | oklch(65.8% 0.231 17)                                                   |
+| error / success   | `error-text` / `success-text`                  | #c13515 / #1b873f                     | oklch(53.9% 0.182 33.7) / —                                             |
+
+**대비 결정(C5)**: white 라벨을 Rausch `#ff385c` 위에 올리면 3.5:1(AA 미달)이라 **본문 크기 채운 CTA는 `cta`(#e00b41, 4.9:1)**를 쓴다. Rausch는 아이콘·워드마크·포커스 링·≥24px 텍스트 전용. 인라인 링크는 `text-ink underline`(hairline decoration → hover ink); `muted-soft`는 disabled 텍스트 전용(본문 3.1:1 미달). accent는 뷰포트당 1~2 moment(페이지당 채운 primary CTA 1개, 나머지는 secondary/ghost).
+
+### Typography
+
+- Display: **Pretendard Variable** 700, `tracking-tight`(-0.025em), 로만(이탤릭 헤더 금지). hero h1 `text-4xl md:text-5xl`(36/48px, viewport 스케일 없음), 섹션 h2 `text-2xl md:text-3xl`.
+- Body: Pretendard Variable 400 `text-base`(16px, 입력 포함 — iOS 확대 방지). 보조 `text-sm`(14px). 12px 이하 텍스트 금지(뱃지 예외 `text-xs` 600).
+- Mono(단계 번호·ref 코드): 시스템 mono fallback.
+- 한글 줄바꿈: `word-break: keep-all` + `overflow-wrap: break-word`(globals.css body).
+- 로딩: npm `pretendard` dynamic subset(`@import` in globals.css, self-hosted, `font-display: swap`) — 외부 CDN 금지.
+
+### Spacing / Shape / Elevation
+
+- 4pt 스케일(Tailwind 기본) + `spacing.section` 64px. 표면 `p-6`/`px-6` 기준(모바일 동일 24px).
+- radius: 버튼·입력 `rounded-sm`(8px), 카드 `rounded-md`(14px), pill `rounded-full`.
+- 그림자 **2 티어만**: `shadow-card`(hover 카드·드롭다운) / `shadow-overlay`(모달·시트), 둘 다 ≤8% opacity. `shadow-sm/md/lg/xl` 금지. scrim `bg-scrim/50` 단일.
+- z-index 이름 5단: `z-nav < z-panel < z-overlay < z-modal < z-toast`.
+
+### Motion
+
+- easing `ease-pinvi`(cubic-bezier(0.2,0,0,1)) 단일, duration `fast 100 / normal 200 / moderate 300`. overshoot(spring)·scale·layout 속성 애니메이션 금지. 리빌 패턴 없음(페이지는 정적으로 완성).
+- `prefers-reduced-motion: reduce` 전역(≤0.01ms).
+- 포커스 링은 `.focus-ring` = `focus-visible:outline-2 outline-focus outline-offset-2`(outline은 transition에 안 묶여 즉시 표시).
+
+### Microinteractions stance
+
+- 성공은 조용히(인라인 텍스트/`role=status`), 축하 토스트 없음. 실패는 원인 + 회복 행동. 로딩은 형태가 정해진 목록/카드는 skeleton, 인라인 액션은 버튼 스피너(라벨 유지, `aria-busy`).
+- 파괴적·비가역 액션(토큰 회수·동의 철회·연결 해제·삭제) = 공용 확인 다이얼로그(`useModalDialog`, danger tone). 가역 액션 = 즉시 실행 + Undo/상태 문구. `window.confirm` 금지.
+- hover 툴팁 800ms / focus 0ms. 터치 타깃 44px(`min-h-11`, `.touch-target`), `sm` 크기는 coarse pointer에서 44px 승격.
+
+### CTA voice (`components/ui/Button.tsx`)
+
+- Primary: `bg-cta text-on-primary` 채움, `rounded-sm`, `min-h-11 px-5 text-base font-semibold`, hover/active `bg-cta-hover`, disabled `bg-primary-disabled text-cta-hover`. 카피는 동사구("무료로 시작하기", "다시 보내기").
+- Secondary: `border border-ink text-ink bg-canvas`, hover `surface-soft`. Ghost: 텍스트만. Danger: `bg-error-text`.
+- 8상태 필수: default · hover · focus-visible · active · disabled(3채널) · loading · error · success(`data-state`).
+- 탐색은 `ButtonLink`(`<a>`), 상태 변경은 `Button`(`<button>`) — 역할을 섞지 않는다. 입력은 `components/forms/FormField|FormSelect|FormTextArea`(`inputClassName`, 44px·16px·hint/error 단일 슬롯).
+
+### Per-page allowances
+
+- 마케팅 페이지: 타이포 우선. enrichment는 Tier-A CSS art / Tier-B 손그림 SVG(토큰 색만)까지. 스톡 사진·Lottie·가짜 브라우저 chrome 금지.
+- 앱 페이지: enrichment 없음 — 기능이 페이지를 만든다. eyebrow(uppercase 소형 라벨) 금지, 맥락은 h1 아래 muted 1줄.
+- 콘텐츠 페이지: 타이포만.
+- Narrative Workflow의 단계 번호(1.0/2.0/3.0)는 순서 콘텐츠라 허용, 태그는 항상 제목 위 세로 스택.
+
+### 페이지가 반드시 공유하는 것 / 달라도 되는 것
+
+- 공유: 워드마크(`components/app/Wordmark.tsx` — 핀 마크 = favicon/앱 아이콘과 동일 path), accent와 배치, Pretendard, CTA voice, 입력 프리미티브, 상태 UI 4종 정책, 법무 colophon.
+- 차이 허용: family 안의 macrostructure(마케팅 서브페이지가 생기면 Long Document/Split Studio 가능), hero 아키타입, 마케팅 enrichment 티어.
+
+### 잔여 이탈(감사 기준, 후속 PR로 수렴)
+
+`bg-white`/`text-white`/`bg-black/NN` 토큰 우회(코드모드), `shadow-lg/xl` 21곳, 44px 미달 버튼 다수, `useMobileWebLayout` UA 스니핑, 앱 셸 회색 ground, 모달 셸 손복사, skeleton 부재, 탭 시맨틱, 관리자 chrome 유출(설정) — `docs/tasks.md` T-312~ 참조.
+
+### Exports
+
+```css
+/* tokens.css — Tailwind 프로젝트에서는 @pinvi/design-tokens preset이 소비 지점. 이식용 요약. */
+:root {
+  --color-paper: oklch(100% 0 0);
+  --color-paper-2: oklch(97.6% 0 0);
+  --color-ink: oklch(25.2% 0 0);
+  --color-ink-2: oklch(52.4% 0 0);
+  --color-rule: oklch(89.8% 0 0);
+  --color-accent: oklch(65.8% 0.231 17);
+  --color-cta: oklch(57.7% 0.228 18.5);
+  --color-cta-hover: oklch(53% 0.209 18.2);
+  --color-accent-ink: oklch(100% 0 0);
+  --color-focus: oklch(65.8% 0.231 17);
+  --font-display: 'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', system-ui, sans-serif;
+  --font-body: 'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', system-ui, sans-serif;
+  --font-outlier: ui-monospace, 'SF Mono', monospace;
+  --space-3xs: 0.25rem;
+  --space-2xs: 0.5rem;
+  --space-xs: 0.75rem;
+  --space-sm: 1rem;
+  --space-md: 1.5rem;
+  --space-lg: 2rem;
+  --space-xl: 3rem;
+  --space-2xl: 4rem;
+  --space-3xl: 6rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 1.875rem;
+  --text-display: 3rem;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --dur-short: 200ms;
+  --radius-input: 8px;
+  --radius-card: 14px;
+  --radius-pill: 9999px;
+  --shadow-card:
+    0 0 0 1px rgb(0 0 0 / 0.02), 0 2px 6px rgb(0 0 0 / 0.04), 0 4px 8px rgb(0 0 0 / 0.08);
+  --shadow-overlay: 0 0 0 1px rgb(0 0 0 / 0.02), 0 8px 24px rgb(0 0 0 / 0.08);
+}
+```
+
+```css
+/* Tailwind v4 @theme(현재는 v3 preset `packages/design-tokens/tailwind-preset.cjs`가 정본) */
+@theme {
+  --color-canvas: #ffffff;
+  --color-ink: #222222;
+  --color-primary: #ff385c;
+  --color-cta: #e00b41;
+  --font-sans: 'Pretendard Variable', Pretendard, system-ui, sans-serif;
+  --ease-pinvi: cubic-bezier(0.2, 0, 0, 1);
+}
+```
+
+```json
+{
+  "color": {
+    "paper": { "$value": "oklch(100% 0 0)", "$type": "color" },
+    "ink": { "$value": "oklch(25.2% 0 0)", "$type": "color" },
+    "accent": { "$value": "oklch(65.8% 0.231 17)", "$type": "color" },
+    "cta": { "$value": "oklch(57.7% 0.228 18.5)", "$type": "color" }
+  },
+  "font": {
+    "display": { "$value": "Pretendard Variable", "$type": "fontFamily" },
+    "body": { "$value": "Pretendard Variable", "$type": "fontFamily" }
+  },
+  "space": { "md": { "$value": "1.5rem", "$type": "dimension" } }
+}
+```
+
+```css
+/* shadcn/ui 변수 매핑 */
+:root {
+  --background: 100% 0 0;
+  --foreground: 25.2% 0 0;
+  --primary: 57.7% 0.228 18.5;
+  --primary-foreground: 100% 0 0;
+  --muted: 97.6% 0 0;
+  --muted-foreground: 52.4% 0 0;
+  --border: 89.8% 0 0;
+  --input: 89.8% 0 0;
+  --ring: 65.8% 0.231 17;
+  --radius: 8px;
+}
+```

@@ -4,6 +4,20 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-08-18
+
+- [x] **T-312** — Hallmark 감사(웹 7표면 13C/26M/19m) → 디자인 시스템 잠금 + 공개 표면 재설계(PR-1+PR-2).
+      (완료: 2026-08-18, PR #TBD, claude)
+      `DESIGN.md` "Hallmark 잠금 시스템"(modern-minimal · Narrative Workflow/Workbench/Long Document · N1/Ft2 · OKLCH
+      토큰 · 대비 결정 `cta`=#e00b41 4.9:1 · 모션/상태/CTA voice/허용 범위/exports) 추가; `@pinvi/design-tokens`에
+      `cta`/`cta-hover`/`focus`/`shadow-overlay`/`zIndex` + `spring` 삭제 + Pretendard Variable; globals에 self-host
+      폰트·`overflow-x: clip`·keep-all·outline `.focus-ring`·`.checkbox`; `components/ui/Button.tsx`(8상태·44px) +
+      `FormField/Select/TextArea` `inputClassName`; `PublicMasthead/PublicColophon/Wordmark`; 랜딩 Narrative Workflow
+      재구성(3카드·내부 문구 삭제), (auth) 레이아웃·로그인·회원가입(전문 링크·20px 체크박스·disabled 사유)·
+      verify-pending 재발송·verify-email, 공유 뷰 chrome/오류 상태, `FullPageMessage`/404 flat + chrome, `AppShell`
+      워드마크·밑줄 탭, favicon/앱 아이콘/themeColor Rausch·canvas. 검증: typecheck/lint 0, vitest 100, build,
+      e2e 9, 375/1280 실렌더. 적대적 리뷰 2인. 후속 T-313~T-316.
+
 ## 2026-08-04
 
 - [x] **T-VN-41-P** — n150 격리 generation 7 cache-target paired live 증명.

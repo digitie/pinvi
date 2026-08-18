@@ -5,9 +5,14 @@
 
 export const colors = {
   // 브랜드 / accent
-  primary: '#ff385c', // Rausch — 모든 primary CTA / 검색 orb / heart save
+  primary: '#ff385c', // Rausch — 브랜드 accent: 아이콘·워드마크·포커스 링·≥24px 텍스트(white 위 3.5:1)
   'primary-active': '#e00b41',
   'primary-disabled': '#ffd1da',
+  // 채운(filled) CTA 배경 — white 라벨 4.9:1(AA). Rausch #ff385c 위 white 14~16px는 3.5:1로 미달이라
+  // 본문 크기 CTA는 이 토큰을 쓴다(DESIGN.md "Hallmark 잠금 시스템" 대비 결정).
+  cta: '#e00b41',
+  'cta-hover': '#c8093a', // hover/pressed — 5.9:1
+  focus: '#ff385c', // focus-visible outline — UI 컴포넌트 대비 3:1 충족
   luxe: '#460479',
   plus: '#92174d',
 
