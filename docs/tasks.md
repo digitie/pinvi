@@ -189,19 +189,27 @@
       (뷰포트·pointer 미디어쿼리만), eyebrow(uppercase accent 라벨) 4곳 삭제, 탐색/지도 shell 장식 칩 6개 삭제,
       TripDashboard 필터를 `role=tab`→`aria-pressed` 토글 그룹(44px)·목록 skeleton·오류 패널(회복 행동)과
       빈 상태(다음 행동 CTA) 분리. (완료: 2026-08-18, PR #450, claude → tasks-done.md)
-- [ ] **T-316** — Hallmark PR-5(여행 상세·지도·설정·파일·법무) + **요청 수명 계약**: TripDetail 3중
-      컨테인먼트·컨트롤 중복(일자 추가·개수 배지) 정리, `useModalDialog`에 배경 inert + portal 옵션 추가 후
-      `RestoreHotswapDialog` 수렴,
-      **api-client 요청 타임아웃/취소 재설계**(T-315 3차 리뷰 요구사항): ① 타이머가 헤더가 아니라 **body
-      소비 완료까지** 유지될 것, ② 호출부 AbortSignal이 요청 전 생애주기 동안 전파될 것(헤더 수신 후에도),
-      ③ 타임아웃 오류는 서버가 확정한 4xx와 **구분 가능**할 것(408 금지 — `KorTravelMapCuration*Panel`이
-      `status < 500`을 terminal로 보고 Idempotency-Key를 폐기해 중복 import가 된다), ④ 장시간 admin 호출
-      (backup/restore/retention/reset/seed/anonymize/audit verifyChain)은 서버 예산(`pinvi_backup_timeout_seconds`
-      900s, `pinvi_restore_timeout_seconds` 3600s)에서 파생되거나 타임아웃을 끄고 진행 상태 폴링에 맡길 것,
-      ⑤ busy 다이얼로그의 탈출은 in-flight 취소와 함께 제공할 것,
-      파괴적 액션 확인 정책(토큰 회수·동의 철회·연결 해제 = Dialog, 가역 = 즉시+Undo, `window.confirm` 제거),
-      탐색 지도 장식 칩·상시 오류 dl 삭제, 설정 Admin chrome 분리(`SettingsHeader`), DSR/신고 raw JSON
-      textarea → 일반 필드, 법무 measure 65ch·초안 배너 중립화.
+- [/] **T-316** — Hallmark PR-5(여행 상세·지도·설정·파일·법무) + **요청 수명 계약**. PR을 4조각으로 나눈다:
+  **(1/4 요청 수명 계약 + 모달 오류 소유권, PR #455)** — api-client 타임아웃/취소 재설계 5요구사항 구현,
+  6차 적대적 리뷰가 main에서 잡은 잔여 결함(일자 409 재시도 막다른 길·포커스 폴백 no-op·전역 오류 누수)
+  해소. **(2/4 모달 격리·확인 정책)** `useModalDialog` inert/portal + `RestoreHotswapDialog` 수렴 +
+  `window.confirm`/`prompt` 9곳 제거 + 파괴적 액션 티어 명문화. **(3/4 TripDetail)** 4겹 컨테인먼트
+  (패널→일자 카드→POI 카드→tinted 첨부/날씨, 320px에서 유효 폭 35% 잠식)와 중복 컨트롤(일자 추가 4곳·
+  개수 배지 5곳·공유 2곳·검색 2개) 정리. **(4/4 표면)** 설정 admin chrome 분리·DSR/신고 raw JSON 폼화·
+  법무 measure 65ch/배너 중립화·지도 상시 오류 dl 삭제·파일 상태 UI. 조사 결과는 3인 매핑 산출물 기준.
+  원래 항목: TripDetail 3중
+  컨테인먼트·컨트롤 중복(일자 추가·개수 배지) 정리, `useModalDialog`에 배경 inert + portal 옵션 추가 후
+  `RestoreHotswapDialog` 수렴,
+  **api-client 요청 타임아웃/취소 재설계**(T-315 3차 리뷰 요구사항): ① 타이머가 헤더가 아니라 **body
+  소비 완료까지** 유지될 것, ② 호출부 AbortSignal이 요청 전 생애주기 동안 전파될 것(헤더 수신 후에도),
+  ③ 타임아웃 오류는 서버가 확정한 4xx와 **구분 가능**할 것(408 금지 — `KorTravelMapCuration*Panel`이
+  `status < 500`을 terminal로 보고 Idempotency-Key를 폐기해 중복 import가 된다), ④ 장시간 admin 호출
+  (backup/restore/retention/reset/seed/anonymize/audit verifyChain)은 서버 예산(`pinvi_backup_timeout_seconds`
+  900s, `pinvi_restore_timeout_seconds` 3600s)에서 파생되거나 타임아웃을 끄고 진행 상태 폴링에 맡길 것,
+  ⑤ busy 다이얼로그의 탈출은 in-flight 취소와 함께 제공할 것,
+  파괴적 액션 확인 정책(토큰 회수·동의 철회·연결 해제 = Dialog, 가역 = 즉시+Undo, `window.confirm` 제거),
+  탐색 지도 장식 칩·상시 오류 dl 삭제, 설정 Admin chrome 분리(`SettingsHeader`), DSR/신고 raw JSON
+  textarea → 일반 필드, 법무 measure 65ch·초안 배너 중립화.
 
 ## 실시간 WebSocket
 

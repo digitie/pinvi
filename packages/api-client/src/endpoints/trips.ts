@@ -136,12 +136,14 @@ export const tripApi = (client: ApiClient) => ({
     });
   },
 
-  update: (tripId: string, version: number, body: TripUpdate) =>
+  update: (tripId: string, version: number, body: TripUpdate, opts?: { signal?: AbortSignal }) =>
     client.request(`/trips/${tripId}`, {
       method: 'PATCH',
       headers: { 'If-Match': String(version) },
       body: JSON.stringify(TripUpdateSchema.parse(body)),
       schema: TripResponseSchema,
+      // 저장 중 다이얼로그를 닫으면 호출부가 취소한다(T-316 요청 수명 계약 ⑤).
+      signal: opts?.signal,
     }),
 
   delete: (tripId: string, body: TripDeleteRequest = { mode: 'soft_delete' }) =>
@@ -164,12 +166,19 @@ export const tripApi = (client: ApiClient) => ({
       schema: TripDayResponseSchema,
     }),
 
-  updateDay: (tripId: string, dayIndex: number, version: number, body: TripDayUpdate) =>
+  updateDay: (
+    tripId: string,
+    dayIndex: number,
+    version: number,
+    body: TripDayUpdate,
+    opts?: { signal?: AbortSignal },
+  ) =>
     client.request(`/trips/${tripId}/days/${dayIndex}`, {
       method: 'PATCH',
       headers: { 'If-Match': String(version) },
       body: JSON.stringify(TripDayUpdateSchema.parse(body)),
       schema: TripDayResponseSchema,
+      signal: opts?.signal,
     }),
 
   // force=true면 POI가 있어도 함께 삭제한다(DAY_HAS_POIS 확인 후 재요청, ADR-055 F2).

@@ -90,6 +90,10 @@ export function TripDayControls({
       setSettingsOpen(false);
       return;
     }
+    // 409 뒤에는 스냅샷을 최신 version으로 갱신한다 — 갱신하지 않으면 같은 다이얼로그에서
+    // 재시도가 영원히 409고, 유일한 탈출(취소→재오픈)이 사용자의 입력을 버린다(6차 리뷰 P1).
+    // 안내 문구도 "한 번 더 누르면 덮어씁니다"로 실제 동작과 맞춘다.
+    if (result.latestVersion != null) openedVersionRef.current = result.latestVersion;
     setSaveError({ message: result.message, field: result.field });
   };
   const closeSettings = () => {
@@ -154,8 +158,15 @@ export function TripDayControls({
               date={date}
               color={color}
               busy={busy}
-              onTitleChange={setTitle}
-              onDateChange={setDate}
+              onTitleChange={(next) => {
+                if (saveError && !saveError.field) setSaveError(null);
+                setTitle(next);
+              }}
+              onDateChange={(next) => {
+                // 값이 바뀌면 날짜 오류를 지운다 — 유효해진 값에 aria-invalid가 남으면 안 된다.
+                if (saveError?.field === 'date') setSaveError(null);
+                setDate(next);
+              }}
               onColorChange={setColor}
               saveError={saveError}
               onSave={saveSettings}

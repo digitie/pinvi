@@ -33,6 +33,7 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
   const [result, setResult] = useState<NoticePlanCopyResponse | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const successCloseRef = useRef<HTMLButtonElement>(null);
+  const copyAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,17 +61,32 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
   }, [result]);
 
   const copy = async () => {
+    const controller = new AbortController();
+    copyAbortRef.current = controller;
     setCopying(true);
     setError(null);
     try {
-      const res = await noticePlanApi(apiClient).copy(plan.notice_plan_id, buildCopyRequest(form));
+      const res = await noticePlanApi(apiClient).copy(plan.notice_plan_id, buildCopyRequest(form), {
+        signal: controller.signal,
+      });
       setResult(res);
       onCopied?.(res);
     } catch (err) {
+      if (controller.signal.aborted) return; // 사용자가 취소한 요청은 오류로 표시하지 않는다.
       setError(err instanceof ApiError ? err.message : '복사에 실패했습니다.');
     } finally {
+      if (copyAbortRef.current === controller) copyAbortRef.current = null;
       setCopying(false);
     }
+  };
+
+  // busy 중 닫기 = 진행 중 복사 취소. 취소 없이 닫으면 사용자가 닫은 뒤 여행이 생기고,
+  // 다시 복사하면 중복 생성된다(T-316 요청 수명 계약 ⑤).
+  const cancelCopyAndClose = () => {
+    copyAbortRef.current?.abort();
+    copyAbortRef.current = null;
+    setCopying(false);
+    onClose();
   };
 
   const footer = result ? (
@@ -101,6 +117,7 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
       open
       onClose={onClose}
       busy={copying}
+      onCancelBusy={cancelCopyAndClose}
       size="sm"
       title="추천 여행 가져오기"
       description={plan.title}

@@ -1095,6 +1095,65 @@ test('일자 설정은 연 시점 version으로 저장해 동시 변경을 409�
   await expect(page.getByTestId('trip-day-settings-error')).toBeVisible();
 });
 
+test('일자 설정 409 뒤 한 번 더 저장하면 최신 version으로 덮어쓴다', async ({ page }) => {
+  // T-315 6차 리뷰 P1: 스냅샷을 409 뒤에도 그대로 두면 재시도가 영원히 409고, 유일한 탈출
+  // (취소→재오픈)이 사용자의 입력을 버린다. 고지한 대로 "한 번 더 누르면 덮어쓰기"가 되어야 한다.
+  const ifMatchHeaders: string[] = [];
+  let serverVersion = 2; // 다이얼로그를 여는 시점엔 1이지만, 열려 있는 동안 남이 2로 올렸다.
+  const currentView: MutableTripDetailView = {
+    ...TRIP_VIEW,
+    days: [{ ...BASE_MARKER_DAY, title: '첫날', version: 1, pois: [] }],
+  };
+
+  await page.route(/.*\/trips\/[0-9a-f-]{36}\/days\/1$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.continue();
+    if (request.method() !== 'PATCH') return route.continue();
+    const ifMatch = request.headers()['if-match'] ?? '';
+    ifMatchHeaders.push(ifMatch);
+    if (ifMatch !== String(serverVersion)) {
+      // 서버가 최신 상태를 반영해 준다(reload가 version 2를 보게 된다).
+      currentView.days = [
+        { ...BASE_MARKER_DAY, title: '남이 바꾼 이름', version: serverVersion, pois: [] },
+      ] as MutableTripDetailView['days'];
+      await route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          error: { code: 'VERSION_CONFLICT', message: '버전이 다릅니다.' },
+        }),
+      });
+      return;
+    }
+    serverVersion += 1;
+    const saved = {
+      ...BASE_MARKER_DAY,
+      ...(request.postDataJSON() as Record<string, unknown>),
+      trip_id: tripId,
+      note: null,
+      version: serverVersion,
+      created_at: '2026-06-01T09:00:00+09:00',
+      updated_at: '2026-06-01T09:00:00+09:00',
+    };
+    currentView.days = [{ ...saved, pois: [] }] as MutableTripDetailView['days'];
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: saved }) });
+  });
+  await mockTripDetailRoutes(page, () => currentView);
+
+  await page.goto(`/trips/${tripId}`);
+  await page.getByTestId('trip-day-rename').click();
+  await page.locator('#trip-day-title-input').fill('내가 쓴 이름');
+  await page.getByRole('button', { name: '저장' }).click();
+
+  // 1차: 연 시점 version(1)으로 보내 409 — 안내가 모달 안에 뜨고 내 입력은 남는다.
+  await expect(page.getByTestId('trip-day-settings-error')).toBeVisible();
+  await expect(page.locator('#trip-day-title-input')).toHaveValue('내가 쓴 이름');
+
+  // 2차: 같은 다이얼로그에서 한 번 더 저장하면 최신 version(2)으로 나가 성공한다.
+  await page.getByRole('button', { name: '저장' }).click();
+  await expect(page.getByTestId('trip-day-title-dialog')).toHaveCount(0);
+  expect(ifMatchHeaders).toEqual(['1', '2']);
+});
+
 test('Day Plan 안에서 날짜·장소 파일과 날짜에 맞는 날씨를 보여준다', async ({ page }) => {
   const weatherRequests: URL[] = [];
   const weatherCardKey = 'weather-card:haeundae';

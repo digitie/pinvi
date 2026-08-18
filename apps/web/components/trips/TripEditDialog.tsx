@@ -19,6 +19,8 @@ export interface TripEditDialogProps {
   error?: string | null;
   onSave: (patch: TripUpdate) => void;
   onClose: () => void;
+  /** 저장 중 명시적 닫기 — 진행 중 요청을 취소하고 닫는다(T-316 요청 수명 계약 ⑤). */
+  onCancelBusy?: () => void;
 }
 
 export function TripEditDialog({
@@ -27,6 +29,7 @@ export function TripEditDialog({
   error = null,
   onSave,
   onClose,
+  onCancelBusy,
 }: TripEditDialogProps) {
   const titleRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState<TripEditForm>({
@@ -47,11 +50,16 @@ export function TripEditDialog({
       title="여행 편집"
       size="sm"
       busy={saving}
+      onCancelBusy={onCancelBusy}
       initialFocusRef={titleRef}
       testId="trip-edit-dialog"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={saving}>
+          <Button
+            variant="secondary"
+            onClick={onCancelBusy && saving ? onCancelBusy : onClose}
+            disabled={saving && !onCancelBusy}
+          >
             취소
           </Button>
           <Button

@@ -37,6 +37,7 @@ export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureReq
   const [done, setDone] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const submitAbortRef = useRef<AbortController | null>(null);
 
   // 접수 완료로 바뀌면 제출 버튼이 사라져 포커스가 body로 떨어진다 — 닫기로 옮긴다.
   useEffect(() => {
@@ -52,17 +53,31 @@ export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureReq
       return;
     }
     setTitleError(undefined);
+    const controller = new AbortController();
+    submitAbortRef.current = controller;
     setSubmitting(true);
     setError(null);
     try {
-      await featureApi(apiClient).request(buildNewPlaceRequest(form, coord));
+      await featureApi(apiClient).request(buildNewPlaceRequest(form, coord), {
+        signal: controller.signal,
+      });
       setDone(true);
       onSubmitted?.();
     } catch (err) {
+      if (controller.signal.aborted) return;
       setError(err instanceof ApiError ? err.message : '제안 등록에 실패했습니다.');
     } finally {
+      if (submitAbortRef.current === controller) submitAbortRef.current = null;
       setSubmitting(false);
     }
+  };
+
+  // busy 중 닫기 = 진행 중 제안 등록 취소(T-316 요청 수명 계약 ⑤).
+  const cancelSubmitAndClose = () => {
+    submitAbortRef.current?.abort();
+    submitAbortRef.current = null;
+    setSubmitting(false);
+    onClose();
   };
 
   return (
@@ -80,6 +95,7 @@ export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureReq
       }
       size="sm"
       busy={submitting}
+      onCancelBusy={cancelSubmitAndClose}
       initialFocusRef={titleRef}
       testId="feature-request-dialog"
       footer={

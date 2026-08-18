@@ -129,8 +129,16 @@ interface MutationOptions {
   captureError?: (message: string) => void;
 }
 
-/** 일자 설정 저장 결과 — 실패 원인을 다이얼로그가 자기 안에서 표시할 수 있게 돌려준다. */
-export type DayUpdateResult = { ok: true } | { ok: false; message: string; field?: 'date' };
+/**
+ * 일자 설정 저장 결과 — 실패 원인을 다이얼로그가 자기 안에서 표시할 수 있게 돌려준다.
+ *
+ * `latestVersion`은 409에서만 채워진다: 다이얼로그가 그 값으로 스냅샷을 갱신해야 "최신을 불러왔다"는
+ * 안내대로 **다시 저장하면 내 값으로 덮어쓰는** 경로가 열린다. 갱신하지 않으면 같은 다이얼로그에서
+ * 재시도가 영원히 409고, 유일한 탈출(취소→재오픈)이 사용자의 입력을 버린다(T-315 6차 리뷰 P1).
+ */
+export type DayUpdateResult =
+  | { ok: true }
+  | { ok: false; message: string; field?: 'date'; latestVersion?: number };
 
 function tripDurationDays(startDate: string | null, endDate: string | null): number | null {
   if (!startDate || !endDate) return null;
@@ -415,8 +423,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const [manualPoiCoord, setManualPoiCoord] = useState<{ lon: number; lat: number } | null>(null);
   const [tripEditOpen, setTripEditOpen] = useState(false);
   const [conflict, setConflict] = useState<ConflictState | null>(null);
-  // 충돌 다이얼로그 전용 오류(전역 배너와 분리 — 다른 실패가 새 다이얼로그로 새지 않게).
+  // 다이얼로그 전용 오류(전역 배너와 분리 — 다른 실패가 새 다이얼로그로 새지 않게).
   const [conflictError, setConflictError] = useState<string | null>(null);
+  const [tripEditError, setTripEditError] = useState<string | null>(null);
+  const [manualPoiError, setManualPoiError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const realtimeClientRef = useRef<TripRealtimeClient | null>(null);
   const realtimeReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -835,23 +845,28 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
   const handleCreateManualPoi = (input: ManualPoiCreateInput): Promise<boolean> => {
     if (selectedDay == null) {
-      setMutationError('일자를 먼저 선택해주세요.');
+      setManualPoiError('일자를 먼저 선택해주세요.');
       return Promise.resolve(false);
     }
+    setManualPoiError(null);
     const last = selectedDay.pois[selectedDay.pois.length - 1]?.sort_order ?? null;
-    return runMutation(async () => {
-      const created = await poiApi(apiClient).create(tripId, {
-        day_index: selectedDay.day_index,
-        sort_order: appendRank(last),
-        feature_id: null,
-        feature_snapshot: buildManualPoiSnapshot(input),
-        custom_marker_color: 'P-08',
-        custom_marker_icon: 'marker',
-        currency: 'KRW',
-      });
-      setSelectedDayIndex(selectedDay.day_index);
-      setSelectedPoiId(created.attachment_id);
-    }).then((ok) => {
+    return runMutation(
+      async () => {
+        const created = await poiApi(apiClient).create(tripId, {
+          day_index: selectedDay.day_index,
+          sort_order: appendRank(last),
+          feature_id: null,
+          feature_snapshot: buildManualPoiSnapshot(input),
+          custom_marker_color: 'P-08',
+          custom_marker_icon: 'marker',
+          currency: 'KRW',
+        });
+        setSelectedDayIndex(selectedDay.day_index);
+        setSelectedPoiId(created.attachment_id);
+      },
+      // 이 다이얼로그가 자기 오류를 소유한다(전역 배너는 scrim 뒤라 읽히지 않는다).
+      { captureError: setManualPoiError },
+    ).then((ok) => {
       if (ok) setManualPoiCoord(null);
       return ok;
     });
@@ -902,7 +917,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
   };
 
   const DAY_CONFLICT_MESSAGE =
-    '다른 사용자가 이 일자를 먼저 변경했습니다. 최신 내용으로 다시 불러왔어요.';
+    '다른 사용자가 이 일자를 먼저 변경했습니다. 최신 내용을 불러왔어요 — 저장을 한 번 더 누르면 내 값으로 덮어씁니다.';
   const dayConflictNotice = () => setMutationError(DAY_CONFLICT_MESSAGE);
 
   // 결과를 돌려준다 — 일자 설정 다이얼로그가 **성공했을 때만** 닫히고(3차 리뷰), 실패 원인은
@@ -937,25 +952,38 @@ export function TripDetail({ tripId }: TripDetailProps) {
     if (!hasPatchFields(patch)) return { ok: true };
     let failure: string | null = null;
     let conflicted = false;
+    let latestVersion: number | undefined;
+    const controller = new AbortController();
+    dayUpdateAbortRef.current = controller;
     const ok = await runMutation(
-      () => tripApi(apiClient).updateDay(tripId, dayIndex, expectedVersion ?? day.version, patch),
+      () =>
+        tripApi(apiClient).updateDay(tripId, dayIndex, expectedVersion ?? day.version, patch, {
+          signal: controller.signal,
+        }),
       {
-        onConflict: () => {
+        onConflict: (latest) => {
           conflicted = true;
+          // reload로 들어온 최신 version — 다이얼로그가 스냅샷을 갱신해 재시도를 가능하게 한다.
+          latestVersion = latest?.days.find((d) => d.day_index === dayIndex)?.version;
         },
         captureError: (message) => {
           failure = message;
         },
       },
     );
+    if (dayUpdateAbortRef.current === controller) dayUpdateAbortRef.current = null;
     if (ok) return { ok: true };
+    if (controller.signal.aborted) return { ok: false, message: '저장을 취소했습니다.' };
     return {
       ok: false,
       message: conflicted ? DAY_CONFLICT_MESSAGE : (failure ?? '변경에 실패했습니다.'),
+      latestVersion,
     };
   };
 
   const dayDeleteTriggerRef = useRef<HTMLElement | null>(null);
+  const dayUpdateAbortRef = useRef<AbortController | null>(null);
+  const tripEditAbortRef = useRef<AbortController | null>(null);
   // 일자 목록 컨테이너 — 삭제로 트리거가 사라졌을 때 포커스를 받아 준다.
   const dayListRef = useRef<HTMLElement | null>(null);
 
@@ -1008,25 +1036,53 @@ export function TripDetail({ tripId }: TripDetailProps) {
     if (!target) return;
     // 요청이 끝난 **뒤에** 닫는다 — 먼저 닫으면 `busy` prop이 관측되지 않아 진행 표시가 죽고,
     // 언마운트 시점에 트리거가 아직 disabled라 포커스 복원 폴백도 건너뛰어진다(T-315 4차 리뷰).
-    void deleteDayRequest(target.dayIndex, true).finally(() => {
-      // 삭제에 성공하면 트리거 버튼이 일자와 함께 사라진다 — 남는 일자 목록으로 포커스를 넘긴다
-      // (그대로 두면 복원 후보가 전부 탈락해 포커스가 body에 남는다, 5차 리뷰).
-      if (!dayDeleteTriggerRef.current?.isConnected) {
-        dayDeleteTriggerRef.current = dayListRef.current;
-      }
+    void deleteDayRequest(target.dayIndex, true).then((ok) => {
+      // 성공하면 트리거 버튼이 일자와 함께 사라진다 — 남는 일자 목록으로 포커스를 넘긴다.
+      // `isConnected` 검사는 쓰지 않는다: 이 콜백은 reload의 setState가 커밋되기 전에 돌아
+      // 항상 true라 폴백이 no-op이 된다(T-315 6차 리뷰 P2). 실패 시에는 트리거가 남아 있으므로
+      // 기존 복원이 맞다.
+      if (ok) dayDeleteTriggerRef.current = dayListRef.current;
       setDayDeleteConfirm(null);
     });
   };
 
   const handleEditTrip = (patch: TripUpdate) => {
     const version = view?.trip.version ?? 1;
+    const controller = new AbortController();
+    tripEditAbortRef.current = controller;
+    setTripEditError(null);
     void runMutation(
       async () => {
-        await tripApi(apiClient).update(tripId, version, patch);
+        await tripApi(apiClient).update(tripId, version, patch, { signal: controller.signal });
         setTripEditOpen(false);
       },
-      { onConflict: (latest) => openTripConflict(patch, latest) },
-    );
+      {
+        onConflict: (latest) => openTripConflict(patch, latest),
+        captureError: (message) => {
+          if (!controller.signal.aborted) setTripEditError(message);
+        },
+      },
+    ).finally(() => {
+      if (tripEditAbortRef.current === controller) tripEditAbortRef.current = null;
+    });
+  };
+
+  const openTripEdit = () => {
+    setTripEditError(null);
+    setTripEditOpen(true);
+  };
+
+  const closeTripEdit = () => {
+    setTripEditError(null);
+    setTripEditOpen(false);
+  };
+
+  // busy 중 닫기 = 진행 중 저장 취소(T-316 요청 수명 계약 ⑤).
+  const cancelTripEditAndClose = () => {
+    tripEditAbortRef.current?.abort();
+    tripEditAbortRef.current = null;
+    setBusy(false);
+    closeTripEdit();
   };
 
   const clearConflict = () => {
@@ -1389,7 +1445,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
               </a>
               <button
                 type="button"
-                onClick={() => setTripEditOpen(true)}
+                onClick={openTripEdit}
                 className="h-9 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
               >
                 편집
@@ -1500,7 +1556,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setTripEditOpen(true)}
+                  onClick={openTripEdit}
                   className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline bg-canvas px-2.5 text-xs font-semibold text-ink hover:bg-surface-soft"
                 >
                   <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1935,9 +1991,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
         <TripEditDialog
           trip={trip}
           saving={busy}
-          error={mutationError}
+          error={tripEditError}
           onSave={handleEditTrip}
-          onClose={() => setTripEditOpen(false)}
+          onClose={closeTripEdit}
+          onCancelBusy={cancelTripEditAndClose}
         />
       )}
 
@@ -1946,8 +2003,11 @@ export function TripDetail({ tripId }: TripDetailProps) {
           coord={manualPoiCoord}
           dayLabel={selectedDay.title ?? `${selectedDay.day_index}일차`}
           saving={busy}
-          error={mutationError}
-          onClose={() => setManualPoiCoord(null)}
+          error={manualPoiError}
+          onClose={() => {
+            setManualPoiError(null);
+            setManualPoiCoord(null);
+          }}
           onCreate={handleCreateManualPoi}
         />
       )}
