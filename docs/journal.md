@@ -37,12 +37,13 @@
   `NODE_ENV` 가드. 공유 뷰: chrome + h1 truncate→wrap + eyebrow→muted 1줄 + 오류를 h1/원인/홈·로그인 버튼 구조로.
   `FullPageMessage`를 중앙 카드+원형 아이콘 → 좌정렬 flat(ink top rule)로, 404에 chrome. `AppShell` 워드마크 공용화
   - 활성 탭 Rausch pill → ink 밑줄(`aria-current`). themeColor/manifest `#03163B`→canvas, favicon/앱 아이콘 SVG를
-    Rausch+white 핀 마크로 재제작(PNG 192/512·apple-touch-icon은 후속 rasterize — T-313에 포함).
+    Rausch+white 핀 마크로 재제작하고 PNG 192/512·apple-touch 180·favicon.ico(PNG-in-ICO 16/32/48)를 Playwright
+    chromium으로 rasterize(스크립트는 세션 스크래치패드 `render-icons.mjs`; 정본은 SVG).
 - **검증**: web typecheck/lint 0, vitest 100, next build 통과(pretendard @import 번들), 로컬 dev 서버 + Playwright
   e2e 9(auth-form-a11y·signup-consents·not-found·shared-trip·oauth-account-match) 통과, 375/1280 실렌더 확인(가로
   스크롤 0, 두 줄 버튼 0, keep-all). not-found e2e는 홈 h1 셀렉터 갱신. Pre-emit critique P4 H4 E4 S4 R5 V4.
 - **범위 밖(후속 T-313~T-316)**: 코드모드(bg-white 등), 앱 셸 ground/하단 탭바, 여행 상세 컨테인먼트·Dialog
-  프리미티브, 지도/설정/파일/법무, PNG 아이콘 rasterize.
+  프리미티브, 지도/설정/파일/법무.
 
 ## 2026-08-06 (codex) — T-VN-41-F1D-C1b PinVi seven-image provenance 보강
 

@@ -75,7 +75,8 @@ module.exports = {
           'Roboto',
           'sans-serif',
         ],
-        mono: ['"JetBrains Mono"', 'ui-monospace', '"SF Mono"', 'monospace'],
+        // 로드하지 않는 웹폰트 이름을 1순위에 두지 않는다 — 시스템 mono 스택(DESIGN.md Typography).
+        mono: ['ui-monospace', '"SF Mono"', 'Menlo', 'Consolas', 'monospace'],
       },
       borderRadius: {
         sm: '8px',

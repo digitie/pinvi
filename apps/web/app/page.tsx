@@ -2,8 +2,9 @@ import { PublicColophon, PublicMasthead } from '@/components/app/PublicChrome';
 import { ButtonLink } from '@/components/ui/Button';
 
 /* Hallmark · genre: modern-minimal · macrostructure: Narrative Workflow · design-system: DESIGN.md · designed-as-app
- * hero: H2 split diptych(7/5, 텍스트 + 단계 색인) · features: F4 step sequence(1.0→2.0→3.0) · cta: 하단 단일
- * nav: N1(워드마크 + 2 링크) · footer: Ft2(1줄 colophon) · enrichment: Tier-B 손그림 SVG(단계별 소형 도해)
+ * hero: H2 split diptych(7/5, 텍스트 + 단계 색인) · features: F4 step sequence(1.0→2.0→3.0, 큰 번호를 제목 위 세로 스택)
+ * cta: 채운 primary는 hero 1개(masthead·하단 마무리는 secondary/ghost) · nav: N1 · footer: Ft2
+ * enrichment: Tier-B 손그림 SVG(단계별 소형 도해, 토큰 색만)
  * removed: 뷰포트 중앙 hero 카드 + 동일 아이콘 카드 3장(AI 템플릿), "Sprint 4 릴리즈 게이트" 배지(내부 문구)
  */
 
@@ -130,10 +131,10 @@ export default function HomePage() {
       <PublicMasthead
         actions={
           <>
-            <ButtonLink href="/login" variant="ghost" size="sm">
+            <ButtonLink href="/login" variant="ghost">
               로그인
             </ButtonLink>
-            <ButtonLink href="/signup" variant="primary" size="sm">
+            <ButtonLink href="/signup" variant="secondary">
               시작하기
             </ButtonLink>
           </>
@@ -141,18 +142,19 @@ export default function HomePage() {
       />
 
       <main id="main" className="flex-1">
-        {/* Hero — H2 split diptych 7/5. 왼쪽 문장·CTA, 오른쪽은 이미지 대신 단계 색인(페이지 내 링크). */}
+        {/* Hero — H2 split diptych 7/5. 왼쪽 문장·CTA, 오른쪽은 이미지 대신 단계 색인(페이지 내 링크).
+            하단 패딩을 상단보다 크게 두어 hero가 다음 섹션 rule에 앉게 한다. */}
         <section
-          className="mx-auto grid w-full max-w-6xl gap-10 px-6 pb-16 pt-14 md:grid-cols-12 md:gap-8 md:pb-24 md:pt-24"
+          className="mx-auto grid w-full max-w-6xl gap-10 px-6 pb-20 pt-14 md:grid-cols-12 md:gap-8 md:pb-32 md:pt-24"
           data-testid="home-hero"
         >
           <div className="md:col-span-7">
-            <h1 className="max-w-[18ch] text-4xl font-bold leading-[1.15] tracking-tight md:text-5xl">
+            <h1 className="max-w-[18ch] text-4xl font-bold leading-[1.15] tracking-tight md:text-5xl md:leading-[1.12]">
               지도에서 고르고, 하루씩 담고, 링크로 나눠요.
             </h1>
-            <p className="mt-6 max-w-[38ch] text-lg leading-relaxed text-body">
-              Pinvi는 한국 공공 지도·날씨·행사 데이터를 한 화면에서 보며 여행 일정을 짜고, 기록하고,
-              읽기 전용 링크로 공유하는 서비스입니다.
+            <p className="mt-6 max-w-[48ch] text-lg leading-relaxed text-body">
+              한국 공공 지도·날씨·행사 데이터를 한 화면에서 보며 여행을 짜고, 기록하고, 링크로
+              나누는 서비스예요.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <ButtonLink href="/signup" variant="primary" size="lg">
@@ -189,7 +191,8 @@ export default function HomePage() {
           </nav>
         </section>
 
-        {/* F4 step sequence — 단계 사이는 두꺼운 번호 rule, 각 단계는 [번호 | 본문 | 도해]. */}
+        {/* F4 step sequence — 단계 사이는 두꺼운 ink rule. 각 단계는 2열([본문 | 도해])이고
+            큰 단계 번호는 제목 **위** 같은 열에 세로 스택(태그-좌/헤딩-우 금지). */}
         <ol className="m-0 list-none p-0" aria-label="Pinvi 사용 단계">
           {STAGES.map((stage, index) => (
             <li
@@ -197,12 +200,15 @@ export default function HomePage() {
               id={stage.id}
               className={`border-t-2 border-ink scroll-mt-16 ${index === STAGES.length - 1 ? 'border-b-2' : ''}`}
             >
-              <article className="mx-auto grid w-full max-w-6xl gap-6 px-6 py-12 md:grid-cols-12 md:gap-8 md:py-16">
-                <p className="m-0 font-mono text-sm tabular-nums text-muted md:col-span-2">
-                  {stage.number} · {stage.label}
-                </p>
-                <div className="md:col-span-6">
-                  <h2 className="text-2xl font-bold leading-snug tracking-tight md:text-3xl">
+              <article className="mx-auto grid w-full max-w-6xl gap-8 px-6 py-12 md:grid-cols-[minmax(0,1fr)_16rem] md:gap-12 md:py-16">
+                <div className="max-w-[60ch]">
+                  <p className="m-0 flex items-baseline gap-3">
+                    <span className="font-mono text-4xl font-bold leading-none tracking-tight text-ink tabular-nums md:text-5xl">
+                      {stage.number}
+                    </span>
+                    <span className="text-base font-semibold text-muted">{stage.label}</span>
+                  </p>
+                  <h2 className="mt-4 text-2xl font-bold leading-snug tracking-tight md:text-3xl md:leading-snug">
                     {stage.heading}
                   </h2>
                   <p className="mt-4 max-w-[46ch] text-base leading-relaxed text-body">
@@ -210,9 +216,9 @@ export default function HomePage() {
                   </p>
                   <ul className="mt-5 max-w-[46ch] space-y-2 pl-0 text-sm text-ink">
                     {stage.facts.map((fact) => (
-                      <li key={fact} className="flex gap-3">
+                      <li key={fact} className="flex items-start gap-3">
                         <span
-                          className="mt-[0.55rem] size-1.5 shrink-0 rounded-full bg-ink"
+                          className="mt-2 size-1.5 shrink-0 rounded-full bg-ink"
                           aria-hidden="true"
                         />
                         <span>{fact}</span>
@@ -220,7 +226,7 @@ export default function HomePage() {
                     ))}
                   </ul>
                 </div>
-                <figure className="m-0 md:col-span-4 md:justify-self-end">
+                <figure className="m-0 md:justify-self-end md:self-center">
                   <StageFigure kind={stage.figure} />
                 </figure>
               </article>
@@ -228,12 +234,12 @@ export default function HomePage() {
           ))}
         </ol>
 
-        {/* 하단 단일 CTA — Narrative Workflow "Start at stage 1 →". */}
+        {/* 하단 마무리 CTA — Narrative Workflow "Start at stage 1 →". 채운 primary는 hero에만 두므로 secondary. */}
         <section className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-6 py-14 sm:flex-row sm:items-center sm:justify-between md:py-20">
           <p className="m-0 text-xl font-semibold tracking-tight">
             1.0 계획부터 시작해 볼까요? 이메일 인증만 하면 바로 여행을 만들 수 있어요.
           </p>
-          <ButtonLink href="/signup" variant="primary" size="lg" className="shrink-0">
+          <ButtonLink href="/signup" variant="secondary" size="lg" className="shrink-0">
             1.0부터 시작하기
           </ButtonLink>
         </section>

@@ -35,7 +35,9 @@ export default async function VerifyPendingPage({
         <p className="rounded-sm bg-surface-soft px-3 py-2 text-sm text-body" role="status">
           {isDev
             ? '이메일 발송이 보류되었습니다(개발 모드). API 콘솔 로그의 verify URL로 인증할 수 있습니다.'
-            : '인증 메일 발송이 지연되고 있습니다. 잠시 뒤 아래에서 다시 보내 주세요.'}
+            : email
+              ? '인증 메일 발송이 지연되고 있습니다. 잠시 뒤 아래에서 다시 보내 주세요.'
+              : '인증 메일 발송이 지연되고 있습니다. 로그인 화면에서 다시 요청할 수 있습니다.'}
         </p>
       ) : null}
 

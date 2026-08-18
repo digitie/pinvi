@@ -45,14 +45,16 @@ export const FormTextArea = forwardRef<HTMLTextAreaElement, FormTextAreaProps>(
           {...textareaProps}
         />
         {error ? (
-          <p id={errorId} role="alert" className="text-sm text-error-text">
+          <p id={errorId} role="alert" className="min-h-5 text-sm text-error-text">
             {error}
           </p>
         ) : hint ? (
-          <p id={hintId} className="text-sm text-muted">
+          <p id={hintId} className="min-h-5 text-sm text-muted">
             {hint}
           </p>
-        ) : null}
+        ) : (
+          <p className="min-h-5 text-sm" aria-hidden="true" />
+        )}
       </div>
     );
   },

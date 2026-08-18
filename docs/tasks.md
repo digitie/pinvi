@@ -122,8 +122,7 @@
       favicon·앱 아이콘·themeColor Rausch/canvas, 내부 문구 제거). (완료: 2026-08-18, PR #TBD, claude → tasks-done.md)
 - [ ] **T-313** — Hallmark PR-1b(기계적 코드모드): `bg-white→bg-canvas`(136), `text-white→text-on-primary`(96),
       `bg-black/NN→bg-scrim/50`, `shadow-sm/md/lg/xl→shadow-card|shadow-overlay`(21), `'...'→'…'`, `vh/svh→dvh`,
-      미정의 `bg-surface`(4) 정정, favicon/앱 아이콘 PNG(192/512/apple-touch) rasterize. 판단 없는 diff — 별도
-      PR로 리뷰 크기 관리. eslint-plugin-tailwindcss `no-custom-classname`·`text-[NNpx]` 차단 검토.
+      미정의 `bg-surface`(4) 정정. 판단 없는 diff — 별도 PR로 리뷰 크기 관리. eslint-plugin-tailwindcss `no-custom-classname`·`text-[NNpx]` 차단 검토.
 - [ ] **T-314** — Hallmark PR-3(앱 셸+대시보드+추천 shelf): `AppShell` ground `bg-canvas`, <md 하단 탭바,
       /trips·/notice-plans eyebrow 삭제·accent 1개, skeleton/empty/error 3종, `role=tab`→`aria-pressed` 세그먼트,
       `useMobileWebLayout` UA 스니핑→`matchMedia`, TripDashboard 링크 안 버튼 span 제거(Mj24).

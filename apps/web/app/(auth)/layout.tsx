@@ -25,7 +25,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             {FACTS.map((fact) => (
               <li key={fact} className="flex gap-3">
                 <span
-                  className="mt-[0.6rem] size-1.5 shrink-0 rounded-full bg-primary"
+                  className="mt-2.5 size-1.5 shrink-0 rounded-full bg-primary"
                   aria-hidden="true"
                 />
                 <span>{fact}</span>
@@ -33,9 +33,9 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             ))}
           </ul>
         </aside>
-        <section className="md:col-span-6 md:col-start-7">
+        <main id="main" className="md:col-span-6 md:col-start-7">
           <div className="mx-auto w-full max-w-sm">{children}</div>
-        </section>
+        </main>
       </div>
       <PublicColophon />
     </div>

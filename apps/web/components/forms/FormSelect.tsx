@@ -38,10 +38,12 @@ export const FormSelect = forwardRef<HTMLSelectElement, FormSelectProps>(functio
         {children}
       </select>
       {error ? (
-        <p id={errorId} role="alert" className="text-sm text-error-text">
+        <p id={errorId} role="alert" className="min-h-5 text-sm text-error-text">
           {error}
         </p>
-      ) : null}
+      ) : (
+        <p className="min-h-5 text-sm" aria-hidden="true" />
+      )}
     </div>
   );
 });

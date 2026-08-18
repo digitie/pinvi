@@ -271,13 +271,13 @@ There are no progressive elevation tiers — the system either has the one shado
 | focus             | `focus`                                        | #ff385c                               | oklch(65.8% 0.231 17)                                                   |
 | error / success   | `error-text` / `success-text`                  | #c13515 / #1b873f                     | oklch(53.9% 0.182 33.7) / —                                             |
 
-**대비 결정(C5)**: white 라벨을 Rausch `#ff385c` 위에 올리면 3.5:1(AA 미달)이라 **본문 크기 채운 CTA는 `cta`(#e00b41, 4.9:1)**를 쓴다. Rausch는 아이콘·워드마크·포커스 링·≥24px 텍스트 전용. 인라인 링크는 `text-ink underline`(hairline decoration → hover ink); `muted-soft`는 disabled 텍스트 전용(본문 3.1:1 미달). accent는 뷰포트당 1~2 moment(페이지당 채운 primary CTA 1개, 나머지는 secondary/ghost).
+**대비 결정(C5)**: white 라벨을 Rausch `#ff385c` 위에 올리면 3.5:1(AA 미달)이라 **본문 크기 채운 CTA는 `cta`(#e00b41, 4.9:1)**를 쓴다. Rausch는 아이콘·워드마크·포커스 링·≥24px 텍스트 전용. 인라인 링크는 `text-ink underline`(hairline decoration → hover ink); `muted-soft`는 disabled 텍스트 전용(본문 3.1:1 미달). accent는 뷰포트당 1~2 moment(페이지당 채운 primary CTA 1개 — 마케팅은 hero, 폼은 submit; masthead·마무리 CTA·보조 액션은 secondary/ghost).
 
 ### Typography
 
 - Display: **Pretendard Variable** 700, `tracking-tight`(-0.025em), 로만(이탤릭 헤더 금지). hero h1 `text-4xl md:text-5xl`(36/48px, viewport 스케일 없음), 섹션 h2 `text-2xl md:text-3xl`.
 - Body: Pretendard Variable 400 `text-base`(16px, 입력 포함 — iOS 확대 방지). 보조 `text-sm`(14px). 12px 이하 텍스트 금지(뱃지 예외 `text-xs` 600).
-- Mono(단계 번호·ref 코드): 시스템 mono fallback.
+- Mono(단계 번호·ref 코드): 시스템 mono 스택(`ui-monospace, "SF Mono", Menlo, Consolas, monospace`) — 로드하지 않는 웹폰트 이름을 1순위에 두지 않는다. 한글 라벨은 mono가 아니라 body.
 - 한글 줄바꿈: `word-break: keep-all` + `overflow-wrap: break-word`(globals.css body).
 - 로딩: npm `pretendard` dynamic subset(`@import` in globals.css, self-hosted, `font-display: swap`) — 외부 CDN 금지.
 

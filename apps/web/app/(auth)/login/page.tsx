@@ -279,11 +279,14 @@ export default function LoginPage() {
       {/* 소셜 로그인 — provider가 하나도 없으면(로딩 완료 후) 구분선·섹션을 렌더하지 않는다. */}
       {oauthProvidersLoading || visibleOAuthProviders.length > 0 || oauthError ? (
         <>
-          <div className="flex items-center gap-3" aria-hidden="true">
-            <span className="h-px flex-1 bg-hairline" />
-            <span className="text-sm text-muted">또는</span>
-            <span className="h-px flex-1 bg-hairline" />
-          </div>
+          {/* 구분선은 실제로 아래에 소셜 버튼이 있거나 올 때만. 오류만 있으면 문장만 남긴다. */}
+          {oauthProvidersLoading || visibleOAuthProviders.length > 0 ? (
+            <div className="flex items-center gap-3" aria-hidden="true">
+              <span className="h-px flex-1 bg-hairline" />
+              <span className="text-sm text-muted">또는</span>
+              <span className="h-px flex-1 bg-hairline" />
+            </div>
+          ) : null}
 
           <div className="space-y-2" aria-busy={oauthProvidersLoading || undefined}>
             {oauthError && (

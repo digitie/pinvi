@@ -1,7 +1,7 @@
 /* Hallmark · genre: modern-minimal · design-system: DESIGN.md("Hallmark 잠금 시스템") + docs/design/styleseed-rules.md · designed-as-app
  * theme: pinvi-locked (paper oklch(100% 0 0) · ink oklch(25.2% 0 0) · accent Rausch oklch(65.8% 0.231 17) · cta oklch(57.7% 0.228 18.5))
  * type: "Pretendard Variable" display 700 / body 400 · macrostructure: Narrative Workflow(/) · Workbench(app) · Long Document(legal·shared)
- * nav: N1a(공개 masthead) · footer: Ft2(colophon 1줄) · enrichment: none · motion: fade ≤200ms, reduced-motion 전역
+ * nav: N1(공개 masthead) · footer: Ft2(colophon 1줄) · enrichment: Tier-B 손그림 SVG(랜딩 한정) · motion: fade ≤200ms, reduced-motion 전역
  * pre-emit critique: P4 H4 E4 S4 R5 V4 */
 
 /* Pretendard Variable — npm `pretendard` dynamic subset(한글 서브셋 분할, font-display: swap). 외부 CDN·render-blocking @import 없음. */
@@ -52,7 +52,8 @@ body {
     background-size: 14px 14px;
   }
   .checkbox:checked {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-6'/%3E%3C/svg%3E");
+    /* stroke %23ffffff = 토큰 on-primary(#ffffff). data URI 안에서는 var()를 못 써 값 리터럴로 둔다. */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23ffffff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-6'/%3E%3C/svg%3E");
   }
 }
 

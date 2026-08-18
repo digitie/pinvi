@@ -5,7 +5,7 @@ import { PublicColophon, PublicMasthead } from '@/components/app/PublicChrome';
 import { ButtonLink } from '@/components/ui/Button';
 import { SharedTripView } from '@/components/trips/SharedTripView';
 
-/* Hallmark · genre: modern-minimal · macrostructure: Workbench(읽기 전용) · design-system: DESIGN.md · designed-as-app
+/* Hallmark · genre: modern-minimal · macrostructure: Long Document(읽기 전용 콘텐츠) · design-system: DESIGN.md · designed-as-app
  * nav: N1(워드마크 + 로그인/시작하기) · footer: Ft2 — 익명 방문자의 첫 접점이라 공개 chrome을 붙인다.
  */
 export default function SharedTripPage() {
@@ -15,10 +15,10 @@ export default function SharedTripPage() {
       <PublicMasthead
         actions={
           <>
-            <ButtonLink href="/login" variant="ghost" size="sm">
+            <ButtonLink href="/login" variant="ghost">
               로그인
             </ButtonLink>
-            <ButtonLink href="/signup" variant="primary" size="sm">
+            <ButtonLink href="/signup" variant="secondary">
               시작하기
             </ButtonLink>
           </>

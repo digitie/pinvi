@@ -67,7 +67,7 @@ Pinvi의 기존 `DESIGN.md` / `docs/architecture/frontend.md` 기준에 맞게 �
 ## 7. Motion
 
 - Pinvi는 StyleSeed의 motion vocab 중 절제된 `fast`/`normal`/`moderate` duration과
-  `pinvi`/`spring` easing만 token으로 쓴다.
+  `pinvi` easing만 token으로 쓴다(`spring` overshoot는 2026-08-18 Hallmark 잠금 시스템에서 삭제).
 - hover/tap/route feedback은 100~300ms 범위로 제한한다.
 - 한 element에 CSS transition과 Framer Motion을 동시에 얹지 않는다.
 - full-page animation, scroll-linked motion, 500ms를 넘는 느린 motion은 기본 금지다.

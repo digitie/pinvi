@@ -17,7 +17,8 @@ export type ButtonState = 'idle' | 'error' | 'success';
  * variant/size만 고른다. 8상태: default·hover·focus-visible(outline)·active·disabled(3채널: 배경·커서·aria)
  * ·loading(aria-busy + 스피너, 라벨 유지)·error·success(data-state).
  * - primary = 채운 CTA. 배경은 `cta`(#e00b41, white 4.9:1) — Rausch #ff385c는 white 라벨 대비 미달이라 쓰지 않는다.
- * - 44px(min-h-11)이 기본. `sm`은 밀도 높은 표/툴바 전용이고 coarse pointer(터치)에서는 44px로 승격.
+ * - 44px(min-h-11)이 기본. `sm`은 밀도 높은 표/툴바·인라인 보조 액션 전용(1차 CTA·masthead에는 쓰지 않음),
+ *   coarse pointer(터치)에서는 44px로 승격.
  * - 모션은 색만 200ms; overshoot·scale 없음. focus 링은 outline(즉시).
  */
 export function buttonClassName({

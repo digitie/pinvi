@@ -80,14 +80,16 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
   if (error || !view) {
     // 오류는 dead end가 아니라 원인 + 다음 행동(홈/로그인) — 404 페이지와 같은 구조·언어.
     return (
-      <div
+      <section
         className="max-w-md space-y-6 border-t-2 border-ink pt-6"
-        role="alert"
+        aria-labelledby="shared-error-title"
         data-testid="shared-error"
       >
         <div className="space-y-2">
-          <h1 className="text-2xl font-bold tracking-tight text-ink">공유 링크를 열 수 없어요</h1>
-          <p className="text-base text-body">
+          <h1 id="shared-error-title" className="text-2xl font-bold tracking-tight text-ink">
+            공유 링크를 열 수 없어요
+          </h1>
+          <p className="text-base text-body" role="alert">
             {error ?? '공유 링크가 만료되었거나 유효하지 않습니다.'} 링크를 보낸 사람에게 새 링크를
             요청하거나, 내 여행에서 직접 확인해 주세요.
           </p>
@@ -100,7 +102,7 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
             로그인
           </ButtonLink>
         </div>
-      </div>
+      </section>
     );
   }
 

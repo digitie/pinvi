@@ -19,7 +19,7 @@ export interface FormFieldProps extends InputHTMLAttributes<HTMLInputElement> {
  */
 export function inputClassName({ error, className }: { error?: boolean; className?: string } = {}) {
   return [
-    'focus-ring w-full min-h-11 rounded-sm border bg-canvas px-3 py-2 text-base text-ink placeholder:text-muted-soft',
+    'focus-ring w-full min-h-11 rounded-sm border bg-canvas px-3 py-2 text-base text-ink placeholder:text-muted',
     'transition-colors duration-normal ease-pinvi',
     'hover:border-border-strong disabled:cursor-not-allowed disabled:bg-surface-soft disabled:text-muted',
     error ? 'border-error-text' : 'border-hairline',
@@ -58,15 +58,18 @@ export const FormField = forwardRef<HTMLInputElement, FormFieldProps>(function F
         className={inputClassName({ error: Boolean(error), className })}
         {...inputProps}
       />
+      {/* helper 슬롯은 항상 예약(min-h-5) — 오류가 뜨는 순간 아래 요소가 밀리지 않는다(gate 39). */}
       {error ? (
-        <p id={errorId} role="alert" className="text-sm text-error-text">
+        <p id={errorId} role="alert" className="min-h-5 text-sm text-error-text">
           {error}
         </p>
       ) : hint ? (
-        <p id={hintId} className="text-sm text-muted">
+        <p id={hintId} className="min-h-5 text-sm text-muted">
           {hint}
         </p>
-      ) : null}
+      ) : (
+        <p className="min-h-5 text-sm" aria-hidden="true" />
+      )}
     </div>
   );
 });
