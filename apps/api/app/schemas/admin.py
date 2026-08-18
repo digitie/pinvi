@@ -1064,12 +1064,21 @@ class AdminRequestTimelineResponse(BaseModel):
     events: list[AdminRequestTimelineEvent] = Field(default_factory=list)
 
 
+# kor-travel-map 3축 feature state (Map `1f2bdc3a` "complete feature state cutover").
+# 합성 단일 문자열 `status`는 Map admin/user 표면에서 모두 사라졌다. 세 축은 서로
+# 독립적으로 움직이므로(예: lifecycle=active + publication=suppressed + quality=quarantined)
+# Pinvi도 파생 문자열로 뭉개지 않고 축 그대로 들고 다닌다.
+AdminFeatureLifecycleState = Literal["active", "retired"]
+AdminFeaturePublicationState = Literal["draft", "published", "suppressed"]
+AdminFeatureQualityState = Literal["valid", "quarantined"]
+
+# Map `GET /v1/admin/features`의 `sort` enum과 동일해야 한다 — 3축 cutover에서
+# `status` 정렬 키가 사라졌고, 모르는 값을 보내면 Map이 422로 거절한다.
 AdminFeatureSort = Literal[
     "name",
     "updated_at",
     "created_at",
     "kind",
-    "status",
     "provider",
     "issue_count",
 ]
@@ -1089,7 +1098,10 @@ class AdminFeatureSummary(BaseModel):
     kind: str
     name: str
     category: str
-    status: str
+    # Map `AdminFeatureRecord`는 세 축을 non-null 필수로 준다(기본값 없음).
+    lifecycle_state: AdminFeatureLifecycleState
+    publication_state: AdminFeaturePublicationState
+    quality_state: AdminFeatureQualityState
     lon: float | None = None
     lat: float | None = None
     address_label: str | None = None
@@ -1139,7 +1151,10 @@ class AdminFeatureDetailFeature(BaseModel):
     kind: str
     name: str
     category: str
-    status: str
+    # Map `AdminFeatureDetailFeatureRecord`도 목록과 같은 3축을 non-null 필수로 준다.
+    lifecycle_state: AdminFeatureLifecycleState
+    publication_state: AdminFeaturePublicationState
+    quality_state: AdminFeatureQualityState
     lon: float | None = None
     lat: float | None = None
     coord_precision_digits: int | None = None
@@ -1181,7 +1196,10 @@ class AdminFeatureDetailSource(BaseModel):
     source_role: str
     match_method: str
     confidence: int
-    is_primary_source: bool
+    # Map `AdminFeatureDetailSourceRecord`에는 이 필드가 없다(primary 여부는
+    # `source_role`이 표현한다). 필수로 두면 상세 proxy가 통째로 502가 되므로
+    # optional로 두고, 값이 오면 그대로 통과시킨다.
+    is_primary_source: bool | None = None
     raw_name: str | None = None
     raw_address: str | None = None
     raw_longitude: float | None = None

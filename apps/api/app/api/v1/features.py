@@ -33,6 +33,7 @@ from app.clients.kor_travel_map import (
 )
 from app.clients.naver_local import NaverLocalClient, NaverLocalClientDep, NaverLocalError
 from app.core.deps import CurrentUserId, DbSession
+from app.core.time import KST
 from app.models.feature_suggestion import FeatureSuggestion
 from app.schemas.envelope import Envelope
 from app.schemas.feature import (
@@ -69,6 +70,31 @@ DECIMAL_6 = Decimal("0.000001")
 # ADR-056: price 마커도 기본 뷰포트에 포함(주유소/휴게소 가격 등 일반 표시).
 _DEFAULT_INBOUNDS_KINDS: list[FeatureKind] = ["place", "event", "notice", "price"]
 _DEFAULT_NEARBY_KINDS: list[FeatureKind] = ["place"]
+
+
+def normalize_asof_query(value: datetime | None) -> datetime | None:
+    """HTTP `?asof=` query의 naive 값을 **KST(Asia/Seoul)**로 해석해 aware datetime으로 만든다.
+
+    `datetime` query는 offset 없이도 파싱되므로(`?asof=2026-07-01T23:59:59`) 어딘가는 시간대를
+    정해야 한다. 그 결정을 HTTP 경계에 두는 이유:
+
+    * 이 값은 **한국 사용자가 입력한 벽시계 시각**이다. `docs/api/features.md` §2.3이 `asof`를
+      KST aware로 규정하고 `services/trip_view_builder.py`도 여행 시각을 Asia/Seoul로 다룬다.
+      naive를 UTC로 읽던 예전 transport 동작(구 `_as_aware_utc`)은 9시간 어긋난 시점의 날씨를
+      조용히 돌려줬다.
+    * transport(`clients/kor_travel_map.py`)는 시간대를 추측하지 않고 aware만 받는다
+      (`_require_aware_datetime`). 모듈 단일 정책이므로 보정은 여기서 한 번만 한다.
+
+    offset이 이미 있으면(`+09:00`/`Z`) 그대로 통과시킨다 — 사용자가 명시한 시간대를 덮어쓰지 않는다.
+
+    **`asof`를 client에 넘기는 다른 라우터도 이 helper를 통과시켜야 한다.** 현재 호출자는
+    이 모듈의 weather 라우터와 `api/v1/admin/features.py`의 weather-values 둘이다(후자는 한때
+    raw query를 그대로 넘겨 naive 입력에서 transport ValueError → 500이었다). 새 호출자가
+    생기면 여기를 통과시켜야 두 경계의 시간대 해석이 갈라지지 않는다.
+    """
+    if value is None or value.utcoffset() is not None:
+        return value
+    return value.replace(tzinfo=KST)
 
 
 @contextmanager
@@ -145,7 +171,13 @@ def _coord_from_kor_travel_map(dto: dict[str, Any]) -> Coord | None:
 
 
 def _summary_from_kor_travel_map(dto: dict[str, Any]) -> FeatureSummary:
-    """kor_travel_map `FeatureSummary`/`NearbyFeatureSummary` → Pinvi FeatureSummary."""
+    """kor_travel_map `FeatureSummary`/`NearbyFeatureSummary` → Pinvi FeatureSummary.
+
+    `status`는 매핑하지 않는다 — Map 3축 feature state cutover(`1f2bdc3a feat(api): complete
+    feature state cutover`)로 user 표면에서 사라졌고 대체 필드도 없다(state 축은 user
+    profile에 노출되지 않는다). `FeatureSummary.status`는 web/mobile 계약 때문에 스키마에는
+    남아 있으나 항상 None이다.
+    """
     distance = dto.get("distance_m")
     return FeatureSummary(
         feature_id=str(dto["feature_id"]),
@@ -155,7 +187,6 @@ def _summary_from_kor_travel_map(dto: dict[str, Any]) -> FeatureSummary:
         category=dto.get("category"),
         marker_color=dto.get("marker_color") or "P-13",
         marker_icon=dto.get("marker_icon") or "marker",
-        status=dto.get("status"),
         distance_m=float(distance) if distance is not None else None,
     )
 
@@ -170,7 +201,11 @@ def _cluster_from_kor_travel_map(dto: dict[str, Any]) -> FeatureCluster:
 
 
 def _detail_from_kor_travel_map(dto: dict[str, Any]) -> FeatureDetail:
-    """kor_travel_map `FeatureDetailResponse` → Pinvi FeatureDetail."""
+    """kor_travel_map `FeatureDetailResponse` → Pinvi FeatureDetail.
+
+    `status`는 매핑하지 않는다 — `_summary_from_kor_travel_map`과 같은 이유로 Map
+    `FeatureDetailResponse`에서 사라졌다(`1f2bdc3a`). `FeatureDetail.status`는 항상 None.
+    """
     address = dto.get("address")
     return FeatureDetail(
         feature_id=str(dto["feature_id"]),
@@ -186,7 +221,6 @@ def _detail_from_kor_travel_map(dto: dict[str, Any]) -> FeatureDetail:
         marker_icon=dto.get("marker_icon") or "marker",
         urls=dto.get("urls") if isinstance(dto.get("urls"), dict) else {},
         detail=dto.get("detail") if isinstance(dto.get("detail"), dict) else {},
-        status=dto.get("status"),
         updated_at=dto.get("updated_at") or datetime.now(UTC),
     )
 
@@ -213,7 +247,11 @@ def _weather_metric_from_kor_travel_map(metric: dict[str, Any]) -> WeatherMetric
 
 
 def _weather_from_kor_travel_map(dto: dict[str, Any], *, feature_id: str) -> FeatureWeatherCard:
-    """kor_travel_map `WeatherCardData` → Pinvi FeatureWeatherCard (평탄 metric 목록)."""
+    """kor_travel_map `WeatherCardData`/`WeatherSnapshotData` → Pinvi FeatureWeatherCard.
+
+    snapshot 응답은 card 응답의 상위집합이라 같은 매핑을 쓴다(client가 `asof` 유무로
+    경로를 고른다 — `clients/kor_travel_map.py` `feature_weather`).
+    """
     metrics = [
         _weather_metric_from_kor_travel_map(m)
         for m in dto.get("metrics", [])
@@ -221,7 +259,10 @@ def _weather_from_kor_travel_map(dto: dict[str, Any], *, feature_id: str) -> Fea
     ]
     return FeatureWeatherCard(
         feature_id=str(dto.get("feature_id") or feature_id),
-        asof=dto.get("asof"),
+        # Map bitemporal cutover(`6650aa71`)로 `WeatherCardData.asof`가 사라지고
+        # `selected_at`(실제로 선택된 관측/예보 시각)이 그 자리를 대신한다. Pinvi 공개 필드
+        # 이름 `asof`는 web/mobile 계약이라 유지하고 소스만 갈아끼운다.
+        asof=dto.get("selected_at"),
         latest_at=dto.get("latest_at"),
         is_stale=bool(dto.get("is_stale", False)),
         source_styles=list(dto.get("source_styles", [])),
@@ -477,12 +518,33 @@ async def list_feature_categories(
     client: KorTravelMapHttpClientDep,
     active_only: Annotated[bool, Query()] = True,
 ) -> Envelope[list[FeatureCategory]]:
-    """kor_travel_map 카테고리 카탈로그 (마커 범례 / 필터 칩). 저빈도 → 클라이언트 긴 TTL 캐시 권장."""
+    """kor_travel_map 카테고리 카탈로그 (마커 범례 / 필터 칩). 저빈도 → 클라이언트 긴 TTL 캐시 권장.
+
+    **`active_only`는 Pinvi가 직접 적용한다 — upstream에 전달하지 않는다.**
+
+    Map `/v1/categories`가 선언하는 query는 `include_counts` 하나뿐이고, FastAPI는 선언하지
+    않은 query를 422가 아니라 조용히 버린다. 그래서 예전처럼 `?active_only=`를 상류로 넘기면
+    "필터가 걸린 척하는" 전량 200이 돌아온다(런타임 신호 0). 확인해 보니 **삭제 전의 upstream
+    `active_only`도 목록을 거른 적이 없다** — 그 스위치는 `db_feature_count`/`db_active`의
+    집계 기준만 바꿨고 item 목록은 늘 정적 카탈로그 전량이었다(Map `routers/categories.py`
+    `_STATIC_CATEGORIES`; 삭제 사유는 T-VN-04 F-1 "비공개 분포가 공개 표면에 노출"). 즉 이
+    파라미터는 위임으로는 한 번도 동작한 적이 없다.
+
+    파라미터를 **삭제하지 않고 로컬 필터로 구현한** 이유: 이건 Pinvi 공개 계약이고
+    (`packages/api-client` `feature.categories({activeOnly})`, `docs/api/features.md` §2.6.1),
+    그 의미는 Map이 항목마다 주는 `is_active`(스냅샷상 required bool)로 **로컬에서 정확히**
+    표현된다. 없는 필터를 받아들이는 척하느니 실제로 적용한다.
+
+    오늘 카탈로그 145건은 전부 `is_active=true`라 응답은 전량과 같다 — 이 필터는 Map이 항목을
+    비활성화하는 순간부터 의미를 갖고, 그때 프런트가 "그런 카테고리 없음" 대신 조용히 잘못된
+    칩을 그리지 않게 한다.
+    """
     with _map_kor_travel_map_errors():
-        data = await client.categories(active_only=active_only)
-    return Envelope.of(
-        [_category_from_kor_travel_map(c) for c in data.get("items", []) if isinstance(c, dict)]
-    )
+        data = await client.categories()
+    items = [_category_from_kor_travel_map(c) for c in data.get("items", []) if isinstance(c, dict)]
+    if active_only:
+        items = [item for item in items if item.is_active]
+    return Envelope.of(items)
 
 
 @router.get("/{feature_id}", response_model=Envelope[FeatureDetail])
@@ -600,9 +662,14 @@ async def get_feature_weather(
     client: KorTravelMapHttpClientDep,
     asof: Annotated[datetime | None, Query()] = None,
 ) -> Envelope[FeatureWeatherCard]:
-    """weather card — kor_travel_map 평탄 metric 목록 + source_styles."""
+    """weather card — kor_travel_map 평탄 metric 목록 + source_styles.
+
+    `asof`를 주면 transport가 bitemporal snapshot 경로(`…/weather/snapshot`,
+    `target_at`=asof / `known_at`=호출 시각)로 나간다. offset 없는 값은 KST로 해석한다
+    (`normalize_asof_query`).
+    """
     with _map_kor_travel_map_errors():
-        dto = await client.feature_weather(feature_id, asof=asof)
+        dto = await client.feature_weather(feature_id, asof=normalize_asof_query(asof))
     return Envelope.of(_weather_from_kor_travel_map(dto, feature_id=feature_id))
 
 

@@ -42,13 +42,11 @@ class _FakeCategoryClient:
     def __init__(self) -> None:
         self.calls: dict[str, Any] = {}
 
-    async def categories(
-        self, *, include_counts: bool = False, active_only: bool = False
-    ) -> dict[str, Any]:
-        self.calls["categories"] = {
-            "include_counts": include_counts,
-            "active_only": active_only,
-        }
+    async def categories(self, *, include_counts: bool = False) -> dict[str, Any]:
+        # 시그니처는 실제 client와 같다 — Map `/v1/categories`는 `include_counts` 하나만
+        # 받는다(`active_only`는 T-VN-04 F-1에서 삭제). 라우터가 다시 위임하면 TypeError로
+        # 즉시 red가 된다.
+        self.calls["categories"] = {"include_counts": include_counts}
         return {
             "include_counts": include_counts,
             "items": [
@@ -116,7 +114,7 @@ async def test_admin_category_mappings_proxies_and_filters_catalog(
 
     assert resp.status_code == 200, resp.text
     data = resp.json()["data"]
-    assert fake.calls["categories"] == {"include_counts": True, "active_only": False}
+    assert fake.calls["categories"] == {"include_counts": True}
     assert data["source_of_truth"] == "kor-travel-map:/v1/categories"
     assert data["mode"] == "pinvi_override"
     assert data["total_count"] == 2
@@ -132,6 +130,41 @@ async def test_admin_category_mappings_proxies_and_filters_catalog(
     assert data["items"][0]["effective_label"] == "해수욕장"
     assert data["items"][0]["effective_maki_icon"] == "swimming"
     assert data["items"][0]["has_override"] is False
+
+
+async def test_admin_category_mappings_active_only_filters_locally(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    """admin `active_only`도 Pinvi가 `is_active`로 거른다(상류 위임 없음).
+
+    Map은 이 query를 더는 받지 않고, 삭제 전에도 이 스위치는 목록이 아니라
+    `db_feature_count`/`db_active` 집계 기준만 바꿨다. 그 집계 축은 되살릴 수 없으므로
+    (`ADR-067` 공개 projection 고정) 파라미터의 의미를 "비활성 카탈로그 항목 제외" 하나로
+    좁히고 여기서 그 동작을 고정한다.
+    """
+    user_id = await _create_user(
+        session_factory,
+        email="operator-category-active@example.com",
+        roles=["user", "operator"],
+    )
+    fake = _FakeCategoryClient()
+    _override(fake)
+    try:
+        resp = await client.get(
+            "/admin/category-mappings?active_only=true",
+            cookies=auth_cookies(user_id),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert fake.calls["categories"] == {"include_counts": True}
+    assert data["active_only"] is True
+    # fake 카탈로그는 active 1건 + inactive 1건 — 필터가 실제로 걸렸는지 본다.
+    assert [item["code"] for item in data["items"]] == ["01070100"]
+    assert data["total_count"] == 1
+    assert data["inactive_count"] == 0
 
 
 async def test_admin_category_mappings_merges_pinvi_overrides(

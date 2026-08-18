@@ -22,7 +22,7 @@ import math
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 
 import httpx
@@ -468,6 +468,22 @@ def _decode_weather_batch_item(
 
 
 def _require_aware_datetime(value: datetime, *, field: str) -> None:
+    """transport로 나가는 모든 시각은 offset이 있어야 한다 — **본 모듈의 단일 시간대 정책**.
+
+    한때 이 모듈에는 정책이 둘 있었다: weather batch 경로는 naive를 거절하고, weather 시점
+    조회는 naive를 **UTC로 간주**해 offset을 붙였다(구 `_as_aware_utc`). 한국 서비스에서
+    offset 없는 wall-clock을 UTC로 읽으면 KST 대비 9시간 어긋난 시점의 데이터가 조용히
+    돌아온다 — `docs/api/features.md` §2.3은 `asof`를 KST aware로 규정하고
+    `services/trip_view_builder.py`도 여행 시각을 Asia/Seoul로 다룬다. 두 정책 중 UTC 쪽을
+    버리고 하나로 모았다:
+
+    * **transport(본 client)는 aware만 받는다.** 시간대 의미를 추측하지 않는다(추측하면 위
+      9시간 드리프트가 조용히 재발한다).
+    * **naive → aware 보정은 시간대 의미를 아는 HTTP 경계가 한다.** 라우터의 `datetime`
+      query는 offset 없이 들어올 수 있으므로 `api/v1/features.py`의
+      `normalize_asof_query()`가 서비스 표준 시간대(KST, `app.core.time.KST`)로 해석한 뒤
+      client에 넘긴다.
+    """
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"{field}에는 UTC offset이 필요합니다.")
 
@@ -1042,28 +1058,93 @@ class KorTravelMapClient:
         return self._thread_page(data, meta)
 
     async def feature_weather(
-        self, feature_id: str, *, asof: datetime | None = None
+        self,
+        feature_id: str,
+        *,
+        asof: datetime | None = None,
+        known_at: datetime | None = None,
     ) -> dict[str, Any]:
-        """날씨 카드. data = {feature_id, asof, is_stale, source_styles, metrics}."""
-        params: dict[str, Any] = {}
-        if asof is not None:
-            params["asof"] = asof.isoformat()
+        """날씨 카드 — `asof`가 있으면 시점(bitemporal) 조회.
+
+        data = {feature_id, selected_at, refresh_after, latest_at, is_stale, source_styles,
+        metrics} (snapshot 경로는 여기에 target_at/known_at이 더 붙는다).
+
+        Map bitemporal cutover(`6650aa71 feat(weather): add bitemporal batch snapshot API`)
+        이후 **시점 조회는 다른 경로**다.
+
+        * `GET /v1/features/{id}/weather`는 query parameter를 하나도 받지 않는다. 예전처럼
+          `?asof=`를 붙이면 FastAPI가 모르는 query를 조용히 버려서 시점과 무관하게 늘 최신
+          카드가 돌아왔다(silent drift). 그래서 `asof`가 오면 snapshot 경로로 라우팅한다.
+        * `GET /v1/features/{id}/weather/snapshot`은 `target_at`(원하는 관측/예보 시각)과
+          `known_at`(그 시각에 알려진 response cutoff)을 **둘 다 required**로 받는다. Pinvi의
+          `asof`는 valid time이므로 `target_at`에 싣고, knowledge cutoff는 호출 시각(=최신
+          지식)을 기본값으로 쓴다. 응답 `WeatherSnapshotData`는 `WeatherCardData`의
+          상위집합(같은 필드 + `target_at`/`known_at`)이라 소비 측 매핑은 그대로 쓴다.
+
+        `WeatherCardData.asof`는 같은 cutover에서 `selected_at`으로 대체됐다. Pinvi 공개
+        응답의 필드 이름 `asof`는 web/mobile 계약이라 유지하고 소스만 `selected_at`으로
+        갈아끼운다 — 그 re-projection은 뷰 계층(`api/v1/features.py`·`api/v1/admin/features.py`)
+        책임이다(본 client는 transport-only, ADR-005).
+
+        `known_at`(knowledge time)은 **의도적으로 kwarg로 남긴다** — 현재 호출자(user
+        `api/v1/features.py`, admin `api/v1/admin/features.py`)는 둘 다 이 값을 생략하고
+        "지금 아는 최신 지식"을 쓴다(사용자에게 노출된 시점 축은 valid time = `asof`
+        하나뿐이다). 그래도 제거하지 않는 이유:
+        1. upstream이 `known_at`을 **required**로 받으므로 client는 반드시 무언가를 보내야
+           한다. kwarg가 없으면 그 값이 숨은 `now()`가 되어 테스트에서 고정할 수 없고,
+           "왜 이 값을 보내나"가 코드에서 사라진다.
+        2. 같은 계약의 batch 형제(`feature_weather_batch(known_at=...)`)에서는 required다.
+           두 진입점의 시그니처가 갈라지면 bitemporal 두 축이 어느 쪽에서 표현되는지가
+           흐려진다.
+        3. 과거 결정을 재현·감사하려면 두 축을 모두 핀해야 한다(valid time만으로는 "그때
+           우리가 알던 값"을 되돌릴 수 없다). 그 호출자가 생기면 kwarg만 채우면 된다.
+        naive 값은 두 인자 모두 거절한다 — `_require_aware_datetime` 참조(단일 시간대 정책).
+        """
+        if asof is None:
+            return self._data(
+                await self._send(
+                    "GET",
+                    f"/v1/features/{feature_id}/weather",
+                    allow_public_api_key=True,
+                )
+            )
+        _require_aware_datetime(asof, field="asof")
+        knowledge_cutoff = datetime.now(UTC) if known_at is None else known_at
+        _require_aware_datetime(knowledge_cutoff, field="known_at")
         return self._data(
             await self._send(
                 "GET",
-                f"/v1/features/{feature_id}/weather",
-                params=params,
+                f"/v1/features/{feature_id}/weather/snapshot",
+                params={
+                    "target_at": asof.isoformat(),
+                    "known_at": knowledge_cutoff.isoformat(),
+                },
                 allow_public_api_key=True,
             )
         )
 
-    async def categories(
-        self, *, include_counts: bool = False, active_only: bool = False
-    ) -> dict[str, Any]:
-        """카테고리 카탈로그. data = {count, include_counts, items}."""
-        params = {"include_counts": include_counts, "active_only": active_only}
+    async def categories(self, *, include_counts: bool = False) -> dict[str, Any]:
+        """카테고리 카탈로그(정적 145건). data = {items, include_counts}.
+
+        **`active_only`는 보내지 않는다.** Map `/v1/categories`가 선언하는 query는
+        `include_counts` 하나뿐이다(스냅샷 기준, `routers/categories.py`: "과거의
+        ``active_only`` 스위치는 비공개 분포를 공개 표면에 노출했기에 제거됐다 — T-VN-04, F-1").
+        FastAPI는 선언하지 않은 query를 422가 아니라 **조용히 버리므로** 계속 보내면 필터가
+        걸린 척하는 200이 돌아온다. 제거 전 실제 upstream 동작도 확인했다: 옛 `active_only`는
+        item 목록이 아니라 `db_feature_count`/`db_active` **집계 기준**만 바꿨고
+        (`_STATIC_CATEGORIES`는 항상 전량), 그 집계는 이제 항상 ADR-067 공개 projection이다.
+
+        catalog 항목별 `is_active`는 응답에 그대로 온다(required bool) — "활성만" 필터가
+        필요하면 **소비 계층**이 그 필드로 거른다(`api/v1/features.py`·
+        `api/v1/admin/category_mappings.py`). transport는 필터를 흉내내지 않는다(ADR-005).
+        """
         return self._data(
-            await self._send("GET", "/v1/categories", params=params, allow_public_api_key=True)
+            await self._send(
+                "GET",
+                "/v1/categories",
+                params={"include_counts": include_counts},
+                allow_public_api_key=True,
+            )
         )
 
     async def public_beaches(

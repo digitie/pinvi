@@ -33,6 +33,9 @@ import {
   AdminUserRoleMutationRequestSchema,
   AdminUserSessionsResponseSchema,
   AdminFeatureSortOrderSchema,
+  AdminFeatureLifecycleStateSchema,
+  AdminFeaturePublicationStateSchema,
+  AdminFeatureQualityStateSchema,
   AdminFeatureSortSchema,
   AdminFeatureRequestApproveSchema,
   AdminFeatureRequestPagedResponseSchema,
@@ -138,13 +141,18 @@ import {
 import { z } from 'zod';
 import type { ApiClient } from '../client';
 
+/**
+ * Map 3축 cutover(`1f2bdc3a`) 이후 upstream이 받는 필터만 노출한다. legacy
+ * `status`/`provider`/`datasetKey`는 Map에 없어 조용히 버려졌으므로 제거했다.
+ */
 export interface AdminFeatureListParams {
   q?: string;
   kind?: string[];
   category?: string[];
-  status?: string[];
-  provider?: string[];
-  datasetKey?: string[];
+  lifecycleState?: z.infer<typeof AdminFeatureLifecycleStateSchema>[];
+  publicationState?: z.infer<typeof AdminFeaturePublicationStateSchema>[];
+  qualityState?: z.infer<typeof AdminFeatureQualityStateSchema>[];
+  providerDatasetId?: number;
   hasCoord?: boolean;
   hasIssue?: boolean;
   issueType?: string[];
@@ -985,10 +993,12 @@ export const adminApi = (client: ApiClient) => ({
     if (params.q) qs.set('q', params.q);
     appendValues(qs, 'kind', params.kind);
     appendValues(qs, 'category', params.category);
-    appendValues(qs, 'status', params.status);
-    appendValues(qs, 'provider', params.provider);
-    appendValues(qs, 'dataset_key', params.datasetKey);
+    appendValues(qs, 'lifecycle_state', params.lifecycleState);
+    appendValues(qs, 'publication_state', params.publicationState);
+    appendValues(qs, 'quality_state', params.qualityState);
     appendValues(qs, 'issue_type', params.issueType);
+    if (params.providerDatasetId !== undefined)
+      qs.set('provider_dataset_id', String(params.providerDatasetId));
     if (params.hasCoord !== undefined) qs.set('has_coord', String(params.hasCoord));
     if (params.hasIssue !== undefined) qs.set('has_issue', String(params.hasIssue));
     if (params.updatedFrom) qs.set('updated_from', params.updatedFrom);

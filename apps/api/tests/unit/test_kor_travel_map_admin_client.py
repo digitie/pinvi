@@ -246,11 +246,15 @@ async def test_list_features_uses_admin_read_path_filters_and_returns_payload() 
                 "data": {
                     "items": [
                         {
+                            # Map 현행 `AdminFeatureRecord` — 합성 `status`는 없다.
                             "feature_id": "f_1",
+                            "feature_uuid": "f_1",
                             "kind": "place",
                             "name": "해운대 카페",
                             "category": "01070100",
-                            "status": "active",
+                            "lifecycle_state": "active",
+                            "publication_state": "published",
+                            "quality_state": "valid",
                             "lon": 129.16,
                             "lat": 35.16,
                             "address_label": "부산",
@@ -272,9 +276,10 @@ async def test_list_features_uses_admin_read_path_filters_and_returns_payload() 
         q="해운대",
         kinds=["place", "event"],
         categories=["01070100"],
-        statuses=["active"],
-        providers=["visitkorea"],
-        dataset_keys=["places"],
+        lifecycle_states=["active"],
+        publication_states=["published", "suppressed"],
+        quality_states=["quarantined"],
+        provider_dataset_id=42,
         has_coord=True,
         has_issue=False,
         issue_types=["missing_coord"],
@@ -287,14 +292,47 @@ async def test_list_features_uses_admin_read_path_filters_and_returns_payload() 
     assert seen["path"] == "/v1/admin/features"
     assert ("kind", "place") in seen["query"]
     assert ("kind", "event") in seen["query"]
-    assert ("provider", "visitkorea") in seen["query"]
-    assert ("dataset_key", "places") in seen["query"]
+    assert ("lifecycle_state", "active") in seen["query"]
+    assert ("publication_state", "published") in seen["query"]
+    assert ("publication_state", "suppressed") in seen["query"]
+    assert ("quality_state", "quarantined") in seen["query"]
+    assert ("provider_dataset_id", "42") in seen["query"]
     assert ("has_coord", "true") in seen["query"]
     assert ("has_issue", "false") in seen["query"]
     assert ("sort", "updated_at") in seen["query"]
+    # Map `GET /v1/admin/features`가 선언하지 않는 이름은 나가면 안 된다 — FastAPI가
+    # 조용히 버려 필터가 걸린 척하기 때문이다(3축 cutover `1f2bdc3a`).
+    assert {name for name, _ in seen["query"]} <= {
+        "q",
+        "kind",
+        "category",
+        "lifecycle_state",
+        "publication_state",
+        "quality_state",
+        "provider_dataset_id",
+        "has_coord",
+        "has_issue",
+        "issue_type",
+        "updated_from",
+        "updated_to",
+        "include_ended",
+        "page_size",
+        "cursor",
+        "sort",
+        "order",
+    }
     assert payload["data"]["items"][0]["feature_id"] == "f_1"
+    assert "status" not in payload["data"]["items"][0]
     assert payload["meta"]["page"]["next_cursor"] == "next-1"
     await client.aclose()
+
+
+def test_list_features_signature_drops_pre_cutover_filter_arguments() -> None:
+    """`statuses`/`providers`/`dataset_keys`를 되살리면 red — Map에 그 query가 없다."""
+    parameters = set(inspect.signature(KorTravelMapAdminClient.list_features).parameters)
+    assert {"lifecycle_states", "publication_states", "quality_states"} <= parameters
+    assert "provider_dataset_id" in parameters
+    assert not {"statuses", "providers", "dataset_keys"} & parameters
 
 
 async def test_get_feature_detail_uses_admin_detail_path() -> None:
@@ -308,24 +346,30 @@ async def test_get_feature_detail_uses_admin_detail_path() -> None:
             json={
                 "data": {
                     "feature": {
+                        # Map 현행 `AdminFeatureDetailFeatureRecord` — 3축만 있고
+                        # 합성 `status`는 없다.
                         "feature_id": "f_1",
+                        "feature_uuid": "f_1",
                         "kind": "place",
                         "name": "해운대 카페",
                         "category": "01070100",
-                        "status": "active",
+                        "lifecycle_state": "active",
+                        "publication_state": "published",
+                        "quality_state": "valid",
                         "address": {},
                         "detail": {},
                         "urls": {},
                         "raw_refs": [],
+                        "row_revision": 1,
                         "created_at": "2026-06-11T00:00:00+09:00",
                         "updated_at": "2026-06-12T00:00:00+09:00",
                     },
                     "sources": [],
                     "issues": [],
                     "overrides": [],
-                    "versions": [],
-                    "change_requests": [],
+                    "state_transitions": [],
                     "files": [],
+                    "curations": [],
                 },
                 "meta": {},
             },
@@ -336,6 +380,7 @@ async def test_get_feature_detail_uses_admin_detail_path() -> None:
     assert seen["method"] == "GET"
     assert seen["path"] == "/v1/admin/features/f_1"
     assert data["feature"]["feature_id"] == "f_1"
+    assert "status" not in data["feature"]
     await client.aclose()
 
 

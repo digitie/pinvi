@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -45,12 +45,21 @@ async def _create_user(
 
 
 def _feature_record() -> dict[str, Any]:
+    """Map 현행 릴리스의 `AdminFeatureRecord` 그대로 — 합성 `status`가 **없다**.
+
+    Map 3축 cutover(`1f2bdc3a`)로 admin 목록 item은
+    `lifecycle_state`/`publication_state`/`quality_state`만 준다. 이 fake에 `status`를
+    되살리면(=Pinvi 스키마가 다시 요구하면) 아래 회귀 테스트가 red가 된다.
+    """
     return {
         "feature_id": "f_place_1",
+        "feature_uuid": "f_place_1",
         "kind": "place",
         "name": "해운대 카페",
         "category": "01070100",
-        "status": "active",
+        "lifecycle_state": "active",
+        "publication_state": "published",
+        "quality_state": "valid",
         "lon": 129.163,
         "lat": 35.158,
         "address_label": "부산 해운대구",
@@ -72,13 +81,24 @@ def _feature_record() -> dict[str, Any]:
 
 
 def _detail() -> dict[str, Any]:
+    """Map 현행 릴리스의 `AdminFeatureDetailData` 그대로.
+
+    - `feature`는 3축만 준다(합성 `status` 없음, `row_revision` 추가).
+    - `sources`는 `is_primary_source`/`source_version`/`raw_*` 없이 `source_entity_key`·
+      `observed_at`을 준다 — primary 여부는 `source_role`이 표현한다.
+    - `versions`/`change_requests`는 애초에 오지 않고, 대신 `state_transitions`·
+      `curations`가 온다(Pinvi 스키마에서는 optional이라 빈 목록으로 남는다).
+    """
     return {
         "feature": {
             "feature_id": "f_place_1",
+            "feature_uuid": "f_place_1",
             "kind": "place",
             "name": "해운대 카페",
             "category": "01070100",
-            "status": "active",
+            "lifecycle_state": "active",
+            "publication_state": "published",
+            "quality_state": "valid",
             "lon": 129.163,
             "lat": 35.158,
             "address": {"road": "해운대해변로"},
@@ -89,13 +109,13 @@ def _detail() -> dict[str, Any]:
             "sigungu_code": "26350",
             "marker_icon": "cafe",
             "marker_color": "P-07",
-            "data_origin": "provider",
-            "data_version": 3,
+            "row_revision": 3,
             "created_at": "2026-06-11T00:00:00+09:00",
             "updated_at": "2026-06-12T00:00:00+09:00",
         },
         "sources": [
             {
+                "source_entity_key": "visitkorea:places:content:1",
                 "source_record_key": "visitkorea:places:1",
                 "provider": "visitkorea",
                 "dataset_key": "places",
@@ -104,11 +124,11 @@ def _detail() -> dict[str, Any]:
                 "source_role": "primary",
                 "match_method": "natural_key",
                 "confidence": 100,
-                "is_primary_source": True,
                 "raw_payload_hash": "sha256:abc",
                 "raw_data": {"name": "해운대 카페"},
                 "fetched_at": "2026-06-11T00:00:00+09:00",
                 "imported_at": "2026-06-11T00:01:00+09:00",
+                "observed_at": "2026-06-11T00:00:30+09:00",
                 "linked_at": "2026-06-11T00:02:00+09:00",
             }
         ],
@@ -127,18 +147,24 @@ def _detail() -> dict[str, Any]:
                 "created_at": "2026-06-12T00:10:00+09:00",
             }
         ],
-        "versions": [
+        "state_transitions": [
             {
-                "feature_id": "f_place_1",
-                "version": 3,
-                "origin": "provider",
-                "change_kind": "upsert",
-                "payload": {"name": "해운대 카페"},
-                "created_at": "2026-06-12T00:00:00+09:00",
+                "transition_id": 1,
+                "from_lifecycle_state": None,
+                "from_publication_state": None,
+                "from_quality_state": None,
+                "to_lifecycle_state": "active",
+                "to_publication_state": "published",
+                "to_quality_state": "valid",
+                "transition_kind": "provider_import",
+                "reason_code": "initial_load",
+                "principal": "service:kortravelmap",
+                "occurred_at": "2026-06-11T00:00:00+09:00",
+                "row_revision": 1,
             }
         ],
-        "change_requests": [],
         "files": [],
+        "curations": [],
     }
 
 
@@ -245,13 +271,32 @@ class _FakeWeatherClient:
         self.calls: dict[str, Any] = {}
         self.unavailable = unavailable
 
-    async def feature_weather(self, feature_id: str, *, asof: Any = None) -> dict[str, Any]:
-        self.calls["feature_weather"] = {"feature_id": feature_id, "asof": asof}
+    async def feature_weather(
+        self, feature_id: str, *, asof: Any = None, known_at: Any = None
+    ) -> dict[str, Any]:
+        # 시그니처는 실제 client(`clients/kor_travel_map.py feature_weather`)와 같아야 한다 —
+        # kwarg가 빠져 있으면 라우터가 새 인자를 넘기기 시작해도 fake에서만 TypeError로 늦게 터진다.
+        self.calls["feature_weather"] = {
+            "feature_id": feature_id,
+            "asof": asof,
+            "known_at": known_at,
+        }
+        # 실제 transport의 단일 시간대 정책을 그대로 흉내낸다(`_require_aware_datetime`).
+        # 이게 없으면 라우터가 `normalize_asof_query()`를 다시 빼먹어도 fake는 naive를 받아
+        # 200을 돌려주고, 실제 배포에서만 500이 난다.
+        for field, value in (("asof", asof), ("known_at", known_at)):
+            if isinstance(value, datetime) and value.utcoffset() is None:
+                raise ValueError(f"{field}에는 UTC offset이 필요합니다.")
         if self.unavailable:
             raise KorTravelMapUnavailable("kor-travel-map weather down")
+        # admin weather-values는 **user** 표면 카드를 투영한다 — Map bitemporal
+        # cutover(`6650aa71`)로 `asof` → `selected_at`. (Map admin profile에도
+        # `GET /v1/admin/features/{id}/weather`가 있지만 Pinvi는 아직 쓰지 않는다;
+        # `api/v1/admin/features.py` `_weather_values_from_payload` 주석의 후속 과제.)
         return {
             "feature_id": feature_id,
-            "asof": "2026-06-12T10:00:00+09:00",
+            "selected_at": "2026-06-12T10:00:00+09:00",
+            "refresh_after": "2026-06-12T11:00:00+09:00",
             "latest_at": "2026-06-12T09:30:00+09:00",
             "is_stale": False,
             "source_styles": ["nowcast", "short"],
@@ -297,8 +342,11 @@ async def test_list_admin_features_proxies_filters(
                 ("q", "해운대"),
                 ("kind", "place"),
                 ("kind", "event"),
-                ("status", "active"),
-                ("provider", "visitkorea"),
+                ("lifecycle_state", "active"),
+                ("publication_state", "published"),
+                ("publication_state", "suppressed"),
+                ("quality_state", "quarantined"),
+                ("provider_dataset_id", "42"),
                 ("category", "01070100"),
                 ("has_issue", "true"),
                 ("page_size", "100"),
@@ -320,14 +368,97 @@ async def test_list_admin_features_proxies_filters(
     assert fake.list_kwargs is not None
     assert fake.list_kwargs["q"] == "해운대"
     assert fake.list_kwargs["kinds"] == ["place", "event"]
-    assert fake.list_kwargs["statuses"] == ["active"]
-    assert fake.list_kwargs["providers"] == ["visitkorea"]
+    assert fake.list_kwargs["lifecycle_states"] == ["active"]
+    assert fake.list_kwargs["publication_states"] == ["published", "suppressed"]
+    assert fake.list_kwargs["quality_states"] == ["quarantined"]
+    assert fake.list_kwargs["provider_dataset_id"] == 42
     assert fake.list_kwargs["categories"] == ["01070100"]
     assert fake.list_kwargs["has_issue"] is True
     assert fake.list_kwargs["page_size"] == 100
     assert fake.list_kwargs["cursor"] == "cursor-1"
     assert fake.list_kwargs["sort"] == "updated_at"
     assert fake.list_kwargs["order"] == "desc"
+    # Map에 없는 legacy 필터 이름은 client 호출 인자로도 남으면 안 된다.
+    assert not {"statuses", "providers", "dataset_keys"} & set(fake.list_kwargs)
+
+
+async def test_list_admin_features_drops_legacy_status_provider_dataset_filters(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    """3축 cutover 전 이름(`status`/`provider`/`dataset_key`)은 upstream에 도달하지 않는다.
+
+    Map `GET /v1/admin/features`에는 셋 다 없어 보내봐야 조용히 버려진다 —
+    "필터가 걸린 척"하는 회귀를 여기서 red로 만든다.
+    """
+    admin_id = await _create_user(
+        session_factory, email="admin@example.com", roles=["user", "operator"]
+    )
+    fake = _FakeAdminClient()
+    _override(fake)
+    try:
+        resp = await client.get(
+            "/admin/features",
+            params=[
+                ("status", "active"),
+                ("provider", "visitkorea"),
+                ("dataset_key", "places"),
+            ],
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    assert fake.list_kwargs is not None
+    forwarded = {key: value for key, value in fake.list_kwargs.items() if value is not None}
+    # 라우터가 legacy 이름을 다시 받으면 여기에 값이 실려 red가 된다.
+    assert forwarded == {"page_size": 50, "sort": "name", "order": "asc"}
+
+
+async def test_list_admin_features_rejects_retired_status_sort_key(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    """`sort=status`는 Map enum에서 사라졌다 — 여기서 막지 않으면 upstream 422가 된다."""
+    admin_id = await _create_user(
+        session_factory, email="admin@example.com", roles=["user", "operator"]
+    )
+    fake = _FakeAdminClient()
+    _override(fake)
+    try:
+        resp = await client.get(
+            "/admin/features",
+            params=[("sort", "status")],
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 422, resp.text
+    assert fake.list_kwargs is None
+
+
+async def test_list_admin_features_exposes_three_state_axes_without_status(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    """Map이 `status`를 안 주는 페이로드로도 목록이 200이고, 3축이 그대로 나온다."""
+    admin_id = await _create_user(
+        session_factory, email="admin@example.com", roles=["user", "operator"]
+    )
+    assert "status" not in _feature_record()
+    fake = _FakeAdminClient()
+    _override(fake)
+    try:
+        resp = await client.get("/admin/features", cookies=auth_cookies(str(admin_id)))
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    item = resp.json()["data"]["items"][0]
+    assert item["lifecycle_state"] == "active"
+    assert item["publication_state"] == "published"
+    assert item["quality_state"] == "valid"
+    # `status`를 되살리면(스키마 필드 복원) 이 단언이 red가 된다.
+    assert "status" not in item
 
 
 async def test_get_admin_feature_returns_detail(
@@ -351,7 +482,20 @@ async def test_get_admin_feature_returns_detail(
     assert fake.detail_id == "f_place_1"
     assert data["feature"]["name"] == "해운대 카페"
     assert data["sources"][0]["provider"] == "visitkorea"
-    assert data["versions"][0]["version"] == 3
+    # Map은 상세 source에 `is_primary_source`를 주지 않는다(필수로 되돌리면 502).
+    assert data["sources"][0]["is_primary_source"] is None
+    assert data["sources"][0]["source_role"] == "primary"
+    # 3축이 상세에도 그대로 실린다.
+    assert data["feature"]["lifecycle_state"] == "active"
+    assert data["feature"]["publication_state"] == "published"
+    assert data["feature"]["quality_state"] == "valid"
+    # `status`를 되살리면 이 단언이 red가 된다.
+    assert "status" not in data["feature"]
+    assert "status" not in _detail()["feature"]
+    # Map 현행 상세에는 `versions`/`change_requests`가 없다 — 항상 빈 목록으로 남는다
+    # (후속: 두 필드를 Pinvi 상세 계약에서 걷어낼지 결정).
+    assert data["versions"] == []
+    assert data["change_requests"] == []
 
 
 async def test_get_admin_feature_sources_and_overrides_return_projections(
@@ -409,8 +553,42 @@ async def test_get_admin_feature_weather_values_proxies_weather_card(
         "2026-06-12T10:00:00+09:00"
     )
     assert data["feature_id"] == "f_weather_1"
+    assert data["asof"] == "2026-06-12T10:00:00+09:00"
     assert data["source_styles"] == ["nowcast", "short"]
     assert data["items"][0]["metric_key"] == "T1H"
+
+
+async def test_get_admin_feature_weather_values_reads_naive_asof_as_kst(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    """offset 없는 `?asof=`도 200이고, client에는 **aware**(KST)로 전달된다.
+
+    회귀 방어: 이 핸들러가 `normalize_asof_query()`를 건너뛰고 raw query를 넘기던 동안
+    naive 입력은 transport `ValueError`가 됐고, 그 예외는 KorTravelMap* 계열만 잡는
+    `_map_admin_errors()`를 뚫어 **500**이 됐다(직전 릴리스에서는 200). user weather 라우터
+    (`test_features_api.py test_weather_naive_asof_is_read_as_kst_not_utc`)와 같은 해석을
+    쓰는지도 함께 고정한다 — 두 경계가 갈라지면 같은 query가 9시간 다른 시점을 조회한다.
+    """
+    admin_id = await _create_user(
+        session_factory, email="admin@example.com", roles=["user", "operator"]
+    )
+    fake = _FakeWeatherClient()
+    _override_weather(fake)
+    try:
+        resp = await client.get(
+            "/admin/features/f_weather_1/weather-values",
+            params={"asof": "2026-06-12T10:00:00"},
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    passed = fake.calls["feature_weather"]["asof"]
+    assert passed.utcoffset() == timedelta(hours=9)
+    assert passed.isoformat() == "2026-06-12T10:00:00+09:00"
+    # knowledge time은 라우터가 넘기지 않는다 — client가 "지금"을 채운다.
+    assert fake.calls["feature_weather"]["known_at"] is None
 
 
 async def test_get_admin_feature_weather_values_maps_upstream_unavailable(

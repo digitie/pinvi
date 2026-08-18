@@ -1,5 +1,45 @@
 # resume.md
 
+## 2026-08-18 (claude) — T-VN-42 라운드 2: 재리뷰 P1 4건 해소
+
+**방금**: `chore/revendor-map-user-spec`(87c3a574 위 미커밋)에서 2라운드 재리뷰 P1을 전부 고쳤다.
+① CI red였던 `test_feature_weather_…_naive_asof`를 현재 정책(transport는 naive 거절)에 맞춰 둘로 분리
+(naive는 `ValueError` + **요청 미발생**까지 단언 / `known_at` 기본값은 aware asof로 분리). ② admin
+weather-values가 `normalize_asof_query()`를 건너뛰어 naive `?asof=`에서 500이던 것을 user 라우터와 같은
+helper로 보정(+ 통합 테스트, fake도 transport 정책을 흉내내게). ③ `docs/api/admin.md` §8.1/§8.2를 3축 +
+`provider_dataset_id`로 갱신하고 `sort` enum에서 `status` 제거, `versions`/`change_requests`가 항상 빈
+배열임을 명시. ④ `/v1/categories` 유령 query — 계약 게이트에 **폐쇄 단언**을 넣고 빠진 10경로를 채웠으며,
+"client가 선언되지 않은 query를 보내는지"를 MockTransport로 보는 **반대 방향 게이트**를 신설하고 client에서
+`active_only` 전송을 제거했다. 공개 `active_only`는 **유지하되 Pinvi가 `is_active`로 직접 필터**한다
+(조사 결과 삭제 전 upstream도 목록을 거른 적이 없다 — 집계 기준만 바꿨다). P2(query-keys 3축 타입 재사용,
+e2e fixture 정리, 거짓 0 카운트 칩 제거)도 함께.
+
+**다음 한 작업**: **n150 CI-parity 게이트로 통합 묶음(testcontainers)과 web e2e를 돌린다** — 이 호스트에는
+Docker/브라우저가 없어 unit + scratch harness + scratch tsc까지만 실측했다. green이면 PR을 연다(PR은 머지
+직전에만). 후속(별건)은 `docs/tasks.md` T-VN-42의 남은 항목: admin weather 경로 전환(비공개 feature 404),
+admin OpenAPI 스냅샷 vendoring(= 이번 admin 드리프트가 CI에 안 잡힌 근본 원인), `state_transitions`/
+`curations` 투영, 공개 `status` 필드 제거.
+
+## 2026-08-18 (claude) — T-VN-42 Map user spec 재vendor 후속 라운드 2 (적대적 P1 해소)
+
+**방금**: `chore/revendor-map-user-spec`(87c3a574 위 미커밋)에서 리뷰 P1/P2를 고쳤다. ① `status` 절단
+회귀방어 — 기본 fixture에서 `status` 키를 빼고 "dto에 남아 있어도 새어 나오지 않음"을 단위+통합에서
+따로 단언(투영을 되돌리면 red임을 실측). ② `docs/api/features.md`의 `"status": "active"` 예시 3곳을
+`null`로 정정 + §1.1 근거 절 신설 + §2.3에 `asof` ← Map `selected_at`·snapshot 라우팅 명시.
+③ **시간대 정책 통일** — transport는 aware만 받고(`_as_aware_utc` 제거), naive 보정은 라우터
+`normalize_asof_query()`가 KST로 한다(예전 UTC 해석은 9시간 드리프트). ④ `known_at` kwarg 유지 근거를
+docstring에 명시 + 통합 fake 시그니처 정렬, ⑤ `schemas/feature.py` stale 주석 정정, ⑥ query 빈 집합
+핀 근거 주석.
+
+**다음 한 작업**: 두 레인을 합친 뒤 **n150 CI-parity 게이트로 통합 묶음(testcontainers)을 돌린다**. 합치기
+전 잔여 2건: ① `tests/unit/test_kor_travel_map_client.py`의
+`test_feature_weather_defaults_known_at_to_now_and_normalises_naive_asof`가 naive `asof`=UTC라는 옛 동작을
+고정하므로 시간대 정책 통일과 함께 교체해야 한다(검증 완료된 교체본 인수인계됨 — naive는
+`pytest.raises(ValueError, match="UTC offset")`), ② `api/v1/admin/features.py` weather-values가 `asof`를
+`features.py normalize_asof_query()`에 통과시키도록 한다(지금은 naive 입력에서 transport ValueError).
+그 뒤 PR을 연다(PR은 머지 직전에만 연다). admin 표면 3축 정렬·유령 query 제거는 병렬 레인이 이미 진행했고,
+admin weather 경로 전환·admin OpenAPI vendoring·공개 `status` 필드 제거는 후속 과제로 `docs/tasks.md` T-VN-42에 있다.
+
 ## 2026-08-18 (claude) — #444 service provenance 재핀(Map #975 머지 SHA) + Hallmark T-313
 
 **방금**: #444 리뷰 P1(핀이 dangling 커밋) 해소 — Map #975가 `4672aa966cd473f17fd4f69ee8066276f7be900d`로 squash

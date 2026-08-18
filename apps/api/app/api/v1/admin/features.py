@@ -11,6 +11,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import ValidationError
 
+from app.api.v1.features import normalize_asof_query
 from app.clients.kor_travel_map import (
     KorTravelMapBadRequest,
     KorTravelMapConflict,
@@ -30,8 +31,11 @@ from app.schemas.admin import (
     AdminFeatureChangeRequestPagedResponse,
     AdminFeatureChangeRequestRecord,
     AdminFeatureDetail,
+    AdminFeatureLifecycleState,
     AdminFeatureOverridesResponse,
     AdminFeaturePagedResponse,
+    AdminFeaturePublicationState,
+    AdminFeatureQualityState,
     AdminFeatureSort,
     AdminFeatureSortOrder,
     AdminFeatureSourcesResponse,
@@ -161,11 +165,25 @@ def _validate_feature_detail(data: dict[str, Any]) -> AdminFeatureDetail:
 def _weather_values_from_payload(
     payload: dict[str, Any], *, feature_id: str
 ) -> AdminFeatureWeatherValuesResponse:
+    """weather card payload → admin weather-values 투영.
+
+    payload는 **user** 표면(`GET /v1/features/{id}/weather[/snapshot]`, user client)에서
+    온다. Map bitemporal cutover(`6650aa71`)의 `asof` → `selected_at` 개명이 그대로
+    적용되므로 여기서 `selected_at`을 읽는다.
+
+    주의(사실관계): Map admin profile에도 `GET /v1/admin/features/{feature_id}/weather`가
+    **존재한다**(query 없음, 응답은 user와 같은 `FeatureWeatherResponse`/`WeatherCardData`).
+    두 경로의 차이는 가시성이다 — user 경로는 `public_features` 기반이라 비공개 feature를
+    404로 막고, admin 경로는 base `features`(lifecycle=active) 기반이라 비공개까지 본다.
+    지금 이 admin tab은 user 카드를 투영하므로 **비공개 feature에서 404가 난다**.
+    admin route로 갈아타는 것은 별도 과제다(후속: admin weather 경로 전환).
+    """
     try:
         return AdminFeatureWeatherValuesResponse.model_validate(
             {
                 "feature_id": str(payload.get("feature_id") or feature_id),
-                "asof": payload.get("asof"),
+                # 공개 필드 이름 `asof`는 admin UI 계약이라 유지하고 소스만 갈아끼운다.
+                "asof": payload.get("selected_at"),
                 "latest_at": payload.get("latest_at"),
                 "is_stale": bool(payload.get("is_stale", False)),
                 "source_styles": payload.get("source_styles", []),
@@ -189,10 +207,21 @@ async def list_features_endpoint(
     q: Annotated[str | None, Query(description="name/address/feature/source 검색")] = None,
     kind: Annotated[list[str] | None, Query(description="feature kind 반복 필터")] = None,
     category: Annotated[list[str] | None, Query(description="category 반복 필터")] = None,
-    feature_status: Annotated[list[str] | None, Query(alias="status")] = None,
-    provider: Annotated[list[str] | None, Query(description="primary provider 반복 필터")] = None,
-    dataset_key: Annotated[
-        list[str] | None, Query(description="primary dataset_key 반복 필터")
+    lifecycle_state: Annotated[
+        list[AdminFeatureLifecycleState] | None,
+        Query(description="lifecycle 축 반복 필터 (active/retired)"),
+    ] = None,
+    publication_state: Annotated[
+        list[AdminFeaturePublicationState] | None,
+        Query(description="publication 축 반복 필터 (draft/published/suppressed)"),
+    ] = None,
+    quality_state: Annotated[
+        list[AdminFeatureQualityState] | None,
+        Query(description="quality 축 반복 필터 (valid/quarantined)"),
+    ] = None,
+    provider_dataset_id: Annotated[
+        int | None,
+        Query(ge=1, description="primary provider dataset canonical ID 필터"),
     ] = None,
     has_coord: Annotated[bool | None, Query()] = None,
     has_issue: Annotated[bool | None, Query()] = None,
@@ -204,15 +233,21 @@ async def list_features_endpoint(
     sort: Annotated[AdminFeatureSort, Query()] = "name",
     order: Annotated[AdminFeatureSortOrder, Query()] = "asc",
 ) -> Envelope[AdminFeaturePagedResponse]:
-    """kor-travel-map `/v1/admin/features` 목록 proxy."""
+    """kor-travel-map `/v1/admin/features` 목록 proxy.
+
+    필터 이름은 Map upstream query와 1:1이다. legacy `status`/`provider`/`dataset_key`는
+    Map 3축 cutover(`1f2bdc3a`) 이후 upstream에 존재하지 않으며, 계속 보내면 FastAPI가
+    조용히 버려 "필터가 걸린 척하는" 전량 응답이 된다 — 그래서 여기서도 받지 않는다.
+    """
     with _map_admin_errors():
         payload = await admin_client.list_features(
             q=q,
             kinds=kind,
             categories=category,
-            statuses=feature_status,
-            providers=provider,
-            dataset_keys=dataset_key,
+            lifecycle_states=lifecycle_state,
+            publication_states=publication_state,
+            quality_states=quality_state,
+            provider_dataset_id=provider_dataset_id,
             has_coord=has_coord,
             has_issue=has_issue,
             issue_types=issue_type,
@@ -433,9 +468,25 @@ async def get_feature_weather_values_endpoint(
     client: KorTravelMapHttpClientDep,
     asof: Annotated[datetime | None, Query()] = None,
 ) -> Envelope[AdminFeatureWeatherValuesResponse]:
-    """kor-travel-map weather card를 admin deep-link tab용 값 목록으로 투영."""
+    """kor-travel-map weather card를 admin deep-link tab용 값 목록으로 투영.
+
+    `asof`는 **반드시** `normalize_asof_query()`(user 라우터 소유)를 통과시킨다. transport는
+    aware만 받고(`clients/kor_travel_map.py _require_aware_datetime`) naive → aware 보정은
+    시간대 의미를 아는 HTTP 경계 한 곳이 KST로 한다 — 그 helper를 건너뛰고 raw query를 넘기면
+    offset 없는 `?asof=2026-07-01T09:00:00`이 transport `ValueError`가 되고, 그 예외는
+    KorTravelMap* 계열만 잡는 `_map_admin_errors()`를 뚫고 나가 **500**이 된다(직전 릴리스에서는
+    200이었다). user weather 라우터와 같은 helper를 쓰는 것이 두 경계의 시간대 해석이 갈라지지
+    않는 유일한 방법이다(user는 KST, admin은 UTC 같은 조용한 분화 차단).
+
+    `ValueError → 422` 방어 매핑은 **의도적으로 넣지 않았다**: `ValueError`는 너무 넓어
+    (`int()` 파싱·언패킹 등 평범한 서버 버그가 전부 여기 해당) `_map_admin_errors()`에서 잡으면
+    이 파일의 모든 핸들러에서 500이어야 할 결함이 "요청이 잘못됐다"는 422로 위장된다. 여기서
+    나는 naive datetime `ValueError`는 사용자 입력 오류가 아니라 **경계가 보정을 빼먹은 코드
+    결함**이므로, 조용히 4xx로 덮지 않고 보정 자체를 강제하고 통합 테스트
+    (`test_admin_features_api.py`)로 고정한다.
+    """
     with _map_admin_errors():
-        data = await client.feature_weather(feature_id, asof=asof)
+        data = await client.feature_weather(feature_id, asof=normalize_asof_query(asof))
     return Envelope.of(_weather_values_from_payload(data, feature_id=feature_id))
 
 

@@ -117,7 +117,9 @@ const featurePage: AdminFeaturePagedResponse = {
       kind: 'place',
       name: '해운대 카페',
       category: '01070100',
-      status: 'active',
+      lifecycle_state: 'active',
+      publication_state: 'published',
+      quality_state: 'valid',
       lon: 129.163,
       lat: 35.158,
       address_label: '부산 해운대구',
@@ -148,7 +150,9 @@ const featureDetail: AdminFeatureDetail = {
     kind: 'place',
     name: '해운대 카페',
     category: '01070100',
-    status: 'active',
+    lifecycle_state: 'active',
+    publication_state: 'published',
+    quality_state: 'valid',
     lon: 129.163,
     lat: 35.158,
     coord_precision_digits: null,
@@ -167,8 +171,11 @@ const featureDetail: AdminFeatureDetail = {
     marker_color: 'P-07',
     parent_feature_id: null,
     sibling_group_id: null,
-    data_origin: 'provider',
-    data_version: 3,
+    // Map `AdminFeatureDetailFeatureRecord`에는 `data_origin`/`data_version`이 **없다**
+    // (3축 cutover `1f2bdc3a`). Pinvi schema가 optional로 남겨 둔 필드라 fixture는 실제
+    // 응답과 같은 null이어야 한다 — 값을 넣으면 "Map이 준다"는 거짓을 e2e가 고정한다.
+    data_origin: null,
+    data_version: null,
     user_change_kind: null,
     user_change_status: null,
     user_change_request_id: null,
@@ -190,7 +197,9 @@ const featureDetail: AdminFeatureDetail = {
       source_role: 'primary',
       match_method: 'natural_key',
       confidence: 100,
-      is_primary_source: true,
+      // Map `AdminFeatureDetailSourceRecord`에 `is_primary_source`는 없다 — primary 여부는
+      // `source_role`이 표현한다.
+      is_primary_source: null,
       raw_name: '해운대 카페',
       raw_address: null,
       raw_longitude: null,
@@ -205,18 +214,10 @@ const featureDetail: AdminFeatureDetail = {
   ],
   issues: [],
   overrides: [],
-  versions: [
-    {
-      feature_id: 'f_place_1',
-      version: 3,
-      origin: 'provider',
-      change_kind: 'upsert',
-      payload: { name: '해운대 카페' },
-      request_id: null,
-      created_by: null,
-      created_at: '2026-06-12T00:00:00+09:00',
-    },
-  ],
+  // Map admin 상세 payload에는 `versions`/`change_requests`가 없다(있는 list는 sources /
+  // issues / overrides / files / state_transitions / curations). Pinvi는 두 키를 소비자
+  // 호환용으로 남겨 두지만 값은 늘 비어 있으므로 fixture도 비운다.
+  versions: [],
   change_requests: [],
   files: [],
 };
@@ -263,25 +264,35 @@ test('Admin Features가 Pinvi proxy로 목록 필터와 상세를 조회한다',
   await expect(page.getByTestId('admin-features-row-f_place_1')).toContainText('해운대 카페');
 
   await page.getByTestId('admin-features-search').fill('해운대');
-  await page.getByTestId('admin-features-provider-filter').fill('visitkorea');
+  await page.getByTestId('admin-features-provider-dataset-filter').fill('42');
   await page.getByTestId('admin-features-category-filter').fill('01070100');
   await page.getByTestId('admin-features-search-submit').click();
   await page.getByTestId('admin-features-kind-filter').selectOption('place');
-  await page.getByTestId('admin-features-status-filter').selectOption('active');
+  await page.getByTestId('admin-features-lifecycle-filter').selectOption('active');
+  await page.getByTestId('admin-features-publication-filter').selectOption('suppressed');
+  await page.getByTestId('admin-features-quality-filter').selectOption('quarantined');
   await page.getByTestId('admin-features-issue-filter').selectOption('yes');
 
+  // Map 3축 cutover(`1f2bdc3a`) 이후의 query 이름만 나가야 한다. legacy 이름은
+  // upstream이 조용히 버리므로 "필터가 걸린 척"하는 회귀를 여기서 잡는다.
   await expect
     .poll(() =>
       requests.some(
         (url) =>
           url.includes('q=') &&
-          url.includes('provider=visitkorea') &&
+          url.includes('provider_dataset_id=42') &&
           url.includes('category=01070100') &&
           url.includes('kind=place') &&
+          url.includes('lifecycle_state=active') &&
+          url.includes('publication_state=suppressed') &&
+          url.includes('quality_state=quarantined') &&
           url.includes('has_issue=true'),
       ),
     )
     .toBe(true);
+  expect(requests.some((url) => /[?&]status=/.test(url))).toBe(false);
+  expect(requests.some((url) => /[?&]provider=/.test(url))).toBe(false);
+  expect(requests.some((url) => /[?&]dataset_key=/.test(url))).toBe(false);
 
   await page.getByTestId('admin-features-detail-f_place_1').click();
   await expect(page.getByTestId('admin-features-detail')).toContainText('visitkorea / places');

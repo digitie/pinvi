@@ -1406,12 +1406,26 @@ export const AdminRequestTimelineResponseSchema = z.object({
 });
 export type AdminRequestTimelineResponse = z.infer<typeof AdminRequestTimelineResponseSchema>;
 
+/**
+ * kor-travel-map 3축 feature state (Map `1f2bdc3a` "complete feature state cutover").
+ * 합성 단일 문자열 `status`는 Map admin/user 표면에서 모두 사라졌다. 세 축은 서로
+ * 독립적으로 움직이므로 파생 단일 문자열로 뭉개지 않고 축 그대로 노출한다.
+ */
+export const AdminFeatureLifecycleStateSchema = z.enum(['active', 'retired']);
+export type AdminFeatureLifecycleState = z.infer<typeof AdminFeatureLifecycleStateSchema>;
+
+export const AdminFeaturePublicationStateSchema = z.enum(['draft', 'published', 'suppressed']);
+export type AdminFeaturePublicationState = z.infer<typeof AdminFeaturePublicationStateSchema>;
+
+export const AdminFeatureQualityStateSchema = z.enum(['valid', 'quarantined']);
+export type AdminFeatureQualityState = z.infer<typeof AdminFeatureQualityStateSchema>;
+
+/** Map `GET /v1/admin/features`의 `sort` enum과 동일 — 3축 cutover에서 `status`가 빠졌다. */
 export const AdminFeatureSortSchema = z.enum([
   'name',
   'updated_at',
   'created_at',
   'kind',
-  'status',
   'provider',
   'issue_count',
 ]);
@@ -1436,7 +1450,9 @@ export const AdminFeatureSummarySchema = z.object({
   kind: z.string(),
   name: z.string(),
   category: z.string(),
-  status: z.string(),
+  lifecycle_state: AdminFeatureLifecycleStateSchema,
+  publication_state: AdminFeaturePublicationStateSchema,
+  quality_state: AdminFeatureQualityStateSchema,
   lon: z.number().nullable().default(null),
   lat: z.number().nullable().default(null),
   address_label: z.string().nullable().default(null),
@@ -1495,7 +1511,9 @@ export const AdminFeatureDetailFeatureSchema = z.object({
   kind: z.string(),
   name: z.string(),
   category: z.string(),
-  status: z.string(),
+  lifecycle_state: AdminFeatureLifecycleStateSchema,
+  publication_state: AdminFeaturePublicationStateSchema,
+  quality_state: AdminFeatureQualityStateSchema,
   lon: z.number().nullable().default(null),
   lat: z.number().nullable().default(null),
   coord_precision_digits: z.number().int().nullable().default(null),
@@ -1538,7 +1556,8 @@ export const AdminFeatureDetailSourceSchema = z.object({
   source_role: z.string(),
   match_method: z.string(),
   confidence: z.number().int(),
-  is_primary_source: z.boolean(),
+  // Map `AdminFeatureDetailSourceRecord`에는 없다(primary 여부는 `source_role`).
+  is_primary_source: z.boolean().nullable().default(null),
   raw_name: z.string().nullable().default(null),
   raw_address: z.string().nullable().default(null),
   raw_longitude: z.number().nullable().default(null),
