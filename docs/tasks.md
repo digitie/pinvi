@@ -190,15 +190,19 @@
       (뷰포트·pointer 미디어쿼리만), eyebrow(uppercase accent 라벨) 4곳 삭제, 탐색/지도 shell 장식 칩 6개 삭제,
       TripDashboard 필터를 `role=tab`→`aria-pressed` 토글 그룹(44px)·목록 skeleton·오류 패널(회복 행동)과
       빈 상태(다음 행동 CTA) 분리. (완료: 2026-08-18, PR #450, claude → tasks-done.md)
-- [/] **T-315** — Hallmark PR-4(여행 상세·모달): `components/ui/Dialog.tsx` 프리미티브 신설
+- [/] **T-315** — Hallmark PR-4(모달 셸 수렴): `components/ui/Dialog.tsx` 프리미티브 신설
   (scrim/overlay/z-modal 토큰 + `useModalDialog` 내장 + 헤더/본문/푸터 슬롯 + busy 잠금),
-  `LocationConsentDialog`(focus trap 없던 것)·`NoticePlanCopyDialog` 이관, 임의 z-index
+  손복사 모달 7종 이관(`LocationConsentDialog`(focus trap 없던 것)·`NoticePlanCopyDialog`·
+  `TripEditDialog`·`TripManualPoiDialog`·`FeatureRequestDialog`·`DaySettingsDialog`), 임의 z-index
   (`z-[50]/[60]/[70]`) 전면 토큰화, 마커 팔레트 UI 오용(TripDayHeader 일출/일몰)·`bg-primary/10`
-  accent tint 제거. **잔여**: TripEditDialog/TripManualPoiDialog/FeatureRequestDialog/TripDayControls/
-  RestoreHotswapDialog 이관, TripDetail 3중 컨테인먼트·컨트롤 중복 정리.
-- [ ] **T-316** — Hallmark PR-5(지도·설정·파일·법무): 파괴적 액션 확인 정책(토큰 회수·동의 철회·연결 해제 =
-      Dialog, 가역 = 즉시+Undo, `window.confirm` 제거), 탐색 지도 장식 칩·상시 오류 dl 삭제, 설정 Admin chrome
-      분리(`SettingsHeader`), DSR/신고 raw JSON textarea → 일반 필드, 법무 measure 65ch·초안 배너 중립화.
+  accent tint 제거, 죽은 훅(`useEscapeKey`/`useDialogAutoFocus`) 삭제. `RestoreHotswapDialog`(admin
+  파괴적 흐름)는 portal + 배경 `inert`까지 쓰는 더 강한 격리라 토큰만 맞추고 이관은 보류 — 훅에
+  inert/portal을 추가하는 T-316에서 수렴.
+- [ ] **T-316** — Hallmark PR-5(여행 상세·지도·설정·파일·법무): TripDetail 3중 컨테인먼트·컨트롤 중복(일자
+      추가·개수 배지) 정리, `useModalDialog`에 배경 inert + portal 옵션 추가 후 `RestoreHotswapDialog` 수렴,
+      파괴적 액션 확인 정책(토큰 회수·동의 철회·연결 해제 = Dialog, 가역 = 즉시+Undo, `window.confirm` 제거),
+      탐색 지도 장식 칩·상시 오류 dl 삭제, 설정 Admin chrome 분리(`SettingsHeader`), DSR/신고 raw JSON
+      textarea → 일반 필드, 법무 measure 65ch·초안 배너 중립화.
 
 ## 실시간 WebSocket
 

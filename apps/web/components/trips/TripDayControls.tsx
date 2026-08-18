@@ -3,10 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Pencil, Plus, Trash2 } from 'lucide-react';
 import { MARKER_PALETTE, type MarkerColorKey, paletteHex } from '@pinvi/domain';
-import { useDialogAutoFocus } from '@/lib/useDialogAutoFocus';
-import { useEscapeKey } from '@/lib/useEscapeKey';
+import { FormField } from '@/components/forms/FormField';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
 
 const PALETTE_KEYS = Object.keys(MARKER_PALETTE) as MarkerColorKey[];
+const DIALOG_LABEL = 'block text-sm font-semibold text-ink';
+// 푸터 버튼이 다이얼로그 셸 밖(footer 슬롯)에 있어 form 속성으로 제출을 잇는다.
+const FORM_ID = 'trip-day-settings-form';
 
 export interface TripDayControlsProps {
   selectedDay: {
@@ -165,8 +169,6 @@ function DaySettingsDialog({
   onClose,
 }: DaySettingsDialogProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  useEscapeKey(onClose);
-  useDialogAutoFocus(inputRef);
   const normalizedTitle = title.trim();
   const unchanged =
     normalizedTitle === (currentTitle ?? '') &&
@@ -174,42 +176,50 @@ function DaySettingsDialog({
     color === currentColor;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/50 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="일자 설정"
-      data-testid="trip-day-title-dialog"
+    <Dialog
+      open
+      onClose={onClose}
+      title={`${dayIndex}일차 설정`}
+      size="sm"
+      busy={busy}
+      initialFocusRef={inputRef}
+      testId="trip-day-title-dialog"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
+            취소
+          </Button>
+          <Button type="submit" form={FORM_ID} disabled={unchanged} loading={busy}>
+            저장
+          </Button>
+        </>
+      }
     >
       <form
-        className="w-full max-w-sm space-y-3 rounded-md border border-hairline bg-canvas p-5 shadow-overlay"
+        id={FORM_ID}
+        className="space-y-3"
         onSubmit={(event) => {
           event.preventDefault();
           if (!unchanged) onSave();
         }}
       >
-        <h2 className="text-base font-bold text-ink">{dayIndex}일차 설정</h2>
-        <label className="block text-sm font-semibold text-ink" htmlFor="trip-day-title-input">
-          이름
-        </label>
-        <input
+        <FormField
           ref={inputRef}
           id="trip-day-title-input"
+          label="이름"
+          labelClassName={DIALOG_LABEL}
           value={title}
           onChange={(event) => onTitleChange(event.target.value)}
           maxLength={200}
           placeholder={`${dayIndex}일차`}
-          className="h-9 w-full rounded-sm border border-hairline px-2 text-sm text-ink outline-none focus:border-primary"
         />
-        <label className="block text-sm font-semibold text-ink" htmlFor="trip-day-date-input">
-          날짜
-        </label>
-        <input
+        <FormField
           id="trip-day-date-input"
+          label="날짜"
           type="date"
+          labelClassName={DIALOG_LABEL}
           value={date}
           onChange={(event) => onDateChange(event.target.value)}
-          className="h-9 w-full rounded-sm border border-hairline px-2 text-sm text-ink outline-none focus:border-primary"
         />
         <span className="block text-sm font-semibold text-ink">일자 색</span>
         <div
@@ -253,23 +263,7 @@ function DaySettingsDialog({
             </button>
           ))}
         </div>
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-9 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
-          >
-            취소
-          </button>
-          <button
-            type="submit"
-            disabled={busy || unchanged}
-            className="h-9 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
-          >
-            저장
-          </button>
-        </div>
       </form>
-    </div>
+    </Dialog>
   );
 }
