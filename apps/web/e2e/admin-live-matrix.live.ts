@@ -755,18 +755,21 @@ function pushFeatureRequestFilterCases(cases: AdminUiCase[]) {
 
 function pushFeaturesFilterCases(cases: AdminUiCase[]) {
   const kinds = ['all', 'place', 'event', 'notice', 'price', 'weather', 'route', 'area'];
-  const statuses = ['active', 'all', 'inactive', 'hidden', 'broken', 'deleted'];
+  // Map 3축 feature state (`1f2bdc3a`) — 합성 status 필터는 upstream에 없다.
+  const lifecycles = ['all', 'active', 'retired'];
+  const publications = ['all', 'draft', 'published', 'suppressed'];
+  const qualities = ['all', 'valid', 'quarantined'];
   const issues = ['all', 'yes', 'no'];
-  const providers = ['', 'visitkorea', 'kma', 'opinet'];
+  const providerDatasetIds = ['', '1', '42'];
   const categories = ['', '01070100', '02010100'];
   for (const viewport of compactViewports) {
     for (const kind of kinds) {
-      for (const status of statuses) {
+      for (const lifecycle of lifecycles) {
         for (const issue of issues) {
           for (const query of shortTerms) {
             pushCase(
               cases,
-              `features filter kind=${kind} status=${status} issue=${issue} q=${query}`,
+              `features filter kind=${kind} lifecycle=${lifecycle} issue=${issue} q=${query}`,
               viewport,
               async (page) => {
                 await openTableRoute(page, '/admin/features', 'Features');
@@ -776,13 +779,15 @@ function pushFeaturesFilterCases(cases: AdminUiCase[]) {
                 await throttle();
                 await page.getByTestId('admin-features-kind-filter').selectOption(kind);
                 await throttle();
-                await page.getByTestId('admin-features-status-filter').selectOption(status);
+                await page.getByTestId('admin-features-lifecycle-filter').selectOption(lifecycle);
                 await throttle();
                 await page.getByTestId('admin-features-issue-filter').selectOption(issue);
                 await waitForAdminTable(page);
                 await expect(page.getByTestId('admin-features-search')).toHaveValue(query);
                 await expect(page.getByTestId('admin-features-kind-filter')).toHaveValue(kind);
-                await expect(page.getByTestId('admin-features-status-filter')).toHaveValue(status);
+                await expect(page.getByTestId('admin-features-lifecycle-filter')).toHaveValue(
+                  lifecycle,
+                );
                 await expect(page.getByTestId('admin-features-issue-filter')).toHaveValue(issue);
               },
             );
@@ -790,20 +795,44 @@ function pushFeaturesFilterCases(cases: AdminUiCase[]) {
         }
       }
     }
-    for (const provider of providers) {
-      for (const category of categories) {
+    for (const publication of publications) {
+      for (const quality of qualities) {
         pushCase(
           cases,
-          `features provider=${provider || 'all'} category=${category || 'all'}`,
+          `features publication=${publication} quality=${quality}`,
           viewport,
           async (page) => {
             await openTableRoute(page, '/admin/features', 'Features');
-            await page.getByTestId('admin-features-provider-filter').fill(provider);
+            await page.getByTestId('admin-features-publication-filter').selectOption(publication);
+            await throttle();
+            await page.getByTestId('admin-features-quality-filter').selectOption(quality);
+            await waitForAdminTable(page);
+            await expect(page.getByTestId('admin-features-publication-filter')).toHaveValue(
+              publication,
+            );
+            await expect(page.getByTestId('admin-features-quality-filter')).toHaveValue(quality);
+          },
+        );
+      }
+    }
+    for (const providerDatasetId of providerDatasetIds) {
+      for (const category of categories) {
+        pushCase(
+          cases,
+          `features provider_dataset_id=${providerDatasetId || 'all'} category=${category || 'all'}`,
+          viewport,
+          async (page) => {
+            await openTableRoute(page, '/admin/features', 'Features');
+            await page
+              .getByTestId('admin-features-provider-dataset-filter')
+              .fill(providerDatasetId);
             await page.getByTestId('admin-features-category-filter').fill(category);
             await throttle();
             await page.getByTestId('admin-features-search-submit').click();
             await waitForAdminTable(page);
-            await expect(page.getByTestId('admin-features-provider-filter')).toHaveValue(provider);
+            await expect(page.getByTestId('admin-features-provider-dataset-filter')).toHaveValue(
+              providerDatasetId,
+            );
             await expect(page.getByTestId('admin-features-category-filter')).toHaveValue(category);
           },
         );

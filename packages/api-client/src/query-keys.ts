@@ -3,6 +3,8 @@
  * `docs/architecture/frontend.md` §4.3.
  */
 
+import type { AdminFeatureListParams } from './endpoints/admin';
+
 export const queryKeys = {
   auth: {
     me: () => ['auth', 'me'] as const,
@@ -157,21 +159,10 @@ export const queryKeys = {
     pois: (params: { page?: number; tripId?: string; hasBrokenLink?: boolean; q?: string }) =>
       ['admin', 'pois', params] as const,
     poi: (poiId: string) => ['admin', 'poi', poiId] as const,
-    features: (params: {
-      q?: string;
-      kind?: string[];
-      category?: string[];
-      status?: string[];
-      provider?: string[];
-      datasetKey?: string[];
-      hasCoord?: boolean;
-      hasIssue?: boolean;
-      issueType?: string[];
-      pageSize?: number;
-      cursor?: string;
-      sort?: string;
-      order?: string;
-    }) => ['admin', 'features', params] as const,
+    // 요청 파라미터 타입을 그대로 재사용한다 — key와 request가 갈라지면 캐시가
+    // 조용히 어긋난다(3축 cutover 때 이 목록만 legacy `status`/`provider`/`datasetKey`로
+    // 남아 있었다). `import type`이라 런타임 의존은 생기지 않는다.
+    features: (params: AdminFeatureListParams) => ['admin', 'features', params] as const,
     feature: (featureId: string) => ['admin', 'feature', featureId] as const,
     featureSources: (featureId: string) => ['admin', 'feature', featureId, 'sources'] as const,
     featureOverrides: (featureId: string) => ['admin', 'feature', featureId, 'overrides'] as const,

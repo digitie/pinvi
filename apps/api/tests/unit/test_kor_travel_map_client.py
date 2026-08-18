@@ -786,6 +786,160 @@ async def test_get_weather_batch_rejects_producer_budget_overflow_before_http() 
     await client.aclose()
 
 
+# --- weather 시점 조회 라우팅 (Map bitemporal cutover `6650aa71`) -----------------
+
+
+async def test_feature_weather_without_asof_uses_card_route_and_sends_no_query() -> None:
+    """`asof`가 없으면 기존 card 경로 그대로. query는 하나도 붙지 않는다."""
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["query"] = str(request.url.query, "utf-8")
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "feature_id": "f1",
+                    "selected_at": "2026-07-30T09:00:00+09:00",
+                    "refresh_after": "2026-07-30T10:00:00+09:00",
+                    "latest_at": "2026-07-30T09:00:00+09:00",
+                    "is_stale": False,
+                    "source_styles": ["nowcast"],
+                    "metrics": [],
+                },
+                "meta": {"request_id": "r-weather"},
+            },
+        )
+
+    client = _client(handler)
+    data = await client.feature_weather("f1")
+    assert seen["path"] == "/v1/features/f1/weather"
+    assert seen["query"] == ""
+    assert data["selected_at"] == "2026-07-30T09:00:00+09:00"
+    await client.aclose()
+
+
+async def test_feature_weather_with_asof_routes_to_bitemporal_snapshot() -> None:
+    """`asof`는 snapshot 경로의 `target_at`으로 나가고 `known_at`이 함께 실린다.
+
+    회귀 방어: card 경로에는 `asof` query가 없어서(Map `6650aa71`) 예전처럼
+    `/weather?asof=`를 보내면 FastAPI가 조용히 버리고 늘 최신값을 돌려줬다.
+    """
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["params"] = dict(request.url.params)
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "feature_id": "f1",
+                    "target_at": "2026-07-01T23:59:59+09:00",
+                    "known_at": "2026-07-02T00:00:00+09:00",
+                    "selected_at": "2026-07-01T23:00:00+09:00",
+                    "refresh_after": None,
+                    "latest_at": "2026-07-01T23:00:00+09:00",
+                    "is_stale": True,
+                    "source_styles": ["short"],
+                    "metrics": [],
+                },
+                "meta": {"request_id": "r-weather-snapshot"},
+            },
+        )
+
+    client = _client(handler)
+    asof = datetime(2026, 7, 1, 23, 59, 59, tzinfo=ZoneInfo("Asia/Seoul"))
+    known_at = datetime(2026, 7, 2, 0, 0, tzinfo=ZoneInfo("Asia/Seoul"))
+    data = await client.feature_weather("f1", asof=asof, known_at=known_at)
+
+    assert seen["path"] == "/v1/features/f1/weather/snapshot"
+    assert seen["params"] == {
+        "target_at": "2026-07-01T23:59:59+09:00",
+        "known_at": "2026-07-02T00:00:00+09:00",
+    }
+    # snapshot 응답은 card 응답의 상위집합 — 소비 측 매핑이 그대로 쓰인다.
+    assert data["selected_at"] == "2026-07-01T23:00:00+09:00"
+    assert data["is_stale"] is True
+    await client.aclose()
+
+
+async def test_feature_weather_rejects_naive_asof_before_any_request_goes_out() -> None:
+    """naive `asof`는 **요청을 보내기 전에** 거절한다 — transport 단일 시간대 정책.
+
+    한때 이 경로는 naive를 UTC로 간주해 offset을 붙였고(구 `_as_aware_utc`), 한국 서비스에서
+    offset 없는 벽시계 시각을 UTC로 읽으면 9시간 어긋난 시점의 날씨가 **오류 없이** 돌아왔다.
+    이제 transport는 시간대를 추측하지 않고 aware만 받는다(`_require_aware_datetime`);
+    naive → aware 보정은 시간대 의미를 아는 HTTP 경계(`api/v1/features.py
+    normalize_asof_query()`, KST 해석) 한 곳이 한다.
+
+    "요청이 나가지 않았음"까지 단언하는 이유: 거절이 전송 뒤에 일어나면 upstream에는 이미
+    잘못된 시점 조회가 도달한 뒤다(그리고 그 호출은 과금·rate limit 대상이다).
+    """
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(500)
+
+    client = _client(handler)
+    with pytest.raises(ValueError, match="UTC offset"):
+        await client.feature_weather("f1", asof=datetime(2026, 7, 1, 23, 59, 59))
+    # naive `known_at`도 같은 정책 — aware `asof`와 짝지어도 거절한다.
+    with pytest.raises(ValueError, match="UTC offset"):
+        await client.feature_weather(
+            "f1",
+            asof=datetime(2026, 7, 1, 23, 59, 59, tzinfo=ZoneInfo("Asia/Seoul")),
+            known_at=datetime(2026, 7, 2, 0, 0),
+        )
+    assert calls == []
+    await client.aclose()
+
+
+async def test_feature_weather_defaults_known_at_to_call_time() -> None:
+    """`known_at` 생략 시 호출 시각(=지금 아는 최신 지식)을 aware로 채운다.
+
+    `known_at`은 upstream에서 **required**라 client가 반드시 무언가를 보내야 한다. 값은
+    호출 시각이라 고정할 수 없으므로 `before <= known_at <= after` 구간만 단언한다
+    (aware 여부는 `utcoffset()`으로 따로 본다 — offset 없는 값은 Map `format: date-time`
+    계약을 만족하지 못한다).
+    """
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["params"] = dict(request.url.params)
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "feature_id": "f1",
+                    "target_at": "2026-07-01T23:59:59+09:00",
+                    "known_at": "2026-07-01T23:59:59+09:00",
+                    "selected_at": None,
+                    "is_stale": True,
+                    "source_styles": [],
+                    "metrics": [],
+                },
+                "meta": {},
+            },
+        )
+
+    before = datetime.now(UTC)
+    client = _client(handler)
+    await client.feature_weather(
+        "f1", asof=datetime(2026, 7, 1, 23, 59, 59, tzinfo=ZoneInfo("Asia/Seoul"))
+    )
+    after = datetime.now(UTC)
+
+    # aware `asof`의 offset은 보존된다(transport는 시간대를 재해석하지 않는다).
+    assert seen["params"]["target_at"] == "2026-07-01T23:59:59+09:00"
+    known_at = datetime.fromisoformat(seen["params"]["known_at"])
+    assert known_at.utcoffset() is not None
+    assert before <= known_at <= after
+    await client.aclose()
+
+
 # --- ADR-048 / kor_travel_map 0e45bd7 계약 (T-181) -------------------------------
 
 

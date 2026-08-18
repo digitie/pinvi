@@ -23,7 +23,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Annotated, Any, Literal, cast
 
@@ -435,7 +435,7 @@ class KorTravelMapAdminClient:
     def _put_sequence_params(
         params: dict[str, Any],
         key: str,
-        values: list[str] | tuple[str, ...] | None,
+        values: Sequence[str] | None,
     ) -> None:
         cleaned = [value for value in values or [] if value]
         if cleaned:
@@ -447,9 +447,10 @@ class KorTravelMapAdminClient:
         q: str | None = None,
         kinds: list[str] | None = None,
         categories: list[str] | None = None,
-        statuses: list[str] | None = None,
-        providers: list[str] | None = None,
-        dataset_keys: list[str] | None = None,
+        lifecycle_states: Sequence[str] | None = None,
+        publication_states: Sequence[str] | None = None,
+        quality_states: Sequence[str] | None = None,
+        provider_dataset_id: int | None = None,
         has_coord: bool | None = None,
         has_issue: bool | None = None,
         issue_types: list[str] | None = None,
@@ -460,16 +461,27 @@ class KorTravelMapAdminClient:
         sort: str | None = None,
         order: str | None = None,
     ) -> dict[str, Any]:
-        """GET /v1/admin/features — admin feature 목록(read-only) envelope 반환."""
+        """GET /v1/admin/features — admin feature 목록(read-only) envelope 반환.
+
+        query 이름은 Map `GET /v1/admin/features`가 실제로 선언한 것만 보낸다:
+        `[q, kind, category, lifecycle_state, publication_state, quality_state,
+        provider_dataset_id, has_coord, has_issue, issue_type, updated_from,
+        updated_to, include_ended, page_size, cursor, sort, order]`.
+        FastAPI는 모르는 query를 조용히 버리므로, 여기서 legacy 이름
+        (`status`/`provider`/`dataset_key`)을 보내면 필터가 걸린 척하면서 전량이
+        돌아온다 — 그래서 3축 cutover(`1f2bdc3a`) 이름으로 갈아탄다.
+        """
         params: dict[str, Any] = {}
         if q:
             params["q"] = q
         self._put_sequence_params(params, "kind", kinds)
         self._put_sequence_params(params, "category", categories)
-        self._put_sequence_params(params, "status", statuses)
-        self._put_sequence_params(params, "provider", providers)
-        self._put_sequence_params(params, "dataset_key", dataset_keys)
+        self._put_sequence_params(params, "lifecycle_state", lifecycle_states)
+        self._put_sequence_params(params, "publication_state", publication_states)
+        self._put_sequence_params(params, "quality_state", quality_states)
         self._put_sequence_params(params, "issue_type", issue_types)
+        if provider_dataset_id is not None:
+            params["provider_dataset_id"] = provider_dataset_id
         if has_coord is not None:
             params["has_coord"] = has_coord
         if has_issue is not None:

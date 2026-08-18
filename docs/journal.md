@@ -2,6 +2,124 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-18 (claude) — T-VN-42 라운드 2: 재리뷰 P1 4건 해소(CI red / admin 500 / 문서 모순 / 유령 query)
+
+- **P1 ① 브랜치가 CI red였다**: `test_feature_weather_defaults_known_at_to_now_and_normalises_naive_asof`가
+  "naive asof = UTC"라는 **옛 정책**을 단언하는데 최종 구현은 `_require_aware_datetime`으로 naive를
+  거절한다(실측 `1 failed`). 테스트를 정책에 맞춰 **둘로 쪼갰다**:
+  `…_rejects_naive_asof_before_any_request_goes_out`(naive asof/known_at 모두
+  `pytest.raises(ValueError, match="UTC offset")` + **요청이 나가지 않았음**까지 단언 — 거절이 전송
+  뒤면 upstream엔 이미 잘못된 시점 조회가 도달한다)와
+  `…_defaults_known_at_to_call_time`(aware KST asof로 `before <= known_at <= after`만 단언 +
+  명시 offset 보존). docstring도 현재 정책으로 갈아끼웠다.
+- **P1 ② admin weather-values가 naive `?asof=`에서 500**: `api/v1/admin/features.py`가
+  `normalize_asof_query()`를 건너뛰고 raw query를 client에 넘겨 transport `ValueError`가
+  `_map_admin_errors()`(KorTravelMap* 계열만 포착)를 뚫었다. user 라우터와 **같은 helper**를
+  통과시키도록 고쳤고(순환 import 없음 — `app/api/v1/__init__.py`가 `features`를 `admin`보다 먼저
+  import), 통합 테스트로 naive `?asof=` 200 + client가 받은 값이 aware KST임을 고정했다. 통합 fake의
+  `feature_weather`도 실제 transport 정책(naive 거절)을 흉내내게 해서, 라우터가 다시 보정을 빼먹으면
+  fake가 200을 돌려주는 일이 없게 했다. **`ValueError → 422` 방어 매핑은 넣지 않았다**: `ValueError`는
+  너무 넓어 이 파일의 모든 핸들러에서 500이어야 할 결함을 "요청이 잘못됐다"로 위장한다(근거는 핸들러
+  docstring).
+- **P1 ③ `docs/api/admin.md`가 이번 변경과 모순**: §8.1 query 표의 `status`/`provider`/`dataset_key`를
+  3축(`lifecycle_state`/`publication_state`/`quality_state`) + `provider_dataset_id`(int≥1)로 갱신하고
+  `sort` enum에서 `status`를 뺐다(스냅샷 enum = name/updated_at/created_at/kind/provider/issue_count).
+  §8.1·§8.2 응답 예시의 `"status": "active"`도 3축으로 바꿨다. 덤으로 §8.2에
+  "`versions`/`change_requests`는 **항상 빈 배열**"(upstream이 주는 list는 sources/issues/overrides/
+  files/state_transitions/curations)을, §8.3 sources 예시의 `is_primary_source`가 upstream에 없다는 것을,
+  weather-values `asof`가 naive면 KST로 읽힌다는 것을 적었다.
+- **P1 ④ `/v1/categories?active_only=` 유령 query**: client가 Map이 더는 선언하지 않는 `active_only`를
+  계속 보내고 있었고 **게이트에 구멍**이 있었다 — `_CLIENT_QUERY_PARAMETERS`가 `_CLIENT_PATHS`의
+  일부만 덮어서 `/v1/categories`는 검사 자체가 없었다. 셋을 함께 했다:
+  1. **폐쇄 단언**(`test_client_query_parameter_table_is_closed`, `set(표) == set(경로)`) + 빠진 10개
+     경로의 query 집합을 스냅샷 기준으로 채움(면제 allowlist 없음 — query 없는 경로는 빈 집합).
+     `_query_parameter_names`는 POST-only(service profile batch)도 보도록 모든 operation 합집합으로,
+     비교는 `_spec_for_path`로 profile을 갈라 본다.
+  2. **반대 방향 게이트 신설**(`test_client_never_sends_a_query_the_snapshot_does_not_declare`):
+     15개 client 메서드를 optional kwarg 전부 채워 MockTransport로 호출하고, 나간 URL의 query가 표의
+     부분집합인지 본다. 표만으로는 "producer가 바꿨다"만 잡고 "우리가 안 쓰는 걸 보낸다"는 못 잡는다.
+     `active_only`를 되돌려 red가 되는 것을 실측 확인했다.
+  3. client에서 `active_only` 전송 제거.
+  4. **경로 목록 자체를 client 소스와 묶었다**(`test_client_path_table_covers_every_path_the_client_module_requests`):
+     폐쇄 단언은 표가 `_CLIENT_PATHS`를 덮는 것까지만 보장하고, 그 목록도 수기라 새 메서드가 새 경로를
+     부르면 게이트가 그 경로를 아예 보지 않는다(= 이번 사고와 같은 침묵). client 모듈의 `/v1/...` 리터럴을
+     스캔해 목록과 **양방향 정확 일치**(빠진 경로 = 검사 구멍, 남은 경로 = 죽은 핀)를 강제하고, 양쪽
+     변형(`/v1/categories` 제거 / 유령 경로 추가)이 실제로 red가 되는지 실측했다.
+- **공개 `active_only` 파라미터 결정 — 유지하되 Pinvi가 직접 필터한다.** 조사 결과 삭제 전 upstream
+  `active_only`도 **목록을 거른 적이 없다**(Map `routers/categories.py`: `_STATIC_CATEGORIES` 전량 반환,
+  스위치는 `db_feature_count`/`db_active` 집계 기준만 바꿨다). 즉 위임으로는 원래 동작한 적이 없는
+  파라미터다. 삭제 대신 `is_active`(스냅샷상 required bool)로 **로컬 필터**를 구현했다: 공개 계약
+  (`packages/api-client` `feature.categories({activeOnly})`, `docs/api/features.md`)을 깨지 않으면서
+  "받는 척"을 없애는 쪽. 오늘 카탈로그 145건은 전부 active라 결과는 전량과 동일하고, Map이 항목을
+  비활성화하는 순간부터 의미를 갖는다. admin `/admin/category-mappings`도 같은 방식으로 로컬 필터.
+  집계 축(`active_only`로 counts 좁히기)은 되살릴 수 없음을 문서에 명시했다(ADR-067 공개 projection 고정).
+- **P2**: `packages/api-client/src/query-keys.ts`의 `adminKeys.features` 파라미터 타입을 3축으로 —
+  손으로 베끼는 대신 `import type { AdminFeatureListParams }`로 **요청 타입을 재사용**해 key와 request가
+  다시는 갈라지지 않게 했다. `apps/web/e2e/admin-priority3.e2e.ts` detail fixture에서 Map이 주지 않는
+  `data_origin`/`data_version`/`is_primary_source`를 null로, `versions[]`를 빈 배열로 정리했다.
+  web 상세의 `versions {…}`/`changes {…}` 카운트 칩은 **제거**했다 — 늘 0이라 "이력 없음"으로 읽히지만
+  실제로는 "가져오지 않는다"인 거짓 0이다. `state_transitions`/`curations`로 대체하지 않은 이유는 Pinvi
+  proxy가 아직 두 list를 투영하지 않아 지금 바꾸면 또 다른 거짓 0이 되기 때문(후속 T-VN-42).
+- **검증**: `pytest tests/unit` = **943 passed / 38 failed**, 그 38은 전부 이 Windows 호스트의 환경
+  artifact다(docker 미설치 provenance·backup·restore 스크립트 26+9건, cp949 locale `read_text` 2건,
+  stale sibling worktree를 집는 live-spec staleness 1건 — 마지막 건은 CI에서 skip 조건). 손댄 파일 관련
+  실패 0. `ruff check` / `ruff format --check` / `mypy --strict app` 통과(mypy 잔여 1건은
+  `os.geteuid` Windows 전용 artifact, 미변경 파일). 통합·e2e는 이 호스트에 Docker/브라우저가 없어 못
+  돌렸고, 대신 scratch harness로 라우터 2개를 함수 호출 수준에서 실측했다(naive→KST 보정, 명시 offset
+  보존, categories 로컬 필터; 보정을 되돌리면 `ValueError`로 red). TS는 scratch tsc로
+  `packages/api-client`+`packages/schemas`(0 errors)와 변경 e2e 파일(0 errors)을, prettier로 변경 3개
+  TS/TSX 파일 포맷을 확인했다.
+
+## 2026-08-18 (claude) — T-VN-42 Map user spec 재vendor 후속: `status` 소비 절단 회귀방어 + 시간대 정책 통일
+
+- **배경**: 87c3a574가 Map user OpenAPI를 `95d2c128`(스냅샷 SHA-256 `6a2ee0f9…`)로 재vendor하고
+  ① 3축 feature state cutover(`1f2bdc3a`)로 사라진 `status` 소비를 끊고 ② bitemporal weather
+  cutover(`6650aa71`)에 맞춰 시점 조회를 `…/weather/snapshot`(`target_at`/`known_at`)으로 복구했다.
+  적대적 리뷰 2건이 모두 hold=false를 냈고 P1이 남았다.
+- **P1 ① `feature_detail` status 절단이 무방비**: `services/feature_detail.py`의 투영을 되돌려도
+  suite가 green이었다 — fixture가 `"status": "active"`를 먹였을 때만 red가 되는데, 그 fixture를
+  지우면 이번엔 "없는 키를 읽어 None"이라 되돌려도 green이다. 그래서 (a) 기본 fixture에서 키를
+  빼 실제 Map 응답과 맞추고 (b) **dto에 `status`가 섞여 있어도 새어 나오지 않음**을 단위
+  (`test_build_card_never_leaks_upstream_status`, 5개 kind)와 통합
+  (`test_detail_card_never_leaks_upstream_status`, wire 레벨)에서 따로 단언했다. 투영을 되돌리면
+  red가 되는 것을 실측 확인했다(`assert 'active' is None`).
+- **P1 ② 공개 API 문서가 거짓**: `docs/api/features.md`의 `"status": "active"` 예시 3곳(in-bounds /
+  detail / search)을 `null`로 고치고, §1.1 "`status` 필드 상태"를 새로 두어 근거(Map `1f2bdc3a`,
+  대체 필드 없음, 필드 제거는 후속 breaking cutover)와 "클라이언트는 `status`로 분기하지 말 것"을
+  명시했다. §2.3에는 (a) 응답 `asof`의 소스가 Map `selected_at`이라는 것(요청 에코가 아님),
+  (b) `asof`를 주면 bitemporal snapshot 경로(`target_at`/`known_at`)로 나간다는 것을 적었다.
+- **P2 시간대 정책 충돌(조용한 9시간 드리프트)**: 같은 모듈에서 `_require_aware_datetime`은 naive를
+  거절하는데 `_as_aware_utc`는 naive를 UTC로 해석했다. 한국 서비스에서 offset 없는 벽시계 시각을
+  UTC로 읽으면 9시간 어긋난 시점의 날씨가 오류 없이 돌아온다. **하나로 통일**: transport는 aware만
+  받고(`_as_aware_utc` 제거), naive → aware 보정은 시간대 의미를 아는 HTTP 경계가
+  `api/v1/features.py normalize_asof_query()`에서 **KST(Asia/Seoul)**로 한다(명시된 offset은 존중).
+  근거는 `_require_aware_datetime` docstring에 남겼고 라우터 통합 테스트 2건으로 고정했다.
+- **P2 나머지**: `known_at` kwarg는 **유지**하고 이유를 docstring에 적었다(upstream required라 무언가는
+  반드시 보내야 하는데 kwarg가 없으면 숨은 `now()`가 되어 고정 불가 / batch 형제와 시그니처 일관 /
+  bitemporal 재현엔 두 축이 필요). 통합 fake 시그니처도 실제 client와 맞췄다. `schemas/feature.py`의
+  "kor_travel_map가 status를 준다" 계열 주석을 "항상 None + 근거 위치 + 제거는 후속"으로 정정했다.
+  `_CLIENT_QUERY_PARAMETERS` 빈 집합 핀이 왜 exact인지(FastAPI가 모르는 query를 422가 아니라 조용히
+  버려서 런타임 신호가 0이라 CI가 유일한 탐지 경로) 근거를 달았다.
+- **검증**: `tests/unit/test_feature_detail.py` 13 passed, `test_kor_travel_map_contract.py` 15 passed,
+  `test_feature_mapping.py` 11 passed. 시간대 정책은 scratch harness로 실측(naive→KST 보정, transport
+  naive 거절, 명시 offset 보존). 통합 테스트는 이 호스트에 Docker가 없어 testcontainers 기동 불가 —
+  n150 CI-parity 게이트 필요. `test_vendored_snapshot_matches_live_kor_travel_map` 1건 실패는 **환경
+  artifact**다: sibling 탐색이 stale worktree(`F:/dev/kor-travel-map-codex`, gitdir 깨짐)를 집는다.
+  vendored 바이트는 Map `95d2c128`·`origin/main`(284fd10c) 양쪽과 SHA-256 `6a2ee0f9…`로 동일함을
+  직접 확인했다.
+- **admin 표면(병렬 레인)**: 같은 cutover가 admin 표면에서도 `status`를 없앴는데 `schemas/admin.py`가
+  required로 두고 있어 PinVi admin의 feature 목록/상세가 502 `FEATURE_SERVICE_BAD_GATEWAY`로 통째로
+  깨져 있었다. 3축 재배선 + admin client query 이름 교정(`status`/`provider`/`dataset_key` → 3축/
+  `provider_dataset_id`)은 같은 PR의 병렬 레인이 진행했다. 남은 후속은 admin weather-values를 admin
+  전용 경로로 전환(지금은 user 경로라 비공개 feature가 404), admin OpenAPI 스냅샷 vendoring,
+  공개 `status` 필드 제거다.
+- **인접 lane에 넘긴 것**: `tests/unit/test_kor_travel_map_client.py`의
+  `test_feature_weather_defaults_known_at_to_now_and_normalises_naive_asof`는 naive `asof`가 UTC로
+  해석되는 옛 동작을 고정하므로 이번 정책 통일로 red가 된다. 소유 밖 파일이라 손대지 않았고,
+  검증까지 마친 교체본을 인수인계했다(naive는 `pytest.raises(ValueError, match="UTC offset")`,
+  aware KST는 그대로 통과). `api/v1/admin/features.py`의 weather-values도 `asof`를
+  `normalize_asof_query()`에 통과시켜야 한다.
+
 ## 2026-08-18 (claude) — #444 후속: service provenance `map_release_revision` 재핀(dangling → Map #975 머지 SHA)
 
 - **문제**: #444가 핀한 Map 후보 `e093e555…`는 어떤 Map 브랜치에도 없는 dangling 커밋(리뷰 P1). Map #975가

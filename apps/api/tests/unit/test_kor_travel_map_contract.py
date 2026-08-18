@@ -1,6 +1,7 @@
 """kor_travel_map `openapi.user.json` 계약 드리프트 게이트 (T-210e).
 
-kor_travel_map `8c5bdcf8`(T-VN-32C PR-2 — read 응답 feature_id UUID 정본화, description-only 스펙 변경 포함)의 전체 스냅샷을 byte-for-byte
+kor_travel_map `95d2c128`(2026-08-17 재vendor — 3축 feature state cutover `1f2bdc3a`로 user 표면 `status` 삭제,
+bitemporal weather `6650aa71`로 `WeatherCardData.asof` → `selected_at` + snapshot 경로 신설)의 전체 스냅샷을 byte-for-byte
 vendor하고 pinned SHA-256으로 수기 graft를 차단한다. 스냅샷(`tests/contract/kor-travel-map-openapi-user.json`)에 Pinvi user client
 (`clients/kor_travel_map.py`) + 그 소비자(`api/v1/features.py`·`public.py`·`search.py`·
 `admin/category_mappings.py`, `services/place_search.py`·`feature_detail.py`)가 의존하는
@@ -24,14 +25,22 @@ batch 2경로(`/v1/features/batch`·`/v1/features/weather/batch`)는 user profil
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import os
+import re
+from collections.abc import Awaitable, Callable
+from contextlib import suppress
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
+import httpx
 import pytest
 from pydantic import BaseModel
 
+from app.clients.kor_travel_map import KorTravelMapClient
 from app.schemas.public import (
     PublicBeachView,
     PublicFestivalMonth,
@@ -41,8 +50,8 @@ from app.schemas.public import (
 )
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
-_UPSTREAM_COMMIT = "8c5bdcf8ce892439a8bb8e0013edf74127bf076a"
-_SNAPSHOT_SHA256 = "66fc83b3ae918b2f82ae9cf02bea162d8fa84967567e2a450493d93b1953e801"
+_UPSTREAM_COMMIT = "95d2c128a8d0613c719eafdb5419c4b76dbcc21f"
+_SNAPSHOT_SHA256 = "6a2ee0f94ffded691f5d169ef1914144eecdf1f4170226c8bc5e963e972403c1"
 
 # service profile 스냅샷 — byte-핀·재추출 절차는 cache-target 계약 테스트
 # (`test_kor_travel_map_cache_target_contract.py`)가 소유하고 본 파일은 읽기만 한다.
@@ -63,6 +72,7 @@ _CLIENT_PATHS = [
     "/v1/features/search",
     "/v1/features/{feature_id}",
     "/v1/features/{feature_id}/weather",
+    "/v1/features/{feature_id}/weather/snapshot",  # asof 지정 시 (bitemporal 시점 조회)
     "/v1/features/batch",  # service profile (_SERVICE_PROFILE_PATHS)
     "/v1/features/weather/batch",  # service profile (_SERVICE_PROFILE_PATHS)
     "/v1/categories",
@@ -75,7 +85,78 @@ _CLIENT_PATHS = [
     # 큐레이션 import는 canonical service snapshot을 사용하며 user-contract gate 범위 밖이다.
 ]
 
+# 각 client 경로가 스냅샷에서 선언하는 query의 **exact** 집합. `_CONSUMED_FIELD_CONTRACTS`
+# (응답 필드)와 달리 여기는 additive 변경까지 실패시키는 **엄격한 exact 핀**이며, 그게 의도다:
+# FastAPI는 선언하지 않은 query를 422가 아니라 **조용히 버린다**. 그래서 producer가 query를
+# 추가/삭제해도 consumer는 200을 계속 받고, 우리가 보낸 필터·시점이 먹은 척한다(응답 필드
+# 드리프트와 달리 런타임 신호가 0이다). 실제 사례가 둘이다: `asof`가 사라진 뒤에도 client는
+# 한동안 `?asof=`를 보내며 늘 최신 카드를 받았고, `/v1/categories`의 `active_only`가 사라진
+# 뒤에도 client는 계속 그 필터를 보내며 전량 응답을 "활성만"으로 오해했다. 이 표는 그 무증상
+# 클래스를 CI로 옮기는 유일한 장치라 false-red를 감수하고 exact로 둔다.
+#
+# **표는 `_CLIENT_PATHS` 전체를 덮어야 한다**(`test_client_query_parameter_table_is_closed`).
+# 두 번째 사례가 CI를 통과한 이유가 바로 구멍이었다 — `/v1/categories`가 표에 없어서 이 게이트가
+# 그 경로를 아예 보지 않았다. 면제는 두지 않는다: query가 없는 경로는 빈 집합으로 적는다(빈
+# 집합은 "핀할 게 없다"가 아니라 **가장 강한 핀**이다 — query가 하나라도 생기면 red가 된다).
+#
+# 값은 **스냅샷이 선언한 집합**이고, client가 실제로 보내는 건 그 부분집합이다(주석으로 차이를
+# 남긴다). 우리가 선언되지 않은 query를 보내지 않는지는
+# `test_client_never_sends_a_query_the_snapshot_does_not_declare`가 따로 본다.
 _CLIENT_QUERY_PARAMETERS: dict[str, set[str]] = {
+    # client는 `include_geometry`/`provider`를 보내지 않는다(geometry는 상세에서, provider
+    # 필터는 admin 표면에서 다룬다) — 나머지는 그대로 사용.
+    "/v1/features/in-bounds": {
+        "min_lon",
+        "min_lat",
+        "max_lon",
+        "max_lat",
+        "kind",
+        "category",
+        "provider",
+        "zoom",
+        "cluster_unit",
+        "max_items",
+        "include_geometry",
+    },
+    # client는 `provider`를 보내지 않는다.
+    "/v1/features/nearby": {
+        "lon",
+        "lat",
+        "radius_m",
+        "kind",
+        "category",
+        "provider",
+        "page_size",
+        "cursor",
+        "sort",
+    },
+    "/v1/features/search": {
+        "q",
+        "min_lon",
+        "min_lat",
+        "max_lon",
+        "max_lat",
+        "kind",
+        "category",
+        "page_size",
+        "cursor",
+        "include_total",
+    },
+    "/v1/features/{feature_id}": set(),
+    # weather card 경로는 query를 하나도 받지 않는다. Map bitemporal cutover(`6650aa71`)
+    # 전에는 `asof`가 있었고, 사라진 뒤에도 client가 계속 `?asof=`를 보냈지만 FastAPI가
+    # 모르는 query를 조용히 버려 늘 최신 카드가 돌아왔다(silent drift). 이 빈 집합이
+    # "여기에 시점 query가 없다"를 고정한다 — 시점 조회는 아래 snapshot 경로다.
+    "/v1/features/{feature_id}/weather": set(),
+    "/v1/features/{feature_id}/weather/snapshot": {"target_at", "known_at"},
+    # service profile POST 2경로 — 입력은 전부 body이고 query는 없다. 빈 집합이 "query로
+    # 새는 필터가 없다"를 고정한다.
+    "/v1/features/batch": set(),
+    "/v1/features/weather/batch": set(),
+    # `include_counts` 단 하나. 옛 `active_only`는 Map T-VN-04 F-1에서 제거됐고(비공개 분포
+    # 노출), 애초에 item 목록이 아니라 counts 집계 기준만 바꾸던 스위치였다. Pinvi의
+    # `active_only`는 이제 소비 계층이 `is_active`로 직접 거른다(`api/v1/features.py`).
+    "/v1/categories": {"include_counts"},
     "/v1/public/beaches": {
         "sido_code",
         "sigungu_code",
@@ -83,7 +164,35 @@ _CLIENT_QUERY_PARAMETERS: dict[str, set[str]] = {
         "page_size",
         "cursor",
     },
+    "/v1/public/beaches/map-markers": {
+        "min_lon",
+        "min_lat",
+        "max_lon",
+        "max_lat",
+        "sido_code",
+        "sigungu_code",
+        "max_items",
+    },
     "/v1/public/beaches/{feature_id}": set(),
+    "/v1/public/festivals/monthly": {
+        "year",
+        "month",
+        "sido_code",
+        "sigungu_code",
+        "page_size",
+        "cursor",
+        "include_months",
+    },
+    "/v1/public/festivals/map-markers": {
+        "year",
+        "month",
+        "min_lon",
+        "min_lat",
+        "max_lon",
+        "max_lat",
+        "max_items",
+    },
+    "/v1/public/festivals/{feature_id}": set(),
 }
 
 _PUBLIC_API_KEY_SCHEME = {
@@ -129,6 +238,20 @@ _PUBLIC_API_KEY_SECURITY = [{"PublicApiKey": []}, {"ServiceToken": []}]
 #     `FeatureSummary`/`NearbyFeatureSummary`/`FeatureDetailResponse`에 `title`이 없다.
 #   * `item.get("address")` — `place_search.feature_item_to_result`. `FeatureSummary`에 없다.
 #
+# 소비를 끊은 필드(계약 표에 두지 않는다):
+#   * `status` — Map 3축 feature state cutover(`1f2bdc3a feat(api): complete feature state
+#     cutover`)로 `FeatureSummary`/`NearbyFeatureSummary`/`FeatureDetailResponse` 세 곳
+#     모두에서 사라졌고 **대체 필드가 없다**(state 축은 user profile에 노출되지 않는다).
+#     `features.py _summary_/_detail_from_kor_travel_map`와 `feature_detail.build_detail_card`는
+#     더 이상 dto에서 읽지 않는다. Pinvi 공개 스키마의 `status`는 web/mobile 계약 때문에
+#     남아 있으나 항상 None이다(공개 필드 제거는 별도 과제 — `docs/` 참조).
+#
+# 이름이 바뀐 필드:
+#   * `WeatherCardData.asof` → `selected_at` (Map bitemporal cutover `6650aa71`). Pinvi 공개
+#     필드 이름 `asof`는 유지하고 소스만 `selected_at`으로 갈아끼웠으므로 계약 표는
+#     **스냅샷에 실제로 있는** `selected_at`을 고정한다. `refresh_after`는 소비하지 않아
+#     고정하지 않는다(표는 "우리가 읽는 필드"만 본다).
+#
 # 반대로 `features.py`의 `data.get("cluster_unit")`은 방어 코드가 아니다 — client가
 # `meta.cluster.cluster_unit`를 `data`로 re-projection하므로 실제 값이 온다(위 `ClusterMeta` 핀).
 # `data.get("next_cursor")`/`get("total")`(`public.py _page_meta`)도 같은 방식이다(`PageMeta` 핀).
@@ -142,7 +265,6 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "category": {"type": "string", "required": True, "nullable": False},
         "marker_color": {"type": "string", "required": False, "nullable": True},
         "marker_icon": {"type": "string", "required": False, "nullable": True},
-        "status": {"type": "string", "required": True, "nullable": False},
     },
     "NearbyFeatureSummary": {
         "feature_id": {"type": "string", "required": True, "nullable": False},
@@ -151,7 +273,6 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "lon": {"type": "number", "required": True, "nullable": False},
         "lat": {"type": "number", "required": True, "nullable": False},
         "category": {"type": "string", "required": True, "nullable": False},
-        "status": {"type": "string", "required": True, "nullable": False},
         "distance_m": {"type": "number", "required": True, "nullable": False},
     },
     "ClusterSummary": {
@@ -175,7 +296,6 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "marker_icon": {"type": "string", "required": False, "nullable": True},
         "urls": {"type": "object", "required": True, "nullable": False},
         "detail": {"type": "object", "required": True, "nullable": False},
-        "status": {"type": "string", "required": True, "nullable": False},
         "updated_at": {
             "type": "string",
             "format": "date-time",
@@ -185,7 +305,40 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
     },
     "WeatherCardData": {
         "feature_id": {"type": "string", "required": True, "nullable": False},
-        "asof": {"type": "string", "format": "date-time", "required": False, "nullable": True},
+        # Pinvi 공개 `asof`의 소스(Map `6650aa71` 이후 이름) — `features.py`
+        # `_weather_from_kor_travel_map`, `admin/features.py` `_weather_values_from_payload`.
+        "selected_at": {
+            "type": "string",
+            "format": "date-time",
+            "required": False,
+            "nullable": True,
+        },
+        "latest_at": {"type": "string", "format": "date-time", "required": False, "nullable": True},
+        "is_stale": {"type": "boolean", "required": True, "nullable": False},
+        "source_styles": {
+            "type": "array",
+            "items_type": "string",
+            "required": True,
+            "nullable": False,
+        },
+        "metrics": {
+            "type": "array",
+            "items_ref": "WeatherMetricOut",
+            "required": True,
+            "nullable": False,
+        },
+    },
+    # `asof` 지정 시 client가 부르는 bitemporal 시점 조회 응답. `WeatherCardData`의
+    # 상위집합이라 소비 측 매핑(`_weather_from_kor_travel_map`)을 그대로 재사용하므로
+    # **같은 필드 집합**을 고정한다 — 한쪽만 분화하면 여기서 드러난다.
+    "WeatherSnapshotData": {
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+        "selected_at": {
+            "type": "string",
+            "format": "date-time",
+            "required": False,
+            "nullable": True,
+        },
         "latest_at": {"type": "string", "format": "date-time", "required": False, "nullable": True},
         "is_stale": {"type": "boolean", "required": True, "nullable": False},
         "source_styles": {
@@ -736,6 +889,7 @@ _ENDPOINT_DATA_SCHEMAS: dict[tuple[str, str], str] = {
     ("get", "/v1/features/search"): "FeatureSearchData",
     ("get", "/v1/features/{feature_id}"): "FeatureDetailResponse",
     ("get", "/v1/features/{feature_id}/weather"): "WeatherCardData",
+    ("get", "/v1/features/{feature_id}/weather/snapshot"): "WeatherSnapshotData",
     ("post", "/v1/features/batch"): "FeatureBatchData",
     ("post", "/v1/features/weather/batch"): "WeatherBatchData",
     ("get", "/v1/categories"): "CategoriesData",
@@ -805,22 +959,252 @@ def test_client_paths_exist_in_snapshot() -> None:
     )
 
 
+def test_client_path_table_covers_every_path_the_client_module_requests() -> None:
+    """`_CLIENT_PATHS`가 client 모듈이 **실제로 요청하는** 경로 전체와 정확히 같은지.
+
+    query 표의 폐쇄 단언(`test_client_query_parameter_table_is_closed`)은 표가
+    `_CLIENT_PATHS`를 덮는 것까지만 보장한다. `_CLIENT_PATHS` 자체가 수기 목록이라, 새 client
+    메서드가 새 경로를 부르기 시작해도 목록에 안 적으면 게이트 전체가 그 경로를 **아예 보지
+    않는다** — `/v1/categories`가 표에서 빠져 `active_only` silent drift가 CI를 통과한 것과
+    같은 침묵이다. 그래서 목록을 client 소스와 양방향으로 묶는다(빠진 경로 = 검사 구멍,
+    남은 경로 = 죽은 핀).
+
+    스캔은 모듈의 double-quote 경로 리터럴을 읽는다(`ruff format`이 quote 스타일을 강제하고,
+    f-string의 `{feature_id}`는 OpenAPI 템플릿 이름과 같은 표기다). 따라서 **경로를 런타임에
+    조립하면 안 된다** — 조립하는 순간 이 게이트가 그 경로를 보지 못한다.
+    """
+    source_file = inspect.getsourcefile(KorTravelMapClient)
+    assert source_file is not None
+    requested = set(re.findall(r'f?"(/v1/[^"]*)"', Path(source_file).read_text(encoding="utf-8")))
+    assert requested == set(_CLIENT_PATHS), {
+        "목록에 없는 client 경로": sorted(requested - set(_CLIENT_PATHS)),
+        "client가 더는 부르지 않는 목록 항목": sorted(set(_CLIENT_PATHS) - requested),
+    }
+
+
 def _query_parameter_names(spec: dict[str, Any], path: str) -> set[str]:
-    parameters = spec["paths"][path]["get"].get("parameters", [])
-    return {parameter["name"] for parameter in parameters if parameter.get("in") == "query"}
+    """path item의 **모든** operation이 선언한 query 이름 합집합.
+
+    `get`만 보면 POST-only 경로(service profile batch 2건)에서 KeyError가 나고, 그 경로를
+    표에서 빼면 폐쇄 단언이 무너진다. 합집합이라 method가 늘어도 게이트가 계속 본다.
+    """
+    return {
+        parameter["name"]
+        for method, operation in spec["paths"][path].items()
+        if method in {"get", "post", "put", "patch", "delete"} and isinstance(operation, dict)
+        for parameter in operation.get("parameters", [])
+        if parameter.get("in") == "query"
+    }
+
+
+def test_client_query_parameter_table_is_closed() -> None:
+    """query 표가 `_CLIENT_PATHS` **전체**를 덮는지 — 게이트의 구멍을 막는 폐쇄 단언.
+
+    이게 없으면 표에 없는 경로는 검사 자체가 일어나지 않는다(면제가 아니라 **침묵**이다).
+    실제로 `/v1/categories`가 표에 빠져 있는 동안, client가 Map이 더는 선언하지 않는
+    `active_only`를 계속 보내도 CI는 green이었다 — FastAPI가 모르는 query를 조용히 버려
+    런타임 신호도 0이었다. 면제 allowlist를 두지 않는 이유: query가 없는 경로는 빈 집합으로
+    적으면 되고(그게 더 강한 핀), "검사 안 함"과 "query 없음"을 구분할 수 없게 만드는 게
+    애초에 이 사고의 원인이었다.
+    """
+    assert set(_CLIENT_QUERY_PARAMETERS) == set(_CLIENT_PATHS), {
+        "표에 없는 client 경로": sorted(set(_CLIENT_PATHS) - set(_CLIENT_QUERY_PARAMETERS)),
+        "client가 부르지 않는 표 항목": sorted(set(_CLIENT_QUERY_PARAMETERS) - set(_CLIENT_PATHS)),
+    }
 
 
 def test_client_query_parameters_match_snapshot() -> None:
-    spec = _spec()
+    user_spec, service_spec = _spec(), _service_spec()
     problems = {
         path: {
             "expected": sorted(expected),
-            "actual": sorted(_query_parameter_names(spec, path)),
+            "actual": sorted(
+                _query_parameter_names(_spec_for_path(path, user_spec, service_spec), path)
+            ),
         }
         for path, expected in _CLIENT_QUERY_PARAMETERS.items()
-        if _query_parameter_names(spec, path) != expected
+        if _query_parameter_names(_spec_for_path(path, user_spec, service_spec), path) != expected
     }
     assert not problems, f"client query 계약이 스냅샷과 다름(드리프트): {problems}"
+
+
+async def test_client_never_sends_a_query_the_snapshot_does_not_declare() -> None:
+    """실제 client 호출이 만든 query가 위 표(=스냅샷 선언)의 부분집합인지 **전송 레벨**에서 본다.
+
+    표만으로는 절반이다. 표는 producer가 query를 바꾼 것은 잡지만 "우리가 선언되지 않은
+    query를 계속 보내고 있다"는 반대 방향은 잡지 못한다 — `/v1/categories?active_only=`가
+    정확히 그 구멍으로 살아남았다. 여기서는 각 client 메서드를 **optional kwarg를 모두 채워**
+    호출하고, MockTransport가 받은 URL의 query 이름을 표와 대조한다. 응답은 계약을 만족하지
+    않아 대부분 예외가 나지만 우리가 보는 건 "무엇을 보냈나"이므로 상관없다.
+
+    probe 목록이 `_CLIENT_PATHS` 전체를 덮는지도 함께 단언한다(구멍이 다시 생기지 않게).
+    """
+    sent: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(200, json={"data": {}, "meta": {}})
+
+    asof = datetime(2026, 7, 1, 23, 59, 59, tzinfo=ZoneInfo("Asia/Seoul"))
+    probes: list[tuple[str, Callable[[KorTravelMapClient], Awaitable[object]]]] = [
+        (
+            "/v1/features/in-bounds",
+            lambda c: c.features_in_bounds(
+                min_lon=129.0,
+                min_lat=35.0,
+                max_lon=129.2,
+                max_lat=35.2,
+                kinds=["place"],
+                category="01070100",
+                zoom=12,
+                cluster_unit="sigungu",
+                max_items=1000,
+            ),
+        ),
+        (
+            "/v1/features/nearby",
+            lambda c: c.features_nearby(
+                lon=129.0,
+                lat=35.0,
+                radius_m=500.0,
+                kinds=["place"],
+                category="01070100",
+                page_size=20,
+                cursor="c1",
+                sort="distance",
+            ),
+        ),
+        (
+            "/v1/features/search",
+            lambda c: c.search_features(
+                q="해운대",
+                min_lon=129.0,
+                min_lat=35.0,
+                max_lon=129.2,
+                max_lat=35.2,
+                kinds=["place"],
+                category="01070100",
+                page_size=20,
+                cursor="c1",
+                include_total=True,
+            ),
+        ),
+        ("/v1/features/{feature_id}", lambda c: c.get_feature("f1")),
+        ("/v1/features/{feature_id}/weather", lambda c: c.feature_weather("f1")),
+        (
+            "/v1/features/{feature_id}/weather/snapshot",
+            lambda c: c.feature_weather("f1", asof=asof, known_at=asof),
+        ),
+        (
+            "/v1/features/batch",
+            lambda c: c.get_features(["f1"], known_row_revisions={"f1": 3}),
+        ),
+        (
+            "/v1/features/weather/batch",
+            lambda c: c.get_weather_batch({asof: ["f1"]}, known_at=asof),
+        ),
+        ("/v1/categories", lambda c: c.categories(include_counts=True)),
+        (
+            "/v1/public/beaches",
+            lambda c: c.public_beaches(
+                sido_code="26",
+                sigungu_code="26350",
+                q="해운대",
+                page_size=20,
+                cursor="c1",
+            ),
+        ),
+        (
+            "/v1/public/beaches/map-markers",
+            lambda c: c.public_beach_markers(
+                min_lon=129.0,
+                min_lat=35.0,
+                max_lon=129.2,
+                max_lat=35.2,
+                sido_code="26",
+                sigungu_code="26350",
+                max_items=500,
+            ),
+        ),
+        ("/v1/public/beaches/{feature_id}", lambda c: c.get_public_beach("f1")),
+        (
+            "/v1/public/festivals/monthly",
+            lambda c: c.public_festivals_monthly(
+                year=2026,
+                month=7,
+                sido_code="26",
+                sigungu_code="26350",
+                page_size=20,
+                cursor="c1",
+                include_months=True,
+            ),
+        ),
+        (
+            "/v1/public/festivals/map-markers",
+            lambda c: c.public_festival_markers(
+                year=2026,
+                month=7,
+                min_lon=129.0,
+                min_lat=35.0,
+                max_lon=129.2,
+                max_lat=35.2,
+                max_items=500,
+            ),
+        ),
+        ("/v1/public/festivals/{feature_id}", lambda c: c.get_public_festival("f1")),
+    ]
+    assert [path for path, _call in probes] == _CLIENT_PATHS, (
+        "probe 목록이 client 경로 전체를 덮지 않는다(순서 포함)"
+    )
+
+    for path, call in probes:
+        sent.clear()
+        http = httpx.AsyncClient(
+            base_url="http://kor-travel-map.test",
+            transport=httpx.MockTransport(handler),
+        )
+        client = KorTravelMapClient(http, service_token="t")
+        with suppress(Exception):
+            await call(client)
+        await client.aclose()
+
+        assert sent, f"{path}: probe가 요청을 만들지 않았다"
+        undeclared = {
+            name
+            for request in sent
+            for name in request.url.params
+            if name not in _CLIENT_QUERY_PARAMETERS[path]
+        }
+        assert not undeclared, (
+            f"{path}: 스냅샷이 선언하지 않은 query를 보낸다(서버가 조용히 버린다): "
+            f"{sorted(undeclared)}"
+        )
+
+
+def test_weather_snapshot_route_requires_the_bitemporal_query_pair() -> None:
+    """시점 조회 경로가 `target_at`/`known_at`을 **둘 다 required**로 받는지 고정한다.
+
+    client(`feature_weather`)는 `asof`가 오면 이 경로로 라우팅하며 두 값을 항상 함께
+    보낸다. producer가 한쪽을 optional로 풀면 "안 보내도 되는 값"으로 오해할 여지가
+    생기고, 반대로 required 파라미터가 늘면 client가 422를 맞는다.
+    """
+    spec = _spec()
+    parameters = {
+        parameter["name"]: parameter
+        for parameter in spec["paths"]["/v1/features/{feature_id}/weather/snapshot"]["get"][
+            "parameters"
+        ]
+        if parameter.get("in") == "query"
+    }
+    assert set(parameters) == {"target_at", "known_at"}
+    for name, parameter in parameters.items():
+        assert parameter.get("required") is True, (name, "required")
+        resolved, nullable = _resolve_property(parameter["schema"], f"snapshot.{name}")
+        assert (resolved.get("type"), resolved.get("format"), nullable) == (
+            "string",
+            "date-time",
+            False,
+        ), (name, parameter["schema"])
 
 
 def test_public_api_key_contract_is_header_only() -> None:

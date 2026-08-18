@@ -33,7 +33,6 @@ def _place_dto(**over: Any) -> dict[str, Any]:
         "marker_icon": "cafe",
         "urls": {"homepage": "https://sb.example"},
         "detail": {"phone": "051-000-0000", "business_hours": "09:00-22:00"},
-        "status": "active",
         "updated_at": "2026-06-10T12:00:00+09:00",
     }
     base.update(over)
@@ -50,6 +49,27 @@ def test_build_place_card_projects_general_fields() -> None:
     assert card.business_hours == "09:00-22:00"
     assert card.homepage_url == "https://sb.example"
     assert card.coord is not None
+    # Map 3축 cutover(`1f2bdc3a`)로 user 표면에 `status`가 없다 → 스키마 필드는 항상 None.
+    assert card.status is None
+
+
+def test_build_card_never_leaks_upstream_status() -> None:
+    """dto에 `status`가 남아 있어도 detail-card로 새어 나오면 안 된다.
+
+    Map 3축 feature state cutover(`1f2bdc3a feat(api): complete feature state cutover`)로
+    `FeatureDetailResponse`에서 `status`가 삭제됐고 **대체 필드가 없다**. 기본 fixture에서 키를
+    빼는 것만으로는 회귀를 못 잡는다 — 투영을 되돌려도(`"status": _clean(dto.get("status"))`)
+    없는 키를 읽어 계속 None이 나오기 때문이다. 그래서 여기서는 구 스냅샷/mock처럼 dto에
+    `status`를 **일부러 넣고** 그래도 None임을 고정한다(되돌리면 red).
+    """
+    for kind in ("place", "event", "notice", "price", "area"):
+        card = build_detail_card(_place_dto(kind=kind, status="active"))
+        assert card.status is None, kind
+
+
+def test_build_card_status_stays_none_when_dto_omits_it() -> None:
+    """실제 Map 응답(=`status` 키 없음)에서도 스키마 필드는 None으로 직렬화된다."""
+    assert build_detail_card(_place_dto()).status is None
 
 
 def test_build_event_card() -> None:
