@@ -1,11 +1,16 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { CopyPlus, Loader2, MapPin, Newspaper, RefreshCw } from 'lucide-react';
+import { CopyPlus, Loader2, MapPin, RefreshCw } from 'lucide-react';
 import { ApiError, noticePlanApi } from '@pinvi/api-client';
 import type { NoticePlan } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { NoticePlanCopyDialog } from '@/components/notice-plans/NoticePlanCopyDialog';
+import { buttonClassName } from '@/components/ui/Button';
+
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench(app) · design-system: DESIGN.md
+ * state: 로딩=카드 skeleton · 빈 상태=분류별 문구 + 회복 행동 · filter: role=group + aria-pressed + 44px(/trips와 동일 계약)
+ */
 
 const CATEGORY_FILTERS = [
   { value: 'all', label: '전체' },
@@ -96,7 +101,8 @@ export function NoticePlanShelf() {
         </p>
       )}
 
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="추천 여행 필터">
+      {/* 패널을 바꾸는 탭이 아니라 같은 목록을 거르는 토글 — role=group + aria-pressed, 터치 타깃 44px(TripDashboard와 동일 계약). */}
+      <div className="flex flex-wrap gap-2" role="group" aria-label="추천 여행 필터">
         {CATEGORY_FILTERS.map((item) => (
           <button
             key={item.value}
@@ -104,11 +110,10 @@ export function NoticePlanShelf() {
             onClick={() => setCategory(item.value)}
             className={
               category === item.value
-                ? 'h-10 rounded-sm bg-ink px-4 text-sm font-semibold text-canvas'
-                : 'h-10 rounded-sm border border-hairline bg-canvas px-4 text-sm font-semibold text-ink hover:bg-surface-soft'
+                ? 'focus-ring inline-flex min-h-11 items-center rounded-sm bg-ink px-4 text-sm font-semibold text-canvas'
+                : 'focus-ring inline-flex min-h-11 items-center rounded-sm border border-hairline bg-canvas px-4 text-sm font-semibold text-ink hover:bg-surface-soft'
             }
-            role="tab"
-            aria-selected={category === item.value}
+            aria-pressed={category === item.value}
           >
             {item.label}
           </button>
@@ -116,15 +121,47 @@ export function NoticePlanShelf() {
       </div>
 
       {loading ? (
-        <div className="flex min-h-56 items-center justify-center rounded-sm border border-hairline bg-canvas text-sm text-muted">
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-          불러오는 중…
+        // 형태가 정해진 카드 목록은 spinner 대신 skeleton(DESIGN.md 상태 UI).
+        <div
+          className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          <span className="sr-only">추천 여행을 불러오는 중…</span>
+          {[0, 1, 2].map((card) => (
+            <div
+              key={card}
+              className="animate-pulse rounded-sm border border-hairline bg-canvas p-4"
+            >
+              <div className="h-5 w-3/5 rounded-sm bg-surface-strong" />
+              <div className="mt-3 h-3 w-2/5 rounded-sm bg-surface-soft" />
+              <div className="mt-4 h-3 w-full rounded-sm bg-surface-soft" />
+              <div className="mt-2 h-3 w-4/5 rounded-sm bg-surface-soft" />
+              <div className="mt-5 h-11 w-full rounded-sm bg-surface-soft" />
+            </div>
+          ))}
         </div>
       ) : visiblePlans.length === 0 ? (
-        <div className="flex min-h-56 flex-col items-center justify-center rounded-sm border border-hairline bg-canvas px-4 text-center">
-          <Newspaper className="h-8 w-8 text-muted" aria-hidden="true" />
-          <p className="mt-3 text-sm font-semibold text-ink">표시할 추천 여행이 없습니다.</p>
-          <p className="mt-1 text-xs text-muted">공개된 추천 여행이 생기면 이곳에 나타납니다.</p>
+        <div className="rounded-sm border border-hairline bg-canvas p-6">
+          <p className="text-sm font-semibold text-ink">
+            {category === 'all'
+              ? '표시할 추천 여행이 없습니다.'
+              : '이 분류에 해당하는 추천 여행이 없습니다.'}
+          </p>
+          <p className="mt-1 text-sm text-muted">
+            {category === 'all'
+              ? '공개된 추천 여행이 생기면 이곳에 나타납니다.'
+              : '전체 분류로 돌아가면 다른 추천 여행을 볼 수 있습니다.'}
+          </p>
+          {category !== 'all' ? (
+            <button
+              type="button"
+              onClick={() => setCategory('all')}
+              className={buttonClassName({ variant: 'secondary', className: 'mt-4' })}
+            >
+              전체 보기
+            </button>
+          ) : null}
         </div>
       ) : (
         <div

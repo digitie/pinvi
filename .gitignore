@@ -69,6 +69,8 @@ dataset/
 testset/
 refdocs/
 test-results/
+# Playwright MCP 브라우저 세션 산출물(스크린샷·aria 스냅샷) — 커밋 대상 아님.
+.playwright-mcp/
 data/
 artifacts/
 *.log

@@ -321,7 +321,11 @@ There are no progressive elevation tiers — the system either has the one shado
 
 ### 잔여 이탈(감사 기준, 후속 PR로 수렴)
 
-`bg-white`/`text-white`/`bg-black/NN` 토큰 우회(코드모드), `shadow-lg/xl` 21곳, 44px 미달 버튼 다수, `useMobileWebLayout` UA 스니핑, 앱 셸 회색 ground, 모달 셸 손복사, skeleton 부재, 탭 시맨틱, 관리자 chrome 유출(설정) — `docs/tasks.md` T-312~ 참조.
+`bg-white`/`text-white`/`bg-black/NN` 토큰 우회(코드모드), `shadow-lg/xl` 21곳, 44px 미달 버튼 다수, 모달 셸 손복사(T-315에서 `components/ui/Dialog` 이관 중), 관리자 chrome 유출(설정) — `docs/tasks.md` T-312~ 참조.
+
+**T-314에서 해소**: `useMobileWebLayout` UA 스니핑(뷰포트·포인터 미디어쿼리로 교체), 앱 셸 회색 ground(→ `bg-canvas` + 모바일 하단 탭바), 목록 skeleton 부재(`/trips`·`/notice-plans`), 필터 탭 시맨틱(패널을 바꾸지 않는 필터는 `role=group` + `aria-pressed` + 44px). 단 **실제 패널을 전환하는** `TripDetail`·`SharedTripView`의 일자·작업 탭은 `role=tab`을 유지하는 것이 맞다.
+
+앱 셸 크롬 계약: 고정 하단 탭바 높이는 `--app-tabbar-h`, main 하단 여백은 `.app-shell-main`이 소유한다(`py-*` 유틸과 겹치면 md 변형이 덮는다). 전체 화면 페이지는 `100dvh - 상수` 대신 셸이 흘려보내는 높이(`flex-1 min-h-0`)를 쓴다.
 
 ### Exports
 

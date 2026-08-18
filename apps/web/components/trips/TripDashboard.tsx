@@ -21,6 +21,11 @@ import { TripMapView } from '@/components/trips/TripMapView';
 import { buttonClassName } from '@/components/ui/Button';
 import { formatTripDateRange } from '@/lib/tripDateLabels';
 
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench(app) · design-system: DESIGN.md
+ * state: 로딩=skeleton 3행 · 오류=원인+회복(로드는 목록 자리 패널, 저장은 role=alert 배너) · 빈 상태=버킷별 문구
+ * filter: role=group + aria-pressed + 44px(패널을 바꾸지 않는 필터) · 채운 primary CTA는 폼 submit 1개
+ */
+
 const VWORLD_API_KEY = process.env.NEXT_PUBLIC_VWORLD_API_KEY ?? '';
 
 const STATUS_LABEL: Record<TripStatus, string> = {
@@ -118,14 +123,19 @@ export function TripDashboard() {
   const [titleError, setTitleError] = useState<string | undefined>(undefined);
   const [dateError, setDateError] = useState<string | undefined>(undefined);
   const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // 로드 오류와 저장(쓰기) 오류를 분리한다 — 저장 실패가 정상 로드된 목록을 지우면 안 된다(T-314 리뷰 P1).
+  const [listError, setListError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
   const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
+  // 빈 상태 CTA → 폼이 실제로 보이게 된 다음 렌더에 스크롤·포커스(같은 핸들러에서는 아직 hidden).
+  const [revealCreateForm, setRevealCreateForm] = useState(false);
   const [mapPointsByTripId, setMapPointsByTripId] = useState<
     Record<string, TripDashboardMapPoint[]>
   >({});
   const titleRef = useRef<HTMLInputElement>(null);
+  const createFormRef = useRef<HTMLElement>(null);
   const mapRequestIdRef = useRef(0);
 
   const filteredTrips = useMemo(() => visibleTrips(trips, bucket), [bucket, trips]);
@@ -195,7 +205,7 @@ export function TripDashboard() {
 
   const loadTrips = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setListError(null);
     try {
       const items = await tripApi(apiClient).list({ bucket: 'all', limit: 50 });
       setTrips(items);
@@ -204,7 +214,7 @@ export function TripDashboard() {
       setTrips([]);
       setMapPointsByTripId({});
       setMapLoading(false);
-      setError(err instanceof ApiError ? err.message : '여행 목록을 불러오지 못했습니다.');
+      setListError(err instanceof ApiError ? err.message : '여행 목록을 불러오지 못했습니다.');
     } finally {
       setLoading(false);
     }
@@ -213,6 +223,14 @@ export function TripDashboard() {
   useEffect(() => {
     void loadTrips();
   }, [loadTrips]);
+
+  useEffect(() => {
+    if (!revealCreateForm) return;
+    // 폼은 state 반영 후 렌더에서야 display:none을 벗는다 — 그 시점에 스크롤·포커스한다.
+    createFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    titleRef.current?.focus();
+    setRevealCreateForm(false);
+  }, [revealCreateForm]);
 
   const onCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -231,7 +249,7 @@ export function TripDashboard() {
     setTitleError(undefined);
     setDateError(undefined);
     setCreating(true);
-    setError(null);
+    setFormError(null);
     setMessage(null);
     const body: TripCreate = {
       title: trimmedTitle,
@@ -253,7 +271,7 @@ export function TripDashboard() {
       setEndDate('');
       setMessage('초안 여행을 저장했습니다.');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : '여행을 저장하지 못했습니다.');
+      setFormError(err instanceof ApiError ? err.message : '여행을 저장하지 못했습니다.');
     } finally {
       setCreating(false);
     }
@@ -300,14 +318,14 @@ export function TripDashboard() {
       {message && (
         <p className="rounded-sm bg-success-bg px-3 py-2 text-sm text-success-text">{message}</p>
       )}
-      {error && !loading && filteredTrips.length > 0 && (
-        // 목록이 이미 있을 때만 상단 배너 — 목록이 비면 아래 오류 패널이 자리를 대체한다(중복 금지).
+      {formError && (
+        // 저장(쓰기) 실패 전용 배너 — 목록 로드 실패는 아래 목록 자리 패널이 담당한다(중복 금지).
         <p
           role="alert"
           className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
           data-testid="trips-error"
         >
-          {error}
+          {formError}
         </p>
       )}
 
@@ -363,6 +381,7 @@ export function TripDashboard() {
 
         <aside className="space-y-4" aria-label="여행 관리">
           <section
+            ref={createFormRef}
             id="trip-dashboard-create"
             className={`${
               mobileToolsOpen ? 'block' : 'hidden'
@@ -471,17 +490,19 @@ export function TripDashboard() {
                   </div>
                 ))}
               </div>
-            ) : error ? (
+            ) : listError ? (
               // 오류일 때 "없습니다"를 함께 띄우지 않는다 — 원인 + 회복 행동으로 목록 자리를 대체.
+              // role=alert — 목록이 비어 상단 배너가 없을 때도 스크린리더에 전달돼야 한다.
               <div
+                role="alert"
                 className="rounded-sm border border-hairline bg-canvas p-4"
                 data-testid="trip-list-error"
               >
                 <p className="text-sm font-semibold text-ink">여행 목록을 불러오지 못했습니다.</p>
                 <p className="mt-1 text-sm text-muted">
-                  {error === '여행 목록을 불러오지 못했습니다.'
+                  {listError === '여행 목록을 불러오지 못했습니다.'
                     ? '네트워크나 서버 상태를 확인한 뒤 다시 시도해 주세요.'
-                    : error}
+                    : listError}
                 </p>
                 <button
                   type="button"
@@ -506,12 +527,10 @@ export function TripDashboard() {
                     type="button"
                     onClick={() => {
                       setMobileToolsOpen(true);
-                      document.getElementById('trip-dashboard-create')?.scrollIntoView({
-                        behavior: 'smooth',
-                        block: 'center',
-                      });
+                      setRevealCreateForm(true);
                     }}
-                    className={buttonClassName({ className: 'mt-4' })}
+                    aria-controls="trip-dashboard-create"
+                    className={buttonClassName({ variant: 'secondary', className: 'mt-4' })}
                   >
                     새 여행 만들기
                   </button>
