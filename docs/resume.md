@@ -460,6 +460,20 @@ opt-in(기본 off, 분리 집계). Map PR-1(#950, `2a8642bd…`) 머지 후 gold
 **다음 한 작업**: Map PR-2(응답 값 전환) 동봉 유예 — CLI 플래그·
 `derivation_enforced` 배선·스냅샷 3종 재추출+핀 회전.
 
+## 2026-08-05 (codex) — T-VN-41-F1 완료, default-off bootstrap 설계 선행
+
+H42와 n150 격리 paired proof는 완료됐고 Docker-manager durable writer-drain의 최신 재검토도
+P0/P1 없이 통과했다. F1은 Manager PR #130으로 merge되어 trusted production release에도 배포됐다.
+installed manifest는 deployed Map/PinVi generation 7 pair와 OpenAPI artifact를 정확히 가리킨다.
+
+그 뒤 최초 n150 diagnostic은 production canonical `.env`에 4-role cache-target binding, exact
+contract pin, `sync=false` line이 전혀 없음을 fail-close로 확인했다. raw Compose/직접 DB 조작/직접
+`.env` 수정은 금지한다. 실행 정본에 F1A(Manager-owned atomic bootstrap)를 추가했고 F2는 F1A
+merge·production deploy·default-off runtime attestation 뒤에만 시작한다.
+
+**다음 한 작업**: `T-VN-41-F1A` — cache-target 4-role binding과 exact generation 7 default-off
+contract를 Manager-owned atomic bootstrap으로 제품화한다.
+
 ## 2026-08-04 (claude) — T-VN-32C 쌍 PR 마무리 (Map merge SHA 핀)
 
 Map #940(T-VN-32A/B/C)이 `e12494bd…`로 머지되어 유예분을 실행했다: alias-map golden 핀 고정 +
