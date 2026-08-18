@@ -156,7 +156,7 @@
       (주요 4 + 더보기 시트, 가로 스크롤 nav 폐기)·데스크톱 ink 밑줄 탭, `useMobileWebLayout` UA 정규식 제거
       (뷰포트·pointer 미디어쿼리만), eyebrow(uppercase accent 라벨) 4곳 삭제, 탐색/지도 shell 장식 칩 6개 삭제,
       TripDashboard 필터를 `role=tab`→`aria-pressed` 토글 그룹(44px)·목록 skeleton·오류 패널(회복 행동)과
-      빈 상태(다음 행동 CTA) 분리. (완료: 2026-08-18, PR #TBD, claude → tasks-done.md)
+      빈 상태(다음 행동 CTA) 분리. (완료: 2026-08-18, PR #450, claude → tasks-done.md)
 - [ ] **T-315** — Hallmark PR-4(여행 상세): 3중 컨테인먼트 해소, `components/ui/Dialog.tsx`(useModalDialog 내장,
       scrim/overlay 토큰) 신설 후 모달 10곳 이관, 컨트롤 중복(일자 추가 ×4) 정리, 마커 팔레트 UI 오용
       (TripDayHeader 일출/일몰) 제거, `bg-primary/10` accent 배경 제거.

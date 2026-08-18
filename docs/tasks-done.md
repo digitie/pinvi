@@ -6,7 +6,7 @@
 
 ## 2026-08-18
 
-- [x] **T-314** — Hallmark PR-3: 앱 셸·대시보드·탐색 지도 재설계. (완료: 2026-08-18, PR #TBD, claude)
+- [x] **T-314** — Hallmark PR-3: 앱 셸·대시보드·탐색 지도 재설계. (완료: 2026-08-18, PR #450, claude)
       `AppShell`: ground를 `bg-surface-soft`→`bg-canvas`, 모바일(<lg) 하단 탭바 신설(주요 4 + `더보기` 시트,
       `min-h-14`·safe-area, 320px 가로 스크롤 nav 폐기)·데스크톱은 ink 밑줄 탭 유지, main 하단 패딩으로 탭바 회피.
       `useMobileWebLayout`: UA 정규식(SamsungBrowser|Android|…) 제거 → `(max-width:1023px), (pointer:coarse) and
