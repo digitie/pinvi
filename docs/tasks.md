@@ -119,7 +119,7 @@
       프리미티브(`components/ui/Button.tsx` Button/ButtonLink 8상태·44px, `FormField/Select/TextArea` 44px·16px)
       + 공개 표면(랜딩 Narrative Workflow 재구성, `PublicMasthead/PublicColophon/Wordmark`, auth 레이아웃·
       로그인·회원가입·verify-pending 재발송·verify-email, 공유 뷰 chrome+오류 상태, 404/FullPageMessage,
-      favicon·앱 아이콘·themeColor Rausch/canvas, 내부 문구 제거). (완료: 2026-08-18, PR #TBD, claude → tasks-done.md)
+      favicon·앱 아이콘·themeColor Rausch/canvas, 내부 문구 제거). (완료: 2026-08-18, PR #447, claude → tasks-done.md)
 - [ ] **T-313** — Hallmark PR-1b(기계적 코드모드): `bg-white→bg-canvas`(136), `text-white→text-on-primary`(96),
       `bg-black/NN→bg-scrim/50`, `shadow-sm/md/lg/xl→shadow-card|shadow-overlay`(21), `'...'→'…'`, `vh/svh→dvh`,
       미정의 `bg-surface`(4) 정정. 판단 없는 diff — 별도 PR로 리뷰 크기 관리. eslint-plugin-tailwindcss `no-custom-classname`·`text-[NNpx]` 차단 검토.

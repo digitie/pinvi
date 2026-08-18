@@ -7,7 +7,7 @@
 ## 2026-08-18
 
 - [x] **T-312** — Hallmark 감사(웹 7표면 13C/26M/19m) → 디자인 시스템 잠금 + 공개 표면 재설계(PR-1+PR-2).
-      (완료: 2026-08-18, PR #TBD, claude)
+      (완료: 2026-08-18, PR #447, claude)
       `DESIGN.md` "Hallmark 잠금 시스템"(modern-minimal · Narrative Workflow/Workbench/Long Document · N1/Ft2 · OKLCH
       토큰 · 대비 결정 `cta`=#e00b41 4.9:1 · 모션/상태/CTA voice/허용 범위/exports) 추가; `@pinvi/design-tokens`에
       `cta`/`cta-hover`/`focus`/`shadow-overlay`/`zIndex` + `spring` 삭제 + Pretendard Variable; globals에 self-host
