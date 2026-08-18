@@ -310,6 +310,19 @@
 - 검증: cache-target transport·restore-fence·service contract·sync configuration unit 103건, changed source
   strict mypy, ruff check/format을 통과했다. 다음은 PinVi draft PR push, Map paired receipt 갱신, 두 적대적
   리뷰어의 고정 SHA 재검토와 n150 isolated rehearsal이다.
+## 2026-08-18 (claude) — #444 후속: service provenance `map_release_revision` 재핀(dangling → Map #975 머지 SHA)
+
+- **문제**: #444가 핀한 Map 후보 `e093e555…`는 어떤 Map 브랜치에도 없는 dangling 커밋(리뷰 P1). Map #975가
+  `4672aa96…`로 squash 머지됐고, 그 커밋의 `packages/kor-travel-map-api/openapi.service.json`은 PinVi vendored
+  스냅샷과 **바이트 동일**(SHA-256 `c6f9aba6…`, GitHub API로 재계산 확인; Map main HEAD도 동일).
+- **변경**: `contracts/kor-travel-map-service-provenance-v1.json` `map_release_revision`, 단위 테스트
+  `_MAP_RELEASE_REVISION`, `.env.example` `EXPECTED_SOURCE_REVISION`(+ `EXPECTED_OPENAPI_SHA256`를 vendored 값
+  `c6f9aba6…`로 정정 — 이전 값 `5d380911…`/`4b7ef67e…`는 stale), tasks/execplan 서술을 `4672aa96…`로 갱신.
+  vendored 바이트·capability는 그대로(재vendor 불필요).
+- **검증**: pin 관련 unit(cache_target_contract·sync_config·kor_travel_map_contract) 75 passed(로컬 sibling
+  live 비교 1건은 환경 의존 pre-existing 실패). CI `contract-pin-consistency`가 새 SHA를 checkout해 바이트 동등을
+  다시 확인한다.
+
 ## 2026-08-18 (claude) — T-312: Hallmark 감사(웹 7표면) → 시스템 잠금 + 공개 표면 재설계
 
 - **감사(`hallmark audit`)**: apps/web 사용자 표면 6개(랜딩·인증·앱셸/대시보드·여행 상세·공유/지도/설정/파일/법무·

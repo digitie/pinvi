@@ -327,9 +327,8 @@ self-host, focus outline) + `components/ui/Button.tsx`·입력 프리미티브 +
 
 **다음 한 작업**: PR #447 적대적 리뷰 2인 → CI → N150 prod 배포(`ktdctl pinvi --build`, web 변경만) → prod 공개
 페이지 live UI e2e(375/1280 스크린샷 + not-found/shared/legal/login) → 머지 → T-313(코드모드) → T-314(앱 셸).
-**#444(codex T-VN-40/41)는 리뷰 2인 request_changes·deploy unsafe(P0: 빈 curation 토큰 → prod API 부팅 실패, P1:
-provenance가 dangling Map 커밋·Map #975 미머지, 마이그레이션 10건 수동 적용 필요)** — Map #975 머지·재핀 전 머지 금지,
-P0/P2/P3는 브랜치 fix 커밋 가능(코멘트 참조).
+#444는 P0 수정 후 머지됐고(`dc8a683f`), Map #975 머지 SHA `4672aa96…`로 provenance 재핀 PR을 올렸다(P1 해소).
+남은 #444 후속: P2 legacy 플랜 편집 잠금 건수 확인, prod 배포 시 `alembic upgrade head`(0050~0059) 선행.
 
 ## 2026-08-06 (codex) — T-VN-41-F1D-C1b PinVi seven-image provenance PR 준비
 
