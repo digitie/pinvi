@@ -310,6 +310,7 @@
 - 검증: cache-target transport·restore-fence·service contract·sync configuration unit 103건, changed source
   strict mypy, ruff check/format을 통과했다. 다음은 PinVi draft PR push, Map paired receipt 갱신, 두 적대적
   리뷰어의 고정 SHA 재검토와 n150 isolated rehearsal이다.
+
 ## 2026-08-18 (claude) — #444 후속: service provenance `map_release_revision` 재핀(dangling → Map #975 머지 SHA)
 
 - **문제**: #444가 핀한 Map 후보 `e093e555…`는 어떤 Map 브랜치에도 없는 dangling 커밋(리뷰 P1). Map #975가
