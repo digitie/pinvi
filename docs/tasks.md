@@ -96,7 +96,16 @@
 
 - [/] **T-310 = Claude** — issue #215 잔여 후속(POI mutation rollback·날짜/예산 검증·위치 동의 gate·
   `apps/mobile` lint CI). 브랜치 `agent/claude-issue-215-followup`, **PR #446 리뷰/머지 대기**.
-  실기기 Dev Client smoke 미실행이 남은 완료 조건이며 issue #215는 그 기록 후 종결한다.
+  Dev Client smoke는 Android 에뮬레이터(API 35)에서 실행했고 절차는 `apps/mobile/README.md`에 고정했다.
+  위치 동의 gate 런타임 확인만 남았으며(로컬 VWorld 키 부재로 지도 표면 도달 불가) 나머지는 통과했다.
+- [ ] **T-311** — `expo-doctor` 신호 정리: SDK-56 patch 드리프트(`expo`/`expo-router`/`expo-*` 9종이
+  기대 버전보다 낮음)와 Hermes V1 회귀. 드리프트 흡수는 dev client 재빌드를 동반하므로 별도 PR로 한다.
+- [ ] **T-318** — `npm install` 후 `expo-router`가 `apps/mobile/node_modules`에 nest되는데 그 의존
+  `@expo/router-server`는 root로 hoist돼 `expo start`가 `expo-router/_ctx-shared` 해석에 실패한다.
+  현재는 root `node_modules/expo-router` 심링크로 우회 중이며, 저장소 차원 해법(단일 react 정렬 또는
+  root 배치)을 정해야 `expo start`가 클린 체크아웃에서 바로 돈다.
+- [ ] **T-319** — 모바일 mutation 실패 안내가 원문 예외를 그대로 노출한다(예: 재정렬 실패 시
+  `fetch failed: java.net.ConnectException…`). 웹 상태 UI 규칙(원인+복구)에 맞춰 사용자 문구로 정리한다.
 
 ## Sprint 6 / v1.0.0 후속 Task 초안
 

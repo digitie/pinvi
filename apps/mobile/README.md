@@ -114,3 +114,30 @@ apps/mobile/
 
 > ADR-051: 설치·실행·테스트·git·commit·push는 Linux worktree에서 수행한다. RN
 > 메트로/시뮬레이터 실행은 플랫폼 제약을 따르되, Windows git/CodeGraph shim은 사용하지 않는다.
+
+## Android 에뮬레이터 smoke 실행 (WSL Metro + Windows 에뮬레이터)
+
+ADR-051대로 설치·git은 Linux(WSL)에서 하되, Android 에뮬레이터는 Windows 호스트에서 돈다.
+이 조합에는 함정이 셋 있어 절차를 고정한다 (T-310 smoke, 2026-08-19).
+
+1. **Metro는 WSL에서** 띄운다. 단, WSL의 Metro는 IPv6(`*:8081`)로 바인딩돼 Windows의 **IPv4**
+   루프백(= 에뮬레이터의 `10.0.2.2`)으로 포워딩되지 않는다. IPv4 릴레이를 하나 세운다.
+   ```bash
+   socat TCP4-LISTEN:8085,bind=127.0.0.1,reuseaddr,fork TCP4:127.0.0.1:8081 &
+   ```
+2. **manifest의 launchAsset URL은 Metro 자신의 host/port로 생성**되므로 그대로 두면 기기가
+   `127.0.0.1:8081`(기기 자신)을 때린다. `EXPO_PACKAGER_PROXY_URL`로 기기가 볼 주소를 준다.
+   ```bash
+   cd apps/mobile
+   EXPO_PUBLIC_PINVI_API_URL=http://10.0.2.2:12801 \
+   EXPO_PACKAGER_PROXY_URL=http://10.0.2.2:8085 \
+   npx expo start --dev-client --port 8081
+   ```
+3. **dev client 실행**은 deep link로 붙인다(개발자 메뉴 입력 없이).
+   ```bash
+   adb shell am start -a android.intent.action.VIEW \
+     -d "pinvi://expo-development-client/?url=http%3A%2F%2F10.0.2.2%3A8085"
+   ```
+
+API(`12801`)는 WSL에서 `127.0.0.1`(IPv4)로 바인딩되므로 `10.0.2.2:12801`로 그대로 닿는다.
+`adb shell input text`는 ASCII만 보낸다 — 한글 입력이 필요한 검증은 UI 조작 대신 API 시드로 만든다.
