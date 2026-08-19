@@ -3,10 +3,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Pencil, Plus, Trash2 } from 'lucide-react';
 import { MARKER_PALETTE, type MarkerColorKey, paletteHex } from '@pinvi/domain';
-import { useDialogAutoFocus } from '@/lib/useDialogAutoFocus';
-import { useEscapeKey } from '@/lib/useEscapeKey';
+import type { DayUpdateResult } from '@/components/trips/TripDetail';
+import { FormField } from '@/components/forms/FormField';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
 
 const PALETTE_KEYS = Object.keys(MARKER_PALETTE) as MarkerColorKey[];
+const DIALOG_LABEL = 'block text-sm font-semibold text-ink';
+// 푸터 버튼이 다이얼로그 셸 밖(footer 슬롯)에 있어 form 속성으로 제출을 잇는다.
+const FORM_ID = 'trip-day-settings-form';
 
 export interface TripDayControlsProps {
   selectedDay: {
@@ -14,17 +19,27 @@ export interface TripDayControlsProps {
     title: string | null;
     date: string | null;
     marker_color?: string | null;
+    /** 다이얼로그를 연 시점의 version 스냅샷 원본 — 저장 시 If-Match로 쓴다. */
+    version?: number;
   } | null;
   onAdd: () => void;
+  /**
+   * 저장 결과 — 다이얼로그는 **성공했을 때만** 닫고(실패 시 입력값 보존) 실패 원인은 모달 안에서
+   * 보여 준다. `expectedVersion`은 다이얼로그를 연 시점의 version이다(열려 있는 동안 들어온
+   * 서버 갱신 버전으로 저장하면 남의 변경을 조용히 덮는다).
+   */
   onUpdate: (
     dayIndex: number,
     patch: { title: string; date: string | null; marker_color: string | null },
-  ) => void;
+    expectedVersion?: number,
+  ) => Promise<DayUpdateResult>;
   onDelete: (dayIndex: number) => void;
   canAdd?: boolean;
   addDisabledReason?: string | null;
   showAdd?: boolean;
   busy?: boolean;
+  /** 저장 중 명시적 닫기 — 진행 중 요청을 취소하고 닫는다(다른 저장 다이얼로그와 같은 계약). */
+  onCancelBusy?: () => void;
 }
 
 export function TripDayControls({
@@ -36,30 +51,56 @@ export function TripDayControls({
   addDisabledReason = null,
   showAdd = true,
   busy = false,
+  onCancelBusy,
 }: TripDayControlsProps) {
   const [title, setTitle] = useState(selectedDay?.title ?? '');
   const [date, setDate] = useState(selectedDay?.date ?? '');
   const [color, setColor] = useState<string | null>(selectedDay?.marker_color ?? null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 오류는 **이 다이얼로그 세션**이 소유한다 — 전역 오류를 그대로 넘기면 아무것도 하지 않은
+  // 새 다이얼로그가 이전(또는 무관한) 실패를 띄운다(T-315 5차 리뷰).
+  const [saveError, setSaveError] = useState<{ message: string; field?: 'date' } | null>(null);
+  // 연 시점의 version — 열려 있는 동안 reload가 들어와도 이 값으로 저장해 409를 살린다.
+  const openedVersionRef = useRef<number | undefined>(undefined);
   const addDisabled = busy || !canAdd;
 
+  // 열려 있는 폼은 서버 갱신으로 덮지 않는다 — 409 후 reload가 사용자가 입력한 이름·날짜·색을
+  // 지우고 다이얼로그까지 닫던 문제(T-315 4차 리뷰). 닫혀 있을 때만 서버 값과 동기화한다.
+  // (인스턴스는 일자마다 key={day_index}로 분리돼 있어 '다른 일자로 전환' 분기는 필요 없다.)
   useEffect(() => {
+    if (settingsOpen) return;
     setTitle(selectedDay?.title ?? '');
     setDate(selectedDay?.date ?? '');
     setColor(selectedDay?.marker_color ?? null);
-    setSettingsOpen(false);
-  }, [selectedDay?.date, selectedDay?.day_index, selectedDay?.title, selectedDay?.marker_color]);
+  }, [settingsOpen, selectedDay?.title, selectedDay?.date, selectedDay?.marker_color]);
 
-  const saveSettings = () => {
+  const openSettings = () => {
+    setSaveError(null);
+    openedVersionRef.current = selectedDay?.version;
+    setSettingsOpen(true);
+  };
+
+  const saveSettings = async () => {
     if (!selectedDay) return;
-    onUpdate(selectedDay.day_index, {
-      title: title.trim(),
-      date: date || null,
-      marker_color: color,
-    });
-    setSettingsOpen(false);
+    // 저장이 끝나기 전에 닫으면 busy 잠금이 무의미해지고, 실패 시 입력값이 사라진다.
+    const result = await onUpdate(
+      selectedDay.day_index,
+      { title: title.trim(), date: date || null, marker_color: color },
+      openedVersionRef.current,
+    );
+    if (result.ok) {
+      setSaveError(null);
+      setSettingsOpen(false);
+      return;
+    }
+    // 409 뒤에는 스냅샷을 최신 version으로 갱신한다 — 갱신하지 않으면 같은 다이얼로그에서
+    // 재시도가 영원히 409고, 유일한 탈출(취소→재오픈)이 사용자의 입력을 버린다(6차 리뷰 P1).
+    // 안내 문구도 "한 번 더 누르면 덮어씁니다"로 실제 동작과 맞춘다.
+    if (result.latestVersion != null) openedVersionRef.current = result.latestVersion;
+    setSaveError({ message: result.message, field: result.field });
   };
   const closeSettings = () => {
+    setSaveError(null);
     setTitle(selectedDay?.title ?? '');
     setDate(selectedDay?.date ?? '');
     setColor(selectedDay?.marker_color ?? null);
@@ -75,7 +116,7 @@ export function TripDayControls({
           disabled={addDisabled}
           title={addDisabledReason ?? undefined}
           aria-describedby={addDisabledReason ? 'trip-day-add-disabled-reason' : undefined}
-          className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
+          className="inline-flex min-h-11 items-center gap-1 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           일자 추가
@@ -90,11 +131,11 @@ export function TripDayControls({
         <>
           <button
             type="button"
-            onClick={() => setSettingsOpen(true)}
+            onClick={openSettings}
             disabled={busy}
             aria-label={`${selectedDay.day_index}일차 설정`}
             title="일자 설정"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-hairline text-ink hover:bg-surface-soft disabled:opacity-50"
+            className="inline-flex size-11 items-center justify-center rounded-sm border border-hairline text-ink hover:bg-surface-soft disabled:opacity-50"
             data-testid="trip-day-rename"
           >
             <Pencil className="h-4 w-4" aria-hidden="true" />
@@ -105,7 +146,7 @@ export function TripDayControls({
             disabled={busy}
             aria-label={`${selectedDay.day_index}일차 삭제`}
             title="삭제"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
+            className="inline-flex size-11 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
             data-testid="trip-day-delete"
           >
             <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -120,9 +161,18 @@ export function TripDayControls({
               date={date}
               color={color}
               busy={busy}
-              onTitleChange={setTitle}
-              onDateChange={setDate}
+              onTitleChange={(next) => {
+                if (saveError && !saveError.field) setSaveError(null);
+                setTitle(next);
+              }}
+              onDateChange={(next) => {
+                // 값이 바뀌면 날짜 오류를 지운다 — 유효해진 값에 aria-invalid가 남으면 안 된다.
+                if (saveError?.field === 'date') setSaveError(null);
+                setDate(next);
+              }}
               onColorChange={setColor}
+              saveError={saveError}
+              onCancelBusy={onCancelBusy}
               onSave={saveSettings}
               onClose={closeSettings}
             />
@@ -142,10 +192,13 @@ interface DaySettingsDialogProps {
   date: string;
   color: string | null;
   busy: boolean;
+  /** 이 다이얼로그 세션에서 난 저장 실패/검증 오류(모달 안 표시). */
+  saveError?: { message: string; field?: 'date' } | null;
+  onCancelBusy?: () => void;
   onTitleChange: (title: string) => void;
   onDateChange: (date: string) => void;
   onColorChange: (color: string | null) => void;
-  onSave: () => void;
+  onSave: () => void | Promise<void>;
   onClose: () => void;
 }
 
@@ -158,6 +211,8 @@ function DaySettingsDialog({
   date,
   color,
   busy,
+  saveError = null,
+  onCancelBusy,
   onTitleChange,
   onDateChange,
   onColorChange,
@@ -165,8 +220,6 @@ function DaySettingsDialog({
   onClose,
 }: DaySettingsDialogProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  useEscapeKey(onClose);
-  useDialogAutoFocus(inputRef);
   const normalizedTitle = title.trim();
   const unchanged =
     normalizedTitle === (currentTitle ?? '') &&
@@ -174,42 +227,70 @@ function DaySettingsDialog({
     color === currentColor;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="일자 설정"
-      data-testid="trip-day-title-dialog"
+    <Dialog
+      open
+      onClose={onClose}
+      title={`${dayIndex}일차 설정`}
+      size="sm"
+      busy={busy}
+      onCancelBusy={onCancelBusy}
+      initialFocusRef={inputRef}
+      testId="trip-day-title-dialog"
+      footer={
+        <>
+          <Button
+            variant="secondary"
+            onClick={onCancelBusy && busy ? onCancelBusy : onClose}
+            disabled={busy && !onCancelBusy}
+          >
+            취소
+          </Button>
+          <Button type="submit" form={FORM_ID} disabled={unchanged} loading={busy}>
+            저장
+          </Button>
+        </>
+      }
     >
       <form
-        className="w-full max-w-sm space-y-3 rounded-md border border-hairline bg-white p-5 shadow-lg"
+        id={FORM_ID}
+        className="space-y-3"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!unchanged) onSave();
+          if (!unchanged) void onSave();
         }}
       >
-        <h2 className="text-base font-bold text-ink">{dayIndex}일차 설정</h2>
-        <label className="block text-sm font-semibold text-ink" htmlFor="trip-day-title-input">
-          이름
-        </label>
-        <input
+        {saveError && !saveError.field && (
+          // 실패해도 다이얼로그가 열린 채 남으므로 오류는 **모달 안**에 있어야 한다 —
+          // 바깥 배너는 scrim 뒤라 보이지도, aria-modal 안에서 읽히지도 않는다(4차 리뷰).
+          // 필드 원인이 분명한 오류는 아래 해당 FormField가 대신 announce한다(중복 방지).
+          <p
+            role="alert"
+            data-testid="trip-day-settings-error"
+            className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
+          >
+            {saveError.message}
+          </p>
+        )}
+        <FormField
           ref={inputRef}
           id="trip-day-title-input"
+          label="이름"
+          labelClassName={DIALOG_LABEL}
           value={title}
           onChange={(event) => onTitleChange(event.target.value)}
+          disabled={busy}
           maxLength={200}
           placeholder={`${dayIndex}일차`}
-          className="h-9 w-full rounded-sm border border-hairline px-2 text-sm text-ink outline-none focus:border-primary"
         />
-        <label className="block text-sm font-semibold text-ink" htmlFor="trip-day-date-input">
-          날짜
-        </label>
-        <input
+        <FormField
           id="trip-day-date-input"
+          label="날짜"
           type="date"
+          labelClassName={DIALOG_LABEL}
           value={date}
           onChange={(event) => onDateChange(event.target.value)}
-          className="h-9 w-full rounded-sm border border-hairline px-2 text-sm text-ink outline-none focus:border-primary"
+          disabled={busy}
+          error={saveError?.field === 'date' ? saveError.message : undefined}
         />
         <span className="block text-sm font-semibold text-ink">일자 색</span>
         <div
@@ -223,13 +304,14 @@ function DaySettingsDialog({
             type="button"
             onClick={() => onColorChange(null)}
             aria-pressed={color === null}
+            disabled={busy}
             aria-label="기본 색"
             title="기본 색(일자 순서 팔레트)"
-            className={
+            className={`disabled:cursor-not-allowed disabled:opacity-60 ${
               color === null
-                ? 'flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-border-strong text-[10px] font-bold text-muted ring-2 ring-primary ring-offset-1'
-                : 'flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-border-strong text-[10px] font-bold text-muted'
-            }
+                ? 'flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-border-strong text-xs font-bold text-muted ring-2 ring-primary ring-offset-1'
+                : 'flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-border-strong text-xs font-bold text-muted'
+            }`}
           >
             기본
           </button>
@@ -239,37 +321,29 @@ function DaySettingsDialog({
               type="button"
               onClick={() => onColorChange(key)}
               aria-pressed={color === key}
+              disabled={busy}
               aria-label={`${MARKER_PALETTE[key].name} 색`}
               title={MARKER_PALETTE[key].name}
               data-testid={`trip-day-color-${key}`}
               style={{ backgroundColor: paletteHex(key) }}
-              className={
+              className={`disabled:cursor-not-allowed disabled:opacity-60 ${
                 color === key
                   ? 'flex h-7 w-7 items-center justify-center rounded-full ring-2 ring-primary ring-offset-1'
                   : 'h-7 w-7 rounded-full'
-              }
+              }`}
             >
-              {color === key && <Check className="h-4 w-4 text-white" aria-hidden="true" />}
+              {/* 마커 팔레트 인라인 배경색 위의 체크라 토큰이 아니라 순백이 맞다(T-313 확정 예외). */}
+              {color === key && (
+                <Check
+                  // eslint-disable-next-line no-restricted-syntax -- 위 주석 참조(마커 팔레트 예외)
+                  className="h-4 w-4 text-white"
+                  aria-hidden="true"
+                />
+              )}
             </button>
           ))}
         </div>
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-9 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
-          >
-            취소
-          </button>
-          <button
-            type="submit"
-            disabled={busy || unchanged}
-            className="h-9 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            저장
-          </button>
-        </div>
       </form>
-    </div>
+    </Dialog>
   );
 }

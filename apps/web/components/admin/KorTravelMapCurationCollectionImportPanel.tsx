@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
+import { ApiClient, ApiError, adminApi, isRequestTimeoutError, queryKeys } from '@pinvi/api-client';
 import type { KorTravelMapCurationCollectionImportResponse } from '@pinvi/schemas';
 import { Download, RefreshCw } from 'lucide-react';
 
@@ -77,7 +77,14 @@ export function KorTravelMapCurationCollectionImportPanel() {
       // 4xx는 server가 terminal outcome으로 확정한 요청이다. 다음 submit은 반드시
       // 새 command여야 하므로 같은 key를 보존하지 않는다. 네트워크·5xx만 수동 replay를
       // 허용한다.
-      if (nextError instanceof ApiError && nextError.status < 500) {
+      // 클라이언트 시간 예산으로 끊긴 요청은 서버가 **확정하지 않은** 상태다 —
+      // terminal 4xx로 오분류해 key를 버리면 재시도가 새 command가 되어 중복 import가 된다
+      // (T-316 요청 수명 계약 ③).
+      if (
+        nextError instanceof ApiError &&
+        nextError.status < 500 &&
+        !isRequestTimeoutError(nextError)
+      ) {
         setIdempotencyKey(null);
       }
     },
@@ -112,7 +119,7 @@ export function KorTravelMapCurationCollectionImportPanel() {
 
   return (
     <section
-      className="rounded-sm border border-hairline bg-surface p-4"
+      className="rounded-sm border border-hairline bg-surface-soft p-4"
       aria-labelledby="canonical-import-heading"
       data-testid="admin-notice-canonical-import"
     >
@@ -176,7 +183,7 @@ export function KorTravelMapCurationCollectionImportPanel() {
           <button
             type="submit"
             disabled={importMutation.isPending}
-            className="inline-flex h-9 items-center gap-1 rounded-sm bg-primary px-3 text-sm font-semibold text-white disabled:opacity-60"
+            className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-60"
             data-testid="admin-notice-canonical-import-submit"
           >
             <Download className="h-4 w-4" aria-hidden="true" />

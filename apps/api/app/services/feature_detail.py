@@ -100,7 +100,13 @@ def _price_items(detail: Any) -> list[PriceItem]:
 
 
 def build_detail_card(dto: dict[str, Any]) -> FeatureDetailCard:
-    """원본 feature dto → kind별 detail-card(일반 사용자 노출 필드만)."""
+    """원본 feature dto → kind별 detail-card(일반 사용자 노출 필드만).
+
+    `status`는 채우지 않는다 — Map 3축 feature state cutover(`1f2bdc3a feat(api): complete
+    feature state cutover`)로 `FeatureDetailResponse`에서 사라졌고 대체 필드가 없다(state
+    축은 user profile 비노출). `DetailCardBase.status`는 web/mobile 계약 때문에 스키마에는
+    남아 있으나 항상 None이다.
+    """
     kind = str(dto.get("kind") or "")
     detail = dto.get("detail")
     urls = dto.get("urls")

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Gavel, Loader2, RefreshCw, RotateCcw, Send } from 'lucide-react';
 import { ApiError, userApi } from '@pinvi/api-client';
 import type {
@@ -8,10 +8,11 @@ import type {
   ContentReportRecord,
   ContentReportTargetType,
 } from '@pinvi/schemas';
-import { Section } from '@/components/admin/AdminPage';
-import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
+import { SettingsList, SettingsSection } from '@/components/app/SettingsSurface';
 import { FormField } from '@/components/forms/FormField';
+import { FormTextArea } from '@/components/forms/FormTextArea';
 import { FormSelect } from '@/components/forms/FormSelect';
+import { buttonClassName } from '@/components/ui/Button';
 import { apiClient } from '@/lib/api';
 
 const TARGET_OPTIONS: { value: ContentReportTargetType; label: string }[] = [
@@ -31,19 +32,40 @@ const REASON_OPTIONS: { value: ContentReportReasonCode; label: string }[] = [
 ];
 
 const APPEALABLE = new Set(['hidden', 'taken_down', 'rejected']);
-const textareaClass =
-  'min-h-24 rounded-sm border border-hairline px-3 py-2 text-sm outline-none focus:border-primary';
+
+/**
+ * 증빙 정보 — 서버 스키마(`evidence`)는 자유형 record라 프런트가 계약을 정한다.
+ * 일반 사용자에게 JSON 문법을 요구하지 않고 선택 입력 3개로 받아 조립한다(T-316).
+ */
+const EVIDENCE_FIELDS: Record<string, { value: string; label: string }[]> = {
+  trip: [
+    { value: 'title', label: '제목' },
+    { value: 'description', label: '설명' },
+    { value: 'memo', label: '메모' },
+  ],
+  comment: [{ value: 'body', label: '댓글 본문' }],
+  attachment: [
+    { value: 'filename', label: '파일명' },
+    { value: 'description', label: '설명' },
+  ],
+  share_link: [{ value: 'link', label: '공유 링크' }],
+};
+
+export function buildReportEvidence(input: {
+  field: string;
+  url: string;
+  note: string;
+}): Record<string, unknown> {
+  return {
+    source: 'user_report',
+    ...(input.field ? { field: input.field } : {}),
+    ...(input.url.trim() ? { url: input.url.trim() } : {}),
+    ...(input.note.trim() ? { note: input.note.trim() } : {}),
+  };
+}
 
 function formatDateTime(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString('ko-KR') : '-';
-}
-
-function parseJsonObject(value: string): Record<string, unknown> {
-  const parsed = JSON.parse(value) as unknown;
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('증빙 정보는 JSON object여야 합니다.');
-  }
-  return parsed as Record<string, unknown>;
 }
 
 export default function ModerationSettingsPage() {
@@ -52,7 +74,9 @@ export default function ModerationSettingsPage() {
   const [targetId, setTargetId] = useState('');
   const [reasonCode, setReasonCode] = useState<ContentReportReasonCode>('privacy');
   const [reasonText, setReasonText] = useState('');
-  const [evidence, setEvidence] = useState('{}');
+  const [evidenceField, setEvidenceField] = useState('');
+  const [evidenceUrl, setEvidenceUrl] = useState('');
+  const [evidenceNote, setEvidenceNote] = useState('');
   const [appealReportId, setAppealReportId] = useState<string | null>(null);
   const [appealReason, setAppealReason] = useState('');
   const [loading, setLoading] = useState(true);
@@ -89,12 +113,18 @@ export default function ModerationSettingsPage() {
         target_id: targetId.trim(),
         reason_code: reasonCode,
         reason_text: reasonText.trim(),
-        evidence: parseJsonObject(evidence),
+        evidence: buildReportEvidence({
+          field: evidenceField,
+          url: evidenceUrl,
+          note: evidenceNote,
+        }),
       });
       setNotice(`${created.report_id} 신고를 접수했습니다.`);
       setTargetId('');
       setReasonText('');
-      setEvidence('{}');
+      setEvidenceField('');
+      setEvidenceUrl('');
+      setEvidenceNote('');
       await load();
     } catch (err) {
       setError(
@@ -126,52 +156,6 @@ export default function ModerationSettingsPage() {
     }
   };
 
-  const columns = useMemo<DataTableColumn<ContentReportRecord>[]>(
-    () => [
-      {
-        key: 'target',
-        header: '대상',
-        cell: (row) => (
-          <div>
-            <div className="font-mono text-xs">{row.target_id}</div>
-            <div className="text-xs text-muted">{row.target_type}</div>
-          </div>
-        ),
-      },
-      { key: 'reason', header: '사유', cell: (row) => row.reason_code },
-      { key: 'status', header: '상태', cell: (row) => row.status },
-      { key: 'created', header: '접수', cell: (row) => formatDateTime(row.created_at) },
-      {
-        key: 'summary',
-        header: '처리',
-        cell: (row) => row.resolution_summary ?? row.appeal_summary ?? '-',
-      },
-      {
-        key: 'actions',
-        header: '',
-        width: '80px',
-        cell: (row) =>
-          APPEALABLE.has(row.status) ? (
-            <button
-              type="button"
-              title="이의제기"
-              aria-label={`${row.report_id} 신고 이의제기`}
-              onClick={() => {
-                setAppealReportId(row.report_id);
-                setAppealReason(row.appeal_summary ?? '');
-              }}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-hairline text-ink hover:bg-surface-soft"
-            >
-              <RotateCcw className="h-4 w-4" aria-hidden="true" />
-            </button>
-          ) : (
-            '-'
-          ),
-      },
-    ],
-    [],
-  );
-
   return (
     <div className="space-y-6">
       <header>
@@ -190,13 +174,17 @@ export default function ModerationSettingsPage() {
         </p>
       )}
 
-      <Section title="새 신고">
+      <SettingsSection title="새 신고">
         <form onSubmit={onCreate} className="grid gap-3 lg:grid-cols-[180px_minmax(0,1fr)]">
           <FormSelect
             id="settings-moderation-target-type"
             label="대상"
             value={targetType}
-            onChange={(event) => setTargetType(event.target.value as ContentReportTargetType)}
+            onChange={(event) => {
+              // 대상이 바뀌면 이전 대상의 필드가 payload에 남지 않게 초기화한다(T-316 리뷰 P2).
+              setEvidenceField('');
+              setTargetType(event.target.value as ContentReportTargetType);
+            }}
           >
             {TARGET_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -224,29 +212,51 @@ export default function ModerationSettingsPage() {
               </option>
             ))}
           </FormSelect>
-          <label className="grid gap-1 text-sm font-semibold text-ink">
-            신고 내용
-            <textarea
-              value={reasonText}
-              onChange={(event) => setReasonText(event.target.value)}
-              className={textareaClass}
-              maxLength={2000}
-              required
+          <FormTextArea
+            id="settings-moderation-reason-text"
+            label="신고 내용"
+            value={reasonText}
+            onChange={(event) => setReasonText(event.target.value)}
+            maxLength={2000}
+            rows={4}
+            required
+          />
+          <div className="grid gap-3 lg:col-span-2 lg:grid-cols-2">
+            <FormSelect
+              id="settings-moderation-evidence-field"
+              label="문제가 된 부분(선택)"
+              value={evidenceField}
+              onChange={(event) => setEvidenceField(event.target.value)}
+            >
+              <option value="">선택 안 함</option>
+              {(EVIDENCE_FIELDS[targetType] ?? []).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </FormSelect>
+            <FormField
+              id="settings-moderation-evidence-url"
+              label="관련 링크(선택)"
+              type="url"
+              value={evidenceUrl}
+              onChange={(event) => setEvidenceUrl(event.target.value)}
             />
-          </label>
-          <label className="grid gap-1 text-sm font-semibold text-ink lg:col-span-2">
-            증빙 정보
-            <textarea
-              value={evidence}
-              onChange={(event) => setEvidence(event.target.value)}
-              className={textareaClass}
-              required
-            />
-          </label>
+            <div className="lg:col-span-2">
+              <FormTextArea
+                id="settings-moderation-evidence-note"
+                label="추가 설명(선택)"
+                value={evidenceNote}
+                onChange={(event) => setEvidenceNote(event.target.value)}
+                maxLength={1000}
+                rows={3}
+              />
+            </div>
+          </div>
           <button
             type="submit"
             disabled={saving}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50 lg:col-start-2 lg:justify-self-start"
+            className={buttonClassName({ className: 'lg:col-start-2 lg:justify-self-start' })}
             data-testid="settings-moderation-submit"
           >
             {saving ? (
@@ -257,27 +267,26 @@ export default function ModerationSettingsPage() {
             접수
           </button>
         </form>
-      </Section>
+      </SettingsSection>
 
       {appealReportId && (
-        <Section title="이의제기">
+        <SettingsSection title="이의제기">
           <form onSubmit={onAppeal} className="grid gap-3">
             <div className="font-mono text-xs text-muted">{appealReportId}</div>
-            <label className="grid gap-1 text-sm font-semibold text-ink">
-              이의제기 사유
-              <textarea
-                value={appealReason}
-                onChange={(event) => setAppealReason(event.target.value)}
-                className={textareaClass}
-                maxLength={2000}
-                required
-              />
-            </label>
+            <FormTextArea
+              id="settings-moderation-appeal-reason"
+              label="이의제기 사유"
+              value={appealReason}
+              onChange={(event) => setAppealReason(event.target.value)}
+              maxLength={2000}
+              rows={4}
+              required
+            />
             <div className="flex gap-2">
               <button
                 type="submit"
                 disabled={appealing}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+                className={buttonClassName()}
                 data-testid="settings-moderation-appeal-submit"
               >
                 {appealing ? (
@@ -290,22 +299,22 @@ export default function ModerationSettingsPage() {
               <button
                 type="button"
                 onClick={() => setAppealReportId(null)}
-                className="h-10 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+                className={buttonClassName({ variant: 'secondary' })}
               >
                 취소
               </button>
             </div>
           </form>
-        </Section>
+        </SettingsSection>
       )}
 
-      <Section title="신고 목록">
+      <SettingsSection title="신고 목록">
         <div className="mb-3 flex justify-end">
           <button
             type="button"
             onClick={() => void load()}
             disabled={loading}
-            className="inline-flex h-9 items-center gap-2 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
+            className="inline-flex min-h-11 items-center gap-2 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
           >
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -315,14 +324,45 @@ export default function ModerationSettingsPage() {
             새로고침
           </button>
         </div>
-        <DataTable
-          columns={columns}
-          rows={reports}
+        <SettingsList
+          items={reports}
           loading={loading}
+          aria-label="신고 목록"
           rowKey={(row) => row.report_id}
           rowTestId={(row) => `settings-moderation-row-${row.report_id}`}
+          empty="접수한 신고가 없습니다."
+          renderRow={(row) => (
+            <>
+              <p className="font-mono text-sm text-ink">{row.target_id}</p>
+              <p className="mt-1 text-sm text-muted">
+                {row.target_type} · {row.reason_code} · {row.status} · 접수{' '}
+                {formatDateTime(row.created_at)}
+              </p>
+              {(row.resolution_summary ?? row.appeal_summary) && (
+                <p className="mt-1 text-sm text-body">
+                  {row.resolution_summary ?? row.appeal_summary}
+                </p>
+              )}
+            </>
+          )}
+          renderActions={(row) =>
+            APPEALABLE.has(row.status) ? (
+              <button
+                type="button"
+                title="이의제기"
+                aria-label={`${row.report_id} 신고 이의제기`}
+                onClick={() => {
+                  setAppealReportId(row.report_id);
+                  setAppealReason(row.appeal_summary ?? '');
+                }}
+                className="focus-ring inline-flex size-11 items-center justify-center rounded-sm text-ink hover:bg-surface-soft"
+              >
+                <RotateCcw className="h-4 w-4" aria-hidden="true" />
+              </button>
+            ) : null
+          }
         />
-      </Section>
+      </SettingsSection>
     </div>
   );
 }

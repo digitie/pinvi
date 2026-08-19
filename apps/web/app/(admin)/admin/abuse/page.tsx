@@ -57,7 +57,7 @@ function MetricBox({
   testId?: string;
 }) {
   return (
-    <div className="rounded-sm border border-hairline bg-white p-3" data-testid={testId}>
+    <div className="rounded-sm border border-hairline bg-canvas p-3" data-testid={testId}>
       <div className="text-xs text-muted">{label}</div>
       <div className="mt-1 truncate text-lg font-semibold text-ink">{value ?? '-'}</div>
     </div>
@@ -432,7 +432,7 @@ export default function AdminAbusePage() {
           <button
             type="submit"
             disabled={createMutation.isPending}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-primary px-3 text-sm font-semibold text-white disabled:opacity-50"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 text-sm font-semibold text-on-primary disabled:opacity-50"
             data-testid="admin-abuse-create"
           >
             {createMutation.isPending ? (

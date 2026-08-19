@@ -84,7 +84,7 @@ export function TripTelegramTargets({ tripId }: TripTelegramTargetsProps) {
 
   return (
     <section
-      className="space-y-3 rounded-sm border border-hairline bg-white p-4"
+      className="space-y-3 rounded-sm border border-hairline bg-canvas p-4"
       aria-label="Telegram 알림 대상"
       data-testid="trip-telegram-targets"
     >
@@ -130,7 +130,7 @@ export function TripTelegramTargets({ tripId }: TripTelegramTargetsProps) {
                   value={selected}
                   onChange={(event) => setSelected(event.target.value)}
                   disabled={atLimit || linkable.length === 0}
-                  className="mt-1 block h-9 min-w-48 rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary disabled:opacity-50"
+                  className="mt-1 block min-h-11 min-w-48 rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-none focus:border-primary disabled:opacity-50"
                   data-testid="trip-telegram-select"
                 >
                   <option value="">
@@ -147,7 +147,7 @@ export function TripTelegramTargets({ tripId }: TripTelegramTargetsProps) {
                 type="button"
                 onClick={() => void link()}
                 disabled={busy || !selected || atLimit}
-                className="inline-flex h-9 items-center gap-1 rounded-sm bg-primary px-3 text-sm font-semibold text-white disabled:opacity-50"
+                className="inline-flex min-h-11 items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
                 data-testid="trip-telegram-link"
               >
                 {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}

@@ -15,6 +15,20 @@
 - 좌표를 query/body에 받는 endpoint는 `app.location_access_log` 자동 적재
   (`docs/architecture/user-location.md`)
 
+### 1.1 `status` 필드 상태 (2026-08-17~)
+
+`FeatureSummary`/`FeatureDetail`/detail-card 응답의 **`status`는 항상 `null`이다.**
+kor-travel-map의 3축 feature state cutover(`1f2bdc3a feat(api): complete feature state
+cutover`)로 user 표면(`FeatureSummary`/`NearbyFeatureSummary`/`FeatureDetailResponse`)에서
+`status`가 삭제됐고 **대체 필드가 없다** — lifecycle/publication/quality 3축은 admin 표면
+전용이라 일반 사용자 응답으로 내려오지 않는다. Pinvi는 그 소비를 끊었고
+(`app/api/v1/features.py`, `app/services/feature_detail.py`), 필드 자체는 web/mobile 계약을
+깨지 않기 위해 남겨 두었다.
+
+**필드 제거는 후속 breaking cutover다**(web/mobile 소비처를 함께 정리해야 한다). 그때까지
+클라이언트는 `status`로 분기하지 말 것 — 값이 있는 척하는 표시(예: "영업중")를 만들면 안 된다.
+계약 근거: `docs/integrations/kor-travel-map-rest-api.md`(2026-08-17 재vendor 노트).
+
 ## 2. Endpoint
 
 ### 2.1 `GET /features/in-bounds`
@@ -48,7 +62,7 @@ Cookie: pinvi_access=...
         "category": "해수욕장",
         "marker_color": "P-07",
         "marker_icon": "swimming",
-        "status": "active",
+        "status": null, // 항상 null — §1.1 참조
       },
     ],
     "clusters": [
@@ -100,7 +114,7 @@ GET /features/f_2611000000_p_abc123...
       // kind+category별 payload (kor_travel_map PlaceDetail / EventDetail / ...)
       "phones": ["051-..."],
     },
-    "status": "active",
+    "status": null, // 항상 null — §1.1 참조
     "updated_at": "...",
   },
 }
@@ -116,7 +130,18 @@ kor-travel-map 호출: `GET /v1/features/{feature_id}` (`name`, 구조화 `addre
 GET /features/{feature_id}/weather?asof=2026-06-02T14:00:00+09:00
 ```
 
-`asof`: 시각 (생략 시 now). KST aware.
+`asof`(선택): 보고 싶은 **관측/예보 시각**(valid time). 생략하면 최신 카드.
+offset을 붙인 KST 값(`+09:00`)을 권장한다 — offset 없이 보내면 서버가 **KST(Asia/Seoul)로
+해석**하고(`app/api/v1/features.py normalize_asof_query`), offset이 있으면 그대로 존중한다.
+(예전에는 offset 없는 값을 UTC로 읽어 9시간 어긋난 시점이 돌아왔다.)
+
+**`asof`를 주면 upstream 경로가 달라진다.** Pinvi는 `asof` 없이는 kor-travel-map
+`GET /v1/features/{id}/weather`(query 없음)를, `asof`가 있으면 bitemporal 시점 경로
+`GET /v1/features/{id}/weather/snapshot`을 호출한다. 후자는 `target_at`(=Pinvi `asof`,
+valid time)과 `known_at`(knowledge time = 호출 시각, "지금 아는 최신 지식")을 **둘 다 필수**로
+받는다. Pinvi는 knowledge 축을 사용자에게 노출하지 않는다 — 시점 축은 `asof` 하나뿐이다.
+(`GET …/weather`에는 시각 query가 아예 없어서 예전처럼 `?asof=`를 붙이면 조용히 무시되고 늘
+최신 카드가 돌아왔다 — kor-travel-map bitemporal cutover `6650aa71`.)
 
 응답 200 — kor_travel_map는 **평탄한 metric 목록 + `forecast_style` 태그**를 준다(KMA
 시간축 그룹핑은 프런트 표현 계층):
@@ -125,6 +150,9 @@ GET /features/{feature_id}/weather?asof=2026-06-02T14:00:00+09:00
 {
   "data": {
     "feature_id": "...",
+    // 응답의 `asof`는 요청 `asof`의 에코가 아니라 **서버가 실제로 고른 시각**이다.
+    // 소스는 kor-travel-map `WeatherCardData.selected_at`(구 `asof`가 `6650aa71`에서 개명).
+    // Pinvi 공개 필드 이름만 `asof`로 유지하고 소스를 갈아끼웠다.
     "asof": "2026-06-10T12:00:00+09:00", // null 가능
     "latest_at": "2026-06-10T11:00:00+09:00", // null 가능
     "is_stale": false,
@@ -261,7 +289,7 @@ Cookie: pinvi_access=...
       "category": "해수욕장",
       "marker_color": "P-07",
       "marker_icon": "swimming",
-      "status": "active",
+      "status": null, // 항상 null — §1.1 참조
     },
   ],
 }
@@ -298,8 +326,15 @@ Cookie: pinvi_access=...
 }
 ```
 
-kor-travel-map 호출: `GET /v1/categories` (`active_only` 전달). 정본은 kor_travel_map이며 Pinvi는
-필요한 필드만 투영한다.
+`active_only`(기본 `true`)는 **Pinvi가 직접 적용한다** — kor-travel-map에는 전달하지 않는다.
+kor-travel-map 호출은 `GET /v1/categories`(`include_counts`만 선언)이고, 필터는 응답 항목의
+`is_active`로 Pinvi가 건다. 상류로 넘기던 시절에는 FastAPI가 모르는 query를 조용히 버려
+`active_only=true`가 전량을 돌려주면서 필터가 걸린 척했다(kor-travel-map T-VN-04 F-1에서
+`active_only` 삭제; 삭제 전에도 그 스위치는 목록이 아니라 `db_feature_count` 집계 기준만
+바꿨다). 정본 카탈로그는 kor_travel_map이며 Pinvi는 필요한 필드만 투영한다.
+
+현재 카탈로그 145건은 전부 `is_active: true`라 `active_only=true|false`의 결과는 같다. 이
+필터는 kor_travel_map이 항목을 비활성화하는 순간부터 의미를 갖는다.
 
 ### 2.7 `GET /search`
 

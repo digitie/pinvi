@@ -72,7 +72,7 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
 
   return (
     <section
-      className="space-y-3 rounded-sm border border-hairline bg-white p-4"
+      className="space-y-3 rounded-sm border border-hairline bg-canvas p-4"
       aria-label="공유 링크"
     >
       <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
@@ -86,7 +86,7 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
           <select
             value={visibility}
             onChange={(event) => setVisibility(event.target.value as TripShareLinkVisibility)}
-            className="mt-1 block h-9 rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
+            className="mt-1 block min-h-11 rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-none focus:border-primary"
           >
             {VISIBILITIES.map((v) => (
               <option key={v} value={v}>
@@ -101,14 +101,14 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
             type="date"
             value={expiresAt}
             onChange={(event) => setExpiresAt(event.target.value)}
-            className="mt-1 block h-9 rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
+            className="mt-1 block min-h-11 rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-none focus:border-primary"
           />
         </label>
         <button
           type="button"
           onClick={() => void create()}
           disabled={creating}
-          className="inline-flex h-9 items-center gap-1 rounded-sm bg-primary px-3 text-sm font-semibold text-white disabled:opacity-50"
+          className="inline-flex min-h-11 items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
         >
           {creating && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
           링크 만들기
@@ -132,7 +132,7 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
               type="button"
               onClick={() => void navigator.clipboard?.writeText(newUrl)}
               aria-label="링크 복사"
-              className="inline-flex h-7 items-center gap-1 rounded-sm border border-hairline bg-white px-2 text-xs font-semibold text-ink hover:bg-surface-soft"
+              className="inline-flex h-7 items-center gap-1 rounded-sm border border-hairline bg-canvas px-2 text-xs font-semibold text-ink hover:bg-surface-soft"
             >
               <Copy className="h-3.5 w-3.5" aria-hidden="true" />
               복사
@@ -142,7 +142,7 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
                 href={`/shared/${tripId}/${newToken}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex h-7 items-center gap-1 rounded-sm border border-hairline bg-white px-2 text-xs font-semibold text-ink hover:bg-surface-soft"
+                className="inline-flex h-7 items-center gap-1 rounded-sm border border-hairline bg-canvas px-2 text-xs font-semibold text-ink hover:bg-surface-soft"
               >
                 <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                 열기

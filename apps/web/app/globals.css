@@ -12,6 +12,8 @@
 @tailwind utilities;
 
 :root {
+  /* 앱 셸 모바일 하단 탭바 높이 — main 하단 패딩 예산의 단일 출처. */
+  --app-tabbar-h: 56px;
   --tm-nav-h: 56px;
   --tm-trip-tab-h: 44px;
   --tm-panel-w-left: 340px;
@@ -54,6 +56,28 @@ body {
   .checkbox:checked {
     /* stroke %23ffffff = 토큰 on-primary(#ffffff). data URI 안에서는 var()를 못 써 값 리터럴로 둔다. */
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23ffffff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-6'/%3E%3C/svg%3E");
+  }
+
+  /* 앱 셸 — 모바일 하단 탭바가 fixed라 main 하단에 그만큼 자리를 비운다.
+     Tailwind는 variant 유틸(md:py-8)을 base 유틸(pb-24) 뒤에 방출하므로 하단 패딩은 유틸 대신 여기서만 준다. */
+  .app-shell-main {
+    padding-bottom: calc(var(--app-tabbar-h) + 1.5rem + env(safe-area-inset-bottom));
+  }
+  @media (min-width: 1024px) {
+    .app-shell-main {
+      padding-bottom: 2rem;
+    }
+  }
+  /* 넓은 layout viewport를 쓰는 폰 보정(useMobileWebLayout) — lg 이상이어도 모바일 셸을 유지한다.
+     속성+클래스(0,2,0)라 Tailwind 유틸(0,1,0)을 레이어 순서와 무관하게 이긴다. */
+  [data-mobile-layout='on'] .app-shell-main {
+    padding-bottom: calc(var(--app-tabbar-h) + 1.5rem + env(safe-area-inset-bottom));
+  }
+  [data-mobile-layout='on'] .app-shell-desktop-nav {
+    display: none;
+  }
+  [data-mobile-layout='on'] .app-shell-tabbar {
+    display: block;
   }
 }
 

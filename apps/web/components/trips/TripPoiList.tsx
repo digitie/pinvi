@@ -106,14 +106,12 @@ export function TripPoiList({
             className={dragIndex === index ? 'opacity-50' : undefined}
           >
             <div
+              // 카드 안 카드 금지 — row는 표면 없이 padding + 선택 시 ink rule만 쓴다(T-316).
               className={
-                compact
-                  ? selected
-                    ? 'rounded-sm bg-primary/5 p-2 ring-1 ring-primary/35'
-                    : 'rounded-sm bg-white p-2'
-                  : selected
-                    ? 'rounded-sm border border-primary bg-surface-soft p-3'
-                    : 'rounded-sm border border-hairline bg-white p-3'
+                (compact ? 'p-2 ' : 'p-3 ') +
+                (selected
+                  ? 'border-l-2 border-ink bg-surface-soft'
+                  : 'border-l-2 border-transparent')
               }
             >
               <div className="flex items-start gap-2">
@@ -133,6 +131,8 @@ export function TripPoiList({
                   className="flex min-w-0 flex-1 items-start gap-3 text-left"
                 >
                   <span
+                    // 마커 팔레트 인라인 색 위 순번이라 순백이 맞다(T-313 예외).
+                    // eslint-disable-next-line no-restricted-syntax
                     className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
                     // ADR-055: 지도 핀과 동일한 서버 계산 display_marker_color로 뱃지 색을 맞춘다(parity).
                     style={{

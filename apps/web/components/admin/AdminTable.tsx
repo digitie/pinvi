@@ -112,7 +112,7 @@ export function AdminTable<R>({
   onRowClick,
   rowTestId,
   virtualized = false,
-  maxHeight = '70vh',
+  maxHeight = '70dvh',
   virtualizeThreshold = 30,
   enableSorting = true,
   initialSort,
@@ -184,7 +184,7 @@ export function AdminTable<R>({
     body = (
       <tr>
         <td colSpan={colCount} className="px-3 py-6 text-center text-muted">
-          불러오는 중...
+          불러오는 중…
         </td>
       </tr>
     );
@@ -275,7 +275,7 @@ export function AdminTable<R>({
             </tr>
           ))}
         </thead>
-        <tbody className="divide-y divide-hairline bg-white">{body}</tbody>
+        <tbody className="divide-y divide-hairline bg-canvas">{body}</tbody>
       </table>
     </div>
   );

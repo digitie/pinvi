@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@pinvi/api-client';
-import type { PoiUpdate, TripViewPoi } from '@pinvi/schemas';
-import { friendlyErrorText } from '@pinvi/domain';
+import type { PoiUpdate, TripView, TripViewPoi } from '@pinvi/schemas';
+import { friendlyErrorText, validateAmountInput } from '@pinvi/domain';
 import { api } from '../../../../../lib/api';
 import {
   Body,
@@ -19,6 +19,15 @@ import {
   Screen,
 } from '../../../../../components/ui';
 
+/** trip 뷰에서 POI 1건만 투영 — 없으면 null(뷰는 있는데 POI가 없는 경우와 로딩을 구분). */
+function selectPoi(view: TripView, poiId: string): TripViewPoi | null {
+  for (const day of view.days) {
+    const found = day.pois.find((p) => p.poi_id === poiId);
+    if (found) return found;
+  }
+  return null;
+}
+
 /**
  * POI 필드 편집 — 메모/비용. `poiApi.update`(If-Match version). 여행 편집 화면에서 진입.
  * 마커/시간 등 나머지 필드는 후속.
@@ -28,35 +37,28 @@ export default function PoiEditScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const tripQuery = useQuery({
+  // 단건 POI GET이 없어 trip 뷰 캐시를 쓰되, `select`로 이 POI만 구독한다(issue #215/#206 —
+  // 다른 POI/일자 변경으로는 리렌더하지 않고, 목록 화면과 캐시를 공유해 추가 요청도 없다).
+  const poiQuery = useQuery({
     queryKey: queryKeys.trips.detail(tripId),
     queryFn: () => api.trips.get(tripId),
     enabled: Boolean(tripId),
+    select: (view) => selectPoi(view, poiId),
   });
+  const poi = poiQuery.data ?? null;
 
-  const poi: TripViewPoi | undefined = tripQuery.data?.days
-    .flatMap((d) => d.pois)
-    .find((p) => p.poi_id === poiId);
-
-  const [note, setNote] = useState('');
-  const [budget, setBudget] = useState('');
+  // 입력값 = 사용자 편집본(있으면) ?? 서버 값(렌더 중 파생, effect seed 없음).
+  // poi.budget_amount는 decimal string이라 그대로 초기값으로 쓴다.
+  const [noteEdit, setNoteEdit] = useState<string | null>(null);
+  const [budgetEdit, setBudgetEdit] = useState<string | null>(null);
+  const note = noteEdit ?? poi?.user_note ?? '';
+  const budget = budgetEdit ?? poi?.budget_amount ?? '';
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!poi) return;
-    setNote((current) => (current === '' ? (poi.user_note ?? '') : current));
-    setBudget((current) => (current === '' ? (poi.budget_amount ?? '') : current));
-    // poi.budget_amount는 decimal string. 초기값만 시드.
-  }, [poi]);
+  const [budgetError, setBudgetError] = useState<string | null>(null);
 
   const saveMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: (body: PoiUpdate) => {
       if (!poi) throw new Error('not ready');
-      const trimmedBudget = budget.trim();
-      const body: PoiUpdate = {
-        user_note: note.trim() || null,
-        budget_amount: trimmedBudget === '' ? null : Number(trimmedBudget),
-      };
       return api.pois.update(tripId, poi.poi_id, poi.version, body);
     },
     onSuccess: () => {
@@ -66,20 +68,17 @@ export default function PoiEditScreen() {
     onError: (err) => setError(friendlyErrorText(err)),
   });
 
-  if (tripQuery.isLoading) {
+  if (poiQuery.isLoading) {
     return (
       <Screen scroll={false}>
         <Loading />
       </Screen>
     );
   }
-  if (tripQuery.isError) {
+  if (poiQuery.isError) {
     return (
       <Screen>
-        <ErrorView
-          message={friendlyErrorText(tripQuery.error)}
-          onRetry={() => tripQuery.refetch()}
-        />
+        <ErrorView message={friendlyErrorText(poiQuery.error)} onRetry={() => poiQuery.refetch()} />
       </Screen>
     );
   }
@@ -92,13 +91,15 @@ export default function PoiEditScreen() {
   }
 
   const onSave = () => {
-    const trimmedBudget = budget.trim();
-    if (trimmedBudget !== '' && !Number.isFinite(Number(trimmedBudget))) {
-      setError('예산은 숫자로 입력해 주세요.');
+    // 예산 검증(issue #215/#206) — 음수/비숫자/지수는 서버 ZodError 대신 사용자 문구로 차단.
+    const amount = validateAmountInput(budget);
+    if (!amount.ok) {
+      setBudgetError(amount.message);
       return;
     }
+    setBudgetError(null);
     setError(null);
-    saveMutation.mutate();
+    saveMutation.mutate({ user_note: note.trim() || null, budget_amount: amount.value });
   };
 
   return (
@@ -114,7 +115,7 @@ export default function PoiEditScreen() {
           <Field
             label="메모"
             value={note}
-            onChangeText={setNote}
+            onChangeText={setNoteEdit}
             multiline
             numberOfLines={4}
             className="min-h-24"
@@ -123,7 +124,11 @@ export default function PoiEditScreen() {
           <Field
             label={`예산 (${poi.currency})`}
             value={budget}
-            onChangeText={setBudget}
+            onChangeText={(v) => {
+              setBudgetEdit(v);
+              setBudgetError(null);
+            }}
+            error={budgetError ?? undefined}
             keyboardType="numeric"
             placeholder="예: 30000"
           />

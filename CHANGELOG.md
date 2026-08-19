@@ -4,6 +4,29 @@
 
 ## Unreleased
 
+- kor-travel-map service 계약 스냅샷을 Map `f637f3ad`(#1000 stream snapshot materialization)로 재vendor했다.
+  사용자에게 보이는 동작 변화는 없다(경로 추가·삭제 없음, snapshot 한도 초과를 설명하는 problem 스키마 6개만
+  추가됐다). 계약 핀(provenance revision·sha, 테스트 상수)을 같은 커밋에서 함께 옮겼다.
+
+- 날씨 카드의 시점 조회(`GET /features/{id}/weather?asof=`)가 실제로 그 시점을 조회한다.
+  kor-travel-map이 시점 조회를 별도 bitemporal 경로로 옮긴 뒤에도 PinVi는 옛 경로에 `asof`를
+  붙여 보냈고, 서버가 모르는 query를 조용히 버려 **어떤 시점을 요청하든 늘 최신 카드**가
+  돌아왔다(오류는 나지 않았다). 또한 offset 없이 보낸 시각을 UTC로 해석해 한국 시간 기준으로
+  9시간 어긋난 시점의 날씨를 돌려줄 수 있었다 — 이제 offset이 없으면 KST(Asia/Seoul)로 읽고,
+  offset을 명시하면 그대로 존중한다. 응답의 `asof`는 요청값의 에코가 아니라 서버가 실제로 고른
+  시각이다.
+- 카테고리 목록의 `active_only` 필터가 실제로 동작한다. 이 값은 kor-travel-map으로 전달되던 시절
+  서버가 모르는 query라 조용히 버려졌고(그리고 삭제되기 전에도 목록을 거르지 않았다) `active_only=true`가
+  전체 목록을 돌려주고 있었다. 이제 PinVi가 카테고리의 활성 여부로 직접 거른다. 지금 카탈로그는 전부
+  활성이라 응답은 이전과 같고, 앞으로 비활성 카테고리가 생기면 필터가 의미를 갖는다.
+- Admin 날씨 탭에서 시간대(offset) 없이 `asof`를 넘기면 **500**이 나던 것을 고쳤다. 사용자 화면과 같은
+  규칙으로 KST(Asia/Seoul)로 읽는다.
+- feature 응답의 `status` 필드는 **항상 `null`**이다. kor-travel-map이 feature 상태를 3축
+  (lifecycle/publication/quality)으로 재편하면서 일반 사용자 표면에서 `status`를 제거했고 대체
+  필드가 없다. 필드 자체는 클라이언트 호환을 위해 남겨 두지만 값이 채워지지 않으므로 이 값으로
+  분기하거나 상태를 표시하면 안 된다(필드 제거는 후속 릴리즈). 목록/상세/detail-card 어디서도
+  옛 값이 새어 나오지 않도록 회귀 테스트로 고정했다.
+
 - kor-travel-map canonical collection import의 2,000 item/10 page 소비자 상한을 검증하고,
   PinVi plan/POI가 collection UUID와 immutable import receipt item proof에 결박되도록 DB 경계를
   강화했다. 배포 가능한 선행 migration은 byte 불변으로 유지하고 새 forward migration에서 완료

@@ -28,16 +28,55 @@
 > PR #533으로 admin `/v1/admin/features/curated/{id}/detail-snapshot`으로 이관됐다(ADR-049, §2.11).
 > **정본 소스**: kor-travel-map `packages/kor-travel-map-api/openapi.user.json`(사용자 표면) +
 > `docs/architecture/rest-api.md`(prose 계약). 본 문서와 충돌 시 **openapi.user.json 우선**.
-> vendored 정본은 **2026-08-09(T-VN-34C) 기준 kor-travel-map
-> commit `f426c7b78c493035952ded5c2a13f61a2a351793`**의 전체 파일이며 SHA-256은
-> `eca7eea1dff7aa1848e50428fb8da5507e4d636c3a979b04859ef43c7f7410e7`다.
-> 이 cutover는 공개 feature 응답에서 과거 `status`와 세 내부 상태 축을 모두 제거했다.
-> 따라서 Pinvi는 해당 필드를 재노출하거나 상태 필터로 보내지 않으며, 아래 계약 테스트가
-> 스냅샷과 Pinvi 투영 양쪽을 함께 고정한다.
+> vendored 정본은 **2026-08-05(T-VN-32C PR-2) 기준 kor-travel-map
+> merge commit `8c5bdcf8ce892439a8bb8e0013edf74127bf076a`**(read 응답 feature_id
+> UUID 정본화 — 스펙 자체는 description-only 변경)의
+> 전체 파일이며 SHA-256은
+> `66fc83b3ae918b2f82ae9cf02bea162d8fa84967567e2a450493d93b1953e801`다.
+> (직전 핀 `94ace1a9…`(T-VN-16C)는 spec-touching 4 commits 뒤처져 있었다. 재동기화
+> 실제 drift는 ① Map `96814b2a`("split service openapi profile")가 ServiceToken 전용
+> batch 2경로(`/v1/features/batch`·`/v1/features/weather/batch`)와 batch schema를
+> user profile에서 `openapi.service.json`으로 분리 — user 게이트가 해당 경로·schema를
+> vendored **service** 스냅샷 기준으로 검증하도록 재배선했다(§8) — 와 ② admin subset의
+> `curation_status`/`reuse_policy`/`relation` enum 명시 additive 추가이며, Pinvi가
+> 소비하는 필드 타입 계약 자체는 무변경이었다.)
 > Pinvi contract gate는 이 pinned hash와 선택적 live 전체
 > 파일 equality를 검사하므로 일부 필드만 수기로 graft하지 않는다.
-> **관계**: 능력 격차 분석은 `docs/kor-travel-map-requirements.md`(이제 대부분 해소),
-> 통합 패턴 개요는 `docs/kor-travel-map-integration.md`(본 문서가 구체 계약으로 대체/보강).
+> **2026-08-17 재vendor (kor-travel-map `origin/main` `95d2c128a8d0613c719eafdb5419c4b76dbcc21f`,
+> 스냅샷 SHA-256 `6a2ee0f94ffded691f5d169ef1914144eecdf1f4170226c8bc5e963e972403c1`)**:
+> 위 `8c5bdcf8`/`66fc83b3…` 핀은 이 재vendor로 대체됐다. consumer-visible drift 2건 —
+> ① **3축 feature state cutover(`1f2bdc3a`)**: user 표면 `FeatureSummary`/
+> `NearbyFeatureSummary`/`FeatureDetailResponse`에서 `status`가 **삭제**되고 대체 필드가
+> 없다(state 축은 user profile 비노출). nearby의 `status` query filter도 없다. Pinvi는
+> `status` **소비를 끊었고**(`features.py`·`services/feature_detail.py`) 공개 스키마의
+> `status` 필드는 web/mobile 계약 때문에 남겨 **항상 None**이다.
+> ② **bitemporal weather(`6650aa71`)**: `WeatherCardData.asof` → `selected_at`(+`refresh_after`),
+> 시점 조회는 새 경로 `GET /v1/features/{id}/weather/snapshot`(§2.6b). §2.6/§2.6b 참조.
+>
+> ③ **admin 표면도 같은 3축 cutover(`1f2bdc3a`)를 받았다**: `AdminFeatureRecord` =
+> `{address_label, category, created_at, feature_id, feature_uuid, issue_count, issues, kind,
+lat, lifecycle_state, lon, name, primary_dataset_key, primary_provider, publication_state,
+quality_state, updated_at}` — **`status` 없음**(`AdminFeatureDetailFeatureRecord`도 동일하게
+> 3축 + `marker_*`/`row_revision`/`sibling_group_id` 등). `GET /v1/admin/features`의 query는
+> `[q, kind, category, lifecycle_state, publication_state, quality_state, provider_dataset_id,
+has_coord, has_issue, issue_type, updated_from, updated_to, include_ended, page_size, cursor,
+sort, order]`이며 `status`·`provider`·`dataset_key`는 **없다**(보내면 조용히 버려진다).
+> admin 전용 weather 경로 `GET /v1/admin/features/{feature_id}/weather`도 **존재한다**
+> (query 없음, 응답 `FeatureWeatherResponse`/`WeatherCardData`; user 경로는 `public_features`
+> 기반이라 비공개 feature가 404지만 admin 경로는 base `features`(lifecycle=active) 기반이다).
+>
+> **후속 과제(이번 PR 범위 밖)**:
+>
+> 1. Pinvi 공개 응답에서 항상 None인 `status` 필드를 실제로 제거한다 —
+>    `FeatureSummary`/`FeatureDetail`/`DetailCardBase`(`app/schemas/feature.py`)와 web/mobile
+>    소비처를 함께 정리해야 하는 breaking change라 별도 cutover로 뺀다.
+> 2. Pinvi admin weather-values(`api/v1/admin/features.py`)를 user 경로 대신 **admin weather
+>    경로**로 전환한다 — 지금은 user 경로를 쓰기 때문에 비공개 feature의 admin 조회가 404가 된다.
+> 3. **admin OpenAPI 스냅샷을 vendoring**한다. 현재 계약 게이트는 user 스냅샷만 검사해서
+>    admin 표면 드리프트(위 ③)가 CI에 잡히지 않는다.
+> 4. 필요하면 `refresh_after` 소비(카드 캐시 TTL) 도입도 같은 과제에서 검토한다.
+>    **관계**: 능력 격차 분석은 `docs/kor-travel-map-requirements.md`(이제 대부분 해소),
+>    통합 패턴 개요는 `docs/kor-travel-map-integration.md`(본 문서가 구체 계약으로 대체/보강).
 >
 > **2026-07-18 T-ADM-C6c clean cut**: admin ops 소비는
 > `/v1/ops/datasets`·`/v1/ops/pipeline/{overview,executions}`·pipeline cancellation이 정본이다.
@@ -206,7 +245,8 @@ FeatureBatchMissingItem|FeatureBatchUnchangedItem]}`. pagination·추적은 `met
 - **200 `FeaturesInBoundsResponse`**: `data:{ clusters:[ClusterSummary], items:[FeatureSummary] }, meta:{duration_ms, request_id, cluster?:{cluster_unit}}`
   (`count`/`data.cluster_unit` 폐기 — granularity는 `meta.cluster`).
   - `ClusterSummary` = `{ cluster_key, feature_count, lon, lat }`.
-  - `FeatureSummary` = `{ feature_id, kind, name, category, lon|null, lat|null, marker_color|null, marker_icon|null, status }`.
+  - `FeatureSummary` = `{ feature_id, kind, name, category, lon|null, lat|null, marker_color|null, marker_icon|null }`.
+    (`status`는 Map 3축 feature state cutover `1f2bdc3a`로 **삭제** — 아래 2026-08-17 노트.)
 - **소비처**: Pinvi `GET /features/in-bounds`(features.py). 지도 마커/클러스터.
 - **주의**: **클러스터링은 kor_travel_map 서버가 한다**(`cluster_unit`/`zoom`). Pinvi
   `services/cluster_query.py`(직접 `feature` schema SQL 조인)는 **경계 위반 + 중복** —
@@ -219,7 +259,7 @@ FeatureBatchMissingItem|FeatureBatchUnchangedItem]}`. pagination·추적은 `met
 - **200 `FeatureDetailEnvelopeResponse`**: `data:FeatureDetailResponse` =
   `{ feature_id, kind, name, category, lon|null, lat|null, address(object), legal_dong_code|null,
 sido_code|null, sigungu_code|null, marker_color|null, marker_icon|null, urls(object),
-detail(object), status, updated_at }`.
+detail(object), updated_at }` (`status` 삭제 — Map `1f2bdc3a`).
 - **소비처**: 마커 클릭 상세, POI 추가 시 검증. 404 = `FEATURE_NOT_FOUND`.
 - **주의**: `name`(Pinvi 코드의 `title` 아님), `address`는 **구조화 객체**(평면
   `address_road/address_jibun` 아님) → schema 정렬(§6-D).
@@ -247,7 +287,7 @@ detail(object), status, updated_at }`.
 
 ### 2.4 `GET /v1/features/nearby` — 반경 + `…/nearby/by-target`
 
-- **nearby params**: `lon* lat* radius_m*`, `kind` `category` `status` `provider`,
+- **nearby params**: `lon* lat* radius_m*`, `kind` `category` `provider`,
   `page_size`, `cursor`, `sort`(기본 distance).
 - **200 `FeaturesNearbyResponse`**: `data:{ origin:NearbyOriginSummary, items:[NearbyFeatureSummary] }, meta:{..., page:{page_size, next_cursor, total}}`.
   `NearbyFeatureSummary` = FeatureSummary + `distance_m`. (`data.next_cursor` 폐기 →
@@ -265,16 +305,16 @@ detail(object), status, updated_at }`.
 - **소비처**: 통합 검색(`GET /search`)의 **feature 파트만**. 주소 후보는 Pinvi가
   **kor-travel-geo v2 직접**(ADR-025), 내 POI는 Pinvi 로컬 — 합쳐서 응답.
 
-### 2.6 `GET /v1/features/{feature_id}/weather` — 날씨 카드
+### 2.6 `GET /v1/features/{feature_id}/weather` — 날씨 카드(최신)
 
-- **current params**: `feature_id*`만 허용한다. Map current card는 `selected_at|null`과
-  `refresh_after|null`을 준다.
-- PinVi의 `GET /features/{feature_id}/weather?asof=...`는 Map current route에 이 query를 넘기지
-  않는다. 대신 Map `GET /v1/features/{feature_id}/weather/snapshot?target_at=...&known_at=...`을
-  호출하며, 응답 `target_at`을 PinVi card의 `asof`로 투영한다. `asof`가 없으면 current 응답의
-  `selected_at`을 투영한다.
+- **params**: `feature_id*` **뿐**. query parameter는 하나도 없다 — 시점 조회는 §2.6b.
 - **200 `FeatureWeatherResponse`**: `data:WeatherCardData` =
-  `{ feature_id, selected_at|null, latest_at|null, is_stale, source_styles:[string], metrics:[WeatherMetricOut] }`.
+  `{ feature_id, selected_at|null, refresh_after|null, latest_at|null, is_stale,
+source_styles:[string], metrics:[WeatherMetricOut] }`.
+  (구 `asof`는 Map bitemporal cutover `6650aa71`에서 `selected_at`으로 대체됐다.
+  Pinvi 공개 필드 이름 `asof`는 web/mobile 계약이라 유지하고 **소스만** `selected_at`으로
+  갈아끼웠다 — `features.py _weather_from_kor_travel_map`,
+  `admin/features.py _weather_values_from_payload`.)
   `WeatherMetricOut` = `{ metric_key, metric_name|null, forecast_style, timeline_bucket|null,
 provider|null, weather_domain|null, valid_at|null, valid_from|null, valid_until|null, effective_at|null,
 issued_at|null, observed_at|null, value_number|null, value_text|null, unit|null, severity|null }`.
@@ -284,6 +324,26 @@ issued_at|null, observed_at|null, value_number|null, value_text|null, unit|null,
   `{nowcast, ultra_short, short, mid, advisories}`. → Pinvi가 `forecast_style`
   (nowcast/ultra_short/short/mid/observed/index/advisory)별로 metric을 **그룹핑해 카드 구성**
   (변환은 Pinvi 표현 계층, KMA provider 변환 직접 작성 아님 — 금지룰 준수)(§6-D).
+
+### 2.6b `GET /v1/features/{feature_id}/weather/snapshot` — 날씨 시점 조회
+
+- **params**: `feature_id*`(path), `target_at*`·`known_at*`(query, 둘 다 **required**,
+  `format: date-time`). `target_at` = 원하는 관측/예보 시각(valid time),
+  `known_at` = 그 시점에 알려진 response cutoff(knowledge time).
+- **200 `FeatureWeatherSnapshotResponse`**: `data:WeatherSnapshotData` = `WeatherCardData`의
+  **상위집합**(같은 필드 + `target_at`, `known_at`) → Pinvi 소비 매핑을 그대로 재사용한다.
+- **소비처**: Pinvi `GET /features/{id}/weather?asof=`와 admin weather-values의 `asof`.
+  client(`feature_weather`)가 `asof` 유무로 §2.6 / §2.6b를 고른다.
+- **주의(과거 silent drift)**: `asof`가 §2.6에서 사라진 뒤에도 client는 `/weather?asof=`를
+  계속 보냈다. FastAPI는 모르는 query를 조용히 버리므로 **시점과 무관하게 늘 최신 카드**가
+  돌아왔다(오류 없음 = 무증상 버그). 계약 게이트가 §2.6의 query 집합을 **빈 집합**으로,
+  §2.6b의 두 query를 required로 고정해 재발을 막는다.
+- **시간대 정책(단일)**: 두 query는 `format: date-time`이라 offset 없는 값을 보내면 안 된다.
+  Pinvi transport(`clients/kor_travel_map.py`)는 **aware datetime만 받고 naive는 거절한다**
+  (`_require_aware_datetime`). naive → aware 보정은 시간대 의미를 아는 HTTP 경계가 하며,
+  `api/v1/features.py normalize_asof_query()`가 **KST(Asia/Seoul)**로 해석한다. 예전
+  transport는 naive를 UTC로 간주해(`_as_aware_utc`, 제거됨) 한국 벽시계 시각을 9시간 어긋난
+  시점으로 조회했다. `known_at`은 사용자에게 노출하지 않고 호출 시각(=최신 지식)을 쓴다.
 
 ### 2.6a `POST /v1/features/weather/batch` — 여행 일자 날씨
 
@@ -319,7 +379,12 @@ latest_at, is_stale}`이고, 나머지 두 item arm은 `{state, feature_id}`다.
 
 ### 2.7 `GET /v1/categories` — 카테고리 카탈로그
 
-- **params**: `include_counts`, `active_only`.
+- **params**: `include_counts` **하나뿐**. 옛 `active_only`는 kor_travel_map T-VN-04 F-1에서
+  제거됐다(비공개 draft/hidden/inactive 분포가 공개 표면에 노출돼서). 삭제 전에도 그 스위치는
+  item 목록이 아니라 `db_feature_count`/`db_active` 집계 기준만 바꿨고, 지금 그 집계는 항상
+  ADR-067 공개 projection(`public_features`) 기준이다. Pinvi client는 이 query를 보내지 않으며
+  (`test_kor_travel_map_contract.py` `_CLIENT_QUERY_PARAMETERS`가 exact로 핀), Pinvi 표면의
+  `active_only`는 응답 `is_active`로 소비 계층에서 직접 거른다.
 - **200 `CategoriesResponse`**: `data:{ items:[CategorySummary] }` (+`include_counts` 관련
   필드는 최신 `openapi.user.json` 확인 — `count`류는 envelope 표준화로 폐기 계열).
   `CategorySummary` = `{ code(8자리), label, parent_code|null, depth, path:[str], maki_icon,
@@ -570,7 +635,9 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
 수기 httpx client(kor_travel_map 권고)가 kor_travel_map `openapi.user.json`과 silent drift하는 것을 막는다.
 
 - **vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-user.json` — Pinvi가 구현 기준으로
-  삼은 kor_travel_map commit `f426c7b8`의 **전체 파일**(T-VN-34C에서 재동기화).
+  삼은 kor_travel_map main commit의 **전체 파일**(현 핀 `95d2c128`, 2026-08-17 재vendor —
+  직전 `8c5bdcf8`). 재vendor가 잡아낸 실제 consumer drift(`status` 삭제 / weather bitemporal)는
+  본 문서 상단 2026-08-17 노트.
   pinned SHA-256은 본 문서 상단과 `test_kor_travel_map_contract.py`가 함께 고정한다.
   **profile 분리(Map `96814b2a`)**: ServiceToken 전용 batch 2경로
   (`/v1/features/batch`·`/v1/features/weather/batch`)는 user profile에서 분리돼
@@ -583,7 +650,10 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   (2) 매핑(`features.py`/`public.py`가 읽는 FeatureSummary/ClusterSummary/
   FeatureDetailResponse/WeatherCardData/WeatherMetricOut/CategorySummary/FeatureBatchData/
   BeachPublicView/FestivalPublicView/PublicMapMarkerLayerData 등) ⊆ 스냅샷 component schemas,
-  (3) public beach 업무 query의 exact shape와 인증 `key` query 부재,
+  (3) public beach 업무 query의 exact shape, weather 2경로의 query 계약(`/weather`는
+  **query 없음** / `/weather/snapshot`은 `target_at`·`known_at` **둘 다 required** —
+  `test_weather_snapshot_route_requires_the_bitemporal_query_pair`, §2.6b silent drift 재발
+  방지선), 인증 `key` query 부재,
   (4) public route `PublicApiKey|ServiceToken` header security와 batch `ServiceToken`-only,
   (5) pinned SHA-256 및 표준 workspace sibling `kor-travel-map-*` 전체 파일 byte equality
   (sibling이 없는 CI에서는 pinned hash는 항상 실행, live equality만 skip —

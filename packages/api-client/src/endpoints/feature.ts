@@ -120,11 +120,12 @@ export const featureApi = (client: ApiClient) => ({
   },
 
   /** feature 요청 큐 등록 (Sprint 6 Admin 검토). */
-  request: (body: FeatureRequestCreate) =>
+  request: (body: FeatureRequestCreate, opts?: { signal?: AbortSignal }) =>
     client.request('/features/requests', {
       method: 'POST',
       body: JSON.stringify(FeatureRequestCreateSchema.parse(body)),
       schema: FeatureRequestResponseSchema,
+      signal: opts?.signal,
     }),
 
   /** feature 요청 큐 상세. */

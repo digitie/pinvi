@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Download, Loader2, Save, Trash2 } from 'lucide-react';
 import { ApiError, adminApi } from '@pinvi/api-client';
 import type { AdminFileStorageSettings, AttachmentLibraryItem } from '@pinvi/schemas';
@@ -8,6 +8,8 @@ import { AdminPage, FilterBar, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FormTextArea } from '@/components/forms/FormTextArea';
 import { apiClient } from '@/lib/api';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -48,6 +50,12 @@ export default function AdminFilesPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<AttachmentLibraryItem | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteReasonError, setDeleteReasonError] = useState<string | null>(null);
+  const deleteTriggerRef = useRef<HTMLElement | null>(null);
+  const fileSectionRef = useRef<HTMLDivElement | null>(null);
+  const deleteReasonRef = useRef<HTMLTextAreaElement | null>(null);
 
   const loadFiles = async () => {
     const page = await adminApi(apiClient).listFiles({
@@ -116,16 +124,35 @@ export default function AdminFilesPage() {
     }
   };
 
-  const remove = async (attachmentId: string) => {
-    const reason = window.prompt('삭제 사유');
-    if (!reason?.trim()) return;
-    setBusyId(attachmentId);
+  // 사유를 받아야 하는 파괴적 액션 — native prompt 대신 사유 입력 Dialog(DESIGN.md 확인 정책).
+  const requestRemove = (item: AttachmentLibraryItem, trigger: HTMLElement | null) => {
+    deleteTriggerRef.current = trigger;
+    setDeleteReason('');
+    setDeleteReasonError(null);
+    setError(null);
+    setPendingDelete(item);
+  };
+
+  const remove = async () => {
+    const target = pendingDelete;
+    if (!target) return;
+    const reason = deleteReason.trim();
+    if (!reason) {
+      setDeleteReasonError('삭제 사유를 입력하세요.');
+      return;
+    }
+    setBusyId(target.attachment_id);
+    setDeleteReasonError(null);
     setError(null);
     try {
-      await adminApi(apiClient).deleteFile(attachmentId, { access_reason: reason.trim() });
+      await adminApi(apiClient).deleteFile(target.attachment_id, { access_reason: reason });
       await loadFiles();
+      // 삭제된 행의 버튼은 사라진다 — 포커스는 표 컨테이너가 받는다.
+      if (!deleteTriggerRef.current?.isConnected) deleteTriggerRef.current = fileSectionRef.current;
+      setPendingDelete(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : '삭제하지 못했습니다.');
+      // 실패하면 다이얼로그를 열어 둔 채 원인을 그 안에서 알린다(입력 보존).
+      setDeleteReasonError(err instanceof ApiError ? err.message : '삭제하지 못했습니다.');
     } finally {
       setBusyId(null);
     }
@@ -201,7 +228,7 @@ export default function AdminFilesPage() {
           </button>
           <button
             type="button"
-            onClick={() => void remove(row.attachment_id)}
+            onClick={(event) => requestRemove(row, event.currentTarget)}
             disabled={busyId === row.attachment_id}
             aria-label="삭제"
             className="rounded-sm p-2 text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
@@ -252,7 +279,7 @@ export default function AdminFilesPage() {
               type="button"
               onClick={saveSettings}
               disabled={settingsBusy || settingsReason.trim().length < 1}
-              className="inline-flex h-10 items-center gap-2 rounded-sm bg-primary px-3 text-sm font-semibold text-white disabled:opacity-50"
+              className="inline-flex h-10 items-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 text-sm font-semibold text-on-primary disabled:opacity-50"
               data-testid="admin-file-settings-save"
             >
               {settingsBusy ? (
@@ -300,16 +327,66 @@ export default function AdminFilesPage() {
       {loading ? (
         <div className="flex h-32 items-center justify-center text-sm text-muted">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-          불러오는 중...
+          불러오는 중…
         </div>
       ) : (
-        <AdminTable
-          columns={columns}
-          rows={items}
-          rowKey={(row) => row.attachment_id}
-          empty="파일이 없습니다."
-        />
+        // 삭제 성공 후 행 버튼이 사라지면 포커스가 이 컨테이너로 돌아온다.
+        <div ref={fileSectionRef} tabIndex={-1} className="outline-none">
+          <AdminTable
+            columns={columns}
+            rows={items}
+            rowKey={(row) => row.attachment_id}
+            empty="파일이 없습니다."
+          />
+        </div>
       )}
+      <Dialog
+        open={pendingDelete != null}
+        onClose={() => setPendingDelete(null)}
+        busy={busyId != null}
+        size="sm"
+        title="파일을 삭제할까요?"
+        description={pendingDelete?.original_filename}
+        initialFocusRef={deleteReasonRef}
+        returnFocusRef={deleteTriggerRef}
+        testId="admin-file-delete-dialog"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setPendingDelete(null)}
+              disabled={busyId != null}
+            >
+              취소
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => void remove()}
+              loading={busyId != null}
+              data-testid="admin-file-delete-submit"
+            >
+              삭제
+            </Button>
+          </>
+        }
+      >
+        <FormTextArea
+          ref={deleteReasonRef}
+          id="admin-file-delete-reason"
+          label="삭제 사유"
+          hint="audit log에 남습니다."
+          value={deleteReason}
+          onChange={(event) => {
+            if (deleteReasonError) setDeleteReasonError(null);
+            setDeleteReason(event.target.value);
+          }}
+          error={deleteReasonError ?? undefined}
+          disabled={busyId != null}
+          maxLength={500}
+          rows={3}
+          data-testid="admin-file-delete-reason"
+        />
+      </Dialog>
     </AdminPage>
   );
 }

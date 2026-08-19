@@ -21,7 +21,7 @@ const DEBOUNCE_MS = 250;
 const SOURCE_META: Record<Source, { label: string; badgeClass: string; icon: 'pin' | 'bookmark' }> =
   {
     feature: { label: '장소', badgeClass: 'bg-surface-soft text-muted', icon: 'pin' },
-    my_poi: { label: '내 여행', badgeClass: 'bg-primary/10 text-primary', icon: 'bookmark' },
+    my_poi: { label: '내 여행', badgeClass: 'bg-surface-strong text-ink', icon: 'bookmark' },
     address: { label: '주소', badgeClass: 'bg-surface-soft text-muted', icon: 'pin' },
     kakao: { label: '카카오', badgeClass: 'bg-marker-p-03/20 text-ink', icon: 'pin' },
     naver: { label: '네이버 검색', badgeClass: 'bg-marker-p-05/15 text-ink', icon: 'pin' },
@@ -93,7 +93,7 @@ export function MapSearchBox({ onSelect, className }: MapSearchBoxProps) {
     <div className={className} data-testid="map-search">
       <form
         onSubmit={submit}
-        className="flex items-center gap-1.5 rounded-sm border border-hairline bg-white px-2 shadow-sm"
+        className="flex items-center gap-1.5 rounded-sm border border-hairline bg-canvas px-2 shadow-card"
       >
         <Search className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
         <input
@@ -101,7 +101,7 @@ export function MapSearchBox({ onSelect, className }: MapSearchBoxProps) {
           onChange={(event) => setQuery(event.target.value)}
           placeholder="장소·주소 검색"
           aria-label="장소·주소 검색"
-          className="h-9 w-full bg-transparent text-sm text-ink outline-none"
+          className="min-h-11 w-full bg-transparent text-sm text-ink outline-none"
         />
         {loading && (
           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted" aria-hidden="true" />
@@ -113,7 +113,7 @@ export function MapSearchBox({ onSelect, className }: MapSearchBoxProps) {
         </p>
       )}
       {results.length > 0 && (
-        <ul className="mt-1 max-h-64 overflow-auto rounded-sm border border-hairline bg-white shadow-sm">
+        <ul className="mt-1 max-h-64 overflow-auto rounded-sm border border-hairline bg-canvas shadow-card">
           {results.map((result, index) => {
             const meta = SOURCE_META[result.source];
             const secondary = result.road_address ?? result.address ?? result.category ?? null;
@@ -138,7 +138,7 @@ export function MapSearchBox({ onSelect, className }: MapSearchBoxProps) {
                     <span className="flex min-w-0 items-center gap-1.5">
                       <span className="truncate text-sm font-medium text-ink">{result.name}</span>
                       <span
-                        className={`shrink-0 rounded-sm px-1 py-0.5 text-[10px] font-semibold ${meta.badgeClass}`}
+                        className={`shrink-0 rounded-sm px-1 py-0.5 text-xs font-semibold ${meta.badgeClass}`}
                       >
                         {meta.label}
                       </span>

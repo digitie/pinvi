@@ -173,8 +173,8 @@ export function TripAttachments({
     <section
       className={
         compact
-          ? 'space-y-2 rounded-sm bg-surface-soft/70 p-2'
-          : 'space-y-3 rounded-sm border border-hairline bg-white p-4'
+          ? 'space-y-2 border-t border-hairline pt-2'
+          : 'space-y-3 rounded-sm border border-hairline bg-canvas p-4'
       }
       aria-label="첨부"
     >
@@ -202,8 +202,8 @@ export function TripAttachments({
             title={listOpen ? '파일 목록 닫기' : '파일 목록 열기'}
             className={
               compact
-                ? 'inline-flex h-7 w-7 items-center justify-center rounded-sm border border-hairline bg-white text-muted hover:bg-surface-soft hover:text-ink'
-                : 'inline-flex h-8 w-8 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-surface-soft hover:text-ink'
+                ? 'inline-flex h-7 w-7 items-center justify-center rounded-sm border border-hairline bg-canvas text-muted hover:bg-surface-soft hover:text-ink'
+                : 'inline-flex size-11 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-surface-soft hover:text-ink'
             }
             data-testid="trip-attachment-toggle"
           >
@@ -218,8 +218,8 @@ export function TripAttachments({
             title="파일 올리기"
             className={
               compact
-                ? 'inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-sm bg-primary text-white hover:opacity-90'
-                : 'inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-sm bg-primary text-white hover:opacity-90'
+                ? 'inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-sm bg-cta text-on-primary hover:bg-cta-hover'
+                : 'inline-flex size-11 cursor-pointer items-center justify-center rounded-sm bg-cta text-on-primary hover:bg-cta-hover'
             }
           >
             {uploading ? (
@@ -255,7 +255,7 @@ export function TripAttachments({
             <div
               className={
                 compact
-                  ? 'flex h-8 items-center justify-center text-xs text-muted'
+                  ? 'flex min-h-11 items-center justify-center text-xs text-muted'
                   : 'flex h-16 items-center justify-center text-sm text-muted'
               }
             >
@@ -279,7 +279,7 @@ export function TripAttachments({
                   key={item.attachment_id}
                   className={
                     compact
-                      ? 'flex flex-wrap items-center justify-between gap-2 rounded-sm bg-white px-2 py-1.5 text-xs'
+                      ? 'flex flex-wrap items-center justify-between gap-2 rounded-sm bg-canvas px-2 py-1.5 text-xs'
                       : 'flex flex-wrap items-center justify-between gap-2 rounded-sm border border-hairline px-3 py-2 text-sm'
                   }
                 >

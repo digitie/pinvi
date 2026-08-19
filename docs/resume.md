@@ -1,7 +1,100 @@
 # resume.md
 
+## 2026-08-19 (claude) — T-310 Dev Client smoke(에뮬레이터) 완료
+
+**방금**: PR #446의 남은 완료 조건인 Dev Client smoke를 Android 에뮬레이터(API 35)에서 돌렸다.
+날짜 검증·POI 재정렬 롤백·파괴적 삭제 확인·예산 검증 네 항목이 통과했고, 위치 동의 gate만 로컬
+VWorld 키 부재로 런타임 확인을 못 해 코드 경로 확인으로 대체했다. smoke를 막던 react 핀 불일치
+(RN 0.85.3 렌더러는 19.2.3 정확 일치 요구, 저장소는 19.2.6 + `expo.install.exclude`가 검증을 가림)를
+같은 브랜치에서 고쳤다. WSL Metro ↔ Windows 에뮬레이터 절차는 `apps/mobile/README.md`에 고정.
+
+**다음 한 작업**: T-273(v1.0.0 E2E/Live gate) — 남은 hard blocker는 geofence 운영 설정이다.
+모바일 후속(T-311 expo-doctor 3신호 · T-318 `expo start` hoisting · T-319 실패 문구 · T-320 위치 동의
+gate 런타임 확인)은 별도 PR로 분리해 뒀다.
+
+
+## 2026-08-19 (claude) — T-316 Hallmark 종결(PR #455 머지)
+
+**방금**: Hallmark 감사(13 critical · 26 major · 19 minor, 7표면)의 마지막 조각을 닫았다. ① `@pinvi/api-client`
+요청 수명 계약 — 타이머가 body 소비 완료까지 유지, abort가 전 생애주기 전파, 타임아웃을 `status: 0`으로
+서버 확정 4xx와 구분(408이면 Idempotency-Key가 폐기돼 큐레이션 import가 중복 실행), 장시간 admin 호출은
+클라이언트 예산 해제, `Dialog.onCancelBusy`로 취소와 함께 탈출구 제공. ② 모달 격리 — body portal + 스택
+인지형 배경 inert, `RestoreHotswapDialog` 수렴(407→265줄)으로 손복사 셸 0건. ③ 파괴적 액션 —
+`window.confirm`/`prompt` 7곳 제거(저장소 전역 0건). ④ 표면 — 여행 상세 4겹 컨테인먼트 해체(320px에서
+유효 폭 −35.3%), 지도 상시 dl 삭제, **nav '지도'가 데모 셸을 가리켜 실제 탐색 지도가 도달 불가였던 IA
+결함** 교정, DSR/신고 raw JSON → 폼 필드, 법무 65ch·공개 chrome, 설정 4쪽 admin chrome 분리, 파일 상태 UI.
+⑤ 44px 미달 컨트롤 53곳 정리 + DESIGN.md 규칙을 lint(`no-restricted-syntax`)가 집행하게 해 재발을 막았다
+(T-317 흡수). 적대적 리뷰 3인 반영, 프로덕션 빌드 Playwright 150 passed/1 skipped.
+
+**다음 한 작업**: T-310(PR #446) — `apps/mobile` 실기기 Dev Client smoke를 돌려 issue #215를 종결한다.
+그 다음은 T-273(v1.0.0 E2E/Live gate)이며, 남은 hard blocker는 geofence 운영 설정이다.
+
+## 2026-08-19 (codex) — T-VN-41S typed snapshot error 소비
+
+선행 #453이 Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의 service artifact
+(SHA-256 `8019e36f…96431`)를 재vendor·재핀했다. #454는 PinVi transport가 item/byte typed `413`과
+request-bound compacted-material typed `410`을 자동 재시도하지 않고 fail-close하도록 회귀 테스트를
+보강하고, root `.env.example`의 hash/revision/generation을 같은 final release와 exact 결박한다.
+
+**다음 한 작업**: #454의 원격 CI와 리뷰를 통과한 뒤 새 exact Map/PinVi pair로만 n150 격리 live proof를
+만든다. 이전 pair의 live 증거는 이 계약의 증거로 재사용하지 않으며, 새 proof 전 completion receipt와
+production sync enable은 금지한다.
+
+## 2026-08-18 (claude) — T-VN-42 라운드 2: 재리뷰 P1 4건 해소
+
+**방금**: `chore/revendor-map-user-spec`(87c3a574 위 미커밋)에서 2라운드 재리뷰 P1을 전부 고쳤다.
+① CI red였던 `test_feature_weather_…_naive_asof`를 현재 정책(transport는 naive 거절)에 맞춰 둘로 분리
+(naive는 `ValueError` + **요청 미발생**까지 단언 / `known_at` 기본값은 aware asof로 분리). ② admin
+weather-values가 `normalize_asof_query()`를 건너뛰어 naive `?asof=`에서 500이던 것을 user 라우터와 같은
+helper로 보정(+ 통합 테스트, fake도 transport 정책을 흉내내게). ③ `docs/api/admin.md` §8.1/§8.2를 3축 +
+`provider_dataset_id`로 갱신하고 `sort` enum에서 `status` 제거, `versions`/`change_requests`가 항상 빈
+배열임을 명시. ④ `/v1/categories` 유령 query — 계약 게이트에 **폐쇄 단언**을 넣고 빠진 10경로를 채웠으며,
+"client가 선언되지 않은 query를 보내는지"를 MockTransport로 보는 **반대 방향 게이트**를 신설하고 client에서
+`active_only` 전송을 제거했다. 공개 `active_only`는 **유지하되 Pinvi가 `is_active`로 직접 필터**한다
+(조사 결과 삭제 전 upstream도 목록을 거른 적이 없다 — 집계 기준만 바꿨다). P2(query-keys 3축 타입 재사용,
+e2e fixture 정리, 거짓 0 카운트 칩 제거)도 함께.
+
+**다음 한 작업**: **n150 CI-parity 게이트로 통합 묶음(testcontainers)과 web e2e를 돌린다** — 이 호스트에는
+Docker/브라우저가 없어 unit + scratch harness + scratch tsc까지만 실측했다. green이면 PR을 연다(PR은 머지
+직전에만). 후속(별건)은 `docs/tasks.md` T-VN-42의 남은 항목: admin weather 경로 전환(비공개 feature 404),
+admin OpenAPI 스냅샷 vendoring(= 이번 admin 드리프트가 CI에 안 잡힌 근본 원인), `state_transitions`/
+`curations` 투영, 공개 `status` 필드 제거.
+
+## 2026-08-18 (claude) — T-VN-42 Map user spec 재vendor 후속 라운드 2 (적대적 P1 해소)
+
+**방금**: `chore/revendor-map-user-spec`(87c3a574 위 미커밋)에서 리뷰 P1/P2를 고쳤다. ① `status` 절단
+회귀방어 — 기본 fixture에서 `status` 키를 빼고 "dto에 남아 있어도 새어 나오지 않음"을 단위+통합에서
+따로 단언(투영을 되돌리면 red임을 실측). ② `docs/api/features.md`의 `"status": "active"` 예시 3곳을
+`null`로 정정 + §1.1 근거 절 신설 + §2.3에 `asof` ← Map `selected_at`·snapshot 라우팅 명시.
+③ **시간대 정책 통일** — transport는 aware만 받고(`_as_aware_utc` 제거), naive 보정은 라우터
+`normalize_asof_query()`가 KST로 한다(예전 UTC 해석은 9시간 드리프트). ④ `known_at` kwarg 유지 근거를
+docstring에 명시 + 통합 fake 시그니처 정렬, ⑤ `schemas/feature.py` stale 주석 정정, ⑥ query 빈 집합
+핀 근거 주석.
+
+**다음 한 작업**: 두 레인을 합친 뒤 **n150 CI-parity 게이트로 통합 묶음(testcontainers)을 돌린다**. 합치기
+전 잔여 2건: ① `tests/unit/test_kor_travel_map_client.py`의
+`test_feature_weather_defaults_known_at_to_now_and_normalises_naive_asof`가 naive `asof`=UTC라는 옛 동작을
+고정하므로 시간대 정책 통일과 함께 교체해야 한다(검증 완료된 교체본 인수인계됨 — naive는
+`pytest.raises(ValueError, match="UTC offset")`), ② `api/v1/admin/features.py` weather-values가 `asof`를
+`features.py normalize_asof_query()`에 통과시키도록 한다(지금은 naive 입력에서 transport ValueError).
+그 뒤 PR을 연다(PR은 머지 직전에만 연다). admin 표면 3축 정렬·유령 query 제거는 병렬 레인이 이미 진행했고,
+admin weather 경로 전환·admin OpenAPI vendoring·공개 `status` 필드 제거는 후속 과제로 `docs/tasks.md` T-VN-42에 있다.
+
+## 2026-08-18 (claude) — #444 service provenance 재핀(Map #975 머지 SHA) + Hallmark T-313
+
+**방금**: #444 리뷰 P1(핀이 dangling 커밋) 해소 — Map #975가 `4672aa966cd473f17fd4f69ee8066276f7be900d`로 squash
+머지됐고 그 커밋의 `openapi.service.json`이 vendored 스냅샷과 바이트 동일(SHA-256 `c6f9aba6…`)임을 확인해
+provenance·runtime contract test·`.env.example` EXPECTED\_\*(stale 값 정정)·CI packaged-provenance digest
+(`a6d501b4…`→`a2d3db8e…`)를 함께 재핀했다(PR #449). 병행: Hallmark T-313 토큰 코드모드 89파일(PR #448).
+
+**다음 한 작업**: #449/#448 CI green 후 머지 → **docker-manager pair 재핀**(`MAP_PINNED_RUNTIME_SOURCE`=4672aa96…,
+`PINVI_PINNED_RUNTIME_SOURCE`=#449 머지 SHA, `pinset_sha256` 재계산 + trusted release 배포)이 F1J-D n150 격리
+rehearsal 재개 전제다. prod 배포는 `~/kor-travel-docker-manager/.env` 소유권(uid 1000, 0600) 복구 대기 →
+스냅샷 → `alembic upgrade head`(0050~0059) → `ktdctl pinvi --build` → smoke.
+
 ## 2026-08-18 (codex) — T-VN-41 ABC rebase pair 재결박
 
+(**대체됨**: 아래 후보 SHA는 dangling — 현행 핀은 Map #975 머지 SHA `4672aa96…`, 위 항목 참조.)
 Map #975 rebase head `e093e5555329234a539a3802566eb5666411b06f`를 PinVi #444 service
 provenance·runtime contract·Docker packaged provenance에 함께 반영했다. service OpenAPI SHA-256은
 `c6f9aba6ab4b815c394e5e1cb5fb4a2c3488d147d5bb1a7e21b92c1796f4aebd`로 byte-identical하다.
@@ -318,6 +411,7 @@ Map commit 뒤 응답이 유실된 경우에도 PinVi DB의 immutable pre-CAS re
 
 **다음 한 작업**: PinVi format-fix commit SHA를 Map paired receipt에 다시 결박하고, 두 적대적 리뷰어의
 고정 SHA 재검토를 통과한다. n150 final isolated rehearsal은 이 코드/계약 gate 뒤에만 별도 실행한다.
+
 ## 2026-08-18 (claude) — T-312 Hallmark 감사 → 시스템 잠금 + 공개 표면 재설계
 
 **방금**: `hallmark audit`(웹 7표면 + prod 실렌더) 13C/26M/19m → `DESIGN.md`에 "Hallmark 잠금 시스템" 추가(genre
@@ -327,31 +421,8 @@ self-host, focus outline) + `components/ui/Button.tsx`·입력 프리미티브 +
 
 **다음 한 작업**: PR #447 적대적 리뷰 2인 → CI → N150 prod 배포(`ktdctl pinvi --build`, web 변경만) → prod 공개
 페이지 live UI e2e(375/1280 스크린샷 + not-found/shared/legal/login) → 머지 → T-313(코드모드) → T-314(앱 셸).
-**#444(codex T-VN-40/41)는 리뷰 2인 request_changes·deploy unsafe(P0: 빈 curation 토큰 → prod API 부팅 실패, P1:
-provenance가 dangling Map 커밋·Map #975 미머지, 마이그레이션 10건 수동 적용 필요)** — Map #975 머지·재핀 전 머지 금지,
-P0/P2/P3는 브랜치 fix 커밋 가능(코멘트 참조).
-## 2026-08-11 (codex) — T-VN-41 Map ops dataset triple 계약 정렬
-
-PinVi의 Map dataset grid projection을 provider/dataset pair에서
-`provider_dataset_id × sync_scope × operation_key` membership으로 전환했다. 다음은 Docker
-Manager의 동일 validator와 smoke를 같은 exact URL 계약으로 고정하고, 두 저장소의 focused
-검증·적대적 재리뷰 뒤 n150 Playwright live gate를 재개하는 일이다.
-
-## 2026-08-09 (codex) — Map 날씨 `asof` typed snapshot 정렬
-
-Map current 날씨 카드에는 `asof` query가 없으므로, PinVi가 같은 query를 전달하면 과거 시점
-요청이 조용히 무시된다. PinVi 공개 `asof`는 유지하되 값이 있으면 Map typed
-`/weather/snapshot`에 `target_at`과 현재 UTC `known_at`을 보내고 응답 `target_at`을 투영하도록
-고쳤다. 값이 없으면 기존 current card의 `selected_at`을 사용한다. 다음은 이 수정 commit을
-Map T-VN-34C paired receipt에 재결박하고 적대적 재리뷰·n150 destructive gate를 수행하는 일이다.
-
-## 2026-08-09 (codex) — T-VN-34C Map 상태 축 cutover PinVi 계약 재벤더링
-
-kor-travel-map commit `f426c7b78c493035952ded5c2a13f61a2a351793`의 user OpenAPI를
-byte-exact로 재벤더링하고, admin curated detail subset도 같은 full OpenAPI에서 결정적으로 다시
-추출했다. 공개 feature의 과거 `status` 및 세 내부 상태 축이 Map 응답에 없음을 PinVi 계약
-테스트와 PinVi feature 투영에서 함께 고정한다. 다음은 user/admin contract, PinVi API/OpenAPI
-생성물, n150 isolated Playwright를 검증한 뒤 paired Map/PinVi SHA를 기록하는 일이다.
+#444는 P0 수정 후 머지됐고(`dc8a683f`), Map #975 머지 SHA `4672aa96…`로 provenance 재핀 PR을 올렸다(P1 해소).
+남은 #444 후속: P2 legacy 플랜 편집 잠금 건수 확인, prod 배포 시 `alembic upgrade head`(0050~0059) 선행.
 
 ## 2026-08-06 (codex) — T-VN-41-F1D-C1b PinVi seven-image provenance PR 준비
 
@@ -481,6 +552,20 @@ opt-in(기본 off, 분리 집계). Map PR-1(#950, `2a8642bd…`) 머지 후 gold
 
 **다음 한 작업**: Map PR-2(응답 값 전환) 동봉 유예 — CLI 플래그·
 `derivation_enforced` 배선·스냅샷 3종 재추출+핀 회전.
+
+## 2026-08-05 (codex) — T-VN-41-F1 완료, default-off bootstrap 설계 선행
+
+H42와 n150 격리 paired proof는 완료됐고 Docker-manager durable writer-drain의 최신 재검토도
+P0/P1 없이 통과했다. F1은 Manager PR #130으로 merge되어 trusted production release에도 배포됐다.
+installed manifest는 deployed Map/PinVi generation 7 pair와 OpenAPI artifact를 정확히 가리킨다.
+
+그 뒤 최초 n150 diagnostic은 production canonical `.env`에 4-role cache-target binding, exact
+contract pin, `sync=false` line이 전혀 없음을 fail-close로 확인했다. raw Compose/직접 DB 조작/직접
+`.env` 수정은 금지한다. 실행 정본에 F1A(Manager-owned atomic bootstrap)를 추가했고 F2는 F1A
+merge·production deploy·default-off runtime attestation 뒤에만 시작한다.
+
+**다음 한 작업**: `T-VN-41-F1A` — cache-target 4-role binding과 exact generation 7 default-off
+contract를 Manager-owned atomic bootstrap으로 제품화한다.
 
 ## 2026-08-04 (claude) — T-VN-32C 쌍 PR 마무리 (Map merge SHA 핀)
 

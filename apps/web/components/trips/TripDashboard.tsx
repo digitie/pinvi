@@ -18,7 +18,13 @@ import { apiClient } from '@/lib/api';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 import { FormField } from '@/components/forms/FormField';
 import { TripMapView } from '@/components/trips/TripMapView';
+import { buttonClassName } from '@/components/ui/Button';
 import { formatTripDateRange } from '@/lib/tripDateLabels';
+
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench(app) · design-system: DESIGN.md
+ * state: 로딩=skeleton 3행 · 오류=원인+회복(로드는 목록 자리 패널, 저장은 role=alert 배너) · 빈 상태=버킷별 문구
+ * filter: role=group + aria-pressed + 44px(패널을 바꾸지 않는 필터) · 채운 primary CTA는 폼 submit 1개
+ */
 
 const VWORLD_API_KEY = process.env.NEXT_PUBLIC_VWORLD_API_KEY ?? '';
 
@@ -117,14 +123,19 @@ export function TripDashboard() {
   const [titleError, setTitleError] = useState<string | undefined>(undefined);
   const [dateError, setDateError] = useState<string | undefined>(undefined);
   const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // 로드 오류와 저장(쓰기) 오류를 분리한다 — 저장 실패가 정상 로드된 목록을 지우면 안 된다(T-314 리뷰 P1).
+  const [listError, setListError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
   const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
+  // 빈 상태 CTA → 폼이 실제로 보이게 된 다음 렌더에 스크롤·포커스(같은 핸들러에서는 아직 hidden).
+  const [revealCreateForm, setRevealCreateForm] = useState(false);
   const [mapPointsByTripId, setMapPointsByTripId] = useState<
     Record<string, TripDashboardMapPoint[]>
   >({});
   const titleRef = useRef<HTMLInputElement>(null);
+  const createFormRef = useRef<HTMLElement>(null);
   const mapRequestIdRef = useRef(0);
 
   const filteredTrips = useMemo(() => visibleTrips(trips, bucket), [bucket, trips]);
@@ -194,7 +205,7 @@ export function TripDashboard() {
 
   const loadTrips = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setListError(null);
     try {
       const items = await tripApi(apiClient).list({ bucket: 'all', limit: 50 });
       setTrips(items);
@@ -203,7 +214,7 @@ export function TripDashboard() {
       setTrips([]);
       setMapPointsByTripId({});
       setMapLoading(false);
-      setError(err instanceof ApiError ? err.message : '여행 목록을 불러오지 못했습니다.');
+      setListError(err instanceof ApiError ? err.message : '여행 목록을 불러오지 못했습니다.');
     } finally {
       setLoading(false);
     }
@@ -212,6 +223,14 @@ export function TripDashboard() {
   useEffect(() => {
     void loadTrips();
   }, [loadTrips]);
+
+  useEffect(() => {
+    if (!revealCreateForm) return;
+    // 폼은 state 반영 후 렌더에서야 display:none을 벗는다 — 그 시점에 스크롤·포커스한다.
+    createFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    titleRef.current?.focus();
+    setRevealCreateForm(false);
+  }, [revealCreateForm]);
 
   const onCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -230,7 +249,7 @@ export function TripDashboard() {
     setTitleError(undefined);
     setDateError(undefined);
     setCreating(true);
-    setError(null);
+    setFormError(null);
     setMessage(null);
     const body: TripCreate = {
       title: trimmedTitle,
@@ -252,30 +271,7 @@ export function TripDashboard() {
       setEndDate('');
       setMessage('초안 여행을 저장했습니다.');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : '여행을 저장하지 못했습니다.');
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  return (
-    <div className="space-y-5">
-      <header className="flex flex-col gap-3 border-b border-hairline pb-5 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-normal text-primary">Trips</p>
-          <h1 className="mt-1 text-2xl font-bold text-ink md:text-3xl">여행</h1>
-          <p className="mt-2 text-sm text-muted">
-            예정 {upcomingCount} · 지난 여행 {pastCount} · 초안 {draftCount}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setMobileToolsOpen((open) => !open)}
-            aria-controls="trip-dashboard-create"
-            aria-expanded={mobileToolsOpen}
-            className={`h-10 w-fit items-center gap-2 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft ${
-              mobileWebLayout ? 'inline-flex' : 'inline-flex lg:hidden'
+      setFormError(err instanceof ApiError ? err.message : '여행을 저장하지 못했습니다.'); } finally { setCreating(false); } }; return ( <div className="space-y-5"> <header className="flex flex-col gap-3 border-b border-hairline pb-5 md:flex-row md:items-end md:justify-between"> <div> <h1 className="text-2xl font-bold tracking-tight text-ink md:text-3xl">여행</h1> <p className="mt-2 text-sm text-muted"> 예정 {upcomingCount} · 지난 여행 {pastCount} · 초안 {draftCount} </p> </div> <div className="flex flex-wrap gap-2"> <button type="button" onClick={() => setMobileToolsOpen((open) => !open)} aria-controls="trip-dashboard-create" aria-expanded={mobileToolsOpen} className={`min-h-11 w-fit items-center gap-2 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft ${ mobileWebLayout ?'inline-flex' : 'inline-flex lg:hidden'
             }`}
           >
             <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
@@ -284,7 +280,7 @@ export function TripDashboard() {
           <button
             type="button"
             onClick={() => void loadTrips()}
-            className="inline-flex h-10 w-fit items-center gap-2 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+            className="inline-flex min-h-11 w-fit items-center gap-2 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
             disabled={loading}
           >
             {loading ? (
@@ -300,13 +296,14 @@ export function TripDashboard() {
       {message && (
         <p className="rounded-sm bg-success-bg px-3 py-2 text-sm text-success-text">{message}</p>
       )}
-      {error && (
+      {formError && (
+        // 저장(쓰기) 실패 전용 배너 — 목록 로드 실패는 아래 목록 자리 패널이 담당한다(중복 금지).
         <p
           role="alert"
           className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
           data-testid="trips-error"
         >
-          {error}
+          {formError}
         </p>
       )}
 
@@ -326,20 +323,20 @@ export function TripDashboard() {
             points={filteredMapPoints}
             selectedPoiId={selectedPoiId}
             onSelectPoi={setSelectedPoiId}
-            className="h-[calc(100svh-14rem)] min-h-[520px] lg:h-[calc(100vh-14rem)]"
+            className="h-[calc(100svh-14rem)] min-h-[520px] lg:h-[calc(100svh-14rem)]"
           />
 
           <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap gap-2">
-            <span className="rounded-sm bg-white/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
+            <span className="rounded-sm bg-canvas/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
               {filteredTrips.length}개 여행
             </span>
-            <span className="rounded-sm bg-white/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
+            <span className="rounded-sm bg-canvas/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
               {mapLoading ? '장소 불러오는 중' : `${filteredMapPoints.length}개 장소`}
             </span>
           </div>
 
           {(mapError || selectedMapPoint) && (
-            <div className="pointer-events-auto absolute bottom-3 left-3 right-3 max-w-md rounded-sm border border-hairline bg-white/95 p-3 shadow-card">
+            <div className="pointer-events-auto absolute bottom-3 left-3 right-3 max-w-md rounded-sm border border-hairline bg-canvas/95 p-3 shadow-card">
               {mapError && <p className="text-xs text-error-text">{mapError}</p>}
               {selectedMapPoint && (
                 <div className={mapError ? 'mt-2 border-t border-hairline pt-2' : ''}>
@@ -350,7 +347,7 @@ export function TripDashboard() {
                   </p>
                   <Link
                     href={`/trips/${selectedMapPoint.tripId}`}
-                    className="mt-2 inline-flex h-8 items-center rounded-sm bg-primary px-3 text-xs font-semibold text-white"
+                    className="mt-2 inline-flex min-h-11 items-center rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover"
                   >
                     여행 열기
                   </Link>
@@ -362,10 +359,11 @@ export function TripDashboard() {
 
         <aside className="space-y-4" aria-label="여행 관리">
           <section
+            ref={createFormRef}
             id="trip-dashboard-create"
             className={`${
               mobileToolsOpen ? 'block' : 'hidden'
-            } rounded-sm border border-hairline bg-white p-4 ${mobileWebLayout ? '' : 'lg:block'}`}
+            } rounded-sm border border-hairline bg-canvas p-4 ${mobileWebLayout ? '' : 'lg:block'}`}
           >
             <form onSubmit={onCreate} className="space-y-3">
               <div className="flex items-center gap-2 text-sm font-bold text-ink">
@@ -377,7 +375,7 @@ export function TripDashboard() {
                 label="제목"
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                className="h-10 focus:border-primary"
+                className="min-h-11 focus:border-primary"
                 maxLength={200}
                 placeholder="부산 2박 3일"
                 error={titleError}
@@ -388,7 +386,7 @@ export function TripDashboard() {
                 label="지역"
                 value={regionHint}
                 onChange={(event) => setRegionHint(event.target.value)}
-                className="h-10 focus:border-primary"
+                className="min-h-11 focus:border-primary"
                 maxLength={120}
                 placeholder="부산"
                 data-testid="trip-create-region"
@@ -403,7 +401,7 @@ export function TripDashboard() {
                     setStartDate(event.target.value);
                     setDateError(undefined);
                   }}
-                  className="h-10 focus:border-primary"
+                  className="min-h-11 focus:border-primary"
                   data-testid="trip-create-start"
                 />
                 <FormField
@@ -416,13 +414,13 @@ export function TripDashboard() {
                     setDateError(undefined);
                   }}
                   error={dateError}
-                  className="h-10 focus:border-primary"
+                  className="min-h-11 focus:border-primary"
                   data-testid="trip-create-end"
                 />
               </div>
               <button
                 type="submit"
-                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
                 disabled={creating}
                 data-testid="trip-create-submit"
               >
@@ -437,7 +435,8 @@ export function TripDashboard() {
           </section>
 
           <section className="space-y-3">
-            <div className="flex flex-wrap gap-2" role="tablist" aria-label="여행 필터">
+            {/* 필터는 탭이 아니라 토글 그룹 — role=tab은 tabpanel/roving tabindex 계약을 요구한다. */}
+            <div className="flex flex-wrap gap-2" role="group" aria-label="여행 필터">
               {BUCKETS.map((item) => (
                 <button
                   key={item.value}
@@ -445,11 +444,10 @@ export function TripDashboard() {
                   onClick={() => setBucket(item.value)}
                   className={
                     bucket === item.value
-                      ? 'h-9 rounded-sm bg-ink px-3 text-sm font-semibold text-white'
-                      : 'h-9 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft'
+                      ? 'focus-ring min-h-11 rounded-sm bg-ink px-4 text-sm font-semibold text-canvas'
+                      : 'focus-ring min-h-11 rounded-sm border border-hairline bg-canvas px-4 text-sm font-semibold text-ink hover:bg-surface-soft'
                   }
-                  role="tab"
-                  aria-selected={bucket === item.value}
+                  aria-pressed={bucket === item.value}
                 >
                   {item.label}
                 </button>
@@ -457,15 +455,64 @@ export function TripDashboard() {
             </div>
 
             {loading ? (
-              <div className="flex min-h-48 items-center justify-center rounded-sm border border-hairline bg-white text-sm text-muted">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                불러오는 중...
+              // 형태가 정해진 목록은 spinner 대신 skeleton(DESIGN.md 상태 UI).
+              <div className="space-y-2" aria-busy="true" aria-live="polite">
+                <span className="sr-only">여행 목록을 불러오는 중…</span>
+                {[0, 1, 2].map((row) => (
+                  <div
+                    key={row}
+                    className="animate-pulse rounded-sm border border-hairline bg-canvas p-4"
+                  >
+                    <div className="h-4 w-2/5 rounded-sm bg-surface-strong" />
+                    <div className="mt-3 h-3 w-3/5 rounded-sm bg-surface-soft" />
+                  </div>
+                ))}
+              </div>
+            ) : listError ? (
+              // 오류일 때 "없습니다"를 함께 띄우지 않는다 — 원인 + 회복 행동으로 목록 자리를 대체.
+              // role=alert — 목록이 비어 상단 배너가 없을 때도 스크린리더에 전달돼야 한다.
+              <div
+                role="alert"
+                className="rounded-sm border border-hairline bg-canvas p-4"
+                data-testid="trip-list-error"
+              >
+                <p className="text-sm font-semibold text-ink">여행 목록을 불러오지 못했습니다.</p>
+                <p className="mt-1 text-sm text-muted">
+                  {listError === '여행 목록을 불러오지 못했습니다.'
+                    ? '네트워크나 서버 상태를 확인한 뒤 다시 시도해 주세요.'
+                    : listError}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void loadTrips()}
+                  className={buttonClassName({ variant: 'secondary', className: 'mt-3' })}
+                >
+                  다시 시도
+                </button>
               </div>
             ) : filteredTrips.length === 0 ? (
-              <div className="flex min-h-48 flex-col items-center justify-center rounded-sm border border-hairline bg-white px-4 text-center">
-                <CalendarDays className="h-8 w-8 text-muted" aria-hidden="true" />
-                <p className="mt-3 text-sm font-semibold text-ink">표시할 여행이 없습니다.</p>
-                <p className="mt-1 text-xs text-muted">첫 여행을 저장하면 이곳에 나타납니다.</p>
+              <div className="rounded-sm border border-hairline bg-canvas p-6">
+                <p className="text-sm font-semibold text-ink">
+                  {bucket === 'past' ? '지난 여행이 없습니다.' : '아직 여행이 없습니다.'}
+                </p>
+                <p className="mt-1 text-sm text-muted">
+                  {bucket === 'past'
+                    ? '종료된 여행이 생기면 여기에 모입니다.'
+                    : '제목만 있으면 시작할 수 있어요. 지도에서 장소를 담고 일자별로 정리해 보세요.'}
+                </p>
+                {bucket !== 'past' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileToolsOpen(true);
+                      setRevealCreateForm(true);
+                    }}
+                    aria-controls="trip-dashboard-create"
+                    className={buttonClassName({ variant: 'secondary', className: 'mt-4' })}
+                  >
+                    새 여행 만들기
+                  </button>
+                ) : null}
               </div>
             ) : (
               <div className="space-y-2" data-testid="trip-list">
@@ -478,8 +525,8 @@ export function TripDashboard() {
                       href={`/trips/${trip.trip_id}`}
                       className={
                         selected
-                          ? 'block rounded-sm border border-primary bg-white p-4 shadow-card'
-                          : 'block rounded-sm border border-hairline bg-white p-4 transition hover:border-primary hover:bg-surface-soft'
+                          ? 'block rounded-sm border border-primary bg-canvas p-4 shadow-card'
+                          : 'block rounded-sm border border-hairline bg-canvas p-4 transition hover:border-primary hover:bg-surface-soft'
                       }
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -505,7 +552,7 @@ export function TripDashboard() {
                       {trip.description && (
                         <p className="mt-2 line-clamp-2 text-sm text-muted">{trip.description}</p>
                       )}
-                      <span className="mt-3 inline-flex h-8 items-center rounded-sm border border-hairline px-3 text-xs font-semibold text-ink">
+                      <span className="mt-3 inline-flex min-h-11 items-center rounded-sm border border-hairline px-3 text-sm font-semibold text-ink">
                         열기/업데이트
                       </span>
                     </Link>

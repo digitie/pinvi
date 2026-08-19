@@ -238,7 +238,7 @@ export default function AdminCategoryMappingPage() {
       cell: (row) => (
         <div className="flex items-center gap-2">
           <span
-            className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold"
             style={{ backgroundColor: row.marker.hex, color: row.marker.labelColor }}
             aria-hidden="true"
           >
@@ -377,7 +377,7 @@ export default function AdminCategoryMappingPage() {
               value={queryInput}
               onChange={(event) => setQueryInput(event.target.value)}
               className={`${inputClass} w-56 pl-7`}
-              placeholder="code, label, icon..."
+              placeholder="code, label, icon…"
               data-testid="admin-category-search"
             />
           </div>
@@ -425,7 +425,7 @@ export default function AdminCategoryMappingPage() {
           ['fallback', formatNumber(unmappedCount)],
           ['icon drift', formatNumber(driftCount)],
         ].map(([label, value]) => (
-          <div key={label} className="rounded-sm border border-hairline bg-white p-3">
+          <div key={label} className="rounded-sm border border-hairline bg-canvas p-3">
             <div className="text-xs text-muted">{label}</div>
             <div className="mt-1 break-all text-sm font-semibold text-ink">{value}</div>
           </div>
@@ -434,7 +434,7 @@ export default function AdminCategoryMappingPage() {
 
       {selectedRow && (
         <section
-          className="rounded-sm border border-hairline bg-white p-4"
+          className="rounded-sm border border-hairline bg-canvas p-4"
           data-testid="admin-category-editor"
         >
           <div className="mb-3 flex items-start justify-between gap-3">

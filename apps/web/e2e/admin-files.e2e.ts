@@ -140,8 +140,6 @@ test('Admin 파일 화면에서 정책 저장, 검색, 다운로드, 삭제를 �
     },
   );
 
-  page.on('dialog', (dialog) => dialog.accept('운영 정리'));
-
   await page.goto('/admin/files');
   await expect(page.getByRole('heading', { name: '파일' })).toBeVisible();
   await expect(page.getByText('receipt.jpg')).toBeVisible();
@@ -174,7 +172,15 @@ test('Admin 파일 화면에서 정책 저장, 검색, 다운로드, 삭제를 �
     )
     .toContain('X-Amz-Signature=get');
 
+  // native prompt 대신 사유 입력 Dialog(T-316). 사유가 비면 제출이 막힌다.
   await page.getByRole('button', { name: '삭제' }).click();
+  await expect(page.getByTestId('admin-file-delete-dialog')).toBeVisible();
+  await page.getByTestId('admin-file-delete-submit').click();
+  await expect(page.getByText('삭제 사유를 입력하세요.')).toBeVisible();
+  expect(deleteBody).toBeNull();
+
+  await page.getByTestId('admin-file-delete-reason').fill('운영 정리');
+  await page.getByTestId('admin-file-delete-submit').click();
   await expect.poll(() => deleteBody).toMatchObject({ access_reason: '운영 정리' });
   await expect(page.getByText('파일이 없습니다.')).toBeVisible();
 });

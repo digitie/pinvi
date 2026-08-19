@@ -162,16 +162,28 @@ async def _load_upstream_items(
     include_counts: bool,
     active_only: bool,
 ) -> tuple[list[AdminCategoryMappingItem], bool]:
+    """kor_travel_map 카탈로그를 읽고 `active_only`를 **Pinvi 쪽에서** 적용한다.
+
+    Map `/v1/categories`는 `include_counts` query 하나만 선언한다 — `active_only`를 계속
+    보내면 FastAPI가 조용히 버려 필터가 걸린 척하는 전량 응답이 된다(`clients/kor_travel_map.py
+    categories` docstring, user 라우터 `list_feature_categories`와 같은 결정). 삭제 전 upstream
+    `active_only`도 목록이 아니라 `db_feature_count`/`db_active` 집계 기준만 바꿨으므로 목록
+    필터로서는 원래 동작한 적이 없다.
+
+    **집계 축은 되살릴 수 없다**: `db_feature_count`/`db_active`는 이제 항상 ADR-067 공개
+    projection(`public_features`) 기준이다. `active_only`는 "정적 카탈로그에서 비활성 항목을
+    빼고 본다"는 의미만 갖는다(Map이 항목마다 주는 required `is_active`).
+    """
     with map_ops_errors(message_subject="kor_travel_map categories"):
-        data = await client.categories(include_counts=include_counts, active_only=active_only)
-    return (
-        [
-            _category_from_kor_travel_map(item)
-            for item in data.get("items", [])
-            if isinstance(item, dict)
-        ],
-        bool(data.get("include_counts", include_counts)),
-    )
+        data = await client.categories(include_counts=include_counts)
+    items = [
+        _category_from_kor_travel_map(item)
+        for item in data.get("items", [])
+        if isinstance(item, dict)
+    ]
+    if active_only:
+        items = [item for item in items if item.is_active]
+    return (items, bool(data.get("include_counts", include_counts)))
 
 
 @router.get("", response_model=Envelope[AdminCategoryMappingsResponse])

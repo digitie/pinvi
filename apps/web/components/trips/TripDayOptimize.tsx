@@ -61,7 +61,7 @@ export function TripDayOptimize({ tripId, dayIndex, poiCount, onApplied }: TripD
         type="button"
         onClick={() => void runPreview()}
         disabled={loading}
-        className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
+        className="inline-flex min-h-11 items-center gap-1 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
       >
         {loading ? (
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -111,7 +111,7 @@ export function TripDayOptimize({ tripId, dayIndex, poiCount, onApplied }: TripD
             <button
               type="button"
               onClick={() => setPreview(null)}
-              className="h-8 rounded-sm border border-hairline px-3 text-xs font-semibold text-ink hover:bg-white"
+              className="min-h-11 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-canvas"
             >
               닫기
             </button>
@@ -119,7 +119,7 @@ export function TripDayOptimize({ tripId, dayIndex, poiCount, onApplied }: TripD
               type="button"
               onClick={() => void apply()}
               disabled={applying || preview.moves.length === 0}
-              className="inline-flex h-8 items-center gap-1 rounded-sm bg-primary px-3 text-xs font-semibold text-white disabled:opacity-50"
+              className="inline-flex min-h-11 items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
             >
               {applying && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
               적용

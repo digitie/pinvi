@@ -1,11 +1,13 @@
-import { useRef } from 'react';
-import { View } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import { Alert, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import { VWorldMapView, type VWorldMapHandle } from 'vworld-map-rn';
 import { useUserLocation } from '@pinvi/hooks';
+import { friendlyErrorText } from '@pinvi/domain';
 import { apiClient } from '../../lib/api';
+import { useLocationConsent } from '../../lib/consents';
 import { expoLocationAdapter } from '../../lib/location';
 import { Body, Button, Card, Heading, Muted, Screen, Subheading } from '../../components/ui';
 
@@ -33,6 +35,37 @@ export default function MapScreen() {
       mapRef.current?.flyTo({ center: [loc.coord.lon, loc.coord.lat], zoom: 15 });
     },
   });
+  // 위치 동의 gate(웹 handleMyLocation 대응) — 동의가 없거나 조회 실패면 OS 권한 요청 전에
+  // 동의 안내를 먼저 띄운다. 설정에서 철회하면 같은 query가 갱신돼 다시 잠긴다.
+  const consent = useLocationConsent();
+  const [granting, setGranting] = useState(false);
+
+  const onMyLocation = useCallback(() => {
+    if (consent.status === 'granted') {
+      refresh();
+      return;
+    }
+    if (consent.status === 'loading') return;
+    Alert.alert(
+      '위치정보 이용 동의',
+      '내 위치 표시·주변 검색 등 위치 기반 기능을 사용하려면 위치기반서비스 이용약관과 ' +
+        '개인위치정보 수집·이용(모두 필수)에 동의해야 합니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '동의하고 사용',
+          onPress: () => {
+            setGranting(true);
+            consent
+              .grant()
+              .then(() => refresh())
+              .catch((err: unknown) => Alert.alert('동의 저장 실패', friendlyErrorText(err)))
+              .finally(() => setGranting(false));
+          },
+        },
+      ],
+    );
+  }, [consent, refresh]);
 
   const tokenQuery = useQuery({
     queryKey: ['mobile', 'vworld-token'],
@@ -106,7 +139,18 @@ export default function MapScreen() {
               </Body>
             </Card>
           ) : null}
-          <Button label="현재 위치로" onPress={refresh} loading={loading} />
+          {consent.status === 'missing' ? (
+            <Card className="gap-1">
+              <Muted>
+                위치 동의가 없어 내 위치 기능이 꺼져 있습니다. 버튼을 눌러 동의할 수 있습니다.
+              </Muted>
+            </Card>
+          ) : null}
+          <Button
+            label="현재 위치로"
+            onPress={onMyLocation}
+            loading={loading || granting || consent.status === 'loading'}
+          />
         </View>
       </View>
     </SafeAreaView>

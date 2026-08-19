@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   CalendarDays,
-  Eye,
   Layers,
   Loader2,
   MapPin,
@@ -125,7 +124,20 @@ type TripDetailPanelTab = 'plan' | 'files' | 'share' | 'people' | 'comments';
 
 interface MutationOptions {
   onConflict?: (latest: TripView | null) => void;
+  /** 주면 전역 배너 대신 이 콜백으로 오류를 넘긴다(다이얼로그 소유 오류). */
+  captureError?: (message: string) => void;
 }
+
+/**
+ * 일자 설정 저장 결과 — 실패 원인을 다이얼로그가 자기 안에서 표시할 수 있게 돌려준다.
+ *
+ * `latestVersion`은 409에서만 채워진다: 다이얼로그가 그 값으로 스냅샷을 갱신해야 "최신을 불러왔다"는
+ * 안내대로 **다시 저장하면 내 값으로 덮어쓰는** 경로가 열린다. 갱신하지 않으면 같은 다이얼로그에서
+ * 재시도가 영원히 409고, 유일한 탈출(취소→재오픈)이 사용자의 입력을 버린다(T-315 6차 리뷰 P1).
+ */
+export type DayUpdateResult =
+  | { ok: true }
+  | { ok: false; message: string; field?: 'date'; latestVersion?: number };
 
 function tripDurationDays(startDate: string | null, endDate: string | null): number | null {
   if (!startDate || !endDate) return null;
@@ -410,6 +422,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const [manualPoiCoord, setManualPoiCoord] = useState<{ lon: number; lat: number } | null>(null);
   const [tripEditOpen, setTripEditOpen] = useState(false);
   const [conflict, setConflict] = useState<ConflictState | null>(null);
+  // 다이얼로그 전용 오류(전역 배너와 분리 — 다른 실패가 새 다이얼로그로 새지 않게).
+  const [conflictError, setConflictError] = useState<string | null>(null);
+  const [tripEditError, setTripEditError] = useState<string | null>(null);
+  const [manualPoiError, setManualPoiError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const realtimeClientRef = useRef<TripRealtimeClient | null>(null);
   const realtimeReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -687,7 +703,11 @@ export function TripDetail({ tripId }: TripDetailProps) {
           options.onConflict(latest);
           return false;
         }
-        setMutationError(err instanceof ApiError ? err.message : '변경에 실패했습니다.');
+        const message = err instanceof ApiError ? err.message : '변경에 실패했습니다.';
+        // captureError를 준 호출부(다이얼로그)는 오류를 **자기 모달 안에서** 보여준다 —
+        // 전역 배너는 scrim 뒤라 보이지도, aria-modal 안에서 읽히지도 않는다(T-315 4·5차 리뷰).
+        if (options.captureError) options.captureError(message);
+        else setMutationError(message);
         await reload();
         return false;
       } finally {
@@ -824,23 +844,28 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
   const handleCreateManualPoi = (input: ManualPoiCreateInput): Promise<boolean> => {
     if (selectedDay == null) {
-      setMutationError('일자를 먼저 선택해주세요.');
+      setManualPoiError('일자를 먼저 선택해주세요.');
       return Promise.resolve(false);
     }
+    setManualPoiError(null);
     const last = selectedDay.pois[selectedDay.pois.length - 1]?.sort_order ?? null;
-    return runMutation(async () => {
-      const created = await poiApi(apiClient).create(tripId, {
-        day_index: selectedDay.day_index,
-        sort_order: appendRank(last),
-        feature_id: null,
-        feature_snapshot: buildManualPoiSnapshot(input),
-        custom_marker_color: 'P-08',
-        custom_marker_icon: 'marker',
-        currency: 'KRW',
-      });
-      setSelectedDayIndex(selectedDay.day_index);
-      setSelectedPoiId(created.attachment_id);
-    }).then((ok) => {
+    return runMutation(
+      async () => {
+        const created = await poiApi(apiClient).create(tripId, {
+          day_index: selectedDay.day_index,
+          sort_order: appendRank(last),
+          feature_id: null,
+          feature_snapshot: buildManualPoiSnapshot(input),
+          custom_marker_color: 'P-08',
+          custom_marker_icon: 'marker',
+          currency: 'KRW',
+        });
+        setSelectedDayIndex(selectedDay.day_index);
+        setSelectedPoiId(created.attachment_id);
+      },
+      // 이 다이얼로그가 자기 오류를 소유한다(전역 배너는 scrim 뒤라 읽히지 않는다).
+      { captureError: setManualPoiError },
+    ).then((ok) => {
       if (ok) setManualPoiCoord(null);
       return ok;
     });
@@ -890,24 +915,30 @@ export function TripDetail({ tripId }: TripDetailProps) {
     });
   };
 
-  const dayConflictNotice = () =>
-    setMutationError('다른 사용자가 이 일자를 먼저 변경했습니다. 최신 내용으로 다시 불러왔어요.');
+  const DAY_CONFLICT_MESSAGE =
+    '다른 사용자가 이 일자를 먼저 변경했습니다. 최신 내용을 불러왔어요 — 저장을 한 번 더 누르면 내 값으로 덮어씁니다.';
+  const dayConflictNotice = () => setMutationError(DAY_CONFLICT_MESSAGE);
 
-  const handleUpdateDay = (
+  // 결과를 돌려준다 — 일자 설정 다이얼로그가 **성공했을 때만** 닫히고(3차 리뷰), 실패 원인은
+  // 모달 안에서 보여 주기 위해서다(4·5차 리뷰). `expectedVersion`은 다이얼로그를 연 시점의
+  // version 스냅샷이다: 열려 있는 동안 다른 곳의 변경이 reload로 들어와도 그 version으로
+  // 저장하면 안 된다 — 409가 안 나고 남의 변경을 조용히 덮는다(lost update, 5차 리뷰 P1).
+  const handleUpdateDay = async (
     dayIndex: number,
     next: { title: string; date: string | null; marker_color: string | null },
-  ) => {
-    if (!view) return;
+    expectedVersion?: number,
+  ): Promise<DayUpdateResult> => {
+    if (!view) return { ok: false, message: '여행 정보를 불러오지 못했습니다.' };
     const day = view.days.find((d) => d.day_index === dayIndex);
-    if (!day) return;
+    if (!day) return { ok: false, message: '일자를 찾지 못했습니다.' };
     // 날짜는 실제로 바뀔 때만 검증한다. 색/이름만 바꾸는 업데이트는 파생 effective_date(ADR-055)를
     // 쓰는 일자에서 명시 날짜를 강제하면 안 된다(날짜 필드가 빈 채 색만 저장 시 "날짜 필요" 오류 방지).
     const dateChanged = next.date !== (day.date ?? null);
     if (dateChanged) {
       const validationMessage = dayDateUpdateValidation(view, dayIndex, next.date);
       if (validationMessage) {
-        setMutationError(validationMessage);
-        return;
+        // 날짜 필드가 원인이므로 필드에 붙여 돌려준다(FormField가 aria-invalid/describedby 배선).
+        return { ok: false, message: validationMessage, field: 'date' };
       }
     }
     const patch: TripDayUpdate = {};
@@ -916,11 +947,44 @@ export function TripDetail({ tripId }: TripDetailProps) {
     if (dateChanged) patch.date = next.date;
     // ADR-055 F6: 일자 색 override(팔레트 키 또는 null=기본색).
     if (next.marker_color !== (day.marker_color ?? null)) patch.marker_color = next.marker_color;
-    if (!hasPatchFields(patch)) return;
-    void runMutation(() => tripApi(apiClient).updateDay(tripId, dayIndex, day.version, patch), {
-      onConflict: dayConflictNotice,
-    });
+    // 바뀐 게 없으면 요청 없이 닫아도 된다(성공으로 본다).
+    if (!hasPatchFields(patch)) return { ok: true };
+    let failure: string | null = null;
+    let conflicted = false;
+    let latestVersion: number | undefined;
+    const controller = new AbortController();
+    dayUpdateAbortRef.current = controller;
+    const ok = await runMutation(
+      () =>
+        tripApi(apiClient).updateDay(tripId, dayIndex, expectedVersion ?? day.version, patch, {
+          signal: controller.signal,
+        }),
+      {
+        onConflict: (latest) => {
+          conflicted = true;
+          // reload로 들어온 최신 version — 다이얼로그가 스냅샷을 갱신해 재시도를 가능하게 한다.
+          latestVersion = latest?.days.find((d) => d.day_index === dayIndex)?.version;
+        },
+        captureError: (message) => {
+          failure = message;
+        },
+      },
+    );
+    if (dayUpdateAbortRef.current === controller) dayUpdateAbortRef.current = null;
+    if (ok) return { ok: true };
+    if (controller.signal.aborted) return { ok: false, message: '저장을 취소했습니다.' };
+    return {
+      ok: false,
+      message: conflicted ? DAY_CONFLICT_MESSAGE : (failure ?? '변경에 실패했습니다.'),
+      latestVersion,
+    };
   };
+
+  const dayDeleteTriggerRef = useRef<HTMLElement | null>(null);
+  const dayUpdateAbortRef = useRef<AbortController | null>(null);
+  const tripEditAbortRef = useRef<AbortController | null>(null);
+  // 일자 목록 컨테이너 — 삭제로 트리거가 사라졌을 때 포커스를 받아 준다.
+  const dayListRef = useRef<HTMLElement | null>(null);
 
   const dayVersion = (dayIndex: number) =>
     view?.days.find((d) => d.day_index === dayIndex)?.version ?? 0;
@@ -935,6 +999,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
     );
 
   const handleDeleteDay = (dayIndex: number) => {
+    // 트리거를 busy로 disabled되기 **전에** 잡아 둔다 — 확인 다이얼로그가 닫힐 때 여기로 포커스를
+    // 돌려준다(직전 포커스는 이미 body로 떨어진 뒤다, T-315 3차 리뷰).
+    dayDeleteTriggerRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     // POI가 없으면 바로 삭제. 있으면(409 DAY_HAS_POIS) 확인 다이얼로그를 띄운다(F2).
     void (async () => {
       setMutationError(null);
@@ -965,24 +1033,72 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const confirmForceDeleteDay = () => {
     const target = dayDeleteConfirm;
     if (!target) return;
-    setDayDeleteConfirm(null);
-    void deleteDayRequest(target.dayIndex, true);
+    // 요청이 끝난 **뒤에** 닫는다 — 먼저 닫으면 `busy` prop이 관측되지 않아 진행 표시가 죽고,
+    // 언마운트 시점에 트리거가 아직 disabled라 포커스 복원 폴백도 건너뛰어진다(T-315 4차 리뷰).
+    void deleteDayRequest(target.dayIndex, true).then((ok) => {
+      // 성공하면 트리거 버튼이 일자와 함께 사라진다 — 남는 일자 목록으로 포커스를 넘긴다.
+      // `isConnected` 검사는 쓰지 않는다: 이 콜백은 reload의 setState가 커밋되기 전에 돌아
+      // 항상 true라 폴백이 no-op이 된다(T-315 6차 리뷰 P2). 실패 시에는 트리거가 남아 있으므로
+      // 기존 복원이 맞다.
+      if (ok) dayDeleteTriggerRef.current = dayListRef.current;
+      setDayDeleteConfirm(null);
+    });
   };
 
   const handleEditTrip = (patch: TripUpdate) => {
     const version = view?.trip.version ?? 1;
+    const controller = new AbortController();
+    tripEditAbortRef.current = controller;
+    setTripEditError(null);
     void runMutation(
       async () => {
-        await tripApi(apiClient).update(tripId, version, patch);
+        await tripApi(apiClient).update(tripId, version, patch, { signal: controller.signal });
         setTripEditOpen(false);
       },
-      { onConflict: (latest) => openTripConflict(patch, latest) },
-    );
+      {
+        onConflict: (latest) => openTripConflict(patch, latest),
+        captureError: (message) => {
+          if (!controller.signal.aborted) setTripEditError(message);
+        },
+      },
+    ).finally(() => {
+      if (tripEditAbortRef.current === controller) tripEditAbortRef.current = null;
+    });
+  };
+
+  const openTripEdit = () => {
+    setTripEditError(null);
+    setTripEditOpen(true);
+  };
+
+  const closeTripEdit = () => {
+    setTripEditError(null);
+    setTripEditOpen(false);
+  };
+
+  // 일자 설정 저장 취소 — dayUpdateAbortRef를 실제로 끊는다(배선만 있고 호출부가 없던 결함, 리뷰 P2).
+  const cancelDayUpdate = () => {
+    dayUpdateAbortRef.current?.abort();
+    dayUpdateAbortRef.current = null;
+    setBusy(false);
+  };
+
+  // busy 중 닫기 = 진행 중 저장 취소(T-316 요청 수명 계약 ⑤).
+  const cancelTripEditAndClose = () => {
+    tripEditAbortRef.current?.abort();
+    tripEditAbortRef.current = null;
+    setBusy(false);
+    closeTripEdit();
+  };
+
+  const clearConflict = () => {
+    setConflictError(null);
+    setConflict(null);
   };
 
   const handleUseServerConflict = () => {
     const current = conflict;
-    setConflict(null);
+    clearConflict();
     setMutationError(null);
     if (current?.target === 'trip') setTripEditOpen(false);
     if (current?.target === 'poi') setEditingPoiId(null);
@@ -991,7 +1107,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
   const handleKeepEditingConflict = () => {
     const current = conflict;
-    setConflict(null);
+    clearConflict();
     if (current?.target === 'trip') setTripEditOpen(true);
     if (current?.target === 'poi') setEditingPoiId(current.poiId);
   };
@@ -1011,6 +1127,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
     void (async () => {
       setBusy(true);
       setMutationError(null);
+      setConflictError(null);
       try {
         if (current.target === 'trip') {
           const patch = pickConflictPatch(
@@ -1022,7 +1139,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
             return;
           }
           await tripApi(apiClient).update(tripId, current.version, patch);
-          setConflict(null);
+          clearConflict();
           setTripEditOpen(false);
           await reload();
           return;
@@ -1037,7 +1154,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           return;
         }
         await poiApi(apiClient).update(tripId, current.poiId, current.version, patch);
-        setConflict(null);
+        clearConflict();
         setEditingPoiId(null);
         await reload();
       } catch (err) {
@@ -1050,7 +1167,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
           }
           return;
         }
-        setMutationError(err instanceof ApiError ? err.message : '충돌 해결에 실패했습니다.');
+        // 충돌 다이얼로그는 실패해도 열린 채 남는다 — 원인을 모달 안에서 알린다(5차 리뷰).
+        setConflictError(err instanceof ApiError ? err.message : '충돌 해결에 실패했습니다.');
       } finally {
         setBusy(false);
       }
@@ -1059,7 +1177,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
   if (loading) {
     return (
-      <div className="flex min-h-64 items-center justify-center rounded-sm border border-hairline bg-white text-sm text-muted">
+      <div className="flex min-h-64 items-center justify-center rounded-sm border border-hairline bg-canvas text-sm text-muted">
         <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
         불러오는 중…
       </div>
@@ -1089,7 +1207,6 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
   const { trip, companions } = view;
   const totalPoiCount = view.days.reduce((count, day) => count + day.pois.length, 0);
-  const selectedDayLabel = selectedDay?.title ?? `${selectedDay?.day_index ?? ''}일차`;
   const panelTabs: Array<{
     id: TripDetailPanelTab;
     label: string;
@@ -1116,8 +1233,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
           onClick={() => setActivePanel(tab.id)}
           className={
             active
-              ? 'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-sm bg-ink px-3 text-sm font-semibold text-white'
-              : 'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-sm px-3 text-sm font-semibold text-muted hover:bg-surface-soft hover:text-ink'
+              ? 'inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-sm bg-ink px-3 text-sm font-semibold text-canvas'
+              : 'inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-sm px-3 text-sm font-semibold text-muted hover:bg-surface-soft hover:text-ink'
           }
         >
           <Icon className="h-4 w-4" aria-hidden="true" />
@@ -1126,7 +1243,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
             <span
               className={
                 active
-                  ? 'rounded-sm bg-white/20 px-1.5 text-xs text-white'
+                  ? 'rounded-sm bg-canvas/20 px-1.5 text-xs text-canvas'
                   : 'rounded-sm bg-surface-soft px-1.5 text-xs text-muted'
               }
             >
@@ -1144,10 +1261,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const detailPanelClassName = mobileWebLayout
     ? `${
         mobilePanelOpen ? 'flex' : 'hidden'
-      } absolute inset-y-0 left-0 z-30 w-[min(86vw,360px)] max-w-[calc(100%-2.5rem)] min-h-0 flex-col border-r border-hairline bg-white shadow-card`
+      } absolute inset-y-0 left-0 z-30 w-[min(86vw,360px)] max-w-[calc(100%-2.5rem)] min-h-0 flex-col border-r border-hairline bg-canvas shadow-card`
     : `${
         mobilePanelOpen ? 'flex' : 'hidden'
-      } absolute inset-y-0 left-0 z-30 w-[min(82vw,360px)] max-w-[calc(100%-3rem)] min-h-0 flex-col border-r border-hairline bg-white shadow-card lg:static lg:h-full lg:w-auto lg:max-w-none lg:shadow-none ${
+      } absolute inset-y-0 left-0 z-30 w-[min(82vw,360px)] max-w-[calc(100%-3rem)] min-h-0 flex-col border-r border-hairline bg-canvas shadow-card lg:static lg:h-full lg:w-auto lg:max-w-none lg:shadow-none ${
         desktopPanelCollapsed ? 'lg:hidden' : 'lg:flex'
       }`;
 
@@ -1156,7 +1273,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
       className={
         mobileWebLayout
           ? 'relative flex h-[100svh] min-h-[100svh] flex-col overflow-hidden bg-canvas'
-          : '-mx-4 -my-6 flex min-h-[calc(100vh-4rem)] flex-col bg-surface-soft md:-mx-6 md:-my-8'
+          : '-mx-4 -my-6 flex min-h-[calc(100svh-4rem)] flex-col bg-surface-soft md:-mx-6 md:-my-8'
       }
       data-testid="trip-detail-shell"
     >
@@ -1166,10 +1283,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
           aria-label="여행 작업 패널"
           data-testid="trip-top-panel"
         >
-          <div className="pointer-events-auto flex h-12 items-center gap-1.5 rounded-sm border border-hairline bg-white/95 p-1.5 shadow-card backdrop-blur">
+          <div className="pointer-events-auto flex h-12 items-center gap-1.5 rounded-sm border border-hairline bg-canvas/95 p-1.5 shadow-card backdrop-blur">
             <Link
               href="/trips"
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink"
+              className="inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink"
               aria-label="여행 목록"
               title="여행 목록"
             >
@@ -1178,11 +1295,11 @@ export function TripDetail({ tripId }: TripDetailProps) {
             <div className="min-w-0 flex-1 px-1">
               <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
                 <h1 className="truncate text-sm font-bold text-ink">{trip.title}</h1>
-                <span className="hidden shrink-0 rounded-sm bg-surface-soft px-1.5 py-0.5 text-[11px] font-semibold text-muted min-[390px]:inline">
+                <span className="hidden shrink-0 rounded-sm bg-surface-soft px-1.5 py-0.5 text-xs font-semibold text-muted min-[390px]:inline">
                   {STATUS_LABEL[trip.status]}
                 </span>
               </div>
-              <p className="mt-0.5 flex min-w-0 items-center gap-2 text-[11px] text-muted">
+              <p className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-muted">
                 <span className="shrink-0">
                   {view.days.length}일 · {totalPoiCount}곳
                 </span>
@@ -1198,25 +1315,13 @@ export function TripDetail({ tripId }: TripDetailProps) {
               aria-expanded={mobilePanelOpen}
               aria-label={mobilePanelOpen ? '패널 닫기' : '패널 열기'}
               title={mobilePanelOpen ? '패널 닫기' : '패널 열기'}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-ink hover:bg-surface-soft"
+              className="inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-ink hover:bg-surface-soft"
             >
               {mobilePanelOpen ? (
                 <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
               ) : (
                 <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
               )}
-            </button>
-            <button
-              type="button"
-              onClick={handleAddDay}
-              disabled={!canAddDay || busy}
-              title={addDayTitle}
-              aria-label={addDayLabel}
-              aria-describedby={addDayDisabledReason ? 'trip-layer-add-disabled-reason' : undefined}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-ink text-white hover:bg-ink/90 disabled:opacity-50"
-              data-testid="trip-add-layer"
-            >
-              <Plus className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
 
@@ -1235,7 +1340,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           {showRealtimeBackoffNotice && (
             <p
               role="status"
-              className="pointer-events-auto inline-flex items-center gap-1.5 rounded-sm bg-white/95 px-3 py-2 text-xs text-muted shadow-card"
+              className="pointer-events-auto inline-flex items-center gap-1.5 rounded-sm bg-canvas/95 px-3 py-2 text-xs text-muted shadow-card"
               data-testid="trip-realtime-backoff-notice"
             >
               실시간 연결을 잠시 늦춰 다시 시도합니다.
@@ -1249,7 +1354,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
         </header>
       ) : (
         <header
-          className="z-20 border-b border-hairline bg-white"
+          className="z-20 border-b border-hairline bg-canvas"
           aria-label="여행 작업 패널"
           data-testid="trip-top-panel"
         >
@@ -1257,7 +1362,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
             <div className="flex min-w-0 items-start gap-3">
               <Link
                 href="/trips"
-                className="mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-surface-soft hover:text-ink"
+                className="mt-1 inline-flex size-11 shrink-0 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-surface-soft hover:text-ink"
                 aria-label="여행 목록"
               >
                 <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -1293,7 +1398,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 onClick={() => setDesktopPanelCollapsed((collapsed) => !collapsed)}
                 aria-controls="trip-detail-panel"
                 aria-expanded={!desktopPanelCollapsed}
-                className="hidden h-9 items-center gap-1.5 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft lg:inline-flex"
+                className="hidden min-h-11 items-center gap-1.5 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft lg:inline-flex"
               >
                 {desktopPanelCollapsed ? (
                   <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
@@ -1310,7 +1415,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 aria-describedby={
                   addDayDisabledReason ? 'trip-layer-add-disabled-reason' : undefined
                 }
-                className="inline-flex h-9 items-center gap-1.5 rounded-sm bg-ink px-3 text-sm font-semibold text-white hover:bg-ink/90 disabled:opacity-50"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-sm bg-ink px-3 text-sm font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
                 data-testid="trip-add-layer"
               >
                 <Plus className="h-4 w-4" aria-hidden="true" />
@@ -1318,23 +1423,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
               </button>
               <button
                 type="button"
-                onClick={() => setActivePanel('share')}
-                className="inline-flex h-9 items-center gap-1.5 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
-              >
-                <Share2 className="h-4 w-4" aria-hidden="true" />
-                공유
-              </button>
-              <a
-                href="#trip-map-canvas"
-                className="inline-flex h-9 items-center gap-1.5 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
-              >
-                <Eye className="h-4 w-4" aria-hidden="true" />
-                미리보기
-              </a>
-              <button
-                type="button"
-                onClick={() => setTripEditOpen(true)}
-                className="h-9 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+                onClick={openTripEdit}
+                className="min-h-11 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
               >
                 편집
               </button>
@@ -1381,7 +1471,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 <button
                   type="button"
                   onClick={() => realtimeClientRef.current?.reconnect()}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-hairline px-2.5 text-xs font-semibold text-ink hover:bg-surface-soft"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-sm border border-hairline px-2.5 text-sm font-semibold text-ink hover:bg-surface-soft"
                   data-testid="trip-realtime-reconnect"
                 >
                   <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1424,7 +1514,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           data-testid="trip-detail-panel"
         >
           {mobileWebLayout && (
-            <div className="shrink-0 border-b border-hairline bg-white p-3">
+            <div className="shrink-0 border-b border-hairline bg-canvas p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-bold text-ink">{trip.title}</p>
@@ -1436,7 +1526,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                   type="button"
                   onClick={() => setMobilePanelOpen(false)}
                   aria-label="패널 닫기"
-                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink"
+                  className="inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink"
                 >
                   <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
                 </button>
@@ -1444,8 +1534,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setTripEditOpen(true)}
-                  className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline bg-white px-2.5 text-xs font-semibold text-ink hover:bg-surface-soft"
+                  onClick={openTripEdit}
+                  className="inline-flex min-h-11 items-center gap-1 rounded-sm border border-hairline bg-canvas px-2.5 text-sm font-semibold text-ink hover:bg-surface-soft"
                 >
                   <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                   편집
@@ -1459,7 +1549,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                   aria-describedby={
                     addDayDisabledReason ? 'trip-drawer-add-disabled-reason' : undefined
                   }
-                  className="inline-flex h-8 items-center gap-1 rounded-sm bg-ink px-2.5 text-xs font-semibold text-white hover:bg-ink/90 disabled:opacity-50"
+                  className="inline-flex min-h-11 items-center gap-1 rounded-sm bg-ink px-2.5 text-sm font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
                   data-testid="trip-add-day-drawer"
                 >
                   <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1498,7 +1588,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                   <button
                     type="button"
                     onClick={() => realtimeClientRef.current?.reconnect()}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-hairline px-2.5 text-xs font-semibold text-ink hover:bg-surface-soft"
+                    className="inline-flex min-h-11 items-center gap-1.5 rounded-sm border border-hairline px-2.5 text-sm font-semibold text-ink hover:bg-surface-soft"
                     data-testid="trip-realtime-reconnect"
                   >
                     <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1516,49 +1606,27 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 aria-label="일정"
                 className={mobileWebLayout ? 'space-y-3 p-3' : 'space-y-4 p-4 md:p-5'}
               >
-                <section className="space-y-3">
-                  {!mobileWebLayout && (
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        onClick={handleAddDay}
-                        disabled={!canAddDay || busy}
-                        title={addDayTitle}
-                        aria-describedby={
-                          addDayDisabledReason ? 'trip-plan-add-disabled-reason' : undefined
-                        }
-                        className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm bg-ink px-2.5 text-xs font-semibold text-white hover:bg-ink/90 disabled:opacity-50"
-                        data-testid="trip-add-day-inline"
-                      >
-                        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                        {addDayLabel}
-                      </button>
-                    </div>
-                  )}
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="rounded-sm bg-surface-soft px-2 py-1 font-semibold text-muted">
-                      {visibleLayerCount}/{view.days.length} 표시
-                    </span>
-                    <span className="rounded-sm bg-surface-soft px-2 py-1 text-muted">
-                      일자 {view.days.length}
-                    </span>
-                    <span className="rounded-sm bg-surface-soft px-2 py-1 text-muted">
-                      장소 {totalPoiCount}
-                    </span>
-                    <span className="min-w-0 rounded-sm bg-surface-soft px-2 py-1 text-muted">
-                      선택 {selectedDay ? selectedDayLabel : '없음'}
-                    </span>
-                  </div>
-                  {!mobileWebLayout && addDayDisabledReason && (
-                    <p id="trip-plan-add-disabled-reason" className="text-xs text-muted">
-                      {addDayDisabledReason}
-                    </p>
-                  )}
-                </section>
+                {/* TD-04/TD-05: 일자 추가는 헤더(데스크톱)·드로어 헤더(모바일) 1곳으로, 개수는
+                    헤더 요약과 탭 배지가 정본이다 — 같은 수치를 칩으로 4중 표기하지 않는다. */}
+                {!mobileWebLayout && addDayDisabledReason && (
+                  <p id="trip-plan-add-disabled-reason" className="text-xs text-muted">
+                    {addDayDisabledReason}
+                  </p>
+                )}
 
-                <section className="space-y-3" aria-label="일자 목록" data-testid="trip-layer-list">
+                <section
+                  ref={dayListRef}
+                  tabIndex={-1}
+                  className="space-y-3 outline-none"
+                  aria-label="일자 목록"
+                  data-testid="trip-layer-list"
+                >
                   {view.days.length > 0 && (
-                    <div className="space-y-2" role="tablist" aria-label="일자 목록">
+                    <div
+                      className="divide-y divide-hairline border-y border-hairline"
+                      role="tablist"
+                      aria-label="일자 목록"
+                    >
                       {view.days.map((day) => {
                         const active = day.day_index === selectedDayIndex;
                         const visible =
@@ -1568,10 +1636,12 @@ export function TripDetail({ tripId }: TripDetailProps) {
                         return (
                           <article
                             key={day.day_index}
+                            // 패널 안 카드 금지(DESIGN.md Workbench 컨테인먼트 1층) — 리스트 row로
+                            // 강등하고 선택은 accent ring이 아니라 ink rule + 중립 surface로 표시한다.
                             className={
                               active
-                                ? 'rounded-sm bg-white shadow-card ring-1 ring-primary/35'
-                                : 'rounded-sm bg-white'
+                                ? 'border-l-2 border-ink bg-surface-soft'
+                                : 'border-l-2 border-transparent'
                             }
                           >
                             <div className="flex items-start gap-3 p-3">
@@ -1597,7 +1667,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                       <span className="truncate text-sm font-bold text-ink">
                                         {dayLabel}
                                       </span>
-                                      <span className="shrink-0 rounded-sm bg-surface-soft px-1.5 py-0.5 text-[11px] font-semibold text-muted">
+                                      <span className="shrink-0 rounded-sm bg-surface-soft px-1.5 py-0.5 text-xs font-semibold text-muted">
                                         {day.pois.length}곳
                                       </span>
                                     </span>
@@ -1608,7 +1678,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                     </span>
                                     {day.out_of_range && (
                                       <span
-                                        className="mt-1 inline-flex w-fit items-center gap-1 rounded-sm bg-error-bg px-1.5 py-0.5 text-[11px] font-semibold text-error-text"
+                                        className="mt-1 inline-flex w-fit items-center gap-1 rounded-sm bg-error-bg px-1.5 py-0.5 text-xs font-semibold text-error-text"
                                         data-testid="trip-day-out-of-range"
                                         title="이 일자의 날짜가 여행 기간을 벗어났습니다."
                                       >
@@ -1618,7 +1688,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                     )}
                                     {dayHolidayLabel && (
                                       <span
-                                        className="mt-1 inline-flex w-fit rounded-sm bg-error-bg px-1.5 py-0.5 text-[11px] font-semibold text-error-text"
+                                        className="mt-1 inline-flex w-fit rounded-sm bg-error-bg px-1.5 py-0.5 text-xs font-semibold text-error-text"
                                         data-testid="trip-day-holiday"
                                       >
                                         {dayHolidayLabel}
@@ -1632,6 +1702,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                     onDelete={handleDeleteDay}
                                     showAdd={false}
                                     busy={busy}
+                                    onCancelBusy={cancelDayUpdate}
                                   />
                                 </div>
                               </div>
@@ -1677,7 +1748,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                 {addNotice && !mutationError && (
                                   <p
                                     role="status"
-                                    className="rounded-sm bg-primary/10 px-3 py-2 text-xs text-primary"
+                                    className="rounded-sm bg-surface-soft px-3 py-2 text-sm text-ink"
                                     data-testid="poi-add-notice"
                                   >
                                     {addNotice}
@@ -1714,7 +1785,9 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                       className="flex w-full items-center gap-2 rounded-sm px-1 py-1 text-left hover:bg-surface-soft"
                                     >
                                       <span
-                                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
+                                        // 마커 팔레트 인라인 색 위 숫자라 순백이 맞다(T-313 예외).
+                                        // eslint-disable-next-line no-restricted-syntax
+                                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
                                         style={{ backgroundColor: paletteHex(poi.marker_color) }}
                                         aria-hidden="true"
                                       >
@@ -1726,7 +1799,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                     </button>
                                   ))}
                                 {day.pois.length > 4 && (
-                                  <p className="pl-7 text-[11px] text-muted">
+                                  <p className="pl-7 text-xs text-muted">
                                     외 {day.pois.length - 4}곳
                                   </p>
                                 )}
@@ -1826,7 +1899,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
             }
           >
             <div
-              className="pointer-events-auto rounded-sm border border-hairline bg-white/95 p-2 shadow-card backdrop-blur"
+              className="pointer-events-auto rounded-sm border border-hairline bg-canvas/95 p-2 shadow-card backdrop-blur"
               data-testid="trip-map-place-search"
             >
               {selectedDay ? (
@@ -1859,10 +1932,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 : 'pointer-events-none absolute bottom-3 left-3 z-10 flex flex-wrap gap-2 md:bottom-4 md:left-4'
             }
           >
-            <span className="rounded-sm bg-white/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
+            <span className="rounded-sm bg-canvas/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
               {visibleLayerCount}일 표시
             </span>
-            <span className="rounded-sm bg-white/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
+            <span className="rounded-sm bg-canvas/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
               장소 {mapPoints.length}곳
             </span>
           </div>
@@ -1873,9 +1946,10 @@ export function TripDetail({ tripId }: TripDetailProps) {
         <TripEditDialog
           trip={trip}
           saving={busy}
-          error={mutationError}
+          error={tripEditError}
           onSave={handleEditTrip}
-          onClose={() => setTripEditOpen(false)}
+          onClose={closeTripEdit}
+          onCancelBusy={cancelTripEditAndClose}
         />
       )}
 
@@ -1884,8 +1958,11 @@ export function TripDetail({ tripId }: TripDetailProps) {
           coord={manualPoiCoord}
           dayLabel={selectedDay.title ?? `${selectedDay.day_index}일차`}
           saving={busy}
-          error={mutationError}
-          onClose={() => setManualPoiCoord(null)}
+          error={manualPoiError}
+          onClose={() => {
+            setManualPoiError(null);
+            setManualPoiCoord(null);
+          }}
           onCreate={handleCreateManualPoi}
         />
       )}
@@ -1897,6 +1974,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           description="다른 변경이 먼저 저장되었습니다. 각 필드에서 서버 값 또는 내 값을 고른 뒤 저장할 수 있습니다."
           fields={conflict.fields}
           saving={busy}
+          error={conflictError}
           onApply={handleApplyConflict}
           onUseServer={handleUseServerConflict}
           onKeepEditing={handleKeepEditingConflict}
@@ -1918,6 +1996,9 @@ export function TripDetail({ tripId }: TripDetailProps) {
         busy={busy}
         onConfirm={confirmForceDeleteDay}
         onCancel={() => setDayDeleteConfirm(null)}
+        // 트리거(일자 삭제)는 busy로 disabled된 채 이 다이얼로그가 열리므로 직전 포커스가 body다.
+        // 닫힐 때 돌아갈 자리를 명시한다(T-315 3차 리뷰).
+        returnFocusRef={dayDeleteTriggerRef}
         testId="day-delete-confirm"
       />
     </div>

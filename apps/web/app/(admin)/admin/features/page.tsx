@@ -12,6 +12,9 @@ import {
 } from '@pinvi/api-client';
 import type {
   AdminFeatureDetail,
+  AdminFeatureLifecycleState,
+  AdminFeaturePublicationState,
+  AdminFeatureQualityState,
   AdminFeatureSort,
   AdminFeatureSortOrder,
   AdminFeatureSummary,
@@ -25,7 +28,17 @@ const apiClient = new ApiClient({
 });
 
 const FEATURE_KINDS = ['place', 'event', 'notice', 'price', 'weather', 'route', 'area'] as const;
-const FEATURE_STATUSES = ['active', 'inactive', 'hidden', 'broken', 'deleted'] as const;
+/**
+ * kor-travel-map 3축 feature state (Map `1f2bdc3a` cutover). 합성 `status` 하나로
+ * 뭉개면 "published 인데 quarantined" 같은 조합이 화면에서 사라지므로 축을 셋 다 노출한다.
+ */
+const LIFECYCLE_STATES: readonly AdminFeatureLifecycleState[] = ['active', 'retired'];
+const PUBLICATION_STATES: readonly AdminFeaturePublicationState[] = [
+  'draft',
+  'published',
+  'suppressed',
+];
+const QUALITY_STATES: readonly AdminFeatureQualityState[] = ['valid', 'quarantined'];
 const ISSUE_FILTERS = [
   { value: 'all', label: '이슈 전체' },
   { value: 'yes', label: '이슈 있음' },
@@ -36,14 +49,15 @@ const SORT_OPTIONS: AdminFeatureSort[] = [
   'updated_at',
   'created_at',
   'kind',
-  'status',
   'provider',
   'issue_count',
 ];
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 200, 500] as const;
 
 type KindFilter = (typeof FEATURE_KINDS)[number] | 'all';
-type StatusFilter = (typeof FEATURE_STATUSES)[number] | 'all';
+type LifecycleFilter = AdminFeatureLifecycleState | 'all';
+type PublicationFilter = AdminFeaturePublicationState | 'all';
+type QualityFilter = AdminFeatureQualityState | 'all';
 type IssueFilter = (typeof ISSUE_FILTERS)[number]['value'];
 
 const inputClass = 'rounded-sm border border-hairline px-2 py-1 text-sm';
@@ -66,6 +80,27 @@ function coordLabel(feature: Pick<AdminFeatureSummary, 'lon' | 'lat'>) {
     : '—';
 }
 
+/** 3축을 한 줄로 붙여 표시(합성 status를 만들지 않는다 — 축 값은 그대로 보인다). */
+function StateAxes({
+  feature,
+}: {
+  feature: Pick<AdminFeatureSummary, 'lifecycle_state' | 'publication_state' | 'quality_state'>;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1" data-testid="admin-features-state-axes">
+      <span className="rounded-sm bg-surface-soft px-1" title="lifecycle_state">
+        {feature.lifecycle_state}
+      </span>
+      <span className="rounded-sm bg-surface-soft px-1" title="publication_state">
+        {feature.publication_state}
+      </span>
+      <span className="rounded-sm bg-surface-soft px-1" title="quality_state">
+        {feature.quality_state}
+      </span>
+    </div>
+  );
+}
+
 function featureTabHref(featureId: string, tab: 'sources' | 'overrides' | 'weather-values') {
   return `/admin/features/${encodeURIComponent(featureId)}/${tab}`;
 }
@@ -78,19 +113,27 @@ function JsonBlock({ value }: { value: unknown }) {
   );
 }
 
+/**
+ * kor-travel-map admin 상세가 **실제로 주는** list만 센다.
+ *
+ * `versions`/`change_requests`는 3축 cutover(`1f2bdc3a`) 이후 upstream payload에 없다
+ * (있는 list는 sources / issues / overrides / files / state_transitions / curations).
+ * Pinvi 응답은 소비자 호환을 위해 두 키를 빈 배열로 남겨 두는데, 그걸 그대로 세면 화면에는
+ * 늘 `versions 0` / `changes 0`이 뜬다 — 운영자에게 "이력이 없다"로 읽히지만 실제로는
+ * "가져오지 않는다"라 **거짓 0**이다. 그래서 두 칩을 지웠다.
+ *
+ * upstream이 주는 `state_transitions`/`curations`로 대체하지 않은 이유: Pinvi proxy가 아직 두
+ * list를 투영하지 않아(`schemas/admin.py AdminFeatureDetail`가 모르는 키를 버린다) 지금 칩만
+ * 바꾸면 또 다른 거짓 0이 된다. 실제 투영은 admin OpenAPI 스냅샷 vendoring과 묶어서 한다
+ * (`docs/tasks.md` T-VN-42).
+ */
 function CountLine({ detail }: { detail: AdminFeatureDetail }) {
   return (
-    <div className="grid grid-cols-3 gap-2 text-xs sm:grid-cols-6">
+    <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
       <span className="rounded-sm bg-surface-soft px-2 py-1">sources {detail.sources.length}</span>
       <span className="rounded-sm bg-surface-soft px-2 py-1">issues {detail.issues.length}</span>
       <span className="rounded-sm bg-surface-soft px-2 py-1">
         overrides {detail.overrides.length}
-      </span>
-      <span className="rounded-sm bg-surface-soft px-2 py-1">
-        versions {detail.versions.length}
-      </span>
-      <span className="rounded-sm bg-surface-soft px-2 py-1">
-        changes {detail.change_requests.length}
       </span>
       <span className="rounded-sm bg-surface-soft px-2 py-1">files {detail.files.length}</span>
     </div>
@@ -107,7 +150,7 @@ function DetailInspector({ featureId }: { featureId: string | null }) {
   if (!featureId) {
     return (
       <section
-        className="rounded-sm border border-hairline bg-white p-4 text-sm text-muted"
+        className="rounded-sm border border-hairline bg-canvas p-4 text-sm text-muted"
         data-testid="admin-features-detail-empty"
       >
         목록에서 feature를 선택하면 상세 정보가 표시됩니다.
@@ -124,7 +167,7 @@ function DetailInspector({ featureId }: { featureId: string | null }) {
 
   return (
     <section
-      className="space-y-4 rounded-sm border border-hairline bg-white p-4"
+      className="space-y-4 rounded-sm border border-hairline bg-canvas p-4"
       data-testid="admin-features-detail"
     >
       <header className="flex items-start justify-between gap-3">
@@ -145,7 +188,7 @@ function DetailInspector({ featureId }: { featureId: string | null }) {
         </button>
       </header>
 
-      {detailQuery.isLoading && <p className="text-sm text-muted">불러오는 중...</p>}
+      {detailQuery.isLoading && <p className="text-sm text-muted">불러오는 중…</p>}
       {error && (
         <p
           role="alert"
@@ -159,9 +202,11 @@ function DetailInspector({ featureId }: { featureId: string | null }) {
       {detail && (
         <>
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
-            <dt className="text-muted">kind/status</dt>
-            <dd>
-              {detail.feature.kind} / {detail.feature.status}
+            <dt className="text-muted">kind</dt>
+            <dd>{detail.feature.kind}</dd>
+            <dt className="text-muted">state</dt>
+            <dd className="text-xs">
+              <StateAxes feature={detail.feature} />
             </dd>
             <dt className="text-muted">category</dt>
             <dd>{detail.feature.category}</dd>
@@ -254,15 +299,17 @@ function DetailInspector({ featureId }: { featureId: string | null }) {
 
 export default function AdminFeaturesPage() {
   const [queryInput, setQueryInput] = useState('');
-  const [providerInput, setProviderInput] = useState('');
+  const [providerDatasetInput, setProviderDatasetInput] = useState('');
   const [categoryInput, setCategoryInput] = useState('');
   const [submitted, setSubmitted] = useState({
     q: '',
-    providers: undefined as string[] | undefined,
+    providerDatasetId: undefined as number | undefined,
     categories: undefined as string[] | undefined,
   });
   const [kind, setKind] = useState<KindFilter>('all');
-  const [status, setStatus] = useState<StatusFilter>('active');
+  const [lifecycle, setLifecycle] = useState<LifecycleFilter>('active');
+  const [publication, setPublication] = useState<PublicationFilter>('all');
+  const [quality, setQuality] = useState<QualityFilter>('all');
   const [issue, setIssue] = useState<IssueFilter>('all');
   const [sort, setSort] = useState<AdminFeatureSort>('name');
   const [order, setOrder] = useState<AdminFeatureSortOrder>('asc');
@@ -283,15 +330,19 @@ export default function AdminFeaturesPage() {
       q: submitted.q || undefined,
       kind: kind === 'all' ? undefined : [kind],
       category: submitted.categories,
-      status: status === 'all' ? Array.from(FEATURE_STATUSES) : [status],
-      provider: submitted.providers,
+      // '전체'는 필터를 아예 보내지 않는다(모든 값을 나열해 보내면 Map이 새 축 값을
+      // 추가했을 때 조용히 잘려 나간다).
+      lifecycleState: lifecycle === 'all' ? undefined : [lifecycle],
+      publicationState: publication === 'all' ? undefined : [publication],
+      qualityState: quality === 'all' ? undefined : [quality],
+      providerDatasetId: submitted.providerDatasetId,
       hasIssue: issue === 'all' ? undefined : issue === 'yes',
       pageSize,
       cursor,
       sort,
       order,
     }),
-    [cursor, issue, kind, order, pageSize, sort, status, submitted],
+    [cursor, issue, kind, lifecycle, order, pageSize, publication, quality, sort, submitted],
   );
 
   const featuresQuery = useQuery({
@@ -310,9 +361,12 @@ export default function AdminFeaturesPage() {
 
   const onSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // Map은 `provider_dataset_id`를 정수(>=1)로만 받는다 — 그 밖의 입력은 안 보낸다.
+    const providerDatasetId = Number.parseInt(providerDatasetInput.trim(), 10);
+    const validDatasetId = Number.isInteger(providerDatasetId) && providerDatasetId >= 1;
     setSubmitted({
       q: queryInput.trim(),
-      providers: valuesFromCsv(providerInput),
+      providerDatasetId: validDatasetId ? providerDatasetId : undefined,
       categories: valuesFromCsv(categoryInput),
     });
     resetCursor();
@@ -333,13 +387,14 @@ export default function AdminFeaturesPage() {
     },
     {
       key: 'kind',
-      header: 'kind/status',
+      header: 'kind/state',
       sortable: true,
-      sortValue: (feature) => `${feature.kind}:${feature.status}`,
+      sortValue: (feature) =>
+        `${feature.kind}:${feature.lifecycle_state}:${feature.publication_state}:${feature.quality_state}`,
       cell: (feature) => (
         <div className="text-xs">
           <div>{feature.kind}</div>
-          <div className="text-muted">{feature.status}</div>
+          <StateAxes feature={feature} />
         </div>
       ),
     },
@@ -423,12 +478,15 @@ export default function AdminFeaturesPage() {
             />
           </div>
           <input
-            type="text"
-            value={providerInput}
-            onChange={(event) => setProviderInput(event.target.value)}
+            type="number"
+            min={1}
+            step={1}
+            value={providerDatasetInput}
+            onChange={(event) => setProviderDatasetInput(event.target.value)}
             className={`${inputClass} w-36`}
-            placeholder="provider"
-            data-testid="admin-features-provider-filter"
+            placeholder="provider_dataset_id"
+            aria-label="provider dataset id"
+            data-testid="admin-features-provider-dataset-filter"
           />
           <input
             type="text"
@@ -464,16 +522,51 @@ export default function AdminFeaturesPage() {
           ))}
         </select>
         <select
-          value={status}
+          value={lifecycle}
           onChange={(event) => {
-            setStatus(event.target.value as StatusFilter);
+            setLifecycle(event.target.value as LifecycleFilter);
             resetCursor();
           }}
           className={inputClass}
-          data-testid="admin-features-status-filter"
+          aria-label="lifecycle_state 필터"
+          data-testid="admin-features-lifecycle-filter"
         >
-          <option value="all">status 전체</option>
-          {FEATURE_STATUSES.map((item) => (
+          <option value="all">lifecycle 전체</option>
+          {LIFECYCLE_STATES.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
+        <select
+          value={publication}
+          onChange={(event) => {
+            setPublication(event.target.value as PublicationFilter);
+            resetCursor();
+          }}
+          className={inputClass}
+          aria-label="publication_state 필터"
+          data-testid="admin-features-publication-filter"
+        >
+          <option value="all">publication 전체</option>
+          {PUBLICATION_STATES.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
+        <select
+          value={quality}
+          onChange={(event) => {
+            setQuality(event.target.value as QualityFilter);
+            resetCursor();
+          }}
+          className={inputClass}
+          aria-label="quality_state 필터"
+          data-testid="admin-features-quality-filter"
+        >
+          <option value="all">quality 전체</option>
+          {QUALITY_STATES.map((item) => (
             <option key={item} value={item}>
               {item}
             </option>

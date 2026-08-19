@@ -83,7 +83,10 @@ export function TripComments({ tripId }: TripCommentsProps) {
   };
 
   return (
-    <section className="space-y-3 rounded-sm border border-hairline bg-white p-4" aria-label="댓글">
+    <section
+      className="space-y-3 rounded-sm border border-hairline bg-canvas p-4"
+      aria-label="댓글"
+    >
       <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
         <MessageSquare className="h-4 w-4 text-primary" aria-hidden="true" />
         댓글
@@ -103,7 +106,7 @@ export function TripComments({ tripId }: TripCommentsProps) {
           type="button"
           onClick={() => void post()}
           disabled={posting || !body.trim()}
-          className="inline-flex h-9 shrink-0 items-center gap-1 rounded-sm bg-primary px-3 text-sm font-semibold text-white disabled:opacity-50"
+          className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
         >
           {posting ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />

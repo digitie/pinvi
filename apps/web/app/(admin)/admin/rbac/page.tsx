@@ -76,7 +76,7 @@ export default function AdminRbacPage() {
       <Section title="역할">
         <div className="grid gap-2 md:grid-cols-4" data-testid="admin-rbac-roles">
           {Object.entries(matrix?.roles ?? {}).map(([role, description]) => (
-            <div key={role} className="rounded-sm border border-hairline bg-white px-3 py-2">
+            <div key={role} className="rounded-sm border border-hairline bg-canvas px-3 py-2">
               <p className="font-mono text-xs font-semibold text-ink">{role}</p>
               <p className="mt-1 text-xs text-muted">{description}</p>
             </div>

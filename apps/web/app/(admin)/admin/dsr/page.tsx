@@ -302,7 +302,7 @@ export default function AdminDsrPage() {
           type="button"
           onClick={() => void dsrQuery.refetch()}
           disabled={dsrQuery.isFetching}
-          className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline bg-white px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
         >
           {dsrQuery.isFetching ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -475,7 +475,7 @@ export default function AdminDsrPage() {
                 <button
                   type="submit"
                   disabled={actionMutation.isPending}
-                  className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+                  className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-4 text-sm font-semibold text-on-primary disabled:opacity-50"
                   data-testid="admin-dsr-action-submit"
                 >
                   {actionMutation.isPending ? (

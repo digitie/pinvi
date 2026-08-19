@@ -123,7 +123,7 @@ test('/trips는 meta null 목록 응답과 전체 지도 POI를 렌더링한다'
   ).toHaveText('경복궁');
 });
 
-test('/trips는 예정 여행을 날짜 오름차순으로 보여주고 지난 여행은 탭으로 분리한다', async ({
+test('/trips는 예정 여행을 날짜 오름차순으로 보여주고 지난 여행은 필터로 분리한다', async ({
   page,
 }) => {
   const trips = [
@@ -164,7 +164,11 @@ test('/trips는 예정 여행을 날짜 오름차순으로 보여주고 지난 �
 
   await page.goto('/trips');
 
-  await expect(page.getByRole('tab', { name: '예정' })).toHaveAttribute('aria-selected', 'true');
+  // 필터는 탭이 아니라 토글 그룹(aria-pressed) — T-314.
+  await expect(page.getByRole('button', { name: '예정', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await expect(page.getByTestId('trip-list').locator('h2')).toHaveText([
     '강릉 당일치기',
     '부산 1박 2일',
@@ -172,7 +176,7 @@ test('/trips는 예정 여행을 날짜 오름차순으로 보여주고 지난 �
   ]);
   await expect(page.getByTestId('trip-list')).not.toContainText('속초 겨울 여행');
 
-  await page.getByRole('tab', { name: '지난 여행' }).click();
+  await page.getByRole('button', { name: '지난 여행', exact: true }).click();
   await expect(page.getByTestId('trip-list').locator('h2')).toHaveText(['속초 겨울 여행']);
 });
 

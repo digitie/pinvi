@@ -411,8 +411,6 @@ test('Admin 사용자 상세에서 lifecycle 액션과 세션 강제 로그아�
     },
   );
 
-  page.on('dialog', (dialog) => dialog.accept());
-
   await page.goto(`/admin/users/${targetUserId}`);
   await expect(page.getByTestId('admin-user-lifecycle-section')).toBeVisible();
   await expect(page.getByTestId('admin-user-sessions')).toContainText('Firefox');
@@ -432,6 +430,9 @@ test('Admin 사용자 상세에서 lifecycle 액션과 세션 강제 로그아�
 
   await page.getByTestId('admin-user-lifecycle-reason').fill('탈퇴 요청 접수');
   await page.getByTestId('admin-user-schedule-delete').click();
+  // 파괴적 lifecycle 액션은 확인 다이얼로그를 거친다(T-316). 사유는 재입력하지 않고 그대로 보여 준다.
+  await expect(page.getByTestId('admin-user-destructive-confirm')).toContainText('탈퇴 요청 접수');
+  await page.getByTestId('admin-user-destructive-confirm-confirm').click();
   await expect(page.getByTestId('admin-user-info')).toContainText('pending_delete');
   expect(deleteReason).toBe('탈퇴 요청 접수:DELETE');
 });
@@ -618,8 +619,6 @@ test('Admin 사용자 상세에서 아바타 교체, 삭제, 전역 제한을 �
     },
   );
 
-  page.on('dialog', (dialog) => dialog.accept());
-
   await page.goto(`/admin/users/${targetUserId}`);
   await expect(page.getByTestId('admin-user-avatar-section')).toContainText('등록된 이미지 없음');
 
@@ -644,6 +643,8 @@ test('Admin 사용자 상세에서 아바타 교체, 삭제, 전역 제한을 �
 
   await page.getByTestId('admin-user-avatar-reason').fill('사용자 요청 삭제');
   await page.getByTestId('admin-user-avatar-delete').click();
+  await expect(page.getByTestId('admin-user-destructive-confirm')).toBeVisible();
+  await page.getByTestId('admin-user-destructive-confirm-confirm').click();
 
   await expect(page.getByTestId('admin-user-avatar-section')).toContainText('등록된 이미지 없음');
   await expect(page.getByTestId('admin-user-audit-list')).toContainText('user.avatar_delete');

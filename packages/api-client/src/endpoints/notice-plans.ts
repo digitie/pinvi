@@ -37,10 +37,12 @@ export const noticePlanApi = (client: ApiClient) => ({
       schema: NoticePlanResponseSchema,
     }),
 
-  copy: (noticePlanId: string, body: NoticePlanCopyRequest) =>
+  copy: (noticePlanId: string, body: NoticePlanCopyRequest, opts?: { signal?: AbortSignal }) =>
     client.request(`/notice-plans/${noticePlanId}/copy`, {
       method: 'POST',
       body: JSON.stringify(NoticePlanCopyRequestSchema.parse(body)),
       schema: NoticePlanCopyResponseSchema,
+      // 복사 다이얼로그를 닫으면 취소한다 — 방치하면 사용자가 닫은 뒤 여행이 생긴다.
+      signal: opts?.signal,
     }),
 });

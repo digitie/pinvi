@@ -188,14 +188,14 @@ export function FeatureDetailCardBody({
               onClick={onLoadEnrichment}
               disabled={enriching}
               data-testid={`${testId}-load-enrichment`}
-              className="inline-flex h-9 items-center gap-1.5 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
             >
               카카오·네이버에서 더 보기
             </button>
           ) : enriching ? (
             <div className="flex items-center gap-2 text-sm text-muted">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              외부 정보 불러오는 중...
+              외부 정보 불러오는 중…
             </div>
           ) : (
             <div className="space-y-2">

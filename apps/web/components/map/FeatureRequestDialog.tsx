@@ -1,22 +1,24 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { CheckCircle2, Loader2, MapPin } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { CheckCircle2, MapPin } from 'lucide-react';
 import { ApiError, featureApi } from '@pinvi/api-client';
 import type { FeatureSuggestionKind } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { buildNewPlaceRequest, type NewPlaceForm } from '@pinvi/domain';
-import { useEscapeKey } from '@/lib/useEscapeKey';
-import { useDialogAutoFocus } from '@/lib/useDialogAutoFocus';
 import { FormField } from '@/components/forms/FormField';
+import { FormTextArea } from '@/components/forms/FormTextArea';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
 
 const DIALOG_LABEL = 'block text-sm font-semibold text-ink';
-const DIALOG_INPUT = 'h-9 px-2 focus:border-primary';
 
 export interface FeatureRequestDialogProps {
   coord: { lon: number; lat: number };
   onClose: () => void;
   onSubmitted?: () => void;
+  /** 진행 중 제안을 취소하고 닫았을 때 — 서버 접수 여부가 불확실함을 호출부가 안내한다. */
+  onSubmitCancelled?: () => void;
 }
 
 const KINDS: { value: FeatureSuggestionKind; label: string }[] = [
@@ -24,7 +26,12 @@ const KINDS: { value: FeatureSuggestionKind; label: string }[] = [
   { value: 'event', label: '이벤트' },
 ];
 
-export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureRequestDialogProps) {
+export function FeatureRequestDialog({
+  coord,
+  onClose,
+  onSubmitted,
+  onSubmitCancelled,
+}: FeatureRequestDialogProps) {
   const [form, setForm] = useState<NewPlaceForm>({
     kind: 'place',
     title: '',
@@ -36,9 +43,13 @@ export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureReq
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const submitAbortRef = useRef<AbortController | null>(null);
 
-  useEscapeKey(onClose);
-  useDialogAutoFocus(titleRef);
+  // 접수 완료로 바뀌면 제출 버튼이 사라져 포커스가 body로 떨어진다 — 닫기로 옮긴다.
+  useEffect(() => {
+    if (done) closeRef.current?.focus();
+  }, [done]);
 
   const update = (patch: Partial<NewPlaceForm>) => setForm((prev) => ({ ...prev, ...patch }));
 
@@ -49,131 +60,137 @@ export function FeatureRequestDialog({ coord, onClose, onSubmitted }: FeatureReq
       return;
     }
     setTitleError(undefined);
+    const controller = new AbortController();
+    submitAbortRef.current = controller;
     setSubmitting(true);
     setError(null);
     try {
-      await featureApi(apiClient).request(buildNewPlaceRequest(form, coord));
+      await featureApi(apiClient).request(buildNewPlaceRequest(form, coord), {
+        signal: controller.signal,
+      });
       setDone(true);
       onSubmitted?.();
     } catch (err) {
+      if (controller.signal.aborted) return;
       setError(err instanceof ApiError ? err.message : '제안 등록에 실패했습니다.');
     } finally {
+      if (submitAbortRef.current === controller) submitAbortRef.current = null;
       setSubmitting(false);
     }
   };
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="장소 제안"
-      data-testid="feature-request-dialog"
-    >
-      <div className="w-full max-w-md space-y-4 rounded-md border border-hairline bg-white p-5 shadow-lg">
-        <h2 className="text-base font-bold text-ink">이 위치 장소 제안</h2>
-        <p className="flex items-center gap-1 text-xs text-muted">
-          <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
-          {coord.lat.toFixed(5)}, {coord.lon.toFixed(5)}
-        </p>
+  // busy 중 닫기 = 진행 중 제안 등록 취소(T-316 요청 수명 계약 ⑤).
+  // 서버가 이미 받았을 수 있으므로 호출부에 "결과 불확실"을 알린다(비멱등 POST, 리뷰 P1).
+  const cancelSubmitAndClose = () => {
+    const wasInFlight = submitAbortRef.current !== null;
+    submitAbortRef.current?.abort();
+    submitAbortRef.current = null;
+    setSubmitting(false);
+    onClose();
+    if (wasInFlight) onSubmitCancelled?.();
+  };
 
-        {done ? (
-          <div className="space-y-3">
-            <p className="flex items-center gap-2 rounded-sm bg-success-bg px-3 py-2 text-sm text-success-text">
-              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-              제안이 접수됐습니다. 관리자 검토 후 반영됩니다.
-            </p>
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={onClose}
-                className="h-9 rounded-sm bg-primary px-4 text-sm font-semibold text-white"
-              >
-                닫기
-              </button>
-            </div>
-          </div>
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="이 위치 장소 제안"
+      description={
+        <span className="flex items-center gap-1">
+          <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="font-mono">
+            {coord.lat.toFixed(5)}, {coord.lon.toFixed(5)}
+          </span>
+        </span>
+      }
+      size="sm"
+      busy={submitting}
+      onCancelBusy={cancelSubmitAndClose}
+      initialFocusRef={titleRef}
+      testId="feature-request-dialog"
+      footer={
+        done ? (
+          <Button ref={closeRef} onClick={onClose}>
+            닫기
+          </Button>
         ) : (
           <>
-            <div className="flex gap-2" role="radiogroup" aria-label="종류">
-              {KINDS.map((k) => (
-                <button
-                  key={k.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={form.kind === k.value}
-                  onClick={() => update({ kind: k.value })}
-                  className={
-                    form.kind === k.value
-                      ? 'h-9 flex-1 rounded-sm bg-ink text-sm font-semibold text-white'
-                      : 'h-9 flex-1 rounded-sm border border-hairline bg-white text-sm font-semibold text-ink hover:bg-surface-soft'
-                  }
-                >
-                  {k.label}
-                </button>
-              ))}
-            </div>
-
-            <FormField
-              ref={titleRef}
-              id="feature-request-title"
-              label="이름"
-              labelClassName={DIALOG_LABEL}
-              className={DIALOG_INPUT}
-              value={form.title}
-              onChange={(event) => update({ title: event.target.value })}
-              maxLength={200}
-              placeholder="예: 해운대 블루라인파크"
-              error={titleError}
-            />
-            <FormField
-              id="feature-request-categories"
-              label="카테고리(쉼표 구분, 선택)"
-              labelClassName={DIALOG_LABEL}
-              className={DIALOG_INPUT}
-              value={form.categories}
-              onChange={(event) => update({ categories: event.target.value })}
-              placeholder="카페, 디저트"
-            />
-            <label className="block text-sm font-semibold text-ink">
-              메모(선택)
-              <textarea
-                value={form.note}
-                onChange={(event) => update({ note: event.target.value })}
-                maxLength={2000}
-                rows={3}
-                className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm font-normal text-ink outline-none focus:border-primary"
-              />
-            </label>
-
-            {error && (
-              <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">
-                {error}
-              </p>
-            )}
-
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="h-9 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                onClick={() => void submit()}
-                disabled={submitting}
-                data-testid="feature-request-submit"
-                className="inline-flex h-9 items-center gap-1 rounded-sm bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                {submitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-                제안하기
-              </button>
-            </div>
+            <Button variant="secondary" onClick={onClose} disabled={submitting}>
+              취소
+            </Button>
+            <Button
+              onClick={() => void submit()}
+              loading={submitting}
+              data-testid="feature-request-submit"
+            >
+              제안하기
+            </Button>
           </>
-        )}
-      </div>
-    </div>
+        )
+      }
+    >
+      {done ? (
+        <p className="flex items-center gap-2 rounded-sm bg-success-bg px-3 py-2 text-sm text-success-text">
+          <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
+          제안이 접수됐습니다. 관리자 검토 후 반영됩니다.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex gap-2" role="radiogroup" aria-label="종류">
+            {KINDS.map((kind) => (
+              <button
+                key={kind.value}
+                type="button"
+                role="radio"
+                aria-checked={form.kind === kind.value}
+                onClick={() => update({ kind: kind.value })}
+                className={
+                  form.kind === kind.value
+                    ? 'focus-ring min-h-11 flex-1 rounded-sm bg-ink text-sm font-semibold text-canvas'
+                    : 'focus-ring min-h-11 flex-1 rounded-sm border border-hairline bg-canvas text-sm font-semibold text-ink hover:bg-surface-soft'
+                }
+              >
+                {kind.label}
+              </button>
+            ))}
+          </div>
+
+          <FormField
+            ref={titleRef}
+            id="feature-request-title"
+            label="이름"
+            labelClassName={DIALOG_LABEL}
+            value={form.title}
+            onChange={(event) => update({ title: event.target.value })}
+            maxLength={200}
+            placeholder="예: 해운대 블루라인파크"
+            error={titleError}
+          />
+          <FormField
+            id="feature-request-categories"
+            label="카테고리(쉼표 구분, 선택)"
+            labelClassName={DIALOG_LABEL}
+            value={form.categories}
+            onChange={(event) => update({ categories: event.target.value })}
+            placeholder="카페, 디저트"
+          />
+          <FormTextArea
+            id="feature-request-note"
+            label="메모(선택)"
+            labelClassName={DIALOG_LABEL}
+            value={form.note}
+            onChange={(event) => update({ note: event.target.value })}
+            maxLength={2000}
+            rows={3}
+          />
+
+          {error && (
+            <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text">
+              {error}
+            </p>
+          )}
+        </div>
+      )}
+    </Dialog>
   );
 }

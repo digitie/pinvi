@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConsentType, UserConsent } from '@pinvi/schemas';
 import { friendlyErrorText } from '@pinvi/domain';
 import { api } from '../../../lib/api';
+import { confirmDestructive } from '../../../lib/confirm';
+import { CONSENTS_QUERY_KEY } from '../../../lib/consents';
 import {
   Badge,
   Body,
@@ -15,8 +17,6 @@ import {
   Screen,
   Subheading,
 } from '../../../components/ui';
-
-const CONSENTS_KEY = ['consents'] as const;
 
 const CONSENTS: { type: ConsentType; label: string; required: boolean; note?: string }[] = [
   { type: 'tos', label: '이용약관', required: true },
@@ -50,13 +50,29 @@ const STATUS_TEXT: Record<'agreed' | 'withdrawn' | 'none', string> = {
 /** 동의 관리 — 웹 `(app)/settings/consents` 대응. 현황 확인 + 선택 항목 철회. */
 export default function ConsentsSettingsScreen() {
   const queryClient = useQueryClient();
-  const consentsQuery = useQuery({ queryKey: CONSENTS_KEY, queryFn: () => api.user.getConsents() });
+  const consentsQuery = useQuery({
+    queryKey: CONSENTS_QUERY_KEY,
+    queryFn: () => api.user.getConsents(),
+  });
 
   const withdrawMutation = useMutation({
     mutationFn: (type: ConsentType) => api.user.withdrawConsent(type),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: CONSENTS_KEY }),
+    // 위치 gate(지도)와 같은 캐시라 철회 즉시 위치 기능이 잠긴다(issue #215/#203).
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CONSENTS_QUERY_KEY }),
     onError: (err) => Alert.alert('철회 실패', friendlyErrorText(err)),
   });
+
+  const onWithdraw = (meta: (typeof CONSENTS)[number]) => {
+    confirmDestructive({
+      title: `${meta.label} 동의 철회`,
+      message:
+        meta.type === 'location_collection'
+          ? '철회하면 내 위치·주변 검색 등 위치 기능이 즉시 비활성화됩니다. 계속할까요?'
+          : `${meta.label} 동의를 철회할까요? 관련 기능이 제한될 수 있습니다.`,
+      confirmLabel: '철회',
+      onConfirm: () => withdrawMutation.mutate(meta.type),
+    });
+  };
 
   return (
     <Screen>
@@ -95,7 +111,8 @@ export default function ConsentsSettingsScreen() {
                       loading={
                         withdrawMutation.isPending && withdrawMutation.variables === meta.type
                       }
-                      onPress={() => withdrawMutation.mutate(meta.type)}
+                      disabled={withdrawMutation.isPending}
+                      onPress={() => onWithdraw(meta)}
                     />
                   ) : null}
                 </Card>

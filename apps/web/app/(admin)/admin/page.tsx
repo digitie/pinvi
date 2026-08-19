@@ -99,7 +99,7 @@ function BarSeries({
   const primaryClass = tone === 'blue' ? 'bg-info-text' : 'bg-emerald-600';
   const secondaryClass = tone === 'blue' ? 'bg-error-text' : 'bg-amber-500';
   return (
-    <div className="rounded-sm border border-hairline bg-white p-4" data-testid={testId}>
+    <div className="rounded-sm border border-hairline bg-canvas p-4" data-testid={testId}>
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-semibold text-ink">{title}</p>
         <p className="text-xs text-muted">최근 24시간</p>
@@ -216,7 +216,7 @@ export default function AdminDashboardPage() {
             return (
               <div
                 key={service.key}
-                className="rounded-sm border border-hairline bg-white p-4"
+                className="rounded-sm border border-hairline bg-canvas p-4"
                 data-testid={`admin-system-${service.key}`}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -244,11 +244,11 @@ export default function AdminDashboardPage() {
         {cards.map((card) => (
           <div
             key={card.label}
-            className="rounded-sm border border-hairline bg-white p-4"
+            className="rounded-sm border border-hairline bg-canvas p-4"
             data-testid={`admin-stat-${card.label}`}
           >
             <p className="text-xs uppercase tracking-wide text-muted">{card.label}</p>
-            <p className="mt-2 text-2xl font-bold text-ink">{loading ? '...' : card.value}</p>
+            <p className="mt-2 text-2xl font-bold text-ink">{loading ? '…' : card.value}</p>
             {card.hint && <p className="mt-1 text-xs text-muted">{card.hint}</p>}
           </div>
         ))}
@@ -274,7 +274,7 @@ export default function AdminDashboardPage() {
       <Section title="부하와 용량">
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
           <div
-            className="rounded-sm border border-hairline bg-white p-4"
+            className="rounded-sm border border-hairline bg-canvas p-4"
             data-testid="admin-dashboard-load"
           >
             <div className="flex items-center justify-between gap-3">
@@ -297,7 +297,7 @@ export default function AdminDashboardPage() {
             </dl>
           </div>
           <div
-            className="rounded-sm border border-hairline bg-white p-4"
+            className="rounded-sm border border-hairline bg-canvas p-4"
             data-testid="admin-dashboard-capacity-disk"
           >
             <div className="flex items-center justify-between gap-3">
@@ -313,7 +313,7 @@ export default function AdminDashboardPage() {
             </p>
           </div>
           <div
-            className="rounded-sm border border-hairline bg-white p-4"
+            className="rounded-sm border border-hairline bg-canvas p-4"
             data-testid="admin-dashboard-capacity"
           >
             <div className="flex items-center justify-between gap-3">

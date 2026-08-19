@@ -4,7 +4,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -55,10 +54,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [offline, setOffline] = useState(false);
   const setStoreAuth = useAuthStore((s) => s.setAuth);
   const clearStoreAuth = useAuthStore((s) => s.clear);
-  // setUser는 effect 의존성에서 제외하되 stale-closure를 피하려고 ref로도 잡는다.
-  const setUserRef = useRef(setUser);
-  setUserRef.current = setUser;
-
   const applyUser = useCallback(
     (next: AuthUser) => {
       setUser(next);
@@ -72,7 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const clearSession = useCallback(() => {
-    setUserRef.current(null);
+    // useState setter는 identity가 안정적이라 ref 없이 직접 써도 stale-closure가 없다.
+    setUser(null);
     setStatus('unauthenticated');
     setOffline(false);
     clearStoreAuth();

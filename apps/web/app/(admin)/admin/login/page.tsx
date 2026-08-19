@@ -81,8 +81,8 @@ function AdminLoginForm() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm space-y-6 rounded-sm border border-hairline bg-white p-8">
+    <div className="flex min-h-dvh items-center justify-center px-4">
+      <div className="w-full max-w-sm space-y-6 rounded-sm border border-hairline bg-canvas p-8">
         <header>
           <h1 className="text-xl font-bold text-ink">Pinvi Admin</h1>
           <p className="mt-1 text-xs text-muted">관리자/운영자/CPO 계정으로 로그인하세요.</p>
@@ -124,10 +124,10 @@ function AdminLoginForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-sm bg-primary py-3 text-sm font-semibold text-white hover:bg-primary-active disabled:opacity-60"
+            className="w-full rounded-sm bg-cta hover:bg-cta-hover py-3 text-sm font-semibold text-on-primary disabled:opacity-60"
             data-testid="admin-login-submit"
           >
-            {loading ? '로그인 중...' : '로그인'}
+            {loading ? '로그인 중…' : '로그인'}
           </button>
         </form>
       </div>

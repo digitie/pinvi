@@ -40,7 +40,7 @@ export function PoiEditor({ poi, saving = false, onSave, onCancel }: PoiEditorPr
 
   return (
     <div
-      className="mt-2 space-y-3 rounded-sm border border-hairline bg-white p-3"
+      className="mt-2 space-y-3 rounded-sm border border-hairline bg-canvas p-3"
       data-testid="poi-editor"
     >
       <div>
@@ -147,7 +147,7 @@ export function PoiEditor({ poi, saving = false, onSave, onCancel }: PoiEditorPr
         <button
           type="button"
           onClick={onCancel}
-          className="h-8 rounded-sm border border-hairline px-3 text-xs font-semibold text-ink hover:bg-surface-soft"
+          className="min-h-11 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
         >
           취소
         </button>
@@ -155,7 +155,7 @@ export function PoiEditor({ poi, saving = false, onSave, onCancel }: PoiEditorPr
           type="button"
           onClick={() => onSave(buildPoiDetailPatch(form))}
           disabled={saving}
-          className="inline-flex h-8 items-center gap-1 rounded-sm bg-primary px-3 text-xs font-semibold text-white disabled:opacity-50"
+          className="inline-flex min-h-11 items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
         >
           {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
           저장

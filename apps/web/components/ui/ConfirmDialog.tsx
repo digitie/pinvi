@@ -1,8 +1,10 @@
 'use client';
 
-import { useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { useRef, type ReactNode, type RefObject } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useModalDialog } from '@/lib/useModalDialog';
+import { buttonClassName } from '@/components/ui/Button';
 
 /**
  * 제네릭 확인 다이얼로그(TDR, ADR-056).
@@ -29,6 +31,8 @@ export interface ConfirmDialogProps {
   onCancel: () => void;
   /** 본문 아래 부가 내용(예: 삭제될 항목 목록). */
   children?: ReactNode;
+  /** 닫힐 때 포커스를 돌려줄 트리거. 트리거가 busy로 disabled된 채 열렸을 때의 폴백. */
+  returnFocusRef?: RefObject<HTMLElement | null>;
   /** e2e용 testid 접두어. 기본 'confirm-dialog'. */
   testId?: string;
 }
@@ -44,30 +48,39 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   children,
+  returnFocusRef,
   testId = 'confirm-dialog',
 }: ConfirmDialogProps) {
   const cancelRef = useRef<HTMLButtonElement | null>(null);
-  const { titleId, backdropProps, dialogProps } = useModalDialog({
+  const { titleId, portalContainer, backdropProps, dialogProps } = useModalDialog({
     onClose: onCancel,
     active: open,
     // 파괴적 확인은 취소 버튼에 기본 포커스를 둬 실수로 Enter를 눌러도 안전하게.
     initialFocusRef: cancelRef,
+    returnFocusRef,
+    // Dialog 프리미티브와 같은 계약 — 진행 중에는 Escape/backdrop도 잠근다
+    // (버튼만 잠그고 Escape는 열려 있으면 '취소는 못 누르는데 Escape는 먹는' 모순).
+    closeOnEscape: !busy,
+    closeOnBackdrop: !busy,
   });
 
   if (!open) return null;
+  // portal 컨테이너는 마운트 effect에서 생긴다 — 생기기 전에는 렌더하지 않는다
+  // (앱 트리 안에서 잠깐 떴다가 옮겨지면 배경 inert가 자기 자신을 잠근다).
+  if (!portalContainer) return null;
 
   const isDanger = tone === 'danger';
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-scrim/50 p-4"
       data-testid={`${testId}-backdrop`}
       {...backdropProps}
     >
       <div
         {...dialogProps}
         data-testid={testId}
-        className="w-full max-w-md space-y-4 rounded-md border border-hairline bg-white p-5 shadow-lg outline-none"
+        className="w-full max-w-md space-y-4 rounded-md border border-hairline bg-canvas p-5 shadow-overlay outline-none"
       >
         <div className="flex items-start gap-3">
           {isDanger && (
@@ -96,7 +109,7 @@ export function ConfirmDialog({
             onClick={onCancel}
             disabled={busy}
             data-testid={`${testId}-cancel`}
-            className="h-9 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
+            className={buttonClassName({ variant: 'secondary', size: 'sm' })}
           >
             {cancelLabel}
           </button>
@@ -105,17 +118,14 @@ export function ConfirmDialog({
             onClick={onConfirm}
             disabled={busy}
             data-testid={`${testId}-confirm`}
-            className={
-              isDanger
-                ? 'inline-flex h-9 items-center gap-1 rounded-sm bg-error-text px-4 text-sm font-semibold text-white hover:bg-error-text-hover disabled:opacity-50'
-                : 'inline-flex h-9 items-center gap-1 rounded-sm bg-primary px-4 text-sm font-semibold text-white hover:bg-primary-active disabled:opacity-50'
-            }
+            className={buttonClassName({ variant: isDanger ? 'danger' : 'primary', size: 'sm' })}
           >
             {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
             {confirmLabel}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    portalContainer,
   );
 }

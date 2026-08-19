@@ -159,7 +159,7 @@ test('빈 목록은 안내 문구를 표시한다', async ({ page }) => {
 test('로딩 중에는 안내 문구를 보였다가 데이터로 대체된다', async ({ page }) => {
   await mockUsers(page, THREE_USERS, { delayMs: 1200 });
   await page.goto('/admin/users');
-  await expect(page.getByText('불러오는 중...')).toBeVisible();
+  await expect(page.getByText('불러오는 중…')).toBeVisible();
   await expect(page.getByTestId(usersRowId(UID.alice))).toBeVisible();
 });
 

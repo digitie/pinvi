@@ -63,7 +63,7 @@ function StatusBadge({ status }: { status: AdminSystemServiceStatus['status'] })
 function DependencyCard({ service }: { service: AdminSystemServiceStatus }) {
   return (
     <div
-      className="rounded-sm border border-hairline bg-white p-4"
+      className="rounded-sm border border-hairline bg-canvas p-4"
       data-testid={`admin-system-dependency-${service.key}`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -146,7 +146,7 @@ export default function AdminSystemPage() {
             <DependencyCard key={service.key} service={service} />
           ))}
           {!loading && dependencies.length === 0 && (
-            <p className="rounded-sm border border-hairline bg-white p-4 text-sm text-muted">
+            <p className="rounded-sm border border-hairline bg-canvas p-4 text-sm text-muted">
               의존 API 상태 없음
             </p>
           )}
@@ -155,7 +155,7 @@ export default function AdminSystemPage() {
 
       <Section title="Docker">
         <div
-          className="rounded-sm border border-hairline bg-white p-4"
+          className="rounded-sm border border-hairline bg-canvas p-4"
           data-testid="admin-system-docker"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -170,7 +170,7 @@ export default function AdminSystemPage() {
           </p>
         </div>
 
-        <div className="mt-3 overflow-x-auto rounded-sm border border-hairline bg-white">
+        <div className="mt-3 overflow-x-auto rounded-sm border border-hairline bg-canvas">
           <table className="min-w-full text-left text-sm" data-testid="admin-system-containers">
             <thead className="bg-surface-soft text-xs uppercase text-muted">
               <tr>

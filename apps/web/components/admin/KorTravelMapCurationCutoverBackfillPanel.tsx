@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
+import { ApiClient, ApiError, adminApi, isRequestTimeoutError, queryKeys } from '@pinvi/api-client';
 import type { KorTravelMapCurationCutoverBackfillResponse } from '@pinvi/schemas';
 import { RefreshCw, ShieldCheck } from 'lucide-react';
 
@@ -72,7 +72,14 @@ export function KorTravelMapCurationCutoverBackfillPanel() {
     onError: (nextError) => {
       // server가 확정한 4xx는 같은 command를 되살리지 않는다. transport/5xx만
       // operation replay 목적으로 동일 key의 명시적 retry를 허용한다.
-      if (nextError instanceof ApiError && nextError.status < 500) {
+      // 클라이언트 시간 예산으로 끊긴 요청은 서버가 **확정하지 않은** 상태다 —
+      // terminal 4xx로 오분류해 key를 버리면 재시도가 새 command가 되어 중복 import가 된다
+      // (T-316 요청 수명 계약 ③).
+      if (
+        nextError instanceof ApiError &&
+        nextError.status < 500 &&
+        !isRequestTimeoutError(nextError)
+      ) {
         setIdempotencyKey(null);
       }
     },
@@ -118,7 +125,7 @@ export function KorTravelMapCurationCutoverBackfillPanel() {
 
   return (
     <section
-      className="rounded-sm border border-hairline bg-surface p-4"
+      className="rounded-sm border border-hairline bg-surface-soft p-4"
       aria-labelledby="cutover-backfill-heading"
       data-testid="admin-notice-cutover-backfill"
     >
@@ -200,7 +207,7 @@ export function KorTravelMapCurationCutoverBackfillPanel() {
           <button
             type="submit"
             disabled={backfillMutation.isPending || !ready}
-            className="inline-flex h-9 items-center gap-1 rounded-sm bg-primary px-3 text-sm font-semibold text-white disabled:opacity-60"
+            className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-60"
             data-testid="admin-notice-cutover-backfill-submit"
           >
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />

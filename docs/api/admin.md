@@ -1173,22 +1173,30 @@ upstream: `kor-travel-map` `GET /v1/admin/features`.
 
 Query:
 
-| 이름                         | 설명                                                                            |
-| ---------------------------- | ------------------------------------------------------------------------------- |
-| `q`                          | name/address/feature/source 검색                                                |
-| `kind`                       | 반복 가능. `place`, `event`, `notice`, `price`, `weather`, `route`, `area`      |
-| `category`                   | 반복 가능 category code                                                         |
-| `status`                     | 반복 가능 feature status. 미지정 시 upstream 기본 `active`                      |
-| `provider`                   | 반복 가능 primary provider                                                      |
-| `dataset_key`                | 반복 가능 primary dataset key                                                   |
-| `has_coord`                  | 좌표 보유 여부                                                                  |
-| `has_issue`                  | integrity issue 보유 여부                                                       |
-| `issue_type`                 | 반복 가능 issue type                                                            |
-| `updated_from`, `updated_to` | ISO-8601 timestamp                                                              |
-| `page_size`                  | 1~500, 기본 50                                                                  |
-| `cursor`                     | keyset cursor                                                                   |
-| `sort`                       | `name`, `updated_at`, `created_at`, `kind`, `status`, `provider`, `issue_count` |
-| `order`                      | `asc` / `desc`                                                                  |
+> **3축 state cutover (kor-travel-map `1f2bdc3a`)**: 단일 `status`는 사라졌고 대체 필드는
+> **3축**이다 — `lifecycle_state`(`active`/`retired`) · `publication_state`(`draft`/`published`/
+> `suppressed`) · `quality_state`(`valid`/`quarantined`). primary provider/dataset 필터도 canonical
+> ID 하나(`provider_dataset_id`)로 합쳐졌다. legacy 이름(`status`/`provider`/`dataset_key`)은
+> upstream에 존재하지 않으며, FastAPI는 모르는 query를 422가 아니라 **조용히 버리므로** 계속
+> 보내면 "필터가 걸린 척하는" 전량 응답이 돌아온다. 그래서 Pinvi도 그 이름을 받지 않는다.
+
+| 이름                         | 설명                                                                       |
+| ---------------------------- | -------------------------------------------------------------------------- |
+| `q`                          | name/address/feature/source 검색                                           |
+| `kind`                       | 반복 가능. `place`, `event`, `notice`, `price`, `weather`, `route`, `area` |
+| `category`                   | 반복 가능 category code                                                    |
+| `lifecycle_state`            | 반복 가능. `active` / `retired`                                            |
+| `publication_state`          | 반복 가능. `draft` / `published` / `suppressed`                            |
+| `quality_state`              | 반복 가능. `valid` / `quarantined`                                         |
+| `provider_dataset_id`        | primary provider dataset canonical ID (정수 ≥ 1, 단일 값)                  |
+| `has_coord`                  | 좌표 보유 여부                                                             |
+| `has_issue`                  | integrity issue 보유 여부                                                  |
+| `issue_type`                 | 반복 가능 issue type                                                       |
+| `updated_from`, `updated_to` | ISO-8601 timestamp                                                         |
+| `page_size`                  | 1~500, 기본 50                                                             |
+| `cursor`                     | keyset cursor                                                              |
+| `sort`                       | `name`, `updated_at`, `created_at`, `kind`, `provider`, `issue_count`      |
+| `order`                      | `asc` / `desc`                                                             |
 
 응답 `data`:
 
@@ -1200,7 +1208,10 @@ Query:
       "kind": "place",
       "name": "해운대 카페",
       "category": "01070100",
-      "status": "active",
+      // 단일 `status` 대신 3축 — 셋 다 non-null 필수다.
+      "lifecycle_state": "active",
+      "publication_state": "published",
+      "quality_state": "valid",
       "lon": 129.163,
       "lat": 35.158,
       "address_label": "부산 해운대구",
@@ -1233,7 +1244,10 @@ upstream: `kor-travel-map` `GET /v1/admin/features/{feature_id}`.
     "kind": "place",
     "name": "해운대 카페",
     "category": "01070100",
-    "status": "active",
+    // §8.1과 같은 3축(단일 `status`는 kor-travel-map `1f2bdc3a`에서 삭제).
+    "lifecycle_state": "active",
+    "publication_state": "published",
+    "quality_state": "valid",
     "address": {},
     "detail": {},
     "urls": {},
@@ -1244,11 +1258,19 @@ upstream: `kor-travel-map` `GET /v1/admin/features/{feature_id}`.
   "sources": [],
   "issues": [],
   "overrides": [],
-  "versions": [],
-  "change_requests": [],
+  "versions": [], // 항상 빈 배열 — 아래 주의 참조
+  "change_requests": [], // 항상 빈 배열 — 아래 주의 참조
   "files": [],
 }
 ```
+
+**주의 — `versions` / `change_requests`는 항상 빈 배열이다.** 같은 cutover 이후 upstream
+`AdminFeatureDetailData`가 주는 list는 `sources` / `issues` / `overrides` / `files` /
+`state_transitions` / `curations`이고 `versions` / `change_requests`는 **없다**. Pinvi 응답에 두
+키를 남겨 둔 것은 소비자 호환 때문이며 값이 채워지지 않는다 — 이 값으로 "이력이 없다"고 표시하면
+안 된다(그래서 Admin Web 상세의 `versions`/`changes` 카운트 칩을 제거했다).
+`state_transitions`/`curations`를 실제로 투영하는 것은 admin OpenAPI 스냅샷 vendoring과 함께 갈
+후속 과제다(`docs/tasks.md` T-VN-42).
 
 ### 8.3 Feature detail subpages
 
@@ -1272,10 +1294,13 @@ Pinvi는 detail subpage를 위해 `kor-travel-map` 데이터를 read-only로 투
       "source_record_key": "visitkorea:places:1",
       "provider": "visitkorea",
       "dataset_key": "places",
+      "source_entity_type": "place",
+      "source_entity_id": "1",
       "source_role": "primary",
       "match_method": "natural_key",
       "confidence": 100,
-      "is_primary_source": true,
+      // `is_primary_source`는 upstream `AdminFeatureDetailSourceRecord`에 없다 —
+      // primary 여부는 `source_role`이 표현한다. Pinvi schema는 optional(기본 null)로만 둔다.
       "fetched_at": "2026-06-11T00:00:00+09:00",
       "imported_at": "2026-06-11T00:01:00+09:00",
       "linked_at": "2026-06-11T00:02:00+09:00",
@@ -1312,9 +1337,15 @@ Pinvi는 detail subpage를 위해 `kor-travel-map` 데이터를 read-only로 투
 
 Query:
 
-| 이름   | 설명                                              |
-| ------ | ------------------------------------------------- |
-| `asof` | 선택. ISO-8601 기준 시각. 미지정 시 upstream 최신 |
+| 이름   | 설명                                                        |
+| ------ | ----------------------------------------------------------- |
+| `asof` | 선택. ISO-8601 관측/예보 시각. 미지정 시 upstream 최신 카드 |
+
+`asof`에 offset이 없으면 **KST(Asia/Seoul)로 해석한다** — 사용자 표면
+(`GET /features/{id}/weather`)과 같은 helper(`api/v1/features.py normalize_asof_query`)를 쓴다.
+두 경계가 갈라지면 같은 query가 9시간 다른 시점을 조회한다. offset이 있으면 그대로 존중한다.
+`asof`를 주면 upstream 경로가 bitemporal snapshot(`…/weather/snapshot`)으로 바뀌는 것도 사용자
+표면과 동일하다(`docs/api/features.md` §2.3).
 
 응답 `data`:
 
@@ -1694,7 +1725,13 @@ Query:
 | ---------------- | -------------------------------------------------- |
 | `q`              | code, label, path, tier name, maki icon 로컬 필터  |
 | `include_counts` | upstream `db_feature_count` 포함 요청. 기본 `true` |
-| `active_only`    | active category만 upstream에 요청. 기본 `false`    |
+| `active_only`    | 비활성 카탈로그 항목 제외(아래 주의). 기본 `false` |
+
+**`active_only`는 Pinvi가 응답 `is_active`로 직접 거른다 — upstream에 전달하지 않는다.**
+kor-travel-map `/v1/categories`가 선언하는 query는 `include_counts` 하나뿐이고(옛 `active_only`는
+T-VN-04 F-1에서 삭제), 삭제 전에도 그 스위치는 item 목록이 아니라 `db_feature_count`/`db_active`
+집계 기준만 바꿨다. 그 집계 축은 되살릴 수 없다 — `db_feature_count`/`db_active`는 이제 항상
+ADR-067 공개 projection(`public_features`) 기준이다.
 
 응답 `data`:
 

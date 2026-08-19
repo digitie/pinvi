@@ -506,7 +506,7 @@ export function TripMapView({
                     type="button"
                     onClick={() => setDetailFeatureId(selectedFeature.feature_id)}
                     data-testid="trip-map-detail-open"
-                    className="h-8 w-full rounded-sm border border-hairline px-3 text-xs font-semibold text-ink hover:bg-surface-soft"
+                    className="min-h-11 w-full rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
                   >
                     상세보기
                   </button>
@@ -518,7 +518,7 @@ export function TripMapView({
                     onAddFeature?.(selectedFeature);
                     setSelectedFeature(null);
                   }}
-                  className="h-8 w-full rounded-sm bg-ink px-3 text-xs font-semibold text-white hover:bg-ink/90 disabled:opacity-50"
+                  className="min-h-11 w-full rounded-sm bg-ink px-3 text-sm font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
                 >
                   일정에 추가
                 </button>

@@ -2,8 +2,224 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-19 (claude) — T-310: Android 에뮬레이터 Dev Client smoke
+
+PR #446의 마지막 완료 조건이던 Dev Client smoke를 Android 에뮬레이터(AVD `pinvi_api35`, API 35
+google_apis x86_64)에서 실행했다. EAS `development` 빌드(`5a90f90c`) APK를 설치하고, WSL의 dev 스택
+(API `12801` · Postgres `5432`)에 붙여 시드 계정·시드 여행으로 네 항목을 확인했다.
+
+**결과** — ① 여행 생성 날짜 검증: 범위 오류(`종료일은 시작일 이후여야 합니다.`)와 형식 오류
+(`날짜는 YYYY-MM-DD 형식으로…`)가 해당 필드에만 붙고 제출이 막히며 편집 시 해제된다. ② POI 재정렬:
+낙관적 반영이 서버에 그대로 반영되고(`002s/005k/008c`), API를 내린 상태에서는 원래 순서로 롤백되며
+실패가 표면화된다. ③ POI 삭제: `confirmDestructive`가 대상 이름을 담아 확인을 받고 취소는 아무것도
+지우지 않는다. ④ 예산 검증: `-100`이 `금액은 0 이상의 숫자로만 입력해 주세요. (예: 30000)`로 막히고
+정상값은 저장·반영된다. 위치 동의 gate는 로컬에 VWorld 키 값이 없어(모두 length=0) 지도 표면 자체가
+키 오류 화면에서 멈춰 런타임 확인을 못 했다 — 코드 경로(`app/(app)/map.tsx`)는 OS 권한 요청 전에
+LBS 약관·개인위치정보 동의를 먼저 받는 구조로 확인했다.
+
+**고친 것** — smoke를 막던 실제 결함 하나. `apps/mobile`이 react/react-dom을 `19.2.6`으로 핀했는데
+RN 0.85.3의 렌더러는 `19.2.3` 정확 일치를 요구해 dev client가 부팅 즉시 죽었다(`Incompatible React
+versions`). `expo.install.exclude`에 react/react-dom이 들어 있어 `expo install --check`가 이 드리프트를
+가려 왔다. 두 패키지를 `19.2.3`으로 내리고 예외 목록에서 빼서 앞으로는 체크에 걸리게 했다. 루트 react는
+`19.2.6`·`apps/web`은 `^19.0.0` 그대로라 웹은 영향이 없다(lock diff는 `apps/mobile` 블록의 핀 수정 +
+`apps/mobile/node_modules/react*` 추가, 그리고 무관한 `playwright/node_modules/fsevents`의 `dev` 플래그
+1줄 — darwin optional 엔트리라 설치·런타임 영향 없음).
+
+**환경** — WSL Metro ↔ Windows 에뮬레이터 조합의 함정 셋(Metro의 IPv6 바인딩, manifest launchAsset이
+Metro 자신의 host/port로 생성되는 점, deep link 실행)을 `apps/mobile/README.md`에 절차로 고정했다.
+새로 연 것: T-311(expo patch 드리프트 + Hermes V1 + **react 중복**), T-318(`expo-router` hoisting으로
+`expo start` 실패), T-319(모바일 실패 문구가 원문 예외 노출).
+
+react 핀을 내리면서 `expo-doctor`의 duplicate 체크가 하나 늘었다(root `19.2.6` ↔ mobile `19.2.3`).
+루트 `overrides`로 단일 버전을 강제하는 안을 시험했으나 npm이 `packages/*`의 `react >=18` 때문에
+root 19.2.6을 유지해 3벌이 되는 등 웹 런타임까지 건드리는 정렬 작업이라, 이번 PR에서 되돌리고
+T-311로 분리했다. 이 체크는 CI를 막지 않는 informational job이다.
+
+
+## 2026-08-19 — Hallmark 재설계 완주(T-313~T-316)
+
+T-312에서 잠근 시스템(`DESIGN.md`)을 표면에 끝까지 적용했다. T-313 토큰 우회 코드모드(89파일, PR #448),
+T-314 앱 셸 하단 탭바·대시보드 상태 UI(PR #450), T-315 모달 셸 수렴(`components/ui/Dialog` + 8종 이관,
+PR #452), T-316 요청 수명 계약·모달 격리(portal + 스택 인지형 inert)·파괴적 액션 확인 정책·여행 상세
+컨테인먼트·설정/법무/지도/파일 표면·44px 스윕(PR #455).
+
+배운 것 두 가지. (1) **모달의 busy 잠금은 UI 혼자 풀 수 없다** — 닫기만 열어 두면 진행 중 요청이 취소되지
+않아 닫은 모달이 되살아나고 비멱등 POST가 중복된다. 탈출구는 반드시 in-flight 취소와 함께 줘야 하고,
+클라이언트 취소가 서버 처리를 되돌리지 못하는 비멱등 요청은 "결과 불확실"을 사용자에게 알려야 한다.
+(2) **반쯤 맞는 타임아웃은 없느니만 못하다** — 헤더까지만 덮거나 4xx로 표면화하면 취소 계약과
+Idempotency-Key 계약을 동시에 깨뜨린다(T-315 3차 리뷰에서 철회 후 T-316에서 요구사항을 갖춰 재도입).
+
+규칙이 다시 새지 않도록 DESIGN.md 항목을 `apps/web/eslint.config.mjs` lint 가드로 옮겼다 — 토큰 우회,
+그림자 티어, 임의 z-index/타이포, 44px 미달 컨트롤을 사용자 표면에서 차단한다.
+
+## 2026-08-19 (codex) — T-VN-41S typed snapshot error 소비
+
+- **변경**: 선행 #453이 Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의 service
+  OpenAPI(SHA-256 `8019e36f150ed006f5580e5ff224a0ba72030808b5303273f8c4c51aa0496431`)를
+  재vendor·재핀한 뒤, PinVi transport와 root `.env.example`을 같은 final release에 정렬했다.
+- **계약**: generic/reconciliation seal `413`은 item 1,000,000개와 canonical material 512 MiB를
+  code discriminator로 구분한다. request-bound material compaction `410`은 snapshot UUID/count/root/
+  compacted-at receipt를 보존한다. PinVi transport는 두 `413`과 `410`을 자동 재시도하지 않고 fail-close한다.
+- **회귀 방어**: typed problem shape와 transport disposition을 고정하고, `.env.example`의 hash/revision/
+  generation 3종이 service provenance와 exact 일치하도록 단언한다.
+- **증거 경계**: 이전 Map/PinVi 후보의 paired CI·n150 live 결과는 새 artifact의 증거로 재사용하지 않는다.
+  #454 CI·리뷰와 새 exact pair live proof 전에는 completion receipt나 production sync enable을 수행하지 않는다.
+
+## 2026-08-19 (claude) — Map service 계약 재vendor + provenance 재핀 (8019e36f / f637f3ad)
+
+- Map `#1000`(T-VN-41S: stream snapshot materialization)이 `openapi.service.json`을 바꿨다
+  (`c6f9aba6…` → `8019e36f…`). diff는 **순수 additive** — path 추가/삭제 0, schema 6개 추가
+  (`CacheTargetSnapshot{ByteLimit,ItemLimit,MaterialCompacted}{Details,Problem}`), 삭제 0.
+  따라서 현행 consumer가 깨지지는 않는다. 새 problem 유형의 소비는 T-VN-41 후속이다.
+- lockstep 3곳을 한 커밋에서 옮겼다: vendored 스냅샷 바이트 ·
+  `contracts/kor-travel-map-service-provenance-v1.json`(`service_openapi_sha256` +
+  `map_release_revision` → Map pair commit `f637f3ad`) ·
+  `tests/unit/test_kor_travel_map_cache_target_contract.py`의 `_MAP_RELEASE_REVISION`/`_SNAPSHOT_SHA256`.
+- **prod env는 건드릴 필요가 없다**: n150 `.env`가 `PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_SYNC_ENABLED=false`이고
+  `..._EXPECTED_SOURCE_REVISION`이 빈 값이라 `config.py`의 lockstep 검증 블록 자체가 돌지 않는다
+  (sync가 켜진 환경에서는 그 env도 같은 순간에 옮겨야 한다).
+- 왜 지금: Map T-VN-40 인수 ④ receipt가 `map_service_openapi_sha256 == pinvi_service_vendor_sha256`을
+  강제하고, cutover(S3~S6)의 pair commit이 `f637f3ad`로 확정됐다. mapping receipt 봉인(S4)은 이 재핀
+  **뒤에** 한 번만 한다 — 먼저 봉인하면 preflight가 새 revision 기준으로 `ready=false`가 된다.
+
+## 2026-08-18 (claude) — T-VN-42 라운드 2: 재리뷰 P1 4건 해소(CI red / admin 500 / 문서 모순 / 유령 query)
+
+- **P1 ① 브랜치가 CI red였다**: `test_feature_weather_defaults_known_at_to_now_and_normalises_naive_asof`가
+  "naive asof = UTC"라는 **옛 정책**을 단언하는데 최종 구현은 `_require_aware_datetime`으로 naive를
+  거절한다(실측 `1 failed`). 테스트를 정책에 맞춰 **둘로 쪼갰다**:
+  `…_rejects_naive_asof_before_any_request_goes_out`(naive asof/known_at 모두
+  `pytest.raises(ValueError, match="UTC offset")` + **요청이 나가지 않았음**까지 단언 — 거절이 전송
+  뒤면 upstream엔 이미 잘못된 시점 조회가 도달한다)와
+  `…_defaults_known_at_to_call_time`(aware KST asof로 `before <= known_at <= after`만 단언 +
+  명시 offset 보존). docstring도 현재 정책으로 갈아끼웠다.
+- **P1 ② admin weather-values가 naive `?asof=`에서 500**: `api/v1/admin/features.py`가
+  `normalize_asof_query()`를 건너뛰고 raw query를 client에 넘겨 transport `ValueError`가
+  `_map_admin_errors()`(KorTravelMap\* 계열만 포착)를 뚫었다. user 라우터와 **같은 helper**를
+  통과시키도록 고쳤고(순환 import 없음 — `app/api/v1/__init__.py`가 `features`를 `admin`보다 먼저
+  import), 통합 테스트로 naive `?asof=` 200 + client가 받은 값이 aware KST임을 고정했다. 통합 fake의
+  `feature_weather`도 실제 transport 정책(naive 거절)을 흉내내게 해서, 라우터가 다시 보정을 빼먹으면
+  fake가 200을 돌려주는 일이 없게 했다. **`ValueError → 422` 방어 매핑은 넣지 않았다**: `ValueError`는
+  너무 넓어 이 파일의 모든 핸들러에서 500이어야 할 결함을 "요청이 잘못됐다"로 위장한다(근거는 핸들러
+  docstring).
+- **P1 ③ `docs/api/admin.md`가 이번 변경과 모순**: §8.1 query 표의 `status`/`provider`/`dataset_key`를
+  3축(`lifecycle_state`/`publication_state`/`quality_state`) + `provider_dataset_id`(int≥1)로 갱신하고
+  `sort` enum에서 `status`를 뺐다(스냅샷 enum = name/updated_at/created_at/kind/provider/issue_count).
+  §8.1·§8.2 응답 예시의 `"status": "active"`도 3축으로 바꿨다. 덤으로 §8.2에
+  "`versions`/`change_requests`는 **항상 빈 배열**"(upstream이 주는 list는 sources/issues/overrides/
+  files/state_transitions/curations)을, §8.3 sources 예시의 `is_primary_source`가 upstream에 없다는 것을,
+  weather-values `asof`가 naive면 KST로 읽힌다는 것을 적었다.
+- **P1 ④ `/v1/categories?active_only=` 유령 query**: client가 Map이 더는 선언하지 않는 `active_only`를
+  계속 보내고 있었고 **게이트에 구멍**이 있었다 — `_CLIENT_QUERY_PARAMETERS`가 `_CLIENT_PATHS`의
+  일부만 덮어서 `/v1/categories`는 검사 자체가 없었다. 셋을 함께 했다:
+  1. **폐쇄 단언**(`test_client_query_parameter_table_is_closed`, `set(표) == set(경로)`) + 빠진 10개
+     경로의 query 집합을 스냅샷 기준으로 채움(면제 allowlist 없음 — query 없는 경로는 빈 집합).
+     `_query_parameter_names`는 POST-only(service profile batch)도 보도록 모든 operation 합집합으로,
+     비교는 `_spec_for_path`로 profile을 갈라 본다.
+  2. **반대 방향 게이트 신설**(`test_client_never_sends_a_query_the_snapshot_does_not_declare`):
+     15개 client 메서드를 optional kwarg 전부 채워 MockTransport로 호출하고, 나간 URL의 query가 표의
+     부분집합인지 본다. 표만으로는 "producer가 바꿨다"만 잡고 "우리가 안 쓰는 걸 보낸다"는 못 잡는다.
+     `active_only`를 되돌려 red가 되는 것을 실측 확인했다.
+  3. client에서 `active_only` 전송 제거.
+  4. **경로 목록 자체를 client 소스와 묶었다**(`test_client_path_table_covers_every_path_the_client_module_requests`):
+     폐쇄 단언은 표가 `_CLIENT_PATHS`를 덮는 것까지만 보장하고, 그 목록도 수기라 새 메서드가 새 경로를
+     부르면 게이트가 그 경로를 아예 보지 않는다(= 이번 사고와 같은 침묵). client 모듈의 `/v1/...` 리터럴을
+     스캔해 목록과 **양방향 정확 일치**(빠진 경로 = 검사 구멍, 남은 경로 = 죽은 핀)를 강제하고, 양쪽
+     변형(`/v1/categories` 제거 / 유령 경로 추가)이 실제로 red가 되는지 실측했다.
+- **공개 `active_only` 파라미터 결정 — 유지하되 Pinvi가 직접 필터한다.** 조사 결과 삭제 전 upstream
+  `active_only`도 **목록을 거른 적이 없다**(Map `routers/categories.py`: `_STATIC_CATEGORIES` 전량 반환,
+  스위치는 `db_feature_count`/`db_active` 집계 기준만 바꿨다). 즉 위임으로는 원래 동작한 적이 없는
+  파라미터다. 삭제 대신 `is_active`(스냅샷상 required bool)로 **로컬 필터**를 구현했다: 공개 계약
+  (`packages/api-client` `feature.categories({activeOnly})`, `docs/api/features.md`)을 깨지 않으면서
+  "받는 척"을 없애는 쪽. 오늘 카탈로그 145건은 전부 active라 결과는 전량과 동일하고, Map이 항목을
+  비활성화하는 순간부터 의미를 갖는다. admin `/admin/category-mappings`도 같은 방식으로 로컬 필터.
+  집계 축(`active_only`로 counts 좁히기)은 되살릴 수 없음을 문서에 명시했다(ADR-067 공개 projection 고정).
+- **P2**: `packages/api-client/src/query-keys.ts`의 `adminKeys.features` 파라미터 타입을 3축으로 —
+  손으로 베끼는 대신 `import type { AdminFeatureListParams }`로 **요청 타입을 재사용**해 key와 request가
+  다시는 갈라지지 않게 했다. `apps/web/e2e/admin-priority3.e2e.ts` detail fixture에서 Map이 주지 않는
+  `data_origin`/`data_version`/`is_primary_source`를 null로, `versions[]`를 빈 배열로 정리했다.
+  web 상세의 `versions {…}`/`changes {…}` 카운트 칩은 **제거**했다 — 늘 0이라 "이력 없음"으로 읽히지만
+  실제로는 "가져오지 않는다"인 거짓 0이다. `state_transitions`/`curations`로 대체하지 않은 이유는 Pinvi
+  proxy가 아직 두 list를 투영하지 않아 지금 바꾸면 또 다른 거짓 0이 되기 때문(후속 T-VN-42).
+- **검증**: `pytest tests/unit` = **943 passed / 38 failed**, 그 38은 전부 이 Windows 호스트의 환경
+  artifact다(docker 미설치 provenance·backup·restore 스크립트 26+9건, cp949 locale `read_text` 2건,
+  stale sibling worktree를 집는 live-spec staleness 1건 — 마지막 건은 CI에서 skip 조건). 손댄 파일 관련
+  실패 0. `ruff check` / `ruff format --check` / `mypy --strict app` 통과(mypy 잔여 1건은
+  `os.geteuid` Windows 전용 artifact, 미변경 파일). 통합·e2e는 이 호스트에 Docker/브라우저가 없어 못
+  돌렸고, 대신 scratch harness로 라우터 2개를 함수 호출 수준에서 실측했다(naive→KST 보정, 명시 offset
+  보존, categories 로컬 필터; 보정을 되돌리면 `ValueError`로 red). TS는 scratch tsc로
+  `packages/api-client`+`packages/schemas`(0 errors)와 변경 e2e 파일(0 errors)을, prettier로 변경 3개
+  TS/TSX 파일 포맷을 확인했다.
+
+## 2026-08-18 (claude) — T-VN-42 Map user spec 재vendor 후속: `status` 소비 절단 회귀방어 + 시간대 정책 통일
+
+- **배경**: 87c3a574가 Map user OpenAPI를 `95d2c128`(스냅샷 SHA-256 `6a2ee0f9…`)로 재vendor하고
+  ① 3축 feature state cutover(`1f2bdc3a`)로 사라진 `status` 소비를 끊고 ② bitemporal weather
+  cutover(`6650aa71`)에 맞춰 시점 조회를 `…/weather/snapshot`(`target_at`/`known_at`)으로 복구했다.
+  적대적 리뷰 2건이 모두 hold=false를 냈고 P1이 남았다.
+- **P1 ① `feature_detail` status 절단이 무방비**: `services/feature_detail.py`의 투영을 되돌려도
+  suite가 green이었다 — fixture가 `"status": "active"`를 먹였을 때만 red가 되는데, 그 fixture를
+  지우면 이번엔 "없는 키를 읽어 None"이라 되돌려도 green이다. 그래서 (a) 기본 fixture에서 키를
+  빼 실제 Map 응답과 맞추고 (b) **dto에 `status`가 섞여 있어도 새어 나오지 않음**을 단위
+  (`test_build_card_never_leaks_upstream_status`, 5개 kind)와 통합
+  (`test_detail_card_never_leaks_upstream_status`, wire 레벨)에서 따로 단언했다. 투영을 되돌리면
+  red가 되는 것을 실측 확인했다(`assert 'active' is None`).
+- **P1 ② 공개 API 문서가 거짓**: `docs/api/features.md`의 `"status": "active"` 예시 3곳(in-bounds /
+  detail / search)을 `null`로 고치고, §1.1 "`status` 필드 상태"를 새로 두어 근거(Map `1f2bdc3a`,
+  대체 필드 없음, 필드 제거는 후속 breaking cutover)와 "클라이언트는 `status`로 분기하지 말 것"을
+  명시했다. §2.3에는 (a) 응답 `asof`의 소스가 Map `selected_at`이라는 것(요청 에코가 아님),
+  (b) `asof`를 주면 bitemporal snapshot 경로(`target_at`/`known_at`)로 나간다는 것을 적었다.
+- **P2 시간대 정책 충돌(조용한 9시간 드리프트)**: 같은 모듈에서 `_require_aware_datetime`은 naive를
+  거절하는데 `_as_aware_utc`는 naive를 UTC로 해석했다. 한국 서비스에서 offset 없는 벽시계 시각을
+  UTC로 읽으면 9시간 어긋난 시점의 날씨가 오류 없이 돌아온다. **하나로 통일**: transport는 aware만
+  받고(`_as_aware_utc` 제거), naive → aware 보정은 시간대 의미를 아는 HTTP 경계가
+  `api/v1/features.py normalize_asof_query()`에서 **KST(Asia/Seoul)**로 한다(명시된 offset은 존중).
+  근거는 `_require_aware_datetime` docstring에 남겼고 라우터 통합 테스트 2건으로 고정했다.
+- **P2 나머지**: `known_at` kwarg는 **유지**하고 이유를 docstring에 적었다(upstream required라 무언가는
+  반드시 보내야 하는데 kwarg가 없으면 숨은 `now()`가 되어 고정 불가 / batch 형제와 시그니처 일관 /
+  bitemporal 재현엔 두 축이 필요). 통합 fake 시그니처도 실제 client와 맞췄다. `schemas/feature.py`의
+  "kor_travel_map가 status를 준다" 계열 주석을 "항상 None + 근거 위치 + 제거는 후속"으로 정정했다.
+  `_CLIENT_QUERY_PARAMETERS` 빈 집합 핀이 왜 exact인지(FastAPI가 모르는 query를 422가 아니라 조용히
+  버려서 런타임 신호가 0이라 CI가 유일한 탐지 경로) 근거를 달았다.
+- **검증**: `tests/unit/test_feature_detail.py` 13 passed, `test_kor_travel_map_contract.py` 15 passed,
+  `test_feature_mapping.py` 11 passed. 시간대 정책은 scratch harness로 실측(naive→KST 보정, transport
+  naive 거절, 명시 offset 보존). 통합 테스트는 이 호스트에 Docker가 없어 testcontainers 기동 불가 —
+  n150 CI-parity 게이트 필요. `test_vendored_snapshot_matches_live_kor_travel_map` 1건 실패는 **환경
+  artifact**다: sibling 탐색이 stale worktree(`F:/dev/kor-travel-map-codex`, gitdir 깨짐)를 집는다.
+  vendored 바이트는 Map `95d2c128`·`origin/main`(284fd10c) 양쪽과 SHA-256 `6a2ee0f9…`로 동일함을
+  직접 확인했다.
+- **admin 표면(병렬 레인)**: 같은 cutover가 admin 표면에서도 `status`를 없앴는데 `schemas/admin.py`가
+  required로 두고 있어 PinVi admin의 feature 목록/상세가 502 `FEATURE_SERVICE_BAD_GATEWAY`로 통째로
+  깨져 있었다. 3축 재배선 + admin client query 이름 교정(`status`/`provider`/`dataset_key` → 3축/
+  `provider_dataset_id`)은 같은 PR의 병렬 레인이 진행했다. 남은 후속은 admin weather-values를 admin
+  전용 경로로 전환(지금은 user 경로라 비공개 feature가 404), admin OpenAPI 스냅샷 vendoring,
+  공개 `status` 필드 제거다.
+- **인접 lane에 넘긴 것**: `tests/unit/test_kor_travel_map_client.py`의
+  `test_feature_weather_defaults_known_at_to_now_and_normalises_naive_asof`는 naive `asof`가 UTC로
+  해석되는 옛 동작을 고정하므로 이번 정책 통일로 red가 된다. 소유 밖 파일이라 손대지 않았고,
+  검증까지 마친 교체본을 인수인계했다(naive는 `pytest.raises(ValueError, match="UTC offset")`,
+  aware KST는 그대로 통과). `api/v1/admin/features.py`의 weather-values도 `asof`를
+  `normalize_asof_query()`에 통과시켜야 한다.
+
+## 2026-08-18 (claude) — #444 후속: service provenance `map_release_revision` 재핀(dangling → Map #975 머지 SHA)
+
+- **문제**: #444가 핀한 Map 후보 `e093e555…`는 어떤 Map 브랜치에도 없는 dangling 커밋(리뷰 P1). Map #975가
+  `4672aa96…`로 squash 머지됐고, 그 커밋의 `packages/kor-travel-map-api/openapi.service.json`은 PinVi vendored
+  스냅샷과 **바이트 동일**(SHA-256 `c6f9aba6…`, GitHub API로 재계산 확인; Map main HEAD도 동일).
+- **변경**: `contracts/kor-travel-map-service-provenance-v1.json` `map_release_revision`, 단위 테스트
+  `_MAP_RELEASE_REVISION`, `.env.example` `EXPECTED_SOURCE_REVISION`(+ `EXPECTED_OPENAPI_SHA256`를 vendored 값
+  `c6f9aba6…`로 정정 — 이전 값 `5d380911…`/`4b7ef67e…`는 stale), tasks/execplan 서술을 `4672aa96…`로 갱신.
+  vendored 바이트·capability는 그대로(재vendor 불필요).
+- **CI digest 동반 회전**: `.github/workflows/api.yml` `docker-provenance-image`가 packaged provenance JSON의
+  SHA-256을 하드코딩하므로 `a6d501b4…`→`a2d3db8e…`로 함께 갱신했다(리뷰 P1 — 재핀 시 항상 동반되어야 하는 gate).
+- **후속(Manager)**: docker-manager tracked v5 pinset은 아직 이 SHA를 모른다 — `MAP_PINNED_RUNTIME_SOURCE`/
+  `PINVI_PINNED_RUNTIME_SOURCE`/`pinset_sha256` 재핀 후 trusted release 배포가 F1J-D 재개 전제다.
+- **검증**: pin 관련 unit(cache_target_contract·sync_config·kor_travel_map_contract) 75 passed(로컬 sibling
+  live 비교 1건은 환경 의존 pre-existing 실패). CI `contract-pin-consistency`가 새 SHA를 checkout해 바이트 동등을
+  다시 확인한다.
+
 ## 2026-08-18 (codex) — T-VN-41 ABC rebase Map provenance 재핀
 
+- (2026-08-18 재핀으로 **대체됨** — 아래 후보 SHA는 dangling이며 현행 핀은 Map #975 머지 SHA `4672aa96…`다.)
 - Map PR #975의 rebase 후 head `e093e5555329234a539a3802566eb5666411b06f`를 PinVi service
   provenance·runtime contract test·Docker packaged-provenance digest에 함께 재핀했다.
   service OpenAPI vendor bytes는 Map artifact와 계속 SHA-256
@@ -310,6 +526,7 @@
 - 검증: cache-target transport·restore-fence·service contract·sync configuration unit 103건, changed source
   strict mypy, ruff check/format을 통과했다. 다음은 PinVi draft PR push, Map paired receipt 갱신, 두 적대적
   리뷰어의 고정 SHA 재검토와 n150 isolated rehearsal이다.
+
 ## 2026-08-18 (claude) — T-312: Hallmark 감사(웹 7표면) → 시스템 잠금 + 공개 표면 재설계
 
 - **감사(`hallmark audit`)**: apps/web 사용자 표면 6개(랜딩·인증·앱셸/대시보드·여행 상세·공유/지도/설정/파일/법무·
@@ -526,6 +743,30 @@
 **다음 한 작업**: Map PR-2(응답 값 전환)와 동봉 유예 이행 — CLI
 `--accept-uuid-literals`+runner self_mapped 출력, `derivation_enforced`
 cutover 사전 검사 배선, user/admin/service 스냅샷 재추출+핀 회전.
+
+## 2026-08-05 (codex) — T-VN-41-F1 완료, F1A bootstrap 공백 확인
+
+- Docker-manager PR #130이 merge되고 trusted n150 Manager release에 설치됐다. installed release와
+  tracked manifest의 Map release·functional owner·OpenAPI artifact·PinVi candidate/release provenance를
+  read-only로 대조해 F1 완료를 확인했다.
+- 그 다음 `cache-target diagnose`는 Docker/DB mutation 전에 production canonical `.env`에 cache-target
+  API base URL, 4-role binding, `sync=false`, exact OpenAPI/source/generation pin이 아직 없음을
+  fail-close로 발견했다. 현재 CLI에는 이 최초 binding을 direct `.env` 편집 없이 생성하는 product
+  command가 없으므로 F2를 시작하지 않았다.
+- F1A를 별도 PR 단위로 추가한다. 명령은 root-only atomic env snapshot/lock 안에서 완전 미구성 상태만
+  default-off contract로 전환하고 secret-free evidence만 반환해야 한다. 구성 후에도 container/DB/final
+  audit을 변경하지 않는다.
+
+## 2026-08-05 (codex) — T-VN-41-F final boundary docs-first·stale pin 차단
+
+- H42 완료와 격리 paired proof 완료 뒤 production final boundary의 최신 Manager를 재검토했다.
+  durable writer-drain recovery의 이전 P1은 모두 current main에 반영돼 관련 회귀 150건도 통과했다.
+- production manifest는 old Map/PinVi/OpenAPI pair를 고정해 현재 deployed generation 7 pair와
+  다르다. 이것은 cutover 시작 전 fail-close해야 하는 release provenance drift이며 운영 env 수동 수정으로
+  우회하지 않는다.
+- `docs/execplan/t-vn-41-production-final-boundary.md`에 F1(Manager pair re-pin·배포)과 F2
+  (n150 diagnose·단일 durable cutover·append-only final audit)를 분리했다. F1이 끝나기 전에는
+  consumer enable이나 final boundary mutation을 실행하지 않는다.
 
 ## 2026-08-04 (claude) — T-VN-32C 쌍 마무리: Map merge SHA 핀 고정 + service snapshot 재추출
 

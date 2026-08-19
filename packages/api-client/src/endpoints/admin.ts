@@ -33,6 +33,9 @@ import {
   AdminUserRoleMutationRequestSchema,
   AdminUserSessionsResponseSchema,
   AdminFeatureSortOrderSchema,
+  AdminFeatureLifecycleStateSchema,
+  AdminFeaturePublicationStateSchema,
+  AdminFeatureQualityStateSchema,
   AdminFeatureSortSchema,
   AdminFeatureRequestApproveSchema,
   AdminFeatureRequestPagedResponseSchema,
@@ -138,13 +141,18 @@ import {
 import { z } from 'zod';
 import type { ApiClient } from '../client';
 
+/**
+ * Map 3축 cutover(`1f2bdc3a`) 이후 upstream이 받는 필터만 노출한다. legacy
+ * `status`/`provider`/`datasetKey`는 Map에 없어 조용히 버려졌으므로 제거했다.
+ */
 export interface AdminFeatureListParams {
   q?: string;
   kind?: string[];
   category?: string[];
-  status?: string[];
-  provider?: string[];
-  datasetKey?: string[];
+  lifecycleState?: z.infer<typeof AdminFeatureLifecycleStateSchema>[];
+  publicationState?: z.infer<typeof AdminFeaturePublicationStateSchema>[];
+  qualityState?: z.infer<typeof AdminFeatureQualityStateSchema>[];
+  providerDatasetId?: number;
   hasCoord?: boolean;
   hasIssue?: boolean;
   issueType?: string[];
@@ -353,6 +361,16 @@ function appendValues(qs: URLSearchParams, key: string, values: string[] | undef
 }
 
 /** `docs/api/admin.md` Sprint 3 범위. */
+/**
+ * 클라이언트 시간 예산을 **끄는** 호출(T-316 요청 수명 계약 ④).
+ *
+ * 서버가 자체 예산으로 끝을 보장하는 동기 대량 작업들이다 — 클라이언트가 먼저 끊으면
+ * (a) 성공한 작업을 실패로 표시하고 (b) 재시도가 두 번째 실행을 부른다. 서버 예산은
+ * `pinvi_backup_timeout_seconds`(900s)·`pinvi_restore_timeout_seconds`(3600s) 등 env로 조정되므로
+ * 클라이언트에 숫자를 복제하지 않고 아예 끈다.
+ */
+const NO_CLIENT_DEADLINE = 0;
+
 export const adminApi = (client: ApiClient) => ({
   getStatsOverview: () =>
     client.request('/admin/stats/overview', {
@@ -489,6 +507,8 @@ export const adminApi = (client: ApiClient) => ({
       headers: { 'Idempotency-Key': idempotencyKey },
       body: JSON.stringify(KorTravelMapCurationCollectionImportRequestSchema.parse(body)),
       schema: KorTravelMapCurationCollectionImportResponseSchema,
+      // upstream snapshot fetch를 동기로 기다린다(재시도×restart로 45초 이상 가능).
+      timeoutMs: NO_CLIENT_DEADLINE,
     }),
 
   getKorTravelMapCurationCutoverLegacyPreflight: () =>
@@ -506,6 +526,7 @@ export const adminApi = (client: ApiClient) => ({
       headers: { 'Idempotency-Key': idempotencyKey },
       body: JSON.stringify(KorTravelMapCurationCutoverBackfillRequestSchema.parse(body)),
       schema: KorTravelMapCurationCutoverBackfillResponseSchema,
+      timeoutMs: NO_CLIENT_DEADLINE,
     }),
 
   createNoticePlan: (body: AdminNoticePlanCreateBody) =>
@@ -633,6 +654,7 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminSeedScenarioRunRequestSchema.parse(body)),
       schema: AdminDevSafetyActionResultSchema,
+      timeoutMs: NO_CLIENT_DEADLINE,
     }),
 
   getResetStatus: () =>
@@ -646,6 +668,7 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminResetRunRequestSchema.parse(body)),
       schema: AdminDevSafetyActionResultSchema,
+      timeoutMs: NO_CLIENT_DEADLINE,
     }),
 
   getRetentionSummary: () =>
@@ -668,6 +691,7 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminRetentionDryRunRequestSchema.parse(body)),
       schema: AdminRetentionRunSchema,
+      timeoutMs: NO_CLIENT_DEADLINE,
     }),
 
   executeRetention: (body: AdminRetentionExecuteBody) =>
@@ -675,6 +699,7 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminRetentionExecuteRequestSchema.parse(body)),
       schema: AdminRetentionRunSchema,
+      timeoutMs: NO_CLIENT_DEADLINE,
     }),
 
   getRateLimitAbuseSummary: (params: AdminRateLimitAbuseParams = {}) => {
@@ -985,10 +1010,12 @@ export const adminApi = (client: ApiClient) => ({
     if (params.q) qs.set('q', params.q);
     appendValues(qs, 'kind', params.kind);
     appendValues(qs, 'category', params.category);
-    appendValues(qs, 'status', params.status);
-    appendValues(qs, 'provider', params.provider);
-    appendValues(qs, 'dataset_key', params.datasetKey);
+    appendValues(qs, 'lifecycle_state', params.lifecycleState);
+    appendValues(qs, 'publication_state', params.publicationState);
+    appendValues(qs, 'quality_state', params.qualityState);
     appendValues(qs, 'issue_type', params.issueType);
+    if (params.providerDatasetId !== undefined)
+      qs.set('provider_dataset_id', String(params.providerDatasetId));
     if (params.hasCoord !== undefined) qs.set('has_coord', String(params.hasCoord));
     if (params.hasIssue !== undefined) qs.set('has_issue', String(params.hasIssue));
     if (params.updatedFrom) qs.set('updated_from', params.updatedFrom);
@@ -1201,6 +1228,8 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminUserLifecycleConfirmRequestSchema.parse(body)),
       schema: AdminUserDetailSchema,
+      // 기본 예산을 유지한다 — 확인 다이얼로그가 busy 동안 잠기므로 예산까지 끄면 응답이 멈출 때
+      // 새로고침 말고는 화면을 풀 수 없다(T-316 리뷰 P2). 서버는 요청 스코프 안에서 끝낸다.
     }),
 
   grantUserRole: (userId: string, body: z.infer<typeof AdminUserRoleMutationRequestSchema>) =>
@@ -1444,7 +1473,9 @@ export const adminApi = (client: ApiClient) => ({
   verifyChain: () =>
     client.request('/admin/audit/verify-chain', {
       method: 'GET',
+      // 감사 체인 전체를 재계산한다 — 행 수에 비례해 느려지고 보존 정책상 행은 줄지 않는다.
       schema: AdminChainVerifySchema,
+      timeoutMs: NO_CLIENT_DEADLINE,
     }),
 
   listLocationAudit: (
@@ -1521,6 +1552,7 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminBackupSnapshotRequestSchema.parse(body)),
       schema: AdminBackupSnapshotSchema,
+      timeoutMs: NO_CLIENT_DEADLINE,
     }),
 
   restoreBackupHotswap: (body: z.infer<typeof AdminBackupRestoreRequestSchema>) =>
@@ -1528,6 +1560,7 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminBackupRestoreRequestSchema.parse(body)),
       schema: AdminBackupRestoreRunSchema,
+      timeoutMs: NO_CLIENT_DEADLINE,
     }),
 
   listMcpTokens: (

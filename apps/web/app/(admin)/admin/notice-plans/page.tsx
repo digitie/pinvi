@@ -115,7 +115,7 @@ export default function AdminNoticePlansPage() {
       actions={
         <Link
           href="/admin/notice-plans/new"
-          className="inline-flex h-9 items-center gap-1 rounded-sm bg-primary px-3 text-sm font-semibold text-white"
+          className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta hover:bg-cta-hover px-3 text-sm font-semibold text-on-primary"
           data-testid="admin-notice-new"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />새 추천 여행

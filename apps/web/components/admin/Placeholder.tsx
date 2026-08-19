@@ -33,8 +33,8 @@ export function Placeholder({
               {taskId}
             </span>
           )}
-          <span className="rounded-sm bg-white px-2 py-1 text-muted">{statusLabel}</span>
-          <span className="rounded-sm bg-white px-2 py-1 text-muted">S{sprint}</span>
+          <span className="rounded-sm bg-canvas px-2 py-1 text-muted">{statusLabel}</span>
+          <span className="rounded-sm bg-canvas px-2 py-1 text-muted">S{sprint}</span>
         </div>
         <ul className="list-inside list-disc space-y-1 text-sm text-ink">
           {notes.length > 0 ? (

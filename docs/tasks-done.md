@@ -4,7 +4,112 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-08-19
+
+- [x] **T-310** — issue #215 잔여 후속: POI mutation 낙관적 override + 롤백, 여행 생성/편집 날짜 검증,
+      POI 예산 검증, 위치 동의 gate, `apps/mobile` lint/typecheck CI. (완료: 2026-08-19, PR #446, claude)
+      Android 에뮬레이터(AVD `pinvi_api35`, API 35) + EAS `development` 빌드 `5a90f90c`로 Dev Client
+      smoke를 실행해 완료 조건을 소진했다. 날짜 검증(범위·형식, 필드 귀속·편집 시 해제) · POI 재정렬
+      (낙관적 반영이 서버 `sort_order`에 반영, API 다운 시 롤백 + 실패 표면화) · 파괴적 삭제
+      (`confirmDestructive` 대상 이름 확인, 취소 무변경) · 예산 검증(`-100` 차단, `25000` 저장) 통과.
+      위치 동의 gate는 로컬 VWorld 키 부재로 지도 표면에 도달하지 못해 코드 경로만 확인하고 T-320으로 분리.
+      smoke가 드러낸 결함 1건을 같은 PR에서 고쳤다: RN 0.85.3 렌더러가 react 19.2.3 정확 일치를 요구하는데
+      저장소가 19.2.6을 핀했고 `expo.install.exclude`가 그 드리프트를 가려 dev client가 부팅 즉시 죽었다
+      (핀 19.2.3 + 예외 제거). WSL Metro ↔ Windows 에뮬레이터 절차는 `apps/mobile/README.md`에 고정했다.
+      파생 task: T-311(expo-doctor 3신호) · T-318(`expo start` hoisting) · T-319(실패 문구) · T-320.
+
+- [x] **T-316** — Hallmark 마지막 조각: 요청 수명 계약 + 모달 격리·확인 정책 + 여행 상세·설정·법무·
+      지도·파일 표면. (완료: 2026-08-19, PR #455, claude)
+      범위는 `apps/web` + `packages/api-client`. 조사 3인 매핑(48항목) 기준으로 5조각을 한 PR에 담았다.
+  - [x] **(1/5) 요청 수명 계약 + 모달 오류 소유권** — api-client 5요구사항(타이머가 body 소비
+        완료까지 유지·abort가 전 생애주기 전파·`status 0`으로 타임아웃과 서버 확정 4xx 구분·장시간
+        admin 호출 9종 `timeoutMs: 0`·`Dialog.onCancelBusy` 취소 탈출구)과 6차 적대적 리뷰가 main에서
+        잡은 잔여 결함 4건(일자 409 재시도 막다른 길·포커스 폴백 no-op·전역 오류 누수·날짜 오류 잔존).
+  - [x] **(2/5) 모달 격리·확인 정책** — `useModalDialog` body portal + 스택 인지형 배경 inert
+        (+ `focusable`이 inert 상속을 보게 수정), `RestoreHotswapDialog` 프리미티브 수렴(407→265줄,
+        마지막 손복사 셸 제거), `window.confirm` 6곳·`window.prompt` 1곳 제거 → `ConfirmDialog`/
+        사유 입력 Dialog(저장소 전역 native dialog 0건), e2e의 `page.on('dialog')` 5곳 재작성.
+  - [x] **(3/5) TripDetail** — 4겹 컨테인먼트(패널→일자 카드→POI 카드→tinted 첨부/날씨, 320px에서
+        유효 폭 −35.3% 실측) 해체와 중복 컨트롤(일자 추가 4곳·개수 배지 5곳·공유 2곳) 정리.
+  - [x] **(4/5) 나머지 표면** — `FeatureMapView` 상시 오류 dl 삭제(모바일에서 지도의 33% 점유) +
+        조건부 오류/로딩/빈 상태, `MapView` 디버그 dl 삭제, nav '지도'를 데모 셸 대신 실제 탐색
+        지도(`/map`)로 교정, DSR/신고 raw JSON textarea → 일반 폼 필드(서버 자유형 record 위에 프런트
+        계약을 세우고 전송 리터럴은 보존), 법무 measure 65ch·본문 16px·초안 배너 중립화·공개 chrome
+        (`app/legal/layout.tsx`, 문서 간 이동 링크 0개 해소), 설정 4쪽의 admin chrome 분리
+        (`components/app/SettingsSurface`: uppercase eyebrow h2·12px 표 헤더·카드 안 카드 제거,
+        표 → hairline row 리스트, skeleton/빈 상태 CTA), 파일 화면 상태 UI(skeleton·회복 행동·44px·
+        100건 절단 표시).
+  - [x] **(5/5) Hallmark 잔여 이탈 종결** — 사용자 표면의 44px 미달 컨트롤 53곳을 `min-h-11`/`size-11`로
+        올리고 컨트롤 라벨 12px → 14px, 입력 14px → 16px(iOS 자동 확대 방지). 재발 방지는 새 lint 가드가
+        맡는다(T-317 흡수): `eslint.config.mjs`의 `no-restricted-syntax`가 토큰 우회(`bg-white`/`text-white`/
+        `bg-black/`), 그림자 티어 이탈(`shadow-sm|md|lg|xl|2xl`), 임의 z-index(`z-[`), 임의 타이포(`text-[Npx]`),
+        44px 미달 컨트롤을 **사용자 표면에서** 차단한다(밀도가 다른 `(admin)`은 제외). 마커 팔레트 인라인 색
+        위 텍스트 3곳만 사유 주석과 함께 예외로 남겼다.
+        ※ `eslint-plugin-tailwindcss` 대신 자체 규칙을 썼다 — 필요한 것은 클래스 정렬이 아니라 **토큰 정책
+        집행**이고, 새 의존성 없이 DESIGN.md 규칙을 그대로 표현할 수 있다.
+
+    적대적 리뷰 3인(모달·요청 수명 / 여행 상세·표면 / 회귀·문서)이 P1 2건을 실측으로 잡아
+    반영했다: `/map` 지도 높이가 362px로 붕괴(flex 사슬 미연결 — nav '지도'를 이 페이지로
+    승격시킨 직후라 더 뼈아팠다), 비멱등 POST 취소가 서버 처리를 되돌리지 못하는데 조용히
+    닫혀 재시도 시 중복 생성. P2로 admin 익명화의 `timeoutMs: 0` + busy 잠금 조합 영구 잠금,
+    `dayUpdateAbortRef` 도달 불가 분기, 지도 빈 상태 조기 표시, 신고 evidence field 잔존,
+    파일 삭제 후 포커스 body 낙하, DESIGN.md 모달 계약 미갱신도 함께 해소했다.
+
+- [x] **T-315** — Hallmark PR-4(모달 셸 수렴). (완료: 2026-08-19, PR #452, claude)
+      `components/ui/Dialog.tsx` 프리미티브 신설
+      (scrim/overlay/z-modal 토큰 + `useModalDialog` 내장 + 헤더/본문/푸터 슬롯 + busy 잠금),
+      손복사 모달 8종 이관(`LocationConsentDialog`(focus trap 없던 것)·`NoticePlanCopyDialog`·
+      `TripEditDialog`·`TripManualPoiDialog`·`FeatureRequestDialog`·`DaySettingsDialog`·`ConflictDialog`·
+      `FeatureDetailModal`(sheet)), 임의 z-index
+      (`z-[50]/[60]/[70]`) 전면 토큰화, 마커 팔레트 UI 오용(TripDayHeader 일출/일몰)·`bg-primary/10`
+      accent tint 제거, 죽은 훅(`useEscapeKey`/`useDialogAutoFocus`) 삭제. `RestoreHotswapDialog`(admin
+      파괴적 흐름)는 portal + 배경 `inert`까지 쓰는 더 강한 격리라 토큰만 맞추고 이관은 보류 — 훅에
+      inert/portal을 추가하는 T-316에서 수렴. 적대적 리뷰 5라운드(10인): 중첩 모달 키보드 도달(ConflictDialog
+      이관), 포커스 격납(focusout 기반 — focusin만으로는 body 낙하를 못 잡음), 닫힐 때 포커스 복원 폴백
+      (남은 최상단 모달 → `returnFocusRef`), 모달 스택을 마운트 생명주기에만 연동, `FeatureDetailModal` sheet
+      이관, 일자 설정 저장을 await해 성공에만 닫기(busy가 죽은 prop이던 문제) + 그에 따라 오류를 **모달 안**
+      에 표시·저장 중 입력 잠금·409 reload가 열린 폼을 덮지 않게 리셋 effect 축소, 일자 삭제 확인은 요청 완료
+      후 닫아 busy/포커스 복원을 살림, 충돌 다이얼로그 필드 토글도 저장 중 잠금(+disabled 시각 상태).
+      5차: **일자 설정 lost update**(열려 있는 동안 들어온 서버 version으로 저장해 409 없이 남의 변경을
+      덮던 문제) → 연 시점 version 스냅샷으로 If-Match 고정, 오류를 전역 `mutationError`에서 떼어 각
+      다이얼로그 세션 소유로(열 때/닫을 때 초기화, 날짜 검증 오류는 해당 FormField에 연결), `ConflictDialog`
+      에도 모달 안 오류 슬롯 추가, 삭제 성공 시 사라진 트리거 대신 일자 목록으로 포커스 복원, 색 팔레트
+      disabled 시각 상태. **api-client 요청 타임아웃은 이 PR에서 뺐다** — 3차 리뷰가 헤더까지만 덮는 범위, 헤더 이후
+      호출부 abort 미전파, 408(4xx)이 Idempotency-Key 폐기 로직을 오작동시켜 큐레이션 import를 중복 실행,
+      admin 예산(restore 30분 < 서버 60분) 불일치를 실측했다. 설계를 갖춘 뒤 T-316에서 다시 넣는다.
+
 ## 2026-08-18
+
+- [x] **T-314** — Hallmark PR-3: 앱 셸·대시보드·탐색 지도 재설계. (완료: 2026-08-18, PR #450, claude)
+      `AppShell`: ground를 `bg-surface-soft`→`bg-canvas`, 모바일(<lg) 하단 탭바 신설(주요 4 + `더보기` 시트,
+      `min-h-14`·safe-area, 320px 가로 스크롤 nav 폐기)·데스크톱은 ink 밑줄 탭 유지, main 하단 패딩으로 탭바 회피.
+      `useMobileWebLayout`: UA 정규식(SamsungBrowser|Android|…) 제거 → `(max-width:1023px), (pointer:coarse) and
+(hover:none)` 단일 미디어쿼리(SSR/클라이언트 판정 분기 해소, Mj9). eyebrow 5곳(`Trips`·`Notice Plans`·
+      `Pinvi`(map)·`Pinvi`(map-shell)·`Settings`) 삭제, 탐색 지도/맵 셸의 장식 칩 6개 삭제(C13), 추천 shelf에 설명 1줄 추가.
+      TripDashboard: 필터를 `role=tab/aria-selected`→`role=group`+`aria-pressed`(44px, Mj10), 목록 로딩은
+      skeleton 3행, 오류는 목록 자리를 대체하는 패널(원인 + `다시 시도`), 빈 상태는 버킷별 문구 + `새 여행 만들기`
+      CTA로 분리(Mj5~Mj7). e2e 셀렉터 동기(trips-dashboard).
+      **적대적 리뷰 2인 반영**: (P1) main 하단 패딩이 `md:py-8`에 덮여 768~1023px에서 탭바가 콘텐츠를 가리던 문제 →
+      하단 패딩을 `.app-shell-main`(+`--app-tabbar-h`)으로 분리; (P1) 저장 실패가 정상 로드된 목록을 지우던 문제 →
+      `listError`/`formError` 분리(배너=쓰기, 목록 자리 패널=로드, 패널에 `role=alert`); (P2) `더보기` 시트를
+      `<details>`→제어 `button aria-expanded/aria-controls`(라우팅·바깥 클릭·Escape로 닫힘, Blink disclosure
+      시맨틱 상실 해소); (P2) 셸 모바일 판정을 `data-mobile-layout`으로 `useMobileWebLayout`과 일치(넓은 layout
+      viewport 폰); (P2) 빈 상태 CTA의 죽은 `scrollIntoView` → 폼 노출 후 effect에서 스크롤+포커스, variant는
+      secondary(채운 primary 1개 규칙); (P3) `/`·`/profile`을 탭바 1순위에서 더보기로 내림(셸 밖 dead-end),
+      `/settings/*` 활성 매칭, 지도 페이지 `min-h-[calc(100dvh-120px)]` 상수 제거(셸이 높이 전달),
+      NoticePlanShelf 필터·로딩·빈 상태를 `/trips`와 동일 계약으로 통일, DESIGN.md 잔여 이탈 갱신.
+      회귀 e2e 신설 `app-shell-mobile.e2e.ts` 5건(768px 가림·시트 닫힘·1180px 모바일 셸·저장 실패·로드 실패).
+      검증: typecheck 0, next lint 0, vitest 100, 관련 Playwright 27 passed/1 skipped, 375px 실렌더.
+
+- [x] **T-313** — Hallmark PR-1b 토큰 우회 코드모드(apps/web 89파일, +328/−320, 로직·testid·문구 의미 변경 0).
+      (완료: 2026-08-18, PR #448, claude)
+      `bg-white→bg-canvas`(131), `text-white`(92)→색 채움 위 `text-on-primary`/ink·scrim 위 `text-canvas`(마커 팔레트
+      인라인 색 위 3곳은 유지), 텍스트 있는 채운 `bg-primary` CTA→`bg-cta text-on-primary hover:bg-cta-hover`(DESIGN.md
+      대비 결정), `bg-black/35~60`→`bg-scrim/50`, 모달·시트 `shadow-lg/xl`→`shadow-overlay`·드롭다운/카드→`shadow-card`,
+      미정의 `bg-surface`(4)→`bg-surface-soft`, 사용자 문구 `...`→`…`(e2e/vitest 어서션 동기), `min-h-screen/h-screen/
+vh`→`dvh`(풀스크린 지도 표면 `100svh`는 유지), `text-[10~24px]`→스케일, 본문 `text-muted-soft→text-muted`, 일부
+      버튼은 `buttonClassName`으로. 검증 에이전트가 잡은 4건(지도 svh 회귀·컨텍스트 메뉴 shadow 티어·업로드 label
+      cta·admin 다이얼로그 표면·설정 인라인 버튼 크기) 반영. typecheck/lint 0, vitest 100, next build 통과.
 
 - [x] **T-312** — Hallmark 감사(웹 7표면 13C/26M/19m) → 디자인 시스템 잠금 + 공개 표면 재설계(PR-1+PR-2).
       (완료: 2026-08-18, PR #447, claude)
@@ -17,6 +122,21 @@
       verify-pending 재발송·verify-email, 공유 뷰 chrome/오류 상태, `FullPageMessage`/404 flat + chrome, `AppShell`
       워드마크·밑줄 탭, favicon/앱 아이콘/themeColor Rausch·canvas. 검증: typecheck/lint 0, vitest 100, build,
       e2e 9, 375/1280 실렌더. 적대적 리뷰 2인. 후속 T-313~T-316.
+
+## 2026-08-06
+
+- [x] **T-VN-41-F1D-C1b** — PinVi seven-image provenance. (완료: 2026-08-06, PR #442, codex)
+      n150 F1D candidate가 `pinvi-web image source revision label is invalid`로 fail-close한 원인은
+      API만 OCI provenance label을 갖고 Web·Dagster build가 revision/environment argument를 받지 않은
+      데 있었다. 세 final Docker image가 하나의 validator로 exact commit을 검증하고
+      `org.opencontainers.image.revision`·`io.pinvi.build.environment` label을 기록하게 했다. tag
+      TOCTOU 지적을 반영해 검증된 image ID를 `PINVI_*_IMAGE` override에 고정하고 기동 뒤 container
+      `.Image`를 재대조한다.
+
+- [x] **T-VN-41-F1D-C1a** — PinVi 후보 migration head 정적 검사. (완료: 2026-08-06, PR #441, codex)
+      `pinvi-admin-bootstrap head`가 revision module을 실행하지 않는 AST literal graph로 exact 단일
+      head를 JSON으로 반환하고, dynamic·0개·복수·CWD decoy·설정 오류는 raw 경로나 credential을
+      반사하지 않는 typed fail-closed error로 종료한다. DB session/DSN/credential file에 진입하지 않는다.
 
 ## 2026-08-04
 
@@ -128,7 +248,7 @@
       0회, 40일차 API 상태와 UI arm 일치, 활성 Trip 잔존 0건을 최종 **1 passed (11.9s)**로
       확인했다. schema migration·새 clone·checkpoint·downgrade는 만들지 않았다.
 
-- [x] **T-VN-16B** — PinVi weather batch 소비 cutover. (완료: 2026-07-30, PR 예정, codex)
+- [x] **T-VN-16B** — PinVi weather batch 소비 cutover. (완료: 2026-07-30, PR #420, codex)
       Trip view가 unique `effective_date`별로 `POST /v1/features/weather/batch`를 호출하고
       날짜 안의 feature를 200개씩 dedupe한다. 브라우저 단건 N+1은 제거했으며
       `found|no_data|retired|suppressed|missing|unavailable|not_requested`을 day-scoped
@@ -143,6 +263,7 @@
       CI·merge evidence는 PR landing 뒤 journal에 보강한다.
 
 - [x] **T-VN-11-P** — kor-travel-map 5상태 batch typed consumer 전환.
+      (완료: 2026-07-30, PR #419, codex)
       `found|retired|suppressed|missing|unchanged`와 PostgreSQL `bigint` revision을 strict
       decode하고, `1..200` chunk·bounded LRU·generation/revision fence로 최신 상태의
       out-of-order rollback을 막았다. transport 실패만 stale snapshot을 `unverified`로
@@ -207,10 +328,31 @@
 
 ## 2026-07-21
 
+- [x] **T-309a/T-309b** — 통합 검색 autocomplete + 외부 pick add-POI. (완료: 2026-07-21, PR #407, claude)
+      T-309a: `MapSearchBox` `onSelect` union + address + source 아이콘 + 정렬 + debounce +
+      attribution + back-link(F3-UI). T-309b: 외부 pick add-POI + best-effort auto-request UX +
+      snapshot POI 렌더(F4-UI) + provider 파생 콘텐츠 미저장(§5.1). 두 task를 1 PR로 진행했다. ADR-054.
+
+- [x] **T-308** — `TripDayHeader` — effective date + 공휴일 + 일출/일몰. (완료: 2026-07-21, PR #406, claude)
+      신규 `TripDayHeader.tsx`와 SharedTripView 렌더(F8-UI, F1 empty-date). ADR-055.
+
+- [x] **T-307** — 일자 색 picker + `display_marker_color` 지도/리스트 parity.
+      (완료: 2026-07-21, PR #405, claude)
+      `TripDayControls` per-day color picker + 지도 마커/리스트 뱃지 색 parity + PoiEditor F7 polish +
+      fit-bounds 확인(F6/F7). ADR-055. 날짜 강제 friction 후속은 PR #411.
+
+- [x] **T-306** — 일자 삭제 확인(F2) + 기간 벗어남 표시(F1). (완료: 2026-07-21, PR #404, claude)
+      day-delete confirm은 T-306a의 `ConfirmDialog`를 소비하고, 기간을 벗어난 일자는 actionable
+      배너/아이콘으로 표시한다. ADR-055/056.
+
 - [x] **T-309c** — FeatureDetailModal 본문 + 마커→상세 모달. (완료: 2026-07-21, PR #402, claude)
       #396 shell 위 kind별 detail-card 본문(place/event/notice/price/generic) + 양 지도 마커→상세 모달
       (모바일 bottom-sheet, weather 제외) + 옵트인 Kakao/Naver enrichment UI(attribution+back-link,
       matched=false 처리). T-305와 병행(fork worktree agent) 후 cherry-pick verify + 링크 보안 검토 후 머지. ADR-056.
+
+- [x] **T-305** — 일자 단위 일출/일몰 — `app.trip_day_rise_sets` + ETL asset.
+      (완료: 2026-07-21, PR #401, claude)
+      전용 table + Dagster asset + day-level rise/set read + batched re-seed + 완료 시그널. ADR-055.
 
 - [x] **T-304** — feature detail-card kind별 투영 + 옵트인 외부 enrichment. (완료: 2026-07-21, PR #400, claude)
       `GET /features/{id}/detail-card` discriminated union(place/event/notice/price + generic) + 서버 투영
@@ -254,6 +396,12 @@
       적대적 리뷰 승인, focused unit 39개, 전체 unit 605개(1 skipped), Ruff/format/mypy/Bash/Compose와
       실제 production Docker 양·음성 검증 및 CI를 통과해 `1c5c89c`로 squash merge했다. 외부
       docker-manager의 동일 계약 연동과 N150 운영 실증은 cross-repo C6c/C7 gate에서 계속한다.
+
+## 2026-07-11
+
+- [x] **T-300** — Admin 메뉴 정렬 + 여행 날짜 공휴일 표시. (완료: 2026-07-11, PR #383, codex)
+      Admin 좌측 메뉴 선택 항목의 세로 정렬 보정 + TripView day에 KASI 공휴일 metadata를 포함해
+      여행 상세/공유/목록 날짜 UI에서 공휴일명을 표시한다. TDR(T-301~T-309c) 선행 작업.
 
 ## 2026-07-01
 

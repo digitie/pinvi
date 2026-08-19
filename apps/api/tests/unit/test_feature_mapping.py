@@ -1,9 +1,13 @@
 """features.py kor_travel_map → Pinvi 매핑 helper 단위 테스트 (DB 불필요).
 
 kor_travel_map 평면 lon/lat·name·구조화 address·cluster_key·평탄 metrics 투영을 검증한다.
+Map cutover로 **끊어낸** 소비(`status`)와 **이름이 바뀐** 소스(`asof` ← `selected_at`)도
+여기서 고정한다.
 """
 
 from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
 
 from app.api.v1.features import (
     _category_from_kor_travel_map,
@@ -61,7 +65,7 @@ def test_summary_defaults_marker_and_name() -> None:
     assert summary.distance_m is None
 
 
-def test_summary_carries_distance_without_legacy_status() -> None:
+def test_summary_carries_distance() -> None:
     summary = _summary_from_kor_travel_map(
         {
             "feature_id": "f1",
@@ -75,6 +79,25 @@ def test_summary_carries_distance_without_legacy_status() -> None:
     assert summary.distance_m == 42.0
     assert summary.coord is not None
     assert summary.coord.lon == 129.1
+
+
+def test_summary_and_detail_never_read_status_from_map_dto() -> None:
+    """Map 3축 feature state cutover(`1f2bdc3a`)로 user 표면에서 `status`가 사라졌다.
+
+    대체 필드가 없으므로 소비를 끊었다. dto에 `status`가 남아 있어도(구 스냅샷·mock)
+    Pinvi 응답으로 새어 나오면 안 된다 — 그래야 "값이 있는 척"하는 회귀를 잡는다.
+    """
+    dto = {
+        "feature_id": "f1",
+        "kind": "place",
+        "name": "이름",
+        "lon": 129.1,
+        "lat": 35.1,
+        "status": "active",
+        "updated_at": "2026-06-10T12:00:00+09:00",
+    }
+    assert _summary_from_kor_travel_map(dto).status is None
+    assert _detail_from_kor_travel_map(dto).status is None
 
 
 def test_cluster_uses_natural_key_and_flat_coord() -> None:
@@ -98,6 +121,7 @@ def test_detail_maps_structured_address_and_codes() -> None:
             "sigungu_code": "11680",
             "urls": {"homepage": "h"},
             "detail": {"x": 1},
+            "status": "active",
             "updated_at": "2026-06-10T12:00:00+09:00",
         }
     )
@@ -105,6 +129,37 @@ def test_detail_maps_structured_address_and_codes() -> None:
     assert detail.address == {"road": "부산 광안로 1"}
     assert detail.sigungu_code == "11680"
     assert detail.urls == {"homepage": "h"}
+
+
+def test_weather_asof_comes_from_map_selected_at() -> None:
+    """Pinvi 공개 필드 `asof`의 소스는 Map `selected_at`이다(bitemporal cutover `6650aa71`).
+
+    구 `asof` 키가 payload에 남아 있어도 읽지 않는다 — 사라진 필드를 계속 소비하면
+    다음 드리프트에서 조용히 None이 된다.
+    """
+    card = _weather_from_kor_travel_map(
+        {
+            "feature_id": "f1",
+            "selected_at": "2026-07-01T23:00:00+09:00",
+            "asof": "1999-01-01T00:00:00+09:00",
+            "refresh_after": "2026-07-02T00:00:00+09:00",
+            "latest_at": "2026-07-01T23:30:00+09:00",
+            "is_stale": False,
+            "source_styles": [],
+            "metrics": [],
+        },
+        feature_id="f1",
+    )
+    assert card.asof == datetime(2026, 7, 1, 23, 0, tzinfo=timezone(timedelta(hours=9)))
+    assert card.latest_at == datetime(2026, 7, 1, 23, 30, tzinfo=timezone(timedelta(hours=9)))
+
+
+def test_weather_asof_is_none_when_map_omits_selected_at() -> None:
+    card = _weather_from_kor_travel_map(
+        {"feature_id": "f1", "is_stale": False, "source_styles": [], "metrics": []},
+        feature_id="f1",
+    )
+    assert card.asof is None
 
 
 def test_weather_maps_flat_metrics() -> None:

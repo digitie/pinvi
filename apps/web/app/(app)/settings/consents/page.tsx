@@ -79,8 +79,7 @@ export default function ConsentsSettingsPage() {
   return (
     <div className="space-y-5">
       <header className="border-b border-hairline pb-4">
-        <p className="text-xs font-semibold uppercase tracking-normal text-primary">Settings</p>
-        <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-ink md:text-3xl">
+        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-ink md:text-3xl">
           <ShieldCheck className="h-6 w-6 text-primary" aria-hidden="true" />
           동의 관리
         </h1>
@@ -100,7 +99,7 @@ export default function ConsentsSettingsPage() {
       )}
 
       {loading ? (
-        <div className="flex min-h-32 items-center justify-center rounded-sm border border-hairline bg-white text-sm text-muted">
+        <div className="flex min-h-32 items-center justify-center rounded-sm border border-hairline bg-canvas text-sm text-muted">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
           불러오는 중…
         </div>
@@ -112,7 +111,7 @@ export default function ConsentsSettingsPage() {
             return (
               <li
                 key={meta.type}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-hairline bg-white p-4"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-hairline bg-canvas p-4"
               >
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 text-sm font-semibold text-ink">
@@ -144,7 +143,7 @@ export default function ConsentsSettingsPage() {
                     type="button"
                     onClick={() => void withdraw(meta.type)}
                     disabled={pending === meta.type}
-                    className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline px-3 text-sm font-semibold text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
+                    className="inline-flex min-h-11 items-center gap-1 rounded-sm border border-hairline px-3 text-sm font-semibold text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
                   >
                     {pending === meta.type && (
                       <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
