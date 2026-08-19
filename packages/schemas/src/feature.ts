@@ -31,8 +31,7 @@ export const MarkerColorSchema = z.string().regex(/^P-\d{2}$/, 'marker color는 
 
 /**
  * 마커/목록 표시용 요약 (in-bounds items / nearby / search).
- * kor_travel_map 평면 `lon`/`lat`(nullable), 표시명 `name`에 정합.
- * 공개 feature 응답은 상태 축과 과거 `status`를 노출하지 않는다.
+ * kor_travel_map 평면 `lon`/`lat`(nullable), 표시명 `name`, lifecycle `status`에 정합.
  * `distance_m`은 nearby 응답에만 채워진다.
  */
 export const FeatureSummarySchema = z.object({
@@ -43,6 +42,7 @@ export const FeatureSummarySchema = z.object({
   category: z.string().nullable().optional(),
   marker_color: MarkerColorSchema,
   marker_icon: z.string().max(64),
+  status: z.string().nullable().optional(),
   distance_m: z.number().nullable().optional(),
 });
 export type FeatureSummary = z.infer<typeof FeatureSummarySchema>;
@@ -80,6 +80,7 @@ export const FeatureDetailSchema = z.object({
   marker_icon: z.string().max(64),
   urls: z.record(z.string(), z.unknown()),
   detail: z.record(z.string(), z.unknown()),
+  status: z.string().nullable().optional(),
   updated_at: Iso8601Schema,
 });
 export type FeatureDetail = z.infer<typeof FeatureDetailSchema>;
@@ -106,6 +107,7 @@ const detailCardBase = {
   marker_color: z.string().default('P-13'),
   marker_icon: z.string().default('marker'),
   homepage_url: z.string().nullable().default(null),
+  status: z.string().nullable().default(null),
   enrichment: z.array(ExternalEnrichmentSchema).default([]),
   degraded_providers: z.array(z.string()).default([]),
 };

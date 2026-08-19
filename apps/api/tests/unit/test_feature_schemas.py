@@ -55,6 +55,7 @@ class TestFeatureSummary:
         # marker_* 는 kor_travel_map nullable → Pinvi 기본값으로 채움
         assert summary.marker_color == "P-13"
         assert summary.marker_icon == "marker"
+        assert summary.status is None
         assert summary.distance_m is None
 
     def test_coord_is_optional(self) -> None:
@@ -62,14 +63,16 @@ class TestFeatureSummary:
         summary = FeatureSummary(feature_id="f1", kind="notice", name="공지")
         assert summary.coord is None
 
-    def test_distance(self) -> None:
+    def test_status_and_distance(self) -> None:
         summary = FeatureSummary(
             feature_id="f1",
             kind="place",
             name="근처",
             coord=Coord(lon=127.0, lat=37.5),
+            status="active",
             distance_m=42.0,
         )
+        assert summary.status == "active"
         assert summary.distance_m == 42.0
 
     def test_marker_color_invalid_pattern(self) -> None:

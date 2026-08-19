@@ -569,33 +569,6 @@ Idempotency-Key 계약을 동시에 깨뜨린다(T-315 3차 리뷰에서 철회 
   스크롤 0, 두 줄 버튼 0, keep-all). not-found e2e는 홈 h1 셀렉터 갱신. Pre-emit critique P4 H4 E4 S4 R5 V4.
 - **범위 밖(후속 T-313~T-316)**: 코드모드(bg-white 등), 앱 셸 ground/하단 탭바, 여행 상세 컨테인먼트·Dialog
   프리미티브, 지도/설정/파일/법무.
-## 2026-08-11 (codex) — T-VN-41 Map ops dataset triple 계약 정렬
-
-- Map dataset grid의 identity가 `provider_dataset_id × sync_scope × operation_key`인데 PinVi가
-  폐기된 provider/dataset pair detail URL을 검증하던 drift를 제거했다.
-- PinVi projection과 admin summary는 triple을 보존하고 exact
-  `/v1/ops/datasets/{provider_dataset_id}` URL만 허용한다. 실행 가능한 operation이 없는
-  catalog-only 행의 `operation_key=null`은 보존하되 실행 projection은 거부한다.
-- 같은 parser가 operation이 다른 형제 행을 하나로 접거나 stale pair URL을 재도입하지 않도록
-  unit/integration fixture를 계약에 맞췄다. Docker Manager도 같은 exact URL validator로 정렬 중이다.
-
-## 2026-08-09 (codex) — Map 날씨 `asof`를 typed snapshot으로 정렬
-
-- Map current 날씨 카드가 더 이상 `asof` query를 받지 않아 PinVi가 이를 그대로 전달하면
-  무시되는 계약 drift를 확인했다. PinVi의 공개 `asof` 의미는 유지하되, 값이 있으면 Map
-  `/weather/snapshot`의 `target_at`/`known_at` 계약으로 호출하도록 전환했다.
-- 현재 카드에는 query를 보내지 않고 `selected_at`을, snapshot에는 `target_at`을 PinVi card의
-  `asof`로 투영한다. Map user/admin 계약과 client·API 통합 검증 117건이 통과했다.
-
-## 2026-08-09 (codex) — T-VN-34C Map 상태 축 cutover PinVi 계약 재벤더링
-
-- Map `f426c7b78c493035952ded5c2a13f61a2a351793`의 `openapi.user.json`을 byte-exact로
-  재벤더링했다(SHA-256
-  `eca7eea1dff7aa1848e50428fb8da5507e4d636c3a979b04859ef43c7f7410e7`).
-- admin curated detail subset은 같은 Map full OpenAPI에서 결정적으로 재추출했고, source pin을
-  같은 commit으로 결박했다.
-- 공개 feature 응답은 Map의 `status`와 내부 세 상태 축을 PinVi가 재노출하지 않도록 user
-  contract, PinVi API 투영, shared schema를 함께 정리했다.
 
 ## 2026-08-06 (codex) — T-VN-41-F1D-C1b PinVi seven-image provenance 보강
 
