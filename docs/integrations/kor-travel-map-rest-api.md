@@ -65,12 +65,15 @@ sort, order]`이며 `status`·`provider`·`dataset_key`는 **없다**(보내면 
 > (query 없음, 응답 `FeatureWeatherResponse`/`WeatherCardData`; user 경로는 `public_features`
 > 기반이라 비공개 feature가 404지만 admin 경로는 base `features`(lifecycle=active) 기반이다).
 >
-> **2026-08-19 Admin 소비 폐쇄(Map `da2c740aa4b4239821075519959c38534cc65d2f`)**:
+> **2026-08-19 Admin 소비 폐쇄 + M01 후보 재핀**: 기존 feature read 소비 폐쇄 위에 Map draft
+> PR #1016의 reviewed head `86c44f459ee9f91fac4818177387cb75e91ea335`를 후보 정본으로 재vendor했다.
 > Admin OpenAPI 전체 파일을 `apps/api/tests/contract/kor-travel-map-openapi-admin.json`
-> (SHA-256 `22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32`)으로 vendor했다.
+> (SHA-256 `483edc245971d4ef247bcd18a0aff83dc83506821c34163234b60abd9f6c0087`)으로 vendor했다.
 > Pinvi weather-values는 Admin 전용 최신 카드 경로로 전환해 비공개 feature와 metric dataset/known-time
 > provenance를 지원하고, Admin 계약에 없는 `asof`는 422로 거부한다. 상세의 `state_transitions`는
 > 실제 응답으로, `curations`는 식별·표시·상태·정렬용 안정 subset으로 투영한다.
+> M01 POST는 계약 드리프트만 검증하며 Pinvi runtime consumer는 열지 않는다. #1016과 Pinvi #458이
+> 모두 병합되기 전까지 paired completion receipt는 `pending`이다.
 >
 > **후속 과제**:
 >
@@ -428,19 +431,22 @@ tier1..4_code/name, is_active, sort_order, db_active|null, db_feature_count|null
 
 | 동작       | 호출                                                                   | body 핵심                                                                                                                                                                                                                                                         | 응답                         |
 | ---------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| 추가       | `POST /admin/features`                                                 | `AdminFeatureCreateRequest`: `kind*(place\|event)`, `name*`, `category*`, `marker_color*`, `marker_icon*`, `reason*`, `coord{lat,lon}`, address/코드, `detail`, `urls`, `status(draft\|active\|inactive\|hidden)`, `feature_id?`, `idempotency_key?`, `operator?` | `AdminFeatureChangeResponse` |
+| 추가       | `POST /admin/features`                                                 | `AdminFeatureCreateRequest`: `kind*(place\|event)`, `name*`, `category*`, `coord{lon,lat}*`, `marker_icon*`, `marker_color*`, `reason*`; caller `feature_id`/`idempotency_key`/`operator`와 state/origin 필드는 body에 없음. UUID `Idempotency-Key`는 required header | `201 AdminManualFeatureCreateResponse` + `ETag`/`Location`/`X-Request-ID`/`Idempotency-Replayed` |
 | 수정       | `PATCH /admin/features/{feature_id}`                                   | `AdminFeaturePatchRequest`: 전 필드 optional + `reason*`                                                                                                                                                                                                          | 〃                           |
 | 삭제(soft) | `DELETE /admin/features/{feature_id}`                                  | `AdminFeatureDeleteRequest`: `reason*`, `operator?`                                                                                                                                                                                                               | 〃                           |
 | 비활성     | `POST /admin/features/{feature_id}/deactivate`                         | `AdminFeatureDeactivateRequest`                                                                                                                                                                                                                                   | —                            |
 | 검수 큐    | `GET /admin/features/change-requests`, `POST .../{id}/approve\|reject` | `AdminFeatureReviewActionRequest`(operator/reason)                                                                                                                                                                                                                | 〃                           |
 
-> **T-VN-M01 선행 cutover(2026-08-19)**: 위 `POST /admin/features`는 kor_travel_map의 upstream
-> 표면 설명이며 Pinvi direct caller 계약이 아니다. Pinvi `KorTravelMapAdminClient.create_feature`와
-> `new_place` direct call은 제거했다. 새 canonical create/queue 계약과 paired receipt가 확정되는 후속
-> cutover 전에는 이 경로를 다시 호출하지 않는다.
-> **TODO blocker**: kor_travel_map M01 최종 spec이 확정되면 vendored Admin OpenAPI와 contract
-> SHA를 같은 Pinvi PR에서 갱신하고, 양 저장소 merge SHA + spec SHA로 paired receipt를 남긴다. 그 전까지
-> 기존 snapshot/SHA는 의도적으로 변경하지 않는다.
+> **T-VN-M01 reviewed draft 후보(2026-08-19)**: 위 POST는 Map draft PR #1016 reviewed head
+> `86c44f459ee9f91fac4818177387cb75e91ea335`의 producer 계약이다. `AdminBFF`와
+> `AdminFeatureCreateBFF`는 한 security requirement 안의 **AND**이며, UUID `Idempotency-Key`와 required
+> `coord`를 요구한다. Map이 발급하는 identity/state/origin은 caller body에서 받지 않는다. Pinvi는 이
+> 계약을 vendor해 drift만 탐지하고, `KorTravelMapAdminClient.create_feature`, create 전용 token/header,
+> exact `POST /v1/admin/features` runtime은 계속 두지 않는다. `new_place`는 canonical queue 준비 전
+> 503/pending으로 닫혀 있고 correction/closure의 PATCH/DELETE만 유지한다.
+>
+> **receipt 경계**: Map #1016과 Pinvi #458은 모두 draft다. 두 PR의 실제 merge SHA가 생기기 전에는
+> paired completion receipt를 만들거나 `complete`로 기록하지 않는다.
 
 - **낙관적 동시성(T-VN-13)**: 수정·삭제 전에
   `GET /admin/features/{feature_id}/revision`을 호출해 raw strong `ETag`를 읽고, 그 값을
@@ -666,12 +672,13 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   해당 경로·batch schema 계약을 vendored `kor-travel-map-openapi-service.json`
   (byte-핀 소유는 `test_kor_travel_map_cache_target_contract.py`) 기준으로 검증하고,
   두 profile에 겹치는 schema(`Meta`/`WeatherMetricOut` 등)는 양쪽 모두에서 고정한다.
-- **Admin/ops 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map
-  `da2c740aa4b4239821075519959c38534cc65d2f`의 전체 `openapi.json` 원본이며 SHA-256은
-  `22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32`다. 이 바이트는 삼중항
-  계약이 들어간 Map `f637f3ad`와 현 main에서도 동일하다. `test_kor_travel_map_ops_contract.py`는
+- **Admin/ops 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map draft
+  PR #1016 reviewed head `86c44f459ee9f91fac4818177387cb75e91ea335`의 전체 `openapi.json` 원본이며
+  SHA-256은 `483edc245971d4ef247bcd18a0aff83dc83506821c34163234b60abd9f6c0087`이다.
+  `test_kor_travel_map_ops_contract.py`는
   provider ETL이 소비하는 ops 경로·인증·query·응답 schema 연결과 폐기 필드 부재를 고정한다.
-  Admin feature 소비 필드/query 게이트는 T-VN-42가 같은 스냅샷에 이어 붙인다.
+  Admin feature 소비 필드/query 게이트와 M01 producer 후보 계약은 같은 스냅샷을 사용한다. 이 pin은
+  draft 후보 증거이며 양 PR 병합 전 completion receipt가 아니다.
 - **계약 테스트**: `apps/api/tests/unit/test_kor_travel_map_contract.py` (CI `pytest tests/unit`에서 실행) —
   (1) user client 경로(`/v1/features/*`·`/v1/categories`·`/v1/public/*`) ⊆ 스냅샷 paths,
   (2) 매핑(`features.py`/`public.py`가 읽는 FeatureSummary/ClusterSummary/
@@ -696,11 +703,15 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   `model_validate`로 객체 전체를 검증하는 `/v1/public/*`는
   `test_public_view_contracts_cover_every_validated_model_field`가 `app/schemas/public.py`
   모델의 `model_fields` ⊆ 계약을 강제한다(모델에 필드를 추가하면 타입 계약도 함께 적어야 통과).
-- **Admin vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map
-  `da2c740aa4b4239821075519959c38534cc65d2f`의 `packages/kor-travel-map-api/openapi.json` 전체 파일,
-  SHA-256 `22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32`.
+- **Admin vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map draft
+  PR #1016 reviewed head `86c44f459ee9f91fac4818177387cb75e91ea335`의
+  `packages/kor-travel-map-api/openapi.json` 전체 파일, SHA-256
+  `483edc245971d4ef247bcd18a0aff83dc83506821c34163234b60abd9f6c0087`.
   `test_kor_travel_map_admin_contract.py`가 Admin feature 목록/상세/weather의 path·AdminBFF security,
   query exact 집합, 응답 container `$ref`, 3축·state transition·curation·weather 소비 shape를 고정한다.
+  같은 gate가 M01 POST의 exact AND security, UUID `Idempotency-Key`, required coord, caller identity/state/origin
+  부재와 201 schema/4개 receipt header를 검증한다. 이 pin은 reviewed draft 후보 증거이며 merge/complete
+  receipt가 아니다.
 
   > **의도적 비대상**: consumer 쪽에서는 exact property 집합·`additionalProperties`를 고정하지
   > 않는다. producer(Map) 쪽 exact 고정은 T-VN-H07A(Map PR #814)가 소유하며, consumer가 이를

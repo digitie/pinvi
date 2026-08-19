@@ -18,8 +18,8 @@ import pytest
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-admin.json"
 )
-_UPSTREAM_COMMIT = "da2c740aa4b4239821075519959c38534cc65d2f"
-_SNAPSHOT_SHA256 = "22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32"
+_UPSTREAM_COMMIT = "86c44f459ee9f91fac4818177387cb75e91ea335"
+_SNAPSHOT_SHA256 = "483edc245971d4ef247bcd18a0aff83dc83506821c34163234b60abd9f6c0087"
 
 _OPS_SECURITY = [{"AdminBFF": []}, {"OpsScope": [], "OpsToken": []}]
 _CONSUMED_ENDPOINTS: dict[tuple[str, str], tuple[set[str], str]] = {
@@ -169,7 +169,7 @@ def spec() -> dict[str, Any]:
 
 
 def test_admin_snapshot_is_exact_upstream_artifact() -> None:
-    assert _UPSTREAM_COMMIT == "da2c740aa4b4239821075519959c38534cc65d2f"
+    assert _UPSTREAM_COMMIT == "86c44f459ee9f91fac4818177387cb75e91ea335"
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
 
 

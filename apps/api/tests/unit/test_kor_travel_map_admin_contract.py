@@ -12,8 +12,8 @@ from app.schemas.admin import AdminFeatureDetailCuration, AdminFeatureWeatherMet
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-admin.json"
 )
-_UPSTREAM_COMMIT = "da2c740aa4b4239821075519959c38534cc65d2f"
-_SNAPSHOT_SHA256 = "22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32"
+_UPSTREAM_COMMIT = "86c44f459ee9f91fac4818177387cb75e91ea335"
+_SNAPSHOT_SHA256 = "483edc245971d4ef247bcd18a0aff83dc83506821c34163234b60abd9f6c0087"
 
 _ADMIN_FEATURE_QUERY_PARAMETERS = {
     "q",
@@ -59,8 +59,87 @@ def _query_names(operation: dict[str, Any]) -> set[str]:
 
 
 def test_admin_snapshot_is_byte_pinned_to_a_reviewed_map_revision() -> None:
-    assert _UPSTREAM_COMMIT == "da2c740aa4b4239821075519959c38534cc65d2f"
+    assert _UPSTREAM_COMMIT == "86c44f459ee9f91fac4818177387cb75e91ea335"
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
+
+
+def test_manual_feature_create_contract_is_exact_but_not_yet_consumed() -> None:
+    spec = _spec()
+    operation = spec["paths"]["/v1/admin/features"]["post"]
+
+    # 두 scheme는 OR 대안이 아니라 같은 security requirement 안의 AND다.
+    assert operation["security"] == [{"AdminBFF": [], "AdminFeatureCreateBFF": []}]
+
+    parameters = operation["parameters"]
+    assert len(parameters) == 1
+    idempotency_key = parameters[0]
+    assert {
+        "name": idempotency_key["name"],
+        "in": idempotency_key["in"],
+        "required": idempotency_key["required"],
+        "type": idempotency_key["schema"]["type"],
+        "format": idempotency_key["schema"]["format"],
+    } == {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": True,
+        "type": "string",
+        "format": "uuid",
+    }
+
+    assert operation["requestBody"] == {
+        "content": {
+            "application/json": {
+                "schema": {"$ref": "#/components/schemas/AdminFeatureCreateRequest"}
+            }
+        },
+        "required": True,
+    }
+    request_schema = _schema(spec, "AdminFeatureCreateRequest")
+    assert request_schema["additionalProperties"] is False
+    assert set(request_schema["required"]) == {
+        "name",
+        "category",
+        "coord",
+        "marker_icon",
+        "marker_color",
+        "kind",
+        "reason",
+    }
+    assert {
+        "feature_id",
+        "idempotency_key",
+        "operator",
+        "actor",
+        "requested_by",
+        "request_id",
+        "command_id",
+        "row_revision",
+        "status",
+        "lifecycle_state",
+        "publication_state",
+        "quality_state",
+        "creation_origin",
+    }.isdisjoint(request_schema["properties"])
+
+    created = operation["responses"]["201"]
+    assert created["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/AdminManualFeatureCreateResponse"
+    }
+    assert set(created["headers"]) == {
+        "ETag",
+        "Location",
+        "X-Request-ID",
+        "Idempotency-Replayed",
+    }
+    assert created["headers"]["Idempotency-Replayed"]["schema"] == {
+        "enum": ["true"],
+        "type": "string",
+    }
+    assert all(
+        created["headers"][name]["schema"]["type"] == "string"
+        for name in ("ETag", "Location", "X-Request-ID")
+    )
 
 
 def test_admin_feature_paths_auth_responses_and_query_sets_are_exact() -> None:

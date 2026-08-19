@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 from collections.abc import Callable
 from typing import Any
 
 import httpx
 import pytest
 
+import app.clients.kor_travel_map_admin as kor_travel_map_admin_module
 from app.api.v1.admin.ops_proxy import retry_after_headers
 from app.clients.kor_travel_map import (
     KorTravelMapBadRequest,
@@ -317,6 +319,28 @@ def test_list_features_signature_drops_pre_cutover_filter_arguments() -> None:
     assert "provider_dataset_id" in parameters
     assert "include_ended" in parameters
     assert not {"statuses", "providers", "dataset_keys"} & parameters
+
+
+def test_manual_feature_create_runtime_inventory_remains_closed() -> None:
+    feature_mutation_methods = {
+        name
+        for name in ("create_feature", "patch_feature", "delete_feature")
+        if callable(getattr(KorTravelMapAdminClient, name, None))
+    }
+    assert feature_mutation_methods == {"patch_feature", "delete_feature"}
+
+    runtime_source = inspect.getsource(kor_travel_map_admin_module)
+    assert "AdminFeatureCreateBFF" not in runtime_source
+    assert "X-Kor-Travel-Map-Admin-Feature-Create-Token" not in runtime_source
+    assert "_ADMIN_FEATURE_CREATE_TOKEN_HEADER" not in runtime_source
+    assert "Idempotency-Key" not in runtime_source
+    assert (
+        re.search(
+            r"_send\(\s*['\"]POST['\"]\s*,\s*['\"]/v1/admin/features['\"]",
+            runtime_source,
+        )
+        is None
+    )
 
 
 async def test_get_feature_detail_uses_admin_detail_path() -> None:

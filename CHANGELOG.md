@@ -7,7 +7,10 @@
 - Admin의 신규 장소(`new_place`) 제안 승인은 canonical Map queue가 준비될 때까지 `503
   MAP_FEATURE_REQUEST_QUEUE_UNAVAILABLE`로 안전하게 중단된다. 이 응답은 kor-travel-map을 호출하거나
   제안 status/ref/reviewer/audit와 연결 POI를 바꾸지 않으며, 기존 장소의 correction/closure 승인은
-  계속 처리한다.
+  계속 처리한다. Map draft PR #1016 reviewed head의 Admin OpenAPI를 exact 재vendor해 수동 생성의
+  AND 인증, UUID 멱등키, required 좌표, server-owned identity/state/origin과 201 receipt 계약을 CI에
+  고정했지만 Pinvi direct POST/create credential runtime은 열지 않았다. 양쪽 draft PR 병합 전 completion
+  receipt는 pending이다.
 - Admin feature 날씨 탭을 kor-travel-map의 Admin 전용 경로로 전환해 공개되지 않은 feature도 최신
   날씨를 dataset/known-time provenance와 함께 조회할 수 있다. Map Admin 계약에 없는 `asof`는 조용히
   무시하지 않고 422로 알린다.
