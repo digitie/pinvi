@@ -35,11 +35,13 @@
         리터럴과 양방향 정확 일치를 강제해(정적 스캔) "목록에 안 적어서 검사도 안 되는" 구멍을 닫았다.
   - [x] **admin weather-values 경로 전환** — Map admin 전용
         `GET /v1/admin/features/{id}/weather`로 옮겨 비공개 feature도 조회한다. Admin upstream에는
-        `asof` 계약이 없으므로 기존 query는 조용히 최신값으로 가장하지 않고 422로 거부한다.
+        `asof` 계약이 없으므로 기존 query는 조용히 최신값으로 가장하지 않고 422로 거부한다. 각 metric의
+        `provider_dataset_id`/`dataset_key`/`dataset_display_name`/`known_at` provenance도 보존한다.
   - [x] **admin 상세 `state_transitions`/`curations` 투영** — Map admin 상세가 주는 list는
         sources/issues/overrides/files/**state_transitions**/**curations**이고 Pinvi가 남겨 둔
         `versions`/`change_requests`는 늘 빈 배열이다. Web 상세의 거짓 0 카운트 칩은 제거했고, 두 list를
-        실제로 투영하고 Web 상세에서 실제 개수를 표시한다.
+        표시용 안정 subset으로 투영하고 Web 상세에서 실제 개수를 표시한다. upstream 내부 lineage/link/
+        audit 전체를 투명 proxy하는 계약은 아니다.
   - [x] **admin OpenAPI 스냅샷 vendoring** — PR #443이 Map `da2c740a`의 전체 Admin 스냅샷
         (SHA-256 `22e3f2f…`) byte pin과 ops dataset/pipeline 소비 게이트를 소유한다. T-VN-42는 같은
         스냅샷의 feature 경로·AdminBFF security·query exact 집합·응답 schema 연결·3축/state

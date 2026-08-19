@@ -68,8 +68,9 @@ sort, order]`이며 `status`·`provider`·`dataset_key`는 **없다**(보내면 
 > **2026-08-19 Admin 소비 폐쇄(Map `da2c740aa4b4239821075519959c38534cc65d2f`)**:
 > Admin OpenAPI 전체 파일을 `apps/api/tests/contract/kor-travel-map-openapi-admin.json`
 > (SHA-256 `22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32`)으로 vendor했다.
-> Pinvi weather-values는 Admin 전용 최신 카드 경로로 전환해 비공개 feature를 지원하고, Admin 계약에
-> 없는 `asof`는 422로 거부한다. 상세의 `state_transitions`/`curations`도 실제 응답으로 투영한다.
+> Pinvi weather-values는 Admin 전용 최신 카드 경로로 전환해 비공개 feature와 metric dataset/known-time
+> provenance를 지원하고, Admin 계약에 없는 `asof`는 422로 거부한다. 상세의 `state_transitions`는
+> 실제 응답으로, `curations`는 식별·표시·상태·정렬용 안정 subset으로 투영한다.
 >
 > **후속 과제**:
 >

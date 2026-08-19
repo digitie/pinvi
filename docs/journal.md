@@ -18,8 +18,7 @@
   과거값처럼 반환하는 실패를 차단한다.
 - **상세 투영**: Map의 실제 `state_transitions`와 `curations` 중 Pinvi가 소비하는 필드를 Python
   Pydantic과 공유 Zod 계약에 추가하고, Admin Web 상세의 실제 count chip과 API/Web 회귀 fixture를
-  연결했다. upstream에
-  없는 legacy `versions`/`change_requests`는 호환용 빈 배열로만 유지한다.
+  연결했다. upstream에 없는 legacy `versions`/`change_requests`는 호환용 빈 배열로만 유지한다.
 - **계약 게이트**: Map `da2c740aa4b4239821075519959c38534cc65d2f`의
   `packages/kor-travel-map-api/openapi.json` 전체 1,501,480 bytes를 SHA-256
   `22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32`로 고정했다. Admin feature
@@ -28,6 +27,13 @@
 - **stack 정렬**: 전문 적대 리뷰와 필수 원격 CI를 통과한 draft PR #443 head `cbdf2815`를 이 브랜치에
   병합했다. 동일한 Admin OpenAPI byte snapshot은 한 파일로 재사용하고, #443의 ops gate와 T-VN-42의
   feature gate를 함께 검증한다. PR #456 base는 #443 브랜치로 바꿔 순서를 명시한다.
+- **stack 적대 리뷰**: 프론트 전문 리뷰는 P1/P2 없음으로 종결했다. API 전문 리뷰의 P2에 따라 Admin
+  weather metric이 Map의 dataset ID/key/display name과 `known_at` provenance를 버리지 않도록 전용
+  Python/Zod schema와 fixture를 추가했다. `curations`는 producer 전체 내부 view가 아니라 상세 표시용
+  안정 subset이라는 경계를 schema·계약 테스트·문서에 명시했다.
+- **stack 검증**: 결합 API unit `365 passed`, feature/provider-sync integration `48 passed`, feature
+  integration 재검증 `16 passed`, API Ruff/format/mypy(222 files), schemas Vitest `16 passed`,
+  schemas/Web typecheck 통과.
 
 ## 2026-08-19 (codex) — PR #443 Map Admin ops 삼중항 복구
 

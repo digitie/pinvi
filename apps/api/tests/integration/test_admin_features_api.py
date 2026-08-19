@@ -241,6 +241,10 @@ class _FakeAdminClient:
                     "metric_name": "기온",
                     "forecast_style": "nowcast",
                     "timeline_bucket": "current",
+                    "provider_dataset_id": 41,
+                    "dataset_key": "kma_vilage_forecast",
+                    "dataset_display_name": "기상청 단기예보",
+                    "known_at": "2026-06-12T09:35:00+09:00",
                     "valid_at": "2026-06-12T10:00:00+09:00",
                     "value_number": 24.5,
                     "unit": "℃",
@@ -558,6 +562,10 @@ async def test_get_admin_feature_weather_values_proxies_weather_card(
     assert data["asof"] == "2026-06-12T10:00:00+09:00"
     assert data["source_styles"] == ["nowcast", "short"]
     assert data["items"][0]["metric_key"] == "T1H"
+    assert data["items"][0]["provider_dataset_id"] == 41
+    assert data["items"][0]["dataset_key"] == "kma_vilage_forecast"
+    assert data["items"][0]["dataset_display_name"] == "기상청 단기예보"
+    assert data["items"][0]["known_at"] == "2026-06-12T09:35:00+09:00"
 
 
 async def test_get_admin_feature_weather_values_rejects_unsupported_asof(

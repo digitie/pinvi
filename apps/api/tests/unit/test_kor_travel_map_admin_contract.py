@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from app.schemas.admin import AdminFeatureDetailCuration, AdminFeatureWeatherMetric
+
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-admin.json"
 )
@@ -185,6 +187,7 @@ def test_admin_feature_state_axes_transition_and_curation_shapes_are_pinned() ->
     }
     assert consumed_curation_fields <= set(curation["required"])
     assert consumed_curation_fields <= set(curation["properties"])
+    assert set(AdminFeatureDetailCuration.model_fields) == consumed_curation_fields
     assert curation["properties"]["curation_item_id"]["format"] == "uuid"
     assert curation["properties"]["collection_id"]["format"] == "uuid"
     assert curation["properties"]["status"]["enum"] == [
@@ -241,3 +244,16 @@ def test_admin_weather_card_keeps_the_fields_pinvi_projects() -> None:
     assert weather["properties"]["metrics"]["items"]["$ref"] == (
         "#/components/schemas/WeatherMetricOut"
     )
+    metric = _schema(spec, "WeatherMetricOut")
+    required_metric_fields = {
+        "forecast_style",
+        "metric_key",
+        "provider_dataset_id",
+        "dataset_key",
+        "dataset_display_name",
+        "known_at",
+    }
+    assert set(metric["required"]) == required_metric_fields
+    assert required_metric_fields <= set(AdminFeatureWeatherMetric.model_fields)
+    assert metric["properties"]["provider_dataset_id"]["type"] == "integer"
+    assert metric["properties"]["known_at"]["format"] == "date-time"

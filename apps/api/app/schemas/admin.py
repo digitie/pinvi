@@ -1298,6 +1298,8 @@ class AdminFeatureDetailStateTransition(BaseModel):
 
 
 class AdminFeatureDetailCuration(BaseModel):
+    """Map curation view에서 Admin 상세 표시가 소비하는 안정 subset."""
+
     curation_item_id: uuid.UUID
     collection_id: uuid.UUID
     collection_key: str
@@ -1354,13 +1356,22 @@ class AdminFeatureOverridesResponse(BaseModel):
     items: list[AdminFeatureDetailOverride] = Field(default_factory=list)
 
 
+class AdminFeatureWeatherMetric(WeatherMetric):
+    """Admin weather metric — 공개 metric에 Map dataset/knowledge provenance를 보존."""
+
+    provider_dataset_id: int
+    dataset_key: str
+    dataset_display_name: str
+    known_at: datetime
+
+
 class AdminFeatureWeatherValuesResponse(BaseModel):
     feature_id: str
     asof: datetime | None = None
     latest_at: datetime | None = None
     is_stale: bool = False
     source_styles: list[str] = Field(default_factory=list)
-    items: list[WeatherMetric] = Field(default_factory=list)
+    items: list[AdminFeatureWeatherMetric] = Field(default_factory=list)
 
 
 class AdminUserFileQuota(BaseModel):

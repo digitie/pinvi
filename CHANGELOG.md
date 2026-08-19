@@ -5,7 +5,8 @@
 ## Unreleased
 
 - Admin feature 날씨 탭을 kor-travel-map의 Admin 전용 경로로 전환해 공개되지 않은 feature도 최신
-  날씨를 조회할 수 있다. Map Admin 계약에 없는 `asof`는 조용히 무시하지 않고 422로 알린다.
+  날씨를 dataset/known-time provenance와 함께 조회할 수 있다. Map Admin 계약에 없는 `asof`는 조용히
+  무시하지 않고 422로 알린다.
   상세 화면은 실제 `state_transitions`와 `curations` 개수를 표시하며, Admin OpenAPI 전체 스냅샷을
   고정해 경로·query·응답 필드 drift를 CI에서 탐지한다.
 - kor-travel-map service 계약 스냅샷을 Map `f637f3ad`(#1000 stream snapshot materialization)로 재vendor했다.

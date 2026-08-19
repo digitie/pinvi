@@ -1296,6 +1296,10 @@ upstream: `kor-travel-map` `GET /v1/admin/features/{feature_id}`.
 legacy 두 키를 남겨 둔 것은 소비자 호환 때문이며 값이 채워지지 않는다. 실제 이력·큐레이션 수는
 `state_transitions` / `curations`를 사용한다.
 
+`curations`는 upstream `AdminCurationItemView` 전체의 투명 proxy가 아니라 상세 화면의 식별·표시·상태·
+정렬에 필요한 안정 subset이다. provider lineage, source URL, 원본 metadata, command ETag와 archive audit
+필드는 이 응답 계약에 포함하지 않는다. 해당 필드가 필요한 운영 기능은 별도 명시 계약으로 추가한다.
+
 ### 8.3 Feature detail subpages
 
 권한: `admin` / `operator`
@@ -1380,6 +1384,10 @@ feature의 시점 조회는 Map Admin 계약에 별도 snapshot 경로가 추가
       "metric_name": "기온",
       "forecast_style": "nowcast",
       "timeline_bucket": "current",
+      "provider_dataset_id": 41,
+      "dataset_key": "kma_vilage_forecast",
+      "dataset_display_name": "기상청 단기예보",
+      "known_at": "2026-06-12T09:35:00+09:00",
       "valid_at": "2026-06-12T10:00:00+09:00",
       "value_number": 24.5,
       "value_text": null,

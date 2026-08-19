@@ -1661,6 +1661,7 @@ export type AdminFeatureDetailStateTransition = z.infer<
   typeof AdminFeatureDetailStateTransitionSchema
 >;
 
+/** Map curation view에서 Admin 상세 표시가 소비하는 안정 subset. */
 export const AdminFeatureDetailCurationSchema = z.object({
   curation_item_id: z.string().uuid(),
   collection_id: z.string().uuid(),
@@ -1722,13 +1723,22 @@ export const AdminFeatureOverridesResponseSchema = z.object({
 });
 export type AdminFeatureOverridesResponse = z.infer<typeof AdminFeatureOverridesResponseSchema>;
 
+/** 공개 weather metric에 Map dataset/knowledge provenance를 보존한 Admin 전용 metric. */
+export const AdminFeatureWeatherMetricSchema = WeatherMetricSchema.extend({
+  provider_dataset_id: z.number().int(),
+  dataset_key: z.string(),
+  dataset_display_name: z.string(),
+  known_at: Iso8601Schema,
+});
+export type AdminFeatureWeatherMetric = z.infer<typeof AdminFeatureWeatherMetricSchema>;
+
 export const AdminFeatureWeatherValuesResponseSchema = z.object({
   feature_id: FeatureIdSchema,
   asof: Iso8601Schema.nullable().default(null),
   latest_at: Iso8601Schema.nullable().default(null),
   is_stale: z.boolean().default(false),
   source_styles: z.array(z.string()).default([]),
-  items: z.array(WeatherMetricSchema).default([]),
+  items: z.array(AdminFeatureWeatherMetricSchema).default([]),
 });
 export type AdminFeatureWeatherValuesResponse = z.infer<
   typeof AdminFeatureWeatherValuesResponseSchema
