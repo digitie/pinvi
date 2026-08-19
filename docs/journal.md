@@ -27,13 +27,17 @@
 - **stack 정렬**: 전문 적대 리뷰와 필수 원격 CI를 통과한 draft PR #443 head `cbdf2815`를 이 브랜치에
   병합했다. 동일한 Admin OpenAPI byte snapshot은 한 파일로 재사용하고, #443의 ops gate와 T-VN-42의
   feature gate를 함께 검증한다. PR #456 base는 #443 브랜치로 바꿔 순서를 명시한다.
-- **stack 적대 리뷰**: 프론트 전문 리뷰는 P1/P2 없음으로 종결했다. API 전문 리뷰의 P2에 따라 Admin
-  weather metric이 Map의 dataset ID/key/display name과 `known_at` provenance를 버리지 않도록 전용
-  Python/Zod schema와 fixture를 추가했다. `curations`는 producer 전체 내부 view가 아니라 상세 표시용
-  안정 subset이라는 경계를 schema·계약 테스트·문서에 명시했다.
+- **stack 적대 리뷰**: API 전문 리뷰의 P2에 따라 Admin weather metric이 Map의 dataset
+  ID/key/display name과 `known_at` provenance를 버리지 않도록 전용 Python/Zod schema와 fixture를
+  추가했다. `curations`는 producer 전체 내부 view가 아니라 상세 표시용 안정 subset이라는 경계를
+  schema·계약 테스트·문서에 명시했다. 프론트 전문 리뷰의 P2는 Admin 날씨 표가 public base type으로
+  provenance를 표시하지 않고 서로 다른 dataset 행의 React key를 합치던 문제를 찾았다. 전용 Admin
+  type과 dataset/known 표시를 사용하고 metric/style/timeline/time/dataset/known 전체 identity를 React
+  key와 test id에 반영했다. 동일 시각·metric에서 dataset 또는 style만 다른 3행 E2E가 DOM 식별자도
+  모두 고유한지 검증한다.
 - **stack 검증**: 결합 API unit `365 passed`, feature/provider-sync integration `48 passed`, feature
   integration 재검증 `16 passed`, API Ruff/format/mypy(222 files), schemas Vitest `16 passed`,
-  schemas/Web typecheck 통과.
+  schemas/Web typecheck와 Web lint/Prettier 통과.
 
 ## 2026-08-19 (codex) — PR #443 Map Admin ops 삼중항 복구
 

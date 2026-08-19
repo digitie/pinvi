@@ -9,8 +9,10 @@ PR #451이 user OpenAPI 재vendor뿐 아니라 3축·bitemporal consumer 수정�
 고정했다. weather-values는 비공개 feature도 읽는 Admin 전용 최신 카드 경로로 전환했으며, upstream에
 없는 `asof`는 최신값으로 가장하지 않고 422로 거부한다. 상세의 `state_transitions`/`curations`는
 Python/Zod를 거쳐 실제로 투영하고 Web에 실제 개수를 표시한다. stack 재리뷰에서 발견한 weather metric
-provenance 손실을 닫아 dataset ID/key/display name과 `known_at`을 BFF·Zod에서 보존한다. `curations`는
-producer 전체 내부 view가 아니라 상세 표시용 안정 subset임을 schema·계약 테스트·문서에 고정했다.
+provenance 손실을 닫아 dataset ID/key/display name과 `known_at`을 BFF·Zod·Admin 표에서 보존한다.
+같은 metric/time이지만 dataset 또는 forecast style이 다른 행은 전체 identity의 React key/test id로
+분리하고 3행 E2E로 고정했다. `curations`는 producer 전체 내부 view가 아니라 상세 표시용 안정 subset임을
+schema·계약 테스트·문서에 고정했다.
 
 작업 전 `/mnt/f`의 Pinvi 미사용 생성물과 병합 완료 worktree를 정리해 약 3.4 GB를 확보했고,
 깨진 Codex worktree를 최신 `origin/main` 기준으로 재생성했다. 비밀 설정·세션·backup이 있는 기존
@@ -21,11 +23,13 @@ stack 병합했다. 하나의 Admin OpenAPI byte snapshot 위에서 #443의 ops 
 유지하며, PR #456 base를 #443 브랜치로 바꿔 선행 순서를 명시한다.
 
 **검증**: 결합 API unit 365 passed, feature/provider-sync integration 48 passed, feature integration 재검증
-16 passed, API Ruff/format/mypy(222 files), schemas Vitest 16 passed, schemas/Web typecheck 통과. stack
-재리뷰는 프론트 P1/P2 없음, API P1 없음과 위 P2 2건 반영으로 수렴했다.
+16 passed, API Ruff/format/mypy(222 files), schemas Vitest 16 passed, schemas/Web typecheck와 Web
+lint/Prettier 통과. API 전문 리뷰의 weather provenance·curation subset P2를 닫고 재검증했으며, 프론트
+전문 리뷰의 provenance 표시·행 identity P2를 전체축 key/test id와 3행 E2E로 닫았다.
 
-**다음 한 작업**: 병합된 계약의 API·schema·Web 검증과 원격 PR CI를 통과시킨다. 공개 응답의 항상-null
-`status` 제거는 web/mobile 소비자를 함께 옮겨야 하는 breaking cutover이므로 별도 PR로 진행한다.
+**다음 한 작업**: draft PR #456 exact head의 프론트 재리뷰와 필수 원격 CI를 통과시킨다. 공개 응답의
+항상-null `status` 제거는 web/mobile 소비자를 함께 옮겨야 하는 breaking cutover이므로 별도 PR로
+진행한다.
 
 ## 2026-08-19 (codex) — PR #443 Map ops 삼중항 계약 복구·게이트 추가
 
