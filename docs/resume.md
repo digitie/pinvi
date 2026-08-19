@@ -10,13 +10,20 @@ Web Zod와 provider 행 key/test id도 같은 삼중항을 사용한다. Map
 `da2c740aa4b4239821075519959c38534cc65d2f`의 전체 Admin OpenAPI(SHA-256 `22e3f2f…`)를 vendor하고
 ops 소비 경로·인증·query·schema·폐기 필드 부재를 31개 계약 테스트로 고정했다.
 
-**검증**: ops projection unit 215 passed, Admin OpenAPI gate 31 passed, provider-sync integration 32 passed,
-schemas Vitest 3 passed, schemas/web typecheck와 Ruff/Prettier 통과. 배포 선행조건은 Map 삼중항 release와
+**적대 리뷰 반영**: 1차 API 리뷰에서 `operation_member_id`가 job UUID가 아니라
+dataset-membership UUID라는 P1을 찾아 update root/request member와 import-job member/cancellation job
+topology를 분리했다. 대체 API 전문 리뷰의 P2에 따라 test fixture도 membership/job UUID를 분리하고,
+projected job UUID와 membership UUID를 비교하던 거짓 불변식을 제거했다. 프론트 전문 리뷰 P2는 형제
+operation 행을 화면에 표시하고, null과 문자열 `none`이 충돌하지 않는 typed row key/test id 및 E2E로
+닫았다.
+
+**검증**: ops projection unit 216 passed, API unit 1,013 passed(로컬 최신 Map user spec 신선도 1건은
+T-VN-42 범위라 별도 확인), Admin OpenAPI gate 31 passed, provider-sync integration 32 passed, schemas
+Vitest 3 passed, schemas/web typecheck와 Ruff/Prettier 통과. 배포 선행조건은 Map 삼중항 release와
 docker-manager draft PR #170 merge·배포다.
 
-**다음 한 작업**: 문서 정렬 커밋 뒤 전문 리뷰어 서브에이전트 2명에게 PR #443 전체 diff를 적대적으로
-검토시키고, 지적을 반영해 CI green을 확인한다. 그 다음 `agent/codex-tvn42`/draft PR #456으로 돌아가
-admin feature 계약 게이트와 남은 T-VN-42 범위를 진행한다.
+**다음 한 작업**: 반영 후 최종 CI green을 확인한다. 그 다음 `agent/codex-tvn42`/draft PR #456으로
+돌아가 admin feature 계약 게이트와 남은 T-VN-42 범위를 진행한다.
 
 ## 2026-08-19 (claude) — T-310 Dev Client smoke(에뮬레이터) 완료
 

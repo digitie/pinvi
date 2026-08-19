@@ -23,7 +23,10 @@ ROOT_ID = "11111111-1111-4111-8111-111111111111"
 PROJECTED_ID = "22222222-2222-4222-8222-222222222222"
 CHILD_ID = "33333333-3333-4333-8333-333333333333"
 CANCELLATION_ID = "44444444-4444-4444-8444-444444444444"
+ROOT_MEMBER_ID = "55555555-5555-4555-8555-555555555555"
+PROJECTED_MEMBER_ID = "66666666-6666-4666-8666-666666666666"
 UPDATE_MEMBER_ID = "77777777-7777-4777-8777-777777777777"
+CHILD_MEMBER_ID = "88888888-8888-4888-8888-888888888888"
 
 
 def _overview() -> dict[str, object]:
@@ -98,7 +101,7 @@ def _execution(progress: int = 1) -> dict[str, object]:
                 "dataset_key": "special_days",
                 "sync_scope": "dataset_wide",
                 "operation_key": "kma_special_days_refresh",
-                "operation_member_id": PROJECTED_ID,
+                "operation_member_id": PROJECTED_MEMBER_ID,
                 "status": "running",
             }
         ],
@@ -278,7 +281,7 @@ def _execution_detail() -> dict[str, object]:
     projected_job["detail_url"] = f"/v1/ops/pipeline/executions/import_job/{ROOT_ID}"
     projected_job["depth"] = 0
     execution["linked_job_count"] = 1
-    execution["provider_datasets"][0]["operation_member_id"] = ROOT_ID  # type: ignore[index]
+    execution["provider_datasets"][0]["operation_member_id"] = ROOT_MEMBER_ID  # type: ignore[index]
     return {
         "execution": {
             "kind": "import_job",
@@ -335,7 +338,7 @@ def _import_job_detail() -> dict[str, object]:
                 "dataset_key": "special_days",
                 "sync_scope": "dataset_wide",
                 "operation_key": "kma_special_days_refresh",
-                "operation_member_id": ROOT_ID,
+                "operation_member_id": ROOT_MEMBER_ID,
                 "status": "running",
             }
         ],
@@ -439,7 +442,7 @@ def _dataset_execution(
         "detail_url": root["detail_url"],
         "status": status,
         "pair_status": pair_status or status,
-        "operation_member_id": PROJECTED_ID,
+        "operation_member_id": PROJECTED_MEMBER_ID,
         "sync_scope": sync_scope,
         "operation_key": operation_key,
         "provider_datasets": root["provider_datasets"],
@@ -530,7 +533,7 @@ def test_dataset_grid_rejects_duplicate_provider_dataset_members() -> None:
     assert isinstance(row, dict)
     execution = _dataset_execution()
     duplicate = deepcopy(execution["provider_datasets"][0])  # type: ignore[index]
-    duplicate["operation_member_id"] = CHILD_ID
+    duplicate["operation_member_id"] = CHILD_MEMBER_ID
     execution["provider_datasets"].append(duplicate)  # type: ignore[union-attr]
     row["active_execution"] = execution
 
@@ -577,10 +580,10 @@ def test_dataset_grid_classifies_execution_by_pair_status() -> None:
     row["latest_execution"]["detail_url"] = (  # type: ignore[index]
         f"/v1/ops/pipeline/executions/import_job/{CHILD_ID}"
     )
-    row["latest_execution"]["operation_member_id"] = CHILD_ID  # type: ignore[index]
+    row["latest_execution"]["operation_member_id"] = CHILD_MEMBER_ID  # type: ignore[index]
     row["latest_execution"]["provider_datasets"][0][  # type: ignore[index]
         "operation_member_id"
-    ] = CHILD_ID
+    ] = CHILD_MEMBER_ID
 
     assert len(project_dataset_grid(data)) == 1
 
@@ -714,7 +717,7 @@ def test_dataset_grid_accepts_explicit_no_refresh_effect() -> None:
     assert len(project_dataset_grid(data)) == 1
 
 
-def test_dataset_grid_rejects_selected_projected_job_status_drift() -> None:
+def test_dataset_grid_keeps_selected_member_and_projected_job_lifecycle_separate() -> None:
     data = _dataset_grid()
     row = data["items"][0]  # type: ignore[index]
     assert isinstance(row, dict)
@@ -722,8 +725,7 @@ def test_dataset_grid_rejects_selected_projected_job_status_drift() -> None:
     execution["projected_job"]["status"] = "done"  # type: ignore[index]
     row["active_execution"] = execution
 
-    with pytest.raises(KorTravelMapOpsContractError, match="dataset grid"):
-        project_dataset_grid(data)
+    assert len(project_dataset_grid(data)) == 1
 
 
 @pytest.mark.parametrize("progress", [0, 1, 100])
@@ -784,7 +786,10 @@ def test_update_root_cancellation_uses_job_ids_not_dataset_membership_ids() -> N
     assert isinstance(root, dict)
     assert isinstance(execution, dict)
     assert root["provider_datasets"][0]["operation_member_id"] == UPDATE_MEMBER_ID  # type: ignore[index]
-    assert execution["provider_datasets"][0]["operation_member_id"] == ROOT_ID  # type: ignore[index]
+    assert execution["provider_datasets"][0]["operation_member_id"] == ROOT_MEMBER_ID  # type: ignore[index]
+    member_ids = {UPDATE_MEMBER_ID, ROOT_MEMBER_ID}
+    job_ids = {PROJECTED_ID, ROOT_ID}
+    assert member_ids.isdisjoint(job_ids)
     root["cancellation"] = {
         "cancellation_id": CANCELLATION_ID,
         "status": "completed",
@@ -1182,7 +1187,7 @@ def test_import_job_detail_accepts_update_root_with_child_provider_pairs() -> No
             "dataset_key": "places",
             "sync_scope": "target_grids",
             "operation_key": "visitkorea_places_refresh",
-            "operation_member_id": CHILD_ID,
+            "operation_member_id": CHILD_MEMBER_ID,
             "status": "running",
         }
     )
@@ -1343,7 +1348,7 @@ def test_import_job_detail_rejects_duplicate_provider_dataset_pair() -> None:
     root = detail["root"]
     assert isinstance(root, dict)
     duplicate = deepcopy(root["provider_datasets"][0])  # type: ignore[index]
-    duplicate["operation_member_id"] = CHILD_ID
+    duplicate["operation_member_id"] = CHILD_MEMBER_ID
     root["provider_datasets"].append(duplicate)  # type: ignore[union-attr]
     root["linked_job_count"] = 2
 
@@ -1366,7 +1371,7 @@ def test_import_job_detail_accepts_requested_child_execution() -> None:
             "dataset_key": "places",
             "sync_scope": "target_grids",
             "operation_key": "visitkorea_places_refresh",
-            "operation_member_id": CHILD_ID,
+            "operation_member_id": CHILD_MEMBER_ID,
             "status": "running",
         }
     )

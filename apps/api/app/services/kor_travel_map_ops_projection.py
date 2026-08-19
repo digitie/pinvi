@@ -430,13 +430,6 @@ class _DatasetExecution(_CanonicalModel):
         expected = f"/v1/ops/pipeline/executions/{self.kind}/{self.id}"
         if self.detail_url != expected:
             raise ValueError("dataset execution detail_url must match kind and id")
-        if (
-            self.projected_job.id == self.operation_member_id
-            and self.projected_job.status != self.pair_status
-        ):
-            raise ValueError(
-                "selected projected job lifecycle must match its representative member"
-            )
         return self
 
 

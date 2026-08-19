@@ -15,10 +15,18 @@
   `da2c740aa4b4239821075519959c38534cc65d2f`의 전체 Admin OpenAPI 원본
   (SHA-256 `22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32`)을 vendor하고,
   ops 소비 경로·security·query·응답 schema와 폐기 필드 부재를 CI 계약으로 고정했다.
-- **검증**: projection unit `215 passed`, OpenAPI gate `31 passed`, provider-sync integration
-  `32 passed`, schemas Vitest `3 passed`, schemas/web typecheck, Ruff/Prettier 통과.
+- **적대 리뷰**: 1차 API 리뷰 P1에서 Map의 `operation_member_id`가 job UUID가 아니라
+  `feature_update_request_dataset_id`/`import_job_dataset_id`임을 확인했다. triple 소속 검증은 이 ID를
+  섞지 않고, cancellation frozen topology는 요청/anchor/projected **job ID**만 대조하도록 교정했다.
+  대체 API 전문 리뷰 P2에 따라 test fixture도 membership/job UUID를 분리하고, projected job UUID와
+  membership UUID를 비교하던 거짓 불변식을 제거했다. 프론트 전문 리뷰 P2는 operation이 다른 형제
+  행을 시각적으로 구분하고 null과 문자열 `none` row key가 충돌하지 않도록 표시·typed key·E2E를
+  보강했다.
+- **검증**: projection unit `216 passed`, API unit `1,013 passed`(T-VN-42 소유 local Map user-spec
+  신선도 1건 제외), OpenAPI gate `31 passed`, provider-sync integration `32 passed`, schemas Vitest
+  `3 passed`, schemas/web typecheck, Ruff/Prettier 통과.
 - **배포 경계**: Map 삼중항 release와 docker-manager draft PR #170 merge·배포 전에는 production-ready가
-  아니다. 다음은 두 전문 리뷰어의 적대 검토와 CI 수렴이며, 완료 뒤 draft PR #456의 T-VN-42로 이동한다.
+  아니다. 다음은 반영 후 최종 CI 수렴이며, 완료 뒤 draft PR #456의 T-VN-42로 이동한다.
 
 ## 2026-08-19 (claude) — T-310: Android 에뮬레이터 Dev Client smoke
 
