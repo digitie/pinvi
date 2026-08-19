@@ -74,6 +74,21 @@ const provider = {
   refresh_policy: { enabled: true },
 };
 
+const providerSiblingOperation = {
+  ...provider,
+  operation_key: 'kma_special_days_backfill',
+};
+
+const providerLiteralNoneOperation = {
+  ...provider,
+  operation_key: 'none',
+};
+
+const providerScopeRollup = {
+  ...provider,
+  operation_key: null,
+};
+
 const etlSummary = {
   generated_at: '2026-06-12T00:03:00+09:00',
   pinvi: {
@@ -531,8 +546,13 @@ test('Provider sync 페이지가 provider key와 job status 필터를 proxy quer
         contentType: 'application/json',
         body: JSON.stringify({
           data: {
-            items: [provider],
-            total: 1,
+            items: [
+              provider,
+              providerSiblingOperation,
+              providerLiteralNoneOperation,
+              providerScopeRollup,
+            ],
+            total: 4,
             schedule_source_status: 'unavailable',
             schedule_source_errors: ['Dagster GraphQL unavailable'],
           },
@@ -613,8 +633,17 @@ test('Provider sync 페이지가 provider key와 job status 필터를 proxy quer
   await expect(page.getByRole('columnheader', { name: '재호출 가능' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: '다음 예약' })).toBeVisible();
   await expect(
-    page.getByTestId('admin-provider-row-41-dataset_wide-kma_special_days_refresh'),
+    page.getByTestId('admin-provider-row-41-dataset_wide-op-value-kma_special_days_refresh'),
   ).toBeVisible();
+  await expect(
+    page.getByTestId('admin-provider-row-41-dataset_wide-op-value-kma_special_days_backfill'),
+  ).toContainText('kma_special_days_backfill');
+  await expect(page.getByTestId('admin-provider-row-41-dataset_wide-op-value-none')).toContainText(
+    'none',
+  );
+  await expect(page.getByTestId('admin-provider-row-41-dataset_wide-op-null')).toContainText(
+    'scope rollup',
+  );
   await expect(page.getByTestId('admin-provider-schedule-source-warning')).toContainText(
     'Dagster GraphQL unavailable',
   );
@@ -643,7 +672,7 @@ test('Provider sync 페이지가 provider key와 job status 필터를 proxy quer
   await page.getByTestId('admin-provider-sync-submit').click();
   await page.getByTestId('admin-provider-sync-job-status').selectOption('failed');
   await expect(
-    page.getByTestId('admin-provider-row-41-dataset_wide-kma_special_days_refresh'),
+    page.getByTestId('admin-provider-row-41-dataset_wide-op-value-kma_special_days_refresh'),
   ).toBeVisible();
 
   const providerUrl = new URL(seenProviderUrls[seenProviderUrls.length - 1]!);
