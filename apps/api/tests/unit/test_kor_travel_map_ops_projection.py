@@ -354,13 +354,17 @@ def _update_request_detail() -> dict[str, object]:
         "scope_type": "provider_dataset",
         "scope": {
             "type": "provider_dataset",
-            "provider": "kma",
-            "dataset_key": "special_days",
+            "provider_dataset_id": 41,
+            "sync_scope": "dataset_wide",
+            "operation_key": "kma_special_days_refresh",
         },
-        "requested_sync_scope": None,
-        "effective_sync_scope": "dataset_wide",
-        "providers": [],
-        "dataset_keys": [],
+        "dataset_memberships": [
+            {
+                "provider_dataset_id": 41,
+                "sync_scope": "dataset_wide",
+                "operation_key": "kma_special_days_refresh",
+            }
+        ],
         "update_policy": {"mode": "refresh"},
         "run_mode": "now",
         "priority": 100,
@@ -1073,66 +1077,50 @@ def test_import_job_detail_rejects_update_request_reciprocal_job_drift() -> None
 @pytest.mark.parametrize(
     "drift",
     [
-        "providers",
-        "dataset_keys",
-        "scope_provider",
-        "requested_sync_scope",
-        "effective_sync_scope",
-        "effective_sync_scope_null",
+        "retired_providers",
+        "scope_provider_dataset_id",
+        "scope_operation_key",
+        "scope_extra_natural_key",
         "raw_alias_scope",
         "raw_random_scope",
-        "provider_filter",
-        "dataset_filter",
+        "membership_provider_dataset_id",
+        "membership_sync_scope",
+        "membership_operation_key",
+        "membership_missing",
         "root_sync_scope",
     ],
 )
 def test_import_job_detail_rejects_update_request_scope_topology_drift(
     drift: str,
 ) -> None:
-    detail = _execution_detail()
+    detail = _as_update_request_detail()
     root = detail["root"]
-    execution = detail["execution"]
+    update_request = detail["update_request"]
     assert isinstance(root, dict)
-    assert isinstance(execution, dict)
-    root["kind"] = "update_request"
-    root["id"] = PROJECTED_ID
-    root["requested_job_id"] = ROOT_ID
-    root["scope_type"] = "provider_dataset"
-    root["priority"] = 100
-    root["run_mode"] = "now"
-    root["operator"] = "service:pinvi"
-    root["progress"] = None
-    root["current_stage"] = None
-    root["dagster_run_status"] = None
-    root["trigger_kind"] = "update_request"
-    root["provider_datasets"][0]["sync_scope"] = "dataset_wide"  # type: ignore[index]
-    root["detail_url"] = f"/v1/ops/pipeline/executions/update_request/{PROJECTED_ID}"
-    execution["request_id"] = PROJECTED_ID
-    update_request = _update_request_detail()
-    detail["update_request"] = update_request
+    assert isinstance(update_request, dict)
 
-    if drift == "providers":
+    if drift == "retired_providers":
         update_request["providers"] = ["visitkorea"]
-    elif drift == "dataset_keys":
-        update_request["dataset_keys"] = ["places"]
-    elif drift == "scope_provider":
-        update_request["scope"]["provider"] = "visitkorea"  # type: ignore[index]
-    elif drift == "requested_sync_scope":
-        update_request["requested_sync_scope"] = "target_grids"
-    elif drift == "effective_sync_scope":
-        update_request["effective_sync_scope"] = "target_grids"
-    elif drift == "effective_sync_scope_null":
-        update_request["effective_sync_scope"] = None
+    elif drift == "scope_provider_dataset_id":
+        update_request["scope"]["provider_dataset_id"] = 42  # type: ignore[index]
+    elif drift == "scope_operation_key":
+        update_request["scope"]["operation_key"] = "visitkorea_places_refresh"  # type: ignore[index]
+    elif drift == "scope_extra_natural_key":
+        update_request["scope"]["provider"] = "kma"  # type: ignore[index]
     elif drift == "raw_alias_scope":
         update_request["scope"]["sync_scope"] = "default"  # type: ignore[index]
-        update_request["requested_sync_scope"] = "default"
     elif drift == "raw_random_scope":
         update_request["scope"]["sync_scope"] = "random"  # type: ignore[index]
-        update_request["requested_sync_scope"] = "random"
-    elif drift == "provider_filter":
-        update_request["providers"] = ["kma"]
-    elif drift == "dataset_filter":
-        update_request["dataset_keys"] = ["special_days"]
+    elif drift == "membership_provider_dataset_id":
+        update_request["dataset_memberships"][0]["provider_dataset_id"] = 42  # type: ignore[index]
+    elif drift == "membership_sync_scope":
+        update_request["dataset_memberships"][0]["sync_scope"] = "target_grids"  # type: ignore[index]
+    elif drift == "membership_operation_key":
+        update_request["dataset_memberships"][0]["operation_key"] = (  # type: ignore[index]
+            "visitkorea_places_refresh"
+        )
+    elif drift == "membership_missing":
+        update_request["dataset_memberships"] = []
     else:
         root["provider_datasets"][0]["sync_scope"] = "target_grids"  # type: ignore[index]
 
@@ -1140,32 +1128,8 @@ def test_import_job_detail_rejects_update_request_scope_topology_drift(
         project_pipeline_execution(detail, requested_job_id=ROOT_ID)
 
 
-def test_import_job_detail_accepts_selector_none_effective_scope() -> None:
-    detail = _execution_detail()
-    root = detail["root"]
-    execution = detail["execution"]
-    assert isinstance(root, dict)
-    assert isinstance(execution, dict)
-    root.update(
-        {
-            "kind": "update_request",
-            "id": PROJECTED_ID,
-            "requested_job_id": ROOT_ID,
-            "scope_type": "provider_dataset",
-            "priority": 100,
-            "run_mode": "now",
-            "operator": "service:pinvi",
-            "progress": None,
-            "current_stage": None,
-            "dagster_run_status": None,
-            "trigger_kind": "update_request",
-            "operation_key": None,
-            "detail_url": (f"/v1/ops/pipeline/executions/update_request/{PROJECTED_ID}"),
-        }
-    )
-    root["provider_datasets"][0]["sync_scope"] = "dataset_wide"  # type: ignore[index]
-    execution["request_id"] = PROJECTED_ID
-    detail["update_request"] = _update_request_detail()
+def test_import_job_detail_accepts_provider_dataset_membership_triple() -> None:
+    detail = _as_update_request_detail()
 
     record = project_pipeline_execution(detail, requested_job_id=ROOT_ID)
 
@@ -1183,8 +1147,7 @@ def test_import_job_detail_accepts_explicit_canonical_scope() -> None:
     assert isinstance(import_job, dict)
     assert isinstance(update_request, dict)
     update_request["scope"]["sync_scope"] = "target_grids"  # type: ignore[index]
-    update_request["requested_sync_scope"] = "target_grids"
-    update_request["effective_sync_scope"] = "target_grids"
+    update_request["dataset_memberships"][0]["sync_scope"] = "target_grids"  # type: ignore[index]
     root["provider_datasets"][0]["sync_scope"] = "target_grids"  # type: ignore[index]
     execution["provider_datasets"][0]["sync_scope"] = "target_grids"  # type: ignore[index]
     import_job["provider_datasets"][0]["sync_scope"] = "target_grids"  # type: ignore[index]
@@ -1239,10 +1202,7 @@ def test_import_job_detail_accepts_non_exact_root_filters_without_pair_projectio
         {
             "scope_type": "feature_ids",
             "scope": {"type": "feature_ids", "feature_ids": ["feature-1"]},
-            "requested_sync_scope": None,
-            "effective_sync_scope": None,
-            "providers": ["kma", "visitkorea"],
-            "dataset_keys": ["places", "special_days"],
+            "dataset_memberships": [],
         }
     )
 
@@ -1267,10 +1227,6 @@ def test_import_job_detail_accepts_non_exact_filters_with_exact_memberships() ->
         {
             "scope_type": "feature_ids",
             "scope": {"type": "feature_ids", "feature_ids": ["feature-1"]},
-            "requested_sync_scope": None,
-            "effective_sync_scope": None,
-            "providers": ["filter-provider"],
-            "dataset_keys": ["filter-dataset"],
         }
     )
 

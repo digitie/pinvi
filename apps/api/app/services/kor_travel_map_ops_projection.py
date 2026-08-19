@@ -161,6 +161,20 @@ class _ProviderDatasetIdentity(_CanonicalModel):
     status: OperationState
 
 
+class _FeatureUpdateDatasetMembership(_CanonicalModel):
+    provider_dataset_id: int = Field(ge=1)
+    sync_scope: str
+    operation_key: str
+
+    @model_validator(mode="after")
+    def membership_is_canonical(self) -> Self:
+        if not _is_canonical_sync_scope(self.sync_scope):
+            raise ValueError("feature update membership sync_scope must be canonical")
+        if not self.operation_key or self.operation_key != self.operation_key.strip():
+            raise ValueError("feature update membership operation_key must be trimmed text")
+        return self
+
+
 class _ProjectedJob(_CanonicalModel):
     id: UUID
     job_kind: str
@@ -945,10 +959,7 @@ class _PipelineUpdateRequestIdentity(_CanonicalModel):
     request_id: UUID
     scope_type: str
     scope: dict[str, Any]
-    requested_sync_scope: str | None
-    effective_sync_scope: str | None
-    providers: list[str]
-    dataset_keys: list[str]
+    dataset_memberships: list[_FeatureUpdateDatasetMembership]
     update_policy: dict[str, Any]
     run_mode: str
     priority: int
@@ -973,10 +984,23 @@ class _PipelineUpdateRequestIdentity(_CanonicalModel):
             raise ValueError("update request status_url must match request identity")
         if self.scope.get("type") != self.scope_type:
             raise ValueError("update request scope type must match scope_type")
-        if len(self.providers) != len(set(self.providers)):
-            raise ValueError("update request providers must be unique")
-        if len(self.dataset_keys) != len(set(self.dataset_keys)):
-            raise ValueError("update request dataset_keys must be unique")
+        membership_keys = [
+            (item.provider_dataset_id, item.sync_scope, item.operation_key)
+            for item in self.dataset_memberships
+        ]
+        if len(membership_keys) != len(set(membership_keys)):
+            raise ValueError("update request dataset_memberships must be unique")
+        if self.scope_type == "provider_dataset":
+            expected_keys = {"type", "provider_dataset_id", "sync_scope", "operation_key"}
+            if set(self.scope) != expected_keys:
+                raise ValueError("provider_dataset scope must expose its exact triple")
+            scope_membership = (
+                self.scope.get("provider_dataset_id"),
+                self.scope.get("sync_scope"),
+                self.scope.get("operation_key"),
+            )
+            if len(membership_keys) != 1 or membership_keys[0] != scope_membership:
+                raise ValueError("provider_dataset scope must match its frozen membership")
         return self
 
 
@@ -1085,45 +1109,45 @@ class _PipelineExecutionDetailData(_CanonicalModel):
                     "update-request root must reciprocally link request and import job"
                 )
             update_request = self.update_request
-            scope_provider = update_request.scope.get("provider")
-            scope_dataset = update_request.scope.get("dataset_key")
+            request_memberships = {
+                (
+                    member.provider_dataset_id,
+                    member.sync_scope,
+                    member.operation_key,
+                )
+                for member in update_request.dataset_memberships
+            }
+            root_memberships = {
+                (
+                    member.provider_dataset_id,
+                    member.sync_scope,
+                    member.operation_key,
+                )
+                for member in self.root.provider_datasets
+            }
+            if not request_memberships.issubset(root_memberships):
+                raise ValueError("update request memberships must belong to the canonical root")
             if update_request.scope_type == "provider_dataset":
-                scope_sync = update_request.scope.get("sync_scope")
-                if (
-                    not isinstance(scope_provider, str)
-                    or not isinstance(scope_dataset, str)
-                    or (scope_sync is not None and not isinstance(scope_sync, str))
-                    or update_request.requested_sync_scope != scope_sync
-                    or not isinstance(update_request.effective_sync_scope, str)
-                    or not _is_canonical_sync_scope(update_request.effective_sync_scope)
-                    or (
-                        scope_sync is not None
-                        and (
-                            not _is_canonical_sync_scope(scope_sync)
-                            or scope_sync != update_request.effective_sync_scope
-                        )
-                    )
-                    or update_request.providers
-                    or update_request.dataset_keys
-                ):
-                    raise ValueError("provider_dataset request must preserve its canonical scope")
+                scope_identity = (
+                    update_request.scope["provider_dataset_id"],
+                    update_request.scope["sync_scope"],
+                    update_request.scope["operation_key"],
+                )
                 scope_members = [
                     member
                     for member in self.root.provider_datasets
-                    if (member.provider, member.dataset_key) == (scope_provider, scope_dataset)
-                    and member.sync_scope == update_request.effective_sync_scope
+                    if (
+                        member.provider_dataset_id,
+                        member.sync_scope,
+                        member.operation_key,
+                    )
+                    == scope_identity
                     and member.operation_member_id == update_request.job_id
                 ]
                 if len(scope_members) != 1:
                     raise ValueError(
                         "provider_dataset request must include its exact direct root member"
                     )
-            else:
-                if (
-                    update_request.requested_sync_scope is not None
-                    or update_request.effective_sync_scope is not None
-                ):
-                    raise ValueError("non-provider_dataset request cannot carry a sync scope")
             if (
                 self.root.scope_type != update_request.scope_type
                 or self.root.status != update_request.status
