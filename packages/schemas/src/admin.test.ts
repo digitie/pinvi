@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AdminKorTravelMapEtlSummarySchema } from './admin';
+import { AdminKorTravelMapEtlSummarySchema, AdminProviderDatasetSummarySchema } from './admin';
 
 describe('AdminKorTravelMapEtlSummarySchema', () => {
   it('accepts partial operation status counts and defaults an absent map', () => {
@@ -27,5 +27,26 @@ describe('AdminKorTravelMapEtlSummarySchema', () => {
         operations_by_status: { unknown: 1 },
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('AdminProviderDatasetSummarySchema', () => {
+  const row = {
+    provider_dataset_id: 41,
+    provider: 'kma',
+    dataset_key: 'special_days',
+    sync_scope: 'dataset_wide',
+    operation_key: 'kma_special_days_refresh',
+    status: 'healthy',
+  };
+
+  it('requires the canonical dataset membership triple', () => {
+    expect(AdminProviderDatasetSummarySchema.parse(row)).toMatchObject(row);
+    expect(
+      AdminProviderDatasetSummarySchema.safeParse({ ...row, operation_key: null }).success,
+    ).toBe(true);
+
+    const { operation_key: _operationKey, ...withoutOperationKey } = row;
+    expect(AdminProviderDatasetSummarySchema.safeParse(withoutOperationKey).success).toBe(false);
   });
 });

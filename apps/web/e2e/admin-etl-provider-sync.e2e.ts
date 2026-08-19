@@ -59,9 +59,11 @@ const cancellationOverlayJobs = [
 }));
 
 const provider = {
+  provider_dataset_id: 41,
   provider: 'kma',
   dataset_key: 'special_days',
-  sync_scope: 'daily',
+  sync_scope: 'dataset_wide',
+  operation_key: 'kma_special_days_refresh',
   status: 'healthy',
   last_success_at: '2026-06-12T00:00:00+09:00',
   last_failure_at: null,
@@ -610,7 +612,9 @@ test('Provider sync 페이지가 provider key와 job status 필터를 proxy quer
   await expect(page.getByRole('heading', { name: 'Provider sync' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: '재호출 가능' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: '다음 예약' })).toBeVisible();
-  await expect(page.getByTestId('admin-provider-row-kma-special_days-daily')).toBeVisible();
+  await expect(
+    page.getByTestId('admin-provider-row-41-dataset_wide-kma_special_days_refresh'),
+  ).toBeVisible();
   await expect(page.getByTestId('admin-provider-schedule-source-warning')).toContainText(
     'Dagster GraphQL unavailable',
   );
@@ -638,7 +642,9 @@ test('Provider sync 페이지가 provider key와 job status 필터를 proxy quer
   await page.getByTestId('admin-provider-sync-key').fill('kma');
   await page.getByTestId('admin-provider-sync-submit').click();
   await page.getByTestId('admin-provider-sync-job-status').selectOption('failed');
-  await expect(page.getByTestId('admin-provider-row-kma-special_days-daily')).toBeVisible();
+  await expect(
+    page.getByTestId('admin-provider-row-41-dataset_wide-kma_special_days_refresh'),
+  ).toBeVisible();
 
   const providerUrl = new URL(seenProviderUrls[seenProviderUrls.length - 1]!);
   const jobUrl = new URL(seenJobUrls[seenJobUrls.length - 1]!);

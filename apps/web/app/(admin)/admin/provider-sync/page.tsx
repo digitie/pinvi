@@ -580,9 +580,11 @@ export default function AdminProviderSyncPage() {
           columns={providerColumns}
           rows={providers}
           loading={providersQuery.isLoading}
-          rowKey={(item) => `${item.provider}:${item.dataset_key}:${item.sync_scope}`}
+          rowKey={(item) =>
+            `${item.provider_dataset_id}:${item.sync_scope}:${item.operation_key ?? 'none'}`
+          }
           rowTestId={(item) =>
-            `admin-provider-row-${item.provider}-${item.dataset_key}-${item.sync_scope}`
+            `admin-provider-row-${item.provider_dataset_id}-${item.sync_scope}-${item.operation_key ?? 'none'}`
           }
           empty="provider sync 상태가 없습니다."
         />
