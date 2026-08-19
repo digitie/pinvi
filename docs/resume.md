@@ -14,8 +14,48 @@ Python/Zod를 거쳐 실제로 투영하고 Web에 실제 개수를 표시한다
 깨진 Codex worktree를 최신 `origin/main` 기준으로 재생성했다. 비밀 설정·세션·backup이 있는 기존
 내용은 `/mnt/f/dev/pinvi-codex-orphan-20260819`에 보존했으며 자동 삭제하지 않는다.
 
-**다음 한 작업**: 로컬·n150 CI-parity와 원격 PR CI/리뷰를 통과시킨다. 공개 응답의 항상-null
+**현재**: 전문 적대 리뷰와 필수 원격 CI를 통과한 draft PR #443 head `cbdf2815`를 T-VN-42 브랜치에
+stack 병합했다. 하나의 Admin OpenAPI byte snapshot 위에서 #443의 ops gate와 #456의 feature gate를 함께
+유지하며, PR #456 base를 #443 브랜치로 바꿔 선행 순서를 명시한다.
+
+**다음 한 작업**: 병합된 계약의 API·schema·Web 검증과 원격 PR CI를 통과시킨다. 공개 응답의 항상-null
 `status` 제거는 web/mobile 소비자를 함께 옮겨야 하는 breaking cutover이므로 별도 PR로 진행한다.
+
+## 2026-08-19 (codex) — PR #443 Map ops 삼중항 계약 복구·게이트 추가
+
+**방금**: draft PR #443을 최신 main에 올리고 Map Admin OpenAPI의 실제 생성 계약에 맞춰 dataset grid,
+pipeline list/detail, update request frozen membership을
+`provider_dataset_id × sync_scope × operation_key`로 정렬했다. null `operation_key` scope-rollup 실행,
+`is_active`, schedule `dagster_operation_key_tag`, refresh `effect=none`, 폐기 vector 제거를 반영했다.
+Web Zod와 provider 행 key/test id도 같은 삼중항을 사용한다. Map
+`da2c740aa4b4239821075519959c38534cc65d2f`의 전체 Admin OpenAPI(SHA-256 `22e3f2f…`)를 vendor하고
+ops 소비 경로·인증·query·schema·폐기 필드 부재를 31개 계약 테스트로 고정했다.
+
+**적대 리뷰 반영**: 1차 API 리뷰에서 `operation_member_id`가 job UUID가 아니라
+dataset-membership UUID라는 P1을 찾아 update root/request member와 import-job member/cancellation job
+topology를 분리했다. 대체 API 전문 리뷰의 P2에 따라 test fixture도 membership/job UUID를 분리하고,
+projected job UUID와 membership UUID를 비교하던 거짓 불변식을 제거했다. 프론트 전문 리뷰 P2는 형제
+operation 행을 화면에 표시하고, null과 문자열 `none`이 충돌하지 않는 typed row key/test id 및 E2E로
+닫았다.
+
+**검증**: ops projection unit 216 passed, API unit 1,013 passed(로컬 최신 Map user spec 신선도 1건은
+T-VN-42 범위라 별도 확인), Admin OpenAPI gate 31 passed, provider-sync integration 32 passed, schemas
+Vitest 3 passed, schemas/web typecheck와 Ruff/Prettier 통과. 배포 선행조건은 Map 삼중항 release와
+docker-manager draft PR #170 merge·배포다.
+
+**다음 한 작업**: 최종 필수 CI를 통과한 뒤 `agent/codex-tvn42`/draft PR #456으로 돌아가 stack한다.
+
+## 2026-08-19 (claude) — T-310 Dev Client smoke(에뮬레이터) 완료
+
+**방금**: PR #446의 남은 완료 조건인 Dev Client smoke를 Android 에뮬레이터(API 35)에서 돌렸다.
+날짜 검증·POI 재정렬 롤백·파괴적 삭제 확인·예산 검증 네 항목이 통과했고, 위치 동의 gate만 로컬
+VWorld 키 부재로 런타임 확인을 못 해 코드 경로 확인으로 대체했다. smoke를 막던 react 핀 불일치
+(RN 0.85.3 렌더러는 19.2.3 정확 일치 요구, 저장소는 19.2.6 + `expo.install.exclude`가 검증을 가림)를
+같은 브랜치에서 고쳤다. WSL Metro ↔ Windows 에뮬레이터 절차는 `apps/mobile/README.md`에 고정.
+
+**다음 한 작업**: T-273(v1.0.0 E2E/Live gate) — 남은 hard blocker는 geofence 운영 설정이다.
+모바일 후속(T-311 expo-doctor 3신호 · T-318 `expo start` hoisting · T-319 실패 문구 · T-320 위치 동의
+gate 런타임 확인)은 별도 PR로 분리해 뒀다.
 
 ## 2026-08-19 (claude) — T-316 Hallmark 종결(PR #455 머지)
 

@@ -7,10 +7,9 @@
 
 ## 현재 선점 / 충돌 회피
 
-- **T-310 = Claude** — `agent/claude-issue-215-followup`(PR #446, 리뷰/머지 대기)은 `apps/mobile`과
-  `@pinvi/domain` 순수 검증 헬퍼만 건드린다.
-- **PR #443(draft) = Codex** — `fix/tvn41-map-triple-contract`는 ops dataset membership 계약만
-  건드린다. T-VN-41 계열 파일을 만지기 전 이 PR과 충돌 범위를 확인한다.
+- **PR #443(draft) = Codex** — `fix/tvn41-map-triple-contract`는 ops dataset/pipeline membership
+  삼중항과 Admin OpenAPI ops 게이트를 복구한다. 배포 선행조건은 Map 삼중항 release와
+  docker-manager PR #170 merge다. T-VN-41 계열 파일을 만지기 전 이 PR과 충돌 범위를 확인한다.
 
 ## kor-travel-map compatible pair
 
@@ -41,9 +40,10 @@
         sources/issues/overrides/files/**state_transitions**/**curations**이고 Pinvi가 남겨 둔
         `versions`/`change_requests`는 늘 빈 배열이다. Web 상세의 거짓 0 카운트 칩은 제거했고, 두 list를
         실제로 투영하고 Web 상세에서 실제 개수를 표시한다.
-  - [x] **admin OpenAPI 스냅샷 vendoring** — Map `da2c740a`의 admin 스냅샷
-        (SHA-256 `22e3f2f…`)을 핀하고 feature 경로·AdminBFF security·query exact 집합·응답 schema
-        연결·3축/state transition/curation/weather 소비 shape를 계약 테스트로 고정했다.
+  - [x] **admin OpenAPI 스냅샷 vendoring** — PR #443이 Map `da2c740a`의 전체 Admin 스냅샷
+        (SHA-256 `22e3f2f…`) byte pin과 ops dataset/pipeline 소비 게이트를 소유한다. T-VN-42는 같은
+        스냅샷의 feature 경로·AdminBFF security·query exact 집합·응답 schema 연결·3축/state
+        transition/curation/weather 소비 shape를 계약 테스트로 고정했다.
   - [ ] **공개 `status` 필드 제거(별도 breaking cutover)** — `FeatureSummary`/`FeatureDetail`/
         `DetailCardBase`(`app/schemas/feature.py`)는 지금 항상 None인 `status`를 web/mobile 계약 때문에
         남겨 두고 있다. web/mobile 소비처와 함께 정리한다.
@@ -96,9 +96,19 @@
 
 ## 모바일
 
-- [/] **T-310 = Claude** — issue #215 잔여 후속(POI mutation rollback·날짜/예산 검증·위치 동의 gate·
-  `apps/mobile` lint CI). 브랜치 `agent/claude-issue-215-followup`, **PR #446 리뷰/머지 대기**.
-  실기기 Dev Client smoke 미실행이 남은 완료 조건이며 issue #215는 그 기록 후 종결한다.
+- [ ] **T-320** — 모바일 위치 동의 gate 런타임 확인. VWorld 키가 있는 환경에서 지도 표면을 띄우고
+  "현재 위치로"가 OS 권한 요청 전 동의를 받는지 확인한다(T-310 smoke에서 키 부재로 미확인).
+- [ ] **T-311** — `expo-doctor` 신호 정리(현재 3건 실패, informational): SDK-56 patch 드리프트
+  (`expo`/`expo-router`/`expo-*` 9종), Hermes V1 회귀, **react 중복**(root `19.2.6` ↔ `apps/mobile`
+  `19.2.3`). 중복 해소는 워크스페이스 전체 react 정렬(웹 런타임 영향)이라 T-310에서 분리했다.
+  루트 `overrides`로 단일 버전을 강제하는 안을 우선 검토하되 웹 build/e2e 재검증을 함께 건다.
+  드리프트 흡수는 dev client 재빌드를 동반하므로 별도 PR로 한다.
+- [ ] **T-318** — `npm install` 후 `expo-router`가 `apps/mobile/node_modules`에 nest되는데 그 의존
+  `@expo/router-server`는 root로 hoist돼 `expo start`가 `expo-router/_ctx-shared` 해석에 실패한다.
+  현재는 root `node_modules/expo-router` 심링크로 우회 중이며, 저장소 차원 해법(단일 react 정렬 또는
+  root 배치)을 정해야 `expo start`가 클린 체크아웃에서 바로 돈다.
+- [ ] **T-319** — 모바일 mutation 실패 안내가 원문 예외를 그대로 노출한다(예: 재정렬 실패 시
+  `fetch failed: java.net.ConnectException…`). 웹 상태 UI 규칙(원인+복구)에 맞춰 사용자 문구로 정리한다.
 
 ## Sprint 6 / v1.0.0 후속 Task 초안
 

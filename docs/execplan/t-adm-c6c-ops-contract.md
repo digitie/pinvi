@@ -22,15 +22,15 @@ cookie, HSTS, dev safety, Resend webhook, rate-limit backend와 kor-travel-map c
    transport loss뿐 아니라 2xx invalid JSON·누락/malformed envelope·예상 밖 5xx와 projection 실패도
    결과 불확실로 분류해 Pinvi 상세/list/grid GET으로 cancellation overlay를 재조정한다. 상세
    projection은 요청 job id와 `data.execution`, import job, canonical root/update request,
-   frozen cancellation member의 reciprocal identity를 검증한다. `provider_dataset` 요청은 filter 배열이
-   비어 있어야 하고, optional 원 `sync_scope`가 있으면 canonical 값이며 effective 값과 같아야 한다.
-   selector-none은 원 scope가 null이고 effective `dataset_wide`인 계약이다. 직접 요청 pair의 root
-   member는 항상 effective scope를 쓰되, 같은 root 아래 다른 provider/dataset child pair는 허용한다.
+   frozen cancellation member의 reciprocal identity를 검증한다. `provider_dataset` 요청은 scope와
+   `dataset_memberships`가 같은 `provider_dataset_id × sync_scope × operation_key` 삼중항이어야 하고,
+   그 frozen membership이 root의 anchor member와 일치해야 한다. 같은 root 아래 다른 membership child는 허용한다.
    상세 요청 job은 anchor나 대표 pair에 고정하지 않는다. `execution.request_id` 또는 standalone
    `parent_job_id`/member 증거로 같은 canonical root에 속한 비대표 child도 허용한다. import payload의
    scope는 root member와 직접 비교하지 않는다. cancellation POST와 상세는 같은 검증기로 member의
    non-null Dagster run exact 집합, 중복, 종료 필수 run의 non-null을 대조한다. frozen topology에는
-   anchor와 노출된 모든 operation member가 반드시 포함되어야 하며 같은 개수의 무관 UUID로 대체할 수 없다.
+   요청 job, anchor와 projected job이 반드시 포함되어야 하며 같은 개수의 무관 UUID로 대체할 수 없다.
+   dataset membership UUID인 `operation_member_id`는 cancellation job ID 집합에 넣지 않는다.
    typed problem은 전체 cancellation detail을 보존하고 같은 검증을 통과할 때만 typed 실패로 취급한다.
 4. 취소 intent는 upstream POST 전에 감사 원장에 commit하고 성공·typed 실패·불확실 결과를 같은
    `request_id`로 추가 기록한다. UI는 fresh 상세 확인 전 재시도를 잠그고 canonical `retryable`
@@ -40,13 +40,17 @@ cookie, HSTS, dev safety, Resend webhook, rate-limit backend와 kor-travel-map c
    검증하고, legacy URL이나 누락된 pagination provenance를 502로 fail-close한다. UI는 cursor를
    실제 다음/이전 이동에 연결해 50개 이후 job도 상태 확인·취소할 수 있게 한다.
    `load_batch_id`와 `parent_job_id`는 Pinvi HTTP 경계에서 UUID로 parse하고 소문자 hyphen 정규형만
-   upstream query와 canonical provenance 대조에 사용한다.
+   upstream query와 canonical provenance 대조에 사용한다. dataset grid 행과 실행 member의
+   identity는 provider/dataset pair가 아니라 `provider_dataset_id × sync_scope × operation_key`다.
+   detail URL은 `/v1/ops/datasets/{provider_dataset_id}`와 exact query를 쓰며, catalog-only 행의
+   null `operation_key`인 scope-rollup 행만 query에서 생략한다. rollup 행도 active/latest 실행을 가질 수
+   있으며 실행 member의 실제 non-null operation을 대조한다.
 7. 모든 canonical ops 성공은 non-null `meta.duration_ms/request_id`를 요구하고, 전달한
-   `X-Request-Id`와 응답 `meta.request_id`가 다르면 fail-close한다. non-exact update root의
-   provider/dataset 배열은 filter이며 `provider_datasets=[]`일 수 있다. dataset grid의 detail URL,
-   preview/scope-refresh capability, canonical/orphan 조합과 pair 기준 active/latest 분류도 검증한다.
-8. root의 effective provider/dataset vector는 request filter와 대표 pair의 합집합이다. 상세에서는 두
-   출처를 재구성해 누락·무관 vector를 거부한다. standalone descendant는 직계 parent만 허용하지 않고
+   `X-Request-Id`와 응답 `meta.request_id`가 다르면 fail-close한다. non-exact update request의
+   `dataset_memberships`와 root `provider_datasets`는 비어 있을 수 있다. dataset grid의 detail URL,
+   preview/scope-refresh capability, canonical/orphan 조합과 membership 기준 active/latest 분류도 검증한다.
+8. update request의 frozen `dataset_memberships`는 root membership의 부분집합이어야 한다. 상세에서는
+   폐기된 provider/dataset vector를 허용하지 않는다. standalone descendant는 직계 parent만 허용하지 않고
    Map의 recursive root projection과 non-null lineage 표식을 신뢰한다. dataset row scope는 canonical
    값만 허용하고 POI allowed scope는 `target_grids` 뒤 `external_system:*`만 올 수 있다.
 
@@ -75,7 +79,7 @@ cookie, HSTS, dev safety, Resend webhook, rate-limit backend와 kor-travel-map c
   enum은 계속 거부한다. attempt `failed`의 attempt error는 Map failed canonical code여야 하지만,
   exact-base member/run의 retryable transport 증거와 hidden-base definitive failed 증거는 한 snapshot에
   섞일 수 있다. `cancel_failed` run error는 retryable/failed canonical code 합집합만 허용한다.
-- 최초 attempt는 full current root topology와 anchor/exposed member를 모두 freeze해야 한다. retry attempt는
+- 최초 attempt는 full current root topology와 요청 job/anchor/projected job을 모두 freeze해야 한다. retry attempt는
   `previous_cancellation_id` lineage 아래 이전 attempt의 unresolved run-backed `cancel_failed` subset만
   복사하므로 이미 해결된 root/requested member가 current members에서 빠질 수 있다.
 - attempt `status`와 `finished_at/error`, run `result`와 engine timestamp, member
@@ -117,7 +121,9 @@ cookie, HSTS, dev safety, Resend webhook, rate-limit backend와 kor-travel-map c
   reconciliation 잠금, 사유 500자 제한, 행 단위 잠금, cursor
   다음/이전 이동, 50개 이후 job 취소, detail/list/grid 재조회, operator form 은닉, 미확정 취소의 cancel
   POST 1회만 확인.
-- 최종: WSL gate와 N150 prod live UI E2E를 통과한 뒤 T-ADM-C6c를 완료 처리한다.
+- 최종: WSL gate와 N150 prod live UI E2E를 통과한 뒤 T-ADM-C6c를 완료 처리한다. 배포 전에는 Map
+  release가 삼중항 Admin 계약을 노출하고 docker-manager PR #170이 merge·배포되어 같은 Map/Pinvi
+  compatible pair를 고정해야 한다. 현재 #170은 draft이므로 PR #443만으로 production-ready가 아니다.
 
 최종 기능 diff는 단일 적대적 리뷰 승인을 받았다. 승인 뒤 WSL에서 API Ruff·format·strict mypy,
 unit `565 passed, 1 skipped`, integration `354 passed`, 마지막 보정 회귀 `361 passed`를 통과했다.

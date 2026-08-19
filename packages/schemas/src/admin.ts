@@ -627,9 +627,11 @@ export type AdminProviderImportJobCancellationResult = z.infer<
 >;
 
 export const AdminProviderDatasetSummarySchema = z.object({
+  provider_dataset_id: z.number().int().positive(),
   provider: z.string(),
   dataset_key: z.string(),
   sync_scope: z.string(),
+  operation_key: z.string().nullable(),
   status: z.string(),
   last_success_at: Iso8601Schema.nullable().default(null),
   last_failure_at: Iso8601Schema.nullable().default(null),

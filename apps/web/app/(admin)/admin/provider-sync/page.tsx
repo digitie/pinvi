@@ -322,6 +322,7 @@ export default function AdminProviderSyncPage() {
         <div>
           <div className="font-mono text-xs">{item.provider}</div>
           <div className="font-mono text-xs text-muted">{item.dataset_key}</div>
+          <div className="font-mono text-xs text-muted">dataset #{item.provider_dataset_id}</div>
         </div>
       ),
     },
@@ -329,8 +330,15 @@ export default function AdminProviderSyncPage() {
       key: 'scope',
       header: 'scope',
       sortable: true,
-      sortValue: (item) => item.sync_scope,
-      cell: (item) => item.sync_scope,
+      sortValue: (item) => `${item.sync_scope}:${item.operation_key ?? ''}`,
+      cell: (item) => (
+        <div>
+          <div className="font-mono text-xs">{item.sync_scope}</div>
+          <div className="font-mono text-xs text-muted">
+            {item.operation_key ?? '(scope rollup)'}
+          </div>
+        </div>
+      ),
     },
     {
       key: 'status',
@@ -580,9 +588,15 @@ export default function AdminProviderSyncPage() {
           columns={providerColumns}
           rows={providers}
           loading={providersQuery.isLoading}
-          rowKey={(item) => `${item.provider}:${item.dataset_key}:${item.sync_scope}`}
+          rowKey={(item) =>
+            JSON.stringify([item.provider_dataset_id, item.sync_scope, item.operation_key])
+          }
           rowTestId={(item) =>
-            `admin-provider-row-${item.provider}-${item.dataset_key}-${item.sync_scope}`
+            `admin-provider-row-${item.provider_dataset_id}-${encodeURIComponent(item.sync_scope)}-op-${
+              item.operation_key === null
+                ? 'null'
+                : `value-${encodeURIComponent(item.operation_key)}`
+            }`
           }
           empty="provider sync 상태가 없습니다."
         />

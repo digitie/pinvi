@@ -25,6 +25,68 @@
   `22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32`로 고정했다. Admin feature
   3경로의 AdminBFF security, exact query 집합, response/container ref, 3축·transition·curation·weather
   소비 shape를 별도 unit gate로 검증한다.
+- **stack 정렬**: 전문 적대 리뷰와 필수 원격 CI를 통과한 draft PR #443 head `cbdf2815`를 이 브랜치에
+  병합했다. 동일한 Admin OpenAPI byte snapshot은 한 파일로 재사용하고, #443의 ops gate와 T-VN-42의
+  feature gate를 함께 검증한다. PR #456 base는 #443 브랜치로 바꿔 순서를 명시한다.
+
+## 2026-08-19 (codex) — PR #443 Map Admin ops 삼중항 복구
+
+- **충돌 해소**: `fix/tvn41-map-triple-contract`를 최신 main에 merge하고 T-VN-42와 겹치던 feature 파일은
+  main 판으로 되돌려 PR #443을 ops 범위로 정리했다.
+- **현재 Map 계약**: grid의 `is_active`, schedule basis `dagster_operation_key_tag`, refresh
+  `effect=none`, pipeline/update request의 `provider_datasets`/`dataset_memberships`와
+  `operation_key`를 반영했다. `operation_key=null` scope-rollup 행은 같은 dataset/scope의 실제
+  operation member를 통해 active/latest 실행을 가질 수 있다. 구형 provider/dataset vector와
+  `operation_registry_version`, `requested_sync_scope/effective_sync_scope`는 fail-close한다.
+- **Web/계약 게이트**: 공용 Zod와 provider-sync 행 identity를 삼중항으로 바꿨다. Map
+  `da2c740aa4b4239821075519959c38534cc65d2f`의 전체 Admin OpenAPI 원본
+  (SHA-256 `22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32`)을 vendor하고,
+  ops 소비 경로·security·query·응답 schema와 폐기 필드 부재를 CI 계약으로 고정했다.
+- **적대 리뷰**: 1차 API 리뷰 P1에서 Map의 `operation_member_id`가 job UUID가 아니라
+  `feature_update_request_dataset_id`/`import_job_dataset_id`임을 확인했다. triple 소속 검증은 이 ID를
+  섞지 않고, cancellation frozen topology는 요청/anchor/projected **job ID**만 대조하도록 교정했다.
+  대체 API 전문 리뷰 P2에 따라 test fixture도 membership/job UUID를 분리하고, projected job UUID와
+  membership UUID를 비교하던 거짓 불변식을 제거했다. 프론트 전문 리뷰 P2는 operation이 다른 형제
+  행을 시각적으로 구분하고 null과 문자열 `none` row key가 충돌하지 않도록 표시·typed key·E2E를
+  보강했다.
+- **검증**: projection unit `216 passed`, API unit `1,013 passed`(T-VN-42 소유 local Map user-spec
+  신선도 1건 제외), OpenAPI gate `31 passed`, provider-sync integration `32 passed`, schemas Vitest
+  `3 passed`, schemas/web typecheck, Ruff/Prettier와 최종 필수 원격 CI 통과.
+- **배포 경계**: Map 삼중항 release와 docker-manager draft PR #170 merge·배포 전에는 production-ready가
+  아니다. PR #443은 draft로 유지하고 후속 draft PR #456을 그 위에 stack한다.
+
+## 2026-08-19 (claude) — T-310: Android 에뮬레이터 Dev Client smoke
+
+PR #446의 마지막 완료 조건이던 Dev Client smoke를 Android 에뮬레이터(AVD `pinvi_api35`, API 35
+google_apis x86_64)에서 실행했다. EAS `development` 빌드(`5a90f90c`) APK를 설치하고, WSL의 dev 스택
+(API `12801` · Postgres `5432`)에 붙여 시드 계정·시드 여행으로 네 항목을 확인했다.
+
+**결과** — ① 여행 생성 날짜 검증: 범위 오류(`종료일은 시작일 이후여야 합니다.`)와 형식 오류
+(`날짜는 YYYY-MM-DD 형식으로…`)가 해당 필드에만 붙고 제출이 막히며 편집 시 해제된다. ② POI 재정렬:
+낙관적 반영이 서버에 그대로 반영되고(`002s/005k/008c`), API를 내린 상태에서는 원래 순서로 롤백되며
+실패가 표면화된다. ③ POI 삭제: `confirmDestructive`가 대상 이름을 담아 확인을 받고 취소는 아무것도
+지우지 않는다. ④ 예산 검증: `-100`이 `금액은 0 이상의 숫자로만 입력해 주세요. (예: 30000)`로 막히고
+정상값은 저장·반영된다. 위치 동의 gate는 로컬에 VWorld 키 값이 없어(모두 length=0) 지도 표면 자체가
+키 오류 화면에서 멈춰 런타임 확인을 못 했다 — 코드 경로(`app/(app)/map.tsx`)는 OS 권한 요청 전에
+LBS 약관·개인위치정보 동의를 먼저 받는 구조로 확인했다.
+
+**고친 것** — smoke를 막던 실제 결함 하나. `apps/mobile`이 react/react-dom을 `19.2.6`으로 핀했는데
+RN 0.85.3의 렌더러는 `19.2.3` 정확 일치를 요구해 dev client가 부팅 즉시 죽었다(`Incompatible React
+versions`). `expo.install.exclude`에 react/react-dom이 들어 있어 `expo install --check`가 이 드리프트를
+가려 왔다. 두 패키지를 `19.2.3`으로 내리고 예외 목록에서 빼서 앞으로는 체크에 걸리게 했다. 루트 react는
+`19.2.6`·`apps/web`은 `^19.0.0` 그대로라 웹은 영향이 없다(lock diff는 `apps/mobile` 블록의 핀 수정 +
+`apps/mobile/node_modules/react*` 추가, 그리고 무관한 `playwright/node_modules/fsevents`의 `dev` 플래그
+1줄 — darwin optional 엔트리라 설치·런타임 영향 없음).
+
+**환경** — WSL Metro ↔ Windows 에뮬레이터 조합의 함정 셋(Metro의 IPv6 바인딩, manifest launchAsset이
+Metro 자신의 host/port로 생성되는 점, deep link 실행)을 `apps/mobile/README.md`에 절차로 고정했다.
+새로 연 것: T-311(expo patch 드리프트 + Hermes V1 + **react 중복**), T-318(`expo-router` hoisting으로
+`expo start` 실패), T-319(모바일 실패 문구가 원문 예외 노출).
+
+react 핀을 내리면서 `expo-doctor`의 duplicate 체크가 하나 늘었다(root `19.2.6` ↔ mobile `19.2.3`).
+루트 `overrides`로 단일 버전을 강제하는 안을 시험했으나 npm이 `packages/*`의 `react >=18` 때문에
+root 19.2.6을 유지해 3벌이 되는 등 웹 런타임까지 건드리는 정렬 작업이라, 이번 PR에서 되돌리고
+T-311로 분리했다. 이 체크는 CI를 막지 않는 informational job이다.
 
 ## 2026-08-19 — Hallmark 재설계 완주(T-313~T-316)
 

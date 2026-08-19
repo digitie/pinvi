@@ -5,7 +5,9 @@ from __future__ import annotations
 from copy import deepcopy
 
 import pytest
+from pydantic import ValidationError
 
+from app.schemas.admin import AdminProviderDatasetSummary
 from app.services.kor_travel_map_ops_projection import (
     KorTravelMapOpsContractError,
     project_dataset_grid,
@@ -21,6 +23,10 @@ ROOT_ID = "11111111-1111-4111-8111-111111111111"
 PROJECTED_ID = "22222222-2222-4222-8222-222222222222"
 CHILD_ID = "33333333-3333-4333-8333-333333333333"
 CANCELLATION_ID = "44444444-4444-4444-8444-444444444444"
+ROOT_MEMBER_ID = "55555555-5555-4555-8555-555555555555"
+PROJECTED_MEMBER_ID = "66666666-6666-4666-8666-666666666666"
+UPDATE_MEMBER_ID = "77777777-7777-4777-8777-777777777777"
+CHILD_MEMBER_ID = "88888888-8888-4888-8888-888888888888"
 
 
 def _overview() -> dict[str, object]:
@@ -74,7 +80,7 @@ def _projected_job(progress: int) -> dict[str, object]:
         "dagster_run_id": "run-1",
         "dagster_run_status": "STARTED",
         "trigger_kind": "manual",
-        "operation_registry_version": "1",
+        "operation_key": "kma_special_days_refresh",
         "load_batch_id": None,
         "parent_job_id": None,
         "depth": 1,
@@ -88,14 +94,14 @@ def _execution(progress: int = 1) -> dict[str, object]:
         "id": ROOT_ID,
         "status": "running",
         "created_at": "2026-07-18T00:00:00+09:00",
-        "providers": ["kma"],
-        "dataset_keys": ["special_days"],
         "provider_datasets": [
             {
+                "provider_dataset_id": 41,
                 "provider": "kma",
                 "dataset_key": "special_days",
-                "sync_scope": None,
-                "operation_member_id": PROJECTED_ID,
+                "sync_scope": "dataset_wide",
+                "operation_key": "kma_special_days_refresh",
+                "operation_member_id": PROJECTED_MEMBER_ID,
                 "status": "running",
             }
         ],
@@ -111,7 +117,7 @@ def _execution(progress: int = 1) -> dict[str, object]:
         "dagster_run_id": "run-1",
         "dagster_run_status": "STARTED",
         "trigger_kind": "manual",
-        "operation_registry_version": "1",
+        "operation_key": "kma_special_days_refresh",
         "requested_job_id": None,
         "linked_job_count": 2,
         "projected_job": _projected_job(progress),
@@ -122,12 +128,14 @@ def _execution(progress: int = 1) -> dict[str, object]:
 
 def _dataset_row() -> dict[str, object]:
     return {
+        "provider_dataset_id": 41,
         "provider": "kma",
         "dataset_key": "special_days",
         "detail_url": (
-            "/v1/ops/datasets/detail?provider=kma&dataset_key=special_days&sync_scope=dataset_wide"
+            "/v1/ops/datasets/41?sync_scope=dataset_wide&operation_key=kma_special_days_refresh"
         ),
         "sync_scope": "dataset_wide",
+        "operation_key": "kma_special_days_refresh",
         "status": "healthy",
         "last_success_at": "2026-07-18T00:00:00+09:00",
         "last_failure_at": None,
@@ -143,7 +151,7 @@ def _dataset_row() -> dict[str, object]:
         },
         "schedule": {
             "source": "dagster_graphql",
-            "basis": "dagster_definition_tags",
+            "basis": "dagster_operation_key_tag",
             "status": "RUNNING",
             "schedule_names": ["kma_schedule"],
             "active_schedule_names": ["kma_schedule"],
@@ -158,7 +166,7 @@ def _dataset_row() -> dict[str, object]:
             "feature_kind": "weather",
             "provider_state_default_scope": "daily",
             "label": "특일",
-            "is_feature_load": True,
+            "is_active": True,
             "is_refreshable": True,
             "scope_refresh": {
                 "supported": False,
@@ -180,7 +188,6 @@ def _dataset_row() -> dict[str, object]:
         },
         "refresh_policy": None,
         "dataset_issues": {"open_count": 0, "severity_counts": {}},
-        "provider_issues": {"open_count": 0, "severity_counts": {}},
     }
 
 
@@ -274,7 +281,7 @@ def _execution_detail() -> dict[str, object]:
     projected_job["detail_url"] = f"/v1/ops/pipeline/executions/import_job/{ROOT_ID}"
     projected_job["depth"] = 0
     execution["linked_job_count"] = 1
-    execution["provider_datasets"][0]["operation_member_id"] = ROOT_ID  # type: ignore[index]
+    execution["provider_datasets"][0]["operation_member_id"] = ROOT_MEMBER_ID  # type: ignore[index]
     return {
         "execution": {
             "kind": "import_job",
@@ -282,8 +289,7 @@ def _execution_detail() -> dict[str, object]:
             "status": "running",
             "created_at": "2026-07-18T00:00:00+09:00",
             "job_kind": "provider_import",
-            "provider": "kma",
-            "dataset_key": "special_days",
+            "provider_datasets": deepcopy(execution["provider_datasets"]),
             "progress": 37,
             "current_stage": "normalize",
             "scope_type": None,
@@ -296,7 +302,7 @@ def _execution_detail() -> dict[str, object]:
             "dagster_run_id": "run-1",
             "dagster_run_status": "STARTED",
             "trigger_kind": "manual",
-            "operation_registry_version": "1",
+            "operation_key": "kma_special_days_refresh",
             "job_id": None,
             "request_id": None,
             "load_batch_id": None,
@@ -325,10 +331,19 @@ def _import_job_detail() -> dict[str, object]:
         "source_checksum": None,
         "error_message": None,
         "dagster_run_id": "run-1",
-        "provider": "kma",
-        "dataset_key": "special_days",
+        "provider_datasets": [
+            {
+                "provider_dataset_id": 41,
+                "provider": "kma",
+                "dataset_key": "special_days",
+                "sync_scope": "dataset_wide",
+                "operation_key": "kma_special_days_refresh",
+                "operation_member_id": ROOT_MEMBER_ID,
+                "status": "running",
+            }
+        ],
         "trigger_kind": "manual",
-        "operation_registry_version": "1",
+        "operation_key": "kma_special_days_refresh",
         "dagster_run_status": "STARTED",
         "created_at": "2026-07-18T00:00:00+09:00",
         "started_at": "2026-07-18T00:01:00+09:00",
@@ -343,13 +358,17 @@ def _update_request_detail() -> dict[str, object]:
         "scope_type": "provider_dataset",
         "scope": {
             "type": "provider_dataset",
-            "provider": "kma",
-            "dataset_key": "special_days",
+            "provider_dataset_id": 41,
+            "sync_scope": "dataset_wide",
+            "operation_key": "kma_special_days_refresh",
         },
-        "requested_sync_scope": None,
-        "effective_sync_scope": "dataset_wide",
-        "providers": [],
-        "dataset_keys": [],
+        "dataset_memberships": [
+            {
+                "provider_dataset_id": 41,
+                "sync_scope": "dataset_wide",
+                "operation_key": "kma_special_days_refresh",
+            }
+        ],
         "update_policy": {"mode": "refresh"},
         "run_mode": "now",
         "priority": 100,
@@ -388,11 +407,12 @@ def _as_update_request_detail() -> dict[str, object]:
             "current_stage": None,
             "dagster_run_status": None,
             "trigger_kind": "update_request",
-            "operation_registry_version": None,
+            "operation_key": None,
             "detail_url": (f"/v1/ops/pipeline/executions/update_request/{PROJECTED_ID}"),
         }
     )
     root["provider_datasets"][0]["sync_scope"] = "dataset_wide"  # type: ignore[index]
+    root["provider_datasets"][0]["operation_member_id"] = UPDATE_MEMBER_ID  # type: ignore[index]
     execution["request_id"] = PROJECTED_ID
     detail["update_request"] = _update_request_detail()
     return detail
@@ -402,12 +422,14 @@ def _dataset_execution(
     *,
     status: str = "running",
     pair_status: str | None = None,
-    sync_scope: str | None = "dataset_wide",
+    sync_scope: str = "dataset_wide",
+    operation_key: str = "kma_special_days_refresh",
 ) -> dict[str, object]:
     root = _execution(progress=37)
     member = root["provider_datasets"][0]  # type: ignore[index]
     assert isinstance(member, dict)
     member["sync_scope"] = sync_scope
+    member["operation_key"] = operation_key
     member["status"] = pair_status or status
     projected_job = deepcopy(root["projected_job"])
     assert isinstance(projected_job, dict)
@@ -420,10 +442,9 @@ def _dataset_execution(
         "detail_url": root["detail_url"],
         "status": status,
         "pair_status": pair_status or status,
-        "operation_member_id": PROJECTED_ID,
+        "operation_member_id": PROJECTED_MEMBER_ID,
         "sync_scope": sync_scope,
-        "providers": root["providers"],
-        "dataset_keys": root["dataset_keys"],
+        "operation_key": operation_key,
         "provider_datasets": root["provider_datasets"],
         "created_at": root["created_at"],
         "started_at": root["started_at"],
@@ -431,7 +452,6 @@ def _dataset_execution(
         "dagster_run_id": root["dagster_run_id"],
         "dagster_run_status": root["dagster_run_status"],
         "trigger_kind": root["trigger_kind"],
-        "operation_registry_version": root["operation_registry_version"],
         "error_message": root["error_message"],
         "projected_job": projected_job,
         "cancellation": None,
@@ -445,6 +465,26 @@ def test_dataset_grid_keeps_rate_limit_and_schedule_times_separate() -> None:
     assert records[0].sync_scope == "dataset_wide"
     assert records[0].eligible_after.isoformat() == "2026-07-18T01:00:00+09:00"
     assert records[0].schedule_next_scheduled_at.isoformat() == "2026-07-19T03:30:00+09:00"
+
+
+def test_dataset_grid_catalog_only_row_preserves_required_null_operation_key() -> None:
+    data = _dataset_grid()
+    row = data["items"][0]  # type: ignore[index]
+    assert isinstance(row, dict)
+    row["operation_key"] = None
+    row["detail_url"] = "/v1/ops/datasets/41?sync_scope=dataset_wide"
+    # Map은 refresh membership이 없는 catalog/orphan/policy-only 행에도 같은
+    # dataset+scope의 최신 실행을 rollup해서 붙인다. 행 identity의 null operation과
+    # 실행이 실제로 가리키는 non-null member operation을 동시에 보존해야 한다.
+    row["active_execution"] = _dataset_execution()
+
+    record = project_dataset_grid(data)[0]
+    serialized = record.model_dump(mode="json")
+    assert serialized["operation_key"] is None
+
+    del serialized["operation_key"]
+    with pytest.raises(ValidationError, match="operation_key"):
+        AdminProviderDatasetSummary.model_validate(serialized)
 
 
 def test_dataset_grid_rejects_missing_schedule_source_contract() -> None:
@@ -475,14 +515,16 @@ def test_dataset_grid_accepts_exact_active_member_scope() -> None:
     assert len(project_dataset_grid(data)) == 1
 
 
-def test_dataset_grid_accepts_dataset_wide_nullable_execution_scope() -> None:
+def test_dataset_grid_rejects_nullable_execution_scope() -> None:
     data = _dataset_grid()
     row = data["items"][0]  # type: ignore[index]
     assert isinstance(row, dict)
     row["sync_scope"] = "dataset_wide"
-    row["active_execution"] = _dataset_execution(sync_scope=None)
+    row["active_execution"] = _dataset_execution()
+    row["active_execution"]["sync_scope"] = None  # type: ignore[index]
 
-    assert len(project_dataset_grid(data)) == 1
+    with pytest.raises(KorTravelMapOpsContractError, match="dataset grid"):
+        project_dataset_grid(data)
 
 
 def test_dataset_grid_rejects_duplicate_provider_dataset_members() -> None:
@@ -491,8 +533,7 @@ def test_dataset_grid_rejects_duplicate_provider_dataset_members() -> None:
     assert isinstance(row, dict)
     execution = _dataset_execution()
     duplicate = deepcopy(execution["provider_datasets"][0])  # type: ignore[index]
-    duplicate["sync_scope"] = "target_grids"
-    duplicate["operation_member_id"] = CHILD_ID
+    duplicate["operation_member_id"] = CHILD_MEMBER_ID
     execution["provider_datasets"].append(duplicate)  # type: ignore[union-attr]
     row["active_execution"] = execution
 
@@ -539,10 +580,10 @@ def test_dataset_grid_classifies_execution_by_pair_status() -> None:
     row["latest_execution"]["detail_url"] = (  # type: ignore[index]
         f"/v1/ops/pipeline/executions/import_job/{CHILD_ID}"
     )
-    row["latest_execution"]["operation_member_id"] = CHILD_ID  # type: ignore[index]
+    row["latest_execution"]["operation_member_id"] = CHILD_MEMBER_ID  # type: ignore[index]
     row["latest_execution"]["provider_datasets"][0][  # type: ignore[index]
         "operation_member_id"
-    ] = CHILD_ID
+    ] = CHILD_MEMBER_ID
 
     assert len(project_dataset_grid(data)) == 1
 
@@ -632,14 +673,14 @@ def test_dataset_grid_rejects_noncanonical_row_scope(invalid_scope: str) -> None
     assert isinstance(row, dict)
     row["sync_scope"] = invalid_scope
     row["detail_url"] = (
-        f"/v1/ops/datasets/detail?provider=kma&dataset_key=special_days&sync_scope={invalid_scope}"
+        f"/v1/ops/datasets/41?sync_scope={invalid_scope}&operation_key=kma_special_days_refresh"
     )
 
     with pytest.raises(KorTravelMapOpsContractError, match="dataset grid"):
         project_dataset_grid(data)
 
 
-def test_dataset_grid_rejects_dataset_wide_in_poi_allowed_scopes() -> None:
+def test_dataset_grid_accepts_declared_dataset_wide_in_poi_allowed_scopes() -> None:
     data = _dataset_grid()
     row = data["items"][0]  # type: ignore[index]
     assert isinstance(row, dict)
@@ -652,11 +693,31 @@ def test_dataset_grid_rejects_dataset_wide_in_poi_allowed_scopes() -> None:
         "reason": None,
     }
 
-    with pytest.raises(KorTravelMapOpsContractError, match="dataset grid"):
-        project_dataset_grid(data)
+    assert len(project_dataset_grid(data)) == 1
 
 
-def test_dataset_grid_rejects_selected_projected_job_status_drift() -> None:
+def test_dataset_grid_accepts_explicit_no_refresh_effect() -> None:
+    data = _dataset_grid()
+    row = data["items"][0]  # type: ignore[index]
+    assert isinstance(row, dict)
+    catalog = row["catalog"]
+    assert isinstance(catalog, dict)
+    row["mutable"] = False
+    catalog["is_active"] = False
+    catalog["is_refreshable"] = False
+    catalog["scope_refresh"] = {
+        "supported": False,
+        "selector": "none",
+        "effect": "none",
+        "default_sync_scope": "dataset_wide",
+        "allowed_sync_scopes": ["dataset_wide"],
+        "reason": "비활성 dataset이라 갱신할 수 없습니다.",
+    }
+
+    assert len(project_dataset_grid(data)) == 1
+
+
+def test_dataset_grid_keeps_selected_member_and_projected_job_lifecycle_separate() -> None:
     data = _dataset_grid()
     row = data["items"][0]  # type: ignore[index]
     assert isinstance(row, dict)
@@ -664,8 +725,7 @@ def test_dataset_grid_rejects_selected_projected_job_status_drift() -> None:
     execution["projected_job"]["status"] = "done"  # type: ignore[index]
     row["active_execution"] = execution
 
-    with pytest.raises(KorTravelMapOpsContractError, match="dataset grid"):
-        project_dataset_grid(data)
+    assert len(project_dataset_grid(data)) == 1
 
 
 @pytest.mark.parametrize("progress", [0, 1, 100])
@@ -701,6 +761,35 @@ def test_pipeline_execution_detail_preserves_matching_cancellation_overlay() -> 
     detail["cancellation"] = cancellation
     root = detail["root"]
     assert isinstance(root, dict)
+    root["cancellation"] = {
+        "cancellation_id": CANCELLATION_ID,
+        "status": "completed",
+        "requested_at": "2026-07-18T00:02:00+09:00",
+        "requested_by": "service:pinvi",
+        "reason": "duplicate",
+        "retryable": False,
+        "unresolved_member_count": 0,
+    }
+
+    record = project_pipeline_execution(detail, requested_job_id=ROOT_ID)
+
+    assert record.cancellation is not None
+    assert record.cancellation.status == "completed"
+
+
+def test_update_root_cancellation_uses_job_ids_not_dataset_membership_ids() -> None:
+    detail = _as_update_request_detail()
+    cancellation = _cancellation()
+    detail["cancellation"] = cancellation
+    root = detail["root"]
+    execution = detail["execution"]
+    assert isinstance(root, dict)
+    assert isinstance(execution, dict)
+    assert root["provider_datasets"][0]["operation_member_id"] == UPDATE_MEMBER_ID  # type: ignore[index]
+    assert execution["provider_datasets"][0]["operation_member_id"] == ROOT_MEMBER_ID  # type: ignore[index]
+    member_ids = {UPDATE_MEMBER_ID, ROOT_MEMBER_ID}
+    job_ids = {PROJECTED_ID, ROOT_ID}
+    assert member_ids.isdisjoint(job_ids)
     root["cancellation"] = {
         "cancellation_id": CANCELLATION_ID,
         "status": "completed",
@@ -808,7 +897,7 @@ def test_pipeline_execution_detail_rejects_partial_import_job_fixture() -> None:
         ("dagster_run_id", "run-2"),
         ("dagster_run_status", "SUCCESS"),
         ("trigger_kind", "scheduled"),
-        ("operation_registry_version", "2"),
+        ("operation_key", "other_refresh"),
         ("load_batch_id", "55555555-5555-4555-8555-555555555555"),
         ("parent_job_id", "66666666-6666-4666-8666-666666666666"),
     ],
@@ -839,7 +928,7 @@ def test_pipeline_execution_detail_rejects_import_lifecycle_drift(
         ("dagster_run_id", "run-2"),
         ("dagster_run_status", "SUCCESS"),
         ("trigger_kind", "scheduled"),
-        ("operation_registry_version", "2"),
+        ("operation_key", "other_refresh"),
     ],
 )
 def test_pipeline_execution_detail_rejects_standalone_root_lifecycle_drift(
@@ -859,7 +948,7 @@ def test_pipeline_execution_detail_rejects_import_scope_outside_root() -> None:
     detail = _execution_detail()
     import_job = detail["import_job"]
     assert isinstance(import_job, dict)
-    import_job["dataset_key"] = "impossible_dataset"
+    import_job["provider_datasets"][0]["dataset_key"] = "impossible_dataset"  # type: ignore[index]
 
     with pytest.raises(KorTravelMapOpsContractError, match="pipeline execution"):
         project_pipeline_execution(detail, requested_job_id=ROOT_ID)
@@ -898,7 +987,7 @@ def test_pipeline_execution_detail_rejects_cancellation_member_drift() -> None:
         project_pipeline_execution(detail, requested_job_id=ROOT_ID)
 
 
-@pytest.mark.parametrize("missing", ["anchor", "exposed_member"])
+@pytest.mark.parametrize("missing", ["anchor", "requested"])
 def test_pipeline_execution_detail_rejects_frozen_topology_substitution(
     missing: str,
 ) -> None:
@@ -910,34 +999,22 @@ def test_pipeline_execution_detail_rejects_frozen_topology_substitution(
     assert isinstance(execution, dict)
     assert isinstance(import_job, dict)
     unrelated_id = "55555555-5555-4555-8555-555555555555"
-    requested_job_id = ROOT_ID
+    root["linked_job_count"] = 2
+    execution.update(
+        {
+            "id": CHILD_ID,
+            "detail_url": (f"/v1/ops/pipeline/executions/import_job/{CHILD_ID}"),
+        }
+    )
+    import_job.update(
+        {
+            "job_id": CHILD_ID,
+            "parent_job_id": ROOT_ID,
+        }
+    )
     if missing == "anchor":
-        root["linked_job_count"] = 2
-        execution.update(
-            {
-                "id": CHILD_ID,
-                "detail_url": (f"/v1/ops/pipeline/executions/import_job/{CHILD_ID}"),
-            }
-        )
-        import_job.update(
-            {
-                "job_id": CHILD_ID,
-                "parent_job_id": ROOT_ID,
-            }
-        )
-        requested_job_id = CHILD_ID
         frozen_ids = [CHILD_ID, unrelated_id]
     else:
-        root["provider_datasets"].append(  # type: ignore[union-attr]
-            {
-                "provider": "visitkorea",
-                "dataset_key": "places",
-                "sync_scope": "target_grids",
-                "operation_member_id": CHILD_ID,
-                "status": "running",
-            }
-        )
-        root["linked_job_count"] = 2
         frozen_ids = [ROOT_ID, unrelated_id]
     cancellation = _cancellation()
     cancellation["members"] = [
@@ -960,7 +1037,7 @@ def test_pipeline_execution_detail_rejects_frozen_topology_substitution(
     }
 
     with pytest.raises(KorTravelMapOpsContractError, match="pipeline execution"):
-        project_pipeline_execution(detail, requested_job_id=requested_job_id)
+        project_pipeline_execution(detail, requested_job_id=CHILD_ID)
 
 
 def test_import_job_detail_keeps_requested_job_when_canonical_root_is_update_request() -> None:
@@ -978,7 +1055,7 @@ def test_import_job_detail_keeps_requested_job_when_canonical_root_is_update_req
     root["current_stage"] = None
     root["dagster_run_status"] = None
     root["trigger_kind"] = "update_request"
-    root["operation_registry_version"] = None
+    root["operation_key"] = None
     root["provider_datasets"][0]["sync_scope"] = "dataset_wide"  # type: ignore[index]
     root["detail_url"] = f"/v1/ops/pipeline/executions/update_request/{PROJECTED_ID}"
     projected_job = root["projected_job"]
@@ -1019,67 +1096,50 @@ def test_import_job_detail_rejects_update_request_reciprocal_job_drift() -> None
 @pytest.mark.parametrize(
     "drift",
     [
-        "providers",
-        "dataset_keys",
-        "scope_provider",
-        "requested_sync_scope",
-        "effective_sync_scope",
-        "effective_sync_scope_null",
+        "retired_providers",
+        "scope_provider_dataset_id",
+        "scope_operation_key",
+        "scope_extra_natural_key",
         "raw_alias_scope",
         "raw_random_scope",
-        "provider_filter",
-        "dataset_filter",
+        "membership_provider_dataset_id",
+        "membership_sync_scope",
+        "membership_operation_key",
+        "membership_missing",
         "root_sync_scope",
     ],
 )
 def test_import_job_detail_rejects_update_request_scope_topology_drift(
     drift: str,
 ) -> None:
-    detail = _execution_detail()
+    detail = _as_update_request_detail()
     root = detail["root"]
-    execution = detail["execution"]
+    update_request = detail["update_request"]
     assert isinstance(root, dict)
-    assert isinstance(execution, dict)
-    root["kind"] = "update_request"
-    root["id"] = PROJECTED_ID
-    root["requested_job_id"] = ROOT_ID
-    root["scope_type"] = "provider_dataset"
-    root["priority"] = 100
-    root["run_mode"] = "now"
-    root["operator"] = "service:pinvi"
-    root["progress"] = None
-    root["current_stage"] = None
-    root["dagster_run_status"] = None
-    root["trigger_kind"] = "update_request"
-    root["operation_registry_version"] = None
-    root["provider_datasets"][0]["sync_scope"] = "dataset_wide"  # type: ignore[index]
-    root["detail_url"] = f"/v1/ops/pipeline/executions/update_request/{PROJECTED_ID}"
-    execution["request_id"] = PROJECTED_ID
-    update_request = _update_request_detail()
-    detail["update_request"] = update_request
+    assert isinstance(update_request, dict)
 
-    if drift == "providers":
+    if drift == "retired_providers":
         update_request["providers"] = ["visitkorea"]
-    elif drift == "dataset_keys":
-        update_request["dataset_keys"] = ["places"]
-    elif drift == "scope_provider":
-        update_request["scope"]["provider"] = "visitkorea"  # type: ignore[index]
-    elif drift == "requested_sync_scope":
-        update_request["requested_sync_scope"] = "target_grids"
-    elif drift == "effective_sync_scope":
-        update_request["effective_sync_scope"] = "target_grids"
-    elif drift == "effective_sync_scope_null":
-        update_request["effective_sync_scope"] = None
+    elif drift == "scope_provider_dataset_id":
+        update_request["scope"]["provider_dataset_id"] = 42  # type: ignore[index]
+    elif drift == "scope_operation_key":
+        update_request["scope"]["operation_key"] = "visitkorea_places_refresh"  # type: ignore[index]
+    elif drift == "scope_extra_natural_key":
+        update_request["scope"]["provider"] = "kma"  # type: ignore[index]
     elif drift == "raw_alias_scope":
         update_request["scope"]["sync_scope"] = "default"  # type: ignore[index]
-        update_request["requested_sync_scope"] = "default"
     elif drift == "raw_random_scope":
         update_request["scope"]["sync_scope"] = "random"  # type: ignore[index]
-        update_request["requested_sync_scope"] = "random"
-    elif drift == "provider_filter":
-        update_request["providers"] = ["kma"]
-    elif drift == "dataset_filter":
-        update_request["dataset_keys"] = ["special_days"]
+    elif drift == "membership_provider_dataset_id":
+        update_request["dataset_memberships"][0]["provider_dataset_id"] = 42  # type: ignore[index]
+    elif drift == "membership_sync_scope":
+        update_request["dataset_memberships"][0]["sync_scope"] = "target_grids"  # type: ignore[index]
+    elif drift == "membership_operation_key":
+        update_request["dataset_memberships"][0]["operation_key"] = (  # type: ignore[index]
+            "visitkorea_places_refresh"
+        )
+    elif drift == "membership_missing":
+        update_request["dataset_memberships"] = []
     else:
         root["provider_datasets"][0]["sync_scope"] = "target_grids"  # type: ignore[index]
 
@@ -1087,32 +1147,8 @@ def test_import_job_detail_rejects_update_request_scope_topology_drift(
         project_pipeline_execution(detail, requested_job_id=ROOT_ID)
 
 
-def test_import_job_detail_accepts_selector_none_effective_scope() -> None:
-    detail = _execution_detail()
-    root = detail["root"]
-    execution = detail["execution"]
-    assert isinstance(root, dict)
-    assert isinstance(execution, dict)
-    root.update(
-        {
-            "kind": "update_request",
-            "id": PROJECTED_ID,
-            "requested_job_id": ROOT_ID,
-            "scope_type": "provider_dataset",
-            "priority": 100,
-            "run_mode": "now",
-            "operator": "service:pinvi",
-            "progress": None,
-            "current_stage": None,
-            "dagster_run_status": None,
-            "trigger_kind": "update_request",
-            "operation_registry_version": None,
-            "detail_url": (f"/v1/ops/pipeline/executions/update_request/{PROJECTED_ID}"),
-        }
-    )
-    root["provider_datasets"][0]["sync_scope"] = "dataset_wide"  # type: ignore[index]
-    execution["request_id"] = PROJECTED_ID
-    detail["update_request"] = _update_request_detail()
+def test_import_job_detail_accepts_provider_dataset_membership_triple() -> None:
+    detail = _as_update_request_detail()
 
     record = project_pipeline_execution(detail, requested_job_id=ROOT_ID)
 
@@ -1122,13 +1158,18 @@ def test_import_job_detail_accepts_selector_none_effective_scope() -> None:
 def test_import_job_detail_accepts_explicit_canonical_scope() -> None:
     detail = _as_update_request_detail()
     root = detail["root"]
+    execution = detail["execution"]
+    import_job = detail["import_job"]
     update_request = detail["update_request"]
     assert isinstance(root, dict)
+    assert isinstance(execution, dict)
+    assert isinstance(import_job, dict)
     assert isinstance(update_request, dict)
     update_request["scope"]["sync_scope"] = "target_grids"  # type: ignore[index]
-    update_request["requested_sync_scope"] = "target_grids"
-    update_request["effective_sync_scope"] = "target_grids"
+    update_request["dataset_memberships"][0]["sync_scope"] = "target_grids"  # type: ignore[index]
     root["provider_datasets"][0]["sync_scope"] = "target_grids"  # type: ignore[index]
+    execution["provider_datasets"][0]["sync_scope"] = "target_grids"  # type: ignore[index]
+    import_job["provider_datasets"][0]["sync_scope"] = "target_grids"  # type: ignore[index]
 
     record = project_pipeline_execution(detail, requested_job_id=ROOT_ID)
 
@@ -1141,49 +1182,21 @@ def test_import_job_detail_accepts_update_root_with_child_provider_pairs() -> No
     assert isinstance(root, dict)
     root["provider_datasets"].append(  # type: ignore[union-attr]
         {
+            "provider_dataset_id": 42,
             "provider": "visitkorea",
             "dataset_key": "places",
             "sync_scope": "target_grids",
-            "operation_member_id": CHILD_ID,
+            "operation_key": "visitkorea_places_refresh",
+            "operation_member_id": CHILD_MEMBER_ID,
             "status": "running",
         }
     )
-    root["providers"] = ["kma", "visitkorea"]
-    root["dataset_keys"] = ["places", "special_days"]
     root["linked_job_count"] = 2
 
     record = project_pipeline_execution(detail, requested_job_id=ROOT_ID)
 
     assert record.job_id == ROOT_ID
     assert record.payload["root_id"] == PROJECTED_ID
-
-
-@pytest.mark.parametrize("drift", ["missing_child_vector", "unrelated_vector"])
-def test_provider_dataset_root_rejects_effective_vector_drift(drift: str) -> None:
-    detail = _as_update_request_detail()
-    root = detail["root"]
-    assert isinstance(root, dict)
-    root["provider_datasets"].append(  # type: ignore[union-attr]
-        {
-            "provider": "visitkorea",
-            "dataset_key": "places",
-            "sync_scope": "target_grids",
-            "operation_member_id": CHILD_ID,
-            "status": "running",
-        }
-    )
-    root["providers"] = ["kma", "visitkorea"]
-    root["dataset_keys"] = ["places", "special_days"]
-    root["linked_job_count"] = 2
-    if drift == "missing_child_vector":
-        root["providers"] = ["kma"]
-        root["dataset_keys"] = ["special_days"]
-    else:
-        root["providers"].append("unrelated-provider")  # type: ignore[union-attr]
-        root["dataset_keys"].append("unrelated-dataset")  # type: ignore[union-attr]
-
-    with pytest.raises(KorTravelMapOpsContractError, match="pipeline execution"):
-        project_pipeline_execution(detail, requested_job_id=ROOT_ID)
 
 
 def test_import_job_detail_accepts_non_exact_root_filters_without_pair_projection() -> None:
@@ -1199,21 +1212,16 @@ def test_import_job_detail_accepts_non_exact_root_filters_without_pair_projectio
     root.update(
         {
             "scope_type": "feature_ids",
-            "providers": ["kma", "visitkorea"],
-            "dataset_keys": ["places", "special_days"],
             "provider_datasets": [],
         }
     )
-    execution.update({"provider": None, "dataset_key": None})
-    import_job.update({"provider": None, "dataset_key": None})
+    execution["provider_datasets"] = []
+    import_job["provider_datasets"] = []
     update_request.update(
         {
             "scope_type": "feature_ids",
             "scope": {"type": "feature_ids", "feature_ids": ["feature-1"]},
-            "requested_sync_scope": None,
-            "effective_sync_scope": None,
-            "providers": ["kma", "visitkorea"],
-            "dataset_keys": ["places", "special_days"],
+            "dataset_memberships": [],
         }
     )
 
@@ -1223,7 +1231,7 @@ def test_import_job_detail_accepts_non_exact_root_filters_without_pair_projectio
     assert record.payload["root_id"] == PROJECTED_ID
 
 
-def test_import_job_detail_accepts_non_exact_filter_and_representative_union() -> None:
+def test_import_job_detail_accepts_non_exact_filters_with_exact_memberships() -> None:
     detail = _as_update_request_detail()
     root = detail["root"]
     execution = detail["execution"]
@@ -1233,78 +1241,17 @@ def test_import_job_detail_accepts_non_exact_filter_and_representative_union() -
     assert isinstance(execution, dict)
     assert isinstance(import_job, dict)
     assert isinstance(update_request, dict)
-    root.update(
-        {
-            "scope_type": "feature_ids",
-            "providers": ["filter-provider", "kma"],
-            "dataset_keys": ["filter-dataset", "special_days"],
-        }
-    )
-    root["provider_datasets"][0]["sync_scope"] = None  # type: ignore[index]
-    root["provider_datasets"][0]["operation_member_id"] = CHILD_ID  # type: ignore[index]
-    root["linked_job_count"] = 2
-    execution.update({"provider": None, "dataset_key": None})
-    import_job.update({"provider": None, "dataset_key": None})
+    root["scope_type"] = "feature_ids"
     update_request.update(
         {
             "scope_type": "feature_ids",
             "scope": {"type": "feature_ids", "feature_ids": ["feature-1"]},
-            "requested_sync_scope": None,
-            "effective_sync_scope": None,
-            "providers": ["filter-provider"],
-            "dataset_keys": ["filter-dataset"],
         }
     )
 
     record = project_pipeline_execution(detail, requested_job_id=ROOT_ID)
 
     assert record.job_id == ROOT_ID
-
-
-@pytest.mark.parametrize("drift", ["missing_representative", "unrelated_vector"])
-def test_import_job_detail_rejects_non_exact_effective_vector_drift(
-    drift: str,
-) -> None:
-    detail = _as_update_request_detail()
-    root = detail["root"]
-    execution = detail["execution"]
-    import_job = detail["import_job"]
-    update_request = detail["update_request"]
-    assert isinstance(root, dict)
-    assert isinstance(execution, dict)
-    assert isinstance(import_job, dict)
-    assert isinstance(update_request, dict)
-    root.update(
-        {
-            "scope_type": "feature_ids",
-            "providers": ["filter-provider", "kma"],
-            "dataset_keys": ["filter-dataset", "special_days"],
-        }
-    )
-    root["provider_datasets"][0]["sync_scope"] = None  # type: ignore[index]
-    root["provider_datasets"][0]["operation_member_id"] = CHILD_ID  # type: ignore[index]
-    root["linked_job_count"] = 2
-    execution.update({"provider": None, "dataset_key": None})
-    import_job.update({"provider": None, "dataset_key": None})
-    update_request.update(
-        {
-            "scope_type": "feature_ids",
-            "scope": {"type": "feature_ids", "feature_ids": ["feature-1"]},
-            "requested_sync_scope": None,
-            "effective_sync_scope": None,
-            "providers": ["filter-provider"],
-            "dataset_keys": ["filter-dataset"],
-        }
-    )
-    if drift == "missing_representative":
-        root["providers"] = ["filter-provider"]
-        root["dataset_keys"] = ["filter-dataset"]
-    else:
-        root["providers"].append("unrelated-provider")  # type: ignore[union-attr]
-        root["dataset_keys"].append("unrelated-dataset")  # type: ignore[union-attr]
-
-    with pytest.raises(KorTravelMapOpsContractError, match="pipeline execution"):
-        project_pipeline_execution(detail, requested_job_id=ROOT_ID)
 
 
 def test_import_job_detail_accepts_nonrepresentative_same_pair_child() -> None:
@@ -1333,7 +1280,7 @@ def test_import_job_detail_accepts_nonrepresentative_same_pair_child() -> None:
     record = project_pipeline_execution(detail, requested_job_id=CHILD_ID)
 
     assert record.job_id == CHILD_ID
-    assert root["provider_datasets"][0]["operation_member_id"] == ROOT_ID  # type: ignore[index]
+    assert root["provider_datasets"][0]["operation_member_id"] == UPDATE_MEMBER_ID  # type: ignore[index]
 
 
 def test_standalone_arbitrary_depth_descendant_keeps_ancestor_lifecycle_separate() -> None:
@@ -1401,8 +1348,7 @@ def test_import_job_detail_rejects_duplicate_provider_dataset_pair() -> None:
     root = detail["root"]
     assert isinstance(root, dict)
     duplicate = deepcopy(root["provider_datasets"][0])  # type: ignore[index]
-    duplicate["sync_scope"] = "target_grids"
-    duplicate["operation_member_id"] = CHILD_ID
+    duplicate["operation_member_id"] = CHILD_MEMBER_ID
     root["provider_datasets"].append(duplicate)  # type: ignore[union-attr]
     root["linked_job_count"] = 2
 
@@ -1420,29 +1366,30 @@ def test_import_job_detail_accepts_requested_child_execution() -> None:
     assert isinstance(import_job, dict)
     root["provider_datasets"].append(  # type: ignore[union-attr]
         {
+            "provider_dataset_id": 42,
             "provider": "visitkorea",
             "dataset_key": "places",
             "sync_scope": "target_grids",
-            "operation_member_id": CHILD_ID,
+            "operation_key": "visitkorea_places_refresh",
+            "operation_member_id": CHILD_MEMBER_ID,
             "status": "running",
         }
     )
-    root["providers"] = ["kma", "visitkorea"]
-    root["dataset_keys"] = ["places", "special_days"]
     root["linked_job_count"] = 2
+    child_membership = [deepcopy(root["provider_datasets"][1])]  # type: ignore[index]
     execution.update(
         {
             "id": CHILD_ID,
-            "provider": "visitkorea",
-            "dataset_key": "places",
+            "provider_datasets": child_membership,
+            "operation_key": "visitkorea_places_refresh",
             "detail_url": (f"/v1/ops/pipeline/executions/import_job/{CHILD_ID}"),
         }
     )
     import_job.update(
         {
             "job_id": CHILD_ID,
-            "provider": "visitkorea",
-            "dataset_key": "places",
+            "provider_datasets": child_membership,
+            "operation_key": "visitkorea_places_refresh",
         }
     )
 
@@ -1475,7 +1422,6 @@ def test_import_job_detail_rejects_noncanonical_direct_member_scope(
             "current_stage": None,
             "dagster_run_status": None,
             "trigger_kind": "update_request",
-            "operation_registry_version": None,
             "detail_url": (f"/v1/ops/pipeline/executions/update_request/{PROJECTED_ID}"),
         }
     )
@@ -1503,7 +1449,7 @@ def test_import_job_detail_rejects_noncanonical_direct_member_scope(
         ("current_stage", "fetch"),
         ("dagster_run_status", "STARTED"),
         ("trigger_kind", "manual"),
-        ("operation_registry_version", "1"),
+        ("operation_key", "other_refresh"),
     ],
 )
 def test_pipeline_execution_detail_rejects_update_root_lifecycle_drift(
@@ -1528,7 +1474,6 @@ def test_pipeline_execution_detail_rejects_update_root_lifecycle_drift(
             "current_stage": None,
             "dagster_run_status": None,
             "trigger_kind": "update_request",
-            "operation_registry_version": None,
             "detail_url": (f"/v1/ops/pipeline/executions/update_request/{PROJECTED_ID}"),
         }
     )
@@ -1579,7 +1524,7 @@ def test_pipeline_execution_detail_rejects_same_id_projected_lifecycle_drift() -
 
 
 def test_pipeline_execution_detail_rejects_same_id_member_lifecycle_drift() -> None:
-    detail = _as_update_request_detail()
+    detail = _execution_detail()
     root = detail["root"]
     assert isinstance(root, dict)
     root["provider_datasets"][0]["status"] = "queued"  # type: ignore[index]
