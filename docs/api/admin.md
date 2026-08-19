@@ -2430,19 +2430,24 @@ upstream: `kor-travel-map`
 목록의 한 행과 같은 `AdminProviderImportJobRecord`를 반환한다. 요청 path job id는
 `execution.id/detail_url`, `import_job.job_id`, standalone root id 또는 update-request root의
 `requested_job_id/request_id`, cancellation frozen member와 reciprocal하게 일치해야 한다. import job의
-`provider_datasets`는 root의 exact membership 부분집합이어야 한다. update request는 생성 시 고정한
+`provider_datasets`는 root의 membership triple
+(`provider_dataset_id + sync_scope + operation_key`)에 속해야 한다. update request root의
+`operation_member_id`는 `feature_update_request_dataset_id`, import job 상세의 `operation_member_id`는
+`import_job_dataset_id`이므로 두 값을 같은 UUID로 간주하지 않는다. update request는 생성 시 고정한
 `dataset_memberships`(`provider_dataset_id + sync_scope + operation_key`)를 root와 대조한다.
 `provider_dataset` 직접 요청의 `scope`도 같은 삼중항만 노출하며 자연키 `provider/dataset_key`나
 폐기된 `requested_sync_scope/effective_sync_scope/providers/dataset_keys`는 허용하지 않는다. 직접 요청
-삼중항은 `operation_member_id == update_request.job_id`인 root member와 정확히 일치해야 한다.
+삼중항은 root member의 triple과 정확히 일치해야 하며 `operation_member_id == update_request.job_id`를
+요구하지 않는다.
 non-exact scope는 `dataset_memberships=[]`일 수 있다. root에는 실행 중 생성된 다른 membership child가
 함께 있을 수 있으며 상세 요청 job도 anchor나 대표 membership에 고정하지 않는다. update root는 reciprocal
 `execution.request_id`, standalone root는 Map의 recursive root projection과 non-null lineage 증거로
 임의 깊이의 비대표 descendant를 허용하며 직계 `parent_job_id == root.id`를 강제하지 않는다.
 cancellation은 `linked_job_count`와 frozen member ID 집합뿐 아니라 요청 job의 operation kind/Dagster
 run을 대조하고, 모든 frozen member의 non-null Dagster run ID exact 집합과 `dagster_runs`가 같아야 한다.
-최초 attempt의 frozen 목록에는 root anchor와 노출된 모든 `operation_member_id`가 포함되어야 하며 무관
-UUID로 개수만 맞출 수 없다. `previous_cancellation_id`가 있는 retry attempt는 이전 attempt의 unresolved
+최초 attempt의 frozen 목록에는 요청 job, root anchor와 projected job이 포함되어야 하며 무관 UUID로
+개수만 맞출 수 없다. dataset membership UUID인 `operation_member_id`를 cancellation job ID로 취급하지
+않는다. `previous_cancellation_id`가 있는 retry attempt는 이전 attempt의 unresolved
 run-backed `cancel_failed` subset만 복사하므로 이미 해결된 root/requested member가 빠질 수 있고 full
 `linked_job_count`를 다시 요구하지 않는다. 종료가 필요한 member에 run ID가 없거나 run이
 누락·추가·중복되면 거부한다.

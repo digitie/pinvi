@@ -29,7 +29,8 @@ cookie, HSTS, dev safety, Resend webhook, rate-limit backend와 kor-travel-map c
    `parent_job_id`/member 증거로 같은 canonical root에 속한 비대표 child도 허용한다. import payload의
    scope는 root member와 직접 비교하지 않는다. cancellation POST와 상세는 같은 검증기로 member의
    non-null Dagster run exact 집합, 중복, 종료 필수 run의 non-null을 대조한다. frozen topology에는
-   anchor와 노출된 모든 operation member가 반드시 포함되어야 하며 같은 개수의 무관 UUID로 대체할 수 없다.
+   요청 job, anchor와 projected job이 반드시 포함되어야 하며 같은 개수의 무관 UUID로 대체할 수 없다.
+   dataset membership UUID인 `operation_member_id`는 cancellation job ID 집합에 넣지 않는다.
    typed problem은 전체 cancellation detail을 보존하고 같은 검증을 통과할 때만 typed 실패로 취급한다.
 4. 취소 intent는 upstream POST 전에 감사 원장에 commit하고 성공·typed 실패·불확실 결과를 같은
    `request_id`로 추가 기록한다. UI는 fresh 상세 확인 전 재시도를 잠그고 canonical `retryable`
@@ -78,7 +79,7 @@ cookie, HSTS, dev safety, Resend webhook, rate-limit backend와 kor-travel-map c
   enum은 계속 거부한다. attempt `failed`의 attempt error는 Map failed canonical code여야 하지만,
   exact-base member/run의 retryable transport 증거와 hidden-base definitive failed 증거는 한 snapshot에
   섞일 수 있다. `cancel_failed` run error는 retryable/failed canonical code 합집합만 허용한다.
-- 최초 attempt는 full current root topology와 anchor/exposed member를 모두 freeze해야 한다. retry attempt는
+- 최초 attempt는 full current root topology와 요청 job/anchor/projected job을 모두 freeze해야 한다. retry attempt는
   `previous_cancellation_id` lineage 아래 이전 attempt의 unresolved run-backed `cancel_failed` subset만
   복사하므로 이미 해결된 root/requested member가 current members에서 빠질 수 있다.
 - attempt `status`와 `finished_at/error`, run `result`와 engine timestamp, member

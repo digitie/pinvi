@@ -23,6 +23,7 @@ ROOT_ID = "11111111-1111-4111-8111-111111111111"
 PROJECTED_ID = "22222222-2222-4222-8222-222222222222"
 CHILD_ID = "33333333-3333-4333-8333-333333333333"
 CANCELLATION_ID = "44444444-4444-4444-8444-444444444444"
+UPDATE_MEMBER_ID = "77777777-7777-4777-8777-777777777777"
 
 
 def _overview() -> dict[str, object]:
@@ -408,6 +409,7 @@ def _as_update_request_detail() -> dict[str, object]:
         }
     )
     root["provider_datasets"][0]["sync_scope"] = "dataset_wide"  # type: ignore[index]
+    root["provider_datasets"][0]["operation_member_id"] = UPDATE_MEMBER_ID  # type: ignore[index]
     execution["request_id"] = PROJECTED_ID
     detail["update_request"] = _update_request_detail()
     return detail
@@ -773,6 +775,32 @@ def test_pipeline_execution_detail_preserves_matching_cancellation_overlay() -> 
     assert record.cancellation.status == "completed"
 
 
+def test_update_root_cancellation_uses_job_ids_not_dataset_membership_ids() -> None:
+    detail = _as_update_request_detail()
+    cancellation = _cancellation()
+    detail["cancellation"] = cancellation
+    root = detail["root"]
+    execution = detail["execution"]
+    assert isinstance(root, dict)
+    assert isinstance(execution, dict)
+    assert root["provider_datasets"][0]["operation_member_id"] == UPDATE_MEMBER_ID  # type: ignore[index]
+    assert execution["provider_datasets"][0]["operation_member_id"] == ROOT_ID  # type: ignore[index]
+    root["cancellation"] = {
+        "cancellation_id": CANCELLATION_ID,
+        "status": "completed",
+        "requested_at": "2026-07-18T00:02:00+09:00",
+        "requested_by": "service:pinvi",
+        "reason": "duplicate",
+        "retryable": False,
+        "unresolved_member_count": 0,
+    }
+
+    record = project_pipeline_execution(detail, requested_job_id=ROOT_ID)
+
+    assert record.cancellation is not None
+    assert record.cancellation.status == "completed"
+
+
 def test_pipeline_execution_detail_accepts_retry_subset_without_resolved_root() -> None:
     detail = _execution_detail()
     cancellation = _cancellation()
@@ -954,7 +982,7 @@ def test_pipeline_execution_detail_rejects_cancellation_member_drift() -> None:
         project_pipeline_execution(detail, requested_job_id=ROOT_ID)
 
 
-@pytest.mark.parametrize("missing", ["anchor", "exposed_member"])
+@pytest.mark.parametrize("missing", ["anchor", "requested"])
 def test_pipeline_execution_detail_rejects_frozen_topology_substitution(
     missing: str,
 ) -> None:
@@ -966,36 +994,22 @@ def test_pipeline_execution_detail_rejects_frozen_topology_substitution(
     assert isinstance(execution, dict)
     assert isinstance(import_job, dict)
     unrelated_id = "55555555-5555-4555-8555-555555555555"
-    requested_job_id = ROOT_ID
+    root["linked_job_count"] = 2
+    execution.update(
+        {
+            "id": CHILD_ID,
+            "detail_url": (f"/v1/ops/pipeline/executions/import_job/{CHILD_ID}"),
+        }
+    )
+    import_job.update(
+        {
+            "job_id": CHILD_ID,
+            "parent_job_id": ROOT_ID,
+        }
+    )
     if missing == "anchor":
-        root["linked_job_count"] = 2
-        execution.update(
-            {
-                "id": CHILD_ID,
-                "detail_url": (f"/v1/ops/pipeline/executions/import_job/{CHILD_ID}"),
-            }
-        )
-        import_job.update(
-            {
-                "job_id": CHILD_ID,
-                "parent_job_id": ROOT_ID,
-            }
-        )
-        requested_job_id = CHILD_ID
         frozen_ids = [CHILD_ID, unrelated_id]
     else:
-        root["provider_datasets"].append(  # type: ignore[union-attr]
-            {
-                "provider_dataset_id": 42,
-                "provider": "visitkorea",
-                "dataset_key": "places",
-                "sync_scope": "target_grids",
-                "operation_key": "visitkorea_places_refresh",
-                "operation_member_id": CHILD_ID,
-                "status": "running",
-            }
-        )
-        root["linked_job_count"] = 2
         frozen_ids = [ROOT_ID, unrelated_id]
     cancellation = _cancellation()
     cancellation["members"] = [
@@ -1018,7 +1032,7 @@ def test_pipeline_execution_detail_rejects_frozen_topology_substitution(
     }
 
     with pytest.raises(KorTravelMapOpsContractError, match="pipeline execution"):
-        project_pipeline_execution(detail, requested_job_id=requested_job_id)
+        project_pipeline_execution(detail, requested_job_id=CHILD_ID)
 
 
 def test_import_job_detail_keeps_requested_job_when_canonical_root_is_update_request() -> None:
@@ -1261,7 +1275,7 @@ def test_import_job_detail_accepts_nonrepresentative_same_pair_child() -> None:
     record = project_pipeline_execution(detail, requested_job_id=CHILD_ID)
 
     assert record.job_id == CHILD_ID
-    assert root["provider_datasets"][0]["operation_member_id"] == ROOT_ID  # type: ignore[index]
+    assert root["provider_datasets"][0]["operation_member_id"] == UPDATE_MEMBER_ID  # type: ignore[index]
 
 
 def test_standalone_arbitrary_depth_descendant_keeps_ancestor_lifecycle_separate() -> None:
@@ -1505,7 +1519,7 @@ def test_pipeline_execution_detail_rejects_same_id_projected_lifecycle_drift() -
 
 
 def test_pipeline_execution_detail_rejects_same_id_member_lifecycle_drift() -> None:
-    detail = _as_update_request_detail()
+    detail = _execution_detail()
     root = detail["root"]
     assert isinstance(root, dict)
     root["provider_datasets"][0]["status"] = "queued"  # type: ignore[index]

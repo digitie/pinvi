@@ -1049,25 +1049,23 @@ class _PipelineExecutionDetailData(_CanonicalModel):
             or self.execution.parent_job_id != self.import_job.parent_job_id
         ):
             raise ValueError("execution lifecycle must match import job")
-        root_members = {
+        root_member_triples = {
             (
                 member.provider_dataset_id,
                 member.sync_scope,
                 member.operation_key,
-                member.operation_member_id,
             )
             for member in self.root.provider_datasets
         }
-        import_members = {
+        import_member_triples = {
             (
                 member.provider_dataset_id,
                 member.sync_scope,
                 member.operation_key,
-                member.operation_member_id,
             )
             for member in self.import_job.provider_datasets
         }
-        if not import_members.issubset(root_members):
+        if not import_member_triples.issubset(root_member_triples):
             raise ValueError("import job memberships must belong to the canonical root")
         if self.root.kind == "import_job":
             if (
@@ -1142,7 +1140,6 @@ class _PipelineExecutionDetailData(_CanonicalModel):
                         member.operation_key,
                     )
                     == scope_identity
-                    and member.operation_member_id == update_request.job_id
                 ]
                 if len(scope_members) != 1:
                     raise ValueError(
@@ -1193,27 +1190,26 @@ class _PipelineExecutionDetailData(_CanonicalModel):
             or projected.parent_job_id != self.execution.parent_job_id
         ):
             raise ValueError("projected job lifecycle must match identical execution")
-        execution_members = {
+        execution_member_statuses = {
             (
                 member.provider_dataset_id,
                 member.sync_scope,
                 member.operation_key,
                 member.operation_member_id,
-                member.status,
-            )
+            ): member.status
             for member in self.execution.provider_datasets
         }
         for member in self.root.provider_datasets:
-            if member.operation_member_id != self.execution.id:
-                continue
             member_key = (
                 member.provider_dataset_id,
                 member.sync_scope,
                 member.operation_key,
                 member.operation_member_id,
-                member.status,
             )
-            if member_key not in execution_members:
+            if (
+                member_key in execution_member_statuses
+                and execution_member_statuses[member_key] != member.status
+            ):
                 raise ValueError("provider dataset member must match identical execution")
         summary = self.root.cancellation
         detail = self.cancellation
@@ -1225,7 +1221,6 @@ class _PipelineExecutionDetailData(_CanonicalModel):
             required_member_ids = {
                 self.execution.id,
                 self.root.projected_job.id,
-                *(member.operation_member_id for member in self.root.provider_datasets),
             }
             if self.root.kind == "import_job":
                 required_member_ids.add(self.root.id)
