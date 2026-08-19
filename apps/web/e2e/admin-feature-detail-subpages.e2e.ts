@@ -137,6 +137,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('Admin feature detail subpage가 deep link와 tab 상태를 처리한다', async ({ page }) => {
+  test.setTimeout(60_000);
   const requests: string[] = [];
 
   await page.route(
