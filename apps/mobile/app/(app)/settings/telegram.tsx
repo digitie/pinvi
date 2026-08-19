@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { TelegramTarget } from '@pinvi/schemas';
 import { friendlyErrorText } from '@pinvi/domain';
 import { api } from '../../../lib/api';
+import { confirmDestructive } from '../../../lib/confirm';
 import {
   Badge,
   Body,
@@ -77,6 +78,15 @@ export default function TelegramSettingsScreen() {
       return;
     }
     createMutation.mutate();
+  };
+
+  const onDelete = (t: TelegramTarget) => {
+    confirmDestructive({
+      title: 'Telegram 연결 해제',
+      message: `"${t.telegram_label ?? t.telegram_chat_id}" 연결을 해제할까요? 이 chat으로는 더 이상 알림이 가지 않습니다.`,
+      confirmLabel: '해제',
+      onConfirm: () => deleteMutation.mutate(t.id),
+    });
   };
 
   const busyId = verifyMutation.isPending
@@ -165,7 +175,7 @@ export default function TelegramSettingsScreen() {
                     className="flex-1"
                     loading={deleteMutation.isPending && busyId === t.id}
                     disabled={busyId !== null && busyId !== t.id}
-                    onPress={() => deleteMutation.mutate(t.id)}
+                    onPress={() => onDelete(t)}
                   />
                 </View>
               </Card>

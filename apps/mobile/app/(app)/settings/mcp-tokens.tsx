@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { McpToken } from '@pinvi/schemas';
 import { friendlyErrorText } from '@pinvi/domain';
 import { api } from '../../../lib/api';
+import { confirmDestructive } from '../../../lib/confirm';
 import {
   Badge,
   Body,
@@ -69,6 +70,15 @@ export default function McpTokensSettingsScreen() {
     onSuccess: () => invalidate(),
     onError: (err) => Alert.alert('회수 실패', friendlyErrorText(err)),
   });
+
+  const onRevoke = (token: McpToken) => {
+    confirmDestructive({
+      title: 'MCP 토큰 회수',
+      message: `"${token.name}" 토큰을 회수할까요? 이 토큰을 쓰는 MCP 클라이언트는 즉시 연결이 끊기며 되돌릴 수 없습니다.`,
+      confirmLabel: '회수',
+      onConfirm: () => revokeMutation.mutate(token.token_id),
+    });
+  };
 
   return (
     <Screen>
@@ -145,7 +155,8 @@ export default function McpTokensSettingsScreen() {
                       loading={
                         revokeMutation.isPending && revokeMutation.variables === token.token_id
                       }
-                      onPress={() => revokeMutation.mutate(token.token_id)}
+                      disabled={revokeMutation.isPending}
+                      onPress={() => onRevoke(token)}
                     />
                   ) : null}
                 </Card>

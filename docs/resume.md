@@ -1,5 +1,18 @@
 # resume.md
 
+## 2026-08-19 (claude) — T-310 Dev Client smoke(에뮬레이터) 완료
+
+**방금**: PR #446의 남은 완료 조건인 Dev Client smoke를 Android 에뮬레이터(API 35)에서 돌렸다.
+날짜 검증·POI 재정렬 롤백·파괴적 삭제 확인·예산 검증 네 항목이 통과했고, 위치 동의 gate만 로컬
+VWorld 키 부재로 런타임 확인을 못 해 코드 경로 확인으로 대체했다. smoke를 막던 react 핀 불일치
+(RN 0.85.3 렌더러는 19.2.3 정확 일치 요구, 저장소는 19.2.6 + `expo.install.exclude`가 검증을 가림)를
+같은 브랜치에서 고쳤다. WSL Metro ↔ Windows 에뮬레이터 절차는 `apps/mobile/README.md`에 고정.
+
+**다음 한 작업**: T-273(v1.0.0 E2E/Live gate) — 남은 hard blocker는 geofence 운영 설정이다.
+모바일 후속(T-311 expo-doctor 3신호 · T-318 `expo start` hoisting · T-319 실패 문구 · T-320 위치 동의
+gate 런타임 확인)은 별도 PR로 분리해 뒀다.
+
+
 ## 2026-08-19 (claude) — T-316 Hallmark 종결(PR #455 머지)
 
 **방금**: Hallmark 감사(13 critical · 26 major · 19 minor, 7표면)의 마지막 조각을 닫았다. ① `@pinvi/api-client`

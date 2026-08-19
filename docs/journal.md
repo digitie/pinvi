@@ -2,6 +2,40 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-19 (claude) — T-310: Android 에뮬레이터 Dev Client smoke
+
+PR #446의 마지막 완료 조건이던 Dev Client smoke를 Android 에뮬레이터(AVD `pinvi_api35`, API 35
+google_apis x86_64)에서 실행했다. EAS `development` 빌드(`5a90f90c`) APK를 설치하고, WSL의 dev 스택
+(API `12801` · Postgres `5432`)에 붙여 시드 계정·시드 여행으로 네 항목을 확인했다.
+
+**결과** — ① 여행 생성 날짜 검증: 범위 오류(`종료일은 시작일 이후여야 합니다.`)와 형식 오류
+(`날짜는 YYYY-MM-DD 형식으로…`)가 해당 필드에만 붙고 제출이 막히며 편집 시 해제된다. ② POI 재정렬:
+낙관적 반영이 서버에 그대로 반영되고(`002s/005k/008c`), API를 내린 상태에서는 원래 순서로 롤백되며
+실패가 표면화된다. ③ POI 삭제: `confirmDestructive`가 대상 이름을 담아 확인을 받고 취소는 아무것도
+지우지 않는다. ④ 예산 검증: `-100`이 `금액은 0 이상의 숫자로만 입력해 주세요. (예: 30000)`로 막히고
+정상값은 저장·반영된다. 위치 동의 gate는 로컬에 VWorld 키 값이 없어(모두 length=0) 지도 표면 자체가
+키 오류 화면에서 멈춰 런타임 확인을 못 했다 — 코드 경로(`app/(app)/map.tsx`)는 OS 권한 요청 전에
+LBS 약관·개인위치정보 동의를 먼저 받는 구조로 확인했다.
+
+**고친 것** — smoke를 막던 실제 결함 하나. `apps/mobile`이 react/react-dom을 `19.2.6`으로 핀했는데
+RN 0.85.3의 렌더러는 `19.2.3` 정확 일치를 요구해 dev client가 부팅 즉시 죽었다(`Incompatible React
+versions`). `expo.install.exclude`에 react/react-dom이 들어 있어 `expo install --check`가 이 드리프트를
+가려 왔다. 두 패키지를 `19.2.3`으로 내리고 예외 목록에서 빼서 앞으로는 체크에 걸리게 했다. 루트 react는
+`19.2.6`·`apps/web`은 `^19.0.0` 그대로라 웹은 영향이 없다(lock diff는 `apps/mobile` 블록의 핀 수정 +
+`apps/mobile/node_modules/react*` 추가, 그리고 무관한 `playwright/node_modules/fsevents`의 `dev` 플래그
+1줄 — darwin optional 엔트리라 설치·런타임 영향 없음).
+
+**환경** — WSL Metro ↔ Windows 에뮬레이터 조합의 함정 셋(Metro의 IPv6 바인딩, manifest launchAsset이
+Metro 자신의 host/port로 생성되는 점, deep link 실행)을 `apps/mobile/README.md`에 절차로 고정했다.
+새로 연 것: T-311(expo patch 드리프트 + Hermes V1 + **react 중복**), T-318(`expo-router` hoisting으로
+`expo start` 실패), T-319(모바일 실패 문구가 원문 예외 노출).
+
+react 핀을 내리면서 `expo-doctor`의 duplicate 체크가 하나 늘었다(root `19.2.6` ↔ mobile `19.2.3`).
+루트 `overrides`로 단일 버전을 강제하는 안을 시험했으나 npm이 `packages/*`의 `react >=18` 때문에
+root 19.2.6을 유지해 3벌이 되는 등 웹 런타임까지 건드리는 정렬 작업이라, 이번 PR에서 되돌리고
+T-311로 분리했다. 이 체크는 CI를 막지 않는 informational job이다.
+
+
 ## 2026-08-19 — Hallmark 재설계 완주(T-313~T-316)
 
 T-312에서 잠근 시스템(`DESIGN.md`)을 표면에 끝까지 적용했다. T-313 토큰 우회 코드모드(89파일, PR #448),

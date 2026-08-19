@@ -19,8 +19,11 @@ React Native 앱이다.
 3. **`tsc --noEmit` 통과** — 루트 `npm run typecheck`(전 workspace)에 `apps/mobile`이 포함된다.
 
 > CI(`web.yml`)의 `npm ci`가 이제 Expo 트리를 설치하고 typecheck에 `apps/mobile`을 포함한다
-> (ADR-041 활성화 — 의도적 CI-safe 유예 종료, web CI가 다소 무거워짐). `apps/mobile`은 자체
-> `lint`/`build` 스크립트가 없어 루트 `npm run lint`/`build --if-present`에서는 건너뛴다.
+> (ADR-041 활성화 — 의도적 CI-safe 유예 종료, web CI가 다소 무거워짐). `apps/mobile`은
+> `lint`(`eslint . --max-warnings 0`, Expo 표준 `eslint-config-expo` flat config, issue #215)와
+> `typecheck` 스크립트를 갖고, 전용 `mobile.yml`에서 `mobile-typecheck` + `mobile-lint`가 Aggregate
+> gate 필수 check다(`mobile-doctor`는 `expo-doctor` 정보성). `build` 스크립트는 없어 루트
+> `npm run build --if-present`에서는 건너뛴다.
 
 남은 작업: development build 생성(아래) + 화면 구현(`docs/architecture/expo-implementation-plan.md`).
 
@@ -91,8 +94,9 @@ apps/mobile/
 ## 활성화 (Sprint M-1)
 
 1. ~~root `workspaces`에 `apps/mobile` 추가~~ — ✅ 완료(2026-06-16).
-2. ~~의존성 설치 + 버전 정합~~ — ✅ 완료. Expo SDK 56 설치, `expo install --check` / `expo-doctor`
-   **21/21 통과**(빌드 준비 완료). `package-lock.json` 갱신(web CI `npm ci`에 포함).
+2. ~~의존성 설치 + 버전 정합~~ — ✅ 완료(2026-06-16 기준 `expo-doctor` 21/21). `package-lock.json`
+   갱신(web CI `npm ci`에 포함). **현재 `expo-doctor`는 3건 실패**(SDK-56 patch 드리프트 · Hermes V1
+   회귀 · react 중복) — informational job이며 정리는 T-311이 맡는다.
 3. **Development build 생성 (EAS) — Expo 계정 로그인 필요(인터랙티브, 사용자 수행).**
    ```bash
    cd apps/mobile
@@ -111,3 +115,36 @@ apps/mobile/
 
 > ADR-051: 설치·실행·테스트·git·commit·push는 Linux worktree에서 수행한다. RN
 > 메트로/시뮬레이터 실행은 플랫폼 제약을 따르되, Windows git/CodeGraph shim은 사용하지 않는다.
+
+## Android 에뮬레이터 smoke 실행 (WSL Metro + Windows 에뮬레이터)
+
+ADR-051대로 설치·git은 Linux(WSL)에서 하되, Android 에뮬레이터는 Windows 호스트에서 돈다.
+이 조합에는 함정이 셋 있어 절차를 고정한다 (T-310 smoke, 2026-08-19).
+
+1. **Metro는 WSL에서** 띄운다. 단, WSL의 Metro는 IPv6(`*:8081`)로 바인딩돼 Windows의 **IPv4**
+   루프백(= 에뮬레이터의 `10.0.2.2`)으로 포워딩되지 않는다. IPv4 릴레이를 하나 세운다.
+   ```bash
+   socat TCP4-LISTEN:8085,bind=127.0.0.1,reuseaddr,fork TCP4:127.0.0.1:8081 &
+   ```
+2. **manifest의 launchAsset URL은 Metro 자신의 host/port로 생성**되므로 그대로 두면 기기가
+   `127.0.0.1:8081`(기기 자신)을 때린다. `EXPO_PACKAGER_PROXY_URL`로 기기가 볼 주소를 준다.
+   ```bash
+   cd apps/mobile
+   EXPO_PUBLIC_PINVI_API_URL=http://10.0.2.2:12801 \
+   EXPO_PACKAGER_PROXY_URL=http://10.0.2.2:8085 \
+   npx expo start --dev-client --port 8081
+   ```
+3. **dev client 실행**은 deep link로 붙인다(개발자 메뉴 입력 없이).
+   ```bash
+   adb shell am start -a android.intent.action.VIEW \
+     -d "pinvi://expo-development-client/?url=http%3A%2F%2F10.0.2.2%3A8085"
+   ```
+
+API(`12801`)는 WSL에서 `127.0.0.1`(IPv4)로 바인딩되므로 `10.0.2.2:12801`로 그대로 닿는다.
+`adb shell input text`는 ASCII만 보낸다 — 한글 입력이 필요한 검증은 UI 조작 대신 API 시드로 만든다.
+
+> **선행 차단 요인(T-318)**: 클린 체크아웃에서는 위 2번이 `Cannot find module 'expo-router/_ctx-shared'`로
+> 죽는다. `expo-router`가 `apps/mobile/node_modules`에 nest되는데 그 의존 `@expo/router-server`는 root로
+> hoist되기 때문이다. 저장소 차원 해법이 정해지기 전까지는
+> `ln -sfn ../apps/mobile/node_modules/expo-router node_modules/expo-router`로 우회한다.
+> 지도 표면까지 확인하려면 서버에 `PINVI_VWORLD_API_KEY`가 있어야 한다(키가 없으면 지도는 키 오류 화면에서 멈춘다).

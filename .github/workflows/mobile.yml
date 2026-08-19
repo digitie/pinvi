@@ -39,3 +39,51 @@ jobs:
 
       - name: Typecheck (@pinvi/mobile)
         run: npm --workspace @pinvi/mobile run typecheck
+
+  # issue #215 — Expo 표준 eslint(eslint-config-expo, SDK 56 정합). Aggregate gate의 필수 check.
+  # `expo lint` 대신 eslint 바이너리를 직접 호출한다(설정 부재 시 expo CLI가 CI에서 자동 설치·
+  # 파일 생성하는 mutating fallback 방지). warning도 실패(--max-warnings 0).
+  mobile-lint:
+    name: mobile-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint (@pinvi/mobile)
+        run: npm --workspace @pinvi/mobile run lint
+
+  # 정보성(비필수) — SDK 정합/버전 드리프트 진단. api.expo.dev·npm registry에 의존해 비결정적이라
+  # Aggregate gate에는 넣지 않고 continue-on-error로 둔다(issue #215 "expo-doctor 검토").
+  mobile-doctor:
+    name: mobile-doctor (informational)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: expo-doctor (@pinvi/mobile)
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_TELEMETRY: "1"
+          CI: "1"
+        run: npx --yes expo-doctor@1.20.2
