@@ -2319,9 +2319,11 @@ Query:
   "data": {
     "items": [
       {
+        "provider_dataset_id": 41,
         "provider": "kma",
         "dataset_key": "special_days",
-        "sync_scope": "daily",
+        "sync_scope": "dataset_wide",
+        "operation_key": "kma_special_days_refresh",
         "status": "healthy",
         "last_success_at": "2026-06-12T00:00:00+09:00",
         "last_failure_at": null,
@@ -2341,8 +2343,11 @@ Query:
 
 `eligible_after`는 provider rate-limit/backoff 기준의 **재호출 가능 시각**이고,
 `schedule_next_scheduled_at`은 Dagster schedule 기준의 **다음 예약 시각**이다. 두 값을 서로
-대체하거나 한 필드로 합치지 않는다. 행 식별자는 `provider + dataset_key + sync_scope`의 exact
-scope를 사용한다.
+대체하거나 한 필드로 합치지 않는다. 행 식별자는
+`provider_dataset_id + sync_scope + operation_key`의 exact membership을 사용한다.
+`operation_key=null`은 특정 operation 행이 아니라 같은 dataset/scope의 rollup 행이다. 이 행도
+active/latest 실행을 포함할 수 있지만, 그 실행의 `provider_datasets`에는 같은
+`provider_dataset_id + sync_scope`와 실제 non-null `operation_key`가 있어야 한다.
 `schedule_source_status`가 `unavailable` 또는 `error`이면 응답을 정상으로 가장하지 않고
 `schedule_source_errors`를 그대로 보존한다. Admin UI는 provider 표 위에 degraded 배너를 표시해
 다음 예약 시각이 불완전할 수 있음을 알린다.
@@ -2425,22 +2430,24 @@ upstream: `kor-travel-map`
 목록의 한 행과 같은 `AdminProviderImportJobRecord`를 반환한다. 요청 path job id는
 `execution.id/detail_url`, `import_job.job_id`, standalone root id 또는 update-request root의
 `requested_job_id/request_id`, cancellation frozen member와 reciprocal하게 일치해야 한다. import job의
-provider/dataset은 root의 exact member 한 건과 맞아야 하지만, import payload의 sync scope를 nullable
-root member와 직접 비교하지 않는다. update request는 scope type/provider/dataset과 root
-`provider_datasets`를 대조한다. `provider_dataset`의 provider/dataset filter 배열은 비어 있어야 하며,
-원 `scope.sync_scope`와 `requested_sync_scope`는 둘 다 null이거나 같은 canonical 값이어야 한다.
-원 scope가 있으면 `effective_sync_scope`와도 같아야 한다. selector-none dataset의
-`requested_sync_scope=null`, `effective_sync_scope=dataset_wide`는 정상 계약이고 직접 요청 pair의
-root member scope는 항상 effective 값이다. non-exact scope의 root provider/dataset 배열은 요청
-filter와 대표 pair vector의 exact 합집합이며 `provider_datasets=[]`일 수 있다. 대표 pair 누락이나 두
-출처에 없는 무관 vector는 거부한다. root에는 실행 중 생성된 다른 provider/dataset child pair가
-함께 있을 수 있으며 상세 요청 job도 anchor나 대표 pair에 고정하지 않는다. update root는 reciprocal
+`provider_datasets`는 root의 membership triple
+(`provider_dataset_id + sync_scope + operation_key`)에 속해야 한다. update request root의
+`operation_member_id`는 `feature_update_request_dataset_id`, import job 상세의 `operation_member_id`는
+`import_job_dataset_id`이므로 두 값을 같은 UUID로 간주하지 않는다. update request는 생성 시 고정한
+`dataset_memberships`(`provider_dataset_id + sync_scope + operation_key`)를 root와 대조한다.
+`provider_dataset` 직접 요청의 `scope`도 같은 삼중항만 노출하며 자연키 `provider/dataset_key`나
+폐기된 `requested_sync_scope/effective_sync_scope/providers/dataset_keys`는 허용하지 않는다. 직접 요청
+삼중항은 root member의 triple과 정확히 일치해야 하며 `operation_member_id == update_request.job_id`를
+요구하지 않는다.
+non-exact scope는 `dataset_memberships=[]`일 수 있다. root에는 실행 중 생성된 다른 membership child가
+함께 있을 수 있으며 상세 요청 job도 anchor나 대표 membership에 고정하지 않는다. update root는 reciprocal
 `execution.request_id`, standalone root는 Map의 recursive root projection과 non-null lineage 증거로
 임의 깊이의 비대표 descendant를 허용하며 직계 `parent_job_id == root.id`를 강제하지 않는다.
 cancellation은 `linked_job_count`와 frozen member ID 집합뿐 아니라 요청 job의 operation kind/Dagster
 run을 대조하고, 모든 frozen member의 non-null Dagster run ID exact 집합과 `dagster_runs`가 같아야 한다.
-최초 attempt의 frozen 목록에는 root anchor와 노출된 모든 `operation_member_id`가 포함되어야 하며 무관
-UUID로 개수만 맞출 수 없다. `previous_cancellation_id`가 있는 retry attempt는 이전 attempt의 unresolved
+최초 attempt의 frozen 목록에는 요청 job, root anchor와 projected job이 포함되어야 하며 무관 UUID로
+개수만 맞출 수 없다. dataset membership UUID인 `operation_member_id`를 cancellation job ID로 취급하지
+않는다. `previous_cancellation_id`가 있는 retry attempt는 이전 attempt의 unresolved
 run-backed `cancel_failed` subset만 복사하므로 이미 해결된 root/requested member가 빠질 수 있고 full
 `linked_job_count`를 다시 요구하지 않는다. 종료가 필요한 member에 run ID가 없거나 run이
 누락·추가·중복되면 거부한다.
@@ -2449,9 +2456,13 @@ result도 대조한다. attempt status와 `finished_at/error`, run result와 eng
 `requires_run_termination`은 Map DB lifecycle constraint와 exact하게 맞아야 한다. resolved run-backed
 member는 `cancelled↔CANCELED`, `done↔SUCCESS`, `failed↔FAILURE` mapping을 따르며 provider
 feature-load tracking failure 예외만 허용한다. 같은 검증을 상세 GET과
-취소 POST 성공 응답에 모두 적용한다. dataset grid의 실행 member는 provider/dataset pair별 유일해야
-하고 선택된 member의 scope/status가 행과 맞아야 한다. active/latest 분류는 root가 아닌 pair status를
-정본으로 하며 동일 root/member가 두 슬롯에 동시에 나타날 수 없다. detail URL, preview,
+취소 POST 성공 응답에 모두 적용한다. dataset grid의 실행 member는
+`provider_dataset_id × sync_scope × operation_key` membership별 유일해야 하고 선택된 member의
+scope/operation/status가 행과 맞아야 한다. `operation_key=null` scope-rollup 행도 active/latest를
+포함할 수 있으며 실행 member의 실제 non-null operation을 검증한다. active/latest 분류는 root가 아닌
+membership status를 정본으로 하며 동일 root/member가 두 슬롯에 동시에 나타날 수 없다. detail URL은
+non-null 행에서 `/v1/ops/datasets/{provider_dataset_id}?sync_scope=...&operation_key=...` exact
+membership을 가리키고, null rollup 행만 `operation_key` query를 생략한다. preview,
 scope-refresh와 canonical/orphan capability 조합도 fail-close한다. 취소 POST 성공과 결과가 불확실한
 오류 뒤 이 endpoint가 reconciliation 정본이다. UI는 fresh GET이 terminal 또는 `retryable`을 확인할
 때까지 해당 job의 취소 재시도를 잠그고, `in_progress` 동안 주기적으로 다시 조회한다. stale 목록

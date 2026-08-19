@@ -308,16 +308,18 @@ async def _seed_pii_retention_candidates(session_factory: Any) -> None:
 
 def _provider_item() -> dict[str, Any]:
     return {
+        "provider_dataset_id": 41,
         "provider": "kma",
         "dataset_key": "special_days",
         "sync_scope": "dataset_wide",
+        "operation_key": "kma_special_days_refresh",
         "status": "healthy",
         "last_success_at": "2026-06-12T00:00:00+09:00",
         "last_failure_at": None,
         "consecutive_failures": 0,
         "eligible_after": "2026-06-13T03:30:00+09:00",
         "detail_url": (
-            "/v1/ops/datasets/detail?provider=kma&dataset_key=special_days&sync_scope=dataset_wide"
+            "/v1/ops/datasets/41?sync_scope=dataset_wide&operation_key=kma_special_days_refresh"
         ),
         "freshness": {
             "state": "fresh",
@@ -329,7 +331,7 @@ def _provider_item() -> dict[str, Any]:
         },
         "schedule": {
             "source": "dagster_graphql",
-            "basis": "dagster_definition_tags",
+            "basis": "dagster_operation_key_tag",
             "status": "RUNNING",
             "schedule_names": ["kma_special_days_schedule"],
             "active_schedule_names": ["kma_special_days_schedule"],
@@ -344,7 +346,7 @@ def _provider_item() -> dict[str, Any]:
             "feature_kind": "weather",
             "provider_state_default_scope": "daily",
             "label": "특일",
-            "is_feature_load": True,
+            "is_active": True,
             "is_refreshable": True,
             "scope_refresh": {
                 "supported": False,
@@ -366,7 +368,6 @@ def _provider_item() -> dict[str, Any]:
         },
         "refresh_policy": None,
         "dataset_issues": {"open_count": 0, "severity_counts": {}},
-        "provider_issues": {"open_count": 0, "severity_counts": {}},
     }
 
 
@@ -388,16 +389,16 @@ def _import_job() -> dict[str, Any]:
         "dagster_run_id": "run-1",
         "dagster_run_status": "STARTED",
         "trigger_kind": "manual",
-        "operation_registry_version": "1",
+        "operation_key": "kma_special_days_refresh",
         "requested_job_id": None,
         "linked_job_count": 2,
-        "providers": ["kma"],
-        "dataset_keys": ["special_days"],
         "provider_datasets": [
             {
+                "provider_dataset_id": 41,
                 "provider": "kma",
                 "dataset_key": "special_days",
-                "sync_scope": None,
+                "sync_scope": "dataset_wide",
+                "operation_key": "kma_special_days_refresh",
                 "operation_member_id": "22222222-2222-4222-8222-222222222222",
                 "status": "running",
             }
@@ -418,7 +419,7 @@ def _import_job() -> dict[str, Any]:
             "dagster_run_id": "run-1",
             "dagster_run_status": "STARTED",
             "trigger_kind": "manual",
-            "operation_registry_version": "1",
+            "operation_key": "kma_special_days_refresh",
             "load_batch_id": None,
             "parent_job_id": None,
             "depth": 1,
@@ -531,8 +532,7 @@ class _FakeOpsClient:
                 "status": item["status"],
                 "created_at": item["created_at"],
                 "job_kind": "provider_import",
-                "provider": "kma",
-                "dataset_key": "special_days",
+                "provider_datasets": item["provider_datasets"],
                 "progress": item["progress"],
                 "current_stage": item["current_stage"],
                 "scope_type": item["scope_type"],
@@ -545,7 +545,7 @@ class _FakeOpsClient:
                 "dagster_run_id": item["dagster_run_id"],
                 "dagster_run_status": item["dagster_run_status"],
                 "trigger_kind": item["trigger_kind"],
-                "operation_registry_version": item["operation_registry_version"],
+                "operation_key": item["operation_key"],
                 "job_id": None,
                 "request_id": None,
                 "load_batch_id": None,
@@ -565,10 +565,9 @@ class _FakeOpsClient:
                 "source_checksum": None,
                 "error_message": item["error_message"],
                 "dagster_run_id": item["dagster_run_id"],
-                "provider": "kma",
-                "dataset_key": "special_days",
+                "provider_datasets": item["provider_datasets"],
                 "trigger_kind": item["trigger_kind"],
-                "operation_registry_version": item["operation_registry_version"],
+                "operation_key": item["operation_key"],
                 "dagster_run_status": item["dagster_run_status"],
                 "created_at": item["created_at"],
                 "started_at": item["started_at"],
