@@ -285,8 +285,7 @@ def _execution_detail() -> dict[str, object]:
             "status": "running",
             "created_at": "2026-07-18T00:00:00+09:00",
             "job_kind": "provider_import",
-            "provider": "kma",
-            "dataset_key": "special_days",
+            "provider_datasets": deepcopy(execution["provider_datasets"]),
             "progress": 37,
             "current_stage": "normalize",
             "scope_type": None,
@@ -299,7 +298,7 @@ def _execution_detail() -> dict[str, object]:
             "dagster_run_id": "run-1",
             "dagster_run_status": "STARTED",
             "trigger_kind": "manual",
-            "operation_registry_version": "1",
+            "operation_key": "kma_special_days_refresh",
             "job_id": None,
             "request_id": None,
             "load_batch_id": None,
@@ -328,10 +327,19 @@ def _import_job_detail() -> dict[str, object]:
         "source_checksum": None,
         "error_message": None,
         "dagster_run_id": "run-1",
-        "provider": "kma",
-        "dataset_key": "special_days",
+        "provider_datasets": [
+            {
+                "provider_dataset_id": 41,
+                "provider": "kma",
+                "dataset_key": "special_days",
+                "sync_scope": "dataset_wide",
+                "operation_key": "kma_special_days_refresh",
+                "operation_member_id": ROOT_ID,
+                "status": "running",
+            }
+        ],
         "trigger_kind": "manual",
-        "operation_registry_version": "1",
+        "operation_key": "kma_special_days_refresh",
         "dagster_run_status": "STARTED",
         "created_at": "2026-07-18T00:00:00+09:00",
         "started_at": "2026-07-18T00:01:00+09:00",
@@ -391,7 +399,7 @@ def _as_update_request_detail() -> dict[str, object]:
             "current_stage": None,
             "dagster_run_status": None,
             "trigger_kind": "update_request",
-            "operation_registry_version": None,
+            "operation_key": None,
             "detail_url": (f"/v1/ops/pipeline/executions/update_request/{PROJECTED_ID}"),
         }
     )
@@ -852,7 +860,7 @@ def test_pipeline_execution_detail_rejects_partial_import_job_fixture() -> None:
         ("dagster_run_id", "run-2"),
         ("dagster_run_status", "SUCCESS"),
         ("trigger_kind", "scheduled"),
-        ("operation_registry_version", "2"),
+        ("operation_key", "other_refresh"),
         ("load_batch_id", "55555555-5555-4555-8555-555555555555"),
         ("parent_job_id", "66666666-6666-4666-8666-666666666666"),
     ],
@@ -883,7 +891,7 @@ def test_pipeline_execution_detail_rejects_import_lifecycle_drift(
         ("dagster_run_id", "run-2"),
         ("dagster_run_status", "SUCCESS"),
         ("trigger_kind", "scheduled"),
-        ("operation_registry_version", "2"),
+        ("operation_key", "other_refresh"),
     ],
 )
 def test_pipeline_execution_detail_rejects_standalone_root_lifecycle_drift(
@@ -903,7 +911,7 @@ def test_pipeline_execution_detail_rejects_import_scope_outside_root() -> None:
     detail = _execution_detail()
     import_job = detail["import_job"]
     assert isinstance(import_job, dict)
-    import_job["dataset_key"] = "impossible_dataset"
+    import_job["provider_datasets"][0]["dataset_key"] = "impossible_dataset"  # type: ignore[index]
 
     with pytest.raises(KorTravelMapOpsContractError, match="pipeline execution"):
         project_pipeline_execution(detail, requested_job_id=ROOT_ID)
@@ -1024,7 +1032,7 @@ def test_import_job_detail_keeps_requested_job_when_canonical_root_is_update_req
     root["current_stage"] = None
     root["dagster_run_status"] = None
     root["trigger_kind"] = "update_request"
-    root["operation_registry_version"] = None
+    root["operation_key"] = None
     root["provider_datasets"][0]["sync_scope"] = "dataset_wide"  # type: ignore[index]
     root["detail_url"] = f"/v1/ops/pipeline/executions/update_request/{PROJECTED_ID}"
     projected_job = root["projected_job"]
@@ -1097,7 +1105,6 @@ def test_import_job_detail_rejects_update_request_scope_topology_drift(
     root["current_stage"] = None
     root["dagster_run_status"] = None
     root["trigger_kind"] = "update_request"
-    root["operation_registry_version"] = None
     root["provider_datasets"][0]["sync_scope"] = "dataset_wide"  # type: ignore[index]
     root["detail_url"] = f"/v1/ops/pipeline/executions/update_request/{PROJECTED_ID}"
     execution["request_id"] = PROJECTED_ID
@@ -1152,7 +1159,7 @@ def test_import_job_detail_accepts_selector_none_effective_scope() -> None:
             "current_stage": None,
             "dagster_run_status": None,
             "trigger_kind": "update_request",
-            "operation_registry_version": None,
+            "operation_key": None,
             "detail_url": (f"/v1/ops/pipeline/executions/update_request/{PROJECTED_ID}"),
         }
     )
@@ -1168,13 +1175,19 @@ def test_import_job_detail_accepts_selector_none_effective_scope() -> None:
 def test_import_job_detail_accepts_explicit_canonical_scope() -> None:
     detail = _as_update_request_detail()
     root = detail["root"]
+    execution = detail["execution"]
+    import_job = detail["import_job"]
     update_request = detail["update_request"]
     assert isinstance(root, dict)
+    assert isinstance(execution, dict)
+    assert isinstance(import_job, dict)
     assert isinstance(update_request, dict)
     update_request["scope"]["sync_scope"] = "target_grids"  # type: ignore[index]
     update_request["requested_sync_scope"] = "target_grids"
     update_request["effective_sync_scope"] = "target_grids"
     root["provider_datasets"][0]["sync_scope"] = "target_grids"  # type: ignore[index]
+    execution["provider_datasets"][0]["sync_scope"] = "target_grids"  # type: ignore[index]
+    import_job["provider_datasets"][0]["sync_scope"] = "target_grids"  # type: ignore[index]
 
     record = project_pipeline_execution(detail, requested_job_id=ROOT_ID)
 
@@ -1196,44 +1209,12 @@ def test_import_job_detail_accepts_update_root_with_child_provider_pairs() -> No
             "status": "running",
         }
     )
-    root["providers"] = ["kma", "visitkorea"]
-    root["dataset_keys"] = ["places", "special_days"]
     root["linked_job_count"] = 2
 
     record = project_pipeline_execution(detail, requested_job_id=ROOT_ID)
 
     assert record.job_id == ROOT_ID
     assert record.payload["root_id"] == PROJECTED_ID
-
-
-@pytest.mark.parametrize("drift", ["missing_child_vector", "unrelated_vector"])
-def test_provider_dataset_root_rejects_effective_vector_drift(drift: str) -> None:
-    detail = _as_update_request_detail()
-    root = detail["root"]
-    assert isinstance(root, dict)
-    root["provider_datasets"].append(  # type: ignore[union-attr]
-        {
-            "provider_dataset_id": 42,
-            "provider": "visitkorea",
-            "dataset_key": "places",
-            "sync_scope": "target_grids",
-            "operation_key": "visitkorea_places_refresh",
-            "operation_member_id": CHILD_ID,
-            "status": "running",
-        }
-    )
-    root["providers"] = ["kma", "visitkorea"]
-    root["dataset_keys"] = ["places", "special_days"]
-    root["linked_job_count"] = 2
-    if drift == "missing_child_vector":
-        root["providers"] = ["kma"]
-        root["dataset_keys"] = ["special_days"]
-    else:
-        root["providers"].append("unrelated-provider")  # type: ignore[union-attr]
-        root["dataset_keys"].append("unrelated-dataset")  # type: ignore[union-attr]
-
-    with pytest.raises(KorTravelMapOpsContractError, match="pipeline execution"):
-        project_pipeline_execution(detail, requested_job_id=ROOT_ID)
 
 
 def test_import_job_detail_accepts_non_exact_root_filters_without_pair_projection() -> None:
@@ -1249,13 +1230,11 @@ def test_import_job_detail_accepts_non_exact_root_filters_without_pair_projectio
     root.update(
         {
             "scope_type": "feature_ids",
-            "providers": ["kma", "visitkorea"],
-            "dataset_keys": ["places", "special_days"],
             "provider_datasets": [],
         }
     )
-    execution.update({"provider": None, "dataset_key": None})
-    import_job.update({"provider": None, "dataset_key": None})
+    execution["provider_datasets"] = []
+    import_job["provider_datasets"] = []
     update_request.update(
         {
             "scope_type": "feature_ids",
@@ -1273,7 +1252,7 @@ def test_import_job_detail_accepts_non_exact_root_filters_without_pair_projectio
     assert record.payload["root_id"] == PROJECTED_ID
 
 
-def test_import_job_detail_accepts_non_exact_filter_and_representative_union() -> None:
+def test_import_job_detail_accepts_non_exact_filters_with_exact_memberships() -> None:
     detail = _as_update_request_detail()
     root = detail["root"]
     execution = detail["execution"]
@@ -1283,18 +1262,7 @@ def test_import_job_detail_accepts_non_exact_filter_and_representative_union() -
     assert isinstance(execution, dict)
     assert isinstance(import_job, dict)
     assert isinstance(update_request, dict)
-    root.update(
-        {
-            "scope_type": "feature_ids",
-            "providers": ["filter-provider", "kma"],
-            "dataset_keys": ["filter-dataset", "special_days"],
-        }
-    )
-    root["provider_datasets"][0]["sync_scope"] = "dataset_wide"  # type: ignore[index]
-    root["provider_datasets"][0]["operation_member_id"] = CHILD_ID  # type: ignore[index]
-    root["linked_job_count"] = 2
-    execution.update({"provider": None, "dataset_key": None})
-    import_job.update({"provider": None, "dataset_key": None})
+    root["scope_type"] = "feature_ids"
     update_request.update(
         {
             "scope_type": "feature_ids",
@@ -1309,52 +1277,6 @@ def test_import_job_detail_accepts_non_exact_filter_and_representative_union() -
     record = project_pipeline_execution(detail, requested_job_id=ROOT_ID)
 
     assert record.job_id == ROOT_ID
-
-
-@pytest.mark.parametrize("drift", ["missing_representative", "unrelated_vector"])
-def test_import_job_detail_rejects_non_exact_effective_vector_drift(
-    drift: str,
-) -> None:
-    detail = _as_update_request_detail()
-    root = detail["root"]
-    execution = detail["execution"]
-    import_job = detail["import_job"]
-    update_request = detail["update_request"]
-    assert isinstance(root, dict)
-    assert isinstance(execution, dict)
-    assert isinstance(import_job, dict)
-    assert isinstance(update_request, dict)
-    root.update(
-        {
-            "scope_type": "feature_ids",
-            "providers": ["filter-provider", "kma"],
-            "dataset_keys": ["filter-dataset", "special_days"],
-        }
-    )
-    root["provider_datasets"][0]["sync_scope"] = "dataset_wide"  # type: ignore[index]
-    root["provider_datasets"][0]["operation_member_id"] = CHILD_ID  # type: ignore[index]
-    root["linked_job_count"] = 2
-    execution.update({"provider": None, "dataset_key": None})
-    import_job.update({"provider": None, "dataset_key": None})
-    update_request.update(
-        {
-            "scope_type": "feature_ids",
-            "scope": {"type": "feature_ids", "feature_ids": ["feature-1"]},
-            "requested_sync_scope": None,
-            "effective_sync_scope": None,
-            "providers": ["filter-provider"],
-            "dataset_keys": ["filter-dataset"],
-        }
-    )
-    if drift == "missing_representative":
-        root["providers"] = ["filter-provider"]
-        root["dataset_keys"] = ["filter-dataset"]
-    else:
-        root["providers"].append("unrelated-provider")  # type: ignore[union-attr]
-        root["dataset_keys"].append("unrelated-dataset")  # type: ignore[union-attr]
-
-    with pytest.raises(KorTravelMapOpsContractError, match="pipeline execution"):
-        project_pipeline_execution(detail, requested_job_id=ROOT_ID)
 
 
 def test_import_job_detail_accepts_nonrepresentative_same_pair_child() -> None:
@@ -1478,22 +1400,21 @@ def test_import_job_detail_accepts_requested_child_execution() -> None:
             "status": "running",
         }
     )
-    root["providers"] = ["kma", "visitkorea"]
-    root["dataset_keys"] = ["places", "special_days"]
     root["linked_job_count"] = 2
+    child_membership = [deepcopy(root["provider_datasets"][1])]  # type: ignore[index]
     execution.update(
         {
             "id": CHILD_ID,
-            "provider": "visitkorea",
-            "dataset_key": "places",
+            "provider_datasets": child_membership,
+            "operation_key": "visitkorea_places_refresh",
             "detail_url": (f"/v1/ops/pipeline/executions/import_job/{CHILD_ID}"),
         }
     )
     import_job.update(
         {
             "job_id": CHILD_ID,
-            "provider": "visitkorea",
-            "dataset_key": "places",
+            "provider_datasets": child_membership,
+            "operation_key": "visitkorea_places_refresh",
         }
     )
 
@@ -1526,7 +1447,6 @@ def test_import_job_detail_rejects_noncanonical_direct_member_scope(
             "current_stage": None,
             "dagster_run_status": None,
             "trigger_kind": "update_request",
-            "operation_registry_version": None,
             "detail_url": (f"/v1/ops/pipeline/executions/update_request/{PROJECTED_ID}"),
         }
     )
@@ -1554,7 +1474,7 @@ def test_import_job_detail_rejects_noncanonical_direct_member_scope(
         ("current_stage", "fetch"),
         ("dagster_run_status", "STARTED"),
         ("trigger_kind", "manual"),
-        ("operation_registry_version", "1"),
+        ("operation_key", "other_refresh"),
     ],
 )
 def test_pipeline_execution_detail_rejects_update_root_lifecycle_drift(
@@ -1579,7 +1499,6 @@ def test_pipeline_execution_detail_rejects_update_root_lifecycle_drift(
             "current_stage": None,
             "dagster_run_status": None,
             "trigger_kind": "update_request",
-            "operation_registry_version": None,
             "detail_url": (f"/v1/ops/pipeline/executions/update_request/{PROJECTED_ID}"),
         }
     )

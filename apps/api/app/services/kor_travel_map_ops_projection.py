@@ -174,7 +174,7 @@ class _ProjectedJob(_CanonicalModel):
     dagster_run_id: str | None
     dagster_run_status: str | None
     trigger_kind: str | None
-    operation_registry_version: str | None
+    operation_key: str | None
     load_batch_id: UUID | None
     parent_job_id: UUID | None
     depth: int
@@ -194,8 +194,7 @@ class _PipelineExecutionRecord(_CanonicalModel):
     status: OperationState
     created_at: datetime
     job_kind: str | None
-    provider: str | None
-    dataset_key: str | None
+    provider_datasets: list[_ProviderDatasetIdentity]
     progress: int | None = Field(ge=0, le=100)
     current_stage: str | None
     scope_type: str | None
@@ -208,7 +207,7 @@ class _PipelineExecutionRecord(_CanonicalModel):
     dagster_run_id: str | None
     dagster_run_status: str | None
     trigger_kind: str | None
-    operation_registry_version: str | None
+    operation_key: str | None
     job_id: UUID | None
     request_id: UUID | None
     load_batch_id: UUID | None
@@ -228,8 +227,6 @@ class _PipelineExecutionRoot(_CanonicalModel):
     id: UUID
     status: OperationState
     created_at: datetime
-    providers: list[str]
-    dataset_keys: list[str]
     provider_datasets: list[_ProviderDatasetIdentity]
     progress: int | None = Field(ge=0, le=100)
     current_stage: str | None
@@ -243,7 +240,7 @@ class _PipelineExecutionRoot(_CanonicalModel):
     dagster_run_id: str | None
     dagster_run_status: str | None
     trigger_kind: str | None
-    operation_registry_version: str | None
+    operation_key: str | None
     requested_job_id: UUID | None
     linked_job_count: int = Field(ge=1)
     projected_job: _ProjectedJob
@@ -259,27 +256,12 @@ class _PipelineExecutionRoot(_CanonicalModel):
             for value in (self.scope_type, self.priority, self.run_mode, self.operator)
         ):
             raise ValueError("standalone import root cannot carry request-only fields")
-        member_keys = [(item.provider, item.dataset_key) for item in self.provider_datasets]
+        member_keys = [
+            (item.provider_dataset_id, item.sync_scope, item.operation_key)
+            for item in self.provider_datasets
+        ]
         if len(member_keys) != len(set(member_keys)):
             raise ValueError("provider_datasets must contain exact unique members")
-        if len(self.providers) != len(set(self.providers)):
-            raise ValueError("providers must contain exact unique identities")
-        if len(self.dataset_keys) != len(set(self.dataset_keys)):
-            raise ValueError("dataset_keys must contain exact unique identities")
-        representative_providers = {item.provider for item in self.provider_datasets}
-        representative_datasets = {item.dataset_key for item in self.provider_datasets}
-        if not representative_providers.issubset(self.providers):
-            raise ValueError("providers must include every representative member")
-        if not representative_datasets.issubset(self.dataset_keys):
-            raise ValueError("dataset_keys must include every representative member")
-        # Standalone vectors are exactly the representative pair projection. Update
-        # vectors additionally contain request filters; detail validation below can
-        # reconstruct and compare that exact union, while list/grid projections can
-        # at least require every representative identity to be present.
-        if self.kind == "import_job" and set(self.providers) != representative_providers:
-            raise ValueError("standalone providers must match exact projected members")
-        if self.kind == "import_job" and set(self.dataset_keys) != representative_datasets:
-            raise ValueError("standalone dataset_keys must match exact projected members")
         expected_url = f"/v1/ops/pipeline/executions/{self.kind}/{self.id}"
         if self.detail_url != expected_url:
             raise ValueError("execution detail_url must match root kind and id")
@@ -947,10 +929,9 @@ class _PipelineImportJobIdentity(_CanonicalModel):
     source_checksum: str | None
     error_message: str | None
     dagster_run_id: str | None
-    provider: str | None
-    dataset_key: str | None
+    provider_datasets: list[_ProviderDatasetIdentity]
     trigger_kind: str | None
-    operation_registry_version: str | None
+    operation_key: str | None
     dagster_run_status: str | None
     created_at: datetime
     started_at: datetime | None
@@ -1027,11 +1008,6 @@ class _PipelineExecutionDetailData(_CanonicalModel):
         if self.execution.id != self.import_job.job_id:
             raise ValueError("execution id must match import_job job_id")
         if (
-            self.execution.provider,
-            self.execution.dataset_key,
-        ) != (self.import_job.provider, self.import_job.dataset_key):
-            raise ValueError("execution scope must match import job scope")
-        if (
             self.execution.status != self.import_job.status
             or self.execution.created_at != self.import_job.created_at
             or self.execution.job_kind != self.import_job.kind
@@ -1042,24 +1018,33 @@ class _PipelineExecutionDetailData(_CanonicalModel):
             or self.execution.finished_at != self.import_job.finished_at
             or self.execution.dagster_run_id != self.import_job.dagster_run_id
             or self.execution.trigger_kind != self.import_job.trigger_kind
-            or self.execution.operation_registry_version
-            != self.import_job.operation_registry_version
+            or self.execution.operation_key != self.import_job.operation_key
+            or self.execution.provider_datasets != self.import_job.provider_datasets
             or self.execution.dagster_run_status != self.import_job.dagster_run_status
             or self.execution.load_batch_id != self.import_job.load_batch_id
             or self.execution.parent_job_id != self.import_job.parent_job_id
         ):
             raise ValueError("execution lifecycle must match import job")
-        if (self.import_job.provider is None) != (self.import_job.dataset_key is None):
-            raise ValueError("import job provider and dataset_key must be an exact pair")
-        if self.import_job.provider is not None and self.import_job.dataset_key is not None:
-            matching_scope = [
-                member
-                for member in self.root.provider_datasets
-                if member.provider == self.import_job.provider
-                and member.dataset_key == self.import_job.dataset_key
-            ]
-            if len(matching_scope) != 1:
-                raise ValueError("import job scope must match one canonical root member")
+        root_members = {
+            (
+                member.provider_dataset_id,
+                member.sync_scope,
+                member.operation_key,
+                member.operation_member_id,
+            )
+            for member in self.root.provider_datasets
+        }
+        import_members = {
+            (
+                member.provider_dataset_id,
+                member.sync_scope,
+                member.operation_key,
+                member.operation_member_id,
+            )
+            for member in self.import_job.provider_datasets
+        }
+        if not import_members.issubset(root_members):
+            raise ValueError("import job memberships must belong to the canonical root")
         if self.root.kind == "import_job":
             if (
                 self.root.requested_job_id is not None
@@ -1086,7 +1071,7 @@ class _PipelineExecutionDetailData(_CanonicalModel):
                 or self.root.dagster_run_id != self.execution.dagster_run_id
                 or self.root.dagster_run_status != self.execution.dagster_run_status
                 or self.root.trigger_kind != self.execution.trigger_kind
-                or self.root.operation_registry_version != self.execution.operation_registry_version
+                or self.root.operation_key != self.execution.operation_key
             ):
                 raise ValueError("identical standalone root lifecycle must match execution")
         else:
@@ -1102,8 +1087,6 @@ class _PipelineExecutionDetailData(_CanonicalModel):
             update_request = self.update_request
             scope_provider = update_request.scope.get("provider")
             scope_dataset = update_request.scope.get("dataset_key")
-            effective_providers = set(update_request.providers)
-            effective_datasets = set(update_request.dataset_keys)
             if update_request.scope_type == "provider_dataset":
                 scope_sync = update_request.scope.get("sync_scope")
                 if (
@@ -1128,22 +1111,19 @@ class _PipelineExecutionDetailData(_CanonicalModel):
                     member
                     for member in self.root.provider_datasets
                     if (member.provider, member.dataset_key) == (scope_provider, scope_dataset)
+                    and member.sync_scope == update_request.effective_sync_scope
+                    and member.operation_member_id == update_request.job_id
                 ]
                 if len(scope_members) != 1:
                     raise ValueError(
                         "provider_dataset request must include its exact direct root member"
                     )
-                member_scope = scope_members[0].sync_scope
-                if member_scope != update_request.effective_sync_scope:
-                    raise ValueError("canonical root member must match effective sync scope")
             else:
                 if (
                     update_request.requested_sync_scope is not None
                     or update_request.effective_sync_scope is not None
                 ):
                     raise ValueError("non-provider_dataset request cannot carry a sync scope")
-            effective_providers.update(member.provider for member in self.root.provider_datasets)
-            effective_datasets.update(member.dataset_key for member in self.root.provider_datasets)
             if (
                 self.root.scope_type != update_request.scope_type
                 or self.root.status != update_request.status
@@ -1159,9 +1139,7 @@ class _PipelineExecutionDetailData(_CanonicalModel):
                 or self.root.current_stage is not None
                 or self.root.dagster_run_status is not None
                 or self.root.trigger_kind != "update_request"
-                or self.root.operation_registry_version is not None
-                or effective_providers != set(self.root.providers)
-                or effective_datasets != set(self.root.dataset_keys)
+                or self.root.operation_key is not None
             ):
                 raise ValueError("update request scope must match exact canonical root members")
             if self.execution.id == update_request.job_id and (
@@ -1186,18 +1164,32 @@ class _PipelineExecutionDetailData(_CanonicalModel):
             or projected.dagster_run_id != self.execution.dagster_run_id
             or projected.dagster_run_status != self.execution.dagster_run_status
             or projected.trigger_kind != self.execution.trigger_kind
-            or projected.operation_registry_version != self.execution.operation_registry_version
+            or projected.operation_key != self.execution.operation_key
             or projected.load_batch_id != self.execution.load_batch_id
             or projected.parent_job_id != self.execution.parent_job_id
         ):
             raise ValueError("projected job lifecycle must match identical execution")
+        execution_members = {
+            (
+                member.provider_dataset_id,
+                member.sync_scope,
+                member.operation_key,
+                member.operation_member_id,
+                member.status,
+            )
+            for member in self.execution.provider_datasets
+        }
         for member in self.root.provider_datasets:
             if member.operation_member_id != self.execution.id:
                 continue
-            if member.status != self.execution.status or (member.provider, member.dataset_key) != (
-                self.execution.provider,
-                self.execution.dataset_key,
-            ):
+            member_key = (
+                member.provider_dataset_id,
+                member.sync_scope,
+                member.operation_key,
+                member.operation_member_id,
+                member.status,
+            )
+            if member_key not in execution_members:
                 raise ValueError("provider dataset member must match identical execution")
         summary = self.root.cancellation
         detail = self.cancellation
@@ -1394,6 +1386,23 @@ def _admin_cancellation_summary(
     )
 
 
+def _admin_membership_payload(
+    members: list[_ProviderDatasetIdentity],
+    *,
+    operation_key: str | None,
+) -> dict[str, Any]:
+    providers = list(dict.fromkeys(member.provider for member in members))
+    dataset_keys = list(dict.fromkeys(member.dataset_key for member in members))
+    return {
+        "provider": providers[0] if len(providers) == 1 else None,
+        "dataset_key": dataset_keys[0] if len(dataset_keys) == 1 else None,
+        "providers": providers,
+        "dataset_keys": dataset_keys,
+        "operation_key": operation_key,
+        "provider_datasets": [member.model_dump(mode="json") for member in members],
+    }
+
+
 def _project_pipeline_execution(
     item: _PipelineExecutionRoot,
 ) -> AdminProviderImportJobRecord:
@@ -1416,15 +1425,10 @@ def _project_pipeline_execution(
             str(projected.parent_job_id) if projected.parent_job_id is not None else None
         ),
         cancellation=_admin_cancellation_summary(item.cancellation),
-        payload={
-            "provider": item.providers[0] if len(item.providers) == 1 else None,
-            "dataset_key": item.dataset_keys[0] if len(item.dataset_keys) == 1 else None,
-            "providers": item.providers,
-            "dataset_keys": item.dataset_keys,
-            "provider_datasets": [
-                member.model_dump(mode="json") for member in item.provider_datasets
-            ],
-        },
+        payload=_admin_membership_payload(
+            item.provider_datasets,
+            operation_key=item.operation_key,
+        ),
         status_url=item.detail_url,
         current_stage=item.current_stage,
         error_message=item.error_message,
@@ -1469,13 +1473,10 @@ def project_pipeline_execution(
             ),
             cancellation=_admin_cancellation_summary(root.cancellation),
             payload={
-                "provider": root.providers[0] if len(root.providers) == 1 else None,
-                "dataset_key": (root.dataset_keys[0] if len(root.dataset_keys) == 1 else None),
-                "providers": root.providers,
-                "dataset_keys": root.dataset_keys,
-                "provider_datasets": [
-                    member.model_dump(mode="json") for member in root.provider_datasets
-                ],
+                **_admin_membership_payload(
+                    root.provider_datasets,
+                    operation_key=root.operation_key,
+                ),
                 "root_kind": root.kind,
                 "root_id": str(root.id),
             },
