@@ -76,7 +76,7 @@ def _projected_job(progress: int) -> dict[str, object]:
         "dagster_run_id": "run-1",
         "dagster_run_status": "STARTED",
         "trigger_kind": "manual",
-        "operation_registry_version": "1",
+        "operation_key": "kma_special_days_refresh",
         "load_batch_id": None,
         "parent_job_id": None,
         "depth": 1,
@@ -90,8 +90,6 @@ def _execution(progress: int = 1) -> dict[str, object]:
         "id": ROOT_ID,
         "status": "running",
         "created_at": "2026-07-18T00:00:00+09:00",
-        "providers": ["kma"],
-        "dataset_keys": ["special_days"],
         "provider_datasets": [
             {
                 "provider_dataset_id": 41,
@@ -115,7 +113,7 @@ def _execution(progress: int = 1) -> dict[str, object]:
         "dagster_run_id": "run-1",
         "dagster_run_status": "STARTED",
         "trigger_kind": "manual",
-        "operation_registry_version": "1",
+        "operation_key": "kma_special_days_refresh",
         "requested_job_id": None,
         "linked_job_count": 2,
         "projected_job": _projected_job(progress),
@@ -149,7 +147,7 @@ def _dataset_row() -> dict[str, object]:
         },
         "schedule": {
             "source": "dagster_graphql",
-            "basis": "dagster_definition_tags",
+            "basis": "dagster_operation_key_tag",
             "status": "RUNNING",
             "schedule_names": ["kma_schedule"],
             "active_schedule_names": ["kma_schedule"],
@@ -164,7 +162,7 @@ def _dataset_row() -> dict[str, object]:
             "feature_kind": "weather",
             "provider_state_default_scope": "daily",
             "label": "특일",
-            "is_feature_load": True,
+            "is_active": True,
             "is_refreshable": True,
             "scope_refresh": {
                 "supported": False,
@@ -186,7 +184,6 @@ def _dataset_row() -> dict[str, object]:
         },
         "refresh_policy": None,
         "dataset_issues": {"open_count": 0, "severity_counts": {}},
-        "provider_issues": {"open_count": 0, "severity_counts": {}},
     }
 
 
@@ -431,8 +428,6 @@ def _dataset_execution(
         "operation_member_id": PROJECTED_ID,
         "sync_scope": sync_scope,
         "operation_key": operation_key,
-        "providers": root["providers"],
-        "dataset_keys": root["dataset_keys"],
         "provider_datasets": root["provider_datasets"],
         "created_at": root["created_at"],
         "started_at": root["started_at"],
@@ -440,7 +435,6 @@ def _dataset_execution(
         "dagster_run_id": root["dagster_run_id"],
         "dagster_run_status": root["dagster_run_status"],
         "trigger_kind": root["trigger_kind"],
-        "operation_registry_version": root["operation_registry_version"],
         "error_message": root["error_message"],
         "projected_job": projected_job,
         "cancellation": None,
@@ -462,8 +456,10 @@ def test_dataset_grid_catalog_only_row_preserves_required_null_operation_key() -
     assert isinstance(row, dict)
     row["operation_key"] = None
     row["detail_url"] = "/v1/ops/datasets/41?sync_scope=dataset_wide"
-    row["active_execution"] = None
-    row["latest_execution"] = None
+    # Map은 refresh membership이 없는 catalog/orphan/policy-only 행에도 같은
+    # dataset+scope의 최신 실행을 rollup해서 붙인다. 행 identity의 null operation과
+    # 실행이 실제로 가리키는 non-null member operation을 동시에 보존해야 한다.
+    row["active_execution"] = _dataset_execution()
 
     record = project_dataset_grid(data)[0]
     serialized = record.model_dump(mode="json")
@@ -667,7 +663,7 @@ def test_dataset_grid_rejects_noncanonical_row_scope(invalid_scope: str) -> None
         project_dataset_grid(data)
 
 
-def test_dataset_grid_rejects_dataset_wide_in_poi_allowed_scopes() -> None:
+def test_dataset_grid_accepts_declared_dataset_wide_in_poi_allowed_scopes() -> None:
     data = _dataset_grid()
     row = data["items"][0]  # type: ignore[index]
     assert isinstance(row, dict)
@@ -680,8 +676,28 @@ def test_dataset_grid_rejects_dataset_wide_in_poi_allowed_scopes() -> None:
         "reason": None,
     }
 
-    with pytest.raises(KorTravelMapOpsContractError, match="dataset grid"):
-        project_dataset_grid(data)
+    assert len(project_dataset_grid(data)) == 1
+
+
+def test_dataset_grid_accepts_explicit_no_refresh_effect() -> None:
+    data = _dataset_grid()
+    row = data["items"][0]  # type: ignore[index]
+    assert isinstance(row, dict)
+    catalog = row["catalog"]
+    assert isinstance(catalog, dict)
+    row["mutable"] = False
+    catalog["is_active"] = False
+    catalog["is_refreshable"] = False
+    catalog["scope_refresh"] = {
+        "supported": False,
+        "selector": "none",
+        "effect": "none",
+        "default_sync_scope": "dataset_wide",
+        "allowed_sync_scopes": ["dataset_wide"],
+        "reason": "비활성 dataset이라 갱신할 수 없습니다.",
+    }
+
+    assert len(project_dataset_grid(data)) == 1
 
 
 def test_dataset_grid_rejects_selected_projected_job_status_drift() -> None:

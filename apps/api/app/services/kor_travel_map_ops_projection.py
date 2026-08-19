@@ -308,7 +308,7 @@ class _DatasetFreshness(_CanonicalModel):
 
 class _DatasetSchedule(_CanonicalModel):
     source: Literal["dagster_graphql"]
-    basis: Literal["dagster_definition_tags", "not_scheduled", "unknown"]
+    basis: Literal["dagster_operation_key_tag", "not_scheduled", "unknown"]
     status: str | None
     schedule_names: list[str]
     active_schedule_names: list[str]
@@ -340,7 +340,7 @@ class _DatasetPreviewCapability(_CanonicalModel):
 class _DatasetScopeRefreshCapability(_CanonicalModel):
     supported: bool
     selector: Literal["none", "poi_cache_targets"]
-    effect: Literal["dataset_wide", "sync_scope"]
+    effect: Literal["dataset_wide", "sync_scope", "none"]
     default_sync_scope: str
     allowed_sync_scopes: list[str]
     reason: str | None = None
@@ -350,7 +350,7 @@ class _DatasetCatalog(_CanonicalModel):
     feature_kind: str
     provider_state_default_scope: str
     label: str
-    is_feature_load: bool
+    is_active: bool
     is_refreshable: bool
     scope_refresh: _DatasetScopeRefreshCapability
     preview: _DatasetPreviewCapability
@@ -391,7 +391,7 @@ class _DatasetProjectedJob(_CanonicalModel):
     dagster_run_id: str | None
     dagster_run_status: str | None
     trigger_kind: str | None
-    operation_registry_version: str | None
+    operation_key: str | None
     depth: int
     detail_url: str
 
@@ -412,8 +412,6 @@ class _DatasetExecution(_CanonicalModel):
     operation_member_id: UUID
     sync_scope: str
     operation_key: str
-    providers: list[str]
-    dataset_keys: list[str]
     provider_datasets: list[_ProviderDatasetIdentity]
     created_at: datetime
     started_at: datetime | None
@@ -421,7 +419,6 @@ class _DatasetExecution(_CanonicalModel):
     dagster_run_id: str | None
     dagster_run_status: str | None
     trigger_kind: str | None
-    operation_registry_version: str | None
     error_message: str | None
     projected_job: _DatasetProjectedJob
     cancellation: _CancellationSummary | None
@@ -434,17 +431,6 @@ class _DatasetExecution(_CanonicalModel):
         ]
         if len(member_keys) != len(set(member_keys)):
             raise ValueError("dataset execution members must be exact and unique")
-        representative_providers = {item.provider for item in self.provider_datasets}
-        representative_datasets = {item.dataset_key for item in self.provider_datasets}
-        if not representative_providers.issubset(self.providers):
-            raise ValueError("dataset execution providers must include representatives")
-        if not representative_datasets.issubset(self.dataset_keys):
-            raise ValueError("dataset execution datasets must include representatives")
-        if self.kind == "import_job" and (
-            set(self.providers) != representative_providers
-            or set(self.dataset_keys) != representative_datasets
-        ):
-            raise ValueError("standalone dataset execution vectors must be exact")
         expected = f"/v1/ops/pipeline/executions/{self.kind}/{self.id}"
         if self.detail_url != expected:
             raise ValueError("dataset execution detail_url must match kind and id")
@@ -485,7 +471,6 @@ class _DatasetGridRow(_CanonicalModel):
     catalog: _DatasetCatalog | None
     refresh_policy: _RefreshPolicy | None
     dataset_issues: _IssueSummary
-    provider_issues: _IssueSummary
 
     @model_validator(mode="after")
     def exact_execution_members_match_row(self) -> Self:
@@ -506,9 +491,11 @@ class _DatasetGridRow(_CanonicalModel):
         ):
             raise ValueError("refresh policy identity must match the dataset row")
         if self.catalog_state == "canonical" and (
-            self.catalog is None or self.orphan_reason is not None or not self.mutable
+            self.catalog is None
+            or self.orphan_reason is not None
+            or self.mutable != self.catalog.is_active
         ):
-            raise ValueError("canonical dataset row must expose mutable catalog data")
+            raise ValueError("canonical dataset row must match catalog active state")
         if self.catalog_state == "orphan" and (
             self.catalog is not None
             or not isinstance(self.orphan_reason, str)
@@ -518,50 +505,48 @@ class _DatasetGridRow(_CanonicalModel):
             raise ValueError("orphan dataset row must expose an immutable orphan reason")
         if self.catalog is not None:
             capability = self.catalog.scope_refresh
-            if capability.selector == "none" and (
+            if capability.effect == "none" and (
                 capability.supported
-                or capability.effect != "dataset_wide"
+                or capability.selector != "none"
+                or capability.default_sync_scope != "dataset_wide"
+                or not capability.reason
+            ):
+                raise ValueError("disabled refresh capability must expose no effect")
+            if capability.effect == "dataset_wide" and (
+                capability.supported
+                or capability.selector != "none"
                 or capability.default_sync_scope != "dataset_wide"
                 or capability.allowed_sync_scopes
                 or not capability.reason
             ):
-                raise ValueError("selector-none refresh capability must be dataset-wide only")
-            if capability.selector == "poi_cache_targets" and (
+                raise ValueError("dataset-wide refresh capability must be exact")
+            if capability.effect == "sync_scope" and (
                 not capability.supported
-                or capability.effect != "sync_scope"
-                or capability.default_sync_scope != "target_grids"
                 or not capability.allowed_sync_scopes
-                or capability.allowed_sync_scopes[0] != "target_grids"
                 or len(capability.allowed_sync_scopes) != len(set(capability.allowed_sync_scopes))
+                or capability.default_sync_scope not in capability.allowed_sync_scopes
                 or any(
-                    not scope.startswith("external_system:") or not _is_canonical_sync_scope(scope)
-                    for scope in capability.allowed_sync_scopes[1:]
+                    not _is_canonical_sync_scope(scope) for scope in capability.allowed_sync_scopes
                 )
                 or capability.reason is not None
             ):
-                raise ValueError("poi target refresh capability must expose canonical scopes")
-            if not self.catalog.is_refreshable and capability.selector != "none":
-                raise ValueError("non-refreshable catalog entry cannot expose scoped refresh")
-        if self.operation_key is None and (
-            self.latest_execution is not None or self.active_execution is not None
-        ):
-            raise ValueError("catalog-only dataset row cannot expose an execution")
+                raise ValueError("scoped refresh capability must expose canonical scopes")
+            if capability.selector == "poi_cache_targets" and (
+                capability.effect != "sync_scope"
+                or "target_grids" not in capability.allowed_sync_scopes
+            ):
+                raise ValueError("poi target refresh capability must include target_grids")
+            if not self.catalog.is_refreshable and capability.effect != "none":
+                raise ValueError("non-refreshable catalog entry cannot expose a refresh effect")
         for execution in (self.latest_execution, self.active_execution):
             if execution is None:
                 continue
             matching_members = [
                 member
                 for member in execution.provider_datasets
-                if (
-                    member.provider_dataset_id,
-                    member.sync_scope,
-                    member.operation_key,
-                )
-                == (
-                    self.provider_dataset_id,
-                    self.sync_scope,
-                    self.operation_key,
-                )
+                if member.provider_dataset_id == self.provider_dataset_id
+                and member.sync_scope == self.sync_scope
+                and (self.operation_key is None or member.operation_key == self.operation_key)
                 and member.operation_member_id == execution.operation_member_id
             ]
             if len(matching_members) != 1:
@@ -569,9 +554,11 @@ class _DatasetGridRow(_CanonicalModel):
             member = matching_members[0]
             if (
                 execution.sync_scope != self.sync_scope
-                or execution.operation_key != self.operation_key
                 or member.sync_scope != execution.sync_scope
                 or member.operation_key != execution.operation_key
+                or (
+                    self.operation_key is not None and execution.operation_key != self.operation_key
+                )
             ):
                 raise ValueError("dataset execution scope must match selected member")
             if member.status != execution.pair_status:

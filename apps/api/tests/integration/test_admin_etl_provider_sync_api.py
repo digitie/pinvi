@@ -331,7 +331,7 @@ def _provider_item() -> dict[str, Any]:
         },
         "schedule": {
             "source": "dagster_graphql",
-            "basis": "dagster_definition_tags",
+            "basis": "dagster_operation_key_tag",
             "status": "RUNNING",
             "schedule_names": ["kma_special_days_schedule"],
             "active_schedule_names": ["kma_special_days_schedule"],
@@ -346,7 +346,7 @@ def _provider_item() -> dict[str, Any]:
             "feature_kind": "weather",
             "provider_state_default_scope": "daily",
             "label": "특일",
-            "is_feature_load": True,
+            "is_active": True,
             "is_refreshable": True,
             "scope_refresh": {
                 "supported": False,
@@ -368,7 +368,6 @@ def _provider_item() -> dict[str, Any]:
         },
         "refresh_policy": None,
         "dataset_issues": {"open_count": 0, "severity_counts": {}},
-        "provider_issues": {"open_count": 0, "severity_counts": {}},
     }
 
 
