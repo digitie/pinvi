@@ -335,8 +335,10 @@ issued_at|null, observed_at|null, value_number|null, value_text|null, unit|null,
   `known_at` = 그 시점에 알려진 response cutoff(knowledge time).
 - **200 `FeatureWeatherSnapshotResponse`**: `data:WeatherSnapshotData` = `WeatherCardData`의
   **상위집합**(같은 필드 + `target_at`, `known_at`) → Pinvi 소비 매핑을 그대로 재사용한다.
-- **소비처**: Pinvi `GET /features/{id}/weather?asof=`와 admin weather-values의 `asof`.
-  client(`feature_weather`)가 `asof` 유무로 §2.6 / §2.6b를 고른다.
+- **소비처**: Pinvi public `GET /features/{id}/weather?asof=`. user client
+  (`feature_weather`)가 `asof` 유무로 §2.6 / §2.6b를 고른다. Admin
+  `weather-values`는 Map Admin snapshot 계약이 추가될 때까지 `asof`를 지원하지 않고
+  422로 거부한다.
 - **주의(과거 silent drift)**: `asof`가 §2.6에서 사라진 뒤에도 client는 `/weather?asof=`를
   계속 보냈다. FastAPI는 모르는 query를 조용히 버리므로 **시점과 무관하게 늘 최신 카드**가
   돌아왔다(오류 없음 = 무증상 버그). 계약 게이트가 §2.6의 query 집합을 **빈 집합**으로,
