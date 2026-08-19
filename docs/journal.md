@@ -26,6 +26,22 @@
   3경로의 AdminBFF security, exact query 집합, response/container ref, 3축·transition·curation·weather
   소비 shape를 별도 unit gate로 검증한다.
 
+## 2026-08-19 — Hallmark 재설계 완주(T-313~T-316)
+
+T-312에서 잠근 시스템(`DESIGN.md`)을 표면에 끝까지 적용했다. T-313 토큰 우회 코드모드(89파일, PR #448),
+T-314 앱 셸 하단 탭바·대시보드 상태 UI(PR #450), T-315 모달 셸 수렴(`components/ui/Dialog` + 8종 이관,
+PR #452), T-316 요청 수명 계약·모달 격리(portal + 스택 인지형 inert)·파괴적 액션 확인 정책·여행 상세
+컨테인먼트·설정/법무/지도/파일 표면·44px 스윕(PR #455).
+
+배운 것 두 가지. (1) **모달의 busy 잠금은 UI 혼자 풀 수 없다** — 닫기만 열어 두면 진행 중 요청이 취소되지
+않아 닫은 모달이 되살아나고 비멱등 POST가 중복된다. 탈출구는 반드시 in-flight 취소와 함께 줘야 하고,
+클라이언트 취소가 서버 처리를 되돌리지 못하는 비멱등 요청은 "결과 불확실"을 사용자에게 알려야 한다.
+(2) **반쯤 맞는 타임아웃은 없느니만 못하다** — 헤더까지만 덮거나 4xx로 표면화하면 취소 계약과
+Idempotency-Key 계약을 동시에 깨뜨린다(T-315 3차 리뷰에서 철회 후 T-316에서 요구사항을 갖춰 재도입).
+
+규칙이 다시 새지 않도록 DESIGN.md 항목을 `apps/web/eslint.config.mjs` lint 가드로 옮겼다 — 토큰 우회,
+그림자 티어, 임의 z-index/타이포, 44px 미달 컨트롤을 사용자 표면에서 차단한다.
+
 ## 2026-08-19 (codex) — T-VN-41S typed snapshot error 소비
 
 - **변경**: 선행 #453이 Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의 service
@@ -7464,7 +7480,7 @@ PR-C 전체 DoD 중 "viewport 기반 feature 로딩 + 클러스터 렌더 + 팔�
 - `api/v1/admin/notice_plans.py` 신규 — §5.3 plan 첨부(GET/POST/DELETE) + §5.4 POI 첨부
   (GET/POST/DELETE). `require_role("admin")`→비admin 404. plan/POI 없으면 404 `NOT_FOUND`,
   개수 초과 409. POST/DELETE 는 admin*audit chain 기록(`curated_plan.attachment*_`/`curated*poi.attachment*_`). DELETE 는 soft delete 만 — RustFS object 보존(§5.6, notice→trip
-copy 시 `storage_key` 공유).
+  copy 시 `storage_key` 공유).
 - 응답은 `AttachmentResponse`(curated*\* + notice*\* alias 항상 동기). 입력 `AttachmentCreate`
   (storage_key 위생 검증 재사용).
 - 테스트 4건(plan CRUD / POI CRUD / unknown-plan 404 / 비admin 404).

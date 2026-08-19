@@ -49,6 +49,41 @@ const fileItem: AttachmentLibraryItem = {
   poi_label: null,
 };
 
+test('파일 목록 로드 실패는 원인 + 다시 시도를 준다', async ({ page }) => {
+  // T-316: 회복 행동 없는 오류 배너를 role=alert + 재시도로 바꿨다.
+  let attempts = 0;
+  await page.route(/.*\/users\/me\/files(\?.*)?$/, async (route, request) => {
+    if (!['fetch', 'xhr'].includes(request.resourceType())) return route.continue();
+    attempts += 1;
+    if (attempts === 1) {
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          error: { code: 'INTERNAL', message: '파일을 불러오지 못했습니다.' },
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [], total: 0 }),
+    });
+  });
+
+  await page.goto('/files');
+  const alert = page.getByTestId('my-file-error');
+  await expect(alert).toBeVisible();
+  await expect(alert).toHaveAttribute('role', 'alert');
+
+  await alert.getByRole('button', { name: '다시 시도' }).click();
+  await expect.poll(() => attempts).toBeGreaterThan(1);
+
+  // 빈 상태는 다음 행동을 준다.
+  await expect(page.getByText('업로드한 파일이 없습니다.')).toBeVisible();
+  await expect(page.getByRole('link', { name: '여행으로 가기' })).toBeVisible();
+});
+
 test('내 파일함에서 파일을 다운로드하고 삭제한다', async ({ page }) => {
   let items = [fileItem];
 
@@ -110,8 +145,6 @@ test('내 파일함에서 파일을 다운로드하고 삭제한다', async ({ p
     },
   );
 
-  page.on('dialog', (dialog) => dialog.accept());
-
   await page.goto('/files');
   await expect(page.getByRole('heading', { name: '파일' })).toBeVisible();
   await expect(page.getByTestId('my-file-list')).toContainText('day.jpg');
@@ -124,6 +157,16 @@ test('내 파일함에서 파일을 다운로드하고 삭제한다', async ({ p
     )
     .toContain('X-Amz-Signature=get');
 
+  // 파괴적 액션은 공용 확인 다이얼로그를 거친다(native confirm 제거, T-316).
   await page.getByRole('button', { name: '삭제' }).click();
+  await expect(page.getByTestId('file-delete-confirm')).toBeVisible();
+
+  // 취소하면 요청이 나가지 않는다.
+  await page.getByTestId('file-delete-confirm-cancel').click();
+  await expect(page.getByTestId('file-delete-confirm')).toHaveCount(0);
+  await expect(page.getByTestId('my-file-list')).toContainText('day.jpg');
+
+  await page.getByRole('button', { name: '삭제' }).click();
+  await page.getByTestId('file-delete-confirm-confirm').click();
   await expect(page.getByText('업로드한 파일이 없습니다.')).toBeVisible();
 });

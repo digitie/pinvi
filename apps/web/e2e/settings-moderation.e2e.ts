@@ -93,7 +93,8 @@ test('사용자 신고/이의제기 설정 화면에서 접수와 appeal을 수�
 
   await page.getByLabel('대상 ID').fill(targetId);
   await page.getByLabel('신고 내용').fill('여행 설명에 개인정보가 포함되어 있습니다.');
-  await page.getByLabel('증빙 정보').fill('{"field":"description"}');
+  // raw JSON 대신 선택 입력 — 전송되는 evidence.field 리터럴은 그대로 유지된다(T-316).
+  await page.getByLabel('문제가 된 부분(선택)').selectOption('description');
   await page.getByTestId('settings-moderation-submit').click();
 
   await expect(page.getByText(`${reportId} 신고를 접수했습니다.`)).toBeVisible();

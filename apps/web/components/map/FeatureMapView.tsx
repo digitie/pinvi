@@ -222,6 +222,10 @@ export function FeatureMapView({
   );
   const [notice, setNotice] = useState<string | null>(null);
 
+  // 최소 1회 조회가 끝났는지 — 조회 전에는 "표시할 장소가 없습니다"라고 단언하지 않는다
+  // (지도 키 미설정·초기화 실패 시 지도 fallback과 모순되는 문구가 겹쳐 떴다, T-316 리뷰 P2).
+  const [loaded, setLoaded] = useState(false);
+
   const fetchInBounds = useCallback(async (map: MapLibreMap) => {
     const zoom = clampZoom(map.getZoom());
     const bbox = boundsToBbox(map.getBounds(), zoom);
@@ -237,6 +241,7 @@ export function FeatureMapView({
       setPoints(toPoints(cached));
       setError(null);
       setLoading(false);
+      setLoaded(true);
       return;
     }
 
@@ -252,6 +257,7 @@ export function FeatureMapView({
       rememberViewport(viewportCache.current, cacheKey, data);
       setPoints(toPoints(data));
       setError(null);
+      setLoaded(true);
     } catch (err) {
       if (isAbortError(err) || requestId !== latestRequest.current) return;
       setError(err instanceof ApiError ? err.message : '지도 데이터를 불러오지 못했습니다.');
@@ -450,12 +456,51 @@ export function FeatureMapView({
   const detailAddress = addressLine(detail);
 
   return (
-    <div className={className} data-testid="feature-map">
-      <div className="grid h-full min-h-[560px] grid-rows-[1fr_auto] overflow-hidden rounded-sm border border-hairline bg-canvas md:min-h-[680px]">
-        <div className="relative min-h-0">
+    // 높이는 셸이 흘려보낸다 — 바깥 래퍼까지 flex 사슬을 이어야 `h-full`이 실제로 해소된다
+    // (사슬이 끊기면 content 높이로 붕괴한다, T-316 리뷰 P1).
+    <div className={`flex min-h-0 flex-col ${className ?? ''}`} data-testid="feature-map">
+      <div className="flex min-h-[320px] flex-1 flex-col overflow-hidden rounded-sm border border-hairline bg-canvas">
+        <div className="relative min-h-0 flex-1">
           <div className="pointer-events-none absolute inset-0 z-10">
             <div className="pointer-events-auto absolute left-3 top-3 w-72 max-w-[80vw]">
               <MapSearchBox onSelect={handleSearchSelect} />
+              {/* 상태는 상시 표가 아니라 **일이 생겼을 때만** 뜬다(DESIGN.md 상태 UI). */}
+              {error ? (
+                <p
+                  role="alert"
+                  className="mt-1 flex flex-wrap items-center gap-2 rounded-sm bg-error-bg px-2 py-1.5 text-xs text-error-text shadow-card"
+                  data-testid="feature-map-error"
+                >
+                  <span className="min-w-0">{error}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const map = mapRef.current;
+                      if (map) void fetchInBounds(map);
+                    }}
+                    className="focus-ring shrink-0 rounded-sm border border-error-text px-2 py-0.5 font-semibold"
+                  >
+                    다시 불러오기
+                  </button>
+                </p>
+              ) : loading ? (
+                <p
+                  className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card"
+                  role="status"
+                  aria-busy="true"
+                  data-testid="feature-map-loading"
+                >
+                  장소를 불러오는 중…
+                </p>
+              ) : loaded && points.length === 0 ? (
+                <p
+                  className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card"
+                  role="status"
+                  data-testid="feature-map-empty"
+                >
+                  이 범위에 표시할 장소가 없습니다 — 지도를 움직여 보세요.
+                </p>
+              ) : null}
               {notice && (
                 <p className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card">
                   {notice}
@@ -467,7 +512,7 @@ export function FeatureMapView({
               onClick={() => void handleMyLocation()}
               aria-label="내 위치로 이동"
               data-testid="map-my-location"
-              className="pointer-events-auto absolute bottom-4 right-3 flex h-10 w-10 items-center justify-center rounded-full border border-hairline bg-canvas text-ink shadow-card hover:bg-surface-soft"
+              className="pointer-events-auto absolute bottom-4 right-3 flex size-11 items-center justify-center rounded-full border border-hairline bg-canvas text-ink shadow-card hover:bg-surface-soft"
             >
               <LocateFixed className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -557,7 +602,7 @@ export function FeatureMapView({
                       type="button"
                       onClick={() => setDetailFeatureId(selected.featureId ?? null)}
                       data-testid="feature-map-detail-open"
-                      className="h-8 w-full rounded-sm bg-ink px-3 text-xs font-semibold text-canvas hover:bg-ink/90"
+                      className="min-h-11 w-full rounded-sm bg-ink px-3 text-sm font-semibold text-canvas hover:bg-ink/90"
                     >
                       상세보기
                     </button>
@@ -631,23 +676,6 @@ export function FeatureMapView({
             </MapContextMenu>
           )}
         </div>
-        <dl
-          className="grid gap-0 border-t border-hairline bg-canvas text-xs text-muted sm:grid-cols-3"
-          data-testid="feature-map-status"
-        >
-          <div className="border-b border-hairline px-4 py-3 sm:border-b-0 sm:border-r">
-            <dt className="font-semibold text-ink">표시</dt>
-            <dd className="mt-1">{points.length}개</dd>
-          </div>
-          <div className="border-b border-hairline px-4 py-3 sm:border-b-0 sm:border-r">
-            <dt className="font-semibold text-ink">상태</dt>
-            <dd className="mt-1">{loading ? '불러오는 중…' : '대기'}</dd>
-          </div>
-          <div className="px-4 py-3">
-            <dt className="font-semibold text-ink">오류</dt>
-            <dd className="mt-1 truncate text-error-text">{error ?? '없음'}</dd>
-          </div>
-        </dl>
       </div>
       <LocationConsentDialog
         open={consentOpen}

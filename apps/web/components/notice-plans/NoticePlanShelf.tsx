@@ -76,7 +76,7 @@ export function NoticePlanShelf() {
         <button
           type="button"
           onClick={() => void loadPlans()}
-          className="inline-flex h-10 w-fit items-center gap-2 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+          className="inline-flex min-h-11 w-fit items-center gap-2 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
           disabled={loading}
         >
           {loading ? (
@@ -197,7 +197,7 @@ export function NoticePlanShelf() {
               <button
                 type="button"
                 onClick={() => setCopyPlan(plan)}
-                className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover"
+                className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover"
                 data-testid={`notice-plan-copy-${plan.notice_plan_id}`}
               >
                 <CopyPlus className="h-4 w-4" aria-hidden="true" />내 여행으로 가져오기
@@ -218,6 +218,12 @@ export function NoticePlanShelf() {
                 : '선택한 여행에 추천 여행을 추가했습니다.',
             )
           }
+          onCopyUncertain={() => {
+            // 취소해도 서버가 복사를 끝냈을 수 있다 — 결과를 단정하지 않고 확인을 요청한다.
+            setMessage(
+              '복사 요청을 취소했습니다. 서버에 이미 접수됐을 수 있으니 여행 목록에서 확인해 주세요.',
+            );
+          }}
         />
       )}
     </div>

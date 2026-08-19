@@ -72,7 +72,7 @@ export function TripCompanions({ tripId, companions, onChanged }: TripCompanions
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="friend@example.com"
-            className="mt-1 block h-9 w-full rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
+            className="mt-1 block min-h-11 w-full rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-none focus:border-primary"
           />
         </label>
         <label className="text-xs font-semibold text-ink">
@@ -80,7 +80,7 @@ export function TripCompanions({ tripId, companions, onChanged }: TripCompanions
           <select
             value={role}
             onChange={(event) => setRole(event.target.value as TripCompanionRole)}
-            className="mt-1 block h-9 rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
+            className="mt-1 block min-h-11 rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-none focus:border-primary"
           >
             {ROLES.map((r) => (
               <option key={r} value={r}>
@@ -93,7 +93,7 @@ export function TripCompanions({ tripId, companions, onChanged }: TripCompanions
           type="button"
           onClick={() => void invite()}
           disabled={inviting || !email.trim()}
-          className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
+          className="inline-flex min-h-11 items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
         >
           {inviting ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />

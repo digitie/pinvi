@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { type ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { ImageIcon, Link2, Loader2, Trash2, Unlink, Upload } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type { AuthUser, OAuthProvider } from '@pinvi/schemas';
@@ -15,6 +15,7 @@ import {
   putToPresigned,
 } from '@pinvi/domain';
 import { buttonClassName } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -86,6 +87,12 @@ export default function ProfilePage() {
   const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 파괴적 액션 확인 — native confirm 대신 공용 다이얼로그(DESIGN.md 확인 정책).
+  const [pendingConfirm, setPendingConfirm] = useState<
+    { kind: 'unlink'; provider: OAuthProviderName } | { kind: 'avatar' } | null
+  >(null);
+  const confirmTriggerRef = useRef<HTMLElement | null>(null);
+  const accountSectionRef = useRef<HTMLDivElement | null>(null);
 
   const oauthIdentities = useMemo(
     () =>
@@ -169,11 +176,23 @@ export default function ProfilePage() {
     }
   };
 
+  // 파괴적 액션은 공용 확인 다이얼로그로만 확인한다(DESIGN.md 확인 정책, native confirm 금지).
+  const requestUnlink = (provider: OAuthProviderName, trigger: HTMLElement | null) => {
+    confirmTriggerRef.current = trigger;
+    setError(null);
+    setMessage(null);
+    setPendingConfirm({ kind: 'unlink', provider });
+  };
+
+  const requestDeleteAvatar = (trigger: HTMLElement | null) => {
+    confirmTriggerRef.current = trigger;
+    setError(null);
+    setMessage(null);
+    setPendingConfirm({ kind: 'avatar' });
+  };
+
   const onUnlinkProvider = async (provider: OAuthProviderName) => {
     const label = OAUTH_PROVIDER_LABELS[provider];
-    if (!window.confirm(`${label} 연결을 해제할까요?`)) {
-      return;
-    }
     setAction(`unlink-${provider}`);
     setError(null);
     setMessage(null);
@@ -189,6 +208,7 @@ export default function ProfilePage() {
       }
     } finally {
       setAction(null);
+      setPendingConfirm(null);
     }
   };
 
@@ -229,9 +249,6 @@ export default function ProfilePage() {
   };
 
   const onDeleteAvatar = async () => {
-    if (!window.confirm('아바타 이미지를 삭제할까요?')) {
-      return;
-    }
     setAvatarAction('delete');
     setError(null);
     setMessage(null);
@@ -243,6 +260,10 @@ export default function ProfilePage() {
       setError(err instanceof ApiError ? err.message : '아바타를 삭제하지 못했습니다.');
     } finally {
       setAvatarAction(null);
+      // 삭제 성공 시 트리거(삭제 버튼)가 disabled로 바뀐다 — 포커스는 섹션이 받는다.
+      if (!confirmTriggerRef.current?.isConnected) confirmTriggerRef.current = accountSectionRef.current;
+      // 요청이 끝난 뒤 닫는다 — busy 표시와 포커스 복원을 살리기 위해(T-315 5차 리뷰 패턴).
+      setPendingConfirm(null);
     }
   };
 
@@ -282,7 +303,12 @@ export default function ProfilePage() {
         className="space-y-3 rounded-sm border border-hairline bg-canvas p-4"
         data-testid="profile-avatar-section"
       >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* 삭제 성공 후 트리거가 사라지거나 비활성이면 포커스가 이 컨테이너로 돌아온다. */}
+        <div
+          ref={accountSectionRef}
+          tabIndex={-1}
+          className="flex flex-col gap-4 outline-none sm:flex-row sm:items-center sm:justify-between"
+        >
           <div className="flex items-center gap-3">
             {avatarSrc ? (
               <img
@@ -326,7 +352,7 @@ export default function ProfilePage() {
             <button
               type="button"
               disabled={!me?.has_avatar || avatarAction !== null}
-              onClick={onDeleteAvatar}
+              onClick={(event) => requestDeleteAvatar(event.currentTarget)}
               className="inline-flex items-center gap-2 rounded-sm border border-error-text px-3 py-2 text-sm font-semibold text-error-text disabled:opacity-50"
               data-testid="profile-avatar-delete"
             >
@@ -366,7 +392,7 @@ export default function ProfilePage() {
               {identity ? (
                 <button
                   type="button"
-                  onClick={() => onUnlinkProvider(provider)}
+                  onClick={(event) => requestUnlink(provider, event.currentTarget)}
                   disabled={action !== null || !me?.has_password}
                   className="inline-flex shrink-0 items-center gap-2 rounded-sm border border-error-text px-3 py-2 text-sm font-semibold text-error-text disabled:opacity-50"
                   data-testid={`${provider}-oauth-unlink`}
@@ -404,6 +430,33 @@ export default function ProfilePage() {
           </section>
         );
       })}
+
+      <ConfirmDialog
+        open={pendingConfirm != null}
+        tone="danger"
+        title={
+          pendingConfirm?.kind === 'unlink'
+            ? `${OAUTH_PROVIDER_LABELS[pendingConfirm.provider]} 연결을 해제할까요?`
+            : '아바타 이미지를 삭제할까요?'
+        }
+        description={
+          pendingConfirm?.kind === 'unlink'
+            ? '다시 연결하려면 해당 서비스에서 인증을 다시 거쳐야 합니다.'
+            : '삭제하면 되돌릴 수 없습니다.'
+        }
+        confirmLabel={pendingConfirm?.kind === 'unlink' ? '연결 해제' : '삭제'}
+        cancelLabel="취소"
+        busy={action !== null || avatarAction !== null}
+        onConfirm={() => {
+          const target = pendingConfirm;
+          if (!target) return;
+          if (target.kind === 'unlink') void onUnlinkProvider(target.provider);
+          else void onDeleteAvatar();
+        }}
+        onCancel={() => setPendingConfirm(null)}
+        returnFocusRef={confirmTriggerRef}
+        testId="profile-destructive-confirm"
+      />
     </div>
   );
 }

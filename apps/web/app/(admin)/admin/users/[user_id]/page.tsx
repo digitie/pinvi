@@ -4,7 +4,7 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { type ChangeEvent, useEffect, useState } from 'react';
+import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import {
   Eraser,
   ImageIcon,
@@ -34,6 +34,7 @@ import type {
   MutableAdminRole,
 } from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FormTextArea } from '@/components/forms/FormTextArea';
 
@@ -122,6 +123,11 @@ export default function AdminUserDetailPage() {
   const [sessions, setSessions] = useState<AdminUserSessionRecord[]>([]);
   const [lifecycleReason, setLifecycleReason] = useState('');
   const [lifecycleBusy, setLifecycleBusy] = useState<LifecycleActionKind | null>(null);
+  const [pendingDestructive, setPendingDestructive] = useState<{
+    kind: 'avatar' | 'delete' | 'anonymize';
+    reason: string;
+  } | null>(null);
+  const destructiveTriggerRef = useRef<HTMLElement | null>(null);
   const [sessionBusy, setSessionBusy] = useState<string | null>(null);
 
   useEffect(() => {
@@ -257,15 +263,21 @@ export default function AdminUserDetailPage() {
     }
   };
 
-  const onDeleteAvatar = async () => {
+  // 파괴적 액션은 공용 확인 다이얼로그로 확인한다(DESIGN.md 확인 정책, native confirm 금지).
+  // 사유는 이미 폼에서 받았으므로 재수집하지 않고 확인 본문에 그대로 보여 준다.
+  const requestDeleteAvatar = (trigger: HTMLElement | null) => {
     const accessReason = avatarReason.trim();
     if (accessReason.length < 1) {
       setError('아바타 삭제 사유가 필요합니다.');
       return;
     }
-    if (!window.confirm('이 사용자의 아바타 이미지를 삭제할까요?')) {
-      return;
-    }
+    destructiveTriggerRef.current = trigger;
+    setError(null);
+    setPendingDestructive({ kind: 'avatar', reason: accessReason });
+  };
+
+  const onDeleteAvatar = async () => {
+    const accessReason = avatarReason.trim();
     setAvatarAction('delete');
     setError(null);
     setMessage(null);
@@ -281,6 +293,7 @@ export default function AdminUserDetailPage() {
       setError(err instanceof ApiError ? err.message : '아바타를 삭제하지 못했습니다.');
     } finally {
       setAvatarAction(null);
+      setPendingDestructive(null);
     }
   };
 
@@ -388,16 +401,26 @@ export default function AdminUserDetailPage() {
     setSessions(nextSessions.items);
   };
 
-  const onLifecycleAction = async (kind: LifecycleActionKind) => {
+  // delete/anonymize는 비가역이므로 확인 다이얼로그를 거친 뒤에만 실행된다.
+  const requestLifecycleAction = (kind: LifecycleActionKind, trigger: HTMLElement | null) => {
     const accessReason = lifecycleReason.trim();
     if (accessReason.length < 1) {
       setError('lifecycle 액션 사유가 필요합니다.');
       return;
     }
-    if (
-      (kind === 'delete' && !window.confirm('이 사용자를 삭제 대기 상태로 전환할까요?')) ||
-      (kind === 'anonymize' && !window.confirm('이 사용자의 계정을 즉시 익명화할까요?'))
-    ) {
+    if (kind !== 'delete' && kind !== 'anonymize') {
+      void onLifecycleAction(kind);
+      return;
+    }
+    destructiveTriggerRef.current = trigger;
+    setError(null);
+    setPendingDestructive({ kind, reason: accessReason });
+  };
+
+  const onLifecycleAction = async (kind: LifecycleActionKind) => {
+    const accessReason = lifecycleReason.trim();
+    if (accessReason.length < 1) {
+      setError('lifecycle 액션 사유가 필요합니다.');
       return;
     }
     setLifecycleBusy(kind);
@@ -431,6 +454,8 @@ export default function AdminUserDetailPage() {
       setError(err instanceof ApiError ? err.message : 'lifecycle 액션을 처리하지 못했습니다.');
     } finally {
       setLifecycleBusy(null);
+      // 요청이 끝난 뒤 닫는다(busy 표시·포커스 복원 유지).
+      setPendingDestructive(null);
     }
   };
 
@@ -630,7 +655,7 @@ export default function AdminUserDetailPage() {
                   blockedAuthStatus ||
                   lifecycleReason.trim().length < 1
                 }
-                onClick={() => void onLifecycleAction('resend-verify')}
+                onClick={(event) => requestLifecycleAction('resend-verify', event.currentTarget)}
                 className="inline-flex h-10 items-center gap-2 rounded-sm border border-primary px-3 text-sm font-semibold text-primary disabled:opacity-50"
                 data-testid="admin-user-resend-verify"
               >
@@ -649,7 +674,9 @@ export default function AdminUserDetailPage() {
                   blockedAuthStatus ||
                   lifecycleReason.trim().length < 1
                 }
-                onClick={() => void onLifecycleAction('force-password-reset')}
+                onClick={(event) =>
+                  requestLifecycleAction('force-password-reset', event.currentTarget)
+                }
                 className="inline-flex h-10 items-center gap-2 rounded-sm border border-primary px-3 text-sm font-semibold text-primary disabled:opacity-50"
                 data-testid="admin-user-force-password-reset"
               >
@@ -667,7 +694,7 @@ export default function AdminUserDetailPage() {
                   activeSessionCount < 1 ||
                   lifecycleReason.trim().length < 1
                 }
-                onClick={() => void onLifecycleAction('revoke-all')}
+                onClick={(event) => requestLifecycleAction('revoke-all', event.currentTarget)}
                 className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink disabled:opacity-50"
                 data-testid="admin-user-revoke-all-sessions"
               >
@@ -685,7 +712,7 @@ export default function AdminUserDetailPage() {
                   !['disabled', 'pending_delete'].includes(user.status) ||
                   lifecycleReason.trim().length < 1
                 }
-                onClick={() => void onLifecycleAction('reactivate')}
+                onClick={(event) => requestLifecycleAction('reactivate', event.currentTarget)}
                 className="inline-flex h-10 items-center gap-2 rounded-sm border border-success-text px-3 text-sm font-semibold text-success-text disabled:opacity-50"
                 data-testid="admin-user-reactivate"
               >
@@ -703,7 +730,7 @@ export default function AdminUserDetailPage() {
                   ['pending_delete', 'deleted'].includes(user.status) ||
                   lifecycleReason.trim().length < 1
                 }
-                onClick={() => void onLifecycleAction('delete')}
+                onClick={(event) => requestLifecycleAction('delete', event.currentTarget)}
                 className="inline-flex h-10 items-center gap-2 rounded-sm border border-error-text px-3 text-sm font-semibold text-error-text disabled:opacity-50"
                 data-testid="admin-user-schedule-delete"
               >
@@ -721,7 +748,7 @@ export default function AdminUserDetailPage() {
                   user.status === 'deleted' ||
                   lifecycleReason.trim().length < 1
                 }
-                onClick={() => void onLifecycleAction('anonymize')}
+                onClick={(event) => requestLifecycleAction('anonymize', event.currentTarget)}
                 className="inline-flex h-10 items-center gap-2 rounded-sm bg-error-text px-3 text-sm font-semibold text-on-primary disabled:opacity-50"
                 data-testid="admin-user-anonymize"
               >
@@ -856,7 +883,7 @@ export default function AdminUserDetailPage() {
                 <button
                   type="button"
                   disabled={!user.has_avatar || avatarAction !== null}
-                  onClick={onDeleteAvatar}
+                  onClick={(event) => requestDeleteAvatar(event.currentTarget)}
                   className="inline-flex items-center gap-2 rounded-sm border border-error-text px-3 py-2 text-sm font-semibold text-error-text disabled:opacity-50"
                   data-testid="admin-user-avatar-delete"
                 >
@@ -1048,6 +1075,49 @@ export default function AdminUserDetailPage() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={pendingDestructive != null}
+        tone="danger"
+        title={
+          pendingDestructive?.kind === 'avatar'
+            ? '이 사용자의 아바타 이미지를 삭제할까요?'
+            : pendingDestructive?.kind === 'delete'
+              ? '이 사용자를 삭제 대기 상태로 전환할까요?'
+              : '이 사용자의 계정을 즉시 익명화할까요?'
+        }
+        description={
+          pendingDestructive?.kind === 'anonymize'
+            ? '즉시 실행되며 되돌릴 수 없습니다.'
+            : pendingDestructive?.kind === 'delete'
+              ? '삭제 대기로 전환되며 보존 정책에 따라 처리됩니다.'
+              : '삭제하면 되돌릴 수 없습니다.'
+        }
+        confirmLabel={
+          pendingDestructive?.kind === 'avatar'
+            ? '아바타 삭제'
+            : pendingDestructive?.kind === 'delete'
+              ? '삭제 대기로 전환'
+              : '즉시 익명화'
+        }
+        cancelLabel="취소"
+        busy={lifecycleBusy !== null || avatarAction !== null}
+        onConfirm={() => {
+          const target = pendingDestructive;
+          if (!target) return;
+          if (target.kind === 'avatar') void onDeleteAvatar();
+          else void onLifecycleAction(target.kind);
+        }}
+        onCancel={() => setPendingDestructive(null)}
+        returnFocusRef={destructiveTriggerRef}
+        testId="admin-user-destructive-confirm"
+      >
+        {/* 사유를 재수집하지 않는다 — 폼에서 이미 받은 값을 그대로 보여 준다(이중 입력 방지). */}
+        {pendingDestructive ? (
+          <p className="rounded-sm bg-surface-soft px-3 py-2 text-sm text-body">
+            사유: {pendingDestructive.reason}
+          </p>
+        ) : null}
+      </ConfirmDialog>
     </AdminPage>
   );
 }

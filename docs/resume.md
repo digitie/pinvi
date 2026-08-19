@@ -17,6 +17,22 @@ Python/Zod를 거쳐 실제로 투영하고 Web에 실제 개수를 표시한다
 **다음 한 작업**: 로컬·n150 CI-parity와 원격 PR CI/리뷰를 통과시킨다. 공개 응답의 항상-null
 `status` 제거는 web/mobile 소비자를 함께 옮겨야 하는 breaking cutover이므로 별도 PR로 진행한다.
 
+## 2026-08-19 (claude) — T-316 Hallmark 종결(PR #455 머지)
+
+**방금**: Hallmark 감사(13 critical · 26 major · 19 minor, 7표면)의 마지막 조각을 닫았다. ① `@pinvi/api-client`
+요청 수명 계약 — 타이머가 body 소비 완료까지 유지, abort가 전 생애주기 전파, 타임아웃을 `status: 0`으로
+서버 확정 4xx와 구분(408이면 Idempotency-Key가 폐기돼 큐레이션 import가 중복 실행), 장시간 admin 호출은
+클라이언트 예산 해제, `Dialog.onCancelBusy`로 취소와 함께 탈출구 제공. ② 모달 격리 — body portal + 스택
+인지형 배경 inert, `RestoreHotswapDialog` 수렴(407→265줄)으로 손복사 셸 0건. ③ 파괴적 액션 —
+`window.confirm`/`prompt` 7곳 제거(저장소 전역 0건). ④ 표면 — 여행 상세 4겹 컨테인먼트 해체(320px에서
+유효 폭 −35.3%), 지도 상시 dl 삭제, **nav '지도'가 데모 셸을 가리켜 실제 탐색 지도가 도달 불가였던 IA
+결함** 교정, DSR/신고 raw JSON → 폼 필드, 법무 65ch·공개 chrome, 설정 4쪽 admin chrome 분리, 파일 상태 UI.
+⑤ 44px 미달 컨트롤 53곳 정리 + DESIGN.md 규칙을 lint(`no-restricted-syntax`)가 집행하게 해 재발을 막았다
+(T-317 흡수). 적대적 리뷰 3인 반영, 프로덕션 빌드 Playwright 150 passed/1 skipped.
+
+**다음 한 작업**: T-310(PR #446) — `apps/mobile` 실기기 Dev Client smoke를 돌려 issue #215를 종결한다.
+그 다음은 T-273(v1.0.0 E2E/Live gate)이며, 남은 hard blocker는 geofence 운영 설정이다.
+
 ## 2026-08-19 (codex) — T-VN-41S typed snapshot error 소비
 
 선행 #453이 Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의 service artifact

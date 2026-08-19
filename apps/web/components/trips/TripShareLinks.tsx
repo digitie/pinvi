@@ -86,7 +86,7 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
           <select
             value={visibility}
             onChange={(event) => setVisibility(event.target.value as TripShareLinkVisibility)}
-            className="mt-1 block h-9 rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
+            className="mt-1 block min-h-11 rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-none focus:border-primary"
           >
             {VISIBILITIES.map((v) => (
               <option key={v} value={v}>
@@ -101,14 +101,14 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
             type="date"
             value={expiresAt}
             onChange={(event) => setExpiresAt(event.target.value)}
-            className="mt-1 block h-9 rounded-sm border border-hairline px-2 text-sm font-normal text-ink outline-none focus:border-primary"
+            className="mt-1 block min-h-11 rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-none focus:border-primary"
           />
         </label>
         <button
           type="button"
           onClick={() => void create()}
           disabled={creating}
-          className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
+          className="inline-flex min-h-11 items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
         >
           {creating && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
           링크 만들기

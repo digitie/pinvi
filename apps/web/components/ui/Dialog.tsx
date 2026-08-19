@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import type { ReactNode, RefObject } from 'react';
 import { X } from 'lucide-react';
 import { useModalDialog } from '@/lib/useModalDialog';
@@ -30,12 +31,20 @@ export interface DialogProps {
   size?: DialogSize;
   variant?: DialogVariant;
   /**
-   * 진행 중이면 닫기 경로(Escape·backdrop·×)를 잠근다 — 저장 중 이탈로 결과를 놓치지 않게.
-   * 닫기만 열어 두면 진행 중 요청이 취소되지 않아 닫은 다이얼로그가 늦은 응답으로 되살아나거나
-   * 비멱등 POST가 중복된다(T-315 2차 리뷰에서 실측). 요청이 끝내 응답하지 않는 경우의 탈출은
-   * 데이터 계층(요청 타임아웃 + in-flight 취소)이 풀어야 하며 T-316에서 다룬다.
+   * 진행 중이면 **실수로** 닫히는 경로(Escape·backdrop)를 잠근다.
+   *
+   * 명시적 닫기(×)까지 잠글지는 `onCancelBusy`가 결정한다:
+   * - 주지 않으면 × 도 잠근다 — 진행 중 요청을 취소할 방법이 없는 다이얼로그에서 닫기만 열어 두면
+   *   닫은 다이얼로그가 늦은 응답으로 되살아나거나 비멱등 POST가 중복된다(T-315 2차 리뷰 실측).
+   * - 주면 × 는 활성으로 남고, 누르면 그 콜백이 in-flight 요청을 취소한 뒤 닫는다
+   *   (T-316 요청 수명 계약 ⑤ — 탈출구는 취소와 함께 제공한다).
    */
   busy?: boolean;
+  /**
+   * busy 중 명시적 닫기 경로. 진행 중 요청을 **취소**하고 닫는 책임을 호출부가 진다.
+   * 주면 busy에도 × 가 활성으로 남는다.
+   */
+  onCancelBusy?: () => void;
   /** 헤더 우측 닫기(×) 버튼. 기본 true. */
   showClose?: boolean;
   /** 열릴 때 포커스를 옮길 대상. 생략하면 패널. */
@@ -65,6 +74,7 @@ export function Dialog({
   size = 'md',
   variant = 'center',
   busy = false,
+  onCancelBusy,
   showClose = true,
   initialFocusRef,
   returnFocusRef,
@@ -73,7 +83,10 @@ export function Dialog({
   testId = 'dialog',
 }: DialogProps) {
   const descriptionId = `${testId}-desc`;
-  const { titleId, backdropProps, dialogProps } = useModalDialog({
+  // busy 중 닫기는 "진행 중 요청 취소"라는 다른 의미다 — 호출부가 그 경로를 줬을 때만 연다.
+  const closeWhileBusy = busy ? onCancelBusy : undefined;
+  const closeDisabled = busy && !closeWhileBusy;
+  const { titleId, portalContainer, backdropProps, dialogProps } = useModalDialog({
     onClose,
     active: open,
     // 저장 중에는 실수로 닫혀 작업이 사라지지 않게 잠근다(T-315 2차 리뷰: 닫기만 열어 두면
@@ -86,10 +99,13 @@ export function Dialog({
   });
 
   if (!open) return null;
+  // portal 컨테이너는 마운트 effect에서 생긴다 — 생기기 전에는 렌더하지 않는다
+  // (앱 트리 안에서 잠깐 떴다가 옮겨지면 배경 inert가 자기 자신을 잠근다).
+  if (!portalContainer) return null;
 
   const sheet = variant === 'sheet';
 
-  return (
+  return createPortal(
     <div
       className={`fixed inset-0 z-modal flex justify-center bg-scrim/50 ${
         sheet ? 'items-end p-0 sm:items-center sm:p-4' : 'items-center p-4'
@@ -122,9 +138,9 @@ export function Dialog({
           {showClose ? (
             <button
               type="button"
-              onClick={onClose}
-              disabled={busy}
-              aria-label="닫기"
+              onClick={closeWhileBusy ?? onClose}
+              disabled={closeDisabled}
+              aria-label={closeWhileBusy ? '취소하고 닫기' : '닫기'}
               data-testid={`${testId}-close`}
               className="focus-ring -mr-2 -mt-1 inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-muted transition-colors duration-normal ease-pinvi hover:bg-surface-soft hover:text-ink disabled:cursor-not-allowed"
             >
@@ -141,6 +157,7 @@ export function Dialog({
           </div>
         ) : null}
       </div>
-    </div>
+    </div>,
+    portalContainer,
   );
 }

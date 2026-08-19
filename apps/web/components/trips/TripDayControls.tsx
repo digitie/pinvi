@@ -38,6 +38,8 @@ export interface TripDayControlsProps {
   addDisabledReason?: string | null;
   showAdd?: boolean;
   busy?: boolean;
+  /** 저장 중 명시적 닫기 — 진행 중 요청을 취소하고 닫는다(다른 저장 다이얼로그와 같은 계약). */
+  onCancelBusy?: () => void;
 }
 
 export function TripDayControls({
@@ -49,6 +51,7 @@ export function TripDayControls({
   addDisabledReason = null,
   showAdd = true,
   busy = false,
+  onCancelBusy,
 }: TripDayControlsProps) {
   const [title, setTitle] = useState(selectedDay?.title ?? '');
   const [date, setDate] = useState(selectedDay?.date ?? '');
@@ -90,6 +93,10 @@ export function TripDayControls({
       setSettingsOpen(false);
       return;
     }
+    // 409 뒤에는 스냅샷을 최신 version으로 갱신한다 — 갱신하지 않으면 같은 다이얼로그에서
+    // 재시도가 영원히 409고, 유일한 탈출(취소→재오픈)이 사용자의 입력을 버린다(6차 리뷰 P1).
+    // 안내 문구도 "한 번 더 누르면 덮어씁니다"로 실제 동작과 맞춘다.
+    if (result.latestVersion != null) openedVersionRef.current = result.latestVersion;
     setSaveError({ message: result.message, field: result.field });
   };
   const closeSettings = () => {
@@ -109,7 +116,7 @@ export function TripDayControls({
           disabled={addDisabled}
           title={addDisabledReason ?? undefined}
           aria-describedby={addDisabledReason ? 'trip-day-add-disabled-reason' : undefined}
-          className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
+          className="inline-flex min-h-11 items-center gap-1 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           일자 추가
@@ -128,7 +135,7 @@ export function TripDayControls({
             disabled={busy}
             aria-label={`${selectedDay.day_index}일차 설정`}
             title="일자 설정"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-hairline text-ink hover:bg-surface-soft disabled:opacity-50"
+            className="inline-flex size-11 items-center justify-center rounded-sm border border-hairline text-ink hover:bg-surface-soft disabled:opacity-50"
             data-testid="trip-day-rename"
           >
             <Pencil className="h-4 w-4" aria-hidden="true" />
@@ -139,7 +146,7 @@ export function TripDayControls({
             disabled={busy}
             aria-label={`${selectedDay.day_index}일차 삭제`}
             title="삭제"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
+            className="inline-flex size-11 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
             data-testid="trip-day-delete"
           >
             <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -154,10 +161,18 @@ export function TripDayControls({
               date={date}
               color={color}
               busy={busy}
-              onTitleChange={setTitle}
-              onDateChange={setDate}
+              onTitleChange={(next) => {
+                if (saveError && !saveError.field) setSaveError(null);
+                setTitle(next);
+              }}
+              onDateChange={(next) => {
+                // 값이 바뀌면 날짜 오류를 지운다 — 유효해진 값에 aria-invalid가 남으면 안 된다.
+                if (saveError?.field === 'date') setSaveError(null);
+                setDate(next);
+              }}
               onColorChange={setColor}
               saveError={saveError}
+              onCancelBusy={onCancelBusy}
               onSave={saveSettings}
               onClose={closeSettings}
             />
@@ -179,6 +194,7 @@ interface DaySettingsDialogProps {
   busy: boolean;
   /** 이 다이얼로그 세션에서 난 저장 실패/검증 오류(모달 안 표시). */
   saveError?: { message: string; field?: 'date' } | null;
+  onCancelBusy?: () => void;
   onTitleChange: (title: string) => void;
   onDateChange: (date: string) => void;
   onColorChange: (color: string | null) => void;
@@ -196,6 +212,7 @@ function DaySettingsDialog({
   color,
   busy,
   saveError = null,
+  onCancelBusy,
   onTitleChange,
   onDateChange,
   onColorChange,
@@ -216,11 +233,16 @@ function DaySettingsDialog({
       title={`${dayIndex}일차 설정`}
       size="sm"
       busy={busy}
+      onCancelBusy={onCancelBusy}
       initialFocusRef={inputRef}
       testId="trip-day-title-dialog"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={busy}>
+          <Button
+            variant="secondary"
+            onClick={onCancelBusy && busy ? onCancelBusy : onClose}
+            disabled={busy && !onCancelBusy}
+          >
             취소
           </Button>
           <Button type="submit" form={FORM_ID} disabled={unchanged} loading={busy}>
@@ -310,7 +332,14 @@ function DaySettingsDialog({
                   : 'h-7 w-7 rounded-full'
               }`}
             >
-              {color === key && <Check className="h-4 w-4 text-white" aria-hidden="true" />}
+              {/* 마커 팔레트 인라인 배경색 위의 체크라 토큰이 아니라 순백이 맞다(T-313 확정 예외). */}
+              {color === key && (
+                <Check
+                  // eslint-disable-next-line no-restricted-syntax -- 위 주석 참조(마커 팔레트 예외)
+                  className="h-4 w-4 text-white"
+                  aria-hidden="true"
+                />
+              )}
             </button>
           ))}
         </div>
