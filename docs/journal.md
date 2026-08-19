@@ -25,8 +25,13 @@ versions`). `expo.install.exclude`에 react/react-dom이 들어 있어 `expo ins
 
 **환경** — WSL Metro ↔ Windows 에뮬레이터 조합의 함정 셋(Metro의 IPv6 바인딩, manifest launchAsset이
 Metro 자신의 host/port로 생성되는 점, deep link 실행)을 `apps/mobile/README.md`에 절차로 고정했다.
-새로 연 것: T-311(expo patch 드리프트), T-318(`expo-router` hoisting으로 `expo start` 실패),
-T-319(모바일 실패 문구가 원문 예외 노출).
+새로 연 것: T-311(expo patch 드리프트 + Hermes V1 + **react 중복**), T-318(`expo-router` hoisting으로
+`expo start` 실패), T-319(모바일 실패 문구가 원문 예외 노출).
+
+react 핀을 내리면서 `expo-doctor`의 duplicate 체크가 하나 늘었다(root `19.2.6` ↔ mobile `19.2.3`).
+루트 `overrides`로 단일 버전을 강제하는 안을 시험했으나 npm이 `packages/*`의 `react >=18` 때문에
+root 19.2.6을 유지해 3벌이 되는 등 웹 런타임까지 건드리는 정렬 작업이라, 이번 PR에서 되돌리고
+T-311로 분리했다. 이 체크는 CI를 막지 않는 informational job이다.
 
 
 ## 2026-08-19 — Hallmark 재설계 완주(T-313~T-316)

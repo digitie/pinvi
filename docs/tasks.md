@@ -98,8 +98,11 @@
   `apps/mobile` lint CI). 브랜치 `agent/claude-issue-215-followup`, **PR #446 리뷰/머지 대기**.
   Dev Client smoke는 Android 에뮬레이터(API 35)에서 실행했고 절차는 `apps/mobile/README.md`에 고정했다.
   위치 동의 gate 런타임 확인만 남았으며(로컬 VWorld 키 부재로 지도 표면 도달 불가) 나머지는 통과했다.
-- [ ] **T-311** — `expo-doctor` 신호 정리: SDK-56 patch 드리프트(`expo`/`expo-router`/`expo-*` 9종이
-  기대 버전보다 낮음)와 Hermes V1 회귀. 드리프트 흡수는 dev client 재빌드를 동반하므로 별도 PR로 한다.
+- [ ] **T-311** — `expo-doctor` 신호 정리(현재 3건 실패, informational): SDK-56 patch 드리프트
+  (`expo`/`expo-router`/`expo-*` 9종), Hermes V1 회귀, **react 중복**(root `19.2.6` ↔ `apps/mobile`
+  `19.2.3`). 중복 해소는 워크스페이스 전체 react 정렬(웹 런타임 영향)이라 T-310에서 분리했다.
+  루트 `overrides`로 단일 버전을 강제하는 안을 우선 검토하되 웹 build/e2e 재검증을 함께 건다.
+  드리프트 흡수는 dev client 재빌드를 동반하므로 별도 PR로 한다.
 - [ ] **T-318** — `npm install` 후 `expo-router`가 `apps/mobile/node_modules`에 nest되는데 그 의존
   `@expo/router-server`는 root로 hoist돼 `expo start`가 `expo-router/_ctx-shared` 해석에 실패한다.
   현재는 root `node_modules/expo-router` 심링크로 우회 중이며, 저장소 차원 해법(단일 react 정렬 또는
