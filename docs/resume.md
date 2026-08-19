@@ -1,5 +1,21 @@
 # resume.md
 
+## 2026-08-19 (claude) — T-316 Hallmark 종결(PR #455 머지)
+
+**방금**: Hallmark 감사(13 critical · 26 major · 19 minor, 7표면)의 마지막 조각을 닫았다. ① `@pinvi/api-client`
+요청 수명 계약 — 타이머가 body 소비 완료까지 유지, abort가 전 생애주기 전파, 타임아웃을 `status: 0`으로
+서버 확정 4xx와 구분(408이면 Idempotency-Key가 폐기돼 큐레이션 import가 중복 실행), 장시간 admin 호출은
+클라이언트 예산 해제, `Dialog.onCancelBusy`로 취소와 함께 탈출구 제공. ② 모달 격리 — body portal + 스택
+인지형 배경 inert, `RestoreHotswapDialog` 수렴(407→265줄)으로 손복사 셸 0건. ③ 파괴적 액션 —
+`window.confirm`/`prompt` 7곳 제거(저장소 전역 0건). ④ 표면 — 여행 상세 4겹 컨테인먼트 해체(320px에서
+유효 폭 −35.3%), 지도 상시 dl 삭제, **nav '지도'가 데모 셸을 가리켜 실제 탐색 지도가 도달 불가였던 IA
+결함** 교정, DSR/신고 raw JSON → 폼 필드, 법무 65ch·공개 chrome, 설정 4쪽 admin chrome 분리, 파일 상태 UI.
+⑤ 44px 미달 컨트롤 53곳 정리 + DESIGN.md 규칙을 lint(`no-restricted-syntax`)가 집행하게 해 재발을 막았다
+(T-317 흡수). 적대적 리뷰 3인 반영, 프로덕션 빌드 Playwright 150 passed/1 skipped.
+
+**다음 한 작업**: T-310(PR #446) — `apps/mobile` 실기기 Dev Client smoke를 돌려 issue #215를 종결한다.
+그 다음은 T-273(v1.0.0 E2E/Live gate)이며, 남은 hard blocker는 geofence 운영 설정이다.
+
 ## 2026-08-19 (codex) — T-VN-41S typed snapshot error 소비
 
 선행 #453이 Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의 service artifact
@@ -50,11 +66,12 @@ docstring에 명시 + 통합 fake 시그니처 정렬, ⑤ `schemas/feature.py` 
 `features.py normalize_asof_query()`에 통과시키도록 한다(지금은 naive 입력에서 transport ValueError).
 그 뒤 PR을 연다(PR은 머지 직전에만 연다). admin 표면 3축 정렬·유령 query 제거는 병렬 레인이 이미 진행했고,
 admin weather 경로 전환·admin OpenAPI vendoring·공개 `status` 필드 제거는 후속 과제로 `docs/tasks.md` T-VN-42에 있다.
+
 ## 2026-08-18 (claude) — #444 service provenance 재핀(Map #975 머지 SHA) + Hallmark T-313
 
 **방금**: #444 리뷰 P1(핀이 dangling 커밋) 해소 — Map #975가 `4672aa966cd473f17fd4f69ee8066276f7be900d`로 squash
 머지됐고 그 커밋의 `openapi.service.json`이 vendored 스냅샷과 바이트 동일(SHA-256 `c6f9aba6…`)임을 확인해
-provenance·runtime contract test·`.env.example` EXPECTED_*(stale 값 정정)·CI packaged-provenance digest
+provenance·runtime contract test·`.env.example` EXPECTED\_\*(stale 값 정정)·CI packaged-provenance digest
 (`a6d501b4…`→`a2d3db8e…`)를 함께 재핀했다(PR #449). 병행: Hallmark T-313 토큰 코드모드 89파일(PR #448).
 
 **다음 한 작업**: #449/#448 CI green 후 머지 → **docker-manager pair 재핀**(`MAP_PINNED_RUNTIME_SOURCE`=4672aa96…,
@@ -381,6 +398,7 @@ Map commit 뒤 응답이 유실된 경우에도 PinVi DB의 immutable pre-CAS re
 
 **다음 한 작업**: PinVi format-fix commit SHA를 Map paired receipt에 다시 결박하고, 두 적대적 리뷰어의
 고정 SHA 재검토를 통과한다. n150 final isolated rehearsal은 이 코드/계약 gate 뒤에만 별도 실행한다.
+
 ## 2026-08-18 (claude) — T-312 Hallmark 감사 → 시스템 잠금 + 공개 표면 재설계
 
 **방금**: `hallmark audit`(웹 7표면 + prod 실렌더) 13C/26M/19m → `DESIGN.md`에 "Hallmark 잠금 시스템" 추가(genre
