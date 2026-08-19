@@ -7,8 +7,6 @@
 
 ## 현재 선점 / 충돌 회피
 
-- **T-310 = Claude** — `agent/claude-issue-215-followup`(PR #446, 리뷰/머지 대기)은 `apps/mobile`과
-  `@pinvi/domain` 순수 검증 헬퍼만 건드린다.
 - **PR #443(draft) = Codex** — `fix/tvn41-map-triple-contract`는 ops dataset membership 계약만
   건드린다. T-VN-41 계열 파일을 만지기 전 이 PR과 충돌 범위를 확인한다.
 
@@ -94,10 +92,8 @@
 
 ## 모바일
 
-- [/] **T-310 = Claude** — issue #215 잔여 후속(POI mutation rollback·날짜/예산 검증·위치 동의 gate·
-  `apps/mobile` lint CI). 브랜치 `agent/claude-issue-215-followup`, **PR #446 리뷰/머지 대기**.
-  Dev Client smoke는 Android 에뮬레이터(API 35)에서 실행했고 절차는 `apps/mobile/README.md`에 고정했다.
-  위치 동의 gate 런타임 확인만 남았으며(로컬 VWorld 키 부재로 지도 표면 도달 불가) 나머지는 통과했다.
+- [ ] **T-320** — 모바일 위치 동의 gate 런타임 확인. VWorld 키가 있는 환경에서 지도 표면을 띄우고
+  "현재 위치로"가 OS 권한 요청 전 동의를 받는지 확인한다(T-310 smoke에서 키 부재로 미확인).
 - [ ] **T-311** — `expo-doctor` 신호 정리(현재 3건 실패, informational): SDK-56 patch 드리프트
   (`expo`/`expo-router`/`expo-*` 9종), Hermes V1 회귀, **react 중복**(root `19.2.6` ↔ `apps/mobile`
   `19.2.3`). 중복 해소는 워크스페이스 전체 react 정렬(웹 런타임 영향)이라 T-310에서 분리했다.

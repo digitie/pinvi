@@ -8,8 +8,9 @@ VWorld 키 부재로 런타임 확인을 못 해 코드 경로 확인으로 대�
 (RN 0.85.3 렌더러는 19.2.3 정확 일치 요구, 저장소는 19.2.6 + `expo.install.exclude`가 검증을 가림)를
 같은 브랜치에서 고쳤다. WSL Metro ↔ Windows 에뮬레이터 절차는 `apps/mobile/README.md`에 고정.
 
-**다음 한 작업**: PR #446 리뷰 반영 후 머지하고 issue #215를 종결한다. 그 다음은 T-273
-(v1.0.0 E2E/Live gate, 남은 hard blocker는 geofence 운영 설정).
+**다음 한 작업**: T-273(v1.0.0 E2E/Live gate) — 남은 hard blocker는 geofence 운영 설정이다.
+모바일 후속(T-311 expo-doctor 3신호 · T-318 `expo start` hoisting · T-319 실패 문구 · T-320 위치 동의
+gate 런타임 확인)은 별도 PR로 분리해 뒀다.
 
 
 ## 2026-08-19 (claude) — T-316 Hallmark 종결(PR #455 머지)

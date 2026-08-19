@@ -6,6 +6,18 @@
 
 ## 2026-08-19
 
+- [x] **T-310** — issue #215 잔여 후속: POI mutation 낙관적 override + 롤백, 여행 생성/편집 날짜 검증,
+      POI 예산 검증, 위치 동의 gate, `apps/mobile` lint/typecheck CI. (완료: 2026-08-19, PR #446, claude)
+      Android 에뮬레이터(AVD `pinvi_api35`, API 35) + EAS `development` 빌드 `5a90f90c`로 Dev Client
+      smoke를 실행해 완료 조건을 소진했다. 날짜 검증(범위·형식, 필드 귀속·편집 시 해제) · POI 재정렬
+      (낙관적 반영이 서버 `sort_order`에 반영, API 다운 시 롤백 + 실패 표면화) · 파괴적 삭제
+      (`confirmDestructive` 대상 이름 확인, 취소 무변경) · 예산 검증(`-100` 차단, `25000` 저장) 통과.
+      위치 동의 gate는 로컬 VWorld 키 부재로 지도 표면에 도달하지 못해 코드 경로만 확인하고 T-320으로 분리.
+      smoke가 드러낸 결함 1건을 같은 PR에서 고쳤다: RN 0.85.3 렌더러가 react 19.2.3 정확 일치를 요구하는데
+      저장소가 19.2.6을 핀했고 `expo.install.exclude`가 그 드리프트를 가려 dev client가 부팅 즉시 죽었다
+      (핀 19.2.3 + 예외 제거). WSL Metro ↔ Windows 에뮬레이터 절차는 `apps/mobile/README.md`에 고정했다.
+      파생 task: T-311(expo-doctor 3신호) · T-318(`expo start` hoisting) · T-319(실패 문구) · T-320.
+
 - [x] **T-316** — Hallmark 마지막 조각: 요청 수명 계약 + 모달 격리·확인 정책 + 여행 상세·설정·법무·
       지도·파일 표면. (완료: 2026-08-19, PR #455, claude)
       범위는 `apps/web` + `packages/api-client`. 조사 3인 매핑(48항목) 기준으로 5조각을 한 PR에 담았다.

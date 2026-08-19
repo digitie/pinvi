@@ -94,8 +94,9 @@ apps/mobile/
 ## 활성화 (Sprint M-1)
 
 1. ~~root `workspaces`에 `apps/mobile` 추가~~ — ✅ 완료(2026-06-16).
-2. ~~의존성 설치 + 버전 정합~~ — ✅ 완료. Expo SDK 56 설치, `expo install --check` / `expo-doctor`
-   **21/21 통과**(빌드 준비 완료). `package-lock.json` 갱신(web CI `npm ci`에 포함).
+2. ~~의존성 설치 + 버전 정합~~ — ✅ 완료(2026-06-16 기준 `expo-doctor` 21/21). `package-lock.json`
+   갱신(web CI `npm ci`에 포함). **현재 `expo-doctor`는 3건 실패**(SDK-56 patch 드리프트 · Hermes V1
+   회귀 · react 중복) — informational job이며 정리는 T-311이 맡는다.
 3. **Development build 생성 (EAS) — Expo 계정 로그인 필요(인터랙티브, 사용자 수행).**
    ```bash
    cd apps/mobile
@@ -141,3 +142,9 @@ ADR-051대로 설치·git은 Linux(WSL)에서 하되, Android 에뮬레이터는
 
 API(`12801`)는 WSL에서 `127.0.0.1`(IPv4)로 바인딩되므로 `10.0.2.2:12801`로 그대로 닿는다.
 `adb shell input text`는 ASCII만 보낸다 — 한글 입력이 필요한 검증은 UI 조작 대신 API 시드로 만든다.
+
+> **선행 차단 요인(T-318)**: 클린 체크아웃에서는 위 2번이 `Cannot find module 'expo-router/_ctx-shared'`로
+> 죽는다. `expo-router`가 `apps/mobile/node_modules`에 nest되는데 그 의존 `@expo/router-server`는 root로
+> hoist되기 때문이다. 저장소 차원 해법이 정해지기 전까지는
+> `ln -sfn ../apps/mobile/node_modules/expo-router node_modules/expo-router`로 우회한다.
+> 지도 표면까지 확인하려면 서버에 `PINVI_VWORLD_API_KEY`가 있어야 한다(키가 없으면 지도는 키 오류 화면에서 멈춘다).

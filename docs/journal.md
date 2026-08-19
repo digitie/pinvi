@@ -21,7 +21,9 @@ LBS 약관·개인위치정보 동의를 먼저 받는 구조로 확인했다.
 RN 0.85.3의 렌더러는 `19.2.3` 정확 일치를 요구해 dev client가 부팅 즉시 죽었다(`Incompatible React
 versions`). `expo.install.exclude`에 react/react-dom이 들어 있어 `expo install --check`가 이 드리프트를
 가려 왔다. 두 패키지를 `19.2.3`으로 내리고 예외 목록에서 빼서 앞으로는 체크에 걸리게 했다. 루트 react는
-`19.2.6` 그대로라 웹은 영향이 없다(lock diff는 `apps/mobile/node_modules/react*` 추가뿐).
+`19.2.6`·`apps/web`은 `^19.0.0` 그대로라 웹은 영향이 없다(lock diff는 `apps/mobile` 블록의 핀 수정 +
+`apps/mobile/node_modules/react*` 추가, 그리고 무관한 `playwright/node_modules/fsevents`의 `dev` 플래그
+1줄 — darwin optional 엔트리라 설치·런타임 영향 없음).
 
 **환경** — WSL Metro ↔ Windows 에뮬레이터 조합의 함정 셋(Metro의 IPv6 바인딩, manifest launchAsset이
 Metro 자신의 host/port로 생성되는 점, deep link 실행)을 `apps/mobile/README.md`에 절차로 고정했다.
