@@ -72,8 +72,8 @@ sort, order]`이며 `status`·`provider`·`dataset_key`는 **없다**(보내면 
 >    소비처를 함께 정리해야 하는 breaking change라 별도 cutover로 뺀다.
 > 2. Pinvi admin weather-values(`api/v1/admin/features.py`)를 user 경로 대신 **admin weather
 >    경로**로 전환한다 — 지금은 user 경로를 쓰기 때문에 비공개 feature의 admin 조회가 404가 된다.
-> 3. **admin OpenAPI 스냅샷을 vendoring**한다. 현재 계약 게이트는 user 스냅샷만 검사해서
->    admin 표면 드리프트(위 ③)가 CI에 잡히지 않는다.
+> 3. **admin OpenAPI 스냅샷을 vendoring**한다. PR #443이 전체 Admin 산출물과 ops 소비 게이트를
+>    먼저 추가했다. T-VN-42는 같은 스냅샷에서 admin feature query/응답 필드 게이트를 이어서 소유한다.
 > 4. 필요하면 `refresh_after` 소비(카드 캐시 TTL) 도입도 같은 과제에서 검토한다.
 >    **관계**: 능력 격차 분석은 `docs/kor-travel-map-requirements.md`(이제 대부분 해소),
 >    통합 패턴 개요는 `docs/kor-travel-map-integration.md`(본 문서가 구체 계약으로 대체/보강).
@@ -92,15 +92,15 @@ sort, order]`이며 `status`·`provider`·`dataset_key`는 **없다**(보내면 
 > 400/401/403/422/429와 exact `404 PIPELINE_EXECUTION_NOT_FOUND`의 확정 거절은 polling 없이 form과
 > 입력을 보존해 수정·재시도한다. code 누락·불일치·route drift 404는 미확정 reconciliation을 유지하며,
 > 두 사유는 Pinvi body 계약과 같은 최대 500자다.
-> update request 원 scope는 optional이지만 있으면 canonical이며 effective scope와 같아야 한다.
-> selector-none은 원 scope null/effective `dataset_wide`이고 직접 pair member는 effective scope를 쓴다.
-> non-exact root의 provider/dataset 배열은 요청 filter이며 대표 pair가 없을 수 있다. root는 child
-> provider/dataset pair를 함께 가질 수 있고 상세 요청 job은 anchor/대표가 아닌 same-root child일 수 있다.
+> update request는 생성 시 고정한 `dataset_memberships` 삼중항을 root membership과 대조한다.
+> `provider_dataset` scope도 같은 삼중항을 노출하며 폐기된 provider/dataset vector는 허용하지 않는다.
+> non-exact request의 membership은 비어 있을 수 있다. root는 child membership을 함께 가질 수 있고
+> 상세 요청 job은 anchor/대표가 아닌 same-root child일 수 있다.
 > 모든 ops 성공의 `meta.duration_ms/request_id`와 전달 `X-Request-Id` 상관관계를 검증한다. typed
 > cancellation problem은 전체 detail과 member/run 불변식을 통과해야 하며, 404는 정확한
 > `PIPELINE_EXECUTION_NOT_FOUND`만 보존한다. grid는 canonical detail URL, preview/scope-refresh,
-> canonical/orphan 조합과 pair 기준 active/latest를 정본으로 검증한다.
-> effective provider/dataset vector는 request filter와 representative pair의 exact 합집합이다. standalone
+> canonical/orphan 조합과 membership 기준 active/latest를 정본으로 검증한다. null operation 행은
+> scope rollup으로 실행을 포함할 수 있으며 실제 실행 member operation을 대조한다. standalone
 > child lookup은 recursive lineage이므로 직계 parent만으로 제한하지 않는다. 409 `IN_PROGRESS`는 full
 > `in_progress` detail/root-only, `UNSAFE`는 full `failed` detail/root-only/detail 없음 shape만 보존한다.
 > attempt `failed`의 member `cancel_failed`는 frozen base mismatch가 근거이므로 모든 canonical run
@@ -645,6 +645,12 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   해당 경로·batch schema 계약을 vendored `kor-travel-map-openapi-service.json`
   (byte-핀 소유는 `test_kor_travel_map_cache_target_contract.py`) 기준으로 검증하고,
   두 profile에 겹치는 schema(`Meta`/`WeatherMetricOut` 등)는 양쪽 모두에서 고정한다.
+- **Admin/ops 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map
+  `da2c740aa4b4239821075519959c38534cc65d2f`의 전체 `openapi.json` 원본이며 SHA-256은
+  `22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32`다. 이 바이트는 삼중항
+  계약이 들어간 Map `f637f3ad`와 현 main에서도 동일하다. `test_kor_travel_map_ops_contract.py`는
+  provider ETL이 소비하는 ops 경로·인증·query·응답 schema 연결과 폐기 필드 부재를 고정한다.
+  Admin feature 소비 필드/query 게이트는 T-VN-42가 같은 스냅샷에 이어 붙인다.
 - **계약 테스트**: `apps/api/tests/unit/test_kor_travel_map_contract.py` (CI `pytest tests/unit`에서 실행) —
   (1) user client 경로(`/v1/features/*`·`/v1/categories`·`/v1/public/*`) ⊆ 스냅샷 paths,
   (2) 매핑(`features.py`/`public.py`가 읽는 FeatureSummary/ClusterSummary/

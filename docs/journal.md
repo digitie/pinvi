@@ -2,6 +2,24 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-19 (codex) — PR #443 Map Admin ops 삼중항 복구
+
+- **충돌 해소**: `fix/tvn41-map-triple-contract`를 최신 main에 merge하고 T-VN-42와 겹치던 feature 파일은
+  main 판으로 되돌려 PR #443을 ops 범위로 정리했다.
+- **현재 Map 계약**: grid의 `is_active`, schedule basis `dagster_operation_key_tag`, refresh
+  `effect=none`, pipeline/update request의 `provider_datasets`/`dataset_memberships`와
+  `operation_key`를 반영했다. `operation_key=null` scope-rollup 행은 같은 dataset/scope의 실제
+  operation member를 통해 active/latest 실행을 가질 수 있다. 구형 provider/dataset vector와
+  `operation_registry_version`, `requested_sync_scope/effective_sync_scope`는 fail-close한다.
+- **Web/계약 게이트**: 공용 Zod와 provider-sync 행 identity를 삼중항으로 바꿨다. Map
+  `da2c740aa4b4239821075519959c38534cc65d2f`의 전체 Admin OpenAPI 원본
+  (SHA-256 `22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32`)을 vendor하고,
+  ops 소비 경로·security·query·응답 schema와 폐기 필드 부재를 CI 계약으로 고정했다.
+- **검증**: projection unit `215 passed`, OpenAPI gate `31 passed`, provider-sync integration
+  `32 passed`, schemas Vitest `3 passed`, schemas/web typecheck, Ruff/Prettier 통과.
+- **배포 경계**: Map 삼중항 release와 docker-manager draft PR #170 merge·배포 전에는 production-ready가
+  아니다. 다음은 두 전문 리뷰어의 적대 검토와 CI 수렴이며, 완료 뒤 draft PR #456의 T-VN-42로 이동한다.
+
 ## 2026-08-19 (claude) — T-310: Android 에뮬레이터 Dev Client smoke
 
 PR #446의 마지막 완료 조건이던 Dev Client smoke를 Android 에뮬레이터(AVD `pinvi_api35`, API 35

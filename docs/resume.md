@@ -1,5 +1,23 @@
 # resume.md
 
+## 2026-08-19 (codex) — PR #443 Map ops 삼중항 계약 복구·게이트 추가
+
+**방금**: draft PR #443을 최신 main에 올리고 Map Admin OpenAPI의 실제 생성 계약에 맞춰 dataset grid,
+pipeline list/detail, update request frozen membership을
+`provider_dataset_id × sync_scope × operation_key`로 정렬했다. null `operation_key` scope-rollup 실행,
+`is_active`, schedule `dagster_operation_key_tag`, refresh `effect=none`, 폐기 vector 제거를 반영했다.
+Web Zod와 provider 행 key/test id도 같은 삼중항을 사용한다. Map
+`da2c740aa4b4239821075519959c38534cc65d2f`의 전체 Admin OpenAPI(SHA-256 `22e3f2f…`)를 vendor하고
+ops 소비 경로·인증·query·schema·폐기 필드 부재를 31개 계약 테스트로 고정했다.
+
+**검증**: ops projection unit 215 passed, Admin OpenAPI gate 31 passed, provider-sync integration 32 passed,
+schemas Vitest 3 passed, schemas/web typecheck와 Ruff/Prettier 통과. 배포 선행조건은 Map 삼중항 release와
+docker-manager draft PR #170 merge·배포다.
+
+**다음 한 작업**: 문서 정렬 커밋 뒤 전문 리뷰어 서브에이전트 2명에게 PR #443 전체 diff를 적대적으로
+검토시키고, 지적을 반영해 CI green을 확인한다. 그 다음 `agent/codex-tvn42`/draft PR #456으로 돌아가
+admin feature 계약 게이트와 남은 T-VN-42 범위를 진행한다.
+
 ## 2026-08-19 (claude) — T-310 Dev Client smoke(에뮬레이터) 완료
 
 **방금**: PR #446의 남은 완료 조건인 Dev Client smoke를 Android 에뮬레이터(API 35)에서 돌렸다.

@@ -7,8 +7,9 @@
 
 ## 현재 선점 / 충돌 회피
 
-- **PR #443(draft) = Codex** — `fix/tvn41-map-triple-contract`는 ops dataset membership 계약만
-  건드린다. T-VN-41 계열 파일을 만지기 전 이 PR과 충돌 범위를 확인한다.
+- **PR #443(draft) = Codex** — `fix/tvn41-map-triple-contract`는 ops dataset/pipeline membership
+  삼중항과 Admin OpenAPI ops 게이트를 복구한다. 배포 선행조건은 Map 삼중항 release와
+  docker-manager PR #170 merge다. T-VN-41 계열 파일을 만지기 전 이 PR과 충돌 범위를 확인한다.
 
 ## kor-travel-map compatible pair
 
@@ -38,8 +39,9 @@
         sources/issues/overrides/files/**state_transitions**/**curations**이고 Pinvi가 남겨 둔
         `versions`/`change_requests`는 늘 빈 배열이다. Web 상세의 거짓 0 카운트 칩은 제거했고, 두 list를
         실제로 투영하는 것은 아래 admin 스냅샷 vendoring과 함께 한다.
-  - [ ] **admin OpenAPI 스냅샷 vendoring** — 지금 계약 게이트는 user 스냅샷만 본다. 위 admin 드리프트가
-        CI에 전혀 잡히지 않은 근본 원인이므로 admin 스냅샷도 핀하고 소비 필드/query 계약을 건다.
+  - [/] **admin OpenAPI 스냅샷 vendoring** — PR #443이 Map 전체 Admin 스냅샷 byte pin과 ops
+        dataset/pipeline 소비 게이트를 먼저 추가했다. T-VN-42에서는 같은 스냅샷에 admin feature
+        query/응답 필드 계약을 추가해 위 2개 admin 후속의 재발을 막는다.
   - [ ] **공개 `status` 필드 제거(별도 breaking cutover)** — `FeatureSummary`/`FeatureDetail`/
         `DetailCardBase`(`app/schemas/feature.py`)는 지금 항상 None인 `status`를 web/mobile 계약 때문에
         남겨 두고 있다. web/mobile 소비처와 함께 정리한다.
