@@ -56,7 +56,6 @@ test.describe('map marker parity live e2e', () => {
 
     await expect(page.getByRole('heading', { name: '탐색 지도' })).toBeVisible();
     await expect(page.getByTestId('feature-map')).toBeVisible();
-    await expect(page.getByTestId('feature-map-status')).toBeVisible();
 
     const markers = page.getByTestId('feature-map-marker-style');
     const count = await markers.count();

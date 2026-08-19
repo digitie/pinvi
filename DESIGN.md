@@ -321,17 +321,35 @@ There are no progressive elevation tiers — the system either has the one shado
 
 ### 잔여 이탈(감사 기준, 후속 PR로 수렴)
 
-`bg-white`/`text-white`/`bg-black/NN` 토큰 우회(코드모드), `shadow-lg/xl` 21곳, 44px 미달 버튼 다수, 관리자 chrome 유출(설정) — `docs/tasks.md` T-312~ 참조.
+**T-316에서 전부 해소됐다**(감사 항목 잔여 0):
 
-**모달 계약**(T-315, `components/ui/Dialog` + `lib/useModalDialog`): 모든 모달은 프리미티브로 뜬다 —
-스택(`modalStack`)에 등록돼 **최상단 하나만** Escape/Tab을 처리하고, 포커스는 패널 안에 격납된다
-(안의 버튼이 disabled/언마운트돼 포커스가 body로 떨어지면 회수). `busy`(저장 중)에는 Escape·backdrop·
-닫기(×)를 **모두** 잠근다 — 닫기만 열어 두면 진행 중 요청이 취소되지 않아 닫은 모달이 되살아나거나
-비멱등 POST가 중복된다(T-315 2차 리뷰 실측). 요청이 끝내 응답하지 않는 경우의 탈출구는 UI가 아니라
-데이터 계층(요청 타임아웃 + in-flight 취소)이 풀어야 할 문제이며 T-316이 맡는다 — 3차 리뷰가 보여준
-대로 헤더만 덮는 타임아웃이나 4xx로 표면화하는 타임아웃은 취소 계약·Idempotency-Key 계약을 깨뜨린다.
-예외: `RestoreHotswapDialog`(admin schema-swap)는 body portal + 배경 `inert`를 쓰는 더 강한 격리라
-아직 프리미티브 밖이다(T-316에서 수렴).
+- 토큰 우회 `bg-white`/`text-white`/`bg-black/NN` — 사용자 표면 0건(마커 팔레트 인라인 색 위 텍스트 3곳만
+  사유 주석과 함께 예외), `shadow-sm|md|lg|xl` 0건, 임의 `z-[` 0건, 임의 `text-[Npx]` 0건.
+- 44px 미달 컨트롤 — 사용자 표면 0건(컨트롤 라벨 ≥14px, 입력 16px).
+- 관리자 chrome 유출(설정 4쪽) → `components/app/SettingsSurface`, 여행 상세 4겹 컨테인먼트,
+  지도 상시 상태 dl, 법무 measure/초안 배너, `window.confirm`/`prompt`(저장소 전역 0건).
+
+**집행**: 위 규칙은 문서만이 아니라 `apps/web/eslint.config.mjs`의 `no-restricted-syntax` 가드가 막는다
+(사용자 표면 한정 — 밀도 규칙이 다른 `(admin)`·`components/admin`은 제외). 규칙을 바꾸려면 이 문서와
+가드를 함께 고친다.
+
+**모달 계약**(T-315/T-316, `components/ui/Dialog` + `lib/useModalDialog`): **모든** 모달은 프리미티브로
+뜬다(예외 없음 — `RestoreHotswapDialog`도 T-316에서 수렴했다).
+
+- **격리**: body 직계 컨테이너로 portal하고, 스택 최상단 모달의 컨테이너만 남긴 채 나머지 body 자식에
+  `inert`를 건다. `aria-hidden`은 걸지 않는다(inert가 이미 접근성 트리에서 제거하고, focused 요소의
+  조상에 aria-hidden을 거는 것은 ARIA 위반이다). 원복 스냅샷은 전역 1개 — 인스턴스별로 두면 중첩에서
+  아래 모달이 먼저 닫히며 배경을 풀어 버린다.
+- **키보드/포커스**: 스택 최상단 하나만 Escape/Tab을 처리한다. 포커스는 패널 안에 격납되고(버튼이
+  disabled/언마운트돼 body로 떨어지면 회수), 닫을 때는 직전 포커스 → 남은 최상단 모달 → `returnFocusRef`
+  순으로 복원한다. 트리거가 액션으로 사라지는 화면(삭제 등)은 목록·섹션 ref를 폴백으로 넘긴다.
+- **busy(저장 중)**: 실수 경로(Escape·backdrop)는 **항상** 잠근다. 명시적 닫기(×)는 `onCancelBusy`를
+  준 다이얼로그만 열려 있고, 그 콜백이 **in-flight 요청을 취소한 뒤** 닫는다(탈출구는 취소와 함께 준다).
+  취소가 서버 처리를 되돌리지 못하는 비멱등 POST는 닫은 뒤 호출부가 재조회·불확실성 안내를 책임진다.
+- **요청 수명**(`@pinvi/api-client`): 타이머는 헤더가 아니라 **body 소비 완료까지** 살아 있고, 호출부
+  AbortSignal도 그 시점까지 전파된다. 타임아웃은 `status: 0` + `isRequestTimeoutError`로 서버가 확정한
+  4xx와 구분한다(408을 쓰면 `status < 500`을 terminal로 보는 호출부가 Idempotency-Key를 버려 비멱등
+  요청을 중복 실행한다). 서버 예산이 정본인 장시간 admin 호출은 `timeoutMs: 0`으로 클라이언트 예산을 끈다.
 
 **T-314에서 해소**: `useMobileWebLayout` UA 스니핑(뷰포트·포인터 미디어쿼리로 교체), 앱 셸 회색 ground(→ `bg-canvas` + 모바일 하단 탭바), 목록 skeleton 부재(`/trips`·`/notice-plans`), 필터 탭 시맨틱(패널을 바꾸지 않는 필터는 `role=group` + `aria-pressed` + 44px). 단 **실제 패널을 전환하는** `TripDetail`·`SharedTripView`의 일자·작업 탭은 `role=tab`을 유지하는 것이 맞다.
 

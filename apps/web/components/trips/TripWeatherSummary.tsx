@@ -153,11 +153,7 @@ export function TripWeatherSummary({
           }[weather.state];
     return (
       <section
-        className={
-          compact
-            ? 'rounded-sm bg-surface-soft/70 px-2 py-1.5'
-            : 'rounded-sm bg-surface-soft px-3 py-2'
-        }
+        className={compact ? 'px-0 py-1' : 'rounded-sm bg-surface-soft px-3 py-2'}
         aria-label={label}
         data-testid="trip-weather-status"
       >
@@ -168,11 +164,7 @@ export function TripWeatherSummary({
 
   return (
     <section
-      className={
-        compact
-          ? 'space-y-1 rounded-sm bg-surface-soft/70 px-2 py-1.5'
-          : 'space-y-2 rounded-sm bg-surface-soft px-3 py-2'
-      }
+      className={compact ? 'space-y-1 px-0 py-1' : 'space-y-2 rounded-sm bg-surface-soft px-3 py-2'}
       aria-label={label}
       data-testid="trip-weather-summary"
     >

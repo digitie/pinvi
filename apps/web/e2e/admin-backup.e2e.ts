@@ -193,17 +193,17 @@ test('Admin backup restore dialog가 확인 문구, focus, 단계 표시, POST b
   await expect(page.getByTestId('restore-submit')).toBeDisabled();
 
   await page.keyboard.press('Shift+Tab');
-  await expect(page.getByTestId('restore-close')).toBeFocused();
+  await expect(page.getByTestId('restore-hotswap-dialog-close')).toBeFocused();
   // forward Tab from the last focusable element cycles back to the first (focus trap).
   await page.getByRole('button', { name: '닫기' }).last().focus();
   await page.keyboard.press('Tab');
-  await expect(page.getByTestId('restore-close')).toBeFocused();
+  await expect(page.getByTestId('restore-hotswap-dialog-close')).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('restore-hotswap-dialog')).toHaveCount(0);
 
   await page.getByTestId('admin-backup-restore').first().click();
   await expect(page.getByTestId('restore-hotswap-dialog')).toBeVisible();
-  await page.getByTestId('restore-hotswap-overlay').click({ position: { x: 2, y: 2 } });
+  await page.getByTestId('restore-hotswap-dialog-backdrop').click({ position: { x: 2, y: 2 } });
   await expect(page.getByTestId('restore-hotswap-dialog')).toHaveCount(0);
 
   await page.getByTestId('admin-backup-restore').first().click();
@@ -223,7 +223,7 @@ test('Admin backup restore dialog가 확인 문구, focus, 단계 표시, POST b
   await page.getByTestId('restore-submit').click();
   await expect(page.getByTestId('restore-progress')).toBeVisible();
   await expect(page.getByTestId('restore-phase-preparing')).toContainText('running');
-  await expect(page.getByTestId('restore-close')).toBeDisabled();
+  await expect(page.getByTestId('restore-hotswap-dialog-close')).toBeDisabled();
 
   expect((await restoreResponse).status()).toBe(200);
   await expect(page.getByTestId('restore-run-id')).toContainText('restore-20260606-003000');
@@ -306,7 +306,7 @@ test('Admin backup restore dialog가 restore POST 500 오류를 표시하고 재
 
   // retry is re-enabled: inputs editable again and submit clickable.
   await expect(page.getByTestId('restore-submit')).toBeEnabled();
-  await expect(page.getByTestId('restore-close')).toBeEnabled();
+  await expect(page.getByTestId('restore-hotswap-dialog-close')).toBeEnabled();
   // 재시도 응답 waiter는 클릭 **전에** 등록한다 — mock 응답이 즉시 와서 클릭 뒤 등록하면 놓친다.
   const retryResponse = page.waitForResponse(
     (response) =>

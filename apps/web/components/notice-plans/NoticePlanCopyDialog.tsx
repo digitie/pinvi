@@ -16,9 +16,20 @@ export interface NoticePlanCopyDialogProps {
   plan: NoticePlan;
   onClose: () => void;
   onCopied?: (result: NoticePlanCopyResponse) => void;
+  /**
+   * 진행 중 복사를 취소하고 닫았을 때. **클라이언트 요청만 끊긴다** — 서버가 이미 받은 요청은
+   * 끝까지 처리될 수 있으므로 호출부가 목록을 재조회하고 사용자에게 불확실성을 알려야 한다
+   * (비멱등 POST라 조용히 닫으면 재시도가 여행을 중복 생성한다, T-316 리뷰 P1).
+   */
+  onCopyUncertain?: () => void;
 }
 
-export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopyDialogProps) {
+export function NoticePlanCopyDialog({
+  plan,
+  onClose,
+  onCopied,
+  onCopyUncertain,
+}: NoticePlanCopyDialogProps) {
   const [form, setForm] = useState<CopyForm>({
     mode: 'new',
     title: plan.title,
@@ -33,6 +44,7 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
   const [result, setResult] = useState<NoticePlanCopyResponse | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const successCloseRef = useRef<HTMLButtonElement>(null);
+  const copyAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,17 +72,35 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
   }, [result]);
 
   const copy = async () => {
+    const controller = new AbortController();
+    copyAbortRef.current = controller;
     setCopying(true);
     setError(null);
     try {
-      const res = await noticePlanApi(apiClient).copy(plan.notice_plan_id, buildCopyRequest(form));
+      const res = await noticePlanApi(apiClient).copy(plan.notice_plan_id, buildCopyRequest(form), {
+        signal: controller.signal,
+      });
       setResult(res);
       onCopied?.(res);
     } catch (err) {
+      if (controller.signal.aborted) return; // 사용자가 취소한 요청은 오류로 표시하지 않는다.
       setError(err instanceof ApiError ? err.message : '복사에 실패했습니다.');
     } finally {
+      if (copyAbortRef.current === controller) copyAbortRef.current = null;
       setCopying(false);
     }
+  };
+
+  // busy 중 닫기 = 진행 중 복사 취소. 취소 없이 닫으면 사용자가 닫은 뒤 여행이 생기고,
+  // 다시 복사하면 중복 생성된다(T-316 요청 수명 계약 ⑤).
+  const cancelCopyAndClose = () => {
+    const wasInFlight = copyAbortRef.current !== null;
+    copyAbortRef.current?.abort();
+    copyAbortRef.current = null;
+    setCopying(false);
+    onClose();
+    // 서버는 이미 요청을 받았을 수 있다 — 호출부가 재조회 + 안내를 책임진다.
+    if (wasInFlight) onCopyUncertain?.();
   };
 
   const footer = result ? (
@@ -101,6 +131,7 @@ export function NoticePlanCopyDialog({ plan, onClose, onCopied }: NoticePlanCopy
       open
       onClose={onClose}
       busy={copying}
+      onCancelBusy={cancelCopyAndClose}
       size="sm"
       title="추천 여행 가져오기"
       description={plan.title}

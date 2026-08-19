@@ -212,10 +212,10 @@ test('편집 다이얼로그 위에 뜬 충돌 다이얼로그에 키보드로 �
   await expect(page.getByTestId('trip-edit-dialog')).toBeVisible();
 });
 
-test('저장 중에는 닫기 경로가 잠기고 포커스는 다이얼로그 안에 남는다', async ({ page }) => {
-  // busy 동안 Escape·backdrop·×가 모두 잠긴다 — 닫기만 열어 두면 진행 중 요청이 취소되지 않아
-  // 닫은 다이얼로그가 되살아나거나 비멱등 POST가 중복된다(T-315 2차 리뷰). 응답이 끝내 오지
-  // 않는 경우의 탈출(요청 타임아웃 + in-flight 취소)은 데이터 계층 과제로 T-316이 맡는다.
+test('저장 중에는 실수 닫기만 잠기고, 명시적 닫기는 요청을 취소한다', async ({ page }) => {
+  // busy 동안 Escape·backdrop은 잠긴다(실수 이탈 방지). 명시적 닫기(×)는 **in-flight 요청을
+  // 취소하며** 열려 있다 — 취소 없이 닫으면 늦은 응답이 닫은 다이얼로그를 되살리거나 비멱등
+  // 요청이 중복된다(T-315 2차 리뷰). 취소와 함께 주는 탈출구가 T-316 요청 수명 계약 ⑤다.
   await commonRoutes(page);
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
     if (request.method() === 'PATCH') {
@@ -234,7 +234,7 @@ test('저장 중에는 닫기 경로가 잠기고 포커스는 다이얼로그 �
   await page.getByLabel('제목').fill('내 제목');
   await page.getByTestId('trip-edit-save').click();
 
-  await expect(page.getByTestId('trip-edit-dialog-close')).toBeDisabled();
+  // 실수 경로는 잠긴다.
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('trip-edit-dialog')).toBeVisible();
   await page.getByTestId('trip-edit-dialog-backdrop').click({ position: { x: 5, y: 5 } });
@@ -249,6 +249,13 @@ test('저장 중에는 닫기 경로가 잠기고 포커스는 다이얼로그 �
       }),
     )
     .toBe(true);
+
+  // 명시적 닫기는 살아 있고, 누르면 진행 중 요청을 취소하며 닫힌다.
+  const close = page.getByTestId('trip-edit-dialog-close');
+  await expect(close).toBeEnabled();
+  await expect(close).toHaveAttribute('aria-label', '취소하고 닫기');
+  await close.click();
+  await expect(page.getByTestId('trip-edit-dialog')).toHaveCount(0);
 });
 
 test('POI 409 충돌에서 내 메모를 최신 version으로 다시 저장한다', async ({ page }) => {

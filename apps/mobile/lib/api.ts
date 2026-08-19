@@ -92,6 +92,9 @@ const refreshingFetcher: typeof fetch = async (input, init) => {
 };
 
 export const apiClient = new ApiClient({
+  // 모바일 네트워크는 웹보다 느리고 401 → refresh → 재시도가 같은 예산 안에서 일어난다.
+  // 웹 기본(30초)을 그대로 상속하면 정상 요청이 잘릴 수 있어 명시적으로 60초를 준다(T-316).
+  timeoutMs: 60_000,
   baseUrl: mobileConfig.apiBaseUrl,
   getAuthToken: () => getAccessToken(),
   fetcher: refreshingFetcher,

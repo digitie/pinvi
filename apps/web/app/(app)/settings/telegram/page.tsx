@@ -1,12 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { BadgeCheck, Loader2, Send, Star, Trash2 } from 'lucide-react';
 import { ApiError, telegramApi } from '@pinvi/api-client';
 import type { TelegramTarget } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
-import { Section } from '@/components/admin/AdminPage';
-import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
+import { SettingsList, SettingsSection } from '@/components/app/SettingsSurface';
 import { FormField } from '@/components/forms/FormField';
 import { buttonClassName } from '@/components/ui/Button';
 
@@ -104,65 +103,6 @@ export default function TelegramTargetsSettingsPage() {
     }
   }, []);
 
-  const columns = useMemo<DataTableColumn<TelegramTarget>[]>(
-    () => [
-      {
-        key: 'label',
-        header: '별칭',
-        cell: (t) => (
-          <span className="inline-flex items-center gap-1">
-            {t.is_default && <Star className="h-3.5 w-3.5 text-primary" aria-label="기본" />}
-            {t.telegram_label ?? '—'}
-          </span>
-        ),
-      },
-      {
-        key: 'chat',
-        header: 'Chat',
-        cell: (t) => (
-          <span className="font-mono text-xs">
-            {t.telegram_chat_id}
-            {t.title_snapshot ? ` · ${t.title_snapshot}` : ''}
-          </span>
-        ),
-      },
-      { key: 'type', header: '종류', cell: (t) => t.telegram_chat_type ?? '—' },
-      { key: 'status', header: '상태', cell: (t) => targetStatus(t) },
-      {
-        key: 'actions',
-        header: '',
-        width: '96px',
-        cell: (t) => (
-          <span className="inline-flex gap-1">
-            <button
-              type="button"
-              title="재검증"
-              aria-label={`${t.telegram_label ?? t.telegram_chat_id} 재검증`}
-              disabled={busyTargetId !== null}
-              onClick={() => void onVerify(t.id)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-hairline text-ink disabled:opacity-40"
-              data-testid={`telegram-verify-${t.telegram_chat_id}`}
-            >
-              <BadgeCheck className="h-4 w-4" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              title="삭제"
-              aria-label={`${t.telegram_label ?? t.telegram_chat_id} 삭제`}
-              disabled={busyTargetId !== null}
-              onClick={() => void onDelete(t.id)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-hairline text-error-text disabled:opacity-40"
-              data-testid={`telegram-delete-${t.telegram_chat_id}`}
-            >
-              <Trash2 className="h-4 w-4" aria-hidden="true" />
-            </button>
-          </span>
-        ),
-      },
-    ],
-    [busyTargetId, onDelete, onVerify],
-  );
-
   return (
     <div className="space-y-6">
       <header className="space-y-1">
@@ -186,7 +126,7 @@ export default function TelegramTargetsSettingsPage() {
         </p>
       )}
 
-      <Section title="새 대상 연결">
+      <SettingsSection title="새 대상 연결">
         <form
           onSubmit={onCreate}
           className="grid items-start gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]"
@@ -214,7 +154,7 @@ export default function TelegramTargetsSettingsPage() {
           />
           <label
             htmlFor="telegram-default"
-            className="mt-7 inline-flex h-9 items-center gap-2 text-sm text-ink"
+            className="mt-7 inline-flex min-h-11 items-center gap-2 text-sm text-ink"
           >
             <input
               id="telegram-default"
@@ -239,11 +179,58 @@ export default function TelegramTargetsSettingsPage() {
             연결
           </button>
         </form>
-      </Section>
+      </SettingsSection>
 
-      <Section title="연결된 대상">
-        <DataTable columns={columns} rows={targets} loading={loading} rowKey={(t) => t.id} />
-      </Section>
+      <SettingsSection title="연결된 대상">
+        <SettingsList
+          items={targets}
+          loading={loading}
+          aria-label="연결된 Telegram 대상"
+          rowKey={(t) => t.id}
+          empty="연결된 대상이 없습니다. 위에서 chat ID를 등록하면 알림을 받을 수 있습니다."
+          renderRow={(t) => (
+            <>
+              <p className="flex items-center gap-1 text-base font-semibold text-ink">
+                {t.is_default && <Star className="size-4 text-primary" aria-label="기본" />}
+                {t.telegram_label ?? '—'}
+              </p>
+              <p className="mt-1 font-mono text-sm text-muted">
+                {t.telegram_chat_id}
+                {t.title_snapshot ? ` · ${t.title_snapshot}` : ''}
+              </p>
+              <p className="mt-1 text-sm text-muted">
+                {t.telegram_chat_type ?? '—'} · {targetStatus(t)}
+              </p>
+            </>
+          )}
+          renderActions={(t) => (
+            <>
+              <button
+                type="button"
+                title="재검증"
+                aria-label={`${t.telegram_label ?? t.telegram_chat_id} 재검증`}
+                disabled={busyTargetId !== null}
+                onClick={() => void onVerify(t.id)}
+                className="focus-ring inline-flex size-11 items-center justify-center rounded-sm text-ink hover:bg-surface-soft disabled:opacity-40"
+                data-testid={`telegram-verify-${t.telegram_chat_id}`}
+              >
+                <BadgeCheck className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                title="삭제"
+                aria-label={`${t.telegram_label ?? t.telegram_chat_id} 삭제`}
+                disabled={busyTargetId !== null}
+                onClick={() => void onDelete(t.id)}
+                className="focus-ring inline-flex size-11 items-center justify-center rounded-sm text-error-text hover:bg-error-bg disabled:opacity-40"
+                data-testid={`telegram-delete-${t.telegram_chat_id}`}
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </>
+          )}
+        />
+      </SettingsSection>
     </div>
   );
 }

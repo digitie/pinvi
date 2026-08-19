@@ -12,8 +12,8 @@ export default function TripMapShellPage() {
           <h1 className="text-2xl font-bold tracking-tight text-ink md:text-3xl">지도</h1>
         </div>
       </header>
-      <section className="min-h-[320px] flex-1">
-        <MapView apiKey={process.env.NEXT_PUBLIC_VWORLD_API_KEY ?? ''} className="h-full" />
+      <section className="flex min-h-[320px] flex-1 flex-col">
+        <MapView apiKey={process.env.NEXT_PUBLIC_VWORLD_API_KEY ?? ''} className="flex-1" />
       </section>
     </div>
   );

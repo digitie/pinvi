@@ -23,7 +23,9 @@ import { Wordmark } from '@/components/app/Wordmark';
 const NAV_ITEMS = [
   { href: '/trips', label: '여행', icon: CalendarDays },
   { href: '/notice-plans', label: '추천', icon: Newspaper },
-  { href: '/trips/map-shell', label: '지도', icon: Map },
+  // '지도' = 실제 탐색 지도(/map). `/trips/map-shell`은 VWorld 렌더 스모크용 데모 셸이라
+  // nav에 걸지 않는다 — 걸어 두면 하드코딩 데모가 주 목적지가 되고 진짜 지도는 도달 불가였다(T-316).
+  { href: '/map', label: '지도', icon: Map },
   { href: '/files', label: '파일', icon: Paperclip },
   { href: '/settings/mcp-tokens', label: '설정', icon: Settings },
   { href: '/profile', label: '프로필', icon: UserCircle },
@@ -32,7 +34,7 @@ const NAV_ITEMS = [
 
 // 모바일 하단 탭바 1순위 = **앱 셸 안에 머무는** 목적지 4개.
 // `/`·`/profile`은 셸 밖(마케팅 랜딩 / auth 레이아웃)이라 탭바가 사라지므로 더보기 시트로 내린다(T-314 리뷰 P2/P3).
-const MOBILE_PRIMARY_HREFS = ['/trips', '/notice-plans', '/trips/map-shell', '/files'] as const;
+const MOBILE_PRIMARY_HREFS = ['/trips', '/notice-plans', '/map', '/files'] as const;
 const MOBILE_PRIMARY = NAV_ITEMS.filter((item) =>
   (MOBILE_PRIMARY_HREFS as readonly string[]).includes(item.href),
 );

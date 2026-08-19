@@ -135,8 +135,6 @@ test('프로필에서 아바타를 업로드하고 삭제한다', async ({ page 
     },
   );
 
-  page.on('dialog', (dialog) => dialog.accept());
-
   await page.goto('/profile');
   await expect(page.getByRole('heading', { name: '프로필' })).toBeVisible();
   await expect(page.getByTestId('profile-avatar-meta')).toContainText('등록된 이미지 없음');
@@ -151,6 +149,8 @@ test('프로필에서 아바타를 업로드하고 삭제한다', async ({ page 
   await expect(page.getByTestId('profile-avatar-image')).toBeVisible();
 
   await page.getByTestId('profile-avatar-delete').click();
+  await expect(page.getByTestId('profile-destructive-confirm')).toBeVisible();
+  await page.getByTestId('profile-destructive-confirm-confirm').click();
 
   await expect(page.getByTestId('profile-avatar-meta')).toContainText('등록된 이미지 없음');
 });

@@ -1,9 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import type { FormEvent, KeyboardEvent } from 'react';
-import { CheckCircle2, Loader2, RotateCcw, ShieldAlert, X, XCircle } from 'lucide-react';
+import type { FormEvent } from 'react';
+import { CheckCircle2, Loader2, RotateCcw, ShieldAlert, XCircle } from 'lucide-react';
 import { ApiError, adminApi } from '@pinvi/api-client';
 import type {
   AdminBackupRestorePhase,
@@ -11,6 +10,7 @@ import type {
   AdminBackupSnapshot,
 } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
+import { Dialog } from '@/components/ui/Dialog';
 
 interface RestoreHotswapDialogProps {
   snapshot: AdminBackupSnapshot | null;
@@ -48,31 +48,17 @@ function phaseIcon(phase: AdminBackupRestorePhase) {
 }
 
 /* Hallmark · component: dialog(admin, destructive) · design-system: DESIGN.md
- * `components/ui/Dialog`로 이관하지 않는다 — 이 다이얼로그는 body portal + 배경 `inert`/`aria-hidden`까지
- * 거는 더 강한 격리를 쓰고, 프리미티브(useModalDialog)는 아직 inert/portal을 제공하지 않는다.
- * 토큰(z-modal·shadow-overlay·44px 닫기)만 시스템에 맞춘다. 수렴은 T-316에서 훅에 inert/portal을 추가한 뒤. */
+ * 프리미티브(`components/ui/Dialog`)로 뜬다 — T-316에서 훅에 body portal + 스택 인지형 배경 inert를
+ * 넣으면서 이 컴포넌트가 손으로 들고 있던 격리(포털·inert·Tab 트랩·포커스 복원)를 전부 걷어냈다.
+ * 파괴적 흐름이므로 `busy`(restoring) 동안 닫기 경로는 잠긴 채 유지한다. */
 export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreHotswapDialogProps) {
-  const dialogRef = useRef<HTMLDivElement | null>(null);
   const reasonRef = useRef<HTMLTextAreaElement | null>(null);
-  const openerRef = useRef<HTMLElement | null>(null);
   const [reason, setReason] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [confirmation, setConfirmation] = useState('');
   const [restoring, setRestoring] = useState(false);
   const [run, setRun] = useState<AdminBackupRestoreRun | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [portalEl] = useState<HTMLDivElement | null>(() =>
-    typeof document === 'undefined' ? null : document.createElement('div'),
-  );
-
-  useEffect(() => {
-    if (!portalEl) return;
-    document.body.appendChild(portalEl);
-    return () => {
-      portalEl.remove();
-    };
-  }, [portalEl]);
-
   useEffect(() => {
     if (!snapshot) return;
     setReason('');
@@ -83,98 +69,9 @@ export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreH
     setError(null);
   }, [snapshot]);
 
-  // Capture the element that opened the dialog BEFORE the inert effect blurs it,
-  // so we can restore focus to it on close (WAI-ARIA dialog focus management).
-  useEffect(() => {
-    if (!snapshot || typeof document === 'undefined') return;
-    openerRef.current = (document.activeElement as HTMLElement | null) ?? null;
-  }, [snapshot]);
-
-  // Mark background content inert + aria-hidden so AT virtual cursor / focus
-  // cannot wander behind the modal while it is open. Declared before the
-  // focus-restore effect so its cleanup (un-inert) runs first — otherwise the
-  // opener would still be inert when we try to refocus it on close.
-  useEffect(() => {
-    if (!snapshot || typeof document === 'undefined' || !portalEl) return;
-    const siblings = Array.from(document.body.children).filter(
-      (element): element is HTMLElement => element !== portalEl && element instanceof HTMLElement,
-    );
-    const previous = siblings.map((element) => ({
-      element,
-      inert: element.hasAttribute('inert'),
-      ariaHidden: element.getAttribute('aria-hidden'),
-    }));
-    siblings.forEach((element) => {
-      element.setAttribute('inert', '');
-      element.setAttribute('aria-hidden', 'true');
-    });
-    return () => {
-      previous.forEach(({ element, inert, ariaHidden }) => {
-        if (inert) element.setAttribute('inert', '');
-        else element.removeAttribute('inert');
-        if (ariaHidden === null) element.removeAttribute('aria-hidden');
-        else element.setAttribute('aria-hidden', ariaHidden);
-      });
-    };
-  }, [snapshot, portalEl]);
-
-  // Restore focus to the opener on close. Declared after the inert effect so its
-  // cleanup runs last — i.e. after the background is re-enabled, otherwise
-  // focusing an element still marked inert would be a no-op.
-  useEffect(() => {
-    if (!snapshot) return;
-    return () => {
-      openerRef.current?.focus?.();
-    };
-  }, [snapshot]);
-
-  useEffect(() => {
-    if (!snapshot) return;
-    reasonRef.current?.focus();
-  }, [snapshot]);
-
   const closeIfIdle = useCallback(() => {
     if (!restoring) onClose();
   }, [onClose, restoring]);
-
-  const handleDialogKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        closeIfIdle();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-
-      const dialog = dialogRef.current;
-      if (!dialog) return;
-      const focusable = Array.from(
-        dialog.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), [href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((element) => !element.hasAttribute('disabled') && element.offsetParent !== null);
-      if (focusable.length === 0) {
-        event.preventDefault();
-        dialog.focus();
-        return;
-      }
-
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-      if (event.shiftKey && active === first) {
-        event.preventDefault();
-        last?.focus();
-        return;
-      }
-      if (!event.shiftKey && active === last) {
-        event.preventDefault();
-        first?.focus();
-      }
-    },
-    [closeIfIdle],
-  );
 
   const pendingPhases: AdminBackupRestorePhase[] = useMemo(
     () =>
@@ -186,7 +83,7 @@ export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreH
     [],
   );
 
-  if (!snapshot || !portalEl) return null;
+  if (!snapshot) return null;
 
   const phases = run?.phases ?? (restoring ? pendingPhases : []);
   const confirmationText = snapshot.filename;
@@ -215,10 +112,8 @@ export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreH
     }
     setRestoring(true);
     setError(null);
-    // The submit button becomes disabled while the request is in flight, which
-    // would drop focus to <body> (outside the trap container). Move focus to the
-    // dialog container so the Tab/Escape trap stays active mid-restore.
-    dialogRef.current?.focus();
+    // 제출 버튼이 disabled되며 포커스가 body로 떨어지는 문제는 훅의 포커스 격납이 처리한다
+    // (T-315 2·3차 리뷰에서 focusout 기반으로 고쳤다).
     try {
       const result = await adminApi(apiClient).restoreBackupHotswap({
         snapshot_id: snapshot.snapshot_id,
@@ -234,174 +129,137 @@ export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreH
     }
   };
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-modal flex items-center justify-center bg-scrim/50 p-4"
-      data-testid="restore-hotswap-overlay"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) closeIfIdle();
-      }}
+  return (
+    <Dialog
+      open
+      onClose={closeIfIdle}
+      busy={restoring}
+      size="lg"
+      title="Restore schema-swap"
+      description={<span data-testid="restore-snapshot-name">{snapshot.filename}</span>}
+      initialFocusRef={reasonRef}
+      testId="restore-hotswap-dialog"
     >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="restore-hotswap-title"
-        aria-describedby="restore-hotswap-description"
-        tabIndex={-1}
-        onKeyDown={handleDialogKeyDown}
-        className="max-h-[88dvh] w-full max-w-2xl overflow-auto rounded-md border border-hairline bg-canvas shadow-overlay outline-none"
-        data-testid="restore-hotswap-dialog"
-      >
-        <div className="flex items-start justify-between gap-3 border-b border-hairline p-4">
-          <div>
-            <h2 id="restore-hotswap-title" className="text-lg font-bold text-ink">
-              Restore schema-swap
-            </h2>
-            <p
-              id="restore-hotswap-description"
-              className="mt-1 text-sm text-muted"
-              data-testid="restore-snapshot-name"
-            >
-              {snapshot.filename}
-            </p>
+      <form className="space-y-4 p-4" onSubmit={(event) => void submit(event)}>
+        {error && (
+          <p
+            role="alert"
+            className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
+            data-testid="restore-error"
+          >
+            {error}
+          </p>
+        )}
+
+        <label className="space-y-1 text-sm font-semibold text-ink">
+          복구 사유
+          <textarea
+            ref={reasonRef}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            disabled={restoring || Boolean(run)}
+            className="min-h-20 w-full rounded-sm border border-hairline px-3 py-2 text-sm font-normal text-ink outline-none focus:border-primary disabled:opacity-60"
+            maxLength={500}
+            placeholder="복구 사유를 입력하세요."
+            data-testid="restore-reason"
+          />
+        </label>
+
+        <label className="flex items-start gap-2 rounded-sm border border-hairline bg-error-bg p-3 text-sm text-error-text">
+          <input
+            type="checkbox"
+            checked={confirmed}
+            onChange={(event) => setConfirmed(event.target.checked)}
+            disabled={restoring || Boolean(run)}
+            className="mt-1"
+            data-testid="restore-confirm"
+          />
+          <span>
+            선택한 snapshot으로 동일 DB `app` schema를 교체하고 previous schema를 남깁니다.
+          </span>
+        </label>
+
+        <label className="space-y-1 text-sm font-semibold text-ink">
+          snapshot 파일명 확인
+          <input
+            value={confirmation}
+            onChange={(event) => setConfirmation(event.target.value)}
+            disabled={restoring || Boolean(run)}
+            className="h-10 w-full rounded-sm border border-hairline px-3 font-mono text-sm font-normal text-ink outline-none focus:border-primary disabled:opacity-60"
+            aria-invalid={confirmation.length > 0 && !confirmationMatches ? 'true' : undefined}
+            data-testid="restore-confirmation"
+          />
+          <span className="block text-xs font-normal text-muted">
+            <code>{confirmationText}</code>
+          </span>
+        </label>
+
+        {phases.length > 0 && (
+          <div
+            className="space-y-3 rounded-sm border border-hairline p-3"
+            data-testid="restore-progress"
+          >
+            <div className="flex items-center gap-2 text-sm font-semibold text-ink">
+              <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+              <span data-testid="restore-run-id">
+                {run?.restore_id ?? 'restore request running'}
+              </span>
+            </div>
+            {run && (
+              <dl className="grid gap-2 text-xs text-muted md:grid-cols-2">
+                <div>
+                  <dt>restore schema</dt>
+                  <dd className="font-mono text-ink">{run.restore_schema}</dd>
+                </div>
+                <div>
+                  <dt>previous schema</dt>
+                  <dd className="font-mono text-ink">{run.previous_schema}</dd>
+                </div>
+              </dl>
+            )}
+            <ol className="space-y-2">
+              {phases.map((phase) => (
+                <li
+                  key={phase.name}
+                  className="flex items-start gap-2 text-sm"
+                  data-testid={`restore-phase-${phase.name}`}
+                >
+                  {phaseIcon(phase)}
+                  <span className="min-w-24 font-semibold text-ink">{phaseLabels[phase.name]}</span>
+                  <span className="text-muted">
+                    {phase.status}
+                    {phase.message ? ` · ${phase.message}` : ''}
+                  </span>
+                </li>
+              ))}
+            </ol>
           </div>
+        )}
+
+        <div className="flex justify-end gap-2">
           <button
             type="button"
             onClick={closeIfIdle}
             disabled={restoring}
-            className="focus-ring inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink disabled:cursor-not-allowed"
-            aria-label="닫기"
-            data-testid="restore-close"
+            className="inline-flex h-10 items-center justify-center rounded-sm border border-hairline px-4 text-sm font-semibold text-ink hover:bg-surface-soft"
           >
-            <X className="h-4 w-4" aria-hidden="true" />
+            닫기
+          </button>
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-error-text px-4 text-sm font-semibold text-on-primary hover:bg-error-text-hover disabled:opacity-50"
+            data-testid="restore-submit"
+          >
+            {restoring ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <RotateCcw className="h-4 w-4" aria-hidden="true" />
+            )}
+            Restore
           </button>
         </div>
-
-        <form className="space-y-4 p-4" onSubmit={(event) => void submit(event)}>
-          {error && (
-            <p
-              role="alert"
-              className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
-              data-testid="restore-error"
-            >
-              {error}
-            </p>
-          )}
-
-          <label className="space-y-1 text-sm font-semibold text-ink">
-            복구 사유
-            <textarea
-              ref={reasonRef}
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              disabled={restoring || Boolean(run)}
-              className="min-h-20 w-full rounded-sm border border-hairline px-3 py-2 text-sm font-normal text-ink outline-none focus:border-primary disabled:opacity-60"
-              maxLength={500}
-              placeholder="복구 사유를 입력하세요."
-              data-testid="restore-reason"
-            />
-          </label>
-
-          <label className="flex items-start gap-2 rounded-sm border border-hairline bg-error-bg p-3 text-sm text-error-text">
-            <input
-              type="checkbox"
-              checked={confirmed}
-              onChange={(event) => setConfirmed(event.target.checked)}
-              disabled={restoring || Boolean(run)}
-              className="mt-1"
-              data-testid="restore-confirm"
-            />
-            <span>
-              선택한 snapshot으로 동일 DB `app` schema를 교체하고 previous schema를 남깁니다.
-            </span>
-          </label>
-
-          <label className="space-y-1 text-sm font-semibold text-ink">
-            snapshot 파일명 확인
-            <input
-              value={confirmation}
-              onChange={(event) => setConfirmation(event.target.value)}
-              disabled={restoring || Boolean(run)}
-              className="h-10 w-full rounded-sm border border-hairline px-3 font-mono text-sm font-normal text-ink outline-none focus:border-primary disabled:opacity-60"
-              aria-invalid={confirmation.length > 0 && !confirmationMatches ? 'true' : undefined}
-              data-testid="restore-confirmation"
-            />
-            <span className="block text-xs font-normal text-muted">
-              <code>{confirmationText}</code>
-            </span>
-          </label>
-
-          {phases.length > 0 && (
-            <div
-              className="space-y-3 rounded-sm border border-hairline p-3"
-              data-testid="restore-progress"
-            >
-              <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-                <ShieldAlert className="h-4 w-4" aria-hidden="true" />
-                <span data-testid="restore-run-id">
-                  {run?.restore_id ?? 'restore request running'}
-                </span>
-              </div>
-              {run && (
-                <dl className="grid gap-2 text-xs text-muted md:grid-cols-2">
-                  <div>
-                    <dt>restore schema</dt>
-                    <dd className="font-mono text-ink">{run.restore_schema}</dd>
-                  </div>
-                  <div>
-                    <dt>previous schema</dt>
-                    <dd className="font-mono text-ink">{run.previous_schema}</dd>
-                  </div>
-                </dl>
-              )}
-              <ol className="space-y-2">
-                {phases.map((phase) => (
-                  <li
-                    key={phase.name}
-                    className="flex items-start gap-2 text-sm"
-                    data-testid={`restore-phase-${phase.name}`}
-                  >
-                    {phaseIcon(phase)}
-                    <span className="min-w-24 font-semibold text-ink">
-                      {phaseLabels[phase.name]}
-                    </span>
-                    <span className="text-muted">
-                      {phase.status}
-                      {phase.message ? ` · ${phase.message}` : ''}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={closeIfIdle}
-              disabled={restoring}
-              className="inline-flex h-10 items-center justify-center rounded-sm border border-hairline px-4 text-sm font-semibold text-ink hover:bg-surface-soft"
-            >
-              닫기
-            </button>
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-error-text px-4 text-sm font-semibold text-on-primary hover:bg-error-text-hover disabled:opacity-50"
-              data-testid="restore-submit"
-            >
-              {restoring ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <RotateCcw className="h-4 w-4" aria-hidden="true" />
-              )}
-              Restore
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>,
-    portalEl,
+      </form>
+    </Dialog>
   );
 }

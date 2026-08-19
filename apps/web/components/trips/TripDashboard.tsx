@@ -271,29 +271,7 @@ export function TripDashboard() {
       setEndDate('');
       setMessage('초안 여행을 저장했습니다.');
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : '여행을 저장하지 못했습니다.');
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  return (
-    <div className="space-y-5">
-      <header className="flex flex-col gap-3 border-b border-hairline pb-5 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink md:text-3xl">여행</h1>
-          <p className="mt-2 text-sm text-muted">
-            예정 {upcomingCount} · 지난 여행 {pastCount} · 초안 {draftCount}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setMobileToolsOpen((open) => !open)}
-            aria-controls="trip-dashboard-create"
-            aria-expanded={mobileToolsOpen}
-            className={`h-10 w-fit items-center gap-2 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft ${
-              mobileWebLayout ? 'inline-flex' : 'inline-flex lg:hidden'
+      setFormError(err instanceof ApiError ? err.message : '여행을 저장하지 못했습니다.'); } finally { setCreating(false); } }; return ( <div className="space-y-5"> <header className="flex flex-col gap-3 border-b border-hairline pb-5 md:flex-row md:items-end md:justify-between"> <div> <h1 className="text-2xl font-bold tracking-tight text-ink md:text-3xl">여행</h1> <p className="mt-2 text-sm text-muted"> 예정 {upcomingCount} · 지난 여행 {pastCount} · 초안 {draftCount} </p> </div> <div className="flex flex-wrap gap-2"> <button type="button" onClick={() => setMobileToolsOpen((open) => !open)} aria-controls="trip-dashboard-create" aria-expanded={mobileToolsOpen} className={`min-h-11 w-fit items-center gap-2 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft ${ mobileWebLayout ?'inline-flex' : 'inline-flex lg:hidden'
             }`}
           >
             <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
@@ -302,7 +280,7 @@ export function TripDashboard() {
           <button
             type="button"
             onClick={() => void loadTrips()}
-            className="inline-flex h-10 w-fit items-center gap-2 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+            className="inline-flex min-h-11 w-fit items-center gap-2 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
             disabled={loading}
           >
             {loading ? (
@@ -369,7 +347,7 @@ export function TripDashboard() {
                   </p>
                   <Link
                     href={`/trips/${selectedMapPoint.tripId}`}
-                    className="mt-2 inline-flex h-8 items-center rounded-sm bg-cta px-3 text-xs font-semibold text-on-primary hover:bg-cta-hover"
+                    className="mt-2 inline-flex min-h-11 items-center rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover"
                   >
                     여행 열기
                   </Link>
@@ -397,7 +375,7 @@ export function TripDashboard() {
                 label="제목"
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                className="h-10 focus:border-primary"
+                className="min-h-11 focus:border-primary"
                 maxLength={200}
                 placeholder="부산 2박 3일"
                 error={titleError}
@@ -408,7 +386,7 @@ export function TripDashboard() {
                 label="지역"
                 value={regionHint}
                 onChange={(event) => setRegionHint(event.target.value)}
-                className="h-10 focus:border-primary"
+                className="min-h-11 focus:border-primary"
                 maxLength={120}
                 placeholder="부산"
                 data-testid="trip-create-region"
@@ -423,7 +401,7 @@ export function TripDashboard() {
                     setStartDate(event.target.value);
                     setDateError(undefined);
                   }}
-                  className="h-10 focus:border-primary"
+                  className="min-h-11 focus:border-primary"
                   data-testid="trip-create-start"
                 />
                 <FormField
@@ -436,13 +414,13 @@ export function TripDashboard() {
                     setDateError(undefined);
                   }}
                   error={dateError}
-                  className="h-10 focus:border-primary"
+                  className="min-h-11 focus:border-primary"
                   data-testid="trip-create-end"
                 />
               </div>
               <button
                 type="submit"
-                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
                 disabled={creating}
                 data-testid="trip-create-submit"
               >
@@ -574,7 +552,7 @@ export function TripDashboard() {
                       {trip.description && (
                         <p className="mt-2 line-clamp-2 text-sm text-muted">{trip.description}</p>
                       )}
-                      <span className="mt-3 inline-flex h-8 items-center rounded-sm border border-hairline px-3 text-xs font-semibold text-ink">
+                      <span className="mt-3 inline-flex min-h-11 items-center rounded-sm border border-hairline px-3 text-sm font-semibold text-ink">
                         열기/업데이트
                       </span>
                     </Link>
