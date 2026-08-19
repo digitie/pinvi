@@ -377,9 +377,16 @@ function WeatherValuesTab({ featureId }: { featureId: string }) {
           ])
         }
         rowTestId={(row) =>
-          `admin-feature-weather-row-${row.metric_key}-${row.provider_dataset_id}-${encodeURIComponent(
-            row.dataset_key,
-          )}-${encodeURIComponent(row.known_at)}`
+          `admin-feature-weather-row-${row.metric_key}-${encodeURIComponent(
+            JSON.stringify([
+              row.forecast_style,
+              row.timeline_bucket ?? null,
+              row.valid_at ?? row.observed_at ?? row.issued_at ?? null,
+              row.provider_dataset_id,
+              row.dataset_key,
+              row.known_at,
+            ]),
+          )}`
         }
         empty="weather 값이 없습니다."
       />
