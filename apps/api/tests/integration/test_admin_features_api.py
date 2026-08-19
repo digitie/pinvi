@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -14,7 +14,6 @@ from app.clients.kor_travel_map import (
     KorTravelMapFeatureNotFound,
     KorTravelMapPreconditionFailed,
     KorTravelMapUnavailable,
-    get_kor_travel_map_client,
 )
 from app.clients.kor_travel_map_admin import get_kor_travel_map_admin_client
 from app.main import app
@@ -87,7 +86,7 @@ def _detail() -> dict[str, Any]:
     - `sources`는 `is_primary_source`/`source_version`/`raw_*` 없이 `source_entity_key`·
       `observed_at`을 준다 — primary 여부는 `source_role`이 표현한다.
     - `versions`/`change_requests`는 애초에 오지 않고, 대신 `state_transitions`·
-      `curations`가 온다(Pinvi 스키마에서는 optional이라 빈 목록으로 남는다).
+      `curations`가 온다(Pinvi가 두 실제 목록을 그대로 투영한다).
     """
     return {
         "feature": {
@@ -164,7 +163,32 @@ def _detail() -> dict[str, Any]:
             }
         ],
         "files": [],
-        "curations": [],
+        "curations": [
+            {
+                "curation_item_id": "11111111-1111-4111-8111-111111111111",
+                "collection_id": "22222222-2222-4222-8222-222222222222",
+                "collection_key": "summer-busan",
+                "title": "부산 여름 여행",
+                "edition_key": "2026-summer",
+                "theme_slug": "busan-cafe",
+                "theme_name": "부산 카페",
+                "theme_group": "seasonal",
+                "feature_id": "f_place_1",
+                "feature_name": "해운대 카페",
+                "feature_kind": "place",
+                "feature_category": "01070100",
+                "place_name": "해운대 카페",
+                "address_hint": "부산 해운대구",
+                "status": "included",
+                "sort_order": 1,
+                "item_title": "바다 앞 카페",
+                "item_summary": "해변 산책 뒤 쉬기 좋은 곳",
+                "curation_relation": "cafe_stop",
+                "reuse_policy": "allowed",
+                "row_revision": "2",
+                "updated_at": "2026-06-12T00:00:00+09:00",
+            }
+        ],
     }
 
 
@@ -175,6 +199,7 @@ class _FakeAdminClient:
         not_found: bool = False,
         approve_conflict: bool = False,
         approve_precondition: bool = False,
+        weather_unavailable: bool = False,
     ) -> None:
         self.list_kwargs: dict[str, Any] | None = None
         self.detail_id: str | None = None
@@ -184,6 +209,7 @@ class _FakeAdminClient:
         self.not_found = not_found
         self.approve_conflict = approve_conflict
         self.approve_precondition = approve_precondition
+        self.weather_unavailable = weather_unavailable
 
     async def list_features(self, **kwargs: Any) -> dict[str, Any]:
         self.list_kwargs = kwargs
@@ -197,6 +223,34 @@ class _FakeAdminClient:
         if self.not_found:
             raise KorTravelMapFeatureNotFound("not found")
         return _detail()
+
+    async def get_feature_weather(self, feature_id: str) -> dict[str, Any]:
+        self.detail_id = feature_id
+        if self.weather_unavailable:
+            raise KorTravelMapUnavailable("kor-travel-map weather down")
+        return {
+            "feature_id": feature_id,
+            "selected_at": "2026-06-12T10:00:00+09:00",
+            "refresh_after": "2026-06-12T11:00:00+09:00",
+            "latest_at": "2026-06-12T09:30:00+09:00",
+            "is_stale": False,
+            "source_styles": ["nowcast", "short"],
+            "metrics": [
+                {
+                    "metric_key": "T1H",
+                    "metric_name": "기온",
+                    "forecast_style": "nowcast",
+                    "timeline_bucket": "current",
+                    "provider_dataset_id": 41,
+                    "dataset_key": "kma_vilage_forecast",
+                    "dataset_display_name": "기상청 단기예보",
+                    "known_at": "2026-06-12T09:35:00+09:00",
+                    "valid_at": "2026-06-12T10:00:00+09:00",
+                    "value_number": 24.5,
+                    "unit": "℃",
+                }
+            ],
+        }
 
     async def list_change_requests(self, **kwargs: Any) -> dict[str, Any]:
         self.change_request_kwargs = kwargs
@@ -266,65 +320,12 @@ class _FakeAdminClient:
         }
 
 
-class _FakeWeatherClient:
-    def __init__(self, *, unavailable: bool = False) -> None:
-        self.calls: dict[str, Any] = {}
-        self.unavailable = unavailable
-
-    async def feature_weather(
-        self, feature_id: str, *, asof: Any = None, known_at: Any = None
-    ) -> dict[str, Any]:
-        # 시그니처는 실제 client(`clients/kor_travel_map.py feature_weather`)와 같아야 한다 —
-        # kwarg가 빠져 있으면 라우터가 새 인자를 넘기기 시작해도 fake에서만 TypeError로 늦게 터진다.
-        self.calls["feature_weather"] = {
-            "feature_id": feature_id,
-            "asof": asof,
-            "known_at": known_at,
-        }
-        # 실제 transport의 단일 시간대 정책을 그대로 흉내낸다(`_require_aware_datetime`).
-        # 이게 없으면 라우터가 `normalize_asof_query()`를 다시 빼먹어도 fake는 naive를 받아
-        # 200을 돌려주고, 실제 배포에서만 500이 난다.
-        for field, value in (("asof", asof), ("known_at", known_at)):
-            if isinstance(value, datetime) and value.utcoffset() is None:
-                raise ValueError(f"{field}에는 UTC offset이 필요합니다.")
-        if self.unavailable:
-            raise KorTravelMapUnavailable("kor-travel-map weather down")
-        # admin weather-values는 **user** 표면 카드를 투영한다 — Map bitemporal
-        # cutover(`6650aa71`)로 `asof` → `selected_at`. (Map admin profile에도
-        # `GET /v1/admin/features/{id}/weather`가 있지만 Pinvi는 아직 쓰지 않는다;
-        # `api/v1/admin/features.py` `_weather_values_from_payload` 주석의 후속 과제.)
-        return {
-            "feature_id": feature_id,
-            "selected_at": "2026-06-12T10:00:00+09:00",
-            "refresh_after": "2026-06-12T11:00:00+09:00",
-            "latest_at": "2026-06-12T09:30:00+09:00",
-            "is_stale": False,
-            "source_styles": ["nowcast", "short"],
-            "metrics": [
-                {
-                    "metric_key": "T1H",
-                    "metric_name": "기온",
-                    "forecast_style": "nowcast",
-                    "timeline_bucket": "current",
-                    "valid_at": "2026-06-12T10:00:00+09:00",
-                    "value_number": 24.5,
-                    "unit": "℃",
-                }
-            ],
-        }
-
-
 def _override(fake: Any) -> None:
     app.dependency_overrides[get_kor_travel_map_admin_client] = lambda: fake
 
 
-def _override_weather(fake: Any) -> None:
-    app.dependency_overrides[get_kor_travel_map_client] = lambda: fake
-
-
 def _clear() -> None:
     app.dependency_overrides.pop(get_kor_travel_map_admin_client, None)
-    app.dependency_overrides.pop(get_kor_travel_map_client, None)
 
 
 async def test_list_admin_features_proxies_filters(
@@ -349,6 +350,7 @@ async def test_list_admin_features_proxies_filters(
                 ("provider_dataset_id", "42"),
                 ("category", "01070100"),
                 ("has_issue", "true"),
+                ("include_ended", "true"),
                 ("page_size", "100"),
                 ("cursor", "cursor-1"),
                 ("sort", "updated_at"),
@@ -374,6 +376,7 @@ async def test_list_admin_features_proxies_filters(
     assert fake.list_kwargs["provider_dataset_id"] == 42
     assert fake.list_kwargs["categories"] == ["01070100"]
     assert fake.list_kwargs["has_issue"] is True
+    assert fake.list_kwargs["include_ended"] is True
     assert fake.list_kwargs["page_size"] == 100
     assert fake.list_kwargs["cursor"] == "cursor-1"
     assert fake.list_kwargs["sort"] == "updated_at"
@@ -412,7 +415,12 @@ async def test_list_admin_features_drops_legacy_status_provider_dataset_filters(
     assert fake.list_kwargs is not None
     forwarded = {key: value for key, value in fake.list_kwargs.items() if value is not None}
     # 라우터가 legacy 이름을 다시 받으면 여기에 값이 실려 red가 된다.
-    assert forwarded == {"page_size": 50, "sort": "name", "order": "asc"}
+    assert forwarded == {
+        "include_ended": False,
+        "page_size": 50,
+        "sort": "name",
+        "order": "asc",
+    }
 
 
 async def test_list_admin_features_rejects_retired_status_sort_key(
@@ -496,6 +504,8 @@ async def test_get_admin_feature_returns_detail(
     # (후속: 두 필드를 Pinvi 상세 계약에서 걷어낼지 결정).
     assert data["versions"] == []
     assert data["change_requests"] == []
+    assert data["state_transitions"][0]["transition_kind"] == "provider_import"
+    assert data["curations"][0]["collection_key"] == "summer-busan"
 
 
 async def test_get_admin_feature_sources_and_overrides_return_projections(
@@ -535,12 +545,11 @@ async def test_get_admin_feature_weather_values_proxies_weather_card(
     admin_id = await _create_user(
         session_factory, email="admin@example.com", roles=["user", "admin"]
     )
-    fake = _FakeWeatherClient()
-    _override_weather(fake)
+    fake = _FakeAdminClient()
+    _override(fake)
     try:
         resp = await client.get(
             "/admin/features/f_weather_1/weather-values",
-            params={"asof": "2026-06-12T10:00:00+09:00"},
             cookies=auth_cookies(str(admin_id)),
         )
     finally:
@@ -548,32 +557,26 @@ async def test_get_admin_feature_weather_values_proxies_weather_card(
 
     assert resp.status_code == 200, resp.text
     data = resp.json()["data"]
-    assert fake.calls["feature_weather"]["feature_id"] == "f_weather_1"
-    assert fake.calls["feature_weather"]["asof"] == datetime.fromisoformat(
-        "2026-06-12T10:00:00+09:00"
-    )
+    assert fake.detail_id == "f_weather_1"
     assert data["feature_id"] == "f_weather_1"
     assert data["asof"] == "2026-06-12T10:00:00+09:00"
     assert data["source_styles"] == ["nowcast", "short"]
     assert data["items"][0]["metric_key"] == "T1H"
+    assert data["items"][0]["provider_dataset_id"] == 41
+    assert data["items"][0]["dataset_key"] == "kma_vilage_forecast"
+    assert data["items"][0]["dataset_display_name"] == "기상청 단기예보"
+    assert data["items"][0]["known_at"] == "2026-06-12T09:35:00+09:00"
 
 
-async def test_get_admin_feature_weather_values_reads_naive_asof_as_kst(
+async def test_get_admin_feature_weather_values_rejects_unsupported_asof(
     client: Any, session_factory: Any, auth_cookies: Any
 ) -> None:
-    """offset 없는 `?asof=`도 200이고, client에는 **aware**(KST)로 전달된다.
-
-    회귀 방어: 이 핸들러가 `normalize_asof_query()`를 건너뛰고 raw query를 넘기던 동안
-    naive 입력은 transport `ValueError`가 됐고, 그 예외는 KorTravelMap* 계열만 잡는
-    `_map_admin_errors()`를 뚫어 **500**이 됐다(직전 릴리스에서는 200). user weather 라우터
-    (`test_features_api.py test_weather_naive_asof_is_read_as_kst_not_utc`)와 같은 해석을
-    쓰는지도 함께 고정한다 — 두 경계가 갈라지면 같은 query가 9시간 다른 시점을 조회한다.
-    """
+    """Map Admin 계약에 없는 `asof`를 조용히 버리고 최신값을 반환하면 안 된다."""
     admin_id = await _create_user(
         session_factory, email="admin@example.com", roles=["user", "operator"]
     )
-    fake = _FakeWeatherClient()
-    _override_weather(fake)
+    fake = _FakeAdminClient()
+    _override(fake)
     try:
         resp = await client.get(
             "/admin/features/f_weather_1/weather-values",
@@ -583,12 +586,9 @@ async def test_get_admin_feature_weather_values_reads_naive_asof_as_kst(
     finally:
         _clear()
 
-    assert resp.status_code == 200, resp.text
-    passed = fake.calls["feature_weather"]["asof"]
-    assert passed.utcoffset() == timedelta(hours=9)
-    assert passed.isoformat() == "2026-06-12T10:00:00+09:00"
-    # knowledge time은 라우터가 넘기지 않는다 — client가 "지금"을 채운다.
-    assert fake.calls["feature_weather"]["known_at"] is None
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert fake.detail_id is None
 
 
 async def test_get_admin_feature_weather_values_maps_upstream_unavailable(
@@ -597,8 +597,8 @@ async def test_get_admin_feature_weather_values_maps_upstream_unavailable(
     admin_id = await _create_user(
         session_factory, email="admin@example.com", roles=["user", "operator"]
     )
-    fake = _FakeWeatherClient(unavailable=True)
-    _override_weather(fake)
+    fake = _FakeAdminClient(weather_unavailable=True)
+    _override(fake)
     try:
         resp = await client.get(
             "/admin/features/f_weather_1/weather-values",

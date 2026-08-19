@@ -7,7 +7,7 @@ import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type {
   AdminFeatureDetailOverride,
   AdminFeatureDetailSource,
-  WeatherMetric,
+  AdminFeatureWeatherMetric,
 } from '@pinvi/schemas';
 import { ArrowLeft, CloudSun, Database, History, RefreshCw } from 'lucide-react';
 import { AdminPage, FilterBar, Section } from '@/components/admin/AdminPage';
@@ -30,7 +30,7 @@ const TAB_META: Record<FeatureDetailTab, { label: string; description: string }>
   },
   'weather-values': {
     label: 'Weather Values',
-    description: 'weather card metric 값을 시간·스타일 단위로 확인',
+    description: 'weather card metric 값을 dataset·known 시각·스타일 단위로 확인',
   },
 };
 
@@ -215,7 +215,7 @@ const overrideColumns: AdminTableColumn<AdminFeatureDetailOverride>[] = [
   },
 ];
 
-const weatherColumns: AdminTableColumn<WeatherMetric>[] = [
+const weatherColumns: AdminTableColumn<AdminFeatureWeatherMetric>[] = [
   {
     key: 'metric',
     header: 'metric',
@@ -225,6 +225,20 @@ const weatherColumns: AdminTableColumn<WeatherMetric>[] = [
       <div className="text-xs">
         <div className="font-mono">{row.metric_key}</div>
         <div className="text-muted">{row.metric_name ?? '—'}</div>
+      </div>
+    ),
+  },
+  {
+    key: 'dataset',
+    header: 'dataset',
+    sortable: true,
+    sortValue: (row) => `${row.dataset_display_name}:${row.provider_dataset_id}:${row.dataset_key}`,
+    cell: (row) => (
+      <div className="text-xs">
+        <div>{row.dataset_display_name}</div>
+        <div className="font-mono text-muted">
+          #{row.provider_dataset_id} · {row.dataset_key}
+        </div>
       </div>
     ),
   },
@@ -262,6 +276,7 @@ const weatherColumns: AdminTableColumn<WeatherMetric>[] = [
       <div className="text-xs">
         <div>{formatDateTime(row.valid_at)}</div>
         <div className="text-muted">obs {formatDateTime(row.observed_at)}</div>
+        <div className="text-muted">known {formatDateTime(row.known_at)}</div>
       </div>
     ),
   },
@@ -351,11 +366,28 @@ function WeatherValuesTab({ featureId }: { featureId: string }) {
         rows={data?.items ?? []}
         loading={query.isLoading}
         rowKey={(row) =>
-          `${row.metric_key}:${row.forecast_style}:${row.timeline_bucket ?? ''}:${
-            row.valid_at ?? row.observed_at ?? row.issued_at ?? ''
-          }`
+          JSON.stringify([
+            row.metric_key,
+            row.forecast_style,
+            row.timeline_bucket ?? null,
+            row.valid_at ?? row.observed_at ?? row.issued_at ?? null,
+            row.provider_dataset_id,
+            row.dataset_key,
+            row.known_at,
+          ])
         }
-        rowTestId={(row) => `admin-feature-weather-row-${row.metric_key}`}
+        rowTestId={(row) =>
+          `admin-feature-weather-row-${row.metric_key}-${encodeURIComponent(
+            JSON.stringify([
+              row.forecast_style,
+              row.timeline_bucket ?? null,
+              row.valid_at ?? row.observed_at ?? row.issued_at ?? null,
+              row.provider_dataset_id,
+              row.dataset_key,
+              row.known_at,
+            ]),
+          )}`
+        }
         empty="weather 값이 없습니다."
       />
     </Section>

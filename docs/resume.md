@@ -1,5 +1,36 @@
 # resume.md
 
+## 2026-08-19 (codex) — T-VN-42 Admin 계약 소비 폐쇄
+
+PR #451이 user OpenAPI 재vendor뿐 아니라 3축·bitemporal consumer 수정까지 이미 병합했음을 확인해
+중복 cherry-pick을 중단했다. 남은 Admin 3건을 후속 변경으로 닫았다. Map
+`da2c740aa4b4239821075519959c38534cc65d2f`의 Admin OpenAPI 전체 파일(SHA-256
+`22e3f2f0…746d32`)을 vendor하고, feature 목록/상세/weather path·security·query·응답 shape를 CI에
+고정했다. weather-values는 비공개 feature도 읽는 Admin 전용 최신 카드 경로로 전환했으며, upstream에
+없는 `asof`는 최신값으로 가장하지 않고 422로 거부한다. 상세의 `state_transitions`/`curations`는
+Python/Zod를 거쳐 실제로 투영하고 Web에 실제 개수를 표시한다. stack 재리뷰에서 발견한 weather metric
+provenance 손실을 닫아 dataset ID/key/display name과 `known_at`을 BFF·Zod·Admin 표에서 보존한다.
+같은 metric/time이지만 dataset 또는 forecast style이 다른 행은 전체 identity의 React key/test id로
+분리하고 3행 E2E로 고정했다. `curations`는 producer 전체 내부 view가 아니라 상세 표시용 안정 subset임을
+schema·계약 테스트·문서에 고정했다.
+
+작업 전 `/mnt/f`의 Pinvi 미사용 생성물과 병합 완료 worktree를 정리해 약 3.4 GB를 확보했고,
+깨진 Codex worktree를 최신 `origin/main` 기준으로 재생성했다. 비밀 설정·세션·backup이 있는 기존
+내용은 `/mnt/f/dev/pinvi-codex-orphan-20260819`에 보존했으며 자동 삭제하지 않는다.
+
+**현재**: 전문 적대 리뷰와 필수 원격 CI를 통과한 draft PR #443 head `cbdf2815`를 T-VN-42 브랜치에
+stack 병합했다. 하나의 Admin OpenAPI byte snapshot 위에서 #443의 ops gate와 #456의 feature gate를 함께
+유지하며, PR #456 base를 #443 브랜치로 바꿔 선행 순서를 명시한다.
+
+**검증**: 결합 API unit 365 passed, feature/provider-sync integration 48 passed, feature integration 재검증
+16 passed, API Ruff/format/mypy(222 files), schemas Vitest 16 passed, schemas/Web typecheck와 Web
+lint/Prettier 통과. API 전문 리뷰의 weather provenance·curation subset P2를 닫고 재검증했으며, 프론트
+전문 리뷰의 provenance 표시·행 identity P2를 전체축 key/test id와 3행 E2E로 닫았다.
+
+**다음 한 작업**: draft PR #456 exact head의 프론트 재리뷰와 필수 원격 CI를 통과시킨다. 공개 응답의
+항상-null `status` 제거는 web/mobile 소비자를 함께 옮겨야 하는 breaking cutover이므로 별도 PR로
+진행한다.
+
 ## 2026-08-19 (codex) — PR #443 Map ops 삼중항 계약 복구·게이트 추가
 
 **방금**: draft PR #443을 최신 main에 올리고 Map Admin OpenAPI의 실제 생성 계약에 맞춰 dataset grid,
@@ -22,8 +53,7 @@ T-VN-42 범위라 별도 확인), Admin OpenAPI gate 31 passed, provider-sync in
 Vitest 3 passed, schemas/web typecheck와 Ruff/Prettier 통과. 배포 선행조건은 Map 삼중항 release와
 docker-manager draft PR #170 merge·배포다.
 
-**다음 한 작업**: 반영 후 최종 CI green을 확인한다. 그 다음 `agent/codex-tvn42`/draft PR #456으로
-돌아가 admin feature 계약 게이트와 남은 T-VN-42 범위를 진행한다.
+**다음 한 작업**: 최종 필수 CI를 통과한 뒤 `agent/codex-tvn42`/draft PR #456으로 돌아가 stack한다.
 
 ## 2026-08-19 (claude) — T-310 Dev Client smoke(에뮬레이터) 완료
 
@@ -36,7 +66,6 @@ VWorld 키 부재로 런타임 확인을 못 해 코드 경로 확인으로 대�
 **다음 한 작업**: T-273(v1.0.0 E2E/Live gate) — 남은 hard blocker는 geofence 운영 설정이다.
 모바일 후속(T-311 expo-doctor 3신호 · T-318 `expo start` hoisting · T-319 실패 문구 · T-320 위치 동의
 gate 런타임 확인)은 별도 PR로 분리해 뒀다.
-
 
 ## 2026-08-19 (claude) — T-316 Hallmark 종결(PR #455 머지)
 

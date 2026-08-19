@@ -158,6 +158,7 @@ export interface AdminFeatureListParams {
   issueType?: string[];
   updatedFrom?: string;
   updatedTo?: string;
+  includeEnded?: boolean;
   pageSize?: number;
   cursor?: string;
   sort?: z.infer<typeof AdminFeatureSortSchema>;
@@ -292,13 +293,7 @@ export type AdminDsrRejectBody = z.infer<typeof AdminDsrRejectRequestSchema>;
 
 export interface AdminContentReportListParams {
   status?:
-    | 'received'
-    | 'reviewing'
-    | 'hidden'
-    | 'taken_down'
-    | 'rejected'
-    | 'appealed'
-    | 'restored';
+    'received' | 'reviewing' | 'hidden' | 'taken_down' | 'rejected' | 'appealed' | 'restored';
   targetType?: 'trip' | 'comment' | 'attachment' | 'share_link';
   pageSize?: number;
 }
@@ -1020,6 +1015,7 @@ export const adminApi = (client: ApiClient) => ({
     if (params.hasIssue !== undefined) qs.set('has_issue', String(params.hasIssue));
     if (params.updatedFrom) qs.set('updated_from', params.updatedFrom);
     if (params.updatedTo) qs.set('updated_to', params.updatedTo);
+    if (params.includeEnded !== undefined) qs.set('include_ended', String(params.includeEnded));
     if (params.pageSize) qs.set('page_size', String(params.pageSize));
     if (params.cursor) qs.set('cursor', params.cursor);
     if (params.sort) qs.set('sort', params.sort);

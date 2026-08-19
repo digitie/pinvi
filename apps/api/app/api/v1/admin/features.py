@@ -11,13 +11,11 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import ValidationError
 
-from app.api.v1.features import normalize_asof_query
 from app.clients.kor_travel_map import (
     KorTravelMapBadRequest,
     KorTravelMapConflict,
     KorTravelMapError,
     KorTravelMapFeatureNotFound,
-    KorTravelMapHttpClientDep,
     KorTravelMapPreconditionFailed,
     KorTravelMapRateLimited,
     KorTravelMapUnavailable,
@@ -165,19 +163,7 @@ def _validate_feature_detail(data: dict[str, Any]) -> AdminFeatureDetail:
 def _weather_values_from_payload(
     payload: dict[str, Any], *, feature_id: str
 ) -> AdminFeatureWeatherValuesResponse:
-    """weather card payload → admin weather-values 투영.
-
-    payload는 **user** 표면(`GET /v1/features/{id}/weather[/snapshot]`, user client)에서
-    온다. Map bitemporal cutover(`6650aa71`)의 `asof` → `selected_at` 개명이 그대로
-    적용되므로 여기서 `selected_at`을 읽는다.
-
-    주의(사실관계): Map admin profile에도 `GET /v1/admin/features/{feature_id}/weather`가
-    **존재한다**(query 없음, 응답은 user와 같은 `FeatureWeatherResponse`/`WeatherCardData`).
-    두 경로의 차이는 가시성이다 — user 경로는 `public_features` 기반이라 비공개 feature를
-    404로 막고, admin 경로는 base `features`(lifecycle=active) 기반이라 비공개까지 본다.
-    지금 이 admin tab은 user 카드를 투영하므로 **비공개 feature에서 404가 난다**.
-    admin route로 갈아타는 것은 별도 과제다(후속: admin weather 경로 전환).
-    """
+    """Admin weather card의 최신값을 admin weather-values 응답으로 투영."""
     try:
         return AdminFeatureWeatherValuesResponse.model_validate(
             {
@@ -228,6 +214,10 @@ async def list_features_endpoint(
     issue_type: Annotated[list[str] | None, Query()] = None,
     updated_from: Annotated[datetime | None, Query()] = None,
     updated_to: Annotated[datetime | None, Query()] = None,
+    include_ended: Annotated[
+        bool,
+        Query(description="종료된 notice 포함 여부. 기본 false."),
+    ] = False,
     page_size: Annotated[int, Query(ge=1, le=500)] = 50,
     cursor: Annotated[str | None, Query()] = None,
     sort: Annotated[AdminFeatureSort, Query()] = "name",
@@ -253,6 +243,7 @@ async def list_features_endpoint(
             issue_types=issue_type,
             updated_from=_iso(updated_from),
             updated_to=_iso(updated_to),
+            include_ended=include_ended,
             page_size=page_size,
             cursor=cursor,
             sort=sort,
@@ -465,28 +456,28 @@ async def get_feature_overrides_endpoint(
 async def get_feature_weather_values_endpoint(
     feature_id: str,
     _admin: Annotated[User, Depends(require_role("admin", "operator"))],
-    client: KorTravelMapHttpClientDep,
-    asof: Annotated[datetime | None, Query()] = None,
+    admin_client: KorTravelMapAdminClientDep,
+    asof: Annotated[
+        datetime | None,
+        Query(description="미지원. Map Admin weather 계약은 현재값만 제공한다."),
+    ] = None,
 ) -> Envelope[AdminFeatureWeatherValuesResponse]:
-    """kor-travel-map weather card를 admin deep-link tab용 값 목록으로 투영.
+    """비공개 feature도 보이는 Map Admin 최신 weather card를 값 목록으로 투영.
 
-    `asof`는 **반드시** `normalize_asof_query()`(user 라우터 소유)를 통과시킨다. transport는
-    aware만 받고(`clients/kor_travel_map.py _require_aware_datetime`) naive → aware 보정은
-    시간대 의미를 아는 HTTP 경계 한 곳이 KST로 한다 — 그 helper를 건너뛰고 raw query를 넘기면
-    offset 없는 `?asof=2026-07-01T09:00:00`이 transport `ValueError`가 되고, 그 예외는
-    KorTravelMap* 계열만 잡는 `_map_admin_errors()`를 뚫고 나가 **500**이 된다(직전 릴리스에서는
-    200이었다). user weather 라우터와 같은 helper를 쓰는 것이 두 경계의 시간대 해석이 갈라지지
-    않는 유일한 방법이다(user는 KST, admin은 UTC 같은 조용한 분화 차단).
-
-    `ValueError → 422` 방어 매핑은 **의도적으로 넣지 않았다**: `ValueError`는 너무 넓어
-    (`int()` 파싱·언패킹 등 평범한 서버 버그가 전부 여기 해당) `_map_admin_errors()`에서 잡으면
-    이 파일의 모든 핸들러에서 500이어야 할 결함이 "요청이 잘못됐다"는 422로 위장된다. 여기서
-    나는 naive datetime `ValueError`는 사용자 입력 오류가 아니라 **경계가 보정을 빼먹은 코드
-    결함**이므로, 조용히 4xx로 덮지 않고 보정 자체를 강제하고 통합 테스트
-    (`test_admin_features_api.py`)로 고정한다.
+    Map Admin 경로는 `asof` query를 선언하지 않는다. FastAPI upstream이 모르는 query를
+    조용히 버리는 일을 막기 위해, 기존 Pinvi query가 오면 현재값으로 가장하지 않고 422로
+    명시 거부한다. Admin 시점 조회는 Map에 별도 계약이 생긴 뒤 복원한다.
     """
+    if asof is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "VALIDATION_ERROR",
+                "message": "admin weather-values는 현재값만 지원하며 asof를 받을 수 없습니다.",
+            },
+        )
     with _map_admin_errors():
-        data = await client.feature_weather(feature_id, asof=normalize_asof_query(asof))
+        data = await admin_client.get_feature_weather(feature_id)
     return Envelope.of(_weather_values_from_payload(data, feature_id=feature_id))
 
 

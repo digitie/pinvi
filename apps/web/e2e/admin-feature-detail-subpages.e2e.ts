@@ -75,10 +75,48 @@ const weatherValuesResponse: AdminFeatureWeatherValuesResponse = {
       metric_name: '기온',
       forecast_style: 'nowcast',
       timeline_bucket: 'current',
+      provider_dataset_id: 41,
+      dataset_key: 'kma_vilage_forecast',
+      dataset_display_name: '기상청 단기예보',
+      known_at: '2026-06-12T09:35:00+09:00',
       valid_at: '2026-06-12T10:00:00+09:00',
       issued_at: null,
       observed_at: null,
       value_number: 24.5,
+      value_text: null,
+      unit: '℃',
+      severity: 'normal',
+    },
+    {
+      metric_key: 'T1H',
+      metric_name: '기온',
+      forecast_style: 'short',
+      timeline_bucket: 'current',
+      provider_dataset_id: 41,
+      dataset_key: 'kma_vilage_forecast',
+      dataset_display_name: '기상청 단기예보',
+      known_at: '2026-06-12T09:35:00+09:00',
+      valid_at: '2026-06-12T10:00:00+09:00',
+      issued_at: null,
+      observed_at: null,
+      value_number: 25.1,
+      value_text: null,
+      unit: '℃',
+      severity: 'normal',
+    },
+    {
+      metric_key: 'T1H',
+      metric_name: '기온',
+      forecast_style: 'nowcast',
+      timeline_bucket: 'current',
+      provider_dataset_id: 42,
+      dataset_key: 'kma_observation',
+      dataset_display_name: '기상청 관측',
+      known_at: '2026-06-12T09:40:00+09:00',
+      valid_at: '2026-06-12T10:00:00+09:00',
+      issued_at: null,
+      observed_at: null,
+      value_number: 23.8,
       value_text: null,
       unit: '℃',
       severity: 'normal',
@@ -99,6 +137,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('Admin feature detail subpage가 deep link와 tab 상태를 처리한다', async ({ page }) => {
+  test.setTimeout(60_000);
   const requests: string[] = [];
 
   await page.route(
@@ -173,7 +212,17 @@ test('Admin feature detail subpage가 deep link와 tab 상태를 처리한다', 
   );
   await page.goto('/admin/features/f_place_1/weather-values');
   await expect(page).toHaveURL(/\/admin\/features\/f_place_1\/weather-values$/);
-  await expect(page.getByTestId('admin-feature-weather-row-T1H')).toContainText('24.5');
+  const weatherRows = page.locator('[data-testid^="admin-feature-weather-row-T1H-"]');
+  await expect(weatherRows).toHaveCount(3);
+  await expect(weatherRows.filter({ hasText: '24.5' })).toContainText('nowcast');
+  await expect(weatherRows.filter({ hasText: '25.1' })).toContainText('short');
+  await expect(weatherRows.filter({ hasText: '24.5' })).toContainText('kma_vilage_forecast');
+  await expect(weatherRows.filter({ hasText: '23.8' })).toContainText('기상청 관측');
+  await expect(weatherRows.filter({ hasText: '23.8' })).toContainText('known');
+  const weatherRowTestIds = await weatherRows.evaluateAll((rows) =>
+    rows.map((row) => row.getAttribute('data-testid')),
+  );
+  expect(new Set(weatherRowTestIds).size).toBe(weatherRowTestIds.length);
 
   await page.goto('/admin/features/empty_feature/sources');
   await expect(page.getByText('source link가 없습니다.')).toBeVisible();

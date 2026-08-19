@@ -1639,14 +1639,75 @@ export const AdminFeatureDetailFileSchema = z.object({
 });
 export type AdminFeatureDetailFile = z.infer<typeof AdminFeatureDetailFileSchema>;
 
+export const AdminFeatureDetailStateTransitionSchema = z.object({
+  transition_id: z.number().int(),
+  from_lifecycle_state: AdminFeatureLifecycleStateSchema.nullable().default(null),
+  from_publication_state: AdminFeaturePublicationStateSchema.nullable().default(null),
+  from_quality_state: AdminFeatureQualityStateSchema.nullable().default(null),
+  to_lifecycle_state: AdminFeatureLifecycleStateSchema,
+  to_publication_state: AdminFeaturePublicationStateSchema,
+  to_quality_state: AdminFeatureQualityStateSchema,
+  transition_kind: z.string(),
+  reason_code: z.string(),
+  principal: z.string(),
+  provider_dataset_id: z.number().int().nullable().default(null),
+  source_entity_key: z.string().nullable().default(null),
+  source_record_key: z.string().nullable().default(null),
+  causation_ref: z.string().nullable().default(null),
+  occurred_at: Iso8601Schema,
+  row_revision: z.number().int().min(1),
+});
+export type AdminFeatureDetailStateTransition = z.infer<
+  typeof AdminFeatureDetailStateTransitionSchema
+>;
+
+/** Map curation view에서 Admin 상세 표시가 소비하는 안정 subset. */
+export const AdminFeatureDetailCurationSchema = z.object({
+  curation_item_id: z.string().uuid(),
+  collection_id: z.string().uuid(),
+  collection_key: z.string(),
+  title: z.string(),
+  edition_key: z.string(),
+  theme_slug: z.string(),
+  theme_name: z.string(),
+  theme_group: z.string(),
+  feature_id: z.string().nullable(),
+  feature_name: z.string().nullable(),
+  feature_kind: z.string().nullable(),
+  feature_category: z.string().nullable(),
+  place_name: z.string(),
+  address_hint: z.string().nullable(),
+  status: z.enum(['candidate', 'included', 'rejected', 'archived']),
+  sort_order: z.number().int(),
+  item_title: z.string().nullable(),
+  item_summary: z.string().nullable(),
+  curation_relation: z.enum([
+    'primary_stop',
+    'food_stop',
+    'cafe_stop',
+    'bookstore_stop',
+    'nearby_option',
+    'accessibility_support',
+    'pet_support',
+    'family_support',
+    'theme_area_anchor',
+  ]),
+  reuse_policy: z.enum(['allowed', 'blocked', 'manual_review']),
+  row_revision: z.string().regex(/^[1-9][0-9]*$/),
+  updated_at: Iso8601Schema,
+});
+export type AdminFeatureDetailCuration = z.infer<typeof AdminFeatureDetailCurationSchema>;
+
 export const AdminFeatureDetailSchema = z.object({
   feature: AdminFeatureDetailFeatureSchema,
   sources: z.array(AdminFeatureDetailSourceSchema).default([]),
   issues: z.array(AdminFeatureDetailIssueSchema).default([]),
   overrides: z.array(AdminFeatureDetailOverrideSchema).default([]),
+  state_transitions: z.array(AdminFeatureDetailStateTransitionSchema).default([]),
   versions: z.array(AdminFeatureDetailVersionSchema).default([]),
   change_requests: z.array(AdminFeatureChangeRequestRecordSchema).default([]),
   files: z.array(AdminFeatureDetailFileSchema).default([]),
+  curations: z.array(AdminFeatureDetailCurationSchema).default([]),
 });
 export type AdminFeatureDetail = z.infer<typeof AdminFeatureDetailSchema>;
 
@@ -1662,13 +1723,22 @@ export const AdminFeatureOverridesResponseSchema = z.object({
 });
 export type AdminFeatureOverridesResponse = z.infer<typeof AdminFeatureOverridesResponseSchema>;
 
+/** 공개 weather metric에 Map dataset/knowledge provenance를 보존한 Admin 전용 metric. */
+export const AdminFeatureWeatherMetricSchema = WeatherMetricSchema.extend({
+  provider_dataset_id: z.number().int(),
+  dataset_key: z.string(),
+  dataset_display_name: z.string(),
+  known_at: Iso8601Schema,
+});
+export type AdminFeatureWeatherMetric = z.infer<typeof AdminFeatureWeatherMetricSchema>;
+
 export const AdminFeatureWeatherValuesResponseSchema = z.object({
   feature_id: FeatureIdSchema,
   asof: Iso8601Schema.nullable().default(null),
   latest_at: Iso8601Schema.nullable().default(null),
   is_stale: z.boolean().default(false),
   source_styles: z.array(z.string()).default([]),
-  items: z.array(WeatherMetricSchema).default([]),
+  items: z.array(AdminFeatureWeatherMetricSchema).default([]),
 });
 export type AdminFeatureWeatherValuesResponse = z.infer<
   typeof AdminFeatureWeatherValuesResponseSchema

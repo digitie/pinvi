@@ -1193,6 +1193,7 @@ Query:
 | `has_issue`                  | integrity issue 보유 여부                                                  |
 | `issue_type`                 | 반복 가능 issue type                                                       |
 | `updated_from`, `updated_to` | ISO-8601 timestamp                                                         |
+| `include_ended`              | 종료된 notice 포함 여부. 기본 `false`                                      |
 | `page_size`                  | 1~500, 기본 50                                                             |
 | `cursor`                     | keyset cursor                                                              |
 | `sort`                       | `name`, `updated_at`, `created_at`, `kind`, `provider`, `issue_count`      |
@@ -1258,19 +1259,46 @@ upstream: `kor-travel-map` `GET /v1/admin/features/{feature_id}`.
   "sources": [],
   "issues": [],
   "overrides": [],
+  "state_transitions": [
+    {
+      "transition_id": 1,
+      "to_lifecycle_state": "active",
+      "to_publication_state": "published",
+      "to_quality_state": "valid",
+      "transition_kind": "provider_import",
+      "reason_code": "initial_load",
+      "principal": "service:kortravelmap",
+      "occurred_at": "2026-06-11T00:00:00+09:00",
+      "row_revision": 1,
+    },
+  ],
   "versions": [], // 항상 빈 배열 — 아래 주의 참조
   "change_requests": [], // 항상 빈 배열 — 아래 주의 참조
   "files": [],
+  "curations": [
+    {
+      "curation_item_id": "...",
+      "collection_id": "...",
+      "collection_key": "summer-busan",
+      "feature_id": "f_place_...",
+      "status": "included",
+      "curation_relation": "cafe_stop",
+      "reuse_policy": "allowed",
+      "row_revision": "2",
+    },
+  ],
 }
 ```
 
 **주의 — `versions` / `change_requests`는 항상 빈 배열이다.** 같은 cutover 이후 upstream
 `AdminFeatureDetailData`가 주는 list는 `sources` / `issues` / `overrides` / `files` /
-`state_transitions` / `curations`이고 `versions` / `change_requests`는 **없다**. Pinvi 응답에 두
-키를 남겨 둔 것은 소비자 호환 때문이며 값이 채워지지 않는다 — 이 값으로 "이력이 없다"고 표시하면
-안 된다(그래서 Admin Web 상세의 `versions`/`changes` 카운트 칩을 제거했다).
-`state_transitions`/`curations`를 실제로 투영하는 것은 admin OpenAPI 스냅샷 vendoring과 함께 갈
-후속 과제다(`docs/tasks.md` T-VN-42).
+`state_transitions` / `curations`이고 `versions` / `change_requests`는 **없다**. Pinvi 응답에
+legacy 두 키를 남겨 둔 것은 소비자 호환 때문이며 값이 채워지지 않는다. 실제 이력·큐레이션 수는
+`state_transitions` / `curations`를 사용한다.
+
+`curations`는 upstream `AdminCurationItemView` 전체의 투명 proxy가 아니라 상세 화면의 식별·표시·상태·
+정렬에 필요한 안정 subset이다. provider lineage, source URL, 원본 metadata, command ETag와 archive audit
+필드는 이 응답 계약에 포함하지 않는다. 해당 필드가 필요한 운영 기능은 별도 명시 계약으로 추가한다.
 
 ### 8.3 Feature detail subpages
 
@@ -1278,8 +1306,9 @@ upstream: `kor-travel-map` `GET /v1/admin/features/{feature_id}`.
 
 Pinvi는 detail subpage를 위해 `kor-travel-map` 데이터를 read-only로 투영한다. `sources`와
 `overrides`는 `GET /v1/admin/features/{feature_id}` detail payload에서 필요한 list만 잘라
-반환하고, `weather-values`는 기존 사용자 feature weather card 계약
-`GET /v1/features/{feature_id}/weather`의 `metrics`를 Admin tab용 `items`로 반환한다. Pinvi는
+반환하고, `weather-values`는 Admin 전용 weather card 계약
+`GET /v1/admin/features/{feature_id}/weather`의 `metrics`를 Admin tab용 `items`로 반환한다. 따라서
+공개되지 않은 feature도 운영자가 조회할 수 있다. Pinvi는
 `feature.*` 또는 `provider_sync.*` 테이블을 직접 조회하거나 override mutation을 만들지 않는다.
 
 #### `GET /admin/features/{feature_id}/sources`
@@ -1335,17 +1364,10 @@ Pinvi는 detail subpage를 위해 `kor-travel-map` 데이터를 read-only로 투
 
 #### `GET /admin/features/{feature_id}/weather-values`
 
-Query:
-
-| 이름   | 설명                                                        |
-| ------ | ----------------------------------------------------------- |
-| `asof` | 선택. ISO-8601 관측/예보 시각. 미지정 시 upstream 최신 카드 |
-
-`asof`에 offset이 없으면 **KST(Asia/Seoul)로 해석한다** — 사용자 표면
-(`GET /features/{id}/weather`)과 같은 helper(`api/v1/features.py normalize_asof_query`)를 쓴다.
-두 경계가 갈라지면 같은 query가 9시간 다른 시점을 조회한다. offset이 있으면 그대로 존중한다.
-`asof`를 주면 upstream 경로가 bitemporal snapshot(`…/weather/snapshot`)으로 바뀌는 것도 사용자
-표면과 동일하다(`docs/api/features.md` §2.3).
+Query 없음. Map Admin weather 계약은 현재 카드만 제공한다. 이전 Pinvi 계약의 `asof`를 보내면
+upstream이 모르는 query를 조용히 버리고 최신값을 반환하는 대신 `422 VALIDATION_ERROR`로 명시 거부한다.
+공개 feature의 시점 조회는 사용자 표면(`GET /features/{id}/weather?asof=...`)을 사용한다. 비공개
+feature의 시점 조회는 Map Admin 계약에 별도 snapshot 경로가 추가되기 전까지 지원하지 않는다.
 
 응답 `data`:
 
@@ -1362,6 +1384,10 @@ Query:
       "metric_name": "기온",
       "forecast_style": "nowcast",
       "timeline_bucket": "current",
+      "provider_dataset_id": 41,
+      "dataset_key": "kma_vilage_forecast",
+      "dataset_display_name": "기상청 단기예보",
+      "known_at": "2026-06-12T09:35:00+09:00",
       "valid_at": "2026-06-12T10:00:00+09:00",
       "value_number": 24.5,
       "value_text": null,

@@ -113,29 +113,21 @@ function JsonBlock({ value }: { value: unknown }) {
   );
 }
 
-/**
- * kor-travel-map admin 상세가 **실제로 주는** list만 센다.
- *
- * `versions`/`change_requests`는 3축 cutover(`1f2bdc3a`) 이후 upstream payload에 없다
- * (있는 list는 sources / issues / overrides / files / state_transitions / curations).
- * Pinvi 응답은 소비자 호환을 위해 두 키를 빈 배열로 남겨 두는데, 그걸 그대로 세면 화면에는
- * 늘 `versions 0` / `changes 0`이 뜬다 — 운영자에게 "이력이 없다"로 읽히지만 실제로는
- * "가져오지 않는다"라 **거짓 0**이다. 그래서 두 칩을 지웠다.
- *
- * upstream이 주는 `state_transitions`/`curations`로 대체하지 않은 이유: Pinvi proxy가 아직 두
- * list를 투영하지 않아(`schemas/admin.py AdminFeatureDetail`가 모르는 키를 버린다) 지금 칩만
- * 바꾸면 또 다른 거짓 0이 된다. 실제 투영은 admin OpenAPI 스냅샷 vendoring과 묶어서 한다
- * (`docs/tasks.md` T-VN-42).
- */
 function CountLine({ detail }: { detail: AdminFeatureDetail }) {
   return (
-    <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:grid-cols-6">
       <span className="rounded-sm bg-surface-soft px-2 py-1">sources {detail.sources.length}</span>
       <span className="rounded-sm bg-surface-soft px-2 py-1">issues {detail.issues.length}</span>
       <span className="rounded-sm bg-surface-soft px-2 py-1">
         overrides {detail.overrides.length}
       </span>
+      <span className="rounded-sm bg-surface-soft px-2 py-1">
+        transitions {detail.state_transitions.length}
+      </span>
       <span className="rounded-sm bg-surface-soft px-2 py-1">files {detail.files.length}</span>
+      <span className="rounded-sm bg-surface-soft px-2 py-1">
+        curations {detail.curations.length}
+      </span>
     </div>
   );
 }

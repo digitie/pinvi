@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { AdminKorTravelMapEtlSummarySchema, AdminProviderDatasetSummarySchema } from './admin';
+import {
+  AdminFeatureWeatherValuesResponseSchema,
+  AdminKorTravelMapEtlSummarySchema,
+  AdminProviderDatasetSummarySchema,
+} from './admin';
 
 describe('AdminKorTravelMapEtlSummarySchema', () => {
   it('accepts partial operation status counts and defaults an absent map', () => {
@@ -48,5 +52,36 @@ describe('AdminProviderDatasetSummarySchema', () => {
 
     const { operation_key: _operationKey, ...withoutOperationKey } = row;
     expect(AdminProviderDatasetSummarySchema.safeParse(withoutOperationKey).success).toBe(false);
+  });
+});
+
+describe('AdminFeatureWeatherValuesResponseSchema', () => {
+  const response = {
+    feature_id: 'f_weather_1',
+    items: [
+      {
+        metric_key: 'T1H',
+        forecast_style: 'nowcast',
+        provider_dataset_id: 41,
+        dataset_key: 'kma_vilage_forecast',
+        dataset_display_name: '기상청 단기예보',
+        known_at: '2026-06-12T09:35:00+09:00',
+      },
+    ],
+  };
+
+  it('preserves required Admin weather dataset and knowledge provenance', () => {
+    const parsed = AdminFeatureWeatherValuesResponseSchema.parse(response);
+
+    expect(parsed.items[0]!).toMatchObject(response.items[0]!);
+  });
+
+  it('rejects an Admin weather metric without provenance', () => {
+    const metric = { ...response.items[0] };
+    delete (metric as Partial<typeof metric>).known_at;
+
+    expect(
+      AdminFeatureWeatherValuesResponseSchema.safeParse({ ...response, items: [metric] }).success,
+    ).toBe(false);
   });
 });

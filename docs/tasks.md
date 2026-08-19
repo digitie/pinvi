@@ -22,9 +22,10 @@
   - [x] user 표면 `status` 소비 절단 + **누출 방지 회귀 테스트**(단위/통합, 되돌리면 red).
   - [x] 시점 조회 snapshot 경로 복구 + query 계약 exact 핀(`/weather`는 빈 집합).
   - [x] 공개 문서 정정(`docs/api/features.md` §1.1·§2.3, `docs/integrations/kor-travel-map-rest-api.md`).
-  - [x] **admin 표면 3축 정렬** — `schemas/admin.py`가 사라진 `status`를 required로 둬 admin
-        feature 목록/상세가 502 `FEATURE_SERVICE_BAD_GATEWAY`였던 것을 `lifecycle_state`/
-        `publication_state`/`quality_state` 3축 + admin client query 이름
+  - [x] **admin 표면 3축 정렬(PR #451)** — Map admin `AdminFeatureRecord`/
+        `AdminFeatureDetailFeatureRecord`에도 `status`가 없다. `schemas/admin.py`가 이를 required로
+        두고 있어 PinVi admin의 feature 목록/상세가 502 `FEATURE_SERVICE_BAD_GATEWAY`였고,
+        `lifecycle_state`/`publication_state`/`quality_state` 3축 + admin client query 이름
         (`status`/`provider`/`dataset_key` → 3축/`provider_dataset_id`)으로 재배선했다.
   - [x] **user client query 폐쇄 게이트** — `_CLIENT_QUERY_PARAMETERS`가 `_CLIENT_PATHS` 전체를
         덮도록 폐쇄 단언을 걸고(면제 없음), "client가 스냅샷에 없는 query를 보내는지"를 MockTransport로
@@ -32,16 +33,19 @@
         제거하고, Pinvi 표면의 `active_only`는 응답 `is_active`로 **로컬 필터**로 구현했다
         (공개/admin 두 라우터 + 문서 + 테스트). `_CLIENT_PATHS` 목록 자체도 client 소스의 `/v1/...`
         리터럴과 양방향 정확 일치를 강제해(정적 스캔) "목록에 안 적어서 검사도 안 되는" 구멍을 닫았다.
-  - [ ] **admin weather-values 경로 전환** — `api/v1/admin/features.py`가 user 경로를 써서 비공개
-        feature의 admin 조회가 404다. Map admin 전용 `GET /v1/admin/features/{id}/weather`로 옮긴다.
-        (같은 핸들러의 `asof` 보정은 라운드 2에서 `normalize_asof_query()` 통과로 해결됨.)
-  - [ ] **admin 상세 `state_transitions`/`curations` 투영** — Map admin 상세가 주는 list는
+  - [x] **admin weather-values 경로 전환** — Map admin 전용
+        `GET /v1/admin/features/{id}/weather`로 옮겨 비공개 feature도 조회한다. Admin upstream에는
+        `asof` 계약이 없으므로 기존 query는 조용히 최신값으로 가장하지 않고 422로 거부한다. 각 metric의
+        `provider_dataset_id`/`dataset_key`/`dataset_display_name`/`known_at` provenance도 보존한다.
+  - [x] **admin 상세 `state_transitions`/`curations` 투영** — Map admin 상세가 주는 list는
         sources/issues/overrides/files/**state_transitions**/**curations**이고 Pinvi가 남겨 둔
         `versions`/`change_requests`는 늘 빈 배열이다. Web 상세의 거짓 0 카운트 칩은 제거했고, 두 list를
-        실제로 투영하는 것은 아래 admin 스냅샷 vendoring과 함께 한다.
-  - [/] **admin OpenAPI 스냅샷 vendoring** — PR #443이 Map 전체 Admin 스냅샷 byte pin과 ops
-        dataset/pipeline 소비 게이트를 먼저 추가했다. T-VN-42에서는 같은 스냅샷에 admin feature
-        query/응답 필드 계약을 추가해 위 2개 admin 후속의 재발을 막는다.
+        표시용 안정 subset으로 투영하고 Web 상세에서 실제 개수를 표시한다. upstream 내부 lineage/link/
+        audit 전체를 투명 proxy하는 계약은 아니다.
+  - [x] **admin OpenAPI 스냅샷 vendoring** — PR #443이 Map `da2c740a`의 전체 Admin 스냅샷
+        (SHA-256 `22e3f2f…`) byte pin과 ops dataset/pipeline 소비 게이트를 소유한다. T-VN-42는 같은
+        스냅샷의 feature 경로·AdminBFF security·query exact 집합·응답 schema 연결·3축/state
+        transition/curation/weather 소비 shape를 계약 테스트로 고정했다.
   - [ ] **공개 `status` 필드 제거(별도 breaking cutover)** — `FeatureSummary`/`FeatureDetail`/
         `DetailCardBase`(`app/schemas/feature.py`)는 지금 항상 None인 `status`를 web/mobile 계약 때문에
         남겨 두고 있다. web/mobile 소비처와 함께 정리한다.

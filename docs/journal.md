@@ -2,6 +2,43 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-19 (codex) — T-VN-42 Admin 계약 폐쇄 + Codex worktree 복구
+
+- **중복 방지 감사**: 로컬 `d978eff2`의 consumer 수정은 이미 squash PR #451(`c13ea5d6`)에 전부
+  포함돼 있었다. 이를 다시 cherry-pick하지 않고, `docs/tasks.md`에 남은 Admin 3건만 후속 범위로
+  확정했다. 공개 `status` 제거는 별도 breaking cutover로 유지한다.
+- **저장공간/복구**: 병합 완료·clean worktree와 Pinvi가 재생성할 수 있는 `node_modules`, `.venv`,
+  CodeGraph/test cache만 정리해 `/mnt/f` 여유 공간을 약 9.6 GB → 13 GB로 늘렸다. Windows lock 때문에
+  상위 디렉터리 rename은 하지 못해 기존 내용을 `pinvi-codex-orphan-20260819`에 보존하고, Codex
+  worktree를 최신 `origin/main`에서 `agent/codex-tvn42`로 재생성했다. orphan의 `.env`, Telegram
+  session, DB dump는 실제 local state이므로 삭제하지 않았다.
+- **Admin weather**: Pinvi `/admin/features/{id}/weather-values`가 user 경로를 호출해 비공개 feature를
+  404로 만들던 것을 Map Admin 전용 `/v1/admin/features/{id}/weather`로 전환했다. 이 upstream 경로는
+  query가 없으므로 기존 `asof`는 422로 명시 거부한다. 모르는 query를 upstream이 조용히 버려 최신값을
+  과거값처럼 반환하는 실패를 차단한다.
+- **상세 투영**: Map의 실제 `state_transitions`와 `curations` 중 Pinvi가 소비하는 필드를 Python
+  Pydantic과 공유 Zod 계약에 추가하고, Admin Web 상세의 실제 count chip과 API/Web 회귀 fixture를
+  연결했다. upstream에 없는 legacy `versions`/`change_requests`는 호환용 빈 배열로만 유지한다.
+- **계약 게이트**: Map `da2c740aa4b4239821075519959c38534cc65d2f`의
+  `packages/kor-travel-map-api/openapi.json` 전체 1,501,480 bytes를 SHA-256
+  `22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32`로 고정했다. Admin feature
+  3경로의 AdminBFF security, exact query 집합, response/container ref, 3축·transition·curation·weather
+  소비 shape를 별도 unit gate로 검증한다.
+- **stack 정렬**: 전문 적대 리뷰와 필수 원격 CI를 통과한 draft PR #443 head `cbdf2815`를 이 브랜치에
+  병합했다. 동일한 Admin OpenAPI byte snapshot은 한 파일로 재사용하고, #443의 ops gate와 T-VN-42의
+  feature gate를 함께 검증한다. PR #456 base는 #443 브랜치로 바꿔 순서를 명시한다.
+- **stack 적대 리뷰**: API 전문 리뷰의 P2에 따라 Admin weather metric이 Map의 dataset
+  ID/key/display name과 `known_at` provenance를 버리지 않도록 전용 Python/Zod schema와 fixture를
+  추가했다. `curations`는 producer 전체 내부 view가 아니라 상세 표시용 안정 subset이라는 경계를
+  schema·계약 테스트·문서에 명시했다. 프론트 전문 리뷰의 P2는 Admin 날씨 표가 public base type으로
+  provenance를 표시하지 않고 서로 다른 dataset 행의 React key를 합치던 문제를 찾았다. 전용 Admin
+  type과 dataset/known 표시를 사용하고 metric/style/timeline/time/dataset/known 전체 identity를 React
+  key와 test id에 반영했다. 동일 시각·metric에서 dataset 또는 style만 다른 3행 E2E가 DOM 식별자도
+  모두 고유한지 검증한다.
+- **stack 검증**: 결합 API unit `365 passed`, feature/provider-sync integration `48 passed`, feature
+  integration 재검증 `16 passed`, API Ruff/format/mypy(222 files), schemas Vitest `16 passed`,
+  schemas/Web typecheck와 Web lint/Prettier 통과.
+
 ## 2026-08-19 (codex) — PR #443 Map Admin ops 삼중항 복구
 
 - **충돌 해소**: `fix/tvn41-map-triple-contract`를 최신 main에 merge하고 T-VN-42와 겹치던 feature 파일은
@@ -24,9 +61,9 @@
   보강했다.
 - **검증**: projection unit `216 passed`, API unit `1,013 passed`(T-VN-42 소유 local Map user-spec
   신선도 1건 제외), OpenAPI gate `31 passed`, provider-sync integration `32 passed`, schemas Vitest
-  `3 passed`, schemas/web typecheck, Ruff/Prettier 통과.
+  `3 passed`, schemas/web typecheck, Ruff/Prettier와 최종 필수 원격 CI 통과.
 - **배포 경계**: Map 삼중항 release와 docker-manager draft PR #170 merge·배포 전에는 production-ready가
-  아니다. 다음은 반영 후 최종 CI 수렴이며, 완료 뒤 draft PR #456의 T-VN-42로 이동한다.
+  아니다. PR #443은 draft로 유지하고 후속 draft PR #456을 그 위에 stack한다.
 
 ## 2026-08-19 (claude) — T-310: Android 에뮬레이터 Dev Client smoke
 
@@ -60,7 +97,6 @@ react 핀을 내리면서 `expo-doctor`의 duplicate 체크가 하나 늘었다(
 루트 `overrides`로 단일 버전을 강제하는 안을 시험했으나 npm이 `packages/*`의 `react >=18` 때문에
 root 19.2.6을 유지해 3벌이 되는 등 웹 런타임까지 건드리는 정렬 작업이라, 이번 PR에서 되돌리고
 T-311로 분리했다. 이 체크는 CI를 막지 않는 informational job이다.
-
 
 ## 2026-08-19 — Hallmark 재설계 완주(T-313~T-316)
 
@@ -7516,7 +7552,7 @@ PR-C 전체 DoD 중 "viewport 기반 feature 로딩 + 클러스터 렌더 + 팔�
 - `api/v1/admin/notice_plans.py` 신규 — §5.3 plan 첨부(GET/POST/DELETE) + §5.4 POI 첨부
   (GET/POST/DELETE). `require_role("admin")`→비admin 404. plan/POI 없으면 404 `NOT_FOUND`,
   개수 초과 409. POST/DELETE 는 admin*audit chain 기록(`curated_plan.attachment*_`/`curated*poi.attachment*_`). DELETE 는 soft delete 만 — RustFS object 보존(§5.6, notice→trip
-copy 시 `storage_key` 공유).
+  copy 시 `storage_key` 공유).
 - 응답은 `AttachmentResponse`(curated*\* + notice*\* alias 항상 동기). 입력 `AttachmentCreate`
   (storage_key 위생 검증 재사용).
 - 테스트 4건(plan CRUD / POI CRUD / unknown-plan 404 / 비admin 404).
