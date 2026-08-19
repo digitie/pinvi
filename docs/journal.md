@@ -2,6 +2,22 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-19 — Hallmark 재설계 완주(T-313~T-316)
+
+T-312에서 잠근 시스템(`DESIGN.md`)을 표면에 끝까지 적용했다. T-313 토큰 우회 코드모드(89파일, PR #448),
+T-314 앱 셸 하단 탭바·대시보드 상태 UI(PR #450), T-315 모달 셸 수렴(`components/ui/Dialog` + 8종 이관,
+PR #452), T-316 요청 수명 계약·모달 격리(portal + 스택 인지형 inert)·파괴적 액션 확인 정책·여행 상세
+컨테인먼트·설정/법무/지도/파일 표면·44px 스윕(PR #455).
+
+배운 것 두 가지. (1) **모달의 busy 잠금은 UI 혼자 풀 수 없다** — 닫기만 열어 두면 진행 중 요청이 취소되지
+않아 닫은 모달이 되살아나고 비멱등 POST가 중복된다. 탈출구는 반드시 in-flight 취소와 함께 줘야 하고,
+클라이언트 취소가 서버 처리를 되돌리지 못하는 비멱등 요청은 "결과 불확실"을 사용자에게 알려야 한다.
+(2) **반쯤 맞는 타임아웃은 없느니만 못하다** — 헤더까지만 덮거나 4xx로 표면화하면 취소 계약과
+Idempotency-Key 계약을 동시에 깨뜨린다(T-315 3차 리뷰에서 철회 후 T-316에서 요구사항을 갖춰 재도입).
+
+규칙이 다시 새지 않도록 DESIGN.md 항목을 `apps/web/eslint.config.mjs` lint 가드로 옮겼다 — 토큰 우회,
+그림자 티어, 임의 z-index/타이포, 44px 미달 컨트롤을 사용자 표면에서 차단한다.
+
 ## 2026-08-19 (codex) — T-VN-41S typed snapshot error 소비
 
 - **변경**: 선행 #453이 Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의 service
@@ -44,7 +60,7 @@
   명시 offset 보존). docstring도 현재 정책으로 갈아끼웠다.
 - **P1 ② admin weather-values가 naive `?asof=`에서 500**: `api/v1/admin/features.py`가
   `normalize_asof_query()`를 건너뛰고 raw query를 client에 넘겨 transport `ValueError`가
-  `_map_admin_errors()`(KorTravelMap* 계열만 포착)를 뚫었다. user 라우터와 **같은 helper**를
+  `_map_admin_errors()`(KorTravelMap\* 계열만 포착)를 뚫었다. user 라우터와 **같은 helper**를
   통과시키도록 고쳤고(순환 import 없음 — `app/api/v1/__init__.py`가 `features`를 `admin`보다 먼저
   import), 통합 테스트로 naive `?asof=` 200 + client가 받은 값이 aware KST임을 고정했다. 통합 fake의
   `feature_weather`도 실제 transport 정책(naive 거절)을 흉내내게 해서, 라우터가 다시 보정을 빼먹으면
@@ -149,6 +165,7 @@
   검증까지 마친 교체본을 인수인계했다(naive는 `pytest.raises(ValueError, match="UTC offset")`,
   aware KST는 그대로 통과). `api/v1/admin/features.py`의 weather-values도 `asof`를
   `normalize_asof_query()`에 통과시켜야 한다.
+
 ## 2026-08-18 (claude) — #444 후속: service provenance `map_release_revision` 재핀(dangling → Map #975 머지 SHA)
 
 - **문제**: #444가 핀한 Map 후보 `e093e555…`는 어떤 Map 브랜치에도 없는 dangling 커밋(리뷰 P1). Map #975가

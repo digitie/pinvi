@@ -7,10 +7,8 @@
 
 ## 현재 선점 / 충돌 회피
 
-- **T-316 = Claude** — `agent/claude-hallmark-t316`(PR #455)은 `apps/web` 디자인 표면과
-  `packages/api-client` 요청 수명 계약만 건드린다. `apps/api`·ETL·contract 스냅샷은 범위 밖이다.
 - **T-310 = Claude** — `agent/claude-issue-215-followup`(PR #446, 리뷰/머지 대기)은 `apps/mobile`과
-  `@pinvi/domain` 순수 검증 헬퍼만 건드린다. T-316의 web 표면과 겹치지 않는다.
+  `@pinvi/domain` 순수 검증 헬퍼만 건드린다.
 - **PR #443(draft) = Codex** — `fix/tvn41-map-triple-contract`는 ops dataset membership 계약만
   건드린다. T-VN-41 계열 파일을 만지기 전 이 PR과 충돌 범위를 확인한다.
 
@@ -93,41 +91,6 @@
   Manager PR #130으로 됐으나 그 pin(`c0afaa4e…`)은 F1F-A에서 old release로 판정돼 재핀됐고, F1A(default-off
   bootstrap)는 착수되지 않은 채 F1D-C one-shot·F1F-B canonical env replace로 대체됐으며, F2 cutover는 미착수다.
   문서 헤더에 역사 기록으로 표기했다. 현행 실행 정본은 위 F1J 항목이며 두 문서가 어긋나면 F1J(신규)를 따른다.
-
-## 웹 디자인 시스템 — Hallmark 감사·재설계 (2026-08-18)
-
-> 감사 정본: `docs/journal.md` 2026-08-18 항목(13 critical · 26 major · 19 minor, 7표면). 잠금 시스템:
-> `DESIGN.md` "Hallmark 잠금 시스템". 완료분 T-312~T-315는 `docs/tasks-done.md`.
-
-- [/] **T-316 = Claude** — Hallmark PR-5(모달 격리·확인 정책 + 여행 상세 + 설정/법무/지도/파일) +
-  요청 수명 계약. 브랜치 `agent/claude-hallmark-t316`, PR #455. 범위는 `apps/web` +
-  `packages/api-client`. 조사 3인 매핑(48항목) 기준.
-  - [x] **(1/5) 요청 수명 계약 + 모달 오류 소유권** — api-client 5요구사항(타이머가 body 소비
-        완료까지 유지·abort가 전 생애주기 전파·`status 0`으로 타임아웃과 서버 확정 4xx 구분·장시간
-        admin 호출 9종 `timeoutMs: 0`·`Dialog.onCancelBusy` 취소 탈출구)과 6차 적대적 리뷰가 main에서
-        잡은 잔여 결함 4건(일자 409 재시도 막다른 길·포커스 폴백 no-op·전역 오류 누수·날짜 오류 잔존).
-  - [x] **(2/5) 모달 격리·확인 정책** — `useModalDialog` body portal + 스택 인지형 배경 inert
-        (+ `focusable`이 inert 상속을 보게 수정), `RestoreHotswapDialog` 프리미티브 수렴(407→265줄,
-        마지막 손복사 셸 제거), `window.confirm` 6곳·`window.prompt` 1곳 제거 → `ConfirmDialog`/
-        사유 입력 Dialog(저장소 전역 native dialog 0건), e2e의 `page.on('dialog')` 5곳 재작성.
-  - [x] **(3/5) TripDetail** — 4겹 컨테인먼트(패널→일자 카드→POI 카드→tinted 첨부/날씨, 320px에서
-        유효 폭 −35.3% 실측) 해체와 중복 컨트롤(일자 추가 4곳·개수 배지 5곳·공유 2곳) 정리.
-  - [x] **(4/5) 나머지 표면** — `FeatureMapView` 상시 오류 dl 삭제(모바일에서 지도의 33% 점유) +
-        조건부 오류/로딩/빈 상태, `MapView` 디버그 dl 삭제, nav '지도'를 데모 셸 대신 실제 탐색
-        지도(`/map`)로 교정, DSR/신고 raw JSON textarea → 일반 폼 필드(서버 자유형 record 위에 프런트
-        계약을 세우고 전송 리터럴은 보존), 법무 measure 65ch·본문 16px·초안 배너 중립화·공개 chrome
-        (`app/legal/layout.tsx`, 문서 간 이동 링크 0개 해소), 설정 4쪽의 admin chrome 분리
-        (`components/app/SettingsSurface`: uppercase eyebrow h2·12px 표 헤더·카드 안 카드 제거,
-        표 → hairline row 리스트, skeleton/빈 상태 CTA), 파일 화면 상태 UI(skeleton·회복 행동·44px·
-        100건 절단 표시).
-  - [x] **(5/5) Hallmark 잔여 이탈 종결** — 사용자 표면의 44px 미달 컨트롤 53곳을 `min-h-11`/`size-11`로
-        올리고 컨트롤 라벨 12px → 14px, 입력 14px → 16px(iOS 자동 확대 방지). 재발 방지는 새 lint 가드가
-        맡는다(T-317 흡수): `eslint.config.mjs`의 `no-restricted-syntax`가 토큰 우회(`bg-white`/`text-white`/
-        `bg-black/`), 그림자 티어 이탈(`shadow-sm|md|lg|xl|2xl`), 임의 z-index(`z-[`), 임의 타이포(`text-[Npx]`),
-        44px 미달 컨트롤을 **사용자 표면에서** 차단한다(밀도가 다른 `(admin)`은 제외). 마커 팔레트 인라인 색
-        위 텍스트 3곳만 사유 주석과 함께 예외로 남겼다.
-        ※ `eslint-plugin-tailwindcss` 대신 자체 규칙을 썼다 — 필요한 것은 클래스 정렬이 아니라 **토큰 정책
-        집행**이고, 새 의존성 없이 DESIGN.md 규칙을 그대로 표현할 수 있다.
 
 ## 모바일
 
