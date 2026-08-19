@@ -1,8 +1,9 @@
 """`/admin/feature-requests/*` — 사용자 feature 제안 검토 큐 (T-179).
 
-사용자 제안(`app.feature_suggestions`, T-177)을 Admin이 검토해 승인/거절한다. 승인 시
-kor_travel_map `/v1/admin/features*` change API(전송 client = T-180)로 전달하고, 반환된
-feature_id/request_id/state를 `kor_travel_map_ref`에 저장한다.
+사용자 제안(`app.feature_suggestions`, T-177)을 Admin이 검토해 승인/거절한다. correction/closure
+승인은 kor_travel_map `/v1/admin/features*` change API(전송 client = T-180)로 전달하고, 반환된
+feature_id/request_id/state를 `kor_travel_map_ref`에 저장한다. new_place 승인은 canonical queue
+cutover 전까지 503으로 fail-close하고 pending 상태를 보존한다.
 
 §7 합의 5건 (kor_travel_map T-217c **확정**, 2026-06-11, kor_travel_map `docs/decisions.md` ADR-051):
 - **review_mode**: kor_travel_map 설정(기본 `require_review` 2단 검토 → status=approved, `immediate`면 added)
@@ -218,41 +219,29 @@ async def approve_feature_request_endpoint(
     admin_client: KorTravelMapAdminClientDep,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Envelope[AdminFeatureRequestResult]:
-    """승인 — kor_travel_map change API 호출 후 상태/`kor_travel_map_ref` 갱신 + audit.
+    """승인 — correction/closure만 Map change API 호출 후 상태/ref 갱신 + audit.
 
+    new_place는 canonical queue가 준비될 때까지 outbound 없이 503으로 fail-close한다. correction/closure는
     kor_travel_map 호출을 먼저 하고 성공 시에만 DB commit한다(실패 시 제안은 pending 유지 → 재시도).
     """
     suggestion = await _load_pending(db, request_id)
+    stype = suggestion.suggestion_type
+    if stype == "new_place":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "MAP_FEATURE_REQUEST_QUEUE_UNAVAILABLE",
+                "message": "신규 장소 등록 큐가 준비되지 않아 승인할 수 없습니다.",
+            },
+        )
+
     # 출처 태깅 (§7 #3 확정, kor_travel_map T-217c / D-11 익명): operator는 **고정 문자열**(admin id
     # 미노출), suggestion_id는 reason 머리에 `[suggestion:<id>]` prefix로 실어 change-requests
     # 큐에서 출처 식별. kor_travel_map는 개인정보를 저장하지 않고, 역추적은 Pinvi admin이 한다.
     operator = "pinvi-admin"
     reason = f"[suggestion:{request_id}] {body.kor_travel_map_reason or body.access_reason}"
-    stype = suggestion.suggestion_type
 
-    if stype == "new_place":
-        if not (body.category and body.marker_color and body.marker_icon):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail={
-                    "code": "VALIDATION_ERROR",
-                    "message": "신규 장소 승인은 category/marker_color/marker_icon이 필요합니다.",
-                },
-            )
-        payload: dict[str, Any] = {
-            "kind": suggestion.kind,
-            "name": body.name or suggestion.name,
-            "category": body.category,
-            "marker_color": body.marker_color,
-            "marker_icon": body.marker_icon,
-            "reason": reason,
-            "coord": {"lon": float(suggestion.lng), "lat": float(suggestion.lat)},
-            "idempotency_key": str(suggestion.request_id),
-            "operator": operator,
-        }
-        with _map_admin_errors():
-            record = await admin_client.create_feature(payload)
-    elif stype == "correction":
+    if stype == "correction":
         if suggestion.target_feature_id is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

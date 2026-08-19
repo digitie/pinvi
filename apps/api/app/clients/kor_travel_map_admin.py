@@ -1,7 +1,8 @@
-"""kor-travel-map admin OpenAPI HTTP client — feature change relay (T-180).
+"""kor-travel-map admin OpenAPI HTTP client — feature correction/closure relay (T-180).
 
 Pinvi Admin이 1차 검토·승인한 사용자 feature 제안을 kor_travel_map `/v1/admin/features*`
-(POST/PATCH/DELETE + change-requests approve/reject)로 전송하는 admin-path client다.
+(PATCH/DELETE + change-requests approve/reject)로 전송하는 admin-path client다. 신규 feature 생성은
+canonical queue cutover 전까지 이 client에서 직접 호출하지 않는다.
 API base는 **:12701 `/v1/admin/*`** 이다. 사용자 토큰을 전달하지 않고
 설정된 admin service token(`X-Kor-Travel-Map-Service-Token`)과, 운영에서 kor_travel_map
 admin proxy gate가 켜진 경우 `X-Kor-Travel-Map-Admin-Proxy-Secret`/actor 헤더를 보낸다.
@@ -532,13 +533,7 @@ class KorTravelMapAdminClient:
             raise KorTravelMapError("admin change 응답에 data.request 가 없습니다.")
         return record
 
-    # ── feature change (T-179 승인 시 호출) ─────────────────────────────────
-
-    async def create_feature(self, payload: Mapping[str, Any]) -> dict[str, Any]:
-        """POST /v1/admin/features — 신규 feature(place/event) 생성 요청. `data.request` 반환."""
-        return self._change_record(
-            await self._send("POST", "/v1/admin/features", json=dict(payload))
-        )
+    # ── feature correction/closure (T-179 승인 시 호출) ───────────────────────
 
     async def patch_feature(self, feature_id: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         """PATCH /v1/admin/features/{id} — 정보 수정(correction). `reason` 필수."""

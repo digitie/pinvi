@@ -407,18 +407,22 @@ tier1..4_code/name, is_active, sort_order, db_active|null, db_feature_count|null
   콘솔에서 운영. **Pinvi 일반 사용자 비노출, 사용자 제안 흐름과 무관.**
   Pinvi 제품은 surface하지 않는다.
 
-**(B) 사용자 feature 제안 = Pinvi 소유 → 승인 시 kor_travel_map feature change API로 반영**
+**(B) 사용자 feature 제안 = Pinvi 소유 → 유형별 승인 경계 분리**
 
 - ① **사용자 제안 큐** (user 도메인, T-177 완료): `app.feature_suggestions` +
   `POST /features/requests`(즉시 201) + `GET /features/requests/{id}`.
   rate-limit/dedup. **kor_travel_map 직접 호출 X.**
 - ② **Pinvi Admin 검사/승인/거절** (admin 도메인): `/admin/feature-requests` +
-  approve/reject(RBAC admin/operator + audit). **승인 시 §2.9 kor_travel_map feature change API 호출.**
+  목록(RBAC admin/operator), approve/reject(RBAC admin + audit).
+  - `new_place` approve는 canonical queue cutover 전까지 `503
+    MAP_FEATURE_REQUEST_QUEUE_UNAVAILABLE`로 fail-close한다. kor_travel_map outbound, status/ref/audit 변경은
+    모두 0이며 제안은 `pending`으로 남는다.
+  - `correction`/`closure` approve만 §2.9의 `PATCH`/`DELETE` feature change API를 호출한다.
 
 ### 2.9 feature change API — `POST/PATCH/DELETE /admin/features` (kor_travel_map PR #317, K-15 해소)
 
 **Pinvi Admin 도메인 전용**(`require_admin_destructive_enabled` + 서비스 토큰 —
-**API base는 :12701 `/v1/admin/*`**). 사용자 제안 승인 시 호출.
+**API base는 :12701 `/v1/admin/*`**). Pinvi는 correction/closure 제안 승인 시에만 호출한다.
 `place`/`event`만 대상. **kor_travel_map ADR-051(2026-06-10)이 이 흐름을 전송 구간 정본으로
 공식 승인** — 별도 suggestions API는 만들지 않는다.
 
@@ -429,6 +433,14 @@ tier1..4_code/name, is_active, sort_order, db_active|null, db_feature_count|null
 | 삭제(soft) | `DELETE /admin/features/{feature_id}`                                  | `AdminFeatureDeleteRequest`: `reason*`, `operator?`                                                                                                                                                                                                               | 〃                           |
 | 비활성     | `POST /admin/features/{feature_id}/deactivate`                         | `AdminFeatureDeactivateRequest`                                                                                                                                                                                                                                   | —                            |
 | 검수 큐    | `GET /admin/features/change-requests`, `POST .../{id}/approve\|reject` | `AdminFeatureReviewActionRequest`(operator/reason)                                                                                                                                                                                                                | 〃                           |
+
+> **T-VN-M01 선행 cutover(2026-08-19)**: 위 `POST /admin/features`는 kor_travel_map의 upstream
+> 표면 설명이며 Pinvi direct caller 계약이 아니다. Pinvi `KorTravelMapAdminClient.create_feature`와
+> `new_place` direct call은 제거했다. 새 canonical create/queue 계약과 paired receipt가 확정되는 후속
+> cutover 전에는 이 경로를 다시 호출하지 않는다.
+> **TODO blocker**: kor_travel_map M01 최종 spec이 확정되면 vendored Admin OpenAPI와 contract
+> SHA를 같은 Pinvi PR에서 갱신하고, 양 저장소 merge SHA + spec SHA로 paired receipt를 남긴다. 그 전까지
+> 기존 snapshot/SHA는 의도적으로 변경하지 않는다.
 
 - **낙관적 동시성(T-VN-13)**: 수정·삭제 전에
   `GET /admin/features/{feature_id}/revision`을 호출해 raw strong `ETag`를 읽고, 그 값을
@@ -494,9 +506,9 @@ POI를 만든다. 수동 POI는 보존한다. Map Python package import와 Map D
 - 레거시 `apps/api/app/etl_bridge/kor_travel_map.py`(in-process Protocol stub) + `features.py`
   라우터는 아직 stub을 사용 → `/features/*` 503. **라우터 cutover/셰입 정렬은 T-173/T-124**.
 - `trip_view_builder`/`cluster_query`는 완성됐으나 미연결(T-175/T-174).
-- admin 도메인 feature change client는 미구현(T-180, PR #317로 대상 API 생김).
-  **base는 API 12701 `/v1/admin/*`** 이며, `pinvi_kor_travel_map_admin_base_url`도
-  같은 기본값을 사용해야 한다.
+- ✅ admin 도메인 feature correction/closure client는 구현돼 있다. **base는 API 12701
+  `/v1/admin/*`** 이며, `pinvi_kor_travel_map_admin_base_url`도 같은 기본값을 사용한다.
+  `new_place` direct create caller는 T-VN-M01 선행 cutover에서 제거했다.
 
 ---
 
@@ -511,6 +523,9 @@ POI를 만든다. 수동 POI는 보존한다. Map Python package import와 Map D
 4. **DEC-05 — K-15 해소(kor_travel_map PR #317)**: feature change API(`POST/PATCH/DELETE
 /v1/admin/features*`) 신설됨 → T-179 완료. **§7 합의 5건 ✅ 확정(kor_travel_map T-217c, 2026-06-11,
    kor_travel_map `decisions.md` ADR-051)** + Pinvi 반영 완료:
+   - **현재 override(T-VN-M01, 2026-08-19)**: 아래 합의 중 direct create/idempotency 설명은 역사적
+     기록이다. `new_place` approve는 queue 준비 전 503/pending으로 닫고, correction/closure만 기존
+     PATCH/DELETE 전송을 유지한다.
    1. **review_mode**: 기본 `require_review` 2단 검토(Pinvi 1차 + kor_travel_map 운영자 최종). →
       Pinvi는 record status `applied`→`added`, 그 외→`approved`.
    2. **idempotency_key** = `suggestion_id`(request_id) → kor_travel_map `make_feature_id(user_request,
@@ -550,17 +565,20 @@ idempotency_key)`로 결정적 feature_id, 재시도 동일.
   (감사 C-12 미존재 테이블 실체화), per-user rate-limit + dedup. **kor_travel_map 직접 호출 X.**
 - **[H2] ✅ T-179 백엔드 — Admin 검사/승인 → kor_travel_map feature change(DEC-05, admin 도메인)** (완료
   2026-06-11): `apps/api/app/api/v1/admin/feature_requests.py` — `GET /admin/feature-requests`
-  목록(RBAC admin/operator, 이메일 마스킹) + `approve`/`reject`(admin + audit). 승인 시 §2.9
-  **`POST/PATCH/DELETE /v1/admin/features*`** 호출(suggestion_type별), 결과 `feature_id`/
-  `request_id`/state를 `feature_suggestions.kor_travel_map_ref`에 저장(status `added`/`approved`). kor_travel_map
-  호출 먼저 → 성공 시에만 commit(실패 시 pending 유지). idempotency_key=request_id, 출처 태깅
-  operator 고정 `"pinvi-admin"` + reason `[suggestion:<id>]` prefix(§7 #3 확정·익명 D-11).
+  목록(RBAC admin/operator, 이메일 마스킹) + `approve`/`reject`(admin + audit). T-VN-M01 선행
+  cutover부터 `new_place` approve는 `503 MAP_FEATURE_REQUEST_QUEUE_UNAVAILABLE`로 끝나며 outbound와
+  status/`kor_travel_map_ref`/reviewer/resolved_at/audit를 바꾸지 않는다. correction/closure만 §2.9
+  **`PATCH/DELETE /v1/admin/features*`**를 호출하고, 결과 `feature_id`/`request_id`/state를
+  `feature_suggestions.kor_travel_map_ref`에 저장(status `added`/`approved`). kor_travel_map 호출 먼저 →
+  성공 시에만 commit(실패 시 pending 유지). 출처 태깅 operator 고정 `"pinvi-admin"` + reason
+  `[suggestion:<id>]` prefix(§7 #3 확정·익명 D-11).
   ⚠️ 재적재(feature-update-request)와 **무관**. **web 검토 UI 완료**
   (`apps/web/app/(admin)/admin/feature-requests/page.tsx` — 검토 큐 + 승인/거절 패널).
   **§7 합의 5건 ✅ 확정(kor_travel_map T-217c, 2026-06-11) + Pinvi 반영 완료** — §7 참조.
 - **[admin client] ✅ T-180 — kor_travel_map admin HTTP client(API 12701 `/v1/admin/*`)** (완료 2026-06-11):
-  `apps/api/app/clients/kor_travel_map_admin.py` — `KorTravelMapAdminClient` (create/patch/delete_feature
-  → `data.request` + change-requests list/approve/reject, 재시도·도메인 예외는 user client 재사용).
+  `apps/api/app/clients/kor_travel_map_admin.py` — `KorTravelMapAdminClient` (patch/delete_feature →
+  `data.request` + change-requests list/approve/reject, 재시도·도메인 예외는 user client 재사용).
+  direct `create_feature`는 T-VN-M01 선행 cutover에서 제거했다.
   base = :12701 `/v1/admin/*` (`pinvi_kor_travel_map_admin_base_url` 기본값도 12701),
   `X-Kor-Travel-Map-Service-Token`(`pinvi_kor_travel_map_admin_service_token`, 미설정 시 공용 토큰 fallback).
   lifespan/`get_kor_travel_map_admin_client` 의존성 + MockTransport 계약 테스트. **승인 시 호출 배선은 T-179.**

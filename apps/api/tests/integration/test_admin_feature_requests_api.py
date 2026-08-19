@@ -12,7 +12,7 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.clients.kor_travel_map_admin import get_kor_travel_map_admin_client
 from app.main import app
@@ -71,21 +71,13 @@ async def _create_suggestion(
 
 class _FakeAdminClient:
     def __init__(self, state: str = "applied") -> None:
-        self.created: dict[str, Any] | None = None
-        self.deleted: dict[str, Any] | None = None
+        self.outbound_calls: list[dict[str, Any]] = []
         self._state = state
 
-    async def create_feature(self, payload: dict[str, Any]) -> dict[str, Any]:
-        self.created = dict(payload)
-        return {
-            "feature_id": "f_new_1",
-            "request_id": "krq-1",
-            "status": self._state,
-            "review_mode": "immediate",
-            "action": "create",
-        }
-
     async def patch_feature(self, feature_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        self.outbound_calls.append(
+            {"method": "PATCH", "feature_id": feature_id, "payload": dict(payload)}
+        )
         return {
             "feature_id": feature_id,
             "request_id": "krq-2",
@@ -97,7 +89,14 @@ class _FakeAdminClient:
     async def delete_feature(
         self, feature_id: str, *, reason: str, operator: str | None = None
     ) -> dict[str, Any]:
-        self.deleted = {"feature_id": feature_id, "reason": reason, "operator": operator}
+        self.outbound_calls.append(
+            {
+                "method": "DELETE",
+                "feature_id": feature_id,
+                "reason": reason,
+                "operator": operator,
+            }
+        )
         return {
             "feature_id": feature_id,
             "request_id": "krq-3",
@@ -136,7 +135,7 @@ async def test_list_pending_masks_requester_email(
     assert "reporter@example.com" not in resp.text
 
 
-async def test_approve_new_place_calls_kor_travel_map_and_marks_added(
+async def test_approve_new_place_fails_closed_without_outbound_or_state_change(
     client: Any, session_factory: Any, auth_cookies: Any
 ) -> None:
     admin_id = await _create_user(
@@ -161,34 +160,29 @@ async def test_approve_new_place_calls_kor_travel_map_and_marks_added(
     finally:
         _clear()
 
-    assert resp.status_code == 200, resp.text
-    data = resp.json()["data"]
-    assert data["status"] == "added"  # applied → added
-    assert data["kor_travel_map_ref"]["feature_id"] == "f_new_1"
-    assert data["kor_travel_map_ref"]["request_id"] == "krq-1"
-    assert fake.created is not None
-    assert fake.created["kind"] == "place"
-    assert fake.created["category"] == "01070100"
-    assert fake.created["coord"] == {"lon": 129.0, "lat": 35.0}
-    assert fake.created["idempotency_key"] == str(req_id)
-    # §7 #3 확정: operator 고정(admin id 미노출) + reason에 [suggestion:<id>] 출처 prefix
-    assert fake.created["operator"] == "pinvi-admin"
-    assert fake.created["reason"].startswith(f"[suggestion:{req_id}]")
+    assert resp.status_code == 503, resp.text
+    assert resp.json()["error"]["code"] == "MAP_FEATURE_REQUEST_QUEUE_UNAVAILABLE"
+    assert fake.outbound_calls == []
 
     async with session_factory() as db:
-        audit = await db.scalar(
-            select(AdminAuditLog).where(AdminAuditLog.action == "feature_request.approve")
+        audit_count = await db.scalar(
+            select(func.count(AdminAuditLog.log_id)).where(
+                AdminAuditLog.action == "feature_request.approve",
+                AdminAuditLog.resource_id == str(req_id),
+            )
         )
         stored = await db.scalar(
             select(FeatureSuggestion).where(FeatureSuggestion.request_id == req_id)
         )
-    assert audit is not None
+    assert audit_count == 0
     assert stored is not None
-    assert stored.status == "added"
-    assert stored.reviewed_by_admin_id == admin_id
+    assert stored.status == "pending"
+    assert stored.kor_travel_map_ref is None
+    assert stored.reviewed_by_admin_id is None
+    assert stored.resolved_at is None
 
 
-async def test_approve_new_place_requires_marker_fields(
+async def test_approve_new_place_fail_close_precedes_marker_validation(
     client: Any, session_factory: Any, auth_cookies: Any
 ) -> None:
     admin_id = await _create_user(
@@ -207,8 +201,52 @@ async def test_approve_new_place_requires_marker_fields(
     finally:
         _clear()
 
-    assert resp.status_code == 422
-    assert fake.created is None
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "MAP_FEATURE_REQUEST_QUEUE_UNAVAILABLE"
+    assert fake.outbound_calls == []
+
+
+@pytest.mark.parametrize(
+    ("suggestion_type", "approval_body", "expected_method"),
+    [
+        ("correction", {"access_reason": "정보 수정", "name": "수정된 장소"}, "PATCH"),
+        ("closure", {"access_reason": "폐업 확인"}, "DELETE"),
+    ],
+)
+async def test_approve_existing_feature_changes_keep_map_outbound(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+    suggestion_type: str,
+    approval_body: dict[str, str],
+    expected_method: str,
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin@example.com", roles=["user", "admin"]
+    )
+    requester_id = await _create_user(session_factory, email="reporter@example.com")
+    req_id = await _create_suggestion(
+        session_factory,
+        requester_id=requester_id,
+        suggestion_type=suggestion_type,
+        target_feature_id="f_existing_1",
+    )
+    fake = _FakeAdminClient(state="applied")
+    _override(fake)
+    try:
+        resp = await client.post(
+            f"/admin/feature-requests/{req_id}/approve",
+            json=approval_body,
+            cookies=auth_cookies(str(admin_id)),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["data"]["status"] == "added"
+    assert len(fake.outbound_calls) == 1
+    assert fake.outbound_calls[0]["method"] == expected_method
+    assert fake.outbound_calls[0]["feature_id"] == "f_existing_1"
 
 
 async def test_reject_sets_status_rejected(
@@ -262,7 +300,7 @@ async def test_approve_already_resolved_conflicts(
         _clear()
 
     assert resp.status_code == 409
-    assert fake.created is None
+    assert fake.outbound_calls == []
 
 
 async def test_non_admin_is_hidden(client: Any, session_factory: Any, auth_cookies: Any) -> None:

@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+- Admin의 신규 장소(`new_place`) 제안 승인은 canonical Map queue가 준비될 때까지 `503
+  MAP_FEATURE_REQUEST_QUEUE_UNAVAILABLE`로 안전하게 중단된다. 이 응답은 kor-travel-map을 호출하거나
+  제안 status/ref/reviewer/audit와 연결 POI를 바꾸지 않으며, 기존 장소의 correction/closure 승인은
+  계속 처리한다.
 - Admin feature 날씨 탭을 kor-travel-map의 Admin 전용 경로로 전환해 공개되지 않은 feature도 최신
   날씨를 dataset/known-time provenance와 함께 조회할 수 있다. Map Admin 계약에 없는 `asof`는 조용히
   무시하지 않고 422로 알린다.
