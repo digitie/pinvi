@@ -85,8 +85,9 @@ def test_summary_and_detail_never_read_status_from_map_dto() -> None:
     """Map 3축 feature state cutover(`1f2bdc3a`)로 user 표면에서 `status`가 사라졌다.
 
     대체 필드가 없어 T-VN-42에서 공개 스키마의 필드까지 제거했다. dto에 `status`가 남아 있어도
-    (구 스냅샷·mock) Pinvi 응답 키로 새어 나오면 안 된다 — 그래야 매핑을 되돌려 "값이 있는 척"하는
-    회귀를 잡는다.
+    (구 스냅샷·mock) Pinvi 응답 키로 나타나면 안 된다. 필드 선언이 되살아나는 회귀는
+    `test_feature_schemas.py`의 필드 집합 등호 게이트가 잡고, 여기서는 선언과 값이 함께 되돌아온
+    조합이 조용히 통과하지 않게 upstream 오염을 계속 주입해 둔다.
     """
     dto = {
         "feature_id": "f1",

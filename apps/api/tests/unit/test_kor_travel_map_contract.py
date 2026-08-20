@@ -243,8 +243,8 @@ _PUBLIC_API_KEY_SECURITY = [{"PublicApiKey": []}, {"ServiceToken": []}]
 #     cutover`)로 `FeatureSummary`/`NearbyFeatureSummary`/`FeatureDetailResponse` 세 곳
 #     모두에서 사라졌고 **대체 필드가 없다**(state 축은 user profile에 노출되지 않는다).
 #     `features.py _summary_/_detail_from_kor_travel_map`와 `feature_detail.build_detail_card`는
-#     더 이상 dto에서 읽지 않는다. Pinvi 공개 스키마의 `status`는 web/mobile 계약 때문에
-#     남아 있으나 항상 None이다(공개 필드 제거는 별도 과제 — `docs/` 참조).
+#     더 이상 dto에서 읽지 않고, 한동안 남겨 뒀던 Pinvi 공개 스키마의 `status` 필드도
+#     T-VN-42에서 제거했다(재도입 방지는 `tests/unit/test_feature_schemas.py`).
 #
 # 이름이 바뀐 필드:
 #   * `WeatherCardData.asof` → `selected_at` (Map bitemporal cutover `6650aa71`). Pinvi 공개

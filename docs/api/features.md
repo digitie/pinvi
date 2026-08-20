@@ -288,7 +288,7 @@ Cookie: pinvi_access=...
       "category": "해수욕장",
       "marker_color": "P-07",
       "marker_icon": "swimming",
-      },
+    },
   ],
 }
 ```

@@ -58,10 +58,14 @@ def test_build_card_never_leaks_upstream_status() -> None:
 
     Map 3축 feature state cutover(`1f2bdc3a feat(api): complete feature state cutover`)로
     `FeatureDetailResponse`에서 `status`가 삭제됐고 **대체 필드가 없다**. T-VN-42에서 공개
-    스키마의 필드까지 제거했으므로 여기서 막는 실패 모드는 "값 재주입"이다 — 구 스냅샷/mock처럼
-    dto에 `status`를 **일부러 넣고**, 투영을 되돌리면(`"status": _clean(dto.get("status"))`)
-    직렬화 키가 되살아나 red가 되게 한다. "필드 재선언"은 `test_feature_schemas.py`의 필드 집합
-    등호 게이트가 맡는다.
+    스키마의 필드까지 제거했다.
+
+    이 테스트가 덮는 범위를 정확히 적어 둔다: 필드를 다시 선언하고 값까지 실어 보내는 조합을
+    **wire 표현**에서 막는다(선언만 되돌리는 경우는 `test_feature_schemas.py`의 필드 집합 등호
+    게이트가 먼저 red다). 반대로 투영만 되돌리는 경우(`"status": _clean(dto.get("status"))`)는
+    여기서 잡히지 않는다 — 필드가 선언돼 있지 않으면 pydantic 기본 `extra="ignore"`가 값을
+    버리므로 애초에 새어 나갈 값이 없다. upstream 오염을 계속 주입해 두는 이유는 두 조건이 함께
+    되살아날 때 조용히 통과하지 않게 하기 위해서다.
     """
     for kind in ("place", "event", "notice", "price", "area"):
         card = build_detail_card(_place_dto(kind=kind, status="active"))
