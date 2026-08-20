@@ -9,11 +9,13 @@ Map과 PinVi는 아직 각각 draft PR 단계이므로 production completion rec
 
 ## 기준선과 계약
 
-- Map source: `590fdc04c55295e4dcbab6ba86b22b8f2e122d1a`.
+- Map source: draft PR #1029 rebased head `fa6d0d3d10456401993e12bb5f726abad4bce413`.
 - full/admin OpenAPI SHA-256:
   `590f49d1c4abe6558cf46da5a4a4b6b787bb007c3194c07f343f97a3b6b8d9be`.
 - service OpenAPI SHA-256:
   `c878531af2acdea0a25861d81f2e87f4768244d8ff37b94cb610194e3db85c96`.
+- user OpenAPI SHA-256:
+  `489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b`.
 - submit은 `ServiceToken`과 UUID `Idempotency-Key`를 요구한다. PinVi local
   `FeatureSuggestion.request_id`를 body `request_id`와 header에 같은 값으로 보낸다.
 - Map service response가 `pending`이면 PinVi는 관리자 승인만 끝난 상태인 `approved`로

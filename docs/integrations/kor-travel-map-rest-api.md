@@ -65,13 +65,15 @@ sort, order]`이며 `status`·`provider`·`dataset_key`는 **없다**(보내면 
 > (query 없음, 응답 `FeatureWeatherResponse`/`WeatherCardData`; user 경로는 `public_features`
 > 기반이라 비공개 feature가 404지만 admin 경로는 base `features`(lifecycle=active) 기반이다).
 >
-> **2026-08-20 M04 범용 요청 큐 후보 재핀**: Map draft PR #1029 head
-> `590fdc04c55295e4dcbab6ba86b22b8f2e122d1a`의 full OpenAPI와 service OpenAPI를 각각
+> **2026-08-20 M04 범용 요청 큐 후보 재핀**: Map draft PR #1029 rebased head
+> `fa6d0d3d10456401993e12bb5f726abad4bce413`의 full OpenAPI와 service OpenAPI를 각각
 > `apps/api/tests/contract/kor-travel-map-openapi-admin.json`
 > (SHA-256 `590f49d1c4abe6558cf46da5a4a4b6b787bb007c3194c07f343f97a3b6b8d9be`) 및
 > `kor-travel-map-openapi-service.json`
 > (SHA-256 `c878531af2acdea0a25861d81f2e87f4768244d8ff37b94cb610194e3db85c96`)으로 byte-exact
-> vendor했다. Pinvi의 `new_place` 승인은 이제 전용 `ServiceToken`과 동일 UUID body/header로
+> vendor했다. 같은 head의 user OpenAPI도 기존 vendor와 byte-exact하며 SHA-256은
+> `489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b`다. Pinvi의 `new_place`
+> 승인은 이제 전용 `ServiceToken`과 동일 UUID body/header로
 > `POST /v1/service/feature-requests`만 호출한다. `pending` receipt는 Pinvi `approved`, verified
 > `exact_conflict`는 `duplicate`로 전이하며, 409·422·전송/5xx·계약 오류는 local row를 `pending`으로
 > 남긴다. Map #1029와 Pinvi draft PR #458이 모두 병합되기 전 paired completion receipt는 `pending`이다.
@@ -660,9 +662,10 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
 수기 httpx client(kor_travel_map 권고)가 kor_travel_map OpenAPI profile과 silent drift하는 것을 막는다.
 
 - **vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-user.json` — Pinvi가 구현 기준으로
-  삼은 kor_travel_map main commit의 **전체 파일**(현 핀 `95d2c128`, 2026-08-17 재vendor —
-  직전 `8c5bdcf8`). 재vendor가 잡아낸 실제 consumer drift(`status` 삭제 / weather bitemporal)는
-  본 문서 상단 2026-08-17 노트.
+  삼은 kor_travel_map의 **전체 파일**(현 source pin은 draft PR #1029 rebased head
+  `fa6d0d3d10456401993e12bb5f726abad4bce413`; bytes는 2026-08-20 재대조에서 동일). 실제 consumer
+  drift를 반영한 최초 재vendor는 `95d2c128`(2026-08-17, 직전 `8c5bdcf8`)이며 상세는 본 문서 상단
+  2026-08-17 노트다.
   pinned SHA-256은 본 문서 상단과 `test_kor_travel_map_contract.py`가 함께 고정한다.
   **profile 분리(Map `96814b2a`)**: ServiceToken 전용 batch 2경로
   (`/v1/features/batch`·`/v1/features/weather/batch`)는 user profile에서 분리돼
@@ -671,7 +674,7 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   (byte-핀 소유는 `test_kor_travel_map_cache_target_contract.py`) 기준으로 검증하고,
   두 profile에 겹치는 schema(`Meta`/`WeatherMetricOut` 등)는 양쪽 모두에서 고정한다.
 - **Admin/ops 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map draft
-  PR #1029 head `590fdc04c55295e4dcbab6ba86b22b8f2e122d1a`의 전체 `openapi.json` 원본이며 SHA-256은
+  PR #1029 rebased head `fa6d0d3d10456401993e12bb5f726abad4bce413`의 전체 `openapi.json` 원본이며 SHA-256은
   `590f49d1c4abe6558cf46da5a4a4b6b787bb007c3194c07f343f97a3b6b8d9be`이다.
   `test_kor_travel_map_ops_contract.py`는
   provider ETL이 소비하는 ops 경로·인증·query·응답 schema 연결과 폐기 필드 부재를 고정한다.
@@ -702,7 +705,7 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   `test_public_view_contracts_cover_every_validated_model_field`가 `app/schemas/public.py`
   모델의 `model_fields` ⊆ 계약을 강제한다(모델에 필드를 추가하면 타입 계약도 함께 적어야 통과).
 - **Admin vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map draft
-  PR #1029 head `590fdc04c55295e4dcbab6ba86b22b8f2e122d1a`의
+  PR #1029 rebased head `fa6d0d3d10456401993e12bb5f726abad4bce413`의
   `packages/kor-travel-map-api/openapi.json` 전체 파일, SHA-256
   `590f49d1c4abe6558cf46da5a4a4b6b787bb007c3194c07f343f97a3b6b8d9be`.
   `test_kor_travel_map_admin_contract.py`가 Admin feature 목록/상세/weather의 path·AdminBFF security,

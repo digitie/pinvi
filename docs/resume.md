@@ -23,9 +23,14 @@ Zod 미러 3곳(detail-card는 각각 5·7 arm 동시)에서 제거했다. 저�
 
 ## 2026-08-20 (codex) — T-VN-M04 범용 Feature 요청 큐 소비자 전환
 
-Map draft PR #1029 head `590fdc04c55295e4dcbab6ba86b22b8f2e122d1a`의 full/service OpenAPI를
-각각 SHA-256 `590f49d1c4abe6558cf46da5a4a4b6b787bb007c3194c07f343f97a3b6b8d9be` /
-`c878531af2acdea0a25861d81f2e87f4768244d8ff37b94cb610194e3db85c96`으로 byte-exact vendor했다.
+Map draft PR #1029 rebased head `fa6d0d3d10456401993e12bb5f726abad4bce413`의 full/service/user
+OpenAPI가 Pinvi vendor와 byte-exact함을 다시 확인했다. SHA-256은 각각
+`590f49d1c4abe6558cf46da5a4a4b6b787bb007c3194c07f343f97a3b6b8d9be` /
+`c878531af2acdea0a25861d81f2e87f4768244d8ff37b94cb610194e3db85c96` /
+`489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b`로 바뀌지 않았다.
+vendor bytes는 수정하지 않고 Admin/ops/user/service/feature-request의 source/release pin과 packaged
+service provenance만 새 head로 옮겼다. 관련 contract test `67 passed`, 변경 Python Ruff check/format,
+provenance JSON/hash와 세 profile `cmp` 검증을 통과했다.
 `new_place` 승인은 별도 `PINVI_KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`으로
 `POST /v1/service/feature-requests`에 suggestion UUID를 body `request_id`와 `Idempotency-Key`에 함께
 제출한다. `pending` receipt는 Pinvi `approved`, verified `exact_conflict`는 `duplicate`로만 전이한다.
@@ -43,7 +48,7 @@ Map API가 떠 있는 compatible draft pair가 없으므로 N150 UI E2E는 아�
 현재 PinVi worktree의 격리 `127.0.0.1:13805` mock UI E2E는 3건 통과했으나 Map live 증거로
 대체하지 않는다.
 
-**다음 한 작업**: M04 보정 커밋을 원격 draft PR에 올리고 전문 적대 재심·필수 CI를 통과시킨다. 그 뒤
+**다음 한 작업**: draft PR #458의 rebased-head provenance CI와 전문 적대 재심을 통과시킨다. 그 뒤
 compatible draft pair로 N150 격리 UI E2E를 실행한다.
 
 

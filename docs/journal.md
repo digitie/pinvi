@@ -54,11 +54,19 @@ false-green이라 T-321로 등록했다. 이번 검증은 누락분을 개별 �
 
 ## 2026-08-20 (codex) — T-VN-M04 Map 범용 Feature 요청 큐 consumer
 
-- **정확한 producer pin**: Map draft PR #1029 head
-  `590fdc04c55295e4dcbab6ba86b22b8f2e122d1a`에서 `openapi.json` 및 `openapi.service.json`을 각각
-  byte-exact vendor했다. SHA-256은 full `590f49d1c4abe6558cf46da5a4a4b6b787bb007c3194c07f343f97a3b6b8d9be`,
-  service `c878531af2acdea0a25861d81f2e87f4768244d8ff37b94cb610194e3db85c96`이며, provenance capability
-  `feature_request=1`과 함께 고정한다.
+- **정확한 producer pin**: Map draft PR #1029 rebased head
+  `fa6d0d3d10456401993e12bb5f726abad4bce413`에서 `openapi.json`·`openapi.service.json`·
+  `openapi.user.json`을 Pinvi vendor와 다시 byte 대조했다. SHA-256은 full
+  `590f49d1c4abe6558cf46da5a4a4b6b787bb007c3194c07f343f97a3b6b8d9be`, service
+  `c878531af2acdea0a25861d81f2e87f4768244d8ff37b94cb610194e3db85c96`, user
+  `489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b`로 기존 vendor와 같았다.
+  snapshot bytes는 건드리지 않고 source/release provenance와 capability `feature_request=1`만 새
+  rebased head에 결박했다.
+- **재결박 검증**: `origin` fetch 뒤 PR #458 branch는 최신 `origin/main`을 이미 포함해 rebase가
+  no-op이었다. 지정 Map commit blob을 명시한 Admin/ops/feature-request/cache-target/user contract 묶음은
+  `67 passed`, 변경 Python Ruff check/format, full/service/user 3개 `cmp`·SHA-256, service provenance
+  JSON/hash와 `git diff --check`를 통과했다. 기본 live-spec 자동 탐색을 쓴 최초 묶음은 다른 Map sibling을
+  선택해 `66 passed, 1 failed`였고, 지정 `fa6d0d3d…` blob override 재실행으로 provenance 대상을 바로잡았다.
 - **승인 경계**: `new_place`만 전용 `FeatureRequestServiceClient`를 지연 해석해
   `POST /v1/service/feature-requests`로 제출한다. suggestion UUID는 body와 `Idempotency-Key`에 동일하게
   넣고, `pending` receipt 뒤에 Pinvi `approved`, verified `exact_conflict` 뒤에만 `duplicate`를 commit한다.
