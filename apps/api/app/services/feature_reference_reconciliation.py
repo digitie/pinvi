@@ -11,7 +11,7 @@ import hashlib
 import json
 import uuid
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast
 
 from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,7 +40,7 @@ class FeatureReferenceReconciliationApplyError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class ReconciliationBlocked:
-    """local mutation 없이 durable blocked attempt만 추가한 결과."""
+    """local mutation 없이 durable blocked observation을 보존한 결과."""
 
     event_id: uuid.UUID
     attempt_sequence: int
@@ -194,6 +194,28 @@ async def _next_attempt_sequence(db: AsyncSession, *, event_id: uuid.UUID) -> in
         ).where(KtmFeatureReferenceReconciliationDeliveryAttempt.event_id == event_id)
     )
     return int(current or 0) + 1
+
+
+async def _latest_blocked_attempt(
+    db: AsyncSession,
+    *,
+    event_id: uuid.UUID,
+) -> KtmFeatureReferenceReconciliationDeliveryAttempt | None:
+    """동일 event의 마지막 blocked 관측을 advisory lock 안에서 읽는다."""
+
+    return cast(
+        KtmFeatureReferenceReconciliationDeliveryAttempt | None,
+        await db.scalar(
+            select(KtmFeatureReferenceReconciliationDeliveryAttempt)
+            .where(
+                KtmFeatureReferenceReconciliationDeliveryAttempt.event_id == event_id,
+                KtmFeatureReferenceReconciliationDeliveryAttempt.status == "blocked",
+            )
+            .order_by(KtmFeatureReferenceReconciliationDeliveryAttempt.attempt_sequence.desc())
+            .limit(1)
+            .with_for_update()
+        ),
+    )
 
 
 async def _lock_event(db: AsyncSession, *, event_id: uuid.UUID) -> None:
@@ -413,18 +435,35 @@ async def apply_feature_reference_reconciliation_event(
             blocks,
             key=lambda row: (row["relation"], row["target_id"], row["reason"]),
         )
+        block_fingerprint_sha256 = _canonical_sha256(ordered_blocks)
+        observation_root_sha256 = _observation(
+            lease=lease,
+            blocks=ordered_blocks,
+            impacts=[],
+        )
+        previous = await _latest_blocked_attempt(db, event_id=event.event_id)
+        if (
+            previous is not None
+            and previous.event_sequence == event.event_sequence
+            and previous.event_sha256 == lease.event_sha256
+            and previous.block_fingerprint_sha256 == block_fingerprint_sha256
+            and previous.observation_root_sha256 == observation_root_sha256
+        ):
+            # 영구 blocker라도 같은 관측은 하나의 immutable evidence로만 남긴다.
+            # advisory lock이 row 부재/동시 worker도 직렬화하므로 별도 unique index가 필요 없다.
+            return ReconciliationBlocked(
+                event_id=event.event_id,
+                attempt_sequence=previous.attempt_sequence,
+                block_fingerprint_sha256=block_fingerprint_sha256,
+            )
         attempt = KtmFeatureReferenceReconciliationDeliveryAttempt(
             event_id=event.event_id,
             attempt_sequence=await _next_attempt_sequence(db, event_id=event.event_id),
             event_sequence=event.event_sequence,
             event_sha256=lease.event_sha256,
             status="blocked",
-            block_fingerprint_sha256=_canonical_sha256(ordered_blocks),
-            observation_root_sha256=_observation(
-                lease=lease,
-                blocks=ordered_blocks,
-                impacts=[],
-            ),
+            block_fingerprint_sha256=block_fingerprint_sha256,
+            observation_root_sha256=observation_root_sha256,
         )
         db.add(attempt)
         await db.flush()

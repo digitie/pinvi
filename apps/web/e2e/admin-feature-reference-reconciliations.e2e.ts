@@ -126,13 +126,46 @@ test.beforeEach(async ({ page }) => {
       });
     },
   );
+  await page.route(
+    (url) =>
+      url.port === '12801' &&
+      url.pathname === `/admin/feature-reference-reconciliations/${blockedEventId}`,
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            event_id: blockedEventId,
+            status: 'blocked',
+            receipt: null,
+            attempts: [blockedAttempt],
+            impacts: [],
+          },
+        }),
+      });
+    },
+  );
 });
 
 test('Admin이 M05 receipt와 blocked evidence를 읽기 전용으로 확인한다', async ({ page }) => {
+  const evidenceRequests: string[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.port === '12801' && url.pathname.startsWith('/admin/feature-reference-reconciliations')) {
+      evidenceRequests.push(`${request.method()} ${url.pathname}`);
+    }
+  });
   await page.goto('/admin/feature-reference-reconciliations');
 
   await expect(page.getByRole('heading', { name: 'Feature 참조 조정 증거' })).toBeVisible();
   await expect(page.getByText('blocked')).toBeVisible();
+  await page.getByTestId(`admin-frr-detail-${blockedEventId}`).click();
+
+  const blockedDetail = page.getByTestId('admin-frr-detail');
+  await expect(blockedDetail).toContainText('local mutation과 ACK를 중단한 blocked event');
+  await expect(blockedDetail).toContainText(blockedAttempt.block_fingerprint_sha256);
+  await expect(blockedDetail).toContainText(blockedAttempt.observation_root_sha256);
+  await blockedDetail.getByRole('button', { name: '닫기' }).click();
   await page.getByTestId(`admin-frr-detail-${appliedEventId}`).click();
 
   const detail = page.getByTestId('admin-frr-detail');
@@ -141,4 +174,9 @@ test('Admin이 M05 receipt와 blocked evidence를 읽기 전용으로 확인한�
   await expect(detail).toContainText('trip_day_pois · rebind');
   await expect(detail).not.toContainText('승인');
   await expect(detail).not.toContainText('거절');
+  expect(evidenceRequests).toEqual([
+    'GET /admin/feature-reference-reconciliations',
+    `GET /admin/feature-reference-reconciliations/${blockedEventId}`,
+    `GET /admin/feature-reference-reconciliations/${appliedEventId}`,
+  ]);
 });

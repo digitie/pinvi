@@ -54,6 +54,11 @@ def _create_append_only_trigger(table_name: str) -> None:
             "app.guard_ktm_feature_reference_reconciliation_append_only()"
         )
     )
+    # ``session_replication_role = replica``는 normal trigger를 건너뛴다. backup/restore
+    # 외의 API session도 같은 database login을 쓰므로 evidence guard는 replication mode에서도
+    # 항상 발화해야 한다.
+    op.execute(sa.text(f"ALTER TABLE app.{table_name} ENABLE ALWAYS TRIGGER {trigger}"))
+    op.execute(sa.text(f"ALTER TABLE app.{table_name} ENABLE ALWAYS TRIGGER {truncate_trigger}"))
 
 
 def upgrade() -> None:

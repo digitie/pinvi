@@ -151,6 +151,7 @@ class FeatureReferenceReconciliationServiceClient:
         self,
         *,
         event_id: uuid.UUID,
+        event_sequence: int,
         worker_id: uuid.UUID,
         lease_epoch: int,
         event_sha256: str,
@@ -185,6 +186,10 @@ class FeatureReferenceReconciliationServiceClient:
             raise FeatureReferenceReconciliationContractError(
                 "Map reconciliation ACK replay header/outcome differ"
             )
+        if result.acked_through_sequence < event_sequence:
+            raise FeatureReferenceReconciliationContractError(
+                "Map reconciliation ACK cursor precedes the acknowledged event"
+            )
         return result
 
     def _require_role(self, expected: Literal["read", "ack"]) -> None:
@@ -214,6 +219,14 @@ class FeatureReferenceReconciliationServiceClient:
             raise FeatureReferenceReconciliationUnavailable(
                 f"Map feature-reference reconciliation transport failed: {exc!r}"
             ) from exc
+        # M05 503은 service subscription/activation 또는 credential pairing이 깨진
+        # durable configuration fault다. worker가 transient network/5xx와 섞어 hot-loop
+        # 하지 않도록 RFC7807 problem으로 보존한다.
+        if response.status_code == httpx.codes.SERVICE_UNAVAILABLE:
+            raise FeatureReferenceReconciliationProblem(
+                status_code=response.status_code,
+                code=_error_code(response),
+            )
         if response.status_code >= httpx.codes.INTERNAL_SERVER_ERROR:
             raise FeatureReferenceReconciliationUnavailable(
                 f"Map feature-reference reconciliation returned {response.status_code}"

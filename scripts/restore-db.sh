@@ -6,6 +6,7 @@ set -euo pipefail
 SCHEMA="${PINVI_RESTORE_SCHEMA:-${PINVI_BACKUP_SCHEMA:-app}}"
 DATABASE_URL="${PINVI_RESTORE_DATABASE_URL:-${PINVI_DATABASE_URL:-}}"
 JOBS="${PINVI_RESTORE_JOBS:-2}"
+APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}"
 BACKUP_FILE="${1:-}"
 
 if [[ -z "${BACKUP_FILE}" ]]; then
@@ -24,6 +25,11 @@ fi
 
 if [[ ! "${SCHEMA}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
   echo "invalid restore schema name" >&2
+  exit 2
+fi
+
+if [[ -n "${APP_ROLE}" && ! "${APP_ROLE}" =~ ^[a-z_][a-z0-9_]*$ ]]; then
+  echo "invalid restore app role name" >&2
   exit 2
 fi
 
@@ -72,5 +78,27 @@ pg_restore \
   --jobs="${JOBS}" \
   --dbname="${DATABASE_URL}" \
   "${BACKUP_FILE}"
+
+# ``--no-owner --no-privileges`` does not recreate runtime grants. A dedicated
+# runtime login must be supplied explicitly; without one the restore executor
+# itself must own the target schema, which is the documented single-role mode.
+if [[ -n "${APP_ROLE}" ]]; then
+  runtime_role_safe="$(psql --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT rolcanlogin AND NOT rolsuper AND NOT rolcreaterole AND NOT rolcreatedb FROM pg_roles WHERE rolname = '${APP_ROLE}'")"
+  if [[ "${runtime_role_safe}" != "t" ]]; then
+    echo "PINVI_RESTORE_APP_ROLE must name an existing non-superuser runtime login" >&2
+    exit 3
+  fi
+  psql \
+    --set=ON_ERROR_STOP=1 \
+    --dbname="${DATABASE_URL}" \
+    --command="GRANT USAGE ON SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\"; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\"; GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\""
+else
+  schema_owner="$(psql --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = '${SCHEMA}'")"
+  restore_user="$(psql --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT current_user")"
+  if [[ -z "${schema_owner}" || "${schema_owner}" != "${restore_user}" ]]; then
+    echo "PINVI_RESTORE_APP_ROLE is required when the restore executor does not own the target schema" >&2
+    exit 3
+  fi
+fi
 
 echo "RESTORED_FILE=${BACKUP_FILE}"

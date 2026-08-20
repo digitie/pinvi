@@ -159,6 +159,7 @@ async def test_ack_uses_separate_token_and_preserves_replay_receipt() -> None:
     try:
         receipt = await client.acknowledge(
             event_id=event_id,
+            event_sequence=12,
             worker_id=worker_id,
             lease_epoch=3,
             event_sha256="a" * 64,
@@ -214,6 +215,7 @@ async def test_transport_rejects_malformed_event_and_ack_replay_header() -> None
         with pytest.raises(FeatureReferenceReconciliationContractError):
             await client.acknowledge(
                 event_id=uuid.uuid4(),
+                event_sequence=12,
                 worker_id=worker_id,
                 lease_epoch=1,
                 event_sha256="a" * 64,
@@ -231,6 +233,7 @@ async def test_role_and_non_success_boundaries_fail_closed() -> None:
         with pytest.raises(PermissionError):
             await client.acknowledge(
                 event_id=uuid.uuid4(),
+                event_sequence=12,
                 worker_id=uuid.uuid4(),
                 lease_epoch=1,
                 event_sha256="a" * 64,
@@ -251,6 +254,7 @@ async def test_role_and_non_success_boundaries_fail_closed() -> None:
         with pytest.raises(FeatureReferenceReconciliationProblem) as raised:
             await client.acknowledge(
                 event_id=uuid.uuid4(),
+                event_sequence=12,
                 worker_id=uuid.uuid4(),
                 lease_epoch=1,
                 event_sha256="a" * 64,
@@ -260,3 +264,30 @@ async def test_role_and_non_success_boundaries_fail_closed() -> None:
     finally:
         await client.aclose()
     assert raised.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_ack_rejects_cursor_before_event_sequence() -> None:
+    client = _client(
+        "ack",
+        lambda _request: httpx.Response(
+            200,
+            json={
+                "data": {"outcome": "acked", "acked_through_sequence": 0},
+                "meta": {"duration_ms": 1, "request_id": "map-request"},
+            },
+        ),
+    )
+    try:
+        with pytest.raises(FeatureReferenceReconciliationContractError):
+            await client.acknowledge(
+                event_id=uuid.uuid4(),
+                event_sequence=12,
+                worker_id=uuid.uuid4(),
+                lease_epoch=1,
+                event_sha256="a" * 64,
+                local_receipt_sha256="b" * 64,
+                idempotency_key=uuid.uuid4(),
+            )
+    finally:
+        await client.aclose()

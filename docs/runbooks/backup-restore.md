@@ -134,11 +134,18 @@ docker compose -f docker-compose.app.yml start web
 | `PINVI_RESTORE_SCHEMA`       | `PINVI_BACKUP_SCHEMA` 또는 `app` | 복구 대상 schema             |
 | `PINVI_RESTORE_DATABASE_URL` | `PINVI_DATABASE_URL`             | restore 전용 DB URL override |
 | `PINVI_RESTORE_JOBS`         | `2`                              | `pg_restore --jobs` 값       |
+| `PINVI_RESTORE_APP_ROLE`     | 빈 값                           | 기존 non-superuser runtime DB role에 schema/table/sequence grant를 복원한다. 비어 있으면 restore executor가 대상 schema owner여야 한다. |
 
 `scripts/restore-db.sh`는 snapshot 옆에 `.sha256` sidecar가 있으면 restore 전에 반드시
 검증한다. sidecar가 실패하면 restore를 시작하지 않는다. 검증은 sidecar의 첫 checksum 값과
 실제 dump hash를 직접 비교하므로 운영 snapshot을 staging 디렉터리로 복사한 뒤에도 같은
 sidecar를 그대로 쓸 수 있다.
+
+`--no-owner --no-privileges` restore 뒤에는 권한이 자동 복원되지 않는다. 단일-role 구성은
+restore executor가 `app` schema owner인지 확인한 뒤에만 끝난다. schema owner와 API runtime
+role을 분리한 구성은 `PINVI_RESTORE_APP_ROLE`을 반드시 지정해 USAGE, table DML, sequence
+USAGE/SELECT grant를 재적용한다. 이 role은 LOGIN이고 superuser·CREATEROLE·CREATEDB 권한이
+없어야 하며, 그렇지 않으면 script가 restore를 중단한다.
 
 `scripts/restore-hotswap.sh` / API hot-swap 환경변수:
 

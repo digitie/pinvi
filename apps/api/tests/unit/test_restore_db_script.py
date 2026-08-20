@@ -18,7 +18,7 @@ def _write_executable(path: Path, body: str) -> None:
     path.chmod(path.stat().st_mode | 0o111)
 
 
-def test_restore_db_bootstraps_missing_schema_before_no_owner_restore(tmp_path: Path) -> None:
+def test_restore_db_bootstraps_schema_and_regrants_explicit_runtime_role(tmp_path: Path) -> None:
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
     invocation_log = tmp_path / "invocations.log"
@@ -28,6 +28,9 @@ def test_restore_db_bootstraps_missing_schema_before_no_owner_restore(tmp_path: 
         fake_bin / "psql",
         """#!/usr/bin/env bash
 set -euo pipefail
+if [[ "$*" == *"FROM pg_roles"* ]]; then
+  printf 't\\n'
+fi
 printf 'psql:%s\\n' "$*" >> "$PINVI_TEST_LOG"
 """,
     )
@@ -43,6 +46,7 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
         {
             "PATH": f"{fake_bin}:/usr/bin:/bin",
             "PINVI_RESTORE_DATABASE_URL": "postgresql://pinvi:fixture@db:5432/pinvi",
+            "PINVI_RESTORE_APP_ROLE": "pinvi_app",
             "PINVI_TEST_LOG": str(invocation_log),
         }
     )
@@ -63,3 +67,7 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
     assert calls[1].startswith("pg_restore:")
     assert "--no-owner" in calls[1]
     assert "--no-privileges" in calls[1]
+    assert calls[2].startswith("psql:")
+    assert "FROM pg_roles" in calls[2]
+    assert calls[3].startswith("psql:")
+    assert 'GRANT USAGE ON SCHEMA "app" TO "pinvi_app"' in calls[3]

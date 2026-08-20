@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from typing import Literal
 
@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.clients.kor_travel_map_feature_reference_reconciliation import (
+    FeatureReferenceReconciliationContractError,
     FeatureReferenceReconciliationLeaseConflict,
     FeatureReferenceReconciliationProblem,
     FeatureReferenceReconciliationServiceClient,
@@ -30,6 +31,13 @@ from app.services.feature_reference_reconciliation import (
 
 logger = logging.getLogger(__name__)
 _ACK_NAMESPACE = uuid.UUID("7242d291-579a-4b96-b035-64aa4d26b1cb")
+_PERMANENT_PROBLEM_STATUSES = frozenset({401, 403, 422, 503})
+
+
+def _is_permanent_pairing_fault(error: FeatureReferenceReconciliationProblem) -> bool:
+    """operator action 없이는 회복할 수 없는 Map pairing fault만 분리한다."""
+
+    return error.status_code in _PERMANENT_PROBLEM_STATUSES
 
 
 async def consume_feature_reference_reconciliation_once(
@@ -55,6 +63,7 @@ async def consume_feature_reference_reconciliation_once(
         return local
     await ack_client.acknowledge(
         event_id=lease.event.event_id,
+        event_sequence=lease.event.event_sequence,
         worker_id=worker_id,
         lease_epoch=lease.lease_epoch,
         event_sha256=lease.event_sha256,
@@ -71,6 +80,7 @@ async def _worker_loop(
     ack_client: FeatureReferenceReconciliationServiceClient,
     worker_id: uuid.UUID,
     config: Settings,
+    on_permanent_fault: Callable[[str], None],
 ) -> None:
     while True:
         try:
@@ -101,11 +111,21 @@ async def _worker_loop(
             await asyncio.sleep(
                 config.pinvi_kor_travel_map_feature_reference_reconciliation_poll_seconds
             )
-        except FeatureReferenceReconciliationProblem:
+        except FeatureReferenceReconciliationProblem as exc:
+            if _is_permanent_pairing_fault(exc):
+                message = f"Map pairing fault: HTTP {exc.status_code} {exc.code or 'unknown'}"
+                on_permanent_fault(message)
+                logger.critical("feature reference reconciliation stopped: %s", message)
+                return
             logger.error("feature reference reconciliation service problem", exc_info=True)
             await asyncio.sleep(
                 config.pinvi_kor_travel_map_feature_reference_reconciliation_poll_seconds
             )
+        except FeatureReferenceReconciliationContractError as exc:
+            message = f"Map reconciliation contract fault: {exc}"
+            on_permanent_fault(message)
+            logger.critical("feature reference reconciliation stopped: %s", message)
+            return
         except Exception:
             logger.exception("feature reference reconciliation local projection failure")
             await asyncio.sleep(
@@ -137,8 +157,8 @@ def _client(
 async def feature_reference_reconciliation_worker_lifespan(app: FastAPI) -> AsyncIterator[None]:
     """default-off. subscription/readiness boundary가 없으면 API startup을 fail-close한다."""
 
-    del app
     if not settings.pinvi_kor_travel_map_feature_reference_reconciliation_enabled:
+        app.state.feature_reference_reconciliation_runtime_fault = None
         yield
         return
     read_secret = settings.pinvi_kor_travel_map_feature_reference_reconciliation_read_token
@@ -149,6 +169,12 @@ async def feature_reference_reconciliation_worker_lifespan(app: FastAPI) -> Asyn
     ack_client = _client(role="ack", token=ack_secret.get_secret_value(), config=settings)
     worker_id = uuid.uuid4()
     task: asyncio.Task[None] | None = None
+    app.state.feature_reference_reconciliation_runtime_fault = None
+
+    def mark_permanent_fault(message: str) -> None:
+        # health endpoint는 credential/token을 노출하지 않는 고정형 diagnostic만 반환한다.
+        app.state.feature_reference_reconciliation_runtime_fault = message
+
     try:
         # subscription이 없을 때 Map은 503을 반환한다. background retry로 숨기지 않고
         # startup 자체를 실패시켜 pairing activation receipt 이전 오배선을 드러낸다.
@@ -159,7 +185,11 @@ async def feature_reference_reconciliation_worker_lifespan(app: FastAPI) -> Asyn
                 ack_client=ack_client,
                 worker_id=worker_id,
             )
-        except FeatureReferenceReconciliationProblem as exc:
+        except (
+            FeatureReferenceReconciliationProblem,
+            FeatureReferenceReconciliationContractError,
+            FeatureReferenceReconciliationUnavailable,
+        ) as exc:
             raise RuntimeError(
                 "M05 reconciliation Map subscription/readiness preflight가 실패했습니다."
             ) from exc
@@ -170,6 +200,7 @@ async def feature_reference_reconciliation_worker_lifespan(app: FastAPI) -> Asyn
                 ack_client=ack_client,
                 worker_id=worker_id,
                 config=settings,
+                on_permanent_fault=mark_permanent_fault,
             )
         )
         yield

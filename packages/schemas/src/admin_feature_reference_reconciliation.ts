@@ -55,15 +55,28 @@ export type AdminFeatureReferenceReconciliationImpact = z.infer<
   typeof AdminFeatureReferenceReconciliationImpactSchema
 >;
 
-export const AdminFeatureReferenceReconciliationSummarySchema = z.object({
-  event_id: UuidSchema,
-  status: FeatureReferenceReconciliationStatusSchema,
-  event_sequence: z.number().int().positive(),
-  event_sha256: Sha256Schema,
-  observed_at: Iso8601Schema,
-  receipt: AdminFeatureReferenceReconciliationReceiptSchema.nullable().optional(),
-  latest_attempt: AdminFeatureReferenceReconciliationAttemptSchema,
-});
+export const AdminFeatureReferenceReconciliationSummarySchema = z
+  .object({
+    event_id: UuidSchema,
+    status: FeatureReferenceReconciliationStatusSchema,
+    event_sequence: z.number().int().positive(),
+    event_sha256: Sha256Schema,
+    observed_at: Iso8601Schema,
+    receipt: AdminFeatureReferenceReconciliationReceiptSchema.nullable().optional(),
+    latest_attempt: AdminFeatureReferenceReconciliationAttemptSchema,
+  })
+  .superRefine((value, context) => {
+    const applied = value.status === 'applied';
+    const shapeValid = applied
+      ? value.receipt != null && value.latest_attempt.status === 'applied'
+      : value.receipt == null && value.latest_attempt.status === 'blocked';
+    if (!shapeValid) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'M05 evidence status와 receipt/latest attempt가 일치하지 않습니다.',
+      });
+    }
+  });
 export type AdminFeatureReferenceReconciliationSummary = z.infer<
   typeof AdminFeatureReferenceReconciliationSummarySchema
 >;
@@ -78,13 +91,27 @@ export type AdminFeatureReferenceReconciliationPagedResponse = z.infer<
   typeof AdminFeatureReferenceReconciliationPagedResponseSchema
 >;
 
-export const AdminFeatureReferenceReconciliationDetailSchema = z.object({
-  event_id: UuidSchema,
-  status: FeatureReferenceReconciliationStatusSchema,
-  receipt: AdminFeatureReferenceReconciliationReceiptSchema.nullable().optional(),
-  attempts: z.array(AdminFeatureReferenceReconciliationAttemptSchema),
-  impacts: z.array(AdminFeatureReferenceReconciliationImpactSchema),
-});
+export const AdminFeatureReferenceReconciliationDetailSchema = z
+  .object({
+    event_id: UuidSchema,
+    status: FeatureReferenceReconciliationStatusSchema,
+    receipt: AdminFeatureReferenceReconciliationReceiptSchema.nullable().optional(),
+    attempts: z.array(AdminFeatureReferenceReconciliationAttemptSchema),
+    impacts: z.array(AdminFeatureReferenceReconciliationImpactSchema),
+  })
+  .superRefine((value, context) => {
+    const latest = value.attempts[0];
+    const applied = value.status === 'applied';
+    const shapeValid = applied
+      ? value.receipt != null && latest?.status === 'applied'
+      : value.receipt == null && latest?.status === 'blocked' && value.impacts.length === 0;
+    if (!shapeValid) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'M05 detail의 receipt/attempt/impact terminal shape가 일치하지 않습니다.',
+      });
+    }
+  });
 export type AdminFeatureReferenceReconciliationDetail = z.infer<
   typeof AdminFeatureReferenceReconciliationDetailSchema
 >;

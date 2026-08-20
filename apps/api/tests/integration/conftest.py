@@ -132,10 +132,35 @@ async def session_factory(_database_url: str):  # type: ignore[no-untyped-def]
         tables = [r[0] for r in rows]
         if tables:
             joined = ", ".join(f'app."{t}"' for t in tables)
-            # 운영 append-only trigger도 실제 migration으로 검증하되, 테스트 격리용
-            # transaction에서만 user trigger를 일시적으로 건너뛴다.
+            # 일반 user trigger는 test fixture의 privileged cleanup에서만 replica mode로
+            # 건너뛴다. M05 evidence trigger는 ENABLE ALWAYS라 별도로 disable/restore해야
+            # 하며, 실제 runtime에 대한 우회 증거가 되지 않게 이 경로를 명시한다.
             await conn.execute(text("SET LOCAL session_replication_role = replica"))
+            m05_evidence_tables = (
+                "ktm_feature_reference_reconciliation_delivery_attempts",
+                "ktm_feature_reference_reconciliation_applied_receipts",
+                "ktm_feature_reference_reconciliation_impacts",
+            )
+            for table_name in m05_evidence_tables:
+                if table_name in tables:
+                    await conn.execute(text(f'ALTER TABLE app."{table_name}" DISABLE TRIGGER USER'))
             await conn.execute(text(f"TRUNCATE {joined} RESTART IDENTITY CASCADE"))
+            for table_name in m05_evidence_tables:
+                if table_name in tables:
+                    await conn.execute(
+                        text(
+                            "ALTER TABLE app."
+                            f'"{table_name}" ENABLE ALWAYS TRIGGER '
+                            f'"trg_{table_name}_append_only"'
+                        )
+                    )
+                    await conn.execute(
+                        text(
+                            "ALTER TABLE app."
+                            f'"{table_name}" ENABLE ALWAYS TRIGGER '
+                            f'"trg_{table_name}_truncate_append_only"'
+                        )
+                    )
 
     try:
         yield factory

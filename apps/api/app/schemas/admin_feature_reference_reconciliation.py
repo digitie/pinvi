@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class AdminFeatureReferenceReconciliationAttempt(BaseModel):
@@ -65,6 +65,15 @@ class AdminFeatureReferenceReconciliationSummary(BaseModel):
     receipt: AdminFeatureReferenceReconciliationReceipt | None = None
     latest_attempt: AdminFeatureReferenceReconciliationAttempt
 
+    @model_validator(mode="after")
+    def validate_terminal_shape(self) -> AdminFeatureReferenceReconciliationSummary:
+        if self.status == "applied":
+            if self.receipt is None or self.latest_attempt.status != "applied":
+                raise ValueError("applied evidence requires receipt and applied latest attempt")
+        elif self.receipt is not None or self.latest_attempt.status != "blocked":
+            raise ValueError("blocked evidence requires no receipt and blocked latest attempt")
+        return self
+
 
 class AdminFeatureReferenceReconciliationPagedResponse(BaseModel):
     items: list[AdminFeatureReferenceReconciliationSummary] = Field(default_factory=list)
@@ -81,3 +90,17 @@ class AdminFeatureReferenceReconciliationDetail(BaseModel):
     receipt: AdminFeatureReferenceReconciliationReceipt | None = None
     attempts: list[AdminFeatureReferenceReconciliationAttempt] = Field(default_factory=list)
     impacts: list[AdminFeatureReferenceReconciliationImpact] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_terminal_shape(self) -> AdminFeatureReferenceReconciliationDetail:
+        latest = self.attempts[0] if self.attempts else None
+        if self.status == "applied":
+            if self.receipt is None or latest is None or latest.status != "applied":
+                raise ValueError("applied evidence requires receipt and applied latest attempt")
+        elif (
+            self.receipt is not None or latest is None or latest.status != "blocked" or self.impacts
+        ):
+            raise ValueError(
+                "blocked evidence requires no receipt, blocked latest attempt, and no impacts"
+            )
+        return self

@@ -28,7 +28,9 @@ Map에 ACK한다. 이 문서는 Map ADR-095와
 ## local evidence 모델
 
 새 relation은 모두 `app` schema, append-only이며 database trigger가 runtime의 raw
-update/delete/truncate를 거부한다.
+update/delete/truncate를 거부한다. trigger는 `ENABLE ALWAYS`라서
+`session_replication_role = replica`에서도 우회되지 않는다. 같은 blocked 관측은
+한 immutable attempt로만 보존하고, blocker material이 달라질 때에만 다음 attempt를 append한다.
 
 | relation | 정본 | 핵심 제약 |
 | --- | --- | --- |
@@ -51,7 +53,9 @@ ACK한다. 달라지면 fail-close한다.
    있으면 mutation 없이 `blocked` attempt만 commit하고 Map ACK을 호출하지 않는다.
 5. block이 없을 때 `rebind`는 두 pair column을 replacement pair로 같은 flush 안에 바꾸고,
    `detach`는 두 column을 `NULL`로 만들며 Trip POI에는 `feature_link_broken_at`을 기록한다.
-   이미 action 결과가 증명된 행은 `already_reconciled` impact로 보존한다.
+   이전 final receipt가 같은 event material을 증명한 경우에만 그 receipt를 재사용해 ACK한다.
+   단지 replacement tuple이 보인다는 사실만으로는 인과를 추론하지 않으며, 별도의
+   `already_reconciled` impact도 만들지 않는다.
 6. canonical JSON UTF-8 SHA-256 final receipt와 sorted impact root, attempt, impact rows를 commit한
    뒤에만 network ACK을 한다. commit 뒤 ACK 전 crash는 재lease 뒤 기존 receipt hash로 재-ACK한다.
 

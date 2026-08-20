@@ -51,6 +51,24 @@ wire 표현 단언으로 방향만 뒤집었다 — 선언과 값이 함께 되�
 **곁다리로 발견** — `vitest run`이 fork 워커 기동에 실패한 파일을 조용히 건너뛰고 **exit 0**으로 끝난다
 (로컬에서 18파일 중 3~6개 누락, `Failed to start forks worker` 로그만 남음). CI에서 같은 일이 나면
 false-green이라 T-321로 등록했다. 이번 검증은 누락분을 개별 실행해 18파일 전부 통과를 확인했다.
+## 2026-08-21 (codex) — T-VN-M05 적대 재심 보정
+
+- 동일한 blocked observation은 마지막 immutable attempt의 event SHA, block fingerprint,
+  observation root가 모두 같을 때 재기록하지 않는다. blocker material이 바뀌면 다음 sequence를
+  append하고, 해소되면 final receipt와 applied attempt로 정상 전이한다.
+- M05 evidence trigger는 `ENABLE ALWAYS`로 올려 `session_replication_role = replica`에서도
+  update/delete/truncate를 거부한다. integration fixture의 schema cleanup은 superuser test-only
+  trigger disable/restore를 명시해 runtime 우회로 오인되지 않게 했다. fresh `--no-owner
+  --no-privileges` restore는 단일-role schema-owner를 대조하거나
+  `PINVI_RESTORE_APP_ROLE`의 table/sequence grant를 명시적으로 재적용한다.
+- read/ACK worker는 Map의 401/403/422/503 pairing fault에서 poll-rate 재시도하지 않고 멈춰
+  `/health/feature-reference-reconciliation`에 비밀 없는 fault를 남긴다. ACK cursor는 해당 event
+  sequence 이상이어야 하며, admin evidence API/Zod는 applied/blocked receipt·latest attempt shape를
+  fail-close하고 DB-side page로만 목록을 읽는다.
+- 검증: focused Python unit 11건, M05 PostGIS integration 8건, Ruff/format, strict mypy,
+  schema Vitest 2건, schema/web typecheck를 통과했다. M05 activation과 N150 isolated paired live UI
+  E2E는 여전히 미완료라 `false`다.
+
 ## 2026-08-21 (codex) — T-VN-M05 local projection safety regression 완료
 
 - `tests/integration/test_feature_reference_reconciliation.py` 7건이 실제 PostGIS migration에서

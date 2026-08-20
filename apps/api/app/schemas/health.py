@@ -33,3 +33,9 @@ class CacheTargetSyncHealthResponse(BaseModel):
     snapshot_merkle_root: str | None
     reconcile_status: str
     last_error: str | None
+
+
+class FeatureReferenceReconciliationHealthResponse(BaseModel):
+    enabled: bool
+    ready: bool
+    fault: str | None

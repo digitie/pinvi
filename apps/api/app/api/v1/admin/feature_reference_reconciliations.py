@@ -6,7 +6,9 @@ import uuid
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, literal, select, union_all
+from sqlalchemy.orm import aliased
+from sqlalchemy.sql import Subquery
 
 from app.core.deps import DbSession
 from app.core.rbac import require_role
@@ -80,23 +82,27 @@ def _impact(row: KtmFeatureReferenceReconciliationImpact) -> AdminImpact:
     )
 
 
-async def _latest_attempts_by_event(
-    db: DbSession,
-) -> dict[uuid.UUID, KtmFeatureReferenceReconciliationDeliveryAttempt]:
-    rows = list(
-        (
-            await db.scalars(
-                select(KtmFeatureReferenceReconciliationDeliveryAttempt).order_by(
-                    KtmFeatureReferenceReconciliationDeliveryAttempt.event_id,
-                    KtmFeatureReferenceReconciliationDeliveryAttempt.attempt_sequence.desc(),
-                )
-            )
-        ).all()
+def _latest_attempts_subquery() -> Subquery:
+    """event별 마지막 attempt만 DB에서 선택한다."""
+
+    previous = aliased(KtmFeatureReferenceReconciliationDeliveryAttempt)
+    latest_sequence = (
+        select(func.max(previous.attempt_sequence))
+        .where(previous.event_id == KtmFeatureReferenceReconciliationDeliveryAttempt.event_id)
+        .correlate(KtmFeatureReferenceReconciliationDeliveryAttempt)
+        .scalar_subquery()
     )
-    latest: dict[uuid.UUID, KtmFeatureReferenceReconciliationDeliveryAttempt] = {}
-    for row in rows:
-        latest.setdefault(row.event_id, row)
-    return latest
+    return (
+        select(
+            KtmFeatureReferenceReconciliationDeliveryAttempt.event_id.label("event_id"),
+            KtmFeatureReferenceReconciliationDeliveryAttempt.attempt_sequence.label(
+                "attempt_sequence"
+            ),
+            KtmFeatureReferenceReconciliationDeliveryAttempt.status.label("attempt_status"),
+        )
+        .where(KtmFeatureReferenceReconciliationDeliveryAttempt.attempt_sequence == latest_sequence)
+        .subquery()
+    )
 
 
 @router.get("", response_model=Envelope[AdminFeatureReferenceReconciliationPagedResponse])
@@ -109,62 +115,113 @@ async def list_feature_reference_reconciliations(
 ) -> Envelope[AdminFeatureReferenceReconciliationPagedResponse]:
     """terminal receipt와 아직 ACK하지 않은 마지막 blocked 관측만 조회한다."""
 
-    latest = await _latest_attempts_by_event(db)
-    receipts = list(
+    latest = _latest_attempts_subquery()
+    applied = select(
+        KtmFeatureReferenceReconciliationAppliedReceipt.event_id.label("event_id"),
+        literal("applied").label("evidence_status"),
+        KtmFeatureReferenceReconciliationAppliedReceipt.event_sequence.label("event_sequence"),
+        KtmFeatureReferenceReconciliationAppliedReceipt.event_sha256.label("event_sha256"),
+        KtmFeatureReferenceReconciliationAppliedReceipt.applied_at.label("observed_at"),
+    ).join(latest, latest.c.event_id == KtmFeatureReferenceReconciliationAppliedReceipt.event_id)
+    blocked = (
+        select(
+            KtmFeatureReferenceReconciliationDeliveryAttempt.event_id.label("event_id"),
+            literal("blocked").label("evidence_status"),
+            KtmFeatureReferenceReconciliationDeliveryAttempt.event_sequence.label("event_sequence"),
+            KtmFeatureReferenceReconciliationDeliveryAttempt.event_sha256.label("event_sha256"),
+            KtmFeatureReferenceReconciliationDeliveryAttempt.observed_at.label("observed_at"),
+        )
+        .join(
+            latest,
+            (latest.c.event_id == KtmFeatureReferenceReconciliationDeliveryAttempt.event_id)
+            & (
+                latest.c.attempt_sequence
+                == KtmFeatureReferenceReconciliationDeliveryAttempt.attempt_sequence
+            ),
+        )
+        .outerjoin(
+            KtmFeatureReferenceReconciliationAppliedReceipt,
+            KtmFeatureReferenceReconciliationAppliedReceipt.event_id
+            == KtmFeatureReferenceReconciliationDeliveryAttempt.event_id,
+        )
+        .where(
+            KtmFeatureReferenceReconciliationAppliedReceipt.event_id.is_(None),
+            KtmFeatureReferenceReconciliationDeliveryAttempt.status == "blocked",
+        )
+    )
+    if status_filter == "applied":
+        candidates = applied.subquery()
+    elif status_filter == "blocked":
+        candidates = blocked.subquery()
+    else:
+        candidates = union_all(applied, blocked).subquery()
+    total = int(await db.scalar(select(func.count()).select_from(candidates)) or 0)
+    start = (page - 1) * limit
+    page_rows = list(
+        (
+            await db.execute(
+                select(candidates)
+                .order_by(candidates.c.observed_at.desc(), candidates.c.event_id.desc())
+                .offset(start)
+                .limit(limit)
+            )
+        ).mappings()
+    )
+    event_ids = [row["event_id"] for row in page_rows]
+    receipt_by_event = {
+        row.event_id: row
+        for row in (
+            await db.scalars(
+                select(KtmFeatureReferenceReconciliationAppliedReceipt).where(
+                    KtmFeatureReferenceReconciliationAppliedReceipt.event_id.in_(event_ids)
+                )
+            )
+        ).all()
+    }
+    attempt_rows = list(
         (
             await db.scalars(
-                select(KtmFeatureReferenceReconciliationAppliedReceipt).order_by(
-                    KtmFeatureReferenceReconciliationAppliedReceipt.applied_at.desc(),
-                    KtmFeatureReferenceReconciliationAppliedReceipt.event_id.desc(),
+                select(KtmFeatureReferenceReconciliationDeliveryAttempt)
+                .where(KtmFeatureReferenceReconciliationDeliveryAttempt.event_id.in_(event_ids))
+                .order_by(
+                    KtmFeatureReferenceReconciliationDeliveryAttempt.event_id,
+                    KtmFeatureReferenceReconciliationDeliveryAttempt.attempt_sequence.desc(),
                 )
             )
         ).all()
     )
-    terminal_ids = {row.event_id for row in receipts}
+    latest_by_event: dict[uuid.UUID, KtmFeatureReferenceReconciliationDeliveryAttempt] = {}
+    for attempt in attempt_rows:
+        latest_by_event.setdefault(attempt.event_id, attempt)
     items: list[AdminFeatureReferenceReconciliationSummary] = []
-    if status_filter in {"all", "applied"}:
-        for receipt_row in receipts:
-            latest_attempt = latest.get(receipt_row.event_id)
-            if latest_attempt is None:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail={
-                        "code": "FEATURE_REFERENCE_RECONCILIATION_EVIDENCE_INVALID",
-                        "message": "terminal receipt에 대응하는 delivery attempt가 없습니다.",
-                    },
-                )
-            items.append(
-                AdminFeatureReferenceReconciliationSummary(
-                    event_id=receipt_row.event_id,
-                    status="applied",
-                    event_sequence=receipt_row.event_sequence,
-                    event_sha256=receipt_row.event_sha256,
-                    observed_at=receipt_row.applied_at,
-                    receipt=_receipt(receipt_row),
-                    latest_attempt=_attempt(latest_attempt),
-                )
+    for row in page_rows:
+        event_id = row["event_id"]
+        latest_attempt = latest_by_event.get(event_id)
+        if latest_attempt is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "code": "FEATURE_REFERENCE_RECONCILIATION_EVIDENCE_INVALID",
+                    "message": "증거 행에 대응하는 delivery attempt가 없습니다.",
+                },
             )
-    if status_filter in {"all", "blocked"}:
-        for event_id, attempt_row in latest.items():
-            if event_id in terminal_ids or attempt_row.status != "blocked":
-                continue
-            items.append(
-                AdminFeatureReferenceReconciliationSummary(
-                    event_id=event_id,
-                    status="blocked",
-                    event_sequence=attempt_row.event_sequence,
-                    event_sha256=attempt_row.event_sha256,
-                    observed_at=attempt_row.observed_at,
-                    receipt=None,
-                    latest_attempt=_attempt(attempt_row),
-                )
+        evidence_status = row["evidence_status"]
+        items.append(
+            AdminFeatureReferenceReconciliationSummary(
+                event_id=event_id,
+                status=evidence_status,
+                event_sequence=row["event_sequence"],
+                event_sha256=row["event_sha256"],
+                observed_at=row["observed_at"],
+                receipt=(
+                    _receipt(receipt_by_event[event_id]) if evidence_status == "applied" else None
+                ),
+                latest_attempt=_attempt(latest_attempt),
             )
-    items.sort(key=lambda row: (row.observed_at, str(row.event_id)), reverse=True)
-    total = len(items)
-    start = (page - 1) * limit
+        )
     return Envelope.of(
         AdminFeatureReferenceReconciliationPagedResponse(
-            items=items[start : start + limit], total=total, page=page, limit=limit
+            items=items, total=total, page=page, limit=limit
         )
     )
 

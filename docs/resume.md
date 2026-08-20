@@ -20,6 +20,18 @@ Zod 미러 3곳(detail-card는 각각 5·7 arm 동시)에서 제거했다. 저�
 
 **다음 한 작업**: T-273(v1.0.0 E2E/Live gate) — 남은 hard blocker는 geofence 운영 설정이다.
 모바일 후속(T-311/T-318/T-319/T-320)과 T-321(vitest 조용한 누락)은 별도 PR로 분리해 뒀다.
+## 2026-08-21 (codex) — T-VN-M05 적대 재심 보정
+
+M05 local evidence는 동일 blocked observation을 중복 append하지 않고, `ENABLE ALWAYS`
+append-only trigger와 strict ACK cursor를 사용한다. Map 401/403/422/503 pairing fault는 worker를
+정지하고 health에만 비밀 없는 fault를 표시한다. admin evidence page는 DB pagination과
+applied/blocked terminal shape validation을 쓴다. single-role fresh restore는 schema ownership을
+확인하고, 분리 role은 `PINVI_RESTORE_APP_ROLE` grant를 다시 적용한다.
+
+**다음 한 작업**: 전문 적대 재심 결과를 반영하고 exact Map/PinVi draft pair의 N150 격리 stack에서
+M04 request → M05 Map decision → PinVi receipt/UI → Map ACK 실제 browser E2E를 실행한다. 이 전에는
+activation을 계속 `false`로 둔다.
+
 ## 2026-08-21 (codex) — T-VN-M05 reconciliation evidence admin 읽기 경계
 
 admin/operator가 terminal receipt, blocked observation, row-level impact를 읽는 전용 API/UI를

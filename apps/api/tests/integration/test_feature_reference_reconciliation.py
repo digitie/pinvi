@@ -264,6 +264,7 @@ async def test_admin_evidence_api_lists_blocked_and_applied_local_receipts(
     admin_id = await _create_admin(session_factory)
     applied_event_id = uuid.uuid4()
     blocked_event_id = uuid.uuid4()
+    second_blocked_event_id = uuid.uuid4()
     old_feature_uuid = uuid.uuid4()
     replacement_uuid = uuid.uuid4()
     async with session_factory() as db:
@@ -312,6 +313,15 @@ async def test_admin_evidence_api_lists_blocked_and_applied_local_receipts(
                     block_fingerprint_sha256="f" * 64,
                     observation_root_sha256="0" * 64,
                 ),
+                KtmFeatureReferenceReconciliationDeliveryAttempt(
+                    event_id=second_blocked_event_id,
+                    attempt_sequence=1,
+                    event_sequence=12,
+                    event_sha256="1" * 64,
+                    status="blocked",
+                    block_fingerprint_sha256="2" * 64,
+                    observation_root_sha256="3" * 64,
+                ),
             )
         )
         await db.commit()
@@ -322,13 +332,30 @@ async def test_admin_evidence_api_lists_blocked_and_applied_local_receipts(
     )
     assert response.status_code == 200, response.text
     items = response.json()["data"]["items"]
-    assert {item["event_id"] for item in items} == {str(applied_event_id), str(blocked_event_id)}
+    assert {item["event_id"] for item in items} == {
+        str(applied_event_id),
+        str(blocked_event_id),
+        str(second_blocked_event_id),
+    }
     applied = next(item for item in items if item["event_id"] == str(applied_event_id))
     assert applied["status"] == "applied"
     assert applied["receipt"]["receipt_sha256"] == "c" * 64
     blocked = next(item for item in items if item["event_id"] == str(blocked_event_id))
     assert blocked["status"] == "blocked"
     assert blocked["receipt"] is None
+
+    blocked_page = await client.get(
+        "/admin/feature-reference-reconciliations?status=blocked&page=1&limit=1",
+        cookies=auth_cookies(str(admin_id)),
+    )
+    assert blocked_page.status_code == 200, blocked_page.text
+    blocked_data = blocked_page.json()["data"]
+    assert blocked_data["total"] == 2
+    assert blocked_data["page"] == 1
+    assert blocked_data["limit"] == 1
+    assert len(blocked_data["items"]) == 1
+    assert blocked_data["items"][0]["status"] == "blocked"
+    assert blocked_data["items"][0]["receipt"] is None
 
     detail = await client.get(
         f"/admin/feature-reference-reconciliations/{applied_event_id}",
@@ -397,6 +424,7 @@ async def test_partial_pair_blocks_without_mutation_and_evidence_is_append_only(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     old_uuid = uuid.uuid4()
+    partial_id: uuid.UUID
     async with session_factory() as db:
         user = User(
             email=f"m05-{uuid.uuid4().hex}@pinvi.test",
@@ -423,6 +451,7 @@ async def test_partial_pair_blocks_without_mutation_and_evidence_is_append_only(
         )
         db.add(partial)
         await db.flush()
+        partial_id = partial.attachment_id
         lease = _lease(
             event_id=uuid.uuid4(),
             event_sequence=2,
@@ -436,14 +465,43 @@ async def test_partial_pair_blocks_without_mutation_and_evidence_is_append_only(
         assert isinstance(blocked, ReconciliationBlocked)
         await db.commit()
 
+    # 영구 blocker는 worker recheck마다 새 row를 만들지 않는다.
     async with session_factory() as db:
-        attempt = await db.get(
-            KtmFeatureReferenceReconciliationDeliveryAttempt,
-            (lease.event.event_id, 1),
+        repeated = await apply_feature_reference_reconciliation_event(db, lease)
+        assert isinstance(repeated, ReconciliationBlocked)
+        assert repeated.attempt_sequence == 1
+        await db.commit()
+
+    # blocker를 해소하면 다음 관측은 terminal receipt와 applied attempt로 전이한다.
+    async with session_factory() as db:
+        partial = await db.get(TripDayPoi, partial_id)
+        assert partial is not None
+        partial.feature_uuid = old_uuid
+        await db.commit()
+
+    async with session_factory() as db:
+        applied = await apply_feature_reference_reconciliation_event(db, lease)
+        assert isinstance(applied, ReconciliationApplied)
+        await db.commit()
+
+    async with session_factory() as db:
+        attempts = list(
+            (
+                await db.scalars(
+                    select(KtmFeatureReferenceReconciliationDeliveryAttempt)
+                    .where(
+                        KtmFeatureReferenceReconciliationDeliveryAttempt.event_id
+                        == lease.event.event_id
+                    )
+                    .order_by(KtmFeatureReferenceReconciliationDeliveryAttempt.attempt_sequence)
+                )
+            ).all()
         )
-        assert attempt is not None
-        assert attempt.status == "blocked"
-        assert attempt.block_fingerprint_sha256 is not None
+        assert [(attempt.attempt_sequence, attempt.status) for attempt in attempts] == [
+            (1, "blocked"),
+            (2, "applied"),
+        ]
+        assert attempts[0].block_fingerprint_sha256 is not None
         with pytest.raises(DBAPIError):
             await db.execute(
                 text(
@@ -454,6 +512,51 @@ async def test_partial_pair_blocks_without_mutation_and_evidence_is_append_only(
             )
             await db.commit()
         await db.rollback()
+
+
+@pytest.mark.asyncio
+async def test_append_only_evidence_trigger_fires_in_replica_mode(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """M05 evidence는 session_replication_role로 우회할 수 없다."""
+
+    old_uuid = uuid.uuid4()
+    event_id = uuid.uuid4()
+    lease = _lease(
+        event_id=event_id,
+        event_sequence=29,
+        event_sha256="f" * 64,
+        old_feature_id="feature-old",
+        old_feature_uuid=old_uuid,
+    )
+    async with session_factory() as db:
+        await _seed_rows(db, old_feature_id="feature-old", old_feature_uuid=old_uuid)
+        result = await apply_feature_reference_reconciliation_event(db, lease)
+        assert isinstance(result, ReconciliationApplied)
+        await db.commit()
+
+    statements = (
+        "UPDATE app.ktm_feature_reference_reconciliation_delivery_attempts "
+        "SET status = status WHERE event_id = :event_id",
+        "DELETE FROM app.ktm_feature_reference_reconciliation_delivery_attempts "
+        "WHERE event_id = :event_id",
+        "TRUNCATE app.ktm_feature_reference_reconciliation_delivery_attempts",
+        "UPDATE app.ktm_feature_reference_reconciliation_applied_receipts "
+        "SET action = action WHERE event_id = :event_id",
+        "DELETE FROM app.ktm_feature_reference_reconciliation_applied_receipts "
+        "WHERE event_id = :event_id",
+        "TRUNCATE app.ktm_feature_reference_reconciliation_applied_receipts",
+        "UPDATE app.ktm_feature_reference_reconciliation_impacts "
+        "SET outcome = outcome WHERE event_id = :event_id",
+        "DELETE FROM app.ktm_feature_reference_reconciliation_impacts WHERE event_id = :event_id",
+        "TRUNCATE app.ktm_feature_reference_reconciliation_impacts",
+    )
+    for statement in statements:
+        async with session_factory() as db:
+            await db.execute(text("SET LOCAL session_replication_role = replica"))
+            with pytest.raises(DBAPIError):
+                await db.execute(text(statement), {"event_id": event_id})
+            await db.rollback()
 
 
 @pytest.mark.asyncio
