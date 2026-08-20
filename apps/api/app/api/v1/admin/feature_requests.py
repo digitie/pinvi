@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +39,7 @@ from app.clients.kor_travel_map_feature_request import (
     FeatureRequestQueueContractError,
     FeatureRequestQueueProblem,
     FeatureRequestQueueUnavailable,
+    FeatureRequestServiceClient,
     get_feature_request_service_client,
 )
 from app.core.deps import DbSession
@@ -209,7 +211,9 @@ def _result(row: FeatureSuggestion) -> AdminFeatureRequestResult:
 
 async def _load_pending(db: AsyncSession, request_id: uuid.UUID) -> FeatureSuggestion:
     suggestion = await db.scalar(
-        select(FeatureSuggestion).where(FeatureSuggestion.request_id == request_id)
+        select(FeatureSuggestion)
+        .where(FeatureSuggestion.request_id == request_id)
+        .with_for_update()
     )
     if suggestion is None:
         raise HTTPException(
@@ -270,13 +274,29 @@ async def approve_feature_request_endpoint(
     Map 호출이 성공하기 전에는 PinVi 제안/audit를 commit하지 않아 retry가 같은 immutable request UUID를
     재사용한다. Map queue 제출은 ``approved``(Map 검토 대기), identity exact conflict만 ``duplicate``다.
     """
+    audit_request_id = _parse_request_id(x_request_id)
     suggestion = await _load_pending(db, request_id)
     stype = suggestion.suggestion_type
     if stype == "new_place":
         service_client = get_feature_request_service_client(request)
-        categories = list(suggestion.categories)
-        if body.category and body.category not in categories:
-            categories.append(body.category)
+        try:
+            FeatureRequestServiceClient.validate_submission(
+                request_id=suggestion.request_id,
+                kind=cast(FeatureSuggestionKind, suggestion.kind),
+                name=suggestion.name,
+                lon=float(suggestion.lng),
+                lat=float(suggestion.lat),
+                categories=list(suggestion.categories),
+                note=suggestion.note,
+            )
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "MAP_FEATURE_REQUEST_PAYLOAD_INVALID",
+                    "message": "Map 요청 큐 범위를 벗어난 기존 제안입니다. 거절 후 새 제안으로 접수하세요.",
+                },
+            ) from exc
         with _map_feature_request_errors():
             receipt = await service_client.submit(
                 request_id=suggestion.request_id,
@@ -284,8 +304,9 @@ async def approve_feature_request_endpoint(
                 name=suggestion.name,
                 lon=float(suggestion.lng),
                 lat=float(suggestion.lat),
-                categories=categories,
+                categories=list(suggestion.categories),
                 note=suggestion.note,
+                correlation_id=audit_request_id,
             )
         record: dict[str, Any] = {
             "feature_id": receipt.feature_id,
@@ -307,6 +328,14 @@ async def approve_feature_request_endpoint(
                 detail={
                     "code": "VALIDATION_ERROR",
                     "message": "correction 제안에 target_feature_id가 없습니다.",
+                },
+            )
+        if not any((body.name, body.category, body.marker_color, body.marker_icon)):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "VALIDATION_ERROR",
+                    "message": "정보 수정 승인에는 하나 이상의 변경 필드가 필요합니다.",
                 },
             )
         patch: dict[str, Any] = {"reason": reason, "operator": operator}
@@ -397,7 +426,7 @@ async def approve_feature_request_endpoint(
         target_pii_fields=None,
         ip_hash_input=request.client.host if request.client else "",
         user_agent=request.headers.get("user-agent"),
-        request_id=_parse_request_id(x_request_id),
+        request_id=audit_request_id,
     )
     await db.commit()
     await db.refresh(suggestion)
@@ -414,6 +443,7 @@ async def reject_feature_request_endpoint(
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Envelope[AdminFeatureRequestResult]:
     """거절 — kor_travel_map 호출 없이 상태만 rejected로. audit."""
+    audit_request_id = _parse_request_id(x_request_id)
     suggestion = await _load_pending(db, request_id)
     before = {"status": suggestion.status}
     suggestion.status = "rejected"
@@ -431,7 +461,7 @@ async def reject_feature_request_endpoint(
         target_pii_fields=None,
         ip_hash_input=request.client.host if request.client else "",
         user_agent=request.headers.get("user-agent"),
-        request_id=_parse_request_id(x_request_id),
+        request_id=audit_request_id,
     )
     await db.commit()
     await db.refresh(suggestion)

@@ -26,6 +26,9 @@
   outcome-uncertain error는 local request/audit를 보존한다. correction/closure는 기존 Map admin
   PATCH/DELETE를 유지한다. Map #1029와 Pinvi draft PR의 exact pair가 격리 N150 `smoke` stack에서
   UI 승인→receipt를 통과하기 전 completion receipt는 `pending`이다.
+  - 신규 장소 UI는 저장된 payload만 제출하며, direct-create 분류/마커 입력을 요구하지 않는다.
+    service receipt/meta와 immutable echo, approve/reject row lock, production env template, isolated
+    live-mutating spec은 구현됐다. remote CI·최종 적대 재심·paired live 실행이 남았다.
 - [/] **T-VN-41-ABC — cache target relay producer/consumer 결박** — Map queued refresh의 source event/outbox
   원자화, restore exact replay `200` OpenAPI 선언, PinVi service artifact exact re-vendor와 restore-fence
   one-shot command를 하나의 compatible pair로 고정한다. command는 sync disabled 상태에서 immutable

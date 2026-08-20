@@ -33,11 +33,13 @@ Map draft PR #1029 head `590fdc04c55295e4dcbab6ba86b22b8f2e122d1a`의 full/servi
 기존 admin PATCH/DELETE 자격과 경로를 유지하며, 두 client는 유형별로만 지연 해석한다.
 
 Map의 요청 큐 좌표 상한 39.5를 Pinvi `new_place` 입력(Pydantic/Zod)에 맞춰, 나중에 승인 불가능한
-제안이 쌓이지 않게 했다. Map #1029와 Pinvi #458은 draft이므로 production completion receipt는 만들지
-않는다. N150 live UI E2E는 두 draft의 exact pair가 격리 `smoke` stack으로 기동된 뒤에만 실행한다.
+제안이 쌓이지 않게 했다. 기존 범위 밖 row는 Map 호출 없이 명시 422로 남겨 관리자가 거절/재접수할 수
+있고, 신규 장소 재시도는 저장된 immutable payload만 사용한다. Map #1029와 Pinvi #458은 draft이므로
+production completion receipt는 만들지 않는다. queue 전용 live-mutating spec/runbook은 추가했지만,
+Map API가 떠 있는 compatible draft pair가 없으므로 N150 UI E2E는 아직 실행하지 않았다.
 
-**다음 한 작업**: M04 contract/API/integration gate와 전문 적대 리뷰를 마치고, Pinvi draft PR을 원격에
-강제 갱신한다. 그 뒤 compatible draft pair로 N150 격리 UI E2E를 실행한다.
+**다음 한 작업**: M04 보정 커밋을 원격 draft PR에 올리고 전문 적대 재심·필수 CI를 통과시킨다. 그 뒤
+compatible draft pair로 N150 격리 UI E2E를 실행한다.
 
 
 ## 2026-08-19 (codex) — T-VN-42 Admin 계약 소비 폐쇄

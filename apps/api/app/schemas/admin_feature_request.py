@@ -53,10 +53,9 @@ class AdminFeatureRequestPagedResponse(BaseModel):
 class AdminFeatureRequestApprove(BaseModel):
     """승인 입력.
 
-    new_place는 범용 Map 요청 큐에 suggestion UUID 그대로 제출한다. ``category``가 있으면 기존
-    suggestion category 목록에 중복 없이 보강한다. ``marker_*``는 correction override 호환 입력이며
-    Map 큐의 최종 승인자가 정한다. ``access_reason``은 PinVi audit 사유, ``kor_travel_map_reason``은
-    correction/closure change request 사유(미지정 시 access_reason)다.
+    new_place는 저장된 suggestion payload를 변경하지 않고 범용 Map 요청 큐에 UUID 그대로 제출한다.
+    ``name``/``category``/``marker_*``는 correction override 전용이다. ``access_reason``은 PinVi audit
+    사유, ``kor_travel_map_reason``은 correction/closure change request 사유(미지정 시 access_reason)다.
     """
 
     access_reason: str = Field(min_length=1, max_length=500)

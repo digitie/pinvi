@@ -26,8 +26,10 @@ Map과 PinVi는 아직 각각 draft PR 단계이므로 production completion rec
 2. API process에만 해당 token을 주입한다. Web·Dagster·admin BFF 자격에는 전달하지 않는다.
 3. thin HTTP transport가 정확한 method/path/body/header와 full success envelope를 strict 검증한다.
    transport/5xx/contract 문제는 outcome uncertainty로 503이며 local suggestion은 pending이다.
-4. PinVi admin approve route는 queue write가 성공한 뒤에만 local row/audit를 commit한다.
-   correction/closure의 admin PATCH/DELETE behavior는 바꾸지 않는다.
+4. PinVi admin approve route는 queue write가 성공한 뒤에만 local row/audit를 commit하며, 같은
+   row의 approve/reject는 `FOR UPDATE`로 직렬화한다. `X-Request-Id`는 Map write 전에 검증하고
+   service request에도 전달한다.
+ correction/closure의 admin PATCH/DELETE behavior는 바꾸지 않는다.
 5. Map full/service OpenAPI artifact를 byte-exact vendor하고 consumer contract test를 추가한다.
 
 ## 검증
@@ -36,7 +38,10 @@ Map과 PinVi는 아직 각각 draft PR 단계이므로 production completion rec
 - service client mock transport: exact URL, service token, UUID idempotency, immutable body,
   response ID/status shape, timeout/4xx fail-closed.
 - admin integration: queue submit 후 `approved` receipt/audit, queue unavailable·409·422에서
-  PinVi row가 `pending`으로 보존됨, correction/closure 회귀.
+  PinVi row가 `pending`으로 보존됨, legacy out-of-range row의 network-free 422,
+  correction/closure 회귀.
+- mock browser e2e: new_place가 direct-create 분류/마커 필드 없이 Map queue receipt의 `approved`를
+  처리하고, correction은 실제 변경 필드를 전달함.
 - API unit/integration, Ruff, strict mypy 및 OpenAPI/vendor gate.
 - Map·PinVi container가 compatible draft pair로 배포된 뒤에만 N150 live UI E2E를 실행한다.
 
@@ -45,4 +50,5 @@ Map과 PinVi는 아직 각각 draft PR 단계이므로 production completion rec
 - [ ] PinVi draft PR을 만들고 원격 CI를 통과한다.
 - [ ] Map draft PR과 PinVi PR의 exact SHA pair를 다시 대조한다.
 - [ ] 격리 N150 live UI E2E에서 관리자 승인→Map queue submit receipt를 확인한다.
+  전용 spec/runbook은 추가됐지만 Map API가 현재 실행 중이 아니므로 아직 실행하지 않았다.
 - [ ] 양 PR이 merge되기 전에는 production completion receipt를 `complete`로 바꾸지 않는다.

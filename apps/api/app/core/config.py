@@ -50,6 +50,28 @@ def _capability_generation(capabilities: dict[str, object], name: str) -> int:
     return generation
 
 
+def _validate_production_map_root_url(value: str, *, env_name: str) -> None:
+    try:
+        base_url = urlsplit(value)
+        hostname = base_url.hostname
+        port = base_url.port
+    except ValueError as exc:
+        raise ValueError(
+            f"production {env_name} must be an allowed root HTTP(S) URL on port 12701"
+        ) from exc
+    if (
+        base_url.scheme not in {"http", "https"}
+        or hostname not in {"127.0.0.1", "host.docker.internal"}
+        or port != 12701
+        or base_url.path not in {"", "/"}
+        or base_url.username is not None
+        or base_url.password is not None
+        or bool(base_url.query)
+        or bool(base_url.fragment)
+    ):
+        raise ValueError(f"production {env_name} must be an allowed root HTTP(S) URL on port 12701")
+
+
 def _load_service_provenance() -> tuple[str, str, int, int, int, int]:
     raw = json.loads(_service_provenance_text())
     if not isinstance(raw, dict):
@@ -409,28 +431,14 @@ class Settings(BaseSettings):
 
         is_production = self.pinvi_environment == "production"
         if is_production:
-            try:
-                admin_base_url = urlsplit(self.pinvi_kor_travel_map_admin_base_url)
-                hostname = admin_base_url.hostname
-                port = admin_base_url.port
-            except ValueError as exc:
-                raise ValueError(
-                    "production PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL must be an allowed "
-                    "root HTTP(S) URL on port 12701"
-                ) from exc
-            if (
-                admin_base_url.scheme not in {"http", "https"}
-                or hostname not in {"127.0.0.1", "host.docker.internal"}
-                or port != 12701
-                or admin_base_url.path not in {"", "/"}
-                or admin_base_url.username is not None
-                or admin_base_url.password is not None
-                or bool(admin_base_url.query)
-                or bool(admin_base_url.fragment)
-            ):
-                raise ValueError(
-                    "production PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL must be an allowed "
-                    "root HTTP(S) URL on port 12701"
+            _validate_production_map_root_url(
+                self.pinvi_kor_travel_map_admin_base_url,
+                env_name="PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL",
+            )
+            if self.pinvi_kor_travel_map_feature_request_token is not None:
+                _validate_production_map_root_url(
+                    self.pinvi_kor_travel_map_api_base_url,
+                    env_name="PINVI_KOR_TRAVEL_MAP_API_BASE_URL",
                 )
 
         read_token = (

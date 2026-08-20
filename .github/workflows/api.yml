@@ -104,11 +104,12 @@ jobs:
 
           assert Path(config.__file__).is_relative_to("/tmp/pinvi-api-wheel-verify")
           assert config.KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256 == (
-              "8019e36f150ed006f5580e5ff224a0ba72030808b5303273f8c4c51aa0496431"
+              "c878531af2acdea0a25861d81f2e87f4768244d8ff37b94cb610194e3db85c96"
           )
           assert config.KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION == 7
           assert config.KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION == 2
           assert config.KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION == 1
+          assert config.KOR_TRAVEL_MAP_FEATURE_REQUEST_CAPABILITY_GENERATION == 1
           PY
           )
 
@@ -138,13 +139,14 @@ jobs:
           assert artifact.is_file()
           payload = json.loads(artifact.read_text(encoding="utf-8"))
           assert hashlib.sha256(artifact.read_bytes()).hexdigest() == (
-              "3ffea6198578a6ff7b88c0ced3ceb40a42b6abc37af230aa1751cae73e0fdca9"
+              "189850e224ba0744fcfd8ad32baf1d8539c6a2c5b4ed696e395b87012eb71b6b"
           )
           assert payload == {
               "capabilities": {
                   "cache_target": {"generation": 7},
                   "c6c_cancel_probe": {"generation": 2},
                   "curation_snapshot": {"generation": 1},
+                  "feature_request": {"generation": 1},
               },
               "map_release_revision": config.KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
               "service_openapi_sha256": config.KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,

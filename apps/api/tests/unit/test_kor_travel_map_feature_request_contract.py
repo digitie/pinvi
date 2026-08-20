@@ -54,7 +54,9 @@ def test_feature_request_submit_contract_is_exact() -> None:
     ]
     assert operation["requestBody"] == {
         "content": {
-            "application/json": {"schema": {"$ref": "#/components/schemas/FeatureRequestSubmitInput"}}
+            "application/json": {
+                "schema": {"$ref": "#/components/schemas/FeatureRequestSubmitInput"}
+            }
         },
         "required": True,
     }

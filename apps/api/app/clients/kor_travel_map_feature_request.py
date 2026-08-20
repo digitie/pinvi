@@ -19,7 +19,7 @@ from typing import Annotated, Literal
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError, model_validator
 
 from app.clients.kor_travel_map import _error_code
 from app.core.config import Settings, settings
@@ -63,6 +63,17 @@ class FeatureRequestCoord(_ClosedModel):
     lat: float = Field(ge=33, le=39.5)
 
 
+class FeatureRequestSubmission(_ClosedModel):
+    """Map queue에 보낼 immutable payload의 local revalidation 모델."""
+
+    request_id: uuid.UUID
+    kind: Literal["place", "event"]
+    name: str = Field(min_length=1, max_length=200)
+    coord: FeatureRequestCoord
+    categories: list[str] = Field(default_factory=list, max_length=10)
+    note: str | None = Field(default=None, max_length=2000)
+
+
 class FeatureRequestReceipt(_ClosedModel):
     request_id: uuid.UUID
     status: Literal["pending", "approved", "rejected", "exact_conflict"]
@@ -70,12 +81,12 @@ class FeatureRequestReceipt(_ClosedModel):
     name: str = Field(min_length=1, max_length=200)
     coord: FeatureRequestCoord
     categories: list[str] = Field(max_length=10)
-    note: str | None = Field(default=None, max_length=2000)
+    note: str | None = Field(max_length=2000)
     submitted_at: datetime
-    resolved_at: datetime | None = None
-    resolved_by_actor: str | None = None
-    feature_id: str | None = None
-    rejection_reason: str | None = None
+    resolved_at: datetime | None
+    resolved_by_actor: str | None
+    feature_id: str | None
+    rejection_reason: str | None
 
     @model_validator(mode="after")
     def validate_submit_receipt(self) -> FeatureRequestReceipt:
@@ -88,6 +99,24 @@ class FeatureRequestReceipt(_ClosedModel):
         if self.status == "exact_conflict" and not self.feature_id:
             raise ValueError("exact_conflict submit response requires feature_id")
         return self
+
+
+class _FeatureRequestPageMeta(_ClosedModel):
+    next_cursor: str | None = None
+    page_size: StrictInt = Field(ge=1)
+    total: StrictInt | None = None
+
+
+class _FeatureRequestClusterMeta(_ClosedModel):
+    cluster_unit: Literal["sido", "sigungu", "eupmyeondong"]
+    drill_down_unit: Literal["sido", "sigungu", "eupmyeondong"] | None
+
+
+class _FeatureRequestResponseMeta(_ClosedModel):
+    duration_ms: StrictInt = Field(ge=0)
+    request_id: str = ""
+    page: _FeatureRequestPageMeta | None = None
+    cluster: _FeatureRequestClusterMeta | None = None
 
 
 class FeatureRequestServiceClient:
@@ -111,21 +140,26 @@ class FeatureRequestServiceClient:
         lat: float,
         categories: list[str],
         note: str | None,
+        correlation_id: uuid.UUID | None = None,
     ) -> FeatureRequestReceipt:
         """immutable PinVi request를 동일 UUID의 Map command로 정확히 한 번 제출한다."""
 
-        payload = {
-            "request_id": str(request_id),
-            "kind": kind,
-            "name": name,
-            "coord": {"lon": lon, "lat": lat},
-            "categories": categories,
-            "note": note,
-        }
+        submission = self.validate_submission(
+            request_id=request_id,
+            kind=kind,
+            name=name,
+            lon=lon,
+            lat=lat,
+            categories=categories,
+            note=note,
+        )
+        payload = submission.model_dump(mode="json")
         headers = {
             _SERVICE_TOKEN_HEADER: self._token,
             _IDEMPOTENCY_KEY_HEADER: str(request_id),
         }
+        if correlation_id is not None:
+            headers["X-Request-ID"] = str(correlation_id)
         last_error: FeatureRequestQueueUnavailable | None = None
         for attempt in range(self._max_attempts):
             try:
@@ -145,13 +179,39 @@ class FeatureRequestServiceClient:
                         code=_error_code(response),
                     )
                 else:
-                    return self._receipt(response, request_id=request_id)
+                    return self._receipt(response, submission=submission)
             if attempt + 1 < self._max_attempts:
                 await asyncio.sleep(0.2 * (2**attempt))
         raise last_error or FeatureRequestQueueUnavailable("feature request submission failed")
 
     @staticmethod
-    def _receipt(response: httpx.Response, *, request_id: uuid.UUID) -> FeatureRequestReceipt:
+    def validate_submission(
+        *,
+        request_id: uuid.UUID,
+        kind: Literal["place", "event"],
+        name: str,
+        lon: float,
+        lat: float,
+        categories: list[str],
+        note: str | None,
+    ) -> FeatureRequestSubmission:
+        """legacy pending row도 Map writer 경계에서 network 호출 전에 검증한다."""
+
+        return FeatureRequestSubmission(
+            request_id=request_id,
+            kind=kind,
+            name=name,
+            coord={"lon": lon, "lat": lat},
+            categories=categories,
+            note=note,
+        )
+
+    @staticmethod
+    def _receipt(
+        response: httpx.Response,
+        *,
+        submission: FeatureRequestSubmission,
+    ) -> FeatureRequestReceipt:
         try:
             payload = json.loads(response.content)
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -161,15 +221,33 @@ class FeatureRequestServiceClient:
         if not isinstance(payload["meta"], dict) or not isinstance(payload["data"], dict):
             raise FeatureRequestQueueContractError("Map submit envelope data/meta is invalid")
         try:
+            _FeatureRequestResponseMeta.model_validate(payload["meta"])
             receipt = FeatureRequestReceipt.model_validate(payload["data"])
-        except ValueError as exc:
-            raise FeatureRequestQueueContractError("Map submit data contract is invalid") from exc
-        if receipt.request_id != request_id:
-            raise FeatureRequestQueueContractError("Map submit response request_id differs from input")
+        except ValidationError as exc:
+            raise FeatureRequestQueueContractError(
+                "Map submit success contract is invalid"
+            ) from exc
+        if receipt.request_id != submission.request_id:
+            raise FeatureRequestQueueContractError(
+                "Map submit response request_id differs from input"
+            )
+        if (
+            receipt.kind != submission.kind
+            or receipt.name != submission.name
+            or receipt.coord.lon != submission.coord.lon
+            or receipt.coord.lat != submission.coord.lat
+            or receipt.categories != submission.categories
+            or receipt.note != submission.note
+        ):
+            raise FeatureRequestQueueContractError(
+                "Map submit response differs from immutable input"
+            )
         return receipt
 
 
-def create_feature_request_service_client(app_settings: Settings) -> FeatureRequestServiceClient | None:
+def create_feature_request_service_client(
+    app_settings: Settings,
+) -> FeatureRequestServiceClient | None:
     token = app_settings.pinvi_kor_travel_map_feature_request_token
     if token is None:
         return None

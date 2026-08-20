@@ -53,6 +53,7 @@ async def _create_suggestion(
     requester_id: uuid.UUID,
     suggestion_type: str = "new_place",
     target_feature_id: str | None = None,
+    latitude: Decimal = Decimal("35.000000"),
 ) -> uuid.UUID:
     async with session_factory() as db:
         row = FeatureSuggestion(
@@ -62,7 +63,7 @@ async def _create_suggestion(
             kind="place",
             name="새 카페",
             lng=Decimal("129.000000"),
-            lat=Decimal("35.000000"),
+            lat=latitude,
             categories=["카페"],
             note="좋은 곳",
             status="pending",
@@ -221,7 +222,8 @@ async def test_approve_new_place_submits_generic_map_queue_and_commits_after_rec
     call = fake_queue.calls[0]
     assert call["request_id"] == req_id
     assert call["kind"] == "place"
-    assert call["categories"] == ["카페", "01070100"]
+    assert call["categories"] == ["카페"]
+    assert call["correlation_id"] is not None
 
     async with session_factory() as db:
         audit_count = await db.scalar(
@@ -246,6 +248,60 @@ async def test_approve_new_place_submits_generic_map_queue_and_commits_after_rec
     }
     assert stored.reviewed_by_admin_id == admin_id
     assert stored.resolved_at is not None
+
+
+async def test_approve_new_place_rejects_invalid_request_id_before_queue_submit(
+    client: Any, session_factory: Any, auth_cookies: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin@example.com", roles=["user", "admin"]
+    )
+    requester_id = await _create_user(session_factory, email="reporter@example.com")
+    req_id = await _create_suggestion(session_factory, requester_id=requester_id)
+    fake_queue = _FakeFeatureRequestClient()
+    _override_feature_request_client(monkeypatch, fake_queue)
+
+    resp = await client.post(
+        f"/admin/feature-requests/{req_id}/approve",
+        json={"access_reason": "검토"},
+        headers={"X-Request-Id": "not-a-uuid"},
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert resp.status_code == 422
+    assert fake_queue.calls == []
+
+
+async def test_approve_legacy_out_of_range_new_place_stays_pending_without_queue_submit(
+    client: Any, session_factory: Any, auth_cookies: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin@example.com", roles=["user", "admin"]
+    )
+    requester_id = await _create_user(session_factory, email="reporter@example.com")
+    req_id = await _create_suggestion(
+        session_factory,
+        requester_id=requester_id,
+        latitude=Decimal("39.500001"),
+    )
+    fake_queue = _FakeFeatureRequestClient()
+    _override_feature_request_client(monkeypatch, fake_queue)
+
+    resp = await client.post(
+        f"/admin/feature-requests/{req_id}/approve",
+        json={"access_reason": "범위 검토"},
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "MAP_FEATURE_REQUEST_PAYLOAD_INVALID"
+    assert fake_queue.calls == []
+    async with session_factory() as db:
+        stored = await db.scalar(
+            select(FeatureSuggestion).where(FeatureSuggestion.request_id == req_id)
+        )
+    assert stored is not None
+    assert stored.status == "pending"
 
 
 async def test_approve_new_place_without_queue_keeps_pending_before_body_specific_fields(
@@ -411,6 +467,32 @@ async def test_approve_existing_feature_changes_keep_map_outbound(
     assert len(fake.outbound_calls) == 1
     assert fake.outbound_calls[0]["method"] == expected_method
     assert fake.outbound_calls[0]["feature_id"] == "f_existing_1"
+
+
+async def test_approve_correction_without_mutation_is_rejected_before_map_call(
+    client: Any, session_factory: Any, auth_cookies: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    admin_id = await _create_user(
+        session_factory, email="admin@example.com", roles=["user", "admin"]
+    )
+    requester_id = await _create_user(session_factory, email="reporter@example.com")
+    req_id = await _create_suggestion(
+        session_factory,
+        requester_id=requester_id,
+        suggestion_type="correction",
+        target_feature_id="f_existing_1",
+    )
+    fake = _FakeAdminClient()
+    _override_admin_client(monkeypatch, fake)
+
+    resp = await client.post(
+        f"/admin/feature-requests/{req_id}/approve",
+        json={"access_reason": "변경 필드 없음"},
+        cookies=auth_cookies(str(admin_id)),
+    )
+
+    assert resp.status_code == 422
+    assert fake.outbound_calls == []
 
 
 async def test_reject_sets_status_rejected(

@@ -56,12 +56,14 @@ def _response(request_id: uuid.UUID, *, status: str = "pending") -> dict[str, An
 @pytest.mark.asyncio
 async def test_submit_uses_exact_service_path_headers_and_same_request_uuid() -> None:
     request_id = uuid.UUID("01900000-0000-7000-8000-000000000002")
+    correlation_id = uuid.UUID("01900000-0000-7000-8000-000000000003")
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "POST"
         assert request.url.path == "/v1/service/feature-requests"
         assert request.headers["X-Kor-Travel-Map-Service-Token"] == "feature-request-token"
         assert request.headers["Idempotency-Key"] == str(request_id)
+        assert request.headers["X-Request-ID"] == str(correlation_id)
         assert json.loads(request.content) == {
             "request_id": str(request_id),
             "kind": "place",
@@ -82,6 +84,7 @@ async def test_submit_uses_exact_service_path_headers_and_same_request_uuid() ->
             lat=35.0,
             categories=["카페", "01070100"],
             note="좋은 곳",
+            correlation_id=correlation_id,
         )
     finally:
         await client.aclose()
@@ -89,6 +92,42 @@ async def test_submit_uses_exact_service_path_headers_and_same_request_uuid() ->
     assert receipt.request_id == request_id
     assert receipt.status == "pending"
     assert receipt.feature_id is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda payload: payload["meta"].pop("duration_ms"),
+        lambda payload: payload["meta"].update({"unexpected": True}),
+        lambda payload: payload["data"].pop("rejection_reason"),
+        lambda payload: payload["data"].update({"name": "다른 이름"}),
+    ],
+)
+async def test_submit_rejects_malformed_or_nonmatching_success_receipt(
+    mutate: Callable[[dict[str, Any]], None],
+) -> None:
+    request_id = uuid.UUID("01900000-0000-7000-8000-000000000002")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = _response(request_id)
+        mutate(payload)
+        return httpx.Response(201, json=payload, request=request)
+
+    client = _client(handler)
+    try:
+        with pytest.raises(FeatureRequestQueueContractError):
+            await client.submit(
+                request_id=request_id,
+                kind="place",
+                name="새 카페",
+                lon=129.0,
+                lat=35.0,
+                categories=["카페", "01070100"],
+                note="좋은 곳",
+            )
+    finally:
+        await client.aclose()
 
 
 @pytest.mark.asyncio
