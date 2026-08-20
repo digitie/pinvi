@@ -57,7 +57,7 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET/POST /admin/notice-plans[/{plan_id}]` / `PATCH` / `DELETE`   | Notice plan CRUD                                     | 6      |
 | `POST /admin/notice-plans/{plan_id}/pois[/reorder]`               | Notice POI                                           | 6      |
 | `GET /admin/feature-requests`                                     | 사용자 feature 제안 검토 큐 (§8.4)                   | 8      |
-| `POST /admin/feature-requests/{id}/approve\|reject`               | 검토 → kor_travel_map `/v1/admin/features*` 릴레이   | 8      |
+| `POST /admin/feature-requests/{id}/approve\|reject`               | 검토 → 신규 장소 service 요청 큐 / 변경·폐쇄 admin 릴레이 | 8      |
 | `GET/PATCH/DELETE /admin/category-mappings[/{category_key}]`      | category catalog + Pinvi marker override             | 6      |
 | `GET /admin/etl/summary`                                          | Pinvi ETL registry + kor-travel-map ops 요약         | 5      |
 | `GET /admin/dedup-review`                                         | Record Linkage 후보 조회                             | 5      |
@@ -1647,10 +1647,10 @@ POI 삭제:
 
 ### 9.6 사용자 feature 제안 검토 큐 (T-179)
 
-사용자 제안(`app.feature_suggestions`, T-177)을 Admin이 검토해 승인/거절한다. 승인 시
-kor_travel_map `/v1/admin/features*` change API(전송 client = T-180, `:12701 /v1/admin/*`)로 전달한다.
-**Pinvi는 신규 수신 API를 만들지 않고 kor_travel_map 기존 change API를 전송 구간으로 쓴다**
-(kor_travel_map ADR-051). `apps/api/app/api/v1/admin/feature_requests.py`.
+사용자 제안(`app.feature_suggestions`, T-177)을 Admin이 검토해 승인/거절한다. 신규 장소는
+kor_travel_map service `POST /v1/service/feature-requests`(`:12701`)에 immutable 요청으로 제출하고,
+변경·폐쇄만 기존 `/v1/admin/features*` change API(전송 client = T-180)로 전달한다.
+`apps/api/app/api/v1/admin/feature_requests.py`.
 
 ```
 GET    /admin/feature-requests?status=pending&page=&limit=     # admin/operator, 이메일 마스킹, FIFO
@@ -1659,17 +1659,20 @@ POST   /admin/feature-requests/{request_id}/reject             # admin
 ```
 
 - **approve** (`access_reason` 필수 + audit): `suggestion_type`별 분기 —
-  - `new_place` → kor_travel_map `POST /v1/admin/features` (`category`(8자리 코드)/`marker_color`/
-    `marker_icon`은 사용자 제안에 없어 **Admin이 검토하며 body로 채운다** — 누락 시 422).
+  - `new_place` → kor_travel_map `POST /v1/service/feature-requests`. 저장된 `kind`/`name`/`coord`/
+    `categories`/`note`만 보존해 보낸다. PinVi suggestion UUID는 body `request_id`와
+    `Idempotency-Key`에 함께 넣고, admin body에는 `category`/`marker_color`/`marker_icon` override를
+    넣지 않는다. Map `pending` receipt면 PinVi는 `approved`, verified `exact_conflict`면
+    `duplicate`로 전이한다.
   - `correction` → `PATCH /v1/admin/features/{target_feature_id}` (override 일부).
   - `closure` → `DELETE /v1/admin/features/{target_feature_id}` (soft).
   - kor_travel_map 호출을 **먼저** 하고 성공 시에만 commit한다(실패 시 제안 `pending` 유지 → 재시도).
-    반환 `feature_id`/`request_id`/state를 `kor_travel_map_ref`에 저장하고 상태를 `applied`면 `added`,
-    그 외(require_review 큐 적재)면 `approved`로 둔다. `idempotency_key = request_id`,
-    출처 태깅 `operator = pinvi-admin:{admin_id}`(익명, D-11).
+    반환 `feature_id`/`request_id`/state를 `kor_travel_map_ref`에 저장한다. 변경·폐쇄는 `applied`면
+    `added`, 그 외(require_review 큐 적재)면 `approved`로 둔다. admin change API의 출처 태깅
+    `operator`는 고정 `pinvi-admin`이다(개인정보 미전달, D-11).
 - **reject**: kor_travel_map 호출 없이 `status = rejected` + audit.
-- **§7 미확정**(kor_travel_map T-217c): review_mode/idempotency/출처태깅/admin인증/closure 합의는 문서화된
-  기본값으로 진행하며 확정 시 조정한다.
+- service queue와 admin change API의 인증·idempotency·출처 경계는 각 vendored Map OpenAPI 계약으로
+  검증한다.
 
 ## 9. API 호출 로그
 

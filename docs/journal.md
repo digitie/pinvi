@@ -78,6 +78,9 @@ false-green이라 T-321로 등록했다. 이번 검증은 누락분을 개별 �
   `smoke` compose project로 기동한 뒤 관리자 UI 승인→Map request receipt만 확인한다.
   현재 PinVi worktree 전용 `127.0.0.1:13805` mock UI E2E는 3건 통과했지만, 이는 Map 동반 live
   실행 증거가 아니다.
+- **정본 문서 정렬**: `docs/api/admin.md`의 obsolete direct-create 설명을 제거했다. `new_place`는
+  저장된 immutable payload를 service queue로만 제출하며, body category/marker override가 없고,
+  correction/closure만 admin change API를 쓴다.
 
 
 ## 2026-08-19 (codex) — T-VN-42 Admin 계약 폐쇄 + Codex worktree 복구
