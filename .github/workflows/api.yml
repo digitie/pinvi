@@ -211,6 +211,7 @@ jobs:
               "cache_target": {"generation": 7},
               "c6c_cancel_probe": {"generation": 2},
               "curation_snapshot": {"generation": 1},
+              "feature_request": {"generation": 1},
           }
 
           config = Path("apps/api/app/core/config.py").read_text()
@@ -222,6 +223,7 @@ jobs:
           assert "KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION" in config
           assert "KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION" in config
           assert "KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION" in config
+          assert "KOR_TRAVEL_MAP_FEATURE_REQUEST_CAPABILITY_GENERATION" in config
           assert "cache-target-upstream-map-v1.json" not in config
           snapshot = Path("apps/api/tests/contract/kor-travel-map-openapi-service.json").read_bytes()
           assert hashlib.sha256(snapshot).hexdigest() == metadata["service_openapi_sha256"]
