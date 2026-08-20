@@ -52,6 +52,23 @@ wire 표현 단언으로 방향만 뒤집었다 — 선언과 값이 함께 되�
 (로컬에서 18파일 중 3~6개 누락, `Failed to start forks worker` 로그만 남음). CI에서 같은 일이 나면
 false-green이라 T-321로 등록했다. 이번 검증은 누락분을 개별 실행해 18파일 전부 통과를 확인했다.
 
+## 2026-08-20 (codex) — T-VN-M04 Map 범용 Feature 요청 큐 consumer
+
+- **정확한 producer pin**: Map draft PR #1029 head
+  `590fdc04c55295e4dcbab6ba86b22b8f2e122d1a`에서 `openapi.json` 및 `openapi.service.json`을 각각
+  byte-exact vendor했다. SHA-256은 full `590f49d1c4abe6558cf46da5a4a4b6b787bb007c3194c07f343f97a3b6b8d9be`,
+  service `c878531af2acdea0a25861d81f2e87f4768244d8ff37b94cb610194e3db85c96`이며, provenance capability
+  `feature_request=1`과 함께 고정한다.
+- **승인 경계**: `new_place`만 전용 `FeatureRequestServiceClient`를 지연 해석해
+  `POST /v1/service/feature-requests`로 제출한다. suggestion UUID는 body와 `Idempotency-Key`에 동일하게
+  넣고, `pending` receipt 뒤에 Pinvi `approved`, verified `exact_conflict` 뒤에만 `duplicate`를 commit한다.
+  409·422 및 transport/5xx/contract failure는 pending row와 audit 0을 보존한다. correction/closure의
+  Map admin PATCH/DELETE client는 새 장소 path에서 요구하지 않는다.
+- **입력 정합**: Map request queue의 lat 상한 39.5를 새 장소 Pydantic/Zod validation으로 동기화했다.
+  기존 correction/closure의 공통 지도 좌표 범위는 변경하지 않았다.
+- **live 증거 경계**: 운영 stack에는 실행하지 않는다. Map/Pinvi draft의 exact pair를 격리 N150
+  `smoke` compose project로 기동한 뒤 관리자 UI 승인→Map request receipt만 확인한다.
+
 
 ## 2026-08-19 (codex) — T-VN-42 Admin 계약 폐쇄 + Codex worktree 복구
 

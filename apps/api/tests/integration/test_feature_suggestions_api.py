@@ -81,6 +81,25 @@ async def test_user_creates_and_reads_feature_suggestion(
     assert detail.json()["data"]["request_id"] == str(request_id)
 
 
+async def test_new_place_rejects_coordinate_outside_map_request_queue_range(
+    client: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+) -> None:
+    user_id, _email = verified_user
+    resp = await client.post(
+        "/features/requests",
+        json={
+            "kind": "place",
+            "title": "큐 범위 밖 장소",
+            "coord": {"lon": 127.0, "lat": 40.0},
+        },
+        cookies=auth_cookies(user_id),
+    )
+
+    assert resp.status_code == 422, resp.text
+
+
 async def test_feature_suggestion_location_audit_uses_authenticated_user(
     client: Any,
     session_factory: Any,

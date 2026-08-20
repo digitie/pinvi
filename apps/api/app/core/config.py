@@ -50,7 +50,7 @@ def _capability_generation(capabilities: dict[str, object], name: str) -> int:
     return generation
 
 
-def _load_service_provenance() -> tuple[str, str, int, int, int]:
+def _load_service_provenance() -> tuple[str, str, int, int, int, int]:
     raw = json.loads(_service_provenance_text())
     if not isinstance(raw, dict):
         raise RuntimeError("Map service provenance must be an object")
@@ -68,7 +68,12 @@ def _load_service_provenance() -> tuple[str, str, int, int, int]:
     if not isinstance(capabilities_value, dict):
         raise RuntimeError("Map service provenance capabilities are invalid")
     capabilities = cast(dict[str, object], capabilities_value)
-    if set(capabilities) != {"cache_target", "c6c_cancel_probe", "curation_snapshot"}:
+    if set(capabilities) != {
+        "cache_target",
+        "c6c_cancel_probe",
+        "curation_snapshot",
+        "feature_request",
+    }:
         raise RuntimeError("Map service provenance capability inventory is invalid")
     return (
         _required_string(payload, "service_openapi_sha256", r"[0-9a-f]{64}"),
@@ -76,6 +81,7 @@ def _load_service_provenance() -> tuple[str, str, int, int, int]:
         _capability_generation(capabilities, "cache_target"),
         _capability_generation(capabilities, "c6c_cancel_probe"),
         _capability_generation(capabilities, "curation_snapshot"),
+        _capability_generation(capabilities, "feature_request"),
     )
 
 
@@ -85,6 +91,7 @@ def _load_service_provenance() -> tuple[str, str, int, int, int]:
     KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION,
     KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION,
     KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION,
+    KOR_TRAVEL_MAP_FEATURE_REQUEST_CAPABILITY_GENERATION,
 ) = _load_service_provenance()
 
 
@@ -201,6 +208,8 @@ class Settings(BaseSettings):
     # kor-travel-map ADR-060: admin proxy gate가 켜진 운영 API에는 secret + actor 헤더가 필요.
     pinvi_kor_travel_map_admin_proxy_secret: str = ""
     pinvi_kor_travel_map_admin_actor: str = "pinvi-admin"
+    # 범용 Feature 요청 큐 write 전용 principal. admin/public/general service token fallback 금지.
+    pinvi_kor_travel_map_feature_request_token: SecretStr | None = None
     # canonical /v1/ops/datasets*·/v1/ops/pipeline* 전용 server principal.
     # read/cancel 자격을 분리하고 요청 actor 대신 map 서버의 고정 actor를 사용한다.
     pinvi_kor_travel_map_ops_read_token: SecretStr | None = None
@@ -509,6 +518,9 @@ class Settings(BaseSettings):
                 self.pinvi_kor_travel_map_curation_cutover_mapping_token.get_secret_value()
                 if self.pinvi_kor_travel_map_curation_cutover_mapping_token is not None
                 else "",
+                self.pinvi_kor_travel_map_feature_request_token.get_secret_value()
+                if self.pinvi_kor_travel_map_feature_request_token is not None
+                else "",
             )
             if value
         }
@@ -574,14 +586,15 @@ class Settings(BaseSettings):
     @field_validator(
         "pinvi_kor_travel_map_curation_snapshot_token",
         "pinvi_kor_travel_map_curation_cutover_mapping_token",
+        "pinvi_kor_travel_map_feature_request_token",
         mode="before",
     )
     @classmethod
-    def _empty_curation_token_is_unset(cls, value: object) -> object:
+    def _empty_scoped_service_token_is_unset(cls, value: object) -> object:
         """빈 문자열은 미설정으로 본다.
 
         docker-manager/`infra/docker-compose.app.yml`은 미설정 토큰을 `${VAR:-}`(빈 문자열)로 주입한다.
-        빈 값을 '설정된 토큰'으로 다루면 두 토큰이 모두 비어 있을 때 `must differ`로 production API가
+        빈 값을 '설정된 토큰'으로 다루면 분리된 scope token이 모두 비어 있을 때 `must differ`로 production API가
         부팅하지 못한다(2026-08-18 리뷰 P0). 공백 포함 값은 그대로 두어 아래 검증이 명시적으로 거부한다.
         """
 
@@ -593,8 +606,8 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
-    def validate_curation_service_principals(self) -> Self:
-        """두 curation scope를 다른 Map trust boundary와 서로 분리한다."""
+    def validate_scoped_service_principals(self) -> Self:
+        """curation과 Feature 요청 write scope를 다른 Map trust boundary와 분리한다."""
 
         curation_tokens = (
             (
@@ -605,10 +618,14 @@ class Settings(BaseSettings):
                 "PINVI_KOR_TRAVEL_MAP_CURATION_CUTOVER_MAPPING_TOKEN",
                 self.pinvi_kor_travel_map_curation_cutover_mapping_token,
             ),
+            (
+                "PINVI_KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN",
+                self.pinvi_kor_travel_map_feature_request_token,
+            ),
         )
         values = [secret.get_secret_value() for _, secret in curation_tokens if secret is not None]
         if len(values) != len(set(values)):
-            raise ValueError("curation snapshot and cutover mapping tokens must differ")
+            raise ValueError("scoped Map service tokens must differ")
         protected = {
             value
             for value in (

@@ -12,6 +12,7 @@ from app.core.config import (
     KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION,
     KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION,
     KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION,
+    KOR_TRAVEL_MAP_FEATURE_REQUEST_CAPABILITY_GENERATION,
     KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
     KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
 )
@@ -22,8 +23,8 @@ _SNAPSHOT = (
 _SERVICE_PROVENANCE = (
     Path(__file__).resolve().parents[4] / "contracts" / "kor-travel-map-service-provenance-v1.json"
 )
-_MAP_RELEASE_REVISION = "f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf"
-_SNAPSHOT_SHA256 = "8019e36f150ed006f5580e5ff224a0ba72030808b5303273f8c4c51aa0496431"
+_MAP_RELEASE_REVISION = "590fdc04c55295e4dcbab6ba86b22b8f2e122d1a"
+_SNAPSHOT_SHA256 = "c878531af2acdea0a25861d81f2e87f4768244d8ff37b94cb610194e3db85c96"
 
 _GENERATION7_ROLE_SCOPES = {
     "command": {"cache-target:command"},
@@ -119,11 +120,13 @@ def test_service_snapshot_exact_bytes_runtime_pin_and_provenance_match_map_relea
     assert KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION == 7
     assert KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION == 2
     assert KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION == 1
+    assert KOR_TRAVEL_MAP_FEATURE_REQUEST_CAPABILITY_GENERATION == 1
     assert json.loads(_SERVICE_PROVENANCE.read_text()) == {
         "capabilities": {
             "c6c_cancel_probe": {"generation": 2},
             "cache_target": {"generation": 7},
             "curation_snapshot": {"generation": 1},
+            "feature_request": {"generation": 1},
         },
         "map_release_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
         "service_openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,

@@ -12,8 +12,8 @@ from app.schemas.admin import AdminFeatureDetailCuration, AdminFeatureWeatherMet
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-admin.json"
 )
-_UPSTREAM_COMMIT = "86c44f459ee9f91fac4818177387cb75e91ea335"
-_SNAPSHOT_SHA256 = "483edc245971d4ef247bcd18a0aff83dc83506821c34163234b60abd9f6c0087"
+_UPSTREAM_COMMIT = "590fdc04c55295e4dcbab6ba86b22b8f2e122d1a"
+_SNAPSHOT_SHA256 = "590f49d1c4abe6558cf46da5a4a4b6b787bb007c3194c07f343f97a3b6b8d9be"
 
 _ADMIN_FEATURE_QUERY_PARAMETERS = {
     "q",
@@ -59,7 +59,7 @@ def _query_names(operation: dict[str, Any]) -> set[str]:
 
 
 def test_admin_snapshot_is_byte_pinned_to_a_reviewed_map_revision() -> None:
-    assert _UPSTREAM_COMMIT == "86c44f459ee9f91fac4818177387cb75e91ea335"
+    assert _UPSTREAM_COMMIT == "590fdc04c55295e4dcbab6ba86b22b8f2e122d1a"
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
 
 

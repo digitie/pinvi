@@ -21,6 +21,24 @@ Zod 미러 3곳(detail-card는 각각 5·7 arm 동시)에서 제거했다. 저�
 **다음 한 작업**: T-273(v1.0.0 E2E/Live gate) — 남은 hard blocker는 geofence 운영 설정이다.
 모바일 후속(T-311/T-318/T-319/T-320)과 T-321(vitest 조용한 누락)은 별도 PR로 분리해 뒀다.
 
+## 2026-08-20 (codex) — T-VN-M04 범용 Feature 요청 큐 소비자 전환
+
+Map draft PR #1029 head `590fdc04c55295e4dcbab6ba86b22b8f2e122d1a`의 full/service OpenAPI를
+각각 SHA-256 `590f49d1c4abe6558cf46da5a4a4b6b787bb007c3194c07f343f97a3b6b8d9be` /
+`c878531af2acdea0a25861d81f2e87f4768244d8ff37b94cb610194e3db85c96`으로 byte-exact vendor했다.
+`new_place` 승인은 별도 `PINVI_KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`으로
+`POST /v1/service/feature-requests`에 suggestion UUID를 body `request_id`와 `Idempotency-Key`에 함께
+제출한다. `pending` receipt는 Pinvi `approved`, verified `exact_conflict`는 `duplicate`로만 전이한다.
+409·422·전송/5xx·응답 계약 오류는 Pinvi row/ref/audit를 보존해 재시도할 수 있다. correction/closure는
+기존 admin PATCH/DELETE 자격과 경로를 유지하며, 두 client는 유형별로만 지연 해석한다.
+
+Map의 요청 큐 좌표 상한 39.5를 Pinvi `new_place` 입력(Pydantic/Zod)에 맞춰, 나중에 승인 불가능한
+제안이 쌓이지 않게 했다. Map #1029와 Pinvi #458은 draft이므로 production completion receipt는 만들지
+않는다. N150 live UI E2E는 두 draft의 exact pair가 격리 `smoke` stack으로 기동된 뒤에만 실행한다.
+
+**다음 한 작업**: M04 contract/API/integration gate와 전문 적대 리뷰를 마치고, Pinvi draft PR을 원격에
+강제 갱신한다. 그 뒤 compatible draft pair로 N150 격리 UI E2E를 실행한다.
+
 
 ## 2026-08-19 (codex) — T-VN-42 Admin 계약 소비 폐쇄
 

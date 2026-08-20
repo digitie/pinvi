@@ -8,9 +8,12 @@
     },
     "curation_snapshot": {
       "generation": 1
+    },
+    "feature_request": {
+      "generation": 1
     }
   },
-  "map_release_revision": "f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf",
-  "service_openapi_sha256": "8019e36f150ed006f5580e5ff224a0ba72030808b5303273f8c4c51aa0496431",
+  "map_release_revision": "590fdc04c55295e4dcbab6ba86b22b8f2e122d1a",
+  "service_openapi_sha256": "c878531af2acdea0a25861d81f2e87f4768244d8ff37b94cb610194e3db85c96",
   "version": 1
 }

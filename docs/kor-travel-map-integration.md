@@ -57,6 +57,8 @@ PINVI_KOR_TRAVEL_MAP_PUBLIC_API_KEY=
 # kor_travel_map admin proxy gate가 켜진 운영 API용.
 PINVI_KOR_TRAVEL_MAP_ADMIN_PROXY_SECRET=
 PINVI_KOR_TRAVEL_MAP_ADMIN_ACTOR=pinvi-admin
+# 범용 Feature 요청 큐 writer 전용 service token. admin/public/ops token 재사용 금지.
+PINVI_KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN=
 # /v1/ops/datasets*·/v1/ops/pipeline* scope별 server principal
 PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN=
 PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN=
@@ -126,7 +128,8 @@ reconciliation/cutover와 sync enable은 deployment control plane이 별도 성�
 | `GET`      | `/v1/categories`                      | 카테고리 카탈로그                                                           |
 | `GET`      | `/v1/public/beaches*`                 | Pinvi `/public/beaches*` 공개 해수욕장 목록·상세·marker                     |
 | `GET`      | `/v1/public/festivals*`               | Pinvi `/public/festivals*` 공개 축제 월별 목록·상세·marker                  |
-| `POST`     | `/v1/admin/features*` (change API)    | Pinvi Admin 승인 제안 반영 (admin 도메인 전용, §2.9 of integrations doc)    |
+| `POST`     | `/v1/service/feature-requests`        | 신규 장소 제안 immutable submit (ServiceToken 전용)                         |
+| `PATCH/DELETE` | `/v1/admin/features*` (change API) | 기존 장소 correction/closure 승인 (admin 도메인 전용)                       |
 | `POST/GET` | `/v1/admin/feature-update-requests*`  | 재적재 — kor_travel_map 운영자 전용, Pinvi 제품 비노출 (DEC-05)             |
 
 응답 envelope는 kor-travel-map 계약의 `{data, meta}`를 따른다. Pinvi는 이 응답을
@@ -174,7 +177,8 @@ T-214h clean cut으로 제거됨). **admin/ops/debug API도 전부 :12701**이�
 | `GET /search` feature 영역      | `GET /v1/features/search`                                                | 주소 후보는 `kor-travel-geo` v2 search                                |
 | `GET /trips/{trip_id}` POI join | `POST /v1/features/batch`                                                | `feature_id[]` batch, 응답 `data.found`/`missing`                     |
 | POI 생성 feature 검증           | `POST /v1/features/batch`                                                | `missing`이면 snapshot fallback 정책 적용                             |
-| 사용자 feature 제안 승인 반영   | `POST/PATCH/DELETE /v1/admin/features*` (change API)                     | Pinvi Admin 도메인 전용 (DEC-05, T-179/T-180)                         |
+| 사용자 신규 장소 제안 승인      | `POST /v1/service/feature-requests`                                      | request UUID를 body/header에 함께 넣는 immutable service 제출          |
+| 기존 장소 correction/closure   | `PATCH/DELETE /v1/admin/features*` (change API)                          | Pinvi Admin 도메인 전용 (DEC-05, T-179/T-180)                         |
 | POI cache target desired state  | `/v1/service/cache-targets/{external_system}/{target_key}`               | command outbox worker, ServiceToken only                              |
 | cache target claim              | `POST /v1/service/cache-target-event-claims`                             | global prefix pull                                                    |
 | cache target ACK                | `POST /v1/service/cache-target-event-acks`                               | local DB commit 뒤 contiguous prefix ACK                              |
