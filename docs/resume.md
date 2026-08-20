@@ -21,6 +21,16 @@ Zod 미러 3곳(detail-card는 각각 5·7 arm 동시)에서 제거했다. 저�
 **다음 한 작업**: T-273(v1.0.0 E2E/Live gate) — 남은 hard blocker는 geofence 운영 설정이다.
 모바일 후속(T-311/T-318/T-319/T-320)과 T-321(vitest 조용한 누락)은 별도 PR로 분리해 뒀다.
 
+## 2026-08-21 (codex) — T-VN-M05 PinVi paired consumer 구현 시작
+
+Map `037e24698f74e2067ea7c8572b044076dc0ac89c` exact service vendor를 기준으로
+`docs/execplan/t-vn-m05-feature-reference-reconciliation.md`에 local receipt/blocked attempt,
+worker, admin impact projection, activation gate를 고정했다.
+
+**다음 한 작업**: `app` schema migration과 strict service transport를 구현한다. M05 activation은
+PinVi consumer/UI, N150 격리 paired live E2E, no-owner restore drill, 전문 적대 리뷰가 모두
+끝날 때까지 `false`다.
+
 ## 2026-08-21 (codex) — T-VN-M05 Map delivery 계약 재vendor
 
 Map PR #1029 head `037e24698f74e2067ea7c8572b044076dc0ac89c`의 full/service/user OpenAPI를

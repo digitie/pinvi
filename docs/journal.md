@@ -52,6 +52,15 @@ wire 표현 단언으로 방향만 뒤집었다 — 선언과 값이 함께 되�
 (로컬에서 18파일 중 3~6개 누락, `Failed to start forks worker` 로그만 남음). CI에서 같은 일이 나면
 false-green이라 T-321로 등록했다. 이번 검증은 누락분을 개별 실행해 18파일 전부 통과를 확인했다.
 
+## 2026-08-21 (codex) — T-VN-M05 paired consumer 실행계획 고정
+
+- Map draft PR #1029 head `037e24698f74e2067ea7c8572b044076dc0ac89c`의 vendored
+  service 계약을 기준으로 PinVi의 durable Feature 참조 재결합 실행계획을 추가했다.
+  final applied receipt가 local transaction에 commit되기 전에는 Map ACK을 호출하지 않는다.
+- partial pair, curation receipt-bound POI, 미종결 correction/closure target은 자동 수정하지
+  않고 append-only blocked attempt로 보존한다. 기본 runtime activation은 계속 `false`이며,
+  isolated paired UI E2E와 실제 no-owner restore drill 전에는 Map subscription receipt를 만들지 않는다.
+
 ## 2026-08-21 (codex) — T-VN-M05 Map delivery 계약 재vendor
 
 - **정확한 producer pin**: Map draft PR #1029 head
