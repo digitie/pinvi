@@ -58,4 +58,4 @@ async def test_worker_stops_after_initial_empty_when_pairing_becomes_permanently
     )
 
     assert read.calls == 2
-    assert faults == [f"Map pairing fault: HTTP {status_code} PAIRING_INVALID"]
+    assert faults == ["map_pairing_fault"]

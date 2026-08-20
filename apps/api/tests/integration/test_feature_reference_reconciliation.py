@@ -10,8 +10,10 @@ from typing import Any, cast
 
 import pytest
 from sqlalchemy import select, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.clients.kor_travel_map_feature_reference_reconciliation import (
     FeatureReferenceReconciliationLease,
@@ -557,6 +559,99 @@ async def test_append_only_evidence_trigger_fires_in_replica_mode(
             with pytest.raises(DBAPIError):
                 await db.execute(text(statement), {"event_id": event_id})
             await db.rollback()
+
+
+@pytest.mark.asyncio
+async def test_non_owner_runtime_login_cannot_disable_or_bypass_m05_evidence_guard(
+    _database_url: str,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """서비스 runtime DB login은 owner privilege 없이 정상 DML만 받는다."""
+
+    event_id = uuid.uuid4()
+    old_uuid = uuid.uuid4()
+    lease = _lease(
+        event_id=event_id,
+        event_sequence=30,
+        event_sha256="e" * 64,
+        old_feature_id="feature-old",
+        old_feature_uuid=old_uuid,
+    )
+    role = f"pinvi_m05_runtime_{uuid.uuid4().hex[:12]}"
+    password = f"m05-{uuid.uuid4().hex}"
+    async with session_factory() as db:
+        await _seed_rows(db, old_feature_id="feature-old", old_feature_uuid=old_uuid)
+        result = await apply_feature_reference_reconciliation_event(db, lease)
+        assert isinstance(result, ReconciliationApplied)
+        await db.execute(
+            text(
+                f"CREATE ROLE {role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE "
+                f"NOREPLICATION NOINHERIT PASSWORD '{password}'"
+            )
+        )
+        await db.execute(text(f"GRANT USAGE ON SCHEMA app TO {role}"))
+        await db.execute(
+            text(f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO {role}")
+        )
+        await db.execute(text(f"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA app TO {role}"))
+        await db.commit()
+
+    runtime_url = make_url(_database_url).set(username=role, password=password)
+    runtime_engine = create_async_engine(
+        runtime_url.render_as_string(hide_password=False),
+        poolclass=NullPool,
+        future=True,
+    )
+    guarded_statements = (
+        "SET LOCAL session_replication_role = replica",
+        "ALTER TABLE app.ktm_feature_reference_reconciliation_delivery_attempts DISABLE TRIGGER USER",
+        "SET ROLE pinvi",
+        "UPDATE app.ktm_feature_reference_reconciliation_delivery_attempts "
+        "SET status = status WHERE event_id = :event_id",
+    )
+    try:
+        async with runtime_engine.connect() as connection:
+            values = await connection.execute(
+                text(
+                    "SELECT current_user, rolsuper, rolcreaterole, rolcreatedb "
+                    "FROM pg_roles WHERE rolname = current_user"
+                )
+            )
+            assert values.one() == (role, False, False, False)
+        for statement in guarded_statements:
+            async with runtime_engine.begin() as connection:
+                with pytest.raises(DBAPIError):
+                    await connection.execute(text(statement), {"event_id": event_id})
+    finally:
+        await runtime_engine.dispose()
+        async with session_factory() as db:
+            await db.execute(text(f"DROP OWNED BY {role}"))
+            await db.execute(text(f"DROP ROLE {role}"))
+            await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_m05_fault_health_is_not_ready_and_does_not_reflect_map_error(
+    client: Any,
+) -> None:
+    from app.core.config import settings
+    from app.main import app
+
+    enabled_before = settings.pinvi_kor_travel_map_feature_reference_reconciliation_enabled
+    settings.pinvi_kor_travel_map_feature_reference_reconciliation_enabled = True
+    app.state.feature_reference_reconciliation_runtime_fault = "map_pairing_fault"
+    try:
+        response = await client.get("/health/feature-reference-reconciliation")
+    finally:
+        app.state.feature_reference_reconciliation_runtime_fault = None
+        settings.pinvi_kor_travel_map_feature_reference_reconciliation_enabled = enabled_before
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "enabled": True,
+        "ready": False,
+        "fault": "map_pairing_fault",
+    }
 
 
 @pytest.mark.asyncio

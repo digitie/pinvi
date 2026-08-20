@@ -61,6 +61,23 @@ if ! command -v pg_restore >/dev/null 2>&1; then
   exit 127
 fi
 
+# Validate the destination authority before CREATE SCHEMA/pg_restore can alter it. A
+# role-split deployment must never discover a typo or privileged runtime login only
+# after `--clean` has dropped the existing schema objects.
+if [[ -n "${APP_ROLE}" ]]; then
+  runtime_role_safe="$(psql --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT r.rolcanlogin AND NOT r.rolsuper AND NOT r.rolcreaterole AND NOT r.rolcreatedb AND NOT r.rolreplication AND NOT pg_has_role(r.oid, current_user, 'member') AND r.oid <> current_user::regrole AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = '${SCHEMA}' AND c.relowner = r.oid) FROM pg_roles r WHERE r.rolname = '${APP_ROLE}'")"
+  if [[ "${runtime_role_safe}" != "t" ]]; then
+    echo "PINVI_RESTORE_APP_ROLE must name an existing non-superuser non-owner runtime login" >&2
+    exit 3
+  fi
+else
+  restore_owner_safe="$(psql --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '${SCHEMA}') OR EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '${SCHEMA}' AND nspowner = current_user::regrole)")"
+  if [[ "${restore_owner_safe}" != "t" ]]; then
+    echo "PINVI_RESTORE_APP_ROLE is required when the restore executor does not own the target schema" >&2
+    exit 3
+  fi
+fi
+
 # ``pg_dump --schema`` does not carry CREATE SCHEMA. Bootstrap a fresh staging
 # database explicitly; an existing schema is intentionally left untouched.
 psql \
@@ -79,26 +96,15 @@ pg_restore \
   --dbname="${DATABASE_URL}" \
   "${BACKUP_FILE}"
 
-# ``--no-owner --no-privileges`` does not recreate runtime grants. A dedicated
-# runtime login must be supplied explicitly; without one the restore executor
-# itself must own the target schema, which is the documented single-role mode.
+# ``--no-owner --no-privileges`` does not recreate runtime grants. The login and
+# ownership safety were already checked before any mutation above.
 if [[ -n "${APP_ROLE}" ]]; then
-  runtime_role_safe="$(psql --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT rolcanlogin AND NOT rolsuper AND NOT rolcreaterole AND NOT rolcreatedb FROM pg_roles WHERE rolname = '${APP_ROLE}'")"
-  if [[ "${runtime_role_safe}" != "t" ]]; then
-    echo "PINVI_RESTORE_APP_ROLE must name an existing non-superuser runtime login" >&2
-    exit 3
-  fi
   psql \
     --set=ON_ERROR_STOP=1 \
     --dbname="${DATABASE_URL}" \
     --command="GRANT USAGE ON SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\"; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\"; GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\""
 else
-  schema_owner="$(psql --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = '${SCHEMA}'")"
-  restore_user="$(psql --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT current_user")"
-  if [[ -z "${schema_owner}" || "${schema_owner}" != "${restore_user}" ]]; then
-    echo "PINVI_RESTORE_APP_ROLE is required when the restore executor does not own the target schema" >&2
-    exit 3
-  fi
+  : # preflight already established the documented single-owner mode.
 fi
 
 echo "RESTORED_FILE=${BACKUP_FILE}"

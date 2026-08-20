@@ -21,7 +21,7 @@ Usage:
   scripts/deploy-node.sh deploy
   scripts/deploy-node.sh build
   scripts/deploy-node.sh pull
-  scripts/deploy-node.sh migrate   # migration + one-shot admin bootstrap
+  scripts/deploy-node.sh migrate   # owner-only migration + one-shot admin bootstrap
   scripts/deploy-node.sh up
   scripts/deploy-node.sh dagster   # Dagster webserver(profile etl)만 기동
   scripts/deploy-node.sh smoke
@@ -104,14 +104,15 @@ migrate() {
   pinvi_verify_runtime_image_provenance app-api
   local credential_file
   credential_file="$(bootstrap_credential_file)"
-  log "starting database dependencies"
+  log "starting database dependencies and runtime DB role"
   compose up -d app-postgres app-rustfs app-rustfs-init
+  compose run --rm app-db-runtime-role
   log "running Pinvi admin bootstrap"
   compose run --rm \
     --user "$(id -u):$(id -g)" \
     -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
     -v "$credential_file:$credential_file:ro" \
-    app-api pinvi-admin-bootstrap
+    app-migrator pinvi-admin-bootstrap
 }
 
 bootstrap_credential_file() {
@@ -159,6 +160,7 @@ smoke() {
   pinvi_verify_or_remove_running_app
   wait_for_url "http://127.0.0.1:${RUSTFS_PORT}/health/live" "RustFS"
   wait_for_url "http://127.0.0.1:${API_PORT}/health" "API"
+  wait_for_url "http://127.0.0.1:${API_PORT}/health/feature-reference-reconciliation" "M05 worker"
   wait_for_url "http://127.0.0.1:${API_PORT}/health/db" "API DB"
   wait_for_url "http://127.0.0.1:${WEB_PORT}/" "Web"
   if [[ "$ENABLE_DAGSTER" != "0" ]]; then

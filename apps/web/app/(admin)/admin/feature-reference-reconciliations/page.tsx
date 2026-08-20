@@ -211,7 +211,7 @@ export default function AdminFeatureReferenceReconciliationsPage() {
         rows={data?.items ?? []}
         rowKey={(row) => row.event_id}
         loading={listQuery.isLoading}
-        emptyMessage="아직 Map Feature 참조 조정 증거가 없습니다."
+        empty="아직 Map Feature 참조 조정 증거가 없습니다."
       />
       <div className="flex items-center gap-2 text-sm">
         <button

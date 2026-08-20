@@ -124,3 +124,26 @@ def test_compose_and_examples_keep_m05_credentials_api_only_and_default_off() ->
         assert f"{variable}=" in example
     assert "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ENABLED=false" in prod
     assert "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ENABLED=false" in example
+
+
+def test_m05_evidence_runtime_uses_non_owner_database_login() -> None:
+    root = Path(__file__).resolve().parents[4]
+    compose = (root / "infra/docker-compose.app.yml").read_text(encoding="utf-8")
+    bootstrap = (root / "infra/postgres/bootstrap-pinvi-runtime-role.sh").read_text(
+        encoding="utf-8"
+    )
+    docker_app = (root / "scripts/docker-app.sh").read_text(encoding="utf-8")
+    deploy = (root / "scripts/deploy-node.sh").read_text(encoding="utf-8")
+    api_block, _ = compose.split("  app-migrator:", maxsplit=1)
+
+    assert "app-db-runtime-role:" in compose
+    assert "PINVI_DATABASE_URL: ${PINVI_DATABASE_URL:-postgresql+asyncpg://pinvi_app:" in api_block
+    assert "PINVI_MIGRATOR_DATABASE_URL" in compose
+    assert "app-migrator pinvi-admin-bootstrap" in docker_app
+    assert "app-migrator pinvi-admin-bootstrap" in deploy
+    assert "compose run --rm app-db-runtime-role" in docker_app
+    assert "compose run --rm app-db-runtime-role" in deploy
+    assert "NOSUPERUSER" in bootstrap
+    assert "NOINHERIT" in bootstrap
+    assert "ALTER DEFAULT PRIVILEGES" in bootstrap
+    assert "c.relowner = r.oid" in bootstrap

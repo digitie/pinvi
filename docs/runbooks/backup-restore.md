@@ -200,7 +200,7 @@ df -h /var/lib/postgresql /var/lib/pinvi/backups
 # 실제 실행 전 staging drill 후 PINVI_RESTORE_HOTSWAP_EXECUTE=1을 설정한다.
 PINVI_RESTORE_HOTSWAP_EXECUTE=1 \
 PINVI_RESTORE_DRAIN_COMMAND='docker compose -f docker-compose.app.yml stop api web' \
-PINVI_RESTORE_APP_ROLE=pinvi \
+PINVI_RESTORE_APP_ROLE=pinvi_app \
 sudo -E ./scripts/restore-hotswap.sh run \
   "${SNAPSHOT}" \
   "${RESTORE_SCHEMA}" \
@@ -221,7 +221,7 @@ drain/read-only 전환을 수행한 뒤 API 환경을 다음처럼 둔다.
 PINVI_RESTORE_HOTSWAP_EXECUTE=1
 PINVI_RESTORE_DRAIN_COMMAND=
 PINVI_RESTORE_ALLOW_NO_DRAIN=1
-PINVI_RESTORE_APP_ROLE=pinvi
+PINVI_RESTORE_APP_ROLE=pinvi_app
 ```
 
 API-triggered restore 중 `PINVI_RESTORE_DRAIN_COMMAND`가 설정돼 있으면 script가

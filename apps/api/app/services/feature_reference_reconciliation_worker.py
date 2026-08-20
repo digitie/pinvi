@@ -32,6 +32,8 @@ from app.services.feature_reference_reconciliation import (
 logger = logging.getLogger(__name__)
 _ACK_NAMESPACE = uuid.UUID("7242d291-579a-4b96-b035-64aa4d26b1cb")
 _PERMANENT_PROBLEM_STATUSES = frozenset({401, 403, 422, 503})
+_PERMANENT_FAULTS = frozenset({"map_pairing_fault", "map_contract_fault"})
+FeatureReferenceReconciliationRuntimeFault = Literal["map_pairing_fault", "map_contract_fault"]
 
 
 def _is_permanent_pairing_fault(error: FeatureReferenceReconciliationProblem) -> bool:
@@ -80,7 +82,7 @@ async def _worker_loop(
     ack_client: FeatureReferenceReconciliationServiceClient,
     worker_id: uuid.UUID,
     config: Settings,
-    on_permanent_fault: Callable[[str], None],
+    on_permanent_fault: Callable[[FeatureReferenceReconciliationRuntimeFault], None],
 ) -> None:
     while True:
         try:
@@ -113,18 +115,19 @@ async def _worker_loop(
             )
         except FeatureReferenceReconciliationProblem as exc:
             if _is_permanent_pairing_fault(exc):
-                message = f"Map pairing fault: HTTP {exc.status_code} {exc.code or 'unknown'}"
-                on_permanent_fault(message)
-                logger.critical("feature reference reconciliation stopped: %s", message)
+                on_permanent_fault("map_pairing_fault")
+                logger.critical(
+                    "feature reference reconciliation stopped: Map pairing HTTP %s",
+                    exc.status_code,
+                )
                 return
             logger.error("feature reference reconciliation service problem", exc_info=True)
             await asyncio.sleep(
                 config.pinvi_kor_travel_map_feature_reference_reconciliation_poll_seconds
             )
-        except FeatureReferenceReconciliationContractError as exc:
-            message = f"Map reconciliation contract fault: {exc}"
-            on_permanent_fault(message)
-            logger.critical("feature reference reconciliation stopped: %s", message)
+        except FeatureReferenceReconciliationContractError:
+            on_permanent_fault("map_contract_fault")
+            logger.critical("feature reference reconciliation stopped: Map contract fault")
             return
         except Exception:
             logger.exception("feature reference reconciliation local projection failure")
@@ -171,9 +174,11 @@ async def feature_reference_reconciliation_worker_lifespan(app: FastAPI) -> Asyn
     task: asyncio.Task[None] | None = None
     app.state.feature_reference_reconciliation_runtime_fault = None
 
-    def mark_permanent_fault(message: str) -> None:
-        # health endpoint는 credential/token을 노출하지 않는 고정형 diagnostic만 반환한다.
-        app.state.feature_reference_reconciliation_runtime_fault = message
+    def mark_permanent_fault(fault: FeatureReferenceReconciliationRuntimeFault) -> None:
+        # health endpoint는 credential/token/remote error code를 노출하지 않는 고정형 diagnostic만 반환한다.
+        if fault not in _PERMANENT_FAULTS:  # pragma: no cover - Literal boundary defense
+            raise RuntimeError("invalid M05 reconciliation runtime fault")
+        app.state.feature_reference_reconciliation_runtime_fault = fault
 
     try:
         # subscription이 없을 때 Map은 503을 반환한다. background retry로 숨기지 않고

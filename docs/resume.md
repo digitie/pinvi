@@ -20,6 +20,21 @@ Zod 미러 3곳(detail-card는 각각 5·7 arm 동시)에서 제거했다. 저�
 
 **다음 한 작업**: T-273(v1.0.0 E2E/Live gate) — 남은 hard blocker는 geofence 운영 설정이다.
 모바일 후속(T-311/T-318/T-319/T-320)과 T-321(vitest 조용한 누락)은 별도 PR로 분리해 뒀다.
+## 2026-08-21 (codex) — T-VN-M05 runtime DB owner 분리
+
+M05 evidence는 runtime non-owner/non-superuser login에서만 API/Dagster가 접근한다. owner URL은
+`app-migrator` migration/restore one-shot에만 두며, runtime이 trigger disable·owner `SET ROLE`·replica
+bypass를 할 수 없다는 실제 PostgreSQL integration test를 추가했다. Map permanent pairing fault는
+external code를 노출하지 않는 fixed health enum으로 기록되고, enabled state에서는 dedicated readiness가
+503으로 전환된다. disposable source→fresh target의 actual no-owner restore에서도 evidence row 1건,
+runtime query, trigger disable/direct update 거부를 확인했다. mock E2E는 configured isolated port에서
+자체 Next server를 띄운다.
+
+**다음 한 작업**: 이 DB role/restore 보강을 전문 적대 리뷰로 재검증하고, exact Map/PinVi draft pair를
+N150 isolated stack에 올려 M04 request → M05 decision → PinVi receipt/UI → Map ACK browser E2E와
+실제 `pg_dump → pg_restore --no-owner --no-privileges` runtime-role drill을 완료한다. 그 전 activation은
+계속 `false`다.
+
 ## 2026-08-21 (codex) — T-VN-M05 적대 재심 보정
 
 M05 local evidence는 동일 blocked observation을 중복 append하지 않고, `ENABLE ALWAYS`

@@ -51,6 +51,28 @@ wire 표현 단언으로 방향만 뒤집었다 — 선언과 값이 함께 되�
 **곁다리로 발견** — `vitest run`이 fork 워커 기동에 실패한 파일을 조용히 건너뛰고 **exit 0**으로 끝난다
 (로컬에서 18파일 중 3~6개 누락, `Failed to start forks worker` 로그만 남음). CI에서 같은 일이 나면
 false-green이라 T-321로 등록했다. 이번 검증은 누락분을 개별 실행해 18파일 전부 통과를 확인했다.
+## 2026-08-21 (codex) — T-VN-M05 runtime DB owner 분리 및 readiness 보정
+
+- app schema/table/trigger migration owner와 API/Dagster runtime login을 분리했다.
+  `app-db-runtime-role` one-shot은 `PINVI_APP_DB_USER`를 non-superuser, non-owner,
+  `NOINHERIT` login으로 만들고 기존·이후 `app` object의 필요한 DML/sequence grant만 부여한다.
+  `app-api`/`app-dagster`에는 runtime URL만, `app-migrator` one-shot에는
+  `PINVI_MIGRATOR_DATABASE_URL`만 전달한다. M05 evidence trigger를 runtime이
+  `ALTER TABLE ... DISABLE TRIGGER`로 끌 수 없게 한 경계다.
+- `restore-db.sh`는 `CREATE SCHEMA`/`pg_restore --clean` 전에 runtime login의
+  non-superuser/non-owner 조건 또는 single-owner 조건을 확인한다. preflight 실패는 대상
+  schema를 바꾸지 않는다.
+- Map permanent pairing fault는 external error code를 health에 반사하지 않는 고정 enum으로
+  축소하고, `/health/feature-reference-reconciliation`은 enabled+fault에서 503을 반환한다.
+  image healthcheck와 deploy/smoke probe도 이 ready route를 함께 검사한다. mock Playwright는
+  `PLAYWRIGHT_BASE_URL`의 실제 포트에 전용 Next server를 띄워 다른 worktree artifact 재사용을 막는다.
+- disposable source→fresh target 실제 drill에서 `pg_dump → pg_restore --no-owner
+  --no-privileges` 뒤 M05 delivery attempt 1건을 runtime login으로 읽었다. runtime login의 trigger
+  disable와 direct UPDATE는 모두 실패했다. 별도 compose role drill도 runtime role이 owner가 아니며
+  superuser/role-creation/database-creation 권한이 없음을 확인했다.
+- M05 activation은 계속 `false`다. 실제 non-owner role no-owner restore drill과 N150 isolated
+  Map/PinVi browser E2E가 남아 있다.
+
 ## 2026-08-21 (codex) — T-VN-M05 적대 재심 보정
 
 - 동일한 blocked observation은 마지막 immutable attempt의 event SHA, block fingerprint,

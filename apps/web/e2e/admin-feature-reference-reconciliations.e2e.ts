@@ -158,7 +158,7 @@ test('Admin이 M05 receipt와 blocked evidence를 읽기 전용으로 확인한�
   await page.goto('/admin/feature-reference-reconciliations');
 
   await expect(page.getByRole('heading', { name: 'Feature 참조 조정 증거' })).toBeVisible();
-  await expect(page.getByText('blocked')).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'blocked' })).toBeVisible();
   await page.getByTestId(`admin-frr-detail-${blockedEventId}`).click();
 
   const blockedDetail = page.getByTestId('admin-frr-detail');
