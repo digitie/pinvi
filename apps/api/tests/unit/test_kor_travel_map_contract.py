@@ -50,8 +50,8 @@ from app.schemas.public import (
 )
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
-_UPSTREAM_COMMIT = "95d2c128a8d0613c719eafdb5419c4b76dbcc21f"
-_SNAPSHOT_SHA256 = "6a2ee0f94ffded691f5d169ef1914144eecdf1f4170226c8bc5e963e972403c1"
+_UPSTREAM_COMMIT = "4c50fe86d3c2f617e09ea1ea55e0886dfed9edf1"
+_SNAPSHOT_SHA256 = "489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b"
 
 # service profile 스냅샷 — byte-핀·재추출 절차는 cache-target 계약 테스트
 # (`test_kor_travel_map_cache_target_contract.py`)가 소유하고 본 파일은 읽기만 한다.
