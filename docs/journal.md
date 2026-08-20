@@ -52,6 +52,19 @@ wire 표현 단언으로 방향만 뒤집었다 — 선언과 값이 함께 되�
 (로컬에서 18파일 중 3~6개 누락, `Failed to start forks worker` 로그만 남음). CI에서 같은 일이 나면
 false-green이라 T-321로 등록했다. 이번 검증은 누락분을 개별 실행해 18파일 전부 통과를 확인했다.
 
+## 2026-08-21 (codex) — T-VN-M05 Map delivery 계약 재vendor
+
+- **정확한 producer pin**: Map draft PR #1029 head
+  `037e24698f74e2067ea7c8572b044076dc0ac89c`의 full/service/user OpenAPI를 원본 git blob에서
+  다시 대조했다. SHA-256은 full `697a08c475fc28ba730af1dd14da89998a3a56cafbfb7676bfb3fa4a0b9ef6fd`,
+  service `e1152a058e176f4f3aaeb4bb0965434f657601639786463f873ac82c6f3018eb`, user
+  `489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b`다. full/service snapshot만
+  새 byte로 교체했고 user는 byte-identical임을 확인했다.
+- **결박 범위**: Admin·ops·user·feature-request contract pin, packaged service provenance, cache-target
+  example와 CI wheel/image provenance digest를 같은 exact release로 옮겼다. M05 reconciliation
+  consumer/UI, isolated live E2E, 실제 no-owner restore drill은 아직 없으므로 activation receipt는
+  계속 만들지 않는다.
+
 ## 2026-08-20 (codex) — T-VN-M04 Map 범용 Feature 요청 큐 consumer
 
 - **정확한 producer pin**: Map draft PR #1029 rebased head

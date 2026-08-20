@@ -65,12 +65,12 @@ sort, order]`이며 `status`·`provider`·`dataset_key`는 **없다**(보내면 
 > (query 없음, 응답 `FeatureWeatherResponse`/`WeatherCardData`; user 경로는 `public_features`
 > 기반이라 비공개 feature가 404지만 admin 경로는 base `features`(lifecycle=active) 기반이다).
 >
-> **2026-08-20 M04 범용 요청 큐 후보 재핀**: Map draft PR #1029 rebased head
-> `fa6d0d3d10456401993e12bb5f726abad4bce413`의 full OpenAPI와 service OpenAPI를 각각
+> **2026-08-21 M05 delivery 후보 재핀**: Map draft PR #1029 head
+> `037e24698f74e2067ea7c8572b044076dc0ac89c`의 full OpenAPI와 service OpenAPI를 각각
 > `apps/api/tests/contract/kor-travel-map-openapi-admin.json`
-> (SHA-256 `590f49d1c4abe6558cf46da5a4a4b6b787bb007c3194c07f343f97a3b6b8d9be`) 및
+> (SHA-256 `697a08c475fc28ba730af1dd14da89998a3a56cafbfb7676bfb3fa4a0b9ef6fd`) 및
 > `kor-travel-map-openapi-service.json`
-> (SHA-256 `c878531af2acdea0a25861d81f2e87f4768244d8ff37b94cb610194e3db85c96`)으로 byte-exact
+> (SHA-256 `e1152a058e176f4f3aaeb4bb0965434f657601639786463f873ac82c6f3018eb`)으로 byte-exact
 > vendor했다. 같은 head의 user OpenAPI도 기존 vendor와 byte-exact하며 SHA-256은
 > `489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b`다. Pinvi의 `new_place`
 > 승인은 이제 전용 `ServiceToken`과 동일 UUID body/header로

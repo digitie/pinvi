@@ -21,6 +21,19 @@ Zod 미러 3곳(detail-card는 각각 5·7 arm 동시)에서 제거했다. 저�
 **다음 한 작업**: T-273(v1.0.0 E2E/Live gate) — 남은 hard blocker는 geofence 운영 설정이다.
 모바일 후속(T-311/T-318/T-319/T-320)과 T-321(vitest 조용한 누락)은 별도 PR로 분리해 뒀다.
 
+## 2026-08-21 (codex) — T-VN-M05 Map delivery 계약 재vendor
+
+Map PR #1029 head `037e24698f74e2067ea7c8572b044076dc0ac89c`의 full/service/user OpenAPI를
+Pinvi vendor와 byte 단위로 대조했다. SHA-256은 각각
+`697a08c475fc28ba730af1dd14da89998a3a56cafbfb7676bfb3fa4a0b9ef6fd` /
+`e1152a058e176f4f3aaeb4bb0965434f657601639786463f873ac82c6f3018eb` /
+`489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b`다. M05 delivery 표면이
+포함된 full/service vendor와 release/provenance/CI digest를 정확히 갱신했다.
+
+**다음 한 작업**: vendored service 계약으로 Pinvi M05 reconciliation consumer와 admin UI를 구현한다.
+그 뒤 exact draft pair의 isolated mutating UI E2E와 실제 `pg_restore --no-owner --no-privileges`
+drill을 모두 통과하기 전에는 activation receipt를 계속 만들지 않는다.
+
 ## 2026-08-20 (codex) — T-VN-M04 범용 Feature 요청 큐 소비자 전환
 
 Map draft PR #1029 rebased head `fa6d0d3d10456401993e12bb5f726abad4bce413`의 full/service/user
