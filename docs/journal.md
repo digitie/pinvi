@@ -70,11 +70,14 @@ false-green이라 T-321로 등록했다. 이번 검증은 누락분을 개별 �
   fail-close한다. 전달한 `X-Request-Id`는 HTTP client call-log extension과 Map `meta.request_id`에
   정확히 일치해야 한다. 헤더가 없으면 middleware가 생성한 응답 request ID를 audit·Map 호출에 재사용한다.
   approve/reject는 row lock으로 직렬화하며 malformed `X-Request-Id`와 legacy
-  범위 밖 row는 Map write 전에 거부한다. UI는 신규 장소에 direct-create 분류/마커를 요구하지 않고,
+  범위 밖 row는 Map write 전에 거부한다. correction marker도 Map `P-01`~`P-16` palette에 맞춘다.
+  UI는 신규 장소에 direct-create 분류/마커를 요구하지 않고,
   correction에는 실제 변경 필드를 입력하게 했다. production env template, queue 전용 live-mutating
   spec/runbook도 보강했다.
 - **live 증거 경계**: 운영 stack에는 실행하지 않는다. Map/Pinvi draft의 exact pair를 격리 N150
   `smoke` compose project로 기동한 뒤 관리자 UI 승인→Map request receipt만 확인한다.
+  현재 PinVi worktree 전용 `127.0.0.1:13805` mock UI E2E는 3건 통과했지만, 이는 Map 동반 live
+  실행 증거가 아니다.
 
 
 ## 2026-08-19 (codex) — T-VN-42 Admin 계약 폐쇄 + Codex worktree 복구

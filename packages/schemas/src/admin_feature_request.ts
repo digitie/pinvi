@@ -45,7 +45,7 @@ export const AdminFeatureRequestApproveSchema = z.object({
   category: z.string().max(32).optional(),
   marker_color: z
     .string()
-    .regex(/^P-\d{2}$/, 'marker color는 P-01~P-16 형식.')
+    .regex(/^P-(0[1-9]|1[0-6])$/, 'marker color는 P-01~P-16 형식.')
     .optional(),
   marker_icon: z.string().max(64).optional(),
   name: z.string().min(1).max(200).optional(),

@@ -19,7 +19,15 @@ from typing import Annotated, Literal
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictFloat,
+    StrictInt,
+    ValidationError,
+    model_validator,
+)
 
 from app.clients.kor_travel_map import _error_code
 from app.core.config import Settings, settings
@@ -59,8 +67,8 @@ class _ClosedModel(BaseModel):
 
 
 class FeatureRequestCoord(_ClosedModel):
-    lon: float = Field(ge=124, le=132)
-    lat: float = Field(ge=33, le=39.5)
+    lon: StrictFloat = Field(ge=124, le=132)
+    lat: StrictFloat = Field(ge=33, le=39.5)
 
 
 class FeatureRequestSubmission(_ClosedModel):

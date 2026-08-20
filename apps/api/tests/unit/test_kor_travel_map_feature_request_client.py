@@ -144,6 +144,7 @@ async def test_submit_rejects_response_with_different_correlation_id() -> None:
         lambda payload: payload["meta"].update({"unexpected": True}),
         lambda payload: payload["data"].pop("rejection_reason"),
         lambda payload: payload["data"].update({"name": "다른 이름"}),
+        lambda payload: payload["data"]["coord"].update({"lon": "129.0"}),
     ],
 )
 async def test_submit_rejects_malformed_or_nonmatching_success_receipt(
