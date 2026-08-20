@@ -82,14 +82,10 @@ class FeatureSummary(BaseModel):
     category: str | None = None
     marker_color: str = Field(default="P-13", pattern=r"^P-\d{2}$")  # 16색 P-01~P-16
     marker_icon: str = Field(default="marker", max_length=64)  # maki icon name
-    # **항상 None**(값을 채우는 코드 경로가 없다). Map 3축 feature state cutover
-    # (`1f2bdc3a feat(api): complete feature state cutover`)로 user 표면
-    # `FeatureSummary`/`NearbyFeatureSummary`에서 `status`가 삭제됐고 대체 필드가 없다
-    # (lifecycle/publication/quality 3축은 admin 표면에만 있다). web/mobile 계약 때문에
-    # 필드는 남겨 두고 소비만 끊었다 — 근거·후속 과제는
-    # `docs/integrations/kor-travel-map-rest-api.md`(2026-08-17 재vendor 노트)와
-    # `api/v1/features.py _summary_from_kor_travel_map`. **필드 제거는 별도 breaking cutover.**
-    status: str | None = None
+    # `status`는 없다. Map 3축 feature state cutover(`1f2bdc3a feat(api): complete feature
+    # state cutover`)로 user 표면에서 사라졌고 대체 필드가 없어(lifecycle/publication/quality
+    # 3축은 admin 표면 전용) 공개 계약에서도 제거했다(T-VN-42). 재도입 방지는
+    # `tests/unit/test_feature_schemas.py`의 필드 집합 등호 게이트가 맡는다.
     distance_m: float | None = None  # nearby 응답에만
 
 
@@ -131,7 +127,6 @@ class FeatureDetail(BaseModel):
     marker_icon: str = Field(default="marker", max_length=64)
     urls: dict[str, Any] = Field(default_factory=dict)  # homepage/sns/review 등
     detail: dict[str, Any] = Field(default_factory=dict)  # kind별 PlaceDetail 등
-    status: str | None = None  # 항상 None — `FeatureSummary.status` 주석 참조(Map `1f2bdc3a`)
     updated_at: datetime
 
 
@@ -162,7 +157,6 @@ class DetailCardBase(BaseModel):
     marker_color: str = Field(default="P-13", pattern=r"^P-\d{2}$")
     marker_icon: str = Field(default="marker", max_length=64)
     homepage_url: str | None = None
-    status: str | None = None  # 항상 None — `FeatureSummary.status` 주석 참조(Map `1f2bdc3a`)
     # 옵트인 enrichment 결과 + provider별 degrade(내부 값으로 fallback).
     enrichment: list[ExternalEnrichment] = Field(default_factory=list)
     degraded_providers: list[str] = Field(default_factory=list)

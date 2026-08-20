@@ -24,11 +24,12 @@
   서버가 모르는 query라 조용히 버려졌고(그리고 삭제되기 전에도 목록을 거르지 않았다) `active_only=true`가
   전체 목록을 돌려주고 있었다. 이제 PinVi가 카테고리의 활성 여부로 직접 거른다. 지금 카탈로그는 전부
   활성이라 응답은 이전과 같고, 앞으로 비활성 카테고리가 생기면 필터가 의미를 갖는다.
-- feature 응답의 `status` 필드는 **항상 `null`**이다. kor-travel-map이 feature 상태를 3축
-  (lifecycle/publication/quality)으로 재편하면서 일반 사용자 표면에서 `status`를 제거했고 대체
-  필드가 없다. 필드 자체는 클라이언트 호환을 위해 남겨 두지만 값이 채워지지 않으므로 이 값으로
-  분기하거나 상태를 표시하면 안 된다(필드 제거는 후속 릴리즈). 목록/상세/detail-card 어디서도
-  옛 값이 새어 나오지 않도록 회귀 테스트로 고정했다.
+- **(breaking)** feature 응답에서 `status` 필드를 제거했다. kor-travel-map이 feature 상태를 3축
+  (lifecycle/publication/quality)으로 재편하면서 일반 사용자 표면에서 `status`를 없앴고 대체 필드가
+  없다. 한동안은 클라이언트 호환을 위해 **항상 `null`인 키**만 남겨 뒀는데, 그 사이 이 필드로
+  분기하던 클라이언트는 이미 아무 정보도 얻지 못했다 — 이제 키까지 사라진다(표시 동작 변화 없음,
+  키만 없어짐). 목록/상세/detail-card 응답과 프런트 스키마에서 함께 제거했고, 옛 값이 다시 새어
+  나오거나 필드가 되살아나면 red가 되도록 서버·프런트 양쪽에 회귀 게이트를 걸었다.
 
 - kor-travel-map canonical collection import의 2,000 item/10 page 소비자 상한을 검증하고,
   PinVi plan/POI가 collection UUID와 immutable import receipt item proof에 결박되도록 DB 경계를

@@ -2,6 +2,31 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-21 (claude) — T-VN-42 종결: 공개 `status` 필드 제거(breaking)
+
+Map 3축 feature state cutover(`1f2bdc3a`)로 user 표면에서 사라진 뒤 web/mobile 계약 때문에 **항상
+None인 키**로만 남아 있던 `status`를 공개 계약에서 걷어냈다. 이걸로 T-VN-42의 마지막 열린 항목이 닫힌다
+(admin 축 3건은 #443·#456이 이미 흡수했다).
+
+**제거 범위** — 서버 `FeatureSummary`/`FeatureDetail`/`DetailCardBase`(detail-card 5 arm 동시)와 Zod 미러
+`FeatureSummarySchema`/`FeatureDetailSchema`/`detailCardBase`(7 arm 동시). 저장소 안 실제 소비처는
+`FeatureMapView`의 `data-feature-status` DOM 속성 하나뿐이었고 그 속성을 읽는 코드·셀렉터가 0건이라
+표시 동작은 바뀌지 않는다. 값이 v0.2.0 이후 한 번도 null이 아닌 적이 없었으므로 이 필드로 분기하던
+클라이언트는 이미 아무 정보도 못 받고 있었다 — 그래도 공개 `/v1` 응답에서 키를 지우는 계약 축소라
+CHANGELOG에 breaking으로 적었다.
+
+**게이트 3중** — 이 필드는 되살아나도 런타임 예외를 만들지 않는다(`schemas/feature.py`에 `model_config`가
+없어 pydantic 기본 `extra="ignore"`, `mypy --strict`는 `app`만 검사, `build_detail_card`는
+`dict[str, Any]`를 `**common`으로 splat해 kwarg 정적 검사도 통하지 않음). 그래서 ① 선언 필드 집합을
+**등호**로 못박고(이름만 바꾼 재도입까지 잡는다) ② `app.openapi()` components에서 부재를 단언하고
+③ Zod shape 등호 + strip 결과 키 부재를 웹 vitest에 걸었다. 기존 누출 방지 테스트 3건은 지우지 않고
+"값 재주입" 게이트로 방향만 뒤집었다 — 필드 재선언과 값 재주입은 실패 모드가 다르다.
+
+**곁다리로 발견** — `vitest run`이 fork 워커 기동에 실패한 파일을 조용히 건너뛰고 **exit 0**으로 끝난다
+(로컬에서 18파일 중 3~6개 누락, `Failed to start forks worker` 로그만 남음). CI에서 같은 일이 나면
+false-green이라 T-321로 등록했다. 이번 검증은 누락분을 개별 실행해 18파일 전부 통과를 확인했다.
+
+
 ## 2026-08-19 (codex) — T-VN-42 Admin 계약 폐쇄 + Codex worktree 복구
 
 - **중복 방지 감사**: 로컬 `d978eff2`의 consumer 수정은 이미 squash PR #451(`c13ea5d6`)에 전부

@@ -15,19 +15,20 @@
 - 좌표를 query/body에 받는 endpoint는 `app.location_access_log` 자동 적재
   (`docs/architecture/user-location.md`)
 
-### 1.1 `status` 필드 상태 (2026-08-17~)
+### 1.1 `status` 필드 제거 (breaking, 2026-08-21)
 
-`FeatureSummary`/`FeatureDetail`/detail-card 응답의 **`status`는 항상 `null`이다.**
+`FeatureSummary`/`FeatureDetail`/detail-card 응답에 **`status` 키가 더 이상 없다.**
 kor-travel-map의 3축 feature state cutover(`1f2bdc3a feat(api): complete feature state
 cutover`)로 user 표면(`FeatureSummary`/`NearbyFeatureSummary`/`FeatureDetailResponse`)에서
 `status`가 삭제됐고 **대체 필드가 없다** — lifecycle/publication/quality 3축은 admin 표면
-전용이라 일반 사용자 응답으로 내려오지 않는다. Pinvi는 그 소비를 끊었고
-(`app/api/v1/features.py`, `app/services/feature_detail.py`), 필드 자체는 web/mobile 계약을
-깨지 않기 위해 남겨 두었다.
+전용이라 일반 사용자 응답으로 내려오지 않는다. 2026-08-17~2026-08-20 사이에는 web/mobile
+계약을 깨지 않으려고 **항상 `null`인 키만** 남겨 뒀고, T-VN-42에서 그 키까지 제거했다.
 
-**필드 제거는 후속 breaking cutover다**(web/mobile 소비처를 함께 정리해야 한다). 그때까지
-클라이언트는 `status`로 분기하지 말 것 — 값이 있는 척하는 표시(예: "영업중")를 만들면 안 된다.
-계약 근거: `docs/integrations/kor-travel-map-rest-api.md`(2026-08-17 재vendor 노트).
+값은 그 기간 내내 `null`이었으므로 이 필드로 분기하던 클라이언트는 이미 아무 정보도 얻지
+못하고 있었다 — 표시 동작은 바뀌지 않고 키만 사라진다. feature의 상태가 필요하면 admin 표면의
+3축(`lifecycle_state`/`publication_state`/`quality_state`)을 쓴다. 재도입 방지 게이트:
+`apps/api/tests/unit/test_feature_schemas.py`(선언 등호 + OpenAPI 노출),
+`apps/web/tests/featureContract.test.ts`(Zod 미러).
 
 ## 2. Endpoint
 
@@ -62,7 +63,6 @@ Cookie: pinvi_access=...
         "category": "해수욕장",
         "marker_color": "P-07",
         "marker_icon": "swimming",
-        "status": null, // 항상 null — §1.1 참조
       },
     ],
     "clusters": [
@@ -114,7 +114,6 @@ GET /features/f_2611000000_p_abc123...
       // kind+category별 payload (kor_travel_map PlaceDetail / EventDetail / ...)
       "phones": ["051-..."],
     },
-    "status": null, // 항상 null — §1.1 참조
     "updated_at": "...",
   },
 }
@@ -289,8 +288,7 @@ Cookie: pinvi_access=...
       "category": "해수욕장",
       "marker_color": "P-07",
       "marker_icon": "swimming",
-      "status": null, // 항상 null — §1.1 참조
-    },
+      },
   ],
 }
 ```

@@ -175,8 +175,7 @@ def _summary_from_kor_travel_map(dto: dict[str, Any]) -> FeatureSummary:
 
     `status`는 매핑하지 않는다 — Map 3축 feature state cutover(`1f2bdc3a feat(api): complete
     feature state cutover`)로 user 표면에서 사라졌고 대체 필드도 없다(state 축은 user
-    profile에 노출되지 않는다). `FeatureSummary.status`는 web/mobile 계약 때문에 스키마에는
-    남아 있으나 항상 None이다.
+    profile에 노출되지 않는다). Pinvi 공개 스키마에서도 제거됐다(T-VN-42).
     """
     distance = dto.get("distance_m")
     return FeatureSummary(
@@ -204,7 +203,7 @@ def _detail_from_kor_travel_map(dto: dict[str, Any]) -> FeatureDetail:
     """kor_travel_map `FeatureDetailResponse` → Pinvi FeatureDetail.
 
     `status`는 매핑하지 않는다 — `_summary_from_kor_travel_map`과 같은 이유로 Map
-    `FeatureDetailResponse`에서 사라졌다(`1f2bdc3a`). `FeatureDetail.status`는 항상 None.
+    `FeatureDetailResponse`에서 사라졌고(`1f2bdc3a`) Pinvi 공개 스키마에도 없다(T-VN-42).
     """
     address = dto.get("address")
     return FeatureDetail(

@@ -182,8 +182,8 @@ async def test_in_bounds_maps_kor_travel_map_shape(
     assert data["cluster_unit"] == "sigungu"
     assert data["items"][0]["name"] == "광안리 해수욕장"
     assert data["items"][0]["coord"] == {"lon": 129.118, "lat": 35.155}
-    # Map 3축 feature state cutover(`1f2bdc3a`)로 user 표면에 `status`가 없다 → 항상 None.
-    assert data["items"][0]["status"] is None
+    # Map 3축 cutover(`1f2bdc3a`)로 사라진 `status`는 공개 응답 키에도 없다(T-VN-42).
+    assert "status" not in data["items"][0]
     assert data["clusters"][0]["cluster_key"] == "11680"
     assert data["clusters"][0]["coord"] == {"lon": 127.04, "lat": 37.52}
     # client 가 min_lon/.../max_items 로 호출됐는지 (구 limit/bbox tuple 폐기)
@@ -209,7 +209,7 @@ async def test_nearby_uses_lon_lat_and_distance(
     body = resp.json()["data"]
     assert body[0]["coord"] == {"lon": 129.118, "lat": 35.155}
     assert body[0]["distance_m"] == 123.4
-    assert body[0]["status"] is None
+    assert "status" not in body[0]
     assert fake.calls["nearby"]["lon"] == 129.118
     assert fake.calls["nearby"]["page_size"] == 100
 
@@ -246,7 +246,7 @@ async def test_feature_detail_maps_structured_address(
     assert data["address"] == {"road": "부산 광안로 1"}
     assert data["sigungu_code"] == "11680"
     assert data["urls"] == {"homepage": "https://example.test"}
-    assert data["status"] is None
+    assert "status" not in data
 
 
 async def test_feature_detail_returns_404_when_missing(

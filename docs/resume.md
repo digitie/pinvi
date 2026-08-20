@@ -1,5 +1,16 @@
 # resume.md
 
+## 2026-08-21 (claude) — T-VN-42 종결(공개 `status` 제거)
+
+**방금**: Map 3축 cutover로 의미를 잃고 항상 None으로만 남아 있던 공개 `status`를 서버 스키마 3곳과
+Zod 미러 3곳(detail-card는 각각 5·7 arm 동시)에서 제거했다. 저장소 안 소비처는 DOM 속성 1곳뿐이라
+표시 동작 변화는 없고, 재도입은 선언 등호·OpenAPI 부재·Zod shape 3중 게이트가 막는다. admin 축
+3건은 #443·#456이 이미 흡수했으므로 이걸로 T-VN-42가 닫힌다.
+
+**다음 한 작업**: T-273(v1.0.0 E2E/Live gate) — 남은 hard blocker는 geofence 운영 설정이다.
+모바일 후속(T-311/T-318/T-319/T-320)과 T-321(vitest 조용한 누락)은 별도 PR로 분리해 뒀다.
+
+
 ## 2026-08-19 (codex) — T-VN-42 Admin 계약 소비 폐쇄
 
 PR #451이 user OpenAPI 재vendor뿐 아니라 3축·bitemporal consumer 수정까지 이미 병합했음을 확인해
