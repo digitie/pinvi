@@ -56,7 +56,7 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET/POST /admin/retention/*`                                     | PII/위치 로그 보존기간 dry-run/execute               | 6      |
 | `GET/POST /admin/notice-plans[/{plan_id}]` / `PATCH` / `DELETE`   | Notice plan CRUD                                     | 6      |
 | `POST /admin/notice-plans/{plan_id}/pois[/reorder]`               | Notice POI                                           | 6      |
-| `GET /admin/feature-requests`                                     | 사용자 feature 제안 검토 큐 (§8.4)                   | 8      |
+| `GET /admin/feature-requests`                                     | 사용자 feature 제안 검토 큐 (§9.6)                   | 8      |
 | `POST /admin/feature-requests/{id}/approve\|reject`               | 검토 → 신규 장소 service 요청 큐 / 변경·폐쇄 admin 릴레이 | 8      |
 | `GET/PATCH/DELETE /admin/category-mappings[/{category_key}]`      | category catalog + Pinvi marker override             | 6      |
 | `GET /admin/etl/summary`                                          | Pinvi ETL registry + kor-travel-map ops 요약         | 5      |
