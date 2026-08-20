@@ -11,6 +11,9 @@
     },
     "feature_request": {
       "generation": 1
+    },
+    "feature_reference_reconciliation": {
+      "generation": 1
     }
   },
   "map_release_revision": "037e24698f74e2067ea7c8572b044076dc0ac89c",

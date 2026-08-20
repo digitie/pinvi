@@ -12,6 +12,7 @@ from app.core.config import (
     KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION,
     KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION,
     KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION,
+    KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_CAPABILITY_GENERATION,
     KOR_TRAVEL_MAP_FEATURE_REQUEST_CAPABILITY_GENERATION,
     KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
     KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
@@ -121,12 +122,14 @@ def test_service_snapshot_exact_bytes_runtime_pin_and_provenance_match_map_relea
     assert KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION == 2
     assert KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION == 1
     assert KOR_TRAVEL_MAP_FEATURE_REQUEST_CAPABILITY_GENERATION == 1
+    assert KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_CAPABILITY_GENERATION == 1
     assert json.loads(_SERVICE_PROVENANCE.read_text()) == {
         "capabilities": {
             "c6c_cancel_probe": {"generation": 2},
             "cache_target": {"generation": 7},
             "curation_snapshot": {"generation": 1},
             "feature_request": {"generation": 1},
+            "feature_reference_reconciliation": {"generation": 1},
         },
         "map_release_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
         "service_openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,

@@ -110,6 +110,7 @@ jobs:
           assert config.KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION == 2
           assert config.KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION == 1
           assert config.KOR_TRAVEL_MAP_FEATURE_REQUEST_CAPABILITY_GENERATION == 1
+          assert config.KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_CAPABILITY_GENERATION == 1
           PY
           )
 
@@ -139,7 +140,7 @@ jobs:
           assert artifact.is_file()
           payload = json.loads(artifact.read_text(encoding="utf-8"))
           assert hashlib.sha256(artifact.read_bytes()).hexdigest() == (
-              "ce5db56528ddf0e93ff87db7684307f3cf94191db42db969711bba02065b1902"
+              "a8f15da7845113b1447e72a02b531578884f4b4de1dd08c9638b9418b9c8d10e"
           )
           assert payload == {
               "capabilities": {
@@ -147,6 +148,7 @@ jobs:
                   "c6c_cancel_probe": {"generation": 2},
                   "curation_snapshot": {"generation": 1},
                   "feature_request": {"generation": 1},
+                  "feature_reference_reconciliation": {"generation": 1},
               },
               "map_release_revision": config.KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
               "service_openapi_sha256": config.KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
@@ -214,6 +216,7 @@ jobs:
               "c6c_cancel_probe": {"generation": 2},
               "curation_snapshot": {"generation": 1},
               "feature_request": {"generation": 1},
+              "feature_reference_reconciliation": {"generation": 1},
           }
 
           config = Path("apps/api/app/core/config.py").read_text()
@@ -226,6 +229,7 @@ jobs:
           assert "KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION" in config
           assert "KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION" in config
           assert "KOR_TRAVEL_MAP_FEATURE_REQUEST_CAPABILITY_GENERATION" in config
+          assert "KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_CAPABILITY_GENERATION" in config
           assert "cache-target-upstream-map-v1.json" not in config
           snapshot = Path("apps/api/tests/contract/kor-travel-map-openapi-service.json").read_bytes()
           assert hashlib.sha256(snapshot).hexdigest() == metadata["service_openapi_sha256"]
