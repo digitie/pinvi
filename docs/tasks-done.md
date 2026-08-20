@@ -46,7 +46,7 @@
         선언 등호 + OpenAPI 노출 부재(`tests/unit/test_feature_schemas.py`), 값 재주입 차단
         (`test_feature_detail.py`·`test_feature_mapping.py`·wire 레벨 integration), Zod 필드 집합
         (`apps/web/tests/featureContract.test.ts`) 3중으로 건다.
-      (완료: 2026-08-21, PR TBD, claude)
+      (완료: 2026-08-21, PR #460, claude)
 
 ## 2026-08-19
 
