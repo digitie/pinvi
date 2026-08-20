@@ -12,8 +12,8 @@ from app.schemas.admin import AdminFeatureDetailCuration, AdminFeatureWeatherMet
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-admin.json"
 )
-_UPSTREAM_COMMIT = "fa6d0d3d10456401993e12bb5f726abad4bce413"
-_SNAPSHOT_SHA256 = "590f49d1c4abe6558cf46da5a4a4b6b787bb007c3194c07f343f97a3b6b8d9be"
+_UPSTREAM_COMMIT = "acce6d6249f4c220aef1880048cd7f266706901f"
+_SNAPSHOT_SHA256 = "18187b2b6613ad669348da020e1c629fc6634180d1453170317d73090cac8d25"
 
 _ADMIN_FEATURE_QUERY_PARAMETERS = {
     "q",
@@ -59,7 +59,7 @@ def _query_names(operation: dict[str, Any]) -> set[str]:
 
 
 def test_admin_snapshot_is_byte_pinned_to_a_reviewed_map_revision() -> None:
-    assert _UPSTREAM_COMMIT == "fa6d0d3d10456401993e12bb5f726abad4bce413"
+    assert _UPSTREAM_COMMIT == "acce6d6249f4c220aef1880048cd7f266706901f"
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
 
 
@@ -140,6 +140,21 @@ def test_manual_feature_create_contract_is_exact_but_not_yet_consumed() -> None:
         created["headers"][name]["schema"]["type"] == "string"
         for name in ("ETag", "Location", "X-Request-ID")
     )
+
+
+def test_feature_request_approve_terminal_headers_are_exact() -> None:
+    operation = _spec()["paths"]["/v1/admin/feature-requests/{request_id}/approve"]["post"]
+
+    assert operation["responses"]["200"]["headers"] == {
+        "ETag": {
+            "description": "승인 또는 exact-conflict winner Feature의 strong entity tag.",
+            "schema": {"type": "string"},
+        },
+        "Location": {
+            "description": "승인 또는 exact-conflict winner Feature의 canonical resource URI.",
+            "schema": {"format": "uri-reference", "type": "string"},
+        },
+    }
 
 
 def test_admin_feature_paths_auth_responses_and_query_sets_are_exact() -> None:
