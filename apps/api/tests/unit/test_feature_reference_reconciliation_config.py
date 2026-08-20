@@ -21,6 +21,10 @@ def _settings(**overrides: object) -> Settings:
     return Settings(_env_file=None, pinvi_environment="test", **overrides)  # type: ignore[arg-type]
 
 
+def _production_settings(**overrides: object) -> Settings:
+    return Settings(_env_file=None, pinvi_environment="production", **overrides)  # type: ignore[arg-type]
+
+
 def _enabled_values() -> dict[str, object]:
     return {
         "pinvi_kor_travel_map_feature_reference_reconciliation_enabled": True,
@@ -43,6 +47,17 @@ def test_reconciliation_network_is_default_off_and_empty_tokens_are_unset() -> N
     assert loaded.pinvi_kor_travel_map_feature_reference_reconciliation_enabled is False
     assert loaded.pinvi_kor_travel_map_feature_reference_reconciliation_read_token is None
     assert loaded.pinvi_kor_travel_map_feature_reference_reconciliation_ack_token is None
+    assert (
+        loaded.pinvi_kor_travel_map_feature_reference_reconciliation_blocked_recheck_seconds == 30
+    )
+
+
+@pytest.mark.parametrize("value", (0, 0.9, 3600.1, float("inf"), float("nan")))
+def test_reconciliation_blocked_recheck_is_finite_bounded(value: float) -> None:
+    with pytest.raises(ValidationError):
+        _settings(
+            pinvi_kor_travel_map_feature_reference_reconciliation_blocked_recheck_seconds=value
+        )
 
 
 def test_enabled_reconciliation_requires_distinct_credentials_and_exact_vendor_pin() -> None:
@@ -84,11 +99,14 @@ def test_reconciliation_tokens_cannot_reuse_other_map_boundary(
 
 
 def test_production_reconciliation_enable_is_forbidden_before_paired_gate() -> None:
-    loaded = _settings(**_enabled_values())
     with pytest.raises(ValueError, match="forbidden in production"):
-        loaded.model_copy(
-            update={"pinvi_environment": "production"}
-        ).validate_feature_reference_reconciliation()
+        _production_settings(
+            pinvi_kor_travel_map_api_base_url="http://127.0.0.1:12701",
+            pinvi_kor_travel_map_admin_base_url="http://127.0.0.1:12701",
+            pinvi_kor_travel_map_ops_read_token="o" * 32,
+            pinvi_kor_travel_map_ops_cancel_token="c" * 32,
+            **_enabled_values(),
+        )
 
 
 def test_compose_and_examples_keep_m05_credentials_api_only_and_default_off() -> None:
@@ -99,6 +117,7 @@ def test_compose_and_examples_keep_m05_credentials_api_only_and_default_off() ->
     for variable in (
         "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_READ_TOKEN",
         "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACK_TOKEN",
+        "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_BLOCKED_RECHECK_SECONDS",
     ):
         assert variable in compose
         assert f"{variable}=" in prod

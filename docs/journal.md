@@ -51,6 +51,17 @@ wire 표현 단언으로 방향만 뒤집었다 — 선언과 값이 함께 되�
 **곁다리로 발견** — `vitest run`이 fork 워커 기동에 실패한 파일을 조용히 건너뛰고 **exit 0**으로 끝난다
 (로컬에서 18파일 중 3~6개 누락, `Failed to start forks worker` 로그만 남음). CI에서 같은 일이 나면
 false-green이라 T-321로 등록했다. 이번 검증은 누락분을 개별 실행해 18파일 전부 통과를 확인했다.
+## 2026-08-21 (codex) — T-VN-M05 local receipt·paired worker 첫 tranche
+
+- `20260821_0060` migration으로 Map reconciliation event의 append-only delivery attempt,
+  final applied receipt, row-level impact relation을 `app` schema에 추가했다. 모든 세 relation은
+  update/delete/truncate trigger가 막으며 event UUID xact advisory lock으로 receipt 부재 경쟁도
+  직렬화한다.
+- read/ACK 전용 token, exact service vendor pin, 별도 HTTP transport와 default-off lifespan worker를
+  추가했다. local transaction이 final receipt를 commit한 뒤에만 ACK하며, partial pair·curation
+  receipt-bound POI·미종결 suggestion은 mutation/ACK 없이 blocked attempt로 남긴다.
+- 실제 PostGIS migration 통합 검증은 rebind, terminal suggestion nonmutation, local receipt replay,
+  partial-pair block, append-only trigger, commit 뒤 ACK 순서를 통과했다. activation은 계속 false다.
 
 ## 2026-08-21 (codex) — T-VN-M05 paired consumer 실행계획 고정
 

@@ -295,6 +295,12 @@ class Settings(BaseSettings):
         le=60,
         allow_inf_nan=False,
     )
+    pinvi_kor_travel_map_feature_reference_reconciliation_blocked_recheck_seconds: float = Field(
+        default=30.0,
+        ge=1.0,
+        le=3600.0,
+        allow_inf_nan=False,
+    )
     pinvi_kor_travel_map_feature_reference_reconciliation_expected_openapi_sha256: str = ""
     pinvi_kor_travel_map_feature_reference_reconciliation_expected_source_revision: str = ""
 

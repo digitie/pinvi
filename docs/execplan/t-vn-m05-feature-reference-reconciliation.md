@@ -27,8 +27,8 @@ Map에 ACK한다. 이 문서는 Map ADR-095와
 
 ## local evidence 모델
 
-새 relation은 모두 `app` schema, append-only이며 raw update/delete/truncate 권한을
-PinVi runtime에서 주지 않는다.
+새 relation은 모두 `app` schema, append-only이며 database trigger가 runtime의 raw
+update/delete/truncate를 거부한다.
 
 | relation | 정본 | 핵심 제약 |
 | --- | --- | --- |
@@ -77,4 +77,3 @@ ACK한다. 달라지면 fail-close한다.
   provider candidate → Map admin decision → PinVi rebind/detach → Map ACK을 실제 브라우저로
   실행하고, `pg_dump` → `pg_restore --no-owner --no-privileges` 복원 드릴과 두 전문 적대
   리뷰를 통과한다. shared/prod stack 또는 mock은 이 증거를 대체하지 않는다.
-

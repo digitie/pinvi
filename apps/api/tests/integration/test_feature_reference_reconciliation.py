@@ -1,0 +1,349 @@
+"""T-VN-M05 local evidence/projection은 실제 PostgreSQL trigger에서 검증한다."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, date, datetime
+from decimal import Decimal
+from typing import cast
+
+import pytest
+from sqlalchemy import select, text
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.clients.kor_travel_map_feature_reference_reconciliation import (
+    FeatureReferenceReconciliationLease,
+    FeatureReferenceReconciliationServiceClient,
+)
+from app.models.curated_plan import CuratedPlanPoi, CuratedTripPlan
+from app.models.feature_reference_reconciliation import (
+    KtmFeatureReferenceReconciliationAppliedReceipt,
+    KtmFeatureReferenceReconciliationDeliveryAttempt,
+    KtmFeatureReferenceReconciliationImpact,
+)
+from app.models.feature_suggestion import FeatureSuggestion
+from app.models.poi import TripDayPoi
+from app.models.trip import Trip
+from app.models.trip_day import TripDay
+from app.models.user import User
+from app.services.feature_reference_reconciliation import (
+    FeatureReferenceReconciliationApplyError,
+    ReconciliationApplied,
+    ReconciliationBlocked,
+    apply_feature_reference_reconciliation_event,
+)
+from app.services.feature_reference_reconciliation_worker import (
+    consume_feature_reference_reconciliation_once,
+)
+
+
+def _lease(
+    *,
+    event_id: uuid.UUID,
+    event_sequence: int,
+    event_sha256: str,
+    old_feature_id: str,
+    old_feature_uuid: uuid.UUID,
+    action: str = "rebind",
+    replacement_feature_id: str | None = "feature-new",
+    replacement_feature_uuid: uuid.UUID | None = None,
+) -> FeatureReferenceReconciliationLease:
+    replacement_uuid = replacement_feature_uuid or uuid.uuid4()
+    return FeatureReferenceReconciliationLease.model_validate(
+        {
+            "outcome": "leased",
+            "lease_epoch": 1,
+            "lease_expires_at": "2026-08-21T00:01:00Z",
+            "event_sha256": event_sha256,
+            "event": {
+                "payload_schema_version": 1,
+                "event_id": str(event_id),
+                "event_sequence": event_sequence,
+                "occurred_at": "2026-08-21T00:00:00Z",
+                "case_id": str(uuid.uuid4()),
+                "resolution_id": str(uuid.uuid4()),
+                "action": action,
+                "old_feature": {
+                    "feature_id": old_feature_id,
+                    "feature_uuid": str(old_feature_uuid),
+                    "row_revision": 2,
+                },
+                "replacement_feature": (
+                    {
+                        "feature_id": replacement_feature_id,
+                        "feature_uuid": str(replacement_uuid),
+                        "row_revision": 3,
+                    }
+                    if action == "rebind"
+                    else None
+                ),
+                "manual_retire_transition_id": 1,
+                "manual_retire_row_revision_after_transition": 2,
+                "command_id": 1,
+            },
+        }
+    )
+
+
+async def _seed_rows(
+    db: AsyncSession,
+    *,
+    old_feature_id: str,
+    old_feature_uuid: uuid.UUID,
+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
+    user = User(
+        email=f"m05-{uuid.uuid4().hex}@pinvi.test",
+        password_hash=None,
+        nickname="M05",
+        status="active",
+        email_verified_at=datetime.now(UTC),
+    )
+    db.add(user)
+    await db.flush()
+    trip = Trip(
+        owner_user_id=user.user_id,
+        title="M05 여행",
+        start_date=date(2026, 8, 21),
+        end_date=date(2026, 8, 21),
+    )
+    db.add(trip)
+    await db.flush()
+    db.add(TripDay(trip_id=trip.trip_id, day_index=1))
+    await db.flush()
+    trip_poi = TripDayPoi(
+        trip_id=trip.trip_id,
+        day_index=1,
+        sort_order="a0",
+        feature_id=old_feature_id,
+        feature_uuid=old_feature_uuid,
+        feature_snapshot={"name": "old"},
+        added_by_user_id=user.user_id,
+    )
+    plan = CuratedTripPlan(
+        slug=f"m05-{uuid.uuid4().hex}",
+        title="M05 추천",
+        created_by_admin_id=user.user_id,
+        updated_by_admin_id=user.user_id,
+    )
+    db.add_all((trip_poi, plan))
+    await db.flush()
+    curated_poi = CuratedPlanPoi(
+        curated_plan_id=plan.curated_plan_id,
+        day_index=1,
+        sort_order="a0",
+        feature_id=old_feature_id,
+        feature_uuid=old_feature_uuid,
+    )
+    terminal_suggestion = FeatureSuggestion(
+        requester_user_id=user.user_id,
+        suggestion_type="correction",
+        target_feature_id=old_feature_id,
+        target_feature_uuid=old_feature_uuid,
+        kind="place",
+        name="이미 끝난 제안",
+        lng=Decimal("127.000000"),
+        lat=Decimal("37.000000"),
+        categories=[],
+        status="duplicate",
+    )
+    db.add_all((curated_poi, terminal_suggestion))
+    await db.flush()
+    return trip_poi.attachment_id, curated_poi.curated_poi_id, terminal_suggestion.request_id
+
+
+@pytest.mark.asyncio
+async def test_rebind_commits_final_receipt_before_ack_material_and_replays_locally(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    old_uuid = uuid.uuid4()
+    replacement_uuid = uuid.uuid4()
+    event_id = uuid.uuid4()
+    lease = _lease(
+        event_id=event_id,
+        event_sequence=1,
+        event_sha256="a" * 64,
+        old_feature_id="feature-old",
+        old_feature_uuid=old_uuid,
+        replacement_feature_uuid=replacement_uuid,
+    )
+    async with session_factory() as db:
+        trip_poi_id, curated_poi_id, terminal_suggestion_id = await _seed_rows(
+            db, old_feature_id="feature-old", old_feature_uuid=old_uuid
+        )
+        applied = await apply_feature_reference_reconciliation_event(db, lease)
+        assert isinstance(applied, ReconciliationApplied)
+        assert applied.replayed_local_receipt is False
+        await db.commit()
+
+    async with session_factory() as db:
+        trip = await db.get(TripDayPoi, trip_poi_id)
+        curated = await db.get(CuratedPlanPoi, curated_poi_id)
+        terminal = await db.get(FeatureSuggestion, terminal_suggestion_id)
+        receipt = await db.get(KtmFeatureReferenceReconciliationAppliedReceipt, event_id)
+        attempts = list(
+            (
+                await db.scalars(
+                    select(KtmFeatureReferenceReconciliationDeliveryAttempt).where(
+                        KtmFeatureReferenceReconciliationDeliveryAttempt.event_id == event_id
+                    )
+                )
+            ).all()
+        )
+        impacts = list(
+            (
+                await db.scalars(
+                    select(KtmFeatureReferenceReconciliationImpact).where(
+                        KtmFeatureReferenceReconciliationImpact.event_id == event_id
+                    )
+                )
+            ).all()
+        )
+        assert (
+            trip is not None
+            and curated is not None
+            and terminal is not None
+            and receipt is not None
+        )
+        assert (trip.feature_id, trip.feature_uuid) == ("feature-new", replacement_uuid)
+        assert (curated.feature_id, curated.feature_uuid) == ("feature-new", replacement_uuid)
+        assert (terminal.target_feature_id, terminal.target_feature_uuid) == (
+            "feature-old",
+            old_uuid,
+        )
+        assert receipt.receipt_sha256 == applied.local_receipt_sha256
+        assert [(attempt.status, attempt.attempt_sequence) for attempt in attempts] == [
+            ("applied", 1)
+        ]
+        assert [(impact.target_relation, impact.outcome) for impact in impacts] == [
+            ("curated_plan_pois", "rebind"),
+            ("trip_day_pois", "rebind"),
+        ]
+
+    async with session_factory() as db:
+        replay = await apply_feature_reference_reconciliation_event(db, lease)
+        assert isinstance(replay, ReconciliationApplied)
+        assert replay.replayed_local_receipt is True
+        assert replay.local_receipt_sha256 == applied.local_receipt_sha256
+        await db.commit()
+
+    async with session_factory() as db:
+        with pytest.raises(FeatureReferenceReconciliationApplyError):
+            await apply_feature_reference_reconciliation_event(
+                db,
+                lease.model_copy(update={"event_sha256": "b" * 64}),
+            )
+        await db.rollback()
+
+
+@pytest.mark.asyncio
+async def test_worker_calls_ack_only_after_final_receipt_commit(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    old_uuid = uuid.uuid4()
+    replacement_uuid = uuid.uuid4()
+    lease = _lease(
+        event_id=uuid.uuid4(),
+        event_sequence=3,
+        event_sha256="d" * 64,
+        old_feature_id="feature-old",
+        old_feature_uuid=old_uuid,
+        replacement_feature_uuid=replacement_uuid,
+    )
+    worker = uuid.uuid4()
+
+    class _ReadClient:
+        async def lease(self, *, worker_id: uuid.UUID) -> FeatureReferenceReconciliationLease:
+            assert worker_id == worker
+            return lease
+
+    class _AckClient:
+        called = False
+
+        async def acknowledge(self, **kwargs: object) -> None:
+            self.called = True
+            assert kwargs["event_id"] == lease.event.event_id
+            async with session_factory() as verification_db:
+                receipt = await verification_db.get(
+                    KtmFeatureReferenceReconciliationAppliedReceipt,
+                    lease.event.event_id,
+                )
+                assert receipt is not None
+                assert kwargs["local_receipt_sha256"] == receipt.receipt_sha256
+
+    ack = _AckClient()
+    async with session_factory() as db:
+        await _seed_rows(db, old_feature_id="feature-old", old_feature_uuid=old_uuid)
+        await db.commit()
+    result = await consume_feature_reference_reconciliation_once(
+        session_factory,
+        read_client=cast(FeatureReferenceReconciliationServiceClient, _ReadClient()),
+        ack_client=cast(FeatureReferenceReconciliationServiceClient, ack),
+        worker_id=worker,
+    )
+    assert isinstance(result, ReconciliationApplied)
+    assert ack.called is True
+
+
+@pytest.mark.asyncio
+async def test_partial_pair_blocks_without_mutation_and_evidence_is_append_only(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    old_uuid = uuid.uuid4()
+    async with session_factory() as db:
+        user = User(
+            email=f"m05-{uuid.uuid4().hex}@pinvi.test",
+            password_hash=None,
+            nickname="M05",
+            status="active",
+            email_verified_at=datetime.now(UTC),
+        )
+        db.add(user)
+        await db.flush()
+        trip = Trip(owner_user_id=user.user_id, title="M05 partial")
+        db.add(trip)
+        await db.flush()
+        db.add(TripDay(trip_id=trip.trip_id, day_index=1))
+        await db.flush()
+        partial = TripDayPoi(
+            trip_id=trip.trip_id,
+            day_index=1,
+            sort_order="a0",
+            feature_id="feature-old",
+            feature_uuid=uuid.uuid4(),
+            feature_snapshot={},
+            added_by_user_id=user.user_id,
+        )
+        db.add(partial)
+        await db.flush()
+        lease = _lease(
+            event_id=uuid.uuid4(),
+            event_sequence=2,
+            event_sha256="c" * 64,
+            old_feature_id="feature-old",
+            old_feature_uuid=old_uuid,
+            action="detach",
+            replacement_feature_id=None,
+        )
+        blocked = await apply_feature_reference_reconciliation_event(db, lease)
+        assert isinstance(blocked, ReconciliationBlocked)
+        await db.commit()
+
+    async with session_factory() as db:
+        attempt = await db.get(
+            KtmFeatureReferenceReconciliationDeliveryAttempt,
+            (lease.event.event_id, 1),
+        )
+        assert attempt is not None
+        assert attempt.status == "blocked"
+        assert attempt.block_fingerprint_sha256 is not None
+        with pytest.raises(DBAPIError):
+            await db.execute(
+                text(
+                    "UPDATE app.ktm_feature_reference_reconciliation_delivery_attempts "
+                    "SET status = 'applied' WHERE event_id = :event_id"
+                ),
+                {"event_id": lease.event.event_id},
+            )
+            await db.commit()
+        await db.rollback()
