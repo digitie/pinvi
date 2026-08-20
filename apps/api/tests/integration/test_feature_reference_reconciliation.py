@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -16,7 +17,12 @@ from app.clients.kor_travel_map_feature_reference_reconciliation import (
     FeatureReferenceReconciliationLease,
     FeatureReferenceReconciliationServiceClient,
 )
-from app.models.curated_plan import CuratedPlanPoi, CuratedTripPlan
+from app.models.curated_plan import (
+    CuratedPlanPoi,
+    CuratedTripPlan,
+    KtmCurationImportReceipt,
+    KtmCurationImportReceiptItem,
+)
 from app.models.feature_reference_reconciliation import (
     KtmFeatureReferenceReconciliationAppliedReceipt,
     KtmFeatureReferenceReconciliationDeliveryAttempt,
@@ -448,3 +454,208 @@ async def test_partial_pair_blocks_without_mutation_and_evidence_is_append_only(
             )
             await db.commit()
         await db.rollback()
+
+
+@pytest.mark.asyncio
+async def test_receipt_bound_curation_poi_blocks_without_feature_rebind(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    old_feature_uuid = uuid.uuid4()
+    replacement_feature_uuid = uuid.uuid4()
+    collection_id = uuid.uuid4()
+    item_id = uuid.uuid4()
+    etag = f'"sha256:{"a" * 64}"'
+    async with session_factory() as db:
+        user = User(
+            email=f"m05-curation-{uuid.uuid4().hex}@pinvi.test",
+            password_hash=None,
+            nickname="M05 curation",
+            status="active",
+            email_verified_at=datetime.now(UTC),
+        )
+        db.add(user)
+        await db.flush()
+        plan = CuratedTripPlan(
+            slug=f"m05-curation-{uuid.uuid4().hex}",
+            title="M05 curation receipt",
+            source_system="kor-travel-map",
+            source_curation_collection_id=collection_id,
+            source_curation_collection_revision=1,
+            source_curation_collection_etag=etag,
+            source_curation_item_set_hash_version="ktm-db-item-set-v1",
+            source_curation_item_set_hash="b" * 64,
+            source_curation_item_count=1,
+            created_by_admin_id=user.user_id,
+            updated_by_admin_id=user.user_id,
+        )
+        db.add(plan)
+        await db.flush()
+        receipt = KtmCurationImportReceipt(
+            actor_admin_id=user.user_id,
+            idempotency_key=uuid.uuid4(),
+            request_fingerprint="c" * 64,
+            source_curation_collection_id=collection_id,
+            source_curation_collection_revision=1,
+            source_curation_collection_etag=etag,
+            source_curation_item_set_hash_version="ktm-db-item-set-v1",
+            source_curation_item_set_hash="b" * 64,
+            source_curation_item_count=1,
+            mode="refresh",
+            requested_is_published=False,
+        )
+        db.add(receipt)
+        await db.flush()
+        db.add(
+            KtmCurationImportReceiptItem(
+                receipt_id=receipt.receipt_id,
+                source_curation_collection_id=collection_id,
+                source_curation_item_id=item_id,
+                source_curation_item_revision=1,
+                source_curation_item_etag=etag,
+                feature_uuid=old_feature_uuid,
+            )
+        )
+        # ORM relationship가 없는 composite FK라 flush 순서를 명시한다.
+        await db.flush()
+        db.add(
+            CuratedPlanPoi(
+                curated_plan_id=plan.curated_plan_id,
+                day_index=1,
+                sort_order="a0",
+                feature_id="feature-old",
+                feature_uuid=old_feature_uuid,
+                feature_snapshot={},
+                source_curation_import_receipt_id=receipt.receipt_id,
+                source_curation_collection_id=collection_id,
+                source_curation_item_id=item_id,
+                source_curation_item_revision=1,
+                source_curation_item_etag=etag,
+            )
+        )
+        await db.commit()
+
+    lease = _lease(
+        event_id=uuid.uuid4(),
+        event_sequence=20,
+        event_sha256="d" * 64,
+        old_feature_id="feature-old",
+        old_feature_uuid=old_feature_uuid,
+        replacement_feature_uuid=replacement_feature_uuid,
+    )
+    async with session_factory() as db:
+        outcome = await apply_feature_reference_reconciliation_event(db, lease)
+        assert isinstance(outcome, ReconciliationBlocked)
+        await db.commit()
+
+    async with session_factory() as db:
+        poi = await db.scalar(
+            select(CuratedPlanPoi).where(
+                CuratedPlanPoi.source_curation_import_receipt_id == receipt.receipt_id
+            )
+        )
+        attempt = await db.get(
+            KtmFeatureReferenceReconciliationDeliveryAttempt,
+            (lease.event.event_id, 1),
+        )
+        assert poi is not None
+        assert (poi.feature_id, poi.feature_uuid) == ("feature-old", old_feature_uuid)
+        assert attempt is not None
+        assert attempt.status == "blocked"
+
+
+@pytest.mark.asyncio
+async def test_nonterminal_feature_suggestion_blocks_without_target_mutation(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    old_feature_uuid = uuid.uuid4()
+    async with session_factory() as db:
+        user = User(
+            email=f"m05-suggestion-{uuid.uuid4().hex}@pinvi.test",
+            password_hash=None,
+            nickname="M05 suggestion",
+            status="active",
+            email_verified_at=datetime.now(UTC),
+        )
+        db.add(user)
+        await db.flush()
+        suggestion = FeatureSuggestion(
+            requester_user_id=user.user_id,
+            suggestion_type="correction",
+            target_feature_id="feature-old",
+            target_feature_uuid=old_feature_uuid,
+            kind="place",
+            name="아직 검토 중",
+            lng=Decimal("127.000000"),
+            lat=Decimal("37.000000"),
+            categories=[],
+            status="pending",
+        )
+        db.add(suggestion)
+        await db.commit()
+
+    lease = _lease(
+        event_id=uuid.uuid4(),
+        event_sequence=21,
+        event_sha256="e" * 64,
+        old_feature_id="feature-old",
+        old_feature_uuid=old_feature_uuid,
+        action="detach",
+        replacement_feature_id=None,
+    )
+    async with session_factory() as db:
+        outcome = await apply_feature_reference_reconciliation_event(db, lease)
+        assert isinstance(outcome, ReconciliationBlocked)
+        await db.commit()
+
+    async with session_factory() as db:
+        stored = await db.get(FeatureSuggestion, suggestion.request_id)
+        assert stored is not None
+        assert (stored.target_feature_id, stored.target_feature_uuid) == (
+            "feature-old",
+            old_feature_uuid,
+        )
+
+
+@pytest.mark.asyncio
+async def test_concurrent_consumer_delivery_uses_one_receipt_and_one_applied_attempt(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    old_feature_uuid = uuid.uuid4()
+    lease = _lease(
+        event_id=uuid.uuid4(),
+        event_sequence=22,
+        event_sha256="f" * 64,
+        old_feature_id="feature-old",
+        old_feature_uuid=old_feature_uuid,
+    )
+    async with session_factory() as db:
+        await _seed_rows(db, old_feature_id="feature-old", old_feature_uuid=old_feature_uuid)
+        await db.commit()
+
+    async def apply_once() -> ReconciliationApplied | ReconciliationBlocked:
+        async with session_factory() as db:
+            outcome = await apply_feature_reference_reconciliation_event(db, lease)
+            await db.commit()
+            return outcome
+
+    first, second = await asyncio.gather(apply_once(), apply_once())
+    assert isinstance(first, ReconciliationApplied)
+    assert isinstance(second, ReconciliationApplied)
+    assert {first.replayed_local_receipt, second.replayed_local_receipt} == {False, True}
+
+    async with session_factory() as db:
+        attempts = list(
+            (
+                await db.scalars(
+                    select(KtmFeatureReferenceReconciliationDeliveryAttempt)
+                    .where(
+                        KtmFeatureReferenceReconciliationDeliveryAttempt.event_id
+                        == lease.event.event_id
+                    )
+                    .order_by(KtmFeatureReferenceReconciliationDeliveryAttempt.attempt_sequence)
+                )
+            ).all()
+        )
+        assert [(attempt.status, attempt.attempt_sequence) for attempt in attempts] == [
+            ("applied", 1)
+        ]

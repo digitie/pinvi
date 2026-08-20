@@ -27,8 +27,9 @@ admin/operator가 terminal receipt, blocked observation, row-level impact를 읽
 표시하지 않는다.
 
 **다음 한 작업**: curation receipt-bound·미종결 suggestion·동시 consumer race를 실제 PostGIS
-통합 검증으로 보강하고, no-owner restore drill 및 13805/N150 격리 UI E2E의 서버 응답 문제를
-해결한다. activation은 전문 적대 리뷰와 paired live E2E가 끝날 때까지 `false`다.
+통합 검증으로 보강하고, 13805/N150 격리 UI E2E의 서버 응답 문제를 해결한다. PostGIS 7건과
+fresh destination no-owner restore drill은 통과했다. activation은 전문 적대 리뷰와 paired live
+E2E가 끝날 때까지 `false`다.
 
 ## 2026-08-21 (codex) — T-VN-M05 PinVi local receipt·worker 구현
 

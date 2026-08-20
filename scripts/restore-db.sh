@@ -45,10 +45,22 @@ if [[ -f "${BACKUP_FILE}.sha256" ]]; then
   fi
 fi
 
+if ! command -v psql >/dev/null 2>&1; then
+  echo "psql not found" >&2
+  exit 127
+fi
+
 if ! command -v pg_restore >/dev/null 2>&1; then
   echo "pg_restore not found" >&2
   exit 127
 fi
+
+# ``pg_dump --schema`` does not carry CREATE SCHEMA. Bootstrap a fresh staging
+# database explicitly; an existing schema is intentionally left untouched.
+psql \
+  --set=ON_ERROR_STOP=1 \
+  --dbname="${DATABASE_URL}" \
+  --command="CREATE SCHEMA IF NOT EXISTS \"${SCHEMA}\""
 
 pg_restore \
   --clean \

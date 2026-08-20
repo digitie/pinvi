@@ -51,6 +51,28 @@ wire 표현 단언으로 방향만 뒤집었다 — 선언과 값이 함께 되�
 **곁다리로 발견** — `vitest run`이 fork 워커 기동에 실패한 파일을 조용히 건너뛰고 **exit 0**으로 끝난다
 (로컬에서 18파일 중 3~6개 누락, `Failed to start forks worker` 로그만 남음). CI에서 같은 일이 나면
 false-green이라 T-321로 등록했다. 이번 검증은 누락분을 개별 실행해 18파일 전부 통과를 확인했다.
+## 2026-08-21 (codex) — T-VN-M05 local projection safety regression 완료
+
+- `tests/integration/test_feature_reference_reconciliation.py` 7건이 실제 PostGIS migration에서
+  통과했다(110.84초). rebind receipt, commit 뒤 ACK, partial-pair block, append-only trigger,
+  admin evidence read, curation receipt-bound block, 미종결 suggestion block, 두 consumer의 같은 event
+  race(terminal receipt 1건·applied attempt 1건)를 포함한다.
+- testcontainers가 만든 ephemeral PostgreSQL/Ryuk 컨테이너는 검증 뒤 제거했다. 13805 mock E2E의
+  Next build 응답 문제와 N150 paired live UI E2E는 별도 미완료 상태로 유지한다.
+
+## 2026-08-21 (codex) — T-VN-M05 no-owner restore drill과 fresh schema bootstrap
+
+- 별도 임시 PostGIS source에서 `20260821_0060` head를 올리고 applied receipt 1건, delivery attempt
+  2건, impact 1건을 넣어 `pg_dump --no-owner --no-privileges`했다. 빈 별도 destination에서 같은
+  옵션의 `pg_restore` 뒤 M05 head와 `2/1/1` relation count가 보존됐고, 복원본의 append-only trigger도
+  UPDATE를 거부했다.
+- drill 첫 시도는 `pg_dump --schema=app`가 `CREATE SCHEMA`를 담지 않아 빈 destination에서 실패했다.
+  `restore-db.sh`가 validated schema 이름으로 `CREATE SCHEMA IF NOT EXISTS`를 먼저 실행하도록 고쳐
+  fresh destination에도 no-owner restore가 되게 했다. 이 명령은 기존 schema의 ownership/ACL을
+  바꾸지 않는다.
+- drill source/destination 컨테이너는 모두 종료·자동 삭제했다. activation은 paired live UI E2E와
+  최종 전문 적대 리뷰 전까지 계속 `false`다.
+
 ## 2026-08-21 (codex) — T-VN-M05 reconciliation evidence admin 읽기 경계
 
 - admin/operator만 `GET /admin/feature-reference-reconciliations`와 event detail을 통해 PinVi의
