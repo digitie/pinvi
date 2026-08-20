@@ -28,7 +28,8 @@ Map과 PinVi는 아직 각각 draft PR 단계이므로 production completion rec
    transport/5xx/contract 문제는 outcome uncertainty로 503이며 local suggestion은 pending이다.
 4. PinVi admin approve route는 queue write가 성공한 뒤에만 local row/audit를 commit하며, 같은
    row의 approve/reject는 `FOR UPDATE`로 직렬화한다. `X-Request-Id`는 Map write 전에 검증하고
-   service request에도 전달한다.
+   service request와 PinVi HTTP call log에 전달하며, Map `meta.request_id`와 정확히 일치할 때만
+   성공으로 인정한다.
  correction/closure의 admin PATCH/DELETE behavior는 바꾸지 않는다.
 5. Map full/service OpenAPI artifact를 byte-exact vendor하고 consumer contract test를 추가한다.
 

@@ -29,7 +29,7 @@ Map draft PR #1029 head `590fdc04c55295e4dcbab6ba86b22b8f2e122d1a`의 full/servi
 `new_place` 승인은 별도 `PINVI_KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`으로
 `POST /v1/service/feature-requests`에 suggestion UUID를 body `request_id`와 `Idempotency-Key`에 함께
 제출한다. `pending` receipt는 Pinvi `approved`, verified `exact_conflict`는 `duplicate`로만 전이한다.
-409·422·전송/5xx·응답 계약 오류는 Pinvi row/ref/audit를 보존해 재시도할 수 있다. correction/closure는
+전달한 `X-Request-Id`는 HTTP call log와 Map `meta.request_id`에 정확히 일치해야 한다. 409·422·전송/5xx·응답 계약 오류는 Pinvi row/ref/audit를 보존해 재시도할 수 있다. correction/closure는
 기존 admin PATCH/DELETE 자격과 경로를 유지하며, 두 client는 유형별로만 지연 해석한다.
 
 Map의 요청 큐 좌표 상한 39.5를 Pinvi `new_place` 입력(Pydantic/Zod)에 맞춰, 나중에 승인 불가능한

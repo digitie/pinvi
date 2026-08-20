@@ -160,10 +160,18 @@ class FeatureRequestServiceClient:
         }
         if correlation_id is not None:
             headers["X-Request-ID"] = str(correlation_id)
+        extensions = (
+            {"pinvi_request_id": str(correlation_id)} if correlation_id is not None else None
+        )
         last_error: FeatureRequestQueueUnavailable | None = None
         for attempt in range(self._max_attempts):
             try:
-                response = await self._http.post(_SUBMIT_PATH, json=payload, headers=headers)
+                response = await self._http.post(
+                    _SUBMIT_PATH,
+                    json=payload,
+                    headers=headers,
+                    extensions=extensions,
+                )
             except httpx.RequestError as exc:
                 last_error = FeatureRequestQueueUnavailable(
                     f"kor-travel-map feature request transport failed: {exc!r}"
@@ -179,7 +187,11 @@ class FeatureRequestServiceClient:
                         code=_error_code(response),
                     )
                 else:
-                    return self._receipt(response, submission=submission)
+                    return self._receipt(
+                        response,
+                        submission=submission,
+                        correlation_id=correlation_id,
+                    )
             if attempt + 1 < self._max_attempts:
                 await asyncio.sleep(0.2 * (2**attempt))
         raise last_error or FeatureRequestQueueUnavailable("feature request submission failed")
@@ -211,6 +223,7 @@ class FeatureRequestServiceClient:
         response: httpx.Response,
         *,
         submission: FeatureRequestSubmission,
+        correlation_id: uuid.UUID | None,
     ) -> FeatureRequestReceipt:
         try:
             payload = json.loads(response.content)
@@ -221,12 +234,16 @@ class FeatureRequestServiceClient:
         if not isinstance(payload["meta"], dict) or not isinstance(payload["data"], dict):
             raise FeatureRequestQueueContractError("Map submit envelope data/meta is invalid")
         try:
-            _FeatureRequestResponseMeta.model_validate(payload["meta"])
+            response_meta = _FeatureRequestResponseMeta.model_validate(payload["meta"])
             receipt = FeatureRequestReceipt.model_validate(payload["data"])
         except ValidationError as exc:
             raise FeatureRequestQueueContractError(
                 "Map submit success contract is invalid"
             ) from exc
+        if correlation_id is not None and response_meta.request_id != str(correlation_id):
+            raise FeatureRequestQueueContractError(
+                "Map submit response meta request_id differs from correlation ID"
+            )
         if receipt.request_id != submission.request_id:
             raise FeatureRequestQueueContractError(
                 "Map submit response request_id differs from input"

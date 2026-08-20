@@ -67,7 +67,8 @@ false-green이라 T-321로 등록했다. 이번 검증은 누락분을 개별 �
 - **입력 정합**: Map request queue의 lat 상한 39.5를 새 장소 Pydantic/Zod validation으로 동기화했다.
   기존 correction/closure의 공통 지도 좌표 범위는 변경하지 않았다.
 - **적대 리뷰 보정**: 저장된 new_place payload만 재전송하고, full receipt/meta와 immutable echo를
-  fail-close한다. approve/reject는 row lock으로 직렬화하며 malformed `X-Request-Id`와 legacy
+  fail-close한다. 전달한 `X-Request-Id`는 HTTP client call-log extension과 Map `meta.request_id`에
+  정확히 일치해야 한다. approve/reject는 row lock으로 직렬화하며 malformed `X-Request-Id`와 legacy
   범위 밖 row는 Map write 전에 거부한다. UI는 신규 장소에 direct-create 분류/마커를 요구하지 않고,
   correction에는 실제 변경 필드를 입력하게 했다. production env template, queue 전용 live-mutating
   spec/runbook도 보강했다.

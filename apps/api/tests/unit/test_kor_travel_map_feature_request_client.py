@@ -31,7 +31,12 @@ def _client(handler: Handler) -> FeatureRequestServiceClient:
     )
 
 
-def _response(request_id: uuid.UUID, *, status: str = "pending") -> dict[str, Any]:
+def _response(
+    request_id: uuid.UUID,
+    *,
+    status: str = "pending",
+    meta_request_id: str = "m04-test",
+) -> dict[str, Any]:
     return {
         "data": {
             "request_id": str(request_id),
@@ -49,7 +54,7 @@ def _response(request_id: uuid.UUID, *, status: str = "pending") -> dict[str, An
             else None,
             "rejection_reason": None,
         },
-        "meta": {"duration_ms": 1, "request_id": "m04-test"},
+        "meta": {"duration_ms": 1, "request_id": meta_request_id},
     }
 
 
@@ -64,6 +69,7 @@ async def test_submit_uses_exact_service_path_headers_and_same_request_uuid() ->
         assert request.headers["X-Kor-Travel-Map-Service-Token"] == "feature-request-token"
         assert request.headers["Idempotency-Key"] == str(request_id)
         assert request.headers["X-Request-ID"] == str(correlation_id)
+        assert request.extensions["pinvi_request_id"] == str(correlation_id)
         assert json.loads(request.content) == {
             "request_id": str(request_id),
             "kind": "place",
@@ -72,7 +78,11 @@ async def test_submit_uses_exact_service_path_headers_and_same_request_uuid() ->
             "categories": ["카페", "01070100"],
             "note": "좋은 곳",
         }
-        return httpx.Response(201, json=_response(request_id), request=request)
+        return httpx.Response(
+            201,
+            json=_response(request_id, meta_request_id=str(correlation_id)),
+            request=request,
+        )
 
     client = _client(handler)
     try:
@@ -92,6 +102,38 @@ async def test_submit_uses_exact_service_path_headers_and_same_request_uuid() ->
     assert receipt.request_id == request_id
     assert receipt.status == "pending"
     assert receipt.feature_id is None
+
+
+@pytest.mark.asyncio
+async def test_submit_rejects_response_with_different_correlation_id() -> None:
+    request_id = uuid.UUID("01900000-0000-7000-8000-000000000002")
+    correlation_id = uuid.UUID("01900000-0000-7000-8000-000000000003")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            201,
+            json=_response(
+                request_id,
+                meta_request_id="01900000-0000-7000-8000-000000000004",
+            ),
+            request=request,
+        )
+
+    client = _client(handler)
+    try:
+        with pytest.raises(FeatureRequestQueueContractError, match="meta request_id"):
+            await client.submit(
+                request_id=request_id,
+                kind="place",
+                name="새 카페",
+                lon=129.0,
+                lat=35.0,
+                categories=["카페", "01070100"],
+                note="좋은 곳",
+                correlation_id=correlation_id,
+            )
+    finally:
+        await client.aclose()
 
 
 @pytest.mark.asyncio
