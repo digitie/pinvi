@@ -211,7 +211,6 @@ async def test_approve_new_place_submits_generic_map_queue_and_commits_after_rec
             "marker_color": "P-07",
             "marker_icon": "cafe",
         },
-        headers={"X-Request-Id": str(uuid.uuid4())},
         cookies=auth_cookies(str(admin_id)),
     )
 
@@ -223,19 +222,25 @@ async def test_approve_new_place_submits_generic_map_queue_and_commits_after_rec
     assert call["request_id"] == req_id
     assert call["kind"] == "place"
     assert call["categories"] == ["카페"]
-    assert call["correlation_id"] is not None
+    response_request_id = uuid.UUID(resp.headers["X-Request-Id"])
+    assert call["correlation_id"] == response_request_id
 
     async with session_factory() as db:
-        audit_count = await db.scalar(
-            select(func.count(AdminAuditLog.log_id)).where(
-                AdminAuditLog.action == "feature_request.approve",
-                AdminAuditLog.resource_id == str(req_id),
-            )
+        audits = list(
+            (
+                await db.scalars(
+                    select(AdminAuditLog).where(
+                        AdminAuditLog.action == "feature_request.approve",
+                        AdminAuditLog.resource_id == str(req_id),
+                    )
+                )
+            ).all()
         )
         stored = await db.scalar(
             select(FeatureSuggestion).where(FeatureSuggestion.request_id == req_id)
         )
-    assert audit_count == 1
+    assert len(audits) == 1
+    assert audits[0].request_id == response_request_id
     assert stored is not None
     assert stored.status == "approved"
     assert stored.kor_travel_map_ref == {

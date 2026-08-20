@@ -84,6 +84,13 @@ def _parse_request_id(value: str | None) -> uuid.UUID:
         ) from exc
 
 
+def _request_correlation_id(request: Request, header_value: str | None) -> uuid.UUID:
+    """응답·audit·upstream 호출이 한 request ID를 공유하게 한다."""
+
+    middleware_value = getattr(request.state, "request_id", None)
+    return _parse_request_id(header_value if header_value is not None else middleware_value)
+
+
 @contextmanager
 def _map_admin_errors() -> Iterator[None]:
     """kor_travel_map admin 호출 도메인 예외 → HTTP status."""
@@ -274,7 +281,7 @@ async def approve_feature_request_endpoint(
     Map 호출이 성공하기 전에는 PinVi 제안/audit를 commit하지 않아 retry가 같은 immutable request UUID를
     재사용한다. Map queue 제출은 ``approved``(Map 검토 대기), identity exact conflict만 ``duplicate``다.
     """
-    audit_request_id = _parse_request_id(x_request_id)
+    audit_request_id = _request_correlation_id(request, x_request_id)
     suggestion = await _load_pending(db, request_id)
     stype = suggestion.suggestion_type
     if stype == "new_place":
@@ -443,7 +450,7 @@ async def reject_feature_request_endpoint(
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Envelope[AdminFeatureRequestResult]:
     """거절 — kor_travel_map 호출 없이 상태만 rejected로. audit."""
-    audit_request_id = _parse_request_id(x_request_id)
+    audit_request_id = _request_correlation_id(request, x_request_id)
     suggestion = await _load_pending(db, request_id)
     before = {"status": suggestion.status}
     suggestion.status = "rejected"
