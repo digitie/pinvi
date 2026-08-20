@@ -41,6 +41,8 @@ import {
   AdminFeatureRequestPagedResponseSchema,
   AdminFeatureRequestRejectSchema,
   AdminFeatureRequestResultSchema,
+  AdminFeatureReferenceReconciliationDetailSchema,
+  AdminFeatureReferenceReconciliationPagedResponseSchema,
   AdminMcpTokenIssueRequestSchema,
   AdminLocationAuditEntrySchema,
   AdminDayCopyRequestSchema,
@@ -293,7 +295,13 @@ export type AdminDsrRejectBody = z.infer<typeof AdminDsrRejectRequestSchema>;
 
 export interface AdminContentReportListParams {
   status?:
-    'received' | 'reviewing' | 'hidden' | 'taken_down' | 'rejected' | 'appealed' | 'restored';
+    | 'received'
+    | 'reviewing'
+    | 'hidden'
+    | 'taken_down'
+    | 'rejected'
+    | 'appealed'
+    | 'restored';
   targetType?: 'trip' | 'comment' | 'attachment' | 'share_link';
   pageSize?: number;
 }
@@ -1116,6 +1124,27 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminFeatureRequestRejectSchema.parse(body)),
       schema: AdminFeatureRequestResultSchema,
+    }),
+
+  /** M05 Map Feature 참조 조정의 PinVi append-only local evidence. */
+  listFeatureReferenceReconciliations: (
+    params: { status?: 'blocked' | 'applied' | 'all'; page?: number; limit?: number } = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set('status', params.status);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.limit) qs.set('limit', String(params.limit));
+    const path = `/admin/feature-reference-reconciliations${qs.toString() ? `?${qs.toString()}` : ''}`;
+    return client.request(path, {
+      method: 'GET',
+      schema: AdminFeatureReferenceReconciliationPagedResponseSchema,
+    });
+  },
+
+  getFeatureReferenceReconciliation: (eventId: string) =>
+    client.request(`/admin/feature-reference-reconciliations/${encodeURIComponent(eventId)}`, {
+      method: 'GET',
+      schema: AdminFeatureReferenceReconciliationDetailSchema,
     }),
 
   listUsers: (params: { page?: number; limit?: number; status?: string; q?: string } = {}) => {

@@ -20,6 +20,15 @@ Zod 미러 3곳(detail-card는 각각 5·7 arm 동시)에서 제거했다. 저�
 
 **다음 한 작업**: T-273(v1.0.0 E2E/Live gate) — 남은 hard blocker는 geofence 운영 설정이다.
 모바일 후속(T-311/T-318/T-319/T-320)과 T-321(vitest 조용한 누락)은 별도 PR로 분리해 뒀다.
+## 2026-08-21 (codex) — T-VN-M05 reconciliation evidence admin 읽기 경계
+
+admin/operator가 terminal receipt, blocked observation, row-level impact를 읽는 전용 API/UI를
+추가했다. 이 화면은 Map subscription/lease/ACK를 바꾸지 않으며, blocked event를 applied로
+표시하지 않는다.
+
+**다음 한 작업**: curation receipt-bound·미종결 suggestion·동시 consumer race를 실제 PostGIS
+통합 검증으로 보강하고, no-owner restore drill 및 13805/N150 격리 UI E2E의 서버 응답 문제를
+해결한다. activation은 전문 적대 리뷰와 paired live E2E가 끝날 때까지 `false`다.
 
 ## 2026-08-21 (codex) — T-VN-M05 PinVi local receipt·worker 구현
 

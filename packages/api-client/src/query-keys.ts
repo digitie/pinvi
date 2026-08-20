@@ -179,6 +179,14 @@ export const queryKeys = {
       ['admin', 'feature-requests', params] as const,
     // list-prefix 키 — mutation 후 invalidate 일관성용(파라미터 무관 전체 무효화).
     featureRequestsAll: () => ['admin', 'feature-requests'] as const,
+    featureReferenceReconciliations: (params: {
+      status?: 'blocked' | 'applied' | 'all';
+      page?: number;
+    }) => ['admin', 'feature-reference-reconciliations', params] as const,
+    featureReferenceReconciliationsAll: () =>
+      ['admin', 'feature-reference-reconciliations'] as const,
+    featureReferenceReconciliation: (eventId: string) =>
+      ['admin', 'feature-reference-reconciliation', eventId] as const,
     emails: (params: { status?: string; limit?: number }) => ['admin', 'emails', params] as const,
     emailDeliverability: () => ['admin', 'emails', 'deliverability'] as const,
     emailsAll: () => ['admin', 'emails'] as const,

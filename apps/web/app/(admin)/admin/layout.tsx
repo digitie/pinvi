@@ -64,6 +64,12 @@ const NAV_GROUPS: {
       { href: '/admin/notice-plans', label: '추천 여행', sprint: 6, icon: Newspaper },
       { href: '/admin/files', label: '파일', sprint: 4, icon: Paperclip },
       { href: '/admin/feature-requests', label: 'Feature 제안', sprint: 4, icon: Lightbulb },
+      {
+        href: '/admin/feature-reference-reconciliations',
+        label: '참조 조정 증거',
+        sprint: 5,
+        icon: GitCompare,
+      },
       { href: '/admin/audit', label: '감사 로그', sprint: 3, icon: ScrollText },
       { href: '/admin/incidents', label: 'Incidents', sprint: 6, icon: ShieldAlert },
       { href: '/admin/abuse', label: 'Abuse', sprint: 6, icon: Ban },

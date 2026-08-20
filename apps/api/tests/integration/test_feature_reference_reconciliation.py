@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from sqlalchemy import select, text
@@ -234,6 +234,107 @@ async def test_rebind_commits_final_receipt_before_ack_material_and_replays_loca
                 lease.model_copy(update={"event_sha256": "b" * 64}),
             )
         await db.rollback()
+
+
+async def _create_admin(session_factory: Any) -> uuid.UUID:
+    async with session_factory() as db:
+        admin = User(
+            email=f"m05-admin-{uuid.uuid4().hex}@pinvi.test",
+            password_hash="x",
+            nickname="M05 운영자",
+            status="active",
+            roles=["user", "admin"],
+            email_verified_at=datetime.now(UTC),
+        )
+        db.add(admin)
+        await db.commit()
+        return admin.user_id
+
+
+@pytest.mark.asyncio
+async def test_admin_evidence_api_lists_blocked_and_applied_local_receipts(
+    client: Any, session_factory: async_sessionmaker[AsyncSession], auth_cookies: Any
+) -> None:
+    admin_id = await _create_admin(session_factory)
+    applied_event_id = uuid.uuid4()
+    blocked_event_id = uuid.uuid4()
+    old_feature_uuid = uuid.uuid4()
+    replacement_uuid = uuid.uuid4()
+    async with session_factory() as db:
+        receipt = KtmFeatureReferenceReconciliationAppliedReceipt(
+            event_id=applied_event_id,
+            event_sequence=10,
+            event_sha256="a" * 64,
+            action="rebind",
+            old_feature_id="feature-old",
+            old_feature_uuid=old_feature_uuid,
+            replacement_feature_id="feature-new",
+            replacement_feature_uuid=replacement_uuid,
+            impact_root_sha256="b" * 64,
+            impact_count=1,
+            receipt_sha256="c" * 64,
+        )
+        db.add_all(
+            (
+                receipt,
+                KtmFeatureReferenceReconciliationDeliveryAttempt(
+                    event_id=applied_event_id,
+                    attempt_sequence=1,
+                    event_sequence=10,
+                    event_sha256="a" * 64,
+                    status="applied",
+                    block_fingerprint_sha256=None,
+                    observation_root_sha256="d" * 64,
+                ),
+                KtmFeatureReferenceReconciliationImpact(
+                    event_id=applied_event_id,
+                    impact_index=0,
+                    target_relation="trip_day_pois",
+                    target_id=uuid.uuid4(),
+                    old_feature_id="feature-old",
+                    old_feature_uuid=old_feature_uuid,
+                    replacement_feature_id="feature-new",
+                    replacement_feature_uuid=replacement_uuid,
+                    outcome="rebind",
+                ),
+                KtmFeatureReferenceReconciliationDeliveryAttempt(
+                    event_id=blocked_event_id,
+                    attempt_sequence=1,
+                    event_sequence=11,
+                    event_sha256="e" * 64,
+                    status="blocked",
+                    block_fingerprint_sha256="f" * 64,
+                    observation_root_sha256="0" * 64,
+                ),
+            )
+        )
+        await db.commit()
+
+    response = await client.get(
+        "/admin/feature-reference-reconciliations?status=all",
+        cookies=auth_cookies(str(admin_id)),
+    )
+    assert response.status_code == 200, response.text
+    items = response.json()["data"]["items"]
+    assert {item["event_id"] for item in items} == {str(applied_event_id), str(blocked_event_id)}
+    applied = next(item for item in items if item["event_id"] == str(applied_event_id))
+    assert applied["status"] == "applied"
+    assert applied["receipt"]["receipt_sha256"] == "c" * 64
+    blocked = next(item for item in items if item["event_id"] == str(blocked_event_id))
+    assert blocked["status"] == "blocked"
+    assert blocked["receipt"] is None
+
+    detail = await client.get(
+        f"/admin/feature-reference-reconciliations/{applied_event_id}",
+        cookies=auth_cookies(str(admin_id)),
+    )
+    assert detail.status_code == 200, detail.text
+    payload = detail.json()["data"]
+    assert payload["status"] == "applied"
+    assert payload["receipt"]["action"] == "rebind"
+    assert [(impact["target_relation"], impact["outcome"]) for impact in payload["impacts"]] == [
+        ("trip_day_pois", "rebind")
+    ]
 
 
 @pytest.mark.asyncio

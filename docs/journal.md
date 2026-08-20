@@ -51,6 +51,19 @@ wire 표현 단언으로 방향만 뒤집었다 — 선언과 값이 함께 되�
 **곁다리로 발견** — `vitest run`이 fork 워커 기동에 실패한 파일을 조용히 건너뛰고 **exit 0**으로 끝난다
 (로컬에서 18파일 중 3~6개 누락, `Failed to start forks worker` 로그만 남음). CI에서 같은 일이 나면
 false-green이라 T-321로 등록했다. 이번 검증은 누락분을 개별 실행해 18파일 전부 통과를 확인했다.
+## 2026-08-21 (codex) — T-VN-M05 reconciliation evidence admin 읽기 경계
+
+- admin/operator만 `GET /admin/feature-reference-reconciliations`와 event detail을 통해 PinVi의
+  append-only delivery attempt, terminal receipt, row-level impact를 읽는다. 이 경계는 Map
+  subscription 생성·lease·ACK·local mutation을 전혀 수행하지 않는다. terminal receipt가 없는
+  event는 마지막 `blocked` 관측만 표시하며 receipt로 가장하지 않는다.
+- Web에는 receipt/blocked hash와 영향 행을 읽기 전용으로 보는 `Feature 참조 조정 증거` 화면과
+  mock Playwright spec을 추가했다. API route OpenAPI smoke, Python Ruff/format, strict mypy와
+  schema/api-client/web typecheck는 통과했다.
+- 이 worktree의 13805 격리 Next production build/Playwright는 서버가 응답하지 않아 완료 증거를
+  만들지 못했다. 따라서 mock UI와 N150 paired live UI E2E는 모두 미완료이며 activation은 계속
+  `false`다.
+
 ## 2026-08-21 (codex) — T-VN-M05 local receipt·paired worker 첫 tranche
 
 - `20260821_0060` migration으로 Map reconciliation event의 append-only delivery attempt,
@@ -7674,7 +7687,7 @@ PR-C 전체 DoD 중 "viewport 기반 feature 로딩 + 클러스터 렌더 + 팔�
 - `api/v1/admin/notice_plans.py` 신규 — §5.3 plan 첨부(GET/POST/DELETE) + §5.4 POI 첨부
   (GET/POST/DELETE). `require_role("admin")`→비admin 404. plan/POI 없으면 404 `NOT_FOUND`,
   개수 초과 409. POST/DELETE 는 admin*audit chain 기록(`curated_plan.attachment*_`/`curated*poi.attachment*_`). DELETE 는 soft delete 만 — RustFS object 보존(§5.6, notice→trip
-  copy 시 `storage_key` 공유).
+copy 시 `storage_key` 공유).
 - 응답은 `AttachmentResponse`(curated*\* + notice*\* alias 항상 동기). 입력 `AttachmentCreate`
   (storage_key 위생 검증 재사용).
 - 테스트 4건(plan CRUD / POI CRUD / unknown-plan 404 / 비admin 404).
