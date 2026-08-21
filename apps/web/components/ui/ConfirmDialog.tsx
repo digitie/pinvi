@@ -51,6 +51,7 @@ export function ConfirmDialog({
   returnFocusRef,
   testId = 'confirm-dialog',
 }: ConfirmDialogProps) {
+  const descriptionId = `${testId}-description`;
   const cancelRef = useRef<HTMLButtonElement | null>(null);
   const { titleId, portalContainer, backdropProps, dialogProps } = useModalDialog({
     onClose: onCancel,
@@ -62,6 +63,7 @@ export function ConfirmDialog({
     // (버튼만 잠그고 Escape는 열려 있으면 '취소는 못 누르는데 Escape는 먹는' 모순).
     closeOnEscape: !busy,
     closeOnBackdrop: !busy,
+    ariaDescribedBy: description != null ? descriptionId : undefined,
   });
 
   if (!open) return null;
@@ -96,7 +98,11 @@ export function ConfirmDialog({
             >
               {title}
             </h2>
-            {description != null && <p className="mt-1 text-sm text-muted">{description}</p>}
+            {description != null && (
+              <p id={descriptionId} className="mt-1 text-sm text-muted">
+                {description}
+              </p>
+            )}
           </div>
         </div>
 

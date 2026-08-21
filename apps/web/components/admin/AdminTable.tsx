@@ -42,6 +42,9 @@ export interface AdminTableProps<R> {
   /** 이 행수 이하이면 가상화하지 않고 전 행 렌더(1행 e2e mock 안정성). */
   virtualizeThreshold?: number;
   /** 전체 정렬 토글(개별은 컬럼 `sortable`). */
+  /** 작은 화면에서 표 대신 렌더할 행 요약. */
+  mobileCard?: (row: R) => ReactNode;
+  /** 전체 정렬 토글(개별은 컬럼 `sortable`). */
   enableSorting?: boolean;
   initialSort?: { columnKey: string; desc: boolean };
 }
@@ -114,6 +117,7 @@ export function AdminTable<R>({
   virtualized = false,
   maxHeight = '70dvh',
   virtualizeThreshold = 30,
+  mobileCard,
   enableSorting = true,
   initialSort,
 }: AdminTableProps<R>) {
@@ -157,6 +161,7 @@ export function AdminTable<R>({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const useVirtual = virtualized && tableRows.length > virtualizeThreshold;
+  const showMobileCards = mobileCard != null && !loading && tableRows.length > 0;
 
   const renderRow = (row: Row<R>) => (
     <tr
@@ -210,15 +215,23 @@ export function AdminTable<R>({
   }
 
   return (
-    <div
-      ref={scrollRef}
-      data-testid="admin-table-scroll"
+    <>
+      {showMobileCards && (
+        <div className="space-y-2 md:hidden" data-testid="admin-mobile-cards">
+          {tableRows.map((row) => (
+            <div key={row.id}>{mobileCard ? mobileCard(row.original) : null}</div>
+          ))}
+        </div>
+      )}
+      <div
+        ref={scrollRef}
+        data-testid="admin-table-scroll"
       // 비가상 테이블은 원래 DataTable처럼 가로 스크롤만(세로 스크롤바 feedback loop 회피).
       // 가상화 테이블만 세로 스크롤(overflow-auto)을 켜 윈도잉이 동작하게 한다.
-      className={`${virtualized ? 'overflow-auto' : 'overflow-x-auto'} rounded-sm border border-hairline`}
+      className={`${showMobileCards ? 'hidden md:block' : ''} ${virtualized ? 'overflow-auto' : 'overflow-x-auto'} rounded-sm border border-hairline`}
       style={virtualized ? { maxHeight } : undefined}
     >
-      <table className="min-w-full divide-y divide-hairline text-sm">
+        <table aria-busy={loading || undefined} className="min-w-full divide-y divide-hairline text-sm tabular-nums">
         <colgroup>
           {columns.map((col) => (
             <col key={col.key} style={col.width ? { width: col.width } : undefined} />
@@ -254,7 +267,7 @@ export function AdminTable<R>({
                       <button
                         type="button"
                         onClick={header.column.getToggleSortingHandler()}
-                        className="inline-flex items-center gap-1 uppercase tracking-wide hover:text-ink"
+                        className="focus-ring inline-flex min-h-11 items-center gap-1 whitespace-nowrap uppercase tracking-wide hover:text-ink"
                         data-testid={`admin-table-sort-${header.column.id}`}
                       >
                         {headerNode}
@@ -276,7 +289,8 @@ export function AdminTable<R>({
           ))}
         </thead>
         <tbody className="divide-y divide-hairline bg-canvas">{body}</tbody>
-      </table>
-    </div>
+        </table>
+      </div>
+    </>
   );
 }

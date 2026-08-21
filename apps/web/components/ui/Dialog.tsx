@@ -86,7 +86,7 @@ export function Dialog({
   // busy 중 닫기는 "진행 중 요청 취소"라는 다른 의미다 — 호출부가 그 경로를 줬을 때만 연다.
   const closeWhileBusy = busy ? onCancelBusy : undefined;
   const closeDisabled = busy && !closeWhileBusy;
-  const { titleId, portalContainer, backdropProps, dialogProps } = useModalDialog({
+  const { titleId, portalContainer, requestClose, backdropProps, dialogProps } = useModalDialog({
     onClose,
     active: open,
     // 저장 중에는 실수로 닫혀 작업이 사라지지 않게 잠근다(T-315 2차 리뷰: 닫기만 열어 두면
@@ -107,7 +107,7 @@ export function Dialog({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-modal flex justify-center bg-scrim/50 ${
+      className={`fixed inset-0 z-modal flex min-w-0 max-w-full justify-center overflow-x-clip bg-scrim/50 ${
         sheet ? 'items-end p-0 sm:items-center sm:p-4' : 'items-center p-4'
       }`}
       data-testid={`${testId}-backdrop`}
@@ -116,11 +116,11 @@ export function Dialog({
       <div
         {...dialogProps}
         data-testid={testId}
-        className={`flex max-h-[88dvh] w-full flex-col overflow-hidden border border-hairline bg-canvas shadow-overlay outline-none ${
+        className={`flex max-h-[88dvh] w-full min-w-0 max-w-full flex-col overflow-hidden border border-hairline bg-canvas shadow-overlay outline-none ${
           sheet ? 'rounded-t-xl sm:rounded-md' : 'rounded-md'
         } ${SIZE[size]}`}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-hairline px-5 py-4">
+        <div className="flex min-w-0 items-start justify-between gap-3 border-b border-hairline px-5 py-4">
           <div className="min-w-0">
             <h2
               id={titleId}
@@ -138,7 +138,7 @@ export function Dialog({
           {showClose ? (
             <button
               type="button"
-              onClick={closeWhileBusy ?? onClose}
+              onClick={closeWhileBusy ?? requestClose}
               disabled={closeDisabled}
               aria-label={closeWhileBusy ? '취소하고 닫기' : '닫기'}
               data-testid={`${testId}-close`}
@@ -149,10 +149,10 @@ export function Dialog({
           ) : null}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-auto px-5 py-4">{children}</div>
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto px-5 py-4">{children}</div>
 
         {footer != null ? (
-          <div className="flex flex-wrap justify-end gap-2 border-t border-hairline px-5 py-4">
+          <div className="flex min-w-0 flex-wrap justify-end gap-2 border-t border-hairline px-5 py-4">
             {footer}
           </div>
         ) : null}

@@ -184,16 +184,16 @@ function AdminGuard({ children }: { children: ReactNode }) {
   const activeHref = getActiveNavHref(pathname);
 
   return (
-    <div className="flex min-h-dvh flex-col bg-surface-soft lg:flex-row">
+    <div className="flex min-h-dvh min-w-0 max-w-full flex-col overflow-x-clip bg-surface-soft lg:flex-row">
       <aside
-        className={`shrink-0 border-b border-hairline bg-canvas transition-[width] duration-200 lg:sticky lg:top-0 lg:h-dvh lg:overflow-y-auto lg:border-b-0 lg:border-r ${
+        className={`w-full max-w-[100dvw] min-w-0 shrink-0 overflow-x-hidden border-b border-hairline bg-canvas transition-[width] duration-200 lg:sticky lg:top-0 lg:h-dvh lg:overflow-y-auto lg:border-b-0 lg:border-r ${
           sidebarCollapsed ? 'lg:w-20' : 'lg:w-64'
         }`}
         data-collapsed={sidebarCollapsed ? 'true' : 'false'}
         data-testid="admin-sidebar"
       >
         <div
-          className={`flex items-center gap-2 border-b border-hairline px-2 py-3 ${
+          className={`flex min-w-0 max-w-full items-center gap-2 border-b border-hairline px-2 py-3 ${
             sidebarCollapsed ? 'lg:flex-col' : 'lg:px-4'
           }`}
         >
@@ -238,66 +238,74 @@ function AdminGuard({ children }: { children: ReactNode }) {
           </div>
         </div>
         <nav
-          className={`flex gap-2 overflow-x-auto p-2 text-sm lg:block lg:overflow-x-visible ${
-            sidebarCollapsed ? 'lg:space-y-3' : 'lg:space-y-5 lg:p-3'
+          className={`w-full min-w-0 max-w-full overflow-x-hidden p-2 text-sm lg:overflow-x-visible ${
+            sidebarCollapsed ? '' : 'lg:p-3'
           }`}
           aria-label="Admin navigation"
         >
-          {NAV_GROUPS.map((group) => (
-            <div key={group.title} className="flex gap-1 lg:block lg:space-y-1">
-              <h2
-                className={
-                  sidebarCollapsed
-                    ? 'sr-only'
-                    : 'sr-only lg:not-sr-only lg:mb-2 lg:block lg:px-2 lg:text-xs lg:font-semibold lg:text-muted'
-                }
-              >
-                {group.title}
-              </h2>
-              <div
-                aria-hidden="true"
-                className={
-                  sidebarCollapsed
-                    ? 'hidden lg:mx-auto lg:mb-2 lg:block lg:h-px lg:w-8 lg:bg-hairline'
-                    : 'hidden'
-                }
-              />
-              <div className="flex gap-1 lg:grid lg:grid-cols-1">
-                {group.items.map((item) => {
-                  const active = activeHref === item.href;
-                  const Icon = item.icon;
-                  const linkSize = sidebarCollapsed
-                    ? 'h-11 w-11 items-center justify-center'
-                    : 'h-11 w-11 items-center justify-center lg:h-10 lg:w-full lg:justify-start lg:gap-2 lg:px-3';
-                  const labelClass = sidebarCollapsed
-                    ? 'sr-only'
-                    : 'sr-only lg:not-sr-only lg:block lg:min-w-0 lg:flex-1 lg:truncate';
-                  return (
-                    <DocumentNavLink
-                      key={item.href}
-                      href={item.href}
-                      aria-label={`${item.label} (Sprint ${item.sprint})`}
-                      aria-current={active ? 'page' : undefined}
-                      title={`${item.label} (Sprint ${item.sprint})`}
-                      data-sprint={item.sprint}
-                      className={
-                        active
-                          ? `flex ${linkSize} rounded-sm bg-ink text-canvas focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus`
-                          : `flex ${linkSize} rounded-sm text-ink hover:bg-surface-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`
-                      }
-                      data-testid={`admin-nav-${item.href.replace(/[^a-z0-9]+/gi, '-')}`}
-                    >
-                      <Icon className="h-5 w-5" aria-hidden="true" />
-                      <span className={labelClass}>{item.label}</span>
-                    </DocumentNavLink>
-                  );
-                })}
+          <div
+            className={`flex w-full min-w-0 max-w-full gap-2 overflow-x-auto overflow-y-hidden overscroll-x-contain [contain:layout_paint] lg:block lg:overflow-visible lg:[contain:none] ${
+              sidebarCollapsed ? 'lg:space-y-3' : 'lg:space-y-5'
+            }`}
+          >
+            {NAV_GROUPS.map((group) => (
+              <div key={group.title} className="flex shrink-0 gap-1 lg:block lg:space-y-1">
+                <h2
+                  className={
+                    sidebarCollapsed
+                      ? 'sr-only'
+                      : 'sr-only lg:not-sr-only lg:mb-2 lg:block lg:px-2 lg:text-xs lg:font-semibold lg:text-muted'
+                  }
+                >
+                  {group.title}
+                </h2>
+                <div
+                  aria-hidden="true"
+                  className={
+                    sidebarCollapsed
+                      ? 'hidden lg:mx-auto lg:mb-2 lg:block lg:h-px lg:w-8 lg:bg-hairline'
+                      : 'hidden'
+                  }
+                />
+                <div className="flex shrink-0 gap-1 lg:grid lg:grid-cols-1">
+                  {group.items.map((item) => {
+                    const active = activeHref === item.href;
+                    const Icon = item.icon;
+                    const linkSize = sidebarCollapsed
+                      ? 'h-11 w-11 items-center justify-center'
+                      : 'h-11 w-11 items-center justify-center lg:h-10 lg:w-full lg:justify-start lg:gap-2 lg:px-3';
+                    const labelClass = sidebarCollapsed
+                      ? 'sr-only'
+                      : 'sr-only lg:not-sr-only lg:block lg:min-w-0 lg:flex-1 lg:truncate';
+                    return (
+                      <DocumentNavLink
+                        key={item.href}
+                        href={item.href}
+                        aria-label={`${item.label} (Sprint ${item.sprint})`}
+                        aria-current={active ? 'page' : undefined}
+                        title={`${item.label} (Sprint ${item.sprint})`}
+                        data-sprint={item.sprint}
+                        className={
+                          active
+                            ? `flex ${linkSize} rounded-sm bg-ink text-canvas focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus`
+                            : `flex ${linkSize} rounded-sm text-ink hover:bg-surface-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`
+                        }
+                        data-testid={`admin-nav-${item.href.replace(/[^a-z0-9]+/gi, '-')}`}
+                      >
+                        <Icon className="h-5 w-5" aria-hidden="true" />
+                        <span className={labelClass}>{item.label}</span>
+                      </DocumentNavLink>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </nav>
       </aside>
-      <main className="flex-1 overflow-x-hidden px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
+      <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        {children}
+      </main>
     </div>
   );
 }

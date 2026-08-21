@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { useModalDialog } from '@/lib/useModalDialog';
+import { isRestorableFocusTarget, useModalDialog } from '@/lib/useModalDialog';
 
 function Harness(props: { onClose: () => void; ariaLabel?: string; idPrefix?: string }) {
   const p = props.idPrefix ?? '';
@@ -20,6 +20,23 @@ function Harness(props: { onClose: () => void; ariaLabel?: string; idPrefix?: st
 }
 
 describe('useModalDialog', () => {
+  it('숨겨진 대상은 focus 복원 대상으로 취급하지 않는다', () => {
+    const target = document.createElement('button');
+    document.body.append(target);
+    const getClientRects = vi
+      .spyOn(target, 'getClientRects')
+      .mockReturnValue([{}] as unknown as DOMRectList);
+    target.style.display = 'none';
+    expect(isRestorableFocusTarget(target)).toBe(false);
+    target.style.display = '';
+    target.style.visibility = 'hidden';
+    expect(isRestorableFocusTarget(target)).toBe(false);
+    target.style.visibility = '';
+    expect(isRestorableFocusTarget(target)).toBe(true);
+    getClientRects.mockRestore();
+    target.remove();
+  });
+
   it('Escape로 onClose를 호출한다', () => {
     const onClose = vi.fn();
     render(<Harness onClose={onClose} />);
@@ -72,12 +89,17 @@ describe('useModalDialog', () => {
     expect(panel).not.toHaveAttribute('aria-labelledby');
   });
 
-  it('열리면 body 스크롤을 잠그고 닫히면 복원한다', () => {
-    expect(document.body.style.overflow).toBe('');
+  it('열리면 root 스크롤을 잠그고 닫히면 복원한다', () => {
+    const root = document.documentElement;
+    const body = document.body;
+    expect(root.style.overflow).toBe('');
+    expect(body.style.overflow).toBe('');
     const { unmount } = render(<Harness onClose={vi.fn()} />);
-    expect(document.body.style.overflow).toBe('hidden');
+    expect(root.style.overflow).toBe('clip');
+    expect(body.style.overflow).toBe('clip');
     unmount();
-    expect(document.body.style.overflow).toBe('');
+    expect(root.style.overflow).toBe('');
+    expect(body.style.overflow).toBe('');
   });
 
   it('열리면 패널로 포커스를 옮긴다', async () => {

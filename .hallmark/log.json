@@ -1,5 +1,16 @@
 [
   {
+    "date": "2026-08-21",
+    "scope": "app/admin",
+    "genre": "modern-minimal · Workbench",
+    "macrostructure": "Admin review queue → evidence detail dialog → immutable decision record",
+    "theme": "pinvi-locked (DESIGN.md Hallmark 잠금 시스템)",
+    "nav": "N1 (AdminGuard responsive scroll rail)",
+    "footer": "해당 없음 (관리자 workbench)",
+    "enrichment": "Tier-B hand-built responsive dialog/evidence workbench",
+    "brief": "M04 제안 검토와 M05 참조 조정 증거 화면의 반응형·접근성 정비 — 재마운트 trigger focus 복원, modal 배경 inert 경계, 모바일 nav의 독립 가로 스크롤 및 root overflow 차단"
+  },
+  {
     "date": "2026-08-18",
     "scope": "app",
     "genre": "modern-minimal",

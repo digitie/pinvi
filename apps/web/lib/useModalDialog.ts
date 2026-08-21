@@ -71,6 +71,8 @@ export interface ModalDialogA11y {
    * 훅은 렌더할 수 없으므로 `createPortal(node, portalContainer)` 호출은 호출부가 한다.
    */
   portalContainer: HTMLElement | null;
+  /** onClose와 함께 열기 전 trigger로 포커스를 복원하는 표준 닫기 경로. */
+  requestClose: () => void;
   /** 제목 요소에 달 id. `ariaLabel`을 주지 않았다면 이 id로 aria 연결된다. */
   titleId: string;
   /** backdrop(scrim) 요소에 spread. */
@@ -92,6 +94,7 @@ export interface ModalDialogA11y {
 
 // 여러 모달이 동시에 스크롤을 잠글 수 있으므로, 마지막 하나가 풀릴 때만 원복한다.
 let scrollLockCount = 0;
+let previousDocumentOverflow: string | null = null;
 let previousBodyOverflow: string | null = null;
 
 const FOCUSABLE_SELECTOR = [
@@ -124,6 +127,50 @@ function isInertCandidate(element: Element): element is HTMLElement {
   // 라우트 변경 안내는 모달이 열려 있어도 살아 있어야 한다.
   if (tag === 'NEXT-ROUTE-ANNOUNCER') return false;
   return true;
+}
+
+export function isRestorableFocusTarget(
+  element: HTMLElement | null | undefined,
+): element is HTMLElement {
+  if (typeof document === 'undefined') return false;
+  const computedStyle = element ? window.getComputedStyle(element) : null;
+  return Boolean(
+    element &&
+      element !== document.body &&
+      document.contains(element) &&
+      !(element as HTMLElement & { disabled?: boolean }).disabled &&
+      computedStyle?.display !== 'none' &&
+      computedStyle?.visibility !== 'hidden' &&
+      element.getClientRects().length > 0 &&
+      // inert는 하위로 상속된다 — 자기 속성만 보면 배경 안 버튼을 "포커스 가능"으로 오판한다.
+      element.closest('[inert]') === null,
+  );
+}
+
+function releaseManagedInert(element: HTMLElement | null | undefined): void {
+  const inertAncestor = element?.closest('[inert]');
+  const inertEntry = inertSnapshot?.find(({ element: candidate }) => candidate === inertAncestor);
+  if (inertAncestor && inertEntry && !inertEntry.hadInert) {
+    inertAncestor.removeAttribute('inert');
+  }
+}
+
+function focusWhenRestorable(resolveTarget: () => HTMLElement | null | undefined): void {
+  if (typeof window === 'undefined') return;
+
+  let remainingFrames = 8;
+  const tryFocus = () => {
+    const target = resolveTarget();
+    releaseManagedInert(target);
+    if (isRestorableFocusTarget(target)) {
+      target.focus({ preventScroll: true });
+      return;
+    }
+    remainingFrames -= 1;
+    if (remainingFrames > 0) window.requestAnimationFrame(tryFocus);
+  };
+
+  tryFocus();
 }
 
 /**
@@ -214,11 +261,18 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
   useEffect(() => {
     returnFocusRefRef.current = returnFocusRef;
   }, [returnFocusRef]);
+  // 명시적 닫기 경로가 고른 대상은 active=false commit 뒤에만 복원한다. 같은 이벤트에서
+  // setTimeout으로 서두르면 React cleanup보다 앞서 inert 상태의 trigger를 건너뛸 수 있다.
+  const pendingReturnFocusRef = useRef<HTMLElement | null>(null);
+  const wasActiveRef = useRef(active);
 
   // portal 컨테이너를 body 직계 자식으로 붙인다 — 배경 inert의 선행 조건이다.
   useEffect(() => {
     if (!active || !portalNode) return;
     portalNode.dataset.modalPortal = '';
+    // portal 자체는 layout box를 만들지 않는다. fixed scrim/panel만 viewport 레이어에 남겨
+    // 모바일 nav의 가로 scroll area가 root scrollWidth로 새지 않게 한다.
+    portalNode.style.display = 'contents';
     document.body.appendChild(portalNode);
     modalContainers.set(generatedTitleId, portalNode);
     syncBackgroundInert();
@@ -236,6 +290,11 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     if (!active) return;
     openerRef.current = (document.activeElement as HTMLElement | null) ?? null;
   }, [active]);
+
+  const requestClose = () => {
+    pendingReturnFocusRef.current = returnFocusRefRef.current?.current ?? openerRef.current;
+    onCloseRef.current();
+  };
 
   // ② 배경 inert — cleanup(해제)이 ③의 포커스 복원보다 **먼저** 돌아야 한다.
   //    (React는 effect/cleanup을 선언 순서대로 실행한다.)
@@ -267,31 +326,32 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
       window.cancelAnimationFrame(raf);
       // previouslyFocused는 body이거나(트리거가 공유 busy로 이미 disabled된 채 열린 경우)
       // 이미 사라졌을 수 있다. 그러면 (1) 남아 있는 최상단 모달 → (2) 호출부가 준 트리거 순으로
-      // 넘긴다. 어느 쪽도 없으면 body에 남는 것을 감수한다(그 이상은 훅이 알 수 없다).
-      const focusable = (el: HTMLElement | null | undefined): el is HTMLElement =>
-        Boolean(
-          el &&
-          el !== document.body &&
-          document.contains(el) &&
-          !(el as HTMLElement & { disabled?: boolean }).disabled &&
-          // inert는 하위로 상속된다 — 자기 속성만 보면 배경 안 버튼을 "포커스 가능"으로 오판한다.
-          el.closest('[inert]') === null,
-        );
-
-      if (focusable(previouslyFocused)) {
-        previouslyFocused.focus();
-        return;
-      }
-      const belowId = modalStack.filter((id) => id !== generatedTitleId).pop();
-      const below = belowId ? modalPanels.get(belowId) : null;
-      if (below && document.contains(below)) {
-        below.focus();
-        return;
-      }
-      const fallback = returnFocusRefRef.current?.current;
-      if (focusable(fallback)) fallback.focus();
+      // 넘긴다. inert/portal cleanup은 React effect 순서와 브라우저 blur 타이밍에 따라 한두
+      // 프레임 늦게 안정화될 수 있으므로, 실제 복원 가능 상태가 될 때까지 짧게 재시도한다.
+      focusWhenRestorable(() => {
+        if (isRestorableFocusTarget(previouslyFocused)) return previouslyFocused;
+        const belowId = modalStack.filter((id) => id !== generatedTitleId).pop();
+        const below = belowId ? modalPanels.get(belowId) : null;
+        if (isRestorableFocusTarget(below)) return below;
+        return returnFocusRefRef.current?.current ?? null;
+      });
     };
   }, [active, generatedTitleId]);
+
+  // active=false의 passive effect는 모든 모달 cleanup(inert/portal/stack 해제) 뒤에 실행된다.
+  // 한 프레임 뒤 복원해 닫기 이벤트와 React commit의 순서 경쟁을 피한다.
+  useEffect(() => {
+    const wasActive = wasActiveRef.current;
+    wasActiveRef.current = active;
+    if (active || !wasActive) return;
+    const returnTarget = pendingReturnFocusRef.current;
+    pendingReturnFocusRef.current = null;
+    if (!returnTarget) return;
+    const raf = window.requestAnimationFrame(() => {
+      focusWhenRestorable(() => returnTarget);
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [active]);
 
   // 포커스 격납 — 안에 있던 요소가 disabled/언마운트되면(저장 중 버튼, 완료 화면 전환)
   // 포커스가 body로 떨어져 aria-modal 밖에 놓인다. **이때 브라우저는 focusin을 쏘지 않으므로**
@@ -325,18 +385,22 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     };
   }, [active, generatedTitleId]);
 
-  // body 스크롤 잠금(참조 카운트).
+  // 잠긴 동안 root가 스크롤 가능한 overflow를 승격하지 않도록 완전히 clip한다.
   useEffect(() => {
     if (!active || !lockScroll) return;
     if (scrollLockCount === 0) {
+      previousDocumentOverflow = document.documentElement.style.overflow;
       previousBodyOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'clip';
+      document.body.style.overflow = 'clip';
     }
     scrollLockCount += 1;
     return () => {
       scrollLockCount -= 1;
       if (scrollLockCount === 0) {
+        document.documentElement.style.overflow = previousDocumentOverflow ?? '';
         document.body.style.overflow = previousBodyOverflow ?? '';
+        previousDocumentOverflow = null;
         previousBodyOverflow = null;
       }
     };
@@ -367,7 +431,7 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
       if (modalStack[modalStack.length - 1] !== generatedTitleId) return;
       if (event.key === 'Escape' && closeOnEscape) {
         event.stopPropagation();
-        onCloseRef.current();
+        requestClose();
         return;
       }
       if (event.key !== 'Tab') return;
@@ -422,6 +486,7 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     dialogRef,
     portalContainer: portalNode,
     titleId,
+    requestClose,
     backdropProps: {
       onMouseDown: (event: ReactMouseEvent) => {
         pointerDownOnBackdrop.current = event.target === event.currentTarget;
@@ -430,7 +495,7 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
         const startedOnBackdrop = pointerDownOnBackdrop.current;
         pointerDownOnBackdrop.current = false;
         if (closeOnBackdrop && startedOnBackdrop && event.target === event.currentTarget) {
-          onCloseRef.current();
+          requestClose();
         }
       },
     },
