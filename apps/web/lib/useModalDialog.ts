@@ -129,13 +129,18 @@ function isInertCandidate(element: Element): element is HTMLElement {
   return true;
 }
 
-function isRestorableFocusTarget(element: HTMLElement | null | undefined): element is HTMLElement {
+export function isRestorableFocusTarget(
+  element: HTMLElement | null | undefined,
+): element is HTMLElement {
   if (typeof document === 'undefined') return false;
+  const computedStyle = element ? window.getComputedStyle(element) : null;
   return Boolean(
     element &&
       element !== document.body &&
       document.contains(element) &&
       !(element as HTMLElement & { disabled?: boolean }).disabled &&
+      computedStyle?.display !== 'none' &&
+      computedStyle?.visibility !== 'hidden' &&
       // inert는 하위로 상속된다 — 자기 속성만 보면 배경 안 버튼을 "포커스 가능"으로 오판한다.
       element.closest('[inert]') === null,
   );

@@ -19,6 +19,7 @@ import { FormTextArea } from '@/components/forms/FormTextArea';
 import { Button, ButtonLink } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Dialog } from '@/components/ui/Dialog';
+import { isRestorableFocusTarget } from '@/lib/useModalDialog';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -86,8 +87,14 @@ const textFromUnknown = (value: unknown) => {
   return JSON.stringify(value);
 };
 
-function findCurrentFocusTarget(testId: string | null): HTMLElement | null {
-  return testId ? document.querySelector<HTMLElement>(`[data-testid="${testId}"]`) : null;
+function findCurrentFocusTarget(focusReturnKey: string | null): HTMLElement | null {
+  if (!focusReturnKey) return null;
+  return (
+    Array.from(document.querySelectorAll<HTMLElement>('[data-focus-return-key]')).find(
+      (target) =>
+        target.dataset.focusReturnKey === focusReturnKey && isRestorableFocusTarget(target),
+    ) ?? null
+  );
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -248,6 +255,7 @@ function FeatureRequestMobileCard({
           aria-haspopup="dialog"
           onClick={(event) => onReview(event.currentTarget)}
           data-testid={`admin-fr-mobile-review-${request.request_id}`}
+          data-focus-return-key={request.request_id}
         >
           검토
         </Button>
@@ -574,7 +582,7 @@ export default function AdminFeatureRequestsPage() {
   const [selected, setSelected] = useState<AdminFeatureRequestSummary | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const reviewReturnFocusRef = useRef<HTMLElement | null>(null);
-  const reviewReturnFocusTestIdRef = useRef<string | null>(null);
+  const reviewReturnFocusKeyRef = useRef<string | null>(null);
   const pendingReviewFocusRestoreRef = useRef(false);
   const noticeRef = useRef<HTMLParagraphElement | null>(null);
   const pendingNoticeFocusRef = useRef(false);
@@ -585,9 +593,7 @@ export default function AdminFeatureRequestsPage() {
       const target = resolveTarget();
       if (
         target &&
-        document.contains(target) &&
-        !(target as HTMLElement & { disabled?: boolean }).disabled &&
-        target.closest('[inert]') === null
+        isRestorableFocusTarget(target)
       ) {
         target.focus({ preventScroll: true });
         return;
@@ -603,7 +609,7 @@ export default function AdminFeatureRequestsPage() {
     pendingReviewFocusRestoreRef.current = false;
     focusAfterDialogTeardown(
       () =>
-        findCurrentFocusTarget(reviewReturnFocusTestIdRef.current) ??
+        findCurrentFocusTarget(reviewReturnFocusKeyRef.current) ??
         reviewReturnFocusRef.current,
     );
   }, [focusAfterDialogTeardown, selected]);
@@ -637,7 +643,7 @@ export default function AdminFeatureRequestsPage() {
 
   const openReview = (request: AdminFeatureRequestSummary, trigger: HTMLElement) => {
     reviewReturnFocusRef.current = trigger;
-    reviewReturnFocusTestIdRef.current = trigger.dataset.testid ?? null;
+    reviewReturnFocusKeyRef.current = trigger.dataset.focusReturnKey ?? null;
     setSelected(request);
     setNotice(null);
   };
@@ -689,6 +695,7 @@ export default function AdminFeatureRequestsPage() {
           aria-haspopup="dialog"
           onClick={(event) => openReview(r, event.currentTarget)}
           data-testid={`admin-fr-review-${r.request_id}`}
+          data-focus-return-key={r.request_id}
         >
           검토
         </Button>

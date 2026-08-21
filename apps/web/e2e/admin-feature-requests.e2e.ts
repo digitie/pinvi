@@ -269,15 +269,20 @@ test('거절은 확인 단계를 거친 뒤 사유만 전달한다', async ({ pa
   expect(rejectBody).toEqual({ access_reason: '중복 제보' });
 });
 
-test('검토 다이얼로그를 닫으면 검토 버튼으로 포커스를 되돌린다', async ({ page }) => {
+test('검토 dialog를 breakpoint 변경 뒤 닫아도 보이는 검토 버튼으로 포커스를 되돌린다', async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 820 });
   await page.goto('/admin/feature-requests');
-  const trigger = page.getByTestId(`admin-fr-review-${requestId}`);
-  await trigger.click();
+  const desktopTrigger = page.getByTestId(`admin-fr-review-${requestId}`);
+  const mobileTrigger = page.getByTestId(`admin-fr-mobile-review-${requestId}`);
+  await desktopTrigger.click();
   await expect(page.getByTestId('admin-fr-reason')).toBeFocused();
 
+  await page.setViewportSize({ width: 375, height: 820 });
+  await expect(desktopTrigger).toBeHidden();
+  await expect(mobileTrigger).toBeVisible();
   await page.getByTestId('admin-fr-review-dialog-close').click();
 
-  await expect(trigger).toBeFocused();
+  await expect(mobileTrigger).toBeFocused();
 });
 
 test('Map 전달 참조를 구조화해 보여준다', async ({ page }) => {

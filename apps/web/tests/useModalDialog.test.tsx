@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { useModalDialog } from '@/lib/useModalDialog';
+import { isRestorableFocusTarget, useModalDialog } from '@/lib/useModalDialog';
 
 function Harness(props: { onClose: () => void; ariaLabel?: string; idPrefix?: string }) {
   const p = props.idPrefix ?? '';
@@ -20,6 +20,19 @@ function Harness(props: { onClose: () => void; ariaLabel?: string; idPrefix?: st
 }
 
 describe('useModalDialog', () => {
+  it('숨겨진 대상은 focus 복원 대상으로 취급하지 않는다', () => {
+    const target = document.createElement('button');
+    document.body.append(target);
+    target.style.display = 'none';
+    expect(isRestorableFocusTarget(target)).toBe(false);
+    target.style.display = '';
+    target.style.visibility = 'hidden';
+    expect(isRestorableFocusTarget(target)).toBe(false);
+    target.style.visibility = '';
+    expect(isRestorableFocusTarget(target)).toBe(true);
+    target.remove();
+  });
+
   it('Escape로 onClose를 호출한다', () => {
     const onClose = vi.fn();
     render(<Harness onClose={onClose} />);

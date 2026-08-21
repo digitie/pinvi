@@ -20,6 +20,7 @@ import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable
 import { FormSelect } from '@/components/forms/FormSelect';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
+import { isRestorableFocusTarget } from '@/lib/useModalDialog';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -61,8 +62,14 @@ const actionLabel = (action: string) => ACTION_LABELS[action] ?? action;
 const outcomeLabel = (outcome: string) => OUTCOME_LABELS[outcome] ?? outcome;
 const relationLabel = (relation: string) => TARGET_RELATION_LABELS[relation] ?? relation;
 
-function findCurrentFocusTarget(testId: string | null): HTMLElement | null {
-  return testId ? document.querySelector<HTMLElement>(`[data-testid="${testId}"]`) : null;
+function findCurrentFocusTarget(focusReturnKey: string | null): HTMLElement | null {
+  if (!focusReturnKey) return null;
+  return (
+    Array.from(document.querySelectorAll<HTMLElement>('[data-focus-return-key]')).find(
+      (target) =>
+        target.dataset.focusReturnKey === focusReturnKey && isRestorableFocusTarget(target),
+    ) ?? null
+  );
 }
 
 interface EvidenceField {
@@ -486,6 +493,7 @@ function MobileEvidenceCard({
           aria-expanded={selected}
           aria-label={`이벤트 #${row.event_sequence} 조정 증거 보기`}
           data-testid={`admin-frr-mobile-detail-${row.event_id}`}
+          data-focus-return-key={row.event_id}
           onClick={(event) => onOpen(event, row)}
         >
           증거
@@ -508,7 +516,7 @@ export default function AdminFeatureReferenceReconciliationsPage() {
   const [page, setPage] = useState(1);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const detailReturnFocusRef = useRef<HTMLElement | null>(null);
-  const detailReturnFocusTestIdRef = useRef<string | null>(null);
+  const detailReturnFocusKeyRef = useRef<string | null>(null);
   const pendingDetailFocusRestoreRef = useRef(false);
   const detailInitialFocusRef = useRef<HTMLParagraphElement | null>(null);
   const listQuery = useQuery({
@@ -546,7 +554,7 @@ export default function AdminFeatureReferenceReconciliationsPage() {
     row: AdminFeatureReferenceReconciliationSummary,
   ) => {
     detailReturnFocusRef.current = event.currentTarget;
-    detailReturnFocusTestIdRef.current = event.currentTarget.dataset.testid ?? null;
+    detailReturnFocusKeyRef.current = event.currentTarget.dataset.focusReturnKey ?? null;
     setSelectedEventId(row.event_id);
   };
   const focusAfterDialogTeardown = useCallback((resolveTarget: () => HTMLElement | null) => {
@@ -555,9 +563,7 @@ export default function AdminFeatureReferenceReconciliationsPage() {
       const target = resolveTarget();
       if (
         target &&
-        document.contains(target) &&
-        !(target as HTMLElement & { disabled?: boolean }).disabled &&
-        target.closest('[inert]') === null
+        isRestorableFocusTarget(target)
       ) {
         target.focus({ preventScroll: true });
         return;
@@ -572,7 +578,7 @@ export default function AdminFeatureReferenceReconciliationsPage() {
     pendingDetailFocusRestoreRef.current = false;
     focusAfterDialogTeardown(
       () =>
-        findCurrentFocusTarget(detailReturnFocusTestIdRef.current) ??
+        findCurrentFocusTarget(detailReturnFocusKeyRef.current) ??
         detailReturnFocusRef.current,
     );
   }, [focusAfterDialogTeardown, selectedEventId]);
@@ -628,6 +634,7 @@ export default function AdminFeatureReferenceReconciliationsPage() {
           aria-expanded={selectedEventId === row.event_id}
           aria-label={`이벤트 #${row.event_sequence} 조정 증거 보기`}
           data-testid={`admin-frr-detail-${row.event_id}`}
+          data-focus-return-key={row.event_id}
           onClick={(event) => openDetail(event, row)}
         >
           증거

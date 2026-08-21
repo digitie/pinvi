@@ -319,7 +319,7 @@ test('상세 조회 실패는 Dialog 안에서 다시 시도할 수 있다', asy
   expect(blockedDetail.calls()).toBe(2);
 });
 
-test('데스크톱과 모바일 trigger는 중복 렌더 중 보이는 버튼만 열고 focus를 복원한다', async ({
+test('데스크톱과 모바일 trigger는 breakpoint 변경 뒤에도 보이는 버튼으로 focus를 복원한다', async ({
   page,
 }) => {
   await routeBlockedDetail(page);
@@ -333,17 +333,21 @@ test('데스크톱과 모바일 trigger는 중복 렌더 중 보이는 버튼만
   await expect(desktopTrigger).toHaveAttribute('aria-label', '이벤트 #11 조정 증거 보기');
   await desktopTrigger.click();
   await expect(page.getByTestId('admin-frr-readonly-boundary')).toBeFocused();
-  await closeDetailDialog(page);
-  await expect(desktopTrigger).toBeFocused();
 
   await page.setViewportSize({ width: 375, height: 820 });
   await expect(desktopTrigger).toBeHidden();
   await expect(mobileTrigger).toBeVisible();
   await expect(mobileTrigger).toHaveAttribute('aria-label', '이벤트 #11 조정 증거 보기');
-  await mobileTrigger.click();
-  await expect(page.getByTestId('admin-frr-readonly-boundary')).toBeFocused();
   await closeDetailDialog(page);
   await expect(mobileTrigger).toBeFocused();
+
+  await mobileTrigger.click();
+  await expect(page.getByTestId('admin-frr-readonly-boundary')).toBeFocused();
+  await page.setViewportSize({ width: 768, height: 820 });
+  await expect(mobileTrigger).toBeHidden();
+  await expect(desktopTrigger).toBeVisible();
+  await closeDetailDialog(page);
+  await expect(desktopTrigger).toBeFocused();
 });
 
 for (const width of [320, 375, 414, 768]) {
