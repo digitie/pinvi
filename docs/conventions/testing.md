@@ -172,6 +172,34 @@ describe('MARKER_PALETTE', () => {
 });
 ```
 
+#### 조용한 파일 누락 가드 (T-321)
+
+`vitest run`은 **fork 워커 기동에 실패한 파일을 결과 없이 버리고 exit 0**으로 끝난다. 설치본
+(`vitest/dist/chunks/cli-api.*.js`)에서 rejection이 trace span에만 기록되고 실행 결과로 전파되지
+않기 때문이며, 요약 줄(`Test Files 15 passed (15)`)은 실행된 것만 세므로 사람도 CI도 누락을 모른다.
+
+`apps/web/vitest.config.ts`가 기본 리포터와 함께 `AssertAllPlannedFilesRan`
+(`apps/web/vitest.reporters.ts`)을 물린다. 실행 전 계획된 spec 집합과 결과가 나온 module 집합을
+대조해 차이가 있으면 누락 목록을 찍고 `process.exitCode = 1`로 실행을 실패시킨다. 계획 집합은
+vitest가 필터를 적용한 뒤의 목록이라 부분 실행(`npx vitest run tests/foo.test.ts`, `-t`)에서는
+오탐하지 않으며, `--shard`는 일부만 보고하는 게 정상이라 예외로 둔다.
+
+**이 가드는 예방책이다** — CI에서 실제로 누락이 발생한 적은 없다(vitest 4 전환 이후 web 워크플로
+132 run 전수 조사, 실행 파일 집합 대조 129/129 일치). 다만 그 vitest 스텝을 담은
+`lint-typecheck-build`는 aggregate 게이트의 required check라 한 번이라도 발생하면 그대로 머지까지
+통과하므로, 자원 사정에 따라 언제든 재발할 수 있는 실패를 탐지 가능하게 만들어 둔다.
+
+가드가 발동하면 로그에서 `[vitest-pool]: Failed to start ... worker`를 확인한다. 자원 압박이
+원인이면 `--maxWorkers`를 낮춰 재실행한다(테스트 코드 문제가 아니다).
+
+`reporters`를 명시하면 vitest의 기본 주입 블록(=`default` + CI의 `github-actions`)이 통째로
+건너뛰어지므로 config에서 직접 되살린다. CLI `--reporter=`는 config 목록을 **대체**하므로 그 플래그를
+쓰면 가드가 빠진다 — 스크립트에서는 쓰지 않는다.
+
+가드는 현재 `apps/web`에만 걸려 있다. `packages/{domain,schemas}`는 vitest 설정 파일이 없어
+기본값으로 돌며(CI 실행은 `npm test` 루트 스크립트가 담당), 같은 가드를 붙이려면 각 워크스페이스에
+설정을 만들어야 한다.
+
 ### 6.2 Playwright
 
 ```ts

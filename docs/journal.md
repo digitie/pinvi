@@ -2,6 +2,30 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-21 (claude) — T-321: vitest의 조용한 테스트 파일 누락을 실패로 만든다
+
+T-VN-42 검증 중 `vitest run`이 18파일 중 3~6개를 결과 없이 버리고 **exit 0**으로 끝나는 걸 봤다.
+설치본을 따라가 원인을 확정했다 — `runner.start().catch(...)`가 만든 rejection을
+`await resolver.promise.catch((error) => span?.recordException(error))`가 삼켜 실행 결과로 전파되지
+않는다(vitest 4.1.10, `dist/chunks/cli-api.*.js`). 요약 줄(`Test Files 15 passed (15)`)은 실행된 것만
+세므로 사람도 CI도 누락을 모른다.
+
+**가드** — `AssertAllPlannedFilesRan` 리포터가 `onTestRunStart`의 계획 spec과 `onTestRunEnd`의 결과
+module을 대조해, 차이가 있으면 누락 목록을 찍고 `process.exitCode = 1`로 실행을 실패시킨다. vitest는
+exitCode를 1로 올리기만 하고 0으로 되돌리지 않아 이 방식이 성립한다. 계획 집합은 필터가 적용된 뒤의
+목록이라 부분 실행에서 오탐하지 않고, `--shard`와 `interrupted`는 예외로 뒀다. 구현 중 실제로 워커
+기동 실패가 재발해 가드가 그대로 발동하는 것까지 확인했다.
+
+**예방책임을 분명히 한다** — CI 이력을 전수 조사한 결과(vitest 4 전환 이후 web 워크플로 132 run,
+실행 파일 집합을 체크아웃 트리와 대조) 실제 누락은 **한 번도 없었다**. 다만 그 스텝을 담은
+`lint-typecheck-build`는 aggregate required check라 한 번 발생하면 머지까지 통과한다.
+
+**곁들여 더 큰 구멍을 닫았다** — CI가 `npm test --workspace @pinvi/web`만 돌려서
+`packages/{domain,schemas}`의 24파일 104테스트가 **한 번도 실행된 적이 없었다**. 루트 `npm test`는 이미
+`--workspaces --if-present`라 워크플로 한 줄 교체로 CI 보호 범위에 들어왔고, 세 워크스페이스 43파일
+224테스트가 전부 통과한다. 잔여는 T-322(packages에도 가드 적용)·T-323(e2e를 required로 올릴지)로 뺐다.
+
+
 ## 2026-08-21 (claude) — T-VN-42 종결: 공개 `status` 필드 제거(breaking)
 
 Map 3축 feature state cutover(`1f2bdc3a`)로 user 표면에서 사라진 뒤 web/mobile 계약 때문에 **항상

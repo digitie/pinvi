@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+import { AssertAllPlannedFilesRan } from './vitest.reporters';
 
 // 순수 로직 단위 테스트(`*.test.ts`, node) + 컴포넌트 테스트(`*.test.tsx`, jsdom + RTL).
 // Playwright e2e(`e2e/**`)는 제외(별도 러너).
@@ -29,5 +30,15 @@ export default defineConfig({
     // 순수 로직(.test.ts)도 jsdom에서 동일하게 통과하고(DOM 미사용), RTL(.test.tsx)에 필요하다.
     environment: 'jsdom',
     setupFiles: ['./tests/vitest.setup.ts'],
+    // 기본 리포터 + 조용한 파일 누락 가드(T-321). 가드는 계획된 spec과 결과가 나온 module을
+    // 대조하므로 부분 실행(`vitest run <file>`, `-t`)에서도 오탐하지 않는다.
+    //
+    // `reporters`를 명시하면 vitest의 기본 주입 블록이 통째로 건너뛰어진다 — 그 블록은
+    // `default`뿐 아니라 CI에서 `github-actions`(주석 annotation)까지 넣으므로 여기서 직접 되살린다.
+    reporters: [
+      'default',
+      ...(process.env.GITHUB_ACTIONS === 'true' ? (['github-actions'] as const) : []),
+      new AssertAllPlannedFilesRan(),
+    ],
   },
 });

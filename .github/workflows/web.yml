@@ -42,8 +42,10 @@ jobs:
       - name: Typecheck (workspaces)
         run: npm run typecheck
 
-      - name: Unit tests (web)
-        run: npm test --workspace @pinvi/web
+      # 루트 test는 `--workspaces --if-present`라 apps/web + packages/{domain,schemas}를 모두 돈다.
+      # 이전에는 @pinvi/web만 호출해 packages의 24파일 104테스트가 CI에서 한 번도 실행되지 않았다(T-321).
+      - name: Unit tests (workspaces)
+        run: npm test
 
       - name: Build (workspaces)
         env:

@@ -1,5 +1,16 @@
 # resume.md
 
+## 2026-08-21 (claude) — T-321 완료(vitest 조용한 누락 가드)
+
+**방금**: vitest가 워커 기동 실패 파일을 결과 없이 버리고 exit 0으로 끝내는 것을 리포터 가드로
+실패 처리했다(원인은 rejection이 trace span에만 기록되는 것). CI 132 run 전수 조사 결과 실제 누락은
+없었으므로 예방책이다. 곁들여 CI가 `@pinvi/web`만 돌리던 것을 루트 `npm test`로 바꿔
+`packages/{domain,schemas}`의 104테스트를 처음으로 CI 보호 범위에 넣었다.
+
+**다음 한 작업**: T-273(v1.0.0 E2E/Live gate) — 남은 hard blocker는 geofence 운영 설정이다.
+모바일 후속(T-311/318/319/320)과 T-322·T-323은 별도 PR로 분리해 뒀다.
+
+
 ## 2026-08-21 (claude) — T-VN-42 종결(공개 `status` 제거)
 
 **방금**: Map 3축 cutover로 의미를 잃고 항상 None으로만 남아 있던 공개 `status`를 서버 스키마 3곳과

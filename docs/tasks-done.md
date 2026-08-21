@@ -6,6 +6,15 @@
 
 ## 2026-08-21
 
+- [x] **T-321** — `vitest run`의 조용한 테스트 파일 누락을 실패로 만든다. (완료: 2026-08-21, PR TBD, claude)
+      원인은 vitest 4.1.10이 fork 워커 기동 실패 rejection을 trace span에만 기록하고 실행 결과로
+      전파하지 않는 것이다 — 요약 줄은 실행된 것만 세므로 사람도 CI도 누락을 모른 채 exit 0이 된다.
+      `AssertAllPlannedFilesRan` 리포터가 계획 spec과 결과 module을 대조해 누락 시 목록을 찍고
+      `process.exitCode = 1`로 실행을 실패시킨다(부분 실행·`--shard`는 오탐하지 않는다).
+      곁들여 CI가 `@pinvi/web`만 돌리던 것을 루트 `npm test`로 바꿔 `packages/{domain,schemas}`의
+      24파일 104테스트를 CI 보호 범위에 넣었다 — 같은 "조용한 green" 계열의 더 큰 구멍이었다.
+      CI 이력 132 run 전수 조사 결과 실제 누락은 한 번도 없었으므로 이 변경은 예방책이다.
+
 - [x] **T-VN-42 — Map user OpenAPI 재vendor(`95d2c128`) 소비 정렬** —
   1차 묶음 **PR #451 머지 완료**(2026-08-19 KST). 스냅샷 SHA-256 `6a2ee0f9…`(Map `95d2c128`·`origin/main`
   284fd10c와 바이트 동일). consumer drift 2건을 흡수한다: ① 3축 feature state cutover(`1f2bdc3a`)로
