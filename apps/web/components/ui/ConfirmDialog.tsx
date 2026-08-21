@@ -51,7 +51,7 @@ export function ConfirmDialog({
   returnFocusRef,
   testId = 'confirm-dialog',
 }: ConfirmDialogProps) {
-  const descriptionId = `-description`;
+  const descriptionId = `${testId}-description`;
   const cancelRef = useRef<HTMLButtonElement | null>(null);
   const { titleId, portalContainer, backdropProps, dialogProps } = useModalDialog({
     onClose: onCancel,
