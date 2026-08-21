@@ -71,6 +71,18 @@ async function expectInInitialViewport(page: Page, testId: string) {
   await expect(page.getByTestId(testId)).toBeInViewport({ ratio: 1 });
 }
 
+function isBlockedDetailRoute(url: URL) {
+  return (
+    url.port === '12801' &&
+    url.pathname === `/admin/feature-reference-reconciliations/${blockedEventId}`
+  );
+}
+
+async function closeDetailDialog(page: Page) {
+  await page.getByTestId('admin-frr-detail-dialog-close').click();
+  await expect(page.getByRole('dialog', { name: 'Feature 참조 조정 증거 상세' })).toBeHidden();
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route(
     (url) => url.port === '12801' && url.pathname === '/auth/me',
@@ -145,7 +157,7 @@ test.beforeEach(async ({ page }) => {
               {
                 event_id: appliedEventId,
                 impact_index: 1,
-                target_relation: 'saved_feature_refs',
+                target_relation: 'curated_plan_pois',
                 target_id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
                 old_feature_id: 'feature-old',
                 old_feature_uuid: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
@@ -157,7 +169,7 @@ test.beforeEach(async ({ page }) => {
               {
                 event_id: appliedEventId,
                 impact_index: 2,
-                target_relation: 'trip_notes',
+                target_relation: 'feature_suggestions',
                 target_id: '99999999-9999-4999-8999-999999999999',
                 old_feature_id: 'feature-old',
                 old_feature_uuid: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
@@ -172,25 +184,20 @@ test.beforeEach(async ({ page }) => {
       });
     },
   );
-  await page.route(
-    (url) =>
-      url.port === '12801' &&
-      url.pathname === `/admin/feature-reference-reconciliations/${blockedEventId}`,
-    async (route) => {
-      await route.fulfill({
-        contentType: 'application/json',
-        body: JSON.stringify({
-          data: {
-            event_id: blockedEventId,
-            status: 'blocked',
-            receipt: null,
-            attempts: [blockedAttempt],
-            impacts: [],
-          },
-        }),
-      });
-    },
-  );
+  await page.route(isBlockedDetailRoute, async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          event_id: blockedEventId,
+          status: 'blocked',
+          receipt: null,
+          attempts: [blockedAttempt],
+          impacts: [],
+        },
+      }),
+    });
+  });
 });
 
 test('Admin이 M05 receipt와 blocked evidence를 Dialog에서 읽기 전용으로 확인한다', async ({
@@ -200,7 +207,10 @@ test('Admin이 M05 receipt와 blocked evidence를 Dialog에서 읽기 전용으�
   const mutationRequests: string[] = [];
   page.on('request', (request) => {
     const url = new URL(request.url());
-    if (url.port === '12801' && url.pathname.startsWith('/admin/feature-reference-reconciliations')) {
+    if (
+      url.port === '12801' &&
+      url.pathname.startsWith('/admin/feature-reference-reconciliations')
+    ) {
       evidenceRequests.push(`${request.method()} ${url.pathname}`);
       if (request.method() !== 'GET') mutationRequests.push(`${request.method()} ${url.pathname}`);
     }
@@ -215,22 +225,40 @@ test('Admin이 M05 receipt와 blocked evidence를 Dialog에서 읽기 전용으�
   await expect(dialog).toBeVisible();
   const blockedDetail = page.getByTestId('admin-frr-detail');
   await expect(page.getByTestId('admin-frr-readonly-boundary')).toContainText('읽기 전용');
-  await expect(blockedDetail).toContainText('blocked 관측으로 local mutation과 ACK를 중단했습니다.');
+  await expect(page.getByTestId('admin-frr-readonly-boundary')).toBeFocused();
+  await expect(blockedDetail).toContainText(
+    '차단(blocked) 관측으로 local mutation과 Map ACK를 중단했습니다.',
+  );
+  await expect(blockedDetail).toContainText('차단 fingerprint SHA-256');
+  await expect(blockedDetail).toContainText('관측 root SHA-256');
+  await expect(blockedDetail).toContainText(blockedAttempt.event_sha256);
   await expect(blockedDetail).toContainText(blockedAttempt.block_fingerprint_sha256);
   await expect(blockedDetail).toContainText(blockedAttempt.observation_root_sha256);
-  await dialog.getByRole('button', { name: '닫기' }).click();
+  await closeDetailDialog(page);
   await page.getByTestId(`admin-frr-detail-${appliedEventId}`).click();
 
   const detail = page.getByTestId('admin-frr-detail');
   await expect(detail).toContainText('반영 완료');
-  await expect(detail).toContainText('feature-old');
-  await expect(detail).toContainText('feature-new');
+  await expect(detail).toContainText('Event SHA-256');
+  await expect(detail).toContainText('이전 Feature UUID');
+  await expect(detail).toContainText('대체 Feature UUID');
+  await expect(detail).toContainText('영향 root SHA-256');
+  await expect(detail).toContainText('적용 시각');
+  await expect(detail).toContainText(receipt.event_sha256);
+  await expect(detail).toContainText(receipt.old_feature_uuid);
+  await expect(detail).toContainText(receipt.replacement_feature_uuid);
+  await expect(detail).toContainText(receipt.impact_root_sha256);
+  await expect(detail).toContainText(receipt.receipt_sha256);
+  await expect(detail).toContainText('여행 일정 POI');
+  await expect(detail).toContainText('큐레이션 POI');
+  await expect(detail).toContainText('Feature 제안');
   await expect(detail).toContainText('trip_day_pois');
-  await expect(detail).toContainText('saved_feature_refs');
-  await expect(detail).toContainText('trip_notes');
+  await expect(detail).toContainText('curated_plan_pois');
+  await expect(detail).toContainText('feature_suggestions');
   await expect(detail).toContainText('대체 Feature로 재연결');
   await expect(detail).toContainText('참조 분리');
   await expect(detail).toContainText('이미 조정됨');
+  await expect(detail).toContainText('recorded_at');
   await expect(detail.getByRole('button', { name: '승인' })).toHaveCount(0);
   await expect(detail.getByRole('button', { name: '거절' })).toHaveCount(0);
   expect(mutationRequests).toEqual([]);
@@ -250,11 +278,74 @@ test('상세 Dialog는 키보드로 열리고 닫힌 뒤 trigger에 focus를 복
 
   const dialog = page.getByRole('dialog', { name: 'Feature 참조 조정 증거 상세' });
   await expect(dialog).toBeVisible();
-  await expect(page.getByTestId('admin-frr-readonly-boundary')).toBeVisible();
+  await expect(page.getByTestId('admin-frr-readonly-boundary')).toBeFocused();
 
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   await expect(trigger).toBeFocused();
+});
+
+test('상세 조회 실패는 Dialog 안에서 다시 시도할 수 있다', async ({ page }) => {
+  let calls = 0;
+  await page.unroute(isBlockedDetailRoute);
+  await page.route(isBlockedDetailRoute, async (route) => {
+    calls += 1;
+    if (calls === 1) {
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'TEST_ERROR', message: 'temporary failure' } }),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          event_id: blockedEventId,
+          status: 'blocked',
+          receipt: null,
+          attempts: [blockedAttempt],
+          impacts: [],
+        },
+      }),
+    });
+  });
+
+  await page.goto('/admin/feature-reference-reconciliations');
+  await page.getByTestId(`admin-frr-detail-${blockedEventId}`).click();
+  await expect(page.getByTestId('admin-frr-detail-retry')).toBeVisible();
+
+  await page.getByTestId('admin-frr-detail-retry').click();
+
+  await expect(page.getByTestId('admin-frr-readonly-boundary')).toContainText('읽기 전용');
+  expect(calls).toBe(2);
+});
+
+test('데스크톱과 모바일 trigger는 중복 렌더 중 보이는 버튼만 열고 focus를 복원한다', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 768, height: 820 });
+  await page.goto('/admin/feature-reference-reconciliations');
+
+  const desktopTrigger = page.getByTestId(`admin-frr-detail-${blockedEventId}`);
+  const mobileTrigger = page.getByTestId(`admin-frr-mobile-detail-${blockedEventId}`);
+  await expect(desktopTrigger).toBeVisible();
+  await expect(mobileTrigger).toBeHidden();
+  await expect(desktopTrigger).toHaveAttribute('aria-label', '이벤트 #11 조정 증거 보기');
+  await desktopTrigger.click();
+  await expect(page.getByTestId('admin-frr-readonly-boundary')).toBeFocused();
+  await closeDetailDialog(page);
+  await expect(desktopTrigger).toBeFocused();
+
+  await page.setViewportSize({ width: 375, height: 820 });
+  await expect(desktopTrigger).toBeHidden();
+  await expect(mobileTrigger).toBeVisible();
+  await expect(mobileTrigger).toHaveAttribute('aria-label', '이벤트 #11 조정 증거 보기');
+  await mobileTrigger.click();
+  await expect(page.getByTestId('admin-frr-readonly-boundary')).toBeFocused();
+  await closeDetailDialog(page);
+  await expect(mobileTrigger).toBeFocused();
 });
 
 for (const width of [320, 375, 414, 768]) {
@@ -271,11 +362,13 @@ for (const width of [320, 375, 414, 768]) {
 
     if (width < 768) {
       await expect(page.getByTestId(`admin-frr-mobile-card-${blockedEventId}`)).toBeVisible();
+      await expect(page.getByTestId(`admin-frr-detail-${blockedEventId}`)).toBeHidden();
       await expectTouchTarget(page, `admin-frr-mobile-detail-${blockedEventId}`);
       await expectInInitialViewport(page, `admin-frr-mobile-detail-${blockedEventId}`);
       await page.getByTestId(`admin-frr-mobile-detail-${blockedEventId}`).click();
     } else {
       await expect(page.getByTestId('admin-table-scroll')).toBeVisible();
+      await expect(page.getByTestId(`admin-frr-mobile-detail-${blockedEventId}`)).toBeHidden();
       await expectTouchTarget(page, `admin-frr-detail-${blockedEventId}`);
       await page.getByTestId(`admin-frr-detail-${blockedEventId}`).click();
     }
