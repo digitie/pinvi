@@ -104,11 +104,13 @@ jobs:
 
           assert Path(config.__file__).is_relative_to("/tmp/pinvi-api-wheel-verify")
           assert config.KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256 == (
-              "8019e36f150ed006f5580e5ff224a0ba72030808b5303273f8c4c51aa0496431"
+              "e1152a058e176f4f3aaeb4bb0965434f657601639786463f873ac82c6f3018eb"
           )
           assert config.KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION == 7
           assert config.KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION == 2
           assert config.KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION == 1
+          assert config.KOR_TRAVEL_MAP_FEATURE_REQUEST_CAPABILITY_GENERATION == 1
+          assert config.KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_CAPABILITY_GENERATION == 1
           PY
           )
 
@@ -138,13 +140,15 @@ jobs:
           assert artifact.is_file()
           payload = json.loads(artifact.read_text(encoding="utf-8"))
           assert hashlib.sha256(artifact.read_bytes()).hexdigest() == (
-              "3ffea6198578a6ff7b88c0ced3ceb40a42b6abc37af230aa1751cae73e0fdca9"
+              "a8f15da7845113b1447e72a02b531578884f4b4de1dd08c9638b9418b9c8d10e"
           )
           assert payload == {
               "capabilities": {
                   "cache_target": {"generation": 7},
                   "c6c_cancel_probe": {"generation": 2},
                   "curation_snapshot": {"generation": 1},
+                  "feature_request": {"generation": 1},
+                  "feature_reference_reconciliation": {"generation": 1},
               },
               "map_release_revision": config.KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
               "service_openapi_sha256": config.KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
@@ -211,6 +215,8 @@ jobs:
               "cache_target": {"generation": 7},
               "c6c_cancel_probe": {"generation": 2},
               "curation_snapshot": {"generation": 1},
+              "feature_request": {"generation": 1},
+              "feature_reference_reconciliation": {"generation": 1},
           }
 
           config = Path("apps/api/app/core/config.py").read_text()
@@ -222,6 +228,8 @@ jobs:
           assert "KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION" in config
           assert "KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION" in config
           assert "KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION" in config
+          assert "KOR_TRAVEL_MAP_FEATURE_REQUEST_CAPABILITY_GENERATION" in config
+          assert "KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_CAPABILITY_GENERATION" in config
           assert "cache-target-upstream-map-v1.json" not in config
           snapshot = Path("apps/api/tests/contract/kor-travel-map-openapi-service.json").read_bytes()
           assert hashlib.sha256(snapshot).hexdigest() == metadata["service_openapi_sha256"]

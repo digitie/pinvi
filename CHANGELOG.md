@@ -4,6 +4,12 @@
 
 ## Unreleased
 
+- Admin의 신규 장소(`new_place`) 제안 승인은 Map의 범용 요청 큐로 immutable 제출한다. 제안 UUID는
+  body `request_id`와 `Idempotency-Key`에 같은 값으로 전송되고, Map `pending` receipt 뒤에만 Pinvi
+  승인이 완료된다. 이미 같은 identity의 feature가 확인된 `exact_conflict`만 duplicate로 끝난다.
+  Map의 확정 거절·일시 장애·계약 오류는 제안/audit를 바꾸지 않아 안전하게 재시도할 수 있다.
+  기존 장소의 correction/closure는 기존 Map admin change API를 계속 사용한다. 이 기능은 Map #1029와
+  Pinvi draft PR의 paired N150 격리 검증 전까지 completion receipt를 만들지 않는다.
 - Admin feature 날씨 탭을 kor-travel-map의 Admin 전용 경로로 전환해 공개되지 않은 feature도 최신
   날씨를 dataset/known-time provenance와 함께 조회할 수 있다. Map Admin 계약에 없는 `asof`는 조용히
   무시하지 않고 422로 알린다.

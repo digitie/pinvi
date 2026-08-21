@@ -39,13 +39,13 @@ export type AdminFeatureRequestPagedResponse = z.infer<
   typeof AdminFeatureRequestPagedResponseSchema
 >;
 
-/** 승인 입력 — new_place는 category(8자리)/marker_color/marker_icon이 필수(서버 422). */
+/** 승인 입력 — new_place는 저장된 요청 payload를 그대로 Map 큐에 제출한다. */
 export const AdminFeatureRequestApproveSchema = z.object({
   access_reason: z.string().min(1).max(500),
   category: z.string().max(32).optional(),
   marker_color: z
     .string()
-    .regex(/^P-\d{2}$/, 'marker color는 P-01~P-16 형식.')
+    .regex(/^P-(0[1-9]|1[0-6])$/, 'marker color는 P-01~P-16 형식.')
     .optional(),
   marker_icon: z.string().max(64).optional(),
   name: z.string().min(1).max(200).optional(),

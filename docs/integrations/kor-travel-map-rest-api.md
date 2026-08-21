@@ -65,12 +65,18 @@ sort, order]`이며 `status`·`provider`·`dataset_key`는 **없다**(보내면 
 > (query 없음, 응답 `FeatureWeatherResponse`/`WeatherCardData`; user 경로는 `public_features`
 > 기반이라 비공개 feature가 404지만 admin 경로는 base `features`(lifecycle=active) 기반이다).
 >
-> **2026-08-19 Admin 소비 폐쇄(Map `da2c740aa4b4239821075519959c38534cc65d2f`)**:
-> Admin OpenAPI 전체 파일을 `apps/api/tests/contract/kor-travel-map-openapi-admin.json`
-> (SHA-256 `22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32`)으로 vendor했다.
-> Pinvi weather-values는 Admin 전용 최신 카드 경로로 전환해 비공개 feature와 metric dataset/known-time
-> provenance를 지원하고, Admin 계약에 없는 `asof`는 422로 거부한다. 상세의 `state_transitions`는
-> 실제 응답으로, `curations`는 식별·표시·상태·정렬용 안정 subset으로 투영한다.
+> **2026-08-21 M05 delivery 후보 재핀**: Map draft PR #1029 head
+> `037e24698f74e2067ea7c8572b044076dc0ac89c`의 full OpenAPI와 service OpenAPI를 각각
+> `apps/api/tests/contract/kor-travel-map-openapi-admin.json`
+> (SHA-256 `697a08c475fc28ba730af1dd14da89998a3a56cafbfb7676bfb3fa4a0b9ef6fd`) 및
+> `kor-travel-map-openapi-service.json`
+> (SHA-256 `e1152a058e176f4f3aaeb4bb0965434f657601639786463f873ac82c6f3018eb`)으로 byte-exact
+> vendor했다. 같은 head의 user OpenAPI도 기존 vendor와 byte-exact하며 SHA-256은
+> `489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b`다. Pinvi의 `new_place`
+> 승인은 이제 전용 `ServiceToken`과 동일 UUID body/header로
+> `POST /v1/service/feature-requests`만 호출한다. `pending` receipt는 Pinvi `approved`, verified
+> `exact_conflict`는 `duplicate`로 전이하며, 409·422·전송/5xx·계약 오류는 local row를 `pending`으로
+> 남긴다. Map #1029와 Pinvi draft PR #458이 모두 병합되기 전 paired completion receipt는 `pending`이다.
 >
 > **후속 과제**:
 >
@@ -407,28 +413,41 @@ tier1..4_code/name, is_active, sort_order, db_active|null, db_feature_count|null
   콘솔에서 운영. **Pinvi 일반 사용자 비노출, 사용자 제안 흐름과 무관.**
   Pinvi 제품은 surface하지 않는다.
 
-**(B) 사용자 feature 제안 = Pinvi 소유 → 승인 시 kor_travel_map feature change API로 반영**
+**(B) 사용자 feature 제안 = Pinvi 소유 → 유형별 승인 경계 분리**
 
 - ① **사용자 제안 큐** (user 도메인, T-177 완료): `app.feature_suggestions` +
   `POST /features/requests`(즉시 201) + `GET /features/requests/{id}`.
   rate-limit/dedup. **kor_travel_map 직접 호출 X.**
 - ② **Pinvi Admin 검사/승인/거절** (admin 도메인): `/admin/feature-requests` +
-  approve/reject(RBAC admin/operator + audit). **승인 시 §2.9 kor_travel_map feature change API 호출.**
+  목록(RBAC admin/operator), approve/reject(RBAC admin + audit).
+  - `new_place` approve는 전용 service 자격으로 `POST /v1/service/feature-requests`에 immutable body를
+    제출한다. Pinvi request UUID는 body `request_id`와 `Idempotency-Key`가 같다. 성공 `pending`은 local
+    `approved`, verified `exact_conflict`는 `duplicate`다. Map의 확정 409·422 또는 outcome-uncertain
+    503에서는 local status/ref/audit를 바꾸지 않아 재시도한다.
+  - `correction`/`closure` approve만 §2.9의 `PATCH`/`DELETE` feature change API를 호출한다.
 
 ### 2.9 feature change API — `POST/PATCH/DELETE /admin/features` (kor_travel_map PR #317, K-15 해소)
 
 **Pinvi Admin 도메인 전용**(`require_admin_destructive_enabled` + 서비스 토큰 —
-**API base는 :12701 `/v1/admin/*`**). 사용자 제안 승인 시 호출.
+**API base는 :12701 `/v1/admin/*`**). Pinvi는 correction/closure 제안 승인 시에만 호출한다.
 `place`/`event`만 대상. **kor_travel_map ADR-051(2026-06-10)이 이 흐름을 전송 구간 정본으로
 공식 승인** — 별도 suggestions API는 만들지 않는다.
 
 | 동작       | 호출                                                                   | body 핵심                                                                                                                                                                                                                                                         | 응답                         |
 | ---------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| 추가       | `POST /admin/features`                                                 | `AdminFeatureCreateRequest`: `kind*(place\|event)`, `name*`, `category*`, `marker_color*`, `marker_icon*`, `reason*`, `coord{lat,lon}`, address/코드, `detail`, `urls`, `status(draft\|active\|inactive\|hidden)`, `feature_id?`, `idempotency_key?`, `operator?` | `AdminFeatureChangeResponse` |
+| 추가       | `POST /admin/features`                                                 | `AdminFeatureCreateRequest`: `kind*(place\|event)`, `name*`, `category*`, `coord{lon,lat}*`, `marker_icon*`, `marker_color*`, `reason*`; caller `feature_id`/`idempotency_key`/`operator`와 state/origin 필드는 body에 없음. UUID `Idempotency-Key`는 required header | `201 AdminManualFeatureCreateResponse` + `ETag`/`Location`/`X-Request-ID`/`Idempotency-Replayed` |
 | 수정       | `PATCH /admin/features/{feature_id}`                                   | `AdminFeaturePatchRequest`: 전 필드 optional + `reason*`                                                                                                                                                                                                          | 〃                           |
 | 삭제(soft) | `DELETE /admin/features/{feature_id}`                                  | `AdminFeatureDeleteRequest`: `reason*`, `operator?`                                                                                                                                                                                                               | 〃                           |
 | 비활성     | `POST /admin/features/{feature_id}/deactivate`                         | `AdminFeatureDeactivateRequest`                                                                                                                                                                                                                                   | —                            |
 | 검수 큐    | `GET /admin/features/change-requests`, `POST .../{id}/approve\|reject` | `AdminFeatureReviewActionRequest`(operator/reason)                                                                                                                                                                                                                | 〃                           |
+
+> **T-VN-M04 후보 경계(2026-08-20)**: Pinvi는 위 admin `POST /v1/admin/features` 생성 producer를
+> 호출하지 않는다. `new_place`는 service profile의 `POST /v1/service/feature-requests`만 사용하며,
+> `ServiceToken`·UUID `Idempotency-Key`·`FeatureRequestSubmitInput` 및 201 envelope를 contract gate로
+> 고정한다. correction/closure만 위 PATCH/DELETE를 유지한다.
+>
+> **receipt 경계**: Map #1029와 Pinvi #458은 모두 draft다. 두 PR의 실제 merge SHA가 생기기 전에는
+> paired completion receipt를 만들거나 `complete`로 기록하지 않는다.
 
 - **낙관적 동시성(T-VN-13)**: 수정·삭제 전에
   `GET /admin/features/{feature_id}/revision`을 호출해 raw strong `ETag`를 읽고, 그 값을
@@ -494,9 +513,9 @@ POI를 만든다. 수동 POI는 보존한다. Map Python package import와 Map D
 - 레거시 `apps/api/app/etl_bridge/kor_travel_map.py`(in-process Protocol stub) + `features.py`
   라우터는 아직 stub을 사용 → `/features/*` 503. **라우터 cutover/셰입 정렬은 T-173/T-124**.
 - `trip_view_builder`/`cluster_query`는 완성됐으나 미연결(T-175/T-174).
-- admin 도메인 feature change client는 미구현(T-180, PR #317로 대상 API 생김).
-  **base는 API 12701 `/v1/admin/*`** 이며, `pinvi_kor_travel_map_admin_base_url`도
-  같은 기본값을 사용해야 한다.
+- ✅ admin 도메인 feature correction/closure client는 구현돼 있다. **base는 API 12701
+  `/v1/admin/*`** 이며, `pinvi_kor_travel_map_admin_base_url`도 같은 기본값을 사용한다.
+  `new_place` direct create caller는 T-VN-M01 선행 cutover에서 제거했다.
 
 ---
 
@@ -511,6 +530,9 @@ POI를 만든다. 수동 POI는 보존한다. Map Python package import와 Map D
 4. **DEC-05 — K-15 해소(kor_travel_map PR #317)**: feature change API(`POST/PATCH/DELETE
 /v1/admin/features*`) 신설됨 → T-179 완료. **§7 합의 5건 ✅ 확정(kor_travel_map T-217c, 2026-06-11,
    kor_travel_map `decisions.md` ADR-051)** + Pinvi 반영 완료:
+   - **현재 override(T-VN-M04, 2026-08-20)**: 아래 direct create/idempotency 설명은 역사 기록이다.
+     `new_place`는 service request queue로 immutable UUID를 제출하고, correction/closure만 기존
+     PATCH/DELETE 전송을 유지한다.
    1. **review_mode**: 기본 `require_review` 2단 검토(Pinvi 1차 + kor_travel_map 운영자 최종). →
       Pinvi는 record status `applied`→`added`, 그 외→`approved`.
    2. **idempotency_key** = `suggestion_id`(request_id) → kor_travel_map `make_feature_id(user_request,
@@ -548,19 +570,21 @@ idempotency_key)`로 결정적 feature_id, 재시도 동일.
   `app.feature_suggestions`
   테이블 + `POST /features/requests`(즉시 201) + `GET /features/requests/{id}` 실구현
   (감사 C-12 미존재 테이블 실체화), per-user rate-limit + dedup. **kor_travel_map 직접 호출 X.**
-- **[H2] ✅ T-179 백엔드 — Admin 검사/승인 → kor_travel_map feature change(DEC-05, admin 도메인)** (완료
-  2026-06-11): `apps/api/app/api/v1/admin/feature_requests.py` — `GET /admin/feature-requests`
-  목록(RBAC admin/operator, 이메일 마스킹) + `approve`/`reject`(admin + audit). 승인 시 §2.9
-  **`POST/PATCH/DELETE /v1/admin/features*`** 호출(suggestion_type별), 결과 `feature_id`/
-  `request_id`/state를 `feature_suggestions.kor_travel_map_ref`에 저장(status `added`/`approved`). kor_travel_map
-  호출 먼저 → 성공 시에만 commit(실패 시 pending 유지). idempotency_key=request_id, 출처 태깅
-  operator 고정 `"pinvi-admin"` + reason `[suggestion:<id>]` prefix(§7 #3 확정·익명 D-11).
+- **[H2] ✅ T-179/M04 백엔드 — Admin 검사/승인 → 범용 Map Feature 요청 큐(DEC-05, admin 도메인)**:
+  `apps/api/app/api/v1/admin/feature_requests.py` — `GET /admin/feature-requests` 목록(RBAC
+  admin/operator, 이메일 마스킹) + `approve`/`reject`(admin + audit). `new_place`는
+  **`POST /v1/service/feature-requests`**에 request UUID를 body/header로 결박해 제출하고, `pending`
+  receipt 뒤에만 `approved`, verified `exact_conflict` 뒤에만 `duplicate`/feature ref/audit를 commit한다.
+  409·422·503에서는 local row가 `pending`으로 남는다. correction/closure만 §2.9
+  **`PATCH/DELETE /v1/admin/features*`**를 호출한다. 출처 태깅 operator 고정 `"pinvi-admin"` + reason
+  `[suggestion:<id>]` prefix는 correction/closure에만 적용한다.
   ⚠️ 재적재(feature-update-request)와 **무관**. **web 검토 UI 완료**
   (`apps/web/app/(admin)/admin/feature-requests/page.tsx` — 검토 큐 + 승인/거절 패널).
   **§7 합의 5건 ✅ 확정(kor_travel_map T-217c, 2026-06-11) + Pinvi 반영 완료** — §7 참조.
 - **[admin client] ✅ T-180 — kor_travel_map admin HTTP client(API 12701 `/v1/admin/*`)** (완료 2026-06-11):
-  `apps/api/app/clients/kor_travel_map_admin.py` — `KorTravelMapAdminClient` (create/patch/delete_feature
-  → `data.request` + change-requests list/approve/reject, 재시도·도메인 예외는 user client 재사용).
+  `apps/api/app/clients/kor_travel_map_admin.py` — `KorTravelMapAdminClient` (patch/delete_feature →
+  `data.request` + change-requests list/approve/reject, 재시도·도메인 예외는 user client 재사용).
+  direct `create_feature`는 T-VN-M01 선행 cutover에서 제거했다.
   base = :12701 `/v1/admin/*` (`pinvi_kor_travel_map_admin_base_url` 기본값도 12701),
   `X-Kor-Travel-Map-Service-Token`(`pinvi_kor_travel_map_admin_service_token`, 미설정 시 공용 토큰 fallback).
   lifespan/`get_kor_travel_map_admin_client` 의존성 + MockTransport 계약 테스트. **승인 시 호출 배선은 T-179.**
@@ -638,9 +662,10 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
 수기 httpx client(kor_travel_map 권고)가 kor_travel_map OpenAPI profile과 silent drift하는 것을 막는다.
 
 - **vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-user.json` — Pinvi가 구현 기준으로
-  삼은 kor_travel_map main commit의 **전체 파일**(현 핀 `95d2c128`, 2026-08-17 재vendor —
-  직전 `8c5bdcf8`). 재vendor가 잡아낸 실제 consumer drift(`status` 삭제 / weather bitemporal)는
-  본 문서 상단 2026-08-17 노트.
+  삼은 kor_travel_map의 **전체 파일**(현 source pin은 draft PR #1029 rebased head
+  `fa6d0d3d10456401993e12bb5f726abad4bce413`; bytes는 2026-08-20 재대조에서 동일). 실제 consumer
+  drift를 반영한 최초 재vendor는 `95d2c128`(2026-08-17, 직전 `8c5bdcf8`)이며 상세는 본 문서 상단
+  2026-08-17 노트다.
   pinned SHA-256은 본 문서 상단과 `test_kor_travel_map_contract.py`가 함께 고정한다.
   **profile 분리(Map `96814b2a`)**: ServiceToken 전용 batch 2경로
   (`/v1/features/batch`·`/v1/features/weather/batch`)는 user profile에서 분리돼
@@ -648,12 +673,13 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   해당 경로·batch schema 계약을 vendored `kor-travel-map-openapi-service.json`
   (byte-핀 소유는 `test_kor_travel_map_cache_target_contract.py`) 기준으로 검증하고,
   두 profile에 겹치는 schema(`Meta`/`WeatherMetricOut` 등)는 양쪽 모두에서 고정한다.
-- **Admin/ops 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map
-  `da2c740aa4b4239821075519959c38534cc65d2f`의 전체 `openapi.json` 원본이며 SHA-256은
-  `22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32`다. 이 바이트는 삼중항
-  계약이 들어간 Map `f637f3ad`와 현 main에서도 동일하다. `test_kor_travel_map_ops_contract.py`는
+- **Admin/ops 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map draft
+  PR #1029 rebased head `fa6d0d3d10456401993e12bb5f726abad4bce413`의 전체 `openapi.json` 원본이며 SHA-256은
+  `590f49d1c4abe6558cf46da5a4a4b6b787bb007c3194c07f343f97a3b6b8d9be`이다.
+  `test_kor_travel_map_ops_contract.py`는
   provider ETL이 소비하는 ops 경로·인증·query·응답 schema 연결과 폐기 필드 부재를 고정한다.
-  Admin feature 소비 필드/query 게이트는 T-VN-42가 같은 스냅샷에 이어 붙인다.
+  Admin feature 소비 필드/query 게이트와 M04 request queue 후보 계약은 같은 source revision을 사용한다.
+  이 pin은 draft 후보 증거이며 양 PR 병합 전 completion receipt가 아니다.
 - **계약 테스트**: `apps/api/tests/unit/test_kor_travel_map_contract.py` (CI `pytest tests/unit`에서 실행) —
   (1) user client 경로(`/v1/features/*`·`/v1/categories`·`/v1/public/*`) ⊆ 스냅샷 paths,
   (2) 매핑(`features.py`/`public.py`가 읽는 FeatureSummary/ClusterSummary/
@@ -678,11 +704,15 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   `model_validate`로 객체 전체를 검증하는 `/v1/public/*`는
   `test_public_view_contracts_cover_every_validated_model_field`가 `app/schemas/public.py`
   모델의 `model_fields` ⊆ 계약을 강제한다(모델에 필드를 추가하면 타입 계약도 함께 적어야 통과).
-- **Admin vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map
-  `da2c740aa4b4239821075519959c38534cc65d2f`의 `packages/kor-travel-map-api/openapi.json` 전체 파일,
-  SHA-256 `22e3f2f07192706bd06b35d2b9841c4a023047053be03731d5cfbfba8a746d32`.
+- **Admin vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map draft
+  PR #1029 rebased head `fa6d0d3d10456401993e12bb5f726abad4bce413`의
+  `packages/kor-travel-map-api/openapi.json` 전체 파일, SHA-256
+  `590f49d1c4abe6558cf46da5a4a4b6b787bb007c3194c07f343f97a3b6b8d9be`.
   `test_kor_travel_map_admin_contract.py`가 Admin feature 목록/상세/weather의 path·AdminBFF security,
   query exact 집합, 응답 container `$ref`, 3축·state transition·curation·weather 소비 shape를 고정한다.
+  feature request service gate는 별도 service vendor의 `ServiceToken`, UUID `Idempotency-Key`, request
+  body/coordinate, 201 envelope와 failure policy를 검증한다. 두 pin 모두 draft 후보 증거이며 merge/complete
+  receipt가 아니다.
 
   > **의도적 비대상**: consumer 쪽에서는 exact property 집합·`additionalProperties`를 고정하지
   > 않는다. producer(Map) 쪽 exact 고정은 T-VN-H07A(Map PR #814)가 소유하며, consumer가 이를

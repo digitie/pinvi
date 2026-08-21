@@ -83,6 +83,9 @@ ktdctl logs storage --follow
 | `PINVI_GRAFANA_HEALTH_URL`   | `http://grafana:3000` (app compose 내부 probe용. iframe public origin은 `NEXT_PUBLIC_GRAFANA_URL`)                        |
 | `NEXT_PUBLIC_VWORLD_API_KEY` | `vworld-map-web` 지도 SDK용 (ADR-046). VWorld 개발자 센터에서 발급 + 도메인 화이트리스트 등록                             |
 | `PINVI_VWORLD_API_KEY`       | 서버 전용 VWorld key. 모바일 `/mobile/vworld/token` 발급과 `kor-travel-geo` v2 REST `key` query에 같은 값을 사용(ADR-048) |
+| `PINVI_DB_OWNER_USER` / `PINVI_POSTGRES_PASSWORD` | schema/table/trigger 소유 및 migration/restore one-shot 전용 login                                                                 |
+| `PINVI_APP_DB_USER` / `PINVI_APP_DB_PASSWORD`     | API/Dagster runtime 전용 non-owner/non-superuser login                                                                              |
+| `PINVI_MIGRATOR_DATABASE_URL`                      | `app-migrator` one-shot 전용 owner URL. API/Dagster에 전달 금지                                                                     |
 | 기타 `PINVI_*`               | 일반 `.env`와 동일                                                                                                        |
 
 `NEXT_PUBLIC_*` 변경 시 web 이미지 재빌드 필요 (빌드 타임 embed).
@@ -145,17 +148,18 @@ docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml down -v --remo
 # 2) 이미지 빌드
 docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml build app-api app-web
 
-# 3) Postgres + RustFS 먼저
+# 3) Postgres + non-owner runtime DB role + RustFS 먼저
 docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml up -d app-postgres app-rustfs app-rustfs-init
+docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml run --rm app-db-runtime-role
 
-# 4) PinVi migration + one-shot admin bootstrap (auto-migrate 안 함)
+# 4) owner-only PinVi migration + one-shot admin bootstrap (auto-migrate 안 함)
 install -m 600 /dev/null /tmp/pinvi-bootstrap-admin.json
 $EDITOR /tmp/pinvi-bootstrap-admin.json
 docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml run --rm \
   --user "$(id -u):$(id -g)" \
   -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/run/pinvi/bootstrap-admin.json \
   -v /tmp/pinvi-bootstrap-admin.json:/run/pinvi/bootstrap-admin.json:ro \
-  app-api pinvi-admin-bootstrap
+  app-migrator pinvi-admin-bootstrap
 rm -f /tmp/pinvi-bootstrap-admin.json
 
 # 5) API + Web
@@ -206,8 +210,10 @@ kor-travel-map/KASI 서비스와 함께 실행한다.
 
 ## 7. 마이그레이션 분리 정책
 
-App 컨테이너는 **자동 마이그레이션 X**. `app-api`가 뜨기 전에 `pinvi-admin-bootstrap`
-one-shot을 명시 실행한다. 이 command가 PinVi Alembic migration과 초기 admin 보장을 함께 소유한다.
+App 컨테이너는 **자동 마이그레이션 X**. `app-api`가 뜨기 전에 owner URL만 받는
+`app-migrator`의 `pinvi-admin-bootstrap` one-shot을 명시 실행한다. API/Dagster는
+`app-db-runtime-role`이 만든 non-owner/non-superuser login만 받고, schema/table/trigger owner
+login을 절대 받지 않는다. 이 command가 PinVi Alembic migration과 초기 admin 보장을 함께 소유한다.
 이유:
 
 - 운영에서 새 이미지 배포 시 마이그레이션이 자동 실행되어 의도치 않은 schema 변경 차단

@@ -35,22 +35,6 @@ async def _make_second_user(session_factory: Any) -> str:
         return str(u.user_id)
 
 
-class _FakeAdminClient:
-    """kor-travel-map admin change API fake — applied 상태 + 고정 feature_id 반환."""
-
-    def __init__(self, feature_id: str = "f_recon_1") -> None:
-        self.feature_id = feature_id
-
-    async def create_feature(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "feature_id": self.feature_id,
-            "request_id": "krq-1",
-            "status": "applied",
-            "review_mode": "immediate",
-            "action": "create",
-        }
-
-
 async def _make_trip(client: Any, cookies: dict[str, str]) -> str:
     resp = await client.post("/trips", json={"title": "부산 여행"}, cookies=cookies)
     assert resp.status_code == 201, resp.text
@@ -167,7 +151,7 @@ async def test_auto_fire_best_effort_when_snapshot_missing_coord(
     assert await _suggestion_count(session_factory, "k300") == 0
 
 
-async def test_approve_reconciles_linked_pois(
+async def test_new_place_approval_fails_closed_without_reconciling_linked_pois(
     client: Any,
     session_factory: Any,
     verified_user: tuple[str, str],
@@ -202,9 +186,8 @@ async def test_approve_reconciles_linked_pois(
         admin.roles = ["user", "admin"]
         await db.commit()
 
-    app.dependency_overrides[get_kor_travel_map_admin_client] = lambda: _FakeAdminClient(
-        feature_id="f_k400"
-    )
+    no_outbound_client = object()
+    app.dependency_overrides[get_kor_travel_map_admin_client] = lambda: no_outbound_client
     try:
         resp = await client.post(
             f"/admin/feature-requests/{req_id}/approve",
@@ -220,17 +203,24 @@ async def test_approve_reconciles_linked_pois(
     finally:
         app.dependency_overrides.pop(get_kor_travel_map_admin_client, None)
 
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["data"]["kor_travel_map_ref"]["feature_id"] == "f_k400"
-    assert resp.json()["data"]["kor_travel_map_ref"]["reconciled_poi_count"] == 1
+    assert resp.status_code == 503, resp.text
+    assert resp.json()["error"]["code"] == "MAP_FEATURE_REQUEST_QUEUE_UNAVAILABLE"
 
-    # reconciliation으로 POI가 새 feature_id에 연결됐다.
+    # fail-close 경계에서는 제안과 연결 POI를 모두 그대로 둔다.
     async with session_factory() as db:
         poi = await db.scalar(
             select(TripDayPoi).where(TripDayPoi.attachment_id == uuid.UUID(poi_id))
         )
+        stored_suggestion = await db.scalar(
+            select(FeatureSuggestion).where(FeatureSuggestion.request_id == req_id)
+        )
     assert poi is not None
-    assert poi.feature_id == "f_k400"
+    assert poi.feature_id is None
+    assert stored_suggestion is not None
+    assert stored_suggestion.status == "pending"
+    assert stored_suggestion.kor_travel_map_ref is None
+    assert stored_suggestion.reviewed_by_admin_id is None
+    assert stored_suggestion.resolved_at is None
 
 
 async def test_manual_request_feature_external_ref_global_dedup(

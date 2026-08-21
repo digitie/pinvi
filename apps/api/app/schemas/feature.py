@@ -295,7 +295,7 @@ class FeatureCategory(BaseModel):
 
 
 class FeatureRequestCreate(BaseModel):
-    """사용자 feature 제안 큐 적재 — Admin이 검토 후 kor_travel_map feature 추가 API로 반영 (DEC-05)."""
+    """사용자 feature 제안 큐 적재 — 새 장소는 Map 범용 요청 큐로 제출한다."""
 
     type: FeatureRequestType = "new_place"
     kind: FeatureSuggestionKind = "place"
@@ -316,6 +316,8 @@ class FeatureRequestCreate(BaseModel):
             raise ValueError("correction/closure 제안은 target_feature_id가 필요합니다.")
         if self.type == "new_place" and self.target_feature_id is not None:
             raise ValueError("new_place 제안은 target_feature_id를 가질 수 없습니다.")
+        if self.type == "new_place" and self.coord.lat > 39.5:
+            raise ValueError("new_place 제안 좌표의 lat은 39.5 이하여야 합니다.")
         if self.external_ref is not None:
             if self.type != "new_place":
                 raise ValueError("외부 참조(external_ref) 제안은 new_place만 가능합니다.")

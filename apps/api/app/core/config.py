@@ -50,7 +50,29 @@ def _capability_generation(capabilities: dict[str, object], name: str) -> int:
     return generation
 
 
-def _load_service_provenance() -> tuple[str, str, int, int, int]:
+def _validate_production_map_root_url(value: str, *, env_name: str) -> None:
+    try:
+        base_url = urlsplit(value)
+        hostname = base_url.hostname
+        port = base_url.port
+    except ValueError as exc:
+        raise ValueError(
+            f"production {env_name} must be an allowed root HTTP(S) URL on port 12701"
+        ) from exc
+    if (
+        base_url.scheme not in {"http", "https"}
+        or hostname not in {"127.0.0.1", "host.docker.internal"}
+        or port != 12701
+        or base_url.path not in {"", "/"}
+        or base_url.username is not None
+        or base_url.password is not None
+        or bool(base_url.query)
+        or bool(base_url.fragment)
+    ):
+        raise ValueError(f"production {env_name} must be an allowed root HTTP(S) URL on port 12701")
+
+
+def _load_service_provenance() -> tuple[str, str, int, int, int, int, int]:
     raw = json.loads(_service_provenance_text())
     if not isinstance(raw, dict):
         raise RuntimeError("Map service provenance must be an object")
@@ -68,7 +90,13 @@ def _load_service_provenance() -> tuple[str, str, int, int, int]:
     if not isinstance(capabilities_value, dict):
         raise RuntimeError("Map service provenance capabilities are invalid")
     capabilities = cast(dict[str, object], capabilities_value)
-    if set(capabilities) != {"cache_target", "c6c_cancel_probe", "curation_snapshot"}:
+    if set(capabilities) != {
+        "cache_target",
+        "c6c_cancel_probe",
+        "curation_snapshot",
+        "feature_request",
+        "feature_reference_reconciliation",
+    }:
         raise RuntimeError("Map service provenance capability inventory is invalid")
     return (
         _required_string(payload, "service_openapi_sha256", r"[0-9a-f]{64}"),
@@ -76,6 +104,8 @@ def _load_service_provenance() -> tuple[str, str, int, int, int]:
         _capability_generation(capabilities, "cache_target"),
         _capability_generation(capabilities, "c6c_cancel_probe"),
         _capability_generation(capabilities, "curation_snapshot"),
+        _capability_generation(capabilities, "feature_request"),
+        _capability_generation(capabilities, "feature_reference_reconciliation"),
     )
 
 
@@ -85,6 +115,8 @@ def _load_service_provenance() -> tuple[str, str, int, int, int]:
     KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION,
     KOR_TRAVEL_MAP_C6C_CANCEL_PROBE_CAPABILITY_GENERATION,
     KOR_TRAVEL_MAP_CURATION_SNAPSHOT_CAPABILITY_GENERATION,
+    KOR_TRAVEL_MAP_FEATURE_REQUEST_CAPABILITY_GENERATION,
+    KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_CAPABILITY_GENERATION,
 ) = _load_service_provenance()
 
 
@@ -201,6 +233,8 @@ class Settings(BaseSettings):
     # kor-travel-map ADR-060: admin proxy gate가 켜진 운영 API에는 secret + actor 헤더가 필요.
     pinvi_kor_travel_map_admin_proxy_secret: str = ""
     pinvi_kor_travel_map_admin_actor: str = "pinvi-admin"
+    # 범용 Feature 요청 큐 write 전용 principal. admin/public/general service token fallback 금지.
+    pinvi_kor_travel_map_feature_request_token: SecretStr | None = None
     # canonical /v1/ops/datasets*·/v1/ops/pipeline* 전용 server principal.
     # read/cancel 자격을 분리하고 요청 actor 대신 map 서버의 고정 actor를 사용한다.
     pinvi_kor_travel_map_ops_read_token: SecretStr | None = None
@@ -249,6 +283,26 @@ class Settings(BaseSettings):
     pinvi_kor_travel_map_cache_target_expected_contract_generation: int | None = Field(
         default=None, gt=0
     )
+
+    # T-VN-M05 Map retire event의 first paired consumer. worker와 service scope는
+    # default-off이며 subscription activation/live proof 전 production enable을 거부한다.
+    pinvi_kor_travel_map_feature_reference_reconciliation_enabled: bool = False
+    pinvi_kor_travel_map_feature_reference_reconciliation_read_token: SecretStr | None = None
+    pinvi_kor_travel_map_feature_reference_reconciliation_ack_token: SecretStr | None = None
+    pinvi_kor_travel_map_feature_reference_reconciliation_poll_seconds: float = Field(
+        default=1.0,
+        ge=0.1,
+        le=60,
+        allow_inf_nan=False,
+    )
+    pinvi_kor_travel_map_feature_reference_reconciliation_blocked_recheck_seconds: float = Field(
+        default=30.0,
+        ge=1.0,
+        le=3600.0,
+        allow_inf_nan=False,
+    )
+    pinvi_kor_travel_map_feature_reference_reconciliation_expected_openapi_sha256: str = ""
+    pinvi_kor_travel_map_feature_reference_reconciliation_expected_source_revision: str = ""
 
     # kor-travel-geo v2 REST (geocoding/주소/행정구역, ADR-025) — `docs/integrations/kor-travel-geo.md`.
     pinvi_kor_travel_geo_base_url: str = "http://localhost:12501"
@@ -400,28 +454,18 @@ class Settings(BaseSettings):
 
         is_production = self.pinvi_environment == "production"
         if is_production:
-            try:
-                admin_base_url = urlsplit(self.pinvi_kor_travel_map_admin_base_url)
-                hostname = admin_base_url.hostname
-                port = admin_base_url.port
-            except ValueError as exc:
-                raise ValueError(
-                    "production PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL must be an allowed "
-                    "root HTTP(S) URL on port 12701"
-                ) from exc
+            _validate_production_map_root_url(
+                self.pinvi_kor_travel_map_admin_base_url,
+                env_name="PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL",
+            )
             if (
-                admin_base_url.scheme not in {"http", "https"}
-                or hostname not in {"127.0.0.1", "host.docker.internal"}
-                or port != 12701
-                or admin_base_url.path not in {"", "/"}
-                or admin_base_url.username is not None
-                or admin_base_url.password is not None
-                or bool(admin_base_url.query)
-                or bool(admin_base_url.fragment)
+                self.pinvi_kor_travel_map_feature_request_token is not None
+                or self.pinvi_kor_travel_map_feature_reference_reconciliation_read_token is not None
+                or self.pinvi_kor_travel_map_feature_reference_reconciliation_ack_token is not None
             ):
-                raise ValueError(
-                    "production PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL must be an allowed "
-                    "root HTTP(S) URL on port 12701"
+                _validate_production_map_root_url(
+                    self.pinvi_kor_travel_map_api_base_url,
+                    env_name="PINVI_KOR_TRAVEL_MAP_API_BASE_URL",
                 )
 
         read_token = (
@@ -509,6 +553,15 @@ class Settings(BaseSettings):
                 self.pinvi_kor_travel_map_curation_cutover_mapping_token.get_secret_value()
                 if self.pinvi_kor_travel_map_curation_cutover_mapping_token is not None
                 else "",
+                self.pinvi_kor_travel_map_feature_request_token.get_secret_value()
+                if self.pinvi_kor_travel_map_feature_request_token is not None
+                else "",
+                self.pinvi_kor_travel_map_feature_reference_reconciliation_read_token.get_secret_value()
+                if self.pinvi_kor_travel_map_feature_reference_reconciliation_read_token is not None
+                else "",
+                self.pinvi_kor_travel_map_feature_reference_reconciliation_ack_token.get_secret_value()
+                if self.pinvi_kor_travel_map_feature_reference_reconciliation_ack_token is not None
+                else "",
             )
             if value
         }
@@ -574,14 +627,17 @@ class Settings(BaseSettings):
     @field_validator(
         "pinvi_kor_travel_map_curation_snapshot_token",
         "pinvi_kor_travel_map_curation_cutover_mapping_token",
+        "pinvi_kor_travel_map_feature_request_token",
+        "pinvi_kor_travel_map_feature_reference_reconciliation_read_token",
+        "pinvi_kor_travel_map_feature_reference_reconciliation_ack_token",
         mode="before",
     )
     @classmethod
-    def _empty_curation_token_is_unset(cls, value: object) -> object:
+    def _empty_scoped_service_token_is_unset(cls, value: object) -> object:
         """빈 문자열은 미설정으로 본다.
 
         docker-manager/`infra/docker-compose.app.yml`은 미설정 토큰을 `${VAR:-}`(빈 문자열)로 주입한다.
-        빈 값을 '설정된 토큰'으로 다루면 두 토큰이 모두 비어 있을 때 `must differ`로 production API가
+        빈 값을 '설정된 토큰'으로 다루면 분리된 scope token이 모두 비어 있을 때 `must differ`로 production API가
         부팅하지 못한다(2026-08-18 리뷰 P0). 공백 포함 값은 그대로 두어 아래 검증이 명시적으로 거부한다.
         """
 
@@ -593,10 +649,10 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
-    def validate_curation_service_principals(self) -> Self:
-        """두 curation scope를 다른 Map trust boundary와 서로 분리한다."""
+    def validate_scoped_service_principals(self) -> Self:
+        """curation과 Feature 요청 write scope를 다른 Map trust boundary와 분리한다."""
 
-        curation_tokens = (
+        scoped_tokens = (
             (
                 "PINVI_KOR_TRAVEL_MAP_CURATION_SNAPSHOT_TOKEN",
                 self.pinvi_kor_travel_map_curation_snapshot_token,
@@ -605,10 +661,22 @@ class Settings(BaseSettings):
                 "PINVI_KOR_TRAVEL_MAP_CURATION_CUTOVER_MAPPING_TOKEN",
                 self.pinvi_kor_travel_map_curation_cutover_mapping_token,
             ),
+            (
+                "PINVI_KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN",
+                self.pinvi_kor_travel_map_feature_request_token,
+            ),
+            (
+                "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_READ_TOKEN",
+                self.pinvi_kor_travel_map_feature_reference_reconciliation_read_token,
+            ),
+            (
+                "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACK_TOKEN",
+                self.pinvi_kor_travel_map_feature_reference_reconciliation_ack_token,
+            ),
         )
-        values = [secret.get_secret_value() for _, secret in curation_tokens if secret is not None]
+        values = [secret.get_secret_value() for _, secret in scoped_tokens if secret is not None]
         if len(values) != len(set(values)):
-            raise ValueError("curation snapshot and cutover mapping tokens must differ")
+            raise ValueError("scoped Map service tokens must differ")
         protected = {
             value
             for value in (
@@ -638,7 +706,7 @@ class Settings(BaseSettings):
             )
             if value
         }
-        for env_name, secret in curation_tokens:
+        for env_name, secret in scoped_tokens:
             if secret is None:
                 continue
             token = secret.get_secret_value()
@@ -648,6 +716,45 @@ class Settings(BaseSettings):
                 raise ValueError(f"{env_name} must not contain whitespace")
             if token in protected:
                 raise ValueError(f"{env_name} must not reuse another Map trust-boundary credential")
+        return self
+
+    @model_validator(mode="after")
+    def validate_feature_reference_reconciliation(self) -> Self:
+        """M05 read/ACK consumer는 exact vendor와 paired activation 전까지 default-off다."""
+
+        if not self.pinvi_kor_travel_map_feature_reference_reconciliation_enabled:
+            return self
+        if self.pinvi_environment == "production":
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ENABLED is forbidden "
+                "in production until the paired M05 activation gate is complete"
+            )
+        read = self.pinvi_kor_travel_map_feature_reference_reconciliation_read_token
+        ack = self.pinvi_kor_travel_map_feature_reference_reconciliation_ack_token
+        if read is None:
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_READ_TOKEN is required"
+            )
+        if ack is None:
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACK_TOKEN is required"
+            )
+        expected_sha = (
+            self.pinvi_kor_travel_map_feature_reference_reconciliation_expected_openapi_sha256
+        )
+        if expected_sha != KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256:
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_EXPECTED_OPENAPI_SHA256 "
+                "must match the vendored service contract"
+            )
+        expected_revision = (
+            self.pinvi_kor_travel_map_feature_reference_reconciliation_expected_source_revision
+        )
+        if expected_revision != KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION:
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_EXPECTED_SOURCE_REVISION "
+                "must match the service contract Map release revision"
+            )
         return self
 
 

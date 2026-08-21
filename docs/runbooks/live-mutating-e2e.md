@@ -11,6 +11,8 @@ Windows runner를 fallback으로 사용한다.
 - `apps/web/e2e/trip-day-hole-live-mutating.live.ts`
 - `apps/web/e2e/trip-feature-resolution-live-mutating.live.ts`
 - `apps/web/e2e/admin-backup-live-mutating.live.ts`
+- `apps/web/e2e/admin-feature-request-queue-live-mutating.live.ts`
+- `apps/web/e2e/admin-feature-reference-reconciliations-live-mutating.live.ts`
 - verified 사용자 계정으로 두 browser context를 로그인한다.
 - test prefix가 붙은 임시 Trip을 생성하고, 실제 `WS /ws/trips/{trip_id}` 연결 상태를 확인한다.
 - API `PATCH /trips/{trip_id}` mutation이 다른 context의 Trip 상세 화면에 WebSocket broadcast
@@ -34,6 +36,13 @@ Windows runner를 fallback으로 사용한다.
   restore hotswap endpoint는 호출하지 않으며, 호출이 발생하면 실패한다. snapshot 삭제 API는 아직
   없으므로 테스트가 만든 staging snapshot은 audit evidence로 남기고 운영 retention/스토리지 정책으로
   관리한다.
+- M04 Feature 요청 큐 suite는 **격리된** Map/PinVi compatible pair에서 사전에 만든 pending
+  `new_place` fixture 하나만 관리자 UI로 승인한다. PinVi 응답의 `approved`와 Map queue
+  `pending` receipt(`request_id`, `review_mode=feature_request_queue`, `action=submit`)를 함께
+  확인한다. production, shared staging, 재실행한 fixture에는 절대 사용하지 않는다.
+- M05 Feature 참조 조정 suite는 같은 격리 pair에서 M04 승인과 Map의 명시적 `rebind` 결정 뒤에만
+  실행한다. worker가 local terminal receipt를 commit하고 Map ACK을 마친 event 하나를 UI에서 읽는다.
+  이 suite는 추가 mutation을 하지 않으며, applied receipt의 이전/대체 Feature와 impact 수만 검증한다.
 
 ## 2. 필수 환경변수
 
@@ -162,6 +171,47 @@ PINVI_BACKUP_LIVE_EMAIL="$PINVI_BACKUP_LIVE_EMAIL" \
 PINVI_BACKUP_LIVE_PASSWORD="$PINVI_BACKUP_LIVE_PASSWORD" \
 npm run test:e2e:live-mutating -- admin-backup-live-mutating.live.ts --workers=1
 ```
+
+### M04 Map Feature 요청 큐 단건
+
+Map #1029와 PinVi #458의 검증한 exact image pair만 격리 포트/DB로 기동한다. admin UI에 보이는
+새 pending `new_place` fixture UUID를 한 번만 발급하고, 값은 tracked 파일이나 로그에 기록하지
+않는다. Map service writer token은 PinVi API process에만 주입한다.
+
+```bash
+cd apps/web
+PINVI_M04_LIVE_E2E=1 \
+PINVI_LIVE_WEB_URL=http://127.0.0.1:13805 \
+PINVI_M04_LIVE_FEATURE_REQUEST_ID="$PINVI_M04_LIVE_FEATURE_REQUEST_ID" \
+PINVI_M04_LIVE_EMAIL="$PINVI_M04_LIVE_EMAIL" \
+PINVI_M04_LIVE_PASSWORD="$PINVI_M04_LIVE_PASSWORD" \
+npm run test:e2e:live-mutating -- admin-feature-request-queue-live-mutating.live.ts --workers=1
+```
+
+성공 뒤 PinVi 응답 및 Map 격리 로그에서 같은 request UUID와 pending receipt를 대조한다. 실패한
+fixture는 다시 승인하지 않고, 격리 DB만 폐기하거나 해당 제안을 운영 절차로 거절한다.
+
+### M05 Feature 참조 조정 증거 단건
+
+M04 승인, Map `rebind` 결정, PinVi worker receipt/ACK가 모두 같은 격리 pair에서 끝난 뒤에만 실행한다.
+이벤트 UUID와 기대 Feature ID·영향 행 수는 해당 일회성 fixture에서만 가져오며, tracked 파일이나 로그에
+기록하지 않는다. 실행 자체는 읽기 전용이다.
+
+```bash
+cd apps/web
+PINVI_M05_LIVE_E2E=1 \
+PINVI_LIVE_WEB_URL=http://127.0.0.1:13805 \
+PINVI_M05_LIVE_EVENT_ID="$PINVI_M05_LIVE_EVENT_ID" \
+PINVI_M05_LIVE_OLD_FEATURE_ID="$PINVI_M05_LIVE_OLD_FEATURE_ID" \
+PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID="$PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID" \
+PINVI_M05_LIVE_IMPACT_COUNT="$PINVI_M05_LIVE_IMPACT_COUNT" \
+PINVI_M05_LIVE_EMAIL="$PINVI_M05_LIVE_EMAIL" \
+PINVI_M05_LIVE_PASSWORD="$PINVI_M05_LIVE_PASSWORD" \
+npm run test:e2e:live-mutating -- admin-feature-reference-reconciliations-live-mutating.live.ts --workers=1
+```
+
+M05 event가 목록 첫 페이지에 없거나 terminal receipt가 없으면 fixture/worker/ACK 상태를 먼저 확인한다.
+이 테스트가 pass해도 M04 승인과 Map 결정·ACK의 server-side receipt 대조가 별도 성공 조건이다.
 
 운영 공개 도메인으로 검증할 때는 `*_URL`을 실제 HTTPS 도메인으로 바꾼다.
 

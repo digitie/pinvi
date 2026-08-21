@@ -38,6 +38,7 @@ from app.models import (  # noqa: E402,F401
     dsr,
     email_deliverability,
     email_queue,
+    feature_reference_reconciliation,
     feature_suggestion,
     kasi,
     mcp_token,

@@ -44,6 +44,8 @@ set -euo pipefail
 sql="${*: -1}"
 if [[ "$*" == *"DROP SCHEMA"* ]]; then
   exit 0
+elif [[ "$sql" == *"FROM pg_roles"* ]]; then
+  echo t
 elif [[ "$sql" == *"lag(content_hash)"* ]]; then
   echo valid
 elif [[ "$sql" == *"to_regnamespace"* ]]; then
@@ -72,6 +74,7 @@ fi
         "PINVI_RESTORE_DATABASE_URL",
         "PINVI_RESTORE_STAGING_DATABASE_URL",
         "PINVI_RESTORE_DRILL_ALLOW_NON_STAGING",
+        "PINVI_RESTORE_APP_ROLE",
     ):
         env.pop(key, None)
     return env
@@ -103,6 +106,7 @@ def test_restore_staging_drill_masks_path_and_rehearses_guard(tmp_path: Path) ->
         "postgresql://pinvi:pinvi@localhost:5432/pinvi_staging"
     )
     env["PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL"] = "precheck"
+    env["PINVI_RESTORE_APP_ROLE"] = "pinvi_app"
 
     result = subprocess.run(  # noqa: S603
         [str(SCRIPT), "run", str(snapshot)],
@@ -129,6 +133,7 @@ def test_restore_staging_drill_accepts_legacy_absolute_sidecar(tmp_path: Path) -
         "postgresql://pinvi:pinvi@localhost:5432/pinvi_staging"
     )
     env["PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL"] = "precheck"
+    env["PINVI_RESTORE_APP_ROLE"] = "pinvi_app"
 
     result = subprocess.run(  # noqa: S603
         [str(SCRIPT), "run", str(snapshot)],

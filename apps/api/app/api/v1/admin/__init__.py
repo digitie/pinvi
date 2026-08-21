@@ -14,6 +14,7 @@ from app.api.v1.admin import (
     dsr,
     emails,
     etl,
+    feature_reference_reconciliations,
     feature_requests,
     features,
     files,
@@ -44,6 +45,7 @@ admin_router.include_router(trips.router)
 admin_router.include_router(pois.router)
 admin_router.include_router(features.router)
 admin_router.include_router(feature_requests.router)
+admin_router.include_router(feature_reference_reconciliations.router)
 admin_router.include_router(category_mappings.router)
 admin_router.include_router(dedup_review.router)
 admin_router.include_router(provider_sync.router)

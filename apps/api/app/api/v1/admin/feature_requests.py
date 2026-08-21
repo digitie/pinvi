@@ -1,14 +1,15 @@
 """`/admin/feature-requests/*` — 사용자 feature 제안 검토 큐 (T-179).
 
-사용자 제안(`app.feature_suggestions`, T-177)을 Admin이 검토해 승인/거절한다. 승인 시
-kor_travel_map `/v1/admin/features*` change API(전송 client = T-180)로 전달하고, 반환된
-feature_id/request_id/state를 `kor_travel_map_ref`에 저장한다.
+사용자 제안(`app.feature_suggestions`, T-177)을 Admin이 검토해 승인/거절한다. correction/closure
+새 장소 승인은 Map `/v1/service/feature-requests` 범용 큐에 immutable request를 제출하고,
+correction/closure만 kor_travel_map `/v1/admin/features*` change API(전송 client = T-180)로
+전달한다. 반환된 feature_id/request_id/state를 `kor_travel_map_ref`에 저장한다.
 
 §7 합의 5건 (kor_travel_map T-217c **확정**, 2026-06-11, kor_travel_map `docs/decisions.md` ADR-051):
 - **review_mode**: kor_travel_map 설정(기본 `require_review` 2단 검토 → status=approved, `immediate`면 added)
-- **idempotency_key** = suggestion `request_id` (kor_travel_map가 결정적 feature_id 생성, 재시도 동일 feature)
-- **출처 태깅** = operator 고정 `"pinvi-admin"`(admin id 미노출, 익명 D-11) + reason
-  `[suggestion:<request_id>]` prefix (change-requests 큐가 출처 식별)
+- **idempotency_key** = suggestion `request_id` (new_place body와 `Idempotency-Key`가 같은 UUID)
+- **출처 태깅** = correction/closure만 operator 고정 `"pinvi-admin"`(admin id 미노출, 익명 D-11) +
+  reason `[suggestion:<request_id>]` prefix를 change-requests 큐에 남긴다.
 - **closure** = soft `DELETE`(provider 재적재 부활 차단). 일시 비활성 deactivate는 미사용
 - **admin 인증** = 인프라 계층(12701 `/v1/admin/*`, SSO/IP allowlist; service token은 선택 pass-through)
 """
@@ -22,6 +23,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +34,14 @@ from app.clients.kor_travel_map import (
     KorTravelMapRateLimited,
     KorTravelMapUnavailable,
 )
-from app.clients.kor_travel_map_admin import KorTravelMapAdminClientDep
+from app.clients.kor_travel_map_admin import get_kor_travel_map_admin_client
+from app.clients.kor_travel_map_feature_request import (
+    FeatureRequestQueueContractError,
+    FeatureRequestQueueProblem,
+    FeatureRequestQueueUnavailable,
+    FeatureRequestServiceClient,
+    get_feature_request_service_client,
+)
 from app.core.deps import DbSession
 from app.core.rbac import require_role
 from app.models.feature_suggestion import FeatureSuggestion
@@ -51,6 +60,7 @@ from app.schemas.feature import (
     FeatureKind,
     FeatureRequestStatus,
     FeatureRequestType,
+    FeatureSuggestionKind,
 )
 from app.services.admin_audit import append_admin_audit
 from app.services.admin_users import mask_email
@@ -72,6 +82,13 @@ def _parse_request_id(value: str | None) -> uuid.UUID:
                 "message": "X-Request-Id 형식이 올바르지 않습니다.",
             },
         ) from exc
+
+
+def _request_correlation_id(request: Request, header_value: str | None) -> uuid.UUID:
+    """응답·audit·upstream 호출이 한 request ID를 공유하게 한다."""
+
+    middleware_value = getattr(request.state, "request_id", None)
+    return _parse_request_id(header_value if header_value is not None else middleware_value)
 
 
 @contextmanager
@@ -127,6 +144,46 @@ def _map_admin_errors() -> Iterator[None]:
         ) from exc
 
 
+@contextmanager
+def _map_feature_request_errors() -> Iterator[None]:
+    """Map service Feature 요청 오류를 PinVi admin 승인 결과로 안전하게 투영한다."""
+
+    try:
+        yield
+    except FeatureRequestQueueProblem as exc:
+        if exc.status_code == status.HTTP_409_CONFLICT:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": exc.code or "MAP_FEATURE_REQUEST_CONFLICT",
+                    "message": "지도 Feature 요청 큐가 이 제출을 충돌로 거절했습니다.",
+                },
+            ) from exc
+        if exc.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": exc.code or "VALIDATION_ERROR",
+                    "message": "지도 Feature 요청 형식이 올바르지 않습니다.",
+                },
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "MAP_FEATURE_REQUEST_QUEUE_UNAVAILABLE",
+                "message": "지도 Feature 요청 큐 인증 또는 활성화 상태를 확인할 수 없습니다.",
+            },
+        ) from exc
+    except (FeatureRequestQueueUnavailable, FeatureRequestQueueContractError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "MAP_FEATURE_REQUEST_QUEUE_UNAVAILABLE",
+                "message": "지도 Feature 요청 큐가 일시적으로 사용 불가합니다.",
+            },
+        ) from exc
+
+
 def _summary(row: FeatureSuggestion, email: str | None) -> AdminFeatureRequestSummary:
     return AdminFeatureRequestSummary(
         request_id=row.request_id,
@@ -161,7 +218,9 @@ def _result(row: FeatureSuggestion) -> AdminFeatureRequestResult:
 
 async def _load_pending(db: AsyncSession, request_id: uuid.UUID) -> FeatureSuggestion:
     suggestion = await db.scalar(
-        select(FeatureSuggestion).where(FeatureSuggestion.request_id == request_id)
+        select(FeatureSuggestion)
+        .where(FeatureSuggestion.request_id == request_id)
+        .with_for_update()
     )
     if suggestion is None:
         raise HTTPException(
@@ -215,50 +274,75 @@ async def approve_feature_request_endpoint(
     request: Request,
     admin: Annotated[User, Depends(require_role("admin"))],
     db: DbSession,
-    admin_client: KorTravelMapAdminClientDep,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Envelope[AdminFeatureRequestResult]:
-    """승인 — kor_travel_map change API 호출 후 상태/`kor_travel_map_ref` 갱신 + audit.
+    """승인 — 새 장소는 Map service 큐, 변경/폐쇄는 Map admin change API로 전송한다.
 
-    kor_travel_map 호출을 먼저 하고 성공 시에만 DB commit한다(실패 시 제안은 pending 유지 → 재시도).
+    Map 호출이 성공하기 전에는 PinVi 제안/audit를 commit하지 않아 retry가 같은 immutable request UUID를
+    재사용한다. Map queue 제출은 ``approved``(Map 검토 대기), identity exact conflict만 ``duplicate``다.
     """
+    audit_request_id = _request_correlation_id(request, x_request_id)
     suggestion = await _load_pending(db, request_id)
-    # 출처 태깅 (§7 #3 확정, kor_travel_map T-217c / D-11 익명): operator는 **고정 문자열**(admin id
-    # 미노출), suggestion_id는 reason 머리에 `[suggestion:<id>]` prefix로 실어 change-requests
-    # 큐에서 출처 식별. kor_travel_map는 개인정보를 저장하지 않고, 역추적은 Pinvi admin이 한다.
-    operator = "pinvi-admin"
-    reason = f"[suggestion:{request_id}] {body.kor_travel_map_reason or body.access_reason}"
     stype = suggestion.suggestion_type
-
     if stype == "new_place":
-        if not (body.category and body.marker_color and body.marker_icon):
+        service_client = get_feature_request_service_client(request)
+        try:
+            FeatureRequestServiceClient.validate_submission(
+                request_id=suggestion.request_id,
+                kind=cast(FeatureSuggestionKind, suggestion.kind),
+                name=suggestion.name,
+                lon=float(suggestion.lng),
+                lat=float(suggestion.lat),
+                categories=list(suggestion.categories),
+                note=suggestion.note,
+            )
+        except ValidationError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={
-                    "code": "VALIDATION_ERROR",
-                    "message": "신규 장소 승인은 category/marker_color/marker_icon이 필요합니다.",
+                    "code": "MAP_FEATURE_REQUEST_PAYLOAD_INVALID",
+                    "message": "Map 요청 큐 범위를 벗어난 기존 제안입니다. 거절 후 새 제안으로 접수하세요.",
                 },
+            ) from exc
+        with _map_feature_request_errors():
+            receipt = await service_client.submit(
+                request_id=suggestion.request_id,
+                kind=cast(FeatureSuggestionKind, suggestion.kind),
+                name=suggestion.name,
+                lon=float(suggestion.lng),
+                lat=float(suggestion.lat),
+                categories=list(suggestion.categories),
+                note=suggestion.note,
+                correlation_id=audit_request_id,
             )
-        payload: dict[str, Any] = {
-            "kind": suggestion.kind,
-            "name": body.name or suggestion.name,
-            "category": body.category,
-            "marker_color": body.marker_color,
-            "marker_icon": body.marker_icon,
-            "reason": reason,
-            "coord": {"lon": float(suggestion.lng), "lat": float(suggestion.lat)},
-            "idempotency_key": str(suggestion.request_id),
-            "operator": operator,
+        record: dict[str, Any] = {
+            "feature_id": receipt.feature_id,
+            "request_id": str(receipt.request_id),
+            "status": receipt.status,
+            "review_mode": "feature_request_queue",
+            "action": "submit",
         }
-        with _map_admin_errors():
-            record = await admin_client.create_feature(payload)
+    # 출처 태깅 (§7 #3 확정, kor_travel_map T-217c / D-11 익명): operator는 **고정 문자열**(admin id
+    # 미노출), suggestion_id는 reason 머리에 `[suggestion:<id>]` prefix로 실어 change-requests
+    # 큐에서 출처 식별. kor_travel_map는 개인정보를 저장하지 않고, 역추적은 Pinvi admin이 한다.
     elif stype == "correction":
+        admin_client = get_kor_travel_map_admin_client(request)
+        operator = "pinvi-admin"
+        reason = f"[suggestion:{request_id}] {body.kor_travel_map_reason or body.access_reason}"
         if suggestion.target_feature_id is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={
                     "code": "VALIDATION_ERROR",
                     "message": "correction 제안에 target_feature_id가 없습니다.",
+                },
+            )
+        if not any((body.name, body.category, body.marker_color, body.marker_icon)):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "VALIDATION_ERROR",
+                    "message": "정보 수정 승인에는 하나 이상의 변경 필드가 필요합니다.",
                 },
             )
         patch: dict[str, Any] = {"reason": reason, "operator": operator}
@@ -273,6 +357,9 @@ async def approve_feature_request_endpoint(
         with _map_admin_errors():
             record = await admin_client.patch_feature(suggestion.target_feature_id, patch)
     else:  # closure
+        admin_client = get_kor_travel_map_admin_client(request)
+        operator = "pinvi-admin"
+        reason = f"[suggestion:{request_id}] {body.kor_travel_map_reason or body.access_reason}"
         if suggestion.target_feature_id is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -287,8 +374,13 @@ async def approve_feature_request_endpoint(
             )
 
     kor_travel_map_state = str(record.get("status") or "")
-    # require_review면 kor_travel_map 큐 적재(approved), immediate/applied면 반영 완료(added).
-    new_status = "added" if kor_travel_map_state == "applied" else "approved"
+    # service queue는 Map admin 검토 전 pending으로 돌아오므로 PinVi 승인만 완료한 ``approved``로
+    # 남긴다. identity exact conflict는 이미 존재하는 feature로 확정돼 ``duplicate``다.
+    if stype == "new_place":
+        new_status = "duplicate" if kor_travel_map_state == "exact_conflict" else "approved"
+    else:
+        # require_review면 kor_travel_map 큐 적재(approved), immediate/applied면 반영 완료(added).
+        new_status = "added" if kor_travel_map_state == "applied" else "approved"
     before = {"status": suggestion.status}
 
     # ADR-054 post-approval reconciliation: feature가 실제로 반영(added)돼 feature_id가 생기면, 이
@@ -301,7 +393,7 @@ async def approve_feature_request_endpoint(
     ref = suggestion.external_ref
     reconciled = 0
     if (
-        new_status == "added"
+        new_status in {"added", "duplicate"}
         and isinstance(feature_id_val, str)
         and feature_id_val
         and isinstance(ref, dict)
@@ -341,7 +433,7 @@ async def approve_feature_request_endpoint(
         target_pii_fields=None,
         ip_hash_input=request.client.host if request.client else "",
         user_agent=request.headers.get("user-agent"),
-        request_id=_parse_request_id(x_request_id),
+        request_id=audit_request_id,
     )
     await db.commit()
     await db.refresh(suggestion)
@@ -358,6 +450,7 @@ async def reject_feature_request_endpoint(
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Envelope[AdminFeatureRequestResult]:
     """거절 — kor_travel_map 호출 없이 상태만 rejected로. audit."""
+    audit_request_id = _request_correlation_id(request, x_request_id)
     suggestion = await _load_pending(db, request_id)
     before = {"status": suggestion.status}
     suggestion.status = "rejected"
@@ -375,7 +468,7 @@ async def reject_feature_request_endpoint(
         target_pii_fields=None,
         ip_hash_input=request.client.host if request.client else "",
         user_agent=request.headers.get("user-agent"),
-        request_id=_parse_request_id(x_request_id),
+        request_id=audit_request_id,
     )
     await db.commit()
     await db.refresh(suggestion)

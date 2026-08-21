@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 from collections.abc import Callable
 from typing import Any
 
 import httpx
 import pytest
 
+import app.clients.kor_travel_map_admin as kor_travel_map_admin_module
 from app.api.v1.admin.ops_proxy import retry_after_headers
 from app.clients.kor_travel_map import (
     KorTravelMapBadRequest,
@@ -140,7 +142,7 @@ def _typed_cancellation_detail_for_code(code: str) -> dict[str, object]:
     return details
 
 
-def _change_response(*, action: str = "create", state: str = "pending") -> dict[str, Any]:
+def _change_response(*, action: str = "update", state: str = "pending") -> dict[str, Any]:
     return {
         "data": {
             "request": {
@@ -157,49 +159,30 @@ def _change_response(*, action: str = "create", state: str = "pending") -> dict[
     }
 
 
-async def test_create_feature_posts_with_token_and_returns_record() -> None:
+async def test_admin_proxy_headers_are_sent_when_configured() -> None:
     seen: dict[str, str] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["method"] = request.method
         seen["path"] = request.url.path
-        seen["token"] = request.headers.get("X-Kor-Travel-Map-Service-Token", "")
-        return httpx.Response(201, json=_change_response(action="create"))
-
-    client = _client(handler)
-    record = await client.create_feature(
-        {
-            "kind": "place",
-            "name": "새 장소",
-            "category": "01070100",
-            "marker_color": "P-13",
-            "marker_icon": "marker",
-            "reason": "user suggestion 123",
-        }
-    )
-    assert seen["method"] == "POST"
-    assert seen["path"] == "/v1/admin/features"
-    assert seen["token"] == "svc-tok"
-    assert record["request_id"] == "req-1"
-    assert record["action"] == "create"
-    await client.aclose()
-
-
-async def test_admin_proxy_headers_are_sent_when_configured() -> None:
-    seen: dict[str, str] = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
+        seen["service_token"] = request.headers.get("X-Kor-Travel-Map-Service-Token", "")
         seen["proxy_secret"] = request.headers.get("X-Kor-Travel-Map-Admin-Proxy-Secret", "")
         seen["actor"] = request.headers.get("X-Kor-Travel-Map-Actor", "")
-        return httpx.Response(201, json=_change_response(action="create"))
+        return httpx.Response(200, json={"data": {"issue_id": "issue-1"}, "meta": {}})
 
     client = _client(
         handler,
         admin_proxy_secret="proxy-secret",
         admin_actor="pinvi-operator",
     )
-    await client.create_feature({"reason": "x"})
-    assert seen == {"proxy_secret": "proxy-secret", "actor": "pinvi-operator"}
+    await client.patch_admin_issue("issue-1", action="acknowledge")
+    assert seen == {
+        "method": "PATCH",
+        "path": "/v1/admin/issues/issue-1",
+        "service_token": "svc-tok",
+        "proxy_secret": "proxy-secret",
+        "actor": "pinvi-operator",
+    }
     await client.aclose()
 
 
@@ -336,6 +319,28 @@ def test_list_features_signature_drops_pre_cutover_filter_arguments() -> None:
     assert "provider_dataset_id" in parameters
     assert "include_ended" in parameters
     assert not {"statuses", "providers", "dataset_keys"} & parameters
+
+
+def test_manual_feature_create_runtime_inventory_remains_closed() -> None:
+    feature_mutation_methods = {
+        name
+        for name in ("create_feature", "patch_feature", "delete_feature")
+        if callable(getattr(KorTravelMapAdminClient, name, None))
+    }
+    assert feature_mutation_methods == {"patch_feature", "delete_feature"}
+
+    runtime_source = inspect.getsource(kor_travel_map_admin_module)
+    assert "AdminFeatureCreateBFF" not in runtime_source
+    assert "X-Kor-Travel-Map-Admin-Feature-Create-Token" not in runtime_source
+    assert "_ADMIN_FEATURE_CREATE_TOKEN_HEADER" not in runtime_source
+    assert "Idempotency-Key" not in runtime_source
+    assert (
+        re.search(
+            r"_send\(\s*['\"]POST['\"]\s*,\s*['\"]/v1/admin/features['\"]",
+            runtime_source,
+        )
+        is None
+    )
 
 
 async def test_get_feature_detail_uses_admin_detail_path() -> None:
@@ -608,7 +613,7 @@ async def test_422_maps_to_bad_request_with_code() -> None:
         lambda r: httpx.Response(422, json={"code": "VALIDATION_ERROR", "status": 422})
     )
     with pytest.raises(KorTravelMapBadRequest) as exc_info:
-        await client.create_feature({"reason": "x"})
+        await client.patch_admin_issue("issue-1", action="acknowledge")
     assert exc_info.value.code == "VALIDATION_ERROR"
     await client.aclose()
 
@@ -622,7 +627,7 @@ async def test_5xx_retries_then_raises_unavailable() -> None:
 
     client = _client(handler)  # max_attempts=2
     with pytest.raises(KorTravelMapUnavailable):
-        await client.create_feature({"reason": "x"})
+        await client.patch_admin_issue("issue-1", action="acknowledge")
     assert calls["n"] == 2
     await client.aclose()
 

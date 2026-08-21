@@ -23,7 +23,7 @@ Usage:
   scripts/docker-app.sh reset
   scripts/docker-app.sh status
   scripts/docker-app.sh logs [api|web|postgres|rustfs]
-  scripts/docker-app.sh migrate   # migration + one-shot admin bootstrap
+  scripts/docker-app.sh migrate   # owner-only migration + one-shot admin bootstrap
   scripts/docker-app.sh smoke [--keep-running]
 
 Defaults:
@@ -139,8 +139,9 @@ require_python() {
 
 up_deps() {
   require_docker
-  log "starting Postgres + RustFS"
+  log "starting Postgres + runtime DB role + RustFS"
   compose up -d app-postgres app-rustfs app-rustfs-init
+  compose run --rm app-db-runtime-role
 }
 
 migrate() {
@@ -156,7 +157,7 @@ migrate() {
       --user "$(id -u):$(id -g)" \
       -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
       -v "$credential_file:$credential_file:ro" \
-      app-api pinvi-admin-bootstrap; then
+      app-migrator pinvi-admin-bootstrap; then
       return 0
     fi
     sleep 3
@@ -186,6 +187,7 @@ up() {
   pinvi_verify_or_remove_running_app
   wait_for_url "http://127.0.0.1:${RUSTFS_PORT}/health/live" "RustFS"
   wait_for_url "http://127.0.0.1:${API_PORT}/health" "API"
+  wait_for_url "http://127.0.0.1:${API_PORT}/health/feature-reference-reconciliation" "M05 worker"
   wait_for_url "http://127.0.0.1:${WEB_PORT}/" "Web"
   log "ready: API http://127.0.0.1:${API_PORT}, Web http://127.0.0.1:${WEB_PORT}, RustFS http://127.0.0.1:${RUSTFS_PORT}"
 }

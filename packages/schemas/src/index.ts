@@ -750,6 +750,22 @@ export type {
   AdminFeatureRequestResult,
 } from './admin_feature_request';
 export {
+  AdminFeatureReferenceReconciliationAttemptSchema,
+  AdminFeatureReferenceReconciliationReceiptSchema,
+  AdminFeatureReferenceReconciliationImpactSchema,
+  AdminFeatureReferenceReconciliationSummarySchema,
+  AdminFeatureReferenceReconciliationPagedResponseSchema,
+  AdminFeatureReferenceReconciliationDetailSchema,
+} from './admin_feature_reference_reconciliation';
+export type {
+  AdminFeatureReferenceReconciliationAttempt,
+  AdminFeatureReferenceReconciliationReceipt,
+  AdminFeatureReferenceReconciliationImpact,
+  AdminFeatureReferenceReconciliationSummary,
+  AdminFeatureReferenceReconciliationPagedResponse,
+  AdminFeatureReferenceReconciliationDetail,
+} from './admin_feature_reference_reconciliation';
+export {
   BoundaryLevelSchema,
   GeoSearchKindSchema,
   GeoCandidateListSchema,

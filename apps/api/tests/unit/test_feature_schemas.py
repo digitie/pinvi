@@ -182,6 +182,14 @@ class TestFeatureRequestCreate:
         )
         assert r.categories == ["카페", "디저트"]
 
+    def test_new_place_rejects_coordinate_outside_map_request_queue_range(self) -> None:
+        with pytest.raises(ValidationError, match=r"39\.5"):
+            FeatureRequestCreate(
+                kind="place",
+                title="북쪽 좌표",
+                coord=Coord(lon=127.0, lat=40.0),
+            )
+
     def test_title_too_long(self) -> None:
         with pytest.raises(ValidationError):
             FeatureRequestCreate(

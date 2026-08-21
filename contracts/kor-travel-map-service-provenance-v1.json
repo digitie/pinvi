@@ -8,9 +8,15 @@
     },
     "curation_snapshot": {
       "generation": 1
+    },
+    "feature_request": {
+      "generation": 1
+    },
+    "feature_reference_reconciliation": {
+      "generation": 1
     }
   },
-  "map_release_revision": "f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf",
-  "service_openapi_sha256": "8019e36f150ed006f5580e5ff224a0ba72030808b5303273f8c4c51aa0496431",
+  "map_release_revision": "037e24698f74e2067ea7c8572b044076dc0ac89c",
+  "service_openapi_sha256": "e1152a058e176f4f3aaeb4bb0965434f657601639786463f873ac82c6f3018eb",
   "version": 1
 }

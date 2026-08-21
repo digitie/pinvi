@@ -5,7 +5,8 @@ from __future__ import annotations
 import time
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +20,7 @@ from app.models.cache_target_sync import (
 )
 from app.schemas.health import (
     CacheTargetSyncHealthResponse,
+    FeatureReferenceReconciliationHealthResponse,
     HealthDbResponse,
     HealthResponse,
 )
@@ -146,3 +148,27 @@ async def cache_target_sync_health(
             )
         ),
     )
+
+
+@router.get(
+    "/health/feature-reference-reconciliation",
+    response_model=FeatureReferenceReconciliationHealthResponse,
+    responses={503: {"model": FeatureReferenceReconciliationHealthResponse}},
+)
+async def feature_reference_reconciliation_health(
+    request: Request,
+) -> FeatureReferenceReconciliationHealthResponse | JSONResponse:
+    """M05 paired worker의 permanent pairing fault를 token 없이 노출한다."""
+
+    fault = getattr(request.app.state, "feature_reference_reconciliation_runtime_fault", None)
+    enabled = settings.pinvi_kor_travel_map_feature_reference_reconciliation_enabled
+    response = FeatureReferenceReconciliationHealthResponse(
+        enabled=enabled,
+        ready=not enabled or fault is None,
+        fault=fault,
+    )
+    if enabled and fault is not None:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content=response.model_dump()
+        )
+    return response

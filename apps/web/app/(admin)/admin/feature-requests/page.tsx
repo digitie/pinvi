@@ -15,6 +15,7 @@ const STATUS_FILTERS = [
   { value: 'pending', label: '대기' },
   { value: 'approved', label: '승인' },
   { value: 'added', label: '반영' },
+  { value: 'duplicate', label: '중복' },
   { value: 'rejected', label: '거절' },
   { value: '', label: '전체' },
 ];
@@ -41,21 +42,35 @@ function ReviewPanel({
 }) {
   const isPending = request.status === 'pending';
   const isNewPlace = request.type === 'new_place';
+  const isCorrection = request.type === 'correction';
   const [accessReason, setAccessReason] = useState('');
+  const [name, setName] = useState('');
   const [category, setCategory] = useState('');
   const [markerColor, setMarkerColor] = useState('');
   const [markerIcon, setMarkerIcon] = useState('');
   const [err, setErr] = useState<string | null>(null);
 
   const approveMutation = useMutation({
-    mutationFn: () =>
-      adminApi(apiClient).approveFeatureRequest(request.request_id, {
+    mutationFn: () => {
+      const approval = {
         access_reason: accessReason.trim(),
-        category: category.trim() || undefined,
-        marker_color: markerColor.trim() || undefined,
-        marker_icon: markerIcon.trim() || undefined,
-      }),
-    onSuccess: () => onDone('제안을 승인해 kor_travel_map에 전달했습니다.'),
+        ...(isCorrection
+          ? {
+              name: name.trim() || undefined,
+              category: category.trim() || undefined,
+              marker_color: markerColor.trim() || undefined,
+              marker_icon: markerIcon.trim() || undefined,
+            }
+          : {}),
+      };
+      return adminApi(apiClient).approveFeatureRequest(request.request_id, approval);
+    },
+    onSuccess: () =>
+      onDone(
+        isNewPlace
+          ? '제안을 Map Feature 요청 큐에 제출했습니다.'
+          : '제안을 승인해 kor_travel_map에 전달했습니다.',
+      ),
     onError: (error) => setErr(error instanceof ApiError ? error.message : '승인에 실패했습니다.'),
   });
 
@@ -80,8 +95,11 @@ function ReviewPanel({
       setErr('검토 사유를 입력하세요.');
       return;
     }
-    if (isNewPlace && !(category.trim() && markerColor.trim() && markerIcon.trim())) {
-      setErr('신규 장소 승인은 카테고리 코드 / 마커 색 / 마커 아이콘이 필요합니다.');
+    if (
+      isCorrection &&
+      !(name.trim() || category.trim() || markerColor.trim() || markerIcon.trim())
+    ) {
+      setErr('정보 수정 승인에는 이름, 카테고리, 마커 색 또는 마커 아이콘을 하나 이상 입력하세요.');
       return;
     }
     setErr(null);
@@ -134,13 +152,16 @@ function ReviewPanel({
       {request.kor_travel_map_ref && (
         <div className="space-y-1 text-xs text-muted" data-testid="admin-fr-kor_travel_map-ref">
           <p className="break-all">kor_travel_map: {JSON.stringify(request.kor_travel_map_ref)}</p>
-          {upstreamRequestId && (
+          {upstreamRequestId && request.kor_travel_map_ref.review_mode !== 'feature_request_queue' && (
             <a
               href={`/admin/features/change-requests?q=${encodeURIComponent(upstreamRequestId)}`}
               className="text-primary underline-offset-2 hover:underline"
             >
               변경 요청 큐에서 보기
             </a>
+          )}
+          {upstreamRequestId && request.kor_travel_map_ref.review_mode === 'feature_request_queue' && (
+            <p>Map Feature 요청 큐 ID: {upstreamRequestId}</p>
           )}
         </div>
       )}
@@ -150,7 +171,22 @@ function ReviewPanel({
       ) : (
         <form onSubmit={approve} className="space-y-2">
           {isNewPlace && (
+            <p className="text-xs text-muted" data-testid="admin-fr-queue-payload-notice">
+              저장된 제안 내용 그대로 Map Feature 요청 큐에 제출합니다. 최종 분류와 마커는 Map 검토자가 결정합니다.
+            </p>
+          )}
+          {isCorrection && (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <label className="block text-xs text-muted">
+                이름
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className={inputClass}
+                  placeholder={request.name}
+                  data-testid="admin-fr-name"
+                />
+              </label>
               <label className="block text-xs text-muted">
                 카테고리 코드
                 <input
@@ -303,7 +339,7 @@ export default function AdminFeatureRequestsPage() {
   return (
     <AdminPage
       title="Feature 제안 검토"
-      description="사용자 feature 제안을 검토해 kor_travel_map에 반영하거나 거절"
+      description="사용자 feature 제안을 검토해 Map 요청 큐 또는 변경 API에 전달하거나 거절"
     >
       <FilterBar>
         <label htmlFor="admin-fr-status" className="text-xs text-muted">

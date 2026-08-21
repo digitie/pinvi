@@ -322,7 +322,7 @@ async def _assert_0053_catalog_contract(db: AsyncSession) -> None:
         )
     )
     assert boundary_definition is not None
-    assert "schema_revision = '20260814_0059'::text" in boundary_definition
+    assert "schema_revision = '20260821_0061'::text" in boundary_definition
 
     indexes = dict(
         (
@@ -770,9 +770,19 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
             assert "poi.deleted_at IS NULL" in old_definition
             await connection.execute(text(old_definition))
             # 이 regression은 head DB에서 historical 0053 catalog를 의도적으로
-            # 합성한다. 0057의 새 mapping receipt relation/function은 0053에는
-            # 없었다. 0059 backfill receipt가 mapping relation을 FK로 참조하므로
-            # 먼저 해당 후속 table을 제거한 뒤 실제 forward create 경로를 검증한다.
+            # 합성한다. 0057 이후의 mapping/backfill receipt와 M05 evidence
+            # relation/function은 0053에는 없었다. 후속 migration이 실제 CREATE
+            # 경로를 다시 실행하도록 먼저 모두 제거한다.
+            await connection.execute(
+                text(
+                    "DROP TABLE app.ktm_feature_reference_reconciliation_impacts, "
+                    "app.ktm_feature_reference_reconciliation_applied_receipts, "
+                    "app.ktm_feature_reference_reconciliation_delivery_attempts"
+                )
+            )
+            await connection.execute(
+                text("DROP FUNCTION app.guard_ktm_feature_reference_reconciliation_append_only()")
+            )
             await connection.execute(text("DROP TABLE app.ktm_curation_cutover_backfill_receipts"))
             await connection.execute(
                 text(
@@ -849,7 +859,7 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
             async with engine.connect() as connection:
                 assert (
                     await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
-                    == "20260814_0059"
+                    == "20260821_0061"
                 )
                 new_body = await connection.scalar(
                     text(
@@ -1040,8 +1050,10 @@ async def test_conditional_snapshot_rejects_legacy_not_modified_proof_chain(
         await db.rollback()
 
 
-async def test_0059_downgrade_is_fail_closed(_database_url: str) -> None:
-    with pytest.raises(RuntimeError, match="0059 downgrade would discard"):
+async def test_forward_only_downgrade_is_fail_closed(_database_url: str) -> None:
+    """head부터의 downgrade는 가장 가까운 forward-only migration에서 멈춘다."""
+
+    with pytest.raises(RuntimeError, match="forward-only"):
         _alembic(_database_url, "downgrade", "20260814_0058")
 
 

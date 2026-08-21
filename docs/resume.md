@@ -1,5 +1,36 @@
 # resume.md
 
+## 2026-08-21 (codex) — T-VN-M05 fresh paired 브라우저 증거 완료
+
+최신 M05 draft head의 fresh isolated PinVi DB에서 runtime role의 x_extension 권한을
+USAGE만으로 확인하고, 일반 POI 생성과 alias-map UUID shadow 이관을 성공시켰다. 이어 같은
+격리 Map/PinVi pair에서 M04 관리자 브라우저 승인 → Map manual_request final 승인 → Dagster
+candidate → Map rebind decision → PinVi applied receipt/영향 행 1건 → Map ACK → M05 관리자
+브라우저 receipt 검증을 끝냈다. 두 브라우저 E2E는 모두 통과했다.
+
+**다음 한 작업**: 현재 draft PR의 CI와 두 전문 적대 리뷰를 최종 확인한다. green/GO 상태가
+확정되면 M05는 merge 대기 상태로 두고 Hallmark audit/redesign을 별도 작업으로 시작한다.
+
+## 2026-08-21 (codex) — M05 final-boundary head 재결박
+
+M05 `0061` head의 append-only trigger enforcement를 final boundary의 service pin과 DB CHECK에도
+같이 반영했다. 이로써 head 전진 뒤 finalization이 fail-closed로 영구 중단하던 CI 회귀를 닫는다.
+표적 Postgres 테스트 5건은 통과했다.
+
+**다음 한 작업**: 이 보정을 최신 main에 rebase·push하고 PinVi CI를 확인한다. 이어 Map CI와
+N150의 격리 paired browser E2E가 모두 성공하기 전에는 M05 activation이나 Hallmark 재설계를
+시작하지 않는다.
+
+## 2026-08-21 (codex) — T-VN-M04/M05 paired live browser evidence
+
+M04 관리자 승인부터 Map rebind, PinVi applied receipt, Map ACK와 M05 관리자 읽기 전용 화면까지
+같은 N150 격리 stack에서 실제 browser E2E로 확인했다. receipt action·Feature 쌍·영향 행 수는
+definition list의 정확한 label/value DOM 쌍으로 검증한다.
+
+**다음 한 작업**: fresh runtime role이 app.trip_day_pois를 정상 변경하도록 x_extension schema
+USAGE를 bootstrap/migration에 영구 부여하고 fresh DB paired E2E를 재확인한다. 그 전에는 M05
+activation과 Hallmark 재설계를 시작하지 않는다.
+
 ## 2026-08-21 (claude) — T-321 완료(전제 정정 + CI 실행 범위 교정)
 
 **방금**: "vitest가 워커 실패 파일을 조용히 건너뛰고 exit 0"이라는 T-321의 전제가 틀렸음을 적대적
@@ -20,6 +51,97 @@ Zod 미러 3곳(detail-card는 각각 5·7 arm 동시)에서 제거했다. 저�
 
 **다음 한 작업**: T-273(v1.0.0 E2E/Live gate) — 남은 hard blocker는 geofence 운영 설정이다.
 모바일 후속(T-311/T-318/T-319/T-320)과 T-321(vitest 조용한 누락)은 별도 PR로 분리해 뒀다.
+## 2026-08-21 (codex) — T-VN-M05 runtime DB owner 분리
+
+M05 evidence는 runtime non-owner/non-superuser login에서만 API/Dagster가 접근한다. owner URL은
+`app-migrator` migration/restore one-shot에만 두며, runtime이 trigger disable·owner `SET ROLE`·replica
+bypass를 할 수 없다는 실제 PostgreSQL integration test를 추가했다. Map permanent pairing fault는
+external code를 노출하지 않는 fixed health enum으로 기록되고, enabled state에서는 dedicated readiness가
+503으로 전환된다. disposable source→fresh target의 actual no-owner restore에서도 evidence row 1건,
+runtime query, trigger disable/direct update 거부를 확인했다. mock E2E는 configured isolated port에서
+자체 Next server를 띄운다.
+
+**다음 한 작업**: 이 DB role/restore 보강을 전문 적대 리뷰로 재검증하고, exact Map/PinVi draft pair를
+N150 isolated stack에 올려 M04 request → M05 decision → PinVi receipt/UI → Map ACK browser E2E와
+실제 `pg_dump → pg_restore --no-owner --no-privileges` runtime-role drill을 완료한다. 그 전 activation은
+계속 `false`다.
+
+## 2026-08-21 (codex) — T-VN-M05 적대 재심 보정
+
+M05 local evidence는 동일 blocked observation을 중복 append하지 않고, `ENABLE ALWAYS`
+append-only trigger와 strict ACK cursor를 사용한다. Map 401/403/422/503 pairing fault는 worker를
+정지하고 health에만 비밀 없는 fault를 표시한다. admin evidence page는 DB pagination과
+applied/blocked terminal shape validation을 쓴다. single-role fresh restore는 schema ownership을
+확인하고, 분리 role은 `PINVI_RESTORE_APP_ROLE` grant를 다시 적용한다.
+
+**다음 한 작업**: 전문 적대 재심 결과를 반영하고 exact Map/PinVi draft pair의 N150 격리 stack에서
+M04 request → M05 Map decision → PinVi receipt/UI → Map ACK 실제 browser E2E를 실행한다. 이 전에는
+activation을 계속 `false`로 둔다.
+
+## 2026-08-21 (codex) — T-VN-M05 reconciliation evidence admin 읽기 경계
+
+admin/operator가 terminal receipt, blocked observation, row-level impact를 읽는 전용 API/UI를
+추가했다. 이 화면은 Map subscription/lease/ACK를 바꾸지 않으며, blocked event를 applied로
+표시하지 않는다.
+
+**다음 한 작업**: curation receipt-bound·미종결 suggestion·동시 consumer race를 실제 PostGIS
+통합 검증으로 보강하고, 13805/N150 격리 UI E2E의 서버 응답 문제를 해결한다. PostGIS 7건과
+fresh destination no-owner restore drill은 통과했다. activation은 전문 적대 리뷰와 paired live
+E2E가 끝날 때까지 `false`다.
+
+## 2026-08-21 (codex) — T-VN-M05 PinVi local receipt·worker 구현
+
+Map `037e24698f74e2067ea7c8572b044076dc0ac89c` exact service vendor를 기준으로
+`20260821_0060` append-only migration, strict read/ACK transport, event UUID advisory lock local
+projection과 default-off paired worker를 구현했다. final local receipt commit 전에는 Map ACK을
+호출하지 않으며 partial pair 등 unsafe row는 immutable blocked attempt로만 남긴다.
+
+**다음 한 작업**: admin evidence read UI와 curation receipt-bound/nonterminal target/race/restore
+검증을 보강한다. M05 activation은 PinVi consumer/UI, N150 격리 paired live E2E, no-owner restore
+drill, 전문 적대 리뷰가 모두 끝날 때까지 `false`다.
+
+## 2026-08-21 (codex) — T-VN-M05 Map delivery 계약 재vendor
+
+Map PR #1029 head `037e24698f74e2067ea7c8572b044076dc0ac89c`의 full/service/user OpenAPI를
+Pinvi vendor와 byte 단위로 대조했다. SHA-256은 각각
+`697a08c475fc28ba730af1dd14da89998a3a56cafbfb7676bfb3fa4a0b9ef6fd` /
+`e1152a058e176f4f3aaeb4bb0965434f657601639786463f873ac82c6f3018eb` /
+`489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b`다. M05 delivery 표면이
+포함된 full/service vendor와 release/provenance/CI digest를 정확히 갱신했다.
+
+**다음 한 작업**: vendored service 계약으로 Pinvi M05 reconciliation consumer와 admin UI를 구현한다.
+그 뒤 exact draft pair의 isolated mutating UI E2E와 실제 `pg_restore --no-owner --no-privileges`
+drill을 모두 통과하기 전에는 activation receipt를 계속 만들지 않는다.
+
+## 2026-08-20 (codex) — T-VN-M04 범용 Feature 요청 큐 소비자 전환
+
+Map draft PR #1029 rebased head `fa6d0d3d10456401993e12bb5f726abad4bce413`의 full/service/user
+OpenAPI가 Pinvi vendor와 byte-exact함을 다시 확인했다. SHA-256은 각각
+`590f49d1c4abe6558cf46da5a4a4b6b787bb007c3194c07f343f97a3b6b8d9be` /
+`c878531af2acdea0a25861d81f2e87f4768244d8ff37b94cb610194e3db85c96` /
+`489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b`로 바뀌지 않았다.
+vendor bytes는 수정하지 않고 Admin/ops/user/service/feature-request의 source/release pin과 packaged
+service provenance만 새 head로 옮겼다. 관련 contract test `67 passed`, 변경 Python Ruff check/format,
+provenance JSON/hash와 세 profile `cmp` 검증을 통과했다.
+`new_place` 승인은 별도 `PINVI_KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`으로
+`POST /v1/service/feature-requests`에 suggestion UUID를 body `request_id`와 `Idempotency-Key`에 함께
+제출한다. `pending` receipt는 Pinvi `approved`, verified `exact_conflict`는 `duplicate`로만 전이한다.
+전달한 `X-Request-Id`는 HTTP call log와 Map `meta.request_id`에 정확히 일치해야 한다. 헤더가 없으면
+middleware가 생성한 응답 request ID를 audit·Map 호출에 재사용한다. 409·422·전송/5xx·응답 계약 오류는 Pinvi row/ref/audit를 보존해 재시도할 수 있다. correction/closure는
+기존 admin PATCH/DELETE 자격과 경로를 유지하며, 두 client는 유형별로만 지연 해석한다.
+Map success envelope의 좌표는 JSON number만 허용하고 correction marker palette는 `P-01`~`P-16`으로
+동기화했다.
+
+Map의 요청 큐 좌표 상한 39.5를 Pinvi `new_place` 입력(Pydantic/Zod)에 맞춰, 나중에 승인 불가능한
+제안이 쌓이지 않게 했다. 기존 범위 밖 row는 Map 호출 없이 명시 422로 남겨 관리자가 거절/재접수할 수
+있고, 신규 장소 재시도는 저장된 immutable payload만 사용한다. Map #1029와 Pinvi #458은 draft이므로
+production completion receipt는 만들지 않는다. queue 전용 live-mutating spec/runbook은 추가했지만,
+Map API가 떠 있는 compatible draft pair가 없으므로 N150 UI E2E는 아직 실행하지 않았다.
+현재 PinVi worktree의 격리 `127.0.0.1:13805` mock UI E2E는 3건 통과했으나 Map live 증거로
+대체하지 않는다.
+
+**다음 한 작업**: draft PR #458의 rebased-head provenance CI와 전문 적대 재심을 통과시킨다. 그 뒤
+compatible draft pair로 N150 격리 UI E2E를 실행한다.
 
 
 ## 2026-08-19 (codex) — T-VN-42 Admin 계약 소비 폐쇄

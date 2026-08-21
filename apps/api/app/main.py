@@ -22,6 +22,7 @@ from app.clients.kor_travel_map_curation import (
     curation_cutover_mapping_service_client_lifespan,
     curation_snapshot_service_client_lifespan,
 )
+from app.clients.kor_travel_map_feature_request import feature_request_service_client_lifespan
 from app.clients.naver_local import naver_local_client_lifespan
 from app.core.config import settings
 from app.core.errors import http_exception_handler, validation_exception_handler
@@ -37,6 +38,9 @@ from app.middleware.security_headers import (
 )
 from app.services.cache_target_sync_worker import cache_target_sync_worker_lifespan
 from app.services.email_service import email_outbox_worker_lifespan
+from app.services.feature_reference_reconciliation_worker import (
+    feature_reference_reconciliation_worker_lifespan,
+)
 from app.services.location_audit import location_audit_outbox_worker_lifespan
 from app.services.telegram_outbox import telegram_outbox_worker_lifespan
 
@@ -58,6 +62,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     async with (
         kor_travel_map_client_lifespan(app),
         kor_travel_map_admin_client_lifespan(app),
+        feature_request_service_client_lifespan(app),
         curation_snapshot_service_client_lifespan(app),
         curation_cutover_mapping_service_client_lifespan(app),
         kor_travel_geo_client_lifespan(app),
@@ -67,6 +72,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         location_audit_outbox_worker_lifespan(app),
         telegram_outbox_worker_lifespan(app),
         cache_target_sync_worker_lifespan(app),
+        feature_reference_reconciliation_worker_lifespan(app),
     ):
         yield
     log.info("pinvi.api.stop")

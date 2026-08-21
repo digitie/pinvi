@@ -212,7 +212,7 @@ export const FeatureCategorySchema = z.object({
 });
 export type FeatureCategory = z.infer<typeof FeatureCategorySchema>;
 
-/** Feature 요청 큐 등록 (Admin 검토 → kor_travel_map feature change). */
+/** Feature 요청 큐 등록 (Admin 검토 뒤 신규 장소는 Map 범용 요청 큐로 제출). */
 export const FeatureRequestCategorySchema = z.string().min(1).max(80);
 
 export const FeatureRequestTypeSchema = z.enum(['new_place', 'correction', 'closure']);
@@ -258,6 +258,10 @@ export const FeatureRequestCreateSchema = z
   .refine((v) => v.type !== 'new_place' || v.target_feature_id == null, {
     message: 'new_place 제안은 target_feature_id를 가질 수 없습니다.',
     path: ['target_feature_id'],
+  })
+  .refine((v) => v.type !== 'new_place' || v.coord.lat <= 39.5, {
+    message: 'new_place 제안 좌표의 lat은 39.5 이하여야 합니다.',
+    path: ['coord', 'lat'],
   })
   .refine((v) => v.external_ref == null || v.type === 'new_place', {
     message: '외부 참조(external_ref) 제안은 new_place만 가능합니다.',
