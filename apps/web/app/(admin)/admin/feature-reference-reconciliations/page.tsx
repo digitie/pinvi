@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -59,6 +60,10 @@ const statusLabel = (status: string) => STATUS_LABELS[status] ?? status;
 const actionLabel = (action: string) => ACTION_LABELS[action] ?? action;
 const outcomeLabel = (outcome: string) => OUTCOME_LABELS[outcome] ?? outcome;
 const relationLabel = (relation: string) => TARGET_RELATION_LABELS[relation] ?? relation;
+
+function findCurrentFocusTarget(testId: string | null): HTMLElement | null {
+  return testId ? document.querySelector<HTMLElement>(`[data-testid="${testId}"]`) : null;
+}
 
 interface EvidenceField {
   label: string;
@@ -503,6 +508,8 @@ export default function AdminFeatureReferenceReconciliationsPage() {
   const [page, setPage] = useState(1);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const detailReturnFocusRef = useRef<HTMLElement | null>(null);
+  const detailReturnFocusTestIdRef = useRef<string | null>(null);
+  const pendingDetailFocusRestoreRef = useRef(false);
   const detailInitialFocusRef = useRef<HTMLParagraphElement | null>(null);
   const listQuery = useQuery({
     queryKey: queryKeys.admin.featureReferenceReconciliations({ status: statusFilter, page }),
@@ -539,9 +546,38 @@ export default function AdminFeatureReferenceReconciliationsPage() {
     row: AdminFeatureReferenceReconciliationSummary,
   ) => {
     detailReturnFocusRef.current = event.currentTarget;
+    detailReturnFocusTestIdRef.current = event.currentTarget.dataset.testid ?? null;
     setSelectedEventId(row.event_id);
   };
+  const focusAfterDialogTeardown = useCallback((resolveTarget: () => HTMLElement | null) => {
+    let remainingFrames = 8;
+    const tryFocus = () => {
+      const target = resolveTarget();
+      if (
+        target &&
+        document.contains(target) &&
+        !(target as HTMLElement & { disabled?: boolean }).disabled &&
+        target.closest('[inert]') === null
+      ) {
+        target.focus({ preventScroll: true });
+        return;
+      }
+      remainingFrames -= 1;
+      if (remainingFrames > 0) window.requestAnimationFrame(tryFocus);
+    };
+    window.requestAnimationFrame(tryFocus);
+  }, []);
+  useEffect(() => {
+    if (selectedEventId !== null || !pendingDetailFocusRestoreRef.current) return;
+    pendingDetailFocusRestoreRef.current = false;
+    focusAfterDialogTeardown(
+      () =>
+        findCurrentFocusTarget(detailReturnFocusTestIdRef.current) ??
+        detailReturnFocusRef.current,
+    );
+  }, [focusAfterDialogTeardown, selectedEventId]);
   const closeDetail = () => {
+    pendingDetailFocusRestoreRef.current = true;
     setSelectedEventId(null);
   };
   const columns: AdminTableColumn<AdminFeatureReferenceReconciliationSummary>[] = [

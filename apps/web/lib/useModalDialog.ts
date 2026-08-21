@@ -264,6 +264,9 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
   useEffect(() => {
     if (!active || !portalNode) return;
     portalNode.dataset.modalPortal = '';
+    // portal 자체는 layout box를 만들지 않는다. fixed scrim/panel만 viewport 레이어에 남겨
+    // 모바일 nav의 가로 scroll area가 root scrollWidth로 새지 않게 한다.
+    portalNode.style.display = 'contents';
     document.body.appendChild(portalNode);
     modalContainers.set(generatedTitleId, portalNode);
     syncBackgroundInert();

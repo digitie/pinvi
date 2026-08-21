@@ -86,6 +86,10 @@ const textFromUnknown = (value: unknown) => {
   return JSON.stringify(value);
 };
 
+function findCurrentFocusTarget(testId: string | null): HTMLElement | null {
+  return testId ? document.querySelector<HTMLElement>(`[data-testid="${testId}"]`) : null;
+}
+
 function StatusBadge({ status }: { status: string }) {
   return (
     <span
@@ -570,6 +574,8 @@ export default function AdminFeatureRequestsPage() {
   const [selected, setSelected] = useState<AdminFeatureRequestSummary | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const reviewReturnFocusRef = useRef<HTMLElement | null>(null);
+  const reviewReturnFocusTestIdRef = useRef<string | null>(null);
+  const pendingReviewFocusRestoreRef = useRef(false);
   const noticeRef = useRef<HTMLParagraphElement | null>(null);
   const pendingNoticeFocusRef = useRef(false);
 
@@ -591,6 +597,16 @@ export default function AdminFeatureRequestsPage() {
     };
     window.requestAnimationFrame(tryFocus);
   }, []);
+
+  useEffect(() => {
+    if (selected !== null || !pendingReviewFocusRestoreRef.current) return;
+    pendingReviewFocusRestoreRef.current = false;
+    focusAfterDialogTeardown(
+      () =>
+        findCurrentFocusTarget(reviewReturnFocusTestIdRef.current) ??
+        reviewReturnFocusRef.current,
+    );
+  }, [focusAfterDialogTeardown, selected]);
 
   useEffect(() => {
     if (!notice || !pendingNoticeFocusRef.current) return;
@@ -621,11 +637,13 @@ export default function AdminFeatureRequestsPage() {
 
   const openReview = (request: AdminFeatureRequestSummary, trigger: HTMLElement) => {
     reviewReturnFocusRef.current = trigger;
+    reviewReturnFocusTestIdRef.current = trigger.dataset.testid ?? null;
     setSelected(request);
     setNotice(null);
   };
 
   const closeReview = () => {
+    pendingReviewFocusRestoreRef.current = true;
     setSelected(null);
   };
 
