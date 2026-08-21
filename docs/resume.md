@@ -7,8 +7,8 @@ focus를 되돌리고, background inert와 root scroll lock을 안전하게 정�
 독립 가로 scroll rail로 남기면서 dialog open 때 root width에 전파하지 않는다. N150 격리
 Playwright 전체 M04/M05 browser E2E 19건과 두 전문 적대 리뷰 P0/P1=0은 통과했다.
 
-**다음 한 작업**: 이 draft PR의 GitHub CI를 최종 확인한다. green/GO 전에는 draft를 유지하고
-merge하지 않는다.
+**상태**: 전문 적대 리뷰 P0/P1=0과 GitHub CI green이 확인됐다. draft를 유지하며 ready 또는
+merge에 관한 사용자 지시를 기다린다.
 
 ## 2026-08-21 (codex) — T-VN-M05 fresh paired 브라우저 증거 완료
 

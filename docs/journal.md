@@ -13,8 +13,8 @@
   inline 값을 복원한다.
 - N150 격리 Playwright에서 M04/M05 전체 browser E2E 19건(포커스·320/375/414/768px root
   overflow 포함)을 통과시켰다. 두 전문 적대 리뷰는 모두 P0/P1 없이 GO를 냈고, 시각 리뷰는
-  nav 자체 scrollLeft 이동·4개 폭 dialog 경계·root 비스크롤도 실측했다. GitHub CI만 draft PR에서
-  계속 확인한다.
+  nav 자체 scrollLeft 이동·4개 폭 dialog 경계·root 비스크롤도 실측했다. GitHub CI의
+  lint/typecheck/unit/build와 e2e도 모두 green이며 draft는 그대로 유지한다.
 
 ## 2026-08-21 (codex) — T-VN-M04/M05 fresh non-owner paired 브라우저 E2E 재완료
 
