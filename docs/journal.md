@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-21 (codex) — Hallmark Admin M04/M05 반응형·접근성 재설계
+
+- 잠긴 PinVi `modern-minimal · Workbench` 디자인 시스템 안에서 M04 제안 검토와 M05
+  참조 조정 증거 화면을 정비했다. 다이얼로그가 목록 재렌더 뒤에도 현재 보이는 trigger를
+  `data-testid`로 다시 찾아 키보드·데스크톱·모바일 focus를 복원하고, 관리하는 배경 inert만
+  해제하도록 경계를 좁혔다.
+- 전문 적대 시각 리뷰가 확인한 모바일 nav scroll rail의 폭 전파는 `[contain:layout_paint]`로
+  막되 rail 자체의 가로 스크롤은 유지했다. 모달의 root scroll lock도 중첩 모달 종료 시 원래
+  inline 값을 복원한다.
+- N150 격리 Playwright에서 M04/M05 전체 browser E2E 19건(포커스·320/375/414/768px root
+  overflow 포함)을 통과시켰다. 두 전문 적대 리뷰와 GitHub CI의 최종 확인은 draft PR에서
+  계속 진행한다.
+
 ## 2026-08-21 (codex) — T-VN-M04/M05 fresh non-owner paired 브라우저 E2E 재완료
 
 - 새 격리 PinVi DB를 branch head로 다시 올려 runtime login의 x_extension 권한이

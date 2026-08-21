@@ -4,6 +4,11 @@
 
 ## Unreleased
 
+- Admin M04 제안 검토와 M05 참조 조정 증거 dialog가 목록 재렌더 뒤에도 실제로 보이는
+  trigger에 keyboard focus를 되돌린다. 모바일 Admin nav의 가로 이동은 유지하면서 dialog를
+  열어도 페이지 root가 가로로 넘치지 않게 했고, 중첩 dialog의 scroll lock도 마지막 dialog가
+  닫힐 때 원래 상태로 되돌린다.
+
 - Admin의 신규 장소(`new_place`) 제안 승인은 Map의 범용 요청 큐로 immutable 제출한다. 제안 UUID는
   body `request_id`와 `Idempotency-Key`에 같은 값으로 전송되고, Map `pending` receipt 뒤에만 Pinvi
   승인이 완료된다. 이미 같은 identity의 feature가 확인된 `exact_conflict`만 duplicate로 끝난다.
