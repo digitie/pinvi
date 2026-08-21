@@ -605,6 +605,7 @@ async def test_non_owner_runtime_login_cannot_disable_or_bypass_m05_evidence_gua
     guarded_statements = (
         "SET LOCAL session_replication_role = replica",
         "ALTER TABLE app.ktm_feature_reference_reconciliation_delivery_attempts DISABLE TRIGGER USER",
+        "DROP SCHEMA app CASCADE",
         "SET ROLE pinvi",
         "UPDATE app.ktm_feature_reference_reconciliation_delivery_attempts "
         "SET status = status WHERE event_id = :event_id",

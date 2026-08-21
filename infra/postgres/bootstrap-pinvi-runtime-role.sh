@@ -52,10 +52,10 @@ SQL
 
 runtime_role_safe="$(psql --no-password --tuples-only --no-align --host=app-postgres \
   --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
-  --command="SELECT r.rolcanlogin AND NOT r.rolsuper AND NOT r.rolcreaterole AND NOT r.rolcreatedb AND NOT r.rolreplication AND NOT pg_has_role(r.oid, current_user, 'member') AND r.oid <> current_user::regrole AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'app' AND c.relowner = r.oid) FROM pg_roles r WHERE r.rolname = '${PINVI_APP_DB_USER}'" )"
+  --command="SELECT r.rolcanlogin AND NOT r.rolsuper AND NOT r.rolcreaterole AND NOT r.rolcreatedb AND NOT r.rolreplication AND NOT pg_has_role(r.oid, current_user, 'member') AND r.oid <> current_user::regrole AND NOT EXISTS (SELECT 1 FROM pg_namespace n WHERE n.nspname = 'app' AND (n.nspowner = r.oid OR pg_has_role(r.oid, n.nspowner, 'member'))) AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'app' AND (c.relowner = r.oid OR pg_has_role(r.oid, c.relowner, 'member'))) FROM pg_roles r WHERE r.rolname = '${PINVI_APP_DB_USER}'" )"
 unset PGPASSWORD
 
 if [ "${runtime_role_safe}" != "t" ]; then
-  echo "runtime DB role is privileged, owner, or inherits the migration owner" >&2
+  echo "runtime DB role is privileged, owns or inherits the app schema/table owner, or inherits the migration owner" >&2
   exit 3
 fi

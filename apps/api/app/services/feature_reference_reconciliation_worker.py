@@ -121,7 +121,9 @@ async def _worker_loop(
                     exc.status_code,
                 )
                 return
-            logger.error("feature reference reconciliation service problem", exc_info=True)
+            logger.error(
+                "feature reference reconciliation service problem: HTTP %s", exc.status_code
+            )
             await asyncio.sleep(
                 config.pinvi_kor_travel_map_feature_reference_reconciliation_poll_seconds
             )
@@ -194,10 +196,10 @@ async def feature_reference_reconciliation_worker_lifespan(app: FastAPI) -> Asyn
             FeatureReferenceReconciliationProblem,
             FeatureReferenceReconciliationContractError,
             FeatureReferenceReconciliationUnavailable,
-        ) as exc:
+        ):
             raise RuntimeError(
                 "M05 reconciliation Map subscription/readiness preflight가 실패했습니다."
-            ) from exc
+            ) from None
         task = asyncio.create_task(
             _worker_loop(
                 session_factory=db_session.async_session_factory,

@@ -147,3 +147,5 @@ def test_m05_evidence_runtime_uses_non_owner_database_login() -> None:
     assert "NOINHERIT" in bootstrap
     assert "ALTER DEFAULT PRIVILEGES" in bootstrap
     assert "c.relowner = r.oid" in bootstrap
+    assert "n.nspowner = r.oid" in bootstrap
+    assert "pg_has_role(r.oid, n.nspowner, 'member')" in bootstrap

@@ -64,6 +64,8 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
     calls = invocation_log.read_text(encoding="utf-8").splitlines()
     assert calls[0].startswith("psql:")
     assert "FROM pg_roles" in calls[0]
+    assert "n.nspowner = r.oid" in calls[0]
+    assert "pg_has_role(r.oid, n.nspowner, 'member')" in calls[0]
     assert calls[1].startswith("psql:")
     assert 'CREATE SCHEMA IF NOT EXISTS "app"' in calls[1]
     assert calls[2].startswith("pg_restore:")
@@ -119,3 +121,5 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
     assert len(calls) == 1
     assert calls[0].startswith("psql:")
     assert "FROM pg_roles" in calls[0]
+    assert "n.nspowner = r.oid" in calls[0]
+    assert "pg_has_role(r.oid, n.nspowner, 'member')" in calls[0]
