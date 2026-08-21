@@ -92,7 +92,7 @@ export interface ModalDialogA11y {
 
 // 여러 모달이 동시에 스크롤을 잠글 수 있으므로, 마지막 하나가 풀릴 때만 원복한다.
 let scrollLockCount = 0;
-let previousBodyOverflow: string | null = null;
+let previousBodyOverflowY: string | null = null;
 
 const FOCUSABLE_SELECTOR = [
   'a[href]',
@@ -344,15 +344,17 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
   useEffect(() => {
     if (!active || !lockScroll) return;
     if (scrollLockCount === 0) {
-      previousBodyOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
+      // `overflow` shorthand는 globals.css의 `overflow-x: clip`까지 hidden으로 덮어
+      // 열린 모달에서 programmatic root horizontal scroll을 다시 허용한다.
+      previousBodyOverflowY = document.body.style.overflowY;
+      document.body.style.overflowY = 'hidden';
     }
     scrollLockCount += 1;
     return () => {
       scrollLockCount -= 1;
       if (scrollLockCount === 0) {
-        document.body.style.overflow = previousBodyOverflow ?? '';
-        previousBodyOverflow = null;
+        document.body.style.overflowY = previousBodyOverflowY ?? '';
+        previousBodyOverflowY = null;
       }
     };
   }, [active, lockScroll]);
