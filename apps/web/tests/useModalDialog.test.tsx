@@ -74,11 +74,15 @@ describe('useModalDialog', () => {
 
   it('열리면 root 스크롤을 잠그고 닫히면 복원한다', () => {
     const root = document.documentElement;
+    const body = document.body;
     expect(root.style.overflow).toBe('');
+    expect(body.style.overflow).toBe('');
     const { unmount } = render(<Harness onClose={vi.fn()} />);
     expect(root.style.overflow).toBe('clip');
+    expect(body.style.overflow).toBe('clip');
     unmount();
     expect(root.style.overflow).toBe('');
+    expect(body.style.overflow).toBe('');
   });
 
   it('열리면 패널로 포커스를 옮긴다', async () => {

@@ -545,8 +545,9 @@ export default function AdminFeatureReferenceReconciliationsPage() {
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
         const target = resolveTarget();
-        if (!target || !document.contains(target) || target.closest('[inert]')) return;
+        if (!target || !document.contains(target)) return;
         if ((target as HTMLElement & { disabled?: boolean }).disabled) return;
+        target.closest('[inert]')?.removeAttribute('inert');
         target.focus({ preventScroll: true });
       });
     });

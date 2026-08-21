@@ -580,9 +580,9 @@ export default function AdminFeatureRequestsPage() {
       if (
         target &&
         document.contains(target) &&
-        target.closest('[inert]') === null &&
         !(target as HTMLElement & { disabled?: boolean }).disabled
       ) {
+        target.closest('[inert]')?.removeAttribute('inert');
         target.focus({ preventScroll: true });
         return;
       }

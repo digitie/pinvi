@@ -95,6 +95,7 @@ export interface ModalDialogA11y {
 // 여러 모달이 동시에 스크롤을 잠글 수 있으므로, 마지막 하나가 풀릴 때만 원복한다.
 let scrollLockCount = 0;
 let previousDocumentOverflow: string | null = null;
+let previousBodyOverflow: string | null = null;
 
 const FOCUSABLE_SELECTOR = [
   'a[href]',
@@ -359,17 +360,21 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
   useEffect(() => {
     if (!active || !lockScroll) return;
     if (scrollLockCount === 0) {
-      // `clip`과 `hidden`을 축별로 섞으면 CSS overflow 계산이 x축 clip을 hidden으로 바꾼다.
-      // root 전체를 clip으로 잠가 가로 누출 없이 배경 스크롤을 멈춘다.
+      // root/body 모두 clip으로 잠가, 축별 `clip`/`hidden` 조합이 x축 clip을 hidden으로
+      // 계산해 programmatic horizontal scroll을 다시 허용하는 일을 막는다.
       previousDocumentOverflow = document.documentElement.style.overflow;
+      previousBodyOverflow = document.body.style.overflow;
       document.documentElement.style.overflow = 'clip';
+      document.body.style.overflow = 'clip';
     }
     scrollLockCount += 1;
     return () => {
       scrollLockCount -= 1;
       if (scrollLockCount === 0) {
         document.documentElement.style.overflow = previousDocumentOverflow ?? '';
+        document.body.style.overflow = previousBodyOverflow ?? '';
         previousDocumentOverflow = null;
+        previousBodyOverflow = null;
       }
     };
   }, [active, lockScroll]);
