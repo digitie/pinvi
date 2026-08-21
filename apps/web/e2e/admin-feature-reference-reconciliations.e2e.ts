@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const adminUser = {
   user_id: '77777777-7777-4777-8777-777777777777',
@@ -44,10 +44,32 @@ const receipt = {
   replacement_feature_id: 'feature-new',
   replacement_feature_uuid: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
   impact_root_sha256: 'f'.repeat(64),
-  impact_count: 1,
+  impact_count: 3,
   receipt_sha256: '0'.repeat(64),
   applied_at: '2026-08-21T10:00:00+09:00',
 };
+
+async function expectNoRootHorizontalScroll(page: Page) {
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        body: document.body.scrollWidth <= document.body.clientWidth,
+        html: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      })),
+    )
+    .toEqual({ body: true, html: true });
+}
+
+async function expectTouchTarget(page: Page, testId: string) {
+  const box = await page.getByTestId(testId).boundingBox();
+  expect(box, `${testId} bounding box`).not.toBeNull();
+  expect(Math.round(box!.width), `${testId} width`).toBeGreaterThanOrEqual(44);
+  expect(Math.round(box!.height), `${testId} height`).toBeGreaterThanOrEqual(44);
+}
+
+async function expectInInitialViewport(page: Page, testId: string) {
+  await expect(page.getByTestId(testId)).toBeInViewport({ ratio: 1 });
+}
 
 test.beforeEach(async ({ page }) => {
   await page.route(
@@ -120,6 +142,30 @@ test.beforeEach(async ({ page }) => {
                 outcome: 'rebind',
                 recorded_at: '2026-08-21T10:00:00+09:00',
               },
+              {
+                event_id: appliedEventId,
+                impact_index: 1,
+                target_relation: 'saved_feature_refs',
+                target_id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+                old_feature_id: 'feature-old',
+                old_feature_uuid: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                replacement_feature_id: null,
+                replacement_feature_uuid: null,
+                outcome: 'detach',
+                recorded_at: '2026-08-21T10:00:01+09:00',
+              },
+              {
+                event_id: appliedEventId,
+                impact_index: 2,
+                target_relation: 'trip_notes',
+                target_id: '99999999-9999-4999-8999-999999999999',
+                old_feature_id: 'feature-old',
+                old_feature_uuid: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                replacement_feature_id: 'feature-new',
+                replacement_feature_uuid: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+                outcome: 'already_reconciled',
+                recorded_at: '2026-08-21T10:00:02+09:00',
+              },
             ],
           },
         }),
@@ -147,36 +193,98 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
-test('Admin이 M05 receipt와 blocked evidence를 읽기 전용으로 확인한다', async ({ page }) => {
+test('Admin이 M05 receipt와 blocked evidence를 Dialog에서 읽기 전용으로 확인한다', async ({
+  page,
+}) => {
   const evidenceRequests: string[] = [];
+  const mutationRequests: string[] = [];
   page.on('request', (request) => {
     const url = new URL(request.url());
     if (url.port === '12801' && url.pathname.startsWith('/admin/feature-reference-reconciliations')) {
       evidenceRequests.push(`${request.method()} ${url.pathname}`);
+      if (request.method() !== 'GET') mutationRequests.push(`${request.method()} ${url.pathname}`);
     }
   });
   await page.goto('/admin/feature-reference-reconciliations');
 
   await expect(page.getByRole('heading', { name: 'Feature 참조 조정 증거' })).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'blocked' })).toBeVisible();
+  await expect(page.getByText('차단됨')).toBeVisible();
   await page.getByTestId(`admin-frr-detail-${blockedEventId}`).click();
 
+  const dialog = page.getByRole('dialog', { name: 'Feature 참조 조정 증거 상세' });
+  await expect(dialog).toBeVisible();
   const blockedDetail = page.getByTestId('admin-frr-detail');
-  await expect(blockedDetail).toContainText('local mutation과 ACK를 중단한 blocked event');
+  await expect(page.getByTestId('admin-frr-readonly-boundary')).toContainText('읽기 전용');
+  await expect(blockedDetail).toContainText('blocked 관측으로 local mutation과 ACK를 중단했습니다.');
   await expect(blockedDetail).toContainText(blockedAttempt.block_fingerprint_sha256);
   await expect(blockedDetail).toContainText(blockedAttempt.observation_root_sha256);
-  await blockedDetail.getByRole('button', { name: '닫기' }).click();
+  await dialog.getByRole('button', { name: '닫기' }).click();
   await page.getByTestId(`admin-frr-detail-${appliedEventId}`).click();
 
   const detail = page.getByTestId('admin-frr-detail');
+  await expect(detail).toContainText('반영 완료');
   await expect(detail).toContainText('feature-old');
   await expect(detail).toContainText('feature-new');
-  await expect(detail).toContainText('trip_day_pois · rebind');
-  await expect(detail).not.toContainText('승인');
-  await expect(detail).not.toContainText('거절');
+  await expect(detail).toContainText('trip_day_pois');
+  await expect(detail).toContainText('saved_feature_refs');
+  await expect(detail).toContainText('trip_notes');
+  await expect(detail).toContainText('대체 Feature로 재연결');
+  await expect(detail).toContainText('참조 분리');
+  await expect(detail).toContainText('이미 조정됨');
+  await expect(detail.getByRole('button', { name: '승인' })).toHaveCount(0);
+  await expect(detail.getByRole('button', { name: '거절' })).toHaveCount(0);
+  expect(mutationRequests).toEqual([]);
   expect(evidenceRequests).toEqual([
     'GET /admin/feature-reference-reconciliations',
     `GET /admin/feature-reference-reconciliations/${blockedEventId}`,
     `GET /admin/feature-reference-reconciliations/${appliedEventId}`,
   ]);
 });
+
+test('상세 Dialog는 키보드로 열리고 닫힌 뒤 trigger에 focus를 복원한다', async ({ page }) => {
+  await page.goto('/admin/feature-reference-reconciliations');
+
+  const trigger = page.getByTestId(`admin-frr-detail-${blockedEventId}`);
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+
+  const dialog = page.getByRole('dialog', { name: 'Feature 참조 조정 증거 상세' });
+  await expect(dialog).toBeVisible();
+  await expect(page.getByTestId('admin-frr-readonly-boundary')).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
+for (const width of [320, 375, 414, 768]) {
+  test(`M05 증거 화면은 ${width}px에서 root overflow 없이 읽기 전용 상세를 연다`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 820 });
+    await page.goto('/admin/feature-reference-reconciliations');
+
+    await expectNoRootHorizontalScroll(page);
+    await expectTouchTarget(page, 'admin-frr-status-filter');
+    await expectTouchTarget(page, 'admin-frr-prev-page');
+    await expectTouchTarget(page, 'admin-frr-next-page');
+
+    if (width < 768) {
+      await expect(page.getByTestId(`admin-frr-mobile-card-${blockedEventId}`)).toBeVisible();
+      await expectTouchTarget(page, `admin-frr-mobile-detail-${blockedEventId}`);
+      await expectInInitialViewport(page, `admin-frr-mobile-detail-${blockedEventId}`);
+      await page.getByTestId(`admin-frr-mobile-detail-${blockedEventId}`).click();
+    } else {
+      await expect(page.getByTestId('admin-table-scroll')).toBeVisible();
+      await expectTouchTarget(page, `admin-frr-detail-${blockedEventId}`);
+      await page.getByTestId(`admin-frr-detail-${blockedEventId}`).click();
+    }
+
+    const dialog = page.getByRole('dialog', { name: 'Feature 참조 조정 증거 상세' });
+    await expect(dialog).toBeVisible();
+    await expect(page.getByTestId('admin-frr-readonly-boundary')).toContainText('읽기 전용');
+    await expect(dialog.getByRole('button', { name: '승인' })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: '거절' })).toHaveCount(0);
+    await expectNoRootHorizontalScroll(page);
+  });
+}
