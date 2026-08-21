@@ -2,13 +2,13 @@
 
 ## 2026-08-21 (codex) — Hallmark Admin M04/M05 반응형·접근성 정비
 
-M04 제안 검토와 M05 참조 조정 증거 dialog가 재렌더로 바뀐 현재 trigger에도 focus를
-되돌리고, background inert와 root scroll lock을 안전하게 정리한다. 모바일 Admin nav는
+M04 제안 검토와 M05 참조 조정 증거 dialog가 재렌더·breakpoint 변경 뒤 현재 보이는 trigger에도
+focus를 되돌리고, background inert와 root scroll lock을 안전하게 정리한다. 모바일 Admin nav는
 독립 가로 scroll rail로 남기면서 dialog open 때 root width에 전파하지 않는다. N150 격리
-Playwright 전체 M04/M05 browser E2E 19건은 통과했다.
+Playwright 전체 M04/M05 browser E2E 19건과 두 전문 적대 리뷰 P0/P1=0은 통과했다.
 
-**다음 한 작업**: 이 draft PR의 전체 M04/M05 browser E2E, 두 전문 적대 리뷰와 GitHub CI를
-최종 확인한다. green/GO 전에는 draft를 유지하고 merge하지 않는다.
+**다음 한 작업**: 이 draft PR의 GitHub CI를 최종 확인한다. green/GO 전에는 draft를 유지하고
+merge하지 않는다.
 
 ## 2026-08-21 (codex) — T-VN-M05 fresh paired 브라우저 증거 완료
 
