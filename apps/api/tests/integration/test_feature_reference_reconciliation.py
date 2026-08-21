@@ -593,6 +593,7 @@ async def test_non_owner_runtime_login_cannot_disable_or_bypass_m05_evidence_gua
         await db.execute(
             text(f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO {role}")
         )
+        await db.execute(text(f"GRANT USAGE ON SCHEMA x_extension TO {role}"))
         await db.execute(text(f"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA app TO {role}"))
         await db.commit()
 
@@ -607,6 +608,7 @@ async def test_non_owner_runtime_login_cannot_disable_or_bypass_m05_evidence_gua
         "ALTER TABLE app.ktm_feature_reference_reconciliation_delivery_attempts DISABLE TRIGGER USER",
         "DROP SCHEMA app CASCADE",
         "SET ROLE pinvi",
+        f"CREATE TABLE x_extension.m05_runtime_{event_id.hex[:12]} (id integer)",
         "UPDATE app.ktm_feature_reference_reconciliation_delivery_attempts "
         "SET status = status WHERE event_id = :event_id",
     )
@@ -619,6 +621,35 @@ async def test_non_owner_runtime_login_cannot_disable_or_bypass_m05_evidence_gua
                 )
             )
             assert values.one() == (role, False, False, False)
+            runtime_has_membership = await connection.scalar(
+                text(
+                    "SELECT EXISTS (SELECT 1 FROM pg_auth_members m "
+                    "WHERE m.member = current_user::regrole)"
+                )
+            )
+            assert runtime_has_membership is False
+            assert (
+                await connection.scalar(
+                    text("SELECT has_schema_privilege(current_user, 'x_extension', 'USAGE')")
+                )
+            ) is True
+            assert (
+                await connection.scalar(
+                    text("SELECT has_schema_privilege(current_user, 'x_extension', 'CREATE')")
+                )
+            ) is False
+            x_extension_owner_or_member = await connection.scalar(
+                text(
+                    "SELECT EXISTS (SELECT 1 FROM pg_namespace n WHERE n.nspname = "
+                    "'x_extension' AND (n.nspowner = current_user::regrole OR "
+                    "pg_has_role(current_user, n.nspowner, 'member')))"
+                )
+            )
+            assert x_extension_owner_or_member is False
+            digest = await connection.scalar(
+                text("SELECT encode(x_extension.digest('m05', 'sha256'), 'hex')")
+            )
+            assert isinstance(digest, str) and len(digest) == 64
         for statement in guarded_statements:
             async with runtime_engine.begin() as connection:
                 with pytest.raises(DBAPIError):

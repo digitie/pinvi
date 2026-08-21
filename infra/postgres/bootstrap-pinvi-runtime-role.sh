@@ -40,8 +40,14 @@ SELECT format(
 \gexec
 SELECT format('CREATE SCHEMA IF NOT EXISTS app AUTHORIZATION %I', :'owner')
 \gexec
+SELECT format('CREATE SCHEMA IF NOT EXISTS x_extension AUTHORIZATION %I', :'owner')
+\gexec
+SELECT format('ALTER SCHEMA x_extension OWNER TO %I', :'owner')
+\gexec
 REVOKE ALL ON SCHEMA app FROM PUBLIC;
+REVOKE ALL ON SCHEMA x_extension FROM PUBLIC;
 GRANT USAGE ON SCHEMA app TO :"app_role";
+GRANT USAGE ON SCHEMA x_extension TO :"app_role";
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO :"app_role";
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA app TO :"app_role";
 ALTER DEFAULT PRIVILEGES FOR ROLE :"owner" IN SCHEMA app
@@ -50,12 +56,68 @@ ALTER DEFAULT PRIVILEGES FOR ROLE :"owner" IN SCHEMA app
   GRANT USAGE, SELECT ON SEQUENCES TO :"app_role";
 SQL
 
-runtime_role_safe="$(psql --no-password --tuples-only --no-align --host=app-postgres \
-  --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
-  --command="SELECT r.rolcanlogin AND NOT r.rolsuper AND NOT r.rolcreaterole AND NOT r.rolcreatedb AND NOT r.rolreplication AND NOT pg_has_role(r.oid, current_user, 'member') AND r.oid <> current_user::regrole AND NOT EXISTS (SELECT 1 FROM pg_namespace n WHERE n.nspname = 'app' AND (n.nspowner = r.oid OR pg_has_role(r.oid, n.nspowner, 'member'))) AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'app' AND (c.relowner = r.oid OR pg_has_role(r.oid, c.relowner, 'member'))) FROM pg_roles r WHERE r.rolname = '${PINVI_APP_DB_USER}'" )"
+runtime_role_safe="$(
+  psql --no-password --tuples-only --no-align --host=app-postgres \
+    --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+    --set="app_role=${PINVI_APP_DB_USER}" <<'SQL'
+SELECT
+  r.rolcanlogin
+  AND NOT r.rolsuper
+  AND NOT r.rolcreaterole
+  AND NOT r.rolcreatedb
+  AND NOT r.rolreplication
+  AND NOT pg_has_role(r.oid, current_user, 'member')
+  AND r.oid <> current_user::regrole
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_auth_members m
+    WHERE m.member = r.oid
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_namespace n
+    WHERE n.nspname IN ('app', 'x_extension')
+      AND (
+        n.nspowner = r.oid
+        OR pg_has_role(r.oid, n.nspowner, 'member')
+        OR has_schema_privilege(r.oid, n.oid, 'CREATE')
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname IN ('app', 'x_extension')
+      AND (c.relowner = r.oid OR pg_has_role(r.oid, c.relowner, 'member'))
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname IN ('app', 'x_extension')
+      AND (p.proowner = r.oid OR pg_has_role(r.oid, p.proowner, 'member'))
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname IN ('app', 'x_extension')
+      AND (t.typowner = r.oid OR pg_has_role(r.oid, t.typowner, 'member'))
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_extension e
+    JOIN pg_namespace n ON n.oid = e.extnamespace
+    WHERE n.nspname = 'x_extension'
+      AND (e.extowner = r.oid OR pg_has_role(r.oid, e.extowner, 'member'))
+  )
+FROM pg_roles r
+WHERE r.rolname = :'app_role';
+SQL
+)"
 unset PGPASSWORD
 
 if [ "${runtime_role_safe}" != "t" ]; then
-  echo "runtime DB role is privileged, owns or inherits the app schema/table owner, or inherits the migration owner" >&2
+  echo "runtime DB role is privileged, has a role membership, owns protected objects, can CREATE there, or inherits the migration owner" >&2
   exit 3
 fi

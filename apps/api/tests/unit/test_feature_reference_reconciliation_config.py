@@ -146,6 +146,18 @@ def test_m05_evidence_runtime_uses_non_owner_database_login() -> None:
     assert "NOSUPERUSER" in bootstrap
     assert "NOINHERIT" in bootstrap
     assert "ALTER DEFAULT PRIVILEGES" in bootstrap
+    assert "FROM pg_auth_members m" in bootstrap
+    assert "WHERE m.member = r.oid" in bootstrap
+    assert "CREATE SCHEMA IF NOT EXISTS x_extension AUTHORIZATION" in bootstrap
+    assert "ALTER SCHEMA x_extension OWNER TO" in bootstrap
+    assert "REVOKE ALL ON SCHEMA x_extension FROM PUBLIC;" in bootstrap
+    assert 'GRANT USAGE ON SCHEMA x_extension TO :"app_role";' in bootstrap
+    assert "n.nspname IN ('app', 'x_extension')" in bootstrap
+    assert "has_schema_privilege(r.oid, n.oid, 'CREATE')" in bootstrap
+    assert "FROM pg_proc p" in bootstrap
+    assert "FROM pg_type t" in bootstrap
+    assert "FROM pg_extension e" in bootstrap
+    assert "e.extowner = r.oid" in bootstrap
     assert "c.relowner = r.oid" in bootstrap
     assert "n.nspowner = r.oid" in bootstrap
     assert "pg_has_role(r.oid, n.nspowner, 'member')" in bootstrap
