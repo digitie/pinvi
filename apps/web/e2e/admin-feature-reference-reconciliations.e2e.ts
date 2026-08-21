@@ -52,12 +52,16 @@ const receipt = {
 async function expectNoRootHorizontalScroll(page: Page) {
   await expect
     .poll(() =>
-      page.evaluate(() => ({
-        body: document.body.scrollWidth <= document.body.clientWidth + 1,
-        html: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
-      })),
+      page.evaluate(() => {
+        const initialX = window.scrollX;
+        const initialY = window.scrollY;
+        window.scrollTo(1, initialY);
+        const rootScrollable = window.scrollX > 0;
+        window.scrollTo(initialX, initialY);
+        return { rootScrollable };
+      }),
     )
-    .toEqual({ body: true, html: true });
+    .toEqual({ rootScrollable: false });
 }
 
 async function expectTouchTarget(page: Page, testId: string) {
@@ -71,19 +75,14 @@ async function expectInInitialViewport(page: Page, testId: string) {
   await expect(page.getByTestId(testId)).toBeInViewport({ ratio: 1 });
 }
 
-function isBlockedDetailRoute(url: URL) {
-  return (
-    url.port === '12801' &&
-    url.pathname === `/admin/feature-reference-reconciliations/${blockedEventId}`
-  );
-}
+const blockedDetailRoute = `**/admin/feature-reference-reconciliations/${blockedEventId}`;
 
 async function routeBlockedDetail(
   page: Page,
   { failuresBeforeSuccess = 0 }: { failuresBeforeSuccess?: number } = {},
 ) {
   let calls = 0;
-  await page.route(isBlockedDetailRoute, async (route) => {
+  await page.route(blockedDetailRoute, async (route) => {
     calls += 1;
     if (calls <= failuresBeforeSuccess) {
       await route.fulfill({
