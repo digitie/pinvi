@@ -518,6 +518,7 @@ export default function AdminFeatureReferenceReconciliationsPage() {
     queryKey: queryKeys.admin.featureReferenceReconciliation(selectedEventId ?? ''),
     queryFn: () => adminApi(apiClient).getFeatureReferenceReconciliation(selectedEventId ?? ''),
     enabled: selectedEventId !== null,
+    retry: false,
   });
 
   useEffect(() => {
