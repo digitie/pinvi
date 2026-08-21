@@ -92,10 +92,10 @@ export interface ModalDialogA11y {
   };
 }
 
-// 여러 모달이 동시에 스크롤을 잠글 수 있으므로, 마지막 하나가 풀릴 때만 원복한다.
+// 여러 모달이 동시에 스크롤을 잠글 수 있으므로, 마지막 하나가 풀릴 때만 해제한다.
 let scrollLockCount = 0;
-let previousDocumentOverflow: string | null = null;
-let previousBodyOverflow: string | null = null;
+let lockedScrollY = 0;
+let scrollLockListener: (() => void) | null = null;
 
 const FOCUSABLE_SELECTOR = [
   'a[href]',
@@ -141,12 +141,21 @@ function isRestorableFocusTarget(element: HTMLElement | null | undefined): eleme
   );
 }
 
+function releaseManagedInert(element: HTMLElement | null | undefined): void {
+  const inertAncestor = element?.closest('[inert]');
+  const inertEntry = inertSnapshot?.find(({ element: candidate }) => candidate === inertAncestor);
+  if (inertAncestor && inertEntry && !inertEntry.hadInert) {
+    inertAncestor.removeAttribute('inert');
+  }
+}
+
 function focusWhenRestorable(resolveTarget: () => HTMLElement | null | undefined): void {
   if (typeof window === 'undefined') return;
 
   let remainingFrames = 8;
   const tryFocus = () => {
     const target = resolveTarget();
+    releaseManagedInert(target);
     if (isRestorableFocusTarget(target)) {
       target.focus({ preventScroll: true });
       return;
@@ -367,25 +376,23 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     };
   }, [active, generatedTitleId]);
 
-  // root 스크롤 잠금(참조 카운트).
+  // root의 기존 overflow-x: clip 계약은 그대로 두고, scroll event를 원 위치로 되돌린다.
+  // overflow 축을 inline으로 덮어쓰면 모바일 nav의 scrollable overflow가 root에 승격된다.
   useEffect(() => {
     if (!active || !lockScroll) return;
     if (scrollLockCount === 0) {
-      // root/body 모두 clip으로 잠가, 축별 `clip`/`hidden` 조합이 x축 clip을 hidden으로
-      // 계산해 programmatic horizontal scroll을 다시 허용하는 일을 막는다.
-      previousDocumentOverflow = document.documentElement.style.overflow;
-      previousBodyOverflow = document.body.style.overflow;
-      document.documentElement.style.overflow = 'clip';
-      document.body.style.overflow = 'clip';
+      lockedScrollY = window.scrollY;
+      scrollLockListener = () => {
+        window.scrollTo({ left: 0, top: lockedScrollY });
+      };
+      window.addEventListener('scroll', scrollLockListener, { passive: true });
     }
     scrollLockCount += 1;
     return () => {
       scrollLockCount -= 1;
       if (scrollLockCount === 0) {
-        document.documentElement.style.overflow = previousDocumentOverflow ?? '';
-        document.body.style.overflow = previousBodyOverflow ?? '';
-        previousDocumentOverflow = null;
-        previousBodyOverflow = null;
+        if (scrollLockListener) window.removeEventListener('scroll', scrollLockListener);
+        scrollLockListener = null;
       }
     };
   }, [active, lockScroll]);
