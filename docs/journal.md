@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-21 (codex) — T-VN-M04/M05 fresh non-owner paired 브라우저 E2E 재완료
+
+- 새 격리 PinVi DB를 branch head로 다시 올려 runtime login의 x_extension 권한이
+  USAGE=true / CREATE=false / direct role membership=false인 상태에서 기동했다. TCP readiness
+  retry도 실제 fresh bootstrap에서 통과했다.
+- 일반 POI 생성과 검증된 Map alias-map UUID shadow 이관을 non-owner runtime으로 마친 뒤, M04
+  feature request의 PinVi 관리자 브라우저 승인과 Map final manual_request 승인을 실행했다.
+- Dagster 전용 candidate writer가 만든 새 case는 Map admin decision writer의 rebind event로
+  terminal 처리했다. PinVi worker는 impact 1건의 applied receipt를 commit하고 Map ACK까지 남겼으며,
+  M05 관리자 브라우저 E2E가 action·이전/대체 Feature·영향 행을 읽기 전용으로 검증했다.
+- 이 증거는 N150의 disposable Map/PinVi paired stack에만 남긴다. 운영 activation이나 code PR merge는
+  수행하지 않았다.
+
 ## 2026-08-21 (codex) — M05 head final-boundary 재결박
 
 - M05 `20260821_0060`/`0061`이 Alembic head를 전진시켰는데 final boundary의 service pin과

@@ -1,5 +1,16 @@
 # resume.md
 
+## 2026-08-21 (codex) — T-VN-M05 fresh paired 브라우저 증거 완료
+
+최신 M05 draft head의 fresh isolated PinVi DB에서 runtime role의 x_extension 권한을
+USAGE만으로 확인하고, 일반 POI 생성과 alias-map UUID shadow 이관을 성공시켰다. 이어 같은
+격리 Map/PinVi pair에서 M04 관리자 브라우저 승인 → Map manual_request final 승인 → Dagster
+candidate → Map rebind decision → PinVi applied receipt/영향 행 1건 → Map ACK → M05 관리자
+브라우저 receipt 검증을 끝냈다. 두 브라우저 E2E는 모두 통과했다.
+
+**다음 한 작업**: 현재 draft PR의 CI와 두 전문 적대 리뷰를 최종 확인한다. green/GO 상태가
+확정되면 M05는 merge 대기 상태로 두고 Hallmark audit/redesign을 별도 작업으로 시작한다.
+
 ## 2026-08-21 (codex) — M05 final-boundary head 재결박
 
 M05 `0061` head의 append-only trigger enforcement를 final boundary의 service pin과 DB CHECK에도
