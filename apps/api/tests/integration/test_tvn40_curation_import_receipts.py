@@ -322,7 +322,7 @@ async def _assert_0053_catalog_contract(db: AsyncSession) -> None:
         )
     )
     assert boundary_definition is not None
-    assert "schema_revision = '20260814_0059'::text" in boundary_definition
+    assert "schema_revision = '20260821_0061'::text" in boundary_definition
 
     indexes = dict(
         (

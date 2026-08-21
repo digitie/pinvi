@@ -1,5 +1,15 @@
 # resume.md
 
+## 2026-08-21 (codex) — M05 final-boundary head 재결박
+
+M05 `0061` head의 append-only trigger enforcement를 final boundary의 service pin과 DB CHECK에도
+같이 반영했다. 이로써 head 전진 뒤 finalization이 fail-closed로 영구 중단하던 CI 회귀를 닫는다.
+표적 Postgres 테스트 5건은 통과했다.
+
+**다음 한 작업**: 이 보정을 최신 main에 rebase·push하고 PinVi CI를 확인한다. 이어 Map CI와
+N150의 격리 paired browser E2E가 모두 성공하기 전에는 M05 activation이나 Hallmark 재설계를
+시작하지 않는다.
+
 ## 2026-08-21 (codex) — T-VN-M04/M05 paired live browser evidence
 
 M04 관리자 승인부터 Map rebind, PinVi applied receipt, Map ACK와 M05 관리자 읽기 전용 화면까지

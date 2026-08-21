@@ -2,6 +2,14 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-21 (codex) — M05 head final-boundary 재결박
+
+- M05 `20260821_0060`/`0061`이 Alembic head를 전진시켰는데 final boundary의 service pin과
+  `ck_ktm_ct_boundary_contract`가 `0059`에 남아 CI의 finalization 회귀 4건이
+  `schema_revision_mismatch`로 중단했다. `0061`은 append-only `ENABLE ALWAYS` 전제를 포함한
+  현재 head를 DB CHECK에 재결박하고, service `FINALIZE_SCHEMA_REVISION`도 같은 값으로 맞췄다.
+- 표적 final-boundary/constraint Postgres 회귀는 5 passed다. 테스트 subprocess가 `alembic`을
+  찾도록 virtualenv `PATH`를 명시한 실행 환경에서 검증했다.
 ## 2026-08-21 (codex) — T-VN-M04/M05 격리 paired 실제 browser E2E 완료
 
 - M04 관리자 승인 뒤 Map manual_request queue 승인, M05 rebind event, PinVi applied receipt와 Map ACK를
