@@ -570,6 +570,7 @@ export default function AdminFeatureRequestsPage() {
   const [selected, setSelected] = useState<AdminFeatureRequestSummary | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const reviewReturnFocusRef = useRef<HTMLElement | null>(null);
+  const pendingReviewFocusRestoreRef = useRef(false);
   const noticeRef = useRef<HTMLParagraphElement | null>(null);
   const pendingNoticeFocusRef = useRef(false);
 
@@ -591,6 +592,12 @@ export default function AdminFeatureRequestsPage() {
     };
     window.requestAnimationFrame(tryFocus);
   }, []);
+
+  useEffect(() => {
+    if (selected !== null || !pendingReviewFocusRestoreRef.current) return;
+    pendingReviewFocusRestoreRef.current = false;
+    focusAfterDialogTeardown(() => reviewReturnFocusRef.current);
+  }, [focusAfterDialogTeardown, selected]);
 
   useEffect(() => {
     if (!notice || !pendingNoticeFocusRef.current) return;
@@ -626,9 +633,8 @@ export default function AdminFeatureRequestsPage() {
   };
 
   const closeReview = () => {
-    const trigger = reviewReturnFocusRef.current;
+    pendingReviewFocusRestoreRef.current = true;
     setSelected(null);
-    focusAfterDialogTeardown(() => trigger);
   };
 
   const columns: AdminTableColumn<AdminFeatureRequestSummary>[] = [
