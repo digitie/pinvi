@@ -126,6 +126,35 @@ function isInertCandidate(element: Element): element is HTMLElement {
   return true;
 }
 
+function isRestorableFocusTarget(element: HTMLElement | null | undefined): element is HTMLElement {
+  if (typeof document === 'undefined') return false;
+  return Boolean(
+    element &&
+      element !== document.body &&
+      document.contains(element) &&
+      !(element as HTMLElement & { disabled?: boolean }).disabled &&
+      // inert는 하위로 상속된다 — 자기 속성만 보면 배경 안 버튼을 "포커스 가능"으로 오판한다.
+      element.closest('[inert]') === null,
+  );
+}
+
+function focusWhenRestorable(resolveTarget: () => HTMLElement | null | undefined): void {
+  if (typeof window === 'undefined') return;
+
+  let remainingFrames = 8;
+  const tryFocus = () => {
+    const target = resolveTarget();
+    if (isRestorableFocusTarget(target)) {
+      target.focus({ preventScroll: true });
+      return;
+    }
+    remainingFrames -= 1;
+    if (remainingFrames > 0) window.requestAnimationFrame(tryFocus);
+  };
+
+  window.requestAnimationFrame(tryFocus);
+}
+
 /**
  * 배경 격리 동기화 — 최상단 모달의 컨테이너만 제외하고 body 자식에 `inert`를 건다.
  *
@@ -267,29 +296,15 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
       window.cancelAnimationFrame(raf);
       // previouslyFocused는 body이거나(트리거가 공유 busy로 이미 disabled된 채 열린 경우)
       // 이미 사라졌을 수 있다. 그러면 (1) 남아 있는 최상단 모달 → (2) 호출부가 준 트리거 순으로
-      // 넘긴다. 어느 쪽도 없으면 body에 남는 것을 감수한다(그 이상은 훅이 알 수 없다).
-      const focusable = (el: HTMLElement | null | undefined): el is HTMLElement =>
-        Boolean(
-          el &&
-          el !== document.body &&
-          document.contains(el) &&
-          !(el as HTMLElement & { disabled?: boolean }).disabled &&
-          // inert는 하위로 상속된다 — 자기 속성만 보면 배경 안 버튼을 "포커스 가능"으로 오판한다.
-          el.closest('[inert]') === null,
-        );
-
-      if (focusable(previouslyFocused)) {
-        previouslyFocused.focus();
-        return;
-      }
-      const belowId = modalStack.filter((id) => id !== generatedTitleId).pop();
-      const below = belowId ? modalPanels.get(belowId) : null;
-      if (below && document.contains(below)) {
-        below.focus();
-        return;
-      }
-      const fallback = returnFocusRefRef.current?.current;
-      if (focusable(fallback)) fallback.focus();
+      // 넘긴다. inert/portal cleanup은 React effect 순서와 브라우저 blur 타이밍에 따라 한두
+      // 프레임 늦게 안정화될 수 있으므로, 실제 복원 가능 상태가 될 때까지 짧게 재시도한다.
+      focusWhenRestorable(() => {
+        if (isRestorableFocusTarget(previouslyFocused)) return previouslyFocused;
+        const belowId = modalStack.filter((id) => id !== generatedTitleId).pop();
+        const below = belowId ? modalPanels.get(belowId) : null;
+        if (isRestorableFocusTarget(below)) return below;
+        return returnFocusRefRef.current?.current ?? null;
+      });
     };
   }, [active, generatedTitleId]);
 

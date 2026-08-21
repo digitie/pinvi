@@ -1,6 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type { AdminFeatureRequestSummary } from '@pinvi/schemas';
@@ -232,6 +240,8 @@ function FeatureRequestMobileCard({
           type="button"
           variant="secondary"
           size="md"
+          aria-label={`${request.name} ${TYPE_LABEL[request.type] ?? request.type} 제안 검토 열기`}
+          aria-haspopup="dialog"
           onClick={(event) => onReview(event.currentTarget)}
           data-testid={`admin-fr-mobile-review-${request.request_id}`}
         >
@@ -561,17 +571,32 @@ export default function AdminFeatureRequestsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const reviewReturnFocusRef = useRef<HTMLElement | null>(null);
   const noticeRef = useRef<HTMLParagraphElement | null>(null);
+  const pendingNoticeFocusRef = useRef(false);
 
-  const focusAfterDialogTeardown = (resolveTarget: () => HTMLElement | null) => {
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        const target = resolveTarget();
-        if (!target || !document.contains(target) || target.closest('[inert]')) return;
-        if ((target as HTMLElement & { disabled?: boolean }).disabled) return;
+  const focusAfterDialogTeardown = useCallback((resolveTarget: () => HTMLElement | null) => {
+    let remainingFrames = 8;
+    const tryFocus = () => {
+      const target = resolveTarget();
+      if (
+        target &&
+        document.contains(target) &&
+        target.closest('[inert]') === null &&
+        !(target as HTMLElement & { disabled?: boolean }).disabled
+      ) {
         target.focus({ preventScroll: true });
-      });
-    });
-  };
+        return;
+      }
+      remainingFrames -= 1;
+      if (remainingFrames > 0) window.requestAnimationFrame(tryFocus);
+    };
+    window.requestAnimationFrame(tryFocus);
+  }, []);
+
+  useEffect(() => {
+    if (!notice || !pendingNoticeFocusRef.current) return;
+    pendingNoticeFocusRef.current = false;
+    focusAfterDialogTeardown(() => noticeRef.current);
+  }, [focusAfterDialogTeardown, notice]);
 
   const featureRequestsQuery = useQuery({
     queryKey: queryKeys.admin.featureRequests({ status: statusFilter, page }),
@@ -644,6 +669,8 @@ export default function AdminFeatureRequestsPage() {
           type="button"
           variant="secondary"
           size="md"
+          aria-label={`${r.name} ${TYPE_LABEL[r.type] ?? r.type} 제안 검토 열기`}
+          aria-haspopup="dialog"
           onClick={(event) => openReview(r, event.currentTarget)}
           data-testid={`admin-fr-review-${r.request_id}`}
         >
@@ -730,9 +757,9 @@ export default function AdminFeatureRequestsPage() {
           onClose={closeReview}
           returnFocusRef={reviewReturnFocusRef}
           onDone={(message) => {
+            pendingNoticeFocusRef.current = true;
             setSelected(null);
             setNotice(message);
-            focusAfterDialogTeardown(() => noticeRef.current);
             void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });
             void queryClient.invalidateQueries({
               queryKey: queryKeys.admin.featureChangeRequestsAll(),

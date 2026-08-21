@@ -61,12 +61,16 @@ const mappedSummary = {
 async function expectNoRootHorizontalScroll(page: Page) {
   await expect
     .poll(() =>
-      page.evaluate(() => ({
-        body: document.body.scrollWidth <= document.body.clientWidth + 1,
-        html: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
-      })),
+      page.evaluate(() => {
+        const initialX = window.scrollX;
+        const initialY = window.scrollY;
+        window.scrollTo(1, initialY);
+        const rootScrollable = window.scrollX > 0;
+        window.scrollTo(initialX, initialY);
+        return { rootScrollable };
+      }),
     )
-    .toEqual({ body: true, html: true });
+    .toEqual({ rootScrollable: false });
 }
 
 async function expectTouchTarget(locator: Locator, label: string) {
@@ -354,6 +358,8 @@ for (const width of [320, 375, 414, 768]) {
       await trigger.scrollIntoViewIfNeeded();
     }
 
+    await expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+    await expect(trigger).toHaveAttribute('aria-label', '새 카페 신규 장소 제안 검토 열기');
     await expectTouchTarget(trigger, 'review trigger');
     if (width < 768) {
       await expect(trigger).toBeInViewport({ ratio: 1 });
