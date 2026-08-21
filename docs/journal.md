@@ -2,6 +2,15 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-21 (codex) — T-VN-M04/M05 격리 paired 실제 browser E2E 완료
+
+- M04 관리자 승인 뒤 Map manual_request queue 승인, M05 rebind event, PinVi applied receipt와 Map ACK를
+  같은 격리 paired stack에서 확인했다.
+- M05 관리자 화면은 receipt action·이전/대체 Feature·영향 행을 정확한 definition list label/value
+  쌍으로 읽기 전용 검증한다. N150 Playwright browser E2E와 web lint·typecheck·production build를 통과했다.
+- fresh isolated DB에서는 PinVi runtime role의 x_extension schema USAGE 누락으로 일반 POI 쓰기가
+  거부됐다. 대상 stack에만 임시 grant를 적용했으며 M05 activation 전 bootstrap/migration 영구 보정이 남는다.
+
 ## 2026-08-21 (claude) — T-321: 전제가 틀렸던 조사와 CI 실행 범위 교정
 
 T-VN-42 검증 중 `vitest run`이 18파일 중 6개를 결과 없이 끝내는 걸 보고 "조용히 건너뛰고 exit 0"이라고

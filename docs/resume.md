@@ -1,5 +1,15 @@
 # resume.md
 
+## 2026-08-21 (codex) — T-VN-M04/M05 paired live browser evidence
+
+M04 관리자 승인부터 Map rebind, PinVi applied receipt, Map ACK와 M05 관리자 읽기 전용 화면까지
+같은 N150 격리 stack에서 실제 browser E2E로 확인했다. receipt action·Feature 쌍·영향 행 수는
+definition list의 정확한 label/value DOM 쌍으로 검증한다.
+
+**다음 한 작업**: fresh runtime role이 app.trip_day_pois를 정상 변경하도록 x_extension schema
+USAGE를 bootstrap/migration에 영구 부여하고 fresh DB paired E2E를 재확인한다. 그 전에는 M05
+activation과 Hallmark 재설계를 시작하지 않는다.
+
 ## 2026-08-21 (claude) — T-321 완료(전제 정정 + CI 실행 범위 교정)
 
 **방금**: "vitest가 워커 실패 파일을 조용히 건너뛰고 exit 0"이라는 T-321의 전제가 틀렸음을 적대적
