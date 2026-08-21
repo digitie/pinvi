@@ -1,0 +1,27 @@
+{
+  "date": "2026-08-21",
+  "scope": "PinVi 관리자 M04/M05 운영 화면",
+  "intent": "고정된 modern-minimal Workbench 시스템 안에서 검토와 읽기 전용 증거의 정보 계층·포커스·반응형을 개선한다.",
+  "locked_system": "pinvi-locked (DESIGN.md Hallmark 잠금 시스템)",
+  "files": [
+    "apps/web/app/(admin)/admin/feature-requests/page.tsx",
+    "apps/web/app/(admin)/admin/feature-reference-reconciliations/page.tsx",
+    "apps/web/components/admin/AdminTable.tsx",
+    "apps/web/e2e/admin-feature-requests.e2e.ts",
+    "apps/web/e2e/admin-feature-reference-reconciliations.e2e.ts"
+  ],
+  "decisions": [
+    "M04는 inline panel 대신 공용 Dialog와 비가역 거절 확인을 사용한다.",
+    "M05는 공용 Dialog 안에서 결론·Receipt·관측·영향 행 순서로 읽기 전용 증거를 표시한다.",
+    "320, 375, 414, 768px에서는 모바일 행 카드를 사용하거나 데스크톱 표로 전환한다."
+  ],
+  "excluded": [
+    "새 색상, 새 토큰, 새 폰트, 장식 이미지, 데이터·권한·계약 변경"
+  ],
+  "validation": [
+    "키보드 포커스 복귀",
+    "상태 문구 한국어화",
+    "320/375/414/768px 브라우저 E2E",
+    "기존 M04/M05 계약 회귀"
+  ]
+}
