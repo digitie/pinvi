@@ -23,7 +23,12 @@ describe('ConfirmDialog', () => {
       </ConfirmDialog>,
     );
     expect(screen.getByTestId('confirm-dialog-title')).toHaveTextContent('일자를 삭제할까요?');
-    expect(screen.getByText('이 작업은 되돌릴 수 없습니다.')).toBeInTheDocument();
+    const description = screen.getByText('이 작업은 되돌릴 수 없습니다.');
+    expect(description).toBeInTheDocument();
+    expect(screen.getByTestId('confirm-dialog')).toHaveAttribute(
+      'aria-describedby',
+      description.id,
+    );
     expect(screen.getByText('POI 3곳이 함께 삭제됩니다.')).toBeInTheDocument();
   });
 
