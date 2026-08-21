@@ -47,11 +47,13 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
     await page.getByTestId(`admin-frr-detail-${eventId}`).click();
 
     const detail = page.getByTestId('admin-frr-detail');
+    const receiptValue = (label: RegExp) =>
+      detail.locator('dl > dt', { hasText: label }).locator('xpath=following-sibling::dd[1]');
     await expect(detail).toContainText('applied');
-    await expect(detail).toContainText(oldFeatureId);
-    await expect(detail).toContainText(replacementFeatureId);
-    await expect(detail).toContainText(`영향 행 ${impactCount}`);
-    await expect(detail).toContainText('rebind');
+    await expect(receiptValue(/^action$/)).toHaveText('rebind');
+    await expect(receiptValue(/^이전 Feature$/)).toHaveText(oldFeatureId);
+    await expect(receiptValue(/^대체 Feature$/)).toHaveText(replacementFeatureId);
+    await expect(receiptValue(/^영향 행$/)).toHaveText(impactCount);
     await expect(detail).not.toContainText('승인');
     await expect(detail).not.toContainText('거절');
   });
