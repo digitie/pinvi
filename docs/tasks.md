@@ -61,9 +61,8 @@
 
 ## 웹 / 테스트 인프라
 
-- [ ] **T-321** — `vitest run`이 fork 워커 기동에 실패한 파일을 **조용히 건너뛰고 exit 0**으로 끝난다
-  (로컬 WSL에서 18파일 중 3~6개 누락 재현, `Failed to start forks worker` 로그만 남음). CI에서 같은 일이
-  나면 false-green이므로 실행 파일 수 검증이나 pool 설정으로 막는다.
+- [ ] **T-323** — web 워크플로의 `e2e` 잡이 aggregate required check가 아니라 Playwright 실패가 머지를
+  막지 않는다. 의도된 것인지 확인하고 아니면 required로 올린다.
 
 ## 모바일
 

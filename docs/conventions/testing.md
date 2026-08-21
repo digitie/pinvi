@@ -172,6 +172,25 @@ describe('MARKER_PALETTE', () => {
 });
 ```
 
+#### 워커 기동 실패 시 요약 줄이 과소 집계된다 (T-321)
+
+fork 워커가 기동에 실패하면 그 파일은 결과를 내지 못하고, 요약 줄은 **실행된 것만** 센다:
+
+```
+Test Files  12 passed (12)      ← 실제 계획은 18개였다
+     Tests  80 passed (80)
+    Errors  6 errors
+```
+
+`12 passed (12)`만 보면 전부 통과한 것처럼 읽히지만 6개 파일은 아예 돌지 않았다. 다만
+**실행은 실패로 끝난다** — vitest는 이 오류들을 unhandled error로 모아 `Unhandled Errors` 블록에
+파일명과 함께 출력하고 `process.exitCode = 1`을 설정한다(`dangerouslyIgnoreUnhandledErrors`를
+켜지 않는 한). CI가 거짓 green을 내지는 않는다는 뜻이다.
+
+그러므로 `Test Files N passed (N)` 숫자만 보고 판단하지 말고 **종료 코드와 `Errors` 줄**을 함께 본다.
+`Errors`가 있으면 `Unhandled Errors` 블록에서 `[vitest-pool]: Failed to start ... worker for test files
+<path>`를 찾는다. 테스트 코드 문제가 아니라 자원 압박이 원인이므로 `--maxWorkers`를 낮춰 재실행한다.
+
 ### 6.2 Playwright
 
 ```ts

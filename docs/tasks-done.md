@@ -6,6 +6,20 @@
 
 ## 2026-08-21
 
+- [x] **T-321** — vitest 워커 기동 실패 시의 "조용한 누락" 조사와 CI 실행 범위 교정.
+      (완료: 2026-08-21, PR #461, claude)
+      **등록 당시 전제가 틀렸다**: 워커 기동 실패가 exit 0으로 끝난다고 봤으나, vitest는 그 오류를
+      unhandled error로 모아 `Unhandled Errors` 블록에 파일명과 함께 출력하고 `process.exitCode = 1`을
+      설정한다. 실제 문제는 **요약 줄(`Test Files 12 passed (12)`)이 실행된 것만 세어 과소 집계**하는
+      것이며 CI가 거짓 green을 내지는 않는다(CI 이력 132 run 전수 조사에서도 누락 0건).
+      전제 오인의 원인은 검증 하네스였다 — `wsl -- bash -lc "...; echo $?"` 형태가 바깥 셸의 `$?`를
+      먼저 치환해 항상 0을 보고했다. 종료 코드는 스크립트 파일로 측정해야 한다.
+      따라서 리포터 가드는 vitest의 기존 실패 신호를 중복하고 `reporters` 명시라는 유지 부담만 남겨
+      **철회**했고, 조사 중 드러난 진짜 구멍만 고쳤다: CI가 `npm test --workspace @pinvi/web`만 돌려서
+      `packages/{domain,schemas}`의 24파일 104테스트가 한 번도 실행된 적이 없었다. 루트 `npm test`로
+      교체해 CI 보호 범위에 넣었고 세 워크스페이스 43파일 224테스트가 통과한다.
+      요약 줄 과소 집계와 대응은 `docs/conventions/testing.md` §6.1에 남겼다.
+
 - [x] **T-VN-42 — Map user OpenAPI 재vendor(`95d2c128`) 소비 정렬** —
   1차 묶음 **PR #451 머지 완료**(2026-08-19 KST). 스냅샷 SHA-256 `6a2ee0f9…`(Map `95d2c128`·`origin/main`
   284fd10c와 바이트 동일). consumer drift 2건을 흡수한다: ① 3축 feature state cutover(`1f2bdc3a`)로

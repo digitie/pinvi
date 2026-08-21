@@ -2,6 +2,30 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-21 (claude) — T-321: 전제가 틀렸던 조사와 CI 실행 범위 교정
+
+T-VN-42 검증 중 `vitest run`이 18파일 중 6개를 결과 없이 끝내는 걸 보고 "조용히 건너뛰고 exit 0"이라고
+판단해 리포터 가드를 만들었다. **적대적 리뷰가 이 전제를 무너뜨렸고, 리뷰가 옳았다.**
+
+**틀린 전제**: vitest는 워커 기동 실패를 삼키지 않는다. 그 오류들을 unhandled error로 모아
+`Unhandled Errors` 블록에 파일명과 함께 출력하고 `process.exitCode = 1`을 설정한다. 실제 문제는
+**요약 줄이 실행된 것만 세어 과소 집계**(`Test Files 12 passed (12)` — 계획은 18)하는 것이고,
+CI가 거짓 green을 내지는 않는다. CI 이력 132 run 전수 조사에서도 실제 누락은 0건이었다.
+
+**왜 틀렸나 — 검증 하네스 결함**: `wsl -d ... -- bash -lc "cmd; echo exit=$?"` 형태로 종료 코드를
+쟀는데, 이 경로에서는 **바깥 셸의 `$?`가 먼저 치환돼 항상 0**이 나온다(`false; echo $?` → 0으로 확인).
+같은 세션에서 npm이 직접 `npm error code 1`을 찍은 실행이 있었는데도 그 신호보다 내 계측을 믿었다.
+앞으로 종료 코드는 스크립트 파일에 담아 측정한다(`bash /path/script.sh`).
+
+**결정**: 리포터 가드는 vitest가 이미 내는 실패 신호를 중복하고, `reporters`를 명시하는 대가로
+기본 주입 블록(`default` + CI `github-actions`)을 수동 유지해야 하는 함정만 남긴다 — 철회했다.
+
+**남긴 것 — 조사 중 드러난 진짜 구멍**: CI 테스트 스텝이 `npm test --workspace @pinvi/web`이라
+`packages/domain`(19파일 88테스트)과 `packages/schemas`(5파일 16테스트)가 **한 번도 실행된 적이 없었다**.
+루트 `npm test`는 이미 `--workspaces --if-present`라 워크플로 한 줄 교체로 CI 보호 범위에 들어왔고,
+세 워크스페이스 43파일 224테스트가 통과한다(CI에서도 확인). 요약 줄 과소 집계와 대응은
+`docs/conventions/testing.md` §6.1에 남겼다.
+
 ## 2026-08-21 (claude) — T-VN-42 종결: 공개 `status` 필드 제거(breaking)
 
 Map 3축 feature state cutover(`1f2bdc3a`)로 user 표면에서 사라진 뒤 web/mobile 계약 때문에 **항상
