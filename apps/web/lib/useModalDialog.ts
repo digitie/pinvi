@@ -94,7 +94,7 @@ export interface ModalDialogA11y {
 
 // 여러 모달이 동시에 스크롤을 잠글 수 있으므로, 마지막 하나가 풀릴 때만 원복한다.
 let scrollLockCount = 0;
-let previousBodyOverflowY: string | null = null;
+let previousDocumentOverflow: string | null = null;
 
 const FOCUSABLE_SELECTOR = [
   'a[href]',
@@ -272,6 +272,11 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     const returnTarget = returnFocusRefRef.current?.current ?? openerRef.current;
     onCloseRef.current();
     window.setTimeout(() => {
+      const inertAncestor = returnTarget?.closest('[inert]');
+      const inertEntry = inertSnapshot?.find(({ element }) => element === inertAncestor);
+      if (inertAncestor && inertEntry && !inertEntry.hadInert) {
+        inertAncestor.removeAttribute('inert');
+      }
       focusWhenRestorable(() => returnTarget);
     }, 0);
   };
@@ -350,21 +355,21 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     };
   }, [active, generatedTitleId]);
 
-  // body 스크롤 잠금(참조 카운트).
+  // root 스크롤 잠금(참조 카운트).
   useEffect(() => {
     if (!active || !lockScroll) return;
     if (scrollLockCount === 0) {
-      // `overflow` shorthand는 globals.css의 `overflow-x: clip`까지 hidden으로 덮어
-      // 열린 모달에서 programmatic root horizontal scroll을 다시 허용한다.
-      previousBodyOverflowY = document.body.style.overflowY;
-      document.body.style.overflowY = 'hidden';
+      // `clip`과 `hidden`을 축별로 섞으면 CSS overflow 계산이 x축 clip을 hidden으로 바꾼다.
+      // root 전체를 clip으로 잠가 가로 누출 없이 배경 스크롤을 멈춘다.
+      previousDocumentOverflow = document.documentElement.style.overflow;
+      document.documentElement.style.overflow = 'clip';
     }
     scrollLockCount += 1;
     return () => {
       scrollLockCount -= 1;
       if (scrollLockCount === 0) {
-        document.body.style.overflowY = previousBodyOverflowY ?? '';
-        previousBodyOverflowY = null;
+        document.documentElement.style.overflow = previousDocumentOverflow ?? '';
+        previousDocumentOverflow = null;
       }
     };
   }, [active, lockScroll]);
