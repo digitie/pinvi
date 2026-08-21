@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type FormEvent, type ReactNode, type RefObject } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type { AdminFeatureRequestSummary } from '@pinvi/schemas';
@@ -161,8 +161,11 @@ function MapReferencePanel({ request }: { request: AdminFeatureRequestSummary })
         </p>
       ) : null}
 
-      <details className="mt-3 text-xs text-muted">
-        <summary className="cursor-pointer select-none underline-offset-2 hover:text-ink hover:underline">
+      <details className="mt-3 text-sm text-muted">
+        <summary
+          className="focus-ring inline-flex min-h-11 cursor-pointer select-none items-center rounded-sm px-2 text-sm font-semibold text-ink underline-offset-2 hover:bg-surface-soft hover:underline"
+          data-testid="admin-fr-map-ref-json-summary"
+        >
           원본 JSON 보기
         </summary>
         <pre className="mt-2 max-h-48 overflow-auto rounded-sm bg-surface-soft p-3 text-xs leading-relaxed text-body">
@@ -197,22 +200,30 @@ function FeatureRequestMobileCard({
         <StatusBadge status={request.status} />
       </header>
 
-      <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
-        <div>
+      <dl className="mt-3 grid min-w-0 grid-cols-2 gap-2 text-sm">
+        <div className="min-w-0">
           <dt className="text-xs text-muted">종류</dt>
-          <dd className="mt-0.5 text-ink">{KIND_LABEL[request.kind] ?? request.kind}</dd>
+          <dd className="mt-0.5 min-w-0 text-ink [overflow-wrap:anywhere]">
+            {KIND_LABEL[request.kind] ?? request.kind}
+          </dd>
         </div>
-        <div>
+        <div className="min-w-0">
           <dt className="text-xs text-muted">등록</dt>
-          <dd className="mt-0.5 text-ink">{formatDateTime(request.created_at)}</dd>
+          <dd className="mt-0.5 min-w-0 text-ink [overflow-wrap:anywhere]">
+            {formatDateTime(request.created_at)}
+          </dd>
         </div>
-        <div>
+        <div className="min-w-0">
           <dt className="text-xs text-muted">좌표</dt>
-          <dd className="mt-0.5 font-mono text-xs text-ink">{formatCoord(request.coord)}</dd>
+          <dd className="mt-0.5 min-w-0 break-all font-mono text-xs text-ink">
+            {formatCoord(request.coord)}
+          </dd>
         </div>
-        <div>
+        <div className="min-w-0">
           <dt className="text-xs text-muted">요청자</dt>
-          <dd className="mt-0.5 text-ink">{request.requester_email_masked ?? '—'}</dd>
+          <dd className="mt-0.5 min-w-0 text-ink [overflow-wrap:anywhere]">
+            {request.requester_email_masked ?? '—'}
+          </dd>
         </div>
       </dl>
 
@@ -220,7 +231,7 @@ function FeatureRequestMobileCard({
         <Button
           type="button"
           variant="secondary"
-          size="sm"
+          size="md"
           onClick={(event) => onReview(event.currentTarget)}
           data-testid={`admin-fr-mobile-review-${request.request_id}`}
         >
@@ -256,6 +267,12 @@ function ReviewDialog({
   const [reasonError, setReasonError] = useState<string | null>(null);
   const [rejectConfirmOpen, setRejectConfirmOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const panelErrorRef = useRef<HTMLParagraphElement | null>(null);
+
+  useEffect(() => {
+    if (!err) return;
+    panelErrorRef.current?.focus({ preventScroll: true });
+  }, [err]);
 
   const approveMutation = useMutation({
     mutationFn: () => {
@@ -492,7 +509,9 @@ function ReviewDialog({
 
             {err && (
               <p
+                ref={panelErrorRef}
                 role="alert"
+                tabIndex={-1}
                 className="rounded-sm bg-error-bg p-3 text-sm text-error-text"
                 data-testid="admin-fr-panel-error"
               >
@@ -517,9 +536,18 @@ function ReviewDialog({
         returnFocusRef={rejectButtonRef}
         testId="admin-fr-reject-confirm"
       >
-        <p data-testid="admin-fr-reject-confirmation">
-          “{request.name}” 제안을 거절합니다. 확정 전 검토 사유를 한 번 더 확인하세요.
-        </p>
+        <div className="space-y-3" data-testid="admin-fr-reject-confirmation">
+          <p>“{request.name}” 제안을 거절합니다. 확정 전 검토 사유를 한 번 더 확인하세요.</p>
+          <div className="rounded-sm border border-hairline bg-surface-soft p-3">
+            <p className="text-xs font-semibold text-muted">거절 사유</p>
+            <p
+              className="mt-1 whitespace-pre-wrap text-sm text-ink [overflow-wrap:anywhere]"
+              data-testid="admin-fr-reject-reason-preview"
+            >
+              {accessReason.trim()}
+            </p>
+          </div>
+        </div>
       </ConfirmDialog>
     </Dialog>
   );
@@ -532,6 +560,18 @@ export default function AdminFeatureRequestsPage() {
   const [selected, setSelected] = useState<AdminFeatureRequestSummary | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const reviewReturnFocusRef = useRef<HTMLElement | null>(null);
+  const noticeRef = useRef<HTMLParagraphElement | null>(null);
+
+  const focusAfterDialogTeardown = (resolveTarget: () => HTMLElement | null) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const target = resolveTarget();
+        if (!target || !document.contains(target) || target.closest('[inert]')) return;
+        if ((target as HTMLElement & { disabled?: boolean }).disabled) return;
+        target.focus({ preventScroll: true });
+      });
+    });
+  };
 
   const featureRequestsQuery = useQuery({
     queryKey: queryKeys.admin.featureRequests({ status: statusFilter, page }),
@@ -558,6 +598,12 @@ export default function AdminFeatureRequestsPage() {
     reviewReturnFocusRef.current = trigger;
     setSelected(request);
     setNotice(null);
+  };
+
+  const closeReview = () => {
+    const trigger = reviewReturnFocusRef.current;
+    setSelected(null);
+    focusAfterDialogTeardown(() => trigger);
   };
 
   const columns: AdminTableColumn<AdminFeatureRequestSummary>[] = [
@@ -597,7 +643,7 @@ export default function AdminFeatureRequestsPage() {
         <Button
           type="button"
           variant="secondary"
-          size="sm"
+          size="md"
           onClick={(event) => openReview(r, event.currentTarget)}
           data-testid={`admin-fr-review-${r.request_id}`}
         >
@@ -624,7 +670,7 @@ export default function AdminFeatureRequestsPage() {
             setPage(1);
             setSelected(null);
           }}
-          className={inputClassName({ className: 'w-auto min-w-36 text-sm' })}
+          className={inputClassName({ className: 'w-auto min-w-36' })}
           data-testid="admin-fr-status-filter"
         >
           {STATUS_FILTERS.map((item) => (
@@ -638,21 +684,32 @@ export default function AdminFeatureRequestsPage() {
 
       {notice && (
         <p
+          ref={noticeRef}
           role="status"
-          className="rounded-sm bg-surface-soft p-3 text-sm text-body"
+          tabIndex={-1}
+          className="focus-ring rounded-sm bg-surface-soft p-3 text-sm text-body"
           data-testid="admin-fr-notice"
         >
           {notice}
         </p>
       )}
       {error && (
-        <p
+        <div
           role="alert"
-          className="rounded-sm bg-error-bg p-3 text-sm text-error-text"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-sm bg-error-bg p-3 text-sm text-error-text"
           data-testid="admin-fr-error"
         >
-          {error}
-        </p>
+          <span>{error}</span>
+          <Button
+            type="button"
+            variant="secondary"
+            size="md"
+            onClick={() => void featureRequestsQuery.refetch()}
+            data-testid="admin-fr-retry"
+          >
+            다시 시도
+          </Button>
+        </div>
       )}
 
       <AdminTable
@@ -670,11 +727,12 @@ export default function AdminFeatureRequestsPage() {
       {selected && (
         <ReviewDialog
           request={selected}
-          onClose={() => setSelected(null)}
+          onClose={closeReview}
           returnFocusRef={reviewReturnFocusRef}
           onDone={(message) => {
             setSelected(null);
             setNotice(message);
+            focusAfterDialogTeardown(() => noticeRef.current);
             void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });
             void queryClient.invalidateQueries({
               queryKey: queryKeys.admin.featureChangeRequestsAll(),
@@ -687,9 +745,10 @@ export default function AdminFeatureRequestsPage() {
         <Button
           type="button"
           variant="secondary"
-          size="sm"
+          size="md"
           disabled={page <= 1}
           onClick={() => setPage((p) => Math.max(1, p - 1))}
+          data-testid="admin-fr-prev-page"
         >
           이전
         </Button>
@@ -699,9 +758,10 @@ export default function AdminFeatureRequestsPage() {
         <Button
           type="button"
           variant="secondary"
-          size="sm"
+          size="md"
           disabled={page >= totalPages}
           onClick={() => setPage((p) => p + 1)}
+          data-testid="admin-fr-next-page"
         >
           다음
         </Button>
