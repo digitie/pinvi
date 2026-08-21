@@ -54,7 +54,6 @@ type MapPoint = ClusterPoint & {
   lon: number;
   lat: number;
   category?: string | null;
-  status?: string | null;
   featureId?: string;
   featureKind?: FeatureSummary['kind'];
   count?: number;
@@ -95,7 +94,6 @@ function toPoints(data: FeaturesInBoundsResponse): MapPoint[] {
         lon: f.coord.lon,
         lat: f.coord.lat,
         category: style.category,
-        status: f.status ?? null,
         featureId: f.feature_id,
         featureKind: f.kind,
       },
@@ -377,7 +375,6 @@ export function FeatureMapView({
           lon: coord.lon,
           lat: coord.lat,
           category: style.category,
-          status: null,
           featureId: result.feature_id,
           featureKind: undefined,
         });
@@ -628,7 +625,6 @@ export function FeatureMapView({
                     : 'false'
                 }
                 data-marker-count={point.count ?? ''}
-                data-feature-status={point.status ?? ''}
               >
                 {point.title}
               </span>

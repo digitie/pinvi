@@ -662,7 +662,6 @@ test('여행 지도는 feature를 보이고 빈 좌표에서 주소 포함 POI�
     category: '관광명소',
     marker_color: 'P-11',
     marker_icon: 'attraction',
-    status: 'active',
   };
 
   await page.route(/.*\/geo\/reverse(\?.*)?$/, async (route, request) => {

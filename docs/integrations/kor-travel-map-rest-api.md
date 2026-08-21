@@ -48,8 +48,8 @@
 > ① **3축 feature state cutover(`1f2bdc3a`)**: user 표면 `FeatureSummary`/
 > `NearbyFeatureSummary`/`FeatureDetailResponse`에서 `status`가 **삭제**되고 대체 필드가
 > 없다(state 축은 user profile 비노출). nearby의 `status` query filter도 없다. Pinvi는
-> `status` **소비를 끊었고**(`features.py`·`services/feature_detail.py`) 공개 스키마의
-> `status` 필드는 web/mobile 계약 때문에 남겨 **항상 None**이다.
+> `status` **소비를 끊었고**(`features.py`·`services/feature_detail.py`), 한동안 web/mobile
+> 계약 때문에 남겨 두었던 항상 None인 공개 필드도 **T-VN-42에서 제거**했다(2026-08-21, breaking).
 > ② **bitemporal weather(`6650aa71`)**: `WeatherCardData.asof` → `selected_at`(+`refresh_after`),
 > 시점 조회는 새 경로 `GET /v1/features/{id}/weather/snapshot`(§2.6b). §2.6/§2.6b 참조.
 >
@@ -74,11 +74,8 @@ sort, order]`이며 `status`·`provider`·`dataset_key`는 **없다**(보내면 
 >
 > **후속 과제**:
 >
-> 1. Pinvi 공개 응답에서 항상 None인 `status` 필드를 실제로 제거한다 —
->    `FeatureSummary`/`FeatureDetail`/`DetailCardBase`(`app/schemas/feature.py`)와 web/mobile
->    소비처를 함께 정리해야 하는 breaking change라 별도 cutover로 뺀다.
-> 2. Map이 Admin bitemporal snapshot 계약을 제공하면 비공개 feature의 `asof` 조회를 복원한다.
-> 3. 필요하면 `refresh_after` 소비(카드 캐시 TTL)를 검토한다.
+> 1. Map이 Admin bitemporal snapshot 계약을 제공하면 비공개 feature의 `asof` 조회를 복원한다.
+> 2. 필요하면 `refresh_after` 소비(카드 캐시 TTL)를 검토한다.
 >    **관계**: 능력 격차 분석은 `docs/kor-travel-map-requirements.md`(이제 대부분 해소),
 >    통합 패턴 개요는 `docs/kor-travel-map-integration.md`(본 문서가 구체 계약으로 대체/보강).
 >

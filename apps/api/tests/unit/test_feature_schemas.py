@@ -11,12 +11,18 @@ from pydantic import ValidationError
 from app.schemas.feature import (
     BBox,
     Coord,
+    DetailCardBase,
+    EventDetailCard,
     FeatureCluster,
     FeatureDetail,
     FeatureRequestCreate,
     FeatureRequestResponse,
     FeatureSummary,
     FeatureWeatherCard,
+    GenericDetailCard,
+    NoticeDetailCard,
+    PlaceDetailCard,
+    PriceDetailCard,
     WeatherMetric,
 )
 
@@ -55,7 +61,6 @@ class TestFeatureSummary:
         # marker_* 는 kor_travel_map nullable → Pinvi 기본값으로 채움
         assert summary.marker_color == "P-13"
         assert summary.marker_icon == "marker"
-        assert summary.status is None
         assert summary.distance_m is None
 
     def test_coord_is_optional(self) -> None:
@@ -63,16 +68,14 @@ class TestFeatureSummary:
         summary = FeatureSummary(feature_id="f1", kind="notice", name="공지")
         assert summary.coord is None
 
-    def test_status_and_distance(self) -> None:
+    def test_distance(self) -> None:
         summary = FeatureSummary(
             feature_id="f1",
             kind="place",
             name="근처",
             coord=Coord(lon=127.0, lat=37.5),
-            status="active",
             distance_m=42.0,
         )
-        assert summary.status == "active"
         assert summary.distance_m == 42.0
 
     def test_marker_color_invalid_pattern(self) -> None:
@@ -212,3 +215,103 @@ class TestFeatureRequestResponse:
         assert r.request_id == request_id
         assert r.status == "pending"
         assert r.categories == []
+
+
+# --- T-VN-42: 공개 `status` 제거 회귀 게이트 -------------------------------------------------
+#
+# Map 3축 feature state cutover(`1f2bdc3a`)로 user 표면에서 사라진 `status`를 Pinvi 공개 계약에서도
+# 제거했다. 이 필드는 되살아나도 **런타임 예외를 만들지 않는다** — `schemas/feature.py`에는
+# `model_config`가 없어 pydantic 기본 `extra="ignore"`이고, `mypy --strict`는 `app`만 검사하며,
+# `build_detail_card`는 `dict[str, Any]`를 `**common`으로 splat해 kwarg 정적 검사도 통하지 않는다.
+# 그래서 선언(A)과 노출 계약(B) 양쪽을 테스트로 못박는다. "값 재주입"은
+# `test_feature_detail.py::test_build_card_never_leaks_upstream_status`가 맡는다.
+
+_DETAIL_CARD_ARMS = (
+    PlaceDetailCard,
+    EventDetailCard,
+    NoticeDetailCard,
+    PriceDetailCard,
+    GenericDetailCard,
+)
+
+# OpenAPI components에 노출되는 이름(= 클라이언트가 보는 계약 문서의 스키마 이름).
+_PUBLIC_FEATURE_SCHEMA_NAMES = (
+    "FeatureSummary",
+    "FeatureDetail",
+    "PlaceDetailCard",
+    "EventDetailCard",
+    "NoticeDetailCard",
+    "PriceDetailCard",
+    "GenericDetailCard",
+)
+
+
+class TestPublicStatusFieldRemoved:
+    """게이트 A — 파이썬 선언에서 필드 집합을 **등호**로 고정한다.
+
+    `"status" not in ...`만 두면 다음 사람이 `feature_status`/`state` 같은 다른 이름으로 같은
+    실수를 반복해도 green이다. 등호는 이름을 바꾼 재도입까지 잡는다.
+    """
+
+    def test_summary_field_set_is_exact(self) -> None:
+        assert set(FeatureSummary.model_fields) == {
+            "feature_id",
+            "kind",
+            "name",
+            "coord",
+            "category",
+            "marker_color",
+            "marker_icon",
+            "distance_m",
+        }
+
+    def test_detail_field_set_is_exact(self) -> None:
+        assert set(FeatureDetail.model_fields) == {
+            "feature_id",
+            "kind",
+            "name",
+            "coord",
+            "category",
+            "address",
+            "legal_dong_code",
+            "sido_code",
+            "sigungu_code",
+            "marker_color",
+            "marker_icon",
+            "urls",
+            "detail",
+            "updated_at",
+        }
+
+    def test_detail_card_base_field_set_is_exact(self) -> None:
+        # `kind`는 base가 아니라 각 arm이 `Literal`로 선언한다.
+        assert set(DetailCardBase.model_fields) == {
+            "feature_id",
+            "name",
+            "coord",
+            "category",
+            "address_line",
+            "marker_color",
+            "marker_icon",
+            "homepage_url",
+            "enrichment",
+            "degraded_providers",
+        }
+
+    @pytest.mark.parametrize("model", _DETAIL_CARD_ARMS)
+    def test_detail_card_arms_have_no_status(self, model: type[DetailCardBase]) -> None:
+        assert "status" not in model.model_fields
+
+
+def test_public_openapi_feature_schemas_have_no_status() -> None:
+    """게이트 B — 클라이언트가 실제로 보는 OpenAPI 계약 문서에 필드가 없는지 본다.
+
+    A(선언)와 다른 실패 모드를 잡는다: 상속·alias·`response_model` 교체로 필드가 되살아나도
+    여기서 red가 된다. 스키마 이름이 사라져 검사가 조용히 침묵하는 구멍을 막으려고 존재부터 단언한다.
+    """
+    from app.main import app
+
+    schemas = app.openapi()["components"]["schemas"]
+    for name in _PUBLIC_FEATURE_SCHEMA_NAMES:
+        assert name in schemas, name
+        assert "status" not in schemas[name].get("properties", {}), name

@@ -1,7 +1,7 @@
 """features.py kor_travel_map → Pinvi 매핑 helper 단위 테스트 (DB 불필요).
 
 kor_travel_map 평면 lon/lat·name·구조화 address·cluster_key·평탄 metrics 투영을 검증한다.
-Map cutover로 **끊어낸** 소비(`status`)와 **이름이 바뀐** 소스(`asof` ← `selected_at`)도
+Map cutover로 **제거한** 필드(`status`, T-VN-42)와 **이름이 바뀐** 소스(`asof` ← `selected_at`)도
 여기서 고정한다.
 """
 
@@ -84,8 +84,10 @@ def test_summary_carries_distance() -> None:
 def test_summary_and_detail_never_read_status_from_map_dto() -> None:
     """Map 3축 feature state cutover(`1f2bdc3a`)로 user 표면에서 `status`가 사라졌다.
 
-    대체 필드가 없으므로 소비를 끊었다. dto에 `status`가 남아 있어도(구 스냅샷·mock)
-    Pinvi 응답으로 새어 나오면 안 된다 — 그래야 "값이 있는 척"하는 회귀를 잡는다.
+    대체 필드가 없어 T-VN-42에서 공개 스키마의 필드까지 제거했다. dto에 `status`가 남아 있어도
+    (구 스냅샷·mock) Pinvi 응답 키로 나타나면 안 된다. 필드 선언이 되살아나는 회귀는
+    `test_feature_schemas.py`의 필드 집합 등호 게이트가 잡고, 여기서는 선언과 값이 함께 되돌아온
+    조합이 조용히 통과하지 않게 upstream 오염을 계속 주입해 둔다.
     """
     dto = {
         "feature_id": "f1",
@@ -96,8 +98,8 @@ def test_summary_and_detail_never_read_status_from_map_dto() -> None:
         "status": "active",
         "updated_at": "2026-06-10T12:00:00+09:00",
     }
-    assert _summary_from_kor_travel_map(dto).status is None
-    assert _detail_from_kor_travel_map(dto).status is None
+    assert "status" not in _summary_from_kor_travel_map(dto).model_dump()
+    assert "status" not in _detail_from_kor_travel_map(dto).model_dump()
 
 
 def test_cluster_uses_natural_key_and_flat_coord() -> None:

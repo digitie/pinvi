@@ -92,8 +92,8 @@ async def test_detail_card_projects_place_without_providers(
         # 원본 불투명 dict는 노출하지 않는다.
         assert "detail" not in data
         assert "urls" not in data
-        # Map user 표면에 `status`가 없다(3축 cutover `1f2bdc3a`) → 계약상 남은 필드는 항상 null.
-        assert data["status"] is None
+        # Map user 표면에 `status`가 없고(3축 cutover `1f2bdc3a`) 공개 응답 키에서도 제거했다(T-VN-42).
+        assert "status" not in data
     finally:
         _clear()
 
@@ -103,9 +103,10 @@ async def test_detail_card_never_leaks_upstream_status(
 ) -> None:
     """upstream payload에 `status`가 섞여 있어도 공개 응답으로 새어 나가지 않는다.
 
-    fixture에서 키를 빼는 것만으로는 회귀를 못 잡는다 — `feature_detail.build_detail_card`의
-    투영을 되돌려도 없는 키를 읽어 계속 null이 나오기 때문이다. 여기서는 구 스냅샷처럼
-    `status`를 일부러 넣고 그래도 null임을 wire 레벨에서 고정한다(되돌리면 red).
+    구 스냅샷처럼 upstream에 `status`를 일부러 섞어 두고, 그 값이 공개 응답 키로 나타나지
+    않는지를 wire 레벨에서 고정한다(T-VN-42). 선언만 되돌리는 회귀는
+    `tests/unit/test_feature_schemas.py`의 필드 집합 등호 게이트가 먼저 잡고, 투영만 되돌리는
+    경우는 필드가 없어 pydantic이 값을 버리므로 새어 나갈 값 자체가 없다.
     """
     user_id, _ = verified_user
     _override(map_extra={"status": "active"})
@@ -113,8 +114,7 @@ async def test_detail_card_never_leaks_upstream_status(
         resp = await client.get("/features/place:1/detail-card", cookies=auth_cookies(user_id))
         assert resp.status_code == 200, resp.text
         data = resp.json()["data"]
-        assert "status" in data  # web/mobile 계약상 키는 유지된다(제거는 후속 cutover)
-        assert data["status"] is None
+        assert "status" not in data
     finally:
         _clear()
 

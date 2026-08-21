@@ -49,27 +49,27 @@ def test_build_place_card_projects_general_fields() -> None:
     assert card.business_hours == "09:00-22:00"
     assert card.homepage_url == "https://sb.example"
     assert card.coord is not None
-    # Map 3축 cutover(`1f2bdc3a`)로 user 표면에 `status`가 없다 → 스키마 필드는 항상 None.
-    assert card.status is None
+    # Map 3축 cutover(`1f2bdc3a`)로 user 표면에 `status`가 없다 → 공개 계약에도 키가 없다(T-VN-42).
+    assert "status" not in card.model_dump()
 
 
 def test_build_card_never_leaks_upstream_status() -> None:
-    """dto에 `status`가 남아 있어도 detail-card로 새어 나오면 안 된다.
+    """dto에 `status`가 남아 있어도 detail-card 계약으로 새어 나오면 안 된다.
 
     Map 3축 feature state cutover(`1f2bdc3a feat(api): complete feature state cutover`)로
-    `FeatureDetailResponse`에서 `status`가 삭제됐고 **대체 필드가 없다**. 기본 fixture에서 키를
-    빼는 것만으로는 회귀를 못 잡는다 — 투영을 되돌려도(`"status": _clean(dto.get("status"))`)
-    없는 키를 읽어 계속 None이 나오기 때문이다. 그래서 여기서는 구 스냅샷/mock처럼 dto에
-    `status`를 **일부러 넣고** 그래도 None임을 고정한다(되돌리면 red).
+    `FeatureDetailResponse`에서 `status`가 삭제됐고 **대체 필드가 없다**. T-VN-42에서 공개
+    스키마의 필드까지 제거했다.
+
+    이 테스트가 덮는 범위를 정확히 적어 둔다: 필드를 다시 선언하고 값까지 실어 보내는 조합을
+    **wire 표현**에서 막는다(선언만 되돌리는 경우는 `test_feature_schemas.py`의 필드 집합 등호
+    게이트가 먼저 red다). 반대로 투영만 되돌리는 경우(`"status": _clean(dto.get("status"))`)는
+    여기서 잡히지 않는다 — 필드가 선언돼 있지 않으면 pydantic 기본 `extra="ignore"`가 값을
+    버리므로 애초에 새어 나갈 값이 없다. upstream 오염을 계속 주입해 두는 이유는 두 조건이 함께
+    되살아날 때 조용히 통과하지 않게 하기 위해서다.
     """
     for kind in ("place", "event", "notice", "price", "area"):
         card = build_detail_card(_place_dto(kind=kind, status="active"))
-        assert card.status is None, kind
-
-
-def test_build_card_status_stays_none_when_dto_omits_it() -> None:
-    """실제 Map 응답(=`status` 키 없음)에서도 스키마 필드는 None으로 직렬화된다."""
-    assert build_detail_card(_place_dto()).status is None
+        assert "status" not in card.model_dump(), kind
 
 
 def test_build_event_card() -> None:
