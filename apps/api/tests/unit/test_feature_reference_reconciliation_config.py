@@ -146,6 +146,9 @@ def test_m05_evidence_runtime_uses_non_owner_database_login() -> None:
     assert "NOSUPERUSER" in bootstrap
     assert "NOINHERIT" in bootstrap
     assert "ALTER DEFAULT PRIVILEGES" in bootstrap
+    assert "until psql --no-password --tuples-only --no-align --host=app-postgres" in bootstrap
+    assert "--command='SELECT 1'" in bootstrap
+    assert '[ "$attempt" -ge 15 ]' in bootstrap
     assert "FROM pg_auth_members m" in bootstrap
     assert "WHERE m.member = r.oid" in bootstrap
     assert "CREATE SCHEMA IF NOT EXISTS x_extension AUTHORIZATION" in bootstrap

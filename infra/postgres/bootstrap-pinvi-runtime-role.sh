@@ -21,6 +21,17 @@ if [ "${POSTGRES_USER}" = "${PINVI_APP_DB_USER}" ]; then
 fi
 
 export PGPASSWORD="${POSTGRES_PASSWORD}"
+attempt=0
+until psql --no-password --tuples-only --no-align --host=app-postgres \
+  --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" --command='SELECT 1' >/dev/null 2>&1; do
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge 15 ]; then
+    unset PGPASSWORD
+    echo "Postgres TCP endpoint did not become ready for runtime role bootstrap" >&2
+    exit 1
+  fi
+  sleep 1
+done
 psql --no-password --set=ON_ERROR_STOP=1 --host=app-postgres --username="${POSTGRES_USER}" \
   --dbname="${POSTGRES_DB}" --set="owner=${POSTGRES_USER}" \
   --set="app_role=${PINVI_APP_DB_USER}" --set="app_password=${PINVI_APP_DB_PASSWORD}" \
