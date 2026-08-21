@@ -86,7 +86,7 @@ export function Dialog({
   // busy 중 닫기는 "진행 중 요청 취소"라는 다른 의미다 — 호출부가 그 경로를 줬을 때만 연다.
   const closeWhileBusy = busy ? onCancelBusy : undefined;
   const closeDisabled = busy && !closeWhileBusy;
-  const { titleId, portalContainer, backdropProps, dialogProps } = useModalDialog({
+  const { titleId, portalContainer, requestClose, backdropProps, dialogProps } = useModalDialog({
     onClose,
     active: open,
     // 저장 중에는 실수로 닫혀 작업이 사라지지 않게 잠근다(T-315 2차 리뷰: 닫기만 열어 두면
@@ -138,7 +138,7 @@ export function Dialog({
           {showClose ? (
             <button
               type="button"
-              onClick={closeWhileBusy ?? onClose}
+              onClick={closeWhileBusy ?? requestClose}
               disabled={closeDisabled}
               aria-label={closeWhileBusy ? '취소하고 닫기' : '닫기'}
               data-testid={`${testId}-close`}

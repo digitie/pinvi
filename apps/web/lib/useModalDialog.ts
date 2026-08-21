@@ -71,6 +71,8 @@ export interface ModalDialogA11y {
    * 훅은 렌더할 수 없으므로 `createPortal(node, portalContainer)` 호출은 호출부가 한다.
    */
   portalContainer: HTMLElement | null;
+  /** onClose와 함께 열기 전 trigger로 포커스를 복원하는 표준 닫기 경로. */
+  requestClose: () => void;
   /** 제목 요소에 달 id. `ariaLabel`을 주지 않았다면 이 id로 aria 연결된다. */
   titleId: string;
   /** backdrop(scrim) 요소에 spread. */
@@ -266,6 +268,14 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     openerRef.current = (document.activeElement as HTMLElement | null) ?? null;
   }, [active]);
 
+  const requestClose = () => {
+    const returnTarget = returnFocusRefRef.current?.current ?? openerRef.current;
+    onCloseRef.current();
+    window.setTimeout(() => {
+      focusWhenRestorable(() => returnTarget);
+    }, 0);
+  };
+
   // ② 배경 inert — cleanup(해제)이 ③의 포커스 복원보다 **먼저** 돌아야 한다.
   //    (React는 effect/cleanup을 선언 순서대로 실행한다.)
   useEffect(() => {
@@ -384,7 +394,7 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
       if (modalStack[modalStack.length - 1] !== generatedTitleId) return;
       if (event.key === 'Escape' && closeOnEscape) {
         event.stopPropagation();
-        onCloseRef.current();
+        requestClose();
         return;
       }
       if (event.key !== 'Tab') return;
@@ -439,6 +449,7 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     dialogRef,
     portalContainer: portalNode,
     titleId,
+    requestClose,
     backdropProps: {
       onMouseDown: (event: ReactMouseEvent) => {
         pointerDownOnBackdrop.current = event.target === event.currentTarget;
@@ -447,7 +458,7 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
         const startedOnBackdrop = pointerDownOnBackdrop.current;
         pointerDownOnBackdrop.current = false;
         if (closeOnBackdrop && startedOnBackdrop && event.target === event.currentTarget) {
-          onCloseRef.current();
+          requestClose();
         }
       },
     },
