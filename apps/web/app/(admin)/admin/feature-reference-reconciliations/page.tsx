@@ -540,16 +540,20 @@ export default function AdminFeatureReferenceReconciliationsPage() {
     detailReturnFocusRef.current = event.currentTarget;
     setSelectedEventId(row.event_id);
   };
-  const restoreDetailFocus = () => {
-    const trigger = detailReturnFocusRef.current;
+  const focusAfterDialogTeardown = (resolveTarget: () => HTMLElement | null) => {
     window.requestAnimationFrame(() => {
-      const disabled = (trigger as HTMLButtonElement | null)?.disabled;
-      if (trigger && document.contains(trigger) && !disabled) trigger.focus();
+      window.requestAnimationFrame(() => {
+        const target = resolveTarget();
+        if (!target || !document.contains(target) || target.closest('[inert]')) return;
+        if ((target as HTMLElement & { disabled?: boolean }).disabled) return;
+        target.focus({ preventScroll: true });
+      });
     });
   };
   const closeDetail = () => {
+    const trigger = detailReturnFocusRef.current;
     setSelectedEventId(null);
-    restoreDetailFocus();
+    focusAfterDialogTeardown(() => trigger);
   };
   const columns: AdminTableColumn<AdminFeatureReferenceReconciliationSummary>[] = [
     {
@@ -661,6 +665,7 @@ export default function AdminFeatureReferenceReconciliationsPage() {
           rowKey={(row) => row.event_id}
           loading={listQuery.isLoading}
           empty="아직 Map Feature 참조 조정 증거가 없습니다. 상태 필터를 전체로 바꿔 보세요."
+          rowTestId={(row) => `admin-frr-row-${row.event_id}`}
           mobileCard={(row) => (
             <MobileEvidenceCard
               row={row}

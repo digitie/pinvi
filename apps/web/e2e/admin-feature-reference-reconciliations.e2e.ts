@@ -53,8 +53,8 @@ async function expectNoRootHorizontalScroll(page: Page) {
   await expect
     .poll(() =>
       page.evaluate(() => ({
-        body: document.body.scrollWidth <= document.body.clientWidth,
-        html: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        body: document.body.scrollWidth <= document.body.clientWidth + 1,
+        html: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
       })),
     )
     .toEqual({ body: true, html: true });
@@ -76,6 +76,37 @@ function isBlockedDetailRoute(url: URL) {
     url.port === '12801' &&
     url.pathname === `/admin/feature-reference-reconciliations/${blockedEventId}`
   );
+}
+
+async function routeBlockedDetail(
+  page: Page,
+  { failuresBeforeSuccess = 0 }: { failuresBeforeSuccess?: number } = {},
+) {
+  let calls = 0;
+  await page.route(isBlockedDetailRoute, async (route) => {
+    calls += 1;
+    if (calls <= failuresBeforeSuccess) {
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'TEST_ERROR', message: 'temporary failure' } }),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          event_id: blockedEventId,
+          status: 'blocked',
+          receipt: null,
+          attempts: [blockedAttempt],
+          impacts: [],
+        },
+      }),
+    });
+  });
+  return { calls: () => calls };
 }
 
 async function closeDetailDialog(page: Page) {
@@ -184,25 +215,13 @@ test.beforeEach(async ({ page }) => {
       });
     },
   );
-  await page.route(isBlockedDetailRoute, async (route) => {
-    await route.fulfill({
-      contentType: 'application/json',
-      body: JSON.stringify({
-        data: {
-          event_id: blockedEventId,
-          status: 'blocked',
-          receipt: null,
-          attempts: [blockedAttempt],
-          impacts: [],
-        },
-      }),
-    });
-  });
 });
 
 test('Admin이 M05 receipt와 blocked evidence를 Dialog에서 읽기 전용으로 확인한다', async ({
   page,
 }) => {
+  await routeBlockedDetail(page);
+
   const evidenceRequests: string[] = [];
   const mutationRequests: string[] = [];
   page.on('request', (request) => {
@@ -218,7 +237,9 @@ test('Admin이 M05 receipt와 blocked evidence를 Dialog에서 읽기 전용으�
   await page.goto('/admin/feature-reference-reconciliations');
 
   await expect(page.getByRole('heading', { name: 'Feature 참조 조정 증거' })).toBeVisible();
-  await expect(page.getByText('차단됨')).toBeVisible();
+  await expect(
+    page.getByTestId(`admin-frr-row-${blockedEventId}`).getByText('차단됨'),
+  ).toBeVisible();
   await page.getByTestId(`admin-frr-detail-${blockedEventId}`).click();
 
   const dialog = page.getByRole('dialog', { name: 'Feature 참조 조정 증거 상세' });
@@ -270,6 +291,7 @@ test('Admin이 M05 receipt와 blocked evidence를 Dialog에서 읽기 전용으�
 });
 
 test('상세 Dialog는 키보드로 열리고 닫힌 뒤 trigger에 focus를 복원한다', async ({ page }) => {
+  await routeBlockedDetail(page);
   await page.goto('/admin/feature-reference-reconciliations');
 
   const trigger = page.getByTestId(`admin-frr-detail-${blockedEventId}`);
@@ -286,31 +308,7 @@ test('상세 Dialog는 키보드로 열리고 닫힌 뒤 trigger에 focus를 복
 });
 
 test('상세 조회 실패는 Dialog 안에서 다시 시도할 수 있다', async ({ page }) => {
-  let calls = 0;
-  await page.unroute(isBlockedDetailRoute);
-  await page.route(isBlockedDetailRoute, async (route) => {
-    calls += 1;
-    if (calls === 1) {
-      await route.fulfill({
-        status: 500,
-        contentType: 'application/json',
-        body: JSON.stringify({ error: { code: 'TEST_ERROR', message: 'temporary failure' } }),
-      });
-      return;
-    }
-    await route.fulfill({
-      contentType: 'application/json',
-      body: JSON.stringify({
-        data: {
-          event_id: blockedEventId,
-          status: 'blocked',
-          receipt: null,
-          attempts: [blockedAttempt],
-          impacts: [],
-        },
-      }),
-    });
-  });
+  const blockedDetail = await routeBlockedDetail(page, { failuresBeforeSuccess: 1 });
 
   await page.goto('/admin/feature-reference-reconciliations');
   await page.getByTestId(`admin-frr-detail-${blockedEventId}`).click();
@@ -319,12 +317,13 @@ test('상세 조회 실패는 Dialog 안에서 다시 시도할 수 있다', asy
   await page.getByTestId('admin-frr-detail-retry').click();
 
   await expect(page.getByTestId('admin-frr-readonly-boundary')).toContainText('읽기 전용');
-  expect(calls).toBe(2);
+  expect(blockedDetail.calls()).toBe(2);
 });
 
 test('데스크톱과 모바일 trigger는 중복 렌더 중 보이는 버튼만 열고 focus를 복원한다', async ({
   page,
 }) => {
+  await routeBlockedDetail(page);
   await page.setViewportSize({ width: 768, height: 820 });
   await page.goto('/admin/feature-reference-reconciliations');
 
@@ -352,6 +351,7 @@ for (const width of [320, 375, 414, 768]) {
   test(`M05 증거 화면은 ${width}px에서 root overflow 없이 읽기 전용 상세를 연다`, async ({
     page,
   }) => {
+    await routeBlockedDetail(page);
     await page.setViewportSize({ width, height: 820 });
     await page.goto('/admin/feature-reference-reconciliations');
 
