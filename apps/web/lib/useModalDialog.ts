@@ -152,7 +152,7 @@ function focusWhenRestorable(resolveTarget: () => HTMLElement | null | undefined
     if (remainingFrames > 0) window.requestAnimationFrame(tryFocus);
   };
 
-  window.requestAnimationFrame(tryFocus);
+  tryFocus();
 }
 
 /**

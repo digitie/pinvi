@@ -107,7 +107,7 @@ export function Dialog({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-modal flex justify-center bg-scrim/50 ${
+      className={`fixed inset-0 z-modal flex min-w-0 max-w-full justify-center overflow-x-clip bg-scrim/50 ${
         sheet ? 'items-end p-0 sm:items-center sm:p-4' : 'items-center p-4'
       }`}
       data-testid={`${testId}-backdrop`}
@@ -116,11 +116,11 @@ export function Dialog({
       <div
         {...dialogProps}
         data-testid={testId}
-        className={`flex max-h-[88dvh] w-full flex-col overflow-hidden border border-hairline bg-canvas shadow-overlay outline-none ${
+        className={`flex max-h-[88dvh] w-full min-w-0 max-w-full flex-col overflow-hidden border border-hairline bg-canvas shadow-overlay outline-none ${
           sheet ? 'rounded-t-xl sm:rounded-md' : 'rounded-md'
         } ${SIZE[size]}`}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-hairline px-5 py-4">
+        <div className="flex min-w-0 items-start justify-between gap-3 border-b border-hairline px-5 py-4">
           <div className="min-w-0">
             <h2
               id={titleId}
@@ -149,10 +149,10 @@ export function Dialog({
           ) : null}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-auto px-5 py-4">{children}</div>
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto px-5 py-4">{children}</div>
 
         {footer != null ? (
-          <div className="flex flex-wrap justify-end gap-2 border-t border-hairline px-5 py-4">
+          <div className="flex min-w-0 flex-wrap justify-end gap-2 border-t border-hairline px-5 py-4">
             {footer}
           </div>
         ) : null}

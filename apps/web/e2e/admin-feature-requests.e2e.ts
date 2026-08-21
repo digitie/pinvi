@@ -137,7 +137,11 @@ test('Admin이 신규 장소를 승인하면 저장된 payload를 Map 요청 큐
 
   await page.goto('/admin/feature-requests');
   await expect(page.getByRole('heading', { name: 'Feature 제안 검토' })).toBeVisible();
-  await expect(page.getByRole('cell', { name: '새 카페' })).toBeVisible();
+  await expect(
+    page
+      .getByTestId(`admin-fr-row-${requestId}`)
+      .getByRole('cell', { name: '새 카페', exact: true }),
+  ).toBeVisible();
 
   await page.getByTestId(`admin-fr-review-${requestId}`).click();
   await expect(page.getByTestId('admin-fr-review-dialog')).toBeVisible();
@@ -328,7 +332,11 @@ test('목록 오류는 복구 버튼으로 다시 조회할 수 있다', async (
   failList = false;
   await page.getByTestId('admin-fr-retry').click();
 
-  await expect(page.getByRole('cell', { name: '새 카페' })).toBeVisible();
+  await expect(
+    page
+      .getByTestId(`admin-fr-row-${requestId}`)
+      .getByRole('cell', { name: '새 카페', exact: true }),
+  ).toBeVisible();
 });
 
 for (const width of [320, 375, 414, 768]) {
