@@ -141,6 +141,7 @@ export function isRestorableFocusTarget(
       !(element as HTMLElement & { disabled?: boolean }).disabled &&
       computedStyle?.display !== 'none' &&
       computedStyle?.visibility !== 'hidden' &&
+      element.getClientRects().length > 0 &&
       // inert는 하위로 상속된다 — 자기 속성만 보면 배경 안 버튼을 "포커스 가능"으로 오판한다.
       element.closest('[inert]') === null,
   );

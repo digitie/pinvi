@@ -23,6 +23,9 @@ describe('useModalDialog', () => {
   it('숨겨진 대상은 focus 복원 대상으로 취급하지 않는다', () => {
     const target = document.createElement('button');
     document.body.append(target);
+    const getClientRects = vi
+      .spyOn(target, 'getClientRects')
+      .mockReturnValue([{}] as unknown as DOMRectList);
     target.style.display = 'none';
     expect(isRestorableFocusTarget(target)).toBe(false);
     target.style.display = '';
@@ -30,6 +33,7 @@ describe('useModalDialog', () => {
     expect(isRestorableFocusTarget(target)).toBe(false);
     target.style.visibility = '';
     expect(isRestorableFocusTarget(target)).toBe(true);
+    getClientRects.mockRestore();
     target.remove();
   });
 
