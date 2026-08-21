@@ -2,29 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
-## 2026-08-21 (claude) — T-321: vitest의 조용한 테스트 파일 누락을 실패로 만든다
+## 2026-08-21 (claude) — T-321: 전제가 틀렸던 조사와 CI 실행 범위 교정
 
-T-VN-42 검증 중 `vitest run`이 18파일 중 3~6개를 결과 없이 버리고 **exit 0**으로 끝나는 걸 봤다.
-설치본을 따라가 원인을 확정했다 — `runner.start().catch(...)`가 만든 rejection을
-`await resolver.promise.catch((error) => span?.recordException(error))`가 삼켜 실행 결과로 전파되지
-않는다(vitest 4.1.10, `dist/chunks/cli-api.*.js`). 요약 줄(`Test Files 15 passed (15)`)은 실행된 것만
-세므로 사람도 CI도 누락을 모른다.
+T-VN-42 검증 중 `vitest run`이 18파일 중 6개를 결과 없이 끝내는 걸 보고 "조용히 건너뛰고 exit 0"이라고
+판단해 리포터 가드를 만들었다. **적대적 리뷰가 이 전제를 무너뜨렸고, 리뷰가 옳았다.**
 
-**가드** — `AssertAllPlannedFilesRan` 리포터가 `onTestRunStart`의 계획 spec과 `onTestRunEnd`의 결과
-module을 대조해, 차이가 있으면 누락 목록을 찍고 `process.exitCode = 1`로 실행을 실패시킨다. vitest는
-exitCode를 1로 올리기만 하고 0으로 되돌리지 않아 이 방식이 성립한다. 계획 집합은 필터가 적용된 뒤의
-목록이라 부분 실행에서 오탐하지 않고, `--shard`와 `interrupted`는 예외로 뒀다. 구현 중 실제로 워커
-기동 실패가 재발해 가드가 그대로 발동하는 것까지 확인했다.
+**틀린 전제**: vitest는 워커 기동 실패를 삼키지 않는다. 그 오류들을 unhandled error로 모아
+`Unhandled Errors` 블록에 파일명과 함께 출력하고 `process.exitCode = 1`을 설정한다. 실제 문제는
+**요약 줄이 실행된 것만 세어 과소 집계**(`Test Files 12 passed (12)` — 계획은 18)하는 것이고,
+CI가 거짓 green을 내지는 않는다. CI 이력 132 run 전수 조사에서도 실제 누락은 0건이었다.
 
-**예방책임을 분명히 한다** — CI 이력을 전수 조사한 결과(vitest 4 전환 이후 web 워크플로 132 run,
-실행 파일 집합을 체크아웃 트리와 대조) 실제 누락은 **한 번도 없었다**. 다만 그 스텝을 담은
-`lint-typecheck-build`는 aggregate required check라 한 번 발생하면 머지까지 통과한다.
+**왜 틀렸나 — 검증 하네스 결함**: `wsl -d ... -- bash -lc "cmd; echo exit=$?"` 형태로 종료 코드를
+쟀는데, 이 경로에서는 **바깥 셸의 `$?`가 먼저 치환돼 항상 0**이 나온다(`false; echo $?` → 0으로 확인).
+같은 세션에서 npm이 직접 `npm error code 1`을 찍은 실행이 있었는데도 그 신호보다 내 계측을 믿었다.
+앞으로 종료 코드는 스크립트 파일에 담아 측정한다(`bash /path/script.sh`).
 
-**곁들여 더 큰 구멍을 닫았다** — CI가 `npm test --workspace @pinvi/web`만 돌려서
-`packages/{domain,schemas}`의 24파일 104테스트가 **한 번도 실행된 적이 없었다**. 루트 `npm test`는 이미
-`--workspaces --if-present`라 워크플로 한 줄 교체로 CI 보호 범위에 들어왔고, 세 워크스페이스 43파일
-224테스트가 전부 통과한다. 잔여는 T-322(packages에도 가드 적용)·T-323(e2e를 required로 올릴지)로 뺐다.
+**결정**: 리포터 가드는 vitest가 이미 내는 실패 신호를 중복하고, `reporters`를 명시하는 대가로
+기본 주입 블록(`default` + CI `github-actions`)을 수동 유지해야 하는 함정만 남긴다 — 철회했다.
 
+**남긴 것 — 조사 중 드러난 진짜 구멍**: CI 테스트 스텝이 `npm test --workspace @pinvi/web`이라
+`packages/domain`(19파일 88테스트)과 `packages/schemas`(5파일 16테스트)가 **한 번도 실행된 적이 없었다**.
+루트 `npm test`는 이미 `--workspaces --if-present`라 워크플로 한 줄 교체로 CI 보호 범위에 들어왔고,
+세 워크스페이스 43파일 224테스트가 통과한다(CI에서도 확인). 요약 줄 과소 집계와 대응은
+`docs/conventions/testing.md` §6.1에 남겼다.
 
 ## 2026-08-21 (claude) — T-VN-42 종결: 공개 `status` 필드 제거(breaking)
 

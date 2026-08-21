@@ -6,14 +6,19 @@
 
 ## 2026-08-21
 
-- [x] **T-321** — `vitest run`의 조용한 테스트 파일 누락을 실패로 만든다. (완료: 2026-08-21, PR TBD, claude)
-      원인은 vitest 4.1.10이 fork 워커 기동 실패 rejection을 trace span에만 기록하고 실행 결과로
-      전파하지 않는 것이다 — 요약 줄은 실행된 것만 세므로 사람도 CI도 누락을 모른 채 exit 0이 된다.
-      `AssertAllPlannedFilesRan` 리포터가 계획 spec과 결과 module을 대조해 누락 시 목록을 찍고
-      `process.exitCode = 1`로 실행을 실패시킨다(부분 실행·`--shard`는 오탐하지 않는다).
-      곁들여 CI가 `@pinvi/web`만 돌리던 것을 루트 `npm test`로 바꿔 `packages/{domain,schemas}`의
-      24파일 104테스트를 CI 보호 범위에 넣었다 — 같은 "조용한 green" 계열의 더 큰 구멍이었다.
-      CI 이력 132 run 전수 조사 결과 실제 누락은 한 번도 없었으므로 이 변경은 예방책이다.
+- [x] **T-321** — vitest 워커 기동 실패 시의 "조용한 누락" 조사와 CI 실행 범위 교정.
+      (완료: 2026-08-21, PR #461, claude)
+      **등록 당시 전제가 틀렸다**: 워커 기동 실패가 exit 0으로 끝난다고 봤으나, vitest는 그 오류를
+      unhandled error로 모아 `Unhandled Errors` 블록에 파일명과 함께 출력하고 `process.exitCode = 1`을
+      설정한다. 실제 문제는 **요약 줄(`Test Files 12 passed (12)`)이 실행된 것만 세어 과소 집계**하는
+      것이며 CI가 거짓 green을 내지는 않는다(CI 이력 132 run 전수 조사에서도 누락 0건).
+      전제 오인의 원인은 검증 하네스였다 — `wsl -- bash -lc "...; echo $?"` 형태가 바깥 셸의 `$?`를
+      먼저 치환해 항상 0을 보고했다. 종료 코드는 스크립트 파일로 측정해야 한다.
+      따라서 리포터 가드는 vitest의 기존 실패 신호를 중복하고 `reporters` 명시라는 유지 부담만 남겨
+      **철회**했고, 조사 중 드러난 진짜 구멍만 고쳤다: CI가 `npm test --workspace @pinvi/web`만 돌려서
+      `packages/{domain,schemas}`의 24파일 104테스트가 한 번도 실행된 적이 없었다. 루트 `npm test`로
+      교체해 CI 보호 범위에 넣었고 세 워크스페이스 43파일 224테스트가 통과한다.
+      요약 줄 과소 집계와 대응은 `docs/conventions/testing.md` §6.1에 남겼다.
 
 - [x] **T-VN-42 — Map user OpenAPI 재vendor(`95d2c128`) 소비 정렬** —
   1차 묶음 **PR #451 머지 완료**(2026-08-19 KST). 스냅샷 SHA-256 `6a2ee0f9…`(Map `95d2c128`·`origin/main`

@@ -61,8 +61,6 @@
 
 ## 웹 / 테스트 인프라
 
-- [ ] **T-322** — `packages/{domain,schemas}`에는 vitest 설정 파일이 없어 T-321 누락 가드가 걸려 있지
-  않다(기본값으로 실행). 두 워크스페이스에도 같은 가드를 붙일지, 공용 설정으로 뺄지 정한다.
 - [ ] **T-323** — web 워크플로의 `e2e` 잡이 aggregate required check가 아니라 Playwright 실패가 머지를
   막지 않는다. 의도된 것인지 확인하고 아니면 required로 올린다.
 
