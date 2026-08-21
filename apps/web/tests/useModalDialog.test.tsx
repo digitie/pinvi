@@ -72,14 +72,14 @@ describe('useModalDialog', () => {
     expect(panel).not.toHaveAttribute('aria-labelledby');
   });
 
-  it('열려도 root의 x축 clip 계약을 inline style로 덮어쓰지 않는다', () => {
+  it('열리면 root 스크롤을 잠그고 닫히면 복원한다', () => {
     const root = document.documentElement;
     const body = document.body;
     expect(root.style.overflow).toBe('');
     expect(body.style.overflow).toBe('');
     const { unmount } = render(<Harness onClose={vi.fn()} />);
-    expect(root.style.overflow).toBe('');
-    expect(body.style.overflow).toBe('');
+    expect(root.style.overflow).toBe('clip');
+    expect(body.style.overflow).toBe('clip');
     unmount();
     expect(root.style.overflow).toBe('');
     expect(body.style.overflow).toBe('');

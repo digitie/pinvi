@@ -92,10 +92,10 @@ export interface ModalDialogA11y {
   };
 }
 
-// 여러 모달이 동시에 스크롤을 잠글 수 있으므로, 마지막 하나가 풀릴 때만 해제한다.
+// 여러 모달이 동시에 스크롤을 잠글 수 있으므로, 마지막 하나가 풀릴 때만 원복한다.
 let scrollLockCount = 0;
-let lockedScrollY = 0;
-let scrollLockListener: (() => void) | null = null;
+let previousDocumentOverflow: string | null = null;
+let previousBodyOverflow: string | null = null;
 
 const FOCUSABLE_SELECTOR = [
   'a[href]',
@@ -379,23 +379,23 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     };
   }, [active, generatedTitleId]);
 
-  // root의 기존 overflow-x: clip 계약은 그대로 두고, scroll event를 원 위치로 되돌린다.
-  // overflow 축을 inline으로 덮어쓰면 모바일 nav의 scrollable overflow가 root에 승격된다.
+  // 잠긴 동안 root가 스크롤 가능한 overflow를 승격하지 않도록 완전히 clip한다.
   useEffect(() => {
     if (!active || !lockScroll) return;
     if (scrollLockCount === 0) {
-      lockedScrollY = window.scrollY;
-      scrollLockListener = () => {
-        window.scrollTo({ left: 0, top: lockedScrollY });
-      };
-      window.addEventListener('scroll', scrollLockListener, { passive: true });
+      previousDocumentOverflow = document.documentElement.style.overflow;
+      previousBodyOverflow = document.body.style.overflow;
+      document.documentElement.style.overflow = 'clip';
+      document.body.style.overflow = 'clip';
     }
     scrollLockCount += 1;
     return () => {
       scrollLockCount -= 1;
       if (scrollLockCount === 0) {
-        if (scrollLockListener) window.removeEventListener('scroll', scrollLockListener);
-        scrollLockListener = null;
+        document.documentElement.style.overflow = previousDocumentOverflow ?? '';
+        document.body.style.overflow = previousBodyOverflow ?? '';
+        previousDocumentOverflow = null;
+        previousBodyOverflow = null;
       }
     };
   }, [active, lockScroll]);
