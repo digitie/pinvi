@@ -41,6 +41,22 @@ const correctionSummary = {
   name: '수정 전 장소',
 };
 
+const mappedRequestId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+const mappedSummary = {
+  ...summary,
+  request_id: mappedRequestId,
+  name: 'Map 큐 전달 장소',
+  status: 'approved',
+  kor_travel_map_ref: {
+    request_id: '01900000-0000-7000-8000-000000000009',
+    state: 'pending',
+    review_mode: 'feature_request_queue',
+    action: 'submit',
+  },
+  reviewed_by_admin_id: adminUser.user_id,
+  resolved_at: '2026-06-11T10:05:00+09:00',
+};
+
 test.beforeEach(async ({ page }) => {
   await page.route(
     (url) => url.port === '12801' && url.pathname === '/auth/me',
@@ -57,7 +73,12 @@ test.beforeEach(async ({ page }) => {
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
-          data: { items: [summary, correctionSummary], total: 2, page: 1, limit: 50 },
+          data: {
+            items: [summary, correctionSummary, mappedSummary],
+            total: 3,
+            page: 1,
+            limit: 50,
+          },
         }),
       });
     },
@@ -93,10 +114,12 @@ test('Admin이 신규 장소를 승인하면 저장된 payload를 Map 요청 큐
 
   await page.goto('/admin/feature-requests');
   await expect(page.getByRole('heading', { name: 'Feature 제안 검토' })).toBeVisible();
-  await expect(page.getByText('새 카페')).toBeVisible();
+  await expect(page.getByRole('cell', { name: '새 카페' })).toBeVisible();
 
   await page.getByTestId(`admin-fr-review-${requestId}`).click();
+  await expect(page.getByTestId('admin-fr-review-dialog')).toBeVisible();
   await expect(page.getByTestId('admin-fr-review-panel')).toBeVisible();
+  await expect(page.getByTestId('admin-fr-reason')).toBeFocused();
 
   await expect(page.getByTestId('admin-fr-queue-payload-notice')).toBeVisible();
   await expect(page.getByTestId('admin-fr-category')).toHaveCount(0);
@@ -171,4 +194,78 @@ test('Admin이 정보 수정 승인에 명시한 변경 필드를 전달한다',
     name: '수정 후 장소',
     category: '01070100',
   });
+});
+
+test('거절은 확인 단계를 거친 뒤 사유만 전달한다', async ({ page }) => {
+  let rejectBody: Record<string, unknown> | null = null;
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === `/admin/feature-requests/${requestId}/reject`,
+    async (route) => {
+      rejectBody = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            request_id: requestId,
+            status: 'rejected',
+            kor_travel_map_ref: null,
+            reviewed_by_admin_id: adminUser.user_id,
+            resolved_at: '2026-06-11T10:05:00+09:00',
+          },
+        }),
+      });
+    },
+  );
+
+  await page.goto('/admin/feature-requests');
+  await page.getByTestId(`admin-fr-review-${requestId}`).click();
+  await page.getByTestId('admin-fr-reason').fill('중복 제보');
+  const rejectButton = page.getByTestId('admin-fr-reject');
+  await rejectButton.click();
+
+  await expect(page.getByTestId('admin-fr-reject-confirm')).toBeVisible();
+  await expect(page.getByTestId('admin-fr-reject-confirmation')).toBeVisible();
+  await expect(page.getByTestId('admin-fr-reject-confirm-cancel')).toBeFocused();
+  expect(rejectBody).toBeNull();
+
+  await page.getByTestId('admin-fr-reject-confirm-cancel').click();
+  await expect(rejectButton).toBeFocused();
+
+  await rejectButton.click();
+  await page.getByTestId('admin-fr-reject-confirm-confirm').click();
+  await expect(page.getByTestId('admin-fr-notice')).toBeVisible();
+  expect(rejectBody).toEqual({ access_reason: '중복 제보' });
+});
+
+test('검토 다이얼로그를 닫으면 검토 버튼으로 포커스를 되돌린다', async ({ page }) => {
+  await page.goto('/admin/feature-requests');
+  const trigger = page.getByTestId(`admin-fr-review-${requestId}`);
+  await trigger.click();
+  await expect(page.getByTestId('admin-fr-reason')).toBeFocused();
+
+  await page.getByTestId('admin-fr-review-dialog-close').click();
+
+  await expect(trigger).toBeFocused();
+});
+
+test('Map 전달 참조를 구조화해 보여준다', async ({ page }) => {
+  await page.goto('/admin/feature-requests');
+  await page.getByTestId(`admin-fr-review-${mappedRequestId}`).click();
+
+  const mapRef = page.getByTestId('admin-fr-kor_travel_map-ref');
+  await expect(mapRef).toContainText('Map 전달 상태');
+  await expect(mapRef).toContainText('요청 ID');
+  await expect(mapRef).toContainText('Map Feature 요청 큐 ID');
+  await expect(mapRef).toContainText('01900000-0000-7000-8000-000000000009');
+});
+
+test('모바일 폭에서는 카드 목록에서 검토 다이얼로그를 연다', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto('/admin/feature-requests');
+
+  await expect(page.getByTestId('admin-mobile-cards')).toBeVisible();
+  await page.getByTestId(`admin-fr-mobile-review-${requestId}`).click();
+
+  await expect(page.getByTestId('admin-fr-review-dialog')).toBeVisible();
+  await expect(page.getByTestId('admin-fr-reason')).toBeFocused();
 });
