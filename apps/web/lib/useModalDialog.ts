@@ -246,6 +246,10 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
   useEffect(() => {
     returnFocusRefRef.current = returnFocusRef;
   }, [returnFocusRef]);
+  // 명시적 닫기 경로가 고른 대상은 active=false commit 뒤에만 복원한다. 같은 이벤트에서
+  // setTimeout으로 서두르면 React cleanup보다 앞서 inert 상태의 trigger를 건너뛸 수 있다.
+  const pendingReturnFocusRef = useRef<HTMLElement | null>(null);
+  const wasActiveRef = useRef(active);
 
   // portal 컨테이너를 body 직계 자식으로 붙인다 — 배경 inert의 선행 조건이다.
   useEffect(() => {
@@ -270,16 +274,8 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
   }, [active]);
 
   const requestClose = () => {
-    const returnTarget = returnFocusRefRef.current?.current ?? openerRef.current;
+    pendingReturnFocusRef.current = returnFocusRefRef.current?.current ?? openerRef.current;
     onCloseRef.current();
-    window.setTimeout(() => {
-      const inertAncestor = returnTarget?.closest('[inert]');
-      const inertEntry = inertSnapshot?.find(({ element }) => element === inertAncestor);
-      if (inertAncestor && inertEntry && !inertEntry.hadInert) {
-        inertAncestor.removeAttribute('inert');
-      }
-      focusWhenRestorable(() => returnTarget);
-    }, 0);
   };
 
   // ② 배경 inert — cleanup(해제)이 ③의 포커스 복원보다 **먼저** 돌아야 한다.
@@ -323,6 +319,21 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
       });
     };
   }, [active, generatedTitleId]);
+
+  // active=false의 passive effect는 모든 모달 cleanup(inert/portal/stack 해제) 뒤에 실행된다.
+  // 한 프레임 뒤 복원해 닫기 이벤트와 React commit의 순서 경쟁을 피한다.
+  useEffect(() => {
+    const wasActive = wasActiveRef.current;
+    wasActiveRef.current = active;
+    if (active || !wasActive) return;
+    const returnTarget = pendingReturnFocusRef.current;
+    pendingReturnFocusRef.current = null;
+    if (!returnTarget) return;
+    const raf = window.requestAnimationFrame(() => {
+      focusWhenRestorable(() => returnTarget);
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [active]);
 
   // 포커스 격납 — 안에 있던 요소가 disabled/언마운트되면(저장 중 버튼, 완료 화면 전환)
   // 포커스가 body로 떨어져 aria-modal 밖에 놓인다. **이때 브라우저는 focusin을 쏘지 않으므로**

@@ -244,7 +244,7 @@ function AdminGuard({ children }: { children: ReactNode }) {
           aria-label="Admin navigation"
         >
           <div
-            className={`flex w-full min-w-0 max-w-full gap-2 overflow-x-auto overflow-y-hidden lg:block lg:overflow-visible ${
+            className={`flex w-full min-w-0 max-w-full gap-2 overflow-x-auto overflow-y-hidden [contain:inline-size] lg:block lg:overflow-visible lg:[contain:none] ${
               sidebarCollapsed ? 'lg:space-y-3' : 'lg:space-y-5'
             }`}
           >

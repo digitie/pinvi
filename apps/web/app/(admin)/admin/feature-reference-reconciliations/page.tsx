@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  useCallback,
   useEffect,
   useRef,
   useState,
@@ -503,7 +502,6 @@ export default function AdminFeatureReferenceReconciliationsPage() {
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]['value']>('all');
   const [page, setPage] = useState(1);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
-  const pendingDetailFocusRestoreRef = useRef(false);
   const detailReturnFocusRef = useRef<HTMLElement | null>(null);
   const detailInitialFocusRef = useRef<HTMLParagraphElement | null>(null);
   const listQuery = useQuery({
@@ -543,24 +541,7 @@ export default function AdminFeatureReferenceReconciliationsPage() {
     detailReturnFocusRef.current = event.currentTarget;
     setSelectedEventId(row.event_id);
   };
-  const focusAfterDialogTeardown = useCallback((resolveTarget: () => HTMLElement | null) => {
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        const target = resolveTarget();
-        if (!target || !document.contains(target)) return;
-        if ((target as HTMLElement & { disabled?: boolean }).disabled) return;
-        target.closest('[inert]')?.removeAttribute('inert');
-        target.focus({ preventScroll: true });
-      });
-    });
-  }, []);
-  useEffect(() => {
-    if (selectedEventId !== null || !pendingDetailFocusRestoreRef.current) return;
-    pendingDetailFocusRestoreRef.current = false;
-    focusAfterDialogTeardown(() => detailReturnFocusRef.current);
-  }, [focusAfterDialogTeardown, selectedEventId]);
   const closeDetail = () => {
-    pendingDetailFocusRestoreRef.current = true;
     setSelectedEventId(null);
   };
   const columns: AdminTableColumn<AdminFeatureReferenceReconciliationSummary>[] = [
