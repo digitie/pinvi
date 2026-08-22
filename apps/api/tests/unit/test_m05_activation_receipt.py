@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
+import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from app.core import config as config_module
 from app.core.config import (
     KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
     KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
@@ -32,15 +37,26 @@ PINVI_DIGESTS = {
 }
 
 
+def _test_trust_anchor_sha256(private_key: Ed25519PrivateKey) -> str:
+    return hashlib.sha256(private_key.public_key().public_bytes_raw()).hexdigest()
+
+
 def _write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, separators=(",", ":")), encoding="utf-8")
     path.chmod(0o600)
 
 
+@pytest.fixture
+def linux_tmp_path() -> Iterator[Path]:
+    with TemporaryDirectory(prefix="pinvi-m05-receipt-", dir="/tmp") as temp_dir:
+        yield Path(temp_dir)
+
+
 def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
-    tmp_path: Path,
+    linux_tmp_path: Path,
     monkeypatch,
 ) -> None:  # type: ignore[no-untyped-def]
+    tmp_path = linux_tmp_path
     evidence_dir = tmp_path / "evidence"
     evidence_dir.mkdir(mode=0o700)
     _write_json(
@@ -112,6 +128,11 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     )
 
     private_key = Ed25519PrivateKey.generate()
+    monkeypatch.setattr(
+        config_module,
+        "PINVI_M05_ACTIVATION_RECEIPT_PUBLIC_KEY_SHA256",
+        _test_trust_anchor_sha256(private_key),
+    )
     private_key_path = tmp_path / "activation-key.pem"
     private_key_path.write_bytes(
         private_key.private_bytes(
@@ -136,6 +157,8 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             str(receipt_path),
             "--pinvi-source-revision",
             PINVI_REVISION,
+            "--activation-generation",
+            "1",
         ],
         check=True,
         capture_output=True,
@@ -147,6 +170,21 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         if line.startswith("public_key=")
     )
     receipt = receipt_path.read_text(encoding="utf-8")
+    ledger_path = tmp_path / "activation-ledger.jsonl"
+    subprocess.run(  # noqa: S603 - invokes the repository-pinned Python test helper
+        [
+            sys.executable,
+            str(script),
+            "ledger",
+            "--receipt",
+            str(receipt_path),
+            "--ledger",
+            str(ledger_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     monkeypatch.setenv("PINVI_SOURCE_REVISION", PINVI_REVISION)
     loaded = Settings(
         _env_file=None,
@@ -166,6 +204,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         ),
         pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt=receipt,
         pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt_public_key=public_key,
+        pinvi_m05_activation_ledger_path=str(ledger_path),
         pinvi_api_image_digest=PINVI_DIGESTS["api"],
         pinvi_web_image_digest=PINVI_DIGESTS["web"],
         pinvi_dagster_image_digest=PINVI_DIGESTS["dagster"],

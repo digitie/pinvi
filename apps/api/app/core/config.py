@@ -7,13 +7,16 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import json
 import os
 import re
+import stat
+import time
 from functools import lru_cache
 from importlib.resources import files
 from pathlib import Path
-from typing import Literal, NoReturn, Self, cast
+from typing import Any, Literal, NoReturn, Self, cast
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -27,6 +30,7 @@ _SERVICE_PROVENANCE_FILENAME = "kor-travel-map-service-provenance-v1.json"
 _PACKAGED_SERVICE_PROVENANCE_PATH = f"_contract_data/{_SERVICE_PROVENANCE_FILENAME}"
 _M05_PAIR_PROVENANCE_FILENAME = "kor-travel-map-m05-pair-provenance-v1.json"
 _PACKAGED_M05_PAIR_PROVENANCE_PATH = f"_contract_data/{_M05_PAIR_PROVENANCE_FILENAME}"
+_M05_ACTIVATION_TRUST_FILENAME = "pinvi-m05-activation-receipt-trust-v1.json"
 
 
 class _DuplicateJsonKeyError(ValueError):
@@ -82,6 +86,20 @@ def _m05_pair_provenance_text() -> str:
     raise RuntimeError(f"Map M05 pair provenance file is missing: {_M05_PAIR_PROVENANCE_FILENAME}")
 
 
+def _m05_activation_trust_text() -> str:
+    packaged = files("app").joinpath(f"_contract_data/{_M05_ACTIVATION_TRUST_FILENAME}")
+    if packaged.is_file():
+        return packaged.read_text(encoding="utf-8")
+
+    for directory in Path(__file__).resolve().parents:
+        candidate = directory / "contracts" / _M05_ACTIVATION_TRUST_FILENAME
+        if candidate.is_file():
+            return candidate.read_text(encoding="utf-8")
+    raise RuntimeError(
+        f"M05 activation trust anchor file is missing: {_M05_ACTIVATION_TRUST_FILENAME}"
+    )
+
+
 def _required_string(payload: dict[str, object], field: str, pattern: str) -> str:
     value = payload.get(field)
     if not isinstance(value, str) or re.fullmatch(pattern, value) is None:
@@ -122,7 +140,7 @@ def _validate_production_map_root_url(value: str, *, env_name: str) -> None:
 
 
 def _load_service_provenance() -> tuple[str, str, int, int, int, int, int]:
-    raw = json.loads(_service_provenance_text())
+    raw = json.loads(_service_provenance_text(), object_pairs_hook=_reject_duplicate_json_keys)
     if not isinstance(raw, dict):
         raise RuntimeError("Map service provenance must be an object")
     payload = cast(dict[str, object], raw)
@@ -133,7 +151,7 @@ def _load_service_provenance() -> tuple[str, str, int, int, int, int, int]:
         "version",
     }:
         raise RuntimeError("Map service provenance fields are invalid")
-    if payload["version"] != 1:
+    if type(payload["version"]) is not int or payload["version"] != 1:
         raise RuntimeError("Map service provenance version is unsupported")
     capabilities_value = payload["capabilities"]
     if not isinstance(capabilities_value, dict):
@@ -159,8 +177,13 @@ def _load_service_provenance() -> tuple[str, str, int, int, int, int, int]:
 
 
 def _load_m05_pair_provenance() -> dict[str, tuple[str, str]]:
-    raw = json.loads(_m05_pair_provenance_text())
-    if not isinstance(raw, dict) or set(raw) != {"map", "version"} or raw["version"] != 1:
+    raw = json.loads(_m05_pair_provenance_text(), object_pairs_hook=_reject_duplicate_json_keys)
+    if (
+        not isinstance(raw, dict)
+        or set(raw) != {"map", "version"}
+        or type(raw["version"]) is not int
+        or raw["version"] != 1
+    ):
         raise RuntimeError("Map M05 pair provenance envelope is invalid")
     map_value = raw["map"]
     if not isinstance(map_value, dict) or set(map_value) != {"admin", "full", "service", "user"}:
@@ -178,6 +201,18 @@ def _load_m05_pair_provenance() -> dict[str, tuple[str, str]]:
     return result
 
 
+def _load_m05_activation_public_key_sha256() -> str:
+    raw = json.loads(_m05_activation_trust_text(), object_pairs_hook=_reject_duplicate_json_keys)
+    if (
+        not isinstance(raw, dict)
+        or set(raw) != {"public_key_sha256", "version"}
+        or type(raw["version"]) is not int
+        or raw["version"] != 1
+    ):
+        raise RuntimeError("M05 activation trust anchor envelope is invalid")
+    return _required_string(raw, "public_key_sha256", r"[0-9a-f]{64}")
+
+
 (
     KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
     KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
@@ -188,6 +223,7 @@ def _load_m05_pair_provenance() -> dict[str, tuple[str, str]]:
     KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_CAPABILITY_GENERATION,
 ) = _load_service_provenance()
 _M05_MAP_PAIR_PROVENANCE = _load_m05_pair_provenance()
+PINVI_M05_ACTIVATION_RECEIPT_PUBLIC_KEY_SHA256 = _load_m05_activation_public_key_sha256()
 if _M05_MAP_PAIR_PROVENANCE["service"] != (
     KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
     KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
@@ -215,6 +251,27 @@ class Settings(BaseSettings):
         extra="ignore",
         hide_input_in_errors=True,
     )
+
+    def __init__(self, **data: Any) -> None:
+        """설정 검증 오류의 input 필드에서 SecretStr 원문을 제거한다."""
+
+        try:
+            super().__init__(**data)
+        except ValidationError as exc:
+            redacted_errors: list[dict[str, Any]] = [
+                {
+                    "type": "value_error",
+                    "loc": error.get("loc", ()),
+                    "input": "<redacted>",
+                    "ctx": {
+                        "error": ValueError(str(error.get("msg", "settings validation failed")))
+                    },
+                }
+                for error in exc.errors()
+            ]
+            raise ValidationError.from_exception_data(
+                "Settings", cast(Any, redacted_errors)
+            ) from exc
 
     # 환경
     pinvi_environment: PinviEnvironment = "development"
@@ -396,6 +453,8 @@ class Settings(BaseSettings):
         None
     )
     pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt_public_key: str = ""
+    # receipt nonce/generation의 root-owned append-only ledger. staging/production enable 시 필수다.
+    pinvi_m05_activation_ledger_path: str = ""
     # immutable deploy wrapper가 대조한 세 Pinvi runtime image digest를 API에만 전달한다.
     pinvi_api_image_digest: str = ""
     pinvi_web_image_digest: str = ""
@@ -847,7 +906,7 @@ class Settings(BaseSettings):
                 "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_EXPECTED_SOURCE_REVISION "
                 "must match the service contract Map release revision"
             )
-        if self.pinvi_environment == "production":
+        if self.pinvi_environment in {"staging", "production"}:
             self._validate_feature_reference_reconciliation_activation_receipt()
         return self
 
@@ -860,7 +919,7 @@ class Settings(BaseSettings):
         if receipt_secret is None:
             _raise_redacted_settings_error(
                 "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT "
-                "is required in production"
+                f"is required in {self.pinvi_environment}"
             )
         try:
             envelope = json.loads(
@@ -891,6 +950,10 @@ class Settings(BaseSettings):
             )
         payload = cast(dict[str, object], payload_value)
         expected_payload_fields = {
+            "activation_expires_at",
+            "activation_generation",
+            "activation_issued_at",
+            "activation_nonce",
             "adversarial_reviews",
             "live_ui_e2e",
             "live_ui_event_id",
@@ -934,6 +997,13 @@ class Settings(BaseSettings):
             _raise_redacted_settings_error(
                 "M05 activation receipt public key and signature must be canonical base64url"
             )
+        if (
+            hashlib.sha256(public_key_bytes).hexdigest()
+            != PINVI_M05_ACTIVATION_RECEIPT_PUBLIC_KEY_SHA256
+        ):
+            _raise_redacted_settings_error(
+                "M05 activation receipt public key does not match the vendored trust anchor"
+            )
         try:
             Ed25519PublicKey.from_public_bytes(public_key_bytes).verify(
                 signature_bytes,
@@ -947,19 +1017,37 @@ class Settings(BaseSettings):
         except (InvalidSignature, ValueError, TypeError):
             _raise_redacted_settings_error("M05 activation receipt signature is invalid")
 
-        if (
-            type(payload["version"]) is not int
-            or payload["version"] != 1
-            or payload["scope"] != "production"
-        ):
+        if type(payload["version"]) is not int or payload["version"] != 1:
             _raise_redacted_settings_error(
                 "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT "
-                "must be a production v1 receipt"
+                "M05 activation receipt must be v1"
+            )
+        if payload["scope"] != self.pinvi_environment:
+            _raise_redacted_settings_error(
+                "M05 activation receipt scope does not match the runtime environment"
+            )
+        generation = payload["activation_generation"]
+        issued_at = payload["activation_issued_at"]
+        expires_at = payload["activation_expires_at"]
+        if (
+            type(generation) is not int
+            or generation < 1
+            or type(issued_at) is not int
+            or type(expires_at) is not int
+            or expires_at <= issued_at
+            or expires_at - issued_at > 7 * 24 * 60 * 60
+            or issued_at > int(time.time()) + 60
+            or expires_at <= int(time.time())
+            or not _is_canonical_uuid(payload["activation_nonce"])
+        ):
+            _raise_redacted_settings_error(
+                "M05 activation receipt freshness, generation, or nonce is invalid"
             )
 
         reviews = payload["adversarial_reviews"]
         if not isinstance(reviews, list) or len(reviews) != 2:
             _raise_redacted_settings_error("M05 activation requires two adversarial reviews")
+        review_keys: set[tuple[str, str, str]] = set()
         for review in reviews:
             if not isinstance(review, dict) or set(review) != {
                 "commit",
@@ -985,6 +1073,12 @@ class Settings(BaseSettings):
                 _raise_redacted_settings_error(
                     "M05 activation requires two adversarial reviews with zero P0/P1 findings"
                 )
+            review_key = (reviewer_id, review_id, review["commit"])
+            if review_key in review_keys:
+                _raise_redacted_settings_error(
+                    "M05 activation requires two distinct adversarial reviews"
+                )
+            review_keys.add(review_key)
         if payload["live_ui_e2e"] != "passed" or payload["restore_drill"] != "passed":
             _raise_redacted_settings_error(
                 "M05 activation requires passed live UI E2E and restore drill evidence"
@@ -1049,6 +1143,62 @@ class Settings(BaseSettings):
             _raise_redacted_settings_error(
                 "M05 activation receipt Pinvi source revision must match PINVI_SOURCE_REVISION"
             )
+        self._validate_m05_activation_ledger(payload, receipt_secret)
+
+    def _validate_m05_activation_ledger(
+        self, payload: dict[str, object], receipt_secret: SecretStr
+    ) -> None:
+        ledger_path = Path(self.pinvi_m05_activation_ledger_path)
+        if (
+            not self.pinvi_m05_activation_ledger_path
+            or ledger_path.is_symlink()
+            or not ledger_path.is_file()
+        ):
+            _raise_redacted_settings_error(
+                "PINVI_M05_ACTIVATION_LEDGER_PATH must point to an append-only receipt ledger"
+            )
+        try:
+            ledger_stat = ledger_path.stat()
+            ledger_lines = ledger_path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            _raise_redacted_settings_error("M05 activation receipt ledger is unreadable")
+        if stat.S_IMODE(ledger_stat.st_mode) & 0o022 or not ledger_lines:
+            _raise_redacted_settings_error("M05 activation receipt ledger permissions are invalid")
+        records: list[dict[str, object]] = []
+        for line in ledger_lines:
+            try:
+                record = json.loads(line, object_pairs_hook=_reject_duplicate_json_keys)
+            except (json.JSONDecodeError, _DuplicateJsonKeyError):
+                _raise_redacted_settings_error(
+                    "M05 activation receipt ledger contains invalid JSON"
+                )
+            if not isinstance(record, dict) or set(record) != {
+                "activation_expires_at",
+                "activation_generation",
+                "activation_issued_at",
+                "activation_nonce",
+                "receipt_sha256",
+                "scope",
+                "source_revision",
+            }:
+                _raise_redacted_settings_error("M05 activation receipt ledger schema is invalid")
+            records.append(cast(dict[str, object], record))
+        latest = records[-1]
+        receipt_sha256 = hashlib.sha256(
+            receipt_secret.get_secret_value().encode("utf-8")
+        ).hexdigest()
+        if (
+            latest["activation_generation"] != payload["activation_generation"]
+            or latest["activation_nonce"] != payload["activation_nonce"]
+            or latest["activation_issued_at"] != payload["activation_issued_at"]
+            or latest["activation_expires_at"] != payload["activation_expires_at"]
+            or latest["receipt_sha256"] != receipt_sha256
+            or latest["scope"] != payload["scope"]
+            or latest["source_revision"] != payload["pinvi_source_revision"]
+        ):
+            _raise_redacted_settings_error(
+                "M05 activation receipt does not match the latest ledger generation"
+            )
 
 
 def _decode_base64url(value: object, *, expected_length: int) -> bytes | None:
@@ -1060,7 +1210,13 @@ def _decode_base64url(value: object, *, expected_length: int) -> bytes | None:
         decoded = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
     except (binascii.Error, ValueError):
         return None
-    return decoded if len(decoded) == expected_length else None
+    if len(decoded) != expected_length or _base64url(decoded) != value:
+        return None
+    return decoded
+
+
+def _base64url(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
 
 
 def _is_canonical_uuid(value: object) -> bool:

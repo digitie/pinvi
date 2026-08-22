@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
+import tempfile
+import time
 from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pydantic import ValidationError
 
+from app.core import config as config_module
 from app.core.config import (
     KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
     KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
@@ -31,6 +35,9 @@ PUBLIC_KEY = (
     .decode("ascii")
     .rstrip("=")
 )
+TEST_TRUST_ANCHOR_SHA256 = hashlib.sha256(
+    PUBLIC_KEY_PRIVATE.public_key().public_bytes_raw()
+).hexdigest()
 IMAGE_DIGESTS = {
     "pinvi_api_image_digest": "sha256:" + "1" * 64,
     "pinvi_web_image_digest": "sha256:" + "2" * 64,
@@ -38,16 +45,61 @@ IMAGE_DIGESTS = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _use_test_activation_trust_anchor(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        config_module,
+        "PINVI_M05_ACTIVATION_RECEIPT_PUBLIC_KEY_SHA256",
+        TEST_TRUST_ANCHOR_SHA256,
+    )
+
+
 def _settings(**overrides: object) -> Settings:
     return Settings(_env_file=None, pinvi_environment="test", **overrides)  # type: ignore[arg-type]
 
 
 def _production_settings(**overrides: object) -> Settings:
+    receipt = overrides.get(
+        "pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt"
+    )
+    if isinstance(receipt, str) and receipt.startswith("{"):
+        try:
+            payload = json.loads(receipt)["payload"]
+        except (KeyError, TypeError, json.JSONDecodeError):
+            payload = None
+        if isinstance(payload, dict):
+            ledger_dir = tempfile.TemporaryDirectory(prefix="pinvi-m05-ledger-", dir="/tmp")
+            ledger_path = Path(ledger_dir.name) / "activation-ledger.jsonl"
+            ledger_path.write_text(
+                json.dumps(
+                    {
+                        "activation_expires_at": payload["activation_expires_at"],
+                        "activation_generation": payload["activation_generation"],
+                        "activation_issued_at": payload["activation_issued_at"],
+                        "activation_nonce": payload["activation_nonce"],
+                        "receipt_sha256": hashlib.sha256(receipt.encode()).hexdigest(),
+                        "scope": payload["scope"],
+                        "source_revision": payload["pinvi_source_revision"],
+                    },
+                    separators=(",", ":"),
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            ledger_path.chmod(0o600)
+            overrides["pinvi_m05_activation_ledger_path"] = str(ledger_path)
+            loaded = Settings(_env_file=None, pinvi_environment="production", **overrides)  # type: ignore[arg-type]
+            ledger_dir.cleanup()
+            return loaded
     return Settings(_env_file=None, pinvi_environment="production", **overrides)  # type: ignore[arg-type]
 
 
 def _receipt_payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
+        "activation_expires_at": int(time.time()) + 3600,
+        "activation_generation": 1,
+        "activation_issued_at": int(time.time()) - 60,
+        "activation_nonce": "22222222-2222-4222-8222-222222222222",
         "adversarial_reviews": [
             {"commit": "1" * 40, "p0_p1": 0, "review_id": "review-1", "reviewer_id": "darwin"},
             {"commit": "2" * 40, "p0_p1": 0, "review_id": "review-2", "reviewer_id": "feynman"},
@@ -239,6 +291,19 @@ def test_production_reconciliation_rejects_receipt_secret_leaks(
             pinvi_kor_travel_map_ops_cancel_token="c" * 32,
             **_production_activation_values(secret),
             **_enabled_values(),
+        )
+    assert secret not in repr(captured.value.errors())
+    assert secret not in str(captured.value)
+
+
+def test_scoped_token_validation_errors_redact_secret_input() -> None:
+    secret = "UNIQUE-SCOPED-TOKEN-TO-REDACT"
+    with pytest.raises(ValidationError) as captured:
+        _settings(
+            **{
+                **_enabled_values(),
+                "pinvi_kor_travel_map_feature_reference_reconciliation_read_token": secret,
+            }
         )
     assert secret not in repr(captured.value.errors())
     assert secret not in str(captured.value)

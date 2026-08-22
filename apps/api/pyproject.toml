@@ -58,6 +58,8 @@ packages = ["app"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "../../contracts/kor-travel-map-service-provenance-v1.json" = "app/_contract_data/kor-travel-map-service-provenance-v1.json"
+"../../contracts/kor-travel-map-m05-pair-provenance-v1.json" = "app/_contract_data/kor-travel-map-m05-pair-provenance-v1.json"
+"../../contracts/pinvi-m05-activation-receipt-trust-v1.json" = "app/_contract_data/pinvi-m05-activation-receipt-trust-v1.json"
 
 [tool.ruff]
 line-length = 100

@@ -76,7 +76,9 @@ ACK한다. 달라지면 fail-close한다.
 `PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ENABLED=true`를 production에서
 사용하려면 `PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT`에
 서명된 v1 envelope를 주입하고, `PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_PUBLIC_KEY`로
-Ed25519 서명을 검증한다. API는 기동 시 중복 JSON key·서명·닫힌 payload schema·현재 vendored
+Ed25519 서명을 검증한다. 이 public key는 같은 설정 채널의 receipt와 함께 임의로 바꿀 수 없으며,
+tracked `contracts/pinvi-m05-activation-receipt-trust-v1.json`의 raw public-key SHA-256 fingerprint와
+일치해야 한다. API는 기동 시 중복 JSON key·서명·닫힌 payload schema·현재 vendored
 Map pair·세 Pinvi runtime image digest·`PINVI_SOURCE_REVISION`을 모두 대조하며, 하나라도 다르면
 fail-close한다.
 
@@ -118,7 +120,8 @@ python scripts/m05_activation_receipt.py create \
 
 입력 파일은 `reviews.json`, `live-ui.json`, `restore.json`, `map-pair.json`,
 `pinvi-images.json`의 다섯 개이며, 도구가 schema·현재 tracked pair·immutable `sha256:` digest와
-source revision을 확인한 후 payload를 서명한다. 출력된 public key와 receipt는 운영 secret 저장소에
+source revision을 확인한 후 payload를 서명한다. `--require-root-owned` 실행에서는 private key도
+tracked trust anchor와 대조한다. 출력된 public key와 receipt는 운영 secret 저장소에
 등록하고, 원문 증거는 root-owned 보관 위치에만 남긴다.
 
 ## 검증과 activation gate
