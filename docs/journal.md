@@ -2,6 +2,15 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-22 (codex) — M04 Feature request 식별자 consumer 중립화
+
+- 범용 Feature request queue는 Pinvi 전용 기능이 아니므로 service token 설정을
+  `KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`으로 바꾸고 Python 설정 필드에도 `pinvi` 접두사를
+  제거했다. `.env` 예시·compose·M04 실행계획·검증 테스트를 함께 갱신했다.
+- 외부 API 호출 상관관계 extension key도 `request_id`로 통일해 feature request client와
+  공용 middleware/admin client 사이의 이름이 제품에 종속되지 않도록 했다. 기존 HTTP header와
+  Map 계약 payload는 변경하지 않았다.
+
 ## 2026-08-22 (codex) — T-273 보류 및 작업 원장 정리
 
 - 최신 `origin/main` 기준으로 T-VN-40과 T-VN-M04의 merge·paired acceptance·격리 browser evidence를

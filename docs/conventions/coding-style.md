@@ -124,7 +124,8 @@ layers = [
 - 클래스: `PascalCase`
 - 함수/변수: `snake_case`
 - 상수: `UPPER_SNAKE`
-- 환경변수: `PINVI_*` prefix
+- 환경변수: Pinvi 소유 값은 `PINVI_*` prefix를 사용하고, 외부 서비스 소유 계약 값은 해당
+  서비스의 정본 prefix를 사용한다(예: `KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`).
 - 외부 식별자 / API 응답 키 / 코드: 원문 유지 (legal_dong_code, mapX, areaCode 등)
 
 ### 2.7 예외
@@ -346,7 +347,8 @@ const t = useTranslations('Auth');
 - [ ] `npm --workspace apps/web run lint` 통과
 - [ ] `npm --workspace apps/web run typecheck` 통과
 - [ ] `import-linter` 의존 방향 통과
-- [ ] 새 환경변수는 `PINVI_*` prefix
+- [ ] 새 환경변수는 소유 서비스의 정본 prefix를 사용한다(Pinvi 소유 값은 `PINVI_*`,
+      범용 Feature request writer는 `KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`)
 - [ ] datetime은 timezone-aware
 - [ ] 좌표는 lon-lat 순서
 - [ ] wrapper class 안 만들었나 (ADR-005)

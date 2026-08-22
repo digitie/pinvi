@@ -6,6 +6,10 @@
 
 ## 2026-08-22
 
+- [x] **T-VN-M04 follow-up — Feature request consumer 중립 식별자** — 범용 queue의
+      service token 설정을 `KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`으로 정리하고 공용
+      HTTP 요청 correlation extension을 `request_id`로 통일했다. 기존 `PINVI_*` 설정을
+      그대로 읽는 호환 alias는 두지 않아 배포 환경도 새 이름으로 함께 바꿔야 한다.
 - [x] **T-VN-40** — PinVi canonical curation consumer와 paired API acceptance를 완료했다.
       Pinvi PR #445·#459, Docker Manager PR #174, Map PR #1048을 반영하고, 격리 DB에서 canonical
       snapshot/import/replay/refresh와 legacy plan 부재를 확인했다. (완료: 2026-08-21)

@@ -23,7 +23,7 @@ Map과 PinVi는 아직 각각 draft PR 단계이므로 production completion rec
 
 ## 변경 범위
 
-1. 별도 `PINVI_KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`을 `SecretStr`로 추가하고, 일반
+1. 별도 `KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`을 `SecretStr`로 추가하고, 일반
    service/admin/public/ops/cache-target/curation 자격과 값 재사용을 거부한다.
 2. API process에만 해당 token을 주입한다. Web·Dagster·admin BFF 자격에는 전달하지 않는다.
 3. thin HTTP transport가 정확한 method/path/body/header와 full success envelope를 strict 검증한다.

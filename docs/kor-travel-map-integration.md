@@ -58,14 +58,17 @@ PINVI_KOR_TRAVEL_MAP_PUBLIC_API_KEY=
 PINVI_KOR_TRAVEL_MAP_ADMIN_PROXY_SECRET=
 PINVI_KOR_TRAVEL_MAP_ADMIN_ACTOR=pinvi-admin
 # 범용 Feature 요청 큐 writer 전용 service token. admin/public/ops token 재사용 금지.
-PINVI_KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN=
+KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN=
 # /v1/ops/datasets*·/v1/ops/pipeline* scope별 server principal
 PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN=
 PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN=
 ```
 
 kor-travel-map 쪽 런북에서는 동일 API URL을 `KOR_TRAVEL_MAP_API_URL`로 부를 수 있다.
-Pinvi 설정 prefix는 항상 `PINVI_*`다.
+Pinvi 소유 설정은 `PINVI_*` prefix를 사용한다. 단, 범용 Feature request writer처럼
+외부 서비스가 소유하는 계약 토큰은 해당 서비스의 정본 이름인
+`KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`을 사용한다. 구 `PINVI_KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`
+이름은 호환 별칭으로 지원하지 않으므로 배포 환경도 새 이름으로 갱신해야 한다.
 
 운영 admin base URL은 HTTP(S), host `127.0.0.1|host.docker.internal`, port `12701`, root
 path만 허용한다. 비운영은 ops token 두 값이 모두 비었을 때만 opt-out하며, 하나라도 설정하면

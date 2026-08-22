@@ -191,6 +191,7 @@ async def test_request_id_header_is_sent_from_per_request_wrapper() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["request_id"] = request.headers.get("X-Request-Id", "")
+        seen["extension_request_id"] = str(request.extensions.get("request_id", ""))
         seen["ops_token"] = request.headers.get("X-Kor-Travel-Map-Ops-Token", "")
         seen["ops_scope"] = request.headers.get("X-Kor-Travel-Map-Ops-Scope", "")
         seen["service_token"] = request.headers.get("X-Kor-Travel-Map-Service-Token", "")
@@ -207,6 +208,7 @@ async def test_request_id_header_is_sent_from_per_request_wrapper() -> None:
     await scoped.list_system_logs(page_size=10)
     assert seen == {
         "request_id": "00000000-0000-4000-8000-000000000123",
+        "extension_request_id": "00000000-0000-4000-8000-000000000123",
         "ops_token": "ops-read-tok",
         "ops_scope": "ops:read",
         "service_token": "",

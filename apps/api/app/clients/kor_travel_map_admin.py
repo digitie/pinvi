@@ -417,7 +417,7 @@ class KorTravelMapAdminClient:
 
     def _extensions(self) -> dict[str, str]:
         if self._request_id:
-            return {"pinvi_request_id": self._request_id}
+            return {"request_id": self._request_id}
         return {}
 
     def _data(

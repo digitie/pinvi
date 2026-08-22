@@ -4,6 +4,11 @@
 
 ## Unreleased
 
+- Feature request queue 연동의 service token 설정과 HTTP 요청 상관관계 metadata를
+  consumer 중립 이름으로 정리했다. `KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`과
+  `request_id`를 사용하며 Pinvi 전용 식별자를 더 이상 queue 기능의 설정·변수·전송 metadata에
+  사용하지 않는다.
+
 - Admin M04 제안 검토와 M05 참조 조정 증거 dialog가 목록 재렌더 뒤에도 실제로 보이는
   trigger에 keyboard focus를 되돌린다. 모바일 Admin nav의 가로 이동은 유지하면서 dialog를
   열어도 페이지 root가 가로로 넘치지 않게 했고, 중첩 dialog의 scroll lock도 마지막 dialog가

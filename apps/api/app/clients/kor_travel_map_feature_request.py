@@ -168,9 +168,7 @@ class FeatureRequestServiceClient:
         }
         if correlation_id is not None:
             headers["X-Request-ID"] = str(correlation_id)
-        extensions = (
-            {"pinvi_request_id": str(correlation_id)} if correlation_id is not None else None
-        )
+        extensions = {"request_id": str(correlation_id)} if correlation_id is not None else None
         last_error: FeatureRequestQueueUnavailable | None = None
         for attempt in range(self._max_attempts):
             try:
@@ -273,7 +271,7 @@ class FeatureRequestServiceClient:
 def create_feature_request_service_client(
     app_settings: Settings,
 ) -> FeatureRequestServiceClient | None:
-    token = app_settings.pinvi_kor_travel_map_feature_request_token
+    token = app_settings.kor_travel_map_feature_request_token
     if token is None:
         return None
     http = httpx.AsyncClient(

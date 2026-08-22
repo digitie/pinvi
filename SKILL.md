@@ -31,7 +31,7 @@
 | 백엔드 import (계획)                    | `from pinvi.api import ...`, `from pinvi.etl import ...`                                                       |
 | 프론트 패키지 (계획)                    | `apps/web` (Next.js App Router)                                                                                |
 | 모바일 패키지 (활성, Sprint M-1)        | `apps/mobile` (Expo SDK 56 + Expo Dev Client + EAS Build, Expo Go 미사용, Android minSdk 24 — ADR-043/044/045) |
-| 환경변수 prefix                         | `PINVI_*`                                                                                                      |
+| 환경변수 prefix                         | `PINVI_*` (외부 서비스 소유 계약 토큰은 해당 정본 이름)                                                     |
 | PostgreSQL DB 이름 (개발)               | `pinvi`                                                                                                        |
 | Postgres schema (자체)                  | `app`, `ops`                                                                                                   |
 | Postgres schema (`kor-travel-map` 소유) | `feature`, `provider_sync`                                                                                     |

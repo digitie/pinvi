@@ -86,7 +86,7 @@ def test_enabled_reconciliation_requires_distinct_credentials_and_exact_vendor_p
 @pytest.mark.parametrize(
     "overrides",
     (
-        {"pinvi_kor_travel_map_feature_request_token": READ},
+        {"kor_travel_map_feature_request_token": READ},
         {"pinvi_kor_travel_map_cache_target_consumer_token": READ},
         {"pinvi_kor_travel_map_service_token": READ},
     ),
