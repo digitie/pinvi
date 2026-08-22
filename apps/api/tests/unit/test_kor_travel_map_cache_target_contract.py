@@ -24,8 +24,8 @@ _SNAPSHOT = (
 _SERVICE_PROVENANCE = (
     Path(__file__).resolve().parents[4] / "contracts" / "kor-travel-map-service-provenance-v1.json"
 )
-_MAP_RELEASE_REVISION = "037e24698f74e2067ea7c8572b044076dc0ac89c"
-_SNAPSHOT_SHA256 = "e1152a058e176f4f3aaeb4bb0965434f657601639786463f873ac82c6f3018eb"
+_MAP_RELEASE_REVISION = "db319a4798229098d04e68e3ac64338183ad547f"
+_SNAPSHOT_SHA256 = "99ba6c178bf55401d3e1bb638a01b96f66bbac38d604534aa126a70f4be53d3d"
 
 _GENERATION7_ROLE_SCOPES = {
     "command": {"cache-target:command"},
@@ -371,8 +371,8 @@ def test_cache_target_consumer_paths_and_recovery_shapes_are_pinned() -> None:
         "application/problem+json"
     ]["schema"]
     assert {key: generic_limit_schema[key] for key in snapshot_limit_union} == snapshot_limit_union
-    assert "1,000,000" in generic_snapshot["responses"]["413"]["description"]
-    assert "512 MiB" in generic_snapshot["responses"]["413"]["description"]
+    assert "500,000" in generic_snapshot["responses"]["413"]["description"]
+    assert "56 MiB" in generic_snapshot["responses"]["413"]["description"]
     for response_code in ("429", "503"):
         assert "Retry-After" in generic_snapshot["responses"][response_code]["headers"]
 
