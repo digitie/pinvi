@@ -15,12 +15,11 @@ production flag 또는 일반 운영 stack의 mutation만으로는 이 작업의
 ## 기준 계약
 
 - Map service contract source: PR #1051 merge `db319a4798229098d04e68e3ac64338183ad547f`.
-  Full/admin 표면은 PR #1054 merge `fadc029ce2b0cd730c604697e04d1fccdff02ce9`, user 표면은
-  #1029 계열 pin을 유지하며 service profile은 #1051 revision으로 재vendor한다.
-- vendored full/service/user OpenAPI SHA-256:
-  `2c02ecfead95b06306db7189278c975ec83a9e2a793f3f0e18ca0bd96240f3cb` /
-  `99ba6c178bf55401d3e1bb638a01b96f66bbac38d604534aa126a70f4be53d3d` /
-  `489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b`.
+  Full/admin 표면은 PR #1054 merge `fadc029ce2b0cd730c604697e04d1fccdff02ce9` 기준이며, user
+  표면은 #1029 계열 pin을 유지한다.
+- M05가 결박하는 admin/full/service/user OpenAPI SHA-256과 source revision의 exact 쌍은
+  [`contracts/kor-travel-map-m05-pair-provenance-v1.json`](../../contracts/kor-travel-map-m05-pair-provenance-v1.json)에
+  고정한다. service 항목은 일반 service provenance와 반드시 일치해야 한다.
 - read token은 `feature-reference-reconciliation:read`, ACK token은
   `feature-reference-reconciliation:ack` 한 scope만 가진 별도 server-only credential이다.
   M04 요청 큐·cache-target·admin·일반 service token과 값 재사용을 거부한다.
@@ -76,26 +75,51 @@ ACK한다. 달라지면 fail-close한다.
 
 `PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ENABLED=true`를 production에서
 사용하려면 `PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT`에
-다음 v1 JSON을 compact form으로 주입한다. API는 기동 시 필드를 닫힌 schema로 검증하고,
-현재 vendored Map SHA/source revision과 이미지의 `PINVI_SOURCE_REVISION`이 다르면 fail-close한다.
+서명된 v1 envelope를 주입하고, `PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_PUBLIC_KEY`로
+Ed25519 서명을 검증한다. API는 기동 시 중복 JSON key·서명·닫힌 payload schema·현재 vendored
+Map pair·세 Pinvi runtime image digest·`PINVI_SOURCE_REVISION`을 모두 대조하며, 하나라도 다르면
+fail-close한다.
 
 ```json
 {
-  "version": 1,
-  "scope": "production",
-  "map_service_openapi_sha256": "<current vendored service SHA-256>",
-  "map_source_revision": "<current Map source revision>",
-  "pinvi_source_revision": "<current Pinvi image source revision>",
-  "adversarial_reviews": 2,
-  "adversarial_p0_p1": 0,
-  "live_ui_e2e": "passed",
-  "restore_drill": "passed"
+  "payload": {
+    "version": 1,
+    "scope": "production",
+    "adversarial_reviews": [
+      {"commit": "<reviewed commit>", "p0_p1": 0, "review_id": "<review id>", "reviewer_id": "<reviewer id>"},
+      {"commit": "<reviewed commit>", "p0_p1": 0, "review_id": "<review id>", "reviewer_id": "<reviewer id>"}
+    ],
+    "live_ui_e2e": "passed",
+    "restore_drill": "passed",
+    "map_pair_evidence_sha256": "<evidence hash>",
+    "pinvi_image_evidence_sha256": "<evidence hash>"
+  },
+  "signature": "<Ed25519 signature, base64url>"
 }
 ```
 
-receipt는 증거 원문이나 token을 담지 않는다. 두 리뷰·isolated live UI E2E·no-owner restore
-drill이 실제로 끝난 뒤 배포 담당자가 생성하며, 코드가 receipt만으로 과거 실행을 재현한다고
-간주해서는 안 된다.
+전체 payload는 구현된 닫힌 계약에 따라 Map admin/full/service/user artifact hash와 source
+revision, Map API/admin/frontend image digest, Pinvi API/Web/Dagster image digest, Pinvi source
+revision, live UI event·Map ACK·restore·review evidence hash를 포함한다. receipt는 증거 원문이나
+token·private key를 담지 않는다. 두 전문 적대 리뷰, isolated live UI E2E, server-side Map ACK
+대조, no-owner restore drill이 실제로 끝난 뒤에만 생성한다.
+
+증거 봉인은 다음 도구가 수행한다. 입력 디렉터리는 `0700`, JSON 증거와 private key는 각각
+`0600`이어야 하며, 운영 실행에서는 `--require-root-owned`를 사용한다.
+
+```bash
+python scripts/m05_activation_receipt.py create \
+  --evidence-dir "$M05_EVIDENCE_DIR" \
+  --private-key "$M05_ACTIVATION_PRIVATE_KEY" \
+  --output "$M05_ACTIVATION_RECEIPT" \
+  --pinvi-source-revision "$PINVI_SOURCE_REVISION" \
+  --require-root-owned
+```
+
+입력 파일은 `reviews.json`, `live-ui.json`, `restore.json`, `map-pair.json`,
+`pinvi-images.json`의 다섯 개이며, 도구가 schema·현재 tracked pair·immutable `sha256:` digest와
+source revision을 확인한 후 payload를 서명한다. 출력된 public key와 receipt는 운영 secret 저장소에
+등록하고, 원문 증거는 root-owned 보관 위치에만 남긴다.
 
 ## 검증과 activation gate
 

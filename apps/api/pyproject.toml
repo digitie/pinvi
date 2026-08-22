@@ -24,6 +24,7 @@ dependencies = [
   "slowapi>=0.1.9",
   "resend>=2.4",
   "boto3>=1.35",
+  "cryptography>=43.0",
   "prometheus-client>=0.22",
 ]
 

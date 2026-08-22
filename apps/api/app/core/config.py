@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import os
 import re
@@ -13,13 +15,18 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Literal, NoReturn, Self, cast
 from urllib.parse import urlsplit
+from uuid import UUID
 
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from pydantic import Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PinviEnvironment = Literal["development", "test", "smoke", "staging", "production"]
 _SERVICE_PROVENANCE_FILENAME = "kor-travel-map-service-provenance-v1.json"
 _PACKAGED_SERVICE_PROVENANCE_PATH = f"_contract_data/{_SERVICE_PROVENANCE_FILENAME}"
+_M05_PAIR_PROVENANCE_FILENAME = "kor-travel-map-m05-pair-provenance-v1.json"
+_PACKAGED_M05_PAIR_PROVENANCE_PATH = f"_contract_data/{_M05_PAIR_PROVENANCE_FILENAME}"
 
 
 class _DuplicateJsonKeyError(ValueError):
@@ -61,6 +68,18 @@ def _service_provenance_text() -> str:
         if candidate.is_file():
             return candidate.read_text(encoding="utf-8")
     raise RuntimeError(f"Map service provenance file is missing: {_SERVICE_PROVENANCE_FILENAME}")
+
+
+def _m05_pair_provenance_text() -> str:
+    packaged = files("app").joinpath(_PACKAGED_M05_PAIR_PROVENANCE_PATH)
+    if packaged.is_file():
+        return packaged.read_text(encoding="utf-8")
+
+    for directory in Path(__file__).resolve().parents:
+        candidate = directory / "contracts" / _M05_PAIR_PROVENANCE_FILENAME
+        if candidate.is_file():
+            return candidate.read_text(encoding="utf-8")
+    raise RuntimeError(f"Map M05 pair provenance file is missing: {_M05_PAIR_PROVENANCE_FILENAME}")
 
 
 def _required_string(payload: dict[str, object], field: str, pattern: str) -> str:
@@ -139,6 +158,26 @@ def _load_service_provenance() -> tuple[str, str, int, int, int, int, int]:
     )
 
 
+def _load_m05_pair_provenance() -> dict[str, tuple[str, str]]:
+    raw = json.loads(_m05_pair_provenance_text())
+    if not isinstance(raw, dict) or set(raw) != {"map", "version"} or raw["version"] != 1:
+        raise RuntimeError("Map M05 pair provenance envelope is invalid")
+    map_value = raw["map"]
+    if not isinstance(map_value, dict) or set(map_value) != {"admin", "full", "service", "user"}:
+        raise RuntimeError("Map M05 pair provenance inventory is invalid")
+
+    result: dict[str, tuple[str, str]] = {}
+    for name in ("admin", "full", "service", "user"):
+        entry = map_value[name]
+        if not isinstance(entry, dict) or set(entry) != {"openapi_sha256", "source_revision"}:
+            raise RuntimeError(f"Map M05 pair provenance entry is invalid: {name}")
+        result[name] = (
+            _required_string(entry, "openapi_sha256", r"[0-9a-f]{64}"),
+            _required_string(entry, "source_revision", r"[0-9a-f]{40}"),
+        )
+    return result
+
+
 (
     KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
     KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
@@ -148,6 +187,24 @@ def _load_service_provenance() -> tuple[str, str, int, int, int, int, int]:
     KOR_TRAVEL_MAP_FEATURE_REQUEST_CAPABILITY_GENERATION,
     KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_CAPABILITY_GENERATION,
 ) = _load_service_provenance()
+_M05_MAP_PAIR_PROVENANCE = _load_m05_pair_provenance()
+if _M05_MAP_PAIR_PROVENANCE["service"] != (
+    KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
+):
+    raise RuntimeError("Map M05 pair service provenance does not match the service provenance")
+(
+    KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+) = _M05_MAP_PAIR_PROVENANCE["admin"]
+(
+    KOR_TRAVEL_MAP_M05_FULL_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_M05_FULL_SOURCE_REVISION,
+) = _M05_MAP_PAIR_PROVENANCE["full"]
+(
+    KOR_TRAVEL_MAP_M05_USER_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_M05_USER_SOURCE_REVISION,
+) = _M05_MAP_PAIR_PROVENANCE["user"]
 
 
 class Settings(BaseSettings):
@@ -338,6 +395,11 @@ class Settings(BaseSettings):
     pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt: SecretStr | None = (
         None
     )
+    pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt_public_key: str = ""
+    # immutable deploy wrapper가 대조한 세 Pinvi runtime image digest를 API에만 전달한다.
+    pinvi_api_image_digest: str = ""
+    pinvi_web_image_digest: str = ""
+    pinvi_dagster_image_digest: str = ""
 
     # kor-travel-geo v2 REST (geocoding/주소/행정구역, ADR-025) — `docs/integrations/kor-travel-geo.md`.
     pinvi_kor_travel_geo_base_url: str = "http://localhost:12501"
@@ -790,7 +852,7 @@ class Settings(BaseSettings):
         return self
 
     def _validate_feature_reference_reconciliation_activation_receipt(self) -> None:
-        """운영 활성화는 현재 pair의 검증 결과를 명시한 receipt 없이는 허용하지 않는다."""
+        """서명된 paired live/restore/review evidence 없이는 운영 활성화를 허용하지 않는다."""
 
         receipt_secret = (
             self.pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt
@@ -801,7 +863,7 @@ class Settings(BaseSettings):
                 "is required in production"
             )
         try:
-            payload = json.loads(
+            envelope = json.loads(
                 receipt_secret.get_secret_value(),
                 object_pairs_hook=_reject_duplicate_json_keys,
             )
@@ -815,21 +877,76 @@ class Settings(BaseSettings):
                 "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT "
                 "must not contain duplicate keys"
             )
-        if not isinstance(payload, dict) or set(payload) != {
-            "adversarial_reviews",
-            "adversarial_p0_p1",
-            "live_ui_e2e",
-            "map_service_openapi_sha256",
-            "map_source_revision",
-            "pinvi_source_revision",
-            "restore_drill",
-            "scope",
-            "version",
-        }:
+        if not isinstance(envelope, dict) or set(envelope) != {"payload", "signature"}:
             _raise_redacted_settings_error(
                 "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT "
                 "has an unsupported schema"
             )
+        payload_value = envelope["payload"]
+        signature = envelope["signature"]
+        if not isinstance(payload_value, dict) or not isinstance(signature, str):
+            _raise_redacted_settings_error(
+                "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT "
+                "has an unsupported signature envelope"
+            )
+        payload = cast(dict[str, object], payload_value)
+        expected_payload_fields = {
+            "adversarial_reviews",
+            "live_ui_e2e",
+            "live_ui_event_id",
+            "live_ui_evidence_sha256",
+            "live_ui_map_ack_sha256",
+            "map_admin_openapi_sha256",
+            "map_admin_source_revision",
+            "map_admin_image_digest",
+            "map_api_image_digest",
+            "map_frontend_image_digest",
+            "map_full_openapi_sha256",
+            "map_full_source_revision",
+            "map_pair_evidence_sha256",
+            "map_service_openapi_sha256",
+            "map_service_source_revision",
+            "map_user_openapi_sha256",
+            "map_user_source_revision",
+            "pinvi_api_image_digest",
+            "pinvi_dagster_image_digest",
+            "pinvi_image_evidence_sha256",
+            "pinvi_source_revision",
+            "pinvi_web_image_digest",
+            "restore_drill",
+            "restore_evidence_sha256",
+            "review_evidence_sha256",
+            "scope",
+            "version",
+        }
+        if set(payload) != expected_payload_fields:
+            _raise_redacted_settings_error(
+                "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT "
+                "has an unsupported payload schema"
+            )
+
+        public_key_bytes = _decode_base64url(
+            self.pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt_public_key,
+            expected_length=32,
+        )
+        signature_bytes = _decode_base64url(signature, expected_length=64)
+        if public_key_bytes is None or signature_bytes is None:
+            _raise_redacted_settings_error(
+                "M05 activation receipt public key and signature must be canonical base64url"
+            )
+        try:
+            Ed25519PublicKey.from_public_bytes(public_key_bytes).verify(
+                signature_bytes,
+                json.dumps(
+                    payload,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8"),
+            )
+        except (InvalidSignature, ValueError, TypeError):
+            _raise_redacted_settings_error("M05 activation receipt signature is invalid")
+
         if (
             type(payload["version"]) is not int
             or payload["version"] != 1
@@ -839,26 +956,89 @@ class Settings(BaseSettings):
                 "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT "
                 "must be a production v1 receipt"
             )
-        if (
-            type(payload["adversarial_reviews"]) is not int
-            or type(payload["adversarial_p0_p1"]) is not int
-            or payload["adversarial_reviews"] != 2
-            or payload["adversarial_p0_p1"] != 0
-        ):
-            _raise_redacted_settings_error(
-                "M05 activation requires two adversarial reviews with zero P0/P1 findings"
-            )
+
+        reviews = payload["adversarial_reviews"]
+        if not isinstance(reviews, list) or len(reviews) != 2:
+            _raise_redacted_settings_error("M05 activation requires two adversarial reviews")
+        for review in reviews:
+            if not isinstance(review, dict) or set(review) != {
+                "commit",
+                "p0_p1",
+                "review_id",
+                "reviewer_id",
+            }:
+                _raise_redacted_settings_error("M05 adversarial review evidence schema is invalid")
+            reviewer_id = review["reviewer_id"]
+            review_id = review["review_id"]
+            if (
+                not isinstance(reviewer_id, str)
+                or not reviewer_id
+                or any(character.isspace() for character in reviewer_id)
+                or not isinstance(review_id, str)
+                or not review_id
+                or any(character.isspace() for character in review_id)
+                or type(review["p0_p1"]) is not int
+                or review["p0_p1"] != 0
+                or not isinstance(review["commit"], str)
+                or re.fullmatch(r"[0-9a-f]{40}", review["commit"]) is None
+            ):
+                _raise_redacted_settings_error(
+                    "M05 activation requires two adversarial reviews with zero P0/P1 findings"
+                )
         if payload["live_ui_e2e"] != "passed" or payload["restore_drill"] != "passed":
             _raise_redacted_settings_error(
                 "M05 activation requires passed live UI E2E and restore drill evidence"
             )
-        if payload["map_service_openapi_sha256"] != KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256:
+        event_id = payload["live_ui_event_id"]
+        if not _is_canonical_uuid(event_id):
+            _raise_redacted_settings_error("M05 live UI evidence event ID is not canonical")
+
+        for field in (
+            "live_ui_evidence_sha256",
+            "live_ui_map_ack_sha256",
+            "map_pair_evidence_sha256",
+            "pinvi_image_evidence_sha256",
+            "restore_evidence_sha256",
+            "review_evidence_sha256",
+        ):
+            value = payload[field]
+            if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+                _raise_redacted_settings_error(f"M05 activation evidence hash is invalid: {field}")
+
+        for field, expected in (
+            ("map_admin_openapi_sha256", KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256),
+            ("map_full_openapi_sha256", KOR_TRAVEL_MAP_M05_FULL_OPENAPI_SHA256),
+            ("map_service_openapi_sha256", KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256),
+            ("map_user_openapi_sha256", KOR_TRAVEL_MAP_M05_USER_OPENAPI_SHA256),
+            ("map_admin_source_revision", KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION),
+            ("map_full_source_revision", KOR_TRAVEL_MAP_M05_FULL_SOURCE_REVISION),
+            ("map_service_source_revision", KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION),
+            ("map_user_source_revision", KOR_TRAVEL_MAP_M05_USER_SOURCE_REVISION),
+        ):
+            if payload[field] != expected:
+                _raise_redacted_settings_error(
+                    f"M05 activation receipt Map pair field does not match: {field}"
+                )
+
+        for field in (
+            "map_admin_image_digest",
+            "map_api_image_digest",
+            "map_frontend_image_digest",
+            "pinvi_api_image_digest",
+            "pinvi_dagster_image_digest",
+            "pinvi_web_image_digest",
+        ):
+            value = payload[field]
+            if not isinstance(value, str) or re.fullmatch(r"sha256:[0-9a-f]{64}", value) is None:
+                _raise_redacted_settings_error(f"M05 image digest is invalid: {field}")
+
+        if (
+            payload["pinvi_api_image_digest"] != self.pinvi_api_image_digest
+            or payload["pinvi_web_image_digest"] != self.pinvi_web_image_digest
+            or payload["pinvi_dagster_image_digest"] != self.pinvi_dagster_image_digest
+        ):
             _raise_redacted_settings_error(
-                "M05 activation receipt Map service contract does not match the vendored contract"
-            )
-        if payload["map_source_revision"] != KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION:
-            _raise_redacted_settings_error(
-                "M05 activation receipt Map source revision does not match the vendored contract"
+                "M05 activation receipt Pinvi runtime image digest does not match the attested pair"
             )
         pinvi_source_revision = payload["pinvi_source_revision"]
         if (
@@ -869,6 +1049,27 @@ class Settings(BaseSettings):
             _raise_redacted_settings_error(
                 "M05 activation receipt Pinvi source revision must match PINVI_SOURCE_REVISION"
             )
+
+
+def _decode_base64url(value: object, *, expected_length: int) -> bytes | None:
+    if not isinstance(value, str) or re.fullmatch(r"[A-Za-z0-9_-]+", value) is None:
+        return None
+    if len(value) % 4 == 1:
+        return None
+    try:
+        decoded = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+    except (binascii.Error, ValueError):
+        return None
+    return decoded if len(decoded) == expected_length else None
+
+
+def _is_canonical_uuid(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        return str(UUID(value)) == value
+    except ValueError:
+        return False
 
 
 @lru_cache(maxsize=1)

@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pydantic import ValidationError
 
 from app.core.config import (
+    KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+    KOR_TRAVEL_MAP_M05_FULL_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_M05_FULL_SOURCE_REVISION,
+    KOR_TRAVEL_MAP_M05_USER_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_M05_USER_SOURCE_REVISION,
     KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
     KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
     Settings,
@@ -16,6 +24,18 @@ from app.core.config import (
 
 READ = "r" * 32
 ACK = "a" * 32
+PINVI_REVISION = "f" * 40
+PUBLIC_KEY_PRIVATE = Ed25519PrivateKey.from_private_bytes(b"m05-ed25519-private-key-32bytes!")
+PUBLIC_KEY = (
+    base64.urlsafe_b64encode(PUBLIC_KEY_PRIVATE.public_key().public_bytes_raw())
+    .decode("ascii")
+    .rstrip("=")
+)
+IMAGE_DIGESTS = {
+    "pinvi_api_image_digest": "sha256:" + "1" * 64,
+    "pinvi_web_image_digest": "sha256:" + "2" * 64,
+    "pinvi_dagster_image_digest": "sha256:" + "3" * 64,
+}
 
 
 def _settings(**overrides: object) -> Settings:
@@ -24,6 +44,60 @@ def _settings(**overrides: object) -> Settings:
 
 def _production_settings(**overrides: object) -> Settings:
     return Settings(_env_file=None, pinvi_environment="production", **overrides)  # type: ignore[arg-type]
+
+
+def _receipt_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "adversarial_reviews": [
+            {"commit": "1" * 40, "p0_p1": 0, "review_id": "review-1", "reviewer_id": "darwin"},
+            {"commit": "2" * 40, "p0_p1": 0, "review_id": "review-2", "reviewer_id": "feynman"},
+        ],
+        "live_ui_e2e": "passed",
+        "live_ui_event_id": "11111111-1111-4111-8111-111111111111",
+        "live_ui_evidence_sha256": "a" * 64,
+        "live_ui_map_ack_sha256": "b" * 64,
+        "map_admin_openapi_sha256": KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
+        "map_admin_source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+        "map_admin_image_digest": "sha256:" + "4" * 64,
+        "map_api_image_digest": "sha256:" + "5" * 64,
+        "map_frontend_image_digest": "sha256:" + "6" * 64,
+        "map_full_openapi_sha256": KOR_TRAVEL_MAP_M05_FULL_OPENAPI_SHA256,
+        "map_full_source_revision": KOR_TRAVEL_MAP_M05_FULL_SOURCE_REVISION,
+        "map_pair_evidence_sha256": "c" * 64,
+        "map_service_openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+        "map_service_source_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
+        "map_user_openapi_sha256": KOR_TRAVEL_MAP_M05_USER_OPENAPI_SHA256,
+        "map_user_source_revision": KOR_TRAVEL_MAP_M05_USER_SOURCE_REVISION,
+        "pinvi_api_image_digest": IMAGE_DIGESTS["pinvi_api_image_digest"],
+        "pinvi_dagster_image_digest": IMAGE_DIGESTS["pinvi_dagster_image_digest"],
+        "pinvi_image_evidence_sha256": "d" * 64,
+        "pinvi_source_revision": PINVI_REVISION,
+        "pinvi_web_image_digest": IMAGE_DIGESTS["pinvi_web_image_digest"],
+        "restore_drill": "passed",
+        "restore_evidence_sha256": "e" * 64,
+        "review_evidence_sha256": "f" * 64,
+        "scope": "production",
+        "version": 1,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _signed_receipt(payload: dict[str, object]) -> str:
+    material = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    signature = base64.urlsafe_b64encode(PUBLIC_KEY_PRIVATE.sign(material.encode("utf-8")))
+    return json.dumps(
+        {"payload": payload, "signature": signature.decode("ascii").rstrip("=")},
+        separators=(",", ":"),
+    )
+
+
+def _production_activation_values(receipt: str) -> dict[str, object]:
+    return {
+        "pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt": receipt,
+        "pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt_public_key": PUBLIC_KEY,
+        **IMAGE_DIGESTS,
+    }
 
 
 def _enabled_values() -> dict[str, object]:
@@ -113,27 +187,13 @@ def test_production_reconciliation_enable_requires_activation_receipt() -> None:
 def test_production_reconciliation_accepts_current_paired_activation_receipt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    pinvi_revision = "f" * 40
-    monkeypatch.setenv("PINVI_SOURCE_REVISION", pinvi_revision)
-    receipt = {
-        "adversarial_reviews": 2,
-        "adversarial_p0_p1": 0,
-        "live_ui_e2e": "passed",
-        "map_service_openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
-        "map_source_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
-        "pinvi_source_revision": pinvi_revision,
-        "restore_drill": "passed",
-        "scope": "production",
-        "version": 1,
-    }
+    monkeypatch.setenv("PINVI_SOURCE_REVISION", PINVI_REVISION)
     loaded = _production_settings(
         pinvi_kor_travel_map_api_base_url="http://127.0.0.1:12701",
         pinvi_kor_travel_map_admin_base_url="http://127.0.0.1:12701",
         pinvi_kor_travel_map_ops_read_token="o" * 32,
         pinvi_kor_travel_map_ops_cancel_token="c" * 32,
-        pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt=json.dumps(
-            receipt, separators=(",", ":")
-        ),
+        **_production_activation_values(_signed_receipt(_receipt_payload())),
         **_enabled_values(),
     )
     assert loaded.pinvi_kor_travel_map_feature_reference_reconciliation_enabled is True
@@ -143,8 +203,9 @@ def test_production_reconciliation_accepts_current_paired_activation_receipt(
     ("field", "value", "message"),
     (
         ("live_ui_e2e", "skipped", "live UI E2E"),
-        ("map_source_revision", "0" * 40, "Map source revision"),
+        ("map_service_source_revision", "0" * 40, "Map pair"),
         ("pinvi_source_revision", "0" * 40, "Pinvi source revision"),
+        ("pinvi_api_image_digest", "sha256:" + "0" * 64, "image digest"),
     ),
 )
 def test_production_reconciliation_rejects_stale_activation_receipt(
@@ -153,29 +214,15 @@ def test_production_reconciliation_rejects_stale_activation_receipt(
     value: object,
     message: str,
 ) -> None:
-    pinvi_revision = "f" * 40
-    monkeypatch.setenv("PINVI_SOURCE_REVISION", pinvi_revision)
-    receipt: dict[str, object] = {
-        "adversarial_reviews": 2,
-        "adversarial_p0_p1": 0,
-        "live_ui_e2e": "passed",
-        "map_service_openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
-        "map_source_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
-        "pinvi_source_revision": pinvi_revision,
-        "restore_drill": "passed",
-        "scope": "production",
-        "version": 1,
-    }
-    receipt[field] = value
+    monkeypatch.setenv("PINVI_SOURCE_REVISION", PINVI_REVISION)
+    receipt = _receipt_payload(**{field: value})
     with pytest.raises(ValueError, match=message):
         _production_settings(
             pinvi_kor_travel_map_api_base_url="http://127.0.0.1:12701",
             pinvi_kor_travel_map_admin_base_url="http://127.0.0.1:12701",
             pinvi_kor_travel_map_ops_read_token="o" * 32,
             pinvi_kor_travel_map_ops_cancel_token="c" * 32,
-            pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt=json.dumps(
-                receipt, separators=(",", ":")
-            ),
+            **_production_activation_values(_signed_receipt(receipt)),
             **_enabled_values(),
         )
 
@@ -183,16 +230,14 @@ def test_production_reconciliation_rejects_stale_activation_receipt(
 def test_production_reconciliation_rejects_receipt_secret_leaks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    pinvi_revision = "f" * 40
     secret = "UNIQUE-M05-ACTIVATION-RECEIPT-SECRET"
-    monkeypatch.setenv("PINVI_SOURCE_REVISION", pinvi_revision)
     with pytest.raises(ValidationError) as captured:
         _production_settings(
             pinvi_kor_travel_map_api_base_url="http://127.0.0.1:12701",
             pinvi_kor_travel_map_admin_base_url="http://127.0.0.1:12701",
             pinvi_kor_travel_map_ops_read_token="o" * 32,
             pinvi_kor_travel_map_ops_cancel_token="c" * 32,
-            pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt=secret,
+            **_production_activation_values(secret),
             **_enabled_values(),
         )
     assert secret not in repr(captured.value.errors())
@@ -201,35 +246,21 @@ def test_production_reconciliation_rejects_receipt_secret_leaks(
 
 @pytest.mark.parametrize(
     "field",
-    ("version", "adversarial_reviews", "adversarial_p0_p1"),
+    ("version", "scope"),
 )
 def test_production_reconciliation_rejects_boolean_numeric_receipt_fields(
     monkeypatch: pytest.MonkeyPatch,
     field: str,
 ) -> None:
-    pinvi_revision = "f" * 40
-    monkeypatch.setenv("PINVI_SOURCE_REVISION", pinvi_revision)
-    receipt: dict[str, object] = {
-        "adversarial_reviews": 2,
-        "adversarial_p0_p1": 0,
-        "live_ui_e2e": "passed",
-        "map_service_openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
-        "map_source_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
-        "pinvi_source_revision": pinvi_revision,
-        "restore_drill": "passed",
-        "scope": "production",
-        "version": 1,
-    }
-    receipt[field] = True
+    monkeypatch.setenv("PINVI_SOURCE_REVISION", PINVI_REVISION)
+    receipt = _receipt_payload(**{field: True})
     with pytest.raises(ValueError, match=r"M05 activation|production v1"):
         _production_settings(
             pinvi_kor_travel_map_api_base_url="http://127.0.0.1:12701",
             pinvi_kor_travel_map_admin_base_url="http://127.0.0.1:12701",
             pinvi_kor_travel_map_ops_read_token="o" * 32,
             pinvi_kor_travel_map_ops_cancel_token="c" * 32,
-            pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt=json.dumps(
-                receipt, separators=(",", ":")
-            ),
+            **_production_activation_values(_signed_receipt(receipt)),
             **_enabled_values(),
         )
 
@@ -237,29 +268,33 @@ def test_production_reconciliation_rejects_boolean_numeric_receipt_fields(
 def test_production_reconciliation_rejects_duplicate_receipt_keys(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    pinvi_revision = "f" * 40
-    monkeypatch.setenv("PINVI_SOURCE_REVISION", pinvi_revision)
-    receipt = json.dumps(
-        {
-            "adversarial_reviews": 2,
-            "adversarial_p0_p1": 0,
-            "live_ui_e2e": "passed",
-            "map_service_openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
-            "map_source_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
-            "pinvi_source_revision": pinvi_revision,
-            "restore_drill": "passed",
-            "scope": "production",
-            "version": 1,
-        },
-        separators=(",", ":"),
-    ).replace('"version":1', '"version":1,"version":1')
+    monkeypatch.setenv("PINVI_SOURCE_REVISION", PINVI_REVISION)
+    receipt = _signed_receipt(_receipt_payload()).replace('"version":1', '"version":1,"version":1')
     with pytest.raises(ValueError, match="duplicate keys"):
         _production_settings(
             pinvi_kor_travel_map_api_base_url="http://127.0.0.1:12701",
             pinvi_kor_travel_map_admin_base_url="http://127.0.0.1:12701",
             pinvi_kor_travel_map_ops_read_token="o" * 32,
             pinvi_kor_travel_map_ops_cancel_token="c" * 32,
-            pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt=receipt,
+            **_production_activation_values(receipt),
+            **_enabled_values(),
+        )
+
+
+def test_production_reconciliation_rejects_invalid_signature(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PINVI_SOURCE_REVISION", PINVI_REVISION)
+    receipt = _receipt_payload()
+    broken = json.loads(_signed_receipt(receipt))
+    broken["signature"] = "A" * 86
+    with pytest.raises(ValueError, match="signature is invalid"):
+        _production_settings(
+            pinvi_kor_travel_map_api_base_url="http://127.0.0.1:12701",
+            pinvi_kor_travel_map_admin_base_url="http://127.0.0.1:12701",
+            pinvi_kor_travel_map_ops_read_token="o" * 32,
+            pinvi_kor_travel_map_ops_cancel_token="c" * 32,
+            **_production_activation_values(json.dumps(broken, separators=(",", ":"))),
             **_enabled_values(),
         )
 
@@ -274,12 +309,38 @@ def test_compose_and_examples_keep_m05_credentials_api_only_and_default_off() ->
         "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACK_TOKEN",
         "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_BLOCKED_RECHECK_SECONDS",
         "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT",
+        "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_PUBLIC_KEY",
+        "PINVI_API_IMAGE_DIGEST",
+        "PINVI_WEB_IMAGE_DIGEST",
+        "PINVI_DAGSTER_IMAGE_DIGEST",
     ):
         assert variable in compose
         assert f"{variable}=" in prod
         assert f"{variable}=" in example
     assert "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ENABLED=false" in prod
     assert "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ENABLED=false" in example
+
+    api_block = compose.split("  app-api:", maxsplit=1)[1].split("  app-migrator:", maxsplit=1)[0]
+    for service_start, service_end in (
+        ("  app-migrator:", "  app-web:"),
+        ("  app-web:", "  app-dagster:"),
+        ("  app-dagster:", "  cadvisor:"),
+    ):
+        service_block = compose.split(service_start, maxsplit=1)[1].split(service_end, maxsplit=1)[
+            0
+        ]
+        for variable in (
+            "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT",
+            "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_PUBLIC_KEY",
+            "PINVI_API_IMAGE_DIGEST",
+            "PINVI_WEB_IMAGE_DIGEST",
+            "PINVI_DAGSTER_IMAGE_DIGEST",
+        ):
+            assert variable not in service_block
+    assert "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT" in api_block
+    assert "kor-travel-map-m05-pair-provenance-v1.json" in (root / "apps/api/Dockerfile").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_m05_evidence_runtime_uses_non_owner_database_login() -> None:

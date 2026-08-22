@@ -43,6 +43,7 @@ COPY apps/api/app ./app
 COPY apps/api/alembic ./alembic
 COPY apps/api/alembic.ini ./alembic.ini
 COPY contracts/kor-travel-map-service-provenance-v1.json ./app/_contract_data/kor-travel-map-service-provenance-v1.json
+COPY contracts/kor-travel-map-m05-pair-provenance-v1.json ./app/_contract_data/kor-travel-map-m05-pair-provenance-v1.json
 COPY scripts/backup-db.sh ./scripts/backup-db.sh
 
 # 의존성 cache layer에서는 app source가 아직 없어 editable package mapping이 비어 있다.

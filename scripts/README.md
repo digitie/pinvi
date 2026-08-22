@@ -6,6 +6,7 @@
 | --------------------------- | ---------------------------------------------------------------------------------------------------------- | ------ |
 | `docker-app.sh`             | App 컨테이너 build/up/down/status/logs/smoke + API image provenance 검증                                   | 1      |
 | `api_image_provenance.py`   | clean Git HEAD·build arg·API image OCI revision label fail-closed 검증                                     | ops    |
+| `m05_activation_receipt.py` | M05의 두 리뷰·live UI·Map pair·restore·Pinvi image 증거를 Ed25519 signed receipt로 봉인              | 6      |
 | `docker-app-smoke-test.sh`  | `docker-app.sh smoke` 호환 wrapper                                                                         | 1      |
 | `pr_review_monitor.py`      | 열린 PR / PR 이벤트에서 최신 head SHA review reminder를 확인하고 MCP 기반 리뷰 알림 댓글을 남김            | 4      |
 | `backup-db.sh`              | `app` schema `pg_dump --format=custom` + sha256. host `pg_dump` 부재 시 Docker fallback 지원 (ADR-022 1차) | 5      |
