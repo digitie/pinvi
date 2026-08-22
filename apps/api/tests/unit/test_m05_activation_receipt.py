@@ -87,9 +87,13 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     _write_json(
         evidence_dir / "restore.json",
         {
+            "backup_runner_sha256": "1" * 64,
             "dump_sha256": "c" * 64,
+            "execution_id": "33333333-3333-4333-8333-333333333333",
             "no_owner_restore": True,
             "restore_command": "pg_restore --no-owner --no-privileges",
+            "restore_output_sha256": "2" * 64,
+            "restore_runner_sha256": "3" * 64,
             "runtime_role_verified": True,
             "source_db_identity_sha256": "d" * 64,
             "status": "passed",

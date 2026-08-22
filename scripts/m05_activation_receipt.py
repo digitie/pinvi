@@ -524,9 +524,13 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
 def _restore(value: object) -> None:
     restore = _object(value, name="restore evidence")
     expected = {
+        "backup_runner_sha256",
         "dump_sha256",
+        "execution_id",
         "no_owner_restore",
         "restore_command",
+        "restore_output_sha256",
+        "restore_runner_sha256",
         "runtime_role_verified",
         "source_db_identity_sha256",
         "status",
@@ -545,11 +549,15 @@ def _restore(value: object) -> None:
         if restore[field] is not True:
             raise ReceiptError(f"restore evidence flag is not true: {field}")
     for field in (
+        "backup_runner_sha256",
         "dump_sha256",
+        "restore_output_sha256",
+        "restore_runner_sha256",
         "source_db_identity_sha256",
         "target_db_identity_sha256",
     ):
         _sha256(restore[field], name=f"restore.{field}")
+    _uuid(restore["execution_id"], name="restore.execution_id")
 
 
 def _map_pair(
