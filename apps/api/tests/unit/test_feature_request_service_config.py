@@ -20,9 +20,7 @@ def _settings(**overrides: object) -> Settings:
 def test_feature_request_token_is_optional_and_empty_is_unset() -> None:
     assert _settings().kor_travel_map_feature_request_token is None
     assert (
-        _settings(
-            kor_travel_map_feature_request_token=""
-        ).kor_travel_map_feature_request_token
+        _settings(kor_travel_map_feature_request_token="").kor_travel_map_feature_request_token
         is None
     )
 
@@ -75,8 +73,7 @@ def test_feature_request_token_is_configurable_by_the_production_compose_templat
 
     assert "KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN=" in env_template
     assert (
-        "KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN: "
-        "${KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN:-}" in compose
+        "KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN: ${KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN:-}" in compose
     )
 
 

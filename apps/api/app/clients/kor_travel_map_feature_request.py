@@ -168,9 +168,7 @@ class FeatureRequestServiceClient:
         }
         if correlation_id is not None:
             headers["X-Request-ID"] = str(correlation_id)
-        extensions = (
-            {"request_id": str(correlation_id)} if correlation_id is not None else None
-        )
+        extensions = {"request_id": str(correlation_id)} if correlation_id is not None else None
         last_error: FeatureRequestQueueUnavailable | None = None
         for attempt in range(self._max_attempts):
             try:
