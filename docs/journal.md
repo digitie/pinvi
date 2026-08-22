@@ -10,8 +10,8 @@
   `99ba6c178bf55401d3e1bb638a01b96f66bbac38d604534aa126a70f4be53d3d`다.
 - 차이는 admission 상한(1,000,000 item/512 MiB → 500,000 item/56 MiB)과 request-bound
   material compaction typed `410` 응답이다. service snapshot, provenance, runtime/CI pin,
-  M05·feature request 계약 테스트와 관련 문서를 같은 PR에서 갱신하고, full/admin/user pin은
-  변경하지 않는다.
+  M05·feature request 계약 테스트와 관련 문서를 같은 PR에서 갱신했고, Map #1054 full/admin
+  artifact도 `fadc029c`/`2c02ecfe…` 기준으로 함께 재vendor했다(user pin은 유지).
 - T-VN-41C receipt는 새 exact pair의 CI·두 전문 적대 리뷰·격리 live proof 전까지 `pending`이다.
 
 ## 2026-08-22 (codex) — M04 Feature request 식별자 consumer 중립화

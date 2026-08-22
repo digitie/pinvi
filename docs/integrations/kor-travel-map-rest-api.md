@@ -70,7 +70,7 @@ sort, order]`이며 `status`·`provider`·`dataset_key`는 **없다**(보내면 
 > `apps/api/tests/contract/kor-travel-map-openapi-service.json`
 > (SHA-256 `99ba6c178bf55401d3e1bb638a01b96f66bbac38d604534aa126a70f4be53d3d`)으로 byte-exact
 > vendor한다. admin snapshot SHA-256은
-> `697a08c475fc28ba730af1dd14da89998a3a56cafbfb7676bfb3fa4a0b9ef6fd`, user SHA-256은
+> `2c02ecfead95b06306db7189278c975ec83a9e2a793f3f0e18ca0bd96240f3cb`, user SHA-256은
 > `489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b`다. Pinvi의 `new_place`
 > 승인은 이제 전용 `ServiceToken`과 동일 UUID body/header로
 > `POST /v1/service/feature-requests`만 호출한다. `pending` receipt는 Pinvi `approved`, verified
@@ -675,14 +675,14 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   해당 경로·batch schema 계약을 vendored `kor-travel-map-openapi-service.json`
   (byte-핀 소유는 `test_kor_travel_map_cache_target_contract.py`) 기준으로 검증하고,
   두 profile에 겹치는 schema(`Meta`/`WeatherMetricOut` 등)는 양쪽 모두에서 고정한다.
-- **Admin/ops 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map PR #1029
-  artifact commit `037e24698f74e2067ea7c8572b044076dc0ac89c`의 전체 `openapi.json` 원본이며
-  SHA-256은 `697a08c475fc28ba730af1dd14da89998a3a56cafbfb7676bfb3fa4a0b9ef6fd`이다.
+- **Admin/ops 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map PR #1054
+  artifact commit `fadc029ce2b0cd730c604697e04d1fccdff02ce9`의 전체 `openapi.json` 원본이며
+  SHA-256은 `2c02ecfead95b06306db7189278c975ec83a9e2a793f3f0e18ca0bd96240f3cb`이다.
   `test_kor_travel_map_ops_contract.py`는
   provider ETL이 소비하는 ops 경로·인증·query·응답 schema 연결과 폐기 필드 부재를 고정한다.
   Admin feature 소비 필드/query 게이트와 M04 request queue 후보 계약은 같은 source revision을 사용한다.
-  이 user/admin pin은 이미 병합된 #1029/#458 구현 기준이며, 현재 service 재vendor와 paired
-  completion receipt는 별도 gate다.
+  user pin은 이미 병합된 #1029/#458 구현 기준이고 admin pin은 #1054 기준이며, 현재 service
+  재vendor와 paired completion receipt는 별도 gate다.
 - **계약 테스트**: `apps/api/tests/unit/test_kor_travel_map_contract.py` (CI `pytest tests/unit`에서 실행) —
   (1) user client 경로(`/v1/features/*`·`/v1/categories`·`/v1/public/*`) ⊆ 스냅샷 paths,
   (2) 매핑(`features.py`/`public.py`가 읽는 FeatureSummary/ClusterSummary/
@@ -707,15 +707,16 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   `model_validate`로 객체 전체를 검증하는 `/v1/public/*`는
   `test_public_view_contracts_cover_every_validated_model_field`가 `app/schemas/public.py`
   모델의 `model_fields` ⊆ 계약을 강제한다(모델에 필드를 추가하면 타입 계약도 함께 적어야 통과).
-- **Admin vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map PR #1029
-  artifact commit `037e24698f74e2067ea7c8572b044076dc0ac89c`의
+- **Admin vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map PR #1054
+  artifact commit `fadc029ce2b0cd730c604697e04d1fccdff02ce9`의
   `packages/kor-travel-map-api/openapi.json` 전체 파일, SHA-256
-  `697a08c475fc28ba730af1dd14da89998a3a56cafbfb7676bfb3fa4a0b9ef6fd`.
+  `2c02ecfead95b06306db7189278c975ec83a9e2a793f3f0e18ca0bd96240f3cb`.
   `test_kor_travel_map_admin_contract.py`가 Admin feature 목록/상세/weather의 path·AdminBFF security,
   query exact 집합, 응답 container `$ref`, 3축·state transition·curation·weather 소비 shape를 고정한다.
   feature request service gate는 별도 service vendor의 `ServiceToken`, UUID `Idempotency-Key`, request
-  body/coordinate, 201 envelope와 failure policy를 검증한다. user/admin pin은 #1029/#458의 병합된
-  구현 기준이고 service pin은 #465의 새 exact pair gate를 거친 뒤에만 merge/complete receipt를 허용한다.
+  body/coordinate, 201 envelope와 failure policy를 검증한다. user pin은 #1029/#458, admin pin은
+  #1054의 병합된 구현 기준이고 service pin은 #465의 새 exact pair gate를 거친 뒤에만
+  merge/complete receipt를 허용한다.
 
   > **의도적 비대상**: consumer 쪽에서는 exact property 집합·`additionalProperties`를 고정하지
   > 않는다. producer(Map) 쪽 exact 고정은 T-VN-H07A(Map PR #814)가 소유하며, consumer가 이를

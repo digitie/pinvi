@@ -14,10 +14,10 @@ Map에 ACK한다. 이 문서는 Map ADR-095와
 ## 기준 계약
 
 - Map service contract source: PR #1051 merge `db319a4798229098d04e68e3ac64338183ad547f`.
-  Full/admin/user 표면은 기존 #1029 계열 pin을 유지하며 service profile만 이 revision으로
-  재vendor한다.
+  Full/admin 표면은 PR #1054 merge `fadc029ce2b0cd730c604697e04d1fccdff02ce9`, user 표면은
+  #1029 계열 pin을 유지하며 service profile은 #1051 revision으로 재vendor한다.
 - vendored full/service/user OpenAPI SHA-256:
-  `697a08c475fc28ba730af1dd14da89998a3a56cafbfb7676bfb3fa4a0b9ef6fd` /
+  `2c02ecfead95b06306db7189278c975ec83a9e2a793f3f0e18ca0bd96240f3cb` /
   `99ba6c178bf55401d3e1bb638a01b96f66bbac38d604534aa126a70f4be53d3d` /
   `489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b`.
 - read token은 `feature-reference-reconciliation:read`, ACK token은
