@@ -21,10 +21,12 @@
   - [ ] **docker-manager pair 재핀(F1J-D 전제)** — Manager tracked v5 pinset은 아직 옛 pair를 고정한다.
         `MAP_PINNED_RUNTIME_SOURCE`=`4672aa96…`, `PINVI_PINNED_RUNTIME_SOURCE`=PinVi 재핀 머지 SHA,
         `pinset_sha256` 재계산 후 trusted Manager release를 배포해야 n150 격리 rehearsal이 fail-close를 통과한다.
-  - T-VN-41S Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의 service OpenAPI
-    `8019e36f150ed006f5580e5ff224a0ba72030808b5303273f8c4c51aa0496431`을 PinVi provenance에
-    재핀했다(**PR #453·#454 머지 완료**, 2026-08-19). typed item/byte `413`과 compacted-material
-    `410`이 추가된 새 계약이므로 이전 paired CI·n150 증거는 재사용하지 않는다. 새 exact pair의 검증 전에는 완료 receipt를 만들지 않는다.
+  - Map PR #1051 merge `db319a4798229098d04e68e3ac64338183ad547f`가 service OpenAPI의
+    admission 상한(500,000 item/56 MiB)과 compacted-material `410`을 갱신했다. 현재 service
+    artifact SHA는 `99ba6c178bf55401d3e1bb638a01b96f66bbac38d604534aa126a70f4be53d3d`이며,
+    이 PinVi branch에서 vendored bytes와 provenance를 재핀한다. 이전 #453·#454 pair의
+    paired CI·n150 증거는 새 exact pair의 증거로 재사용하지 않는다. 새 pair 검증 전에는
+    완료 receipt를 만들지 않는다.
     production `SYNC_ENABLED=true`는 final C7 root enable boundary 전까지 Settings validation이 거부하며,
     격리 n150 live proof는 `smoke` stack에서만 실행한다.
 - [/] **T-VN-41-F — C6c 격리 compatible-pair 증명** — 서비스 전 단계이므로 production consumer enable,

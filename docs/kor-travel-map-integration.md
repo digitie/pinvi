@@ -197,9 +197,9 @@ T-VN-41 source byte 계약은 Map commit
 leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
 commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
 
-서비스 계약은 Map exact merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`의
+서비스 계약은 Map PR #1051 exact merge `db319a4798229098d04e68e3ac64338183ad547f`의
 `packages/kor-travel-map-api/openapi.service.json` exact bytes를 vendor한다. SHA-256은
-`8019e36f150ed006f5580e5ff224a0ba72030808b5303273f8c4c51aa0496431`다. artifact owner/functional
+`99ba6c178bf55401d3e1bb638a01b96f66bbac38d604534aa126a70f4be53d3d`다. artifact owner/functional
 owner 이중 provenance는 control-plane 정본이 아니다. PinVi의
 `contracts/kor-travel-map-service-provenance-v1.json`은 위 Map release·SHA-256과 capability
 `cache_target=7`, `c6c_cancel_probe=2`를 비밀값 없이 한 번만 기록한다. cache-target runtime 상수와
@@ -221,7 +221,7 @@ receipt까지 exact 결박한다. 그 뒤에만 ready/completed를 함께 확정
 generation 7은 source PUT/DELETE·refresh create의 exact command scope와 target/refresh GET의 consumer
 credential 전환, 17-route machine-readable scope를 고정한다. generation 6은 trim된 Unicode NFC identity와 512자 `target_key`, 중복 없는 refresh key 배열,
 typed snapshot backpressure 오류를 고정한다. T-VN-41S는 generation을 올리지 않고 generic/reconciliation
-seal의 `413`을 item 1,000,000개와 canonical material 512 MiB 상한의 code-discriminated problem으로
+seal의 `413`을 item 500,000개와 canonical material 56 MiB 상한의 code-discriminated problem으로
 분리하고, request-bound material compaction을 immutable receipt가 포함된 typed `410`으로 고정한다.
 기존 후보/live 증거는 이 새 바이트 계약의 증거로 재사용하지 않는다. generation 5는 snapshot page의 timezone-aware
 `created_at`/`expires_at`을 필수화했다. generic snapshot은
@@ -251,8 +251,8 @@ Map의 `429 SNAPSHOT_CAPACITY_EXCEEDED`와 `503 SNAPSHOT_{BARRIER_TIMEOUT,BUILD_
 canonical `Retry-After`를 그대로 기다려 최대 3회 시도한다. header 누락·범위 위반은 계약 오류이고,
 `413 SNAPSHOT_{ITEM,BYTE}_LIMIT_EXCEEDED`와 request-bound
 `410 SNAPSHOT_MATERIAL_COMPACTED`는 자동 재시도 없이 startup을 fail-close한다. 이 동작과 Map의
-1,000,000-item/512 MiB ceiling을 n150 production enable 전 live gate에서 확인한다. 정확히 1,000,000개
-성공의 wall latency와 API/DB peak RSS를 함께 기록하고, 1,000,001개 또는 512 MiB 초과의 typed `413`
+500,000-item/56 MiB ceiling을 n150 production enable 전 live gate에서 확인한다. 정확히 500,000개
+성공의 wall latency와 API/DB peak RSS를 함께 기록하고, 500,001개 또는 56 MiB 초과의 typed `413`
 non-retry와 구분한다.
 
 generation 4는 generation 3의 restore epoch 배달 경계에 mutation/read 응답 의미를 분리한 breaking
