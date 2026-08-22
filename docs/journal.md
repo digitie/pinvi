@@ -2,6 +2,16 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-22 (codex) — T-273 보류 및 작업 원장 정리
+
+- 최신 `origin/main` 기준으로 T-VN-40과 T-VN-M04의 merge·paired acceptance·격리 browser evidence를
+  대조하고 완료 아카이브로 옮겼다. 완료된 T-321도 열린 원장에서 제거했다.
+- T-273은 geofence 운영 설정과 전용 staging Web/API가 준비될 때까지 `보류`로 이동했고, T-274는
+  v1.0.0 릴리즈 후속으로 유지했다. T-323은 E2E required check 결정 작업으로 남겼다.
+- 기존 M04/M05 구현 브랜치를 최신 `main`에 그대로 재생하면 이미 머지된 커밋을 중복 적용하며 충돌하므로,
+  원장 변경은 `origin/main`에서 새 작업 브랜치로 분리했다. 기존 브랜치와 미추적 `apps/api/uv.lock`은
+  변경하지 않았다.
+
 ## 2026-08-21 (codex) — Hallmark Admin M04/M05 반응형·접근성 재설계
 
 - 잠긴 PinVi `modern-minimal · Workbench` 디자인 시스템 안에서 M04 제안 검토와 M05

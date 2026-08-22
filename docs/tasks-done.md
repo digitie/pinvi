@@ -4,6 +4,16 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-08-22
+
+- [x] **T-VN-40** — PinVi canonical curation consumer와 paired API acceptance를 완료했다.
+      Pinvi PR #445·#459, Docker Manager PR #174, Map PR #1048을 반영하고, 격리 DB에서 canonical
+      snapshot/import/replay/refresh와 legacy plan 부재를 확인했다. (완료: 2026-08-21)
+- [x] **T-VN-M04** — 범용 Feature 요청 큐 consumer를 완료했다. Pinvi PR #458에서 신규 장소 승인
+      요청의 UUID·idempotency·pending/exact-conflict 경계와 correction/closure 분리를 반영했고,
+      Map 승인부터 PinVi receipt·Map ACK까지의 격리 paired browser evidence를 기록했다.
+      (완료: 2026-08-21)
+
 ## 2026-08-21
 
 - [x] **T-321** — vitest 워커 기동 실패 시의 "조용한 누락" 조사와 CI 실행 범위 교정.
