@@ -65,18 +65,19 @@ sort, order]`이며 `status`·`provider`·`dataset_key`는 **없다**(보내면 
 > (query 없음, 응답 `FeatureWeatherResponse`/`WeatherCardData`; user 경로는 `public_features`
 > 기반이라 비공개 feature가 404지만 admin 경로는 base `features`(lifecycle=active) 기반이다).
 >
-> **2026-08-21 M05 delivery 후보 재핀**: Map draft PR #1029 head
-> `037e24698f74e2067ea7c8572b044076dc0ac89c`의 full OpenAPI와 service OpenAPI를 각각
-> `apps/api/tests/contract/kor-travel-map-openapi-admin.json`
-> (SHA-256 `697a08c475fc28ba730af1dd14da89998a3a56cafbfb7676bfb3fa4a0b9ef6fd`) 및
-> `kor-travel-map-openapi-service.json`
-> (SHA-256 `e1152a058e176f4f3aaeb4bb0965434f657601639786463f873ac82c6f3018eb`)으로 byte-exact
-> vendor했다. 같은 head의 user OpenAPI도 기존 vendor와 byte-exact하며 SHA-256은
+> **2026-08-22 M05 service 계약 재핀 준비**: Map PR #1051 merge
+> `db319a4798229098d04e68e3ac64338183ad547f`의 service OpenAPI를
+> `apps/api/tests/contract/kor-travel-map-openapi-service.json`
+> (SHA-256 `99ba6c178bf55401d3e1bb638a01b96f66bbac38d604534aa126a70f4be53d3d`)으로 byte-exact
+> vendor한다. admin snapshot SHA-256은
+> `2c02ecfead95b06306db7189278c975ec83a9e2a793f3f0e18ca0bd96240f3cb`, user SHA-256은
 > `489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b`다. Pinvi의 `new_place`
 > 승인은 이제 전용 `ServiceToken`과 동일 UUID body/header로
 > `POST /v1/service/feature-requests`만 호출한다. `pending` receipt는 Pinvi `approved`, verified
 > `exact_conflict`는 `duplicate`로 전이하며, 409·422·전송/5xx·계약 오류는 local row를 `pending`으로
-> 남긴다. Map #1029와 Pinvi draft PR #458이 모두 병합되기 전 paired completion receipt는 `pending`이다.
+> 남긴다. Map #1029 구현 merge(`57c9d99a`)와 Pinvi #458은 이미 병합됐지만, 현재 Map #1051 service
+> artifact를 PinVi #465에서 재vendor하고 새 exact pair를 검증하기 전 paired completion receipt는
+> `pending`이다.
 >
 > **후속 과제**:
 >
@@ -446,8 +447,9 @@ tier1..4_code/name, is_active, sort_order, db_active|null, db_feature_count|null
 > `ServiceToken`·UUID `Idempotency-Key`·`FeatureRequestSubmitInput` 및 201 envelope를 contract gate로
 > 고정한다. correction/closure만 위 PATCH/DELETE를 유지한다.
 >
-> **receipt 경계**: Map #1029와 Pinvi #458은 모두 draft다. 두 PR의 실제 merge SHA가 생기기 전에는
-> paired completion receipt를 만들거나 `complete`로 기록하지 않는다.
+> **receipt 경계**: Map #1029 구현 merge(`57c9d99a`)와 Pinvi #458은 완료됐다. 다만 Map #1051
+> service 재vendor PR #465의 CI·적대 리뷰·격리 paired proof가 끝나기 전에는 completion receipt를
+> 만들거나 `complete`로 기록하지 않는다.
 
 - **낙관적 동시성(T-VN-13)**: 수정·삭제 전에
   `GET /admin/features/{feature_id}/revision`을 호출해 raw strong `ETag`를 읽고, 그 값을
@@ -662,8 +664,8 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
 수기 httpx client(kor_travel_map 권고)가 kor_travel_map OpenAPI profile과 silent drift하는 것을 막는다.
 
 - **vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-user.json` — Pinvi가 구현 기준으로
-  삼은 kor_travel_map의 **전체 파일**(현 source pin은 draft PR #1029 rebased head
-  `fa6d0d3d10456401993e12bb5f726abad4bce413`; bytes는 2026-08-20 재대조에서 동일). 실제 consumer
+  삼은 kor_travel_map의 **전체 파일**(현 source pin은 Map PR #1029 artifact commit
+  `037e24698f74e2067ea7c8572b044076dc0ac89c`; bytes는 2026-08-22 재대조에서 동일). 실제 consumer
   drift를 반영한 최초 재vendor는 `95d2c128`(2026-08-17, 직전 `8c5bdcf8`)이며 상세는 본 문서 상단
   2026-08-17 노트다.
   pinned SHA-256은 본 문서 상단과 `test_kor_travel_map_contract.py`가 함께 고정한다.
@@ -673,13 +675,14 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   해당 경로·batch schema 계약을 vendored `kor-travel-map-openapi-service.json`
   (byte-핀 소유는 `test_kor_travel_map_cache_target_contract.py`) 기준으로 검증하고,
   두 profile에 겹치는 schema(`Meta`/`WeatherMetricOut` 등)는 양쪽 모두에서 고정한다.
-- **Admin/ops 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map draft
-  PR #1029 rebased head `fa6d0d3d10456401993e12bb5f726abad4bce413`의 전체 `openapi.json` 원본이며 SHA-256은
-  `590f49d1c4abe6558cf46da5a4a4b6b787bb007c3194c07f343f97a3b6b8d9be`이다.
+- **Admin/ops 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map PR #1054
+  artifact commit `fadc029ce2b0cd730c604697e04d1fccdff02ce9`의 전체 `openapi.json` 원본이며
+  SHA-256은 `2c02ecfead95b06306db7189278c975ec83a9e2a793f3f0e18ca0bd96240f3cb`이다.
   `test_kor_travel_map_ops_contract.py`는
   provider ETL이 소비하는 ops 경로·인증·query·응답 schema 연결과 폐기 필드 부재를 고정한다.
   Admin feature 소비 필드/query 게이트와 M04 request queue 후보 계약은 같은 source revision을 사용한다.
-  이 pin은 draft 후보 증거이며 양 PR 병합 전 completion receipt가 아니다.
+  user pin은 이미 병합된 #1029/#458 구현 기준이고 admin pin은 #1054 기준이며, 현재 service
+  재vendor와 paired completion receipt는 별도 gate다.
 - **계약 테스트**: `apps/api/tests/unit/test_kor_travel_map_contract.py` (CI `pytest tests/unit`에서 실행) —
   (1) user client 경로(`/v1/features/*`·`/v1/categories`·`/v1/public/*`) ⊆ 스냅샷 paths,
   (2) 매핑(`features.py`/`public.py`가 읽는 FeatureSummary/ClusterSummary/
@@ -704,15 +707,16 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   `model_validate`로 객체 전체를 검증하는 `/v1/public/*`는
   `test_public_view_contracts_cover_every_validated_model_field`가 `app/schemas/public.py`
   모델의 `model_fields` ⊆ 계약을 강제한다(모델에 필드를 추가하면 타입 계약도 함께 적어야 통과).
-- **Admin vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map draft
-  PR #1029 rebased head `fa6d0d3d10456401993e12bb5f726abad4bce413`의
+- **Admin vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map PR #1054
+  artifact commit `fadc029ce2b0cd730c604697e04d1fccdff02ce9`의
   `packages/kor-travel-map-api/openapi.json` 전체 파일, SHA-256
-  `590f49d1c4abe6558cf46da5a4a4b6b787bb007c3194c07f343f97a3b6b8d9be`.
+  `2c02ecfead95b06306db7189278c975ec83a9e2a793f3f0e18ca0bd96240f3cb`.
   `test_kor_travel_map_admin_contract.py`가 Admin feature 목록/상세/weather의 path·AdminBFF security,
   query exact 집합, 응답 container `$ref`, 3축·state transition·curation·weather 소비 shape를 고정한다.
   feature request service gate는 별도 service vendor의 `ServiceToken`, UUID `Idempotency-Key`, request
-  body/coordinate, 201 envelope와 failure policy를 검증한다. 두 pin 모두 draft 후보 증거이며 merge/complete
-  receipt가 아니다.
+  body/coordinate, 201 envelope와 failure policy를 검증한다. user pin은 #1029/#458, admin pin은
+  #1054의 병합된 구현 기준이고 service pin은 #465의 새 exact pair gate를 거친 뒤에만
+  merge/complete receipt를 허용한다.
 
   > **의도적 비대상**: consumer 쪽에서는 exact property 집합·`additionalProperties`를 고정하지
   > 않는다. producer(Map) 쪽 exact 고정은 T-VN-H07A(Map PR #814)가 소유하며, consumer가 이를

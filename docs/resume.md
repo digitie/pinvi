@@ -1,5 +1,21 @@
 # resume.md
 
+## 2026-08-22 (codex) — Map #1051 service 계약 재vendor 준비
+
+Map PR #1051에서 갱신된 service OpenAPI가 PinVi vendor와 달라졌음을 byte 단위로 확인했다.
+현재 Map service artifact는 `db319a4798229098d04e68e3ac64338183ad547f` 기준이며 SHA-256은
+`99ba6c178bf55401d3e1bb638a01b96f66bbac38d604534aa126a70f4be53d3d`다. 기존 PinVi
+`e1152a…` vendor는 1,000,000 item/512 MiB와 typed `410`이 없는 이전 계약이었다.
+
+이번 branch에서는 service 스냅샷·일반 provenance·runtime/CI hash pin·M05/cache-target/feature
+request 계약 테스트와 현재 문서를 함께 재고정한다. Map #1054의 full/admin artifact도
+`fadc029c`/`2c02ecfe…`로 재vendor했지만 service provenance revision은 #1051을 가리킨다.
+새 exact pair의 CI·두 전문 적대 리뷰·격리 live proof 전에는 receipt를 `complete`로 올리거나
+production sync를 켜지 않는다.
+
+**다음 한 작업**: draft PR의 CI와 두 전문 리뷰를 통과시킨 뒤, Map #1054 admin 및 #1051
+service vendor를 함께 반영한 T-VN-41C paired acceptance 전제와 남은 M05 activation 조건을 대조한다.
+
 ## 2026-08-22 (codex) — M04 Feature request 이름 정리
 
 범용 Feature request queue의 설정·상관관계 식별자에서 Pinvi 제품 접두사를 제거했다.

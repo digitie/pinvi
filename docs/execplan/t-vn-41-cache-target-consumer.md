@@ -440,8 +440,8 @@ generation 1회만 만든다. consumer pause 중 변경으로 backlog/checksum m
 lag=0, DLQ=0, count/root 일치를 확인한다. 증거에는 두 repo commit/image ID/contract generation, epoch,
 event ID/cursor, snapshot ID/count/root, command/claim/ack receipt를 넣고 credential·host·domain은 redaction한다.
 서로 다른 API process에서 동시에 bootstrap해도 PinVi 발신 traversal은 DB 전체에서 1임을 확인하고,
-synthetic `429/503`은 `Retry-After` 뒤 재시도되는 증거를 남긴다. 정확히 1,000,000개 snapshot은 성공해야
-하며 wall latency와 API/DB container peak RSS를 기록한다. 1,000,001개 또는 canonical material 512 MiB
+synthetic `429/503`은 `Retry-After` 뒤 재시도되는 증거를 남긴다. 정확히 500,000개 snapshot은 성공해야
+하며 wall latency와 API/DB container peak RSS를 기록한다. 500,001개 또는 canonical material 56 MiB
 초과는 code-discriminated `413` 뒤 재요청 없이 startup이 닫혀야 한다. request-bound material이 terminal
 audit 보존 기간 뒤 compact되면 immutable receipt를 포함한 typed `410`으로 fail-close한다.
 
@@ -455,7 +455,8 @@ audit 보존 기간 뒤 compact되면 immutable receipt를 포함한 typed `410`
 - [x] relay inbox commit-before-ACK, duplicate/gap/epoch/checksum core
 - [x] service transport/worker, command publisher, default-off principal gate
 - [x] final OpenAPI pin, cache generation observer
-- [/] 2026-08-18 T-VN-41S Map merge `f637f3ad4efa8e601c1aa922ec0aecf624f7bcaf`과 vendored service
-      SHA-256 `8019e36f150ed006f5580e5ff224a0ba72030808b5303273f8c4c51aa0496431`을 provenance에 재결박했다.
-      item/byte typed `413`과 compacted-material typed `410`을 포함한 새 artifact이므로 이전 pair의
-      paired CI·n150 live proof는 재사용하지 않는다. 새 exact pair의 CI와 live proof가 남아 있다.
+- [/] 2026-08-22 Map PR #1051 merge `db319a4798229098d04e68e3ac64338183ad547f`의 service
+      artifact SHA-256 `99ba6c178bf55401d3e1bb638a01b96f66bbac38d604534aa126a70f4be53d3d`를
+      provenance와 vendored bytes에 재결박한다. admission 상한과 compacted-material `410`이
+      갱신된 새 artifact이므로 이전 pair의 paired CI·n150 live proof는 재사용하지 않는다. 새
+      exact pair의 CI와 live proof가 남아 있다.

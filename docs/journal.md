@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-22 (codex) — Map #1051 service 계약 byte 대조 및 재vendor
+
+- Map `packages/kor-travel-map-api/openapi.service.json`과 PinVi vendor를 대조해 기존
+  `e1152a…`가 stale임을 확인했다. Map PR #1051 merge
+  `db319a4798229098d04e68e3ac64338183ad547f`의 service SHA-256은
+  `99ba6c178bf55401d3e1bb638a01b96f66bbac38d604534aa126a70f4be53d3d`다.
+- 차이는 admission 상한(1,000,000 item/512 MiB → 500,000 item/56 MiB)과 request-bound
+  material compaction typed `410` 응답이다. service snapshot, provenance, runtime/CI pin,
+  M05·feature request 계약 테스트와 관련 문서를 같은 PR에서 갱신했고, Map #1054 full/admin
+  artifact도 `fadc029c`/`2c02ecfe…` 기준으로 함께 재vendor했다(user pin은 유지).
+- T-VN-41C receipt는 새 exact pair의 CI·두 전문 적대 리뷰·격리 live proof 전까지 `pending`이다.
+
 ## 2026-08-22 (codex) — M04 Feature request 식별자 consumer 중립화
 
 - 범용 Feature request queue는 Pinvi 전용 기능이 아니므로 service token 설정을
