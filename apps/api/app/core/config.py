@@ -11,15 +11,44 @@ import re
 from functools import lru_cache
 from importlib.resources import files
 from pathlib import Path
-from typing import Literal, Self, cast
+from typing import Literal, NoReturn, Self, cast
 from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PinviEnvironment = Literal["development", "test", "smoke", "staging", "production"]
 _SERVICE_PROVENANCE_FILENAME = "kor-travel-map-service-provenance-v1.json"
 _PACKAGED_SERVICE_PROVENANCE_PATH = f"_contract_data/{_SERVICE_PROVENANCE_FILENAME}"
+
+
+class _DuplicateJsonKeyError(ValueError):
+    """activation receipt의 중복 키를 fail-closed로 거부한다."""
+
+
+def _reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    payload: dict[str, object] = {}
+    for key, value in pairs:
+        if key in payload:
+            raise _DuplicateJsonKeyError
+        payload[key] = value
+    return payload
+
+
+def _raise_redacted_settings_error(message: str) -> NoReturn:
+    """SecretStr가 포함된 Settings 검증 오류에서 raw input을 보존하지 않는다."""
+
+    raise ValidationError.from_exception_data(
+        "Settings",
+        [
+            {
+                "type": "value_error",
+                "loc": (),
+                "input": "<redacted>",
+                "ctx": {"error": ValueError(message)},
+            }
+        ],
+    )
 
 
 def _service_provenance_text() -> str:
@@ -127,6 +156,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        hide_input_in_errors=True,
     )
 
     # 환경
@@ -766,17 +796,25 @@ class Settings(BaseSettings):
             self.pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt
         )
         if receipt_secret is None:
-            raise ValueError(
+            _raise_redacted_settings_error(
                 "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT "
                 "is required in production"
             )
         try:
-            payload = json.loads(receipt_secret.get_secret_value())
-        except json.JSONDecodeError as exc:
-            raise ValueError(
+            payload = json.loads(
+                receipt_secret.get_secret_value(),
+                object_pairs_hook=_reject_duplicate_json_keys,
+            )
+        except json.JSONDecodeError:
+            _raise_redacted_settings_error(
                 "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT "
                 "must be valid JSON"
-            ) from exc
+            )
+        except _DuplicateJsonKeyError:
+            _raise_redacted_settings_error(
+                "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT "
+                "must not contain duplicate keys"
+            )
         if not isinstance(payload, dict) or set(payload) != {
             "adversarial_reviews",
             "adversarial_p0_p1",
@@ -788,29 +826,38 @@ class Settings(BaseSettings):
             "scope",
             "version",
         }:
-            raise ValueError(
+            _raise_redacted_settings_error(
                 "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT "
                 "has an unsupported schema"
             )
-        if payload["version"] != 1 or payload["scope"] != "production":
-            raise ValueError(
+        if (
+            type(payload["version"]) is not int
+            or payload["version"] != 1
+            or payload["scope"] != "production"
+        ):
+            _raise_redacted_settings_error(
                 "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT "
                 "must be a production v1 receipt"
             )
-        if payload["adversarial_reviews"] != 2 or payload["adversarial_p0_p1"] != 0:
-            raise ValueError(
+        if (
+            type(payload["adversarial_reviews"]) is not int
+            or type(payload["adversarial_p0_p1"]) is not int
+            or payload["adversarial_reviews"] != 2
+            or payload["adversarial_p0_p1"] != 0
+        ):
+            _raise_redacted_settings_error(
                 "M05 activation requires two adversarial reviews with zero P0/P1 findings"
             )
         if payload["live_ui_e2e"] != "passed" or payload["restore_drill"] != "passed":
-            raise ValueError(
+            _raise_redacted_settings_error(
                 "M05 activation requires passed live UI E2E and restore drill evidence"
             )
         if payload["map_service_openapi_sha256"] != KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256:
-            raise ValueError(
+            _raise_redacted_settings_error(
                 "M05 activation receipt Map service contract does not match the vendored contract"
             )
         if payload["map_source_revision"] != KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION:
-            raise ValueError(
+            _raise_redacted_settings_error(
                 "M05 activation receipt Map source revision does not match the vendored contract"
             )
         pinvi_source_revision = payload["pinvi_source_revision"]
@@ -819,7 +866,7 @@ class Settings(BaseSettings):
             or re.fullmatch(r"[0-9a-f]{40}", pinvi_source_revision) is None
             or pinvi_source_revision != os.environ.get("PINVI_SOURCE_REVISION", "")
         ):
-            raise ValueError(
+            _raise_redacted_settings_error(
                 "M05 activation receipt Pinvi source revision must match PINVI_SOURCE_REVISION"
             )
 

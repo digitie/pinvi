@@ -180,6 +180,90 @@ def test_production_reconciliation_rejects_stale_activation_receipt(
         )
 
 
+def test_production_reconciliation_rejects_receipt_secret_leaks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pinvi_revision = "f" * 40
+    secret = "UNIQUE-M05-ACTIVATION-RECEIPT-SECRET"
+    monkeypatch.setenv("PINVI_SOURCE_REVISION", pinvi_revision)
+    with pytest.raises(ValidationError) as captured:
+        _production_settings(
+            pinvi_kor_travel_map_api_base_url="http://127.0.0.1:12701",
+            pinvi_kor_travel_map_admin_base_url="http://127.0.0.1:12701",
+            pinvi_kor_travel_map_ops_read_token="o" * 32,
+            pinvi_kor_travel_map_ops_cancel_token="c" * 32,
+            pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt=secret,
+            **_enabled_values(),
+        )
+    assert secret not in repr(captured.value.errors())
+    assert secret not in str(captured.value)
+
+
+@pytest.mark.parametrize(
+    "field",
+    ("version", "adversarial_reviews", "adversarial_p0_p1"),
+)
+def test_production_reconciliation_rejects_boolean_numeric_receipt_fields(
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+) -> None:
+    pinvi_revision = "f" * 40
+    monkeypatch.setenv("PINVI_SOURCE_REVISION", pinvi_revision)
+    receipt: dict[str, object] = {
+        "adversarial_reviews": 2,
+        "adversarial_p0_p1": 0,
+        "live_ui_e2e": "passed",
+        "map_service_openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+        "map_source_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
+        "pinvi_source_revision": pinvi_revision,
+        "restore_drill": "passed",
+        "scope": "production",
+        "version": 1,
+    }
+    receipt[field] = True
+    with pytest.raises(ValueError, match=r"M05 activation|production v1"):
+        _production_settings(
+            pinvi_kor_travel_map_api_base_url="http://127.0.0.1:12701",
+            pinvi_kor_travel_map_admin_base_url="http://127.0.0.1:12701",
+            pinvi_kor_travel_map_ops_read_token="o" * 32,
+            pinvi_kor_travel_map_ops_cancel_token="c" * 32,
+            pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt=json.dumps(
+                receipt, separators=(",", ":")
+            ),
+            **_enabled_values(),
+        )
+
+
+def test_production_reconciliation_rejects_duplicate_receipt_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pinvi_revision = "f" * 40
+    monkeypatch.setenv("PINVI_SOURCE_REVISION", pinvi_revision)
+    receipt = json.dumps(
+        {
+            "adversarial_reviews": 2,
+            "adversarial_p0_p1": 0,
+            "live_ui_e2e": "passed",
+            "map_service_openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+            "map_source_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
+            "pinvi_source_revision": pinvi_revision,
+            "restore_drill": "passed",
+            "scope": "production",
+            "version": 1,
+        },
+        separators=(",", ":"),
+    ).replace('"version":1', '"version":1,"version":1')
+    with pytest.raises(ValueError, match="duplicate keys"):
+        _production_settings(
+            pinvi_kor_travel_map_api_base_url="http://127.0.0.1:12701",
+            pinvi_kor_travel_map_admin_base_url="http://127.0.0.1:12701",
+            pinvi_kor_travel_map_ops_read_token="o" * 32,
+            pinvi_kor_travel_map_ops_cancel_token="c" * 32,
+            pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt=receipt,
+            **_enabled_values(),
+        )
+
+
 def test_compose_and_examples_keep_m05_credentials_api_only_and_default_off() -> None:
     root = Path(__file__).resolve().parents[4]
     compose = (root / "infra/docker-compose.app.yml").read_text(encoding="utf-8")
