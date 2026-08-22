@@ -28,7 +28,9 @@ AI provider(Gemini / Claude / Codex) 직접 구현은 ADR-020에 따라 별도 r
 
 ### 2.1 비밀 관리
 
-- 환경변수에 저장. `PINVI_*` prefix
+- 환경변수에 저장. Pinvi 소유 값은 `PINVI_*` prefix를 사용하고, 외부 서비스 소유 계약
+  값은 해당 서비스의 정본 prefix를 사용한다(Feature request writer는
+  `KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`).
 - `.env`는 로컬 권한 `600`, 운영은 systemd `EnvironmentFile` 또는 vault
 - DB / 로그 / Sentry 이벤트에 **평문 키 절대 X** — `before_send` PII 마스킹
 - 사용자별 AI provider 키는 `kor-travel-concierge`이 소유한다. 본 저장소가

@@ -57,7 +57,8 @@ CodeGraph, 테스트, Docker, 의존성 설치, 장기 실행도 Linux에서 수
 
 ### 2.3 환경변수 정책
 
-- `PINVI_*` prefix
+- Pinvi 소유 값은 `PINVI_*` prefix를 사용하고, 외부 서비스 소유 계약 값은 해당 서비스의
+  정본 prefix를 사용한다(Feature request writer는 `KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`).
 - `.env`는 로컬 권한 600, 운영은 systemd `EnvironmentFile`
 - `docker compose config`는 secret 노출 가능 → 공유 금지
 - secret 변경 시 audit log
