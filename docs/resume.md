@@ -1,5 +1,14 @@
 # resume.md
 
+## 2026-08-22 (codex) — M04 Feature request 이름 정리
+
+범용 Feature request queue의 설정·상관관계 식별자에서 Pinvi 제품 접두사를 제거했다.
+`KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`과 `request_id`를 `.env`/compose·서비스 client·검증
+테스트에 일관되게 적용했으며, Map HTTP body/header 계약은 그대로 유지했다.
+
+**다음 한 작업**: 이 consumer 중립화 PR의 두 전문 적대 리뷰와 CI를 통과시킨 뒤, T-VN-41-F1J-D
+격리 compatible-pair rehearsal을 재개한다.
+
 ## 2026-08-22 (codex) — T-273 보류 및 작업 원장 정합성 정리
 
 T-VN-40과 T-VN-M04는 양 저장소 merge·paired acceptance·격리 browser evidence를 확인해
@@ -143,7 +152,7 @@ OpenAPI가 Pinvi vendor와 byte-exact함을 다시 확인했다. SHA-256은 각�
 vendor bytes는 수정하지 않고 Admin/ops/user/service/feature-request의 source/release pin과 packaged
 service provenance만 새 head로 옮겼다. 관련 contract test `67 passed`, 변경 Python Ruff check/format,
 provenance JSON/hash와 세 profile `cmp` 검증을 통과했다.
-`new_place` 승인은 별도 `PINVI_KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`으로
+`new_place` 승인은 별도 `KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`으로
 `POST /v1/service/feature-requests`에 suggestion UUID를 body `request_id`와 `Idempotency-Key`에 함께
 제출한다. `pending` receipt는 Pinvi `approved`, verified `exact_conflict`는 `duplicate`로만 전이한다.
 전달한 `X-Request-Id`는 HTTP call log와 Map `meta.request_id`에 정확히 일치해야 한다. 헤더가 없으면

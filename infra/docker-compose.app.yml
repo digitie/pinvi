@@ -122,7 +122,7 @@ services:
       # read/cancel token은 같은 header를 쓰지만 capability별로 서로 다른 값을 전달한다.
       PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL: ${PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL:-http://host.docker.internal:12701}
       # generic Feature 요청 큐 writer. ordinary service/admin/public credential과 공유하지 않는다.
-      PINVI_KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN: ${PINVI_KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN:-}
+      KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN: ${KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN:-}
       PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN: ${PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN:-}
       PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN: ${PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN:-}
       # cache target HTTP worker는 non-production 격리 stack에서 compatible pair pin이 모두 있을

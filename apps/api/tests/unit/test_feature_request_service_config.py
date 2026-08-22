@@ -18,11 +18,11 @@ def _settings(**overrides: object) -> Settings:
 
 
 def test_feature_request_token_is_optional_and_empty_is_unset() -> None:
-    assert _settings().pinvi_kor_travel_map_feature_request_token is None
+    assert _settings().kor_travel_map_feature_request_token is None
     assert (
         _settings(
-            pinvi_kor_travel_map_feature_request_token=""
-        ).pinvi_kor_travel_map_feature_request_token
+            kor_travel_map_feature_request_token=""
+        ).kor_travel_map_feature_request_token
         is None
     )
 
@@ -33,7 +33,7 @@ def test_feature_request_token_is_optional_and_empty_is_unset() -> None:
 )
 def test_feature_request_token_requires_a_strong_no_whitespace_value(value: str) -> None:
     with pytest.raises(ValidationError, match="FEATURE_REQUEST_TOKEN"):
-        _settings(pinvi_kor_travel_map_feature_request_token=value)
+        _settings(kor_travel_map_feature_request_token=value)
 
 
 @pytest.mark.parametrize(
@@ -57,15 +57,15 @@ def test_feature_request_token_cannot_reuse_other_map_trust_boundary(
     overrides: dict[str, str], error: str
 ) -> None:
     with pytest.raises(ValidationError, match=error):
-        _settings(pinvi_kor_travel_map_feature_request_token=_TOKEN, **overrides)
+        _settings(kor_travel_map_feature_request_token=_TOKEN, **overrides)
 
 
 def test_feature_request_token_accepts_a_distinct_credential() -> None:
     loaded = _settings(
-        pinvi_kor_travel_map_feature_request_token=_TOKEN,
+        kor_travel_map_feature_request_token=_TOKEN,
         pinvi_kor_travel_map_curation_snapshot_token=_OTHER,
     )
-    assert loaded.pinvi_kor_travel_map_feature_request_token is not None
+    assert loaded.kor_travel_map_feature_request_token is not None
 
 
 def test_feature_request_token_is_configurable_by_the_production_compose_template() -> None:
@@ -73,10 +73,10 @@ def test_feature_request_token_is_configurable_by_the_production_compose_templat
     env_template = (root / "infra/.env.prod.example").read_text(encoding="utf-8")
     compose = (root / "infra/docker-compose.app.yml").read_text(encoding="utf-8")
 
-    assert "PINVI_KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN=" in env_template
+    assert "KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN=" in env_template
     assert (
-        "PINVI_KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN: "
-        "${PINVI_KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN:-}" in compose
+        "KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN: "
+        "${KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN:-}" in compose
     )
 
 
@@ -87,7 +87,7 @@ def test_production_feature_request_token_requires_the_allowed_map_api_root() ->
             pinvi_environment="production",
             pinvi_kor_travel_map_admin_base_url="http://host.docker.internal:12701",
             pinvi_kor_travel_map_api_base_url="https://map.example.test:12701",
-            pinvi_kor_travel_map_feature_request_token=_TOKEN,
+            kor_travel_map_feature_request_token=_TOKEN,
             pinvi_kor_travel_map_ops_read_token="r" * 32,
             pinvi_kor_travel_map_ops_cancel_token="c" * 32,
         )

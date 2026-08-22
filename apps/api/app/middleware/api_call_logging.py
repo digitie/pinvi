@@ -18,7 +18,7 @@ from app.models.api_call_log import ApiCallLog
 log = structlog.get_logger("api_call")
 
 _PROVIDER_EXTENSION = "pinvi_provider"
-_REQUEST_ID_EXTENSION = "pinvi_request_id"
+_REQUEST_ID_EXTENSION = "request_id"
 _SENSITIVE_QUERY_KEYS = {
     "access_token",
     "api_key",

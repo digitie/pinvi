@@ -35,7 +35,7 @@ async def test_api_call_tracker_persists_httpx_response(session_factory) -> None
             "https://provider.pinvi.test/v1/items",
             extensions={
                 "pinvi_provider": "resend",
-                "pinvi_request_id": str(request_id),
+                "request_id": str(request_id),
             },
         )
 

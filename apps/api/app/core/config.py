@@ -234,7 +234,7 @@ class Settings(BaseSettings):
     pinvi_kor_travel_map_admin_proxy_secret: str = ""
     pinvi_kor_travel_map_admin_actor: str = "pinvi-admin"
     # 범용 Feature 요청 큐 write 전용 principal. admin/public/general service token fallback 금지.
-    pinvi_kor_travel_map_feature_request_token: SecretStr | None = None
+    kor_travel_map_feature_request_token: SecretStr | None = None
     # canonical /v1/ops/datasets*·/v1/ops/pipeline* 전용 server principal.
     # read/cancel 자격을 분리하고 요청 actor 대신 map 서버의 고정 actor를 사용한다.
     pinvi_kor_travel_map_ops_read_token: SecretStr | None = None
@@ -459,7 +459,7 @@ class Settings(BaseSettings):
                 env_name="PINVI_KOR_TRAVEL_MAP_ADMIN_BASE_URL",
             )
             if (
-                self.pinvi_kor_travel_map_feature_request_token is not None
+                self.kor_travel_map_feature_request_token is not None
                 or self.pinvi_kor_travel_map_feature_reference_reconciliation_read_token is not None
                 or self.pinvi_kor_travel_map_feature_reference_reconciliation_ack_token is not None
             ):
@@ -553,8 +553,8 @@ class Settings(BaseSettings):
                 self.pinvi_kor_travel_map_curation_cutover_mapping_token.get_secret_value()
                 if self.pinvi_kor_travel_map_curation_cutover_mapping_token is not None
                 else "",
-                self.pinvi_kor_travel_map_feature_request_token.get_secret_value()
-                if self.pinvi_kor_travel_map_feature_request_token is not None
+                self.kor_travel_map_feature_request_token.get_secret_value()
+                if self.kor_travel_map_feature_request_token is not None
                 else "",
                 self.pinvi_kor_travel_map_feature_reference_reconciliation_read_token.get_secret_value()
                 if self.pinvi_kor_travel_map_feature_reference_reconciliation_read_token is not None
@@ -627,7 +627,7 @@ class Settings(BaseSettings):
     @field_validator(
         "pinvi_kor_travel_map_curation_snapshot_token",
         "pinvi_kor_travel_map_curation_cutover_mapping_token",
-        "pinvi_kor_travel_map_feature_request_token",
+        "kor_travel_map_feature_request_token",
         "pinvi_kor_travel_map_feature_reference_reconciliation_read_token",
         "pinvi_kor_travel_map_feature_reference_reconciliation_ack_token",
         mode="before",
@@ -662,8 +662,8 @@ class Settings(BaseSettings):
                 self.pinvi_kor_travel_map_curation_cutover_mapping_token,
             ),
             (
-                "PINVI_KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN",
-                self.pinvi_kor_travel_map_feature_request_token,
+                "KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN",
+                self.kor_travel_map_feature_request_token,
             ),
             (
                 "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_READ_TOKEN",

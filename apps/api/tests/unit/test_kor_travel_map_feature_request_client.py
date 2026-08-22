@@ -69,7 +69,7 @@ async def test_submit_uses_exact_service_path_headers_and_same_request_uuid() ->
         assert request.headers["X-Kor-Travel-Map-Service-Token"] == "feature-request-token"
         assert request.headers["Idempotency-Key"] == str(request_id)
         assert request.headers["X-Request-ID"] == str(correlation_id)
-        assert request.extensions["pinvi_request_id"] == str(correlation_id)
+        assert request.extensions["request_id"] == str(correlation_id)
         assert json.loads(request.content) == {
             "request_id": str(request_id),
             "kind": "place",
