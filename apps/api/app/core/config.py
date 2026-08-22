@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from functools import lru_cache
 from importlib.resources import files
@@ -303,6 +304,10 @@ class Settings(BaseSettings):
     )
     pinvi_kor_travel_map_feature_reference_reconciliation_expected_openapi_sha256: str = ""
     pinvi_kor_travel_map_feature_reference_reconciliation_expected_source_revision: str = ""
+    # production enable은 paired live/restore/review evidence를 담은 immutable receipt가 있어야 한다.
+    pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt: SecretStr | None = (
+        None
+    )
 
     # kor-travel-geo v2 REST (geocoding/주소/행정구역, ADR-025) — `docs/integrations/kor-travel-geo.md`.
     pinvi_kor_travel_geo_base_url: str = "http://localhost:12501"
@@ -720,15 +725,10 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_feature_reference_reconciliation(self) -> Self:
-        """M05 read/ACK consumer는 exact vendor와 paired activation 전까지 default-off다."""
+        """M05 read/ACK consumer는 exact vendor와 paired activation receipt를 요구한다."""
 
         if not self.pinvi_kor_travel_map_feature_reference_reconciliation_enabled:
             return self
-        if self.pinvi_environment == "production":
-            raise ValueError(
-                "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ENABLED is forbidden "
-                "in production until the paired M05 activation gate is complete"
-            )
         read = self.pinvi_kor_travel_map_feature_reference_reconciliation_read_token
         ack = self.pinvi_kor_travel_map_feature_reference_reconciliation_ack_token
         if read is None:
@@ -755,7 +755,73 @@ class Settings(BaseSettings):
                 "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_EXPECTED_SOURCE_REVISION "
                 "must match the service contract Map release revision"
             )
+        if self.pinvi_environment == "production":
+            self._validate_feature_reference_reconciliation_activation_receipt()
         return self
+
+    def _validate_feature_reference_reconciliation_activation_receipt(self) -> None:
+        """운영 활성화는 현재 pair의 검증 결과를 명시한 receipt 없이는 허용하지 않는다."""
+
+        receipt_secret = (
+            self.pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt
+        )
+        if receipt_secret is None:
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT "
+                "is required in production"
+            )
+        try:
+            payload = json.loads(receipt_secret.get_secret_value())
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT "
+                "must be valid JSON"
+            ) from exc
+        if not isinstance(payload, dict) or set(payload) != {
+            "adversarial_reviews",
+            "adversarial_p0_p1",
+            "live_ui_e2e",
+            "map_service_openapi_sha256",
+            "map_source_revision",
+            "pinvi_source_revision",
+            "restore_drill",
+            "scope",
+            "version",
+        }:
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT "
+                "has an unsupported schema"
+            )
+        if payload["version"] != 1 or payload["scope"] != "production":
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT "
+                "must be a production v1 receipt"
+            )
+        if payload["adversarial_reviews"] != 2 or payload["adversarial_p0_p1"] != 0:
+            raise ValueError(
+                "M05 activation requires two adversarial reviews with zero P0/P1 findings"
+            )
+        if payload["live_ui_e2e"] != "passed" or payload["restore_drill"] != "passed":
+            raise ValueError(
+                "M05 activation requires passed live UI E2E and restore drill evidence"
+            )
+        if payload["map_service_openapi_sha256"] != KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256:
+            raise ValueError(
+                "M05 activation receipt Map service contract does not match the vendored contract"
+            )
+        if payload["map_source_revision"] != KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION:
+            raise ValueError(
+                "M05 activation receipt Map source revision does not match the vendored contract"
+            )
+        pinvi_source_revision = payload["pinvi_source_revision"]
+        if (
+            not isinstance(pinvi_source_revision, str)
+            or re.fullmatch(r"[0-9a-f]{40}", pinvi_source_revision) is None
+            or pinvi_source_revision != os.environ.get("PINVI_SOURCE_REVISION", "")
+        ):
+            raise ValueError(
+                "M05 activation receipt Pinvi source revision must match PINVI_SOURCE_REVISION"
+            )
 
 
 @lru_cache(maxsize=1)

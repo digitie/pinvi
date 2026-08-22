@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -98,13 +99,83 @@ def test_reconciliation_tokens_cannot_reuse_other_map_boundary(
         _settings(**{**_enabled_values(), **overrides})
 
 
-def test_production_reconciliation_enable_is_forbidden_before_paired_gate() -> None:
-    with pytest.raises(ValueError, match="forbidden in production"):
+def test_production_reconciliation_enable_requires_activation_receipt() -> None:
+    with pytest.raises(ValueError, match=r"ACTIVATION_RECEIPT.*required"):
         _production_settings(
             pinvi_kor_travel_map_api_base_url="http://127.0.0.1:12701",
             pinvi_kor_travel_map_admin_base_url="http://127.0.0.1:12701",
             pinvi_kor_travel_map_ops_read_token="o" * 32,
             pinvi_kor_travel_map_ops_cancel_token="c" * 32,
+            **_enabled_values(),
+        )
+
+
+def test_production_reconciliation_accepts_current_paired_activation_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pinvi_revision = "f" * 40
+    monkeypatch.setenv("PINVI_SOURCE_REVISION", pinvi_revision)
+    receipt = {
+        "adversarial_reviews": 2,
+        "adversarial_p0_p1": 0,
+        "live_ui_e2e": "passed",
+        "map_service_openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+        "map_source_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
+        "pinvi_source_revision": pinvi_revision,
+        "restore_drill": "passed",
+        "scope": "production",
+        "version": 1,
+    }
+    loaded = _production_settings(
+        pinvi_kor_travel_map_api_base_url="http://127.0.0.1:12701",
+        pinvi_kor_travel_map_admin_base_url="http://127.0.0.1:12701",
+        pinvi_kor_travel_map_ops_read_token="o" * 32,
+        pinvi_kor_travel_map_ops_cancel_token="c" * 32,
+        pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt=json.dumps(
+            receipt, separators=(",", ":")
+        ),
+        **_enabled_values(),
+    )
+    assert loaded.pinvi_kor_travel_map_feature_reference_reconciliation_enabled is True
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (
+        ("live_ui_e2e", "skipped", "live UI E2E"),
+        ("map_source_revision", "0" * 40, "Map source revision"),
+        ("pinvi_source_revision", "0" * 40, "Pinvi source revision"),
+    ),
+)
+def test_production_reconciliation_rejects_stale_activation_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    pinvi_revision = "f" * 40
+    monkeypatch.setenv("PINVI_SOURCE_REVISION", pinvi_revision)
+    receipt: dict[str, object] = {
+        "adversarial_reviews": 2,
+        "adversarial_p0_p1": 0,
+        "live_ui_e2e": "passed",
+        "map_service_openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+        "map_source_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
+        "pinvi_source_revision": pinvi_revision,
+        "restore_drill": "passed",
+        "scope": "production",
+        "version": 1,
+    }
+    receipt[field] = value
+    with pytest.raises(ValueError, match=message):
+        _production_settings(
+            pinvi_kor_travel_map_api_base_url="http://127.0.0.1:12701",
+            pinvi_kor_travel_map_admin_base_url="http://127.0.0.1:12701",
+            pinvi_kor_travel_map_ops_read_token="o" * 32,
+            pinvi_kor_travel_map_ops_cancel_token="c" * 32,
+            pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt=json.dumps(
+                receipt, separators=(",", ":")
+            ),
             **_enabled_values(),
         )
 
@@ -118,6 +189,7 @@ def test_compose_and_examples_keep_m05_credentials_api_only_and_default_off() ->
         "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_READ_TOKEN",
         "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACK_TOKEN",
         "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_BLOCKED_RECHECK_SECONDS",
+        "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT",
     ):
         assert variable in compose
         assert f"{variable}=" in prod

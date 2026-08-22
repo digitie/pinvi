@@ -8,8 +8,9 @@ Map에 ACK한다. 이 문서는 Map ADR-095와
 `docs/reports/t-vn-m05-manual-provider-dedup-design-2026-08-21.md`를 PinVi 소비자
 경계로 구체화한다.
 
-기본 활성화는 `false`다. Map subscription activation receipt, production flag 또는
-일반 운영 stack의 mutation은 이 작업의 완료 증거가 아니다.
+기본 활성화는 `false`다. production에서 켜려면 현재 Map service contract와 PinVi image
+revision에 맞는 activation receipt가 필요하다. Map subscription activation receipt,
+production flag 또는 일반 운영 stack의 mutation만으로는 이 작업의 완료 증거가 아니다.
 
 ## 기준 계약
 
@@ -70,6 +71,31 @@ ACK한다. 달라지면 fail-close한다.
   readiness failure로 남긴다.
 - PinVi admin은 blocked/applied attempt와 final receipt·impact를 읽기 전용으로 표시한다.
   Map decision·subscription activation을 이 UI가 만들지 않는다.
+
+## production activation receipt
+
+`PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ENABLED=true`를 production에서
+사용하려면 `PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT`에
+다음 v1 JSON을 compact form으로 주입한다. API는 기동 시 필드를 닫힌 schema로 검증하고,
+현재 vendored Map SHA/source revision과 이미지의 `PINVI_SOURCE_REVISION`이 다르면 fail-close한다.
+
+```json
+{
+  "version": 1,
+  "scope": "production",
+  "map_service_openapi_sha256": "<current vendored service SHA-256>",
+  "map_source_revision": "<current Map source revision>",
+  "pinvi_source_revision": "<current Pinvi image source revision>",
+  "adversarial_reviews": 2,
+  "adversarial_p0_p1": 0,
+  "live_ui_e2e": "passed",
+  "restore_drill": "passed"
+}
+```
+
+receipt는 증거 원문이나 token을 담지 않는다. 두 리뷰·isolated live UI E2E·no-owner restore
+drill이 실제로 끝난 뒤 배포 담당자가 생성하며, 코드가 receipt만으로 과거 실행을 재현한다고
+간주해서는 안 된다.
 
 ## 검증과 activation gate
 
