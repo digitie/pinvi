@@ -17,7 +17,8 @@
 - **프론트엔드 패키지**: `apps/web` (Next.js App Router)
 - **모바일 패키지 (활성, Sprint M-1)**: `apps/mobile` (Expo SDK 56 + Expo Dev Client +
   EAS Build, Expo Go 미사용, Android minSdk 24 — ADR-043/044/045)
-- **환경변수 prefix**: `PINVI_*`
+- **환경변수 prefix**: Pinvi 소유 값은 `PINVI_*`; 외부 서비스 소유 계약 토큰은 해당
+  서비스의 정본 이름(예: `KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`)
 - **PostgreSQL DB 이름 (개발)**: `pinvi`
 - **Postgres schema (계획)**: `app`, `feature`, `provider_sync`, `ops`, `x_extension`
   (`feature`/`provider_sync` 영역은 `kor-travel-map`이 소유. `app`은 Pinvi

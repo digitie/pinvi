@@ -86,7 +86,7 @@ ktdctl logs storage --follow
 | `PINVI_DB_OWNER_USER` / `PINVI_POSTGRES_PASSWORD` | schema/table/trigger 소유 및 migration/restore one-shot 전용 login                                                                 |
 | `PINVI_APP_DB_USER` / `PINVI_APP_DB_PASSWORD`     | API/Dagster runtime 전용 non-owner/non-superuser login                                                                              |
 | `PINVI_MIGRATOR_DATABASE_URL`                      | `app-migrator` one-shot 전용 owner URL. API/Dagster에 전달 금지                                                                     |
-| 기타 `PINVI_*`               | 일반 `.env`와 동일                                                                                                        |
+| 기타 `PINVI_*`               | Pinvi 소유 설정. 외부 서비스 소유 계약 토큰은 해당 정본 이름을 사용(Feature request writer: `KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`) |
 
 `NEXT_PUBLIC_*` 변경 시 web 이미지 재빌드 필요 (빌드 타임 embed).
 
