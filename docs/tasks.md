@@ -7,28 +7,11 @@
 
 ## 현재 선점 / 충돌 회피
 
-- **PR #443(draft) = Codex** — `fix/tvn41-map-triple-contract`는 ops dataset/pipeline membership
-  삼중항과 Admin OpenAPI ops 게이트를 복구한다. 배포 선행조건은 Map 삼중항 release와
-  docker-manager PR #170 merge다. T-VN-41 계열 파일을 만지기 전 이 PR과 충돌 범위를 확인한다.
+- 활성 선점은 없다. T-VN-41 계열 파일을 만질 때는 docker-manager PR #170과의 충돌 범위를
+  먼저 확인한다.
 
 ## kor-travel-map compatible pair
 
-- [/] **T-VN-40 PinVi canonical curation consumer** — Map legacy curated-feature snapshot 대신
-  collection/item UUID service snapshot을 소비한다. bigint revision/strong ETag/item-set receipt,
-  actor-scoped import idempotency, plan/POI mutation+audit 단일 transaction을 먼저 완료하고 legacy
-  admin snapshot/client/source ID 열을 제거한 뒤 paired service receipt와 n150 live import를 닫는다.
-  - Docker Manager PR #174의 raw PinVi token→Map digest 경계는 draft 상태다. 병합 후 n150 canonical
-    import/backfill live acceptance와 exact paired receipt를 확인하기 전에는 receipt complete와 legacy
-    source column·route의 물리 삭제를 금지한다.
-- [/] **T-VN-M04 범용 Feature 요청 큐 consumer** — `new_place` admin 승인은 Map
-  `POST /v1/service/feature-requests`에 전용 token과 동일 UUID body/header를 제출한다. Map `pending`
-  receipt 뒤에만 Pinvi `approved`, verified `exact_conflict` 뒤에만 `duplicate`를 commit하며, 확정 거절과
-  outcome-uncertain error는 local request/audit를 보존한다. correction/closure는 기존 Map admin
-  PATCH/DELETE를 유지한다. Map #1029와 Pinvi draft PR의 exact pair가 격리 N150 `smoke` stack에서
-  UI 승인→receipt를 통과하기 전 completion receipt는 `pending`이다.
-  - 신규 장소 UI는 저장된 payload만 제출하며, direct-create 분류/마커 입력을 요구하지 않는다.
-    service receipt/meta와 immutable echo, approve/reject row lock, production env template, isolated
-    live-mutating spec은 구현됐다. remote CI·최종 적대 재심·paired live 실행이 남았다.
 - [/] **T-VN-41-ABC — cache target relay producer/consumer 결박** — Map queued refresh의 source event/outbox
   원자화, restore exact replay `200` OpenAPI 선언, PinVi service artifact exact re-vendor와 restore-fence
   one-shot command를 하나의 compatible pair로 고정한다. command는 sync disabled 상태에서 immutable
@@ -89,12 +72,11 @@
 - [ ] **T-319** — 모바일 mutation 실패 안내가 원문 예외를 그대로 노출한다(예: 재정렬 실패 시
   `fetch failed: java.net.ConnectException…`). 웹 상태 UI 규칙(원인+복구)에 맞춰 사용자 문구로 정리한다.
 
-## Sprint 6 / v1.0.0 후속 Task 초안
-
-- [ ] T-273 — v1.0.0 E2E / Live Gate. 남은 hard blocker는 geofence 운영 설정이다.
-      mutating suite는 local dev에서 통과했으며, 전용 staging Web/API는 release evidence 재실행 조건이다.
-- [ ] T-274 — v1.0.0 릴리즈.
-
 ## 보류 / 미래 작업
 
-(현재 없음.)
+- [ ] **T-273 — v1.0.0 E2E / Live Gate** — geofence 운영 설정과 전용 staging Web/API가 준비될 때까지
+  보류한다.
+
+## Sprint 6 / v1.0.0 후속 Task 초안
+
+- [ ] T-274 — v1.0.0 릴리즈.

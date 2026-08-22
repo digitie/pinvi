@@ -1,5 +1,15 @@
 # resume.md
 
+## 2026-08-22 (codex) — T-273 보류 및 작업 원장 정합성 정리
+
+T-VN-40과 T-VN-M04는 양 저장소 merge·paired acceptance·격리 browser evidence를 확인해
+`docs/tasks-done.md`로 옮겼다. 이미 완료된 T-321도 열린 원장에서 제거했다. T-273은 geofence
+운영 설정과 전용 staging Web/API가 준비될 때까지 보류로 이동했으며, T-274 릴리즈는 그 뒤에
+진행한다. T-323은 E2E required check 승격 여부를 결정하는 별도 열린 작업으로 유지한다.
+
+**다음 한 작업**: geofence 운영 적용 조건을 충족한 뒤 T-273 live gate를 N150/staging에서 재실행한다.
+그 전까지 M05 activation은 `false`로 유지한다.
+
 ## 2026-08-21 (codex) — Hallmark Admin M04/M05 반응형·접근성 정비
 
 M04 제안 검토와 M05 참조 조정 증거 dialog가 재렌더·breakpoint 변경 뒤 현재 보이는 trigger에도
@@ -7,8 +17,8 @@ focus를 되돌리고, background inert와 root scroll lock을 안전하게 정�
 독립 가로 scroll rail로 남기면서 dialog open 때 root width에 전파하지 않는다. N150 격리
 Playwright 전체 M04/M05 browser E2E 19건과 두 전문 적대 리뷰 P0/P1=0은 통과했다.
 
-**상태**: 전문 적대 리뷰 P0/P1=0과 GitHub CI green이 확인됐다. draft를 유지하며 ready 또는
-merge에 관한 사용자 지시를 기다린다.
+**상태**: 전문 적대 리뷰 P0/P1=0과 GitHub CI green이 확인됐고, PR #462가 2026-08-21
+merge됐다.
 
 ## 2026-08-21 (codex) — T-VN-M05 fresh paired 브라우저 증거 완료
 
