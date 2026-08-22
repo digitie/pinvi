@@ -432,6 +432,41 @@ def _hash_source_openapi(source_root: Path) -> dict[str, str]:
     return actual
 
 
+def _runtime_map_openapi(
+    *, map_admin_url: str, source_root: Path, expected: dict[str, str]
+) -> dict[str, str]:
+    """실행 중 Map API가 고정 source artifact와 같은 OpenAPI를 제공하는지 확인한다."""
+
+    runtime_value, runtime_raw = _http_json(
+        _url(map_admin_url, "/openapi.json"),
+        headers=_map_headers(),
+    )
+    source_raw = _git_blob(
+        source_root,
+        revision=expected["source_revision"],
+        relative_path="packages/kor-travel-map-api/openapi.json",
+    )
+    try:
+        source_value = json.loads(
+            source_raw, object_pairs_hook=_reject_duplicate_keys
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, AttestationError) as exc:
+        raise AttestationError("pinned Map admin OpenAPI is not valid JSON") from exc
+    runtime_canonical = _sha256(_canonical_json(runtime_value))
+    source_canonical = _sha256(_canonical_json(source_value))
+    if runtime_canonical != source_canonical:
+        raise AttestationError(
+            "live Map admin OpenAPI does not match the pinned source artifact"
+        )
+    return {
+        "canonical_sha256": runtime_canonical,
+        "http_sha256": _sha256(runtime_raw),
+        "source_canonical_sha256": source_canonical,
+        "source_revision": expected["source_revision"],
+        "source_sha256": expected["openapi_sha256"],
+    }
+
+
 def _validate_ui_marker(value: object, *, event_id: str) -> None:
     marker = _object(value, name="UI evidence marker")
     expected = {
@@ -546,6 +581,11 @@ def _live(args: argparse.Namespace) -> int:
         expected_environment=args.scope,
         require_environment_label=False,
     )
+    runtime_map_openapi = _runtime_map_openapi(
+        map_admin_url=args.map_admin_url,
+        source_root=args.map_source_root,
+        expected=pair["admin"],
+    )
     map_pair = {
         "admin": pair["admin"],
         "full": pair["full"],
@@ -555,6 +595,7 @@ def _live(args: argparse.Namespace) -> int:
         "api_image_digest": runtime_map_api["digest"],
         "frontend_image_digest": runtime_map_frontend["digest"],
         "runtime": {
+            "admin_openapi": runtime_map_openapi,
             "api": runtime_map_api,
             "frontend": runtime_map_frontend,
             "full_openapi_sha256": source_openapi["full"],

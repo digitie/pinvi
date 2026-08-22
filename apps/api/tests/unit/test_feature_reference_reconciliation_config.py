@@ -112,6 +112,7 @@ def _receipt_payload(**overrides: object) -> dict[str, object]:
         "live_ui_map_snapshot_sha256": "c" * 64,
         "live_ui_pinvi_snapshot_sha256": "d" * 64,
         "map_admin_openapi_sha256": KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
+        "map_admin_runtime_openapi_sha256": "9" * 64,
         "map_admin_source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
         "map_admin_image_digest": "sha256:" + "4" * 64,
         "map_api_image_digest": "sha256:" + "5" * 64,

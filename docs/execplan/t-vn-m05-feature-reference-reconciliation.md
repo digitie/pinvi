@@ -101,10 +101,12 @@ fail-close한다.
 ```
 
 전체 payload는 구현된 닫힌 계약에 따라 Map admin/full/service/user artifact hash와 source
-revision, Map API/admin/frontend image digest, Pinvi API/Web/Dagster image digest, Pinvi source
-revision, live UI event·Map ACK·restore·review evidence hash를 포함한다. receipt는 증거 원문이나
-token·private key를 담지 않는다. 두 전문 적대 리뷰, isolated live UI E2E, server-side Map ACK
-대조, no-owner restore drill이 실제로 끝난 뒤에만 생성한다.
+revision, 실행 중 Map API의 HTTP OpenAPI 응답 hash, Map API/admin/frontend image digest, Pinvi
+API/Web/Dagster image digest, Pinvi source revision, live UI event·Map ACK·restore·review evidence
+hash를 포함한다. attestation 단계에서 실행 중 Map admin OpenAPI의 정규화된 JSON을 pinned Git
+blob과 비교한다. receipt는 증거 원문이나 token·private key를 담지 않는다. 두 전문 적대 리뷰,
+isolated live UI E2E, server-side Map ACK 대조, no-owner restore drill이 실제로 끝난 뒤에만
+생성한다.
 
 증거 봉인은 다음 도구가 수행한다. 입력 디렉터리는 `0700`, JSON 증거와 private key는 각각
 `0600`이어야 하며, 운영 실행에서는 `--require-root-owned`를 사용한다.
@@ -118,10 +120,15 @@ python scripts/m05_activation_receipt.py create \
   --require-root-owned
 ```
 
+실제 복원 증거는 고정된 `scripts/backup-db.sh`와 `scripts/restore-staging-drill.sh`를 source→fresh
+target으로 호출하는 `scripts/m05_restore_drill.py`가 만든다. source·target URL과 runtime URL은
+환경변수로만 전달하며, 결과 JSON에는 URL·SQL 비밀값을 저장하지 않는다.
+
 입력 파일은 `reviews.json`, `live-ui.json`, `restore.json`, `map-pair.json`,
 `pinvi-images.json`과 live verifier가 생성한 서명 `attestation.json`이다. signer는 schema·현재
-tracked pair·각 pinned Map commit의 Git blob·실제 runtime image ID/OCI revision·immutable
-`sha256:` digest와 source revision을 확인한 후 payload를 서명한다. `--require-root-owned` 실행에서는
+tracked pair·각 pinned Map commit의 Git blob·실제 Map HTTP OpenAPI·실제 runtime image ID/OCI
+revision·immutable `sha256:` digest와 source revision을 확인한 후 payload를 서명한다.
+`--require-root-owned` 실행에서는
 private key와 증거 디렉터리도 tracked trust anchor/소유권과 대조한다. 출력된 public key와 receipt는
 운영 secret 저장소에 등록하고, 원문 증거·append-only ledger는 root-owned 보관 위치에서 API에
 read-only로만 mount한다.

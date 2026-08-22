@@ -588,10 +588,39 @@ def _map_pair(
                     f"Map pair {name} does not match the vendored provenance"
                 )
     runtime = _object(pair["runtime"], name="Map pair runtime evidence")
-    if set(runtime) != {"api", "frontend", "full_openapi_sha256"}:
+    if set(runtime) != {
+        "admin_openapi",
+        "api",
+        "frontend",
+        "full_openapi_sha256",
+    }:
         raise ReceiptError("Map pair runtime evidence schema is invalid")
     if runtime["full_openapi_sha256"] != expected["full"]["openapi_sha256"]:
         raise ReceiptError("Map runtime OpenAPI does not match the vendored provenance")
+    admin_openapi = _object(
+        runtime["admin_openapi"], name="Map runtime admin OpenAPI evidence"
+    )
+    if set(admin_openapi) != {
+        "canonical_sha256",
+        "http_sha256",
+        "source_canonical_sha256",
+        "source_revision",
+        "source_sha256",
+    }:
+        raise ReceiptError("Map runtime admin OpenAPI evidence schema is invalid")
+    for field in ("canonical_sha256", "http_sha256", "source_canonical_sha256"):
+        _sha256(admin_openapi[field], name=f"Map runtime admin OpenAPI.{field}")
+    if (
+        admin_openapi["canonical_sha256"]
+        != admin_openapi["source_canonical_sha256"]
+        or admin_openapi["source_sha256"] != expected["admin"]["openapi_sha256"]
+        or admin_openapi["source_revision"] != expected["admin"]["source_revision"]
+    ):
+        raise ReceiptError("Map runtime admin OpenAPI is not bound to the pair")
+    _commit(
+        admin_openapi["source_revision"],
+        name="Map runtime admin OpenAPI.source_revision",
+    )
     for name in ("api", "frontend"):
         runtime_image = _object(runtime[name], name=f"Map runtime {name}")
         if set(runtime_image) != {
@@ -626,6 +655,10 @@ def _map_pair(
     return {
         "admin_image_digest": _digest(
             pair["admin_image_digest"], name="Map admin image digest"
+        ),
+        "admin_runtime_openapi_sha256": _sha256(
+            admin_openapi["http_sha256"],
+            name="Map runtime admin OpenAPI.http_sha256",
         ),
         "api_image_digest": _digest(
             pair["api_image_digest"], name="Map API image digest"
@@ -857,6 +890,9 @@ def _create(args: argparse.Namespace) -> int:
         "live_ui_map_snapshot_sha256": live_ui["map_snapshot_after_sha256"],
         "live_ui_pinvi_snapshot_sha256": live_ui["pinvi_snapshot_after_sha256"],
         "map_admin_openapi_sha256": pair_expected["admin"]["openapi_sha256"],
+        "map_admin_runtime_openapi_sha256": map_pair[
+            "admin_runtime_openapi_sha256"
+        ],
         "map_admin_source_revision": pair_expected["admin"]["source_revision"],
         "map_admin_image_digest": map_pair["admin_image_digest"],
         "map_api_image_digest": map_pair["api_image_digest"],
