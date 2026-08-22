@@ -100,6 +100,7 @@ def _receipt_payload(**overrides: object) -> dict[str, object]:
         "activation_generation": 1,
         "activation_issued_at": int(time.time()) - 60,
         "activation_nonce": "22222222-2222-4222-8222-222222222222",
+        "activation_attestation_sha256": "0" * 64,
         "adversarial_reviews": [
             {"commit": "1" * 40, "p0_p1": 0, "review_id": "review-1", "reviewer_id": "darwin"},
             {"commit": "2" * 40, "p0_p1": 0, "review_id": "review-2", "reviewer_id": "feynman"},
@@ -108,6 +109,8 @@ def _receipt_payload(**overrides: object) -> dict[str, object]:
         "live_ui_event_id": "11111111-1111-4111-8111-111111111111",
         "live_ui_evidence_sha256": "a" * 64,
         "live_ui_map_ack_sha256": "b" * 64,
+        "live_ui_map_snapshot_sha256": "c" * 64,
+        "live_ui_pinvi_snapshot_sha256": "d" * 64,
         "map_admin_openapi_sha256": KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
         "map_admin_source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
         "map_admin_image_digest": "sha256:" + "4" * 64,

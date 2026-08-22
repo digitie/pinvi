@@ -9,6 +9,18 @@ const oldFeatureId = process.env.PINVI_M05_LIVE_OLD_FEATURE_ID;
 const replacementFeatureId = process.env.PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID;
 const impactCount = process.env.PINVI_M05_LIVE_IMPACT_COUNT;
 
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
 async function ensureAdminAuth(page: Page) {
   if (adminStorageState) {
     await page.goto('/admin');
@@ -56,5 +68,35 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
     await expect(receiptValue(/^영향 행$/)).toHaveText(impactCount);
     await expect(detail).not.toContainText('승인');
     await expect(detail).not.toContainText('거절');
+
+    const evidenceDir = process.env.PINVI_M05_UI_EVIDENCE_DIR;
+    if (evidenceDir) {
+      const response = await page.evaluate(async (id) => {
+        const result = await fetch(`/api/proxy/admin/feature-reference-reconciliations/${id}`, {
+          credentials: 'same-origin',
+          cache: 'no-store',
+        });
+        return { body: await result.json(), status: result.status };
+      }, eventId);
+      expect(response.status).toBe(200);
+      const responseBody = response.body as { data?: unknown };
+      expect(responseBody.data).toBeDefined();
+      const marker = {
+        assertions: ['status', 'action', 'old_feature', 'replacement_feature', 'impact_count'],
+        event_id: eventId,
+        impact_count: Number(impactCount),
+        old_feature_id: oldFeatureId,
+        pinvi_detail_sha256: createHash('sha256')
+          .update(canonicalJson(responseBody.data), 'utf8')
+          .digest('hex'),
+        replacement_feature_id: replacementFeatureId,
+        status: 'passed',
+      };
+      writeFileSync(
+        path.join(evidenceDir, 'ui-run.json'),
+        `${JSON.stringify(marker)}\n`,
+        { encoding: 'utf8', mode: 0o600, flag: 'wx' },
+      );
+    }
   });
 });

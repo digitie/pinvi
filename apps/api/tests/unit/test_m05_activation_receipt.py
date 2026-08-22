@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import subprocess
@@ -72,10 +73,15 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "event_id": "11111111-1111-4111-8111-111111111111",
             "event_sha256": "a" * 64,
             "map_ack_sha256": "b" * 64,
+            "map_snapshot_after_sha256": "c" * 64,
+            "map_snapshot_before_sha256": "c" * 64,
             "pinvi_source_revision": PINVI_REVISION,
+            "pinvi_snapshot_after_sha256": "d" * 64,
+            "pinvi_snapshot_before_sha256": "d" * 64,
             "runner_exit_code": 0,
             "server_side_ack_verified": True,
             "status": "passed",
+            "ui_evidence_sha256": "e" * 64,
         },
     )
     _write_json(
@@ -113,6 +119,23 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
                 "openapi_sha256": KOR_TRAVEL_MAP_M05_USER_OPENAPI_SHA256,
                 "source_revision": KOR_TRAVEL_MAP_M05_USER_SOURCE_REVISION,
             },
+            "runtime": {
+                "api": {
+                    "digest": "sha256:" + "7" * 64,
+                    "environment": "production",
+                    "image_id": "sha256:" + "7" * 64,
+                    "revision_label": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+                    "source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+                },
+                "frontend": {
+                    "digest": "sha256:" + "8" * 64,
+                    "environment": "production",
+                    "image_id": "sha256:" + "8" * 64,
+                    "revision_label": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+                    "source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+                },
+                "full_openapi_sha256": KOR_TRAVEL_MAP_M05_FULL_OPENAPI_SHA256,
+            },
         },
     )
     _write_json(
@@ -121,6 +144,8 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             name: {
                 "digest": digest,
                 "environment": "production",
+                "image_id": digest,
+                "revision_label": PINVI_REVISION,
                 "source_revision": PINVI_REVISION,
             }
             for name, digest in PINVI_DIGESTS.items()
@@ -142,6 +167,36 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         )
     )
     private_key_path.chmod(0o600)
+
+    evidence_hashes = {
+        name: hashlib.sha256((evidence_dir / f"{name}.json").read_bytes()).hexdigest()
+        for name in ("live-ui", "map-pair", "pinvi-images", "restore", "reviews")
+    }
+    attestation_payload = {
+        "created_at": 1,
+        "event_id": "11111111-1111-4111-8111-111111111111",
+        "evidence_sha256": evidence_hashes,
+        "map_ack_sha256": "b" * 64,
+        "map_snapshot_sha256": "c" * 64,
+        "pinvi_snapshot_sha256": "d" * 64,
+        "pinvi_source_revision": PINVI_REVISION,
+        "scope": "production",
+        "status": "passed",
+        "verification_id": "22222222-2222-4222-8222-222222222222",
+        "version": 1,
+    }
+    attestation_bytes = json.dumps(
+        attestation_payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+    _write_json(
+        evidence_dir / "attestation.json",
+        {
+            "payload": attestation_payload,
+            "signature": base64.urlsafe_b64encode(private_key.sign(attestation_bytes))
+            .decode("ascii")
+            .rstrip("="),
+        },
+    )
     receipt_path = tmp_path / "activation-receipt.json"
     script = Path(__file__).resolve().parents[4] / "scripts/m05_activation_receipt.py"
     completed = subprocess.run(  # noqa: S603 - invokes the repository-pinned Python test helper

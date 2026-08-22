@@ -163,6 +163,13 @@ services:
       # 전달되지 않는다.
       PINVI_API_WORKERS: ${PINVI_API_WORKERS:-1}
       PINVI_VWORLD_API_KEY: ${PINVI_VWORLD_API_KEY:-}
+    # production/staging activation ledger는 host의 root-owned·append-only 파일을
+    # API에 read-only로만 노출한다. 운영 enable 시 두 경로를 모두 명시한다.
+    volumes:
+      - type: bind
+        source: ${PINVI_M05_ACTIVATION_LEDGER_HOST_PATH:-/tmp/pinvi-m05-activation-ledger.jsonl}
+        target: ${PINVI_M05_ACTIVATION_LEDGER_PATH:-/run/pinvi/m05/activation-ledger.jsonl}
+        read_only: true
     ports:
       - "${PINVI_API_PORT:-12801}:8000"
 

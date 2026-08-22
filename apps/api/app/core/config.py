@@ -950,6 +950,7 @@ class Settings(BaseSettings):
             )
         payload = cast(dict[str, object], payload_value)
         expected_payload_fields = {
+            "activation_attestation_sha256",
             "activation_expires_at",
             "activation_generation",
             "activation_issued_at",
@@ -959,6 +960,8 @@ class Settings(BaseSettings):
             "live_ui_event_id",
             "live_ui_evidence_sha256",
             "live_ui_map_ack_sha256",
+            "live_ui_map_snapshot_sha256",
+            "live_ui_pinvi_snapshot_sha256",
             "map_admin_openapi_sha256",
             "map_admin_source_revision",
             "map_admin_image_digest",
@@ -1088,8 +1091,11 @@ class Settings(BaseSettings):
             _raise_redacted_settings_error("M05 live UI evidence event ID is not canonical")
 
         for field in (
+            "activation_attestation_sha256",
             "live_ui_evidence_sha256",
             "live_ui_map_ack_sha256",
+            "live_ui_map_snapshot_sha256",
+            "live_ui_pinvi_snapshot_sha256",
             "map_pair_evidence_sha256",
             "pinvi_image_evidence_sha256",
             "restore_evidence_sha256",
@@ -1165,6 +1171,7 @@ class Settings(BaseSettings):
         if stat.S_IMODE(ledger_stat.st_mode) & 0o022 or not ledger_lines:
             _raise_redacted_settings_error("M05 activation receipt ledger permissions are invalid")
         records: list[dict[str, object]] = []
+        previous_generation: int | None = None
         for line in ledger_lines:
             try:
                 record = json.loads(line, object_pairs_hook=_reject_duplicate_json_keys)
@@ -1182,7 +1189,31 @@ class Settings(BaseSettings):
                 "source_revision",
             }:
                 _raise_redacted_settings_error("M05 activation receipt ledger schema is invalid")
-            records.append(cast(dict[str, object], record))
+            record_object = cast(dict[str, object], record)
+            generation = record_object["activation_generation"]
+            issued_at = record_object["activation_issued_at"]
+            expires_at = record_object["activation_expires_at"]
+            scope = record_object["scope"]
+            source_revision = record_object["source_revision"]
+            if (
+                type(generation) is not int
+                or generation < 1
+                or (previous_generation is not None and generation <= previous_generation)
+                or type(issued_at) is not int
+                or type(expires_at) is not int
+                or expires_at <= issued_at
+                or expires_at - issued_at > 7 * 24 * 60 * 60
+                or not _is_canonical_uuid(record_object["activation_nonce"])
+                or not isinstance(record_object["receipt_sha256"], str)
+                or re.fullmatch(r"[0-9a-f]{64}", record_object["receipt_sha256"]) is None
+                or not isinstance(scope, str)
+                or scope not in {"staging", "production"}
+                or not isinstance(source_revision, str)
+                or re.fullmatch(r"[0-9a-f]{40}", source_revision) is None
+            ):
+                _raise_redacted_settings_error("M05 activation receipt ledger fields are invalid")
+            previous_generation = generation
+            records.append(record_object)
         latest = records[-1]
         receipt_sha256 = hashlib.sha256(
             receipt_secret.get_secret_value().encode("utf-8")

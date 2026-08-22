@@ -119,10 +119,12 @@ python scripts/m05_activation_receipt.py create \
 ```
 
 입력 파일은 `reviews.json`, `live-ui.json`, `restore.json`, `map-pair.json`,
-`pinvi-images.json`의 다섯 개이며, 도구가 schema·현재 tracked pair·immutable `sha256:` digest와
-source revision을 확인한 후 payload를 서명한다. `--require-root-owned` 실행에서는 private key도
-tracked trust anchor와 대조한다. 출력된 public key와 receipt는 운영 secret 저장소에
-등록하고, 원문 증거는 root-owned 보관 위치에만 남긴다.
+`pinvi-images.json`과 live verifier가 생성한 서명 `attestation.json`이다. signer는 schema·현재
+tracked pair·각 pinned Map commit의 Git blob·실제 runtime image ID/OCI revision·immutable
+`sha256:` digest와 source revision을 확인한 후 payload를 서명한다. `--require-root-owned` 실행에서는
+private key와 증거 디렉터리도 tracked trust anchor/소유권과 대조한다. 출력된 public key와 receipt는
+운영 secret 저장소에 등록하고, 원문 증거·append-only ledger는 root-owned 보관 위치에서 API에
+read-only로만 mount한다.
 
 ## 검증과 activation gate
 
