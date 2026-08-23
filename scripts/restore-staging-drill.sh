@@ -44,7 +44,7 @@ Optional:
   PINVI_RESTORE_DRILL_SCHEMA=app
   PINVI_RESTORE_DRILL_JOBS=2
   PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL=none|precheck|drain
-  PINVI_RESTORE_DRILL_ALLOW_NON_STAGING=1
+  PINVI_RESTORE_DRILL_ALLOW_NON_STAGING=1  (test mode only)
 EOF
 }
 
@@ -67,7 +67,8 @@ fi
 
 DATABASE_URL="${PINVI_RESTORE_STAGING_DATABASE_URL:-}"
 if [[ -z "${DATABASE_URL}" ]]; then
-  if [[ "${PINVI_RESTORE_DRILL_ALLOW_NON_STAGING:-0}" == "1" ]]; then
+  if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" == "1" &&
+    "${PINVI_RESTORE_DRILL_ALLOW_NON_STAGING:-0}" == "1" ]]; then
     DATABASE_URL="${PINVI_RESTORE_DATABASE_URL:-${PINVI_DATABASE_URL:-}}"
   else
     phase precheck failed "PINVI_RESTORE_STAGING_DATABASE_URL is required for staging drill"
@@ -78,6 +79,17 @@ fi
 if [[ -z "${DATABASE_URL}" ]]; then
   phase precheck failed "staging database URL is empty"
   exit 2
+fi
+
+if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" != "1" &&
+  "${PINVI_ENVIRONMENT:-}" != "staging" ]]; then
+  phase precheck failed "staging restore drill requires PINVI_ENVIRONMENT=staging"
+  exit 2
+fi
+if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" != "1" &&
+  -n "${PINVI_DATABASE_URL:-}" && "${DATABASE_URL}" == "${PINVI_DATABASE_URL}" ]]; then
+  phase precheck failed "staging restore target must not be the application database"
+  exit 3
 fi
 
 if [[ "${DATABASE_URL}" == postgresql+asyncpg://* ]]; then
@@ -295,6 +307,10 @@ before_oid="$(schema_oid)"
 evidence before_schema_oid "${before_oid}"
 
 phase restore running "restoring app schema into staging database"
+REQUIRE_FRESH_SCHEMA=1
+if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" == "1" ]]; then
+  REQUIRE_FRESH_SCHEMA="${PINVI_RESTORE_REQUIRE_FRESH_SCHEMA:-0}"
+fi
 set +e
 restore_output="$(PINVI_RESTORE_DATABASE_URL="${DATABASE_URL}" \
   PINVI_RESTORE_SCHEMA="${SCHEMA}" \
@@ -305,7 +321,7 @@ restore_output="$(PINVI_RESTORE_DATABASE_URL="${DATABASE_URL}" \
   PINVI_RESTORE_PG_RESTORE_SHA256="${PINVI_RESTORE_PG_RESTORE_SHA256:-}" \
   PINVI_RESTORE_PRIVATE_TOOL_COPY="${PINVI_RESTORE_PRIVATE_TOOL_COPY:-0}" \
   PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST="${PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST:-0}" \
-  PINVI_RESTORE_REQUIRE_FRESH_SCHEMA="${PINVI_RESTORE_REQUIRE_FRESH_SCHEMA:-0}" \
+  PINVI_RESTORE_REQUIRE_FRESH_SCHEMA="${REQUIRE_FRESH_SCHEMA}" \
   PINVI_RESTORE_APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}" \
   PINVI_RESTORE_EXPECTED_DATABASE_NAME="${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" \
   PINVI_RESTORE_EXPECTED_DATABASE_OID="${PINVI_RESTORE_EXPECTED_DATABASE_OID:-}" \

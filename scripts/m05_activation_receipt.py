@@ -66,6 +66,14 @@ class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def _canonical_github_opener() -> urllib.request.OpenerDirector:
+    # GitHub PR provenance must not be supplied by ambient HTTP(S) proxy variables.
+    return urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        _NoRedirectHandler(),
+    )
+
+
 class ReceiptError(ValueError):
     """M05 evidence가 canonical receipt 계약을 위반했다."""
 
@@ -614,6 +622,9 @@ def _assert_source_checkout(source_revision: str, *, test_mode: bool) -> None:
 
     root = Path(__file__).resolve().parents[1]
     git_env = os.environ.copy()
+    for name in tuple(git_env):
+        if name.startswith("GIT_"):
+            git_env.pop(name, None)
     git_env.update(
         {
             "GIT_CONFIG_GLOBAL": "/dev/null",
@@ -623,10 +634,16 @@ def _assert_source_checkout(source_revision: str, *, test_mode: bool) -> None:
             "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         }
     )
-    for name in tuple(git_env):
-        if name.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")):
-            git_env.pop(name, None)
     try:
+        top_level = subprocess.run(
+            [_host_tool("git"), "-C", str(root), "rev-parse", "--show-toplevel"],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=git_env,
+        ).stdout.strip()
+        if Path(top_level).resolve() != root.resolve():
+            raise ReceiptError("receipt producer checkout root is not canonical")
         revision = subprocess.run(
             [_host_tool("git"), "-C", str(root), "rev-parse", "HEAD"],
             check=True,
@@ -670,7 +687,7 @@ def _assert_source_checkout(source_revision: str, *, test_mode: bool) -> None:
         token = os.environ.get("PINVI_GITHUB_TOKEN", "")
         if token:
             request.add_header("Authorization", f"Bearer {token}")
-        with urllib.request.build_opener(_NoRedirectHandler()).open(
+        with _canonical_github_opener().open(
             request, timeout=20
         ) as response:
             if response.geturl() != request.full_url or response.getcode() != 200:
@@ -1210,6 +1227,129 @@ def _append_database_anchor(
         raise ReceiptError("M05 activation database anchor does not match the ledger record")
 
 
+def _validate_ledger_receipt_signature(
+    envelope_object: dict[str, object], *, public_key_value: str
+) -> bytes:
+    public_key_bytes = _decode_base64url(public_key_value, expected_length=32)
+    signature_bytes = _decode_base64url(envelope_object.get("signature"), expected_length=64)
+    if public_key_bytes is None or signature_bytes is None:
+        raise ReceiptError("ledger requires a canonical signed receipt and public key")
+    if (
+        hashlib.sha256(public_key_bytes).hexdigest() != _trust_anchor()
+        and os.environ.get("PINVI_M05_RECEIPT_TEST_MODE") != "1"
+    ):
+        raise ReceiptError("ledger public key does not match the vendored trust anchor")
+    payload = _object(envelope_object["payload"], name="receipt payload")
+    try:
+        Ed25519PublicKey.from_public_bytes(public_key_bytes).verify(
+            signature_bytes, _canonical_json(payload)
+        )
+    except (InvalidSignature, ValueError, TypeError) as exc:
+        raise ReceiptError("ledger receipt signature is invalid") from exc
+    return public_key_bytes
+
+
+def _validate_ledger_evidence(args: argparse.Namespace, payload: dict[str, object]) -> None:
+    evidence_directory_fd = _open_secure_directory(
+        args.evidence_dir, require_root_owned=args.require_root_owned
+    )
+    try:
+        evidence: dict[str, object] = {}
+        evidence_hashes: dict[str, str] = {}
+        paths = {name.removesuffix(".json").replace("-", "_"): Path(name) for name in _EVIDENCE_FILES}
+        for key, path in paths.items():
+            value, digest = _read_json(
+                path,
+                require_root_owned=args.require_root_owned,
+                directory_fd=evidence_directory_fd,
+            )
+            evidence[key] = value
+            evidence_hashes[key] = digest
+    finally:
+        os.close(evidence_directory_fd)
+
+    expected_hashes = {
+        "activation_attestation_sha256": evidence_hashes["attestation"],
+        "live_ui_evidence_sha256": evidence_hashes["live_ui"],
+        "map_pair_evidence_sha256": evidence_hashes["map_pair"],
+        "pinvi_image_evidence_sha256": evidence_hashes["pinvi_images"],
+        "restore_evidence_sha256": evidence_hashes["restore"],
+        "review_evidence_sha256": evidence_hashes["reviews"],
+    }
+    for field, expected in expected_hashes.items():
+        if payload.get(field) != expected:
+            raise ReceiptError(f"receipt does not bind {field} to the supplied evidence")
+
+    source_revision = _commit(payload["pinvi_source_revision"], name="receipt source revision")
+    scope = _string(payload["scope"], name="receipt scope")
+    reviewer_roster_path = args.reviewer_roster or _REVIEWER_ROSTER
+    allowed_review_keys = _review_allowlist(
+        args.review_allowlist,
+        challenge_path=args.review_challenge,
+        pinvi_source_revision=source_revision,
+        require_root_owned=args.require_root_owned,
+        review_response_nonce=_review_nonce(
+            args.review_response_nonce,
+            name="review response nonce",
+        ),
+        reviewer_roster_path=reviewer_roster_path,
+    )
+    reviews = _reviews(
+        evidence["reviews"],
+        pinvi_source_revision=source_revision,
+        expected_pr_url=args.pr_url,
+        allowed_review_keys=allowed_review_keys,
+        reviewer_roster_path=reviewer_roster_path,
+    )
+    if payload.get("adversarial_reviews") != reviews:
+        raise ReceiptError("receipt adversarial reviews do not match the supplied review evidence")
+    live_ui = _live_ui(evidence["live_ui"], pinvi_source_revision=source_revision)
+    _restore(
+        evidence["restore"],
+        pinvi_source_revision=source_revision,
+        environment=scope,
+        require_root_owned=args.require_root_owned,
+    )
+    pair_expected = _pair_provenance()
+    map_pair = _map_pair(evidence["map_pair"], pair_expected, environment=scope)
+    pinvi_images = _pinvi_images(
+        evidence["pinvi_images"],
+        pinvi_source_revision=source_revision,
+        environment=scope,
+    )
+    _attestation(
+        evidence["attestation"],
+        evidence_hashes={
+            "live-ui": evidence_hashes["live_ui"],
+            "map-pair": evidence_hashes["map_pair"],
+            "pinvi-images": evidence_hashes["pinvi_images"],
+            "restore": evidence_hashes["restore"],
+            "reviews": evidence_hashes["reviews"],
+        },
+        live_ui=live_ui,
+        pinvi_source_revision=source_revision,
+        scope=scope,
+        public_key_bytes=_decode_base64url(args.public_key, expected_length=32) or b"",
+        issued_at=cast(int, payload["activation_issued_at"]),
+        expires_at=cast(int, payload["activation_expires_at"]),
+        activation_nonce=_uuid(payload["activation_nonce"], name="receipt activation nonce"),
+    )
+    if (
+        payload.get("live_ui_event_id") != live_ui["event_id"]
+        or payload.get("live_ui_verification_id") != live_ui["verification_id"]
+        or payload.get("live_ui_map_admin_endpoint") != live_ui["map_admin_endpoint"]
+        or payload.get("live_ui_pinvi_api_endpoint") != live_ui["pinvi_api_endpoint"]
+        or payload.get("live_ui_pinvi_web_endpoint") != live_ui["pinvi_web_endpoint"]
+        or payload.get("map_admin_container_id") != map_pair["map_admin_container_id"]
+        or payload.get("map_api_container_id") != map_pair["map_api_container_id"]
+        or payload.get("map_frontend_container_id") != map_pair["map_frontend_container_id"]
+        or payload.get("pinvi_api_container_id") != pinvi_images["api_container_id"]
+        or payload.get("pinvi_web_container_id") != pinvi_images["web_container_id"]
+        or payload.get("pinvi_dagster_container_id") != pinvi_images["dagster_container_id"]
+    ):
+        raise ReceiptError("receipt runtime identity does not match the supplied evidence")
+
+
 def _ledger_unlocked(args: argparse.Namespace) -> int:
     receipt_bytes = _read_secure_bytes(
         args.receipt,
@@ -1223,6 +1363,10 @@ def _ledger_unlocked(args: argparse.Namespace) -> int:
     envelope_object = _object(envelope, name="receipt")
     if set(envelope_object) != {"payload", "signature"}:
         raise ReceiptError("receipt envelope schema is invalid")
+    _validate_ledger_receipt_signature(
+        envelope_object,
+        public_key_value=args.public_key,
+    )
     payload = _object(envelope_object["payload"], name="receipt payload")
     required = {
         "activation_expires_at",
@@ -1247,6 +1391,7 @@ def _ledger_unlocked(args: argparse.Namespace) -> int:
         or payload["scope"] not in {"staging", "production"}
     ):
         raise ReceiptError("receipt ledger fields are invalid")
+    _validate_ledger_evidence(args, payload)
     database_generation = _read_database_anchor_generation(
         args.durable_anchor_database_url,
         require_root_owned=args.require_root_owned,
@@ -2220,6 +2365,36 @@ def _attestation(
     return verification_id
 
 
+def _runtime_dependency(value: object, *, name: str) -> dict[str, object]:
+    dependency = _object(value, name=f"{name} runtime dependency")
+    expected = {
+        "container_id",
+        "digest",
+        "environment",
+        "image_id",
+        "revision_label",
+        "source_revision",
+        "started_at",
+    }
+    if set(dependency) != expected:
+        raise ReceiptError(f"{name} runtime dependency schema is invalid")
+    if dependency["digest"] != dependency["image_id"]:
+        raise ReceiptError(f"{name} runtime dependency image is not digest-bound")
+    if dependency["revision_label"] != dependency["source_revision"]:
+        raise ReceiptError(f"{name} runtime dependency source label is not bound")
+    if (
+        not isinstance(dependency["container_id"], str)
+        or re.fullmatch(r"[0-9a-f]{64}\Z", dependency["container_id"]) is None
+        or not isinstance(dependency["started_at"], str)
+        or not dependency["started_at"]
+    ):
+        raise ReceiptError(f"{name} runtime dependency identity is invalid")
+    _digest(dependency["digest"], name=f"{name}.digest")
+    _string(dependency["environment"], name=f"{name}.environment")
+    _commit(dependency["source_revision"], name=f"{name}.source_revision")
+    return dependency
+
+
 def _create(args: argparse.Namespace) -> int:
     evidence_dir = args.evidence_dir
     evidence_directory_fd = _open_secure_directory(
@@ -2435,7 +2610,43 @@ def _create(args: argparse.Namespace) -> int:
         "signature": _base64url(private_key.sign(_canonical_json(payload))),
     }
     _write_new_json(args.output, signed)
+    map_pair_evidence = _object(evidence["map_pair"], name="Map pair evidence")
+    map_runtime = _object(map_pair_evidence["runtime"], name="Map pair runtime evidence")
+    pinvi_image_evidence = _object(evidence["pinvi_images"], name="Pinvi image evidence")
+    runtime_payload = {
+        "activation_generation": args.activation_generation,
+        "activation_nonce": activation_nonce,
+        "created_at": int(time.time()),
+        "dependencies": {
+            "map_admin": _runtime_dependency(map_runtime["admin"], name="Map admin"),
+            "map_api": _runtime_dependency(map_runtime["api"], name="Map API"),
+            "map_frontend": _runtime_dependency(map_runtime["frontend"], name="Map frontend"),
+            "pinvi_api": _runtime_dependency(pinvi_image_evidence["api"], name="Pinvi API"),
+            "pinvi_web": _runtime_dependency(pinvi_image_evidence["web"], name="Pinvi Web"),
+            "pinvi_dagster": _runtime_dependency(
+                pinvi_image_evidence["dagster"], name="Pinvi Dagster"
+            ),
+        },
+        "endpoints": {
+            "map_admin": live_ui["map_admin_endpoint"],
+            "pinvi_api": live_ui["pinvi_api_endpoint"],
+            "pinvi_web": live_ui["pinvi_web_endpoint"],
+        },
+        "pinvi_source_revision": source_revision,
+        "receipt_sha256": hashlib.sha256(args.output.read_bytes()).hexdigest(),
+        "scope": scope,
+        "version": 1,
+    }
+    runtime_attestation = {
+        "payload": runtime_payload,
+        "signature": _base64url(private_key.sign(_canonical_json(runtime_payload))),
+    }
+    runtime_attestation_path = evidence_dir / "runtime-attestation.json"
+    _write_new_json(runtime_attestation_path, runtime_attestation)
     print(f"receipt_sha256={hashlib.sha256(args.output.read_bytes()).hexdigest()}")
+    print(
+        f"runtime_attestation_sha256={hashlib.sha256(runtime_attestation_path.read_bytes()).hexdigest()}"
+    )
     print(
         f"public_key={_base64url(private_key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw))}"
     )
@@ -2474,6 +2685,16 @@ def _parser() -> argparse.ArgumentParser:
     ledger.add_argument("--durable-floor", type=Path, required=True)
     ledger.add_argument("--durable-history", type=Path, required=True)
     ledger.add_argument("--durable-anchor", type=Path, required=True)
+    ledger.add_argument("--public-key", default=os.environ.get("PINVI_M05_ACTIVATION_RECEIPT_PUBLIC_KEY", ""))
+    ledger.add_argument("--evidence-dir", type=Path, required=True)
+    ledger.add_argument("--pr-url", default=_M05_ACTIVATION_PR_URL)
+    ledger.add_argument("--review-allowlist", type=Path, required=True)
+    ledger.add_argument("--review-challenge", type=Path, required=True)
+    ledger.add_argument("--reviewer-roster", type=Path)
+    ledger.add_argument(
+        "--review-response-nonce",
+        default=os.environ.get("PINVI_M05_REVIEW_RESPONSE_NONCE", ""),
+    )
     ledger.add_argument(
         "--durable-anchor-database-url",
         default=os.environ.get("PINVI_M05_ACTIVATION_ANCHOR_DATABASE_URL", ""),

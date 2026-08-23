@@ -44,6 +44,8 @@ _RESTORE_PHASES: tuple[RestorePhaseName, ...] = (
     "draining",
     "switching",
 )
+_SAFE_EXECUTION_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+_STRICT_BACKUP_ENVIRONMENTS = {"staging", "production"}
 
 
 class BackupServiceError(Exception):
@@ -131,6 +133,17 @@ def backup_dir() -> Path:
 
 def backup_script_path() -> Path:
     return resolve_repo_path(settings.pinvi_backup_script_path)
+
+
+def _validated_backup_script() -> Path:
+    script = backup_script_path()
+    canonical = repo_root() / "scripts" / "backup-db.sh"
+    if script.is_symlink() or not script.is_file() or not os.access(script, os.X_OK):
+        raise BackupServiceError("backup script must be a regular executable")
+    if settings.pinvi_environment in _STRICT_BACKUP_ENVIRONMENTS:
+        if script.resolve() != canonical.resolve():
+            raise BackupServiceError("운영 backup script는 repository canonical 경로여야 합니다.")
+    return script
 
 
 def restore_hotswap_script_path() -> Path:
@@ -274,13 +287,30 @@ def _snapshot_from_script_result(
     directory: Path,
     before: set[Path],
 ) -> BackupSnapshot | None:
+    directory = directory.resolve()
+
+    def verified_path(value: str) -> Path:
+        candidate = Path(value)
+        if candidate.is_symlink() or not candidate.is_file():
+            raise BackupServiceError("backup script returned a non-regular dump path")
+        resolved = candidate.resolve()
+        try:
+            resolved.relative_to(directory)
+        except ValueError as exc:
+            raise BackupServiceError(
+                "backup script returned a dump outside the approved directory"
+            ) from exc
+        return resolved
+
     match = _BACKUP_FILE_RE.search(stdout)
     if match:
-        path = Path(match.group("path")).resolve()
-        if path.exists():
-            return _snapshot_from_file(path)
+        return _snapshot_from_file(verified_path(match.group("path")))
 
-    created = [path for path in directory.glob("*.dump") if path.resolve() not in before]
+    created = [
+        path
+        for path in directory.glob("*.dump")
+        if path.is_file() and not path.is_symlink() and path.resolve() not in before
+    ]
     if created:
         created.sort(key=lambda path: path.stat().st_mtime, reverse=True)
         return _snapshot_from_file(created[0])
@@ -288,23 +318,38 @@ def _snapshot_from_script_result(
 
 
 async def create_backup_snapshot(*, access_reason: str) -> BackupSnapshot:
-    script = backup_script_path()
-    if not script.exists():
-        raise BackupServiceError(f"backup script not found: {script}")
+    script = _validated_backup_script()
 
     directory = backup_dir()
+    if settings.pinvi_environment in _STRICT_BACKUP_ENVIRONMENTS and directory.is_symlink():
+        raise BackupServiceError("운영 backup directory는 symlink일 수 없습니다.")
     directory.mkdir(parents=True, exist_ok=True)
+    if not directory.is_dir():
+        raise BackupServiceError("backup directory is not a directory")
+    directory = directory.resolve()
     _ensure_backup_disk_space(directory)
 
     before = {path.resolve() for path in directory.glob("*.dump")}
     env = {
-        **os.environ,
+        "PATH": _SAFE_EXECUTION_PATH,
+        "PINVI_ENVIRONMENT": settings.pinvi_environment,
         "PINVI_BACKUP_DIR": str(directory),
         "PINVI_BACKUP_SCHEMA": settings.pinvi_backup_schema,
         "PINVI_BACKUP_MIN_FREE_BYTES": str(settings.pinvi_backup_min_free_bytes),
         "PINVI_BACKUP_REASON": access_reason,
-        "PINVI_DATABASE_URL": settings.pinvi_database_url,
+        "PINVI_BACKUP_DATABASE_URL": settings.pinvi_database_url,
+        "PINVI_DATABASE_URL": "",
+        "PINVI_BACKUP_DOCKER_FALLBACK": "0",
     }
+    if settings.pinvi_environment in _STRICT_BACKUP_ENVIRONMENTS:
+        pg_dump = Path(_pinned_postgres_tool("pg_dump"))
+        env.update(
+            {
+                "PINVI_BACKUP_PG_DUMP_BIN": str(pg_dump),
+                "PINVI_BACKUP_PG_DUMP_SHA256": _sha256_file(pg_dump),
+                "PINVI_BACKUP_PRIVATE_TOOL_COPY": "0",
+            }
+        )
 
     proc = await asyncio.create_subprocess_exec(
         str(script),
@@ -312,6 +357,7 @@ async def create_backup_snapshot(*, access_reason: str) -> BackupSnapshot:
         stderr=asyncio.subprocess.PIPE,
         env=env,
         cwd=str(repo_root()),
+        start_new_session=True,
     )
     try:
         stdout_raw, stderr_raw = await asyncio.wait_for(
@@ -319,7 +365,10 @@ async def create_backup_snapshot(*, access_reason: str) -> BackupSnapshot:
             timeout=settings.pinvi_backup_timeout_seconds,
         )
     except TimeoutError as exc:
-        proc.kill()
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
         await proc.wait()
         raise BackupServiceError(sanitize_backup_message("backup script timed out")) from exc
 

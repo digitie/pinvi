@@ -76,13 +76,15 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
     assert "n.nspowner = r.oid" in calls[0]
     assert "pg_has_role(r.oid, n.nspowner, 'member')" in calls[0]
     assert calls[1].startswith("psql:")
-    assert 'CREATE SCHEMA IF NOT EXISTS "app"' in calls[1]
-    assert calls[2].startswith("pg_restore:")
-    assert "--no-owner" in calls[2]
-    assert "--no-privileges" in calls[2]
-    assert calls[3].startswith("psql:")
-    assert 'GRANT USAGE ON SCHEMA "app" TO "pinvi_app"' in calls[3]
-    assert "GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA" in calls[3]
+    assert "WITH RECURSIVE role_closure" in calls[1]
+    assert calls[2].startswith("psql:")
+    assert 'CREATE SCHEMA IF NOT EXISTS "app"' in calls[2]
+    assert calls[3].startswith("pg_restore:")
+    assert "--no-owner" in calls[3]
+    assert "--no-privileges" in calls[3]
+    assert calls[4].startswith("psql:")
+    assert 'GRANT USAGE ON SCHEMA "app" TO "pinvi_app"' in calls[4]
+    assert "GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA" in calls[4]
 
 
 def test_restore_db_rejects_invalid_runtime_role_before_schema_mutation(tmp_path: Path) -> None:
@@ -133,8 +135,9 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
     assert result.returncode == 3
     assert "PINVI_RESTORE_APP_ROLE" in result.stderr
     calls = invocation_log.read_text(encoding="utf-8").splitlines()
-    assert len(calls) == 1
+    assert len(calls) == 2
     assert calls[0].startswith("psql:")
     assert "FROM pg_roles" in calls[0]
     assert "n.nspowner = r.oid" in calls[0]
     assert "pg_has_role(r.oid, n.nspowner, 'member')" in calls[0]
+    assert "WITH RECURSIVE role_closure" in calls[1]

@@ -12,12 +12,70 @@ BACKUP_DIR="${PINVI_BACKUP_DIR:-${ROOT_DIR}/.tmp/backups}"
 SCHEMA="${PINVI_BACKUP_SCHEMA:-app}"
 MIN_FREE_BYTES="${PINVI_BACKUP_MIN_FREE_BYTES:-1073741824}"
 DATABASE_URL="${PINVI_BACKUP_DATABASE_URL:-${PINVI_DATABASE_URL:-}}"
-PG_DUMP_BIN="${PINVI_BACKUP_PG_DUMP_BIN:-pg_dump}"
+ENVIRONMENT="${PINVI_ENVIRONMENT:-development}"
+STRICT_ENVIRONMENT=0
+if [[ "${ENVIRONMENT}" == "staging" || "${ENVIRONMENT}" == "production" ]]; then
+  STRICT_ENVIRONMENT=1
+fi
 DOCKER_FALLBACK="${PINVI_BACKUP_DOCKER_FALLBACK:-1}"
 DOCKER_BIN="${PINVI_BACKUP_DOCKER_BIN:-docker}"
 DOCKER_IMAGE="${PINVI_BACKUP_DOCKER_IMAGE:-postgis/postgis:16-3.5}"
 DOCKER_NETWORK="${PINVI_BACKUP_DOCKER_NETWORK:-}"
 CONTAINER_BACKUP_DIR="/backup"
+
+pinned_tool() {
+  local name="$1"
+  local candidate
+  for directory in /usr/local/bin /usr/bin /bin /usr/lib/postgresql/*/bin; do
+    candidate="${directory}/${name}"
+    if [[ -f "${candidate}" && -x "${candidate}" && ! -L "${candidate}" ]]; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+PG_DUMP_BIN="${PINVI_BACKUP_PG_DUMP_BIN:-}"
+if [[ -z "${PG_DUMP_BIN}" && "${STRICT_ENVIRONMENT}" == "1" ]]; then
+  PG_DUMP_BIN="$(pinned_tool pg_dump || true)"
+fi
+if [[ -z "${PG_DUMP_BIN}" ]]; then
+  PG_DUMP_BIN="pg_dump"
+fi
+
+if [[ "${STRICT_ENVIRONMENT}" == "1" ]]; then
+  if [[ "${BACKUP_DIR}" != /* || -L "${BACKUP_DIR}" ]]; then
+    echo "strict backup requires an absolute non-symlink backup directory" >&2
+    exit 3
+  fi
+  if [[ "${DOCKER_FALLBACK}" == "1" ]]; then
+    echo "strict backup forbids docker pg_dump fallback" >&2
+    exit 3
+  fi
+  if [[ "${PG_DUMP_BIN}" != /* || ! -f "${PG_DUMP_BIN}" || ! -x "${PG_DUMP_BIN}" || -L "${PG_DUMP_BIN}" ]]; then
+    echo "strict backup requires a regular pinned pg_dump executable" >&2
+    exit 3
+  fi
+  resolved_pg_dump="$(realpath -e "${PG_DUMP_BIN}")"
+  case "${resolved_pg_dump}" in
+    /usr/local/bin/pg_dump|/usr/bin/pg_dump|/bin/pg_dump|/usr/lib/postgresql/[0-9]*/bin/pg_dump) ;;
+    *)
+      if [[ "${PINVI_BACKUP_PRIVATE_TOOL_COPY:-0}" != "1" ]]; then
+        echo "strict backup pg_dump is outside the trusted tool directories" >&2
+        exit 3
+      fi
+      ;;
+  esac
+  if [[ ! "${PINVI_BACKUP_PG_DUMP_SHA256:-}" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "strict backup requires a pg_dump digest pin" >&2
+    exit 3
+  fi
+  if [[ "$(sha256sum "${PG_DUMP_BIN}" | awk 'NR == 1 { print $1 }')" != "${PINVI_BACKUP_PG_DUMP_SHA256}" ]]; then
+    echo "strict backup pg_dump digest pin failed" >&2
+    exit 3
+  fi
+fi
 
 if [[ -z "${DATABASE_URL}" ]]; then
   echo "PINVI_DATABASE_URL or PINVI_BACKUP_DATABASE_URL is required" >&2
@@ -39,6 +97,10 @@ if ! command -v sha256sum >/dev/null 2>&1; then
 fi
 
 mkdir -p "${BACKUP_DIR}"
+if [[ "${STRICT_ENVIRONMENT}" == "1" && ! -d "${BACKUP_DIR}" ]]; then
+  echo "strict backup directory is not a regular directory" >&2
+  exit 3
+fi
 available_kb="$(df -Pk "${BACKUP_DIR}" | awk 'NR == 2 { print $4 }')"
 available_bytes="$((available_kb * 1024))"
 if (( MIN_FREE_BYTES > 0 && available_bytes < MIN_FREE_BYTES )); then
@@ -49,14 +111,30 @@ fi
 timestamp="$(date -u +%Y%m%d-%H%M%S)"
 backup_file="${BACKUP_DIR}/pinvi-${SCHEMA}-${timestamp}.dump"
 tmp_file="$(mktemp "${BACKUP_DIR}/.pinvi-${SCHEMA}-${timestamp}.dump.XXXXXX")"
+PRIVATE_TOOL_DIR=""
 cleanup() {
   rm -f "${tmp_file}" "${tmp_file}.sha256"
+  if [[ -n "${PRIVATE_TOOL_DIR}" && -d "${PRIVATE_TOOL_DIR}" ]]; then
+    rm -rf "${PRIVATE_TOOL_DIR}"
+  fi
 }
 trap cleanup EXIT
 
+if [[ "${STRICT_ENVIRONMENT}" == "1" ]]; then
+  PRIVATE_TOOL_DIR="$(mktemp -d)"
+  chmod 700 "${PRIVATE_TOOL_DIR}"
+  cp -- "${PG_DUMP_BIN}" "${PRIVATE_TOOL_DIR}/pg_dump"
+  chmod 700 "${PRIVATE_TOOL_DIR}/pg_dump"
+  if [[ "$(sha256sum "${PRIVATE_TOOL_DIR}/pg_dump" | awk 'NR == 1 { print $1 }')" != "${PINVI_BACKUP_PG_DUMP_SHA256}" ]]; then
+    echo "strict backup pg_dump changed while copying to the private directory" >&2
+    exit 3
+  fi
+  PG_DUMP_BIN="${PRIVATE_TOOL_DIR}/pg_dump"
+fi
+
 run_pg_dump() {
   # pg_dump custom format is a single-file artifact. Parallel jobs are used at restore time.
-  if command -v "${PG_DUMP_BIN}" >/dev/null 2>&1; then
+  if [[ "${PG_DUMP_BIN}" == /* && -x "${PG_DUMP_BIN}" ]] || command -v "${PG_DUMP_BIN}" >/dev/null 2>&1; then
     "${PG_DUMP_BIN}" \
       --format=custom \
       --schema="${SCHEMA}" \

@@ -660,6 +660,8 @@ class Settings(BaseSettings):
     pinvi_api_image_digest: str = ""
     pinvi_web_image_digest: str = ""
     pinvi_dagster_image_digest: str = ""
+    # receipt와 같은 private key로 서명한 fresh dependency runtime snapshot.
+    pinvi_m05_runtime_attestation_path: str = ""
 
     # kor-travel-geo v2 REST (geocoding/주소/행정구역, ADR-025) — `docs/integrations/kor-travel-geo.md`.
     pinvi_kor_travel_geo_base_url: str = "http://localhost:12501"
@@ -1616,7 +1618,182 @@ class Settings(BaseSettings):
             _raise_redacted_settings_error(
                 "M05 activation receipt Pinvi source revision must match PINVI_SOURCE_REVISION"
             )
+        self._validate_m05_runtime_attestation(
+            payload,
+            receipt_secret=receipt_secret,
+            public_key_bytes=public_key_bytes,
+        )
         self._validate_m05_activation_ledger(payload, receipt_secret)
+
+    def _validate_m05_runtime_attestation(
+        self,
+        receipt_payload: dict[str, object],
+        *,
+        receipt_secret: SecretStr,
+        public_key_bytes: bytes,
+    ) -> None:
+        path = Path(self.pinvi_m05_runtime_attestation_path)
+        try:
+            parent = path.parent
+            metadata = path.stat()
+            parent_metadata = parent.stat()
+            if (
+                not path.is_absolute()
+                or path.is_symlink()
+                or not path.is_file()
+                or stat.S_IMODE(metadata.st_mode) != 0o600
+                or metadata.st_uid != os.geteuid()
+                or parent.is_symlink()
+                or not parent.is_dir()
+                or stat.S_IMODE(parent_metadata.st_mode) & 0o022
+                or parent_metadata.st_uid != os.geteuid()
+            ):
+                raise OSError("runtime attestation permissions are invalid")
+            raw = path.read_bytes()
+            envelope = json.loads(raw, object_pairs_hook=_reject_duplicate_json_keys)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, _DuplicateJsonKeyError):
+            _raise_redacted_settings_error(
+                "PINVI_M05_RUNTIME_ATTESTATION_PATH is not a secure valid JSON file"
+            )
+        if not isinstance(envelope, dict) or set(envelope) != {"payload", "signature"}:
+            _raise_redacted_settings_error("M05 runtime attestation envelope is invalid")
+        runtime_payload = envelope.get("payload")
+        signature = envelope.get("signature")
+        if not isinstance(runtime_payload, dict) or not isinstance(signature, str):
+            _raise_redacted_settings_error("M05 runtime attestation signature envelope is invalid")
+        runtime_signature = _decode_base64url(signature, expected_length=64)
+        if runtime_signature is None:
+            _raise_redacted_settings_error("M05 runtime attestation signature encoding is invalid")
+        try:
+            Ed25519PublicKey.from_public_bytes(public_key_bytes).verify(
+                runtime_signature,
+                _canonical_json(runtime_payload),
+            )
+        except (InvalidSignature, ValueError, TypeError):
+            _raise_redacted_settings_error("M05 runtime attestation signature is invalid")
+        expected_fields = {
+            "activation_generation",
+            "activation_nonce",
+            "created_at",
+            "dependencies",
+            "endpoints",
+            "pinvi_source_revision",
+            "receipt_sha256",
+            "scope",
+            "version",
+        }
+        if set(runtime_payload) != expected_fields or runtime_payload["version"] != 1:
+            _raise_redacted_settings_error("M05 runtime attestation schema is invalid")
+        if (
+            runtime_payload["activation_generation"] != receipt_payload["activation_generation"]
+            or runtime_payload["activation_nonce"] != receipt_payload["activation_nonce"]
+            or runtime_payload["scope"] != self.pinvi_environment
+            or runtime_payload["pinvi_source_revision"] != receipt_payload["pinvi_source_revision"]
+            or runtime_payload["receipt_sha256"]
+            != hashlib.sha256(receipt_secret.get_secret_value().encode("utf-8")).hexdigest()
+            or type(runtime_payload["created_at"]) is not int
+            or runtime_payload["created_at"] > int(time.time()) + 60
+            or runtime_payload["created_at"]
+            < cast(int, receipt_payload["activation_issued_at"]) - 60
+            or runtime_payload["created_at"] > cast(int, receipt_payload["activation_expires_at"])
+        ):
+            _raise_redacted_settings_error("M05 runtime attestation freshness is invalid")
+        dependencies = runtime_payload["dependencies"]
+        endpoints = runtime_payload["endpoints"]
+        if not isinstance(dependencies, dict) or set(dependencies) != {
+            "map_admin",
+            "map_api",
+            "map_frontend",
+            "pinvi_api",
+            "pinvi_web",
+            "pinvi_dagster",
+        }:
+            _raise_redacted_settings_error("M05 runtime attestation dependencies are invalid")
+        if not isinstance(endpoints, dict) or set(endpoints) != {
+            "map_admin",
+            "pinvi_api",
+            "pinvi_web",
+        }:
+            _raise_redacted_settings_error("M05 runtime attestation endpoints are invalid")
+        endpoint_fields = {
+            "map_admin": "live_ui_map_admin_endpoint",
+            "pinvi_api": "live_ui_pinvi_api_endpoint",
+            "pinvi_web": "live_ui_pinvi_web_endpoint",
+        }
+        for name, field in endpoint_fields.items():
+            if endpoints[name] != receipt_payload[field]:
+                _raise_redacted_settings_error(
+                    f"M05 runtime attestation endpoint is not bound: {name}"
+                )
+        dependency_fields = {
+            "map_admin": (
+                "map_admin_container_id",
+                "map_admin_image_digest",
+                "map_admin_source_revision",
+            ),
+            "map_api": (
+                "map_api_container_id",
+                "map_api_image_digest",
+                "map_admin_source_revision",
+            ),
+            "map_frontend": (
+                "map_frontend_container_id",
+                "map_frontend_image_digest",
+                "map_admin_source_revision",
+            ),
+            "pinvi_api": (
+                "pinvi_api_container_id",
+                "pinvi_api_image_digest",
+                "pinvi_source_revision",
+            ),
+            "pinvi_web": (
+                "pinvi_web_container_id",
+                "pinvi_web_image_digest",
+                "pinvi_source_revision",
+            ),
+            "pinvi_dagster": (
+                "pinvi_dagster_container_id",
+                "pinvi_dagster_image_digest",
+                "pinvi_source_revision",
+            ),
+        }
+        for name, fields in dependency_fields.items():
+            dependency = dependencies[name]
+            if not isinstance(dependency, dict) or set(dependency) != {
+                "container_id",
+                "digest",
+                "environment",
+                "image_id",
+                "revision_label",
+                "source_revision",
+                "started_at",
+            }:
+                _raise_redacted_settings_error(
+                    f"M05 runtime attestation dependency schema is invalid: {name}"
+                )
+            expected_container, expected_digest, expected_revision = fields
+            if (
+                dependency["container_id"] != receipt_payload[expected_container]
+                or dependency["digest"] != receipt_payload[expected_digest]
+                or dependency["image_id"] != dependency["digest"]
+                or dependency["environment"] != self.pinvi_environment
+                or dependency["source_revision"] != receipt_payload[expected_revision]
+                or dependency["revision_label"] != dependency["source_revision"]
+                or not isinstance(dependency["started_at"], str)
+                or not dependency["started_at"]
+                or not isinstance(dependency["container_id"], str)
+                or re.fullmatch(r"[0-9a-f]{64}", dependency["container_id"]) is None
+                or not isinstance(dependency["digest"], str)
+                or re.fullmatch(r"sha256:[0-9a-f]{64}", dependency["digest"]) is None
+            ):
+                _raise_redacted_settings_error(
+                    f"M05 runtime attestation dependency is not bound: {name}"
+                )
+        runtime_container_id = _runtime_container_id()
+        if runtime_container_id != dependencies["pinvi_api"]["container_id"]:
+            _raise_redacted_settings_error(
+                "M05 runtime attestation API container ID does not match the running container"
+            )
 
     def _validate_m05_activation_ledger(
         self, payload: dict[str, object], receipt_secret: SecretStr

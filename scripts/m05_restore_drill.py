@@ -52,10 +52,34 @@ class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def _canonical_github_opener() -> urllib.request.OpenerDirector:
+    # GitHub PR provenance must not be supplied by ambient HTTP(S) proxy variables.
+    return urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        _NoRedirectHandler(),
+    )
+
+
 def _command_env() -> dict[str, str]:
     environment = os.environ.copy()
+    for name in tuple(environment):
+        if name.startswith("GIT_"):
+            environment.pop(name, None)
+    environment.update(
+        {
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "GIT_CONFIG_SYSTEM": "/dev/null",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_TERMINAL_PROMPT": "0",
+        }
+    )
     if environment.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
         environment["PATH"] = _SAFE_PATH
+        for name in tuple(environment):
+            if name.startswith("GIT_"):
+                environment.pop(name, None)
+        environment["GIT_CONFIG_GLOBAL"] = "/dev/null"
+        environment["GIT_CONFIG_SYSTEM"] = "/dev/null"
         environment["GIT_CONFIG_NOSYSTEM"] = "1"
         environment["GIT_TERMINAL_PROMPT"] = "0"
         for name in (
@@ -71,10 +95,6 @@ def _command_env() -> dict[str, str]:
             "BASH_ENV",
             "CDPATH",
             "ENV",
-            "GIT_CONFIG_GLOBAL",
-            "GIT_CONFIG_SYSTEM",
-            "GIT_SSH",
-            "GIT_SSH_COMMAND",
             "LD_AUDIT",
             "LD_LIBRARY_PATH",
             "LD_PRELOAD",
@@ -100,9 +120,6 @@ def _command_env() -> dict[str, str]:
             "PSQLRC",
         ):
             environment.pop(name, None)
-        for name in tuple(environment):
-            if name.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")):
-                environment.pop(name, None)
     return environment
 
 
@@ -622,6 +639,15 @@ def _source_revision(root: Path) -> str:
     if not _COMMIT_RE.fullmatch(expected):
         raise RestoreDrillError("restore producer requires a full PINVI_SOURCE_REVISION")
     try:
+        top_level = subprocess.run(
+            [_tool_path("git"), "-C", str(root), "rev-parse", "--show-toplevel"],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=_command_env(),
+        ).stdout.strip()
+        if Path(top_level).resolve() != root.resolve():
+            raise RestoreDrillError("restore producer checkout root is not canonical")
         revision = subprocess.run(
             [_tool_path("git"), "-C", str(root), "rev-parse", "HEAD"],
             check=True,
@@ -663,7 +689,7 @@ def _source_revision(root: Path) -> str:
             token = os.environ.get("PINVI_GITHUB_TOKEN", "")
             if token:
                 request.add_header("Authorization", f"Bearer {token}")
-            with urllib.request.build_opener(_NoRedirectHandler()).open(
+            with _canonical_github_opener().open(
                 request, timeout=20
             ) as response:
                 if response.geturl() != request.full_url or response.getcode() != 200:
@@ -782,6 +808,8 @@ def _run_drill(args: argparse.Namespace) -> int:
                 "PINVI_BACKUP_DOCKER_FALLBACK": "0",
                 "PINVI_BACKUP_PG_DUMP_BIN": private_tools["pg_dump"]["path"],
                 "PINVI_BACKUP_PSQL_BIN": private_tools["psql"]["path"],
+                "PINVI_BACKUP_PG_DUMP_SHA256": private_tools["pg_dump"]["sha256"],
+                "PINVI_BACKUP_PRIVATE_TOOL_COPY": "1",
             }
         )
         backup = _run([private_tools["bash"]["path"], str(backup_script)], env=backup_env)
@@ -800,7 +828,7 @@ def _run_drill(args: argparse.Namespace) -> int:
                 "PINVI_RESTORE_DATABASE_URL": target_url,
                 "PINVI_RESTORE_SCHEMA": args.schema,
                 "PINVI_RESTORE_APP_ROLE": args.runtime_role,
-                "PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL": "precheck",
+                "PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL": "drain",
                 "PINVI_RESTORE_PG_RESTORE_BIN": private_tools["pg_restore"]["path"],
                 "PINVI_RESTORE_PSQL_BIN": private_tools["psql"]["path"],
                 "PINVI_RESTORE_PG_RESTORE_SHA256": private_tools["pg_restore"]["sha256"],
@@ -836,7 +864,7 @@ def _run_drill(args: argparse.Namespace) -> int:
             "DRILL_EVIDENCE=checksum=verified",
             "DRILL_EVIDENCE=pg_restore_list=ok",
             "DRILL_EVIDENCE=restore_tool_binding=verified",
-            "DRILL_EVIDENCE=rollback_rehearsal=precheck_guard_schema_unchanged",
+            "DRILL_EVIDENCE=rollback_rehearsal=drain_failed_schema_unchanged",
             "DRILL_PHASE=complete:success:staging restore drill completed",
             "RESTORE_COMMAND=pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges",
         ]

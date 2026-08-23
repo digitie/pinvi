@@ -199,7 +199,7 @@ secure_restore_with_identity_guard() {
     --schema="${SCHEMA}" \
     --file="${restore_sql}" \
     "${BACKUP_FILE}"
-  if grep -Eq '^[[:space:]]*\\(connect|c)[[:space:]]' "${restore_sql}"; then
+  if grep -Eiq '^[[:space:]]*(\\(connect|c)([[:space:]]|$)|c([[:space:]]|$)|begin([[:space:]]|;|$)|start[[:space:]]+transaction([[:space:]]|;|$)|commit([[:space:]]|;|$)|rollback([[:space:]]|;|$))' "${restore_sql}"; then
     echo "restore dump contains a connection switch" >&2
     exit 3
   fi
@@ -247,7 +247,8 @@ fi
 assert_expected_target
 if [[ -n "${APP_ROLE}" ]]; then
   runtime_role_safe="$("${PSQL_BIN}" --no-psqlrc --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT r.rolcanlogin AND NOT r.rolsuper AND NOT r.rolcreaterole AND NOT r.rolcreatedb AND NOT r.rolreplication AND NOT r.rolbypassrls AND NOT pg_has_role(r.oid, current_user, 'member') AND r.oid <> current_user::regrole AND NOT EXISTS (SELECT 1 FROM pg_namespace n WHERE n.nspname = '${SCHEMA}' AND (n.nspowner = r.oid OR pg_has_role(r.oid, n.nspowner, 'member'))) AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = '${SCHEMA}' AND (c.relowner = r.oid OR pg_has_role(r.oid, c.relowner, 'member'))) FROM pg_roles r WHERE r.rolname = '${APP_ROLE}'")"
-  if [[ "${runtime_role_safe}" != "t" ]]; then
+  runtime_role_membership_safe="$("${PSQL_BIN}" --no-psqlrc --tuples-only --no-align --dbname="${DATABASE_URL}" --command="WITH RECURSIVE role_closure(role_oid) AS ( SELECT oid FROM pg_roles WHERE rolname = '${APP_ROLE}' UNION SELECT membership.roleid FROM role_closure closure JOIN pg_auth_members membership ON membership.member = closure.role_oid ) SELECT COALESCE((SELECT bool_and( NOT effective.rolsuper AND NOT effective.rolcreaterole AND NOT effective.rolcreatedb AND NOT effective.rolreplication AND NOT effective.rolbypassrls AND NOT EXISTS (SELECT 1 FROM pg_namespace n WHERE n.nspname = '${SCHEMA}' AND (n.nspowner = effective.oid OR pg_has_role(effective.oid, n.nspowner, 'member'))) AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = '${SCHEMA}' AND (c.relowner = effective.oid OR pg_has_role(effective.oid, c.relowner, 'member') OR pg_has_role(r.oid, c.relowner, 'member'))) ) FROM role_closure closure JOIN pg_roles effective ON effective.oid = closure.role_oid JOIN pg_roles r ON r.rolname = '${APP_ROLE}'), false)")"
+  if [[ "${runtime_role_safe}" != "t" || "${runtime_role_membership_safe}" != "t" ]]; then
     echo "PINVI_RESTORE_APP_ROLE must name an existing non-superuser non-owner runtime login" >&2
     exit 3
   fi

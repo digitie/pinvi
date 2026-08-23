@@ -611,7 +611,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     anchor_dir = tmp_path / "anchor"
     anchor_dir.mkdir(mode=0o700)
     durable_anchor_path = anchor_dir / "activation-durable-anchor.jsonl"
-    subprocess.run(  # noqa: S603 - invokes the repository-pinned Python test helper
+    ledger_completed = subprocess.run(  # noqa: S603 - invokes the repository-pinned Python test helper
         [
             sys.executable,
             str(script),
@@ -628,11 +628,25 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             str(durable_history_path),
             "--durable-anchor",
             str(durable_anchor_path),
+            "--public-key",
+            public_key,
+            "--evidence-dir",
+            str(evidence_dir),
+            "--review-allowlist",
+            str(review_allowlist_path),
+            "--review-challenge",
+            str(review_challenge_path),
+            "--review-response-nonce",
+            review_response_nonce,
+            "--reviewer-roster",
+            str(reviewer_roster_path),
         ],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
+        env={**os.environ, "PINVI_M05_RECEIPT_TEST_MODE": "1"},
     )
+    assert ledger_completed.returncode == 0, ledger_completed.stderr
     monkeypatch.setenv("PINVI_SOURCE_REVISION", PINVI_REVISION)
     high_watermark = json.loads(high_watermark_path.read_text(encoding="utf-8"))
     assert high_watermark == {
@@ -661,6 +675,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         ),
         pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt=receipt,
         pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt_public_key=public_key,
+        pinvi_m05_runtime_attestation_path=str(evidence_dir / "runtime-attestation.json"),
         pinvi_m05_activation_ledger_path=str(ledger_path),
         pinvi_m05_activation_high_watermark_path=str(high_watermark_path),
         pinvi_m05_activation_durable_floor_path=str(durable_floor_path),

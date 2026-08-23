@@ -87,6 +87,9 @@ def _production_settings(**overrides: object) -> Settings:
         if isinstance(payload, dict):
             ledger_dir = tempfile.TemporaryDirectory(prefix="pinvi-m05-ledger-", dir="/tmp")
             ledger_path = Path(ledger_dir.name) / "activation-ledger.jsonl"
+            overrides["pinvi_m05_runtime_attestation_path"] = str(
+                _write_runtime_attestation(Path(ledger_dir.name), receipt, payload)
+            )
             record = {
                 "activation_expires_at": payload["activation_expires_at"],
                 "activation_generation": payload["activation_generation"],
@@ -263,6 +266,76 @@ def _signed_receipt(payload: dict[str, object]) -> str:
         {"payload": payload, "signature": signature.decode("ascii").rstrip("=")},
         separators=(",", ":"),
     )
+
+
+def _write_runtime_attestation(directory: Path, receipt: str, payload: dict[str, object]) -> Path:
+    def dependency(
+        container_field: str, digest_field: str, revision_field: str
+    ) -> dict[str, object]:
+        return {
+            "container_id": payload[container_field],
+            "digest": payload[digest_field],
+            "environment": payload["scope"],
+            "image_id": payload[digest_field],
+            "revision_label": payload[revision_field],
+            "source_revision": payload[revision_field],
+            "started_at": "2026-08-24T00:00:00.000000000Z",
+        }
+
+    runtime_payload = {
+        "activation_generation": payload["activation_generation"],
+        "activation_nonce": payload["activation_nonce"],
+        "created_at": int(time.time()),
+        "dependencies": {
+            "map_admin": dependency(
+                "map_admin_container_id", "map_admin_image_digest", "map_admin_source_revision"
+            ),
+            "map_api": dependency(
+                "map_api_container_id", "map_api_image_digest", "map_admin_source_revision"
+            ),
+            "map_frontend": dependency(
+                "map_frontend_container_id",
+                "map_frontend_image_digest",
+                "map_admin_source_revision",
+            ),
+            "pinvi_api": dependency(
+                "pinvi_api_container_id", "pinvi_api_image_digest", "pinvi_source_revision"
+            ),
+            "pinvi_web": dependency(
+                "pinvi_web_container_id", "pinvi_web_image_digest", "pinvi_source_revision"
+            ),
+            "pinvi_dagster": dependency(
+                "pinvi_dagster_container_id", "pinvi_dagster_image_digest", "pinvi_source_revision"
+            ),
+        },
+        "endpoints": {
+            "map_admin": payload["live_ui_map_admin_endpoint"],
+            "pinvi_api": payload["live_ui_pinvi_api_endpoint"],
+            "pinvi_web": payload["live_ui_pinvi_web_endpoint"],
+        },
+        "pinvi_source_revision": payload["pinvi_source_revision"],
+        "receipt_sha256": hashlib.sha256(receipt.encode("utf-8")).hexdigest(),
+        "scope": payload["scope"],
+        "version": 1,
+    }
+    canonical = json.dumps(
+        runtime_payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+    path = directory / "runtime-attestation.json"
+    path.write_text(
+        json.dumps(
+            {
+                "payload": runtime_payload,
+                "signature": base64.urlsafe_b64encode(PUBLIC_KEY_PRIVATE.sign(canonical))
+                .decode("ascii")
+                .rstrip("="),
+            },
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+    path.chmod(0o600)
+    return path
 
 
 def _production_activation_values(receipt: str) -> dict[str, object]:

@@ -32,6 +32,9 @@ LOCK_HOLDER_PID=""
 LOCK_HOLDER_BACKEND_PID=""
 LOCK_HOLDER_ACTIVE=0
 WRITE_FENCE_ACTIVE=0
+PUBLIC_CONNECT_REVOKED=0
+FENCED_CONNECT_ROLES=""
+CONNECT_RESTORE_GRANTS=""
 TEST_MODE="${PINVI_M05_RESTORE_TEST_MODE:-0}"
 APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}"
 declare -a WRITE_ROLES=()
@@ -350,13 +353,36 @@ END
 SQL
 }
 
+advisory_lock_sql_guard() {
+  cat <<SQL
+DO \$m05\$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_locks
+    WHERE pid = ${LOCK_HOLDER_BACKEND_PID}
+      AND locktype = 'advisory'
+      AND classid = 1414679892
+      AND objid = 1213421392
+      AND granted
+  ) THEN
+    RAISE EXCEPTION 'schema-swap database advisory lock was lost before mutation';
+  END IF;
+END
+\$m05\$;
+SQL
+}
+
 run_guarded_command() {
   local command="$1"
   local wrapper="${TMP_DIR}/guarded-command.sql"
   assert_advisory_lock_alive
   {
+    printf 'BEGIN;\n'
+    advisory_lock_sql_guard
     write_identity_guard
     printf '%s;\n' "${command}"
+    printf 'COMMIT;\n'
   } >"${wrapper}"
   "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${wrapper}" >/dev/null
 }
@@ -365,13 +391,16 @@ run_guarded_file() {
   local sql_file="$1"
   local wrapper="${TMP_DIR}/guarded-$(basename "${sql_file}")"
   assert_advisory_lock_alive
-  if grep -Eq '^[[:space:]]*\\(connect|c)[[:space:]]' "${sql_file}"; then
+  if grep -Eiq '^[[:space:]]*(\\(connect|c)([[:space:]]|$)|c([[:space:]]|$)|begin([[:space:]]|;|$)|start[[:space:]]+transaction([[:space:]]|;|$)|commit([[:space:]]|;|$)|rollback([[:space:]]|;|$))' "${sql_file}"; then
     phase restoring failed "restore SQL contains a connection switch"
     exit 3
   fi
   {
+    printf 'BEGIN;\n'
+    advisory_lock_sql_guard
     write_identity_guard
     cat "${sql_file}"
+    printf '\nCOMMIT;\n'
   } >"${wrapper}"
   "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${wrapper}" >/dev/null
 }
@@ -452,73 +481,39 @@ if [[ -n "${PINVI_RESTORE_WRITE_ROLES:-}" ]]; then
   done
 fi
 
-enter_write_fence() {
-  local roles_sql
-  roles_sql="$(write_roles_sql)"
-  WRITE_FENCE_ACTIVE=1
-  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f - >/dev/null <<SQL
-$(write_identity_guard)
-DO \$m05\$
-DECLARE
-  role_name text;
+public_connect_sql() {
+  if [[ "${PUBLIC_CONNECT_REVOKED}" == "1" ]]; then
+    cat <<'SQL'
+DO $m05$
 BEGIN
-  FOREACH role_name IN ARRAY string_to_array('${roles_sql}', ',') LOOP
-    IF to_regrole(role_name) IS NULL THEN
-      RAISE EXCEPTION 'restore write role does not exist: %', role_name;
-    END IF;
-    IF role_name = current_user THEN
-      RAISE EXCEPTION 'restore write role must not be the restore executor: %', role_name;
-    END IF;
-    IF to_regnamespace('${SOURCE_SCHEMA}') IS NOT NULL THEN
-      EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM PUBLIC, %I', '${SOURCE_SCHEMA}', role_name);
-      EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA %I FROM PUBLIC, %I', '${SOURCE_SCHEMA}', role_name);
-      EXECUTE format('REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I FROM PUBLIC, %I', '${SOURCE_SCHEMA}', role_name);
-    END IF;
-    IF to_regnamespace('${RESTORE_SCHEMA}') IS NOT NULL THEN
-      EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM PUBLIC, %I', '${RESTORE_SCHEMA}', role_name);
-      EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA %I FROM PUBLIC, %I', '${RESTORE_SCHEMA}', role_name);
-      EXECUTE format('REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I FROM PUBLIC, %I', '${RESTORE_SCHEMA}', role_name);
-    END IF;
-  END LOOP;
-  IF to_regnamespace('${SOURCE_SCHEMA}') IS NOT NULL THEN
-    EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM PUBLIC', '${SOURCE_SCHEMA}');
-    EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA %I FROM PUBLIC', '${SOURCE_SCHEMA}');
-    EXECUTE format('REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I FROM PUBLIC', '${SOURCE_SCHEMA}');
-  END IF;
-  IF to_regnamespace('${RESTORE_SCHEMA}') IS NOT NULL THEN
-    EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM PUBLIC', '${RESTORE_SCHEMA}');
-    EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA %I FROM PUBLIC', '${RESTORE_SCHEMA}');
-    EXECUTE format('REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I FROM PUBLIC', '${RESTORE_SCHEMA}');
-  END IF;
+  EXECUTE format('REVOKE CONNECT ON DATABASE %I FROM PUBLIC', current_database());
 END
-\$m05\$;
-SELECT pg_terminate_backend(pid)
-FROM pg_stat_activity
-WHERE datname = current_database()
-  AND pid <> pg_backend_pid()
-  AND pid <> ${LOCK_HOLDER_BACKEND_PID};
+$m05$;
 SQL
-  local writer_roles
-  assert_advisory_lock_alive
-  writer_roles="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
+  fi
+}
+
+writer_login_roles() {
+  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
 WITH RECURSIVE role_closure(login_oid, role_oid) AS (
-  SELECT r.oid, r.oid
-  FROM pg_roles r
-  WHERE r.rolcanlogin
+  SELECT r.oid, r.oid FROM pg_roles r WHERE r.rolcanlogin
   UNION
   SELECT rc.login_oid, membership.roleid
   FROM role_closure rc
   JOIN pg_auth_members membership ON membership.member = rc.role_oid
 )
-SELECT COALESCE(string_agg(login.rolname, ',' ORDER BY login.rolname), '')
+SELECT COALESCE(string_agg(DISTINCT login.rolname, ',' ORDER BY login.rolname), '')
 FROM pg_roles login
 JOIN role_closure closure ON closure.login_oid = login.oid
 JOIN pg_roles effective ON effective.oid = closure.role_oid
 WHERE login.rolcanlogin
   AND login.rolname <> current_user
-  AND login.rolname <> ALL(string_to_array('${roles_sql}', ','))
   AND (
     effective.rolsuper
+    OR effective.rolbypassrls
+    OR effective.rolcreaterole
+    OR effective.rolcreatedb
+    OR effective.rolreplication
     OR (to_regnamespace('${SOURCE_SCHEMA}') IS NOT NULL AND has_schema_privilege(effective.rolname, '${SOURCE_SCHEMA}', 'CREATE'))
     OR (to_regnamespace('${RESTORE_SCHEMA}') IS NOT NULL AND has_schema_privilege(effective.rolname, '${RESTORE_SCHEMA}', 'CREATE'))
     OR EXISTS (
@@ -528,6 +523,7 @@ WHERE login.rolcanlogin
         AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
         AND (
           c.relowner = effective.oid
+          OR pg_has_role(effective.oid, c.relowner, 'member')
           OR has_table_privilege(effective.rolname, c.oid, 'INSERT')
           OR has_table_privilege(effective.rolname, c.oid, 'UPDATE')
           OR has_table_privilege(effective.rolname, c.oid, 'DELETE')
@@ -543,15 +539,277 @@ WHERE login.rolcanlogin
         AND c.relkind = 'S'
         AND (
           c.relowner = effective.oid
+          OR pg_has_role(effective.oid, c.relowner, 'member')
           OR has_sequence_privilege(effective.rolname, c.oid, 'USAGE')
           OR has_sequence_privilege(effective.rolname, c.oid, 'SELECT')
           OR has_sequence_privilege(effective.rolname, c.oid, 'UPDATE')
         )
     )
   )
+" | tr -d '[:space:]'
+}
+
+assert_role_list_safe() {
+  local role_list="$1"
+  local context="$2"
+  local role
+  if [[ -z "${role_list}" ]]; then
+    return 0
+  fi
+  IFS=',' read -r -a role_names <<<"${role_list}"
+  for role in "${role_names[@]}"; do
+    if [[ ! "${role}" =~ ^[a-z_][a-z0-9_]*$ ]]; then
+      phase draining failed "${context} contains an unsafe role name"
+      exit 3
+    fi
+  done
+}
+
+writer_connect_roles() {
+  local writer_logins="$1"
+  if [[ -z "${writer_logins}" ]]; then
+    printf '%s\n' ""
+    return 0
+  fi
+  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
+WITH RECURSIVE role_closure(role_oid) AS (
+  SELECT oid FROM pg_roles WHERE rolname = ANY(string_to_array('${writer_logins}', ','))
+  UNION
+  SELECT membership.roleid
+  FROM role_closure closure
+  JOIN pg_auth_members membership ON membership.member = closure.role_oid
+)
+SELECT COALESCE(string_agg(DISTINCT roles.rolname, ',' ORDER BY roles.rolname), '')
+FROM pg_roles roles
+JOIN role_closure closure ON closure.role_oid = roles.oid
+" | tr -d '[:space:]'
+}
+
+assert_writer_fence_capable() {
+  local writer_logins="$1"
+  if [[ -z "${writer_logins}" ]]; then
+    return 0
+  fi
+  local unsafe_roles
+  unsafe_roles="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
+WITH RECURSIVE role_closure(role_oid) AS (
+  SELECT oid FROM pg_roles WHERE rolname = ANY(string_to_array('${writer_logins}', ','))
+  UNION
+  SELECT membership.roleid
+  FROM role_closure closure
+  JOIN pg_auth_members membership ON membership.member = closure.role_oid
+)
+SELECT COALESCE(string_agg(DISTINCT roles.rolname, ',' ORDER BY roles.rolname), '')
+FROM pg_roles roles
+JOIN role_closure closure ON closure.role_oid = roles.oid
+JOIN pg_database db ON db.datname = current_database()
+WHERE roles.rolsuper
+   OR roles.rolcreaterole
+   OR roles.rolcreatedb
+   OR roles.rolreplication
+   OR roles.rolbypassrls
+   OR db.datdba = roles.oid
 " | tr -d '[:space:]')"
-  if [[ -n "${writer_roles}" ]]; then
-    phase draining failed "database write fence found unfenced login writers: ${writer_roles}"
+  if [[ -n "${unsafe_roles}" ]]; then
+    phase draining failed "database write fence cannot contain privileged writer roles: ${unsafe_roles}"
+    exit 3
+  fi
+}
+
+connect_restore_grants() {
+  local roles_sql="$1"
+  if [[ -z "${roles_sql}" ]]; then
+    printf '%s\n' ""
+    return 0
+  fi
+  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
+WITH grants AS (
+  SELECT roles.rolname, bool_or(aclexplode.is_grantable) AS grantable
+  FROM pg_database db
+  CROSS JOIN LATERAL aclexplode(COALESCE(db.datacl, acldefault('d', db.datdba))) acl
+  JOIN pg_roles roles ON roles.oid = acl.grantee
+  WHERE db.datname = current_database()
+    AND roles.rolname = ANY(string_to_array('${roles_sql}', ','))
+    AND acl.privilege_type = 'CONNECT'
+  GROUP BY roles.rolname
+)
+SELECT COALESCE(string_agg(rolname || ':' || CASE WHEN grantable THEN '1' ELSE '0' END, ',' ORDER BY rolname), '')
+FROM grants
+" | tr -d '[:space:]'
+}
+
+public_connect_granted() {
+  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
+SELECT EXISTS (
+  SELECT 1
+  FROM pg_database db
+  CROSS JOIN LATERAL aclexplode(COALESCE(db.datacl, acldefault('d', db.datdba))) acl
+  WHERE db.datname = current_database()
+    AND acl.grantee = 0
+    AND acl.privilege_type = 'CONNECT'
+)
+" | tr -d '[:space:]'
+}
+
+wait_for_database_quiescence() {
+  local attempts=0 active
+  while (( attempts < 50 )); do
+    assert_advisory_lock_alive
+    "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE datname = current_database()
+  AND pid <> pg_backend_pid()
+  AND pid <> ${LOCK_HOLDER_BACKEND_PID}
+" >/dev/null
+    active="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
+SELECT count(*)::text
+FROM pg_stat_activity
+WHERE datname = current_database()
+  AND pid <> pg_backend_pid()
+  AND pid <> ${LOCK_HOLDER_BACKEND_PID}
+  AND (xact_start IS NOT NULL OR state <> 'idle')
+" | tr -d '[:space:]')"
+    if [[ "${active}" == "0" ]]; then
+      return 0
+    fi
+    attempts=$((attempts + 1))
+    sleep 0.1
+  done
+  phase draining failed "database write fence could not drain active transactions"
+  exit 3
+}
+
+assert_configured_roles_safe() {
+  local roles_sql unsafe_roles
+  roles_sql="$(write_roles_sql)"
+  unsafe_roles="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
+WITH RECURSIVE role_closure(role_oid) AS (
+  SELECT oid FROM pg_roles WHERE rolname = ANY(string_to_array('${roles_sql}', ','))
+  UNION
+  SELECT membership.roleid
+  FROM role_closure closure
+  JOIN pg_auth_members membership ON membership.member = closure.role_oid
+)
+SELECT COALESCE(string_agg(DISTINCT effective.rolname, ',' ORDER BY effective.rolname), '')
+FROM pg_roles effective
+JOIN role_closure closure ON closure.role_oid = effective.oid
+WHERE effective.rolsuper
+   OR effective.rolbypassrls
+   OR effective.rolcreaterole
+   OR effective.rolcreatedb
+   OR effective.rolreplication
+   OR (to_regnamespace('${SOURCE_SCHEMA}') IS NOT NULL AND has_schema_privilege(effective.rolname, '${SOURCE_SCHEMA}', 'CREATE'))
+   OR (to_regnamespace('${RESTORE_SCHEMA}') IS NOT NULL AND has_schema_privilege(effective.rolname, '${RESTORE_SCHEMA}', 'CREATE'))
+   OR EXISTS (
+     SELECT 1
+     FROM pg_namespace n
+     WHERE n.nspname IN ('${SOURCE_SCHEMA}', '${RESTORE_SCHEMA}')
+       AND (n.nspowner = effective.oid OR pg_has_role(effective.oid, n.nspowner, 'member'))
+   )
+   OR EXISTS (
+     SELECT 1
+     FROM pg_class c
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname IN ('${SOURCE_SCHEMA}', '${RESTORE_SCHEMA}')
+       AND (c.relowner = effective.oid OR pg_has_role(effective.oid, c.relowner, 'member'))
+   )
+" | tr -d '[:space:]')"
+  if [[ -n "${unsafe_roles}" ]]; then
+    phase draining failed "configured restore role has privileged or owner membership: ${unsafe_roles}"
+    exit 3
+  fi
+}
+
+enter_write_fence() {
+  local roles_sql
+  roles_sql="$(write_roles_sql)"
+  assert_advisory_lock_alive
+  assert_configured_roles_safe
+  local writer_logins
+  writer_logins="$(writer_login_roles)"
+  assert_role_list_safe "${writer_logins}" "database writer inventory"
+  assert_writer_fence_capable "${writer_logins}"
+  FENCED_CONNECT_ROLES="$(writer_connect_roles "${writer_logins}")"
+  assert_role_list_safe "${FENCED_CONNECT_ROLES}" "database connection fence inventory"
+  CONNECT_RESTORE_GRANTS="$(connect_restore_grants "${FENCED_CONNECT_ROLES}")"
+  if [[ -n "${writer_logins}" && -z "${FENCED_CONNECT_ROLES}" ]]; then
+    phase draining failed "database write fence could not identify writer roles"
+    exit 3
+  fi
+  PUBLIC_CONNECT_WAS_GRANTED="$(public_connect_granted)"
+  if [[ "${PUBLIC_CONNECT_WAS_GRANTED}" == "t" ]]; then
+    PUBLIC_CONNECT_REVOKED=1
+  fi
+  WRITE_FENCE_ACTIVE=1
+  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f - >/dev/null <<SQL
+BEGIN;
+$(advisory_lock_sql_guard)
+$(write_identity_guard)
+DO \$m05\$
+DECLARE
+  role_name text;
+BEGIN
+  FOREACH role_name IN ARRAY string_to_array('${roles_sql}', ',') LOOP
+    IF to_regrole(role_name) IS NULL THEN
+      RAISE EXCEPTION 'restore write role does not exist: %', role_name;
+    END IF;
+    IF role_name = current_user THEN
+      RAISE EXCEPTION 'restore write role must not be the restore executor: %', role_name;
+    END IF;
+  END LOOP;
+  FOR role_name IN
+    WITH RECURSIVE role_closure(role_oid) AS (
+      SELECT oid FROM pg_roles WHERE rolname = ANY(string_to_array('${roles_sql}', ','))
+      UNION
+      SELECT membership.roleid
+      FROM role_closure closure
+      JOIN pg_auth_members membership ON membership.member = closure.role_oid
+    )
+    SELECT rolname FROM pg_roles JOIN role_closure ON role_closure.role_oid = pg_roles.oid
+  LOOP
+    IF to_regnamespace('${SOURCE_SCHEMA}') IS NOT NULL THEN
+      EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM %I', '${SOURCE_SCHEMA}', role_name);
+      EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA %I FROM %I', '${SOURCE_SCHEMA}', role_name);
+      EXECUTE format('REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I FROM %I', '${SOURCE_SCHEMA}', role_name);
+    END IF;
+    IF to_regnamespace('${RESTORE_SCHEMA}') IS NOT NULL THEN
+      EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM %I', '${RESTORE_SCHEMA}', role_name);
+      EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA %I FROM %I', '${RESTORE_SCHEMA}', role_name);
+      EXECUTE format('REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I FROM %I', '${RESTORE_SCHEMA}', role_name);
+    END IF;
+  END LOOP;
+  IF to_regnamespace('${SOURCE_SCHEMA}') IS NOT NULL THEN
+    EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM PUBLIC', '${SOURCE_SCHEMA}');
+    EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA %I FROM PUBLIC', '${SOURCE_SCHEMA}');
+    EXECUTE format('REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I FROM PUBLIC', '${SOURCE_SCHEMA}');
+  END IF;
+  IF to_regnamespace('${RESTORE_SCHEMA}') IS NOT NULL THEN
+    EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM PUBLIC', '${RESTORE_SCHEMA}');
+    EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA %I FROM PUBLIC', '${RESTORE_SCHEMA}');
+    EXECUTE format('REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I FROM PUBLIC', '${RESTORE_SCHEMA}');
+  END IF;
+END
+\$m05\$;
+DO \$m05\$
+DECLARE
+  role_name text;
+BEGIN
+  FOREACH role_name IN ARRAY string_to_array('${FENCED_CONNECT_ROLES}', ',') LOOP
+    IF role_name <> '' THEN
+      EXECUTE format('REVOKE CONNECT ON DATABASE %I FROM %I', current_database(), role_name);
+    END IF;
+  END LOOP;
+END
+\$m05\$;
+$(public_connect_sql)
+COMMIT;
+SQL
+  assert_advisory_lock_alive
+  wait_for_database_quiescence
+  writer_logins="$(writer_login_roles)"
+  if [[ -n "${writer_logins}" ]]; then
+    phase draining failed "database write fence found unfenced login writers: ${writer_logins}"
     exit 3
   fi
   phase draining success "database write fence revoked all non-owner runtime writes"
@@ -561,6 +819,8 @@ release_write_fence() {
   local roles_sql
   roles_sql="$(write_roles_sql)"
   "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f - >/dev/null <<SQL
+BEGIN;
+$(advisory_lock_sql_guard)
 $(write_identity_guard)
 DO \$m05\$
 DECLARE
@@ -581,6 +841,28 @@ BEGIN
   END LOOP;
 END
 \$m05\$;
+$(public_connect_sql | sed 's/REVOKE CONNECT/GRANT CONNECT/; s/FROM PUBLIC/TO PUBLIC/')
+DO \$m05\$
+DECLARE
+  grant_spec text;
+  role_name text;
+  grantable text;
+BEGIN
+  FOREACH grant_spec IN ARRAY string_to_array('${CONNECT_RESTORE_GRANTS}', ',') LOOP
+    IF grant_spec <> '' THEN
+      role_name := split_part(grant_spec, ':', 1);
+      grantable := split_part(grant_spec, ':', 2);
+      EXECUTE format(
+        'GRANT CONNECT ON DATABASE %I TO %I%s',
+        current_database(),
+        role_name,
+        CASE WHEN grantable = '1' THEN ' WITH GRANT OPTION' ELSE '' END
+      );
+    END IF;
+  END LOOP;
+END
+\$m05\$;
+COMMIT;
 SQL
   WRITE_FENCE_ACTIVE=0
 }
@@ -644,10 +926,8 @@ fi
 
 phase switching running "renaming schemas"
 cat >"${TMP_DIR}/switch.sql" <<SQL
-BEGIN;
 ALTER SCHEMA ${SOURCE_SCHEMA} RENAME TO ${PREVIOUS_SCHEMA};
 ALTER SCHEMA ${RESTORE_SCHEMA} RENAME TO ${SOURCE_SCHEMA};
-COMMIT;
 SQL
 run_guarded_file "${TMP_DIR}/switch.sql"
 release_write_fence
