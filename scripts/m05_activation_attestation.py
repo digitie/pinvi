@@ -948,6 +948,7 @@ def _runtime_snapshot(
             require_environment_label=False,
             expected_image_digest=pair["runtime_image_digests"]["admin"],
             endpoint_url=args.map_admin_url,
+            endpoint_container_port=13701,
         ),
         "map_api": _docker_inspect(
             args.map_api_container,
