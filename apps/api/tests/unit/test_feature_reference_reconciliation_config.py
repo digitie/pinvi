@@ -258,10 +258,18 @@ def test_reconciliation_network_is_default_off_and_empty_tokens_are_unset() -> N
 def test_empty_cache_target_contract_generation_env_is_unset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_COMMAND_TOKEN", "")
+    monkeypatch.setenv("PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_CONSUMER_TOKEN", "")
+    monkeypatch.setenv("PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_RESTORE_FENCE_TOKEN", "")
+    monkeypatch.setenv("PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_RECOVERY_TOKEN", "")
     monkeypatch.setenv("PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_CONTRACT_GENERATION", "")
 
     loaded = _settings()
 
+    assert loaded.pinvi_kor_travel_map_cache_target_command_token is None
+    assert loaded.pinvi_kor_travel_map_cache_target_consumer_token is None
+    assert loaded.pinvi_kor_travel_map_cache_target_restore_fence_token is None
+    assert loaded.pinvi_kor_travel_map_cache_target_recovery_token is None
     assert loaded.pinvi_kor_travel_map_cache_target_expected_contract_generation is None
 
 

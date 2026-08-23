@@ -930,17 +930,21 @@ class Settings(BaseSettings):
         "pinvi_kor_travel_map_curation_snapshot_token",
         "pinvi_kor_travel_map_curation_cutover_mapping_token",
         "kor_travel_map_feature_request_token",
+        "pinvi_kor_travel_map_cache_target_command_token",
+        "pinvi_kor_travel_map_cache_target_consumer_token",
+        "pinvi_kor_travel_map_cache_target_restore_fence_token",
+        "pinvi_kor_travel_map_cache_target_recovery_token",
         "pinvi_kor_travel_map_feature_reference_reconciliation_read_token",
         "pinvi_kor_travel_map_feature_reference_reconciliation_ack_token",
         mode="before",
     )
     @classmethod
-    def _empty_scoped_service_token_is_unset(cls, value: object) -> object:
+    def _empty_optional_secret_is_unset(cls, value: object) -> object:
         """빈 문자열은 미설정으로 본다.
 
         docker-manager/`infra/docker-compose.app.yml`은 미설정 토큰을 `${VAR:-}`(빈 문자열)로 주입한다.
-        빈 값을 '설정된 토큰'으로 다루면 분리된 scope token이 모두 비어 있을 때 `must differ`로 production API가
-        부팅하지 못한다(2026-08-18 리뷰 P0). 공백 포함 값은 그대로 두어 아래 검증이 명시적으로 거부한다.
+        빈 값을 '설정된 토큰'으로 다루면 default-off worker의 선택적 credential도 길이 검증에서
+        부팅하지 못한다. 공백 포함 값은 그대로 두어 아래 검증이 명시적으로 거부한다.
         """
 
         if value is None:
