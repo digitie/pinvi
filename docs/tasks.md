@@ -53,6 +53,11 @@
   bootstrap)는 착수되지 않은 채 F1D-C one-shot·F1F-B canonical env replace로 대체됐으며, F2 cutover는 미착수다.
   문서 헤더에 역사 기록으로 표기했다. 현행 실행 정본은 위 F1J 항목이며 두 문서가 어긋나면 F1J(신규)를 따른다.
 
+## 인증 / 외부 통합
+
+- [ ] **T-324** — Google OAuth client ID/secret이 API Compose 런타임에 전달되지 않아 사라진
+  소셜 로그인 버튼과 authorize 흐름을 운영 설정에서 복원한다.
+
 ## 웹 / 테스트 인프라
 
 - [ ] **T-323** — web 워크플로의 `e2e` 잡이 aggregate required check가 아니라 Playwright 실패가 머지를
