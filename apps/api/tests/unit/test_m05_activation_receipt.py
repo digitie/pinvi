@@ -20,12 +20,24 @@ from app.core import config as config_module
 from app.core.config import (
     KOR_TRAVEL_MAP_M05_ADMIN_IMAGE_DIGEST,
     KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_M05_ADMIN_RUNTIME_OPERATION_CONTRACT_SHA256,
+    KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_CANONICAL_SHA256,
+    KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_OPERATION_CONTRACT_SHA256,
     KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
     KOR_TRAVEL_MAP_M05_API_IMAGE_DIGEST,
     KOR_TRAVEL_MAP_M05_FRONTEND_IMAGE_DIGEST,
     KOR_TRAVEL_MAP_M05_FULL_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_M05_FULL_RUNTIME_OPERATION_CONTRACT_SHA256,
+    KOR_TRAVEL_MAP_M05_FULL_SOURCE_CANONICAL_SHA256,
+    KOR_TRAVEL_MAP_M05_FULL_SOURCE_OPERATION_CONTRACT_SHA256,
     KOR_TRAVEL_MAP_M05_FULL_SOURCE_REVISION,
+    KOR_TRAVEL_MAP_M05_SERVICE_RUNTIME_OPERATION_CONTRACT_SHA256,
+    KOR_TRAVEL_MAP_M05_SERVICE_SOURCE_CANONICAL_SHA256,
+    KOR_TRAVEL_MAP_M05_SERVICE_SOURCE_OPERATION_CONTRACT_SHA256,
     KOR_TRAVEL_MAP_M05_USER_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_M05_USER_RUNTIME_OPERATION_CONTRACT_SHA256,
+    KOR_TRAVEL_MAP_M05_USER_SOURCE_CANONICAL_SHA256,
+    KOR_TRAVEL_MAP_M05_USER_SOURCE_OPERATION_CONTRACT_SHA256,
     KOR_TRAVEL_MAP_M05_USER_SOURCE_REVISION,
     KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
     KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
@@ -34,7 +46,13 @@ from app.core.config import (
 
 READ = "r" * 32
 ACK = "a" * 32
-PINVI_REVISION = "f" * 40
+REPO_ROOT = Path(__file__).resolve().parents[4]
+PINVI_REVISION = subprocess.run(
+    ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+    check=True,
+    capture_output=True,
+    text=True,
+).stdout.strip()
 PINVI_DIGESTS = {
     "api": "sha256:" + "1" * 64,
     "web": "sha256:" + "2" * 64,
@@ -49,6 +67,15 @@ def _test_trust_anchor_sha256(private_key: Ed25519PrivateKey) -> str:
 def _write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, separators=(",", ":")), encoding="utf-8")
     path.chmod(0o600)
+
+
+def _identity_sha256(identity: dict[str, object]) -> str:
+    material = json.dumps(identity, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def _script_sha256(name: str) -> str:
+    return hashlib.sha256((REPO_ROOT / "scripts" / name).read_bytes()).hexdigest()
 
 
 @pytest.fixture
@@ -68,23 +95,23 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         evidence_dir / "reviews.json",
         [
             {
-                "agent_id": "44444444-4444-4444-8444-444444444444",
+                "agent_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
                 "commit": PINVI_REVISION,
                 "p0_p1": 0,
                 "pr_url": "https://github.com/digitie/pinvi/pull/466",
-                "review_id": "review-1",
-                "reviewer_id": "darwin",
+                "review_id": "44444444-4444-4444-8444-444444444444",
+                "reviewer_id": "66666666-6666-4666-8666-666666666666",
                 "summary": "GO: no P0/P1 findings",
                 "summary_sha256": hashlib.sha256(b"GO: no P0/P1 findings").hexdigest(),
                 "verdict": "GO",
             },
             {
-                "agent_id": "55555555-5555-4555-8555-555555555555",
+                "agent_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
                 "commit": PINVI_REVISION,
                 "p0_p1": 0,
                 "pr_url": "https://github.com/digitie/pinvi/pull/466",
-                "review_id": "review-2",
-                "reviewer_id": "feynman",
+                "review_id": "55555555-5555-4555-8555-555555555555",
+                "reviewer_id": "77777777-7777-4777-8777-777777777777",
                 "summary": "GO: no P0/P1 findings",
                 "summary_sha256": hashlib.sha256(b"GO: no P0/P1 findings").hexdigest(),
                 "verdict": "GO",
@@ -116,68 +143,66 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "playwright_runner_image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:" + "8" * 64,
         },
     )
+    source_identity = {
+        "database": "source",
+        "database_oid": "100",
+        "schema_exists": True,
+        "server_version_num": "160000",
+        "system_identifier": "1",
+        "user": "pinvi_owner",
+    }
+    source_after_backup_identity = source_identity.copy()
+    target_before_restore_identity = {
+        "database": "target",
+        "database_oid": "200",
+        "schema_exists": False,
+        "server_version_num": "160000",
+        "system_identifier": "1",
+        "user": "pinvi_owner",
+    }
+    target_identity = {
+        "database": "target",
+        "database_oid": "200",
+        "schema_exists": True,
+        "server_version_num": "160000",
+        "system_identifier": "1",
+        "user": "pinvi_app",
+    }
+    runtime_identity = target_identity.copy()
     _write_json(
         evidence_dir / "restore.json",
         {
-            "backup_runner_sha256": "1" * 64,
+            "backup_runner_sha256": _script_sha256("backup-db.sh"),
             "dump_sha256": "c" * 64,
             "execution_id": "33333333-3333-4333-8333-333333333333",
             "no_owner_restore": True,
-            "restore_command": "pg_restore --no-owner --no-privileges",
+            "restore_command": (
+                "pg_restore --clean --if-exists --exit-on-error "
+                "--no-owner --no-privileges"
+            ),
             "restore_output_sha256": "2" * 64,
-            "restore_runner_sha256": "3" * 64,
-            "runtime_db_identity": {
-                "database": "target",
-                "database_oid": "200",
-                "schema_exists": True,
-                "server_version_num": "160000",
-                "system_identifier": "1",
-                "user": "pinvi_app",
-            },
+            "restore_runner_sha256": _script_sha256("restore-staging-drill.sh"),
+            "runtime_db_identity": runtime_identity,
             "runtime_role": "pinvi_app",
             "runtime_role_verified": True,
-            "source_db_identity": {
-                "database": "source",
-                "database_oid": "100",
-                "schema_exists": True,
-                "server_version_num": "160000",
-                "system_identifier": "1",
-                "user": "pinvi_owner",
-            },
-            "source_db_identity_after_backup": {
-                "database": "source",
-                "database_oid": "100",
-                "schema_exists": True,
-                "server_version_num": "160000",
-                "system_identifier": "1",
-                "user": "pinvi_owner",
-            },
-            "source_db_identity_after_backup_sha256": "a" * 64,
-            "source_db_identity_sha256": "d" * 64,
+            "source_db_identity": source_identity,
+            "source_db_identity_after_backup": source_after_backup_identity,
+            "source_db_identity_after_backup_sha256": _identity_sha256(
+                source_after_backup_identity
+            ),
+            "source_db_identity_sha256": _identity_sha256(source_identity),
             "source_revision": PINVI_REVISION,
             "staging_role": "pinvi_owner",
             "staging_role_verified": True,
             "status": "passed",
-            "target_db_identity": {
-                "database": "target",
-                "database_oid": "200",
-                "schema_exists": True,
-                "server_version_num": "160000",
-                "system_identifier": "1",
-                "user": "pinvi_owner",
-            },
-            "target_db_identity_before_restore": {
-                "database": "target",
-                "database_oid": "200",
-                "schema_exists": True,
-                "server_version_num": "160000",
-                "system_identifier": "1",
-                "user": "pinvi_owner",
-            },
-            "target_db_identity_before_restore_sha256": "b" * 64,
-            "target_db_identity_sha256": "e" * 64,
+            "target_db_identity": target_identity,
+            "target_db_identity_before_restore": target_before_restore_identity,
+            "target_db_identity_before_restore_sha256": _identity_sha256(
+                target_before_restore_identity
+            ),
+            "target_db_identity_sha256": _identity_sha256(target_identity),
             "trigger_guard_verified": True,
-            "runtime_db_identity_sha256": "f" * 64,
+            "runtime_db_identity_sha256": _identity_sha256(runtime_identity),
         },
     )
     _write_json(
@@ -188,27 +213,39 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "frontend_image_digest": KOR_TRAVEL_MAP_M05_FRONTEND_IMAGE_DIGEST,
             "admin": {
                 "openapi_sha256": KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
+                "runtime_operation_contract_sha256": KOR_TRAVEL_MAP_M05_ADMIN_RUNTIME_OPERATION_CONTRACT_SHA256,
+                "source_canonical_sha256": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_CANONICAL_SHA256,
+                "source_operation_contract_sha256": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_OPERATION_CONTRACT_SHA256,
                 "source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
             },
             "full": {
                 "openapi_sha256": KOR_TRAVEL_MAP_M05_FULL_OPENAPI_SHA256,
+                "runtime_operation_contract_sha256": KOR_TRAVEL_MAP_M05_FULL_RUNTIME_OPERATION_CONTRACT_SHA256,
+                "source_canonical_sha256": KOR_TRAVEL_MAP_M05_FULL_SOURCE_CANONICAL_SHA256,
+                "source_operation_contract_sha256": KOR_TRAVEL_MAP_M05_FULL_SOURCE_OPERATION_CONTRACT_SHA256,
                 "source_revision": KOR_TRAVEL_MAP_M05_FULL_SOURCE_REVISION,
             },
             "service": {
                 "openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+                "runtime_operation_contract_sha256": KOR_TRAVEL_MAP_M05_SERVICE_RUNTIME_OPERATION_CONTRACT_SHA256,
+                "source_canonical_sha256": KOR_TRAVEL_MAP_M05_SERVICE_SOURCE_CANONICAL_SHA256,
+                "source_operation_contract_sha256": KOR_TRAVEL_MAP_M05_SERVICE_SOURCE_OPERATION_CONTRACT_SHA256,
                 "source_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
             },
             "user": {
                 "openapi_sha256": KOR_TRAVEL_MAP_M05_USER_OPENAPI_SHA256,
+                "runtime_operation_contract_sha256": KOR_TRAVEL_MAP_M05_USER_RUNTIME_OPERATION_CONTRACT_SHA256,
+                "source_canonical_sha256": KOR_TRAVEL_MAP_M05_USER_SOURCE_CANONICAL_SHA256,
+                "source_operation_contract_sha256": KOR_TRAVEL_MAP_M05_USER_SOURCE_OPERATION_CONTRACT_SHA256,
                 "source_revision": KOR_TRAVEL_MAP_M05_USER_SOURCE_REVISION,
             },
             "runtime": {
                 "admin_openapi": {
-                    "canonical_sha256": "9" * 64,
-                    "source_canonical_sha256": "9" * 64,
+                    "canonical_sha256": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_CANONICAL_SHA256,
+                    "source_canonical_sha256": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_CANONICAL_SHA256,
                     "source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
                     "source_sha256": KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
-                    "surface_coverage_sha256": "e" * 64,
+                    "surface_coverage_sha256": KOR_TRAVEL_MAP_M05_ADMIN_RUNTIME_OPERATION_CONTRACT_SHA256,
                     "transport": "http",
                     "transport_sha256": "a" * 64,
                 },
@@ -241,29 +278,29 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
                 },
                 "full_openapi_sha256": KOR_TRAVEL_MAP_M05_FULL_OPENAPI_SHA256,
                 "full_openapi": {
-                    "canonical_sha256": "9" * 64,
-                    "source_canonical_sha256": "8" * 64,
+                    "canonical_sha256": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_CANONICAL_SHA256,
+                    "source_canonical_sha256": KOR_TRAVEL_MAP_M05_FULL_SOURCE_CANONICAL_SHA256,
                     "source_revision": KOR_TRAVEL_MAP_M05_FULL_SOURCE_REVISION,
                     "source_sha256": KOR_TRAVEL_MAP_M05_FULL_OPENAPI_SHA256,
-                    "surface_coverage_sha256": "f" * 64,
+                    "surface_coverage_sha256": KOR_TRAVEL_MAP_M05_FULL_RUNTIME_OPERATION_CONTRACT_SHA256,
                     "transport": "http",
                     "transport_sha256": "a" * 64,
                 },
                 "service_openapi": {
-                    "canonical_sha256": "a" * 64,
-                    "source_canonical_sha256": "a" * 64,
+                    "canonical_sha256": KOR_TRAVEL_MAP_M05_SERVICE_SOURCE_CANONICAL_SHA256,
+                    "source_canonical_sha256": KOR_TRAVEL_MAP_M05_SERVICE_SOURCE_CANONICAL_SHA256,
                     "source_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
                     "source_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
-                    "surface_coverage_sha256": "1" * 64,
+                    "surface_coverage_sha256": KOR_TRAVEL_MAP_M05_SERVICE_RUNTIME_OPERATION_CONTRACT_SHA256,
                     "transport": "source-artifact",
                     "transport_sha256": "b" * 64,
                 },
                 "user_openapi": {
-                    "canonical_sha256": "c" * 64,
-                    "source_canonical_sha256": "c" * 64,
+                    "canonical_sha256": KOR_TRAVEL_MAP_M05_USER_SOURCE_CANONICAL_SHA256,
+                    "source_canonical_sha256": KOR_TRAVEL_MAP_M05_USER_SOURCE_CANONICAL_SHA256,
                     "source_revision": KOR_TRAVEL_MAP_M05_USER_SOURCE_REVISION,
                     "source_sha256": KOR_TRAVEL_MAP_M05_USER_OPENAPI_SHA256,
-                    "surface_coverage_sha256": "2" * 64,
+                    "surface_coverage_sha256": KOR_TRAVEL_MAP_M05_USER_RUNTIME_OPERATION_CONTRACT_SHA256,
                     "transport": "source-artifact",
                     "transport_sha256": "d" * 64,
                 },
@@ -381,6 +418,14 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         text=True,
     )
     monkeypatch.setenv("PINVI_SOURCE_REVISION", PINVI_REVISION)
+    high_watermark_path = tmp_path / "activation-high-watermark.json"
+    _write_json(
+        high_watermark_path,
+        {
+            "generation": 2,
+            "receipt_sha256": hashlib.sha256(receipt.encode("utf-8")).hexdigest(),
+        },
+    )
     loaded = Settings(
         _env_file=None,
         pinvi_environment="production",
@@ -400,6 +445,8 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt=receipt,
         pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt_public_key=public_key,
         pinvi_m05_activation_ledger_path=str(ledger_path),
+        pinvi_m05_activation_high_watermark_path=str(high_watermark_path),
+        pinvi_m05_activation_pr_url="https://github.com/digitie/pinvi/pull/466",
         pinvi_api_image_digest=PINVI_DIGESTS["api"],
         pinvi_web_image_digest=PINVI_DIGESTS["web"],
         pinvi_dagster_image_digest=PINVI_DIGESTS["dagster"],

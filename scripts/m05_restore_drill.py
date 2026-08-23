@@ -450,7 +450,10 @@ def _run_drill(args: argparse.Namespace) -> int:
             "dump_sha256": _sha256(dump.read_bytes()),
             "execution_id": str(uuid4()),
             "no_owner_restore": True,
-            "restore_command": "pg_restore --no-owner --no-privileges",
+            "restore_command": (
+                "pg_restore --clean --if-exists --exit-on-error "
+                "--no-owner --no-privileges"
+            ),
             "restore_output_sha256": _sha256(execution_output),
             "restore_runner_sha256": _sha256(restore_script.read_bytes()),
             "runtime_role_verified": True,

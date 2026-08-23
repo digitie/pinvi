@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import HTTPCookieProcessor, Request, build_opener
+from urllib.request import HTTPCookieProcessor, HTTPRedirectHandler, Request, build_opener
 from uuid import UUID, uuid4
 
 from cryptography.hazmat.primitives import serialization
@@ -49,6 +49,13 @@ _PAIR_PATH = Path(__file__).resolve().parents[1] / (
 
 class AttestationError(ValueError):
     """원격 live evidence가 attestation 계약을 위반했다."""
+
+
+class _NoRedirectHandler(HTTPRedirectHandler):
+    """attestation HTTP probe가 다른 loopback 프로세스로 이동하지 않게 한다."""
+
+    def redirect_request(self, *_args: Any, **_kwargs: Any) -> None:
+        return None
 
 
 def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -174,13 +181,39 @@ def _load_pair() -> dict[str, dict[str, str]]:
     result: dict[str, dict[str, str]] = {}
     for name in ("admin", "full", "service", "user"):
         entry = _object(map_value[name], name=f"Map pair {name}")
-        if set(entry) != {"openapi_sha256", "source_revision"}:
+        if set(entry) != {
+            "openapi_sha256",
+            "runtime_operation_contract_sha256",
+            "source_canonical_sha256",
+            "source_operation_contract_sha256",
+            "source_revision",
+        }:
             raise AttestationError(f"Map pair {name} schema is invalid")
         digest = _string(entry["openapi_sha256"], name=f"{name}.openapi_sha256")
         if _SHA256_RE.fullmatch(digest) is None:
             raise AttestationError(f"{name}.openapi_sha256 is invalid")
+        source_canonical = _string(
+            entry["source_canonical_sha256"], name=f"{name}.source_canonical_sha256"
+        )
+        runtime_operation_contract = _string(
+            entry["runtime_operation_contract_sha256"],
+            name=f"{name}.runtime_operation_contract_sha256",
+        )
+        source_operation_contract = _string(
+            entry["source_operation_contract_sha256"],
+            name=f"{name}.source_operation_contract_sha256",
+        )
+        if (
+            _SHA256_RE.fullmatch(source_canonical) is None
+            or _SHA256_RE.fullmatch(runtime_operation_contract) is None
+            or _SHA256_RE.fullmatch(source_operation_contract) is None
+        ):
+            raise AttestationError(f"{name} OpenAPI provenance hash is invalid")
         result[name] = {
             "openapi_sha256": digest,
+            "runtime_operation_contract_sha256": runtime_operation_contract,
+            "source_canonical_sha256": source_canonical,
+            "source_operation_contract_sha256": source_operation_contract,
             "source_revision": _commit(
                 entry["source_revision"], name=f"{name}.source_revision"
             ),
@@ -293,7 +326,11 @@ def _http_json(
     if body is not None:
         request.add_header("Content-Type", "application/json")
     try:
-        with (opener or build_opener()).open(request, timeout=30) as response:
+        with (opener or build_opener(_NoRedirectHandler())).open(
+            request, timeout=30
+        ) as response:
+            if 300 <= response.status < 400:
+                raise AttestationError(f"live HTTP redirect is not allowed: {url}")
             raw = response.read()
     except (HTTPError, URLError, TimeoutError, OSError) as exc:
         raise AttestationError(f"live HTTP verification failed: {url}") from exc
@@ -385,7 +422,7 @@ def _pinvi_case_snapshot(
     if not email or not password:
         raise AttestationError("M05_PINVI_EMAIL and M05_PINVI_PASSWORD are required")
     cookie_jar = CookieJar()
-    opener = build_opener(HTTPCookieProcessor(cookie_jar))
+    opener = build_opener(HTTPCookieProcessor(cookie_jar), _NoRedirectHandler())
     login, _ = _http_json(
         _url(pinvi_api_url, "/auth/login"),
         opener=opener,
@@ -585,12 +622,30 @@ def _hash_source_openapi(source_root: Path) -> dict[str, str]:
         revision = _commit(
             expected[name]["source_revision"], name=f"{name}.source_revision"
         )
-        digest = _sha256(
-            _git_blob(source_root, revision=revision, relative_path=relative_path)
+        source_raw = _git_blob(
+            source_root, revision=revision, relative_path=relative_path
         )
+        digest = _sha256(source_raw)
         if digest != expected[name]["openapi_sha256"]:
             raise AttestationError(
                 f"Map source OpenAPI does not match the tracked pair: {name}"
+            )
+        try:
+            source_value = json.loads(
+                source_raw, object_pairs_hook=_reject_duplicate_keys
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError, AttestationError) as exc:
+            raise AttestationError(f"Map source OpenAPI is not valid JSON: {name}") from exc
+        if _sha256(_canonical_json(source_value)) != expected[name]["source_canonical_sha256"]:
+            raise AttestationError(
+                f"Map source OpenAPI canonical hash does not match the tracked pair: {name}"
+            )
+        if (
+            _openapi_operation_contract_sha256(source_value, name=f"Map source {name} OpenAPI")
+            != expected[name]["source_operation_contract_sha256"]
+        ):
+            raise AttestationError(
+                f"Map source OpenAPI operation contract does not match the tracked pair: {name}"
             )
         actual[name] = digest
     return actual
@@ -618,6 +673,40 @@ def _openapi_surface_sha256(operations: dict[str, set[str]]) -> str:
             {path: sorted(methods) for path, methods in sorted(operations.items())}
         )
     )
+
+
+_OPENAPI_OPERATION_BINDING_KEYS = (
+    "operationId",
+    "parameters",
+    "requestBody",
+    "responses",
+    "security",
+)
+
+
+def _openapi_operation_contract(value: object, *, name: str) -> dict[str, object]:
+    operation = _object(value, name=name)
+    return {
+        key: operation[key]
+        for key in _OPENAPI_OPERATION_BINDING_KEYS
+        if key in operation
+    }
+
+
+def _openapi_operation_contract_sha256(value: object, *, name: str) -> str:
+    document = _object(value, name=name)
+    paths = _object(document.get("paths"), name=f"{name}.paths")
+    operations: dict[str, dict[str, dict[str, object]]] = {}
+    for path, raw_path in paths.items():
+        path_object = _object(raw_path, name=f"{name}.paths.{path}")
+        operations[path] = {
+            method: _openapi_operation_contract(
+                raw_operation, name=f"{name}.paths.{path}.{method}"
+            )
+            for method, raw_operation in path_object.items()
+            if method in {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
+        }
+    return _sha256(_canonical_json(operations))
 
 
 def _assert_openapi_surface_covered(
@@ -651,19 +740,8 @@ def _assert_openapi_surface_covered(
                 raise AttestationError(
                     f"live Map OpenAPI operation identity differs from the pinned full surface: {path}"
                 )
-    return _sha256(
-        _canonical_json(
-            {
-                "expected": {
-                    path: sorted(methods)
-                    for path, methods in sorted(expected_operations.items())
-                },
-                "runtime": {
-                    path: sorted(methods)
-                    for path, methods in sorted(runtime_operations.items())
-                },
-            }
-        )
+    return _openapi_operation_contract_sha256(
+        runtime_value, name="runtime Map OpenAPI"
     )
 
 
@@ -695,7 +773,10 @@ def _runtime_map_openapi(
         raise AttestationError("pinned Map admin OpenAPI is not valid JSON") from exc
     runtime_canonical = _sha256(_canonical_json(runtime_value))
     source_canonical = _sha256(_canonical_json(runtime_source_value))
-    if runtime_canonical != source_canonical:
+    if (
+        runtime_canonical != source_canonical
+        or source_canonical != expected["admin"]["source_canonical_sha256"]
+    ):
         raise AttestationError(
             "live Map admin OpenAPI does not match the pinned source artifact"
         )
@@ -714,9 +795,17 @@ def _runtime_map_openapi(
         runtime_value, expected_value=full_source_value
     )
     full_source_canonical = _sha256(_canonical_json(full_source_value))
-    runtime_surface_sha256 = _openapi_surface_sha256(
-        _openapi_operations(runtime_value, name="runtime Map OpenAPI")
+    if full_source_canonical != expected["full"]["source_canonical_sha256"]:
+        raise AttestationError("pinned Map full OpenAPI canonical hash is not tracked")
+    runtime_surface_sha256 = _openapi_operation_contract_sha256(
+        runtime_value, name="runtime Map OpenAPI"
     )
+    if (
+        runtime_surface_sha256 != expected["admin"]["runtime_operation_contract_sha256"]
+        or full_surface_coverage_sha256
+        != expected["full"]["runtime_operation_contract_sha256"]
+    ):
+        raise AttestationError("live Map OpenAPI operation contract is not pinned")
 
     result: dict[str, dict[str, str]] = {}
     result["admin_openapi"] = {
@@ -750,9 +839,15 @@ def _runtime_map_openapi(
         except (UnicodeDecodeError, json.JSONDecodeError, AttestationError) as exc:
             raise AttestationError(f"pinned Map {name} OpenAPI is not valid JSON") from exc
         source_canonical = _sha256(_canonical_json(source_value))
-        source_surface_sha256 = _openapi_surface_sha256(
-            _openapi_operations(source_value, name=f"pinned Map {name} OpenAPI")
+        source_surface_sha256 = _openapi_operation_contract_sha256(
+            source_value, name=f"pinned Map {name} OpenAPI"
         )
+        if (
+            source_canonical != expected[name]["source_canonical_sha256"]
+            or source_surface_sha256
+            != expected[name]["source_operation_contract_sha256"]
+        ):
+            raise AttestationError(f"pinned Map {name} OpenAPI hashes are not tracked")
         result[f"{name}_openapi"] = {
             "canonical_sha256": source_canonical,
             "source_canonical_sha256": source_canonical,
@@ -774,6 +869,7 @@ def _validate_ui_marker(
     runner_image: dict[str, str],
     pinvi_detail: dict[str, object],
     pinvi_detail_sha256: str,
+    expected_pinvi_api_endpoint: str,
 ) -> None:
     marker = _object(value, name="UI evidence marker")
     expected = {
@@ -781,6 +877,7 @@ def _validate_ui_marker(
         "event_id",
         "impact_count",
         "old_feature_id",
+        "pinvi_api_endpoint",
         "pinvi_detail_sha256",
         "replacement_feature_id",
         "source_revision",
@@ -795,6 +892,8 @@ def _validate_ui_marker(
         raise AttestationError("UI marker event does not match the requested event")
     if _commit(marker.get("source_revision"), name="UI marker source revision") != source_revision:
         raise AttestationError("UI marker source revision does not match the runtime")
+    if marker.get("pinvi_api_endpoint") != expected_pinvi_api_endpoint:
+        raise AttestationError("UI marker does not bind the actual Pinvi API endpoint")
     if _uuid(marker.get("verification_id"), name="UI marker verification ID") != verification_id:
         raise AttestationError("UI marker verification ID does not match this run")
     if marker.get("playwright_runner_image_ref") != runner_image["image_ref"]:
@@ -1037,6 +1136,7 @@ def _live(args: argparse.Namespace) -> int:
         runner_image=runner_image,
         pinvi_detail=after_pinvi,
         pinvi_detail_sha256=after_pinvi_hash,
+        expected_pinvi_api_endpoint=args.pinvi_api_url.rstrip("/"),
     )
     runtime_after_ui = _runtime_snapshot(
         args, pair=pair, source_revision=source_revision

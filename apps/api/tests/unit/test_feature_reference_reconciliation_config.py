@@ -17,12 +17,20 @@ from app.core import config as config_module
 from app.core.config import (
     KOR_TRAVEL_MAP_M05_ADMIN_IMAGE_DIGEST,
     KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_M05_ADMIN_RUNTIME_OPERATION_CONTRACT_SHA256,
+    KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_OPERATION_CONTRACT_SHA256,
     KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
     KOR_TRAVEL_MAP_M05_API_IMAGE_DIGEST,
     KOR_TRAVEL_MAP_M05_FRONTEND_IMAGE_DIGEST,
     KOR_TRAVEL_MAP_M05_FULL_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_M05_FULL_RUNTIME_OPERATION_CONTRACT_SHA256,
+    KOR_TRAVEL_MAP_M05_FULL_SOURCE_OPERATION_CONTRACT_SHA256,
     KOR_TRAVEL_MAP_M05_FULL_SOURCE_REVISION,
+    KOR_TRAVEL_MAP_M05_SERVICE_RUNTIME_OPERATION_CONTRACT_SHA256,
+    KOR_TRAVEL_MAP_M05_SERVICE_SOURCE_OPERATION_CONTRACT_SHA256,
     KOR_TRAVEL_MAP_M05_USER_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_M05_USER_RUNTIME_OPERATION_CONTRACT_SHA256,
+    KOR_TRAVEL_MAP_M05_USER_SOURCE_OPERATION_CONTRACT_SHA256,
     KOR_TRAVEL_MAP_M05_USER_SOURCE_REVISION,
     KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
     KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
@@ -92,7 +100,22 @@ def _production_settings(**overrides: object) -> Settings:
                 json.dumps(record, separators=(",", ":")) + "\n", encoding="utf-8"
             )
             ledger_path.chmod(0o600)
+            high_watermark_path = Path(ledger_dir.name) / "activation-high-watermark.json"
+            high_watermark_path.write_text(
+                json.dumps(
+                    {
+                        "generation": payload["activation_generation"],
+                        "receipt_sha256": hashlib.sha256(receipt.encode()).hexdigest(),
+                    },
+                    separators=(",", ":"),
+                ),
+                encoding="utf-8",
+            )
+            high_watermark_path.chmod(0o600)
             overrides["pinvi_m05_activation_ledger_path"] = str(ledger_path)
+            overrides["pinvi_m05_activation_high_watermark_path"] = str(
+                high_watermark_path
+            )
             loaded = Settings(_env_file=None, pinvi_environment="production", **overrides)  # type: ignore[arg-type]
             ledger_dir.cleanup()
             return loaded
@@ -108,23 +131,23 @@ def _receipt_payload(**overrides: object) -> dict[str, object]:
         "activation_attestation_sha256": "0" * 64,
         "adversarial_reviews": [
             {
-                "agent_id": "44444444-4444-4444-8444-444444444444",
+                "agent_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
                 "commit": PINVI_REVISION,
                 "p0_p1": 0,
                 "pr_url": "https://github.com/digitie/pinvi/pull/466",
-                "review_id": "review-1",
-                "reviewer_id": "darwin",
+                "review_id": "44444444-4444-4444-8444-444444444444",
+                "reviewer_id": "66666666-6666-4666-8666-666666666666",
                 "summary": "GO: no P0/P1 findings",
                 "summary_sha256": hashlib.sha256(b"GO: no P0/P1 findings").hexdigest(),
                 "verdict": "GO",
             },
             {
-                "agent_id": "55555555-5555-4555-8555-555555555555",
+                "agent_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
                 "commit": PINVI_REVISION,
                 "p0_p1": 0,
                 "pr_url": "https://github.com/digitie/pinvi/pull/466",
-                "review_id": "review-2",
-                "reviewer_id": "feynman",
+                "review_id": "55555555-5555-4555-8555-555555555555",
+                "reviewer_id": "77777777-7777-4777-8777-777777777777",
                 "summary": "GO: no P0/P1 findings",
                 "summary_sha256": hashlib.sha256(b"GO: no P0/P1 findings").hexdigest(),
                 "verdict": "GO",
@@ -133,9 +156,11 @@ def _receipt_payload(**overrides: object) -> dict[str, object]:
         "live_ui_e2e": "passed",
         "live_ui_event_id": "11111111-1111-4111-8111-111111111111",
         "live_ui_evidence_sha256": "a" * 64,
+        "live_ui_map_admin_endpoint": "http://127.0.0.1:12701",
         "live_ui_map_ack_sha256": "b" * 64,
         "live_ui_local_receipt_sha256": "1" * 64,
         "live_ui_map_snapshot_sha256": "c" * 64,
+        "live_ui_pinvi_api_endpoint": "http://127.0.0.1:12801",
         "live_ui_pinvi_snapshot_sha256": "d" * 64,
         "live_ui_pinvi_web_endpoint": "http://127.0.0.1:12805",
         "live_ui_playwright_runner_image_id": "sha256:" + "8" * 64,
@@ -143,25 +168,39 @@ def _receipt_payload(**overrides: object) -> dict[str, object]:
         "live_ui_verification_id": "22222222-2222-4222-8222-222222222222",
         "map_admin_openapi_sha256": KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
         "map_admin_runtime_openapi_sha256": "9" * 64,
+        "map_admin_runtime_operation_contract_sha256": KOR_TRAVEL_MAP_M05_ADMIN_RUNTIME_OPERATION_CONTRACT_SHA256,
+        "map_admin_source_operation_contract_sha256": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_OPERATION_CONTRACT_SHA256,
         "map_admin_source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
         "map_admin_image_digest": KOR_TRAVEL_MAP_M05_ADMIN_IMAGE_DIGEST,
+        "map_admin_container_id": "a" * 64,
         "map_api_image_digest": KOR_TRAVEL_MAP_M05_API_IMAGE_DIGEST,
+        "map_api_container_id": "b" * 64,
         "map_frontend_image_digest": KOR_TRAVEL_MAP_M05_FRONTEND_IMAGE_DIGEST,
+        "map_frontend_container_id": "c" * 64,
         "map_full_openapi_sha256": KOR_TRAVEL_MAP_M05_FULL_OPENAPI_SHA256,
         "map_full_runtime_openapi_sha256": "8" * 64,
+        "map_full_runtime_operation_contract_sha256": KOR_TRAVEL_MAP_M05_FULL_RUNTIME_OPERATION_CONTRACT_SHA256,
+        "map_full_source_operation_contract_sha256": KOR_TRAVEL_MAP_M05_FULL_SOURCE_OPERATION_CONTRACT_SHA256,
         "map_full_source_revision": KOR_TRAVEL_MAP_M05_FULL_SOURCE_REVISION,
         "map_pair_evidence_sha256": "c" * 64,
         "map_service_openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
         "map_service_runtime_openapi_sha256": "a" * 64,
+        "map_service_runtime_operation_contract_sha256": KOR_TRAVEL_MAP_M05_SERVICE_RUNTIME_OPERATION_CONTRACT_SHA256,
+        "map_service_source_operation_contract_sha256": KOR_TRAVEL_MAP_M05_SERVICE_SOURCE_OPERATION_CONTRACT_SHA256,
         "map_service_source_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
         "map_user_openapi_sha256": KOR_TRAVEL_MAP_M05_USER_OPENAPI_SHA256,
         "map_user_runtime_openapi_sha256": "b" * 64,
+        "map_user_runtime_operation_contract_sha256": KOR_TRAVEL_MAP_M05_USER_RUNTIME_OPERATION_CONTRACT_SHA256,
+        "map_user_source_operation_contract_sha256": KOR_TRAVEL_MAP_M05_USER_SOURCE_OPERATION_CONTRACT_SHA256,
         "map_user_source_revision": KOR_TRAVEL_MAP_M05_USER_SOURCE_REVISION,
         "pinvi_api_image_digest": IMAGE_DIGESTS["pinvi_api_image_digest"],
+        "pinvi_api_container_id": "d" * 64,
         "pinvi_dagster_image_digest": IMAGE_DIGESTS["pinvi_dagster_image_digest"],
+        "pinvi_dagster_container_id": "e" * 64,
         "pinvi_image_evidence_sha256": "d" * 64,
         "pinvi_source_revision": PINVI_REVISION,
         "pinvi_web_image_digest": IMAGE_DIGESTS["pinvi_web_image_digest"],
+        "pinvi_web_container_id": "f" * 64,
         "restore_drill": "passed",
         "restore_evidence_sha256": "e" * 64,
         "review_evidence_sha256": "f" * 64,

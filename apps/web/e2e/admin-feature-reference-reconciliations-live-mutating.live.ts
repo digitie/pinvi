@@ -71,13 +71,26 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
     }
     if (!apiBaseUrl) throw new Error('M05 UI API endpoint가 준비되지 않았습니다.');
     const apiOrigin = new URL(apiBaseUrl).origin;
+    const detailPath = `/admin/feature-reference-reconciliations/${eventId}`;
     let observedApiRequests = 0;
     page.on('request', (request) => {
       if (new URL(request.url()).origin === apiOrigin) observedApiRequests += 1;
     });
     await ensureAdminAuth(page);
     await page.goto('/admin/feature-reference-reconciliations');
+    const detailResponsePromise = page.waitForResponse((response) => {
+      const responseUrl = new URL(response.url());
+      return (
+        response.request().method() === 'GET' &&
+        responseUrl.pathname === detailPath
+      );
+    });
     await page.getByTestId(`admin-frr-detail-${eventId}`).click();
+    const detailResponse = await detailResponsePromise;
+    expect(detailResponse.status()).toBe(200);
+    expect(new URL(detailResponse.url()).origin).toBe(apiOrigin);
+    expect(detailResponse.request().redirectedFrom()).toBeNull();
+    const detailResponseBody = (await detailResponse.json()) as { data?: unknown };
 
     const detail = page.getByTestId('admin-frr-detail');
     const receiptValue = (label: RegExp) =>
@@ -93,16 +106,7 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
 
     const evidenceDir = process.env.PINVI_M05_UI_EVIDENCE_DIR;
     if (evidenceDir) {
-      const response = await page.evaluate(async ({ baseUrl, id }) => {
-        const result = await fetch(`${baseUrl}/admin/feature-reference-reconciliations/${id}`, {
-          credentials: 'include',
-          cache: 'no-store',
-        });
-        return { body: await result.json(), status: result.status };
-      }, { baseUrl: apiBaseUrl, id: eventId });
-      expect(response.status).toBe(200);
-      const responseBody = response.body as { data?: unknown };
-      expect(responseBody.data).toBeDefined();
+      expect(detailResponseBody.data).toBeDefined();
       if (!verificationId || !playwrightRunnerImageId || !playwrightRunnerImageRef) {
         throw new Error('M05 UI run binding 환경변수가 준비되지 않았습니다.');
       }
@@ -111,8 +115,9 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
         event_id: eventId,
         impact_count: Number(impactCount),
         old_feature_id: oldFeatureId,
+        pinvi_api_endpoint: apiBaseUrl,
         pinvi_detail_sha256: createHash('sha256')
-          .update(canonicalJson(responseBody.data), 'utf8')
+          .update(canonicalJson(detailResponseBody.data), 'utf8')
           .digest('hex'),
         replacement_feature_id: replacementFeatureId,
         verification_id: verificationId,

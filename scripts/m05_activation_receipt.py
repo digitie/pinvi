@@ -12,6 +12,7 @@ import json
 import os
 import re
 import stat
+import subprocess
 import time
 from pathlib import Path
 from typing import cast
@@ -36,6 +37,9 @@ _PAIR_PROVENANCE = Path(__file__).resolve().parents[1] / (
 )
 _TRUST_ANCHOR = Path(__file__).resolve().parents[1] / (
     "contracts/pinvi-m05-activation-receipt-trust-v1.json"
+)
+_REVIEWER_ROSTER = Path(__file__).resolve().parents[1] / (
+    "contracts/pinvi-m05-reviewer-roster-v1.json"
 )
 _EVIDENCE_FILES = (
     "attestation.json",
@@ -256,6 +260,48 @@ def _trust_anchor() -> str:
     )
 
 
+def _reviewer_roster() -> set[str]:
+    try:
+        raw = json.loads(
+            _REVIEWER_ROSTER.read_bytes(), object_pairs_hook=_reject_duplicate_keys
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ReceiptError) as exc:
+        raise ReceiptError("M05 reviewer roster is invalid") from exc
+    payload = _object(raw, name="M05 reviewer roster")
+    if set(payload) != {"agent_ids", "version"} or payload["version"] != 1:
+        raise ReceiptError("M05 reviewer roster schema is invalid")
+    agents = payload["agent_ids"]
+    if not isinstance(agents, list) or len(agents) != 2:
+        raise ReceiptError("M05 reviewer roster must contain exactly two agents")
+    result = {_uuid(agent, name="M05 reviewer roster agent") for agent in agents}
+    if len(result) != 2:
+        raise ReceiptError("M05 reviewer roster agents must be distinct")
+    return result
+
+
+def _assert_source_checkout(source_revision: str) -> None:
+    """receipt signer가 인자로 받은 revision의 clean checkout에서만 동작하게 한다."""
+
+    root = Path(__file__).resolve().parents[1]
+    try:
+        revision = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        status = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ReceiptError("receipt producer source revision could not be verified") from exc
+    if revision != source_revision or status:
+        raise ReceiptError("receipt producer checkout must be clean at the signed revision")
+
+
 def _ledger_records(path: Path, *, require_root_owned: bool) -> list[dict[str, object]]:
     if not path.is_file() or path.is_symlink():
         return []
@@ -453,11 +499,29 @@ def _pair_provenance() -> dict[str, dict[str, str]]:
     result: dict[str, dict[str, str]] = {}
     for name in ("admin", "full", "service", "user"):
         entry = _object(map_value.get(name), name=f"pair provenance {name}")
-        if set(entry) != {"openapi_sha256", "source_revision"}:
+        if set(entry) != {
+            "openapi_sha256",
+            "runtime_operation_contract_sha256",
+            "source_canonical_sha256",
+            "source_operation_contract_sha256",
+            "source_revision",
+        }:
             raise ReceiptError(f"pair provenance {name} schema is invalid")
         result[name] = {
             "openapi_sha256": _sha256(
                 entry["openapi_sha256"], name=f"{name}.openapi_sha256"
+            ),
+            "runtime_operation_contract_sha256": _sha256(
+                entry["runtime_operation_contract_sha256"],
+                name=f"{name}.runtime_operation_contract_sha256",
+            ),
+            "source_canonical_sha256": _sha256(
+                entry["source_canonical_sha256"],
+                name=f"{name}.source_canonical_sha256",
+            ),
+            "source_operation_contract_sha256": _sha256(
+                entry["source_operation_contract_sha256"],
+                name=f"{name}.source_operation_contract_sha256",
             ),
             "source_revision": _commit(
                 entry["source_revision"], name=f"{name}.source_revision"
@@ -473,7 +537,7 @@ def _pair_provenance() -> dict[str, dict[str, str]]:
 
 
 def _reviews(
-    value: object, *, pinvi_source_revision: str
+    value: object, *, pinvi_source_revision: str, expected_pr_url: str
 ) -> list[dict[str, object]]:
     if not isinstance(value, list) or len(value) != 2:
         raise ReceiptError("reviews.json must contain exactly two reviews")
@@ -482,6 +546,7 @@ def _reviews(
     reviewer_ids: set[str] = set()
     review_ids: set[str] = set()
     agent_ids: set[str] = set()
+    allowed_agent_ids = _reviewer_roster()
     for item in value:
         review = _object(item, name="review")
         if set(review) != {
@@ -501,12 +566,14 @@ def _reviews(
         commit = _commit(review["commit"], name="review.commit")
         if commit != pinvi_source_revision:
             raise ReceiptError("review commit does not match the signed Pinvi source revision")
-        review_id = _string(review["review_id"], name="review.review_id")
-        reviewer_id = _string(review["reviewer_id"], name="review.reviewer_id")
+        review_id = _uuid(review["review_id"], name="review.review_id")
+        reviewer_id = _uuid(review["reviewer_id"], name="review.reviewer_id")
         agent_id = _uuid(review["agent_id"], name="review.agent_id")
         pr_url = _string(review["pr_url"], name="review.pr_url")
-        if _REVIEW_PR_RE.fullmatch(pr_url) is None:
-            raise ReceiptError("review.pr_url must identify the Pinvi pull request")
+        if pr_url != expected_pr_url or _REVIEW_PR_RE.fullmatch(pr_url) is None:
+            raise ReceiptError("review.pr_url must identify the exact Pinvi pull request")
+        if agent_id not in allowed_agent_ids:
+            raise ReceiptError("review.agent_id is not in the pinned reviewer roster")
         if review["verdict"] != "GO":
             raise ReceiptError("review verdict must be GO")
         summary = review["summary"]
@@ -697,7 +764,10 @@ def _restore(value: object, *, pinvi_source_revision: str) -> None:
     }
     if set(restore) != expected or restore["status"] != "passed":
         raise ReceiptError("restore evidence schema/status is invalid")
-    if restore["restore_command"] != "pg_restore --no-owner --no-privileges":
+    if restore["restore_command"] != (
+        "pg_restore --clean --if-exists --exit-on-error "
+        "--no-owner --no-privileges"
+    ):
         raise ReceiptError("restore evidence is not a no-owner restore")
     for field in (
         "no_owner_restore",
@@ -719,6 +789,17 @@ def _restore(value: object, *, pinvi_source_revision: str) -> None:
         "target_db_identity_sha256",
     ):
         _sha256(restore[field], name=f"restore.{field}")
+    repository_root = Path(__file__).resolve().parents[1]
+    for evidence_field, script_path in (
+        ("backup_runner_sha256", repository_root / "scripts/backup-db.sh"),
+        ("restore_runner_sha256", repository_root / "scripts/restore-staging-drill.sh"),
+    ):
+        try:
+            expected_script_sha256 = hashlib.sha256(script_path.read_bytes()).hexdigest()
+        except OSError as exc:
+            raise ReceiptError("restore runner source is missing") from exc
+        if restore[evidence_field] != expected_script_sha256:
+            raise ReceiptError(f"restore runner hash is not bound to {script_path.name}")
     for field in (
         "source_db_identity",
         "source_db_identity_after_backup",
@@ -736,6 +817,18 @@ def _restore(value: object, *, pinvi_source_revision: str) -> None:
             "user",
         }:
             raise ReceiptError(f"restore.{field} identity schema is invalid")
+    for identity_field, digest_field in (
+        ("source_db_identity", "source_db_identity_sha256"),
+        ("source_db_identity_after_backup", "source_db_identity_after_backup_sha256"),
+        ("target_db_identity_before_restore", "target_db_identity_before_restore_sha256"),
+        ("target_db_identity", "target_db_identity_sha256"),
+        ("runtime_db_identity", "runtime_db_identity_sha256"),
+    ):
+        expected_identity_sha256 = hashlib.sha256(
+            _canonical_json(restore[identity_field])
+        ).hexdigest()
+        if restore[digest_field] != expected_identity_sha256:
+            raise ReceiptError(f"restore identity hash is not bound: {identity_field}")
     if (
         restore["source_db_identity"]["database"]
         != restore["source_db_identity_after_backup"]["database"]
@@ -758,6 +851,15 @@ def _restore(value: object, *, pinvi_source_revision: str) -> None:
         or restore["runtime_db_identity"]["user"] != restore["runtime_role"]
         or restore["target_db_identity_before_restore"]["user"]
         != restore["staging_role"]
+        or restore["source_db_identity"]["schema_exists"] is not True
+        or restore["source_db_identity_after_backup"]["schema_exists"] is not True
+        or restore["target_db_identity_before_restore"]["schema_exists"] is not False
+        or restore["target_db_identity"]["schema_exists"] is not True
+        or restore["runtime_db_identity"]["schema_exists"] is not True
+        or restore["source_db_identity"]["database"]
+        == restore["target_db_identity_before_restore"]["database"]
+        or restore["source_db_identity"]["database_oid"]
+        == restore["target_db_identity_before_restore"]["database_oid"]
     ):
         raise ReceiptError("restore database identities or roles are not bound")
     _string(restore["runtime_role"], name="restore.runtime_role")
@@ -787,13 +889,28 @@ def _map_pair(
         raise ReceiptError("Map pair evidence schema is invalid")
     for name in ("admin", "full", "service", "user"):
         entry = _object(pair[name], name=f"Map pair {name}")
-        if set(entry) != {"openapi_sha256", "source_revision"}:
+        if set(entry) != {
+            "openapi_sha256",
+            "runtime_operation_contract_sha256",
+            "source_canonical_sha256",
+            "source_operation_contract_sha256",
+            "source_revision",
+        }:
             raise ReceiptError(f"Map pair {name} evidence schema is invalid")
         for field in ("openapi_sha256", "source_revision"):
             if entry[field] != expected[name][field]:
                 raise ReceiptError(
                     f"Map pair {name} does not match the vendored provenance"
                 )
+        if (
+            entry["runtime_operation_contract_sha256"]
+            != expected[name]["runtime_operation_contract_sha256"]
+            or entry["source_canonical_sha256"]
+            != expected[name]["source_canonical_sha256"]
+            or entry["source_operation_contract_sha256"]
+            != expected[name]["source_operation_contract_sha256"]
+        ):
+            raise ReceiptError(f"Map pair {name} hashes are not pinned to provenance")
     runtime = _object(pair["runtime"], name="Map pair runtime evidence")
     if set(runtime) != {
         "admin_openapi",
@@ -851,6 +968,10 @@ def _map_pair(
                 and artifact["canonical_sha256"] != artifact["source_canonical_sha256"]
             )
             or artifact["source_sha256"] != expected[provenance_name]["openapi_sha256"]
+            or artifact["source_canonical_sha256"]
+            != expected[provenance_name]["source_canonical_sha256"]
+            or artifact["surface_coverage_sha256"]
+            != expected[provenance_name]["runtime_operation_contract_sha256"]
             or artifact["source_revision"]
             != expected[provenance_name]["source_revision"]
         ):
@@ -931,24 +1052,39 @@ def _map_pair(
             raise ReceiptError(f"Map {name} image digest is not bound to its runtime")
     return {
         "admin_image_digest": image_digests["admin"],
+        "map_admin_container_id": runtime["admin"]["container_id"],
         "admin_runtime_openapi_sha256": _sha256(
             runtime_openapi["admin_openapi"]["transport_sha256"],
             name="Map runtime admin OpenAPI.transport_sha256",
         ),
+        "admin_runtime_operation_contract_sha256": expected["admin"][
+            "runtime_operation_contract_sha256"
+        ],
         "full_runtime_openapi_sha256": _sha256(
             runtime_openapi["full_openapi"]["transport_sha256"],
             name="Map runtime full OpenAPI.transport_sha256",
         ),
+        "full_runtime_operation_contract_sha256": expected["full"][
+            "runtime_operation_contract_sha256"
+        ],
         "api_image_digest": image_digests["api"],
+        "map_api_container_id": runtime["api"]["container_id"],
         "frontend_image_digest": image_digests["frontend"],
+        "map_frontend_container_id": runtime["frontend"]["container_id"],
         "service_runtime_openapi_sha256": _sha256(
             runtime_openapi["service_openapi"]["transport_sha256"],
             name="Map runtime service OpenAPI.transport_sha256",
         ),
+        "service_runtime_operation_contract_sha256": expected["service"][
+            "runtime_operation_contract_sha256"
+        ],
         "user_runtime_openapi_sha256": _sha256(
             runtime_openapi["user_openapi"]["transport_sha256"],
             name="Map runtime user OpenAPI.transport_sha256",
         ),
+        "user_runtime_operation_contract_sha256": expected["user"][
+            "runtime_operation_contract_sha256"
+        ],
     }
 
 
@@ -994,6 +1130,7 @@ def _pinvi_images(
         ):
             raise ReceiptError(f"Pinvi {name} container identity is invalid")
         result[name] = _digest(image["digest"], name=f"Pinvi {name}.digest")
+        result[f"{name}_container_id"] = image["container_id"]
     return result
 
 
@@ -1120,6 +1257,7 @@ def _create(args: argparse.Namespace) -> int:
     )
 
     source_revision = _commit(args.pinvi_source_revision, name="Pinvi source revision")
+    _assert_source_checkout(source_revision)
     scope = _string(args.scope, name="receipt scope")
     if scope not in {"staging", "production"}:
         raise ReceiptError("receipt scope must be staging or production")
@@ -1172,7 +1310,9 @@ def _create(args: argparse.Namespace) -> int:
                 "activation nonce must match the live attestation verification ID"
             )
         reviews = _reviews(
-            evidence["reviews"], pinvi_source_revision=source_revision
+            evidence["reviews"],
+            pinvi_source_revision=source_revision,
+            expected_pr_url=args.pr_url,
         )
         live_ui = _live_ui(evidence["live_ui"], pinvi_source_revision=source_revision)
         _restore(evidence["restore"], pinvi_source_revision=source_revision)
@@ -1237,7 +1377,9 @@ def _create(args: argparse.Namespace) -> int:
         "live_ui_evidence_sha256": evidence_hashes["live_ui"],
         "live_ui_map_ack_sha256": live_ui["map_ack_sha256"],
         "live_ui_local_receipt_sha256": live_ui["map_local_receipt_sha256"],
+        "live_ui_map_admin_endpoint": live_ui["map_admin_endpoint"],
         "live_ui_map_snapshot_sha256": live_ui["map_snapshot_after_sha256"],
+        "live_ui_pinvi_api_endpoint": live_ui["pinvi_api_endpoint"],
         "live_ui_pinvi_snapshot_sha256": live_ui["pinvi_snapshot_after_sha256"],
         "live_ui_pinvi_web_endpoint": live_ui["pinvi_web_endpoint"],
         "live_ui_playwright_runner_image_id": live_ui["playwright_runner_image_id"],
@@ -1247,13 +1389,28 @@ def _create(args: argparse.Namespace) -> int:
         "map_admin_runtime_openapi_sha256": map_pair[
             "admin_runtime_openapi_sha256"
         ],
+        "map_admin_runtime_operation_contract_sha256": map_pair[
+            "admin_runtime_operation_contract_sha256"
+        ],
+        "map_admin_source_operation_contract_sha256": pair_expected["admin"][
+            "source_operation_contract_sha256"
+        ],
         "map_admin_source_revision": pair_expected["admin"]["source_revision"],
         "map_admin_image_digest": map_pair["admin_image_digest"],
+        "map_admin_container_id": map_pair["map_admin_container_id"],
         "map_api_image_digest": map_pair["api_image_digest"],
+        "map_api_container_id": map_pair["map_api_container_id"],
         "map_frontend_image_digest": map_pair["frontend_image_digest"],
+        "map_frontend_container_id": map_pair["map_frontend_container_id"],
         "map_full_openapi_sha256": pair_expected["full"]["openapi_sha256"],
         "map_full_runtime_openapi_sha256": map_pair[
             "full_runtime_openapi_sha256"
+        ],
+        "map_full_runtime_operation_contract_sha256": map_pair[
+            "full_runtime_operation_contract_sha256"
+        ],
+        "map_full_source_operation_contract_sha256": pair_expected["full"][
+            "source_operation_contract_sha256"
         ],
         "map_full_source_revision": pair_expected["full"]["source_revision"],
         "map_pair_evidence_sha256": evidence_hashes["map_pair"],
@@ -1261,16 +1418,31 @@ def _create(args: argparse.Namespace) -> int:
         "map_service_runtime_openapi_sha256": map_pair[
             "service_runtime_openapi_sha256"
         ],
+        "map_service_runtime_operation_contract_sha256": map_pair[
+            "service_runtime_operation_contract_sha256"
+        ],
+        "map_service_source_operation_contract_sha256": pair_expected["service"][
+            "source_operation_contract_sha256"
+        ],
         "map_service_source_revision": pair_expected["service"]["source_revision"],
         "map_user_openapi_sha256": pair_expected["user"]["openapi_sha256"],
         "map_user_runtime_openapi_sha256": map_pair[
             "user_runtime_openapi_sha256"
         ],
+        "map_user_runtime_operation_contract_sha256": map_pair[
+            "user_runtime_operation_contract_sha256"
+        ],
+        "map_user_source_operation_contract_sha256": pair_expected["user"][
+            "source_operation_contract_sha256"
+        ],
         "map_user_source_revision": pair_expected["user"]["source_revision"],
         "pinvi_api_image_digest": pinvi_images["api"],
+        "pinvi_api_container_id": pinvi_images["api_container_id"],
         "pinvi_dagster_image_digest": pinvi_images["dagster"],
+        "pinvi_dagster_container_id": pinvi_images["dagster_container_id"],
         "pinvi_image_evidence_sha256": evidence_hashes["pinvi_images"],
         "pinvi_source_revision": source_revision,
+        "pinvi_web_container_id": pinvi_images["web_container_id"],
         "pinvi_web_image_digest": pinvi_images["web"],
         "restore_drill": "passed",
         "restore_evidence_sha256": evidence_hashes["restore"],
@@ -1302,6 +1474,9 @@ def _parser() -> argparse.ArgumentParser:
     )
     create.add_argument(
         "--scope", choices=("staging", "production"), default="production"
+    )
+    create.add_argument(
+        "--pr-url", default="https://github.com/digitie/pinvi/pull/466"
     )
     create.add_argument("--activation-generation", type=int, required=True)
     create.add_argument("--activation-nonce")

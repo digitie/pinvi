@@ -24,6 +24,7 @@ def _marker() -> dict[str, object]:
         "event_id": "11111111-1111-4111-8111-111111111111",
         "impact_count": 0,
         "old_feature_id": "feature-old",
+        "pinvi_api_endpoint": "http://127.0.0.1:12801",
         "pinvi_detail_sha256": "d" * 64,
         "replacement_feature_id": "feature-new",
         "source_revision": "f" * 40,
@@ -59,6 +60,7 @@ def test_m05_marker_is_bound_to_nonce_runner_and_after_snapshot() -> None:
         },
         pinvi_detail=_detail(),
         pinvi_detail_sha256="d" * 64,
+        expected_pinvi_api_endpoint="http://127.0.0.1:12801",
     )
 
     broken = _marker()
@@ -75,6 +77,7 @@ def test_m05_marker_is_bound_to_nonce_runner_and_after_snapshot() -> None:
             },
             pinvi_detail=_detail(),
             pinvi_detail_sha256="d" * 64,
+            expected_pinvi_api_endpoint="http://127.0.0.1:12801",
         )
 
 

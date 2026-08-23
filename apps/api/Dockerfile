@@ -37,6 +37,7 @@ RUN mkdir -p /tmp/pinvi-prometheus
 COPY contracts/kor-travel-map-service-provenance-v1.json /contracts/kor-travel-map-service-provenance-v1.json
 COPY contracts/kor-travel-map-m05-pair-provenance-v1.json /contracts/kor-travel-map-m05-pair-provenance-v1.json
 COPY contracts/pinvi-m05-activation-receipt-trust-v1.json /contracts/pinvi-m05-activation-receipt-trust-v1.json
+COPY contracts/pinvi-m05-reviewer-roster-v1.json /contracts/pinvi-m05-reviewer-roster-v1.json
 COPY apps/api/pyproject.toml ./pyproject.toml
 RUN pip install --upgrade pip && pip install -e .
 
@@ -47,6 +48,7 @@ COPY apps/api/alembic.ini ./alembic.ini
 COPY contracts/kor-travel-map-service-provenance-v1.json ./app/_contract_data/kor-travel-map-service-provenance-v1.json
 COPY contracts/kor-travel-map-m05-pair-provenance-v1.json ./app/_contract_data/kor-travel-map-m05-pair-provenance-v1.json
 COPY contracts/pinvi-m05-activation-receipt-trust-v1.json ./app/_contract_data/pinvi-m05-activation-receipt-trust-v1.json
+COPY contracts/pinvi-m05-reviewer-roster-v1.json ./app/_contract_data/pinvi-m05-reviewer-roster-v1.json
 COPY scripts/backup-db.sh ./scripts/backup-db.sh
 
 # 의존성 cache layer에서는 app source가 아직 없어 editable package mapping이 비어 있다.

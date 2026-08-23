@@ -132,4 +132,6 @@ fi
     assert evidence["no_owner_restore"] is True
     assert evidence["runtime_role_verified"] is True
     assert evidence["trigger_guard_verified"] is True
-    assert evidence["restore_command"] == "pg_restore --no-owner --no-privileges"
+    assert evidence["restore_command"] == (
+        "pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges"
+    )
