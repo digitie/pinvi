@@ -95,3 +95,16 @@ def test_m05_endpoint_rejects_wildcard_host_binding() -> None:
             endpoint_url="http://127.0.0.1:12801",
             container_port=8000,
         )
+
+
+def test_m05_map_checkout_allowlist_uses_only_source_revisions() -> None:
+    module = _attestation_module()
+    pair = module._load_pair()
+
+    allowed = {
+        pair[name]["source_revision"]
+        for name in ("admin", "full", "service", "user")
+    }
+
+    assert "runtime_image_digests" not in allowed
+    assert pair["full"]["source_revision"] in allowed

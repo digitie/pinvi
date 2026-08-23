@@ -921,7 +921,10 @@ def _live(args: argparse.Namespace) -> int:
     _assert_clean_checkout(
         args.map_source_root,
         expected_revision=pair["full"]["source_revision"],
-        allowed_revisions={entry["source_revision"] for entry in pair.values()},
+        allowed_revisions={
+            pair[name]["source_revision"]
+            for name in ("admin", "full", "service", "user")
+        },
         label="Map source",
     )
     runtime_initial = _runtime_snapshot(
