@@ -268,10 +268,9 @@ SQL
   exit 3
 }
 
-assert_advisory_lock_alive() {
+advisory_lock_is_alive() {
   if [[ "${LOCK_HOLDER_ACTIVE}" != "1" ]] || ! kill -0 "${LOCK_HOLDER_PID}" >/dev/null 2>&1; then
-    phase preparing failed "schema-swap advisory lock was lost"
-    exit 3
+    return 1
   fi
   local lock_state
   lock_state="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
@@ -282,8 +281,12 @@ SELECT EXISTS (
     AND classid = 1414679892
     AND objid = 1213421392
     AND granted
-" | tr -d '[:space:]')"
-  if [[ "${lock_state}" != "t" ]]; then
+" 2>/dev/null | tr -d '[:space:]')" || return 1
+  [[ "${lock_state}" == "t" ]]
+}
+
+assert_advisory_lock_alive() {
+  if ! advisory_lock_is_alive; then
     phase preparing failed "schema-swap database advisory lock was lost"
     exit 3
   fi
@@ -353,6 +356,23 @@ END
 SQL
 }
 
+execute_sql_file() {
+  local sql_file="$1"
+  local phase_name="$2"
+  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${sql_file}" >/dev/null &
+  local sql_pid="$!"
+  while kill -0 "${sql_pid}" >/dev/null 2>&1; do
+    if ! advisory_lock_is_alive; then
+      kill "${sql_pid}" >/dev/null 2>&1 || true
+      wait "${sql_pid}" >/dev/null 2>&1 || true
+      phase "${phase_name}" failed "schema-swap advisory lock was lost during SQL execution"
+      exit 3
+    fi
+    sleep 0.1
+  done
+  wait "${sql_pid}"
+}
+
 advisory_lock_sql_guard() {
   cat <<SQL
 DO \$m05\$
@@ -384,7 +404,7 @@ run_guarded_command() {
     printf '%s;\n' "${command}"
     printf 'COMMIT;\n'
   } >"${wrapper}"
-  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${wrapper}" >/dev/null
+  execute_sql_file "${wrapper}" restoring
 }
 
 run_guarded_file() {
@@ -402,7 +422,7 @@ run_guarded_file() {
     cat "${sql_file}"
     printf '\nCOMMIT;\n'
   } >"${wrapper}"
-  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${wrapper}" >/dev/null
+  execute_sql_file "${wrapper}" restoring
 }
 
 remap_sql() {
@@ -742,7 +762,8 @@ enter_write_fence() {
     PUBLIC_CONNECT_REVOKED=1
   fi
   WRITE_FENCE_ACTIVE=1
-  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f - >/dev/null <<SQL
+  local fence_sql="${TMP_DIR}/enter-fence.sql"
+  cat >"${fence_sql}" <<SQL
 BEGIN;
 $(advisory_lock_sql_guard)
 $(write_identity_guard)
@@ -805,6 +826,7 @@ END
 $(public_connect_sql)
 COMMIT;
 SQL
+  execute_sql_file "${fence_sql}" draining
   assert_advisory_lock_alive
   wait_for_database_quiescence
   writer_logins="$(writer_login_roles)"
@@ -818,7 +840,8 @@ SQL
 release_write_fence() {
   local roles_sql
   roles_sql="$(write_roles_sql)"
-  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f - >/dev/null <<SQL
+  local fence_sql="${TMP_DIR}/release-fence.sql"
+  cat >"${fence_sql}" <<SQL
 BEGIN;
 $(advisory_lock_sql_guard)
 $(write_identity_guard)
@@ -864,6 +887,7 @@ END
 \$m05\$;
 COMMIT;
 SQL
+  execute_sql_file "${fence_sql}" draining
   WRITE_FENCE_ACTIVE=0
 }
 
