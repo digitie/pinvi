@@ -37,7 +37,9 @@ jobs:
               per_page: 100,
             });
 
-            const changed = files.map((file) => file.filename);
+            const changed = files.flatMap((file) =>
+              [file.filename, file.previous_filename].filter(Boolean),
+            );
             const hasAny = (predicates) => changed.some((path) => predicates.some((predicate) => predicate(path)));
             const startsWith = (prefix) => (path) => path.startsWith(prefix);
             const equals = (target) => (path) => path === target;
@@ -65,6 +67,9 @@ jobs:
               equals(".github/workflows/web.yml"),
             ])) {
               requiredChecks.push("lint-typecheck-build");
+              // Web Playwright는 lint/build와 별개 job이다. Aggregate gate가 유일한
+              // required check이므로 여기서 기다리지 않으면 E2E 실패가 merge를 막지 못한다(T-323).
+              requiredChecks.push("e2e");
             }
             if (hasAny([
               startsWith("apps/mobile/"),
@@ -101,7 +106,16 @@ jobs:
                 ref: headSha,
                 per_page: 100,
               });
-              const byName = new Map(runs.map((run) => [run.name, run]));
+              const byName = new Map();
+              for (const run of runs) {
+                if (run.head_sha !== headSha || run.app?.slug !== "github-actions") {
+                  continue;
+                }
+                const previous = byName.get(run.name);
+                if (!previous || run.id > previous.id) {
+                  byName.set(run.name, run);
+                }
+              }
               const pending = [];
 
               for (const name of requiredChecks) {

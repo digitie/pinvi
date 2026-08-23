@@ -2,6 +2,15 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-24 (codex) — T-323 Web E2E required gate 착수
+
+- `web.yml`은 `lint-typecheck-build`와 별도로 Playwright `e2e` job을 실행하지만 aggregate gate가
+  build job만 기다리고 있어, E2E 실패가 유일한 required check에 반영되지 않는 경로를 확인했다.
+- 변경 파일에 Web/packages가 포함되면 aggregate가 `lint-typecheck-build`와 `e2e`를 모두 기다리도록
+  고치고, workflow 인덱스와 열린 작업 원장의 현재 선점을 동기화한다.
+- PR CI에서 exact head의 Playwright job과 aggregate gate가 함께 green인지 확인한 뒤 T-323을 완료
+  아카이브로 이동한다.
+
 ## 2026-08-22 (codex) — Map #1051 service 계약 byte 대조 및 재vendor
 
 - Map `packages/kor-travel-map-api/openapi.service.json`과 PinVi vendor를 대조해 기존

@@ -7,7 +7,7 @@
 | Workflow                                       | 트리거                                                | 목적                                                                                         | Sprint |
 | ---------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------ |
 | [api.yml](./api.yml)                           | `apps/api/**` PR / push                               | ruff + ruff format check + mypy --strict + pytest (unit) + alembic upgrade (PostGIS service) | 4+     |
-| [web.yml](./web.yml)                           | `apps/web/**` / `packages/**` PR / push               | lint (next + ESLint) + tsc --noEmit + next build                                             | 4+     |
+| [web.yml](./web.yml)                           | `apps/web/**` / `packages/**` PR / push               | lint (next + ESLint) + tsc --noEmit + next build + Playwright E2E                            | 4+     |
 | [etl.yml](./etl.yml)                           | `apps/etl/**` PR / push                               | ruff check + Dagster definitions load test (placeholder, Sprint 5 본격)                      | 5+     |
 | [aggregate-ci.yml](./aggregate-ci.yml)         | 모든 PR                                               | 변경 파일 기준 필요한 path-filtered check를 기다리는 required gate                           | 4+     |
 | [docker-images.yml](./docker-images.yml)       | tag `v*` push / 수동 실행                             | API/Web `linux/amd64,linux/arm64` image를 GHCR에 push (T-108)                                | 6+     |
@@ -56,7 +56,7 @@ T-065 이후 required status check는 **`Aggregate CI gate` 하나만** 활성�
 기다린다.
 
 - API 변경: `lint-typecheck-test`
-- Web/packages 변경: `lint-typecheck-build`
+- Web/packages 변경: `lint-typecheck-build` + `e2e`
 - ETL 변경: `sanity`
 - docs-only / 설정-only 변경: `Aggregate CI gate` 자체만 통과
 
