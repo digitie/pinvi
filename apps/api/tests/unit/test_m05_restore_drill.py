@@ -22,9 +22,7 @@ def _restore_drill_module():
 
 def test_m05_restore_drill_normalizes_asyncpg_url_for_psql() -> None:
     module = _restore_drill_module()
-    os.environ["PINVI_TEST_RESTORE_URL"] = (
-        "postgresql+asyncpg://runtime:secret@db:5432/pinvi"
-    )
+    os.environ["PINVI_TEST_RESTORE_URL"] = "postgresql+asyncpg://runtime:secret@db:5432/pinvi"
     try:
         assert module._database_url("PINVI_TEST_RESTORE_URL") == (
             "postgresql://runtime:secret@db:5432/pinvi"

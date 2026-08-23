@@ -87,11 +87,7 @@ def test_m05_endpoint_rejects_wildcard_host_binding() -> None:
         module._assert_docker_endpoint(
             {
                 "NetworkSettings": {
-                    "Ports": {
-                        "8000/tcp": [
-                            {"HostIp": "0.0.0" + ".0", "HostPort": "12801"}
-                        ]
-                    }
+                    "Ports": {"8000/tcp": [{"HostIp": "0.0.0" + ".0", "HostPort": "12801"}]}
                 }
             },
             container="pinvi-api",
@@ -104,10 +100,7 @@ def test_m05_map_checkout_allowlist_uses_only_source_revisions() -> None:
     module = _attestation_module()
     pair = module._load_pair()
 
-    allowed = {
-        pair[name]["source_revision"]
-        for name in ("admin", "full", "service", "user")
-    }
+    allowed = {pair[name]["source_revision"] for name in ("admin", "full", "service", "user")}
 
     assert "runtime_image_digests" not in allowed
     assert pair["full"]["source_revision"] in allowed

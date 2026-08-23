@@ -140,7 +140,8 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "ui_evidence_sha256": "e" * 64,
             "verification_id": "22222222-2222-4222-8222-222222222222",
             "playwright_runner_image_id": "sha256:" + "9" * 64,
-            "playwright_runner_image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:" + "8" * 64,
+            "playwright_runner_image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:"
+            + "8" * 64,
         },
     )
     source_identity = {
@@ -177,8 +178,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "execution_id": "33333333-3333-4333-8333-333333333333",
             "no_owner_restore": True,
             "restore_command": (
-                "pg_restore --clean --if-exists --exit-on-error "
-                "--no-owner --no-privileges"
+                "pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges"
             ),
             "restore_output_sha256": "2" * 64,
             "restore_runner_sha256": _script_sha256("restore-staging-drill.sh"),
@@ -356,7 +356,8 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         "pinvi_web_endpoint": "http://127.0.0.1:12805",
         "pinvi_source_revision": PINVI_REVISION,
         "playwright_runner_image_id": "sha256:" + "9" * 64,
-        "playwright_runner_image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:" + "8" * 64,
+        "playwright_runner_image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:"
+        + "8" * 64,
         "scope": "production",
         "status": "passed",
         "verification_id": "22222222-2222-4222-8222-222222222222",

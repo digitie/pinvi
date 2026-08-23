@@ -113,9 +113,7 @@ def _production_settings(**overrides: object) -> Settings:
             )
             high_watermark_path.chmod(0o600)
             overrides["pinvi_m05_activation_ledger_path"] = str(ledger_path)
-            overrides["pinvi_m05_activation_high_watermark_path"] = str(
-                high_watermark_path
-            )
+            overrides["pinvi_m05_activation_high_watermark_path"] = str(high_watermark_path)
             loaded = Settings(_env_file=None, pinvi_environment="production", **overrides)  # type: ignore[arg-type]
             ledger_dir.cleanup()
             return loaded
@@ -164,7 +162,8 @@ def _receipt_payload(**overrides: object) -> dict[str, object]:
         "live_ui_pinvi_snapshot_sha256": "d" * 64,
         "live_ui_pinvi_web_endpoint": "http://127.0.0.1:12805",
         "live_ui_playwright_runner_image_id": "sha256:" + "8" * 64,
-        "live_ui_playwright_runner_image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:" + "7" * 64,
+        "live_ui_playwright_runner_image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:"
+        + "7" * 64,
         "live_ui_verification_id": "22222222-2222-4222-8222-222222222222",
         "map_admin_openapi_sha256": KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
         "map_admin_runtime_openapi_sha256": "9" * 64,
