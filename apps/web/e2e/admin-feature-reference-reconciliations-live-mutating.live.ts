@@ -96,10 +96,10 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
     const receiptValue = (label: RegExp) =>
       detail.locator('dl > dt', { hasText: label }).locator('xpath=following-sibling::dd[1]');
     await expect(detail).toContainText('applied');
-    await expect(receiptValue(/^action$/)).toHaveText('rebind');
-    await expect(receiptValue(/^이전 Feature$/)).toHaveText(oldFeatureId);
-    await expect(receiptValue(/^대체 Feature$/)).toHaveText(replacementFeatureId);
-    await expect(receiptValue(/^영향 행$/)).toHaveText(impactCount);
+    await expect(receiptValue(/^조치$/)).toContainText('rebind');
+    await expect(receiptValue(/^이전 Feature ID$/)).toHaveText(oldFeatureId);
+    await expect(receiptValue(/^대체 Feature ID$/)).toHaveText(replacementFeatureId);
+    await expect(receiptValue(/^영향 행 수$/)).toHaveText(`${impactCount}건`);
     await expect(detail).not.toContainText('승인');
     await expect(detail).not.toContainText('거절');
     await expect.poll(() => observedApiRequests).toBeGreaterThan(0);
