@@ -1252,14 +1252,17 @@ class Settings(BaseSettings):
         reviewer_ids: set[str] = set()
         review_ids: set[str] = set()
         agent_ids: set[str] = set()
+        challenge_ids: set[str] = set()
         for review in reviews:
             if not isinstance(review, dict) or set(review) != {
                 "agent_id",
+                "challenge_id",
                 "commit",
                 "p0_p1",
                 "pr_url",
                 "review_id",
                 "reviewer_id",
+                "response_sha256",
                 "summary",
                 "summary_sha256",
                 "verdict",
@@ -1268,6 +1271,8 @@ class Settings(BaseSettings):
             reviewer_id = review["reviewer_id"]
             review_id = review["review_id"]
             agent_id = review["agent_id"]
+            challenge_id = review["challenge_id"]
+            response_sha256 = review["response_sha256"]
             summary = review["summary"]
             summary_sha256 = review["summary_sha256"]
             if (
@@ -1276,6 +1281,10 @@ class Settings(BaseSettings):
                 or not isinstance(agent_id, str)
                 or not _is_canonical_uuid(agent_id)
                 or reviewer_id != agent_id
+                or not isinstance(challenge_id, str)
+                or not _is_canonical_uuid(challenge_id)
+                or not isinstance(response_sha256, str)
+                or re.fullmatch(r"[0-9a-f]{64}", response_sha256) is None
                 or not isinstance(review["pr_url"], str)
                 or re.fullmatch(
                     r"https://github\.com/digitie/pinvi/pull/[1-9][0-9]*", review["pr_url"]
@@ -1313,6 +1322,11 @@ class Settings(BaseSettings):
             reviewer_ids.add(reviewer_id)
             review_ids.add(review_id)
             agent_ids.add(agent_id)
+            challenge_ids.add(challenge_id)
+        if len(challenge_ids) != 1:
+            _raise_redacted_settings_error(
+                "M05 activation reviews must share one external challenge"
+            )
         if payload["live_ui_e2e"] != "passed" or payload["restore_drill"] != "passed":
             _raise_redacted_settings_error(
                 "M05 activation requires passed live UI E2E and restore drill evidence"
