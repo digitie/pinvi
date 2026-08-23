@@ -161,11 +161,16 @@ def _write_json(path: Path, value: object) -> str:
 def _load_pair() -> dict[str, dict[str, str]]:
     raw, _ = _read_json(_PAIR_PATH)
     envelope = _object(raw, name="Map pair provenance")
-    if set(envelope) != {"map", "version"} or envelope["version"] != 1:
+    if set(envelope) != {"map", "runtime_image_digests", "version"} or envelope["version"] != 1:
         raise AttestationError("Map pair provenance envelope is invalid")
     map_value = _object(envelope["map"], name="Map pair provenance map")
     if set(map_value) != {"admin", "full", "service", "user"}:
         raise AttestationError("Map pair provenance inventory is invalid")
+    runtime_images = _object(
+        envelope["runtime_image_digests"], name="Map runtime image digests"
+    )
+    if set(runtime_images) != {"admin", "api", "frontend"}:
+        raise AttestationError("Map runtime image digest inventory is invalid")
     result: dict[str, dict[str, str]] = {}
     for name in ("admin", "full", "service", "user"):
         entry = _object(map_value[name], name=f"Map pair {name}")
@@ -180,6 +185,14 @@ def _load_pair() -> dict[str, dict[str, str]]:
                 entry["source_revision"], name=f"{name}.source_revision"
             ),
         }
+    result["runtime_image_digests"] = {}
+    for name in ("admin", "api", "frontend"):
+        digest = _string(
+            runtime_images[name], name=f"runtime_image_digests.{name}"
+        )
+        if _DIGEST_RE.fullmatch(digest) is None:
+            raise AttestationError(f"runtime_image_digests.{name} is invalid")
+        result["runtime_image_digests"][name] = digest
     return result
 
 
@@ -419,6 +432,7 @@ def _docker_inspect(
     expected_revision: str,
     expected_environment: str,
     require_environment_label: bool = True,
+    expected_image_digest: str | None = None,
     endpoint_url: str | None = None,
     endpoint_container_port: int = 8000,
 ) -> dict[str, str]:
@@ -452,6 +466,8 @@ def _docker_inspect(
     image_id = item.get("Image")
     if not isinstance(image_id, str) or _DIGEST_RE.fullmatch(image_id) is None:
         raise AttestationError(f"runtime image ID is not immutable for {container}")
+    if expected_image_digest is not None and image_id != expected_image_digest:
+        raise AttestationError(f"runtime image digest mismatch for {container}")
     config = _object(item.get("Config"), name=f"docker config {container}")
     labels = config.get("Labels")
     labels = (
@@ -580,6 +596,77 @@ def _hash_source_openapi(source_root: Path) -> dict[str, str]:
     return actual
 
 
+def _openapi_operations(value: object, *, name: str) -> dict[str, set[str]]:
+    document = _object(value, name=name)
+    paths = _object(document.get("paths"), name=f"{name}.paths")
+    operations: dict[str, set[str]] = {}
+    for path, raw_operations in paths.items():
+        if not isinstance(path, str):
+            raise AttestationError(f"{name} contains an invalid path")
+        operation_object = _object(raw_operations, name=f"{name}.paths.{path}")
+        operations[path] = {
+            method
+            for method in operation_object
+            if method in {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
+        }
+    return operations
+
+
+def _openapi_surface_sha256(operations: dict[str, set[str]]) -> str:
+    return _sha256(
+        _canonical_json(
+            {path: sorted(methods) for path, methods in sorted(operations.items())}
+        )
+    )
+
+
+def _assert_openapi_surface_covered(
+    runtime_value: object, *, expected_value: object
+) -> str:
+    runtime_operations = _openapi_operations(runtime_value, name="runtime Map OpenAPI")
+    expected_operations = _openapi_operations(expected_value, name="full Map OpenAPI")
+    runtime_paths = _object(
+        _object(runtime_value, name="runtime Map OpenAPI").get("paths"),
+        name="runtime Map OpenAPI.paths",
+    )
+    expected_paths = _object(
+        _object(expected_value, name="full Map OpenAPI").get("paths"),
+        name="full Map OpenAPI.paths",
+    )
+    for path, methods in expected_operations.items():
+        if path not in runtime_operations or not methods.issubset(runtime_operations[path]):
+            raise AttestationError(
+                f"live Map OpenAPI does not cover the pinned full surface: {path}"
+            )
+        expected_path = _object(expected_paths[path], name=f"full Map OpenAPI.paths.{path}")
+        runtime_path = _object(runtime_paths[path], name=f"runtime Map OpenAPI.paths.{path}")
+        for method in methods:
+            expected_operation = _object(
+                expected_path[method], name=f"full Map OpenAPI operation {path} {method}"
+            )
+            runtime_operation = _object(
+                runtime_path[method], name=f"runtime Map OpenAPI operation {path} {method}"
+            )
+            if expected_operation.get("operationId") != runtime_operation.get("operationId"):
+                raise AttestationError(
+                    f"live Map OpenAPI operation identity differs from the pinned full surface: {path}"
+                )
+    return _sha256(
+        _canonical_json(
+            {
+                "expected": {
+                    path: sorted(methods)
+                    for path, methods in sorted(expected_operations.items())
+                },
+                "runtime": {
+                    path: sorted(methods)
+                    for path, methods in sorted(runtime_operations.items())
+                },
+            }
+        )
+    )
+
+
 def _runtime_map_openapi(
     *, map_admin_url: str, source_root: Path, expected: dict[str, dict[str, str]]
 ) -> dict[str, dict[str, str]]:
@@ -612,6 +699,24 @@ def _runtime_map_openapi(
         raise AttestationError(
             "live Map admin OpenAPI does not match the pinned source artifact"
         )
+    full_source_raw = _git_blob(
+        source_root,
+        revision=expected["full"]["source_revision"],
+        relative_path="packages/kor-travel-map-api/openapi.json",
+    )
+    try:
+        full_source_value = json.loads(
+            full_source_raw, object_pairs_hook=_reject_duplicate_keys
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, AttestationError) as exc:
+        raise AttestationError("pinned Map full OpenAPI is not valid JSON") from exc
+    full_surface_coverage_sha256 = _assert_openapi_surface_covered(
+        runtime_value, expected_value=full_source_value
+    )
+    full_source_canonical = _sha256(_canonical_json(full_source_value))
+    runtime_surface_sha256 = _openapi_surface_sha256(
+        _openapi_operations(runtime_value, name="runtime Map OpenAPI")
+    )
 
     result: dict[str, dict[str, str]] = {}
     result["admin_openapi"] = {
@@ -619,6 +724,16 @@ def _runtime_map_openapi(
         "source_canonical_sha256": source_canonical,
         "source_revision": expected["admin"]["source_revision"],
         "source_sha256": expected["admin"]["openapi_sha256"],
+        "surface_coverage_sha256": runtime_surface_sha256,
+        "transport": "http",
+        "transport_sha256": _sha256(runtime_raw),
+    }
+    result["full_openapi"] = {
+        "canonical_sha256": runtime_canonical,
+        "source_canonical_sha256": full_source_canonical,
+        "source_revision": expected["full"]["source_revision"],
+        "source_sha256": expected["full"]["openapi_sha256"],
+        "surface_coverage_sha256": full_surface_coverage_sha256,
         "transport": "http",
         "transport_sha256": _sha256(runtime_raw),
     }
@@ -635,11 +750,15 @@ def _runtime_map_openapi(
         except (UnicodeDecodeError, json.JSONDecodeError, AttestationError) as exc:
             raise AttestationError(f"pinned Map {name} OpenAPI is not valid JSON") from exc
         source_canonical = _sha256(_canonical_json(source_value))
+        source_surface_sha256 = _openapi_surface_sha256(
+            _openapi_operations(source_value, name=f"pinned Map {name} OpenAPI")
+        )
         result[f"{name}_openapi"] = {
             "canonical_sha256": source_canonical,
             "source_canonical_sha256": source_canonical,
             "source_revision": expected[name]["source_revision"],
             "source_sha256": expected[name]["openapi_sha256"],
+            "surface_coverage_sha256": source_surface_sha256,
             "transport": "source-artifact",
             "transport_sha256": _sha256(source_raw),
         }
@@ -728,6 +847,7 @@ def _runtime_snapshot(
             expected_revision=pair["admin"]["source_revision"],
             expected_environment=args.scope,
             require_environment_label=False,
+            expected_image_digest=pair["runtime_image_digests"]["admin"],
             endpoint_url=args.map_admin_url,
         ),
         "map_api": _docker_inspect(
@@ -735,12 +855,14 @@ def _runtime_snapshot(
             expected_revision=pair["admin"]["source_revision"],
             expected_environment=args.scope,
             require_environment_label=False,
+            expected_image_digest=pair["runtime_image_digests"]["api"],
         ),
         "map_frontend": _docker_inspect(
             args.map_frontend_container,
             expected_revision=pair["admin"]["source_revision"],
             expected_environment=args.scope,
             require_environment_label=False,
+            expected_image_digest=pair["runtime_image_digests"]["frontend"],
         ),
         "pinvi_api": _docker_inspect(
             args.pinvi_api_container,
@@ -752,6 +874,8 @@ def _runtime_snapshot(
             args.pinvi_web_container,
             expected_revision=source_revision,
             expected_environment=args.scope,
+            endpoint_url=args.pinvi_web_url,
+            endpoint_container_port=3000,
         ),
         "pinvi_dagster": _docker_inspect(
             args.pinvi_dagster_container,
@@ -865,9 +989,17 @@ def _live(args: argparse.Namespace) -> int:
     child_env["PINVI_PLAYWRIGHT_RUNNER_NETWORK"] = "host"
     child_env["PINVI_PLAYWRIGHT_RUNNER_REPO_ROOT"] = str(pinvi_source_root)
     child_env["PINVI_PLAYWRIGHT_RUNNER_SKIP_NPM_CI"] = "0"
+    child_env["PINVI_LIVE_WEB_URL"] = args.pinvi_web_url
+    child_env["PINVI_LIVE_API_URL"] = args.pinvi_api_url
+    child_env["PINVI_M05_UI_API_URL"] = args.pinvi_api_url
     completed = subprocess.run(command, check=False, env=child_env)
     if completed.returncode != 0:
         raise AttestationError(f"live UI command exited with {completed.returncode}")
+    _assert_clean_checkout(
+        pinvi_source_root,
+        expected_revision=source_revision,
+        label="Pinvi source after live UI",
+    )
     marker, marker_raw_hash = _read_json(marker_path)
 
     after_map, after_ack, after_map_hash, after_ack_hash = _map_case_snapshot(
@@ -955,6 +1087,7 @@ def _live(args: argparse.Namespace) -> int:
         "pinvi_snapshot_after_sha256": after_pinvi_hash,
         "pinvi_source_revision": source_revision,
         "pinvi_api_endpoint": args.pinvi_api_url.rstrip("/"),
+        "pinvi_web_endpoint": args.pinvi_web_url.rstrip("/"),
         "pinvi_receipt_sha256": after_receipt_sha,
         "playwright_runner_image_id": runner_image["image_id"],
         "playwright_runner_image_ref": runner_image["image_ref"],
@@ -985,12 +1118,13 @@ def _live(args: argparse.Namespace) -> int:
         "map_snapshot_sha256": after_map_hash,
         "pinvi_snapshot_sha256": after_pinvi_hash,
         "pinvi_api_endpoint": args.pinvi_api_url.rstrip("/"),
+        "pinvi_web_endpoint": args.pinvi_web_url.rstrip("/"),
         "pinvi_source_revision": source_revision,
         "playwright_runner_image_id": runner_image["image_id"],
         "playwright_runner_image_ref": runner_image["image_ref"],
         "scope": args.scope,
         "status": "passed",
-        "verification_id": str(uuid4()),
+        "verification_id": verification_id,
         "version": 1,
     }
     attestation = {
@@ -1021,6 +1155,7 @@ def _parser() -> argparse.ArgumentParser:
     live.add_argument("--map-source-root", type=Path, required=True)
     live.add_argument("--pinvi-api-url", required=True)
     live.add_argument("--pinvi-api-container", required=True)
+    live.add_argument("--pinvi-web-url", required=True)
     live.add_argument("--pinvi-web-container", required=True)
     live.add_argument("--pinvi-dagster-container", required=True)
     live.add_argument("--event-id", required=True)

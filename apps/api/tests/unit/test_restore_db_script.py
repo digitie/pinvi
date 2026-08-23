@@ -60,7 +60,10 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
         check=True,
     )
 
-    assert result.stdout == f"RESTORED_FILE={snapshot}\n"
+    assert result.stdout == (
+        "RESTORE_COMMAND=pg_restore --clean --if-exists --exit-on-error "
+        f"--no-owner --no-privileges\nRESTORED_FILE={snapshot}\n"
+    )
     calls = invocation_log.read_text(encoding="utf-8").splitlines()
     assert calls[0].startswith("psql:")
     assert "FROM pg_roles" in calls[0]

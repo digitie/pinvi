@@ -190,11 +190,11 @@ def _load_service_provenance() -> tuple[str, str, int, int, int, int, int]:
     )
 
 
-def _load_m05_pair_provenance() -> dict[str, tuple[str, str]]:
+def _load_m05_pair_provenance() -> tuple[dict[str, tuple[str, str]], dict[str, str]]:
     raw = json.loads(_m05_pair_provenance_text(), object_pairs_hook=_reject_duplicate_json_keys)
     if (
         not isinstance(raw, dict)
-        or set(raw) != {"map", "version"}
+        or set(raw) != {"map", "runtime_image_digests", "version"}
         or type(raw["version"]) is not int
         or raw["version"] != 1
     ):
@@ -202,6 +202,18 @@ def _load_m05_pair_provenance() -> dict[str, tuple[str, str]]:
     map_value = raw["map"]
     if not isinstance(map_value, dict) or set(map_value) != {"admin", "full", "service", "user"}:
         raise RuntimeError("Map M05 pair provenance inventory is invalid")
+
+    runtime_images = raw["runtime_image_digests"]
+    if not isinstance(runtime_images, dict) or set(runtime_images) != {
+        "admin",
+        "api",
+        "frontend",
+    }:
+        raise RuntimeError("Map M05 runtime image digest inventory is invalid")
+    runtime_image_digests = {
+        name: _required_string(runtime_images, name, r"sha256:[0-9a-f]{64}")
+        for name in ("admin", "api", "frontend")
+    }
 
     result: dict[str, tuple[str, str]] = {}
     for name in ("admin", "full", "service", "user"):
@@ -212,7 +224,7 @@ def _load_m05_pair_provenance() -> dict[str, tuple[str, str]]:
             _required_string(entry, "openapi_sha256", r"[0-9a-f]{64}"),
             _required_string(entry, "source_revision", r"[0-9a-f]{40}"),
         )
-    return result
+    return result, runtime_image_digests
 
 
 def _load_m05_activation_public_key_sha256() -> str:
@@ -236,7 +248,7 @@ def _load_m05_activation_public_key_sha256() -> str:
     KOR_TRAVEL_MAP_FEATURE_REQUEST_CAPABILITY_GENERATION,
     KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_CAPABILITY_GENERATION,
 ) = _load_service_provenance()
-_M05_MAP_PAIR_PROVENANCE = _load_m05_pair_provenance()
+_M05_MAP_PAIR_PROVENANCE, _M05_MAP_RUNTIME_IMAGE_DIGESTS = _load_m05_pair_provenance()
 PINVI_M05_ACTIVATION_RECEIPT_PUBLIC_KEY_SHA256 = _load_m05_activation_public_key_sha256()
 if _M05_MAP_PAIR_PROVENANCE["service"] != (
     KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
@@ -255,6 +267,9 @@ if _M05_MAP_PAIR_PROVENANCE["service"] != (
     KOR_TRAVEL_MAP_M05_USER_OPENAPI_SHA256,
     KOR_TRAVEL_MAP_M05_USER_SOURCE_REVISION,
 ) = _M05_MAP_PAIR_PROVENANCE["user"]
+KOR_TRAVEL_MAP_M05_ADMIN_IMAGE_DIGEST = _M05_MAP_RUNTIME_IMAGE_DIGESTS["admin"]
+KOR_TRAVEL_MAP_M05_API_IMAGE_DIGEST = _M05_MAP_RUNTIME_IMAGE_DIGESTS["api"]
+KOR_TRAVEL_MAP_M05_FRONTEND_IMAGE_DIGEST = _M05_MAP_RUNTIME_IMAGE_DIGESTS["frontend"]
 
 
 class Settings(BaseSettings):
@@ -470,7 +485,7 @@ class Settings(BaseSettings):
     # receipt nonce/generation의 root-owned append-only ledger. staging/production enable 시 필수다.
     pinvi_m05_activation_ledger_path: str = ""
     # 배포자가 승인한 ledger high-watermark. 이 값보다 낮은 receipt rollback은 거부한다.
-    pinvi_m05_activation_min_generation: int = Field(default=0, ge=0)
+    pinvi_m05_activation_min_generation: int = Field(default=1, ge=1)
     # immutable deploy wrapper가 대조한 세 Pinvi runtime image digest를 API에만 전달한다.
     pinvi_api_image_digest: str = ""
     pinvi_web_image_digest: str = ""
@@ -979,6 +994,7 @@ class Settings(BaseSettings):
             "live_ui_local_receipt_sha256",
             "live_ui_map_snapshot_sha256",
             "live_ui_pinvi_snapshot_sha256",
+            "live_ui_pinvi_web_endpoint",
             "live_ui_playwright_runner_image_id",
             "live_ui_playwright_runner_image_ref",
             "live_ui_verification_id",
@@ -989,6 +1005,7 @@ class Settings(BaseSettings):
             "map_api_image_digest",
             "map_frontend_image_digest",
             "map_full_openapi_sha256",
+            "map_full_runtime_openapi_sha256",
             "map_full_source_revision",
             "map_pair_evidence_sha256",
             "map_service_openapi_sha256",
@@ -1085,16 +1102,25 @@ class Settings(BaseSettings):
         review_keys: set[tuple[str, str, str]] = set()
         reviewer_ids: set[str] = set()
         review_ids: set[str] = set()
+        agent_ids: set[str] = set()
         for review in reviews:
             if not isinstance(review, dict) or set(review) != {
+                "agent_id",
                 "commit",
                 "p0_p1",
+                "pr_url",
                 "review_id",
                 "reviewer_id",
+                "summary",
+                "summary_sha256",
+                "verdict",
             }:
                 _raise_redacted_settings_error("M05 adversarial review evidence schema is invalid")
             reviewer_id = review["reviewer_id"]
             review_id = review["review_id"]
+            agent_id = review["agent_id"]
+            summary = review["summary"]
+            summary_sha256 = review["summary_sha256"]
             if (
                 not isinstance(reviewer_id, str)
                 or not reviewer_id
@@ -1102,6 +1128,17 @@ class Settings(BaseSettings):
                 or not isinstance(review_id, str)
                 or not review_id
                 or any(character.isspace() for character in review_id)
+                or not isinstance(agent_id, str)
+                or not _is_canonical_uuid(agent_id)
+                or not isinstance(review["pr_url"], str)
+                or re.fullmatch(r"https://github\.com/digitie/pinvi/pull/[1-9][0-9]*", review["pr_url"]) is None
+                or review["verdict"] != "GO"
+                or not isinstance(summary, str)
+                or not summary
+                or any(character in "\r\n" for character in summary)
+                or not isinstance(summary_sha256, str)
+                or re.fullmatch(r"[0-9a-f]{64}", summary_sha256) is None
+                or hashlib.sha256(summary.encode("utf-8")).hexdigest() != summary_sha256
                 or type(review["p0_p1"]) is not int
                 or review["p0_p1"] != 0
                 or not isinstance(review["commit"], str)
@@ -1116,6 +1153,7 @@ class Settings(BaseSettings):
                 review_key in review_keys
                 or reviewer_id in reviewer_ids
                 or review_id in review_ids
+                or agent_id in agent_ids
             ):
                 _raise_redacted_settings_error(
                     "M05 activation requires two distinct adversarial reviews"
@@ -1123,6 +1161,7 @@ class Settings(BaseSettings):
             review_keys.add(review_key)
             reviewer_ids.add(reviewer_id)
             review_ids.add(review_id)
+            agent_ids.add(agent_id)
         if payload["live_ui_e2e"] != "passed" or payload["restore_drill"] != "passed":
             _raise_redacted_settings_error(
                 "M05 activation requires passed live UI E2E and restore drill evidence"
@@ -1139,6 +1178,7 @@ class Settings(BaseSettings):
             "live_ui_map_snapshot_sha256",
             "live_ui_pinvi_snapshot_sha256",
             "map_admin_runtime_openapi_sha256",
+            "map_full_runtime_openapi_sha256",
             "map_service_runtime_openapi_sha256",
             "map_user_runtime_openapi_sha256",
             "map_pair_evidence_sha256",
@@ -1163,6 +1203,14 @@ class Settings(BaseSettings):
         ):
             _raise_redacted_settings_error(
                 "M05 live UI runner identity or verification nonce is invalid"
+            )
+        if (
+            not isinstance(payload["live_ui_pinvi_web_endpoint"], str)
+            or not payload["live_ui_pinvi_web_endpoint"].startswith("http://127.0.0.1:")
+            or any(character.isspace() for character in payload["live_ui_pinvi_web_endpoint"])
+        ):
+            _raise_redacted_settings_error(
+                "M05 live UI Web endpoint is not a canonical loopback URL"
             )
 
         for field in ("live_ui_local_receipt_sha256",):
@@ -1197,6 +1245,16 @@ class Settings(BaseSettings):
             value = payload[field]
             if not isinstance(value, str) or re.fullmatch(r"sha256:[0-9a-f]{64}", value) is None:
                 _raise_redacted_settings_error(f"M05 image digest is invalid: {field}")
+
+        for field, expected in (
+            ("map_admin_image_digest", KOR_TRAVEL_MAP_M05_ADMIN_IMAGE_DIGEST),
+            ("map_api_image_digest", KOR_TRAVEL_MAP_M05_API_IMAGE_DIGEST),
+            ("map_frontend_image_digest", KOR_TRAVEL_MAP_M05_FRONTEND_IMAGE_DIGEST),
+        ):
+            if payload[field] != expected:
+                _raise_redacted_settings_error(
+                    f"M05 activation receipt Map image digest does not match the pinned runtime: {field}"
+                )
 
         if (
             payload["pinvi_api_image_digest"] != self.pinvi_api_image_digest

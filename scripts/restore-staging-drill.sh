@@ -168,13 +168,23 @@ before_oid="$(schema_oid)"
 evidence before_schema_oid "${before_oid}"
 
 phase restore running "restoring app schema into staging database"
-if ! PINVI_RESTORE_DATABASE_URL="${DATABASE_URL}" \
+set +e
+restore_output="$(PINVI_RESTORE_DATABASE_URL="${DATABASE_URL}" \
   PINVI_RESTORE_SCHEMA="${SCHEMA}" \
   PINVI_RESTORE_JOBS="${JOBS}" \
-  "${ROOT_DIR}/scripts/restore-db.sh" "${SNAPSHOT}" >/dev/null; then
+  "${ROOT_DIR}/scripts/restore-db.sh" "${SNAPSHOT}" 2>&1)"
+restore_status="$?"
+set -e
+if [[ "${restore_status}" != "0" ]]; then
   phase restore failed "restore-db.sh failed"
   exit 3
 fi
+while IFS= read -r restore_line; do
+  case "${restore_line}" in
+    RESTORE_COMMAND=*) printf '%s\n' "${restore_line}" ;;
+    RESTORED_FILE=*) evidence restored_file "$(mask_snapshot "${SNAPSHOT}")" ;;
+  esac
+done <<<"${restore_output}"
 phase restore success "restore-db.sh completed"
 
 phase validate running "checking restored schema"

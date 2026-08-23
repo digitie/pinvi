@@ -126,14 +126,44 @@ def _require_true(result: subprocess.CompletedProcess[str], *, name: str) -> Non
         raise RestoreDrillError(f"restore verification failed: {name}")
 
 
-def _runtime_role_check(database_url: str, *, schema: str) -> None:
+def _runtime_role_check(
+    database_url: str, *, schema: str, expected_role: str
+) -> None:
+    if not _ROLE_RE.fullmatch(expected_role):
+        raise RestoreDrillError("restore runtime role is invalid")
     sql = f"""
 SELECT r.rolcanlogin
+  AND current_user = '{expected_role}'
   AND NOT r.rolsuper
   AND NOT r.rolcreaterole
   AND NOT r.rolcreatedb
   AND NOT r.rolreplication
   AND has_schema_privilege(current_user, '{schema}', 'USAGE')
+  AND NOT EXISTS (
+      SELECT 1
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = '{schema}'
+        AND c.relkind IN ('r', 'p')
+        AND NOT (
+            has_table_privilege(current_user, c.oid, 'SELECT')
+            AND has_table_privilege(current_user, c.oid, 'INSERT')
+            AND has_table_privilege(current_user, c.oid, 'UPDATE')
+            AND has_table_privilege(current_user, c.oid, 'DELETE')
+        )
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = '{schema}'
+        AND c.relkind = 'S'
+        AND NOT (
+            has_sequence_privilege(current_user, c.oid, 'USAGE')
+            AND has_sequence_privilege(current_user, c.oid, 'SELECT')
+            AND has_sequence_privilege(current_user, c.oid, 'UPDATE')
+        )
+  )
   AND NOT EXISTS (
       SELECT 1 FROM pg_namespace n
       WHERE n.nspname = '{schema}'
@@ -143,6 +173,23 @@ FROM pg_roles r
 WHERE r.rolname = current_user
 """.strip()
     _require_true(_scalar(database_url, sql), name="runtime role")
+
+
+def _staging_role_check(
+    database_url: str, *, expected_role: str, runtime_role: str
+) -> None:
+    if not _ROLE_RE.fullmatch(expected_role):
+        raise RestoreDrillError("restore staging role is invalid")
+    if expected_role == runtime_role:
+        raise RestoreDrillError("restore staging and runtime roles must differ")
+    sql = f"""
+SELECT current_user = '{expected_role}'
+  AND r.rolcanlogin
+  AND NOT r.rolreplication
+FROM pg_roles r
+WHERE r.rolname = current_user
+""".strip()
+    _require_true(_scalar(database_url, sql), name="staging role")
 
 
 def _trigger_check(database_url: str, *, schema: str) -> None:
@@ -283,6 +330,12 @@ def _run_drill(args: argparse.Namespace) -> int:
         raise RestoreDrillError("restore schema is invalid")
     if not _ROLE_RE.fullmatch(args.runtime_role):
         raise RestoreDrillError("restore runtime role is invalid")
+    if not _ROLE_RE.fullmatch(args.staging_role):
+        raise RestoreDrillError("restore staging role is invalid")
+    if args.runtime_role == args.staging_role:
+        raise RestoreDrillError("restore staging and runtime roles must differ")
+    if not args.target_database_prefix:
+        raise RestoreDrillError("restore target database prefix is required")
 
     source_url = _database_url(args.source_database_url_env)
     target_url = _database_url(args.staging_database_url_env)
@@ -297,6 +350,22 @@ def _run_drill(args: argparse.Namespace) -> int:
         raise RestoreDrillError(
             "restore source, owner target, and runtime target must be distinct database identities"
         )
+    target_database = target_identity_pre.get("database")
+    if (
+        not isinstance(target_database, str)
+        or not target_database.startswith(args.target_database_prefix)
+    ):
+        raise RestoreDrillError("restore target database is outside the M05 disposable prefix")
+    _staging_role_check(
+        target_url,
+        expected_role=args.staging_role,
+        runtime_role=args.runtime_role,
+    )
+    _runtime_role_check(
+        runtime_url,
+        schema=args.schema,
+        expected_role=args.runtime_role,
+    )
 
     root = Path(__file__).resolve().parents[1]
     backup_script = root / "scripts/backup-db.sh"
@@ -323,6 +392,12 @@ def _run_drill(args: argparse.Namespace) -> int:
         )
         backup = _run([_BASH, str(backup_script)], env=backup_env)
         dump = _single_dump(temporary_dir)
+        source_identity_after_backup = _identity(source_url, schema=args.schema)
+        target_identity_before_restore = _identity(target_url, schema=args.schema)
+        if _identity_key(source_identity_after_backup) != source_key:
+            raise RestoreDrillError("source database identity changed during backup")
+        if _identity_key(target_identity_before_restore) != target_key:
+            raise RestoreDrillError("target database identity changed before restore")
 
         restore_env = os.environ.copy()
         restore_env.update(
@@ -340,13 +415,21 @@ def _run_drill(args: argparse.Namespace) -> int:
             "DRILL_EVIDENCE=pg_restore_list=ok",
             "DRILL_EVIDENCE=rollback_rehearsal=precheck_guard_schema_unchanged",
             "DRILL_PHASE=complete:success:staging restore drill completed",
+            "RESTORE_COMMAND=pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges",
         )
         if any(marker not in restore.stdout for marker in required_markers):
             raise RestoreDrillError(
                 "restore staging runner did not produce all required markers"
             )
 
-        _runtime_role_check(runtime_url, schema=args.schema)
+        source_revision_after = _source_revision(root)
+        if source_revision_after != source_revision:
+            raise RestoreDrillError("restore runner changed the source checkout")
+        _runtime_role_check(
+            runtime_url,
+            schema=args.schema,
+            expected_role=args.runtime_role,
+        )
         _trigger_check(target_url, schema=args.schema)
         _trigger_bypass_is_blocked(target_url, schema=args.schema)
         target_identity = _identity(target_url, schema=args.schema)
@@ -371,10 +454,24 @@ def _run_drill(args: argparse.Namespace) -> int:
             "restore_output_sha256": _sha256(execution_output),
             "restore_runner_sha256": _sha256(restore_script.read_bytes()),
             "runtime_role_verified": True,
+            "staging_role_verified": True,
+            "runtime_role": args.runtime_role,
+            "staging_role": args.staging_role,
+            "source_db_identity": source_identity_pre,
+            "source_db_identity_after_backup": source_identity_after_backup,
+            "target_db_identity_before_restore": target_identity_before_restore,
+            "target_db_identity": target_identity,
+            "runtime_db_identity": runtime_identity,
             "source_db_identity_sha256": _identity_sha256(source_identity_pre),
+            "source_db_identity_after_backup_sha256": _identity_sha256(
+                source_identity_after_backup
+            ),
             "source_revision": source_revision,
             "status": "passed",
             "target_db_identity_sha256": _identity_sha256(target_identity),
+            "target_db_identity_before_restore_sha256": _identity_sha256(
+                target_identity_before_restore
+            ),
             "trigger_guard_verified": True,
             "runtime_db_identity_sha256": _identity_sha256(runtime_identity),
         }
@@ -390,6 +487,13 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--schema", default="app")
     parser.add_argument(
         "--runtime-role", default=os.environ.get("PINVI_RESTORE_RUNTIME_ROLE", "")
+    )
+    parser.add_argument(
+        "--staging-role", default=os.environ.get("PINVI_RESTORE_STAGING_ROLE", "")
+    )
+    parser.add_argument(
+        "--target-database-prefix",
+        default=os.environ.get("PINVI_RESTORE_TARGET_DATABASE_PREFIX", "pinvi_m05_restore_"),
     )
     parser.add_argument(
         "--source-database-url-env",

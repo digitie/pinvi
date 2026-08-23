@@ -15,6 +15,9 @@ const sourceRevision = process.env.PINVI_SOURCE_REVISION;
 const verificationId = process.env.PINVI_M05_UI_VERIFICATION_ID;
 const playwrightRunnerImageId = process.env.PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_ID;
 const playwrightRunnerImageRef = process.env.PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_REF;
+const apiBaseUrl = (
+  process.env.PINVI_M05_UI_API_URL ?? process.env.PINVI_LIVE_API_URL
+)?.replace(/\/$/, '');
 
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
@@ -54,6 +57,7 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
   test.skip(!verificationId, 'PINVI_M05_UI_VERIFICATION_ID가 필요합니다.');
   test.skip(!playwrightRunnerImageId, 'PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_ID가 필요합니다.');
   test.skip(!playwrightRunnerImageRef, 'PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_REF가 필요합니다.');
+  test.skip(!apiBaseUrl, 'PINVI_M05_UI_API_URL가 필요합니다.');
   test.skip(
     !adminStorageState && (!adminEmail || !adminPassword),
     'PINVI_M05_LIVE_EMAIL/PINVI_M05_LIVE_PASSWORD 또는 storage state가 필요합니다.',
@@ -65,6 +69,12 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
     if (!eventId || !oldFeatureId || !replacementFeatureId || !impactCount) {
       throw new Error('M05 live fixture 환경변수가 준비되지 않았습니다.');
     }
+    if (!apiBaseUrl) throw new Error('M05 UI API endpoint가 준비되지 않았습니다.');
+    const apiOrigin = new URL(apiBaseUrl).origin;
+    let observedApiRequests = 0;
+    page.on('request', (request) => {
+      if (new URL(request.url()).origin === apiOrigin) observedApiRequests += 1;
+    });
     await ensureAdminAuth(page);
     await page.goto('/admin/feature-reference-reconciliations');
     await page.getByTestId(`admin-frr-detail-${eventId}`).click();
@@ -79,16 +89,17 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
     await expect(receiptValue(/^영향 행$/)).toHaveText(impactCount);
     await expect(detail).not.toContainText('승인');
     await expect(detail).not.toContainText('거절');
+    await expect.poll(() => observedApiRequests).toBeGreaterThan(0);
 
     const evidenceDir = process.env.PINVI_M05_UI_EVIDENCE_DIR;
     if (evidenceDir) {
-      const response = await page.evaluate(async (id) => {
-        const result = await fetch(`/api/proxy/admin/feature-reference-reconciliations/${id}`, {
-          credentials: 'same-origin',
+      const response = await page.evaluate(async ({ baseUrl, id }) => {
+        const result = await fetch(`${baseUrl}/admin/feature-reference-reconciliations/${id}`, {
+          credentials: 'include',
           cache: 'no-store',
         });
         return { body: await result.json(), status: result.status };
-      }, eventId);
+      }, { baseUrl: apiBaseUrl, id: eventId });
       expect(response.status).toBe(200);
       const responseBody = response.body as { data?: unknown };
       expect(responseBody.data).toBeDefined();

@@ -17,5 +17,10 @@
       "source_revision": "037e24698f74e2067ea7c8572b044076dc0ac89c"
     }
   },
+  "runtime_image_digests": {
+    "admin": "sha256:6610eb0b61e5c2f0474990282001dfa0447094a1ef116c4350de261b519c2d7e",
+    "api": "sha256:6610eb0b61e5c2f0474990282001dfa0447094a1ef116c4350de261b519c2d7e",
+    "frontend": "sha256:089bbc5fd4be2ee85539bcad0c1ba7dc5c00fe5a4d9a1fa946636c920c9da548"
+  },
   "version": 1
 }

@@ -60,6 +60,7 @@ if ! command -v pg_restore >/dev/null 2>&1; then
   echo "pg_restore not found" >&2
   exit 127
 fi
+PG_RESTORE_BIN="$(command -v pg_restore)"
 
 # Validate the destination authority before CREATE SCHEMA/pg_restore can alter it. A
 # role-split deployment must never discover a typo or privileged runtime login only
@@ -85,7 +86,8 @@ psql \
   --dbname="${DATABASE_URL}" \
   --command="CREATE SCHEMA IF NOT EXISTS \"${SCHEMA}\""
 
-pg_restore \
+printf '%s\n' "RESTORE_COMMAND=pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges"
+"${PG_RESTORE_BIN}" \
   --clean \
   --if-exists \
   --exit-on-error \

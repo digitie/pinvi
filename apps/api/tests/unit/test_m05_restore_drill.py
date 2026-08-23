@@ -111,6 +111,8 @@ fi
             "PINVI_RESTORE_STAGING_DATABASE_URL": "postgresql://owner:secret@db/target",
             "PINVI_RESTORE_RUNTIME_DATABASE_URL": "postgresql://runtime:secret@db/target",
             "PINVI_RESTORE_RUNTIME_ROLE": "pinvi_app",
+            "PINVI_RESTORE_STAGING_ROLE": "pinvi_owner",
+            "PINVI_RESTORE_TARGET_DATABASE_PREFIX": "fixture-",
             "PINVI_SOURCE_REVISION": "f" * 40,
         }
     )
