@@ -1609,11 +1609,11 @@ class Settings(BaseSettings):
         durable_history_previous_sha256 = "0" * 64
         for line in durable_history_lines:
             try:
-                history_value = json.loads(
-                    line, object_pairs_hook=_reject_duplicate_json_keys
-                )
+                history_value = json.loads(line, object_pairs_hook=_reject_duplicate_json_keys)
             except (json.JSONDecodeError, _DuplicateJsonKeyError):
-                _raise_redacted_settings_error("M05 activation durable history contains invalid JSON")
+                _raise_redacted_settings_error(
+                    "M05 activation durable history contains invalid JSON"
+                )
             if not isinstance(history_value, dict) or set(history_value) != {
                 "generation",
                 "previous_record_sha256",
