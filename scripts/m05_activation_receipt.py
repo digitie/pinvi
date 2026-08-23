@@ -707,15 +707,25 @@ def _map_pair(
         )
         if set(artifact) != {
             "canonical_sha256",
-            "http_sha256",
             "source_canonical_sha256",
             "source_revision",
             "source_sha256",
+            "transport",
+            "transport_sha256",
         }:
             raise ReceiptError(
                 f"Map runtime {provenance_name} OpenAPI evidence schema is invalid"
             )
-        for field in ("canonical_sha256", "http_sha256", "source_canonical_sha256"):
+        expected_transport = "http" if provenance_name == "admin" else "source-artifact"
+        if artifact["transport"] != expected_transport:
+            raise ReceiptError(
+                f"Map runtime {provenance_name} OpenAPI transport is invalid"
+            )
+        for field in (
+            "canonical_sha256",
+            "source_canonical_sha256",
+            "transport_sha256",
+        ):
             _sha256(
                 artifact[field],
                 name=f"Map runtime {provenance_name} OpenAPI.{field}",
@@ -790,18 +800,18 @@ def _map_pair(
     return {
         "admin_image_digest": image_digests["admin"],
         "admin_runtime_openapi_sha256": _sha256(
-            runtime_openapi["admin_openapi"]["http_sha256"],
-            name="Map runtime admin OpenAPI.http_sha256",
+            runtime_openapi["admin_openapi"]["transport_sha256"],
+            name="Map runtime admin OpenAPI.transport_sha256",
         ),
         "api_image_digest": image_digests["api"],
         "frontend_image_digest": image_digests["frontend"],
         "service_runtime_openapi_sha256": _sha256(
-            runtime_openapi["service_openapi"]["http_sha256"],
-            name="Map runtime service OpenAPI.http_sha256",
+            runtime_openapi["service_openapi"]["transport_sha256"],
+            name="Map runtime service OpenAPI.transport_sha256",
         ),
         "user_runtime_openapi_sha256": _sha256(
-            runtime_openapi["user_openapi"]["http_sha256"],
-            name="Map runtime user OpenAPI.http_sha256",
+            runtime_openapi["user_openapi"]["transport_sha256"],
+            name="Map runtime user OpenAPI.transport_sha256",
         ),
     }
 

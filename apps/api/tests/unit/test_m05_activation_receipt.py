@@ -136,10 +136,11 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "runtime": {
                 "admin_openapi": {
                     "canonical_sha256": "9" * 64,
-                    "http_sha256": "a" * 64,
                     "source_canonical_sha256": "9" * 64,
                     "source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
                     "source_sha256": KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
+                    "transport": "http",
+                    "transport_sha256": "a" * 64,
                 },
                 "api": {
                     "container_id": "b" * 64,
@@ -171,17 +172,19 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
                 "full_openapi_sha256": KOR_TRAVEL_MAP_M05_FULL_OPENAPI_SHA256,
                 "service_openapi": {
                     "canonical_sha256": "a" * 64,
-                    "http_sha256": "b" * 64,
                     "source_canonical_sha256": "a" * 64,
                     "source_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
                     "source_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+                    "transport": "source-artifact",
+                    "transport_sha256": "b" * 64,
                 },
                 "user_openapi": {
                     "canonical_sha256": "c" * 64,
-                    "http_sha256": "d" * 64,
                     "source_canonical_sha256": "c" * 64,
                     "source_revision": KOR_TRAVEL_MAP_M05_USER_SOURCE_REVISION,
                     "source_sha256": KOR_TRAVEL_MAP_M05_USER_OPENAPI_SHA256,
+                    "transport": "source-artifact",
+                    "transport_sha256": "d" * 64,
                 },
             },
         },

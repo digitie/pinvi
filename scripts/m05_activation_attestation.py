@@ -581,52 +581,67 @@ def _hash_source_openapi(source_root: Path) -> dict[str, str]:
 
 
 def _runtime_map_openapi(
-    *, map_admin_url: str, source_root: Path, expected: dict[str, str]
-
+    *, map_admin_url: str, source_root: Path, expected: dict[str, dict[str, str]]
 ) -> dict[str, dict[str, str]]:
-    """실행 중 Map의 admin/service/user surface를 각각 고정 source와 대조한다."""
+    """실행 중 full/admin과 source-bound service/user surface를 대조한다.
 
-    paths = {
-        "admin_openapi": ("/openapi.json", "admin"),
-        "service_openapi": ("/openapi.service.json", "service"),
-        "user_openapi": ("/openapi.user.json", "user"),
-    }
-    result: dict[str, dict[str, str]] = {}
-    for surface, (path, expected_name) in paths.items():
-        runtime_value, runtime_raw = _http_json(
-            _url(map_admin_url, path),
-            headers=_map_headers(),
+    Map API는 service/user profile을 별도 HTTP route로 제공하지 않고, 같은 full
+    application에서 생성한 vendored artifact로 관리한다. 따라서 HTTP proof는
+    실제 ``/openapi.json``에만 적용하고, service/user는 pinned Git blob을
+    ``source-artifact`` transport로 봉인한다.
+    """
+
+    runtime_value, runtime_raw = _http_json(
+        _url(map_admin_url, "/openapi.json"),
+        headers=_map_headers(),
+    )
+    runtime_source_raw = _git_blob(
+        source_root,
+        revision=expected["admin"]["source_revision"],
+        relative_path="packages/kor-travel-map-api/openapi.json",
+    )
+    try:
+        runtime_source_value = json.loads(
+            runtime_source_raw, object_pairs_hook=_reject_duplicate_keys
         )
+    except (UnicodeDecodeError, json.JSONDecodeError, AttestationError) as exc:
+        raise AttestationError("pinned Map admin OpenAPI is not valid JSON") from exc
+    runtime_canonical = _sha256(_canonical_json(runtime_value))
+    source_canonical = _sha256(_canonical_json(runtime_source_value))
+    if runtime_canonical != source_canonical:
+        raise AttestationError(
+            "live Map admin OpenAPI does not match the pinned source artifact"
+        )
+
+    result: dict[str, dict[str, str]] = {}
+    result["admin_openapi"] = {
+        "canonical_sha256": runtime_canonical,
+        "source_canonical_sha256": source_canonical,
+        "source_revision": expected["admin"]["source_revision"],
+        "source_sha256": expected["admin"]["openapi_sha256"],
+        "transport": "http",
+        "transport_sha256": _sha256(runtime_raw),
+    }
+    for name in ("service", "user"):
         source_raw = _git_blob(
             source_root,
-            revision=expected["source_revision"]
-            if expected_name == "admin"
-            else _load_pair()[expected_name]["source_revision"],
-            relative_path=(
-                "packages/kor-travel-map-api/openapi.json"
-                if expected_name == "admin"
-                else f"packages/kor-travel-map-api/openapi.{expected_name}.json"
-            ),
+            revision=expected[name]["source_revision"],
+            relative_path=f"packages/kor-travel-map-api/openapi.{name}.json",
         )
         try:
             source_value = json.loads(
                 source_raw, object_pairs_hook=_reject_duplicate_keys
             )
         except (UnicodeDecodeError, json.JSONDecodeError, AttestationError) as exc:
-            raise AttestationError(f"pinned Map {expected_name} OpenAPI is not valid JSON") from exc
-        runtime_canonical = _sha256(_canonical_json(runtime_value))
+            raise AttestationError(f"pinned Map {name} OpenAPI is not valid JSON") from exc
         source_canonical = _sha256(_canonical_json(source_value))
-        if runtime_canonical != source_canonical:
-            raise AttestationError(
-                f"live Map {expected_name} OpenAPI does not match the pinned source artifact"
-            )
-        expected_surface = _load_pair()[expected_name]
-        result[surface] = {
-            "canonical_sha256": runtime_canonical,
-            "http_sha256": _sha256(runtime_raw),
+        result[f"{name}_openapi"] = {
+            "canonical_sha256": source_canonical,
             "source_canonical_sha256": source_canonical,
-            "source_revision": expected_surface["source_revision"],
-            "source_sha256": expected_surface["openapi_sha256"],
+            "source_revision": expected[name]["source_revision"],
+            "source_sha256": expected[name]["openapi_sha256"],
+            "transport": "source-artifact",
+            "transport_sha256": _sha256(source_raw),
         }
     return result
 
@@ -897,7 +912,7 @@ def _live(args: argparse.Namespace) -> int:
     runtime_map_openapi = _runtime_map_openapi(
         map_admin_url=args.map_admin_url,
         source_root=args.map_source_root,
-        expected=pair["admin"],
+        expected=pair,
     )
     runtime_after_openapi = _runtime_snapshot(
         args, pair=pair, source_revision=source_revision
