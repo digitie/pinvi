@@ -96,7 +96,9 @@ def _database_url(name: str) -> str:
     value = os.environ.get(name, "")
     if not value or any(character.isspace() for character in value):
         raise RestoreDrillError(f"{name} must be supplied via environment")
-    if not value.startswith(("postgres://", "postgresql://", "postgresql+asyncpg://")):
+    if value.startswith("postgresql+asyncpg://"):
+        value = "postgresql://" + value.removeprefix("postgresql+asyncpg://")
+    if not value.startswith(("postgres://", "postgresql://")):
         raise RestoreDrillError(f"{name} must be a PostgreSQL URL")
     return value
 

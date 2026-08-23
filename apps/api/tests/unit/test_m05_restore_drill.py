@@ -2,11 +2,35 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+
+
+def _restore_drill_module():
+    script = Path(__file__).resolve().parents[4] / "scripts/m05_restore_drill.py"
+    spec = importlib.util.spec_from_file_location("m05_restore_drill", script)
+    if spec is None or spec.loader is None:
+        raise AssertionError("restore drill module could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_m05_restore_drill_normalizes_asyncpg_url_for_psql() -> None:
+    module = _restore_drill_module()
+    os.environ["PINVI_TEST_RESTORE_URL"] = (
+        "postgresql+asyncpg://runtime:secret@db:5432/pinvi"
+    )
+    try:
+        assert module._database_url("PINVI_TEST_RESTORE_URL") == (
+            "postgresql://runtime:secret@db:5432/pinvi"
+        )
+    finally:
+        os.environ.pop("PINVI_TEST_RESTORE_URL", None)
 
 
 def _write_executable(path: Path, body: str) -> None:
