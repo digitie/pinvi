@@ -29,6 +29,7 @@ from http.cookiejar import CookieJar
 from pathlib import Path
 from typing import Any, cast
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 from uuid import UUID, uuid4
 
@@ -186,6 +187,79 @@ def _url(base: str, path: str) -> str:
     return f"{base}{path}"
 
 
+def _assert_clean_checkout(
+    root: Path, *, expected_revision: str, label: str, allowed_revisions: set[str] | None = None
+) -> None:
+    """producer가 dirty/임의 checkout에서 실행되지 않도록 source identity를 고정한다."""
+
+    if root.is_symlink() or not root.is_dir():
+        raise AttestationError(f"{label} must be a regular directory")
+    try:
+        top = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        revision = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        status = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise AttestationError(f"{label} git identity could not be verified") from exc
+    if Path(top).resolve() != root.resolve() or status:
+        raise AttestationError(f"{label} checkout must be clean and canonical")
+    if allowed_revisions is not None:
+        if revision not in allowed_revisions:
+            raise AttestationError(f"{label} HEAD is not one of the pinned revisions")
+    elif revision != expected_revision:
+        raise AttestationError(f"{label} HEAD does not match the pinned revision")
+
+
+def _assert_docker_endpoint(
+    item: dict[str, object], *, container: str, endpoint_url: str, container_port: int
+) -> None:
+    """HTTP 대상이 caller가 고른 임의 서버가 아니라 지정 container의 host binding인지 확인한다."""
+
+    try:
+        parsed = urlsplit(endpoint_url)
+        host = parsed.hostname
+        port = parsed.port
+    except ValueError as exc:
+        raise AttestationError(f"service endpoint is invalid for {container}") from exc
+    if (
+        parsed.scheme != "http"
+        or host not in {"127.0.0.1", "localhost"}
+        or port is None
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise AttestationError(
+            f"service endpoint must be a loopback HTTP root for {container}"
+        )
+    network = _object(item.get("NetworkSettings"), name=f"docker network {container}")
+    ports = network.get("Ports")
+    if not isinstance(ports, dict):
+        raise AttestationError(f"docker endpoint binding is missing for {container}")
+    bindings = ports.get(f"{container_port}/tcp")
+    if not isinstance(bindings, list) or not any(
+        isinstance(binding, dict)
+        and str(binding.get("HostPort")) == str(port)
+        and binding.get("HostIp") in {"127.0.0.1", "0.0.0.0", ""}
+        for binding in bindings
+    ):
+        raise AttestationError(f"service endpoint is not bound to {container}")
+
+
 def _http_json(
     url: str,
     *,
@@ -291,7 +365,7 @@ def _pinvi_case_snapshot(
     event_id: str,
     email: str,
     password: str,
-) -> tuple[dict[str, object], str]:
+) -> tuple[dict[str, object], str, str]:
     if not email or not password:
         raise AttestationError("M05_PINVI_EMAIL and M05_PINVI_PASSWORD are required")
     cookie_jar = CookieJar()
@@ -321,6 +395,9 @@ def _pinvi_case_snapshot(
     event_sha = _string(receipt.get("event_sha256"), name="Pinvi receipt event hash")
     if _SHA256_RE.fullmatch(event_sha) is None:
         raise AttestationError("Pinvi receipt event hash is invalid")
+    receipt_sha = _string(receipt.get("receipt_sha256"), name="Pinvi receipt hash")
+    if _SHA256_RE.fullmatch(receipt_sha) is None:
+        raise AttestationError("Pinvi receipt hash is invalid")
     attempts = data.get("attempts")
     if not isinstance(attempts, list) or not attempts:
         raise AttestationError("Pinvi M05 delivery attempts are missing")
@@ -330,7 +407,7 @@ def _pinvi_case_snapshot(
     impacts = data.get("impacts")
     if not isinstance(impacts, list) or len(impacts) != receipt.get("impact_count"):
         raise AttestationError("Pinvi impact count does not match its terminal receipt")
-    return data, _sha256(_canonical_json(data))
+    return data, _sha256(_canonical_json(data)), receipt_sha
 
 
 def _docker_inspect(
@@ -339,6 +416,8 @@ def _docker_inspect(
     expected_revision: str,
     expected_environment: str,
     require_environment_label: bool = True,
+    endpoint_url: str | None = None,
+    endpoint_container_port: int = 8000,
 ) -> dict[str, str]:
     if not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", container):
         raise AttestationError("container name is invalid")
@@ -383,6 +462,13 @@ def _docker_inspect(
         != expected_environment
     ):
         raise AttestationError(f"runtime build environment mismatch for {container}")
+    if endpoint_url is not None:
+        _assert_docker_endpoint(
+            item,
+            container=container,
+            endpoint_url=endpoint_url,
+            container_port=endpoint_container_port,
+        )
     return {
         "digest": image_id,
         "image_id": image_id,
@@ -467,7 +553,9 @@ def _runtime_map_openapi(
     }
 
 
-def _validate_ui_marker(value: object, *, event_id: str) -> None:
+def _validate_ui_marker(
+    value: object, *, event_id: str, source_revision: str
+) -> None:
     marker = _object(value, name="UI evidence marker")
     expected = {
         "assertions",
@@ -476,12 +564,15 @@ def _validate_ui_marker(value: object, *, event_id: str) -> None:
         "old_feature_id",
         "pinvi_detail_sha256",
         "replacement_feature_id",
+        "source_revision",
         "status",
     }
     if set(marker) != expected or marker.get("status") != "passed":
         raise AttestationError("UI evidence marker schema/status is invalid")
     if _uuid(marker.get("event_id"), name="UI marker event ID") != event_id:
         raise AttestationError("UI marker event does not match the requested event")
+    if _commit(marker.get("source_revision"), name="UI marker source revision") != source_revision:
+        raise AttestationError("UI marker source revision does not match the runtime")
     if not isinstance(marker["assertions"], list) or not marker["assertions"]:
         raise AttestationError("UI marker assertions are missing")
     if not isinstance(marker["impact_count"], int) or marker["impact_count"] < 0:
@@ -522,23 +613,72 @@ def _live(args: argparse.Namespace) -> int:
     email = os.environ.get("M05_PINVI_EMAIL", "")
     password = os.environ.get("M05_PINVI_PASSWORD", "")
 
-    before_map, _before_ack, before_map_hash, _before_ack_hash = _map_case_snapshot(
+    pair = _load_pair()
+    pinvi_source_root = Path(__file__).resolve().parents[1]
+    _assert_clean_checkout(
+        pinvi_source_root,
+        expected_revision=source_revision,
+        label="Pinvi source",
+    )
+    _assert_clean_checkout(
+        args.map_source_root,
+        expected_revision=pair["full"]["source_revision"],
+        allowed_revisions={entry["source_revision"] for entry in pair.values()},
+        label="Map source",
+    )
+    runtime_map_admin = _docker_inspect(
+        args.map_admin_container,
+        expected_revision=pair["admin"]["source_revision"],
+        expected_environment=args.scope,
+        require_environment_label=False,
+        endpoint_url=args.map_admin_url,
+    )
+    runtime_map_api = _docker_inspect(
+        args.map_api_container,
+        expected_revision=pair["admin"]["source_revision"],
+        expected_environment=args.scope,
+        require_environment_label=False,
+    )
+    runtime_pinvi_api = _docker_inspect(
+        args.pinvi_api_container,
+        expected_revision=source_revision,
+        expected_environment=args.scope,
+        endpoint_url=args.pinvi_api_url,
+    )
+
+    before_map, before_ack, before_map_hash, _before_ack_hash = _map_case_snapshot(
         map_admin_url=args.map_admin_url,
         case_id=case_id,
         event_id=event_id,
     )
-    before_pinvi, before_pinvi_hash = _pinvi_case_snapshot(
+    before_pinvi, before_pinvi_hash, before_receipt_sha = _pinvi_case_snapshot(
         pinvi_api_url=args.pinvi_api_url,
         event_id=event_id,
         email=email,
         password=password,
     )
+    before_local_receipt_sha = _string(
+        before_ack.get("local_receipt_sha256"), name="Map local receipt hash"
+    )
+    if before_local_receipt_sha != before_receipt_sha:
+        raise AttestationError(
+            "Map ACK local receipt hash does not match the Pinvi terminal receipt"
+        )
 
     command = list(args.ui_command)
     if command and command[0] == "--":
         command = command[1:]
     if not command:
         raise AttestationError("a real Playwright command is required after --")
+    runner_path = pinvi_source_root / "scripts/n150-playwright-runner.sh"
+    if Path(command[0]).resolve() != runner_path.resolve():
+        raise AttestationError("live UI must use the repository Playwright runner")
+    if (
+        "apps/web/e2e/admin-feature-reference-reconciliations-live-mutating.live.ts"
+        not in command
+        or "--workers=1" not in command
+    ):
+        raise AttestationError("live UI command is not the pinned M05 Playwright test")
     child_env = os.environ.copy()
     child_env["PINVI_M05_UI_EVIDENCE_DIR"] = str(evidence_dir)
     child_env["PINVI_M05_LIVE_EVENT_ID"] = event_id
@@ -547,19 +687,26 @@ def _live(args: argparse.Namespace) -> int:
         raise AttestationError(f"live UI command exited with {completed.returncode}")
     marker_path = evidence_dir / "ui-run.json"
     marker, marker_raw_hash = _read_json(marker_path)
-    _validate_ui_marker(marker, event_id=event_id)
+    _validate_ui_marker(marker, event_id=event_id, source_revision=source_revision)
 
-    after_map, _after_ack, after_map_hash, after_ack_hash = _map_case_snapshot(
+    after_map, after_ack, after_map_hash, after_ack_hash = _map_case_snapshot(
         map_admin_url=args.map_admin_url,
         case_id=case_id,
         event_id=event_id,
     )
-    after_pinvi, after_pinvi_hash = _pinvi_case_snapshot(
+    after_pinvi, after_pinvi_hash, after_receipt_sha = _pinvi_case_snapshot(
         pinvi_api_url=args.pinvi_api_url,
         event_id=event_id,
         email=email,
         password=password,
     )
+    after_local_receipt_sha = _string(
+        after_ack.get("local_receipt_sha256"), name="Map local receipt hash"
+    )
+    if after_local_receipt_sha != after_receipt_sha:
+        raise AttestationError(
+            "Map ACK local receipt hash does not match the Pinvi terminal receipt"
+        )
     if before_map_hash != after_map_hash or before_pinvi_hash != after_pinvi_hash:
         raise AttestationError("M05 remote state drifted during the read-only UI flow")
     if before_map != after_map or before_pinvi != after_pinvi:
@@ -567,14 +714,7 @@ def _live(args: argparse.Namespace) -> int:
             "M05 remote snapshot is not byte-stable across the UI flow"
         )
 
-    pair = _load_pair()
     source_openapi = _hash_source_openapi(args.map_source_root)
-    runtime_map_api = _docker_inspect(
-        args.map_api_container,
-        expected_revision=pair["admin"]["source_revision"],
-        expected_environment=args.scope,
-        require_environment_label=False,
-    )
     runtime_map_frontend = _docker_inspect(
         args.map_frontend_container,
         expected_revision=pair["admin"]["source_revision"],
@@ -591,27 +731,29 @@ def _live(args: argparse.Namespace) -> int:
         "full": pair["full"],
         "service": pair["service"],
         "user": pair["user"],
-        "admin_image_digest": runtime_map_frontend["digest"],
+        "admin_image_digest": runtime_map_admin["digest"],
         "api_image_digest": runtime_map_api["digest"],
         "frontend_image_digest": runtime_map_frontend["digest"],
         "runtime": {
             "admin_openapi": runtime_map_openapi,
+            "admin": runtime_map_admin,
             "api": runtime_map_api,
             "frontend": runtime_map_frontend,
             "full_openapi_sha256": source_openapi["full"],
         },
     }
     pinvi_images = {
-        name: _docker_inspect(
-            container,
+        "api": runtime_pinvi_api,
+        "web": _docker_inspect(
+            args.pinvi_web_container,
             expected_revision=source_revision,
             expected_environment=args.scope,
-        )
-        for name, container in (
-            ("api", args.pinvi_api_container),
-            ("web", args.pinvi_web_container),
-            ("dagster", args.pinvi_dagster_container),
-        )
+        ),
+        "dagster": _docker_inspect(
+            args.pinvi_dagster_container,
+            expected_revision=source_revision,
+            expected_environment=args.scope,
+        ),
     }
 
     live_ui = {
@@ -620,12 +762,16 @@ def _live(args: argparse.Namespace) -> int:
             _object(after_map["event"], name="Map event")["event_sha256"],
             name="event hash",
         ),
+        "map_admin_endpoint": args.map_admin_url.rstrip("/"),
         "map_ack_sha256": after_ack_hash,
+        "map_local_receipt_sha256": after_local_receipt_sha,
         "map_snapshot_before_sha256": before_map_hash,
         "map_snapshot_after_sha256": after_map_hash,
         "pinvi_snapshot_before_sha256": before_pinvi_hash,
         "pinvi_snapshot_after_sha256": after_pinvi_hash,
         "pinvi_source_revision": source_revision,
+        "pinvi_api_endpoint": args.pinvi_api_url.rstrip("/"),
+        "pinvi_receipt_sha256": after_receipt_sha,
         "runner_exit_code": completed.returncode,
         "server_side_ack_verified": True,
         "status": "passed",
@@ -648,8 +794,11 @@ def _live(args: argparse.Namespace) -> int:
         "event_id": event_id,
         "evidence_sha256": output_hashes,
         "map_ack_sha256": after_ack_hash,
+        "local_receipt_sha256": after_receipt_sha,
+        "map_admin_endpoint": args.map_admin_url.rstrip("/"),
         "map_snapshot_sha256": after_map_hash,
         "pinvi_snapshot_sha256": after_pinvi_hash,
+        "pinvi_api_endpoint": args.pinvi_api_url.rstrip("/"),
         "pinvi_source_revision": source_revision,
         "scope": args.scope,
         "status": "passed",
@@ -678,6 +827,7 @@ def _parser() -> argparse.ArgumentParser:
     live.add_argument("--private-key", type=Path, required=True)
     live.add_argument("--map-admin-url", required=True)
     live.add_argument("--map-case-id", required=True)
+    live.add_argument("--map-admin-container", required=True)
     live.add_argument("--map-api-container", required=True)
     live.add_argument("--map-frontend-container", required=True)
     live.add_argument("--map-source-root", type=Path, required=True)

@@ -11,6 +11,7 @@ const eventId = process.env.PINVI_M05_LIVE_EVENT_ID;
 const oldFeatureId = process.env.PINVI_M05_LIVE_OLD_FEATURE_ID;
 const replacementFeatureId = process.env.PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID;
 const impactCount = process.env.PINVI_M05_LIVE_IMPACT_COUNT;
+const sourceRevision = process.env.PINVI_SOURCE_REVISION;
 
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
@@ -46,6 +47,7 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
   test.skip(!oldFeatureId, 'PINVI_M05_LIVE_OLD_FEATURE_ID가 필요합니다.');
   test.skip(!replacementFeatureId, 'PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID가 필요합니다.');
   test.skip(!impactCount, 'PINVI_M05_LIVE_IMPACT_COUNT가 필요합니다.');
+  test.skip(!sourceRevision, 'PINVI_SOURCE_REVISION이 필요합니다.');
   test.skip(
     !adminStorageState && (!adminEmail || !adminPassword),
     'PINVI_M05_LIVE_EMAIL/PINVI_M05_LIVE_PASSWORD 또는 storage state가 필요합니다.',
@@ -93,6 +95,7 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
           .update(canonicalJson(responseBody.data), 'utf8')
           .digest('hex'),
         replacement_feature_id: replacementFeatureId,
+        source_revision: sourceRevision,
         status: 'passed',
       };
       writeFileSync(

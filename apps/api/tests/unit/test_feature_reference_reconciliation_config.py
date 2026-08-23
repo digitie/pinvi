@@ -70,21 +70,23 @@ def _production_settings(**overrides: object) -> Settings:
         if isinstance(payload, dict):
             ledger_dir = tempfile.TemporaryDirectory(prefix="pinvi-m05-ledger-", dir="/tmp")
             ledger_path = Path(ledger_dir.name) / "activation-ledger.jsonl"
-            ledger_path.write_text(
+            record = {
+                "activation_expires_at": payload["activation_expires_at"],
+                "activation_generation": payload["activation_generation"],
+                "activation_issued_at": payload["activation_issued_at"],
+                "activation_nonce": payload["activation_nonce"],
+                "previous_record_sha256": "0" * 64,
+                "receipt_sha256": hashlib.sha256(receipt.encode()).hexdigest(),
+                "scope": payload["scope"],
+                "source_revision": payload["pinvi_source_revision"],
+            }
+            record["record_sha256"] = hashlib.sha256(
                 json.dumps(
-                    {
-                        "activation_expires_at": payload["activation_expires_at"],
-                        "activation_generation": payload["activation_generation"],
-                        "activation_issued_at": payload["activation_issued_at"],
-                        "activation_nonce": payload["activation_nonce"],
-                        "receipt_sha256": hashlib.sha256(receipt.encode()).hexdigest(),
-                        "scope": payload["scope"],
-                        "source_revision": payload["pinvi_source_revision"],
-                    },
-                    separators=(",", ":"),
-                )
-                + "\n",
-                encoding="utf-8",
+                    record, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+                ).encode("utf-8")
+            ).hexdigest()
+            ledger_path.write_text(
+                json.dumps(record, separators=(",", ":")) + "\n", encoding="utf-8"
             )
             ledger_path.chmod(0o600)
             overrides["pinvi_m05_activation_ledger_path"] = str(ledger_path)
@@ -109,6 +111,7 @@ def _receipt_payload(**overrides: object) -> dict[str, object]:
         "live_ui_event_id": "11111111-1111-4111-8111-111111111111",
         "live_ui_evidence_sha256": "a" * 64,
         "live_ui_map_ack_sha256": "b" * 64,
+        "live_ui_local_receipt_sha256": "1" * 64,
         "live_ui_map_snapshot_sha256": "c" * 64,
         "live_ui_pinvi_snapshot_sha256": "d" * 64,
         "map_admin_openapi_sha256": KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,

@@ -228,6 +228,11 @@ def _uuid(value: object, *, name: str) -> str:
     return value
 
 
+def _ledger_record_hash(record: dict[str, object]) -> str:
+    unsigned = {key: value for key, value in record.items() if key != "record_sha256"}
+    return hashlib.sha256(_canonical_json(unsigned)).hexdigest()
+
+
 def _trust_anchor() -> str:
     try:
         raw = json.loads(
@@ -272,6 +277,8 @@ def _ledger_records(path: Path, *, require_root_owned: bool) -> list[dict[str, o
             "activation_generation",
             "activation_issued_at",
             "activation_nonce",
+            "previous_record_sha256",
+            "record_sha256",
             "receipt_sha256",
             "scope",
             "source_revision",
@@ -294,8 +301,16 @@ def _ledger_records(path: Path, *, require_root_owned: bool) -> list[dict[str, o
         ):
             raise ReceiptError("activation ledger record fields are invalid")
         _uuid(record_object["activation_nonce"], name="ledger activation nonce")
+        previous_record_sha = _sha256(
+            record_object["previous_record_sha256"],
+            name="ledger previous record hash",
+        )
+        if previous_record_sha != (records[-1]["record_sha256"] if records else "0" * 64):
+            raise ReceiptError("activation ledger hash chain is broken")
         _sha256(record_object["receipt_sha256"], name="ledger receipt hash")
         _commit(record_object["source_revision"], name="ledger source revision")
+        if record_object["record_sha256"] != _ledger_record_hash(record_object):
+            raise ReceiptError("activation ledger record hash is invalid")
         previous_generation = generation
         records.append(record_object)
     return records
@@ -347,6 +362,7 @@ def _ledger(args: argparse.Namespace) -> int:
         "activation_generation": generation,
         "activation_issued_at": issued_at,
         "activation_nonce": nonce,
+        "previous_record_sha256": "0" * 64,
         "receipt_sha256": hashlib.sha256(receipt_bytes).hexdigest(),
         "scope": payload["scope"],
         "source_revision": source_revision,
@@ -376,6 +392,7 @@ def _ledger(args: argparse.Namespace) -> int:
             args.ledger, require_root_owned=args.require_root_owned
         )
         if records:
+            record["previous_record_sha256"] = records[-1]["record_sha256"]
             previous_generation = records[-1]["activation_generation"]
             if (
                 type(previous_generation) is not int
@@ -384,6 +401,7 @@ def _ledger(args: argparse.Namespace) -> int:
                 raise ReceiptError(
                     "activation ledger generation must increase monotonically"
                 )
+        record["record_sha256"] = _ledger_record_hash(record)
         with os.fdopen(fd, "ab") as stream:
             fd = -1
             stream.write(_canonical_json(record) + b"\n")
@@ -464,9 +482,13 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
     expected = {
         "event_id",
         "event_sha256",
+        "map_admin_endpoint",
         "map_ack_sha256",
+        "map_local_receipt_sha256",
         "map_snapshot_after_sha256",
         "map_snapshot_before_sha256",
+        "pinvi_api_endpoint",
+        "pinvi_receipt_sha256",
         "pinvi_source_revision",
         "pinvi_snapshot_after_sha256",
         "pinvi_snapshot_before_sha256",
@@ -481,6 +503,22 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
         raise ReceiptError("live-ui runner did not exit successfully")
     if live["server_side_ack_verified"] is not True:
         raise ReceiptError("live-ui server-side Map ACK was not verified")
+    for field in ("map_admin_endpoint", "pinvi_api_endpoint"):
+        endpoint = live[field]
+        if (
+            not isinstance(endpoint, str)
+            or not endpoint.startswith("http://127.0.0.1:")
+            or any(character.isspace() for character in endpoint)
+        ):
+            raise ReceiptError(f"live-ui endpoint is not a canonical loopback URL: {field}")
+    local_receipt_sha = _sha256(
+        live["map_local_receipt_sha256"], name="live-ui.map_local_receipt_sha256"
+    )
+    pinvi_receipt_sha = _sha256(
+        live["pinvi_receipt_sha256"], name="live-ui.pinvi_receipt_sha256"
+    )
+    if local_receipt_sha != pinvi_receipt_sha:
+        raise ReceiptError("live-ui Map ACK and Pinvi receipt hashes differ")
     if (
         live["map_snapshot_before_sha256"] != live["map_snapshot_after_sha256"]
         or live["pinvi_snapshot_before_sha256"] != live["pinvi_snapshot_after_sha256"]
@@ -499,6 +537,10 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
         "map_ack_sha256": _sha256(
             live["map_ack_sha256"], name="live-ui.map_ack_sha256"
         ),
+        "map_admin_endpoint": _string(
+            live["map_admin_endpoint"], name="live-ui.map_admin_endpoint"
+        ),
+        "map_local_receipt_sha256": local_receipt_sha,
         "map_snapshot_after_sha256": _sha256(
             live["map_snapshot_after_sha256"], name="live-ui.map_snapshot_after_sha256"
         ),
@@ -507,6 +549,10 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
             name="live-ui.map_snapshot_before_sha256",
         ),
         "pinvi_source_revision": pinvi_source_revision,
+        "pinvi_api_endpoint": _string(
+            live["pinvi_api_endpoint"], name="live-ui.pinvi_api_endpoint"
+        ),
+        "pinvi_receipt_sha256": pinvi_receipt_sha,
         "pinvi_snapshot_after_sha256": _sha256(
             live["pinvi_snapshot_after_sha256"],
             name="live-ui.pinvi_snapshot_after_sha256",
@@ -521,7 +567,7 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
     }
 
 
-def _restore(value: object) -> None:
+def _restore(value: object, *, pinvi_source_revision: str) -> None:
     restore = _object(value, name="restore evidence")
     expected = {
         "backup_runner_sha256",
@@ -533,6 +579,7 @@ def _restore(value: object) -> None:
         "restore_runner_sha256",
         "runtime_role_verified",
         "source_db_identity_sha256",
+        "source_revision",
         "status",
         "target_db_identity_sha256",
         "trigger_guard_verified",
@@ -558,6 +605,8 @@ def _restore(value: object) -> None:
     ):
         _sha256(restore[field], name=f"restore.{field}")
     _uuid(restore["execution_id"], name="restore.execution_id")
+    if _commit(restore["source_revision"], name="restore.source_revision") != pinvi_source_revision:
+        raise ReceiptError("restore producer source revision does not match Pinvi")
 
 
 def _map_pair(
@@ -590,6 +639,7 @@ def _map_pair(
     runtime = _object(pair["runtime"], name="Map pair runtime evidence")
     if set(runtime) != {
         "admin_openapi",
+        "admin",
         "api",
         "frontend",
         "full_openapi_sha256",
@@ -621,7 +671,7 @@ def _map_pair(
         admin_openapi["source_revision"],
         name="Map runtime admin OpenAPI.source_revision",
     )
-    for name in ("api", "frontend"):
+    for name in ("admin", "api", "frontend"):
         runtime_image = _object(runtime[name], name=f"Map runtime {name}")
         if set(runtime_image) != {
             "digest",
@@ -652,20 +702,27 @@ def _map_pair(
             runtime_image["source_revision"], name=f"Map runtime {name}.source_revision"
         )
         _string(runtime_image["environment"], name=f"Map runtime {name}.environment")
-    return {
-        "admin_image_digest": _digest(
-            pair["admin_image_digest"], name="Map admin image digest"
+    image_digests = {
+        "admin": _digest(pair["admin_image_digest"], name="Map admin image digest"),
+        "api": _digest(pair["api_image_digest"], name="Map API image digest"),
+        "frontend": _digest(
+            pair["frontend_image_digest"], name="Map frontend image digest"
         ),
+    }
+    for name, digest in image_digests.items():
+        runtime_image = _object(runtime[name], name=f"Map runtime {name}")
+        if digest != _digest(
+            runtime_image["digest"], name=f"Map runtime {name} digest"
+        ):
+            raise ReceiptError(f"Map {name} image digest is not bound to its runtime")
+    return {
+        "admin_image_digest": image_digests["admin"],
         "admin_runtime_openapi_sha256": _sha256(
             admin_openapi["http_sha256"],
             name="Map runtime admin OpenAPI.http_sha256",
         ),
-        "api_image_digest": _digest(
-            pair["api_image_digest"], name="Map API image digest"
-        ),
-        "frontend_image_digest": _digest(
-            pair["frontend_image_digest"], name="Map frontend image digest"
-        ),
+        "api_image_digest": image_digests["api"],
+        "frontend_image_digest": image_digests["frontend"],
     }
 
 
@@ -713,6 +770,8 @@ def _attestation(
     pinvi_source_revision: str,
     scope: str,
     public_key_bytes: bytes,
+    issued_at: int,
+    expires_at: int,
 ) -> None:
     envelope = _object(value, name="M05 live attestation")
     if set(envelope) != {"payload", "signature"} or not isinstance(
@@ -724,9 +783,12 @@ def _attestation(
         "created_at",
         "event_id",
         "evidence_sha256",
+        "local_receipt_sha256",
+        "map_admin_endpoint",
         "map_ack_sha256",
         "map_snapshot_sha256",
         "pinvi_snapshot_sha256",
+        "pinvi_api_endpoint",
         "pinvi_source_revision",
         "scope",
         "status",
@@ -745,9 +807,26 @@ def _attestation(
         or _uuid(payload["event_id"], name="attestation event ID")
         != live_ui["event_id"]
         or type(payload["created_at"]) is not int
+        or payload["created_at"] < issued_at - 60
+        or payload["created_at"] > issued_at + 15 * 60
+        or payload["created_at"] > int(time.time()) + 60
     ):
         raise ReceiptError("M05 live attestation identity/status is invalid")
     _uuid(payload["verification_id"], name="attestation verification ID")
+    if payload["created_at"] > expires_at:
+        raise ReceiptError("M05 live attestation is newer than the receipt expiry")
+    for field, expected_endpoint in (
+        ("map_admin_endpoint", live_ui["map_admin_endpoint"]),
+        ("pinvi_api_endpoint", live_ui["pinvi_api_endpoint"]),
+    ):
+        if payload[field] != expected_endpoint:
+            raise ReceiptError(f"M05 live attestation does not bind {field}")
+    if (
+        _sha256(payload["local_receipt_sha256"], name="attestation.local_receipt_sha256")
+        != live_ui["map_local_receipt_sha256"]
+        or live_ui["map_local_receipt_sha256"] != live_ui["pinvi_receipt_sha256"]
+    ):
+        raise ReceiptError("M05 live attestation does not bind the terminal receipt hash")
     for field, expected_value in (
         ("map_ack_sha256", live_ui["map_ack_sha256"]),
         ("map_snapshot_sha256", live_ui["map_snapshot_after_sha256"]),
@@ -829,7 +908,7 @@ def _create(args: argparse.Namespace) -> int:
 
         reviews = _reviews(evidence["reviews"])
         live_ui = _live_ui(evidence["live_ui"], pinvi_source_revision=source_revision)
-        _restore(evidence["restore"])
+        _restore(evidence["restore"], pinvi_source_revision=source_revision)
         pair_expected = _pair_provenance()
         map_pair = _map_pair(evidence["map_pair"], pair_expected, environment=scope)
         pinvi_images = _pinvi_images(
@@ -874,6 +953,8 @@ def _create(args: argparse.Namespace) -> int:
         pinvi_source_revision=source_revision,
         scope=scope,
         public_key_bytes=public_key_raw,
+        issued_at=issued_at,
+        expires_at=expires_at,
     )
 
     payload: dict[str, object] = {
@@ -887,6 +968,7 @@ def _create(args: argparse.Namespace) -> int:
         "live_ui_event_id": live_ui["event_id"],
         "live_ui_evidence_sha256": evidence_hashes["live_ui"],
         "live_ui_map_ack_sha256": live_ui["map_ack_sha256"],
+        "live_ui_local_receipt_sha256": live_ui["map_local_receipt_sha256"],
         "live_ui_map_snapshot_sha256": live_ui["map_snapshot_after_sha256"],
         "live_ui_pinvi_snapshot_sha256": live_ui["pinvi_snapshot_after_sha256"],
         "map_admin_openapi_sha256": pair_expected["admin"]["openapi_sha256"],

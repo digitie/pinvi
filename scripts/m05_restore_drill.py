@@ -28,6 +28,7 @@ from uuid import uuid4
 _BASH = "/usr/bin/bash"
 _ROLE_RE = re.compile(r"[a-z_][a-z0-9_]{0,62}\Z")
 _SCHEMA_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+_COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 
 
 class RestoreDrillError(ValueError):
@@ -215,6 +216,33 @@ def _secure_output_parent(path: Path, *, require_root_owned: bool) -> None:
         raise RestoreDrillError("restore evidence parent must be root-owned")
 
 
+def _source_revision(root: Path) -> str:
+    expected = os.environ.get("PINVI_SOURCE_REVISION", "")
+    try:
+        revision = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        if expected:
+            status = subprocess.run(
+                ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+            if not _COMMIT_RE.fullmatch(expected) or revision != expected or status:
+                raise RestoreDrillError(
+                    "restore producer checkout is not a clean PINVI_SOURCE_REVISION"
+                )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise RestoreDrillError("restore producer source revision could not be verified") from exc
+    if not _COMMIT_RE.fullmatch(revision):
+        raise RestoreDrillError("restore producer source revision is invalid")
+    return revision
+
+
 def _run_drill(args: argparse.Namespace) -> int:
     output: Path = args.output
     _secure_output_parent(output, require_root_owned=args.require_root_owned)
@@ -237,6 +265,7 @@ def _run_drill(args: argparse.Namespace) -> int:
     for script in (backup_script, restore_script):
         if script.is_symlink() or not script.is_file():
             raise RestoreDrillError("restore runner source is not canonical")
+    source_revision = _source_revision(root)
 
     with tempfile.TemporaryDirectory(
         prefix="pinvi-m05-restore-", dir=output.parent
@@ -297,6 +326,7 @@ def _run_drill(args: argparse.Namespace) -> int:
             "restore_runner_sha256": _sha256(restore_script.read_bytes()),
             "runtime_role_verified": True,
             "source_db_identity_sha256": _sha256(source_identity.encode("utf-8")),
+            "source_revision": source_revision,
             "status": "passed",
             "target_db_identity_sha256": _sha256(target_identity.encode("utf-8")),
             "trigger_guard_verified": True,

@@ -46,6 +46,20 @@ def _reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict[str, ob
     return payload
 
 
+def _canonical_json(value: object) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+
+
+def _ledger_record_hash(record: dict[str, object]) -> str:
+    unsigned = {key: value for key, value in record.items() if key != "record_sha256"}
+    return hashlib.sha256(_canonical_json(unsigned)).hexdigest()
+
+
 def _raise_redacted_settings_error(message: str) -> NoReturn:
     """SecretStr가 포함된 Settings 검증 오류에서 raw input을 보존하지 않는다."""
 
@@ -960,6 +974,7 @@ class Settings(BaseSettings):
             "live_ui_event_id",
             "live_ui_evidence_sha256",
             "live_ui_map_ack_sha256",
+            "live_ui_local_receipt_sha256",
             "live_ui_map_snapshot_sha256",
             "live_ui_pinvi_snapshot_sha256",
             "map_admin_openapi_sha256",
@@ -1095,6 +1110,7 @@ class Settings(BaseSettings):
             "activation_attestation_sha256",
             "live_ui_evidence_sha256",
             "live_ui_map_ack_sha256",
+            "live_ui_local_receipt_sha256",
             "live_ui_map_snapshot_sha256",
             "live_ui_pinvi_snapshot_sha256",
             "map_admin_runtime_openapi_sha256",
@@ -1106,6 +1122,12 @@ class Settings(BaseSettings):
             value = payload[field]
             if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
                 _raise_redacted_settings_error(f"M05 activation evidence hash is invalid: {field}")
+
+        for field in ("live_ui_local_receipt_sha256",):
+            if not isinstance(payload[field], str):
+                _raise_redacted_settings_error(
+                    f"M05 activation receipt terminal binding is invalid: {field}"
+                )
 
         for field, expected in (
             ("map_admin_openapi_sha256", KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256),
@@ -1170,10 +1192,15 @@ class Settings(BaseSettings):
             ledger_lines = ledger_path.read_text(encoding="utf-8").splitlines()
         except (OSError, UnicodeDecodeError):
             _raise_redacted_settings_error("M05 activation receipt ledger is unreadable")
-        if stat.S_IMODE(ledger_stat.st_mode) & 0o022 or not ledger_lines:
+        if (
+            stat.S_IMODE(ledger_stat.st_mode) != 0o600
+            or ledger_stat.st_uid != os.geteuid()
+            or not ledger_lines
+        ):
             _raise_redacted_settings_error("M05 activation receipt ledger permissions are invalid")
         records: list[dict[str, object]] = []
         previous_generation: int | None = None
+        previous_record_sha256 = "0" * 64
         for line in ledger_lines:
             try:
                 record = json.loads(line, object_pairs_hook=_reject_duplicate_json_keys)
@@ -1186,6 +1213,8 @@ class Settings(BaseSettings):
                 "activation_generation",
                 "activation_issued_at",
                 "activation_nonce",
+                "previous_record_sha256",
+                "record_sha256",
                 "receipt_sha256",
                 "scope",
                 "source_revision",
@@ -1197,6 +1226,8 @@ class Settings(BaseSettings):
             expires_at = record_object["activation_expires_at"]
             scope = record_object["scope"]
             source_revision = record_object["source_revision"]
+            record_previous_sha256 = record_object["previous_record_sha256"]
+            record_sha256 = record_object["record_sha256"]
             if (
                 type(generation) is not int
                 or generation < 1
@@ -1206,6 +1237,11 @@ class Settings(BaseSettings):
                 or expires_at <= issued_at
                 or expires_at - issued_at > 7 * 24 * 60 * 60
                 or not _is_canonical_uuid(record_object["activation_nonce"])
+                or not isinstance(record_previous_sha256, str)
+                or re.fullmatch(r"[0-9a-f]{64}", record_previous_sha256) is None
+                or record_previous_sha256 != previous_record_sha256
+                or not isinstance(record_sha256, str)
+                or re.fullmatch(r"[0-9a-f]{64}", record_sha256) is None
                 or not isinstance(record_object["receipt_sha256"], str)
                 or re.fullmatch(r"[0-9a-f]{64}", record_object["receipt_sha256"]) is None
                 or not isinstance(scope, str)
@@ -1214,7 +1250,10 @@ class Settings(BaseSettings):
                 or re.fullmatch(r"[0-9a-f]{40}", source_revision) is None
             ):
                 _raise_redacted_settings_error("M05 activation receipt ledger fields are invalid")
+            if record_sha256 != _ledger_record_hash(record_object):
+                _raise_redacted_settings_error("M05 activation receipt ledger hash chain is invalid")
             previous_generation = generation
+            previous_record_sha256 = record_sha256
             records.append(record_object)
         latest = records[-1]
         receipt_sha256 = hashlib.sha256(

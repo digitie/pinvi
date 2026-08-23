@@ -75,6 +75,13 @@ image="${PINVI_PLAYWRIGHT_RUNNER_IMAGE:-mcr.microsoft.com/playwright:v${playwrig
 network="${PINVI_PLAYWRIGHT_RUNNER_NETWORK:-host}"
 skip_npm_ci="${PINVI_PLAYWRIGHT_RUNNER_SKIP_NPM_CI:-0}"
 volume_prefix="${PINVI_PLAYWRIGHT_RUNNER_VOLUME_PREFIX:-pinvi-playwright}"
+evidence_dir="${PINVI_M05_UI_EVIDENCE_DIR:-}"
+if [[ -n "$evidence_dir" ]]; then
+  if [[ "$evidence_dir" != /* || ! -d "$evidence_dir" ]]; then
+    echo "error: PINVI_M05_UI_EVIDENCE_DIR must be an existing absolute directory" >&2
+    exit 1
+  fi
+fi
 
 docker_args=(
   run
@@ -104,6 +111,11 @@ docker_args+=(
   -v "${volume_prefix}-npm-cache:/tmp/.npm"
   -v "${volume_prefix}-test-results:/work/apps/web/test-results"
   -v "${volume_prefix}-playwright-report:/work/apps/web/playwright-report"
+)
+if [[ -n "$evidence_dir" ]]; then
+  docker_args+=( -v "$evidence_dir:$evidence_dir" )
+fi
+docker_args+=(
   -w /work
   "$image"
   bash

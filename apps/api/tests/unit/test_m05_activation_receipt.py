@@ -7,6 +7,7 @@ import hashlib
 import json
 import subprocess
 import sys
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -72,10 +73,14 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         {
             "event_id": "11111111-1111-4111-8111-111111111111",
             "event_sha256": "a" * 64,
+            "map_admin_endpoint": "http://127.0.0.1:12701",
             "map_ack_sha256": "b" * 64,
+            "map_local_receipt_sha256": "1" * 64,
             "map_snapshot_after_sha256": "c" * 64,
             "map_snapshot_before_sha256": "c" * 64,
             "pinvi_source_revision": PINVI_REVISION,
+            "pinvi_api_endpoint": "http://127.0.0.1:12801",
+            "pinvi_receipt_sha256": "1" * 64,
             "pinvi_snapshot_after_sha256": "d" * 64,
             "pinvi_snapshot_before_sha256": "d" * 64,
             "runner_exit_code": 0,
@@ -96,6 +101,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "restore_runner_sha256": "3" * 64,
             "runtime_role_verified": True,
             "source_db_identity_sha256": "d" * 64,
+            "source_revision": PINVI_REVISION,
             "status": "passed",
             "target_db_identity_sha256": "e" * 64,
             "trigger_guard_verified": True,
@@ -104,9 +110,9 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     _write_json(
         evidence_dir / "map-pair.json",
         {
-            "admin_image_digest": "sha256:" + "4" * 64,
-            "api_image_digest": "sha256:" + "5" * 64,
-            "frontend_image_digest": "sha256:" + "6" * 64,
+            "admin_image_digest": "sha256:" + "7" * 64,
+            "api_image_digest": "sha256:" + "7" * 64,
+            "frontend_image_digest": "sha256:" + "8" * 64,
             "admin": {
                 "openapi_sha256": KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
                 "source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
@@ -132,6 +138,13 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
                     "source_sha256": KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
                 },
                 "api": {
+                    "digest": "sha256:" + "7" * 64,
+                    "environment": "production",
+                    "image_id": "sha256:" + "7" * 64,
+                    "revision_label": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+                    "source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+                },
+                "admin": {
                     "digest": "sha256:" + "7" * 64,
                     "environment": "production",
                     "image_id": "sha256:" + "7" * 64,
@@ -184,12 +197,15 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         for name in ("live-ui", "map-pair", "pinvi-images", "restore", "reviews")
     }
     attestation_payload = {
-        "created_at": 1,
+        "created_at": int(time.time()),
         "event_id": "11111111-1111-4111-8111-111111111111",
         "evidence_sha256": evidence_hashes,
         "map_ack_sha256": "b" * 64,
+        "local_receipt_sha256": "1" * 64,
+        "map_admin_endpoint": "http://127.0.0.1:12701",
         "map_snapshot_sha256": "c" * 64,
         "pinvi_snapshot_sha256": "d" * 64,
+        "pinvi_api_endpoint": "http://127.0.0.1:12801",
         "pinvi_source_revision": PINVI_REVISION,
         "scope": "production",
         "status": "passed",
