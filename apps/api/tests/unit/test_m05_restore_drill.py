@@ -90,6 +90,8 @@ elif [[ "$sql" == *"has_schema_privilege"* || "$sql" == *"count(*) = 6"* || "$sq
   echo t
 elif [[ "$sql" == *"lag(content_hash)"* ]]; then
   echo valid
+elif [[ "$sql" == *"to_regnamespace"* && "$sql" == *"IS NOT NULL"* ]]; then
+  echo f
 elif [[ "$sql" == *"to_regnamespace"* ]]; then
   echo 12345
 elif [[ "$sql" == *"to_regclass"* ]]; then
