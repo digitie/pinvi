@@ -41,6 +41,8 @@ def _command_env() -> dict[str, str]:
     environment = os.environ.copy()
     if environment.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
         environment["PATH"] = _SAFE_PATH
+        environment["PINVI_BACKUP_PG_DUMP_BIN"] = "/usr/bin/pg_dump"
+        environment["PINVI_BACKUP_DOCKER_BIN"] = "/usr/bin/docker"
     return environment
 
 
@@ -341,6 +343,8 @@ def _source_revision(root: Path) -> str:
 def _run_drill(args: argparse.Namespace) -> int:
     output: Path = args.output
     _secure_output_parent(output, require_root_owned=args.require_root_owned)
+    if args.require_root_owned and os.environ.get("PINVI_M05_RESTORE_TEST_MODE") == "1":
+        raise RestoreDrillError("restore test mode cannot produce root-owned evidence")
     if not _SCHEMA_RE.fullmatch(args.schema):
         raise RestoreDrillError("restore schema is invalid")
     if not _ROLE_RE.fullmatch(args.runtime_role):
