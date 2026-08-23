@@ -624,17 +624,31 @@ async def _restore_backup_hotswap_locked(
                 cwd=str(repo_root()),
                 start_new_session=True,
             )
+            communicate_task = asyncio.create_task(proc.communicate())
             try:
                 stdout_raw, stderr_raw = await asyncio.wait_for(
-                    proc.communicate(),
+                    asyncio.shield(communicate_task),
                     timeout=settings.pinvi_restore_timeout_seconds,
                 )
             except TimeoutError as exc:
+                # Give the shell and its children a graceful group termination so
+                # the shell EXIT trap can release the database fence and advisory
+                # lock. SIGKILL is the final fail-safe after the cleanup grace
+                # period.
                 try:
-                    os.killpg(proc.pid, signal.SIGKILL)
+                    os.killpg(proc.pid, signal.SIGTERM)
                 except ProcessLookupError:
                     pass
-                await proc.wait()
+                try:
+                    stdout_raw, stderr_raw = await asyncio.wait_for(
+                        asyncio.shield(communicate_task), timeout=10.0
+                    )
+                except TimeoutError:
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    stdout_raw, stderr_raw = await communicate_task
                 raise BackupServiceError(
                     sanitize_backup_message("restore hotswap script timed out")
                 ) from exc

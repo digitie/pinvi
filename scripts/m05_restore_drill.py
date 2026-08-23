@@ -264,6 +264,7 @@ def _run(
     *,
     env: dict[str, str],
     check: bool = True,
+    input_text: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     try:
         completed = subprocess.run(
@@ -272,6 +273,7 @@ def _run(
             capture_output=True,
             text=True,
             env=env,
+            input=input_text,
         )
     except OSError as exc:
         raise RestoreDrillError("restore drill command could not be started") from exc
@@ -328,6 +330,23 @@ def _scalar(database_url: str, sql: str, *, check: bool = True) -> subprocess.Co
     )
 
 
+def _psql_file(
+    database_url: str, sql: str, *, check: bool = True
+) -> subprocess.CompletedProcess[str]:
+    return _run(
+        [
+            _tool_path("psql"),
+            "--no-psqlrc",
+            "--set=ON_ERROR_STOP=1",
+            f"--dbname={database_url}",
+            "--file=-",
+        ],
+        env=_command_env(),
+        check=check,
+        input_text=sql,
+    )
+
+
 def _require_true(result: subprocess.CompletedProcess[str], *, name: str) -> None:
     if result.returncode != 0 or result.stdout.strip() != "t":
         raise RestoreDrillError(f"restore verification failed: {name}")
@@ -347,7 +366,6 @@ def _runtime_role_check(
   AND has_schema_privilege(current_user, '{schema}', 'USAGE')
   AND NOT has_schema_privilege(current_user, '{schema}', 'CREATE')
   AND NOT has_schema_privilege(current_user, 'x_extension', 'CREATE')
-  AND NOT has_database_privilege(current_user, current_database(), 'CREATE')
   AND NOT EXISTS (
       SELECT 1
       FROM pg_class c
@@ -411,6 +429,10 @@ def _runtime_role_check(
   AND NOT EXISTS (
       SELECT 1 FROM pg_namespace n WHERE n.nspname = '{schema}'
   )"""
+    schema_checks = f"""
+  AND NOT has_database_privilege(current_user, current_database(), 'CREATE')
+  AND NOT has_schema_privilege(current_user, 'public', 'CREATE')
+{schema_checks}"""
     sql = f"""
 SELECT r.rolcanlogin
   AND current_user = '{expected_role}'
@@ -567,7 +589,9 @@ AND to_regnamespace('{schema}') IS NULL
     _require_true(_scalar(database_url, sql), name="fresh disposable target")
 
 
-def _recreate_disposable_target(database_url: str, *, staging_role: str) -> None:
+def _recreate_disposable_target(
+    database_url: str, *, staging_role: str, runtime_role: str
+) -> None:
     """인증된 단일 연결에서 endpoint를 확인한 뒤 prefix DB를 재생성한다."""
 
     try:
@@ -579,6 +603,8 @@ def _recreate_disposable_target(database_url: str, *, staging_role: str) -> None
         raise RestoreDrillError("restore target database is outside the M05 disposable prefix")
     if not _ROLE_RE.fullmatch(staging_role):
         raise RestoreDrillError("restore staging role is invalid")
+    if not _ROLE_RE.fullmatch(runtime_role):
+        raise RestoreDrillError("restore runtime role is invalid")
     maintenance_url = urlunsplit(parsed._replace(path="/postgres"))
     quoted_database = '"' + database_name.replace('"', '""') + '"'
     quoted_role = '"' + staging_role.replace('"', '""') + '"'
@@ -590,23 +616,44 @@ def _recreate_disposable_target(database_url: str, *, staging_role: str) -> None
     expected_port = str(parsed.port or 5432)
     sql_hostaddr = hostaddr.replace("'", "''")
     sql_role = staging_role.replace("'", "''")
-    _run(
-        [
-            _tool_path("psql"),
-            "--no-psqlrc",
-            "--set=ON_ERROR_STOP=1",
-            f"--dbname={maintenance_url}",
-            "--command="
-            + "DO $m05$ BEGIN IF current_database() <> 'postgres' "
-            + f"OR current_user <> '{sql_role}' "
-            + f"OR COALESCE(inet_server_addr()::text, '') <> '{sql_hostaddr}' "
-            + f"OR inet_server_port()::text <> '{expected_port}' "
-            + "OR (pg_control_system()).system_identifier::text = '' "
-            + "THEN RAISE EXCEPTION 'restore maintenance endpoint identity mismatch'; END IF; END $m05$; "
-            + f"DROP DATABASE IF EXISTS {quoted_database} WITH (FORCE); "
-            + f"CREATE DATABASE {quoted_database} OWNER {quoted_role}",
-        ],
-        env=_command_env(),
+    sql_runtime = runtime_role.replace("'", "''")
+    _psql_file(
+        maintenance_url,
+        f"""
+DO $m05$
+BEGIN
+  IF current_database() <> 'postgres'
+     OR current_user <> '{sql_role}'
+     OR COALESCE(inet_server_addr()::text, '') <> '{sql_hostaddr}'
+     OR inet_server_port()::text <> '{expected_port}'
+     OR (pg_control_system()).system_identifier::text = ''
+  THEN
+    RAISE EXCEPTION 'restore maintenance endpoint identity mismatch';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_roles r
+    WHERE r.rolname = '{sql_runtime}'
+      AND r.rolcanlogin
+      AND NOT r.rolsuper
+      AND NOT r.rolcreaterole
+      AND NOT r.rolcreatedb
+      AND NOT r.rolreplication
+      AND NOT r.rolbypassrls
+      AND NOT r.rolinherit
+      AND NOT EXISTS (SELECT 1 FROM pg_auth_members m WHERE m.member = r.oid)
+      AND NOT has_database_privilege(r.rolname, 'postgres', 'CREATE')
+      AND NOT has_database_privilege(r.rolname, 'template1', 'CREATE')
+      AND NOT has_schema_privilege(r.rolname, 'public', 'CREATE')
+  ) THEN
+    RAISE EXCEPTION 'restore runtime role has direct database or schema creation authority';
+  END IF;
+END
+$m05$;
+DROP DATABASE IF EXISTS {quoted_database} WITH (FORCE);
+CREATE DATABASE {quoted_database} OWNER {quoted_role};
+        """,
+        check=True,
     )
 
 
@@ -759,7 +806,11 @@ def _run_drill(args: argparse.Namespace) -> int:
     if source_database_name == target_database_name:
         raise RestoreDrillError("restore source and disposable target databases must differ")
     if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
-        _recreate_disposable_target(target_url, staging_role=args.staging_role)
+        _recreate_disposable_target(
+            target_url,
+            staging_role=args.staging_role,
+            runtime_role=args.runtime_role,
+        )
     source_identity_pre = _identity(source_url, schema=args.schema)
     target_identity_pre = _identity(target_url, schema=args.schema)
     runtime_identity_pre = _identity(runtime_url, schema=args.schema)

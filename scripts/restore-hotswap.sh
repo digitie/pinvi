@@ -548,13 +548,7 @@ run_guarded_file() {
         i++
       }
       normalized = tolower(clean)
-      if (
-        normalized ~ /^[[:space:]]*[\\!]/ ||
-        normalized ~ /pg_advisory_(lock|unlock)/ ||
-        normalized ~ /pg_(cancel|terminate)_backend/ ||
-        normalized ~ /discard[[:space:]]+all/ ||
-        normalized ~ /(^|[;[:space:]])(begin|start[[:space:]]+transaction|commit|end|rollback|abort)([;[:space:]]|$)/
-      ) {
+      if (normalized ~ /^[[:space:]]*[\\!]/ || normalized ~ /pg_advisory_(lock|unlock)/ || normalized ~ /pg_(cancel|terminate)_backend/ || normalized ~ /discard[[:space:]]+all/ || normalized ~ /(^|[;[:space:]])(begin|start[[:space:]]+transaction|commit|end|rollback|abort)([;[:space:]]|$)/) {
         unsafe = 1
         exit
       }
@@ -756,6 +750,7 @@ WITH RECURSIVE role_closure(role_oid) AS (
 SELECT COALESCE(string_agg(DISTINCT roles.rolname, ',' ORDER BY roles.rolname), '')
 FROM pg_roles roles
 JOIN role_closure closure ON closure.role_oid = roles.oid
+WHERE roles.rolname <> current_user
 " | tr -d '[:space:]'
 }
 
@@ -777,25 +772,28 @@ SELECT COALESCE(string_agg(DISTINCT roles.rolname, ',' ORDER BY roles.rolname), 
 FROM pg_roles roles
 JOIN role_closure closure ON closure.role_oid = roles.oid
 JOIN pg_database db ON db.datname = current_database()
-WHERE roles.rolsuper
-   OR roles.rolcreaterole
-   OR roles.rolcreatedb
-   OR roles.rolreplication
-   OR roles.rolbypassrls
+WHERE roles.rolname <> current_user
+  AND (
+    roles.rolsuper
+    OR roles.rolcreaterole
+    OR roles.rolcreatedb
+    OR roles.rolreplication
+    OR roles.rolbypassrls
     OR db.datdba = roles.oid
-   OR EXISTS (
-     SELECT 1
-     FROM pg_namespace n
-     WHERE n.nspname IN ('${SOURCE_SCHEMA}', '${RESTORE_SCHEMA}')
-       AND n.nspowner = roles.oid
-   )
-   OR EXISTS (
-     SELECT 1
-     FROM pg_class c
-     JOIN pg_namespace n ON n.oid = c.relnamespace
-     WHERE n.nspname IN ('${SOURCE_SCHEMA}', '${RESTORE_SCHEMA}')
-       AND c.relowner = roles.oid
-   )
+    OR EXISTS (
+      SELECT 1
+      FROM pg_namespace n
+      WHERE n.nspname IN ('${SOURCE_SCHEMA}', '${RESTORE_SCHEMA}')
+        AND n.nspowner = roles.oid
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname IN ('${SOURCE_SCHEMA}', '${RESTORE_SCHEMA}')
+        AND c.relowner = roles.oid
+    )
+  )
 " | tr -d '[:space:]')"
   if [[ -n "${unsafe_roles}" ]]; then
     phase draining failed "database write fence cannot contain privileged writer roles: ${unsafe_roles}"
@@ -892,6 +890,7 @@ BEGIN
   JOIN role_closure closure ON closure.login_oid = login.oid
   JOIN pg_roles effective ON effective.oid = closure.role_oid
   WHERE login.rolcanlogin
+    AND login.rolname <> current_user
     AND has_database_privilege(login.rolname, current_database(), 'CONNECT')
     AND (
       effective.rolsuper
@@ -997,10 +996,59 @@ WHERE effective.rolsuper
   fi
 }
 
+assert_restore_executor_safe() {
+  local roles_sql
+  roles_sql="$(write_roles_sql)"
+  local executor_safe
+  executor_safe="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
+SELECT EXISTS (
+  SELECT 1
+  FROM pg_roles r
+  WHERE r.rolname = current_user
+    AND r.rolcanlogin
+    AND has_database_privilege(current_user, current_database(), 'CONNECT')
+    AND has_database_privilege(current_user, current_database(), 'CREATE')
+    AND NOT r.rolsuper
+    AND NOT r.rolcreaterole
+    AND NOT r.rolcreatedb
+    AND NOT r.rolreplication
+    AND NOT r.rolbypassrls
+    AND NOT r.rolinherit
+    AND NOT EXISTS (
+      SELECT 1 FROM pg_auth_members m WHERE m.member = r.oid
+    )
+    AND current_user <> ALL(string_to_array('${roles_sql}', ','))
+    AND EXISTS (
+      SELECT 1
+      FROM pg_namespace n
+      WHERE n.nspname = '${SOURCE_SCHEMA}'
+        AND n.nspowner = r.oid
+    )
+    AND (
+      to_regnamespace('${RESTORE_SCHEMA}') IS NULL
+      OR EXISTS (
+        SELECT 1
+        FROM pg_namespace n
+        WHERE n.nspname = '${RESTORE_SCHEMA}'
+          AND n.nspowner = r.oid
+      )
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM pg_namespace n WHERE n.nspname = '${PREVIOUS_SCHEMA}'
+    )
+  )
+" | tr -d '[:space:]')"
+  if [[ "${executor_safe}" != "t" ]]; then
+    phase draining failed "restore executor must be a dedicated schema owner with database CREATE and no elevated membership"
+    exit 3
+  fi
+}
+
 enter_write_fence() {
   local roles_sql
   roles_sql="$(write_roles_sql)"
   assert_advisory_lock_alive
+  assert_restore_executor_safe
   assert_configured_roles_safe
   local writer_logins
   writer_logins="$(writer_login_roles)"

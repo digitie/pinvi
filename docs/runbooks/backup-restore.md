@@ -152,14 +152,22 @@ USAGE/SELECT grant를 재적용한다. 이 role은 LOGIN이고 superuser·CREATE
 
 | 변수                            | 기본값               | 설명                                                 |
 | ------------------------------- | -------------------- | ---------------------------------------------------- |
-| `PINVI_RESTORE_DATABASE_URL`    | `PINVI_DATABASE_URL` | restore/swap 전용 DB URL override                    |
+| `PINVI_RESTORE_DATABASE_URL`    | `PINVI_DATABASE_URL` | restore/swap 전용 DB URL override. 실행 모드에서는 전용 non-superuser schema owner login을 지정해야 한다. |
 | `PINVI_RESTORE_HOTSWAP_EXECUTE` | `0`                  | staging drill 후 운영 노드에서만 `1`                 |
 | `PINVI_RESTORE_DRAIN_COMMAND`   | 빈 값                | CLI 경로에서만 실행할 write drain 명령               |
 | `PINVI_RESTORE_ALLOW_NO_DRAIN`  | `0`                  | 외부 write fence를 확인한 경우에만 `1`                |
 | `PINVI_RESTORE_DRAIN_VERIFIED`  | `0`                  | 외부 orchestrator가 write fence를 확인했다는 명시적 증명 |
-| `PINVI_RESTORE_APP_ROLE`        | 빈 값                | swap 후 live schema에 권한을 재적용할 앱 DB role. schema-swap 실행 시 필수 |
+| `PINVI_RESTORE_APP_ROLE`        | 빈 값                | swap 후 live schema에 권한을 재적용할 앱 DB role. schema-swap 실행 시 필수이며 restore executor와 달라야 한다. |
 | `PINVI_RESTORE_WRITE_ROLES`     | 빈 값                | API·worker 등 모든 runtime write role의 쉼표 구분 목록. 누락된 login writer가 있으면 fail-close |
 | `PINVI_RESTORE_HOTSWAP_SCRIPT_SHA256` | 빈 값           | 운영 API 경로에서 canonical hotswap runner content digest 고정 |
+
+실행 모드의 `PINVI_RESTORE_DATABASE_URL`은 API runtime role이 아닌 별도 restore
+executor로 연결해야 한다. 이 login은 `LOGIN`, `NOSUPERUSER`, `NOCREATEROLE`,
+`NOCREATEDB`, `NOREPLICATION`, `NOBYPASSRLS`, `NOINHERIT`이어야 하고 role membership이
+없어야 한다. 기존 `app` schema의 직접 owner이며 현재 database의 `CREATE` 권한을 가져야
+schema를 만들고 rename할 수 있다. `PINVI_RESTORE_APP_ROLE`과
+`PINVI_RESTORE_WRITE_ROLES`에는 executor를 넣지 않는다. runner는 이 executor를 사전
+검증된 유지보수 주체로만 허용하고, 나머지 connectable writer의 권한과 CONNECT를 fence한다.
 
 ## 4. Restore — schema-swap 핫스왑 (정상 절차, Sprint 6 T-111)
 
@@ -203,8 +211,10 @@ df -h /var/lib/postgresql /var/lib/pinvi/backups
 # 2. restore schema 준비/복구 + 검증 + drain + schema swap (CLI 운영자 경로)
 # 실제 실행 전 staging drill 후 PINVI_RESTORE_HOTSWAP_EXECUTE=1을 설정한다.
 PINVI_RESTORE_HOTSWAP_EXECUTE=1 \
+PINVI_RESTORE_DATABASE_URL='postgresql://<restore-owner>:<password>@<postgres-host>:5432/pinvi' \
 PINVI_RESTORE_DRAIN_COMMAND='docker compose -f docker-compose.app.yml stop api web' \
 PINVI_RESTORE_APP_ROLE=pinvi_app \
+PINVI_RESTORE_WRITE_ROLES=pinvi_app \
 sudo -E ./scripts/restore-hotswap.sh run \
   "${SNAPSHOT}" \
   "${RESTORE_SCHEMA}" \

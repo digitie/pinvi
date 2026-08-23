@@ -181,30 +181,11 @@ assert_expected_target() {
 }
 
 secure_restore_with_identity_guard() {
-  local restore_sql
-  local guarded_sql
-  restore_sql="$(mktemp)"
-  guarded_sql="$(mktemp)"
-  cleanup_restore_sql() {
-    rm -f "${restore_sql}" "${guarded_sql}"
-  }
-  trap 'cleanup_restore_sql; cleanup_snapshot' EXIT
-
-  "${PG_RESTORE_BIN}" \
-    --clean \
-    --if-exists \
-    --exit-on-error \
-    --no-owner \
-    --no-privileges \
-    --schema="${SCHEMA}" \
-    --file="${restore_sql}" \
-    "${BACKUP_FILE}"
-  if grep -Eiq '^[[:space:]]*(\\(connect|c)([[:space:]]|$)|c([[:space:]]|$)|begin([[:space:]]|;|$)|start[[:space:]]+transaction([[:space:]]|;|$)|commit([[:space:]]|;|$)|rollback([[:space:]]|;|$))' "${restore_sql}"; then
-    echo "restore dump contains a connection switch" >&2
-    exit 3
-  fi
-  {
-    cat <<SQL
+  # Keep the identity check and schema bootstrap in psql, but let pg_restore
+  # consume the custom archive directly. Converting an archive to plain SQL and
+  # feeding it to psql makes function bodies look like transaction controls and
+  # exposes psql meta-command parsing to archive contents.
+  cat >"${SNAPSHOT_TMP_DIR}/restore-identity.sql" <<SQL
 DO \$m05\$
 BEGIN
   IF current_database() <> '${PINVI_RESTORE_EXPECTED_DATABASE_NAME}'
@@ -218,19 +199,33 @@ BEGIN
 END
 \$m05\$;
 SQL
-    printf 'CREATE SCHEMA IF NOT EXISTS "%s";\n' "${SCHEMA}"
-    cat "${restore_sql}"
-    if [[ -n "${APP_ROLE}" ]]; then
-      printf 'GRANT USAGE ON SCHEMA "%s" TO "%s";\n' "${SCHEMA}" "${APP_ROLE}"
-      printf 'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "%s" TO "%s";\n' "${SCHEMA}" "${APP_ROLE}"
-      printf 'GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA "%s" TO "%s";\n' "${SCHEMA}" "${APP_ROLE}"
-    fi
-  } >"${guarded_sql}"
   "${PSQL_BIN}" \
     --no-psqlrc \
     --set=ON_ERROR_STOP=1 \
     --dbname="${DATABASE_URL}" \
-    --file="${guarded_sql}"
+    --file="${SNAPSHOT_TMP_DIR}/restore-identity.sql"
+  "${PSQL_BIN}" \
+    --no-psqlrc \
+    --set=ON_ERROR_STOP=1 \
+    --dbname="${DATABASE_URL}" \
+    --command="CREATE SCHEMA IF NOT EXISTS \"${SCHEMA}\""
+  "${PG_RESTORE_BIN}" \
+    --clean \
+    --if-exists \
+    --exit-on-error \
+    --no-owner \
+    --no-privileges \
+    --schema="${SCHEMA}" \
+    --jobs="${JOBS}" \
+    --dbname="${DATABASE_URL}" \
+    "${BACKUP_FILE}"
+  if [[ -n "${APP_ROLE}" ]]; then
+    "${PSQL_BIN}" \
+      --no-psqlrc \
+      --set=ON_ERROR_STOP=1 \
+      --dbname="${DATABASE_URL}" \
+      --command="GRANT USAGE ON SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\"; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\"; GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\""
+  fi
 }
 
 # Validate the destination authority before CREATE SCHEMA/pg_restore can alter it. A
