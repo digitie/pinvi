@@ -50,6 +50,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # M05 receipt 검증은 merge ref가 아니라 실제 PR head를 봉인한다.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-python@v5
         with:
