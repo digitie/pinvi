@@ -33,6 +33,7 @@ _PACKAGED_M05_PAIR_PROVENANCE_PATH = f"_contract_data/{_M05_PAIR_PROVENANCE_FILE
 _M05_ACTIVATION_TRUST_FILENAME = "pinvi-m05-activation-receipt-trust-v1.json"
 _M05_REVIEWER_ROSTER_FILENAME = "pinvi-m05-reviewer-roster-v1.json"
 _M05_ACTIVATION_PR_URL = "https://github.com/digitie/pinvi/pull/466"
+_CONTAINER_ID_RE = re.compile(r"(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])")
 
 
 class _DuplicateJsonKeyError(ValueError):
@@ -60,6 +61,38 @@ def _canonical_json(value: object) -> bytes:
 def _ledger_record_hash(record: dict[str, object]) -> str:
     unsigned = {key: value for key, value in record.items() if key != "record_sha256"}
     return hashlib.sha256(_canonical_json(unsigned)).hexdigest()
+
+
+def _decode_canonical_reviewer_public_key(value: object) -> bytes | None:
+    if not isinstance(value, str) or re.fullmatch(r"[A-Za-z0-9_-]{43}", value) is None:
+        return None
+    try:
+        decoded = base64.urlsafe_b64decode(value + "=")
+    except (binascii.Error, ValueError):
+        return None
+    if (
+        len(decoded) != 32
+        or base64.urlsafe_b64encode(decoded).rstrip(b"=").decode("ascii") != value
+    ):
+        return None
+    try:
+        Ed25519PublicKey.from_public_bytes(decoded)
+    except ValueError:
+        return None
+    return decoded
+
+
+def _runtime_container_id() -> str | None:
+    """현재 API 프로세스가 속한 Docker cgroup의 실제 container ID를 읽는다."""
+
+    for path in (Path("/proc/self/cgroup"), Path("/proc/1/cpuset")):
+        try:
+            matches = _CONTAINER_ID_RE.findall(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError):
+            continue
+        if matches:
+            return cast(str, matches[-1])
+    return None
 
 
 def _raise_redacted_settings_error(message: str) -> NoReturn:
@@ -272,7 +305,7 @@ def _load_m05_activation_public_key_sha256() -> str:
     raw = json.loads(_m05_activation_trust_text(), object_pairs_hook=_reject_duplicate_json_keys)
     if (
         not isinstance(raw, dict)
-        or set(raw) != {"public_key_sha256", "version"}
+        or set(raw) != {"public_key_sha256", "reviewer_roster_sha256", "version"}
         or type(raw["version"]) is not int
         or raw["version"] != 1
     ):
@@ -284,9 +317,9 @@ def _load_m05_reviewer_agent_ids() -> frozenset[str]:
     raw = json.loads(_m05_reviewer_roster_text(), object_pairs_hook=_reject_duplicate_json_keys)
     if (
         not isinstance(raw, dict)
-        or set(raw) != {"agent_ids", "version"}
+        or set(raw) != {"agent_ids", "public_keys", "version"}
         or type(raw["version"]) is not int
-        or raw["version"] != 1
+        or raw["version"] != 2
         or not isinstance(raw["agent_ids"], list)
         or len(raw["agent_ids"]) != 2
     ):
@@ -303,6 +336,23 @@ def _load_m05_reviewer_agent_ids() -> frozenset[str]:
         result.add(agent_id)
     if len(result) != 2:
         raise RuntimeError("M05 reviewer roster agents are not distinct")
+    public_keys = raw["public_keys"]
+    if (
+        not isinstance(public_keys, dict)
+        or set(public_keys) != result
+        or any(
+            _decode_canonical_reviewer_public_key(value) is None for value in public_keys.values()
+        )
+    ):
+        raise RuntimeError("M05 reviewer roster public keys are invalid")
+    trust = json.loads(_m05_activation_trust_text(), object_pairs_hook=_reject_duplicate_json_keys)
+    if (
+        not isinstance(trust, dict)
+        or not isinstance(trust.get("reviewer_roster_sha256"), str)
+        or hashlib.sha256(_m05_reviewer_roster_text().encode("utf-8")).hexdigest()
+        != trust["reviewer_roster_sha256"]
+    ):
+        raise RuntimeError("M05 reviewer roster is not bound to the activation trust anchor")
     return frozenset(result)
 
 
@@ -589,6 +639,8 @@ class Settings(BaseSettings):
     pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt: SecretStr | None = (
         None
     )
+    # container ID가 receipt payload에 결박되므로 재생성 없는 bind-mounted receipt 경로를 지원한다.
+    pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt_path: str = ""
     pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt_public_key: str = ""
     # receipt nonce/generation의 root-owned append-only ledger. staging/production enable 시 필수다.
     pinvi_m05_activation_ledger_path: str = ""
@@ -1085,6 +1137,36 @@ class Settings(BaseSettings):
         receipt_secret = (
             self.pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt
         )
+        receipt_path_value = (
+            self.pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt_path
+        )
+        if receipt_secret is not None and receipt_path_value:
+            _raise_redacted_settings_error(
+                "M05 activation receipt must use either an inline value or a mounted path"
+            )
+        if receipt_secret is None and receipt_path_value:
+            receipt_path = Path(receipt_path_value)
+            try:
+                receipt_parent = receipt_path.parent
+                receipt_stat = receipt_path.stat()
+                parent_stat = receipt_parent.stat()
+                if (
+                    not receipt_path.is_absolute()
+                    or receipt_path.is_symlink()
+                    or not receipt_path.is_file()
+                    or stat.S_IMODE(receipt_stat.st_mode) != 0o600
+                    or receipt_stat.st_uid != os.geteuid()
+                    or receipt_parent.is_symlink()
+                    or not receipt_parent.is_dir()
+                    or stat.S_IMODE(parent_stat.st_mode) & 0o022
+                    or parent_stat.st_uid != os.geteuid()
+                ):
+                    raise OSError("activation receipt path permissions are invalid")
+                receipt_secret = SecretStr(receipt_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError):
+                _raise_redacted_settings_error(
+                    "M05 activation receipt mounted path is not a secure regular file"
+                )
         if receipt_secret is None:
             _raise_redacted_settings_error(
                 "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT "
@@ -1519,6 +1601,12 @@ class Settings(BaseSettings):
             _raise_redacted_settings_error(
                 "M05 activation receipt Pinvi runtime image digest does not match the attested pair"
             )
+        if self.pinvi_environment in {"staging", "production"}:
+            runtime_container_id = _runtime_container_id()
+            if runtime_container_id != payload["pinvi_api_container_id"]:
+                _raise_redacted_settings_error(
+                    "M05 activation receipt API container ID does not match the running container"
+                )
         pinvi_source_revision = payload["pinvi_source_revision"]
         if (
             not isinstance(pinvi_source_revision, str)

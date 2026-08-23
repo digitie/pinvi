@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import time
@@ -121,11 +122,59 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2": tmp_path / "ampere-review.txt",
     }
     review_response_hashes: dict[str, str] = {}
+    reviewer_private_keys = {
+        agent_id: Ed25519PrivateKey.generate() for agent_id in review_response_paths
+    }
     review_ids = {
         "01a02ce8-22cf-70b2-92cc-7dc3af16a915": "44444444-4444-4444-8444-444444444444",
         "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2": "55555555-5555-4555-8555-555555555555",
     }
+    reviewer_roster_path = tmp_path / "reviewer-roster.json"
+    _write_json(
+        reviewer_roster_path,
+        {
+            "agent_ids": list(review_response_paths),
+            "public_keys": {
+                agent_id: base64.urlsafe_b64encode(
+                    private_key.public_key().public_bytes(
+                        serialization.Encoding.Raw,
+                        serialization.PublicFormat.Raw,
+                    )
+                )
+                .decode("ascii")
+                .rstrip("=")
+                for agent_id, private_key in reviewer_private_keys.items()
+            },
+            "version": 2,
+        },
+    )
     for agent_id, response_path in review_response_paths.items():
+        summary = "GO no P0/P1 findings"
+        signature_payload = {
+            "agent_id": agent_id,
+            "challenge_id": review_challenge_id,
+            "commit": PINVI_REVISION,
+            "p0_p1": 0,
+            "pr_url": "https://github.com/digitie/pinvi/pull/466",
+            "review_id": review_ids[agent_id],
+            "review_nonce": review_response_nonce,
+            "summary": summary,
+            "verdict": "GO",
+        }
+        review_signature = (
+            base64.urlsafe_b64encode(
+                reviewer_private_keys[agent_id].sign(
+                    json.dumps(
+                        signature_payload,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    ).encode("utf-8")
+                )
+            )
+            .decode("ascii")
+            .rstrip("=")
+        )
         response = (
             "verdict: GO\n"
             "p0_p1: 0\n"
@@ -137,7 +186,8 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             f"reviewed_commit: {PINVI_REVISION}\n"
             "pr_url: https://github.com/digitie/pinvi/pull/466\n"
             f"challenge_id: {review_challenge_id}\n"
-            "summary: GO no P0/P1 findings\n"
+            f"summary: {summary}\n"
+            f"review_signature: {review_signature}\n"
         )
         response_path.write_text(response, encoding="utf-8")
         response_path.chmod(0o600)
@@ -538,10 +588,13 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             str(review_challenge_path),
             "--review-response-nonce",
             review_response_nonce,
+            "--reviewer-roster",
+            str(reviewer_roster_path),
         ],
         check=True,
         capture_output=True,
         text=True,
+        env={**os.environ, "PINVI_M05_RECEIPT_TEST_MODE": "1"},
     )
     public_key = next(
         line.removeprefix("public_key=")
@@ -587,6 +640,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     assert json.loads(durable_floor_path.read_text(encoding="utf-8")) == {"generation": 2}
     assert len(durable_history_path.read_text(encoding="utf-8").splitlines()) == 1
     assert len(durable_anchor_path.read_text(encoding="utf-8").splitlines()) == 1
+    monkeypatch.setattr(config_module, "_runtime_container_id", lambda: "d" * 64)
     loaded = Settings(
         _env_file=None,
         pinvi_environment="production",

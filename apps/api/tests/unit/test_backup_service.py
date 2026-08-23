@@ -223,6 +223,42 @@ printf 'RESTORE_PHASE=switching:success:switched %s\\n' "$4"
 
 
 @pytest.mark.asyncio
+async def test_restore_backup_hotswap_timeout_kills_script_process_group(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backup_dir = anyio.Path(settings.pinvi_backup_dir)
+    await backup_dir.mkdir(parents=True)
+    snapshot = backup_dir / "pinvi-app-timeout.dump"
+    await snapshot.write_text("dump", encoding="utf-8")
+    await (backup_dir / "pinvi-app-timeout.dump.sha256").write_text(
+        f"{hashlib.sha256(b'dump').hexdigest()}\n", encoding="utf-8"
+    )
+    marker = tmp_path / "child-survived"
+    script = tmp_path / "restore-hotswap-timeout.sh"
+    _write_script(
+        script,
+        """#!/usr/bin/env bash
+set -euo pipefail
+(sleep 1; touch "$PINVI_TIMEOUT_MARKER") &
+while :; do sleep 1; done
+""",
+    )
+    monkeypatch.setenv("PINVI_TIMEOUT_MARKER", str(marker))
+    monkeypatch.setattr(settings, "pinvi_restore_hotswap_script_path", str(script))
+    monkeypatch.setattr(settings, "pinvi_restore_timeout_seconds", 0.05)
+
+    with pytest.raises(BackupServiceError, match="timed out"):
+        await restore_backup_hotswap(
+            snapshot_id="pinvi-app-timeout",
+            access_reason="timeout 테스트",
+        )
+
+    await anyio.sleep(1.2)
+    assert not marker.exists()
+
+
+@pytest.mark.asyncio
 async def test_restore_backup_hotswap_rejects_snapshot_without_verified_checksum() -> None:
     backup_dir = anyio.Path(settings.pinvi_backup_dir)
     await backup_dir.mkdir(parents=True)

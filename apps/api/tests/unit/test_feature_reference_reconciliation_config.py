@@ -63,6 +63,7 @@ def _use_test_activation_trust_anchor(monkeypatch: pytest.MonkeyPatch) -> None:
         "PINVI_M05_ACTIVATION_RECEIPT_PUBLIC_KEY_SHA256",
         TEST_TRUST_ANCHOR_SHA256,
     )
+    monkeypatch.setattr(config_module, "_runtime_container_id", lambda: "d" * 64)
 
 
 def _settings(**overrides: object) -> Settings:
@@ -73,6 +74,11 @@ def _production_settings(**overrides: object) -> Settings:
     receipt = overrides.get(
         "pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt"
     )
+    receipt_path_value = overrides.get(
+        "pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt_path"
+    )
+    if receipt is None and isinstance(receipt_path_value, str) and receipt_path_value:
+        receipt = Path(receipt_path_value).read_text(encoding="utf-8")
     if isinstance(receipt, str) and receipt.startswith("{"):
         try:
             payload = json.loads(receipt)["payload"]
@@ -381,6 +387,29 @@ def test_production_reconciliation_accepts_current_paired_activation_receipt(
         **_production_activation_values(_signed_receipt(_receipt_payload())),
         **_enabled_values(),
     )
+    assert loaded.pinvi_kor_travel_map_feature_reference_reconciliation_enabled is True
+
+
+def test_production_reconciliation_accepts_secure_mounted_activation_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PINVI_SOURCE_REVISION", PINVI_REVISION)
+    with tempfile.TemporaryDirectory(prefix="pinvi-m05-receipt-", dir="/tmp") as directory:
+        receipt_path = Path(directory) / "activation-receipt.json"
+        receipt_path.write_text(_signed_receipt(_receipt_payload()), encoding="utf-8")
+        receipt_path.chmod(0o600)
+        loaded = _production_settings(
+            pinvi_kor_travel_map_api_base_url="http://127.0.0.1:12701",
+            pinvi_kor_travel_map_admin_base_url="http://127.0.0.1:12701",
+            pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt_path=str(
+                receipt_path
+            ),
+            pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt_public_key=PUBLIC_KEY,
+            pinvi_kor_travel_map_ops_read_token="o" * 32,
+            pinvi_kor_travel_map_ops_cancel_token="c" * 32,
+            **IMAGE_DIGESTS,
+            **_enabled_values(),
+        )
     assert loaded.pinvi_kor_travel_map_feature_reference_reconciliation_enabled is True
 
 

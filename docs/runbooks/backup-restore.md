@@ -135,6 +135,7 @@ docker compose -f docker-compose.app.yml start web
 | `PINVI_RESTORE_DATABASE_URL` | `PINVI_DATABASE_URL`             | restore 전용 DB URL override |
 | `PINVI_RESTORE_JOBS`         | `2`                              | `pg_restore --jobs` 값       |
 | `PINVI_RESTORE_APP_ROLE`     | 빈 값                           | 기존 non-superuser runtime DB role에 schema/table/sequence grant를 복원한다. 비어 있으면 restore executor가 대상 schema owner여야 한다. |
+| `PINVI_RESTORE_WRITE_ROLES`  | 빈 값                           | API 외 별도 runtime login까지 포함하는 쉼표 구분 role 목록. schema-swap 전체 동안 non-owner 쓰기를 revoke한다. |
 
 `scripts/restore-db.sh`는 snapshot 옆에 `.sha256` sidecar가 없거나 일반 파일이 아니면
 restore를 시작하지 않는다. restore 전에 sidecar의 첫 checksum 값과 실제 dump hash를 직접
@@ -156,7 +157,8 @@ USAGE/SELECT grant를 재적용한다. 이 role은 LOGIN이고 superuser·CREATE
 | `PINVI_RESTORE_DRAIN_COMMAND`   | 빈 값                | CLI 경로에서만 실행할 write drain 명령               |
 | `PINVI_RESTORE_ALLOW_NO_DRAIN`  | `0`                  | 외부 write fence를 확인한 경우에만 `1`                |
 | `PINVI_RESTORE_DRAIN_VERIFIED`  | `0`                  | 외부 orchestrator가 write fence를 확인했다는 명시적 증명 |
-| `PINVI_RESTORE_APP_ROLE`        | 빈 값                | swap 전 restore schema에 GRANT를 재적용할 앱 DB role |
+| `PINVI_RESTORE_APP_ROLE`        | 빈 값                | swap 후 live schema에 권한을 재적용할 앱 DB role. schema-swap 실행 시 필수 |
+| `PINVI_RESTORE_WRITE_ROLES`     | 빈 값                | API·worker 등 모든 runtime write role의 쉼표 구분 목록. 누락된 login writer가 있으면 fail-close |
 | `PINVI_RESTORE_HOTSWAP_SCRIPT_SHA256` | 빈 값           | 운영 API 경로에서 canonical hotswap runner content digest 고정 |
 
 ## 4. Restore — schema-swap 핫스왑 (정상 절차, Sprint 6 T-111)

@@ -24,6 +24,8 @@ import socket
 import stat
 import subprocess
 import tempfile
+import urllib.error
+import urllib.request
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import uuid4
@@ -145,6 +147,21 @@ def _trusted_tool_path(path: Path, name: str) -> bool:
 def _tool_identity(name: str) -> dict[str, str]:
     path = _tool_path(name)
     return {"path": path, "sha256": _sha256(Path(path).read_bytes())}
+
+
+def _copy_verified_tool(tool: dict[str, str], destination: Path) -> dict[str, str]:
+    """복원 runner가 원본 PATH를 다시 참조하지 않도록 private copy를 봉인한다."""
+
+    source = Path(tool["path"])
+    if source.is_symlink() or not source.is_file() or not os.access(source, os.X_OK):
+        raise RestoreDrillError("restore tool source is not a regular executable")
+    target = destination / source.name
+    shutil.copyfile(source, target)
+    target.chmod(0o700)
+    digest = _sha256(target.read_bytes())
+    if digest != tool["sha256"]:
+        raise RestoreDrillError(f"restore tool changed while copying: {source.name}")
+    return {"path": str(target), "sha256": digest}
 
 
 def _tool_trust_manifest(path: Path) -> dict[str, dict[str, str]]:
@@ -621,15 +638,6 @@ def _source_revision(root: Path) -> str:
             text=True,
             env=_command_env(),
         ).stdout
-        remote_url = subprocess.run(
-            [_tool_path("git"), "-C", str(root), "remote", "get-url", "origin"],
-            check=True,
-            capture_output=True,
-            text=True,
-            env=_command_env(),
-        ).stdout.strip()
-        if remote_url.removesuffix(".git") != "https://github.com/digitie/pinvi":
-            raise RestoreDrillError("restore producer origin is not the canonical Pinvi remote")
         if revision != expected or status:
             raise RestoreDrillError(
                 "restore producer checkout is not a clean PINVI_SOURCE_REVISION"
@@ -638,6 +646,29 @@ def _source_revision(root: Path) -> str:
         raise RestoreDrillError("restore producer source revision could not be verified") from exc
     if not _COMMIT_RE.fullmatch(revision):
         raise RestoreDrillError("restore producer source revision is invalid")
+    if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
+        try:
+            request = urllib.request.Request(
+                "https://api.github.com/repos/digitie/pinvi/pulls/466",
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "User-Agent": "pinvi-m05-restore-drill",
+                },
+            )
+            token = os.environ.get("PINVI_GITHUB_TOKEN", "")
+            if token:
+                request.add_header("Authorization", f"Bearer {token}")
+            with urllib.request.urlopen(request, timeout=20) as response:
+                remote_payload = json.loads(response.read())
+            remote_revision = remote_payload["head"]["sha"]
+            if (
+                remote_payload["html_url"] != "https://github.com/digitie/pinvi/pull/466"
+                or remote_payload["base"]["repo"]["full_name"] != "digitie/pinvi"
+                or remote_revision != revision
+            ):
+                raise RestoreDrillError("restore producer is not the current canonical M05 PR head")
+        except (OSError, urllib.error.URLError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise RestoreDrillError("restore producer GitHub PR head could not be verified") from exc
     return revision
 
 
@@ -722,6 +753,15 @@ def _run_drill(args: argparse.Namespace) -> int:
 
     with tempfile.TemporaryDirectory(prefix="pinvi-m05-restore-", dir=output.parent) as temporary:
         temporary_dir = Path(temporary)
+        private_tools = {
+            name: _copy_verified_tool(tool, temporary_dir)
+            for name, tool in {
+                "bash": bash_tool,
+                "psql": psql_tool,
+                "pg_dump": backup_tool,
+                "pg_restore": restore_tool,
+            }.items()
+        }
         backup_env = _command_env()
         backup_env.update(
             {
@@ -731,11 +771,11 @@ def _run_drill(args: argparse.Namespace) -> int:
                 "PINVI_BACKUP_DIR": str(temporary_dir),
                 "PINVI_BACKUP_MIN_FREE_BYTES": "0",
                 "PINVI_BACKUP_DOCKER_FALLBACK": "0",
-                "PINVI_BACKUP_PG_DUMP_BIN": backup_tool["path"],
-                "PINVI_BACKUP_PSQL_BIN": psql_tool["path"],
+                "PINVI_BACKUP_PG_DUMP_BIN": private_tools["pg_dump"]["path"],
+                "PINVI_BACKUP_PSQL_BIN": private_tools["psql"]["path"],
             }
         )
-        backup = _run([bash_tool["path"], str(backup_script)], env=backup_env)
+        backup = _run([private_tools["bash"]["path"], str(backup_script)], env=backup_env)
         dump = _single_dump(temporary_dir)
         source_identity_after_backup = _identity(source_url, schema=args.schema)
         target_identity_before_restore = _identity(target_url, schema=args.schema)
@@ -752,10 +792,11 @@ def _run_drill(args: argparse.Namespace) -> int:
                 "PINVI_RESTORE_SCHEMA": args.schema,
                 "PINVI_RESTORE_APP_ROLE": args.runtime_role,
                 "PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL": "precheck",
-                "PINVI_RESTORE_PG_RESTORE_BIN": restore_tool["path"],
-                "PINVI_RESTORE_PSQL_BIN": psql_tool["path"],
-                "PINVI_RESTORE_PG_RESTORE_SHA256": restore_tool["sha256"],
-                "PINVI_RESTORE_PSQL_SHA256": psql_tool["sha256"],
+                "PINVI_RESTORE_PG_RESTORE_BIN": private_tools["pg_restore"]["path"],
+                "PINVI_RESTORE_PSQL_BIN": private_tools["psql"]["path"],
+                "PINVI_RESTORE_PG_RESTORE_SHA256": private_tools["pg_restore"]["sha256"],
+                "PINVI_RESTORE_PSQL_SHA256": private_tools["psql"]["sha256"],
+                "PINVI_RESTORE_PRIVATE_TOOL_COPY": "1",
                 "PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST": "1",
                 "PINVI_RESTORE_REQUIRE_FRESH_SCHEMA": "1",
             }
@@ -778,7 +819,10 @@ def _run_drill(args: argparse.Namespace) -> int:
                     "PINVI_RESTORE_EXPECTED_PORT": str(target_identity_before_restore["port"]),
                 }
             )
-        restore = _run([bash_tool["path"], str(restore_script), "run", str(dump)], env=restore_env)
+        restore = _run(
+            [private_tools["bash"]["path"], str(restore_script), "run", str(dump)],
+            env=restore_env,
+        )
         required_markers = [
             "DRILL_EVIDENCE=checksum=verified",
             "DRILL_EVIDENCE=pg_restore_list=ok",

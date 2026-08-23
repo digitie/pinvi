@@ -14,6 +14,8 @@ import re
 import stat
 import subprocess
 import time
+import urllib.error
+import urllib.request
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -256,7 +258,7 @@ def _trust_anchor() -> str:
         raise ReceiptError("M05 activation trust anchor is invalid") from exc
     payload = _object(raw, name="M05 activation trust anchor")
     if (
-        set(payload) != {"public_key_sha256", "version"}
+        set(payload) != {"public_key_sha256", "reviewer_roster_sha256", "version"}
         or type(payload["version"]) is not int
         or payload["version"] != 1
     ):
@@ -264,21 +266,75 @@ def _trust_anchor() -> str:
     return _sha256(payload["public_key_sha256"], name="M05 activation public key fingerprint")
 
 
-def _reviewer_roster() -> set[str]:
+def _reviewer_public_keys(path: Path | None = None) -> dict[str, bytes]:
+    roster_path = path or _REVIEWER_ROSTER
     try:
-        raw = json.loads(_REVIEWER_ROSTER.read_bytes(), object_pairs_hook=_reject_duplicate_keys)
+        raw_bytes = roster_path.read_bytes()
+        raw = json.loads(raw_bytes, object_pairs_hook=_reject_duplicate_keys)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ReceiptError) as exc:
         raise ReceiptError("M05 reviewer roster is invalid") from exc
     payload = _object(raw, name="M05 reviewer roster")
-    if set(payload) != {"agent_ids", "version"} or payload["version"] != 1:
+    if set(payload) != {"agent_ids", "public_keys", "version"} or payload["version"] != 2:
         raise ReceiptError("M05 reviewer roster schema is invalid")
     agents = payload["agent_ids"]
     if not isinstance(agents, list) or len(agents) != 2:
         raise ReceiptError("M05 reviewer roster must contain exactly two agents")
-    result = {_uuid(agent, name="M05 reviewer roster agent") for agent in agents}
-    if len(result) != 2:
+    agent_ids = {_uuid(agent, name="M05 reviewer roster agent") for agent in agents}
+    if len(agent_ids) != 2:
         raise ReceiptError("M05 reviewer roster agents must be distinct")
+    public_keys = _object(payload["public_keys"], name="M05 reviewer roster public keys")
+    if set(public_keys) != agent_ids:
+        raise ReceiptError("M05 reviewer roster public key inventory is invalid")
+    result: dict[str, bytes] = {}
+    for agent_id in agent_ids:
+        public_key = _decode_base64url(public_keys[agent_id], expected_length=32)
+        if public_key is None:
+            raise ReceiptError("M05 reviewer roster public key is invalid")
+        try:
+            Ed25519PublicKey.from_public_bytes(public_key)
+        except (ValueError, TypeError) as exc:
+            raise ReceiptError("M05 reviewer roster public key is invalid") from exc
+        result[agent_id] = public_key
+    if path is None:
+        try:
+            trust = json.loads(
+                _TRUST_ANCHOR.read_bytes(), object_pairs_hook=_reject_duplicate_keys
+            )
+            trust_object = _object(trust, name="M05 activation trust anchor")
+            expected_roster_sha256 = _sha256(
+                trust_object["reviewer_roster_sha256"], name="M05 reviewer roster fingerprint"
+            )
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ReceiptError, KeyError) as exc:
+            raise ReceiptError("M05 reviewer roster trust binding is invalid") from exc
+        if hashlib.sha256(raw_bytes).hexdigest() != expected_roster_sha256:
+            raise ReceiptError("M05 reviewer roster does not match the vendored trust anchor")
     return result
+
+
+def _reviewer_roster(path: Path | None = None) -> set[str]:
+    return set(_reviewer_public_keys(path))
+
+
+def _reviewer_signature_payload(
+    *,
+    agent_id: str,
+    challenge_id: str,
+    pinvi_source_revision: str,
+    review_id: str,
+    review_response_nonce: str,
+    summary: str,
+) -> dict[str, object]:
+    return {
+        "agent_id": agent_id,
+        "challenge_id": challenge_id,
+        "commit": pinvi_source_revision,
+        "p0_p1": 0,
+        "pr_url": _M05_ACTIVATION_PR_URL,
+        "review_id": review_id,
+        "review_nonce": review_response_nonce,
+        "summary": summary,
+        "verdict": "GO",
+    }
 
 
 def _review_challenge(
@@ -287,6 +343,7 @@ def _review_challenge(
     require_root_owned: bool,
     pinvi_source_revision: str,
     review_response_nonce: str,
+    reviewer_roster_path: Path | None,
 ) -> tuple[str, dict[str, str], dict[str, dict[str, object]]]:
     raw = _read_secure_bytes(
         path,
@@ -323,15 +380,17 @@ def _review_challenge(
     agent_ids = challenge["agent_ids"]
     if (
         not isinstance(agent_ids, list)
-        or {_uuid(item, name="review challenge agent") for item in agent_ids} != _reviewer_roster()
+        or {_uuid(item, name="review challenge agent") for item in agent_ids}
+        != _reviewer_roster(reviewer_roster_path)
     ):
         raise ReceiptError("review challenge must cover the pinned reviewers")
     response_paths = _object(challenge["response_paths"], name="review challenge response paths")
-    if set(response_paths) != _reviewer_roster():
+    if set(response_paths) != _reviewer_roster(reviewer_roster_path):
         raise ReceiptError("review challenge response path inventory is invalid")
     response_hashes: dict[str, str] = {}
     response_records: dict[str, dict[str, object]] = {}
-    for agent_id in _reviewer_roster():
+    reviewer_public_keys = _reviewer_public_keys(reviewer_roster_path)
+    for agent_id in reviewer_public_keys:
         response_path = Path(_string(response_paths[agent_id], name="review response path"))
         response_bytes = _read_secure_bytes(
             response_path,
@@ -345,6 +404,7 @@ def _review_challenge(
             challenge_id=challenge_id,
             pinvi_source_revision=pinvi_source_revision,
             review_response_nonce=review_response_nonce,
+            reviewer_public_key=reviewer_public_keys[agent_id],
         )
     return challenge_id, response_hashes, response_records
 
@@ -356,6 +416,7 @@ def _parse_review_response(
     challenge_id: str,
     pinvi_source_revision: str,
     review_response_nonce: str,
+    reviewer_public_key: bytes,
 ) -> dict[str, object]:
     """리뷰 도구의 machine-readable header를 검증해 임의 텍스트를 거부한다."""
 
@@ -373,6 +434,7 @@ def _parse_review_response(
         "review_id",
         "reviewer_agent_id",
         "review_nonce",
+        "review_signature",
         "reviewed_commit",
         "summary",
         "verdict",
@@ -403,13 +465,33 @@ def _parse_review_response(
         or any(character in "\r\n" for character in fields["summary"])
     ):
         raise ReceiptError("review response does not prove a zero-finding GO for the challenge")
+    review_id = _uuid(fields["review_id"], name="review response review_id")
+    signature = _decode_base64url(fields["review_signature"], expected_length=64)
+    if signature is None:
+        raise ReceiptError("review response signature encoding is invalid")
+    try:
+        Ed25519PublicKey.from_public_bytes(reviewer_public_key).verify(
+            signature,
+            _canonical_json(
+                _reviewer_signature_payload(
+                    agent_id=agent_id,
+                    challenge_id=challenge_id,
+                    pinvi_source_revision=pinvi_source_revision,
+                    review_id=review_id,
+                    review_response_nonce=review_response_nonce,
+                    summary=fields["summary"],
+                )
+            ),
+        )
+    except (InvalidSignature, ValueError, TypeError) as exc:
+        raise ReceiptError("review response signature is invalid") from exc
     return {
         "agent_id": agent_id,
         "challenge_id": challenge_id,
         "commit": pinvi_source_revision,
         "p0_p1": 0,
         "pr_url": _M05_ACTIVATION_PR_URL,
-        "review_id": _uuid(fields["review_id"], name="review response review_id"),
+        "review_id": review_id,
         "summary": fields["summary"],
         "verdict": "GO",
     }
@@ -422,6 +504,7 @@ def _review_allowlist(
     pinvi_source_revision: str,
     require_root_owned: bool,
     review_response_nonce: str,
+    reviewer_roster_path: Path | None,
 ) -> set[tuple[str, str, str, str, str, str]]:
     if path is None:
         raise ReceiptError("production receipt requires an external review allowlist")
@@ -438,6 +521,7 @@ def _review_allowlist(
         require_root_owned=require_root_owned,
         pinvi_source_revision=pinvi_source_revision,
         review_response_nonce=review_response_nonce,
+        reviewer_roster_path=reviewer_roster_path,
     )
     raw = _read_secure_bytes(
         path,
@@ -451,7 +535,7 @@ def _review_allowlist(
     if not isinstance(value, list) or len(value) != 2:
         raise ReceiptError("review allowlist must contain exactly two reviews")
     result: set[tuple[str, str, str, str, str, str]] = set()
-    allowed_agents = _reviewer_roster()
+    allowed_agents = _reviewer_roster(reviewer_roster_path)
     for item in value:
         review = _object(item, name="review allowlist entry")
         if set(review) != {
@@ -511,7 +595,7 @@ def _trusted_restore_tool_path(path: Path, name: str) -> bool:
     )
 
 
-def _assert_source_checkout(source_revision: str) -> None:
+def _assert_source_checkout(source_revision: str, *, test_mode: bool) -> None:
     """서명 대상이 clean checkout이자 원격 PR의 실제 head인지 확인한다."""
 
     root = Path(__file__).resolve().parents[1]
@@ -550,52 +634,42 @@ def _assert_source_checkout(source_revision: str) -> None:
             text=True,
             env=git_env,
         ).stdout
-        remote_urls = subprocess.run(
-            [
-                _host_tool("git"),
-                "-C",
-                str(root),
-                "remote",
-                "get-url",
-                "--all",
-                "origin",
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-            env=git_env,
-        ).stdout.splitlines()
     except (OSError, subprocess.CalledProcessError) as exc:
         raise ReceiptError("receipt producer source revision could not be verified") from exc
-    if revision != source_revision or status:
+    if revision != source_revision or (status and not test_mode):
         raise ReceiptError("receipt producer checkout must be clean at the signed revision")
-    if [remote.removesuffix(".git") for remote in remote_urls] != [
-        "https://github.com/digitie/pinvi"
-    ]:
-        raise ReceiptError("receipt producer origin is not the canonical Pinvi remote")
+    if test_mode:
+        return
     pr_match = re.fullmatch(
         r"https://github\.com/digitie/pinvi/pull/([1-9][0-9]*)", _M05_ACTIVATION_PR_URL
     )
     if pr_match is None:
         raise ReceiptError("M05 activation PR URL is invalid")
     try:
-        remote_head = subprocess.run(
-            [
-                _host_tool("git"),
-                "-C",
-                str(root),
-                "ls-remote",
-                "origin",
-                f"refs/pull/{pr_match.group(1)}/head",
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-            env=git_env,
-        ).stdout.strip()
-    except (OSError, subprocess.CalledProcessError) as exc:
-        raise ReceiptError("M05 activation PR head could not be verified") from exc
-    remote_revision = remote_head.split(maxsplit=1)[0] if remote_head else ""
+        request = urllib.request.Request(
+            f"https://api.github.com/repos/digitie/pinvi/pulls/{pr_match.group(1)}",
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "pinvi-m05-activation-receipt",
+            },
+        )
+        token = os.environ.get("PINVI_GITHUB_TOKEN", "")
+        if token:
+            request.add_header("Authorization", f"Bearer {token}")
+        with urllib.request.urlopen(request, timeout=20) as response:
+            remote_payload = json.loads(response.read(), object_pairs_hook=_reject_duplicate_keys)
+    except (OSError, urllib.error.URLError, json.JSONDecodeError, ReceiptError) as exc:
+        raise ReceiptError("M05 activation PR head could not be verified by GitHub") from exc
+    remote_object = _object(remote_payload, name="GitHub pull request")
+    head_object = _object(remote_object.get("head"), name="GitHub pull request head")
+    base_object = _object(remote_object.get("base"), name="GitHub pull request base")
+    base_repo = _object(base_object.get("repo"), name="GitHub pull request base repo")
+    remote_revision = _commit(head_object.get("sha"), name="GitHub pull request head SHA")
+    if (
+        remote_object.get("html_url") != _M05_ACTIVATION_PR_URL
+        or base_repo.get("full_name") != "digitie/pinvi"
+    ):
+        raise ReceiptError("GitHub pull request provenance is not the canonical Pinvi PR")
     if remote_revision != source_revision:
         raise ReceiptError("receipt source revision is not the current M05 PR head")
 
@@ -978,6 +1052,146 @@ def _write_durable_floor(path: Path, *, generation: int, require_root_owned: boo
         raise ReceiptError("activation durable floor update could not be verified")
 
 
+def _database_anchor_url(database_url: str, *, require_root_owned: bool) -> str | None:
+    if not database_url:
+        if require_root_owned:
+            raise ReceiptError("root-owned activation ledger requires a database anchor URL")
+        return None
+    if database_url.startswith("postgresql+asyncpg://"):
+        database_url = "postgresql://" + database_url.removeprefix("postgresql+asyncpg://")
+    return database_url
+
+
+def _database_anchor_command_env() -> dict[str, str]:
+    command_env = os.environ.copy()
+    for name in (
+        "BASH_ENV",
+        "CDPATH",
+        "ENV",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_SYSTEM",
+        "PGAPPNAME",
+        "PGDATABASE",
+        "PGHOST",
+        "PGPASSWORD",
+        "PGPORT",
+        "PGSERVICE",
+        "PGSERVICEFILE",
+        "PGSSLMODE",
+        "PSQLRC",
+    ):
+        command_env.pop(name, None)
+    return command_env
+
+
+def _read_database_anchor_generation(
+    database_url: str,
+    *,
+    require_root_owned: bool,
+) -> int | None:
+    database_url = _database_anchor_url(database_url, require_root_owned=require_root_owned)
+    if database_url is None:
+        return None
+    psql = _host_tool("psql")
+    try:
+        current = subprocess.run(
+            [
+                psql,
+                "--no-psqlrc",
+                "--set=ON_ERROR_STOP=1",
+                "--tuples-only",
+                "--no-align",
+                "--dbname",
+                database_url,
+                "--command",
+                "SELECT COALESCE(MAX(generation), 0)::text FROM ops.m05_activation_database_anchor",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=_database_anchor_command_env(),
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ReceiptError("M05 activation database anchor could not be read") from exc
+    try:
+        return int(current)
+    except ValueError as exc:
+        raise ReceiptError("M05 activation database anchor returned an invalid generation") from exc
+
+
+def _append_database_anchor(
+    database_url: str,
+    *,
+    generation: int,
+    receipt_sha256: str,
+    record_sha256: str,
+    require_root_owned: bool,
+) -> None:
+    database_url = _database_anchor_url(database_url, require_root_owned=require_root_owned)
+    if database_url is None:
+        return
+    psql = _host_tool("psql")
+    command_env = _database_anchor_command_env()
+    current_generation = _read_database_anchor_generation(
+        database_url,
+        require_root_owned=require_root_owned,
+    )
+    if current_generation is None:
+        raise ReceiptError("M05 activation database anchor URL is invalid")
+    if current_generation > generation:
+        raise ReceiptError("activation ledger generation is below the database anchor")
+    if current_generation < generation:
+        sql = (
+            "INSERT INTO ops.m05_activation_database_anchor "
+            "(generation, receipt_sha256, record_sha256) VALUES "
+            f"({generation}, '{receipt_sha256}', '{record_sha256}') "
+            "ON CONFLICT (generation) DO NOTHING"
+        )
+        try:
+            subprocess.run(
+                [
+                    psql,
+                    "--no-psqlrc",
+                    "--set=ON_ERROR_STOP=1",
+                    "--dbname",
+                    database_url,
+                    "--command",
+                    sql,
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=command_env,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise ReceiptError("M05 activation database anchor could not be appended") from exc
+    try:
+        stored = subprocess.run(
+            [
+                psql,
+                "--no-psqlrc",
+                "--set=ON_ERROR_STOP=1",
+                "--tuples-only",
+                "--no-align",
+                "--dbname",
+                database_url,
+                "--command",
+                (
+                    "SELECT generation::text || '|' || receipt_sha256 || '|' || record_sha256 "
+                    f"FROM ops.m05_activation_database_anchor WHERE generation = {generation}"
+                ),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=command_env,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ReceiptError("M05 activation database anchor could not be verified") from exc
+    if stored != f"{generation}|{receipt_sha256}|{record_sha256}":
+        raise ReceiptError("M05 activation database anchor does not match the ledger record")
+
+
 def _ledger_unlocked(args: argparse.Namespace) -> int:
     receipt_bytes = _read_secure_bytes(
         args.receipt,
@@ -1015,6 +1229,12 @@ def _ledger_unlocked(args: argparse.Namespace) -> int:
         or payload["scope"] not in {"staging", "production"}
     ):
         raise ReceiptError("receipt ledger fields are invalid")
+    database_generation = _read_database_anchor_generation(
+        args.durable_anchor_database_url,
+        require_root_owned=args.require_root_owned,
+    )
+    if database_generation is not None and database_generation > generation:
+        raise ReceiptError("activation ledger generation is below the database anchor")
     nonce = _uuid(payload["activation_nonce"], name="receipt activation nonce")
     source_revision = _commit(payload["pinvi_source_revision"], name="receipt source revision")
     record = {
@@ -1104,6 +1324,13 @@ def _ledger_unlocked(args: argparse.Namespace) -> int:
         receipt_sha256=cast(str, record["receipt_sha256"]),
         require_root_owned=args.require_root_owned,
     )
+    _append_database_anchor(
+        args.durable_anchor_database_url,
+        generation=generation,
+        receipt_sha256=cast(str, record["receipt_sha256"]),
+        record_sha256=cast(str, record["record_sha256"]),
+        require_root_owned=args.require_root_owned,
+    )
     print(f"ledger_generation={generation}")
     print(f"ledger_receipt_sha256={record['receipt_sha256']}")
     return 0
@@ -1174,6 +1401,7 @@ def _reviews(
     pinvi_source_revision: str,
     expected_pr_url: str,
     allowed_review_keys: set[tuple[str, str, str, str, str, str]],
+    reviewer_roster_path: Path | None,
 ) -> list[dict[str, object]]:
     if not isinstance(value, list) or len(value) != 2:
         raise ReceiptError("reviews.json must contain exactly two reviews")
@@ -1183,7 +1411,7 @@ def _reviews(
     reviewer_ids: set[str] = set()
     review_ids: set[str] = set()
     agent_ids: set[str] = set()
-    allowed_agent_ids = _reviewer_roster()
+    allowed_agent_ids = _reviewer_roster(reviewer_roster_path)
     for item in value:
         review = _object(item, name="review")
         if set(review) != {
@@ -1981,9 +2209,18 @@ def _create(args: argparse.Namespace) -> int:
     )
 
     source_revision = _commit(args.pinvi_source_revision, name="Pinvi source revision")
-    _assert_source_checkout(source_revision)
+    _assert_source_checkout(
+        source_revision,
+        test_mode=(
+            os.environ.get("PINVI_M05_RECEIPT_TEST_MODE") == "1"
+            and not args.require_root_owned
+        ),
+    )
     if args.pr_url != _M05_ACTIVATION_PR_URL:
         raise ReceiptError("M05 activation receipt is pinned to PR #466")
+    reviewer_roster_path = args.reviewer_roster or _REVIEWER_ROSTER
+    if args.require_root_owned and reviewer_roster_path != _REVIEWER_ROSTER:
+        raise ReceiptError("root-owned M05 receipt must use the vendored reviewer roster")
     scope = _string(args.scope, name="receipt scope")
     if scope not in {"staging", "production"}:
         raise ReceiptError("receipt scope must be staging or production")
@@ -1996,6 +2233,7 @@ def _create(args: argparse.Namespace) -> int:
             args.review_response_nonce,
             name="review response nonce",
         ),
+        reviewer_roster_path=reviewer_roster_path,
     )
     now = int(time.time())
     issued_at = args.activation_issued_at if args.activation_issued_at is not None else now
@@ -2039,6 +2277,7 @@ def _create(args: argparse.Namespace) -> int:
             pinvi_source_revision=source_revision,
             expected_pr_url=args.pr_url,
             allowed_review_keys=allowed_review_keys,
+            reviewer_roster_path=reviewer_roster_path,
         )
         live_ui = _live_ui(evidence["live_ui"], pinvi_source_revision=source_revision)
         _restore(
@@ -2198,6 +2437,7 @@ def _parser() -> argparse.ArgumentParser:
     create.add_argument("--activation-expires-at", type=int)
     create.add_argument("--review-allowlist", type=Path, required=True)
     create.add_argument("--review-challenge", type=Path, required=True)
+    create.add_argument("--reviewer-roster", type=Path)
     create.add_argument(
         "--review-response-nonce",
         default=os.environ.get("PINVI_M05_REVIEW_RESPONSE_NONCE", ""),
@@ -2211,6 +2451,10 @@ def _parser() -> argparse.ArgumentParser:
     ledger.add_argument("--durable-floor", type=Path, required=True)
     ledger.add_argument("--durable-history", type=Path, required=True)
     ledger.add_argument("--durable-anchor", type=Path, required=True)
+    ledger.add_argument(
+        "--durable-anchor-database-url",
+        default=os.environ.get("PINVI_M05_ACTIVATION_ANCHOR_DATABASE_URL", ""),
+    )
     ledger.add_argument("--require-root-owned", action="store_true")
     ledger.set_defaults(handler=_ledger)
     return parser

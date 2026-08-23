@@ -74,13 +74,15 @@ ACK한다. 달라지면 fail-close한다.
 ## production activation receipt
 
 `PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ENABLED=true`를 production에서
-사용하려면 `PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT`에
+사용하려면 `PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT` 또는
+root-owned `0600` bind-mounted `PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_PATH`에
 서명된 v1 envelope를 주입하고, `PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_PUBLIC_KEY`로
 Ed25519 서명을 검증한다. 이 public key는 같은 설정 채널의 receipt와 함께 임의로 바꿀 수 없으며,
 tracked `contracts/pinvi-m05-activation-receipt-trust-v1.json`의 raw public-key SHA-256 fingerprint와
 일치해야 한다. API는 기동 시 중복 JSON key·서명·닫힌 payload schema·현재 vendored
 Map pair·세 Pinvi runtime image digest·`PINVI_SOURCE_REVISION`을 모두 대조하며, 하나라도 다르면
-fail-close한다.
+fail-close한다. receipt payload에는 실제 API container ID도 포함되므로 운영 배포는 inline 환경변수보다
+파일 경로를 사용한다. 최종 container를 재생성하지 않은 상태에서 receipt 파일만 봉인·교체한 뒤 기동해야 한다.
 
 ```json
 {
@@ -125,7 +127,8 @@ python scripts/m05_activation_receipt.py create \
 (`--review-response-nonce`), external allowlist(`--review-allowlist`)를 함께 전달한다. ledger 기록 시에는
 `--durable-history`와 `--durable-anchor`를 ledger/high-watermark/floor와
 분리된 root-owned durable 경로에 append한다. anchor는 coordinated snapshot rollback을 막기 위해
-별도 durable mount에 둔다.
+별도 durable mount에 둔다. `PINVI_M05_ACTIVATION_ANCHOR_DATABASE_URL`을 ledger producer에만
+전달하면 `ops.m05_activation_database_anchor`에도 같은 record hash를 append한다.
 
 실제 복원 증거는 고정된 `scripts/backup-db.sh`와 `scripts/restore-staging-drill.sh`를 source→fresh
 target으로 호출하는 `scripts/m05_restore_drill.py`가 만든다. source·target URL과 runtime URL은
@@ -154,8 +157,9 @@ read-only로만 mount한다.
 복구 직전과 직후에 대조한다. activation ledger·high-watermark와 별도로 DB snapshot에 포함하지 않는
 durable history(`PINVI_M05_ACTIVATION_DURABLE_HISTORY_PATH`)와 외부 anchor
 (`PINVI_M05_ACTIVATION_DURABLE_ANCHOR_PATH`)도 같은 generation과 receipt hash를 append-only hash
-chain으로 보존한다. 네 파일과 anchor가 서로 어긋나거나 anchor보다 과거인 snapshot은 API startup에서
-거부한다.
+chain으로 보존한다. 여기에 `ops.m05_activation_database_anchor` append-only DB anchor도 같은
+generation·receipt·ledger record hash를 보존한다. 네 파일과 두 anchor가 서로 어긋나거나 anchor보다
+과거인 snapshot은 API startup에서 거부한다.
 
 ## 검증과 activation gate
 

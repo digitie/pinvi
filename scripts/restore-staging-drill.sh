@@ -149,8 +149,10 @@ assert_trusted_tool_path() {
 if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" == "1" ]]; then
   :
 else
-  assert_trusted_tool_path "pg_restore" "${PG_RESTORE_BIN}"
-  assert_trusted_tool_path "psql" "${PSQL_BIN}"
+  if [[ "${PINVI_RESTORE_PRIVATE_TOOL_COPY:-0}" != "1" ]]; then
+    assert_trusted_tool_path "pg_restore" "${PG_RESTORE_BIN}"
+    assert_trusted_tool_path "psql" "${PSQL_BIN}"
+  fi
   for tool_spec in \
     "pg_restore:${PG_RESTORE_BIN}:${PINVI_RESTORE_PG_RESTORE_SHA256:-}" \
     "psql:${PSQL_BIN}:${PINVI_RESTORE_PSQL_SHA256:-}"; do
@@ -167,6 +169,34 @@ if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" != "1" ||
   evidence restore_tool_binding verified
 fi
 
+TMP_DIR="$(mktemp -d)"
+copy_verified_private() {
+  local name="$1"
+  local source="$2"
+  local expected="$3"
+  local target="${TMP_DIR}/${name}"
+  if [[ -L "${source}" || ! -f "${source}" ]]; then
+    phase precheck failed "${name} source must be a regular file"
+    exit 3
+  fi
+  cp -- "${source}" "${target}"
+  chmod 700 "${target}"
+  if [[ "$(sha256sum "${target}" | awk 'NR == 1 { print $1 }')" != "${expected}" ]]; then
+    phase precheck failed "${name} changed while copying to the private restore directory"
+    exit 3
+  fi
+  printf '%s\n' "${target}"
+}
+
+PSQL_DIGEST="${PINVI_RESTORE_PSQL_SHA256:-}"
+PG_RESTORE_DIGEST="${PINVI_RESTORE_PG_RESTORE_SHA256:-}"
+if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" == "1" ]]; then
+  PSQL_DIGEST="$(sha256sum "${PSQL_BIN}" | awk 'NR == 1 { print $1 }')"
+  PG_RESTORE_DIGEST="$(sha256sum "${PG_RESTORE_BIN}" | awk 'NR == 1 { print $1 }')"
+fi
+PSQL_BIN="$(copy_verified_private psql "${PSQL_BIN}" "${PSQL_DIGEST}")"
+PG_RESTORE_BIN="$(copy_verified_private pg_restore "${PG_RESTORE_BIN}" "${PG_RESTORE_DIGEST}")"
+
 if [[ -L "${SNAPSHOT}" || ! -f "${SNAPSHOT}" || -L "${SNAPSHOT}.sha256" || ! -f "${SNAPSHOT}.sha256" ]]; then
   phase precheck failed "snapshot and checksum sidecar must be regular files"
   exit 3
@@ -181,6 +211,15 @@ if [[ ! "${expected_checksum}" =~ ^[0-9a-f]{64}$ || "${expected_checksum}" != "$
   phase precheck failed "snapshot checksum failed"
   exit 3
 fi
+SNAPSHOT_COPY="${TMP_DIR}/snapshot.dump"
+cp -- "${SNAPSHOT}" "${SNAPSHOT_COPY}"
+if [[ "$(sha256sum "${SNAPSHOT_COPY}" | awk 'NR == 1 { print $1 }')" != "${expected_checksum}" ]]; then
+  phase precheck failed "snapshot changed while copying to the private restore directory"
+  exit 3
+fi
+printf '%s  %s\n' "${expected_checksum}" "$(basename "${SNAPSHOT_COPY}")" >"${SNAPSHOT_COPY}.sha256"
+chmod 600 "${SNAPSHOT_COPY}.sha256"
+SNAPSHOT="${SNAPSHOT_COPY}"
 evidence checksum verified
 
 if ! "${PG_RESTORE_BIN}" --list "${SNAPSHOT}" >/dev/null; then

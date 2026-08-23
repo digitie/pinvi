@@ -7,6 +7,7 @@ import hashlib
 import os
 import re
 import shutil
+import signal
 import stat
 import tempfile
 import uuid
@@ -536,6 +537,7 @@ async def _restore_backup_hotswap_locked(
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
                 cwd=str(repo_root()),
+                start_new_session=True,
             )
             try:
                 stdout_raw, stderr_raw = await asyncio.wait_for(
@@ -543,7 +545,10 @@ async def _restore_backup_hotswap_locked(
                     timeout=settings.pinvi_restore_timeout_seconds,
                 )
             except TimeoutError as exc:
-                proc.kill()
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
                 await proc.wait()
                 raise BackupServiceError(
                     sanitize_backup_message("restore hotswap script timed out")

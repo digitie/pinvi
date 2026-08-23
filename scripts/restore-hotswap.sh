@@ -29,9 +29,13 @@ DATABASE_URL="${PINVI_RESTORE_DATABASE_URL:-${PINVI_DATABASE_URL:-}}"
 SOURCE_SCHEMA="${PINVI_BACKUP_SCHEMA:-app}"
 TMP_DIR=""
 LOCK_HOLDER_PID=""
+LOCK_HOLDER_BACKEND_PID=""
 LOCK_HOLDER_ACTIVE=0
 WRITE_FENCE_ACTIVE=0
 TEST_MODE="${PINVI_M05_RESTORE_TEST_MODE:-0}"
+APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}"
+declare -a WRITE_ROLES=()
+declare -A WRITE_ROLE_SEEN=()
 
 phase preparing running "precheck started"
 
@@ -44,7 +48,7 @@ if [[ "${DATABASE_URL}" == postgresql+asyncpg://* ]]; then
   DATABASE_URL="postgresql://${DATABASE_URL#postgresql+asyncpg://}"
 fi
 
-if [[ ! -f "${SNAPSHOT}" ]]; then
+if [[ -L "${SNAPSHOT}" || ! -f "${SNAPSHOT}" ]]; then
   phase preparing failed "snapshot file not found"
   exit 2
 fi
@@ -114,7 +118,7 @@ if [[ "${TEST_MODE}" != "1" ]]; then
   assert_trusted_tool_path "pg_restore" "${PG_RESTORE_BIN}"
 fi
 
-if [[ ! -f "${SNAPSHOT}.sha256" ]]; then
+if [[ -L "${SNAPSHOT}.sha256" || ! -f "${SNAPSHOT}.sha256" ]]; then
   phase preparing failed "snapshot checksum sidecar is required"
   exit 3
 fi
@@ -162,8 +166,12 @@ fi
 TMP_DIR="$(mktemp -d)"
 cleanup() {
   set +e
+  local cleanup_failed=0
   if [[ "${WRITE_FENCE_ACTIVE}" == "1" ]]; then
-    release_write_fence
+    if ! declare -F release_write_fence >/dev/null || ! release_write_fence; then
+      phase draining failed "database write fence cleanup failed; manual writer lockout is required"
+      cleanup_failed=1
+    fi
   fi
   if [[ -n "${LOCK_HOLDER_PID}" ]]; then
     kill "${LOCK_HOLDER_PID}" >/dev/null 2>&1 || true
@@ -171,6 +179,9 @@ cleanup() {
   fi
   if [[ -n "${TMP_DIR}" && -d "${TMP_DIR}" ]]; then
     rm -rf "${TMP_DIR}"
+  fi
+  if [[ "${cleanup_failed}" == "1" ]]; then
+    exit 3
   fi
 }
 trap cleanup EXIT
@@ -215,7 +226,7 @@ BEGIN
   END IF;
 END
 $m05$;
-SELECT 'M05_LOCK_ACQUIRED';
+SELECT 'M05_LOCK_ACQUIRED|' || pg_backend_pid()::text;
 SELECT pg_sleep(86400);
 SQL
   mkfifo -m 600 "${lock_signal}"
@@ -226,8 +237,14 @@ SQL
   LOCK_HOLDER_PID="$!"
   local marker=""
   while IFS= read -r marker; do
-    if [[ "${marker}" == "M05_LOCK_ACQUIRED" ]]; then
+    if [[ "${marker}" == M05_LOCK_ACQUIRED\|[0-9]* ]]; then
+      local backend_pid="${marker#M05_LOCK_ACQUIRED|}"
+      if [[ ! "${backend_pid}" =~ ^[0-9]+$ ]]; then
+        phase preparing failed "schema-swap advisory lock returned an invalid backend PID"
+        exit 3
+      fi
       LOCK_HOLDER_ACTIVE=1
+      LOCK_HOLDER_BACKEND_PID="${backend_pid}"
       phase preparing success "schema-swap advisory lock acquired for the full run"
       return 0
     fi
@@ -240,6 +257,20 @@ SQL
 assert_advisory_lock_alive() {
   if [[ "${LOCK_HOLDER_ACTIVE}" != "1" ]] || ! kill -0 "${LOCK_HOLDER_PID}" >/dev/null 2>&1; then
     phase preparing failed "schema-swap advisory lock was lost"
+    exit 3
+  fi
+  local lock_state
+  lock_state="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 -tAc "
+SELECT EXISTS (
+  SELECT 1 FROM pg_locks
+  WHERE pid = ${LOCK_HOLDER_BACKEND_PID}
+    AND locktype = 'advisory'
+    AND classid = 1414679892
+    AND objid = 1213421392
+    AND granted
+" | tr -d '[:space:]')"
+  if [[ "${lock_state}" != "t" ]]; then
+    phase preparing failed "schema-swap database advisory lock was lost"
     exit 3
   fi
 }
@@ -289,6 +320,9 @@ validate_expected_target_values() {
 validate_expected_target_values
 
 write_identity_guard() {
+  if [[ "${TEST_MODE}" == "1" && -z "${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" ]]; then
+    return 0
+  fi
   cat <<SQL
 DO \$m05\$
 BEGIN
@@ -364,6 +398,158 @@ remap_sql() {
   ' "${input}"
 }
 
+add_write_role() {
+  local role="$1"
+  if [[ -z "${role}" ]]; then
+    return 0
+  fi
+  if [[ ! "${role}" =~ ^[a-z_][a-z0-9_]*$ ]]; then
+    phase draining failed "unsafe restore write role: ${role}"
+    exit 3
+  fi
+  if [[ -z "${WRITE_ROLE_SEEN[${role}]:-}" ]]; then
+    WRITE_ROLES+=("${role}")
+    WRITE_ROLE_SEEN["${role}"]=1
+  fi
+}
+
+write_roles_sql() {
+  local role
+  local joined=""
+  for role in "${WRITE_ROLES[@]}"; do
+    if [[ -n "${joined}" ]]; then
+      joined+=","
+    fi
+    joined+="${role}"
+  done
+  printf '%s' "${joined}"
+}
+
+if [[ -z "${APP_ROLE}" ]]; then
+  phase draining failed "PINVI_RESTORE_APP_ROLE is required for the database write fence"
+  exit 3
+fi
+if [[ ! "${APP_ROLE}" =~ ^[a-z_][a-z0-9_]*$ ]]; then
+  phase draining failed "unsafe app role name: ${APP_ROLE}"
+  exit 3
+fi
+add_write_role "${APP_ROLE}"
+if [[ -n "${PINVI_RESTORE_WRITE_ROLES:-}" ]]; then
+  IFS=',' read -r -a configured_write_roles <<<"${PINVI_RESTORE_WRITE_ROLES}"
+  for configured_role in "${configured_write_roles[@]}"; do
+    add_write_role "${configured_role}"
+  done
+fi
+
+enter_write_fence() {
+  local roles_sql
+  roles_sql="$(write_roles_sql)"
+  WRITE_FENCE_ACTIVE=1
+  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f - >/dev/null <<SQL
+$(write_identity_guard)
+DO \$m05\$
+DECLARE
+  role_name text;
+BEGIN
+  FOREACH role_name IN ARRAY string_to_array('${roles_sql}', ',') LOOP
+    IF to_regrole(role_name) IS NULL THEN
+      RAISE EXCEPTION 'restore write role does not exist: %', role_name;
+    END IF;
+    IF role_name = current_user THEN
+      RAISE EXCEPTION 'restore write role must not be the restore executor: %', role_name;
+    END IF;
+    IF to_regnamespace('${SOURCE_SCHEMA}') IS NOT NULL THEN
+      EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM PUBLIC, %I', '${SOURCE_SCHEMA}', role_name);
+      EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA %I FROM PUBLIC, %I', '${SOURCE_SCHEMA}', role_name);
+      EXECUTE format('REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I FROM PUBLIC, %I', '${SOURCE_SCHEMA}', role_name);
+    END IF;
+    IF to_regnamespace('${RESTORE_SCHEMA}') IS NOT NULL THEN
+      EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM PUBLIC, %I', '${RESTORE_SCHEMA}', role_name);
+      EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA %I FROM PUBLIC, %I', '${RESTORE_SCHEMA}', role_name);
+      EXECUTE format('REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I FROM PUBLIC, %I', '${RESTORE_SCHEMA}', role_name);
+    END IF;
+  END LOOP;
+  IF to_regnamespace('${SOURCE_SCHEMA}') IS NOT NULL THEN
+    EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM PUBLIC', '${SOURCE_SCHEMA}');
+    EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA %I FROM PUBLIC', '${SOURCE_SCHEMA}');
+    EXECUTE format('REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I FROM PUBLIC', '${SOURCE_SCHEMA}');
+  END IF;
+  IF to_regnamespace('${RESTORE_SCHEMA}') IS NOT NULL THEN
+    EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM PUBLIC', '${RESTORE_SCHEMA}');
+    EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA %I FROM PUBLIC', '${RESTORE_SCHEMA}');
+    EXECUTE format('REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I FROM PUBLIC', '${RESTORE_SCHEMA}');
+  END IF;
+END
+\$m05\$;
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE datname = current_database()
+  AND pid <> pg_backend_pid()
+  AND pid <> ${LOCK_HOLDER_BACKEND_PID};
+SQL
+  local writer_roles
+  writer_roles="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 -tAc "
+SELECT COALESCE(string_agg(r.rolname, ',' ORDER BY r.rolname), '')
+FROM pg_roles r
+WHERE r.rolcanlogin
+  AND r.rolname <> current_user
+  AND (
+    r.rolsuper
+    OR (to_regnamespace('${SOURCE_SCHEMA}') IS NOT NULL AND has_schema_privilege(r.rolname, '${SOURCE_SCHEMA}', 'CREATE'))
+    OR (to_regnamespace('${RESTORE_SCHEMA}') IS NOT NULL AND has_schema_privilege(r.rolname, '${RESTORE_SCHEMA}', 'CREATE'))
+    OR EXISTS (
+      SELECT 1 FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname IN ('${SOURCE_SCHEMA}', '${RESTORE_SCHEMA}')
+        AND (
+          has_table_privilege(r.rolname, c.oid, 'INSERT')
+          OR has_table_privilege(r.rolname, c.oid, 'UPDATE')
+          OR has_table_privilege(r.rolname, c.oid, 'DELETE')
+          OR has_table_privilege(r.rolname, c.oid, 'TRUNCATE')
+          OR has_table_privilege(r.rolname, c.oid, 'REFERENCES')
+          OR has_table_privilege(r.rolname, c.oid, 'TRIGGER')
+        )
+    )
+  )
+" | tr -d '[:space:]')"
+  if [[ -n "${writer_roles}" ]]; then
+    phase draining failed "database write fence found unfenced login writers: ${writer_roles}"
+    exit 3
+  fi
+  phase draining success "database write fence revoked all non-owner runtime writes"
+}
+
+release_write_fence() {
+  local roles_sql
+  roles_sql="$(write_roles_sql)"
+  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f - >/dev/null <<SQL
+$(write_identity_guard)
+DO \$m05\$
+DECLARE
+  role_name text;
+  schema_name text;
+BEGIN
+  FOREACH role_name IN ARRAY string_to_array('${roles_sql}', ',') LOOP
+    IF to_regnamespace('${SOURCE_SCHEMA}') IS NOT NULL THEN
+      EXECUTE format('GRANT USAGE ON SCHEMA %I TO %I', '${SOURCE_SCHEMA}', role_name);
+      EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA %I TO %I', '${SOURCE_SCHEMA}', role_name);
+      EXECUTE format('GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I TO %I', '${SOURCE_SCHEMA}', role_name);
+    END IF;
+    IF to_regnamespace('${PREVIOUS_SCHEMA}') IS NOT NULL THEN
+      EXECUTE format('GRANT USAGE ON SCHEMA %I TO %I', '${PREVIOUS_SCHEMA}', role_name);
+      EXECUTE format('GRANT SELECT, INSERT ON TABLE %I.admin_audit_log TO %I', '${PREVIOUS_SCHEMA}', role_name);
+      EXECUTE format('GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I TO %I', '${PREVIOUS_SCHEMA}', role_name);
+    END IF;
+  END LOOP;
+END
+\$m05\$;
+SQL
+  WRITE_FENCE_ACTIVE=0
+}
+
+phase draining running "write fence"
+enter_write_fence
+
 phase restoring running "restoring ${SOURCE_SCHEMA} into ${RESTORE_SCHEMA}"
 run_guarded_command "DROP SCHEMA IF EXISTS ${RESTORE_SCHEMA} CASCADE"
 "${PG_RESTORE_BIN}" \
@@ -395,26 +581,6 @@ run_guarded_file "${TMP_DIR}/schema-remapped.sql"
 run_guarded_file "${TMP_DIR}/data-remapped.sql"
 phase restoring success "restored into ${RESTORE_SCHEMA}"
 
-# pg_restore --no-privileges로 복원했으므로 GRANT가 비어 있다. 앱 role이 스키마 owner가
-# 아니면 swap 직후 permission denied가 난다. swap 전에 RESTORE_SCHEMA에 GRANT를 재적용한다
-# (GRANT는 객체에 귀속되어 schema rename 후에도 유지된다).
-APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}"
-if [[ -n "${APP_ROLE}" ]]; then
-  if [[ ! "${APP_ROLE}" =~ ^[a-z_][a-z0-9_]*$ ]]; then
-    phase restoring failed "unsafe app role name: ${APP_ROLE}"
-    exit 2
-  fi
-  cat >"${TMP_DIR}/grants.sql" <<SQL
-GRANT USAGE ON SCHEMA ${RESTORE_SCHEMA} TO ${APP_ROLE};
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ${RESTORE_SCHEMA} TO ${APP_ROLE};
-GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA ${RESTORE_SCHEMA} TO ${APP_ROLE};
-SQL
-  run_guarded_file "${TMP_DIR}/grants.sql"
-  phase restoring success "re-granted privileges to ${APP_ROLE}"
-else
-  phase restoring success "PINVI_RESTORE_APP_ROLE unset; assuming single-owner role (no GRANT re-apply)"
-fi
-
 phase validating running "validating restored schema"
 users_exists="$("${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -tAc "SELECT to_regclass('${RESTORE_SCHEMA}.users') IS NOT NULL")"
 if [[ "${users_exists}" != "t" ]]; then
@@ -423,69 +589,7 @@ if [[ "${users_exists}" != "t" ]]; then
 fi
 phase validating success "restored schema passed basic checks"
 
-enter_write_fence() {
-  if [[ -z "${APP_ROLE:-}" ]]; then
-    phase draining failed "PINVI_RESTORE_APP_ROLE is required for the database write fence"
-    exit 3
-  fi
-  local fence_status
-  WRITE_FENCE_ACTIVE=1
-  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f - >/dev/null <<SQL
-$(write_identity_guard)
-REVOKE CREATE ON SCHEMA ${SOURCE_SCHEMA}, ${RESTORE_SCHEMA} FROM ${APP_ROLE};
-REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA ${SOURCE_SCHEMA}, ${RESTORE_SCHEMA} FROM ${APP_ROLE};
-REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA ${SOURCE_SCHEMA}, ${RESTORE_SCHEMA} FROM ${APP_ROLE};
-SELECT pg_terminate_backend(pid)
-FROM pg_stat_activity
-WHERE usename = '${APP_ROLE}' AND pid <> pg_backend_pid();
-SQL
-  fence_status="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 -tAc "
-SELECT
-  NOT EXISTS (
-    SELECT 1 FROM pg_stat_activity
-    WHERE usename = '${APP_ROLE}' AND pid <> pg_backend_pid()
-  )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM pg_namespace n
-    JOIN pg_class c ON c.relnamespace = n.oid
-    WHERE n.nspname IN ('${SOURCE_SCHEMA}', '${RESTORE_SCHEMA}')
-      AND (
-        has_schema_privilege('${APP_ROLE}', n.oid, 'CREATE')
-        OR has_table_privilege('${APP_ROLE}', c.oid, 'INSERT')
-        OR has_table_privilege('${APP_ROLE}', c.oid, 'UPDATE')
-        OR has_table_privilege('${APP_ROLE}', c.oid, 'DELETE')
-        OR has_table_privilege('${APP_ROLE}', c.oid, 'TRUNCATE')
-      )
-" | tr -d '[:space:]')"
-  if [[ "${fence_status}" != "t" ]]; then
-    phase draining failed "database write fence could not revoke active runtime writes"
-    exit 3
-  fi
-  phase draining success "database write fence revoked runtime writes and terminated active sessions"
-}
-
-release_write_fence() {
-  if [[ -z "${APP_ROLE:-}" ]]; then
-    WRITE_FENCE_ACTIVE=0
-    return 0
-  fi
-  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=0 "${DATABASE_URL}" -f - >/dev/null 2>&1 <<SQL || true
-DO $m05$
-BEGIN
-  IF to_regnamespace('${SOURCE_SCHEMA}') IS NOT NULL THEN
-    EXECUTE 'GRANT USAGE ON SCHEMA ${SOURCE_SCHEMA} TO ${APP_ROLE}';
-    EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ${SOURCE_SCHEMA} TO ${APP_ROLE}';
-    EXECUTE 'GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA ${SOURCE_SCHEMA} TO ${APP_ROLE}';
-  END IF;
-END
-$m05$;
-SQL
-  WRITE_FENCE_ACTIVE=0
-}
-
 phase draining running "write drain"
-enter_write_fence
 if [[ "${PINVI_RESTORE_API_TRIGGER:-0}" == "1" && -n "${PINVI_RESTORE_DRAIN_COMMAND:-}" ]]; then
   phase draining failed "API-triggered restore cannot run PINVI_RESTORE_DRAIN_COMMAND"
   exit 3
