@@ -116,11 +116,9 @@ def _m05_docker_request(
     try:
         connection.connect(str(path))
         connection.sendall(
-            (
-                f"GET {request_path} HTTP/1.1\r\n"
-                "Host: docker\r\n"
-                "Connection: close\r\n\r\n"
-            ).encode("ascii")
+            (f"GET {request_path} HTTP/1.1\r\nHost: docker\r\nConnection: close\r\n\r\n").encode(
+                "ascii"
+            )
         )
         response = http.client.HTTPResponse(connection)
         response.begin()
@@ -201,7 +199,9 @@ def _validate_m05_runtime_dependencies_live(
         digest = raw_dependency.get("digest")
         source_revision = raw_dependency.get("source_revision")
         started_at = raw_dependency.get("started_at")
-        if not all(isinstance(value, str) for value in (container_id, digest, source_revision, started_at)):
+        if not all(
+            isinstance(value, str) for value in (container_id, digest, source_revision, started_at)
+        ):
             raise RuntimeError(f"M05 runtime dependency fields are invalid: {name}")
         live = _m05_docker_inspect(
             socket_path,
@@ -214,11 +214,7 @@ def _validate_m05_runtime_dependencies_live(
         config = live.get("Config")
         if not isinstance(state, dict) or state.get("Running") is not True:
             raise RuntimeError(f"M05 runtime dependency is not running: {name}")
-        if (
-            live_id != container_id
-            or live_image != digest
-            or state.get("StartedAt") != started_at
-        ):
+        if live_id != container_id or live_image != digest or state.get("StartedAt") != started_at:
             raise RuntimeError(f"M05 runtime dependency identity drifted: {name}")
         if not isinstance(config, dict) or not isinstance(config.get("Labels"), dict):
             raise RuntimeError(f"M05 runtime dependency labels are missing: {name}")
@@ -247,14 +243,11 @@ def _validate_m05_runtime_dependencies_live(
         network = live.get("NetworkSettings")
         ports = network.get("Ports") if isinstance(network, dict) else None
         bindings = ports.get(f"{endpoint_binding[0]}/tcp") if isinstance(ports, dict) else None
-        if (
-            not isinstance(bindings, list)
-            or not any(
-                isinstance(binding, dict)
-                and binding.get("HostIp") == "127.0.0.1"
-                and str(binding.get("HostPort")) == str(endpoint_binding[1])
-                for binding in bindings
-            )
+        if not isinstance(bindings, list) or not any(
+            isinstance(binding, dict)
+            and binding.get("HostIp") == "127.0.0.1"
+            and str(binding.get("HostPort")) == str(endpoint_binding[1])
+            for binding in bindings
         ):
             raise RuntimeError(f"M05 runtime endpoint binding drifted: {name}")
 
