@@ -9,7 +9,17 @@
 - 변경 파일에 Web/packages가 포함되면 aggregate가 `lint-typecheck-build`와 `e2e`를 모두 기다리도록
   고치고, workflow 인덱스와 열린 작업 원장의 현재 선점을 동기화한다.
 - PR CI에서 exact head의 Playwright job과 aggregate gate가 함께 green인지 확인한 뒤 T-323을 완료
-  아카이브로 이동한다.
+ 아카이브로 이동한다.
+
+## 2026-08-24 (codex) — T-324 Google OAuth 런타임 설정 복원 착수
+
+- API와 Web의 Google OAuth 구현·버튼은 남아 있었지만 `infra/docker-compose.app.yml`이 Google
+  client ID/secret을 API 컨테이너에 전달하지 않아 `/auth/oauth/providers`가 Google을 disabled로
+  판정하는 경로를 확인했다.
+- Compose의 Google 설정 전달과 `infra/.env.prod.example`의 운영 입력 항목을 복원하고, 두 파일의
+  계약을 고정하는 단위 테스트를 추가했다. 실제 client secret은 파일이나 로그에 기록하지 않는다.
+- T-324를 열린 작업 원장에 추가했으며, PR CI와 격리 live UI에서 로그인 화면의 Google 버튼 및
+ API provider 상태를 확인한 뒤 완료 아카이브로 이동한다.
 
 ## 2026-08-22 (codex) — Map #1051 service 계약 byte 대조 및 재vendor
 
