@@ -7,8 +7,8 @@
 
 ## 현재 선점 / 충돌 회피
 
-- 활성 선점은 없다. T-VN-41 계열 파일을 만질 때는 docker-manager PR #170과의 충돌 범위를
-  먼저 확인한다.
+- 현재 선점: `T-323` — `codex/t323-e2e-required`. aggregate gate가 Web `e2e` 결과를 기다리도록
+  workflow·required-check 문서만 갱신하며, Google OAuth·T-VN-41 파일과 충돌을 피한다.
 
 ## kor-travel-map compatible pair
 
