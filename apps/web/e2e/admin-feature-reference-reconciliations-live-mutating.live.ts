@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 const enabled = process.env.PINVI_M05_LIVE_E2E === '1';
