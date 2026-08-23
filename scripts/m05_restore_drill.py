@@ -628,7 +628,7 @@ def _source_revision(root: Path) -> str:
             text=True,
             env=_command_env(),
         ).stdout.strip()
-        if remote_url != "https://github.com/digitie/pinvi.git":
+        if remote_url.removesuffix(".git") != "https://github.com/digitie/pinvi":
             raise RestoreDrillError("restore producer origin is not the canonical Pinvi remote")
         if revision != expected or status:
             raise RestoreDrillError(

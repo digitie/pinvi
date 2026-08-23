@@ -547,7 +547,9 @@ def _assert_source_checkout(source_revision: str) -> None:
         raise ReceiptError("receipt producer source revision could not be verified") from exc
     if revision != source_revision or status:
         raise ReceiptError("receipt producer checkout must be clean at the signed revision")
-    if remote_urls != ["https://github.com/digitie/pinvi.git"]:
+    if [remote.removesuffix(".git") for remote in remote_urls] != [
+        "https://github.com/digitie/pinvi"
+    ]:
         raise ReceiptError("receipt producer origin is not the canonical Pinvi remote")
     pr_match = re.fullmatch(
         r"https://github\.com/digitie/pinvi/pull/([1-9][0-9]*)", _M05_ACTIVATION_PR_URL
