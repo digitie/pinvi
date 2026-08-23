@@ -1230,7 +1230,6 @@ class Settings(BaseSettings):
             _raise_redacted_settings_error(
                 "M05 activation receipt freshness, generation, or nonce is invalid"
             )
-
         if (
             not isinstance(payload["pinvi_source_revision"], str)
             or re.fullmatch(r"[0-9a-f]{40}", payload["pinvi_source_revision"]) is None
@@ -1393,9 +1392,10 @@ class Settings(BaseSettings):
             "pinvi_web_container_id",
             "pinvi_dagster_container_id",
         ):
+            container_id = payload[container_field]
             if (
-                not isinstance(payload[container_field], str)
-                or re.fullmatch(r"[0-9a-f]{64}", payload[container_field]) is None
+                not isinstance(container_id, str)
+                or re.fullmatch(r"[0-9a-f]{64}", container_id) is None
             ):
                 _raise_redacted_settings_error(
                     f"M05 activation receipt container identity is invalid: {container_field}"
@@ -1621,8 +1621,11 @@ class Settings(BaseSettings):
         receipt_sha256 = hashlib.sha256(
             receipt_secret.get_secret_value().encode("utf-8")
         ).hexdigest()
-        if payload["activation_generation"] < high_watermark_generation or (
-            payload["activation_generation"] == high_watermark_generation
+        activation_generation = payload["activation_generation"]
+        if type(activation_generation) is not int:
+            _raise_redacted_settings_error("M05 activation generation is invalid")
+        if activation_generation < high_watermark_generation or (
+            activation_generation == high_watermark_generation
             and receipt_sha256 != high_watermark_receipt_sha256
         ):
             _raise_redacted_settings_error(
