@@ -118,9 +118,29 @@ def _production_settings(**overrides: object) -> Settings:
                 encoding="utf-8",
             )
             durable_floor_path.chmod(0o600)
+            durable_history_path = Path(ledger_dir.name) / "activation-durable-history.jsonl"
+            durable_history = {
+                "generation": payload["activation_generation"],
+                "previous_record_sha256": "0" * 64,
+                "receipt_sha256": hashlib.sha256(receipt.encode()).hexdigest(),
+            }
+            durable_history["record_sha256"] = hashlib.sha256(
+                json.dumps(
+                    durable_history,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8")
+            ).hexdigest()
+            durable_history_path.write_text(
+                json.dumps(durable_history, separators=(",", ":")) + "\n",
+                encoding="utf-8",
+            )
+            durable_history_path.chmod(0o600)
             overrides["pinvi_m05_activation_ledger_path"] = str(ledger_path)
             overrides["pinvi_m05_activation_high_watermark_path"] = str(high_watermark_path)
             overrides["pinvi_m05_activation_durable_floor_path"] = str(durable_floor_path)
+            overrides["pinvi_m05_activation_durable_history_path"] = str(durable_history_path)
             loaded = Settings(_env_file=None, pinvi_environment="production", **overrides)  # type: ignore[arg-type]
             ledger_dir.cleanup()
             return loaded
@@ -138,10 +158,12 @@ def _receipt_payload(**overrides: object) -> dict[str, object]:
             {
                 "agent_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
                 "commit": PINVI_REVISION,
+                "challenge_id": "33333333-3333-4333-8333-333333333333",
                 "p0_p1": 0,
                 "pr_url": "https://github.com/digitie/pinvi/pull/466",
                 "review_id": "44444444-4444-4444-8444-444444444444",
                 "reviewer_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
+                "response_sha256": "1" * 64,
                 "summary": "GO: no P0/P1 findings",
                 "summary_sha256": hashlib.sha256(b"GO: no P0/P1 findings").hexdigest(),
                 "verdict": "GO",
@@ -149,10 +171,12 @@ def _receipt_payload(**overrides: object) -> dict[str, object]:
             {
                 "agent_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
                 "commit": PINVI_REVISION,
+                "challenge_id": "33333333-3333-4333-8333-333333333333",
                 "p0_p1": 0,
                 "pr_url": "https://github.com/digitie/pinvi/pull/466",
                 "review_id": "55555555-5555-4555-8555-555555555555",
                 "reviewer_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
+                "response_sha256": "2" * 64,
                 "summary": "GO: no P0/P1 findings",
                 "summary_sha256": hashlib.sha256(b"GO: no P0/P1 findings").hexdigest(),
                 "verdict": "GO",
