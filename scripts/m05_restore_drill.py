@@ -30,7 +30,7 @@ _ROLE_RE = re.compile(r"[a-z_][a-z0-9_]{0,62}\Z")
 _SCHEMA_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 _TARGET_DATABASE_RE = re.compile(r"pinvi_m05_restore_[a-z0-9_]+\Z")
-_SAFE_PATH = "/usr/bin:/bin"
+_SAFE_PATH = "/usr/local/bin:/usr/bin:/bin"
 
 
 class RestoreDrillError(ValueError):
@@ -41,7 +41,7 @@ def _command_env() -> dict[str, str]:
     environment = os.environ.copy()
     if environment.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
         environment["PATH"] = _SAFE_PATH
-        environment["PINVI_BACKUP_PG_DUMP_BIN"] = "/usr/bin/pg_dump"
+        environment["PINVI_BACKUP_PG_DUMP_BIN"] = "/usr/local/bin/pg_dump"
         environment["PINVI_BACKUP_DOCKER_BIN"] = "/usr/bin/docker"
     return environment
 
