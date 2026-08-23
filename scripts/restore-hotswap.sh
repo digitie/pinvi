@@ -432,27 +432,134 @@ run_guarded_file() {
   local wrapper="${TMP_DIR}/guarded-$(basename "${sql_file}")"
   assert_advisory_lock_alive
   if awk '
-    BEGIN { in_copy = 0; unsafe = 0 }
+    function identifier_character(value) {
+      return value ~ /^[[:alnum:]_$]$/
+    }
+    BEGIN {
+      in_copy = 0
+      block_comment_depth = 0
+      quote = ""
+      dollar_delimiter = ""
+      single_quote_escape = 0
+      unsafe = 0
+      single_quote = sprintf("%c", 39)
+      double_quote = sprintf("%c", 34)
+    }
     {
       line = $0
-      normalized = tolower(line)
-      if (!in_copy && normalized ~ /^[[:space:]]*copy([[:space:]]|$)/ && normalized ~ /;[[:space:]]*$/) {
-        in_copy = 1
-        next
-      }
       if (in_copy) {
         if (line == "\\.") in_copy = 0
         next
       }
+      clean = ""
+      for (i = 1; i <= length(line); ) {
+        character = substr(line, i, 1)
+        pair = substr(line, i, 2)
+        if (block_comment_depth > 0) {
+          if (pair == "/*") {
+            block_comment_depth++
+            i += 2
+          } else if (pair == "*/") {
+            block_comment_depth--
+            clean = clean " "
+            i += 2
+          } else {
+            i++
+          }
+          continue
+        }
+        if (dollar_delimiter != "") {
+          if (substr(line, i, length(dollar_delimiter)) == dollar_delimiter) {
+            delimiter_length = length(dollar_delimiter)
+            dollar_delimiter = ""
+            clean = clean " "
+            i += delimiter_length
+          } else {
+            i++
+          }
+          continue
+        }
+        if (quote == "single") {
+          if (single_quote_escape && character == "\\") {
+            clean = clean "  "
+            i += 2
+          } else if (character == single_quote) {
+            if (substr(line, i + 1, 1) == single_quote) {
+              clean = clean "  "
+              i += 2
+            } else {
+              quote = ""
+              clean = clean " "
+              i++
+            }
+          } else {
+            i++
+          }
+          continue
+        }
+        if (quote == "double") {
+          if (character == double_quote) {
+            if (substr(line, i + 1, 1) == double_quote) {
+              clean = clean "  "
+              i += 2
+            } else {
+              quote = ""
+              clean = clean " "
+              i++
+            }
+          } else {
+            i++
+          }
+          continue
+        }
+        if (pair == "--") break
+        if (pair == "/*") {
+          block_comment_depth = 1
+          clean = clean " "
+          i += 2
+          continue
+        }
+        if (character == single_quote) {
+          quote = "single"
+          previous = i > 1 ? substr(line, i - 1, 1) : ""
+          before_previous = i > 2 ? substr(line, i - 2, 1) : ""
+          single_quote_escape = tolower(previous) == "e" &&
+            (i == 2 || !identifier_character(before_previous))
+          clean = clean " "
+          i++
+          continue
+        }
+        if (character == double_quote) {
+          quote = "double"
+          clean = clean " "
+          i++
+          continue
+        }
+        if (character == "$") {
+          candidate = substr(line, i)
+          if (match(candidate, /^\$\$|^\$[[:alpha:]_][[:alnum:]_]*\$/)) {
+            dollar_delimiter = substr(candidate, RSTART, RLENGTH)
+            clean = clean " "
+            i += RLENGTH
+            continue
+          }
+        }
+        clean = clean character
+        i++
+      }
+      normalized = tolower(clean)
       if (
-        normalized ~ /^[[:space:]]*\\[[:alpha:]!]/ ||
+        normalized ~ /^[[:space:]]*[\\!]/ ||
         normalized ~ /pg_advisory_(lock|unlock)/ ||
         normalized ~ /pg_(cancel|terminate)_backend/ ||
         normalized ~ /discard[[:space:]]+all/ ||
-        normalized ~ /(^|[;[:space:]])(begin|start[[:space:]]+transaction|commit|rollback|abort)([;[:space:]]|$)/
+        normalized ~ /(^|[;[:space:]])(begin|start[[:space:]]+transaction|commit|end|rollback|abort)([;[:space:]]|$)/
       ) {
         unsafe = 1
         exit
+      }
+      if (!in_copy && normalized ~ /^[[:space:]]*copy([[:space:]]|$)/ && normalized ~ /;[[:space:]]*$/) {
+        in_copy = 1
       }
     }
     END { exit unsafe ? 0 : 1 }

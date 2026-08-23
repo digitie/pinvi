@@ -11,5 +11,8 @@ def test_restore_hotswap_rejects_session_and_lock_control_in_dump_sql() -> None:
     assert "pg_advisory_(lock|unlock)" in source
     assert "pg_(cancel|terminate)_backend" in source
     assert "discard[[:space:]]+all" in source
+    assert "end|rollback|abort" in source
+    assert "block_comment_depth" in source
+    assert "dollar_delimiter" in source
     assert "advisory_lock_sql_guard" in source
     assert source.count("advisory_lock_sql_guard") >= 6
