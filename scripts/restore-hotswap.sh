@@ -693,10 +693,6 @@ WHERE login.rolcanlogin
   AND has_database_privilege(login.rolname, current_database(), 'CONNECT')
   AND (
     effective.rolsuper
-    OR effective.rolbypassrls
-    OR effective.rolcreaterole
-    OR effective.rolcreatedb
-    OR effective.rolreplication
     OR (to_regnamespace('${SOURCE_SCHEMA}') IS NOT NULL AND has_schema_privilege(effective.rolname, '${SOURCE_SCHEMA}', 'CREATE'))
     OR (to_regnamespace('${RESTORE_SCHEMA}') IS NOT NULL AND has_schema_privilege(effective.rolname, '${RESTORE_SCHEMA}', 'CREATE'))
     OR EXISTS (
@@ -909,10 +905,6 @@ BEGIN
     AND has_database_privilege(login.rolname, current_database(), 'CONNECT')
     AND (
       effective.rolsuper
-      OR effective.rolbypassrls
-      OR effective.rolcreaterole
-      OR effective.rolcreatedb
-      OR effective.rolreplication
       OR (to_regnamespace('${SOURCE_SCHEMA}') IS NOT NULL AND has_schema_privilege(effective.rolname, '${SOURCE_SCHEMA}', 'CREATE'))
       OR (to_regnamespace('${RESTORE_SCHEMA}') IS NOT NULL AND has_schema_privilege(effective.rolname, '${RESTORE_SCHEMA}', 'CREATE'))
       OR EXISTS (

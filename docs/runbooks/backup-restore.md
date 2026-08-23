@@ -166,12 +166,16 @@ USAGE/SELECT grant를 재적용한다. 이 role은 LOGIN이고 superuser·CREATE
 | 변수                                  | 설명                                                                                          |
 | ------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `PINVI_RESTORE_TEMPLATE_DATABASE_URL` | 같은 PostgreSQL cluster의 template DB URL. `app`는 없고 `x_extension`만 준비해야 한다. |
+| `PINVI_RESTORE_HOTSWAP_DATABASE_URL` | 같은 disposable target을 가리키는 전용 schema-owner/hotswap executor URL. |
+| `PINVI_RESTORE_HOTSWAP_ROLE` | `PINVI_RESTORE_HOTSWAP_DATABASE_URL`의 role 이름. |
 
 template DB에는 one-time privileged bootstrap으로 `x_extension` schema와 `citext`, `pgcrypto`,
 `pg_trgm`을 설치하고 runtime login에 `USAGE`만 부여한다. template에는 active connection이
-없어야 하며, staging executor는 target을 매번 `DROP DATABASE ... WITH (FORCE)` 후
-`CREATE DATABASE ... TEMPLATE ...`로 재생성할 수 있는 `CREATEDB` 권한이 있어야 한다. 이
-template URL은 runtime/API container에 전달하지 않고 drill 실행 주체의 local-only 환경에만 둔다.
+없어야 하며, hotswap executor에는 database `CREATE`와 `x_extension` `USAGE`를 부여한다.
+staging provisioner는 target을 매번 `DROP DATABASE ... WITH (FORCE)` 후
+`CREATE DATABASE ... TEMPLATE ...`로 재생성할 수 있는 `CREATEDB` 권한을 가지며, hotswap
+executor와 분리한다. `PINVI_RESTORE_HOTSWAP_DATABASE_URL`은 runtime/API container에
+전달하지 않고 drill 실행 주체의 local-only 환경에만 둔다.
 
 실행 모드의 `PINVI_RESTORE_DATABASE_URL`은 API runtime role이 아닌 별도 restore
 executor로 연결해야 한다. 이 login은 `LOGIN`, `NOSUPERUSER`, `NOCREATEROLE`,

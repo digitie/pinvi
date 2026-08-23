@@ -41,6 +41,8 @@ Required:
                                       PINVI_DATABASE_URL unless explicitly allowed.
 
 Optional:
+  PINVI_RESTORE_HOTSWAP_DATABASE_URL   dedicated schema-owner URL for restore/hotswap;
+                                      defaults to the staging URL.
   PINVI_RESTORE_DRILL_SCHEMA=app
   PINVI_RESTORE_DRILL_JOBS=2
   PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL=none|precheck|drain
@@ -65,18 +67,20 @@ if [[ ! "${SCHEMA}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
   exit 2
 fi
 
-DATABASE_URL="${PINVI_RESTORE_STAGING_DATABASE_URL:-}"
-if [[ -z "${DATABASE_URL}" ]]; then
+STAGING_DATABASE_URL="${PINVI_RESTORE_STAGING_DATABASE_URL:-}"
+DATABASE_URL="${PINVI_RESTORE_HOTSWAP_DATABASE_URL:-${STAGING_DATABASE_URL}}"
+if [[ -z "${STAGING_DATABASE_URL}" ]]; then
   if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" == "1" &&
     "${PINVI_RESTORE_DRILL_ALLOW_NON_STAGING:-0}" == "1" ]]; then
-    DATABASE_URL="${PINVI_RESTORE_DATABASE_URL:-${PINVI_DATABASE_URL:-}}"
+    STAGING_DATABASE_URL="${PINVI_RESTORE_DATABASE_URL:-${PINVI_DATABASE_URL:-}}"
+    DATABASE_URL="${PINVI_RESTORE_HOTSWAP_DATABASE_URL:-${STAGING_DATABASE_URL}}"
   else
     phase precheck failed "PINVI_RESTORE_STAGING_DATABASE_URL is required for staging drill"
     exit 2
   fi
 fi
 
-if [[ -z "${DATABASE_URL}" ]]; then
+if [[ -z "${STAGING_DATABASE_URL}" || -z "${DATABASE_URL}" ]]; then
   phase precheck failed "staging database URL is empty"
   exit 2
 fi
@@ -92,6 +96,9 @@ if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" != "1" &&
   exit 3
 fi
 
+if [[ "${STAGING_DATABASE_URL}" == postgresql+asyncpg://* ]]; then
+  STAGING_DATABASE_URL="postgresql://${STAGING_DATABASE_URL#postgresql+asyncpg://}"
+fi
 if [[ "${DATABASE_URL}" == postgresql+asyncpg://* ]]; then
   DATABASE_URL="postgresql://${DATABASE_URL#postgresql+asyncpg://}"
 fi

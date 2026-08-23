@@ -7,7 +7,9 @@ DB URL과 runtime role은 명령행에 넣지 않고 다음 환경변수로만 �
 * ``PINVI_RESTORE_STAGING_DATABASE_URL`` — owner/migrator target
 * ``PINVI_RESTORE_RUNTIME_DATABASE_URL`` — non-owner runtime target login
 * ``PINVI_RESTORE_TEMPLATE_DATABASE_URL`` — target-cluster template with x_extension
+* ``PINVI_RESTORE_HOTSWAP_DATABASE_URL`` — dedicated schema-owner target login
 * ``PINVI_RESTORE_RUNTIME_ROLE`` — runtime login name
+* ``PINVI_RESTORE_HOTSWAP_ROLE`` — dedicated hotswap executor role
 
 이 도구는 repository의 backup/restore runner를 고정 호출하고, 성공한 실행의
 결과만 root-owned evidence JSON으로 봉인한다. stdout/stderr에는 URL을 출력하지 않는다.
@@ -482,6 +484,54 @@ WHERE r.rolname = current_user
     _require_true(_scalar(database_url, sql), name="staging role")
 
 
+def _hotswap_role_check(
+    database_url: str,
+    *,
+    schema: str,
+    expected_role: str,
+    require_schema_owner: bool,
+) -> None:
+    if not _ROLE_RE.fullmatch(expected_role):
+        raise RestoreDrillError("restore hotswap role is invalid")
+    schema_check = (
+        f"""
+  AND EXISTS (
+      SELECT 1 FROM pg_namespace n
+      WHERE n.nspname = '{schema}' AND n.nspowner = r.oid
+  )"""
+        if require_schema_owner
+        else f"""
+  AND NOT EXISTS (
+      SELECT 1 FROM pg_namespace n WHERE n.nspname = '{schema}'
+  )"""
+    )
+    sql = f"""
+SELECT current_user = '{expected_role}'
+  AND r.rolcanlogin
+  AND NOT r.rolsuper
+  AND NOT r.rolcreaterole
+  AND NOT r.rolcreatedb
+  AND NOT r.rolreplication
+  AND NOT r.rolbypassrls
+  AND r.rolinherit
+  AND has_database_privilege(current_user, current_database(), 'CREATE')
+  AND has_schema_privilege(current_user, 'x_extension', 'USAGE')
+  AND NOT has_schema_privilege(current_user, 'x_extension', 'CREATE')
+  AND EXISTS (
+      SELECT 1 FROM pg_auth_members m
+      WHERE m.member = r.oid AND m.roleid = to_regrole('pg_signal_backend')
+  )
+  AND NOT EXISTS (
+      SELECT 1 FROM pg_auth_members m
+      WHERE m.member = r.oid AND m.roleid <> to_regrole('pg_signal_backend')
+  )
+{schema_check}
+FROM pg_roles r
+WHERE r.rolname = current_user
+""".strip()
+    _require_true(_scalar(database_url, sql), name="restore hotswap role")
+
+
 def _trigger_check(database_url: str, *, schema: str) -> None:
     sql = f"""
 SELECT count(*) = 6
@@ -612,14 +662,18 @@ def _recreate_disposable_target(
     *,
     staging_role: str,
     runtime_role: str,
+    hotswap_role: str,
+    hotswap_url: str,
     template_url: str,
 ) -> None:
     """x_extension이 준비된 target template에서 prefix DB를 재생성한다."""
 
     try:
         parsed = urlsplit(database_url)
+        hotswap_parsed = urlsplit(hotswap_url)
         template_parsed = urlsplit(template_url)
         database_name = parsed.path.removeprefix("/")
+        hotswap_database_name = hotswap_parsed.path.removeprefix("/")
         template_name = template_parsed.path.removeprefix("/")
     except ValueError as exc:
         raise RestoreDrillError("restore target URL is invalid") from exc
@@ -631,6 +685,10 @@ def _recreate_disposable_target(
         raise RestoreDrillError("restore staging role is invalid")
     if not _ROLE_RE.fullmatch(runtime_role):
         raise RestoreDrillError("restore runtime role is invalid")
+    if not _ROLE_RE.fullmatch(hotswap_role):
+        raise RestoreDrillError("restore hotswap role is invalid")
+    if hotswap_database_name != database_name:
+        raise RestoreDrillError("restore hotswap URL must target the disposable database")
     maintenance_url = urlunsplit(parsed._replace(path="/postgres"))
     quoted_database = '"' + database_name.replace('"', '""') + '"'
     quoted_role = '"' + staging_role.replace('"', '""') + '"'
@@ -641,12 +699,25 @@ def _recreate_disposable_target(
     template_hostaddr = template_parsed.query and dict(
         parse_qsl(template_parsed.query, keep_blank_values=True)
     ).get("hostaddr", "")
+    hotswap_hostaddr = hotswap_parsed.query and dict(
+        parse_qsl(hotswap_parsed.query, keep_blank_values=True)
+    ).get("hostaddr", "")
     expected_port = str(parsed.port or 5432)
+    hotswap_port = str(hotswap_parsed.port or 5432)
     template_port = str(template_parsed.port or 5432)
-    if not hostaddr or not template_hostaddr:
-        raise RestoreDrillError("restore target and template URLs need pinned hostaddr values")
-    if hostaddr != template_hostaddr or expected_port != template_port:
-        raise RestoreDrillError("restore target and template must use the same PostgreSQL endpoint")
+    if not hostaddr or not template_hostaddr or not hotswap_hostaddr:
+        raise RestoreDrillError(
+            "restore target, hotswap, and template URLs need pinned hostaddr values"
+        )
+    if (
+        hostaddr != template_hostaddr
+        or hostaddr != hotswap_hostaddr
+        or expected_port != template_port
+        or expected_port != hotswap_port
+    ):
+        raise RestoreDrillError(
+            "restore target, hotswap, and template must use the same PostgreSQL endpoint"
+        )
     target_system_identifier = _scalar(
         maintenance_url,
         "SELECT (pg_control_system()).system_identifier::text",
@@ -656,6 +727,7 @@ def _recreate_disposable_target(
     sql_hostaddr = hostaddr.replace("'", "''")
     sql_role = staging_role.replace("'", "''")
     sql_runtime = runtime_role.replace("'", "''")
+    sql_hotswap = hotswap_role.replace("'", "''")
     sql_template = template_name.replace("'", "''")
     template_check = _scalar(
         template_url,
@@ -670,6 +742,29 @@ SELECT current_database() = '{sql_template}'
   AND NOT has_database_privilege('{sql_runtime}', current_database(), 'CREATE')
   AND has_schema_privilege('{sql_runtime}', 'x_extension', 'USAGE')
   AND NOT has_schema_privilege('{sql_runtime}', 'public', 'CREATE')
+  AND has_database_privilege('{sql_hotswap}', current_database(), 'CREATE')
+  AND has_schema_privilege('{sql_hotswap}', 'x_extension', 'USAGE')
+  AND NOT has_schema_privilege('{sql_hotswap}', 'x_extension', 'CREATE')
+  AND EXISTS (
+    SELECT 1
+    FROM pg_roles r
+    WHERE r.rolname = '{sql_hotswap}'
+      AND r.rolcanlogin
+      AND NOT r.rolsuper
+      AND NOT r.rolcreaterole
+      AND NOT r.rolcreatedb
+      AND NOT r.rolreplication
+      AND NOT r.rolbypassrls
+      AND r.rolinherit
+      AND EXISTS (
+        SELECT 1 FROM pg_auth_members m
+        WHERE m.member = r.oid AND m.roleid = to_regrole('pg_signal_backend')
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_auth_members m
+        WHERE m.member = r.oid AND m.roleid <> to_regrole('pg_signal_backend')
+      )
+  )
   AND (
     SELECT count(*)
     FROM pg_extension e
@@ -717,6 +812,24 @@ BEGIN
       AND NOT has_database_privilege(r.rolname, '{sql_template}', 'CREATE')
   ) THEN
     RAISE EXCEPTION 'restore runtime role has direct database or schema creation authority';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_roles r
+    WHERE r.rolname = '{sql_hotswap}'
+      AND NOT r.rolcreatedb
+      AND r.rolinherit
+      AND has_database_privilege(r.rolname, '{sql_template}', 'CREATE')
+      AND EXISTS (
+        SELECT 1 FROM pg_auth_members m
+        WHERE m.member = r.oid AND m.roleid = to_regrole('pg_signal_backend')
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_auth_members m
+        WHERE m.member = r.oid AND m.roleid <> to_regrole('pg_signal_backend')
+      )
+  ) THEN
+    RAISE EXCEPTION 'restore hotswap role is not a dedicated non-CREATEDB executor';
   END IF;
   IF EXISTS (
     SELECT 1 FROM pg_stat_activity WHERE datname = '{sql_template}'
@@ -873,32 +986,49 @@ def _run_drill(args: argparse.Namespace) -> int:
     source_url = _database_url(args.source_database_url_env)
     target_url = _database_url(args.staging_database_url_env)
     runtime_url = _database_url(args.runtime_database_url_env)
+    hotswap_url = ""
+    hotswap_role = ""
     template_url = ""
     if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
+        if not _ROLE_RE.fullmatch(args.hotswap_role):
+            raise RestoreDrillError("restore hotswap role is required")
+        hotswap_role = args.hotswap_role
+        hotswap_url = _database_url(args.hotswap_database_url_env)
         template_url = _database_url(args.template_database_url_env)
     try:
         source_database_name = urlsplit(source_url).path.removeprefix("/")
         target_database_name = urlsplit(target_url).path.removeprefix("/")
+        hotswap_database_name = urlsplit(hotswap_url).path.removeprefix("/")
     except ValueError as exc:
         raise RestoreDrillError("restore database URL is invalid") from exc
     if source_database_name == target_database_name:
         raise RestoreDrillError("restore source and disposable target databases must differ")
+    if hotswap_url and hotswap_database_name != target_database_name:
+        raise RestoreDrillError("restore hotswap database must match the disposable target")
     if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
         _recreate_disposable_target(
             target_url,
             staging_role=args.staging_role,
             runtime_role=args.runtime_role,
+            hotswap_role=hotswap_role,
+            hotswap_url=hotswap_url,
             template_url=template_url,
         )
     source_identity_pre = _identity(source_url, schema=args.schema)
     target_identity_pre = _identity(target_url, schema=args.schema)
     runtime_identity_pre = _identity(runtime_url, schema=args.schema)
+    hotswap_identity_pre = _identity(hotswap_url, schema=args.schema) if hotswap_url else None
     source_key = _identity_key(source_identity_pre)
     target_key = _identity_key(target_identity_pre)
     runtime_key = _identity_key(runtime_identity_pre)
-    if source_key in {target_key, runtime_key} or target_key != runtime_key:
+    hotswap_key = _identity_key(hotswap_identity_pre) if hotswap_identity_pre else None
+    if (
+        source_key in {target_key, runtime_key}
+        or target_key != runtime_key
+        or (hotswap_key is not None and hotswap_key != target_key)
+    ):
         raise RestoreDrillError(
-            "restore source, owner target, and runtime target must be distinct database identities"
+            "restore source, owner target, hotswap target, and runtime target identities are invalid"
         )
     target_database = target_identity_pre.get("database")
     if (
@@ -914,6 +1044,13 @@ def _run_drill(args: argparse.Namespace) -> int:
         expected_role=args.staging_role,
         runtime_role=args.runtime_role,
     )
+    if hotswap_url:
+        _hotswap_role_check(
+            hotswap_url,
+            schema=args.schema,
+            expected_role=hotswap_role,
+            require_schema_owner=False,
+        )
     _runtime_role_check(
         runtime_url,
         schema=args.schema,
@@ -983,6 +1120,8 @@ def _run_drill(args: argparse.Namespace) -> int:
                 "PINVI_RESTORE_REQUIRE_FRESH_SCHEMA": "1",
             }
         )
+        if hotswap_url:
+            restore_env["PINVI_RESTORE_HOTSWAP_DATABASE_URL"] = hotswap_url
         if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
             restore_env.update(
                 {
@@ -1026,13 +1165,26 @@ def _run_drill(args: argparse.Namespace) -> int:
             schema=args.schema,
             expected_role=args.runtime_role,
         )
-        _trigger_check(target_url, schema=args.schema)
-        _trigger_bypass_is_blocked(target_url, schema=args.schema)
+        if hotswap_url:
+            _hotswap_role_check(
+                hotswap_url,
+                schema=args.schema,
+                expected_role=hotswap_role,
+                require_schema_owner=True,
+            )
+        trigger_url = hotswap_url or target_url
+        _trigger_check(trigger_url, schema=args.schema)
+        _trigger_bypass_is_blocked(trigger_url, schema=args.schema)
         target_identity = _identity(target_url, schema=args.schema)
         runtime_identity = _identity(runtime_url, schema=args.schema)
+        hotswap_identity = _identity(hotswap_url, schema=args.schema) if hotswap_url else None
         if (
             _identity_key(target_identity) != target_key
             or _identity_key(runtime_identity) != target_key
+            or (
+                hotswap_identity is not None
+                and _identity_key(hotswap_identity) != target_key
+            )
         ):
             raise RestoreDrillError(
                 "restore target identity changed or does not match the runtime target"
@@ -1120,6 +1272,14 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--template-database-url-env",
         default="PINVI_RESTORE_TEMPLATE_DATABASE_URL",
+    )
+    parser.add_argument(
+        "--hotswap-database-url-env",
+        default="PINVI_RESTORE_HOTSWAP_DATABASE_URL",
+    )
+    parser.add_argument(
+        "--hotswap-role",
+        default=os.environ.get("PINVI_RESTORE_HOTSWAP_ROLE", ""),
     )
     parser.add_argument("--require-root-owned", action="store_true")
     return parser

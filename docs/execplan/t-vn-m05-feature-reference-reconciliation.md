@@ -137,8 +137,13 @@ target으로 호출하는 `scripts/m05_restore_drill.py`가 만든다. source·t
 fresh target은 매 실행 `DROP DATABASE ... WITH (FORCE)` 뒤 target cluster의
 `PINVI_RESTORE_TEMPLATE_DATABASE_URL`에서 재생성한다. 이 template은 `app` schema가 없어야
 하고 `x_extension` schema에 `citext`, `pgcrypto`, `pg_trgm`이 설치되어 있어야 하며 runtime
-login에 `x_extension` USAGE만 부여한다. extension 설치는 one-time privileged bootstrap에서
-수행하고 restore staging login에는 extension 생성 권한을 주지 않는다.
+login에 `x_extension` USAGE만, 별도 `PINVI_RESTORE_HOTSWAP_DATABASE_URL`의 executor에
+database `CREATE`와 `x_extension` USAGE만 부여한다. extension 설치는 one-time privileged
+bootstrap에서 수행하고 restore staging login에는 extension 생성 권한을 주지 않는다. staging
+provisioner는 disposable database 재생성을 위해 `CREATEDB`를 가지며, hotswap executor는
+`CREATEDB` 없이 `INHERIT`와 직접 `pg_signal_backend` membership만 가진다. restore는
+hotswap executor로 수행해 복원된 `app` schema의 owner와 schema-swap executor를 동일하게
+결박한다.
 
 입력 파일은 `reviews.json`, `live-ui.json`, `restore.json`, `map-pair.json`,
 `pinvi-images.json`과 live verifier가 생성한 서명 `attestation.json`이다. signer는 schema·현재
