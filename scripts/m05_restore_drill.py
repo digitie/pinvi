@@ -37,6 +37,7 @@ _SAFE_PATH = "/usr/local/bin:/usr/bin:/bin"
 _TOOL_TRUST_MANIFEST_ENV = "PINVI_M05_RESTORE_TOOL_TRUST_MANIFEST"
 _TRUSTED_TOOL_NAMES = ("git", "pg_dump", "pg_restore", "psql")
 _TRUSTED_TOOL_DIRECTORIES = (Path("/usr/local/bin"), Path("/usr/bin"), Path("/bin"))
+_POSTGRES_TOOL_DIRECTORY_RE = re.compile(r"/usr/lib/postgresql/[0-9]+/bin\Z")
 _PINNED_TOOL_PATHS: dict[str, str] = {}
 _TOOL_TRUST_MANIFEST_SHA256 = ""
 
@@ -73,13 +74,16 @@ def _tool_path(name: str) -> str:
         if path is None:
             raise RestoreDrillError(f"restore test tool is missing: {name}")
         return path
-    allowed_directories = _TRUSTED_TOOL_DIRECTORIES
-    for directory in allowed_directories:
-        candidate = directory / name
+    candidates = [directory / name for directory in _TRUSTED_TOOL_DIRECTORIES]
+    candidates.extend(
+        directory / name
+        for directory in sorted(Path("/usr/lib/postgresql").glob("*/bin"))
+    )
+    for candidate in candidates:
         if not candidate.is_file() or not os.access(candidate, os.X_OK):
             continue
         resolved = candidate.resolve()
-        if resolved.parent not in allowed_directories:
+        if not _trusted_tool_path(resolved, name):
             continue
         manifest_path = os.environ.get(_TOOL_TRUST_MANIFEST_ENV, "")
         if not manifest_path:
@@ -94,6 +98,20 @@ def _tool_path(name: str) -> str:
             raise RestoreDrillError(f"restore tool digest does not match the trust manifest: {name}")
         return str(resolved)
     raise RestoreDrillError(f"pinned restore tool is missing: {name}")
+
+
+def _trusted_tool_path(path: Path, name: str) -> bool:
+    if (
+        path.name != name
+        or path.is_symlink()
+        or not path.is_file()
+        or not os.access(path, os.X_OK)
+    ):
+        return False
+    parent = str(path.resolve().parent)
+    return Path(parent) in _TRUSTED_TOOL_DIRECTORIES or bool(
+        _POSTGRES_TOOL_DIRECTORY_RE.fullmatch(parent)
+    )
 
 
 def _tool_identity(name: str) -> dict[str, str]:
@@ -127,19 +145,17 @@ def _tool_trust_manifest(path: Path) -> dict[str, dict[str, str]]:
             raise RestoreDrillError(f"restore tool trust manifest entry is invalid: {name}")
         tool_path = entry["path"]
         digest = entry["sha256"]
+        tool_file = Path(tool_path) if isinstance(tool_path, str) else Path("/")
         if (
             not isinstance(tool_path, str)
             or not tool_path.startswith("/")
-            or Path(tool_path).name != name
-            or Path(tool_path).is_symlink()
-            or Path(tool_path).resolve().parent not in _TRUSTED_TOOL_DIRECTORIES
-            or not Path(tool_path).is_file()
+            or not _trusted_tool_path(tool_file, name)
             or not isinstance(digest, str)
             or re.fullmatch(r"[0-9a-f]{64}", digest) is None
-            or _sha256(Path(tool_path).read_bytes()) != digest
+            or _sha256(tool_file.read_bytes()) != digest
         ):
             raise RestoreDrillError(f"restore tool trust manifest binding is invalid: {name}")
-        result[name] = {"path": str(Path(tool_path).resolve()), "sha256": digest}
+        result[name] = {"path": str(tool_file), "sha256": digest}
     _TOOL_TRUST_MANIFEST_SHA256 = _sha256(raw)
     return result
 

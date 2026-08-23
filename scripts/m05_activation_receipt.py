@@ -36,6 +36,7 @@ _M05_ACTIVATION_PR_URL = "https://github.com/digitie/pinvi/pull/466"
 _M05_RESTORE_DATABASE_RE = re.compile(r"pinvi_m05_restore_[a-z0-9_]+\Z")
 _HOST_TOOL_DIRECTORIES = (Path("/usr/bin"), Path("/bin"))
 _RESTORE_TOOL_DIRECTORIES = (Path("/usr/local/bin"), Path("/usr/bin"), Path("/bin"))
+_POSTGRES_TOOL_DIRECTORY_RE = re.compile(r"/usr/lib/postgresql/[0-9]+/bin\Z")
 _RESTORE_TOOL_NAMES = ("git", "pg_dump", "pg_restore", "psql")
 _PAIR_PROVENANCE = Path(__file__).resolve().parents[1] / (
     "contracts/kor-travel-map-m05-pair-provenance-v1.json"
@@ -404,6 +405,20 @@ def _host_tool(name: str) -> str:
         if resolved.parent in _HOST_TOOL_DIRECTORIES:
             return str(resolved)
     raise ReceiptError(f"pinned host tool is missing: {name}")
+
+
+def _trusted_restore_tool_path(path: Path, name: str) -> bool:
+    if (
+        path.name != name
+        or path.is_symlink()
+        or not path.is_file()
+        or not os.access(path, os.X_OK)
+    ):
+        return False
+    parent = str(path.resolve().parent)
+    return path.resolve().parent in _RESTORE_TOOL_DIRECTORIES or bool(
+        _POSTGRES_TOOL_DIRECTORY_RE.fullmatch(parent)
+    )
 
 
 def _assert_source_checkout(source_revision: str) -> None:
@@ -1332,10 +1347,7 @@ def _restore(
         if (
             not tool_path.startswith("/")
             or any(character.isspace() for character in tool_path)
-            or path_object.name != expected_name
-            or path_object.is_symlink()
-            or path_object.resolve().parent not in _RESTORE_TOOL_DIRECTORIES
-            or not path_object.is_file()
+            or not _trusted_restore_tool_path(path_object, expected_name)
         ):
             raise ReceiptError(f"restore tool path is not a trusted system path: {field}")
         digest_field = field.removesuffix("_path") + "_sha256"

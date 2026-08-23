@@ -95,8 +95,9 @@ pinned_tool() {
     command -v "${name}" || true
     return 0
   fi
-  for candidate in "/usr/local/bin/${name}" "/usr/bin/${name}" "/bin/${name}"; do
-    if [[ -f "${candidate}" && -x "${candidate}" ]]; then
+  for candidate in "/usr/local/bin/${name}" "/usr/bin/${name}" "/bin/${name}" \
+    /usr/lib/postgresql/*/bin/${name}; do
+    if [[ -f "${candidate}" && -x "${candidate}" && ! -L "${candidate}" ]]; then
       printf '%s\n' "${candidate}"
       return 0
     fi

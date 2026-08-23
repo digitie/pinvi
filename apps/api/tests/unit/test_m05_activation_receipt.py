@@ -79,7 +79,26 @@ def _script_sha256(name: str) -> str:
 
 
 def _tool_sha256(name: str) -> str:
-    return hashlib.sha256(Path("/usr/bin").joinpath(name).read_bytes()).hexdigest()
+    return hashlib.sha256(_tool_path(name).read_bytes()).hexdigest()
+
+
+def _tool_path(name: str) -> Path:
+    candidates = [
+        Path("/usr/local/bin") / name,
+        Path("/usr/bin") / name,
+        Path("/bin") / name,
+        *sorted(Path("/usr/lib/postgresql").glob(f"*/bin/{name}")),
+    ]
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if (
+            candidate.is_file()
+            and not candidate.is_symlink()
+            and resolved.name == name
+            and resolved.is_file()
+        ):
+            return resolved
+    raise AssertionError(f"test tool is missing: {name}")
 
 
 @pytest.fixture
@@ -124,27 +143,27 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         evidence_dir / "reviews.json",
         [
             {
-                    "agent_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
-                    "challenge_id": review_challenge_id,
+                "agent_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
+                "challenge_id": review_challenge_id,
                 "commit": PINVI_REVISION,
                 "p0_p1": 0,
                 "pr_url": "https://github.com/digitie/pinvi/pull/466",
                 "review_id": "44444444-4444-4444-8444-444444444444",
-                    "reviewer_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
-                    "response_sha256": review_response_hashes["01a02ce8-22cf-70b2-92cc-7dc3af16a915"],
+                "reviewer_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
+                "response_sha256": review_response_hashes["01a02ce8-22cf-70b2-92cc-7dc3af16a915"],
                 "summary": "GO: no P0/P1 findings",
                 "summary_sha256": hashlib.sha256(b"GO: no P0/P1 findings").hexdigest(),
                 "verdict": "GO",
             },
             {
-                    "agent_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
-                    "challenge_id": review_challenge_id,
+                "agent_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
+                "challenge_id": review_challenge_id,
                 "commit": PINVI_REVISION,
                 "p0_p1": 0,
                 "pr_url": "https://github.com/digitie/pinvi/pull/466",
                 "review_id": "55555555-5555-4555-8555-555555555555",
-                    "reviewer_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
-                    "response_sha256": review_response_hashes["01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2"],
+                "reviewer_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
+                "response_sha256": review_response_hashes["01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2"],
                 "summary": "GO: no P0/P1 findings",
                 "summary_sha256": hashlib.sha256(b"GO: no P0/P1 findings").hexdigest(),
                 "verdict": "GO",
@@ -155,21 +174,21 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     _write_json(
         review_allowlist_path,
         [
-                {
-                    "agent_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
-                    "challenge_id": review_challenge_id,
-                    "commit": PINVI_REVISION,
-                    "pr_url": "https://github.com/digitie/pinvi/pull/466",
-                    "response_sha256": review_response_hashes["01a02ce8-22cf-70b2-92cc-7dc3af16a915"],
-                    "review_id": "44444444-4444-4444-8444-444444444444",
+            {
+                "agent_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
+                "challenge_id": review_challenge_id,
+                "commit": PINVI_REVISION,
+                "pr_url": "https://github.com/digitie/pinvi/pull/466",
+                "response_sha256": review_response_hashes["01a02ce8-22cf-70b2-92cc-7dc3af16a915"],
+                "review_id": "44444444-4444-4444-8444-444444444444",
             },
-                {
-                    "agent_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
-                    "challenge_id": review_challenge_id,
-                    "commit": PINVI_REVISION,
-                    "pr_url": "https://github.com/digitie/pinvi/pull/466",
-                    "response_sha256": review_response_hashes["01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2"],
-                    "review_id": "55555555-5555-4555-8555-555555555555",
+            {
+                "agent_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
+                "challenge_id": review_challenge_id,
+                "commit": PINVI_REVISION,
+                "pr_url": "https://github.com/digitie/pinvi/pull/466",
+                "response_sha256": review_response_hashes["01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2"],
+                "review_id": "55555555-5555-4555-8555-555555555555",
             },
         ],
     )
@@ -241,7 +260,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     restore_tool_manifest = {
         "tools": {
             name: {
-                "path": f"/usr/bin/{name}",
+                "path": str(_tool_path(name)),
                 "sha256": _tool_sha256(name),
             }
             for name in ("git", "pg_dump", "pg_restore", "psql")
@@ -252,22 +271,20 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     restore_tool_manifest_sha256 = hashlib.sha256(
         restore_tool_manifest_path.read_bytes()
     ).hexdigest()
-    monkeypatch.setenv(
-        "PINVI_M05_RESTORE_TOOL_TRUST_MANIFEST", str(restore_tool_manifest_path)
-    )
+    monkeypatch.setenv("PINVI_M05_RESTORE_TOOL_TRUST_MANIFEST", str(restore_tool_manifest_path))
     _write_json(
         evidence_dir / "restore.json",
         {
             "backup_runner_sha256": _script_sha256("backup-db.sh"),
-            "backup_tool_path": "/usr/bin/pg_dump",
+            "backup_tool_path": str(_tool_path("pg_dump")),
             "backup_tool_sha256": _tool_sha256("pg_dump"),
             "bash_tool_path": "/usr/bin/bash",
             "bash_tool_sha256": _tool_sha256("bash"),
             "environment": "production",
             "fresh_target_verified": True,
-            "git_tool_path": "/usr/bin/git",
+            "git_tool_path": str(_tool_path("git")),
             "git_tool_sha256": _tool_sha256("git"),
-            "psql_tool_path": "/usr/bin/psql",
+            "psql_tool_path": str(_tool_path("psql")),
             "psql_tool_sha256": _tool_sha256("psql"),
             "dump_sha256": "c" * 64,
             "execution_id": "33333333-3333-4333-8333-333333333333",
@@ -279,7 +296,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "restore_db_runner_sha256": _script_sha256("restore-db.sh"),
             "restore_runner_sha256": _script_sha256("restore-staging-drill.sh"),
             "m05_restore_drill_sha256": _script_sha256("m05_restore_drill.py"),
-            "restore_tool_path": "/usr/bin/pg_restore",
+            "restore_tool_path": str(_tool_path("pg_restore")),
             "restore_tool_sha256": _tool_sha256("pg_restore"),
             "tool_trust_manifest_path": str(restore_tool_manifest_path),
             "tool_trust_manifest_sha256": restore_tool_manifest_sha256,
@@ -296,14 +313,14 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "staging_role": "pinvi_owner",
             "staging_role_verified": True,
             "status": "passed",
-                "target_db_identity": target_identity,
-                "target_db_identity_before_restore": target_before_restore_identity,
+            "target_db_identity": target_identity,
+            "target_db_identity_before_restore": target_before_restore_identity,
             "target_db_identity_before_restore_sha256": _identity_sha256(
                 target_before_restore_identity
             ),
-                "target_db_identity_sha256": _identity_sha256(target_identity),
-                "target_recreated": True,
-                "trigger_guard_verified": True,
+            "target_db_identity_sha256": _identity_sha256(target_identity),
+            "target_recreated": True,
+            "trigger_guard_verified": True,
             "runtime_db_identity_sha256": _identity_sha256(runtime_identity),
         },
     )
