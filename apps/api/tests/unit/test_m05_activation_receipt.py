@@ -47,8 +47,8 @@ from app.core.config import (
 READ = "r" * 32
 ACK = "a" * 32
 REPO_ROOT = Path(__file__).resolve().parents[4]
-PINVI_REVISION = subprocess.run(
-    ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+PINVI_REVISION = subprocess.run(  # noqa: S603
+    ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],  # noqa: S607
     check=True,
     capture_output=True,
     text=True,
