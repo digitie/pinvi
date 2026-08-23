@@ -383,10 +383,27 @@ def _pinned_postgres_tool(name: str) -> str:
     raise BackupServiceError(f"pinned PostgreSQL tool is missing: {name}")
 
 
-async def _restore_target_identity() -> dict[str, str]:
-    """Capture the target identity that every hotswap mutation must re-check."""
+def _pinned_bash_tool() -> str:
+    """Return a non-symlink bash executable from an allowlisted system directory."""
 
-    engine = create_async_engine(_restore_lock_database_url(), poolclass=NullPool)
+    for directory in (Path("/usr/local/bin"), Path("/usr/bin"), Path("/bin")):
+        candidate = directory / "bash"
+        if not candidate.is_file() or candidate.is_symlink() or not os.access(candidate, os.X_OK):
+            continue
+        resolved = candidate.resolve()
+        if resolved.parent in {
+            Path("/usr/local/bin"),
+            Path("/usr/bin"),
+            Path("/bin"),
+        }:
+            return str(resolved)
+    raise BackupServiceError("pinned bash tool is missing")
+
+
+async def _database_identity(database_url: str) -> dict[str, str]:
+    """Read the immutable database identity used to bind a schema swap."""
+
+    engine = create_async_engine(database_url, poolclass=NullPool)
     try:
         async with engine.connect() as conn:
             row = (
@@ -422,8 +439,20 @@ async def _restore_target_identity() -> dict[str, str]:
         "PINVI_RESTORE_EXPECTED_PORT": str(row["port"]),
     }
     if any(not value or value == "None" for value in values.values()):
-        raise BackupServiceError("restore target identity is incomplete")
+        raise BackupServiceError("database identity is incomplete")
     return values
+
+
+async def _restore_target_identity() -> dict[str, str]:
+    """Bind the restore target to the same database identity used by the API."""
+
+    application_identity = await _database_identity(
+        _asyncpg_database_url(settings.pinvi_database_url)
+    )
+    target_identity = await _database_identity(_restore_lock_database_url())
+    if target_identity != application_identity:
+        raise BackupServiceError("restore target is not the application database")
+    return target_identity
 
 
 async def restore_backup_hotswap(
@@ -510,6 +539,7 @@ async def _restore_backup_hotswap_locked(
         env.update(target_identity)
         pg_restore_path = _pinned_postgres_tool("pg_restore")
         psql_path = _pinned_postgres_tool("psql")
+        bash_path = _pinned_bash_tool()
         env.update(
             {
                 "PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST": "1",
@@ -517,6 +547,8 @@ async def _restore_backup_hotswap_locked(
                 "PINVI_RESTORE_PG_RESTORE_SHA256": _sha256_file(Path(pg_restore_path)),
                 "PINVI_RESTORE_PSQL_BIN": psql_path,
                 "PINVI_RESTORE_PSQL_SHA256": _sha256_file(Path(psql_path)),
+                "PINVI_RESTORE_BASH_BIN": bash_path,
+                "PINVI_RESTORE_BASH_SHA256": _sha256_file(Path(bash_path)),
             }
         )
 
@@ -528,6 +560,7 @@ async def _restore_backup_hotswap_locked(
             if _sha256_file(verified_script) != script_sha256:
                 raise BackupServiceError("restore hotswap script changed during staging")
             proc = await asyncio.create_subprocess_exec(
+                env.get("PINVI_RESTORE_BASH_BIN", "/usr/bin/bash"),
                 str(verified_script),
                 "run",
                 str(verified_snapshot),

@@ -114,7 +114,7 @@ if ! command -v sha256sum >/dev/null 2>&1; then
   exit 127
 fi
 verify_tool_digest "pg_restore" "${PG_RESTORE_BIN}" "${PINVI_RESTORE_PG_RESTORE_SHA256:-}"
-if [[ "${TEST_MODE}" != "1" ]]; then
+if [[ "${TEST_MODE}" != "1" && "${PINVI_RESTORE_PRIVATE_TOOL_COPY:-0}" != "1" ]]; then
   assert_trusted_tool_path "pg_restore" "${PG_RESTORE_BIN}"
 fi
 
@@ -159,8 +159,18 @@ if [[ "${PSQL_BIN}" != /* || ! -x "${PSQL_BIN}" ]]; then
   exit 127
 fi
 verify_tool_digest "psql" "${PSQL_BIN}" "${PINVI_RESTORE_PSQL_SHA256:-}"
-if [[ "${TEST_MODE}" != "1" ]]; then
+if [[ "${TEST_MODE}" != "1" && "${PINVI_RESTORE_PRIVATE_TOOL_COPY:-0}" != "1" ]]; then
   assert_trusted_tool_path "psql" "${PSQL_BIN}"
+fi
+
+BASH_BIN="${PINVI_RESTORE_BASH_BIN:-$(pinned_tool bash || true)}"
+if [[ "${BASH_BIN}" != /* || ! -x "${BASH_BIN}" ]]; then
+  phase preparing failed "bash not found"
+  exit 127
+fi
+verify_tool_digest "bash" "${BASH_BIN}" "${PINVI_RESTORE_BASH_SHA256:-}"
+if [[ "${TEST_MODE}" != "1" && "${PINVI_RESTORE_PRIVATE_TOOL_COPY:-0}" != "1" ]]; then
+  assert_trusted_tool_path "bash" "${BASH_BIN}"
 fi
 
 TMP_DIR="$(mktemp -d)"
@@ -203,6 +213,7 @@ copy_tool_to_private_dir() {
 if [[ "${TEST_MODE}" != "1" ]]; then
   PG_RESTORE_BIN="$(copy_tool_to_private_dir pg_restore "${PG_RESTORE_BIN}" "${PINVI_RESTORE_PG_RESTORE_SHA256}")"
   PSQL_BIN="$(copy_tool_to_private_dir psql "${PSQL_BIN}" "${PINVI_RESTORE_PSQL_SHA256}")"
+  BASH_BIN="$(copy_tool_to_private_dir bash "${BASH_BIN}" "${PINVI_RESTORE_BASH_SHA256}")"
 fi
 
 cp -- "${SNAPSHOT}" "${TMP_DIR}/snapshot.dump"
@@ -260,7 +271,7 @@ assert_advisory_lock_alive() {
     exit 3
   fi
   local lock_state
-  lock_state="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 -tAc "
+  lock_state="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
 SELECT EXISTS (
   SELECT 1 FROM pg_locks
   WHERE pid = ${LOCK_HOLDER_BACKEND_PID}
@@ -488,26 +499,53 @@ WHERE datname = current_database()
   AND pid <> ${LOCK_HOLDER_BACKEND_PID};
 SQL
   local writer_roles
-  writer_roles="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 -tAc "
-SELECT COALESCE(string_agg(r.rolname, ',' ORDER BY r.rolname), '')
-FROM pg_roles r
-WHERE r.rolcanlogin
-  AND r.rolname <> current_user
+  assert_advisory_lock_alive
+  writer_roles="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
+WITH RECURSIVE role_closure(login_oid, role_oid) AS (
+  SELECT r.oid, r.oid
+  FROM pg_roles r
+  WHERE r.rolcanlogin
+  UNION
+  SELECT rc.login_oid, membership.roleid
+  FROM role_closure rc
+  JOIN pg_auth_members membership ON membership.member = rc.role_oid
+)
+SELECT COALESCE(string_agg(login.rolname, ',' ORDER BY login.rolname), '')
+FROM pg_roles login
+JOIN role_closure closure ON closure.login_oid = login.oid
+JOIN pg_roles effective ON effective.oid = closure.role_oid
+WHERE login.rolcanlogin
+  AND login.rolname <> current_user
+  AND login.rolname <> ALL(string_to_array('${roles_sql}', ','))
   AND (
-    r.rolsuper
-    OR (to_regnamespace('${SOURCE_SCHEMA}') IS NOT NULL AND has_schema_privilege(r.rolname, '${SOURCE_SCHEMA}', 'CREATE'))
-    OR (to_regnamespace('${RESTORE_SCHEMA}') IS NOT NULL AND has_schema_privilege(r.rolname, '${RESTORE_SCHEMA}', 'CREATE'))
+    effective.rolsuper
+    OR (to_regnamespace('${SOURCE_SCHEMA}') IS NOT NULL AND has_schema_privilege(effective.rolname, '${SOURCE_SCHEMA}', 'CREATE'))
+    OR (to_regnamespace('${RESTORE_SCHEMA}') IS NOT NULL AND has_schema_privilege(effective.rolname, '${RESTORE_SCHEMA}', 'CREATE'))
     OR EXISTS (
       SELECT 1 FROM pg_class c
       JOIN pg_namespace n ON n.oid = c.relnamespace
       WHERE n.nspname IN ('${SOURCE_SCHEMA}', '${RESTORE_SCHEMA}')
+        AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
         AND (
-          has_table_privilege(r.rolname, c.oid, 'INSERT')
-          OR has_table_privilege(r.rolname, c.oid, 'UPDATE')
-          OR has_table_privilege(r.rolname, c.oid, 'DELETE')
-          OR has_table_privilege(r.rolname, c.oid, 'TRUNCATE')
-          OR has_table_privilege(r.rolname, c.oid, 'REFERENCES')
-          OR has_table_privilege(r.rolname, c.oid, 'TRIGGER')
+          c.relowner = effective.oid
+          OR has_table_privilege(effective.rolname, c.oid, 'INSERT')
+          OR has_table_privilege(effective.rolname, c.oid, 'UPDATE')
+          OR has_table_privilege(effective.rolname, c.oid, 'DELETE')
+          OR has_table_privilege(effective.rolname, c.oid, 'TRUNCATE')
+          OR has_table_privilege(effective.rolname, c.oid, 'REFERENCES')
+          OR has_table_privilege(effective.rolname, c.oid, 'TRIGGER')
+        )
+    )
+    OR EXISTS (
+      SELECT 1 FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname IN ('${SOURCE_SCHEMA}', '${RESTORE_SCHEMA}')
+        AND c.relkind = 'S'
+        AND (
+          c.relowner = effective.oid
+          OR has_sequence_privilege(effective.rolname, c.oid, 'USAGE')
+          OR has_sequence_privilege(effective.rolname, c.oid, 'SELECT')
+          OR has_sequence_privilege(effective.rolname, c.oid, 'UPDATE')
         )
     )
   )
@@ -595,7 +633,7 @@ if [[ "${PINVI_RESTORE_API_TRIGGER:-0}" == "1" && -n "${PINVI_RESTORE_DRAIN_COMM
   exit 3
 fi
 if [[ -n "${PINVI_RESTORE_DRAIN_COMMAND:-}" ]]; then
-  bash -lc "${PINVI_RESTORE_DRAIN_COMMAND}"
+  "${BASH_BIN}" -lc "${PINVI_RESTORE_DRAIN_COMMAND}"
   phase draining success "external drain command completed after database write fence"
 elif [[ "${PINVI_RESTORE_ALLOW_NO_DRAIN:-0}" == "1" && "${PINVI_RESTORE_DRAIN_VERIFIED:-0}" == "1" ]]; then
   phase draining skipped "external drain acknowledged; database write fence is active"

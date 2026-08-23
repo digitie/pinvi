@@ -116,7 +116,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     evidence_dir = tmp_path / "evidence"
     evidence_dir.mkdir(mode=0o700)
     review_challenge_id = "66666666-6666-4666-8666-666666666666"
-    review_response_nonce = "a" * 64
+    review_response_nonce = "A" * 43
     review_response_paths = {
         "01a02ce8-22cf-70b2-92cc-7dc3af16a915": tmp_path / "helmholtz-review.txt",
         "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2": tmp_path / "ampere-review.txt",
@@ -350,7 +350,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "backup_tool_sha256": _tool_sha256("pg_dump"),
             "bash_tool_path": "/usr/bin/bash",
             "bash_tool_sha256": _tool_sha256("bash"),
-            "environment": "production",
+            "environment": "staging",
             "fresh_target_verified": True,
             "git_tool_path": str(_tool_path("git")),
             "git_tool_sha256": _tool_sha256("git"),
@@ -442,7 +442,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
                 "api": {
                     "container_id": "b" * 64,
                     "digest": KOR_TRAVEL_MAP_M05_API_IMAGE_DIGEST,
-                    "environment": "production",
+                    "environment": "staging",
                     "image_id": KOR_TRAVEL_MAP_M05_API_IMAGE_DIGEST,
                     "revision_label": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
                     "source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
@@ -451,7 +451,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
                 "admin": {
                     "container_id": "a" * 64,
                     "digest": KOR_TRAVEL_MAP_M05_ADMIN_IMAGE_DIGEST,
-                    "environment": "production",
+                    "environment": "staging",
                     "image_id": KOR_TRAVEL_MAP_M05_ADMIN_IMAGE_DIGEST,
                     "revision_label": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
                     "source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
@@ -460,7 +460,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
                 "frontend": {
                     "container_id": "c" * 64,
                     "digest": KOR_TRAVEL_MAP_M05_FRONTEND_IMAGE_DIGEST,
-                    "environment": "production",
+                    "environment": "staging",
                     "image_id": KOR_TRAVEL_MAP_M05_FRONTEND_IMAGE_DIGEST,
                     "revision_label": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
                     "source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
@@ -503,7 +503,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             name: {
                 "container_id": "d" * 64,
                 "digest": digest,
-                "environment": "production",
+                "environment": "staging",
                 "image_id": digest,
                 "revision_label": PINVI_REVISION,
                 "source_revision": PINVI_REVISION,
@@ -548,7 +548,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         "playwright_runner_image_id": "sha256:" + "9" * 64,
         "playwright_runner_image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:"
         + "8" * 64,
-        "scope": "production",
+        "scope": "staging",
         "status": "passed",
         "verification_id": "22222222-2222-4222-8222-222222222222",
         "version": 1,
@@ -578,6 +578,8 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             str(private_key_path),
             "--output",
             str(receipt_path),
+            "--scope",
+            "staging",
             "--pinvi-source-revision",
             PINVI_REVISION,
             "--activation-generation",
@@ -643,7 +645,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     monkeypatch.setattr(config_module, "_runtime_container_id", lambda: "d" * 64)
     loaded = Settings(
         _env_file=None,
-        pinvi_environment="production",
+        pinvi_environment="staging",
         pinvi_kor_travel_map_api_base_url="http://127.0.0.1:12701",
         pinvi_kor_travel_map_admin_base_url="http://127.0.0.1:12701",
         pinvi_kor_travel_map_ops_read_token="o" * 32,

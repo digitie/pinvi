@@ -19,7 +19,7 @@ import urllib.request
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 from cryptography.exceptions import InvalidSignature
@@ -31,7 +31,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
-_REVIEW_NONCE_RE = re.compile(r"[0-9a-f]{64}\Z")
 _DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
 _PLAYWRIGHT_IMAGE_RE = re.compile(
     r"mcr\.microsoft\.com/playwright:[A-Za-z0-9][A-Za-z0-9._-]*@sha256:[0-9a-f]{64}\Z"
@@ -60,6 +59,11 @@ _EVIDENCE_FILES = (
     "map-pair.json",
     "pinvi-images.json",
 )
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args: Any, **kwargs: Any) -> None:
+        return None
 
 
 class ReceiptError(ValueError):
@@ -241,8 +245,8 @@ def _uuid(value: object, *, name: str) -> str:
 
 def _review_nonce(value: object, *, name: str) -> str:
     value = _string(value, name=name)
-    if _REVIEW_NONCE_RE.fullmatch(value) is None:
-        raise ReceiptError(f"{name} must be lowercase 256-bit hex")
+    if _decode_base64url(value, expected_length=32) is None:
+        raise ReceiptError(f"{name} must be canonical 256-bit base64url")
     return value
 
 
@@ -576,12 +580,22 @@ def _review_allowlist(
 
 
 def _host_tool(name: str) -> str:
-    for directory in _HOST_TOOL_DIRECTORIES:
+    directories = list(_HOST_TOOL_DIRECTORIES)
+    if name in {"pg_dump", "pg_restore", "psql"}:
+        directories.extend(sorted(Path("/usr/lib/postgresql").glob("*/bin")))
+    for directory in directories:
         candidate = directory / name
-        if not candidate.is_file() or not os.access(candidate, os.X_OK):
+        if (
+            not candidate.is_file()
+            or candidate.is_symlink()
+            or not os.access(candidate, os.X_OK)
+        ):
             continue
         resolved = candidate.resolve()
-        if resolved.parent in _HOST_TOOL_DIRECTORIES:
+        if resolved.parent in _HOST_TOOL_DIRECTORIES or (
+            name in {"pg_dump", "pg_restore", "psql"}
+            and _POSTGRES_TOOL_DIRECTORY_RE.fullmatch(str(resolved.parent))
+        ):
             return str(resolved)
     raise ReceiptError(f"pinned host tool is missing: {name}")
 
@@ -656,7 +670,11 @@ def _assert_source_checkout(source_revision: str, *, test_mode: bool) -> None:
         token = os.environ.get("PINVI_GITHUB_TOKEN", "")
         if token:
             request.add_header("Authorization", f"Bearer {token}")
-        with urllib.request.urlopen(request, timeout=20) as response:
+        with urllib.request.build_opener(_NoRedirectHandler()).open(
+            request, timeout=20
+        ) as response:
+            if response.geturl() != request.full_url or response.getcode() != 200:
+                raise ReceiptError("M05 activation PR response origin is not canonical")
             remote_payload = json.loads(response.read(), object_pairs_hook=_reject_duplicate_keys)
     except (OSError, urllib.error.URLError, json.JSONDecodeError, ReceiptError) as exc:
         raise ReceiptError("M05 activation PR head could not be verified by GitHub") from exc
@@ -2224,6 +2242,11 @@ def _create(args: argparse.Namespace) -> int:
     scope = _string(args.scope, name="receipt scope")
     if scope not in {"staging", "production"}:
         raise ReceiptError("receipt scope must be staging or production")
+    if scope == "production" and (
+        not args.require_root_owned
+        or os.environ.get("PINVI_M05_RECEIPT_TEST_MODE") == "1"
+    ):
+        raise ReceiptError("production receipt requires root-owned evidence and cannot use test mode")
     allowed_review_keys = _review_allowlist(
         args.review_allowlist,
         challenge_path=args.review_challenge,

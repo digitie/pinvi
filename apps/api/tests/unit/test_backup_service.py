@@ -182,6 +182,32 @@ def test_restore_lock_database_url_accepts_psql_driverless_url(
 
 
 @pytest.mark.asyncio
+async def test_restore_target_identity_must_match_application_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    application_identity = {
+        "PINVI_RESTORE_EXPECTED_DATABASE_NAME": "pinvi",
+        "PINVI_RESTORE_EXPECTED_DATABASE_OID": "100",
+        "PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER": "200",
+        "PINVI_RESTORE_EXPECTED_HOSTADDR": "127.0.0.1",
+        "PINVI_RESTORE_EXPECTED_PORT": "5432",
+    }
+    target_identity = {**application_identity, "PINVI_RESTORE_EXPECTED_DATABASE_OID": "101"}
+    calls: list[str] = []
+
+    async def fake_database_identity(database_url: str) -> dict[str, str]:
+        calls.append(database_url)
+        return application_identity if len(calls) == 1 else target_identity
+
+    monkeypatch.setattr(backup_service, "_database_identity", fake_database_identity)
+
+    with pytest.raises(BackupServiceError, match="not the application database"):
+        await backup_service._restore_target_identity()
+
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
 async def test_restore_backup_hotswap_runs_script_and_parses_phases(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

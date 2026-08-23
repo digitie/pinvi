@@ -134,7 +134,8 @@ assert_trusted_tool_path() {
   esac
 }
 
-if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" != "1" ]]; then
+if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" != "1" &&
+  "${PINVI_RESTORE_PRIVATE_TOOL_COPY:-0}" != "1" ]]; then
   assert_trusted_tool_path "psql" "${PSQL_BIN}"
   assert_trusted_tool_path "pg_restore" "${PG_RESTORE_BIN}"
   actual_psql_sha256="$(sha256sum "${PSQL_BIN}" | awk 'NR == 1 { print $1 }')"

@@ -117,7 +117,11 @@ PG_RESTORE_BIN="${PINVI_RESTORE_PG_RESTORE_BIN:-}"
 if [[ -z "${PG_RESTORE_BIN}" ]]; then
   PG_RESTORE_BIN="$(pinned_tool pg_restore || true)"
 fi
-for tool_path in "${PG_RESTORE_BIN}" "${PSQL_BIN}"; do
+BASH_BIN="${PINVI_RESTORE_BASH_BIN:-}"
+if [[ -z "${BASH_BIN}" ]]; then
+  BASH_BIN="$(pinned_tool bash || true)"
+fi
+for tool_path in "${PG_RESTORE_BIN}" "${PSQL_BIN}" "${BASH_BIN}"; do
   if [[ "${tool_path}" != /* || ! -x "${tool_path}" ]]; then
     phase precheck failed "restore tooling is not pinned"
     exit 127
@@ -127,6 +131,7 @@ if ! command -v sha256sum >/dev/null 2>&1; then
   phase precheck failed "sha256sum not found"
   exit 127
 fi
+BASH_SHA256="${PINVI_RESTORE_BASH_SHA256:-$(sha256sum "${BASH_BIN}" | awk 'NR == 1 { print $1 }')}"
 assert_trusted_tool_path() {
   local name="$1"
   local path="$2"
@@ -155,7 +160,8 @@ else
   fi
   for tool_spec in \
     "pg_restore:${PG_RESTORE_BIN}:${PINVI_RESTORE_PG_RESTORE_SHA256:-}" \
-    "psql:${PSQL_BIN}:${PINVI_RESTORE_PSQL_SHA256:-}"; do
+    "psql:${PSQL_BIN}:${PINVI_RESTORE_PSQL_SHA256:-}" \
+    "bash:${BASH_BIN}:${BASH_SHA256}"; do
     IFS=: read -r tool_name tool_path tool_digest <<<"${tool_spec}"
     if [[ ! "${tool_digest}" =~ ^[0-9a-f]{64}$ ]] || \
       [[ "$(sha256sum "${tool_path}" | awk 'NR == 1 { print $1 }')" != "${tool_digest}" ]]; then
@@ -297,6 +303,7 @@ restore_output="$(PINVI_RESTORE_DATABASE_URL="${DATABASE_URL}" \
   PINVI_RESTORE_PG_RESTORE_BIN="${PG_RESTORE_BIN}" \
   PINVI_RESTORE_PSQL_SHA256="${PINVI_RESTORE_PSQL_SHA256:-}" \
   PINVI_RESTORE_PG_RESTORE_SHA256="${PINVI_RESTORE_PG_RESTORE_SHA256:-}" \
+  PINVI_RESTORE_PRIVATE_TOOL_COPY="${PINVI_RESTORE_PRIVATE_TOOL_COPY:-0}" \
   PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST="${PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST:-0}" \
   PINVI_RESTORE_REQUIRE_FRESH_SCHEMA="${PINVI_RESTORE_REQUIRE_FRESH_SCHEMA:-0}" \
   PINVI_RESTORE_APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}" \
@@ -350,6 +357,9 @@ rollback_precheck_rehearsal() {
     PINVI_RESTORE_PG_RESTORE_BIN="${PG_RESTORE_BIN}" \
     PINVI_RESTORE_PSQL_SHA256="${PINVI_RESTORE_PSQL_SHA256:-}" \
     PINVI_RESTORE_PG_RESTORE_SHA256="${PINVI_RESTORE_PG_RESTORE_SHA256:-}" \
+    PINVI_RESTORE_PRIVATE_TOOL_COPY="${PINVI_RESTORE_PRIVATE_TOOL_COPY:-0}" \
+    PINVI_RESTORE_BASH_BIN="${BASH_BIN}" \
+    PINVI_RESTORE_BASH_SHA256="${BASH_SHA256}" \
     PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST="${PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST:-0}" \
     PINVI_RESTORE_EXPECTED_DATABASE_NAME="${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" \
     PINVI_RESTORE_EXPECTED_DATABASE_OID="${PINVI_RESTORE_EXPECTED_DATABASE_OID:-}" \
@@ -385,6 +395,9 @@ rollback_drain_rehearsal() {
     PINVI_RESTORE_PG_RESTORE_BIN="${PG_RESTORE_BIN}" \
     PINVI_RESTORE_PSQL_SHA256="${PINVI_RESTORE_PSQL_SHA256:-}" \
     PINVI_RESTORE_PG_RESTORE_SHA256="${PINVI_RESTORE_PG_RESTORE_SHA256:-}" \
+    PINVI_RESTORE_PRIVATE_TOOL_COPY="${PINVI_RESTORE_PRIVATE_TOOL_COPY:-0}" \
+    PINVI_RESTORE_BASH_BIN="${BASH_BIN}" \
+    PINVI_RESTORE_BASH_SHA256="${BASH_SHA256}" \
     PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST="${PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST:-0}" \
     PINVI_RESTORE_EXPECTED_DATABASE_NAME="${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" \
     PINVI_RESTORE_EXPECTED_DATABASE_OID="${PINVI_RESTORE_EXPECTED_DATABASE_OID:-}" \

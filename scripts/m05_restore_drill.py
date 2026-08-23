@@ -47,6 +47,11 @@ class RestoreDrillError(ValueError):
     """실제 복원 드릴이 M05 evidence 계약을 충족하지 못했다."""
 
 
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args: object, **kwargs: object) -> None:
+        return None
+
+
 def _command_env() -> dict[str, str]:
     environment = os.environ.copy()
     if environment.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
@@ -658,7 +663,11 @@ def _source_revision(root: Path) -> str:
             token = os.environ.get("PINVI_GITHUB_TOKEN", "")
             if token:
                 request.add_header("Authorization", f"Bearer {token}")
-            with urllib.request.urlopen(request, timeout=20) as response:
+            with urllib.request.build_opener(_NoRedirectHandler()).open(
+                request, timeout=20
+            ) as response:
+                if response.geturl() != request.full_url or response.getcode() != 200:
+                    raise RestoreDrillError("restore producer GitHub response origin is not canonical")
                 remote_payload = json.loads(response.read())
             remote_revision = remote_payload["head"]["sha"]
             if (
