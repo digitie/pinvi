@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    # T-323: aggregate-ci.yml waits for this exact check on Web changes.
+    # T-323: aggregate-ci.yml waits for this exact GitHub Actions check on Web changes.
     steps:
       - uses: actions/checkout@v4
 

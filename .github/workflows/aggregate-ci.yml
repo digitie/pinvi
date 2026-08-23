@@ -37,7 +37,9 @@ jobs:
               per_page: 100,
             });
 
-            const changed = files.map((file) => file.filename);
+            const changed = files.flatMap((file) =>
+              [file.filename, file.previous_filename].filter(Boolean),
+            );
             const hasAny = (predicates) => changed.some((path) => predicates.some((predicate) => predicate(path)));
             const startsWith = (prefix) => (path) => path.startsWith(prefix);
             const equals = (target) => (path) => path === target;
@@ -104,7 +106,16 @@ jobs:
                 ref: headSha,
                 per_page: 100,
               });
-              const byName = new Map(runs.map((run) => [run.name, run]));
+              const byName = new Map();
+              for (const run of runs) {
+                if (run.head_sha !== headSha || run.app?.slug !== "github-actions") {
+                  continue;
+                }
+                const previous = byName.get(run.name);
+                if (!previous || run.id > previous.id) {
+                  byName.set(run.name, run);
+                }
+              }
               const pending = [];
 
               for (const name of requiredChecks) {
