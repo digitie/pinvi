@@ -255,6 +255,16 @@ def test_reconciliation_network_is_default_off_and_empty_tokens_are_unset() -> N
     )
 
 
+def test_empty_cache_target_contract_generation_env_is_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_CONTRACT_GENERATION", "")
+
+    loaded = _settings()
+
+    assert loaded.pinvi_kor_travel_map_cache_target_expected_contract_generation is None
+
+
 @pytest.mark.parametrize("value", (0, 0.9, 3600.1, float("inf"), float("nan")))
 def test_reconciliation_blocked_recheck_is_finite_bounded(value: float) -> None:
     with pytest.raises(ValidationError):

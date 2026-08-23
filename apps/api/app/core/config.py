@@ -950,6 +950,18 @@ class Settings(BaseSettings):
             return None
         return value
 
+    @field_validator(
+        "pinvi_kor_travel_map_cache_target_expected_contract_generation",
+        mode="before",
+    )
+    @classmethod
+    def _empty_optional_contract_generation_is_unset(cls, value: object) -> object:
+        """선택적 contract generation의 빈 env 값은 기본값 None으로 본다."""
+
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
     @model_validator(mode="after")
     def validate_scoped_service_principals(self) -> Self:
         """curation과 Feature 요청 write scope를 다른 Map trust boundary와 분리한다."""
