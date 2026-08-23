@@ -44,7 +44,7 @@ fi
 
 timestamp="$(date -u +%Y%m%d-%H%M%S)"
 backup_file="${BACKUP_DIR}/pinvi-${SCHEMA}-${timestamp}.dump"
-tmp_file="$(mktemp "${BACKUP_DIR}/.pinvi-${SCHEMA}-${timestamp}.XXXXXX.dump")"
+tmp_file="$(mktemp "${BACKUP_DIR}/.pinvi-${SCHEMA}-${timestamp}.dump.XXXXXX")"
 cleanup() {
   rm -f "${tmp_file}" "${tmp_file}.sha256"
 }
