@@ -3,6 +3,10 @@
 
 set -euo pipefail
 
+unset PGAPPNAME PGCONNECT_TIMEOUT PGDATABASE PGHOST PGHOSTADDR PGOPTIONS PGPASSFILE \
+  PGPASSWORD PGPORT PGSERVICE PGSERVICEFILE PGSSLCERT PGSSLMODE PGSSLKEY \
+  PGSSLROOTCERT PGTARGETSESSIONATTRS PSQLRC
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCHEMA="${PINVI_RESTORE_DRILL_SCHEMA:-${PINVI_BACKUP_SCHEMA:-app}}"
 JOBS="${PINVI_RESTORE_DRILL_JOBS:-${PINVI_RESTORE_JOBS:-2}}"
@@ -161,7 +165,7 @@ evidence pg_restore_list ok
 
 psql_scalar() {
   local sql="$1"
-  "${PSQL_BIN}" -v ON_ERROR_STOP=1 "${DATABASE_URL}" -tAc "${sql}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -tAc "${sql}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
 
 schema_oid() {
@@ -322,7 +326,7 @@ rollback_drain_rehearsal() {
   set -e
   local oid_after
   oid_after="$(schema_oid)"
-  "${PSQL_BIN}" -v ON_ERROR_STOP=1 "${DATABASE_URL}" \
+  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" \
     -c "DROP SCHEMA IF EXISTS ${restore_schema} CASCADE" >/dev/null
   if [[ "${code}" == "0" || "${oid_after}" != "${oid_before}" ]]; then
     phase rollback failed "drain-failure rehearsal did not preserve current schema"

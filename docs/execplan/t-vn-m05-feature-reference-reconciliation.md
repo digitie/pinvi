@@ -121,8 +121,9 @@ python scripts/m05_activation_receipt.py create \
 ```
 
 `create`에는 challenge 파일(`--review-challenge`)과 external allowlist(`--review-allowlist`)을 함께
-전달한다. ledger 기록 시에는 `--durable-history`를 ledger/high-watermark/floor와 다른 root-owned
-경로로 지정한다.
+전달한다. ledger 기록 시에는 `--durable-history`와 `--durable-anchor`를 ledger/high-watermark/floor와
+분리된 root-owned durable 경로에 append한다. anchor는 coordinated snapshot rollback을 막기 위해
+별도 durable mount에 둔다.
 
 실제 복원 증거는 고정된 `scripts/backup-db.sh`와 `scripts/restore-staging-drill.sh`를 source→fresh
 target으로 호출하는 `scripts/m05_restore_drill.py`가 만든다. source·target URL과 runtime URL은
@@ -147,9 +148,10 @@ allowlist와 `reviews.json`이 challenge 파일의 실제 원문에 결박되지
 복구 드릴의 target은 `pinvi_m05_restore_*` prefix 안에서 매 실행 `DROP DATABASE ... WITH (FORCE)`
 후 새로 만들며, source/target/runtime의 database OID·system identifier·pinned `hostaddr`·port를
 복구 직전과 직후에 대조한다. activation ledger·high-watermark와 별도로 DB snapshot에 포함하지 않는
-durable history(`PINVI_M05_ACTIVATION_DURABLE_HISTORY_PATH`)도 같은 generation과 receipt hash를
-append-only hash chain으로 보존한다. 세 파일과 history가 서로 어긋나거나 history보다 과거인
-snapshot은 API startup에서 거부한다.
+durable history(`PINVI_M05_ACTIVATION_DURABLE_HISTORY_PATH`)와 외부 anchor
+(`PINVI_M05_ACTIVATION_DURABLE_ANCHOR_PATH`)도 같은 generation과 receipt hash를 append-only hash
+chain으로 보존한다. 네 파일과 anchor가 서로 어긋나거나 anchor보다 과거인 snapshot은 API startup에서
+거부한다.
 
 ## 검증과 activation gate
 

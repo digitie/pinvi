@@ -151,6 +151,7 @@ services:
       PINVI_M05_ACTIVATION_HIGH_WATERMARK_PATH: ${PINVI_M05_ACTIVATION_HIGH_WATERMARK_PATH:-}
       PINVI_M05_ACTIVATION_DURABLE_FLOOR_PATH: ${PINVI_M05_ACTIVATION_DURABLE_FLOOR_PATH:-}
       PINVI_M05_ACTIVATION_DURABLE_HISTORY_PATH: ${PINVI_M05_ACTIVATION_DURABLE_HISTORY_PATH:-}
+      PINVI_M05_ACTIVATION_DURABLE_ANCHOR_PATH: ${PINVI_M05_ACTIVATION_DURABLE_ANCHOR_PATH:-}
       PINVI_M05_ACTIVATION_PR_URL: ${PINVI_M05_ACTIVATION_PR_URL:-https://github.com/digitie/pinvi/pull/466}
       PINVI_M05_ACTIVATION_MIN_GENERATION: ${PINVI_M05_ACTIVATION_MIN_GENERATION:-1}
       # immutable deploy wrapper가 label/image ID 대조 뒤에만 세 digest를 주입한다.
@@ -186,6 +187,10 @@ services:
       - type: bind
         source: ${PINVI_M05_ACTIVATION_DURABLE_HISTORY_HOST_PATH:-/tmp/pinvi-m05-activation-durable-history.jsonl}
         target: ${PINVI_M05_ACTIVATION_DURABLE_HISTORY_PATH:-/run/pinvi/m05/activation-durable-history.jsonl}
+        read_only: true
+      - type: bind
+        source: ${PINVI_M05_ACTIVATION_DURABLE_ANCHOR_HOST_PATH:-/tmp/pinvi-m05-activation-durable-anchor.jsonl}
+        target: ${PINVI_M05_ACTIVATION_DURABLE_ANCHOR_PATH:-/run/pinvi/m05/activation-durable-anchor.jsonl}
         read_only: true
     ports:
       - "127.0.0.1:${PINVI_API_PORT:-12801}:8000"

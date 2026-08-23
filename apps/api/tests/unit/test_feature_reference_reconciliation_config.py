@@ -137,10 +137,17 @@ def _production_settings(**overrides: object) -> Settings:
                 encoding="utf-8",
             )
             durable_history_path.chmod(0o600)
+            durable_anchor_path = Path(ledger_dir.name) / "activation-durable-anchor.jsonl"
+            durable_anchor_path.write_text(
+                json.dumps(durable_history, separators=(",", ":")) + "\n",
+                encoding="utf-8",
+            )
+            durable_anchor_path.chmod(0o600)
             overrides["pinvi_m05_activation_ledger_path"] = str(ledger_path)
             overrides["pinvi_m05_activation_high_watermark_path"] = str(high_watermark_path)
             overrides["pinvi_m05_activation_durable_floor_path"] = str(durable_floor_path)
             overrides["pinvi_m05_activation_durable_history_path"] = str(durable_history_path)
+            overrides["pinvi_m05_activation_durable_anchor_path"] = str(durable_anchor_path)
             loaded = Settings(_env_file=None, pinvi_environment="production", **overrides)  # type: ignore[arg-type]
             ledger_dir.cleanup()
             return loaded

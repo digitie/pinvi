@@ -3,6 +3,10 @@
 
 set -euo pipefail
 
+unset PGAPPNAME PGCONNECT_TIMEOUT PGDATABASE PGHOST PGHOSTADDR PGOPTIONS PGPASSFILE \
+  PGPASSWORD PGPORT PGSERVICE PGSERVICEFILE PGSSLCERT PGSSLMODE PGSSLKEY \
+  PGSSLROOTCERT PGTARGETSESSIONATTRS PSQLRC
+
 SCHEMA="${PINVI_RESTORE_SCHEMA:-${PINVI_BACKUP_SCHEMA:-app}}"
 DATABASE_URL="${PINVI_RESTORE_DATABASE_URL:-${PINVI_DATABASE_URL:-}}"
 JOBS="${PINVI_RESTORE_JOBS:-2}"
@@ -112,7 +116,7 @@ assert_expected_target() {
     return 0
   fi
   local actual
-  actual="$("${PSQL_BIN}" --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT current_database() || '|' || d.oid::text || '|' || (pg_control_system()).system_identifier::text || '|' || COALESCE(inet_server_addr()::text, '') || '|' || inet_server_port()::text FROM pg_database d WHERE d.datname = current_database()" | tr -d '[:space:]')"
+  actual="$("${PSQL_BIN}" --no-psqlrc --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT current_database() || '|' || d.oid::text || '|' || (pg_control_system()).system_identifier::text || '|' || COALESCE(inet_server_addr()::text, '') || '|' || inet_server_port()::text FROM pg_database d WHERE d.datname = current_database()" | tr -d '[:space:]')"
   local expected="${PINVI_RESTORE_EXPECTED_DATABASE_NAME}|${PINVI_RESTORE_EXPECTED_DATABASE_OID}|${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER}|${PINVI_RESTORE_EXPECTED_HOSTADDR}|${PINVI_RESTORE_EXPECTED_PORT}"
   if [[ "${actual}" != "${expected}" ]]; then
     echo "restore target identity changed before mutation" >&2
@@ -121,12 +125,65 @@ assert_expected_target() {
   printf '%s\n' "RESTORE_TARGET_BINDING=verified"
 }
 
+secure_restore_with_identity_guard() {
+  local restore_sql
+  local guarded_sql
+  restore_sql="$(mktemp)"
+  guarded_sql="$(mktemp)"
+  cleanup_restore_sql() {
+    rm -f "${restore_sql}" "${guarded_sql}"
+  }
+  trap cleanup_restore_sql EXIT
+
+  "${PG_RESTORE_BIN}" \
+    --clean \
+    --if-exists \
+    --exit-on-error \
+    --no-owner \
+    --no-privileges \
+    --schema="${SCHEMA}" \
+    --file="${restore_sql}" \
+    "${BACKUP_FILE}"
+  if grep -Eq '^[[:space:]]*\\(connect|c)[[:space:]]' "${restore_sql}"; then
+    echo "restore dump contains a connection switch" >&2
+    exit 3
+  fi
+  {
+    cat <<SQL
+DO \$m05\$
+BEGIN
+  IF current_database() <> '${PINVI_RESTORE_EXPECTED_DATABASE_NAME}'
+     OR (SELECT oid::text FROM pg_database WHERE datname = current_database()) <> '${PINVI_RESTORE_EXPECTED_DATABASE_OID}'
+     OR (pg_control_system()).system_identifier::text <> '${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER}'
+     OR COALESCE(inet_server_addr()::text, '') <> '${PINVI_RESTORE_EXPECTED_HOSTADDR}'
+     OR inet_server_port()::text <> '${PINVI_RESTORE_EXPECTED_PORT}'
+  THEN
+    RAISE EXCEPTION 'restore target identity changed before mutation';
+  END IF;
+END
+\$m05\$;
+SQL
+    printf 'CREATE SCHEMA IF NOT EXISTS "%s";\n' "${SCHEMA}"
+    cat "${restore_sql}"
+    if [[ -n "${APP_ROLE}" ]]; then
+      printf 'GRANT USAGE ON SCHEMA "%s" TO "%s";\n' "${SCHEMA}" "${APP_ROLE}"
+      printf 'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "%s" TO "%s";\n' "${SCHEMA}" "${APP_ROLE}"
+      printf 'GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA "%s" TO "%s";\n' "${SCHEMA}" "${APP_ROLE}"
+    fi
+  } >"${guarded_sql}"
+  "${PSQL_BIN}" \
+    --no-psqlrc \
+    --set=ON_ERROR_STOP=1 \
+    --dbname="${DATABASE_URL}" \
+    --file="${guarded_sql}"
+}
+
 # Validate the destination authority before CREATE SCHEMA/pg_restore can alter it. A
 # role-split deployment must never discover a typo or privileged runtime login only
 # after `--clean` has dropped the existing schema objects.
 if [[ "${PINVI_RESTORE_REQUIRE_FRESH_SCHEMA:-0}" == "1" ]]; then
   assert_expected_target
-  schema_exists="$("${PSQL_BIN}" --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT to_regnamespace('${SCHEMA}') IS NOT NULL")"
+  schema_exists="$("${PSQL_BIN}" --no-psqlrc --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT to_regnamespace('${SCHEMA}') IS NOT NULL")"
   if [[ "${schema_exists}" != "f" ]]; then
     echo "PINVI_RESTORE_REQUIRE_FRESH_SCHEMA requires a target without the app schema" >&2
     exit 3
@@ -134,49 +191,54 @@ if [[ "${PINVI_RESTORE_REQUIRE_FRESH_SCHEMA:-0}" == "1" ]]; then
 fi
 assert_expected_target
 if [[ -n "${APP_ROLE}" ]]; then
-  runtime_role_safe="$("${PSQL_BIN}" --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT r.rolcanlogin AND NOT r.rolsuper AND NOT r.rolcreaterole AND NOT r.rolcreatedb AND NOT r.rolreplication AND NOT pg_has_role(r.oid, current_user, 'member') AND r.oid <> current_user::regrole AND NOT EXISTS (SELECT 1 FROM pg_namespace n WHERE n.nspname = '${SCHEMA}' AND (n.nspowner = r.oid OR pg_has_role(r.oid, n.nspowner, 'member'))) AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = '${SCHEMA}' AND (c.relowner = r.oid OR pg_has_role(r.oid, c.relowner, 'member'))) FROM pg_roles r WHERE r.rolname = '${APP_ROLE}'")"
+  runtime_role_safe="$("${PSQL_BIN}" --no-psqlrc --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT r.rolcanlogin AND NOT r.rolsuper AND NOT r.rolcreaterole AND NOT r.rolcreatedb AND NOT r.rolreplication AND NOT r.rolbypassrls AND NOT pg_has_role(r.oid, current_user, 'member') AND r.oid <> current_user::regrole AND NOT EXISTS (SELECT 1 FROM pg_namespace n WHERE n.nspname = '${SCHEMA}' AND (n.nspowner = r.oid OR pg_has_role(r.oid, n.nspowner, 'member'))) AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = '${SCHEMA}' AND (c.relowner = r.oid OR pg_has_role(r.oid, c.relowner, 'member'))) FROM pg_roles r WHERE r.rolname = '${APP_ROLE}'")"
   if [[ "${runtime_role_safe}" != "t" ]]; then
     echo "PINVI_RESTORE_APP_ROLE must name an existing non-superuser non-owner runtime login" >&2
     exit 3
   fi
 else
-  restore_owner_safe="$("${PSQL_BIN}" --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '${SCHEMA}') OR EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '${SCHEMA}' AND nspowner = current_user::regrole)")"
+  restore_owner_safe="$("${PSQL_BIN}" --no-psqlrc --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '${SCHEMA}') OR EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '${SCHEMA}' AND nspowner = current_user::regrole)")"
   if [[ "${restore_owner_safe}" != "t" ]]; then
     echo "PINVI_RESTORE_APP_ROLE is required when the restore executor does not own the target schema" >&2
     exit 3
   fi
 fi
 
-# ``pg_dump --schema`` does not carry CREATE SCHEMA. Bootstrap a fresh staging
-# database explicitly; an existing schema is intentionally left untouched.
-"${PSQL_BIN}" \
-  --set=ON_ERROR_STOP=1 \
-  --dbname="${DATABASE_URL}" \
-  --command="CREATE SCHEMA IF NOT EXISTS \"${SCHEMA}\""
-
-assert_expected_target
-
 printf '%s\n' "RESTORE_COMMAND=pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges"
-"${PG_RESTORE_BIN}" \
-  --clean \
-  --if-exists \
-  --exit-on-error \
-  --no-owner \
-  --no-privileges \
-  --schema="${SCHEMA}" \
-  --jobs="${JOBS}" \
-  --dbname="${DATABASE_URL}" \
-  "${BACKUP_FILE}"
-
-# ``--no-owner --no-privileges`` does not recreate runtime grants. The login and
-# ownership safety were already checked before any mutation above.
-if [[ -n "${APP_ROLE}" ]]; then
+if [[ "${PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST:-0}" == "1" && -n "${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" ]]; then
+  secure_restore_with_identity_guard
+else
+  # ``pg_dump --schema`` does not carry CREATE SCHEMA. Bootstrap a fresh staging
+  # database explicitly; an existing schema is intentionally left untouched.
   "${PSQL_BIN}" \
+    --no-psqlrc \
     --set=ON_ERROR_STOP=1 \
     --dbname="${DATABASE_URL}" \
-    --command="GRANT USAGE ON SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\"; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\"; GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\""
-else
-  : # preflight already established the documented single-owner mode.
+    --command="CREATE SCHEMA IF NOT EXISTS \"${SCHEMA}\""
+
+  assert_expected_target
+  "${PG_RESTORE_BIN}" \
+    --clean \
+    --if-exists \
+    --exit-on-error \
+    --no-owner \
+    --no-privileges \
+    --schema="${SCHEMA}" \
+    --jobs="${JOBS}" \
+    --dbname="${DATABASE_URL}" \
+    "${BACKUP_FILE}"
+
+  # ``--no-owner --no-privileges`` does not recreate runtime grants. The login and
+  # ownership safety were already checked before any mutation above.
+  if [[ -n "${APP_ROLE}" ]]; then
+    "${PSQL_BIN}" \
+      --no-psqlrc \
+      --set=ON_ERROR_STOP=1 \
+      --dbname="${DATABASE_URL}" \
+      --command="GRANT USAGE ON SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\"; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\"; GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\""
+  else
+    : # preflight already established the documented single-owner mode.
+  fi
 fi
 
 echo "RESTORED_FILE=${BACKUP_FILE}"

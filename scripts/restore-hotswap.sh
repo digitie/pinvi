@@ -3,6 +3,10 @@
 
 set -euo pipefail
 
+unset PGAPPNAME PGCONNECT_TIMEOUT PGDATABASE PGHOST PGHOSTADDR PGOPTIONS PGPASSFILE \
+  PGPASSWORD PGPORT PGSERVICE PGSERVICEFILE PGSSLCERT PGSSLMODE PGSSLKEY \
+  PGSSLROOTCERT PGTARGETSESSIONATTRS PSQLRC
+
 phase() {
   local name="$1"
   local status="$2"
@@ -180,7 +184,7 @@ remap_sql() {
 }
 
 phase restoring running "restoring ${SOURCE_SCHEMA} into ${RESTORE_SCHEMA}"
-"${PSQL_BIN}" -v ON_ERROR_STOP=1 "${DATABASE_URL}" \
+"${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" \
   -c "DROP SCHEMA IF EXISTS ${RESTORE_SCHEMA} CASCADE" >/dev/null
 "${PG_RESTORE_BIN}" \
   --schema="${SOURCE_SCHEMA}" \
@@ -193,7 +197,7 @@ phase restoring running "restoring ${SOURCE_SCHEMA} into ${RESTORE_SCHEMA}"
   printf 'CREATE SCHEMA IF NOT EXISTS %s;\n' "${RESTORE_SCHEMA}"
   remap_sql "${TMP_DIR}/schema.sql"
 } >"${TMP_DIR}/schema-remapped.sql"
-"${PSQL_BIN}" -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${TMP_DIR}/schema-remapped.sql" >/dev/null
+"${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${TMP_DIR}/schema-remapped.sql" >/dev/null
 
 "${PG_RESTORE_BIN}" \
   --schema="${SOURCE_SCHEMA}" \
@@ -208,7 +212,7 @@ phase restoring running "restoring ${SOURCE_SCHEMA} into ${RESTORE_SCHEMA}"
   printf 'SET session_replication_role = replica;\n'
   remap_sql "${TMP_DIR}/data.sql"
 } >"${TMP_DIR}/data-remapped.sql"
-"${PSQL_BIN}" -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${TMP_DIR}/data-remapped.sql" >/dev/null
+"${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${TMP_DIR}/data-remapped.sql" >/dev/null
 phase restoring success "restored into ${RESTORE_SCHEMA}"
 
 # pg_restore --no-privileges로 복원했으므로 GRANT가 비어 있다. 앱 role이 스키마 owner가
@@ -220,7 +224,7 @@ if [[ -n "${APP_ROLE}" ]]; then
     phase restoring failed "unsafe app role name: ${APP_ROLE}"
     exit 2
   fi
-  "${PSQL_BIN}" -v ON_ERROR_STOP=1 "${DATABASE_URL}" <<SQL >/dev/null
+  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" <<SQL >/dev/null
 GRANT USAGE ON SCHEMA ${RESTORE_SCHEMA} TO ${APP_ROLE};
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ${RESTORE_SCHEMA} TO ${APP_ROLE};
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA ${RESTORE_SCHEMA} TO ${APP_ROLE};

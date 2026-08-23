@@ -60,6 +60,23 @@ def _command_env() -> dict[str, str]:
             "PINVI_RESTORE_PG_RESTORE_BIN",
             "PINVI_RESTORE_PSQL_BIN",
             "PINVI_RESTORE_REQUIRE_FRESH_SCHEMA",
+            "PGAPPNAME",
+            "PGCONNECT_TIMEOUT",
+            "PGDATABASE",
+            "PGHOST",
+            "PGHOSTADDR",
+            "PGOPTIONS",
+            "PGPASSFILE",
+            "PGPASSWORD",
+            "PGPORT",
+            "PGSERVICE",
+            "PGSERVICEFILE",
+            "PGSSLCERT",
+            "PGSSLMODE",
+            "PGSSLKEY",
+            "PGSSLROOTCERT",
+            "PGTARGETSESSIONATTRS",
+            "PSQLRC",
         ):
             environment.pop(name, None)
     return environment

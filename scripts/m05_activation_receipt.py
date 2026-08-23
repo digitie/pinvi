@@ -276,7 +276,7 @@ def _review_challenge(
     *,
     require_root_owned: bool,
     pinvi_source_revision: str,
-) -> tuple[str, dict[str, str]]:
+) -> tuple[str, dict[str, str], dict[str, dict[str, object]]]:
     raw = _read_secure_bytes(
         path,
         require_root_owned=require_root_owned,
@@ -313,6 +313,7 @@ def _review_challenge(
     if set(response_paths) != _reviewer_roster():
         raise ReceiptError("review challenge response path inventory is invalid")
     response_hashes: dict[str, str] = {}
+    response_records: dict[str, dict[str, object]] = {}
     for agent_id in _reviewer_roster():
         response_path = Path(_string(response_paths[agent_id], name="review response path"))
         response_bytes = _read_secure_bytes(
@@ -321,7 +322,76 @@ def _review_challenge(
             label="review response",
         )
         response_hashes[agent_id] = hashlib.sha256(response_bytes).hexdigest()
-    return challenge_id, response_hashes
+        response_records[agent_id] = _parse_review_response(
+            response_bytes,
+            agent_id=agent_id,
+            challenge_id=challenge_id,
+            pinvi_source_revision=pinvi_source_revision,
+        )
+    return challenge_id, response_hashes, response_records
+
+
+def _parse_review_response(
+    raw: bytes,
+    *,
+    agent_id: str,
+    challenge_id: str,
+    pinvi_source_revision: str,
+) -> dict[str, object]:
+    """리뷰 도구의 machine-readable header를 검증해 임의 텍스트를 거부한다."""
+
+    try:
+        lines = raw.decode("utf-8").splitlines()
+    except UnicodeDecodeError as exc:
+        raise ReceiptError("review response is not valid UTF-8") from exc
+    fields: dict[str, str] = {}
+    required = {
+        "agent_id",
+        "challenge_id",
+        "commit",
+        "p0_p1",
+        "pr_url",
+        "review_id",
+        "reviewer_agent_id",
+        "reviewed_commit",
+        "summary",
+        "verdict",
+    }
+    for line in lines:
+        if ": " not in line:
+            continue
+        key, value = line.split(": ", 1)
+        if key in required:
+            if key in fields:
+                raise ReceiptError("review response repeats a required field")
+            fields[key] = value
+    if set(fields) != required:
+        raise ReceiptError("review response machine-readable header is incomplete")
+    if (
+        _uuid(fields["agent_id"], name="review response agent_id") != agent_id
+        or _uuid(fields["reviewer_agent_id"], name="review response reviewer_agent_id")
+        != agent_id
+        or _uuid(fields["challenge_id"], name="review response challenge_id") != challenge_id
+        or _commit(fields["commit"], name="review response commit") != pinvi_source_revision
+        or _commit(fields["reviewed_commit"], name="review response reviewed_commit")
+        != pinvi_source_revision
+        or fields["pr_url"] != _M05_ACTIVATION_PR_URL
+        or fields["verdict"] != "GO"
+        or fields["p0_p1"] != "0"
+        or not fields["summary"]
+        or any(character in "\r\n" for character in fields["summary"])
+    ):
+        raise ReceiptError("review response does not prove a zero-finding GO for the challenge")
+    return {
+        "agent_id": agent_id,
+        "challenge_id": challenge_id,
+        "commit": pinvi_source_revision,
+        "p0_p1": 0,
+        "pr_url": _M05_ACTIVATION_PR_URL,
+        "review_id": _uuid(fields["review_id"], name="review response review_id"),
+        "summary": fields["summary"],
+        "verdict": "GO",
+    }
 
 
 def _review_allowlist(
@@ -341,7 +411,7 @@ def _review_allowlist(
         raise ReceiptError("review allowlist parent must not be group/world writable")
     if require_root_owned and parent_stat.st_uid != 0:
         raise ReceiptError("review allowlist parent is not root-owned")
-    challenge_id, response_hashes = _review_challenge(
+    challenge_id, response_hashes, response_records = _review_challenge(
         challenge_path,
         require_root_owned=require_root_owned,
         pinvi_source_revision=pinvi_source_revision,
@@ -381,6 +451,14 @@ def _review_allowlist(
             raise ReceiptError("review allowlist response is not bound to the challenge file")
         if agent_id not in allowed_agents or pr_url != _M05_ACTIVATION_PR_URL:
             raise ReceiptError("review allowlist entry is not pinned to M05")
+        response_record = response_records[agent_id]
+        if (
+            response_record["review_id"] != review_id
+            or response_record["commit"] != commit
+            or response_record["challenge_id"] != challenge_id
+            or response_record["pr_url"] != pr_url
+        ):
+            raise ReceiptError("review allowlist metadata is not bound to the parsed response")
         key = (agent_id, review_id, commit, pr_url, challenge_id, response_sha256)
         if key in result:
             raise ReceiptError("review allowlist entries must be distinct")
@@ -904,6 +982,12 @@ def _ledger(args: argparse.Namespace) -> int:
     )
     _append_durable_history(
         args.durable_history,
+        generation=generation,
+        receipt_sha256=cast(str, record["receipt_sha256"]),
+        require_root_owned=args.require_root_owned,
+    )
+    _append_durable_history(
+        args.durable_anchor,
         generation=generation,
         receipt_sha256=cast(str, record["receipt_sha256"]),
         require_root_owned=args.require_root_owned,
@@ -1996,6 +2080,7 @@ def _parser() -> argparse.ArgumentParser:
     ledger.add_argument("--high-watermark", type=Path, required=True)
     ledger.add_argument("--durable-floor", type=Path, required=True)
     ledger.add_argument("--durable-history", type=Path, required=True)
+    ledger.add_argument("--durable-anchor", type=Path, required=True)
     ledger.add_argument("--require-root-owned", action="store_true")
     ledger.set_defaults(handler=_ledger)
     return parser

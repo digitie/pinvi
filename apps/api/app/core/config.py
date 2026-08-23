@@ -598,6 +598,8 @@ class Settings(BaseSettings):
     pinvi_m05_activation_durable_floor_path: str = ""
     # DB snapshot과 함께 복원되지 않는 별도 append-only monotonic history.
     pinvi_m05_activation_durable_history_path: str = ""
+    # ledger snapshot과 분리된 외부 monotonic anchor. 운영에서는 별도 durable mount를 사용한다.
+    pinvi_m05_activation_durable_anchor_path: str = ""
     # receipt가 봉인된 작업의 정본 PR URL.
     pinvi_m05_activation_pr_url: str = _M05_ACTIVATION_PR_URL
     # 배포자가 승인한 ledger generation. 이 값보다 낮은 receipt rollback은 거부한다.
@@ -1531,6 +1533,7 @@ class Settings(BaseSettings):
         high_watermark_path = Path(self.pinvi_m05_activation_high_watermark_path)
         durable_floor_path = Path(self.pinvi_m05_activation_durable_floor_path)
         durable_history_path = Path(self.pinvi_m05_activation_durable_history_path)
+        durable_anchor_path = Path(self.pinvi_m05_activation_durable_anchor_path)
         if (
             not self.pinvi_m05_activation_ledger_path
             or ledger_path.is_symlink()
@@ -1544,6 +1547,9 @@ class Settings(BaseSettings):
             or not self.pinvi_m05_activation_durable_history_path
             or durable_history_path.is_symlink()
             or not durable_history_path.is_file()
+            or not self.pinvi_m05_activation_durable_anchor_path
+            or durable_anchor_path.is_symlink()
+            or not durable_anchor_path.is_file()
         ):
             _raise_redacted_settings_error(
                 "M05 activation ledger, high-watermark, and durable floor files are required"
@@ -1563,6 +1569,8 @@ class Settings(BaseSettings):
             )
             durable_history_stat = durable_history_path.stat()
             durable_history_lines = durable_history_path.read_text(encoding="utf-8").splitlines()
+            durable_anchor_stat = durable_anchor_path.stat()
+            durable_anchor_lines = durable_anchor_path.read_text(encoding="utf-8").splitlines()
         except (OSError, UnicodeDecodeError):
             _raise_redacted_settings_error("M05 activation ledger files are unreadable")
         except (json.JSONDecodeError, _DuplicateJsonKeyError):
@@ -1578,6 +1586,13 @@ class Settings(BaseSettings):
             or stat.S_IMODE(durable_history_stat.st_mode) != 0o600
             or durable_history_stat.st_uid != os.geteuid()
             or not durable_history_lines
+            or stat.S_IMODE(durable_anchor_stat.st_mode) != 0o600
+            or durable_anchor_stat.st_uid != os.geteuid()
+            or not durable_anchor_lines
+            or durable_anchor_path == durable_history_path
+            or durable_anchor_path == ledger_path
+            or durable_anchor_path == high_watermark_path
+            or durable_anchor_path == durable_floor_path
         ):
             _raise_redacted_settings_error("M05 activation ledger file permissions are invalid")
         if not isinstance(high_watermark, dict) or set(high_watermark) != {
@@ -1648,6 +1663,50 @@ class Settings(BaseSettings):
             durable_history_records.append(history_record)
         if not durable_history_records:
             _raise_redacted_settings_error("M05 activation durable history is empty")
+        durable_anchor_records: list[dict[str, object]] = []
+        durable_anchor_previous_generation: int | None = None
+        durable_anchor_previous_sha256 = "0" * 64
+        for line in durable_anchor_lines:
+            try:
+                anchor_value = json.loads(line, object_pairs_hook=_reject_duplicate_json_keys)
+            except (json.JSONDecodeError, _DuplicateJsonKeyError):
+                _raise_redacted_settings_error(
+                    "M05 activation durable anchor contains invalid JSON"
+                )
+            if not isinstance(anchor_value, dict) or set(anchor_value) != {
+                "generation",
+                "previous_record_sha256",
+                "receipt_sha256",
+                "record_sha256",
+            }:
+                _raise_redacted_settings_error("M05 activation durable anchor schema is invalid")
+            anchor_record = cast(dict[str, object], anchor_value)
+            anchor_generation = anchor_record["generation"]
+            anchor_previous_sha256 = anchor_record["previous_record_sha256"]
+            anchor_receipt_sha256 = anchor_record["receipt_sha256"]
+            anchor_record_sha256 = anchor_record["record_sha256"]
+            if (
+                type(anchor_generation) is not int
+                or anchor_generation < 1
+                or (
+                    durable_anchor_previous_generation is not None
+                    and anchor_generation <= durable_anchor_previous_generation
+                )
+                or not isinstance(anchor_previous_sha256, str)
+                or re.fullmatch(r"[0-9a-f]{64}", anchor_previous_sha256) is None
+                or anchor_previous_sha256 != durable_anchor_previous_sha256
+                or not isinstance(anchor_receipt_sha256, str)
+                or re.fullmatch(r"[0-9a-f]{64}", anchor_receipt_sha256) is None
+                or not isinstance(anchor_record_sha256, str)
+                or re.fullmatch(r"[0-9a-f]{64}", anchor_record_sha256) is None
+                or anchor_record_sha256 != _ledger_record_hash(anchor_record)
+            ):
+                _raise_redacted_settings_error("M05 activation durable anchor fields are invalid")
+            durable_anchor_previous_generation = anchor_generation
+            durable_anchor_previous_sha256 = anchor_record_sha256
+            durable_anchor_records.append(anchor_record)
+        if not durable_anchor_records:
+            _raise_redacted_settings_error("M05 activation durable anchor is empty")
         records: list[dict[str, object]] = []
         activation_nonces: set[str] = set()
         previous_generation: int | None = None
@@ -1720,6 +1779,9 @@ class Settings(BaseSettings):
         durable_history_latest = durable_history_records[-1]
         durable_history_latest_generation = durable_history_latest["generation"]
         durable_history_latest_receipt_sha256 = durable_history_latest["receipt_sha256"]
+        durable_anchor_latest = durable_anchor_records[-1]
+        durable_anchor_latest_generation = durable_anchor_latest["generation"]
+        durable_anchor_latest_receipt_sha256 = durable_anchor_latest["receipt_sha256"]
         if (
             type(latest_generation) is not int
             or not isinstance(latest_receipt_sha256, str)
@@ -1730,6 +1792,9 @@ class Settings(BaseSettings):
             or not isinstance(durable_history_latest_generation, int)
             or durable_history_latest_generation != high_watermark_generation
             or durable_history_latest_receipt_sha256 != high_watermark_receipt_sha256
+            or not isinstance(durable_anchor_latest_generation, int)
+            or durable_anchor_latest_generation != high_watermark_generation
+            or durable_anchor_latest_receipt_sha256 != high_watermark_receipt_sha256
         ):
             _raise_redacted_settings_error(
                 "M05 activation external monotonic floors do not match the latest ledger record"

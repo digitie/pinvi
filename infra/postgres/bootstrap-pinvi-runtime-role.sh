@@ -22,7 +22,7 @@ fi
 
 export PGPASSWORD="${POSTGRES_PASSWORD}"
 attempt=0
-until psql --no-password --tuples-only --no-align --host=app-postgres \
+until psql --no-psqlrc --no-password --tuples-only --no-align --host=app-postgres \
   --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" --command='SELECT 1' >/dev/null 2>&1; do
   attempt=$((attempt + 1))
   if [ "$attempt" -ge 15 ]; then
@@ -32,19 +32,19 @@ until psql --no-password --tuples-only --no-align --host=app-postgres \
   fi
   sleep 1
 done
-psql --no-password --set=ON_ERROR_STOP=1 --host=app-postgres --username="${POSTGRES_USER}" \
+psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host=app-postgres --username="${POSTGRES_USER}" \
   --dbname="${POSTGRES_DB}" --set="owner=${POSTGRES_USER}" \
   --set="app_role=${PINVI_APP_DB_USER}" --set="app_password=${PINVI_APP_DB_PASSWORD}" \
   >/dev/null <<'SQL'
 SELECT format(
-    'CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT PASSWORD %L',
+    'CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT PASSWORD %L',
     :'app_role',
     :'app_password'
 )
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'app_role')
 \gexec
 SELECT format(
-    'ALTER ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT PASSWORD %L',
+    'ALTER ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT PASSWORD %L',
     :'app_role',
     :'app_password'
 )
@@ -68,7 +68,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE :"owner" IN SCHEMA app
 SQL
 
 runtime_role_safe="$(
-  psql --no-password --tuples-only --no-align --host=app-postgres \
+  psql --no-psqlrc --no-password --tuples-only --no-align --host=app-postgres \
     --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
     --set="app_role=${PINVI_APP_DB_USER}" <<'SQL'
 SELECT
@@ -77,6 +77,7 @@ SELECT
   AND NOT r.rolcreaterole
   AND NOT r.rolcreatedb
   AND NOT r.rolreplication
+  AND NOT r.rolbypassrls
   AND NOT pg_has_role(r.oid, current_user, 'member')
   AND r.oid <> current_user::regrole
   AND NOT EXISTS (
