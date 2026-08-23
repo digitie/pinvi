@@ -127,7 +127,30 @@ if ! command -v sha256sum >/dev/null 2>&1; then
   phase precheck failed "sha256sum not found"
   exit 127
 fi
-if [[ "${PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST:-0}" == "1" ]]; then
+assert_trusted_tool_path() {
+  local name="$1"
+  local path="$2"
+  if [[ "${path}" != /* || ! -f "${path}" || ! -x "${path}" || -L "${path}" ]]; then
+    phase precheck failed "${name} path is not a trusted executable"
+    exit 127
+  fi
+  local resolved
+  resolved="$(realpath -e "${path}")"
+  case "${resolved}" in
+    /usr/local/bin/${name}|/usr/bin/${name}|/bin/${name}) ;;
+    /usr/lib/postgresql/[0-9]*/bin/${name}) ;;
+    *)
+      phase precheck failed "${name} path is outside the trusted tool directories"
+      exit 127
+      ;;
+  esac
+}
+
+if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" == "1" ]]; then
+  :
+else
+  assert_trusted_tool_path "pg_restore" "${PG_RESTORE_BIN}"
+  assert_trusted_tool_path "psql" "${PSQL_BIN}"
   for tool_spec in \
     "pg_restore:${PG_RESTORE_BIN}:${PINVI_RESTORE_PG_RESTORE_SHA256:-}" \
     "psql:${PSQL_BIN}:${PINVI_RESTORE_PSQL_SHA256:-}"; do
@@ -138,30 +161,43 @@ if [[ "${PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST:-0}" == "1" ]]; then
       exit 3
     fi
   done
+fi
+if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" != "1" ||
+  "${PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST:-0}" == "1" ]]; then
   evidence restore_tool_binding verified
 fi
 
-if [[ -f "${SNAPSHOT}.sha256" ]]; then
-  if ! command -v sha256sum >/dev/null 2>&1; then
-    phase precheck failed "sha256sum not found"
-    exit 127
-  fi
-  expected_checksum="$(awk 'NR == 1 { print $1 }' "${SNAPSHOT}.sha256")"
-  actual_checksum="$(sha256sum "${SNAPSHOT}" | awk 'NR == 1 { print $1 }')"
-  if [[ -z "${expected_checksum}" || "${expected_checksum}" != "${actual_checksum}" ]]; then
-    phase precheck failed "snapshot checksum failed"
-    exit 3
-  fi
-  evidence checksum verified
-else
-  evidence checksum missing
+if [[ -L "${SNAPSHOT}" || ! -f "${SNAPSHOT}" || -L "${SNAPSHOT}.sha256" || ! -f "${SNAPSHOT}.sha256" ]]; then
+  phase precheck failed "snapshot and checksum sidecar must be regular files"
+  exit 3
 fi
+if ! command -v sha256sum >/dev/null 2>&1; then
+  phase precheck failed "sha256sum not found"
+  exit 127
+fi
+expected_checksum="$(awk 'NR == 1 { print $1 }' "${SNAPSHOT}.sha256")"
+actual_checksum="$(sha256sum "${SNAPSHOT}" | awk 'NR == 1 { print $1 }')"
+if [[ ! "${expected_checksum}" =~ ^[0-9a-f]{64}$ || "${expected_checksum}" != "${actual_checksum}" ]]; then
+  phase precheck failed "snapshot checksum failed"
+  exit 3
+fi
+evidence checksum verified
 
 if ! "${PG_RESTORE_BIN}" --list "${SNAPSHOT}" >/dev/null; then
   phase precheck failed "pg_restore list failed"
   exit 3
 fi
 evidence pg_restore_list ok
+
+if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" != "1" ]]; then
+  for variable in PINVI_RESTORE_EXPECTED_DATABASE_NAME PINVI_RESTORE_EXPECTED_DATABASE_OID \
+    PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER PINVI_RESTORE_EXPECTED_HOSTADDR PINVI_RESTORE_EXPECTED_PORT; do
+    if [[ -z "${!variable:-}" ]]; then
+      phase precheck failed "${variable} is required for a non-test staging restore"
+      exit 3
+    fi
+  done
+fi
 
 psql_scalar() {
   local sql="$1"

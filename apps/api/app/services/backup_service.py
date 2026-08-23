@@ -7,9 +7,11 @@ import hashlib
 import os
 import re
 import shutil
+import stat
+import tempfile
 import uuid
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -136,7 +138,7 @@ def restore_hotswap_script_path() -> Path:
 
 def _checksum_for(path: Path) -> str | None:
     checksum_file = Path(f"{path}.sha256")
-    if not checksum_file.exists():
+    if checksum_file.is_symlink() or not checksum_file.is_file():
         return None
     first = checksum_file.read_text(encoding="utf-8").strip().split(maxsplit=1)[0]
     expected = first or None
@@ -172,7 +174,11 @@ def list_backup_snapshots(*, limit: int = 50) -> list[BackupSnapshot]:
     directory = backup_dir()
     if not directory.exists():
         return []
-    snapshots = [_snapshot_from_file(path) for path in directory.glob("*.dump") if path.is_file()]
+    snapshots = [
+        _snapshot_from_file(path)
+        for path in directory.glob("*.dump")
+        if path.is_file() and not path.is_symlink()
+    ]
     snapshots.sort(key=lambda snapshot: snapshot.created_at, reverse=True)
     return snapshots[:limit]
 
@@ -207,9 +213,58 @@ def get_backup_snapshot(*, snapshot_id: str) -> BackupSnapshot:
     if not _SNAPSHOT_ID_RE.fullmatch(snapshot_id):
         raise BackupSnapshotNotFoundError("backup snapshot id 형식이 올바르지 않습니다.")
     path = backup_dir() / f"{snapshot_id}.dump"
-    if not path.is_file():
+    if path.is_symlink() or not path.is_file():
         raise BackupSnapshotNotFoundError(f"backup snapshot을 찾을 수 없습니다: {snapshot_id}")
     return _snapshot_from_file(path)
+
+
+@contextmanager
+def _verified_snapshot_copy(snapshot: BackupSnapshot) -> Iterator[Path]:
+    """검증된 dump를 private directory로 복사해 restore 중 TOCTOU를 차단한다."""
+
+    if snapshot.checksum_sha256 is None:
+        raise BackupSnapshotUnverifiedError("checksum sidecar로 검증되지 않은 snapshot입니다.")
+    temporary_dir = Path(tempfile.mkdtemp(prefix="pinvi-restore-", dir="/tmp"))
+    target = temporary_dir / snapshot.filename
+    source_fd = -1
+    target_fd = -1
+    digest = hashlib.sha256()
+    try:
+        source_fd = os.open(
+            snapshot.path,
+            os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
+        )
+        source_stat = os.fstat(source_fd)
+        if not stat.S_ISREG(source_stat.st_mode):
+            raise BackupSnapshotUnverifiedError("backup snapshot은 regular file이어야 합니다.")
+        target_fd = os.open(
+            target,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+        )
+        with os.fdopen(source_fd, "rb") as source, os.fdopen(target_fd, "wb") as destination:
+            source_fd = -1
+            target_fd = -1
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+                destination.write(chunk)
+            destination.flush()
+            os.fsync(destination.fileno())
+        if digest.hexdigest() != snapshot.checksum_sha256:
+            raise BackupSnapshotUnverifiedError(
+                "restore 직전 backup snapshot checksum이 바뀌었습니다."
+            )
+        yield target
+    except OSError as exc:
+        raise BackupServiceError(
+            "backup snapshot을 private restore 영역으로 복사할 수 없습니다."
+        ) from exc
+    finally:
+        if source_fd != -1:
+            os.close(source_fd)
+        if target_fd != -1:
+            os.close(target_fd)
+        shutil.rmtree(temporary_dir, ignore_errors=True)
 
 
 def _snapshot_from_script_result(
@@ -292,10 +347,9 @@ def _ensure_backup_disk_space(directory: Path) -> None:
 
 
 # 동시 복원은 동일 DB에 두 개의 비가역 schema-swap을 겹쳐 무결성을 깨뜨린다.
-# 프로세스 내 lock + DB advisory lock을 함께 써서 같은 워커와 다중 워커를 모두 막는다.
+# 이 lock은 같은 API worker를 빠르게 직렬화하고, 프로세스 간 직렬화는
+# restore-hotswap.sh가 전체 실행 동안 보유하는 DB advisory lock이 담당한다.
 _restore_lock = asyncio.Lock()
-_RESTORE_LOCK_NAMESPACE = 0x54524D54  # "TRMT"
-_RESTORE_LOCK_RESOURCE = 0x48535750  # "HSWP"
 
 
 def _asyncpg_database_url(database_url: str) -> str:
@@ -377,32 +431,9 @@ async def restore_backup_hotswap(
     access_reason: str,
 ) -> BackupRestoreRun:
     async with _restore_lock:
-        async with _restore_advisory_lock():
-            return await _restore_backup_hotswap_locked(
-                snapshot_id=snapshot_id, access_reason=access_reason
-            )
-
-
-@asynccontextmanager
-async def _restore_advisory_lock() -> AsyncIterator[None]:
-    engine = create_async_engine(_restore_lock_database_url(), poolclass=NullPool)
-    try:
-        async with engine.connect() as conn:
-            acquired = await conn.scalar(
-                text("SELECT pg_try_advisory_lock(:namespace, :resource)"),
-                {"namespace": _RESTORE_LOCK_NAMESPACE, "resource": _RESTORE_LOCK_RESOURCE},
-            )
-            if acquired is not True:
-                raise BackupRestoreAlreadyRunningError("다른 schema-swap restore가 진행 중입니다.")
-            try:
-                yield
-            finally:
-                await conn.execute(
-                    text("SELECT pg_advisory_unlock(:namespace, :resource)"),
-                    {"namespace": _RESTORE_LOCK_NAMESPACE, "resource": _RESTORE_LOCK_RESOURCE},
-                )
-    finally:
-        await engine.dispose()
+        return await _restore_backup_hotswap_locked(
+            snapshot_id=snapshot_id, access_reason=access_reason
+        )
 
 
 async def _restore_backup_hotswap_locked(
@@ -421,6 +452,13 @@ async def _restore_backup_hotswap_locked(
         raise BackupServiceError("운영 schema-swap script는 repository canonical 경로여야 합니다.")
     if script.is_symlink() or not script.is_file():
         raise BackupServiceError(f"restore hotswap script not found: {script}")
+    script_sha256 = _sha256_file(script)
+    expected_script_sha256 = settings.pinvi_restore_hotswap_script_sha256
+    if settings.pinvi_environment in {"staging", "production"} and (
+        not re.fullmatch(r"[0-9a-f]{64}", expected_script_sha256)
+        or script_sha256 != expected_script_sha256
+    ):
+        raise BackupServiceError("운영 schema-swap script digest pin이 없습니다.")
 
     started_at = datetime.now(UTC)
     # 초 해상도만 쓰면 같은 초에 두 번 복원 시 restore_id(→ 스키마명)가 충돌한다. uuid suffix로 고유화.
@@ -481,28 +519,35 @@ async def _restore_backup_hotswap_locked(
             }
         )
 
-    proc = await asyncio.create_subprocess_exec(
-        str(script),
-        "run",
-        snapshot.path,
-        restore_schema,
-        previous_schema,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        env=env,
-        cwd=str(repo_root()),
-    )
-    try:
-        stdout_raw, stderr_raw = await asyncio.wait_for(
-            proc.communicate(),
-            timeout=settings.pinvi_restore_timeout_seconds,
-        )
-    except TimeoutError as exc:
-        proc.kill()
-        await proc.wait()
-        raise BackupServiceError(
-            sanitize_backup_message("restore hotswap script timed out")
-        ) from exc
+    with _verified_snapshot_copy(snapshot) as verified_snapshot:
+        with tempfile.TemporaryDirectory(prefix="pinvi-restore-script-", dir="/tmp") as script_dir:
+            verified_script = Path(script_dir) / "restore-hotswap.sh"
+            shutil.copyfile(script, verified_script)
+            verified_script.chmod(0o700)
+            if _sha256_file(verified_script) != script_sha256:
+                raise BackupServiceError("restore hotswap script changed during staging")
+            proc = await asyncio.create_subprocess_exec(
+                str(verified_script),
+                "run",
+                str(verified_snapshot),
+                restore_schema,
+                previous_schema,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env,
+                cwd=str(repo_root()),
+            )
+            try:
+                stdout_raw, stderr_raw = await asyncio.wait_for(
+                    proc.communicate(),
+                    timeout=settings.pinvi_restore_timeout_seconds,
+                )
+            except TimeoutError as exc:
+                proc.kill()
+                await proc.wait()
+                raise BackupServiceError(
+                    sanitize_backup_message("restore hotswap script timed out")
+                ) from exc
 
     stdout = stdout_raw.decode("utf-8", errors="replace")
     stderr = stderr_raw.decode("utf-8", errors="replace")

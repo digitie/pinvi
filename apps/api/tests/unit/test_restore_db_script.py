@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
 from pathlib import Path
@@ -24,6 +25,10 @@ def test_restore_db_bootstraps_schema_and_regrants_explicit_runtime_role(tmp_pat
     invocation_log = tmp_path / "invocations.log"
     snapshot = tmp_path / "m05.dump"
     snapshot.write_bytes(b"custom-format-fixture")
+    snapshot.with_name(f"{snapshot.name}.sha256").write_text(
+        f"{hashlib.sha256(snapshot.read_bytes()).hexdigest()}  {snapshot.name}\n",
+        encoding="utf-8",
+    )
     _write_executable(
         fake_bin / "psql",
         """#!/usr/bin/env bash
@@ -86,6 +91,10 @@ def test_restore_db_rejects_invalid_runtime_role_before_schema_mutation(tmp_path
     invocation_log = tmp_path / "invocations.log"
     snapshot = tmp_path / "m05.dump"
     snapshot.write_bytes(b"custom-format-fixture")
+    snapshot.with_name(f"{snapshot.name}.sha256").write_text(
+        f"{hashlib.sha256(snapshot.read_bytes()).hexdigest()}  {snapshot.name}\n",
+        encoding="utf-8",
+    )
     _write_executable(
         fake_bin / "psql",
         """#!/usr/bin/env bash

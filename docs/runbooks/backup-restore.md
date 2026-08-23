@@ -59,7 +59,7 @@ ls -la /var/lib/pinvi/backups/
 
 | 변수                                           | 기본값                   | 설명                                                        |
 | ---------------------------------------------- | ------------------------ | ----------------------------------------------------------- |
-| `PINVI_BACKUP_DIR`                             | `.tmp/backups`           | dump 저장 디렉터리                                          |
+| `PINVI_BACKUP_DIR`                             | `/var/lib/pinvi/backups` | dump 저장 디렉터리                                          |
 | `PINVI_BACKUP_SCHEMA`                          | `app`                    | Pinvi 소유 schema                                           |
 | `PINVI_BACKUP_DATABASE_URL`                    | `PINVI_DATABASE_URL`     | backup 전용 DB URL override                                 |
 | `PINVI_BACKUP_MIN_FREE_BYTES`                  | `1073741824`             | backup 시작 전 남아 있어야 하는 최소 여유 byte              |
@@ -136,10 +136,10 @@ docker compose -f docker-compose.app.yml start web
 | `PINVI_RESTORE_JOBS`         | `2`                              | `pg_restore --jobs` 값       |
 | `PINVI_RESTORE_APP_ROLE`     | 빈 값                           | 기존 non-superuser runtime DB role에 schema/table/sequence grant를 복원한다. 비어 있으면 restore executor가 대상 schema owner여야 한다. |
 
-`scripts/restore-db.sh`는 snapshot 옆에 `.sha256` sidecar가 있으면 restore 전에 반드시
-검증한다. sidecar가 실패하면 restore를 시작하지 않는다. 검증은 sidecar의 첫 checksum 값과
-실제 dump hash를 직접 비교하므로 운영 snapshot을 staging 디렉터리로 복사한 뒤에도 같은
-sidecar를 그대로 쓸 수 있다.
+`scripts/restore-db.sh`는 snapshot 옆에 `.sha256` sidecar가 없거나 일반 파일이 아니면
+restore를 시작하지 않는다. restore 전에 sidecar의 첫 checksum 값과 실제 dump hash를 직접
+비교하고, 통과한 dump는 private 임시 디렉터리로 복사한 뒤 다시 hash를 비교해 restore에
+사용한다. 운영 snapshot을 staging 디렉터리로 복사할 때는 dump와 sidecar를 함께 복사해야 한다.
 
 `--no-owner --no-privileges` restore 뒤에는 권한이 자동 복원되지 않는다. 단일-role 구성은
 restore executor가 `app` schema owner인지 확인한 뒤에만 끝난다. schema owner와 API runtime
@@ -157,6 +157,7 @@ USAGE/SELECT grant를 재적용한다. 이 role은 LOGIN이고 superuser·CREATE
 | `PINVI_RESTORE_ALLOW_NO_DRAIN`  | `0`                  | 외부 write fence를 확인한 경우에만 `1`                |
 | `PINVI_RESTORE_DRAIN_VERIFIED`  | `0`                  | 외부 orchestrator가 write fence를 확인했다는 명시적 증명 |
 | `PINVI_RESTORE_APP_ROLE`        | 빈 값                | swap 전 restore schema에 GRANT를 재적용할 앱 DB role |
+| `PINVI_RESTORE_HOTSWAP_SCRIPT_SHA256` | 빈 값           | 운영 API 경로에서 canonical hotswap runner content digest 고정 |
 
 ## 4. Restore — schema-swap 핫스왑 (정상 절차, Sprint 6 T-111)
 
@@ -227,12 +228,13 @@ PINVI_RESTORE_APP_ROLE=pinvi_app
 ```
 
 API-triggered restore 중 `PINVI_RESTORE_DRAIN_COMMAND`가 설정돼 있으면 script가
-`draining:failed`로 중단한다. API 경로는 외부 write fence를 완료한 뒤
-`PINVI_RESTORE_DRAIN_VERIFIED=1`을 명시해야 하며, CLI 경로만 drain command를 실행할 수 있다.
+`draining:failed`로 중단한다. API 경로는 외부 전환 확인값과 함께 DB write fence를 적용한다.
+hotswap runner는 전체 실행 동안 DB advisory lock을 유지하고, source/restore schema에 대한
+runtime role의 write 권한을 회수하며, 기존 runtime 세션을 종료한 뒤 권한·세션 상태를 다시
+확인한다. CLI 경로만 별도의 `PINVI_RESTORE_DRAIN_COMMAND`를 실행할 수 있다.
 
-schema switch의 핵심 SQL은 다음 형태다. 실제 스크립트는 DB advisory lock,
-active session 확인, grants, rollback marker를 운영 노드별로 보강할 수 있다. 기본
-`scripts/restore-hotswap.sh`는 custom dump를 `app_restore_<ts>` schema로 remap해
+schema switch의 핵심 SQL은 다음 형태다. 기본 `scripts/restore-hotswap.sh`는 custom dump를
+`app_restore_<ts>` schema로 remap해
 복구하고 `PINVI_RESTORE_HOTSWAP_EXECUTE=1` 가드 뒤에서 아래 rename을 수행한다.
 
 ```sql

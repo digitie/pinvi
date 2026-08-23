@@ -835,6 +835,9 @@ def _run_drill(args: argparse.Namespace) -> int:
             ),
             "restore_output_sha256": _sha256(execution_output),
             "restore_db_runner_sha256": _sha256((root / "scripts/restore-db.sh").read_bytes()),
+            "hotswap_runner_sha256": _sha256(
+                (root / "scripts/restore-hotswap.sh").read_bytes()
+            ),
             "restore_runner_sha256": _sha256(restore_script.read_bytes()),
             "m05_restore_drill_sha256": _sha256(Path(__file__).read_bytes()),
             "restore_tool_path": restore_tool["path"],

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from pathlib import Path
 
 import anyio
@@ -41,12 +39,6 @@ def _backup_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "pinvi_restore_allow_no_drain", False)
     monkeypatch.setattr(settings, "pinvi_restore_drain_verified", False)
     monkeypatch.setattr(settings, "pinvi_restore_app_role", "")
-
-    @asynccontextmanager
-    async def _noop_restore_advisory_lock() -> AsyncIterator[None]:
-        yield
-
-    monkeypatch.setattr(backup_service, "_restore_advisory_lock", _noop_restore_advisory_lock)
 
 
 def _write_script(path: Path, body: str) -> None:
@@ -242,49 +234,6 @@ async def test_restore_backup_hotswap_rejects_snapshot_without_verified_checksum
             snapshot_id="pinvi-app-unverified",
             access_reason="복구 훈련",
         )
-
-
-@pytest.mark.asyncio
-async def test_restore_backup_hotswap_uses_advisory_lock(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    backup_dir = anyio.Path(settings.pinvi_backup_dir)
-    await backup_dir.mkdir(parents=True)
-    snapshot = backup_dir / "pinvi-app-lock.dump"
-    await snapshot.write_text("dump", encoding="utf-8")
-    await (backup_dir / "pinvi-app-lock.dump.sha256").write_text(
-        f"{hashlib.sha256(b'dump').hexdigest()}\n", encoding="utf-8"
-    )
-    script = tmp_path / "restore-hotswap.sh"
-    _write_script(
-        script,
-        """#!/usr/bin/env bash
-set -euo pipefail
-printf 'RESTORE_PHASE=preparing:success:checked\\n'
-printf 'RESTORE_PHASE=restoring:success:restored\\n'
-printf 'RESTORE_PHASE=validating:success:validated\\n'
-printf 'RESTORE_PHASE=draining:skipped:test\\n'
-printf 'RESTORE_PHASE=switching:success:switched\\n'
-""",
-    )
-    monkeypatch.setattr(settings, "pinvi_restore_hotswap_script_path", str(script))
-    entered = False
-
-    @asynccontextmanager
-    async def _recording_restore_advisory_lock() -> AsyncIterator[None]:
-        nonlocal entered
-        entered = True
-        yield
-
-    monkeypatch.setattr(backup_service, "_restore_advisory_lock", _recording_restore_advisory_lock)
-
-    await restore_backup_hotswap(
-        snapshot_id="pinvi-app-lock",
-        access_reason="락 테스트",
-    )
-
-    assert entered is True
 
 
 @pytest.mark.asyncio

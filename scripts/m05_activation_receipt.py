@@ -29,6 +29,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
+_REVIEW_NONCE_RE = re.compile(r"[0-9a-f]{64}\Z")
 _DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
 _PLAYWRIGHT_IMAGE_RE = re.compile(
     r"mcr\.microsoft\.com/playwright:[A-Za-z0-9][A-Za-z0-9._-]*@sha256:[0-9a-f]{64}\Z"
@@ -236,6 +237,13 @@ def _uuid(value: object, *, name: str) -> str:
     return value
 
 
+def _review_nonce(value: object, *, name: str) -> str:
+    value = _string(value, name=name)
+    if _REVIEW_NONCE_RE.fullmatch(value) is None:
+        raise ReceiptError(f"{name} must be lowercase 256-bit hex")
+    return value
+
+
 def _ledger_record_hash(record: dict[str, object]) -> str:
     unsigned = {key: value for key, value in record.items() if key != "record_sha256"}
     return hashlib.sha256(_canonical_json(unsigned)).hexdigest()
@@ -278,6 +286,7 @@ def _review_challenge(
     *,
     require_root_owned: bool,
     pinvi_source_revision: str,
+    review_response_nonce: str,
 ) -> tuple[str, dict[str, str], dict[str, dict[str, object]]]:
     raw = _read_secure_bytes(
         path,
@@ -295,11 +304,17 @@ def _review_challenge(
         "challenge_id",
         "pr_url",
         "response_paths",
+        "response_nonce_sha256",
         "version",
     }:
         raise ReceiptError("review challenge schema is invalid")
-    if challenge["version"] != 1:
+    if challenge["version"] != 2:
         raise ReceiptError("review challenge version is invalid")
+    if (
+        _sha256(challenge["response_nonce_sha256"], name="review challenge nonce hash")
+        != hashlib.sha256(review_response_nonce.encode("ascii")).hexdigest()
+    ):
+        raise ReceiptError("review challenge nonce does not match the receipt input")
     challenge_id = _uuid(challenge["challenge_id"], name="review challenge ID")
     if _commit(challenge["commit"], name="review challenge commit") != pinvi_source_revision:
         raise ReceiptError("review challenge commit does not match the signed source revision")
@@ -329,6 +344,7 @@ def _review_challenge(
             agent_id=agent_id,
             challenge_id=challenge_id,
             pinvi_source_revision=pinvi_source_revision,
+            review_response_nonce=review_response_nonce,
         )
     return challenge_id, response_hashes, response_records
 
@@ -339,6 +355,7 @@ def _parse_review_response(
     agent_id: str,
     challenge_id: str,
     pinvi_source_revision: str,
+    review_response_nonce: str,
 ) -> dict[str, object]:
     """리뷰 도구의 machine-readable header를 검증해 임의 텍스트를 거부한다."""
 
@@ -355,6 +372,7 @@ def _parse_review_response(
         "pr_url",
         "review_id",
         "reviewer_agent_id",
+        "review_nonce",
         "reviewed_commit",
         "summary",
         "verdict",
@@ -376,6 +394,8 @@ def _parse_review_response(
         or _commit(fields["commit"], name="review response commit") != pinvi_source_revision
         or _commit(fields["reviewed_commit"], name="review response reviewed_commit")
         != pinvi_source_revision
+        or _review_nonce(fields["review_nonce"], name="review response review_nonce")
+        != review_response_nonce
         or fields["pr_url"] != _M05_ACTIVATION_PR_URL
         or fields["verdict"] != "GO"
         or fields["p0_p1"] != "0"
@@ -401,6 +421,7 @@ def _review_allowlist(
     challenge_path: Path,
     pinvi_source_revision: str,
     require_root_owned: bool,
+    review_response_nonce: str,
 ) -> set[tuple[str, str, str, str, str, str]]:
     if path is None:
         raise ReceiptError("production receipt requires an external review allowlist")
@@ -416,6 +437,7 @@ def _review_allowlist(
         challenge_path,
         require_root_owned=require_root_owned,
         pinvi_source_revision=pinvi_source_revision,
+        review_response_nonce=review_response_nonce,
     )
     raw = _read_secure_bytes(
         path,
@@ -1378,6 +1400,7 @@ def _restore(
         "restore_command",
         "restore_output_sha256",
         "restore_db_runner_sha256",
+        "hotswap_runner_sha256",
         "restore_runner_sha256",
         "m05_restore_drill_sha256",
         "restore_tool_path",
@@ -1434,6 +1457,7 @@ def _restore(
         "dump_sha256",
         "restore_output_sha256",
         "restore_db_runner_sha256",
+        "hotswap_runner_sha256",
         "restore_runner_sha256",
         "m05_restore_drill_sha256",
         "restore_tool_sha256",
@@ -1517,6 +1541,7 @@ def _restore(
     for evidence_field, script_path in (
         ("backup_runner_sha256", repository_root / "scripts/backup-db.sh"),
         ("restore_db_runner_sha256", repository_root / "scripts/restore-db.sh"),
+        ("hotswap_runner_sha256", repository_root / "scripts/restore-hotswap.sh"),
         ("restore_runner_sha256", repository_root / "scripts/restore-staging-drill.sh"),
         ("m05_restore_drill_sha256", repository_root / "scripts/m05_restore_drill.py"),
     ):
@@ -1967,6 +1992,10 @@ def _create(args: argparse.Namespace) -> int:
         challenge_path=args.review_challenge,
         pinvi_source_revision=source_revision,
         require_root_owned=args.require_root_owned,
+        review_response_nonce=_review_nonce(
+            args.review_response_nonce,
+            name="review response nonce",
+        ),
     )
     now = int(time.time())
     issued_at = args.activation_issued_at if args.activation_issued_at is not None else now
@@ -2169,6 +2198,10 @@ def _parser() -> argparse.ArgumentParser:
     create.add_argument("--activation-expires-at", type=int)
     create.add_argument("--review-allowlist", type=Path, required=True)
     create.add_argument("--review-challenge", type=Path, required=True)
+    create.add_argument(
+        "--review-response-nonce",
+        default=os.environ.get("PINVI_M05_REVIEW_RESPONSE_NONCE", ""),
+    )
     create.add_argument("--require-root-owned", action="store_true")
     create.set_defaults(handler=_create)
     ledger = subparsers.add_parser("ledger")

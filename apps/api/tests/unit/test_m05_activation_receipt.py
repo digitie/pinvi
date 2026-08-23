@@ -115,6 +115,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     evidence_dir = tmp_path / "evidence"
     evidence_dir.mkdir(mode=0o700)
     review_challenge_id = "66666666-6666-4666-8666-666666666666"
+    review_response_nonce = "a" * 64
     review_response_paths = {
         "01a02ce8-22cf-70b2-92cc-7dc3af16a915": tmp_path / "helmholtz-review.txt",
         "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2": tmp_path / "ampere-review.txt",
@@ -131,6 +132,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             f"review_id: {review_ids[agent_id]}\n"
             f"reviewer_agent_id: {agent_id}\n"
             f"agent_id: {agent_id}\n"
+            f"review_nonce: {review_response_nonce}\n"
             f"commit: {PINVI_REVISION}\n"
             f"reviewed_commit: {PINVI_REVISION}\n"
             "pr_url: https://github.com/digitie/pinvi/pull/466\n"
@@ -151,7 +153,10 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "response_paths": {
                 agent_id: str(path) for agent_id, path in review_response_paths.items()
             },
-            "version": 1,
+            "response_nonce_sha256": hashlib.sha256(
+                review_response_nonce.encode("ascii")
+            ).hexdigest(),
+            "version": 2,
         },
     )
     _write_json(
@@ -309,6 +314,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             ),
             "restore_output_sha256": "2" * 64,
             "restore_db_runner_sha256": _script_sha256("restore-db.sh"),
+            "hotswap_runner_sha256": _script_sha256("restore-hotswap.sh"),
             "restore_runner_sha256": _script_sha256("restore-staging-drill.sh"),
             "m05_restore_drill_sha256": _script_sha256("m05_restore_drill.py"),
             "restore_tool_path": str(_tool_path("pg_restore")),
@@ -530,6 +536,8 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             str(review_allowlist_path),
             "--review-challenge",
             str(review_challenge_path),
+            "--review-response-nonce",
+            review_response_nonce,
         ],
         check=True,
         capture_output=True,

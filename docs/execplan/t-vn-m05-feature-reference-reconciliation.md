@@ -117,11 +117,13 @@ python scripts/m05_activation_receipt.py create \
   --private-key "$M05_ACTIVATION_PRIVATE_KEY" \
   --output "$M05_ACTIVATION_RECEIPT" \
   --pinvi-source-revision "$PINVI_SOURCE_REVISION" \
+  --review-response-nonce "$PINVI_M05_REVIEW_RESPONSE_NONCE" \
   --require-root-owned
 ```
 
-`create`에는 challenge 파일(`--review-challenge`)과 external allowlist(`--review-allowlist`)을 함께
-전달한다. ledger 기록 시에는 `--durable-history`와 `--durable-anchor`를 ledger/high-watermark/floor와
+`create`에는 challenge 파일(`--review-challenge`), 해당 실행에서만 전달한 review response nonce
+(`--review-response-nonce`), external allowlist(`--review-allowlist`)를 함께 전달한다. ledger 기록 시에는
+`--durable-history`와 `--durable-anchor`를 ledger/high-watermark/floor와
 분리된 root-owned durable 경로에 append한다. anchor는 coordinated snapshot rollback을 막기 위해
 별도 durable mount에 둔다.
 
@@ -138,9 +140,11 @@ private key와 증거 디렉터리도 tracked trust anchor/소유권과 대조�
 운영 secret 저장소에 등록하고, 원문 증거·append-only ledger는 root-owned 보관 위치에서 API에
 read-only로만 mount한다.
 
-리뷰 증적은 실행 전에 만든 root-owned challenge 파일에 commit, PR, 두 reviewer ID와 각 reviewer의
-원문 응답 경로를 고정한다. 두 응답은 challenge ID와 원문 SHA-256을 함께 제출해야 하며, signer는
-allowlist와 `reviews.json`이 challenge 파일의 실제 원문에 결박되지 않으면 거부한다. 복구 도구는
+리뷰 증적은 실행 전에 만든 root-owned challenge 파일에 commit, PR, 두 reviewer ID, 각 reviewer의
+원문 응답 경로와 one-run nonce의 hash를 고정한다. nonce 원문은 challenge 파일에 저장하지 않고 두
+리뷰어와 signer 프로세스에만 전달하며, 두 응답은 nonce·challenge ID와 원문 SHA-256을 함께 제출해야
+한다. signer는 allowlist와 `reviews.json`이 challenge 파일의 실제 원문에 결박되지 않으면 거부한다.
+복구 도구는
 `PINVI_M05_RESTORE_TOOL_TRUST_MANIFEST`의 root-owned `0600` manifest에 고정된 `git`, `pg_dump`,
 `pg_restore`, `psql` 경로·digest만 사용한다. live가 아닌 테스트 모드의 fake tool은 root-owned
 운영 증적으로 승격할 수 없다.

@@ -746,6 +746,8 @@ class Settings(BaseSettings):
     pinvi_backup_min_free_bytes: int = 1_073_741_824
     pinvi_restore_database_url: str = ""
     pinvi_restore_hotswap_execute: bool = False
+    # 운영 API restore는 canonical hotswap runner의 content digest를 배포 시 고정한다.
+    pinvi_restore_hotswap_script_sha256: str = ""
     pinvi_restore_drain_command: str = ""
     pinvi_restore_allow_no_drain: bool = False
     # API-triggered swap은 외부 orchestrator가 write fence를 확인한 경우에만 허용한다.
