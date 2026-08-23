@@ -13,33 +13,52 @@ down_revision: str | None = "20260821_0061"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+_BOUNDARY_CONTRACT_CHECK = (
+    "contract_version = 'pinvi-cache-target-final-boundary/v1' "
+    "AND status = 'succeeded' AND schema_revision = '20260824_0062'"
+)
+
 
 def upgrade() -> None:
-    op.execute("CREATE SCHEMA IF NOT EXISTS ops")
-    op.create_table(
-        "m05_activation_database_anchor",
-        sa.Column("generation", sa.BigInteger(), nullable=False),
-        sa.Column("receipt_sha256", sa.String(length=64), nullable=False),
-        sa.Column("record_sha256", sa.String(length=64), nullable=False),
-        sa.Column(
-            "observed_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.CheckConstraint("generation > 0", name="ck_m05_anchor_generation"),
-        sa.CheckConstraint(
-            "receipt_sha256 ~ '^[0-9a-f]{64}$'", name="ck_m05_anchor_receipt_sha"
-        ),
-        sa.CheckConstraint(
-            "record_sha256 ~ '^[0-9a-f]{64}$'", name="ck_m05_anchor_record_sha"
-        ),
-        sa.PrimaryKeyConstraint("generation", name="pk_m05_activation_database_anchor"),
-        schema="ops",
+    # 이 migration 자체가 Alembic head를 전진시키므로, final boundary의 schema pin도
+    # 같은 트랜잭션에서 함께 전진시킨다. pin을 빠뜨리면 boundary는 의도대로 fail-close한다.
+    op.drop_constraint(
+        op.f("ck_ktm_ct_boundary_contract"),
+        "ktm_cache_target_boundary_audits",
+        schema="app",
+        type_="check",
     )
+    op.create_check_constraint(
+        op.f("ck_ktm_ct_boundary_contract"),
+        "ktm_cache_target_boundary_audits",
+        _BOUNDARY_CONTRACT_CHECK,
+        schema="app",
+    )
+    op.execute("CREATE SCHEMA IF NOT EXISTS ops")
+    bind = op.get_bind()
+    if bind.scalar(sa.text("SELECT to_regclass('ops.m05_activation_database_anchor')")) is None:
+        op.create_table(
+            "m05_activation_database_anchor",
+            sa.Column("generation", sa.BigInteger(), nullable=False),
+            sa.Column("receipt_sha256", sa.String(length=64), nullable=False),
+            sa.Column("record_sha256", sa.String(length=64), nullable=False),
+            sa.Column(
+                "observed_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.text("now()"),
+                nullable=False,
+            ),
+            sa.CheckConstraint("generation > 0", name="ck_m05_anchor_generation"),
+            sa.CheckConstraint(
+                "receipt_sha256 ~ '^[0-9a-f]{64}$'", name="ck_m05_anchor_receipt_sha"
+            ),
+            sa.CheckConstraint("record_sha256 ~ '^[0-9a-f]{64}$'", name="ck_m05_anchor_record_sha"),
+            sa.PrimaryKeyConstraint("generation", name="pk_m05_activation_database_anchor"),
+            schema="ops",
+        )
     op.execute(
         """
-        CREATE FUNCTION ops.guard_m05_activation_database_anchor_append_only()
+        CREATE OR REPLACE FUNCTION ops.guard_m05_activation_database_anchor_append_only()
         RETURNS trigger
         LANGUAGE plpgsql
         SECURITY INVOKER
@@ -57,16 +76,38 @@ def upgrade() -> None:
     )
     op.execute(
         """
-        CREATE TRIGGER trg_m05_activation_database_anchor_append_only
-        BEFORE UPDATE OR DELETE ON ops.m05_activation_database_anchor
-        FOR EACH ROW EXECUTE FUNCTION ops.guard_m05_activation_database_anchor_append_only()
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                  FROM pg_trigger
+                 WHERE tgname = 'trg_m05_activation_database_anchor_append_only'
+                   AND tgrelid = 'ops.m05_activation_database_anchor'::regclass
+            ) THEN
+                CREATE TRIGGER trg_m05_activation_database_anchor_append_only
+                BEFORE UPDATE OR DELETE ON ops.m05_activation_database_anchor
+                FOR EACH ROW EXECUTE FUNCTION ops.guard_m05_activation_database_anchor_append_only();
+            END IF;
+        END
+        $$;
         """
     )
     op.execute(
         """
-        CREATE TRIGGER trg_m05_activation_database_anchor_truncate_append_only
-        BEFORE TRUNCATE ON ops.m05_activation_database_anchor
-        FOR EACH STATEMENT EXECUTE FUNCTION ops.guard_m05_activation_database_anchor_append_only()
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                  FROM pg_trigger
+                 WHERE tgname = 'trg_m05_activation_database_anchor_truncate_append_only'
+                   AND tgrelid = 'ops.m05_activation_database_anchor'::regclass
+            ) THEN
+                CREATE TRIGGER trg_m05_activation_database_anchor_truncate_append_only
+                BEFORE TRUNCATE ON ops.m05_activation_database_anchor
+                FOR EACH STATEMENT EXECUTE FUNCTION ops.guard_m05_activation_database_anchor_append_only();
+            END IF;
+        END
+        $$;
         """
     )
     op.execute(
