@@ -1981,7 +1981,10 @@ class Settings(BaseSettings):
     def validate_m05_runtime_dependencies_live(self) -> None:
         """M05 worker가 dependency container 교체를 감지할 때 재검증한다."""
 
-        if self.pinvi_environment not in {"staging", "production"} or not self.pinvi_m05_runtime_live_check:
+        if (
+            self.pinvi_environment not in {"staging", "production"}
+            or not self.pinvi_m05_runtime_live_check
+        ):
             return
         if not self._m05_runtime_dependencies or not self._m05_runtime_endpoints:
             raise RuntimeError("M05 runtime dependency snapshot is not loaded")
