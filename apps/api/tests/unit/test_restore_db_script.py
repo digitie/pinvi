@@ -76,6 +76,7 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
     assert "--no-privileges" in calls[2]
     assert calls[3].startswith("psql:")
     assert 'GRANT USAGE ON SCHEMA "app" TO "pinvi_app"' in calls[3]
+    assert "GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA" in calls[3]
 
 
 def test_restore_db_rejects_invalid_runtime_role_before_schema_mutation(tmp_path: Path) -> None:
