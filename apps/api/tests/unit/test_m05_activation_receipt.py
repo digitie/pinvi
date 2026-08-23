@@ -154,7 +154,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     }
     source_after_backup_identity = source_identity.copy()
     target_before_restore_identity = {
-        "database": "target",
+        "database": "pinvi_m05_restore_target",
         "database_oid": "200",
         "schema_exists": False,
         "server_version_num": "160000",
@@ -162,7 +162,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         "user": "pinvi_owner",
     }
     target_identity = {
-        "database": "target",
+        "database": "pinvi_m05_restore_target",
         "database_oid": "200",
         "schema_exists": True,
         "server_version_num": "160000",
@@ -174,6 +174,10 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         evidence_dir / "restore.json",
         {
             "backup_runner_sha256": _script_sha256("backup-db.sh"),
+            "backup_tool_path": "/usr/local/bin/pg_dump",
+            "backup_tool_sha256": "f" * 64,
+            "psql_tool_path": "/usr/local/bin/psql",
+            "psql_tool_sha256": "g" * 64,
             "dump_sha256": "c" * 64,
             "execution_id": "33333333-3333-4333-8333-333333333333",
             "no_owner_restore": True,
@@ -181,7 +185,11 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
                 "pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges"
             ),
             "restore_output_sha256": "2" * 64,
+            "restore_db_runner_sha256": _script_sha256("restore-db.sh"),
             "restore_runner_sha256": _script_sha256("restore-staging-drill.sh"),
+            "m05_restore_drill_sha256": _script_sha256("m05_restore_drill.py"),
+            "restore_tool_path": "/usr/local/bin/pg_restore",
+            "restore_tool_sha256": "e" * 64,
             "runtime_db_identity": runtime_identity,
             "runtime_role": "pinvi_app",
             "runtime_role_verified": True,

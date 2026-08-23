@@ -22,6 +22,7 @@ def _restore_drill_module():
 
 def test_m05_restore_drill_normalizes_asyncpg_url_for_psql() -> None:
     module = _restore_drill_module()
+    os.environ["PINVI_M05_RESTORE_TEST_MODE"] = "1"
     os.environ["PINVI_TEST_RESTORE_URL"] = "postgresql+asyncpg://runtime:secret@db:5432/pinvi"
     try:
         assert module._database_url("PINVI_TEST_RESTORE_URL") == (
@@ -29,6 +30,7 @@ def test_m05_restore_drill_normalizes_asyncpg_url_for_psql() -> None:
         )
     finally:
         os.environ.pop("PINVI_TEST_RESTORE_URL", None)
+        os.environ.pop("PINVI_M05_RESTORE_TEST_MODE", None)
 
 
 def _write_executable(path: Path, body: str) -> None:
@@ -82,7 +84,7 @@ elif [[ "$sql" == *"json_build_object"* ]]; then
   if [[ "$sql" == *"/source"* ]]; then
     echo '{"database":"fixture-source","user":"fixture","database_oid":"100","system_identifier":"1","schema_exists":true,"server_version_num":"160000"}'
   else
-    echo '{"database":"pinvi_m05_restore_target","user":"fixture","database_oid":"200","system_identifier":"1","schema_exists":true,"server_version_num":"160000"}'
+    echo '{"database":"pinvi_m05_restore_target","user":"fixture","database_oid":"200","system_identifier":"1","schema_exists":false,"server_version_num":"160000"}'
   fi
 elif [[ "$sql" == *"has_schema_privilege"* || "$sql" == *"count(*) = 6"* || "$sql" == *"FROM pg_roles"* ]]; then
   echo t
@@ -106,6 +108,7 @@ fi
         {
             "PATH": f"{fake_bin}{os.pathsep}{env['PATH']}",
             "PINVI_M05_RESTORE_TEST_MODE": "1",
+            "PINVI_ENVIRONMENT": "test",
             "PINVI_RESTORE_SOURCE_DATABASE_URL": "postgresql://source:secret@db/source",
             "PINVI_RESTORE_STAGING_DATABASE_URL": "postgresql://owner:secret@db/target",
             "PINVI_RESTORE_RUNTIME_DATABASE_URL": "postgresql://runtime:secret@db/target",

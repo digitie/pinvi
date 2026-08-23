@@ -19,9 +19,12 @@ import hashlib
 import json
 import os
 import re
+import shutil
+import socket
 import stat
 import subprocess
 import tempfile
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from pathlib import Path
 from uuid import uuid4
 
@@ -31,6 +34,7 @@ _SCHEMA_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 _TARGET_DATABASE_RE = re.compile(r"pinvi_m05_restore_[a-z0-9_]+\Z")
 _SAFE_PATH = "/usr/local/bin:/usr/bin:/bin"
+_PINNED_TOOL_PATHS: dict[str, str] = {}
 
 
 class RestoreDrillError(ValueError):
@@ -41,9 +45,45 @@ def _command_env() -> dict[str, str]:
     environment = os.environ.copy()
     if environment.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
         environment["PATH"] = _SAFE_PATH
-        environment["PINVI_BACKUP_PG_DUMP_BIN"] = "/usr/local/bin/pg_dump"
-        environment["PINVI_BACKUP_DOCKER_BIN"] = "/usr/bin/docker"
+        for name in (
+            "PINVI_BACKUP_PG_DUMP_BIN",
+            "PINVI_BACKUP_DOCKER_BIN",
+            "PINVI_BACKUP_DOCKER_FALLBACK",
+            "PINVI_BACKUP_DOCKER_IMAGE",
+            "PINVI_BACKUP_DOCKER_NETWORK",
+            "PINVI_BACKUP_PSQL_BIN",
+            "PINVI_RESTORE_PG_RESTORE_BIN",
+            "PINVI_RESTORE_PSQL_BIN",
+            "PINVI_RESTORE_REQUIRE_FRESH_SCHEMA",
+        ):
+            environment.pop(name, None)
     return environment
+
+
+def _tool_path(name: str) -> str:
+    pinned = _PINNED_TOOL_PATHS.get(name)
+    if pinned is not None:
+        return pinned
+    if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") == "1":
+        path = shutil.which(name)
+        if path is None:
+            raise RestoreDrillError(f"restore test tool is missing: {name}")
+        return path
+    allowed_directories = tuple(Path(item) for item in _SAFE_PATH.split(":"))
+    for directory in allowed_directories:
+        candidate = directory / name
+        if not candidate.is_file() or not os.access(candidate, os.X_OK):
+            continue
+        resolved = candidate.resolve()
+        if resolved.parent not in allowed_directories:
+            continue
+        return str(resolved)
+    raise RestoreDrillError(f"pinned restore tool is missing: {name}")
+
+
+def _tool_identity(name: str) -> dict[str, str]:
+    path = _tool_path(name)
+    return {"path": path, "sha256": _sha256(Path(path).read_bytes())}
 
 
 def _sha256(value: bytes) -> str:
@@ -111,7 +151,28 @@ def _database_url(name: str) -> str:
         value = "postgresql://" + value.removeprefix("postgresql+asyncpg://")
     if not value.startswith(("postgres://", "postgresql://")):
         raise RestoreDrillError(f"{name} must be a PostgreSQL URL")
-    return value
+    if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") == "1":
+        return value
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+        port = parsed.port or 5432
+    except ValueError as exc:
+        raise RestoreDrillError(f"{name} is not a valid PostgreSQL URL") from exc
+    if hostname is None:
+        raise RestoreDrillError(f"{name} must include a database host")
+    query = parse_qsl(parsed.query, keep_blank_values=True)
+    if any(key == "hostaddr" for key, _ in query):
+        raise RestoreDrillError(f"{name} must not provide an unpinned hostaddr")
+    try:
+        addresses = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
+    except OSError as exc:
+        raise RestoreDrillError(f"{name} host could not be resolved") from exc
+    resolved_addresses = [item[4][0] for item in addresses if item[4]]
+    if not resolved_addresses:
+        raise RestoreDrillError(f"{name} host has no resolved address")
+    query.append(("hostaddr", resolved_addresses[0]))
+    return urlunsplit(parsed._replace(query=urlencode(query)))
 
 
 def _scalar(
@@ -119,7 +180,7 @@ def _scalar(
 ) -> subprocess.CompletedProcess[str]:
     return _run(
         [
-            "psql",
+            _tool_path("psql"),
             "--no-psqlrc",
             "--tuples-only",
             "--no-align",
@@ -147,6 +208,11 @@ SELECT r.rolcanlogin
   AND NOT r.rolcreaterole
   AND NOT r.rolcreatedb
   AND NOT r.rolreplication
+  AND NOT r.rolinherit
+  AND NOT EXISTS (
+      SELECT 1 FROM pg_auth_members m
+      WHERE m.member = r.oid
+  )
   AND has_schema_privilege(current_user, '{schema}', 'USAGE')
   AND NOT has_schema_privilege(current_user, '{schema}', 'CREATE')
   AND NOT has_database_privilege(current_user, current_database(), 'CREATE')
@@ -162,6 +228,34 @@ SELECT r.rolcanlogin
             AND has_table_privilege(current_user, c.oid, 'UPDATE')
             AND has_table_privilege(current_user, c.oid, 'DELETE')
         )
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = '{schema}'
+        AND (c.relowner = r.oid OR pg_has_role(r.oid, c.relowner, 'member'))
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = '{schema}'
+        AND (p.proowner = r.oid OR pg_has_role(r.oid, p.proowner, 'member'))
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM pg_type t
+      JOIN pg_namespace n ON n.oid = t.typnamespace
+      WHERE n.nspname = '{schema}'
+        AND (t.typowner = r.oid OR pg_has_role(r.oid, t.typowner, 'member'))
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM pg_extension e
+      JOIN pg_namespace n ON n.oid = e.extnamespace
+      WHERE n.nspname = '{schema}'
+        AND (e.extowner = r.oid OR pg_has_role(r.oid, e.extowner, 'member'))
   )
   AND NOT EXISTS (
       SELECT 1
@@ -345,6 +439,11 @@ def _run_drill(args: argparse.Namespace) -> int:
     _secure_output_parent(output, require_root_owned=args.require_root_owned)
     if args.require_root_owned and os.environ.get("PINVI_M05_RESTORE_TEST_MODE") == "1":
         raise RestoreDrillError("restore test mode cannot produce root-owned evidence")
+    if (
+        os.environ.get("PINVI_M05_RESTORE_TEST_MODE") == "1"
+        and os.environ.get("PINVI_ENVIRONMENT") != "test"
+    ):
+        raise RestoreDrillError("restore test mode requires PINVI_ENVIRONMENT=test")
     if not _SCHEMA_RE.fullmatch(args.schema):
         raise RestoreDrillError("restore schema is invalid")
     if not _ROLE_RE.fullmatch(args.runtime_role):
@@ -353,6 +452,8 @@ def _run_drill(args: argparse.Namespace) -> int:
         raise RestoreDrillError("restore staging role is invalid")
     if args.runtime_role == args.staging_role:
         raise RestoreDrillError("restore staging and runtime roles must differ")
+    psql_tool = _tool_identity("psql")
+    _PINNED_TOOL_PATHS["psql"] = psql_tool["path"]
     source_url = _database_url(args.source_database_url_env)
     target_url = _database_url(args.staging_database_url_env)
     runtime_url = _database_url(args.runtime_database_url_env)
@@ -374,6 +475,10 @@ def _run_drill(args: argparse.Namespace) -> int:
         raise RestoreDrillError(
             "restore target database is outside the M05 disposable prefix"
         )
+    if target_identity_pre.get("schema_exists") is not False:
+        raise RestoreDrillError(
+            "restore target must be a fresh database without the app schema"
+        )
     _staging_role_check(
         target_url,
         expected_role=args.staging_role,
@@ -392,6 +497,8 @@ def _run_drill(args: argparse.Namespace) -> int:
         if script.is_symlink() or not script.is_file():
             raise RestoreDrillError("restore runner source is not canonical")
     source_revision = _source_revision(root)
+    backup_tool = _tool_identity("pg_dump")
+    restore_tool = _tool_identity("pg_restore")
 
     with tempfile.TemporaryDirectory(
         prefix="pinvi-m05-restore-", dir=output.parent
@@ -405,7 +512,9 @@ def _run_drill(args: argparse.Namespace) -> int:
                 "PINVI_BACKUP_SCHEMA": args.schema,
                 "PINVI_BACKUP_DIR": str(temporary_dir),
                 "PINVI_BACKUP_MIN_FREE_BYTES": "0",
-                "PINVI_BACKUP_DOCKER_FALLBACK": "1",
+                "PINVI_BACKUP_DOCKER_FALLBACK": "0",
+                "PINVI_BACKUP_PG_DUMP_BIN": backup_tool["path"],
+                "PINVI_BACKUP_PSQL_BIN": psql_tool["path"],
             }
         )
         backup = _run([_BASH, str(backup_script)], env=backup_env)
@@ -425,6 +534,9 @@ def _run_drill(args: argparse.Namespace) -> int:
                 "PINVI_RESTORE_SCHEMA": args.schema,
                 "PINVI_RESTORE_APP_ROLE": args.runtime_role,
                 "PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL": "precheck",
+                "PINVI_RESTORE_PG_RESTORE_BIN": restore_tool["path"],
+                "PINVI_RESTORE_PSQL_BIN": psql_tool["path"],
+                "PINVI_RESTORE_REQUIRE_FRESH_SCHEMA": "1",
             }
         )
         restore = _run([_BASH, str(restore_script), "run", str(dump)], env=restore_env)
@@ -465,6 +577,10 @@ def _run_drill(args: argparse.Namespace) -> int:
         ).encode()
         evidence = {
             "backup_runner_sha256": _sha256(backup_script.read_bytes()),
+            "backup_tool_path": backup_tool["path"],
+            "backup_tool_sha256": backup_tool["sha256"],
+            "psql_tool_path": psql_tool["path"],
+            "psql_tool_sha256": psql_tool["sha256"],
             "dump_sha256": _sha256(dump.read_bytes()),
             "execution_id": str(uuid4()),
             "no_owner_restore": True,
@@ -473,7 +589,13 @@ def _run_drill(args: argparse.Namespace) -> int:
                 "--no-owner --no-privileges"
             ),
             "restore_output_sha256": _sha256(execution_output),
+            "restore_db_runner_sha256": _sha256(
+                (root / "scripts/restore-db.sh").read_bytes()
+            ),
             "restore_runner_sha256": _sha256(restore_script.read_bytes()),
+            "m05_restore_drill_sha256": _sha256(Path(__file__).read_bytes()),
+            "restore_tool_path": restore_tool["path"],
+            "restore_tool_sha256": restore_tool["sha256"],
             "runtime_role_verified": True,
             "staging_role_verified": True,
             "runtime_role": args.runtime_role,

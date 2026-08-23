@@ -8,6 +8,7 @@ DATABASE_URL="${PINVI_RESTORE_DATABASE_URL:-${PINVI_DATABASE_URL:-}}"
 JOBS="${PINVI_RESTORE_JOBS:-2}"
 APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}"
 BACKUP_FILE="${1:-}"
+PSQL_BIN="${PINVI_RESTORE_PSQL_BIN:-psql}"
 
 if [[ -z "${BACKUP_FILE}" ]]; then
   echo "Usage: scripts/restore-db.sh /path/to/backup.dump" >&2
@@ -51,28 +52,43 @@ if [[ -f "${BACKUP_FILE}.sha256" ]]; then
   fi
 fi
 
-if ! command -v psql >/dev/null 2>&1; then
-  echo "psql not found" >&2
+if [[ "${PSQL_BIN}" != /* || ! -x "${PSQL_BIN}" ]]; then
+  echo "PINVI_RESTORE_PSQL_BIN is not an executable absolute path" >&2
   exit 127
 fi
 
-if ! command -v pg_restore >/dev/null 2>&1; then
-  echo "pg_restore not found" >&2
+if [[ -n "${PINVI_RESTORE_PG_RESTORE_BIN:-}" ]]; then
+  PG_RESTORE_BIN="${PINVI_RESTORE_PG_RESTORE_BIN}"
+else
+  if ! command -v pg_restore >/dev/null 2>&1; then
+    echo "pg_restore not found" >&2
+    exit 127
+  fi
+  PG_RESTORE_BIN="$(command -v pg_restore)"
+fi
+if [[ "${PG_RESTORE_BIN}" != /* || ! -x "${PG_RESTORE_BIN}" ]]; then
+  echo "PINVI_RESTORE_PG_RESTORE_BIN is not an executable absolute path" >&2
   exit 127
 fi
-PG_RESTORE_BIN="$(command -v pg_restore)"
 
 # Validate the destination authority before CREATE SCHEMA/pg_restore can alter it. A
 # role-split deployment must never discover a typo or privileged runtime login only
 # after `--clean` has dropped the existing schema objects.
+if [[ "${PINVI_RESTORE_REQUIRE_FRESH_SCHEMA:-0}" == "1" ]]; then
+  schema_exists="$("${PSQL_BIN}" --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT to_regnamespace('${SCHEMA}') IS NOT NULL")"
+  if [[ "${schema_exists}" != "f" ]]; then
+    echo "PINVI_RESTORE_REQUIRE_FRESH_SCHEMA requires a target without the app schema" >&2
+    exit 3
+  fi
+fi
 if [[ -n "${APP_ROLE}" ]]; then
-  runtime_role_safe="$(psql --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT r.rolcanlogin AND NOT r.rolsuper AND NOT r.rolcreaterole AND NOT r.rolcreatedb AND NOT r.rolreplication AND NOT pg_has_role(r.oid, current_user, 'member') AND r.oid <> current_user::regrole AND NOT EXISTS (SELECT 1 FROM pg_namespace n WHERE n.nspname = '${SCHEMA}' AND (n.nspowner = r.oid OR pg_has_role(r.oid, n.nspowner, 'member'))) AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = '${SCHEMA}' AND (c.relowner = r.oid OR pg_has_role(r.oid, c.relowner, 'member'))) FROM pg_roles r WHERE r.rolname = '${APP_ROLE}'")"
+  runtime_role_safe="$("${PSQL_BIN}" --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT r.rolcanlogin AND NOT r.rolsuper AND NOT r.rolcreaterole AND NOT r.rolcreatedb AND NOT r.rolreplication AND NOT pg_has_role(r.oid, current_user, 'member') AND r.oid <> current_user::regrole AND NOT EXISTS (SELECT 1 FROM pg_namespace n WHERE n.nspname = '${SCHEMA}' AND (n.nspowner = r.oid OR pg_has_role(r.oid, n.nspowner, 'member'))) AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = '${SCHEMA}' AND (c.relowner = r.oid OR pg_has_role(r.oid, c.relowner, 'member'))) FROM pg_roles r WHERE r.rolname = '${APP_ROLE}'")"
   if [[ "${runtime_role_safe}" != "t" ]]; then
     echo "PINVI_RESTORE_APP_ROLE must name an existing non-superuser non-owner runtime login" >&2
     exit 3
   fi
 else
-  restore_owner_safe="$(psql --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '${SCHEMA}') OR EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '${SCHEMA}' AND nspowner = current_user::regrole)")"
+  restore_owner_safe="$("${PSQL_BIN}" --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '${SCHEMA}') OR EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '${SCHEMA}' AND nspowner = current_user::regrole)")"
   if [[ "${restore_owner_safe}" != "t" ]]; then
     echo "PINVI_RESTORE_APP_ROLE is required when the restore executor does not own the target schema" >&2
     exit 3
@@ -81,7 +97,7 @@ fi
 
 # ``pg_dump --schema`` does not carry CREATE SCHEMA. Bootstrap a fresh staging
 # database explicitly; an existing schema is intentionally left untouched.
-psql \
+"${PSQL_BIN}" \
   --set=ON_ERROR_STOP=1 \
   --dbname="${DATABASE_URL}" \
   --command="CREATE SCHEMA IF NOT EXISTS \"${SCHEMA}\""
@@ -101,7 +117,7 @@ printf '%s\n' "RESTORE_COMMAND=pg_restore --clean --if-exists --exit-on-error --
 # ``--no-owner --no-privileges`` does not recreate runtime grants. The login and
 # ownership safety were already checked before any mutation above.
 if [[ -n "${APP_ROLE}" ]]; then
-  psql \
+  "${PSQL_BIN}" \
     --set=ON_ERROR_STOP=1 \
     --dbname="${DATABASE_URL}" \
     --command="GRANT USAGE ON SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\"; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\"; GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\""

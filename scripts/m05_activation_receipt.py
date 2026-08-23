@@ -33,6 +33,7 @@ _PLAYWRIGHT_IMAGE_RE = re.compile(
 )
 _REVIEW_PR_RE = re.compile(r"https://github\.com/digitie/pinvi/pull/[1-9][0-9]*\Z")
 _M05_ACTIVATION_PR_URL = "https://github.com/digitie/pinvi/pull/466"
+_M05_RESTORE_DATABASE_RE = re.compile(r"pinvi_m05_restore_[a-z0-9_]+\Z")
 _PAIR_PROVENANCE = Path(__file__).resolve().parents[1] / (
     "contracts/kor-travel-map-m05-pair-provenance-v1.json"
 )
@@ -866,12 +867,20 @@ def _restore(value: object, *, pinvi_source_revision: str) -> None:
     restore = _object(value, name="restore evidence")
     expected = {
         "backup_runner_sha256",
+        "backup_tool_path",
+        "backup_tool_sha256",
+        "psql_tool_path",
+        "psql_tool_sha256",
         "dump_sha256",
         "execution_id",
         "no_owner_restore",
         "restore_command",
         "restore_output_sha256",
+        "restore_db_runner_sha256",
         "restore_runner_sha256",
+        "m05_restore_drill_sha256",
+        "restore_tool_path",
+        "restore_tool_sha256",
         "runtime_db_identity",
         "runtime_role",
         "runtime_role_verified",
@@ -906,9 +915,14 @@ def _restore(value: object, *, pinvi_source_revision: str) -> None:
             raise ReceiptError(f"restore evidence flag is not true: {field}")
     for field in (
         "backup_runner_sha256",
+        "backup_tool_sha256",
+        "psql_tool_sha256",
         "dump_sha256",
         "restore_output_sha256",
+        "restore_db_runner_sha256",
         "restore_runner_sha256",
+        "m05_restore_drill_sha256",
+        "restore_tool_sha256",
         "runtime_db_identity_sha256",
         "source_db_identity_after_backup_sha256",
         "source_db_identity_sha256",
@@ -917,9 +931,17 @@ def _restore(value: object, *, pinvi_source_revision: str) -> None:
     ):
         _sha256(restore[field], name=f"restore.{field}")
     repository_root = Path(__file__).resolve().parents[1]
+    for field in ("backup_tool_path", "psql_tool_path", "restore_tool_path"):
+        tool_path = _string(restore[field], name=f"restore.{field}")
+        if not tool_path.startswith("/") or any(
+            character.isspace() for character in tool_path
+        ):
+            raise ReceiptError(f"restore tool path is invalid: {field}")
     for evidence_field, script_path in (
         ("backup_runner_sha256", repository_root / "scripts/backup-db.sh"),
+        ("restore_db_runner_sha256", repository_root / "scripts/restore-db.sh"),
         ("restore_runner_sha256", repository_root / "scripts/restore-staging-drill.sh"),
+        ("m05_restore_drill_sha256", repository_root / "scripts/m05_restore_drill.py"),
     ):
         try:
             expected_script_sha256 = hashlib.sha256(
@@ -990,6 +1012,12 @@ def _restore(value: object, *, pinvi_source_revision: str) -> None:
         or restore["target_db_identity_before_restore"]["schema_exists"] is not False
         or restore["target_db_identity"]["schema_exists"] is not True
         or restore["runtime_db_identity"]["schema_exists"] is not True
+        or _M05_RESTORE_DATABASE_RE.fullmatch(
+            restore["target_db_identity_before_restore"]["database"]
+        ) is None
+        or _M05_RESTORE_DATABASE_RE.fullmatch(
+            restore["target_db_identity"]["database"]
+        ) is None
         or restore["source_db_identity"]["database"]
         == restore["target_db_identity_before_restore"]["database"]
         or restore["source_db_identity"]["database_oid"]

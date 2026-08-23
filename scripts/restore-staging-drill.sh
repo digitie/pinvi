@@ -88,9 +88,17 @@ if [[ ! -f "${SNAPSHOT}" ]]; then
   exit 2
 fi
 
-for command_name in pg_restore psql; do
-  if ! command -v "${command_name}" >/dev/null 2>&1; then
-    phase precheck failed "${command_name} not found"
+PSQL_BIN="${PINVI_RESTORE_PSQL_BIN:-}"
+if [[ -z "${PSQL_BIN}" ]]; then
+  PSQL_BIN="$(command -v psql || true)"
+fi
+PG_RESTORE_BIN="${PINVI_RESTORE_PG_RESTORE_BIN:-}"
+if [[ -z "${PG_RESTORE_BIN}" ]]; then
+  PG_RESTORE_BIN="$(command -v pg_restore || true)"
+fi
+for tool_path in "${PG_RESTORE_BIN}" "${PSQL_BIN}"; do
+  if [[ "${tool_path}" != /* || ! -x "${tool_path}" ]]; then
+    phase precheck failed "restore tooling is not pinned"
     exit 127
   fi
 done
@@ -111,7 +119,7 @@ else
   evidence checksum missing
 fi
 
-if ! pg_restore --list "${SNAPSHOT}" >/dev/null; then
+if ! "${PG_RESTORE_BIN}" --list "${SNAPSHOT}" >/dev/null; then
   phase precheck failed "pg_restore list failed"
   exit 3
 fi
@@ -119,7 +127,7 @@ evidence pg_restore_list ok
 
 psql_scalar() {
   local sql="$1"
-  psql -v ON_ERROR_STOP=1 "${DATABASE_URL}" -tAc "${sql}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+  "${PSQL_BIN}" -v ON_ERROR_STOP=1 "${DATABASE_URL}" -tAc "${sql}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
 
 schema_oid() {
