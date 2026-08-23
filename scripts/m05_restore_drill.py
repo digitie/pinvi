@@ -579,7 +579,7 @@ def _fresh_target_check(database_url: str, *, schema: str) -> None:
 SELECT NOT EXISTS (
     SELECT 1
     FROM pg_namespace n
-    WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'public', 'x_extension')
+    WHERE n.nspname NOT IN ('pg_catalog', 'pg_toast', 'information_schema', 'public', 'x_extension')
 )
 AND NOT EXISTS (
     SELECT 1
@@ -662,7 +662,7 @@ def _recreate_disposable_target(
         f"""
 SELECT current_database() = '{sql_template}'
   AND current_user = '{sql_role}'
-  AND COALESCE(inet_server_addr()::text, '') = '{sql_hostaddr}'
+  AND COALESCE(host(inet_server_addr()), '') = '{sql_hostaddr}'
   AND inet_server_port()::text = '{expected_port}'
   AND (pg_control_system()).system_identifier::text = '{target_system_identifier}'
   AND to_regnamespace('app') IS NULL
@@ -687,7 +687,7 @@ DO $m05$
 BEGIN
   IF current_database() <> 'postgres'
      OR current_user <> '{sql_role}'
-     OR COALESCE(inet_server_addr()::text, '') <> '{sql_hostaddr}'
+     OR COALESCE(host(inet_server_addr()), '') <> '{sql_hostaddr}'
      OR inet_server_port()::text <> '{expected_port}'
      OR (pg_control_system()).system_identifier::text <> '{target_system_identifier}'
   THEN

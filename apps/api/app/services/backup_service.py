@@ -464,7 +464,7 @@ async def _database_identity(database_url: str) -> dict[str, str]:
                             current_database() AS database_name,
                             d.oid::text AS database_oid,
                             (pg_control_system()).system_identifier::text AS system_identifier,
-                            COALESCE(inet_server_addr()::text, '') AS hostaddr,
+                            COALESCE(host(inet_server_addr()), '') AS hostaddr,
                             inet_server_port()::text AS port
                         FROM pg_database d
                         WHERE d.datname = current_database()
