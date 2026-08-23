@@ -31,6 +31,10 @@ TMP_DIR=""
 LOCK_HOLDER_PID=""
 LOCK_HOLDER_BACKEND_PID=""
 LOCK_HOLDER_ACTIVE=0
+LOCK_INPUT_FD=""
+LOCK_SIGNAL_FD=""
+SQL_SEQUENCE=0
+CLEANUP_MODE=0
 WRITE_FENCE_ACTIVE=0
 PUBLIC_CONNECT_REVOKED=0
 FENCED_CONNECT_ROLES=""
@@ -179,6 +183,7 @@ fi
 TMP_DIR="$(mktemp -d)"
 cleanup() {
   set +e
+  CLEANUP_MODE=1
   local cleanup_failed=0
   if [[ "${WRITE_FENCE_ACTIVE}" == "1" ]]; then
     if ! declare -F release_write_fence >/dev/null || ! release_write_fence; then
@@ -189,6 +194,14 @@ cleanup() {
   if [[ -n "${LOCK_HOLDER_PID}" ]]; then
     kill "${LOCK_HOLDER_PID}" >/dev/null 2>&1 || true
     wait "${LOCK_HOLDER_PID}" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "${LOCK_INPUT_FD}" ]]; then
+    exec {LOCK_INPUT_FD}>&- || true
+    LOCK_INPUT_FD=""
+  fi
+  if [[ -n "${LOCK_SIGNAL_FD}" ]]; then
+    exec {LOCK_SIGNAL_FD}<&- || true
+    LOCK_SIGNAL_FD=""
   fi
   if [[ -n "${TMP_DIR}" && -d "${TMP_DIR}" ]]; then
     rm -rf "${TMP_DIR}"
@@ -230,9 +243,18 @@ SNAPSHOT="${TMP_DIR}/snapshot.dump"
 phase preparing success "snapshot verified for ${RESTORE_SCHEMA}"
 
 start_advisory_lock() {
-  local lock_sql="${TMP_DIR}/lock.sql"
+  local lock_input="${TMP_DIR}/lock.input"
   local lock_signal="${TMP_DIR}/lock.signal"
-  cat >"${lock_sql}" <<'SQL'
+  mkfifo -m 600 "${lock_input}" "${lock_signal}"
+  (
+    "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 -Atq "${DATABASE_URL}" \
+      >"${lock_signal}" 2>"${TMP_DIR}/lock.err" <"${lock_input}"
+  ) &
+  LOCK_HOLDER_PID="$!"
+  exec {LOCK_SIGNAL_FD}<"${lock_signal}"
+  exec {LOCK_INPUT_FD}>"${lock_input}"
+  cat >&"${LOCK_INPUT_FD}" <<'SQL'
+\set ON_ERROR_STOP on
 DO $m05$
 BEGIN
   IF NOT pg_try_advisory_lock(1414679892, 1213421392) THEN
@@ -241,16 +263,9 @@ BEGIN
 END
 $m05$;
 SELECT 'M05_LOCK_ACQUIRED|' || pg_backend_pid()::text;
-SELECT pg_sleep(86400);
 SQL
-  mkfifo -m 600 "${lock_signal}"
-  (
-    "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 -At "${DATABASE_URL}" \
-      -f "${lock_sql}" >"${lock_signal}" 2>"${TMP_DIR}/lock.err"
-  ) &
-  LOCK_HOLDER_PID="$!"
   local marker=""
-  while IFS= read -r marker; do
+  while IFS= read -r marker <&"${LOCK_SIGNAL_FD}"; do
     if [[ "${marker}" == M05_LOCK_ACQUIRED\|[0-9]* ]]; then
       local backend_pid="${marker#M05_LOCK_ACQUIRED|}"
       if [[ ! "${backend_pid}" =~ ^[0-9]+$ ]]; then
@@ -262,32 +277,22 @@ SQL
       phase preparing success "schema-swap advisory lock acquired for the full run"
       return 0
     fi
-  done <"${lock_signal}"
+  done
   wait "${LOCK_HOLDER_PID}" >/dev/null 2>&1 || true
   phase preparing failed "another schema-swap is running or the restore lock could not be acquired"
   exit 3
 }
 
 advisory_lock_is_alive() {
-  if [[ "${LOCK_HOLDER_ACTIVE}" != "1" ]] || ! kill -0 "${LOCK_HOLDER_PID}" >/dev/null 2>&1; then
-    return 1
-  fi
-  local lock_state
-  lock_state="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
-SELECT EXISTS (
-  SELECT 1 FROM pg_locks
-  WHERE pid = ${LOCK_HOLDER_BACKEND_PID}
-    AND locktype = 'advisory'
-    AND classid = 1414679892
-    AND objid = 1213421392
-    AND granted
-" 2>/dev/null | tr -d '[:space:]')" || return 1
-  [[ "${lock_state}" == "t" ]]
+  [[ "${LOCK_HOLDER_ACTIVE}" == "1" ]] && kill -0 "${LOCK_HOLDER_PID}" >/dev/null 2>&1
 }
 
 assert_advisory_lock_alive() {
   if ! advisory_lock_is_alive; then
     phase preparing failed "schema-swap database advisory lock was lost"
+    if [[ "${CLEANUP_MODE}" == "1" ]]; then
+      return 1
+    fi
     exit 3
   fi
 }
@@ -359,18 +364,31 @@ SQL
 execute_sql_file() {
   local sql_file="$1"
   local phase_name="$2"
-  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${sql_file}" >/dev/null &
-  local sql_pid="$!"
-  while kill -0 "${sql_pid}" >/dev/null 2>&1; do
-    if ! advisory_lock_is_alive; then
-      kill "${sql_pid}" >/dev/null 2>&1 || true
-      wait "${sql_pid}" >/dev/null 2>&1 || true
-      phase "${phase_name}" failed "schema-swap advisory lock was lost during SQL execution"
+  if ! advisory_lock_is_alive; then
+    phase "${phase_name}" failed "schema-swap database advisory lock was lost before SQL dispatch"
+    if [[ "${CLEANUP_MODE}" == "1" ]]; then
+      return 1
+    fi
+    exit 3
+  fi
+  local command_id=$((SQL_SEQUENCE + 1))
+  SQL_SEQUENCE="${command_id}"
+  cat -- "${sql_file}" >&"${LOCK_INPUT_FD}"
+  printf "\nSELECT 'M05_SQL_DONE|%s';\n" "${command_id}" >&"${LOCK_INPUT_FD}"
+  local marker=""
+  while true; do
+    if IFS= read -r -t 1 marker <&"${LOCK_SIGNAL_FD}"; then
+      if [[ "${marker}" == "M05_SQL_DONE|${command_id}" ]]; then
+        return 0
+      fi
+    elif ! kill -0 "${LOCK_HOLDER_PID}" >/dev/null 2>&1; then
+      phase "${phase_name}" failed "schema-swap lock session ended during SQL execution"
+      if [[ "${CLEANUP_MODE}" == "1" ]]; then
+        return 1
+      fi
       exit 3
     fi
-    sleep 0.1
   done
-  wait "${sql_pid}"
 }
 
 advisory_lock_sql_guard() {
@@ -527,7 +545,7 @@ FROM pg_roles login
 JOIN role_closure closure ON closure.login_oid = login.oid
 JOIN pg_roles effective ON effective.oid = closure.role_oid
 WHERE login.rolcanlogin
-  AND login.rolname <> current_user
+  AND has_database_privilege(login.rolname, current_database(), 'CONNECT')
   AND (
     effective.rolsuper
     OR effective.rolbypassrls
@@ -628,7 +646,20 @@ WHERE roles.rolsuper
    OR roles.rolcreatedb
    OR roles.rolreplication
    OR roles.rolbypassrls
-   OR db.datdba = roles.oid
+    OR db.datdba = roles.oid
+   OR EXISTS (
+     SELECT 1
+     FROM pg_namespace n
+     WHERE n.nspname IN ('${SOURCE_SCHEMA}', '${RESTORE_SCHEMA}')
+       AND n.nspowner = roles.oid
+   )
+   OR EXISTS (
+     SELECT 1
+     FROM pg_class c
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname IN ('${SOURCE_SCHEMA}', '${RESTORE_SCHEMA}')
+       AND c.relowner = roles.oid
+   )
 " | tr -d '[:space:]')"
   if [[ -n "${unsafe_roles}" ]]; then
     phase draining failed "database write fence cannot contain privileged writer roles: ${unsafe_roles}"
@@ -672,32 +703,121 @@ SELECT EXISTS (
 }
 
 wait_for_database_quiescence() {
-  local attempts=0 active
-  while (( attempts < 50 )); do
-    assert_advisory_lock_alive
-    "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
-SELECT pg_terminate_backend(pid)
-FROM pg_stat_activity
-WHERE datname = current_database()
-  AND pid <> pg_backend_pid()
-  AND pid <> ${LOCK_HOLDER_BACKEND_PID}
-" >/dev/null
-    active="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
-SELECT count(*)::text
-FROM pg_stat_activity
-WHERE datname = current_database()
-  AND pid <> pg_backend_pid()
-  AND pid <> ${LOCK_HOLDER_BACKEND_PID}
-  AND (xact_start IS NOT NULL OR state <> 'idle')
-" | tr -d '[:space:]')"
-    if [[ "${active}" == "0" ]]; then
-      return 0
-    fi
-    attempts=$((attempts + 1))
-    sleep 0.1
-  done
-  phase draining failed "database write fence could not drain active transactions"
-  exit 3
+  local sql_file="${TMP_DIR}/quiescence.sql"
+  cat >"${sql_file}" <<'SQL'
+DO $m05$
+DECLARE
+  attempts integer := 0;
+  active_count bigint;
+BEGIN
+  LOOP
+    PERFORM pg_terminate_backend(activity.pid)
+    FROM pg_stat_activity activity
+    WHERE activity.datname = current_database()
+      AND activity.pid <> pg_backend_pid();
+    SELECT count(*)
+      INTO active_count
+    FROM pg_stat_activity activity
+    WHERE activity.datname = current_database()
+      AND activity.pid <> pg_backend_pid()
+      AND (activity.xact_start IS NOT NULL OR activity.state <> 'idle');
+    EXIT WHEN active_count = 0;
+    attempts := attempts + 1;
+    IF attempts >= 50 THEN
+      RAISE EXCEPTION 'database write fence could not drain active transactions';
+    END IF;
+    PERFORM pg_sleep(0.1);
+  END LOOP;
+END
+$m05$;
+SQL
+  execute_sql_file "${sql_file}" draining
+}
+
+assert_no_connectable_writer_roles() {
+  local sql_file="${TMP_DIR}/writer-fence-check.sql"
+  cat >"${sql_file}" <<SQL
+DO \$m05\$
+DECLARE
+  writer_names text;
+BEGIN
+  WITH RECURSIVE role_closure(login_oid, role_oid) AS (
+    SELECT r.oid, r.oid
+    FROM pg_roles r
+    WHERE r.rolcanlogin
+    UNION
+    SELECT rc.login_oid, membership.roleid
+    FROM role_closure rc
+    JOIN pg_auth_members membership ON membership.member = rc.role_oid
+  )
+  SELECT COALESCE(string_agg(DISTINCT login.rolname, ',' ORDER BY login.rolname), '')
+    INTO writer_names
+  FROM pg_roles login
+  JOIN role_closure closure ON closure.login_oid = login.oid
+  JOIN pg_roles effective ON effective.oid = closure.role_oid
+  WHERE login.rolcanlogin
+    AND has_database_privilege(login.rolname, current_database(), 'CONNECT')
+    AND (
+      effective.rolsuper
+      OR effective.rolbypassrls
+      OR effective.rolcreaterole
+      OR effective.rolcreatedb
+      OR effective.rolreplication
+      OR (to_regnamespace('${SOURCE_SCHEMA}') IS NOT NULL AND has_schema_privilege(effective.rolname, '${SOURCE_SCHEMA}', 'CREATE'))
+      OR (to_regnamespace('${RESTORE_SCHEMA}') IS NOT NULL AND has_schema_privilege(effective.rolname, '${RESTORE_SCHEMA}', 'CREATE'))
+      OR EXISTS (
+        SELECT 1
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname IN ('${SOURCE_SCHEMA}', '${RESTORE_SCHEMA}')
+          AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+          AND (
+            c.relowner = effective.oid
+            OR pg_has_role(effective.oid, c.relowner, 'member')
+            OR has_table_privilege(effective.rolname, c.oid, 'INSERT')
+            OR has_table_privilege(effective.rolname, c.oid, 'UPDATE')
+            OR has_table_privilege(effective.rolname, c.oid, 'DELETE')
+            OR has_table_privilege(effective.rolname, c.oid, 'TRUNCATE')
+            OR has_table_privilege(effective.rolname, c.oid, 'REFERENCES')
+            OR has_table_privilege(effective.rolname, c.oid, 'TRIGGER')
+          )
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname IN ('${SOURCE_SCHEMA}', '${RESTORE_SCHEMA}')
+          AND c.relkind = 'S'
+          AND (
+            c.relowner = effective.oid
+            OR pg_has_role(effective.oid, c.relowner, 'member')
+            OR has_sequence_privilege(effective.rolname, c.oid, 'USAGE')
+            OR has_sequence_privilege(effective.rolname, c.oid, 'SELECT')
+            OR has_sequence_privilege(effective.rolname, c.oid, 'UPDATE')
+          )
+      )
+    );
+  IF writer_names <> '' THEN
+    RAISE EXCEPTION 'database write fence found connectable writers: %', writer_names;
+  END IF;
+END
+\$m05\$;
+SQL
+  execute_sql_file "${sql_file}" draining
+}
+
+assert_restored_schema() {
+  local sql_file="${TMP_DIR}/restored-schema-check.sql"
+  cat >"${sql_file}" <<SQL
+DO \$m05\$
+BEGIN
+  IF to_regclass('${RESTORE_SCHEMA}.users') IS NULL THEN
+    RAISE EXCEPTION 'restored schema is missing users table';
+  END IF;
+END
+\$m05\$;
+SQL
+  execute_sql_file "${sql_file}" validating
 }
 
 assert_configured_roles_safe() {
@@ -824,16 +944,11 @@ BEGIN
 END
 \$m05\$;
 $(public_connect_sql)
-COMMIT;
+  COMMIT;
 SQL
   execute_sql_file "${fence_sql}" draining
-  assert_advisory_lock_alive
   wait_for_database_quiescence
-  writer_logins="$(writer_login_roles)"
-  if [[ -n "${writer_logins}" ]]; then
-    phase draining failed "database write fence found unfenced login writers: ${writer_logins}"
-    exit 3
-  fi
+  assert_no_connectable_writer_roles
   phase draining success "database write fence revoked all non-owner runtime writes"
 }
 
@@ -841,6 +956,9 @@ release_write_fence() {
   local roles_sql
   roles_sql="$(write_roles_sql)"
   local fence_sql="${TMP_DIR}/release-fence.sql"
+  if ! assert_advisory_lock_alive; then
+    return 1
+  fi
   cat >"${fence_sql}" <<SQL
 BEGIN;
 $(advisory_lock_sql_guard)
@@ -887,7 +1005,9 @@ END
 \$m05\$;
 COMMIT;
 SQL
-  execute_sql_file "${fence_sql}" draining
+  if ! execute_sql_file "${fence_sql}" draining; then
+    return 1
+  fi
   WRITE_FENCE_ACTIVE=0
 }
 
@@ -926,11 +1046,7 @@ run_guarded_file "${TMP_DIR}/data-remapped.sql"
 phase restoring success "restored into ${RESTORE_SCHEMA}"
 
 phase validating running "validating restored schema"
-users_exists="$("${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -tAc "SELECT to_regclass('${RESTORE_SCHEMA}.users') IS NOT NULL")"
-if [[ "${users_exists}" != "t" ]]; then
-  phase validating failed "restored schema is missing users table"
-  exit 3
-fi
+assert_restored_schema
 phase validating success "restored schema passed basic checks"
 
 phase draining running "write drain"

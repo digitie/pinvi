@@ -8,9 +8,11 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+import http.client
 import json
 import os
 import re
+import socket
 import stat
 import time
 from functools import lru_cache
@@ -22,7 +24,14 @@ from uuid import UUID
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from pydantic import Field, SecretStr, ValidationError, field_validator, model_validator
+from pydantic import (
+    Field,
+    PrivateAttr,
+    SecretStr,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PinviEnvironment = Literal["development", "test", "smoke", "staging", "production"]
@@ -93,6 +102,136 @@ def _runtime_container_id() -> str | None:
         if matches:
             return cast(str, matches[-1])
     return None
+
+
+def _m05_docker_inspect(
+    socket_path: str, *, container_id: str, timeout_seconds: float
+) -> dict[str, object]:
+    """Docker Engine의 local Unix socket에서 container metadata를 직접 읽는다."""
+
+    path = Path(socket_path)
+    if (
+        not path.is_absolute()
+        or path.is_symlink()
+        or not path.is_socket()
+        or not re.fullmatch(r"[0-9a-f]{64}", container_id)
+    ):
+        raise RuntimeError("M05 runtime Docker identity input is invalid")
+    try:
+        socket_metadata = path.stat()
+    except OSError as exc:
+        raise RuntimeError("M05 runtime Docker socket could not be inspected") from exc
+    if socket_metadata.st_uid != 0 or stat.S_IMODE(socket_metadata.st_mode) & 0o002:
+        raise RuntimeError("M05 runtime Docker socket is not trusted")
+    connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    connection.settimeout(timeout_seconds)
+    try:
+        connection.connect(str(path))
+        connection.sendall(
+            (
+                f"GET /containers/{container_id}/json HTTP/1.1\r\n"
+                "Host: docker\r\n"
+                "Connection: close\r\n\r\n"
+            ).encode("ascii")
+        )
+        request = http.client.HTTPResponse(connection)
+        request.begin()
+        if request.status != 200:
+            raise RuntimeError("M05 runtime Docker inspect returned a non-success status")
+        raw = request.read(4 * 1024 * 1024 + 1)
+        if len(raw) > 4 * 1024 * 1024:
+            raise RuntimeError("M05 runtime Docker inspect response is too large")
+    except (OSError, http.client.HTTPException) as exc:
+        raise RuntimeError("M05 runtime Docker identity could not be inspected") from exc
+    finally:
+        connection.close()
+    try:
+        value = json.loads(raw, object_pairs_hook=_reject_duplicate_json_keys)
+    except (UnicodeDecodeError, json.JSONDecodeError, _DuplicateJsonKeyError) as exc:
+        raise RuntimeError("M05 runtime Docker inspect response is invalid") from exc
+    if not isinstance(value, dict):
+        raise RuntimeError("M05 runtime Docker inspect response is not an object")
+    return cast(dict[str, object], value)
+
+
+def _validate_m05_runtime_dependencies_live(
+    *,
+    dependencies: dict[str, object],
+    endpoints: dict[str, object],
+    socket_path: str,
+    timeout_seconds: float,
+    environment: str,
+) -> None:
+    """서명된 snapshot의 여섯 dependency를 startup 시점의 Docker 상태와 대조한다."""
+
+    endpoint_ports: dict[str, tuple[int, int]] = {
+        "map_admin": (13701, 12701),
+        "pinvi_api": (8000, 12801),
+        "pinvi_web": (3000, 12805),
+    }
+    for name, raw_dependency in dependencies.items():
+        if not isinstance(raw_dependency, dict):
+            raise RuntimeError(f"M05 runtime dependency is not an object: {name}")
+        container_id = raw_dependency.get("container_id")
+        digest = raw_dependency.get("digest")
+        source_revision = raw_dependency.get("source_revision")
+        started_at = raw_dependency.get("started_at")
+        if not all(isinstance(value, str) for value in (container_id, digest, source_revision, started_at)):
+            raise RuntimeError(f"M05 runtime dependency fields are invalid: {name}")
+        live = _m05_docker_inspect(
+            socket_path,
+            container_id=cast(str, container_id),
+            timeout_seconds=timeout_seconds,
+        )
+        live_id = live.get("Id")
+        live_image = live.get("Image")
+        state = live.get("State")
+        config = live.get("Config")
+        if not isinstance(state, dict) or state.get("Running") is not True:
+            raise RuntimeError(f"M05 runtime dependency is not running: {name}")
+        if (
+            live_id != container_id
+            or live_image != digest
+            or state.get("StartedAt") != started_at
+        ):
+            raise RuntimeError(f"M05 runtime dependency identity drifted: {name}")
+        if not isinstance(config, dict) or not isinstance(config.get("Labels"), dict):
+            raise RuntimeError(f"M05 runtime dependency labels are missing: {name}")
+        labels = cast(dict[str, object], config["Labels"])
+        if (
+            labels.get("io.pinvi.build.environment") != environment
+            or labels.get("org.opencontainers.image.revision") != source_revision
+        ):
+            raise RuntimeError(f"M05 runtime dependency labels drifted: {name}")
+        endpoint_binding = endpoint_ports.get(name)
+        if endpoint_binding is None:
+            continue
+        raw_endpoint = endpoints.get(name)
+        if not isinstance(raw_endpoint, str):
+            raise RuntimeError(f"M05 runtime endpoint is missing: {name}")
+        parsed_endpoint = urlsplit(raw_endpoint)
+        if (
+            parsed_endpoint.scheme != "http"
+            or parsed_endpoint.hostname != "127.0.0.1"
+            or parsed_endpoint.port != endpoint_binding[1]
+            or parsed_endpoint.path not in {"", "/"}
+            or parsed_endpoint.query
+            or parsed_endpoint.fragment
+        ):
+            raise RuntimeError(f"M05 runtime endpoint is not canonical: {name}")
+        network = live.get("NetworkSettings")
+        ports = network.get("Ports") if isinstance(network, dict) else None
+        bindings = ports.get(f"{endpoint_binding[0]}/tcp") if isinstance(ports, dict) else None
+        if (
+            not isinstance(bindings, list)
+            or not any(
+                isinstance(binding, dict)
+                and binding.get("HostIp") == "127.0.0.1"
+                and str(binding.get("HostPort")) == str(endpoint_binding[1])
+                for binding in bindings
+            )
+        ):
+            raise RuntimeError(f"M05 runtime endpoint binding drifted: {name}")
 
 
 def _raise_redacted_settings_error(message: str) -> NoReturn:
@@ -438,6 +577,9 @@ class Settings(BaseSettings):
         extra="ignore",
         hide_input_in_errors=True,
     )
+
+    _m05_runtime_dependencies: dict[str, object] = PrivateAttr(default_factory=dict)
+    _m05_runtime_endpoints: dict[str, object] = PrivateAttr(default_factory=dict)
 
     def __init__(self, **data: Any) -> None:
         """설정 검증 오류의 input 필드에서 SecretStr 원문을 제거한다."""
@@ -1789,11 +1931,43 @@ class Settings(BaseSettings):
                 _raise_redacted_settings_error(
                     f"M05 runtime attestation dependency is not bound: {name}"
                 )
+        try:
+            _validate_m05_runtime_dependencies_live(
+                dependencies=cast(dict[str, object], dependencies),
+                endpoints=cast(dict[str, object], endpoints),
+                socket_path=self.pinvi_docker_socket_path,
+                timeout_seconds=self.pinvi_docker_status_timeout_seconds,
+                environment=self.pinvi_environment,
+            )
+        except RuntimeError as exc:
+            _raise_redacted_settings_error(
+                f"M05 runtime attestation does not match live dependencies: {exc}"
+            )
+        self._m05_runtime_dependencies = cast(dict[str, object], dependencies)
+        self._m05_runtime_endpoints = cast(dict[str, object], endpoints)
         runtime_container_id = _runtime_container_id()
         if runtime_container_id != dependencies["pinvi_api"]["container_id"]:
             _raise_redacted_settings_error(
                 "M05 runtime attestation API container ID does not match the running container"
             )
+
+    def validate_m05_runtime_dependencies_live(self) -> None:
+        """M05 worker가 dependency container 교체를 감지할 때 재검증한다."""
+
+        if self.pinvi_environment not in {"staging", "production"}:
+            return
+        if not self._m05_runtime_dependencies or not self._m05_runtime_endpoints:
+            raise RuntimeError("M05 runtime dependency snapshot is not loaded")
+        try:
+            _validate_m05_runtime_dependencies_live(
+                dependencies=self._m05_runtime_dependencies,
+                endpoints=self._m05_runtime_endpoints,
+                socket_path=self.pinvi_docker_socket_path,
+                timeout_seconds=self.pinvi_docker_status_timeout_seconds,
+                environment=self.pinvi_environment,
+            )
+        except RuntimeError as exc:
+            raise RuntimeError("M05 runtime dependency drift detected") from exc
 
     def _validate_m05_activation_ledger(
         self, payload: dict[str, object], receipt_secret: SecretStr

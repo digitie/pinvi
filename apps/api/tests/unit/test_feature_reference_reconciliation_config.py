@@ -64,6 +64,11 @@ def _use_test_activation_trust_anchor(monkeypatch: pytest.MonkeyPatch) -> None:
         TEST_TRUST_ANCHOR_SHA256,
     )
     monkeypatch.setattr(config_module, "_runtime_container_id", lambda: "d" * 64)
+    monkeypatch.setattr(
+        config_module,
+        "_validate_m05_runtime_dependencies_live",
+        lambda **_kwargs: None,
+    )
 
 
 def _settings(**overrides: object) -> Settings:

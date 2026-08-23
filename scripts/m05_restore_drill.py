@@ -333,22 +333,17 @@ def _require_true(result: subprocess.CompletedProcess[str], *, name: str) -> Non
         raise RestoreDrillError(f"restore verification failed: {name}")
 
 
-def _runtime_role_check(database_url: str, *, schema: str, expected_role: str) -> None:
+def _runtime_role_check(
+    database_url: str,
+    *,
+    schema: str,
+    expected_role: str,
+    require_schema_privileges: bool = True,
+) -> None:
     if not _ROLE_RE.fullmatch(expected_role):
         raise RestoreDrillError("restore runtime role is invalid")
-    sql = f"""
-SELECT r.rolcanlogin
-  AND current_user = '{expected_role}'
-  AND NOT r.rolsuper
-  AND NOT r.rolcreaterole
-  AND NOT r.rolcreatedb
-  AND NOT r.rolreplication
-  AND NOT r.rolbypassrls
-  AND NOT r.rolinherit
-  AND NOT EXISTS (
-      SELECT 1 FROM pg_auth_members m
-      WHERE m.member = r.oid
-  )
+    if require_schema_privileges:
+        schema_checks = f"""
   AND has_schema_privilege(current_user, '{schema}', 'USAGE')
   AND NOT has_schema_privilege(current_user, '{schema}', 'CREATE')
   AND NOT has_schema_privilege(current_user, 'x_extension', 'CREATE')
@@ -410,7 +405,26 @@ SELECT r.rolcanlogin
       SELECT 1 FROM pg_namespace n
       WHERE n.nspname = '{schema}'
         AND (n.nspowner = r.oid OR pg_has_role(r.oid, n.nspowner, 'member'))
+  )"""
+    else:
+        schema_checks = f"""
+  AND NOT EXISTS (
+      SELECT 1 FROM pg_namespace n WHERE n.nspname = '{schema}'
+  )"""
+    sql = f"""
+SELECT r.rolcanlogin
+  AND current_user = '{expected_role}'
+  AND NOT r.rolsuper
+  AND NOT r.rolcreaterole
+  AND NOT r.rolcreatedb
+  AND NOT r.rolreplication
+  AND NOT r.rolbypassrls
+  AND NOT r.rolinherit
+  AND NOT EXISTS (
+      SELECT 1 FROM pg_auth_members m
+      WHERE m.member = r.oid
   )
+{schema_checks}
 FROM pg_roles r
 WHERE r.rolname = current_user
 """.strip()
@@ -774,6 +788,7 @@ def _run_drill(args: argparse.Namespace) -> int:
         runtime_url,
         schema=args.schema,
         expected_role=args.runtime_role,
+        require_schema_privileges=False,
     )
 
     root = Path(__file__).resolve().parents[1]

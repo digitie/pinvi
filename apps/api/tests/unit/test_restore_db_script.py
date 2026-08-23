@@ -75,6 +75,8 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
     assert "FROM pg_roles" in calls[0]
     assert "n.nspowner = r.oid" in calls[0]
     assert "pg_has_role(r.oid, n.nspowner, 'member')" in calls[0]
+    assert "NOT r.rolinherit" in calls[0]
+    assert "FROM pg_auth_members m WHERE m.member = r.oid" in calls[0]
     assert calls[1].startswith("psql:")
     assert "WITH RECURSIVE role_closure" in calls[1]
     assert calls[2].startswith("psql:")
@@ -140,4 +142,6 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
     assert "FROM pg_roles" in calls[0]
     assert "n.nspowner = r.oid" in calls[0]
     assert "pg_has_role(r.oid, n.nspowner, 'member')" in calls[0]
+    assert "NOT r.rolinherit" in calls[0]
+    assert "FROM pg_auth_members m WHERE m.member = r.oid" in calls[0]
     assert "WITH RECURSIVE role_closure" in calls[1]

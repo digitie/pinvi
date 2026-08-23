@@ -30,7 +30,13 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import HTTPCookieProcessor, HTTPRedirectHandler, Request, build_opener
+from urllib.request import (
+    HTTPCookieProcessor,
+    HTTPRedirectHandler,
+    ProxyHandler,
+    Request,
+    build_opener,
+)
 from uuid import UUID, uuid4
 
 from cryptography.hazmat.primitives import serialization
@@ -68,6 +74,74 @@ class _NoRedirectHandler(HTTPRedirectHandler):
 
     def redirect_request(self, *_args: Any, **_kwargs: Any) -> None:
         return None
+
+
+def _git_env() -> dict[str, str]:
+    """Git subprocess가 호출자의 config·hook·transport override를 상속하지 않게 한다."""
+
+    env = os.environ.copy()
+    for name in tuple(env):
+        if name.startswith("GIT_"):
+            env.pop(name)
+    env.update(
+        {
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "GIT_CONFIG_SYSTEM": "/dev/null",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_TERMINAL_PROMPT": "0",
+            "GIT_OPTIONAL_LOCKS": "0",
+            "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        }
+    )
+    return env
+
+
+def _docker_env() -> dict[str, str]:
+    """Docker CLI가 원격 context·TLS·대체 config를 선택하지 않게 한다."""
+
+    env = os.environ.copy()
+    for name in tuple(env):
+        if name.startswith("DOCKER_"):
+            env.pop(name)
+    env.update(
+        {
+            "DOCKER_HOST": "unix:///var/run/docker.sock",
+            "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        }
+    )
+    return env
+
+
+def _direct_opener(*handlers: Any) -> Any:
+    """환경변수 proxy와 redirect를 모두 배제한 HTTP opener를 만든다."""
+
+    return build_opener(ProxyHandler({}), *handlers, _NoRedirectHandler())
+
+
+def _assert_loopback_response(response: Any, *, expected_url: str) -> None:
+    """HTTP 응답 URL과 실제 peer가 요청한 loopback endpoint인지 확인한다."""
+
+    try:
+        parsed = urlsplit(expected_url)
+        host = parsed.hostname
+    except ValueError as exc:
+        raise AttestationError(f"live HTTP URL is invalid: {expected_url}") from exc
+    if parsed.scheme != "http" or host not in {"127.0.0.1", "localhost"}:
+        raise AttestationError("live HTTP probe must target a loopback HTTP endpoint")
+    if response.geturl() != expected_url:
+        raise AttestationError(f"live HTTP response origin changed: {expected_url}")
+
+    raw = getattr(getattr(response, "fp", None), "raw", None)
+    sock = getattr(raw, "_sock", None)
+    if sock is None:
+        raise AttestationError("live HTTP response peer could not be inspected")
+    try:
+        peer = sock.getpeername()
+    except OSError as exc:
+        raise AttestationError("live HTTP response peer could not be read") from exc
+    peer_host = peer[0] if isinstance(peer, tuple) and peer else peer
+    if peer_host not in {"127.0.0.1", "::1"}:
+        raise AttestationError("live HTTP response peer is not loopback")
 
 
 def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -261,12 +335,14 @@ def _assert_clean_checkout(
             check=True,
             capture_output=True,
             text=True,
+            env=_git_env(),
         ).stdout.strip()
         revision = subprocess.run(
             [_host_tool("git"), "-C", str(root), "rev-parse", "HEAD"],
             check=True,
             capture_output=True,
             text=True,
+            env=_git_env(),
         ).stdout.strip()
         status = subprocess.run(
             [
@@ -280,6 +356,7 @@ def _assert_clean_checkout(
             check=True,
             capture_output=True,
             text=True,
+            env=_git_env(),
         ).stdout
     except (OSError, subprocess.CalledProcessError) as exc:
         raise AttestationError(f"{label} git identity could not be verified") from exc
@@ -345,11 +422,12 @@ def _http_json(
     if body is not None:
         request.add_header("Content-Type", "application/json")
     try:
-        with (opener or build_opener(_NoRedirectHandler())).open(
-            request, timeout=30
-        ) as response:
+        with (opener or _direct_opener()).open(request, timeout=30) as response:
             if 300 <= response.status < 400:
                 raise AttestationError(f"live HTTP redirect is not allowed: {url}")
+            if not 200 <= response.status < 300:
+                raise AttestationError(f"live HTTP response status is not successful: {url}")
+            _assert_loopback_response(response, expected_url=url)
             raw = response.read()
     except (HTTPError, URLError, TimeoutError, OSError) as exc:
         raise AttestationError(f"live HTTP verification failed: {url}") from exc
@@ -474,7 +552,7 @@ def _pinvi_case_snapshot(
     if not email or not password:
         raise AttestationError("M05_PINVI_EMAIL and M05_PINVI_PASSWORD are required")
     cookie_jar = CookieJar()
-    opener = build_opener(HTTPCookieProcessor(cookie_jar), _NoRedirectHandler())
+    opener = _direct_opener(HTTPCookieProcessor(cookie_jar))
     login, _ = _http_json(
         _url(pinvi_api_url, "/auth/login"),
         opener=opener,
@@ -533,6 +611,7 @@ def _docker_inspect(
             check=True,
             capture_output=True,
             text=True,
+            env=_docker_env(),
         )
     except (OSError, subprocess.CalledProcessError) as exc:
         raise AttestationError(f"docker inspect failed for {container}") from exc
@@ -618,6 +697,7 @@ def _docker_image_identity(image_ref: str) -> dict[str, str]:
             check=True,
             capture_output=True,
             text=True,
+            env=_docker_env(),
         )
     except (OSError, subprocess.CalledProcessError) as exc:
         raise AttestationError("M05 Playwright runner image inspect failed") from exc
@@ -666,6 +746,7 @@ def _git_blob(source_root: Path, *, revision: str, relative_path: str) -> bytes:
             ],
             check=True,
             capture_output=True,
+            env=_git_env(),
         )
     except (OSError, subprocess.CalledProcessError) as exc:
         raise AttestationError(
@@ -1010,7 +1091,6 @@ def _runtime_snapshot(
             args.map_admin_container,
             expected_revision=pair["admin"]["source_revision"],
             expected_environment=args.scope,
-            require_environment_label=False,
             expected_image_digest=pair["runtime_image_digests"]["admin"],
             endpoint_url=args.map_admin_url,
             endpoint_container_port=13701,
@@ -1019,14 +1099,12 @@ def _runtime_snapshot(
             args.map_api_container,
             expected_revision=pair["admin"]["source_revision"],
             expected_environment=args.scope,
-            require_environment_label=False,
             expected_image_digest=pair["runtime_image_digests"]["api"],
         ),
         "map_frontend": _docker_inspect(
             args.map_frontend_container,
             expected_revision=pair["admin"]["source_revision"],
             expected_environment=args.scope,
-            require_environment_label=False,
             expected_image_digest=pair["runtime_image_digests"]["frontend"],
         ),
         "pinvi_api": _docker_inspect(
@@ -1152,7 +1230,16 @@ def _live(args: argparse.Namespace) -> int:
     if marker_path.is_symlink() or marker_path.exists():
         raise AttestationError("UI evidence marker must not pre-exist the pinned run")
     child_env = os.environ.copy()
+    for name in tuple(child_env):
+        if name.startswith(("GIT_", "DOCKER_")) or name.lower() in {
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+            "no_proxy",
+        }:
+            child_env.pop(name)
     child_env["PATH"] = "/usr/local/bin:/usr/bin:/bin"
+    child_env["DOCKER_HOST"] = "unix:///var/run/docker.sock"
     child_env["PINVI_M05_UI_EVIDENCE_DIR"] = str(evidence_dir)
     child_env["PINVI_M05_LIVE_EVENT_ID"] = event_id
     child_env["PINVI_M05_UI_VERIFICATION_ID"] = verification_id

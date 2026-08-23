@@ -218,6 +218,12 @@ services:
         source: ${PINVI_M05_RUNTIME_ATTESTATION_HOST_PATH:-/tmp/pinvi-m05-runtime-attestation.json}
         target: ${PINVI_M05_RUNTIME_ATTESTATION_PATH:-/run/pinvi/m05/runtime-attestation.json}
         read_only: true
+      # M05 활성화 시 API startup이 여섯 dependency의 실제 container ID/digest/label과
+      # signed runtime attestation을 대조한다. 기본 개발 경로도 local Docker socket만 허용한다.
+      - type: bind
+        source: ${PINVI_DOCKER_SOCKET_HOST_PATH:-/var/run/docker.sock}
+        target: ${PINVI_DOCKER_SOCKET_PATH:-/var/run/docker.sock}
+        read_only: true
     ports:
       - "127.0.0.1:${PINVI_API_PORT:-12801}:8000"
 

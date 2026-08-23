@@ -86,6 +86,16 @@ async def _worker_loop(
 ) -> None:
     while True:
         try:
+            validate_runtime = getattr(config, "validate_m05_runtime_dependencies_live", None)
+            if callable(validate_runtime):
+                validate_runtime()
+        except asyncio.CancelledError:
+            raise
+        except RuntimeError:
+            on_permanent_fault("map_pairing_fault")
+            logger.critical("M05 runtime dependency identity drifted; worker stopped")
+            return
+        try:
             result = await consume_feature_reference_reconciliation_once(
                 session_factory,
                 read_client=read_client,
