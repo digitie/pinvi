@@ -137,7 +137,9 @@ def _production_settings(**overrides: object) -> Settings:
                 encoding="utf-8",
             )
             durable_history_path.chmod(0o600)
-            durable_anchor_path = Path(ledger_dir.name) / "activation-durable-anchor.jsonl"
+            anchor_dir = Path(ledger_dir.name) / "anchor"
+            anchor_dir.mkdir(mode=0o700)
+            durable_anchor_path = anchor_dir / "activation-durable-anchor.jsonl"
             durable_anchor_path.write_text(
                 json.dumps(durable_history, separators=(",", ":")) + "\n",
                 encoding="utf-8",

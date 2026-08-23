@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -16,6 +17,7 @@ from app.services.backup_service import (
     BackupDiskGuardError,
     BackupServiceError,
     BackupSnapshotNotFoundError,
+    BackupSnapshotUnverifiedError,
     create_backup_snapshot,
     list_backup_snapshots,
     restore_backup_hotswap,
@@ -37,6 +39,7 @@ def _backup_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "pinvi_restore_hotswap_execute", False)
     monkeypatch.setattr(settings, "pinvi_restore_drain_command", "")
     monkeypatch.setattr(settings, "pinvi_restore_allow_no_drain", False)
+    monkeypatch.setattr(settings, "pinvi_restore_drain_verified", False)
     monkeypatch.setattr(settings, "pinvi_restore_app_role", "")
 
     @asynccontextmanager
@@ -195,6 +198,9 @@ async def test_restore_backup_hotswap_runs_script_and_parses_phases(
     await backup_dir.mkdir(parents=True)
     snapshot = backup_dir / "pinvi-app-restore.dump"
     await snapshot.write_text("dump", encoding="utf-8")
+    await (backup_dir / "pinvi-app-restore.dump.sha256").write_text(
+        f"{hashlib.sha256(b'dump').hexdigest()}\n", encoding="utf-8"
+    )
     script = tmp_path / "restore-hotswap.sh"
     _write_script(
         script,
@@ -225,6 +231,20 @@ printf 'RESTORE_PHASE=switching:success:switched %s\\n' "$4"
 
 
 @pytest.mark.asyncio
+async def test_restore_backup_hotswap_rejects_snapshot_without_verified_checksum() -> None:
+    backup_dir = anyio.Path(settings.pinvi_backup_dir)
+    await backup_dir.mkdir(parents=True)
+    snapshot = backup_dir / "pinvi-app-unverified.dump"
+    await snapshot.write_text("dump", encoding="utf-8")
+
+    with pytest.raises(BackupSnapshotUnverifiedError):
+        await restore_backup_hotswap(
+            snapshot_id="pinvi-app-unverified",
+            access_reason="복구 훈련",
+        )
+
+
+@pytest.mark.asyncio
 async def test_restore_backup_hotswap_uses_advisory_lock(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -233,6 +253,9 @@ async def test_restore_backup_hotswap_uses_advisory_lock(
     await backup_dir.mkdir(parents=True)
     snapshot = backup_dir / "pinvi-app-lock.dump"
     await snapshot.write_text("dump", encoding="utf-8")
+    await (backup_dir / "pinvi-app-lock.dump.sha256").write_text(
+        f"{hashlib.sha256(b'dump').hexdigest()}\n", encoding="utf-8"
+    )
     script = tmp_path / "restore-hotswap.sh"
     _write_script(
         script,

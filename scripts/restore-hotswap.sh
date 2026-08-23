@@ -3,9 +3,12 @@
 
 set -euo pipefail
 
-unset PGAPPNAME PGCONNECT_TIMEOUT PGDATABASE PGHOST PGHOSTADDR PGOPTIONS PGPASSFILE \
+unset BASH_ENV CDPATH ENV GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_SSH GIT_SSH_COMMAND \
+  LD_AUDIT LD_LIBRARY_PATH LD_PRELOAD PYTHONHOME PYTHONPATH RUBYLIB \
+  PGAPPNAME PGCONNECT_TIMEOUT PGDATABASE PGHOST PGHOSTADDR PGOPTIONS PGPASSFILE \
   PGPASSWORD PGPORT PGSERVICE PGSERVICEFILE PGSSLCERT PGSSLMODE PGSSLKEY \
   PGSSLROOTCERT PGTARGETSESSIONATTRS PSQLRC
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 phase() {
   local name="$1"
@@ -74,6 +77,25 @@ verify_tool_digest() {
   fi
 }
 
+assert_trusted_tool_path() {
+  local name="$1"
+  local path="$2"
+  if [[ "${path}" != /* || ! -f "${path}" || ! -x "${path}" || -L "${path}" ]]; then
+    phase preparing failed "${name} path is not a trusted executable"
+    exit 3
+  fi
+  local resolved
+  resolved="$(realpath -e "${path}")"
+  case "${resolved}" in
+    /usr/local/bin/${name}|/usr/bin/${name}|/bin/${name}) ;;
+    /usr/lib/postgresql/[0-9]*/bin/${name}) ;;
+    *)
+      phase preparing failed "${name} path is outside the trusted tool directories"
+      exit 3
+      ;;
+  esac
+}
+
 PG_RESTORE_BIN="${PINVI_RESTORE_PG_RESTORE_BIN:-$(pinned_tool pg_restore || true)}"
 if [[ "${PG_RESTORE_BIN}" != /* || ! -x "${PG_RESTORE_BIN}" ]]; then
   phase preparing failed "pg_restore not found"
@@ -84,18 +106,23 @@ if ! command -v sha256sum >/dev/null 2>&1; then
   exit 127
 fi
 verify_tool_digest "pg_restore" "${PG_RESTORE_BIN}" "${PINVI_RESTORE_PG_RESTORE_SHA256:-}"
+if [[ "${PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST:-0}" == "1" ]]; then
+  assert_trusted_tool_path "pg_restore" "${PG_RESTORE_BIN}"
+fi
 
-if [[ -f "${SNAPSHOT}.sha256" ]]; then
-  if ! command -v sha256sum >/dev/null 2>&1; then
-    phase preparing failed "sha256sum not found"
-    exit 127
-  fi
-  expected_checksum="$(awk 'NR == 1 { print $1 }' "${SNAPSHOT}.sha256")"
-  actual_checksum="$(sha256sum "${SNAPSHOT}" | awk 'NR == 1 { print $1 }')"
-  if [[ -z "${expected_checksum}" || "${expected_checksum}" != "${actual_checksum}" ]]; then
-    phase preparing failed "snapshot checksum failed"
-    exit 3
-  fi
+if [[ ! -f "${SNAPSHOT}.sha256" ]]; then
+  phase preparing failed "snapshot checksum sidecar is required"
+  exit 3
+fi
+if ! command -v sha256sum >/dev/null 2>&1; then
+  phase preparing failed "sha256sum not found"
+  exit 127
+fi
+expected_checksum="$(awk 'NR == 1 { print $1 }' "${SNAPSHOT}.sha256")"
+actual_checksum="$(sha256sum "${SNAPSHOT}" | awk 'NR == 1 { print $1 }')"
+if [[ ! "${expected_checksum}" =~ ^[0-9a-f]{64}$ || "${expected_checksum}" != "${actual_checksum}" ]]; then
+  phase preparing failed "snapshot checksum failed"
+  exit 3
 fi
 
 "${PG_RESTORE_BIN}" --list "${SNAPSHOT}" >/dev/null
@@ -115,6 +142,11 @@ for schema_name in "${SOURCE_SCHEMA}" "${RESTORE_SCHEMA}" "${PREVIOUS_SCHEMA}"; 
     exit 2
   fi
 done
+if [[ "${SOURCE_SCHEMA}" == "${RESTORE_SCHEMA}" || "${SOURCE_SCHEMA}" == "${PREVIOUS_SCHEMA}" || \
+  "${RESTORE_SCHEMA}" == "${PREVIOUS_SCHEMA}" ]]; then
+  phase preparing failed "source, restore, and previous schemas must be distinct"
+  exit 2
+fi
 
 PSQL_BIN="${PINVI_RESTORE_PSQL_BIN:-$(pinned_tool psql || true)}"
 if [[ "${PSQL_BIN}" != /* || ! -x "${PSQL_BIN}" ]]; then
@@ -122,11 +154,21 @@ if [[ "${PSQL_BIN}" != /* || ! -x "${PSQL_BIN}" ]]; then
   exit 127
 fi
 verify_tool_digest "psql" "${PSQL_BIN}" "${PINVI_RESTORE_PSQL_SHA256:-}"
+if [[ "${PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST:-0}" == "1" ]]; then
+  assert_trusted_tool_path "psql" "${PSQL_BIN}"
+fi
 
 assert_expected_target() {
-  if [[ -z "${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" ]]; then
+  if [[ "${PINVI_RESTORE_HOTSWAP_EXECUTE:-0}" != "1" && -z "${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" ]]; then
     return 0
   fi
+  for variable in PINVI_RESTORE_EXPECTED_DATABASE_NAME PINVI_RESTORE_EXPECTED_DATABASE_OID \
+    PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER PINVI_RESTORE_EXPECTED_HOSTADDR PINVI_RESTORE_EXPECTED_PORT; do
+    if [[ -z "${!variable:-}" ]]; then
+      phase preparing failed "${variable} is required for an executing schema swap"
+      exit 3
+    fi
+  done
   local actual
   actual="$("${PSQL_BIN}" --no-psqlrc --tuples-only --no-align \
     --dbname="${DATABASE_URL}" \
@@ -149,6 +191,68 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+validate_expected_target_values() {
+  if [[ "${PINVI_RESTORE_HOTSWAP_EXECUTE:-0}" != "1" &&
+    -z "${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" ]]; then
+    return 0
+  fi
+  if [[ ! "${PINVI_RESTORE_EXPECTED_DATABASE_NAME}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ||
+    ! "${PINVI_RESTORE_EXPECTED_DATABASE_OID}" =~ ^[0-9]+$ ||
+    ! "${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER}" =~ ^[0-9]+$ ||
+    ! "${PINVI_RESTORE_EXPECTED_HOSTADDR}" =~ ^[0-9A-Fa-f:.]+$ ||
+    ! "${PINVI_RESTORE_EXPECTED_PORT}" =~ ^[0-9]+$ ]]; then
+    phase preparing failed "restore target identity contains unsafe values"
+    exit 3
+  fi
+}
+
+validate_expected_target_values
+
+write_identity_guard() {
+  cat <<SQL
+DO \$m05\$
+BEGIN
+  IF current_database() <> '${PINVI_RESTORE_EXPECTED_DATABASE_NAME}'
+     OR (SELECT oid::text FROM pg_database WHERE datname = current_database()) <> '${PINVI_RESTORE_EXPECTED_DATABASE_OID}'
+     OR (pg_control_system()).system_identifier::text <> '${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER}'
+     OR COALESCE(inet_server_addr()::text, '') <> '${PINVI_RESTORE_EXPECTED_HOSTADDR}'
+     OR inet_server_port()::text <> '${PINVI_RESTORE_EXPECTED_PORT}'
+  THEN
+    RAISE EXCEPTION 'restore target identity changed before mutation';
+  END IF;
+END
+\$m05\$;
+SQL
+}
+
+run_guarded_command() {
+  local command="$1"
+  local wrapper="${TMP_DIR}/guarded-command.sql"
+  {
+    printf 'SELECT pg_advisory_lock(1414679892, 1213421392);\n'
+    write_identity_guard
+    printf '%s;\n' "${command}"
+    printf 'SELECT pg_advisory_unlock(1414679892, 1213421392);\n'
+  } >"${wrapper}"
+  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${wrapper}" >/dev/null
+}
+
+run_guarded_file() {
+  local sql_file="$1"
+  local wrapper="${TMP_DIR}/guarded-$(basename "${sql_file}")"
+  if grep -Eq '^[[:space:]]*\\(connect|c)[[:space:]]' "${sql_file}"; then
+    phase restoring failed "restore SQL contains a connection switch"
+    exit 3
+  fi
+  {
+    printf 'SELECT pg_advisory_lock(1414679892, 1213421392);\n'
+    write_identity_guard
+    cat "${sql_file}"
+    printf '\nSELECT pg_advisory_unlock(1414679892, 1213421392);\n'
+  } >"${wrapper}"
+  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${wrapper}" >/dev/null
+}
 
 remap_sql() {
   local input="$1"
@@ -184,8 +288,7 @@ remap_sql() {
 }
 
 phase restoring running "restoring ${SOURCE_SCHEMA} into ${RESTORE_SCHEMA}"
-"${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" \
-  -c "DROP SCHEMA IF EXISTS ${RESTORE_SCHEMA} CASCADE" >/dev/null
+run_guarded_command "DROP SCHEMA IF EXISTS ${RESTORE_SCHEMA} CASCADE"
 "${PG_RESTORE_BIN}" \
   --schema="${SOURCE_SCHEMA}" \
   --schema-only \
@@ -197,7 +300,7 @@ phase restoring running "restoring ${SOURCE_SCHEMA} into ${RESTORE_SCHEMA}"
   printf 'CREATE SCHEMA IF NOT EXISTS %s;\n' "${RESTORE_SCHEMA}"
   remap_sql "${TMP_DIR}/schema.sql"
 } >"${TMP_DIR}/schema-remapped.sql"
-"${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${TMP_DIR}/schema-remapped.sql" >/dev/null
+run_guarded_file "${TMP_DIR}/schema-remapped.sql"
 
 "${PG_RESTORE_BIN}" \
   --schema="${SOURCE_SCHEMA}" \
@@ -212,7 +315,7 @@ phase restoring running "restoring ${SOURCE_SCHEMA} into ${RESTORE_SCHEMA}"
   printf 'SET session_replication_role = replica;\n'
   remap_sql "${TMP_DIR}/data.sql"
 } >"${TMP_DIR}/data-remapped.sql"
-"${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${TMP_DIR}/data-remapped.sql" >/dev/null
+run_guarded_file "${TMP_DIR}/data-remapped.sql"
 phase restoring success "restored into ${RESTORE_SCHEMA}"
 
 # pg_restore --no-privileges로 복원했으므로 GRANT가 비어 있다. 앱 role이 스키마 owner가
@@ -224,11 +327,12 @@ if [[ -n "${APP_ROLE}" ]]; then
     phase restoring failed "unsafe app role name: ${APP_ROLE}"
     exit 2
   fi
-  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" <<SQL >/dev/null
+  cat >"${TMP_DIR}/grants.sql" <<SQL
 GRANT USAGE ON SCHEMA ${RESTORE_SCHEMA} TO ${APP_ROLE};
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ${RESTORE_SCHEMA} TO ${APP_ROLE};
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA ${RESTORE_SCHEMA} TO ${APP_ROLE};
 SQL
+  run_guarded_file "${TMP_DIR}/grants.sql"
   phase restoring success "re-granted privileges to ${APP_ROLE}"
 else
   phase restoring success "PINVI_RESTORE_APP_ROLE unset; assuming single-owner role (no GRANT re-apply)"
@@ -244,24 +348,25 @@ phase validating success "restored schema passed basic checks"
 
 phase draining running "write drain"
 if [[ "${PINVI_RESTORE_API_TRIGGER:-0}" == "1" && -n "${PINVI_RESTORE_DRAIN_COMMAND:-}" ]]; then
-  phase draining failed "API-triggered restore cannot run PINVI_RESTORE_DRAIN_COMMAND; pre-drain externally and set PINVI_RESTORE_ALLOW_NO_DRAIN=1"
+  phase draining failed "API-triggered restore cannot run PINVI_RESTORE_DRAIN_COMMAND; pre-drain externally and set PINVI_RESTORE_DRAIN_VERIFIED=1"
   exit 3
 fi
 if [[ -n "${PINVI_RESTORE_DRAIN_COMMAND:-}" ]]; then
   bash -lc "${PINVI_RESTORE_DRAIN_COMMAND}"
   phase draining success "drain command completed"
-elif [[ "${PINVI_RESTORE_ALLOW_NO_DRAIN:-0}" == "1" ]]; then
-  phase draining skipped "PINVI_RESTORE_ALLOW_NO_DRAIN=1"
+elif [[ "${PINVI_RESTORE_ALLOW_NO_DRAIN:-0}" == "1" && "${PINVI_RESTORE_DRAIN_VERIFIED:-0}" == "1" ]]; then
+  phase draining skipped "external drain fence verified"
 else
-  phase draining failed "PINVI_RESTORE_DRAIN_COMMAND is required unless PINVI_RESTORE_ALLOW_NO_DRAIN=1"
+  phase draining failed "PINVI_RESTORE_DRAIN_COMMAND or PINVI_RESTORE_DRAIN_VERIFIED=1 is required"
   exit 3
 fi
 
 phase switching running "renaming schemas"
-"${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" <<SQL >/dev/null
+cat >"${TMP_DIR}/switch.sql" <<SQL
 BEGIN;
 ALTER SCHEMA ${SOURCE_SCHEMA} RENAME TO ${PREVIOUS_SCHEMA};
 ALTER SCHEMA ${RESTORE_SCHEMA} RENAME TO ${SOURCE_SCHEMA};
 COMMIT;
 SQL
+run_guarded_file "${TMP_DIR}/switch.sql"
 phase switching success "schema-swap completed"

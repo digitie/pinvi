@@ -50,6 +50,8 @@ COPY contracts/kor-travel-map-m05-pair-provenance-v1.json ./app/_contract_data/k
 COPY contracts/pinvi-m05-activation-receipt-trust-v1.json ./app/_contract_data/pinvi-m05-activation-receipt-trust-v1.json
 COPY contracts/pinvi-m05-reviewer-roster-v1.json ./app/_contract_data/pinvi-m05-reviewer-roster-v1.json
 COPY scripts/backup-db.sh ./scripts/backup-db.sh
+COPY scripts/restore-db.sh ./scripts/restore-db.sh
+COPY scripts/restore-hotswap.sh ./scripts/restore-hotswap.sh
 
 # 의존성 cache layer에서는 app source가 아직 없어 editable package mapping이 비어 있다.
 # source copy 뒤 project만 다시 설치해 console script가 작업 디렉터리에 의존하지 않게 한다.

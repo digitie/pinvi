@@ -154,7 +154,8 @@ USAGE/SELECT grant를 재적용한다. 이 role은 LOGIN이고 superuser·CREATE
 | `PINVI_RESTORE_DATABASE_URL`    | `PINVI_DATABASE_URL` | restore/swap 전용 DB URL override                    |
 | `PINVI_RESTORE_HOTSWAP_EXECUTE` | `0`                  | staging drill 후 운영 노드에서만 `1`                 |
 | `PINVI_RESTORE_DRAIN_COMMAND`   | 빈 값                | CLI 경로에서만 실행할 write drain 명령               |
-| `PINVI_RESTORE_ALLOW_NO_DRAIN`  | `0`                  | API 경로에서 외부 drain 완료 후 `1`                  |
+| `PINVI_RESTORE_ALLOW_NO_DRAIN`  | `0`                  | 외부 write fence를 확인한 경우에만 `1`                |
+| `PINVI_RESTORE_DRAIN_VERIFIED`  | `0`                  | 외부 orchestrator가 write fence를 확인했다는 명시적 증명 |
 | `PINVI_RESTORE_APP_ROLE`        | 빈 값                | swap 전 restore schema에 GRANT를 재적용할 앱 DB role |
 
 ## 4. Restore — schema-swap 핫스왑 (정상 절차, Sprint 6 T-111)
@@ -221,11 +222,13 @@ drain/read-only 전환을 수행한 뒤 API 환경을 다음처럼 둔다.
 PINVI_RESTORE_HOTSWAP_EXECUTE=1
 PINVI_RESTORE_DRAIN_COMMAND=
 PINVI_RESTORE_ALLOW_NO_DRAIN=1
+PINVI_RESTORE_DRAIN_VERIFIED=1
 PINVI_RESTORE_APP_ROLE=pinvi_app
 ```
 
 API-triggered restore 중 `PINVI_RESTORE_DRAIN_COMMAND`가 설정돼 있으면 script가
-`draining:failed`로 중단한다. CLI 경로만 drain command를 실행할 수 있다.
+`draining:failed`로 중단한다. API 경로는 외부 write fence를 완료한 뒤
+`PINVI_RESTORE_DRAIN_VERIFIED=1`을 명시해야 하며, CLI 경로만 drain command를 실행할 수 있다.
 
 schema switch의 핵심 SQL은 다음 형태다. 실제 스크립트는 DB advisory lock,
 active session 확인, grants, rollback marker를 운영 노드별로 보강할 수 있다. 기본

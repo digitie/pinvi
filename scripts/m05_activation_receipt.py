@@ -14,6 +14,8 @@ import re
 import stat
 import subprocess
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 from uuid import UUID, uuid4
@@ -37,7 +39,7 @@ _M05_RESTORE_DATABASE_RE = re.compile(r"pinvi_m05_restore_[a-z0-9_]+\Z")
 _HOST_TOOL_DIRECTORIES = (Path("/usr/bin"), Path("/bin"))
 _RESTORE_TOOL_DIRECTORIES = (Path("/usr/local/bin"), Path("/usr/bin"), Path("/bin"))
 _POSTGRES_TOOL_DIRECTORY_RE = re.compile(r"/usr/lib/postgresql/[0-9]+/bin\Z")
-_RESTORE_TOOL_NAMES = ("git", "pg_dump", "pg_restore", "psql")
+_RESTORE_TOOL_NAMES = ("bash", "git", "pg_dump", "pg_restore", "psql")
 _PAIR_PROVENANCE = Path(__file__).resolve().parents[1] / (
     "contracts/kor-travel-map-m05-pair-provenance-v1.json"
 )
@@ -369,8 +371,7 @@ def _parse_review_response(
         raise ReceiptError("review response machine-readable header is incomplete")
     if (
         _uuid(fields["agent_id"], name="review response agent_id") != agent_id
-        or _uuid(fields["reviewer_agent_id"], name="review response reviewer_agent_id")
-        != agent_id
+        or _uuid(fields["reviewer_agent_id"], name="review response reviewer_agent_id") != agent_id
         or _uuid(fields["challenge_id"], name="review response challenge_id") != challenge_id
         or _commit(fields["commit"], name="review response commit") != pinvi_source_revision
         or _commit(fields["reviewed_commit"], name="review response reviewed_commit")
@@ -492,12 +493,26 @@ def _assert_source_checkout(source_revision: str) -> None:
     """서명 대상이 clean checkout이자 원격 PR의 실제 head인지 확인한다."""
 
     root = Path(__file__).resolve().parents[1]
+    git_env = os.environ.copy()
+    git_env.update(
+        {
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "GIT_CONFIG_SYSTEM": "/dev/null",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_TERMINAL_PROMPT": "0",
+            "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        }
+    )
+    for name in tuple(git_env):
+        if name.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")):
+            git_env.pop(name, None)
     try:
         revision = subprocess.run(
             [_host_tool("git"), "-C", str(root), "rev-parse", "HEAD"],
             check=True,
             capture_output=True,
             text=True,
+            env=git_env,
         ).stdout.strip()
         status = subprocess.run(
             [
@@ -511,11 +526,29 @@ def _assert_source_checkout(source_revision: str) -> None:
             check=True,
             capture_output=True,
             text=True,
+            env=git_env,
         ).stdout
+        remote_urls = subprocess.run(
+            [
+                _host_tool("git"),
+                "-C",
+                str(root),
+                "remote",
+                "get-url",
+                "--all",
+                "origin",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=git_env,
+        ).stdout.splitlines()
     except (OSError, subprocess.CalledProcessError) as exc:
         raise ReceiptError("receipt producer source revision could not be verified") from exc
     if revision != source_revision or status:
         raise ReceiptError("receipt producer checkout must be clean at the signed revision")
+    if remote_urls != ["https://github.com/digitie/pinvi.git"]:
+        raise ReceiptError("receipt producer origin is not the canonical Pinvi remote")
     pr_match = re.fullmatch(
         r"https://github\.com/digitie/pinvi/pull/([1-9][0-9]*)", _M05_ACTIVATION_PR_URL
     )
@@ -534,6 +567,7 @@ def _assert_source_checkout(source_revision: str) -> None:
             check=True,
             capture_output=True,
             text=True,
+            env=git_env,
         ).stdout.strip()
     except (OSError, subprocess.CalledProcessError) as exc:
         raise ReceiptError("M05 activation PR head could not be verified") from exc
@@ -834,6 +868,42 @@ def _append_durable_history(
         raise ReceiptError("activation durable history update could not be verified")
 
 
+@contextmanager
+def _activation_write_lock(path: Path, *, require_root_owned: bool) -> Iterator[None]:
+    """ledger와 네 개의 monotonic sidecar 갱신을 하나의 writer critical section으로 묶는다."""
+
+    parent = path.parent
+    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if parent.is_symlink() or not parent.is_dir():
+        raise ReceiptError("activation ledger lock parent must be a regular directory")
+    parent_stat = parent.stat()
+    if stat.S_IMODE(parent_stat.st_mode) & 0o022:
+        raise ReceiptError("activation ledger lock parent must not be group/world writable")
+    if require_root_owned and parent_stat.st_uid != 0:
+        raise ReceiptError("activation ledger lock parent is not root-owned")
+    lock_path = parent / ".activation-ledger.lock"
+    flags = os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(lock_path, flags, 0o600)
+    except OSError as exc:
+        raise ReceiptError("activation ledger lock cannot be opened") from exc
+    try:
+        metadata = os.fstat(fd)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+            or (require_root_owned and metadata.st_uid != 0)
+        ):
+            raise ReceiptError("activation ledger lock permissions are invalid")
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
+
 def _write_durable_floor(path: Path, *, generation: int, require_root_owned: bool) -> None:
     if type(generation) is not int or generation < 1:
         raise ReceiptError("activation durable floor generation is invalid")
@@ -884,7 +954,7 @@ def _write_durable_floor(path: Path, *, generation: int, require_root_owned: boo
         raise ReceiptError("activation durable floor update could not be verified")
 
 
-def _ledger(args: argparse.Namespace) -> int:
+def _ledger_unlocked(args: argparse.Namespace) -> int:
     receipt_bytes = _read_secure_bytes(
         args.receipt,
         require_root_owned=args.require_root_owned,
@@ -952,19 +1022,37 @@ def _ledger(args: argparse.Namespace) -> int:
         if args.require_root_owned and ledger_stat.st_uid != 0:
             raise ReceiptError("activation ledger is not root-owned")
         records = _ledger_records(args.ledger, require_root_owned=args.require_root_owned)
-        if any(record["activation_nonce"] == nonce for record in records):
-            raise ReceiptError("activation nonce has already been recorded")
-        if records:
-            record["previous_record_sha256"] = records[-1]["record_sha256"]
-            previous_generation = records[-1]["activation_generation"]
-            if type(previous_generation) is not int or generation <= previous_generation:
-                raise ReceiptError("activation ledger generation must increase monotonically")
-        record["record_sha256"] = _ledger_record_hash(record)
-        with os.fdopen(fd, "ab") as stream:
-            fd = -1
-            stream.write(_canonical_json(record) + b"\n")
-            stream.flush()
-            os.fsync(stream.fileno())
+        existing = next(
+            (item for item in records if item["activation_nonce"] == nonce),
+            None,
+        )
+        if existing is not None:
+            if any(
+                existing[field] != record[field]
+                for field in (
+                    "activation_expires_at",
+                    "activation_generation",
+                    "activation_issued_at",
+                    "activation_nonce",
+                    "receipt_sha256",
+                    "scope",
+                    "source_revision",
+                )
+            ):
+                raise ReceiptError("activation nonce conflicts with the existing ledger record")
+            record = existing
+        else:
+            if records:
+                record["previous_record_sha256"] = records[-1]["record_sha256"]
+                previous_generation = records[-1]["activation_generation"]
+                if type(previous_generation) is not int or generation <= previous_generation:
+                    raise ReceiptError("activation ledger generation must increase monotonically")
+            record["record_sha256"] = _ledger_record_hash(record)
+            with os.fdopen(fd, "ab") as stream:
+                fd = -1
+                stream.write(_canonical_json(record) + b"\n")
+                stream.flush()
+                os.fsync(stream.fileno())
     finally:
         if fd != -1:
             fcntl.flock(fd, fcntl.LOCK_UN)
@@ -995,6 +1083,11 @@ def _ledger(args: argparse.Namespace) -> int:
     print(f"ledger_generation={generation}")
     print(f"ledger_receipt_sha256={record['receipt_sha256']}")
     return 0
+
+
+def _ledger(args: argparse.Namespace) -> int:
+    with _activation_write_lock(args.ledger, require_root_owned=args.require_root_owned):
+        return _ledger_unlocked(args)
 
 
 def _pair_provenance() -> dict[str, dict[str, str]]:
@@ -1354,12 +1447,14 @@ def _restore(
         _sha256(restore[field], name=f"restore.{field}")
     repository_root = Path(__file__).resolve().parents[1]
     tool_path_fields = {
+        "bash": "bash_tool_path",
         "git": "git_tool_path",
         "pg_dump": "backup_tool_path",
         "pg_restore": "restore_tool_path",
         "psql": "psql_tool_path",
     }
     tool_digest_fields = {
+        "bash": "bash_tool_sha256",
         "git": "git_tool_sha256",
         "pg_dump": "backup_tool_sha256",
         "pg_restore": "restore_tool_sha256",

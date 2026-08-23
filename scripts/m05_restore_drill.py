@@ -28,14 +28,13 @@ from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import uuid4
 
-_BASH = "/usr/bin/bash"
 _ROLE_RE = re.compile(r"[a-z_][a-z0-9_]{0,62}\Z")
 _SCHEMA_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 _TARGET_DATABASE_RE = re.compile(r"pinvi_m05_restore_[a-z0-9_]+\Z")
-_SAFE_PATH = "/usr/local/bin:/usr/bin:/bin"
+_SAFE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 _TOOL_TRUST_MANIFEST_ENV = "PINVI_M05_RESTORE_TOOL_TRUST_MANIFEST"
-_TRUSTED_TOOL_NAMES = ("git", "pg_dump", "pg_restore", "psql")
+_TRUSTED_TOOL_NAMES = ("bash", "git", "pg_dump", "pg_restore", "psql")
 _TRUSTED_TOOL_DIRECTORIES = (Path("/usr/local/bin"), Path("/usr/bin"), Path("/bin"))
 _POSTGRES_TOOL_DIRECTORY_RE = re.compile(r"/usr/lib/postgresql/[0-9]+/bin\Z")
 _PINNED_TOOL_PATHS: dict[str, str] = {}
@@ -50,6 +49,8 @@ def _command_env() -> dict[str, str]:
     environment = os.environ.copy()
     if environment.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
         environment["PATH"] = _SAFE_PATH
+        environment["GIT_CONFIG_NOSYSTEM"] = "1"
+        environment["GIT_TERMINAL_PROMPT"] = "0"
         for name in (
             "PINVI_BACKUP_PG_DUMP_BIN",
             "PINVI_BACKUP_DOCKER_BIN",
@@ -60,6 +61,19 @@ def _command_env() -> dict[str, str]:
             "PINVI_RESTORE_PG_RESTORE_BIN",
             "PINVI_RESTORE_PSQL_BIN",
             "PINVI_RESTORE_REQUIRE_FRESH_SCHEMA",
+            "BASH_ENV",
+            "CDPATH",
+            "ENV",
+            "GIT_CONFIG_GLOBAL",
+            "GIT_CONFIG_SYSTEM",
+            "GIT_SSH",
+            "GIT_SSH_COMMAND",
+            "LD_AUDIT",
+            "LD_LIBRARY_PATH",
+            "LD_PRELOAD",
+            "PYTHONHOME",
+            "PYTHONPATH",
+            "RUBYLIB",
             "PGAPPNAME",
             "PGCONNECT_TIMEOUT",
             "PGDATABASE",
@@ -79,6 +93,9 @@ def _command_env() -> dict[str, str]:
             "PSQLRC",
         ):
             environment.pop(name, None)
+        for name in tuple(environment):
+            if name.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")):
+                environment.pop(name, None)
     return environment
 
 
@@ -369,8 +386,14 @@ def _staging_role_check(database_url: str, *, expected_role: str, runtime_role: 
     sql = f"""
 SELECT current_user = '{expected_role}'
   AND r.rolcanlogin
+  AND NOT r.rolsuper
+  AND NOT r.rolcreaterole
   AND NOT r.rolreplication
   AND NOT r.rolbypassrls
+  AND NOT EXISTS (
+      SELECT 1 FROM pg_auth_members m
+      WHERE m.member = r.oid
+  )
 FROM pg_roles r
 WHERE r.rolname = current_user
 """.strip()
@@ -598,6 +621,15 @@ def _source_revision(root: Path) -> str:
             text=True,
             env=_command_env(),
         ).stdout
+        remote_url = subprocess.run(
+            [_tool_path("git"), "-C", str(root), "remote", "get-url", "origin"],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=_command_env(),
+        ).stdout.strip()
+        if remote_url != "https://github.com/digitie/pinvi.git":
+            raise RestoreDrillError("restore producer origin is not the canonical Pinvi remote")
         if revision != expected or status:
             raise RestoreDrillError(
                 "restore producer checkout is not a clean PINVI_SOURCE_REVISION"
@@ -632,6 +664,8 @@ def _run_drill(args: argparse.Namespace) -> int:
         raise RestoreDrillError("restore staging role is invalid")
     if args.runtime_role == args.staging_role:
         raise RestoreDrillError("restore staging and runtime roles must differ")
+    bash_tool = _tool_identity("bash")
+    _PINNED_TOOL_PATHS["bash"] = bash_tool["path"]
     psql_tool = _tool_identity("psql")
     _PINNED_TOOL_PATHS["psql"] = psql_tool["path"]
     source_url = _database_url(args.source_database_url_env)
@@ -701,7 +735,7 @@ def _run_drill(args: argparse.Namespace) -> int:
                 "PINVI_BACKUP_PSQL_BIN": psql_tool["path"],
             }
         )
-        backup = _run([_BASH, str(backup_script)], env=backup_env)
+        backup = _run([bash_tool["path"], str(backup_script)], env=backup_env)
         dump = _single_dump(temporary_dir)
         source_identity_after_backup = _identity(source_url, schema=args.schema)
         target_identity_before_restore = _identity(target_url, schema=args.schema)
@@ -744,7 +778,7 @@ def _run_drill(args: argparse.Namespace) -> int:
                     "PINVI_RESTORE_EXPECTED_PORT": str(target_identity_before_restore["port"]),
                 }
             )
-        restore = _run([_BASH, str(restore_script), "run", str(dump)], env=restore_env)
+        restore = _run([bash_tool["path"], str(restore_script), "run", str(dump)], env=restore_env)
         required_markers = [
             "DRILL_EVIDENCE=checksum=verified",
             "DRILL_EVIDENCE=pg_restore_list=ok",
@@ -785,8 +819,8 @@ def _run_drill(args: argparse.Namespace) -> int:
             "backup_runner_sha256": _sha256(backup_script.read_bytes()),
             "backup_tool_path": backup_tool["path"],
             "backup_tool_sha256": backup_tool["sha256"],
-            "bash_tool_path": _BASH,
-            "bash_tool_sha256": _sha256(Path(_BASH).read_bytes()),
+            "bash_tool_path": bash_tool["path"],
+            "bash_tool_sha256": bash_tool["sha256"],
             "environment": os.environ.get("PINVI_ENVIRONMENT", ""),
             "fresh_target_verified": True,
             "git_tool_path": _tool_path("git"),

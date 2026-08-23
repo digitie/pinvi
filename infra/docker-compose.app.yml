@@ -90,6 +90,17 @@ services:
       PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
       # non-owner application login only. Migration/restore use PINVI_MIGRATOR_DATABASE_URL.
       PINVI_DATABASE_URL: ${PINVI_DATABASE_URL:-postgresql+asyncpg://pinvi_app:pinvi_app_smoke@app-postgres:5432/pinvi}
+      PINVI_BACKUP_DIR: /var/lib/pinvi/backups
+      PINVI_BACKUP_SCRIPT_PATH: ${PINVI_BACKUP_SCRIPT_PATH:-scripts/backup-db.sh}
+      PINVI_RESTORE_SCRIPT_PATH: ${PINVI_RESTORE_SCRIPT_PATH:-scripts/restore-db.sh}
+      PINVI_RESTORE_HOTSWAP_SCRIPT_PATH: ${PINVI_RESTORE_HOTSWAP_SCRIPT_PATH:-scripts/restore-hotswap.sh}
+      PINVI_RESTORE_TIMEOUT_SECONDS: ${PINVI_RESTORE_TIMEOUT_SECONDS:-3600}
+      PINVI_RESTORE_DATABASE_URL: ${PINVI_RESTORE_DATABASE_URL:-}
+      PINVI_RESTORE_HOTSWAP_EXECUTE: ${PINVI_RESTORE_HOTSWAP_EXECUTE:-false}
+      PINVI_RESTORE_DRAIN_COMMAND: ${PINVI_RESTORE_DRAIN_COMMAND:-}
+      PINVI_RESTORE_ALLOW_NO_DRAIN: ${PINVI_RESTORE_ALLOW_NO_DRAIN:-false}
+      PINVI_RESTORE_DRAIN_VERIFIED: ${PINVI_RESTORE_DRAIN_VERIFIED:-false}
+      PINVI_RESTORE_APP_ROLE: ${PINVI_RESTORE_APP_ROLE:-}
       PINVI_JWT_SECRET_KEY: ${PINVI_JWT_SECRET_KEY:-pinvi-smoke-jwt-secret-32-bytes-minimum}
       PINVI_MCP_JWT_SECRET: ${PINVI_MCP_JWT_SECRET:-pinvi-smoke-jwt-secret-32-bytes-minimum}
       PINVI_RESEND_API_KEY: ${PINVI_RESEND_API_KEY:-}
@@ -172,6 +183,9 @@ services:
     # production/staging activation ledger는 host의 root-owned·append-only 파일을
     # API에 read-only로만 노출한다. 운영 enable 시 두 경로를 모두 명시한다.
     volumes:
+      - type: bind
+        source: ${PINVI_BACKUP_HOST_DIR:-/tmp/pinvi-backups}
+        target: /var/lib/pinvi/backups
       - type: bind
         source: ${PINVI_M05_ACTIVATION_LEDGER_HOST_PATH:-/tmp/pinvi-m05-activation-ledger.jsonl}
         target: ${PINVI_M05_ACTIVATION_LEDGER_PATH:-/run/pinvi/m05/activation-ledger.jsonl}

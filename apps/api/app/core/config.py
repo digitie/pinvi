@@ -748,6 +748,8 @@ class Settings(BaseSettings):
     pinvi_restore_hotswap_execute: bool = False
     pinvi_restore_drain_command: str = ""
     pinvi_restore_allow_no_drain: bool = False
+    # API-triggered swap은 외부 orchestrator가 write fence를 확인한 경우에만 허용한다.
+    pinvi_restore_drain_verified: bool = False
     pinvi_restore_app_role: str = ""
 
     # Feature flag
@@ -1534,6 +1536,16 @@ class Settings(BaseSettings):
         durable_floor_path = Path(self.pinvi_m05_activation_durable_floor_path)
         durable_history_path = Path(self.pinvi_m05_activation_durable_history_path)
         durable_anchor_path = Path(self.pinvi_m05_activation_durable_anchor_path)
+        try:
+            ledger_parent = ledger_path.parent.resolve(strict=True)
+            high_watermark_parent = high_watermark_path.parent.resolve(strict=True)
+            durable_floor_parent = durable_floor_path.parent.resolve(strict=True)
+            durable_history_parent = durable_history_path.parent.resolve(strict=True)
+            durable_anchor_parent = durable_anchor_path.parent.resolve(strict=True)
+        except OSError:
+            _raise_redacted_settings_error(
+                "M05 activation ledger parent directories are unreadable"
+            )
         if (
             not self.pinvi_m05_activation_ledger_path
             or ledger_path.is_symlink()
@@ -1593,8 +1605,30 @@ class Settings(BaseSettings):
             or durable_anchor_path == ledger_path
             or durable_anchor_path == high_watermark_path
             or durable_anchor_path == durable_floor_path
+            or durable_anchor_parent
+            in {
+                ledger_parent,
+                high_watermark_parent,
+                durable_floor_parent,
+                durable_history_parent,
+            }
+            or any(
+                parent.is_symlink()
+                or not parent.is_dir()
+                or stat.S_IMODE(parent.stat().st_mode) & 0o022
+                or parent.stat().st_uid != os.geteuid()
+                for parent in (
+                    ledger_path.parent,
+                    high_watermark_path.parent,
+                    durable_floor_path.parent,
+                    durable_history_path.parent,
+                    durable_anchor_path.parent,
+                )
+            )
         ):
-            _raise_redacted_settings_error("M05 activation ledger file permissions are invalid")
+            _raise_redacted_settings_error(
+                "M05 activation ledger files or durable anchor boundary are invalid"
+            )
         if not isinstance(high_watermark, dict) or set(high_watermark) != {
             "generation",
             "receipt_sha256",

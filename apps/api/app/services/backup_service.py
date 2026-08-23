@@ -55,6 +55,12 @@ class BackupSnapshotNotFoundError(BackupServiceError):
     code = "BACKUP_SNAPSHOT_NOT_FOUND"
 
 
+class BackupSnapshotUnverifiedError(BackupServiceError):
+    """checksum sidecar로 검증되지 않은 snapshot은 schema swap에 사용할 수 없음."""
+
+    code = "BACKUP_SNAPSHOT_UNVERIFIED"
+
+
 class BackupDiskGuardError(BackupServiceError):
     """backup 대상 volume 여유 공간 부족."""
 
@@ -303,6 +309,68 @@ def _restore_lock_database_url() -> str:
     return _asyncpg_database_url(database_url)
 
 
+def _pinned_postgres_tool(name: str) -> str:
+    """Return a non-symlink PostgreSQL client from an allowlisted system directory."""
+
+    directories = [Path("/usr/local/bin"), Path("/usr/bin"), Path("/bin")]
+    directories.extend(sorted(Path("/usr/lib/postgresql").glob("*/bin")))
+    for directory in directories:
+        candidate = directory / name
+        if not candidate.is_file() or candidate.is_symlink() or not os.access(candidate, os.X_OK):
+            continue
+        resolved = candidate.resolve()
+        if resolved.parent in {
+            Path("/usr/local/bin"),
+            Path("/usr/bin"),
+            Path("/bin"),
+        } or re.fullmatch(r"/usr/lib/postgresql/[0-9]+/bin", str(resolved.parent)):
+            return str(resolved)
+    raise BackupServiceError(f"pinned PostgreSQL tool is missing: {name}")
+
+
+async def _restore_target_identity() -> dict[str, str]:
+    """Capture the target identity that every hotswap mutation must re-check."""
+
+    engine = create_async_engine(_restore_lock_database_url(), poolclass=NullPool)
+    try:
+        async with engine.connect() as conn:
+            row = (
+                (
+                    await conn.execute(
+                        text(
+                            """
+                        SELECT
+                            current_database() AS database_name,
+                            d.oid::text AS database_oid,
+                            (pg_control_system()).system_identifier::text AS system_identifier,
+                            COALESCE(inet_server_addr()::text, '') AS hostaddr,
+                            inet_server_port()::text AS port
+                        FROM pg_database d
+                        WHERE d.datname = current_database()
+                        """
+                        )
+                    )
+                )
+                .mappings()
+                .one()
+            )
+    except Exception as exc:
+        raise BackupServiceError("restore target identity could not be verified") from exc
+    finally:
+        await engine.dispose()
+
+    values = {
+        "PINVI_RESTORE_EXPECTED_DATABASE_NAME": str(row["database_name"]),
+        "PINVI_RESTORE_EXPECTED_DATABASE_OID": str(row["database_oid"]),
+        "PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER": str(row["system_identifier"]),
+        "PINVI_RESTORE_EXPECTED_HOSTADDR": str(row["hostaddr"]),
+        "PINVI_RESTORE_EXPECTED_PORT": str(row["port"]),
+    }
+    if any(not value or value == "None" for value in values.values()):
+        raise BackupServiceError("restore target identity is incomplete")
+    return values
+
+
 async def restore_backup_hotswap(
     *,
     snapshot_id: str,
@@ -343,8 +411,15 @@ async def _restore_backup_hotswap_locked(
     access_reason: str,
 ) -> BackupRestoreRun:
     snapshot = get_backup_snapshot(snapshot_id=snapshot_id)
+    if snapshot.status != "verified" or snapshot.checksum_sha256 is None:
+        raise BackupSnapshotUnverifiedError(
+            "checksum sidecar로 검증되지 않은 snapshot은 복구에 사용할 수 없습니다."
+        )
     script = restore_hotswap_script_path()
-    if not script.exists():
+    canonical_script = repo_root() / "scripts" / "restore-hotswap.sh"
+    if settings.pinvi_environment in {"staging", "production"} and script != canonical_script:
+        raise BackupServiceError("운영 schema-swap script는 repository canonical 경로여야 합니다.")
+    if script.is_symlink() or not script.is_file():
         raise BackupServiceError(f"restore hotswap script not found: {script}")
 
     started_at = datetime.now(UTC)
@@ -354,7 +429,29 @@ async def _restore_backup_hotswap_locked(
     restore_schema = f"{schema}_restore_{restore_id}"
     previous_schema = f"{schema}_previous_{restore_id}"
     env = {
-        **os.environ,
+        **{
+            key: value
+            for key, value in os.environ.items()
+            if key
+            not in {
+                "BASH_ENV",
+                "CDPATH",
+                "ENV",
+                "GIT_CONFIG_GLOBAL",
+                "GIT_CONFIG_SYSTEM",
+                "GIT_SSH",
+                "GIT_SSH_COMMAND",
+                "LD_AUDIT",
+                "LD_LIBRARY_PATH",
+                "LD_PRELOAD",
+                "PINVI_RESTORE_PG_RESTORE_BIN",
+                "PINVI_RESTORE_PSQL_BIN",
+                "PYTHONHOME",
+                "PYTHONPATH",
+                "RUBYLIB",
+            }
+        },
+        "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         "PINVI_BACKUP_SCHEMA": schema,
         "PINVI_RESTORE_REASON": access_reason,
         "PINVI_RESTORE_ID": restore_id,
@@ -365,9 +462,24 @@ async def _restore_backup_hotswap_locked(
         "PINVI_RESTORE_HOTSWAP_EXECUTE": ("1" if settings.pinvi_restore_hotswap_execute else "0"),
         "PINVI_RESTORE_DRAIN_COMMAND": settings.pinvi_restore_drain_command,
         "PINVI_RESTORE_ALLOW_NO_DRAIN": ("1" if settings.pinvi_restore_allow_no_drain else "0"),
+        "PINVI_RESTORE_DRAIN_VERIFIED": ("1" if settings.pinvi_restore_drain_verified else "0"),
         "PINVI_RESTORE_APP_ROLE": settings.pinvi_restore_app_role,
         "PINVI_RESTORE_API_TRIGGER": "1",
     }
+    if settings.pinvi_restore_hotswap_execute:
+        target_identity = await _restore_target_identity()
+        env.update(target_identity)
+        pg_restore_path = _pinned_postgres_tool("pg_restore")
+        psql_path = _pinned_postgres_tool("psql")
+        env.update(
+            {
+                "PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST": "1",
+                "PINVI_RESTORE_PG_RESTORE_BIN": pg_restore_path,
+                "PINVI_RESTORE_PG_RESTORE_SHA256": _sha256_file(Path(pg_restore_path)),
+                "PINVI_RESTORE_PSQL_BIN": psql_path,
+                "PINVI_RESTORE_PSQL_SHA256": _sha256_file(Path(psql_path)),
+            }
+        )
 
     proc = await asyncio.create_subprocess_exec(
         str(script),

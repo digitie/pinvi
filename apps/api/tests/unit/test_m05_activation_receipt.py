@@ -278,7 +278,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
                 "path": str(_tool_path(name)),
                 "sha256": _tool_sha256(name),
             }
-            for name in ("git", "pg_dump", "pg_restore", "psql")
+            for name in ("bash", "git", "pg_dump", "pg_restore", "psql")
         },
         "version": 1,
     }
@@ -545,7 +545,9 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     high_watermark_path = tmp_path / "activation-high-watermark.json"
     durable_floor_path = tmp_path / "activation-durable-floor.json"
     durable_history_path = tmp_path / "activation-durable-history.jsonl"
-    durable_anchor_path = tmp_path / "activation-durable-anchor.jsonl"
+    anchor_dir = tmp_path / "anchor"
+    anchor_dir.mkdir(mode=0o700)
+    durable_anchor_path = anchor_dir / "activation-durable-anchor.jsonl"
     subprocess.run(  # noqa: S603 - invokes the repository-pinned Python test helper
         [
             sys.executable,
