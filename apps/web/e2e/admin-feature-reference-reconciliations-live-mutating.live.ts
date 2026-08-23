@@ -91,15 +91,40 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
     expect(new URL(detailResponse.url()).origin).toBe(apiOrigin);
     expect(detailResponse.request().redirectedFrom()).toBeNull();
     const detailResponseBody = (await detailResponse.json()) as { data?: unknown };
+    if (
+      !detailResponseBody.data ||
+      typeof detailResponseBody.data !== 'object' ||
+      Array.isArray(detailResponseBody.data)
+    ) {
+      throw new Error('M05 detail response data가 object가 아닙니다.');
+    }
+    const responseData = detailResponseBody.data as Record<string, unknown>;
+    const responseReceipt = responseData.receipt;
+    if (
+      !responseReceipt ||
+      typeof responseReceipt !== 'object' ||
+      Array.isArray(responseReceipt)
+    ) {
+      throw new Error('M05 detail response receipt가 object가 아닙니다.');
+    }
+    const responseReceiptRecord = responseReceipt as Record<string, unknown>;
+    expect(responseData.status).toBe('applied');
+    expect(responseReceiptRecord.action).toBe('rebind');
+    expect(responseReceiptRecord.old_feature_id).toBe(oldFeatureId);
+    expect(responseReceiptRecord.replacement_feature_id).toBe(replacementFeatureId);
+    expect(responseReceiptRecord.impact_count).toBe(Number(impactCount));
 
     const detail = page.getByTestId('admin-frr-detail');
-    const receiptValue = (label: RegExp) =>
-      detail.locator('dl > dt', { hasText: label }).locator('xpath=following-sibling::dd[1]');
+    const receiptValue = (label: string) =>
+      detail
+        .locator('dl > dt')
+        .filter({ hasText: label })
+        .locator('xpath=following-sibling::dd[1]');
     await expect(detail).toContainText('applied');
-    await expect(receiptValue(/^조치$/)).toContainText('rebind');
-    await expect(receiptValue(/^이전 Feature ID$/)).toHaveText(oldFeatureId);
-    await expect(receiptValue(/^대체 Feature ID$/)).toHaveText(replacementFeatureId);
-    await expect(receiptValue(/^영향 행 수$/)).toHaveText(`${impactCount}건`);
+    await expect(receiptValue('조치')).toContainText(String(responseReceiptRecord.action));
+    await expect(receiptValue('이전 Feature ID')).toHaveText(oldFeatureId);
+    await expect(receiptValue('대체 Feature ID')).toHaveText(replacementFeatureId);
+    await expect(receiptValue('영향 행 수')).toHaveText(`${responseReceiptRecord.impact_count}건`);
     await expect(detail).not.toContainText('승인');
     await expect(detail).not.toContainText('거절');
     await expect.poll(() => observedApiRequests).toBeGreaterThan(0);
