@@ -104,14 +104,53 @@ def _runtime_container_id() -> str | None:
     return None
 
 
+def _m05_docker_request(
+    path: Path, *, request_path: str, timeout_seconds: float
+) -> dict[str, object]:
+    """canonical Docker Engine socket에서 제한된 JSON 응답을 읽는다."""
+
+    if not request_path.startswith("/") or any(character in request_path for character in "\r\n"):
+        raise RuntimeError("M05 runtime Docker request path is invalid")
+    connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    connection.settimeout(timeout_seconds)
+    try:
+        connection.connect(str(path))
+        connection.sendall(
+            (
+                f"GET {request_path} HTTP/1.1\r\n"
+                "Host: docker\r\n"
+                "Connection: close\r\n\r\n"
+            ).encode("ascii")
+        )
+        response = http.client.HTTPResponse(connection)
+        response.begin()
+        if response.status != 200:
+            raise RuntimeError("M05 runtime Docker request returned a non-success status")
+        raw = response.read(4 * 1024 * 1024 + 1)
+        if len(raw) > 4 * 1024 * 1024:
+            raise RuntimeError("M05 runtime Docker response is too large")
+    except (OSError, http.client.HTTPException) as exc:
+        raise RuntimeError("M05 runtime Docker identity could not be inspected") from exc
+    finally:
+        connection.close()
+    try:
+        value = json.loads(raw, object_pairs_hook=_reject_duplicate_json_keys)
+    except (UnicodeDecodeError, json.JSONDecodeError, _DuplicateJsonKeyError) as exc:
+        raise RuntimeError("M05 runtime Docker response is invalid") from exc
+    if not isinstance(value, dict):
+        raise RuntimeError("M05 runtime Docker response is not an object")
+    return cast(dict[str, object], value)
+
+
 def _m05_docker_inspect(
     socket_path: str, *, container_id: str, timeout_seconds: float
 ) -> dict[str, object]:
-    """Docker Engine의 local Unix socket에서 container metadata를 직접 읽는다."""
+    """canonical Docker Engine socket에서 engine과 container metadata를 읽는다."""
 
     path = Path(socket_path)
     if (
-        not path.is_absolute()
+        socket_path != "/var/run/docker.sock"
+        or not path.is_absolute()
         or path.is_symlink()
         or not path.is_socket()
         or not re.fullmatch(r"[0-9a-f]{64}", container_id)
@@ -123,35 +162,21 @@ def _m05_docker_inspect(
         raise RuntimeError("M05 runtime Docker socket could not be inspected") from exc
     if socket_metadata.st_uid != 0 or stat.S_IMODE(socket_metadata.st_mode) & 0o002:
         raise RuntimeError("M05 runtime Docker socket is not trusted")
-    connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    connection.settimeout(timeout_seconds)
-    try:
-        connection.connect(str(path))
-        connection.sendall(
-            (
-                f"GET /containers/{container_id}/json HTTP/1.1\r\n"
-                "Host: docker\r\n"
-                "Connection: close\r\n\r\n"
-            ).encode("ascii")
-        )
-        request = http.client.HTTPResponse(connection)
-        request.begin()
-        if request.status != 200:
-            raise RuntimeError("M05 runtime Docker inspect returned a non-success status")
-        raw = request.read(4 * 1024 * 1024 + 1)
-        if len(raw) > 4 * 1024 * 1024:
-            raise RuntimeError("M05 runtime Docker inspect response is too large")
-    except (OSError, http.client.HTTPException) as exc:
-        raise RuntimeError("M05 runtime Docker identity could not be inspected") from exc
-    finally:
-        connection.close()
-    try:
-        value = json.loads(raw, object_pairs_hook=_reject_duplicate_json_keys)
-    except (UnicodeDecodeError, json.JSONDecodeError, _DuplicateJsonKeyError) as exc:
-        raise RuntimeError("M05 runtime Docker inspect response is invalid") from exc
-    if not isinstance(value, dict):
-        raise RuntimeError("M05 runtime Docker inspect response is not an object")
-    return cast(dict[str, object], value)
+    engine = _m05_docker_request(path, request_path="/info", timeout_seconds=timeout_seconds)
+    if (
+        not isinstance(engine.get("ID"), str)
+        or not engine["ID"]
+        or not isinstance(engine.get("ServerVersion"), str)
+        or not engine["ServerVersion"]
+        or not isinstance(engine.get("DockerRootDir"), str)
+        or not str(engine["DockerRootDir"]).startswith("/")
+    ):
+        raise RuntimeError("M05 runtime Docker Engine identity is invalid")
+    return _m05_docker_request(
+        path,
+        request_path=f"/containers/{container_id}/json",
+        timeout_seconds=timeout_seconds,
+    )
 
 
 def _validate_m05_runtime_dependencies_live(
@@ -1931,6 +1956,10 @@ class Settings(BaseSettings):
                 _raise_redacted_settings_error(
                     f"M05 runtime attestation dependency is not bound: {name}"
                 )
+        if self.pinvi_docker_socket_path != "/var/run/docker.sock":
+            _raise_redacted_settings_error(
+                "M05 runtime Docker socket must be the canonical local Engine socket"
+            )
         try:
             _validate_m05_runtime_dependencies_live(
                 dependencies=cast(dict[str, object], dependencies),

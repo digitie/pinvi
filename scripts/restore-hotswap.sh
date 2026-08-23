@@ -420,6 +420,8 @@ run_guarded_command() {
     advisory_lock_sql_guard
     write_identity_guard
     printf '%s;\n' "${command}"
+    advisory_lock_sql_guard
+    write_identity_guard
     printf 'COMMIT;\n'
   } >"${wrapper}"
   execute_sql_file "${wrapper}" restoring
@@ -429,8 +431,33 @@ run_guarded_file() {
   local sql_file="$1"
   local wrapper="${TMP_DIR}/guarded-$(basename "${sql_file}")"
   assert_advisory_lock_alive
-  if grep -Eiq '^[[:space:]]*(\\(connect|c)([[:space:]]|$)|c([[:space:]]|$)|begin([[:space:]]|;|$)|start[[:space:]]+transaction([[:space:]]|;|$)|commit([[:space:]]|;|$)|rollback([[:space:]]|;|$))' "${sql_file}"; then
-    phase restoring failed "restore SQL contains a connection switch"
+  if awk '
+    BEGIN { in_copy = 0; unsafe = 0 }
+    {
+      line = $0
+      normalized = tolower(line)
+      if (!in_copy && normalized ~ /^[[:space:]]*copy([[:space:]]|$)/ && normalized ~ /;[[:space:]]*$/) {
+        in_copy = 1
+        next
+      }
+      if (in_copy) {
+        if (line == "\\.") in_copy = 0
+        next
+      }
+      if (
+        normalized ~ /^[[:space:]]*\\[[:alpha:]!]/ ||
+        normalized ~ /pg_advisory_(lock|unlock)/ ||
+        normalized ~ /pg_(cancel|terminate)_backend/ ||
+        normalized ~ /discard[[:space:]]+all/ ||
+        normalized ~ /(^|[;[:space:]])(begin|start[[:space:]]+transaction|commit|rollback|abort)([;[:space:]]|$)/
+      ) {
+        unsafe = 1
+        exit
+      }
+    }
+    END { exit unsafe ? 0 : 1 }
+  ' "${sql_file}"; then
+    phase restoring failed "restore SQL contains a session, lock, or transaction control"
     exit 3
   fi
   {
@@ -438,6 +465,8 @@ run_guarded_file() {
     advisory_lock_sql_guard
     write_identity_guard
     cat "${sql_file}"
+    advisory_lock_sql_guard
+    write_identity_guard
     printf '\nCOMMIT;\n'
   } >"${wrapper}"
   execute_sql_file "${wrapper}" restoring
