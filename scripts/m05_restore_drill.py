@@ -183,19 +183,47 @@ ROLLBACK;
         )
 
 
-def _identity(database_url: str, *, schema: str) -> str:
+def _identity(database_url: str, *, schema: str) -> dict[str, object]:
     sql = (
         "SELECT json_build_object("
         "'database', current_database(), "
         "'user', current_user, "
+        "'database_oid', d.oid::text, "
+        "'system_identifier', (pg_control_system()).system_identifier::text, "
         "'schema_exists', to_regnamespace('" + schema + "') IS NOT NULL, "
-        "'server_version_num', current_setting('server_version_num'))::text"
+        "'server_version_num', current_setting('server_version_num'))::text "
+        "FROM pg_database d WHERE d.datname = current_database()"
     )
     result = _scalar(database_url, sql)
-    value = result.stdout.strip()
-    if not value:
+    raw = result.stdout.strip()
+    if not raw:
         raise RestoreDrillError("database identity query returned no result")
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RestoreDrillError("database identity query returned invalid JSON") from exc
+    if not isinstance(value, dict) or set(value) != {
+        "database",
+        "database_oid",
+        "schema_exists",
+        "server_version_num",
+        "system_identifier",
+        "user",
+    }:
+        raise RestoreDrillError("database identity query returned an invalid identity")
     return value
+
+
+def _identity_key(identity: dict[str, object]) -> tuple[object, object, object]:
+    return (
+        identity["database"],
+        identity["database_oid"],
+        identity["system_identifier"],
+    )
+
+
+def _identity_sha256(identity: dict[str, object]) -> str:
+    return _sha256(_canonical_json(identity))
 
 
 def _single_dump(directory: Path) -> Path:
@@ -220,6 +248,10 @@ def _secure_output_parent(path: Path, *, require_root_owned: bool) -> None:
 
 def _source_revision(root: Path) -> str:
     expected = os.environ.get("PINVI_SOURCE_REVISION", "")
+    if not _COMMIT_RE.fullmatch(expected):
+        raise RestoreDrillError(
+            "restore producer requires a full PINVI_SOURCE_REVISION"
+        )
     try:
         revision = subprocess.run(
             ["git", "-C", str(root), "rev-parse", "HEAD"],
@@ -227,17 +259,16 @@ def _source_revision(root: Path) -> str:
             capture_output=True,
             text=True,
         ).stdout.strip()
-        if expected:
-            status = subprocess.run(
-                ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
-                check=True,
-                capture_output=True,
-                text=True,
-            ).stdout
-            if not _COMMIT_RE.fullmatch(expected) or revision != expected or status:
-                raise RestoreDrillError(
-                    "restore producer checkout is not a clean PINVI_SOURCE_REVISION"
-                )
+        status = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        if revision != expected or status:
+            raise RestoreDrillError(
+                "restore producer checkout is not a clean PINVI_SOURCE_REVISION"
+            )
     except (OSError, subprocess.CalledProcessError) as exc:
         raise RestoreDrillError("restore producer source revision could not be verified") from exc
     if not _COMMIT_RE.fullmatch(revision):
@@ -256,9 +287,15 @@ def _run_drill(args: argparse.Namespace) -> int:
     source_url = _database_url(args.source_database_url_env)
     target_url = _database_url(args.staging_database_url_env)
     runtime_url = _database_url(args.runtime_database_url_env)
-    if source_url == target_url or target_url == runtime_url:
+    source_identity_pre = _identity(source_url, schema=args.schema)
+    target_identity_pre = _identity(target_url, schema=args.schema)
+    runtime_identity_pre = _identity(runtime_url, schema=args.schema)
+    source_key = _identity_key(source_identity_pre)
+    target_key = _identity_key(target_identity_pre)
+    runtime_key = _identity_key(runtime_identity_pre)
+    if source_key in {target_key, runtime_key} or target_key != runtime_key:
         raise RestoreDrillError(
-            "restore source, owner target, and runtime target must be distinct URLs"
+            "restore source, owner target, and runtime target must be distinct database identities"
         )
 
     root = Path(__file__).resolve().parents[1]
@@ -312,8 +349,15 @@ def _run_drill(args: argparse.Namespace) -> int:
         _runtime_role_check(runtime_url, schema=args.schema)
         _trigger_check(target_url, schema=args.schema)
         _trigger_bypass_is_blocked(target_url, schema=args.schema)
-        source_identity = _identity(source_url, schema=args.schema)
-        target_identity = _identity(runtime_url, schema=args.schema)
+        target_identity = _identity(target_url, schema=args.schema)
+        runtime_identity = _identity(runtime_url, schema=args.schema)
+        if (
+            _identity_key(target_identity) != target_key
+            or _identity_key(runtime_identity) != target_key
+        ):
+            raise RestoreDrillError(
+                "restore target identity changed or does not match the runtime target"
+            )
 
         execution_output = (
             f"{backup.stdout}\0{backup.stderr}\0{restore.stdout}\0{restore.stderr}"
@@ -327,11 +371,12 @@ def _run_drill(args: argparse.Namespace) -> int:
             "restore_output_sha256": _sha256(execution_output),
             "restore_runner_sha256": _sha256(restore_script.read_bytes()),
             "runtime_role_verified": True,
-            "source_db_identity_sha256": _sha256(source_identity.encode("utf-8")),
+            "source_db_identity_sha256": _identity_sha256(source_identity_pre),
             "source_revision": source_revision,
             "status": "passed",
-            "target_db_identity_sha256": _sha256(target_identity.encode("utf-8")),
+            "target_db_identity_sha256": _identity_sha256(target_identity),
             "trigger_guard_verified": True,
+            "runtime_db_identity_sha256": _identity_sha256(runtime_identity),
         }
     _write_json(output, evidence)
     print(f"restore_evidence_sha256={_sha256(_canonical_json(evidence))}")

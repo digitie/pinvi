@@ -64,8 +64,8 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     _write_json(
         evidence_dir / "reviews.json",
         [
-            {"commit": "1" * 40, "p0_p1": 0, "review_id": "review-1", "reviewer_id": "darwin"},
-            {"commit": "2" * 40, "p0_p1": 0, "review_id": "review-2", "reviewer_id": "feynman"},
+            {"commit": PINVI_REVISION, "p0_p1": 0, "review_id": "review-1", "reviewer_id": "darwin"},
+            {"commit": PINVI_REVISION, "p0_p1": 0, "review_id": "review-2", "reviewer_id": "feynman"},
         ],
     )
     _write_json(
@@ -87,6 +87,9 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "server_side_ack_verified": True,
             "status": "passed",
             "ui_evidence_sha256": "e" * 64,
+            "verification_id": "22222222-2222-4222-8222-222222222222",
+            "playwright_runner_image_id": "sha256:" + "9" * 64,
+            "playwright_runner_image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:" + "8" * 64,
         },
     )
     _write_json(
@@ -105,6 +108,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "status": "passed",
             "target_db_identity_sha256": "e" * 64,
             "trigger_guard_verified": True,
+            "runtime_db_identity_sha256": "f" * 64,
         },
     )
     _write_json(
@@ -138,27 +142,47 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
                     "source_sha256": KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
                 },
                 "api": {
+                    "container_id": "b" * 64,
                     "digest": "sha256:" + "7" * 64,
                     "environment": "production",
                     "image_id": "sha256:" + "7" * 64,
                     "revision_label": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
                     "source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+                    "started_at": "2026-08-23T00:00:00.000000000Z",
                 },
                 "admin": {
+                    "container_id": "a" * 64,
                     "digest": "sha256:" + "7" * 64,
                     "environment": "production",
                     "image_id": "sha256:" + "7" * 64,
                     "revision_label": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
                     "source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+                    "started_at": "2026-08-23T00:00:00.000000000Z",
                 },
                 "frontend": {
+                    "container_id": "c" * 64,
                     "digest": "sha256:" + "8" * 64,
                     "environment": "production",
                     "image_id": "sha256:" + "8" * 64,
                     "revision_label": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
                     "source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+                    "started_at": "2026-08-23T00:00:00.000000000Z",
                 },
                 "full_openapi_sha256": KOR_TRAVEL_MAP_M05_FULL_OPENAPI_SHA256,
+                "service_openapi": {
+                    "canonical_sha256": "a" * 64,
+                    "http_sha256": "b" * 64,
+                    "source_canonical_sha256": "a" * 64,
+                    "source_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
+                    "source_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+                },
+                "user_openapi": {
+                    "canonical_sha256": "c" * 64,
+                    "http_sha256": "d" * 64,
+                    "source_canonical_sha256": "c" * 64,
+                    "source_revision": KOR_TRAVEL_MAP_M05_USER_SOURCE_REVISION,
+                    "source_sha256": KOR_TRAVEL_MAP_M05_USER_OPENAPI_SHA256,
+                },
             },
         },
     )
@@ -166,11 +190,13 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         evidence_dir / "pinvi-images.json",
         {
             name: {
+                "container_id": "d" * 64,
                 "digest": digest,
                 "environment": "production",
                 "image_id": digest,
                 "revision_label": PINVI_REVISION,
                 "source_revision": PINVI_REVISION,
+                "started_at": "2026-08-23T00:00:00.000000000Z",
             }
             for name, digest in PINVI_DIGESTS.items()
         },
@@ -207,6 +233,8 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         "pinvi_snapshot_sha256": "d" * 64,
         "pinvi_api_endpoint": "http://127.0.0.1:12801",
         "pinvi_source_revision": PINVI_REVISION,
+        "playwright_runner_image_id": "sha256:" + "9" * 64,
+        "playwright_runner_image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:" + "8" * 64,
         "scope": "production",
         "status": "passed",
         "verification_id": "22222222-2222-4222-8222-222222222222",

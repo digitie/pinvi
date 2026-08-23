@@ -83,6 +83,18 @@ if [[ -n "$evidence_dir" ]]; then
   fi
 fi
 
+if [[ -n "${PINVI_M05_UI_VERIFICATION_ID:-}" ]]; then
+  expected_m05_image="${PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_REF:-}"
+  if [[ "$image" != "$expected_m05_image" || "$image" != mcr.microsoft.com/playwright:*@sha256:* ]]; then
+    echo "error: M05 live UI requires the attested immutable Playwright image" >&2
+    exit 1
+  fi
+  if [[ "$network" != "host" || "$skip_npm_ci" != "0" ]]; then
+    echo "error: M05 live UI requires host networking and a fresh npm ci" >&2
+    exit 1
+  fi
+fi
+
 docker_args=(
   run
   --rm

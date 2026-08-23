@@ -12,6 +12,9 @@ const oldFeatureId = process.env.PINVI_M05_LIVE_OLD_FEATURE_ID;
 const replacementFeatureId = process.env.PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID;
 const impactCount = process.env.PINVI_M05_LIVE_IMPACT_COUNT;
 const sourceRevision = process.env.PINVI_SOURCE_REVISION;
+const verificationId = process.env.PINVI_M05_UI_VERIFICATION_ID;
+const playwrightRunnerImageId = process.env.PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_ID;
+const playwrightRunnerImageRef = process.env.PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_REF;
 
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
@@ -48,6 +51,9 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
   test.skip(!replacementFeatureId, 'PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID가 필요합니다.');
   test.skip(!impactCount, 'PINVI_M05_LIVE_IMPACT_COUNT가 필요합니다.');
   test.skip(!sourceRevision, 'PINVI_SOURCE_REVISION이 필요합니다.');
+  test.skip(!verificationId, 'PINVI_M05_UI_VERIFICATION_ID가 필요합니다.');
+  test.skip(!playwrightRunnerImageId, 'PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_ID가 필요합니다.');
+  test.skip(!playwrightRunnerImageRef, 'PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_REF가 필요합니다.');
   test.skip(
     !adminStorageState && (!adminEmail || !adminPassword),
     'PINVI_M05_LIVE_EMAIL/PINVI_M05_LIVE_PASSWORD 또는 storage state가 필요합니다.',
@@ -86,6 +92,9 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
       expect(response.status).toBe(200);
       const responseBody = response.body as { data?: unknown };
       expect(responseBody.data).toBeDefined();
+      if (!verificationId || !playwrightRunnerImageId || !playwrightRunnerImageRef) {
+        throw new Error('M05 UI run binding 환경변수가 준비되지 않았습니다.');
+      }
       const marker = {
         assertions: ['status', 'action', 'old_feature', 'replacement_feature', 'impact_count'],
         event_id: eventId,
@@ -95,6 +104,9 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
           .update(canonicalJson(responseBody.data), 'utf8')
           .digest('hex'),
         replacement_feature_id: replacementFeatureId,
+        verification_id: verificationId,
+        playwright_runner_image_id: playwrightRunnerImageId,
+        playwright_runner_image_ref: playwrightRunnerImageRef,
         source_revision: sourceRevision,
         status: 'passed',
       };

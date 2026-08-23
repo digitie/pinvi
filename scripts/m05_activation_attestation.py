@@ -39,6 +39,9 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 _DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
+_PLAYWRIGHT_IMAGE_RE = re.compile(
+    r"mcr\.microsoft\.com/playwright:[A-Za-z0-9][A-Za-z0-9._-]*@sha256:[0-9a-f]{64}\Z"
+)
 _PAIR_PATH = Path(__file__).resolve().parents[1] / (
     "contracts/kor-travel-map-m05-pair-provenance-v1.json"
 )
@@ -254,7 +257,7 @@ def _assert_docker_endpoint(
     if not isinstance(bindings, list) or not any(
         isinstance(binding, dict)
         and str(binding.get("HostPort")) == str(port)
-        and binding.get("HostIp") in {"127.0.0.1", "0.0.0.0", ""}
+        and binding.get("HostIp") == "127.0.0.1"
         for binding in bindings
     ):
         raise AttestationError(f"service endpoint is not bound to {container}")
@@ -437,6 +440,15 @@ def _docker_inspect(
             f"docker inspect output is invalid for {container}"
         ) from exc
     item = _object(value, name=f"docker inspect {container}")
+    container_id = item.get("Id")
+    if not isinstance(container_id, str) or re.fullmatch(r"[0-9a-f]{64}\Z", container_id) is None:
+        raise AttestationError(f"runtime container ID is invalid for {container}")
+    state = _object(item.get("State"), name=f"docker state {container}")
+    if state.get("Running") is not True:
+        raise AttestationError(f"runtime container is not running for {container}")
+    started_at = _string(
+        state.get("StartedAt"), name=f"{container}.state.started_at"
+    )
     image_id = item.get("Image")
     if not isinstance(image_id, str) or _DIGEST_RE.fullmatch(image_id) is None:
         raise AttestationError(f"runtime image ID is not immutable for {container}")
@@ -470,12 +482,62 @@ def _docker_inspect(
             container_port=endpoint_container_port,
         )
     return {
+        "container_id": container_id,
         "digest": image_id,
         "image_id": image_id,
         "environment": expected_environment,
         "source_revision": expected_revision,
         "revision_label": revision,
+        "started_at": started_at,
     }
+
+
+def _docker_image_identity(image_ref: str) -> dict[str, str]:
+    """M05 browser는 공식 이미지의 immutable registry digest만 허용한다."""
+
+    if _PLAYWRIGHT_IMAGE_RE.fullmatch(image_ref) is None:
+        raise AttestationError(
+            "M05 Playwright runner image must be an immutable official digest reference"
+        )
+    repository, expected_digest = image_ref.rsplit("@", 1)
+    try:
+        completed = subprocess.run(
+            ["docker", "image", "inspect", "--format", "{{json .}}", image_ref],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise AttestationError("M05 Playwright runner image inspect failed") from exc
+    try:
+        item = _object(json.loads(completed.stdout), name="Playwright runner image")
+    except json.JSONDecodeError as exc:
+        raise AttestationError("M05 Playwright runner image inspect output is invalid") from exc
+    image_id = item.get("Id")
+    if not isinstance(image_id, str) or _DIGEST_RE.fullmatch(image_id) is None:
+        raise AttestationError("M05 Playwright runner image ID is not immutable")
+    repo_digests = item.get("RepoDigests")
+    if not isinstance(repo_digests, list) or f"{repository.split(':', 1)[0]}@{expected_digest}" not in repo_digests:
+        raise AttestationError(
+            "M05 Playwright runner image is not attested by the official registry digest"
+        )
+    return {"image_id": image_id, "image_ref": image_ref}
+
+
+def _assert_runtime_identity(
+    before: dict[str, str], after: dict[str, str], *, label: str
+) -> None:
+    for field in (
+        "container_id",
+        "digest",
+        "image_id",
+        "environment",
+        "source_revision",
+        "revision_label",
+        "started_at",
+    ):
+        if before[field] != after[field]:
+            raise AttestationError(f"runtime identity changed during live verification: {label}")
 
 
 def _git_blob(source_root: Path, *, revision: str, relative_path: str) -> bytes:
@@ -520,41 +582,64 @@ def _hash_source_openapi(source_root: Path) -> dict[str, str]:
 
 def _runtime_map_openapi(
     *, map_admin_url: str, source_root: Path, expected: dict[str, str]
-) -> dict[str, str]:
-    """실행 중 Map API가 고정 source artifact와 같은 OpenAPI를 제공하는지 확인한다."""
 
-    runtime_value, runtime_raw = _http_json(
-        _url(map_admin_url, "/openapi.json"),
-        headers=_map_headers(),
-    )
-    source_raw = _git_blob(
-        source_root,
-        revision=expected["source_revision"],
-        relative_path="packages/kor-travel-map-api/openapi.json",
-    )
-    try:
-        source_value = json.loads(
-            source_raw, object_pairs_hook=_reject_duplicate_keys
-        )
-    except (UnicodeDecodeError, json.JSONDecodeError, AttestationError) as exc:
-        raise AttestationError("pinned Map admin OpenAPI is not valid JSON") from exc
-    runtime_canonical = _sha256(_canonical_json(runtime_value))
-    source_canonical = _sha256(_canonical_json(source_value))
-    if runtime_canonical != source_canonical:
-        raise AttestationError(
-            "live Map admin OpenAPI does not match the pinned source artifact"
-        )
-    return {
-        "canonical_sha256": runtime_canonical,
-        "http_sha256": _sha256(runtime_raw),
-        "source_canonical_sha256": source_canonical,
-        "source_revision": expected["source_revision"],
-        "source_sha256": expected["openapi_sha256"],
+) -> dict[str, dict[str, str]]:
+    """실행 중 Map의 admin/service/user surface를 각각 고정 source와 대조한다."""
+
+    paths = {
+        "admin_openapi": ("/openapi.json", "admin"),
+        "service_openapi": ("/openapi.service.json", "service"),
+        "user_openapi": ("/openapi.user.json", "user"),
     }
+    result: dict[str, dict[str, str]] = {}
+    for surface, (path, expected_name) in paths.items():
+        runtime_value, runtime_raw = _http_json(
+            _url(map_admin_url, path),
+            headers=_map_headers(),
+        )
+        source_raw = _git_blob(
+            source_root,
+            revision=expected["source_revision"]
+            if expected_name == "admin"
+            else _load_pair()[expected_name]["source_revision"],
+            relative_path=(
+                "packages/kor-travel-map-api/openapi.json"
+                if expected_name == "admin"
+                else f"packages/kor-travel-map-api/openapi.{expected_name}.json"
+            ),
+        )
+        try:
+            source_value = json.loads(
+                source_raw, object_pairs_hook=_reject_duplicate_keys
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError, AttestationError) as exc:
+            raise AttestationError(f"pinned Map {expected_name} OpenAPI is not valid JSON") from exc
+        runtime_canonical = _sha256(_canonical_json(runtime_value))
+        source_canonical = _sha256(_canonical_json(source_value))
+        if runtime_canonical != source_canonical:
+            raise AttestationError(
+                f"live Map {expected_name} OpenAPI does not match the pinned source artifact"
+            )
+        expected_surface = _load_pair()[expected_name]
+        result[surface] = {
+            "canonical_sha256": runtime_canonical,
+            "http_sha256": _sha256(runtime_raw),
+            "source_canonical_sha256": source_canonical,
+            "source_revision": expected_surface["source_revision"],
+            "source_sha256": expected_surface["openapi_sha256"],
+        }
+    return result
 
 
 def _validate_ui_marker(
-    value: object, *, event_id: str, source_revision: str
+    value: object,
+    *,
+    event_id: str,
+    source_revision: str,
+    verification_id: str,
+    runner_image: dict[str, str],
+    pinvi_detail: dict[str, object],
+    pinvi_detail_sha256: str,
 ) -> None:
     marker = _object(value, name="UI evidence marker")
     expected = {
@@ -566,6 +651,9 @@ def _validate_ui_marker(
         "replacement_feature_id",
         "source_revision",
         "status",
+        "verification_id",
+        "playwright_runner_image_id",
+        "playwright_runner_image_ref",
     }
     if set(marker) != expected or marker.get("status") != "passed":
         raise AttestationError("UI evidence marker schema/status is invalid")
@@ -573,6 +661,12 @@ def _validate_ui_marker(
         raise AttestationError("UI marker event does not match the requested event")
     if _commit(marker.get("source_revision"), name="UI marker source revision") != source_revision:
         raise AttestationError("UI marker source revision does not match the runtime")
+    if _uuid(marker.get("verification_id"), name="UI marker verification ID") != verification_id:
+        raise AttestationError("UI marker verification ID does not match this run")
+    if marker.get("playwright_runner_image_ref") != runner_image["image_ref"]:
+        raise AttestationError("UI marker Playwright image reference does not match this run")
+    if marker.get("playwright_runner_image_id") != runner_image["image_id"]:
+        raise AttestationError("UI marker Playwright image ID does not match this run")
     if not isinstance(marker["assertions"], list) or not marker["assertions"]:
         raise AttestationError("UI marker assertions are missing")
     if not isinstance(marker["impact_count"], int) or marker["impact_count"] < 0:
@@ -580,6 +674,18 @@ def _validate_ui_marker(
     digest = marker["pinvi_detail_sha256"]
     if not isinstance(digest, str) or _SHA256_RE.fullmatch(digest) is None:
         raise AttestationError("UI marker Pinvi detail hash is invalid")
+    if digest != pinvi_detail_sha256:
+        raise AttestationError("UI marker does not bind the after-run Pinvi detail response")
+    receipt = _object(pinvi_detail.get("receipt"), name="UI marker Pinvi receipt")
+    for marker_field, receipt_field in (
+        ("old_feature_id", "old_feature_id"),
+        ("replacement_feature_id", "replacement_feature_id"),
+        ("impact_count", "impact_count"),
+    ):
+        if marker[marker_field] != receipt.get(receipt_field):
+            raise AttestationError(
+                f"UI marker does not bind Pinvi receipt field: {receipt_field}"
+            )
 
 
 def _load_private_key(path: Path, *, require_root_owned: bool) -> Ed25519PrivateKey:
@@ -593,6 +699,59 @@ def _load_private_key(path: Path, *, require_root_owned: bool) -> Ed25519Private
     if not isinstance(value, Ed25519PrivateKey):
         raise AttestationError("M05 private key is not Ed25519")
     return value
+
+
+def _runtime_snapshot(
+    args: argparse.Namespace,
+    *,
+    pair: dict[str, dict[str, str]],
+    source_revision: str,
+) -> dict[str, dict[str, str]]:
+    return {
+        "map_admin": _docker_inspect(
+            args.map_admin_container,
+            expected_revision=pair["admin"]["source_revision"],
+            expected_environment=args.scope,
+            require_environment_label=False,
+            endpoint_url=args.map_admin_url,
+        ),
+        "map_api": _docker_inspect(
+            args.map_api_container,
+            expected_revision=pair["admin"]["source_revision"],
+            expected_environment=args.scope,
+            require_environment_label=False,
+        ),
+        "map_frontend": _docker_inspect(
+            args.map_frontend_container,
+            expected_revision=pair["admin"]["source_revision"],
+            expected_environment=args.scope,
+            require_environment_label=False,
+        ),
+        "pinvi_api": _docker_inspect(
+            args.pinvi_api_container,
+            expected_revision=source_revision,
+            expected_environment=args.scope,
+            endpoint_url=args.pinvi_api_url,
+        ),
+        "pinvi_web": _docker_inspect(
+            args.pinvi_web_container,
+            expected_revision=source_revision,
+            expected_environment=args.scope,
+        ),
+        "pinvi_dagster": _docker_inspect(
+            args.pinvi_dagster_container,
+            expected_revision=source_revision,
+            expected_environment=args.scope,
+        ),
+    }
+
+
+def _assert_runtime_snapshots_unchanged(
+    before: dict[str, dict[str, str]],
+    after: dict[str, dict[str, str]],
+) -> None:
+    for name, runtime in before.items():
+        _assert_runtime_identity(runtime, after[name], label=name)
 
 
 def _live(args: argparse.Namespace) -> int:
@@ -626,24 +785,8 @@ def _live(args: argparse.Namespace) -> int:
         allowed_revisions={entry["source_revision"] for entry in pair.values()},
         label="Map source",
     )
-    runtime_map_admin = _docker_inspect(
-        args.map_admin_container,
-        expected_revision=pair["admin"]["source_revision"],
-        expected_environment=args.scope,
-        require_environment_label=False,
-        endpoint_url=args.map_admin_url,
-    )
-    runtime_map_api = _docker_inspect(
-        args.map_api_container,
-        expected_revision=pair["admin"]["source_revision"],
-        expected_environment=args.scope,
-        require_environment_label=False,
-    )
-    runtime_pinvi_api = _docker_inspect(
-        args.pinvi_api_container,
-        expected_revision=source_revision,
-        expected_environment=args.scope,
-        endpoint_url=args.pinvi_api_url,
+    runtime_initial = _runtime_snapshot(
+        args, pair=pair, source_revision=source_revision
     )
 
     before_map, before_ack, before_map_hash, _before_ack_hash = _map_case_snapshot(
@@ -664,6 +807,10 @@ def _live(args: argparse.Namespace) -> int:
         raise AttestationError(
             "Map ACK local receipt hash does not match the Pinvi terminal receipt"
         )
+    runtime_before_ui = _runtime_snapshot(
+        args, pair=pair, source_revision=source_revision
+    )
+    _assert_runtime_snapshots_unchanged(runtime_initial, runtime_before_ui)
 
     command = list(args.ui_command)
     if command and command[0] == "--":
@@ -673,21 +820,40 @@ def _live(args: argparse.Namespace) -> int:
     runner_path = pinvi_source_root / "scripts/n150-playwright-runner.sh"
     if Path(command[0]).resolve() != runner_path.resolve():
         raise AttestationError("live UI must use the repository Playwright runner")
-    if (
-        "apps/web/e2e/admin-feature-reference-reconciliations-live-mutating.live.ts"
-        not in command
-        or "--workers=1" not in command
-    ):
+    command[0] = str(runner_path)
+    expected_command = [
+        str(runner_path),
+        "--",
+        "npm",
+        "-w",
+        "@pinvi/web",
+        "run",
+        "test:e2e:live-mutating",
+        "--",
+        "apps/web/e2e/admin-feature-reference-reconciliations-live-mutating.live.ts",
+        "--workers=1",
+    ]
+    if command != expected_command:
         raise AttestationError("live UI command is not the pinned M05 Playwright test")
+    runner_image = _docker_image_identity(args.playwright_runner_image)
+    verification_id = str(uuid4())
+    marker_path = evidence_dir / "ui-run.json"
+    if marker_path.is_symlink() or marker_path.exists():
+        raise AttestationError("UI evidence marker must not pre-exist the pinned run")
     child_env = os.environ.copy()
     child_env["PINVI_M05_UI_EVIDENCE_DIR"] = str(evidence_dir)
     child_env["PINVI_M05_LIVE_EVENT_ID"] = event_id
+    child_env["PINVI_M05_UI_VERIFICATION_ID"] = verification_id
+    child_env["PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_REF"] = runner_image["image_ref"]
+    child_env["PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_ID"] = runner_image["image_id"]
+    child_env["PINVI_PLAYWRIGHT_RUNNER_IMAGE"] = runner_image["image_ref"]
+    child_env["PINVI_PLAYWRIGHT_RUNNER_NETWORK"] = "host"
+    child_env["PINVI_PLAYWRIGHT_RUNNER_REPO_ROOT"] = str(pinvi_source_root)
+    child_env["PINVI_PLAYWRIGHT_RUNNER_SKIP_NPM_CI"] = "0"
     completed = subprocess.run(command, check=False, env=child_env)
     if completed.returncode != 0:
         raise AttestationError(f"live UI command exited with {completed.returncode}")
-    marker_path = evidence_dir / "ui-run.json"
     marker, marker_raw_hash = _read_json(marker_path)
-    _validate_ui_marker(marker, event_id=event_id, source_revision=source_revision)
 
     after_map, after_ack, after_map_hash, after_ack_hash = _map_case_snapshot(
         map_admin_url=args.map_admin_url,
@@ -713,47 +879,50 @@ def _live(args: argparse.Namespace) -> int:
         raise AttestationError(
             "M05 remote snapshot is not byte-stable across the UI flow"
         )
+    _validate_ui_marker(
+        marker,
+        event_id=event_id,
+        source_revision=source_revision,
+        verification_id=verification_id,
+        runner_image=runner_image,
+        pinvi_detail=after_pinvi,
+        pinvi_detail_sha256=after_pinvi_hash,
+    )
+    runtime_after_ui = _runtime_snapshot(
+        args, pair=pair, source_revision=source_revision
+    )
+    _assert_runtime_snapshots_unchanged(runtime_initial, runtime_after_ui)
 
     source_openapi = _hash_source_openapi(args.map_source_root)
-    runtime_map_frontend = _docker_inspect(
-        args.map_frontend_container,
-        expected_revision=pair["admin"]["source_revision"],
-        expected_environment=args.scope,
-        require_environment_label=False,
-    )
     runtime_map_openapi = _runtime_map_openapi(
         map_admin_url=args.map_admin_url,
         source_root=args.map_source_root,
         expected=pair["admin"],
     )
+    runtime_after_openapi = _runtime_snapshot(
+        args, pair=pair, source_revision=source_revision
+    )
+    _assert_runtime_snapshots_unchanged(runtime_after_ui, runtime_after_openapi)
     map_pair = {
         "admin": pair["admin"],
         "full": pair["full"],
         "service": pair["service"],
         "user": pair["user"],
-        "admin_image_digest": runtime_map_admin["digest"],
-        "api_image_digest": runtime_map_api["digest"],
-        "frontend_image_digest": runtime_map_frontend["digest"],
+        "admin_image_digest": runtime_after_openapi["map_admin"]["digest"],
+        "api_image_digest": runtime_after_openapi["map_api"]["digest"],
+        "frontend_image_digest": runtime_after_openapi["map_frontend"]["digest"],
         "runtime": {
-            "admin_openapi": runtime_map_openapi,
-            "admin": runtime_map_admin,
-            "api": runtime_map_api,
-            "frontend": runtime_map_frontend,
+            **runtime_map_openapi,
+            "admin": runtime_after_openapi["map_admin"],
+            "api": runtime_after_openapi["map_api"],
+            "frontend": runtime_after_openapi["map_frontend"],
             "full_openapi_sha256": source_openapi["full"],
         },
     }
     pinvi_images = {
-        "api": runtime_pinvi_api,
-        "web": _docker_inspect(
-            args.pinvi_web_container,
-            expected_revision=source_revision,
-            expected_environment=args.scope,
-        ),
-        "dagster": _docker_inspect(
-            args.pinvi_dagster_container,
-            expected_revision=source_revision,
-            expected_environment=args.scope,
-        ),
+        "api": runtime_after_openapi["pinvi_api"],
+        "web": runtime_after_openapi["pinvi_web"],
+        "dagster": runtime_after_openapi["pinvi_dagster"],
     }
 
     live_ui = {
@@ -772,6 +941,8 @@ def _live(args: argparse.Namespace) -> int:
         "pinvi_source_revision": source_revision,
         "pinvi_api_endpoint": args.pinvi_api_url.rstrip("/"),
         "pinvi_receipt_sha256": after_receipt_sha,
+        "playwright_runner_image_id": runner_image["image_id"],
+        "playwright_runner_image_ref": runner_image["image_ref"],
         "runner_exit_code": completed.returncode,
         "server_side_ack_verified": True,
         "status": "passed",
@@ -800,6 +971,8 @@ def _live(args: argparse.Namespace) -> int:
         "pinvi_snapshot_sha256": after_pinvi_hash,
         "pinvi_api_endpoint": args.pinvi_api_url.rstrip("/"),
         "pinvi_source_revision": source_revision,
+        "playwright_runner_image_id": runner_image["image_id"],
+        "playwright_runner_image_ref": runner_image["image_ref"],
         "scope": args.scope,
         "status": "passed",
         "verification_id": str(uuid4()),
@@ -838,6 +1011,7 @@ def _parser() -> argparse.ArgumentParser:
     live.add_argument("--event-id", required=True)
     live.add_argument("--pinvi-source-revision", required=True)
     live.add_argument("--scope", choices=("staging", "production"), required=True)
+    live.add_argument("--playwright-runner-image", required=True)
     live.add_argument("--require-root-owned", action="store_true")
     live.add_argument("ui_command", nargs=argparse.REMAINDER)
     live.set_defaults(handler=_live)

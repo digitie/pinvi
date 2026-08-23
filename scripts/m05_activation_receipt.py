@@ -15,7 +15,7 @@ import stat
 import time
 from pathlib import Path
 from typing import cast
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
@@ -27,6 +27,9 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 _DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
+_PLAYWRIGHT_IMAGE_RE = re.compile(
+    r"mcr\.microsoft\.com/playwright:[A-Za-z0-9][A-Za-z0-9._-]*@sha256:[0-9a-f]{64}\Z"
+)
 _PAIR_PROVENANCE = Path(__file__).resolve().parents[1] / (
     "contracts/kor-travel-map-m05-pair-provenance-v1.json"
 )
@@ -266,6 +269,7 @@ def _ledger_records(path: Path, *, require_root_owned: bool) -> list[dict[str, o
         raise ReceiptError("activation ledger is not valid UTF-8") from exc
     records: list[dict[str, object]] = []
     previous_generation: int | None = None
+    activation_nonces: set[str] = set()
     for line in lines:
         try:
             record = json.loads(line, object_pairs_hook=_reject_duplicate_keys)
@@ -300,7 +304,12 @@ def _ledger_records(path: Path, *, require_root_owned: bool) -> list[dict[str, o
             or scope not in {"staging", "production"}
         ):
             raise ReceiptError("activation ledger record fields are invalid")
-        _uuid(record_object["activation_nonce"], name="ledger activation nonce")
+        activation_nonce = _uuid(
+            record_object["activation_nonce"], name="ledger activation nonce"
+        )
+        if activation_nonce in activation_nonces:
+            raise ReceiptError("activation ledger contains a replayed nonce")
+        activation_nonces.add(activation_nonce)
         previous_record_sha = _sha256(
             record_object["previous_record_sha256"],
             name="ledger previous record hash",
@@ -391,6 +400,8 @@ def _ledger(args: argparse.Namespace) -> int:
         records = _ledger_records(
             args.ledger, require_root_owned=args.require_root_owned
         )
+        if any(record["activation_nonce"] == nonce for record in records):
+            raise ReceiptError("activation nonce has already been recorded")
         if records:
             record["previous_record_sha256"] = records[-1]["record_sha256"]
             previous_generation = records[-1]["activation_generation"]
@@ -449,11 +460,15 @@ def _pair_provenance() -> dict[str, dict[str, str]]:
     return result
 
 
-def _reviews(value: object) -> list[dict[str, object]]:
+def _reviews(
+    value: object, *, pinvi_source_revision: str
+) -> list[dict[str, object]]:
     if not isinstance(value, list) or len(value) != 2:
         raise ReceiptError("reviews.json must contain exactly two reviews")
     result: list[dict[str, object]] = []
     review_keys: set[tuple[str, str, str]] = set()
+    reviewer_ids: set[str] = set()
+    review_ids: set[str] = set()
     for item in value:
         review = _object(item, name="review")
         if set(review) != {"commit", "p0_p1", "review_id", "reviewer_id"}:
@@ -461,8 +476,14 @@ def _reviews(value: object) -> list[dict[str, object]]:
         if type(review["p0_p1"]) is not int or review["p0_p1"] != 0:
             raise ReceiptError("review P0/P1 count must be zero")
         commit = _commit(review["commit"], name="review.commit")
+        if commit != pinvi_source_revision:
+            raise ReceiptError("review commit does not match the signed Pinvi source revision")
         review_id = _string(review["review_id"], name="review.review_id")
         reviewer_id = _string(review["reviewer_id"], name="review.reviewer_id")
+        if reviewer_id in reviewer_ids or review_id in review_ids:
+            raise ReceiptError("reviews.json must contain distinct reviewers and review IDs")
+        reviewer_ids.add(reviewer_id)
+        review_ids.add(review_id)
         normalized = {
             "commit": commit,
             "p0_p1": 0,
@@ -496,6 +517,9 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
         "server_side_ack_verified",
         "status",
         "ui_evidence_sha256",
+        "verification_id",
+        "playwright_runner_image_id",
+        "playwright_runner_image_ref",
     }
     if set(live) != expected or live["status"] != "passed":
         raise ReceiptError("live-ui evidence schema/status is invalid")
@@ -503,6 +527,16 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
         raise ReceiptError("live-ui runner did not exit successfully")
     if live["server_side_ack_verified"] is not True:
         raise ReceiptError("live-ui server-side Map ACK was not verified")
+    _uuid(live["verification_id"], name="live-ui.verification_id")
+    _digest(
+        live["playwright_runner_image_id"],
+        name="live-ui.playwright_runner_image_id",
+    )
+    if (
+        not isinstance(live["playwright_runner_image_ref"], str)
+        or _PLAYWRIGHT_IMAGE_RE.fullmatch(live["playwright_runner_image_ref"]) is None
+    ):
+        raise ReceiptError("live-ui Playwright runner image reference is invalid")
     for field in ("map_admin_endpoint", "pinvi_api_endpoint"):
         endpoint = live[field]
         if (
@@ -553,6 +587,14 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
             live["pinvi_api_endpoint"], name="live-ui.pinvi_api_endpoint"
         ),
         "pinvi_receipt_sha256": pinvi_receipt_sha,
+        "playwright_runner_image_id": _digest(
+            live["playwright_runner_image_id"],
+            name="live-ui.playwright_runner_image_id",
+        ),
+        "playwright_runner_image_ref": _string(
+            live["playwright_runner_image_ref"],
+            name="live-ui.playwright_runner_image_ref",
+        ),
         "pinvi_snapshot_after_sha256": _sha256(
             live["pinvi_snapshot_after_sha256"],
             name="live-ui.pinvi_snapshot_after_sha256",
@@ -560,6 +602,9 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
         "pinvi_snapshot_before_sha256": _sha256(
             live["pinvi_snapshot_before_sha256"],
             name="live-ui.pinvi_snapshot_before_sha256",
+        ),
+        "verification_id": _uuid(
+            live["verification_id"], name="live-ui.verification_id"
         ),
         "ui_evidence_sha256": _sha256(
             live["ui_evidence_sha256"], name="live-ui.ui_evidence_sha256"
@@ -583,6 +628,7 @@ def _restore(value: object, *, pinvi_source_revision: str) -> None:
         "status",
         "target_db_identity_sha256",
         "trigger_guard_verified",
+        "runtime_db_identity_sha256",
     }
     if set(restore) != expected or restore["status"] != "passed":
         raise ReceiptError("restore evidence schema/status is invalid")
@@ -600,6 +646,7 @@ def _restore(value: object, *, pinvi_source_revision: str) -> None:
         "dump_sha256",
         "restore_output_sha256",
         "restore_runner_sha256",
+        "runtime_db_identity_sha256",
         "source_db_identity_sha256",
         "target_db_identity_sha256",
     ):
@@ -643,42 +690,60 @@ def _map_pair(
         "api",
         "frontend",
         "full_openapi_sha256",
+        "service_openapi",
+        "user_openapi",
     }:
         raise ReceiptError("Map pair runtime evidence schema is invalid")
     if runtime["full_openapi_sha256"] != expected["full"]["openapi_sha256"]:
         raise ReceiptError("Map runtime OpenAPI does not match the vendored provenance")
-    admin_openapi = _object(
-        runtime["admin_openapi"], name="Map runtime admin OpenAPI evidence"
-    )
-    if set(admin_openapi) != {
-        "canonical_sha256",
-        "http_sha256",
-        "source_canonical_sha256",
-        "source_revision",
-        "source_sha256",
-    }:
-        raise ReceiptError("Map runtime admin OpenAPI evidence schema is invalid")
-    for field in ("canonical_sha256", "http_sha256", "source_canonical_sha256"):
-        _sha256(admin_openapi[field], name=f"Map runtime admin OpenAPI.{field}")
-    if (
-        admin_openapi["canonical_sha256"]
-        != admin_openapi["source_canonical_sha256"]
-        or admin_openapi["source_sha256"] != expected["admin"]["openapi_sha256"]
-        or admin_openapi["source_revision"] != expected["admin"]["source_revision"]
+    runtime_openapi: dict[str, dict[str, object]] = {}
+    for surface, provenance_name in (
+        ("admin_openapi", "admin"),
+        ("service_openapi", "service"),
+        ("user_openapi", "user"),
     ):
-        raise ReceiptError("Map runtime admin OpenAPI is not bound to the pair")
-    _commit(
-        admin_openapi["source_revision"],
-        name="Map runtime admin OpenAPI.source_revision",
-    )
+        artifact = _object(
+            runtime[surface], name=f"Map runtime {provenance_name} OpenAPI evidence"
+        )
+        if set(artifact) != {
+            "canonical_sha256",
+            "http_sha256",
+            "source_canonical_sha256",
+            "source_revision",
+            "source_sha256",
+        }:
+            raise ReceiptError(
+                f"Map runtime {provenance_name} OpenAPI evidence schema is invalid"
+            )
+        for field in ("canonical_sha256", "http_sha256", "source_canonical_sha256"):
+            _sha256(
+                artifact[field],
+                name=f"Map runtime {provenance_name} OpenAPI.{field}",
+            )
+        if (
+            artifact["canonical_sha256"] != artifact["source_canonical_sha256"]
+            or artifact["source_sha256"] != expected[provenance_name]["openapi_sha256"]
+            or artifact["source_revision"]
+            != expected[provenance_name]["source_revision"]
+        ):
+            raise ReceiptError(
+                f"Map runtime {provenance_name} OpenAPI is not bound to the pair"
+            )
+        _commit(
+            artifact["source_revision"],
+            name=f"Map runtime {provenance_name} OpenAPI.source_revision",
+        )
+        runtime_openapi[surface] = artifact
     for name in ("admin", "api", "frontend"):
         runtime_image = _object(runtime[name], name=f"Map runtime {name}")
         if set(runtime_image) != {
+            "container_id",
             "digest",
             "environment",
             "image_id",
             "revision_label",
             "source_revision",
+            "started_at",
         }:
             raise ReceiptError(f"Map runtime {name} evidence schema is invalid")
         if runtime_image["digest"] != runtime_image["image_id"]:
@@ -702,6 +767,13 @@ def _map_pair(
             runtime_image["source_revision"], name=f"Map runtime {name}.source_revision"
         )
         _string(runtime_image["environment"], name=f"Map runtime {name}.environment")
+        if (
+            not isinstance(runtime_image["container_id"], str)
+            or re.fullmatch(r"[0-9a-f]{64}\Z", runtime_image["container_id"]) is None
+            or not isinstance(runtime_image["started_at"], str)
+            or not runtime_image["started_at"]
+        ):
+            raise ReceiptError(f"Map runtime {name} container identity is invalid")
     image_digests = {
         "admin": _digest(pair["admin_image_digest"], name="Map admin image digest"),
         "api": _digest(pair["api_image_digest"], name="Map API image digest"),
@@ -718,11 +790,19 @@ def _map_pair(
     return {
         "admin_image_digest": image_digests["admin"],
         "admin_runtime_openapi_sha256": _sha256(
-            admin_openapi["http_sha256"],
+            runtime_openapi["admin_openapi"]["http_sha256"],
             name="Map runtime admin OpenAPI.http_sha256",
         ),
         "api_image_digest": image_digests["api"],
         "frontend_image_digest": image_digests["frontend"],
+        "service_runtime_openapi_sha256": _sha256(
+            runtime_openapi["service_openapi"]["http_sha256"],
+            name="Map runtime service OpenAPI.http_sha256",
+        ),
+        "user_runtime_openapi_sha256": _sha256(
+            runtime_openapi["user_openapi"]["http_sha256"],
+            name="Map runtime user OpenAPI.http_sha256",
+        ),
     }
 
 
@@ -736,11 +816,13 @@ def _pinvi_images(
     for name in ("api", "web", "dagster"):
         image = _object(images[name], name=f"Pinvi {name} image evidence")
         if set(image) != {
+            "container_id",
             "digest",
             "environment",
             "image_id",
             "revision_label",
             "source_revision",
+            "started_at",
         }:
             raise ReceiptError(f"Pinvi {name} image evidence schema is invalid")
         if image["environment"] != environment:
@@ -758,6 +840,13 @@ def _pinvi_images(
             != pinvi_source_revision
         ):
             raise ReceiptError("Pinvi runtime images do not share one source revision")
+        if (
+            not isinstance(image["container_id"], str)
+            or re.fullmatch(r"[0-9a-f]{64}\Z", image["container_id"]) is None
+            or not isinstance(image["started_at"], str)
+            or not image["started_at"]
+        ):
+            raise ReceiptError(f"Pinvi {name} container identity is invalid")
         result[name] = _digest(image["digest"], name=f"Pinvi {name}.digest")
     return result
 
@@ -772,7 +861,8 @@ def _attestation(
     public_key_bytes: bytes,
     issued_at: int,
     expires_at: int,
-) -> None:
+    activation_nonce: str,
+) -> str:
     envelope = _object(value, name="M05 live attestation")
     if set(envelope) != {"payload", "signature"} or not isinstance(
         envelope["signature"], str
@@ -790,6 +880,8 @@ def _attestation(
         "pinvi_snapshot_sha256",
         "pinvi_api_endpoint",
         "pinvi_source_revision",
+        "playwright_runner_image_id",
+        "playwright_runner_image_ref",
         "scope",
         "status",
         "verification_id",
@@ -812,7 +904,17 @@ def _attestation(
         or payload["created_at"] > int(time.time()) + 60
     ):
         raise ReceiptError("M05 live attestation identity/status is invalid")
-    _uuid(payload["verification_id"], name="attestation verification ID")
+    verification_id = _uuid(payload["verification_id"], name="attestation verification ID")
+    if verification_id != activation_nonce or verification_id != live_ui["verification_id"]:
+        raise ReceiptError("M05 live attestation verification ID is not bound to the receipt nonce")
+    if (
+        payload["playwright_runner_image_id"] != live_ui["playwright_runner_image_id"]
+        or payload["playwright_runner_image_ref"] != live_ui["playwright_runner_image_ref"]
+    ):
+        raise ReceiptError("M05 live attestation does not bind the Playwright runner")
+    _digest(payload["playwright_runner_image_id"], name="attestation.playwright_runner_image_id")
+    if _PLAYWRIGHT_IMAGE_RE.fullmatch(payload["playwright_runner_image_ref"]) is None:
+        raise ReceiptError("M05 live attestation Playwright image reference is invalid")
     if payload["created_at"] > expires_at:
         raise ReceiptError("M05 live attestation is newer than the receipt expiry")
     for field, expected_endpoint in (
@@ -860,6 +962,7 @@ def _attestation(
         )
     except (ValueError, TypeError, InvalidSignature) as exc:
         raise ReceiptError("M05 live attestation signature is invalid") from exc
+    return verification_id
 
 
 def _create(args: argparse.Namespace) -> int:
@@ -883,9 +986,6 @@ def _create(args: argparse.Namespace) -> int:
     )
     if type(issued_at) is not int or type(expires_at) is not int:
         raise ReceiptError("activation timestamps must be integers")
-    activation_nonce = _uuid(
-        args.activation_nonce or str(uuid4()), name="activation nonce"
-    )
     if issued_at > now + 60 or expires_at <= now or expires_at <= issued_at:
         raise ReceiptError("activation receipt freshness window is invalid")
     if expires_at - issued_at > 7 * 24 * 60 * 60:
@@ -906,7 +1006,26 @@ def _create(args: argparse.Namespace) -> int:
             evidence[key] = value
             evidence_hashes[key] = digest
 
-        reviews = _reviews(evidence["reviews"])
+        attestation_envelope = _object(
+            evidence["attestation"], name="M05 live attestation"
+        )
+        attestation_payload = _object(
+            attestation_envelope.get("payload"), name="M05 live attestation payload"
+        )
+        attestation_nonce = _uuid(
+            attestation_payload.get("verification_id"),
+            name="M05 attestation verification ID",
+        )
+        activation_nonce = _uuid(
+            args.activation_nonce or attestation_nonce, name="activation nonce"
+        )
+        if activation_nonce != attestation_nonce:
+            raise ReceiptError(
+                "activation nonce must match the live attestation verification ID"
+            )
+        reviews = _reviews(
+            evidence["reviews"], pinvi_source_revision=source_revision
+        )
         live_ui = _live_ui(evidence["live_ui"], pinvi_source_revision=source_revision)
         _restore(evidence["restore"], pinvi_source_revision=source_revision)
         pair_expected = _pair_provenance()
@@ -955,6 +1074,7 @@ def _create(args: argparse.Namespace) -> int:
         public_key_bytes=public_key_raw,
         issued_at=issued_at,
         expires_at=expires_at,
+        activation_nonce=activation_nonce,
     )
 
     payload: dict[str, object] = {
@@ -971,6 +1091,9 @@ def _create(args: argparse.Namespace) -> int:
         "live_ui_local_receipt_sha256": live_ui["map_local_receipt_sha256"],
         "live_ui_map_snapshot_sha256": live_ui["map_snapshot_after_sha256"],
         "live_ui_pinvi_snapshot_sha256": live_ui["pinvi_snapshot_after_sha256"],
+        "live_ui_playwright_runner_image_id": live_ui["playwright_runner_image_id"],
+        "live_ui_playwright_runner_image_ref": live_ui["playwright_runner_image_ref"],
+        "live_ui_verification_id": live_ui["verification_id"],
         "map_admin_openapi_sha256": pair_expected["admin"]["openapi_sha256"],
         "map_admin_runtime_openapi_sha256": map_pair[
             "admin_runtime_openapi_sha256"
@@ -983,8 +1106,14 @@ def _create(args: argparse.Namespace) -> int:
         "map_full_source_revision": pair_expected["full"]["source_revision"],
         "map_pair_evidence_sha256": evidence_hashes["map_pair"],
         "map_service_openapi_sha256": pair_expected["service"]["openapi_sha256"],
+        "map_service_runtime_openapi_sha256": map_pair[
+            "service_runtime_openapi_sha256"
+        ],
         "map_service_source_revision": pair_expected["service"]["source_revision"],
         "map_user_openapi_sha256": pair_expected["user"]["openapi_sha256"],
+        "map_user_runtime_openapi_sha256": map_pair[
+            "user_runtime_openapi_sha256"
+        ],
         "map_user_source_revision": pair_expected["user"]["source_revision"],
         "pinvi_api_image_digest": pinvi_images["api"],
         "pinvi_dagster_image_digest": pinvi_images["dagster"],

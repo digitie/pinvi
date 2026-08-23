@@ -469,6 +469,8 @@ class Settings(BaseSettings):
     pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt_public_key: str = ""
     # receipt nonce/generation의 root-owned append-only ledger. staging/production enable 시 필수다.
     pinvi_m05_activation_ledger_path: str = ""
+    # 배포자가 승인한 ledger high-watermark. 이 값보다 낮은 receipt rollback은 거부한다.
+    pinvi_m05_activation_min_generation: int = Field(default=0, ge=0)
     # immutable deploy wrapper가 대조한 세 Pinvi runtime image digest를 API에만 전달한다.
     pinvi_api_image_digest: str = ""
     pinvi_web_image_digest: str = ""
@@ -977,6 +979,9 @@ class Settings(BaseSettings):
             "live_ui_local_receipt_sha256",
             "live_ui_map_snapshot_sha256",
             "live_ui_pinvi_snapshot_sha256",
+            "live_ui_playwright_runner_image_id",
+            "live_ui_playwright_runner_image_ref",
+            "live_ui_verification_id",
             "map_admin_openapi_sha256",
             "map_admin_runtime_openapi_sha256",
             "map_admin_source_revision",
@@ -987,8 +992,10 @@ class Settings(BaseSettings):
             "map_full_source_revision",
             "map_pair_evidence_sha256",
             "map_service_openapi_sha256",
+            "map_service_runtime_openapi_sha256",
             "map_service_source_revision",
             "map_user_openapi_sha256",
+            "map_user_runtime_openapi_sha256",
             "map_user_source_revision",
             "pinvi_api_image_digest",
             "pinvi_dagster_image_digest",
@@ -1057,16 +1064,27 @@ class Settings(BaseSettings):
             or expires_at - issued_at > 7 * 24 * 60 * 60
             or issued_at > int(time.time()) + 60
             or expires_at <= int(time.time())
+            or generation <= self.pinvi_m05_activation_min_generation
             or not _is_canonical_uuid(payload["activation_nonce"])
         ):
             _raise_redacted_settings_error(
                 "M05 activation receipt freshness, generation, or nonce is invalid"
             )
 
+        if (
+            not isinstance(payload["pinvi_source_revision"], str)
+            or re.fullmatch(r"[0-9a-f]{40}", payload["pinvi_source_revision"]) is None
+            or payload["pinvi_source_revision"] != os.environ.get("PINVI_SOURCE_REVISION", "")
+        ):
+            _raise_redacted_settings_error(
+                "M05 activation receipt Pinvi source revision must match PINVI_SOURCE_REVISION"
+            )
         reviews = payload["adversarial_reviews"]
         if not isinstance(reviews, list) or len(reviews) != 2:
             _raise_redacted_settings_error("M05 activation requires two adversarial reviews")
         review_keys: set[tuple[str, str, str]] = set()
+        reviewer_ids: set[str] = set()
+        review_ids: set[str] = set()
         for review in reviews:
             if not isinstance(review, dict) or set(review) != {
                 "commit",
@@ -1088,16 +1106,23 @@ class Settings(BaseSettings):
                 or review["p0_p1"] != 0
                 or not isinstance(review["commit"], str)
                 or re.fullmatch(r"[0-9a-f]{40}", review["commit"]) is None
+                or review["commit"] != payload["pinvi_source_revision"]
             ):
                 _raise_redacted_settings_error(
                     "M05 activation requires two adversarial reviews with zero P0/P1 findings"
                 )
             review_key = (reviewer_id, review_id, review["commit"])
-            if review_key in review_keys:
+            if (
+                review_key in review_keys
+                or reviewer_id in reviewer_ids
+                or review_id in review_ids
+            ):
                 _raise_redacted_settings_error(
                     "M05 activation requires two distinct adversarial reviews"
                 )
             review_keys.add(review_key)
+            reviewer_ids.add(reviewer_id)
+            review_ids.add(review_id)
         if payload["live_ui_e2e"] != "passed" or payload["restore_drill"] != "passed":
             _raise_redacted_settings_error(
                 "M05 activation requires passed live UI E2E and restore drill evidence"
@@ -1114,6 +1139,8 @@ class Settings(BaseSettings):
             "live_ui_map_snapshot_sha256",
             "live_ui_pinvi_snapshot_sha256",
             "map_admin_runtime_openapi_sha256",
+            "map_service_runtime_openapi_sha256",
+            "map_user_runtime_openapi_sha256",
             "map_pair_evidence_sha256",
             "pinvi_image_evidence_sha256",
             "restore_evidence_sha256",
@@ -1122,6 +1149,21 @@ class Settings(BaseSettings):
             value = payload[field]
             if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
                 _raise_redacted_settings_error(f"M05 activation evidence hash is invalid: {field}")
+
+        if (
+            not isinstance(payload["live_ui_playwright_runner_image_id"], str)
+            or re.fullmatch(r"sha256:[0-9a-f]{64}", payload["live_ui_playwright_runner_image_id"]) is None
+            or not isinstance(payload["live_ui_playwright_runner_image_ref"], str)
+            or re.fullmatch(
+                r"mcr\.microsoft\.com/playwright:[A-Za-z0-9][A-Za-z0-9._-]*@sha256:[0-9a-f]{64}",
+                payload["live_ui_playwright_runner_image_ref"],
+            ) is None
+            or not _is_canonical_uuid(payload["live_ui_verification_id"])
+            or payload["live_ui_verification_id"] != payload["activation_nonce"]
+        ):
+            _raise_redacted_settings_error(
+                "M05 live UI runner identity or verification nonce is invalid"
+            )
 
         for field in ("live_ui_local_receipt_sha256",):
             if not isinstance(payload[field], str):
@@ -1199,6 +1241,7 @@ class Settings(BaseSettings):
         ):
             _raise_redacted_settings_error("M05 activation receipt ledger permissions are invalid")
         records: list[dict[str, object]] = []
+        activation_nonces: set[str] = set()
         previous_generation: int | None = None
         previous_record_sha256 = "0" * 64
         for line in ledger_lines:
@@ -1250,6 +1293,10 @@ class Settings(BaseSettings):
                 or re.fullmatch(r"[0-9a-f]{40}", source_revision) is None
             ):
                 _raise_redacted_settings_error("M05 activation receipt ledger fields are invalid")
+            activation_nonce = cast(str, record_object["activation_nonce"])
+            if activation_nonce in activation_nonces:
+                _raise_redacted_settings_error("M05 activation receipt ledger replays a nonce")
+            activation_nonces.add(activation_nonce)
             if record_sha256 != _ledger_record_hash(record_object):
                 _raise_redacted_settings_error("M05 activation receipt ledger hash chain is invalid")
             previous_generation = generation

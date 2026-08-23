@@ -42,6 +42,19 @@ def test_m05_restore_drill_seals_actual_runner_evidence(tmp_path: Path) -> None:
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
     _write_executable(
+        fake_bin / "git",
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$*" == *"rev-parse HEAD"* ]]; then
+  echo "ffffffffffffffffffffffffffffffffffffffff"
+elif [[ "$*" == *"status --porcelain"* ]]; then
+  exit 0
+else
+  exec /usr/bin/git "$@"
+fi
+""",
+    )
+    _write_executable(
         fake_bin / "pg_dump",
         """#!/usr/bin/env bash
 set -euo pipefail
@@ -68,7 +81,11 @@ if [[ "$sql" == *"SET LOCAL session_replication_role"* ]]; then
   echo 'app.ktm_feature_reference_reconciliation_delivery_attempts is append-only' >&2
   exit 1
 elif [[ "$sql" == *"json_build_object"* ]]; then
-  echo '{"database":"fixture","user":"fixture","schema_exists":true,"server_version_num":"160000"}'
+  if [[ "$sql" == *"/source"* ]]; then
+    echo '{"database":"fixture-source","user":"fixture","database_oid":"100","system_identifier":"1","schema_exists":true,"server_version_num":"160000"}'
+  else
+    echo '{"database":"fixture-target","user":"fixture","database_oid":"200","system_identifier":"1","schema_exists":true,"server_version_num":"160000"}'
+  fi
 elif [[ "$sql" == *"has_schema_privilege"* || "$sql" == *"count(*) = 6"* || "$sql" == *"FROM pg_roles"* ]]; then
   echo t
 elif [[ "$sql" == *"lag(content_hash)"* ]]; then
@@ -94,6 +111,7 @@ fi
             "PINVI_RESTORE_STAGING_DATABASE_URL": "postgresql://owner:secret@db/target",
             "PINVI_RESTORE_RUNTIME_DATABASE_URL": "postgresql://runtime:secret@db/target",
             "PINVI_RESTORE_RUNTIME_ROLE": "pinvi_app",
+            "PINVI_SOURCE_REVISION": "f" * 40,
         }
     )
     script = Path(__file__).resolve().parents[4] / "scripts/m05_restore_drill.py"
