@@ -111,3 +111,36 @@ def test_m05_map_checkout_allowlist_uses_only_source_revisions() -> None:
 
     assert "runtime_image_digests" not in allowed
     assert pair["full"]["source_revision"] in allowed
+
+
+def test_m05_map_case_binds_missing_event_hash_to_ack(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _attestation_module()
+    monkeypatch.setenv("M05_MAP_ADMIN_PROXY_SECRET", "s" * 32)
+    event_id = "11111111-1111-4111-8111-111111111111"
+    ack_hash = "a" * 64
+    response = {
+        "data": {
+            "status": "terminal",
+            "event": {"event_id": event_id, "event_sequence": 1},
+            "subscriptions": [
+                {
+                    "principal_id": "service:feature-reference-reconciliation",
+                    "acked_through_sequence": 1,
+                    "ack": {
+                        "event_id": event_id,
+                        "event_sha256": ack_hash,
+                        "local_receipt_sha256": "b" * 64,
+                    },
+                }
+            ],
+        }
+    }
+    monkeypatch.setattr(module, "_http_json", lambda *args, **kwargs: (response, b"{}"))
+
+    _data, ack, _map_hash, _ack_hash = module._map_case_snapshot(
+        map_admin_url="http://127.0.0.1:14701",
+        case_id="22222222-2222-4222-8222-222222222222",
+        event_id=event_id,
+    )
+
+    assert ack["event_sha256"] == ack_hash

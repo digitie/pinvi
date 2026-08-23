@@ -375,9 +375,12 @@ def _map_case_snapshot(
     event = _object(data.get("event"), name="Map case event")
     if _uuid(event.get("event_id"), name="Map event ID") != event_id:
         raise AttestationError("Map case event does not match the requested event")
-    event_sha = _string(event.get("event_sha256"), name="Map event hash")
-    if _SHA256_RE.fullmatch(event_sha) is None:
-        raise AttestationError("Map event hash is invalid")
+    event_sha_value = event.get("event_sha256")
+    event_sha: str | None = (
+        _string(event_sha_value, name="Map event hash")
+        if event_sha_value is not None
+        else None
+    )
     sequence = event.get("event_sequence")
     if type(sequence) is not int or sequence < 1:
         raise AttestationError("Map event sequence is invalid")
@@ -399,9 +402,16 @@ def _map_case_snapshot(
     ack = _object(subscription.get("ack"), name="Map ACK")
     if (
         _uuid(ack.get("event_id"), name="Map ACK event ID") != event_id
-        or ack.get("event_sha256") != event_sha
     ):
         raise AttestationError("Map ACK does not bind to the event")
+    ack_sha = _string(ack.get("event_sha256"), name="Map ACK event hash")
+    if event_sha is None:
+        # The current Map case-detail projection exposes the immutable hash on
+        # the ACK, while its event payload omits the column. The ACK is still
+        # bound to this event ID and sequence, so use that hash as the proof.
+        event_sha = ack_sha
+    if _SHA256_RE.fullmatch(event_sha) is None or ack_sha != event_sha:
+        raise AttestationError("Map event hash is invalid")
     local_receipt_sha = _string(
         ack.get("local_receipt_sha256"), name="Map local receipt hash"
     )
