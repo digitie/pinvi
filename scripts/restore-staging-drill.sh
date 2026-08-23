@@ -344,6 +344,7 @@ if [[ "${restore_status}" != "0" ]]; then
 fi
 while IFS= read -r restore_line; do
   case "${restore_line}" in
+    RESTORE_TARGET_BINDING=*) printf '%s\n' "${restore_line}" ;;
     RESTORE_COMMAND=*) printf '%s\n' "${restore_line}" ;;
     RESTORED_FILE=*) evidence restored_file "$(mask_snapshot "${SNAPSHOT}")" ;;
   esac

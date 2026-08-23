@@ -99,6 +99,12 @@ def test_restore_staging_drill_requires_staging_url(tmp_path: Path) -> None:
     assert "PINVI_RESTORE_STAGING_DATABASE_URL is required" in result.stdout
 
 
+def test_restore_staging_drill_forwards_target_binding_marker() -> None:
+    script = SCRIPT.read_text(encoding="utf-8")
+
+    assert "RESTORE_TARGET_BINDING=*) printf '%s\\n' \"${restore_line}\" ;;" in script
+
+
 def test_restore_staging_drill_masks_path_and_rehearses_guard(tmp_path: Path) -> None:
     snapshot = tmp_path / "pinvi-app-test.dump"
     _write_snapshot(snapshot)
