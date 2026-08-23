@@ -34,6 +34,7 @@ _PLAYWRIGHT_IMAGE_RE = re.compile(
 _REVIEW_PR_RE = re.compile(r"https://github\.com/digitie/pinvi/pull/[1-9][0-9]*\Z")
 _M05_ACTIVATION_PR_URL = "https://github.com/digitie/pinvi/pull/466"
 _M05_RESTORE_DATABASE_RE = re.compile(r"pinvi_m05_restore_[a-z0-9_]+\Z")
+_HOST_TOOL_DIRECTORIES = (Path("/usr/bin"), Path("/bin"))
 _PAIR_PROVENANCE = Path(__file__).resolve().parents[1] / (
     "contracts/kor-travel-map-m05-pair-provenance-v1.json"
 )
@@ -281,19 +282,82 @@ def _reviewer_roster() -> set[str]:
     return result
 
 
+def _review_allowlist(
+    path: Path | None, *, require_root_owned: bool
+) -> set[tuple[str, str, str, str]]:
+    if path is None:
+        raise ReceiptError("production receipt requires an external review allowlist")
+    parent = path.parent
+    if parent.is_symlink() or not parent.is_dir():
+        raise ReceiptError("review allowlist parent must be a regular directory")
+    parent_stat = parent.stat()
+    if stat.S_IMODE(parent_stat.st_mode) & 0o022:
+        raise ReceiptError("review allowlist parent must not be group/world writable")
+    if require_root_owned and parent_stat.st_uid != 0:
+        raise ReceiptError("review allowlist parent is not root-owned")
+    raw = _read_secure_bytes(
+        path,
+        require_root_owned=require_root_owned,
+        label="review allowlist",
+    )
+    try:
+        value = json.loads(raw, object_pairs_hook=_reject_duplicate_keys)
+    except (UnicodeDecodeError, json.JSONDecodeError, ReceiptError) as exc:
+        raise ReceiptError("review allowlist is invalid JSON") from exc
+    if not isinstance(value, list) or len(value) != 2:
+        raise ReceiptError("review allowlist must contain exactly two reviews")
+    result: set[tuple[str, str, str, str]] = set()
+    allowed_agents = _reviewer_roster()
+    for item in value:
+        review = _object(item, name="review allowlist entry")
+        if set(review) != {"agent_id", "commit", "pr_url", "review_id"}:
+            raise ReceiptError("review allowlist entry schema is invalid")
+        agent_id = _uuid(review["agent_id"], name="review allowlist agent_id")
+        commit = _commit(review["commit"], name="review allowlist commit")
+        pr_url = _string(review["pr_url"], name="review allowlist pr_url")
+        review_id = _uuid(review["review_id"], name="review allowlist review_id")
+        if agent_id not in allowed_agents or pr_url != _M05_ACTIVATION_PR_URL:
+            raise ReceiptError("review allowlist entry is not pinned to M05")
+        key = (agent_id, review_id, commit, pr_url)
+        if key in result:
+            raise ReceiptError("review allowlist entries must be distinct")
+        result.add(key)
+    if {entry[0] for entry in result} != allowed_agents:
+        raise ReceiptError("review allowlist must cover both pinned reviewers")
+    return result
+
+
+def _host_tool(name: str) -> str:
+    for directory in _HOST_TOOL_DIRECTORIES:
+        candidate = directory / name
+        if not candidate.is_file() or not os.access(candidate, os.X_OK):
+            continue
+        resolved = candidate.resolve()
+        if resolved.parent in _HOST_TOOL_DIRECTORIES:
+            return str(resolved)
+    raise ReceiptError(f"pinned host tool is missing: {name}")
+
+
 def _assert_source_checkout(source_revision: str) -> None:
     """receipt signer가 인자로 받은 revision의 clean checkout에서만 동작하게 한다."""
 
     root = Path(__file__).resolve().parents[1]
     try:
         revision = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            [_host_tool("git"), "-C", str(root), "rev-parse", "HEAD"],
             check=True,
             capture_output=True,
             text=True,
         ).stdout.strip()
         status = subprocess.run(
-            ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
+            [
+                _host_tool("git"),
+                "-C",
+                str(root),
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
+            ],
             check=True,
             capture_output=True,
             text=True,
@@ -489,6 +553,79 @@ def _write_high_watermark(
         raise ReceiptError("activation high-watermark update could not be verified")
 
 
+def _read_durable_floor(path: Path, *, require_root_owned: bool) -> int | None:
+    if not path.exists():
+        return None
+    if path.is_symlink() or not path.is_file():
+        raise ReceiptError("activation durable floor is not a regular file")
+    raw = _read_secure_bytes(
+        path,
+        require_root_owned=require_root_owned,
+        label="activation durable floor",
+    )
+    try:
+        value = json.loads(raw, object_pairs_hook=_reject_duplicate_keys)
+    except (UnicodeDecodeError, json.JSONDecodeError, ReceiptError) as exc:
+        raise ReceiptError("activation durable floor is invalid JSON") from exc
+    payload = _object(value, name="activation durable floor")
+    generation = payload.get("generation")
+    if set(payload) != {"generation"} or type(generation) is not int or generation < 1:
+        raise ReceiptError("activation durable floor schema is invalid")
+    return generation
+
+
+def _write_durable_floor(
+    path: Path, *, generation: int, require_root_owned: bool
+) -> None:
+    if type(generation) is not int or generation < 1:
+        raise ReceiptError("activation durable floor generation is invalid")
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if path.parent.is_symlink() or not path.parent.is_dir():
+        raise ReceiptError("activation durable floor parent must be a regular directory")
+    parent_stat = path.parent.stat()
+    if stat.S_IMODE(parent_stat.st_mode) & 0o022:
+        raise ReceiptError("activation durable floor parent must not be group/world writable")
+    if require_root_owned and parent_stat.st_uid != 0:
+        raise ReceiptError("activation durable floor parent is not root-owned")
+    existing = _read_durable_floor(path, require_root_owned=require_root_owned)
+    if existing is not None:
+        if existing > generation:
+            raise ReceiptError("activation durable floor generation cannot move backwards")
+        if existing == generation:
+            return
+    temporary = path.parent / f".{path.name}.{os.getpid()}.{uuid4().hex}.tmp"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    fd = -1
+    try:
+        fd = os.open(temporary, flags, 0o600)
+        with os.fdopen(fd, "wb") as stream:
+            fd = -1
+            stream.write(_canonical_json({"generation": generation}))
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        directory_fd = os.open(
+            path.parent,
+            os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_DIRECTORY", 0),
+        )
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except OSError as exc:
+        raise ReceiptError("activation durable floor could not be updated") from exc
+    finally:
+        if fd != -1:
+            os.close(fd)
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+    if _read_durable_floor(path, require_root_owned=require_root_owned) != generation:
+        raise ReceiptError("activation durable floor update could not be verified")
+
+
 def _ledger(args: argparse.Namespace) -> int:
     receipt_bytes = _read_secure_bytes(
         args.receipt,
@@ -592,6 +729,11 @@ def _ledger(args: argparse.Namespace) -> int:
         receipt_sha256=cast(str, record["receipt_sha256"]),
         require_root_owned=args.require_root_owned,
     )
+    _write_durable_floor(
+        args.durable_floor,
+        generation=generation,
+        require_root_owned=args.require_root_owned,
+    )
     print(f"ledger_generation={generation}")
     print(f"ledger_receipt_sha256={record['receipt_sha256']}")
     return 0
@@ -658,12 +800,17 @@ def _pair_provenance() -> dict[str, dict[str, str]]:
 
 
 def _reviews(
-    value: object, *, pinvi_source_revision: str, expected_pr_url: str
+    value: object,
+    *,
+    pinvi_source_revision: str,
+    expected_pr_url: str,
+    allowed_review_keys: set[tuple[str, str, str, str]],
 ) -> list[dict[str, object]]:
     if not isinstance(value, list) or len(value) != 2:
         raise ReceiptError("reviews.json must contain exactly two reviews")
     result: list[dict[str, object]] = []
     review_keys: set[tuple[str, str, str]] = set()
+    allowlist_keys: set[tuple[str, str, str, str]] = set()
     reviewer_ids: set[str] = set()
     review_ids: set[str] = set()
     agent_ids: set[str] = set()
@@ -739,7 +886,13 @@ def _reviews(
         if key in review_keys:
             raise ReceiptError("reviews.json must contain two distinct reviews")
         review_keys.add(key)
+        allowlist_key = (agent_id, review_id, commit, pr_url)
+        if allowlist_key not in allowed_review_keys:
+            raise ReceiptError("review is not bound to the external review allowlist")
+        allowlist_keys.add(allowlist_key)
         result.append(normalized)
+    if allowlist_keys != allowed_review_keys:
+        raise ReceiptError("external review allowlist does not match reviews.json")
     return result
 
 
@@ -1447,6 +1600,10 @@ def _create(args: argparse.Namespace) -> int:
     scope = _string(args.scope, name="receipt scope")
     if scope not in {"staging", "production"}:
         raise ReceiptError("receipt scope must be staging or production")
+    allowed_review_keys = _review_allowlist(
+        args.review_allowlist,
+        require_root_owned=args.require_root_owned,
+    )
     now = int(time.time())
     issued_at = (
         args.activation_issued_at if args.activation_issued_at is not None else now
@@ -1499,6 +1656,7 @@ def _create(args: argparse.Namespace) -> int:
             evidence["reviews"],
             pinvi_source_revision=source_revision,
             expected_pr_url=args.pr_url,
+            allowed_review_keys=allowed_review_keys,
         )
         live_ui = _live_ui(evidence["live_ui"], pinvi_source_revision=source_revision)
         _restore(evidence["restore"], pinvi_source_revision=source_revision)
@@ -1660,12 +1818,14 @@ def _parser() -> argparse.ArgumentParser:
     create.add_argument("--activation-nonce")
     create.add_argument("--activation-issued-at", type=int)
     create.add_argument("--activation-expires-at", type=int)
+    create.add_argument("--review-allowlist", type=Path, required=True)
     create.add_argument("--require-root-owned", action="store_true")
     create.set_defaults(handler=_create)
     ledger = subparsers.add_parser("ledger")
     ledger.add_argument("--receipt", type=Path, required=True)
     ledger.add_argument("--ledger", type=Path, required=True)
     ledger.add_argument("--high-watermark", type=Path, required=True)
+    ledger.add_argument("--durable-floor", type=Path, required=True)
     ledger.add_argument("--require-root-owned", action="store_true")
     ledger.set_defaults(handler=_ledger)
     return parser

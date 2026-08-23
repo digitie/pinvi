@@ -47,8 +47,9 @@ if [[ "$(uname -s)" != "Linux" ]]; then
   exit 1
 fi
 
-if ! command -v docker >/dev/null 2>&1; then
-  echo "error: docker is required" >&2
+docker_bin="/usr/bin/docker"
+if [[ ! -x "${docker_bin}" ]]; then
+  echo "error: pinned /usr/bin/docker is required" >&2
   exit 1
 fi
 
@@ -143,4 +144,4 @@ exec "$@"'
 
 echo "playwright_runner_image=$image"
 echo "playwright_runner_network=$network"
-exec docker "${docker_args[@]}"
+exec "${docker_bin}" "${docker_args[@]}"

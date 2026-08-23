@@ -45,10 +45,22 @@ _PLAYWRIGHT_IMAGE_RE = re.compile(
 _PAIR_PATH = Path(__file__).resolve().parents[1] / (
     "contracts/kor-travel-map-m05-pair-provenance-v1.json"
 )
+_HOST_TOOL_DIRECTORIES = (Path("/usr/bin"), Path("/bin"))
 
 
 class AttestationError(ValueError):
     """원격 live evidence가 attestation 계약을 위반했다."""
+
+
+def _host_tool(name: str) -> str:
+    for directory in _HOST_TOOL_DIRECTORIES:
+        candidate = directory / name
+        if not candidate.is_file() or not os.access(candidate, os.X_OK):
+            continue
+        resolved = candidate.resolve()
+        if resolved.parent in _HOST_TOOL_DIRECTORIES:
+            return str(resolved)
+    raise AttestationError(f"pinned host tool is missing: {name}")
 
 
 class _NoRedirectHandler(HTTPRedirectHandler):
@@ -245,19 +257,26 @@ def _assert_clean_checkout(
         raise AttestationError(f"{label} must be a regular directory")
     try:
         top = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+            [_host_tool("git"), "-C", str(root), "rev-parse", "--show-toplevel"],
             check=True,
             capture_output=True,
             text=True,
         ).stdout.strip()
         revision = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            [_host_tool("git"), "-C", str(root), "rev-parse", "HEAD"],
             check=True,
             capture_output=True,
             text=True,
         ).stdout.strip()
         status = subprocess.run(
-            ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
+            [
+                _host_tool("git"),
+                "-C",
+                str(root),
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
+            ],
             check=True,
             capture_output=True,
             text=True,
@@ -510,7 +529,7 @@ def _docker_inspect(
         raise AttestationError("container name is invalid")
     try:
         completed = subprocess.run(
-            ["docker", "inspect", "--format", "{{json .}}", container],
+            [_host_tool("docker"), "inspect", "--format", "{{json .}}", container],
             check=True,
             capture_output=True,
             text=True,
@@ -588,7 +607,14 @@ def _docker_image_identity(image_ref: str) -> dict[str, str]:
     repository, expected_digest = image_ref.rsplit("@", 1)
     try:
         completed = subprocess.run(
-            ["docker", "image", "inspect", "--format", "{{json .}}", image_ref],
+            [
+                _host_tool("docker"),
+                "image",
+                "inspect",
+                "--format",
+                "{{json .}}",
+                image_ref,
+            ],
             check=True,
             capture_output=True,
             text=True,
@@ -631,7 +657,13 @@ def _git_blob(source_root: Path, *, revision: str, relative_path: str) -> bytes:
         raise AttestationError("Map source root must be a regular directory")
     try:
         completed = subprocess.run(
-            ["git", "-C", str(source_root), "show", f"{revision}:{relative_path}"],
+            [
+                _host_tool("git"),
+                "-C",
+                str(source_root),
+                "show",
+                f"{revision}:{relative_path}",
+            ],
             check=True,
             capture_output=True,
         )
@@ -1120,6 +1152,7 @@ def _live(args: argparse.Namespace) -> int:
     if marker_path.is_symlink() or marker_path.exists():
         raise AttestationError("UI evidence marker must not pre-exist the pinned run")
     child_env = os.environ.copy()
+    child_env["PATH"] = "/usr/local/bin:/usr/bin:/bin"
     child_env["PINVI_M05_UI_EVIDENCE_DIR"] = str(evidence_dir)
     child_env["PINVI_M05_LIVE_EVENT_ID"] = event_id
     child_env["PINVI_M05_UI_VERIFICATION_ID"] = verification_id

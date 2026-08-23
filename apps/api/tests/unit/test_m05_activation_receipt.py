@@ -118,6 +118,24 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             },
         ],
     )
+    review_allowlist_path = tmp_path / "reviews-allowlist.json"
+    _write_json(
+        review_allowlist_path,
+        [
+            {
+                "agent_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
+                "commit": PINVI_REVISION,
+                "pr_url": "https://github.com/digitie/pinvi/pull/466",
+                "review_id": "44444444-4444-4444-8444-444444444444",
+            },
+            {
+                "agent_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
+                "commit": PINVI_REVISION,
+                "pr_url": "https://github.com/digitie/pinvi/pull/466",
+                "review_id": "55555555-5555-4555-8555-555555555555",
+            },
+        ],
+    )
     _write_json(
         evidence_dir / "live-ui.json",
         {
@@ -400,6 +418,8 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             PINVI_REVISION,
             "--activation-generation",
             "2",
+            "--review-allowlist",
+            str(review_allowlist_path),
         ],
         check=True,
         capture_output=True,
@@ -413,6 +433,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     receipt = receipt_path.read_text(encoding="utf-8")
     ledger_path = tmp_path / "activation-ledger.jsonl"
     high_watermark_path = tmp_path / "activation-high-watermark.json"
+    durable_floor_path = tmp_path / "activation-durable-floor.json"
     subprocess.run(  # noqa: S603 - invokes the repository-pinned Python test helper
         [
             sys.executable,
@@ -424,6 +445,8 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             str(ledger_path),
             "--high-watermark",
             str(high_watermark_path),
+            "--durable-floor",
+            str(durable_floor_path),
         ],
         check=True,
         capture_output=True,
@@ -435,6 +458,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         "generation": 2,
         "receipt_sha256": hashlib.sha256(receipt.encode("utf-8")).hexdigest(),
     }
+    assert json.loads(durable_floor_path.read_text(encoding="utf-8")) == {"generation": 2}
     loaded = Settings(
         _env_file=None,
         pinvi_environment="production",
@@ -455,6 +479,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt_public_key=public_key,
         pinvi_m05_activation_ledger_path=str(ledger_path),
         pinvi_m05_activation_high_watermark_path=str(high_watermark_path),
+        pinvi_m05_activation_durable_floor_path=str(durable_floor_path),
         pinvi_m05_activation_pr_url="https://github.com/digitie/pinvi/pull/466",
         pinvi_api_image_digest=PINVI_DIGESTS["api"],
         pinvi_web_image_digest=PINVI_DIGESTS["web"],

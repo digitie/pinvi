@@ -112,8 +112,15 @@ def _production_settings(**overrides: object) -> Settings:
                 encoding="utf-8",
             )
             high_watermark_path.chmod(0o600)
+            durable_floor_path = Path(ledger_dir.name) / "activation-durable-floor.json"
+            durable_floor_path.write_text(
+                json.dumps({"generation": payload["activation_generation"]}),
+                encoding="utf-8",
+            )
+            durable_floor_path.chmod(0o600)
             overrides["pinvi_m05_activation_ledger_path"] = str(ledger_path)
             overrides["pinvi_m05_activation_high_watermark_path"] = str(high_watermark_path)
+            overrides["pinvi_m05_activation_durable_floor_path"] = str(durable_floor_path)
             loaded = Settings(_env_file=None, pinvi_environment="production", **overrides)  # type: ignore[arg-type]
             ledger_dir.cleanup()
             return loaded

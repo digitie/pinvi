@@ -408,14 +408,21 @@ def _source_revision(root: Path) -> str:
         )
     try:
         revision = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            [_tool_path("git"), "-C", str(root), "rev-parse", "HEAD"],
             check=True,
             capture_output=True,
             text=True,
             env=_command_env(),
         ).stdout.strip()
         status = subprocess.run(
-            ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
+            [
+                _tool_path("git"),
+                "-C",
+                str(root),
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
+            ],
             check=True,
             capture_output=True,
             text=True,

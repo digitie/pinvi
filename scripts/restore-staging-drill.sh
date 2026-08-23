@@ -88,13 +88,25 @@ if [[ ! -f "${SNAPSHOT}" ]]; then
   exit 2
 fi
 
+pinned_tool() {
+  local name="$1"
+  local candidate
+  for candidate in "/usr/local/bin/${name}" "/usr/bin/${name}" "/bin/${name}"; do
+    if [[ -f "${candidate}" && -x "${candidate}" ]]; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 PSQL_BIN="${PINVI_RESTORE_PSQL_BIN:-}"
 if [[ -z "${PSQL_BIN}" ]]; then
-  PSQL_BIN="$(command -v psql || true)"
+  PSQL_BIN="$(pinned_tool psql || true)"
 fi
 PG_RESTORE_BIN="${PINVI_RESTORE_PG_RESTORE_BIN:-}"
 if [[ -z "${PG_RESTORE_BIN}" ]]; then
-  PG_RESTORE_BIN="$(command -v pg_restore || true)"
+  PG_RESTORE_BIN="$(pinned_tool pg_restore || true)"
 fi
 for tool_path in "${PG_RESTORE_BIN}" "${PSQL_BIN}"; do
   if [[ "${tool_path}" != /* || ! -x "${tool_path}" ]]; then

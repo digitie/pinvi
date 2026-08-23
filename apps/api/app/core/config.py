@@ -594,6 +594,8 @@ class Settings(BaseSettings):
     pinvi_m05_activation_ledger_path: str = ""
     # ledger와 분리된 root-owned high-watermark. 같은 generation의 다른 receipt replay도 거부한다.
     pinvi_m05_activation_high_watermark_path: str = ""
+    # ledger/high-watermark와 분리된 root-owned monotonic floor. 함께 복원된 과거 snapshot을 거부한다.
+    pinvi_m05_activation_durable_floor_path: str = ""
     # receipt가 봉인된 작업의 정본 PR URL.
     pinvi_m05_activation_pr_url: str = _M05_ACTIVATION_PR_URL
     # 배포자가 승인한 ledger generation. 이 값보다 낮은 receipt rollback은 거부한다.
@@ -1511,6 +1513,7 @@ class Settings(BaseSettings):
     ) -> None:
         ledger_path = Path(self.pinvi_m05_activation_ledger_path)
         high_watermark_path = Path(self.pinvi_m05_activation_high_watermark_path)
+        durable_floor_path = Path(self.pinvi_m05_activation_durable_floor_path)
         if (
             not self.pinvi_m05_activation_ledger_path
             or ledger_path.is_symlink()
@@ -1518,9 +1521,12 @@ class Settings(BaseSettings):
             or not self.pinvi_m05_activation_high_watermark_path
             or high_watermark_path.is_symlink()
             or not high_watermark_path.is_file()
+            or not self.pinvi_m05_activation_durable_floor_path
+            or durable_floor_path.is_symlink()
+            or not durable_floor_path.is_file()
         ):
             _raise_redacted_settings_error(
-                "M05 activation ledger and external high-watermark files are required"
+                "M05 activation ledger, high-watermark, and durable floor files are required"
             )
         try:
             ledger_stat = ledger_path.stat()
@@ -1528,6 +1534,11 @@ class Settings(BaseSettings):
             high_watermark_stat = high_watermark_path.stat()
             high_watermark = json.loads(
                 high_watermark_path.read_text(encoding="utf-8"),
+                object_pairs_hook=_reject_duplicate_json_keys,
+            )
+            durable_floor_stat = durable_floor_path.stat()
+            durable_floor = json.loads(
+                durable_floor_path.read_text(encoding="utf-8"),
                 object_pairs_hook=_reject_duplicate_json_keys,
             )
         except (OSError, UnicodeDecodeError):
@@ -1540,6 +1551,8 @@ class Settings(BaseSettings):
             or not ledger_lines
             or stat.S_IMODE(high_watermark_stat.st_mode) != 0o600
             or high_watermark_stat.st_uid != os.geteuid()
+            or stat.S_IMODE(durable_floor_stat.st_mode) != 0o600
+            or durable_floor_stat.st_uid != os.geteuid()
         ):
             _raise_redacted_settings_error("M05 activation ledger file permissions are invalid")
         if not isinstance(high_watermark, dict) or set(high_watermark) != {
@@ -1557,6 +1570,15 @@ class Settings(BaseSettings):
             or re.fullmatch(r"[0-9a-f]{64}", high_watermark_receipt_sha256) is None
         ):
             _raise_redacted_settings_error("M05 activation high-watermark fields are invalid")
+        if not isinstance(durable_floor, dict) or set(durable_floor) != {"generation"}:
+            _raise_redacted_settings_error("M05 activation durable floor schema is invalid")
+        durable_floor_generation = durable_floor["generation"]
+        if (
+            type(durable_floor_generation) is not int
+            or durable_floor_generation < 1
+            or durable_floor_generation < self.pinvi_m05_activation_min_generation
+        ):
+            _raise_redacted_settings_error("M05 activation durable floor fields are invalid")
         records: list[dict[str, object]] = []
         activation_nonces: set[str] = set()
         previous_generation: int | None = None
@@ -1632,9 +1654,10 @@ class Settings(BaseSettings):
             or re.fullmatch(r"[0-9a-f]{64}", latest_receipt_sha256) is None
             or high_watermark_generation != latest_generation
             or high_watermark_receipt_sha256 != latest_receipt_sha256
+            or durable_floor_generation != high_watermark_generation
         ):
             _raise_redacted_settings_error(
-                "M05 activation high-watermark does not match the latest ledger record"
+                "M05 activation external monotonic floors do not match the latest ledger record"
             )
         receipt_sha256 = hashlib.sha256(
             receipt_secret.get_secret_value().encode("utf-8")

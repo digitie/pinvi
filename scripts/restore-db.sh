@@ -8,7 +8,23 @@ DATABASE_URL="${PINVI_RESTORE_DATABASE_URL:-${PINVI_DATABASE_URL:-}}"
 JOBS="${PINVI_RESTORE_JOBS:-2}"
 APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}"
 BACKUP_FILE="${1:-}"
-PSQL_BIN="${PINVI_RESTORE_PSQL_BIN:-psql}"
+
+pinned_tool() {
+  local name="$1"
+  local candidate
+  for candidate in "/usr/local/bin/${name}" "/usr/bin/${name}" "/bin/${name}"; do
+    if [[ -f "${candidate}" && -x "${candidate}" ]]; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+PSQL_BIN="${PINVI_RESTORE_PSQL_BIN:-}"
+if [[ -z "${PSQL_BIN}" ]]; then
+  PSQL_BIN="$(pinned_tool psql || true)"
+fi
 
 if [[ -z "${BACKUP_FILE}" ]]; then
   echo "Usage: scripts/restore-db.sh /path/to/backup.dump" >&2
@@ -60,11 +76,11 @@ fi
 if [[ -n "${PINVI_RESTORE_PG_RESTORE_BIN:-}" ]]; then
   PG_RESTORE_BIN="${PINVI_RESTORE_PG_RESTORE_BIN}"
 else
-  if ! command -v pg_restore >/dev/null 2>&1; then
+  PG_RESTORE_BIN="$(pinned_tool pg_restore || true)"
+  if [[ -z "${PG_RESTORE_BIN}" ]]; then
     echo "pg_restore not found" >&2
     exit 127
   fi
-  PG_RESTORE_BIN="$(command -v pg_restore)"
 fi
 if [[ "${PG_RESTORE_BIN}" != /* || ! -x "${PG_RESTORE_BIN}" ]]; then
   echo "PINVI_RESTORE_PG_RESTORE_BIN is not an executable absolute path" >&2
