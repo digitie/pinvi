@@ -47,6 +47,7 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
             "PATH": f"{fake_bin}:/usr/bin:/bin",
             "PINVI_RESTORE_DATABASE_URL": "postgresql://pinvi:fixture@db:5432/pinvi",
             "PINVI_RESTORE_APP_ROLE": "pinvi_app",
+            "PINVI_M05_RESTORE_TEST_MODE": "1",
             "PINVI_TEST_LOG": str(invocation_log),
         }
     )
@@ -106,6 +107,7 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
             "PATH": f"{fake_bin}:/usr/bin:/bin",
             "PINVI_RESTORE_DATABASE_URL": "postgresql://pinvi:fixture@db:5432/pinvi",
             "PINVI_RESTORE_APP_ROLE": "pinvi_app",
+            "PINVI_M05_RESTORE_TEST_MODE": "1",
             "PINVI_TEST_LOG": str(invocation_log),
         }
     )

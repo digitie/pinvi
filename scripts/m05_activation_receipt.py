@@ -35,6 +35,8 @@ _REVIEW_PR_RE = re.compile(r"https://github\.com/digitie/pinvi/pull/[1-9][0-9]*\
 _M05_ACTIVATION_PR_URL = "https://github.com/digitie/pinvi/pull/466"
 _M05_RESTORE_DATABASE_RE = re.compile(r"pinvi_m05_restore_[a-z0-9_]+\Z")
 _HOST_TOOL_DIRECTORIES = (Path("/usr/bin"), Path("/bin"))
+_RESTORE_TOOL_DIRECTORIES = (Path("/usr/local/bin"), Path("/usr/bin"), Path("/bin"))
+_RESTORE_TOOL_NAMES = ("git", "pg_dump", "pg_restore", "psql")
 _PAIR_PROVENANCE = Path(__file__).resolve().parents[1] / (
     "contracts/kor-travel-map-m05-pair-provenance-v1.json"
 )
@@ -282,9 +284,56 @@ def _reviewer_roster() -> set[str]:
     return result
 
 
+def _review_challenge(
+    path: Path,
+    *,
+    require_root_owned: bool,
+    pinvi_source_revision: str,
+) -> tuple[str, dict[str, str]]:
+    raw = _read_secure_bytes(
+        path,
+        require_root_owned=require_root_owned,
+        label="review challenge",
+    )
+    try:
+        value = json.loads(raw, object_pairs_hook=_reject_duplicate_keys)
+    except (UnicodeDecodeError, json.JSONDecodeError, ReceiptError) as exc:
+        raise ReceiptError("review challenge is invalid JSON") from exc
+    challenge = _object(value, name="review challenge")
+    if set(challenge) != {"agent_ids", "commit", "challenge_id", "pr_url", "response_paths", "version"}:
+        raise ReceiptError("review challenge schema is invalid")
+    if challenge["version"] != 1:
+        raise ReceiptError("review challenge version is invalid")
+    challenge_id = _uuid(challenge["challenge_id"], name="review challenge ID")
+    if _commit(challenge["commit"], name="review challenge commit") != pinvi_source_revision:
+        raise ReceiptError("review challenge commit does not match the signed source revision")
+    if challenge["pr_url"] != _M05_ACTIVATION_PR_URL:
+        raise ReceiptError("review challenge is not pinned to M05")
+    agent_ids = challenge["agent_ids"]
+    if not isinstance(agent_ids, list) or {_uuid(item, name="review challenge agent") for item in agent_ids} != _reviewer_roster():
+        raise ReceiptError("review challenge must cover the pinned reviewers")
+    response_paths = _object(challenge["response_paths"], name="review challenge response paths")
+    if set(response_paths) != _reviewer_roster():
+        raise ReceiptError("review challenge response path inventory is invalid")
+    response_hashes: dict[str, str] = {}
+    for agent_id in _reviewer_roster():
+        response_path = Path(_string(response_paths[agent_id], name="review response path"))
+        response_bytes = _read_secure_bytes(
+            response_path,
+            require_root_owned=require_root_owned,
+            label="review response",
+        )
+        response_hashes[agent_id] = hashlib.sha256(response_bytes).hexdigest()
+    return challenge_id, response_hashes
+
+
 def _review_allowlist(
-    path: Path | None, *, require_root_owned: bool
-) -> set[tuple[str, str, str, str]]:
+    path: Path | None,
+    *,
+    challenge_path: Path,
+    pinvi_source_revision: str,
+    require_root_owned: bool,
+) -> set[tuple[str, str, str, str, str, str]]:
     if path is None:
         raise ReceiptError("production receipt requires an external review allowlist")
     parent = path.parent
@@ -295,6 +344,11 @@ def _review_allowlist(
         raise ReceiptError("review allowlist parent must not be group/world writable")
     if require_root_owned and parent_stat.st_uid != 0:
         raise ReceiptError("review allowlist parent is not root-owned")
+    challenge_id, response_hashes = _review_challenge(
+        challenge_path,
+        require_root_owned=require_root_owned,
+        pinvi_source_revision=pinvi_source_revision,
+    )
     raw = _read_secure_bytes(
         path,
         require_root_owned=require_root_owned,
@@ -306,19 +360,33 @@ def _review_allowlist(
         raise ReceiptError("review allowlist is invalid JSON") from exc
     if not isinstance(value, list) or len(value) != 2:
         raise ReceiptError("review allowlist must contain exactly two reviews")
-    result: set[tuple[str, str, str, str]] = set()
+    result: set[tuple[str, str, str, str, str, str]] = set()
     allowed_agents = _reviewer_roster()
     for item in value:
         review = _object(item, name="review allowlist entry")
-        if set(review) != {"agent_id", "commit", "pr_url", "review_id"}:
+        if set(review) != {
+            "agent_id",
+            "challenge_id",
+            "commit",
+            "pr_url",
+            "response_sha256",
+            "review_id",
+        }:
             raise ReceiptError("review allowlist entry schema is invalid")
         agent_id = _uuid(review["agent_id"], name="review allowlist agent_id")
         commit = _commit(review["commit"], name="review allowlist commit")
         pr_url = _string(review["pr_url"], name="review allowlist pr_url")
         review_id = _uuid(review["review_id"], name="review allowlist review_id")
+        if _uuid(review["challenge_id"], name="review allowlist challenge_id") != challenge_id:
+            raise ReceiptError("review allowlist challenge does not match the challenge file")
+        response_sha256 = _sha256(
+            review["response_sha256"], name="review allowlist response hash"
+        )
+        if response_hashes.get(agent_id) != response_sha256:
+            raise ReceiptError("review allowlist response is not bound to the challenge file")
         if agent_id not in allowed_agents or pr_url != _M05_ACTIVATION_PR_URL:
             raise ReceiptError("review allowlist entry is not pinned to M05")
-        key = (agent_id, review_id, commit, pr_url)
+        key = (agent_id, review_id, commit, pr_url, challenge_id, response_sha256)
         if key in result:
             raise ReceiptError("review allowlist entries must be distinct")
         result.add(key)
@@ -574,6 +642,117 @@ def _read_durable_floor(path: Path, *, require_root_owned: bool) -> int | None:
     return generation
 
 
+def _durable_history_records(
+    path: Path, *, require_root_owned: bool
+) -> list[dict[str, object]]:
+    if not path.exists():
+        return []
+    raw = _read_secure_bytes(
+        path,
+        require_root_owned=require_root_owned,
+        label="activation durable history",
+    )
+    records: list[dict[str, object]] = []
+    previous_generation: int | None = None
+    previous_record_sha256 = "0" * 64
+    for line in raw.decode("utf-8").splitlines():
+        try:
+            value = json.loads(line, object_pairs_hook=_reject_duplicate_keys)
+        except (UnicodeDecodeError, json.JSONDecodeError, ReceiptError) as exc:
+            raise ReceiptError("activation durable history contains invalid JSON") from exc
+        record = _object(value, name="activation durable history record")
+        if set(record) != {
+            "generation",
+            "previous_record_sha256",
+            "receipt_sha256",
+            "record_sha256",
+        }:
+            raise ReceiptError("activation durable history record schema is invalid")
+        generation = record["generation"]
+        if (
+            type(generation) is not int
+            or generation < 1
+            or (previous_generation is not None and generation <= previous_generation)
+            or _sha256(record["previous_record_sha256"], name="durable history previous hash")
+            != previous_record_sha256
+        ):
+            raise ReceiptError("activation durable history generation chain is invalid")
+        _sha256(record["receipt_sha256"], name="durable history receipt hash")
+        record_sha256 = _sha256(
+            record["record_sha256"], name="durable history record hash"
+        )
+        if record_sha256 != _ledger_record_hash(record):
+            raise ReceiptError("activation durable history record hash is invalid")
+        previous_generation = generation
+        previous_record_sha256 = record_sha256
+        records.append(record)
+    return records
+
+
+def _append_durable_history(
+    path: Path,
+    *,
+    generation: int,
+    receipt_sha256: str,
+    require_root_owned: bool,
+) -> None:
+    receipt_sha256 = _sha256(receipt_sha256, name="activation durable history receipt hash")
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if path.parent.is_symlink() or not path.parent.is_dir():
+        raise ReceiptError("activation durable history parent must be a regular directory")
+    parent_stat = path.parent.stat()
+    if stat.S_IMODE(parent_stat.st_mode) & 0o022:
+        raise ReceiptError("activation durable history parent must not be group/world writable")
+    if require_root_owned and parent_stat.st_uid != 0:
+        raise ReceiptError("activation durable history parent is not root-owned")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_CLOEXEC
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags, 0o600)
+    except OSError as exc:
+        raise ReceiptError("activation durable history cannot be opened") from exc
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        metadata = os.fstat(fd)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+            or (require_root_owned and metadata.st_uid != 0)
+        ):
+            raise ReceiptError("activation durable history file permissions are invalid")
+        records = _durable_history_records(path, require_root_owned=require_root_owned)
+        if records:
+            previous = records[-1]
+            previous_generation = previous["generation"]
+            if generation < previous_generation:
+                raise ReceiptError("activation durable history generation cannot move backwards")
+            if generation == previous_generation:
+                if previous["receipt_sha256"] != receipt_sha256:
+                    raise ReceiptError("activation durable history conflicts at the same generation")
+                return
+            previous_record_sha256 = cast(str, previous["record_sha256"])
+        else:
+            previous_record_sha256 = "0" * 64
+        record: dict[str, object] = {
+            "generation": generation,
+            "previous_record_sha256": previous_record_sha256,
+            "receipt_sha256": receipt_sha256,
+        }
+        record["record_sha256"] = _ledger_record_hash(record)
+        with os.fdopen(fd, "ab") as stream:
+            fd = -1
+            stream.write(_canonical_json(record) + b"\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+    finally:
+        if fd != -1:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+    records = _durable_history_records(path, require_root_owned=require_root_owned)
+    if not records or records[-1]["generation"] != generation:
+        raise ReceiptError("activation durable history update could not be verified")
+
+
 def _write_durable_floor(
     path: Path, *, generation: int, require_root_owned: bool
 ) -> None:
@@ -734,6 +913,12 @@ def _ledger(args: argparse.Namespace) -> int:
         generation=generation,
         require_root_owned=args.require_root_owned,
     )
+    _append_durable_history(
+        args.durable_history,
+        generation=generation,
+        receipt_sha256=cast(str, record["receipt_sha256"]),
+        require_root_owned=args.require_root_owned,
+    )
     print(f"ledger_generation={generation}")
     print(f"ledger_receipt_sha256={record['receipt_sha256']}")
     return 0
@@ -804,13 +989,13 @@ def _reviews(
     *,
     pinvi_source_revision: str,
     expected_pr_url: str,
-    allowed_review_keys: set[tuple[str, str, str, str]],
+    allowed_review_keys: set[tuple[str, str, str, str, str, str]],
 ) -> list[dict[str, object]]:
     if not isinstance(value, list) or len(value) != 2:
         raise ReceiptError("reviews.json must contain exactly two reviews")
     result: list[dict[str, object]] = []
     review_keys: set[tuple[str, str, str]] = set()
-    allowlist_keys: set[tuple[str, str, str, str]] = set()
+    allowlist_keys: set[tuple[str, str, str, str, str, str]] = set()
     reviewer_ids: set[str] = set()
     review_ids: set[str] = set()
     agent_ids: set[str] = set()
@@ -819,11 +1004,13 @@ def _reviews(
         review = _object(item, name="review")
         if set(review) != {
             "agent_id",
+            "challenge_id",
             "commit",
             "p0_p1",
             "pr_url",
             "review_id",
             "reviewer_id",
+            "response_sha256",
             "summary",
             "summary_sha256",
             "verdict",
@@ -837,6 +1024,10 @@ def _reviews(
                 "review commit does not match the signed Pinvi source revision"
             )
         review_id = _uuid(review["review_id"], name="review.review_id")
+        challenge_id = _uuid(review["challenge_id"], name="review.challenge_id")
+        response_sha256 = _sha256(
+            review["response_sha256"], name="review.response_sha256"
+        )
         reviewer_id = _uuid(review["reviewer_id"], name="review.reviewer_id")
         agent_id = _uuid(review["agent_id"], name="review.agent_id")
         if reviewer_id != agent_id:
@@ -873,11 +1064,13 @@ def _reviews(
         agent_ids.add(agent_id)
         normalized = {
             "commit": commit,
+            "challenge_id": challenge_id,
             "p0_p1": 0,
             "agent_id": agent_id,
             "pr_url": pr_url,
             "review_id": review_id,
             "reviewer_id": reviewer_id,
+            "response_sha256": response_sha256,
             "summary": summary,
             "summary_sha256": summary_sha256,
             "verdict": "GO",
@@ -886,7 +1079,14 @@ def _reviews(
         if key in review_keys:
             raise ReceiptError("reviews.json must contain two distinct reviews")
         review_keys.add(key)
-        allowlist_key = (agent_id, review_id, commit, pr_url)
+        allowlist_key = (
+            agent_id,
+            review_id,
+            commit,
+            pr_url,
+            challenge_id,
+            response_sha256,
+        )
         if allowlist_key not in allowed_review_keys:
             raise ReceiptError("review is not bound to the external review allowlist")
         allowlist_keys.add(allowlist_key)
@@ -1016,12 +1216,20 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
     }
 
 
-def _restore(value: object, *, pinvi_source_revision: str) -> None:
+def _restore(
+    value: object,
+    *,
+    pinvi_source_revision: str,
+    environment: str,
+    require_root_owned: bool,
+) -> None:
     restore = _object(value, name="restore evidence")
     expected = {
         "backup_runner_sha256",
         "backup_tool_path",
         "backup_tool_sha256",
+        "bash_tool_path",
+        "bash_tool_sha256",
         "psql_tool_path",
         "psql_tool_sha256",
         "dump_sha256",
@@ -1034,6 +1242,12 @@ def _restore(value: object, *, pinvi_source_revision: str) -> None:
         "m05_restore_drill_sha256",
         "restore_tool_path",
         "restore_tool_sha256",
+        "tool_trust_manifest_path",
+        "tool_trust_manifest_sha256",
+        "git_tool_path",
+        "git_tool_sha256",
+        "environment",
+        "fresh_target_verified",
         "runtime_db_identity",
         "runtime_role",
         "runtime_role_verified",
@@ -1049,11 +1263,18 @@ def _restore(value: object, *, pinvi_source_revision: str) -> None:
         "target_db_identity_before_restore",
         "target_db_identity_before_restore_sha256",
         "target_db_identity_sha256",
+        "target_recreated",
         "trigger_guard_verified",
         "runtime_db_identity_sha256",
     }
     if set(restore) != expected or restore["status"] != "passed":
         raise ReceiptError("restore evidence schema/status is invalid")
+    if restore["environment"] != environment or environment == "test":
+        raise ReceiptError("restore evidence is not from the signed non-test environment")
+    if restore["fresh_target_verified"] is not True:
+        raise ReceiptError("restore evidence does not prove a disposable fresh target")
+    if restore["target_recreated"] is not True:
+        raise ReceiptError("restore evidence does not prove target database recreation")
     if restore["restore_command"] != (
         "pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges"
     ):
@@ -1076,6 +1297,9 @@ def _restore(value: object, *, pinvi_source_revision: str) -> None:
         "restore_runner_sha256",
         "m05_restore_drill_sha256",
         "restore_tool_sha256",
+        "bash_tool_sha256",
+        "git_tool_sha256",
+        "tool_trust_manifest_sha256",
         "runtime_db_identity_sha256",
         "source_db_identity_after_backup_sha256",
         "source_db_identity_sha256",
@@ -1084,12 +1308,73 @@ def _restore(value: object, *, pinvi_source_revision: str) -> None:
     ):
         _sha256(restore[field], name=f"restore.{field}")
     repository_root = Path(__file__).resolve().parents[1]
-    for field in ("backup_tool_path", "psql_tool_path", "restore_tool_path"):
+    tool_path_fields = {
+        "git": "git_tool_path",
+        "pg_dump": "backup_tool_path",
+        "pg_restore": "restore_tool_path",
+        "psql": "psql_tool_path",
+    }
+    tool_digest_fields = {
+        "git": "git_tool_sha256",
+        "pg_dump": "backup_tool_sha256",
+        "pg_restore": "restore_tool_sha256",
+        "psql": "psql_tool_sha256",
+    }
+    for field, expected_name in (
+        ("backup_tool_path", "pg_dump"),
+        ("bash_tool_path", "bash"),
+        ("git_tool_path", "git"),
+        ("psql_tool_path", "psql"),
+        ("restore_tool_path", "pg_restore"),
+    ):
         tool_path = _string(restore[field], name=f"restore.{field}")
-        if not tool_path.startswith("/") or any(
-            character.isspace() for character in tool_path
+        path_object = Path(tool_path)
+        if (
+            not tool_path.startswith("/")
+            or any(character.isspace() for character in tool_path)
+            or path_object.name != expected_name
+            or path_object.is_symlink()
+            or path_object.resolve().parent not in _RESTORE_TOOL_DIRECTORIES
+            or not path_object.is_file()
         ):
-            raise ReceiptError(f"restore tool path is invalid: {field}")
+            raise ReceiptError(f"restore tool path is not a trusted system path: {field}")
+        digest_field = field.removesuffix("_path") + "_sha256"
+        if hashlib.sha256(path_object.read_bytes()).hexdigest() != restore[digest_field]:
+            raise ReceiptError(f"restore tool digest is not bound to the path: {field}")
+    manifest_path = Path(os.environ.get("PINVI_M05_RESTORE_TOOL_TRUST_MANIFEST", ""))
+    if (
+        not str(manifest_path)
+        or manifest_path.is_symlink()
+        or not manifest_path.is_file()
+        or stat.S_IMODE(manifest_path.stat().st_mode) != 0o600
+        or (require_root_owned and manifest_path.stat().st_uid != 0)
+    ):
+        raise ReceiptError("restore evidence requires the external tool trust manifest")
+    manifest_bytes = manifest_path.read_bytes()
+    if hashlib.sha256(manifest_bytes).hexdigest() != restore["tool_trust_manifest_sha256"]:
+        raise ReceiptError("restore tool trust manifest hash is not bound")
+    try:
+        manifest = json.loads(manifest_bytes, object_pairs_hook=_reject_duplicate_keys)
+    except (UnicodeDecodeError, json.JSONDecodeError, ReceiptError) as exc:
+        raise ReceiptError("restore tool trust manifest is invalid") from exc
+    manifest_object = _object(manifest, name="restore tool trust manifest")
+    if set(manifest_object) != {"tools", "version"} or manifest_object["version"] != 1:
+        raise ReceiptError("restore tool trust manifest schema is invalid")
+    tools = _object(manifest_object["tools"], name="restore tool trust manifest tools")
+    if set(tools) != set(_RESTORE_TOOL_NAMES):
+        raise ReceiptError("restore tool trust manifest inventory is invalid")
+    for name in _RESTORE_TOOL_NAMES:
+        entry = _object(tools[name], name=f"restore tool trust manifest {name}")
+        if set(entry) != {"path", "sha256"}:
+            raise ReceiptError("restore tool trust manifest entry schema is invalid")
+        path = _string(entry["path"], name=f"restore tool trust manifest {name}.path")
+        digest = _sha256(entry["sha256"], name=f"restore tool trust manifest {name}.sha256")
+        if path != restore[tool_path_fields[name]]:
+            raise ReceiptError(f"restore tool trust manifest path is not bound: {name}")
+        if digest != restore[tool_digest_fields[name]]:
+            raise ReceiptError(f"restore tool trust manifest digest is not bound: {name}")
+    if restore["tool_trust_manifest_path"] != str(manifest_path):
+        raise ReceiptError("restore tool trust manifest path is not bound")
     for evidence_field, script_path in (
         ("backup_runner_sha256", repository_root / "scripts/backup-db.sh"),
         ("restore_db_runner_sha256", repository_root / "scripts/restore-db.sh"),
@@ -1116,9 +1401,13 @@ def _restore(value: object, *, pinvi_source_revision: str) -> None:
         identity = _object(restore[field], name=f"restore.{field}")
         if set(identity) != {
             "database",
+            "host",
+            "hostaddr",
             "database_oid",
+            "port",
             "schema_exists",
             "server_version_num",
+            "sslmode",
             "system_identifier",
             "user",
         }:
@@ -1602,6 +1891,8 @@ def _create(args: argparse.Namespace) -> int:
         raise ReceiptError("receipt scope must be staging or production")
     allowed_review_keys = _review_allowlist(
         args.review_allowlist,
+        challenge_path=args.review_challenge,
+        pinvi_source_revision=source_revision,
         require_root_owned=args.require_root_owned,
     )
     now = int(time.time())
@@ -1659,7 +1950,12 @@ def _create(args: argparse.Namespace) -> int:
             allowed_review_keys=allowed_review_keys,
         )
         live_ui = _live_ui(evidence["live_ui"], pinvi_source_revision=source_revision)
-        _restore(evidence["restore"], pinvi_source_revision=source_revision)
+        _restore(
+            evidence["restore"],
+            pinvi_source_revision=source_revision,
+            environment=scope,
+            require_root_owned=args.require_root_owned,
+        )
         pair_expected = _pair_provenance()
         map_pair = _map_pair(evidence["map_pair"], pair_expected, environment=scope)
         pinvi_images = _pinvi_images(
@@ -1819,6 +2115,7 @@ def _parser() -> argparse.ArgumentParser:
     create.add_argument("--activation-issued-at", type=int)
     create.add_argument("--activation-expires-at", type=int)
     create.add_argument("--review-allowlist", type=Path, required=True)
+    create.add_argument("--review-challenge", type=Path, required=True)
     create.add_argument("--require-root-owned", action="store_true")
     create.set_defaults(handler=_create)
     ledger = subparsers.add_parser("ledger")
@@ -1826,6 +2123,7 @@ def _parser() -> argparse.ArgumentParser:
     ledger.add_argument("--ledger", type=Path, required=True)
     ledger.add_argument("--high-watermark", type=Path, required=True)
     ledger.add_argument("--durable-floor", type=Path, required=True)
+    ledger.add_argument("--durable-history", type=Path, required=True)
     ledger.add_argument("--require-root-owned", action="store_true")
     ledger.set_defaults(handler=_ledger)
     return parser

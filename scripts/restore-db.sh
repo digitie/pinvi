@@ -12,6 +12,10 @@ BACKUP_FILE="${1:-}"
 pinned_tool() {
   local name="$1"
   local candidate
+  if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" == "1" ]]; then
+    command -v "${name}" || true
+    return 0
+  fi
   for candidate in "/usr/local/bin/${name}" "/usr/bin/${name}" "/bin/${name}"; do
     if [[ -f "${candidate}" && -x "${candidate}" ]]; then
       printf '%s\n' "${candidate}"
@@ -87,16 +91,32 @@ if [[ "${PG_RESTORE_BIN}" != /* || ! -x "${PG_RESTORE_BIN}" ]]; then
   exit 127
 fi
 
+assert_expected_target() {
+  if [[ -z "${PINVI_RESTORE_EXPECTED_DATABASE_OID:-}" ]]; then
+    return 0
+  fi
+  local actual
+  actual="$("${PSQL_BIN}" --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT current_database() || '|' || d.oid::text || '|' || (pg_control_system()).system_identifier::text || '|' || COALESCE(inet_server_addr()::text, '') || '|' || inet_server_port()::text FROM pg_database d WHERE d.datname = current_database()" | tr -d '[:space:]')"
+  local expected="${PINVI_RESTORE_EXPECTED_DATABASE_NAME}|${PINVI_RESTORE_EXPECTED_DATABASE_OID}|${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER}|${PINVI_RESTORE_EXPECTED_HOSTADDR}|${PINVI_RESTORE_EXPECTED_PORT}"
+  if [[ "${actual}" != "${expected}" ]]; then
+    echo "restore target identity changed before mutation" >&2
+    exit 3
+  fi
+  printf '%s\n' "RESTORE_TARGET_BINDING=verified"
+}
+
 # Validate the destination authority before CREATE SCHEMA/pg_restore can alter it. A
 # role-split deployment must never discover a typo or privileged runtime login only
 # after `--clean` has dropped the existing schema objects.
 if [[ "${PINVI_RESTORE_REQUIRE_FRESH_SCHEMA:-0}" == "1" ]]; then
+  assert_expected_target
   schema_exists="$("${PSQL_BIN}" --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT to_regnamespace('${SCHEMA}') IS NOT NULL")"
   if [[ "${schema_exists}" != "f" ]]; then
     echo "PINVI_RESTORE_REQUIRE_FRESH_SCHEMA requires a target without the app schema" >&2
     exit 3
   fi
 fi
+assert_expected_target
 if [[ -n "${APP_ROLE}" ]]; then
   runtime_role_safe="$("${PSQL_BIN}" --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT r.rolcanlogin AND NOT r.rolsuper AND NOT r.rolcreaterole AND NOT r.rolcreatedb AND NOT r.rolreplication AND NOT pg_has_role(r.oid, current_user, 'member') AND r.oid <> current_user::regrole AND NOT EXISTS (SELECT 1 FROM pg_namespace n WHERE n.nspname = '${SCHEMA}' AND (n.nspowner = r.oid OR pg_has_role(r.oid, n.nspowner, 'member'))) AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = '${SCHEMA}' AND (c.relowner = r.oid OR pg_has_role(r.oid, c.relowner, 'member'))) FROM pg_roles r WHERE r.rolname = '${APP_ROLE}'")"
   if [[ "${runtime_role_safe}" != "t" ]]; then
@@ -117,6 +137,8 @@ fi
   --set=ON_ERROR_STOP=1 \
   --dbname="${DATABASE_URL}" \
   --command="CREATE SCHEMA IF NOT EXISTS \"${SCHEMA}\""
+
+assert_expected_target
 
 printf '%s\n' "RESTORE_COMMAND=pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges"
 "${PG_RESTORE_BIN}" \

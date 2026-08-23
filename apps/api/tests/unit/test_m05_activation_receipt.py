@@ -78,6 +78,10 @@ def _script_sha256(name: str) -> str:
     return hashlib.sha256((REPO_ROOT / "scripts" / name).read_bytes()).hexdigest()
 
 
+def _tool_sha256(name: str) -> str:
+    return hashlib.sha256(Path("/usr/bin").joinpath(name).read_bytes()).hexdigest()
+
+
 @pytest.fixture
 def linux_tmp_path() -> Iterator[Path]:
     with TemporaryDirectory(prefix="pinvi-m05-receipt-", dir="/tmp") as temp_dir:
@@ -91,27 +95,56 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     tmp_path = linux_tmp_path
     evidence_dir = tmp_path / "evidence"
     evidence_dir.mkdir(mode=0o700)
+    review_challenge_id = "66666666-6666-4666-8666-666666666666"
+    review_response_paths = {
+        "01a02ce8-22cf-70b2-92cc-7dc3af16a915": tmp_path / "helmholtz-review.txt",
+        "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2": tmp_path / "ampere-review.txt",
+    }
+    review_response_hashes: dict[str, str] = {}
+    for agent_id, response_path in review_response_paths.items():
+        response = f"GO review challenge={review_challenge_id} agent={agent_id}\n"
+        response_path.write_text(response, encoding="utf-8")
+        response_path.chmod(0o600)
+        review_response_hashes[agent_id] = hashlib.sha256(response.encode()).hexdigest()
+    review_challenge_path = tmp_path / "review-challenge.json"
+    _write_json(
+        review_challenge_path,
+        {
+            "agent_ids": list(review_response_paths),
+            "challenge_id": review_challenge_id,
+            "commit": PINVI_REVISION,
+            "pr_url": "https://github.com/digitie/pinvi/pull/466",
+            "response_paths": {
+                agent_id: str(path) for agent_id, path in review_response_paths.items()
+            },
+            "version": 1,
+        },
+    )
     _write_json(
         evidence_dir / "reviews.json",
         [
             {
-                "agent_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
+                    "agent_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
+                    "challenge_id": review_challenge_id,
                 "commit": PINVI_REVISION,
                 "p0_p1": 0,
                 "pr_url": "https://github.com/digitie/pinvi/pull/466",
                 "review_id": "44444444-4444-4444-8444-444444444444",
-                "reviewer_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
+                    "reviewer_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
+                    "response_sha256": review_response_hashes["01a02ce8-22cf-70b2-92cc-7dc3af16a915"],
                 "summary": "GO: no P0/P1 findings",
                 "summary_sha256": hashlib.sha256(b"GO: no P0/P1 findings").hexdigest(),
                 "verdict": "GO",
             },
             {
-                "agent_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
+                    "agent_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
+                    "challenge_id": review_challenge_id,
                 "commit": PINVI_REVISION,
                 "p0_p1": 0,
                 "pr_url": "https://github.com/digitie/pinvi/pull/466",
                 "review_id": "55555555-5555-4555-8555-555555555555",
-                "reviewer_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
+                    "reviewer_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
+                    "response_sha256": review_response_hashes["01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2"],
                 "summary": "GO: no P0/P1 findings",
                 "summary_sha256": hashlib.sha256(b"GO: no P0/P1 findings").hexdigest(),
                 "verdict": "GO",
@@ -122,17 +155,21 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     _write_json(
         review_allowlist_path,
         [
-            {
-                "agent_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
-                "commit": PINVI_REVISION,
-                "pr_url": "https://github.com/digitie/pinvi/pull/466",
-                "review_id": "44444444-4444-4444-8444-444444444444",
+                {
+                    "agent_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
+                    "challenge_id": review_challenge_id,
+                    "commit": PINVI_REVISION,
+                    "pr_url": "https://github.com/digitie/pinvi/pull/466",
+                    "response_sha256": review_response_hashes["01a02ce8-22cf-70b2-92cc-7dc3af16a915"],
+                    "review_id": "44444444-4444-4444-8444-444444444444",
             },
-            {
-                "agent_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
-                "commit": PINVI_REVISION,
-                "pr_url": "https://github.com/digitie/pinvi/pull/466",
-                "review_id": "55555555-5555-4555-8555-555555555555",
+                {
+                    "agent_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
+                    "challenge_id": review_challenge_id,
+                    "commit": PINVI_REVISION,
+                    "pr_url": "https://github.com/digitie/pinvi/pull/466",
+                    "response_sha256": review_response_hashes["01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2"],
+                    "review_id": "55555555-5555-4555-8555-555555555555",
             },
         ],
     )
@@ -165,8 +202,12 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     source_identity = {
         "database": "source",
         "database_oid": "100",
+        "host": "db",
+        "hostaddr": "127.0.0.1",
+        "port": "5432",
         "schema_exists": True,
         "server_version_num": "160000",
+        "sslmode": "prefer",
         "system_identifier": "1",
         "user": "pinvi_owner",
     }
@@ -174,28 +215,60 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     target_before_restore_identity = {
         "database": "pinvi_m05_restore_target",
         "database_oid": "200",
+        "host": "db",
+        "hostaddr": "127.0.0.1",
+        "port": "5432",
         "schema_exists": False,
         "server_version_num": "160000",
+        "sslmode": "prefer",
         "system_identifier": "1",
         "user": "pinvi_owner",
     }
     target_identity = {
         "database": "pinvi_m05_restore_target",
         "database_oid": "200",
+        "host": "db",
+        "hostaddr": "127.0.0.1",
+        "port": "5432",
         "schema_exists": True,
         "server_version_num": "160000",
+        "sslmode": "prefer",
         "system_identifier": "1",
         "user": "pinvi_app",
     }
     runtime_identity = target_identity.copy()
+    restore_tool_manifest_path = tmp_path / "restore-tool-trust.json"
+    restore_tool_manifest = {
+        "tools": {
+            name: {
+                "path": f"/usr/bin/{name}",
+                "sha256": _tool_sha256(name),
+            }
+            for name in ("git", "pg_dump", "pg_restore", "psql")
+        },
+        "version": 1,
+    }
+    _write_json(restore_tool_manifest_path, restore_tool_manifest)
+    restore_tool_manifest_sha256 = hashlib.sha256(
+        restore_tool_manifest_path.read_bytes()
+    ).hexdigest()
+    monkeypatch.setenv(
+        "PINVI_M05_RESTORE_TOOL_TRUST_MANIFEST", str(restore_tool_manifest_path)
+    )
     _write_json(
         evidence_dir / "restore.json",
         {
             "backup_runner_sha256": _script_sha256("backup-db.sh"),
-            "backup_tool_path": "/usr/local/bin/pg_dump",
-            "backup_tool_sha256": "f" * 64,
-            "psql_tool_path": "/usr/local/bin/psql",
-            "psql_tool_sha256": "b" * 64,
+            "backup_tool_path": "/usr/bin/pg_dump",
+            "backup_tool_sha256": _tool_sha256("pg_dump"),
+            "bash_tool_path": "/usr/bin/bash",
+            "bash_tool_sha256": _tool_sha256("bash"),
+            "environment": "production",
+            "fresh_target_verified": True,
+            "git_tool_path": "/usr/bin/git",
+            "git_tool_sha256": _tool_sha256("git"),
+            "psql_tool_path": "/usr/bin/psql",
+            "psql_tool_sha256": _tool_sha256("psql"),
             "dump_sha256": "c" * 64,
             "execution_id": "33333333-3333-4333-8333-333333333333",
             "no_owner_restore": True,
@@ -206,8 +279,10 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "restore_db_runner_sha256": _script_sha256("restore-db.sh"),
             "restore_runner_sha256": _script_sha256("restore-staging-drill.sh"),
             "m05_restore_drill_sha256": _script_sha256("m05_restore_drill.py"),
-            "restore_tool_path": "/usr/local/bin/pg_restore",
-            "restore_tool_sha256": "e" * 64,
+            "restore_tool_path": "/usr/bin/pg_restore",
+            "restore_tool_sha256": _tool_sha256("pg_restore"),
+            "tool_trust_manifest_path": str(restore_tool_manifest_path),
+            "tool_trust_manifest_sha256": restore_tool_manifest_sha256,
             "runtime_db_identity": runtime_identity,
             "runtime_role": "pinvi_app",
             "runtime_role_verified": True,
@@ -221,13 +296,14 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "staging_role": "pinvi_owner",
             "staging_role_verified": True,
             "status": "passed",
-            "target_db_identity": target_identity,
-            "target_db_identity_before_restore": target_before_restore_identity,
+                "target_db_identity": target_identity,
+                "target_db_identity_before_restore": target_before_restore_identity,
             "target_db_identity_before_restore_sha256": _identity_sha256(
                 target_before_restore_identity
             ),
-            "target_db_identity_sha256": _identity_sha256(target_identity),
-            "trigger_guard_verified": True,
+                "target_db_identity_sha256": _identity_sha256(target_identity),
+                "target_recreated": True,
+                "trigger_guard_verified": True,
             "runtime_db_identity_sha256": _identity_sha256(runtime_identity),
         },
     )
@@ -420,6 +496,8 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "2",
             "--review-allowlist",
             str(review_allowlist_path),
+            "--review-challenge",
+            str(review_challenge_path),
         ],
         check=True,
         capture_output=True,
@@ -434,6 +512,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     ledger_path = tmp_path / "activation-ledger.jsonl"
     high_watermark_path = tmp_path / "activation-high-watermark.json"
     durable_floor_path = tmp_path / "activation-durable-floor.json"
+    durable_history_path = tmp_path / "activation-durable-history.jsonl"
     subprocess.run(  # noqa: S603 - invokes the repository-pinned Python test helper
         [
             sys.executable,
@@ -447,6 +526,8 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             str(high_watermark_path),
             "--durable-floor",
             str(durable_floor_path),
+            "--durable-history",
+            str(durable_history_path),
         ],
         check=True,
         capture_output=True,
@@ -459,6 +540,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         "receipt_sha256": hashlib.sha256(receipt.encode("utf-8")).hexdigest(),
     }
     assert json.loads(durable_floor_path.read_text(encoding="utf-8")) == {"generation": 2}
+    assert len(durable_history_path.read_text(encoding="utf-8").splitlines()) == 1
     loaded = Settings(
         _env_file=None,
         pinvi_environment="production",
@@ -480,6 +562,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         pinvi_m05_activation_ledger_path=str(ledger_path),
         pinvi_m05_activation_high_watermark_path=str(high_watermark_path),
         pinvi_m05_activation_durable_floor_path=str(durable_floor_path),
+        pinvi_m05_activation_durable_history_path=str(durable_history_path),
         pinvi_m05_activation_pr_url="https://github.com/digitie/pinvi/pull/466",
         pinvi_api_image_digest=PINVI_DIGESTS["api"],
         pinvi_web_image_digest=PINVI_DIGESTS["web"],

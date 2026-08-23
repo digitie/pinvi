@@ -38,7 +38,22 @@ if [[ ! -f "${SNAPSHOT}" ]]; then
   exit 2
 fi
 
-if ! command -v pg_restore >/dev/null 2>&1; then
+PINNED_TOOL_DIRS=("/usr/local/bin" "/usr/bin" "/bin")
+pinned_tool() {
+  local name="$1"
+  local candidate
+  for directory in "${PINNED_TOOL_DIRS[@]}"; do
+    candidate="${directory}/${name}"
+    if [[ -f "${candidate}" && -x "${candidate}" ]]; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+PG_RESTORE_BIN="${PINVI_RESTORE_PG_RESTORE_BIN:-$(pinned_tool pg_restore || true)}"
+if [[ "${PG_RESTORE_BIN}" != /* || ! -x "${PG_RESTORE_BIN}" ]]; then
   phase preparing failed "pg_restore not found"
   exit 127
 fi
@@ -56,7 +71,7 @@ if [[ -f "${SNAPSHOT}.sha256" ]]; then
   fi
 fi
 
-pg_restore --list "${SNAPSHOT}" >/dev/null
+"${PG_RESTORE_BIN}" --list "${SNAPSHOT}" >/dev/null
 phase preparing success "snapshot verified for ${RESTORE_SCHEMA}"
 
 if [[ "${PINVI_RESTORE_HOTSWAP_EXECUTE:-0}" != "1" ]]; then
@@ -74,7 +89,8 @@ for schema_name in "${SOURCE_SCHEMA}" "${RESTORE_SCHEMA}" "${PREVIOUS_SCHEMA}"; 
   fi
 done
 
-if ! command -v psql >/dev/null 2>&1; then
+PSQL_BIN="${PINVI_RESTORE_PSQL_BIN:-$(pinned_tool psql || true)}"
+if [[ "${PSQL_BIN}" != /* || ! -x "${PSQL_BIN}" ]]; then
   phase preparing failed "psql not found"
   exit 127
 fi
@@ -121,9 +137,9 @@ remap_sql() {
 }
 
 phase restoring running "restoring ${SOURCE_SCHEMA} into ${RESTORE_SCHEMA}"
-psql -v ON_ERROR_STOP=1 "${DATABASE_URL}" \
+"${PSQL_BIN}" -v ON_ERROR_STOP=1 "${DATABASE_URL}" \
   -c "DROP SCHEMA IF EXISTS ${RESTORE_SCHEMA} CASCADE" >/dev/null
-pg_restore \
+"${PG_RESTORE_BIN}" \
   --schema="${SOURCE_SCHEMA}" \
   --schema-only \
   --no-owner \
@@ -134,9 +150,9 @@ pg_restore \
   printf 'CREATE SCHEMA IF NOT EXISTS %s;\n' "${RESTORE_SCHEMA}"
   remap_sql "${TMP_DIR}/schema.sql"
 } >"${TMP_DIR}/schema-remapped.sql"
-psql -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${TMP_DIR}/schema-remapped.sql" >/dev/null
+"${PSQL_BIN}" -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${TMP_DIR}/schema-remapped.sql" >/dev/null
 
-pg_restore \
+"${PG_RESTORE_BIN}" \
   --schema="${SOURCE_SCHEMA}" \
   --data-only \
   --no-owner \
@@ -149,7 +165,7 @@ pg_restore \
   printf 'SET session_replication_role = replica;\n'
   remap_sql "${TMP_DIR}/data.sql"
 } >"${TMP_DIR}/data-remapped.sql"
-psql -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${TMP_DIR}/data-remapped.sql" >/dev/null
+"${PSQL_BIN}" -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${TMP_DIR}/data-remapped.sql" >/dev/null
 phase restoring success "restored into ${RESTORE_SCHEMA}"
 
 # pg_restore --no-privileges로 복원했으므로 GRANT가 비어 있다. 앱 role이 스키마 owner가
@@ -161,10 +177,10 @@ if [[ -n "${APP_ROLE}" ]]; then
     phase restoring failed "unsafe app role name: ${APP_ROLE}"
     exit 2
   fi
-  psql -v ON_ERROR_STOP=1 "${DATABASE_URL}" <<SQL >/dev/null
+  "${PSQL_BIN}" -v ON_ERROR_STOP=1 "${DATABASE_URL}" <<SQL >/dev/null
 GRANT USAGE ON SCHEMA ${RESTORE_SCHEMA} TO ${APP_ROLE};
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ${RESTORE_SCHEMA} TO ${APP_ROLE};
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ${RESTORE_SCHEMA} TO ${APP_ROLE};
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA ${RESTORE_SCHEMA} TO ${APP_ROLE};
 SQL
   phase restoring success "re-granted privileges to ${APP_ROLE}"
 else

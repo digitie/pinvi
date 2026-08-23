@@ -69,6 +69,7 @@ fi
     )
     env = os.environ.copy()
     env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    env["PINVI_M05_RESTORE_TEST_MODE"] = "1"
     for key in (
         "PINVI_DATABASE_URL",
         "PINVI_RESTORE_DATABASE_URL",

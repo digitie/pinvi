@@ -82,11 +82,11 @@ if [[ "$sql" == *"SET LOCAL session_replication_role"* ]]; then
   exit 1
 elif [[ "$sql" == *"json_build_object"* ]]; then
   if [[ "$sql" == *"/source"* ]]; then
-    echo '{"database":"fixture-source","user":"fixture","database_oid":"100","system_identifier":"1","schema_exists":true,"server_version_num":"160000"}'
+          echo '{"database":"fixture-source","user":"fixture","database_oid":"100","system_identifier":"1","schema_exists":true,"server_version_num":"160000"}'
   else
-    echo '{"database":"pinvi_m05_restore_target","user":"fixture","database_oid":"200","system_identifier":"1","schema_exists":false,"server_version_num":"160000"}'
+          echo '{"database":"pinvi_m05_restore_target","user":"fixture","database_oid":"200","system_identifier":"1","schema_exists":false,"server_version_num":"160000"}'
   fi
-elif [[ "$sql" == *"has_schema_privilege"* || "$sql" == *"count(*) = 6"* || "$sql" == *"FROM pg_roles"* ]]; then
+    elif [[ "$sql" == *"has_schema_privilege"* || "$sql" == *"count(*) = 6"* || "$sql" == *"FROM pg_roles"* || "$sql" == *"fresh disposable target"* || "$sql" == *"pg_namespace"* ]]; then
   echo t
 elif [[ "$sql" == *"lag(content_hash)"* ]]; then
   echo valid
@@ -105,6 +105,7 @@ fi
     )
     output = tmp_path / "evidence" / "restore.json"
     output.parent.mkdir(mode=0o700)
+    output.parent.chmod(0o700)
     env = os.environ.copy()
     env.update(
         {

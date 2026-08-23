@@ -120,6 +120,10 @@ python scripts/m05_activation_receipt.py create \
   --require-root-owned
 ```
 
+`create`에는 challenge 파일(`--review-challenge`)과 external allowlist(`--review-allowlist`)을 함께
+전달한다. ledger 기록 시에는 `--durable-history`를 ledger/high-watermark/floor와 다른 root-owned
+경로로 지정한다.
+
 실제 복원 증거는 고정된 `scripts/backup-db.sh`와 `scripts/restore-staging-drill.sh`를 source→fresh
 target으로 호출하는 `scripts/m05_restore_drill.py`가 만든다. source·target URL과 runtime URL은
 환경변수로만 전달하며, 결과 JSON에는 URL·SQL 비밀값을 저장하지 않는다.
@@ -132,6 +136,20 @@ revision·immutable `sha256:` digest와 source revision을 확인한 후 payload
 private key와 증거 디렉터리도 tracked trust anchor/소유권과 대조한다. 출력된 public key와 receipt는
 운영 secret 저장소에 등록하고, 원문 증거·append-only ledger는 root-owned 보관 위치에서 API에
 read-only로만 mount한다.
+
+리뷰 증적은 실행 전에 만든 root-owned challenge 파일에 commit, PR, 두 reviewer ID와 각 reviewer의
+원문 응답 경로를 고정한다. 두 응답은 challenge ID와 원문 SHA-256을 함께 제출해야 하며, signer는
+allowlist와 `reviews.json`이 challenge 파일의 실제 원문에 결박되지 않으면 거부한다. 복구 도구는
+`PINVI_M05_RESTORE_TOOL_TRUST_MANIFEST`의 root-owned `0600` manifest에 고정된 `git`, `pg_dump`,
+`pg_restore`, `psql` 경로·digest만 사용한다. live가 아닌 테스트 모드의 fake tool은 root-owned
+운영 증적으로 승격할 수 없다.
+
+복구 드릴의 target은 `pinvi_m05_restore_*` prefix 안에서 매 실행 `DROP DATABASE ... WITH (FORCE)`
+후 새로 만들며, source/target/runtime의 database OID·system identifier·pinned `hostaddr`·port를
+복구 직전과 직후에 대조한다. activation ledger·high-watermark와 별도로 DB snapshot에 포함하지 않는
+durable history(`PINVI_M05_ACTIVATION_DURABLE_HISTORY_PATH`)도 같은 generation과 receipt hash를
+append-only hash chain으로 보존한다. 세 파일과 history가 서로 어긋나거나 history보다 과거인
+snapshot은 API startup에서 거부한다.
 
 ## 검증과 activation gate
 

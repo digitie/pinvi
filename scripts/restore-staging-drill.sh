@@ -91,6 +91,10 @@ fi
 pinned_tool() {
   local name="$1"
   local candidate
+  if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" == "1" ]]; then
+    command -v "${name}" || true
+    return 0
+  fi
   for candidate in "/usr/local/bin/${name}" "/usr/bin/${name}" "/bin/${name}"; do
     if [[ -f "${candidate}" && -x "${candidate}" ]]; then
       printf '%s\n' "${candidate}"
@@ -192,6 +196,15 @@ set +e
 restore_output="$(PINVI_RESTORE_DATABASE_URL="${DATABASE_URL}" \
   PINVI_RESTORE_SCHEMA="${SCHEMA}" \
   PINVI_RESTORE_JOBS="${JOBS}" \
+  PINVI_RESTORE_PSQL_BIN="${PSQL_BIN}" \
+  PINVI_RESTORE_PG_RESTORE_BIN="${PG_RESTORE_BIN}" \
+  PINVI_RESTORE_REQUIRE_FRESH_SCHEMA="${PINVI_RESTORE_REQUIRE_FRESH_SCHEMA:-0}" \
+  PINVI_RESTORE_APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}" \
+  PINVI_RESTORE_EXPECTED_DATABASE_NAME="${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" \
+  PINVI_RESTORE_EXPECTED_DATABASE_OID="${PINVI_RESTORE_EXPECTED_DATABASE_OID:-}" \
+  PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER="${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER:-}" \
+  PINVI_RESTORE_EXPECTED_HOSTADDR="${PINVI_RESTORE_EXPECTED_HOSTADDR:-}" \
+  PINVI_RESTORE_EXPECTED_PORT="${PINVI_RESTORE_EXPECTED_PORT:-}" \
   "${ROOT_DIR}/scripts/restore-db.sh" "${SNAPSHOT}" 2>&1)"
 restore_status="$?"
 set -e
