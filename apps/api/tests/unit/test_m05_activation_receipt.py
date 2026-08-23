@@ -100,7 +100,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
                 "p0_p1": 0,
                 "pr_url": "https://github.com/digitie/pinvi/pull/466",
                 "review_id": "44444444-4444-4444-8444-444444444444",
-                "reviewer_id": "66666666-6666-4666-8666-666666666666",
+                "reviewer_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
                 "summary": "GO: no P0/P1 findings",
                 "summary_sha256": hashlib.sha256(b"GO: no P0/P1 findings").hexdigest(),
                 "verdict": "GO",
@@ -111,7 +111,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
                 "p0_p1": 0,
                 "pr_url": "https://github.com/digitie/pinvi/pull/466",
                 "review_id": "55555555-5555-4555-8555-555555555555",
-                "reviewer_id": "77777777-7777-4777-8777-777777777777",
+                "reviewer_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
                 "summary": "GO: no P0/P1 findings",
                 "summary_sha256": hashlib.sha256(b"GO: no P0/P1 findings").hexdigest(),
                 "verdict": "GO",
@@ -404,6 +404,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     )
     receipt = receipt_path.read_text(encoding="utf-8")
     ledger_path = tmp_path / "activation-ledger.jsonl"
+    high_watermark_path = tmp_path / "activation-high-watermark.json"
     subprocess.run(  # noqa: S603 - invokes the repository-pinned Python test helper
         [
             sys.executable,
@@ -413,20 +414,19 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             str(receipt_path),
             "--ledger",
             str(ledger_path),
+            "--high-watermark",
+            str(high_watermark_path),
         ],
         check=True,
         capture_output=True,
         text=True,
     )
     monkeypatch.setenv("PINVI_SOURCE_REVISION", PINVI_REVISION)
-    high_watermark_path = tmp_path / "activation-high-watermark.json"
-    _write_json(
-        high_watermark_path,
-        {
-            "generation": 2,
-            "receipt_sha256": hashlib.sha256(receipt.encode("utf-8")).hexdigest(),
-        },
-    )
+    high_watermark = json.loads(high_watermark_path.read_text(encoding="utf-8"))
+    assert high_watermark == {
+        "generation": 2,
+        "receipt_sha256": hashlib.sha256(receipt.encode("utf-8")).hexdigest(),
+    }
     loaded = Settings(
         _env_file=None,
         pinvi_environment="production",

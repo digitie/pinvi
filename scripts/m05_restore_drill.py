@@ -29,10 +29,19 @@ _BASH = "/usr/bin/bash"
 _ROLE_RE = re.compile(r"[a-z_][a-z0-9_]{0,62}\Z")
 _SCHEMA_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
+_TARGET_DATABASE_RE = re.compile(r"pinvi_m05_restore_[a-z0-9_]+\Z")
+_SAFE_PATH = "/usr/bin:/bin"
 
 
 class RestoreDrillError(ValueError):
     """실제 복원 드릴이 M05 evidence 계약을 충족하지 못했다."""
+
+
+def _command_env() -> dict[str, str]:
+    environment = os.environ.copy()
+    if environment.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
+        environment["PATH"] = _SAFE_PATH
+    return environment
 
 
 def _sha256(value: bytes) -> str:
@@ -116,7 +125,7 @@ def _scalar(
             f"--dbname={database_url}",
             f"--command={sql}",
         ],
-        env=os.environ.copy(),
+        env=_command_env(),
         check=check,
     )
 
@@ -126,9 +135,7 @@ def _require_true(result: subprocess.CompletedProcess[str], *, name: str) -> Non
         raise RestoreDrillError(f"restore verification failed: {name}")
 
 
-def _runtime_role_check(
-    database_url: str, *, schema: str, expected_role: str
-) -> None:
+def _runtime_role_check(database_url: str, *, schema: str, expected_role: str) -> None:
     if not _ROLE_RE.fullmatch(expected_role):
         raise RestoreDrillError("restore runtime role is invalid")
     sql = f"""
@@ -139,6 +146,8 @@ SELECT r.rolcanlogin
   AND NOT r.rolcreatedb
   AND NOT r.rolreplication
   AND has_schema_privilege(current_user, '{schema}', 'USAGE')
+  AND NOT has_schema_privilege(current_user, '{schema}', 'CREATE')
+  AND NOT has_database_privilege(current_user, current_database(), 'CREATE')
   AND NOT EXISTS (
       SELECT 1
       FROM pg_class c
@@ -248,7 +257,9 @@ def _identity(database_url: str, *, schema: str) -> dict[str, object]:
     try:
         value = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise RestoreDrillError("database identity query returned invalid JSON") from exc
+        raise RestoreDrillError(
+            "database identity query returned invalid JSON"
+        ) from exc
     if not isinstance(value, dict) or set(value) != {
         "database",
         "database_oid",
@@ -305,19 +316,23 @@ def _source_revision(root: Path) -> str:
             check=True,
             capture_output=True,
             text=True,
+            env=_command_env(),
         ).stdout.strip()
         status = subprocess.run(
             ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
             check=True,
             capture_output=True,
             text=True,
+            env=_command_env(),
         ).stdout
         if revision != expected or status:
             raise RestoreDrillError(
                 "restore producer checkout is not a clean PINVI_SOURCE_REVISION"
             )
     except (OSError, subprocess.CalledProcessError) as exc:
-        raise RestoreDrillError("restore producer source revision could not be verified") from exc
+        raise RestoreDrillError(
+            "restore producer source revision could not be verified"
+        ) from exc
     if not _COMMIT_RE.fullmatch(revision):
         raise RestoreDrillError("restore producer source revision is invalid")
     return revision
@@ -334,9 +349,6 @@ def _run_drill(args: argparse.Namespace) -> int:
         raise RestoreDrillError("restore staging role is invalid")
     if args.runtime_role == args.staging_role:
         raise RestoreDrillError("restore staging and runtime roles must differ")
-    if not args.target_database_prefix:
-        raise RestoreDrillError("restore target database prefix is required")
-
     source_url = _database_url(args.source_database_url_env)
     target_url = _database_url(args.staging_database_url_env)
     runtime_url = _database_url(args.runtime_database_url_env)
@@ -353,9 +365,11 @@ def _run_drill(args: argparse.Namespace) -> int:
     target_database = target_identity_pre.get("database")
     if (
         not isinstance(target_database, str)
-        or not target_database.startswith(args.target_database_prefix)
+        or _TARGET_DATABASE_RE.fullmatch(target_database) is None
     ):
-        raise RestoreDrillError("restore target database is outside the M05 disposable prefix")
+        raise RestoreDrillError(
+            "restore target database is outside the M05 disposable prefix"
+        )
     _staging_role_check(
         target_url,
         expected_role=args.staging_role,
@@ -379,7 +393,7 @@ def _run_drill(args: argparse.Namespace) -> int:
         prefix="pinvi-m05-restore-", dir=output.parent
     ) as temporary:
         temporary_dir = Path(temporary)
-        backup_env = os.environ.copy()
+        backup_env = _command_env()
         backup_env.update(
             {
                 "PINVI_BACKUP_DATABASE_URL": source_url,
@@ -399,7 +413,7 @@ def _run_drill(args: argparse.Namespace) -> int:
         if _identity_key(target_identity_before_restore) != target_key:
             raise RestoreDrillError("target database identity changed before restore")
 
-        restore_env = os.environ.copy()
+        restore_env = _command_env()
         restore_env.update(
             {
                 "PINVI_RESTORE_STAGING_DATABASE_URL": target_url,
@@ -493,10 +507,6 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--staging-role", default=os.environ.get("PINVI_RESTORE_STAGING_ROLE", "")
-    )
-    parser.add_argument(
-        "--target-database-prefix",
-        default=os.environ.get("PINVI_RESTORE_TARGET_DATABASE_PREFIX", "pinvi_m05_restore_"),
     )
     parser.add_argument(
         "--source-database-url-env",

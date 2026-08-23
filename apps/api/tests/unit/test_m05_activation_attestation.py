@@ -137,3 +137,4 @@ def test_m05_map_case_binds_missing_event_hash_to_ack(monkeypatch: pytest.Monkey
     )
 
     assert ack["event_sha256"] == ack_hash
+    assert module._map_case_event_hash(_data, ack) == ack_hash

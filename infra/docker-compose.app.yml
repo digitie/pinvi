@@ -178,7 +178,7 @@ services:
         target: ${PINVI_M05_ACTIVATION_HIGH_WATERMARK_PATH:-/run/pinvi/m05/activation-high-watermark.json}
         read_only: true
     ports:
-      - "${PINVI_API_PORT:-12801}:8000"
+      - "127.0.0.1:${PINVI_API_PORT:-12801}:8000"
 
   # Explicit one-shot only: app-api is never allowed to receive the owner URL.
   # `scripts/docker-app.sh migrate` mounts the bootstrap credential and invokes it here.
@@ -215,7 +215,7 @@ services:
     depends_on:
       - app-api
     ports:
-      - "${PINVI_WEB_PORT:-12805}:3000"
+      - "127.0.0.1:${PINVI_WEB_PORT:-12805}:3000"
 
   # Dagster webserver — 고정 포트 12802(컨테이너/호스트 동일). profile "etl"로만 기동.
   # reverse proxy: pinvi-dagster.<domain> → host :12802.

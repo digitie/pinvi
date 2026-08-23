@@ -32,6 +32,7 @@ _M05_PAIR_PROVENANCE_FILENAME = "kor-travel-map-m05-pair-provenance-v1.json"
 _PACKAGED_M05_PAIR_PROVENANCE_PATH = f"_contract_data/{_M05_PAIR_PROVENANCE_FILENAME}"
 _M05_ACTIVATION_TRUST_FILENAME = "pinvi-m05-activation-receipt-trust-v1.json"
 _M05_REVIEWER_ROSTER_FILENAME = "pinvi-m05-reviewer-roster-v1.json"
+_M05_ACTIVATION_PR_URL = "https://github.com/digitie/pinvi/pull/466"
 
 
 class _DuplicateJsonKeyError(ValueError):
@@ -594,7 +595,7 @@ class Settings(BaseSettings):
     # ledger와 분리된 root-owned high-watermark. 같은 generation의 다른 receipt replay도 거부한다.
     pinvi_m05_activation_high_watermark_path: str = ""
     # receipt가 봉인된 작업의 정본 PR URL.
-    pinvi_m05_activation_pr_url: str = "https://github.com/digitie/pinvi/pull/466"
+    pinvi_m05_activation_pr_url: str = _M05_ACTIVATION_PR_URL
     # 배포자가 승인한 ledger generation. 이 값보다 낮은 receipt rollback은 거부한다.
     pinvi_m05_activation_min_generation: int = Field(default=1, ge=1)
     # immutable deploy wrapper가 대조한 세 Pinvi runtime image digest를 API에만 전달한다.
@@ -1239,6 +1240,8 @@ class Settings(BaseSettings):
                 "M05 activation receipt Pinvi source revision must match PINVI_SOURCE_REVISION"
             )
         reviews = payload["adversarial_reviews"]
+        if self.pinvi_m05_activation_pr_url != _M05_ACTIVATION_PR_URL:
+            _raise_redacted_settings_error("M05 activation PR URL is not the pinned PR #466")
         if not isinstance(reviews, list) or len(reviews) != 2:
             _raise_redacted_settings_error("M05 activation requires two adversarial reviews")
         review_keys: set[tuple[str, str, str]] = set()
@@ -1268,6 +1271,7 @@ class Settings(BaseSettings):
                 or not _is_canonical_uuid(review_id)
                 or not isinstance(agent_id, str)
                 or not _is_canonical_uuid(agent_id)
+                or reviewer_id != agent_id
                 or not isinstance(review["pr_url"], str)
                 or re.fullmatch(
                     r"https://github\.com/digitie/pinvi/pull/[1-9][0-9]*", review["pr_url"]
@@ -1617,7 +1621,21 @@ class Settings(BaseSettings):
             previous_generation = generation
             previous_record_sha256 = record_sha256
             records.append(record_object)
+        if not records:
+            _raise_redacted_settings_error("M05 activation receipt ledger is empty")
         latest = records[-1]
+        latest_generation = latest["activation_generation"]
+        latest_receipt_sha256 = latest["receipt_sha256"]
+        if (
+            type(latest_generation) is not int
+            or not isinstance(latest_receipt_sha256, str)
+            or re.fullmatch(r"[0-9a-f]{64}", latest_receipt_sha256) is None
+            or high_watermark_generation != latest_generation
+            or high_watermark_receipt_sha256 != latest_receipt_sha256
+        ):
+            _raise_redacted_settings_error(
+                "M05 activation high-watermark does not match the latest ledger record"
+            )
         receipt_sha256 = hashlib.sha256(
             receipt_secret.get_secret_value().encode("utf-8")
         ).hexdigest()

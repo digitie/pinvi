@@ -422,6 +422,29 @@ def _map_case_snapshot(
     return data, ack, map_data_hash, ack_hash
 
 
+def _map_case_event_hash(data: dict[str, object], ack: dict[str, object]) -> str:
+    """Return the Map event hash, using the ACK projection when event hash is omitted."""
+
+    event = _object(data.get("event"), name="Map case event")
+    event_sha_value = event.get("event_sha256")
+    event_sha = (
+        _string(event_sha_value, name="Map event hash")
+        if event_sha_value is not None
+        else _string(ack.get("event_sha256"), name="Map ACK event hash")
+    )
+    if _SHA256_RE.fullmatch(event_sha) is None:
+        raise AttestationError("Map event hash is invalid")
+    return event_sha
+
+
+def _pinvi_case_event_hash(data: dict[str, object]) -> str:
+    receipt = _object(data.get("receipt"), name="Pinvi local receipt")
+    event_sha = _string(receipt.get("event_sha256"), name="Pinvi receipt event hash")
+    if _SHA256_RE.fullmatch(event_sha) is None:
+        raise AttestationError("Pinvi receipt event hash is invalid")
+    return event_sha
+
+
 def _pinvi_case_snapshot(
     *,
     pinvi_api_url: str,
@@ -1052,6 +1075,10 @@ def _live(args: argparse.Namespace) -> int:
         email=email,
         password=password,
     )
+    before_map_event_sha = _map_case_event_hash(before_map, before_ack)
+    before_pinvi_event_sha = _pinvi_case_event_hash(before_pinvi)
+    if before_map_event_sha != before_pinvi_event_sha:
+        raise AttestationError("Map event hash does not match the Pinvi receipt event hash")
     before_local_receipt_sha = _string(
         before_ack.get("local_receipt_sha256"), name="Map local receipt hash"
     )
@@ -1126,6 +1153,10 @@ def _live(args: argparse.Namespace) -> int:
         email=email,
         password=password,
     )
+    after_map_event_sha = _map_case_event_hash(after_map, after_ack)
+    after_pinvi_event_sha = _pinvi_case_event_hash(after_pinvi)
+    if after_map_event_sha != after_pinvi_event_sha:
+        raise AttestationError("Map event hash does not match the Pinvi receipt event hash")
     after_local_receipt_sha = _string(
         after_ack.get("local_receipt_sha256"), name="Map local receipt hash"
     )
@@ -1188,10 +1219,7 @@ def _live(args: argparse.Namespace) -> int:
 
     live_ui = {
         "event_id": event_id,
-        "event_sha256": _string(
-            _object(after_map["event"], name="Map event")["event_sha256"],
-            name="event hash",
-        ),
+        "event_sha256": after_map_event_sha,
         "map_admin_endpoint": args.map_admin_url.rstrip("/"),
         "map_ack_sha256": after_ack_hash,
         "map_local_receipt_sha256": after_local_receipt_sha,

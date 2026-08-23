@@ -82,7 +82,7 @@ elif [[ "$sql" == *"json_build_object"* ]]; then
   if [[ "$sql" == *"/source"* ]]; then
     echo '{"database":"fixture-source","user":"fixture","database_oid":"100","system_identifier":"1","schema_exists":true,"server_version_num":"160000"}'
   else
-    echo '{"database":"fixture-target","user":"fixture","database_oid":"200","system_identifier":"1","schema_exists":true,"server_version_num":"160000"}'
+    echo '{"database":"pinvi_m05_restore_target","user":"fixture","database_oid":"200","system_identifier":"1","schema_exists":true,"server_version_num":"160000"}'
   fi
 elif [[ "$sql" == *"has_schema_privilege"* || "$sql" == *"count(*) = 6"* || "$sql" == *"FROM pg_roles"* ]]; then
   echo t
@@ -105,12 +105,12 @@ fi
     env.update(
         {
             "PATH": f"{fake_bin}{os.pathsep}{env['PATH']}",
+            "PINVI_M05_RESTORE_TEST_MODE": "1",
             "PINVI_RESTORE_SOURCE_DATABASE_URL": "postgresql://source:secret@db/source",
             "PINVI_RESTORE_STAGING_DATABASE_URL": "postgresql://owner:secret@db/target",
             "PINVI_RESTORE_RUNTIME_DATABASE_URL": "postgresql://runtime:secret@db/target",
             "PINVI_RESTORE_RUNTIME_ROLE": "pinvi_app",
             "PINVI_RESTORE_STAGING_ROLE": "pinvi_owner",
-            "PINVI_RESTORE_TARGET_DATABASE_PREFIX": "fixture-",
             "PINVI_SOURCE_REVISION": "f" * 40,
         }
     )

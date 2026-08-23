@@ -15,6 +15,7 @@ const sourceRevision = process.env.PINVI_SOURCE_REVISION;
 const verificationId = process.env.PINVI_M05_UI_VERIFICATION_ID;
 const playwrightRunnerImageId = process.env.PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_ID;
 const playwrightRunnerImageRef = process.env.PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_REF;
+const webBaseUrl = process.env.PINVI_LIVE_WEB_URL?.replace(/\/$/, '');
 const apiBaseUrl = (
   process.env.PINVI_M05_UI_API_URL ?? process.env.PINVI_LIVE_API_URL
 )?.replace(/\/$/, '');
@@ -47,21 +48,33 @@ async function ensureAdminAuth(page: Page) {
   await expect(page).toHaveURL(/\/admin(?:[?#].*)?$/);
 }
 
+function assertSameOrigin(page: Page, expectedOrigin: string) {
+  if (new URL(page.url()).origin !== expectedOrigin) {
+    throw new Error(`M05 live UI document origin이 ${expectedOrigin}이 아닙니다.`);
+  }
+}
+
 test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
-  test.skip(!enabled, 'PINVI_M05_LIVE_E2E=1인 격리 paired stack에서만 실행합니다.');
-  test.skip(!eventId, 'PINVI_M05_LIVE_EVENT_ID가 필요합니다.');
-  test.skip(!oldFeatureId, 'PINVI_M05_LIVE_OLD_FEATURE_ID가 필요합니다.');
-  test.skip(!replacementFeatureId, 'PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID가 필요합니다.');
-  test.skip(!impactCount, 'PINVI_M05_LIVE_IMPACT_COUNT가 필요합니다.');
-  test.skip(!sourceRevision, 'PINVI_SOURCE_REVISION이 필요합니다.');
-  test.skip(!verificationId, 'PINVI_M05_UI_VERIFICATION_ID가 필요합니다.');
-  test.skip(!playwrightRunnerImageId, 'PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_ID가 필요합니다.');
-  test.skip(!playwrightRunnerImageRef, 'PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_REF가 필요합니다.');
-  test.skip(!apiBaseUrl, 'PINVI_M05_UI_API_URL가 필요합니다.');
-  test.skip(
-    !adminStorageState && (!adminEmail || !adminPassword),
-    'PINVI_M05_LIVE_EMAIL/PINVI_M05_LIVE_PASSWORD 또는 storage state가 필요합니다.',
-  );
+  test.beforeAll(() => {
+    const missing: string[] = [];
+    if (!enabled) missing.push('PINVI_M05_LIVE_E2E=1');
+    if (!eventId) missing.push('PINVI_M05_LIVE_EVENT_ID');
+    if (!oldFeatureId) missing.push('PINVI_M05_LIVE_OLD_FEATURE_ID');
+    if (!replacementFeatureId) missing.push('PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID');
+    if (!impactCount) missing.push('PINVI_M05_LIVE_IMPACT_COUNT');
+    if (!sourceRevision) missing.push('PINVI_SOURCE_REVISION');
+    if (!verificationId) missing.push('PINVI_M05_UI_VERIFICATION_ID');
+    if (!playwrightRunnerImageId) missing.push('PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_ID');
+    if (!playwrightRunnerImageRef) missing.push('PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_REF');
+    if (!webBaseUrl) missing.push('PINVI_LIVE_WEB_URL');
+    if (!apiBaseUrl) missing.push('PINVI_M05_UI_API_URL');
+    if (!adminStorageState && (!adminEmail || !adminPassword)) {
+      missing.push('PINVI_M05_LIVE_EMAIL/PINVI_M05_LIVE_PASSWORD 또는 storage state');
+    }
+    if (missing.length > 0) {
+      throw new Error(`M05 live E2E 환경변수가 없습니다: ${missing.join(', ')}`);
+    }
+  });
   if (adminStorageState) test.use({ storageState: adminStorageState });
   test.describe.configure({ mode: 'serial' });
 
@@ -70,14 +83,28 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
       throw new Error('M05 live fixture 환경변수가 준비되지 않았습니다.');
     }
     if (!apiBaseUrl) throw new Error('M05 UI API endpoint가 준비되지 않았습니다.');
+    if (!webBaseUrl) throw new Error('M05 UI web endpoint가 준비되지 않았습니다.');
+    const webOrigin = new URL(webBaseUrl).origin;
     const apiOrigin = new URL(apiBaseUrl).origin;
     const detailPath = `/admin/feature-reference-reconciliations/${eventId}`;
     let observedApiRequests = 0;
+    let foreignDocumentOrigin: string | null = null;
     page.on('request', (request) => {
       if (new URL(request.url()).origin === apiOrigin) observedApiRequests += 1;
     });
+    page.on('framenavigated', (frame) => {
+      if (frame === page.mainFrame() && frame.url() !== 'about:blank') {
+        const origin = new URL(frame.url()).origin;
+        if (origin !== webOrigin) foreignDocumentOrigin = origin;
+      }
+    });
     await ensureAdminAuth(page);
-    await page.goto('/admin/feature-reference-reconciliations');
+    assertSameOrigin(page, webOrigin);
+    const listResponse = await page.goto('/admin/feature-reference-reconciliations');
+    if (!listResponse) throw new Error('M05 UI 목록 응답이 없습니다.');
+    expect(new URL(listResponse.url()).origin).toBe(webOrigin);
+    expect(listResponse.request().redirectedFrom()).toBeNull();
+    assertSameOrigin(page, webOrigin);
     const detailResponsePromise = page.waitForResponse((response) => {
       const responseUrl = new URL(response.url());
       return (
@@ -121,11 +148,12 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
         .locator('dl > dt')
         .filter({ hasText: label })
         .locator('xpath=following-sibling::dd[1]');
-    await expect(detail).toContainText(String(responseStatus));
+    await expect(detail.getByTestId(`admin-frr-status-${String(responseStatus)}`)).toBeVisible();
     await expect(receiptValue('조치')).toContainText(String(responseReceiptRecord.action));
     await expect(receiptValue('이전 Feature ID')).toHaveText(oldFeatureId);
     await expect(receiptValue('대체 Feature ID')).toHaveText(replacementFeatureId);
     await expect(receiptValue('영향 행 수')).toHaveText(`${responseReceiptRecord.impact_count}건`);
+    expect(foreignDocumentOrigin).toBeNull();
     await expect(detail).not.toContainText('승인');
     await expect(detail).not.toContainText('거절');
     await expect.poll(() => observedApiRequests).toBeGreaterThan(0);
