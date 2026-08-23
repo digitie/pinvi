@@ -38,13 +38,13 @@ if [[ ! -f "${SNAPSHOT}" ]]; then
   exit 2
 fi
 
-PINNED_TOOL_DIRS=("/usr/local/bin" "/usr/bin" "/bin")
+PINNED_TOOL_DIRS=("/usr/local/bin" "/usr/bin" "/bin" /usr/lib/postgresql/*/bin)
 pinned_tool() {
   local name="$1"
   local candidate
   for directory in "${PINNED_TOOL_DIRS[@]}"; do
     candidate="${directory}/${name}"
-    if [[ -f "${candidate}" && -x "${candidate}" ]]; then
+    if [[ -f "${candidate}" && -x "${candidate}" && ! -L "${candidate}" ]]; then
       printf '%s\n' "${candidate}"
       return 0
     fi
@@ -52,11 +52,34 @@ pinned_tool() {
   return 1
 }
 
+verify_tool_digest() {
+  local name="$1"
+  local path="$2"
+  local expected="$3"
+  if [[ "${PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST:-0}" == "1" ]]; then
+    if [[ ! "${expected}" =~ ^[0-9a-f]{64}$ ]]; then
+      phase preparing failed "${name} digest pin is required"
+      exit 3
+    fi
+    local actual
+    actual="$(sha256sum "${path}" | awk 'NR == 1 { print $1 }')"
+    if [[ "${actual}" != "${expected}" ]]; then
+      phase preparing failed "${name} digest pin failed"
+      exit 3
+    fi
+  fi
+}
+
 PG_RESTORE_BIN="${PINVI_RESTORE_PG_RESTORE_BIN:-$(pinned_tool pg_restore || true)}"
 if [[ "${PG_RESTORE_BIN}" != /* || ! -x "${PG_RESTORE_BIN}" ]]; then
   phase preparing failed "pg_restore not found"
   exit 127
 fi
+if ! command -v sha256sum >/dev/null 2>&1; then
+  phase preparing failed "sha256sum not found"
+  exit 127
+fi
+verify_tool_digest "pg_restore" "${PG_RESTORE_BIN}" "${PINVI_RESTORE_PG_RESTORE_SHA256:-}"
 
 if [[ -f "${SNAPSHOT}.sha256" ]]; then
   if ! command -v sha256sum >/dev/null 2>&1; then
@@ -94,6 +117,26 @@ if [[ "${PSQL_BIN}" != /* || ! -x "${PSQL_BIN}" ]]; then
   phase preparing failed "psql not found"
   exit 127
 fi
+verify_tool_digest "psql" "${PSQL_BIN}" "${PINVI_RESTORE_PSQL_SHA256:-}"
+
+assert_expected_target() {
+  if [[ -z "${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" ]]; then
+    return 0
+  fi
+  local actual
+  actual="$("${PSQL_BIN}" --no-psqlrc --tuples-only --no-align \
+    --dbname="${DATABASE_URL}" \
+    --command="SELECT current_database() || '|' || d.oid::text || '|' || (pg_control_system()).system_identifier::text || '|' || COALESCE(inet_server_addr()::text, '') || '|' || inet_server_port()::text FROM pg_database d WHERE d.datname = current_database()" \
+    | tr -d '[:space:]')"
+  local expected="${PINVI_RESTORE_EXPECTED_DATABASE_NAME}|${PINVI_RESTORE_EXPECTED_DATABASE_OID}|${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER}|${PINVI_RESTORE_EXPECTED_HOSTADDR}|${PINVI_RESTORE_EXPECTED_PORT}"
+  if [[ "${actual}" != "${expected}" ]]; then
+    phase preparing failed "restore target identity changed before schema swap"
+    exit 3
+  fi
+  phase preparing success "restore target identity verified"
+}
+
+assert_expected_target
 
 TMP_DIR="$(mktemp -d)"
 cleanup() {
@@ -188,7 +231,7 @@ else
 fi
 
 phase validating running "validating restored schema"
-users_exists="$(psql -v ON_ERROR_STOP=1 "${DATABASE_URL}" -tAc "SELECT to_regclass('${RESTORE_SCHEMA}.users') IS NOT NULL")"
+users_exists="$("${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -tAc "SELECT to_regclass('${RESTORE_SCHEMA}.users') IS NOT NULL")"
 if [[ "${users_exists}" != "t" ]]; then
   phase validating failed "restored schema is missing users table"
   exit 3
@@ -211,7 +254,7 @@ else
 fi
 
 phase switching running "renaming schemas"
-psql -v ON_ERROR_STOP=1 "${DATABASE_URL}" <<SQL >/dev/null
+"${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" <<SQL >/dev/null
 BEGIN;
 ALTER SCHEMA ${SOURCE_SCHEMA} RENAME TO ${PREVIOUS_SCHEMA};
 ALTER SCHEMA ${RESTORE_SCHEMA} RENAME TO ${SOURCE_SCHEMA};

@@ -129,9 +129,7 @@ def _read_secure_bytes(
         else:
             fd = os.open(path.name, flags, dir_fd=directory_fd)
     except OSError as exc:
-        raise ReceiptError(
-            f"{label} is not a readable regular file: {path.name}"
-        ) from exc
+        raise ReceiptError(f"{label} is not a readable regular file: {path.name}") from exc
     try:
         file_stat = os.fstat(fd)
         if not stat.S_ISREG(file_stat.st_mode):
@@ -186,9 +184,7 @@ def _write_new_json(path: Path, value: object) -> None:
         with os.fdopen(fd, "wb") as stream:
             fd = -1
             stream.write(
-                json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True).encode(
-                    "utf-8"
-                )
+                json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
             )
     finally:
         if fd != -1:
@@ -202,11 +198,7 @@ def _object(value: object, *, name: str) -> dict[str, object]:
 
 
 def _string(value: object, *, name: str) -> str:
-    if (
-        not isinstance(value, str)
-        or not value
-        or any(character.isspace() for character in value)
-    ):
+    if not isinstance(value, str) or not value or any(character.isspace() for character in value):
         raise ReceiptError(f"{name} must be a non-empty token-free string")
     return value
 
@@ -249,9 +241,7 @@ def _ledger_record_hash(record: dict[str, object]) -> str:
 
 def _trust_anchor() -> str:
     try:
-        raw = json.loads(
-            _TRUST_ANCHOR.read_bytes(), object_pairs_hook=_reject_duplicate_keys
-        )
+        raw = json.loads(_TRUST_ANCHOR.read_bytes(), object_pairs_hook=_reject_duplicate_keys)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ReceiptError) as exc:
         raise ReceiptError("M05 activation trust anchor is invalid") from exc
     payload = _object(raw, name="M05 activation trust anchor")
@@ -261,16 +251,12 @@ def _trust_anchor() -> str:
         or payload["version"] != 1
     ):
         raise ReceiptError("M05 activation trust anchor schema is invalid")
-    return _sha256(
-        payload["public_key_sha256"], name="M05 activation public key fingerprint"
-    )
+    return _sha256(payload["public_key_sha256"], name="M05 activation public key fingerprint")
 
 
 def _reviewer_roster() -> set[str]:
     try:
-        raw = json.loads(
-            _REVIEWER_ROSTER.read_bytes(), object_pairs_hook=_reject_duplicate_keys
-        )
+        raw = json.loads(_REVIEWER_ROSTER.read_bytes(), object_pairs_hook=_reject_duplicate_keys)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ReceiptError) as exc:
         raise ReceiptError("M05 reviewer roster is invalid") from exc
     payload = _object(raw, name="M05 reviewer roster")
@@ -301,7 +287,14 @@ def _review_challenge(
     except (UnicodeDecodeError, json.JSONDecodeError, ReceiptError) as exc:
         raise ReceiptError("review challenge is invalid JSON") from exc
     challenge = _object(value, name="review challenge")
-    if set(challenge) != {"agent_ids", "commit", "challenge_id", "pr_url", "response_paths", "version"}:
+    if set(challenge) != {
+        "agent_ids",
+        "commit",
+        "challenge_id",
+        "pr_url",
+        "response_paths",
+        "version",
+    }:
         raise ReceiptError("review challenge schema is invalid")
     if challenge["version"] != 1:
         raise ReceiptError("review challenge version is invalid")
@@ -311,7 +304,10 @@ def _review_challenge(
     if challenge["pr_url"] != _M05_ACTIVATION_PR_URL:
         raise ReceiptError("review challenge is not pinned to M05")
     agent_ids = challenge["agent_ids"]
-    if not isinstance(agent_ids, list) or {_uuid(item, name="review challenge agent") for item in agent_ids} != _reviewer_roster():
+    if (
+        not isinstance(agent_ids, list)
+        or {_uuid(item, name="review challenge agent") for item in agent_ids} != _reviewer_roster()
+    ):
         raise ReceiptError("review challenge must cover the pinned reviewers")
     response_paths = _object(challenge["response_paths"], name="review challenge response paths")
     if set(response_paths) != _reviewer_roster():
@@ -380,9 +376,7 @@ def _review_allowlist(
         review_id = _uuid(review["review_id"], name="review allowlist review_id")
         if _uuid(review["challenge_id"], name="review allowlist challenge_id") != challenge_id:
             raise ReceiptError("review allowlist challenge does not match the challenge file")
-        response_sha256 = _sha256(
-            review["response_sha256"], name="review allowlist response hash"
-        )
+        response_sha256 = _sha256(review["response_sha256"], name="review allowlist response hash")
         if response_hashes.get(agent_id) != response_sha256:
             raise ReceiptError("review allowlist response is not bound to the challenge file")
         if agent_id not in allowed_agents or pr_url != _M05_ACTIVATION_PR_URL:
@@ -408,12 +402,7 @@ def _host_tool(name: str) -> str:
 
 
 def _trusted_restore_tool_path(path: Path, name: str) -> bool:
-    if (
-        path.name != name
-        or path.is_symlink()
-        or not path.is_file()
-        or not os.access(path, os.X_OK)
-    ):
+    if path.name != name or path.is_symlink() or not path.is_file() or not os.access(path, os.X_OK):
         return False
     parent = str(path.resolve().parent)
     return path.resolve().parent in _RESTORE_TOOL_DIRECTORIES or bool(
@@ -422,7 +411,7 @@ def _trusted_restore_tool_path(path: Path, name: str) -> bool:
 
 
 def _assert_source_checkout(source_revision: str) -> None:
-    """receipt signer가 인자로 받은 revision의 clean checkout에서만 동작하게 한다."""
+    """서명 대상이 clean checkout이자 원격 PR의 실제 head인지 확인한다."""
 
     root = Path(__file__).resolve().parents[1]
     try:
@@ -446,13 +435,33 @@ def _assert_source_checkout(source_revision: str) -> None:
             text=True,
         ).stdout
     except (OSError, subprocess.CalledProcessError) as exc:
-        raise ReceiptError(
-            "receipt producer source revision could not be verified"
-        ) from exc
+        raise ReceiptError("receipt producer source revision could not be verified") from exc
     if revision != source_revision or status:
-        raise ReceiptError(
-            "receipt producer checkout must be clean at the signed revision"
-        )
+        raise ReceiptError("receipt producer checkout must be clean at the signed revision")
+    pr_match = re.fullmatch(
+        r"https://github\.com/digitie/pinvi/pull/([1-9][0-9]*)", _M05_ACTIVATION_PR_URL
+    )
+    if pr_match is None:
+        raise ReceiptError("M05 activation PR URL is invalid")
+    try:
+        remote_head = subprocess.run(
+            [
+                _host_tool("git"),
+                "-C",
+                str(root),
+                "ls-remote",
+                "origin",
+                f"refs/pull/{pr_match.group(1)}/head",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ReceiptError("M05 activation PR head could not be verified") from exc
+    remote_revision = remote_head.split(maxsplit=1)[0] if remote_head else ""
+    if remote_revision != source_revision:
+        raise ReceiptError("receipt source revision is not the current M05 PR head")
 
 
 def _ledger_records(path: Path, *, require_root_owned: bool) -> list[dict[str, object]]:
@@ -504,9 +513,7 @@ def _ledger_records(path: Path, *, require_root_owned: bool) -> list[dict[str, o
             or scope not in {"staging", "production"}
         ):
             raise ReceiptError("activation ledger record fields are invalid")
-        activation_nonce = _uuid(
-            record_object["activation_nonce"], name="ledger activation nonce"
-        )
+        activation_nonce = _uuid(record_object["activation_nonce"], name="ledger activation nonce")
         if activation_nonce in activation_nonces:
             raise ReceiptError("activation ledger contains a replayed nonce")
         activation_nonces.add(activation_nonce)
@@ -514,9 +521,7 @@ def _ledger_records(path: Path, *, require_root_owned: bool) -> list[dict[str, o
             record_object["previous_record_sha256"],
             name="ledger previous record hash",
         )
-        if previous_record_sha != (
-            records[-1]["record_sha256"] if records else "0" * 64
-        ):
+        if previous_record_sha != (records[-1]["record_sha256"] if records else "0" * 64):
             raise ReceiptError("activation ledger hash chain is broken")
         _sha256(record_object["receipt_sha256"], name="ledger receipt hash")
         _commit(record_object["source_revision"], name="ledger source revision")
@@ -527,9 +532,7 @@ def _ledger_records(path: Path, *, require_root_owned: bool) -> list[dict[str, o
     return records
 
 
-def _read_high_watermark(
-    path: Path, *, require_root_owned: bool
-) -> tuple[int, str] | None:
+def _read_high_watermark(path: Path, *, require_root_owned: bool) -> tuple[int, str] | None:
     if not path.exists():
         return None
     if path.is_symlink() or not path.is_file():
@@ -569,35 +572,22 @@ def _write_high_watermark(
 ) -> None:
     if type(generation) is not int or generation < 1:
         raise ReceiptError("activation high-watermark generation is invalid")
-    receipt_sha256 = _sha256(
-        receipt_sha256, name="activation high-watermark receipt hash"
-    )
+    receipt_sha256 = _sha256(receipt_sha256, name="activation high-watermark receipt hash")
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     if path.parent.is_symlink() or not path.parent.is_dir():
-        raise ReceiptError(
-            "activation high-watermark parent must be a regular directory"
-        )
+        raise ReceiptError("activation high-watermark parent must be a regular directory")
     parent_stat = path.parent.stat()
     if stat.S_IMODE(parent_stat.st_mode) & 0o022:
-        raise ReceiptError(
-            "activation high-watermark parent must not be group/world writable"
-        )
+        raise ReceiptError("activation high-watermark parent must not be group/world writable")
     if require_root_owned and parent_stat.st_uid != 0:
         raise ReceiptError("activation high-watermark parent is not root-owned")
     existing = _read_high_watermark(path, require_root_owned=require_root_owned)
     if existing is not None:
         existing_generation, existing_receipt_sha256 = existing
         if existing_generation > generation:
-            raise ReceiptError(
-                "activation high-watermark generation cannot move backwards"
-            )
-        if (
-            existing_generation == generation
-            and existing_receipt_sha256 != receipt_sha256
-        ):
-            raise ReceiptError(
-                "activation high-watermark conflicts at the same generation"
-            )
+            raise ReceiptError("activation high-watermark generation cannot move backwards")
+        if existing_generation == generation and existing_receipt_sha256 != receipt_sha256:
+            raise ReceiptError("activation high-watermark conflicts at the same generation")
         if existing_generation == generation:
             return
 
@@ -657,9 +647,7 @@ def _read_durable_floor(path: Path, *, require_root_owned: bool) -> int | None:
     return generation
 
 
-def _durable_history_records(
-    path: Path, *, require_root_owned: bool
-) -> list[dict[str, object]]:
+def _durable_history_records(path: Path, *, require_root_owned: bool) -> list[dict[str, object]]:
     if not path.exists():
         return []
     raw = _read_secure_bytes(
@@ -693,9 +681,7 @@ def _durable_history_records(
         ):
             raise ReceiptError("activation durable history generation chain is invalid")
         _sha256(record["receipt_sha256"], name="durable history receipt hash")
-        record_sha256 = _sha256(
-            record["record_sha256"], name="durable history record hash"
-        )
+        record_sha256 = _sha256(record["record_sha256"], name="durable history record hash")
         if record_sha256 != _ledger_record_hash(record):
             raise ReceiptError("activation durable history record hash is invalid")
         previous_generation = generation
@@ -743,7 +729,9 @@ def _append_durable_history(
                 raise ReceiptError("activation durable history generation cannot move backwards")
             if generation == previous_generation:
                 if previous["receipt_sha256"] != receipt_sha256:
-                    raise ReceiptError("activation durable history conflicts at the same generation")
+                    raise ReceiptError(
+                        "activation durable history conflicts at the same generation"
+                    )
                 return
             previous_record_sha256 = cast(str, previous["record_sha256"])
         else:
@@ -768,9 +756,7 @@ def _append_durable_history(
         raise ReceiptError("activation durable history update could not be verified")
 
 
-def _write_durable_floor(
-    path: Path, *, generation: int, require_root_owned: bool
-) -> None:
+def _write_durable_floor(path: Path, *, generation: int, require_root_owned: bool) -> None:
     if type(generation) is not int or generation < 1:
         raise ReceiptError("activation durable floor generation is invalid")
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -858,9 +844,7 @@ def _ledger(args: argparse.Namespace) -> int:
     ):
         raise ReceiptError("receipt ledger fields are invalid")
     nonce = _uuid(payload["activation_nonce"], name="receipt activation nonce")
-    source_revision = _commit(
-        payload["pinvi_source_revision"], name="receipt source revision"
-    )
+    source_revision = _commit(payload["pinvi_source_revision"], name="receipt source revision")
     record = {
         "activation_expires_at": expires_at,
         "activation_generation": generation,
@@ -885,28 +869,18 @@ def _ledger(args: argparse.Namespace) -> int:
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
         ledger_stat = os.fstat(fd)
-        if (
-            not stat.S_ISREG(ledger_stat.st_mode)
-            or stat.S_IMODE(ledger_stat.st_mode) != 0o600
-        ):
+        if not stat.S_ISREG(ledger_stat.st_mode) or stat.S_IMODE(ledger_stat.st_mode) != 0o600:
             raise ReceiptError("activation ledger mode is not 0600")
         if args.require_root_owned and ledger_stat.st_uid != 0:
             raise ReceiptError("activation ledger is not root-owned")
-        records = _ledger_records(
-            args.ledger, require_root_owned=args.require_root_owned
-        )
+        records = _ledger_records(args.ledger, require_root_owned=args.require_root_owned)
         if any(record["activation_nonce"] == nonce for record in records):
             raise ReceiptError("activation nonce has already been recorded")
         if records:
             record["previous_record_sha256"] = records[-1]["record_sha256"]
             previous_generation = records[-1]["activation_generation"]
-            if (
-                type(previous_generation) is not int
-                or generation <= previous_generation
-            ):
-                raise ReceiptError(
-                    "activation ledger generation must increase monotonically"
-                )
+            if type(previous_generation) is not int or generation <= previous_generation:
+                raise ReceiptError("activation ledger generation must increase monotonically")
         record["record_sha256"] = _ledger_record_hash(record)
         with os.fdopen(fd, "ab") as stream:
             fd = -1
@@ -941,9 +915,7 @@ def _ledger(args: argparse.Namespace) -> int:
 
 def _pair_provenance() -> dict[str, dict[str, str]]:
     try:
-        raw = json.loads(
-            _PAIR_PROVENANCE.read_bytes(), object_pairs_hook=_reject_duplicate_keys
-        )
+        raw = json.loads(_PAIR_PROVENANCE.read_bytes(), object_pairs_hook=_reject_duplicate_keys)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ReceiptError) as exc:
         raise ReceiptError("pair provenance file is invalid") from exc
     payload = _object(raw, name="pair provenance")
@@ -973,9 +945,7 @@ def _pair_provenance() -> dict[str, dict[str, str]]:
         }:
             raise ReceiptError(f"pair provenance {name} schema is invalid")
         result[name] = {
-            "openapi_sha256": _sha256(
-                entry["openapi_sha256"], name=f"{name}.openapi_sha256"
-            ),
+            "openapi_sha256": _sha256(entry["openapi_sha256"], name=f"{name}.openapi_sha256"),
             "runtime_operation_contract_sha256": _sha256(
                 entry["runtime_operation_contract_sha256"],
                 name=f"{name}.runtime_operation_contract_sha256",
@@ -988,9 +958,7 @@ def _pair_provenance() -> dict[str, dict[str, str]]:
                 entry["source_operation_contract_sha256"],
                 name=f"{name}.source_operation_contract_sha256",
             ),
-            "source_revision": _commit(
-                entry["source_revision"], name=f"{name}.source_revision"
-            ),
+            "source_revision": _commit(entry["source_revision"], name=f"{name}.source_revision"),
         }
     result["runtime_image_digests"] = {
         name: _digest(runtime_images[name], name=f"runtime_image_digests.{name}")
@@ -1035,23 +1003,17 @@ def _reviews(
             raise ReceiptError("review P0/P1 count must be zero")
         commit = _commit(review["commit"], name="review.commit")
         if commit != pinvi_source_revision:
-            raise ReceiptError(
-                "review commit does not match the signed Pinvi source revision"
-            )
+            raise ReceiptError("review commit does not match the signed Pinvi source revision")
         review_id = _uuid(review["review_id"], name="review.review_id")
         challenge_id = _uuid(review["challenge_id"], name="review.challenge_id")
-        response_sha256 = _sha256(
-            review["response_sha256"], name="review.response_sha256"
-        )
+        response_sha256 = _sha256(review["response_sha256"], name="review.response_sha256")
         reviewer_id = _uuid(review["reviewer_id"], name="review.reviewer_id")
         agent_id = _uuid(review["agent_id"], name="review.agent_id")
         if reviewer_id != agent_id:
             raise ReceiptError("review.reviewer_id must bind to review.agent_id")
         pr_url = _string(review["pr_url"], name="review.pr_url")
         if pr_url != expected_pr_url or _REVIEW_PR_RE.fullmatch(pr_url) is None:
-            raise ReceiptError(
-                "review.pr_url must identify the exact Pinvi pull request"
-            )
+            raise ReceiptError("review.pr_url must identify the exact Pinvi pull request")
         if agent_id not in allowed_agent_ids:
             raise ReceiptError("review.agent_id is not in the pinned reviewer roster")
         if review["verdict"] != "GO":
@@ -1066,14 +1028,8 @@ def _reviews(
         summary_sha256 = _sha256(review["summary_sha256"], name="review.summary_sha256")
         if hashlib.sha256(summary.encode("utf-8")).hexdigest() != summary_sha256:
             raise ReceiptError("review summary hash is invalid")
-        if (
-            reviewer_id in reviewer_ids
-            or review_id in review_ids
-            or agent_id in agent_ids
-        ):
-            raise ReceiptError(
-                "reviews.json must contain distinct reviewers and review IDs"
-            )
+        if reviewer_id in reviewer_ids or review_id in review_ids or agent_id in agent_ids:
+            raise ReceiptError("reviews.json must contain distinct reviewers and review IDs")
         reviewer_ids.add(reviewer_id)
         review_ids.add(review_id)
         agent_ids.add(agent_id)
@@ -1158,15 +1114,11 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
             or not endpoint.startswith("http://127.0.0.1:")
             or any(character.isspace() for character in endpoint)
         ):
-            raise ReceiptError(
-                f"live-ui endpoint is not a canonical loopback URL: {field}"
-            )
+            raise ReceiptError(f"live-ui endpoint is not a canonical loopback URL: {field}")
     local_receipt_sha = _sha256(
         live["map_local_receipt_sha256"], name="live-ui.map_local_receipt_sha256"
     )
-    pinvi_receipt_sha = _sha256(
-        live["pinvi_receipt_sha256"], name="live-ui.pinvi_receipt_sha256"
-    )
+    pinvi_receipt_sha = _sha256(live["pinvi_receipt_sha256"], name="live-ui.pinvi_receipt_sha256")
     if local_receipt_sha != pinvi_receipt_sha:
         raise ReceiptError("live-ui Map ACK and Pinvi receipt hashes differ")
     if (
@@ -1178,15 +1130,11 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
         _commit(live["pinvi_source_revision"], name="live-ui.pinvi_source_revision")
         != pinvi_source_revision
     ):
-        raise ReceiptError(
-            "live-ui source revision does not match the signed Pinvi pair"
-        )
+        raise ReceiptError("live-ui source revision does not match the signed Pinvi pair")
     return {
         "event_id": _uuid(live["event_id"], name="live-ui.event_id"),
         "event_sha256": _sha256(live["event_sha256"], name="live-ui.event_sha256"),
-        "map_ack_sha256": _sha256(
-            live["map_ack_sha256"], name="live-ui.map_ack_sha256"
-        ),
+        "map_ack_sha256": _sha256(live["map_ack_sha256"], name="live-ui.map_ack_sha256"),
         "map_admin_endpoint": _string(
             live["map_admin_endpoint"], name="live-ui.map_admin_endpoint"
         ),
@@ -1222,9 +1170,7 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
             live["pinvi_snapshot_before_sha256"],
             name="live-ui.pinvi_snapshot_before_sha256",
         ),
-        "verification_id": _uuid(
-            live["verification_id"], name="live-ui.verification_id"
-        ),
+        "verification_id": _uuid(live["verification_id"], name="live-ui.verification_id"),
         "ui_evidence_sha256": _sha256(
             live["ui_evidence_sha256"], name="live-ui.ui_evidence_sha256"
         ),
@@ -1394,15 +1340,11 @@ def _restore(
         ("m05_restore_drill_sha256", repository_root / "scripts/m05_restore_drill.py"),
     ):
         try:
-            expected_script_sha256 = hashlib.sha256(
-                script_path.read_bytes()
-            ).hexdigest()
+            expected_script_sha256 = hashlib.sha256(script_path.read_bytes()).hexdigest()
         except OSError as exc:
             raise ReceiptError("restore runner source is missing") from exc
         if restore[evidence_field] != expected_script_sha256:
-            raise ReceiptError(
-                f"restore runner hash is not bound to {script_path.name}"
-            )
+            raise ReceiptError(f"restore runner hash is not bound to {script_path.name}")
     for field in (
         "source_db_identity",
         "source_db_identity_after_backup",
@@ -1452,15 +1394,13 @@ def _restore(
         != restore["target_db_identity"]["database_oid"]
         or restore["target_db_identity_before_restore"]["system_identifier"]
         != restore["target_db_identity"]["system_identifier"]
-        or restore["target_db_identity"]["database"]
-        != restore["runtime_db_identity"]["database"]
+        or restore["target_db_identity"]["database"] != restore["runtime_db_identity"]["database"]
         or restore["target_db_identity"]["database_oid"]
         != restore["runtime_db_identity"]["database_oid"]
         or restore["target_db_identity"]["system_identifier"]
         != restore["runtime_db_identity"]["system_identifier"]
         or restore["runtime_db_identity"]["user"] != restore["runtime_role"]
-        or restore["target_db_identity_before_restore"]["user"]
-        != restore["staging_role"]
+        or restore["target_db_identity_before_restore"]["user"] != restore["staging_role"]
         or restore["source_db_identity"]["schema_exists"] is not True
         or restore["source_db_identity_after_backup"]["schema_exists"] is not True
         or restore["target_db_identity_before_restore"]["schema_exists"] is not False
@@ -1468,10 +1408,9 @@ def _restore(
         or restore["runtime_db_identity"]["schema_exists"] is not True
         or _M05_RESTORE_DATABASE_RE.fullmatch(
             restore["target_db_identity_before_restore"]["database"]
-        ) is None
-        or _M05_RESTORE_DATABASE_RE.fullmatch(
-            restore["target_db_identity"]["database"]
-        ) is None
+        )
+        is None
+        or _M05_RESTORE_DATABASE_RE.fullmatch(restore["target_db_identity"]["database"]) is None
         or restore["source_db_identity"]["database"]
         == restore["target_db_identity_before_restore"]["database"]
         or restore["source_db_identity"]["database_oid"]
@@ -1481,10 +1420,7 @@ def _restore(
     _string(restore["runtime_role"], name="restore.runtime_role")
     _string(restore["staging_role"], name="restore.staging_role")
     _uuid(restore["execution_id"], name="restore.execution_id")
-    if (
-        _commit(restore["source_revision"], name="restore.source_revision")
-        != pinvi_source_revision
-    ):
+    if _commit(restore["source_revision"], name="restore.source_revision") != pinvi_source_revision:
         raise ReceiptError("restore producer source revision does not match Pinvi")
 
 
@@ -1518,14 +1454,11 @@ def _map_pair(
             raise ReceiptError(f"Map pair {name} evidence schema is invalid")
         for field in ("openapi_sha256", "source_revision"):
             if entry[field] != expected[name][field]:
-                raise ReceiptError(
-                    f"Map pair {name} does not match the vendored provenance"
-                )
+                raise ReceiptError(f"Map pair {name} does not match the vendored provenance")
         if (
             entry["runtime_operation_contract_sha256"]
             != expected[name]["runtime_operation_contract_sha256"]
-            or entry["source_canonical_sha256"]
-            != expected[name]["source_canonical_sha256"]
+            or entry["source_canonical_sha256"] != expected[name]["source_canonical_sha256"]
             or entry["source_operation_contract_sha256"]
             != expected[name]["source_operation_contract_sha256"]
         ):
@@ -1551,9 +1484,7 @@ def _map_pair(
         ("service_openapi", "service"),
         ("user_openapi", "user"),
     ):
-        artifact = _object(
-            runtime[surface], name=f"Map runtime {provenance_name} OpenAPI evidence"
-        )
+        artifact = _object(runtime[surface], name=f"Map runtime {provenance_name} OpenAPI evidence")
         if set(artifact) != {
             "canonical_sha256",
             "source_canonical_sha256",
@@ -1563,16 +1494,10 @@ def _map_pair(
             "transport",
             "transport_sha256",
         }:
-            raise ReceiptError(
-                f"Map runtime {provenance_name} OpenAPI evidence schema is invalid"
-            )
-        expected_transport = (
-            "http" if provenance_name in {"admin", "full"} else "source-artifact"
-        )
+            raise ReceiptError(f"Map runtime {provenance_name} OpenAPI evidence schema is invalid")
+        expected_transport = "http" if provenance_name in {"admin", "full"} else "source-artifact"
         if artifact["transport"] != expected_transport:
-            raise ReceiptError(
-                f"Map runtime {provenance_name} OpenAPI transport is invalid"
-            )
+            raise ReceiptError(f"Map runtime {provenance_name} OpenAPI transport is invalid")
         for field in (
             "canonical_sha256",
             "source_canonical_sha256",
@@ -1593,12 +1518,9 @@ def _map_pair(
             != expected[provenance_name]["source_canonical_sha256"]
             or artifact["surface_coverage_sha256"]
             != expected[provenance_name]["runtime_operation_contract_sha256"]
-            or artifact["source_revision"]
-            != expected[provenance_name]["source_revision"]
+            or artifact["source_revision"] != expected[provenance_name]["source_revision"]
         ):
-            raise ReceiptError(
-                f"Map runtime {provenance_name} OpenAPI is not bound to the pair"
-            )
+            raise ReceiptError(f"Map runtime {provenance_name} OpenAPI is not bound to the pair")
         _commit(
             artifact["source_revision"],
             name=f"Map runtime {provenance_name} OpenAPI.source_revision",
@@ -1624,25 +1546,15 @@ def _map_pair(
         }:
             raise ReceiptError(f"Map runtime {name} evidence schema is invalid")
         if runtime_image["digest"] != runtime_image["image_id"]:
-            raise ReceiptError(
-                f"Map runtime {name} image ID is not bound to its digest"
-            )
+            raise ReceiptError(f"Map runtime {name} image ID is not bound to its digest")
         if runtime_image["revision_label"] != runtime_image["source_revision"]:
-            raise ReceiptError(
-                f"Map runtime {name} source label is not self-consistent"
-            )
+            raise ReceiptError(f"Map runtime {name} source label is not self-consistent")
         if runtime_image["environment"] != environment:
-            raise ReceiptError(
-                f"Map runtime {name} environment does not match receipt scope"
-            )
+            raise ReceiptError(f"Map runtime {name} environment does not match receipt scope")
         if runtime_image["source_revision"] != expected["admin"]["source_revision"]:
-            raise ReceiptError(
-                f"Map runtime {name} source revision does not match the pair"
-            )
+            raise ReceiptError(f"Map runtime {name} source revision does not match the pair")
         _digest(runtime_image["digest"], name=f"Map runtime {name}.digest")
-        _commit(
-            runtime_image["source_revision"], name=f"Map runtime {name}.source_revision"
-        )
+        _commit(runtime_image["source_revision"], name=f"Map runtime {name}.source_revision")
         _string(runtime_image["environment"], name=f"Map runtime {name}.environment")
         if (
             not isinstance(runtime_image["container_id"], str)
@@ -1654,9 +1566,7 @@ def _map_pair(
     image_digests = {
         "admin": _digest(pair["admin_image_digest"], name="Map admin image digest"),
         "api": _digest(pair["api_image_digest"], name="Map API image digest"),
-        "frontend": _digest(
-            pair["frontend_image_digest"], name="Map frontend image digest"
-        ),
+        "frontend": _digest(pair["frontend_image_digest"], name="Map frontend image digest"),
     }
     expected_image_digests = _object(
         expected["runtime_image_digests"], name="Map expected runtime image digests"
@@ -1665,13 +1575,9 @@ def _map_pair(
         if digest != _digest(
             expected_image_digests[name], name=f"Map expected {name} image digest"
         ):
-            raise ReceiptError(
-                f"Map {name} image digest does not match the pinned runtime"
-            )
+            raise ReceiptError(f"Map {name} image digest does not match the pinned runtime")
         runtime_image = _object(runtime[name], name=f"Map runtime {name}")
-        if digest != _digest(
-            runtime_image["digest"], name=f"Map runtime {name} digest"
-        ):
+        if digest != _digest(runtime_image["digest"], name=f"Map runtime {name} digest"):
             raise ReceiptError(f"Map {name} image digest is not bound to its runtime")
     return {
         "admin_image_digest": image_digests["admin"],
@@ -1711,9 +1617,7 @@ def _map_pair(
     }
 
 
-def _pinvi_images(
-    value: object, *, pinvi_source_revision: str, environment: str
-) -> dict[str, str]:
+def _pinvi_images(value: object, *, pinvi_source_revision: str, environment: str) -> dict[str, str]:
     images = _object(value, name="Pinvi image evidence")
     if set(images) != {"api", "dagster", "web"}:
         raise ReceiptError("Pinvi image evidence schema is invalid")
@@ -1731,15 +1635,11 @@ def _pinvi_images(
         }:
             raise ReceiptError(f"Pinvi {name} image evidence schema is invalid")
         if image["environment"] != environment:
-            raise ReceiptError(
-                f"Pinvi {name} image environment does not match receipt scope"
-            )
+            raise ReceiptError(f"Pinvi {name} image environment does not match receipt scope")
         if image["digest"] != image["image_id"]:
             raise ReceiptError(f"Pinvi {name} image ID is not bound to its digest")
         if image["revision_label"] != image["source_revision"]:
-            raise ReceiptError(
-                f"Pinvi {name} image source label is not self-consistent"
-            )
+            raise ReceiptError(f"Pinvi {name} image source label is not self-consistent")
         if (
             _commit(image["source_revision"], name=f"Pinvi {name}.source_revision")
             != pinvi_source_revision
@@ -1770,9 +1670,7 @@ def _attestation(
     activation_nonce: str,
 ) -> str:
     envelope = _object(value, name="M05 live attestation")
-    if set(envelope) != {"payload", "signature"} or not isinstance(
-        envelope["signature"], str
-    ):
+    if set(envelope) != {"payload", "signature"} or not isinstance(envelope["signature"], str):
         raise ReceiptError("M05 live attestation envelope is invalid")
     payload = _object(envelope["payload"], name="M05 live attestation payload")
     expected = {
@@ -1803,28 +1701,19 @@ def _attestation(
         or payload["scope"] != scope
         or _commit(payload["pinvi_source_revision"], name="attestation source revision")
         != pinvi_source_revision
-        or _uuid(payload["event_id"], name="attestation event ID")
-        != live_ui["event_id"]
+        or _uuid(payload["event_id"], name="attestation event ID") != live_ui["event_id"]
         or type(payload["created_at"]) is not int
         or payload["created_at"] < issued_at - 60
         or payload["created_at"] > issued_at + 15 * 60
         or payload["created_at"] > int(time.time()) + 60
     ):
         raise ReceiptError("M05 live attestation identity/status is invalid")
-    verification_id = _uuid(
-        payload["verification_id"], name="attestation verification ID"
-    )
-    if (
-        verification_id != activation_nonce
-        or verification_id != live_ui["verification_id"]
-    ):
-        raise ReceiptError(
-            "M05 live attestation verification ID is not bound to the receipt nonce"
-        )
+    verification_id = _uuid(payload["verification_id"], name="attestation verification ID")
+    if verification_id != activation_nonce or verification_id != live_ui["verification_id"]:
+        raise ReceiptError("M05 live attestation verification ID is not bound to the receipt nonce")
     if (
         payload["playwright_runner_image_id"] != live_ui["playwright_runner_image_id"]
-        or payload["playwright_runner_image_ref"]
-        != live_ui["playwright_runner_image_ref"]
+        or payload["playwright_runner_image_ref"] != live_ui["playwright_runner_image_ref"]
     ):
         raise ReceiptError("M05 live attestation does not bind the Playwright runner")
     _digest(
@@ -1843,15 +1732,11 @@ def _attestation(
         if payload[field] != expected_endpoint:
             raise ReceiptError(f"M05 live attestation does not bind {field}")
     if (
-        _sha256(
-            payload["local_receipt_sha256"], name="attestation.local_receipt_sha256"
-        )
+        _sha256(payload["local_receipt_sha256"], name="attestation.local_receipt_sha256")
         != live_ui["map_local_receipt_sha256"]
         or live_ui["map_local_receipt_sha256"] != live_ui["pinvi_receipt_sha256"]
     ):
-        raise ReceiptError(
-            "M05 live attestation does not bind the terminal receipt hash"
-        )
+        raise ReceiptError("M05 live attestation does not bind the terminal receipt hash")
     for field, expected_value in (
         ("map_ack_sha256", live_ui["map_ack_sha256"]),
         ("map_snapshot_sha256", live_ui["map_snapshot_after_sha256"]),
@@ -1859,9 +1744,7 @@ def _attestation(
     ):
         if _sha256(payload[field], name=f"attestation.{field}") != expected_value:
             raise ReceiptError(f"M05 live attestation does not bind {field}")
-    attested_hashes = _object(
-        payload["evidence_sha256"], name="attestation evidence hashes"
-    )
+    attested_hashes = _object(payload["evidence_sha256"], name="attestation evidence hashes")
     if set(attested_hashes) != {
         "live-ui",
         "map-pair",
@@ -1871,10 +1754,7 @@ def _attestation(
     }:
         raise ReceiptError("M05 live attestation evidence inventory is invalid")
     for name in ("live-ui", "map-pair", "pinvi-images", "restore", "reviews"):
-        if (
-            _sha256(attested_hashes[name], name=f"attestation.{name}")
-            != evidence_hashes[name]
-        ):
+        if _sha256(attested_hashes[name], name=f"attestation.{name}") != evidence_hashes[name]:
             raise ReceiptError(f"M05 live attestation does not bind {name} evidence")
     signature_bytes = _decode_base64url(envelope["signature"], expected_length=64)
     if signature_bytes is None:
@@ -1908,13 +1788,9 @@ def _create(args: argparse.Namespace) -> int:
         require_root_owned=args.require_root_owned,
     )
     now = int(time.time())
-    issued_at = (
-        args.activation_issued_at if args.activation_issued_at is not None else now
-    )
+    issued_at = args.activation_issued_at if args.activation_issued_at is not None else now
     expires_at = (
-        args.activation_expires_at
-        if args.activation_expires_at is not None
-        else now + 24 * 60 * 60
+        args.activation_expires_at if args.activation_expires_at is not None else now + 24 * 60 * 60
     )
     if type(issued_at) is not int or type(expires_at) is not int:
         raise ReceiptError("activation timestamps must be integers")
@@ -1922,10 +1798,7 @@ def _create(args: argparse.Namespace) -> int:
         raise ReceiptError("activation receipt freshness window is invalid")
     if expires_at - issued_at > 7 * 24 * 60 * 60:
         raise ReceiptError("activation receipt lifetime exceeds seven days")
-    paths = {
-        name.removesuffix(".json").replace("-", "_"): Path(name)
-        for name in _EVIDENCE_FILES
-    }
+    paths = {name.removesuffix(".json").replace("-", "_"): Path(name) for name in _EVIDENCE_FILES}
     try:
         evidence: dict[str, object] = {}
         evidence_hashes: dict[str, str] = {}
@@ -1938,9 +1811,7 @@ def _create(args: argparse.Namespace) -> int:
             evidence[key] = value
             evidence_hashes[key] = digest
 
-        attestation_envelope = _object(
-            evidence["attestation"], name="M05 live attestation"
-        )
+        attestation_envelope = _object(evidence["attestation"], name="M05 live attestation")
         attestation_payload = _object(
             attestation_envelope.get("payload"), name="M05 live attestation payload"
         )
@@ -1952,9 +1823,7 @@ def _create(args: argparse.Namespace) -> int:
             args.activation_nonce or attestation_nonce, name="activation nonce"
         )
         if activation_nonce != attestation_nonce:
-            raise ReceiptError(
-                "activation nonce must match the live attestation verification ID"
-            )
+            raise ReceiptError("activation nonce must match the live attestation verification ID")
         reviews = _reviews(
             evidence["reviews"],
             pinvi_source_revision=source_revision,
@@ -1984,9 +1853,7 @@ def _create(args: argparse.Namespace) -> int:
         label="private key",
     )
     try:
-        private_key = serialization.load_pem_private_key(
-            private_key_bytes, password=None
-        )
+        private_key = serialization.load_pem_private_key(private_key_bytes, password=None)
     except (ValueError, TypeError) as exc:
         raise ReceiptError("private key is not valid PEM") from exc
     if not isinstance(private_key, Ed25519PrivateKey):
@@ -1994,10 +1861,7 @@ def _create(args: argparse.Namespace) -> int:
     public_key_raw = private_key.public_key().public_bytes(
         serialization.Encoding.Raw, serialization.PublicFormat.Raw
     )
-    if (
-        args.require_root_owned
-        and hashlib.sha256(public_key_raw).hexdigest() != _trust_anchor()
-    ):
+    if args.require_root_owned and hashlib.sha256(public_key_raw).hexdigest() != _trust_anchor():
         raise ReceiptError("private key does not match the vendored M05 trust anchor")
     _attestation(
         evidence["attestation"],
@@ -2063,9 +1927,7 @@ def _create(args: argparse.Namespace) -> int:
         "map_full_source_revision": pair_expected["full"]["source_revision"],
         "map_pair_evidence_sha256": evidence_hashes["map_pair"],
         "map_service_openapi_sha256": pair_expected["service"]["openapi_sha256"],
-        "map_service_runtime_openapi_sha256": map_pair[
-            "service_runtime_openapi_sha256"
-        ],
+        "map_service_runtime_openapi_sha256": map_pair["service_runtime_openapi_sha256"],
         "map_service_runtime_operation_contract_sha256": map_pair[
             "service_runtime_operation_contract_sha256"
         ],
@@ -2118,9 +1980,7 @@ def _parser() -> argparse.ArgumentParser:
     create.add_argument(
         "--pinvi-source-revision", default=os.environ.get("PINVI_SOURCE_REVISION", "")
     )
-    create.add_argument(
-        "--scope", choices=("staging", "production"), default="production"
-    )
+    create.add_argument("--scope", choices=("staging", "production"), default="production")
     create.add_argument("--pr-url", default=_M05_ACTIVATION_PR_URL)
     create.add_argument("--activation-generation", type=int, required=True)
     create.add_argument("--activation-nonce")

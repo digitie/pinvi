@@ -91,6 +91,21 @@ if [[ "${PG_RESTORE_BIN}" != /* || ! -x "${PG_RESTORE_BIN}" ]]; then
   echo "PINVI_RESTORE_PG_RESTORE_BIN is not an executable absolute path" >&2
   exit 127
 fi
+if [[ "${PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST:-0}" == "1" ]]; then
+  if ! command -v sha256sum >/dev/null 2>&1; then
+    echo "sha256sum not found" >&2
+    exit 127
+  fi
+  actual_psql_sha256="$(sha256sum "${PSQL_BIN}" | awk 'NR == 1 { print $1 }')"
+  actual_pg_restore_sha256="$(sha256sum "${PG_RESTORE_BIN}" | awk 'NR == 1 { print $1 }')"
+  if [[ ! "${PINVI_RESTORE_PSQL_SHA256:-}" =~ ^[0-9a-f]{64}$ || \
+    "${actual_psql_sha256}" != "${PINVI_RESTORE_PSQL_SHA256}" || \
+    ! "${PINVI_RESTORE_PG_RESTORE_SHA256:-}" =~ ^[0-9a-f]{64}$ || \
+    "${actual_pg_restore_sha256}" != "${PINVI_RESTORE_PG_RESTORE_SHA256}" ]]; then
+    echo "restore tool digest pin failed" >&2
+    exit 3
+  fi
+fi
 
 assert_expected_target() {
   if [[ -z "${PINVI_RESTORE_EXPECTED_DATABASE_OID:-}" ]]; then

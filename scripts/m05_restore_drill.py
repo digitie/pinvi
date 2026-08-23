@@ -24,8 +24,8 @@ import socket
 import stat
 import subprocess
 import tempfile
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import uuid4
 
 _BASH = "/usr/bin/bash"
@@ -76,8 +76,7 @@ def _tool_path(name: str) -> str:
         return path
     candidates = [directory / name for directory in _TRUSTED_TOOL_DIRECTORIES]
     candidates.extend(
-        directory / name
-        for directory in sorted(Path("/usr/lib/postgresql").glob("*/bin"))
+        directory / name for directory in sorted(Path("/usr/lib/postgresql").glob("*/bin"))
     )
     for candidate in candidates:
         if not candidate.is_file() or not os.access(candidate, os.X_OK):
@@ -87,26 +86,21 @@ def _tool_path(name: str) -> str:
             continue
         manifest_path = os.environ.get(_TOOL_TRUST_MANIFEST_ENV, "")
         if not manifest_path:
-            raise RestoreDrillError(
-                "non-test restore requires a root-owned tool trust manifest"
-            )
+            raise RestoreDrillError("non-test restore requires a root-owned tool trust manifest")
         manifest = _tool_trust_manifest(Path(manifest_path))
         expected = manifest.get(name)
         if expected is None or expected["path"] != str(resolved):
             raise RestoreDrillError(f"restore tool is not pinned by the trust manifest: {name}")
         if expected["sha256"] != _sha256(resolved.read_bytes()):
-            raise RestoreDrillError(f"restore tool digest does not match the trust manifest: {name}")
+            raise RestoreDrillError(
+                f"restore tool digest does not match the trust manifest: {name}"
+            )
         return str(resolved)
     raise RestoreDrillError(f"pinned restore tool is missing: {name}")
 
 
 def _trusted_tool_path(path: Path, name: str) -> bool:
-    if (
-        path.name != name
-        or path.is_symlink()
-        or not path.is_file()
-        or not os.access(path, os.X_OK)
-    ):
+    if path.name != name or path.is_symlink() or not path.is_file() or not os.access(path, os.X_OK):
         return False
     parent = str(path.resolve().parent)
     return Path(parent) in _TRUSTED_TOOL_DIRECTORIES or bool(
@@ -174,17 +168,13 @@ def _canonical_json(value: object) -> bytes:
 
 
 def _write_json(path: Path, value: object) -> None:
-    raw = json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True).encode(
-        "utf-8"
-    )
+    raw = json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC
     flags |= getattr(os, "O_NOFOLLOW", 0)
     try:
         fd = os.open(path, flags, 0o600)
     except OSError as exc:
-        raise RestoreDrillError(
-            "restore evidence output already exists or is unsafe"
-        ) from exc
+        raise RestoreDrillError("restore evidence output already exists or is unsafe") from exc
     try:
         with os.fdopen(fd, "wb") as stream:
             fd = -1
@@ -249,9 +239,7 @@ def _database_url(name: str) -> str:
     return urlunsplit(parsed._replace(query=urlencode(query)))
 
 
-def _scalar(
-    database_url: str, sql: str, *, check: bool = True
-) -> subprocess.CompletedProcess[str]:
+def _scalar(database_url: str, sql: str, *, check: bool = True) -> subprocess.CompletedProcess[str]:
     return _run(
         [
             _tool_path("psql"),
@@ -356,9 +344,7 @@ WHERE r.rolname = current_user
     _require_true(_scalar(database_url, sql), name="runtime role")
 
 
-def _staging_role_check(
-    database_url: str, *, expected_role: str, runtime_role: str
-) -> None:
+def _staging_role_check(database_url: str, *, expected_role: str, runtime_role: str) -> None:
     if not _ROLE_RE.fullmatch(expected_role):
         raise RestoreDrillError("restore staging role is invalid")
     if expected_role == runtime_role:
@@ -407,9 +393,7 @@ ROLLBACK;
 """.strip()
     result = _scalar(database_url, sql, check=False)
     if result.returncode == 0 or "append-only" not in result.stderr:
-        raise RestoreDrillError(
-            "M05 append-only trigger did not block replication bypass"
-        )
+        raise RestoreDrillError("M05 append-only trigger did not block replication bypass")
 
 
 def _identity(database_url: str, *, schema: str) -> dict[str, object]:
@@ -442,9 +426,7 @@ def _identity(database_url: str, *, schema: str) -> dict[str, object]:
     try:
         value = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise RestoreDrillError(
-            "database identity query returned invalid JSON"
-        ) from exc
+        raise RestoreDrillError("database identity query returned invalid JSON") from exc
     if not isinstance(value, dict) or set(value) != {
         "database",
         "database_oid",
@@ -493,7 +475,7 @@ AND to_regnamespace('{schema}') IS NULL
 
 
 def _recreate_disposable_target(database_url: str, *, staging_role: str) -> None:
-    """매 드릴마다 prefix 한정 disposable DB를 새로 만들어 재사용을 차단한다."""
+    """인증된 단일 연결에서 endpoint를 확인한 뒤 prefix DB를 재생성한다."""
 
     try:
         parsed = urlsplit(database_url)
@@ -507,13 +489,29 @@ def _recreate_disposable_target(database_url: str, *, staging_role: str) -> None
     maintenance_url = urlunsplit(parsed._replace(path="/postgres"))
     quoted_database = '"' + database_name.replace('"', '""') + '"'
     quoted_role = '"' + staging_role.replace('"', '""') + '"'
+    hostaddr = parsed.query and dict(parse_qsl(parsed.query, keep_blank_values=True)).get(
+        "hostaddr", ""
+    )
+    if not hostaddr:
+        raise RestoreDrillError("restore target URL is missing the pinned hostaddr")
+    expected_port = str(parsed.port or 5432)
+    sql_hostaddr = hostaddr.replace("'", "''")
+    sql_role = staging_role.replace("'", "''")
     _run(
         [
             _tool_path("psql"),
             "--no-psqlrc",
             "--set=ON_ERROR_STOP=1",
             f"--dbname={maintenance_url}",
-            f"--command=DROP DATABASE IF EXISTS {quoted_database} WITH (FORCE); CREATE DATABASE {quoted_database} OWNER {quoted_role}",
+            "--command="
+            + "DO $m05$ BEGIN IF current_database() <> 'postgres' "
+            + f"OR current_user <> '{sql_role}' "
+            + f"OR COALESCE(inet_server_addr()::text, '') <> '{sql_hostaddr}' "
+            + f"OR inet_server_port()::text <> '{expected_port}' "
+            + "OR (pg_control_system()).system_identifier::text = '' "
+            + "THEN RAISE EXCEPTION 'restore maintenance endpoint identity mismatch'; END IF; END $m05$; "
+            + f"DROP DATABASE IF EXISTS {quoted_database} WITH (FORCE); "
+            + f"CREATE DATABASE {quoted_database} OWNER {quoted_role}",
         ],
         env=_command_env(),
     )
@@ -560,9 +558,7 @@ def _secure_output_parent(path: Path, *, require_root_owned: bool) -> None:
 def _source_revision(root: Path) -> str:
     expected = os.environ.get("PINVI_SOURCE_REVISION", "")
     if not _COMMIT_RE.fullmatch(expected):
-        raise RestoreDrillError(
-            "restore producer requires a full PINVI_SOURCE_REVISION"
-        )
+        raise RestoreDrillError("restore producer requires a full PINVI_SOURCE_REVISION")
     try:
         revision = subprocess.run(
             [_tool_path("git"), "-C", str(root), "rev-parse", "HEAD"],
@@ -590,9 +586,7 @@ def _source_revision(root: Path) -> str:
                 "restore producer checkout is not a clean PINVI_SOURCE_REVISION"
             )
     except (OSError, subprocess.CalledProcessError) as exc:
-        raise RestoreDrillError(
-            "restore producer source revision could not be verified"
-        ) from exc
+        raise RestoreDrillError("restore producer source revision could not be verified") from exc
     if not _COMMIT_RE.fullmatch(revision):
         raise RestoreDrillError("restore producer source revision is invalid")
     return revision
@@ -650,13 +644,9 @@ def _run_drill(args: argparse.Namespace) -> int:
         not isinstance(target_database, str)
         or _TARGET_DATABASE_RE.fullmatch(target_database) is None
     ):
-        raise RestoreDrillError(
-            "restore target database is outside the M05 disposable prefix"
-        )
+        raise RestoreDrillError("restore target database is outside the M05 disposable prefix")
     if target_identity_pre.get("schema_exists") is not False:
-        raise RestoreDrillError(
-            "restore target must be a fresh database without the app schema"
-        )
+        raise RestoreDrillError("restore target must be a fresh database without the app schema")
     _fresh_target_check(target_url, schema=args.schema)
     _staging_role_check(
         target_url,
@@ -679,9 +669,7 @@ def _run_drill(args: argparse.Namespace) -> int:
     backup_tool = _tool_identity("pg_dump")
     restore_tool = _tool_identity("pg_restore")
 
-    with tempfile.TemporaryDirectory(
-        prefix="pinvi-m05-restore-", dir=output.parent
-    ) as temporary:
+    with tempfile.TemporaryDirectory(prefix="pinvi-m05-restore-", dir=output.parent) as temporary:
         temporary_dir = Path(temporary)
         backup_env = _command_env()
         backup_env.update(
@@ -715,6 +703,9 @@ def _run_drill(args: argparse.Namespace) -> int:
                 "PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL": "precheck",
                 "PINVI_RESTORE_PG_RESTORE_BIN": restore_tool["path"],
                 "PINVI_RESTORE_PSQL_BIN": psql_tool["path"],
+                "PINVI_RESTORE_PG_RESTORE_SHA256": restore_tool["sha256"],
+                "PINVI_RESTORE_PSQL_SHA256": psql_tool["sha256"],
+                "PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST": "1",
                 "PINVI_RESTORE_REQUIRE_FRESH_SCHEMA": "1",
             }
         )
@@ -733,15 +724,14 @@ def _run_drill(args: argparse.Namespace) -> int:
                     "PINVI_RESTORE_EXPECTED_HOSTADDR": str(
                         target_identity_before_restore["hostaddr"]
                     ),
-                    "PINVI_RESTORE_EXPECTED_PORT": str(
-                        target_identity_before_restore["port"]
-                    ),
+                    "PINVI_RESTORE_EXPECTED_PORT": str(target_identity_before_restore["port"]),
                 }
             )
         restore = _run([_BASH, str(restore_script), "run", str(dump)], env=restore_env)
         required_markers = [
             "DRILL_EVIDENCE=checksum=verified",
             "DRILL_EVIDENCE=pg_restore_list=ok",
+            "DRILL_EVIDENCE=restore_tool_binding=verified",
             "DRILL_EVIDENCE=rollback_rehearsal=precheck_guard_schema_unchanged",
             "DRILL_PHASE=complete:success:staging restore drill completed",
             "RESTORE_COMMAND=pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges",
@@ -749,9 +739,7 @@ def _run_drill(args: argparse.Namespace) -> int:
         if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
             required_markers.append("RESTORE_TARGET_BINDING=verified")
         if any(marker not in restore.stdout for marker in required_markers):
-            raise RestoreDrillError(
-                "restore staging runner did not produce all required markers"
-            )
+            raise RestoreDrillError("restore staging runner did not produce all required markers")
 
         source_revision_after = _source_revision(root)
         if source_revision_after != source_revision:
@@ -792,13 +780,10 @@ def _run_drill(args: argparse.Namespace) -> int:
             "execution_id": str(uuid4()),
             "no_owner_restore": True,
             "restore_command": (
-                "pg_restore --clean --if-exists --exit-on-error "
-                "--no-owner --no-privileges"
+                "pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges"
             ),
             "restore_output_sha256": _sha256(execution_output),
-            "restore_db_runner_sha256": _sha256(
-                (root / "scripts/restore-db.sh").read_bytes()
-            ),
+            "restore_db_runner_sha256": _sha256((root / "scripts/restore-db.sh").read_bytes()),
             "restore_runner_sha256": _sha256(restore_script.read_bytes()),
             "m05_restore_drill_sha256": _sha256(Path(__file__).read_bytes()),
             "restore_tool_path": restore_tool["path"],
@@ -838,12 +823,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("run", choices=("run",))
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--schema", default="app")
-    parser.add_argument(
-        "--runtime-role", default=os.environ.get("PINVI_RESTORE_RUNTIME_ROLE", "")
-    )
-    parser.add_argument(
-        "--staging-role", default=os.environ.get("PINVI_RESTORE_STAGING_ROLE", "")
-    )
+    parser.add_argument("--runtime-role", default=os.environ.get("PINVI_RESTORE_RUNTIME_ROLE", ""))
+    parser.add_argument("--staging-role", default=os.environ.get("PINVI_RESTORE_STAGING_ROLE", ""))
     parser.add_argument(
         "--source-database-url-env",
         default="PINVI_RESTORE_SOURCE_DATABASE_URL",

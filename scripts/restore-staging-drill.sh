@@ -119,6 +119,23 @@ for tool_path in "${PG_RESTORE_BIN}" "${PSQL_BIN}"; do
     exit 127
   fi
 done
+if ! command -v sha256sum >/dev/null 2>&1; then
+  phase precheck failed "sha256sum not found"
+  exit 127
+fi
+if [[ "${PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST:-0}" == "1" ]]; then
+  for tool_spec in \
+    "pg_restore:${PG_RESTORE_BIN}:${PINVI_RESTORE_PG_RESTORE_SHA256:-}" \
+    "psql:${PSQL_BIN}:${PINVI_RESTORE_PSQL_SHA256:-}"; do
+    IFS=: read -r tool_name tool_path tool_digest <<<"${tool_spec}"
+    if [[ ! "${tool_digest}" =~ ^[0-9a-f]{64}$ ]] || \
+      [[ "$(sha256sum "${tool_path}" | awk 'NR == 1 { print $1 }')" != "${tool_digest}" ]]; then
+      phase precheck failed "${tool_name} digest pin failed"
+      exit 3
+    fi
+  done
+  evidence restore_tool_binding verified
+fi
 
 if [[ -f "${SNAPSHOT}.sha256" ]]; then
   if ! command -v sha256sum >/dev/null 2>&1; then
@@ -199,6 +216,9 @@ restore_output="$(PINVI_RESTORE_DATABASE_URL="${DATABASE_URL}" \
   PINVI_RESTORE_JOBS="${JOBS}" \
   PINVI_RESTORE_PSQL_BIN="${PSQL_BIN}" \
   PINVI_RESTORE_PG_RESTORE_BIN="${PG_RESTORE_BIN}" \
+  PINVI_RESTORE_PSQL_SHA256="${PINVI_RESTORE_PSQL_SHA256:-}" \
+  PINVI_RESTORE_PG_RESTORE_SHA256="${PINVI_RESTORE_PG_RESTORE_SHA256:-}" \
+  PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST="${PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST:-0}" \
   PINVI_RESTORE_REQUIRE_FRESH_SCHEMA="${PINVI_RESTORE_REQUIRE_FRESH_SCHEMA:-0}" \
   PINVI_RESTORE_APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}" \
   PINVI_RESTORE_EXPECTED_DATABASE_NAME="${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" \
@@ -245,8 +265,18 @@ rollback_precheck_rehearsal() {
   local oid_before="$1"
   TMP_DIR="$(mktemp -d)"
   set +e
-  PINVI_RESTORE_DATABASE_URL="${DATABASE_URL}" \
+    PINVI_RESTORE_DATABASE_URL="${DATABASE_URL}" \
     PINVI_BACKUP_SCHEMA="${SCHEMA}" \
+    PINVI_RESTORE_PSQL_BIN="${PSQL_BIN}" \
+    PINVI_RESTORE_PG_RESTORE_BIN="${PG_RESTORE_BIN}" \
+    PINVI_RESTORE_PSQL_SHA256="${PINVI_RESTORE_PSQL_SHA256:-}" \
+    PINVI_RESTORE_PG_RESTORE_SHA256="${PINVI_RESTORE_PG_RESTORE_SHA256:-}" \
+    PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST="${PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST:-0}" \
+    PINVI_RESTORE_EXPECTED_DATABASE_NAME="${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" \
+    PINVI_RESTORE_EXPECTED_DATABASE_OID="${PINVI_RESTORE_EXPECTED_DATABASE_OID:-}" \
+    PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER="${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER:-}" \
+    PINVI_RESTORE_EXPECTED_HOSTADDR="${PINVI_RESTORE_EXPECTED_HOSTADDR:-}" \
+    PINVI_RESTORE_EXPECTED_PORT="${PINVI_RESTORE_EXPECTED_PORT:-}" \
     PINVI_RESTORE_HOTSWAP_EXECUTE=0 \
     "${ROOT_DIR}/scripts/restore-hotswap.sh" run \
     "${SNAPSHOT}" "${restore_schema}" "${previous_schema}" \
@@ -271,7 +301,17 @@ rollback_drain_rehearsal() {
   TMP_DIR="$(mktemp -d)"
   set +e
   PINVI_RESTORE_DATABASE_URL="${DATABASE_URL}" \
-    PINVI_BACKUP_SCHEMA="${SCHEMA}" \
+  PINVI_BACKUP_SCHEMA="${SCHEMA}" \
+    PINVI_RESTORE_PSQL_BIN="${PSQL_BIN}" \
+    PINVI_RESTORE_PG_RESTORE_BIN="${PG_RESTORE_BIN}" \
+    PINVI_RESTORE_PSQL_SHA256="${PINVI_RESTORE_PSQL_SHA256:-}" \
+    PINVI_RESTORE_PG_RESTORE_SHA256="${PINVI_RESTORE_PG_RESTORE_SHA256:-}" \
+    PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST="${PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST:-0}" \
+    PINVI_RESTORE_EXPECTED_DATABASE_NAME="${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" \
+    PINVI_RESTORE_EXPECTED_DATABASE_OID="${PINVI_RESTORE_EXPECTED_DATABASE_OID:-}" \
+    PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER="${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER:-}" \
+    PINVI_RESTORE_EXPECTED_HOSTADDR="${PINVI_RESTORE_EXPECTED_HOSTADDR:-}" \
+    PINVI_RESTORE_EXPECTED_PORT="${PINVI_RESTORE_EXPECTED_PORT:-}" \
     PINVI_RESTORE_HOTSWAP_EXECUTE=1 \
     PINVI_RESTORE_DRAIN_COMMAND= \
     PINVI_RESTORE_ALLOW_NO_DRAIN=0 \
@@ -282,7 +322,7 @@ rollback_drain_rehearsal() {
   set -e
   local oid_after
   oid_after="$(schema_oid)"
-  psql -v ON_ERROR_STOP=1 "${DATABASE_URL}" \
+  "${PSQL_BIN}" -v ON_ERROR_STOP=1 "${DATABASE_URL}" \
     -c "DROP SCHEMA IF EXISTS ${restore_schema} CASCADE" >/dev/null
   if [[ "${code}" == "0" || "${oid_after}" != "${oid_before}" ]]; then
     phase rollback failed "drain-failure rehearsal did not preserve current schema"
