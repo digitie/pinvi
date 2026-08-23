@@ -657,6 +657,11 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
     assert len(durable_history_path.read_text(encoding="utf-8").splitlines()) == 1
     assert len(durable_anchor_path.read_text(encoding="utf-8").splitlines()) == 1
     monkeypatch.setattr(config_module, "_runtime_container_id", lambda: "d" * 64)
+    monkeypatch.setattr(
+        config_module,
+        "_validate_m05_runtime_dependencies_live",
+        lambda **_: None,
+    )
     loaded = Settings(
         _env_file=None,
         pinvi_environment="staging",
