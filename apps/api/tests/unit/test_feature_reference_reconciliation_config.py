@@ -648,12 +648,13 @@ def test_compose_and_examples_keep_m05_credentials_api_only_and_default_off() ->
     )
 
 
-def test_m05_docker_identity_uses_fixed_local_engine_socket() -> None:
+def test_m05_docker_identity_does_not_expose_engine_socket() -> None:
     root = Path(__file__).resolve().parents[4]
     compose = (root / "infra/docker-compose.app.yml").read_text(encoding="utf-8")
 
-    assert "source: /var/run/docker.sock" in compose
-    assert "target: /var/run/docker.sock" in compose
+    assert "source: /var/run/docker.sock" not in compose
+    assert "target: /var/run/docker.sock" not in compose
+    assert "PINVI_M05_RUNTIME_LIVE_CHECK" in compose
     assert "PINVI_DOCKER_SOCKET_HOST_PATH" not in compose
     with pytest.raises(RuntimeError, match="identity input"):
         config_module._m05_docker_inspect(

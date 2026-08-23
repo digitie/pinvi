@@ -948,6 +948,10 @@ class Settings(BaseSettings):
     pinvi_docker_socket_path: str = "/var/run/docker.sock"
     pinvi_docker_status_timeout_seconds: float = 2.0
     pinvi_docker_status_container_limit: int = 80
+    # Signed M05 runtime attestation is the in-container source of truth. A live
+    # Docker inspection, when explicitly enabled for a host-side maintenance
+    # process, must never be enabled by the ordinary API compose service.
+    pinvi_m05_runtime_live_check: bool = False
 
     # Backup / Restore (ADR-022)
     pinvi_backup_dir: str = ".tmp/backups"
@@ -1949,22 +1953,23 @@ class Settings(BaseSettings):
                 _raise_redacted_settings_error(
                     f"M05 runtime attestation dependency is not bound: {name}"
                 )
-        if self.pinvi_docker_socket_path != "/var/run/docker.sock":
-            _raise_redacted_settings_error(
-                "M05 runtime Docker socket must be the canonical local Engine socket"
-            )
-        try:
-            _validate_m05_runtime_dependencies_live(
-                dependencies=cast(dict[str, object], dependencies),
-                endpoints=cast(dict[str, object], endpoints),
-                socket_path=self.pinvi_docker_socket_path,
-                timeout_seconds=self.pinvi_docker_status_timeout_seconds,
-                environment=self.pinvi_environment,
-            )
-        except RuntimeError as exc:
-            _raise_redacted_settings_error(
-                f"M05 runtime attestation does not match live dependencies: {exc}"
-            )
+        if self.pinvi_m05_runtime_live_check:
+            if self.pinvi_docker_socket_path != "/var/run/docker.sock":
+                _raise_redacted_settings_error(
+                    "M05 runtime Docker socket must be the canonical local Engine socket"
+                )
+            try:
+                _validate_m05_runtime_dependencies_live(
+                    dependencies=cast(dict[str, object], dependencies),
+                    endpoints=cast(dict[str, object], endpoints),
+                    socket_path=self.pinvi_docker_socket_path,
+                    timeout_seconds=self.pinvi_docker_status_timeout_seconds,
+                    environment=self.pinvi_environment,
+                )
+            except RuntimeError as exc:
+                _raise_redacted_settings_error(
+                    f"M05 runtime attestation does not match live dependencies: {exc}"
+                )
         self._m05_runtime_dependencies = cast(dict[str, object], dependencies)
         self._m05_runtime_endpoints = cast(dict[str, object], endpoints)
         runtime_container_id = _runtime_container_id()
@@ -1976,7 +1981,7 @@ class Settings(BaseSettings):
     def validate_m05_runtime_dependencies_live(self) -> None:
         """M05 worker가 dependency container 교체를 감지할 때 재검증한다."""
 
-        if self.pinvi_environment not in {"staging", "production"}:
+        if self.pinvi_environment not in {"staging", "production"} or not self.pinvi_m05_runtime_live_check:
             return
         if not self._m05_runtime_dependencies or not self._m05_runtime_endpoints:
             raise RuntimeError("M05 runtime dependency snapshot is not loaded")

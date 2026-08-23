@@ -134,6 +134,12 @@ python scripts/m05_activation_receipt.py create \
 target으로 호출하는 `scripts/m05_restore_drill.py`가 만든다. source·target URL과 runtime URL은
 환경변수로만 전달하며, 결과 JSON에는 URL·SQL 비밀값을 저장하지 않는다.
 
+fresh target은 매 실행 `DROP DATABASE ... WITH (FORCE)` 뒤 target cluster의
+`PINVI_RESTORE_TEMPLATE_DATABASE_URL`에서 재생성한다. 이 template은 `app` schema가 없어야
+하고 `x_extension` schema에 `citext`, `pgcrypto`, `pg_trgm`이 설치되어 있어야 하며 runtime
+login에 `x_extension` USAGE만 부여한다. extension 설치는 one-time privileged bootstrap에서
+수행하고 restore staging login에는 extension 생성 권한을 주지 않는다.
+
 입력 파일은 `reviews.json`, `live-ui.json`, `restore.json`, `map-pair.json`,
 `pinvi-images.json`과 live verifier가 생성한 서명 `attestation.json`이다. signer는 schema·현재
 tracked pair·각 pinned Map commit의 Git blob·실제 Map HTTP OpenAPI·실제 runtime image ID/OCI
@@ -153,7 +159,7 @@ read-only로만 mount한다.
 운영 증적으로 승격할 수 없다.
 
 복구 드릴의 target은 `pinvi_m05_restore_*` prefix 안에서 매 실행 `DROP DATABASE ... WITH (FORCE)`
-후 새로 만들며, source/target/runtime의 database OID·system identifier·pinned `hostaddr`·port를
+후 extension template에서 새로 만들며, source/target/runtime의 database OID·system identifier·pinned `hostaddr`·port를
 복구 직전과 직후에 대조한다. activation ledger·high-watermark와 별도로 DB snapshot에 포함하지 않는
 durable history(`PINVI_M05_ACTIVATION_DURABLE_HISTORY_PATH`)와 외부 anchor
 (`PINVI_M05_ACTIVATION_DURABLE_ANCHOR_PATH`)도 같은 generation과 receipt hash를 append-only hash

@@ -103,6 +103,8 @@ services:
       PINVI_RESTORE_DRAIN_VERIFIED: ${PINVI_RESTORE_DRAIN_VERIFIED:-false}
       PINVI_RESTORE_APP_ROLE: ${PINVI_RESTORE_APP_ROLE:-}
       PINVI_RESTORE_WRITE_ROLES: ${PINVI_RESTORE_WRITE_ROLES:-}
+      # API는 서명된 runtime attestation만 읽는다. Docker Engine socket은 API에 주지 않는다.
+      PINVI_M05_RUNTIME_LIVE_CHECK: ${PINVI_M05_RUNTIME_LIVE_CHECK:-false}
       PINVI_JWT_SECRET_KEY: ${PINVI_JWT_SECRET_KEY:-pinvi-smoke-jwt-secret-32-bytes-minimum}
       PINVI_MCP_JWT_SECRET: ${PINVI_MCP_JWT_SECRET:-pinvi-smoke-jwt-secret-32-bytes-minimum}
       PINVI_RESEND_API_KEY: ${PINVI_RESEND_API_KEY:-}
@@ -217,12 +219,6 @@ services:
       - type: bind
         source: ${PINVI_M05_RUNTIME_ATTESTATION_HOST_PATH:-/tmp/pinvi-m05-runtime-attestation.json}
         target: ${PINVI_M05_RUNTIME_ATTESTATION_PATH:-/run/pinvi/m05/runtime-attestation.json}
-        read_only: true
-      # M05 활성화 시 API startup이 여섯 dependency의 실제 container ID/digest/label과
-      # signed runtime attestation을 대조한다. canonical local Docker socket만 허용한다.
-      - type: bind
-        source: /var/run/docker.sock
-        target: /var/run/docker.sock
         read_only: true
     ports:
       - "127.0.0.1:${PINVI_API_PORT:-12801}:8000"

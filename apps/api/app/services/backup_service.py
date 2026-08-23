@@ -566,6 +566,7 @@ async def _restore_backup_hotswap_locked(
                 "PINVI_RESTORE_PG_RESTORE_BIN",
                 "PINVI_RESTORE_PSQL_BIN",
                 "PINVI_RESTORE_PRIVATE_TOOL_COPY",
+                "PINVI_RESTORE_SETSID_BIN",
                 "PYTHONHOME",
                 "PYTHONPATH",
                 "RUBYLIB",

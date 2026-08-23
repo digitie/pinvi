@@ -161,13 +161,27 @@ USAGE/SELECT grant를 재적용한다. 이 role은 LOGIN이고 superuser·CREATE
 | `PINVI_RESTORE_WRITE_ROLES`     | 빈 값                | API·worker 등 모든 runtime write role의 쉼표 구분 목록. 누락된 login writer가 있으면 fail-close |
 | `PINVI_RESTORE_HOTSWAP_SCRIPT_SHA256` | 빈 값           | 운영 API 경로에서 canonical hotswap runner content digest 고정 |
 
+`m05_restore_drill.py`의 fresh target 재생성에는 다음 환경변수도 필요하다.
+
+| 변수                                  | 설명                                                                                          |
+| ------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `PINVI_RESTORE_TEMPLATE_DATABASE_URL` | 같은 PostgreSQL cluster의 template DB URL. `app`는 없고 `x_extension`만 준비해야 한다. |
+
+template DB에는 one-time privileged bootstrap으로 `x_extension` schema와 `citext`, `pgcrypto`,
+`pg_trgm`을 설치하고 runtime login에 `USAGE`만 부여한다. template에는 active connection이
+없어야 하며, staging executor는 target을 매번 `DROP DATABASE ... WITH (FORCE)` 후
+`CREATE DATABASE ... TEMPLATE ...`로 재생성할 수 있는 `CREATEDB` 권한이 있어야 한다. 이
+template URL은 runtime/API container에 전달하지 않고 drill 실행 주체의 local-only 환경에만 둔다.
+
 실행 모드의 `PINVI_RESTORE_DATABASE_URL`은 API runtime role이 아닌 별도 restore
 executor로 연결해야 한다. 이 login은 `LOGIN`, `NOSUPERUSER`, `NOCREATEROLE`,
-`NOCREATEDB`, `NOREPLICATION`, `NOBYPASSRLS`, `NOINHERIT`이어야 하고 role membership이
-없어야 한다. 기존 `app` schema의 직접 owner이며 현재 database의 `CREATE` 권한을 가져야
-schema를 만들고 rename할 수 있다. `PINVI_RESTORE_APP_ROLE`과
+`NOCREATEDB`, `NOREPLICATION`, `NOBYPASSRLS`, `INHERIT`이어야 하고
+`pg_signal_backend`만 직접 member로 가져야 한다. 기존 `app` schema의 직접 owner이며 현재
+database의 `CREATE` 권한을 가져야 schema를 만들고 rename할 수 있다. `PINVI_RESTORE_APP_ROLE`과
 `PINVI_RESTORE_WRITE_ROLES`에는 executor를 넣지 않는다. runner는 이 executor를 사전
 검증된 유지보수 주체로만 허용하고, 나머지 connectable writer의 권한과 CONNECT를 fence한다.
+timeout 시에는 advisory lock session을 별도 process session으로 보존해 EXIT cleanup이
+fence를 먼저 복구하도록 한다.
 
 ## 4. Restore — schema-swap 핫스왑 (정상 절차, Sprint 6 T-111)
 
@@ -243,7 +257,9 @@ API-triggered restore 중 `PINVI_RESTORE_DRAIN_COMMAND`가 설정돼 있으면 s
 `draining:failed`로 중단한다. API 경로는 외부 전환 확인값과 함께 DB write fence를 적용한다.
 hotswap runner는 전체 실행 동안 DB advisory lock을 유지하고, source/restore schema에 대한
 runtime role의 write 권한을 회수하며, 기존 runtime 세션을 종료한 뒤 권한·세션 상태를 다시
-확인한다. CLI 경로만 별도의 `PINVI_RESTORE_DRAIN_COMMAND`를 실행할 수 있다.
+확인한다. data restore 중에는 `session_replication_role`을 변경하지 않으므로 M05
+`ENABLE ALWAYS` trigger와 foreign-key 검증을 그대로 유지한다. CLI 경로만 별도의
+`PINVI_RESTORE_DRAIN_COMMAND`를 실행할 수 있다.
 
 schema switch의 핵심 SQL은 다음 형태다. 기본 `scripts/restore-hotswap.sh`는 custom dump를
 `app_restore_<ts>` schema로 remap해

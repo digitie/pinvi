@@ -6,6 +6,7 @@ DB URL과 runtime role은 명령행에 넣지 않고 다음 환경변수로만 �
 * ``PINVI_RESTORE_SOURCE_DATABASE_URL`` — dump source
 * ``PINVI_RESTORE_STAGING_DATABASE_URL`` — owner/migrator target
 * ``PINVI_RESTORE_RUNTIME_DATABASE_URL`` — non-owner runtime target login
+* ``PINVI_RESTORE_TEMPLATE_DATABASE_URL`` — target-cluster template with x_extension
 * ``PINVI_RESTORE_RUNTIME_ROLE`` — runtime login name
 
 이 도구는 repository의 backup/restore runner를 고정 호출하고, 성공한 실행의
@@ -34,11 +35,16 @@ _ROLE_RE = re.compile(r"[a-z_][a-z0-9_]{0,62}\Z")
 _SCHEMA_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 _TARGET_DATABASE_RE = re.compile(r"pinvi_m05_restore_[a-z0-9_]+\Z")
+_DATABASE_RE = re.compile(r"[a-z_][a-z0-9_]{0,62}\Z")
 _SAFE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 _TOOL_TRUST_MANIFEST_ENV = "PINVI_M05_RESTORE_TOOL_TRUST_MANIFEST"
 _TRUSTED_TOOL_NAMES = ("bash", "git", "pg_dump", "pg_restore", "psql")
 _TRUSTED_TOOL_DIRECTORIES = (Path("/usr/local/bin"), Path("/usr/bin"), Path("/bin"))
 _POSTGRES_TOOL_DIRECTORY_RE = re.compile(r"/usr/lib/postgresql/[0-9]+/bin\Z")
+_REQUIRED_TEMPLATE_EXTENSIONS = ("citext", "pgcrypto", "pg_trgm")
+_REQUIRED_TEMPLATE_EXTENSIONS_SQL = ", ".join(
+    f"'{extension}'" for extension in _REQUIRED_TEMPLATE_EXTENSIONS
+)
 _PINNED_TOOL_PATHS: dict[str, str] = {}
 _TOOL_TRUST_MANIFEST_SHA256 = ""
 
@@ -307,7 +313,7 @@ def _database_url(name: str) -> str:
         addresses = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
     except OSError as exc:
         raise RestoreDrillError(f"{name} host could not be resolved") from exc
-    resolved_addresses = [item[4][0] for item in addresses if item[4]]
+    resolved_addresses = [str(item[4][0]) for item in addresses if item[4]]
     if not resolved_addresses:
         raise RestoreDrillError(f"{name} host has no resolved address")
     query.append(("hostaddr", resolved_addresses[0]))
@@ -364,6 +370,7 @@ def _runtime_role_check(
     if require_schema_privileges:
         schema_checks = f"""
   AND has_schema_privilege(current_user, '{schema}', 'USAGE')
+  AND has_schema_privilege(current_user, 'x_extension', 'USAGE')
   AND NOT has_schema_privilege(current_user, '{schema}', 'CREATE')
   AND NOT has_schema_privilege(current_user, 'x_extension', 'CREATE')
   AND NOT EXISTS (
@@ -507,7 +514,10 @@ WHERE event_id = (
 ROLLBACK;
 """.strip()
     result = _scalar(database_url, sql, check=False)
-    if result.returncode == 0 or "append-only" not in result.stderr:
+    if result.returncode == 0:
+        raise RestoreDrillError("M05 append-only trigger did not block replication bypass")
+    error_text = result.stderr.lower()
+    if "append-only" not in error_text and "permission denied" not in error_text:
         raise RestoreDrillError("M05 append-only trigger did not block replication bypass")
 
 
@@ -569,7 +579,7 @@ def _fresh_target_check(database_url: str, *, schema: str) -> None:
 SELECT NOT EXISTS (
     SELECT 1
     FROM pg_namespace n
-    WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'public')
+    WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'public', 'x_extension')
 )
 AND NOT EXISTS (
     SELECT 1
@@ -582,25 +592,41 @@ AND NOT EXISTS (
     SELECT 1
     FROM pg_extension e
     JOIN pg_namespace n ON n.oid = e.extnamespace
-    WHERE n.nspname NOT IN ('pg_catalog', 'public')
+    WHERE n.nspname NOT IN ('pg_catalog', 'public', 'x_extension')
 )
+AND to_regnamespace('x_extension') IS NOT NULL
+AND (
+    SELECT count(*)
+    FROM pg_extension e
+    JOIN pg_namespace n ON n.oid = e.extnamespace
+    WHERE n.nspname = 'x_extension'
+      AND e.extname = ANY(ARRAY[{_REQUIRED_TEMPLATE_EXTENSIONS_SQL}])
+) = 3
 AND to_regnamespace('{schema}') IS NULL
 """.strip()
     _require_true(_scalar(database_url, sql), name="fresh disposable target")
 
 
 def _recreate_disposable_target(
-    database_url: str, *, staging_role: str, runtime_role: str
+    database_url: str,
+    *,
+    staging_role: str,
+    runtime_role: str,
+    template_url: str,
 ) -> None:
-    """인증된 단일 연결에서 endpoint를 확인한 뒤 prefix DB를 재생성한다."""
+    """x_extension이 준비된 target template에서 prefix DB를 재생성한다."""
 
     try:
         parsed = urlsplit(database_url)
+        template_parsed = urlsplit(template_url)
         database_name = parsed.path.removeprefix("/")
+        template_name = template_parsed.path.removeprefix("/")
     except ValueError as exc:
         raise RestoreDrillError("restore target URL is invalid") from exc
     if _TARGET_DATABASE_RE.fullmatch(database_name) is None:
         raise RestoreDrillError("restore target database is outside the M05 disposable prefix")
+    if _DATABASE_RE.fullmatch(template_name) is None or template_name == database_name:
+        raise RestoreDrillError("restore target template database is invalid")
     if not _ROLE_RE.fullmatch(staging_role):
         raise RestoreDrillError("restore staging role is invalid")
     if not _ROLE_RE.fullmatch(runtime_role):
@@ -608,15 +634,52 @@ def _recreate_disposable_target(
     maintenance_url = urlunsplit(parsed._replace(path="/postgres"))
     quoted_database = '"' + database_name.replace('"', '""') + '"'
     quoted_role = '"' + staging_role.replace('"', '""') + '"'
+    quoted_template = '"' + template_name.replace('"', '""') + '"'
     hostaddr = parsed.query and dict(parse_qsl(parsed.query, keep_blank_values=True)).get(
         "hostaddr", ""
     )
-    if not hostaddr:
-        raise RestoreDrillError("restore target URL is missing the pinned hostaddr")
+    template_hostaddr = template_parsed.query and dict(
+        parse_qsl(template_parsed.query, keep_blank_values=True)
+    ).get("hostaddr", "")
     expected_port = str(parsed.port or 5432)
+    template_port = str(template_parsed.port or 5432)
+    if not hostaddr or not template_hostaddr:
+        raise RestoreDrillError("restore target and template URLs need pinned hostaddr values")
+    if hostaddr != template_hostaddr or expected_port != template_port:
+        raise RestoreDrillError("restore target and template must use the same PostgreSQL endpoint")
+    target_system_identifier = _scalar(
+        maintenance_url,
+        "SELECT (pg_control_system()).system_identifier::text",
+    ).stdout.strip()
+    if not re.fullmatch(r"[0-9]+", target_system_identifier):
+        raise RestoreDrillError("restore target system identifier is invalid")
     sql_hostaddr = hostaddr.replace("'", "''")
     sql_role = staging_role.replace("'", "''")
     sql_runtime = runtime_role.replace("'", "''")
+    sql_template = template_name.replace("'", "''")
+    template_check = _scalar(
+        template_url,
+        f"""
+SELECT current_database() = '{sql_template}'
+  AND current_user = '{sql_role}'
+  AND COALESCE(inet_server_addr()::text, '') = '{sql_hostaddr}'
+  AND inet_server_port()::text = '{expected_port}'
+  AND (pg_control_system()).system_identifier::text = '{target_system_identifier}'
+  AND to_regnamespace('app') IS NULL
+  AND to_regnamespace('x_extension') IS NOT NULL
+  AND NOT has_database_privilege('{sql_runtime}', current_database(), 'CREATE')
+  AND has_schema_privilege('{sql_runtime}', 'x_extension', 'USAGE')
+  AND NOT has_schema_privilege('{sql_runtime}', 'public', 'CREATE')
+  AND (
+    SELECT count(*)
+    FROM pg_extension e
+    JOIN pg_namespace n ON n.oid = e.extnamespace
+    WHERE n.nspname = 'x_extension'
+      AND e.extname = ANY(ARRAY[{_REQUIRED_TEMPLATE_EXTENSIONS_SQL}])
+  ) = 3
+""".strip(),
+    )
+    _require_true(template_check, name="restore target template")
     _psql_file(
         maintenance_url,
         f"""
@@ -626,9 +689,17 @@ BEGIN
      OR current_user <> '{sql_role}'
      OR COALESCE(inet_server_addr()::text, '') <> '{sql_hostaddr}'
      OR inet_server_port()::text <> '{expected_port}'
-     OR (pg_control_system()).system_identifier::text = ''
+     OR (pg_control_system()).system_identifier::text <> '{target_system_identifier}'
   THEN
     RAISE EXCEPTION 'restore maintenance endpoint identity mismatch';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_roles r
+    WHERE r.rolname = current_user
+      AND (r.rolsuper OR r.rolcreatedb)
+  ) THEN
+    RAISE EXCEPTION 'restore staging role must have CREATEDB for disposable target recreation';
   END IF;
   IF NOT EXISTS (
     SELECT 1
@@ -643,15 +714,19 @@ BEGIN
       AND NOT r.rolinherit
       AND NOT EXISTS (SELECT 1 FROM pg_auth_members m WHERE m.member = r.oid)
       AND NOT has_database_privilege(r.rolname, 'postgres', 'CREATE')
-      AND NOT has_database_privilege(r.rolname, 'template1', 'CREATE')
-      AND NOT has_schema_privilege(r.rolname, 'public', 'CREATE')
+      AND NOT has_database_privilege(r.rolname, '{sql_template}', 'CREATE')
   ) THEN
     RAISE EXCEPTION 'restore runtime role has direct database or schema creation authority';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_stat_activity WHERE datname = '{sql_template}'
+  ) THEN
+    RAISE EXCEPTION 'restore target template has active connections';
   END IF;
 END
 $m05$;
 DROP DATABASE IF EXISTS {quoted_database} WITH (FORCE);
-CREATE DATABASE {quoted_database} OWNER {quoted_role};
+CREATE DATABASE {quoted_database} WITH OWNER {quoted_role} TEMPLATE {quoted_template};
         """,
         check=True,
     )
@@ -798,6 +873,9 @@ def _run_drill(args: argparse.Namespace) -> int:
     source_url = _database_url(args.source_database_url_env)
     target_url = _database_url(args.staging_database_url_env)
     runtime_url = _database_url(args.runtime_database_url_env)
+    template_url = ""
+    if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
+        template_url = _database_url(args.template_database_url_env)
     try:
         source_database_name = urlsplit(source_url).path.removeprefix("/")
         target_database_name = urlsplit(target_url).path.removeprefix("/")
@@ -810,6 +888,7 @@ def _run_drill(args: argparse.Namespace) -> int:
             target_url,
             staging_role=args.staging_role,
             runtime_role=args.runtime_role,
+            template_url=template_url,
         )
     source_identity_pre = _identity(source_url, schema=args.schema)
     target_identity_pre = _identity(target_url, schema=args.schema)
@@ -1037,6 +1116,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--runtime-database-url-env",
         default="PINVI_RESTORE_RUNTIME_DATABASE_URL",
+    )
+    parser.add_argument(
+        "--template-database-url-env",
+        default="PINVI_RESTORE_TEMPLATE_DATABASE_URL",
     )
     parser.add_argument("--require-root-owned", action="store_true")
     return parser

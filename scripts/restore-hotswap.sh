@@ -180,6 +180,15 @@ if [[ "${TEST_MODE}" != "1" && "${PINVI_RESTORE_PRIVATE_TOOL_COPY:-0}" != "1" ]]
   assert_trusted_tool_path "bash" "${BASH_BIN}"
 fi
 
+SETSID_BIN="$(pinned_tool setsid || true)"
+if [[ "${SETSID_BIN}" != /* || ! -x "${SETSID_BIN}" ]]; then
+  phase preparing failed "setsid not found"
+  exit 127
+fi
+if [[ "${TEST_MODE}" != "1" && "${PINVI_RESTORE_PRIVATE_TOOL_COPY:-0}" != "1" ]]; then
+  assert_trusted_tool_path "setsid" "${SETSID_BIN}"
+fi
+
 TMP_DIR="$(mktemp -d)"
 cleanup() {
   set +e
@@ -211,6 +220,12 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+terminate_restore() {
+  if [[ "${CLEANUP_MODE}" != "1" ]]; then
+    exit 143
+  fi
+}
+trap terminate_restore TERM INT
 
 copy_tool_to_private_dir() {
   local name="$1"
@@ -247,7 +262,7 @@ start_advisory_lock() {
   local lock_signal="${TMP_DIR}/lock.signal"
   mkfifo -m 600 "${lock_input}" "${lock_signal}"
   (
-    "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 -Atq "${DATABASE_URL}" \
+    exec "${SETSID_BIN}" "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 -Atq "${DATABASE_URL}" \
       >"${lock_signal}" 2>"${TMP_DIR}/lock.err" <"${lock_input}"
   ) &
   LOCK_HOLDER_PID="$!"
@@ -1013,9 +1028,18 @@ SELECT EXISTS (
     AND NOT r.rolcreatedb
     AND NOT r.rolreplication
     AND NOT r.rolbypassrls
-    AND NOT r.rolinherit
+    AND r.rolinherit
+    AND EXISTS (
+      SELECT 1
+      FROM pg_auth_members m
+      WHERE m.member = r.oid
+        AND m.roleid = to_regrole('pg_signal_backend')
+    )
     AND NOT EXISTS (
-      SELECT 1 FROM pg_auth_members m WHERE m.member = r.oid
+      SELECT 1
+      FROM pg_auth_members m
+      WHERE m.member = r.oid
+        AND m.roleid <> to_regrole('pg_signal_backend')
     )
     AND current_user <> ALL(string_to_array('${roles_sql}', ','))
     AND EXISTS (
@@ -1039,7 +1063,7 @@ SELECT EXISTS (
   )
 " | tr -d '[:space:]')"
   if [[ "${executor_safe}" != "t" ]]; then
-    phase draining failed "restore executor must be a dedicated schema owner with database CREATE and no elevated membership"
+    phase draining failed "restore executor must be a dedicated schema owner with database CREATE and only pg_signal_backend membership"
     exit 3
   fi
 }
@@ -1220,10 +1244,9 @@ run_guarded_file "${TMP_DIR}/schema-remapped.sql"
   --no-privileges \
   --file="${TMP_DIR}/data.sql" \
   "${SNAPSHOT}"
-# 스키마(FK 포함)를 먼저 만든 뒤 data-only를 적재하므로, FK 적재 순서/순환이 있으면 실패한다.
-# 데이터 적재 동안만 트리거/FK 검증을 끈다(단일 세션 내 SET → 세션 종료 시 자동 해제).
+# 스키마(FK 포함)를 먼저 만든 뒤 data-only를 적재한다. pg_restore가 계산한
+# dependency order를 사용하고, M05 ENABLE ALWAYS trigger와 FK 검증은 복구 중에도 켠다.
 {
-  printf 'SET session_replication_role = replica;\n'
   remap_sql "${TMP_DIR}/data.sql"
 } >"${TMP_DIR}/data-remapped.sql"
 run_guarded_file "${TMP_DIR}/data-remapped.sql"

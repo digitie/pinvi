@@ -18,6 +18,9 @@ def test_restore_hotswap_rejects_session_and_lock_control_in_dump_sql() -> None:
     assert "dollar_delimiter" in source
     assert "advisory_lock_sql_guard" in source
     assert source.count("advisory_lock_sql_guard") >= 6
+    assert 'exec "${SETSID_BIN}" "${PSQL_BIN}"' in source
+    assert "trap terminate_restore TERM INT" in source
+    assert "SET session_replication_role = replica" not in source
 
 
 def test_restore_hotswap_sql_guard_executes_and_ignores_literal_controls() -> None:
