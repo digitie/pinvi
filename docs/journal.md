@@ -19,7 +19,12 @@
 - Compose의 Google 설정 전달과 `infra/.env.prod.example`의 운영 입력 항목을 복원하고, 두 파일의
   계약을 고정하는 단위 테스트를 추가했다. 실제 client secret은 파일이나 로그에 기록하지 않는다.
 - T-324를 열린 작업 원장에 추가했으며, PR CI와 격리 live UI에서 로그인 화면의 Google 버튼 및
- API provider 상태를 확인한 뒤 완료 아카이브로 이동한다.
+  API provider 상태를 확인한 뒤 완료 아카이브로 이동한다.
+- 2026-08-24 검증에서 API provider 응답의 Google 항목이 `enabled: true`이고, 실제 브라우저가
+  `/login`에서 Google 버튼을 표시한 뒤 Google authorize 요청을 시작했다
+  (`LIVE_OAUTH_UI=passed provider=google button=visible authorize=started`). N150 실행 대상이
+  확인되지 않아 로컬 Linux 실브라우저를 fallback으로 사용했으며, client secret과 authorize
+  URL 값은 기록하지 않았다.
 
 ## 2026-08-22 (codex) — Map #1051 service 계약 byte 대조 및 재vendor
 
