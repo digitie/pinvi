@@ -177,7 +177,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "backup_tool_path": "/usr/local/bin/pg_dump",
             "backup_tool_sha256": "f" * 64,
             "psql_tool_path": "/usr/local/bin/psql",
-            "psql_tool_sha256": "g" * 64,
+            "psql_tool_sha256": "b" * 64,
             "dump_sha256": "c" * 64,
             "execution_id": "33333333-3333-4333-8333-333333333333",
             "no_owner_restore": True,
