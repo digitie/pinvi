@@ -108,7 +108,8 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
       throw new Error('M05 detail response receipt가 object가 아닙니다.');
     }
     const responseReceiptRecord = responseReceipt as Record<string, unknown>;
-    expect(responseData.status).toBe('applied');
+    const responseStatus = responseData.status;
+    expect(responseStatus).toBe('applied');
     expect(responseReceiptRecord.action).toBe('rebind');
     expect(responseReceiptRecord.old_feature_id).toBe(oldFeatureId);
     expect(responseReceiptRecord.replacement_feature_id).toBe(replacementFeatureId);
@@ -120,7 +121,7 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
         .locator('dl > dt')
         .filter({ hasText: label })
         .locator('xpath=following-sibling::dd[1]');
-    await expect(detail).toContainText('applied');
+    await expect(detail).toContainText(String(responseStatus));
     await expect(receiptValue('조치')).toContainText(String(responseReceiptRecord.action));
     await expect(receiptValue('이전 Feature ID')).toHaveText(oldFeatureId);
     await expect(receiptValue('대체 Feature ID')).toHaveText(replacementFeatureId);
