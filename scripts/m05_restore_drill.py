@@ -692,6 +692,7 @@ def _recreate_disposable_target(
     maintenance_url = urlunsplit(parsed._replace(path="/postgres"))
     quoted_database = '"' + database_name.replace('"', '""') + '"'
     quoted_role = '"' + staging_role.replace('"', '""') + '"'
+    quoted_hotswap_role = '"' + hotswap_role.replace('"', '""') + '"'
     quoted_template = '"' + template_name.replace('"', '""') + '"'
     hostaddr = parsed.query and dict(parse_qsl(parsed.query, keep_blank_values=True)).get(
         "hostaddr", ""
@@ -840,6 +841,7 @@ END
 $m05$;
 DROP DATABASE IF EXISTS {quoted_database} WITH (FORCE);
 CREATE DATABASE {quoted_database} WITH OWNER {quoted_role} TEMPLATE {quoted_template};
+GRANT CONNECT, CREATE ON DATABASE {quoted_database} TO {quoted_hotswap_role};
         """,
         check=True,
     )
