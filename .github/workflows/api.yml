@@ -8,6 +8,7 @@ on:
       - 'scripts/api-image-provenance.sh'
       - 'scripts/backup-db.sh'
       - 'scripts/m05_*.py'
+      - 'scripts/trusted-hotswap-entrypoint.py'
       - 'scripts/n150-playwright-runner.sh'
       - 'scripts/restore-db.sh'
       - 'scripts/restore-hotswap.sh'
@@ -26,6 +27,7 @@ on:
       - 'scripts/api-image-provenance.sh'
       - 'scripts/backup-db.sh'
       - 'scripts/m05_*.py'
+      - 'scripts/trusted-hotswap-entrypoint.py'
       - 'scripts/n150-playwright-runner.sh'
       - 'scripts/restore-db.sh'
       - 'scripts/restore-hotswap.sh'
@@ -95,7 +97,9 @@ jobs:
           python -m ruff check --select E4,E7,E9,F,I \
             scripts/m05_activation_attestation.py \
             scripts/m05_activation_receipt.py \
-            scripts/m05_restore_drill.py
+            scripts/m05_restore_drill.py \
+            scripts/m05_hotswap_forensics.py \
+            scripts/trusted-hotswap-entrypoint.py
           bash -n \
             scripts/backup-db.sh \
             scripts/restore-db.sh \

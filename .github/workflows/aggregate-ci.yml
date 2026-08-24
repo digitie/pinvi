@@ -51,6 +51,7 @@ jobs:
               equals("scripts/api-image-provenance.sh"),
               equals("scripts/backup-db.sh"),
               startsWith("scripts/m05_"),
+              equals("scripts/trusted-hotswap-entrypoint.py"),
               equals("scripts/n150-playwright-runner.sh"),
               equals("scripts/restore-db.sh"),
               equals("scripts/restore-hotswap.sh"),
