@@ -207,6 +207,112 @@ async def test_extra_coord_query_cannot_override_the_handler_coordinate(
 
 
 # --------------------------------------------------------------------------------------
+# 실패한 응답이 기록을 지우지 않는다 (T-333)
+# --------------------------------------------------------------------------------------
+
+
+async def test_upstream_failure_still_records_the_location_use(
+    client, session_factory, verified_user, auth_cookies, grant_location_consent
+):  # type: ignore[no-untyped-def]
+    """상류가 거절해도 좌표는 이미 상류로 나갔다 — 확인자료에 남아야 한다.
+
+    이전에는 `status_code >= 400`이면 통째로 건너뛰었다. 그 가드는 미들웨어가 query를 추측하던
+    시절의 대리 지표였고(T-330이 추측을 없앴다), 지금은 순수 손실이다. 위치정보법 제16조가 기록하라는
+    것은 수집·이용의 **사실**이지 요청의 성공 여부가 아니다.
+    """
+    user_id, _ = verified_user
+    await grant_location_consent(user_id)
+
+    class _Unavailable:
+        async def features_nearby(self, **kwargs: Any) -> dict[str, Any]:
+            from app.clients.kor_travel_map import KorTravelMapUnavailable
+
+            raise KorTravelMapUnavailable("kor-travel-map down")
+
+    app.dependency_overrides[get_kor_travel_map_client] = _Unavailable
+    try:
+        res = await client.get(
+            "/features/nearby",
+            params={"lon": 126.9780, "lat": 37.5665, "radius_m": 500},
+            cookies=auth_cookies(user_id),
+        )
+    finally:
+        app.dependency_overrides[get_kor_travel_map_client] = _FakeMapClient
+
+    assert res.status_code >= 400, res.text
+
+    rows = await _outbox_rows(session_factory, user_id)
+    assert len(rows) == 1
+    assert rows[0].purpose == "nearby_attractions"
+    assert rows[0].lat == Decimal("37.566500")
+
+
+async def test_unhandled_exception_still_records_the_location_use(
+    client, session_factory, verified_user, auth_cookies, grant_location_consent
+):  # type: ignore[no-untyped-def]
+    """미처리 예외는 `call_next`에서 **raise되어** 온다 — 가드를 지우는 것만으로는 못 잡는다.
+
+    좌표를 상류에 보낸 뒤 응답 조립이 터지는 경우가 여기 해당한다. 원래 예외는 그대로 전파돼야 한다.
+    """
+    user_id, _ = verified_user
+    await grant_location_consent(user_id)
+
+    class _Exploding:
+        async def features_nearby(self, **kwargs: Any) -> dict[str, Any]:
+            raise RuntimeError("응답 조립 실패")
+
+    app.dependency_overrides[get_kor_travel_map_client] = _Exploding
+    try:
+        with pytest.raises(RuntimeError):
+            await client.get(
+                "/features/nearby",
+                params={"lon": 126.9780, "lat": 37.5665, "radius_m": 500},
+                cookies=auth_cookies(user_id),
+            )
+    finally:
+        app.dependency_overrides[get_kor_travel_map_client] = _FakeMapClient
+
+    rows = await _outbox_rows(session_factory, user_id)
+    assert len(rows) == 1
+    assert rows[0].purpose == "nearby_attractions"
+
+
+async def test_rejected_before_declaration_still_records_nothing(
+    client, session_factory, verified_user, auth_cookies
+):  # type: ignore[no-untyped-def]
+    """게이트에서 막힌 요청은 좌표를 **선언한 적이 없으므로** 여전히 기록되지 않는다.
+
+    "일어나지 않은 위치 사용을 적지 않는다"는 보증이 상태 코드가 아니라 **호출 순서**에서 온다는
+    것을 고정한다 — 모든 선언 지점이 인증·검증·동의 게이트 뒤에 있다.
+    """
+    user_id, _ = verified_user  # 위치 동의 없음
+
+    res = await client.get(
+        "/features/nearby",
+        params={"lon": 126.9780, "lat": 37.5665, "radius_m": 500},
+        cookies=auth_cookies(user_id),
+    )
+    assert res.status_code == 403, res.text
+    assert await _outbox_rows(session_factory, user_id) == []
+
+
+async def test_validation_rejection_records_nothing(
+    client, session_factory, verified_user, auth_cookies, grant_location_consent
+):  # type: ignore[no-untyped-def]
+    """입력 검증 422는 핸들러 본문에 도달하지도 않는다 — 선언이 없으니 기록도 없다."""
+    user_id, _ = verified_user
+    await grant_location_consent(user_id)
+
+    res = await client.get(
+        "/features/nearby",
+        params={"lon": 999, "lat": 37.5665, "radius_m": 500},
+        cookies=auth_cookies(user_id),
+    )
+    assert res.status_code == 422, res.text
+    assert await _outbox_rows(session_factory, user_id) == []
+
+
+# --------------------------------------------------------------------------------------
 # 외부 의존 — 감사 경로만 보기 위해 상류 응답을 고정한다 (저장소 관례: dependency_overrides)
 # --------------------------------------------------------------------------------------
 

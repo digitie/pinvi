@@ -609,7 +609,7 @@ class KtmCacheTargetBoundaryAudit(Base):
             # schema_revision pin은 head migration마다 의식적 re-pin —
             # services/cache_target_final_boundary.FINALIZE_SCHEMA_REVISION과 반드시 동일.
             "contract_version = 'pinvi-cache-target-final-boundary/v1' "
-            "AND status = 'succeeded' AND schema_revision = '20260825_0066'",
+            "AND status = 'succeeded' AND schema_revision = '20260825_0067'",
             name=conv("ck_ktm_ct_boundary_contract"),
         ),
         CheckConstraint(

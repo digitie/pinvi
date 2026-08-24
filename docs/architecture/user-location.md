@@ -248,6 +248,9 @@ async def location_audit(request: Request, call_next):
     lat, lng = _declared_coord(request)
     if lat is None or lng is None:
         return response
+    # 응답 상태는 보지 않는다(T-333). 선언 이후에 도달하는 4xx/5xx는 전부 좌표를 이미 쓴 뒤의
+    # 실패다. "일어나지 않은 사용을 적지 않는다"는 보증은 상태가 아니라 **호출 순서**가 지킨다 —
+    # 모든 선언 지점이 인증·입력검증·동의 게이트 뒤에 있다.
     await location_audit_repo.append({
         "user_id": request.state.user_id,
         "endpoint": request.url.path,

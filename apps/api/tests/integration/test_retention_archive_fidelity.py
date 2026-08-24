@@ -195,3 +195,333 @@ async def test_archived_row_keeps_the_coordinate_source(session_factory):  # typ
         ),
     )
     assert a["content_hash"] == expected
+
+
+# --------------------------------------------------------------------------------------
+# 아카이브도 append-only다 (T-336)
+# --------------------------------------------------------------------------------------
+
+
+async def test_archive_rows_cannot_be_updated_or_deleted(session_factory):  # type: ignore[no-untyped-def]
+    """원본이 삭제된 뒤 **유일한 사본**이 되는 테이블이 수정 가능해서는 안 된다.
+
+    `trg_location_access_log_append_only`는 원본에만 걸려 있었다 — 보호가 가장 필요해지는 순간
+    (아카이브 후)에 보호가 사라지는 구조였다. `session_replication_role = replica`로도 우회되지
+    않아야 하므로 `ENABLE ALWAYS`다.
+    """
+    from sqlalchemy.exc import DBAPIError
+
+    log_id = await _seed_archived_row(session_factory)
+
+    statements = (
+        (
+            "UPDATE app.location_access_log_archive SET purpose = 'viewport_query' "
+            "WHERE log_id = :log_id"
+        ),
+        "DELETE FROM app.location_access_log_archive WHERE log_id = :log_id",
+        "TRUNCATE app.location_access_log_archive",
+    )
+    for statement in statements:
+        async with session_factory() as db:
+            await db.execute(text("SET LOCAL session_replication_role = replica"))
+            with pytest.raises(DBAPIError):
+                await db.execute(text(statement), {"log_id": log_id})
+            await db.rollback()
+
+
+async def test_retention_delete_permission_does_not_open_the_archive(session_factory):  # type: ignore[no-untyped-def]
+    """retention이 원본 삭제를 여는 GUC는 **아카이브에는 적용되지 않는다**.
+
+    가드 함수의 예외 절이 `TG_TABLE_NAME = 'location_access_log'`로 좁혀져 있어 그렇다. 이 성질이
+    깨지면 retention 트랜잭션 하나가 원본과 사본을 동시에 지울 수 있게 된다.
+    """
+    from sqlalchemy.exc import DBAPIError
+
+    log_id = await _seed_archived_row(session_factory)
+
+    async with session_factory() as db:
+        await db.execute(
+            text("SELECT set_config('app.retention_location_delete_allowed', 'on', true)")
+        )
+        # 원본은 이 트랜잭션에서 지울 수 있다(정상 retention 경로).
+        await db.execute(
+            text("DELETE FROM app.location_access_log WHERE log_id = :log_id"), {"log_id": log_id}
+        )
+        # 같은 트랜잭션에서도 아카이브는 열리지 않는다.
+        with pytest.raises(DBAPIError):
+            await db.execute(
+                text("DELETE FROM app.location_access_log_archive WHERE log_id = :log_id"),
+                {"log_id": log_id},
+            )
+        await db.rollback()
+
+
+async def _seed_archived_row(session_factory) -> int:  # type: ignore[no-untyped-def]
+    """원본 1행을 만들고 아카이브까지 복사한 뒤 그 log_id를 돌려준다."""
+    import uuid
+    from datetime import UTC, datetime, timedelta
+    from decimal import Decimal
+
+    from app.models.user import User
+    from app.services.location_audit import append_location_log
+
+    async with session_factory() as db:
+        user = User(email=f"lock_{uuid.uuid4().hex[:8]}@pinvi.test", status="active")
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        user_id = user.user_id
+
+    async with session_factory() as db:
+        row = await append_location_log(
+            db,
+            user_id=user_id,
+            endpoint="/features/nearby",
+            purpose="nearby_attractions",
+            lat=Decimal("37.5665"),
+            lng=Decimal("126.9780"),
+            request_id=uuid.uuid4(),
+            ip_hash="ab" * 32,
+            coord_source="device",
+            occurred_at=datetime.now(UTC) - timedelta(days=400),
+        )
+        log_id = row.log_id
+
+    run_id = uuid.uuid4()
+    async with session_factory() as db:
+        await db.execute(
+            text(
+                "INSERT INTO app.retention_runs "
+                "(run_id, status, mode, access_reason, actor_user_id) "
+                "VALUES (:run_id, 'completed', 'execute', :reason, :actor)"
+            ),
+            {"run_id": run_id, "reason": "T-336 append-only test", "actor": user_id},
+        )
+        await db.execute(
+            _ARCHIVE_LOCATION_SQL,
+            {"run_id": run_id, "archive_cutoff": datetime.now(UTC) - timedelta(days=1)},
+        )
+        await db.commit()
+
+    return int(log_id)
+
+
+# --------------------------------------------------------------------------------------
+# 체인 검증이 아카이브 경계를 넘는다 (T-335)
+# --------------------------------------------------------------------------------------
+
+
+async def test_chain_survives_archiving_the_older_rows(
+    client, session_factory, verified_user, auth_cookies
+):  # type: ignore[no-untyped-def]
+    """아카이브 실행 후에도 확인자료 열람이 체인 파손을 보고하면 안 된다.
+
+    앵커 조회가 active 테이블만 보면, 원본이 삭제된 뒤 최고참 행의 `prev_hash`가 아카이브된 해시를
+    가리키는데 앵커는 `None`이라 `GENESIS_HASH`와 비교돼 **상시 불일치**한다. 위변조 탐지가 항상
+    켜지면 실제 변조와 구분할 수 없다 — T-329 리뷰가 잡은 차단 결함과 같은 계열이다.
+    """
+    import uuid
+    from datetime import UTC, datetime, timedelta
+    from decimal import Decimal
+
+    from app.models.user import User
+    from app.services.location_audit import append_location_log
+
+    async with session_factory() as db:
+        cpo = User(
+            email=f"bridge_cpo_{uuid.uuid4().hex[:8]}@pinvi.test",
+            status="active",
+            roles=["user", "cpo"],
+        )
+        db.add(cpo)
+        await db.commit()
+        await db.refresh(cpo)
+        cpo_id = str(cpo.user_id)
+
+    subject_id, _ = verified_user
+    now = datetime.now(UTC)
+
+    # 오래된 행 2건 + 최근 행 2건. 앞의 둘만 아카이브 대상이 된다.
+    for age_days in (400, 380, 5, 1):
+        async with session_factory() as db:
+            await append_location_log(
+                db,
+                user_id=uuid.UUID(subject_id),
+                endpoint="/features/nearby",
+                purpose="nearby_attractions",
+                lat=Decimal("37.5665"),
+                lng=Decimal("126.9780"),
+                request_id=uuid.uuid4(),
+                ip_hash="ab" * 32,
+                coord_source="device",
+                occurred_at=now - timedelta(days=age_days),
+            )
+
+    run_id = uuid.uuid4()
+    cutoff = now - timedelta(days=300)
+    async with session_factory() as db:
+        await db.execute(
+            text(
+                "INSERT INTO app.retention_runs "
+                "(run_id, status, mode, access_reason, actor_user_id) "
+                "VALUES (:run_id, 'completed', 'execute', :reason, :actor)"
+            ),
+            {"run_id": run_id, "reason": "T-335 bridge test", "actor": uuid.UUID(subject_id)},
+        )
+        await db.execute(_ARCHIVE_LOCATION_SQL, {"run_id": run_id, "archive_cutoff": cutoff})
+        await db.execute(
+            text("SELECT set_config('app.retention_location_delete_allowed', 'on', true)")
+        )
+        await db.execute(
+            text(
+                "DELETE FROM app.location_access_log active "
+                "WHERE active.occurred_at <= :cutoff AND EXISTS ("
+                "  SELECT 1 FROM app.location_access_log_archive archive "
+                "  WHERE archive.log_id = active.log_id)"
+            ),
+            {"cutoff": cutoff},
+        )
+        await db.commit()
+
+    res = await client.get(
+        f"/admin/audit/location?user_id={subject_id}&limit=10",
+        cookies=auth_cookies(cpo_id),
+    )
+    assert res.status_code == 200, res.text
+    assert len(res.json()["data"]) == 2
+    assert res.headers.get("X-Chain-Broken") is None
+
+
+async def test_append_after_full_archive_keeps_the_chain_linked(session_factory):  # type: ignore[no-untyped-def]
+    """전량 아카이브 후 새로 쓰는 행은 **아카이브의 마지막 해시**에 이어져야 한다.
+
+    쓰기 측도 active 테이블만 보고 있었다. 그대로 두면 배수 직후의 첫 행이 `GENESIS_HASH`로 체인을
+    조용히 재시작하고, 끊긴 자리가 영구히 남는다 — 읽기 측만 고치면 오탐이 자리만 옮긴다.
+    """
+    import uuid
+    from datetime import UTC, datetime, timedelta
+    from decimal import Decimal
+
+    from app.models.user import User
+    from app.services.hash_chain import GENESIS_HASH
+    from app.services.location_audit import append_location_log
+
+    async with session_factory() as db:
+        user = User(email=f"tail_{uuid.uuid4().hex[:8]}@pinvi.test", status="active")
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        user_id = user.user_id
+
+    now = datetime.now(UTC)
+    async with session_factory() as db:
+        first = await append_location_log(
+            db,
+            user_id=user_id,
+            endpoint="/features/nearby",
+            purpose="nearby_attractions",
+            lat=Decimal("37.5665"),
+            lng=Decimal("126.9780"),
+            request_id=uuid.uuid4(),
+            ip_hash="ab" * 32,
+            occurred_at=now - timedelta(days=400),
+        )
+        archived_hash = first.content_hash
+
+    run_id = uuid.uuid4()
+    async with session_factory() as db:
+        await db.execute(
+            text(
+                "INSERT INTO app.retention_runs "
+                "(run_id, status, mode, access_reason, actor_user_id) "
+                "VALUES (:run_id, 'completed', 'execute', :reason, :actor)"
+            ),
+            {"run_id": run_id, "reason": "T-335 tail test", "actor": user_id},
+        )
+        await db.execute(
+            _ARCHIVE_LOCATION_SQL,
+            {"run_id": run_id, "archive_cutoff": now - timedelta(days=1)},
+        )
+        await db.execute(
+            text("SELECT set_config('app.retention_location_delete_allowed', 'on', true)")
+        )
+        await db.execute(text("DELETE FROM app.location_access_log"))
+        await db.commit()
+
+    async with session_factory() as db:
+        following = await append_location_log(
+            db,
+            user_id=user_id,
+            endpoint="/features/nearby",
+            purpose="nearby_attractions",
+            lat=Decimal("35.1796"),
+            lng=Decimal("129.0756"),
+            request_id=uuid.uuid4(),
+            ip_hash="cd" * 32,
+        )
+
+    assert following.prev_hash == archived_hash
+    assert following.prev_hash != GENESIS_HASH
+
+
+# --------------------------------------------------------------------------------------
+# 실패한 실행도 영수증을 남긴다 (T-338)
+# --------------------------------------------------------------------------------------
+
+
+async def test_failed_execute_leaves_a_receipt(session_factory, monkeypatch):  # type: ignore[no-untyped-def]
+    """파괴적 작업이 실패하면 "시도했고 어디서 멈췄는가"가 증거로 남아야 한다.
+
+    이전에는 영수증 행이 파괴적 작업과 **같은 트랜잭션**에 있어서, 호출부의 `rollback()`이 작업과
+    함께 영수증까지 지웠다. 실패한 실행이 아무 흔적도 남기지 않는다는 뜻이다.
+    """
+    import uuid
+
+    from app.core.config import get_settings
+    from app.models.user import User
+    from app.services import admin_retention
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "pinvi_retention_execute_enabled", True, raising=False)
+
+    async with session_factory() as db:
+        actor = User(
+            email=f"ret_{uuid.uuid4().hex[:8]}@pinvi.test", status="active", roles=["user", "cpo"]
+        )
+        db.add(actor)
+        await db.commit()
+        await db.refresh(actor)
+        actor_id = actor.user_id
+
+    async def _boom(*args: object, **kwargs: object) -> dict[str, int]:
+        raise RuntimeError("아카이브 중 실패")
+
+    monkeypatch.setattr(admin_retention, "_execute_location_archive", _boom)
+
+    async with session_factory() as db:
+        with pytest.raises(admin_retention.RetentionExecutionError):
+            await admin_retention.execute_retention(
+                db,
+                actor_user_id=actor_id,
+                scope="location",
+                access_reason="T-338 failure receipt test",
+                confirm_phrase=settings.pinvi_retention_execute_confirm_phrase,
+            )
+        # 호출부가 하는 일 — 실패하면 롤백한다. 영수증은 이것을 견뎌야 한다.
+        await db.rollback()
+
+    async with session_factory() as db:
+        rows = (
+            await db.execute(
+                text(
+                    "SELECT status, error_message FROM app.retention_runs "
+                    "WHERE actor_user_id = :actor ORDER BY started_at DESC"
+                ),
+                {"actor": actor_id},
+            )
+        ).mappings()
+        receipts = list(rows)
+
+    assert len(receipts) == 1, "실패한 실행의 영수증이 남지 않았다"
+    assert receipts[0]["status"] == "failed"
+    assert "아카이브 중 실패" in (receipts[0]["error_message"] or "")

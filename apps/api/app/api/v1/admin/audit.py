@@ -18,7 +18,7 @@ from app.models.user import User
 from app.schemas.admin import AdminAuditEntry, AdminLocationAuditEntry
 from app.schemas.envelope import Envelope
 from app.services.hash_chain import GENESIS_HASH, compute_content_hash
-from app.services.location_audit import location_log_payload
+from app.services.location_audit import location_log_payload, previous_content_hash
 
 router = APIRouter(prefix="/admin/audit", tags=["admin"])
 
@@ -147,13 +147,10 @@ async def _is_location_window_broken(db: AsyncSession, window: list[LocationAcce
     ordered = sorted(window, key=lambda r: r.log_id)
     # 앵커 링크: 최소 log_id 행의 prev_hash가 직전 글로벌 행 content_hash와 일치하는지 1회 확인.
     # (필터로 윈도우가 비연속이어도 prev_hash는 항상 글로벌 직전 행을 가리키므로 정확하다.)
-    anchor_prev = await db.scalar(
-        select(LocationAccessLog.content_hash)
-        .where(LocationAccessLog.log_id < ordered[0].log_id)
-        .order_by(LocationAccessLog.log_id.desc())
-        .limit(1)
-    )
-    if ordered[0].prev_hash != (anchor_prev if anchor_prev is not None else GENESIS_HASH):
+    # 아카이브까지 함께 본다. active 테이블만 보면 retention 실행 후 최고참 행의 앵커가 사라져
+    # **정상 체인이 상시 파손으로 보고된다**(T-335).
+    anchor_prev = await previous_content_hash(db, before_log_id=ordered[0].log_id)
+    if ordered[0].prev_hash != anchor_prev:
         return True
     # 각 행 self-consistency: content_hash == H(prev_hash, fields). 필터/윈도우 비연속과 무관하게
     # 표시된 행의 필드 변조를 탐지한다(윈도우 내부 링크는 비연속이라 검증 대상 아님).

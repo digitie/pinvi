@@ -43,13 +43,44 @@ class LocationAuditMiddleware(BaseHTTPMiddleware):
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            # 핸들러가 이미 쓴 좌표는 응답이 터졌다고 없던 일이 되지 않는다(T-333). 미처리 예외는
+            # `call_next`에서 **raise되어** 오므로, 여기서 잡지 않으면 상류에 좌표를 보낸 뒤 실패한
+            # 요청이 확인자료에 남지 않는다. 원래 예외는 그대로 올려보낸다.
+            await self._record_declared(request)
+            raise
+        await self._record_declared(request)
+        return response
 
+    async def _record_declared(self, request: Request) -> None:
+        """핸들러가 선언한 좌표를 outbox에 적재한다. **응답 상태는 보지 않는다.**
+
+        예전에는 `status_code >= 400`이면 건너뛰었는데, 그 가드는 미들웨어가 query string에서 좌표를
+        **추측**하던 시절의 대리 지표였다("요청이 거절됐으니 그 좌표는 안 쓰였을 것"). T-330이 추측을
+        없애고 핸들러 선언만 읽게 바꾸면서 전제가 사라졌는데 가드만 남았다.
+
+        선언은 핸들러 안에서만 일어나고, 모든 선언 지점은 인증·입력검증·동의 게이트 **뒤**에 있다.
+        그래서 "일어나지 않은 위치 사용을 적지 않는다"는 보증은 상태 코드가 아니라 **호출 순서**가
+        지킨다. 반대로 선언 이후에 도달하는 4xx/5xx는 전부 좌표를 이미 쓴 뒤의 실패다 — 상류 거절,
+        미매치 404, rate limit, 상류 timeout, 제3자 제공 후의 직렬화 실패. 위치정보법 제16조가
+        기록하라는 것은 수집·이용·제공의 **사실**이지 요청의 성공 여부가 아니다.
+
+        한계(의도적): 좌표가 프로세스를 떠나기 **전에** 상류 연결이 실패한 경우도 기록된다. 수집·이용은
+        실제로 있었으므로 기록 자체는 맞지만, 목적 라벨이 제공을 함의할 수 있다. 클라이언트 연결이
+        끊겨 취소되는 경우는 기록하지 못한다 — 취소 스코프 안에서는 `await`가 즉시 되던져진다.
+        """
+        try:
+            await self._enqueue_declared(request)
+        except Exception as exc:
+            # 감사 실패가 원래 예외를 가려서는 안 된다. raise 경로에서 특히 그렇다.
+            log.warning("location_audit.record_failed", error=str(exc))
+
+    async def _enqueue_declared(self, request: Request) -> None:
         purpose = _classify_purpose(request.url.path)
         if purpose is None:
-            return response
-        if response.status_code >= 400:
-            return response
+            return
 
         lat, lng = _declared_coord(request)
         coord_source = getattr(request.state, "location_audit_coord_source", None)
@@ -58,55 +89,49 @@ class LocationAuditMiddleware(BaseHTTPMiddleware):
         # 않는다. 반쪽 좌표도 마찬가지다 — 위경도 중 하나만으로는 어떤 위치도 지목하지 못하므로
         # `lat`만 담긴 행은 확인자료가 아니라 잡음이다(T-330).
         if lat is None or lng is None:
-            return response
+            return
 
         # NaN/Infinity는 numeric 컬럼에 저장은 되지만 체인 적재의 quantize에서 터진다. 그 예외는
         # drain 루프를 막아 **이후 모든 감사 기록을 멈추므로**(T-328이 고친 것과 같은 정지),
         # 애초에 outbox에 넣지 않는다.
         if not (lat.is_finite() and lng.is_finite()):
             log.warning("location_audit.non_finite_coord", endpoint=request.url.path)
-            return response
+            return
 
         user_id_str = getattr(request.state, "user_id", None)
         if user_id_str is None:
-            return response
-
+            return
         try:
             user_id = uuid.UUID(str(user_id_str))
         except ValueError:
-            return response
+            return
 
-        request_id_raw = (
-            getattr(request.state, "request_id", None)
-            or request.headers.get("X-Request-Id")
-            or response.headers.get("X-Request-Id")
+        # `response.headers`는 보지 않는다. `X-Request-Id`는 `RequestIdMiddleware`가 이 미들웨어
+        # **바깥에서** 응답에 붙이므로 여기서는 아직 존재하지 않는다 — 도달 불가한 폴백이었다.
+        request_id_raw = getattr(request.state, "request_id", None) or request.headers.get(
+            "X-Request-Id"
         )
         if request_id_raw is None:
-            return response
+            return
         try:
             request_id = uuid.UUID(str(request_id_raw))
         except ValueError:
-            return response
+            return
 
         ip_hash = sha256_hex(request.client.host) if request.client else sha256_hex("")
 
-        try:
-            async with async_session_factory() as session:
-                await enqueue_location_audit_outbox(
-                    session,
-                    user_id=user_id,
-                    endpoint=request.url.path,
-                    purpose=purpose,
-                    lat=lat,
-                    lng=lng,
-                    request_id=request_id,
-                    ip_hash=ip_hash,
-                    coord_source=coord_source,
-                )
-        except Exception as exc:
-            log.warning("location_audit.enqueue_failed", error=str(exc))
-
-        return response
+        async with async_session_factory() as session:
+            await enqueue_location_audit_outbox(
+                session,
+                user_id=user_id,
+                endpoint=request.url.path,
+                purpose=purpose,
+                lat=lat,
+                lng=lng,
+                request_id=request_id,
+                ip_hash=ip_hash,
+                coord_source=coord_source,
+            )
 
 
 def _classify_purpose(path: str) -> str | None:
