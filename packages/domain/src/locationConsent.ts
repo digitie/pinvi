@@ -18,7 +18,7 @@ export function hasLocationConsent(consents: UserConsent[]): boolean {
   );
 }
 
-/** PUT /users/consents 에 보낼 위치 동의 아이템. */
+/** PUT /users/me/consents 에 보낼 위치 동의 아이템. */
 export function locationConsentItems(): { consent_type: ConsentType; version: string }[] {
   return LOCATION_CONSENT_TYPES.map((consent_type) => ({
     consent_type,

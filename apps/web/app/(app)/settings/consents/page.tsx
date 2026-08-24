@@ -6,6 +6,7 @@ import { Loader2, ShieldCheck } from 'lucide-react';
 import { ApiError, userApi } from '@pinvi/api-client';
 import type { ConsentType, UserConsent } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
+import { invalidateLocationConsent } from '@/lib/locationConsent';
 import { CONSENT_LEGAL_SLUG } from '@/lib/legalDocs';
 
 interface ConsentMeta {
@@ -68,6 +69,9 @@ export default function ConsentsSettingsPage() {
     setError(null);
     try {
       await userApi(apiClient).withdrawConsent(type);
+      // 지도의 위치 동의 캐시를 즉시 무효화한다 — 철회 후 60초 동안 stale 'granted'가 남으면
+      // 지도로 돌아갔을 때 좌표를 취득하게 된다(LBS 제16조).
+      invalidateLocationConsent();
       await reload();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '철회에 실패했습니다.');

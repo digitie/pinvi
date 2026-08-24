@@ -10,7 +10,7 @@ test.use({
 test('내 위치는 위치 동의 후에만 동작한다', async ({ page }) => {
   let consented = false;
 
-  await page.route(/.*\/users\/consents$/, async (route, request) => {
+  await page.route(/.*\/users\/me\/consents$/, async (route, request) => {
     if (!isFetch(request.resourceType())) return route.continue();
     if (request.method() === 'PUT') {
       consented = true;

@@ -34,14 +34,14 @@ export const userApi = (client: ApiClient) => ({
 
   /** 현재 사용자의 동의 목록(`docs/api/users.md` §3). */
   getConsents: () =>
-    client.request('/users/consents', {
+    client.request('/users/me/consents', {
       method: 'GET',
       schema: z.array(UserConsentSchema),
     }),
 
   /** 동의 기록(idempotent). 위치 기능 등 추가 동의 시 사용. */
   putConsents: (items: { consent_type: ConsentType; version: string }[]) =>
-    client.request('/users/consents', {
+    client.request('/users/me/consents', {
       method: 'PUT',
       body: JSON.stringify(ConsentItemsSchema.parse(items)),
       schema: z.array(UserConsentSchema),
@@ -49,7 +49,7 @@ export const userApi = (client: ApiClient) => ({
 
   /** 동의 철회(`location_collection` 철회 시 위치 기능 비활성, LBS 제16조). */
   withdrawConsent: (consentType: ConsentType) =>
-    client.requestNoContent(`/users/consents/${consentType}`, {
+    client.requestNoContent(`/users/me/consents/${consentType}`, {
       method: 'DELETE',
     }),
 
