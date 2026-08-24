@@ -476,6 +476,7 @@ async def _seed_admin(session_factory) -> uuid.UUID:  # type: ignore[no-untyped-
         await db.commit()
         return admin.user_id
 
+
 async def test_conditional_snapshot_rejects_legacy_not_modified_proof_chain(
     session_factory,
 ) -> None:  # type: ignore[no-untyped-def]
