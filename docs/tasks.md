@@ -60,11 +60,6 @@
 
 ## 지도 / 위치
 
-- [ ] **T-326** — 동의 철회 이력이 재동의로 지워진다. `record_consents`는 같은
-  `(user_id, consent_type, version)` row를 in-place 갱신해 `withdrawn_at`을 `None`으로 되돌리고
-  `agreed_at`을 덮어쓴다(PK가 그 3튜플이고 모든 화면이 `v1.0`을 쓴다). 철회했다는 사실 자체가
-  남지 않아 "언제 동의했고 언제 철회했는가"를 증빙할 수 없다. 이력 테이블 + migration이 필요하며
-  retention 정책(`docs/compliance/lbs-act.md` §5)과 함께 설계한다. T-325 리뷰에서 발견.
 - [ ] **T-327** — 서버측 위치 동의 강제가 없다. `location_collection` 철회 후에도 좌표를 받는
   endpoint(`/features/nearby`, `/geo/reverse` 등)에 동의 확인 dependency가 없어 게이트가 전적으로
   클라이언트 책임이다. `ConsentItem.version`도 자유 문자열이라 허용 버전 대조가 없다. 곁들여

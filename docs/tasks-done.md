@@ -20,6 +20,18 @@
 
 ## 2026-08-24
 
+- [x] **T-326** — 동의/철회 이벤트 이력을 남겨 재동의가 철회 사실을 지우지 않게 한다.
+      (완료: 2026-08-24, PR #471, claude)
+      `app.user_consents`는 `(user_id, consent_type, version)` PK의 현재 상태 테이블이라 재동의가
+      같은 row를 in-place로 되살려(`withdrawn_at → None`) 철회 사실이 사라졌고, 이용약관 제4조의
+      "동의 이력 기록" 고지가 거짓이었다. 현재 상태 테이블은 그대로 두고 append 전용
+      `app.user_consent_events`를 신설했다(다행 전환은 설정 화면의 첫 행 선택과 마케팅 게이트를
+      반전시킨다 — ADR-062). 마이그레이션 `0063`(DDL)·`0064`(백필, 복원 가능한 것만).
+      곁들여 `record_consents`가 매 PUT마다 `agreed_at`을 덮어쓰던 것과 `list_user_consents`
+      정렬이 버전 상승 시 옛 행을 표시하던 잠복 버그를 고쳤고, T-327이 쓸 `has_valid_consents`
+      읽기 choke point를 만들었다. 적대적 리뷰가 downgrade의 증빙 삭제와 모델 주석의 **사실과
+      다른 근거 2건**을 잡아 함께 정정했다.
+
 - [x] **T-328** — `/search` 감사 purpose를 DB 계약에 맞추고 drain을 행 단위로 격리한다.
       (완료: 2026-08-24, PR #470, claude)
       미들웨어가 `third_party_place_search`를 발행하는데 `ck_location_access_log_purpose`는 6종만
