@@ -68,8 +68,12 @@ def upgrade() -> None:
         sa.Column("coord_source", sa.Text(), nullable=True),
         schema="app",
     )
+    # 제약 이름은 **접미사만** 넘긴다. naming_convention이 `ck_%(table_name)s_%(constraint_name)s`라
+    # 전체 이름을 넘기면 테이블명이 두 번 붙는데(`20260824_0065` 선례가 그렇다), 이 테이블은 이름이
+    # 길어 그 결과가 66자가 되고 PostgreSQL이 63자로 **잘라 버린다** — 소스에 적힌 이름과 실제
+    # 이름이 달라져 나중에 DROP할 수 없다.
     op.create_check_constraint(
-        "ck_location_access_log_archive_coord_source",
+        "coord_source",
         "location_access_log_archive",
         _SOURCE_CHECK,
         schema="app",

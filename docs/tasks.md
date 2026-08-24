@@ -62,6 +62,10 @@
 
 ## 지도 / 위치
 
+- [ ] **T-338** — 실패한 retention execute가 영수증을 하나도 남기지 않는다. 문서는 dry-run/execute의
+  evidence를 `retention_runs`에 남긴다고 약속하는데, 실행 중 예외가 나면 같은 트랜잭션이 롤백되면서
+  run 행까지 사라진다 — "무엇을 시도했고 어디서 멈췄는가"가 증거로 남지 않는다. 파괴적 작업의
+  감사 추적이라 특히 중요하다. T-332 적대적 리뷰에서 발견.
 - [ ] **T-335** — 아카이브가 한 번이라도 실행되면 `GET /admin/audit/location`이 **상시**
   `X-Chain-Broken: true`를 보고한다. `_is_location_window_broken`의 앵커 조회가
   `LocationAccessLog`(active 테이블)만 보므로, 원본이 삭제된 뒤 살아남은 최고참 행의 `prev_hash`는

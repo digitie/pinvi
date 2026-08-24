@@ -87,6 +87,26 @@ async def test_archive_statement_copies_every_shared_column(session_factory):  #
         "테이블에 컬럼이 있어도 나열에서 빠지면 값은 복사되지 않고, 원본은 곧바로 삭제된다."
     )
 
+    # 대상 나열만 보면 부족하다 — 이름을 넣고 값으로 `NULL`을 주면 나열은 완전한데 값은 사라진다.
+    # PostgreSQL은 개수만 맞추므로 그런 statement도 오류 없이 실행된다. 그래서 값을 공급하는
+    # SELECT 투영이 대상 컬럼과 **같은 순서로 같은 이름**인지까지 본다.
+    projection = re.search(r"SELECT\s+(.*?)\s+FROM app\.location_access_log", statement, re.DOTALL)
+    assert projection is not None, "아카이브 INSERT의 SELECT 투영을 찾지 못했다"
+    selected = [c.strip() for c in projection.group(1).split(",") if c.strip()]
+    target = [c.strip() for c in insert_columns.group(1).split(",") if c.strip()]
+    assert len(selected) == len(target), (
+        f"대상 컬럼 {len(target)}개와 SELECT 표현식 {len(selected)}개의 개수가 다르다"
+    )
+    mismatched = {
+        t: sel
+        for t, sel in zip(target, selected, strict=True)
+        if t != sel and not sel.startswith(":")
+    }
+    assert not mismatched, (
+        f"대상 컬럼과 다른 값을 공급하는 자리: {mismatched}. "
+        "이름을 나열해 놓고 값으로 NULL이나 다른 컬럼을 주면 아카이브는 조용히 위조된다."
+    )
+
 
 async def test_archived_row_keeps_the_coordinate_source(session_factory):  # type: ignore[no-untyped-def]
     """실제로 한 행을 아카이브해 출처가 따라가는지 본다 — 계약이 아니라 동작을 본다."""

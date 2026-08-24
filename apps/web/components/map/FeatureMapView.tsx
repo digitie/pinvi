@@ -485,20 +485,21 @@ export function FeatureMapView({
 
   // 위치 기능은 LBS 동의(lbs_tos + location_collection) 확인 후에만(위치정보법 제15·16조).
   const handleMyLocation = useCallback(async () => {
-    if (locationConsent === true) {
-      void locateNow();
-      return;
-    }
+    // 로컬 boolean으로 단축하지 않는다. `locationConsent`는 `true`로만 바뀌는 단방향 래치라,
+    // 한 번 동의한 세션은 사용자가 설정에서 철회해도 계속 위치를 잡았다 — 위치정보법 제16조
+    // "철회 즉시 위치 기능 비활성"과 어긋난다. 버튼은 사용자의 명시 액션이므로 매번 서버에
+    // 확인하는 비용(요청 1회)이 정당하고, 그래야 다른 탭에서의 철회도 즉시 반영된다.
     const state = await getLocationConsentState({ force: true });
     if (state === 'granted') {
       setLocationConsent(true);
       void locateNow();
       return;
     }
+    setLocationConsent(false);
     // 버튼은 사용자의 명시 액션이므로 여기서는 동의 다이얼로그를 띄운다(자동 경로와 다른 점).
     setConsentError(null);
     setConsentOpen(true);
-  }, [locationConsent, locateNow]);
+  }, [locateNow]);
 
   const handleConsentAgree = useCallback(async () => {
     setConsentSaving(true);

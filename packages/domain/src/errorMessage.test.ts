@@ -30,6 +30,20 @@ describe('friendlyErrorText', () => {
       '이 작업을 수행할 권한이 없습니다.',
     );
   });
+
+  it('falls back to ApiError message for other 4xx', () => {
+    expect(friendlyErrorText(new ApiError('bad', '잘못된 요청', 400))).toBe('잘못된 요청');
+  });
+
+  it('uses message for a plain Error', () => {
+    expect(friendlyErrorText(new Error('boom'))).toBe('boom');
+  });
+
+  it('returns a default for empty / unknown errors', () => {
+    expect(friendlyErrorText(new Error(''))).toBe('예기치 못한 오류가 발생했습니다.');
+    expect(friendlyErrorText('nope')).toBe('예기치 못한 오류가 발생했습니다.');
+    expect(friendlyErrorText(undefined)).toBe('예기치 못한 오류가 발생했습니다.');
+  });
 });
 
 describe('isLocationConsentRequired', () => {
@@ -50,19 +64,6 @@ describe('isLocationConsentRequired', () => {
     expect(isLocationConsentRequired(err)).toBe(false);
   });
 
-  it('falls back to ApiError message for other 4xx', () => {
-    expect(friendlyErrorText(new ApiError('bad', '잘못된 요청', 400))).toBe('잘못된 요청');
-  });
-
-  it('uses message for a plain Error', () => {
-    expect(friendlyErrorText(new Error('boom'))).toBe('boom');
-  });
-
-  it('returns a default for empty / unknown errors', () => {
-    expect(friendlyErrorText(new Error(''))).toBe('예기치 못한 오류가 발생했습니다.');
-    expect(friendlyErrorText('nope')).toBe('예기치 못한 오류가 발생했습니다.');
-    expect(friendlyErrorText(undefined)).toBe('예기치 못한 오류가 발생했습니다.');
-  });
 });
 
 describe('errorDigest', () => {
