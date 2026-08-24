@@ -1,14 +1,16 @@
 # resume.md
 
-## 2026-08-24 (codex) — M05 Alembic `0100/0101` rebaseline 구현·리허설
+## 2026-08-24 (codex) — M05 Alembic `0100/0101` rebaseline 최신 main 통합
 
 사용자가 과거 Alembic 이력 호환을 종료하기로 결정했다. N150 운영 DB를 읽기 전용으로
 확인한 결과 PostgreSQL 16의 `20260821_0061`이며 실제 app 데이터가 있고, M05 객체는 아직
-없다. ADR-062에 따라 active graph를 새 설치용 `0100` 기준선과 `0101` M05 통합 revision으로
-정리했다. PostgreSQL 16 fresh bootstrap과 disposable `0061 → 0100 → 0101` 전환 리허설,
-N150의 read-only catalog fingerprint preflight를 통과했다.
+없다. 최신 `main` 리베이스에서 post-`0061` location-audit·동의 이력 migration이 M05의 옛
+`0062~0064` 번호와 충돌함을 확인했다. ADR-065에 따라 active graph는 새 설치용 `0100` 기준선과
+이 upstream 변경과 M05를 함께 적용하는 `0101` 하나로 정리했다. N150의 read-only `0061`
+catalog fingerprint preflight, 통합 `0101` fresh bootstrap·`0061` rebaseline rehearsal,
+focused PostgreSQL 회귀 147건을 통과했다.
 
-**다음 한 작업**: focused regression·적대 리뷰·N150 browser E2E를 마친 뒤 최신 `main`으로
+**다음 한 작업**: 두 전문 적대 리뷰와 N150 browser E2E를 실행한 뒤 최신 `main`으로 다시
 rebase하여 draft PR #466을 병합한다. production DB mutation과 M05 activation은 별도 승인 전까지
 하지 않는다.
 

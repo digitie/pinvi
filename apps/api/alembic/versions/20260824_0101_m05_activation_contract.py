@@ -1,11 +1,12 @@
-"""M05 activation 계약을 새 Alembic 기준선 위에 한 번에 적용한다.
+"""현재 main과 M05 계약을 새 Alembic 기준선 위에 한 번에 적용한다.
 
 Revision ID: 20260824_0101
 Revises: 20260824_0100
 Create Date: 2026-08-24
 
-`20260824_0062`~`0064`의 최종 DDL만 보존한다. 이 revision은 새 설치와
-ADR-062의 명시적 0061 rebaseline 뒤에만 실행된다.
+N150의 `0061` 기준선 뒤에 합류한 location-audit·동의 이력 변경과 M05의 충돌했던
+옛 `0062`~`0064` DDL을 모두 이 revision에 통합한다. 이 revision은 새 설치와
+ADR-063의 명시적 `0061` rebaseline 뒤에만 실행된다.
 """
 
 from __future__ import annotations
@@ -31,6 +32,11 @@ _DOLLAR_QUOTE = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$")
 _BOUNDARY_CONTRACT_CHECK = (
     "contract_version = 'pinvi-cache-target-final-boundary/v1' "
     "AND status = 'succeeded' AND schema_revision = '20260824_0101'"
+)
+_LOCATION_ACCESS_LOG_PURPOSE_CONSTRAINT = "ck_location_access_log_ck_location_access_log_purpose"
+_LOCATION_ACCESS_LOG_PURPOSES = (
+    "'viewport_query', 'nearby_attractions', 'weather_at_coord', "
+    "'feature_request', 'region_covering', 'region_radius', 'third_party_place_search'"
 )
 
 
@@ -203,6 +209,120 @@ def _advance_boundary_contract() -> None:
     )
 
 
+def _install_location_audit_purpose_contract() -> None:
+    """현재 main의 `/search` 감사 purpose를 0061 기준선 위에 반영한다."""
+
+    op.execute(
+        f"ALTER TABLE app.location_access_log DROP CONSTRAINT "
+        f"{_LOCATION_ACCESS_LOG_PURPOSE_CONSTRAINT}"
+    )
+    op.execute(
+        f"ALTER TABLE app.location_access_log ADD CONSTRAINT "
+        f"{_LOCATION_ACCESS_LOG_PURPOSE_CONSTRAINT} "
+        f"CHECK (purpose IN ({_LOCATION_ACCESS_LOG_PURPOSES}))"
+    )
+
+
+def _install_user_consent_event_history() -> None:
+    """T-326의 현재 상태 이력 테이블과 정직한 0061 data backfill을 적용한다."""
+
+    op.create_table(
+        "user_consent_events",
+        sa.Column(
+            "event_id",
+            sa.dialects.postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
+        sa.Column("user_id", sa.dialects.postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("consent_type", sa.String(length=32), nullable=False),
+        sa.Column("version", sa.String(length=32), nullable=False),
+        sa.Column("event", sa.String(length=16), nullable=False),
+        sa.Column("source", sa.String(length=16), nullable=False),
+        sa.Column(
+            "occurred_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.PrimaryKeyConstraint("event_id", name=op.f("pk_user_consent_events")),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["app.users.user_id"],
+            name=op.f("fk_user_consent_events_user_id"),
+            ondelete="CASCADE",
+        ),
+        sa.CheckConstraint(
+            "consent_type IN ('tos', 'privacy', 'lbs_tos', 'location_collection', "
+            "'demographic_use', 'marketing')",
+            name=op.f("ck_user_consent_events_consent_type"),
+        ),
+        sa.CheckConstraint(
+            "event IN ('agreed', 'withdrawn')",
+            name=op.f("ck_user_consent_events_event"),
+        ),
+        sa.CheckConstraint(
+            "source IN ('register', 'profile_complete', 'settings', 'backfill')",
+            name=op.f("ck_user_consent_events_source"),
+        ),
+        schema="app",
+    )
+    op.create_index(
+        "ix_user_consent_events_user_type_time",
+        "user_consent_events",
+        ["user_id", "consent_type", "occurred_at"],
+        schema="app",
+    )
+    # `0101`은 M05 object용 별도 migration owner로도 실행한다. app schema의 새 table은
+    # 그 owner가 아니라 app schema owner가 소유해야 runtime privilege 경계가 기존 table과 같다.
+    op.execute(
+        sa.text(
+            """
+            DO $app_owner$
+            DECLARE
+                app_owner name;
+            BEGIN
+                SELECT namespace.nspowner::regrole::text::name
+                  INTO app_owner
+                  FROM pg_namespace namespace
+                 WHERE namespace.nspname = 'app';
+                IF app_owner IS NULL THEN
+                    RAISE EXCEPTION 'app schema owner is unavailable';
+                END IF;
+                EXECUTE format('ALTER TABLE app.user_consent_events OWNER TO %I', app_owner);
+            END
+            $app_owner$
+            """
+        )
+    )
+    # 현재 상태만 남은 0061 행에서 정확히 복원할 수 있는 agreement/withdrawal만 기록한다.
+    # 재동의로 사라진 과거 cycle은 추정해 만들지 않는다.
+    op.execute(
+        sa.text(
+            """
+            INSERT INTO app.user_consent_events
+                (user_id, consent_type, version, event, source, occurred_at)
+            SELECT user_id, consent_type, version, event, 'backfill', occurred_at
+            FROM (
+                SELECT c.user_id, c.consent_type, c.version, 'agreed' AS event, c.agreed_at AS occurred_at
+                FROM app.user_consents c
+                UNION ALL
+                SELECT c.user_id, c.consent_type, c.version, 'withdrawn', c.withdrawn_at
+                FROM app.user_consents c
+                WHERE c.withdrawn_at IS NOT NULL
+            ) AS restored
+            WHERE NOT EXISTS (
+                SELECT 1 FROM app.user_consent_events e
+                WHERE e.user_id = restored.user_id
+                  AND e.consent_type = restored.consent_type
+                  AND e.event = restored.event
+                  AND e.source = 'backfill'
+            )
+            """
+        )
+    )
+
+
 def _replace_admin_audit_guard() -> None:
     """restore 뒤 admin reflection도 기존 원장에 append만 하도록 고정한다."""
 
@@ -226,8 +346,7 @@ def _replace_admin_audit_guard() -> None:
     )
     op.execute("DROP TRIGGER IF EXISTS trg_admin_audit_log_append_only ON app.admin_audit_log")
     op.execute(
-        "DROP TRIGGER IF EXISTS trg_admin_audit_log_truncate_append_only "
-        "ON app.admin_audit_log"
+        "DROP TRIGGER IF EXISTS trg_admin_audit_log_truncate_append_only ON app.admin_audit_log"
     )
     op.execute(
         sa.text(
@@ -251,9 +370,7 @@ def _replace_admin_audit_guard() -> None:
         "trg_admin_audit_log_append_only",
         "trg_admin_audit_log_truncate_append_only",
     ):
-        op.execute(
-            sa.text(f"ALTER TABLE app.admin_audit_log ENABLE ALWAYS TRIGGER {trigger_name}")
-        )
+        op.execute(sa.text(f"ALTER TABLE app.admin_audit_log ENABLE ALWAYS TRIGGER {trigger_name}"))
 
 
 def _grant_receipt_fence_access(bind: sa.Connection) -> None:
@@ -502,6 +619,8 @@ def _assert_m05_acl(bind: sa.Connection) -> None:
 
 
 def upgrade() -> None:
+    _install_location_audit_purpose_contract()
+    _install_user_consent_event_history()
     # named ops default ACL까지 검사하려면 schema를 먼저 확보해야 한다. 이 revision은
     # partial legacy M05 object를 덮어쓰지 않고 transaction 전체를 fail-close한다.
     op.execute("CREATE SCHEMA IF NOT EXISTS ops")

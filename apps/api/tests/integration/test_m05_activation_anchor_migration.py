@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
@@ -60,11 +61,25 @@ async def _drop_database(maintenance_url: str, database_url: str) -> None:
 
 
 def _role_database_url(database_url: str, *, role: str, password: str, database: str) -> str:
-    return make_url(database_url).set(
-        username=role,
-        password=password,
-        database=database,
-    ).render_as_string(hide_password=False)
+    return (
+        make_url(database_url)
+        .set(
+            username=role,
+            password=password,
+            database=database,
+        )
+        .render_as_string(hide_password=False)
+    )
+
+
+def _rebaseline_module():  # type: ignore[no-untyped-def]
+    path = API_DIR.parents[1] / "scripts" / "alembic_rebaseline.py"
+    spec = importlib.util.spec_from_file_location("pinvi_alembic_rebaseline_test", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 @pytest.mark.asyncio
@@ -114,9 +129,7 @@ async def test_0101_installs_m05_final_contract_with_minimal_public_surface(
                         "AND NOT trigger_row.tgisinternal"
                     )
                 )
-                assert {
-                    (row[0], row[1], row[2], row[3]) for row in trigger_rows
-                } >= {
+                assert {(row[0], row[1], row[2], row[3]) for row in trigger_rows} >= {
                     ("app", "admin_audit_log", "trg_admin_audit_log_append_only", "A"),
                     ("app", "admin_audit_log", "trg_admin_audit_log_truncate_append_only", "A"),
                     (
@@ -194,6 +207,165 @@ async def test_0101_installs_m05_final_contract_with_minimal_public_surface(
                         )
                     )
                 await connection.rollback()
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
+async def test_0101_absorbs_current_main_post_0061_contracts_and_backfill(
+    _database_url: str,
+) -> None:
+    """0101은 N150 0061의 location audit·동의 데이터를 현재 main 계약으로 전진시킨다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_0101_main")
+    user_id = uuid.uuid4()
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "INSERT INTO app.users (user_id, email, nickname) "
+                        "VALUES (:user_id, :email, 'rebaseline')"
+                    ),
+                    {"user_id": user_id, "email": f"{user_id.hex}@pinvi.test"},
+                )
+                await connection.execute(
+                    text(
+                        """
+                        INSERT INTO app.user_consents
+                            (user_id, consent_type, version, agreed_at, withdrawn_at)
+                        VALUES
+                            (:user_id, 'tos', 'v1', '2026-01-01T00:00:00Z', NULL),
+                            (:user_id, 'location_collection', 'v1', '2026-01-02T00:00:00Z',
+                             '2026-01-03T00:00:00Z')
+                        """
+                    ),
+                    {"user_id": user_id},
+                )
+        finally:
+            await engine.dispose()
+
+        activation = _alembic(target_url, "upgrade", "20260824_0101")
+        assert activation.returncode == 0, activation.stderr
+
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.connect() as connection:
+                location_purpose_check = await connection.scalar(
+                    text(
+                        "SELECT pg_get_constraintdef(constraint_row.oid) "
+                        "FROM pg_constraint constraint_row "
+                        "JOIN pg_class relation ON relation.oid = constraint_row.conrelid "
+                        "JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace "
+                        "WHERE namespace.nspname = 'app' "
+                        "AND relation.relname = 'location_access_log' "
+                        "AND constraint_row.conname = "
+                        "'ck_location_access_log_ck_location_access_log_purpose'"
+                    )
+                )
+                assert location_purpose_check is not None
+                assert "third_party_place_search" in location_purpose_check
+
+                events = (
+                    await connection.execute(
+                        text(
+                            "SELECT consent_type, event, source "
+                            "FROM app.user_consent_events "
+                            "WHERE user_id = :user_id "
+                            "ORDER BY consent_type, event"
+                        ),
+                        {"user_id": user_id},
+                    )
+                ).all()
+                assert events == [
+                    ("location_collection", "agreed", "backfill"),
+                    ("location_collection", "withdrawn", "backfill"),
+                    ("tos", "agreed", "backfill"),
+                ]
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
+async def test_rebaseline_0061_to_0100_then_0101_preserves_data_and_runs_backfill(
+    _database_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """N150과 같은 0061 catalog는 version row만 전환한 뒤 current-main/M05 0101을 적용한다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_rebaseline")
+    user_id = uuid.uuid4()
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "INSERT INTO app.users (user_id, email, nickname) "
+                        "VALUES (:user_id, :email, 'rebaseline')"
+                    ),
+                    {"user_id": user_id, "email": f"{user_id.hex}@pinvi.test"},
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO app.user_consents "
+                        "(user_id, consent_type, version, agreed_at, withdrawn_at) "
+                        "VALUES (:user_id, 'privacy', 'v1', '2026-02-01T00:00:00Z', NULL)"
+                    ),
+                    {"user_id": user_id},
+                )
+                await connection.execute(
+                    text("UPDATE app.alembic_version SET version_num = '20260821_0061'")
+                )
+        finally:
+            await engine.dispose()
+
+        module = _rebaseline_module()
+        receipt_payloads: list[dict[str, object]] = []
+        monkeypatch.setattr(
+            module,
+            "_prepare_receipt",
+            lambda _path, payload: receipt_payloads.append(payload),
+        )
+        monkeypatch.setattr(
+            module,
+            "_finalize_receipt",
+            lambda _path, payload: receipt_payloads.append(payload),
+        )
+        preflight = await module._apply(target_url, "0" * 64, tmp_path / "receipt.json")
+        assert preflight.version_rows == ("20260821_0061",)
+        assert [payload["state"] for payload in receipt_payloads] == ["prepared", "applied"]
+
+        activation = _alembic(target_url, "upgrade", "20260824_0101")
+        assert activation.returncode == 0, activation.stderr
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.connect() as connection:
+                assert (
+                    await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
+                    == "20260824_0101"
+                )
+                assert (
+                    await connection.scalar(
+                        text(
+                            "SELECT count(*) FROM app.user_consent_events "
+                            "WHERE user_id = :user_id AND source = 'backfill'"
+                        ),
+                        {"user_id": user_id},
+                    )
+                    == 1
+                )
         finally:
             await engine.dispose()
     finally:
@@ -281,9 +453,9 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
 
     try:
         for statement in (
-            f'CREATE ROLE "{fence_role}" LOGIN NOINHERIT PASSWORD \'{_ROLE_PASSWORD}\';',
-            f'CREATE ROLE "{app_owner}" LOGIN INHERIT PASSWORD \'{_ROLE_PASSWORD}\';',
-            f'CREATE ROLE "{migration_owner}" LOGIN INHERIT PASSWORD \'{_ROLE_PASSWORD}\' '
+            f"CREATE ROLE \"{fence_role}\" LOGIN NOINHERIT PASSWORD '{_ROLE_PASSWORD}';",
+            f"CREATE ROLE \"{app_owner}\" LOGIN INHERIT PASSWORD '{_ROLE_PASSWORD}';",
+            f"CREATE ROLE \"{migration_owner}\" LOGIN INHERIT PASSWORD '{_ROLE_PASSWORD}' "
             f'IN ROLE "{app_owner}";',
         ):
             await _execute_autocommit(maintenance_url, statement)
@@ -320,6 +492,16 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
                     )
                 )
                 assert owners.one() == (migration_owner, migration_owner)
+                assert (
+                    await connection.scalar(
+                        text(
+                            "SELECT relation.relowner::regrole::text "
+                            "FROM pg_class relation "
+                            "WHERE relation.oid = 'app.user_consent_events'::regclass"
+                        )
+                    )
+                    == app_owner
+                )
                 extension_access = await connection.scalar(
                     text(
                         "SELECT has_schema_privilege(:migration_owner, 'x_extension', 'USAGE') "

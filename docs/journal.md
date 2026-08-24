@@ -36,15 +36,17 @@
 CHANGELOG 항목 추가. 범위를 넘는 두 건은 T-326(동의 철회 이력이 재동의로 지워짐)·T-327(서버측
 동의 강제·버전 대조 부재, 국내 판정 bbox 한계)으로 분리했다.
 
-## 2026-08-24 (codex) — M05 Alembic rebaseline 구현·리허설
+## 2026-08-24 (codex) — M05 Alembic rebaseline 최신 main 통합
 
-- active migration graph를 `20260824_0100 → 20260824_0101`로 교체했다. `0100`은 clean
-  PostgreSQL 16의 `0061` app catalog 기준선이고, `0101`은 M05 anchor·append-only audit/receipt와
-  최소 ACL 계약을 통합한다.
+- 최신 `main` 리베이스에서 post-`0061`의 location-audit·동의 이벤트 `0062~0064`가 M05 branch의
+  같은 revision 번호와 충돌함을 확인했다. active graph는 `20260824_0100 → 20260824_0101`로 유지하되,
+  `0100`은 PostgreSQL 16 `0061` app catalog 기준선, `0101`은 upstream 변경과 M05
+  anchor·append-only audit/receipt·최소 ACL 계약을 함께 적용하도록 재정렬했다.
 - root-only rebaseline helper는 정확한 `0061` version row, final-boundary sentinel, M05 object
   부재, `COLLATE "C"` structural catalog fingerprint와 root-owned fresh backup checksum을 모두
   확인한 뒤 version row 한 행만 `0100`으로 바꾼다. PostgreSQL 16 disposable `0061 → 0100 → 0101`
-  리허설과 N150 read-only preflight가 통과했다.
+  리허설과 N150 read-only preflight가 통과했다. 통합 `0101`의 fresh bootstrap·rebaseline,
+  동의/위치 감사·M05 복구 focused PostgreSQL 회귀 147건도 통과했다.
 - `verify_m05_hotswap_release_receipt`를 migration owner 소유 `SECURITY DEFINER` 함수로 추가해,
   fence role에 `x_extension` 권한을 넓히지 않고 receipt hash를 검증한다. 운영 DB mutation과 M05
   activation은 수행하지 않았다.
@@ -54,7 +56,8 @@ CHANGELOG 항목 추가. 범위를 넘는 두 건은 T-326(동의 철회 이력�
 - N150 운영 DB를 read-only로 확인했다. PostgreSQL 16, `20260821_0061`, 실제 app 데이터 보유,
   M05 `ops` 객체 없음이다. API mount에서는 backup artifact를 확인할 수 없으므로 production
   전환 전 fresh root-only snapshot을 필수 gate로 둔다.
-- ADR-062는 active graph를 `0100` full baseline과 `0101` M05 통합 revision만으로 재구성한다.
+- ADR-065는 active graph를 `0100` full baseline과 current main·M05 `0101` 통합 revision만으로
+  재구성한다.
   과거 revision upgrade는 지원하지 않되, 현재 N150 `0061` DB는 backup proof와 catalog fingerprint가
   모두 맞을 때에만 version row를 `0100`으로 전환하고 `0101`을 적용한다.
 - M05 activation은 계속 `false`이며 production DB mutation은 별도 승인 전까지 하지 않는다.

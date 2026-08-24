@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ADR-062의 단발 0061 → 0100 Alembic metadata rebaseline 도구.
+"""ADR-063의 단발 0061 → 0100 Alembic metadata rebaseline 도구.
 
 이 도구는 기존 migration을 실행하거나 app data/DDL을 바꾸지 않는다. `check`는
 읽기 전용 preflight이고, `apply`는 검증된 0061 catalog의 `app.alembic_version`
@@ -29,7 +29,9 @@ from sqlalchemy.pool import NullPool
 LEGACY_REVISION = "20260821_0061"
 BASELINE_REVISION = "20260824_0100"
 _EXPECTED_CATALOG_LINES = 1590
-_EXPECTED_CATALOG_SHA256 = "30257369c7141b19d77071ce6414c4cdc8195a66bac7dc0a49aa72cd66e03cf7"
+_EXPECTED_CATALOG_SHA256 = (
+    "30257369c7141b19d77071ce6414c4cdc8195a66bac7dc0a49aa72cd66e03cf7"
+)
 _CHECKSUM = re.compile(r"^[0-9a-f]{64}$")
 
 # pg_dump 기반 기준선은 constraint/source location을 다시 정규화한다. 그래서 이
@@ -217,7 +219,9 @@ def _read_checksum(checksum_file: Path) -> str:
         raise RebaselineError("backup checksum file is unreadable") from exc
     digest = first_line.split(maxsplit=1)[0].lower()
     if _CHECKSUM.fullmatch(digest) is None:
-        raise RebaselineError("backup checksum file does not start with a SHA-256 digest")
+        raise RebaselineError(
+            "backup checksum file does not start with a SHA-256 digest"
+        )
     return digest
 
 
@@ -239,7 +243,9 @@ def _prepare_receipt(path: Path, payload: dict[str, Any]) -> None:
     except OSError as exc:
         raise RebaselineError("receipt directory is unavailable") from exc
     if parent_metadata.st_uid != 0 or parent_metadata.st_mode & 0o022:
-        raise RebaselineError("receipt directory must be root-owned and not writable by group/other")
+        raise RebaselineError(
+            "receipt directory must be root-owned and not writable by group/other"
+        )
     try:
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except OSError as exc:
@@ -262,15 +268,21 @@ async def _catalog_fingerprint(connection: AsyncConnection) -> tuple[int, str]:
     return len(rows), hashlib.sha256(payload).hexdigest()
 
 
-async def _read_version_rows(connection: AsyncConnection, *, lock: bool) -> tuple[str, ...]:
+async def _read_version_rows(
+    connection: AsyncConnection, *, lock: bool
+) -> tuple[str, ...]:
     suffix = " FOR UPDATE" if lock else ""
     rows = await connection.execute(
-        text(f"SELECT version_num FROM app.alembic_version ORDER BY version_num{suffix}")
+        text(
+            f"SELECT version_num FROM app.alembic_version ORDER BY version_num{suffix}"
+        )
     )
     return tuple(rows.scalars())
 
 
-async def _preflight(connection: AsyncConnection, *, lock_version: bool) -> CatalogPreflight:
+async def _preflight(
+    connection: AsyncConnection, *, lock_version: bool
+) -> CatalogPreflight:
     version_rows = await _read_version_rows(connection, lock=lock_version)
     sentinel = (await connection.execute(text(_LEGACY_SENTINELS_SQL))).mappings().one()
     catalog_lines, catalog_sha256 = await _catalog_fingerprint(connection)
@@ -284,7 +296,9 @@ async def _preflight(connection: AsyncConnection, *, lock_version: bool) -> Cata
     if preflight.server_version_num // 10000 != 16:
         raise RebaselineError("rebaseline requires PostgreSQL 16")
     if preflight.version_rows != (LEGACY_REVISION,):
-        raise RebaselineError("database must have exactly one 20260821_0061 alembic version row")
+        raise RebaselineError(
+            "database must have exactly one 20260821_0061 alembic version row"
+        )
     if not bool(sentinel["boundary_is_0061"]):
         raise RebaselineError("0061 final-boundary contract sentinel is missing")
     if not bool(sentinel["m05_objects_absent"]):
@@ -315,7 +329,9 @@ async def _check(database_url: str) -> CatalogPreflight:
         await engine.dispose()
 
 
-async def _apply(database_url: str, backup_sha256: str, receipt: Path) -> CatalogPreflight:
+async def _apply(
+    database_url: str, backup_sha256: str, receipt: Path
+) -> CatalogPreflight:
     engine = create_async_engine(database_url, poolclass=NullPool)
     try:
         async with engine.begin() as connection:
@@ -337,10 +353,14 @@ async def _apply(database_url: str, backup_sha256: str, receipt: Path) -> Catalo
                 {"baseline": BASELINE_REVISION, "legacy": LEGACY_REVISION},
             )
             if result.rowcount != 1:
-                raise RebaselineError("alembic version row changed during the locked transition")
+                raise RebaselineError(
+                    "alembic version row changed during the locked transition"
+                )
             version_rows = await _read_version_rows(connection, lock=False)
             if version_rows != (BASELINE_REVISION,):
-                raise RebaselineError("post-update alembic version row is not 20260824_0100")
+                raise RebaselineError(
+                    "post-update alembic version row is not 20260824_0100"
+                )
     finally:
         await engine.dispose()
 

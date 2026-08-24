@@ -3053,10 +3053,7 @@ fixture mutation 전에 fail-close할 수 있다.
   때문에 원리적으로 불가능. (c) kor-travel-geo 위임 — 지도 진입마다 왕복이 추가되고 실패 모드가
   생기는데, 얻는 것은 안내 문구의 정확도뿐이라 지금은 비용이 이익을 넘는다.
 
-- 다음 신규 ADR = **ADR-065**
-- 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.
-
-## ADR-062: Pinvi Alembic 이력은 0100 기준선과 0101 M05 통합 revision으로 재기준화한다
+## ADR-065: Pinvi Alembic 이력은 0100 기준선과 0101 현재 main·M05 통합 revision으로 재기준화한다
 
 - **상태**: accepted
 - **날짜**: 2026-08-24
@@ -3066,8 +3063,10 @@ fixture mutation 전에 fail-close할 수 있다.
 
 Pinvi의 active Alembic graph는 `20260601_0001`부터 `20260821_0061`까지 긴
 forward-only 이력을 갖고 있다. 현재 N150 운영 DB는 PostgreSQL 16에서 정확히
-`20260821_0061`을 가리키며, `app` schema에 실제 데이터가 있다. 반면 M05의
-`0062`·`0063`과 receipt `0064`는 아직 `main`이나 운영 DB에 배포되지 않았다.
+`20260821_0061`을 가리키며, `app` schema에 실제 데이터가 있다. 최신 `main`은 그 뒤
+location audit purpose와 동의 이벤트/backfill을 `0062`·`0063`·`0064`에 추가했다. M05 branch도
+독립적으로 같은 revision 번호를 사용했으므로, 두 계보를 그대로 합치면 Alembic revision ID 충돌과
+`0061` parent가 없는 분기 그래프가 된다.
 
 사용자는 과거 revision별 in-place upgrade 호환을 더 이상 유지하지 않기로 했다. 다만
 이 결정은 운영 데이터 삭제 권한을 주지 않는다. 따라서 새 설치는 간결한 기준선으로
@@ -3078,8 +3077,9 @@ forward-only 이력을 갖고 있다. 현재 N150 운영 DB는 PostgreSQL 16에�
 - active Alembic graph는 다음 두 revision만 유지한다.
   - `20260824_0100`: `down_revision = None`인 Pinvi `app` schema의 새 설치 기준선.
     기존 `0001`부터 `0061`까지의 최종 catalog를 재현한다.
-  - `20260824_0101`: `down_revision = 20260824_0100`이며 기존 M05
-    `0062`·`0063`·`0064`의 DDL과 권한 계약을 하나로 통합한다.
+  - `20260824_0101`: `down_revision = 20260824_0100`이며 current main의
+    location audit purpose, 동의 이벤트 table/backfill과 M05의 anchor·audit guard·receipt
+    DDL/권한 계약을 하나로 통합한다.
 - 과거 revision 파일은 active graph에서 제거한다. 과거 DB의 일반
   `alembic upgrade head`는 지원하지 않는다.
 - 새 DB는 빈 catalog에서 `alembic upgrade head`로 `0100 → 0101`을 적용한다.
@@ -3092,9 +3092,10 @@ forward-only 이력을 갖고 있다. 현재 N150 운영 DB는 PostgreSQL 16에�
     모두 일치한다. fingerprint line의 정렬은 PostgreSQL locale 차이를 없애기 위해
     `COLLATE "C"`로 고정한다.
   - root-only producer가 만든 새 backup의 checksum 검증 결과가 명시적으로 주어진다.
-- rebaseline 뒤에만 표준 `alembic upgrade 20260824_0101`을 실행한다. 실패 시
-  version을 임의로 stamp하거나 이전 migration을 되살리지 않고, 검증한 backup으로
-  복구한 뒤 원인을 수정한다.
+- rebaseline 뒤에만 표준 `alembic upgrade 20260824_0101`을 실행한다. 이 단계가 N150의
+  `0061` data에 동의 이벤트 backfill과 location audit 계약을 적용한 뒤 M05 object를 만든다.
+  실패 시 version을 임의로 stamp하거나 이전 migration을 되살리지 않고, 검증한 backup으로 복구한
+  뒤 원인을 수정한다.
 - `0061`이 아닌 기존 DB, fingerprint가 다른 DB, backup이 확인되지 않은 DB는
   rebaseline을 거부한다. 해당 DB는 검증된 backup을 새 `0101` DB로 복구하는 별도
   절차만 허용한다.
@@ -3106,17 +3107,18 @@ forward-only 이력을 갖고 있다. 현재 N150 운영 DB는 PostgreSQL 16에�
 
 ### 근거
 
-`0062` 이후는 아직 공유된 배포 계약이 아니므로 M05를 한 revision으로 합쳐도 remote
-history를 깨지 않는다. 반면 N150 DB에는 실제 데이터가 있으므로 단순 drop/recreate나
-무검증 `alembic stamp`는 데이터 보존과 audit chain 신뢰를 훼손한다. locale-independent structural
-fingerprint와 fresh backup을 함께 요구하면 history 유지 비용은 끝내면서도 현재 운영 catalog를
-fail-closed로 전환할 수 있다.
+옛 M05와 최신 main이 같은 `0062`·`0063`·`0064` 식별자를 사용하므로 두 계보를 유지한 채
+병합하는 것은 불가능하다. history 호환을 종료한 이상, N150의 실제 기준점인 `0061`을 `0100`으로
+보존하고 그 뒤의 현재 기능을 `0101` 하나에 명시적으로 합치는 편이 가장 작고 검증 가능하다.
+반면 N150 DB에는 실제 데이터가 있으므로 단순 drop/recreate나 무검증 `alembic stamp`는 데이터
+보존과 audit chain 신뢰를 훼손한다. locale-independent structural fingerprint와 fresh backup을 함께
+요구하면 history 유지 비용은 끝내면서도 현재 운영 catalog를 fail-closed로 전환할 수 있다.
 
 ### 결과 (긍정)
 
 - 새 설치와 CI는 `0100 → 0101` 두 단계만 검증한다.
-- M05의 DDL·ACL·append-only receipt와 owner-bound verification 계약은 하나의 reviewable
-  revision에 모인다.
+- current main의 post-`0061` data contract와 M05의 DDL·ACL·append-only receipt,
+  owner-bound verification 계약은 하나의 reviewable revision에 모인다.
 - 운영 `0061` 데이터는 재생성 없이 명시적·감사 가능한 전환 경로를 가진다.
 
 ### 결과 (부정)
@@ -3131,3 +3133,6 @@ fail-closed로 전환할 수 있다.
 - `0100` fresh bootstrap과 N150 `0061 → 0100 → 0101` disposable rehearsal을 PostgreSQL 16에서
   검증한다.
 - production rebaseline은 PR merge 뒤에도 별도 운영 변경 승인과 fresh backup 검증이 있어야 한다.
+
+- 다음 신규 ADR = **ADR-066**
+- 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

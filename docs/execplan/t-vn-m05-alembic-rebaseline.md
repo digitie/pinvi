@@ -2,12 +2,13 @@
 
 ## 상태
 
-구현·로컬 리허설 완료, 최종 검증·리뷰·PR 병합 진행 중. ADR-062의 구현 정본이다.
+최신 main 통합 회귀를 완료했다. N150 browser E2E·최종 적대 리뷰·PR 병합을 진행한다. ADR-065의
+구현 정본이다.
 
 ## 목표
 
 긴 Pinvi Alembic 이력을 active graph에서 제거하고, 새 설치는 `20260824_0100` 기준선과
-`20260824_0101` M05 통합 revision만 적용하게 한다. N150 운영 DB의 실제 사용자·감사 데이터는
+`20260824_0101` 현재 main·M05 통합 revision만 적용하게 한다. N150 운영 DB의 실제 사용자·감사 데이터는
 삭제하지 않고, 검증된 `20260821_0061 → 20260824_0100 → 20260824_0101` 전환만 허용한다.
 
 ## 확인된 운영 사실
@@ -23,11 +24,13 @@
 
 1. active `apps/api/alembic/versions/`를 `0100`/`0101` 두 revision으로 재구성한다.
 2. `0100`이 fresh PostgreSQL 16 catalog에서 `0061`의 Pinvi-owned schema를 재현하게 한다.
-3. `0101`이 M05 `0062`·`0063`·`0064` 계약을 하나로 적용하게 한다.
+3. `0101`이 N150 `0061` 뒤 current main에 합류한 location-audit·동의 이력 변경과 M05의
+   충돌했던 옛 `0062`·`0063`·`0064` 계약을 하나로 적용하게 한다.
 4. root-only rebaseline helper가 `0061` catalog fingerprint와 fresh backup proof를 확인한 뒤
    version row만 `0100`으로 바꾸게 한다.
-5. fresh bootstrap과 `0061 → 0100 → 0101` rehearsal, M05 recovery/preflight를 통과했다.
-   N150 browser E2E와 최종 적대 리뷰를 남겼다.
+5. 이전 기준선의 fresh bootstrap과 `0061 → 0100 → 0101` rehearsal, M05 recovery/preflight를
+   통과했다. 최신 main 통합본으로 같은 검증을 다시 실행하고 N150 browser E2E와 최종 적대 리뷰를
+   남긴다.
 
 ## 비범위
 
@@ -59,8 +62,8 @@
 
 ## 완료 기준
 
-- fresh DB가 `0100 → 0101`로 bootstrap되고 app catalog fingerprint가 기준값과 일치한다. (통과)
-- disposable `0061` DB가 data row 보존 상태로 rebaseline 후 `0101`까지 올라간다. (통과)
+- fresh DB가 `0100 → 0101`로 bootstrap되고 app catalog fingerprint가 기준값과 일치한다.
+- disposable `0061` DB가 data row 보존 상태로 rebaseline 후 `0101`까지 올라간다.
 - helper는 unknown revision, data-less/dirty catalog, M05 object 존재, backup proof 누락을 모두 거부한다.
 - M05 focused PostgreSQL 검증·N150 browser E2E·두 전문 적대 리뷰가 통과한다.
 - production 전환은 merge 뒤 별도 승인 gate로 남고 M05 activation은 `false`다.
