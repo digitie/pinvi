@@ -142,7 +142,7 @@ def test_m05_restore_drill_serializes_target_recreation_and_preflights_staging_r
     assert "SELECT pg_advisory_unlock(1414679892, 1213421392);" in source
     assert "_ProvisioningLock" not in source
     assert "PINVI_RESTORE_COORDINATION_DATABASE_URL" not in source
-    assert "PINVI_RESTORE_HOTSWAP_EXECUTE\": \"1\"" not in source
+    assert 'PINVI_RESTORE_HOTSWAP_EXECUTE": "1"' not in source
     assert '"PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL": "precheck"' in source
 
 

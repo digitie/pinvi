@@ -15,9 +15,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[4]
 HOTSWAP_SCRIPT = ROOT / "scripts/restore-hotswap.sh"
-M05_ACTIVATION_SCHEMA = (
-    ROOT / "apps/api/alembic/baselines/20260824_0101_m05_activation.sql"
-)
+M05_ACTIVATION_SCHEMA = ROOT / "apps/api/alembic/baselines/20260824_0101_m05_activation.sql"
 TEST_PASSWORD = "m05-test-only-password"
 AUDIT_FIXTURE_OCCURRED_AT = "2026-08-24T03:00:00+00:00"
 
@@ -834,7 +832,10 @@ def test_restore_hotswap_preflight_rejects_real_noncanonical_topologies_before_m
 
             assert result.returncode == 3, result.stdout + result.stderr
             assert case.expected_failure in result.stdout + result.stderr
-            if case.expected_failure == "restored admin audit hash chain or content hash is invalid":
+            if (
+                case.expected_failure
+                == "restored admin audit hash chain or content hash is invalid"
+            ):
                 _assert_source_retained_with_active_fence(
                     tools,
                     case,
@@ -1725,9 +1726,7 @@ SELECT (SELECT oid::text FROM pg_namespace WHERE nspname = 'app'),
             failed_app_connect,
             failed_app_insert,
             failed_lock_gone,
-        ) = (
-            after_failure.stdout.strip().split("|")
-        )
+        ) = after_failure.stdout.strip().split("|")
         assert failed_app_oid and failed_app_oid != app_oid
         assert failed_previous_oid == app_oid
         assert failed_restore_missing == "t"
