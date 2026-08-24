@@ -60,10 +60,6 @@
 
 ## 지도 / 위치
 
-- [ ] **T-328** — `/search`가 발행하는 `third_party_place_search`가 `ck_location_access_log_purpose`
-  CHECK(6종)에 없어 체인 적재가 거부되고, drain이 배치 전체를 abort해 이후 모든 위치 감사 기록이
-  멈춘다(위치정보법 §16 확인자료). 제약을 실제 계약에 맞추고 drain을 행 단위로 격리한다.
-  T-325 리뷰 조사에서 발견. 브랜치 `agent/claude-t328-location-audit-purpose`.
 - [ ] **T-326** — 동의 철회 이력이 재동의로 지워진다. `record_consents`는 같은
   `(user_id, consent_type, version)` row를 in-place 갱신해 `withdrawn_at`을 `None`으로 되돌리고
   `agreed_at`을 덮어쓴다(PK가 그 3튜플이고 모든 화면이 `v1.0`을 쓴다). 철회했다는 사실 자체가

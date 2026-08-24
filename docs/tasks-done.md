@@ -20,6 +20,18 @@
 
 ## 2026-08-24
 
+- [x] **T-328** — `/search` 감사 purpose를 DB 계약에 맞추고 drain을 행 단위로 격리한다.
+      (완료: 2026-08-24, PR #470, claude)
+      미들웨어가 `third_party_place_search`를 발행하는데 `ck_location_access_log_purpose`는 6종만
+      허용해 체인 적재가 거부됐고(라이브 DB에서 재현), drain이 배치를 한 트랜잭션으로 커밋해
+      위반 1건이 배치를 abort → `_drain_loop`가 같은 head 행을 무한 재시도 → **`/search` 좌표 요청
+      한 번이 이후 모든 위치 감사 기록을 영구 정지**시켰다(위치정보법 §16 확인자료).
+      마이그레이션 `20260824_0062`로 제약을 7종으로 넓히고(downgrade는 append-only trigger 때문에
+      `NOT VALID`), drain을 SAVEPOINT로 행 격리했다. 새 purpose 추가 시 마이그레이션 누락을 잡는
+      정적 계약 테스트와, 체인 테이블까지 확인하는 통합 테스트 2건을 추가했다(기존 테스트는 outbox만
+      봐서 이 결함에도 green이었다). 적대적 리뷰가 head pin 재결박 누락과 `ruff format` red를 잡아
+      함께 고쳤다 — 후자는 fail-fast 때문에 이 PR의 테스트가 CI에서 한 번도 돌지 않게 만들고 있었다.
+
 - [x] **T-325** — 웹·앱 지도의 최초 중심점을 단말기 위치로 잡는다. (완료: 2026-08-24, PR #469, claude)
       `docs/architecture/user-location.md` §1이 "지도 초기 중심점(앱 진입 시), 시군구 수준(~1km),
       세션당 1회"를 사양으로 두고 §5에 폴백 체인까지 규정했으나 미구현이었다.
