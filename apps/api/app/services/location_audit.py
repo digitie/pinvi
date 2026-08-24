@@ -17,7 +17,6 @@ from decimal import Decimal
 
 from fastapi import FastAPI
 from sqlalchemy import func, select, update
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -152,7 +151,13 @@ async def drain_location_audit_outbox(session: AsyncSession, *, batch_size: int 
                     occurred_at=event.occurred_at,
                     commit=False,
                 )
-        except SQLAlchemyError:
+        except Exception:
+            # `SQLAlchemyError`만 잡으면 부족하다 — 이미 적재된 비유한 좌표(NaN/Infinity)는
+            # `_coord_str`의 quantize에서 `InvalidOperation`을 던지는데 그것은 `ArithmeticError`
+            # 계열이라 DB 예외가 아니다. 그 한 행이 배치를 탈출시키면 T-328이 고친 "감사 전면 정지"가
+            # 그대로 재현된다. 새 행은 미들웨어가 막지만(T-330), 이미 outbox에 있는 행은 여기서만
+            # 막을 수 있다.
+            #
             # 실패 행은 `processed_at`을 채우지 않아 다음 drain에서 다시 시도된다. 다만 뒤 행을
             # 막지는 않는다. 원인은 로그로 드러내야 조용히 유실되지 않는다.
             logger.warning(

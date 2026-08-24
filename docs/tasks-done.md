@@ -20,6 +20,22 @@
 
 ## 2026-08-24
 
+- [x] **T-330** — 위치 감사가 **핸들러가 선언한 좌표만** 기록한다. (완료: 2026-08-24, PR TBD, claude)
+      미들웨어가 query string(`lat`/`lng`/`lon`/`latitude`/`longitude`)을 추측해 읽던 것을 없애고
+      `request.state.location_audit_coord`를 유일 정본으로 삼았다. 추측은 확인자료를 세 방향으로
+      오염시켰다 — (a) 핸들러가 무시한 파라미터를 "썼다"고 적었고(`/search?q=&lat=`의 거짓 Kakao
+      제공 기록, `/features/in-bounds`의 뷰포트를 사용자 위치로 기록), (b) 별칭 우선순위가
+      `lng`→`lon`이라 `?lon=127&lng=999`가 **핸들러와 다른 좌표**를 기록했으며, (c) `?lng=abc`의
+      `InvalidOperation`이 `except ValueError`를 통과해 정상 200을 500으로 바꿨다. 대신
+      `/features/nearby`·`/regions/*` 핸들러가 좌표를 명시 선언하게 하고 경로별 감사 여부를 통합
+      테스트 8건으로 고정했다 — 기존에는 이 경로들의 감사를 단언하는 테스트가 하나도 없어, fallback을
+      지우면 법정 기록이 green인 채 사라질 수 있었다. 비유한 좌표(NaN/Infinity)는 enqueue 전에
+      차단하고 drain 격리를 `Exception`으로 넓혀, 이미 적재된 poison 행이 T-328이 고친 "감사 전면
+      정지"를 재현하지 못하게 했다. `viewport_query`/`weather_at_coord`는 발행을 중단했다(뷰포트와
+      feature 좌표는 개인위치정보가 아니다). 과거 거짓 행은 append-only 보증을 깨지 않기 위해
+      삭제하지 않고 `lbs-act.md` §3.2에 정오표로 해석 규칙을 고정했다. 문서 정정: `/geo/reverse`의
+      `reverse_geocode` 적재는 문서 3곳이 규정했지만 **구현된 적이 없다**.
+
 - [x] **T-327** — 서버측 위치 동의 게이트와 약관 버전 정본. (완료: 2026-08-24, PR TBD, claude)
       `user-location.md` §2 "서버는 다음 요청부터 위치 추론·기록 거부"와 `api/users.md` §3.3
       "철회 → 사용자 좌표 응답 차단"이 미구현이라 게이트가 전적으로 클라이언트 책임이었다 —

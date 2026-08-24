@@ -466,6 +466,7 @@ async def features_nearby(
     # 사용자 자신의 위치를 필수로 받는 경로다 — 동의 없이 좌표를 받지 않는다(T-327).
     _location_consent: Annotated[None, Depends(require_location_consent())],
     client: KorTravelMapHttpClientDep,
+    request: Request,
     lon: Annotated[float, Query(ge=LNG_MIN, le=LNG_MAX)],
     lat: Annotated[float, Query(ge=LAT_MIN, le=LAT_MAX)],
     radius_m: Annotated[int, Query(ge=10, le=50000)],
@@ -473,7 +474,10 @@ async def features_nearby(
     category: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> Envelope[list[FeatureSummary]]:
-    """반경 검색 (distance_m 포함). location_audit 미들웨어가 좌표 query 자동 적재."""
+    """반경 검색 (distance_m 포함). 사용자 자신의 위치이므로 확인자료로 남긴다."""
+    # 미들웨어는 핸들러가 선언한 좌표만 기록한다(T-330). 선언하지 않으면 이 경로의 법정 기록이
+    # 조용히 사라지므로, `test_location_audit_middleware.py`가 경로별로 이를 붙잡는다.
+    request.state.location_audit_coord = (_decimal6(lat), _decimal6(lon))
     with _map_kor_travel_map_errors():
         data = await client.features_nearby(
             lon=lon,

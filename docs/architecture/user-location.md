@@ -217,14 +217,20 @@ export default function MapPage() {
 
 다음 API 호출 시 서버에 좌표를 전송 — `app.location_access_log` 자동 적재:
 
-- `GET /features/nearby?lat=&lng=&radius_m=`
-- `GET /features/in-bounds?...` (좌표 자체는 viewport bounds지만 `purpose=viewport_query`로 적재)
-- `GET /features/{id}/weather?lat=&lng=` (좌표 기반 보정 시)
+- `GET /features/nearby?lon=&lat=&radius_m=` — `nearby_attractions`
+- `GET /regions/covering-point?lon=&lat=` — `region_covering`
+- `GET /regions/within-radius?lon=&lat=` — `region_radius`
+- `POST /features/requests` — `feature_request`
+- `GET /search?q=&lat=&lon=` — near-me 분기에서만 `third_party_place_search` (ADR-054 §9)
 
-- `GET /geo/reverse?lon=&lat=` — "내 위치"/지도 클릭 → 행정구역·주소 label
-  (kor-travel-geo v2 `POST /v2/reverse`, ADR-025 / `docs/integrations/kor-travel-geo.md`).
-  `purpose=reverse_geocode`로 적재. 역지오코딩은 kor-travel-map이 아니라 kor-travel-geo
-  v2 REST 직접이다.
+감사하지 **않는** 좌표 경로와 그 이유:
+
+- `GET /features/in-bounds` — bbox는 사용자가 보고 있는 화면 영역이지 사용자의 위치가 아니다.
+- `GET /features/{id}/weather` — 좌표는 그 feature의 위치다.
+- `GET /geo/reverse?lon=&lat=` — 지도 클릭 지점의 주소 label이다. 유일한 호출자
+  (`TripManualPoiDialog`)가 지도에서 고른 좌표를 보낸다. **과거 이 문서는 `reverse_geocode`
+  적재를 규정했지만 미들웨어는 이 경로를 분류한 적이 없다** — 구현이 아니라 문서가 틀렸고,
+  좌표 출처를 계약으로 구분하기 전까지(T-329) 사용자 위치로 기록하는 것이 오히려 부정확하다.
 
 서버 미들웨어 `apps/api/app/middleware/location_audit.py`:
 
@@ -232,13 +238,13 @@ export default function MapPage() {
 @app.middleware("http")
 async def location_audit(request: Request, call_next):
     response = await call_next(request)
-    # 응답 직후, request에서 lat/lng가 query/body에 있으면 적재
-    lat = _extract_lat(request)
-    lng = _extract_lng(request)
-    if lat is None or lng is None:
-        return response
     purpose = _classify_purpose(request.url.path)
     if purpose is None:
+        return response
+    # 좌표는 **핸들러가 선언한 것**만 읽는다(T-330). query string을 추측하면 핸들러가 무시한
+    # 파라미터까지 "썼다"고 적게 되고, 별칭 우선순위 탓에 실제 사용과 다른 좌표가 기록된다.
+    lat, lng = _declared_coord(request)
+    if lat is None or lng is None:
         return response
     await location_audit_repo.append({
         "user_id": request.state.user_id,
@@ -255,10 +261,13 @@ async def location_audit(request: Request, call_next):
 `purpose` 분류:
 
 - `/features/nearby` → `'nearby_attractions'`
-- `/features/in-bounds` → `'viewport_query'`
-- `/features/{id}/weather` → `'weather_at_coord'`
-- `/geo/reverse` → `'reverse_geocode'` (kor-travel-geo v2, ADR-025)
-- 그 외 좌표 포함 endpoint → `'feature_request'`
+- `/regions/covering-point` → `'region_covering'`
+- `/regions/within-radius` → `'region_radius'`
+- `/features/requests` → `'feature_request'`
+- `/search` → `'third_party_place_search'` (near-me 분기에서만)
+
+`viewport_query`·`weather_at_coord`는 DB CHECK에 남아 있지만(과거 행 보존) 더는 발행되지
+않는다. 경로별 감사 여부는 `tests/integration/test_location_audit_middleware.py`가 고정한다.
 
 content_hash chain은 `location_audit_repo` 안에서 처리 (SPEC V8 O-3 / `docs/spec/v8/00-infrastructure.md` §3.3).
 

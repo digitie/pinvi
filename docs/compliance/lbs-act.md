@@ -108,14 +108,30 @@ CREATE INDEX ON app.location_access_log (user_id, occurred_at DESC);
 
 ### 3.2 `purpose` 분류
 
-| 값                   | endpoint                                 |
-| -------------------- | ---------------------------------------- |
-| `viewport_query`     | `/features/in-bounds`                    |
-| `nearby_attractions` | `/features/nearby`                       |
-| `weather_at_coord`   | `/features/{id}/weather` (좌표 query 시) |
-| `feature_request`    | `/features/requests`                     |
-| `region_covering`    | `/regions/covering-point`                |
-| `region_radius`      | `/regions/within-radius`                 |
+| 값                          | endpoint                                   |
+| --------------------------- | ------------------------------------------ |
+| `nearby_attractions`        | `/features/nearby`                         |
+| `feature_request`           | `/features/requests`                       |
+| `region_covering`           | `/regions/covering-point`                  |
+| `region_radius`             | `/regions/within-radius`                   |
+| `third_party_place_search`  | `/search` (near-me 분기, ADR-054 §9)       |
+| ~~`viewport_query`~~        | 발행 중단 (T-330) — 아래 정오표            |
+| ~~`weather_at_coord`~~      | 발행 중단 (T-330) — 아래 정오표            |
+
+#### 정오표 — T-330 이전 기간의 기록 (2026-08-24)
+
+미들웨어가 좌표를 query string에서 **추측**하던 기간에 다음 행이 생길 수 있었다. 확인자료로
+신뢰할 수 없으므로 해석 시 배제한다.
+
+- `lat` 또는 `lng`가 NULL인 행 — 위경도 중 하나만으로는 어떤 위치도 지목하지 못한다.
+- `viewport_query` / `weather_at_coord` 행 — 지도 뷰포트와 feature 좌표는 개인위치정보가 아니다.
+- `/search`의 `third_party_place_search` 행 중 실제 Kakao 제공과 대응하지 않는 것 — 좌표가
+  불완전하면 핸들러가 near-me로 처리하지 않아 제3자 제공 자체가 일어나지 않았다.
+- 기록된 좌표가 핸들러가 상류에 보낸 좌표와 다른 행 — `lng` 별칭이 `lon`보다 먼저 읽혔다.
+
+**이 행들을 삭제하거나 정정하지 않는다.** `trg_location_access_log_append_only`가 UPDATE/DELETE를
+막고 있고(§3.4), 그 append-only 보증을 깨는 것이 부정확한 행을 남겨 두는 것보다 큰 손상이다.
+대신 여기 해석 규칙을 고정한다. 이후 기록은 핸들러가 선언한 좌표만 담는다.
 
 ### 3.3 content_hash chain
 

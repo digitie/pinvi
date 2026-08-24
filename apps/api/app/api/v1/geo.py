@@ -6,9 +6,10 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Annotated, Any, NoReturn
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from app.clients.kor_travel_geo import (
     KorTravelGeoBadRequest,
@@ -54,6 +55,18 @@ def _raise_geo_http(exc: KorTravelGeoUnavailable | KorTravelGeoBadRequest) -> No
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         detail={"code": exc.code or "VALIDATION_ERROR", "message": str(exc)},
     ) from exc
+
+
+_AUDIT_PRECISION = Decimal("0.000001")
+
+
+def _audit_decimal(value: float) -> Decimal:
+    """확인자료에 적을 좌표 — 저장 정밀도(소수점 6자리)로 맞춘다.
+
+    `location_access_log.lat/lng`가 `numeric(9,6)`이므로 여기서 맞춰 두면 기록된 값과 핸들러가
+    상류에 보낸 값의 대응이 자릿수 반올림 때문에 흐려지지 않는다.
+    """
+    return Decimal(str(value)).quantize(_AUDIT_PRECISION)
 
 
 @geo_router.get("/geocode", response_model=Envelope[GeoCandidateList])
@@ -111,6 +124,7 @@ async def search(
 async def regions_covering_point(
     _current_user: CurrentUserId,
     client: KorTravelGeoClientDep,
+    request: Request,
     lon: Annotated[float, LON],
     lat: Annotated[float, LAT],
     boundary_level: Annotated[BoundaryLevel, Query()] = "emd",
@@ -118,6 +132,7 @@ async def regions_covering_point(
     """좌표를 포함하는 행정구역(단건) — kor-travel-geo `/v2/reverse`의 최선 후보 region. 미매치 404.
 
     `boundary_level`은 응답에 echo되는 요청 hint다(reverse region에서 파생하지 않는다)."""
+    request.state.location_audit_coord = (_audit_decimal(lat), _audit_decimal(lon))
     try:
         payload = await client.reverse(lon=lon, lat=lat, include_region=True)
     except (KorTravelGeoUnavailable, KorTravelGeoBadRequest) as exc:
@@ -173,12 +188,14 @@ def _regions_within_radius(payload: dict[str, Any]) -> RegionsWithinRadius:
 async def regions_within_radius(
     _current_user: CurrentUserId,
     client: KorTravelGeoClientDep,
+    request: Request,
     lon: Annotated[float, LON],
     lat: Annotated[float, LAT],
     radius_km: Annotated[float, Query(gt=0, le=500.0)] = 3.0,
     levels: Annotated[list[BoundaryLevel] | None, Query()] = None,
 ) -> Envelope[RegionsWithinRadius]:
     """좌표 반경 내 행정구역 — level별(sido/sigungu/emd) 그룹. 기본 levels=[sigungu, emd]."""
+    request.state.location_audit_coord = (_audit_decimal(lat), _audit_decimal(lon))
     try:
         payload = await client.regions_within_radius(
             lon=lon, lat=lat, radius_km=radius_km, levels=levels or ["sigungu", "emd"]
