@@ -170,6 +170,8 @@ USAGE/SELECT grant를 재적용한다. 이 role은 LOGIN이고 superuser·CREATE
 | `PINVI_RESTORE_HOTSWAP_DATABASE_URL` | 같은 disposable target을 가리키는 전용 schema-owner/hotswap executor URL. |
 | `PINVI_RESTORE_HOTSWAP_ROLE` | `PINVI_RESTORE_HOTSWAP_DATABASE_URL`의 role 이름. |
 | `PINVI_RESTORE_FENCE_ROLE` | `PINVI_RESTORE_FENCE_DATABASE_URL`의 전용 target owner role 이름. target database owner이며 `CREATEDB`와 role membership가 없어야 한다. |
+| `PINVI_RESTORE_PROVISION_DATABASE_URL` | fresh target 생성 전용 root-only provisioner URL. `postgres` maintenance DB를 가리키며 staging/hotswap/runtime와 분리한다. |
+| `PINVI_RESTORE_PROVISION_DISABLE_LOGIN` | `1` 필수. target 생성 직후 provisioner role을 `NOLOGIN`으로 봉인해 schema-swap writer inventory에서 제거한다. 다음 drill 전 privileged bootstrap으로 다시 활성화한다. |
 
 template DB에는 one-time privileged bootstrap으로 `x_extension` schema와 `citext`, `pgcrypto`,
 `pg_trgm`을 설치하고 runtime login에 `USAGE`만 부여한다. template에는 active connection이
@@ -179,7 +181,9 @@ staging provisioner는 target을 매번 `DROP DATABASE ... WITH (FORCE)` 후
 아니다. target owner는 별도 non-`CREATEDB` fence role로 고정하고, target 생성 후 staging
 provisioner에는 `CONNECT`만, hotswap executor에는 `CONNECT, CREATE`를 target database에
 부여한다. hotswap executor와 staging provisioner도 서로 분리한다. `PINVI_RESTORE_HOTSWAP_DATABASE_URL`은 runtime/API container에
-전달하지 않고 drill 실행 주체의 local-only 환경에만 둔다.
+전달하지 않고 drill 실행 주체의 local-only 환경에만 둔다. root-only provisioner는 target 생성
+직후 `NOLOGIN`으로 봉인하고, 다음 실행에서만 별도 privileged bootstrap이 다시 `LOGIN`으로
+전환한다.
 
 실행 모드의 `PINVI_RESTORE_DATABASE_URL`은 API runtime role이 아닌 별도 restore
 executor로 연결해야 한다. 이 login은 `LOGIN`, `NOSUPERUSER`, `NOCREATEROLE`,

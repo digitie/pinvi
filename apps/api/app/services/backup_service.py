@@ -322,6 +322,11 @@ def _snapshot_from_script_result(
 
 
 async def create_backup_snapshot(*, access_reason: str) -> BackupSnapshot:
+    if settings.pinvi_environment in _STRICT_BACKUP_ENVIRONMENTS:
+        raise BackupServiceError(
+            "staging/production backup은 API 컨테이너에서 만들 수 없습니다. "
+            "root-owned trusted backup producer를 사용하세요."
+        )
     script = _validated_backup_script()
 
     directory = backup_dir()

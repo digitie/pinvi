@@ -5,6 +5,8 @@ DB URL과 runtime role은 명령행에 넣지 않고 다음 환경변수로만 �
 
 * ``PINVI_RESTORE_SOURCE_DATABASE_URL`` — dump source
 * ``PINVI_RESTORE_STAGING_DATABASE_URL`` — owner/migrator target
+* ``PINVI_RESTORE_PROVISION_DATABASE_URL`` — root-only disposable target provisioner
+* ``PINVI_RESTORE_PROVISION_DISABLE_LOGIN`` — target 생성 후 provisioner login 봉인 여부
 * ``PINVI_RESTORE_FENCE_DATABASE_URL`` — dedicated target-owner fence login
 * ``PINVI_RESTORE_RUNTIME_DATABASE_URL`` — non-owner runtime target login
 * ``PINVI_RESTORE_TEMPLATE_DATABASE_URL`` — target-cluster template with x_extension
@@ -512,6 +514,31 @@ WHERE r.rolname = current_user
     _require_true(_scalar(database_url, sql), name="database fence role")
 
 
+def _provisioner_role_check(
+    database_url: str,
+    *,
+    staging_role: str,
+    fence_role: str,
+    runtime_role: str,
+    hotswap_role: str,
+) -> None:
+    """Disposable DB owner assignment은 root-only superuser one-shot으로만 수행한다."""
+
+    roles = (staging_role, fence_role, runtime_role, hotswap_role)
+    if any(_ROLE_RE.fullmatch(role) is None for role in roles):
+        raise RestoreDrillError("restore provisioner role binding is invalid")
+    quoted_roles = ", ".join(f"'{role}'" for role in roles)
+    sql = f"""
+SELECT current_database() = 'postgres'
+  AND r.rolcanlogin
+  AND r.rolsuper
+  AND current_user <> ALL(ARRAY[{quoted_roles}])
+FROM pg_roles r
+WHERE r.rolname = current_user
+""".strip()
+    _require_true(_scalar(database_url, sql), name="root-only restore provisioner")
+
+
 def _hotswap_role_check(
     database_url: str,
     *,
@@ -552,6 +579,10 @@ SELECT current_user = '{expected_role}'
   AND NOT EXISTS (
       SELECT 1 FROM pg_auth_members m
       WHERE m.member = r.oid AND m.roleid <> to_regrole('pg_signal_backend')
+  )
+  AND NOT EXISTS (
+      SELECT 1 FROM pg_auth_members m
+      WHERE m.roleid = r.oid
   )
 {schema_check}
 FROM pg_roles r
@@ -689,6 +720,8 @@ def _recreate_disposable_target(
     database_url: str,
     *,
     staging_role: str,
+    provision_url: str,
+    disable_provisioner_login: bool,
     fence_role: str,
     fence_url: str,
     runtime_role: str,
@@ -700,10 +733,12 @@ def _recreate_disposable_target(
 
     try:
         parsed = urlsplit(database_url)
+        provision_parsed = urlsplit(provision_url)
         fence_parsed = urlsplit(fence_url)
         hotswap_parsed = urlsplit(hotswap_url)
         template_parsed = urlsplit(template_url)
         database_name = parsed.path.removeprefix("/")
+        provision_database_name = provision_parsed.path.removeprefix("/")
         fence_database_name = fence_parsed.path.removeprefix("/")
         hotswap_database_name = hotswap_parsed.path.removeprefix("/")
         template_name = template_parsed.path.removeprefix("/")
@@ -713,6 +748,8 @@ def _recreate_disposable_target(
         raise RestoreDrillError("restore target database is outside the M05 disposable prefix")
     if _DATABASE_RE.fullmatch(template_name) is None or template_name == database_name:
         raise RestoreDrillError("restore target template database is invalid")
+    if provision_database_name != "postgres":
+        raise RestoreDrillError("restore provisioner URL must use the postgres maintenance database")
     if not _ROLE_RE.fullmatch(staging_role):
         raise RestoreDrillError("restore staging role is invalid")
     if not _ROLE_RE.fullmatch(fence_role):
@@ -725,7 +762,6 @@ def _recreate_disposable_target(
         raise RestoreDrillError("restore hotswap URL must target the disposable database")
     if fence_database_name != database_name:
         raise RestoreDrillError("restore fence URL must target the disposable database")
-    maintenance_url = urlunsplit(parsed._replace(path="/postgres"))
     quoted_database = '"' + database_name.replace('"', '""') + '"'
     quoted_role = '"' + staging_role.replace('"', '""') + '"'
     quoted_fence_role = '"' + fence_role.replace('"', '""') + '"'
@@ -740,6 +776,9 @@ def _recreate_disposable_target(
     hotswap_hostaddr = hotswap_parsed.query and dict(
         parse_qsl(hotswap_parsed.query, keep_blank_values=True)
     ).get("hostaddr", "")
+    provision_hostaddr = provision_parsed.query and dict(
+        parse_qsl(provision_parsed.query, keep_blank_values=True)
+    ).get("hostaddr", "")
     fence_hostaddr = fence_parsed.query and dict(
         parse_qsl(fence_parsed.query, keep_blank_values=True)
     ).get("hostaddr", "")
@@ -747,27 +786,43 @@ def _recreate_disposable_target(
     hotswap_port = str(hotswap_parsed.port or 5432)
     template_port = str(template_parsed.port or 5432)
     fence_port = str(fence_parsed.port or 5432)
-    if not hostaddr or not template_hostaddr or not hotswap_hostaddr or not fence_hostaddr:
+    provision_port = str(provision_parsed.port or 5432)
+    if (
+        not hostaddr
+        or not template_hostaddr
+        or not hotswap_hostaddr
+        or not fence_hostaddr
+        or not provision_hostaddr
+    ):
         raise RestoreDrillError(
-            "restore target, fence, hotswap, and template URLs need pinned hostaddr values"
+            "restore target, provisioner, fence, hotswap, and template URLs need pinned hostaddr values"
         )
     if (
         hostaddr != template_hostaddr
         or hostaddr != hotswap_hostaddr
         or hostaddr != fence_hostaddr
+        or hostaddr != provision_hostaddr
         or expected_port != template_port
         or expected_port != hotswap_port
         or expected_port != fence_port
+        or expected_port != provision_port
     ):
         raise RestoreDrillError(
-            "restore target, hotswap, and template must use the same PostgreSQL endpoint"
+            "restore target, provisioner, fence, hotswap, and template must use the same PostgreSQL endpoint"
         )
     target_system_identifier = _scalar(
-        maintenance_url,
+        provision_url,
         "SELECT (pg_control_system()).system_identifier::text",
     ).stdout.strip()
     if not re.fullmatch(r"[0-9]+", target_system_identifier):
         raise RestoreDrillError("restore target system identifier is invalid")
+    _provisioner_role_check(
+        provision_url,
+        staging_role=staging_role,
+        fence_role=fence_role,
+        runtime_role=runtime_role,
+        hotswap_role=hotswap_role,
+    )
     sql_hostaddr = hostaddr.replace("'", "''")
     sql_role = staging_role.replace("'", "''")
     sql_fence = fence_role.replace("'", "''")
@@ -825,6 +880,10 @@ SELECT current_database() = '{sql_template}'
         SELECT 1 FROM pg_auth_members m
         WHERE m.member = r.oid AND m.roleid <> to_regrole('pg_signal_backend')
       )
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_auth_members m
+        WHERE m.roleid = r.oid
+      )
   )
   AND (
     SELECT count(*)
@@ -836,14 +895,16 @@ SELECT current_database() = '{sql_template}'
 """.strip(),
     )
     _require_true(template_check, name="restore target template")
+    disable_provisioner_sql = (
+        "ALTER ROLE CURRENT_USER NOLOGIN;" if disable_provisioner_login else ""
+    )
     _psql_file(
-        maintenance_url,
+        provision_url,
         f"""
 SELECT pg_advisory_lock(1414679892, 1213421392);
 DO $m05$
 BEGIN
   IF current_database() <> 'postgres'
-     OR current_user <> '{sql_role}'
      OR COALESCE(host(inet_server_addr()), '') <> '{sql_hostaddr}'
      OR inet_server_port()::text <> '{expected_port}'
      OR (pg_control_system()).system_identifier::text <> '{target_system_identifier}'
@@ -854,9 +915,9 @@ BEGIN
     SELECT 1
     FROM pg_roles r
     WHERE r.rolname = current_user
-      AND (r.rolsuper OR r.rolcreatedb)
+      AND r.rolsuper
   ) THEN
-    RAISE EXCEPTION 'restore staging role must have CREATEDB for disposable target recreation';
+    RAISE EXCEPTION 'restore disposable target provisioner must be a superuser';
   END IF;
   IF NOT EXISTS (
     SELECT 1
@@ -902,10 +963,36 @@ END
 $m05$;
 DROP DATABASE IF EXISTS {quoted_database} WITH (FORCE);
 CREATE DATABASE {quoted_database} WITH OWNER {quoted_fence_role} TEMPLATE {quoted_template};
+{disable_provisioner_sql}
 SELECT pg_advisory_unlock(1414679892, 1213421392);
         """,
         check=True,
     )
+    postcondition = _scalar(
+        fence_url,
+        f"""
+SELECT EXISTS (
+  SELECT 1
+  FROM pg_database d
+  JOIN pg_roles fence_role ON fence_role.oid = d.datdba
+  WHERE d.datname = '{database_name}'
+    AND fence_role.rolname = '{sql_fence}'
+    AND fence_role.rolcanlogin
+    AND NOT fence_role.rolsuper
+    AND NOT fence_role.rolcreaterole
+    AND NOT fence_role.rolcreatedb
+    AND NOT fence_role.rolreplication
+    AND NOT fence_role.rolbypassrls
+    AND fence_role.rolinherit
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_auth_members m
+      WHERE m.member = fence_role.oid OR m.roleid = fence_role.oid
+    )
+)
+""".strip(),
+    )
+    _require_true(postcondition, name="fresh target fence-owner postcondition")
     _psql_file(
         fence_url,
         f"""
@@ -929,6 +1016,14 @@ def _identity_key(identity: dict[str, object]) -> tuple[object, ...]:
 
 def _identity_sha256(identity: dict[str, object]) -> str:
     return _sha256(_canonical_json(identity))
+
+
+def _maintenance_database_url(database_url: str) -> str:
+    try:
+        parsed = urlsplit(database_url)
+    except ValueError as exc:
+        raise RestoreDrillError("restore maintenance URL is invalid") from exc
+    return urlunsplit(parsed._replace(path="/postgres"))
 
 
 def _single_dump(directory: Path) -> Path:
@@ -1053,6 +1148,13 @@ def _run_drill(args: argparse.Namespace) -> int:
         and not _ROLE_RE.fullmatch(args.fence_role)
     ):
         raise RestoreDrillError("restore fence role is required")
+    if (
+        os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1"
+        and not args.provision_disable_login
+    ):
+        raise RestoreDrillError(
+            "restore provisioner login must be disabled after disposable target creation"
+        )
     if args.runtime_role == args.staging_role:
         raise RestoreDrillError("restore staging and runtime roles must differ")
     bash_tool = _tool_identity("bash")
@@ -1064,6 +1166,7 @@ def _run_drill(args: argparse.Namespace) -> int:
     runtime_url = _database_url(args.runtime_database_url_env)
     hotswap_url = ""
     fence_url = ""
+    provision_url = ""
     hotswap_role = ""
     template_url = ""
     if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
@@ -1072,10 +1175,12 @@ def _run_drill(args: argparse.Namespace) -> int:
         hotswap_role = args.hotswap_role
         hotswap_url = _database_url(args.hotswap_database_url_env)
         fence_url = _database_url(args.fence_database_url_env)
+        provision_url = _database_url(args.provision_database_url_env)
         template_url = _database_url(args.template_database_url_env)
     try:
         source_database_name = urlsplit(source_url).path.removeprefix("/")
         target_database_name = urlsplit(target_url).path.removeprefix("/")
+        provision_database_name = urlsplit(provision_url).path.removeprefix("/")
         hotswap_database_name = urlsplit(hotswap_url).path.removeprefix("/")
         fence_database_name = urlsplit(fence_url).path.removeprefix("/")
     except ValueError as exc:
@@ -1086,15 +1191,19 @@ def _run_drill(args: argparse.Namespace) -> int:
         raise RestoreDrillError("restore hotswap database must match the disposable target")
     if fence_url and fence_database_name != target_database_name:
         raise RestoreDrillError("restore fence database must match the disposable target")
+    if provision_url and provision_database_name != "postgres":
+        raise RestoreDrillError("restore provisioner URL must use the postgres maintenance database")
     if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
         _staging_role_check(
-            target_url,
+            _maintenance_database_url(target_url),
             expected_role=args.staging_role,
             runtime_role=args.runtime_role,
         )
         _recreate_disposable_target(
             target_url,
             staging_role=args.staging_role,
+            provision_url=provision_url,
+            disable_provisioner_login=args.provision_disable_login,
             fence_role=args.fence_role,
             fence_url=fence_url,
             runtime_role=args.runtime_role,
@@ -1179,11 +1288,15 @@ def _run_drill(args: argparse.Namespace) -> int:
                 "PINVI_DATABASE_URL": "",
                 "PINVI_BACKUP_SCHEMA": args.schema,
                 "PINVI_BACKUP_DIR": str(temporary_dir),
+                "PINVI_BACKUP_TRUSTED": "1",
                 "PINVI_BACKUP_MIN_FREE_BYTES": "0",
                 "PINVI_BACKUP_DOCKER_FALLBACK": "0",
                 "PINVI_BACKUP_PG_DUMP_BIN": private_tools["pg_dump"]["path"],
+                "PINVI_BACKUP_PG_RESTORE_BIN": private_tools["pg_restore"]["path"],
                 "PINVI_BACKUP_PSQL_BIN": private_tools["psql"]["path"],
                 "PINVI_BACKUP_PG_DUMP_SHA256": private_tools["pg_dump"]["sha256"],
+                "PINVI_BACKUP_PG_RESTORE_SHA256": private_tools["pg_restore"]["sha256"],
+                "PINVI_BACKUP_PSQL_SHA256": private_tools["psql"]["sha256"],
                 "PINVI_BACKUP_PRIVATE_TOOL_COPY": "1",
             }
         )
@@ -1228,10 +1341,11 @@ def _run_drill(args: argparse.Namespace) -> int:
                     "PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER": str(
                         target_identity_before_restore["system_identifier"]
                     ),
-                    "PINVI_RESTORE_EXPECTED_HOSTADDR": str(
-                        target_identity_before_restore["hostaddr"]
-                    ),
+                "PINVI_RESTORE_EXPECTED_HOSTADDR": str(
+                    target_identity_before_restore["hostaddr"]
+                ),
                     "PINVI_RESTORE_EXPECTED_PORT": str(target_identity_before_restore["port"]),
+                    "PINVI_RESTORE_TRUSTED_BACKUP_DIR": str(temporary_dir),
                 }
             )
         restore = _run(
@@ -1306,6 +1420,9 @@ def _run_drill(args: argparse.Namespace) -> int:
             "dump_sha256": _sha256(dump.read_bytes()),
             "execution_id": str(uuid4()),
             "no_owner_restore": True,
+            "provisioner_login_disabled": bool(
+                provision_url and args.provision_disable_login
+            ),
             "restore_command": (
                 "pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges"
             ),
@@ -1370,6 +1487,15 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--fence-database-url-env",
         default="PINVI_RESTORE_FENCE_DATABASE_URL",
+    )
+    parser.add_argument(
+        "--provision-database-url-env",
+        default="PINVI_RESTORE_PROVISION_DATABASE_URL",
+    )
+    parser.add_argument(
+        "--provision-disable-login",
+        action="store_true",
+        default=os.environ.get("PINVI_RESTORE_PROVISION_DISABLE_LOGIN", "0") == "1",
     )
     parser.add_argument(
         "--runtime-database-url-env",

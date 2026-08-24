@@ -185,8 +185,11 @@ services:
     # API에 read-only로만 노출한다. 운영 enable 시 두 경로를 모두 명시한다.
     volumes:
       - type: bind
-        source: ${PINVI_BACKUP_HOST_DIR:-/tmp/pinvi-backups}
+        # API는 root-owned restore trust directory를 읽기 전용으로만 볼 수 있다.
+        # 새 trusted snapshot은 maintenance one-shot producer만 작성한다.
+        source: ${PINVI_RESTORE_TRUSTED_BACKUP_HOST_DIR:-/tmp/pinvi-restore-trust}
         target: /var/lib/pinvi/backups
+        read_only: true
       - type: bind
         source: ${PINVI_M05_ACTIVATION_LEDGER_HOST_PATH:-/tmp/pinvi-m05-activation-ledger.jsonl}
         target: ${PINVI_M05_ACTIVATION_LEDGER_PATH:-/run/pinvi/m05/activation-ledger.jsonl}
@@ -217,6 +220,42 @@ services:
         read_only: true
     ports:
       - "127.0.0.1:${PINVI_API_PORT:-12801}:8000"
+
+  # root-only maintenance snapshot producer. app-api에는 이 bind의 write mount나
+  # producer credential을 주지 않는다. `docker compose --profile maintenance run --rm app-backup`만 허용한다.
+  app-backup:
+    image: ${PINVI_API_IMAGE:-pinvi-api:local}
+    profiles: ["maintenance"]
+    restart: "no"
+    user: "0:0"
+    depends_on:
+      app-postgres:
+        condition: service_healthy
+      app-db-runtime-role:
+        condition: service_completed_successfully
+    environment:
+      PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
+      PINVI_BACKUP_DIR: /var/lib/pinvi/restore-trust
+      PINVI_BACKUP_TRUSTED: "1"
+      PINVI_BACKUP_DATABASE_URL: ${PINVI_DATABASE_URL:-postgresql+asyncpg://pinvi_app:pinvi_app_smoke@app-postgres:5432/pinvi}
+      PINVI_BACKUP_SCHEMA: ${PINVI_BACKUP_SCHEMA:-app}
+      PINVI_BACKUP_MIN_FREE_BYTES: ${PINVI_BACKUP_MIN_FREE_BYTES:-1073741824}
+      PINVI_BACKUP_DOCKER_FALLBACK: "0"
+    volumes:
+      - type: bind
+        source: ${PINVI_RESTORE_TRUSTED_BACKUP_HOST_DIR:-/tmp/pinvi-restore-trust}
+        target: /var/lib/pinvi/restore-trust
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        export PINVI_BACKUP_PG_DUMP_BIN="$$(command -v pg_dump)"
+        export PINVI_BACKUP_PG_RESTORE_BIN="$$(command -v pg_restore)"
+        export PINVI_BACKUP_PSQL_BIN="$$(command -v psql)"
+        export PINVI_BACKUP_PG_DUMP_SHA256="$$(sha256sum "$${PINVI_BACKUP_PG_DUMP_BIN}" | awk 'NR == 1 { print $$1}')"
+        export PINVI_BACKUP_PG_RESTORE_SHA256="$$(sha256sum "$${PINVI_BACKUP_PG_RESTORE_BIN}" | awk 'NR == 1 { print $$1}')"
+        export PINVI_BACKUP_PSQL_SHA256="$$(sha256sum "$${PINVI_BACKUP_PSQL_BIN}" | awk 'NR == 1 { print $$1}')"
+        exec /app/scripts/backup-db.sh
 
   # Explicit one-shot only: app-api is never allowed to receive the owner URL.
   # `scripts/docker-app.sh migrate` mounts the bootstrap credential and invokes it here.

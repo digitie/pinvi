@@ -16,6 +16,12 @@ APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}"
 BACKUP_FILE="${1:-}"
 ORIGINAL_BACKUP_FILE="${BACKUP_FILE}"
 TEST_MODE="${PINVI_M05_RESTORE_TEST_MODE:-0}"
+STRICT_RESTORE_ENVIRONMENT=0
+if [[ "${TEST_MODE}" != "1" && ( "${PINVI_ENVIRONMENT:-}" == "staging" || "${PINVI_ENVIRONMENT:-}" == "production" ) ]]; then
+  STRICT_RESTORE_ENVIRONMENT=1
+fi
+TRUSTED_SNAPSHOT_CHECKSUM=""
+TRUSTED_SNAPSHOT_LIST_SHA256=""
 
 if [[ "${TEST_MODE}" != "0" && "${TEST_MODE}" != "1" ]]; then
   echo "PINVI_M05_RESTORE_TEST_MODE must be 0 or 1" >&2
@@ -77,6 +83,73 @@ if [[ -L "${BACKUP_FILE}" || ! -f "${BACKUP_FILE}" ]]; then
   exit 2
 fi
 
+assert_trusted_snapshot_provenance() {
+  if [[ "${STRICT_RESTORE_ENVIRONMENT}" != "1" ]]; then
+    return 0
+  fi
+  local trusted_dir snapshot_parent manifest_file item key value
+  trusted_dir="${PINVI_RESTORE_TRUSTED_BACKUP_DIR:-}"
+  if [[ "${trusted_dir}" != /* || -L "${trusted_dir}" || ! -d "${trusted_dir}" ]]; then
+    echo "strict restore requires a root-owned trusted backup directory" >&2
+    exit 3
+  fi
+  trusted_dir="$(realpath -e "${trusted_dir}")"
+  snapshot_parent="$(realpath -e "$(dirname "${BACKUP_FILE}")")"
+  if [[ "${snapshot_parent}" != "${trusted_dir}" ]]; then
+    echo "backup file is outside the trusted backup directory" >&2
+    exit 3
+  fi
+  if [[ "$(stat -c '%u:%a' "${trusted_dir}")" != "0:700" ]]; then
+    echo "trusted backup directory must be root-owned mode 0700" >&2
+    exit 3
+  fi
+  manifest_file="${BACKUP_FILE}.m05-manifest"
+  for item in "${BACKUP_FILE}" "${BACKUP_FILE}.sha256" "${manifest_file}"; do
+    if [[ -L "${item}" || ! -f "${item}" || "$(stat -c '%u:%a' "${item}")" != "0:600" ]]; then
+      echo "trusted snapshot artifact is not a root-owned mode 0600 regular file" >&2
+      exit 3
+    fi
+  done
+  declare -A manifest=()
+  while IFS='=' read -r key value || [[ -n "${key:-}" ]]; do
+    case "${key}" in
+      version|dump_filename|schema|dump_sha256|pg_restore_list_sha256|source_database|source_database_oid|source_system_identifier|source_hostaddr|source_port) ;;
+      *)
+        echo "trusted snapshot manifest has an invalid field" >&2
+        exit 3
+        ;;
+    esac
+    if [[ -z "${value}" || -v "manifest[${key}]" || "${value}" == *$'\r'* ]]; then
+      echo "trusted snapshot manifest is malformed" >&2
+      exit 3
+    fi
+    manifest[${key}]="${value}"
+  done <"${manifest_file}"
+  for key in version dump_filename schema dump_sha256 pg_restore_list_sha256 source_database source_database_oid source_system_identifier source_hostaddr source_port; do
+    if [[ ! -v "manifest[${key}]" ]]; then
+      echo "trusted snapshot manifest is incomplete" >&2
+      exit 3
+    fi
+  done
+  if [[ "${manifest[version]}" != "1" ||
+    "${manifest[dump_filename]}" != "$(basename "${BACKUP_FILE}")" ||
+    "${manifest[schema]}" != "${SCHEMA}" ||
+    ! "${manifest[dump_sha256]}" =~ ^[0-9a-f]{64}$ ||
+    ! "${manifest[pg_restore_list_sha256]}" =~ ^[0-9a-f]{64}$ ||
+    ! "${manifest[source_database]}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ||
+    ! "${manifest[source_database_oid]}" =~ ^[0-9]+$ ||
+    ! "${manifest[source_system_identifier]}" =~ ^[0-9]+$ ||
+    ! "${manifest[source_hostaddr]}" =~ ^[0-9A-Fa-f:.]+$ ||
+    ! "${manifest[source_port]}" =~ ^[0-9]+$ ]]; then
+    echo "trusted snapshot manifest values are invalid" >&2
+    exit 3
+  fi
+  TRUSTED_SNAPSHOT_CHECKSUM="${manifest[dump_sha256]}"
+  TRUSTED_SNAPSHOT_LIST_SHA256="${manifest[pg_restore_list_sha256]}"
+}
+
+assert_trusted_snapshot_provenance
+
 if [[ -L "${BACKUP_FILE}.sha256" || ! -f "${BACKUP_FILE}.sha256" ]]; then
   echo "backup checksum sidecar is required as a regular file" >&2
   exit 3
@@ -87,7 +160,8 @@ if ! command -v sha256sum >/dev/null 2>&1; then
 fi
 expected_checksum="$(awk 'NR == 1 { print $1 }' "${BACKUP_FILE}.sha256")"
 actual_checksum="$(sha256sum "${BACKUP_FILE}" | awk 'NR == 1 { print $1 }')"
-if [[ ! "${expected_checksum}" =~ ^[0-9a-f]{64}$ || "${expected_checksum}" != "${actual_checksum}" ]]; then
+if [[ ! "${expected_checksum}" =~ ^[0-9a-f]{64}$ || "${expected_checksum}" != "${actual_checksum}" ||
+  ( -n "${TRUSTED_SNAPSHOT_CHECKSUM}" && "${expected_checksum}" != "${TRUSTED_SNAPSHOT_CHECKSUM}" ) ]]; then
   echo "backup checksum failed" >&2
   exit 3
 fi
@@ -167,6 +241,14 @@ if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" != "1" &&
   fi
   PSQL_BIN="${SNAPSHOT_TMP_DIR}/psql"
   PG_RESTORE_BIN="${SNAPSHOT_TMP_DIR}/pg_restore"
+fi
+
+if [[ "${STRICT_RESTORE_ENVIRONMENT}" == "1" ]]; then
+  actual_restore_list_sha256="$("${PG_RESTORE_BIN}" --list "${BACKUP_FILE}" | sha256sum | awk 'NR == 1 { print $1 }')"
+  if [[ "${actual_restore_list_sha256}" != "${TRUSTED_SNAPSHOT_LIST_SHA256}" ]]; then
+    echo "trusted snapshot archive inventory failed" >&2
+    exit 3
+  fi
 fi
 
 assert_expected_target() {
