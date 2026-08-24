@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import subprocess
 import uuid
@@ -13,8 +12,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.pool import NullPool
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.curated_plan import (
     CuratedPlanPoi,
@@ -27,8 +25,6 @@ from app.models.user import User
 from app.services.curation_collection_import import (
     CurationCollectionImportConflict,
     _apply_not_modified,
-    curation_collection_request_fingerprint,
-    inspect_curation_collection_import,
 )
 
 pytestmark = pytest.mark.asyncio
