@@ -322,7 +322,7 @@ async def _assert_0053_catalog_contract(db: AsyncSession) -> None:
         )
     )
     assert boundary_definition is not None
-    assert "schema_revision = '20260821_0061'::text" in boundary_definition
+    assert "schema_revision = '20260824_0062'::text" in boundary_definition
 
     indexes = dict(
         (
@@ -859,7 +859,7 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
             async with engine.connect() as connection:
                 assert (
                     await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
-                    == "20260821_0061"
+                    == "20260824_0062"
                 )
                 new_body = await connection.scalar(
                     text(

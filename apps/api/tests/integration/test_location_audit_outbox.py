@@ -122,9 +122,7 @@ async def test_search_purpose_is_accepted_by_chain_contract(session_factory) -> 
     async with session_factory() as db:
         assert await drain_location_audit_outbox(db) == 1
     async with session_factory() as db:
-        purposes = list(
-            (await db.execute(select(LocationAccessLog.purpose))).scalars()
-        )
+        purposes = list((await db.execute(select(LocationAccessLog.purpose))).scalars())
     assert purposes == ["third_party_place_search"]
 
 

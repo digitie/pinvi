@@ -17,6 +17,15 @@ from collections.abc import Sequence
 
 from alembic import op
 
+_BOUNDARY_CONTRACT_CHECK = (
+    "contract_version = 'pinvi-cache-target-final-boundary/v1' "
+    "AND status = 'succeeded' AND schema_revision = '20260824_0062'"
+)
+_PREV_BOUNDARY_CONTRACT_CHECK = (
+    "contract_version = 'pinvi-cache-target-final-boundary/v1' "
+    "AND status = 'succeeded' AND schema_revision = '20260821_0061'"
+)
+
 revision: str = "20260824_0062"
 down_revision: str | None = "20260821_0061"
 branch_labels: str | Sequence[str] | None = None
@@ -31,12 +40,34 @@ _OLD_PURPOSES = (
 _NEW_PURPOSES = f"{_OLD_PURPOSES}, 'third_party_place_search'"
 
 
+def _repin_boundary_contract(check: str) -> None:
+    """새 head에서만 final boundary가 열리도록 DB/service pin을 함께 전진시킨다.
+
+    이 저장소는 head 마이그레이션마다 `FINALIZE_SCHEMA_REVISION`과 DB CHECK를 의식적으로
+    재결박한다(`20260821_0061` 등 선례). 둘 중 하나만 옮기면 receipt INSERT가 CHECK 위반이
+    되거나 finalize가 `schema_revision_mismatch`로 거부된다.
+    """
+    op.drop_constraint(
+        op.f("ck_ktm_ct_boundary_contract"),
+        "ktm_cache_target_boundary_audits",
+        schema="app",
+        type_="check",
+    )
+    op.create_check_constraint(
+        op.f("ck_ktm_ct_boundary_contract"),
+        "ktm_cache_target_boundary_audits",
+        check,
+        schema="app",
+    )
+
+
 def upgrade() -> None:
     op.execute(f"ALTER TABLE app.location_access_log DROP CONSTRAINT {_CONSTRAINT}")
     op.execute(
         f"ALTER TABLE app.location_access_log ADD CONSTRAINT {_CONSTRAINT} "
         f"CHECK (purpose IN ({_NEW_PURPOSES}))"
     )
+    _repin_boundary_contract(_BOUNDARY_CONTRACT_CHECK)
 
 
 def downgrade() -> None:
@@ -51,3 +82,4 @@ def downgrade() -> None:
         f"ALTER TABLE app.location_access_log ADD CONSTRAINT {_CONSTRAINT} "
         f"CHECK (purpose IN ({_OLD_PURPOSES})) NOT VALID"
     )
+    _repin_boundary_contract(_PREV_BOUNDARY_CONTRACT_CHECK)
