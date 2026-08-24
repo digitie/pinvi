@@ -39,6 +39,87 @@ def test_restore_hotswap_rejects_session_and_lock_control_in_dump_sql() -> None:
     assert "SET session_replication_role = replica" not in source
 
 
+def test_restore_hotswap_failure_path_never_mutates_database_topology() -> None:
+    source = SCRIPT.read_text(encoding="utf-8")
+    cleanup = source[source.index("cleanup() {") : source.index("trap cleanup EXIT")]
+
+    assert "rollback_schema_switch" not in source
+    assert "SCHEMA_SWITCH_ACTIVE" not in source
+    assert "DROP SCHEMA IF EXISTS ${RESTORE_SCHEMA}" not in source
+    assert "CREATE SCHEMA IF NOT EXISTS" not in source
+    assert "rollback will be attempted" not in source
+    assert "release_write_fence" not in cleanup
+    assert "ALTER SCHEMA" not in cleanup
+    assert "DROP SCHEMA" not in cleanup
+    assert "REVOKE CONNECT" not in cleanup
+    assert "GRANT CONNECT" not in cleanup
+    assert "record_forensics_failure" in cleanup
+    assert "database write fence remains active" in cleanup
+
+
+def test_restore_hotswap_binds_forensics_to_actual_mutation_boundaries() -> None:
+    source = SCRIPT.read_text(encoding="utf-8")
+    main = source[source.rindex('phase draining running "write fence"') :]
+
+    assert source.rindex("assert_forensics_inactive") < source.rindex("start_advisory_lock")
+    assert main.index("assert_restore_schema_absent") < main.index("prepare_write_fence_inventory")
+    assert main.index("prepare_write_fence_inventory") < main.index("forensics_begin")
+    assert main.index("forensics_begin") < main.index("enter_write_fence")
+    assert main.index("forensics_transition fence_intent") < main.index("enter_write_fence")
+    assert main.index("enter_write_fence") < main.index("forensics_transition fence_applied")
+    assert main.index("assert_restore_schema_absent") < main.index(
+        'run_guarded_command "CREATE SCHEMA ${RESTORE_SCHEMA}"'
+    )
+    assert "CREATE SCHEMA IF NOT EXISTS" not in main
+    assert main.index("phase validating success") < main.index("forensics_transition restore_ready")
+    assert main.index("forensics_transition switched") < main.index(
+        "forensics_transition fence_release_intent"
+    )
+    assert main.index("forensics_transition fence_release_intent") < main.index(
+        "release_write_fence"
+    )
+    assert main.index("release_write_fence") < main.index("persist_post_release_forensics")
+    post_release_forensics = source[
+        source.index("persist_post_release_forensics() {") : source.index(
+            "reapply_write_fence_after_post_release_forensic_failure()"
+        )
+    ]
+    assert "forensics_seal_release_receipt" in post_release_forensics
+    assert "forensics_transition fence_released" not in source
+    release = source[
+        source.index("release_write_fence() {") : source.index("persist_post_release_forensics()")
+    ]
+    assert (
+        release.index("read_release_receipt_after_commit")
+        < release.index("assert_database_fence_restored")
+        < release.index("assert_supported_acl_topology")
+    )
+    cleanup = source[source.index("cleanup() {") : source.index("trap cleanup EXIT")]
+    assert "release_receipt_seal_is_exact" in cleanup
+    assert "PINVI_RESTORE_TEST_SIGKILL_AFTER_RELEASE_RECEIPT_COMMIT_ONCE" in release
+    assert "PINVI_RESTORE_TEST_SIGKILL_AFTER_RELEASE_RECEIPT_SEAL_ONCE" in main
+    assert '"${PINVI_ENVIRONMENT:-}" == "test"' in source
+
+
+def test_restore_hotswap_receipt_gate_accepts_canonical_uuid_and_uses_owner_verifier() -> None:
+    source = SCRIPT.read_text(encoding="utf-8")
+    release = source[
+        source.index("release_receipt_sql() {") : source.index(
+            "read_release_receipt_after_commit()"
+        )
+    ]
+    receipt_read = source[
+        source.index("read_release_receipt_after_commit() {") : source.index(
+            "release_write_fence()"
+        )
+    ]
+
+    assert "[89ab][0-9a-f]{3}-[0-9a-f]{12}" in release
+    assert "[89ab][0-9a-f]{12}" not in release
+    assert "ops.verify_m05_hotswap_release_receipt" in receipt_read
+    assert "x_extension.digest" not in receipt_read
+
+
 def test_restore_hotswap_validates_all_m05_always_triggers_before_switch() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
 
@@ -75,9 +156,9 @@ def test_restore_hotswap_rejects_noncanonical_acl_before_write_fence_mutation() 
     assert "NOT has_schema_privilege((SELECT oid FROM app_role), n.oid, 'CREATE')" in source
     assert "PINVI_RESTORE_TRUSTED_BACKUP_DIR" in source
     assert "trusted snapshot archive inventory failed" in source
-    enter = source.index("enter_write_fence()")
-    assert source.index("  assert_supported_acl_topology\n", enter) < source.index(
-        "  local writer_logins", enter
+    inventory = source.index("prepare_write_fence_inventory()")
+    assert source.index("  assert_supported_acl_topology\n", inventory) < source.index(
+        "  writer_logins", inventory
     )
 
 

@@ -140,7 +140,6 @@ async def session_factory(_database_url: str):  # type: ignore[no-untyped-def]
                 "ktm_feature_reference_reconciliation_delivery_attempts",
                 "ktm_feature_reference_reconciliation_applied_receipts",
                 "ktm_feature_reference_reconciliation_impacts",
-<<<<<<< HEAD
                 "admin_audit_log",
                 # 보존 아카이브도 `ENABLE ALWAYS`라 replica mode로 건너뛰지 못한다(T-336).
                 "location_access_log_archive",

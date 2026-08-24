@@ -14,7 +14,13 @@ GENESIS_HASH = "0" * 64
 
 def compute_content_hash(prev_hash: str, payload: dict[str, Any]) -> str:
     """SHA-256(prev_hash + canonical JSON of payload)."""
-    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    serialized = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
     return hashlib.sha256((prev_hash + serialized).encode("utf-8")).hexdigest()
 
 

@@ -140,6 +140,10 @@ def test_m05_restore_drill_serializes_target_recreation_and_preflights_staging_r
     assert "restore provisioner login must be disabled" in source
     assert "SELECT pg_advisory_lock(1414679892, 1213421392);" in source
     assert "SELECT pg_advisory_unlock(1414679892, 1213421392);" in source
+    assert "_ProvisioningLock" not in source
+    assert "PINVI_RESTORE_COORDINATION_DATABASE_URL" not in source
+    assert "PINVI_RESTORE_HOTSWAP_EXECUTE\": \"1\"" not in source
+    assert '"PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL": "precheck"' in source
 
 
 def _write_executable(path: Path, body: str) -> None:
@@ -191,10 +195,13 @@ exit 0
         """#!/usr/bin/env bash
 set -euo pipefail
 sql="$*"
-if [[ "$sql" == *"-Atq"* ]]; then
+if [[ "$sql" == *"-Atq"* && "$sql" != *"m05_hotswap_topology.sql"* ]]; then
   while IFS= read -r line; do
     if [[ "$line" == *"M05_LOCK_ACQUIRED"* ]]; then
       echo 'M05_LOCK_ACQUIRED|123'
+    elif [[ "$line" == *"M05_SCALAR|"* ]]; then
+      scalar="$(printf '%s\\n' "$line" | sed -n 's/.*M05_SCALAR|\\([0-9][0-9]*\\)|.*/\\1/p')"
+      echo "M05_SCALAR|${scalar}|12345"
     elif [[ "$line" == *"M05_SQL_DONE|"* ]]; then
       marker="$(printf '%s\\n' "$line" | sed -n 's/.*M05_SQL_DONE|\\([0-9][0-9]*\\).*/\\1/p')"
       echo "M05_SQL_DONE|${marker}"
@@ -209,12 +216,20 @@ elif [[ "$sql" == *"json_build_object"* ]]; then
   else
           echo '{"database":"pinvi_m05_restore_target","user":"fixture","database_oid":"200","system_identifier":"1","schema_exists":false,"server_version_num":"160000"}'
   fi
+elif [[ "$sql" == *"to_regnamespace"* && "$sql" == *"IS NOT NULL"* && "$sql" == *"x_extension"* ]]; then
+  echo t
+elif [[ "$sql" == *"to_regnamespace"* && "$sql" == *"IS NOT NULL"* ]]; then
+  echo f
+elif [[ "$sql" == *"to_regnamespace"* && "$sql" == *"IS NULL"* ]]; then
+  echo t
+elif [[ "$sql" == *"SELECT COALESCE((SELECT oid::text FROM pg_namespace"* ]]; then
+  echo 12345
+elif [[ "$sql" == *"m05_hotswap_topology.sql"* ]]; then
+  echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
     elif [[ "$sql" == *"has_schema_privilege"* || "$sql" == *"count(*) = 6"* || "$sql" == *"FROM pg_roles"* || "$sql" == *"fresh disposable target"* || "$sql" == *"pg_namespace"* ]]; then
   echo t
 elif [[ "$sql" == *"lag(content_hash)"* ]]; then
   echo valid
-elif [[ "$sql" == *"to_regnamespace"* && "$sql" == *"IS NOT NULL"* ]]; then
-  echo f
 elif [[ "$sql" == *"to_regnamespace"* ]]; then
   echo 12345
 elif [[ "$sql" == *"to_regclass"* ]]; then
@@ -262,3 +277,6 @@ fi
     assert evidence["restore_command"] == (
         "pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges"
     )
+    assert evidence["hotswap_success"] is False
+    assert evidence["hotswap_success_marker"] == ""
+    assert evidence["hotswap_success_output_sha256"] == ""

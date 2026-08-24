@@ -7,7 +7,7 @@
 -- extension churn이 recovery proof를 불필요하게 무효화하기 때문이다. public의 CREATE
 -- grant는 app role이 swap schema 밖에서 객체를 만들 수 있는 writer escape hatch이므로
 -- 반드시 topology에 남긴다.
-WITH parameters AS (
+WITH RECURSIVE parameters AS (
   SELECT
     :'source_schema'::name AS source_schema,
     :'previous_schema'::name AS previous_schema,
@@ -74,6 +74,26 @@ security_definer_owner_scope AS (
   SELECT DISTINCT procedure_row.proowner AS role_oid
   FROM accessible_security_definer_scope AS procedure_row
 ),
+-- SECURITY DEFINER owner가 다른 role을 상속하거나 SET ROLE 할 수 있으면 그
+-- transitive authority도 executable routine의 authority surface다.  양 방향을
+-- 닫아 owner를 포함하는 membership graph 전체와 그 role attributes를 hash한다.
+-- UNION (not UNION ALL) is deliberate: PostgreSQL's recursive CTE then converges
+-- safely even when membership edges form a cycle.
+security_definer_role_closure(role_oid) AS (
+  SELECT role_oid
+  FROM security_definer_owner_scope
+
+  UNION
+
+  SELECT CASE
+    WHEN membership.member = closure.role_oid THEN membership.roleid
+    ELSE membership.member
+  END
+  FROM security_definer_role_closure AS closure
+  JOIN pg_auth_members AS membership
+    ON membership.member = closure.role_oid
+    OR membership.roleid = closure.role_oid
+),
 role_scope AS (
   SELECT
     role_row.oid,
@@ -101,7 +121,7 @@ role_scope AS (
   WHERE role_row.rolname IN (parameters.app_role, parameters.fence_role)
      OR role_row.oid IN (SELECT role_oid FROM source_owner_scope)
      OR role_row.oid IN (SELECT role_oid FROM restore_executor_scope)
-     OR role_row.oid IN (SELECT role_oid FROM security_definer_owner_scope)
+     OR role_row.oid IN (SELECT role_oid FROM security_definer_role_closure)
 ),
 default_acl_owner_scope AS (
   SELECT role_oid FROM source_owner_scope

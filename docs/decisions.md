@@ -3055,3 +3055,79 @@ fixture mutation 전에 fail-close할 수 있다.
 
 - 다음 신규 ADR = **ADR-065**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.
+
+## ADR-062: Pinvi Alembic 이력은 0100 기준선과 0101 M05 통합 revision으로 재기준화한다
+
+- **상태**: accepted
+- **날짜**: 2026-08-24
+- **결정자**: 사용자 + Codex
+
+### 컨텍스트
+
+Pinvi의 active Alembic graph는 `20260601_0001`부터 `20260821_0061`까지 긴
+forward-only 이력을 갖고 있다. 현재 N150 운영 DB는 PostgreSQL 16에서 정확히
+`20260821_0061`을 가리키며, `app` schema에 실제 데이터가 있다. 반면 M05의
+`0062`·`0063`과 receipt `0064`는 아직 `main`이나 운영 DB에 배포되지 않았다.
+
+사용자는 과거 revision별 in-place upgrade 호환을 더 이상 유지하지 않기로 했다. 다만
+이 결정은 운영 데이터 삭제 권한을 주지 않는다. 따라서 새 설치는 간결한 기준선으로
+시작하되, 현재 N150의 `0061` 데이터는 한 번의 검증된 전환으로 보존해야 한다.
+
+### 결정
+
+- active Alembic graph는 다음 두 revision만 유지한다.
+  - `20260824_0100`: `down_revision = None`인 Pinvi `app` schema의 새 설치 기준선.
+    기존 `0001`부터 `0061`까지의 최종 catalog를 재현한다.
+  - `20260824_0101`: `down_revision = 20260824_0100`이며 기존 M05
+    `0062`·`0063`·`0064`의 DDL과 권한 계약을 하나로 통합한다.
+- 과거 revision 파일은 active graph에서 제거한다. 과거 DB의 일반
+  `alembic upgrade head`는 지원하지 않는다.
+- 새 DB는 빈 catalog에서 `alembic upgrade head`로 `0100 → 0101`을 적용한다.
+- 현재 N150 운영 DB만 별도 root-only rebaseline 도구로 지원한다. 이 도구는 다음을
+  모두 확인한 뒤 하나의 transaction에서 `app.alembic_version`을 `0061`에서
+  `0100`으로 바꾼다. 이 단계는 DDL이나 사용자 데이터를 변경하지 않는다.
+  - version row가 정확히 하나이고 `20260821_0061`이다.
+  - M05 `ops` anchor/receipt 객체가 아직 없다.
+  - shared structural catalog fingerprint와 final-boundary/M05 security·trigger sentinel이
+    모두 일치한다. fingerprint line의 정렬은 PostgreSQL locale 차이를 없애기 위해
+    `COLLATE "C"`로 고정한다.
+  - root-only producer가 만든 새 backup의 checksum 검증 결과가 명시적으로 주어진다.
+- rebaseline 뒤에만 표준 `alembic upgrade 20260824_0101`을 실행한다. 실패 시
+  version을 임의로 stamp하거나 이전 migration을 되살리지 않고, 검증한 backup으로
+  복구한 뒤 원인을 수정한다.
+- `0061`이 아닌 기존 DB, fingerprint가 다른 DB, backup이 확인되지 않은 DB는
+  rebaseline을 거부한다. 해당 DB는 검증된 backup을 새 `0101` DB로 복구하는 별도
+  절차만 허용한다.
+- `0101`의 `ops` receipt object owner는 app runtime·schema-swap executor·fence database
+  owner와 분리된 migration owner다. migration owner는 app schema owner의 권한을 상속해
+  필요한 DDL만 수행하고, `x_extension`에는 `USAGE`만 받는다. migration 뒤에는 runtime
+  login/CONNECT surface에 남지 않게 운영 역할을 비활성화한다.
+- M05 activation은 이 revision 전환만으로 켜지지 않으며 계속 `false`다.
+
+### 근거
+
+`0062` 이후는 아직 공유된 배포 계약이 아니므로 M05를 한 revision으로 합쳐도 remote
+history를 깨지 않는다. 반면 N150 DB에는 실제 데이터가 있으므로 단순 drop/recreate나
+무검증 `alembic stamp`는 데이터 보존과 audit chain 신뢰를 훼손한다. locale-independent structural
+fingerprint와 fresh backup을 함께 요구하면 history 유지 비용은 끝내면서도 현재 운영 catalog를
+fail-closed로 전환할 수 있다.
+
+### 결과 (긍정)
+
+- 새 설치와 CI는 `0100 → 0101` 두 단계만 검증한다.
+- M05의 DDL·ACL·append-only receipt와 owner-bound verification 계약은 하나의 reviewable
+  revision에 모인다.
+- 운영 `0061` 데이터는 재생성 없이 명시적·감사 가능한 전환 경로를 가진다.
+
+### 결과 (부정)
+
+- 과거 revision에서의 일반 forward upgrade는 더 이상 지원하지 않는다.
+- `0100` baseline과 catalog fingerprint를 생성·검증하는 일회성 구현 비용이 든다.
+- 운영 rebaseline은 fresh backup과 root-only 실행 권한이 없으면 진행할 수 없다.
+
+### 후속
+
+- `docs/execplan/t-vn-m05-alembic-rebaseline.md`의 구현·검증·운영 전환 절차를 따른다.
+- `0100` fresh bootstrap과 N150 `0061 → 0100 → 0101` disposable rehearsal을 PostgreSQL 16에서
+  검증한다.
+- production rebaseline은 PR merge 뒤에도 별도 운영 변경 승인과 fresh backup 검증이 있어야 한다.

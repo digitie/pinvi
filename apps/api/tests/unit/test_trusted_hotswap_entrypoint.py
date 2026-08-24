@@ -70,6 +70,56 @@ def test_hotswap_endpoint_rejects_the_same_ambiguous_vectors_as_backup(url: str)
         backup.pin_backup_database_url(url)
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql://runtime@postgres:5432/pinvi?user=other",
+        "postgresql://runtime@postgres:5432/pinvi?dbname=evil",
+        "postgresql://runtime@postgres:5432/pinvi?options=-c%20default_transaction_read_only%3Doff",
+        "postgresql://runtime@postgres:5432/pinvi?op%74ions=-c%20role%3Dpinvi_app",
+        "postgresql://runtime@postgres:5432/pinvi?options=-c%20role%3Dpinvi_app",
+        "postgresql://runtime@postgres:5432/pinvi?application_name=untrusted",
+    ],
+)
+def test_hotswap_endpoint_rejects_all_non_tls_query_overrides_before_dns(
+    monkeypatch: pytest.MonkeyPatch, url: str
+) -> None:
+    hotswap = _script_module("trusted-hotswap-entrypoint.py", "trusted_hotswap_entrypoint")
+    monkeypatch.setattr(
+        hotswap.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("rejected URL reached DNS resolution")
+        ),
+    )
+
+    with pytest.raises(hotswap.TrustedHotswapError, match="query is not allowed"):
+        hotswap.pin_database_url(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql://runtime@postgres:5432/pinvi?sslmode=",
+        "postgresql://runtime@postgres:5432/pinvi?sslmode=invalid",
+    ],
+)
+def test_hotswap_endpoint_rejects_invalid_tls_query_values_before_dns(
+    monkeypatch: pytest.MonkeyPatch, url: str
+) -> None:
+    hotswap = _script_module("trusted-hotswap-entrypoint.py", "trusted_hotswap_entrypoint")
+    monkeypatch.setattr(
+        hotswap.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("rejected URL reached DNS resolution")
+        ),
+    )
+
+    with pytest.raises(hotswap.TrustedHotswapError, match="sslmode is invalid"):
+        hotswap.pin_database_url(url)
+
+
 def test_hotswap_strict_entrypoint_requires_root_and_strict_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -332,7 +382,7 @@ def test_drain_receipt_consumption_latches_archive_if_unlink_fails(
 
 def _recovery_marker(
     *,
-    state: str = "fence_released",
+    state: str = "fence_release_intent",
     terminal_schema_mode: str = "switched",
     recovery_required: bool = False,
 ) -> dict[str, object]:
@@ -340,22 +390,28 @@ def _recovery_marker(
         "acl_topology_sha256": "b" * 64,
         "app_role": "pinvi_app",
         "connect_restore_grants": [{"grant_option": False, "role": "pinvi_app"}],
+        "drain_receipt_sha256": "d" * 64,
         "fence_executor_role": "pinvi_fence",
         "operation_id": "123e4567-e89b-42d3-a456-426614174000",
+        "pg_restore_list_sha256": "e" * 64,
         "previous_schema": "app_previous_1",
         "public_connect_was_granted": True,
         "recovery_required": recovery_required,
+        "restore_executor_connect_restore_grants": [],
+        "restore_executor_role": "pinvi_owner",
         "restore_schema": "app_restore_1",
         "source_schema": "app",
+        "source_identity_sha256": "f" * 64,
         "source_schema_oid_before": 100,
         "state": state,
+        "script_sha256": "1" * 64,
+        "snapshot_sha256": "2" * 64,
         "target_identity_sha256": "a" * 64,
     }
     if state == "prepared":
         marker["connect_restore_grants"] = []
         marker["public_connect_was_granted"] = False
         return marker
-    marker["post_release_acl_topology_sha256"] = "c" * 64
     marker["terminal_schema_mode"] = terminal_schema_mode
     if terminal_schema_mode == "switched":
         marker.update(
@@ -365,9 +421,14 @@ def _recovery_marker(
                 "restore_schema_oid": 200,
             }
         )
-    else:
-        marker["restore_schema_oid"] = 200
     return marker
+
+
+def _terminal_receipt() -> dict[str, object]:
+    return {
+        "post_release_acl_topology_sha256": "c" * 64,
+        "record_sha256": "8" * 64,
+    }
 
 
 def _safe_observation(
@@ -376,6 +437,7 @@ def _safe_observation(
     previous_oid: str,
     restore_oid: str,
     connect_grants: list[dict[str, object]] | None = None,
+    restore_executor_grants: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     return {
         "advisory_lock_absent": True,
@@ -392,6 +454,9 @@ def _safe_observation(
         "previous_oid": previous_oid,
         "public_connect_granted": True,
         "restore_executor_role": "pinvi_owner",
+        "restore_executor_connect_restore_grants": restore_executor_grants
+        if restore_executor_grants is not None
+        else [],
         "restore_executor_safe": True,
         "restore_oid": restore_oid,
     }
@@ -425,6 +490,11 @@ def _patch_recovery_reads(
         return f"{topology_sha256}\n"
 
     monkeypatch.setattr(hotswap, "_run_psql", run_psql)
+    monkeypatch.setattr(
+        hotswap,
+        "_release_receipt_topology_sha256",
+        lambda _database_url, _fields: (topology_sha256, "a" * 64),
+    )
 
 
 def test_recovery_proof_accepts_the_verified_switched_matrix(
@@ -443,30 +513,18 @@ def test_recovery_proof_accepts_the_verified_switched_matrix(
         marker,
         "postgresql://unused",
         Path("/trusted/m05_hotswap_topology.sql"),
+        marker_sha256="7" * 64,
+        receipt=_terminal_receipt(),
+        fence_database_url="postgresql://fence",
     )
 
     assert hotswap._SHA256_RE.fullmatch(result)
 
 
-def test_recovery_proof_accepts_no_switch_and_prepared_only_at_exact_boundaries(
+def test_recovery_proof_accepts_prepared_only_at_exact_boundary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     hotswap = _script_module("trusted-hotswap-entrypoint.py", "trusted_hotswap_entrypoint")
-    no_switch_marker = _recovery_marker(terminal_schema_mode="no_switch", recovery_required=True)
-    _patch_recovery_reads(
-        monkeypatch,
-        hotswap,
-        _safe_observation(app_oid="100", previous_oid="", restore_oid="200"),
-        "c" * 64,
-    )
-    assert hotswap._SHA256_RE.fullmatch(
-        hotswap._safe_recovery_observation(
-            no_switch_marker,
-            "postgresql://unused",
-            Path("/trusted/m05_hotswap_topology.sql"),
-        )
-    )
-
     prepared_marker = _recovery_marker(state="prepared")
     prepared_observation = _safe_observation(
         app_oid="100",
@@ -481,6 +539,9 @@ def test_recovery_proof_accepts_no_switch_and_prepared_only_at_exact_boundaries(
             prepared_marker,
             "postgresql://unused",
             Path("/trusted/m05_hotswap_topology.sql"),
+            marker_sha256="7" * 64,
+            receipt=None,
+            fence_database_url=None,
         )
     )
 
@@ -506,6 +567,9 @@ def test_recovery_proof_rejects_connect_acl_or_topology_drift(
             marker,
             "postgresql://unused",
             Path("/trusted/m05_hotswap_topology.sql"),
+            marker_sha256="7" * 64,
+            receipt=_terminal_receipt(),
+            fence_database_url="postgresql://fence",
         )
 
     _patch_recovery_reads(
@@ -519,7 +583,305 @@ def test_recovery_proof_rejects_connect_acl_or_topology_drift(
             marker,
             "postgresql://unused",
             Path("/trusted/m05_hotswap_topology.sql"),
+            marker_sha256="7" * 64,
+            receipt=_terminal_receipt(),
+            fence_database_url="postgresql://fence",
         )
+
+
+def test_recovery_proof_rejects_restore_executor_connect_grant_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hotswap = _script_module("trusted-hotswap-entrypoint.py", "trusted_hotswap_entrypoint")
+    marker = _recovery_marker()
+    marker["restore_executor_connect_restore_grants"] = [
+        {"grant_option": False, "role": "pinvi_owner"}
+    ]
+    _patch_recovery_reads(
+        monkeypatch,
+        hotswap,
+        _safe_observation(
+            app_oid="200",
+            previous_oid="100",
+            restore_oid="",
+            restore_executor_grants=[],
+        ),
+        "c" * 64,
+    )
+
+    with pytest.raises(hotswap.TrustedHotswapError, match="CONNECT"):
+        hotswap._safe_recovery_observation(
+            marker,
+            "postgresql://unused",
+            Path("/trusted/m05_hotswap_topology.sql"),
+            marker_sha256="7" * 64,
+            receipt=_terminal_receipt(),
+            fence_database_url="postgresql://fence",
+        )
+
+
+def test_root_recovery_reads_release_receipt_before_acknowledgement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """release window 직후 marker는 DB receipt 검증 없이는 종료 처리할 수 없다."""
+
+    hotswap = _script_module("trusted-hotswap-entrypoint.py", "trusted_hotswap_entrypoint")
+    marker = _recovery_marker(state="fence_release_intent")
+    marker_sha256 = hotswap.hashlib.sha256(hotswap._canonical_json(marker)).hexdigest()
+    forensics = Path("/trusted/forensics")
+    topology = Path("/trusted/m05_hotswap_topology.sql")
+    receipt = {"record_sha256": "8" * 64}
+    receipt_calls: list[tuple[dict[str, object], str, str]] = []
+    acknowledgement: list[tuple[Path, str, str, str, str | None]] = []
+
+    monkeypatch.setattr(hotswap, "_strict_environment", lambda: None)
+    monkeypatch.setattr(
+        hotswap, "_load_trusted_configuration", lambda: _trusted_configuration(hotswap)
+    )
+    monkeypatch.setattr(
+        hotswap,
+        "_canonical_runner_paths",
+        lambda: (Path("/trusted/restore-hotswap.sh"), forensics, topology),
+    )
+    monkeypatch.setattr(hotswap, "_read_marker", lambda _forensics: marker)
+
+    def assert_current_history(observed_forensics: Path, *, operation_id: str) -> dict[str, object]:
+        assert observed_forensics == forensics
+        assert operation_id == marker["operation_id"]
+        return {
+            "intent_state_sequence": 6,
+            "marker_sha256": marker_sha256,
+            "recovery_acknowledgement_verification_sha256": None,
+            "release_receipt_record_sha256": "8" * 64,
+            "root_unsealed_release_receipt_verification_sha256": None,
+        }
+
+    monkeypatch.setattr(
+        hotswap, "_assert_current_history_consistent_for_recovery", assert_current_history
+    )
+    monkeypatch.setattr(hotswap, "pin_database_url", lambda value: f"pinned:{value}")
+
+    def read_receipt(
+        observed_marker: dict[str, object], *, marker_sha256: str, fence_database_url: str
+    ) -> dict[str, object]:
+        receipt_calls.append((observed_marker, marker_sha256, fence_database_url))
+        return receipt
+
+    monkeypatch.setattr(hotswap, "_read_release_receipt", read_receipt)
+    monkeypatch.setattr(
+        hotswap,
+        "_safe_recovery_observation",
+        lambda observed_marker, database_url, observed_topology, **kwargs: (
+            "6" * 64
+            if (
+                observed_marker is marker
+                and database_url == "pinned:postgresql://owner@target/pinvi"
+                and observed_topology == topology
+                and kwargs
+                == {
+                    "marker_sha256": marker_sha256,
+                    "receipt": receipt,
+                    "fence_database_url": "pinned:postgresql://fence@target/pinvi",
+                }
+            )
+            else (_ for _ in ()).throw(AssertionError("unexpected recovery proof inputs"))
+        ),
+    )
+    monkeypatch.setattr(
+        hotswap,
+        "_acknowledge_after_verified_recovery",
+        lambda observed_forensics, *, operation_id, verification_sha256, expected_marker_sha256, expected_release_receipt_record_sha256: (
+            acknowledgement.append(
+                (
+                    observed_forensics,
+                    operation_id,
+                    verification_sha256,
+                    expected_marker_sha256,
+                    expected_release_receipt_record_sha256,
+                )
+            )
+        ),
+    )
+
+    assert (
+        hotswap._recover(
+            Namespace(confirm=True, operation_id="123e4567-e89b-42d3-a456-426614174000")
+        )
+        == 0
+    )
+    assert receipt_calls == [(marker, marker_sha256, "pinned:postgresql://fence@target/pinvi")]
+    assert acknowledgement == [
+        (
+            forensics,
+            "123e4567-e89b-42d3-a456-426614174000",
+            "6" * 64,
+            marker_sha256,
+            "8" * 64,
+        )
+    ]
+
+
+def test_root_recovery_unsealed_receipt_requires_explicit_cas_escalation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DB commit 뒤 seal 전 SIGKILL은 default recover가 아닌 root escalation만 닫는다."""
+
+    hotswap = _script_module("trusted-hotswap-entrypoint.py", "trusted_hotswap_entrypoint")
+    marker = _recovery_marker(state="fence_release_intent")
+    marker_sha256 = hotswap.hashlib.sha256(hotswap._canonical_json(marker)).hexdigest()
+    forensics = Path("/trusted/forensics")
+    topology = Path("/trusted/m05_hotswap_topology.sql")
+    receipt = {"record_sha256": "8" * 64}
+    acknowledgement: list[tuple[Path, str, str, str, str]] = []
+
+    monkeypatch.setattr(hotswap, "_strict_environment", lambda: None)
+    monkeypatch.setattr(
+        hotswap, "_load_trusted_configuration", lambda: _trusted_configuration(hotswap)
+    )
+    monkeypatch.setattr(
+        hotswap,
+        "_canonical_runner_paths",
+        lambda: (Path("/trusted/restore-hotswap.sh"), forensics, topology),
+    )
+    monkeypatch.setattr(hotswap, "_read_marker", lambda _forensics: marker)
+    monkeypatch.setattr(
+        hotswap,
+        "_assert_current_history_consistent_for_recovery",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("normal recovery must not accept an unsealed receipt")
+        ),
+    )
+    monkeypatch.setattr(
+        hotswap,
+        "_assert_unsealed_release_receipt_escalation_history",
+        lambda observed_forensics, *, operation_id: (
+            {
+                "intent_state_sequence": 6,
+                "marker_sha256": marker_sha256,
+                "recovery_acknowledgement_verification_sha256": None,
+                "release_receipt_record_sha256": None,
+                "root_unsealed_release_receipt_verification_sha256": None,
+            }
+            if observed_forensics == forensics and operation_id == marker["operation_id"]
+            else (_ for _ in ()).throw(AssertionError("unexpected escalation history"))
+        ),
+    )
+    monkeypatch.setattr(hotswap, "pin_database_url", lambda value: f"pinned:{value}")
+
+    def read_receipt(
+        observed_marker: dict[str, object],
+        *,
+        marker_sha256: str,
+        fence_database_url: str,
+    ) -> dict[str, object]:
+        assert observed_marker is marker
+        assert marker_sha256 == marker_sha256_value
+        assert fence_database_url == "pinned:postgresql://fence@target/pinvi"
+        return receipt
+
+    marker_sha256_value = marker_sha256
+    monkeypatch.setattr(hotswap, "_read_release_receipt", read_receipt)
+    monkeypatch.setattr(
+        hotswap,
+        "_safe_recovery_observation",
+        lambda observed_marker, database_url, observed_topology, **kwargs: (
+            "6" * 64
+            if (
+                observed_marker is marker
+                and database_url == "pinned:postgresql://owner@target/pinvi"
+                and observed_topology == topology
+                and kwargs
+                == {
+                    "marker_sha256": marker_sha256,
+                    "receipt": receipt,
+                    "fence_database_url": "pinned:postgresql://fence@target/pinvi",
+                }
+            )
+            else (_ for _ in ()).throw(AssertionError("unexpected escalation proof"))
+        ),
+    )
+    monkeypatch.setattr(
+        hotswap,
+        "_acknowledge_unsealed_release_receipt_after_verified_recovery",
+        lambda observed_forensics, *, operation_id, verification_sha256, expected_marker_sha256, expected_release_receipt_record_sha256: (
+            acknowledgement.append(
+                (
+                    observed_forensics,
+                    operation_id,
+                    verification_sha256,
+                    expected_marker_sha256,
+                    expected_release_receipt_record_sha256,
+                )
+            )
+        ),
+    )
+
+    assert (
+        hotswap._recover(
+            Namespace(
+                confirm=True,
+                operation_id="123e4567-e89b-42d3-a456-426614174000",
+                escalate_unsealed_release_receipt=True,
+                expected_marker_sha256=marker_sha256,
+            )
+        )
+        == 0
+    )
+    assert acknowledgement == [
+        (
+            forensics,
+            "123e4567-e89b-42d3-a456-426614174000",
+            "6" * 64,
+            marker_sha256,
+            "8" * 64,
+        )
+    ]
+
+
+def test_root_recovery_unsealed_escalation_requires_an_explicit_marker_hash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hotswap = _script_module("trusted-hotswap-entrypoint.py", "trusted_hotswap_entrypoint")
+    monkeypatch.setattr(hotswap, "_strict_environment", lambda: None)
+
+    with pytest.raises(hotswap.TrustedHotswapError, match="expected-marker-sha256"):
+        hotswap._recover(
+            Namespace(
+                confirm=True,
+                operation_id="123e4567-e89b-42d3-a456-426614174000",
+                escalate_unsealed_release_receipt=True,
+                expected_marker_sha256=None,
+            )
+        )
+
+
+def test_recovery_psql_sets_server_side_read_only_before_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """trusted recovery query는 SQL 모양과 무관하게 server-side read-only여야 한다."""
+
+    hotswap = _script_module("trusted-hotswap-entrypoint.py", "trusted_hotswap_entrypoint")
+    monkeypatch.setattr(hotswap, "_trusted_psql_path", lambda: Path("/trusted/psql"))
+    captured: dict[str, object] = {}
+
+    def run(arguments, **kwargs):  # type: ignore[no-untyped-def]
+        captured["arguments"] = arguments
+        captured.update(kwargs)
+        return SimpleNamespace(returncode=0, stdout="1\n")
+
+    monkeypatch.setattr(hotswap.subprocess, "run", run)
+    assert (
+        hotswap._run_psql(
+            "postgresql://fence@target/pinvi",
+            command="SELECT 1",
+            failure="read-only test query failed",
+        )
+        == "1\n"
+    )
+    assert captured["env"] == {
+        **hotswap._SAFE_ENVIRONMENT,
+        "PGOPTIONS": "-c default_transaction_read_only=on",
+    }
 
 
 def test_root_run_execve_receives_only_the_explicit_trusted_environment(
@@ -608,6 +970,7 @@ def test_root_run_execve_receives_only_the_explicit_trusted_environment(
         "PINVI_ENVIRONMENT": "staging",
         "PINVI_M05_FORENSICS_DRAIN_RECEIPT_SHA256": "d" * 64,
         "PINVI_M05_FORENSICS_OPERATION_ID": "123e4567-e89b-42d3-a456-426614174000",
+        "PINVI_M05_FORENSICS_STATE_DIR": "/var/lib/pinvi/restore-forensics",
         "PINVI_RESTORE_ALLOW_NO_DRAIN": "1",
         "PINVI_RESTORE_API_TRIGGER": "1",
         "PINVI_RESTORE_APP_ROLE": "pinvi_app",
@@ -702,7 +1065,7 @@ def test_root_wrapper_does_not_resolve_id_from_the_caller_path(tmp_path: Path) -
     )
     caller_id.chmod(0o755)
 
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603
         ["/bin/sh", str(wrapper), "status"],
         check=False,
         capture_output=True,
@@ -721,9 +1084,18 @@ def test_root_wrapper_does_not_resolve_id_from_the_caller_path(tmp_path: Path) -
         "PINVI_RESTORE_ALLOW_NO_DRAIN",
         "PINVI_RESTORE_DRAIN_COMMAND",
         "PINVI_RESTORE_DRAIN_VERIFIED",
+        "PINVI_RESTORE_EXTERNAL_LOCK_HOLDER_BACKEND_PID",
+        "PINVI_RESTORE_EXTERNAL_LOCK_HOLDER_PID",
         "PINVI_RESTORE_PG_RESTORE_BIN",
         "PINVI_RESTORE_PRIVATE_TOOL_COPY",
         "PINVI_RESTORE_PSQL_BIN",
+        "PINVI_RESTORE_TEST_FAIL_AFTER_RELEASE_RECEIPT_SEAL_ONCE",
+        "PINVI_RESTORE_TEST_FAIL_RELEASE_SQL_ONCE",
+        "PINVI_RESTORE_TEST_FAIL_RESTORE_ONCE",
+        "PINVI_RESTORE_TEST_REQUIRE_RELEASE_RECEIPT",
+        "PINVI_RESTORE_TEST_SIGKILL_AFTER_RELEASE_RECEIPT_COMMIT_ONCE",
+        "PINVI_RESTORE_TEST_SIGKILL_AFTER_RELEASE_RECEIPT_SEAL_ONCE",
+        "PINVI_M05_RESTORE_DRILL",
     ],
 )
 def test_root_runner_rejects_inherited_tool_test_and_command_overrides(

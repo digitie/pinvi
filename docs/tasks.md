@@ -8,7 +8,8 @@
 ## 현재 선점 / 충돌 회피
 
 - 현재 선점: `T-VN-M05-ACTIVATION` — `codex/m05-activation`. M05 설정·compose·activation
-  receipt 경계만 만지며, T-323·Google OAuth 파일과 충돌을 피한다.
+  receipt 경계와 ADR-062 Alembic `0100/0101` rebaseline만 만지며, T-323·Google OAuth 파일과
+  충돌을 피한다.
 
 ## kor-travel-map compatible pair
 
@@ -75,8 +76,8 @@
 
 ## 웹 / 테스트 인프라
 
-- [ ] **T-VN-M05-ACTIVATION** — paired live/restore/review evidence를 요구하는 M05 production
-  activation receipt gate와 실제 isolated activation 검증을 완료한다.
+- [ ] **T-VN-M05-ACTIVATION** — ADR-062 `0100/0101` rebaseline, paired live/restore/review evidence를
+  요구하는 M05 production activation receipt gate와 실제 isolated activation 검증을 완료한다.
 - [ ] **T-323** — web 워크플로의 `e2e` 잡이 aggregate required check가 아니라 Playwright 실패가 머지를
   막지 않는다. 의도된 것인지 확인하고 아니면 required로 올린다.
 

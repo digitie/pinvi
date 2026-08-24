@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import ipaddress
 import json
 import os
@@ -26,8 +27,9 @@ from typing import Final, NoReturn, cast
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 _POSTGRES_SCHEMES: Final = frozenset({"postgres", "postgresql", "postgresql+asyncpg"})
-_ENDPOINT_QUERY_KEYS: Final = frozenset(
-    {"host", "hostaddr", "port", "service", "servicefile"}
+_ALLOWED_DATABASE_URL_QUERY_KEYS: Final = frozenset({"sslmode"})
+_SSL_MODES: Final = frozenset(
+    {"allow", "disable", "prefer", "require", "verify-ca", "verify-full"}
 )
 _STRICT_ENVIRONMENTS: Final = frozenset({"staging", "production"})
 _SHA256_RE: Final = re.compile(r"[0-9a-f]{64}")
@@ -53,13 +55,30 @@ _RUNNER_UNSAFE_ENVIRONMENT_KEYS: Final = frozenset(
         "PINVI_RESTORE_DRAIN_VERIFIED",
         "PINVI_RESTORE_HOTSWAP_EXECUTE",
         "PINVI_RESTORE_ALLOW_NO_DRAIN",
+        "PINVI_RESTORE_EXTERNAL_LOCK_HOLDER_BACKEND_PID",
+        "PINVI_RESTORE_EXTERNAL_LOCK_HOLDER_PID",
         "PINVI_RESTORE_PG_RESTORE_BIN",
         "PINVI_RESTORE_PG_RESTORE_SHA256",
         "PINVI_RESTORE_PRIVATE_TOOL_COPY",
         "PINVI_RESTORE_PSQL_BIN",
         "PINVI_RESTORE_PSQL_SHA256",
+        "PINVI_RESTORE_TEST_FAIL_FORENSICS_HISTORY_APPEND_ONCE",
+        "PINVI_RESTORE_TEST_FAIL_FORENSICS_RELEASE_ONCE",
+        "PINVI_RESTORE_TEST_FAIL_AFTER_RELEASE_RECEIPT_SEAL_ONCE",
+        "PINVI_RESTORE_TEST_FAIL_REFENCE_SQL_ONCE",
+        "PINVI_RESTORE_TEST_FAIL_RELEASE_DATABASE_SQL_ONCE",
         "PINVI_RESTORE_TEST_FAIL_RELEASE_ONCE",
+        "PINVI_RESTORE_TEST_FAIL_RELEASE_SQL_ONCE",
+        "PINVI_RESTORE_TEST_FAIL_RELEASE_WINDOW_ONCE",
+        "PINVI_RESTORE_TEST_FAIL_RESTORE_ONCE",
+        "PINVI_RESTORE_TEST_REQUIRE_RELEASE_RECEIPT",
+        "PINVI_RESTORE_TEST_SIGKILL_AFTER_RELEASE_RECEIPT_COMMIT_ONCE",
+        "PINVI_RESTORE_TEST_SIGKILL_AFTER_RELEASE_RECEIPT_SEAL_ONCE",
         "PINVI_RESTORE_WRITE_ROLES",
+        "PINVI_M05_FORENSICS_DRAIN_RECEIPT_SHA256",
+        "PINVI_M05_FORENSICS_OPERATION_ID",
+        "PINVI_M05_FORENSICS_STATE_DIR",
+        "PINVI_M05_RESTORE_DRILL",
         "PINVI_M05_RESTORE_TEST_MODE",
         # These inputs are read only from /etc/pinvi/trusted-hotswap.json.
         # Keep this second guard even though the root wrapper empties env: it
@@ -350,8 +369,10 @@ def pin_database_url(value: str) -> str:
     names = [name for name, _ in query]
     if any(not name for name in names) or len(set(names)) != len(names):
         _raise("hotswap database URL query is ambiguous")
-    if _ENDPOINT_QUERY_KEYS.intersection(names):
-        _raise("hotswap database URL must not preconfigure an endpoint override")
+    if any(name not in _ALLOWED_DATABASE_URL_QUERY_KEYS for name in names):
+        _raise("hotswap database URL query is not allowed")
+    if any(name == "sslmode" and value not in _SSL_MODES for name, value in query):
+        _raise("hotswap database URL sslmode is invalid")
     query.append(("hostaddr", _resolved_hostaddr(hostname, port)))
     return urlunsplit(parsed._replace(query=urlencode(query, safe=":")))
 
@@ -376,6 +397,196 @@ def _forensics_command(
         text=True,
         env=_SAFE_ENVIRONMENT,
     )
+
+
+def _validate_recovery_ledger_proof(proof: object) -> dict[str, object]:
+    """forensic module의 in-process proof ABI를 strict하게 고정한다."""
+
+    if not isinstance(proof, dict) or set(proof) != {
+        "intent_state_sequence",
+        "marker_sha256",
+        "recovery_acknowledgement_verification_sha256",
+        "release_receipt_record_sha256",
+        "root_unsealed_release_receipt_verification_sha256",
+    }:
+        _raise("trusted forensic history proof is invalid")
+    marker_sha256 = proof.get("marker_sha256")
+    receipt_record_sha256 = proof.get("release_receipt_record_sha256")
+    acknowledgement_verification_sha256 = proof.get(
+        "recovery_acknowledgement_verification_sha256"
+    )
+    root_unsealed_verification_sha256 = proof.get(
+        "root_unsealed_release_receipt_verification_sha256"
+    )
+    sequence = proof.get("intent_state_sequence")
+    if (
+        not isinstance(marker_sha256, str)
+        or _SHA256_RE.fullmatch(marker_sha256) is None
+        or (
+            receipt_record_sha256 is not None
+            and (
+                not isinstance(receipt_record_sha256, str)
+                or _SHA256_RE.fullmatch(receipt_record_sha256) is None
+            )
+        )
+        or (
+            acknowledgement_verification_sha256 is not None
+            and (
+                not isinstance(acknowledgement_verification_sha256, str)
+                or _SHA256_RE.fullmatch(acknowledgement_verification_sha256) is None
+            )
+        )
+        or (
+            root_unsealed_verification_sha256 is not None
+            and (
+                not isinstance(root_unsealed_verification_sha256, str)
+                or _SHA256_RE.fullmatch(root_unsealed_verification_sha256) is None
+            )
+        )
+        or (sequence is not None and (type(sequence) is not int or sequence < 1))
+    ):
+        _raise("trusted forensic history proof is invalid")
+    return cast(dict[str, object], proof)
+
+
+def _load_forensic_history_proof(
+    forensics: Path,
+    *,
+    operation_id: str,
+    primitive_name: str,
+) -> dict[str, object]:
+    """고정 forensic module의 read-only proof primitive 하나만 실행한다."""
+
+    module_name = "_pinvi_m05_hotswap_forensics_history"
+    specification = importlib.util.spec_from_file_location(module_name, forensics)
+    if specification is None or specification.loader is None:
+        _raise("trusted forensic history primitive is unavailable")
+    module = importlib.util.module_from_spec(specification)
+    sys.modules[module_name] = module
+    try:
+        specification.loader.exec_module(module)
+        validate = getattr(module, primitive_name, None)
+        if not callable(validate):
+            _raise("trusted forensic history primitive is unavailable")
+        proof = validate(Path(_STATE_DIRECTORY), operation_id=operation_id)
+        return _validate_recovery_ledger_proof(proof)
+    except TrustedHotswapError:
+        raise
+    except Exception as exc:
+        raise TrustedHotswapError(
+            "trusted forensic history is not recoverable"
+        ) from exc
+    finally:
+        sys.modules.pop(module_name, None)
+
+
+def _assert_current_history_consistent_for_recovery(
+    forensics: Path, *, operation_id: str
+) -> dict[str, object]:
+    """current pointer만 앞선 forensic transition은 archive 전에 거부한다."""
+
+    return _load_forensic_history_proof(
+        forensics,
+        operation_id=operation_id,
+        primitive_name="assert_current_history_consistent_for_verified_recovery",
+    )
+
+
+def _assert_unsealed_release_receipt_escalation_history(
+    forensics: Path, *, operation_id: str
+) -> dict[str, object]:
+    """명시적 root escalation만 seal 없는 terminal intent를 읽을 수 있다."""
+
+    return _load_forensic_history_proof(
+        forensics,
+        operation_id=operation_id,
+        primitive_name="assert_unsealed_release_receipt_escalation_history",
+    )
+
+
+def _acknowledge_after_verified_recovery(
+    forensics: Path,
+    *,
+    operation_id: str,
+    verification_sha256: str,
+    expected_marker_sha256: str,
+    expected_release_receipt_record_sha256: str | None,
+) -> None:
+    """public helper CLI 대신 trusted proof 뒤 marker를 archive한다.
+
+    Strict recovery acknowledgement는 public CLI가 아니라 이 root-only
+    entrypoint의 in-process primitive다. 호출자는 이 함수 앞에서 반드시
+    `_safe_recovery_observation`의 read-only DB 증명을 완료해야 한다.
+    """
+
+    module_name = "_pinvi_m05_hotswap_forensics"
+    specification = importlib.util.spec_from_file_location(module_name, forensics)
+    if specification is None or specification.loader is None:
+        _raise("trusted forensic recovery primitive is unavailable")
+    module = importlib.util.module_from_spec(specification)
+    sys.modules[module_name] = module
+    try:
+        specification.loader.exec_module(module)
+        acknowledge = getattr(module, "acknowledge_after_verified_recovery", None)
+        if not callable(acknowledge):
+            _raise("trusted forensic recovery primitive is unavailable")
+        acknowledge(
+            Path(_STATE_DIRECTORY),
+            operation_id=operation_id,
+            verification_sha256=verification_sha256,
+            expected_marker_sha256=expected_marker_sha256,
+            expected_release_receipt_record_sha256=expected_release_receipt_record_sha256,
+        )
+    except TrustedHotswapError:
+        raise
+    except Exception as exc:
+        raise TrustedHotswapError(
+            "trusted recovery acknowledgement could not be written"
+        ) from exc
+    finally:
+        sys.modules.pop(module_name, None)
+
+
+def _acknowledge_unsealed_release_receipt_after_verified_recovery(
+    forensics: Path,
+    *,
+    operation_id: str,
+    verification_sha256: str,
+    expected_marker_sha256: str,
+    expected_release_receipt_record_sha256: str,
+) -> None:
+    """explicit root escalation의 full proof 뒤에만 unsealed intent를 archive한다."""
+
+    module_name = "_pinvi_m05_hotswap_forensics_unsealed_recovery"
+    specification = importlib.util.spec_from_file_location(module_name, forensics)
+    if specification is None or specification.loader is None:
+        _raise("trusted unsealed forensic recovery primitive is unavailable")
+    module = importlib.util.module_from_spec(specification)
+    sys.modules[module_name] = module
+    try:
+        specification.loader.exec_module(module)
+        acknowledge = getattr(
+            module,
+            "acknowledge_unsealed_release_receipt_after_verified_recovery",
+            None,
+        )
+        if not callable(acknowledge):
+            _raise("trusted unsealed forensic recovery primitive is unavailable")
+        acknowledge(
+            Path(_STATE_DIRECTORY),
+            operation_id=operation_id,
+            verification_sha256=verification_sha256,
+            expected_marker_sha256=expected_marker_sha256,
+            expected_release_receipt_record_sha256=expected_release_receipt_record_sha256,
+        )
+    except TrustedHotswapError:
+        raise
+    except Exception as exc:
+        raise TrustedHotswapError(
+            "trusted unsealed recovery acknowledgement could not be written"
+        ) from exc
+    finally:
+        sys.modules.pop(module_name, None)
 
 
 def _forensics_status(forensics: Path, *, allow_absent: bool) -> dict[str, object]:
@@ -898,6 +1109,7 @@ def _runner_environment(
         "PINVI_RESTORE_TRUSTED_BACKUP_DIR": str(trusted_directory),
         "PINVI_M05_FORENSICS_DRAIN_RECEIPT_SHA256": receipt_sha256,
         "PINVI_M05_FORENSICS_OPERATION_ID": operation_id,
+        "PINVI_M05_FORENSICS_STATE_DIR": _STATE_DIRECTORY,
     }
     for environment_name, configuration_name, _ in _SOURCE_IDENTITY_CONFIGURATION:
         environment[environment_name] = getattr(configuration, configuration_name)
@@ -949,7 +1161,10 @@ def _run_psql(
         capture_output=True,
         input=command,
         text=True,
-        env=_SAFE_ENVIRONMENT,
+        # Every invocation in this entrypoint is an independent observation.
+        # This server-side GUC makes an accidental write fail even if a future
+        # query stops looking like a SELECT.
+        env={**_SAFE_ENVIRONMENT, "PGOPTIONS": "-c default_transaction_read_only=on"},
     )
     if result.returncode != 0:
         _raise(failure)
@@ -981,6 +1196,17 @@ WHERE d.datname = current_database();
     }
 
 
+def _assert_fence_database_identity(
+    fence_database_url: str, fields: dict[str, object]
+) -> str:
+    """receipt/topology 관찰도 marker가 결박한 동일 target DB에서만 허용한다."""
+
+    actual_target, _ = _identity_sha256_from_psql(fence_database_url)
+    if actual_target != fields["expected_target"]:
+        _raise("trusted recovery fence database identity does not match the marker")
+    return actual_target
+
+
 def _recovery_marker_fields(marker: dict[str, object]) -> dict[str, object]:
     """helper schema 검증 뒤에도 recovery에 필요한 fields를 독립적으로 좁힌다."""
 
@@ -990,6 +1216,11 @@ def _recovery_marker_fields(marker: dict[str, object]) -> dict[str, object]:
     restore_schema = marker.get("restore_schema")
     app_role = marker.get("app_role")
     fence_role = marker.get("fence_executor_role")
+    script_sha256 = marker.get("script_sha256")
+    snapshot_sha256 = marker.get("snapshot_sha256")
+    drain_receipt_sha256 = marker.get("drain_receipt_sha256")
+    pg_restore_list_sha256 = marker.get("pg_restore_list_sha256")
+    source_identity_sha256 = marker.get("source_identity_sha256")
     expected_target = marker.get("target_identity_sha256")
     expected_topology = marker.get("acl_topology_sha256")
     source_oid = marker.get("source_schema_oid_before")
@@ -997,6 +1228,8 @@ def _recovery_marker_fields(marker: dict[str, object]) -> dict[str, object]:
     recovery_required = marker.get("recovery_required")
     public_connect_was_granted = marker.get("public_connect_was_granted")
     grants = marker.get("connect_restore_grants")
+    restore_executor_role = marker.get("restore_executor_role")
+    restore_executor_grants = marker.get("restore_executor_connect_restore_grants")
     if (
         not isinstance(operation_id, str)
         or _UUID_RE.fullmatch(operation_id) is None
@@ -1010,49 +1243,83 @@ def _recovery_marker_fields(marker: dict[str, object]) -> dict[str, object]:
         or _ROLE_RE.fullmatch(app_role) is None
         or not isinstance(fence_role, str)
         or _ROLE_RE.fullmatch(fence_role) is None
+        or not isinstance(script_sha256, str)
+        or _SHA256_RE.fullmatch(script_sha256) is None
+        or not isinstance(snapshot_sha256, str)
+        or _SHA256_RE.fullmatch(snapshot_sha256) is None
+        or not isinstance(drain_receipt_sha256, str)
+        or _SHA256_RE.fullmatch(drain_receipt_sha256) is None
+        or not isinstance(pg_restore_list_sha256, str)
+        or _SHA256_RE.fullmatch(pg_restore_list_sha256) is None
+        or not isinstance(source_identity_sha256, str)
+        or _SHA256_RE.fullmatch(source_identity_sha256) is None
+        or not isinstance(restore_executor_role, str)
+        or _ROLE_RE.fullmatch(restore_executor_role) is None
         or not isinstance(expected_target, str)
         or _SHA256_RE.fullmatch(expected_target) is None
         or not isinstance(expected_topology, str)
         or _SHA256_RE.fullmatch(expected_topology) is None
         or type(source_oid) is not int
         or source_oid < 1
-        or state not in {"prepared", "fence_released"}
+        or state not in {"prepared", "fence_release_intent"}
         or type(recovery_required) is not bool
         or type(public_connect_was_granted) is not bool
         or not isinstance(grants, list)
+        or not isinstance(restore_executor_grants, list)
     ):
         _raise("hotswap forensic marker recovery fields are invalid")
-    if len({source_schema, previous_schema, restore_schema}) != 3:
+    if len(
+        {source_schema, previous_schema, restore_schema}
+    ) != 3 or restore_executor_role in {app_role, fence_role}:
         _raise("hotswap forensic marker recovery fields are invalid")
-    normalized_grants: list[dict[str, object]] = []
-    previous_role = ""
-    for grant in grants:
-        if not isinstance(grant, dict) or set(grant) != {"grant_option", "role"}:
-            _raise("hotswap forensic marker recovery fields are invalid")
-        role = grant.get("role")
-        grant_option = grant.get("grant_option")
-        if (
-            not isinstance(role, str)
-            or _ROLE_RE.fullmatch(role) is None
-            or type(grant_option) is not bool
-            or role <= previous_role
-        ):
-            _raise("hotswap forensic marker recovery fields are invalid")
-        normalized_grants.append({"grant_option": grant_option, "role": role})
-        previous_role = role
+
+    def normalize_grants(
+        value: list[object], *, expected_role: str
+    ) -> list[dict[str, object]]:
+        normalized: list[dict[str, object]] = []
+        previous_role = ""
+        for grant in value:
+            if not isinstance(grant, dict) or set(grant) != {"grant_option", "role"}:
+                _raise("hotswap forensic marker recovery fields are invalid")
+            role = grant.get("role")
+            grant_option = grant.get("grant_option")
+            if (
+                not isinstance(role, str)
+                or _ROLE_RE.fullmatch(role) is None
+                or role != expected_role
+                or type(grant_option) is not bool
+                or role <= previous_role
+            ):
+                _raise("hotswap forensic marker recovery fields are invalid")
+            normalized.append({"grant_option": grant_option, "role": role})
+            previous_role = role
+        return normalized
+
+    normalized_grants = normalize_grants(grants, expected_role=app_role)
+    normalized_restore_executor_grants = normalize_grants(
+        restore_executor_grants, expected_role=restore_executor_role
+    )
     fields: dict[str, object] = {
         "app_role": app_role,
         "connect_restore_grants": normalized_grants,
         "expected_target": expected_target,
         "fence_role": fence_role,
+        "drain_receipt_sha256": drain_receipt_sha256,
         "operation_id": operation_id,
+        "pg_restore_list_sha256": pg_restore_list_sha256,
         "previous_schema": previous_schema,
         "public_connect_was_granted": public_connect_was_granted,
         "recovery_required": recovery_required,
+        "restore_executor_connect_restore_grants": normalized_restore_executor_grants,
+        "restore_executor_role": restore_executor_role,
         "restore_schema": restore_schema,
         "source_oid": source_oid,
+        "source_identity_sha256": source_identity_sha256,
         "source_schema": source_schema,
+        "script_sha256": script_sha256,
+        "snapshot_sha256": snapshot_sha256,
         "state": state,
+        "pre_release_topology_sha256": expected_topology,
         "topology_sha256": expected_topology,
     }
     if state == "prepared":
@@ -1061,45 +1328,26 @@ def _recovery_marker_fields(marker: dict[str, object]) -> dict[str, object]:
         return fields
 
     terminal_schema_mode = marker.get("terminal_schema_mode")
-    post_release_topology = marker.get("post_release_acl_topology_sha256")
-    if (
-        terminal_schema_mode not in {"switched", "no_switch"}
-        or not isinstance(post_release_topology, str)
-        or _SHA256_RE.fullmatch(post_release_topology) is None
-    ):
+    if terminal_schema_mode != "switched":
         _raise("hotswap forensic marker terminal fields are invalid")
     fields["terminal_schema_mode"] = terminal_schema_mode
-    fields["topology_sha256"] = post_release_topology
-    if terminal_schema_mode == "switched":
-        app_oid = marker.get("app_schema_oid_after_switch")
-        previous_oid = marker.get("previous_schema_oid_after_switch")
-        restore_oid = marker.get("restore_schema_oid")
-        if (
-            type(app_oid) is not int
-            or type(previous_oid) is not int
-            or type(restore_oid) is not int
-            or app_oid < 1
-            or previous_oid < 1
-            or restore_oid < 1
-            or app_oid != restore_oid
-            or previous_oid != source_oid
-        ):
-            _raise("hotswap forensic marker switch matrix is invalid")
-        fields["app_oid"] = app_oid
-        fields["previous_oid"] = previous_oid
-        fields["restore_oid"] = restore_oid
-        return fields
-
-    if (
-        marker.get("app_schema_oid_after_switch") is not None
-        or marker.get("previous_schema_oid_after_switch") is not None
-    ):
-        _raise("hotswap forensic marker no-switch matrix is invalid")
+    app_oid = marker.get("app_schema_oid_after_switch")
+    previous_oid = marker.get("previous_schema_oid_after_switch")
     restore_oid = marker.get("restore_schema_oid")
-    if restore_oid is not None and (type(restore_oid) is not int or restore_oid < 1):
-        _raise("hotswap forensic marker restore oid is invalid")
-    if restore_oid is not None:
-        fields["restore_oid"] = restore_oid
+    if (
+        type(app_oid) is not int
+        or type(previous_oid) is not int
+        or type(restore_oid) is not int
+        or app_oid < 1
+        or previous_oid < 1
+        or restore_oid < 1
+        or app_oid != restore_oid
+        or previous_oid != source_oid
+    ):
+        _raise("hotswap forensic marker switch matrix is invalid")
+    fields["app_oid"] = app_oid
+    fields["previous_oid"] = previous_oid
+    fields["restore_oid"] = restore_oid
     return fields
 
 
@@ -1124,8 +1372,175 @@ def _topology_sha256(
     return output
 
 
+def _read_release_receipt(
+    marker: dict[str, object], *, marker_sha256: str, fence_database_url: str
+) -> dict[str, object]:
+    """fence DB owner만 읽을 수 있는 0101 release receipt를 marker에 결박한다."""
+
+    fields = _recovery_marker_fields(marker)
+    if fields["state"] == "prepared":
+        _raise("prepared marker does not have a release receipt")
+    _assert_fence_database_identity(fence_database_url, fields)
+    receipt_sql = """
+SELECT json_build_object(
+  'receipt', to_jsonb(receipt),
+  'record_sha256_valid', ops.verify_m05_hotswap_release_receipt(
+    receipt.operation_id, receipt.marker_sha256
+  ),
+  'session_is_configured_fence_database_owner', session_user = current_user
+    AND current_user = :'fence_role'::name
+    AND current_user = (
+      SELECT database_row.datdba::regrole::text
+      FROM pg_database database_row
+      WHERE database_row.datname = current_database()
+    )
+)::text
+FROM ops.m05_hotswap_release_receipts receipt
+WHERE receipt.operation_id = :'operation_id'::uuid;
+"""
+    output = _run_psql(
+        fence_database_url,
+        command=receipt_sql,
+        variables={
+            "fence_role": cast(str, fields["fence_role"]),
+            "operation_id": cast(str, fields["operation_id"]),
+        },
+        failure="trusted recovery release receipt could not be read",
+    ).strip()
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise TrustedHotswapError(
+            "trusted recovery release receipt is invalid"
+        ) from exc
+    if not isinstance(payload, dict) or set(payload) != {
+        "receipt",
+        "record_sha256_valid",
+        "session_is_configured_fence_database_owner",
+    }:
+        _raise("trusted recovery release receipt is invalid")
+    receipt = payload.get("receipt")
+    if (
+        not isinstance(receipt, dict)
+        or payload.get("record_sha256_valid") is not True
+        or payload.get("session_is_configured_fence_database_owner") is not True
+    ):
+        _raise("trusted recovery release receipt is invalid")
+    required = {
+        "operation_id",
+        "marker_sha256",
+        "script_sha256",
+        "snapshot_sha256",
+        "drain_receipt_sha256",
+        "pg_restore_list_sha256",
+        "target_identity_sha256",
+        "source_identity_sha256",
+        "source_schema",
+        "restore_schema",
+        "previous_schema",
+        "app_role",
+        "fence_role",
+        "restore_executor_role",
+        "source_schema_oid_before",
+        "restore_schema_oid",
+        "app_schema_oid_after_switch",
+        "previous_schema_oid_after_switch",
+        "connect_restore_grants",
+        "restore_executor_connect_restore_grants",
+        "public_connect_was_granted",
+        "pre_release_acl_topology_sha256",
+        "post_release_acl_topology_sha256",
+        "observed_at",
+        "record_sha256",
+    }
+    if set(receipt) != required:
+        _raise("trusted recovery release receipt is invalid")
+    expected: dict[str, object] = {
+        "operation_id": fields["operation_id"],
+        "marker_sha256": marker_sha256,
+        "script_sha256": fields["script_sha256"],
+        "snapshot_sha256": fields["snapshot_sha256"],
+        "drain_receipt_sha256": fields["drain_receipt_sha256"],
+        "pg_restore_list_sha256": fields["pg_restore_list_sha256"],
+        "target_identity_sha256": fields["expected_target"],
+        "source_identity_sha256": fields["source_identity_sha256"],
+        "source_schema": fields["source_schema"],
+        "restore_schema": fields["restore_schema"],
+        "previous_schema": fields["previous_schema"],
+        "app_role": fields["app_role"],
+        "fence_role": fields["fence_role"],
+        "restore_executor_role": fields["restore_executor_role"],
+        "source_schema_oid_before": fields["source_oid"],
+        "restore_schema_oid": fields["restore_oid"],
+        "app_schema_oid_after_switch": fields["app_oid"],
+        "previous_schema_oid_after_switch": fields["previous_oid"],
+        "connect_restore_grants": fields["connect_restore_grants"],
+        "restore_executor_connect_restore_grants": fields[
+            "restore_executor_connect_restore_grants"
+        ],
+        "public_connect_was_granted": fields["public_connect_was_granted"],
+        "pre_release_acl_topology_sha256": fields["pre_release_topology_sha256"],
+    }
+    if any(receipt[name] != value for name, value in expected.items()):
+        _raise("trusted recovery release receipt does not match the marker")
+    post_topology = receipt.get("post_release_acl_topology_sha256")
+    record_sha256 = receipt.get("record_sha256")
+    observed_at = receipt.get("observed_at")
+    if (
+        not isinstance(post_topology, str)
+        or _SHA256_RE.fullmatch(post_topology) is None
+        or not isinstance(record_sha256, str)
+        or _SHA256_RE.fullmatch(record_sha256) is None
+        or not isinstance(observed_at, str)
+        or not observed_at
+    ):
+        _raise("trusted recovery release receipt is invalid")
+    return cast(dict[str, object], receipt)
+
+
+def _release_receipt_topology_sha256(
+    fence_database_url: str, fields: dict[str, object]
+) -> tuple[str, str]:
+    """receipt commit과 같은 DB canonical function으로 terminal topology를 재계산한다."""
+
+    fence_target_identity_sha256 = _assert_fence_database_identity(
+        fence_database_url, fields
+    )
+    output = _run_psql(
+        fence_database_url,
+        command="""
+SELECT ops.m05_hotswap_release_topology_sha256(
+  :'source_schema'::name,
+  :'previous_schema'::name,
+  :'restore_schema'::name,
+  :'app_role'::name,
+  :'fence_role'::name,
+  :'restore_executor_role'::name
+);
+""",
+        variables={
+            "app_role": cast(str, fields["app_role"]),
+            "fence_role": cast(str, fields["fence_role"]),
+            "previous_schema": cast(str, fields["previous_schema"]),
+            "restore_executor_role": cast(str, fields["restore_executor_role"]),
+            "restore_schema": cast(str, fields["restore_schema"]),
+            "source_schema": cast(str, fields["source_schema"]),
+        },
+        failure="trusted recovery release receipt topology could not be read",
+    ).strip()
+    if _SHA256_RE.fullmatch(output) is None:
+        _raise("trusted recovery release receipt topology is invalid")
+    return output, fence_target_identity_sha256
+
+
 def _safe_recovery_observation(
-    marker: dict[str, object], database_url: str, topology: Path
+    marker: dict[str, object],
+    database_url: str,
+    topology: Path,
+    *,
+    marker_sha256: str,
+    receipt: dict[str, object] | None,
+    fence_database_url: str | None,
 ) -> str:
     fields = _recovery_marker_fields(marker)
     actual_target, _ = _identity_sha256_from_psql(database_url)
@@ -1205,6 +1620,20 @@ SELECT json_build_object(
       AND acl.privilege_type = 'CONNECT'
   ),
   'restore_executor_role', current_user,
+  'restore_executor_connect_restore_grants', COALESCE((
+    SELECT json_agg(
+      json_build_object('grant_option', acl.is_grantable, 'role', role_row.rolname)
+      ORDER BY role_row.rolname
+    )
+    FROM pg_database database_row
+    CROSS JOIN LATERAL aclexplode(
+      COALESCE(database_row.datacl, acldefault('d', database_row.datdba))
+    ) AS acl
+    JOIN pg_roles AS role_row ON role_row.oid = acl.grantee
+    WHERE database_row.datname = current_database()
+      AND acl.privilege_type = 'CONNECT'
+      AND role_row.rolname = current_user
+  ), '[]'::json),
   'restore_executor_safe', current_user <> :'app_role'
     AND current_user <> :'fence_role'
     AND EXISTS (
@@ -1248,6 +1677,7 @@ SELECT json_build_object(
         "fence_role_safe",
         "previous_oid",
         "public_connect_granted",
+        "restore_executor_connect_restore_grants",
         "restore_executor_role",
         "restore_executor_safe",
         "restore_oid",
@@ -1270,6 +1700,7 @@ SELECT json_build_object(
         any(not isinstance(observation[key], str) for key in string_keys)
         or any(type(observation[key]) is not bool for key in boolean_keys)
         or not isinstance(observation["connect_restore_grants"], list)
+        or not isinstance(observation["restore_executor_connect_restore_grants"], list)
         or _ROLE_RE.fullmatch(cast(str, observation["restore_executor_role"])) is None
         or observation["advisory_lock_absent"] is not True
         or observation["app_connect"] is not True
@@ -1279,13 +1710,17 @@ SELECT json_build_object(
         or observation["app_usage"] is not True
         or observation["fence_role_safe"] is not True
         or observation["restore_executor_safe"] is not True
+        or observation["restore_executor_role"] != fields["restore_executor_role"]
     ):
         _raise("trusted recovery state does not prove a safe writer release")
-    if state == "fence_released" and (
+    if state != "prepared" and (
         observation["connect_restore_grants"] != fields["connect_restore_grants"]
+        or observation["restore_executor_connect_restore_grants"]
+        != fields["restore_executor_connect_restore_grants"]
         or observation["public_connect_granted"] != fields["public_connect_was_granted"]
     ):
         _raise("trusted recovery database CONNECT grants do not match the marker")
+    fence_target_identity_sha256: str | None = None
     if state == "prepared":
         if (
             observation["app_oid"] != str(fields["source_oid"])
@@ -1293,35 +1728,50 @@ SELECT json_build_object(
             or observation["restore_oid"] != ""
         ):
             _raise("trusted recovery state does not prove an untouched prepared marker")
-    elif fields["terminal_schema_mode"] == "switched":
+    else:
         if (
             observation["app_oid"] != str(fields["app_oid"])
             or observation["previous_oid"] != str(fields["previous_oid"])
             or observation["restore_oid"] != ""
         ):
             _raise("trusted recovery state does not prove a released switched schema")
-    else:
-        expected_restore_oid = fields.get("restore_oid")
-        if (
-            observation["app_oid"] != str(fields["source_oid"])
-            or observation["previous_oid"] != ""
-            or observation["restore_oid"]
-            != ("" if expected_restore_oid is None else str(expected_restore_oid))
-        ):
-            _raise("trusted recovery state does not prove a released no-switch schema")
 
-    actual_topology = _topology_sha256(database_url, marker, topology)
-    if actual_topology != fields["topology_sha256"]:
-        _raise("trusted recovery ACL topology does not match the marker")
+    if state == "prepared":
+        actual_topology = _topology_sha256(database_url, marker, topology)
+        if actual_topology != fields["topology_sha256"]:
+            _raise("trusted recovery ACL topology does not match the marker")
+    else:
+        if receipt is None or fence_database_url is None:
+            _raise("trusted recovery terminal marker is missing its release receipt")
+        actual_topology, fence_target_identity_sha256 = _release_receipt_topology_sha256(
+            fence_database_url, fields
+        )
+        receipt_topology = receipt.get("post_release_acl_topology_sha256")
+        if actual_topology != receipt_topology:
+            _raise(
+                "trusted recovery release receipt topology does not match the database"
+            )
     verification: dict[str, object] = {
+        "marker_sha256": marker_sha256,
         "marker_state": state,
         "observation": observation,
         "operation_id": fields["operation_id"],
         "target_identity_sha256": actual_target,
         "topology_sha256": actual_topology,
     }
-    if state == "fence_released":
+    if state == "fence_release_intent":
         verification["terminal_schema_mode"] = fields["terminal_schema_mode"]
+    if receipt is not None:
+        if fence_target_identity_sha256 is None:
+            _raise("trusted recovery terminal fence database identity is unavailable")
+        verification["fence_database_identity_sha256"] = (
+            fence_target_identity_sha256
+        )
+        verification["fence_database_role"] = fields["fence_role"]
+        verification["release_receipt_record_sha256"] = receipt["record_sha256"]
+        verification["release_receipt_topology_sha256"] = receipt[
+            "post_release_acl_topology_sha256"
+        ]
     return hashlib.sha256(_canonical_json(verification)).hexdigest()
 
 
@@ -1355,10 +1805,10 @@ def _run(args: argparse.Namespace) -> int:
     return 3
 
 
-def _status(_: argparse.Namespace) -> int:
+def _status(_args: argparse.Namespace) -> int:
     _strict_environment()
     _load_trusted_configuration()
-    _, forensics, _ = _canonical_runner_paths()
+    _runner, forensics, _topology = _canonical_runner_paths()
     marker = _read_marker(forensics)
     sys.stdout.buffer.write(_canonical_json(marker) + b"\n")
     return 0
@@ -1368,31 +1818,111 @@ def _recover(args: argparse.Namespace) -> int:
     _strict_environment()
     if not args.confirm:
         _raise("trusted recovery requires --confirm")
+    escalate_unsealed_release_receipt = bool(
+        getattr(args, "escalate_unsealed_release_receipt", False)
+    )
+    expected_unsealed_marker_sha256 = getattr(args, "expected_marker_sha256", None)
+    if escalate_unsealed_release_receipt and (
+        not isinstance(expected_unsealed_marker_sha256, str)
+        or _SHA256_RE.fullmatch(expected_unsealed_marker_sha256) is None
+    ):
+        _raise("unsealed release receipt escalation requires --expected-marker-sha256")
+    if (
+        not escalate_unsealed_release_receipt
+        and expected_unsealed_marker_sha256 is not None
+    ):
+        _raise(
+            "--expected-marker-sha256 is only valid with unsealed release receipt escalation"
+        )
     configuration = _load_trusted_configuration()
     _, forensics, topology = _canonical_runner_paths()
     marker = _read_marker(forensics)
     if marker.get("operation_id") != args.operation_id:
         _raise("trusted recovery operation does not match the active marker")
-    if marker.get("state") not in {"prepared", "fence_released"}:
+    if marker.get("state") not in {
+        "prepared",
+        "fence_release_intent",
+    }:
         _raise("trusted recovery only acknowledges a proven marker boundary")
+    if marker.get("recovery_required") is not False:
+        _raise("trusted recovery refuses a recovery-latched marker")
+    if escalate_unsealed_release_receipt:
+        if marker.get("state") != "fence_release_intent":
+            _raise("unsealed release receipt escalation requires a terminal intent")
+        ledger_proof = _assert_unsealed_release_receipt_escalation_history(
+            forensics, operation_id=args.operation_id
+        )
+    else:
+        ledger_proof = _assert_current_history_consistent_for_recovery(
+            forensics, operation_id=args.operation_id
+        )
+    marker_sha256 = cast(str, ledger_proof["marker_sha256"])
+    if hashlib.sha256(_canonical_json(marker)).hexdigest() != marker_sha256:
+        _raise("trusted recovery marker changed while its history was verified")
+    if (
+        escalate_unsealed_release_receipt
+        and marker_sha256 != expected_unsealed_marker_sha256
+    ):
+        _raise("unsealed release receipt marker does not match explicit confirmation")
     database_url = pin_database_url(configuration.restore_database_url)
-    verification_sha256 = _safe_recovery_observation(marker, database_url, topology)
-    result = _forensics_command(
-        forensics,
-        [
-            "acknowledge",
-            "--strict",
-            "--state-dir",
-            _STATE_DIRECTORY,
-            "--operation-id",
-            args.operation_id,
-            "--verification-sha256",
-            verification_sha256,
-            "--confirm",
-        ],
+    state = marker.get("state")
+    fence_database_url: str | None = None
+    receipt: dict[str, object] | None = None
+    if state != "prepared":
+        fence_database_url = pin_database_url(configuration.fence_database_url)
+        receipt = _read_release_receipt(
+            marker,
+            marker_sha256=marker_sha256,
+            fence_database_url=fence_database_url,
+        )
+        certified_receipt_record_sha256 = ledger_proof["release_receipt_record_sha256"]
+        if (
+            certified_receipt_record_sha256 is not None
+            and receipt.get("record_sha256") != certified_receipt_record_sha256
+        ):
+            _raise(
+                "trusted recovery release receipt does not match its forensic evidence"
+            )
+    verification_sha256 = _safe_recovery_observation(
+        marker,
+        database_url,
+        topology,
+        marker_sha256=marker_sha256,
+        receipt=receipt,
+        fence_database_url=fence_database_url,
     )
-    if result.returncode != 0:
-        _raise("trusted recovery acknowledgement could not be written")
+    if escalate_unsealed_release_receipt:
+        if receipt is None or not isinstance(receipt.get("record_sha256"), str):
+            _raise(
+                "unsealed release receipt escalation could not bind the database receipt"
+            )
+        prior_root_verification_sha256 = ledger_proof[
+            "root_unsealed_release_receipt_verification_sha256"
+        ]
+        if (
+            prior_root_verification_sha256 is not None
+            and prior_root_verification_sha256 != verification_sha256
+        ):
+            _raise(
+                "unsealed release receipt root verification does not match the current read-only proof"
+            )
+        _acknowledge_unsealed_release_receipt_after_verified_recovery(
+            forensics,
+            operation_id=args.operation_id,
+            verification_sha256=verification_sha256,
+            expected_marker_sha256=marker_sha256,
+            expected_release_receipt_record_sha256=cast(str, receipt["record_sha256"]),
+        )
+    else:
+        _acknowledge_after_verified_recovery(
+            forensics,
+            operation_id=args.operation_id,
+            verification_sha256=verification_sha256,
+            expected_marker_sha256=marker_sha256,
+            expected_release_receipt_record_sha256=cast(
+                str | None, ledger_proof["release_receipt_record_sha256"]
+            ),
+        )
     return 0
 
 
@@ -1412,6 +1942,8 @@ def _parser() -> argparse.ArgumentParser:
     recover = commands.add_parser("recover")
     recover.add_argument("--operation-id", required=True)
     recover.add_argument("--confirm", action="store_true")
+    recover.add_argument("--escalate-unsealed-release-receipt", action="store_true")
+    recover.add_argument("--expected-marker-sha256")
     return parser
 
 

@@ -346,8 +346,10 @@ sudo install -d -o root -g root -m 0700 /var/lib/pinvi/restore-forensics
 
 `/etc/pinvi`도 root:root이고 group/other write가 없어야 한다. 그 아래
 `/etc/pinvi/trusted-hotswap.json`은 symlink가 아닌 root:root `0600` JSON 파일로 아래
-**정확히** 일곱 field만 둔다. URL에는 실제 credential을 문서·로그·shell history에 남기지
-않으며, 운영자는 root 전용 editor/secret manager로 값을 넣는다.
+**정확히** 일곱 field만 둔다. hotswap은 target DB의 고정 M05 advisory lock만 사용하며,
+별도 coordination DB나 그와 관련된 가짜 상호배제 주장을 두지 않는다. URL에는 실제
+credential을 문서·로그·shell history에 남기지 않으며, 운영자는 root 전용 editor/secret
+manager로 값을 넣는다.
 
 ```json
 {
@@ -366,6 +368,17 @@ sudo install -d -o root -g root -m 0700 /var/lib/pinvi/restore-forensics
   "trusted_backup_dir": "/var/lib/pinvi/backups"
 }
 ```
+
+`0101`의 `ops.m05_hotswap_release_receipts` table과 세 `SECURITY DEFINER` function
+(`m05_hotswap_release_topology_sha256`, `record_m05_hotswap_release_receipt`,
+`verify_m05_hotswap_release_receipt`)은 **migration owner**가 소유한다. target database
+owner인 fence role에는 table `SELECT`와 세 function `EXECUTE`만 각각 grant한다. trusted
+runner는 이 owner/fence 분리를 preflight에서 재검증한다. 따라서 receipt object를 만들
+migration role과 fence database owner를 같은 role로 구성하지 말고, migration owner는 app schema
+owner 권한과 `x_extension`의 `USAGE`만 가진 별도 비로그인 역할로 둔다. migration 뒤에는
+app role·schema-swap executor·fence role에 owner/추가 ACL을 부여하지 않으며, migration owner도
+runtime login 또는 database `CONNECT` surface에 남기지 않는다. receipt migration 뒤 default ACL을
+추가하거나 grant를 넓히는 변경은 허용하지 않는다.
 
 `prepare-drain`은 DB M05 advisory lock이 비어 있고 app writer 세션이 없는 것을 read-only로
 확인한 뒤 `drain-receipt.json`을 root:root `0600`으로 만든다. receipt는 operation UUID,
@@ -390,9 +403,12 @@ COMMIT;
 ### 4.3 실패 시
 
 M05 schema-swap은 **자동 rollback, 자동 schema rename 되돌림, 자동 restore candidate
-삭제를 절대 하지 않는다.** `switching` 이후 release/fence/검증 중 하나라도 실패하면 현재
-`app`/`app_previous_<id>` topology, forensic marker, candidate와 receipt archive를 그대로
-보존하고 새 hotswap·Docker rebuild·runtime lease 발급을 막는다.
+삭제를 절대 하지 않는다.** switch 전 실패에서는 기존 `app`과 별도
+`app_restore_<id>` candidate, write/CONNECT fence, forensic marker와 receipt archive를 그대로
+보존한다. switch 뒤 실패에서는 restored schema가 이미 현재 `app`이고 이전 source가
+`app_previous_<id>`이므로 별도 candidate가 남아 있다고 가정하지 않는다. 이 경우 현재
+`app`/`app_previous_<id>` topology, fence, forensic marker와 receipt archive를 그대로 보존한다.
+어느 경우에도 새 hotswap·Docker rebuild·runtime lease 발급은 막는다.
 
 운영자는 다음만 수행한다.
 
@@ -400,9 +416,15 @@ M05 schema-swap은 **자동 rollback, 자동 schema rename 되돌림, 자동 res
   읽는다. URL·credential·raw snapshot path는 출력하지 않는다.
 - marker가 `prepared` 또는 `fence_released`이며 read-only DB proof가 성공한 경우에만 정확한
   UUID와 `--confirm`을 함께 사용해 root acknowledgement를 기록한다.
-- 그 밖의 `fence_intent`, `fence_applied`, `restore_ready`, `switched`,
-  `fence_release_intent` 또는 malformed marker는 **자동·추측성 복구 금지** 상태다. forensic
-  snapshot과 catalog proof를 보존한 채 운영 변경 승인 절차로 escalate한다.
+- `fence_release_intent`는 원칙적으로 incident다. 단, `0101` release receipt가 같은 operation의
+  **raw canonical intent marker SHA-256**, script/snapshot/drain/list/source/target digest,
+  switched OID matrix와 CONNECT release를 모두 결박하고, append-only JSONL history와 일치하며,
+  fence DB의 canonical topology 함수와 전체 read-only switched proof까지 정확히 통과한 경우에만
+  root `recover --confirm`이 archive할 수 있다. 이는 receipt commit 직후 marker 영속 전
+  SIGKILL된 좁은 경우만 위한 예외다.
+- recovery latch가 있거나 re-fence가 실패한 `fence_release_intent`, 그리고 그 밖의
+  `fence_intent`, `fence_applied`, `restore_ready`, `switched` 또는 malformed marker는 이 예외의
+  대상이 아니다. forensic snapshot과 catalog proof를 보존한 채 운영 변경 승인 절차로 escalate한다.
 
 ```bash
 sudo /usr/local/sbin/pinvi-trusted-hotswap status
@@ -435,16 +457,19 @@ PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL=precheck \
 
 출력은 `DRILL_PHASE=...`와 `DRILL_EVIDENCE=...` 형식이다. 기록해도 되는 값은
 `backup://<filename>`, checksum 검증 여부, `pg_restore --list` 성공, `users`/`trips`/
-`admin_audit_log` row count, `admin_audit_chain_links=valid`, rollback rehearsal 결과다.
+`admin_audit_log` row count, `admin_audit_chain_links=valid`, precheck 결과다.
 DB URL, host 절대경로, 사용자 PII, query 결과 원문은 기록하지 않는다.
 
 `PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL`:
 
-| 값         | 용도                                                                                                                                                                                               |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `precheck` | 기본값. `restore-hotswap.sh` execute guard가 schema-swap을 거부하고 기존 `app` schema OID가 유지되는지 확인한다.                                                                                   |
-| `drain`    | staging 여유 디스크가 충분할 때 사용한다. 임시 `app_restore_drill_<ts>` schema까지 복구한 뒤 drain 미설정 실패를 유도하고 기존 `app` schema가 유지되는지 확인한다. 완료 후 임시 schema를 drop한다. |
-| `none`     | 단순 restore와 DB health만 확인한다.                                                                                                                                                               |
+| 값 | 용도 |
+| --- | --- |
+| `precheck` | 기본값. generic drill은 `restore-hotswap.sh` execute guard가 schema-swap을 거부하고 기존 `app` schema OID가 유지되는지 확인한다. 실제 schema-swap·writer release 성공 증거는 root-only trusted entrypoint만 만든다. |
+| `none` | 단순 restore와 DB health만 확인한다. |
+
+과거 `drain` 값은 지원하지 않는다. generic staging drill에서 schema-swap을 실제 실행하거나
+candidate schema를 자동 삭제하면 M05 forensic 경계가 사라지므로, 이 값은 어떤 DB 도구도
+실행하기 전에 거부된다.
 
 운영 노드에서 별도 staging DB 권한이 없을 때는 운영 DB 안에 새 database를 만들지 않는다. 대신 Docker
 격리 network와 disposable PostgreSQL/PostGIS container를 만들고, 임의 password와
@@ -468,7 +493,7 @@ curl -fsS -H "Authorization: Bearer $CPO_BEARER" \
 - snapshot 파일명(`backup://...`)과 checksum 검증 여부
 - row count 3종(`users`, `trips`, `admin_audit_log`)
 - `admin_audit_chain_links`와 API `verify-chain` 결과
-- rollback rehearsal mode와 결과
+- precheck mode와 결과
 - 실패가 있었다면 sanitized phase 이름과 원인 분류
 
 ### 5.2 prod (분기 1회)
@@ -490,7 +515,7 @@ curl -fsS -H "Authorization: Bearer $CPO_BEARER" \
 | backup duration 급증            | DB 행 수 폭증 / 네트워크 / RustFS 응답 지연     | Grafana로 원인 단계 식별, jobs 수 늘리기              |
 | pg_restore 실패 (FK 충돌)       | --schema=app 외부 의존 (예: feature.feature_id) | restore 순서 변경 또는 `--data-only`                  |
 | audit chain verify-chain BROKEN | restore 중 row 일부 누락                        | snapshot 검증 후 별 snapshot으로 재시도               |
-| schema swap 후 app 502          | schema rename/grant 실패 / app DB 연결 잔존     | API/Web 정지 → previous schema rollback → grants 점검 |
+| schema swap 후 app 502          | schema rename/grant 실패 / app DB 연결 잔존     | 자동 previous-schema rename-back·candidate 삭제·grant/CONNECT 복구를 하지 않는다. root-only status로 marker와 catalog를 read-only 확인하고, `fence_intent` 이후 marker는 forensic incident로 운영 변경 승인 절차에 escalate한다. |
 
 ## 7. RustFS 백업
 

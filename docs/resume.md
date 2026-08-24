@@ -1,14 +1,35 @@
 # resume.md
 
-## 2026-08-24 (claude) — T-325 지도 자동 센터링 (PR #469, 머지 대기)
+## 2026-08-24 (codex) — M05 Alembic `0100/0101` rebaseline 구현·리허설
 
-**방금**: 웹·앱 지도가 진입 시 단말기 위치로 중심점을 잡게 했다(동의 + 권한이 이미 있을 때만,
-프롬프트·모달 없이). 착수 중 발견한 선행 블로커 — api-client가 서버에 없는 `/users/consents`를
-호출해 **모든 동의 요청이 404** — 를 먼저 고쳤다. 적대적 리뷰 차단 3건과 minor 지적을 모두 반영했다.
+사용자가 과거 Alembic 이력 호환을 종료하기로 결정했다. N150 운영 DB를 읽기 전용으로
+확인한 결과 PostgreSQL 16의 `20260821_0061`이며 실제 app 데이터가 있고, M05 객체는 아직
+없다. ADR-062에 따라 active graph를 새 설치용 `0100` 기준선과 `0101` M05 통합 revision으로
+정리했다. PostgreSQL 16 fresh bootstrap과 disposable `0061 → 0100 → 0101` 전환 리허설,
+N150의 read-only catalog fingerprint preflight를 통과했다.
 
-**다음 한 작업**: PR #469 리뷰/머지(지시 대기 중). 그 다음은 T-273(v1.0.0 E2E/Live gate,
-남은 hard blocker는 geofence 운영 설정). T-326·T-327은 이번 리뷰에서 분리한 후속이다.
+**다음 한 작업**: focused regression·적대 리뷰·N150 browser E2E를 마친 뒤 최신 `main`으로
+rebase하여 draft PR #466을 병합한다. production DB mutation과 M05 activation은 별도 승인 전까지
+하지 않는다.
 
+## 2026-08-24 (codex) — M05 root-only hotswap 실행 경계
+
+M05 staging/production hotswap은 draft PR #466에서 root-only launcher와 static JSON config로
+입력을 봉인했다. caller 환경 변수·caller PATH·Python site 설정은 trusted DB URL, role, source
+identity, backup 경로를 바꿀 수 없고, drain proof도 exact operation UUID·snapshot digest·target
+identity·15분 TTL로 한 번만 소비된다. root wrapper 이전의 bare command PATH lookup도 제거했다.
+
+**상태**: 자동 rollback·candidate 삭제를 제거하고 forensic lifecycle을 실제 mutation 경계에
+결박했다. 현재 `0101`은 CONNECT release와 같은 DB transaction에 append-only release receipt를 남기며,
+root recovery는 `fence_release_intent`의 raw marker/history binding·receipt·catalog topology가 모두
+일치할 때만 acknowledgement를 기록한다. M05 activation은 계속 `false`다.
+
+**검증**: M05 관련 unit 96건, 실제 PostgreSQL schema-swap preflight 8건, Alembic receipt
+migration/ACL/append-only integration 5건, PostgreSQL 16 recovery authority proof를 통과했다.
+
+**다음 한 작업**: 최종 적대 재리뷰 결과를 반영해 최신 `main`으로 rebase·push한 뒤, N150 live UI
+E2E와 GitHub CI가 모두 green인 것을 확인하고 draft PR #466을 병합한다. 운영 DB의 실제 schema-swap은
+별도 운영 변경 승인 없이는 실행하지 않는다.
 
 ## 2026-08-22 (codex) — Map #1051 service 계약 재vendor 준비
 

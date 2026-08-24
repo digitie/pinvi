@@ -44,6 +44,10 @@ _UUID_RE: Final = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
 )
 _LOCK_KEY: Final = "1414679892:1213421392"
+_RELEASE_RECEIPT_SEAL_TYPE: Final = "release_receipt_committed"
+_ROOT_UNSEALED_RELEASE_RECEIPT_VERIFICATION_TYPE: Final = (
+    "root_unsealed_release_receipt_verified"
+)
 _STATE_ORDER: Final = (
     "prepared",
     "fence_intent",
@@ -51,7 +55,6 @@ _STATE_ORDER: Final = (
     "restore_ready",
     "switched",
     "fence_release_intent",
-    "fence_released",
 )
 _STATES: Final = frozenset(_STATE_ORDER)
 _NEXT_STATES: Final = {
@@ -60,7 +63,6 @@ _NEXT_STATES: Final = {
     "fence_applied": frozenset({"restore_ready"}),
     "restore_ready": frozenset({"switched"}),
     "switched": frozenset({"fence_release_intent"}),
-    "fence_release_intent": frozenset({"fence_released"}),
 }
 MarkerState = Literal[
     "prepared",
@@ -69,7 +71,6 @@ MarkerState = Literal[
     "restore_ready",
     "switched",
     "fence_release_intent",
-    "fence_released",
 ]
 
 
@@ -121,9 +122,9 @@ def _validate_identifier(value: object, field: str, pattern: re.Pattern[str]) ->
 
 
 def _validate_positive_int(value: object, field: str) -> int:
-    if type(value) is not int or cast(int, value) < 1:
+    if type(value) is not int or value < 1:
         _raise(f"forensic marker {field} is invalid")
-    return cast(int, value)
+    return value
 
 
 def _validate_uuid(value: object, field: str = "operation_id") -> str:
@@ -159,9 +160,7 @@ def _validate_connect_restore_grants(value: object) -> list[dict[str, object]]:
     return grants
 
 
-def _validate_state_history(
-    value: object, *, state: str, recovery_required: bool
-) -> list[dict[str, object]]:
+def _validate_state_history(value: object, *, state: str) -> list[dict[str, object]]:
     if not isinstance(value, list) or not value:
         _raise("forensic marker state_history is invalid")
     history: list[dict[str, object]] = []
@@ -177,7 +176,7 @@ def _validate_state_history(
             not isinstance(item_state, str)
             or item_state not in _STATES
             or type(sequence) is not int
-            or cast(int, sequence) != previous_sequence + 1
+            or sequence != previous_sequence + 1
             or not isinstance(at_utc, str)
             or not at_utc.endswith("Z")
         ):
@@ -186,18 +185,10 @@ def _validate_state_history(
             normal_transition = item_state in _NEXT_STATES.get(
                 previous_state, frozenset()
             )
-            cleanup_transition = (
-                recovery_required
-                and item_state == "fence_release_intent"
-                and previous_state
-                in {"fence_intent", "fence_applied", "restore_ready", "switched"}
-            )
-            if not normal_transition and not cleanup_transition:
+            if not normal_transition:
                 _raise("forensic marker state_history transition is invalid")
-        history.append(
-            {"at_utc": at_utc, "sequence": cast(int, sequence), "state": item_state}
-        )
-        previous_sequence = cast(int, sequence)
+        history.append({"at_utc": at_utc, "sequence": sequence, "state": item_state})
+        previous_sequence = sequence
         previous_state = item_state
     if history[0]["state"] != "prepared":
         _raise("forensic marker state_history must start at prepared")
@@ -224,6 +215,7 @@ def _validate_marker(value: object) -> dict[str, object]:
         "acl_topology_sha256",
         "app_role",
         "connect_restore_grants",
+        "drain_receipt_sha256",
         "failure",
         "fence_executor_role",
         "fenced_connect_roles",
@@ -235,6 +227,8 @@ def _validate_marker(value: object) -> dict[str, object]:
         "previous_schema",
         "public_connect_was_granted",
         "recovery_required",
+        "restore_executor_connect_restore_grants",
+        "restore_executor_role",
         "restore_schema",
         "script_sha256",
         "snapshot_sha256",
@@ -248,7 +242,6 @@ def _validate_marker(value: object) -> dict[str, object]:
     }
     optional = {
         "app_schema_oid_after_switch",
-        "post_release_acl_topology_sha256",
         "previous_schema_oid_after_switch",
         "restore_schema_oid",
         "terminal_schema_mode",
@@ -271,6 +264,9 @@ def _validate_marker(value: object) -> dict[str, object]:
         "connect_restore_grants": _validate_connect_restore_grants(
             value.get("connect_restore_grants")
         ),
+        "drain_receipt_sha256": _validate_sha256(
+            value.get("drain_receipt_sha256"), "drain receipt"
+        ),
         "failure": _validate_failure(value.get("failure")),
         "fence_executor_role": _validate_identifier(
             value.get("fence_executor_role"), "fence executor role", _ROLE_RE
@@ -292,6 +288,12 @@ def _validate_marker(value: object) -> dict[str, object]:
         ),
         "public_connect_was_granted": value.get("public_connect_was_granted"),
         "recovery_required": recovery_required,
+        "restore_executor_connect_restore_grants": _validate_connect_restore_grants(
+            value.get("restore_executor_connect_restore_grants")
+        ),
+        "restore_executor_role": _validate_identifier(
+            value.get("restore_executor_role"), "restore executor role", _ROLE_RE
+        ),
         "restore_schema": _validate_identifier(
             value.get("restore_schema"), "restore schema", _SCHEMA_RE
         ),
@@ -308,7 +310,7 @@ def _validate_marker(value: object) -> dict[str, object]:
         ),
         "state": state,
         "state_history": _validate_state_history(
-            value.get("state_history"), state=state, recovery_required=recovery_required
+            value.get("state_history"), state=state
         ),
         "target_identity_sha256": _validate_sha256(
             value.get("target_identity_sha256"), "target identity"
@@ -327,10 +329,15 @@ def _validate_marker(value: object) -> dict[str, object]:
         _raise("forensic marker schema names must be distinct")
     if marker["fence_executor_role"] == marker["app_role"]:
         _raise("forensic marker fence executor must be distinct from the app role")
+    if marker["restore_executor_role"] in {
+        marker["app_role"],
+        marker["fence_executor_role"],
+    }:
+        _raise("forensic marker restore executor must be distinct from runtime roles")
     if marker["write_roles"] != [marker["app_role"]]:
         _raise("forensic marker writer inventory is not the strict M05 app role")
     for name in optional:
-        if name in {"terminal_schema_mode", "post_release_acl_topology_sha256"}:
+        if name == "terminal_schema_mode":
             continue
         item = value.get(name)
         if item is None:
@@ -344,9 +351,23 @@ def _validate_marker(value: object) -> dict[str, object]:
     if fence_started and marker["fenced_connect_roles"] != [marker["app_role"]]:
         _raise("forensic marker fenced role inventory is not the strict M05 app role")
     if not fence_started and (
-        marker["fenced_connect_roles"] or marker["connect_restore_grants"]
+        marker["fenced_connect_roles"]
+        or marker["connect_restore_grants"]
+        or marker["restore_executor_connect_restore_grants"]
     ):
         _raise("forensic marker pre-fence inventory is not empty")
+    if any(
+        grant["role"] != marker["app_role"]
+        for grant in cast(list[dict[str, object]], marker["connect_restore_grants"])
+    ):
+        _raise("forensic marker app CONNECT grant inventory is invalid")
+    if any(
+        grant["role"] != marker["restore_executor_role"]
+        for grant in cast(
+            list[dict[str, object]], marker["restore_executor_connect_restore_grants"]
+        )
+    ):
+        _raise("forensic marker restore executor CONNECT grant inventory is invalid")
     if "restore_ready" in historical_states and "restore_schema_oid" not in marker:
         _raise("forensic marker restore schema oid is missing")
     if "restore_schema_oid" in marker and "restore_ready" not in historical_states:
@@ -357,40 +378,17 @@ def _validate_marker(value: object) -> dict[str, object]:
     ):
         _raise("forensic marker restored schema oid must differ from the source schema")
     terminal_schema_mode = value.get("terminal_schema_mode")
-    if state in {
-        "fence_release_intent",
-        "fence_released",
-    } and terminal_schema_mode not in {
-        "no_switch",
-        "switched",
-    }:
+    if state == "fence_release_intent" and terminal_schema_mode != "switched":
         _raise("forensic marker terminal schema mode is invalid")
-    if (
-        state not in {"fence_release_intent", "fence_released"}
-        and terminal_schema_mode is not None
-    ):
+    if state != "fence_release_intent" and terminal_schema_mode is not None:
         _raise("forensic marker terminal schema mode is premature")
     if terminal_schema_mode is not None:
         marker["terminal_schema_mode"] = terminal_schema_mode
-    post_release_acl_topology = value.get("post_release_acl_topology_sha256")
-    if state == "fence_released" and post_release_acl_topology is None:
-        _raise("forensic marker post-release acl topology is missing")
-    if state != "fence_released" and post_release_acl_topology is not None:
-        _raise("forensic marker post-release acl topology is premature")
-    if post_release_acl_topology is not None:
-        marker["post_release_acl_topology_sha256"] = _validate_sha256(
-            post_release_acl_topology, "post-release acl topology"
-        )
     if terminal_schema_mode == "switched" and (
         "app_schema_oid_after_switch" not in marker
         or "previous_schema_oid_after_switch" not in marker
     ):
         _raise("forensic marker switch oid matrix is missing")
-    if terminal_schema_mode == "no_switch" and (
-        "app_schema_oid_after_switch" in marker
-        or "previous_schema_oid_after_switch" in marker
-    ):
-        _raise("forensic marker no-switch terminal state has a switch oid matrix")
     switched = "switched" in historical_states
     has_switch_matrix = (
         "app_schema_oid_after_switch" in marker
@@ -408,8 +406,6 @@ def _validate_marker(value: object) -> dict[str, object]:
         _raise("forensic marker switched oid matrix is inconsistent")
     if terminal_schema_mode == "switched" and not switched:
         _raise("forensic marker switched terminal mode lacks a switch state")
-    if terminal_schema_mode == "no_switch" and switched:
-        _raise("forensic marker no-switch terminal mode follows a switch state")
     if marker["failure"] is None and marker["recovery_required"]:
         _raise("forensic marker recovery latch lacks failure evidence")
     if marker["failure"] is not None and not marker["recovery_required"]:
@@ -774,6 +770,418 @@ class _StateDirectory:
             os.close(directory_fd)
         return self._current_unlocked()
 
+    def _recovery_ledger_proof_unlocked(
+        self,
+        operation_id: str,
+        *,
+        require_release_receipt_seal: bool,
+        allow_root_unsealed_release_receipt_verification: bool = False,
+    ) -> dict[str, object]:
+        """현재 marker와 append-only ledger의 exact recovery boundary를 검증한다.
+
+        ``current.json``은 state transition에서 history보다 먼저 바뀔 수 있다. 반면
+        release receipt seal은 marker를 다시 쓰지 않는 terminal forensic commit이다.
+        따라서 recovery와 cleanup 모두 raw marker SHA, 모든 state event의 순서, 그리고
+        intent 뒤 하나뿐인 seal을 같은 ledger read에서 묶어 검증해야 한다.
+        """
+
+        marker, raw = self._current_unlocked()
+        if marker["operation_id"] != operation_id:
+            _raise("forensic marker operation does not match")
+        marker_sha256 = _sha256(raw)
+        history_raw = self._read_regular(f"{_OPERATIONS_NAME}/{operation_id}.jsonl")
+        expected_history = cast(list[dict[str, object]], marker["state_history"])
+        state_events: list[dict[str, object]] = []
+        seal: dict[str, object] | None = None
+        root_unsealed_release_receipt_verification: dict[str, object] | None = None
+        recovery_acknowledgement: dict[str, object] | None = None
+        saw_prepared_intent = False
+        for event_index, line in enumerate(history_raw.splitlines()):
+            if not line or len(line) > _MAX_HISTORY_LINE_BYTES:
+                _raise("forensic operation history is invalid")
+            try:
+                event = json.loads(
+                    line.decode("utf-8"), object_pairs_hook=_reject_duplicate_json_keys
+                )
+            except (UnicodeDecodeError, json.JSONDecodeError, _DuplicateJsonKeyError):
+                _raise("forensic operation history is invalid")
+            if not isinstance(event, dict) or _canonical_json(event) != line:
+                _raise("forensic operation history is invalid")
+            event_type = event.get("type")
+            if event_type == "prepared_intent":
+                if (
+                    saw_prepared_intent
+                    or event_index != 0
+                    or set(event)
+                    != {
+                        "at_utc",
+                        "marker_sha256",
+                        "operation_id",
+                        "sequence",
+                        "state",
+                        "type",
+                    }
+                    or event.get("state") != "prepared"
+                    or event.get("sequence") != 1
+                ):
+                    _raise("forensic operation history is invalid")
+                saw_prepared_intent = True
+            elif event_type == "state":
+                if (
+                    not saw_prepared_intent
+                    or seal is not None
+                    or root_unsealed_release_receipt_verification is not None
+                    or recovery_acknowledgement is not None
+                    or set(event)
+                    != {
+                        "at_utc",
+                        "marker_sha256",
+                        "operation_id",
+                        "sequence",
+                        "state",
+                        "type",
+                    }
+                ):
+                    _raise("forensic operation history is invalid")
+                state_events.append(event)
+            elif event_type == _RELEASE_RECEIPT_SEAL_TYPE:
+                if (
+                    not saw_prepared_intent
+                    or seal is not None
+                    or root_unsealed_release_receipt_verification is not None
+                    or recovery_acknowledgement is not None
+                    or set(event)
+                    != {
+                        "at_utc",
+                        "intent_marker_sha256",
+                        "intent_state_sequence",
+                        "operation_id",
+                        "receipt_record_sha256",
+                        "type",
+                    }
+                ):
+                    _raise("forensic release receipt seal is invalid")
+                seal = event
+            elif event_type == _ROOT_UNSEALED_RELEASE_RECEIPT_VERIFICATION_TYPE:
+                if (
+                    not saw_prepared_intent
+                    or seal is not None
+                    or root_unsealed_release_receipt_verification is not None
+                    or recovery_acknowledgement is not None
+                    or set(event)
+                    != {
+                        "at_utc",
+                        "intent_marker_sha256",
+                        "intent_state_sequence",
+                        "operation_id",
+                        "receipt_record_sha256",
+                        "type",
+                        "verification_sha256",
+                    }
+                ):
+                    _raise(
+                        "forensic root unsealed release receipt verification is invalid"
+                    )
+                root_unsealed_release_receipt_verification = event
+            elif event_type == "recovery_acknowledged":
+                if (
+                    not saw_prepared_intent
+                    or recovery_acknowledgement is not None
+                    or set(event)
+                    != {
+                        "at_utc",
+                        "marker_sha256",
+                        "operation_id",
+                        "outcome",
+                        "sequence",
+                        "state",
+                        "type",
+                        "verification_sha256",
+                    }
+                    or event.get("outcome") != "recovery_acknowledged"
+                ):
+                    _raise("forensic recovery acknowledgement is invalid")
+                recovery_acknowledgement = event
+            else:
+                # failure/recovery acknowledgement이 남아 있으면 current marker는
+                # 이미 latched 또는 archived여야 한다. 이 primitive는 unlatched
+                # marker의 archive 전 증명에만 사용한다.
+                _raise("forensic operation history is not recoverable")
+
+            if (
+                event.get("operation_id") != operation_id
+                or not isinstance(event.get("at_utc"), str)
+                or not cast(str, event["at_utc"]).endswith("Z")
+            ):
+                _raise("forensic operation history is invalid")
+            if event_type in {"prepared_intent", "state"} and (
+                type(event.get("sequence")) is not int
+                or cast(int, event["sequence"]) < 1
+                or event.get("state") not in _STATES
+                or not isinstance(event.get("marker_sha256"), str)
+                or _SHA256_RE.fullmatch(cast(str, event["marker_sha256"])) is None
+            ):
+                _raise("forensic operation history is invalid")
+            if event_type == _RELEASE_RECEIPT_SEAL_TYPE and (
+                type(event.get("intent_state_sequence")) is not int
+                or cast(int, event["intent_state_sequence"]) < 1
+                or not isinstance(event.get("intent_marker_sha256"), str)
+                or _SHA256_RE.fullmatch(cast(str, event["intent_marker_sha256"]))
+                is None
+                or not isinstance(event.get("receipt_record_sha256"), str)
+                or _SHA256_RE.fullmatch(cast(str, event["receipt_record_sha256"]))
+                is None
+            ):
+                _raise("forensic release receipt seal is invalid")
+            if event_type == _ROOT_UNSEALED_RELEASE_RECEIPT_VERIFICATION_TYPE and (
+                type(event.get("intent_state_sequence")) is not int
+                or cast(int, event["intent_state_sequence"]) < 1
+                or not isinstance(event.get("intent_marker_sha256"), str)
+                or _SHA256_RE.fullmatch(cast(str, event["intent_marker_sha256"]))
+                is None
+                or not isinstance(event.get("receipt_record_sha256"), str)
+                or _SHA256_RE.fullmatch(cast(str, event["receipt_record_sha256"]))
+                is None
+                or not isinstance(event.get("verification_sha256"), str)
+                or _SHA256_RE.fullmatch(cast(str, event["verification_sha256"])) is None
+            ):
+                _raise("forensic root unsealed release receipt verification is invalid")
+            if event_type == "recovery_acknowledged" and (
+                type(event.get("sequence")) is not int
+                or cast(int, event["sequence"]) < 1
+                or event.get("state") not in _STATES
+                or not isinstance(event.get("marker_sha256"), str)
+                or _SHA256_RE.fullmatch(cast(str, event["marker_sha256"])) is None
+                or not isinstance(event.get("verification_sha256"), str)
+                or _SHA256_RE.fullmatch(cast(str, event["verification_sha256"])) is None
+            ):
+                _raise("forensic recovery acknowledgement is invalid")
+        if not saw_prepared_intent or len(state_events) != len(expected_history):
+            _raise("forensic current marker is not fully represented in history")
+        for expected, event in zip(expected_history, state_events, strict=True):
+            if (
+                event["sequence"] != expected["sequence"]
+                or event["state"] != expected["state"]
+            ):
+                _raise("forensic current marker history sequence is inconsistent")
+        if state_events[-1].get("marker_sha256") != marker_sha256:
+            _raise("forensic current marker hash is not committed in history")
+
+        state = cast(str, marker["state"])
+        receipt_record_sha256: str | None = None
+        root_unsealed_verification_sha256: str | None = None
+        if state == "fence_release_intent":
+            intent_state_sequence = len(expected_history)
+            if seal is None:
+                if root_unsealed_release_receipt_verification is not None:
+                    if (
+                        root_unsealed_release_receipt_verification.get(
+                            "intent_marker_sha256"
+                        )
+                        != marker_sha256
+                        or root_unsealed_release_receipt_verification.get(
+                            "intent_state_sequence"
+                        )
+                        != intent_state_sequence
+                    ):
+                        _raise(
+                            "forensic root unsealed release receipt verification does not match the intent marker"
+                        )
+                    if not allow_root_unsealed_release_receipt_verification:
+                        _raise(
+                            "forensic unsealed release receipt requires explicit root escalation"
+                        )
+                    receipt_record_sha256 = cast(
+                        str,
+                        root_unsealed_release_receipt_verification[
+                            "receipt_record_sha256"
+                        ],
+                    )
+                    root_unsealed_verification_sha256 = cast(
+                        str,
+                        root_unsealed_release_receipt_verification[
+                            "verification_sha256"
+                        ],
+                    )
+                elif require_release_receipt_seal:
+                    _raise("forensic release receipt seal is missing")
+            elif (
+                seal.get("intent_marker_sha256") != marker_sha256
+                or seal.get("intent_state_sequence") != intent_state_sequence
+            ):
+                _raise("forensic release receipt seal does not match the intent marker")
+            else:
+                receipt_record_sha256 = cast(str, seal["receipt_record_sha256"])
+        elif seal is not None or root_unsealed_release_receipt_verification is not None:
+            _raise("forensic release receipt terminal evidence is premature")
+
+        acknowledgement_verification_sha256: str | None = None
+        if recovery_acknowledgement is not None:
+            if (
+                recovery_acknowledgement.get("state") != state
+                or recovery_acknowledgement.get("sequence") != len(expected_history)
+                or recovery_acknowledgement.get("marker_sha256") != marker_sha256
+            ):
+                _raise("forensic recovery acknowledgement does not match the marker")
+            final_marker = self._read_regular(
+                f"{_OPERATIONS_NAME}/{operation_id}.final.json"
+            )
+            if final_marker != raw:
+                _raise("forensic final marker does not match the active marker")
+            acknowledgement_raw = self._read_regular(
+                f"{_RECOVERY_NAME}/{operation_id}.json"
+            )
+            try:
+                acknowledgement = json.loads(
+                    acknowledgement_raw.decode("utf-8"),
+                    object_pairs_hook=_reject_duplicate_json_keys,
+                )
+            except (UnicodeDecodeError, json.JSONDecodeError, _DuplicateJsonKeyError):
+                _raise("forensic recovery acknowledgement is invalid")
+            if (
+                not isinstance(acknowledgement, dict)
+                or set(acknowledgement)
+                != {
+                    "at_utc",
+                    "marker_sha256",
+                    "operation_id",
+                    "outcome",
+                    "verification_sha256",
+                    "version",
+                }
+                or not isinstance(acknowledgement.get("at_utc"), str)
+                or not cast(str, acknowledgement["at_utc"]).endswith("Z")
+                or acknowledgement.get("version") != 1
+                or acknowledgement.get("outcome") != "recovery_acknowledged"
+                or acknowledgement.get("operation_id") != operation_id
+                or acknowledgement.get("marker_sha256") != marker_sha256
+                or acknowledgement.get("verification_sha256")
+                != recovery_acknowledgement.get("verification_sha256")
+            ):
+                _raise("forensic recovery acknowledgement does not match the marker")
+            if (
+                root_unsealed_verification_sha256 is not None
+                and recovery_acknowledgement.get("verification_sha256")
+                != root_unsealed_verification_sha256
+            ):
+                _raise(
+                    "forensic recovery acknowledgement does not match the root unsealed release receipt verification"
+                )
+            acknowledgement_verification_sha256 = cast(
+                str, recovery_acknowledgement["verification_sha256"]
+            )
+
+        return {
+            "intent_state_sequence": (
+                len(expected_history) if state == "fence_release_intent" else None
+            ),
+            "marker_sha256": marker_sha256,
+            "recovery_acknowledgement_verification_sha256": acknowledgement_verification_sha256,
+            "release_receipt_record_sha256": receipt_record_sha256,
+            "root_unsealed_release_receipt_verification_sha256": root_unsealed_verification_sha256,
+        }
+
+    def assert_current_history_consistent_for_recovery(
+        self, operation_id: str
+    ) -> dict[str, object]:
+        """root archive 전 완전한 state ledger 및 release receipt seal을 증명한다."""
+
+        return self._recovery_ledger_proof_unlocked(
+            operation_id, require_release_receipt_seal=True
+        )
+
+    def seal_release_receipt(
+        self,
+        operation_id: str,
+        *,
+        intent_marker_sha256: str,
+        receipt_record_sha256: str,
+        test_fail_history_append: bool = False,
+    ) -> None:
+        """검증 완료한 DB release receipt를 marker를 바꾸지 않고 ledger에 봉인한다.
+
+        append/fsync error는 event가 durable하지 않았다는 뜻이 아니다. 같은 lock 안에서
+        exact event를 재독해 하나만 남아 있으면 성공으로 수렴하고, 부분/중복/다른
+        binding은 fail-close하여 caller cleanup이 database fence를 다시 적용하게 한다.
+        """
+
+        intent_marker_sha256 = _validate_sha256(
+            intent_marker_sha256, "release receipt intent marker"
+        )
+        receipt_record_sha256 = _validate_sha256(
+            receipt_record_sha256, "release receipt record"
+        )
+        with self._exclusive_lock():
+            marker, raw = self._current_unlocked()
+            if marker["operation_id"] != operation_id:
+                _raise("forensic marker operation does not match")
+            if marker["state"] != "fence_release_intent" or marker["recovery_required"]:
+                _raise("forensic marker is not a sealable release intent")
+            if _sha256(raw) != intent_marker_sha256:
+                _raise("forensic release receipt intent marker changed")
+            proof = self._recovery_ledger_proof_unlocked(
+                operation_id, require_release_receipt_seal=False
+            )
+            if proof["recovery_acknowledgement_verification_sha256"] is not None:
+                _raise("forensic release receipt seal follows recovery acknowledgement")
+            existing_record_sha256 = proof["release_receipt_record_sha256"]
+            if existing_record_sha256 is not None:
+                if existing_record_sha256 != receipt_record_sha256:
+                    _raise("forensic release receipt seal does not match the receipt")
+                return
+            sequence = proof["intent_state_sequence"]
+            if type(sequence) is not int:
+                _raise("forensic release receipt intent sequence is invalid")
+            event = {
+                "at_utc": _utc_now(),
+                "intent_marker_sha256": intent_marker_sha256,
+                "intent_state_sequence": sequence,
+                "operation_id": operation_id,
+                "receipt_record_sha256": receipt_record_sha256,
+                "type": _RELEASE_RECEIPT_SEAL_TYPE,
+            }
+            try:
+                if test_fail_history_append:
+                    _raise("test-only forensic history append failure injected")
+                self._append_history(operation_id, event)
+            except ForensicsError:
+                recovered = self._recovery_ledger_proof_unlocked(
+                    operation_id, require_release_receipt_seal=False
+                )
+                if recovered["release_receipt_record_sha256"] == receipt_record_sha256:
+                    return
+                raise
+            verified = self._recovery_ledger_proof_unlocked(
+                operation_id, require_release_receipt_seal=True
+            )
+            if verified["release_receipt_record_sha256"] != receipt_record_sha256:
+                _raise("forensic release receipt seal could not be verified")
+
+    def assert_exact_release_receipt_seal(
+        self,
+        operation_id: str,
+        *,
+        intent_marker_sha256: str,
+        receipt_record_sha256: str,
+    ) -> None:
+        """cleanup/root가 raw intent와 receipt record의 exact seal만 신뢰하게 한다."""
+
+        intent_marker_sha256 = _validate_sha256(
+            intent_marker_sha256, "release receipt intent marker"
+        )
+        receipt_record_sha256 = _validate_sha256(
+            receipt_record_sha256, "release receipt record"
+        )
+        with self._exclusive_lock():
+            proof = self._recovery_ledger_proof_unlocked(
+                operation_id, require_release_receipt_seal=True
+            )
+            if (
+                proof["marker_sha256"] != intent_marker_sha256
+                or proof["release_receipt_record_sha256"] != receipt_record_sha256
+            ):
+                _raise("forensic release receipt seal does not match the active marker")
+
     def _write_new_or_match(self, relative: str, raw: bytes, *, mismatch: str) -> bool:
         """Persist an immutable artifact, or accept an exact crash-resume duplicate."""
 
@@ -812,6 +1220,155 @@ class _StateDirectory:
                 return True
         return False
 
+    def _append_root_unsealed_release_receipt_verification_unlocked(
+        self,
+        operation_id: str,
+        *,
+        intent_marker_sha256: str,
+        intent_state_sequence: int,
+        receipt_record_sha256: str,
+        verification_sha256: str,
+    ) -> None:
+        """DB commit 뒤 seal 전 crash를 root 증명으로만 봉인한다.
+
+        이 event는 normal runner가 release 직후 남기는 ``release_receipt_committed``
+        seal과 다른 의미다. root entrypoint가 다시 수행한 full read-only DB proof를
+        binding하므로, append/fsync 결과가 불명확할 때도 같은 lock 아래 exact readback
+        하나만 성공으로 인정한다.
+        """
+
+        event = {
+            "at_utc": _utc_now(),
+            "intent_marker_sha256": intent_marker_sha256,
+            "intent_state_sequence": intent_state_sequence,
+            "operation_id": operation_id,
+            "receipt_record_sha256": receipt_record_sha256,
+            "type": _ROOT_UNSEALED_RELEASE_RECEIPT_VERIFICATION_TYPE,
+            "verification_sha256": verification_sha256,
+        }
+        try:
+            self._append_history(operation_id, event)
+        except ForensicsError:
+            recovered = self._recovery_ledger_proof_unlocked(
+                operation_id,
+                require_release_receipt_seal=False,
+                allow_root_unsealed_release_receipt_verification=True,
+            )
+            if (
+                recovered["marker_sha256"] == intent_marker_sha256
+                and recovered["intent_state_sequence"] == intent_state_sequence
+                and recovered["release_receipt_record_sha256"] == receipt_record_sha256
+                and recovered["root_unsealed_release_receipt_verification_sha256"]
+                == verification_sha256
+            ):
+                return
+            raise
+        verified = self._recovery_ledger_proof_unlocked(
+            operation_id,
+            require_release_receipt_seal=False,
+            allow_root_unsealed_release_receipt_verification=True,
+        )
+        if (
+            verified["marker_sha256"] != intent_marker_sha256
+            or verified["intent_state_sequence"] != intent_state_sequence
+            or verified["release_receipt_record_sha256"] != receipt_record_sha256
+            or verified["root_unsealed_release_receipt_verification_sha256"]
+            != verification_sha256
+        ):
+            _raise(
+                "forensic root unsealed release receipt verification could not be verified"
+            )
+
+    def _archive_verified_recovery_unlocked(
+        self,
+        operation_id: str,
+        marker: dict[str, object],
+        raw: bytes,
+        proof: dict[str, object],
+        *,
+        verification_sha256: str,
+    ) -> None:
+        """이미 lock 안에서 검증한 marker를 acknowledgement와 함께 archive한다."""
+
+        marker_sha256 = _sha256(raw)
+        pending_verification = proof["recovery_acknowledgement_verification_sha256"]
+        if pending_verification is not None:
+            if pending_verification != verification_sha256:
+                _raise("forensic recovery acknowledgement verification changed")
+            self._unlink_current()
+            return
+        self._write_new_or_match(
+            f"{_OPERATIONS_NAME}/{operation_id}.final.json",
+            raw,
+            mismatch="forensic final marker does not match the active marker",
+        )
+        acknowledgement_path = f"{_RECOVERY_NAME}/{operation_id}.json"
+        acknowledgement = {
+            "at_utc": _utc_now(),
+            "marker_sha256": marker_sha256,
+            "operation_id": operation_id,
+            "outcome": "recovery_acknowledged",
+            "verification_sha256": verification_sha256,
+            "version": 1,
+        }
+        wrote_acknowledgement = False
+        try:
+            self._write_new_regular(
+                acknowledgement_path, _canonical_json(acknowledgement)
+            )
+            wrote_acknowledgement = True
+        except ForensicsError:
+            try:
+                existing = json.loads(
+                    self._read_regular(acknowledgement_path).decode("utf-8"),
+                    object_pairs_hook=_reject_duplicate_json_keys,
+                )
+            except (
+                UnicodeDecodeError,
+                json.JSONDecodeError,
+                _DuplicateJsonKeyError,
+            ):
+                _raise("forensic recovery acknowledgement is invalid")
+            if (
+                not isinstance(existing, dict)
+                or set(existing)
+                != {
+                    "at_utc",
+                    "marker_sha256",
+                    "operation_id",
+                    "outcome",
+                    "verification_sha256",
+                    "version",
+                }
+                or not isinstance(existing.get("at_utc"), str)
+                or not cast(str, existing["at_utc"]).endswith("Z")
+                or existing.get("version") != 1
+                or existing.get("outcome") != "recovery_acknowledged"
+                or existing.get("operation_id") != operation_id
+                or existing.get("marker_sha256") != marker_sha256
+                or existing.get("verification_sha256") != verification_sha256
+            ):
+                _raise("forensic recovery acknowledgement does not match the marker")
+        if wrote_acknowledgement or not self._history_has_acknowledgement(
+            operation_id,
+            marker_sha256=marker_sha256,
+            verification_sha256=verification_sha256,
+        ):
+            self._append_history(
+                operation_id,
+                {
+                    "at_utc": _utc_now(),
+                    "marker_sha256": marker_sha256,
+                    "operation_id": operation_id,
+                    "outcome": "recovery_acknowledged",
+                    "sequence": len(cast(list[object], marker["state_history"])),
+                    "state": marker["state"],
+                    "type": "recovery_acknowledged",
+                    "verification_sha256": verification_sha256,
+                },
+            )
+        self._unlink_current()
+
     def begin(self, marker: dict[str, object]) -> None:
         marker = _validate_marker(marker)
         operation_id = cast(str, marker["operation_id"])
@@ -841,7 +1398,12 @@ class _StateDirectory:
             self._append_history(operation_id, event)
 
     def transition(
-        self, operation_id: str, state: MarkerState, updates: dict[str, object]
+        self,
+        operation_id: str,
+        state: MarkerState,
+        updates: dict[str, object],
+        *,
+        test_fail_history_append: bool = False,
     ) -> None:
         with self._exclusive_lock():
             marker, _ = self._current_unlocked()
@@ -849,31 +1411,8 @@ class _StateDirectory:
                 _raise("forensic marker operation does not match")
             current_state = cast(str, marker["state"])
             if marker["recovery_required"]:
-                historical_states = {
-                    cast(str, item["state"])
-                    for item in cast(list[dict[str, object]], marker["state_history"])
-                }
-                expected_mode = (
-                    "switched" if "switched" in historical_states else "no_switch"
-                )
-                cleanup_transition = (
-                    state == "fence_release_intent"
-                    and current_state
-                    in {"fence_intent", "fence_applied", "restore_ready", "switched"}
-                    and updates == {"terminal_schema_mode": expected_mode}
-                ) or (
-                    state == "fence_released"
-                    and current_state == "fence_release_intent"
-                    and set(updates) == {"post_release_acl_topology_sha256"}
-                    and isinstance(updates["post_release_acl_topology_sha256"], str)
-                    and _SHA256_RE.fullmatch(
-                        cast(str, updates["post_release_acl_topology_sha256"])
-                    )
-                    is not None
-                )
-                if not cleanup_transition:
-                    _raise("forensic marker is recovery latched")
-            elif state not in _NEXT_STATES.get(current_state, frozenset()):
+                _raise("forensic marker is recovery latched")
+            if state not in _NEXT_STATES.get(current_state, frozenset()):
                 _raise("forensic marker state transition is invalid")
             marker.update(updates)
             history = cast(list[dict[str, object]], marker["state_history"])
@@ -886,6 +1425,8 @@ class _StateDirectory:
             raw = _canonical_json(marker)
             # Current is authoritative; append-only history follows the durable state.
             self._replace_regular(_CURRENT_NAME, raw)
+            if test_fail_history_append:
+                _raise("test-only forensic history append failure injected")
             self._append_history(
                 operation_id,
                 {
@@ -931,93 +1472,228 @@ class _StateDirectory:
             )
 
     def acknowledge_and_archive(
-        self, operation_id: str, *, verification_sha256: str
+        self,
+        operation_id: str,
+        *,
+        verification_sha256: str,
+        expected_marker_sha256: str | None = None,
+        expected_release_receipt_record_sha256: str | None = None,
+        trusted_release_intent: bool = False,
     ) -> None:
         verification_sha256 = _validate_sha256(
             verification_sha256, "recovery verification"
+        )
+        if expected_marker_sha256 is not None:
+            expected_marker_sha256 = _validate_sha256(
+                expected_marker_sha256, "verified recovery marker"
+            )
+        if expected_release_receipt_record_sha256 is not None:
+            expected_release_receipt_record_sha256 = _validate_sha256(
+                expected_release_receipt_record_sha256,
+                "verified recovery release receipt",
+            )
+        with self._exclusive_lock():
+            marker, raw = self._current_unlocked()
+            if marker["operation_id"] != operation_id:
+                _raise("forensic marker operation does not match")
+            marker_sha256 = _sha256(raw)
+            # The trusted entrypoint proves the current marker and the live DB
+            # separately.  Re-read and compare while holding the writer lock so
+            # it cannot archive a newer marker that appeared after that proof.
+            if (
+                expected_marker_sha256 is not None
+                and marker_sha256 != expected_marker_sha256
+            ):
+                _raise("forensic marker changed after verified recovery")
+            allowed_states = {"prepared"}
+            if trusted_release_intent:
+                allowed_states.add("fence_release_intent")
+            if marker["state"] not in allowed_states or marker["recovery_required"]:
+                _raise("forensic marker is not safe for recovery acknowledgement")
+            # Recheck the ledger inside the same lock as the current marker CAS.
+            # The raw marker can remain unchanged while an interrupted writer has
+            # left a partial/extra JSONL event; archive must not race that state.
+            proof = self.assert_current_history_consistent_for_recovery(operation_id)
+            if proof["marker_sha256"] != marker_sha256:
+                _raise("forensic marker history changed after verified recovery")
+            if marker["state"] == "fence_release_intent":
+                if (
+                    expected_release_receipt_record_sha256 is None
+                    or proof["release_receipt_record_sha256"]
+                    != expected_release_receipt_record_sha256
+                ):
+                    _raise("forensic release receipt changed after verified recovery")
+            elif expected_release_receipt_record_sha256 is not None:
+                _raise("prepared recovery cannot bind a release receipt")
+            self._archive_verified_recovery_unlocked(
+                operation_id,
+                marker,
+                raw,
+                proof,
+                verification_sha256=verification_sha256,
+            )
+
+    def acknowledge_unsealed_release_receipt_and_archive(
+        self,
+        operation_id: str,
+        *,
+        verification_sha256: str,
+        expected_marker_sha256: str,
+        expected_release_receipt_record_sha256: str,
+    ) -> None:
+        """명시적 root escalation만 unsealed release receipt를 종료할 수 있다.
+
+        정상 runner의 release seal이 없는 intent는 일반 acknowledgement에서 절대
+        archive하지 않는다. 이 primitive의 caller는 raw marker SHA를 외부에서 다시
+        확인하고, same operation의 DB receipt와 full read-only topology proof를 완료한
+        trusted root entrypoint여야 한다.
+        """
+
+        verification_sha256 = _validate_sha256(
+            verification_sha256, "recovery verification"
+        )
+        expected_marker_sha256 = _validate_sha256(
+            expected_marker_sha256, "verified recovery marker"
+        )
+        expected_release_receipt_record_sha256 = _validate_sha256(
+            expected_release_receipt_record_sha256,
+            "verified recovery release receipt",
         )
         with self._exclusive_lock():
             marker, raw = self._current_unlocked()
             if marker["operation_id"] != operation_id:
                 _raise("forensic marker operation does not match")
-            if (
-                marker["state"] not in {"prepared", "fence_released"}
-                and not marker["recovery_required"]
-            ):
-                _raise("forensic marker is not safe for recovery acknowledgement")
             marker_sha256 = _sha256(raw)
-            self._write_new_or_match(
-                f"{_OPERATIONS_NAME}/{operation_id}.final.json",
-                raw,
-                mismatch="forensic final marker does not match the active marker",
-            )
-            acknowledgement_path = f"{_RECOVERY_NAME}/{operation_id}.json"
-            acknowledgement = {
-                "at_utc": _utc_now(),
-                "marker_sha256": marker_sha256,
-                "operation_id": operation_id,
-                "outcome": "recovery_acknowledged",
-                "verification_sha256": verification_sha256,
-                "version": 1,
-            }
-            wrote_acknowledgement = False
-            try:
-                self._write_new_regular(
-                    acknowledgement_path, _canonical_json(acknowledgement)
-                )
-                wrote_acknowledgement = True
-            except ForensicsError:
-                try:
-                    existing = json.loads(
-                        self._read_regular(acknowledgement_path).decode("utf-8"),
-                        object_pairs_hook=_reject_duplicate_json_keys,
-                    )
-                except (
-                    UnicodeDecodeError,
-                    json.JSONDecodeError,
-                    _DuplicateJsonKeyError,
-                ):
-                    _raise("forensic recovery acknowledgement is invalid")
-                if (
-                    not isinstance(existing, dict)
-                    or set(existing)
-                    != {
-                        "at_utc",
-                        "marker_sha256",
-                        "operation_id",
-                        "outcome",
-                        "verification_sha256",
-                        "version",
-                    }
-                    or not isinstance(existing.get("at_utc"), str)
-                    or not cast(str, existing["at_utc"]).endswith("Z")
-                    or existing.get("version") != 1
-                    or existing.get("outcome") != "recovery_acknowledged"
-                    or existing.get("operation_id") != operation_id
-                    or existing.get("marker_sha256") != marker_sha256
-                    or existing.get("verification_sha256") != verification_sha256
-                ):
-                    _raise(
-                        "forensic recovery acknowledgement does not match the marker"
-                    )
-            if wrote_acknowledgement or not self._history_has_acknowledgement(
+            if marker_sha256 != expected_marker_sha256:
+                _raise("forensic marker changed after verified recovery")
+            if marker["state"] != "fence_release_intent" or marker["recovery_required"]:
+                _raise("forensic marker is not an unsealed release intent")
+            proof = self._recovery_ledger_proof_unlocked(
                 operation_id,
-                marker_sha256=marker_sha256,
-                verification_sha256=verification_sha256,
-            ):
-                self._append_history(
+                require_release_receipt_seal=False,
+                allow_root_unsealed_release_receipt_verification=True,
+            )
+            if proof["marker_sha256"] != marker_sha256:
+                _raise("forensic marker history changed after verified recovery")
+            intent_state_sequence = proof["intent_state_sequence"]
+            if type(intent_state_sequence) is not int:
+                _raise("forensic release receipt intent sequence is invalid")
+            root_verification_sha256 = proof[
+                "root_unsealed_release_receipt_verification_sha256"
+            ]
+            receipt_record_sha256 = proof["release_receipt_record_sha256"]
+            if root_verification_sha256 is None:
+                if receipt_record_sha256 is not None:
+                    _raise("forensic normal release receipt seal cannot be escalated")
+                self._append_root_unsealed_release_receipt_verification_unlocked(
                     operation_id,
-                    {
-                        "at_utc": _utc_now(),
-                        "marker_sha256": marker_sha256,
-                        "operation_id": operation_id,
-                        "sequence": len(cast(list[object], marker["state_history"])),
-                        "state": marker["state"],
-                        "type": "recovery_acknowledged",
-                        "verification_sha256": verification_sha256,
-                    },
+                    intent_marker_sha256=marker_sha256,
+                    intent_state_sequence=intent_state_sequence,
+                    receipt_record_sha256=expected_release_receipt_record_sha256,
+                    verification_sha256=verification_sha256,
                 )
-            self._unlink_current()
+                proof = self._recovery_ledger_proof_unlocked(
+                    operation_id,
+                    require_release_receipt_seal=False,
+                    allow_root_unsealed_release_receipt_verification=True,
+                )
+                root_verification_sha256 = proof[
+                    "root_unsealed_release_receipt_verification_sha256"
+                ]
+                receipt_record_sha256 = proof["release_receipt_record_sha256"]
+            if (
+                root_verification_sha256 != verification_sha256
+                or receipt_record_sha256 != expected_release_receipt_record_sha256
+            ):
+                _raise(
+                    "forensic root unsealed release receipt verification changed after recovery proof"
+                )
+            self._archive_verified_recovery_unlocked(
+                operation_id,
+                marker,
+                raw,
+                proof,
+                verification_sha256=verification_sha256,
+            )
+
+
+def acknowledge_after_verified_recovery(
+    state_directory: Path,
+    *,
+    operation_id: str,
+    verification_sha256: str,
+    expected_marker_sha256: str,
+    expected_release_receipt_record_sha256: str | None,
+) -> None:
+    """trusted entrypoint의 DB 관찰 뒤 strict marker만 archive한다.
+
+    Strict acknowledgement는 public helper CLI에서 제공하지 않는다. 이 작은
+    in-process primitive는 trusted root entrypoint가 `_safe_recovery_observation`
+    을 마친 뒤에만 호출한다.
+    """
+
+    store = _StateDirectory.open(state_directory, strict=True, test_mode=False)
+    store.acknowledge_and_archive(
+        operation_id,
+        verification_sha256=verification_sha256,
+        expected_marker_sha256=expected_marker_sha256,
+        expected_release_receipt_record_sha256=expected_release_receipt_record_sha256,
+        trusted_release_intent=True,
+    )
+
+
+def acknowledge_unsealed_release_receipt_after_verified_recovery(
+    state_directory: Path,
+    *,
+    operation_id: str,
+    verification_sha256: str,
+    expected_marker_sha256: str,
+    expected_release_receipt_record_sha256: str,
+) -> None:
+    """root-only explicit escalation 뒤 unsealed terminal intent를 archive한다."""
+
+    store = _StateDirectory.open(state_directory, strict=True, test_mode=False)
+    store.acknowledge_unsealed_release_receipt_and_archive(
+        operation_id,
+        verification_sha256=verification_sha256,
+        expected_marker_sha256=expected_marker_sha256,
+        expected_release_receipt_record_sha256=expected_release_receipt_record_sha256,
+    )
+
+
+def assert_current_history_consistent_for_verified_recovery(
+    state_directory: Path, *, operation_id: str
+) -> dict[str, object]:
+    """trusted entrypoint가 archive 전에 호출하는 strict ledger proof primitive다."""
+
+    store = _StateDirectory.open(state_directory, strict=True, test_mode=False)
+    return store.assert_current_history_consistent_for_recovery(operation_id)
+
+
+def assert_unsealed_release_receipt_escalation_history(
+    state_directory: Path, *, operation_id: str
+) -> dict[str, object]:
+    """root escalation 전에 unsealed intent의 exact ledger만 읽는다.
+
+    이 primitive는 seal 없는 release window의 live DB proof를 건너뛰지 않는다.
+    caller는 이 반환값으로 raw marker SHA를 operator confirmation과 CAS하고, 이후
+    fence-owner receipt 및 full read-only topology proof를 다시 수행해야 한다.
+    """
+
+    store = _StateDirectory.open(state_directory, strict=True, test_mode=False)
+    proof = store._recovery_ledger_proof_unlocked(
+        operation_id,
+        require_release_receipt_seal=False,
+        allow_root_unsealed_release_receipt_verification=True,
+    )
+    if proof["intent_state_sequence"] is None:
+        _raise("forensic marker is not an unsealed release intent")
+    if (
+        proof["release_receipt_record_sha256"] is not None
+        and proof["root_unsealed_release_receipt_verification_sha256"] is None
+    ):
+        _raise("forensic normal release receipt seal cannot be escalated")
+    return proof
 
 
 def _split_roles(value: str, field: str) -> list[str]:
@@ -1057,6 +1733,7 @@ def _marker_from_begin(args: argparse.Namespace) -> dict[str, object]:
         "acl_topology_sha256": args.acl_topology_sha256,
         "app_role": args.app_role,
         "connect_restore_grants": [],
+        "drain_receipt_sha256": args.drain_receipt_sha256,
         "failure": None,
         "fence_executor_role": args.fence_executor_role,
         "fenced_connect_roles": [],
@@ -1068,6 +1745,8 @@ def _marker_from_begin(args: argparse.Namespace) -> dict[str, object]:
         "previous_schema": args.previous_schema,
         "public_connect_was_granted": False,
         "recovery_required": False,
+        "restore_executor_connect_restore_grants": [],
+        "restore_executor_role": args.restore_executor_role,
         "restore_schema": args.restore_schema,
         "script_sha256": args.script_sha256,
         "snapshot_sha256": args.snapshot_sha256,
@@ -1107,15 +1786,14 @@ def _command_transition(args: argparse.Namespace) -> int:
                 args.fenced_connect_roles, "fenced roles"
             ),
             "public_connect_was_granted": args.public_connect_was_granted == "1",
+            "restore_executor_connect_restore_grants": _parse_grants(
+                args.restore_executor_connect_restore_grants
+            ),
             "source_schema_oid_before": args.source_schema_oid_before,
             "write_roles": _split_roles(args.write_roles, "writer roles"),
         }
     elif state == "fence_release_intent":
         updates = {"terminal_schema_mode": args.terminal_schema_mode}
-    elif state == "fence_released":
-        updates = {
-            "post_release_acl_topology_sha256": args.post_release_acl_topology_sha256
-        }
     elif state == "restore_ready":
         updates = {"restore_schema_oid": args.restore_schema_oid}
     elif state == "switched":
@@ -1123,13 +1801,43 @@ def _command_transition(args: argparse.Namespace) -> int:
             "app_schema_oid_after_switch": args.app_schema_oid_after_switch,
             "previous_schema_oid_after_switch": args.previous_schema_oid_after_switch,
         }
-    store.transition(args.operation_id, state, updates)
+    if args.test_fail_history_append_once and not args.test_mode:
+        _raise("test-only forensic history failure requires test mode")
+    store.transition(
+        args.operation_id,
+        state,
+        updates,
+        test_fail_history_append=args.test_fail_history_append_once,
+    )
     return 0
 
 
 def _command_failure(args: argparse.Namespace) -> int:
     store = _store_from_args(args)
     store.record_failure(args.operation_id, phase=args.phase, code=args.code)
+    return 0
+
+
+def _command_seal_release_receipt(args: argparse.Namespace) -> int:
+    store = _store_from_args(args)
+    if args.test_fail_history_append_once and not args.test_mode:
+        _raise("test-only forensic history failure requires test mode")
+    store.seal_release_receipt(
+        args.operation_id,
+        intent_marker_sha256=args.intent_marker_sha256,
+        receipt_record_sha256=args.receipt_record_sha256,
+        test_fail_history_append=args.test_fail_history_append_once,
+    )
+    return 0
+
+
+def _command_assert_release_receipt_seal(args: argparse.Namespace) -> int:
+    store = _store_from_args(args)
+    store.assert_exact_release_receipt_seal(
+        args.operation_id,
+        intent_marker_sha256=args.intent_marker_sha256,
+        receipt_record_sha256=args.receipt_record_sha256,
+    )
     return 0
 
 
@@ -1147,9 +1855,63 @@ def _command_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _is_canonical_state_directory_alias(value: str) -> bool:
+    """공개 CLI가 canonical root store의 별칭을 archive하지 못하게 한다.
+
+    ``Path(...) == DEFAULT_STATE_DIRECTORY`` 같은 문자열 비교는 ``..`` 및
+    ``//`` alias를 놓친다.  먼저 resolve된 canonical path를 비교하고, 실제
+    directory가 존재할 때는 O_NOFOLLOW fd의 device/inode도 확인한다. 이 함수는
+    허용 판단이 아닌 *거부* 경계이므로 path를 열 수 없으면 lexical canonical
+    identity만으로도 fail-closed한다.
+    """
+
+    candidate = Path(value)
+    try:
+        if candidate.resolve(strict=False) == DEFAULT_STATE_DIRECTORY.resolve(
+            strict=False
+        ):
+            return True
+    except (OSError, RuntimeError):
+        # resolve 실패는 canonical store를 public CLI로 열 권한을 주는 근거가
+        # 될 수 없다. 아래 fd 비교도 할 수 없으면 noncanonical test store만
+        # _StateDirectory.open에서 별도 검증한다.
+        return False
+
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    candidate_fd: int | None = None
+    default_fd: int | None = None
+    try:
+        candidate_fd = os.open(candidate, flags)
+        default_fd = os.open(DEFAULT_STATE_DIRECTORY, flags)
+        candidate_stat = os.fstat(candidate_fd)
+        default_stat = os.fstat(default_fd)
+        return (
+            candidate_stat.st_dev == default_stat.st_dev
+            and candidate_stat.st_ino == default_stat.st_ino
+        )
+    except OSError:
+        return False
+    finally:
+        if candidate_fd is not None:
+            os.close(candidate_fd)
+        if default_fd is not None:
+            os.close(default_fd)
+
+
 def _command_acknowledge(args: argparse.Namespace) -> int:
     if not args.confirm:
         _raise("recovery acknowledgement requires --confirm")
+    # The canonical production directory is never acknowledgeable through the
+    # public helper CLI, even when a caller omits --strict or lies with
+    # --test-mode.  Only the trusted entrypoint's in-process primitive can
+    # archive that marker after its independent read-only DB proof.
+    if (
+        not args.test_mode
+        or args.strict
+        or _is_canonical_state_directory_alias(args.state_dir)
+    ):
+        _raise("strict recovery acknowledgement must use the trusted entrypoint")
     store = _store_from_args(args)
     store.acknowledge_and_archive(
         args.operation_id, verification_sha256=args.verification_sha256
@@ -1172,6 +1934,7 @@ def _parser() -> argparse.ArgumentParser:
     begin.add_argument("--operation-id", default="")
     begin.add_argument("--script-sha256", required=True)
     begin.add_argument("--snapshot-sha256", required=True)
+    begin.add_argument("--drain-receipt-sha256", required=True)
     begin.add_argument("--pg-restore-list-sha256", required=True)
     begin.add_argument("--source-identity-sha256", required=True)
     begin.add_argument("--target-identity-sha256", required=True)
@@ -1182,6 +1945,7 @@ def _parser() -> argparse.ArgumentParser:
     begin.add_argument("--previous-schema", required=True)
     begin.add_argument("--app-role", required=True)
     begin.add_argument("--fence-executor-role", required=True)
+    begin.add_argument("--restore-executor-role", required=True)
     begin.add_argument("--source-schema-oid-before", type=int, required=True)
     begin.add_argument("--write-roles", required=True)
 
@@ -1193,6 +1957,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     transition.add_argument("--acl-topology-sha256", default="")
     transition.add_argument("--connect-restore-grants", default="")
+    transition.add_argument("--restore-executor-connect-restore-grants", default="")
     transition.add_argument("--fenced-connect-roles", default="")
     transition.add_argument(
         "--public-connect-was-granted", choices=("0", "1"), default="0"
@@ -1202,16 +1967,29 @@ def _parser() -> argparse.ArgumentParser:
     transition.add_argument("--restore-schema-oid", type=int, default=0)
     transition.add_argument("--app-schema-oid-after-switch", type=int, default=0)
     transition.add_argument("--previous-schema-oid-after-switch", type=int, default=0)
-    transition.add_argument("--post-release-acl-topology-sha256", default="")
-    transition.add_argument(
-        "--terminal-schema-mode", choices=("no_switch", "switched"), default=""
-    )
+    transition.add_argument("--test-fail-history-append-once", action="store_true")
+    transition.add_argument("--terminal-schema-mode", choices=("switched",), default="")
 
     failure = commands.add_parser("failure")
     _add_store_arguments(failure)
     failure.add_argument("--operation-id", required=True)
     failure.add_argument("--phase", required=True)
     failure.add_argument("--code", required=True)
+
+    seal_release_receipt = commands.add_parser("seal-release-receipt")
+    _add_store_arguments(seal_release_receipt)
+    seal_release_receipt.add_argument("--operation-id", required=True)
+    seal_release_receipt.add_argument("--intent-marker-sha256", required=True)
+    seal_release_receipt.add_argument("--receipt-record-sha256", required=True)
+    seal_release_receipt.add_argument(
+        "--test-fail-history-append-once", action="store_true"
+    )
+
+    assert_release_receipt_seal = commands.add_parser("assert-release-receipt-seal")
+    _add_store_arguments(assert_release_receipt_seal)
+    assert_release_receipt_seal.add_argument("--operation-id", required=True)
+    assert_release_receipt_seal.add_argument("--intent-marker-sha256", required=True)
+    assert_release_receipt_seal.add_argument("--receipt-record-sha256", required=True)
 
     status = commands.add_parser("status")
     _add_store_arguments(status)
@@ -1232,6 +2010,8 @@ def main(argv: list[str] | None = None) -> int:
             "begin": _command_begin,
             "transition": _command_transition,
             "failure": _command_failure,
+            "seal-release-receipt": _command_seal_release_receipt,
+            "assert-release-receipt-seal": _command_assert_release_receipt_seal,
             "status": _command_status,
             "acknowledge": _command_acknowledge,
         }

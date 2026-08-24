@@ -1132,60 +1132,6 @@ def _identity(database_url: str, *, schema: str) -> dict[str, object]:
     return value
 
 
-def _hotswap_success_state(
-    database_url: str,
-    *,
-    schema: str,
-    restore_schema: str,
-    previous_schema: str,
-    runtime_role: str,
-    fence_role: str,
-) -> dict[str, object]:
-    """실제 schema-swap 직후의 OID·권한·lock release 상태를 읽는다."""
-
-    for value, label in (
-        (schema, "schema"),
-        (restore_schema, "restore schema"),
-        (previous_schema, "previous schema"),
-        (runtime_role, "runtime role"),
-        (fence_role, "fence role"),
-    ):
-        if _SCHEMA_RE.fullmatch(value) is None and label.endswith("schema"):
-            raise RestoreDrillError(f"hotswap {label} is invalid")
-        if _ROLE_RE.fullmatch(value) is None and label.endswith("role"):
-            raise RestoreDrillError(f"hotswap {label} is invalid")
-    sql = f"""
-SELECT json_build_object(
-  'app_oid', COALESCE((SELECT oid::text FROM pg_namespace WHERE nspname = '{schema}'), ''),
-  'previous_oid', COALESCE((SELECT oid::text FROM pg_namespace WHERE nspname = '{previous_schema}'), ''),
-  'restore_absent', to_regnamespace('{restore_schema}') IS NULL,
-  'advisory_lock_absent', NOT EXISTS (
-    SELECT 1 FROM pg_locks
-    WHERE locktype = 'advisory' AND classid = 1414679892 AND objid = 1213421392 AND granted
-  ),
-  'runtime_connect', has_database_privilege('{runtime_role}', current_database(), 'CONNECT'),
-  'runtime_usage', has_schema_privilege('{runtime_role}', '{schema}', 'USAGE'),
-  'fence_connect', has_database_privilege('{fence_role}', current_database(), 'CONNECT')
-)::text
-""".strip()
-    result = _scalar(database_url, sql)
-    try:
-        state = json.loads(result.stdout.strip())
-    except json.JSONDecodeError as exc:
-        raise RestoreDrillError("hotswap post-cutover state is invalid JSON") from exc
-    if not isinstance(state, dict) or set(state) != {
-        "app_oid",
-        "previous_oid",
-        "restore_absent",
-        "advisory_lock_absent",
-        "runtime_connect",
-        "runtime_usage",
-        "fence_connect",
-    }:
-        raise RestoreDrillError("hotswap post-cutover state schema is invalid")
-    return state
-
-
 def _fresh_target_check(database_url: str, *, schema: str) -> None:
     """재사용 DB에서 app 스키마만 지운 상태를 fresh target으로 오인하지 않는다."""
 
@@ -1886,7 +1832,9 @@ def _run_drill(args: argparse.Namespace) -> int:
                 "PINVI_RESTORE_FENCE_DATABASE_URL": fence_url,
                 "PINVI_RESTORE_SCHEMA": args.schema,
                 "PINVI_RESTORE_APP_ROLE": args.runtime_role,
-                "PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL": "drain",
+                # 범용 drill은 DB precheck까지만 증명한다. schema-swap execution과
+                # terminal evidence는 root-only trusted entrypoint가 전담한다.
+                "PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL": "precheck",
                 "PINVI_RESTORE_PG_RESTORE_BIN": private_tools["pg_restore"]["path"],
                 "PINVI_RESTORE_PSQL_BIN": private_tools["psql"]["path"],
                 "PINVI_RESTORE_PG_RESTORE_SHA256": private_tools["pg_restore"]["sha256"],
@@ -1938,7 +1886,7 @@ def _run_drill(args: argparse.Namespace) -> int:
             "DRILL_EVIDENCE=checksum=verified",
             "DRILL_EVIDENCE=pg_restore_list=ok",
             "DRILL_EVIDENCE=restore_tool_binding=verified",
-            "DRILL_EVIDENCE=rollback_rehearsal=drain_failed_schema_unchanged",
+            "DRILL_EVIDENCE=rollback_rehearsal=precheck_guard_schema_unchanged",
             "DRILL_PHASE=complete:success:staging restore drill completed",
             "RESTORE_COMMAND=pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges",
         ]
@@ -1998,122 +1946,6 @@ def _run_drill(args: argparse.Namespace) -> int:
         hotswap_advisory_lock_released = False
         hotswap_fence_restored = False
         hotswap_executor_reconnect_fenced = False
-        if hotswap_url and os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
-            success_suffix = uuid4().hex[:12]
-            success_restore_schema = f"{args.schema}_restore_m05_success_{success_suffix}"
-            success_previous_schema = f"{args.schema}_previous_m05_success_{success_suffix}"
-            before_schema = _scalar(
-                hotswap_url,
-                f"SELECT oid::text FROM pg_namespace WHERE nspname = '{args.schema}'",
-            ).stdout.strip()
-            if not before_schema.isdigit():
-                raise RestoreDrillError("successful hotswap pre-cutover schema OID is invalid")
-            hotswap_env = _command_env()
-            hotswap_env.update(
-                {
-                    "PINVI_BACKUP_SCHEMA": args.schema,
-                    "PINVI_ENVIRONMENT": environment,
-                    "PINVI_RESTORE_HOTSWAP_EXECUTE": "1",
-                    "PINVI_RESTORE_DATABASE_URL": hotswap_url,
-                    "PINVI_RESTORE_FENCE_DATABASE_URL": fence_url,
-                    "PINVI_RESTORE_APP_ROLE": args.runtime_role,
-                    "PINVI_RESTORE_ALLOW_NO_DRAIN": "1",
-                    "PINVI_RESTORE_DRAIN_VERIFIED": "1",
-                    "PINVI_RESTORE_PG_RESTORE_BIN": private_tools["pg_restore"]["path"],
-                    "PINVI_RESTORE_PG_RESTORE_SHA256": private_tools["pg_restore"]["sha256"],
-                    "PINVI_RESTORE_PSQL_BIN": private_tools["psql"]["path"],
-                    "PINVI_RESTORE_PSQL_SHA256": private_tools["psql"]["sha256"],
-                    "PINVI_RESTORE_BASH_BIN": private_tools["bash"]["path"],
-                    "PINVI_RESTORE_BASH_SHA256": private_tools["bash"]["sha256"],
-                    "PINVI_RESTORE_PRIVATE_TOOL_COPY": "1",
-                    "PINVI_RESTORE_EXPECTED_DATABASE_NAME": str(
-                        target_identity_before_restore["database"]
-                    ),
-                    "PINVI_RESTORE_EXPECTED_DATABASE_OID": str(
-                        target_identity_before_restore["database_oid"]
-                    ),
-                    "PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER": str(
-                        target_identity_before_restore["system_identifier"]
-                    ),
-                    "PINVI_RESTORE_EXPECTED_HOSTADDR": str(
-                        target_identity_before_restore["hostaddr"]
-                    ),
-                    "PINVI_RESTORE_EXPECTED_PORT": str(target_identity_before_restore["port"]),
-                    "PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME": str(
-                        source_identity_pre["database"]
-                    ),
-                    "PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID": str(
-                        source_identity_pre["database_oid"]
-                    ),
-                    "PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER": str(
-                        source_identity_pre["system_identifier"]
-                    ),
-                    "PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR": str(
-                        source_identity_pre["hostaddr"]
-                    ),
-                    "PINVI_RESTORE_EXPECTED_SOURCE_PORT": str(source_identity_pre["port"]),
-                    "PINVI_RESTORE_TRUSTED_BACKUP_DIR": str(temporary_dir),
-                }
-            )
-            hotswap = _run(
-                [
-                    private_tools["bash"]["path"],
-                    str(root / "scripts/restore-hotswap.sh"),
-                    "run",
-                    str(dump),
-                    success_restore_schema,
-                    success_previous_schema,
-                ],
-                env=hotswap_env,
-                check=False,
-            )
-            hotswap_output = f"{hotswap.stdout}\0{hotswap.stderr}".encode()
-            hotswap_success_output_sha256 = _sha256(hotswap_output)
-            hotswap_success_marker = "RESTORE_PHASE=switching:success:schema-swap completed"
-            hotswap_executor_reconnect_marker = (
-                "RESTORE_PHASE=draining:success:hotswap executor reconnect is fenced while lock session remains open"
-            )
-            if hotswap.returncode != 0:
-                raise RestoreDrillError("successful hotswap runner failed")
-            if hotswap_success_marker not in hotswap.stdout:
-                raise RestoreDrillError("successful hotswap runner did not produce the schema-swap marker")
-            if hotswap_executor_reconnect_marker not in hotswap.stdout:
-                raise RestoreDrillError("successful hotswap runner did not prove executor reconnect fencing")
-            state = _hotswap_success_state(
-                hotswap_url,
-                schema=args.schema,
-                restore_schema=success_restore_schema,
-                previous_schema=success_previous_schema,
-                runtime_role=args.runtime_role,
-                fence_role=args.fence_role,
-            )
-            hotswap_schema_oid_before = before_schema
-            hotswap_schema_oid_after = str(state["app_oid"])
-            hotswap_previous_schema_oid = str(state["previous_oid"])
-            hotswap_previous_schema_present = bool(hotswap_previous_schema_oid)
-            hotswap_restore_schema_absent = state["restore_absent"] is True
-            hotswap_advisory_lock_released = state["advisory_lock_absent"] is True
-            hotswap_fence_restored = (
-                state["runtime_connect"] is True
-                and state["runtime_usage"] is True
-                and state["fence_connect"] is True
-            )
-            hotswap_executor_reconnect_fenced = True
-            if (
-                not hotswap_schema_oid_after.isdigit()
-                or hotswap_schema_oid_after == hotswap_schema_oid_before
-                or hotswap_previous_schema_oid != hotswap_schema_oid_before
-                or not hotswap_previous_schema_present
-                or not hotswap_restore_schema_absent
-                or not hotswap_advisory_lock_released
-                or not hotswap_fence_restored
-            ):
-                raise RestoreDrillError("successful hotswap post-cutover state is not complete")
-            _admin_audit_contract_check(hotswap_url, schema=args.schema)
-            _admin_audit_guard_is_enforced(hotswap_url, schema=args.schema)
-            _trigger_check(hotswap_url, schema=args.schema)
-            _trigger_guard_is_enforced(hotswap_url, schema=args.schema)
-            hotswap_success = True
 
         execution_output = (
             f"{backup.stdout}\0{backup.stderr}\0{restore.stdout}\0{restore.stderr}"

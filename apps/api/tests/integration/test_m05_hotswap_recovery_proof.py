@@ -102,6 +102,7 @@ def _prepared_marker(
     *,
     app_role: str,
     fence_role: str,
+    restore_role: str,
     target_identity_sha256: str,
     topology_sha256: str,
     source_oid: int,
@@ -110,12 +111,19 @@ def _prepared_marker(
         "acl_topology_sha256": topology_sha256,
         "app_role": app_role,
         "connect_restore_grants": [],
+        "drain_receipt_sha256": "2" * 64,
         "fence_executor_role": fence_role,
         "operation_id": "123e4567-e89b-42d3-a456-426614174000",
+        "pg_restore_list_sha256": "3" * 64,
         "previous_schema": "app_previous",
         "public_connect_was_granted": False,
         "recovery_required": False,
+        "restore_executor_connect_restore_grants": [],
+        "restore_executor_role": restore_role,
         "restore_schema": "app_restore",
+        "script_sha256": "1" * 64,
+        "snapshot_sha256": "2" * 64,
+        "source_identity_sha256": "4" * 64,
         "source_schema": "app",
         "source_schema_oid_before": source_oid,
         "state": "prepared",
@@ -139,6 +147,7 @@ def test_trusted_recovery_rejects_authority_surface_drift() -> None:
     app_role = f"m05_app_{suffix}"
     fence_role = f"m05_fence_{suffix}"
     secdef_owner = f"m05_secdef_{suffix}"
+    secdef_mid = f"m05_secdef_mid_{suffix}"
     helper_schema = f"m05_helper_{suffix}"
     container = PostgresContainer(
         "postgres:16-alpine",
@@ -163,7 +172,7 @@ CREATE ROLE "{app_role}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
 CREATE ROLE "{fence_role}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
   NOREPLICATION NOBYPASSRLS NOINHERIT PASSWORD '{TEST_PASSWORD}';
 CREATE ROLE "{secdef_owner}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
-  NOREPLICATION NOBYPASSRLS NOINHERIT PASSWORD '{TEST_PASSWORD}';
+  NOREPLICATION NOBYPASSRLS INHERIT PASSWORD '{TEST_PASSWORD}';
 CREATE DATABASE "{database}" OWNER "{restore_role}";
 """,
             )
@@ -252,12 +261,20 @@ GRANT EXECUTE ON FUNCTION "{helper_schema}".m05_external_secdef() TO "{app_role}
         marker = _prepared_marker(
             app_role=app_role,
             fence_role=fence_role,
+            restore_role=restore_role,
             target_identity_sha256=target_identity_sha256,
             topology_sha256=topology_sha256,
             source_oid=source_oid,
         )
 
-        assert hotswap._safe_recovery_observation(marker, restore_url, TOPOLOGY_SQL)
+        assert hotswap._safe_recovery_observation(
+            marker,
+            restore_url,
+            TOPOLOGY_SQL,
+            marker_sha256="0" * 64,
+            receipt=None,
+            fence_database_url=None,
+        )
 
         _require_success(
             _psql(
@@ -271,7 +288,14 @@ GRANT EXECUTE ON FUNCTION "{helper_schema}".m05_external_secdef() TO "{app_role}
             != topology_sha256
         )
         with pytest.raises(hotswap.TrustedHotswapError, match="safe writer release"):
-            hotswap._safe_recovery_observation(marker, restore_url, TOPOLOGY_SQL)
+            hotswap._safe_recovery_observation(
+                marker,
+                restore_url,
+                TOPOLOGY_SQL,
+                marker_sha256="0" * 64,
+                receipt=None,
+                fence_database_url=None,
+            )
 
         _require_success(
             _psql(
@@ -292,7 +316,14 @@ GRANT EXECUTE ON FUNCTION "{helper_schema}".m05_external_secdef() TO "{app_role}
             )
         )
         with pytest.raises(hotswap.TrustedHotswapError, match="ACL topology"):
-            hotswap._safe_recovery_observation(marker, restore_url, TOPOLOGY_SQL)
+            hotswap._safe_recovery_observation(
+                marker,
+                restore_url,
+                TOPOLOGY_SQL,
+                marker_sha256="0" * 64,
+                receipt=None,
+                fence_database_url=None,
+            )
 
         _require_success(
             _psql(
@@ -317,14 +348,28 @@ RESET ROLE;
             )
         )
         with pytest.raises(hotswap.TrustedHotswapError, match="ACL topology"):
-            hotswap._safe_recovery_observation(marker, restore_url, TOPOLOGY_SQL)
+            hotswap._safe_recovery_observation(
+                marker,
+                restore_url,
+                TOPOLOGY_SQL,
+                marker_sha256="0" * 64,
+                receipt=None,
+                fence_database_url=None,
+            )
 
         body_topology_sha256 = _topology_sha256(
             psql, restore_url, app_role=app_role, fence_role=fence_role
         )
         assert body_topology_sha256 != topology_sha256
         marker["acl_topology_sha256"] = body_topology_sha256
-        assert hotswap._safe_recovery_observation(marker, restore_url, TOPOLOGY_SQL)
+        assert hotswap._safe_recovery_observation(
+            marker,
+            restore_url,
+            TOPOLOGY_SQL,
+            marker_sha256="0" * 64,
+            receipt=None,
+            fence_database_url=None,
+        )
 
         _require_success(
             _psql(
@@ -335,14 +380,28 @@ RESET ROLE;
             )
         )
         with pytest.raises(hotswap.TrustedHotswapError, match="ACL topology"):
-            hotswap._safe_recovery_observation(marker, restore_url, TOPOLOGY_SQL)
+            hotswap._safe_recovery_observation(
+                marker,
+                restore_url,
+                TOPOLOGY_SQL,
+                marker_sha256="0" * 64,
+                receipt=None,
+                fence_database_url=None,
+            )
 
         grant_option_topology_sha256 = _topology_sha256(
             psql, restore_url, app_role=app_role, fence_role=fence_role
         )
         assert grant_option_topology_sha256 != body_topology_sha256
         marker["acl_topology_sha256"] = grant_option_topology_sha256
-        assert hotswap._safe_recovery_observation(marker, restore_url, TOPOLOGY_SQL)
+        assert hotswap._safe_recovery_observation(
+            marker,
+            restore_url,
+            TOPOLOGY_SQL,
+            marker_sha256="0" * 64,
+            receipt=None,
+            fence_database_url=None,
+        )
 
         _require_success(
             _psql(
@@ -352,6 +411,60 @@ RESET ROLE;
             )
         )
         with pytest.raises(hotswap.TrustedHotswapError, match="ACL topology"):
-            hotswap._safe_recovery_observation(marker, restore_url, TOPOLOGY_SQL)
+            hotswap._safe_recovery_observation(
+                marker,
+                restore_url,
+                TOPOLOGY_SQL,
+                marker_sha256="0" * 64,
+                receipt=None,
+                fence_database_url=None,
+            )
+
+        _require_success(
+            _psql(
+                psql,
+                root_target_url,
+                f'''
+REVOKE pg_read_all_data FROM "{secdef_owner}";
+CREATE ROLE "{secdef_mid}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
+  NOREPLICATION NOBYPASSRLS INHERIT;
+GRANT "{secdef_mid}" TO "{secdef_owner}";
+''',
+            )
+        )
+        membership_topology_sha256 = _topology_sha256(
+            psql, restore_url, app_role=app_role, fence_role=fence_role
+        )
+        assert membership_topology_sha256 != grant_option_topology_sha256
+        marker["acl_topology_sha256"] = membership_topology_sha256
+        assert hotswap._safe_recovery_observation(
+            marker,
+            restore_url,
+            TOPOLOGY_SQL,
+            marker_sha256="0" * 64,
+            receipt=None,
+            fence_database_url=None,
+        )
+
+        _require_success(
+            _psql(
+                psql,
+                root_target_url,
+                f'GRANT pg_read_all_data TO "{secdef_mid}";',
+            )
+        )
+        assert (
+            _topology_sha256(psql, restore_url, app_role=app_role, fence_role=fence_role)
+            != membership_topology_sha256
+        )
+        with pytest.raises(hotswap.TrustedHotswapError, match="ACL topology"):
+            hotswap._safe_recovery_observation(
+                marker,
+                restore_url,
+                TOPOLOGY_SQL,
+                marker_sha256="0" * 64,
+                receipt=None,
+                fence_database_url=None,
+            )
     finally:
         container.stop()

@@ -14,6 +14,9 @@ phase() {
   local name="$1"
   local status="$2"
   local message="${3:-}"
+  if [[ "${status}" == "running" ]]; then
+    ACTIVE_PHASE="${name}"
+  fi
   printf 'RESTORE_PHASE=%s:%s:%s\n' "$name" "$status" "$message"
 }
 
@@ -38,14 +41,51 @@ LOCK_COMMAND_SEQUENCE=0
 SQL_SEQUENCE=0
 CLEANUP_MODE=0
 WRITE_FENCE_ACTIVE=0
-SCHEMA_SWITCH_ACTIVE=0
 RELEASE_FAILURE_INJECTED=0
+RELEASE_SQL_FAILURE_INJECTED=0
+RELEASE_DATABASE_SQL_FAILURE_INJECTED=0
+RESTORE_FAILURE_INJECTED=0
+FORENSICS_RELEASE_FAILURE_INJECTED=0
+FORENSICS_HISTORY_APPEND_FAILURE_INJECTED=0
+# The release transaction and the filesystem forensic state have no shared
+# atomic commit.  Mark the interval *before* the first physical writer grant
+# so EXIT/INT/TERM handling fails closed even if the process is interrupted
+# between the database commit and the next shell assignment.
+RELEASE_WINDOW_MAY_HAVE_OPENED=0
+RELEASE_WRITE_FENCE_COMPLETED=0
+RELEASE_WINDOW_REFENCED=0
+RELEASE_TERMINAL_SEALED=0
+REFENCE_SQL_FAILURE_INJECTED=0
 PUBLIC_CONNECT_REVOKED=0
 FENCED_CONNECT_ROLES=""
 CONNECT_RESTORE_GRANTS=""
+APP_CONNECT_RESTORE_GRANTS=""
+RESTORE_EXECUTOR_CONNECT_RESTORE_GRANTS=""
 FENCE_EXECUTOR_ROLE=""
 HOTSWAP_EXECUTOR_ROLE=""
 LOCK_SESSION_FENCED=0
+ACTIVE_PHASE="preparing"
+FORENSICS_ENABLED=0
+FORENSICS_STARTED=0
+FORENSICS_TERMINAL=0
+FORENSICS_FAILURE_RECORDED=0
+FORENSICS_STATE_DIRECTORY=""
+FORENSICS_MODE_ARGUMENT=""
+FORENSICS_HELPER=""
+FORENSICS_OPERATION_ID=""
+FORENSICS_DRAIN_RECEIPT_SHA256=""
+FORENSICS_SCRIPT_SHA256=""
+FORENSICS_RELEASE_INTENT_MARKER_SHA256=""
+RESTORE_LIST_SHA256=""
+SOURCE_SCHEMA_OID_BEFORE=""
+ACL_TOPOLOGY_SHA256=""
+FORENSICS_SCHEMA_OID=""
+RESTORE_SCHEMA_OID=""
+APP_SCHEMA_OID_AFTER_SWITCH=""
+PREVIOUS_SCHEMA_OID_AFTER_SWITCH=""
+RELEASE_RECEIPT_TOPOLOGY_SHA256=""
+RELEASE_RECEIPT_RECORD_SHA256=""
+RELEASE_RECEIPT_REQUIRED=0
 TEST_MODE="${PINVI_M05_RESTORE_TEST_MODE:-0}"
 APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}"
 STRICT_RESTORE_ENVIRONMENT=0
@@ -61,7 +101,6 @@ TRUSTED_SOURCE_HOSTADDR=""
 TRUSTED_SOURCE_PORT=""
 declare -a WRITE_ROLES=()
 declare -A WRITE_ROLE_SEEN=()
-
 if [[ "${TEST_MODE}" != "0" && "${TEST_MODE}" != "1" ]]; then
   phase preparing failed "PINVI_M05_RESTORE_TEST_MODE must be 0 or 1"
   exit 2
@@ -84,7 +123,6 @@ fi
 if [[ "${FENCE_DATABASE_URL}" == postgresql+asyncpg://* ]]; then
   FENCE_DATABASE_URL="postgresql://${FENCE_DATABASE_URL#postgresql+asyncpg://}"
 fi
-
 if [[ "${PINVI_RESTORE_HOTSWAP_EXECUTE:-0}" == "1" && "${TEST_MODE}" != "1" &&
   -z "${PINVI_RESTORE_FENCE_DATABASE_URL:-}" ]]; then
   phase preparing failed "PINVI_RESTORE_FENCE_DATABASE_URL is required for an executing schema swap"
@@ -294,73 +332,74 @@ if [[ "${TEST_MODE}" != "1" && "${PINVI_RESTORE_PRIVATE_TOOL_COPY:-0}" != "1" ]]
 fi
 
 TMP_DIR="$(mktemp -d)"
-rollback_schema_switch() {
-  local rollback_sql="${TMP_DIR}/rollback-schema-switch.sql"
-  if ! assert_advisory_lock_alive; then
+release_receipt_seal_is_exact() {
+  # Shell flags are not evidence: a TERM can land after a durable seal and
+  # before the assignment that normally records completion.  Only the strict
+  # helper may certify the same raw intent marker and receipt record together.
+  if [[ "${FORENSICS_ENABLED}" != "1" || "${RELEASE_RECEIPT_REQUIRED}" != "1" ||
+    ! "${FORENSICS_OPERATION_ID}" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ||
+    ! "${FORENSICS_RELEASE_INTENT_MARKER_SHA256}" =~ ^[0-9a-f]{64}$ ||
+    ! "${RELEASE_RECEIPT_RECORD_SHA256}" =~ ^[0-9a-f]{64}$ ||
+    -z "${FORENSICS_HELPER}" || -z "${FORENSICS_MODE_ARGUMENT}" || -z "${FORENSICS_STATE_DIRECTORY}" ]]; then
     return 1
   fi
-  cat >"${rollback_sql}" <<SQL
-BEGIN;
-$(advisory_lock_sql_guard)
-$(write_identity_guard)
-DO \$m05\$
-BEGIN
-  IF to_regnamespace('${SOURCE_SCHEMA}') IS NULL
-     OR to_regnamespace('${PREVIOUS_SCHEMA}') IS NULL
-     OR to_regnamespace('${RESTORE_SCHEMA}') IS NOT NULL
-  THEN
-    RAISE EXCEPTION 'schema-swap rollback topology is invalid';
-  END IF;
-END
-\$m05\$;
-ALTER SCHEMA ${SOURCE_SCHEMA} RENAME TO ${RESTORE_SCHEMA};
-ALTER SCHEMA ${PREVIOUS_SCHEMA} RENAME TO ${SOURCE_SCHEMA};
-$(advisory_lock_sql_guard)
-$(write_identity_guard)
-COMMIT;
-SQL
-  if ! execute_sql_file "${rollback_sql}" switching; then
-    return 1
-  fi
-  phase switching failed "schema-swap rolled back after fence release failure"
+  /usr/bin/python3 -I "${FORENSICS_HELPER}" assert-release-receipt-seal \
+    "${FORENSICS_MODE_ARGUMENT}" --state-dir "${FORENSICS_STATE_DIRECTORY}" \
+    --operation-id "${FORENSICS_OPERATION_ID}" \
+    --intent-marker-sha256 "${FORENSICS_RELEASE_INTENT_MARKER_SHA256}" \
+    --receipt-record-sha256 "${RELEASE_RECEIPT_RECORD_SHA256}" >/dev/null
 }
 
 cleanup() {
   local cleanup_status=$?
+  trap - EXIT
   set +e
   CLEANUP_MODE=1
-  local cleanup_failed=0
-  if [[ "${SCHEMA_SWITCH_ACTIVE}" == "1" ]]; then
-    if ! declare -F rollback_schema_switch >/dev/null || ! rollback_schema_switch; then
-      phase switching failed "schema-swap rollback failed; manual writer lockout is required"
-      cleanup_failed=1
+  # A signal, crash-like shell error, or filesystem failure can occur after
+  # the release SQL starts but before the terminal forensic marker commits.
+  # Never infer that writers stayed fenced from a missing completion flag:
+  # refence the live database first, retain the switched schemas/candidate,
+  # and leave the marker latched for explicit root incident recovery.
+  if [[ "${cleanup_status}" != "0" && "${WRITE_FENCE_ACTIVE}" == "1" &&
+        "${RELEASE_WINDOW_MAY_HAVE_OPENED}" == "1" &&
+        "${RELEASE_WINDOW_REFENCED}" != "1" ]]; then
+    if release_receipt_seal_is_exact; then
+      # The sealed receipt is the terminal forensic commit.  Leave current.json
+      # for trusted root acknowledgement, but do not accidentally re-fence a
+      # database whose release was already proven and sealed.
+      RELEASE_TERMINAL_SEALED=1
+      FORENSICS_TERMINAL=1
+      WRITE_FENCE_ACTIVE=0
+    elif reapply_write_fence_after_post_release_forensic_failure; then
+      RELEASE_WINDOW_REFENCED=1
     else
-      SCHEMA_SWITCH_ACTIVE=0
+      phase "${ACTIVE_PHASE}" failed "release-window writer fence reapplication failed; explicit root escalation is required"
+      cleanup_status=3
     fi
   fi
-  if [[ "${cleanup_status}" != "0" &&
-        "${SCHEMA_SWITCH_ACTIVE}" == "0" &&
-        -n "${TMP_DIR}" && -d "${TMP_DIR}" ]]; then
-    local restore_cleanup_sql="${TMP_DIR}/cleanup-restore-schema.sql"
-    cat >"${restore_cleanup_sql}" <<SQL
-BEGIN;
-$(advisory_lock_sql_guard)
-$(write_identity_guard)
-DROP SCHEMA IF EXISTS ${RESTORE_SCHEMA} CASCADE;
-$(advisory_lock_sql_guard)
-$(write_identity_guard)
-COMMIT;
-SQL
-    if ! execute_guarded_sql_file "${restore_cleanup_sql}" validating; then
-      phase validating failed "restore candidate cleanup failed; manual cleanup is required"
-      cleanup_failed=1
+  if [[ "${cleanup_status}" != "0" && "${FORENSICS_STARTED}" == "1" &&
+        "${FORENSICS_TERMINAL}" != "1" && "${FORENSICS_FAILURE_RECORDED}" != "1" ]]; then
+    local failure_code="runner_failure"
+    if [[ "${RELEASE_WINDOW_MAY_HAVE_OPENED}" == "1" ]]; then
+      if [[ "${RELEASE_WINDOW_REFENCED}" == "1" ]]; then
+        if [[ "${RELEASE_WRITE_FENCE_COMPLETED}" == "1" ]]; then
+          failure_code="post_release_forensics_persist_failed_refenced"
+        else
+          failure_code="release_window_interrupted_refenced"
+        fi
+      elif [[ "${RELEASE_WRITE_FENCE_COMPLETED}" == "1" ]]; then
+        failure_code="post_release_forensics_persist_failed_refence_failed"
+      else
+        failure_code="release_window_interrupted_refence_failed"
+      fi
+    fi
+    if ! record_forensics_failure "${failure_code}"; then
+      phase "${ACTIVE_PHASE}" failed "forensic failure latch could not be persisted; explicit root escalation is required"
+      cleanup_status=3
     fi
   fi
-  if [[ "${WRITE_FENCE_ACTIVE}" == "1" ]]; then
-    if ! declare -F release_write_fence >/dev/null || ! release_write_fence; then
-      phase draining failed "database write fence cleanup failed; manual writer lockout is required"
-      cleanup_failed=1
-    fi
+  if [[ "${cleanup_status}" != "0" && "${WRITE_FENCE_ACTIVE}" == "1" ]]; then
+    phase draining failed "database write fence remains active; explicit root recovery is required"
   fi
   if [[ -n "${LOCK_HOLDER_PID}" ]]; then
     kill "${LOCK_HOLDER_PID}" >/dev/null 2>&1 || true
@@ -377,9 +416,7 @@ SQL
   if [[ -n "${TMP_DIR}" && -d "${TMP_DIR}" ]]; then
     rm -rf "${TMP_DIR}"
   fi
-  if [[ "${cleanup_failed}" == "1" ]]; then
-    exit 3
-  fi
+  exit "${cleanup_status}"
 }
 trap cleanup EXIT
 terminate_restore() {
@@ -417,13 +454,17 @@ fi
 SNAPSHOT="${TMP_DIR}/snapshot.dump"
 
 if [[ "${STRICT_RESTORE_ENVIRONMENT}" == "1" ]]; then
-  actual_restore_list_sha256="$("${PG_RESTORE_BIN}" --list "${SNAPSHOT}" | sha256sum | awk 'NR == 1 { print $1 }')"
-  if [[ "${actual_restore_list_sha256}" != "${TRUSTED_SNAPSHOT_LIST_SHA256}" ]]; then
+  RESTORE_LIST_SHA256="$("${PG_RESTORE_BIN}" --list "${SNAPSHOT}" | sha256sum | awk 'NR == 1 { print $1 }')"
+  if [[ "${RESTORE_LIST_SHA256}" != "${TRUSTED_SNAPSHOT_LIST_SHA256}" ]]; then
     phase preparing failed "trusted snapshot archive inventory failed"
     exit 3
   fi
 else
-  "${PG_RESTORE_BIN}" --list "${SNAPSHOT}" >/dev/null
+  RESTORE_LIST_SHA256="$("${PG_RESTORE_BIN}" --list "${SNAPSHOT}" | sha256sum | awk 'NR == 1 { print $1 }')"
+  if [[ ! "${RESTORE_LIST_SHA256}" =~ ^[0-9a-f]{64}$ ]]; then
+    phase preparing failed "snapshot archive inventory failed"
+    exit 3
+  fi
 fi
 phase preparing success "snapshot verified for ${RESTORE_SCHEMA}"
 
@@ -478,11 +519,334 @@ advisory_lock_is_alive() {
 assert_advisory_lock_alive() {
   if ! advisory_lock_is_alive; then
     phase preparing failed "schema-swap database advisory lock was lost"
-    if [[ "${CLEANUP_MODE}" == "1" ]]; then
-      return 1
+    return 1
+  fi
+}
+
+configure_forensics() {
+  local runner_directory helper_metadata helper_mode
+  if [[ "${STRICT_RESTORE_ENVIRONMENT}" == "1" ]]; then
+    if [[ ! "${PINVI_M05_FORENSICS_OPERATION_ID:-}" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ||
+      ! "${PINVI_M05_FORENSICS_DRAIN_RECEIPT_SHA256:-}" =~ ^[0-9a-f]{64}$ ]]; then
+      phase preparing failed "strict hotswap requires a fixed forensic operation receipt"
+      exit 3
     fi
+    if [[ "${PINVI_M05_FORENSICS_STATE_DIR:-}" != "/var/lib/pinvi/restore-forensics" ]]; then
+      phase preparing failed "strict hotswap requires the fixed forensic state directory"
+      exit 3
+    fi
+    FORENSICS_ENABLED=1
+    FORENSICS_MODE_ARGUMENT="--strict"
+    FORENSICS_STATE_DIRECTORY="/var/lib/pinvi/restore-forensics"
+    FORENSICS_OPERATION_ID="${PINVI_M05_FORENSICS_OPERATION_ID}"
+    FORENSICS_DRAIN_RECEIPT_SHA256="${PINVI_M05_FORENSICS_DRAIN_RECEIPT_SHA256}"
+    RELEASE_RECEIPT_REQUIRED=1
+  elif [[ "${PINVI_ENVIRONMENT:-}" == "test" &&
+    ( -n "${PINVI_M05_FORENSICS_OPERATION_ID:-}" ||
+      -n "${PINVI_M05_FORENSICS_DRAIN_RECEIPT_SHA256:-}" ||
+      -n "${PINVI_M05_FORENSICS_STATE_DIR:-}" ) ]]; then
+    if [[ ! "${PINVI_M05_FORENSICS_OPERATION_ID:-}" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ||
+      ! "${PINVI_M05_FORENSICS_DRAIN_RECEIPT_SHA256:-}" =~ ^[0-9a-f]{64}$ ||
+      "${PINVI_M05_FORENSICS_STATE_DIR:-}" != /* ]]; then
+      phase preparing failed "test forensic lifecycle requires an operation receipt and absolute state directory"
+      exit 3
+    fi
+    FORENSICS_ENABLED=1
+    FORENSICS_MODE_ARGUMENT="--test-mode"
+    FORENSICS_STATE_DIRECTORY="${PINVI_M05_FORENSICS_STATE_DIR}"
+    FORENSICS_OPERATION_ID="${PINVI_M05_FORENSICS_OPERATION_ID}"
+    FORENSICS_DRAIN_RECEIPT_SHA256="${PINVI_M05_FORENSICS_DRAIN_RECEIPT_SHA256}"
+    if [[ "${PINVI_RESTORE_TEST_REQUIRE_RELEASE_RECEIPT:-0}" == "1" ]]; then
+      RELEASE_RECEIPT_REQUIRED=1
+    fi
+  else
+    return 0
+  fi
+
+  runner_directory="${BASH_SOURCE[0]%/*}"
+  if [[ "${runner_directory}" == "${BASH_SOURCE[0]}" ]]; then
+    runner_directory="."
+  fi
+  runner_directory="$(cd -- "${runner_directory}" && pwd -P)"
+  FORENSICS_HELPER="${runner_directory}/m05_hotswap_forensics.py"
+  if [[ ! -f "${FORENSICS_HELPER}" || -L "${FORENSICS_HELPER}" ]]; then
+    phase preparing failed "trusted forensic helper is unavailable"
     exit 3
   fi
+  if [[ "${STRICT_RESTORE_ENVIRONMENT}" == "1" ]]; then
+    helper_metadata="$(stat -c '%u:%a' "${FORENSICS_HELPER}")"
+    helper_mode="${helper_metadata#*:}"
+    if [[ "${helper_metadata%%:*}" != "0" || ! "${helper_mode}" =~ ^[0-7]{3,4}$ ||
+      $((8#${helper_mode} & 8#022)) -ne 0 ]]; then
+      phase preparing failed "trusted forensic helper permissions are invalid"
+      exit 3
+    fi
+  fi
+}
+
+forensics_command() {
+  local command="$1"
+  shift
+  if [[ "${FORENSICS_ENABLED}" != "1" ]]; then
+    return 0
+  fi
+  /usr/bin/python3 -I "${FORENSICS_HELPER}" "${command}" \
+    "${FORENSICS_MODE_ARGUMENT}" --state-dir "${FORENSICS_STATE_DIRECTORY}" "$@"
+}
+
+assert_forensics_inactive() {
+  local status
+  if [[ "${FORENSICS_ENABLED}" != "1" ]]; then
+    return 0
+  fi
+  if ! status="$(forensics_command status --allow-absent)"; then
+    phase preparing failed "forensic lifecycle status could not be read"
+    exit 3
+  fi
+  if [[ "${status}" != '{"active":false}' ]]; then
+    phase preparing failed "unresolved hotswap forensic marker blocks a new hotswap"
+    exit 3
+  fi
+}
+
+forensics_begin() {
+  if [[ "${FORENSICS_ENABLED}" != "1" ]]; then
+    return 0
+  fi
+  FORENSICS_SCRIPT_SHA256="$(sha256sum "${BASH_SOURCE[0]}" | awk 'NR == 1 { print $1 }')"
+  if [[ ! "${FORENSICS_SCRIPT_SHA256}" =~ ^[0-9a-f]{64}$ ]]; then
+    phase preparing failed "hotswap runner checksum is invalid for forensic lifecycle"
+    exit 3
+  fi
+  if ! forensics_command begin \
+    --operation-id "${FORENSICS_OPERATION_ID}" \
+    --script-sha256 "${FORENSICS_SCRIPT_SHA256}" \
+    --snapshot-sha256 "${actual_checksum}" \
+    --drain-receipt-sha256 "${FORENSICS_DRAIN_RECEIPT_SHA256}" \
+    --pg-restore-list-sha256 "${RESTORE_LIST_SHA256}" \
+    --source-identity-sha256 "$(source_identity_sha256)" \
+    --target-identity-sha256 "$(target_identity_sha256)" \
+    --acl-topology-sha256 "${ACL_TOPOLOGY_SHA256}" \
+    --holder-backend-pid "${LOCK_HOLDER_BACKEND_PID}" \
+    --source-schema "${SOURCE_SCHEMA}" \
+    --restore-schema "${RESTORE_SCHEMA}" \
+    --previous-schema "${PREVIOUS_SCHEMA}" \
+    --app-role "${APP_ROLE}" \
+    --fence-executor-role "${FENCE_EXECUTOR_ROLE}" \
+    --restore-executor-role "${HOTSWAP_EXECUTOR_ROLE}" \
+    --source-schema-oid-before "${SOURCE_SCHEMA_OID_BEFORE}" \
+    --write-roles "$(write_roles_sql)" >/dev/null; then
+    phase preparing failed "forensic lifecycle marker could not be created"
+    exit 3
+  fi
+  FORENSICS_STARTED=1
+}
+
+forensics_capture_release_intent_marker_sha256() {
+  if [[ "${FORENSICS_ENABLED}" != "1" ]]; then
+    return 0
+  fi
+  # ``status`` is a presentation command and appends one newline.  The receipt
+  # is bound to the raw canonical current.json bytes, exactly like the helper's
+  # append-only ledger. Command substitution strips only that terminal newline;
+  # canonical marker JSON itself contains no line break.
+  local marker_raw
+  if ! marker_raw="$(forensics_command status)"; then
+    phase switching failed "fence-release intent marker could not be read"
+    return 1
+  fi
+  if ! FORENSICS_RELEASE_INTENT_MARKER_SHA256="$(printf '%s' "${marker_raw}" | sha256sum | awk 'NR == 1 { print $1 }')"; then
+    phase switching failed "fence-release intent marker could not be hashed"
+    return 1
+  fi
+  if [[ ! "${FORENSICS_RELEASE_INTENT_MARKER_SHA256}" =~ ^[0-9a-f]{64}$ ]]; then
+    phase switching failed "fence-release intent marker hash is invalid"
+    return 1
+  fi
+}
+
+forensics_transition() {
+  local state="$1"
+  shift
+  if [[ "${FORENSICS_ENABLED}" != "1" ]]; then
+    return 0
+  fi
+  if ! forensics_command transition --operation-id "${FORENSICS_OPERATION_ID}" --state "${state}" "$@"; then
+    phase "${ACTIVE_PHASE}" failed "forensic lifecycle transition could not be persisted"
+    return 1
+  fi
+}
+
+forensics_seal_release_receipt() {
+  local -a test_seal_arguments=()
+  if [[ "${FORENSICS_ENABLED}" != "1" ]]; then
+    return 0
+  fi
+  if [[ "${RELEASE_RECEIPT_REQUIRED}" != "1" ||
+    ! "${FORENSICS_RELEASE_INTENT_MARKER_SHA256}" =~ ^[0-9a-f]{64}$ ||
+    ! "${RELEASE_RECEIPT_RECORD_SHA256}" =~ ^[0-9a-f]{64}$ ]]; then
+    phase "${ACTIVE_PHASE}" failed "post-release forensic seal requires a verified release receipt"
+    return 1
+  fi
+  if [[ "${PINVI_ENVIRONMENT:-}" == "test" &&
+        "${PINVI_RESTORE_TEST_FAIL_FORENSICS_RELEASE_ONCE:-0}" == "1" &&
+        "${FORENSICS_RELEASE_FAILURE_INJECTED}" == "0" ]]; then
+    FORENSICS_RELEASE_FAILURE_INJECTED=1
+    phase "${ACTIVE_PHASE}" failed "test-only post-release forensic seal failure injected"
+    return 1
+  fi
+  if [[ "${PINVI_ENVIRONMENT:-}" == "test" &&
+        "${PINVI_RESTORE_TEST_FAIL_FORENSICS_HISTORY_APPEND_ONCE:-0}" == "1" &&
+        "${FORENSICS_HISTORY_APPEND_FAILURE_INJECTED}" == "0" ]]; then
+    FORENSICS_HISTORY_APPEND_FAILURE_INJECTED=1
+    test_seal_arguments+=(--test-fail-history-append-once)
+  fi
+  if ! forensics_command seal-release-receipt \
+    --operation-id "${FORENSICS_OPERATION_ID}" \
+    --intent-marker-sha256 "${FORENSICS_RELEASE_INTENT_MARKER_SHA256}" \
+    --receipt-record-sha256 "${RELEASE_RECEIPT_RECORD_SHA256}" \
+    "${test_seal_arguments[@]}"; then
+    phase "${ACTIVE_PHASE}" failed "post-release forensic seal could not be persisted"
+    return 1
+  fi
+}
+
+record_forensics_failure() {
+  local code="${1:-runner_failure}"
+  if [[ "${FORENSICS_ENABLED}" != "1" || "${FORENSICS_STARTED}" != "1" ||
+    "${FORENSICS_TERMINAL}" == "1" ]]; then
+    return 0
+  fi
+  if forensics_command failure --operation-id "${FORENSICS_OPERATION_ID}" \
+    --phase "${ACTIVE_PHASE}" --code "${code}" >/dev/null; then
+    FORENSICS_FAILURE_RECORDED=1
+    return 0
+  fi
+  return 1
+}
+
+source_identity_sha256() {
+  local identity
+  if [[ "${STRICT_RESTORE_ENVIRONMENT}" == "1" ]]; then
+    identity="${TRUSTED_SOURCE_DATABASE}|${TRUSTED_SOURCE_DATABASE_OID}|${TRUSTED_SOURCE_SYSTEM_IDENTIFIER}|${TRUSTED_SOURCE_HOSTADDR}|${TRUSTED_SOURCE_PORT}"
+  else
+    identity="${PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME:-}|${PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID:-}|${PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER:-}|${PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR:-}|${PINVI_RESTORE_EXPECTED_SOURCE_PORT:-}"
+  fi
+  printf '%s' "${identity}" | sha256sum | awk 'NR == 1 { print $1 }'
+}
+
+target_identity_sha256() {
+  printf '%s' "${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}|${PINVI_RESTORE_EXPECTED_DATABASE_OID:-}|${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER:-}|${PINVI_RESTORE_EXPECTED_HOSTADDR:-}|${PINVI_RESTORE_EXPECTED_PORT:-}" \
+    | sha256sum | awk 'NR == 1 { print $1 }'
+}
+
+assert_restore_schema_absent() {
+  local candidate_absent
+  candidate_absent="$("${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc \
+    "SELECT to_regnamespace('${RESTORE_SCHEMA}') IS NULL" | tr -d '[:space:]')"
+  if [[ "${candidate_absent}" != "t" ]]; then
+    phase preparing failed "restore candidate schema already exists; preserve it for explicit forensic recovery"
+    exit 3
+  fi
+}
+
+direct_schema_oid() {
+  local schema_name="$1"
+  local schema_oid
+  schema_oid="$("${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc \
+    "SELECT COALESCE((SELECT oid::text FROM pg_namespace WHERE nspname = '${schema_name}'), '')" | tr -d '[:space:]')"
+  if [[ ! "${schema_oid}" =~ ^[0-9]+$ ]]; then
+    phase "${ACTIVE_PHASE}" failed "schema oid is unavailable for forensic lifecycle"
+    exit 3
+  fi
+  printf '%s\n' "${schema_oid}"
+}
+
+lock_session_scalar() {
+  local expression="$1"
+  local phase_name="$2"
+  local marker value_marker observed value=""
+  LOCK_COMMAND_SEQUENCE=$((LOCK_COMMAND_SEQUENCE + 1))
+  marker="M05_SQL_DONE|${LOCK_COMMAND_SEQUENCE}"
+  value_marker="M05_SCALAR|${LOCK_COMMAND_SEQUENCE}|"
+  if ! assert_advisory_lock_alive; then
+    return 1
+  fi
+  cat >&"${LOCK_INPUT_FD}" <<SQL
+\\set ON_ERROR_STOP off
+SELECT '${value_marker}' || (${expression});
+\\if :ERROR
+ROLLBACK;
+SELECT 'M05_SQL_FAILED|${LOCK_COMMAND_SEQUENCE}';
+\\else
+SELECT '${marker}';
+\\endif
+\\set ON_ERROR_STOP on
+SQL
+  while IFS= read -r observed <&"${LOCK_SIGNAL_FD}"; do
+    if [[ "${observed}" == "${value_marker}"* ]]; then
+      if [[ -n "${value}" ]]; then
+        phase "${phase_name}" failed "forensic scalar returned multiple values"
+        return 1
+      fi
+      value="${observed#${value_marker}}"
+      continue
+    fi
+    if [[ "${observed}" == "${marker}" ]]; then
+      if [[ -z "${value}" ]]; then
+        phase "${phase_name}" failed "forensic scalar returned no value"
+        return 1
+      fi
+      FORENSICS_SCHEMA_OID="${value}"
+      return 0
+    fi
+    if [[ "${observed}" == "M05_SQL_FAILED|${LOCK_COMMAND_SEQUENCE}" ]]; then
+      phase "${phase_name}" failed "forensic scalar query failed"
+      return 1
+    fi
+  done
+  # The only connection that remains usable after the CONNECT fence is the
+  # pre-opened lock holder.  Preserve psql's diagnostic when it disappears so
+  # an operator can distinguish a transport loss from a server-side fence or
+  # termination decision without attempting any recovery mutation.
+  cat -- "${TMP_DIR}/lock.err" >&2 2>/dev/null || true
+  phase "${phase_name}" failed "pre-opened hotswap executor session was lost"
+  return 1
+}
+
+lock_schema_oid() {
+  local schema_name="$1"
+  lock_session_scalar "SELECT oid::text FROM pg_namespace WHERE nspname = '${schema_name}'" "${ACTIVE_PHASE}"
+  if [[ ! "${FORENSICS_SCHEMA_OID}" =~ ^[0-9]+$ ]]; then
+    phase "${ACTIVE_PHASE}" failed "schema oid is unavailable for forensic lifecycle"
+    exit 3
+  fi
+}
+
+calculate_acl_topology_sha256() {
+  local runner_directory topology_sql topology_sha256
+  runner_directory="${BASH_SOURCE[0]%/*}"
+  if [[ "${runner_directory}" == "${BASH_SOURCE[0]}" ]]; then
+    runner_directory="."
+  fi
+  runner_directory="$(cd -- "${runner_directory}" && pwd -P)"
+  topology_sql="${runner_directory}/m05_hotswap_topology.sql"
+  if [[ ! -f "${topology_sql}" || -L "${topology_sql}" ]]; then
+    phase "${ACTIVE_PHASE}" failed "trusted ACL topology query is unavailable"
+    exit 3
+  fi
+  if ! topology_sha256="$("${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 -Atq --dbname="${DATABASE_URL}" \
+    --set="app_role=${APP_ROLE}" --set="fence_role=${FENCE_EXECUTOR_ROLE}" \
+    --set="source_schema=${SOURCE_SCHEMA}" --set="previous_schema=${PREVIOUS_SCHEMA}" \
+    --set="restore_schema=${RESTORE_SCHEMA}" --file="${topology_sql}" | tr -d '[:space:]')"; then
+    phase "${ACTIVE_PHASE}" failed "ACL topology could not be read for forensic lifecycle"
+    exit 3
+  fi
+  if [[ ! "${topology_sha256}" =~ ^[0-9a-f]{64}$ ]]; then
+    phase "${ACTIVE_PHASE}" failed "ACL topology is invalid for forensic lifecycle"
+    exit 3
+  fi
+  printf '%s\n' "${topology_sha256}"
 }
 
 assert_expected_target() {
@@ -563,6 +927,8 @@ assert_trusted_snapshot_matches_expected_source() {
   phase preparing success "trusted snapshot source identity bound to expected source"
 }
 
+configure_forensics
+assert_forensics_inactive
 assert_trusted_snapshot_matches_expected_source
 assert_expected_target
 
@@ -588,6 +954,7 @@ start_advisory_lock
 
 if [[ "${TEST_MODE}" == "1" ]]; then
   HOTSWAP_EXECUTOR_ROLE="m05_test_executor"
+  FENCE_EXECUTOR_ROLE="m05_test_fence"
 else
   HOTSWAP_EXECUTOR_ROLE="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc \
     "SELECT current_user" | tr -d '[:space:]')"
@@ -695,31 +1062,35 @@ execute_validation_sql_file() {
 execute_lock_session_file() {
   local sql_file="$1"
   local phase_name="$2"
-  local mode="${3:-strict}"
+  local lock_sql_file
   local marker
   LOCK_COMMAND_SEQUENCE=$((LOCK_COMMAND_SEQUENCE + 1))
   marker="M05_SQL_DONE|${LOCK_COMMAND_SEQUENCE}"
   if ! assert_advisory_lock_alive; then
     return 1
   fi
-  if [[ "${mode}" == "validation" ]]; then
-    cat >&"${LOCK_INPUT_FD}" <<SQL
+  lock_sql_file="${TMP_DIR}/lock-session-${LOCK_COMMAND_SEQUENCE}.sql"
+  if ! sed '/^[[:space:]]*COMMIT;[[:space:]]*$/d' "${sql_file}" >"${lock_sql_file}"; then
+    phase "${phase_name}" failed "schema-swap SQL could not be staged for the lock session"
+    return 1
+  fi
+  cat >&"${LOCK_INPUT_FD}" <<SQL
 \\set ON_ERROR_STOP off
-\\i ${sql_file}
+\\i ${lock_sql_file}
+\\if :ERROR
+ROLLBACK;
+SELECT 'M05_SQL_FAILED|${LOCK_COMMAND_SEQUENCE}';
+\\else
+COMMIT;
 \\if :ERROR
 ROLLBACK;
 SELECT 'M05_SQL_FAILED|${LOCK_COMMAND_SEQUENCE}';
 \\else
 SELECT '${marker}';
 \\endif
+\\endif
 \\set ON_ERROR_STOP on
 SQL
-  else
-    cat >&"${LOCK_INPUT_FD}" <<SQL
-\\i ${sql_file}
-SELECT '${marker}';
-SQL
-  fi
   local observed=""
   while IFS= read -r observed <&"${LOCK_SIGNAL_FD}"; do
     if [[ "${observed}" == "${marker}" ]]; then
@@ -975,7 +1346,7 @@ remap_sql() {
       next
     }
     $0 == ("CREATE SCHEMA " source ";") {
-      printf "CREATE SCHEMA IF NOT EXISTS %s;\n", target
+      printf "CREATE SCHEMA %s;\n", target
       next
     }
     {
@@ -1215,6 +1586,175 @@ FROM grants
 " | tr -d '[:space:]'
 }
 
+connect_restore_grants_json() {
+  # DB receipt 함수가 다시 catalog에서 계산하는 canonical JSONB와 byte-for-byte
+  # 같은 shape을 만든다. role/grant spec은 inventory 단계에서 이미 검증했지만,
+  # 이 직전 경계도 untrusted shell text를 SQL/JSON으로 승격하지 않게 좁힌다.
+  local grant_specs="$1"
+  local expected_role="$2"
+  local grant_spec role_name grantable
+  local first=1
+  if [[ ! "${expected_role}" =~ ^[a-z_][a-z0-9_]*$ ]]; then
+    return 1
+  fi
+  printf '['
+  if [[ -n "${grant_specs}" ]]; then
+    IFS=',' read -r -a receipt_grant_specs <<<"${grant_specs}"
+    for grant_spec in "${receipt_grant_specs[@]}"; do
+      role_name="${grant_spec%%:*}"
+      grantable="${grant_spec##*:}"
+      if [[ "${grant_spec}" != *:* || "${role_name}" != "${expected_role}" ||
+        ( "${grantable}" != "0" && "${grantable}" != "1" ) ]]; then
+        return 1
+      fi
+      if [[ "${first}" == "0" ]]; then
+        printf ','
+      fi
+      if [[ "${grantable}" == "1" ]]; then
+        printf '{"grant_option":true,"role":"%s"}' "${role_name}"
+      else
+        printf '{"grant_option":false,"role":"%s"}' "${role_name}"
+      fi
+      first=0
+    done
+  fi
+  printf ']'
+}
+
+assert_release_receipt_acl() {
+  if [[ "${RELEASE_RECEIPT_REQUIRED}" != "1" ]]; then
+    return 0
+  fi
+  # This is a pre-mutation boundary.  A receipt must not be forgeable by
+  # PUBLIC/app/hotswap/fence.  The 0101 public ``ops`` schema USAGE is an
+  # intentional read-name-resolution policy; table/function capability and
+  # every owner must remain outside the three runtime principals.
+  local receipt_acl_safe
+  if ! receipt_acl_safe="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${FENCE_DATABASE_URL}" -tAc "
+WITH configured AS (
+  SELECT '${APP_ROLE}'::name AS app_role,
+         '${HOTSWAP_EXECUTOR_ROLE}'::name AS hotswap_role,
+         '${FENCE_EXECUTOR_ROLE}'::name AS fence_role
+),
+database_owner AS (
+  SELECT database_row.datdba AS oid
+  FROM pg_database database_row
+  WHERE database_row.datname = current_database()
+),
+roles AS (
+  SELECT configured.*, app.oid AS app_oid, hotswap.oid AS hotswap_oid,
+         fence.oid AS fence_oid
+  FROM configured
+  JOIN pg_roles app ON app.rolname = configured.app_role
+  JOIN pg_roles hotswap ON hotswap.rolname = configured.hotswap_role
+  JOIN pg_roles fence ON fence.rolname = configured.fence_role
+),
+receipt_schema AS (
+  SELECT namespace.oid, namespace.nspowner, namespace.nspacl
+  FROM pg_namespace namespace
+  WHERE namespace.nspname = 'ops'
+),
+receipt_table AS (
+  SELECT relation.oid, relation.relowner, relation.relacl
+  FROM pg_class relation
+  JOIN receipt_schema schema ON schema.oid = relation.relnamespace
+  WHERE relation.relname = 'm05_hotswap_release_receipts'
+    AND relation.relkind = 'r'
+),
+receipt_functions AS (
+  SELECT procedure.oid, procedure.proowner, procedure.proacl
+  FROM pg_proc procedure
+  JOIN receipt_schema schema ON schema.oid = procedure.pronamespace
+  WHERE procedure.oid IN (
+    'ops.m05_hotswap_release_topology_sha256(name, name, name, name, name, name)'::regprocedure,
+    'ops.record_m05_hotswap_release_receipt(uuid, text, text, text, text, text, text, text, name, name, name, name, name, name, oid, oid, oid, oid, jsonb, jsonb, boolean, text)'::regprocedure,
+    'ops.verify_m05_hotswap_release_receipt(uuid, text)'::regprocedure
+  )
+)
+SELECT
+  (SELECT count(*) FROM database_owner) = 1
+  AND (SELECT count(*) FROM roles) = 1
+  AND (SELECT count(*) FROM receipt_schema) = 1
+  AND (SELECT count(*) FROM receipt_table) = 1
+  AND (SELECT count(*) FROM receipt_functions) = 3
+  AND (SELECT fence_oid FROM roles) = (SELECT oid FROM database_owner)
+  AND (SELECT nspowner FROM receipt_schema) NOT IN (
+    SELECT app_oid FROM roles UNION SELECT hotswap_oid FROM roles UNION SELECT fence_oid FROM roles
+  )
+  AND (SELECT relowner FROM receipt_table) NOT IN (
+    SELECT app_oid FROM roles UNION SELECT hotswap_oid FROM roles UNION SELECT fence_oid FROM roles
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM receipt_functions procedure
+    CROSS JOIN roles
+    WHERE procedure.proowner IN (roles.app_oid, roles.hotswap_oid, roles.fence_oid)
+  )
+  AND EXISTS (
+    SELECT 1
+    FROM receipt_schema schema
+    CROSS JOIN LATERAL aclexplode(COALESCE(schema.nspacl, acldefault('n', schema.nspowner))) acl
+    WHERE acl.grantee = 0
+      AND acl.privilege_type = 'USAGE'
+      AND NOT acl.is_grantable
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM receipt_schema schema
+    CROSS JOIN LATERAL aclexplode(COALESCE(schema.nspacl, acldefault('n', schema.nspowner))) acl
+    WHERE NOT (
+      acl.grantee = schema.nspowner
+      OR (acl.grantee = 0 AND acl.privilege_type = 'USAGE' AND NOT acl.is_grantable)
+    )
+  )
+  AND EXISTS (
+    SELECT 1
+    FROM receipt_table relation
+    CROSS JOIN roles
+    CROSS JOIN LATERAL aclexplode(COALESCE(relation.relacl, acldefault('r', relation.relowner))) acl
+    WHERE acl.grantee = roles.fence_oid
+      AND acl.privilege_type = 'SELECT'
+      AND NOT acl.is_grantable
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM receipt_table relation
+    CROSS JOIN roles
+    CROSS JOIN LATERAL aclexplode(COALESCE(relation.relacl, acldefault('r', relation.relowner))) acl
+    WHERE NOT (
+      acl.grantee = relation.relowner
+      OR (acl.grantee = roles.fence_oid AND acl.privilege_type = 'SELECT' AND NOT acl.is_grantable)
+    )
+  )
+  AND (
+    SELECT count(*)
+    FROM receipt_functions procedure
+    CROSS JOIN roles
+    CROSS JOIN LATERAL aclexplode(COALESCE(procedure.proacl, acldefault('f', procedure.proowner))) acl
+    WHERE acl.grantee = roles.fence_oid
+      AND acl.privilege_type = 'EXECUTE'
+      AND NOT acl.is_grantable
+  ) = 3
+  AND NOT EXISTS (
+    SELECT 1
+    FROM receipt_functions procedure
+    CROSS JOIN roles
+    CROSS JOIN LATERAL aclexplode(COALESCE(procedure.proacl, acldefault('f', procedure.proowner))) acl
+    WHERE NOT (
+      acl.grantee = procedure.proowner
+      OR (acl.grantee = roles.fence_oid AND acl.privilege_type = 'EXECUTE' AND NOT acl.is_grantable)
+    )
+  );
+" | tr -d '[:space:]')"; then
+    phase draining failed "M05 release receipt ACL could not be read"
+    exit 3
+  fi
+  if [[ "${receipt_acl_safe}" != "t" ]]; then
+    phase draining failed "M05 release receipt ACL is not canonical"
+    exit 3
+  fi
+}
+
 public_connect_granted() {
   local database_url="${1:-${DATABASE_URL}}"
   "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${database_url}" -tAc "
@@ -1265,14 +1805,14 @@ assert_database_fence_applied() {
       state="$(database_connect_granted "${FENCE_DATABASE_URL}" "${role_name}")"
       if [[ "${state}" != "f" ]]; then
         phase draining failed "database CONNECT fence was not applied"
-        exit 3
+        return 1
       fi
     done
   fi
   if [[ "${PUBLIC_CONNECT_REVOKED}" == "1" &&
     "$(public_connect_granted "${FENCE_DATABASE_URL}")" != "f" ]]; then
     phase draining failed "PUBLIC CONNECT fence was not applied"
-    exit 3
+    return 1
   fi
 }
 
@@ -1333,7 +1873,9 @@ BEGIN
 END
 \$m05\$;
 SQL
-  execute_sql_file "${sql_file}" draining
+  if ! execute_sql_file "${sql_file}" draining; then
+    return 1
+  fi
 }
 
 assert_no_connectable_writer_roles() {
@@ -1403,7 +1945,9 @@ BEGIN
 END
 \$m05\$;
 SQL
-  execute_sql_file "${sql_file}" draining
+  if ! execute_sql_file "${sql_file}" draining; then
+    return 1
+  fi
 }
 
 assert_restored_schema() {
@@ -1708,7 +2252,7 @@ BEGIN
     RETURN result;
   ELSIF jsonb_typeof(value) = 'array' THEN
     SELECT COALESCE(
-      '[' || string_agg(pg_temp.m05_canonical_jsonb(array_value), ',' ORDER BY array_value.ordinality) || ']',
+      '[' || string_agg(pg_temp.m05_canonical_jsonb(array_value.value), ',' ORDER BY array_value.ordinality) || ']',
       '[]'
     )
     INTO result
@@ -1883,7 +2427,7 @@ BEGIN
                        'before_state', before_state,
                        'after_state', after_state,
                        'access_reason', access_reason,
-                       'target_pii_fields', target_pii_fields,
+                       'target_pii_fields', to_jsonb(target_pii_fields),
                        'ip_hash', ip_hash,
                        'user_agent', user_agent,
                        'request_id', request_id::text,
@@ -1970,9 +2514,9 @@ BEGIN
       AND constraint_row.conname = 'ck_ktm_ct_boundary_contract'
       AND pg_get_constraintdef(constraint_row.oid) LIKE '%contract_version = ''pinvi-cache-target-final-boundary/v1''%'
       AND pg_get_constraintdef(constraint_row.oid) LIKE '%status = ''succeeded''%'
-      AND pg_get_constraintdef(constraint_row.oid) LIKE '%schema_revision = ''20260824_0063''%'
+      AND pg_get_constraintdef(constraint_row.oid) LIKE '%schema_revision = ''20260824_0101''%'
   ) THEN
-    RAISE EXCEPTION 'restored schema is not bound to the 20260824_0063 final-boundary contract';
+    RAISE EXCEPTION 'restored schema is not bound to the 20260824_0101 final-boundary contract';
   END IF;
 END
 \$m05\$;
@@ -2148,7 +2692,7 @@ assert_supported_acl_topology() {
   local writer_logins topology_safe
   writer_logins="$(writer_login_roles)"
   if [[ "${writer_logins}" != "${APP_ROLE}" ]]; then
-    phase draining failed "schema-swap requires exactly one canonical runtime writer role"
+    phase draining failed "schema-swap requires exactly one canonical runtime writer role (observed: ${writer_logins})"
     exit 3
   fi
   topology_safe="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
@@ -2416,45 +2960,82 @@ SELECT
   fi
 }
 
-enter_write_fence() {
-  local roles_sql
-  roles_sql="$(write_roles_sql)"
+prepare_write_fence_inventory() {
+  local writer_logins app_connect_roles
   assert_advisory_lock_alive
   if [[ "${TEST_MODE}" == "1" ]]; then
-    phase draining success "test-mode write fence simulated"
+    FENCED_CONNECT_ROLES="${APP_ROLE},${HOTSWAP_EXECUTOR_ROLE}"
+    APP_CONNECT_RESTORE_GRANTS=""
+    RESTORE_EXECUTOR_CONNECT_RESTORE_GRANTS=""
+    CONNECT_RESTORE_GRANTS=""
+    PUBLIC_CONNECT_REVOKED=0
+    SOURCE_SCHEMA_OID_BEFORE="$(direct_schema_oid "${SOURCE_SCHEMA}")"
+    ACL_TOPOLOGY_SHA256="$(calculate_acl_topology_sha256)"
     return 0
   fi
   assert_restore_executor_safe
   assert_fence_target_identity
   assert_fence_executor_safe
+  assert_release_receipt_acl
   assert_configured_roles_safe
   assert_supported_acl_topology
-  local writer_logins
   writer_logins="$(writer_login_roles)"
   assert_role_list_safe "${writer_logins}" "database writer inventory"
   assert_writer_fence_capable "${writer_logins}"
-  FENCED_CONNECT_ROLES="$(writer_connect_roles "${writer_logins}")"
-  assert_role_list_safe "${FENCED_CONNECT_ROLES}" "database connection fence inventory"
-  if [[ "${FENCED_CONNECT_ROLES}" == *"${HOTSWAP_EXECUTOR_ROLE}"* ]]; then
+  app_connect_roles="$(writer_connect_roles "${writer_logins}")"
+  assert_role_list_safe "${app_connect_roles}" "database connection fence inventory"
+  if [[ "${writer_logins}" != "${APP_ROLE}" || "${app_connect_roles}" != "${APP_ROLE}" ]]; then
+    phase draining failed "database write fence requires exactly the canonical app connection role"
+    exit 3
+  fi
+  if [[ "${HOTSWAP_EXECUTOR_ROLE}" == "${APP_ROLE}" ]]; then
     phase draining failed "hotswap executor was already present in the runtime writer inventory"
     exit 3
   fi
-  if [[ -n "${FENCED_CONNECT_ROLES}" ]]; then
-    FENCED_CONNECT_ROLES+=","
-  fi
-  FENCED_CONNECT_ROLES+="${HOTSWAP_EXECUTOR_ROLE}"
+  FENCED_CONNECT_ROLES="${APP_ROLE},${HOTSWAP_EXECUTOR_ROLE}"
   assert_role_list_safe "${FENCED_CONNECT_ROLES}" "database connection fence inventory"
-  CONNECT_RESTORE_GRANTS="$(connect_restore_grants "${FENCED_CONNECT_ROLES}")"
-  if [[ -n "${writer_logins}" && -z "${FENCED_CONNECT_ROLES}" ]]; then
-    phase draining failed "database write fence could not identify writer roles"
-    exit 3
+  APP_CONNECT_RESTORE_GRANTS="$(connect_restore_grants "${APP_ROLE}")"
+  RESTORE_EXECUTOR_CONNECT_RESTORE_GRANTS="$(connect_restore_grants "${HOTSWAP_EXECUTOR_ROLE}")"
+  if [[ -n "${APP_CONNECT_RESTORE_GRANTS}" && -n "${RESTORE_EXECUTOR_CONNECT_RESTORE_GRANTS}" ]]; then
+    CONNECT_RESTORE_GRANTS="${APP_CONNECT_RESTORE_GRANTS},${RESTORE_EXECUTOR_CONNECT_RESTORE_GRANTS}"
+  elif [[ -n "${APP_CONNECT_RESTORE_GRANTS}" ]]; then
+    CONNECT_RESTORE_GRANTS="${APP_CONNECT_RESTORE_GRANTS}"
+  else
+    CONNECT_RESTORE_GRANTS="${RESTORE_EXECUTOR_CONNECT_RESTORE_GRANTS}"
   fi
-  PUBLIC_CONNECT_WAS_GRANTED="$(public_connect_granted "${FENCE_DATABASE_URL}")"
-  if [[ "${PUBLIC_CONNECT_WAS_GRANTED}" == "t" ]]; then
+  PUBLIC_CONNECT_REVOKED=0
+  if [[ "$(public_connect_granted "${FENCE_DATABASE_URL}")" == "t" ]]; then
     PUBLIC_CONNECT_REVOKED=1
+  fi
+  SOURCE_SCHEMA_OID_BEFORE="$(direct_schema_oid "${SOURCE_SCHEMA}")"
+  ACL_TOPOLOGY_SHA256="$(calculate_acl_topology_sha256)"
+}
+
+enter_write_fence() {
+  local roles_sql reference_sql_failure=""
+  roles_sql="$(write_roles_sql)"
+  if ! assert_advisory_lock_alive; then
+    return 1
+  fi
+  if [[ "${TEST_MODE}" == "1" ]]; then
+    phase draining success "test-mode write fence simulated"
+    return 0
+  fi
+  if [[ -z "${FENCED_CONNECT_ROLES}" || -z "${SOURCE_SCHEMA_OID_BEFORE}" ||
+    -z "${ACL_TOPOLOGY_SHA256}" ]]; then
+    phase draining failed "database write fence inventory was not prepared"
+    return 1
   fi
   WRITE_FENCE_ACTIVE=1
   local fence_sql="${TMP_DIR}/enter-fence.sql"
+  if [[ "${PINVI_ENVIRONMENT:-}" == "test" &&
+        "${PINVI_RESTORE_TEST_FAIL_REFENCE_SQL_ONCE:-0}" == "1" &&
+        "${RELEASE_WINDOW_MAY_HAVE_OPENED}" == "1" &&
+        "${RELEASE_WRITE_FENCE_COMPLETED}" == "1" &&
+        "${REFENCE_SQL_FAILURE_INJECTED}" == "0" ]]; then
+    REFENCE_SQL_FAILURE_INJECTED=1
+    reference_sql_failure="SELECT m05_missing_reference_sql_probe();"
+  fi
   cat >"${fence_sql}" <<SQL
 BEGIN;
 $(advisory_lock_sql_guard)
@@ -2504,9 +3085,12 @@ BEGIN
   END IF;
 END
 \$m05\$;
+${reference_sql_failure}
   COMMIT;
 SQL
-  execute_sql_file "${fence_sql}" draining
+  if ! execute_sql_file "${fence_sql}" draining; then
+    return 1
+  fi
   local database_fence_sql="${TMP_DIR}/enter-database-fence.sql"
   cat >"${database_fence_sql}" <<SQL
 BEGIN;
@@ -2528,24 +3112,129 @@ $(advisory_lock_sql_guard)
 $(write_identity_guard)
 COMMIT;
 SQL
-  execute_fence_sql_file "${database_fence_sql}" draining
-  assert_database_fence_applied
-  assert_hotswap_executor_reconnect_fenced
+  if ! execute_fence_sql_file "${database_fence_sql}" draining; then
+    return 1
+  fi
+  if ! assert_database_fence_applied; then
+    return 1
+  fi
+  if ! assert_hotswap_executor_reconnect_fenced; then
+    return 1
+  fi
   LOCK_SESSION_FENCED=1
-  wait_for_database_quiescence
-  assert_no_connectable_writer_roles
+  if ! wait_for_database_quiescence; then
+    return 1
+  fi
+  if ! assert_no_connectable_writer_roles; then
+    return 1
+  fi
   phase draining success "database write fence revoked all non-owner runtime writes"
 }
 
+release_receipt_sql() {
+  if [[ "${RELEASE_RECEIPT_REQUIRED}" != "1" ]]; then
+    return 0
+  fi
+  local app_grants_json restore_executor_grants_json public_connect
+  local source_identity target_identity
+  if ! app_grants_json="$(connect_restore_grants_json "${APP_CONNECT_RESTORE_GRANTS}" "${APP_ROLE}")" ||
+    ! restore_executor_grants_json="$(connect_restore_grants_json "${RESTORE_EXECUTOR_CONNECT_RESTORE_GRANTS}" "${HOTSWAP_EXECUTOR_ROLE}")"; then
+    phase switching failed "release receipt CONNECT grant encoding is invalid"
+    return 1
+  fi
+  if [[ "${PUBLIC_CONNECT_REVOKED}" == "1" ]]; then
+    public_connect=true
+  else
+    public_connect=false
+  fi
+  source_identity="$(source_identity_sha256)"
+  target_identity="$(target_identity_sha256)"
+  if [[ ! "${FORENSICS_OPERATION_ID}" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ||
+    ! "${FORENSICS_RELEASE_INTENT_MARKER_SHA256}" =~ ^[0-9a-f]{64}$ ||
+    ! "${FORENSICS_SCRIPT_SHA256}" =~ ^[0-9a-f]{64}$ ||
+    ! "${actual_checksum}" =~ ^[0-9a-f]{64}$ ||
+    ! "${FORENSICS_DRAIN_RECEIPT_SHA256}" =~ ^[0-9a-f]{64}$ ||
+    ! "${RESTORE_LIST_SHA256}" =~ ^[0-9a-f]{64}$ ||
+    ! "${source_identity}" =~ ^[0-9a-f]{64}$ ||
+    ! "${target_identity}" =~ ^[0-9a-f]{64}$ ||
+    ! "${ACL_TOPOLOGY_SHA256}" =~ ^[0-9a-f]{64}$ ||
+    ! "${SOURCE_SCHEMA_OID_BEFORE}" =~ ^[0-9]+$ ||
+    ! "${RESTORE_SCHEMA_OID}" =~ ^[0-9]+$ ||
+    ! "${APP_SCHEMA_OID_AFTER_SWITCH}" =~ ^[0-9]+$ ||
+    ! "${PREVIOUS_SCHEMA_OID_AFTER_SWITCH}" =~ ^[0-9]+$ ]]; then
+    phase switching failed "release receipt inputs are incomplete"
+    return 1
+  fi
+  cat <<SQL
+SELECT ops.record_m05_hotswap_release_receipt(
+  '${FORENSICS_OPERATION_ID}'::uuid,
+  '${FORENSICS_RELEASE_INTENT_MARKER_SHA256}',
+  '${FORENSICS_SCRIPT_SHA256}',
+  '${actual_checksum}',
+  '${FORENSICS_DRAIN_RECEIPT_SHA256}',
+  '${RESTORE_LIST_SHA256}',
+  '${target_identity}',
+  '${source_identity}',
+  '${SOURCE_SCHEMA}'::name,
+  '${RESTORE_SCHEMA}'::name,
+  '${PREVIOUS_SCHEMA}'::name,
+  '${APP_ROLE}'::name,
+  '${FENCE_EXECUTOR_ROLE}'::name,
+  '${HOTSWAP_EXECUTOR_ROLE}'::name,
+  ${SOURCE_SCHEMA_OID_BEFORE}::oid,
+  ${RESTORE_SCHEMA_OID}::oid,
+  ${APP_SCHEMA_OID_AFTER_SWITCH}::oid,
+  ${PREVIOUS_SCHEMA_OID_AFTER_SWITCH}::oid,
+  '${app_grants_json}'::jsonb,
+  '${restore_executor_grants_json}'::jsonb,
+  ${public_connect},
+  '${ACL_TOPOLOGY_SHA256}'
+);
+SQL
+}
+
+read_release_receipt_after_commit() {
+  if [[ "${RELEASE_RECEIPT_REQUIRED}" != "1" ]]; then
+    return 0
+  fi
+  local receipt_values
+  if ! receipt_values="$(PGOPTIONS='-c default_transaction_read_only=on' "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 -Atq \
+    --dbname="${FENCE_DATABASE_URL}" -c "
+SELECT receipt.record_sha256 || '|' || receipt.post_release_acl_topology_sha256 || '|' ||
+  CASE WHEN ops.verify_m05_hotswap_release_receipt(
+    receipt.operation_id, receipt.marker_sha256
+  ) THEN 't' ELSE 'f' END
+FROM ops.m05_hotswap_release_receipts receipt
+WHERE receipt.operation_id = '${FORENSICS_OPERATION_ID}'::uuid
+  AND receipt.marker_sha256 = '${FORENSICS_RELEASE_INTENT_MARKER_SHA256}';
+" | tr -d '[:space:]')"; then
+    phase switching failed "release receipt could not be read after CONNECT release"
+    return 1
+  fi
+  IFS='|' read -r RELEASE_RECEIPT_RECORD_SHA256 RELEASE_RECEIPT_TOPOLOGY_SHA256 receipt_record_valid <<<"${receipt_values}"
+  if [[ ! "${RELEASE_RECEIPT_RECORD_SHA256}" =~ ^[0-9a-f]{64}$ ||
+    ! "${RELEASE_RECEIPT_TOPOLOGY_SHA256}" =~ ^[0-9a-f]{64}$ ||
+    "${receipt_record_valid:-}" != "t" ]]; then
+    phase switching failed "release receipt is missing or invalid after CONNECT release"
+    return 1
+  fi
+}
+
 release_write_fence() {
-  local roles_sql
+  local roles_sql release_sql_failure=""
   roles_sql="$(write_roles_sql)"
   local fence_sql="${TMP_DIR}/release-fence.sql"
-  if [[ "${TEST_MODE}" == "1" &&
+  if [[ "${PINVI_ENVIRONMENT:-}" == "test" &&
         "${PINVI_RESTORE_TEST_FAIL_RELEASE_ONCE:-0}" == "1" &&
         "${RELEASE_FAILURE_INJECTED}" == "0" ]]; then
     RELEASE_FAILURE_INJECTED=1
     return 1
+  fi
+  if [[ "${PINVI_ENVIRONMENT:-}" == "test" &&
+        "${PINVI_RESTORE_TEST_FAIL_RELEASE_SQL_ONCE:-0}" == "1" &&
+        "${RELEASE_SQL_FAILURE_INJECTED}" == "0" ]]; then
+    RELEASE_SQL_FAILURE_INJECTED=1
+    release_sql_failure="SELECT m05_missing_release_sql_probe();"
   fi
   if ! assert_advisory_lock_alive; then
     return 1
@@ -2573,12 +3262,23 @@ BEGIN
   END LOOP;
 END
 \$m05\$;
+${release_sql_failure}
 COMMIT;
 SQL
   if ! execute_sql_file "${fence_sql}" draining; then
     return 1
   fi
   local database_fence_sql="${TMP_DIR}/release-database-fence.sql"
+  local database_release_sql_failure="" receipt_sql=""
+  if [[ "${PINVI_ENVIRONMENT:-}" == "test" &&
+        "${PINVI_RESTORE_TEST_FAIL_RELEASE_DATABASE_SQL_ONCE:-0}" == "1" &&
+        "${RELEASE_DATABASE_SQL_FAILURE_INJECTED}" == "0" ]]; then
+    RELEASE_DATABASE_SQL_FAILURE_INJECTED=1
+    database_release_sql_failure="SELECT m05_missing_release_database_sql_probe();"
+  fi
+  if ! receipt_sql="$(release_receipt_sql)"; then
+    return 1
+  fi
   cat >"${database_fence_sql}" <<SQL
 BEGIN;
 $(advisory_lock_sql_guard)
@@ -2606,23 +3306,75 @@ END
 \$m05\$;
 $(advisory_lock_sql_guard)
 $(write_identity_guard)
+${database_release_sql_failure}
+${receipt_sql}
 COMMIT;
 SQL
   if ! execute_fence_sql_file "${database_fence_sql}" draining; then
+    return 1
+  fi
+  if [[ "${PINVI_ENVIRONMENT:-}" == "test" &&
+        "${PINVI_RESTORE_TEST_SIGKILL_AFTER_RELEASE_RECEIPT_COMMIT_ONCE:-0}" == "1" &&
+        "${RELEASE_RECEIPT_REQUIRED}" == "1" ]]; then
+    # Deliberately bypass EXIT cleanup at the only irreducible cross-store
+    # boundary: the DB transaction is durable, but the filesystem seal has not
+    # been attempted. Normal recovery must refuse this unsealed marker; only a
+    # fresh, explicit root read-only escalation can certify it.
+    kill -KILL "$$"
+  fi
+  if ! read_release_receipt_after_commit; then
     return 1
   fi
   if ! assert_database_fence_restored; then
     return 1
   fi
   assert_supported_acl_topology
-  WRITE_FENCE_ACTIVE=0
+}
+
+persist_post_release_forensics() {
+  if [[ "${FORENSICS_ENABLED}" != "1" ]]; then
+    return 0
+  fi
+  # release_write_fence() has already committed the receipt and independently
+  # proved the receipt hash, the restored database fence, and the canonical ACL
+  # topology.  This is intentionally an append-only seal, not another current
+  # marker state: a write/fsync ambiguity cannot make a newer marker unarchiveable.
+  forensics_seal_release_receipt
+}
+
+reapply_write_fence_after_post_release_forensic_failure() {
+  local failure_phase="${ACTIVE_PHASE}"
+  phase draining running "reapplying writer fence after post-release forensic persistence failure"
+  if ! enter_write_fence; then
+    ACTIVE_PHASE="${failure_phase}"
+    return 1
+  fi
+  ACTIVE_PHASE="${failure_phase}"
+  phase switching failed "post-release forensic persistence failed after writers were released; writer fence was reapplied"
 }
 
 phase draining running "write fence"
+assert_restore_schema_absent
+prepare_write_fence_inventory
+forensics_begin
+forensics_transition fence_intent \
+  --acl-topology-sha256 "${ACL_TOPOLOGY_SHA256}" \
+  --connect-restore-grants "${APP_CONNECT_RESTORE_GRANTS}" \
+  --restore-executor-connect-restore-grants "${RESTORE_EXECUTOR_CONNECT_RESTORE_GRANTS}" \
+  --fenced-connect-roles "${APP_ROLE}" \
+  --public-connect-was-granted "${PUBLIC_CONNECT_REVOKED}" \
+  --source-schema-oid-before "${SOURCE_SCHEMA_OID_BEFORE}" \
+  --write-roles "$(write_roles_sql)"
 enter_write_fence
+forensics_transition fence_applied
 
 phase restoring running "restoring ${SOURCE_SCHEMA} into ${RESTORE_SCHEMA}"
-run_guarded_command "DROP SCHEMA IF EXISTS ${RESTORE_SCHEMA} CASCADE"
+# The snapshot was intentionally produced with ``--schema`` and therefore
+# does not carry a CREATE SCHEMA statement.  The pre-fence collision check
+# established that this exact candidate name is absent; create it once under
+# the fenced lock without an IF NOT EXISTS/DROP escape hatch.  Any later
+# failure leaves this candidate and the forensic marker for explicit recovery.
+run_guarded_command "CREATE SCHEMA ${RESTORE_SCHEMA}"
 restore_archive_section() {
   local section="$1"
   local label="$2"
@@ -2636,13 +3388,15 @@ restore_archive_section() {
     --no-privileges \
     --file="${archive_sql}" \
     "${SNAPSHOT}"
-  {
-    if [[ "${section}" == "pre-data" ]]; then
-      printf 'CREATE SCHEMA IF NOT EXISTS %s;\n' "${RESTORE_SCHEMA}"
-    fi
-    remap_sql "${archive_sql}"
-  } | strip_pg_restore_transaction_wrappers >"${remapped_sql}"
+  remap_sql "${archive_sql}" | strip_pg_restore_transaction_wrappers >"${remapped_sql}"
   run_guarded_file "${remapped_sql}"
+  if [[ "${PINVI_ENVIRONMENT:-}" == "test" &&
+        "${PINVI_RESTORE_TEST_FAIL_RESTORE_ONCE:-0}" == "1" &&
+        "${RESTORE_FAILURE_INJECTED}" == "0" ]]; then
+    RESTORE_FAILURE_INJECTED=1
+    phase restoring failed "test-only restore failure injected after candidate mutation"
+    exit 3
+  fi
 }
 
 # Keep foreign keys and post-data triggers out of the data load.  The archive is
@@ -2652,12 +3406,16 @@ restore_archive_section pre-data pre-data
 restore_archive_section data data
 restore_archive_section post-data post-data
 phase restoring success "restored into ${RESTORE_SCHEMA}"
+lock_schema_oid "${RESTORE_SCHEMA}"
+restored_schema_oid="${FORENSICS_SCHEMA_OID}"
+RESTORE_SCHEMA_OID="${restored_schema_oid}"
 
 phase validating running "validating restored schema"
 assert_cache_target_boundary_contract
 assert_admin_audit_contract
 assert_restored_schema
 phase validating success "restored schema passed basic checks"
+forensics_transition restore_ready --restore-schema-oid "${restored_schema_oid}"
 
 phase draining running "write drain"
 if [[ "${PINVI_RESTORE_API_TRIGGER:-0}" == "1" && -n "${PINVI_RESTORE_DRAIN_COMMAND:-}" ]]; then
@@ -2682,10 +3440,52 @@ SQL
 if ! run_guarded_file "${TMP_DIR}/switch.sql"; then
   exit 3
 fi
-SCHEMA_SWITCH_ACTIVE=1
-if ! release_write_fence; then
-  phase switching failed "schema-swap release failed; rollback will be attempted"
+lock_schema_oid "${SOURCE_SCHEMA}"
+switched_app_schema_oid="${FORENSICS_SCHEMA_OID}"
+APP_SCHEMA_OID_AFTER_SWITCH="${switched_app_schema_oid}"
+lock_schema_oid "${PREVIOUS_SCHEMA}"
+switched_previous_schema_oid="${FORENSICS_SCHEMA_OID}"
+PREVIOUS_SCHEMA_OID_AFTER_SWITCH="${switched_previous_schema_oid}"
+forensics_transition switched \
+  --app-schema-oid-after-switch "${switched_app_schema_oid}" \
+  --previous-schema-oid-after-switch "${switched_previous_schema_oid}"
+forensics_transition fence_release_intent --terminal-schema-mode switched
+if ! forensics_capture_release_intent_marker_sha256; then
   exit 3
 fi
-SCHEMA_SWITCH_ACTIVE=0
+RELEASE_WINDOW_MAY_HAVE_OPENED=1
+if ! release_write_fence; then
+  phase switching failed "schema-swap release failed; restored schema and writer fence remain for explicit root recovery"
+  exit 3
+fi
+if [[ "${PINVI_ENVIRONMENT:-}" == "test" &&
+      "${PINVI_RESTORE_TEST_FAIL_RELEASE_WINDOW_ONCE:-0}" == "1" ]]; then
+  phase switching failed "test-only release-window interruption injected before forensic completion"
+  exit 3
+fi
+RELEASE_WRITE_FENCE_COMPLETED=1
+if ! persist_post_release_forensics; then
+  phase switching failed "post-release forensic persistence failed after writers were released; cleanup will reapply the writer fence"
+  exit 3
+fi
+if [[ "${PINVI_ENVIRONMENT:-}" == "test" &&
+      "${PINVI_RESTORE_TEST_FAIL_AFTER_RELEASE_RECEIPT_SEAL_ONCE:-0}" == "1" &&
+      "${RELEASE_RECEIPT_REQUIRED}" == "1" ]]; then
+  # Catchable failure exercises EXIT cleanup's strict seal re-read. It must
+  # retain current.json for root acknowledgement without re-fencing a release
+  # that is already cryptographically bound to the same receipt.
+  phase switching failed "test-only failure injected after release receipt seal"
+  exit 3
+fi
+if [[ "${PINVI_ENVIRONMENT:-}" == "test" &&
+      "${PINVI_RESTORE_TEST_SIGKILL_AFTER_RELEASE_RECEIPT_SEAL_ONCE:-0}" == "1" &&
+      "${RELEASE_RECEIPT_REQUIRED}" == "1" ]]; then
+  # This seam is deliberately after the immutable seal and before any shell
+  # completion flag. The next root recovery must re-run its DB proof before it
+  # can archive the still-active marker.
+  kill -KILL "$$"
+fi
+RELEASE_TERMINAL_SEALED=1
+FORENSICS_TERMINAL=1
+WRITE_FENCE_ACTIVE=0
 phase switching success "schema-swap completed"

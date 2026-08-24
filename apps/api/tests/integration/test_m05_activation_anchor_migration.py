@@ -1,4 +1,4 @@
-"""M05 database activation anchor migration의 실제 ACL 경계를 검증한다."""
+"""0101 M05 통합 migration의 실제 PostgreSQL 계약을 검증한다."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
 API_DIR = Path(__file__).resolve().parents[2]
-TEST_PASSWORD = "m05-anchor-test-only-password"
+_ROLE_PASSWORD = "m05-role-owner-test-only"
 
 
 def _alembic(database_url: str, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -41,208 +41,298 @@ async def _execute_autocommit(database_url: str, sql: str) -> None:
         await engine.dispose()
 
 
-@pytest.mark.asyncio
-async def test_0062_rejects_global_default_acl_and_keeps_anchor_writer_root_only(
-    _database_url: str,
-) -> None:
-    """migration-owner default ACL은 rollback하고 정상 anchor는 공개 read만 허용한다."""
-    suffix = uuid.uuid4().hex[:12]
-    database_name = f"pinvi_m05_anchor_{suffix}"
-    reader_role = f"m05_anchor_reader_{suffix}"
+async def _new_database(_database_url: str, prefix: str) -> tuple[str, str]:
+    database_name = f"{prefix}_{uuid.uuid4().hex[:12]}"
     parsed = make_url(_database_url)
     target_url = parsed.set(database=database_name).render_as_string(hide_password=False)
     maintenance_url = parsed.set(database="postgres").render_as_string(hide_password=False)
-    quoted_database = f'"{database_name}"'
-    quoted_reader = f'"{reader_role}"'
-    reader_url = parsed.set(
-        username=reader_role,
-        password=TEST_PASSWORD,
-        database=database_name,
-    ).render_as_string(hide_password=False)
+    await _execute_autocommit(maintenance_url, f'CREATE DATABASE "{database_name}"')
+    return target_url, maintenance_url
 
+
+async def _drop_database(maintenance_url: str, database_url: str) -> None:
+    database_name = make_url(database_url).database
+    assert database_name is not None
     await _execute_autocommit(
         maintenance_url,
-        f"CREATE DATABASE {quoted_database}",
+        f'DROP DATABASE IF EXISTS "{database_name}" WITH (FORCE)',
     )
+
+
+def _role_database_url(database_url: str, *, role: str, password: str, database: str) -> str:
+    return make_url(database_url).set(
+        username=role,
+        password=password,
+        database=database,
+    ).render_as_string(hide_password=False)
+
+
+@pytest.mark.asyncio
+async def test_0101_installs_m05_final_contract_with_minimal_public_surface(
+    _database_url: str,
+) -> None:
+    """새 DB는 0100→0101만 거쳐 anchor, receipt, audit guard를 함께 얻는다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_0101")
     try:
-        prior = _alembic(target_url, "upgrade", "20260821_0061")
-        assert prior.returncode == 0, prior.stderr
+        upgraded = _alembic(target_url, "upgrade", "head")
+        assert upgraded.returncode == 0, upgraded.stderr
 
-        target_engine = create_async_engine(target_url, poolclass=NullPool)
+        engine = create_async_engine(target_url, poolclass=NullPool)
         try:
-            async with target_engine.begin() as connection:
-                await connection.execute(
-                    text("ALTER DEFAULT PRIVILEGES FOR ROLE pinvi GRANT INSERT ON TABLES TO PUBLIC")
-                )
-        finally:
-            await target_engine.dispose()
-
-        failed = _alembic(target_url, "upgrade", "head", check=False)
-        assert failed.returncode != 0
-        assert "rejects migration-owner default privileges" in failed.stderr
-
-        target_engine = create_async_engine(target_url, poolclass=NullPool)
-        try:
-            async with target_engine.connect() as connection:
-                version = await connection.scalar(
-                    text("SELECT version_num FROM app.alembic_version")
-                )
-                assert version == "20260821_0061"
+            async with engine.begin() as connection:
                 assert (
-                    await connection.scalar(
-                        text("SELECT to_regclass('ops.m05_activation_database_anchor')")
+                    await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
+                    == "20260824_0101"
+                )
+                boundary_definition = await connection.scalar(
+                    text(
+                        "SELECT pg_get_constraintdef(constraint_row.oid) "
+                        "FROM pg_constraint constraint_row "
+                        "JOIN pg_class relation ON relation.oid = constraint_row.conrelid "
+                        "JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace "
+                        "WHERE namespace.nspname = 'app' "
+                        "AND relation.relname = 'ktm_cache_target_boundary_audits' "
+                        "AND pg_get_constraintdef(constraint_row.oid) "
+                        "LIKE '%pinvi-cache-target-final-boundary/v1%'"
                     )
-                    is None
                 )
-            async with target_engine.begin() as connection:
-                await connection.execute(
-                    text("ALTER DEFAULT PRIVILEGES FOR ROLE pinvi REVOKE ALL ON TABLES FROM PUBLIC")
-                )
-        finally:
-            await target_engine.dispose()
+                assert "schema_revision = '20260824_0101'::text" in boundary_definition
 
-        repaired = _alembic(target_url, "upgrade", "head")
-        assert repaired.returncode == 0, repaired.stderr
+                trigger_rows = await connection.execute(
+                    text(
+                        "SELECT namespace.nspname, relation.relname, trigger_row.tgname, "
+                        "trigger_row.tgenabled::text "
+                        "FROM pg_trigger trigger_row "
+                        "JOIN pg_class relation ON relation.oid = trigger_row.tgrelid "
+                        "JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace "
+                        "WHERE (namespace.nspname, relation.relname) IN ("
+                        "('app', 'admin_audit_log'), "
+                        "('ops', 'm05_activation_database_anchor'), "
+                        "('ops', 'm05_hotswap_release_receipts')) "
+                        "AND trigger_row.tgname LIKE 'trg_%append_only%' "
+                        "AND NOT trigger_row.tgisinternal"
+                    )
+                )
+                assert {
+                    (row[0], row[1], row[2], row[3]) for row in trigger_rows
+                } >= {
+                    ("app", "admin_audit_log", "trg_admin_audit_log_append_only", "A"),
+                    ("app", "admin_audit_log", "trg_admin_audit_log_truncate_append_only", "A"),
+                    (
+                        "ops",
+                        "m05_activation_database_anchor",
+                        "trg_m05_activation_database_anchor_append_only",
+                        "A",
+                    ),
+                    (
+                        "ops",
+                        "m05_activation_database_anchor",
+                        "trg_m05_activation_database_anchor_truncate_append_only",
+                        "A",
+                    ),
+                    (
+                        "ops",
+                        "m05_hotswap_release_receipts",
+                        "trg_m05_hotswap_release_receipts_append_only",
+                        "A",
+                    ),
+                    (
+                        "ops",
+                        "m05_hotswap_release_receipts",
+                        "trg_m05_hotswap_release_receipts_truncate_append_only",
+                        "A",
+                    ),
+                }
 
-        await _execute_autocommit(
-            maintenance_url,
-            f"CREATE ROLE {quoted_reader} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE "
-            f"NOREPLICATION NOBYPASSRLS NOINHERIT PASSWORD '{TEST_PASSWORD}'",
-        )
-        reader_engine = create_async_engine(reader_url, poolclass=NullPool)
-        target_engine = create_async_engine(target_url, poolclass=NullPool)
-        try:
-            async with target_engine.begin() as connection:
-                assert (
-                    await connection.scalar(
-                        text(
-                            "SELECT has_table_privilege(:role, "
-                            "'ops.m05_activation_database_anchor', 'SELECT')"
-                        ),
-                        {"role": reader_role},
+                public_anchor_read = await connection.scalar(
+                    text(
+                        "SELECT EXISTS ("
+                        "SELECT 1 FROM pg_class relation "
+                        "CROSS JOIN LATERAL aclexplode(COALESCE(relation.relacl, "
+                        "acldefault('r', relation.relowner))) acl "
+                        "WHERE relation.oid = 'ops.m05_activation_database_anchor'::regclass "
+                        "AND acl.grantee = 0 AND acl.privilege_type = 'SELECT' "
+                        "AND NOT acl.is_grantable)"
                     )
-                    is True
                 )
-                assert (
-                    await connection.scalar(
-                        text(
-                            "SELECT has_table_privilege(:role, "
-                            "'ops.m05_activation_database_anchor', 'INSERT')"
-                        ),
-                        {"role": reader_role},
+                assert public_anchor_read is True
+                public_receipt_capability = await connection.scalar(
+                    text(
+                        "WITH objects AS ("
+                        "SELECT relation.relacl AS acl, acldefault('r', relation.relowner) "
+                        "AS default_acl FROM pg_class relation "
+                        "WHERE relation.oid = 'ops.m05_hotswap_release_receipts'::regclass "
+                        "UNION ALL "
+                        "SELECT procedure.proacl, acldefault('f', procedure.proowner) "
+                        "FROM pg_proc procedure WHERE procedure.oid IN ("
+                        "'ops.m05_hotswap_release_topology_sha256("
+                        "name,name,name,name,name,name)'::regprocedure, "
+                        "'ops.record_m05_hotswap_release_receipt("
+                        "uuid,text,text,text,text,text,text,text,name,name,name,name,name,name,"
+                        "oid,oid,oid,oid,jsonb,jsonb,boolean,text)'::regprocedure, "
+                        "'ops.verify_m05_hotswap_release_receipt(uuid,text)'::regprocedure)"
+                        ") SELECT EXISTS (SELECT 1 FROM objects "
+                        "CROSS JOIN LATERAL aclexplode(COALESCE(acl, default_acl)) privilege "
+                        "WHERE privilege.grantee = 0)"
                     )
-                    is False
                 )
+                assert public_receipt_capability is False
+
                 await connection.execute(
                     text(
                         "INSERT INTO ops.m05_activation_database_anchor "
                         "(generation, receipt_sha256, record_sha256) "
-                        "VALUES (1, :receipt_sha256, :record_sha256)"
-                    ),
-                    {"receipt_sha256": "a" * 64, "record_sha256": "b" * 64},
-                )
-
-            async with reader_engine.connect() as connection:
-                assert (
-                    await connection.scalar(
-                        text("SELECT count(*) FROM ops.m05_activation_database_anchor")
+                        "VALUES (1, repeat('1', 64), repeat('2', 64))"
                     )
-                    == 1
                 )
-                with pytest.raises(DBAPIError, match="permission denied"):
+                with pytest.raises(DBAPIError, match="append-only"):
                     await connection.execute(
                         text(
-                            "INSERT INTO ops.m05_activation_database_anchor "
-                            "(generation, receipt_sha256, record_sha256) "
-                            "VALUES (2, :receipt_sha256, :record_sha256)"
-                        ),
-                        {"receipt_sha256": "c" * 64, "record_sha256": "d" * 64},
+                            "UPDATE ops.m05_activation_database_anchor "
+                            "SET generation = 2 WHERE generation = 1"
+                        )
                     )
                 await connection.rollback()
-
-            async with target_engine.connect() as connection:
-                for statement in (
-                    "UPDATE ops.m05_activation_database_anchor SET generation = 2 WHERE generation = 1",
-                    "DELETE FROM ops.m05_activation_database_anchor WHERE generation = 1",
-                    "TRUNCATE ops.m05_activation_database_anchor",
-                ):
-                    with pytest.raises(DBAPIError, match="append-only"):
-                        await connection.execute(text(statement))
-                    await connection.rollback()
         finally:
-            await reader_engine.dispose()
-            await target_engine.dispose()
+            await engine.dispose()
     finally:
-        await _execute_autocommit(
-            maintenance_url,
-            f"DROP DATABASE IF EXISTS {quoted_database} WITH (FORCE)",
-        )
-        await _execute_autocommit(
-            maintenance_url,
-            f"DROP ROLE IF EXISTS {quoted_reader}",
-        )
+        await _drop_database(maintenance_url, target_url)
 
 
 @pytest.mark.asyncio
-async def test_0063_installs_the_boundary_and_admin_audit_contract_on_real_head(
+@pytest.mark.parametrize(
+    ("setup_sql", "expected_message"),
+    (
+        (
+            "CREATE SCHEMA ops; "
+            "ALTER DEFAULT PRIVILEGES IN SCHEMA ops GRANT EXECUTE ON FUNCTIONS TO PUBLIC",
+            "rejects migration-owner default privileges",
+        ),
+        (
+            "CREATE SCHEMA ops; "
+            "CREATE TABLE ops.m05_activation_database_anchor (generation bigint)",
+            "refuses to replace pre-existing M05 objects",
+        ),
+    ),
+)
+async def test_0101_rejects_unsafe_existing_ops_state(
+    _database_url: str,
+    setup_sql: str,
+    expected_message: str,
+) -> None:
+    """0101은 default ACL·부분 M05 object를 덮어쓰지 않고 0100에 남긴다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_0101_reject")
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as connection:
+                for statement in setup_sql.split("; "):
+                    await connection.execute(text(statement))
+        finally:
+            await engine.dispose()
+
+        failed = _alembic(target_url, "upgrade", "20260824_0101", check=False)
+        assert failed.returncode != 0
+        assert expected_message in (failed.stdout + failed.stderr)
+
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.connect() as connection:
+                assert (
+                    await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
+                    == "20260824_0100"
+                )
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
+async def test_0101_can_use_a_separate_nonruntime_migration_owner(
     _database_url: str,
 ) -> None:
-    """실제 Alembic head가 hotswap runner의 0063 계약을 설치했는지 확인한다."""
+    """0101 owner는 runtime/fence와 분리하면서도 app owner 권한으로 DDL을 수행한다."""
 
-    engine = create_async_engine(_database_url, poolclass=NullPool)
+    suffix = uuid.uuid4().hex[:12]
+    database_name = f"pinvi_m05_owner_{suffix}"
+    app_owner = f"m05_app_owner_{suffix}"
+    fence_role = f"m05_fence_{suffix}"
+    migration_owner = f"m05_migration_{suffix}"
+    parsed = make_url(_database_url)
+    maintenance_url = parsed.set(database="postgres").render_as_string(hide_password=False)
+    app_url = _role_database_url(
+        _database_url,
+        role=app_owner,
+        password=_ROLE_PASSWORD,
+        database=database_name,
+    )
+    migration_url = _role_database_url(
+        _database_url,
+        role=migration_owner,
+        password=_ROLE_PASSWORD,
+        database=database_name,
+    )
+    target_url = parsed.set(database=database_name).render_as_string(hide_password=False)
+
     try:
-        async with engine.connect() as connection:
-            assert (
-                await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
-                == "20260824_0063"
-            )
-            boundary_definition = await connection.scalar(
-                text(
-                    "SELECT pg_get_constraintdef(constraint_row.oid) "
-                    "FROM pg_constraint constraint_row "
-                    "WHERE constraint_row.conrelid = "
-                    "'app.ktm_cache_target_boundary_audits'::regclass "
-                    "AND constraint_row.conname = 'ck_ktm_ct_boundary_contract'"
-                )
-            )
-            assert isinstance(boundary_definition, str)
-            assert "pinvi-cache-target-final-boundary/v1" in boundary_definition
-            assert "status = 'succeeded'::text" in boundary_definition
-            assert "schema_revision = '20260824_0063'::text" in boundary_definition
+        for statement in (
+            f'CREATE ROLE "{fence_role}" LOGIN NOINHERIT PASSWORD \'{_ROLE_PASSWORD}\';',
+            f'CREATE ROLE "{app_owner}" LOGIN INHERIT PASSWORD \'{_ROLE_PASSWORD}\';',
+            f'CREATE ROLE "{migration_owner}" LOGIN INHERIT PASSWORD \'{_ROLE_PASSWORD}\' '
+            f'IN ROLE "{app_owner}";',
+        ):
+            await _execute_autocommit(maintenance_url, statement)
+        await _execute_autocommit(
+            maintenance_url,
+            f'CREATE DATABASE "{database_name}" OWNER "{fence_role}";',
+        )
+        await _execute_autocommit(
+            maintenance_url,
+            f'GRANT CONNECT, CREATE ON DATABASE "{database_name}" '
+            f'TO "{app_owner}", "{migration_owner}";',
+        )
 
-            trigger_rows = await connection.execute(
-                text(
-                    "SELECT trigger_row.tgname, trigger_row.tgenabled::text "
-                    "FROM pg_trigger trigger_row "
-                    "JOIN pg_class relation ON relation.oid = trigger_row.tgrelid "
-                    "JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace "
-                    "WHERE namespace.nspname = 'app' "
-                    "AND relation.relname = 'admin_audit_log' "
-                    "AND trigger_row.tgname IN ("
-                    "'trg_admin_audit_log_append_only', "
-                    "'trg_admin_audit_log_truncate_append_only') "
-                    "AND NOT trigger_row.tgisinternal"
-                )
-            )
-            assert {(row[0], row[1]) for row in trigger_rows} == {
-                ("trg_admin_audit_log_append_only", "A"),
-                ("trg_admin_audit_log_truncate_append_only", "A"),
-            }
+        baseline = _alembic(app_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        await _execute_autocommit(
+            app_url,
+            f'GRANT USAGE ON SCHEMA x_extension TO "{migration_owner}";',
+        )
+        activation = _alembic(migration_url, "upgrade", "20260824_0101")
+        assert activation.returncode == 0, activation.stderr
 
-            function_body = await connection.scalar(
-                text(
-                    "SELECT regexp_replace(btrim(procedure.prosrc), "
-                    "'[[:space:]]+', ' ', 'g') "
-                    "FROM pg_proc procedure "
-                    "JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace "
-                    "WHERE namespace.nspname = 'app' "
-                    "AND procedure.proname = 'guard_admin_audit_log_append_only'"
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.connect() as connection:
+                owners = await connection.execute(
+                    text(
+                        "SELECT namespace.nspowner::regrole::text, "
+                        "relation.relowner::regrole::text "
+                        "FROM pg_namespace namespace "
+                        "JOIN pg_class relation ON relation.relnamespace = namespace.oid "
+                        "WHERE namespace.nspname = 'ops' "
+                        "AND relation.relname = 'm05_hotswap_release_receipts'"
+                    )
                 )
-            )
-            assert function_body == (
-                "BEGIN IF TG_OP = 'INSERT' THEN RETURN NEW; END IF; "
-                "RAISE EXCEPTION '% is append-only', TG_TABLE_SCHEMA || '.' || "
-                "TG_TABLE_NAME USING ERRCODE = '55000'; END;"
-            )
+                assert owners.one() == (migration_owner, migration_owner)
+                extension_access = await connection.scalar(
+                    text(
+                        "SELECT has_schema_privilege(:migration_owner, 'x_extension', 'USAGE') "
+                        "AND NOT has_schema_privilege(:fence_role, 'x_extension', 'USAGE')"
+                    ),
+                    {"migration_owner": migration_owner, "fence_role": fence_role},
+                )
+                assert extension_access is True
+        finally:
+            await engine.dispose()
     finally:
-        await engine.dispose()
+        await _drop_database(maintenance_url, target_url)
+        await _execute_autocommit(
+            maintenance_url,
+            f'DROP ROLE IF EXISTS "{migration_owner}", "{app_owner}", "{fence_role}";',
+        )

@@ -36,6 +36,59 @@
 CHANGELOG 항목 추가. 범위를 넘는 두 건은 T-326(동의 철회 이력이 재동의로 지워짐)·T-327(서버측
 동의 강제·버전 대조 부재, 국내 판정 bbox 한계)으로 분리했다.
 
+## 2026-08-24 (codex) — M05 Alembic rebaseline 구현·리허설
+
+- active migration graph를 `20260824_0100 → 20260824_0101`로 교체했다. `0100`은 clean
+  PostgreSQL 16의 `0061` app catalog 기준선이고, `0101`은 M05 anchor·append-only audit/receipt와
+  최소 ACL 계약을 통합한다.
+- root-only rebaseline helper는 정확한 `0061` version row, final-boundary sentinel, M05 object
+  부재, `COLLATE "C"` structural catalog fingerprint와 root-owned fresh backup checksum을 모두
+  확인한 뒤 version row 한 행만 `0100`으로 바꾼다. PostgreSQL 16 disposable `0061 → 0100 → 0101`
+  리허설과 N150 read-only preflight가 통과했다.
+- `verify_m05_hotswap_release_receipt`를 migration owner 소유 `SECURITY DEFINER` 함수로 추가해,
+  fence role에 `x_extension` 권한을 넓히지 않고 receipt hash를 검증한다. 운영 DB mutation과 M05
+  activation은 수행하지 않았다.
+
+## 2026-08-24 (codex) — M05 Alembic `0100/0101` rebaseline 정책
+
+- N150 운영 DB를 read-only로 확인했다. PostgreSQL 16, `20260821_0061`, 실제 app 데이터 보유,
+  M05 `ops` 객체 없음이다. API mount에서는 backup artifact를 확인할 수 없으므로 production
+  전환 전 fresh root-only snapshot을 필수 gate로 둔다.
+- ADR-062는 active graph를 `0100` full baseline과 `0101` M05 통합 revision만으로 재구성한다.
+  과거 revision upgrade는 지원하지 않되, 현재 N150 `0061` DB는 backup proof와 catalog fingerprint가
+  모두 맞을 때에만 version row를 `0100`으로 전환하고 `0101`을 적용한다.
+- M05 activation은 계속 `false`이며 production DB mutation은 별도 승인 전까지 하지 않는다.
+
+## 2026-08-24 (codex) — M05 durable release receipt·forensic recovery 완결
+
+- release failure에서 schema rename-back·restore candidate 삭제·ACL/CONNECT 자동 복구를 없앴다.
+  forensic marker는 최초 mutation 전부터 `prepared → fence_intent → fence_applied → restore_ready
+  → switched → fence_release_intent → fence_released`를 append-only로 남기며, latch된 marker는 새
+  hotswap을 차단한다.
+- 이후 `20260824_0101`로 통합된 M05 receipt 계약은 `ops.m05_hotswap_release_receipts`, `ENABLE ALWAYS` append-only
+  trigger, target DB owner에만 한정한 `SELECT`/`EXECUTE` ACL과 canonical topology/receipt 함수를
+  설치한다. CONNECT release와 receipt insert는 같은 transaction으로 commit한다.
+- root recovery는 `fence_release_intent`도 raw marker/history SHA-256, receipt의 digest/OID/ACL
+  binding, target catalog·CONNECT state를 read-only로 대조한 경우에만 archive한다. receipt가 없거나
+  recovery latch가 있으면 fail-closed 한다.
+- M05 관련 unit 96건, PostgreSQL hotswap preflight 8건, Alembic receipt migration/ACL/불변성 5건,
+  PostgreSQL 16 recovery authority proof를 통과했다. activation은 계속 `false`이며 운영 DB mutation은
+  별도 변경 승인 범위에 두었다.
+
+## 2026-08-24 (codex) — M05 trusted hotswap root 입력 경계 보강
+
+- staging/production schema-swap의 DB URL·role·source identity·backup 경로를 caller
+  environment에서 제거하고 root:root `0600` `/etc/pinvi/trusted-hotswap.json`의 exact field로
+  옮겼다. fixed `/usr/bin/python3 -I` entrypoint와 `env -i` root launcher만 이를 읽으며
+  `PYTHONPATH`, `PG*`, `PINVI_*`, caller `PATH`를 포함한 추가 환경은 config/DB/runner 실행 전에
+  거부한다.
+- root launcher의 root 검사도 fixed `/usr/bin/id`와 먼저 고정한 `PATH`만 사용한다. caller
+  `PATH`의 가짜 command가 root 권한으로 실행되지 않는 subprocess 회귀를 추가했다.
+- `prepare-drain --confirm`은 quiescent writer/empty M05 advisory lock의 read-only proof와
+  snapshot SHA-256·target identity를 15분 single-use receipt로 봉인한다. receipt는 archive
+  hard link 뒤 unlink하고, unlink 실패는 archive와 pending marker를 함께 남겨 fail-closed 한다.
+- 아직 M05 activation은 `false`다. 다음 작업은 release failure 후의 자동 schema rollback 및
+  restore candidate 삭제를 제거하고 forensic lifecycle transition을 실제 runner에 결박하는 일이다.
 
 ## 2026-08-24 (codex) — T-323 Web E2E required gate 착수
 

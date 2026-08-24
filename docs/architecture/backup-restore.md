@@ -120,6 +120,8 @@ Postgres database 안에서 임시 restore schema를 만들고, cut-over 순간�
    - N150/staging 기본 7일
    - Odroid M1S 기본 24시간 (디스크 여유 부족 시 즉시 drop 가능)
    - 보존 중에는 forensic/debug read-only만 허용
+   - 이 보존본은 자동 rollback 또는 이전 Alembic revision 복귀에 쓰지 않는다. 삭제는 별도
+     운영 승인과 forensic 보존 정책에 따른 정리 작업이다.
 ```
 
 cut-over 구간은 무중단이 아니라 **짧은 near-zero downtime**으로 본다. 목표는
@@ -138,8 +140,9 @@ restore 준비 시간을 사용자 트래픽과 병렬로 처리하고, 쓰기 �
   - precheck 결과 표시 (checksum, disk guard, active restore lock)
   - "시작" 클릭 → progress bar (preparing / restoring / validating / draining / switching)
   - 각 단계 estimate + 실시간 로그 표시 (WebSocket 또는 SSE)
-  - 실패 시 자동 rollback (cut-over 전이면 안전)
-- 완료 후 previous schema 보존 기한 표시 (N150 7일 / Odroid 24시간)
+  - 실패 시 forensic operation UUID·단계·명시적 root escalation 상태를 표시한다. UI/API는
+    schema rename-back, candidate 삭제, 권한/CONNECT 복구를 자동으로 요청하지 않는다.
+  - 완료 후 previous schema 보존 기한 표시 (N150 7일 / Odroid 24시간)
 
 ### 5.3 audit chain 안전성
 
@@ -157,17 +160,34 @@ canonical chain에서 사라지고, previous schema에 forensic 목적으로 보
   계정이 없더라도 성공 reflection이 FK 때문에 실패하지 않게 하기 위한 forensic 경계다.
 - Sprint 6 PoC에서 `verify-chain` endpoint가 cut-over 전후 모두 통과해야 한다.
 
-### 5.4 실패 / rollback
+### 5.4 실패 / forensic escalation
 
-| 실패 지점                                  | 자동 처리                                                                                   |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| precheck 실패                              | abort, 기존 `app` 유지                                                                      |
-| restore schema 준비 실패                   | abort, 기존 `app` 유지                                                                      |
-| pg_restore 실패                            | restore schema DROP, 기존 `app` 유지                                                        |
-| healthcheck 실패                           | restore schema DROP, 기존 `app` 유지                                                        |
-| cut-over 전 drain 실패                     | abort, 기존 `app` 유지                                                                      |
-| cut-over 후 app 오류                       | API/Web 정지 → `app`을 `app_failed_<ts>`로, `app_previous_<ts>`를 `app`으로 rename → 재시작 |
-| cut-over 후 1시간 내 audit chain 깨짐 발견 | manual intervention (운영자 판단)                                                           |
+M05 hotswap은 이전 schema 또는 이전 Alembic revision으로 돌아가는 복구 계획을 제공하지
+않는다. 실패 cleanup/rollback 경로는 **자동 schema rename-back, restore candidate 삭제,
+이전 ACL/CONNECT 재부여 또는 fence release를 수행하지 않는다.** 정상 forward terminal
+경로의 한 번뿐인 release와, 그 뒤 forensic persistence가 실패했을 때의 재-fence는 별도
+경계다. 첫 영속 mutation 직전부터 `prepared → fence_intent →
+fence_applied → restore_ready → switched → fence_release_intent → fence_released` forensic
+marker를 남긴다. 실패한 marker는 latch되어 다음 hotswap을 막으며, root의 read-only catalog
+proof가 없는 acknowledgement나 추측성 DB 수정은 허용하지 않는다. `0101`에서는 terminal
+CONNECT release와 append-only DB receipt를 같은 transaction으로 commit하고, receipt는 raw
+`fence_release_intent` marker SHA-256, digest들, OID matrix와 post-release topology를 결박한다.
+
+| 실패 지점 | 처리와 보존 상태 |
+| --- | --- |
+| candidate collision 또는 marker 생성 전 precheck 실패 | fence 전에 중단한다. 기존 `app`과 기존 candidate를 그대로 둔다. |
+| `prepared` 이후 fence 전 실패 | marker를 failure latch로 보존하고 새 실행을 차단한다. DB topology는 변경하지 않는다. |
+| `fence_applied` 이후 restore/healthcheck/drain 실패 | 원래 `app`, 생성된 candidate, write/CONNECT fence, marker를 그대로 보존한다. 자동 DROP·권한 복구·재시도는 없다. |
+| cut-over 이후 release 또는 검증 실패 | 새 `app`, `app_previous_<id>`, active fence, marker와 receipt archive를 그대로 보존한다. 이전 schema를 `app`으로 rename하지 않는다. |
+| `fence_released` 뒤 발견한 audit chain 이상 | marker와 catalog evidence를 보존하고 별도 운영 변경 승인 절차로 escalate한다. |
+
+운영자는 root-only status에서 operation UUID와 marker state를 읽고, 안전한 terminal
+boundary가 read-only로 입증된 경우에만 acknowledgement를 기록할 수 있다. `fence_release_intent`
+는 원칙적으로 forensic incident이며, `0101` receipt의 exact raw marker/history binding, DB canonical
+topology, CONNECT state와 switched catalog 전체가 read-only로 일치할 때만 root entrypoint가
+`recover --confirm`으로 archive할 수 있다. 이는 receipt commit과 marker 영속 사이 SIGKILL의
+좁은 예외이고, latch·re-fence 실패·다른 intermediate state 또는 malformed marker에는 적용하지
+않는다.
 
 ## 6. 분기 훈련
 
