@@ -45,7 +45,11 @@ export const featureApi = (client: ApiClient) => ({
     });
   },
 
-  /** 반경 검색 (distance_m 포함). location_audit 미들웨어가 좌표 query 자동 적재. */
+  /**
+   * 반경 검색 (distance_m 포함). 좌표는 **언제나 사용자 자신의 위치**로 취급되므로 서버가
+   * 위치 동의를 요구한다 — 없으면 403 `LOCATION_CONSENT_REQUIRED`이고, 호출부는
+   * `isLocationConsentRequired`로 판별해 동의 재요청으로 연결해야 한다(T-334).
+   */
   nearby: (
     params: {
       lat: number;

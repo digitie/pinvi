@@ -1,6 +1,17 @@
 import { ApiError } from '@pinvi/api-client';
 
 /**
+ * 사용자가 **스스로 해소할 수 있는** 403 코드. 이 목록에 있으면 서버가 보낸 안내 문구를 그대로
+ * 보여준다 — 권한 부족과 달리, 사용자가 할 수 있는 행동이 있기 때문이다.
+ */
+const RECOVERABLE_FORBIDDEN_CODES = new Set(['LOCATION_CONSENT_REQUIRED']);
+
+/** 위치 동의가 없어서 거절된 요청인가 (ADR-063). 호출부는 동의 재요청 흐름으로 연결한다. */
+export function isLocationConsentRequired(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 403 && error.code === 'LOCATION_CONSENT_REQUIRED';
+}
+
+/**
  * 사용자에게 보여줄 친화적인 오류 문구를 만든다.
  *
  * - `ApiError`: status별로 안내 문구를 구분한다 (401/403/404/5xx).
@@ -12,7 +23,14 @@ import { ApiError } from '@pinvi/api-client';
 export function friendlyErrorText(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401) return '로그인이 필요하거나 세션이 만료되었습니다.';
-    if (error.status === 403) return '이 작업을 수행할 권한이 없습니다.';
+    // 서버가 **무엇을 하면 되는지** 아는 403은 그 문구를 그대로 쓴다. 일괄로 "권한이 없습니다"라고
+    // 덮으면 고칠 수 있는 상태가 고칠 수 없는 상태처럼 보인다 — 위치 동의가 정확히 그런 경우다
+    // (동의만 하면 되는데 권한 문제로 읽힌다). 코드가 붙지 않은 403만 일반 문구로 떨어뜨린다.
+    if (error.status === 403) {
+      return RECOVERABLE_FORBIDDEN_CODES.has(error.code) && error.message
+        ? error.message
+        : '이 작업을 수행할 권한이 없습니다.';
+    }
     if (error.status === 404) return '요청한 항목을 찾을 수 없습니다.';
     if (error.status >= 500)
       return '서버에 일시적인 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.';

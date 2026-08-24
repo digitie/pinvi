@@ -12,7 +12,7 @@ Create Date: 2026-08-25
 손실은 두 겹이다.
 
 1. 확인자료의 내용 자체가 줄어든다. `20260628_0029` 이후 아카이브는 항상 무손실 사본이었다
-   (`docs/data-model.md` §7.4 "동일 payload로 복사").
+   (`docs/data-model.md` §8.12 "동일 payload로 복사").
 2. **아카이브 행의 `content_hash`가 재검증 불가능해진다.** 해시는 `coord_source`를 포함해
    계산되므로(`location_log_payload`), 그 값이 없는 사본으로는 어떤 재계산도 원래 해시를
    재현할 수 없다. 위변조 탐지 근거가 아카이브에서 사라진다.

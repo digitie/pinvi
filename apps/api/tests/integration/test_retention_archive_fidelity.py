@@ -1,6 +1,6 @@
 """보존 아카이브가 확인자료의 **무손실 사본**인지 (T-332).
 
-`docs/data-model.md` §7.4가 아카이브를 "동일 payload로 복사"로 규정한다. 이 불변식은 그냥 좋은
+`docs/data-model.md` §8.12가 아카이브를 "동일 payload로 복사"로 규정한다. 이 불변식은 그냥 좋은
 성질이 아니라 필수 조건이다 — 아카이브 직후 원본이 삭제되므로 아카이브가 **유일한 사본**이 되고,
 행의 `content_hash`는 원본의 모든 필드를 커밋하고 있어 하나라도 빠지면 그 행은 영구히 재검증
 불가가 된다. 위변조 탐지 근거가 사라진다는 뜻이다.
@@ -25,16 +25,20 @@ pytestmark = pytest.mark.asyncio
 _ARCHIVE_ONLY_COLUMNS = {"retention_run_id", "archived_at"}
 
 
-async def _columns(session_factory, table: str) -> set[str]:  # type: ignore[no-untyped-def]
+async def _columns(session_factory, table: str) -> dict[str, tuple]:  # type: ignore[no-untyped-def]
+    """컬럼 이름 → 타입. **이름만 보면 부족하다** — 원본 `text`를 아카이브가 `varchar(16)`로 받으면
+    컬럼은 있는데 값이 조용히 잘린다. 사본이 원본을 담을 수 있는지는 타입까지 봐야 안다.
+    """
     async with session_factory() as db:
         rows = await db.execute(
             text(
-                "SELECT column_name FROM information_schema.columns "
+                "SELECT column_name, data_type, character_maximum_length, "
+                "numeric_precision, numeric_scale FROM information_schema.columns "
                 "WHERE table_schema = 'app' AND table_name = :t"
             ),
             {"t": table},
         )
-        return {r[0] for r in rows}
+        return {r[0]: tuple(r[1:]) for r in rows}
 
 
 async def test_archive_table_can_hold_every_source_column(session_factory):  # type: ignore[no-untyped-def]
@@ -45,13 +49,21 @@ async def test_archive_table_can_hold_every_source_column(session_factory):  # t
     source = await _columns(session_factory, "location_access_log")
     archive = await _columns(session_factory, "location_access_log_archive")
 
-    missing = sorted(source - archive)
+    missing = sorted(set(source) - set(archive))
     assert not missing, (
         f"원본에는 있고 아카이브에는 없는 컬럼: {missing}. "
         "아카이브는 원본 삭제 후 유일한 사본이므로 이 값들은 영구히 사라진다. "
         "마이그레이션으로 아카이브 테이블에도 컬럼을 추가하라."
     )
-    assert archive - source == _ARCHIVE_ONLY_COLUMNS
+    assert set(archive) - set(source) == _ARCHIVE_ONLY_COLUMNS
+
+    narrowed = {
+        name: (source[name], archive[name]) for name in source if source[name] != archive[name]
+    }
+    assert not narrowed, (
+        f"원본과 타입이 다른 아카이브 컬럼: {narrowed}. "
+        "컬럼이 있어도 타입이 좁으면 값이 조용히 잘린다 — 사본이 원본을 담지 못한다."
+    )
 
 
 async def test_archive_statement_copies_every_shared_column(session_factory):  # type: ignore[no-untyped-def]
@@ -60,7 +72,7 @@ async def test_archive_statement_copies_every_shared_column(session_factory):  #
     스키마 검사만으로는 부족하다는 뜻이다 — 실제 T-332의 결함이 여기 있었다. 컬럼은 원본에만
     추가됐고 SQL은 손대지 않아, 아카이브가 조용히 NULL을 채웠다.
     """
-    source = await _columns(session_factory, "location_access_log")
+    source = set(await _columns(session_factory, "location_access_log"))
 
     statement = str(_ARCHIVE_LOCATION_SQL)
     insert_columns = re.search(

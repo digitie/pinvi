@@ -181,7 +181,8 @@ blocker로 보고한다.
 
 실제 archive/delete는 `/admin/retention`에서만 실행한다. 기본 kill-switch
 `PINVI_RETENTION_EXECUTE_ENABLED=false`가 꺼져 있으면 execute는 `409`로 차단된다. 실행 시에는
-후보 row를 `app.location_access_log_archive`에 먼저 복사하고, 같은 transaction에서
+후보 row를 `app.location_access_log_archive`에 **무손실 사본**으로(좌표 출처 `coord_source` 포함)
+먼저 복사하고, 같은 transaction에서
 `set_config('app.retention_location_delete_allowed', 'on', true)`를 설정한 경우에만
 `app.location_access_log` 삭제 trigger가 허용한다.
 
