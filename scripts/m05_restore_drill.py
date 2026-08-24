@@ -1288,6 +1288,7 @@ def _run_drill(args: argparse.Namespace) -> int:
                 "PINVI_DATABASE_URL": "",
                 "PINVI_BACKUP_SCHEMA": args.schema,
                 "PINVI_BACKUP_DIR": str(temporary_dir),
+                "PINVI_BACKUP_CATALOG_PATH": str(temporary_dir / "backup-catalog.json"),
                 "PINVI_BACKUP_TRUSTED": "1",
                 "PINVI_BACKUP_MIN_FREE_BYTES": "0",
                 "PINVI_BACKUP_DOCKER_FALLBACK": "0",
