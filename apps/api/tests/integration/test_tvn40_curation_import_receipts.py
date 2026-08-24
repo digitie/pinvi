@@ -322,7 +322,7 @@ async def _assert_0053_catalog_contract(db: AsyncSession) -> None:
         )
     )
     assert boundary_definition is not None
-    assert "schema_revision = '20260824_0065'::text" in boundary_definition
+    assert "schema_revision = '20260825_0066'::text" in boundary_definition
 
     indexes = dict(
         (
@@ -787,7 +787,11 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
             await connection.execute(text("DROP TABLE app.user_consent_events"))
             # 0065가 붙이는 좌표 출처 컬럼도 마찬가지다(T-329). ORM metadata로 합성한 카탈로그에는
             # 이미 들어 있어서, 지우지 않으면 0065의 ADD COLUMN이 중복으로 실패한다.
-            for _audit_table in ("location_access_log", "location_audit_outbox"):
+            for _audit_table in (
+                "location_access_log",
+                "location_audit_outbox",
+                "location_access_log_archive",
+            ):
                 await connection.execute(
                     text(f"ALTER TABLE app.{_audit_table} DROP COLUMN coord_source")
                 )
@@ -867,7 +871,7 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
             async with engine.connect() as connection:
                 assert (
                     await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
-                    == "20260824_0065"
+                    == "20260825_0066"
                 )
                 new_body = await connection.scalar(
                     text(

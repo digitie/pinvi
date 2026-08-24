@@ -484,15 +484,18 @@ _EXECUTE_PII_SQL = text(
     """
 )
 
+#: 아카이브는 **무손실 사본**이어야 한다. 컬럼을 명시 나열하므로 원본에 컬럼이 늘면 여기도 함께
+#: 늘려야 하고, 잊으면 오류 없이 조용히 빠진 채 원본이 삭제된다(T-332가 그렇게 깨졌다). 두 테이블의
+#: 컬럼 집합 일치는 `tests/integration/test_retention_archive_fidelity.py`가 강제한다.
 _ARCHIVE_LOCATION_SQL = text(
     """
     WITH archived AS (
       INSERT INTO app.location_access_log_archive (
-        log_id, user_id, occurred_at, endpoint, purpose, lat, lng, request_id, ip_hash,
-        prev_hash, content_hash, retention_run_id
+        log_id, user_id, occurred_at, endpoint, purpose, coord_source, lat, lng,
+        request_id, ip_hash, prev_hash, content_hash, retention_run_id
       )
-      SELECT log_id, user_id, occurred_at, endpoint, purpose, lat, lng, request_id, ip_hash,
-             prev_hash, content_hash, :run_id
+      SELECT log_id, user_id, occurred_at, endpoint, purpose, coord_source, lat, lng,
+             request_id, ip_hash, prev_hash, content_hash, :run_id
       FROM app.location_access_log
       WHERE occurred_at <= :archive_cutoff
       ON CONFLICT (log_id) DO NOTHING
