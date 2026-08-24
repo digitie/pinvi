@@ -240,7 +240,7 @@ def test_restore_hotswap_rejects_api_writable_snapshot_before_pg_restore(tmp_pat
     fake_tool = tmp_path / "pg_restore"
     _write_executable(
         fake_tool,
-        "#!/usr/bin/env bash\nset -euo pipefail\ntouch \"$PINVI_TEST_TOOL_MARKER\"\n",
+        '#!/usr/bin/env bash\nset -euo pipefail\ntouch "$PINVI_TEST_TOOL_MARKER"\n',
     )
     env = os.environ.copy()
     env.update(

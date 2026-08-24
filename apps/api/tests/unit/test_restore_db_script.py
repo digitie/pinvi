@@ -163,7 +163,7 @@ def test_restore_db_rejects_api_writable_snapshot_before_pg_restore(tmp_path: Pa
     fake_bin.mkdir()
     _write_executable(
         fake_bin / "pg_restore",
-        "#!/usr/bin/env bash\nset -euo pipefail\ntouch \"$PINVI_TEST_TOOL_MARKER\"\n",
+        '#!/usr/bin/env bash\nset -euo pipefail\ntouch "$PINVI_TEST_TOOL_MARKER"\n',
     )
     env = os.environ.copy()
     env.update(

@@ -445,9 +445,7 @@ REVOKE INSERT, UPDATE, DELETE ON TABLE app.widgets FROM {_quoted(app_role)};
                 definer_sql,
             )
         )
-        _require_success(
-            _psql(tools, app_url, f"SELECT {function_schema}.definer_write();")
-        )
+        _require_success(_psql(tools, app_url, f"SELECT {function_schema}.definer_write();"))
         proof = _psql(tools, hotswap_url, "SELECT value FROM app.widgets WHERE id = 1;")
         _require_success(proof)
         assert proof.stdout.strip() == "1"

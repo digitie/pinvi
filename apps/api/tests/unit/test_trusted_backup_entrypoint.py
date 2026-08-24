@@ -85,6 +85,9 @@ def test_compose_uses_root_endpoint_pinning_entrypoint() -> None:
     compose = (root / "infra" / "docker-compose.app.yml").read_text(encoding="utf-8")
     dockerfile = (root / "apps" / "api" / "Dockerfile").read_text(encoding="utf-8")
 
-    assert "user: \"0:0\"" in compose
+    assert 'user: "0:0"' in compose
     assert "exec python /app/scripts/trusted-backup-entrypoint.py" in compose
-    assert "COPY scripts/trusted-backup-entrypoint.py ./scripts/trusted-backup-entrypoint.py" in dockerfile
+    assert (
+        "COPY scripts/trusted-backup-entrypoint.py ./scripts/trusted-backup-entrypoint.py"
+        in dockerfile
+    )

@@ -148,7 +148,10 @@ def test_restore_staging_drill_forwards_target_binding_marker() -> None:
         "RESTORE_TARGET_BINDING=*|RESTORE_SOURCE_BINDING=*) printf '%s\\n' \"${restore_line}\" ;;"
         in script
     )
-    assert 'FENCE_DATABASE_URL="${PINVI_RESTORE_FENCE_DATABASE_URL:-${STAGING_DATABASE_URL}}"' in script
+    assert (
+        'FENCE_DATABASE_URL="${PINVI_RESTORE_FENCE_DATABASE_URL:-${STAGING_DATABASE_URL}}"'
+        in script
+    )
     assert 'TRUSTED_SNAPSHOT="${SNAPSHOT}"' in script
     assert 'restore-db.sh" "${TRUSTED_SNAPSHOT}"' in script
     assert 'PINVI_RESTORE_FENCE_DATABASE_URL="${FENCE_DATABASE_URL}"' in script

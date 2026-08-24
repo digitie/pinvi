@@ -54,13 +54,11 @@ async def test_0062_rejects_global_default_acl_and_keeps_anchor_writer_root_only
     maintenance_url = parsed.set(database="postgres").render_as_string(hide_password=False)
     quoted_database = f'"{database_name}"'
     quoted_reader = f'"{reader_role}"'
-    reader_url = (
-        parsed.set(
-            username=reader_role,
-            password=TEST_PASSWORD,
-            database=database_name,
-        ).render_as_string(hide_password=False)
-    )
+    reader_url = parsed.set(
+        username=reader_role,
+        password=TEST_PASSWORD,
+        database=database_name,
+    ).render_as_string(hide_password=False)
 
     await _execute_autocommit(
         maintenance_url,
