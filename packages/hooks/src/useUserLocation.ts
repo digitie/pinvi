@@ -45,6 +45,12 @@ export interface LocationAdapter {
    * `@pinvi/hooks`에 domain 의존을 늘리지 않기 위해서다(구조적 타이핑으로 호환).
    */
   getPermissionState?(): Promise<'granted' | 'prompt' | 'denied' | 'unsupported'>;
+  /**
+   * 새 측위를 시작하지 않고 **이미 확보된 최근 위치만** 돌려준다(없으면 null).
+   * 자동 센터링이 진입을 지연시키지 않게 하는 용도다. 웹은 `getCurrentPosition`의 `maximumAge`가
+   * 같은 일을 하므로 구현하지 않는다.
+   */
+  getCachedPosition?(maxAgeMs: number): Promise<UserLocation | null>;
 }
 
 export interface UseUserLocationOptions extends LocationOptions {
