@@ -756,11 +756,13 @@ def test_m05_evidence_runtime_uses_non_owner_database_login() -> None:
 
     assert "app-db-runtime-role:" in compose
     assert "PINVI_DATABASE_URL: ${PINVI_DATABASE_URL:-postgresql+asyncpg://pinvi_app:" in api_block
-    assert "PINVI_MIGRATOR_DATABASE_URL" in compose
+    assert "PINVI_MIGRATOR_DATABASE_URL" not in compose
     for source in (docker_app, deploy):
         assert 'local service="app-migrator"' in source
         assert 'service="app-legacy-rebaseline-migrator"' in source
         assert '"$service" pinvi-admin-bootstrap' in source
+        assert "reject_explicit_migrator_database_url()" in source
+        assert "PINVI_MIGRATOR_DATABASE_URL is unsupported" in source
     for source in (docker_app, deploy):
         assert "compose run --rm" in source
         assert "app-db-runtime-role" in source

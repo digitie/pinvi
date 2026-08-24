@@ -2,6 +2,35 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-25 (codex) — M05 rebaseline P1 재심 보강
+
+**작업**: 적대 재심에서 지적된 `pg_database` fence timeout 순서, legacy handoff lock 순서,
+one-shot migrator URL 우회·기존 세션 생존, legacy bootstrap의 receipt fingerprint 전 ACL 변경을
+같은 범위에서 보강했다.
+
+**변경**:
+
+- authority/identity query 전에 5초 `lock_timeout`을 적용하고, legacy path의 순서를 advisory
+  serialization lock → timeout → identity proof → connection fence로 고정했다.
+- `app-migrator`는 one-shot `PINVI_MIGRATOR_DB_USER`/`PINVI_MIGRATOR_DB_PASSWORD`만 사용하고,
+  `PINVI_MIGRATOR_DATABASE_URL`은 deploy wrapper가 fail-close한다.
+- role bootstrap은 항상 기존 migrator backend를 종료·부재 확인한 뒤에만 새 one-shot password를
+  연다. legacy bootstrap은 pre-handoff `app` ACL/default ACL을 보존하며, `0101` canonical owner
+  수렴 뒤 runtime grant를 복원한다.
+
+**결정**: active Alembic graph와 final head는 계속 `0100 → 0101`뿐이다. 중간 `0062~0064` 재결박을
+되살리지 않으며, M05 activation과 production DB mutation은 수행하지 않았다.
+
+**발견**: 전체 unit test의 권한 검증은 Windows mount 임시 디렉터리에서 mode를 보존하지 않아
+실패한다. `TMPDIR=/tmp` Linux 임시 공간에서 재실행하면 코드와 무관한 이 환경 실패 없이 통과한다.
+
+**검증**: 정적 35건, PostgreSQL fence·legacy ownership 3건, Docker migrator lifecycle 1건,
+`0101` PostgreSQL integration 24건, API unit 1,271건, Ruff/format, strict mypy 235 source files,
+shell/Compose 검증을 통과했다.
+
+**다음**: 최신 `main` rebase·push 후 두 전문 적대 재심과 GitHub CI, 격리 N150 paired browser
+E2E를 모두 통과시킨 뒤에만 PR #466 merge를 검토한다.
+
 ## 2026-08-24 (codex) — M05 rebaseline 단일 final head 재결박
 
 - 최신 `main` rebase 뒤에 남은 `20260824_0065` 좌표 출처 migration을 별도 head로 두지 않고

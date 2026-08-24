@@ -568,6 +568,17 @@ def _configured_app_schema_owner() -> str | None:
     return configured
 
 
+def _configured_app_runtime_role() -> str | None:
+    """Return the non-owner runtime login granted only after legacy handoff."""
+
+    configured = os.environ.get("PINVI_APP_DB_USER")
+    if configured is None or not configured.strip():
+        return None
+    if configured != configured.strip() or _ROLE_IDENTIFIER.fullmatch(configured) is None:
+        raise RuntimeError("0101 app runtime role configuration is invalid")
+    return configured
+
+
 def _managed_deployment_requires_migration_owner() -> bool:
     """Keep staging/production M05 receipt ownership fail-closed."""
 
@@ -743,13 +754,13 @@ def _assert_legacy_rebaseline_ddl_quiescence(bind: sa.Connection) -> None:
 def _acquire_legacy_rebaseline_database_connection_fence(bind: sa.Connection) -> None:
     """새 backend를 막고 기존 DDL 가능 client를 종료한 뒤 quiescence를 증명한다."""
 
-    has_authority = bind.scalar(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL))
-    if has_authority is not True:
-        raise RuntimeError(
-            "0101 legacy rebaseline requires database-owner connection fence authority"
-        )
     bind.execute(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL))
     try:
+        has_authority = bind.scalar(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL))
+        if has_authority is not True:
+            raise RuntimeError(
+                "0101 legacy rebaseline requires database-owner connection fence authority"
+            )
         bind.execute(sa.text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE"))
     except sa.exc.DBAPIError as exc:
         # pg_database AccessShare lock을 잡은 기존 backend는 DDL-capable PID 열거 전에
@@ -868,33 +879,39 @@ def _assert_legacy_rebaseline_handoff(bind: sa.Connection) -> None:
             "server_port",
         )
     }
-    identity_payload = bind.scalar(
-        sa.text(
-            """
-            SELECT json_build_object(
-                'database_name', current_database(),
-                'database_oid', (
-                    SELECT database_row.oid
-                    FROM pg_database database_row
-                    WHERE database_row.datname = current_database()
-                )::bigint,
-                'system_identifier', (pg_control_system()).system_identifier::text,
-                'server_addr', COALESCE(host(inet_server_addr()), ''),
-                'server_port', COALESCE(inet_server_port(), 0)::integer
-            )::text
-            """
+    # 0100 helper와 같은 순서(advisory → pg_database fence)로 잡는다. advisory를
+    # 먼저 잡아 catalog lock 대기와 반대 순서의 deadlock을 막고, 이후 identity
+    # proof가 pg_database를 읽기 전부터 timeout을 적용한다.
+    bind.execute(sa.text(_LEGACY_REBASELINE_SERIALIZATION_LOCK_SQL))
+    bind.execute(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL))
+    try:
+        identity_payload = bind.scalar(
+            sa.text(
+                """
+                SELECT json_build_object(
+                    'database_name', current_database(),
+                    'database_oid', (
+                        SELECT database_row.oid
+                        FROM pg_database database_row
+                        WHERE database_row.datname = current_database()
+                    )::bigint,
+                    'system_identifier', (pg_control_system()).system_identifier::text,
+                    'server_addr', COALESCE(host(inet_server_addr()), ''),
+                    'server_port', COALESCE(inet_server_port(), 0)::integer
+                )::text
+                """
+            )
         )
-    )
+    except sa.exc.DBAPIError as exc:
+        raise RuntimeError(
+            "0101 legacy rebaseline could not read database proof within 5s"
+        ) from exc
     try:
         identity = json.loads(identity_payload)
     except (TypeError, json.JSONDecodeError) as exc:
         raise RuntimeError("0101 legacy rebaseline database proof is invalid") from exc
     if identity != expected_identity:
         raise RuntimeError("0101 legacy rebaseline receipt does not match this database")
-    # 0100 helper와 같은 순서(advisory → pg_database fence)로 잡는다. env.py의
-    # online Alembic lock과도 reentrant여서 fresh/legacy runner가 같은 head를
-    # 읽기 전부터 직렬화된다.
-    bind.execute(sa.text(_LEGACY_REBASELINE_SERIALIZATION_LOCK_SQL))
     _acquire_legacy_rebaseline_database_connection_fence(bind)
     _assert_legacy_rebaseline_fingerprint(bind, preflight)
     version_rows_payload = bind.scalar(
@@ -1647,6 +1664,51 @@ def _converge_legacy_app_ownership(bind: sa.Connection, app_owner: str | None) -
     return app_schema_owner
 
 
+def _grant_legacy_runtime_app_privileges(bind: sa.Connection, app_schema_owner: str | None) -> None:
+    """Receipt fingerprint를 재검증한 뒤에만 legacy app runtime ACL을 복원한다."""
+
+    if not _legacy_rebaseline_profile():
+        return
+    if app_schema_owner is None:
+        raise RuntimeError("0101 legacy rebaseline app schema owner is unavailable")
+    app_role = _configured_app_runtime_role()
+    if app_role is None:
+        raise RuntimeError("0101 legacy rebaseline requires PINVI_APP_DB_USER")
+    if (
+        bind.scalar(
+            sa.text("SELECT current_user = :app_schema_owner"),
+            {"app_schema_owner": app_schema_owner},
+        )
+        is not True
+    ):
+        raise RuntimeError("0101 legacy rebaseline could not restore app owner for runtime grants")
+
+    quoted_owner = _quote_identifier(app_schema_owner)
+    quoted_app_role = _quote_identifier(app_role)
+    bind.execute(sa.text("REVOKE ALL ON SCHEMA app FROM PUBLIC"))
+    bind.execute(sa.text(f"GRANT USAGE ON SCHEMA app TO {quoted_app_role}"))
+    bind.execute(
+        sa.text(
+            f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO {quoted_app_role}"
+        )
+    )
+    bind.execute(
+        sa.text(f"GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA app TO {quoted_app_role}")
+    )
+    bind.execute(
+        sa.text(
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {quoted_owner} IN SCHEMA app "
+            f"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {quoted_app_role}"
+        )
+    )
+    bind.execute(
+        sa.text(
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {quoted_owner} IN SCHEMA app "
+            f"GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {quoted_app_role}"
+        )
+    )
+
+
 def _advance_boundary_contract() -> None:
     """finalize가 기준선 이후 M05 계약만 수용하도록 revision pin을 전진시킨다."""
 
@@ -2117,6 +2179,7 @@ def upgrade() -> None:
     canonical_app_owner = _converge_legacy_app_ownership(bind, app_owner)
     if canonical_app_owner != app_owner:
         _restore_app_owner(canonical_app_owner)
+    _grant_legacy_runtime_app_privileges(bind, canonical_app_owner)
 
 
 def downgrade() -> None:

@@ -282,7 +282,15 @@ run_admin_bootstrap() {
     "$service" pinvi-admin-bootstrap
 }
 
+reject_explicit_migrator_database_url() {
+  if [[ -n "${PINVI_MIGRATOR_DATABASE_URL:-}" ]]; then
+    echo "PINVI_MIGRATOR_DATABASE_URL is unsupported; use PINVI_MIGRATOR_DB_USER and PINVI_MIGRATOR_DB_PASSWORD" >&2
+    exit 2
+  fi
+}
+
 migrate() {
+  reject_explicit_migrator_database_url
   require_docker
   require_python
   pinvi_verify_runtime_image_provenance app-api

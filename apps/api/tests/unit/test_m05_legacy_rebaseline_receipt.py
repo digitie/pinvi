@@ -70,7 +70,9 @@ class _BoundIdentity:
         raise AssertionError(f"unexpected legacy handoff statement: {sql}")
 
     def execute(self, statement: object) -> None:
-        assert "pg_advisory_xact_lock" in str(statement)
+        assert "pg_advisory_xact_lock" in str(statement) or "SET LOCAL lock_timeout = '5s'" in str(
+            statement
+        )
 
 
 def _root_owned_fstat(module):  # type: ignore[no-untyped-def]

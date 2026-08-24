@@ -97,7 +97,7 @@ services:
       # smoke 기본값 — 운영은 infra/.env.prod 의 ${...} override 로 도메인/시크릿 주입(ADR-047).
       # 내부 endpoint(app-rustfs:9000)는 compose 내부망이라 override 대상 아님.
       PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
-      # non-owner application login only. Migration/restore use PINVI_MIGRATOR_DATABASE_URL.
+      # non-owner application login only. Migration/restore use dedicated one-shot inputs.
       PINVI_DATABASE_URL: ${PINVI_DATABASE_URL:-postgresql+asyncpg://pinvi_app:pinvi_app_smoke@app-postgres:5432/pinvi}
       # ordinary API에는 raw dump를 mount하지 않는다. strict 환경의 snapshot 목록은
       # root producer가 만드는 metadata-only catalog로만 표시한다.
@@ -293,7 +293,7 @@ services:
       # The non-inheriting login defaults to app schema owner, then 0101 switches its
       # M05 receipt DDL to PINVI_MIGRATION_OWNER and restores the app owner for versioning.
       PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
-      PINVI_DATABASE_URL: ${PINVI_MIGRATOR_DATABASE_URL:-postgresql+asyncpg://${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}:${PINVI_MIGRATOR_DB_PASSWORD:-pinvi_app_smoke}@app-postgres:5432/pinvi}
+      PINVI_DATABASE_URL: postgresql+asyncpg://${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}:${PINVI_MIGRATOR_DB_PASSWORD:-pinvi_app_smoke}@app-postgres:5432/pinvi
       PINVI_MIGRATION_OWNER: ${PINVI_MIGRATION_OWNER:-pinvi_migration_owner}
       PINVI_MIGRATOR_DB_USER: ${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}
       PINVI_M05_LEGACY_REBASELINE: "0"
@@ -311,6 +311,7 @@ services:
       PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
       # wrapper가 legacy를 명시하지 않은 상태에서 직접 실행하면 인증 실패로 닫힌다.
       PINVI_DATABASE_URL: ${PINVI_LEGACY_REBASELINE_DATABASE_URL:-postgresql+asyncpg://invalid:invalid@app-postgres:5432/pinvi}
+      PINVI_APP_DB_USER: ${PINVI_APP_DB_USER:-pinvi_app}
       PINVI_APP_SCHEMA_OWNER: ${PINVI_APP_SCHEMA_OWNER:-pinvi_app_owner}
       PINVI_MIGRATION_OWNER: ${PINVI_MIGRATION_OWNER:-pinvi_migration_owner}
       PINVI_MIGRATOR_DB_USER: ${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}

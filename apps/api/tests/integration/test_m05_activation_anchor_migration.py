@@ -864,7 +864,7 @@ async def test_rebaseline_connection_fence_fails_closed_when_catalog_lock_is_blo
     _database_url: str,
     fence_kind: str,
 ) -> None:
-    """pg_database를 먼저 읽은 backend가 있어도 0100/0101 fence는 유한 시간에 멈춘다."""
+    """배타 catalog lock이 authority proof도 막아도 0100/0101 fence는 유한 시간에 멈춘다."""
 
     target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_fence_timeout")
     try:
@@ -878,8 +878,11 @@ async def test_rebaseline_connection_fence_fails_closed_when_catalog_lock_is_blo
             blocker_transaction = await blocker.begin()
             fence_transaction = await fence.begin()
             try:
-                # pg_database relation의 AccessShare lock은 transaction 종료까지 유지된다.
-                await blocker.execute(text("SELECT * FROM pg_catalog.pg_database"))
+                # authority proof의 pg_database SELECT도 막는 외부 AccessExclusive lock을
+                # transaction 종료까지 유지한다. timeout은 이 조회 전에 설정되어야 한다.
+                await blocker.execute(
+                    text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE")
+                )
                 started_at = time.monotonic()
                 with pytest.raises(
                     RuntimeError, match="could not acquire database connection fence within 5s"
@@ -1589,12 +1592,15 @@ async def test_0101_legacy_converges_all_app_catalog_owners(
 
     suffix = uuid.uuid4().hex[:12]
     app_owner = f"m05_legacy_app_owner_{suffix}"
+    runtime_role = f"m05_legacy_runtime_{suffix}"
     migration_owner = f"m05_legacy_migration_{suffix}"
     migrator_login = f"m05_legacy_migrator_{suffix}"
     target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_legacy_owner")
     try:
         for statement in (
             f'CREATE ROLE "{app_owner}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE '
+            "NOREPLICATION NOBYPASSRLS NOINHERIT;",
+            f'CREATE ROLE "{runtime_role}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE '
             "NOREPLICATION NOBYPASSRLS NOINHERIT;",
             f'CREATE ROLE "{migration_owner}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE '
             "NOREPLICATION NOBYPASSRLS NOINHERIT;",
@@ -1656,6 +1662,7 @@ async def test_0101_legacy_converges_all_app_catalog_owners(
                 assert isinstance(legacy_owner, str)
                 migration = _activation_migration_module()
                 monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE", "1")
+                monkeypatch.setenv("PINVI_APP_DB_USER", runtime_role)
                 monkeypatch.setenv("PINVI_APP_SCHEMA_OWNER", app_owner)
                 monkeypatch.setenv("PINVI_MIGRATION_OWNER", migration_owner)
                 monkeypatch.setenv("PINVI_MIGRATOR_DB_USER", migrator_login)
@@ -1665,6 +1672,13 @@ async def test_0101_legacy_converges_all_app_catalog_owners(
                     assert migration._converge_legacy_app_ownership(bind, legacy_owner) == app_owner
                     migration._restore_app_owner(app_owner)
                     assert bind.scalar(text("SELECT current_user")) == app_owner
+                    migration._grant_legacy_runtime_app_privileges(bind, app_owner)
+                    bind.execute(
+                        text(
+                            "CREATE TABLE app.legacy_runtime_default_acl_probe "
+                            "(record_id bigserial PRIMARY KEY)"
+                        )
+                    )
 
                 await connection.run_sync(converge)
 
@@ -1689,13 +1703,31 @@ async def test_0101_legacy_converges_all_app_catalog_owners(
                     {"app_owner": app_owner},
                 )
                 assert canonical_ownership is True
+                runtime_privileges = await connection.execute(
+                    text(
+                        "SELECT "
+                        "has_table_privilege(:runtime_role, 'app.legacy_records', "
+                        "'SELECT, INSERT, UPDATE, DELETE'), "
+                        "has_sequence_privilege(:runtime_role, 'app.legacy_sequence', "
+                        "'USAGE, SELECT, UPDATE'), "
+                        "has_table_privilege(:runtime_role, "
+                        "'app.legacy_runtime_default_acl_probe', "
+                        "'SELECT, INSERT, UPDATE, DELETE'), "
+                        "has_sequence_privilege(:runtime_role, "
+                        "'app.legacy_runtime_default_acl_probe_record_id_seq', "
+                        "'USAGE, SELECT, UPDATE')"
+                    ),
+                    {"runtime_role": runtime_role},
+                )
+                assert runtime_privileges.one() == (True, True, True, True)
         finally:
             await engine.dispose()
     finally:
         await _drop_database(maintenance_url, target_url)
         await _execute_autocommit(
             maintenance_url,
-            f'DROP ROLE IF EXISTS "{migrator_login}", "{migration_owner}", "{app_owner}";',
+            f'DROP ROLE IF EXISTS "{migrator_login}", "{migration_owner}", "{runtime_role}", '
+            f'"{app_owner}";',
         )
 
 

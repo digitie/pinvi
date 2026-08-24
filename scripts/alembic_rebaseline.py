@@ -1012,18 +1012,12 @@ async def _acquire_rebaseline_database_connection_fence(
 ) -> None:
     """Block new backends, evict existing DDL-capable clients, then prove quiescence."""
 
-    has_authority = await connection.scalar(
-        text(_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL)
-    )
-    if has_authority is not True:
-        raise RebaselineError(
-            "rebaseline requires database-owner connection fence authority"
-        )
     await connection.execute(text(_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL))
     try:
-        await connection.execute(
-            text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE")
-        )
+        has_authority = await connection.scalar(text(_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL))
+        if has_authority is not True:
+            raise RebaselineError("rebaseline requires database-owner connection fence authority")
+        await connection.execute(text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE"))
     except DBAPIError as exc:
         # 기존 backend가 pg_database AccessShare lock을 길게 보유하면 client를
         # 식별·종료하기도 전에 여기서 막힌다. 무기한 대기하지 않고 transaction을

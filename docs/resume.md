@@ -1,5 +1,25 @@
 # resume.md
 
+## 2026-08-25 (codex) — M05 P1 fence·one-shot·legacy ACL 재보강
+
+적대 재심이 발견한 네 P1을 반영했다. `pg_database` authority proof보다 먼저 5초
+`lock_timeout`을 설정하고, legacy handoff는 advisory serialization lock → timeout →
+database identity proof → connection fence 순서로 고정했다. 일반 `app-migrator`는
+`PINVI_MIGRATOR_DATABASE_URL`을 더 이상 받아들이지 않으며 wrapper가 이를 fail-close하고
+one-shot user/password만 사용한다. role bootstrap은 새 password를 열기 전에 기존 migrator
+LOGIN/CONNECT와 backend를 항상 회수·검증한다. legacy profile은 receipt fingerprint 재검증
+전 `app` ACL/default ACL을 바꾸지 않고, canonical owner 수렴 후 `0101` 안에서만 runtime grant를
+복원한다.
+
+**검증**: 정적 테스트 35건, PostgreSQL fence·legacy ownership integration 3건, Docker migrator
+lifecycle 1건, `0101` 통합 PostgreSQL 24건, API unit 1,271건, Ruff/format, strict mypy
+235 source files, shell/Compose 검증을 통과했다. Windows mount 임시 디렉터리의 mode 보존 한계는
+`TMPDIR=/tmp` Linux 재실행으로 분리 확인했다.
+
+**다음 한 작업**: 이 보강을 최신 `main`에 rebase·push한 뒤 두 전문 적대 재심과 GitHub CI를
+통과시키고, 격리 N150 paired live browser E2E를 실행한다. 모두 green이 되기 전에는 PR #466
+merge나 production DB mutation/M05 activation을 하지 않는다.
+
 ## 2026-08-24 (codex) — M05 Alembic `0100/0101` rebaseline 최신 main 통합
 
 사용자가 과거 Alembic 이력 호환을 종료하기로 결정했다. N150 운영 DB를 읽기 전용으로

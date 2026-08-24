@@ -86,6 +86,13 @@ FROM pg_stat_activity activity
 JOIN pg_roles migrator ON migrator.oid = activity.usesysid
 WHERE migrator.rolname = :'migrator_role'
   AND activity.pid <> pg_backend_pid();
+SELECT 1 / CASE WHEN EXISTS (
+    SELECT 1
+    FROM pg_stat_activity activity
+    JOIN pg_roles migrator ON migrator.oid = activity.usesysid
+    WHERE migrator.rolname = :'migrator_role'
+      AND activity.pid <> pg_backend_pid()
+) THEN 0 ELSE 1 END;
 SQL
 }
 
@@ -104,14 +111,10 @@ seal_migrator_on_failure() {
 trap 'seal_migrator_on_failure' EXIT
 trap 'exit 1' HUP INT TERM
 
-# Final topology validation can intentionally fail on stale memberships.  When this
-# invocation is the post-migration seal, close the one-shot credential before any
-# other validation path so a failed validation cannot leave a reusable LOGIN/CONNECT
-# window behind.  Keep this separate from the normal role bootstrap transaction: its
-# effects must survive a later fail-closed check.
-if [ "${PINVI_MIGRATOR_DISABLE_LOGIN}" = "1" ]; then
-  seal_migrator_login
-fi
+# 새 one-shot password를 열기 전에도 이전 backend는 계속 살아 있을 수 있다. 항상
+# 먼저 LOGIN/CONNECT를 회수하고 세션 종료까지 확인해, 회전만으로 기존 migrator가
+# 남는 경로를 없앤다. 이 효과는 뒤 topology 검증 실패와 분리되어 유지된다.
+seal_migrator_login
 
 # 기존 0061 owner를 바꾸는 것은 ADR-063의 rebaseline 범위를 넘는다. 일반 실행은
 # 이미 새 app schema owner로 정착한 DB 또는 빈 DB만 받는다. 과거 0061 전환은
@@ -329,12 +332,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE :"default_privilege_owner" IN SCHEMA app
 SQL
 }
 
-if [ "${PINVI_M05_LEGACY_REBASELINE}" = "1" ]; then
-  # 0101 tail가 app catalog을 canonical owner로 넘긴 직후에도, 다음 app DDL의
-  # runtime grant가 끊기지 않게 legacy owner와 canonical owner 둘 다 고정한다.
-  grant_app_runtime_privileges "${POSTGRES_USER}"
-  grant_app_runtime_privileges "${PINVI_APP_SCHEMA_OWNER}"
-else
+if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then
   grant_app_runtime_privileges "${PINVI_APP_SCHEMA_OWNER}"
 fi
 
@@ -448,7 +446,10 @@ SELECT
                  OR membership.roleid = runtime.oid
           )
           AND NOT has_database_privilege(runtime.oid, current_database(), 'CREATE')
-          AND has_schema_privilege(runtime.oid, 'app', 'USAGE')
+          AND (
+              :'legacy_rebaseline' = '1'
+              OR has_schema_privilege(runtime.oid, 'app', 'USAGE')
+          )
           AND has_schema_privilege(runtime.oid, 'x_extension', 'USAGE')
           AND NOT has_schema_privilege(runtime.oid, 'app', 'CREATE')
           AND NOT has_schema_privilege(runtime.oid, 'x_extension', 'CREATE')

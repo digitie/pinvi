@@ -49,6 +49,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
     migrator_role = f"m05_migrator_{suffix}"
     password = "m05-compose-test-password"
     ephemeral_password = "m05-one-shot-ephemeral-password"
+    rotated_password = "m05-one-shot-rotated-password"
     environment_file = tmp_path / "compose.env"
     environment_file.write_text(
         "\n".join(
@@ -133,15 +134,15 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
         return state[0], state[1], state[2], state[3], state[4]
 
     client_name = f"pinvi-m05-client-{suffix}"
+    rotated_client_name = f"pinvi-m05-rotated-client-{suffix}"
     stale_role = f"m05_stale_{suffix}"
     try:
         compose("up", "--detach", "app-postgres")
         compose("run", "--rm", "--no-deps", "app-db-runtime-role")
         assert role_state() == ("false", "false", "0", "false", "true")
 
-        # legacy 0101이 app catalog을 schema owner로 넘긴 뒤에도 다음 DDL에 runtime
-        # grant가 남아야 한다. canonical owner의 default ACL을 일부러 비운 뒤 legacy
-        # bootstrap으로 다시 고정하고, 그 owner가 만든 table/sequence를 직접 확인한다.
+        # legacy bootstrap은 receipt fingerprint가 결박되기 전 app ACL/default ACL을
+        # 바꾸지 않는다. 복원은 0101 handoff가 끝난 뒤 migration 안에서 수행한다.
         compose(
             "exec",
             "-T",
@@ -193,7 +194,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             f"has_sequence_privilege('{runtime_role}', 'app.legacy_default_acl_probe_id_seq', "
             "'USAGE, SELECT, UPDATE')::text;",
         )
-        assert default_acl_probe.stdout.strip() == "true|true"
+        assert default_acl_probe.stdout.strip() == "false|false"
 
         compose(
             "exec",
@@ -294,6 +295,66 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             "--no-deps",
             "--env",
             f"PINVI_MIGRATOR_DB_PASSWORD={ephemeral_password}",
+            "--entrypoint",
+            "/bin/sh",
+            "app-db-runtime-role",
+            "-ec",
+            'PGPASSWORD="$PINVI_MIGRATOR_DB_PASSWORD" exec psql --no-psqlrc '
+            '--no-password --host=app-postgres --username="$PINVI_MIGRATOR_DB_USER" '
+            '--dbname="$POSTGRES_DB" --command="SELECT pg_sleep(60)"',
+        )
+        for _ in range(40):
+            if role_state()[2] == "1":
+                break
+            time.sleep(0.25)
+        assert role_state()[2] == "1"
+
+        compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "--env",
+            "PINVI_MIGRATOR_DISABLE_LOGIN=0",
+            "--env",
+            f"PINVI_MIGRATOR_DB_PASSWORD={rotated_password}",
+            "app-db-runtime-role",
+        )
+        assert role_state() == ("true", "true", "0", "false", "true")
+        terminated_client = subprocess.run(  # noqa: S603 - fixed Docker wait invocation
+            [docker, "wait", client_name],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        assert terminated_client.returncode == 0
+        assert terminated_client.stdout.strip() != "0"
+
+        old_password = compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "--env",
+            f"PINVI_MIGRATOR_DB_PASSWORD={ephemeral_password}",
+            "--entrypoint",
+            "/bin/sh",
+            "app-db-runtime-role",
+            "-ec",
+            'PGPASSWORD="$PINVI_MIGRATOR_DB_PASSWORD" exec psql --no-psqlrc '
+            '--no-password --host=app-postgres --username="$PINVI_MIGRATOR_DB_USER" '
+            '--dbname="$POSTGRES_DB" --command="SELECT 1"',
+            check=False,
+        )
+        assert old_password.returncode != 0
+
+        compose(
+            "run",
+            "--detach",
+            "--name",
+            rotated_client_name,
+            "--no-deps",
+            "--env",
+            f"PINVI_MIGRATOR_DB_PASSWORD={rotated_password}",
             "--entrypoint",
             "/bin/sh",
             "app-db-runtime-role",

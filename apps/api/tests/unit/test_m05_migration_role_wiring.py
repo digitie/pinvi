@@ -30,6 +30,7 @@ def test_compose_keeps_runtime_and_migrator_role_inputs_separate() -> None:
     assert 'PINVI_MIGRATOR_DISABLE_LOGIN: "1"' in role_bootstrap_block
     assert 'PINVI_M05_LEGACY_REBASELINE: "0"' in role_bootstrap_block
     assert "postgresql+asyncpg://${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}:" in migrator_block
+    assert "PINVI_MIGRATOR_DATABASE_URL" not in migrator_block
     assert "PINVI_MIGRATION_OWNER" in migrator_block
     assert "PINVI_MIGRATOR_DB_USER" in migrator_block
     assert "PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}" in migrator_block
@@ -38,6 +39,7 @@ def test_compose_keeps_runtime_and_migrator_role_inputs_separate() -> None:
     )[0]
     assert "profiles: [legacy-rebaseline]" in legacy_migrator_block
     assert "PINVI_LEGACY_REBASELINE_DATABASE_URL" in legacy_migrator_block
+    assert "PINVI_APP_DB_USER" in legacy_migrator_block
     assert "PINVI_MIGRATOR_DB_USER" in legacy_migrator_block
     assert 'PINVI_M05_LEGACY_REBASELINE: "1"' in legacy_migrator_block
     assert 'user: "0:0"' in legacy_migrator_block
@@ -61,7 +63,8 @@ def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
     assert "REVOKE CONNECT ON DATABASE" in bootstrap
     assert "pg_terminate_backend(activity.pid, 5000)" in bootstrap
     assert "FROM pg_stat_activity activity" in bootstrap
-    assert "close the one-shot credential before any" in bootstrap
+    assert "이전 backend는 계속 살아 있을 수 있다" in bootstrap
+    assert "세션 종료까지 확인해" in bootstrap
     assert "seal_migrator_on_failure()" in bootstrap
     assert "trap 'seal_migrator_on_failure' EXIT" in bootstrap
     assert "OR membership.roleid = runtime.oid" in bootstrap
@@ -73,7 +76,7 @@ def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
     assert "WHERE membership.roleid = owner.oid" in bootstrap
     assert "WHERE membership.roleid = migrator.oid" in bootstrap
     assert "grant_app_runtime_privileges()" in bootstrap
-    assert 'grant_app_runtime_privileges "${POSTGRES_USER}"' in bootstrap
+    assert 'if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then' in bootstrap
     assert 'grant_app_runtime_privileges "${PINVI_APP_SCHEMA_OWNER}"' in bootstrap
 
 
@@ -93,6 +96,7 @@ def test_0101_switches_only_m05_objects_and_restores_app_owner_for_versioning() 
     assert migration.index("_replace_admin_audit_guard()") < activation
     assert "_managed_deployment_requires_migration_owner" in migration
     assert "_configured_migrator_login" in migration
+    assert "_configured_app_runtime_role" in migration
     assert "0101 managed migration requires migration and migrator roles" in migration
     assert "membership.roleid = (SELECT oid FROM migration_role)" in migration
     assert "_assert_legacy_rebaseline_handoff(bind)" in migration
@@ -111,8 +115,15 @@ def test_0101_switches_only_m05_objects_and_restores_app_owner_for_versioning() 
         )
     ]
     assert handoff.index("_LEGACY_REBASELINE_SERIALIZATION_LOCK_SQL") < handoff.index(
+        "SELECT json_build_object"
+    )
+    assert handoff.index("_LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL") < handoff.index(
+        "SELECT json_build_object"
+    )
+    assert handoff.index("SELECT json_build_object") < handoff.index(
         "_acquire_legacy_rebaseline_database_connection_fence(bind)"
     )
+    assert "_grant_legacy_runtime_app_privileges(bind, canonical_app_owner)" in upgrade
 
 
 def test_rebaseline_fence_blocks_new_backends_and_catches_inherited_catalog_owners() -> None:
@@ -130,6 +141,23 @@ def test_rebaseline_fence_blocks_new_backends_and_catches_inherited_catalog_owne
         assert "pg_has_role(activity.usesysid, owner_row.owner_oid, 'USAGE')" in source
         assert "pg_has_role(activity.usesysid, owner_row.owner_oid, 'SET')" in source
         assert "ALLOW_CONNECTIONS false" not in source
+
+    helper_fence = helper[
+        helper.index("async def _acquire_rebaseline_database_connection_fence") : helper.index(
+            "async def _app_data_fingerprint"
+        )
+    ]
+    migration_fence = migration[
+        migration.index(
+            "def _acquire_legacy_rebaseline_database_connection_fence"
+        ) : migration.index("def _legacy_rebaseline_catalog_fingerprint")
+    ]
+    assert helper_fence.index("_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL") < helper_fence.index(
+        "_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL"
+    )
+    assert migration_fence.index(
+        "_LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL"
+    ) < migration_fence.index("_LEGACY_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL")
 
     env = (ROOT / "apps" / "api" / "alembic" / "env.py").read_text(encoding="utf-8")
     assert "_MIGRATION_SERIALIZATION_LOCK_SQL" in env
@@ -157,6 +185,8 @@ def test_migration_wrappers_open_only_for_the_one_shot_and_seal_afterward() -> N
         assert 'PINVI_MIGRATOR_DB_PASSWORD="$MIGRATOR_ONE_SHOT_PASSWORD" compose run' in source
         assert "compose_with_one_shot_migrator_password" in source
         assert 'MIGRATOR_ONE_SHOT_PASSWORD=""' in source
+        assert "reject_explicit_migrator_database_url()" in source
+        assert "PINVI_MIGRATOR_DATABASE_URL is unsupported" in source
         assert 'if ! prepare_migrator_login "$legacy_rebaseline"; then' in migration
         assert "migrator preparation failed; sealing the one-shot login" in migration
         assert (

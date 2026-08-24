@@ -87,8 +87,7 @@ ktdctl logs storage --follow
 | `PINVI_APP_DB_USER` / `PINVI_APP_DB_PASSWORD`     | API/Dagster runtime 전용 non-owner/non-superuser login                                                                              |
 | `PINVI_APP_SCHEMA_OWNER`                           | `app` object의 non-login schema owner. fresh `0100`/일반 `0101` app DDL의 effective role                                           |
 | `PINVI_MIGRATION_OWNER`                            | M05 `ops` receipt object의 non-login owner. `x_extension` `USAGE`만 받고 runtime/fence/hotswap과 분리                              |
-| `PINVI_MIGRATOR_DB_USER` / `PINVI_MIGRATOR_DB_PASSWORD` | one-shot non-inheriting login. 기본은 `NOLOGIN`·database `CONNECT` 없음이며 wrapper만 일시적으로 연다                       |
-| `PINVI_MIGRATOR_DATABASE_URL`                      | 위 one-shot login URL. API/Dagster에 전달 금지                                                                                      |
+| `PINVI_MIGRATOR_DB_USER` / `PINVI_MIGRATOR_DB_PASSWORD` | one-shot non-inheriting login. 기본은 `NOLOGIN`·database `CONNECT` 없음이며 wrapper만 일시적으로 연다. 별도 URL override는 지원하지 않는다 |
 | `PINVI_M05_LEGACY_REBASELINE`                      | 평상시 `0`. `0061 → 0100 → 0101` 승인 전환 명령에만 `1`로 export; 일반 deploy 금지                                                 |
 | `PINVI_LEGACY_REBASELINE_DATABASE_URL`             | legacy profile 전용 root/app owner URL. 일반 migrator·API·Dagster에 전달 금지                                                       |
 | `PINVI_M05_LEGACY_REBASELINE_RECEIPT_HOST_PATH`    | `alembic_rebaseline.py apply`가 만든 root-owned `0600` applied receipt의 host 절대경로. legacy one-shot에만 read-only mount한다 |
