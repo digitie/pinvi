@@ -171,6 +171,7 @@ USAGE/SELECT grant를 재적용한다. 이 role은 LOGIN이고 superuser·CREATE
 | `PINVI_RESTORE_HOTSWAP_ROLE` | `PINVI_RESTORE_HOTSWAP_DATABASE_URL`의 role 이름. |
 | `PINVI_RESTORE_FENCE_ROLE` | `PINVI_RESTORE_FENCE_DATABASE_URL`의 전용 target owner role 이름. target database owner이며 `CREATEDB`와 role membership가 없어야 한다. |
 | `PINVI_RESTORE_PROVISION_DATABASE_URL` | fresh target 생성 전용 root-only provisioner URL. `postgres` maintenance DB를 가리키며 staging/hotswap/runtime와 분리한다. |
+| `PINVI_RESTORE_PROVISIONER_ROLE` | 위 maintenance URL로 접속하는 dedicated root-only superuser role 이름. fence/runtime/staging role과 겸용하지 않는다. |
 | `PINVI_RESTORE_PROVISION_DISABLE_LOGIN` | `1` 필수. target 생성 직후 provisioner role을 `NOLOGIN`으로 봉인해 schema-swap writer inventory에서 제거한다. 다음 drill 전 privileged bootstrap으로 다시 활성화한다. |
 
 template DB에는 one-time privileged bootstrap으로 `x_extension` schema와 `citext`, `pgcrypto`,

@@ -43,6 +43,14 @@ _HOST_TOOL_DIRECTORIES = (Path("/usr/bin"), Path("/bin"))
 _RESTORE_TOOL_DIRECTORIES = (Path("/usr/local/bin"), Path("/usr/bin"), Path("/bin"))
 _POSTGRES_TOOL_DIRECTORY_RE = re.compile(r"/usr/lib/postgresql/[0-9]+/bin\Z")
 _RESTORE_TOOL_NAMES = ("bash", "git", "pg_dump", "pg_restore", "psql")
+_RESTORE_IDENTITY_ENDPOINT_FIELDS = (
+    "database",
+    "database_oid",
+    "system_identifier",
+    "hostaddr",
+    "port",
+    "sslmode",
+)
 _PAIR_PROVENANCE = Path(__file__).resolve().parents[1] / (
     "contracts/kor-travel-map-m05-pair-provenance-v1.json"
 )
@@ -1803,6 +1811,14 @@ def _restore(
         "git_tool_sha256",
         "environment",
         "fresh_target_verified",
+        "fence_db_identity",
+        "fence_db_identity_before_restore",
+        "fence_db_identity_before_restore_sha256",
+        "fence_db_identity_sha256",
+        "fence_role",
+        "fence_role_verified",
+        "provisioner_login_disabled",
+        "provisioner_role",
         "runtime_db_identity",
         "runtime_role",
         "runtime_role_verified",
@@ -1821,6 +1837,8 @@ def _restore(
         "target_recreated",
         "trigger_guard_verified",
         "runtime_db_identity_sha256",
+        "fence_db_identity_before_restore_sha256",
+        "fence_db_identity_sha256",
     }
     if set(restore) != expected or restore["status"] != "passed":
         raise ReceiptError("restore evidence schema/status is invalid")
@@ -1836,8 +1854,10 @@ def _restore(
         raise ReceiptError("restore evidence is not a no-owner restore")
     for field in (
         "no_owner_restore",
+        "provisioner_login_disabled",
         "runtime_role_verified",
         "staging_role_verified",
+        "fence_role_verified",
         "trigger_guard_verified",
     ):
         if restore[field] is not True:
@@ -1949,6 +1969,8 @@ def _restore(
         "target_db_identity_before_restore",
         "target_db_identity",
         "runtime_db_identity",
+        "fence_db_identity_before_restore",
+        "fence_db_identity",
     ):
         identity = _object(restore[field], name=f"restore.{field}")
         if set(identity) != {
@@ -1973,6 +1995,11 @@ def _restore(
         ),
         ("target_db_identity", "target_db_identity_sha256"),
         ("runtime_db_identity", "runtime_db_identity_sha256"),
+        (
+            "fence_db_identity_before_restore",
+            "fence_db_identity_before_restore_sha256",
+        ),
+        ("fence_db_identity", "fence_db_identity_sha256"),
     ):
         expected_identity_sha256 = hashlib.sha256(
             _canonical_json(restore[identity_field])

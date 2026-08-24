@@ -39,8 +39,9 @@ def test_m05_restore_drill_serializes_target_recreation_and_preflights_staging_r
 
     assert "_staging_role_check(" in source
     assert "PINVI_RESTORE_PROVISION_DATABASE_URL" in source
+    assert "PINVI_RESTORE_PROVISIONER_ROLE" in source
     assert "PINVI_BACKUP_CATALOG_PATH" in source
-    assert "ALTER ROLE CURRENT_USER NOLOGIN" in source
+    assert 'ALTER ROLE "{provisioner_role}" NOLOGIN;' in source
     assert "restore provisioner login must be disabled" in source
     assert "SELECT pg_advisory_lock(1414679892, 1213421392);" in source
     assert "SELECT pg_advisory_unlock(1414679892, 1213421392);" in source

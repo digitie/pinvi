@@ -6,6 +6,7 @@ DB URL과 runtime role은 명령행에 넣지 않고 다음 환경변수로만 �
 * ``PINVI_RESTORE_SOURCE_DATABASE_URL`` — dump source
 * ``PINVI_RESTORE_STAGING_DATABASE_URL`` — owner/migrator target
 * ``PINVI_RESTORE_PROVISION_DATABASE_URL`` — root-only disposable target provisioner
+* ``PINVI_RESTORE_PROVISIONER_ROLE`` — expected dedicated root-only provisioner role
 * ``PINVI_RESTORE_PROVISION_DISABLE_LOGIN`` — target 생성 후 provisioner login 봉인 여부
 * ``PINVI_RESTORE_FENCE_DATABASE_URL`` — dedicated target-owner fence login
 * ``PINVI_RESTORE_RUNTIME_DATABASE_URL`` — non-owner runtime target login
@@ -457,7 +458,7 @@ SELECT r.rolcanlogin
   AND NOT r.rolinherit
   AND NOT EXISTS (
       SELECT 1 FROM pg_auth_members m
-      WHERE m.member = r.oid
+      WHERE m.member = r.oid OR m.roleid = r.oid
   )
 {schema_checks}
 FROM pg_roles r
@@ -476,12 +477,12 @@ SELECT current_user = '{expected_role}'
   AND r.rolcanlogin
   AND NOT r.rolsuper
   AND NOT r.rolcreaterole
-  AND r.rolcreatedb
+  AND NOT r.rolcreatedb
   AND NOT r.rolreplication
   AND NOT r.rolbypassrls
   AND NOT EXISTS (
       SELECT 1 FROM pg_auth_members m
-      WHERE m.member = r.oid
+      WHERE m.member = r.oid OR m.roleid = r.oid
   )
 FROM pg_roles r
 WHERE r.rolname = current_user
@@ -517,6 +518,7 @@ WHERE r.rolname = current_user
 def _provisioner_role_check(
     database_url: str,
     *,
+    expected_role: str,
     staging_role: str,
     fence_role: str,
     runtime_role: str,
@@ -524,19 +526,23 @@ def _provisioner_role_check(
 ) -> None:
     """Disposable DB owner assignment은 root-only superuser one-shot으로만 수행한다."""
 
-    roles = (staging_role, fence_role, runtime_role, hotswap_role)
+    roles = (expected_role, staging_role, fence_role, runtime_role, hotswap_role)
     if any(_ROLE_RE.fullmatch(role) is None for role in roles):
         raise RestoreDrillError("restore provisioner role binding is invalid")
     quoted_roles = ", ".join(f"'{role}'" for role in roles)
     sql = f"""
 SELECT current_database() = 'postgres'
+  AND current_user = '{expected_role}'
   AND r.rolcanlogin
   AND r.rolsuper
   AND current_user <> ALL(ARRAY[{quoted_roles}])
 FROM pg_roles r
 WHERE r.rolname = current_user
 """.strip()
-    _require_true(_scalar(database_url, sql), name="root-only restore provisioner")
+    _require_true(
+        _scalar(database_url, sql),
+        name="dedicated root-only restore provisioner",
+    )
 
 
 def _hotswap_role_check(
@@ -594,40 +600,63 @@ WHERE r.rolname = current_user
 def _trigger_check(database_url: str, *, schema: str) -> None:
     sql = f"""
 SELECT count(*) = 6
-FROM pg_trigger t
-JOIN pg_class c ON c.oid = t.tgrelid
-JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = '{schema}'
-  AND c.relname IN (
-      'ktm_feature_reference_reconciliation_delivery_attempts',
-      'ktm_feature_reference_reconciliation_applied_receipts',
-      'ktm_feature_reference_reconciliation_impacts'
-  )
-  AND t.tgenabled = 'A'
+FROM (VALUES
+  ('ktm_feature_reference_reconciliation_delivery_attempts', left('trg_ktm_feature_reference_reconciliation_delivery_attempts_append_only', 63)),
+  ('ktm_feature_reference_reconciliation_delivery_attempts', left('trg_ktm_feature_reference_reconciliation_delivery_attempts_truncate_append_only', 63)),
+  ('ktm_feature_reference_reconciliation_applied_receipts', left('trg_ktm_feature_reference_reconciliation_applied_receipts_append_only', 63)),
+  ('ktm_feature_reference_reconciliation_applied_receipts', left('trg_ktm_feature_reference_reconciliation_applied_receipts_truncate_append_only', 63)),
+  ('ktm_feature_reference_reconciliation_impacts', left('trg_ktm_feature_reference_reconciliation_impacts_append_only', 63)),
+  ('ktm_feature_reference_reconciliation_impacts', left('trg_ktm_feature_reference_reconciliation_impacts_truncate_append_only', 63))
+) expected(table_name, trigger_name)
+WHERE EXISTS (
+  SELECT 1
+  FROM pg_trigger t
+  JOIN pg_class c ON c.oid = t.tgrelid
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  JOIN pg_proc p ON p.oid = t.tgfoid
+  JOIN pg_namespace pn ON pn.oid = p.pronamespace
+  WHERE n.nspname = '{schema}'
+    AND c.relname = expected.table_name
+    AND t.tgname = expected.trigger_name
+    AND t.tgenabled = 'A'
+    AND NOT t.tgisinternal
+    AND p.proname = 'guard_ktm_feature_reference_reconciliation_append_only'
+    AND pn.nspname = '{schema}'
+    AND NOT p.prosecdef
+)
 """.strip()
     _require_true(_scalar(database_url, sql), name="always-enabled M05 triggers")
 
 
-def _trigger_bypass_is_blocked(database_url: str, *, schema: str) -> None:
+def _trigger_guard_is_enforced(database_url: str, *, schema: str) -> None:
+    """Catalog metadata alone cannot prove that the guard body still blocks DDL."""
+
     sql = f"""
-BEGIN;
-SET LOCAL session_replication_role = replica;
-UPDATE {schema}.ktm_feature_reference_reconciliation_delivery_attempts
-SET event_sha256 = event_sha256
-WHERE event_id = (
-    SELECT event_id
-    FROM {schema}.ktm_feature_reference_reconciliation_delivery_attempts
-    ORDER BY observed_at
-    LIMIT 1
-);
-ROLLBACK;
+DO $m05$
+DECLARE
+  protected_table text;
+BEGIN
+  FOREACH protected_table IN ARRAY ARRAY[
+    'ktm_feature_reference_reconciliation_delivery_attempts',
+    'ktm_feature_reference_reconciliation_applied_receipts',
+    'ktm_feature_reference_reconciliation_impacts'
+  ] LOOP
+    BEGIN
+      EXECUTE format('TRUNCATE TABLE %I.%I', '{schema}', protected_table);
+      RAISE EXCEPTION 'M05 append-only trigger unexpectedly allowed TRUNCATE on %', protected_table;
+    EXCEPTION
+      WHEN SQLSTATE '55000' THEN
+        IF SQLERRM NOT ILIKE '%append-only%' THEN
+          RAISE EXCEPTION 'M05 append-only trigger returned an unexpected diagnostic for %', protected_table;
+        END IF;
+    END;
+  END LOOP;
+END
+$m05$;
 """.strip()
     result = _scalar(database_url, sql, check=False)
-    if result.returncode == 0:
-        raise RestoreDrillError("M05 append-only trigger did not block replication bypass")
-    error_text = result.stderr.lower()
-    if "append-only" not in error_text and "permission denied" not in error_text:
-        raise RestoreDrillError("M05 append-only trigger did not block replication bypass")
+    if result.returncode != 0:
+        raise RestoreDrillError("M05 append-only trigger semantic probe failed")
 
 
 def _identity(database_url: str, *, schema: str) -> dict[str, object]:
@@ -721,6 +750,7 @@ def _recreate_disposable_target(
     *,
     staging_role: str,
     provision_url: str,
+    provisioner_role: str,
     disable_provisioner_login: bool,
     fence_role: str,
     fence_url: str,
@@ -752,6 +782,8 @@ def _recreate_disposable_target(
         raise RestoreDrillError("restore provisioner URL must use the postgres maintenance database")
     if not _ROLE_RE.fullmatch(staging_role):
         raise RestoreDrillError("restore staging role is invalid")
+    if not _ROLE_RE.fullmatch(provisioner_role):
+        raise RestoreDrillError("restore provisioner role is invalid")
     if not _ROLE_RE.fullmatch(fence_role):
         raise RestoreDrillError("restore fence role is invalid")
     if not _ROLE_RE.fullmatch(runtime_role):
@@ -818,6 +850,7 @@ def _recreate_disposable_target(
         raise RestoreDrillError("restore target system identifier is invalid")
     _provisioner_role_check(
         provision_url,
+        expected_role=provisioner_role,
         staging_role=staging_role,
         fence_role=fence_role,
         runtime_role=runtime_role,
@@ -828,6 +861,7 @@ def _recreate_disposable_target(
     sql_fence = fence_role.replace("'", "''")
     sql_runtime = runtime_role.replace("'", "''")
     sql_hotswap = hotswap_role.replace("'", "''")
+    sql_provisioner = provisioner_role.replace("'", "''")
     sql_template = template_name.replace("'", "''")
     template_check = _scalar(
         template_url,
@@ -845,6 +879,13 @@ SELECT current_database() = '{sql_template}'
   AND has_database_privilege('{sql_hotswap}', current_database(), 'CREATE')
   AND has_schema_privilege('{sql_hotswap}', 'x_extension', 'USAGE')
   AND NOT has_schema_privilege('{sql_hotswap}', 'x_extension', 'CREATE')
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_default_acl d
+    JOIN pg_roles r ON r.oid = d.defaclrole
+    WHERE r.rolname = '{sql_hotswap}'
+      AND d.defaclnamespace = 0
+  )
   AND EXISTS (
     SELECT 1
     FROM pg_roles r
@@ -896,7 +937,9 @@ SELECT current_database() = '{sql_template}'
     )
     _require_true(template_check, name="restore target template")
     disable_provisioner_sql = (
-        "ALTER ROLE CURRENT_USER NOLOGIN;" if disable_provisioner_login else ""
+        f'ALTER ROLE "{provisioner_role}" NOLOGIN;'
+        if disable_provisioner_login
+        else ""
     )
     _psql_file(
         provision_url,
@@ -914,10 +957,12 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1
     FROM pg_roles r
-    WHERE r.rolname = current_user
+    WHERE r.rolname = '{sql_provisioner}'
+      AND current_user = '{sql_provisioner}'
+      AND r.rolcanlogin
       AND r.rolsuper
   ) THEN
-    RAISE EXCEPTION 'restore disposable target provisioner must be a superuser';
+    RAISE EXCEPTION 'restore disposable target provisioner is not the dedicated superuser';
   END IF;
   IF NOT EXISTS (
     SELECT 1
@@ -930,7 +975,10 @@ BEGIN
       AND NOT r.rolreplication
       AND NOT r.rolbypassrls
       AND NOT r.rolinherit
-      AND NOT EXISTS (SELECT 1 FROM pg_auth_members m WHERE m.member = r.oid)
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_auth_members m
+        WHERE m.member = r.oid OR m.roleid = r.oid
+      )
       AND NOT has_database_privilege(r.rolname, 'postgres', 'CREATE')
       AND NOT has_database_privilege(r.rolname, '{sql_template}', 'CREATE')
   ) THEN
@@ -949,7 +997,8 @@ BEGIN
       )
       AND NOT EXISTS (
         SELECT 1 FROM pg_auth_members m
-        WHERE m.member = r.oid AND m.roleid <> to_regrole('pg_signal_backend')
+        WHERE (m.member = r.oid AND m.roleid <> to_regrole('pg_signal_backend'))
+           OR m.roleid = r.oid
       )
   ) THEN
     RAISE EXCEPTION 'restore hotswap role is not a dedicated non-CREATEDB executor';
@@ -989,6 +1038,19 @@ SELECT EXISTS (
       FROM pg_auth_members m
       WHERE m.member = fence_role.oid OR m.roleid = fence_role.oid
     )
+)
+AND NOT EXISTS (
+  SELECT 1
+  FROM pg_default_acl d
+  JOIN pg_roles r ON r.oid = d.defaclrole
+  WHERE r.rolname = '{sql_hotswap}'
+    AND d.defaclnamespace = 0
+)
+AND EXISTS (
+  SELECT 1
+  FROM pg_roles r
+  WHERE r.rolname = '{sql_provisioner}'
+    AND r.rolcanlogin = {str(not disable_provisioner_login).lower()}
 )
 """.strip(),
     )
@@ -1150,6 +1212,11 @@ def _run_drill(args: argparse.Namespace) -> int:
         raise RestoreDrillError("restore fence role is required")
     if (
         os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1"
+        and not _ROLE_RE.fullmatch(args.provisioner_role)
+    ):
+        raise RestoreDrillError("restore provisioner role is required")
+    if (
+        os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1"
         and not args.provision_disable_login
     ):
         raise RestoreDrillError(
@@ -1203,6 +1270,7 @@ def _run_drill(args: argparse.Namespace) -> int:
             target_url,
             staging_role=args.staging_role,
             provision_url=provision_url,
+            provisioner_role=args.provisioner_role,
             disable_provisioner_login=args.provision_disable_login,
             fence_role=args.fence_role,
             fence_url=fence_url,
@@ -1385,7 +1453,7 @@ def _run_drill(args: argparse.Namespace) -> int:
             )
         trigger_url = hotswap_url or target_url
         _trigger_check(trigger_url, schema=args.schema)
-        _trigger_bypass_is_blocked(trigger_url, schema=args.schema)
+        _trigger_guard_is_enforced(trigger_url, schema=args.schema)
         target_identity = _identity(target_url, schema=args.schema)
         runtime_identity = _identity(runtime_url, schema=args.schema)
         fence_identity = _identity(fence_url, schema=args.schema) if fence_url else None
@@ -1424,6 +1492,7 @@ def _run_drill(args: argparse.Namespace) -> int:
             "provisioner_login_disabled": bool(
                 provision_url and args.provision_disable_login
             ),
+            "provisioner_role": args.provisioner_role,
             "restore_command": (
                 "pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges"
             ),
@@ -1452,6 +1521,12 @@ def _run_drill(args: argparse.Namespace) -> int:
             "runtime_db_identity": runtime_identity,
             "fence_db_identity_before_restore": fence_identity_pre,
             "fence_db_identity": fence_identity,
+            "fence_db_identity_before_restore_sha256": (
+                _identity_sha256(fence_identity_pre) if fence_identity_pre is not None else ""
+            ),
+            "fence_db_identity_sha256": (
+                _identity_sha256(fence_identity) if fence_identity is not None else ""
+            ),
             "source_db_identity_sha256": _identity_sha256(source_identity_pre),
             "source_db_identity_after_backup_sha256": _identity_sha256(
                 source_identity_after_backup
@@ -1492,6 +1567,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--provision-database-url-env",
         default="PINVI_RESTORE_PROVISION_DATABASE_URL",
+    )
+    parser.add_argument(
+        "--provisioner-role",
+        default=os.environ.get("PINVI_RESTORE_PROVISIONER_ROLE", ""),
     )
     parser.add_argument(
         "--provision-disable-login",
