@@ -18,6 +18,7 @@ from app.models.user import User
 from app.schemas.admin import AdminAuditEntry, AdminLocationAuditEntry
 from app.schemas.envelope import Envelope
 from app.services.hash_chain import GENESIS_HASH, compute_content_hash
+from app.services.location_audit import location_log_payload
 
 router = APIRouter(prefix="/admin/audit", tags=["admin"])
 
@@ -157,18 +158,21 @@ async def _is_location_window_broken(db: AsyncSession, window: list[LocationAcce
     # 각 행 self-consistency: content_hash == H(prev_hash, fields). 필터/윈도우 비연속과 무관하게
     # 표시된 행의 필드 변조를 탐지한다(윈도우 내부 링크는 비연속이라 검증 대상 아님).
     for row in ordered:
+        # payload 구성은 쓰기 측과 **같은 함수**를 쓴다. 여기에 필드 목록을 복제하면 컬럼이 늘 때
+        # 한쪽만 갱신돼 정상 행이 변조로 판정된다 — T-329가 실제로 그렇게 깨뜨렸다.
         expected = compute_content_hash(
             row.prev_hash,
-            {
-                "user_id": str(row.user_id),
-                "occurred_at": row.occurred_at.isoformat(),
-                "endpoint": row.endpoint,
-                "purpose": row.purpose,
-                "lat": _coord_str(row.lat),
-                "lng": _coord_str(row.lng),
-                "request_id": str(row.request_id),
-                "ip_hash": row.ip_hash,
-            },
+            location_log_payload(
+                user_id=row.user_id,
+                occurred_at=row.occurred_at,
+                endpoint=row.endpoint,
+                purpose=row.purpose,
+                lat=row.lat,
+                lng=row.lng,
+                request_id=row.request_id,
+                ip_hash=row.ip_hash,
+                coord_source=row.coord_source,
+            ),
         )
         if row.content_hash != expected:
             return True

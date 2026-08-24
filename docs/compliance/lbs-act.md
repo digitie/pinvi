@@ -92,6 +92,7 @@ CREATE TABLE app.location_access_log (
   occurred_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   endpoint     TEXT NOT NULL,
   purpose      TEXT NOT NULL,
+  coord_source TEXT,            -- 'device' | 'map_pick' | NULL(컬럼 도입 이전 행), ADR-063
   lat          NUMERIC(9,6),
   lng          NUMERIC(9,6),
   request_id   UUID NOT NULL,
@@ -151,6 +152,10 @@ def compute_content_hash(prev_hash: str, row: dict) -> str:
         "occurred_at": row["occurred_at"].isoformat(),
         "endpoint": row["endpoint"],
         "purpose": row["purpose"],
+        # coord_source는 **값이 있을 때만** 키를 넣는다 — 넣고 빼는 규칙이 어긋나면 정상 행이
+        # 변조로 판정된다. 정본 구성은 `app/services/location_audit.py::location_log_payload`이며
+        # 쓰기와 검증이 같은 함수를 쓴다(T-329 리뷰).
+        **({"coord_source": row["coord_source"]} if row.get("coord_source") else {}),
         "lat": float(row["lat"]) if row["lat"] else None,
         "lng": float(row["lng"]) if row["lng"] else None,
         "request_id": row["request_id"],

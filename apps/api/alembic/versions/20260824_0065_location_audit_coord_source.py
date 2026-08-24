@@ -95,23 +95,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """컬럼과 제약을 되돌린다.
+    """forward-only — `coord_source`는 살아남는 `content_hash`가 커밋한 값이다.
 
-    `purpose` 되돌리기는 `20260824_0062`와 같은 이유로 `NOT VALID`다 — append-only 트리거가
-    UPDATE/DELETE를 막으므로 이미 적재된 `reverse_geocode` 행을 정리할 수단이 없다. 기존 행을 남긴
-    채 이후 삽입만 다시 좁힌다.
-
-    `coord_source` 컬럼은 DROP한다. 이 방향은 데이터를 잃지만, 컬럼 자체가 이 리비전에서 생긴 것이라
-    그 안의 값도 전부 이 리비전 이후의 것이다.
+    컬럼을 DROP해도 이 리비전 이후 적재된 행의 `content_hash`는 그 값을 포함한 채 남는다. 그러면
+    해당 행들은 **영구히 재검증 불가**가 되고, `trg_location_access_log_append_only`가 UPDATE/DELETE를
+    막으므로 정리할 수단도 없다. 되돌릴 수 없는 것을 되돌리는 척하지 않는다 —
+    `20260814_0055` 이후 이 저장소의 관례이기도 하다.
     """
-    op.execute(f"ALTER TABLE app.location_access_log DROP CONSTRAINT {_PURPOSE_CONSTRAINT}")
-    op.execute(
-        f"ALTER TABLE app.location_access_log ADD CONSTRAINT {_PURPOSE_CONSTRAINT} "
-        f"CHECK (purpose IN ({_OLD_PURPOSES})) NOT VALID"
+    raise RuntimeError(
+        "20260824_0065 downgrade is forward-only: content_hash가 coord_source를 커밋하고 있어 "
+        "컬럼을 DROP하면 이후 적재된 확인자료가 영구히 재검증 불가가 된다"
     )
-
-    for table in ("location_access_log", "location_audit_outbox"):
-        op.drop_constraint(f"ck_{table}_coord_source", table, schema="app", type_="check")
-        op.drop_column(table, "coord_source", schema="app")
-
-    _repin_boundary_contract(_PREV_BOUNDARY_CONTRACT_CHECK)

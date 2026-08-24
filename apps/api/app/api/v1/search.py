@@ -12,6 +12,7 @@ K(`pinvi_place_search_internal_threshold`) 미만일 때만 Kakao/Naver Local(�
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request
@@ -24,6 +25,7 @@ from app.clients.naver_local import NaverLocalClientDep, NaverLocalError
 from app.core.config import settings
 from app.core.consent_deps import assert_location_consent
 from app.core.deps import CurrentUserId, DbSession
+from app.middleware.location_audit import declare_location_audit
 from app.models.poi import TripDayPoi
 from app.models.trip import Trip
 from app.schemas.envelope import Envelope
@@ -97,6 +99,14 @@ async def _search_my_pois(db: DbSession, *, user_id: uuid.UUID, q: str) -> list[
     return out
 
 
+_AUDIT_PRECISION = Decimal("0.000001")
+
+
+def _audit_decimal(value: float) -> Decimal:
+    """확인자료에 적을 좌표 — 저장 정밀도(`numeric(9,6)`)로 맞춘다."""
+    return Decimal(str(value)).quantize(_AUDIT_PRECISION)
+
+
 @router.get("/search", response_model=Envelope[PlaceSearchResponse])
 async def unified_search(
     request: Request,
@@ -122,7 +132,10 @@ async def unified_search(
         # 사용자 좌표를 제3자(Kakao)에 제공하는 경로다 — 동의를 먼저 확인한다(T-327).
         # dependency로 걸지 않는 이유: 좌표 없는 키워드 검색까지 막히기 때문이다.
         await assert_location_consent(db, user_id=user_id)
-        request.state.location_audit_coord = (None, None)
+        # 출처를 여기서 함께 선언한다. 좌표만 세팅하면 이 행이 `coord_source=NULL`로 남는데, NULL의
+        # 계약상 의미는 "이 컬럼이 없던 시기의 행"이라 **제3자 제공이 실제로 일어난 가장 민감한
+        # 행**이 레거시와 구분되지 않는다(T-329 리뷰 지적).
+        declare_location_audit(request, lat=None, lng=None, source="device")
 
     results: list[PlaceSearchResult] = []
 
@@ -150,9 +163,16 @@ async def unified_search(
     if len(results) < settings.pinvi_place_search_internal_threshold:
         if kakao_local is not None:
             try:
-                if near_me:
+                if lat is not None and lon is not None:
                     # 좌표를 실제로 Kakao에 제3자 제공하는 지점 — 여기서만 감사 기록(§9).
-                    request.state.location_audit_coord = (lat, lon)
+                    # `near_me`와 같은 조건이지만 여기서 다시 쓰는 이유는, 좌표가 non-None임을
+                    # 이 지점에서 타입으로도 보이게 하기 위해서다.
+                    declare_location_audit(
+                        request,
+                        lat=_audit_decimal(lat),
+                        lng=_audit_decimal(lon),
+                        source="device",
+                    )
                 kakao_data = await kakao_local.search_keyword(
                     query=q,
                     size=limit,

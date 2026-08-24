@@ -14,6 +14,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
 from fastapi import FastAPI
 from sqlalchemy import func, select, update
@@ -37,6 +38,44 @@ def _coord_str(value: Decimal | None) -> str | None:
     return str(value.quantize(Decimal("0.000001")))
 
 
+def location_log_payload(
+    *,
+    user_id: uuid.UUID,
+    occurred_at: datetime,
+    endpoint: str,
+    purpose: str,
+    lat: Decimal | None,
+    lng: Decimal | None,
+    request_id: uuid.UUID,
+    ip_hash: str,
+    coord_source: str | None,
+) -> dict[str, Any]:
+    """`content_hash`가 덮는 필드의 **정본**. 쓰기와 검증이 반드시 같은 것을 써야 한다.
+
+    이 함수가 존재하는 이유는 하나다. 예전에는 payload 구성이 두 곳에 복제돼 있었고
+    (`append_location_log`와 admin 체인 검증기), T-329가 `coord_source`를 쓰기 측에만 추가하는
+    바람에 **정상 행이 전부 변조로 판정되는** 결함이 생겼다. 위변조 탐지 신호가 상시 켜지면
+    실제 변조와 구분할 수 없으므로 확인자료의 무결성 증명 수단이 죽는다.
+
+    출처가 `None`이면 **키 자체를 넣지 않는다.** payload는 `sort_keys=True` canonical JSON이라,
+    키를 생략해야 이 컬럼이 없던 시절 행의 재계산 결과가 바이트 단위로 유지된다
+    (`"coord_source": null`을 넣으면 과거 행 전체의 content_hash가 어긋난다).
+    """
+    payload: dict[str, Any] = {
+        "user_id": str(user_id),
+        "occurred_at": occurred_at.isoformat(),
+        "endpoint": endpoint,
+        "purpose": purpose,
+        "lat": _coord_str(lat),
+        "lng": _coord_str(lng),
+        "request_id": str(request_id),
+        "ip_hash": ip_hash,
+    }
+    if coord_source is not None:
+        payload["coord_source"] = coord_source
+    return payload
+
+
 async def append_location_log(
     session: AsyncSession,
     *,
@@ -57,21 +96,17 @@ async def append_location_log(
         select(LocationAccessLog).order_by(LocationAccessLog.log_id.desc()).limit(1)
     )
     prev_hash = last.content_hash if last else GENESIS_HASH
-    payload = {
-        "user_id": str(user_id),
-        "occurred_at": moment.isoformat(),
-        "endpoint": endpoint,
-        "purpose": purpose,
-        "lat": _coord_str(lat),
-        "lng": _coord_str(lng),
-        "request_id": str(request_id),
-        "ip_hash": ip_hash,
-    }
-    # 출처가 없으면 **키 자체를 넣지 않는다.** payload는 `sort_keys=True` canonical JSON이므로,
-    # 키를 생략해야 이 컬럼이 없던 시절 행의 재계산 결과가 바이트 단위로 그대로 유지된다
-    # (`"coord_source": null`을 넣으면 과거 행 전체의 content_hash가 어긋나 체인이 깨진다).
-    if coord_source is not None:
-        payload["coord_source"] = coord_source
+    payload = location_log_payload(
+        user_id=user_id,
+        occurred_at=moment,
+        endpoint=endpoint,
+        purpose=purpose,
+        lat=lat,
+        lng=lng,
+        request_id=request_id,
+        ip_hash=ip_hash,
+        coord_source=coord_source,
+    )
     row = LocationAccessLog(
         user_id=user_id,
         occurred_at=moment,

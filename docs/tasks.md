@@ -60,6 +60,25 @@
 
 ## 지도 / 위치
 
+## 지도 / 위치
+
+- [ ] **T-332** — 보존 아카이브가 `coord_source`를 버린다. `admin_retention.py`의
+  `_ARCHIVE_LOCATION_SQL`이 컬럼을 명시 나열하는 방식이라 새 컬럼을 조용히 드롭하고, 곧바로
+  `_DELETE_ARCHIVED_LOCATION_SQL`이 원본을 지운다 — 복구 불가다. 0029 이후 archive는 항상 무손실
+  사본이었는데(`data-model.md` §7.4 "동일 payload로 복사") T-329가 그 불변식을 처음 깼다. 게다가
+  아카이브 행의 `content_hash`는 `coord_source`를 커밋하고 있어 사본만으로는 **재검증이 불가능**해진다.
+  수정: archive 테이블에 컬럼 추가 마이그레이션 + INSERT/SELECT 목록 2곳 + 문서 갱신.
+  긴급하지 않은 근거: `LOCATION_LOG_ARCHIVE_RETENTION_MONTHS = 6`이라 `coord_source`를 실은 행이
+  아카이브 자격을 얻는 것은 2027-02-24 이후이고, execute는 `PINVI_RETENTION_EXECUTE_ENABLED`
+  기본 off + CPO 수동이다. T-329 적대적 리뷰에서 발견.
+- [ ] **T-333** — 핸들러가 좌표를 선언했어도 응답이 4xx/5xx면 감사 행이 버려진다
+  (`location_audit.py`의 `if response.status_code >= 400: return response`). 상류에 좌표를 이미
+  보낸 뒤 실패한 경우(예: kor-travel-geo 호출 성공 후 응답 직렬화 실패)에는 위치 사용이 실제로
+  일어났는데 기록이 없다. 선재 조건이며 T-329 리뷰에서 발견.
+- [ ] **T-334** — 프런트가 `LOCATION_CONSENT_REQUIRED`(403)를 복구 가능한 상태로 다루지 않는다.
+  서버 게이트(T-327/T-329)가 실제로 403을 반환할 수 있게 됐지만 웹/모바일은 이를 일반 오류로
+  표시한다. 동의 재요청 흐름으로 연결해야 한다. T-327/T-329 리뷰에서 이월.
+
 ## 웹 / 테스트 인프라
 
 - [ ] **T-323** — web 워크플로의 `e2e` 잡이 aggregate required check가 아니라 Playwright 실패가 머지를

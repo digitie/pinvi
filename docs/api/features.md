@@ -215,9 +215,15 @@ Cookie: pinvi_access=...
   "title": "새 카페",
   "coord": { "lon": 129.0, "lat": 35.0 },
   "categories": ["카페"],
-  "note": "..."
+  "note": "...",
+  "coord_source": "map_pick"
 }
 ```
+
+`coord_source`(기본 `map_pick`)는 `coord`가 무엇인지 선언한다. `map_pick`은 사용자가 지도에서 고른
+지점이라 개인위치정보가 아니고, `device`는 사용자 자신의 위치라 **위치 동의를 요구한다** — 없으면
+`403 LOCATION_CONSENT_REQUIRED`다. 확인자료(`location_access_log`)에는 어느 쪽이든 출처가 함께
+기록된다(ADR-063). `source`(`user`/`kakao`/`naver`)는 제안의 **provider 출처**로 이것과 다른 축이다.
 
 `type`(기본 `new_place`)은 `new_place` | `correction` | `closure` 중 하나다. `correction`/`closure`
 (기존 feature 정보 수정·폐업 제보)는 `target_feature_id`가 **필수**이고, `new_place`는

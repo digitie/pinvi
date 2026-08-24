@@ -27,8 +27,13 @@ def _contracted_purposes() -> set[str]:
             continue
         # upgrade()가 세우는 목록만 본다 — downgrade()의 구 목록에 속으면 안 된다.
         upgrade_src = source.split("def downgrade", 1)[0]
-        quoted = set(re.findall(r"'([a-z_]+)'", upgrade_src))
-        purposes = {p for p in quoted if p not in {"app", "purpose"}}
+        # purpose 목록을 담는 상수 정의에서만 읽는다. 파일 전체에서 따옴표를 긁으면 같은
+        # 마이그레이션의 다른 리터럴(`'device'`, `'map_pick'`, `'succeeded'` 등)까지 "계약된
+        # purpose"로 세어 검사가 조용히 헐거워진다(T-329 리뷰 지적).
+        blocks = re.findall(
+            r"^_\w*PURPOSES\w*\s*=\s*(.+?)(?=^\w|\Z)", upgrade_src, re.MULTILINE | re.DOTALL
+        )
+        purposes = {p for b in blocks for p in re.findall(r"'([a-z_]+)'", b)}
         if purposes:
             latest = (path.name, purposes)
     assert latest is not None, "purpose CHECK 제약을 정의하는 마이그레이션을 찾지 못했다"

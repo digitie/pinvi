@@ -231,6 +231,61 @@ async def test_chain_payload_omits_the_key_when_there_is_no_source(session_facto
 
 
 # --------------------------------------------------------------------------------------
+# 체인 검증기가 쓰기 측과 같은 payload를 본다 — 정상 행을 변조로 오판하지 않는다
+# --------------------------------------------------------------------------------------
+
+
+async def test_admin_chain_verification_accepts_rows_that_carry_a_source(
+    client, session_factory, verified_user, auth_cookies
+):  # type: ignore[no-untyped-def]
+    """출처가 있는 행도 `X-Chain-Broken`을 유발하면 안 된다.
+
+    쓰기 측이 payload에 `coord_source` 키를 넣는데 검증기가 그것을 빼고 재계산하면, **정상 행이
+    전부 변조로 판정된다.** 그러면 위변조 탐지 신호가 상시 켜져 실제 변조와 구분할 수 없게 되고,
+    확인자료의 무결성 증명 수단이 사라진다. 두 곳이 갈라지지 않게 하는 것이
+    `location_log_payload` 하나이며, 이 테스트가 그 대칭을 지킨다.
+    """
+    from app.models.user import User
+    from app.services.location_audit import append_location_log
+
+    async with session_factory() as db:
+        # 확인자료 열람은 CPO 전용이다(admin에게도 404로 감춘다).
+        cpo = User(
+            email=f"chain_cpo_{uuid.uuid4().hex[:8]}@pinvi.test",
+            status="active",
+            roles=["user", "cpo"],
+        )
+        db.add(cpo)
+        await db.commit()
+        await db.refresh(cpo)
+        cpo_id = str(cpo.user_id)
+
+    subject_id, _ = verified_user
+
+    for source in ("device", "map_pick", None):
+        async with session_factory() as db:
+            await append_location_log(
+                db,
+                user_id=uuid.UUID(subject_id),
+                endpoint="/features/nearby",
+                purpose="nearby_attractions",
+                lat=Decimal("37.5665"),
+                lng=Decimal("126.9780"),
+                request_id=uuid.uuid4(),
+                ip_hash="ef" * 32,
+                coord_source=source,
+            )
+
+    res = await client.get(
+        f"/admin/audit/location?user_id={subject_id}&limit=10",
+        cookies=auth_cookies(cpo_id),
+    )
+    assert res.status_code == 200, res.text
+    assert len(res.json()["data"]) == 3
+    assert res.headers.get("X-Chain-Broken") is None
+
+
+# --------------------------------------------------------------------------------------
 # 외부 의존
 # --------------------------------------------------------------------------------------
 

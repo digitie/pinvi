@@ -222,12 +222,12 @@ export default function MapPage() {
 - `GET /regions/within-radius?lon=&lat=` — `region_radius`
 - `POST /features/requests` — `feature_request`
 - `GET /search?q=&lat=&lon=` — near-me 분기에서만 `third_party_place_search` (ADR-054 §9)
+- `GET /geo/reverse?lon=&lat=` — `reverse_geocode`. 기본 출처는 `map_pick`이다.
 
 감사하지 **않는** 좌표 경로와 그 이유:
 
 - `GET /features/in-bounds` — bbox는 사용자가 보고 있는 화면 영역이지 사용자의 위치가 아니다.
 - `GET /features/{id}/weather` — 좌표는 그 feature의 위치다.
-- `GET /geo/reverse?lon=&lat=` — `reverse_geocode`. 기본 출처는 `map_pick`이다.
 
 각 좌표는 **출처**(`coord_source`)와 함께 기록된다 — `device`(사용자 자신의 위치) 또는
 `map_pick`(지도에서 고른 지점). 동의 게이트는 `device`에만 걸린다(ADR-063). `/regions/*`,
