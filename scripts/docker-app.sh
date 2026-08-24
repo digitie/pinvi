@@ -13,6 +13,7 @@ WEB_PORT="${PINVI_WEB_PORT:-12805}"
 RUSTFS_PORT="${PINVI_RUSTFS_PORT:-12101}"
 RUSTFS_CONSOLE_PORT="${PINVI_RUSTFS_CONSOLE_PORT:-12105}"
 SMOKE_KEEP_RUNNING=""
+MIGRATOR_ONE_SHOT_PASSWORD=""
 
 usage() {
   cat <<'EOF'
@@ -194,23 +195,49 @@ legacy_rebaseline_receipt_file() {
 prepare_migrator_login() {
   local legacy_rebaseline="$1"
   local disable_login="0"
+  MIGRATOR_ONE_SHOT_PASSWORD=""
   if [[ "$legacy_rebaseline" == "1" ]]; then
     # legacy is run as the existing root/app owner, never as the reusable migrator login.
     disable_login="1"
+    compose run --rm \
+      -e PINVI_M05_LEGACY_REBASELINE="$legacy_rebaseline" \
+      -e PINVI_MIGRATOR_DISABLE_LOGIN="$disable_login" \
+      app-db-runtime-role
+    return
   fi
-  compose run --rm \
+
+  MIGRATOR_ONE_SHOT_PASSWORD="$(new_migrator_one_shot_password)"
+  PINVI_MIGRATOR_DB_PASSWORD="$MIGRATOR_ONE_SHOT_PASSWORD" compose run --rm \
     -e PINVI_M05_LEGACY_REBASELINE="$legacy_rebaseline" \
     -e PINVI_MIGRATOR_DISABLE_LOGIN="$disable_login" \
     app-db-runtime-role
 }
 
+new_migrator_one_shot_password() {
+  local password
+  password="$(LC_ALL=C od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+  [[ "$password" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "could not generate one-shot migrator password" >&2
+    return 1
+  }
+  printf '%s' "$password"
+}
+
+compose_with_one_shot_migrator_password() {
+  PINVI_MIGRATOR_DB_PASSWORD="$MIGRATOR_ONE_SHOT_PASSWORD" compose "$@"
+}
+
 seal_migrator_login() {
   local legacy_rebaseline="$1"
   log "sealing one-shot migrator login"
-  compose run --rm \
+  if ! compose run --rm \
     -e PINVI_M05_LEGACY_REBASELINE="$legacy_rebaseline" \
     -e PINVI_MIGRATOR_DISABLE_LOGIN=1 \
-    app-db-runtime-role
+    app-db-runtime-role; then
+    MIGRATOR_ONE_SHOT_PASSWORD=""
+    return 1
+  fi
+  MIGRATOR_ONE_SHOT_PASSWORD=""
 }
 
 run_admin_bootstrap() {
@@ -234,7 +261,20 @@ run_admin_bootstrap() {
       -v "$legacy_receipt_file:/run/pinvi/m05/legacy-rebaseline-receipt.json:ro"
     )
   fi
-  compose "${profile_args[@]}" run --rm --no-deps \
+  if [[ "$legacy_rebaseline" == "1" ]]; then
+    compose "${profile_args[@]}" run --rm --no-deps \
+      --user "$runner_user" \
+      -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
+      -v "$credential_file:$credential_file:ro" \
+      "${legacy_args[@]}" \
+      "$service" pinvi-admin-bootstrap
+    return
+  fi
+  [[ -n "$MIGRATOR_ONE_SHOT_PASSWORD" ]] || {
+    echo "one-shot migrator password is unavailable" >&2
+    return 1
+  }
+  compose_with_one_shot_migrator_password "${profile_args[@]}" run --rm --no-deps \
     --user "$runner_user" \
     -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
     -v "$credential_file:$credential_file:ro" \

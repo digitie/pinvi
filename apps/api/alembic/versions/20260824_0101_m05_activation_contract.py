@@ -284,6 +284,8 @@ JOIN pg_roles AS current_role_row ON current_role_row.rolname = current_user
 WHERE database_row.datname = current_database()
   AND session_user = current_user
 """
+_LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL = "SET LOCAL lock_timeout = '5s'"
+_LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_RESET_SQL = "SET LOCAL lock_timeout = 0"
 _LEGACY_REBASELINE_DDL_CAPABLE_SESSIONS_CTE = """
 WITH app_schema AS (
   SELECT namespace.oid, namespace.nspowner
@@ -746,7 +748,17 @@ def _acquire_legacy_rebaseline_database_connection_fence(bind: sa.Connection) ->
         raise RuntimeError(
             "0101 legacy rebaseline requires database-owner connection fence authority"
         )
-    bind.execute(sa.text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE"))
+    bind.execute(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL))
+    try:
+        bind.execute(sa.text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE"))
+    except sa.exc.DBAPIError as exc:
+        # pg_database AccessShare lock을 잡은 기존 backend는 DDL-capable PID 열거 전에
+        # 이 fence를 막을 수 있다. 이 경우 transaction 전체를 fail-close하여 무기한
+        # 대기나 부분 handoff를 남기지 않는다.
+        raise RuntimeError(
+            "0101 legacy rebaseline could not acquire database connection fence within 5s"
+        ) from exc
+    bind.execute(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_RESET_SQL))
     for _ in range(20):
         bind.execute(sa.text("SELECT pg_stat_clear_snapshot()"))
         pids = tuple(
@@ -879,6 +891,10 @@ def _assert_legacy_rebaseline_handoff(bind: sa.Connection) -> None:
         raise RuntimeError("0101 legacy rebaseline database proof is invalid") from exc
     if identity != expected_identity:
         raise RuntimeError("0101 legacy rebaseline receipt does not match this database")
+    # 0100 helper와 같은 순서(advisory → pg_database fence)로 잡는다. env.py의
+    # online Alembic lock과도 reentrant여서 fresh/legacy runner가 같은 head를
+    # 읽기 전부터 직렬화된다.
+    bind.execute(sa.text(_LEGACY_REBASELINE_SERIALIZATION_LOCK_SQL))
     _acquire_legacy_rebaseline_database_connection_fence(bind)
     _assert_legacy_rebaseline_fingerprint(bind, preflight)
     version_rows_payload = bind.scalar(

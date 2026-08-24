@@ -293,7 +293,7 @@ services:
       # The non-inheriting login defaults to app schema owner, then 0101 switches its
       # M05 receipt DDL to PINVI_MIGRATION_OWNER and restores the app owner for versioning.
       PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
-      PINVI_DATABASE_URL: ${PINVI_MIGRATOR_DATABASE_URL:-postgresql+asyncpg://pinvi_migrator:pinvi_app_smoke@app-postgres:5432/pinvi}
+      PINVI_DATABASE_URL: ${PINVI_MIGRATOR_DATABASE_URL:-postgresql+asyncpg://${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}:${PINVI_MIGRATOR_DB_PASSWORD:-pinvi_app_smoke}@app-postgres:5432/pinvi}
       PINVI_MIGRATION_OWNER: ${PINVI_MIGRATION_OWNER:-pinvi_migration_owner}
       PINVI_MIGRATOR_DB_USER: ${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}
       PINVI_M05_LEGACY_REBASELINE: "0"

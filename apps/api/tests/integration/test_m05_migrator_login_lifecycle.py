@@ -48,6 +48,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
     migration_owner = f"m05_migration_owner_{suffix}"
     migrator_role = f"m05_migrator_{suffix}"
     password = "m05-compose-test-password"
+    ephemeral_password = "m05-one-shot-ephemeral-password"
     environment_file = tmp_path / "compose.env"
     environment_file.write_text(
         "\n".join(
@@ -138,6 +139,62 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
         compose("run", "--rm", "--no-deps", "app-db-runtime-role")
         assert role_state() == ("false", "false", "0", "false", "true")
 
+        # legacy 0101이 app catalog을 schema owner로 넘긴 뒤에도 다음 DDL에 runtime
+        # grant가 남아야 한다. canonical owner의 default ACL을 일부러 비운 뒤 legacy
+        # bootstrap으로 다시 고정하고, 그 owner가 만든 table/sequence를 직접 확인한다.
+        compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            f'ALTER DEFAULT PRIVILEGES FOR ROLE "{schema_owner}" IN SCHEMA app '
+            f'REVOKE ALL ON TABLES FROM "{runtime_role}"; '
+            f'ALTER DEFAULT PRIVILEGES FOR ROLE "{schema_owner}" IN SCHEMA app '
+            f'REVOKE ALL ON SEQUENCES FROM "{runtime_role}";',
+        )
+        compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "--env",
+            "PINVI_M05_LEGACY_REBASELINE=1",
+            "--env",
+            "PINVI_MIGRATOR_DISABLE_LOGIN=1",
+            "app-db-runtime-role",
+        )
+        compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            f'SET ROLE "{schema_owner}"; '
+            "CREATE TABLE app.legacy_default_acl_probe (id bigserial PRIMARY KEY); "
+            "RESET ROLE;",
+        )
+        default_acl_probe = compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            "--no-psqlrc",
+            "--tuples-only",
+            "--no-align",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            f"SELECT has_table_privilege('{runtime_role}', 'app.legacy_default_acl_probe', "
+            "'SELECT, INSERT, UPDATE, DELETE')::text, "
+            f"has_sequence_privilege('{runtime_role}', 'app.legacy_default_acl_probe_id_seq', "
+            "'USAGE, SELECT, UPDATE')::text;",
+        )
+        assert default_acl_probe.stdout.strip() == "true|true"
+
         compose(
             "exec",
             "-T",
@@ -208,9 +265,26 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             "--no-deps",
             "--env",
             "PINVI_MIGRATOR_DISABLE_LOGIN=0",
+            "--env",
+            f"PINVI_MIGRATOR_DB_PASSWORD={ephemeral_password}",
             "app-db-runtime-role",
         )
         assert role_state() == ("true", "true", "0", "false", "true")
+
+        stale_password = compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "--entrypoint",
+            "/bin/sh",
+            "app-db-runtime-role",
+            "-ec",
+            'PGPASSWORD="$PINVI_MIGRATOR_DB_PASSWORD" exec psql --no-psqlrc '
+            '--no-password --host=app-postgres --username="$PINVI_MIGRATOR_DB_USER" '
+            '--dbname="$POSTGRES_DB" --command="SELECT 1"',
+            check=False,
+        )
+        assert stale_password.returncode != 0
 
         compose(
             "run",
@@ -218,6 +292,8 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             "--name",
             client_name,
             "--no-deps",
+            "--env",
+            f"PINVI_MIGRATOR_DB_PASSWORD={ephemeral_password}",
             "--entrypoint",
             "/bin/sh",
             "app-db-runtime-role",

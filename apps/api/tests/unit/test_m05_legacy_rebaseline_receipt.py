@@ -69,6 +69,9 @@ class _BoundIdentity:
             return json.dumps(self.version_rows)
         raise AssertionError(f"unexpected legacy handoff statement: {sql}")
 
+    def execute(self, statement: object) -> None:
+        assert "pg_advisory_xact_lock" in str(statement)
+
 
 def _root_owned_fstat(module):  # type: ignore[no-untyped-def]
     actual_fstat = module.os.fstat

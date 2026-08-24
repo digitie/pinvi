@@ -199,12 +199,6 @@ else
   migrator_login_attribute="LOGIN"
 fi
 
-if [ "${PINVI_M05_LEGACY_REBASELINE}" = "1" ]; then
-  default_privilege_owner="${POSTGRES_USER}"
-else
-  default_privilege_owner="${PINVI_APP_SCHEMA_OWNER}"
-fi
-
 psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host=app-postgres \
   --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
   --set="bootstrap_owner=${POSTGRES_USER}" \
@@ -317,11 +311,13 @@ SELECT format('ALTER SCHEMA app OWNER TO %I', :'schema_owner')
 SQL
 fi
 
-psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host=app-postgres \
-  --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
-  --set="app_role=${PINVI_APP_DB_USER}" \
-  --set="default_privilege_owner=${default_privilege_owner}" \
-  >/dev/null <<'SQL'
+grant_app_runtime_privileges() {
+  default_privilege_owner="$1"
+  psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host=app-postgres \
+    --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+    --set="app_role=${PINVI_APP_DB_USER}" \
+    --set="default_privilege_owner=${default_privilege_owner}" \
+    >/dev/null <<'SQL'
 REVOKE ALL ON SCHEMA app FROM PUBLIC;
 GRANT USAGE ON SCHEMA app TO :"app_role";
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO :"app_role";
@@ -331,6 +327,16 @@ ALTER DEFAULT PRIVILEGES FOR ROLE :"default_privilege_owner" IN SCHEMA app
 ALTER DEFAULT PRIVILEGES FOR ROLE :"default_privilege_owner" IN SCHEMA app
   GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"app_role";
 SQL
+}
+
+if [ "${PINVI_M05_LEGACY_REBASELINE}" = "1" ]; then
+  # 0101 tail가 app catalog을 canonical owner로 넘긴 직후에도, 다음 app DDL의
+  # runtime grant가 끊기지 않게 legacy owner와 canonical owner 둘 다 고정한다.
+  grant_app_runtime_privileges "${POSTGRES_USER}"
+  grant_app_runtime_privileges "${PINVI_APP_SCHEMA_OWNER}"
+else
+  grant_app_runtime_privileges "${PINVI_APP_SCHEMA_OWNER}"
+fi
 
 role_topology_safe="$(
   psql --no-psqlrc --no-password --tuples-only --no-align --host=app-postgres \

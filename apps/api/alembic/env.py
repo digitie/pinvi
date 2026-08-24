@@ -24,6 +24,11 @@ if config.config_file_name is not None:
 
 target_metadata = metadata
 
+# 모든 online Alembic run은 revision graph를 읽기 전에 같은 transaction-scoped
+# advisory lock을 잡는다. 두 runner가 0100에서 동시에 시작해도 두 번째 runner는
+# 첫 commit 뒤의 0101 head를 읽으므로 stale version-row update나 중복 DDL이 없다.
+_MIGRATION_SERIALIZATION_LOCK_SQL = "SELECT pg_advisory_xact_lock(1863432274, 20260824)"
+
 
 def get_url() -> str:
     return settings.pinvi_database_url
@@ -44,6 +49,7 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
+    connection.execute(text(_MIGRATION_SERIALIZATION_LOCK_SQL))
     connection.execute(text("CREATE SCHEMA IF NOT EXISTS app"))
     connection.execute(text("CREATE SCHEMA IF NOT EXISTS x_extension"))
     context.configure(

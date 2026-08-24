@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -294,6 +295,8 @@ JOIN pg_roles AS current_role_row ON current_role_row.rolname = current_user
 WHERE database_row.datname = current_database()
   AND session_user = current_user
 """
+_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL = "SET LOCAL lock_timeout = '5s'"
+_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_RESET_SQL = "SET LOCAL lock_timeout = 0"
 
 # table lock만으로 enum/domain/operator처럼 relation 밖에 저장되는 app DDL을 멈출 수는
 # 없다. owner role은 direct login뿐 아니라 INHERIT membership나 SET ROLE로도 쓸 수
@@ -1016,9 +1019,19 @@ async def _acquire_rebaseline_database_connection_fence(
         raise RebaselineError(
             "rebaseline requires database-owner connection fence authority"
         )
-    await connection.execute(
-        text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE")
-    )
+    await connection.execute(text(_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL))
+    try:
+        await connection.execute(
+            text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE")
+        )
+    except DBAPIError as exc:
+        # 기존 backend가 pg_database AccessShare lock을 길게 보유하면 client를
+        # 식별·종료하기도 전에 여기서 막힌다. 무기한 대기하지 않고 transaction을
+        # rollback하게 하여 다음 승인된 재시도에 맡긴다.
+        raise RebaselineError(
+            "rebaseline could not acquire database connection fence within 5s"
+        ) from exc
+    await connection.execute(text(_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_RESET_SQL))
     for _ in range(20):
         await connection.execute(text("SELECT pg_stat_clear_snapshot()"))
         pids = tuple(

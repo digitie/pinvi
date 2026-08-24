@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
@@ -24,12 +25,10 @@ API_DIR = Path(__file__).resolve().parents[2]
 _ROLE_PASSWORD = "m05-role-owner-test-only"
 
 
-def _alembic(
+def _alembic_environment(
     database_url: str,
-    *args: str,
-    check: bool = True,
     environment: Mapping[str, str | None] | None = None,
-) -> subprocess.CompletedProcess[str]:
+) -> dict[str, str]:
     env = dict(os.environ)
     env["PINVI_DATABASE_URL"] = database_url
     for key, value in (environment or {}).items():
@@ -37,6 +36,16 @@ def _alembic(
             env.pop(key, None)
         else:
             env[key] = value
+    return env
+
+
+def _alembic(
+    database_url: str,
+    *args: str,
+    check: bool = True,
+    environment: Mapping[str, str | None] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    env = _alembic_environment(database_url, environment)
     return subprocess.run(  # noqa: S603
         [sys.executable, "-m", "alembic", *args],
         cwd=API_DIR,
@@ -846,6 +855,123 @@ async def test_0101_connection_fence_evicts_ddl_clients_and_restores_admission(
         finally:
             await restored_engine.dispose()
     finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fence_kind", ("helper", "migration"))
+async def test_rebaseline_connection_fence_fails_closed_when_catalog_lock_is_blocked(
+    _database_url: str,
+    fence_kind: str,
+) -> None:
+    """pg_database를 먼저 읽은 backend가 있어도 0100/0101 fence는 유한 시간에 멈춘다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_fence_timeout")
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        module = _rebaseline_module() if fence_kind == "helper" else _activation_migration_module()
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            blocker = await engine.connect()
+            fence = await engine.connect()
+            blocker_transaction = await blocker.begin()
+            fence_transaction = await fence.begin()
+            try:
+                # pg_database relation의 AccessShare lock은 transaction 종료까지 유지된다.
+                await blocker.execute(text("SELECT * FROM pg_catalog.pg_database"))
+                started_at = time.monotonic()
+                with pytest.raises(
+                    RuntimeError, match="could not acquire database connection fence within 5s"
+                ):
+                    if fence_kind == "helper":
+                        await module._acquire_rebaseline_database_connection_fence(fence)
+                    else:
+                        await fence.run_sync(
+                            module._acquire_legacy_rebaseline_database_connection_fence
+                        )
+                assert time.monotonic() - started_at < 7
+            finally:
+                await fence_transaction.rollback()
+                await blocker_transaction.rollback()
+                await fence.close()
+                await blocker.close()
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
+async def test_online_alembic_serializes_concurrent_fresh_upgrades(
+    _database_url: str,
+) -> None:
+    """두 fresh runner가 함께 시작해도 하나의 0101 head만 만들고 둘 다 성공한다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_concurrent_upgrade")
+    processes: list[asyncio.subprocess.Process] = []
+    engine = create_async_engine(target_url, poolclass=NullPool)
+    try:
+        async with engine.connect() as blocker:
+            transaction = await blocker.begin()
+            try:
+                await blocker.execute(text("SELECT pg_advisory_xact_lock(1863432274, 20260824)"))
+                environment = _alembic_environment(
+                    target_url,
+                    {
+                        "PINVI_M05_LEGACY_REBASELINE": None,
+                        "PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH": None,
+                    },
+                )
+                for _ in range(2):
+                    processes.append(
+                        await asyncio.create_subprocess_exec(
+                            sys.executable,
+                            "-m",
+                            "alembic",
+                            "upgrade",
+                            "head",
+                            cwd=API_DIR,
+                            env=environment,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE,
+                        )
+                    )
+                for _ in range(100):
+                    waiters = await blocker.scalar(
+                        text(
+                            "SELECT count(*) FROM pg_locks "
+                            "WHERE locktype = 'advisory' "
+                            "AND classid = 1863432274 "
+                            "AND objid = 20260824 "
+                            "AND NOT granted"
+                        )
+                    )
+                    if waiters == 2:
+                        break
+                    await asyncio.sleep(0.1)
+                assert waiters == 2
+                await transaction.commit()
+            finally:
+                if transaction.is_active:
+                    await transaction.rollback()
+
+        results = await asyncio.gather(
+            *(asyncio.wait_for(process.communicate(), timeout=30) for process in processes)
+        )
+        for process, (stdout, stderr) in zip(processes, results, strict=True):
+            assert process.returncode == 0, (stdout + stderr).decode()
+
+        async with engine.connect() as connection:
+            assert await connection.scalar(
+                text("SELECT array_agg(version_num ORDER BY version_num) FROM app.alembic_version")
+            ) == ["20260824_0101"]
+    finally:
+        for process in processes:
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+        await engine.dispose()
         await _drop_database(maintenance_url, target_url)
 
 

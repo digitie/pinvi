@@ -29,7 +29,7 @@ def test_compose_keeps_runtime_and_migrator_role_inputs_separate() -> None:
         assert value in role_bootstrap_block
     assert 'PINVI_MIGRATOR_DISABLE_LOGIN: "1"' in role_bootstrap_block
     assert 'PINVI_M05_LEGACY_REBASELINE: "0"' in role_bootstrap_block
-    assert "postgresql+asyncpg://pinvi_migrator:" in migrator_block
+    assert "postgresql+asyncpg://${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}:" in migrator_block
     assert "PINVI_MIGRATION_OWNER" in migrator_block
     assert "PINVI_MIGRATOR_DB_USER" in migrator_block
     assert "PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}" in migrator_block
@@ -72,6 +72,9 @@ def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
     assert "GRANT EXECUTE ON FUNCTION x_extension.digest(bytea, text)" in bootstrap
     assert "WHERE membership.roleid = owner.oid" in bootstrap
     assert "WHERE membership.roleid = migrator.oid" in bootstrap
+    assert "grant_app_runtime_privileges()" in bootstrap
+    assert 'grant_app_runtime_privileges "${POSTGRES_USER}"' in bootstrap
+    assert 'grant_app_runtime_privileges "${PINVI_APP_SCHEMA_OWNER}"' in bootstrap
 
 
 def test_0101_switches_only_m05_objects_and_restores_app_owner_for_versioning() -> None:
@@ -102,6 +105,14 @@ def test_0101_switches_only_m05_objects_and_restores_app_owner_for_versioning() 
     assert upgrade.index("_assert_legacy_rebaseline_handoff(bind)") < upgrade.index(
         "_advance_boundary_contract()"
     )
+    handoff = migration[
+        migration.index("def _assert_legacy_rebaseline_handoff") : migration.index(
+            "def _activate_m05_migration_owner"
+        )
+    ]
+    assert handoff.index("_LEGACY_REBASELINE_SERIALIZATION_LOCK_SQL") < handoff.index(
+        "_acquire_legacy_rebaseline_database_connection_fence(bind)"
+    )
 
 
 def test_rebaseline_fence_blocks_new_backends_and_catches_inherited_catalog_owners() -> None:
@@ -112,11 +123,17 @@ def test_rebaseline_fence_blocks_new_backends_and_catches_inherited_catalog_owne
 
     for source in (helper, migration):
         assert "LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE" in source
+        assert "SET LOCAL lock_timeout = '5s'" in source
+        assert "could not acquire database connection fence within 5s" in source
         assert "SELECT pg_stat_clear_snapshot()" in source
         assert "SELECT pg_terminate_backend(:pid, 5000)" in source
         assert "pg_has_role(activity.usesysid, owner_row.owner_oid, 'USAGE')" in source
         assert "pg_has_role(activity.usesysid, owner_row.owner_oid, 'SET')" in source
         assert "ALLOW_CONNECTIONS false" not in source
+
+    env = (ROOT / "apps" / "api" / "alembic" / "env.py").read_text(encoding="utf-8")
+    assert "_MIGRATION_SERIALIZATION_LOCK_SQL" in env
+    assert env.index("_MIGRATION_SERIALIZATION_LOCK_SQL") < env.index("context.run_migrations()")
 
 
 def test_migration_wrappers_open_only_for_the_one_shot_and_seal_afterward() -> None:
@@ -135,6 +152,11 @@ def test_migration_wrappers_open_only_for_the_one_shot_and_seal_afterward() -> N
         assert 'runner_user="0:0"' in source
         assert "legacy-rebaseline-receipt.json:ro" in source
         assert "run --rm --no-deps" in source
+        assert "MIGRATOR_ONE_SHOT_PASSWORD" in source
+        assert "od -An -N32 -tx1 /dev/urandom" in source
+        assert 'PINVI_MIGRATOR_DB_PASSWORD="$MIGRATOR_ONE_SHOT_PASSWORD" compose run' in source
+        assert "compose_with_one_shot_migrator_password" in source
+        assert 'MIGRATOR_ONE_SHOT_PASSWORD=""' in source
         assert 'if ! prepare_migrator_login "$legacy_rebaseline"; then' in migration
         assert "migrator preparation failed; sealing the one-shot login" in migration
         assert (
