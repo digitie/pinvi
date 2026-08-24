@@ -277,7 +277,14 @@ WHERE namespace.nspname = 'app'
 ORDER BY relation.relname COLLATE "C"
 """
 _LEGACY_REBASELINE_SERIALIZATION_LOCK_SQL = "SELECT pg_advisory_xact_lock(1863432274, 20260824)"
-_LEGACY_REBASELINE_DDL_QUIESCENCE_SQL = """
+_LEGACY_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL = """
+SELECT current_role_row.rolsuper OR database_row.datdba = current_role_row.oid
+FROM pg_database AS database_row
+JOIN pg_roles AS current_role_row ON current_role_row.rolname = current_user
+WHERE database_row.datname = current_database()
+  AND session_user = current_user
+"""
+_LEGACY_REBASELINE_DDL_CAPABLE_SESSIONS_CTE = """
 WITH app_schema AS (
   SELECT namespace.oid, namespace.nspowner
   FROM pg_namespace AS namespace
@@ -333,9 +340,9 @@ app_catalog_owners(owner_oid) AS (
   SELECT extension_row.extowner
   FROM pg_extension AS extension_row
   JOIN app_schema AS schema ON schema.oid = extension_row.extnamespace
-)
-SELECT NOT EXISTS (
-  SELECT 1
+),
+ddl_capable_sessions(pid) AS (
+  SELECT activity.pid
   FROM pg_stat_activity AS activity
   LEFT JOIN pg_roles AS role_row ON role_row.oid = activity.usesysid
   WHERE activity.datname = current_database()
@@ -344,14 +351,34 @@ SELECT NOT EXISTS (
     AND (
       COALESCE(role_row.rolsuper, false)
       OR COALESCE(has_schema_privilege(activity.usesysid, 'app', 'CREATE'), false)
-      OR COALESCE(
-        pg_has_role(activity.usesysid, (SELECT nspowner FROM app_schema), 'SET'),
-        false
+      OR EXISTS (
+        SELECT 1
+        FROM app_catalog_owners AS owner_row
+        WHERE activity.usesysid = owner_row.owner_oid
+          OR COALESCE(
+            pg_has_role(activity.usesysid, owner_row.owner_oid, 'USAGE'),
+            false
+          )
+          OR COALESCE(
+            pg_has_role(activity.usesysid, owner_row.owner_oid, 'SET'),
+            false
+          )
       )
-      OR activity.usesysid IN (SELECT owner_oid FROM app_catalog_owners)
     )
 )
 """
+_LEGACY_REBASELINE_DDL_QUIESCENCE_SQL = "".join(
+    (
+        _LEGACY_REBASELINE_DDL_CAPABLE_SESSIONS_CTE,
+        "SELECT NOT EXISTS (SELECT 1 FROM ddl_capable_sessions)",
+    )
+)
+_LEGACY_REBASELINE_DDL_CAPABLE_SESSION_IDS_SQL = "".join(
+    (
+        _LEGACY_REBASELINE_DDL_CAPABLE_SESSIONS_CTE,
+        "SELECT pid FROM ddl_capable_sessions ORDER BY pid",
+    )
+)
 
 
 def _split_postgres_statements(source: str) -> tuple[str, ...]:
@@ -705,9 +732,36 @@ def _lock_legacy_rebaseline_app_tables(bind: sa.Connection, tables: tuple[str, .
 def _assert_legacy_rebaseline_ddl_quiescence(bind: sa.Connection) -> None:
     """Receipt 검증 중 app DDL을 할 수 있는 다른 세션을 fail-close한다."""
 
+    bind.execute(sa.text("SELECT pg_stat_clear_snapshot()"))
     ddl_quiescent = bind.scalar(sa.text(_LEGACY_REBASELINE_DDL_QUIESCENCE_SQL))
     if ddl_quiescent is not True:
         raise RuntimeError("0101 legacy rebaseline requires app DDL quiescence")
+
+
+def _acquire_legacy_rebaseline_database_connection_fence(bind: sa.Connection) -> None:
+    """새 backend를 막고 기존 DDL 가능 client를 종료한 뒤 quiescence를 증명한다."""
+
+    has_authority = bind.scalar(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL))
+    if has_authority is not True:
+        raise RuntimeError(
+            "0101 legacy rebaseline requires database-owner connection fence authority"
+        )
+    bind.execute(sa.text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE"))
+    for _ in range(20):
+        bind.execute(sa.text("SELECT pg_stat_clear_snapshot()"))
+        pids = tuple(
+            int(pid)
+            for pid in bind.execute(
+                sa.text(_LEGACY_REBASELINE_DDL_CAPABLE_SESSION_IDS_SQL)
+            ).scalars()
+        )
+        if not pids:
+            _assert_legacy_rebaseline_ddl_quiescence(bind)
+            return
+        for pid in pids:
+            bind.scalar(sa.text("SELECT pg_terminate_backend(:pid, 5000)"), {"pid": pid})
+        bind.execute(sa.text("SELECT pg_sleep(0.05)"))
+    raise RuntimeError("0101 legacy rebaseline could not prove app DDL quiescence")
 
 
 def _legacy_rebaseline_catalog_fingerprint(bind: sa.Connection) -> tuple[int, str]:
@@ -825,6 +879,7 @@ def _assert_legacy_rebaseline_handoff(bind: sa.Connection) -> None:
         raise RuntimeError("0101 legacy rebaseline database proof is invalid") from exc
     if identity != expected_identity:
         raise RuntimeError("0101 legacy rebaseline receipt does not match this database")
+    _acquire_legacy_rebaseline_database_connection_fence(bind)
     _assert_legacy_rebaseline_fingerprint(bind, preflight)
     version_rows_payload = bind.scalar(
         sa.text(

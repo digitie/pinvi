@@ -104,6 +104,21 @@ def test_0101_switches_only_m05_objects_and_restores_app_owner_for_versioning() 
     )
 
 
+def test_rebaseline_fence_blocks_new_backends_and_catches_inherited_catalog_owners() -> None:
+    helper = (ROOT / "scripts" / "alembic_rebaseline.py").read_text(encoding="utf-8")
+    migration = (
+        ROOT / "apps" / "api" / "alembic" / "versions" / "20260824_0101_m05_activation_contract.py"
+    ).read_text(encoding="utf-8")
+
+    for source in (helper, migration):
+        assert "LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE" in source
+        assert "SELECT pg_stat_clear_snapshot()" in source
+        assert "SELECT pg_terminate_backend(:pid, 5000)" in source
+        assert "pg_has_role(activity.usesysid, owner_row.owner_oid, 'USAGE')" in source
+        assert "pg_has_role(activity.usesysid, owner_row.owner_oid, 'SET')" in source
+        assert "ALLOW_CONNECTIONS false" not in source
+
+
 def test_migration_wrappers_open_only_for_the_one_shot_and_seal_afterward() -> None:
     for path in (ROOT / "scripts" / "docker-app.sh", ROOT / "scripts" / "deploy-node.sh"):
         source = path.read_text(encoding="utf-8")

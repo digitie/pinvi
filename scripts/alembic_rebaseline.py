@@ -284,10 +284,22 @@ _REBASELINE_SERIALIZATION_LOCK_SQL = (
     "SELECT pg_advisory_xact_lock(1863432274, 20260824)"
 )
 
+# `apply`는 database owner/root-only 연결로만 수행한다. transaction 전체에 shared
+# `pg_database`의 AccessExclusive lock을 유지해 새 backend가 startup 중에 멈추도록
+# 하므로, 그 강한 cluster-level fence 권한을 명시적으로 요구한다.
+_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL = """
+SELECT current_role_row.rolsuper OR database_row.datdba = current_role_row.oid
+FROM pg_database AS database_row
+JOIN pg_roles AS current_role_row ON current_role_row.rolname = current_user
+WHERE database_row.datname = current_database()
+  AND session_user = current_user
+"""
+
 # table lock만으로 enum/domain/operator처럼 relation 밖에 저장되는 app DDL을 멈출 수는
-# 없다. receipt를 작성하거나 소비할 때 app catalog owner·schema CREATE·SET ROLE 권한을
-# 가진 별도 client backend가 하나라도 있으면 fail-close한다.
-_REBASELINE_DDL_QUIESCENCE_SQL = """
+# 없다. owner role은 direct login뿐 아니라 INHERIT membership나 SET ROLE로도 쓸 수
+# 있으므로, receipt를 작성하거나 소비할 때 그런 별도 client backend가 하나라도 있으면
+# fail-close한다.
+_REBASELINE_DDL_CAPABLE_SESSIONS_CTE = """
 WITH app_schema AS (
   SELECT namespace.oid, namespace.nspowner
   FROM pg_namespace AS namespace
@@ -343,9 +355,9 @@ app_catalog_owners(owner_oid) AS (
   SELECT extension_row.extowner
   FROM pg_extension AS extension_row
   JOIN app_schema AS schema ON schema.oid = extension_row.extnamespace
-)
-SELECT NOT EXISTS (
-  SELECT 1
+),
+ddl_capable_sessions(pid) AS (
+  SELECT activity.pid
   FROM pg_stat_activity AS activity
   LEFT JOIN pg_roles AS role_row ON role_row.oid = activity.usesysid
   WHERE activity.datname = current_database()
@@ -354,14 +366,30 @@ SELECT NOT EXISTS (
     AND (
       COALESCE(role_row.rolsuper, false)
       OR COALESCE(has_schema_privilege(activity.usesysid, 'app', 'CREATE'), false)
-      OR COALESCE(
-        pg_has_role(activity.usesysid, (SELECT nspowner FROM app_schema), 'SET'),
-        false
+      OR EXISTS (
+        SELECT 1
+        FROM app_catalog_owners AS owner_row
+        WHERE activity.usesysid = owner_row.owner_oid
+          OR COALESCE(
+            pg_has_role(activity.usesysid, owner_row.owner_oid, 'USAGE'),
+            false
+          )
+          OR COALESCE(
+            pg_has_role(activity.usesysid, owner_row.owner_oid, 'SET'),
+            false
+          )
       )
-      OR activity.usesysid IN (SELECT owner_oid FROM app_catalog_owners)
     )
 )
 """
+_REBASELINE_DDL_QUIESCENCE_SQL = (
+    _REBASELINE_DDL_CAPABLE_SESSIONS_CTE
+    + "SELECT NOT EXISTS (SELECT 1 FROM ddl_capable_sessions)"
+)
+_REBASELINE_DDL_CAPABLE_SESSION_IDS_SQL = (
+    _REBASELINE_DDL_CAPABLE_SESSIONS_CTE
+    + "SELECT pid FROM ddl_capable_sessions ORDER BY pid"
+)
 
 _LEGACY_SENTINELS_SQL = """
 SELECT
@@ -967,6 +995,49 @@ async def _normalize_fingerprint_session(connection: AsyncConnection) -> None:
         await connection.execute(text(statement))
 
 
+async def _assert_rebaseline_ddl_quiescence(connection: AsyncConnection) -> None:
+    """Fail-close unless no other client can mutate the protected app catalog."""
+
+    await connection.execute(text("SELECT pg_stat_clear_snapshot()"))
+    ddl_quiescent = await connection.scalar(text(_REBASELINE_DDL_QUIESCENCE_SQL))
+    if ddl_quiescent is not True:
+        raise RebaselineError("rebaseline requires app DDL quiescence")
+
+
+async def _acquire_rebaseline_database_connection_fence(
+    connection: AsyncConnection,
+) -> None:
+    """Block new backends, evict existing DDL-capable clients, then prove quiescence."""
+
+    has_authority = await connection.scalar(
+        text(_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL)
+    )
+    if has_authority is not True:
+        raise RebaselineError(
+            "rebaseline requires database-owner connection fence authority"
+        )
+    await connection.execute(
+        text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE")
+    )
+    for _ in range(20):
+        await connection.execute(text("SELECT pg_stat_clear_snapshot()"))
+        pids = tuple(
+            int(pid)
+            for pid in (
+                await connection.execute(text(_REBASELINE_DDL_CAPABLE_SESSION_IDS_SQL))
+            ).scalars()
+        )
+        if not pids:
+            await _assert_rebaseline_ddl_quiescence(connection)
+            return
+        for pid in pids:
+            await connection.scalar(
+                text("SELECT pg_terminate_backend(:pid, 5000)"), {"pid": pid}
+            )
+        await connection.execute(text("SELECT pg_sleep(0.05)"))
+    raise RebaselineError("rebaseline could not prove app DDL quiescence")
+
+
 async def _app_data_fingerprint(connection: AsyncConnection) -> tuple[int, int, str]:
     """0061 대상의 실제 app data 내용까지 PII를 남기지 않고 고정한다."""
 
@@ -1138,11 +1209,7 @@ async def _apply(
     try:
         async with engine.begin() as connection:
             await connection.execute(text(_REBASELINE_SERIALIZATION_LOCK_SQL))
-            ddl_quiescent = await connection.scalar(
-                text(_REBASELINE_DDL_QUIESCENCE_SQL)
-            )
-            if ddl_quiescent is not True:
-                raise RebaselineError("rebaseline requires app DDL quiescence")
+            await _acquire_rebaseline_database_connection_fence(connection)
             locked_versions = await _read_version_rows(connection, lock=True)
             if locked_versions not in {(LEGACY_REVISION,), (BASELINE_REVISION,)}:
                 raise RebaselineError(

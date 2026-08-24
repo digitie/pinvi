@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import importlib.util
 import json
@@ -594,7 +595,7 @@ async def test_0101_legacy_handoff_revalidates_receipt_data_before_ddl(
 
 
 def test_0101_legacy_catalog_serializer_matches_rebaseline_helper() -> None:
-    """receipt producer와 0101 consumer가 같은 catalog serialization을 유지한다."""
+    """receipt producer와 0101 consumer가 같은 catalog·DDL fence serialization을 유지한다."""
 
     rebaseline = _rebaseline_module()
     migration = _activation_migration_module()
@@ -602,6 +603,14 @@ def test_0101_legacy_catalog_serializer_matches_rebaseline_helper() -> None:
     assert (
         migration._LEGACY_REBASELINE_CATALOG_FINGERPRINT_SQL.strip()
         == rebaseline._CATALOG_FINGERPRINT_SQL.strip()
+    )
+    assert (
+        migration._LEGACY_REBASELINE_DDL_CAPABLE_SESSIONS_CTE.strip()
+        == rebaseline._REBASELINE_DDL_CAPABLE_SESSIONS_CTE.strip()
+    )
+    assert (
+        migration._LEGACY_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL.strip()
+        == rebaseline._REBASELINE_DATABASE_FENCE_AUTHORITY_SQL.strip()
     )
 
 
@@ -664,22 +673,178 @@ async def test_0101_legacy_catalog_fingerprint_covers_nonrelation_schema_objects
 async def test_0101_legacy_receipt_rejects_parallel_ddl_capable_session(
     _database_url: str,
 ) -> None:
-    """catalog row 외 DDL도 receipt 검증 중에는 별도 owner session과 공존할 수 없다."""
+    """상속된 app owner도 SET ROLE 없이 DDL 가능하므로 receipt 검증에서 막는다."""
 
+    suffix = uuid.uuid4().hex[:12]
+    app_owner = f"m05_ddl_owner_{suffix}"
+    inherited_member = f"m05_ddl_member_{suffix}"
     target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_ddl_quiescence")
+    try:
+        for statement in (
+            f'CREATE ROLE "{app_owner}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE '
+            "NOREPLICATION NOBYPASSRLS NOINHERIT;",
+            f'CREATE ROLE "{inherited_member}" LOGIN INHERIT NOSUPERUSER NOCREATEDB '
+            f"NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD '{_ROLE_PASSWORD}';",
+            f'GRANT "{app_owner}" TO "{inherited_member}" WITH INHERIT TRUE, SET FALSE;',
+        ):
+            await _execute_autocommit(maintenance_url, statement)
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        migration = _activation_migration_module()
+        await _execute_autocommit(target_url, f'ALTER SCHEMA app OWNER TO "{app_owner}"')
+        member_url = _role_database_url(
+            target_url,
+            role=inherited_member,
+            password=_ROLE_PASSWORD,
+            database=make_url(target_url).database or "",
+        )
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        member_engine = create_async_engine(member_url, poolclass=NullPool)
+        try:
+            async with member_engine.connect() as blocker:
+                transaction = await blocker.begin()
+                try:
+                    assert (
+                        await blocker.scalar(
+                            text("SELECT has_schema_privilege(current_user, 'app', 'CREATE')")
+                        )
+                        is True
+                    )
+                    assert (
+                        await blocker.scalar(
+                            text("SELECT pg_has_role(current_user, :app_owner, 'USAGE')"),
+                            {"app_owner": app_owner},
+                        )
+                        is True
+                    )
+                    assert (
+                        await blocker.scalar(
+                            text("SELECT pg_has_role(current_user, :app_owner, 'SET')"),
+                            {"app_owner": app_owner},
+                        )
+                        is False
+                    )
+                    await blocker.execute(text("CREATE TABLE app.inherited_ddl_probe (id integer)"))
+                    async with engine.begin() as probe:
+                        with pytest.raises(RuntimeError, match="app DDL quiescence"):
+                            await probe.run_sync(migration._assert_legacy_rebaseline_ddl_quiescence)
+                finally:
+                    await transaction.rollback()
+        finally:
+            await member_engine.dispose()
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+        await _execute_autocommit(
+            maintenance_url,
+            f'DROP ROLE IF EXISTS "{inherited_member}", "{app_owner}";',
+        )
+
+
+@pytest.mark.asyncio
+async def test_rebaseline_connection_fence_evicts_ddl_clients_and_restores_admission(
+    _database_url: str,
+) -> None:
+    """0100 helper는 transaction 동안 새 접속과 기존 DDL 가능 client를 함께 막는다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_helper_fence")
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        rebaseline = _rebaseline_module()
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        rejected_engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            blocker = await engine.connect()
+            try:
+                blocker_pid = await blocker.scalar(text("SELECT pg_backend_pid()"))
+                assert isinstance(blocker_pid, int)
+                await blocker.rollback()
+                async with engine.begin() as fence:
+                    await rebaseline._acquire_rebaseline_database_connection_fence(fence)
+                    assert (
+                        await fence.scalar(
+                            text(
+                                "SELECT NOT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = :pid)"
+                            ),
+                            {"pid": blocker_pid},
+                        )
+                        is True
+                    )
+
+                    async def attempt_connection() -> None:
+                        async with rejected_engine.connect() as rejected:
+                            await rejected.execute(text("SELECT 1"))
+
+                    with pytest.raises((asyncio.TimeoutError, DBAPIError)):
+                        await asyncio.wait_for(attempt_connection(), timeout=0.5)
+            finally:
+                await blocker.close()
+        finally:
+            await rejected_engine.dispose()
+            await engine.dispose()
+
+        restored_engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with restored_engine.connect() as restored:
+                assert await restored.scalar(text("SELECT 1")) == 1
+        finally:
+            await restored_engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
+async def test_0101_connection_fence_evicts_ddl_clients_and_restores_admission(
+    _database_url: str,
+) -> None:
+    """0101 legacy handoff도 같은 transaction-scoped database fence를 사용한다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_0101_fence")
     try:
         baseline = _alembic(target_url, "upgrade", "20260824_0100")
         assert baseline.returncode == 0, baseline.stderr
         migration = _activation_migration_module()
         engine = create_async_engine(target_url, poolclass=NullPool)
+        rejected_engine = create_async_engine(target_url, poolclass=NullPool)
         try:
-            async with engine.connect() as blocker:
-                await blocker.execute(text("SELECT 1"))
-                async with engine.begin() as probe:
-                    with pytest.raises(RuntimeError, match="app DDL quiescence"):
-                        await probe.run_sync(migration._assert_legacy_rebaseline_ddl_quiescence)
+            blocker = await engine.connect()
+            try:
+                blocker_pid = await blocker.scalar(text("SELECT pg_backend_pid()"))
+                assert isinstance(blocker_pid, int)
+                await blocker.rollback()
+                async with engine.begin() as fence:
+                    await fence.run_sync(
+                        migration._acquire_legacy_rebaseline_database_connection_fence
+                    )
+                    assert (
+                        await fence.scalar(
+                            text(
+                                "SELECT NOT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = :pid)"
+                            ),
+                            {"pid": blocker_pid},
+                        )
+                        is True
+                    )
+
+                    async def attempt_connection() -> None:
+                        async with rejected_engine.connect() as rejected:
+                            await rejected.execute(text("SELECT 1"))
+
+                    with pytest.raises((asyncio.TimeoutError, DBAPIError)):
+                        await asyncio.wait_for(attempt_connection(), timeout=0.5)
+            finally:
+                await blocker.close()
         finally:
+            await rejected_engine.dispose()
             await engine.dispose()
+
+        restored_engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with restored_engine.connect() as restored:
+                assert await restored.scalar(text("SELECT 1")) == 1
+        finally:
+            await restored_engine.dispose()
     finally:
         await _drop_database(maintenance_url, target_url)
 
