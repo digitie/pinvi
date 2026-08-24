@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3 -I
 """staging/production M05 hotswap의 좁은 root-only host entrypoint.
 
 ordinary API와 이 entrypoint의 권한은 의도적으로 분리한다. 이 entrypoint는 canonical
@@ -19,6 +19,7 @@ import socket
 import stat
 import subprocess
 import sys
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Final, NoReturn, cast
@@ -60,6 +61,21 @@ _RUNNER_UNSAFE_ENVIRONMENT_KEYS: Final = frozenset(
         "PINVI_RESTORE_TEST_FAIL_RELEASE_ONCE",
         "PINVI_RESTORE_WRITE_ROLES",
         "PINVI_M05_RESTORE_TEST_MODE",
+        # These inputs are read only from /etc/pinvi/trusted-hotswap.json.
+        # Keep this second guard even though the root wrapper empties env: it
+        # makes direct helper reuse fail closed rather than reintroducing an
+        # environment-derived operation input.
+        "PINVI_BACKUP_SCHEMA",
+        "PINVI_ENVIRONMENT",
+        "PINVI_RESTORE_APP_ROLE",
+        "PINVI_RESTORE_DATABASE_URL",
+        "PINVI_RESTORE_FENCE_DATABASE_URL",
+        "PINVI_RESTORE_TRUSTED_BACKUP_DIR",
+        "PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME",
+        "PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID",
+        "PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER",
+        "PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR",
+        "PINVI_RESTORE_EXPECTED_SOURCE_PORT",
         # A root wrapper reads the target once and supplies the exact values
         # to every runner SQL identity guard. Caller-provided values would
         # turn that guard into a value selected by the caller.
@@ -70,15 +86,32 @@ _RUNNER_UNSAFE_ENVIRONMENT_KEYS: Final = frozenset(
         "PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER",
     }
 )
-_SOURCE_IDENTITY_ENVIRONMENT: Final = (
+_SOURCE_IDENTITY_CONFIGURATION: Final = (
     (
         "PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME",
+        "source_database_name",
         re.compile(r"[A-Za-z_][A-Za-z0-9_]*"),
     ),
-    ("PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID", re.compile(r"[0-9]+")),
-    ("PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER", re.compile(r"[0-9]+")),
-    ("PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR", re.compile(r"[0-9A-Fa-f:.]+")),
-    ("PINVI_RESTORE_EXPECTED_SOURCE_PORT", re.compile(r"[0-9]+")),
+    (
+        "PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID",
+        "source_database_oid",
+        re.compile(r"[0-9]+"),
+    ),
+    (
+        "PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER",
+        "source_system_identifier",
+        re.compile(r"[0-9]+"),
+    ),
+    (
+        "PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR",
+        "source_hostaddr",
+        re.compile(r"[0-9A-Fa-f:.]+"),
+    ),
+    (
+        "PINVI_RESTORE_EXPECTED_SOURCE_PORT",
+        "source_port",
+        re.compile(r"[0-9]+"),
+    ),
 )
 _TARGET_IDENTITY_ENVIRONMENT: Final = (
     ("PINVI_RESTORE_EXPECTED_DATABASE_NAME", "database"),
@@ -90,6 +123,38 @@ _TARGET_IDENTITY_ENVIRONMENT: Final = (
 _SAFE_ENVIRONMENT: Final = {
     "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 }
+_CONFIG_PATH: Final = Path("/etc/pinvi/trusted-hotswap.json")
+_CONFIG_FIELDS: Final = frozenset(
+    {
+        "app_role",
+        "environment",
+        "fence_database_url",
+        "restore_database_url",
+        "source_identity",
+        "source_schema",
+        "trusted_backup_dir",
+    }
+)
+_CONFIG_SOURCE_IDENTITY_FIELDS: Final = frozenset(
+    {"database_name", "database_oid", "hostaddr", "port", "system_identifier"}
+)
+
+
+@dataclass(frozen=True)
+class TrustedHotswapConfiguration:
+    """Root-only hotswap input. 호출자의 환경변수로 대체할 수 없다."""
+
+    app_role: str
+    environment: str
+    fence_database_url: str
+    restore_database_url: str
+    source_database_name: str
+    source_database_oid: str
+    source_hostaddr: str
+    source_port: str
+    source_schema: str
+    source_system_identifier: str
+    trusted_backup_dir: str
 
 
 class TrustedHotswapError(RuntimeError):
@@ -294,8 +359,8 @@ def pin_database_url(value: str) -> str:
 def _strict_environment() -> None:
     if os.geteuid() != 0:
         _raise("trusted hotswap entrypoint requires root execution")
-    if os.environ.get("PINVI_ENVIRONMENT", "") not in _STRICT_ENVIRONMENTS:
-        _raise("trusted hotswap entrypoint requires staging or production")
+    if dict(os.environ) != _SAFE_ENVIRONMENT:
+        _raise("trusted hotswap entrypoint requires the sanitized root wrapper")
 
 
 def _forensics_command(
@@ -338,13 +403,6 @@ def _assert_no_active_marker(forensics: Path) -> None:
     if marker == {"active": False}:
         return
     _raise("unresolved hotswap forensic marker blocks a new hotswap")
-
-
-def _required_runner_environment_value(name: str, pattern: re.Pattern[str]) -> str:
-    value = os.environ.get(name, "")
-    if pattern.fullmatch(value) is None:
-        _raise(f"trusted hotswap {name} is missing or invalid")
-    return value
 
 
 def _assert_runner_environment_is_narrow() -> None:
@@ -427,6 +485,98 @@ def _safe_root_only_file(
     ):
         _raise("trusted hotswap root-only file changed while reading")
     return payload
+
+
+def _reject_duplicate_json_keys(
+    pairs: list[tuple[str, object]],
+) -> dict[str, object]:
+    parsed: dict[str, object] = {}
+    for name, value in pairs:
+        if name in parsed:
+            raise ValueError("duplicate JSON key")
+        parsed[name] = value
+    return parsed
+
+
+def _configuration_string(
+    value: object, *, name: str, pattern: re.Pattern[str] | None = None
+) -> str:
+    if (
+        not isinstance(value, str)
+        or not value
+        or any(character.isspace() for character in value)
+    ):
+        _raise(f"trusted hotswap configuration {name} is invalid")
+    if pattern is not None and pattern.fullmatch(value) is None:
+        _raise(f"trusted hotswap configuration {name} is invalid")
+    return value
+
+
+def _load_trusted_configuration() -> TrustedHotswapConfiguration:
+    """root-owned static config만 root runner의 operation input으로 받아들인다."""
+
+    _safe_parent_chain(_CONFIG_PATH.parent)
+    payload = _safe_root_only_file(_CONFIG_PATH, mode=0o600)
+    try:
+        raw = json.loads(
+            payload.decode("utf-8"), object_pairs_hook=_reject_duplicate_json_keys
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise TrustedHotswapError("trusted hotswap configuration is invalid") from exc
+    if not isinstance(raw, dict) or set(raw) != _CONFIG_FIELDS:
+        _raise("trusted hotswap configuration is invalid")
+    source_identity = raw.get("source_identity")
+    if (
+        not isinstance(source_identity, dict)
+        or set(source_identity) != _CONFIG_SOURCE_IDENTITY_FIELDS
+    ):
+        _raise("trusted hotswap configuration source identity is invalid")
+
+    environment = _configuration_string(raw.get("environment"), name="environment")
+    if environment not in _STRICT_ENVIRONMENTS:
+        _raise("trusted hotswap configuration environment is invalid")
+    trusted_backup_dir = _configuration_string(
+        raw.get("trusted_backup_dir"), name="trusted_backup_dir"
+    )
+    if not Path(trusted_backup_dir).is_absolute():
+        _raise("trusted hotswap configuration trusted_backup_dir is invalid")
+
+    source_values: dict[str, str] = {}
+    source_patterns = {
+        "database_name": re.compile(r"[A-Za-z_][A-Za-z0-9_]*"),
+        "database_oid": re.compile(r"[0-9]+"),
+        "hostaddr": re.compile(r"[0-9A-Fa-f:.]+"),
+        "port": re.compile(r"[0-9]+"),
+        "system_identifier": re.compile(r"[0-9]+"),
+    }
+    for field, pattern in source_patterns.items():
+        source_values[field] = _configuration_string(
+            source_identity.get(field),
+            name=f"source_identity.{field}",
+            pattern=pattern,
+        )
+
+    return TrustedHotswapConfiguration(
+        app_role=_configuration_string(
+            raw.get("app_role"), name="app_role", pattern=_ROLE_RE
+        ),
+        environment=environment,
+        fence_database_url=_configuration_string(
+            raw.get("fence_database_url"), name="fence_database_url"
+        ),
+        restore_database_url=_configuration_string(
+            raw.get("restore_database_url"), name="restore_database_url"
+        ),
+        source_database_name=source_values["database_name"],
+        source_database_oid=source_values["database_oid"],
+        source_hostaddr=source_values["hostaddr"],
+        source_port=source_values["port"],
+        source_schema=_configuration_string(
+            raw.get("source_schema"), name="source_schema", pattern=_SCHEMA_RE
+        ),
+        source_system_identifier=source_values["system_identifier"],
+        trusted_backup_dir=trusted_backup_dir,
+    )
 
 
 def _parse_receipt_timestamp(name: str, value: object) -> datetime:
@@ -577,7 +727,135 @@ def _consume_trusted_drain_receipt(operation_id: str, receipt_sha256: str) -> No
         _raise("trusted hotswap drain receipt could not be consumed")
 
 
+def _receipt_timestamp(value: datetime) -> str:
+    return (
+        value.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    )
+
+
+def _write_trusted_drain_receipt(receipt: dict[str, object]) -> None:
+    """root-only receipt를 replace 없이 단 한 번 생성한다."""
+
+    operation_id = receipt.get("operation_id")
+    if not isinstance(operation_id, str) or _UUID_RE.fullmatch(operation_id) is None:
+        _raise("trusted hotswap drain receipt is invalid")
+    state_directory = _safe_root_only_directory(_DRAIN_RECEIPT_PATH.parent, mode=0o700)
+    consumed_directory = state_directory / "consumed-drain-receipts"
+    try:
+        consumed_directory.mkdir(mode=0o700, exist_ok=True)
+    except OSError:
+        _raise("trusted hotswap drain receipt archive is unavailable")
+    _safe_root_only_directory(consumed_directory, mode=0o700)
+    if (consumed_directory / f"{operation_id}.json").exists():
+        _raise("trusted hotswap drain receipt was already consumed")
+    payload = _canonical_json(receipt) + b"\n"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(_DRAIN_RECEIPT_PATH, flags, 0o600)
+    except FileExistsError:
+        _raise("trusted hotswap drain receipt is already pending")
+    except OSError:
+        _raise("trusted hotswap drain receipt could not be written")
+    try:
+        with os.fdopen(descriptor, "wb", closefd=False) as destination:
+            destination.write(payload)
+            destination.flush()
+            os.fsync(destination.fileno())
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_uid != 0
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+            or metadata.st_size != len(payload)
+        ):
+            _raise("trusted hotswap drain receipt permissions are invalid")
+    except OSError:
+        _raise("trusted hotswap drain receipt could not be written")
+    finally:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+
+
+def _assert_drain_quiescent(database_url: str, app_role: str) -> None:
+    """receipt 직전의 DB writer drain·M05 lock 부재를 관찰한다.
+
+    이 관찰은 runner의 DB fence를 대체하지 않는다. 짧은 TTL receipt로 operator가
+    reverse proxy/orchestrator drain을 마친 직후 run을 시작하도록 결박하고, run은
+    별도로 fence를 적용해 그 사이 재접속도 종료한다.
+    """
+
+    output = _run_psql(
+        database_url,
+        command="""
+SELECT json_build_object(
+  'advisory_lock_absent', NOT EXISTS (
+    SELECT 1 FROM pg_locks
+    WHERE locktype = 'advisory' AND classid = 1414679892 AND objid = 1213421392
+      AND granted
+  ),
+  'app_sessions_absent', NOT EXISTS (
+    SELECT 1 FROM pg_stat_activity
+    WHERE usename = :'app_role' AND pid <> pg_backend_pid()
+  )
+)::text;
+""",
+        variables={"app_role": app_role},
+        failure="trusted hotswap drain state could not be read",
+    )
+    try:
+        observation = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise TrustedHotswapError("trusted hotswap drain state is invalid") from exc
+    if observation != {"advisory_lock_absent": True, "app_sessions_absent": True}:
+        _raise("trusted hotswap drain state does not prove a quiescent writer")
+
+
+def _prepare_drain_receipt(args: argparse.Namespace) -> int:
+    _strict_environment()
+    if not args.confirm:
+        _raise("trusted hotswap drain receipt requires --confirm")
+    if _UUID_RE.fullmatch(args.operation_id) is None:
+        _raise("trusted hotswap drain receipt operation id is invalid")
+    configuration = _load_trusted_configuration()
+    _, forensics, _ = _canonical_runner_paths()
+    _assert_no_active_marker(forensics)
+    database_url = pin_database_url(configuration.restore_database_url)
+    trusted_directory = _safe_root_only_directory(
+        Path(configuration.trusted_backup_dir), mode=0o700
+    )
+    snapshot_sha256 = _trusted_snapshot_sha256(args.snapshot, trusted_directory)
+    _, target_identity_sha256 = _target_identity_environment(database_url)
+    _assert_drain_quiescent(database_url, configuration.app_role)
+    verified_at = datetime.now(UTC)
+    receipt: dict[str, object] = {
+        "app_role": configuration.app_role,
+        "expires_at_utc": _receipt_timestamp(verified_at + _DRAIN_RECEIPT_MAX_AGE),
+        "operation_id": args.operation_id,
+        "quiescent": True,
+        "snapshot_sha256": snapshot_sha256,
+        "source_schema": configuration.source_schema,
+        "target_identity_sha256": target_identity_sha256,
+        "verified_at_utc": _receipt_timestamp(verified_at),
+        "version": 1,
+    }
+    _write_trusted_drain_receipt(receipt)
+    sys.stdout.buffer.write(
+        _canonical_json(
+            {
+                "expires_at_utc": receipt["expires_at_utc"],
+                "operation_id": args.operation_id,
+                "status": "prepared",
+            }
+        )
+        + b"\n"
+    )
+    return 0
+
+
 def _runner_environment(
+    configuration: TrustedHotswapConfiguration,
     database_url: str,
     fence_url: str,
     *,
@@ -587,24 +865,16 @@ def _runner_environment(
     """root runner에 필요한 immutable operation input만 복사한다."""
 
     _assert_runner_environment_is_narrow()
-    app_role = _required_runner_environment_value("PINVI_RESTORE_APP_ROLE", _ROLE_RE)
-    source_schema = os.environ.get("PINVI_BACKUP_SCHEMA", "app")
-    if _SCHEMA_RE.fullmatch(source_schema) is None:
-        _raise("trusted hotswap PINVI_BACKUP_SCHEMA is invalid")
-    trusted_backup_directory = os.environ.get("PINVI_RESTORE_TRUSTED_BACKUP_DIR", "")
-    if (
-        not trusted_backup_directory.startswith("/")
-        or _UUID_RE.fullmatch(operation_id) is None
-    ):
+    if _UUID_RE.fullmatch(operation_id) is None:
         _raise("trusted hotswap trusted backup directory is missing or invalid")
     trusted_directory = _safe_root_only_directory(
-        Path(trusted_backup_directory), mode=0o700
+        Path(configuration.trusted_backup_dir), mode=0o700
     )
     receipt, receipt_sha256 = _prepare_trusted_drain_receipt(
         snapshot=snapshot,
         operation_id=operation_id,
-        app_role=app_role,
-        source_schema=source_schema,
+        app_role=configuration.app_role,
+        source_schema=configuration.source_schema,
         trusted_directory=trusted_directory,
     )
     target_environment, target_identity_sha256 = _target_identity_environment(
@@ -616,11 +886,11 @@ def _runner_environment(
 
     environment: dict[str, str] = {
         **_SAFE_ENVIRONMENT,
-        "PINVI_BACKUP_SCHEMA": source_schema,
-        "PINVI_ENVIRONMENT": os.environ["PINVI_ENVIRONMENT"],
+        "PINVI_BACKUP_SCHEMA": configuration.source_schema,
+        "PINVI_ENVIRONMENT": configuration.environment,
         "PINVI_RESTORE_ALLOW_NO_DRAIN": "1",
         "PINVI_RESTORE_API_TRIGGER": "1",
-        "PINVI_RESTORE_APP_ROLE": app_role,
+        "PINVI_RESTORE_APP_ROLE": configuration.app_role,
         "PINVI_RESTORE_DATABASE_URL": database_url,
         "PINVI_RESTORE_DRAIN_VERIFIED": "1",
         "PINVI_RESTORE_FENCE_DATABASE_URL": fence_url,
@@ -629,10 +899,8 @@ def _runner_environment(
         "PINVI_M05_FORENSICS_DRAIN_RECEIPT_SHA256": receipt_sha256,
         "PINVI_M05_FORENSICS_OPERATION_ID": operation_id,
     }
-    for environment_name, pattern in _SOURCE_IDENTITY_ENVIRONMENT:
-        environment[environment_name] = _required_runner_environment_value(
-            environment_name, pattern
-        )
+    for environment_name, configuration_name, _ in _SOURCE_IDENTITY_CONFIGURATION:
+        environment[environment_name] = getattr(configuration, configuration_name)
 
     trusted_tools = (
         ("PINVI_RESTORE_BASH", _trusted_bash_path()),
@@ -1059,11 +1327,13 @@ SELECT json_build_object(
 
 def _run(args: argparse.Namespace) -> int:
     _strict_environment()
+    configuration = _load_trusted_configuration()
     runner, forensics, _ = _canonical_runner_paths()
     _assert_no_active_marker(forensics)
-    database_url = pin_database_url(os.environ.get("PINVI_RESTORE_DATABASE_URL", ""))
-    fence_url = pin_database_url(os.environ.get("PINVI_RESTORE_FENCE_DATABASE_URL", ""))
+    database_url = pin_database_url(configuration.restore_database_url)
+    fence_url = pin_database_url(configuration.fence_database_url)
     environment = _runner_environment(
+        configuration,
         database_url,
         fence_url,
         snapshot=args.snapshot,
@@ -1087,6 +1357,7 @@ def _run(args: argparse.Namespace) -> int:
 
 def _status(_: argparse.Namespace) -> int:
     _strict_environment()
+    _load_trusted_configuration()
     _, forensics, _ = _canonical_runner_paths()
     marker = _read_marker(forensics)
     sys.stdout.buffer.write(_canonical_json(marker) + b"\n")
@@ -1097,13 +1368,14 @@ def _recover(args: argparse.Namespace) -> int:
     _strict_environment()
     if not args.confirm:
         _raise("trusted recovery requires --confirm")
+    configuration = _load_trusted_configuration()
     _, forensics, topology = _canonical_runner_paths()
     marker = _read_marker(forensics)
     if marker.get("operation_id") != args.operation_id:
         _raise("trusted recovery operation does not match the active marker")
     if marker.get("state") not in {"prepared", "fence_released"}:
         _raise("trusted recovery only acknowledges a proven marker boundary")
-    database_url = pin_database_url(os.environ.get("PINVI_RESTORE_DATABASE_URL", ""))
+    database_url = pin_database_url(configuration.restore_database_url)
     verification_sha256 = _safe_recovery_observation(marker, database_url, topology)
     result = _forensics_command(
         forensics,
@@ -1127,6 +1399,10 @@ def _recover(args: argparse.Namespace) -> int:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="PinVi trusted hotswap entrypoint")
     commands = parser.add_subparsers(dest="command", required=True)
+    prepare_drain = commands.add_parser("prepare-drain")
+    prepare_drain.add_argument("--operation-id", required=True)
+    prepare_drain.add_argument("--confirm", action="store_true")
+    prepare_drain.add_argument("snapshot")
     run = commands.add_parser("run")
     run.add_argument("--operation-id", required=True)
     run.add_argument("snapshot")
@@ -1142,7 +1418,12 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        handlers = {"run": _run, "status": _status, "recover": _recover}
+        handlers = {
+            "prepare-drain": _prepare_drain_receipt,
+            "run": _run,
+            "status": _status,
+            "recover": _recover,
+        }
         return handlers[args.command](args)
     except TrustedHotswapError as exc:
         print(f"trusted hotswap failed: {exc}", file=sys.stderr)

@@ -13,6 +13,7 @@
 | `docker-app-smoke-test.sh`  | `docker-app.sh smoke` 호환 wrapper                                                                         | 1      |
 | `pr_review_monitor.py`      | 열린 PR / PR 이벤트에서 최신 head SHA review reminder를 확인하고 MCP 기반 리뷰 알림 댓글을 남김            | 4      |
 | `trusted-backup-entrypoint.py` | staging/production root producer가 DB hostname을 단일 `hostaddr`로 결박한 뒤 canonical backup runner를 exec | 6      |
+| `trusted-hotswap-root.sh` | 호출자 환경을 비우고 root-owned 설정만 읽는 hotswap launcher                                                   | 6      |
 | `trusted-hotswap-entrypoint.py` | staging/production root one-shot hotswap의 endpoint pinning·forensic status/recovery acknowledgement 경계 | 6      |
 | `backup-db.sh`              | `app` schema `pg_dump --format=custom` + sha256. host `pg_dump` 부재 시 Docker fallback 지원 (ADR-022 1차) | 5      |
 | `restore-db.sh`             | custom dump `pg_restore` (긴급/스테이징, 핫스왑 전 단계)                                                   | 5      |

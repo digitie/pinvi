@@ -96,6 +96,54 @@ dump와 sidecar는 생성 직후 `sha256sum -c`로 검증하며, Admin API 응�
 restore 계열 스크립트는 sidecar의 첫 checksum 값과 실제 dump hash를 비교하므로, 과거 sidecar가
 절대경로를 담고 있더라도 dump와 sidecar를 staging 경로로 함께 옮겨 검증할 수 있다.
 
+#### 2.2.1 root-only hotswap launcher 설치
+
+운영 hotswap은 호출자의 환경변수나 `PATH`를 신뢰하지 않는다. launcher를 root:root 0755로
+`/usr/local/sbin/pinvi-trusted-hotswap`에 설치하고, launcher가 실행하는 entrypoint와 동료
+runner(`restore-hotswap.sh`, `m05_hotswap_forensics.py`, `m05_hotswap_topology.sql`)를 모두
+root 소유·그룹/공개 쓰기 금지 디렉터리인 `/usr/local/libexec/pinvi`에 설치한다.
+
+```bash
+install -d -o root -g root -m 755 /usr/local/libexec/pinvi
+install -o root -g root -m 755 scripts/trusted-hotswap-root.sh \
+  /usr/local/sbin/pinvi-trusted-hotswap
+install -o root -g root -m 755 scripts/trusted-hotswap-entrypoint.py \
+  scripts/restore-hotswap.sh scripts/m05_hotswap_forensics.py \
+  scripts/m05_hotswap_topology.sql /usr/local/libexec/pinvi/
+install -d -o root -g root -m 755 /etc/pinvi
+install -o root -g root -m 600 /secure/bootstrap/trusted-hotswap.json \
+  /etc/pinvi/trusted-hotswap.json
+```
+
+마지막 `install`은 별도 root-only provisioning 단계에서 생성한 설정 파일을 검증하는
+의미로 사용한다. 설정 파일의 필드는 아래처럼 고정되며, URL·source identity·trusted backup
+경로는 운영 환경에 맞게 채운다. password가 포함된 URL과 source identity는 로그나 PR에 기록하지
+않는다.
+
+```json
+{
+  "app_role": "pinvi_app",
+  "environment": "production",
+  "fence_database_url": "postgresql://<fence-owner>:<password>@<postgres-host>:5432/pinvi",
+  "restore_database_url": "postgresql://<restore-owner>:<password>@<postgres-host>:5432/pinvi",
+  "source_identity": {
+    "database_name": "pinvi",
+    "database_oid": "<oid>",
+    "hostaddr": "<ip>",
+    "port": "5432",
+    "system_identifier": "<system-identifier>"
+  },
+  "source_schema": "app",
+  "trusted_backup_dir": "/var/lib/pinvi/backups"
+}
+```
+
+`trusted-hotswap-root.sh`는 빈 환경으로 `/usr/bin/python3 -I`를 실행하므로, entrypoint는
+`/etc/pinvi/trusted-hotswap.json`만 operation 입력으로 사용한다. `run`에는 root-owned
+0600 dump와 checksum sidecar 경로, UUID `--operation-id`, restore/previous schema 이름을
+전달한다. `status`와 `recover`도 같은 설정 파일과 root-only forensic state를 요구하며,
+설정의 source identity가 바뀌면 기존 설정을 재검증·교체한 뒤 실행한다.
+
 ### 2.3 live e2e
 
 - read-only: `apps/web/e2e/admin-live-backup.live.ts`가 `/admin/backup` 목록, sort/filter,
@@ -230,7 +278,7 @@ lock session을 종료하며, grace period 뒤 process-group `SIGKILL`을 최종
 `app_restore_<ts>`를 만들고, cut-over 순간에 `app` schema 이름을 바꾼다. 다운타임은
 0이 아니라 짧은 write drain + restart 구간이며, 목표는 30~90초다.
 
-### 4.2 CLI / 운영자 절차 (T-111 script 구현 기준)
+### 4.2 trusted root host 절차 (M05 실행 경계)
 
 ```bash
 # 운영 노드 SSH
@@ -246,46 +294,84 @@ sha256sum -c "${SNAPSHOT}.sha256"
 pg_restore --list "${SNAPSHOT}" >/tmp/pinvi-restore-list.txt
 df -h /var/lib/postgresql /var/lib/pinvi/backups
 
-# 2. restore schema 준비/복구 + 검증 + drain + schema swap (CLI 운영자 경로)
-# 실제 실행 전 staging drill 후 PINVI_RESTORE_HOTSWAP_EXECUTE=1을 설정한다.
-PINVI_RESTORE_HOTSWAP_EXECUTE=1 \
-PINVI_RESTORE_DATABASE_URL='postgresql://<restore-owner>:<password>@<postgres-host>:5432/pinvi' \
-PINVI_RESTORE_FENCE_DATABASE_URL='postgresql://<dedicated-fence-owner>:<password>@<postgres-host>:5432/pinvi' \
-PINVI_RESTORE_DRAIN_COMMAND='docker compose -f docker-compose.app.yml stop api web' \
-PINVI_RESTORE_APP_ROLE=pinvi_app \
-PINVI_RESTORE_WRITE_ROLES=pinvi_app \
-sudo -E ./scripts/restore-hotswap.sh run \
+# 2. reverse proxy/orchestrator에서 먼저 write drain을 완료한다.
+# 3. drain proof를 만들고(15분 TTL), 정확히 같은 operation/snapshot으로 한 번만 실행한다.
+OPERATION_ID="$(uuidgen)"
+sudo /usr/local/sbin/pinvi-trusted-hotswap prepare-drain \
+  --confirm \
+  --operation-id "${OPERATION_ID}" \
+  "${SNAPSHOT}"
+sudo /usr/local/sbin/pinvi-trusted-hotswap run \
+  --operation-id "${OPERATION_ID}" \
   "${SNAPSHOT}" \
   "${RESTORE_SCHEMA}" \
   "${PREVIOUS_SCHEMA}"
-docker compose -f docker-compose.app.yml up -d api web
 
-# 3. healthcheck
+# 4. healthcheck. release 실패 또는 nonterminal marker가 있으면 여기서 재기동·재시도하지 않는다.
 curl -fsS https://pinvi-api.example.com/health/db
 curl -fsS -H "Authorization: Bearer $CPO_BEARER" \
   https://pinvi-api.example.com/admin/audit/verify-chain | jq .
 ```
 
-API `/admin/backup/restore-hotswap` 버튼/endpoint 경로는 자기 API 컨테이너를 멈추는
-drain command를 실행하지 않는다. 운영자는 먼저 reverse proxy나 orchestrator에서 write
-drain/read-only 전환을 수행한 뒤 API 환경을 다음처럼 둔다.
+staging/production에서는 `sudo -E`, `scripts/restore-hotswap.sh` 직접 실행, entrypoint
+Python 파일 직접 실행, 또는 caller 환경의 `PINVI_*`/`PG*` 값 전달을 **허용하지 않는다**.
+유일한 실행 경로는 root-owned `/usr/local/sbin/pinvi-trusted-hotswap`이다. 이 wrapper는
+고정 `/bin/sh`에서 시작해 caller 환경을 지우고, 고정 `/usr/bin/python3 -I`와 다음의
+root-owned entrypoint만 실행한다.
 
 ```bash
-PINVI_RESTORE_HOTSWAP_EXECUTE=1
-PINVI_RESTORE_DRAIN_COMMAND=
-PINVI_RESTORE_ALLOW_NO_DRAIN=1
-PINVI_RESTORE_DRAIN_VERIFIED=1
-PINVI_RESTORE_FENCE_DATABASE_URL='postgresql://<dedicated-fence-owner>:<password>@<postgres-host>:5432/pinvi'
-PINVI_RESTORE_APP_ROLE=pinvi_app
+/usr/local/libexec/pinvi/trusted-hotswap-entrypoint.py
 ```
 
-API-triggered restore 중 `PINVI_RESTORE_DRAIN_COMMAND`가 설정돼 있으면 script가
-`draining:failed`로 중단한다. API 경로는 외부 전환 확인값과 함께 DB write fence를 적용한다.
-hotswap runner는 전체 실행 동안 DB advisory lock을 유지하고, source/restore schema에 대한
-runtime role의 write 권한을 회수하며, 기존 runtime 세션을 종료한 뒤 권한·세션 상태를 다시
-확인한다. data restore 중에는 `session_replication_role`을 변경하지 않으므로 M05
-`ENABLE ALWAYS` trigger와 foreign-key 검증을 그대로 유지한다. CLI 경로만 별도의
-`PINVI_RESTORE_DRAIN_COMMAND`를 실행할 수 있다.
+설치 전에는 attested release checkout에서 다음 필요 파일을 root:root, parent non-writable로
+설치한다. 설치 대상은 symlink가 아니어야 한다.
+
+```bash
+sudo install -d -o root -g root -m 0755 /usr/local/libexec/pinvi
+sudo install -o root -g root -m 0755 scripts/trusted-hotswap-root.sh \
+  /usr/local/sbin/pinvi-trusted-hotswap
+sudo install -o root -g root -m 0755 scripts/trusted-hotswap-entrypoint.py \
+  /usr/local/libexec/pinvi/trusted-hotswap-entrypoint.py
+sudo install -o root -g root -m 0755 scripts/restore-hotswap.sh \
+  /usr/local/libexec/pinvi/restore-hotswap.sh
+sudo install -o root -g root -m 0644 scripts/m05_hotswap_forensics.py \
+  /usr/local/libexec/pinvi/m05_hotswap_forensics.py
+sudo install -o root -g root -m 0644 scripts/m05_hotswap_topology.sql \
+  /usr/local/libexec/pinvi/m05_hotswap_topology.sql
+sudo install -d -o root -g root -m 0700 /var/lib/pinvi/restore-forensics
+```
+
+`/etc/pinvi`도 root:root이고 group/other write가 없어야 한다. 그 아래
+`/etc/pinvi/trusted-hotswap.json`은 symlink가 아닌 root:root `0600` JSON 파일로 아래
+**정확히** 일곱 field만 둔다. URL에는 실제 credential을 문서·로그·shell history에 남기지
+않으며, 운영자는 root 전용 editor/secret manager로 값을 넣는다.
+
+```json
+{
+  "app_role": "pinvi_app",
+  "environment": "staging",
+  "fence_database_url": "postgresql://<fence-owner>:<redacted>@<postgres-host>:5432/pinvi",
+  "restore_database_url": "postgresql://<restore-owner>:<redacted>@<postgres-host>:5432/pinvi",
+  "source_identity": {
+    "database_name": "pinvi",
+    "database_oid": "<source-database-oid>",
+    "hostaddr": "<source-host-ip>",
+    "port": "5432",
+    "system_identifier": "<postgres-system-identifier>"
+  },
+  "source_schema": "app",
+  "trusted_backup_dir": "/var/lib/pinvi/backups"
+}
+```
+
+`prepare-drain`은 DB M05 advisory lock이 비어 있고 app writer 세션이 없는 것을 read-only로
+확인한 뒤 `drain-receipt.json`을 root:root `0600`으로 만든다. receipt는 operation UUID,
+snapshot SHA-256, source schema, pinned target identity와 `15분` TTL을 결박한다. `run`은 이를
+hard link archive한 뒤 unlink하여 한 번만 소비하며, archive가 남아 있으면 같은 receipt를
+재발급·재사용할 수 없다. 이 proof는 runner의 DB write fence를 대체하지 않는다. run은 여전히
+전체 실행 동안 advisory lock을 유지하고 runtime writer 권한·CONNECT를 fence하고 재접속을
+종료한다. data restore는 `session_replication_role`을 바꾸지 않아 M05 `ENABLE ALWAYS` trigger와
+foreign-key 검증을 유지한다.
 
 schema switch의 핵심 SQL은 다음 형태다. 기본 `scripts/restore-hotswap.sh`는 custom dump를
 `app_restore_<ts>` schema로 remap해
