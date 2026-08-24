@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -22,9 +23,19 @@ API_DIR = Path(__file__).resolve().parents[2]
 _ROLE_PASSWORD = "m05-role-owner-test-only"
 
 
-def _alembic(database_url: str, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+def _alembic(
+    database_url: str,
+    *args: str,
+    check: bool = True,
+    environment: Mapping[str, str | None] | None = None,
+) -> subprocess.CompletedProcess[str]:
     env = dict(os.environ)
     env["PINVI_DATABASE_URL"] = database_url
+    for key, value in (environment or {}).items():
+        if value is None:
+            env.pop(key, None)
+        else:
+            env[key] = value
     return subprocess.run(  # noqa: S603
         [sys.executable, "-m", "alembic", *args],
         cwd=API_DIR,
@@ -732,24 +743,20 @@ async def test_0101_rejects_unsafe_existing_ops_state(
 async def test_0101_can_use_a_separate_nonruntime_migration_owner(
     _database_url: str,
 ) -> None:
-    """0101 owner는 runtime/fence와 분리하면서도 app owner 권한으로 DDL을 수행한다."""
+    """Fresh topology는 non-login owner와 one-shot SET ROLE만으로 0101을 실행한다."""
 
     suffix = uuid.uuid4().hex[:12]
     database_name = f"pinvi_m05_owner_{suffix}"
     app_owner = f"m05_app_owner_{suffix}"
     fence_role = f"m05_fence_{suffix}"
     migration_owner = f"m05_migration_{suffix}"
+    migrator_login = f"m05_migrator_{suffix}"
+    runtime_role = f"m05_runtime_{suffix}"
     parsed = make_url(_database_url)
     maintenance_url = parsed.set(database="postgres").render_as_string(hide_password=False)
-    app_url = _role_database_url(
+    migrator_url = _role_database_url(
         _database_url,
-        role=app_owner,
-        password=_ROLE_PASSWORD,
-        database=database_name,
-    )
-    migration_url = _role_database_url(
-        _database_url,
-        role=migration_owner,
+        role=migrator_login,
         password=_ROLE_PASSWORD,
         database=database_name,
     )
@@ -758,33 +765,158 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
     try:
         for statement in (
             f"CREATE ROLE \"{fence_role}\" LOGIN NOINHERIT PASSWORD '{_ROLE_PASSWORD}';",
-            f"CREATE ROLE \"{app_owner}\" LOGIN INHERIT PASSWORD '{_ROLE_PASSWORD}';",
-            f"CREATE ROLE \"{migration_owner}\" LOGIN INHERIT PASSWORD '{_ROLE_PASSWORD}' "
-            f'IN ROLE "{app_owner}";',
+            f"CREATE ROLE \"{app_owner}\" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE "
+            "NOREPLICATION NOBYPASSRLS NOINHERIT;",
+            f"CREATE ROLE \"{migration_owner}\" NOLOGIN NOSUPERUSER NOCREATEDB "
+            "NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;",
+            f"CREATE ROLE \"{migrator_login}\" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE "
+            f"NOREPLICATION NOBYPASSRLS NOINHERIT PASSWORD '{_ROLE_PASSWORD}';",
+            f"CREATE ROLE \"{runtime_role}\" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE "
+            f"NOREPLICATION NOBYPASSRLS NOINHERIT PASSWORD '{_ROLE_PASSWORD}';",
         ):
             await _execute_autocommit(maintenance_url, statement)
         await _execute_autocommit(
             maintenance_url,
             f'CREATE DATABASE "{database_name}" OWNER "{fence_role}";',
         )
-        await _execute_autocommit(
-            maintenance_url,
-            f'GRANT CONNECT, CREATE ON DATABASE "{database_name}" '
-            f'TO "{app_owner}", "{migration_owner}";',
-        )
+        for statement in (
+            f'GRANT "{app_owner}" TO "{migration_owner}" '
+            "WITH INHERIT FALSE, SET TRUE;",
+            f'GRANT "{app_owner}" TO "{migrator_login}" '
+            "WITH INHERIT FALSE, SET TRUE;",
+            f'GRANT "{migration_owner}" TO "{migrator_login}" '
+            "WITH INHERIT FALSE, SET TRUE;",
+            f'ALTER ROLE "{migrator_login}" IN DATABASE "{database_name}" '
+            f'SET ROLE TO "{app_owner}";',
+            f'REVOKE CONNECT ON DATABASE "{database_name}" FROM PUBLIC;',
+            f'GRANT CONNECT ON DATABASE "{database_name}" TO "{runtime_role}", '
+            f'"{migrator_login}";',
+            f'GRANT CREATE ON DATABASE "{database_name}" TO "{app_owner}", '
+            f'"{migration_owner}";',
+            f'CREATE SCHEMA app AUTHORIZATION "{app_owner}";',
+            "CREATE SCHEMA x_extension;",
+            "CREATE EXTENSION pgcrypto SCHEMA x_extension;",
+            "CREATE EXTENSION pg_trgm SCHEMA x_extension;",
+            "CREATE EXTENSION citext SCHEMA x_extension;",
+            "REVOKE ALL ON SCHEMA x_extension FROM PUBLIC;",
+            f'GRANT USAGE ON SCHEMA x_extension TO "{app_owner}", '
+            f'"{migration_owner}", "{runtime_role}";',
+        ):
+            await _execute_autocommit(target_url, statement)
 
-        baseline = _alembic(app_url, "upgrade", "20260824_0100")
-        assert baseline.returncode == 0, baseline.stderr
-        await _execute_autocommit(
-            app_url,
-            f'GRANT USAGE ON SCHEMA x_extension TO "{migration_owner}";',
+        role_environment = {"PINVI_MIGRATION_OWNER": migration_owner}
+        baseline = _alembic(
+            migrator_url,
+            "upgrade",
+            "20260824_0100",
+            environment=role_environment,
         )
-        activation = _alembic(migration_url, "upgrade", "20260824_0101")
+        assert baseline.returncode == 0, baseline.stderr
+        activation = _alembic(
+            migrator_url,
+            "upgrade",
+            "20260824_0101",
+            check=False,
+            environment=role_environment,
+        )
         assert activation.returncode == 0, activation.stderr
 
         engine = create_async_engine(target_url, poolclass=NullPool)
         try:
             async with engine.connect() as connection:
+                membership_contract = await connection.scalar(
+                    text(
+                        """
+                        WITH schema_owner AS (
+                            SELECT oid FROM pg_roles WHERE rolname = :app_owner
+                        ),
+                        migration_owner AS (
+                            SELECT oid, rolcanlogin, rolsuper, rolcreaterole, rolcreatedb,
+                                   rolreplication, rolbypassrls, rolinherit
+                            FROM pg_roles WHERE rolname = :migration_owner
+                        ),
+                        migrator AS (
+                            SELECT oid, rolcanlogin, rolsuper, rolcreaterole, rolcreatedb,
+                                   rolreplication, rolbypassrls, rolinherit
+                            FROM pg_roles WHERE rolname = :migrator_login
+                        )
+                        SELECT
+                            (SELECT count(*) FROM migration_owner) = 1
+                            AND (SELECT count(*) FROM migrator) = 1
+                            AND EXISTS (
+                                SELECT 1 FROM migration_owner role_row
+                                WHERE NOT role_row.rolcanlogin
+                                  AND NOT role_row.rolsuper
+                                  AND NOT role_row.rolcreaterole
+                                  AND NOT role_row.rolcreatedb
+                                  AND NOT role_row.rolreplication
+                                  AND NOT role_row.rolbypassrls
+                                  AND NOT role_row.rolinherit
+                                  AND NOT has_database_privilege(
+                                      role_row.oid, current_database(), 'CONNECT'
+                                  )
+                                  AND has_schema_privilege(
+                                      role_row.oid, 'x_extension', 'USAGE'
+                                  )
+                                  AND NOT has_schema_privilege(
+                                      role_row.oid, 'x_extension', 'CREATE'
+                                  )
+                            )
+                            AND EXISTS (
+                                SELECT 1 FROM migrator role_row
+                                WHERE role_row.rolcanlogin
+                                  AND NOT role_row.rolsuper
+                                  AND NOT role_row.rolcreaterole
+                                  AND NOT role_row.rolcreatedb
+                                  AND NOT role_row.rolreplication
+                                  AND NOT role_row.rolbypassrls
+                                  AND NOT role_row.rolinherit
+                                  AND (
+                                      SELECT count(*) FROM pg_auth_members membership
+                                      WHERE membership.member = role_row.oid
+                                        AND membership.roleid IN (
+                                            (SELECT oid FROM schema_owner),
+                                            (SELECT oid FROM migration_owner)
+                                        )
+                                        AND NOT membership.admin_option
+                                        AND NOT membership.inherit_option
+                                        AND membership.set_option
+                                  ) = 2
+                                  AND NOT EXISTS (
+                                      SELECT 1 FROM pg_auth_members membership
+                                      WHERE membership.member = role_row.oid
+                                        AND membership.roleid NOT IN (
+                                            (SELECT oid FROM schema_owner),
+                                            (SELECT oid FROM migration_owner)
+                                        )
+                                  )
+                            )
+                            AND EXISTS (
+                                SELECT 1 FROM pg_auth_members membership
+                                WHERE membership.member = (SELECT oid FROM migration_owner)
+                                  AND membership.roleid = (SELECT oid FROM schema_owner)
+                                  AND NOT membership.admin_option
+                                  AND NOT membership.inherit_option
+                                  AND membership.set_option
+                            )
+                            AND EXISTS (
+                                SELECT 1 FROM pg_db_role_setting setting_row
+                                WHERE setting_row.setrole = (SELECT oid FROM migrator)
+                                  AND setting_row.setdatabase = (
+                                      SELECT oid FROM pg_database
+                                      WHERE datname = current_database()
+                                  )
+                                  AND ('role=' || :app_owner) = ANY(setting_row.setconfig)
+                            )
+                        """
+                    ),
+                    {
+                        "app_owner": app_owner,
+                        "migration_owner": migration_owner,
+                        "migrator_login": migrator_login,
+                    },
+                )
+                assert membership_contract is True
                 owners = await connection.execute(
                     text(
                         "SELECT namespace.nspowner::regrole::text, "
@@ -816,9 +948,81 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
                 assert extension_access is True
         finally:
             await engine.dispose()
+
+        migrator_engine = create_async_engine(migrator_url, poolclass=NullPool)
+        try:
+            async with migrator_engine.connect() as connection:
+                session_roles = await connection.execute(text("SELECT session_user, current_user"))
+                assert session_roles.one() == (migrator_login, app_owner)
+                await connection.execute(text(f'SET ROLE "{migration_owner}"'))
+                assert await connection.scalar(text("SELECT current_user")) == migration_owner
+        finally:
+            await migrator_engine.dispose()
     finally:
         await _drop_database(maintenance_url, target_url)
         await _execute_autocommit(
             maintenance_url,
-            f'DROP ROLE IF EXISTS "{migration_owner}", "{app_owner}", "{fence_role}";',
+            f'DROP ROLE IF EXISTS "{runtime_role}", "{migrator_login}", '
+            f'"{migration_owner}", "{app_owner}", "{fence_role}";',
+        )
+
+
+@pytest.mark.asyncio
+async def test_0101_legacy_rebaseline_profile_switches_only_m05_objects(
+    _database_url: str,
+) -> None:
+    """0061 rebaseline은 기존 app owner를 보존하고 M05 object만 새 owner로 만든다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_legacy_owner")
+    migration_owner = f"m05_legacy_migration_{uuid.uuid4().hex[:12]}"
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        await _execute_autocommit(
+            maintenance_url,
+            f"CREATE ROLE \"{migration_owner}\" NOLOGIN NOSUPERUSER NOCREATEDB "
+            "NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;",
+        )
+        for statement in (
+            f'GRANT CREATE ON DATABASE "{make_url(target_url).database}" TO "{migration_owner}";',
+            f'GRANT USAGE ON SCHEMA x_extension TO "{migration_owner}";',
+        ):
+            await _execute_autocommit(target_url, statement)
+
+        activation = _alembic(
+            target_url,
+            "upgrade",
+            "20260824_0101",
+            check=False,
+            environment={
+                "PINVI_MIGRATION_OWNER": migration_owner,
+                "PINVI_M05_LEGACY_REBASELINE": "1",
+            },
+        )
+        assert activation.returncode == 0, activation.stderr
+
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.connect() as connection:
+                assert await connection.scalar(
+                    text(
+                        "SELECT relation.relowner::regrole::text "
+                        "FROM pg_class relation "
+                        "WHERE relation.oid = 'app.user_consent_events'::regclass"
+                    )
+                ) == make_url(target_url).username
+                assert await connection.scalar(
+                    text(
+                        "SELECT relation.relowner::regrole::text "
+                        "FROM pg_class relation "
+                        "WHERE relation.oid = 'ops.m05_hotswap_release_receipts'::regclass"
+                    )
+                ) == migration_owner
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+        await _execute_autocommit(
+            maintenance_url,
+            f'DROP ROLE IF EXISTS "{migration_owner}";',
         )

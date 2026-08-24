@@ -1,5 +1,9 @@
 #!/usr/bin/env sh
-# App runtime DB login bootstrap.  The migration/restore owner never reaches API/Dagster.
+# Runtime DB login and one-shot Alembic role topology bootstrap.
+#
+# app-api/app-dagster only receive PINVI_APP_DB_USER. The root bootstrap login
+# creates (or temporarily re-enables) the non-inheriting migrator login, while
+# 0101 itself switches just its M05 receipt DDL to PINVI_MIGRATION_OWNER.
 
 set -eu
 
@@ -8,15 +12,47 @@ set -eu
 : "${POSTGRES_DB:?POSTGRES_DB is required}"
 : "${PINVI_APP_DB_USER:?PINVI_APP_DB_USER is required}"
 : "${PINVI_APP_DB_PASSWORD:?PINVI_APP_DB_PASSWORD is required}"
+: "${PINVI_APP_SCHEMA_OWNER:?PINVI_APP_SCHEMA_OWNER is required}"
+: "${PINVI_MIGRATION_OWNER:?PINVI_MIGRATION_OWNER is required}"
+: "${PINVI_MIGRATOR_DB_USER:?PINVI_MIGRATOR_DB_USER is required}"
+: "${PINVI_MIGRATOR_DB_PASSWORD:?PINVI_MIGRATOR_DB_PASSWORD is required}"
 
-case "${POSTGRES_USER}" in
-  ''|[!a-z_]*|*[!a-z0-9_]* ) echo "invalid POSTGRES_USER" >&2; exit 2 ;;
+PINVI_M05_LEGACY_REBASELINE="${PINVI_M05_LEGACY_REBASELINE:-0}"
+PINVI_MIGRATOR_DISABLE_LOGIN="${PINVI_MIGRATOR_DISABLE_LOGIN:-0}"
+
+for role_name in \
+  "${POSTGRES_USER}" \
+  "${PINVI_APP_DB_USER}" \
+  "${PINVI_APP_SCHEMA_OWNER}" \
+  "${PINVI_MIGRATION_OWNER}" \
+  "${PINVI_MIGRATOR_DB_USER}"; do
+  case "${role_name}" in
+    ''|[!a-z_]*|*[!a-z0-9_]* ) echo "invalid PostgreSQL role name" >&2; exit 2 ;;
+  esac
+done
+case "${POSTGRES_DB}" in
+  ''|[!a-z_]*|*[!a-z0-9_]* ) echo "invalid POSTGRES_DB" >&2; exit 2 ;;
 esac
-case "${PINVI_APP_DB_USER}" in
-  ''|[!a-z_]*|*[!a-z0-9_]* ) echo "invalid PINVI_APP_DB_USER" >&2; exit 2 ;;
+case "${PINVI_M05_LEGACY_REBASELINE}" in
+  0|1 ) ;;
+  * ) echo "PINVI_M05_LEGACY_REBASELINE must be 0 or 1" >&2; exit 2 ;;
 esac
-if [ "${POSTGRES_USER}" = "${PINVI_APP_DB_USER}" ]; then
-  echo "runtime DB role must differ from the migration owner" >&2
+case "${PINVI_MIGRATOR_DISABLE_LOGIN}" in
+  0|1 ) ;;
+  * ) echo "PINVI_MIGRATOR_DISABLE_LOGIN must be 0 or 1" >&2; exit 2 ;;
+esac
+
+if [ "${POSTGRES_USER}" = "${PINVI_APP_DB_USER}" ] \
+  || [ "${POSTGRES_USER}" = "${PINVI_APP_SCHEMA_OWNER}" ] \
+  || [ "${POSTGRES_USER}" = "${PINVI_MIGRATION_OWNER}" ] \
+  || [ "${POSTGRES_USER}" = "${PINVI_MIGRATOR_DB_USER}" ] \
+  || [ "${PINVI_APP_DB_USER}" = "${PINVI_APP_SCHEMA_OWNER}" ] \
+  || [ "${PINVI_APP_DB_USER}" = "${PINVI_MIGRATION_OWNER}" ] \
+  || [ "${PINVI_APP_DB_USER}" = "${PINVI_MIGRATOR_DB_USER}" ] \
+  || [ "${PINVI_APP_SCHEMA_OWNER}" = "${PINVI_MIGRATION_OWNER}" ] \
+  || [ "${PINVI_APP_SCHEMA_OWNER}" = "${PINVI_MIGRATOR_DB_USER}" ] \
+  || [ "${PINVI_MIGRATION_OWNER}" = "${PINVI_MIGRATOR_DB_USER}" ]; then
+  echo "runtime, schema owner, migration owner, migrator, and bootstrap roles must differ" >&2
   exit 2
 fi
 
@@ -27,14 +63,78 @@ until psql --no-psqlrc --no-password --tuples-only --no-align --host=app-postgre
   attempt=$((attempt + 1))
   if [ "$attempt" -ge 15 ]; then
     unset PGPASSWORD
-    echo "Postgres TCP endpoint did not become ready for runtime role bootstrap" >&2
+    echo "Postgres TCP endpoint did not become ready for DB role bootstrap" >&2
     exit 1
   fi
   sleep 1
 done
-psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host=app-postgres --username="${POSTGRES_USER}" \
-  --dbname="${POSTGRES_DB}" --set="owner=${POSTGRES_USER}" \
+
+# 기존 0061 owner를 바꾸는 것은 ADR-063의 rebaseline 범위를 넘는다. 일반 실행은
+# 이미 새 app schema owner로 정착한 DB 또는 빈 DB만 받는다. 과거 0061 전환은
+# PINVI_M05_LEGACY_REBASELINE=1 root-only one-shot으로만 아래 보호를 우회한다.
+if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then
+  canonical_app_ownership="$(
+    psql --no-psqlrc --no-password --tuples-only --no-align --host=app-postgres \
+      --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+      --set="schema_owner=${PINVI_APP_SCHEMA_OWNER}" <<'SQL'
+WITH app_schema AS (
+    SELECT namespace.oid, namespace.nspowner::regrole::text AS owner_name
+    FROM pg_namespace namespace
+    WHERE namespace.nspname = 'app'
+),
+app_objects AS (
+    SELECT relation.relowner::regrole::text AS owner_name
+    FROM pg_class relation
+    JOIN app_schema schema ON schema.oid = relation.relnamespace
+    UNION ALL
+    SELECT procedure.proowner::regrole::text
+    FROM pg_proc procedure
+    JOIN app_schema schema ON schema.oid = procedure.pronamespace
+    UNION ALL
+    SELECT type_row.typowner::regrole::text
+    FROM pg_type type_row
+    JOIN app_schema schema ON schema.oid = type_row.typnamespace
+)
+SELECT
+    NOT EXISTS (SELECT 1 FROM app_objects)
+    OR (
+        (SELECT owner_name = :'schema_owner' FROM app_schema)
+        AND NOT EXISTS (
+            SELECT 1 FROM app_objects
+            WHERE owner_name <> :'schema_owner'
+        )
+    );
+SQL
+  )"
+  if [ "${canonical_app_ownership}" != "t" ]; then
+    unset PGPASSWORD
+    echo "existing app objects are not owned by PINVI_APP_SCHEMA_OWNER; use the approved root-only legacy rebaseline profile" >&2
+    exit 3
+  fi
+fi
+
+if [ "${PINVI_MIGRATOR_DISABLE_LOGIN}" = "1" ]; then
+  migrator_login_attribute="NOLOGIN"
+else
+  migrator_login_attribute="LOGIN"
+fi
+
+if [ "${PINVI_M05_LEGACY_REBASELINE}" = "1" ]; then
+  default_privilege_owner="${POSTGRES_USER}"
+else
+  default_privilege_owner="${PINVI_APP_SCHEMA_OWNER}"
+fi
+
+psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host=app-postgres \
+  --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+  --set="bootstrap_owner=${POSTGRES_USER}" \
   --set="app_role=${PINVI_APP_DB_USER}" --set="app_password=${PINVI_APP_DB_PASSWORD}" \
+  --set="schema_owner=${PINVI_APP_SCHEMA_OWNER}" \
+  --set="migration_owner=${PINVI_MIGRATION_OWNER}" \
+  --set="migrator_role=${PINVI_MIGRATOR_DB_USER}" \
+  --set="migrator_password=${PINVI_MIGRATOR_DB_PASSWORD}" \
+  --set="migrator_login_attribute=${migrator_login_attribute}" \
+  --set="database_name=${POSTGRES_DB}" \
   >/dev/null <<'SQL'
 SELECT format(
     'CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT PASSWORD %L',
@@ -49,87 +149,281 @@ SELECT format(
     :'app_password'
 )
 \gexec
-SELECT format('CREATE SCHEMA IF NOT EXISTS app AUTHORIZATION %I', :'owner')
+SELECT format(
+    'CREATE ROLE %I NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT',
+    :'schema_owner'
+)
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'schema_owner')
 \gexec
-SELECT format('CREATE SCHEMA IF NOT EXISTS x_extension AUTHORIZATION %I', :'owner')
+SELECT format(
+    'ALTER ROLE %I NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT',
+    :'schema_owner'
+)
 \gexec
-SELECT format('ALTER SCHEMA x_extension OWNER TO %I', :'owner')
+SELECT format(
+    'CREATE ROLE %I NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT',
+    :'migration_owner'
+)
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'migration_owner')
 \gexec
-REVOKE ALL ON SCHEMA app FROM PUBLIC;
+SELECT format(
+    'ALTER ROLE %I NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT',
+    :'migration_owner'
+)
+\gexec
+SELECT format(
+    'CREATE ROLE %I %s NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT PASSWORD %L',
+    :'migrator_role',
+    :'migrator_login_attribute',
+    :'migrator_password'
+)
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'migrator_role')
+\gexec
+SELECT format(
+    'ALTER ROLE %I %s NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT PASSWORD %L',
+    :'migrator_role',
+    :'migrator_login_attribute',
+    :'migrator_password'
+)
+\gexec
+SELECT format('GRANT %I TO %I WITH INHERIT FALSE, SET TRUE', :'schema_owner', :'migration_owner')
+\gexec
+SELECT format('GRANT %I TO %I WITH INHERIT FALSE, SET TRUE', :'schema_owner', :'migrator_role')
+\gexec
+SELECT format('GRANT %I TO %I WITH INHERIT FALSE, SET TRUE', :'migration_owner', :'migrator_role')
+\gexec
+SELECT format('ALTER ROLE %I IN DATABASE %I SET ROLE TO %I',
+              :'migrator_role', :'database_name', :'schema_owner')
+\gexec
+REVOKE CONNECT ON DATABASE :"database_name" FROM PUBLIC;
+GRANT CONNECT ON DATABASE :"database_name" TO :"app_role", :"migrator_role";
+GRANT CREATE ON DATABASE :"database_name" TO :"schema_owner", :"migration_owner";
+SELECT format('CREATE SCHEMA IF NOT EXISTS x_extension AUTHORIZATION %I', :'bootstrap_owner')
+\gexec
+SELECT format('ALTER SCHEMA x_extension OWNER TO %I', :'bootstrap_owner')
+\gexec
+CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA x_extension;
+CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA x_extension;
+CREATE EXTENSION IF NOT EXISTS citext SCHEMA x_extension;
 REVOKE ALL ON SCHEMA x_extension FROM PUBLIC;
+GRANT USAGE ON SCHEMA x_extension TO :"app_role", :"schema_owner", :"migration_owner";
+SQL
+
+if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then
+  psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host=app-postgres \
+    --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+    --set="schema_owner=${PINVI_APP_SCHEMA_OWNER}" \
+    >/dev/null <<'SQL'
+SELECT format('CREATE SCHEMA IF NOT EXISTS app AUTHORIZATION %I', :'schema_owner')
+\gexec
+SELECT format('ALTER SCHEMA app OWNER TO %I', :'schema_owner')
+\gexec
+SQL
+fi
+
+psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host=app-postgres \
+  --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+  --set="app_role=${PINVI_APP_DB_USER}" \
+  --set="default_privilege_owner=${default_privilege_owner}" \
+  >/dev/null <<'SQL'
+REVOKE ALL ON SCHEMA app FROM PUBLIC;
 GRANT USAGE ON SCHEMA app TO :"app_role";
-GRANT USAGE ON SCHEMA x_extension TO :"app_role";
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO :"app_role";
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA app TO :"app_role";
-ALTER DEFAULT PRIVILEGES FOR ROLE :"owner" IN SCHEMA app
+ALTER DEFAULT PRIVILEGES FOR ROLE :"default_privilege_owner" IN SCHEMA app
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"app_role";
-ALTER DEFAULT PRIVILEGES FOR ROLE :"owner" IN SCHEMA app
+ALTER DEFAULT PRIVILEGES FOR ROLE :"default_privilege_owner" IN SCHEMA app
   GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"app_role";
 SQL
 
-runtime_role_safe="$(
+role_topology_safe="$(
   psql --no-psqlrc --no-password --tuples-only --no-align --host=app-postgres \
     --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
-    --set="app_role=${PINVI_APP_DB_USER}" <<'SQL'
+    --set="bootstrap_owner=${POSTGRES_USER}" \
+    --set="app_role=${PINVI_APP_DB_USER}" \
+    --set="schema_owner=${PINVI_APP_SCHEMA_OWNER}" \
+    --set="migration_owner=${PINVI_MIGRATION_OWNER}" \
+    --set="migrator_role=${PINVI_MIGRATOR_DB_USER}" \
+    --set="legacy_rebaseline=${PINVI_M05_LEGACY_REBASELINE}" \
+    --set="migrator_disabled=${PINVI_MIGRATOR_DISABLE_LOGIN}" <<'SQL'
+WITH runtime_role AS (
+    SELECT * FROM pg_roles WHERE rolname = :'app_role'
+),
+schema_owner AS (
+    SELECT * FROM pg_roles WHERE rolname = :'schema_owner'
+),
+migration_owner AS (
+    SELECT * FROM pg_roles WHERE rolname = :'migration_owner'
+),
+migrator_role AS (
+    SELECT * FROM pg_roles WHERE rolname = :'migrator_role'
+),
+database_owner AS (
+    SELECT database_row.datdba AS oid, database_row.oid AS database_oid
+    FROM pg_database database_row
+    WHERE database_row.datname = current_database()
+),
+app_schema AS (
+    SELECT namespace.oid, namespace.nspowner
+    FROM pg_namespace namespace
+    WHERE namespace.nspname = 'app'
+),
+x_extension_schema AS (
+    SELECT namespace.oid, namespace.nspowner
+    FROM pg_namespace namespace
+    WHERE namespace.nspname = 'x_extension'
+),
+app_objects AS (
+    SELECT relation.relowner AS owner_oid
+    FROM pg_class relation
+    JOIN app_schema schema ON schema.oid = relation.relnamespace
+    UNION ALL
+    SELECT procedure.proowner
+    FROM pg_proc procedure
+    JOIN app_schema schema ON schema.oid = procedure.pronamespace
+    UNION ALL
+    SELECT type_row.typowner
+    FROM pg_type type_row
+    JOIN app_schema schema ON schema.oid = type_row.typnamespace
+)
 SELECT
-  r.rolcanlogin
-  AND NOT r.rolsuper
-  AND NOT r.rolcreaterole
-  AND NOT r.rolcreatedb
-  AND NOT r.rolreplication
-  AND NOT r.rolbypassrls
-  AND NOT pg_has_role(r.oid, current_user, 'member')
-  AND r.oid <> current_user::regrole
-  AND NOT EXISTS (
-    SELECT 1
-    FROM pg_auth_members m
-    WHERE m.member = r.oid
-  )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM pg_namespace n
-    WHERE n.nspname IN ('app', 'x_extension')
-      AND (
-        n.nspowner = r.oid
-        OR pg_has_role(r.oid, n.nspowner, 'member')
-        OR has_schema_privilege(r.oid, n.oid, 'CREATE')
-      )
-  )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM pg_class c
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname IN ('app', 'x_extension')
-      AND (c.relowner = r.oid OR pg_has_role(r.oid, c.relowner, 'member'))
-  )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM pg_proc p
-    JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE n.nspname IN ('app', 'x_extension')
-      AND (p.proowner = r.oid OR pg_has_role(r.oid, p.proowner, 'member'))
-  )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM pg_type t
-    JOIN pg_namespace n ON n.oid = t.typnamespace
-    WHERE n.nspname IN ('app', 'x_extension')
-      AND (t.typowner = r.oid OR pg_has_role(r.oid, t.typowner, 'member'))
-  )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM pg_extension e
-    JOIN pg_namespace n ON n.oid = e.extnamespace
-    WHERE n.nspname = 'x_extension'
-      AND (e.extowner = r.oid OR pg_has_role(r.oid, e.extowner, 'member'))
-  )
-FROM pg_roles r
-WHERE r.rolname = :'app_role';
+    (SELECT count(*) FROM runtime_role) = 1
+    AND (SELECT count(*) FROM schema_owner) = 1
+    AND (SELECT count(*) FROM migration_owner) = 1
+    AND (SELECT count(*) FROM migrator_role) = 1
+    AND (SELECT count(*) FROM database_owner) = 1
+    AND (SELECT count(*) FROM app_schema) = 1
+    AND (SELECT count(*) FROM x_extension_schema) = 1
+    AND EXISTS (
+        SELECT 1 FROM runtime_role runtime
+        WHERE runtime.rolcanlogin
+          AND NOT runtime.rolsuper
+          AND NOT runtime.rolcreaterole
+          AND NOT runtime.rolcreatedb
+          AND NOT runtime.rolreplication
+          AND NOT runtime.rolbypassrls
+          AND NOT runtime.rolinherit
+          AND runtime.oid <> (SELECT oid FROM database_owner)
+          AND NOT EXISTS (
+              SELECT 1 FROM pg_auth_members membership
+              WHERE membership.member = runtime.oid
+          )
+          AND NOT has_database_privilege(runtime.oid, current_database(), 'CREATE')
+          AND has_schema_privilege(runtime.oid, 'app', 'USAGE')
+          AND has_schema_privilege(runtime.oid, 'x_extension', 'USAGE')
+          AND NOT has_schema_privilege(runtime.oid, 'app', 'CREATE')
+          AND NOT has_schema_privilege(runtime.oid, 'x_extension', 'CREATE')
+    )
+    AND EXISTS (
+        SELECT 1 FROM schema_owner owner
+        WHERE NOT owner.rolcanlogin
+          AND NOT owner.rolsuper
+          AND NOT owner.rolcreaterole
+          AND NOT owner.rolcreatedb
+          AND NOT owner.rolreplication
+          AND NOT owner.rolbypassrls
+          AND NOT owner.rolinherit
+          AND NOT EXISTS (
+              SELECT 1 FROM pg_auth_members membership
+              WHERE membership.member = owner.oid
+          )
+    )
+    AND EXISTS (
+        SELECT 1 FROM migration_owner owner
+        WHERE NOT owner.rolcanlogin
+          AND NOT owner.rolsuper
+          AND NOT owner.rolcreaterole
+          AND NOT owner.rolcreatedb
+          AND NOT owner.rolreplication
+          AND NOT owner.rolbypassrls
+          AND NOT owner.rolinherit
+          AND owner.oid <> (SELECT oid FROM database_owner)
+          AND has_database_privilege(owner.oid, current_database(), 'CREATE')
+          AND NOT has_database_privilege(owner.oid, current_database(), 'CONNECT')
+          AND has_schema_privilege(owner.oid, 'x_extension', 'USAGE')
+          AND NOT has_schema_privilege(owner.oid, 'x_extension', 'CREATE')
+          AND EXISTS (
+              SELECT 1 FROM pg_auth_members membership
+              WHERE membership.member = owner.oid
+                AND membership.roleid = (SELECT oid FROM schema_owner)
+                AND NOT membership.admin_option
+                AND NOT membership.inherit_option
+                AND membership.set_option
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM pg_auth_members membership
+              WHERE membership.member = owner.oid
+                AND membership.roleid <> (SELECT oid FROM schema_owner)
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM pg_default_acl default_acl
+              WHERE default_acl.defaclrole = owner.oid
+                AND default_acl.defaclnamespace = 0
+          )
+    )
+    AND EXISTS (
+        SELECT 1 FROM migrator_role migrator
+        WHERE (:'migrator_disabled' = '1') = NOT migrator.rolcanlogin
+          AND NOT migrator.rolsuper
+          AND NOT migrator.rolcreaterole
+          AND NOT migrator.rolcreatedb
+          AND NOT migrator.rolreplication
+          AND NOT migrator.rolbypassrls
+          AND NOT migrator.rolinherit
+          AND migrator.oid <> (SELECT oid FROM database_owner)
+          AND has_database_privilege(migrator.oid, current_database(), 'CONNECT')
+          AND NOT has_database_privilege(migrator.oid, current_database(), 'CREATE')
+          AND NOT pg_has_role(migrator.oid, (SELECT oid FROM database_owner), 'MEMBER')
+          AND (
+              SELECT count(*)
+              FROM pg_auth_members membership
+              WHERE membership.member = migrator.oid
+                AND membership.roleid IN (
+                    (SELECT oid FROM schema_owner),
+                    (SELECT oid FROM migration_owner)
+                )
+                AND NOT membership.admin_option
+                AND NOT membership.inherit_option
+                AND membership.set_option
+          ) = 2
+          AND NOT EXISTS (
+              SELECT 1 FROM pg_auth_members membership
+              WHERE membership.member = migrator.oid
+                AND membership.roleid NOT IN (
+                    (SELECT oid FROM schema_owner),
+                    (SELECT oid FROM migration_owner)
+                )
+          )
+          AND EXISTS (
+              SELECT 1
+              FROM pg_db_role_setting setting_row
+              WHERE setting_row.setrole = migrator.oid
+                AND setting_row.setdatabase = (SELECT database_oid FROM database_owner)
+                AND ('role=' || :'schema_owner') = ANY(setting_row.setconfig)
+          )
+    )
+    AND (SELECT nspowner FROM x_extension_schema) = :'bootstrap_owner'::regrole
+    AND (
+        :'legacy_rebaseline' = '1'
+        OR (
+            (SELECT nspowner FROM app_schema) = :'schema_owner'::regrole
+            AND NOT EXISTS (
+                SELECT 1 FROM app_objects
+                WHERE owner_oid <> :'schema_owner'::regrole
+            )
+        )
+    )
+    AND (
+        SELECT count(*)
+        FROM pg_extension extension
+        JOIN x_extension_schema schema ON schema.oid = extension.extnamespace
+        WHERE extension.extname IN ('pgcrypto', 'pg_trgm', 'citext')
+    ) = 3;
 SQL
 )"
 unset PGPASSWORD
 
-if [ "${runtime_role_safe}" != "t" ]; then
-  echo "runtime DB role is privileged, has a role membership, owns protected objects, can CREATE there, or inherits the migration owner" >&2
+if [ "${role_topology_safe}" != "t" ]; then
+  echo "runtime/migrator/migration-owner role topology is not canonical" >&2
   exit 3
 fi

@@ -5,7 +5,7 @@ services:
   app-postgres:
     image: postgis/postgis:16-3.5-alpine
     environment:
-      # schema/table/trigger owner. ordinary app containers never receive this login.
+      # root-only bootstrap/extension owner. ordinary app containers never receive this login.
       POSTGRES_USER: ${PINVI_DB_OWNER_USER:-pinvi_owner}
       # smoke 기본값 — 운영은 infra/.env.prod 로 owner URL과 함께 override한다.
       POSTGRES_PASSWORD: ${PINVI_POSTGRES_PASSWORD:-pinvi_app_smoke}
@@ -16,7 +16,8 @@ services:
       timeout: 5s
       retries: 10
 
-  # Migration owner가 한 번만 만드는, non-owner/non-superuser runtime login이다.
+  # Root bootstrap이 한 번만 만드는 non-owner/non-superuser runtime login과 Alembic role
+  # topology다. ordinary runtime에는 migrator/owner login을 전달하지 않는다.
   # M05 evidence trigger는 runtime login이 ALTER TABLE로 비활성화할 수 없어야 한다.
   app-db-runtime-role:
     image: postgis/postgis:16-3.5-alpine
@@ -30,6 +31,12 @@ services:
       POSTGRES_DB: pinvi
       PINVI_APP_DB_USER: ${PINVI_APP_DB_USER:-pinvi_app}
       PINVI_APP_DB_PASSWORD: ${PINVI_APP_DB_PASSWORD:-pinvi_app_smoke}
+      PINVI_APP_SCHEMA_OWNER: ${PINVI_APP_SCHEMA_OWNER:-pinvi_app_owner}
+      PINVI_MIGRATION_OWNER: ${PINVI_MIGRATION_OWNER:-pinvi_migration_owner}
+      PINVI_MIGRATOR_DB_USER: ${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}
+      PINVI_MIGRATOR_DB_PASSWORD: ${PINVI_MIGRATOR_DB_PASSWORD:-pinvi_app_smoke}
+      # 0061→0100→0101의 승인된 root-only 전환에서만 1이다. 일반 deploy는 항상 0.
+      PINVI_M05_LEGACY_REBASELINE: ${PINVI_M05_LEGACY_REBASELINE:-0}
     volumes:
       - ./postgres/bootstrap-pinvi-runtime-role.sh:/bootstrap/bootstrap-pinvi-runtime-role.sh:ro
     entrypoint: ["/bin/sh", "/bootstrap/bootstrap-pinvi-runtime-role.sh"]
@@ -270,7 +277,7 @@ services:
         # 결박한다. preconfigured hostaddr/endpoint override는 dump 전에 거부한다.
         exec python /app/scripts/trusted-backup-entrypoint.py
 
-  # Explicit one-shot only: app-api is never allowed to receive the owner URL.
+  # Explicit one-shot only: app-api is never allowed to receive the migrator URL.
   # `scripts/docker-app.sh migrate` mounts the bootstrap credential and invokes it here.
   app-migrator:
     image: ${PINVI_API_IMAGE:-pinvi-api:local}
@@ -281,8 +288,12 @@ services:
         condition: service_completed_successfully
     environment:
       # This command only owns schema migration/admin bootstrap. It never serves traffic.
+      # The non-inheriting login defaults to app schema owner, then 0101 switches its
+      # M05 receipt DDL to PINVI_MIGRATION_OWNER and restores the app owner for versioning.
       PINVI_ENVIRONMENT: smoke
-      PINVI_DATABASE_URL: ${PINVI_MIGRATOR_DATABASE_URL:-postgresql+asyncpg://pinvi_owner:pinvi_app_smoke@app-postgres:5432/pinvi}
+      PINVI_DATABASE_URL: ${PINVI_MIGRATOR_DATABASE_URL:-postgresql+asyncpg://pinvi_migrator:pinvi_app_smoke@app-postgres:5432/pinvi}
+      PINVI_MIGRATION_OWNER: ${PINVI_MIGRATION_OWNER:-pinvi_migration_owner}
+      PINVI_M05_LEGACY_REBASELINE: ${PINVI_M05_LEGACY_REBASELINE:-0}
 
   app-web:
     build:

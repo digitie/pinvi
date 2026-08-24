@@ -149,6 +149,11 @@ drain_runtime_writers() {
   compose stop app-api
 }
 
+seal_migrator_login() {
+  log "sealing one-shot migrator login after successful migration"
+  compose run --rm -e PINVI_MIGRATOR_DISABLE_LOGIN=1 app-db-runtime-role
+}
+
 migrate() {
   require_docker
   require_python
@@ -164,6 +169,7 @@ migrate() {
       -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
       -v "$credential_file:$credential_file:ro" \
       app-migrator pinvi-admin-bootstrap; then
+      seal_migrator_login
       return 0
     fi
     sleep 3

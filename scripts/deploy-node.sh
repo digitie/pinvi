@@ -108,6 +108,11 @@ drain_runtime_writers() {
   fi
 }
 
+seal_migrator_login() {
+  log "sealing one-shot migrator login after successful migration"
+  compose run --rm -e PINVI_MIGRATOR_DISABLE_LOGIN=1 app-db-runtime-role
+}
+
 migrate() {
   pinvi_verify_runtime_image_provenance app-api
   local credential_file
@@ -122,6 +127,7 @@ migrate() {
     -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
     -v "$credential_file:$credential_file:ro" \
     app-migrator pinvi-admin-bootstrap
+  seal_migrator_login
 }
 
 bootstrap_credential_file() {

@@ -12,6 +12,7 @@ ADR-063의 명시적 `0061` rebaseline 뒤에만 실행된다.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from collections.abc import Sequence
 from pathlib import Path
@@ -29,6 +30,7 @@ _M05_SCHEMA_FILE = "20260824_0101_m05_activation.sql"
 _M05_SCHEMA_SHA256 = "128e2b374842ca2e9755041815457625a8c2212c013c1bafd6adb93db42128cb"
 _M05_SCHEMA_STATEMENT_COUNT = 21
 _DOLLAR_QUOTE = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$")
+_ROLE_IDENTIFIER = re.compile(r"[a-z_][a-z0-9_]*")
 _BOUNDARY_CONTRACT_CHECK = (
     "contract_version = 'pinvi-cache-target-final-boundary/v1' "
     "AND status = 'succeeded' AND schema_revision = '20260824_0101'"
@@ -190,6 +192,206 @@ def _reject_existing_m05_objects(bind: sa.Connection) -> None:
     )
     if existing is True:
         raise RuntimeError("0101 refuses to replace pre-existing M05 objects")
+
+
+def _configured_migration_owner() -> str | None:
+    """Return the explicitly configured M05 receipt owner, if this is a managed run."""
+
+    configured = os.environ.get("PINVI_MIGRATION_OWNER")
+    if configured is None or not configured.strip():
+        return None
+    if configured != configured.strip() or _ROLE_IDENTIFIER.fullmatch(configured) is None:
+        raise RuntimeError("0101 migration owner configuration is invalid")
+    return configured
+
+
+def _legacy_rebaseline_profile() -> bool:
+    """Allow the one approved 0061 owner path without broadening normal migrator authority."""
+
+    configured = os.environ.get("PINVI_M05_LEGACY_REBASELINE", "0")
+    if configured == "0":
+        return False
+    if configured == "1":
+        return True
+    raise RuntimeError("0101 legacy rebaseline profile configuration is invalid")
+
+
+def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
+    """Switch only the M05 portion to its non-login receipt owner.
+
+    The pre-existing app tables are still changed by their owner.  This matters for the
+    one supported 0061 rebaseline: ADR-063 deliberately does not rewrite old object
+    ownership while stamping 0100.  Fresh installs instead arrive here through the
+    non-inheriting one-shot migrator login whose database default role is the app owner.
+    """
+
+    migration_owner = _configured_migration_owner()
+    legacy_rebaseline = _legacy_rebaseline_profile()
+    if migration_owner is None:
+        if legacy_rebaseline:
+            raise RuntimeError("0101 legacy rebaseline requires a migration owner")
+        return None
+
+    role_contract_valid = bind.scalar(
+        sa.text(
+            """
+            WITH migration_role AS (
+                SELECT role_row.oid, role_row.rolcanlogin, role_row.rolsuper,
+                       role_row.rolcreaterole, role_row.rolcreatedb,
+                       role_row.rolreplication, role_row.rolbypassrls,
+                       role_row.rolinherit
+                FROM pg_roles role_row
+                WHERE role_row.rolname = :migration_owner
+            ),
+            app_owner AS (
+                SELECT namespace.nspowner AS oid
+                FROM pg_namespace namespace
+                WHERE namespace.nspname = 'app'
+            ),
+            database_owner AS (
+                SELECT database_row.datdba AS oid
+                FROM pg_database database_row
+                WHERE database_row.datname = current_database()
+            ),
+            session_role AS (
+                SELECT role_row.oid, role_row.rolcanlogin, role_row.rolsuper,
+                       role_row.rolcreaterole, role_row.rolcreatedb,
+                       role_row.rolreplication, role_row.rolbypassrls,
+                       role_row.rolinherit
+                FROM pg_roles role_row
+                WHERE role_row.rolname = session_user
+            )
+            SELECT
+                (SELECT count(*) FROM migration_role) = 1
+                AND (SELECT count(*) FROM app_owner) = 1
+                AND (SELECT count(*) FROM database_owner) = 1
+                AND (SELECT count(*) FROM session_role) = 1
+                AND EXISTS (
+                    SELECT 1
+                    FROM migration_role migration
+                    WHERE NOT migration.rolcanlogin
+                      AND NOT migration.rolsuper
+                      AND NOT migration.rolcreaterole
+                      AND NOT migration.rolcreatedb
+                      AND NOT migration.rolreplication
+                      AND NOT migration.rolbypassrls
+                      AND NOT migration.rolinherit
+                      AND migration.oid <> (SELECT oid FROM app_owner)
+                      AND migration.oid <> (SELECT oid FROM database_owner)
+                )
+                AND has_schema_privilege(
+                    (SELECT oid FROM migration_role), 'x_extension', 'USAGE'
+                )
+                AND NOT has_schema_privilege(
+                    (SELECT oid FROM migration_role), 'x_extension', 'CREATE'
+                )
+                AND has_function_privilege(
+                    (SELECT oid FROM migration_role),
+                    'x_extension.digest(bytea,text)'::regprocedure,
+                    'EXECUTE'
+                )
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM pg_default_acl default_acl
+                    WHERE default_acl.defaclrole = (SELECT oid FROM migration_role)
+                      AND default_acl.defaclnamespace = 0
+                )
+                AND (
+                    CASE WHEN :legacy_rebaseline THEN
+                        session_user = current_user
+                        AND current_user::regrole = (SELECT oid FROM app_owner)
+                        AND current_user::regrole = (SELECT oid FROM database_owner)
+                        AND (SELECT count(*) FROM app.alembic_version) = 1
+                        AND (SELECT version_num FROM app.alembic_version) = '20260824_0100'
+                        AND pg_has_role(
+                            session_user::regrole,
+                            (SELECT oid FROM migration_role),
+                            'SET'
+                        )
+                    ELSE
+                        session_user <> current_user
+                        AND current_user::regrole = (SELECT oid FROM app_owner)
+                        AND EXISTS (
+                            SELECT 1
+                            FROM session_role session_login
+                            WHERE session_login.rolcanlogin
+                              AND NOT session_login.rolsuper
+                              AND NOT session_login.rolcreaterole
+                              AND NOT session_login.rolcreatedb
+                              AND NOT session_login.rolreplication
+                              AND NOT session_login.rolbypassrls
+                              AND NOT session_login.rolinherit
+                              AND session_login.oid <> (SELECT oid FROM database_owner)
+                        )
+                        AND EXISTS (
+                            SELECT 1
+                            FROM pg_auth_members membership
+                            WHERE membership.member = (SELECT oid FROM session_role)
+                              AND membership.roleid = (SELECT oid FROM migration_role)
+                              AND NOT membership.admin_option
+                              AND NOT membership.inherit_option
+                              AND membership.set_option
+                        )
+                        AND EXISTS (
+                            SELECT 1
+                            FROM pg_auth_members membership
+                            WHERE membership.member = (SELECT oid FROM session_role)
+                              AND membership.roleid = (SELECT oid FROM app_owner)
+                              AND NOT membership.admin_option
+                              AND NOT membership.inherit_option
+                              AND membership.set_option
+                        )
+                        AND EXISTS (
+                            SELECT 1
+                            FROM pg_auth_members membership
+                            WHERE membership.member = (SELECT oid FROM migration_role)
+                              AND membership.roleid = (SELECT oid FROM app_owner)
+                              AND NOT membership.admin_option
+                              AND NOT membership.inherit_option
+                              AND membership.set_option
+                        )
+                        AND NOT pg_has_role(
+                            (SELECT oid FROM session_role),
+                            (SELECT oid FROM database_owner),
+                            'MEMBER'
+                        )
+                    END
+                )
+            """
+        ),
+        {
+            "migration_owner": migration_owner,
+            "legacy_rebaseline": legacy_rebaseline,
+        },
+    )
+    if role_contract_valid is not True:
+        raise RuntimeError("0101 migration owner role contract is not satisfied")
+
+    # The identifier has already been constrained to a portable PostgreSQL role name.
+    op.execute(f'SET LOCAL ROLE "{migration_owner}"')
+    if bind.scalar(sa.text("SELECT current_user = :migration_owner"), {"migration_owner": migration_owner}) is not True:
+        raise RuntimeError("0101 could not activate the migration owner")
+    return bind.scalar(
+        sa.text(
+            """
+            SELECT namespace.nspowner::regrole::text
+            FROM pg_namespace namespace
+            WHERE namespace.nspname = 'app'
+            """
+        )
+    )
+
+
+def _restore_app_owner(app_owner: str | None) -> None:
+    """Let Alembic write its version row with the pre-existing app owner again."""
+
+    if app_owner is None:
+        return
+    if _ROLE_IDENTIFIER.fullmatch(app_owner) is None:
+        raise RuntimeError("0101 app schema owner is invalid")
+    op.execute(f'SET LOCAL ROLE "{app_owner}"')
+    if op.get_bind().scalar(sa.text("SELECT current_user = :app_owner"), {"app_owner": app_owner}) is not True:
+        raise RuntimeError("0101 could not restore the app schema owner")
 
 
 def _advance_boundary_contract() -> None:
@@ -625,19 +827,21 @@ def _assert_m05_acl(bind: sa.Connection) -> None:
 def upgrade() -> None:
     _install_location_audit_purpose_contract()
     _install_user_consent_event_history()
+    _advance_boundary_contract()
+    _replace_admin_audit_guard()
+    bind = op.get_bind()
+    app_owner = _activate_m05_migration_owner(bind)
     # named ops default ACL까지 검사하려면 schema를 먼저 확보해야 한다. 이 revision은
     # partial legacy M05 object를 덮어쓰지 않고 transaction 전체를 fail-close한다.
     op.execute("CREATE SCHEMA IF NOT EXISTS ops")
-    bind = op.get_bind()
     _reject_unsafe_m05_default_privileges(bind)
     _reject_existing_m05_objects(bind)
-    _advance_boundary_contract()
-    _replace_admin_audit_guard()
     op.execute("SET LOCAL check_function_bodies = false")
     for statement in _m05_schema_statements():
         op.execute(sa.text(statement))
     _harden_m05_acl(bind)
     _assert_m05_acl(bind)
+    _restore_app_owner(app_owner)
 
 
 def downgrade() -> None:
