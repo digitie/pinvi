@@ -60,12 +60,6 @@
 
 ## 지도 / 위치
 
-- [ ] **T-327** — 서버측 위치 동의 강제가 없다. `location_collection` 철회 후에도 좌표를 받는
-  endpoint(`/features/nearby`, `/geo/reverse` 등)에 동의 확인 dependency가 없어 게이트가 전적으로
-  클라이언트 책임이다. `ConsentItem.version`도 자유 문자열이라 허용 버전 대조가 없다. 곁들여
-  국내 판정이 단순 bbox(대마도 등 포함)라 geofencing 용도로는 폴리곤 판정이 필요하다.
-  T-325 리뷰에서 발견.
-
 ## 웹 / 테스트 인프라
 
 - [ ] **T-323** — web 워크플로의 `e2e` 잡이 aggregate required check가 아니라 Playwright 실패가 머지를

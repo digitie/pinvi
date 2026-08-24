@@ -345,9 +345,14 @@ async def test_unified_search_degrades_when_providers_absent(
 
 
 async def test_unified_search_near_me_passes_coord_to_kakao_only(
-    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+    client: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+    grant_location_consent: Any,
 ) -> None:
     user_id, _ = verified_user
+    # near-me 검색은 좌표를 제3자에 제공하므로 위치 동의를 요구한다(T-327).
+    await grant_location_consent(user_id)
     kakao = _FakeKakaoLocalClient()
     _override_search_clients(
         _FakeKorTravelMapClient(),
@@ -407,9 +412,12 @@ async def test_unified_search_near_me_disclosure_is_audited(
     verified_user: tuple[str, str],
     auth_cookies: Any,
     session_factory: Any,
+    grant_location_consent: Any,
 ) -> None:
     """실제로 Kakao에 좌표를 제공하면 third_party_place_search 감사 기록이 남는다."""
     user_id, _ = verified_user
+    # near-me 검색은 좌표를 제3자에 제공하므로 위치 동의를 요구한다(T-327).
+    await grant_location_consent(user_id)
     _override_search_clients(
         _FakeKorTravelMapClient(),
         _FakeKorTravelGeoClient(),
@@ -432,9 +440,12 @@ async def test_unified_search_near_me_short_circuit_not_audited(
     verified_user: tuple[str, str],
     auth_cookies: Any,
     session_factory: Any,
+    grant_location_consent: Any,
 ) -> None:
     """near-me라도 내부 결과 ≥ K로 Kakao를 호출하지 않으면 좌표는 제공되지 않아 감사도 없다."""
     user_id, _ = verified_user
+    # near-me 검색은 좌표를 제3자에 제공하므로 위치 동의를 요구한다(T-327).
+    await grant_location_consent(user_id)
     kakao = _FakeKakaoLocalClient()
     _override_search_clients(
         _FakeKorTravelMapClient(item_count=5),  # ≥ K → short-circuit

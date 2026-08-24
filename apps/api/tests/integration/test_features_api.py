@@ -192,9 +192,14 @@ async def test_in_bounds_maps_kor_travel_map_shape(
 
 
 async def test_nearby_uses_lon_lat_and_distance(
-    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+    client: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+    grant_location_consent: Any,
 ) -> None:
     user_id, _email = verified_user
+    # 좌표 endpoint는 위치 동의를 요구한다(T-327).
+    await grant_location_consent(user_id)
     fake = _FakeKorTravelMapClient()
     _override(fake)
     try:
@@ -215,9 +220,14 @@ async def test_nearby_uses_lon_lat_and_distance(
 
 
 async def test_nearby_rejects_legacy_lng_query(
-    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+    client: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+    grant_location_consent: Any,
 ) -> None:
     user_id, _email = verified_user
+    # 좌표 endpoint는 위치 동의를 요구한다(T-327).
+    await grant_location_consent(user_id)
     _override(_FakeKorTravelMapClient())
     try:
         resp = await client.get(
