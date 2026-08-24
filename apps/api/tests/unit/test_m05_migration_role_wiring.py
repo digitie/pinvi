@@ -127,3 +127,15 @@ def test_migration_wrappers_open_only_for_the_one_shot_and_seal_afterward() -> N
             < migration.index("run_admin_bootstrap")
             < migration.rindex("seal_migrator_login")
         )
+
+
+def test_docker_app_up_uses_the_explicit_legacy_role_profile_before_migration() -> None:
+    source = (ROOT / "scripts" / "docker-app.sh").read_text(encoding="utf-8")
+    up_deps = source[source.index("up_deps() {") : source.index("drain_runtime_writers() {")]
+    up = source[source.index("up() {") : source.index("down() {")]
+
+    assert 'local legacy_rebaseline="${1:-0}"' in up_deps
+    assert '-e PINVI_M05_LEGACY_REBASELINE="$legacy_rebaseline"' in up_deps
+    assert "legacy_rebaseline_receipt_file >/dev/null" in up
+    assert 'up_deps "$legacy_rebaseline"' in up
+    assert up.index('up_deps "$legacy_rebaseline"') < up.index("migrate")

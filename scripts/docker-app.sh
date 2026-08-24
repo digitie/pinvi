@@ -138,10 +138,14 @@ require_python() {
 }
 
 up_deps() {
+  local legacy_rebaseline="${1:-0}"
   require_docker
   log "starting Postgres + runtime DB role + RustFS"
   compose up -d app-postgres app-rustfs app-rustfs-init
-  compose run --rm app-db-runtime-role
+  compose run --rm \
+    -e PINVI_M05_LEGACY_REBASELINE="$legacy_rebaseline" \
+    -e PINVI_MIGRATOR_DISABLE_LOGIN=1 \
+    app-db-runtime-role
 }
 
 drain_runtime_writers() {
@@ -290,8 +294,13 @@ up() {
   require_docker
   require_python
   pinvi_verify_runtime_image_provenance app-api app-web
+  local legacy_rebaseline
+  legacy_rebaseline="$(m05_legacy_rebaseline_profile)"
+  if [[ "$legacy_rebaseline" == "1" ]]; then
+    legacy_rebaseline_receipt_file >/dev/null
+  fi
   free_app_ports
-  up_deps
+  up_deps "$legacy_rebaseline"
   migrate
   log "starting API + Web"
   compose up -d app-api app-web
