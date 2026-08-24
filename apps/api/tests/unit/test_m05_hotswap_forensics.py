@@ -299,3 +299,24 @@ def test_no_switch_terminal_requires_a_durable_failure_latch(tmp_path: Path, cap
     terminal_intent[-1] = "no_switch"
     assert module.main(terminal_intent) == 3
     assert "transition is invalid" in capsys.readouterr().err
+
+
+def test_status_allow_absent_only_reports_an_absent_current_pointer(tmp_path: Path, capsys) -> None:
+    module = _module()
+    state_directory = tmp_path / "forensics"
+    state_directory.mkdir(mode=0o700)
+    status = [
+        "status",
+        "--state-dir",
+        str(state_directory),
+        "--test-mode",
+        "--allow-absent",
+    ]
+    assert module.main(status) == 0
+    assert capsys.readouterr().out == '{"active":false}\n'
+
+    assert module.main(_begin_arguments(state_directory)) == 0
+    operation_id = capsys.readouterr().out.strip()
+    assert module._UUID_RE.fullmatch(operation_id)
+    assert module.main(status) == 0
+    assert json.loads(capsys.readouterr().out)["operation_id"] == operation_id

@@ -761,6 +761,19 @@ class _StateDirectory:
 
         return self._current_unlocked()
 
+    def current_if_present(self) -> tuple[dict[str, object], bytes] | None:
+        """Return no marker only for an absent current pointer; corruption fails closed."""
+
+        directory_fd = self._directory_fd()
+        try:
+            try:
+                os.stat(_CURRENT_NAME, dir_fd=directory_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                return None
+        finally:
+            os.close(directory_fd)
+        return self._current_unlocked()
+
     def _write_new_or_match(self, relative: str, raw: bytes, *, mismatch: str) -> bool:
         """Persist an immutable artifact, or accept an exact crash-resume duplicate."""
 
@@ -1122,7 +1135,14 @@ def _command_failure(args: argparse.Namespace) -> int:
 
 def _command_status(args: argparse.Namespace) -> int:
     store = _store_from_args(args)
-    marker, _ = store.current()
+    if args.allow_absent:
+        current = store.current_if_present()
+        if current is None:
+            sys.stdout.buffer.write(b'{"active":false}\n')
+            return 0
+        marker, _ = current
+    else:
+        marker, _ = store.current()
     sys.stdout.buffer.write(_canonical_json(marker) + b"\n")
     return 0
 
@@ -1195,6 +1215,7 @@ def _parser() -> argparse.ArgumentParser:
 
     status = commands.add_parser("status")
     _add_store_arguments(status)
+    status.add_argument("--allow-absent", action="store_true")
 
     acknowledge = commands.add_parser("acknowledge")
     _add_store_arguments(acknowledge)
