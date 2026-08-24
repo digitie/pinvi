@@ -160,7 +160,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
         )
         assert stale_membership.returncode != 0
         assert "role topology is not canonical" in stale_membership.stderr
-        assert role_state()[:3] == ("true", "true", "0")
+        assert role_state()[:3] == ("false", "false", "0")
         sealed_membership = compose("run", "--rm", "--no-deps", "app-db-runtime-role", check=False)
         assert sealed_membership.returncode != 0
         assert "role topology is not canonical" in sealed_membership.stderr

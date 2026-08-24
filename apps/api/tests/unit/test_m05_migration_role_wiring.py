@@ -62,7 +62,12 @@ def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
     assert "pg_terminate_backend(activity.pid, 5000)" in bootstrap
     assert "FROM pg_stat_activity activity" in bootstrap
     assert "close the one-shot credential before any" in bootstrap
+    assert "seal_migrator_on_failure()" in bootstrap
+    assert "trap 'seal_migrator_on_failure' EXIT" in bootstrap
     assert "OR membership.roleid = runtime.oid" in bootstrap
+    assert "FROM pg_operator operator_row" in bootstrap
+    assert "FROM pg_collation collation" in bootstrap
+    assert "FROM pg_extension extension" in bootstrap
     assert "REVOKE ALL ON FUNCTION x_extension.digest(bytea, text) FROM PUBLIC;" in bootstrap
     assert "GRANT EXECUTE ON FUNCTION x_extension.digest(bytea, text)" in bootstrap
     assert "WHERE membership.roleid = owner.oid" in bootstrap
@@ -89,6 +94,10 @@ def test_0101_switches_only_m05_objects_and_restores_app_owner_for_versioning() 
     assert "membership.roleid = (SELECT oid FROM migration_role)" in migration
     assert "_assert_legacy_rebaseline_handoff(bind)" in migration
     assert "PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH" in migration
+    assert "_LEGACY_REBASELINE_SERIALIZATION_LOCK_SQL" in migration
+    assert "_assert_legacy_rebaseline_ddl_quiescence" in migration
+    assert "FROM pg_operator operator_row" in migration
+    assert "ALTER OPERATOR app." in migration
     upgrade = migration[migration.index("def upgrade()") :]
     assert upgrade.index("_assert_legacy_rebaseline_handoff(bind)") < upgrade.index(
         "_advance_boundary_contract()"

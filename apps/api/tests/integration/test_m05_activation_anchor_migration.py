@@ -593,6 +593,97 @@ async def test_0101_legacy_handoff_revalidates_receipt_data_before_ddl(
         await _drop_database(maintenance_url, target_url)
 
 
+def test_0101_legacy_catalog_serializer_matches_rebaseline_helper() -> None:
+    """receipt producer와 0101 consumer가 같은 catalog serialization을 유지한다."""
+
+    rebaseline = _rebaseline_module()
+    migration = _activation_migration_module()
+
+    assert (
+        migration._LEGACY_REBASELINE_CATALOG_FINGERPRINT_SQL.strip()
+        == rebaseline._CATALOG_FINGERPRINT_SQL.strip()
+    )
+
+
+@pytest.mark.asyncio
+async def test_0101_legacy_catalog_fingerprint_covers_nonrelation_schema_objects(
+    _database_url: str,
+) -> None:
+    """enum/domain/composite/operator 변화는 receipt 재검증 digest를 바꾼다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_catalog_drift")
+    cases = (
+        (
+            "CREATE TYPE app.receipt_status AS ENUM ('before')",
+            "ALTER TYPE app.receipt_status ADD VALUE 'after'",
+        ),
+        (
+            "CREATE DOMAIN app.receipt_code AS text",
+            "ALTER DOMAIN app.receipt_code ADD CONSTRAINT receipt_code_nonempty "
+            "CHECK (VALUE <> '')",
+        ),
+        (
+            "CREATE TYPE app.receipt_pair AS (code text)",
+            "ALTER TYPE app.receipt_pair ADD ATTRIBUTE sequence integer",
+        ),
+        (
+            None,
+            "CREATE OPERATOR app.#=# (LEFTARG = integer, RIGHTARG = integer, "
+            "PROCEDURE = pg_catalog.int4eq)",
+        ),
+    )
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        migration = _activation_migration_module()
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.connect() as connection:
+                for setup_sql, drift_sql in cases:
+                    transaction = await connection.begin()
+                    try:
+                        if setup_sql is not None:
+                            await connection.execute(text(setup_sql))
+                        before = await connection.run_sync(
+                            migration._legacy_rebaseline_catalog_fingerprint
+                        )
+                        await connection.execute(text(drift_sql))
+                        after = await connection.run_sync(
+                            migration._legacy_rebaseline_catalog_fingerprint
+                        )
+                        assert after != before
+                    finally:
+                        await transaction.rollback()
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
+async def test_0101_legacy_receipt_rejects_parallel_ddl_capable_session(
+    _database_url: str,
+) -> None:
+    """catalog row 외 DDL도 receipt 검증 중에는 별도 owner session과 공존할 수 없다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_ddl_quiescence")
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        migration = _activation_migration_module()
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.connect() as blocker:
+                await blocker.execute(text("SELECT 1"))
+                async with engine.begin() as probe:
+                    with pytest.raises(RuntimeError, match="app DDL quiescence"):
+                        await probe.run_sync(migration._assert_legacy_rebaseline_ddl_quiescence)
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+
+
 @pytest.mark.asyncio
 async def test_rebaseline_preflight_rejects_same_shape_constraint_drift(
     _database_url: str,
@@ -1257,6 +1348,13 @@ async def test_0101_legacy_converges_all_app_catalog_owners(
                         "RETURNS integer LANGUAGE sql AS 'SELECT value + 1'"
                     )
                 )
+                await connection.execute(
+                    text(
+                        "CREATE OPERATOR app.#=# ("
+                        "LEFTARG = integer, RIGHTARG = integer, "
+                        "PROCEDURE = pg_catalog.int4eq)"
+                    )
+                )
 
                 legacy_owner = await connection.scalar(
                     text(
@@ -1290,7 +1388,9 @@ async def test_0101_legacy_converges_all_app_catalog_owners(
                         "UNION ALL SELECT procedure.proowner FROM pg_proc procedure "
                         "JOIN app_schema schema ON schema.oid = procedure.pronamespace "
                         "UNION ALL SELECT type_row.typowner FROM pg_type type_row "
-                        "JOIN app_schema schema ON schema.oid = type_row.typnamespace"
+                        "JOIN app_schema schema ON schema.oid = type_row.typnamespace "
+                        "UNION ALL SELECT operator_row.oprowner FROM pg_operator operator_row "
+                        "JOIN app_schema schema ON schema.oid = operator_row.oprnamespace"
                         ") SELECT (SELECT nspowner FROM app_schema) = CAST(:app_owner AS regrole) "
                         "AND NOT EXISTS (SELECT 1 FROM app_objects "
                         "WHERE owner_oid <> CAST(:app_owner AS regrole))"

@@ -69,14 +69,9 @@ until psql --no-psqlrc --no-password --tuples-only --no-align --host=app-postgre
   sleep 1
 done
 
-# Final topology validation can intentionally fail on stale memberships.  When this
-# invocation is the post-migration seal, close the one-shot credential before any
-# other validation path so a failed validation cannot leave a reusable LOGIN/CONNECT
-# window behind.  Keep this separate from the normal role bootstrap transaction: its
-# effects must survive a later fail-closed check.
-if [ "${PINVI_MIGRATOR_DISABLE_LOGIN}" = "1" ]; then
-  psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host=app-postgres \
-    --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+seal_migrator_login() {
+  PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 \
+    --host=app-postgres --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
     --set="migrator_role=${PINVI_MIGRATOR_DB_USER}" \
     --set="database_name=${POSTGRES_DB}" \
     >/dev/null <<'SQL'
@@ -92,6 +87,30 @@ JOIN pg_roles migrator ON migrator.oid = activity.usesysid
 WHERE migrator.rolname = :'migrator_role'
   AND activity.pid <> pg_backend_pid();
 SQL
+}
+
+seal_migrator_on_failure() {
+  status=$?
+  if [ "${status}" -ne 0 ] && [ "${PINVI_MIGRATOR_DISABLE_LOGIN}" = "0" ]; then
+    seal_migrator_login >/dev/null 2>&1 || true
+  fi
+  trap - EXIT
+  exit "${status}"
+}
+
+# Explicit-open은 one-shot migration 전용이다. 이후 어떤 fail-closed 검증이 실패해도
+# bootstrap 자체가 LOGIN/CONNECT를 즉시 회수한다. SIGKILL 이외의 종료도 같은 EXIT
+# handler로 봉인한다.
+trap 'seal_migrator_on_failure' EXIT
+trap 'exit 1' HUP INT TERM
+
+# Final topology validation can intentionally fail on stale memberships.  When this
+# invocation is the post-migration seal, close the one-shot credential before any
+# other validation path so a failed validation cannot leave a reusable LOGIN/CONNECT
+# window behind.  Keep this separate from the normal role bootstrap transaction: its
+# effects must survive a later fail-closed check.
+if [ "${PINVI_MIGRATOR_DISABLE_LOGIN}" = "1" ]; then
+  seal_migrator_login
 fi
 
 # 기존 0061 owner를 바꾸는 것은 ADR-063의 rebaseline 범위를 넘는다. 일반 실행은
@@ -119,6 +138,42 @@ app_objects AS (
     SELECT type_row.typowner::regrole::text
     FROM pg_type type_row
     JOIN app_schema schema ON schema.oid = type_row.typnamespace
+    UNION ALL
+    SELECT operator_row.oprowner::regrole::text
+    FROM pg_operator operator_row
+    JOIN app_schema schema ON schema.oid = operator_row.oprnamespace
+    UNION ALL
+    SELECT collation_row.collowner::regrole::text
+    FROM pg_collation collation_row
+    JOIN app_schema schema ON schema.oid = collation_row.collnamespace
+    UNION ALL
+    SELECT conversion_row.conowner::regrole::text
+    FROM pg_conversion conversion_row
+    JOIN app_schema schema ON schema.oid = conversion_row.connamespace
+    UNION ALL
+    SELECT opclass_row.opcowner::regrole::text
+    FROM pg_opclass opclass_row
+    JOIN app_schema schema ON schema.oid = opclass_row.opcnamespace
+    UNION ALL
+    SELECT opfamily_row.opfowner::regrole::text
+    FROM pg_opfamily opfamily_row
+    JOIN app_schema schema ON schema.oid = opfamily_row.opfnamespace
+    UNION ALL
+    SELECT config_row.cfgowner::regrole::text
+    FROM pg_ts_config config_row
+    JOIN app_schema schema ON schema.oid = config_row.cfgnamespace
+    UNION ALL
+    SELECT dictionary_row.dictowner::regrole::text
+    FROM pg_ts_dict dictionary_row
+    JOIN app_schema schema ON schema.oid = dictionary_row.dictnamespace
+    UNION ALL
+    SELECT statistic_row.stxowner::regrole::text
+    FROM pg_statistic_ext statistic_row
+    JOIN app_schema schema ON schema.oid = statistic_row.stxnamespace
+    UNION ALL
+    SELECT extension_row.extowner::regrole::text
+    FROM pg_extension extension_row
+    JOIN app_schema schema ON schema.oid = extension_row.extnamespace
 )
 SELECT
     NOT EXISTS (SELECT 1 FROM app_objects)
@@ -326,6 +381,42 @@ app_objects AS (
     SELECT type_row.typowner
     FROM pg_type type_row
     JOIN app_schema schema ON schema.oid = type_row.typnamespace
+    UNION ALL
+    SELECT operator_row.oprowner
+    FROM pg_operator operator_row
+    JOIN app_schema schema ON schema.oid = operator_row.oprnamespace
+    UNION ALL
+    SELECT collation_row.collowner
+    FROM pg_collation collation_row
+    JOIN app_schema schema ON schema.oid = collation_row.collnamespace
+    UNION ALL
+    SELECT conversion_row.conowner
+    FROM pg_conversion conversion_row
+    JOIN app_schema schema ON schema.oid = conversion_row.connamespace
+    UNION ALL
+    SELECT opclass_row.opcowner
+    FROM pg_opclass opclass_row
+    JOIN app_schema schema ON schema.oid = opclass_row.opcnamespace
+    UNION ALL
+    SELECT opfamily_row.opfowner
+    FROM pg_opfamily opfamily_row
+    JOIN app_schema schema ON schema.oid = opfamily_row.opfnamespace
+    UNION ALL
+    SELECT config_row.cfgowner
+    FROM pg_ts_config config_row
+    JOIN app_schema schema ON schema.oid = config_row.cfgnamespace
+    UNION ALL
+    SELECT dictionary_row.dictowner
+    FROM pg_ts_dict dictionary_row
+    JOIN app_schema schema ON schema.oid = dictionary_row.dictnamespace
+    UNION ALL
+    SELECT statistic_row.stxowner
+    FROM pg_statistic_ext statistic_row
+    JOIN app_schema schema ON schema.oid = statistic_row.stxnamespace
+    UNION ALL
+    SELECT extension_row.extowner
+    FROM pg_extension extension_row
+    JOIN app_schema schema ON schema.oid = extension_row.extnamespace
 )
 SELECT
     (SELECT count(*) FROM runtime_role) = 1
@@ -518,9 +609,9 @@ SELECT
     )
     AND (
         SELECT count(*)
-        FROM pg_extension extension
-        JOIN x_extension_schema schema ON schema.oid = extension.extnamespace
-        WHERE extension.extname IN ('pgcrypto', 'pg_trgm', 'citext')
+        FROM pg_extension extension_row
+        JOIN x_extension_schema schema ON schema.oid = extension_row.extnamespace
+        WHERE extension_row.extname IN ('pgcrypto', 'pg_trgm', 'citext')
     ) = 3;
 SQL
 )"

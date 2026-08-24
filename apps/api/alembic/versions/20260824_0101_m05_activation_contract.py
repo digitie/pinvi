@@ -34,6 +34,7 @@ _M05_SCHEMA_SHA256 = "128e2b374842ca2e9755041815457625a8c2212c013c1bafd6adb93db4
 _M05_SCHEMA_STATEMENT_COUNT = 21
 _DOLLAR_QUOTE = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$")
 _ROLE_IDENTIFIER = re.compile(r"[a-z_][a-z0-9_]*")
+_OPERATOR_NAME = re.compile(r"[-+*/<>=~!@#%^&|`?]+")
 _BOUNDARY_CONTRACT_CHECK = (
     "contract_version = 'pinvi-cache-target-final-boundary/v1' "
     "AND status = 'succeeded' AND schema_revision = '20260824_0101'"
@@ -106,7 +107,7 @@ WITH object_lines(line) AS (
                            COALESCE(pg_get_partkeydef(c.oid), ''))::text
   FROM pg_class AS c
   JOIN pg_namespace AS n ON n.oid = c.relnamespace
-  WHERE n.nspname = 'app' AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
+  WHERE n.nspname = 'app' AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f', 'c')
   UNION ALL
   SELECT jsonb_build_array('column', c.relname, a.attname, a.attnum,
                            pg_catalog.format_type(a.atttypid, a.atttypmod), a.attnotnull,
@@ -117,8 +118,74 @@ WITH object_lines(line) AS (
   JOIN pg_class AS c ON c.oid = a.attrelid
   JOIN pg_namespace AS n ON n.oid = c.relnamespace
   LEFT JOIN pg_attrdef AS d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
-  WHERE n.nspname = 'app' AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+  WHERE n.nspname = 'app' AND c.relkind IN ('r', 'p', 'v', 'm', 'f', 'c')
     AND a.attnum > 0 AND NOT a.attisdropped
+  UNION ALL
+  SELECT jsonb_build_array(
+      'type', type_row.typname, type_row.typtype,
+      pg_get_userbyid(type_row.typowner), COALESCE(type_row.typacl::text, ''),
+      CASE WHEN type_row.typbasetype = 0 THEN ''
+           ELSE pg_catalog.format_type(type_row.typbasetype, type_row.typtypmod) END,
+      type_row.typnotnull, COALESCE(type_row.typdefault, ''),
+      CASE WHEN type_row.typcollation = 0 THEN ''
+           ELSE type_row.typcollation::regcollation::text END
+    )::text
+  FROM pg_type AS type_row
+  JOIN pg_namespace AS n ON n.oid = type_row.typnamespace
+  WHERE n.nspname = 'app'
+    AND type_row.typrelid = 0
+    AND type_row.typelem = 0
+    AND type_row.typtype <> 'p'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'enum', type_row.typname, enum_row.enumsortorder, enum_row.enumlabel
+    )::text
+  FROM pg_enum AS enum_row
+  JOIN pg_type AS type_row ON type_row.oid = enum_row.enumtypid
+  JOIN pg_namespace AS n ON n.oid = type_row.typnamespace
+  WHERE n.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'domain_constraint', type_row.typname, constraint_row.conname,
+      constraint_row.condeferrable, constraint_row.condeferred,
+      constraint_row.convalidated, pg_get_constraintdef(constraint_row.oid, true)
+    )::text
+  FROM pg_constraint AS constraint_row
+  JOIN pg_type AS type_row ON type_row.oid = constraint_row.contypid
+  JOIN pg_namespace AS n ON n.oid = type_row.typnamespace
+  WHERE n.nspname = 'app' AND constraint_row.contypid <> 0
+  UNION ALL
+  SELECT jsonb_build_array(
+      'composite_type', type_row.typname, pg_get_userbyid(type_row.typowner),
+      COALESCE(type_row.typacl::text, '')
+    )::text
+  FROM pg_type AS type_row
+  JOIN pg_class AS relation ON relation.oid = type_row.typrelid
+  JOIN pg_namespace AS n ON n.oid = type_row.typnamespace
+  WHERE n.nspname = 'app' AND relation.relkind = 'c'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'operator', operator_row.oprname, operator_row.oprkind,
+      pg_get_userbyid(operator_row.oprowner), operator_row.oprcanmerge,
+      operator_row.oprcanhash,
+      CASE WHEN operator_row.oprleft = 0 THEN ''
+           ELSE pg_catalog.format_type(operator_row.oprleft, NULL::integer) END,
+      CASE WHEN operator_row.oprright = 0 THEN ''
+           ELSE pg_catalog.format_type(operator_row.oprright, NULL::integer) END,
+      pg_catalog.format_type(operator_row.oprresult, NULL::integer),
+      CASE WHEN operator_row.oprcom = 0 THEN ''
+           ELSE operator_row.oprcom::regoperator::text END,
+      CASE WHEN operator_row.oprnegate = 0 THEN ''
+           ELSE operator_row.oprnegate::regoperator::text END,
+      operator_row.oprcode::regprocedure::text,
+      CASE WHEN operator_row.oprrest = 0 THEN ''
+           ELSE operator_row.oprrest::regprocedure::text END,
+      CASE WHEN operator_row.oprjoin = 0 THEN ''
+           ELSE operator_row.oprjoin::regprocedure::text END
+    )::text
+  FROM pg_operator AS operator_row
+  JOIN pg_namespace AS n ON n.oid = operator_row.oprnamespace
+  WHERE n.nspname = 'app'
   UNION ALL
   SELECT jsonb_build_array('constraint', c.relname, con.conname, con.contype,
                            con.condeferrable, con.condeferred, con.convalidated,
@@ -208,6 +275,82 @@ JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
 WHERE namespace.nspname = 'app'
   AND relation.relkind IN ('r', 'p')
 ORDER BY relation.relname COLLATE "C"
+"""
+_LEGACY_REBASELINE_SERIALIZATION_LOCK_SQL = "SELECT pg_advisory_xact_lock(1863432274, 20260824)"
+_LEGACY_REBASELINE_DDL_QUIESCENCE_SQL = """
+WITH app_schema AS (
+  SELECT namespace.oid, namespace.nspowner
+  FROM pg_namespace AS namespace
+  WHERE namespace.nspname = 'app'
+),
+app_catalog_owners(owner_oid) AS (
+  SELECT schema.nspowner FROM app_schema AS schema
+  UNION
+  SELECT relation.relowner
+  FROM pg_class AS relation
+  JOIN app_schema AS schema ON schema.oid = relation.relnamespace
+  UNION
+  SELECT procedure.proowner
+  FROM pg_proc AS procedure
+  JOIN app_schema AS schema ON schema.oid = procedure.pronamespace
+  UNION
+  SELECT type_row.typowner
+  FROM pg_type AS type_row
+  JOIN app_schema AS schema ON schema.oid = type_row.typnamespace
+  UNION
+  SELECT operator_row.oprowner
+  FROM pg_operator AS operator_row
+  JOIN app_schema AS schema ON schema.oid = operator_row.oprnamespace
+  UNION
+  SELECT collation_row.collowner
+  FROM pg_collation AS collation_row
+  JOIN app_schema AS schema ON schema.oid = collation_row.collnamespace
+  UNION
+  SELECT conversion_row.conowner
+  FROM pg_conversion AS conversion_row
+  JOIN app_schema AS schema ON schema.oid = conversion_row.connamespace
+  UNION
+  SELECT opclass_row.opcowner
+  FROM pg_opclass AS opclass_row
+  JOIN app_schema AS schema ON schema.oid = opclass_row.opcnamespace
+  UNION
+  SELECT opfamily_row.opfowner
+  FROM pg_opfamily AS opfamily_row
+  JOIN app_schema AS schema ON schema.oid = opfamily_row.opfnamespace
+  UNION
+  SELECT config_row.cfgowner
+  FROM pg_ts_config AS config_row
+  JOIN app_schema AS schema ON schema.oid = config_row.cfgnamespace
+  UNION
+  SELECT dictionary_row.dictowner
+  FROM pg_ts_dict AS dictionary_row
+  JOIN app_schema AS schema ON schema.oid = dictionary_row.dictnamespace
+  UNION
+  SELECT statistic_row.stxowner
+  FROM pg_statistic_ext AS statistic_row
+  JOIN app_schema AS schema ON schema.oid = statistic_row.stxnamespace
+  UNION
+  SELECT extension_row.extowner
+  FROM pg_extension AS extension_row
+  JOIN app_schema AS schema ON schema.oid = extension_row.extnamespace
+)
+SELECT NOT EXISTS (
+  SELECT 1
+  FROM pg_stat_activity AS activity
+  LEFT JOIN pg_roles AS role_row ON role_row.oid = activity.usesysid
+  WHERE activity.datname = current_database()
+    AND activity.backend_type = 'client backend'
+    AND activity.pid <> pg_backend_pid()
+    AND (
+      COALESCE(role_row.rolsuper, false)
+      OR COALESCE(has_schema_privilege(activity.usesysid, 'app', 'CREATE'), false)
+      OR COALESCE(
+        pg_has_role(activity.usesysid, (SELECT nspowner FROM app_schema), 'SET'),
+        false
+      )
+      OR activity.usesysid IN (SELECT owner_oid FROM app_catalog_owners)
+    )
+)
 """
 
 
@@ -559,6 +702,14 @@ def _lock_legacy_rebaseline_app_tables(bind: sa.Connection, tables: tuple[str, .
         )
 
 
+def _assert_legacy_rebaseline_ddl_quiescence(bind: sa.Connection) -> None:
+    """Receipt 검증 중 app DDL을 할 수 있는 다른 세션을 fail-close한다."""
+
+    ddl_quiescent = bind.scalar(sa.text(_LEGACY_REBASELINE_DDL_QUIESCENCE_SQL))
+    if ddl_quiescent is not True:
+        raise RuntimeError("0101 legacy rebaseline requires app DDL quiescence")
+
+
 def _legacy_rebaseline_catalog_fingerprint(bind: sa.Connection) -> tuple[int, str]:
     rows = tuple(
         str(line)
@@ -610,7 +761,9 @@ def _assert_legacy_rebaseline_fingerprint(
 ) -> None:
     """Reject receipt replay when the post-stamp legacy database has drifted."""
 
+    bind.execute(sa.text(_LEGACY_REBASELINE_SERIALIZATION_LOCK_SQL))
     _normalize_legacy_rebaseline_fingerprint_session(bind)
+    _assert_legacy_rebaseline_ddl_quiescence(bind)
     tables = _legacy_rebaseline_app_tables(bind)
     _lock_legacy_rebaseline_app_tables(bind, tables)
     catalog_lines, catalog_sha256 = _legacy_rebaseline_catalog_fingerprint(bind)
@@ -1165,6 +1318,42 @@ def _legacy_app_ownership_is_canonical(bind: sa.Connection, app_schema_owner: st
                     SELECT type_row.typowner
                     FROM pg_type type_row
                     JOIN app_schema schema ON schema.oid = type_row.typnamespace
+                    UNION ALL
+                    SELECT operator_row.oprowner
+                    FROM pg_operator operator_row
+                    JOIN app_schema schema ON schema.oid = operator_row.oprnamespace
+                    UNION ALL
+                    SELECT collation_row.collowner
+                    FROM pg_collation collation_row
+                    JOIN app_schema schema ON schema.oid = collation_row.collnamespace
+                    UNION ALL
+                    SELECT conversion_row.conowner
+                    FROM pg_conversion conversion_row
+                    JOIN app_schema schema ON schema.oid = conversion_row.connamespace
+                    UNION ALL
+                    SELECT opclass_row.opcowner
+                    FROM pg_opclass opclass_row
+                    JOIN app_schema schema ON schema.oid = opclass_row.opcnamespace
+                    UNION ALL
+                    SELECT opfamily_row.opfowner
+                    FROM pg_opfamily opfamily_row
+                    JOIN app_schema schema ON schema.oid = opfamily_row.opfnamespace
+                    UNION ALL
+                    SELECT config_row.cfgowner
+                    FROM pg_ts_config config_row
+                    JOIN app_schema schema ON schema.oid = config_row.cfgnamespace
+                    UNION ALL
+                    SELECT dictionary_row.dictowner
+                    FROM pg_ts_dict dictionary_row
+                    JOIN app_schema schema ON schema.oid = dictionary_row.dictnamespace
+                    UNION ALL
+                    SELECT statistic_row.stxowner
+                    FROM pg_statistic_ext statistic_row
+                    JOIN app_schema schema ON schema.oid = statistic_row.stxnamespace
+                    UNION ALL
+                    SELECT extension_row.extowner
+                    FROM pg_extension extension_row
+                    JOIN app_schema schema ON schema.oid = extension_row.extnamespace
                 )
                 SELECT
                     (SELECT count(*) FROM app_schema) = 1
@@ -1179,6 +1368,66 @@ def _legacy_app_ownership_is_canonical(bind: sa.Connection, app_schema_owner: st
         )
         is True
     )
+
+
+def _assert_legacy_supported_catalog_owners_are_canonical(
+    bind: sa.Connection, app_schema_owner: str
+) -> None:
+    """ALTER OWNER를 지원하지 않는 app catalog owner drift는 transaction 전체를 중단한다."""
+
+    unsupported_owner_drift = bind.scalar(
+        sa.text(
+            """
+            WITH app_schema AS (
+                SELECT namespace.oid
+                FROM pg_namespace namespace
+                WHERE namespace.nspname = 'app'
+            ),
+            unsupported_objects(owner_oid) AS (
+                SELECT collation_row.collowner
+                FROM pg_collation collation_row
+                JOIN app_schema schema ON schema.oid = collation_row.collnamespace
+                UNION ALL
+                SELECT conversion_row.conowner
+                FROM pg_conversion conversion_row
+                JOIN app_schema schema ON schema.oid = conversion_row.connamespace
+                UNION ALL
+                SELECT opclass_row.opcowner
+                FROM pg_opclass opclass_row
+                JOIN app_schema schema ON schema.oid = opclass_row.opcnamespace
+                UNION ALL
+                SELECT opfamily_row.opfowner
+                FROM pg_opfamily opfamily_row
+                JOIN app_schema schema ON schema.oid = opfamily_row.opfnamespace
+                UNION ALL
+                SELECT config_row.cfgowner
+                FROM pg_ts_config config_row
+                JOIN app_schema schema ON schema.oid = config_row.cfgnamespace
+                UNION ALL
+                SELECT dictionary_row.dictowner
+                FROM pg_ts_dict dictionary_row
+                JOIN app_schema schema ON schema.oid = dictionary_row.dictnamespace
+                UNION ALL
+                SELECT statistic_row.stxowner
+                FROM pg_statistic_ext statistic_row
+                JOIN app_schema schema ON schema.oid = statistic_row.stxnamespace
+                UNION ALL
+                SELECT extension_row.extowner
+                FROM pg_extension extension_row
+                JOIN app_schema schema ON schema.oid = extension_row.extnamespace
+            )
+            SELECT EXISTS (
+                SELECT 1
+                FROM unsupported_objects object_row
+                JOIN pg_roles owner ON owner.rolname = :app_schema_owner
+                WHERE object_row.owner_oid <> owner.oid
+            )
+            """
+        ),
+        {"app_schema_owner": app_schema_owner},
+    )
+    if unsupported_owner_drift is True:
+        raise RuntimeError("0101 legacy rebaseline has noncanonical unsupported app catalog owners")
 
 
 def _converge_legacy_app_ownership(bind: sa.Connection, app_owner: str | None) -> str | None:
@@ -1201,6 +1450,7 @@ def _converge_legacy_app_ownership(bind: sa.Connection, app_owner: str | None) -
     if current_owner != app_owner:
         raise RuntimeError("0101 legacy rebaseline app schema owner changed before convergence")
 
+    _assert_legacy_supported_catalog_owners_are_canonical(bind, app_schema_owner)
     quoted_owner = _quote_identifier(app_schema_owner)
     bind.execute(sa.text(f"ALTER SCHEMA app OWNER TO {quoted_owner}"))
 
@@ -1286,6 +1536,38 @@ def _converge_legacy_app_ownership(bind: sa.Connection, app_owner: str | None) -
             sa.text(
                 f"ALTER ROUTINE app.{_quote_identifier(routine_name)}({identity_arguments}) "
                 f"OWNER TO {quoted_owner}"
+            )
+        )
+
+    operators = tuple(
+        (str(row[0]), str(row[1]), str(row[2]))
+        for row in bind.execute(
+            sa.text(
+                """
+                SELECT
+                    operator_row.oprname,
+                    CASE WHEN operator_row.oprleft = 0 THEN 'NONE'
+                         ELSE pg_catalog.format_type(operator_row.oprleft, NULL::integer) END,
+                    CASE WHEN operator_row.oprright = 0 THEN 'NONE'
+                         ELSE pg_catalog.format_type(operator_row.oprright, NULL::integer) END
+                FROM pg_operator operator_row
+                JOIN pg_namespace namespace ON namespace.oid = operator_row.oprnamespace
+                JOIN pg_roles owner ON owner.rolname = :app_schema_owner
+                WHERE namespace.nspname = 'app'
+                  AND operator_row.oprowner <> owner.oid
+                ORDER BY operator_row.oprname COLLATE "C", operator_row.oid
+                """
+            ),
+            {"app_schema_owner": app_schema_owner},
+        )
+    )
+    for operator_name, left_type, right_type in operators:
+        if _OPERATOR_NAME.fullmatch(operator_name) is None:
+            raise RuntimeError("0101 legacy rebaseline encountered an invalid app operator name")
+        bind.execute(
+            sa.text(
+                f"ALTER OPERATOR app.{operator_name} "
+                f"({left_type}, {right_type}) OWNER TO {quoted_owner}"
             )
         )
 
