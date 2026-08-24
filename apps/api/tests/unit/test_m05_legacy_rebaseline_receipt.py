@@ -101,6 +101,9 @@ def test_0101_legacy_handoff_requires_root_owned_applied_receipt(
     monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH", str(receipt_path))
     monkeypatch.setattr(module.os, "geteuid", lambda: 0)
     monkeypatch.setattr(module, "_assert_legacy_rebaseline_fingerprint", lambda *_args: None)
+    monkeypatch.setattr(
+        module, "_acquire_legacy_rebaseline_database_connection_fence", lambda *_args: None
+    )
 
     with pytest.raises(RuntimeError, match="root-owned mode 0600"):
         module._assert_legacy_rebaseline_handoff(_BoundIdentity(identity, ["20260824_0100"]))
