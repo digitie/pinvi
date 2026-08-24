@@ -151,6 +151,46 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
     assert "WITH RECURSIVE role_closure" in calls[1]
 
 
+def test_restore_db_rejects_api_writable_snapshot_before_pg_restore(tmp_path: Path) -> None:
+    marker = tmp_path / "pg-restore-called"
+    snapshot = tmp_path / "untrusted.dump"
+    snapshot.write_bytes(b"malicious-custom-archive")
+    snapshot.with_name(f"{snapshot.name}.sha256").write_text(
+        f"{hashlib.sha256(snapshot.read_bytes()).hexdigest()}  {snapshot.name}\n",
+        encoding="utf-8",
+    )
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(
+        fake_bin / "pg_restore",
+        "#!/usr/bin/env bash\nset -euo pipefail\ntouch \"$PINVI_TEST_TOOL_MARKER\"\n",
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{fake_bin}:/usr/bin:/bin",
+            "PINVI_ENVIRONMENT": "production",
+            "PINVI_RESTORE_DATABASE_URL": "postgresql://restore-owner@db:5432/pinvi",
+            "PINVI_RESTORE_PG_RESTORE_BIN": str(fake_bin / "pg_restore"),
+            "PINVI_TEST_TOOL_MARKER": str(marker),
+        }
+    )
+    env.pop("PINVI_M05_RESTORE_TEST_MODE", None)
+
+    result = subprocess.run(  # noqa: S603
+        [BASH_BIN, str(_repo_root() / "scripts" / "restore-db.sh"), str(snapshot)],
+        cwd=_repo_root(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 3
+    assert "strict restore requires a root-owned trusted backup directory" in result.stderr
+    assert not marker.exists()
+
+
 @pytest.mark.parametrize("environment", ["staging", "production"])
 def test_restore_db_rejects_test_mode_outside_test_before_clean_restore(
     tmp_path: Path,

@@ -126,6 +126,23 @@ exit 9
         await create_backup_snapshot(access_reason="실패 테스트")
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("environment", ["staging", "production"])
+async def test_create_backup_snapshot_refuses_strict_api_writer_before_child_spawn(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    monkeypatch.setattr(settings, "pinvi_environment", environment)
+
+    async def unexpected_child(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("strict API backup must not spawn a child process")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", unexpected_child)
+
+    with pytest.raises(BackupServiceError, match="root-owned trusted backup producer"):
+        await create_backup_snapshot(access_reason="strict provenance regression")
+
+
 def test_list_backup_snapshots_sorts_recent_first(tmp_path: Path) -> None:
     backup_dir = Path(settings.pinvi_backup_dir)
     backup_dir.mkdir(parents=True)
@@ -277,9 +294,12 @@ async def test_restore_backup_hotswap_refuses_strict_api_execution_before_child_
 def test_app_api_compose_does_not_receive_restore_executor_authority() -> None:
     root = Path(__file__).resolve().parents[4]
     compose = (root / "infra/docker-compose.app.yml").read_text(encoding="utf-8")
-    api_block = compose.split("  app-api:", maxsplit=1)[1].split("  app-migrator:", maxsplit=1)[0]
+    api_block = compose.split("  app-api:", maxsplit=1)[1].split("  app-backup:", maxsplit=1)[0]
 
     assert "PINVI_DATABASE_URL" in api_block
+    assert "PINVI_RESTORE_TRUSTED_BACKUP_HOST_DIR" in api_block
+    assert "read_only: true" in api_block
+    assert "PINVI_BACKUP_TRUSTED" not in api_block
     for variable in (
         "PINVI_RESTORE_DATABASE_URL",
         "PINVI_RESTORE_FENCE_DATABASE_URL",
@@ -291,6 +311,10 @@ def test_app_api_compose_does_not_receive_restore_executor_authority() -> None:
         "PINVI_RESTORE_WRITE_ROLES",
     ):
         assert variable not in api_block
+
+    assert "  app-backup:" in compose
+    assert 'profiles: ["maintenance"]' in compose
+    assert "PINVI_BACKUP_TRUSTED: \"1\"" in compose
 
 
 def test_strict_settings_reject_restore_executor_authority() -> None:

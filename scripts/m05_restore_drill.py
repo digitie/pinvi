@@ -500,7 +500,7 @@ SELECT current_user = '{expected_role}'
   AND NOT r.rolcreatedb
   AND NOT r.rolreplication
   AND NOT r.rolbypassrls
-  AND r.rolinherit
+  AND NOT r.rolinherit
   AND d.datdba = r.oid
   AND NOT EXISTS (
       SELECT 1 FROM pg_auth_members m
@@ -855,7 +855,7 @@ SELECT current_database() = '{sql_template}'
       AND NOT r.rolcreatedb
       AND NOT r.rolreplication
       AND NOT r.rolbypassrls
-      AND r.rolinherit
+      AND NOT r.rolinherit
       AND NOT EXISTS (
         SELECT 1 FROM pg_auth_members m
         WHERE m.member = r.oid OR m.roleid = r.oid
@@ -983,7 +983,7 @@ SELECT EXISTS (
     AND NOT fence_role.rolcreatedb
     AND NOT fence_role.rolreplication
     AND NOT fence_role.rolbypassrls
-    AND fence_role.rolinherit
+    AND NOT fence_role.rolinherit
     AND NOT EXISTS (
       SELECT 1
       FROM pg_auth_members m

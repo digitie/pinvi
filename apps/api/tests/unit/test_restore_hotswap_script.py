@@ -67,9 +67,14 @@ def test_restore_hotswap_rejects_noncanonical_acl_before_write_fence_mutation() 
     assert "OR p.prosecdef" in source
     assert "d.defaclnamespace = 0" in source
     assert "NOT owner_role.rolcreatedb" in source
-    assert "AND owner_role.rolinherit" in source
+    assert "AND NOT owner_role.rolinherit" in source
+    assert "WHERE m.roleid = r.oid" in source
+    assert "WHERE membership.member = owner_role.oid" in source
+    assert "OR membership.roleid = owner_role.oid" in source
     assert "has_schema_privilege((SELECT oid FROM app_role), n.oid, 'USAGE')" in source
     assert "NOT has_schema_privilege((SELECT oid FROM app_role), n.oid, 'CREATE')" in source
+    assert "PINVI_RESTORE_TRUSTED_BACKUP_DIR" in source
+    assert "trusted snapshot archive inventory failed" in source
     enter = source.index("enter_write_fence()")
     assert source.index("  assert_supported_acl_topology\n", enter) < source.index(
         "  local writer_logins", enter
@@ -224,6 +229,46 @@ exit 99
     assert not marker.exists()
 
 
+def test_restore_hotswap_rejects_api_writable_snapshot_before_pg_restore(tmp_path: Path) -> None:
+    marker = tmp_path / "pg-restore-called"
+    snapshot = tmp_path / "untrusted.dump"
+    snapshot.write_bytes(b"malicious-custom-archive")
+    snapshot.with_name(f"{snapshot.name}.sha256").write_text(
+        f"{hashlib.sha256(snapshot.read_bytes()).hexdigest()}  {snapshot.name}\n",
+        encoding="utf-8",
+    )
+    fake_tool = tmp_path / "pg_restore"
+    _write_executable(
+        fake_tool,
+        "#!/usr/bin/env bash\nset -euo pipefail\ntouch \"$PINVI_TEST_TOOL_MARKER\"\n",
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "PINVI_ENVIRONMENT": "production",
+            "PINVI_RESTORE_HOTSWAP_EXECUTE": "1",
+            "PINVI_RESTORE_DATABASE_URL": "postgresql://restore-owner@db:5432/pinvi",
+            "PINVI_RESTORE_FENCE_DATABASE_URL": "postgresql://fence-owner@db:5432/pinvi",
+            "PINVI_RESTORE_PG_RESTORE_BIN": str(fake_tool),
+            "PINVI_TEST_TOOL_MARKER": str(marker),
+        }
+    )
+    env.pop("PINVI_M05_RESTORE_TEST_MODE", None)
+
+    result = subprocess.run(  # noqa: S603
+        [BASH_BIN, str(SCRIPT), "run", str(snapshot), "app_restore", "app_previous"],
+        cwd=SCRIPT.parents[1],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 3
+    assert "strict restore requires a root-owned trusted backup directory" in result.stdout
+    assert not marker.exists()
+
+
 def test_restore_hotswap_rejects_wrong_fence_target_before_mutation(tmp_path: Path) -> None:
     marker = tmp_path / "mutation-called"
     snapshot = tmp_path / "m05.dump"
@@ -264,7 +309,7 @@ esac
     env = os.environ.copy()
     env.update(
         {
-            "PINVI_ENVIRONMENT": "staging",
+            "PINVI_ENVIRONMENT": "development",
             "PINVI_RESTORE_HOTSWAP_EXECUTE": "1",
             "PINVI_RESTORE_PRIVATE_TOOL_COPY": "1",
             "PINVI_RESTORE_DATABASE_URL": "postgresql://restore-owner@db:5432/pinvi",

@@ -1342,7 +1342,7 @@ SELECT EXISTS (
     AND NOT owner_role.rolcreatedb
     AND NOT owner_role.rolreplication
     AND NOT owner_role.rolbypassrls
-    AND owner_role.rolinherit
+    AND NOT owner_role.rolinherit
     AND NOT EXISTS (
       SELECT 1
       FROM pg_auth_members membership

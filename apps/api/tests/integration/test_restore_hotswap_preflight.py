@@ -169,6 +169,67 @@ GRANT USAGE ON SCHEMA x_extension TO {_quoted(hotswap_role)}, {_quoted(app_role)
             )
         )
 
+    reconciliation_schema = ""
+    if kind == "canonical":
+        # The executing hotswap validates the M05 reconciliation safeguards after
+        # restore.  Keep this fixture structurally small, but include the exact
+        # protected objects so this is a genuine happy-path exercise rather than
+        # an ACL-only preflight probe.
+        reconciliation_schema = """
+CREATE TABLE app.users (id bigint PRIMARY KEY);
+CREATE TABLE app.admin_audit_log (id bigint PRIMARY KEY);
+CREATE TABLE app.ktm_feature_reference_reconciliation_delivery_attempts (id bigint PRIMARY KEY);
+CREATE TABLE app.ktm_feature_reference_reconciliation_applied_receipts (id bigint PRIMARY KEY);
+CREATE TABLE app.ktm_feature_reference_reconciliation_impacts (id bigint PRIMARY KEY);
+CREATE FUNCTION app.guard_ktm_feature_reference_reconciliation_append_only()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF TG_OP = 'TRUNCATE' THEN
+    RETURN NULL;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER trg_ktm_feature_reference_reconciliation_delivery_attempts_append_only
+  BEFORE INSERT OR UPDATE OR DELETE
+  ON app.ktm_feature_reference_reconciliation_delivery_attempts
+  FOR EACH ROW EXECUTE FUNCTION app.guard_ktm_feature_reference_reconciliation_append_only();
+ALTER TABLE app.ktm_feature_reference_reconciliation_delivery_attempts
+  ENABLE ALWAYS TRIGGER trg_ktm_feature_reference_reconciliation_delivery_attempts_append_only;
+CREATE TRIGGER trg_ktm_feature_reference_reconciliation_delivery_attempts_truncate_append_only
+  BEFORE TRUNCATE
+  ON app.ktm_feature_reference_reconciliation_delivery_attempts
+  FOR EACH STATEMENT EXECUTE FUNCTION app.guard_ktm_feature_reference_reconciliation_append_only();
+ALTER TABLE app.ktm_feature_reference_reconciliation_delivery_attempts
+  ENABLE ALWAYS TRIGGER trg_ktm_feature_reference_reconciliation_delivery_attempts_truncate_append_only;
+CREATE TRIGGER trg_ktm_feature_reference_reconciliation_applied_receipts_append_only
+  BEFORE INSERT OR UPDATE OR DELETE
+  ON app.ktm_feature_reference_reconciliation_applied_receipts
+  FOR EACH ROW EXECUTE FUNCTION app.guard_ktm_feature_reference_reconciliation_append_only();
+ALTER TABLE app.ktm_feature_reference_reconciliation_applied_receipts
+  ENABLE ALWAYS TRIGGER trg_ktm_feature_reference_reconciliation_applied_receipts_append_only;
+CREATE TRIGGER trg_ktm_feature_reference_reconciliation_applied_receipts_truncate_append_only
+  BEFORE TRUNCATE
+  ON app.ktm_feature_reference_reconciliation_applied_receipts
+  FOR EACH STATEMENT EXECUTE FUNCTION app.guard_ktm_feature_reference_reconciliation_append_only();
+ALTER TABLE app.ktm_feature_reference_reconciliation_applied_receipts
+  ENABLE ALWAYS TRIGGER trg_ktm_feature_reference_reconciliation_applied_receipts_truncate_append_only;
+CREATE TRIGGER trg_ktm_feature_reference_reconciliation_impacts_append_only
+  BEFORE INSERT OR UPDATE OR DELETE
+  ON app.ktm_feature_reference_reconciliation_impacts
+  FOR EACH ROW EXECUTE FUNCTION app.guard_ktm_feature_reference_reconciliation_append_only();
+ALTER TABLE app.ktm_feature_reference_reconciliation_impacts
+  ENABLE ALWAYS TRIGGER trg_ktm_feature_reference_reconciliation_impacts_append_only;
+CREATE TRIGGER trg_ktm_feature_reference_reconciliation_impacts_truncate_append_only
+  BEFORE TRUNCATE
+  ON app.ktm_feature_reference_reconciliation_impacts
+  FOR EACH STATEMENT EXECUTE FUNCTION app.guard_ktm_feature_reference_reconciliation_append_only();
+ALTER TABLE app.ktm_feature_reference_reconciliation_impacts
+  ENABLE ALWAYS TRIGGER trg_ktm_feature_reference_reconciliation_impacts_truncate_append_only;
+"""
+
     setup_sql = f"""
 CREATE SCHEMA app AUTHORIZATION {_quoted(hotswap_role)};
 REVOKE ALL ON SCHEMA app FROM PUBLIC;
@@ -178,6 +239,7 @@ CREATE TABLE app.widgets (
   value integer NOT NULL DEFAULT 0
 );
 INSERT INTO app.widgets (value) VALUES (0);
+{reconciliation_schema}
 {table_grants}
 {extra_grant}
 {default_acl}
@@ -218,6 +280,7 @@ REVOKE INSERT, UPDATE, DELETE ON TABLE app.widgets FROM {_quoted(app_role)};
         )
 
     expected_failure = {
+        "canonical": "",
         "acl": "schema-swap requires canonical single-runtime-role ACLs",
         "extra": "schema-swap requires exactly one canonical runtime writer role",
         "global_default": "schema-swap requires canonical single-runtime-role ACLs",
@@ -380,5 +443,160 @@ def test_restore_hotswap_preflight_rejects_real_noncanonical_topologies_before_m
             assert result.returncode == 3, result.stdout + result.stderr
             assert case.expected_failure in result.stdout
             _assert_source_unchanged(tools, case, restore_schema)
+    finally:
+        container.stop()
+
+
+def test_restore_hotswap_real_canonical_topology_completes_and_releases_fence(
+    tmp_path: Path,
+) -> None:
+    """Dedicated fence owner와 direct pg_signal executor가 실제 schema swap을 완주한다."""
+
+    tools = _require_tools()
+    try:
+        import docker  # noqa: F401
+        from testcontainers.postgres import PostgresContainer
+    except Exception:
+        pytest.skip("docker SDK 미설치 — M05 실제 hotswap 검증을 건너뜁니다.")
+
+    suffix = uuid.uuid4().hex[:8]
+    container = PostgresContainer(
+        "postgres:16-alpine",
+        username="m05_root",
+        password=TEST_PASSWORD,
+        dbname="m05_root",
+    )
+    container.start()
+    try:
+        host = container.get_container_host_ip()
+        port = container.get_exposed_port(5432)
+        root_url = _database_url(host=host, port=port, role="m05_root", database="m05_root")
+        case = _create_case(
+            tools=tools,
+            root_url=root_url,
+            host=host,
+            port=port,
+            suffix=suffix,
+            kind="canonical",
+        )
+        before_identity = _identity(tools, case.hotswap_url)
+        fence_topology = _psql(
+            tools,
+            case.fence_url,
+            """
+SELECT current_user,
+       (SELECT role.rolname
+        FROM pg_database database
+        JOIN pg_roles role ON role.oid = database.datdba
+        WHERE database.datname = current_database()),
+       (SELECT NOT rolinherit FROM pg_roles WHERE rolname = current_user),
+       NOT EXISTS (
+         SELECT 1
+         FROM pg_auth_members membership
+         JOIN pg_roles role ON role.oid = membership.member OR role.oid = membership.roleid
+         WHERE role.rolname = current_user
+       );
+""",
+        )
+        _require_success(fence_topology)
+        assert fence_topology.stdout.strip().split("|")[2:] == ["t", "t"]
+        before_schema = _psql(
+            tools,
+            case.hotswap_url,
+            "SELECT oid::text FROM pg_namespace WHERE nspname = 'app';",
+        )
+        _require_success(before_schema)
+        before_schema_oid = before_schema.stdout.strip()
+        assert before_schema_oid
+        snapshot = _snapshot(tools, case.hotswap_url, tmp_path / "canonical-snapshot")
+        _require_success(_psql(tools, root_url, "ALTER ROLE m05_root NOLOGIN;"))
+
+        restore_schema = f"app_restore_{suffix}"
+        previous_schema = f"app_previous_{suffix}"
+        env = os.environ.copy()
+        env.update(
+            {
+                "PINVI_ENVIRONMENT": "development",
+                "PINVI_RESTORE_HOTSWAP_EXECUTE": "1",
+                "PINVI_RESTORE_PRIVATE_TOOL_COPY": "1",
+                "PINVI_RESTORE_DATABASE_URL": case.hotswap_url,
+                "PINVI_RESTORE_FENCE_DATABASE_URL": case.fence_url,
+                "PINVI_RESTORE_APP_ROLE": case.app_role,
+                "PINVI_RESTORE_ALLOW_NO_DRAIN": "1",
+                "PINVI_RESTORE_DRAIN_VERIFIED": "1",
+                "PINVI_RESTORE_PG_RESTORE_BIN": tools["pg_restore"],
+                "PINVI_RESTORE_PG_RESTORE_SHA256": hashlib.sha256(
+                    Path(tools["pg_restore"]).read_bytes()
+                ).hexdigest(),
+                "PINVI_RESTORE_PSQL_BIN": tools["psql"],
+                "PINVI_RESTORE_PSQL_SHA256": hashlib.sha256(
+                    Path(tools["psql"]).read_bytes()
+                ).hexdigest(),
+                "PINVI_RESTORE_BASH_BIN": tools["bash"],
+                "PINVI_RESTORE_BASH_SHA256": hashlib.sha256(
+                    Path(tools["bash"]).read_bytes()
+                ).hexdigest(),
+                "PINVI_RESTORE_EXPECTED_DATABASE_NAME": before_identity[0],
+                "PINVI_RESTORE_EXPECTED_DATABASE_OID": before_identity[1],
+                "PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER": before_identity[2],
+                "PINVI_RESTORE_EXPECTED_HOSTADDR": before_identity[3],
+                "PINVI_RESTORE_EXPECTED_PORT": before_identity[4],
+            }
+        )
+        env.pop("PINVI_M05_RESTORE_TEST_MODE", None)
+
+        result = _run(
+            [
+                tools["bash"],
+                str(HOTSWAP_SCRIPT),
+                "run",
+                str(snapshot),
+                restore_schema,
+                previous_schema,
+            ],
+            env=env,
+        )
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "RESTORE_PHASE=switching:success:schema-swap completed" in result.stdout
+        after = _psql(
+            tools,
+            case.hotswap_url,
+            f"""
+SELECT (SELECT oid::text FROM pg_namespace WHERE nspname = 'app'),
+       (SELECT oid::text FROM pg_namespace WHERE nspname = '{previous_schema}'),
+       to_regnamespace('{restore_schema}') IS NULL,
+       has_database_privilege('{case.app_role}', current_database(), 'CONNECT'),
+       has_schema_privilege('{case.app_role}', 'app', 'USAGE'),
+       has_table_privilege('{case.app_role}', 'app.widgets', 'SELECT, INSERT, UPDATE, DELETE'),
+       has_database_privilege('{case.fence_role}', current_database(), 'CREATE'),
+       NOT EXISTS (
+         SELECT 1 FROM pg_locks
+         WHERE locktype = 'advisory'
+           AND classid = 1414679892
+           AND objid = 1213421392
+           AND granted
+       );
+""",  # noqa: S608 - test fixture identifiers are generated locally.
+        )
+        _require_success(after)
+        (
+            app_oid,
+            previous_oid,
+            restore_missing,
+            app_connect,
+            app_usage,
+            app_dml,
+            fence_create,
+            lock_gone,
+        ) = after.stdout.strip().split("|")
+        assert app_oid and previous_oid and app_oid != before_schema_oid
+        assert previous_oid == before_schema_oid
+        assert restore_missing == "t"
+        assert app_connect == "t"
+        assert app_usage == "t"
+        assert app_dml == "t"
+        assert fence_create == "t"
+        assert lock_gone == "t"
     finally:
         container.stop()
