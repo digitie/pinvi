@@ -312,6 +312,32 @@ async def test_validation_rejection_records_nothing(
     assert await _outbox_rows(session_factory, user_id) == []
 
 
+async def test_malformed_request_id_does_not_erase_the_record(
+    client, session_factory, verified_user, auth_cookies, grant_location_consent
+):  # type: ignore[no-untyped-def]
+    """클라이언트가 헤더 한 줄로 자기 위치 기록을 지울 수 없어야 한다.
+
+    `X-Request-Id`는 `RequestIdMiddleware`가 무검증으로 통과시키므로 UUID가 아닐 수 있다. 파싱
+    실패에 감사 행을 버리면 **사용자가 자기 확인자료를 마음대로 없앨 수 있다** — 위치정보법 제16조는
+    사업자의 의무이지 사용자의 선택이 아니다. 서버가 새 id를 발급하고 그 사실을 로그로 남긴다.
+    """
+    user_id, _ = verified_user
+    await grant_location_consent(user_id)
+
+    res = await client.get(
+        "/features/nearby",
+        params={"lon": 126.9780, "lat": 37.5665, "radius_m": 500},
+        cookies=auth_cookies(user_id),
+        headers={"X-Request-Id": "not-a-uuid"},
+    )
+    assert res.status_code == 200, res.text
+
+    rows = await _outbox_rows(session_factory, user_id)
+    assert len(rows) == 1, "잘못된 상관 id 때문에 확인자료가 사라졌다"
+    assert rows[0].purpose == "nearby_attractions"
+    assert rows[0].request_id is not None
+
+
 # --------------------------------------------------------------------------------------
 # 외부 의존 — 감사 경로만 보기 위해 상류 응답을 고정한다 (저장소 관례: dependency_overrides)
 # --------------------------------------------------------------------------------------

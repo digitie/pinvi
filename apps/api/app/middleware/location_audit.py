@@ -106,17 +106,23 @@ class LocationAuditMiddleware(BaseHTTPMiddleware):
         except ValueError:
             return
 
-        # `response.headers`는 보지 않는다. `X-Request-Id`는 `RequestIdMiddleware`가 이 미들웨어
-        # **바깥에서** 응답에 붙이므로 여기서는 아직 존재하지 않는다 — 도달 불가한 폴백이었다.
-        request_id_raw = getattr(request.state, "request_id", None) or request.headers.get(
-            "X-Request-Id"
-        )
-        if request_id_raw is None:
-            return
+        # `RequestIdMiddleware`가 이 미들웨어 **바깥**이라 `state.request_id`는 항상 세팅돼 있다.
+        # 그 값은 클라이언트가 보낸 `X-Request-Id`를 무검증으로 통과시킨 것이다 — UUID가 아닐 수 있다.
+        #
+        # 파싱 실패에 행을 버리면 **사용자가 헤더 한 줄로 자기 위치 기록을 지울 수 있다.** 상관용
+        # 식별자 하나 때문에 위치정보법 제16조 확인자료를 잃는 것은 어느 쪽으로도 남는 장사가 아니다.
+        # 서버가 새 id를 발급하고 그 사실을 로그로 남긴다 — `admin/features.py::_parse_request_id`
+        # 등 이 저장소의 감사 경로가 이미 그렇게 한다(없으면 발급, 틀리면 거절; 행을 버리지 않는다).
+        request_id_raw = getattr(request.state, "request_id", None)
         try:
             request_id = uuid.UUID(str(request_id_raw))
-        except ValueError:
-            return
+        except (ValueError, TypeError, AttributeError):
+            request_id = uuid.uuid4()
+            log.warning(
+                "location_audit.invalid_request_id",
+                endpoint=request.url.path,
+                substituted=str(request_id),
+            )
 
         ip_hash = sha256_hex(request.client.host) if request.client else sha256_hex("")
 

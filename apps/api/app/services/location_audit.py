@@ -46,10 +46,11 @@ _PREV_CONTENT_HASH_SQL = text(
       UNION ALL
       SELECT log_id, content_hash FROM app.location_access_log_archive
     ) chain
-    -- 캐스트를 명시한다. asyncpg는 파라미터를 그대로 IS NULL과 비교하면 타입을 정하지 못해
-    -- AmbiguousParameterError를 낸다.
+    -- COALESCE로 단일 부등식을 유지한다. `IS NULL OR log_id < ...` 형태는 generic plan에서
+    -- Index Cond를 잃고 체인 전체를 스캔한다 — 확인자료 열람이 행 수에 비례해 느려진다.
+    -- 캐스트는 유지한다. asyncpg는 파라미터의 타입을 추론하지 못하면 AmbiguousParameterError를 낸다.
     -- (주석에 콜론 파라미터 표기를 쓰지 마라 — text()는 주석 안의 것도 바인드로 읽는다.)
-    WHERE CAST(:before_log_id AS bigint) IS NULL OR log_id < CAST(:before_log_id AS bigint)
+    WHERE log_id < COALESCE(CAST(:before_log_id AS bigint), 9223372036854775807)
     ORDER BY log_id DESC
     LIMIT 1
     """
