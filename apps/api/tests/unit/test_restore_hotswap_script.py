@@ -61,12 +61,14 @@ BEGIN
   RETURN NEW;
 END;
 $fn$;
+\\restrict trusted_dump_token
+\\unrestrict trusted_dump_token
 COPY app.users (id) FROM stdin;
 COMMIT;
 \\.
 SELECT 1;
 """
-    unsafe_sql = "SELECT 1;\nCOMMIT;\n"
+    unsafe_sql = "SELECT 1;\nCOMMIT;\n\\! true\n"
     awk = shutil.which("awk")
     assert awk is not None
 

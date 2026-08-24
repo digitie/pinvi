@@ -46,6 +46,15 @@ APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}"
 declare -a WRITE_ROLES=()
 declare -A WRITE_ROLE_SEEN=()
 
+if [[ "${TEST_MODE}" != "0" && "${TEST_MODE}" != "1" ]]; then
+  phase preparing failed "PINVI_M05_RESTORE_TEST_MODE must be 0 or 1"
+  exit 2
+fi
+if [[ "${TEST_MODE}" == "1" && "${PINVI_ENVIRONMENT:-}" != "test" ]]; then
+  phase preparing failed "M05 restore test mode requires PINVI_ENVIRONMENT=test"
+  exit 3
+fi
+
 phase preparing running "precheck started"
 
 if [[ -z "${DATABASE_URL}" ]]; then
@@ -586,7 +595,7 @@ run_guarded_file() {
         i++
       }
       normalized = tolower(clean)
-      if (normalized ~ /^[[:space:]]*[\\!]/ || normalized ~ /pg_advisory_(lock|unlock)/ || normalized ~ /pg_(cancel|terminate)_backend/ || normalized ~ /discard[[:space:]]+all/ || normalized ~ /(^|[;[:space:]])(begin|start[[:space:]]+transaction|commit|end|rollback|abort)([;[:space:]]|$)/) {
+      if (normalized ~ /^[[:space:]]*\\!/ || normalized ~ /pg_advisory_(lock|unlock)/ || normalized ~ /pg_(cancel|terminate)_backend/ || normalized ~ /discard[[:space:]]+all/ || normalized ~ /(^|[;[:space:]])(begin|start[[:space:]]+transaction|commit|end|rollback|abort)([;[:space:]]|$)/) {
         unsafe = 1
         exit
       }
