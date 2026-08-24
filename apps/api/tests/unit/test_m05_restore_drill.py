@@ -33,6 +33,15 @@ def test_m05_restore_drill_normalizes_asyncpg_url_for_psql() -> None:
         os.environ.pop("PINVI_M05_RESTORE_TEST_MODE", None)
 
 
+def test_m05_restore_drill_serializes_target_recreation_and_preflights_staging_role() -> None:
+    module = _restore_drill_module()
+    source = Path(module.__file__).read_text(encoding="utf-8")
+
+    assert "_staging_role_check(" in source
+    assert "SELECT pg_advisory_lock(1414679892, 1213421392);" in source
+    assert "SELECT pg_advisory_unlock(1414679892, 1213421392);" in source
+
+
 def _write_executable(path: Path, body: str) -> None:
     path.write_text(body, encoding="utf-8")
     path.chmod(path.stat().st_mode | 0o111)
@@ -69,6 +78,11 @@ done
         fake_bin / "pg_restore",
         """#!/usr/bin/env bash
 set -euo pipefail
+for arg in "$@"; do
+  if [[ "$arg" == --file=* ]]; then
+    : >"${arg#--file=}"
+  fi
+done
 exit 0
 """,
     )
@@ -77,7 +91,16 @@ exit 0
         """#!/usr/bin/env bash
 set -euo pipefail
 sql="$*"
-if [[ "$sql" == *"SET LOCAL session_replication_role"* ]]; then
+if [[ "$sql" == *"-Atq"* ]]; then
+  while IFS= read -r line; do
+    if [[ "$line" == *"M05_LOCK_ACQUIRED"* ]]; then
+      echo 'M05_LOCK_ACQUIRED|123'
+    elif [[ "$line" == *"M05_SQL_DONE|"* ]]; then
+      marker="$(printf '%s\\n' "$line" | sed -n 's/.*M05_SQL_DONE|\\([0-9][0-9]*\\).*/\\1/p')"
+      echo "M05_SQL_DONE|${marker}"
+    fi
+  done
+elif [[ "$sql" == *"SET LOCAL session_replication_role"* ]]; then
   echo 'app.ktm_feature_reference_reconciliation_delivery_attempts is append-only' >&2
   exit 1
 elif [[ "$sql" == *"json_build_object"* ]]; then

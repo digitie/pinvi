@@ -208,7 +208,11 @@ def sanitize_backup_message(message: str) -> str:
     """Remove local paths and database credentials from operator-facing errors."""
 
     sanitized = message
-    for database_url in (settings.pinvi_database_url, settings.pinvi_restore_database_url):
+    for database_url in (
+        settings.pinvi_database_url,
+        settings.pinvi_restore_database_url,
+        settings.pinvi_restore_fence_database_url,
+    ):
         if database_url:
             sanitized = sanitized.replace(database_url, "postgresql://[masked]")
     sanitized = _DATABASE_URL_RE.sub("postgresql://[masked]", sanitized)
@@ -449,6 +453,44 @@ def _pinned_bash_tool() -> str:
     raise BackupServiceError("pinned bash tool is missing")
 
 
+def _process_descendants(root_pid: int) -> list[int]:
+    """Return Linux descendants without relying on an untrusted process command."""
+
+    children_by_parent: dict[int, list[int]] = {}
+    proc_root = Path("/proc")
+    try:
+        entries = tuple(proc_root.iterdir())
+    except OSError:
+        return []
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            fields = (entry / "stat").read_text(encoding="utf-8").rsplit(") ", 1)[1].split()
+            pid = int(entry.name)
+            parent_pid = int(fields[1])
+        except (OSError, IndexError, ValueError):
+            continue
+        children_by_parent.setdefault(parent_pid, []).append(pid)
+
+    descendants: list[int] = []
+    pending = [root_pid]
+    while pending:
+        parent_pid = pending.pop()
+        for child_pid in children_by_parent.get(parent_pid, []):
+            descendants.append(child_pid)
+            pending.append(child_pid)
+    return descendants
+
+
+def _terminate_processes(process_ids: list[int], signum: signal.Signals) -> None:
+    for child_pid in reversed(process_ids):
+        try:
+            os.kill(child_pid, signum)
+        except ProcessLookupError:
+            pass
+
+
 async def _database_identity(database_url: str) -> dict[str, str]:
     """Read the immutable database identity used to bind a schema swap."""
 
@@ -580,6 +622,7 @@ async def _restore_backup_hotswap_locked(
         "PINVI_PREVIOUS_SCHEMA": previous_schema,
         "PINVI_DATABASE_URL": settings.pinvi_database_url,
         "PINVI_RESTORE_DATABASE_URL": settings.pinvi_restore_database_url,
+        "PINVI_RESTORE_FENCE_DATABASE_URL": settings.pinvi_restore_fence_database_url,
         "PINVI_RESTORE_HOTSWAP_EXECUTE": ("1" if settings.pinvi_restore_hotswap_execute else "0"),
         "PINVI_RESTORE_DRAIN_COMMAND": settings.pinvi_restore_drain_command,
         "PINVI_RESTORE_ALLOW_NO_DRAIN": ("1" if settings.pinvi_restore_allow_no_drain else "0"),
@@ -589,6 +632,14 @@ async def _restore_backup_hotswap_locked(
     }
     if settings.pinvi_restore_hotswap_execute:
         target_identity = await _restore_target_identity()
+        fence_url = settings.pinvi_restore_fence_database_url
+        if not fence_url:
+            raise BackupServiceError(
+                "schema-swap 실행에는 target database owner fence URL이 필요합니다."
+            )
+        fence_identity = await _database_identity(_asyncpg_database_url(fence_url))
+        if fence_identity != target_identity:
+            raise BackupServiceError("database fence target is not the application database")
         env.update(target_identity)
         pg_restore_path = _pinned_postgres_tool("pg_restore")
         psql_path = _pinned_postgres_tool("psql")
@@ -632,14 +683,31 @@ async def _restore_backup_hotswap_locked(
                     timeout=settings.pinvi_restore_timeout_seconds,
                 )
             except TimeoutError as exc:
-                # Give the shell and its children a graceful group termination so
-                # the shell EXIT trap can release the database fence and advisory
-                # lock. SIGKILL is the final fail-safe after the cleanup grace
-                # period.
+                # Signal the shell first so its EXIT trap can release the database
+                # fence and advisory lock. SIGKILL on the process group is the
+                # final fail-safe after the cleanup grace period.
+                descendant_pids = _process_descendants(proc.pid)
                 try:
-                    os.killpg(proc.pid, signal.SIGTERM)
+                    proc.send_signal(signal.SIGTERM)
                 except ProcessLookupError:
                     pass
+                shell_exited = False
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=1.0)
+                    shell_exited = True
+                except TimeoutError:
+                    pass
+                if shell_exited:
+                    _terminate_processes(descendant_pids, signal.SIGTERM)
+                    # The shell's EXIT cleanup has completed. A remaining
+                    # process-group member is now safe to terminate.
+                    try:
+                        os.killpg(proc.pid, signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+                # If the shell is still cleaning up, leave it and its lock
+                # holder alone for the grace period. SIGKILL is the final
+                # fail-safe only after that period expires.
                 try:
                     stdout_raw, stderr_raw = await asyncio.wait_for(
                         asyncio.shield(communicate_task), timeout=10.0

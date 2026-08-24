@@ -103,6 +103,13 @@ def test_restore_staging_drill_forwards_target_binding_marker() -> None:
     script = SCRIPT.read_text(encoding="utf-8")
 
     assert "RESTORE_TARGET_BINDING=*) printf '%s\\n' \"${restore_line}\" ;;" in script
+    assert 'PINVI_RESTORE_FENCE_DATABASE_URL="${STAGING_DATABASE_URL}"' in script
+    assert (
+        "RESTORE_PHASE=draining:failed:PINVI_RESTORE_DRAIN_COMMAND or PINVI_RESTORE_DRAIN_VERIFIED=1 is required"
+        in script
+    )
+    assert "rollback_database_fence" in script
+    assert "m05_advisory_lock_present" in script
 
 
 def test_restore_staging_drill_masks_path_and_rehearses_guard(tmp_path: Path) -> None:

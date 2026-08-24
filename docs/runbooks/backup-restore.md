@@ -153,6 +153,7 @@ USAGE/SELECT grant를 재적용한다. 이 role은 LOGIN이고 superuser·CREATE
 | 변수                            | 기본값               | 설명                                                 |
 | ------------------------------- | -------------------- | ---------------------------------------------------- |
 | `PINVI_RESTORE_DATABASE_URL`    | `PINVI_DATABASE_URL` | restore/swap 전용 DB URL override. 실행 모드에서는 전용 non-superuser schema owner login을 지정해야 한다. |
+| `PINVI_RESTORE_FENCE_DATABASE_URL` | 빈 값              | 실행 모드에서만 필요한 target DB owner URL. hotswap executor와 분리된 non-superuser owner 연결로 database `CONNECT` fence를 적용·복구한다. target identity가 다르면 fail-close한다. |
 | `PINVI_RESTORE_HOTSWAP_EXECUTE` | `0`                  | staging drill 후 운영 노드에서만 `1`                 |
 | `PINVI_RESTORE_DRAIN_COMMAND`   | 빈 값                | CLI 경로에서만 실행할 write drain 명령               |
 | `PINVI_RESTORE_ALLOW_NO_DRAIN`  | `0`                  | 외부 write fence를 확인한 경우에만 `1`                |
@@ -184,8 +185,9 @@ executor로 연결해야 한다. 이 login은 `LOGIN`, `NOSUPERUSER`, `NOCREATER
 database의 `CREATE` 권한을 가져야 schema를 만들고 rename할 수 있다. `PINVI_RESTORE_APP_ROLE`과
 `PINVI_RESTORE_WRITE_ROLES`에는 executor를 넣지 않는다. runner는 이 executor를 사전
 검증된 유지보수 주체로만 허용하고, 나머지 connectable writer의 권한과 CONNECT를 fence한다.
-timeout 시에는 advisory lock session을 별도 process session으로 보존해 EXIT cleanup이
-fence를 먼저 복구하도록 한다.
+timeout 시에는 API가 hotswap shell에 먼저 직접 `SIGTERM`을 보내 shell `EXIT` cleanup을
+실행하게 한다. advisory lock session은 shell과 같은 process group에 두고, fence 복구 후
+lock session을 종료하며, grace period 뒤 process-group `SIGKILL`을 최종 안전장치로 사용한다.
 
 ## 4. Restore — schema-swap 핫스왑 (정상 절차, Sprint 6 T-111)
 
@@ -230,6 +232,7 @@ df -h /var/lib/postgresql /var/lib/pinvi/backups
 # 실제 실행 전 staging drill 후 PINVI_RESTORE_HOTSWAP_EXECUTE=1을 설정한다.
 PINVI_RESTORE_HOTSWAP_EXECUTE=1 \
 PINVI_RESTORE_DATABASE_URL='postgresql://<restore-owner>:<password>@<postgres-host>:5432/pinvi' \
+PINVI_RESTORE_FENCE_DATABASE_URL='postgresql://<target-owner>:<password>@<postgres-host>:5432/pinvi' \
 PINVI_RESTORE_DRAIN_COMMAND='docker compose -f docker-compose.app.yml stop api web' \
 PINVI_RESTORE_APP_ROLE=pinvi_app \
 PINVI_RESTORE_WRITE_ROLES=pinvi_app \
@@ -254,6 +257,7 @@ PINVI_RESTORE_HOTSWAP_EXECUTE=1
 PINVI_RESTORE_DRAIN_COMMAND=
 PINVI_RESTORE_ALLOW_NO_DRAIN=1
 PINVI_RESTORE_DRAIN_VERIFIED=1
+PINVI_RESTORE_FENCE_DATABASE_URL='postgresql://<target-owner>:<password>@<postgres-host>:5432/pinvi'
 PINVI_RESTORE_APP_ROLE=pinvi_app
 ```
 

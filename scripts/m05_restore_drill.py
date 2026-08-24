@@ -472,6 +472,7 @@ SELECT current_user = '{expected_role}'
   AND r.rolcanlogin
   AND NOT r.rolsuper
   AND NOT r.rolcreaterole
+  AND r.rolcreatedb
   AND NOT r.rolreplication
   AND NOT r.rolbypassrls
   AND NOT EXISTS (
@@ -779,6 +780,7 @@ SELECT current_database() = '{sql_template}'
     _psql_file(
         maintenance_url,
         f"""
+SELECT pg_advisory_lock(1414679892, 1213421392);
 DO $m05$
 BEGIN
   IF current_database() <> 'postgres'
@@ -842,6 +844,7 @@ $m05$;
 DROP DATABASE IF EXISTS {quoted_database} WITH (FORCE);
 CREATE DATABASE {quoted_database} WITH OWNER {quoted_role} TEMPLATE {quoted_template};
 GRANT CONNECT, CREATE ON DATABASE {quoted_database} TO {quoted_hotswap_role};
+SELECT pg_advisory_unlock(1414679892, 1213421392);
         """,
         check=True,
     )
@@ -1008,6 +1011,11 @@ def _run_drill(args: argparse.Namespace) -> int:
     if hotswap_url and hotswap_database_name != target_database_name:
         raise RestoreDrillError("restore hotswap database must match the disposable target")
     if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
+        _staging_role_check(
+            target_url,
+            expected_role=args.staging_role,
+            runtime_role=args.runtime_role,
+        )
         _recreate_disposable_target(
             target_url,
             staging_role=args.staging_role,
@@ -1110,6 +1118,7 @@ def _run_drill(args: argparse.Namespace) -> int:
             {
                 "PINVI_RESTORE_STAGING_DATABASE_URL": target_url,
                 "PINVI_RESTORE_DATABASE_URL": target_url,
+                "PINVI_RESTORE_FENCE_DATABASE_URL": target_url,
                 "PINVI_RESTORE_SCHEMA": args.schema,
                 "PINVI_RESTORE_APP_ROLE": args.runtime_role,
                 "PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL": "drain",

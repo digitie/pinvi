@@ -26,6 +26,7 @@ SNAPSHOT="$2"
 RESTORE_SCHEMA="$3"
 PREVIOUS_SCHEMA="$4"
 DATABASE_URL="${PINVI_RESTORE_DATABASE_URL:-${PINVI_DATABASE_URL:-}}"
+FENCE_DATABASE_URL="${PINVI_RESTORE_FENCE_DATABASE_URL:-${DATABASE_URL}}"
 SOURCE_SCHEMA="${PINVI_BACKUP_SCHEMA:-app}"
 TMP_DIR=""
 LOCK_HOLDER_PID=""
@@ -53,6 +54,9 @@ fi
 
 if [[ "${DATABASE_URL}" == postgresql+asyncpg://* ]]; then
   DATABASE_URL="postgresql://${DATABASE_URL#postgresql+asyncpg://}"
+fi
+if [[ "${FENCE_DATABASE_URL}" == postgresql+asyncpg://* ]]; then
+  FENCE_DATABASE_URL="postgresql://${FENCE_DATABASE_URL#postgresql+asyncpg://}"
 fi
 
 if [[ -L "${SNAPSHOT}" || ! -f "${SNAPSHOT}" ]]; then
@@ -148,6 +152,11 @@ if [[ "${PINVI_RESTORE_HOTSWAP_EXECUTE:-0}" != "1" ]]; then
   exit 3
 fi
 
+if [[ "${TEST_MODE}" != "1" && -z "${FENCE_DATABASE_URL}" ]]; then
+  phase preparing failed "PINVI_RESTORE_FENCE_DATABASE_URL is required for an executing schema swap"
+  exit 3
+fi
+
 for schema_name in "${SOURCE_SCHEMA}" "${RESTORE_SCHEMA}" "${PREVIOUS_SCHEMA}"; do
   if [[ ! "${schema_name}" =~ ^[a-z_][a-z0-9_]*$ ]]; then
     phase preparing failed "unsafe schema name: ${schema_name}"
@@ -178,15 +187,6 @@ fi
 verify_tool_digest "bash" "${BASH_BIN}" "${PINVI_RESTORE_BASH_SHA256:-}"
 if [[ "${TEST_MODE}" != "1" && "${PINVI_RESTORE_PRIVATE_TOOL_COPY:-0}" != "1" ]]; then
   assert_trusted_tool_path "bash" "${BASH_BIN}"
-fi
-
-SETSID_BIN="$(pinned_tool setsid || true)"
-if [[ "${SETSID_BIN}" != /* || ! -x "${SETSID_BIN}" ]]; then
-  phase preparing failed "setsid not found"
-  exit 127
-fi
-if [[ "${TEST_MODE}" != "1" && "${PINVI_RESTORE_PRIVATE_TOOL_COPY:-0}" != "1" ]]; then
-  assert_trusted_tool_path "setsid" "${SETSID_BIN}"
 fi
 
 TMP_DIR="$(mktemp -d)"
@@ -262,7 +262,7 @@ start_advisory_lock() {
   local lock_signal="${TMP_DIR}/lock.signal"
   mkfifo -m 600 "${lock_input}" "${lock_signal}"
   (
-    exec "${SETSID_BIN}" "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 -Atq "${DATABASE_URL}" \
+    exec "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 -Atq "${DATABASE_URL}" \
       >"${lock_signal}" 2>"${TMP_DIR}/lock.err" <"${lock_input}"
   ) &
   LOCK_HOLDER_PID="$!"
@@ -313,6 +313,9 @@ assert_advisory_lock_alive() {
 }
 
 assert_expected_target() {
+  if [[ "${TEST_MODE}" == "1" && -z "${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" ]]; then
+    return 0
+  fi
   if [[ "${PINVI_RESTORE_HOTSWAP_EXECUTE:-0}" != "1" && -z "${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" ]]; then
     return 0
   fi
@@ -340,6 +343,9 @@ start_advisory_lock
 assert_expected_target
 
 validate_expected_target_values() {
+  if [[ "${TEST_MODE}" == "1" && -z "${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" ]]; then
+    return 0
+  fi
   if [[ "${PINVI_RESTORE_HOTSWAP_EXECUTE:-0}" != "1" &&
     -z "${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" ]]; then
     return 0
@@ -404,6 +410,22 @@ execute_sql_file() {
       exit 3
     fi
   done
+}
+
+execute_fence_sql_file() {
+  local sql_file="$1"
+  local phase_name="$2"
+  if ! assert_advisory_lock_alive; then
+    return 1
+  fi
+  if ! "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${FENCE_DATABASE_URL}" \
+    --file="${sql_file}"; then
+    phase "${phase_name}" failed "database owner fence SQL failed"
+    return 1
+  fi
+  if ! assert_advisory_lock_alive; then
+    return 1
+  fi
 }
 
 advisory_lock_sql_guard() {
@@ -676,6 +698,18 @@ SQL
   fi
 }
 
+public_connect_restore_sql() {
+  if [[ "${PUBLIC_CONNECT_REVOKED}" == "1" ]]; then
+    cat <<'SQL'
+DO $m05$
+BEGIN
+  EXECUTE format('GRANT CONNECT ON DATABASE %I TO PUBLIC', current_database());
+END
+$m05$;
+SQL
+  fi
+}
+
 writer_login_roles() {
   "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
 WITH RECURSIVE role_closure(login_oid, role_oid) AS (
@@ -818,7 +852,7 @@ connect_restore_grants() {
     printf '%s\n' ""
     return 0
   fi
-  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
+  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${FENCE_DATABASE_URL}" -tAc "
 WITH grants AS (
   SELECT roles.rolname, bool_or(aclexplode.is_grantable) AS grantable
   FROM pg_database db
@@ -835,7 +869,8 @@ FROM grants
 }
 
 public_connect_granted() {
-  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
+  local database_url="${1:-${DATABASE_URL}}"
+  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${database_url}" -tAc "
 SELECT EXISTS (
   SELECT 1
   FROM pg_database db
@@ -845,6 +880,62 @@ SELECT EXISTS (
     AND acl.privilege_type = 'CONNECT'
 )
 " | tr -d '[:space:]'
+}
+
+database_connect_granted() {
+  local database_url="$1"
+  local role_name="$2"
+  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${database_url}" -tAc \
+    "SELECT has_database_privilege('${role_name}', current_database(), 'CONNECT')" \
+    | tr -d '[:space:]'
+}
+
+assert_database_fence_applied() {
+  if [[ "${TEST_MODE}" == "1" ]]; then
+    return 0
+  fi
+  local role_name state
+  if [[ -n "${FENCED_CONNECT_ROLES}" ]]; then
+    IFS=',' read -r -a fenced_roles <<<"${FENCED_CONNECT_ROLES}"
+    for role_name in "${fenced_roles[@]}"; do
+      state="$(database_connect_granted "${FENCE_DATABASE_URL}" "${role_name}")"
+      if [[ "${state}" != "f" ]]; then
+        phase draining failed "database CONNECT fence was not applied"
+        exit 3
+      fi
+    done
+  fi
+  if [[ "${PUBLIC_CONNECT_REVOKED}" == "1" &&
+    "$(public_connect_granted "${FENCE_DATABASE_URL}")" != "f" ]]; then
+    phase draining failed "PUBLIC CONNECT fence was not applied"
+    exit 3
+  fi
+}
+
+assert_database_fence_restored() {
+  if [[ "${TEST_MODE}" == "1" ]]; then
+    return 0
+  fi
+  local grant_spec role_name state
+  if [[ -n "${CONNECT_RESTORE_GRANTS}" ]]; then
+    IFS=',' read -r -a grant_specs <<<"${CONNECT_RESTORE_GRANTS}"
+    for grant_spec in "${grant_specs[@]}"; do
+      role_name="${grant_spec%%:*}"
+      state="$(database_connect_granted "${FENCE_DATABASE_URL}" "${role_name}")"
+      if [[ "${state}" != "t" ]]; then
+        phase draining failed "database CONNECT grant was not restored"
+        return 1
+      fi
+    done
+  fi
+  local expected_public="f"
+  if [[ "${PUBLIC_CONNECT_REVOKED}" == "1" ]]; then
+    expected_public="t"
+  fi
+  if [[ "$(public_connect_granted "${FENCE_DATABASE_URL}")" != "${expected_public}" ]]; then
+    phase draining failed "PUBLIC CONNECT state was not restored"
+    return 1
+  fi
 }
 
 wait_for_database_quiescence() {
@@ -956,6 +1047,34 @@ BEGIN
   IF to_regclass('${RESTORE_SCHEMA}.users') IS NULL THEN
     RAISE EXCEPTION 'restored schema is missing users table';
   END IF;
+  IF (
+    SELECT count(*)
+    FROM (VALUES
+      ('ktm_feature_reference_reconciliation_delivery_attempts', left('trg_ktm_feature_reference_reconciliation_delivery_attempts_append_only', 63)),
+      ('ktm_feature_reference_reconciliation_delivery_attempts', left('trg_ktm_feature_reference_reconciliation_delivery_attempts_truncate_append_only', 63)),
+      ('ktm_feature_reference_reconciliation_applied_receipts', left('trg_ktm_feature_reference_reconciliation_applied_receipts_append_only', 63)),
+      ('ktm_feature_reference_reconciliation_applied_receipts', left('trg_ktm_feature_reference_reconciliation_applied_receipts_truncate_append_only', 63)),
+      ('ktm_feature_reference_reconciliation_impacts', left('trg_ktm_feature_reference_reconciliation_impacts_append_only', 63)),
+      ('ktm_feature_reference_reconciliation_impacts', left('trg_ktm_feature_reference_reconciliation_impacts_truncate_append_only', 63))
+    ) expected(table_name, trigger_name)
+    WHERE EXISTS (
+      SELECT 1
+      FROM pg_trigger t
+      JOIN pg_class c ON c.oid = t.tgrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_proc p ON p.oid = t.tgfoid
+      JOIN pg_namespace pn ON pn.oid = p.pronamespace
+      WHERE n.nspname = '${RESTORE_SCHEMA}'
+        AND c.relname = expected.table_name
+        AND t.tgname = expected.trigger_name
+        AND t.tgenabled = 'A'
+        AND NOT t.tgisinternal
+        AND p.proname = 'guard_ktm_feature_reference_reconciliation_append_only'
+        AND pn.nspname = '${RESTORE_SCHEMA}'
+    )
+  ) <> 6 THEN
+    RAISE EXCEPTION 'restored schema is missing an ENABLE ALWAYS M05 append-only trigger';
+  END IF;
 END
 \$m05\$;
 SQL
@@ -1060,11 +1179,48 @@ SELECT EXISTS (
   fi
 }
 
+assert_fence_executor_safe() {
+  if [[ "${TEST_MODE}" == "1" ]]; then
+    return 0
+  fi
+  local executor_user fence_safe
+  executor_user="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc \
+    "SELECT current_user" | tr -d '[:space:]')"
+  if [[ ! "${executor_user}" =~ ^[a-z_][a-z0-9_]*$ ]]; then
+    phase draining failed "restore executor identity is invalid"
+    exit 3
+  fi
+  fence_safe="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${FENCE_DATABASE_URL}" -tAc "
+SELECT EXISTS (
+  SELECT 1
+  FROM pg_database db
+  JOIN pg_roles owner_role ON owner_role.oid = db.datdba
+  WHERE db.datname = current_database()
+    AND current_user = owner_role.rolname
+    AND current_user <> '${executor_user}'
+    AND owner_role.rolcanlogin
+    AND NOT owner_role.rolsuper
+    AND NOT owner_role.rolcreaterole
+    AND NOT owner_role.rolreplication
+    AND NOT owner_role.rolbypassrls
+)
+" | tr -d '[:space:]')"
+  if [[ "${fence_safe}" != "t" ]]; then
+    phase draining failed "database fence URL must be a dedicated non-superuser target owner"
+    exit 3
+  fi
+}
+
 enter_write_fence() {
   local roles_sql
   roles_sql="$(write_roles_sql)"
   assert_advisory_lock_alive
+  if [[ "${TEST_MODE}" == "1" ]]; then
+    phase draining success "test-mode write fence simulated"
+    return 0
+  fi
   assert_restore_executor_safe
+  assert_fence_executor_safe
   assert_configured_roles_safe
   local writer_logins
   writer_logins="$(writer_login_roles)"
@@ -1077,7 +1233,7 @@ enter_write_fence() {
     phase draining failed "database write fence could not identify writer roles"
     exit 3
   fi
-  PUBLIC_CONNECT_WAS_GRANTED="$(public_connect_granted)"
+  PUBLIC_CONNECT_WAS_GRANTED="$(public_connect_granted "${FENCE_DATABASE_URL}")"
   if [[ "${PUBLIC_CONNECT_WAS_GRANTED}" == "t" ]]; then
     PUBLIC_CONNECT_REVOKED=1
   fi
@@ -1132,6 +1288,14 @@ BEGIN
   END IF;
 END
 \$m05\$;
+  COMMIT;
+SQL
+  execute_sql_file "${fence_sql}" draining
+  local database_fence_sql="${TMP_DIR}/enter-database-fence.sql"
+  cat >"${database_fence_sql}" <<SQL
+BEGIN;
+$(advisory_lock_sql_guard)
+$(write_identity_guard)
 DO \$m05\$
 DECLARE
   role_name text;
@@ -1144,9 +1308,12 @@ BEGIN
 END
 \$m05\$;
 $(public_connect_sql)
-  COMMIT;
+$(advisory_lock_sql_guard)
+$(write_identity_guard)
+COMMIT;
 SQL
-  execute_sql_file "${fence_sql}" draining
+  execute_fence_sql_file "${database_fence_sql}" draining
+  assert_database_fence_applied
   wait_for_database_quiescence
   assert_no_connectable_writer_roles
   phase draining success "database write fence revoked all non-owner runtime writes"
@@ -1182,7 +1349,17 @@ BEGIN
   END LOOP;
 END
 \$m05\$;
-$(public_connect_sql | sed 's/REVOKE CONNECT/GRANT CONNECT/; s/FROM PUBLIC/TO PUBLIC/')
+COMMIT;
+SQL
+  if ! execute_sql_file "${fence_sql}" draining; then
+    return 1
+  fi
+  local database_fence_sql="${TMP_DIR}/release-database-fence.sql"
+  cat >"${database_fence_sql}" <<SQL
+BEGIN;
+$(advisory_lock_sql_guard)
+$(write_identity_guard)
+$(public_connect_restore_sql)
 DO \$m05\$
 DECLARE
   grant_spec text;
@@ -1203,9 +1380,14 @@ BEGIN
   END LOOP;
 END
 \$m05\$;
+$(advisory_lock_sql_guard)
+$(write_identity_guard)
 COMMIT;
 SQL
-  if ! execute_sql_file "${fence_sql}" draining; then
+  if ! execute_fence_sql_file "${database_fence_sql}" draining; then
+    return 1
+  fi
+  if ! assert_database_fence_restored; then
     return 1
   fi
   WRITE_FENCE_ACTIVE=0

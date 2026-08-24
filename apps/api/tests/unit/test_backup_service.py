@@ -266,11 +266,15 @@ async def test_restore_backup_hotswap_timeout_kills_script_process_group(
         script,
         """#!/usr/bin/env bash
 set -euo pipefail
-(sleep 1; touch "$PINVI_TIMEOUT_MARKER") &
-while :; do sleep 1; done
+cleanup_marker="${PINVI_TIMEOUT_CLEANUP_MARKER}"
+trap 'touch "$cleanup_marker"; exit 143' TERM INT
+(sleep 20; touch "$PINVI_TIMEOUT_MARKER") &
+while :; do :; done
 """,
     )
     monkeypatch.setenv("PINVI_TIMEOUT_MARKER", str(marker))
+    cleanup_marker = tmp_path / "timeout-cleanup"
+    monkeypatch.setenv("PINVI_TIMEOUT_CLEANUP_MARKER", str(cleanup_marker))
     monkeypatch.setattr(settings, "pinvi_restore_hotswap_script_path", str(script))
     monkeypatch.setattr(settings, "pinvi_restore_timeout_seconds", 0.05)
 
@@ -282,6 +286,7 @@ while :; do sleep 1; done
 
     await anyio.sleep(1.2)
     assert not marker.exists()
+    assert cleanup_marker.exists()
 
 
 @pytest.mark.asyncio

@@ -18,9 +18,29 @@ def test_restore_hotswap_rejects_session_and_lock_control_in_dump_sql() -> None:
     assert "dollar_delimiter" in source
     assert "advisory_lock_sql_guard" in source
     assert source.count("advisory_lock_sql_guard") >= 6
-    assert 'exec "${SETSID_BIN}" "${PSQL_BIN}"' in source
+    assert 'exec "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 -Atq "${DATABASE_URL}"' in source
     assert "trap terminate_restore TERM INT" in source
+    assert "execute_fence_sql_file" in source
+    assert "PINVI_RESTORE_FENCE_DATABASE_URL" in source
+    assert "database fence URL must be a dedicated non-superuser target owner" in source
     assert "SET session_replication_role = replica" not in source
+
+
+def test_restore_hotswap_validates_all_m05_always_triggers_before_switch() -> None:
+    source = SCRIPT.read_text(encoding="utf-8")
+
+    assert "restored schema is missing an ENABLE ALWAYS M05 append-only trigger" in source
+    assert "t.tgenabled = 'A'" in source
+    assert "NOT t.tgisinternal" in source
+    assert "guard_ktm_feature_reference_reconciliation_append_only" in source
+    assert (
+        "left('trg_ktm_feature_reference_reconciliation_delivery_attempts_append_only', 63)"
+        in source
+    )
+    assert (
+        "left('trg_ktm_feature_reference_reconciliation_impacts_truncate_append_only', 63)"
+        in source
+    )
 
 
 def test_restore_hotswap_sql_guard_executes_and_ignores_literal_controls() -> None:

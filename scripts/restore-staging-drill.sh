@@ -43,6 +43,8 @@ Required:
 Optional:
   PINVI_RESTORE_HOTSWAP_DATABASE_URL   dedicated schema-owner URL for restore/hotswap;
                                       defaults to the staging URL.
+  PINVI_RESTORE_FENCE_DATABASE_URL     staging DB-owner URL used for database CONNECT fencing;
+                                      defaults to the staging URL for this drill.
   PINVI_RESTORE_DRILL_SCHEMA=app
   PINVI_RESTORE_DRILL_JOBS=2
   PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL=none|precheck|drain
@@ -263,9 +265,48 @@ if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" != "1" ]]; then
   done
 fi
 
+psql_scalar_url() {
+  local database_url="$1"
+  local sql="$2"
+  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${database_url}" -tAc "${sql}" \
+    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+}
+
 psql_scalar() {
   local sql="$1"
-  "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" -tAc "${sql}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+  psql_scalar_url "${DATABASE_URL}" "${sql}"
+}
+
+staging_public_connect_state() {
+  if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" == "1" ]]; then
+    printf 'f\n'
+    return 0
+  fi
+  psql_scalar_url "${STAGING_DATABASE_URL}" "
+SELECT EXISTS (
+  SELECT 1
+  FROM pg_database db
+  CROSS JOIN LATERAL aclexplode(COALESCE(db.datacl, acldefault('d', db.datdba))) acl
+  WHERE db.datname = current_database()
+    AND acl.grantee = 0
+    AND acl.privilege_type = 'CONNECT'
+)"
+}
+
+m05_advisory_lock_present() {
+  if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" == "1" ]]; then
+    printf 'f\n'
+    return 0
+  fi
+  psql_scalar_url "${STAGING_DATABASE_URL}" "
+SELECT EXISTS (
+  SELECT 1
+  FROM pg_locks
+  WHERE locktype = 'advisory'
+    AND classid = 1414679892
+    AND objid = 1213421392
+    AND granted
+)"
 }
 
 schema_oid() {
@@ -390,6 +431,7 @@ rollback_precheck_rehearsal() {
     PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER="${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER:-}" \
     PINVI_RESTORE_EXPECTED_HOSTADDR="${PINVI_RESTORE_EXPECTED_HOSTADDR:-}" \
     PINVI_RESTORE_EXPECTED_PORT="${PINVI_RESTORE_EXPECTED_PORT:-}" \
+    PINVI_RESTORE_FENCE_DATABASE_URL="${STAGING_DATABASE_URL}" \
     PINVI_RESTORE_HOTSWAP_EXECUTE=0 \
     "${ROOT_DIR}/scripts/restore-hotswap.sh" run \
     "${SNAPSHOT}" "${restore_schema}" "${previous_schema}" \
@@ -411,6 +453,13 @@ rollback_drain_rehearsal() {
   local restore_schema="${SCHEMA}_restore_drill_${ts}"
   local previous_schema="${SCHEMA}_previous_drill_${ts}"
   local oid_before="$1"
+  local public_connect_before lock_before
+  public_connect_before="$(staging_public_connect_state)"
+  lock_before="$(m05_advisory_lock_present)"
+  if [[ "${lock_before}" == "t" ]]; then
+    phase rollback failed "M05 advisory lock was already held before rollback rehearsal"
+    exit 5
+  fi
   TMP_DIR="$(mktemp -d)"
   set +e
   PINVI_RESTORE_DATABASE_URL="${DATABASE_URL}" \
@@ -428,6 +477,7 @@ rollback_drain_rehearsal() {
     PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER="${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER:-}" \
     PINVI_RESTORE_EXPECTED_HOSTADDR="${PINVI_RESTORE_EXPECTED_HOSTADDR:-}" \
     PINVI_RESTORE_EXPECTED_PORT="${PINVI_RESTORE_EXPECTED_PORT:-}" \
+    PINVI_RESTORE_FENCE_DATABASE_URL="${STAGING_DATABASE_URL}" \
     PINVI_RESTORE_HOTSWAP_EXECUTE=1 \
     PINVI_RESTORE_DRAIN_COMMAND= \
     PINVI_RESTORE_ALLOW_NO_DRAIN=0 \
@@ -438,12 +488,32 @@ rollback_drain_rehearsal() {
   set -e
   local oid_after
   oid_after="$(schema_oid)"
+  local public_connect_after lock_after
+  public_connect_after="$(staging_public_connect_state)"
+  lock_after="$(m05_advisory_lock_present)"
   "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 "${DATABASE_URL}" \
     -c "DROP SCHEMA IF EXISTS ${restore_schema} CASCADE" >/dev/null
-  if [[ "${code}" == "0" || "${oid_after}" != "${oid_before}" ]]; then
+  if [[ "${code}" == "0" || "${oid_after}" != "${oid_before}" ||
+    "${public_connect_after}" != "${public_connect_before}" || "${lock_after}" != "f" ]]; then
     phase rollback failed "drain-failure rehearsal did not preserve current schema"
     exit 5
   fi
+  if ! grep -Fq -- "RESTORE_PHASE=draining:failed:PINVI_RESTORE_DRAIN_COMMAND or PINVI_RESTORE_DRAIN_VERIFIED=1 is required" \
+    "${TMP_DIR}/hotswap.out"; then
+    phase rollback failed "drain-failure rehearsal did not produce the expected drain guard"
+    exit 5
+  fi
+  if grep -Fq -- "database write fence cleanup failed" "${TMP_DIR}/hotswap.out" "${TMP_DIR}/hotswap.err" ||
+    grep -Fq -- "database owner fence SQL failed" "${TMP_DIR}/hotswap.out" "${TMP_DIR}/hotswap.err" ||
+    grep -Fq -- "database CONNECT fence was not applied" "${TMP_DIR}/hotswap.out" "${TMP_DIR}/hotswap.err" ||
+    grep -Fq -- "database CONNECT grant was not restored" "${TMP_DIR}/hotswap.out" "${TMP_DIR}/hotswap.err" ||
+    grep -Fq -- "PUBLIC CONNECT" "${TMP_DIR}/hotswap.out" "${TMP_DIR}/hotswap.err" ||
+    grep -Fq -- "schema-swap database advisory lock was lost" "${TMP_DIR}/hotswap.out" "${TMP_DIR}/hotswap.err"; then
+    phase rollback failed "drain-failure rehearsal detected fence or lock cleanup failure"
+    exit 5
+  fi
+  evidence rollback_database_fence restored
+  evidence rollback_advisory_lock released
   evidence rollback_rehearsal "drain_failed_schema_unchanged"
 }
 
