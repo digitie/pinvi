@@ -12,6 +12,7 @@ SCHEMA="${PINVI_RESTORE_DRILL_SCHEMA:-${PINVI_BACKUP_SCHEMA:-app}}"
 JOBS="${PINVI_RESTORE_DRILL_JOBS:-${PINVI_RESTORE_JOBS:-2}}"
 ROLLBACK_REHEARSAL="${PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL:-precheck}"
 SNAPSHOT="${2:-}"
+TRUSTED_SNAPSHOT="${SNAPSHOT}"
 TMP_DIR=""
 
 phase() {
@@ -398,7 +399,7 @@ restore_output="$(PINVI_RESTORE_DATABASE_URL="${DATABASE_URL}" \
   PINVI_RESTORE_EXPECTED_HOSTADDR="${PINVI_RESTORE_EXPECTED_HOSTADDR:-}" \
   PINVI_RESTORE_EXPECTED_PORT="${PINVI_RESTORE_EXPECTED_PORT:-}" \
   PINVI_RESTORE_TRUSTED_BACKUP_DIR="${PINVI_RESTORE_TRUSTED_BACKUP_DIR:-}" \
-  "${ROOT_DIR}/scripts/restore-db.sh" "${SNAPSHOT}" 2>&1)"
+  "${ROOT_DIR}/scripts/restore-db.sh" "${TRUSTED_SNAPSHOT}" 2>&1)"
 restore_status="$?"
 set -e
 if [[ "${restore_status}" != "0" ]]; then
@@ -457,7 +458,7 @@ rollback_precheck_rehearsal() {
     PINVI_RESTORE_FENCE_DATABASE_URL="${FENCE_DATABASE_URL}" \
     PINVI_RESTORE_HOTSWAP_EXECUTE=0 \
     "${ROOT_DIR}/scripts/restore-hotswap.sh" run \
-    "${SNAPSHOT}" "${restore_schema}" "${previous_schema}" \
+    "${TRUSTED_SNAPSHOT}" "${restore_schema}" "${previous_schema}" \
     >"${TMP_DIR}/hotswap.out" 2>"${TMP_DIR}/hotswap.err"
   local code="$?"
   set -e
@@ -506,7 +507,7 @@ rollback_drain_rehearsal() {
     PINVI_RESTORE_DRAIN_COMMAND= \
     PINVI_RESTORE_ALLOW_NO_DRAIN=0 \
     "${ROOT_DIR}/scripts/restore-hotswap.sh" run \
-    "${SNAPSHOT}" "${restore_schema}" "${previous_schema}" \
+    "${TRUSTED_SNAPSHOT}" "${restore_schema}" "${previous_schema}" \
     >"${TMP_DIR}/hotswap.out" 2>"${TMP_DIR}/hotswap.err"
   local code="$?"
   set -e
