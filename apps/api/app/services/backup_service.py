@@ -613,6 +613,44 @@ def _terminate_processes(process_ids: list[int], signum: signal.Signals) -> None
             pass
 
 
+async def _terminate_restore_process(
+    proc: asyncio.subprocess.Process,
+    communicate_task: asyncio.Task[tuple[bytes, bytes]],
+) -> tuple[bytes, bytes]:
+    """Stop a restore process only after its shell cleanup trap has run."""
+
+    descendant_pids = _process_descendants(proc.pid)
+    try:
+        proc.send_signal(signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+
+    shell_exited = False
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=1.0)
+        shell_exited = True
+    except TimeoutError:
+        pass
+    if shell_exited:
+        _terminate_processes(descendant_pids, signal.SIGTERM)
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+
+    try:
+        return await asyncio.wait_for(
+            asyncio.shield(communicate_task),
+            timeout=10.0,
+        )
+    except TimeoutError:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        return await communicate_task
+
+
 async def _database_identity(database_url: str) -> dict[str, str]:
     """Read the immutable database identity used to bind a schema swap."""
 
@@ -818,41 +856,17 @@ async def _restore_backup_hotswap_locked(
                 # Signal the shell first so its EXIT trap can release the database
                 # fence and advisory lock. SIGKILL on the process group is the
                 # final fail-safe after the cleanup grace period.
-                descendant_pids = _process_descendants(proc.pid)
-                try:
-                    proc.send_signal(signal.SIGTERM)
-                except ProcessLookupError:
-                    pass
-                shell_exited = False
-                try:
-                    await asyncio.wait_for(proc.wait(), timeout=1.0)
-                    shell_exited = True
-                except TimeoutError:
-                    pass
-                if shell_exited:
-                    _terminate_processes(descendant_pids, signal.SIGTERM)
-                    # The shell's EXIT cleanup has completed. A remaining
-                    # process-group member is now safe to terminate.
-                    try:
-                        os.killpg(proc.pid, signal.SIGTERM)
-                    except ProcessLookupError:
-                        pass
-                # If the shell is still cleaning up, leave it and its lock
-                # holder alone for the grace period. SIGKILL is the final
-                # fail-safe only after that period expires.
-                try:
-                    stdout_raw, stderr_raw = await asyncio.wait_for(
-                        asyncio.shield(communicate_task), timeout=10.0
-                    )
-                except TimeoutError:
-                    try:
-                        os.killpg(proc.pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-                    stdout_raw, stderr_raw = await communicate_task
+                await _terminate_restore_process(proc, communicate_task)
                 raise BackupServiceError(
                     sanitize_backup_message("restore hotswap script timed out")
                 ) from exc
+            except asyncio.CancelledError:
+                # Cancellation must not abandon a shell that still owns the
+                # database fence or advisory-lock session. Finish the same
+                # cleanup sequence as the timeout path, then preserve the
+                # caller's cancellation semantics.
+                await _terminate_restore_process(proc, communicate_task)
+                raise
 
     stdout = stdout_raw.decode("utf-8", errors="replace")
     stderr = stderr_raw.decode("utf-8", errors="replace")

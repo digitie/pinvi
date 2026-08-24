@@ -626,8 +626,13 @@ def _trusted_restore_tool_path(path: Path, name: str) -> bool:
     )
 
 
-def _assert_source_checkout(source_revision: str, *, test_mode: bool) -> None:
-    """서명 대상이 clean checkout이자 원격 PR의 실제 head인지 확인한다."""
+def _assert_source_checkout(
+    source_revision: str,
+    *,
+    scope: str,
+    test_mode: bool,
+) -> None:
+    """서명 대상 checkout과 PR 상태·merge provenance를 확인한다."""
 
     root = Path(__file__).resolve().parents[1]
     git_env = os.environ.copy()
@@ -707,14 +712,32 @@ def _assert_source_checkout(source_revision: str, *, test_mode: bool) -> None:
     remote_object = _object(remote_payload, name="GitHub pull request")
     head_object = _object(remote_object.get("head"), name="GitHub pull request head")
     base_object = _object(remote_object.get("base"), name="GitHub pull request base")
+    head_repo = _object(head_object.get("repo"), name="GitHub pull request head repo")
     base_repo = _object(base_object.get("repo"), name="GitHub pull request base repo")
     remote_revision = _commit(head_object.get("sha"), name="GitHub pull request head SHA")
     if (
         remote_object.get("html_url") != _M05_ACTIVATION_PR_URL
+        or base_object.get("ref") != "main"
         or base_repo.get("full_name") != "digitie/pinvi"
+        or head_repo.get("full_name") != "digitie/pinvi"
+        or head_object.get("ref") != "codex/m05-activation"
     ):
         raise ReceiptError("GitHub pull request provenance is not the canonical Pinvi PR")
-    if remote_revision != source_revision:
+    if scope == "production":
+        if (
+            remote_object.get("state") != "closed"
+            or remote_object.get("draft") is not False
+            or not isinstance(remote_object.get("merged_at"), str)
+            or not remote_object.get("merged_at")
+        ):
+            raise ReceiptError("production receipt requires a closed, merged, non-draft M05 PR")
+        merge_revision = _commit(
+            remote_object.get("merge_commit_sha"),
+            name="GitHub pull request merge commit SHA",
+        )
+        if merge_revision != source_revision:
+            raise ReceiptError("production receipt source revision is not the merged M05 PR commit")
+    elif remote_revision != source_revision:
         raise ReceiptError("receipt source revision is not the current M05 PR head")
 
 
@@ -1837,6 +1860,17 @@ def _restore(
         "target_recreated",
         "trigger_guard_verified",
         "runtime_db_identity_sha256",
+        "hotswap_success",
+        "hotswap_success_marker",
+        "hotswap_success_output_sha256",
+        "hotswap_schema_oid_before",
+        "hotswap_schema_oid_after",
+        "hotswap_previous_schema_oid",
+        "hotswap_previous_schema_present",
+        "hotswap_restore_schema_absent",
+        "hotswap_advisory_lock_released",
+        "hotswap_fence_restored",
+        "hotswap_executor_reconnect_fenced",
     }
     if set(restore) != expected or restore["status"] != "passed":
         raise ReceiptError("restore evidence schema/status is invalid")
@@ -1857,6 +1891,12 @@ def _restore(
         "staging_role_verified",
         "fence_role_verified",
         "trigger_guard_verified",
+        "hotswap_success",
+        "hotswap_previous_schema_present",
+        "hotswap_restore_schema_absent",
+        "hotswap_advisory_lock_released",
+        "hotswap_fence_restored",
+        "hotswap_executor_reconnect_fenced",
     ):
         if restore[field] is not True:
             raise ReceiptError(f"restore evidence flag is not true: {field}")
@@ -1881,8 +1921,28 @@ def _restore(
         "target_db_identity_sha256",
         "fence_db_identity_before_restore_sha256",
         "fence_db_identity_sha256",
+        "hotswap_success_output_sha256",
     ):
         _sha256(restore[field], name=f"restore.{field}")
+    if restore["hotswap_success_marker"] != (
+        "RESTORE_PHASE=switching:success:schema-swap completed"
+    ):
+        raise ReceiptError("restore evidence does not prove a successful schema swap")
+    for field in (
+        "hotswap_schema_oid_before",
+        "hotswap_schema_oid_after",
+        "hotswap_previous_schema_oid",
+    ):
+        if (
+            not isinstance(restore[field], str)
+            or re.fullmatch(r"[0-9]+", restore[field]) is None
+        ):
+            raise ReceiptError(f"restore hotswap schema OID is invalid: {field}")
+    if (
+        restore["hotswap_schema_oid_before"] == restore["hotswap_schema_oid_after"]
+        or restore["hotswap_previous_schema_oid"] != restore["hotswap_schema_oid_before"]
+    ):
+        raise ReceiptError("restore hotswap schema OID matrix is invalid")
     repository_root = Path(__file__).resolve().parents[1]
     tool_path_fields = {
         "bash": "bash_tool_path",
@@ -2444,8 +2504,12 @@ def _create(args: argparse.Namespace) -> int:
     )
 
     source_revision = _commit(args.pinvi_source_revision, name="Pinvi source revision")
+    scope = _string(args.scope, name="receipt scope")
+    if scope not in {"staging", "production"}:
+        raise ReceiptError("receipt scope must be staging or production")
     _assert_source_checkout(
         source_revision,
+        scope=scope,
         test_mode=(
             os.environ.get("PINVI_M05_RECEIPT_TEST_MODE") == "1"
             and not args.require_root_owned
@@ -2456,9 +2520,6 @@ def _create(args: argparse.Namespace) -> int:
     reviewer_roster_path = args.reviewer_roster or _REVIEWER_ROSTER
     if args.require_root_owned and reviewer_roster_path != _REVIEWER_ROSTER:
         raise ReceiptError("root-owned M05 receipt must use the vendored reviewer roster")
-    scope = _string(args.scope, name="receipt scope")
-    if scope not in {"staging", "production"}:
-        raise ReceiptError("receipt scope must be staging or production")
     if scope == "production" and (
         not args.require_root_owned
         or os.environ.get("PINVI_M05_RECEIPT_TEST_MODE") == "1"

@@ -409,6 +409,52 @@ while :; do :; done
 
 
 @pytest.mark.asyncio
+async def test_restore_backup_hotswap_cancellation_kills_script_process_group(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backup_dir = anyio.Path(settings.pinvi_backup_dir)
+    await backup_dir.mkdir(parents=True)
+    snapshot = backup_dir / "pinvi-app-cancel.dump"
+    await snapshot.write_text("dump", encoding="utf-8")
+    await (backup_dir / "pinvi-app-cancel.dump.sha256").write_text(
+        f"{hashlib.sha256(b'dump').hexdigest()}\n", encoding="utf-8"
+    )
+    marker = tmp_path / "child-survived-cancel"
+    script = tmp_path / "restore-hotswap-cancel.sh"
+    _write_script(
+        script,
+        """#!/usr/bin/env bash
+set -euo pipefail
+cleanup_marker="${PINVI_CANCEL_CLEANUP_MARKER}"
+trap 'touch "$cleanup_marker"; exit 143' TERM INT
+(sleep 20; touch "${PINVI_CANCEL_MARKER}") &
+while :; do :; done
+""",
+    )
+    monkeypatch.setenv("PINVI_CANCEL_MARKER", str(marker))
+    cleanup_marker = tmp_path / "cancel-cleanup"
+    monkeypatch.setenv("PINVI_CANCEL_CLEANUP_MARKER", str(cleanup_marker))
+    monkeypatch.setattr(settings, "pinvi_restore_hotswap_script_path", str(script))
+
+    restore_task = asyncio.create_task(
+        restore_backup_hotswap(
+            snapshot_id="pinvi-app-cancel",
+            access_reason="취소 정리 테스트",
+        )
+    )
+    await anyio.sleep(0.1)
+    restore_task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await restore_task
+
+    await anyio.sleep(1.2)
+    assert not marker.exists()
+    assert cleanup_marker.exists()
+
+
+@pytest.mark.asyncio
 async def test_restore_backup_hotswap_rejects_snapshot_without_verified_checksum() -> None:
     backup_dir = anyio.Path(settings.pinvi_backup_dir)
     await backup_dir.mkdir(parents=True)

@@ -452,6 +452,17 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "target_recreated": True,
             "trigger_guard_verified": True,
             "runtime_db_identity_sha256": _identity_sha256(runtime_identity),
+            "hotswap_success": True,
+            "hotswap_success_marker": "RESTORE_PHASE=switching:success:schema-swap completed",
+            "hotswap_success_output_sha256": "f" * 64,
+            "hotswap_schema_oid_before": "300",
+            "hotswap_schema_oid_after": "400",
+            "hotswap_previous_schema_oid": "300",
+            "hotswap_previous_schema_present": True,
+            "hotswap_restore_schema_absent": True,
+            "hotswap_advisory_lock_released": True,
+            "hotswap_fence_restored": True,
+            "hotswap_executor_reconnect_fenced": True,
         },
     )
     _write_json(

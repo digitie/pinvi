@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -15,6 +16,33 @@ import pytest
 ROOT = Path(__file__).resolve().parents[4]
 HOTSWAP_SCRIPT = ROOT / "scripts/restore-hotswap.sh"
 TEST_PASSWORD = "m05-test-only-password"
+AUDIT_FIXTURE_OCCURRED_AT = "2026-08-24T03:00:00+00:00"
+
+
+def _audit_content_hash(
+    prev_hash: str,
+    *,
+    action: str,
+    ip_hash: str,
+    request_id: str,
+    occurred_at: str,
+) -> str:
+    payload = {
+        "actor_user_id": "40000000-0000-4000-8000-000000000001",
+        "action": action,
+        "resource_type": "restore",
+        "resource_id": None,
+        "before_state": None,
+        "after_state": None,
+        "access_reason": None,
+        "target_pii_fields": None,
+        "ip_hash": ip_hash,
+        "user_agent": None,
+        "request_id": request_id,
+        "occurred_at": occurred_at,
+    }
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256((prev_hash + serialized).encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -133,6 +161,7 @@ GRANT CONNECT ON DATABASE {_quoted(database)} TO {_quoted(app_role)};
             root_target_url,
             f"""
 CREATE SCHEMA x_extension AUTHORIZATION m05_root;
+CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA x_extension;
 REVOKE ALL ON SCHEMA x_extension FROM PUBLIC;
 GRANT USAGE ON SCHEMA x_extension TO {_quoted(hotswap_role)}, {_quoted(app_role)};
 """,
@@ -176,6 +205,7 @@ GRANT USAGE ON SCHEMA x_extension TO {_quoted(hotswap_role)}, {_quoted(app_role)
         "trigger_noop",
         "trigger_truncate_noop",
         "audit_trigger_noop",
+        "audit_content_noop",
         "missing_audit",
     }:
         # The executing hotswap validates the M05 reconciliation safeguards after
@@ -194,6 +224,19 @@ END;"""
             else """BEGIN
     RETURN NEW;
 END;"""
+        )
+        audit_content_hash_sql = (
+            "repeat('2', 64)"
+            if kind == "audit_content_noop"
+            else repr(
+                _audit_content_hash(
+                    "0" * 64,
+                    action="m05.fixture",
+                    ip_hash="1" * 64,
+                    request_id="40000000-0000-4000-8000-000000000002",
+                    occurred_at=AUDIT_FIXTURE_OCCURRED_AT,
+                )
+            )
         )
         audit_table = (
             ""
@@ -237,13 +280,16 @@ VALUES ('40000000-0000-4000-8000-000000000001');
 INSERT INTO app.admin_audit_log (
   actor_user_id, action, resource_type, resource_id, before_state, after_state,
   access_reason, target_pii_fields, ip_hash, user_agent, request_id, prev_hash,
-  content_hash
+  content_hash, occurred_at
 ) VALUES (
   '40000000-0000-4000-8000-000000000001', 'm05.fixture', 'restore', NULL,
   NULL, NULL, NULL, NULL, repeat('1', 64), NULL,
-  '40000000-0000-4000-8000-000000000002', repeat('0', 64), repeat('2', 64)
+  '40000000-0000-4000-8000-000000000002', repeat('0', 64), __AUDIT_CONTENT_HASH__,
+  TIMESTAMPTZ '__AUDIT_OCCURRED_AT__'
 );
 """.replace("$audit_guard__BODY__$audit_guard$", f"$audit_guard${audit_guard_body}$audit_guard$")
+            .replace("__AUDIT_CONTENT_HASH__", audit_content_hash_sql)
+            .replace("__AUDIT_OCCURRED_AT__", AUDIT_FIXTURE_OCCURRED_AT.replace("T", " "))
         )
         trigger_body = (
             """
@@ -416,6 +462,17 @@ CREATE TABLE app.widgets (
   value integer NOT NULL DEFAULT 0
 );
 INSERT INTO app.widgets (value) VALUES (0);
+CREATE TABLE app.ktm_cache_target_boundary_audits (
+  transaction_id uuid PRIMARY KEY,
+  contract_version text NOT NULL,
+  status text NOT NULL,
+  schema_revision text NOT NULL,
+  CONSTRAINT ck_ktm_ct_boundary_contract CHECK (
+    contract_version = 'pinvi-cache-target-final-boundary/v1'
+    AND status = 'succeeded'
+    AND schema_revision = '20260824_0063'
+  )
+);
 {reconciliation_schema}
 {table_grants}
 {extra_grant}
@@ -462,6 +519,7 @@ REVOKE INSERT, UPDATE, DELETE ON TABLE app.widgets FROM {_quoted(app_role)};
         "trigger_noop": "M05 append-only trigger unexpectedly allowed",
         "trigger_truncate_noop": "M05 append-only trigger unexpectedly allowed TRUNCATE on delivery attempts",
         "audit_trigger_noop": "restored admin audit log is missing a canonical ENABLE ALWAYS append-only guard",
+        "audit_content_noop": "restored admin audit hash chain or content hash is invalid",
         "missing_audit": "schema-swap requires canonical single-runtime-role ACLs",
         "acl": "schema-swap requires canonical single-runtime-role ACLs",
         "extra": "schema-swap requires exactly one canonical runtime writer role",
@@ -593,6 +651,7 @@ def test_restore_hotswap_preflight_rejects_real_noncanonical_topologies_before_m
                 "global_default",
                 "security_definer",
                 "cross_schema_security_definer",
+                "audit_content_noop",
                 "missing_audit",
             )
         ]
@@ -650,7 +709,7 @@ def test_restore_hotswap_preflight_rejects_real_noncanonical_topologies_before_m
             )
 
             assert result.returncode == 3, result.stdout + result.stderr
-            assert case.expected_failure in result.stdout
+            assert case.expected_failure in result.stdout + result.stderr
             _assert_source_unchanged(tools, case, restore_schema)
     finally:
         container.stop()
@@ -873,17 +932,20 @@ SELECT current_user,
         reflection_insert = _psql(
             tools,
             case.hotswap_url,
-            """
+            f"""
 INSERT INTO app.admin_audit_log (
   actor_user_id, action, resource_type, resource_id, before_state, after_state,
   access_reason, target_pii_fields, ip_hash, user_agent, request_id, prev_hash,
-  content_hash
+  content_hash, occurred_at
 ) VALUES (
   '40000000-0000-4000-8000-000000000001', 'm05.reflection', 'restore', NULL,
   NULL, NULL, NULL, NULL, repeat('6', 64), NULL,
-  '40000000-0000-4000-8000-000000000003', repeat('2', 64), repeat('7', 64)
+  '40000000-0000-4000-8000-000000000003',
+  {_audit_content_hash("0" * 64, action="m05.fixture", ip_hash="1" * 64, request_id="40000000-0000-4000-8000-000000000002", occurred_at=AUDIT_FIXTURE_OCCURRED_AT)!r},
+  {_audit_content_hash(_audit_content_hash("0" * 64, action="m05.fixture", ip_hash="1" * 64, request_id="40000000-0000-4000-8000-000000000002", occurred_at=AUDIT_FIXTURE_OCCURRED_AT), action="m05.reflection", ip_hash="6" * 64, request_id="40000000-0000-4000-8000-000000000003", occurred_at="2026-08-24T03:01:00+00:00")!r},
+  TIMESTAMPTZ '2026-08-24 03:01:00+00'
 );
-""",
+""",  # noqa: S608 - test fixture identifiers are generated locally.
         )
         _require_success(reflection_insert)
         after = _psql(
@@ -954,5 +1016,71 @@ SELECT (SELECT oid::text FROM pg_namespace WHERE nspname = 'app'),
         assert audit_count == "2"
         assert audit_chain_valid == "t"
         assert lock_gone == "t"
+
+        failure_snapshot = _snapshot(tools, case.hotswap_url, tmp_path / "release-failure-snapshot")
+        failure_identity = _identity(tools, case.hotswap_url)
+        failure_restore_schema = f"app_restore_release_failure_{suffix}"
+        failure_previous_schema = f"app_previous_release_failure_{suffix}"
+        failure_env = os.environ.copy()
+        failure_env.update(
+            {
+                "PINVI_ENVIRONMENT": "test",
+                "PINVI_M05_RESTORE_TEST_MODE": "1",
+                "PINVI_RESTORE_HOTSWAP_EXECUTE": "1",
+                "PINVI_RESTORE_DATABASE_URL": case.hotswap_url,
+                "PINVI_RESTORE_FENCE_DATABASE_URL": case.fence_url,
+                "PINVI_RESTORE_APP_ROLE": case.app_role,
+                "PINVI_RESTORE_ALLOW_NO_DRAIN": "1",
+                "PINVI_RESTORE_DRAIN_VERIFIED": "1",
+                "PINVI_RESTORE_TEST_FAIL_RELEASE_ONCE": "1",
+                "PINVI_RESTORE_PG_RESTORE_BIN": tools["pg_restore"],
+                "PINVI_RESTORE_PSQL_BIN": tools["psql"],
+                "PINVI_RESTORE_BASH_BIN": tools["bash"],
+                "PINVI_RESTORE_EXPECTED_DATABASE_NAME": failure_identity[0],
+                "PINVI_RESTORE_EXPECTED_DATABASE_OID": failure_identity[1],
+                "PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER": failure_identity[2],
+                "PINVI_RESTORE_EXPECTED_HOSTADDR": failure_identity[3],
+                "PINVI_RESTORE_EXPECTED_PORT": failure_identity[4],
+            }
+        )
+        failure_result = _run(
+            [
+                tools["bash"],
+                str(HOTSWAP_SCRIPT),
+                "run",
+                str(failure_snapshot),
+                failure_restore_schema,
+                failure_previous_schema,
+            ],
+            env=failure_env,
+        )
+        assert failure_result.returncode == 3, failure_result.stdout + failure_result.stderr
+        failure_output = failure_result.stdout + failure_result.stderr
+        assert "schema-swap release failed; rollback will be attempted" in failure_output
+        assert "schema-swap rolled back after fence release failure" in failure_output
+        after_failure = _psql(
+            tools,
+            case.hotswap_url,
+            f"""
+SELECT (SELECT oid::text FROM pg_namespace WHERE nspname = 'app'),
+       to_regnamespace('{failure_previous_schema}') IS NULL,
+       to_regnamespace('{failure_restore_schema}') IS NULL,
+       NOT EXISTS (
+         SELECT 1 FROM pg_locks
+         WHERE locktype = 'advisory'
+           AND classid = 1414679892
+           AND objid = 1213421392
+           AND granted
+       );
+""",  # noqa: S608 - test fixture identifiers are generated locally.
+        )
+        _require_success(after_failure)
+        failed_app_oid, failed_previous_missing, failed_restore_missing, failed_lock_gone = (
+            after_failure.stdout.strip().split("|")
+        )
+        assert failed_app_oid == app_oid
+        assert failed_previous_missing == "t"
+        assert failed_restore_missing == "t"
+        assert failed_lock_gone == "t"
     finally:
         container.stop()

@@ -34,13 +34,18 @@ LOCK_HOLDER_BACKEND_PID=""
 LOCK_HOLDER_ACTIVE=0
 LOCK_INPUT_FD=""
 LOCK_SIGNAL_FD=""
+LOCK_COMMAND_SEQUENCE=0
 SQL_SEQUENCE=0
 CLEANUP_MODE=0
 WRITE_FENCE_ACTIVE=0
+SCHEMA_SWITCH_ACTIVE=0
+RELEASE_FAILURE_INJECTED=0
 PUBLIC_CONNECT_REVOKED=0
 FENCED_CONNECT_ROLES=""
 CONNECT_RESTORE_GRANTS=""
 FENCE_EXECUTOR_ROLE=""
+HOTSWAP_EXECUTOR_ROLE=""
+LOCK_SESSION_FENCED=0
 TEST_MODE="${PINVI_M05_RESTORE_TEST_MODE:-0}"
 APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}"
 STRICT_RESTORE_ENVIRONMENT=0
@@ -289,10 +294,68 @@ if [[ "${TEST_MODE}" != "1" && "${PINVI_RESTORE_PRIVATE_TOOL_COPY:-0}" != "1" ]]
 fi
 
 TMP_DIR="$(mktemp -d)"
+rollback_schema_switch() {
+  local rollback_sql="${TMP_DIR}/rollback-schema-switch.sql"
+  if ! assert_advisory_lock_alive; then
+    return 1
+  fi
+  cat >"${rollback_sql}" <<SQL
+BEGIN;
+$(advisory_lock_sql_guard)
+$(write_identity_guard)
+DO \$m05\$
+BEGIN
+  IF to_regnamespace('${SOURCE_SCHEMA}') IS NULL
+     OR to_regnamespace('${PREVIOUS_SCHEMA}') IS NULL
+     OR to_regnamespace('${RESTORE_SCHEMA}') IS NOT NULL
+  THEN
+    RAISE EXCEPTION 'schema-swap rollback topology is invalid';
+  END IF;
+END
+\$m05\$;
+ALTER SCHEMA ${SOURCE_SCHEMA} RENAME TO ${RESTORE_SCHEMA};
+ALTER SCHEMA ${PREVIOUS_SCHEMA} RENAME TO ${SOURCE_SCHEMA};
+$(advisory_lock_sql_guard)
+$(write_identity_guard)
+COMMIT;
+SQL
+  if ! execute_sql_file "${rollback_sql}" switching; then
+    return 1
+  fi
+  phase switching failed "schema-swap rolled back after fence release failure"
+}
+
 cleanup() {
+  local cleanup_status=$?
   set +e
   CLEANUP_MODE=1
   local cleanup_failed=0
+  if [[ "${SCHEMA_SWITCH_ACTIVE}" == "1" ]]; then
+    if ! declare -F rollback_schema_switch >/dev/null || ! rollback_schema_switch; then
+      phase switching failed "schema-swap rollback failed; manual writer lockout is required"
+      cleanup_failed=1
+    else
+      SCHEMA_SWITCH_ACTIVE=0
+    fi
+  fi
+  if [[ "${cleanup_status}" != "0" &&
+        "${SCHEMA_SWITCH_ACTIVE}" == "0" &&
+        -n "${TMP_DIR}" && -d "${TMP_DIR}" ]]; then
+    local restore_cleanup_sql="${TMP_DIR}/cleanup-restore-schema.sql"
+    cat >"${restore_cleanup_sql}" <<SQL
+BEGIN;
+$(advisory_lock_sql_guard)
+$(write_identity_guard)
+DROP SCHEMA IF EXISTS ${RESTORE_SCHEMA} CASCADE;
+$(advisory_lock_sql_guard)
+$(write_identity_guard)
+COMMIT;
+SQL
+    if ! execute_guarded_sql_file "${restore_cleanup_sql}" validating; then
+      phase validating failed "restore candidate cleanup failed; manual cleanup is required"
+      cleanup_failed=1
+    fi
+  fi
   if [[ "${WRITE_FENCE_ACTIVE}" == "1" ]]; then
     if ! declare -F release_write_fence >/dev/null || ! release_write_fence; then
       phase draining failed "database write fence cleanup failed; manual writer lockout is required"
@@ -523,6 +586,17 @@ assert_fence_target_identity() {
 assert_fence_target_identity
 start_advisory_lock
 
+if [[ "${TEST_MODE}" == "1" ]]; then
+  HOTSWAP_EXECUTOR_ROLE="m05_test_executor"
+else
+  HOTSWAP_EXECUTOR_ROLE="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc \
+    "SELECT current_user" | tr -d '[:space:]')"
+  if [[ ! "${HOTSWAP_EXECUTOR_ROLE}" =~ ^[a-z_][a-z0-9_]*$ ]]; then
+    phase preparing failed "restore executor identity is invalid"
+    exit 3
+  fi
+fi
+
 write_identity_guard() {
   if [[ "${TEST_MODE}" == "1" && -z "${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" ]]; then
     return 0
@@ -549,10 +623,13 @@ execute_sql_file() {
   if ! assert_advisory_lock_alive; then
     return 1
   fi
-  # The persistent session owns only the advisory lock.  Every executable
-  # restore/fence statement uses a disposable connection that verifies the
-  # holder PID from inside its transaction, so an ordinary SQL error cannot
-  # kill the holder and strand the writer fence.
+  if [[ "${LOCK_SESSION_FENCED}" == "1" ]]; then
+    execute_lock_session_file "${sql_file}" "${phase_name}" "strict"
+    return $?
+  fi
+  # Before the database CONNECT fence, every executable restore statement uses
+  # a disposable connection that verifies the holder PID from inside its
+  # transaction, so an ordinary SQL error cannot kill the holder.
   if ! "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" \
     --file="${sql_file}"; then
     phase "${phase_name}" failed "schema-swap SQL execution failed"
@@ -566,6 +643,10 @@ execute_guarded_sql_file() {
   local phase_name="$2"
   if ! assert_advisory_lock_alive; then
     return 1
+  fi
+  if [[ "${LOCK_SESSION_FENCED}" == "1" ]]; then
+    execute_lock_session_file "${sql_file}" "${phase_name}" "strict"
+    return $?
   fi
   if ! "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" \
     --file="${sql_file}"; then
@@ -592,14 +673,16 @@ execute_fence_sql_file() {
 }
 
 execute_validation_sql_file() {
-  # Validation must never use the persistent advisory-lock psql session.  A
-  # deliberate validation error (for example a rejected append-only probe)
-  # would otherwise terminate that session under ON_ERROR_STOP and make the
-  # EXIT cleanup unable to release the write fence.  The separate read/probe
-  # connection is bracketed by the holder-PID guard instead.
+  # Before CONNECT is fenced, validation uses a disposable connection.  After
+  # fencing the hotswap role, every connection with that credential must be
+  # rejected; validation therefore stays on the pre-opened lock session.
   local sql_file="$1"
   if ! assert_advisory_lock_alive; then
     return 1
+  fi
+  if [[ "${LOCK_SESSION_FENCED}" == "1" ]]; then
+    execute_lock_session_file "${sql_file}" validating "validation"
+    return $?
   fi
   if ! "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" \
     --file="${sql_file}"; then
@@ -607,6 +690,50 @@ execute_validation_sql_file() {
     return 1
   fi
   assert_advisory_lock_alive
+}
+
+execute_lock_session_file() {
+  local sql_file="$1"
+  local phase_name="$2"
+  local mode="${3:-strict}"
+  local marker
+  LOCK_COMMAND_SEQUENCE=$((LOCK_COMMAND_SEQUENCE + 1))
+  marker="M05_SQL_DONE|${LOCK_COMMAND_SEQUENCE}"
+  if ! assert_advisory_lock_alive; then
+    return 1
+  fi
+  if [[ "${mode}" == "validation" ]]; then
+    cat >&"${LOCK_INPUT_FD}" <<SQL
+\\set ON_ERROR_STOP off
+\\i ${sql_file}
+\\if :ERROR
+ROLLBACK;
+SELECT 'M05_SQL_FAILED|${LOCK_COMMAND_SEQUENCE}';
+\\else
+SELECT '${marker}';
+\\endif
+\\set ON_ERROR_STOP on
+SQL
+  else
+    cat >&"${LOCK_INPUT_FD}" <<SQL
+\\i ${sql_file}
+SELECT '${marker}';
+SQL
+  fi
+  local observed=""
+  while IFS= read -r observed <&"${LOCK_SIGNAL_FD}"; do
+    if [[ "${observed}" == "${marker}" ]]; then
+      assert_advisory_lock_alive
+      return $?
+    fi
+    if [[ "${observed}" == "M05_SQL_FAILED|${LOCK_COMMAND_SEQUENCE}" ]]; then
+      cat -- "${TMP_DIR}/lock.err" >&2 2>/dev/null || true
+      phase "${phase_name}" failed "schema-swap SQL execution failed"
+      return 1
+    fi
+  done
+  phase "${phase_name}" failed "pre-opened hotswap executor session was lost"
+  return 1
 }
 
 advisory_lock_sql_guard() {
@@ -1110,6 +1237,23 @@ database_connect_granted() {
     | tr -d '[:space:]'
 }
 
+assert_hotswap_executor_reconnect_fenced() {
+  if [[ "${TEST_MODE}" == "1" ]]; then
+    return 0
+  fi
+  local reconnect_error="${TMP_DIR}/hotswap-reconnect-fence.err"
+  if "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" \
+    -tAc "SELECT 1" >/dev/null 2>"${reconnect_error}"; then
+    phase draining failed "hotswap executor retained a connectable second session"
+    return 1
+  fi
+  if [[ "$(database_connect_granted "${FENCE_DATABASE_URL}" "${HOTSWAP_EXECUTOR_ROLE}")" != "f" ]]; then
+    phase draining failed "hotswap executor CONNECT privilege was not revoked"
+    return 1
+  fi
+  phase draining success "hotswap executor reconnect is fenced while lock session remains open"
+}
+
 assert_database_fence_applied() {
   if [[ "${TEST_MODE}" == "1" ]]; then
     return 0
@@ -1540,6 +1684,43 @@ SQL
 assert_admin_audit_contract() {
   local sql_file="${TMP_DIR}/admin-audit-contract-check.sql"
   cat >"${sql_file}" <<SQL
+CREATE OR REPLACE FUNCTION pg_temp.m05_canonical_jsonb(value jsonb)
+RETURNS text
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS \$m05json\$
+DECLARE
+  result text;
+BEGIN
+  IF value IS NULL OR jsonb_typeof(value) = 'null' THEN
+    RETURN 'null';
+  ELSIF jsonb_typeof(value) = 'object' THEN
+    SELECT COALESCE(
+      '{' || string_agg(
+        to_json(object_value.key)::text || ':' ||
+          pg_temp.m05_canonical_jsonb(object_value.value),
+        ',' ORDER BY object_value.key
+      ) || '}',
+      '{}'
+    )
+    INTO result
+    FROM jsonb_each(value) AS object_value(key, value);
+    RETURN result;
+  ELSIF jsonb_typeof(value) = 'array' THEN
+    SELECT COALESCE(
+      '[' || string_agg(pg_temp.m05_canonical_jsonb(array_value), ',' ORDER BY array_value.ordinality) || ']',
+      '[]'
+    )
+    INTO result
+    FROM jsonb_array_elements(value) WITH ORDINALITY AS array_value(value, ordinality);
+    RETURN result;
+  ELSIF jsonb_typeof(value) = 'string' THEN
+    RETURN to_json(value #>> '{}')::text;
+  END IF;
+  RETURN value::text;
+END;
+\$m05json\$;
+
 DO \$m05\$
 DECLARE
   audit_row_ctid tid;
@@ -1681,17 +1862,50 @@ BEGIN
   END IF;
   IF EXISTS (
     WITH ordered AS (
-      SELECT log_id, prev_hash, content_hash,
+      SELECT log_id, prev_hash, content_hash, actor_user_id, action,
+             resource_type, resource_id, before_state, after_state,
+             access_reason, target_pii_fields, ip_hash, user_agent,
+             request_id, occurred_at,
              lag(content_hash) OVER (ORDER BY log_id) AS previous_content_hash
       FROM ${RESTORE_SCHEMA}.admin_audit_log
+    ),
+    hashed AS (
+      SELECT ordered.*,
+             encode(
+               x_extension.digest(
+                 convert_to(
+                   prev_hash || pg_temp.m05_canonical_jsonb(
+                     jsonb_build_object(
+                       'actor_user_id', actor_user_id::text,
+                       'action', action,
+                       'resource_type', resource_type,
+                       'resource_id', resource_id,
+                       'before_state', before_state,
+                       'after_state', after_state,
+                       'access_reason', access_reason,
+                       'target_pii_fields', target_pii_fields,
+                       'ip_hash', ip_hash,
+                       'user_agent', user_agent,
+                       'request_id', request_id::text,
+                       'occurred_at', occurred_at
+                     )
+                   )::text,
+                   'UTF8'
+                 ),
+                 'sha256'
+               ),
+               'hex'
+             ) AS expected_content_hash
+      FROM ordered
     )
     SELECT 1
-    FROM ordered
+    FROM hashed
     WHERE prev_hash !~ '^[0-9a-f]{64}$'
        OR content_hash !~ '^[0-9a-f]{64}$'
        OR prev_hash <> COALESCE(previous_content_hash, repeat('0', 64))
+       OR content_hash <> expected_content_hash
   ) THEN
-    RAISE EXCEPTION 'restored admin audit hash chain is invalid';
+    RAISE EXCEPTION 'restored admin audit hash chain or content hash is invalid';
   END IF;
   BEGIN
     TRUNCATE TABLE ${RESTORE_SCHEMA}.admin_audit_log;
@@ -1729,6 +1943,36 @@ BEGIN
           RAISE EXCEPTION 'admin audit append-only trigger returned an unexpected DELETE diagnostic';
         END IF;
     END;
+  END IF;
+END
+\$m05\$;
+SQL
+  if ! execute_validation_sql_file "${sql_file}"; then
+    if [[ "${CLEANUP_MODE}" == "1" ]]; then
+      return 1
+    fi
+    exit 3
+  fi
+}
+
+assert_cache_target_boundary_contract() {
+  local sql_file="${TMP_DIR}/cache-target-boundary-contract-check.sql"
+  cat >"${sql_file}" <<SQL
+DO \$m05\$
+BEGIN
+  IF to_regclass('${RESTORE_SCHEMA}.ktm_cache_target_boundary_audits') IS NULL THEN
+    RAISE EXCEPTION 'restored schema is missing the M05 final-boundary audit table';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint constraint_row
+    WHERE constraint_row.conrelid = '${RESTORE_SCHEMA}.ktm_cache_target_boundary_audits'::regclass
+      AND constraint_row.conname = 'ck_ktm_ct_boundary_contract'
+      AND pg_get_constraintdef(constraint_row.oid) LIKE '%contract_version = ''pinvi-cache-target-final-boundary/v1''%'
+      AND pg_get_constraintdef(constraint_row.oid) LIKE '%status = ''succeeded''%'
+      AND pg_get_constraintdef(constraint_row.oid) LIKE '%schema_revision = ''20260824_0063''%'
+  ) THEN
+    RAISE EXCEPTION 'restored schema is not bound to the 20260824_0063 final-boundary contract';
   END IF;
 END
 \$m05\$;
@@ -2181,6 +2425,15 @@ enter_write_fence() {
   assert_writer_fence_capable "${writer_logins}"
   FENCED_CONNECT_ROLES="$(writer_connect_roles "${writer_logins}")"
   assert_role_list_safe "${FENCED_CONNECT_ROLES}" "database connection fence inventory"
+  if [[ "${FENCED_CONNECT_ROLES}" == *"${HOTSWAP_EXECUTOR_ROLE}"* ]]; then
+    phase draining failed "hotswap executor was already present in the runtime writer inventory"
+    exit 3
+  fi
+  if [[ -n "${FENCED_CONNECT_ROLES}" ]]; then
+    FENCED_CONNECT_ROLES+=","
+  fi
+  FENCED_CONNECT_ROLES+="${HOTSWAP_EXECUTOR_ROLE}"
+  assert_role_list_safe "${FENCED_CONNECT_ROLES}" "database connection fence inventory"
   CONNECT_RESTORE_GRANTS="$(connect_restore_grants "${FENCED_CONNECT_ROLES}")"
   if [[ -n "${writer_logins}" && -z "${FENCED_CONNECT_ROLES}" ]]; then
     phase draining failed "database write fence could not identify writer roles"
@@ -2267,6 +2520,8 @@ COMMIT;
 SQL
   execute_fence_sql_file "${database_fence_sql}" draining
   assert_database_fence_applied
+  assert_hotswap_executor_reconnect_fenced
+  LOCK_SESSION_FENCED=1
   wait_for_database_quiescence
   assert_no_connectable_writer_roles
   phase draining success "database write fence revoked all non-owner runtime writes"
@@ -2276,6 +2531,12 @@ release_write_fence() {
   local roles_sql
   roles_sql="$(write_roles_sql)"
   local fence_sql="${TMP_DIR}/release-fence.sql"
+  if [[ "${TEST_MODE}" == "1" &&
+        "${PINVI_RESTORE_TEST_FAIL_RELEASE_ONCE:-0}" == "1" &&
+        "${RELEASE_FAILURE_INJECTED}" == "0" ]]; then
+    RELEASE_FAILURE_INJECTED=1
+    return 1
+  fi
   if ! assert_advisory_lock_alive; then
     return 1
   fi
@@ -2383,6 +2644,7 @@ restore_archive_section post-data post-data
 phase restoring success "restored into ${RESTORE_SCHEMA}"
 
 phase validating running "validating restored schema"
+assert_cache_target_boundary_contract
 assert_admin_audit_contract
 assert_restored_schema
 phase validating success "restored schema passed basic checks"
@@ -2407,6 +2669,13 @@ cat >"${TMP_DIR}/switch.sql" <<SQL
 ALTER SCHEMA ${SOURCE_SCHEMA} RENAME TO ${PREVIOUS_SCHEMA};
 ALTER SCHEMA ${RESTORE_SCHEMA} RENAME TO ${SOURCE_SCHEMA};
 SQL
-run_guarded_file "${TMP_DIR}/switch.sql"
-release_write_fence
+if ! run_guarded_file "${TMP_DIR}/switch.sql"; then
+  exit 3
+fi
+SCHEMA_SWITCH_ACTIVE=1
+if ! release_write_fence; then
+  phase switching failed "schema-swap release failed; rollback will be attempted"
+  exit 3
+fi
+SCHEMA_SWITCH_ACTIVE=0
 phase switching success "schema-swap completed"

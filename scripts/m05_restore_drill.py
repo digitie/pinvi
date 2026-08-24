@@ -1132,6 +1132,60 @@ def _identity(database_url: str, *, schema: str) -> dict[str, object]:
     return value
 
 
+def _hotswap_success_state(
+    database_url: str,
+    *,
+    schema: str,
+    restore_schema: str,
+    previous_schema: str,
+    runtime_role: str,
+    fence_role: str,
+) -> dict[str, object]:
+    """실제 schema-swap 직후의 OID·권한·lock release 상태를 읽는다."""
+
+    for value, label in (
+        (schema, "schema"),
+        (restore_schema, "restore schema"),
+        (previous_schema, "previous schema"),
+        (runtime_role, "runtime role"),
+        (fence_role, "fence role"),
+    ):
+        if _SCHEMA_RE.fullmatch(value) is None and label.endswith("schema"):
+            raise RestoreDrillError(f"hotswap {label} is invalid")
+        if _ROLE_RE.fullmatch(value) is None and label.endswith("role"):
+            raise RestoreDrillError(f"hotswap {label} is invalid")
+    sql = f"""
+SELECT json_build_object(
+  'app_oid', COALESCE((SELECT oid::text FROM pg_namespace WHERE nspname = '{schema}'), ''),
+  'previous_oid', COALESCE((SELECT oid::text FROM pg_namespace WHERE nspname = '{previous_schema}'), ''),
+  'restore_absent', to_regnamespace('{restore_schema}') IS NULL,
+  'advisory_lock_absent', NOT EXISTS (
+    SELECT 1 FROM pg_locks
+    WHERE locktype = 'advisory' AND classid = 1414679892 AND objid = 1213421392 AND granted
+  ),
+  'runtime_connect', has_database_privilege('{runtime_role}', current_database(), 'CONNECT'),
+  'runtime_usage', has_schema_privilege('{runtime_role}', '{schema}', 'USAGE'),
+  'fence_connect', has_database_privilege('{fence_role}', current_database(), 'CONNECT')
+)::text
+""".strip()
+    result = _scalar(database_url, sql)
+    try:
+        state = json.loads(result.stdout.strip())
+    except json.JSONDecodeError as exc:
+        raise RestoreDrillError("hotswap post-cutover state is invalid JSON") from exc
+    if not isinstance(state, dict) or set(state) != {
+        "app_oid",
+        "previous_oid",
+        "restore_absent",
+        "advisory_lock_absent",
+        "runtime_connect",
+        "runtime_usage",
+        "fence_connect",
+    }:
+        raise RestoreDrillError("hotswap post-cutover state schema is invalid")
+    return state
+
+
 def _fresh_target_check(database_url: str, *, schema: str) -> None:
     """재사용 DB에서 app 스키마만 지운 상태를 fresh target으로 오인하지 않는다."""
 
@@ -1363,6 +1417,40 @@ SELECT current_database() = '{sql_template}'
         if disable_provisioner_login
         else ""
     )
+    postcondition_sql = f"""
+SELECT EXISTS (
+  SELECT 1
+  FROM pg_database d
+  JOIN pg_roles fence_role ON fence_role.oid = d.datdba
+  WHERE d.datname = '{database_name}'
+    AND fence_role.rolname = '{sql_fence}'
+    AND fence_role.rolcanlogin
+    AND NOT fence_role.rolsuper
+    AND NOT fence_role.rolcreaterole
+    AND NOT fence_role.rolcreatedb
+    AND NOT fence_role.rolreplication
+    AND NOT fence_role.rolbypassrls
+    AND NOT fence_role.rolinherit
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_auth_members m
+      WHERE m.member = fence_role.oid OR m.roleid = fence_role.oid
+    )
+)
+AND NOT EXISTS (
+  SELECT 1
+  FROM pg_default_acl d
+  JOIN pg_roles r ON r.oid = d.defaclrole
+  WHERE r.rolname = '{sql_hotswap}'
+    AND d.defaclnamespace = 0
+)
+AND EXISTS (
+  SELECT 1
+  FROM pg_roles r
+  WHERE r.rolname = '{sql_provisioner}'
+    AND r.rolcanlogin = {str(not disable_provisioner_login).lower()}
+)
+""".strip()
     _psql_file(
         provision_url,
         f"""
@@ -1435,54 +1523,17 @@ $m05$;
 DROP DATABASE IF EXISTS {quoted_database} WITH (FORCE);
 CREATE DATABASE {quoted_database} WITH OWNER {quoted_fence_role} TEMPLATE {quoted_template};
 {disable_provisioner_sql}
-SELECT pg_advisory_unlock(1414679892, 1213421392);
-        """,
-        check=True,
-    )
-    postcondition = _scalar(
-        fence_url,
-        f"""
-SELECT EXISTS (
-  SELECT 1
-  FROM pg_database d
-  JOIN pg_roles fence_role ON fence_role.oid = d.datdba
-  WHERE d.datname = '{database_name}'
-    AND fence_role.rolname = '{sql_fence}'
-    AND fence_role.rolcanlogin
-    AND NOT fence_role.rolsuper
-    AND NOT fence_role.rolcreaterole
-    AND NOT fence_role.rolcreatedb
-    AND NOT fence_role.rolreplication
-    AND NOT fence_role.rolbypassrls
-    AND NOT fence_role.rolinherit
-    AND NOT EXISTS (
-      SELECT 1
-      FROM pg_auth_members m
-      WHERE m.member = fence_role.oid OR m.roleid = fence_role.oid
-    )
-)
-AND NOT EXISTS (
-  SELECT 1
-  FROM pg_default_acl d
-  JOIN pg_roles r ON r.oid = d.defaclrole
-  WHERE r.rolname = '{sql_hotswap}'
-    AND d.defaclnamespace = 0
-)
-AND EXISTS (
-  SELECT 1
-  FROM pg_roles r
-  WHERE r.rolname = '{sql_provisioner}'
-    AND r.rolcanlogin = {str(not disable_provisioner_login).lower()}
-)
-""".strip(),
-    )
-    _require_true(postcondition, name="fresh target fence-owner postcondition")
-    _psql_file(
-        fence_url,
-        f"""
 GRANT CONNECT ON DATABASE {quoted_database} TO {quoted_role};
 GRANT CONNECT, CREATE ON DATABASE {quoted_database} TO {quoted_hotswap_role};
-        """.strip(),
+DO $m05$
+BEGIN
+  IF NOT ({postcondition_sql}) THEN
+    RAISE EXCEPTION 'fresh target fence-owner postcondition failed';
+  END IF;
+END
+$m05$;
+SELECT pg_advisory_unlock(1414679892, 1213421392);
+        """,
         check=True,
     )
 
@@ -1595,11 +1646,33 @@ def _source_revision(root: Path) -> str:
                     raise RestoreDrillError("restore producer GitHub response origin is not canonical")
                 remote_payload = json.loads(response.read())
             remote_revision = remote_payload["head"]["sha"]
+            head = remote_payload["head"]
+            base = remote_payload["base"]
+            if not isinstance(head, dict) or not isinstance(base, dict):
+                raise RestoreDrillError("restore producer GitHub PR topology is invalid")
+            head_repo = head.get("repo")
+            base_repo = base.get("repo")
             if (
                 remote_payload["html_url"] != "https://github.com/digitie/pinvi/pull/466"
-                or remote_payload["base"]["repo"]["full_name"] != "digitie/pinvi"
-                or remote_revision != revision
+                or base.get("ref") != "main"
+                or not isinstance(base_repo, dict)
+                or base_repo.get("full_name") != "digitie/pinvi"
+                or not isinstance(head_repo, dict)
+                or head_repo.get("full_name") != "digitie/pinvi"
+                or head.get("ref") != "codex/m05-activation"
             ):
+                raise RestoreDrillError("restore producer is not the current canonical M05 PR")
+            if os.environ.get("PINVI_ENVIRONMENT") == "production":
+                if (
+                    remote_payload.get("state") != "closed"
+                    or remote_payload.get("draft") is not False
+                    or not remote_payload.get("merged_at")
+                    or remote_payload.get("merge_commit_sha") != revision
+                ):
+                    raise RestoreDrillError(
+                        "production restore producer must be the merged M05 PR commit"
+                    )
+            elif remote_revision != revision:
                 raise RestoreDrillError("restore producer is not the current canonical M05 PR head")
         except (OSError, urllib.error.URLError, KeyError, TypeError, json.JSONDecodeError) as exc:
             raise RestoreDrillError("restore producer GitHub PR head could not be verified") from exc
@@ -1914,8 +1987,137 @@ def _run_drill(args: argparse.Namespace) -> int:
                 "restore target identity changed or does not match the runtime target"
             )
 
+        hotswap_success = False
+        hotswap_success_marker = ""
+        hotswap_success_output_sha256 = ""
+        hotswap_schema_oid_before = ""
+        hotswap_schema_oid_after = ""
+        hotswap_previous_schema_oid = ""
+        hotswap_previous_schema_present = False
+        hotswap_restore_schema_absent = False
+        hotswap_advisory_lock_released = False
+        hotswap_fence_restored = False
+        hotswap_executor_reconnect_fenced = False
+        if hotswap_url and os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
+            success_suffix = uuid4().hex[:12]
+            success_restore_schema = f"{args.schema}_restore_m05_success_{success_suffix}"
+            success_previous_schema = f"{args.schema}_previous_m05_success_{success_suffix}"
+            before_schema = _scalar(
+                hotswap_url,
+                f"SELECT oid::text FROM pg_namespace WHERE nspname = '{args.schema}'",
+            ).stdout.strip()
+            if not before_schema.isdigit():
+                raise RestoreDrillError("successful hotswap pre-cutover schema OID is invalid")
+            hotswap_env = _command_env()
+            hotswap_env.update(
+                {
+                    "PINVI_BACKUP_SCHEMA": args.schema,
+                    "PINVI_ENVIRONMENT": environment,
+                    "PINVI_RESTORE_HOTSWAP_EXECUTE": "1",
+                    "PINVI_RESTORE_DATABASE_URL": hotswap_url,
+                    "PINVI_RESTORE_FENCE_DATABASE_URL": fence_url,
+                    "PINVI_RESTORE_APP_ROLE": args.runtime_role,
+                    "PINVI_RESTORE_ALLOW_NO_DRAIN": "1",
+                    "PINVI_RESTORE_DRAIN_VERIFIED": "1",
+                    "PINVI_RESTORE_PG_RESTORE_BIN": private_tools["pg_restore"]["path"],
+                    "PINVI_RESTORE_PG_RESTORE_SHA256": private_tools["pg_restore"]["sha256"],
+                    "PINVI_RESTORE_PSQL_BIN": private_tools["psql"]["path"],
+                    "PINVI_RESTORE_PSQL_SHA256": private_tools["psql"]["sha256"],
+                    "PINVI_RESTORE_BASH_BIN": private_tools["bash"]["path"],
+                    "PINVI_RESTORE_BASH_SHA256": private_tools["bash"]["sha256"],
+                    "PINVI_RESTORE_PRIVATE_TOOL_COPY": "1",
+                    "PINVI_RESTORE_EXPECTED_DATABASE_NAME": str(
+                        target_identity_before_restore["database"]
+                    ),
+                    "PINVI_RESTORE_EXPECTED_DATABASE_OID": str(
+                        target_identity_before_restore["database_oid"]
+                    ),
+                    "PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER": str(
+                        target_identity_before_restore["system_identifier"]
+                    ),
+                    "PINVI_RESTORE_EXPECTED_HOSTADDR": str(
+                        target_identity_before_restore["hostaddr"]
+                    ),
+                    "PINVI_RESTORE_EXPECTED_PORT": str(target_identity_before_restore["port"]),
+                    "PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME": str(
+                        source_identity_pre["database"]
+                    ),
+                    "PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID": str(
+                        source_identity_pre["database_oid"]
+                    ),
+                    "PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER": str(
+                        source_identity_pre["system_identifier"]
+                    ),
+                    "PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR": str(
+                        source_identity_pre["hostaddr"]
+                    ),
+                    "PINVI_RESTORE_EXPECTED_SOURCE_PORT": str(source_identity_pre["port"]),
+                    "PINVI_RESTORE_TRUSTED_BACKUP_DIR": str(temporary_dir),
+                }
+            )
+            hotswap = _run(
+                [
+                    private_tools["bash"]["path"],
+                    str(root / "scripts/restore-hotswap.sh"),
+                    "run",
+                    str(dump),
+                    success_restore_schema,
+                    success_previous_schema,
+                ],
+                env=hotswap_env,
+                check=False,
+            )
+            hotswap_output = f"{hotswap.stdout}\0{hotswap.stderr}".encode()
+            hotswap_success_output_sha256 = _sha256(hotswap_output)
+            hotswap_success_marker = "RESTORE_PHASE=switching:success:schema-swap completed"
+            hotswap_executor_reconnect_marker = (
+                "RESTORE_PHASE=draining:success:hotswap executor reconnect is fenced while lock session remains open"
+            )
+            if hotswap.returncode != 0:
+                raise RestoreDrillError("successful hotswap runner failed")
+            if hotswap_success_marker not in hotswap.stdout:
+                raise RestoreDrillError("successful hotswap runner did not produce the schema-swap marker")
+            if hotswap_executor_reconnect_marker not in hotswap.stdout:
+                raise RestoreDrillError("successful hotswap runner did not prove executor reconnect fencing")
+            state = _hotswap_success_state(
+                hotswap_url,
+                schema=args.schema,
+                restore_schema=success_restore_schema,
+                previous_schema=success_previous_schema,
+                runtime_role=args.runtime_role,
+                fence_role=args.fence_role,
+            )
+            hotswap_schema_oid_before = before_schema
+            hotswap_schema_oid_after = str(state["app_oid"])
+            hotswap_previous_schema_oid = str(state["previous_oid"])
+            hotswap_previous_schema_present = bool(hotswap_previous_schema_oid)
+            hotswap_restore_schema_absent = state["restore_absent"] is True
+            hotswap_advisory_lock_released = state["advisory_lock_absent"] is True
+            hotswap_fence_restored = (
+                state["runtime_connect"] is True
+                and state["runtime_usage"] is True
+                and state["fence_connect"] is True
+            )
+            hotswap_executor_reconnect_fenced = True
+            if (
+                not hotswap_schema_oid_after.isdigit()
+                or hotswap_schema_oid_after == hotswap_schema_oid_before
+                or hotswap_previous_schema_oid != hotswap_schema_oid_before
+                or not hotswap_previous_schema_present
+                or not hotswap_restore_schema_absent
+                or not hotswap_advisory_lock_released
+                or not hotswap_fence_restored
+            ):
+                raise RestoreDrillError("successful hotswap post-cutover state is not complete")
+            _admin_audit_contract_check(hotswap_url, schema=args.schema)
+            _admin_audit_guard_is_enforced(hotswap_url, schema=args.schema)
+            _trigger_check(hotswap_url, schema=args.schema)
+            _trigger_guard_is_enforced(hotswap_url, schema=args.schema)
+            hotswap_success = True
+
         execution_output = (
             f"{backup.stdout}\0{backup.stderr}\0{restore.stdout}\0{restore.stderr}"
+            f"\0{hotswap_success_output_sha256}"
         ).encode()
         evidence = {
             "backup_runner_sha256": _sha256(backup_script.read_bytes()),
@@ -1982,6 +2184,17 @@ def _run_drill(args: argparse.Namespace) -> int:
             ),
             "trigger_guard_verified": True,
             "runtime_db_identity_sha256": _identity_sha256(runtime_identity),
+            "hotswap_success": hotswap_success,
+            "hotswap_success_marker": hotswap_success_marker,
+            "hotswap_success_output_sha256": hotswap_success_output_sha256,
+            "hotswap_schema_oid_before": hotswap_schema_oid_before,
+            "hotswap_schema_oid_after": hotswap_schema_oid_after,
+            "hotswap_previous_schema_oid": hotswap_previous_schema_oid,
+            "hotswap_previous_schema_present": hotswap_previous_schema_present,
+            "hotswap_restore_schema_absent": hotswap_restore_schema_absent,
+            "hotswap_advisory_lock_released": hotswap_advisory_lock_released,
+            "hotswap_fence_restored": hotswap_fence_restored,
+            "hotswap_executor_reconnect_fenced": hotswap_executor_reconnect_fenced,
         }
     _write_json(output, evidence)
     print(f"restore_evidence_sha256={_sha256(_canonical_json(evidence))}")

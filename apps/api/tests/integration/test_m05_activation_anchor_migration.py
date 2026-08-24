@@ -181,3 +181,68 @@ async def test_0062_rejects_global_default_acl_and_keeps_anchor_writer_root_only
             maintenance_url,
             f"DROP ROLE IF EXISTS {quoted_reader}",
         )
+
+
+@pytest.mark.asyncio
+async def test_0063_installs_the_boundary_and_admin_audit_contract_on_real_head(
+    _database_url: str,
+) -> None:
+    """실제 Alembic head가 hotswap runner의 0063 계약을 설치했는지 확인한다."""
+
+    engine = create_async_engine(_database_url, poolclass=NullPool)
+    try:
+        async with engine.connect() as connection:
+            assert (
+                await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
+                == "20260824_0063"
+            )
+            boundary_definition = await connection.scalar(
+                text(
+                    "SELECT pg_get_constraintdef(constraint_row.oid) "
+                    "FROM pg_constraint constraint_row "
+                    "WHERE constraint_row.conrelid = "
+                    "'app.ktm_cache_target_boundary_audits'::regclass "
+                    "AND constraint_row.conname = 'ck_ktm_ct_boundary_contract'"
+                )
+            )
+            assert isinstance(boundary_definition, str)
+            assert "pinvi-cache-target-final-boundary/v1" in boundary_definition
+            assert "status = 'succeeded'::text" in boundary_definition
+            assert "schema_revision = '20260824_0063'::text" in boundary_definition
+
+            trigger_rows = await connection.execute(
+                text(
+                    "SELECT trigger_row.tgname, trigger_row.tgenabled::text "
+                    "FROM pg_trigger trigger_row "
+                    "JOIN pg_class relation ON relation.oid = trigger_row.tgrelid "
+                    "JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace "
+                    "WHERE namespace.nspname = 'app' "
+                    "AND relation.relname = 'admin_audit_log' "
+                    "AND trigger_row.tgname IN ("
+                    "'trg_admin_audit_log_append_only', "
+                    "'trg_admin_audit_log_truncate_append_only') "
+                    "AND NOT trigger_row.tgisinternal"
+                )
+            )
+            assert {(row[0], row[1]) for row in trigger_rows} == {
+                ("trg_admin_audit_log_append_only", "A"),
+                ("trg_admin_audit_log_truncate_append_only", "A"),
+            }
+
+            function_body = await connection.scalar(
+                text(
+                    "SELECT regexp_replace(btrim(procedure.prosrc), "
+                    "'[[:space:]]+', ' ', 'g') "
+                    "FROM pg_proc procedure "
+                    "JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace "
+                    "WHERE namespace.nspname = 'app' "
+                    "AND procedure.proname = 'guard_admin_audit_log_append_only'"
+                )
+            )
+            assert function_body == (
+                "BEGIN IF TG_OP = 'INSERT' THEN RETURN NEW; END IF; "
+                "RAISE EXCEPTION '% is append-only', TG_TABLE_SCHEMA || '.' || "
+                "TG_TABLE_NAME USING ERRCODE = '55000'; END;"
+            )
+    finally:
+        await engine.dispose()
