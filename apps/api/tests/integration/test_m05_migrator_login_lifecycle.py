@@ -149,9 +149,22 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             f'CREATE ROLE "{stale_role}" LOGIN NOINHERIT; '
             f'GRANT "{schema_owner}" TO "{stale_role}" WITH INHERIT FALSE, SET TRUE;',
         )
-        stale_membership = compose("run", "--rm", "--no-deps", "app-db-runtime-role", check=False)
+        stale_membership = compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "--env",
+            "PINVI_MIGRATOR_DISABLE_LOGIN=0",
+            "app-db-runtime-role",
+            check=False,
+        )
         assert stale_membership.returncode != 0
         assert "role topology is not canonical" in stale_membership.stderr
+        assert role_state()[:3] == ("true", "true", "0")
+        sealed_membership = compose("run", "--rm", "--no-deps", "app-db-runtime-role", check=False)
+        assert sealed_membership.returncode != 0
+        assert "role topology is not canonical" in sealed_membership.stderr
+        assert role_state()[:3] == ("false", "false", "0")
         compose(
             "exec",
             "-T",
@@ -160,6 +173,32 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             f"--username={root_role}",
             "--dbname=pinvi",
             f'--command=REVOKE "{schema_owner}" FROM "{stale_role}"; DROP ROLE "{stale_role}";',
+        )
+        compose("run", "--rm", "--no-deps", "app-db-runtime-role")
+
+        compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            f'CREATE ROLE "{stale_role}" LOGIN NOINHERIT; '
+            f'GRANT "{runtime_role}" TO "{stale_role}" WITH INHERIT FALSE, SET TRUE;',
+        )
+        inbound_membership = compose("run", "--rm", "--no-deps", "app-db-runtime-role", check=False)
+        assert inbound_membership.returncode != 0
+        assert "role topology is not canonical" in inbound_membership.stderr
+        assert role_state()[:3] == ("false", "false", "0")
+        compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            f'--command=REVOKE "{runtime_role}" FROM "{stale_role}"; DROP ROLE "{stale_role}";',
         )
         compose("run", "--rm", "--no-deps", "app-db-runtime-role")
 

@@ -249,7 +249,9 @@ USAGE/SELECT grant를 재적용한다. 이 role은 LOGIN이고 superuser·CREATE
 
 template DB에는 one-time privileged bootstrap으로 `x_extension` schema와 `citext`, `pgcrypto`,
 `pg_trgm`을 설치하고 runtime login에 `USAGE`만 부여한다. template에는 active connection이
-없어야 하며, hotswap executor에는 database `CREATE`와 `x_extension` `USAGE`를 부여한다.
+없어야 하며, hotswap executor에는 database `CREATE`, `x_extension` `USAGE`, 그리고
+`x_extension.digest(bytea,text)`의 직접·비위임 `EXECUTE`만 부여한다. provisioner는 target
+복제 전에 template의 `PUBLIC` digest 실행 권한을 revoke하고 이 executor grant를 고정한다.
 staging provisioner는 target을 매번 `DROP DATABASE ... WITH (FORCE)` 후
 `CREATE DATABASE ... TEMPLATE ...`로 재생성할 수 있는 `CREATEDB` 권한을 가지며, target owner가
 아니다. target owner는 별도 non-`CREATEDB` fence role로 고정하고, target 생성 후 staging
@@ -262,13 +264,16 @@ provisioner에는 `CONNECT`만, hotswap executor에는 `CONNECT, CREATE`를 targ
 실행 모드의 `PINVI_RESTORE_DATABASE_URL`은 API runtime role이 아닌 별도 restore
 executor로 연결해야 한다. 이 login은 `LOGIN`, `NOSUPERUSER`, `NOCREATEROLE`,
 `NOCREATEDB`, `NOREPLICATION`, `NOBYPASSRLS`, `INHERIT`이어야 하고
-`pg_signal_backend`만 직접 member로 가져야 한다. 기존 `app` schema의 직접 owner이며 현재
+`pg_signal_backend`만 `ADMIN FALSE, INHERIT TRUE, SET TRUE`로 직접 member로 가져야 한다. 기존 `app` schema의 직접 owner이며 현재
 database의 `CREATE` 권한을 가져야 schema를 만들고 rename할 수 있다. `PINVI_RESTORE_APP_ROLE`과
 `PINVI_RESTORE_WRITE_ROLES`에는 executor를 넣지 않는다. runner는 이 executor를 사전
 검증된 유지보수 주체로만 허용하고, 나머지 connectable writer의 권한과 CONNECT를 fence한다.
 timeout 시에는 API가 hotswap shell에 먼저 직접 `SIGTERM`을 보내 shell `EXIT` cleanup을
 실행하게 한다. advisory lock session은 shell과 같은 process group에 두고, fence 복구 후
 lock session을 종료하며, grace period 뒤 process-group `SIGKILL`을 최종 안전장치로 사용한다.
+staging/production의 `restore-staging-drill.sh`도 standalone restore 진입점이 아니다. root-owned
+target operation lease FD와 token을 `m05_restore_drill.py`가 명시적으로 상속한 경우에만
+`restore-db.sh`를 호출하며, lease가 없거나 다른 target의 lease면 DB 도구 실행 전 중단한다.
 
 ## 4. Restore — schema-swap 핫스왑 (정상 절차, Sprint 6 T-111)
 

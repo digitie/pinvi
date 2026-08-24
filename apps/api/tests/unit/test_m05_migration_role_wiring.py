@@ -61,6 +61,8 @@ def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
     assert "REVOKE CONNECT ON DATABASE" in bootstrap
     assert "pg_terminate_backend(activity.pid, 5000)" in bootstrap
     assert "FROM pg_stat_activity activity" in bootstrap
+    assert "close the one-shot credential before any" in bootstrap
+    assert "OR membership.roleid = runtime.oid" in bootstrap
     assert "REVOKE ALL ON FUNCTION x_extension.digest(bytea, text) FROM PUBLIC;" in bootstrap
     assert "GRANT EXECUTE ON FUNCTION x_extension.digest(bytea, text)" in bootstrap
     assert "WHERE membership.roleid = owner.oid" in bootstrap
@@ -109,6 +111,8 @@ def test_migration_wrappers_open_only_for_the_one_shot_and_seal_afterward() -> N
         assert 'runner_user="0:0"' in source
         assert "legacy-rebaseline-receipt.json:ro" in source
         assert "run --rm --no-deps" in source
+        assert 'if ! prepare_migrator_login "$legacy_rebaseline"; then' in migration
+        assert "migrator preparation failed; sealing the one-shot login" in migration
         assert (
             migration.index("prepare_migrator_login")
             < migration.index("run_admin_bootstrap")

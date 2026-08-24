@@ -2623,11 +2623,44 @@ SELECT EXISTS (
     AND r.rolinherit
     AND has_schema_privilege(current_user, 'x_extension', 'USAGE')
     AND NOT has_schema_privilege(current_user, 'x_extension', 'CREATE')
+    AND has_function_privilege(
+      current_user,
+      'x_extension.digest(bytea,text)'::regprocedure,
+      'EXECUTE'
+    )
+    AND EXISTS (
+      SELECT 1
+      FROM pg_proc procedure
+      JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+      CROSS JOIN LATERAL aclexplode(
+        COALESCE(procedure.proacl, acldefault('f', procedure.proowner))
+      ) acl
+      WHERE procedure.oid = 'x_extension.digest(bytea,text)'::regprocedure
+        AND namespace.nspname = 'x_extension'
+        AND acl.grantee = r.oid
+        AND acl.privilege_type = 'EXECUTE'
+        AND NOT acl.is_grantable
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_proc procedure
+      JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+      CROSS JOIN LATERAL aclexplode(
+        COALESCE(procedure.proacl, acldefault('f', procedure.proowner))
+      ) acl
+      WHERE procedure.oid = 'x_extension.digest(bytea,text)'::regprocedure
+        AND namespace.nspname = 'x_extension'
+        AND acl.grantee = 0
+        AND acl.privilege_type = 'EXECUTE'
+    )
     AND EXISTS (
       SELECT 1
       FROM pg_auth_members m
       WHERE m.member = r.oid
         AND m.roleid = to_regrole('pg_signal_backend')
+        AND NOT m.admin_option
+        AND m.inherit_option
+        AND m.set_option
     )
     AND NOT EXISTS (
       SELECT 1
@@ -2662,7 +2695,7 @@ SELECT EXISTS (
   )
 " | tr -d '[:space:]')"
   if [[ "${executor_safe}" != "t" ]]; then
-    phase draining failed "restore executor must be a dedicated schema owner with database CREATE and only direct pg_signal_backend membership"
+    phase draining failed "restore executor requires direct digest execution and only non-admin pg_signal_backend membership"
     exit 3
   fi
 }

@@ -12,6 +12,7 @@ ADR-065의 명시적 `0061` rebaseline 뒤에만 실행된다.
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -80,6 +81,134 @@ _LEGACY_REBASELINE_PREFLIGHT_FIELDS = frozenset(
     }
 )
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+_LEGACY_REBASELINE_FINGERPRINT_SESSION_STATEMENTS = (
+    "SET LOCAL TIME ZONE 'UTC'",
+    "SET LOCAL DateStyle TO 'ISO, YMD'",
+    "SET LOCAL IntervalStyle TO 'iso_8601'",
+    "SET LOCAL bytea_output TO 'hex'",
+    "SET LOCAL extra_float_digits TO 3",
+)
+# `scripts/alembic_rebaseline.py`의 0061 preflight와 같은 catalog serialization이다.
+# 0101은 receipt를 만든 뒤의 data/catalog drift를 DDL 전에 다시 검증해야 하므로, 이
+# forward-only migration 안에도 독립적으로 남긴다.
+_LEGACY_REBASELINE_CATALOG_FINGERPRINT_SQL = """
+WITH object_lines(line) AS (
+  SELECT jsonb_build_array('schema', n.nspname, pg_get_userbyid(n.nspowner),
+                           COALESCE(n.nspacl::text, ''))::text
+  FROM pg_namespace AS n
+  WHERE n.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array('relation', c.relname, c.relkind, c.relpersistence,
+                           pg_get_userbyid(c.relowner), COALESCE(c.reloptions::text, ''),
+                           COALESCE(c.relacl::text, ''), c.relrowsecurity,
+                           c.relforcerowsecurity, c.relispartition,
+                           COALESCE(pg_get_expr(c.relpartbound, c.oid, true), ''),
+                           COALESCE(pg_get_partkeydef(c.oid), ''))::text
+  FROM pg_class AS c
+  JOIN pg_namespace AS n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'app' AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
+  UNION ALL
+  SELECT jsonb_build_array('column', c.relname, a.attname, a.attnum,
+                           pg_catalog.format_type(a.atttypid, a.atttypmod), a.attnotnull,
+                           a.attidentity, a.attgenerated,
+                           COALESCE(pg_get_expr(d.adbin, d.adrelid), ''),
+                           COALESCE(a.attcollation::regcollation::text, ''))::text
+  FROM pg_attribute AS a
+  JOIN pg_class AS c ON c.oid = a.attrelid
+  JOIN pg_namespace AS n ON n.oid = c.relnamespace
+  LEFT JOIN pg_attrdef AS d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+  WHERE n.nspname = 'app' AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+    AND a.attnum > 0 AND NOT a.attisdropped
+  UNION ALL
+  SELECT jsonb_build_array('constraint', c.relname, con.conname, con.contype,
+                           con.condeferrable, con.condeferred, con.convalidated,
+                           con.conkey::text,
+                           CASE WHEN con.confrelid = 0 THEN ''
+                                ELSE con.confrelid::regclass::text END,
+                           con.confkey::text, con.confupdtype, con.confdeltype,
+                           con.confmatchtype,
+                           pg_get_constraintdef(con.oid, true))::text
+  FROM pg_constraint AS con
+  JOIN pg_class AS c ON c.oid = con.conrelid
+  JOIN pg_namespace AS n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array('index', table_rel.relname, index_rel.relname,
+                           i.indisunique, i.indisprimary, i.indisvalid, i.indisready,
+                           i.indkey::text, i.indclass::text, i.indcollation::text,
+                           i.indoption::text, pg_get_indexdef(i.indexrelid),
+                           COALESCE(pg_get_expr(i.indexprs, i.indrelid, true), ''),
+                           COALESCE(pg_get_expr(i.indpred, i.indrelid, true), ''))::text
+  FROM pg_index AS i
+  JOIN pg_class AS table_rel ON table_rel.oid = i.indrelid
+  JOIN pg_class AS index_rel ON index_rel.oid = i.indexrelid
+  JOIN pg_namespace AS n ON n.oid = table_rel.relnamespace
+  WHERE n.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array('function', p.oid::regprocedure::text, l.lanname,
+                           p.prosecdef, p.proleakproof, p.proisstrict, p.provolatile,
+                           p.proparallel, COALESCE(p.proconfig::text, ''),
+                           COALESCE(p.prosrc, ''), COALESCE(p.proacl::text, ''))::text
+  FROM pg_proc AS p
+  JOIN pg_namespace AS n ON n.oid = p.pronamespace
+  JOIN pg_language AS l ON l.oid = p.prolang
+  WHERE n.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array('trigger', c.relname, t.tgname, t.tgenabled, t.tgtype,
+                           t.tgfoid::regprocedure::text, encode(t.tgargs, 'hex'),
+                           t.tgattr::text)::text
+  FROM pg_trigger AS t
+  JOIN pg_class AS c ON c.oid = t.tgrelid
+  JOIN pg_namespace AS n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'app' AND NOT t.tgisinternal
+  UNION ALL
+  SELECT jsonb_build_array(
+      'policy', relation.relname, policy.polname, policy.polpermissive,
+      policy.polcmd,
+      COALESCE(array_to_string(ARRAY(
+        SELECT pg_get_userbyid(role_oid)
+        FROM unnest(policy.polroles) AS role_oid
+        ORDER BY pg_get_userbyid(role_oid)
+      ), ','), ''),
+      COALESCE(pg_get_expr(policy.polqual, policy.polrelid, true), ''),
+      COALESCE(pg_get_expr(policy.polwithcheck, policy.polrelid, true), '')
+    )::text
+  FROM pg_policy AS policy
+  JOIN pg_class AS relation ON relation.oid = policy.polrelid
+  JOIN pg_namespace AS n ON n.oid = relation.relnamespace
+  WHERE n.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'rule', relation.relname, rewrite.rulename, rewrite.ev_type,
+      rewrite.ev_enabled, rewrite.is_instead, pg_get_ruledef(rewrite.oid, true)
+    )::text
+  FROM pg_rewrite AS rewrite
+  JOIN pg_class AS relation ON relation.oid = rewrite.ev_class
+  JOIN pg_namespace AS n ON n.oid = relation.relnamespace
+  WHERE n.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array('extension', e.extname, e.extversion, n.nspname)::text
+  FROM pg_extension AS e
+  JOIN pg_namespace AS n ON n.oid = e.extnamespace
+  WHERE e.extname IN ('pgcrypto', 'pg_trgm', 'citext')
+  UNION ALL
+  SELECT jsonb_build_array('default_acl', COALESCE(n.nspname, ''),
+                           d.defaclrole::regrole::text, d.defaclobjtype,
+                           COALESCE(d.defaclacl::text, ''))::text
+  FROM pg_default_acl AS d
+  LEFT JOIN pg_namespace AS n ON n.oid = d.defaclnamespace
+  WHERE n.nspname = 'app' OR n.nspname IS NULL
+)
+SELECT line FROM object_lines ORDER BY line COLLATE "C"
+"""
+_LEGACY_REBASELINE_APP_TABLES_SQL = """
+SELECT relation.relname
+FROM pg_class AS relation
+JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+WHERE namespace.nspname = 'app'
+  AND relation.relkind IN ('r', 'p')
+ORDER BY relation.relname COLLATE "C"
+"""
 
 
 def _split_postgres_statements(source: str) -> tuple[str, ...]:
@@ -256,6 +385,17 @@ def _configured_migrator_login() -> str | None:
     return configured
 
 
+def _configured_app_schema_owner() -> str | None:
+    """Return the canonical non-login app owner used after legacy convergence."""
+
+    configured = os.environ.get("PINVI_APP_SCHEMA_OWNER")
+    if configured is None or not configured.strip():
+        return None
+    if configured != configured.strip() or _ROLE_IDENTIFIER.fullmatch(configured) is None:
+        raise RuntimeError("0101 app schema owner configuration is invalid")
+    return configured
+
+
 def _managed_deployment_requires_migration_owner() -> bool:
     """Keep staging/production M05 receipt ownership fail-closed."""
 
@@ -345,20 +485,150 @@ def _read_legacy_rebaseline_receipt() -> dict[str, object]:
         or any(
             not isinstance(preflight[field], str) or not preflight[field]
             for field in (
+                "current_user",
                 "database_name",
+                "session_user",
                 "system_identifier",
                 "server_addr",
             )
         )
         or any(
             not isinstance(preflight[field], int) or isinstance(preflight[field], bool)
-            for field in ("database_oid", "server_port")
+            for field in (
+                "app_data_rows",
+                "app_data_table_lines",
+                "catalog_lines",
+                "database_oid",
+                "expected_catalog_lines",
+                "server_port",
+                "server_version_num",
+            )
         )
+        or any(
+            not isinstance(preflight[field], str) or _SHA256.fullmatch(preflight[field]) is None
+            for field in (
+                "app_data_content_sha256",
+                "catalog_sha256",
+                "expected_catalog_sha256",
+            )
+        )
+        or preflight["app_data_rows"] <= 0
+        or preflight["app_data_table_lines"] <= 0
+        or preflight["catalog_lines"] <= 0
         or preflight["database_oid"] <= 0
+        or preflight["expected_catalog_lines"] != preflight["catalog_lines"]
+        or preflight["expected_catalog_sha256"] != preflight["catalog_sha256"]
         or not 1 <= preflight["server_port"] <= 65535
+        or preflight["server_version_num"] // 10000 != 16
+        or not str(preflight["system_identifier"]).isdigit()
     ):
         raise RuntimeError("0101 legacy rebaseline receipt preflight is invalid")
+    try:
+        ipaddress.ip_address(preflight["server_addr"])
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("0101 legacy rebaseline receipt preflight endpoint is invalid") from exc
     return receipt
+
+
+def _quote_identifier(identifier: str) -> str:
+    """Quote a PostgreSQL identifier selected from trusted catalog rows."""
+
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def _normalize_legacy_rebaseline_fingerprint_session(bind: sa.Connection) -> None:
+    """Keep the post-stamp fingerprint serialization identical to the helper."""
+
+    for statement in _LEGACY_REBASELINE_FINGERPRINT_SESSION_STATEMENTS:
+        bind.execute(sa.text(statement))
+
+
+def _legacy_rebaseline_app_tables(bind: sa.Connection) -> tuple[str, ...]:
+    return tuple(
+        str(table_name)
+        for table_name in bind.execute(sa.text(_LEGACY_REBASELINE_APP_TABLES_SQL)).scalars()
+    )
+
+
+def _lock_legacy_rebaseline_app_tables(bind: sa.Connection, tables: tuple[str, ...]) -> None:
+    """Freeze the receipt-bound app rows before calculating their rebaseline digest."""
+
+    for table_name in tables:
+        bind.execute(
+            sa.text(f"LOCK TABLE app.{_quote_identifier(table_name)} IN SHARE ROW EXCLUSIVE MODE")
+        )
+
+
+def _legacy_rebaseline_catalog_fingerprint(bind: sa.Connection) -> tuple[int, str]:
+    rows = tuple(
+        str(line)
+        for line in bind.execute(sa.text(_LEGACY_REBASELINE_CATALOG_FINGERPRINT_SQL)).scalars()
+    )
+    payload = ("\n".join(rows) + "\n").encode("utf-8")
+    return len(rows), hashlib.sha256(payload).hexdigest()
+
+
+def _legacy_rebaseline_app_data_fingerprint(
+    bind: sa.Connection, tables: tuple[str, ...]
+) -> tuple[int, int, str]:
+    """Recreate the helper's PII-free app-data digest after the 0100 stamp."""
+
+    digest = hashlib.sha256()
+    total_rows = 0
+    data_tables = tuple(table_name for table_name in tables if table_name != "alembic_version")
+    for table_name in data_tables:
+        digest.update(
+            json.dumps(["table", table_name], ensure_ascii=True, separators=(",", ":")).encode(
+                "utf-8"
+            )
+            + b"\n"
+        )
+        table_query = (
+            f"SELECT to_jsonb(data_row)::text "  # noqa: S608 - pg_catalog table name is quoted
+            f"FROM app.{_quote_identifier(table_name)} AS data_row "
+            'ORDER BY to_jsonb(data_row)::text COLLATE "C"'
+        )
+        result = bind.execute(sa.text(table_query))
+        try:
+            for row_json in result.scalars():
+                total_rows += 1
+                digest.update(
+                    json.dumps(
+                        ["row", table_name, str(row_json)],
+                        ensure_ascii=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                    + b"\n"
+                )
+        finally:
+            result.close()
+    return total_rows, len(data_tables), digest.hexdigest()
+
+
+def _assert_legacy_rebaseline_fingerprint(
+    bind: sa.Connection, preflight: dict[str, object]
+) -> None:
+    """Reject receipt replay when the post-stamp legacy database has drifted."""
+
+    _normalize_legacy_rebaseline_fingerprint_session(bind)
+    tables = _legacy_rebaseline_app_tables(bind)
+    _lock_legacy_rebaseline_app_tables(bind, tables)
+    catalog_lines, catalog_sha256 = _legacy_rebaseline_catalog_fingerprint(bind)
+    app_data_rows, app_data_table_lines, app_data_content_sha256 = (
+        _legacy_rebaseline_app_data_fingerprint(bind, tables)
+    )
+    actual = {
+        "app_data_content_sha256": app_data_content_sha256,
+        "app_data_rows": app_data_rows,
+        "app_data_table_lines": app_data_table_lines,
+        "catalog_lines": catalog_lines,
+        "catalog_sha256": catalog_sha256,
+    }
+    expected = {field: preflight[field] for field in actual}
+    if actual != expected:
+        raise RuntimeError(
+            "0101 legacy rebaseline receipt data or catalog fingerprint does not match this database"
+        )
 
 
 def _assert_legacy_rebaseline_handoff(bind: sa.Connection) -> None:
@@ -390,12 +660,19 @@ def _assert_legacy_rebaseline_handoff(bind: sa.Connection) -> None:
                     WHERE database_row.datname = current_database()
                 )::bigint,
                 'system_identifier', (pg_control_system()).system_identifier::text,
-                'server_addr', COALESCE(inet_server_addr()::text, ''),
+                'server_addr', COALESCE(host(inet_server_addr()), ''),
                 'server_port', COALESCE(inet_server_port(), 0)::integer
             )::text
             """
         )
     )
+    try:
+        identity = json.loads(identity_payload)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("0101 legacy rebaseline database proof is invalid") from exc
+    if identity != expected_identity:
+        raise RuntimeError("0101 legacy rebaseline receipt does not match this database")
+    _assert_legacy_rebaseline_fingerprint(bind, preflight)
     version_rows_payload = bind.scalar(
         sa.text(
             """
@@ -408,12 +685,9 @@ def _assert_legacy_rebaseline_handoff(bind: sa.Connection) -> None:
         )
     )
     try:
-        identity = json.loads(identity_payload)
         version_rows = json.loads(version_rows_payload)
     except (TypeError, json.JSONDecodeError) as exc:
         raise RuntimeError("0101 legacy rebaseline database proof is invalid") from exc
-    if identity != expected_identity:
-        raise RuntimeError("0101 legacy rebaseline receipt does not match this database")
     if version_rows != ["20260824_0100"]:
         raise RuntimeError("0101 legacy rebaseline requires the 0100 handoff row")
 
@@ -421,10 +695,11 @@ def _assert_legacy_rebaseline_handoff(bind: sa.Connection) -> None:
 def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
     """Switch only the M05 portion to its non-login receipt owner.
 
-    The pre-existing app tables are still changed by their owner.  This matters for the
-    one supported 0061 rebaseline: ADR-063 deliberately does not rewrite old object
-    ownership while stamping 0100.  Fresh installs instead arrive here through the
-    non-inheriting one-shot migrator login whose database default role is the app owner.
+    The pre-existing app tables are still changed by their owner.  The root-only 0100
+    handoff deliberately does not rewrite old object ownership; the verified legacy
+    0101 tail converges only the approved `app` catalog after its M05 DDL is complete.
+    Fresh installs instead arrive here through the non-inheriting one-shot migrator
+    login whose database default role is the app owner.
     """
 
     migration_owner = _configured_migration_owner()
@@ -439,6 +714,9 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
         ):
             raise RuntimeError("0101 managed migration requires migration and migrator roles")
         return None
+    legacy_app_schema_owner = (
+        _require_legacy_canonical_app_owner(bind) if legacy_rebaseline else None
+    )
 
     role_contract_valid = bind.scalar(
         sa.text(
@@ -464,6 +742,11 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
                 FROM pg_namespace namespace
                 WHERE namespace.nspname = 'app'
             ),
+            legacy_app_owner AS (
+                SELECT role_row.oid
+                FROM pg_roles role_row
+                WHERE role_row.rolname = :legacy_app_schema_owner
+            ),
             database_owner AS (
                 SELECT database_row.datdba AS oid
                 FROM pg_database database_row
@@ -483,6 +766,15 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
                 AND (SELECT count(*) FROM app_owner) = 1
                 AND (SELECT count(*) FROM database_owner) = 1
                 AND (SELECT count(*) FROM session_role) = 1
+                AND (
+                    NOT :legacy_rebaseline
+                    OR (SELECT count(*) FROM legacy_app_owner) = 1
+                )
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM pg_auth_members membership
+                    WHERE membership.member = (SELECT oid FROM app_owner)
+                )
                 AND EXISTS (
                     SELECT 1
                     FROM migration_role migration
@@ -533,6 +825,64 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
                     FROM pg_default_acl default_acl
                     WHERE default_acl.defaclrole = (SELECT oid FROM migration_role)
                       AND default_acl.defaclnamespace = 0
+                )
+                AND (
+                    SELECT count(*)
+                    FROM pg_auth_members membership
+                    WHERE membership.member = (SELECT oid FROM migration_role)
+                      AND membership.roleid = CASE
+                          WHEN :legacy_rebaseline THEN (SELECT oid FROM legacy_app_owner)
+                          ELSE (SELECT oid FROM app_owner)
+                      END
+                      AND NOT membership.admin_option
+                      AND NOT membership.inherit_option
+                      AND membership.set_option
+                ) = 1
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM pg_auth_members membership
+                    WHERE membership.member = (SELECT oid FROM migration_role)
+                      AND (
+                          membership.roleid <> CASE
+                              WHEN :legacy_rebaseline THEN (SELECT oid FROM legacy_app_owner)
+                              ELSE (SELECT oid FROM app_owner)
+                          END
+                          OR membership.admin_option
+                          OR membership.inherit_option
+                          OR NOT membership.set_option
+                      )
+                )
+                AND (
+                    SELECT count(*)
+                    FROM pg_auth_members membership
+                    WHERE membership.member = (SELECT oid FROM migrator_role)
+                      AND membership.roleid IN (
+                          (SELECT oid FROM migration_role),
+                          CASE
+                              WHEN :legacy_rebaseline THEN (SELECT oid FROM legacy_app_owner)
+                              ELSE (SELECT oid FROM app_owner)
+                          END
+                      )
+                      AND NOT membership.admin_option
+                      AND NOT membership.inherit_option
+                      AND membership.set_option
+                ) = 2
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM pg_auth_members membership
+                    WHERE membership.member = (SELECT oid FROM migrator_role)
+                      AND (
+                          membership.roleid NOT IN (
+                              (SELECT oid FROM migration_role),
+                              CASE
+                                  WHEN :legacy_rebaseline THEN (SELECT oid FROM legacy_app_owner)
+                                  ELSE (SELECT oid FROM app_owner)
+                              END
+                          )
+                          OR membership.admin_option
+                          OR membership.inherit_option
+                          OR NOT membership.set_option
+                      )
                 )
                 AND (
                     CASE WHEN :legacy_rebaseline THEN
@@ -645,6 +995,7 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
         {
             "migration_owner": migration_owner,
             "migrator_login": migrator_login,
+            "legacy_app_schema_owner": legacy_app_schema_owner,
             "legacy_rebaseline": legacy_rebaseline,
         },
     )
@@ -672,18 +1023,275 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
 
 
 def _restore_app_owner(app_owner: str | None) -> None:
-    """Let Alembic write its version row with the pre-existing app owner again."""
+    """Let Alembic write its version row with the effective app schema owner again."""
 
     if app_owner is None:
         return
     if _ROLE_IDENTIFIER.fullmatch(app_owner) is None:
         raise RuntimeError("0101 app schema owner is invalid")
-    op.execute(f'SET LOCAL ROLE "{app_owner}"')
+    op.execute(sa.text(f'SET LOCAL ROLE "{app_owner}"'))
     if (
         op.get_bind().scalar(sa.text("SELECT current_user = :app_owner"), {"app_owner": app_owner})
         is not True
     ):
         raise RuntimeError("0101 could not restore the app schema owner")
+
+
+def _require_legacy_canonical_app_owner(bind: sa.Connection) -> str:
+    """Require the configured post-legacy app owner before changing any owner metadata."""
+
+    app_schema_owner = _configured_app_schema_owner()
+    migration_owner = _configured_migration_owner()
+    migrator_login = _configured_migrator_login()
+    if app_schema_owner is None:
+        raise RuntimeError("0101 legacy rebaseline requires PINVI_APP_SCHEMA_OWNER")
+    if migration_owner is None or migrator_login is None:
+        raise RuntimeError("0101 legacy rebaseline requires migration and migrator roles")
+    canonical_owner_is_safe = bind.scalar(
+        sa.text(
+            """
+            WITH canonical_owner AS (
+                SELECT role_row.oid, role_row.rolcanlogin, role_row.rolsuper,
+                       role_row.rolcreaterole, role_row.rolcreatedb,
+                       role_row.rolreplication, role_row.rolbypassrls,
+                       role_row.rolinherit
+                FROM pg_roles role_row
+                WHERE role_row.rolname = :app_schema_owner
+            ),
+            migration_role AS (
+                SELECT role_row.oid
+                FROM pg_roles role_row
+                WHERE role_row.rolname = :migration_owner
+            ),
+            migrator_role AS (
+                SELECT role_row.oid
+                FROM pg_roles role_row
+                WHERE role_row.rolname = :migrator_login
+            ),
+            database_owner AS (
+                SELECT database_row.datdba AS oid
+                FROM pg_database database_row
+                WHERE database_row.datname = current_database()
+            )
+            SELECT
+                (SELECT count(*) FROM canonical_owner) = 1
+                AND (SELECT count(*) FROM migration_role) = 1
+                AND (SELECT count(*) FROM migrator_role) = 1
+                AND (SELECT count(*) FROM database_owner) = 1
+                AND EXISTS (
+                    SELECT 1
+                    FROM canonical_owner owner
+                    WHERE NOT owner.rolcanlogin
+                      AND NOT owner.rolsuper
+                      AND NOT owner.rolcreaterole
+                      AND NOT owner.rolcreatedb
+                      AND NOT owner.rolreplication
+                      AND NOT owner.rolbypassrls
+                      AND NOT owner.rolinherit
+                      AND owner.oid <> (SELECT oid FROM database_owner)
+                      AND owner.oid <> (SELECT oid FROM migration_role)
+                      AND owner.oid <> (SELECT oid FROM migrator_role)
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM pg_auth_members membership
+                          WHERE membership.member = owner.oid
+                      )
+                )
+                AND session_user = current_user
+                AND current_user::regrole = (SELECT oid FROM database_owner)
+                AND pg_has_role(
+                    session_user::regrole,
+                    (SELECT oid FROM canonical_owner),
+                    'SET'
+                )
+                AND (
+                    SELECT count(*)
+                    FROM pg_auth_members membership
+                    WHERE membership.roleid = (SELECT oid FROM canonical_owner)
+                      AND membership.member IN (
+                          (SELECT oid FROM migration_role),
+                          (SELECT oid FROM migrator_role)
+                      )
+                      AND NOT membership.admin_option
+                      AND NOT membership.inherit_option
+                      AND membership.set_option
+                ) = 2
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM pg_auth_members membership
+                    WHERE membership.roleid = (SELECT oid FROM canonical_owner)
+                      AND (
+                          membership.member NOT IN (
+                              (SELECT oid FROM migration_role),
+                              (SELECT oid FROM migrator_role)
+                          )
+                          OR membership.admin_option
+                          OR membership.inherit_option
+                          OR NOT membership.set_option
+                      )
+                )
+            """
+        ),
+        {
+            "app_schema_owner": app_schema_owner,
+            "migration_owner": migration_owner,
+            "migrator_login": migrator_login,
+        },
+    )
+    if canonical_owner_is_safe is not True:
+        raise RuntimeError("0101 legacy rebaseline canonical app owner is not safe")
+    return app_schema_owner
+
+
+def _legacy_app_ownership_is_canonical(bind: sa.Connection, app_schema_owner: str) -> bool:
+    return (
+        bind.scalar(
+            sa.text(
+                """
+                WITH app_schema AS (
+                    SELECT namespace.oid, namespace.nspowner
+                    FROM pg_namespace namespace
+                    WHERE namespace.nspname = 'app'
+                ),
+                app_objects AS (
+                    SELECT relation.relowner AS owner_oid
+                    FROM pg_class relation
+                    JOIN app_schema schema ON schema.oid = relation.relnamespace
+                    UNION ALL
+                    SELECT procedure.proowner
+                    FROM pg_proc procedure
+                    JOIN app_schema schema ON schema.oid = procedure.pronamespace
+                    UNION ALL
+                    SELECT type_row.typowner
+                    FROM pg_type type_row
+                    JOIN app_schema schema ON schema.oid = type_row.typnamespace
+                )
+                SELECT
+                    (SELECT count(*) FROM app_schema) = 1
+                    AND (SELECT nspowner FROM app_schema) = CAST(:app_schema_owner AS regrole)
+                    AND NOT EXISTS (
+                        SELECT 1 FROM app_objects
+                        WHERE owner_oid <> CAST(:app_schema_owner AS regrole)
+                    )
+                """
+            ),
+            {"app_schema_owner": app_schema_owner},
+        )
+        is True
+    )
+
+
+def _converge_legacy_app_ownership(bind: sa.Connection, app_owner: str | None) -> str | None:
+    """Move only the approved legacy `app` catalog onto the canonical schema owner."""
+
+    if not _legacy_rebaseline_profile():
+        return app_owner
+    if app_owner is None:
+        raise RuntimeError("0101 legacy rebaseline app schema owner is unavailable")
+    app_schema_owner = _require_legacy_canonical_app_owner(bind)
+    current_owner = bind.scalar(
+        sa.text(
+            """
+            SELECT namespace.nspowner::regrole::text
+            FROM pg_namespace namespace
+            WHERE namespace.nspname = 'app'
+            """
+        )
+    )
+    if current_owner != app_owner:
+        raise RuntimeError("0101 legacy rebaseline app schema owner changed before convergence")
+
+    quoted_owner = _quote_identifier(app_schema_owner)
+    bind.execute(sa.text(f"ALTER SCHEMA app OWNER TO {quoted_owner}"))
+
+    relation_rows = tuple(
+        (str(row[0]), str(row[1]))
+        for row in bind.execute(
+            sa.text(
+                """
+                SELECT relation.relname, relation.relkind::text
+                FROM pg_class relation
+                JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+                JOIN pg_roles owner ON owner.rolname = :app_schema_owner
+                WHERE namespace.nspname = 'app'
+                  AND relation.relowner <> owner.oid
+                  AND relation.relkind IN ('r', 'p', 'v', 'm', 'S', 'f', 'c')
+                ORDER BY relation.relkind, relation.relname COLLATE "C"
+                """
+            ),
+            {"app_schema_owner": app_schema_owner},
+        )
+    )
+    relation_commands = {
+        "r": "ALTER TABLE",
+        "p": "ALTER TABLE",
+        "v": "ALTER VIEW",
+        "m": "ALTER MATERIALIZED VIEW",
+        "S": "ALTER SEQUENCE",
+        "f": "ALTER FOREIGN TABLE",
+        "c": "ALTER TYPE",
+    }
+    for relation_name, relation_kind in relation_rows:
+        bind.execute(
+            sa.text(
+                f"{relation_commands[relation_kind]} app.{_quote_identifier(relation_name)} "
+                f"OWNER TO {quoted_owner}"
+            )
+        )
+
+    type_names = tuple(
+        str(row[0])
+        for row in bind.execute(
+            sa.text(
+                """
+                SELECT type_row.typname
+                FROM pg_type type_row
+                JOIN pg_namespace namespace ON namespace.oid = type_row.typnamespace
+                JOIN pg_roles owner ON owner.rolname = :app_schema_owner
+                WHERE namespace.nspname = 'app'
+                  AND type_row.typowner <> owner.oid
+                  AND type_row.typrelid = 0
+                  AND type_row.typelem = 0
+                  AND type_row.typtype <> 'p'
+                ORDER BY type_row.typname COLLATE "C"
+                """
+            ),
+            {"app_schema_owner": app_schema_owner},
+        )
+    )
+    for type_name in type_names:
+        bind.execute(
+            sa.text(f"ALTER TYPE app.{_quote_identifier(type_name)} OWNER TO {quoted_owner}")
+        )
+
+    routines = tuple(
+        (str(row[0]), str(row[1]))
+        for row in bind.execute(
+            sa.text(
+                """
+                SELECT procedure.proname, pg_get_function_identity_arguments(procedure.oid)
+                FROM pg_proc procedure
+                JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+                JOIN pg_roles owner ON owner.rolname = :app_schema_owner
+                WHERE namespace.nspname = 'app'
+                  AND procedure.proowner <> owner.oid
+                ORDER BY procedure.proname COLLATE "C", procedure.oid
+                """
+            ),
+            {"app_schema_owner": app_schema_owner},
+        )
+    )
+    for routine_name, identity_arguments in routines:
+        bind.execute(
+            sa.text(
+                f"ALTER ROUTINE app.{_quote_identifier(routine_name)}({identity_arguments}) "
+                f"OWNER TO {quoted_owner}"
+            )
+        )
+
+    if not _legacy_app_ownership_is_canonical(bind, app_schema_owner):
+        raise RuntimeError("0101 legacy rebaseline app ownership did not converge")
+    return app_schema_owner
 
 
 def _advance_boundary_contract() -> None:
@@ -1153,6 +1761,9 @@ def upgrade() -> None:
     _harden_m05_acl(bind)
     _assert_m05_acl(bind)
     _restore_app_owner(app_owner)
+    canonical_app_owner = _converge_legacy_app_ownership(bind, app_owner)
+    if canonical_app_owner != app_owner:
+        _restore_app_owner(canonical_app_owner)
 
 
 def downgrade() -> None:

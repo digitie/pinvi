@@ -87,7 +87,9 @@ def _acquire_root_target_lease(database_url: str):
     except RestoreDrillError:
         raise
     except Exception as exc:
-        raise RestoreDrillError("restore target operation lease is unavailable") from exc
+        raise RestoreDrillError(
+            "restore target operation lease is unavailable"
+        ) from exc
 
 
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -177,7 +179,8 @@ def _tool_path(name: str) -> str:
         return path
     candidates = [directory / name for directory in _TRUSTED_TOOL_DIRECTORIES]
     candidates.extend(
-        directory / name for directory in sorted(Path("/usr/lib/postgresql").glob("*/bin"))
+        directory / name
+        for directory in sorted(Path("/usr/lib/postgresql").glob("*/bin"))
     )
     for candidate in candidates:
         if not candidate.is_file() or not os.access(candidate, os.X_OK):
@@ -187,11 +190,15 @@ def _tool_path(name: str) -> str:
             continue
         manifest_path = os.environ.get(_TOOL_TRUST_MANIFEST_ENV, "")
         if not manifest_path:
-            raise RestoreDrillError("non-test restore requires a root-owned tool trust manifest")
+            raise RestoreDrillError(
+                "non-test restore requires a root-owned tool trust manifest"
+            )
         manifest = _tool_trust_manifest(Path(manifest_path))
         expected = manifest.get(name)
         if expected is None or expected["path"] != str(resolved):
-            raise RestoreDrillError(f"restore tool is not pinned by the trust manifest: {name}")
+            raise RestoreDrillError(
+                f"restore tool is not pinned by the trust manifest: {name}"
+            )
         if expected["sha256"] != _sha256(resolved.read_bytes()):
             raise RestoreDrillError(
                 f"restore tool digest does not match the trust manifest: {name}"
@@ -201,7 +208,12 @@ def _tool_path(name: str) -> str:
 
 
 def _trusted_tool_path(path: Path, name: str) -> bool:
-    if path.name != name or path.is_symlink() or not path.is_file() or not os.access(path, os.X_OK):
+    if (
+        path.name != name
+        or path.is_symlink()
+        or not path.is_file()
+        or not os.access(path, os.X_OK)
+    ):
         return False
     parent = str(path.resolve().parent)
     return Path(parent) in _TRUSTED_TOOL_DIRECTORIES or bool(
@@ -243,7 +255,11 @@ def _tool_trust_manifest(path: Path) -> dict[str, dict[str, str]]:
         value = json.loads(raw)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise RestoreDrillError("restore tool trust manifest is invalid JSON") from exc
-    if not isinstance(value, dict) or set(value) != {"tools", "version"} or value["version"] != 1:
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"tools", "version"}
+        or value["version"] != 1
+    ):
         raise RestoreDrillError("restore tool trust manifest schema is invalid")
     tools = value["tools"]
     if not isinstance(tools, dict) or set(tools) != set(_TRUSTED_TOOL_NAMES):
@@ -252,7 +268,9 @@ def _tool_trust_manifest(path: Path) -> dict[str, dict[str, str]]:
     for name in _TRUSTED_TOOL_NAMES:
         entry = tools[name]
         if not isinstance(entry, dict) or set(entry) != {"path", "sha256"}:
-            raise RestoreDrillError(f"restore tool trust manifest entry is invalid: {name}")
+            raise RestoreDrillError(
+                f"restore tool trust manifest entry is invalid: {name}"
+            )
         tool_path = entry["path"]
         digest = entry["sha256"]
         tool_file = Path(tool_path) if isinstance(tool_path, str) else Path("/")
@@ -264,7 +282,9 @@ def _tool_trust_manifest(path: Path) -> dict[str, dict[str, str]]:
             or re.fullmatch(r"[0-9a-f]{64}", digest) is None
             or _sha256(tool_file.read_bytes()) != digest
         ):
-            raise RestoreDrillError(f"restore tool trust manifest binding is invalid: {name}")
+            raise RestoreDrillError(
+                f"restore tool trust manifest binding is invalid: {name}"
+            )
         result[name] = {"path": str(tool_file), "sha256": digest}
     _TOOL_TRUST_MANIFEST_SHA256 = _sha256(raw)
     return result
@@ -284,13 +304,17 @@ def _canonical_json(value: object) -> bytes:
 
 
 def _write_json(path: Path, value: object) -> None:
-    raw = json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
+    raw = json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True).encode(
+        "utf-8"
+    )
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC
     flags |= getattr(os, "O_NOFOLLOW", 0)
     try:
         fd = os.open(path, flags, 0o600)
     except OSError as exc:
-        raise RestoreDrillError("restore evidence output already exists or is unsafe") from exc
+        raise RestoreDrillError(
+            "restore evidence output already exists or is unsafe"
+        ) from exc
     try:
         with os.fdopen(fd, "wb") as stream:
             fd = -1
@@ -308,6 +332,7 @@ def _run(
     env: dict[str, str],
     check: bool = True,
     input_text: str | None = None,
+    pass_fds: tuple[int, ...] = (),
 ) -> subprocess.CompletedProcess[str]:
     try:
         completed = subprocess.run(
@@ -317,6 +342,7 @@ def _run(
             text=True,
             env=env,
             input=input_text,
+            pass_fds=pass_fds,
         )
     except OSError as exc:
         raise RestoreDrillError("restore drill command could not be started") from exc
@@ -377,7 +403,9 @@ def _database_url(name: str) -> str:
     return urlunsplit(parsed._replace(query=urlencode(query, safe=":")))
 
 
-def _scalar(database_url: str, sql: str, *, check: bool = True) -> subprocess.CompletedProcess[str]:
+def _scalar(
+    database_url: str, sql: str, *, check: bool = True
+) -> subprocess.CompletedProcess[str]:
     return _run(
         [
             _tool_path("psql"),
@@ -517,7 +545,9 @@ WHERE r.rolname = current_user
     _require_true(_scalar(database_url, sql), name="runtime role")
 
 
-def _staging_role_check(database_url: str, *, expected_role: str, runtime_role: str) -> None:
+def _staging_role_check(
+    database_url: str, *, expected_role: str, runtime_role: str
+) -> None:
     if not _ROLE_RE.fullmatch(expected_role):
         raise RestoreDrillError("restore staging role is invalid")
     if expected_role == runtime_role:
@@ -628,9 +658,43 @@ SELECT current_user = '{expected_role}'
   AND has_database_privilege(current_user, current_database(), 'CREATE')
   AND has_schema_privilege(current_user, 'x_extension', 'USAGE')
   AND NOT has_schema_privilege(current_user, 'x_extension', 'CREATE')
+  AND has_function_privilege(
+      current_user,
+      'x_extension.digest(bytea,text)'::regprocedure,
+      'EXECUTE'
+  )
+  AND EXISTS (
+      SELECT 1
+      FROM pg_proc procedure
+      JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+      CROSS JOIN LATERAL aclexplode(
+          COALESCE(procedure.proacl, acldefault('f', procedure.proowner))
+      ) acl
+      WHERE procedure.oid = 'x_extension.digest(bytea,text)'::regprocedure
+        AND namespace.nspname = 'x_extension'
+        AND acl.grantee = r.oid
+        AND acl.privilege_type = 'EXECUTE'
+        AND NOT acl.is_grantable
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM pg_proc procedure
+      JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+      CROSS JOIN LATERAL aclexplode(
+          COALESCE(procedure.proacl, acldefault('f', procedure.proowner))
+      ) acl
+      WHERE procedure.oid = 'x_extension.digest(bytea,text)'::regprocedure
+        AND namespace.nspname = 'x_extension'
+        AND acl.grantee = 0
+        AND acl.privilege_type = 'EXECUTE'
+  )
   AND EXISTS (
       SELECT 1 FROM pg_auth_members m
-      WHERE m.member = r.oid AND m.roleid = to_regrole('pg_signal_backend')
+      WHERE m.member = r.oid
+        AND m.roleid = to_regrole('pg_signal_backend')
+        AND NOT m.admin_option
+        AND m.inherit_option
+        AND m.set_option
   )
   AND NOT EXISTS (
       SELECT 1 FROM pg_auth_members m
@@ -1138,7 +1202,9 @@ def _identity(database_url: str, *, schema: str) -> dict[str, object]:
     try:
         value = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise RestoreDrillError("database identity query returned invalid JSON") from exc
+        raise RestoreDrillError(
+            "database identity query returned invalid JSON"
+        ) from exc
     if not isinstance(value, dict) or set(value) != {
         "database",
         "database_oid",
@@ -1224,11 +1290,15 @@ def _recreate_disposable_target(
     except ValueError as exc:
         raise RestoreDrillError("restore target URL is invalid") from exc
     if _TARGET_DATABASE_RE.fullmatch(database_name) is None:
-        raise RestoreDrillError("restore target database is outside the M05 disposable prefix")
+        raise RestoreDrillError(
+            "restore target database is outside the M05 disposable prefix"
+        )
     if _DATABASE_RE.fullmatch(template_name) is None or template_name == database_name:
         raise RestoreDrillError("restore target template database is invalid")
     if provision_database_name != "postgres":
-        raise RestoreDrillError("restore provisioner URL must use the postgres maintenance database")
+        raise RestoreDrillError(
+            "restore provisioner URL must use the postgres maintenance database"
+        )
     if not _ROLE_RE.fullmatch(staging_role):
         raise RestoreDrillError("restore staging role is invalid")
     if not _ROLE_RE.fullmatch(provisioner_role):
@@ -1240,7 +1310,9 @@ def _recreate_disposable_target(
     if not _ROLE_RE.fullmatch(hotswap_role):
         raise RestoreDrillError("restore hotswap role is invalid")
     if hotswap_database_name != database_name:
-        raise RestoreDrillError("restore hotswap URL must target the disposable database")
+        raise RestoreDrillError(
+            "restore hotswap URL must target the disposable database"
+        )
     if fence_database_name != database_name:
         raise RestoreDrillError("restore fence URL must target the disposable database")
     quoted_database = '"' + database_name.replace('"', '""') + '"'
@@ -1248,9 +1320,9 @@ def _recreate_disposable_target(
     quoted_fence_role = '"' + fence_role.replace('"', '""') + '"'
     quoted_hotswap_role = '"' + hotswap_role.replace('"', '""') + '"'
     quoted_template = '"' + template_name.replace('"', '""') + '"'
-    hostaddr = parsed.query and dict(parse_qsl(parsed.query, keep_blank_values=True)).get(
-        "hostaddr", ""
-    )
+    hostaddr = parsed.query and dict(
+        parse_qsl(parsed.query, keep_blank_values=True)
+    ).get("hostaddr", "")
     template_hostaddr = template_parsed.query and dict(
         parse_qsl(template_parsed.query, keep_blank_values=True)
     ).get("hostaddr", "")
@@ -1312,6 +1384,48 @@ def _recreate_disposable_target(
     sql_hotswap = hotswap_role.replace("'", "''")
     sql_provisioner = provisioner_role.replace("'", "''")
     sql_template = template_name.replace("'", "''")
+    template_provision_url = urlunsplit(
+        provision_parsed._replace(path=f"/{template_name}")
+    )
+    _psql_file(
+        template_provision_url,
+        f"""
+REVOKE ALL ON FUNCTION x_extension.digest(bytea, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION x_extension.digest(bytea, text) TO {quoted_hotswap_role};
+DO $m05$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_proc procedure
+    JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+    CROSS JOIN LATERAL aclexplode(
+      COALESCE(procedure.proacl, acldefault('f', procedure.proowner))
+    ) acl
+    JOIN pg_roles hotswap ON hotswap.rolname = '{sql_hotswap}'
+    WHERE procedure.oid = 'x_extension.digest(bytea,text)'::regprocedure
+      AND namespace.nspname = 'x_extension'
+      AND acl.grantee = hotswap.oid
+      AND acl.privilege_type = 'EXECUTE'
+      AND NOT acl.is_grantable
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_proc procedure
+    JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+    CROSS JOIN LATERAL aclexplode(
+      COALESCE(procedure.proacl, acldefault('f', procedure.proowner))
+    ) acl
+    WHERE procedure.oid = 'x_extension.digest(bytea,text)'::regprocedure
+      AND namespace.nspname = 'x_extension'
+      AND acl.grantee = 0
+      AND acl.privilege_type = 'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'restore hotswap digest ACL is not canonical';
+  END IF;
+END
+$m05$;
+        """,
+        check=True,
+    )
     template_check = _scalar(
         template_url,
         f"""
@@ -1328,6 +1442,32 @@ SELECT current_database() = '{sql_template}'
   AND has_database_privilege('{sql_hotswap}', current_database(), 'CREATE')
   AND has_schema_privilege('{sql_hotswap}', 'x_extension', 'USAGE')
   AND NOT has_schema_privilege('{sql_hotswap}', 'x_extension', 'CREATE')
+  AND EXISTS (
+    SELECT 1
+    FROM pg_proc procedure
+    JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+    CROSS JOIN LATERAL aclexplode(
+      COALESCE(procedure.proacl, acldefault('f', procedure.proowner))
+    ) acl
+    JOIN pg_roles hotswap ON hotswap.rolname = '{sql_hotswap}'
+    WHERE procedure.oid = 'x_extension.digest(bytea,text)'::regprocedure
+      AND namespace.nspname = 'x_extension'
+      AND acl.grantee = hotswap.oid
+      AND acl.privilege_type = 'EXECUTE'
+      AND NOT acl.is_grantable
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_proc procedure
+    JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+    CROSS JOIN LATERAL aclexplode(
+      COALESCE(procedure.proacl, acldefault('f', procedure.proowner))
+    ) acl
+    WHERE procedure.oid = 'x_extension.digest(bytea,text)'::regprocedure
+      AND namespace.nspname = 'x_extension'
+      AND acl.grantee = 0
+      AND acl.privilege_type = 'EXECUTE'
+  )
   AND NOT EXISTS (
     SELECT 1
     FROM pg_default_acl d
@@ -1364,7 +1504,11 @@ SELECT current_database() = '{sql_template}'
       AND r.rolinherit
       AND EXISTS (
         SELECT 1 FROM pg_auth_members m
-        WHERE m.member = r.oid AND m.roleid = to_regrole('pg_signal_backend')
+        WHERE m.member = r.oid
+          AND m.roleid = to_regrole('pg_signal_backend')
+          AND NOT m.admin_option
+          AND m.inherit_option
+          AND m.set_option
       )
       AND NOT EXISTS (
         SELECT 1 FROM pg_auth_members m
@@ -1386,9 +1530,7 @@ SELECT current_database() = '{sql_template}'
     )
     _require_true(template_check, name="restore target template")
     disable_provisioner_sql = (
-        f'ALTER ROLE "{provisioner_role}" NOLOGIN;'
-        if disable_provisioner_login
-        else ""
+        f'ALTER ROLE "{provisioner_role}" NOLOGIN;' if disable_provisioner_login else ""
     )
     postcondition_sql = f"""
 SELECT EXISTS (
@@ -1476,7 +1618,11 @@ BEGIN
       AND has_database_privilege(r.rolname, '{sql_template}', 'CREATE')
       AND EXISTS (
         SELECT 1 FROM pg_auth_members m
-        WHERE m.member = r.oid AND m.roleid = to_regrole('pg_signal_backend')
+        WHERE m.member = r.oid
+          AND m.roleid = to_regrole('pg_signal_backend')
+          AND NOT m.admin_option
+          AND m.inherit_option
+          AND m.set_option
       )
       AND NOT EXISTS (
         SELECT 1 FROM pg_auth_members m
@@ -1560,7 +1706,9 @@ def _secure_output_parent(path: Path, *, require_root_owned: bool) -> None:
 def _source_revision(root: Path) -> str:
     expected = os.environ.get("PINVI_SOURCE_REVISION", "")
     if not _COMMIT_RE.fullmatch(expected):
-        raise RestoreDrillError("restore producer requires a full PINVI_SOURCE_REVISION")
+        raise RestoreDrillError(
+            "restore producer requires a full PINVI_SOURCE_REVISION"
+        )
     try:
         top_level = subprocess.run(
             [_tool_path("git"), "-C", str(root), "rev-parse", "--show-toplevel"],
@@ -1597,7 +1745,9 @@ def _source_revision(root: Path) -> str:
                 "restore producer checkout is not a clean PINVI_SOURCE_REVISION"
             )
     except (OSError, subprocess.CalledProcessError) as exc:
-        raise RestoreDrillError("restore producer source revision could not be verified") from exc
+        raise RestoreDrillError(
+            "restore producer source revision could not be verified"
+        ) from exc
     if not _COMMIT_RE.fullmatch(revision):
         raise RestoreDrillError("restore producer source revision is invalid")
     if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
@@ -1612,21 +1762,24 @@ def _source_revision(root: Path) -> str:
             token = os.environ.get("PINVI_GITHUB_TOKEN", "")
             if token:
                 request.add_header("Authorization", f"Bearer {token}")
-            with _canonical_github_opener().open(
-                request, timeout=20
-            ) as response:
+            with _canonical_github_opener().open(request, timeout=20) as response:
                 if response.geturl() != request.full_url or response.getcode() != 200:
-                    raise RestoreDrillError("restore producer GitHub response origin is not canonical")
+                    raise RestoreDrillError(
+                        "restore producer GitHub response origin is not canonical"
+                    )
                 remote_payload = json.loads(response.read())
             remote_revision = remote_payload["head"]["sha"]
             head = remote_payload["head"]
             base = remote_payload["base"]
             if not isinstance(head, dict) or not isinstance(base, dict):
-                raise RestoreDrillError("restore producer GitHub PR topology is invalid")
+                raise RestoreDrillError(
+                    "restore producer GitHub PR topology is invalid"
+                )
             head_repo = head.get("repo")
             base_repo = base.get("repo")
             if (
-                remote_payload["html_url"] != "https://github.com/digitie/pinvi/pull/466"
+                remote_payload["html_url"]
+                != "https://github.com/digitie/pinvi/pull/466"
                 or base.get("ref") != "main"
                 or not isinstance(base_repo, dict)
                 or base_repo.get("full_name") != "digitie/pinvi"
@@ -1634,7 +1787,9 @@ def _source_revision(root: Path) -> str:
                 or head_repo.get("full_name") != "digitie/pinvi"
                 or head.get("ref") != "codex/m05-activation"
             ):
-                raise RestoreDrillError("restore producer is not the current canonical M05 PR")
+                raise RestoreDrillError(
+                    "restore producer is not the current canonical M05 PR"
+                )
             if os.environ.get("PINVI_ENVIRONMENT") == "production":
                 if (
                     remote_payload.get("state") != "closed"
@@ -1646,13 +1801,28 @@ def _source_revision(root: Path) -> str:
                         "production restore producer must be the merged M05 PR commit"
                     )
             elif remote_revision != revision:
-                raise RestoreDrillError("restore producer is not the current canonical M05 PR head")
-        except (OSError, urllib.error.URLError, KeyError, TypeError, json.JSONDecodeError) as exc:
-            raise RestoreDrillError("restore producer GitHub PR head could not be verified") from exc
+                raise RestoreDrillError(
+                    "restore producer is not the current canonical M05 PR head"
+                )
+        except (
+            OSError,
+            urllib.error.URLError,
+            KeyError,
+            TypeError,
+            json.JSONDecodeError,
+        ) as exc:
+            raise RestoreDrillError(
+                "restore producer GitHub PR head could not be verified"
+            ) from exc
     return revision
 
 
-def _run_drill(args: argparse.Namespace, *, _lease_held: bool = False) -> int:
+def _run_drill(
+    args: argparse.Namespace,
+    *,
+    _lease_held: bool = False,
+    _operation_lease: object | None = None,
+) -> int:
     output: Path = args.output
     environment = os.environ.get("PINVI_ENVIRONMENT", "")
     if environment in {"staging", "production"} and not args.require_root_owned:
@@ -1677,14 +1847,12 @@ def _run_drill(args: argparse.Namespace, *, _lease_held: bool = False) -> int:
         raise RestoreDrillError("restore runtime role is invalid")
     if not _ROLE_RE.fullmatch(args.staging_role):
         raise RestoreDrillError("restore staging role is invalid")
-    if (
-        os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1"
-        and not _ROLE_RE.fullmatch(args.fence_role)
+    if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1" and not _ROLE_RE.fullmatch(
+        args.fence_role
     ):
         raise RestoreDrillError("restore fence role is required")
-    if (
-        os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1"
-        and not _ROLE_RE.fullmatch(args.provisioner_role)
+    if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1" and not _ROLE_RE.fullmatch(
+        args.provisioner_role
     ):
         raise RestoreDrillError("restore provisioner role is required")
     if (
@@ -1704,8 +1872,10 @@ def _run_drill(args: argparse.Namespace, *, _lease_held: bool = False) -> int:
     target_url = _database_url(args.staging_database_url_env)
     runtime_url = _database_url(args.runtime_database_url_env)
     if args.require_root_owned and not _lease_held:
-        with _acquire_root_target_lease(target_url):
-            return _run_drill(args, _lease_held=True)
+        with _acquire_root_target_lease(target_url) as lease:
+            return _run_drill(args, _lease_held=True, _operation_lease=lease)
+    if args.require_root_owned and _operation_lease is None:
+        raise RestoreDrillError("restore target operation lease is unavailable")
     hotswap_url = ""
     fence_url = ""
     provision_url = ""
@@ -1728,13 +1898,21 @@ def _run_drill(args: argparse.Namespace, *, _lease_held: bool = False) -> int:
     except ValueError as exc:
         raise RestoreDrillError("restore database URL is invalid") from exc
     if source_database_name == target_database_name:
-        raise RestoreDrillError("restore source and disposable target databases must differ")
+        raise RestoreDrillError(
+            "restore source and disposable target databases must differ"
+        )
     if hotswap_url and hotswap_database_name != target_database_name:
-        raise RestoreDrillError("restore hotswap database must match the disposable target")
+        raise RestoreDrillError(
+            "restore hotswap database must match the disposable target"
+        )
     if fence_url and fence_database_name != target_database_name:
-        raise RestoreDrillError("restore fence database must match the disposable target")
+        raise RestoreDrillError(
+            "restore fence database must match the disposable target"
+        )
     if provision_url and provision_database_name != "postgres":
-        raise RestoreDrillError("restore provisioner URL must use the postgres maintenance database")
+        raise RestoreDrillError(
+            "restore provisioner URL must use the postgres maintenance database"
+        )
     if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
         _staging_role_check(
             _maintenance_database_url(target_url),
@@ -1758,7 +1936,9 @@ def _run_drill(args: argparse.Namespace, *, _lease_held: bool = False) -> int:
     target_identity_pre = _identity(target_url, schema=args.schema)
     runtime_identity_pre = _identity(runtime_url, schema=args.schema)
     fence_identity_pre = _identity(fence_url, schema=args.schema) if fence_url else None
-    hotswap_identity_pre = _identity(hotswap_url, schema=args.schema) if hotswap_url else None
+    hotswap_identity_pre = (
+        _identity(hotswap_url, schema=args.schema) if hotswap_url else None
+    )
     source_key = _identity_key(source_identity_pre)
     target_key = _identity_key(target_identity_pre)
     runtime_key = _identity_key(runtime_identity_pre)
@@ -1778,9 +1958,13 @@ def _run_drill(args: argparse.Namespace, *, _lease_held: bool = False) -> int:
         not isinstance(target_database, str)
         or _TARGET_DATABASE_RE.fullmatch(target_database) is None
     ):
-        raise RestoreDrillError("restore target database is outside the M05 disposable prefix")
+        raise RestoreDrillError(
+            "restore target database is outside the M05 disposable prefix"
+        )
     if target_identity_pre.get("schema_exists") is not False:
-        raise RestoreDrillError("restore target must be a fresh database without the app schema")
+        raise RestoreDrillError(
+            "restore target must be a fresh database without the app schema"
+        )
     _fresh_target_check(target_url, schema=args.schema)
     _staging_role_check(
         target_url,
@@ -1813,7 +1997,9 @@ def _run_drill(args: argparse.Namespace, *, _lease_held: bool = False) -> int:
     backup_tool = _tool_identity("pg_dump")
     restore_tool = _tool_identity("pg_restore")
 
-    with tempfile.TemporaryDirectory(prefix="pinvi-m05-restore-", dir=output.parent) as temporary:
+    with tempfile.TemporaryDirectory(
+        prefix="pinvi-m05-restore-", dir=output.parent
+    ) as temporary:
         temporary_dir = Path(temporary)
         private_tools = {
             name: _copy_verified_tool(tool, temporary_dir)
@@ -1849,7 +2035,9 @@ def _run_drill(args: argparse.Namespace, *, _lease_held: bool = False) -> int:
                 "PINVI_BACKUP_PRIVATE_TOOL_COPY": "1",
             }
         )
-        backup = _run([private_tools["bash"]["path"], str(backup_script)], env=backup_env)
+        backup = _run(
+            [private_tools["bash"]["path"], str(backup_script)], env=backup_env
+        )
         dump = _single_dump(temporary_dir)
         source_identity_after_backup = _identity(source_url, schema=args.schema)
         target_identity_before_restore = _identity(target_url, schema=args.schema)
@@ -1871,7 +2059,9 @@ def _run_drill(args: argparse.Namespace, *, _lease_held: bool = False) -> int:
                 "PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL": "precheck",
                 "PINVI_RESTORE_PG_RESTORE_BIN": private_tools["pg_restore"]["path"],
                 "PINVI_RESTORE_PSQL_BIN": private_tools["psql"]["path"],
-                "PINVI_RESTORE_PG_RESTORE_SHA256": private_tools["pg_restore"]["sha256"],
+                "PINVI_RESTORE_PG_RESTORE_SHA256": private_tools["pg_restore"][
+                    "sha256"
+                ],
                 "PINVI_RESTORE_PSQL_SHA256": private_tools["psql"]["sha256"],
                 "PINVI_RESTORE_PRIVATE_TOOL_COPY": "1",
                 "PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST": "1",
@@ -1895,7 +2085,9 @@ def _run_drill(args: argparse.Namespace, *, _lease_held: bool = False) -> int:
                     "PINVI_RESTORE_EXPECTED_HOSTADDR": str(
                         target_identity_before_restore["hostaddr"]
                     ),
-                    "PINVI_RESTORE_EXPECTED_PORT": str(target_identity_before_restore["port"]),
+                    "PINVI_RESTORE_EXPECTED_PORT": str(
+                        target_identity_before_restore["port"]
+                    ),
                     "PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME": str(
                         source_identity_pre["database"]
                     ),
@@ -1908,13 +2100,37 @@ def _run_drill(args: argparse.Namespace, *, _lease_held: bool = False) -> int:
                     "PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR": str(
                         source_identity_pre["hostaddr"]
                     ),
-                    "PINVI_RESTORE_EXPECTED_SOURCE_PORT": str(source_identity_pre["port"]),
+                    "PINVI_RESTORE_EXPECTED_SOURCE_PORT": str(
+                        source_identity_pre["port"]
+                    ),
                     "PINVI_RESTORE_TRUSTED_BACKUP_DIR": str(temporary_dir),
                 }
             )
+        restore_pass_fds: tuple[int, ...] = ()
+        if _operation_lease is not None:
+            fileno = getattr(_operation_lease, "fileno", None)
+            token = getattr(_operation_lease, "token", None)
+            try:
+                lease_descriptor = fileno() if callable(fileno) else -1
+            except Exception as exc:
+                raise RestoreDrillError(
+                    "restore target operation lease is invalid"
+                ) from exc
+            if (
+                not isinstance(token, str)
+                or re.fullmatch(r"m05-v1-[0-9a-f]{64}", token) is None
+                or not isinstance(lease_descriptor, int)
+                or lease_descriptor < 0
+            ):
+                raise RestoreDrillError("restore target operation lease is invalid")
+            os.set_inheritable(lease_descriptor, True)
+            restore_env["PINVI_M05_OPERATION_LEASE_FD"] = str(lease_descriptor)
+            restore_env["PINVI_M05_OPERATION_LEASE_TOKEN"] = token
+            restore_pass_fds = (lease_descriptor,)
         restore = _run(
             [private_tools["bash"]["path"], str(restore_script), "run", str(dump)],
             env=restore_env,
+            pass_fds=restore_pass_fds,
         )
         required_markers = [
             "DRILL_EVIDENCE=checksum=verified",
@@ -1928,7 +2144,9 @@ def _run_drill(args: argparse.Namespace, *, _lease_held: bool = False) -> int:
             required_markers.append("RESTORE_TARGET_BINDING=verified")
             required_markers.append("RESTORE_SOURCE_BINDING=verified")
         if any(marker not in restore.stdout for marker in required_markers):
-            raise RestoreDrillError("restore staging runner did not produce all required markers")
+            raise RestoreDrillError(
+                "restore staging runner did not produce all required markers"
+            )
 
         source_revision_after = _source_revision(root)
         if source_revision_after != source_revision:
@@ -1955,11 +2173,16 @@ def _run_drill(args: argparse.Namespace, *, _lease_held: bool = False) -> int:
         target_identity = _identity(target_url, schema=args.schema)
         runtime_identity = _identity(runtime_url, schema=args.schema)
         fence_identity = _identity(fence_url, schema=args.schema) if fence_url else None
-        hotswap_identity = _identity(hotswap_url, schema=args.schema) if hotswap_url else None
+        hotswap_identity = (
+            _identity(hotswap_url, schema=args.schema) if hotswap_url else None
+        )
         if (
             _identity_key(target_identity) != target_key
             or _identity_key(runtime_identity) != target_key
-            or (fence_identity is not None and _identity_key(fence_identity) != target_key)
+            or (
+                fence_identity is not None
+                and _identity_key(fence_identity) != target_key
+            )
             or (
                 hotswap_identity is not None
                 and _identity_key(hotswap_identity) != target_key
@@ -2008,7 +2231,9 @@ def _run_drill(args: argparse.Namespace, *, _lease_held: bool = False) -> int:
                 "pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges"
             ),
             "restore_output_sha256": _sha256(execution_output),
-            "restore_db_runner_sha256": _sha256((root / "scripts/restore-db.sh").read_bytes()),
+            "restore_db_runner_sha256": _sha256(
+                (root / "scripts/restore-db.sh").read_bytes()
+            ),
             "hotswap_runner_sha256": _sha256(
                 (root / "scripts/restore-hotswap.sh").read_bytes()
             ),
@@ -2033,7 +2258,9 @@ def _run_drill(args: argparse.Namespace, *, _lease_held: bool = False) -> int:
             "fence_db_identity_before_restore": fence_identity_pre,
             "fence_db_identity": fence_identity,
             "fence_db_identity_before_restore_sha256": (
-                _identity_sha256(fence_identity_pre) if fence_identity_pre is not None else ""
+                _identity_sha256(fence_identity_pre)
+                if fence_identity_pre is not None
+                else ""
             ),
             "fence_db_identity_sha256": (
                 _identity_sha256(fence_identity) if fence_identity is not None else ""
@@ -2072,8 +2299,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("run", choices=("run",))
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--schema", default="app")
-    parser.add_argument("--runtime-role", default=os.environ.get("PINVI_RESTORE_RUNTIME_ROLE", ""))
-    parser.add_argument("--staging-role", default=os.environ.get("PINVI_RESTORE_STAGING_ROLE", ""))
+    parser.add_argument(
+        "--runtime-role", default=os.environ.get("PINVI_RESTORE_RUNTIME_ROLE", "")
+    )
+    parser.add_argument(
+        "--staging-role", default=os.environ.get("PINVI_RESTORE_STAGING_ROLE", "")
+    )
     parser.add_argument(
         "--source-database-url-env",
         default="PINVI_RESTORE_SOURCE_DATABASE_URL",

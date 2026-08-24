@@ -95,6 +95,42 @@ def _rebaseline_module():  # type: ignore[no-untyped-def]
     return module
 
 
+def _activation_migration_module():  # type: ignore[no-untyped-def]
+    path = API_DIR / "alembic" / "versions" / "20260824_0101_m05_activation_contract.py"
+    spec = importlib.util.spec_from_file_location("pinvi_m05_activation_migration_test", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _root_owned_fstat(module):  # type: ignore[no-untyped-def]
+    actual_fstat = module.os.fstat
+
+    def root_owned(descriptor: int) -> os.stat_result:
+        metadata = actual_fstat(descriptor)
+        values = list(metadata)
+        values[0] = (metadata.st_mode & ~0o777) | 0o600
+        values[4] = 0
+        return os.stat_result(values)
+
+    return root_owned
+
+
+class _MigrationOperations:
+    """Alembic op proxy의 좁은 subset으로 migration helper를 실제 connection에 결박한다."""
+
+    def __init__(self, bind) -> None:  # type: ignore[no-untyped-def]
+        self._bind = bind
+
+    def execute(self, statement: object) -> None:
+        self._bind.execute(statement)
+
+    def get_bind(self):  # type: ignore[no-untyped-def]
+        return self._bind
+
+
 def _rebaseline_evidence(module, preflight, tmp_path: Path):  # type: ignore[no-untyped-def]
     backup_manifest = module.BackupManifest(
         path=tmp_path / "snapshot.dump.m05-manifest",
@@ -427,6 +463,11 @@ async def test_rebaseline_0061_to_0100_then_0101_preserves_data_and_runs_backfil
         try:
             async with engine.connect() as connection:
                 rebaseline_preflight = await module._preflight(connection, lock_version=False)
+                backup_producer_hostaddr = await connection.scalar(
+                    text("SELECT COALESCE(host(inet_server_addr()), '')")
+                )
+                assert rebaseline_preflight.server_addr == backup_producer_hostaddr
+                assert "/" not in rebaseline_preflight.server_addr
         finally:
             await engine.dispose()
         artifact, target_manifest = _rebaseline_evidence(module, rebaseline_preflight, tmp_path)
@@ -466,6 +507,85 @@ async def test_rebaseline_0061_to_0100_then_0101_preserves_data_and_runs_backfil
                         {"user_id": user_id},
                     )
                     == 1
+                )
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
+async def test_0101_legacy_handoff_revalidates_receipt_data_before_ddl(
+    _database_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """0100 stamp 뒤의 app data drift는 root receipt가 있어도 0101 DDL 전에 막는다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_handoff_data")
+    user_id = uuid.uuid4()
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "INSERT INTO app.users (user_id, email, nickname) "
+                        "VALUES (:user_id, :email, 'handoff')"
+                    ),
+                    {"user_id": user_id, "email": f"{user_id.hex}@pinvi.test"},
+                )
+                await connection.execute(
+                    text("UPDATE app.alembic_version SET version_num = '20260821_0061'")
+                )
+
+            rebaseline = _rebaseline_module()
+            async with engine.connect() as connection:
+                preflight = await rebaseline._preflight(connection, lock_version=False)
+            artifact, target = _rebaseline_evidence(rebaseline, preflight, tmp_path)
+            receipts: list[dict[str, object]] = []
+            monkeypatch.setattr(
+                rebaseline,
+                "_prepare_receipt",
+                lambda _path, payload: receipts.append(payload),
+            )
+            monkeypatch.setattr(
+                rebaseline,
+                "_finalize_receipt",
+                lambda _path, payload: receipts.append(payload),
+            )
+            _, state = await rebaseline._apply(
+                target_url, artifact, target, tmp_path / "receipt.json"
+            )
+            assert state == "applied"
+            assert receipts[-1]["state"] == "applied"
+
+            receipt_path = tmp_path / "applied-receipt.json"
+            receipt_path.write_text(json.dumps(receipts[-1]), encoding="utf-8")
+            receipt_path.chmod(0o600)
+            migration = _activation_migration_module()
+            monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE", "1")
+            monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH", str(receipt_path))
+            monkeypatch.setattr(migration.os, "geteuid", lambda: 0)
+            monkeypatch.setattr(migration.os, "fstat", _root_owned_fstat(migration))
+
+            async with engine.begin() as connection:
+                await connection.run_sync(migration._assert_legacy_rebaseline_handoff)
+
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text("UPDATE app.users SET nickname = 'drifted' WHERE user_id = :user_id"),
+                    {"user_id": user_id},
+                )
+                with pytest.raises(RuntimeError, match="data or catalog fingerprint"):
+                    await connection.run_sync(migration._assert_legacy_rebaseline_handoff)
+                assert (
+                    await connection.scalar(
+                        text("SELECT to_regclass('ops.m05_hotswap_release_receipts')")
+                    )
+                    is None
                 )
         finally:
             await engine.dispose()
@@ -807,6 +927,7 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
     migrator_login = f"m05_migrator_{suffix}"
     runtime_role = f"m05_runtime_{suffix}"
     stale_role = f"m05_stale_{suffix}"
+    escape_role = f"m05_escape_{suffix}"
     parsed = make_url(_database_url)
     maintenance_url = parsed.set(database="postgres").render_as_string(hide_password=False)
     migrator_url = _role_database_url(
@@ -890,6 +1011,29 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
         )
         await _execute_autocommit(target_url, f'REVOKE "{app_owner}" FROM "{stale_role}";')
         await _execute_autocommit(maintenance_url, f'DROP ROLE "{stale_role}";')
+        await _execute_autocommit(
+            maintenance_url,
+            f'CREATE ROLE "{escape_role}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE '
+            "NOREPLICATION NOBYPASSRLS NOINHERIT;",
+        )
+        for role_name in (migration_owner, app_owner, migrator_login):
+            await _execute_autocommit(
+                target_url,
+                f'GRANT "{escape_role}" TO "{role_name}" WITH INHERIT FALSE, SET TRUE;',
+            )
+            escaped_owner = _alembic(
+                migrator_url,
+                "upgrade",
+                "20260824_0101",
+                check=False,
+                environment=role_environment,
+            )
+            assert escaped_owner.returncode != 0
+            assert "0101 migration owner role contract is not satisfied" in (
+                escaped_owner.stdout + escaped_owner.stderr
+            )
+            await _execute_autocommit(target_url, f'REVOKE "{escape_role}" FROM "{role_name}";')
+        await _execute_autocommit(maintenance_url, f'DROP ROLE "{escape_role}";')
         activation = _alembic(
             migrator_url,
             "upgrade",
@@ -1050,7 +1194,117 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
         await _execute_autocommit(
             maintenance_url,
             f'DROP ROLE IF EXISTS "{stale_role}", "{runtime_role}", "{migrator_login}", '
-            f'"{migration_owner}", "{app_owner}", "{fence_role}";',
+            f'"{migration_owner}", "{app_owner}", "{fence_role}", "{escape_role}";',
+        )
+
+
+@pytest.mark.asyncio
+async def test_0101_legacy_converges_all_app_catalog_owners(
+    _database_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """root-only legacy 0101은 기존 app owner를 canonical non-login owner로 한 번만 수렴한다."""
+
+    suffix = uuid.uuid4().hex[:12]
+    app_owner = f"m05_legacy_app_owner_{suffix}"
+    migration_owner = f"m05_legacy_migration_{suffix}"
+    migrator_login = f"m05_legacy_migrator_{suffix}"
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_legacy_owner")
+    try:
+        for statement in (
+            f'CREATE ROLE "{app_owner}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE '
+            "NOREPLICATION NOBYPASSRLS NOINHERIT;",
+            f'CREATE ROLE "{migration_owner}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE '
+            "NOREPLICATION NOBYPASSRLS NOINHERIT;",
+            f'CREATE ROLE "{migrator_login}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE '
+            "NOREPLICATION NOBYPASSRLS NOINHERIT;",
+            f'GRANT "{app_owner}" TO "{migration_owner}" WITH INHERIT FALSE, SET TRUE;',
+            f'GRANT "{app_owner}" TO "{migrator_login}" WITH INHERIT FALSE, SET TRUE;',
+            f'GRANT "{migration_owner}" TO "{migrator_login}" WITH INHERIT FALSE, SET TRUE;',
+        ):
+            await _execute_autocommit(maintenance_url, statement)
+
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(text("CREATE SCHEMA app"))
+                await connection.execute(
+                    text("CREATE TYPE app.legacy_status AS ENUM ('created', 'completed')")
+                )
+                await connection.execute(text("CREATE DOMAIN app.legacy_code AS text"))
+                await connection.execute(
+                    text("CREATE TYPE app.legacy_pair AS (code text, amount integer)")
+                )
+                await connection.execute(
+                    text(
+                        "CREATE TABLE app.legacy_records "
+                        "(record_id integer PRIMARY KEY, status app.legacy_status NOT NULL)"
+                    )
+                )
+                await connection.execute(text("CREATE SEQUENCE app.legacy_sequence"))
+                await connection.execute(
+                    text("CREATE VIEW app.legacy_records_view AS SELECT * FROM app.legacy_records")
+                )
+                await connection.execute(
+                    text(
+                        "CREATE MATERIALIZED VIEW app.legacy_records_materialized "
+                        "AS SELECT * FROM app.legacy_records"
+                    )
+                )
+                await connection.execute(
+                    text(
+                        "CREATE FUNCTION app.legacy_increment(value integer) "
+                        "RETURNS integer LANGUAGE sql AS 'SELECT value + 1'"
+                    )
+                )
+
+                legacy_owner = await connection.scalar(
+                    text(
+                        "SELECT namespace.nspowner::regrole::text "
+                        "FROM pg_namespace namespace WHERE namespace.nspname = 'app'"
+                    )
+                )
+                assert isinstance(legacy_owner, str)
+                migration = _activation_migration_module()
+                monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE", "1")
+                monkeypatch.setenv("PINVI_APP_SCHEMA_OWNER", app_owner)
+                monkeypatch.setenv("PINVI_MIGRATION_OWNER", migration_owner)
+                monkeypatch.setenv("PINVI_MIGRATOR_DB_USER", migrator_login)
+
+                def converge(bind) -> None:  # type: ignore[no-untyped-def]
+                    monkeypatch.setattr(migration, "op", _MigrationOperations(bind))
+                    assert migration._converge_legacy_app_ownership(bind, legacy_owner) == app_owner
+                    migration._restore_app_owner(app_owner)
+                    assert bind.scalar(text("SELECT current_user")) == app_owner
+
+                await connection.run_sync(converge)
+
+                canonical_ownership = await connection.scalar(
+                    text(
+                        "WITH app_schema AS ("
+                        "SELECT namespace.oid, namespace.nspowner FROM pg_namespace namespace "
+                        "WHERE namespace.nspname = 'app'"
+                        "), app_objects AS ("
+                        "SELECT relation.relowner AS owner_oid FROM pg_class relation "
+                        "JOIN app_schema schema ON schema.oid = relation.relnamespace "
+                        "UNION ALL SELECT procedure.proowner FROM pg_proc procedure "
+                        "JOIN app_schema schema ON schema.oid = procedure.pronamespace "
+                        "UNION ALL SELECT type_row.typowner FROM pg_type type_row "
+                        "JOIN app_schema schema ON schema.oid = type_row.typnamespace"
+                        ") SELECT (SELECT nspowner FROM app_schema) = CAST(:app_owner AS regrole) "
+                        "AND NOT EXISTS (SELECT 1 FROM app_objects "
+                        "WHERE owner_oid <> CAST(:app_owner AS regrole))"
+                    ),
+                    {"app_owner": app_owner},
+                )
+                assert canonical_ownership is True
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+        await _execute_autocommit(
+            maintenance_url,
+            f'DROP ROLE IF EXISTS "{migrator_login}", "{migration_owner}", "{app_owner}";',
         )
 
 

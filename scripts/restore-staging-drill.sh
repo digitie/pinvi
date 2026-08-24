@@ -101,6 +101,12 @@ fi
 STAGING_DATABASE_URL="${PINVI_RESTORE_STAGING_DATABASE_URL:-}"
 DATABASE_URL="${PINVI_RESTORE_HOTSWAP_DATABASE_URL:-${STAGING_DATABASE_URL}}"
 FENCE_DATABASE_URL="${PINVI_RESTORE_FENCE_DATABASE_URL:-${STAGING_DATABASE_URL}}"
+OPERATION_LEASE_FD="${PINVI_M05_OPERATION_LEASE_FD:-}"
+OPERATION_LEASE_TOKEN="${PINVI_M05_OPERATION_LEASE_TOKEN:-}"
+STRICT_RESTORE_ENVIRONMENT=0
+if [[ "${TEST_MODE}" != "1" && ( "${PINVI_ENVIRONMENT:-}" == "staging" || "${PINVI_ENVIRONMENT:-}" == "production" ) ]]; then
+  STRICT_RESTORE_ENVIRONMENT=1
+fi
 if [[ -z "${STAGING_DATABASE_URL}" ]]; then
   if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" == "1" &&
     "${PINVI_RESTORE_DRILL_ALLOW_NON_STAGING:-0}" == "1" ]]; then
@@ -143,6 +149,33 @@ fi
 if [[ "${FENCE_DATABASE_URL}" == postgresql+asyncpg://* ]]; then
   FENCE_DATABASE_URL="postgresql://${FENCE_DATABASE_URL#postgresql+asyncpg://}"
 fi
+
+assert_operation_lease() {
+  if [[ "${STRICT_RESTORE_ENVIRONMENT}" != "1" ]]; then
+    return 0
+  fi
+  if [[ ! "${OPERATION_LEASE_TOKEN}" =~ ^m05-v1-[0-9a-f]{64}$ ||
+    ! "${OPERATION_LEASE_FD}" =~ ^[0-9]+$ ||
+    ! -e "/proc/self/fd/${OPERATION_LEASE_FD}" ]]; then
+    phase precheck failed "strict staging drill requires a trusted target operation lease"
+    exit 3
+  fi
+  local expected_path actual_path
+  expected_path="/var/lib/pinvi/restore-forensics/operation-leases/${OPERATION_LEASE_TOKEN#m05-v1-}.lock"
+  actual_path="$(readlink -f "/proc/self/fd/${OPERATION_LEASE_FD}" 2>/dev/null || true)"
+  if [[ "${actual_path}" != "${expected_path}" || -L "${expected_path}" ||
+    ! -f "${expected_path}" || "$(stat -c '%u:%a' "${expected_path}")" != "0:600" ]]; then
+    phase precheck failed "trusted target operation lease is invalid"
+    exit 3
+  fi
+  if ! flock -n "${OPERATION_LEASE_FD}"; then
+    phase precheck failed "another M05 target mutation is already running"
+    exit 3
+  fi
+  phase precheck success "shared target operation lease acquired"
+}
+
+assert_operation_lease
 
 phase precheck running "snapshot and tooling checks"
 evidence snapshot "$(mask_snapshot "${SNAPSHOT}")"

@@ -202,7 +202,7 @@ prepare_migrator_login() {
 
 seal_migrator_login() {
   local legacy_rebaseline="$1"
-  log "sealing one-shot migrator login after successful migration"
+  log "sealing one-shot migrator login"
   compose run --rm \
     -e PINVI_M05_LEGACY_REBASELINE="$legacy_rebaseline" \
     -e PINVI_MIGRATOR_DISABLE_LOGIN=1 \
@@ -253,13 +253,24 @@ migrate() {
   drain_runtime_writers
   local attempt
   for attempt in 1 2 3 4 5; do
-    prepare_migrator_login "$legacy_rebaseline"
+    if ! prepare_migrator_login "$legacy_rebaseline"; then
+      log "migrator preparation failed; sealing the one-shot login"
+      seal_migrator_login "$legacy_rebaseline" || \
+        log "migrator preparation failure could not be followed by a sealing run"
+      return 1
+    fi
     log "running Pinvi admin bootstrap (attempt ${attempt}/5)"
     if run_admin_bootstrap "$credential_file" "$legacy_rebaseline" "$legacy_receipt_file"; then
-      seal_migrator_login "$legacy_rebaseline"
+      if ! seal_migrator_login "$legacy_rebaseline"; then
+        log "migration succeeded but the one-shot migrator login could not be sealed"
+        return 1
+      fi
       return 0
     fi
-    seal_migrator_login "$legacy_rebaseline"
+    if ! seal_migrator_login "$legacy_rebaseline"; then
+      log "failed migration could not be followed by a sealing run"
+      return 1
+    fi
     sleep 3
   done
   echo "pinvi-admin-bootstrap failed after 5 attempts" >&2

@@ -69,6 +69,31 @@ until psql --no-psqlrc --no-password --tuples-only --no-align --host=app-postgre
   sleep 1
 done
 
+# Final topology validation can intentionally fail on stale memberships.  When this
+# invocation is the post-migration seal, close the one-shot credential before any
+# other validation path so a failed validation cannot leave a reusable LOGIN/CONNECT
+# window behind.  Keep this separate from the normal role bootstrap transaction: its
+# effects must survive a later fail-closed check.
+if [ "${PINVI_MIGRATOR_DISABLE_LOGIN}" = "1" ]; then
+  psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host=app-postgres \
+    --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+    --set="migrator_role=${PINVI_MIGRATOR_DB_USER}" \
+    --set="database_name=${POSTGRES_DB}" \
+    >/dev/null <<'SQL'
+SELECT format('ALTER ROLE %I NOLOGIN', :'migrator_role')
+WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'migrator_role')
+\gexec
+SELECT format('REVOKE CONNECT ON DATABASE %I FROM %I', :'database_name', :'migrator_role')
+WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'migrator_role')
+\gexec
+SELECT pg_terminate_backend(activity.pid, 5000)
+FROM pg_stat_activity activity
+JOIN pg_roles migrator ON migrator.oid = activity.usesysid
+WHERE migrator.rolname = :'migrator_role'
+  AND activity.pid <> pg_backend_pid();
+SQL
+fi
+
 # 기존 0061 owner를 바꾸는 것은 ADR-063의 rebaseline 범위를 넘는다. 일반 실행은
 # 이미 새 app schema owner로 정착한 DB 또는 빈 DB만 받는다. 과거 0061 전환은
 # PINVI_M05_LEGACY_REBASELINE=1 root-only one-shot으로만 아래 보호를 우회한다.
@@ -323,6 +348,7 @@ SELECT
           AND NOT EXISTS (
               SELECT 1 FROM pg_auth_members membership
               WHERE membership.member = runtime.oid
+                 OR membership.roleid = runtime.oid
           )
           AND NOT has_database_privilege(runtime.oid, current_database(), 'CREATE')
           AND has_schema_privilege(runtime.oid, 'app', 'USAGE')

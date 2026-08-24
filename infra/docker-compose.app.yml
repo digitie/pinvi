@@ -311,6 +311,7 @@ services:
       PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
       # wrapper가 legacy를 명시하지 않은 상태에서 직접 실행하면 인증 실패로 닫힌다.
       PINVI_DATABASE_URL: ${PINVI_LEGACY_REBASELINE_DATABASE_URL:-postgresql+asyncpg://invalid:invalid@app-postgres:5432/pinvi}
+      PINVI_APP_SCHEMA_OWNER: ${PINVI_APP_SCHEMA_OWNER:-pinvi_app_owner}
       PINVI_MIGRATION_OWNER: ${PINVI_MIGRATION_OWNER:-pinvi_migration_owner}
       PINVI_MIGRATOR_DB_USER: ${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}
       PINVI_M05_LEGACY_REBASELINE: "1"

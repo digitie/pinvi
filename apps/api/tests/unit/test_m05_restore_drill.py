@@ -145,18 +145,27 @@ def test_m05_restore_drill_serializes_target_recreation_and_preflights_staging_r
     assert "PINVI_RESTORE_COORDINATION_DATABASE_URL" not in source
     assert "m05_operation_lease.py" in source
     assert "staging/production restore drill requires a root-owned target lease" in source
-    assert "with _acquire_root_target_lease(target_url):" in source
-    assert "return _run_drill(args, _lease_held=True)" in source
+    assert "with _acquire_root_target_lease(target_url) as lease:" in source
+    assert "return _run_drill(args, _lease_held=True, _operation_lease=lease)" in source
     run = source[source.index("def _run_drill(") :]
-    assert run.index("with _acquire_root_target_lease(target_url):") < run.index(
+    assert run.index("with _acquire_root_target_lease(target_url) as lease:") < run.index(
         "        _staging_role_check("
     )
     recreate = source[
         source.index("def _recreate_disposable_target(") : source.index("def _identity_key(")
     ]
     assert recreate.index("{disable_provisioner_sql}") < recreate.index("DROP DATABASE IF EXISTS")
+    assert "REVOKE ALL ON FUNCTION x_extension.digest(bytea, text) FROM PUBLIC;" in recreate
+    assert "GRANT EXECUTE ON FUNCTION x_extension.digest(bytea, text)" in recreate
+    assert "restore hotswap digest ACL is not canonical" in recreate
+    assert "NOT m.admin_option" in recreate
+    assert "m.inherit_option" in recreate
+    assert "m.set_option" in recreate
     assert 'PINVI_RESTORE_HOTSWAP_EXECUTE": "1"' not in source
     assert '"PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL": "precheck"' in source
+    assert 'restore_env["PINVI_M05_OPERATION_LEASE_FD"]' in source
+    assert 'restore_env["PINVI_M05_OPERATION_LEASE_TOKEN"]' in source
+    assert "pass_fds=restore_pass_fds" in source
 
 
 def test_m05_restore_drill_requires_root_owned_target_lease_in_managed_environment(

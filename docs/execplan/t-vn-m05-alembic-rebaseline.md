@@ -34,8 +34,9 @@ active graph·rebaseline proof·M05 owner 전환과 단일 N150 target lease의 
    남긴다.
 6. fresh install은 root bootstrap이 extension·non-login app schema owner·non-login migration
    owner·one-shot migrator login을 만들고, `0101` 안에서 M05 부분만 `SET LOCAL ROLE`로 owner를
-   전환한다. 기존 N150 `0061`은 object owner를 재작성하지 않고 승인된 root-only legacy profile로
-   같은 M05 전환만 수행한다.
+   전환한다. 기존 N150 `0061`은 `0100` stamp 단계에서 object owner를 재작성하지 않는다. 다만 승인된
+   root-only legacy `0101` tail은 receipt identity와 data/catalog fingerprint를 재검증·writer lock한
+   뒤 `app` schema 및 내부 relation/routine/type owner만 canonical non-login owner로 수렴한다.
 
 ## 비범위
 
@@ -67,13 +68,15 @@ active graph·rebaseline proof·M05 owner 전환과 단일 N150 target lease의 
    M05 ACL, API DB health를 확인한다. 현재 N150 `0061`은 이 단계 직전에만 root-only
    `PINVI_M05_LEGACY_REBASELINE=1` + 별도 root URL profile과 root-owned `0600` applied rebaseline
    receipt를 명시한다. `0101`이 receipt의 `0061` preflight DB identity와 현재 `0100` handoff row를
-   대조한 뒤, 기존 app DDL 뒤 M05 object만 migration owner로 전환됐는지 확인한다.
+   대조하고 data/catalog fingerprint와 writer lock을 다시 확인한 뒤, 기존 app DDL·M05 object 설치 후
+   app schema 및 내부 object owner가 canonical non-login owner 하나로 수렴했는지 확인한다.
 5. 실패 시 새 history를 억지로 stamp하지 않고 snapshot 복구 후 fail-closed 원인을 해결한다.
 
 ## 완료 기준
 
 - fresh DB가 `0100 → 0101`로 bootstrap되고 app catalog fingerprint가 기준값과 일치한다.
-- disposable `0061` DB가 data row 보존 상태로 rebaseline 후 `0101`까지 올라간다.
+- disposable `0061` DB가 data row 보존 상태로 rebaseline 후 `0101`까지 올라가고, 최종 `app`
+  catalog owner가 canonical non-login owner 하나로 수렴한다.
 - helper는 unknown revision, data-less/dirty catalog, M05 object 존재, backup proof 누락을 모두 거부한다.
 - fresh role topology와 root-only legacy profile 모두 M05 receipt owner를 runtime/fence/database owner와
   분리하고, 성공·실패 후 one-shot migrator login을 `NOLOGIN`·`CONNECT` revoke·session 0으로 봉인한다.

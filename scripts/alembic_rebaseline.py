@@ -217,7 +217,7 @@ SELECT
   (SELECT database_row.oid FROM pg_database AS database_row
    WHERE database_row.datname = current_database())::bigint AS database_oid,
   (pg_control_system()).system_identifier::text AS system_identifier,
-  COALESCE(inet_server_addr()::text, '') AS server_addr,
+  COALESCE(host(inet_server_addr()), '') AS server_addr,
   COALESCE(inet_server_port(), 0)::integer AS server_port,
   session_user AS session_user,
   current_user AS current_user,

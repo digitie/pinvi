@@ -215,7 +215,8 @@ def _create_case(
             root_url,
             f"""
 {create_roles}
-GRANT pg_signal_backend TO {_quoted(hotswap_role)};
+GRANT pg_signal_backend TO {_quoted(hotswap_role)}
+  WITH ADMIN FALSE, INHERIT TRUE, SET TRUE;
 CREATE DATABASE {_quoted(database)} OWNER {_quoted(fence_role)};
 GRANT CONNECT, CREATE ON DATABASE {_quoted(database)} TO {_quoted(hotswap_role)};
 GRANT CONNECT, CREATE ON DATABASE {_quoted(database)} TO {_quoted(migration_role)};
@@ -237,7 +238,10 @@ GRANT CONNECT ON DATABASE {_quoted(database)} TO {_quoted(app_role)};
 CREATE SCHEMA x_extension AUTHORIZATION m05_root;
 CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA x_extension;
 REVOKE ALL ON SCHEMA x_extension FROM PUBLIC;
+REVOKE ALL ON FUNCTION x_extension.digest(bytea, text) FROM PUBLIC;
 GRANT USAGE ON SCHEMA x_extension TO {_quoted(hotswap_role)}, {_quoted(app_role)}, {_quoted(migration_role)};
+GRANT EXECUTE ON FUNCTION x_extension.digest(bytea, text)
+  TO {_quoted(hotswap_role)}, {_quoted(migration_role)};
 """,
         )
     )
@@ -952,6 +956,118 @@ def test_restore_hotswap_rejects_real_append_only_trigger_drift_before_schema_sw
             previous_schema=previous_schema,
             restore_schema=restore_schema,
         )
+    finally:
+        container.stop()
+
+
+def test_restore_hotswap_rejects_missing_digest_acl_and_signal_admin_before_mutation(
+    tmp_path: Path,
+) -> None:
+    """executor의 digest 권한과 pg_signal_backend admin 우회는 fence 전에 막힌다."""
+
+    tools = _require_tools()
+    try:
+        import docker  # noqa: F401
+        from testcontainers.postgres import PostgresContainer
+    except Exception:
+        pytest.skip("docker SDK 미설치 — M05 실제 권한 검증을 건너뜁니다.")
+
+    suffix = uuid.uuid4().hex[:8]
+    container = PostgresContainer(
+        "postgres:16-alpine",
+        username="m05_root",
+        password=TEST_PASSWORD,
+        dbname="m05_root",
+    )
+    container.start()
+    try:
+        host = container.get_container_host_ip()
+        port = container.get_exposed_port(5432)
+        root_url = _database_url(host=host, port=port, role="m05_root", database="m05_root")
+        scenarios: list[tuple[str, _Case, Path]] = []
+        for failure in ("digest", "signal_admin"):
+            case = _create_case(
+                tools=tools,
+                root_url=root_url,
+                host=host,
+                port=port,
+                suffix=f"{suffix}_{failure}",
+                kind="canonical",
+            )
+            snapshot = _snapshot(tools, case.hotswap_url, tmp_path / f"{failure}-snapshot")
+            if failure == "digest":
+                mutation = (
+                    "REVOKE EXECUTE ON FUNCTION x_extension.digest(bytea, text) "
+                    f"FROM {_quoted(case.hotswap_role)};"
+                )
+                mutation_url = _database_url(
+                    host=host,
+                    port=port,
+                    role="m05_root",
+                    database=case.database,
+                )
+            else:
+                mutation = (
+                    f"GRANT pg_signal_backend TO {_quoted(case.hotswap_role)} "
+                    "WITH ADMIN TRUE, INHERIT TRUE, SET TRUE;"
+                )
+                mutation_url = root_url
+            _require_success(_psql(tools, mutation_url, mutation))
+            scenarios.append((failure, case, snapshot))
+        _require_success(_psql(tools, root_url, "ALTER ROLE m05_root NOLOGIN;"))
+
+        for index, (failure, case, snapshot) in enumerate(scenarios):
+            identity = _identity(tools, case.hotswap_url)
+            restore_schema = f"app_restore_{failure}_{index}_{suffix}"
+            previous_schema = f"app_previous_{failure}_{index}_{suffix}"
+            env = os.environ.copy()
+            env.update(
+                {
+                    "PINVI_ENVIRONMENT": "development",
+                    "PINVI_RESTORE_HOTSWAP_EXECUTE": "1",
+                    "PINVI_RESTORE_PRIVATE_TOOL_COPY": "1",
+                    "PINVI_RESTORE_DATABASE_URL": case.hotswap_url,
+                    "PINVI_RESTORE_FENCE_DATABASE_URL": case.fence_url,
+                    "PINVI_RESTORE_APP_ROLE": case.app_role,
+                    "PINVI_RESTORE_ALLOW_NO_DRAIN": "1",
+                    "PINVI_RESTORE_DRAIN_VERIFIED": "1",
+                    "PINVI_RESTORE_PG_RESTORE_BIN": tools["pg_restore"],
+                    "PINVI_RESTORE_PG_RESTORE_SHA256": hashlib.sha256(
+                        Path(tools["pg_restore"]).read_bytes()
+                    ).hexdigest(),
+                    "PINVI_RESTORE_PSQL_BIN": tools["psql"],
+                    "PINVI_RESTORE_PSQL_SHA256": hashlib.sha256(
+                        Path(tools["psql"]).read_bytes()
+                    ).hexdigest(),
+                    "PINVI_RESTORE_BASH_BIN": tools["bash"],
+                    "PINVI_RESTORE_BASH_SHA256": hashlib.sha256(
+                        Path(tools["bash"]).read_bytes()
+                    ).hexdigest(),
+                    "PINVI_RESTORE_EXPECTED_DATABASE_NAME": identity[0],
+                    "PINVI_RESTORE_EXPECTED_DATABASE_OID": identity[1],
+                    "PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER": identity[2],
+                    "PINVI_RESTORE_EXPECTED_HOSTADDR": identity[3],
+                    "PINVI_RESTORE_EXPECTED_PORT": identity[4],
+                }
+            )
+            env.pop("PINVI_M05_RESTORE_TEST_MODE", None)
+            result = _run(
+                [
+                    tools["bash"],
+                    str(HOTSWAP_SCRIPT),
+                    "run",
+                    str(snapshot),
+                    restore_schema,
+                    previous_schema,
+                ],
+                env=env,
+            )
+
+            assert result.returncode == 3, result.stdout + result.stderr
+            assert "restore executor requires direct digest execution" in (
+                result.stdout + result.stderr
+            )
+            _assert_source_unchanged(tools, case, restore_schema)
     finally:
         container.stop()
 
