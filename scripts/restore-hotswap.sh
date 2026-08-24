@@ -2032,32 +2032,34 @@ enter_write_fence
 
 phase restoring running "restoring ${SOURCE_SCHEMA} into ${RESTORE_SCHEMA}"
 run_guarded_command "DROP SCHEMA IF EXISTS ${RESTORE_SCHEMA} CASCADE"
-"${PG_RESTORE_BIN}" \
-  --schema="${SOURCE_SCHEMA}" \
-  --schema-only \
-  --no-owner \
-  --no-privileges \
-  --file="${TMP_DIR}/schema.sql" \
-  "${SNAPSHOT}"
-{
-  printf 'CREATE SCHEMA IF NOT EXISTS %s;\n' "${RESTORE_SCHEMA}"
-  remap_sql "${TMP_DIR}/schema.sql"
-} >"${TMP_DIR}/schema-remapped.sql"
-run_guarded_file "${TMP_DIR}/schema-remapped.sql"
+restore_archive_section() {
+  local section="$1"
+  local label="$2"
+  local archive_sql="${TMP_DIR}/${label}.sql"
+  local remapped_sql="${TMP_DIR}/${label}-remapped.sql"
+  "${PG_RESTORE_BIN}" \
+    --schema="${SOURCE_SCHEMA}" \
+    --section="${section}" \
+    --exit-on-error \
+    --no-owner \
+    --no-privileges \
+    --file="${archive_sql}" \
+    "${SNAPSHOT}"
+  {
+    if [[ "${section}" == "pre-data" ]]; then
+      printf 'CREATE SCHEMA IF NOT EXISTS %s;\n' "${RESTORE_SCHEMA}"
+    fi
+    remap_sql "${archive_sql}"
+  } >"${remapped_sql}"
+  run_guarded_file "${remapped_sql}"
+}
 
-"${PG_RESTORE_BIN}" \
-  --schema="${SOURCE_SCHEMA}" \
-  --data-only \
-  --no-owner \
-  --no-privileges \
-  --file="${TMP_DIR}/data.sql" \
-  "${SNAPSHOT}"
-# 스키마(FK 포함)를 먼저 만든 뒤 data-only를 적재한다. pg_restore가 계산한
-# dependency order를 사용하고, M05 ENABLE ALWAYS trigger와 FK 검증은 복구 중에도 켠다.
-{
-  remap_sql "${TMP_DIR}/data.sql"
-} >"${TMP_DIR}/data-remapped.sql"
-run_guarded_file "${TMP_DIR}/data-remapped.sql"
+# Keep foreign keys and post-data triggers out of the data load.  The archive is
+# trusted and the database writer fence is active; post-data then installs the
+# canonical constraints/append-only triggers before behavioral validation.
+restore_archive_section pre-data pre-data
+restore_archive_section data data
+restore_archive_section post-data post-data
 phase restoring success "restored into ${RESTORE_SCHEMA}"
 
 phase validating running "validating restored schema"
