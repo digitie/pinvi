@@ -13,7 +13,25 @@ import type {
 import { apiClient } from '@/lib/api';
 import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
-import { hasLocationConsent, locationConsentItems, resolveMarkerStyle } from '@pinvi/domain';
+import {
+  DEFAULT_MAP_CENTER,
+  DEFAULT_MAP_ZOOM,
+  MY_LOCATION_ZOOM,
+  coarseCoordText,
+  locationConsentItems,
+  resolveMapCenter,
+  resolveMarkerStyle,
+  shouldAutoLocate,
+  type AutoCenterSkipReason,
+  type LocationConsentState,
+  type LocationPermissionState,
+} from '@pinvi/domain';
+import { useUserLocation } from '@pinvi/hooks';
+import { webLocationAdapter } from '@/lib/locationAdapter';
+import {
+  getLocationConsentState,
+  setLocationConsentGranted,
+} from '@/lib/locationConsent';
 import {
   ClusterLayer,
   type ClusterPoint,
@@ -36,8 +54,16 @@ import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 
-const DEFAULT_CENTER: [number, number] = [126.978, 37.5665];
-const DEFAULT_ZOOM = 12;
+const DEFAULT_CENTER: [number, number] = [...DEFAULT_MAP_CENTER] as [number, number];
+const DEFAULT_ZOOM = DEFAULT_MAP_ZOOM;
+/** 자동 센터링 결정이 늦어도 지도가 빈 채로 남지 않도록 in-bounds 조회를 여는 상한. */
+const AUTO_CENTER_TIMEOUT_MS = 2_000;
+
+/**
+ * 세션당 1회(`docs/architecture/user-location.md` §1) — 모듈 스코프 in-memory 캐시.
+ * 좌표를 localStorage/sessionStorage/쿠키/서버 어디에도 남기지 않는다(§7). 탭을 새로 열면 초기화된다.
+ */
+let autoCenterSession: { done: true; coord: { lon: number; lat: number } | null } | null = null;
 const CLUSTER_COLOR = '#37404a';
 const CLUSTER_MARKER_COLOR = 'cluster';
 const DEBOUNCE_MS = 250;
@@ -220,6 +246,33 @@ export function FeatureMapView({
   );
   const [notice, setNotice] = useState<string | null>(null);
 
+  // 카메라는 선언형이다. `VWorldMap`이 center/zoom prop 변화에 반응해 카메라를 옮기고, 사용자가
+  // 조작 중이면 moveend까지 적용을 미룬다 — 자동 센터링이 사용자의 손을 가로채지 않는다.
+  const [camera, setCamera] = useState<{ center: [number, number]; zoom: number }>({
+    center: initialCenter,
+    zoom: initialZoom,
+  });
+  // 자동 센터링 판단 결과(관측용). CI e2e에는 VWorld 키가 없어 실제 카메라를 볼 수 없으므로
+  // 결정 자체를 sr-only로 노출해야 검증된다.
+  const [autoCenter, setAutoCenter] = useState<{
+    resolved: boolean;
+    source: 'device' | 'default';
+    reason: AutoCenterSkipReason | 'located' | 'out-of-area' | 'locate-failed' | 'pending';
+    consent: LocationConsentState;
+    permission: LocationPermissionState | 'unknown';
+  }>({
+    resolved: false,
+    source: 'default',
+    reason: 'pending',
+    consent: 'loading',
+    permission: 'unknown',
+  });
+  // 결정 전에 사용자가 지도를 만졌는지 — 만졌으면 자동 센터링을 영구 취소한다.
+  const userInteractedRef = useRef(false);
+  // 자동 센터링이 끝나기 전에는 in-bounds 조회를 미룬다(진입 시 두 번 조회 방지).
+  const autoCenterSettledRef = useRef(false);
+  const pendingFetchRef = useRef<MapLibreMap | null>(null);
+
   // 최소 1회 조회가 끝났는지 — 조회 전에는 "표시할 장소가 없습니다"라고 단언하지 않는다
   // (지도 키 미설정·초기화 실패 시 지도 fallback과 모순되는 문구가 겹쳐 떴다, T-316 리뷰 P2).
   const [loaded, setLoaded] = useState(false);
@@ -279,13 +332,36 @@ export function FeatureMapView({
     };
   }, []);
 
+  const markUserInteracted = useCallback(() => {
+    userInteractedRef.current = true;
+  }, []);
+
   const handleMapLoad = useCallback(
     (map: MapLibreMap) => {
       mapRef.current = map;
-      void fetchInBounds(map);
+      // `VWorldMap`은 moveend/zoomend만 노출한다. 자동 센터링을 취소해야 하는 것은 "사용자가
+      // 직접 만졌는가"이므로 시작 이벤트를 직접 바인딩한다(프로그램 카메라 이동과 구분).
+      for (const eventName of ['dragstart', 'zoomstart', 'rotatestart', 'pitchstart'] as const) {
+        map.on(eventName, markUserInteracted);
+      }
+      // 자동 센터링이 확정되기 전에 조회하면 곧바로 다른 viewport로 다시 조회하게 된다.
+      if (autoCenterSettledRef.current) {
+        void fetchInBounds(map);
+      } else {
+        pendingFetchRef.current = map;
+      }
     },
-    [fetchInBounds],
+    [fetchInBounds, markUserInteracted],
   );
+
+  /** 자동 센터링 결정이 끝났음을 알리고 보류된 in-bounds 조회를 연다. */
+  const settleAutoCenter = useCallback(() => {
+    if (autoCenterSettledRef.current) return;
+    autoCenterSettledRef.current = true;
+    const map = pendingFetchRef.current;
+    pendingFetchRef.current = null;
+    if (map) void fetchInBounds(map);
+  }, [fetchInBounds]);
 
   const handleViewportChange = useCallback(
     (event: MapLibreEvent) => {
@@ -387,42 +463,41 @@ export function FeatureMapView({
     [flyTo],
   );
 
-  const runGeolocate = useCallback(() => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setNotice('이 브라우저는 위치를 지원하지 않습니다.');
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const lon = position.coords.longitude;
-        const lat = position.coords.latitude;
-        setUserLocation([lon, lat]);
-        setNotice(null);
-        flyTo(lon, lat, 14);
-      },
-      () => setNotice('위치 권한이 거부되었거나 가져올 수 없습니다.'),
-    );
-  }, [flyTo]);
+  // 사용자가 버튼으로 명시 요청한 경로 — 높은 정확도, 가까운 줌(user-location.md §1 표).
+  const { loading: locating, refresh: locateNow } = useUserLocation(webLocationAdapter, {
+    high_accuracy: true,
+    max_age_ms: 30_000,
+    on_success: (loc) => {
+      setUserLocation([loc.coord.lon, loc.coord.lat]);
+      setNotice(null);
+      flyTo(loc.coord.lon, loc.coord.lat, MY_LOCATION_ZOOM);
+    },
+    on_error: (err) =>
+      setNotice(
+        err.code === 'PERMISSION_DENIED'
+          ? '위치 권한이 거부되어 있습니다. 브라우저 설정에서 이 사이트의 위치 권한을 허용해 주세요.'
+          : err.code === 'UNSUPPORTED'
+            ? '이 브라우저는 위치를 지원하지 않습니다.'
+            : '위치를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.',
+      ),
+  });
 
   // 위치 기능은 LBS 동의(lbs_tos + location_collection) 확인 후에만(위치정보법 제15·16조).
   const handleMyLocation = useCallback(async () => {
     if (locationConsent === true) {
-      runGeolocate();
+      void locateNow();
       return;
     }
-    try {
-      const consents = await userApi(apiClient).getConsents();
-      if (hasLocationConsent(consents)) {
-        setLocationConsent(true);
-        runGeolocate();
-        return;
-      }
-    } catch {
-      // 동의 조회 실패 시 동의 다이얼로그로 안내.
+    const state = await getLocationConsentState({ force: true });
+    if (state === 'granted') {
+      setLocationConsent(true);
+      void locateNow();
+      return;
     }
+    // 버튼은 사용자의 명시 액션이므로 여기서는 동의 다이얼로그를 띄운다(자동 경로와 다른 점).
     setConsentError(null);
     setConsentOpen(true);
-  }, [locationConsent, runGeolocate]);
+  }, [locationConsent, locateNow]);
 
   const handleConsentAgree = useCallback(async () => {
     setConsentSaving(true);
@@ -430,14 +505,121 @@ export function FeatureMapView({
     try {
       await userApi(apiClient).putConsents(locationConsentItems());
       setLocationConsent(true);
+      // 방금 기록한 동의를 공유 캐시에도 반영해 다른 표면이 서버를 다시 묻지 않게 한다.
+      setLocationConsentGranted();
       setConsentOpen(false);
-      runGeolocate();
+      void locateNow();
     } catch (err) {
       setConsentError(err instanceof ApiError ? err.message : '동의 저장에 실패했습니다.');
     } finally {
       setConsentSaving(false);
     }
-  }, [runGeolocate]);
+  }, [locateNow]);
+
+  /**
+   * 진입 시 자동 센터링(T-325, `docs/architecture/user-location.md` §1 "지도 초기 중심점").
+   *
+   * 게이트 순서가 계약이다 — 권한이 `granted`가 **아니면 네트워크도 좌표 취득도 하지 않는다**.
+   * 권한 조회는 프롬프트를 띄우지 않는 로컬 조회이므로, 이 순서 덕분에 권한 없는 사용자에게
+   * 동의 조회 왕복조차 발생하지 않는다. 실제 좌표 취득은 동의까지 확인한 뒤에만 일어난다.
+   *
+   * 자동 경로는 **어떤 모달도 띄우지 않는다**. 동의가 없거나 확인되지 않으면 조용히 기본 중심점을
+   * 유지하고, 사용자가 "내 위치" 버튼을 눌렀을 때만 동의 다이얼로그를 연다(다크 패턴 회피).
+   */
+  useEffect(() => {
+    let alive = true;
+    // 결정이 지연돼도 지도가 빈 채로 남지 않도록 조회를 여는 상한.
+    const timeout = setTimeout(settleAutoCenter, AUTO_CENTER_TIMEOUT_MS);
+
+    const finish = (
+      next: Partial<Omit<typeof autoCenter, 'resolved'>> & {
+        reason: (typeof autoCenter)['reason'];
+      },
+    ) => {
+      if (!alive) return;
+      setAutoCenter((prev) => ({ ...prev, ...next, resolved: true }));
+      settleAutoCenter();
+    };
+
+    void (async () => {
+      // 같은 세션에서 이미 결정했다면 재측위 없이 캐시된 좌표를 그대로 쓴다(§1 "세션당 1회").
+      if (autoCenterSession?.done) {
+        const cachedCoord = autoCenterSession.coord;
+        if (cachedCoord && !userInteractedRef.current) {
+          const outcome = resolveMapCenter({ deviceCoord: cachedCoord });
+          if (outcome.source === 'device') {
+            setCamera({ center: outcome.center, zoom: outcome.zoom });
+            setUserLocation(outcome.center);
+          }
+        }
+        finish({ reason: 'already-resolved', source: cachedCoord ? 'device' : 'default' });
+        return;
+      }
+
+      const permission = (await webLocationAdapter.getPermissionState?.()) ?? 'prompt';
+      if (!alive) return;
+
+      const gateWithoutConsent = shouldAutoLocate({
+        permission,
+        consent: 'granted',
+        gate: { alreadyResolved: false, userInteracted: userInteractedRef.current },
+      });
+      if (!gateWithoutConsent.proceed) {
+        autoCenterSession = { done: true, coord: null };
+        finish({ reason: gateWithoutConsent.skipReason, permission });
+        return;
+      }
+
+      const consent = await getLocationConsentState();
+      if (!alive) return;
+
+      const gate = shouldAutoLocate({
+        permission,
+        consent,
+        gate: { alreadyResolved: false, userInteracted: userInteractedRef.current },
+      });
+      if (!gate.proceed) {
+        // 동의 실패는 세션에 굳히지 않는다 — 사용자가 버튼으로 동의하면 다음 진입에서 바로 걸린다.
+        finish({ reason: gate.skipReason, permission, consent });
+        return;
+      }
+
+      try {
+        // 자동 경로는 낮은 정확도 + 캐시 허용(시군구 수준이면 충분, 배터리·프라이버시 최소수집).
+        const loc = await webLocationAdapter.getCurrentPosition({
+          high_accuracy: false,
+          max_age_ms: 300_000,
+        });
+        if (!alive) return;
+        autoCenterSession = { done: true, coord: loc.coord };
+        const outcome = resolveMapCenter({ deviceCoord: loc.coord });
+        if (outcome.source === 'device') {
+          if (!userInteractedRef.current) {
+            setCamera({ center: outcome.center, zoom: outcome.zoom });
+          }
+          setUserLocation([loc.coord.lon, loc.coord.lat]);
+          finish({ reason: 'located', source: 'device', permission, consent });
+          return;
+        }
+        // 국내 범위 밖이면 센터링도 마커도 하지 않고 이유만 알린다(ADR-018).
+        setNotice('현재 위치가 국내 서비스 범위 밖이라 기본 위치(서울)를 표시합니다.');
+        finish({ reason: 'out-of-area', permission, consent });
+      } catch {
+        if (!alive) return;
+        // 자동 경로는 재시도하지 않는다 — 5초 뒤 카메라를 빼앗는 편이 더 나쁘다. 버튼은 언제든 쓸 수 있다.
+        autoCenterSession = { done: true, coord: null };
+        setNotice('현재 위치를 확인하지 못해 기본 위치를 표시합니다. 내 위치 버튼으로 다시 시도할 수 있어요.');
+        finish({ reason: 'locate-failed', permission, consent });
+      }
+    })();
+
+    return () => {
+      alive = false;
+      clearTimeout(timeout);
+    };
+    // 마운트 1회만 — 의존성을 늘리면 재측위가 반복된다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const copyCoord = useCallback(async (lat: number, lon: number) => {
     const text = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
@@ -508,17 +690,37 @@ export function FeatureMapView({
               type="button"
               onClick={() => void handleMyLocation()}
               aria-label="내 위치로 이동"
+              aria-busy={locating}
+              disabled={locating}
               data-testid="map-my-location"
-              className="pointer-events-auto absolute bottom-4 right-3 flex size-11 items-center justify-center rounded-full border border-hairline bg-canvas text-ink shadow-card hover:bg-surface-soft"
+              className="focus-ring pointer-events-auto absolute bottom-4 right-3 flex size-11 items-center justify-center rounded-full border border-hairline bg-canvas text-ink shadow-card hover:bg-surface-soft disabled:cursor-not-allowed disabled:text-muted"
             >
-              <LocateFixed className="h-5 w-5" aria-hidden="true" />
+              <LocateFixed
+                className={`h-5 w-5 ${locating ? 'animate-pulse' : ''}`}
+                aria-hidden="true"
+              />
             </button>
+            {/* 자동 센터링 결정의 관측 창구. CI e2e에는 VWorld 키가 없어 실제 카메라를 볼 수 없으므로
+                결정 자체를 노출해야 검증된다. 좌표는 4자리로 절사해 원좌표를 DOM에 싣지 않는다. */}
+            <div
+              className="sr-only"
+              aria-hidden="true"
+              data-testid="map-center-state"
+              data-resolved={autoCenter.resolved ? 'true' : 'false'}
+              data-source={autoCenter.source}
+              data-reason={autoCenter.reason}
+              data-consent={autoCenter.consent}
+              data-permission={autoCenter.permission}
+              data-center-lon={coarseCoordText(camera.center[0])}
+              data-center-lat={coarseCoordText(camera.center[1])}
+              data-zoom={String(camera.zoom)}
+            />
           </div>
 
           <VWorldMap
             apiKey={apiKey}
-            center={initialCenter}
-            zoom={initialZoom}
+            center={camera.center}
+            zoom={camera.zoom}
             layerType="Base"
             navigation
             scale
