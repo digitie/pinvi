@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { ApiError, userApi } from '@pinvi/api-client';
 import { hasLocationConsent } from '@pinvi/domain';
 import type { LocationConsentState } from '@pinvi/domain';
@@ -17,17 +16,8 @@ import { apiClient } from './api';
 
 const TTL_MS = 60_000;
 
-type Listener = (state: LocationConsentState) => void;
-
 let cached: { value: LocationConsentState; fetchedAt: number } | null = null;
 let inFlight: Promise<LocationConsentState> | null = null;
-const listeners = new Set<Listener>();
-
-function publish(value: LocationConsentState): void {
-  for (const listener of listeners) {
-    listener(value);
-  }
-}
 
 async function load(): Promise<LocationConsentState> {
   try {
@@ -61,7 +51,6 @@ export async function getLocationConsentState(options?: {
       if (value !== 'error') {
         cached = { value, fetchedAt: Date.now() };
       }
-      publish(value);
       return value;
     })
     .finally(() => {
@@ -78,34 +67,4 @@ export function invalidateLocationConsent(): void {
 /** 동의를 방금 기록했을 때 서버 왕복 없이 상태를 앞당긴다(다이얼로그 확인 직후). */
 export function setLocationConsentGranted(): void {
   cached = { value: 'granted', fetchedAt: Date.now() };
-  publish('granted');
-}
-
-/** 구독형 읽기. 마운트 시 1회 조회하고 이후 변경을 받는다. */
-export function useLocationConsentState(): LocationConsentState {
-  const [state, setState] = useState<LocationConsentState>(() => cached?.value ?? 'loading');
-
-  useEffect(() => {
-    let alive = true;
-    const listener: Listener = (next) => {
-      if (alive) setState(next);
-    };
-    listeners.add(listener);
-    void getLocationConsentState().then((value) => {
-      if (alive) setState(value);
-    });
-    return () => {
-      alive = false;
-      listeners.delete(listener);
-    };
-  }, []);
-
-  return state;
-}
-
-/** 테스트 전용 — 모듈 캐시를 비운다. */
-export function resetLocationConsentCacheForTest(): void {
-  cached = null;
-  inFlight = null;
-  listeners.clear();
 }

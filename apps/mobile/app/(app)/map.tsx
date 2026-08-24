@@ -83,17 +83,43 @@ export default function MapScreen() {
     });
   }, [location, autoCenter.resolved]);
 
+  // 화면이 사라졌는지만 추적한다. effect 재실행으로 취소하면 진행 중이던 측위 결과가 버려진다.
+  const unmountedRef = useRef(false);
+  useEffect(() => {
+    return () => {
+      unmountedRef.current = true;
+    };
+  }, []);
+  // 자동 센터링은 화면당 1회만 시작한다.
+  const autoCenterStartedRef = useRef(false);
+
   /**
    * 자동 센터링 게이트 — 웹과 같은 순수 로직(`shouldAutoLocate`)을 쓴다.
-   * 권한이 `granted`가 아니면 동의 조회도 좌표 취득도 하지 않고, 어떤 프롬프트도 띄우지 않는다.
+   * 권한이 `granted`가 아니면 좌표를 취득하지 않고, 어떤 프롬프트도 띄우지 않는다.
+   *
+   * 타임아웃과 실제 측위가 경쟁한다. 타임아웃이 먼저 이겨 기본 중심점으로 지도를 띄웠더라도
+   * **뒤늦게 도착한 좌표를 버리지 않고** 카메라로 옮긴다 — `initialCenter`는 mount 시 1회만
+   * 읽히므로 그때는 명령형 `flyTo`가 유일한 수단이다.
    */
   useEffect(() => {
-    if (autoCenter.resolved) return;
-    let alive = true;
+    if (autoCenterStartedRef.current) return;
+    // 동의 판정이 끝나야 게이트를 통과시킬 수 있다. 늦어지면 아래 타임아웃이 지도를 먼저 띄운다.
+    if (consent.status === 'loading') return;
+    autoCenterStartedRef.current = true;
 
-    const settle = (next?: { coord: { lon: number; lat: number } | null }) => {
-      if (!alive) return;
-      const outcome = resolveMapCenter({ deviceCoord: next?.coord ?? null });
+    let resolvedOnce = false;
+
+    const settle = (coord: { lon: number; lat: number } | null) => {
+      if (unmountedRef.current) return;
+      const outcome = resolveMapCenter({ deviceCoord: coord });
+      if (resolvedOnce) {
+        // 이미 지도가 떠 있다 — 늦게 온 좌표는 카메라 이동으로 반영한다.
+        if (outcome.source === 'device') {
+          mapRef.current?.flyTo({ center: outcome.center, zoom: AUTO_CENTER_ZOOM });
+        }
+        return;
+      }
+      resolvedOnce = true;
       setAutoCenter({
         resolved: true,
         center: outcome.center,
@@ -103,55 +129,57 @@ export default function MapScreen() {
     };
 
     // 결정이 늦어도 지도는 뜬다.
-    const timeout = setTimeout(() => settle(), AUTO_CENTER_TIMEOUT_MS);
+    const timeout = setTimeout(() => settle(null), AUTO_CENTER_TIMEOUT_MS);
 
     void (async () => {
-      if (autoCenterSession?.done) {
-        settle({ coord: autoCenterSession.coord });
-        return;
-      }
       const permission = (await expoLocationAdapter.getPermissionState?.()) ?? 'prompt';
-      if (!alive) return;
-      const permissionGate = shouldAutoLocate({
-        permission,
-        consent: 'granted',
-        gate: { alreadyResolved: false, userInteracted: false },
-      });
-      if (!permissionGate.proceed) {
-        autoCenterSession = { done: true, coord: null };
-        settle();
-        return;
-      }
+      if (unmountedRef.current) return;
+
       const gate = shouldAutoLocate({
         permission,
         consent: consent.status,
         gate: { alreadyResolved: false, userInteracted: false },
       });
       if (!gate.proceed) {
-        // 동의 미확인은 세션에 굳히지 않는다 — 동의 직후 다시 들어오면 걸린다.
-        if (consent.status !== 'loading') settle();
+        clearTimeout(timeout);
+        settle(null);
         return;
       }
+
+      // 권한·동의를 모두 통과한 뒤에만 세션 캐시를 본다 — 캐시가 게이트를 우회하면 안 된다.
+      if (autoCenterSession?.done) {
+        clearTimeout(timeout);
+        settle(autoCenterSession.coord);
+        return;
+      }
+
       try {
         // 최근 위치가 있으면 그것으로 즉시 확정해 진입을 지연시키지 않는다.
         const cached = await expoLocationAdapter.getCachedPosition?.(300_000);
-        const loc = cached ?? (await expoLocationAdapter.getCurrentPosition({ high_accuracy: false }));
-        if (!alive) return;
-        autoCenterSession = { done: true, coord: loc.coord };
-        settle({ coord: loc.coord });
+        const loc =
+          cached ?? (await expoLocationAdapter.getCurrentPosition({ high_accuracy: false }));
+        if (unmountedRef.current) return;
+        const outcome = resolveMapCenter({ deviceCoord: loc.coord });
+        // 국내 좌표만 캐시한다 — 국외 좌표를 캐시하면 재진입 때 안내 없이 조용히 넘어간다.
+        autoCenterSession = {
+          done: true,
+          coord: outcome.source === 'device' ? loc.coord : null,
+        };
+        clearTimeout(timeout);
+        settle(loc.coord);
       } catch {
-        if (!alive) return;
+        if (unmountedRef.current) return;
         // 자동 경로는 재시도하지 않는다. "현재 위치로" 버튼은 언제든 쓸 수 있다.
         autoCenterSession = { done: true, coord: null };
-        settle();
+        clearTimeout(timeout);
+        settle(null);
       }
     })();
 
     return () => {
-      alive = false;
       clearTimeout(timeout);
     };
-  }, [autoCenter.resolved, consent.status]);
+  }, [consent.status]);
 
   const onMyLocation = useCallback(() => {
     if (consent.status === 'granted') {

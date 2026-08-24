@@ -58,6 +58,15 @@
 - [ ] **T-324** — Google OAuth client ID/secret이 API Compose 런타임에 전달되지 않아 사라진
   소셜 로그인 버튼과 authorize 흐름을 운영 설정에서 복원한다.
 
+## 지도 / 위치
+
+- [ ] **T-325 = Claude** — 웹·앱 지도의 **최초 중심점을 단말기 위치로** 잡는다. 지금은 양쪽 다 서울시청
+  하드코딩(`FeatureMapView.DEFAULT_CENTER`, `map.tsx`의 `SEOUL`)에서 시작하고 사용자가 버튼을 눌러야만
+  이동한다. LBS 동의(`lbs_tos`+`location_collection`)와 OS/브라우저 권한이 **이미 있는 경우에만**
+  프롬프트 없이 자동 센터링한다(권한 미결정 상태에서 진입만으로 프롬프트를 띄우지 않는다).
+  곁들여 웹의 인라인 `navigator.geolocation` 호출을 이미 있는 `webLocationAdapter` + 공용
+  `useUserLocation`으로 모은다. 브랜치 `agent/claude-t325-device-location-center`.
+
 ## 웹 / 테스트 인프라
 
 - [ ] **T-323** — web 워크플로의 `e2e` 잡이 aggregate required check가 아니라 Playwright 실패가 머지를

@@ -28,10 +28,7 @@ import {
 } from '@pinvi/domain';
 import { useUserLocation } from '@pinvi/hooks';
 import { webLocationAdapter } from '@/lib/locationAdapter';
-import {
-  getLocationConsentState,
-  setLocationConsentGranted,
-} from '@/lib/locationConsent';
+import { getLocationConsentState, setLocationConsentGranted } from '@/lib/locationConsent';
 import {
   ClusterLayer,
   type ClusterPoint,
@@ -542,20 +539,6 @@ export function FeatureMapView({
     };
 
     void (async () => {
-      // 같은 세션에서 이미 결정했다면 재측위 없이 캐시된 좌표를 그대로 쓴다(§1 "세션당 1회").
-      if (autoCenterSession?.done) {
-        const cachedCoord = autoCenterSession.coord;
-        if (cachedCoord && !userInteractedRef.current) {
-          const outcome = resolveMapCenter({ deviceCoord: cachedCoord });
-          if (outcome.source === 'device') {
-            setCamera({ center: outcome.center, zoom: outcome.zoom });
-            setUserLocation(outcome.center);
-          }
-        }
-        finish({ reason: 'already-resolved', source: cachedCoord ? 'device' : 'default' });
-        return;
-      }
-
       const permission = (await webLocationAdapter.getPermissionState?.()) ?? 'prompt';
       if (!alive) return;
 
@@ -565,12 +548,14 @@ export function FeatureMapView({
         gate: { alreadyResolved: false, userInteracted: userInteractedRef.current },
       });
       if (!gateWithoutConsent.proceed) {
-        autoCenterSession = { done: true, coord: null };
         finish({ reason: gateWithoutConsent.skipReason, permission });
         return;
       }
 
-      const consent = await getLocationConsentState();
+      // 동의는 **매번 서버에서 다시 확인한다**. 캐시된 'granted'를 믿으면 방금 철회한 사용자가
+      // 지도로 돌아왔을 때 좌표를 취득하게 된다(위치정보법 제16조 — 철회 즉시 비활성).
+      // 자동 경로는 세션당 1회이고 이미 권한 게이트 뒤이므로 왕복 비용도 문제가 되지 않는다.
+      const consent = await getLocationConsentState({ force: true });
       if (!alive) return;
 
       const gate = shouldAutoLocate({
@@ -584,6 +569,26 @@ export function FeatureMapView({
         return;
       }
 
+      // 같은 세션에서 이미 측위했다면 재측위하지 않는다(§1 "세션당 1회").
+      // 이 분기는 **권한·동의를 모두 통과한 뒤**에만 닿는다 — 캐시가 게이트를 우회하면 안 된다.
+      if (autoCenterSession?.done) {
+        const cachedCoord = autoCenterSession.coord;
+        if (cachedCoord && !userInteractedRef.current) {
+          const outcome = resolveMapCenter({ deviceCoord: cachedCoord });
+          if (outcome.source === 'device') {
+            setCamera({ center: outcome.center, zoom: outcome.zoom });
+            setUserLocation(outcome.center);
+          }
+        }
+        finish({
+          reason: 'already-resolved',
+          source: cachedCoord ? 'device' : 'default',
+          permission,
+          consent,
+        });
+        return;
+      }
+
       try {
         // 자동 경로는 낮은 정확도 + 캐시 허용(시군구 수준이면 충분, 배터리·프라이버시 최소수집).
         const loc = await webLocationAdapter.getCurrentPosition({
@@ -591,8 +596,9 @@ export function FeatureMapView({
           max_age_ms: 300_000,
         });
         if (!alive) return;
-        autoCenterSession = { done: true, coord: loc.coord };
         const outcome = resolveMapCenter({ deviceCoord: loc.coord });
+        // 국내 좌표만 캐시한다 — 국외 좌표를 캐시하면 재진입 때 안내 없이 조용히 넘어간다.
+        autoCenterSession = { done: true, coord: outcome.source === 'device' ? loc.coord : null };
         if (outcome.source === 'device') {
           if (!userInteractedRef.current) {
             setCamera({ center: outcome.center, zoom: outcome.zoom });
@@ -608,7 +614,9 @@ export function FeatureMapView({
         if (!alive) return;
         // 자동 경로는 재시도하지 않는다 — 5초 뒤 카메라를 빼앗는 편이 더 나쁘다. 버튼은 언제든 쓸 수 있다.
         autoCenterSession = { done: true, coord: null };
-        setNotice('현재 위치를 확인하지 못해 기본 위치를 표시합니다. 내 위치 버튼으로 다시 시도할 수 있어요.');
+        setNotice(
+          '현재 위치를 확인하지 못해 기본 위치를 표시합니다. 내 위치 버튼으로 다시 시도할 수 있어요.',
+        );
         finish({ reason: 'locate-failed', permission, consent });
       }
     })();

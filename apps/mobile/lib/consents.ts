@@ -7,12 +7,7 @@ import { api } from './api';
 /** 동의 현황 query key — 설정 화면(철회)과 위치 gate(지도)가 같은 캐시를 공유한다. */
 export const CONSENTS_QUERY_KEY = ['consents'] as const;
 
-export type LocationConsentStatus =
-  | 'loading'
-  | 'granted'
-  | 'missing'
-  | 'unauthenticated'
-  | 'error';
+export type LocationConsentStatus = 'loading' | 'granted' | 'missing' | 'unauthenticated' | 'error';
 
 /**
  * 위치 기능 gate — 웹 `FeatureMapView.handleMyLocation` 대응(issue #215/#203).

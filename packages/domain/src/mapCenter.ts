@@ -23,12 +23,7 @@ export const MY_LOCATION_ZOOM = 14;
 export type LocationPermissionState = 'granted' | 'prompt' | 'denied' | 'unsupported';
 
 /** 위치 동의 상태. `unauthenticated`는 비로그인(동의 조회 401)이며 조용히 중단한다. */
-export type LocationConsentState =
-  | 'granted'
-  | 'missing'
-  | 'unauthenticated'
-  | 'error'
-  | 'loading';
+export type LocationConsentState = 'granted' | 'missing' | 'unauthenticated' | 'error' | 'loading';
 
 /** 자동 센터링을 하지 않은 이유 — 관측/테스트용. 사용자 문구가 아니다. */
 export type AutoCenterSkipReason =

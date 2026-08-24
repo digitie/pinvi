@@ -77,6 +77,8 @@ artifacts/
 
 # Local tool state
 .dagster/
+# `dagster dev`가 cwd에 만드는 임시 홈(TMP_DAGSTER_HOME_PREFIX) — 로컬 실행 상태라 추적 대상이 아니다.
+.tmp_dagster_home_*/
 .tmp/
 
 # Agent local state

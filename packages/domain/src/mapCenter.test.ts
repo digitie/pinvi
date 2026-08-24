@@ -49,10 +49,12 @@ describe('shouldAutoLocate', () => {
   );
 
   it('권한 검사가 동의 검사보다 먼저다 — 권한이 없으면 동의 조회 자체가 불필요하다', () => {
-    expect(shouldAutoLocate({ permission: 'denied', consent: 'loading', gate: OPEN_GATE })).toEqual({
-      proceed: false,
-      skipReason: 'no-permission',
-    });
+    expect(shouldAutoLocate({ permission: 'denied', consent: 'loading', gate: OPEN_GATE })).toEqual(
+      {
+        proceed: false,
+        skipReason: 'no-permission',
+      },
+    );
   });
 
   it('이미 결정을 끝냈으면 세션 안에서 다시 취득하지 않는다', () => {
