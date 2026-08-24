@@ -32,8 +32,14 @@ from app.services.feature_reference_reconciliation import (
 logger = logging.getLogger(__name__)
 _ACK_NAMESPACE = uuid.UUID("7242d291-579a-4b96-b035-64aa4d26b1cb")
 _PERMANENT_PROBLEM_STATUSES = frozenset({401, 403, 422, 503})
-_PERMANENT_FAULTS = frozenset({"map_pairing_fault", "map_contract_fault"})
-FeatureReferenceReconciliationRuntimeFault = Literal["map_pairing_fault", "map_contract_fault"]
+_PERMANENT_FAULTS = frozenset({"map_pairing_fault", "map_contract_fault", "runtime_lease_fault"})
+FeatureReferenceReconciliationRuntimeFault = Literal[
+    "map_pairing_fault", "map_contract_fault", "runtime_lease_fault"
+]
+
+
+class FeatureReferenceReconciliationRuntimeLeaseError(RuntimeError):
+    """root watcher runtime lease가 Map side effect 경계에서 사라지거나 drift했다."""
 
 
 def _is_permanent_pairing_fault(error: FeatureReferenceReconciliationProblem) -> bool:
@@ -48,6 +54,7 @@ async def consume_feature_reference_reconciliation_once(
     read_client: FeatureReferenceReconciliationServiceClient,
     ack_client: FeatureReferenceReconciliationServiceClient,
     worker_id: uuid.UUID,
+    runtime_lease_validator: Callable[[], None] | None = None,
 ) -> ReconciliationBlocked | ReconciliationApplied | None:
     """lease→local transaction→commit→ACK 한 단위를 수행한다.
 
@@ -55,6 +62,7 @@ async def consume_feature_reference_reconciliation_once(
     final receipt가 남으므로 다음 lease가 같은 SHA로 재-ACK한다.
     """
 
+    _validate_runtime_lease(runtime_lease_validator)
     lease = await read_client.lease(worker_id=worker_id)
     if lease is None:
         return None
@@ -63,6 +71,8 @@ async def consume_feature_reference_reconciliation_once(
         await db.commit()
     if isinstance(local, ReconciliationBlocked):
         return local
+    # local commit 뒤 host pair가 교체되면 Map ACK으로 event를 소비하지 않는다.
+    _validate_runtime_lease(runtime_lease_validator)
     await ack_client.acknowledge(
         event_id=lease.event.event_id,
         event_sequence=lease.event.event_sequence,
@@ -73,6 +83,19 @@ async def consume_feature_reference_reconciliation_once(
         idempotency_key=uuid.uuid5(_ACK_NAMESPACE, str(lease.event.event_id)),
     )
     return local
+
+
+def _validate_runtime_lease(runtime_lease_validator: Callable[[], None] | None) -> None:
+    """설정 validator의 내부 경로나 파일명을 worker log/health로 누출하지 않는다."""
+
+    if runtime_lease_validator is None:
+        return
+    try:
+        runtime_lease_validator()
+    except Exception as exc:
+        raise FeatureReferenceReconciliationRuntimeLeaseError(
+            "M05 runtime lease verification failed"
+        ) from exc
 
 
 async def _worker_loop(
@@ -89,8 +112,16 @@ async def _worker_loop(
             validate_runtime = getattr(config, "validate_m05_runtime_dependencies_live", None)
             if callable(validate_runtime):
                 validate_runtime()
+            runtime_lease_validator = getattr(config, "validate_m05_runtime_lease", None)
+            _validate_runtime_lease(
+                runtime_lease_validator if callable(runtime_lease_validator) else None
+            )
         except asyncio.CancelledError:
             raise
+        except FeatureReferenceReconciliationRuntimeLeaseError:
+            on_permanent_fault("runtime_lease_fault")
+            logger.critical("M05 runtime lease is invalid; worker stopped")
+            return
         except RuntimeError:
             on_permanent_fault("map_pairing_fault")
             logger.critical("M05 runtime dependency identity drifted; worker stopped")
@@ -101,6 +132,9 @@ async def _worker_loop(
                 read_client=read_client,
                 ack_client=ack_client,
                 worker_id=worker_id,
+                runtime_lease_validator=(
+                    runtime_lease_validator if callable(runtime_lease_validator) else None
+                ),
             )
             if result is None:
                 await asyncio.sleep(
@@ -140,6 +174,10 @@ async def _worker_loop(
         except FeatureReferenceReconciliationContractError:
             on_permanent_fault("map_contract_fault")
             logger.critical("feature reference reconciliation stopped: Map contract fault")
+            return
+        except FeatureReferenceReconciliationRuntimeLeaseError:
+            on_permanent_fault("runtime_lease_fault")
+            logger.critical("M05 runtime lease is invalid; worker stopped")
             return
         except Exception:
             logger.exception("feature reference reconciliation local projection failure")
@@ -185,6 +223,7 @@ async def feature_reference_reconciliation_worker_lifespan(app: FastAPI) -> Asyn
     worker_id = uuid.uuid4()
     task: asyncio.Task[None] | None = None
     app.state.feature_reference_reconciliation_runtime_fault = None
+    runtime_lease_validator = getattr(settings, "validate_m05_runtime_lease", None)
 
     def mark_permanent_fault(fault: FeatureReferenceReconciliationRuntimeFault) -> None:
         # health endpoint는 credential/token/remote error code를 노출하지 않는 고정형 diagnostic만 반환한다.
@@ -201,10 +240,14 @@ async def feature_reference_reconciliation_worker_lifespan(app: FastAPI) -> Asyn
                 read_client=read_client,
                 ack_client=ack_client,
                 worker_id=worker_id,
+                runtime_lease_validator=(
+                    runtime_lease_validator if callable(runtime_lease_validator) else None
+                ),
             )
         except (
             FeatureReferenceReconciliationProblem,
             FeatureReferenceReconciliationContractError,
+            FeatureReferenceReconciliationRuntimeLeaseError,
             FeatureReferenceReconciliationUnavailable,
         ):
             raise RuntimeError(

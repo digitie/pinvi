@@ -34,6 +34,12 @@ from pydantic import (
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.m05_runtime_lease import (
+    M05RuntimeLeaseBinding,
+    M05RuntimeLeaseError,
+    M05RuntimeLeaseVerifier,
+)
+
 PinviEnvironment = Literal["development", "test", "smoke", "staging", "production"]
 _STRICT_RESTORE_EXECUTOR_ENVIRONMENTS = frozenset({"staging", "production"})
 _SERVICE_PROVENANCE_FILENAME = "kor-travel-map-service-provenance-v1.json"
@@ -599,6 +605,9 @@ class Settings(BaseSettings):
 
     _m05_runtime_dependencies: dict[str, object] = PrivateAttr(default_factory=dict)
     _m05_runtime_endpoints: dict[str, object] = PrivateAttr(default_factory=dict)
+    _m05_runtime_attestation_sha256: str = PrivateAttr(default="")
+    _m05_runtime_dependency_snapshot_sha256: str = PrivateAttr(default="")
+    _m05_runtime_lease_verifier: M05RuntimeLeaseVerifier | None = PrivateAttr(default=None)
 
     def __init__(self, **data: Any) -> None:
         """설정 검증 오류의 input 필드에서 SecretStr 원문을 제거한다."""
@@ -823,6 +832,10 @@ class Settings(BaseSettings):
     pinvi_dagster_image_digest: str = ""
     # receipt와 같은 private key로 서명한 fresh dependency runtime snapshot.
     pinvi_m05_runtime_attestation_path: str = ""
+    # root host watcher가 별도 Ed25519 key로 발급하는 120초 이하 runtime lease directory.
+    # ordinary API에는 public trust/current lease만 read-only mount하며 signer/Docker socket은 주지 않는다.
+    pinvi_m05_runtime_lease_directory: str = ""
+    pinvi_m05_runtime_lease_max_lifetime_seconds: int = Field(default=120, ge=1, le=120)
 
     # kor-travel-geo v2 REST (geocoding/주소/행정구역, ADR-025) — `docs/integrations/kor-travel-geo.md`.
     pinvi_kor_travel_geo_base_url: str = "http://localhost:12501"
@@ -1819,6 +1832,7 @@ class Settings(BaseSettings):
             receipt_secret=receipt_secret,
             public_key_bytes=public_key_bytes,
         )
+        self._validate_m05_runtime_lease(payload, receipt_secret=receipt_secret)
         self._validate_m05_activation_ledger(payload, receipt_secret)
 
     def _validate_m05_runtime_attestation(
@@ -2004,11 +2018,65 @@ class Settings(BaseSettings):
                 )
         self._m05_runtime_dependencies = cast(dict[str, object], dependencies)
         self._m05_runtime_endpoints = cast(dict[str, object], endpoints)
+        self._m05_runtime_attestation_sha256 = hashlib.sha256(raw).hexdigest()
+        self._m05_runtime_dependency_snapshot_sha256 = hashlib.sha256(
+            _canonical_json(dependencies)
+        ).hexdigest()
         runtime_container_id = _runtime_container_id()
         if runtime_container_id != dependencies["pinvi_api"]["container_id"]:
             _raise_redacted_settings_error(
                 "M05 runtime attestation API container ID does not match the running container"
             )
+
+    def _validate_m05_runtime_lease(
+        self,
+        receipt_payload: dict[str, object],
+        *,
+        receipt_secret: SecretStr,
+    ) -> None:
+        """root watcher lease가 현재 receipt/attestation과 분리 없이 결박됐는지 확인한다."""
+
+        if (
+            self.pinvi_environment not in {"staging", "production"}
+            or not self.pinvi_kor_travel_map_feature_reference_reconciliation_enabled
+        ):
+            return
+        try:
+            verifier = M05RuntimeLeaseVerifier(
+                directory=Path(self.pinvi_m05_runtime_lease_directory),
+                binding=M05RuntimeLeaseBinding(
+                    scope=cast(Literal["staging", "production"], self.pinvi_environment),
+                    activation_generation=cast(int, receipt_payload["activation_generation"]),
+                    activation_nonce=cast(str, receipt_payload["activation_nonce"]),
+                    receipt_sha256=hashlib.sha256(
+                        receipt_secret.get_secret_value().encode("utf-8")
+                    ).hexdigest(),
+                    runtime_attestation_sha256=self._m05_runtime_attestation_sha256,
+                    dependency_snapshot_sha256=self._m05_runtime_dependency_snapshot_sha256,
+                ),
+                max_lifetime_seconds=self.pinvi_m05_runtime_lease_max_lifetime_seconds,
+            )
+            verifier.validate()
+        except (M05RuntimeLeaseError, OSError, TypeError, ValueError):
+            _raise_redacted_settings_error(
+                "M05 runtime lease is absent, expired, or not bound to the active pair"
+            )
+        self._m05_runtime_lease_verifier = verifier
+
+    def validate_m05_runtime_lease(self) -> None:
+        """worker의 Map read·ACK 경계에서 현재 root watcher lease를 재확인한다."""
+
+        if (
+            self.pinvi_environment not in {"staging", "production"}
+            or not self.pinvi_kor_travel_map_feature_reference_reconciliation_enabled
+        ):
+            return
+        if self._m05_runtime_lease_verifier is None:
+            raise RuntimeError("M05 runtime lease verifier is not loaded")
+        try:
+            self._m05_runtime_lease_verifier.validate()
+        except M05RuntimeLeaseError as exc:
+            raise RuntimeError("M05 runtime lease is invalid") from exc
 
     def validate_m05_runtime_dependencies_live(self) -> None:
         """M05 worker가 dependency container 교체를 감지할 때 재검증한다."""
