@@ -45,12 +45,15 @@ async def record_consents(
     now = datetime.now(UTC)
     rows: list[UserConsent] = []
     for item in consents:
+        # 같은 사용자의 동시 PUT이 둘 다 "철회됨"을 보고 각각 부활 이벤트를 남기지 않도록 잠근다.
         existing = await db.scalar(
-            select(UserConsent).where(
+            select(UserConsent)
+            .where(
                 UserConsent.user_id == user_id,
                 UserConsent.consent_type == item.consent_type,
                 UserConsent.version == item.version,
             )
+            .with_for_update()
         )
         if existing is not None:
             if existing.withdrawn_at is None:

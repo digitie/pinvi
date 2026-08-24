@@ -556,7 +556,9 @@ async def put_consents(
     db: DbSession,
 ) -> Envelope[list[ConsentResponse]]:
     """동의 항목 기록 (idempotent). `docs/api/users.md` §3."""
-    rows = await record_consents(db, user_id=uuid.UUID(current_user_id), consents=body)
+    rows = await record_consents(
+        db, user_id=uuid.UUID(current_user_id), consents=body, source="settings"
+    )
     return Envelope.of(_to_consent_responses(rows))
 
 

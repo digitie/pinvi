@@ -9,9 +9,15 @@
 `consents.find(...)`로 type당 첫 행을 고르고, 마케팅 발송 게이트는 `withdrawn_at IS NULL` 행의
 **존재**만 본다. 다행으로 바꾸면 유효한 동의가 "철회됨"으로 표시되거나 철회자에게 메일이 나간다.
 
-hash chain(`admin_audit_log` 패턴)은 쓰지 않는다. append-only 트리거를 걸면 PIPA 계정 파기 시
-삭제가 막히고, 테스트 하네스의 TRUNCATE 격리도 우회하지 못한다. 이 테이블의 목적은 법정 무결성
-증명이 아니라 이벤트 유실 방지다.
+hash chain(`admin_audit_log` 패턴)과 append-only 트리거는 **이번 범위에서 제외**한다. 이 테이블의
+목적은 법정 무결성 증명이 아니라 이벤트 유실 방지이고, 현재 애플리케이션 코드에는 이 테이블을
+UPDATE/DELETE하는 경로가 없다(쓰기는 INSERT 3곳뿐).
+
+다만 그것이 "보호가 불필요하다"는 뜻은 아니다 — 같은 법적 성격의 `location_access_log`와
+`admin_audit_log`는 append-only 트리거를 갖는다. 실제 긴장은 이 모델이 선언한
+`ondelete="CASCADE"` FK다: 사용자를 하드 삭제하면 이력도 함께 사라진다. 지금은 계정 파기가
+in-place 익명화라(`admin_retention._EXECUTE_PII_SQL`) 그 경로가 없지만, 하드 삭제가 생기면
+보존 정책을 먼저 정해야 한다. 무결성 보호 도입은 후속 과제로 둔다.
 """
 
 from __future__ import annotations
