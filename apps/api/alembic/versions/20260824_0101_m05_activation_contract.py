@@ -1743,7 +1743,7 @@ def _install_location_audit_purpose_contract() -> None:
 
 
 def _install_location_audit_coord_source_contract() -> None:
-    """좌표 출처를 기록해 device 동의 게이트와 audit ledger를 같은 계약으로 묶는다."""
+    """좌표 출처를 원본·outbox·보존 사본에 함께 기록한다."""
 
     for table in ("location_access_log", "location_audit_outbox"):
         op.add_column(
@@ -1757,6 +1757,19 @@ def _install_location_audit_coord_source_contract() -> None:
             _LOCATION_AUDIT_COORD_SOURCE_CHECK,
             schema="app",
         )
+    op.add_column(
+        "location_access_log_archive",
+        sa.Column("coord_source", sa.Text(), nullable=True),
+        schema="app",
+    )
+    # naming convention이 table명을 붙이므로 suffix만 넘긴다. 전체 이름을 넘기면
+    # archive table의 실제 제약 이름이 PostgreSQL 63자 제한으로 잘린다.
+    op.create_check_constraint(
+        "coord_source",
+        "location_access_log_archive",
+        _LOCATION_AUDIT_COORD_SOURCE_CHECK,
+        schema="app",
+    )
 
 
 def _install_user_consent_event_history() -> None:

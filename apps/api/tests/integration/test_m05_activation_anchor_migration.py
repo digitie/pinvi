@@ -202,12 +202,15 @@ async def test_0101_installs_m05_final_contract_with_minimal_public_surface(
                         "SELECT table_name, is_nullable, data_type "
                         "FROM information_schema.columns "
                         "WHERE table_schema = 'app' "
-                        "AND table_name IN ('location_access_log', 'location_audit_outbox') "
+                        "AND table_name IN ("
+                        "'location_access_log', 'location_access_log_archive', "
+                        "'location_audit_outbox') "
                         "AND column_name = 'coord_source'"
                     )
                 )
                 assert {(row[0], row[1], row[2]) for row in coord_source_columns} == {
                     ("location_access_log", "YES", "text"),
+                    ("location_access_log_archive", "YES", "text"),
                     ("location_audit_outbox", "YES", "text"),
                 }
                 coord_source_constraints = dict(
@@ -220,7 +223,8 @@ async def test_0101_installs_m05_final_contract_with_minimal_public_surface(
                                 "JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace "
                                 "WHERE namespace.nspname = 'app' "
                                 "AND relation.relname IN ("
-                                "'location_access_log', 'location_audit_outbox') "
+                                "'location_access_log', 'location_access_log_archive', "
+                                "'location_audit_outbox') "
                                 "AND constraint_row.contype = 'c' "
                                 "AND pg_get_constraintdef(constraint_row.oid, true) "
                                 "LIKE '%coord_source%'"
@@ -230,6 +234,7 @@ async def test_0101_installs_m05_final_contract_with_minimal_public_surface(
                 )
                 assert set(coord_source_constraints) == {
                     "location_access_log",
+                    "location_access_log_archive",
                     "location_audit_outbox",
                 }
                 for definition in coord_source_constraints.values():

@@ -33,7 +33,7 @@ E2E를 모두 통과시킨 뒤에만 PR #466 merge를 검토한다.
 
 ## 2026-08-24 (codex) — M05 rebaseline 단일 final head 재결박
 
-- 최신 `main` rebase 뒤에 남은 `20260824_0065` 좌표 출처 migration을 별도 head로 두지 않고
+- 최신 `main` rebase 뒤에 남은 `20260824_0065`·`0066` 좌표 출처 migration을 별도 head로 두지 않고
   `20260824_0101`에 흡수했다. active graph는 다시 `0100 → 0101` 두 revision만 가지며,
   `FINALIZE_SCHEMA_REVISION`과 `ck_ktm_ct_boundary_contract`는 최종 `0101`에서만 재결박된다.
 - `0101` fresh install이 `coord_source` 컬럼·허용값 CHECK·`reverse_geocode` purpose까지 설치하는
