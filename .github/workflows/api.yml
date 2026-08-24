@@ -9,6 +9,7 @@ on:
       - 'scripts/backup-db.sh'
       - 'scripts/m05_*.py'
       - 'scripts/trusted-hotswap-entrypoint.py'
+      - 'scripts/trusted-hotswap-root.sh'
       - 'scripts/n150-playwright-runner.sh'
       - 'scripts/restore-db.sh'
       - 'scripts/restore-hotswap.sh'
@@ -28,6 +29,7 @@ on:
       - 'scripts/backup-db.sh'
       - 'scripts/m05_*.py'
       - 'scripts/trusted-hotswap-entrypoint.py'
+      - 'scripts/trusted-hotswap-root.sh'
       - 'scripts/n150-playwright-runner.sh'
       - 'scripts/restore-db.sh'
       - 'scripts/restore-hotswap.sh'
@@ -105,7 +107,8 @@ jobs:
             scripts/restore-db.sh \
             scripts/restore-hotswap.sh \
             scripts/restore-staging-drill.sh \
-            scripts/n150-playwright-runner.sh
+            scripts/n150-playwright-runner.sh \
+            scripts/trusted-hotswap-root.sh
 
       - name: ruff format check
         run: ruff format --check .

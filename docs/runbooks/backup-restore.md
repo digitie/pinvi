@@ -208,6 +208,9 @@ USAGE/SELECT grant를 재적용한다. 이 role은 LOGIN이고 superuser·CREATE
 
 `scripts/restore-hotswap.sh` / API hot-swap 환경변수:
 
+> 아래 값은 개발·격리 drill과 API 내부 contract 설명이다. staging/production root hotswap은
+> 이 값을 caller 환경에서 받지 않고 §4.2의 root-only JSON config와 fixed wrapper로만 만든다.
+
 | 변수                            | 기본값               | 설명                                                 |
 | ------------------------------- | -------------------- | ---------------------------------------------------- |
 | `PINVI_RESTORE_DATABASE_URL`    | `PINVI_DATABASE_URL` | restore/swap 전용 DB URL override. 실행 모드에서는 전용 non-superuser schema owner login을 지정해야 한다. |
@@ -386,13 +389,31 @@ COMMIT;
 
 ### 4.3 실패 시
 
-다이얼로그가 자동 rollback을 트리거. 운영자는:
+M05 schema-swap은 **자동 rollback, 자동 schema rename 되돌림, 자동 restore candidate
+삭제를 절대 하지 않는다.** `switching` 이후 release/fence/검증 중 하나라도 실패하면 현재
+`app`/`app_previous_<id>` topology, forensic marker, candidate와 receipt archive를 그대로
+보존하고 새 hotswap·Docker rebuild·runtime lease 발급을 막는다.
 
-- 진행 단계 확인
-- 실패 원인 (UI 로그 + Loki `request_id` 검색)
-- 필요 시 별 backup으로 재시도
-- cut-over 후 app 오류면 API/Web을 정지한 뒤 `app_previous_<ts>`를 다시 `app`으로
-  rename하고 재시작한다.
+운영자는 다음만 수행한다.
+
+- `sudo /usr/local/sbin/pinvi-trusted-hotswap status`로 marker state와 operation UUID를
+  읽는다. URL·credential·raw snapshot path는 출력하지 않는다.
+- marker가 `prepared` 또는 `fence_released`이며 read-only DB proof가 성공한 경우에만 정확한
+  UUID와 `--confirm`을 함께 사용해 root acknowledgement를 기록한다.
+- 그 밖의 `fence_intent`, `fence_applied`, `restore_ready`, `switched`,
+  `fence_release_intent` 또는 malformed marker는 **자동·추측성 복구 금지** 상태다. forensic
+  snapshot과 catalog proof를 보존한 채 운영 변경 승인 절차로 escalate한다.
+
+```bash
+sudo /usr/local/sbin/pinvi-trusted-hotswap status
+sudo /usr/local/sbin/pinvi-trusted-hotswap recover \
+  --operation-id "<status의-정확한-uuid>" \
+  --confirm
+```
+
+`recover`는 schema/ACL을 수정하지 않고, safe terminal boundary를 read-only로 재검증한 뒤
+marker acknowledgement만 남긴다. 이 절차는 과거 DB/Alembic revision으로의 복구 계획을
+전제하지 않는다.
 
 ## 5. 분기 훈련
 
