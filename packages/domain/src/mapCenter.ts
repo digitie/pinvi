@@ -1,4 +1,4 @@
-import { CoordSchema } from '@pinvi/schemas';
+import { isInServiceArea } from '@pinvi/schemas';
 
 /**
  * 지도 중심점 결정 — 웹/모바일 공용 순수 로직 (T-325).
@@ -84,16 +84,20 @@ export function shouldAutoLocate({
 }
 
 /**
- * 좌표가 국내 서비스 범위 안인지. 판정 기준은 `CoordSchema`(EPSG:4326 대한민국 범위)를 그대로 쓴다 —
- * 범위 상수를 여기서 다시 정의하면 두 정본이 생긴다(ADR-018 한국 전용 정책).
+ * 좌표가 Pinvi 서비스 범위(남한) 안인지 — `@pinvi/schemas`의 `isInServiceArea`를 그대로 쓴다.
  *
- * 한계: `CoordSchema`는 lon 124~132 / lat 33~43의 **단순 bbox**라 대마도·규슈 북안처럼 이 사각형에
- * 걸치는 일본 영토가 '국내'로 통과한다. 이 함수의 용도는 "지도를 어디에 둘 것인가"이므로 그 정도
- * 오차는 무해하지만, 서비스 차단(geofencing) 판정에 그대로 쓰면 안 된다 — 정밀 판정이 필요하면
- * 행정구역 폴리곤을 쓰는 별도 수단이 있어야 한다(T-327).
+ * 이전에는 `CoordSchema`(좌표 **입력 유효** 범위, lat 상한 43)를 그대로 썼다. 그것은 한반도
+ * 전체를 덮는 사각형이라 온성(42.95)까지 "서비스 지역"으로 통과시켰다. 두 범위는 목적이 다르다 —
+ * 하나는 "좌표로서 말이 되는가", 다른 하나는 "여기로 지도를 옮길 만한가"다.
+ *
+ * **사각형으로는 정확할 수 없다는 것이 이 판정의 성질이다.** 대마도와 평양은 여전히 통과하고,
+ * 상한을 조여도 고쳐지지 않는다 — 개성(37.97)이 강원 고성(38.38)보다 남쪽이라 어떤 위도선도
+ * 남북한을 가르지 못한다. 그래서 이 함수는 "국내인가"를 답한다고 주장하지 않는다. 틀렸을 때의
+ * 결과는 사용자가 빈 지도를 보는 것뿐이다. **좌표 기반 차단에 쓰지 마라** — 그런 판정이 필요하면
+ * kor-travel-geo 행정구역 조회를 써야 한다(ADR-064).
  */
-export function isCoordInKorea(coord: { lon: number; lat: number }): boolean {
-  return CoordSchema.safeParse(coord).success;
+export function isCoordInServiceArea(coord: { lon: number; lat: number }): boolean {
+  return isInServiceArea(coord);
 }
 
 export interface ResolveMapCenterInput {
@@ -120,7 +124,7 @@ export function resolveMapCenter({ deviceCoord }: ResolveMapCenterInput): MapCen
       outOfServiceArea: false,
     };
   }
-  if (!isCoordInKorea(deviceCoord)) {
+  if (!isCoordInServiceArea(deviceCoord)) {
     return {
       center: [...DEFAULT_MAP_CENTER] as [number, number],
       zoom: DEFAULT_MAP_ZOOM,

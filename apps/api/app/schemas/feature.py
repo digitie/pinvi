@@ -22,6 +22,9 @@ from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.core.coord_range import SERVICE_AREA_LAT_MAX
+from app.core.coord_source import CoordSource
+
 FeatureKind = Literal[
     "place",
     "event",
@@ -309,6 +312,10 @@ class FeatureRequestCreate(BaseModel):
     # (provider, external_id)로 전역 dedup된다.
     source: Literal["user", "kakao", "naver"] = "user"
     external_ref: ExternalRef | None = None
+    # 좌표의 출처(T-329). 기본은 지도에서 고른 지점이다 — 이 경로의 실사용 흐름이 그렇다.
+    # `device`로 선언하면 사용자 자신의 위치를 보낸다는 뜻이고, 그때만 위치 동의를 요구한다.
+    # (`source`는 provider 출처라 이름이 겹치지 않게 `coord_source`로 둔다.)
+    coord_source: CoordSource = "map_pick"
 
     @model_validator(mode="after")
     def validate_target_feature_id(self) -> Self:
@@ -316,8 +323,10 @@ class FeatureRequestCreate(BaseModel):
             raise ValueError("correction/closure 제안은 target_feature_id가 필요합니다.")
         if self.type == "new_place" and self.target_feature_id is not None:
             raise ValueError("new_place 제안은 target_feature_id를 가질 수 없습니다.")
-        if self.type == "new_place" and self.coord.lat > 39.5:
-            raise ValueError("new_place 제안 좌표의 lat은 39.5 이하여야 합니다.")
+        # 입력 유효 범위(lat ≤ 43)가 아니라 **서비스 범위**로 본다 — 제안은 우리가 서비스하는
+        # 곳에만 만들 수 있다(ADR-064).
+        if self.type == "new_place" and self.coord.lat > SERVICE_AREA_LAT_MAX:
+            raise ValueError(f"new_place 제안 좌표의 lat은 {SERVICE_AREA_LAT_MAX} 이하여야 합니다.")
         if self.external_ref is not None:
             if self.type != "new_place":
                 raise ValueError("외부 참조(external_ref) 제안은 new_place만 가능합니다.")

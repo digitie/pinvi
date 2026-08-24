@@ -116,7 +116,8 @@ export function TripManualPoiDialog({
     void (async () => {
       try {
         const res = await geoApi(apiClient).reverse(
-          { lon: coord.lon, lat: coord.lat, radiusM: 200 },
+          // 지도에서 고른 지점이다 — 단말 위치가 아니므로 위치 동의를 요구하지 않는다(T-329).
+          { lon: coord.lon, lat: coord.lat, radiusM: 200, coordSource: 'map_pick' },
           { signal: controller.signal },
         );
         const first = res.candidates[0] ?? null;

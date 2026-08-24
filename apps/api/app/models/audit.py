@@ -43,6 +43,9 @@ class LocationAccessLog(Base):
     purpose: Mapped[str] = mapped_column(String(64), nullable=False)
     lat: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
     lng: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    #: 좌표 출처 — `device`(사용자 자신의 위치) / `map_pick`(지도에서 고른 지점). NULL은 이 개념이
+    #: 없던 시기의 행이라는 뜻이며, 소급 판정하지 않는다(T-329).
+    coord_source: Mapped[str | None] = mapped_column(Text())
     request_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
     ip_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     prev_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -94,6 +97,9 @@ class LocationAuditOutbox(Base):
     purpose: Mapped[str] = mapped_column(String(64), nullable=False)
     lat: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
     lng: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    #: 좌표 출처 — `device`(사용자 자신의 위치) / `map_pick`(지도에서 고른 지점). NULL은 이 개념이
+    #: 없던 시기의 행이라는 뜻이며, 소급 판정하지 않는다(T-329).
+    coord_source: Mapped[str | None] = mapped_column(Text())
     request_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
     ip_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -32,9 +32,16 @@ from app.clients.kor_travel_map import (
     KorTravelMapUnavailable,
 )
 from app.clients.naver_local import NaverLocalClient, NaverLocalClientDep, NaverLocalError
-from app.core.consent_deps import require_location_consent
+from app.core.consent_deps import assert_location_consent, require_location_consent
+from app.core.coord_range import (
+    COORD_LAT_MAX,
+    COORD_LAT_MIN,
+    COORD_LON_MAX,
+    COORD_LON_MIN,
+)
 from app.core.deps import CurrentUserId, DbSession
 from app.core.time import KST
+from app.middleware.location_audit import declare_location_audit
 from app.models.feature_suggestion import FeatureSuggestion
 from app.schemas.envelope import Envelope
 from app.schemas.feature import (
@@ -63,8 +70,10 @@ from app.services.feature_request import find_active_suggestion_by_external_ref
 router = APIRouter(prefix="/features", tags=["features"])
 
 # 허용 viewport 한국 범위 (ADR-018)
-LNG_MIN, LNG_MAX = 124.0, 132.0
-LAT_MIN, LAT_MAX = 33.0, 43.0
+# 좌표 **입력 유효** 범위다(한반도 전체). 서비스 지역 판정이 아니다 — 둘의 차이는
+# `app/core/coord_range.py`와 ADR-064.
+LNG_MIN, LNG_MAX = COORD_LON_MIN, COORD_LON_MAX
+LAT_MIN, LAT_MAX = COORD_LAT_MIN, COORD_LAT_MAX
 MIN_ZOOM, MAX_ZOOM = 5, 19
 FEATURE_SUGGESTION_DAILY_LIMIT = 20
 DECIMAL_6 = Decimal("0.000001")
@@ -466,6 +475,7 @@ async def features_nearby(
     # 사용자 자신의 위치를 필수로 받는 경로다 — 동의 없이 좌표를 받지 않는다(T-327).
     _location_consent: Annotated[None, Depends(require_location_consent())],
     client: KorTravelMapHttpClientDep,
+    request: Request,
     lon: Annotated[float, Query(ge=LNG_MIN, le=LNG_MAX)],
     lat: Annotated[float, Query(ge=LAT_MIN, le=LAT_MAX)],
     radius_m: Annotated[int, Query(ge=10, le=50000)],
@@ -473,7 +483,12 @@ async def features_nearby(
     category: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> Envelope[list[FeatureSummary]]:
-    """반경 검색 (distance_m 포함). location_audit 미들웨어가 좌표 query 자동 적재."""
+    """반경 검색 (distance_m 포함). 사용자 자신의 위치이므로 확인자료로 남긴다."""
+    # 미들웨어는 핸들러가 선언한 좌표만 기록한다(T-330). 선언하지 않으면 이 경로의 법정 기록이
+    # 조용히 사라지므로, `test_location_audit_middleware.py`가 경로별로 이를 붙잡는다.
+    # "내 주변"이라는 endpoint의 의미상 좌표는 언제나 사용자 자신의 위치다 — 출처를 파라미터로
+    # 받지 않고 `device`로 고정한다(그래서 위 dependency가 동의를 요구한다).
+    declare_location_audit(request, lat=_decimal6(lat), lng=_decimal6(lon), source="device")
     with _map_kor_travel_map_errors():
         data = await client.features_nearby(
             lon=lon,
@@ -691,7 +706,11 @@ async def request_feature(
     name = _normalise_title(body.title)
     lng = _decimal6(body.coord.lon)
     lat = _decimal6(body.coord.lat)
-    request.state.location_audit_coord = (lat, lng)
+    # 지도에서 고른 POI 위치가 기본이다. 클라이언트가 자기 현재 위치로 제안하는 경우에만
+    # `coord_source="device"`를 선언하고, 그때는 동의를 요구한다.
+    if body.coord_source == "device":
+        await assert_location_consent(db, user_id=user_id)
+    declare_location_audit(request, lat=lat, lng=lng, source=body.coord_source)
     categories = _normalise_categories(body.categories)
 
     external_ref = body.external_ref.model_dump() if body.external_ref is not None else None

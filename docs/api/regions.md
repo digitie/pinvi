@@ -23,6 +23,10 @@ GET /regions/covering-point?lon=129.118&lat=35.155&boundary_level=emd
 
 - `boundary_level`: `sido` | `sigungu` | `emd` (기본 `emd`)
 - `boundary_level`은 요청 hint이며 응답에 그대로 echo된다(reverse 결과에서 파생하지 않음).
+- `coord_source`: `device` | `map_pick` (기본 `map_pick`) — 이 좌표가 무엇인지 선언한다.
+  `device`는 사용자 자신의 위치(개인위치정보)라 **위치 동의를 요구한다**; 없으면 403
+  `LOCATION_CONSENT_REQUIRED`. `map_pick`(지도에서 고른 지점)은 개인위치정보가 아니므로
+  게이트하지 않는다. 확인자료에는 어느 쪽이든 출처가 함께 기록된다(ADR-063).
 - 내부: `kor-travel-geo` `POST /v2/reverse`의 최선 후보 `region`을 사용한다.
 
 응답 200:
@@ -52,6 +56,10 @@ GET /regions/within-radius?lon=129.118&lat=35.155&radius_km=2.0&levels=sigungu&l
 - 내부: `kor-travel-geo` `POST /v2/regions/within-radius`
 - `radius_km`: 최대 500 (기본 3.0)
 - `levels`: `sido` | `sigungu` | `emd` (반복 query param, 기본 `sigungu`+`emd`)
+- `coord_source`: `device` | `map_pick` (기본 `map_pick`) — 이 좌표가 무엇인지 선언한다.
+  `device`는 사용자 자신의 위치(개인위치정보)라 **위치 동의를 요구한다**; 없으면 403
+  `LOCATION_CONSENT_REQUIRED`. `map_pick`(지도에서 고른 지점)은 개인위치정보가 아니므로
+  게이트하지 않는다. 확인자료에는 어느 쪽이든 출처가 함께 기록된다(ADR-063).
 
 응답 200: `center`/`radius_km` + level별 그룹 배열 `sido[]`/`sigungu[]`/`emd[]`. 각 항목은
 `{code, name, relation}`이며 `relation`은 `contains`(중심 좌표 포함) 또는 `overlaps`(반경

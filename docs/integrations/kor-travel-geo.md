@@ -290,8 +290,7 @@ async def geo_reverse(lon: float, lat: float, geo: GeocodingDep,
     return Envelope.of(_to_reverse_response(region))
 ```
 
-- `lon`/`lat` 쿼리 파라미터를 받으므로 `LocationAuditMiddleware`가 자동 적재한다
-  (§8). `/geo/reverse`를 `PURPOSE_BY_PATH`에 `"reverse_geocode"`로 등록한다.
+- `/geo/reverse`는 `reverse_geocode`로 감사하되 좌표 **출처**를 함께 적는다(§8, ADR-063).
 - candidate 정렬/선택은 서비스 레이어. `confidence`는 같은 응답 안에서만 비교.
 
 ## 7. 캐싱 / rate-limit
@@ -306,11 +305,15 @@ async def geo_reverse(lon: float, lat: float, geo: GeocodingDep,
 
 ## 8. 위치 감사 (LBS / PIPA)
 
-`/geo/reverse`는 사용자 좌표를 서버로 전송하므로 `app.location_access_log` 자동
-적재 대상이다(`docs/architecture/user-location.md` §4.2).
+`/geo/reverse`는 `PURPOSE_BY_PATH`에 `"reverse_geocode"`로 등록돼 `app.location_access_log`에
+적재된다(`docs/architecture/user-location.md` §4.2).
 
-- `apps/api/app/middleware/location_audit.py`의 `PURPOSE_BY_PATH`에
-  `"/geo/reverse": "reverse_geocode"` 추가.
+- 이 등록은 T-329에서야 실제로 이뤄졌다. 그 전까지 이 문서와 `user-location.md`는 등록한다고
+  적었지만 `_classify_purpose`가 이 경로를 분류한 적이 없었다 — 문서가 틀린 상태로 오래 남아 있었다.
+- 등록을 미룬 것이 아니라 **미룰 수밖에 없었다**: 좌표 출처 구분이 없으면 지도 클릭을
+  "사용자의 위치"로 기록하게 되어 확인자료가 거짓이 된다. `coord_source`(ADR-063)가 생긴 뒤에야
+  `map_pick`으로 정직하게 남길 수 있게 됐다. 기본 출처는 `map_pick`이고, `coord_source=device`로
+  호출하면 위치 동의를 요구한다.
 - `/geo/search`·`/geo/geocode`는 **주소 문자열** 입력이라 좌표 감사 대상이 아니다.
   단 응답 좌표를 로그(Loki/Sentry)에 평문 적재하지 않는다(PII).
 - 좌표 정밀도 노출은 소수 4자리까지(user-location §7).

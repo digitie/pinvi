@@ -27,8 +27,13 @@ def _contracted_purposes() -> set[str]:
             continue
         # upgrade()가 세우는 목록만 본다 — downgrade()의 구 목록에 속으면 안 된다.
         upgrade_src = source.split("def downgrade", 1)[0]
-        quoted = set(re.findall(r"'([a-z_]+)'", upgrade_src))
-        purposes = {p for p in quoted if p not in {"app", "purpose"}}
+        # purpose 목록을 담는 상수 정의에서만 읽는다. 파일 전체에서 따옴표를 긁으면 같은
+        # 마이그레이션의 다른 리터럴(`'device'`, `'map_pick'`, `'succeeded'` 등)까지 "계약된
+        # purpose"로 세어 검사가 조용히 헐거워진다(T-329 리뷰 지적).
+        blocks = re.findall(
+            r"^_\w*PURPOSES\w*\s*=\s*(.+?)(?=^\w|\Z)", upgrade_src, re.MULTILINE | re.DOTALL
+        )
+        purposes = {p for b in blocks for p in re.findall(r"'([a-z_]+)'", b)}
         if purposes:
             latest = (path.name, purposes)
     assert latest is not None, "purpose CHECK 제약을 정의하는 마이그레이션을 찾지 못했다"
@@ -60,3 +65,19 @@ def test_search_third_party_purpose_is_contracted() -> None:
     """회귀 고정 — 이 값이 빠지면 `/search` 감사가 다시 멈춘다."""
     assert PURPOSE_BY_PATH["/search"] == "third_party_place_search"
     assert "third_party_place_search" in _contracted_purposes()
+
+
+def test_viewport_and_feature_weather_are_no_longer_audited_as_user_location() -> None:
+    """지도 뷰포트와 feature 날씨는 **사용자의 위치가 아니다** (T-330).
+
+    `/features/in-bounds`의 bbox는 사용자가 보고 있는 화면 영역이고, `/features/{id}/weather`의
+    좌표는 그 feature의 위치다. 둘 다 개인위치정보가 아니므로 확인자료에 넣으면 기록이 부정확해진다.
+    실제로 두 경로는 좌표 파라미터를 선언하지도 않아 감사 행을 만든 적이 없었고, 오직 query에
+    `lat`/`lng`를 손으로 덧붙였을 때만 거짓 행이 생겼다.
+
+    DB CHECK의 `viewport_query`/`weather_at_coord`는 **그대로 둔다** — 과거에 그렇게 적재된 행이
+    있을 수 있고, 제약을 좁혀도 기존 행은 재검증되지 않아 얻는 것이 없다.
+    """
+    assert _classify_purpose("/features/in-bounds") is None
+    assert _classify_purpose("/features/f_1/weather") is None
+    assert {"viewport_query", "weather_at_coord"} <= _contracted_purposes()

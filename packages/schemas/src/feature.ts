@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CoordSchema, Iso8601Schema } from './common';
+import { CoordSchema, CoordSourceSchema, Iso8601Schema } from './common';
 
 /** `kor-travel-map` 의 7가지 kind. */
 export const FeatureKindSchema = z.enum([
@@ -250,6 +250,9 @@ export const FeatureRequestCreateSchema = z
     // ADR-054: Kakao/Naver pick에서 온 제안이면 source + external_ref(전역 dedup 키).
     source: FeatureRequestSourceSchema.optional().default('user'),
     external_ref: ExternalRefSchema.nullable().optional(),
+    // 좌표 출처(T-329). 기본은 지도에서 고른 지점 — 이 다이얼로그의 실사용 흐름이 그렇다.
+    // (`source`는 provider 출처라 이름이 겹치지 않게 `coord_source`로 둔다.)
+    coord_source: CoordSourceSchema.optional().default('map_pick'),
   })
   .refine((v) => v.type === 'new_place' || v.target_feature_id != null, {
     message: 'correction/closure 제안은 target_feature_id가 필요합니다.',

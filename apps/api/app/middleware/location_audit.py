@@ -17,6 +17,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.core.coord_source import CoordSource
 from app.db.session import async_session_factory
 from app.services.hash_chain import sha256_hex
 from app.services.location_audit import append_location_log, enqueue_location_audit_outbox
@@ -24,13 +25,15 @@ from app.services.location_audit import append_location_log, enqueue_location_au
 log = structlog.get_logger("location_audit")
 
 PURPOSE_BY_PATH: dict[str, str] = {
-    "/features/in-bounds": "viewport_query",
     "/features/nearby": "nearby_attractions",
     "/regions/covering-point": "region_covering",
     "/regions/within-radius": "region_radius",
     # "내 주변 검색"으로 사용자 좌표를 Kakao에 제3자 제공(ADR-054 §9). 좌표는 핸들러가
     # request.state.location_audit_coord로 세팅하며, 좌표 없는 키워드 검색은 감사 대상이 아니다.
     "/search": "third_party_place_search",
+    # 지도 클릭 지점의 주소 label. 좌표 출처를 `map_pick`으로 적을 수 있게 된 뒤에야 감사에 넣었다
+    # — 그 전에는 지도 클릭을 "사용자의 위치"로 기록하는 셈이었다(T-329).
+    "/geo/reverse": "reverse_geocode",
 }
 
 
@@ -48,15 +51,20 @@ class LocationAuditMiddleware(BaseHTTPMiddleware):
         if response.status_code >= 400:
             return response
 
-        try:
-            lat, lng = _extract_coord(request)
-        except ValueError:
+        lat, lng = _declared_coord(request)
+        coord_source = getattr(request.state, "location_audit_coord_source", None)
+
+        # 핸들러가 좌표를 선언하지 않았으면 위치정보 사용/제3자 제공이 없었던 것이므로 감사하지
+        # 않는다. 반쪽 좌표도 마찬가지다 — 위경도 중 하나만으로는 어떤 위치도 지목하지 못하므로
+        # `lat`만 담긴 행은 확인자료가 아니라 잡음이다(T-330).
+        if lat is None or lng is None:
             return response
 
-        # 좌표가 실제로 없으면 위치정보 제3자 제공/사용이 없었던 것이므로 감사하지 않는다.
-        # (좌표 없는 키워드-only `/search` 등이 거짓 감사 기록을 남기지 않게 한다. 다른 감사 경로는
-        # 모두 필수 좌표를 지니므로 영향 없음.)
-        if lat is None and lng is None:
+        # NaN/Infinity는 numeric 컬럼에 저장은 되지만 체인 적재의 quantize에서 터진다. 그 예외는
+        # drain 루프를 막아 **이후 모든 감사 기록을 멈추므로**(T-328이 고친 것과 같은 정지),
+        # 애초에 outbox에 넣지 않는다.
+        if not (lat.is_finite() and lng.is_finite()):
+            log.warning("location_audit.non_finite_coord", endpoint=request.url.path)
             return response
 
         user_id_str = getattr(request.state, "user_id", None)
@@ -93,6 +101,7 @@ class LocationAuditMiddleware(BaseHTTPMiddleware):
                     lng=lng,
                     request_id=request_id,
                     ip_hash=ip_hash,
+                    coord_source=coord_source,
                 )
         except Exception as exc:
             log.warning("location_audit.enqueue_failed", error=str(exc))
@@ -103,34 +112,63 @@ class LocationAuditMiddleware(BaseHTTPMiddleware):
 def _classify_purpose(path: str) -> str | None:
     if path in PURPOSE_BY_PATH:
         return PURPOSE_BY_PATH[path]
-    if path.startswith("/features/") and path.endswith("/weather"):
-        return "weather_at_coord"
     if path == "/features/requests":
         return "feature_request"
     return None
 
 
-def _extract_coord(request: Request) -> tuple[Decimal | None, Decimal | None]:
+def declare_location_audit(
+    request: Request,
+    *,
+    lat: Decimal | None,
+    lng: Decimal | None,
+    source: CoordSource,
+) -> None:
+    """감사 대상 핸들러가 자기 좌표와 그 **출처**를 함께 선언한다.
+
+    좌표와 출처를 하나의 호출로 묶는 이유는, 둘 중 하나만 세팅하는 실수를 구조적으로 막기 위해서다.
+    출처 없는 좌표는 "누구의 위치인지 모르는 좌표"이고 그것은 확인자료로 쓸 수 없다.
+
+    `lat`/`lng`가 `None`이면 "이번 요청에서는 좌표를 쓰지 않았다"는 명시적 선언이다
+    (`/search`의 키워드-only 분기가 그렇게 쓴다).
+    """
+    request.state.location_audit_coord = (lat, lng)
+    request.state.location_audit_coord_source = source
+
+
+def _declared_coord(request: Request) -> tuple[Decimal | None, Decimal | None]:
+    """핸들러가 **선언한** 좌표만 읽는다. query string은 보지 않는다.
+
+    이전에는 query(`lat`/`lng`/`lon`/`latitude`/`longitude`)를 추측해 읽었고, 그 추측이
+    확인자료를 세 방향으로 오염시켰다(T-330):
+
+    - **핸들러가 무시한 파라미터를 "썼다"고 적었다.** `/search?q=…&lat=…`은 near-me가 아닌데도
+      Kakao 제3자 제공 기록이 남았고, `/features/in-bounds`는 지도 뷰포트 조회인데 좌표 query를
+      덧붙이면 사용자 위치 기록이 됐다.
+    - **핸들러와 다른 좌표를 적었다.** 별칭 우선순위가 `lng` → `lon`이라 `?lon=127&lng=999`는
+      핸들러가 127을 쓰는 동안 999를 기록했다. 확인자료가 실제 사용과 어긋나면 증거가 아니다.
+    - **응답을 깨뜨렸다.** `?lng=abc`의 `Decimal("abc")`는 `InvalidOperation`을 던지는데 이는
+      `ValueError`가 아니라 `ArithmeticError` 계열이라 호출부의 `except ValueError`를 통과했고,
+      정상 200 응답이 500으로 바뀌었다.
+
+    좌표가 실제로 쓰였는지 아는 것은 핸들러뿐이다. 그러므로 감사 대상 경로는
+    `request.state.location_audit_coord`를 **명시적으로** 세팅해야 한다 — 세팅하지 않으면
+    기록되지 않는다. 조용히 빠지는 것을 막는 것은 `PURPOSE_BY_PATH` 경로별 감사 테스트다
+    (`tests/integration/test_location_audit_middleware.py`).
+    """
     state_coord = getattr(request.state, "location_audit_coord", None)
-    if state_coord is not None:
-        lat, lng = state_coord
+    if state_coord is None:
+        return None, None
+    lat, lng = state_coord
+    try:
         return (
             Decimal(str(lat)) if lat is not None else None,
             Decimal(str(lng)) if lng is not None else None,
         )
-
-    lat = request.query_params.get("lat") or request.query_params.get("latitude")
-    lng = (
-        request.query_params.get("lng")
-        or request.query_params.get("lon")
-        or request.query_params.get("longitude")
-    )
-    if lat is None and lng is None:
+    except ArithmeticError:
+        # 핸들러가 숫자가 아닌 것을 선언한 경우다. 감사를 포기할지언정 응답은 깨지 않는다.
+        log.warning("location_audit.undecodable_declared_coord", endpoint=request.url.path)
         return None, None
-    return (
-        Decimal(lat) if lat is not None else None,
-        Decimal(lng) if lng is not None else None,
-    )
 
 
 async def _append_log(

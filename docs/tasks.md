@@ -60,20 +60,24 @@
 
 ## 지도 / 위치
 
-- [ ] **T-329** — 좌표를 감사 로그에 남기지만 동의 게이트가 없는 경로 3개를 정리한다:
-  `GET /regions/covering-point`, `GET /regions/within-radius`(둘 다 단일 점 필수·인증 필요·
-  `region_*` purpose로 적재), `POST /features/requests`(`location_audit_coord` 설정).
-  다만 `/features/requests`의 좌표는 **지도에서 가져온 POI 좌표**라 게이트하면 수동 POI 생성이
-  깨진다 — `source=device|map_pick` 구분을 계약에 넣은 뒤 `device`만 막는 것이 맞다.
-  `/geo/reverse`도 같은 이유로 이 구분을 기다린다. T-327 리뷰에서 발견.
-- [ ] **T-330** — 위치 감사 미들웨어의 query 좌표 fallback이 **부분 좌표에도 감사 행을 남긴다**.
-  `?lat=`만 보내면 `lng=NULL`인 행이, `?lat=&lng=`(별칭)이면 완전한 좌표 행이 적재되는데 정작
-  핸들러는 near-me로 처리하지 않아 제3자 제공이 일어나지 않는다 — 일어나지 않은 제공을 기록하는
-  거짓 감사다. 선재 조건이며 T-327 리뷰에서 발견.
-- [ ] **T-331** — 국내 판정이 `LNG_MIN/MAX 124~132`, `LAT_MIN/MAX 33~43` 단순 bbox라 대마도 등
-  일본 영토 일부가 포함된다. 현재 용도는 `/features/nearby`의 입력 범위 클램프뿐이라 보안 통제가
-  아니지만, 좌표 수준 geofencing이 필요해지면 폴리곤 판정이 있어야 한다(ADR-018의 국가 차단은
-  IP 기반이라 이 문제를 덮지 않는다 — T-268에서 완료). T-325/T-327 리뷰에서 이월.
+## 지도 / 위치
+
+- [ ] **T-332** — 보존 아카이브가 `coord_source`를 버린다. `admin_retention.py`의
+  `_ARCHIVE_LOCATION_SQL`이 컬럼을 명시 나열하는 방식이라 새 컬럼을 조용히 드롭하고, 곧바로
+  `_DELETE_ARCHIVED_LOCATION_SQL`이 원본을 지운다 — 복구 불가다. 0029 이후 archive는 항상 무손실
+  사본이었는데(`data-model.md` §7.4 "동일 payload로 복사") T-329가 그 불변식을 처음 깼다. 게다가
+  아카이브 행의 `content_hash`는 `coord_source`를 커밋하고 있어 사본만으로는 **재검증이 불가능**해진다.
+  수정: archive 테이블에 컬럼 추가 마이그레이션 + INSERT/SELECT 목록 2곳 + 문서 갱신.
+  긴급하지 않은 근거: `LOCATION_LOG_ARCHIVE_RETENTION_MONTHS = 6`이라 `coord_source`를 실은 행이
+  아카이브 자격을 얻는 것은 2027-02-24 이후이고, execute는 `PINVI_RETENTION_EXECUTE_ENABLED`
+  기본 off + CPO 수동이다. T-329 적대적 리뷰에서 발견.
+- [ ] **T-333** — 핸들러가 좌표를 선언했어도 응답이 4xx/5xx면 감사 행이 버려진다
+  (`location_audit.py`의 `if response.status_code >= 400: return response`). 상류에 좌표를 이미
+  보낸 뒤 실패한 경우(예: kor-travel-geo 호출 성공 후 응답 직렬화 실패)에는 위치 사용이 실제로
+  일어났는데 기록이 없다. 선재 조건이며 T-329 리뷰에서 발견.
+- [ ] **T-334** — 프런트가 `LOCATION_CONSENT_REQUIRED`(403)를 복구 가능한 상태로 다루지 않는다.
+  서버 게이트(T-327/T-329)가 실제로 403을 반환할 수 있게 됐지만 웹/모바일은 이를 일반 오류로
+  표시한다. 동의 재요청 흐름으로 연결해야 한다. T-327/T-329 리뷰에서 이월.
 
 ## 웹 / 테스트 인프라
 
