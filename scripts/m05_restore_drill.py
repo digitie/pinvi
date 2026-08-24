@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -52,6 +53,8 @@ _REQUIRED_TEMPLATE_EXTENSIONS = ("citext", "pgcrypto", "pg_trgm")
 _REQUIRED_TEMPLATE_EXTENSIONS_SQL = ", ".join(
     f"'{extension}'" for extension in _REQUIRED_TEMPLATE_EXTENSIONS
 )
+_POSTGRES_SCHEMES = frozenset({"postgres", "postgresql", "postgresql+asyncpg"})
+_ENDPOINT_QUERY_KEYS = frozenset({"host", "hostaddr", "port", "service", "servicefile"})
 _PINNED_TOOL_PATHS: dict[str, str] = {}
 _TOOL_TRUST_MANIFEST_SHA256 = ""
 
@@ -305,26 +308,46 @@ def _database_url(name: str) -> str:
         raise RestoreDrillError(f"{name} must be a PostgreSQL URL")
     if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") == "1":
         return value
+    # Keep this strict endpoint contract aligned with trusted-backup-entrypoint.py:
+    # every root drill endpoint must be bound to one unambiguous server address.
     try:
         parsed = urlsplit(value)
         hostname = parsed.hostname
         port = parsed.port or 5432
     except ValueError as exc:
         raise RestoreDrillError(f"{name} is not a valid PostgreSQL URL") from exc
-    if hostname is None:
-        raise RestoreDrillError(f"{name} must include a database host")
+    if (
+        parsed.scheme not in _POSTGRES_SCHEMES
+        or not parsed.netloc
+        or hostname is None
+        or not parsed.path.startswith("/")
+        or parsed.path == "/"
+        or parsed.fragment
+    ):
+        raise RestoreDrillError(f"{name} is not a canonical PostgreSQL URL")
     query = parse_qsl(parsed.query, keep_blank_values=True)
-    if any(key == "hostaddr" for key, _ in query):
-        raise RestoreDrillError(f"{name} must not provide an unpinned hostaddr")
+    names = [key for key, _ in query]
+    if any(not key for key in names) or len(set(names)) != len(names):
+        raise RestoreDrillError(f"{name} query is ambiguous")
+    if _ENDPOINT_QUERY_KEYS.intersection(names):
+        raise RestoreDrillError(f"{name} must not preconfigure an endpoint override")
     try:
         addresses = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
     except OSError as exc:
         raise RestoreDrillError(f"{name} host could not be resolved") from exc
-    resolved_addresses = [str(item[4][0]) for item in addresses if item[4]]
-    if not resolved_addresses:
-        raise RestoreDrillError(f"{name} host has no resolved address")
-    query.append(("hostaddr", resolved_addresses[0]))
-    return urlunsplit(parsed._replace(query=urlencode(query)))
+    resolved_addresses: set[str] = set()
+    for record in addresses:
+        sockaddr = record[4]
+        if not sockaddr or not isinstance(sockaddr[0], str):
+            continue
+        try:
+            resolved_addresses.add(str(ipaddress.ip_address(sockaddr[0])))
+        except ValueError:
+            continue
+    if len(resolved_addresses) != 1:
+        raise RestoreDrillError(f"{name} host must resolve to exactly one address")
+    query.append(("hostaddr", resolved_addresses.pop()))
+    return urlunsplit(parsed._replace(query=urlencode(query, safe=":")))
 
 
 def _scalar(database_url: str, sql: str, *, check: bool = True) -> subprocess.CompletedProcess[str]:

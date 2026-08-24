@@ -5,9 +5,12 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import socket
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 
 def _restore_drill_module():
@@ -31,6 +34,98 @@ def test_m05_restore_drill_normalizes_asyncpg_url_for_psql() -> None:
     finally:
         os.environ.pop("PINVI_TEST_RESTORE_URL", None)
         os.environ.pop("PINVI_M05_RESTORE_TEST_MODE", None)
+
+
+def test_m05_restore_drill_pins_single_canonical_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _restore_drill_module()
+
+    def getaddrinfo(host: str, port: int, *, type: int) -> list[tuple[object, ...]]:
+        assert host == "app-postgres"
+        assert port == 5432
+        assert type == socket.SOCK_STREAM
+        return [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("::1", port, 0, 0))]
+
+    monkeypatch.setattr(module.socket, "getaddrinfo", getaddrinfo)
+    monkeypatch.setenv(
+        "PINVI_TEST_RESTORE_URL",
+        "postgresql+asyncpg://runtime@app-postgres:5432/pinvi?sslmode=require",
+    )
+    monkeypatch.delenv("PINVI_M05_RESTORE_TEST_MODE", raising=False)
+
+    assert module._database_url("PINVI_TEST_RESTORE_URL") == (
+        "postgresql://runtime@app-postgres:5432/pinvi?sslmode=require&hostaddr=::1"
+    )
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql://runtime@app-postgres:5432/pinvi?host=other-postgres",
+        "postgresql://runtime@app-postgres:5432/pinvi?hostaddr=127.0.0.1",
+        "postgresql://runtime@app-postgres:5432/pinvi?port=6543",
+        "postgresql://runtime@app-postgres:5432/pinvi?service=pinvi",
+        "postgresql://runtime@app-postgres:5432/pinvi?servicefile=/tmp/pg_service.conf",
+        "postgresql://runtime@app-postgres:5432/pinvi?sslmode=require&sslmode=verify-full",
+        "postgresql://runtime@app-postgres:5432/pinvi?=value",
+    ],
+)
+def test_m05_restore_drill_rejects_ambiguous_or_overridden_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+    url: str,
+) -> None:
+    module = _restore_drill_module()
+    monkeypatch.setenv("PINVI_TEST_RESTORE_URL", url)
+    monkeypatch.delenv("PINVI_M05_RESTORE_TEST_MODE", raising=False)
+
+    with pytest.raises(module.RestoreDrillError, match=r"ambiguous|endpoint override"):
+        module._database_url("PINVI_TEST_RESTORE_URL")
+
+
+def test_m05_restore_drill_rejects_multi_address_dns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _restore_drill_module()
+
+    def getaddrinfo(host: str, port: int, *, type: int) -> list[tuple[object, ...]]:
+        assert host == "app-postgres"
+        assert port == 5432
+        assert type == socket.SOCK_STREAM
+        return [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("172.30.0.9", port)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("172.30.0.10", port)),
+        ]
+
+    monkeypatch.setattr(module.socket, "getaddrinfo", getaddrinfo)
+    monkeypatch.setenv(
+        "PINVI_TEST_RESTORE_URL",
+        "postgresql://runtime@app-postgres:5432/pinvi",
+    )
+    monkeypatch.delenv("PINVI_M05_RESTORE_TEST_MODE", raising=False)
+
+    with pytest.raises(module.RestoreDrillError, match="exactly one address"):
+        module._database_url("PINVI_TEST_RESTORE_URL")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql://runtime@app-postgres:5432/",
+        "mysql://runtime@app-postgres:5432/pinvi",
+        "postgresql://runtime@app-postgres:5432/pinvi#fragment",
+    ],
+)
+def test_m05_restore_drill_rejects_noncanonical_database_url(
+    monkeypatch: pytest.MonkeyPatch,
+    url: str,
+) -> None:
+    module = _restore_drill_module()
+    monkeypatch.setenv("PINVI_TEST_RESTORE_URL", url)
+    monkeypatch.delenv("PINVI_M05_RESTORE_TEST_MODE", raising=False)
+
+    with pytest.raises(module.RestoreDrillError, match="PostgreSQL URL"):
+        module._database_url("PINVI_TEST_RESTORE_URL")
 
 
 def test_m05_restore_drill_serializes_target_recreation_and_preflights_staging_role() -> None:
