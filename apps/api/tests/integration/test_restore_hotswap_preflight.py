@@ -176,7 +176,11 @@ GRANT USAGE ON SCHEMA x_extension TO {_quoted(hotswap_role)}, {_quoted(app_role)
         # restore.  Keep this fixture structurally small, but include the exact
         # protected objects so this is a genuine happy-path exercise rather than
         # an ACL-only preflight probe.
-        audit_table = "" if kind == "missing_audit" else "CREATE TABLE app.admin_audit_log (id bigint PRIMARY KEY);"
+        audit_table = (
+            ""
+            if kind == "missing_audit"
+            else "CREATE TABLE app.admin_audit_log (id bigint PRIMARY KEY);"
+        )
         trigger_body = (
             """
   IF TG_OP = 'INSERT' THEN
@@ -193,9 +197,68 @@ GRANT USAGE ON SCHEMA x_extension TO {_quoted(hotswap_role)}, {_quoted(app_role)
         reconciliation_schema = f"""
 CREATE TABLE app.users (id bigint PRIMARY KEY);
 {audit_table}
-CREATE TABLE app.ktm_feature_reference_reconciliation_delivery_attempts (id bigint PRIMARY KEY);
-CREATE TABLE app.ktm_feature_reference_reconciliation_applied_receipts (id bigint PRIMARY KEY);
-CREATE TABLE app.ktm_feature_reference_reconciliation_impacts (id bigint PRIMARY KEY);
+CREATE TABLE app.ktm_feature_reference_reconciliation_delivery_attempts (
+  event_id uuid NOT NULL,
+  attempt_sequence bigint NOT NULL CHECK (attempt_sequence > 0),
+  event_sequence bigint NOT NULL CHECK (event_sequence > 0),
+  event_sha256 varchar(64) NOT NULL CHECK (event_sha256 ~ '^[0-9a-f]{{64}}$'),
+  status varchar(16) NOT NULL,
+  block_fingerprint_sha256 varchar(64),
+  observation_root_sha256 varchar(64) NOT NULL
+    CHECK (observation_root_sha256 ~ '^[0-9a-f]{{64}}$'),
+  PRIMARY KEY (event_id, attempt_sequence),
+  CHECK (
+    (status = 'blocked' AND block_fingerprint_sha256 IS NOT NULL) OR
+    (status = 'applied' AND block_fingerprint_sha256 IS NULL)
+  )
+);
+CREATE TABLE app.ktm_feature_reference_reconciliation_applied_receipts (
+  event_id uuid PRIMARY KEY,
+  event_sequence bigint NOT NULL UNIQUE CHECK (event_sequence > 0),
+  event_sha256 varchar(64) NOT NULL UNIQUE CHECK (event_sha256 ~ '^[0-9a-f]{{64}}$'),
+  action varchar(16) NOT NULL,
+  old_feature_id text NOT NULL,
+  old_feature_uuid uuid NOT NULL,
+  replacement_feature_id text,
+  replacement_feature_uuid uuid,
+  impact_root_sha256 varchar(64) NOT NULL CHECK (impact_root_sha256 ~ '^[0-9a-f]{{64}}$'),
+  impact_count bigint NOT NULL CHECK (impact_count >= 0),
+  receipt_sha256 varchar(64) NOT NULL UNIQUE CHECK (receipt_sha256 ~ '^[0-9a-f]{{64}}$'),
+  CHECK (
+    (replacement_feature_id IS NULL AND replacement_feature_uuid IS NULL) OR
+    (replacement_feature_id IS NOT NULL AND replacement_feature_uuid IS NOT NULL)
+  ),
+  CHECK (
+    (action = 'rebind' AND replacement_feature_id IS NOT NULL) OR
+    (action = 'detach' AND replacement_feature_id IS NULL)
+  )
+);
+CREATE TABLE app.ktm_feature_reference_reconciliation_impacts (
+  event_id uuid NOT NULL,
+  impact_index integer NOT NULL CHECK (impact_index >= 0),
+  target_relation varchar(32) NOT NULL
+    CHECK (target_relation IN ('trip_day_pois', 'curated_plan_pois', 'feature_suggestions')),
+  target_id uuid NOT NULL,
+  old_feature_id text NOT NULL,
+  old_feature_uuid uuid NOT NULL,
+  replacement_feature_id text,
+  replacement_feature_uuid uuid,
+  outcome varchar(24) NOT NULL,
+  PRIMARY KEY (event_id, impact_index),
+  UNIQUE (event_id, target_relation, target_id),
+  FOREIGN KEY (event_id)
+    REFERENCES app.ktm_feature_reference_reconciliation_applied_receipts(event_id)
+    ON DELETE RESTRICT,
+  CHECK (
+    (replacement_feature_id IS NULL AND replacement_feature_uuid IS NULL) OR
+    (replacement_feature_id IS NOT NULL AND replacement_feature_uuid IS NOT NULL)
+  ),
+  CHECK (
+    (outcome = 'rebind' AND replacement_feature_id IS NOT NULL) OR
+    (outcome = 'detach' AND replacement_feature_id IS NULL) OR
+    outcome = 'already_reconciled'
+  )
+);
 CREATE FUNCTION app.guard_ktm_feature_reference_reconciliation_append_only()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -296,7 +359,7 @@ REVOKE INSERT, UPDATE, DELETE ON TABLE app.widgets FROM {_quoted(app_role)};
 
     expected_failure = {
         "canonical": "",
-        "trigger_noop": "M05 append-only trigger unexpectedly allowed TRUNCATE",
+        "trigger_noop": "M05 append-only trigger unexpectedly allowed",
         "missing_audit": "schema-swap requires canonical single-runtime-role ACLs",
         "acl": "schema-swap requires canonical single-runtime-role ACLs",
         "extra": "schema-swap requires exactly one canonical runtime writer role",
@@ -573,7 +636,7 @@ def test_restore_hotswap_rejects_real_noop_append_only_trigger_before_schema_swi
         )
 
         assert result.returncode == 3, result.stdout + result.stderr
-        assert "M05 append-only trigger unexpectedly allowed TRUNCATE" in result.stderr
+        assert "M05 append-only trigger unexpectedly allowed" in result.stderr
         _assert_source_not_swapped(tools, case, previous_schema)
     finally:
         container.stop()

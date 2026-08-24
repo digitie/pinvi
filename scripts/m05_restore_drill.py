@@ -629,28 +629,144 @@ WHERE EXISTS (
 
 
 def _trigger_guard_is_enforced(database_url: str, *, schema: str) -> None:
-    """Catalog metadata alone cannot prove that the guard body still blocks DDL."""
+    """Catalog metadata alone cannot prove that the guard body blocks row mutations."""
 
     sql = f"""
 DO $m05$
-DECLARE
-  protected_table text;
 BEGIN
-  FOREACH protected_table IN ARRAY ARRAY[
-    'ktm_feature_reference_reconciliation_delivery_attempts',
-    'ktm_feature_reference_reconciliation_applied_receipts',
-    'ktm_feature_reference_reconciliation_impacts'
-  ] LOOP
-    BEGIN
-      EXECUTE format('TRUNCATE TABLE %I.%I', '{schema}', protected_table);
-      RAISE EXCEPTION 'M05 append-only trigger unexpectedly allowed TRUNCATE on %', protected_table;
-    EXCEPTION
-      WHEN SQLSTATE '55000' THEN
-        IF SQLERRM NOT ILIKE '%append-only%' THEN
-          RAISE EXCEPTION 'M05 append-only trigger returned an unexpected diagnostic for %', protected_table;
-        END IF;
-    END;
-  END LOOP;
+  -- Do not probe the receipt table with a standalone TRUNCATE: the canonical
+  -- 0060 topology makes impacts reference it with RESTRICT.  Per-table DML
+  -- probes avoid that false failure and each exception block rolls its allowed
+  -- disposable INSERT back with the required 55000 guard rejection.
+  BEGIN
+    INSERT INTO {schema}.ktm_feature_reference_reconciliation_delivery_attempts (
+      event_id, attempt_sequence, event_sequence, event_sha256, status,
+      block_fingerprint_sha256, observation_root_sha256
+    ) VALUES (
+      '10000000-0000-4000-8000-000000000001', 1, 1, repeat('1', 64), 'applied',
+      NULL, repeat('2', 64)
+    );
+    UPDATE {schema}.ktm_feature_reference_reconciliation_delivery_attempts
+    SET status = status
+    WHERE event_id = '10000000-0000-4000-8000-000000000001' AND attempt_sequence = 1;
+    RAISE EXCEPTION 'M05 append-only trigger unexpectedly allowed UPDATE on delivery attempts';
+  EXCEPTION
+    WHEN SQLSTATE '55000' THEN
+      IF SQLERRM NOT ILIKE '%append-only%' THEN
+        RAISE EXCEPTION 'M05 append-only trigger returned an unexpected delivery-attempt UPDATE diagnostic';
+      END IF;
+  END;
+  BEGIN
+    INSERT INTO {schema}.ktm_feature_reference_reconciliation_delivery_attempts (
+      event_id, attempt_sequence, event_sequence, event_sha256, status,
+      block_fingerprint_sha256, observation_root_sha256
+    ) VALUES (
+      '10000000-0000-4000-8000-000000000002', 1, 1, repeat('3', 64), 'applied',
+      NULL, repeat('4', 64)
+    );
+    DELETE FROM {schema}.ktm_feature_reference_reconciliation_delivery_attempts
+    WHERE event_id = '10000000-0000-4000-8000-000000000002' AND attempt_sequence = 1;
+    RAISE EXCEPTION 'M05 append-only trigger unexpectedly allowed DELETE on delivery attempts';
+  EXCEPTION
+    WHEN SQLSTATE '55000' THEN
+      IF SQLERRM NOT ILIKE '%append-only%' THEN
+        RAISE EXCEPTION 'M05 append-only trigger returned an unexpected delivery-attempt DELETE diagnostic';
+      END IF;
+  END;
+  BEGIN
+    INSERT INTO {schema}.ktm_feature_reference_reconciliation_applied_receipts (
+      event_id, event_sequence, event_sha256, action, old_feature_id,
+      old_feature_uuid, replacement_feature_id, replacement_feature_uuid,
+      impact_root_sha256, impact_count, receipt_sha256
+    ) VALUES (
+      '20000000-0000-4000-8000-000000000001', 1, repeat('5', 64), 'detach',
+      'm05-guard-probe', '20000000-0000-4000-8000-000000000002', NULL, NULL,
+      repeat('6', 64), 0, repeat('7', 64)
+    );
+    UPDATE {schema}.ktm_feature_reference_reconciliation_applied_receipts
+    SET action = action
+    WHERE event_id = '20000000-0000-4000-8000-000000000001';
+    RAISE EXCEPTION 'M05 append-only trigger unexpectedly allowed UPDATE on applied receipts';
+  EXCEPTION
+    WHEN SQLSTATE '55000' THEN
+      IF SQLERRM NOT ILIKE '%append-only%' THEN
+        RAISE EXCEPTION 'M05 append-only trigger returned an unexpected applied-receipt UPDATE diagnostic';
+      END IF;
+  END;
+  BEGIN
+    INSERT INTO {schema}.ktm_feature_reference_reconciliation_applied_receipts (
+      event_id, event_sequence, event_sha256, action, old_feature_id,
+      old_feature_uuid, replacement_feature_id, replacement_feature_uuid,
+      impact_root_sha256, impact_count, receipt_sha256
+    ) VALUES (
+      '20000000-0000-4000-8000-000000000003', 1, repeat('8', 64), 'detach',
+      'm05-guard-probe', '20000000-0000-4000-8000-000000000004', NULL, NULL,
+      repeat('9', 64), 0, repeat('a', 64)
+    );
+    DELETE FROM {schema}.ktm_feature_reference_reconciliation_applied_receipts
+    WHERE event_id = '20000000-0000-4000-8000-000000000003';
+    RAISE EXCEPTION 'M05 append-only trigger unexpectedly allowed DELETE on applied receipts';
+  EXCEPTION
+    WHEN SQLSTATE '55000' THEN
+      IF SQLERRM NOT ILIKE '%append-only%' THEN
+        RAISE EXCEPTION 'M05 append-only trigger returned an unexpected applied-receipt DELETE diagnostic';
+      END IF;
+  END;
+  BEGIN
+    INSERT INTO {schema}.ktm_feature_reference_reconciliation_applied_receipts (
+      event_id, event_sequence, event_sha256, action, old_feature_id,
+      old_feature_uuid, replacement_feature_id, replacement_feature_uuid,
+      impact_root_sha256, impact_count, receipt_sha256
+    ) VALUES (
+      '30000000-0000-4000-8000-000000000001', 1, repeat('b', 64), 'detach',
+      'm05-guard-probe', '30000000-0000-4000-8000-000000000002', NULL, NULL,
+      repeat('c', 64), 0, repeat('d', 64)
+    );
+    INSERT INTO {schema}.ktm_feature_reference_reconciliation_impacts (
+      event_id, impact_index, target_relation, target_id, old_feature_id,
+      old_feature_uuid, replacement_feature_id, replacement_feature_uuid, outcome
+    ) VALUES (
+      '30000000-0000-4000-8000-000000000001', 0, 'trip_day_pois',
+      '30000000-0000-4000-8000-000000000003', 'm05-guard-probe',
+      '30000000-0000-4000-8000-000000000002', NULL, NULL, 'detach'
+    );
+    UPDATE {schema}.ktm_feature_reference_reconciliation_impacts
+    SET outcome = outcome
+    WHERE event_id = '30000000-0000-4000-8000-000000000001' AND impact_index = 0;
+    RAISE EXCEPTION 'M05 append-only trigger unexpectedly allowed UPDATE on impacts';
+  EXCEPTION
+    WHEN SQLSTATE '55000' THEN
+      IF SQLERRM NOT ILIKE '%append-only%' THEN
+        RAISE EXCEPTION 'M05 append-only trigger returned an unexpected impact UPDATE diagnostic';
+      END IF;
+  END;
+  BEGIN
+    INSERT INTO {schema}.ktm_feature_reference_reconciliation_applied_receipts (
+      event_id, event_sequence, event_sha256, action, old_feature_id,
+      old_feature_uuid, replacement_feature_id, replacement_feature_uuid,
+      impact_root_sha256, impact_count, receipt_sha256
+    ) VALUES (
+      '30000000-0000-4000-8000-000000000004', 1, repeat('e', 64), 'detach',
+      'm05-guard-probe', '30000000-0000-4000-8000-000000000005', NULL, NULL,
+      repeat('f', 64), 0, repeat('0', 64)
+    );
+    INSERT INTO {schema}.ktm_feature_reference_reconciliation_impacts (
+      event_id, impact_index, target_relation, target_id, old_feature_id,
+      old_feature_uuid, replacement_feature_id, replacement_feature_uuid, outcome
+    ) VALUES (
+      '30000000-0000-4000-8000-000000000004', 0, 'trip_day_pois',
+      '30000000-0000-4000-8000-000000000006', 'm05-guard-probe',
+      '30000000-0000-4000-8000-000000000005', NULL, NULL, 'detach'
+    );
+    DELETE FROM {schema}.ktm_feature_reference_reconciliation_impacts
+    WHERE event_id = '30000000-0000-4000-8000-000000000004' AND impact_index = 0;
+    RAISE EXCEPTION 'M05 append-only trigger unexpectedly allowed DELETE on impacts';
+  EXCEPTION
+    WHEN SQLSTATE '55000' THEN
+      IF SQLERRM NOT ILIKE '%append-only%' THEN
+        RAISE EXCEPTION 'M05 append-only trigger returned an unexpected impact DELETE diagnostic';
+      END IF;
+  END;
 END
 $m05$;
 """.strip()
