@@ -322,7 +322,7 @@ async def _assert_0053_catalog_contract(db: AsyncSession) -> None:
         )
     )
     assert boundary_definition is not None
-    assert "schema_revision = '20260824_0062'::text" in boundary_definition
+    assert "schema_revision = '20260824_0064'::text" in boundary_definition
 
     indexes = dict(
         (
@@ -783,6 +783,8 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
             await connection.execute(
                 text("DROP FUNCTION app.guard_ktm_feature_reference_reconciliation_append_only()")
             )
+            # 0063이 만드는 동의 이벤트 이력도 0053 시점에는 없었다(T-326).
+            await connection.execute(text("DROP TABLE app.user_consent_events"))
             await connection.execute(text("DROP TABLE app.ktm_curation_cutover_backfill_receipts"))
             await connection.execute(
                 text(
@@ -859,7 +861,7 @@ async def test_existing_0053_database_receives_0054_undelete_lock(
             async with engine.connect() as connection:
                 assert (
                     await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
-                    == "20260824_0062"
+                    == "20260824_0064"
                 )
                 new_body = await connection.scalar(
                     text(

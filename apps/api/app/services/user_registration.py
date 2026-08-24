@@ -23,6 +23,7 @@ from app.core.security import (
 )
 from app.models.user import User
 from app.models.user_consent import UserConsent
+from app.models.user_consent_event import UserConsentEvent
 from app.models.user_email_verification import UserEmailVerification
 from app.schemas.consent import ConsentItem
 from app.services.auth_session import revoke_active_user_sessions
@@ -104,6 +105,17 @@ async def register_user(
                 consent_type=item.consent_type,
                 version=item.version,
                 agreed_at=now,
+            )
+        )
+        # 가입 동의도 이력에 남긴다 — 이 경로는 `record_consents`를 타지 않는다(T-326).
+        db.add(
+            UserConsentEvent(
+                user_id=user.user_id,
+                consent_type=item.consent_type,
+                version=item.version,
+                event="agreed",
+                source="register",
+                occurred_at=now,
             )
         )
 
