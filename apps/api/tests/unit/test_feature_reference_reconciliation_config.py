@@ -41,6 +41,7 @@ READ = "r" * 32
 ACK = "a" * 32
 PINVI_REVISION = "f" * 40
 PUBLIC_KEY_PRIVATE = Ed25519PrivateKey.from_private_bytes(b"m05-ed25519-private-key-32bytes!")
+LEASE_PRIVATE_KEY = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
 PUBLIC_KEY = (
     base64.urlsafe_b64encode(PUBLIC_KEY_PRIVATE.public_key().public_bytes_raw())
     .decode("ascii")
@@ -92,9 +93,18 @@ def _production_settings(**overrides: object) -> Settings:
         if isinstance(payload, dict):
             ledger_dir = tempfile.TemporaryDirectory(prefix="pinvi-m05-ledger-", dir="/tmp")
             ledger_path = Path(ledger_dir.name) / "activation-ledger.jsonl"
-            overrides["pinvi_m05_runtime_attestation_path"] = str(
-                _write_runtime_attestation(Path(ledger_dir.name), receipt, payload)
+            runtime_attestation_path = _write_runtime_attestation(
+                Path(ledger_dir.name), receipt, payload
             )
+            overrides["pinvi_m05_runtime_attestation_path"] = str(runtime_attestation_path)
+            lease_directory = Path(ledger_dir.name) / "runtime-lease"
+            _write_runtime_lease(
+                lease_directory,
+                receipt=receipt,
+                runtime_attestation_path=runtime_attestation_path,
+                payload=payload,
+            )
+            overrides["pinvi_m05_runtime_lease_directory"] = str(lease_directory)
             record = {
                 "activation_expires_at": payload["activation_expires_at"],
                 "activation_generation": payload["activation_generation"],
@@ -341,6 +351,67 @@ def _write_runtime_attestation(directory: Path, receipt: str, payload: dict[str,
     )
     path.chmod(0o600)
     return path
+
+
+def _write_runtime_lease(
+    directory: Path,
+    *,
+    receipt: str,
+    runtime_attestation_path: Path,
+    payload: dict[str, object],
+) -> None:
+    directory.mkdir(mode=0o700)
+    public_key = LEASE_PRIVATE_KEY.public_key().public_bytes_raw()
+    key_id = hashlib.sha256(public_key).hexdigest()
+    trust = {
+        "key_id": key_id,
+        "public_key": base64.urlsafe_b64encode(public_key).decode("ascii").rstrip("="),
+        "version": 1,
+    }
+    (directory / "trust.json").write_text(
+        json.dumps(trust, separators=(",", ":")), encoding="utf-8"
+    )
+    (directory / "trust.json").chmod(0o600)
+    runtime_payload = json.loads(runtime_attestation_path.read_text(encoding="utf-8"))["payload"]
+    assert isinstance(runtime_payload, dict)
+    lease_payload = {
+        "activation_generation": payload["activation_generation"],
+        "activation_nonce": payload["activation_nonce"],
+        "dependency_snapshot_sha256": hashlib.sha256(
+            json.dumps(
+                runtime_payload["dependencies"],
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest(),
+        "expires_at": int(time.time()) + 60,
+        "issued_at": int(time.time()) - 1,
+        "key_id": key_id,
+        "receipt_sha256": hashlib.sha256(receipt.encode("utf-8")).hexdigest(),
+        "runtime_attestation_sha256": hashlib.sha256(
+            runtime_attestation_path.read_bytes()
+        ).hexdigest(),
+        "scope": payload["scope"],
+        "sequence": 1,
+        "version": 1,
+    }
+    material = json.dumps(
+        lease_payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+    (directory / "current.json").write_text(
+        json.dumps(
+            {
+                "payload": lease_payload,
+                "signature": base64.urlsafe_b64encode(LEASE_PRIVATE_KEY.sign(material))
+                .decode("ascii")
+                .rstrip("="),
+            },
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+    (directory / "current.json").chmod(0o600)
 
 
 def _production_activation_values(receipt: str) -> dict[str, object]:
