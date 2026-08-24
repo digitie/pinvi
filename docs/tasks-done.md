@@ -29,6 +29,8 @@
       하나만 호출한다. `/features/nearby`는 dependency, `/search`는 near-me 분기 안에서만 검사한다
       (dependency로 걸면 좌표 없는 키워드 검색까지 막힌다). `lbs_tos`+`location_collection` 둘 다
       요구해 프런트 `hasLocationConsent`와 판정을 일치시킨다.
+      적대적 리뷰에서 미게이트 경로 3종과 미들웨어의 부분 좌표 감사, 국내 판정 bbox 잔여를
+      T-329·T-330·T-331로 승계했다.
 
 - [x] **T-326** — 동의/철회 이벤트 이력을 남겨 재동의가 철회 사실을 지우지 않게 한다.
       (완료: 2026-08-24, PR #471, claude)

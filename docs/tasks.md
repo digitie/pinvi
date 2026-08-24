@@ -60,6 +60,21 @@
 
 ## 지도 / 위치
 
+- [ ] **T-329** — 좌표를 감사 로그에 남기지만 동의 게이트가 없는 경로 3개를 정리한다:
+  `GET /regions/covering-point`, `GET /regions/within-radius`(둘 다 단일 점 필수·인증 필요·
+  `region_*` purpose로 적재), `POST /features/requests`(`location_audit_coord` 설정).
+  다만 `/features/requests`의 좌표는 **지도에서 가져온 POI 좌표**라 게이트하면 수동 POI 생성이
+  깨진다 — `source=device|map_pick` 구분을 계약에 넣은 뒤 `device`만 막는 것이 맞다.
+  `/geo/reverse`도 같은 이유로 이 구분을 기다린다. T-327 리뷰에서 발견.
+- [ ] **T-330** — 위치 감사 미들웨어의 query 좌표 fallback이 **부분 좌표에도 감사 행을 남긴다**.
+  `?lat=`만 보내면 `lng=NULL`인 행이, `?lat=&lng=`(별칭)이면 완전한 좌표 행이 적재되는데 정작
+  핸들러는 near-me로 처리하지 않아 제3자 제공이 일어나지 않는다 — 일어나지 않은 제공을 기록하는
+  거짓 감사다. 선재 조건이며 T-327 리뷰에서 발견.
+- [ ] **T-331** — 국내 판정이 `LNG_MIN/MAX 124~132`, `LAT_MIN/MAX 33~43` 단순 bbox라 대마도 등
+  일본 영토 일부가 포함된다. 현재 용도는 `/features/nearby`의 입력 범위 클램프뿐이라 보안 통제가
+  아니지만, 좌표 수준 geofencing이 필요해지면 폴리곤 판정이 있어야 한다(ADR-018의 국가 차단은
+  IP 기반이라 이 문제를 덮지 않는다 — T-268에서 완료). T-325/T-327 리뷰에서 이월.
+
 ## 웹 / 테스트 인프라
 
 - [ ] **T-323** — web 워크플로의 `e2e` 잡이 aggregate required check가 아니라 Playwright 실패가 머지를
