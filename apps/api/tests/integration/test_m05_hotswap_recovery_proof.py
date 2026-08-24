@@ -35,9 +35,7 @@ def _require_psql() -> str:
     return path
 
 
-def _run(
-    command: list[str], *, input_text: str | None = None
-) -> subprocess.CompletedProcess[str]:
+def _run(command: list[str], *, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(  # noqa: S603
         command,
         input=input_text,
@@ -125,8 +123,8 @@ def _prepared_marker(
     }
 
 
-def test_trusted_recovery_rejects_public_create_and_append_only_trigger_drift() -> None:
-    """public CREATE와 ENABLE ALWAYS guard drift는 PG16에서 root recovery를 막는다."""
+def test_trusted_recovery_rejects_authority_surface_drift() -> None:
+    """PG16 catalog의 모든 M05 writer escape drift는 root recovery를 막는다."""
 
     psql = _require_psql()
     try:
@@ -140,6 +138,8 @@ def test_trusted_recovery_rejects_public_create_and_append_only_trigger_drift() 
     restore_role = f"m05_restore_{suffix}"
     app_role = f"m05_app_{suffix}"
     fence_role = f"m05_fence_{suffix}"
+    secdef_owner = f"m05_secdef_{suffix}"
+    helper_schema = f"m05_helper_{suffix}"
     container = PostgresContainer(
         "postgres:16-alpine",
         username="m05_root",
@@ -162,16 +162,14 @@ CREATE ROLE "{app_role}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
   NOREPLICATION NOBYPASSRLS NOINHERIT PASSWORD '{TEST_PASSWORD}';
 CREATE ROLE "{fence_role}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
   NOREPLICATION NOBYPASSRLS NOINHERIT PASSWORD '{TEST_PASSWORD}';
+CREATE ROLE "{secdef_owner}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
+  NOREPLICATION NOBYPASSRLS NOINHERIT PASSWORD '{TEST_PASSWORD}';
 CREATE DATABASE "{database}" OWNER "{restore_role}";
 """,
             )
         )
-        restore_url = _url(
-            host=host, port=port, role=restore_role, database=database
-        )
-        root_target_url = _url(
-            host=host, port=port, role="m05_root", database=database
-        )
+        restore_url = _url(host=host, port=port, role=restore_role, database=database)
+        root_target_url = _url(host=host, port=port, role="m05_root", database=database)
         _require_success(
             _psql(
                 psql,
@@ -212,6 +210,29 @@ BEFORE INSERT OR UPDATE OR DELETE ON app.admin_audit_log
 FOR EACH ROW EXECUTE FUNCTION app.admin_audit_append_only_guard();
 ALTER TABLE app.admin_audit_log
   ENABLE ALWAYS TRIGGER m05_admin_audit_append_only;
+""",
+            )
+        )
+        _require_success(
+            _psql(
+                psql,
+                root_target_url,
+                f"""
+CREATE SCHEMA "{helper_schema}" AUTHORIZATION "{secdef_owner}";
+SET ROLE "{secdef_owner}";
+CREATE FUNCTION "{helper_schema}".m05_external_secdef()
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+BEGIN
+  RETURN 1;
+END;
+$$;
+RESET ROLE;
+GRANT USAGE ON SCHEMA "{helper_schema}" TO "{app_role}";
+GRANT EXECUTE ON FUNCTION "{helper_schema}".m05_external_secdef() TO "{app_role}";
 """,
             )
         )
@@ -267,8 +288,67 @@ ALTER TABLE app.admin_audit_log
             _psql(
                 psql,
                 restore_url,
-                "ALTER TABLE app.admin_audit_log "
-                "DISABLE TRIGGER m05_admin_audit_append_only;",
+                "ALTER TABLE app.admin_audit_log DISABLE TRIGGER m05_admin_audit_append_only;",
+            )
+        )
+        with pytest.raises(hotswap.TrustedHotswapError, match="ACL topology"):
+            hotswap._safe_recovery_observation(marker, restore_url, TOPOLOGY_SQL)
+
+        _require_success(
+            _psql(
+                psql,
+                root_target_url,
+                f"""
+ALTER TABLE app.admin_audit_log
+  ENABLE ALWAYS TRIGGER m05_admin_audit_append_only;
+SET ROLE "{secdef_owner}";
+CREATE OR REPLACE FUNCTION "{helper_schema}".m05_external_secdef()
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+BEGIN
+  RETURN 2;
+END;
+$$;
+RESET ROLE;
+""",
+            )
+        )
+        with pytest.raises(hotswap.TrustedHotswapError, match="ACL topology"):
+            hotswap._safe_recovery_observation(marker, restore_url, TOPOLOGY_SQL)
+
+        body_topology_sha256 = _topology_sha256(
+            psql, restore_url, app_role=app_role, fence_role=fence_role
+        )
+        assert body_topology_sha256 != topology_sha256
+        marker["acl_topology_sha256"] = body_topology_sha256
+        assert hotswap._safe_recovery_observation(marker, restore_url, TOPOLOGY_SQL)
+
+        _require_success(
+            _psql(
+                psql,
+                root_target_url,
+                f'GRANT EXECUTE ON FUNCTION "{helper_schema}".m05_external_secdef() '
+                f'TO "{app_role}" WITH GRANT OPTION;',
+            )
+        )
+        with pytest.raises(hotswap.TrustedHotswapError, match="ACL topology"):
+            hotswap._safe_recovery_observation(marker, restore_url, TOPOLOGY_SQL)
+
+        grant_option_topology_sha256 = _topology_sha256(
+            psql, restore_url, app_role=app_role, fence_role=fence_role
+        )
+        assert grant_option_topology_sha256 != body_topology_sha256
+        marker["acl_topology_sha256"] = grant_option_topology_sha256
+        assert hotswap._safe_recovery_observation(marker, restore_url, TOPOLOGY_SQL)
+
+        _require_success(
+            _psql(
+                psql,
+                root_target_url,
+                f'GRANT pg_read_all_data TO "{secdef_owner}";',
             )
         )
         with pytest.raises(hotswap.TrustedHotswapError, match="ACL topology"):

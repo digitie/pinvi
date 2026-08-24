@@ -46,6 +46,34 @@ source_owner_scope AS (
 restore_executor_scope AS (
   SELECT current_user::regrole::oid AS role_oid
 ),
+-- An executable SECURITY DEFINER routine outside ``app`` is an authority
+-- boundary even when its caller has no direct DML privilege.  Its owner and
+-- every role-membership edge touching that owner must therefore participate
+-- in the topology proof as well.  Do not join through ``role_scope`` here:
+-- that would make this scope depend on itself.
+accessible_security_definer_scope AS (
+  SELECT
+    procedure_row.oid,
+    procedure_row.pronamespace,
+    namespace_row.nspname,
+    procedure_row.proowner,
+    procedure_row.proacl,
+    procedure_row.prosecdef,
+    pg_get_function_identity_arguments(procedure_row.oid) AS identity_arguments,
+    pg_get_functiondef(procedure_row.oid) AS definition
+  FROM pg_proc AS procedure_row
+  JOIN pg_namespace AS namespace_row
+    ON namespace_row.oid = procedure_row.pronamespace
+  CROSS JOIN parameters
+  WHERE procedure_row.prosecdef
+    AND namespace_row.nspname NOT IN ('pg_catalog', 'pg_toast', 'information_schema')
+    AND namespace_row.nspname <> parameters.source_schema
+    AND has_function_privilege(parameters.app_role, procedure_row.oid, 'EXECUTE')
+),
+security_definer_owner_scope AS (
+  SELECT DISTINCT procedure_row.proowner AS role_oid
+  FROM accessible_security_definer_scope AS procedure_row
+),
 role_scope AS (
   SELECT
     role_row.oid,
@@ -73,6 +101,7 @@ role_scope AS (
   WHERE role_row.rolname IN (parameters.app_role, parameters.fence_role)
      OR role_row.oid IN (SELECT role_oid FROM source_owner_scope)
      OR role_row.oid IN (SELECT role_oid FROM restore_executor_scope)
+     OR role_row.oid IN (SELECT role_oid FROM security_definer_owner_scope)
 ),
 default_acl_owner_scope AS (
   SELECT role_oid FROM source_owner_scope
@@ -447,19 +476,33 @@ entries AS (
 
   SELECT jsonb_build_object(
     'kind', 'accessible_security_definer',
-    'oid', procedure_row.oid,
-    'schema', namespace_row.nspname,
-    'owner', procedure_row.proowner,
-    'identity_arguments', pg_get_function_identity_arguments(procedure_row.oid)
+    'oid', procedure_scope.oid,
+    'schema', procedure_scope.nspname,
+    'owner', procedure_scope.proowner,
+    'identity_arguments', procedure_scope.identity_arguments,
+    'security_definer', procedure_scope.prosecdef,
+    'acl_is_null', procedure_scope.proacl IS NULL,
+    'definition', procedure_scope.definition
   )
-  FROM pg_proc AS procedure_row
-  JOIN pg_namespace AS namespace_row ON namespace_row.oid = procedure_row.pronamespace
-  JOIN role_scope AS app_role ON app_role.rolname = (SELECT app_role FROM parameters)
-  CROSS JOIN parameters
-  WHERE procedure_row.prosecdef
-    AND namespace_row.nspname NOT IN ('pg_catalog', 'pg_toast', 'information_schema')
-    AND namespace_row.nspname <> parameters.source_schema
-    AND has_function_privilege(app_role.oid, procedure_row.oid, 'EXECUTE')
+  FROM accessible_security_definer_scope AS procedure_scope
+
+  UNION ALL
+
+  SELECT jsonb_build_object(
+    'kind', 'accessible_security_definer_acl',
+    'procedure_oid', procedure_scope.oid,
+    'grantor', acl.grantor,
+    'grantee', acl.grantee,
+    'privilege', acl.privilege_type,
+    'grant_option', acl.is_grantable
+  )
+  FROM accessible_security_definer_scope AS procedure_scope
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(
+      procedure_scope.proacl,
+      acldefault('f', procedure_scope.proowner)
+    )
+  ) AS acl
 )
 SELECT encode(
   x_extension.digest(
