@@ -29,6 +29,10 @@ export function buildNewPlaceRequest(
   coord: { lon: number; lat: number },
 ): FeatureRequestCreate {
   return {
+    // 이 다이얼로그의 좌표는 사용자가 지도에서 고른 지점이다 — 단말 측위 결과가 아니다(T-329).
+    // 서버는 `device`에만 위치 동의를 요구하므로, 여기서 잘못 선언하면 동의를 철회한 사용자의
+    // 수동 POI 제안이 403으로 막힌다.
+    coord_source: 'map_pick',
     type: 'new_place',
     kind: form.kind,
     title: form.title.trim(),

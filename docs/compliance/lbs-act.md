@@ -115,8 +115,12 @@ CREATE INDEX ON app.location_access_log (user_id, occurred_at DESC);
 | `region_covering`           | `/regions/covering-point`                  |
 | `region_radius`             | `/regions/within-radius`                   |
 | `third_party_place_search`  | `/search` (near-me 분기, ADR-054 §9)       |
+| `reverse_geocode`           | `/geo/reverse`                             |
 | ~~`viewport_query`~~        | 발행 중단 (T-330) — 아래 정오표            |
 | ~~`weather_at_coord`~~      | 발행 중단 (T-330) — 아래 정오표            |
+
+각 행은 좌표의 **출처**(`coord_source`)를 함께 담는다 — `device`(사용자 자신의 위치) 또는
+`map_pick`(지도에서 고른 지점). NULL은 이 컬럼이 없던 시기의 행이다(ADR-063).
 
 #### 정오표 — T-330 이전 기간의 기록 (2026-08-24)
 

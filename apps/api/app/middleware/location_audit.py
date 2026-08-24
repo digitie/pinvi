@@ -17,6 +17,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.core.coord_source import CoordSource
 from app.db.session import async_session_factory
 from app.services.hash_chain import sha256_hex
 from app.services.location_audit import append_location_log, enqueue_location_audit_outbox
@@ -30,6 +31,9 @@ PURPOSE_BY_PATH: dict[str, str] = {
     # "내 주변 검색"으로 사용자 좌표를 Kakao에 제3자 제공(ADR-054 §9). 좌표는 핸들러가
     # request.state.location_audit_coord로 세팅하며, 좌표 없는 키워드 검색은 감사 대상이 아니다.
     "/search": "third_party_place_search",
+    # 지도 클릭 지점의 주소 label. 좌표 출처를 `map_pick`으로 적을 수 있게 된 뒤에야 감사에 넣었다
+    # — 그 전에는 지도 클릭을 "사용자의 위치"로 기록하는 셈이었다(T-329).
+    "/geo/reverse": "reverse_geocode",
 }
 
 
@@ -48,6 +52,7 @@ class LocationAuditMiddleware(BaseHTTPMiddleware):
             return response
 
         lat, lng = _declared_coord(request)
+        coord_source = getattr(request.state, "location_audit_coord_source", None)
 
         # 핸들러가 좌표를 선언하지 않았으면 위치정보 사용/제3자 제공이 없었던 것이므로 감사하지
         # 않는다. 반쪽 좌표도 마찬가지다 — 위경도 중 하나만으로는 어떤 위치도 지목하지 못하므로
@@ -96,6 +101,7 @@ class LocationAuditMiddleware(BaseHTTPMiddleware):
                     lng=lng,
                     request_id=request_id,
                     ip_hash=ip_hash,
+                    coord_source=coord_source,
                 )
         except Exception as exc:
             log.warning("location_audit.enqueue_failed", error=str(exc))
@@ -109,6 +115,25 @@ def _classify_purpose(path: str) -> str | None:
     if path == "/features/requests":
         return "feature_request"
     return None
+
+
+def declare_location_audit(
+    request: Request,
+    *,
+    lat: Decimal | None,
+    lng: Decimal | None,
+    source: CoordSource,
+) -> None:
+    """감사 대상 핸들러가 자기 좌표와 그 **출처**를 함께 선언한다.
+
+    좌표와 출처를 하나의 호출로 묶는 이유는, 둘 중 하나만 세팅하는 실수를 구조적으로 막기 위해서다.
+    출처 없는 좌표는 "누구의 위치인지 모르는 좌표"이고 그것은 확인자료로 쓸 수 없다.
+
+    `lat`/`lng`가 `None`이면 "이번 요청에서는 좌표를 쓰지 않았다"는 명시적 선언이다
+    (`/search`의 키워드-only 분기가 그렇게 쓴다).
+    """
+    request.state.location_audit_coord = (lat, lng)
+    request.state.location_audit_coord_source = source
 
 
 def _declared_coord(request: Request) -> tuple[Decimal | None, Decimal | None]:

@@ -23,6 +23,9 @@ describe('featureRequest', () => {
       coord: { lon: 126.97, lat: 37.57 },
       categories: ['카페'],
       note: null,
+      // T-329: 이 다이얼로그의 좌표는 지도에서 고른 지점이다. `device`로 잘못 선언하면 위치 동의를
+      // 철회한 사용자의 수동 POI 제안이 서버에서 403으로 막힌다.
+      coord_source: 'map_pick',
       // T-303(ADR-054): 빌더는 source/external_ref 기본값을 채운다.
       source: 'user',
       external_ref: null,

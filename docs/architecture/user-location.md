@@ -227,10 +227,12 @@ export default function MapPage() {
 
 - `GET /features/in-bounds` — bbox는 사용자가 보고 있는 화면 영역이지 사용자의 위치가 아니다.
 - `GET /features/{id}/weather` — 좌표는 그 feature의 위치다.
-- `GET /geo/reverse?lon=&lat=` — 지도 클릭 지점의 주소 label이다. 유일한 호출자
-  (`TripManualPoiDialog`)가 지도에서 고른 좌표를 보낸다. **과거 이 문서는 `reverse_geocode`
-  적재를 규정했지만 미들웨어는 이 경로를 분류한 적이 없다** — 구현이 아니라 문서가 틀렸고,
-  좌표 출처를 계약으로 구분하기 전까지(T-329) 사용자 위치로 기록하는 것이 오히려 부정확하다.
+- `GET /geo/reverse?lon=&lat=` — `reverse_geocode`. 기본 출처는 `map_pick`이다.
+
+각 좌표는 **출처**(`coord_source`)와 함께 기록된다 — `device`(사용자 자신의 위치) 또는
+`map_pick`(지도에서 고른 지점). 동의 게이트는 `device`에만 걸린다(ADR-063). `/regions/*`,
+`/geo/reverse`는 query로, `POST /features/requests`는 body로 출처를 받고 기본값은 `map_pick`이다.
+`/features/nearby`와 `/search` near-me는 endpoint의 의미상 `device`로 서버가 고정한다.
 
 서버 미들웨어 `apps/api/app/middleware/location_audit.py`:
 
@@ -265,6 +267,7 @@ async def location_audit(request: Request, call_next):
 - `/regions/within-radius` → `'region_radius'`
 - `/features/requests` → `'feature_request'`
 - `/search` → `'third_party_place_search'` (near-me 분기에서만)
+- `/geo/reverse` → `'reverse_geocode'`
 
 `viewport_query`·`weather_at_coord`는 DB CHECK에 남아 있지만(과거 행 보존) 더는 발행되지
 않는다. 경로별 감사 여부는 `tests/integration/test_location_audit_middleware.py`가 고정한다.

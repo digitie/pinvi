@@ -6,17 +6,22 @@
 
 from __future__ import annotations
 
+import uuid
 from decimal import Decimal
 from typing import Annotated, Any, NoReturn
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.kor_travel_geo import (
     KorTravelGeoBadRequest,
     KorTravelGeoClientDep,
     KorTravelGeoUnavailable,
 )
-from app.core.deps import CurrentUserId
+from app.core.consent_deps import assert_location_consent
+from app.core.coord_source import CONSENT_REQUIRED_COORD_SOURCES, CoordSource
+from app.core.deps import CurrentUserId, DbSession
+from app.middleware.location_audit import declare_location_audit
 from app.schemas.envelope import Envelope
 from app.schemas.geo import (
     BoundaryLevel,
@@ -60,6 +65,28 @@ def _raise_geo_http(exc: KorTravelGeoUnavailable | KorTravelGeoBadRequest) -> No
 _AUDIT_PRECISION = Decimal("0.000001")
 
 
+async def _gate_and_declare(
+    request: Request,
+    *,
+    db: AsyncSession,
+    user_id: str,
+    lon: float,
+    lat: float,
+    coord_source: CoordSource,
+) -> None:
+    """출처가 `device`면 위치 동의를 요구하고, 어느 쪽이든 확인자료에 출처를 함께 남긴다.
+
+    `map_pick`을 게이트하지 않는 이유는 그것이 개인위치정보가 아니기 때문이다 — 사용자가 지도에서
+    찍은 점을 동의 철회로 막으면 동의와 무관한 기능이 깨진다. 반대로 `device`를 열어 두면 철회한
+    사용자의 실제 위치가 통과한다. 이 갈림을 계약으로 만든 것이 `coord_source`다.
+    """
+    if coord_source in CONSENT_REQUIRED_COORD_SOURCES:
+        await assert_location_consent(db, user_id=uuid.UUID(user_id))
+    declare_location_audit(
+        request, lat=_audit_decimal(lat), lng=_audit_decimal(lon), source=coord_source
+    )
+
+
 def _audit_decimal(value: float) -> Decimal:
     """확인자료에 적을 좌표 — 저장 정밀도(소수점 6자리)로 맞춘다.
 
@@ -90,11 +117,18 @@ async def geocode(
 async def reverse(
     _current_user: CurrentUserId,
     client: KorTravelGeoClientDep,
+    request: Request,
+    db: DbSession,
     lon: Annotated[float, LON],
     lat: Annotated[float, LAT],
     radius_m: Annotated[int, Query(ge=10, le=5000)] = 200,
+    coord_source: Annotated[CoordSource, Query()] = "map_pick",
 ) -> Envelope[GeoCandidateList]:
-    """좌표 → 주소/행정구역 후보. 좌표 query는 location_audit 미들웨어가 chain 적재."""
+    """좌표 → 주소/행정구역 후보. 기본 출처는 지도 클릭(`map_pick`)이다."""
+    # 좌표 출처를 선언받아 확인자료에 그대로 적고, `device`일 때만 동의를 요구한다(T-329).
+    await _gate_and_declare(
+        request, db=db, user_id=_current_user, lon=lon, lat=lat, coord_source=coord_source
+    )
     try:
         payload = await client.reverse(lon=lon, lat=lat, radius_m=radius_m)
     except (KorTravelGeoUnavailable, KorTravelGeoBadRequest) as exc:
@@ -125,14 +159,19 @@ async def regions_covering_point(
     _current_user: CurrentUserId,
     client: KorTravelGeoClientDep,
     request: Request,
+    db: DbSession,
     lon: Annotated[float, LON],
     lat: Annotated[float, LAT],
     boundary_level: Annotated[BoundaryLevel, Query()] = "emd",
+    coord_source: Annotated[CoordSource, Query()] = "map_pick",
 ) -> Envelope[RegionCovering]:
     """좌표를 포함하는 행정구역(단건) — kor-travel-geo `/v2/reverse`의 최선 후보 region. 미매치 404.
 
     `boundary_level`은 응답에 echo되는 요청 hint다(reverse region에서 파생하지 않는다)."""
-    request.state.location_audit_coord = (_audit_decimal(lat), _audit_decimal(lon))
+    # 좌표 출처를 선언받아 확인자료에 그대로 적고, `device`일 때만 동의를 요구한다(T-329).
+    await _gate_and_declare(
+        request, db=db, user_id=_current_user, lon=lon, lat=lat, coord_source=coord_source
+    )
     try:
         payload = await client.reverse(lon=lon, lat=lat, include_region=True)
     except (KorTravelGeoUnavailable, KorTravelGeoBadRequest) as exc:
@@ -189,13 +228,18 @@ async def regions_within_radius(
     _current_user: CurrentUserId,
     client: KorTravelGeoClientDep,
     request: Request,
+    db: DbSession,
     lon: Annotated[float, LON],
     lat: Annotated[float, LAT],
     radius_km: Annotated[float, Query(gt=0, le=500.0)] = 3.0,
     levels: Annotated[list[BoundaryLevel] | None, Query()] = None,
+    coord_source: Annotated[CoordSource, Query()] = "map_pick",
 ) -> Envelope[RegionsWithinRadius]:
     """좌표 반경 내 행정구역 — level별(sido/sigungu/emd) 그룹. 기본 levels=[sigungu, emd]."""
-    request.state.location_audit_coord = (_audit_decimal(lat), _audit_decimal(lon))
+    # 좌표 출처를 선언받아 확인자료에 그대로 적고, `device`일 때만 동의를 요구한다(T-329).
+    await _gate_and_declare(
+        request, db=db, user_id=_current_user, lon=lon, lat=lat, coord_source=coord_source
+    )
     try:
         payload = await client.regions_within_radius(
             lon=lon, lat=lat, radius_km=radius_km, levels=levels or ["sigungu", "emd"]

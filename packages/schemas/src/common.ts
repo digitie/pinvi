@@ -13,6 +13,14 @@ export const CoordSchema = z.object({
 });
 export type Coord = z.infer<typeof CoordSchema>;
 
+/**
+ * 좌표의 출처 (T-329). `device`는 사용자 자신의 위치(개인위치정보)이고 `map_pick`은 사용자가
+ * 지도에서 고른 지점이다. 서버는 `device`에만 위치 동의를 요구한다 — `map_pick`까지 막으면
+ * 동의와 무관한 지도 기능이 깨진다. 정본 정의는 `apps/api/app/core/coord_source.py`.
+ */
+export const CoordSourceSchema = z.enum(['device', 'map_pick']);
+export type CoordSource = z.infer<typeof CoordSourceSchema>;
+
 /** API 공통 성공 응답 wrapper. */
 export const SuccessEnvelopeSchema = <T extends z.ZodTypeAny>(data: T) =>
   z.object({

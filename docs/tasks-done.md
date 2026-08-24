@@ -20,6 +20,24 @@
 
 ## 2026-08-24
 
+- [x] **T-329** — 확인자료가 좌표의 **출처**를 기록하고, 동의 게이트는 `device`에만 걸린다.
+      (완료: 2026-08-24, PR TBD, claude, ADR-063)
+      T-327이 `/regions/*`·`POST /features/requests`·`/geo/reverse`를 미게이트로 남긴 이유가
+      "좌표 출처가 계약상 구분되지 않는다"였다. 구분이 없으면 선택지가 둘뿐인데 **둘 다 틀렸다** —
+      전부 막으면 지도에서 POI를 고르는 기능이 깨지고, 전부 열면 철회한 사용자의 실제 위치가
+      통과한다. `coord_source`(`device`/`map_pick`)를 계약에 넣어 그 갈림을 없앴다.
+      `/regions/*`·`/geo/reverse`는 query로, `POST /features/requests`는 body로 출처를 받고
+      기본값은 `map_pick`이다(현재 실사용 호출자가 전부 지도 클릭이라 기본값이 `device`면 기존
+      흐름이 403으로 깨진다). `/features/nearby`와 `/search` near-me는 endpoint의 의미상 좌표가
+      사용자 위치일 수밖에 없어 선언을 받지 않고 서버가 `device`로 고정한다 — 클라이언트가
+      `map_pick`이라 우겨도 무시된다. `/geo/reverse`를 `reverse_geocode`로 실제 감사에 넣었다
+      (문서 3곳이 오래 규정했지만 구현된 적이 없던 것 — T-330에서 문서를 정정했고, 출처를 적을 수
+      있게 된 지금은 `map_pick`으로 정직하게 남길 수 있다). 해시 체인은 출처가 없을 때 payload
+      **키 자체를 생략**해 과거 행의 재계산 바이트를 보존한다(`"coord_source": null`을 넣으면 이
+      컬럼이 없던 시절 행 전체의 content_hash가 어긋난다). 한계는 ADR-063에 명시했다 — 출처는
+      클라이언트의 선언이라 거짓말할 수 있고, 그럼에도 이 설계인 이유는 게이트가 막으려는 것이
+      적대적 클라이언트가 아니라 **자사 클라이언트가 철회를 존중하지 않는 것**이기 때문이다.
+
 - [x] **T-330** — 위치 감사가 **핸들러가 선언한 좌표만** 기록한다. (완료: 2026-08-24, PR TBD, claude)
       미들웨어가 query string(`lat`/`lng`/`lon`/`latitude`/`longitude`)을 추측해 읽던 것을 없애고
       `request.state.location_audit_coord`를 유일 정본으로 삼았다. 추측은 확인자료를 세 방향으로

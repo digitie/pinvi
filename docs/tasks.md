@@ -60,12 +60,6 @@
 
 ## 지도 / 위치
 
-- [ ] **T-329** — 좌표를 감사 로그에 남기지만 동의 게이트가 없는 경로 3개를 정리한다:
-  `GET /regions/covering-point`, `GET /regions/within-radius`(둘 다 단일 점 필수·인증 필요·
-  `region_*` purpose로 적재), `POST /features/requests`(`location_audit_coord` 설정).
-  다만 `/features/requests`의 좌표는 **지도에서 가져온 POI 좌표**라 게이트하면 수동 POI 생성이
-  깨진다 — `source=device|map_pick` 구분을 계약에 넣은 뒤 `device`만 막는 것이 맞다.
-  `/geo/reverse`도 같은 이유로 이 구분을 기다린다. T-327 리뷰에서 발견.
 - [ ] **T-331** — 국내 판정이 `LNG_MIN/MAX 124~132`, `LAT_MIN/MAX 33~43` 단순 bbox라 대마도 등
   일본 영토 일부가 포함된다. 현재 용도는 `/features/nearby`의 입력 범위 클램프뿐이라 보안 통제가
   아니지만, 좌표 수준 geofencing이 필요해지면 폴리곤 판정이 있어야 한다(ADR-018의 국가 차단은

@@ -2979,5 +2979,44 @@ fixture mutation 전에 fail-close할 수 있다.
   만들어내지 않는다(없는 이력을 추정해 넣는 것이 더 나쁜 증빙이다). 서버측 동의 게이트(T-327)는
   이 테이블이 아니라 `has_valid_consents`라는 단일 읽기 지점을 통해 현재 상태를 본다.
 
-- 다음 신규 ADR = **ADR-063**
+## ADR-063: 위치 확인자료는 좌표와 함께 **출처**(`device`/`map_pick`)를 기록하고, 동의 게이트는 `device`에만 건다
+
+- **Status**: Accepted (2026-08-24, T-329)
+- **Context**: `location_access_log`가 좌표를 적으면서 그것이 사용자 자신의 위치인지 사용자가
+  지도에서 고른 지점인지 구분하지 않았다. 구분이 없으면 두 가지가 동시에 불가능해진다.
+  (a) 사용자에게 보여줄 "위치 사용 내역"이 지도 클릭까지 "당신의 위치를 썼다"고 말한다.
+  (b) 좌표 endpoint에 동의 게이트를 걸 수 없다 — 걸면 지도에서 POI를 고르는 기능이 깨지고,
+  안 걸면 철회한 사용자의 실제 위치도 통과한다. T-327이 `/regions/*`와 `POST /features/requests`,
+  `/geo/reverse`를 미게이트로 남긴 이유가 정확히 이것이었다.
+- **Decision**:
+  - `location_access_log`/`location_audit_outbox`에 nullable `coord_source`를 두고 값은
+    `device`(사용자 자신의 위치, 개인위치정보) 또는 `map_pick`(사용자가 지도에서 고른 지점)이다.
+    NULL은 "기록 시점에 이 개념이 없었다"는 뜻이며 과거 행을 소급 판정하지 않는다.
+  - 동의 게이트(T-327)는 `device`에만 건다. `map_pick`은 개인위치정보가 아니므로 게이트하지 않는다.
+  - 출처를 파라미터로 받는 경로: `/regions/covering-point`, `/regions/within-radius`,
+    `/geo/reverse`(query), `POST /features/requests`(body). 기본값은 모두 `map_pick`이다 —
+    현재 실사용 호출자가 전부 지도 클릭이고, 기본값이 `device`면 기존 흐름이 403으로 깨진다.
+  - 출처가 endpoint의 의미로 정해지는 경로는 선언을 받지 않고 서버가 `device`로 고정한다
+    (`/features/nearby`, `/search` near-me 분기). 클라이언트가 `map_pick`이라 우겨도 무시된다.
+  - `/geo/reverse`를 `PURPOSE_BY_PATH`에 `reverse_geocode`로 등록해 실제로 감사한다. 문서 3곳이
+    오래 그렇게 규정했지만 구현된 적이 없었고(T-330에서 문서 정정), 출처를 적을 수 있게 된
+    지금은 지도 클릭을 `map_pick`으로 정직하게 남길 수 있다.
+  - 해시 체인 payload는 출처가 없을 때 **키 자체를 넣지 않는다**. payload가 `sort_keys=True`
+    canonical JSON이라 `"coord_source": null`을 넣으면 이 컬럼이 없던 시절 행 전체의
+    content_hash가 어긋나 체인 검증이 무너진다.
+- **한계 (명시)**: `coord_source`는 **클라이언트의 선언**이다. 서버는 좌표만 보고 그것이 단말
+  측위 결과인지 지도 탭 결과인지 알 수 없으므로, `map_pick`이라 거짓 선언하면 게이트를 지난다.
+  그럼에도 이 설계를 택한 근거: (1) 게이트가 막으려는 것은 자사 클라이언트가 철회를 존중하지 않는
+  것이지 적대적 클라이언트가 아니다 — 후자는 자기 자격증명으로 자기 좌표를 보내는 것이라 위협
+  모델이 다르다. (2) 거짓 선언도 확인자료에 그대로 남아 사후에 드러난다. (3) 좌표만으로 출처를
+  판정할 방법이 없으므로 대안은 "전부 막기"(기능 파손)나 "전부 열기"(현재 상태)뿐이다.
+- **Consequences**: 확인자료가 "누구의 위치였는가"를 답할 수 있게 된다. 동의 철회가 지도 기능을
+  깨뜨리지 않으면서 실제 위치 수집만 차단한다. 새 좌표 endpoint를 추가하는 사람은 출처를 선언해야
+  하며(`declare_location_audit`이 좌표와 출처를 한 호출로 묶는다), 경로별 감사 여부는
+  `tests/integration/test_location_audit_middleware.py`와 `test_location_coord_source.py`가 고정한다.
+- **Alternatives**: (a) 모든 좌표 경로 게이트 — 지도 클릭 기반 POI 생성·역지오코딩이 깨진다.
+  (b) 게이트 없음(현재) — 철회가 서버에서 무의미해진다. (c) 서버가 출처를 추론 — 좌표만으로는
+  불가능하고, 정확도/이동성 같은 힌트를 받아도 결국 클라이언트 선언이라 (현재 안)과 같은 한계다.
+
+- 다음 신규 ADR = **ADR-064**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

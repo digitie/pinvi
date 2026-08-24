@@ -47,6 +47,7 @@ async def append_location_log(
     lng: Decimal | None,
     request_id: uuid.UUID,
     ip_hash: str,
+    coord_source: str | None = None,
     occurred_at: datetime | None = None,
     commit: bool = True,
 ) -> LocationAccessLog:
@@ -66,6 +67,11 @@ async def append_location_log(
         "request_id": str(request_id),
         "ip_hash": ip_hash,
     }
+    # 출처가 없으면 **키 자체를 넣지 않는다.** payload는 `sort_keys=True` canonical JSON이므로,
+    # 키를 생략해야 이 컬럼이 없던 시절 행의 재계산 결과가 바이트 단위로 그대로 유지된다
+    # (`"coord_source": null`을 넣으면 과거 행 전체의 content_hash가 어긋나 체인이 깨진다).
+    if coord_source is not None:
+        payload["coord_source"] = coord_source
     row = LocationAccessLog(
         user_id=user_id,
         occurred_at=moment,
@@ -75,6 +81,7 @@ async def append_location_log(
         lng=lng,
         request_id=request_id,
         ip_hash=ip_hash,
+        coord_source=coord_source,
         prev_hash=prev_hash,
         content_hash=compute_content_hash(prev_hash, payload),
     )
@@ -96,6 +103,7 @@ async def enqueue_location_audit_outbox(
     lng: Decimal | None,
     request_id: uuid.UUID,
     ip_hash: str,
+    coord_source: str | None = None,
 ) -> None:
     """요청 경로 — outbox에 빠르게 append(체인 계산 없음)."""
     session.add(
@@ -108,6 +116,7 @@ async def enqueue_location_audit_outbox(
             lng=lng,
             request_id=request_id,
             ip_hash=ip_hash,
+            coord_source=coord_source,
         )
     )
     await session.commit()
@@ -148,6 +157,7 @@ async def drain_location_audit_outbox(session: AsyncSession, *, batch_size: int 
                     lng=event.lng,
                     request_id=event.request_id,
                     ip_hash=event.ip_hash,
+                    coord_source=event.coord_source,
                     occurred_at=event.occurred_at,
                     commit=False,
                 )

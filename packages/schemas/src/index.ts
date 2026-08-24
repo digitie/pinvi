@@ -2,10 +2,11 @@ export {
   Iso8601Schema,
   NonNegativeDecimalStringSchema,
   CoordSchema,
+  CoordSourceSchema,
   SuccessEnvelopeSchema,
   ErrorEnvelopeSchema,
 } from './common';
-export type { Coord, ErrorEnvelope } from './common';
+export type { Coord, CoordSource, ErrorEnvelope } from './common';
 
 export {
   RegisterRequestSchema,

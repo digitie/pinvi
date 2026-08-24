@@ -12,19 +12,19 @@
 **주의**: 이 게이트는 "사용자 자신의 위치"를 받는 경로에만 건다. 지도 클릭·검색 결과처럼 사용자
 위치가 아닌 좌표까지 막으면 동의와 무관한 기능이 깨진다.
 
-현재 적용 범위와 제외 근거(감사 로그에 좌표가 남는 경로 기준):
+게이트는 좌표의 **출처**(`app.core.coord_source.CoordSource`)로 갈린다 — `device`(사용자 자신의
+위치)만 막고 `map_pick`(지도에서 고른 지점)은 막지 않는다(ADR-063).
 
-- `GET /features/nearby` — 게이트. 사용자 좌표를 필수로 받는다.
-- `GET /search`(near-me 분기) — 게이트. 좌표가 **선택적**이라 dependency로 걸면 좌표 없는 키워드
-  검색까지 막힌다. 그래서 핸들러 안 분기에서 검사한다.
-- `GET /regions/covering-point`, `GET /regions/within-radius` — **미게이트**. 단일 점을 받고
-  감사에도 남지만, 좌표 출처가 사용자 위치인지 지도 클릭인지 계약상 구분되지 않는다.
-- `POST /features/requests` — **미게이트**. 좌표가 지도에서 고른 POI 위치라(사용자 위치가 아니다)
-  게이트하면 수동 POI 생성이 깨진다.
-- `GET /geo/reverse` — **미게이트**. 유일한 실사용자가 지도 클릭이다.
+- `GET /features/nearby` — 항상 게이트. endpoint의 의미상 좌표가 사용자 위치일 수밖에 없어
+  출처 선언을 받지 않고 서버가 `device`로 고정한다.
+- `GET /search`(near-me 분기) — 항상 게이트. 좌표가 **선택적**이라 dependency로 걸면 좌표 없는
+  키워드 검색까지 막히므로 핸들러 안 분기에서 검사한다.
+- `GET /regions/covering-point`, `GET /regions/within-radius`, `GET /geo/reverse` — 출처를
+  query로 받고 `device`일 때만 게이트. 기본값은 `map_pick`이다.
+- `POST /features/requests` — 출처를 body로 받고 `device`일 때만 게이트. 기본값은 `map_pick`이다.
 
-미게이트 3종은 `source=device|map_pick` 구분을 계약에 넣은 뒤 `device`만 막아야 한다(T-329).
-그때까지 이 파일은 "무엇을 왜 막지 않는지"를 함께 기록한다 — 목록이 조용히 낡지 않게 하기 위해서다.
+출처는 클라이언트의 선언이라 거짓말할 수 있다. 그 한계와 그럼에도 이 설계를 택한 근거는
+`app/core/coord_source.py`와 ADR-063에 있다.
 """
 
 from __future__ import annotations

@@ -32,9 +32,10 @@ from app.clients.kor_travel_map import (
     KorTravelMapUnavailable,
 )
 from app.clients.naver_local import NaverLocalClient, NaverLocalClientDep, NaverLocalError
-from app.core.consent_deps import require_location_consent
+from app.core.consent_deps import assert_location_consent, require_location_consent
 from app.core.deps import CurrentUserId, DbSession
 from app.core.time import KST
+from app.middleware.location_audit import declare_location_audit
 from app.models.feature_suggestion import FeatureSuggestion
 from app.schemas.envelope import Envelope
 from app.schemas.feature import (
@@ -477,7 +478,9 @@ async def features_nearby(
     """반경 검색 (distance_m 포함). 사용자 자신의 위치이므로 확인자료로 남긴다."""
     # 미들웨어는 핸들러가 선언한 좌표만 기록한다(T-330). 선언하지 않으면 이 경로의 법정 기록이
     # 조용히 사라지므로, `test_location_audit_middleware.py`가 경로별로 이를 붙잡는다.
-    request.state.location_audit_coord = (_decimal6(lat), _decimal6(lon))
+    # "내 주변"이라는 endpoint의 의미상 좌표는 언제나 사용자 자신의 위치다 — 출처를 파라미터로
+    # 받지 않고 `device`로 고정한다(그래서 위 dependency가 동의를 요구한다).
+    declare_location_audit(request, lat=_decimal6(lat), lng=_decimal6(lon), source="device")
     with _map_kor_travel_map_errors():
         data = await client.features_nearby(
             lon=lon,
@@ -695,7 +698,11 @@ async def request_feature(
     name = _normalise_title(body.title)
     lng = _decimal6(body.coord.lon)
     lat = _decimal6(body.coord.lat)
-    request.state.location_audit_coord = (lat, lng)
+    # 지도에서 고른 POI 위치가 기본이다. 클라이언트가 자기 현재 위치로 제안하는 경우에만
+    # `coord_source="device"`를 선언하고, 그때는 동의를 요구한다.
+    if body.coord_source == "device":
+        await assert_location_consent(db, user_id=user_id)
+    declare_location_audit(request, lat=lat, lng=lng, source=body.coord_source)
     categories = _normalise_categories(body.categories)
 
     external_ref = body.external_ref.model_dump() if body.external_ref is not None else None

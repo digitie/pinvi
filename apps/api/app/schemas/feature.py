@@ -22,6 +22,8 @@ from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.core.coord_source import CoordSource
+
 FeatureKind = Literal[
     "place",
     "event",
@@ -309,6 +311,10 @@ class FeatureRequestCreate(BaseModel):
     # (provider, external_id)로 전역 dedup된다.
     source: Literal["user", "kakao", "naver"] = "user"
     external_ref: ExternalRef | None = None
+    # 좌표의 출처(T-329). 기본은 지도에서 고른 지점이다 — 이 경로의 실사용 흐름이 그렇다.
+    # `device`로 선언하면 사용자 자신의 위치를 보낸다는 뜻이고, 그때만 위치 동의를 요구한다.
+    # (`source`는 provider 출처라 이름이 겹치지 않게 `coord_source`로 둔다.)
+    coord_source: CoordSource = "map_pick"
 
     @model_validator(mode="after")
     def validate_target_feature_id(self) -> Self:
