@@ -867,7 +867,7 @@ SPEC V8 O-6 / M-14에 따라 컬럼 추가:
 | 테이블                            | 비고                                                                                                                         |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `app.retention_runs`              | dry-run/execute mode, scope, status, candidate snapshot, result evidence, kill-switch 상태, 실행 사유, actor, 시작/완료 시각 |
-| `app.location_access_log_archive` | 6개월 초과 `location_access_log` row를 active table 삭제 전에 동일 payload로 복사. `retention_run_id`로 실행 run에 연결      |
+| `app.location_access_log_archive` | 6개월 초과 `location_access_log` row를 active table 삭제 전에 동일 payload로 복사(무손실 — 원본 컬럼이 늘면 아카이브도 함께 늘려야 한다, T-332). `retention_run_id`로 실행 run에 연결      |
 
 실행 전 `location_audit_outbox` cutoff 이전 pending row와 hash-chain bridge mismatch를 차단한다.
 `admin_audit_log` PII 후보는 별도 `audit_retention` summary로 집계한다. append-only 감사 원장이라

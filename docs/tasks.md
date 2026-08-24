@@ -62,23 +62,30 @@
 
 ## 지도 / 위치
 
-- [ ] **T-332** — 보존 아카이브가 `coord_source`를 버린다. `admin_retention.py`의
-  `_ARCHIVE_LOCATION_SQL`이 컬럼을 명시 나열하는 방식이라 새 컬럼을 조용히 드롭하고, 곧바로
-  `_DELETE_ARCHIVED_LOCATION_SQL`이 원본을 지운다 — 복구 불가다. 0029 이후 archive는 항상 무손실
-  사본이었는데(`data-model.md` §7.4 "동일 payload로 복사") T-329가 그 불변식을 처음 깼다. 게다가
-  아카이브 행의 `content_hash`는 `coord_source`를 커밋하고 있어 사본만으로는 **재검증이 불가능**해진다.
-  수정: archive 테이블에 컬럼 추가 마이그레이션 + INSERT/SELECT 목록 2곳 + 문서 갱신.
-  긴급하지 않은 근거: `LOCATION_LOG_ARCHIVE_RETENTION_MONTHS = 6`이라 `coord_source`를 실은 행이
-  아카이브 자격을 얻는 것은 2027-02-24 이후이고, execute는 `PINVI_RETENTION_EXECUTE_ENABLED`
-  기본 off + CPO 수동이다. T-329 적대적 리뷰에서 발견.
+- [ ] **T-338** — 실패한 retention execute가 영수증을 하나도 남기지 않는다. 문서는 dry-run/execute의
+  evidence를 `retention_runs`에 남긴다고 약속하는데, 실행 중 예외가 나면 같은 트랜잭션이 롤백되면서
+  run 행까지 사라진다 — "무엇을 시도했고 어디서 멈췄는가"가 증거로 남지 않는다. 파괴적 작업의
+  감사 추적이라 특히 중요하다. T-332 적대적 리뷰에서 발견.
+- [ ] **T-335** — 아카이브가 한 번이라도 실행되면 `GET /admin/audit/location`이 **상시**
+  `X-Chain-Broken: true`를 보고한다. `_is_location_window_broken`의 앵커 조회가
+  `LocationAccessLog`(active 테이블)만 보므로, 원본이 삭제된 뒤 살아남은 최고참 행의 `prev_hash`는
+  아카이브된 행의 `content_hash`를 가리키는데 앵커는 `None` → `GENESIS_HASH`와 비교돼 불일치한다.
+  위변조 탐지가 상시 켜지면 실제 변조와 구분할 수 없다 — T-329 리뷰가 잡은 차단 결함과 같은 계열이다.
+  `admin_etl`은 이미 `bridge_anchor_matches`로 같은 링크를 계산하지만 audit endpoint는 그것을 보지
+  않는다. 해법: 앵커 조회를 아카이브까지 fallback. 0029(T-276)부터의 선재 결함이며 테스트 없음.
+  T-332 조사에서 발견.
+- [ ] **T-336** — `location_access_log_archive`에 append-only 트리거가 없다.
+  `trg_location_access_log_append_only`는 원본에만 걸려 있어, **원본 삭제 후 유일한 사본이 되는**
+  테이블이 UPDATE/DELETE에 열려 있다. 아카이브되는 순간 확인자료 보호 수준이 내려간다.
+  T-332 조사에서 발견.
+- [ ] **T-337** — `_EXECUTE_PII_SQL`의 익명화가 `app.users`의 PII 컬럼을 손으로 나열한다.
+  새 PII 컬럼이 추가되면 **오류 없이** 익명화에서 빠진다 — T-332가 아카이브에서 겪은 것과 같은
+  형태의 결함이다. `test_retention_archive_fidelity.py`의 카탈로그 대조 패턴을 그대로 적용할 수 있다.
+  T-332 조사에서 발견.
 - [ ] **T-333** — 핸들러가 좌표를 선언했어도 응답이 4xx/5xx면 감사 행이 버려진다
   (`location_audit.py`의 `if response.status_code >= 400: return response`). 상류에 좌표를 이미
   보낸 뒤 실패한 경우(예: kor-travel-geo 호출 성공 후 응답 직렬화 실패)에는 위치 사용이 실제로
   일어났는데 기록이 없다. 선재 조건이며 T-329 리뷰에서 발견.
-- [ ] **T-334** — 프런트가 `LOCATION_CONSENT_REQUIRED`(403)를 복구 가능한 상태로 다루지 않는다.
-  서버 게이트(T-327/T-329)가 실제로 403을 반환할 수 있게 됐지만 웹/모바일은 이를 일반 오류로
-  표시한다. 동의 재요청 흐름으로 연결해야 한다. T-327/T-329 리뷰에서 이월.
-
 ## 웹 / 테스트 인프라
 
 - [ ] **T-323** — web 워크플로의 `e2e` 잡이 aggregate required check가 아니라 Playwright 실패가 머지를

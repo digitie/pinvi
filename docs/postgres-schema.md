@@ -1192,6 +1192,7 @@ CREATE TABLE app.location_access_log_archive (
   occurred_at       timestamptz NOT NULL,
   endpoint          text NOT NULL,
   purpose           varchar(64) NOT NULL,
+  coord_source      text,             -- 'device' | 'map_pick' | NULL, 원본과 동일 (ADR-063)
   lat               numeric(9,6),
   lng               numeric(9,6),
   request_id        uuid NOT NULL,
@@ -1202,6 +1203,12 @@ CREATE TABLE app.location_access_log_archive (
   archived_at       timestamptz NOT NULL DEFAULT now()
 );
 ```
+
+아카이브는 원본의 **무손실 사본**이어야 한다. 아카이브 직후 원본이 삭제되므로 이것이 유일한
+사본이 되고, `content_hash`가 원본의 모든 필드를 커밋하고 있어 하나라도 빠지면 그 행은 영구히
+재검증 불가가 된다. 원본에 컬럼을 추가하면 **여기와 `_ARCHIVE_LOCATION_SQL`의 나열도 함께**
+늘려야 하며, 두 테이블의 컬럼 일치는 `tests/integration/test_retention_archive_fidelity.py`가
+강제한다(T-332).
 
 `/admin/retention`은 dry-run/execute batch evidence를 `retention_runs`에 남긴다.
 위치 로그 execute는 6개월 초과 `location_access_log` row를 archive table에 복사한 뒤 active
