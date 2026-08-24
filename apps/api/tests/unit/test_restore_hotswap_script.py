@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import subprocess
@@ -52,6 +53,21 @@ def test_restore_hotswap_validates_all_m05_always_triggers_before_switch() -> No
     assert (
         "left('trg_ktm_feature_reference_reconciliation_impacts_truncate_append_only', 63)"
         in source
+    )
+
+
+def test_restore_hotswap_rejects_noncanonical_acl_before_write_fence_mutation() -> None:
+    source = SCRIPT.read_text(encoding="utf-8")
+
+    assert "assert_supported_acl_topology()" in source
+    assert "PINVI_RESTORE_WRITE_ROLES is not supported" in source
+    assert "schema-swap requires canonical single-runtime-role ACLs" in source
+    assert "aclexplode(COALESCE(c.relacl" in source
+    assert "a.attacl IS NOT NULL" in source
+    assert "p.proowner <> current_user::regrole OR p.proacl IS NOT NULL" in source
+    enter = source.index("enter_write_fence()")
+    assert source.index("  assert_supported_acl_topology\n", enter) < source.index(
+        "  local writer_logins", enter
     )
 
 
@@ -193,4 +209,79 @@ exit 99
 
     assert result.returncode == 3
     assert "PINVI_RESTORE_FENCE_DATABASE_URL is required" in result.stdout
+    assert not marker.exists()
+
+
+def test_restore_hotswap_rejects_wrong_fence_target_before_mutation(tmp_path: Path) -> None:
+    marker = tmp_path / "mutation-called"
+    snapshot = tmp_path / "m05.dump"
+    snapshot.write_bytes(b"custom-format-fixture")
+    snapshot.with_name(f"{snapshot.name}.sha256").write_text(
+        f"{hashlib.sha256(snapshot.read_bytes()).hexdigest()}  {snapshot.name}\n",
+        encoding="utf-8",
+    )
+    pg_restore = tmp_path / "pg_restore"
+    psql = tmp_path / "psql"
+    _write_executable(
+        pg_restore,
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$*" != *"--list"* ]]; then
+  touch "$PINVI_TEST_MUTATION_MARKER"
+fi
+""",
+    )
+    _write_executable(
+        psql,
+        """#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  *"--dbname=postgresql://restore-owner@db:5432/pinvi"*)
+    printf 'pinvi|100|200|127.0.0.1|5432\\n'
+    ;;
+  *"--dbname=postgresql://fence-owner@db:5432/other"*)
+    printf 'other|101|200|127.0.0.1|5432\\n'
+    ;;
+  *)
+    touch "$PINVI_TEST_MUTATION_MARKER"
+    exit 99
+    ;;
+esac
+""",
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "PINVI_ENVIRONMENT": "staging",
+            "PINVI_RESTORE_HOTSWAP_EXECUTE": "1",
+            "PINVI_RESTORE_PRIVATE_TOOL_COPY": "1",
+            "PINVI_RESTORE_DATABASE_URL": "postgresql://restore-owner@db:5432/pinvi",
+            "PINVI_RESTORE_FENCE_DATABASE_URL": "postgresql://fence-owner@db:5432/other",
+            "PINVI_RESTORE_PG_RESTORE_BIN": str(pg_restore),
+            "PINVI_RESTORE_PG_RESTORE_SHA256": hashlib.sha256(pg_restore.read_bytes()).hexdigest(),
+            "PINVI_RESTORE_PSQL_BIN": str(psql),
+            "PINVI_RESTORE_PSQL_SHA256": hashlib.sha256(psql.read_bytes()).hexdigest(),
+            "PINVI_RESTORE_BASH_BIN": BASH_BIN,
+            "PINVI_RESTORE_BASH_SHA256": hashlib.sha256(Path(BASH_BIN).read_bytes()).hexdigest(),
+            "PINVI_RESTORE_EXPECTED_DATABASE_NAME": "pinvi",
+            "PINVI_RESTORE_EXPECTED_DATABASE_OID": "100",
+            "PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER": "200",
+            "PINVI_RESTORE_EXPECTED_HOSTADDR": "127.0.0.1",
+            "PINVI_RESTORE_EXPECTED_PORT": "5432",
+            "PINVI_TEST_MUTATION_MARKER": str(marker),
+        }
+    )
+    env.pop("PINVI_M05_RESTORE_TEST_MODE", None)
+
+    result = subprocess.run(  # noqa: S603
+        [BASH_BIN, str(SCRIPT), "run", str(snapshot), "app_restore", "app_previous"],
+        cwd=SCRIPT.parents[1],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 3
+    assert "database fence target does not match the restore target" in result.stdout
     assert not marker.exists()

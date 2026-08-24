@@ -1250,6 +1250,210 @@ SELECT EXISTS (
   fi
 }
 
+assert_supported_acl_topology() {
+  if [[ "${TEST_MODE}" == "1" ]]; then
+    return 0
+  fi
+  if [[ -n "${PINVI_RESTORE_WRITE_ROLES:-}" ]]; then
+    phase draining failed "schema-swap supports one canonical runtime role; PINVI_RESTORE_WRITE_ROLES is not supported"
+    exit 3
+  fi
+  local writer_logins topology_safe
+  writer_logins="$(writer_login_roles)"
+  if [[ "${writer_logins}" != "${APP_ROLE}" ]]; then
+    phase draining failed "schema-swap requires exactly one canonical runtime writer role"
+    exit 3
+  fi
+  topology_safe="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc "
+WITH source_schema AS (
+  SELECT n.oid, n.nspowner, n.nspacl
+  FROM pg_namespace n
+  WHERE n.nspname = '${SOURCE_SCHEMA}'
+),
+app_role AS (
+  SELECT oid FROM pg_roles WHERE rolname = '${APP_ROLE}'
+),
+fence_role AS (
+  SELECT oid FROM pg_roles WHERE rolname = '${FENCE_EXECUTOR_ROLE}'
+),
+table_relations AS (
+  SELECT c.oid, c.relowner, c.relacl
+  FROM pg_class c
+  JOIN source_schema s ON s.oid = c.relnamespace
+  WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
+),
+sequence_relations AS (
+  SELECT c.oid, c.relowner, c.relacl
+  FROM pg_class c
+  JOIN source_schema s ON s.oid = c.relnamespace
+  WHERE c.relkind = 'S'
+)
+SELECT
+  (SELECT count(*) FROM source_schema) = 1
+  AND (SELECT count(*) FROM app_role) = 1
+  AND (SELECT count(*) FROM fence_role) = 1
+  AND (SELECT oid FROM app_role) <> (SELECT oid FROM fence_role)
+  AND NOT EXISTS (
+    SELECT 1 FROM source_schema s WHERE s.nspowner <> current_user::regrole
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_auth_members m
+    JOIN fence_role f ON f.oid = m.member
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_class c
+    JOIN source_schema s ON s.oid = c.relnamespace
+    WHERE c.relowner <> current_user::regrole
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_proc p
+    JOIN source_schema s ON s.oid = p.pronamespace
+    WHERE p.proowner <> current_user::regrole OR p.proacl IS NOT NULL
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN source_schema s ON s.oid = t.typnamespace
+    WHERE t.typowner <> current_user::regrole OR t.typacl IS NOT NULL
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_attribute a
+    JOIN table_relations c ON c.oid = a.attrelid
+    WHERE a.attnum > 0 AND NOT a.attisdropped AND a.attacl IS NOT NULL
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM source_schema s
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM aclexplode(COALESCE(s.nspacl, acldefault('n', s.nspowner))) acl
+      WHERE acl.grantee = (SELECT oid FROM app_role)
+        AND acl.privilege_type = 'USAGE'
+        AND NOT acl.is_grantable
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM aclexplode(COALESCE(s.nspacl, acldefault('n', s.nspowner))) acl
+      WHERE NOT (
+        acl.grantee = s.nspowner
+        OR (
+          acl.grantee = (SELECT oid FROM app_role)
+          AND acl.privilege_type = 'USAGE'
+          AND NOT acl.is_grantable
+        )
+      )
+    )
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM table_relations c
+    WHERE c.relowner <> current_user::regrole
+      OR (
+        SELECT count(*)
+        FROM aclexplode(COALESCE(c.relacl, acldefault('r', c.relowner))) acl
+        WHERE acl.grantee = (SELECT oid FROM app_role)
+          AND acl.privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+          AND NOT acl.is_grantable
+      ) <> 4
+      OR EXISTS (
+        SELECT 1
+        FROM aclexplode(COALESCE(c.relacl, acldefault('r', c.relowner))) acl
+        WHERE NOT (
+          acl.grantee = c.relowner
+          OR (
+            acl.grantee = (SELECT oid FROM app_role)
+            AND acl.privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+            AND NOT acl.is_grantable
+          )
+        )
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM sequence_relations c
+    WHERE c.relowner <> current_user::regrole
+      OR (
+        SELECT count(*)
+        FROM aclexplode(COALESCE(c.relacl, acldefault('S', c.relowner))) acl
+        WHERE acl.grantee = (SELECT oid FROM app_role)
+          AND acl.privilege_type IN ('USAGE', 'SELECT', 'UPDATE')
+          AND NOT acl.is_grantable
+      ) <> 3
+      OR EXISTS (
+        SELECT 1
+        FROM aclexplode(COALESCE(c.relacl, acldefault('S', c.relowner))) acl
+        WHERE NOT (
+          acl.grantee = c.relowner
+          OR (
+            acl.grantee = (SELECT oid FROM app_role)
+            AND acl.privilege_type IN ('USAGE', 'SELECT', 'UPDATE')
+            AND NOT acl.is_grantable
+          )
+        )
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_default_acl d
+    JOIN source_schema s ON s.oid = d.defaclnamespace
+    WHERE d.defaclrole = current_user::regrole
+      AND (
+        d.defaclobjtype NOT IN ('r', 'S')
+        OR (
+          d.defaclobjtype = 'r'
+          AND (
+            (
+              SELECT count(*)
+              FROM aclexplode(d.defaclacl) acl
+              WHERE acl.grantee = (SELECT oid FROM app_role)
+                AND acl.privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+                AND NOT acl.is_grantable
+            ) <> 4
+            OR EXISTS (
+              SELECT 1
+              FROM aclexplode(d.defaclacl) acl
+              WHERE NOT (
+                acl.grantee = (SELECT oid FROM app_role)
+                AND acl.privilege_type IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+                AND NOT acl.is_grantable
+              )
+            )
+          )
+        )
+        OR (
+          d.defaclobjtype = 'S'
+          AND (
+            (
+              SELECT count(*)
+              FROM aclexplode(d.defaclacl) acl
+              WHERE acl.grantee = (SELECT oid FROM app_role)
+                AND acl.privilege_type IN ('USAGE', 'SELECT', 'UPDATE')
+                AND NOT acl.is_grantable
+            ) <> 3
+            OR EXISTS (
+              SELECT 1
+              FROM aclexplode(d.defaclacl) acl
+              WHERE NOT (
+                acl.grantee = (SELECT oid FROM app_role)
+                AND acl.privilege_type IN ('USAGE', 'SELECT', 'UPDATE')
+                AND NOT acl.is_grantable
+              )
+            )
+          )
+        )
+      )
+  )
+" | tr -d '[:space:]')"
+  if [[ "${topology_safe}" != "t" ]]; then
+    phase draining failed "schema-swap requires canonical single-runtime-role ACLs; use an offline restore plan"
+    exit 3
+  fi
+}
+
 enter_write_fence() {
   local roles_sql
   roles_sql="$(write_roles_sql)"
@@ -1262,6 +1466,7 @@ enter_write_fence() {
   assert_fence_target_identity
   assert_fence_executor_safe
   assert_configured_roles_safe
+  assert_supported_acl_topology
   local writer_logins
   writer_logins="$(writer_login_roles)"
   assert_role_list_safe "${writer_logins}" "database writer inventory"
@@ -1430,6 +1635,7 @@ SQL
   if ! assert_database_fence_restored; then
     return 1
   fi
+  assert_supported_acl_topology
   WRITE_FENCE_ACTIVE=0
 }
 
