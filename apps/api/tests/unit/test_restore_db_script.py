@@ -7,6 +7,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 BASH_BIN = "/usr/bin/bash"
 
 
@@ -53,6 +55,7 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
             "PINVI_RESTORE_DATABASE_URL": "postgresql://pinvi:fixture@db:5432/pinvi",
             "PINVI_RESTORE_APP_ROLE": "pinvi_app",
             "PINVI_M05_RESTORE_TEST_MODE": "1",
+            "PINVI_ENVIRONMENT": "test",
             "PINVI_TEST_LOG": str(invocation_log),
         }
     )
@@ -121,6 +124,7 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
             "PINVI_RESTORE_DATABASE_URL": "postgresql://pinvi:fixture@db:5432/pinvi",
             "PINVI_RESTORE_APP_ROLE": "pinvi_app",
             "PINVI_M05_RESTORE_TEST_MODE": "1",
+            "PINVI_ENVIRONMENT": "test",
             "PINVI_TEST_LOG": str(invocation_log),
         }
     )
@@ -145,3 +149,56 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
     assert "NOT r.rolinherit" in calls[0]
     assert "FROM pg_auth_members m WHERE m.member = r.oid" in calls[0]
     assert "WITH RECURSIVE role_closure" in calls[1]
+
+
+@pytest.mark.parametrize("environment", ["staging", "production"])
+def test_restore_db_rejects_test_mode_outside_test_before_clean_restore(
+    tmp_path: Path,
+    environment: str,
+) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    invocation_log = tmp_path / "invocations.log"
+    snapshot = tmp_path / "m05.dump"
+    snapshot.write_bytes(b"custom-format-fixture")
+    snapshot.with_name(f"{snapshot.name}.sha256").write_text(
+        f"{hashlib.sha256(snapshot.read_bytes()).hexdigest()}  {snapshot.name}\n",
+        encoding="utf-8",
+    )
+    _write_executable(
+        fake_bin / "psql",
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf 'psql:%s\\n' "$*" >> "$PINVI_TEST_LOG"
+""",
+    )
+    _write_executable(
+        fake_bin / "pg_restore",
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
+""",
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{fake_bin}:/usr/bin:/bin",
+            "PINVI_RESTORE_DATABASE_URL": "postgresql://pinvi:fixture@db:5432/pinvi",
+            "PINVI_M05_RESTORE_TEST_MODE": "1",
+            "PINVI_ENVIRONMENT": environment,
+            "PINVI_TEST_LOG": str(invocation_log),
+        }
+    )
+
+    result = subprocess.run(  # noqa: S603
+        [BASH_BIN, str(_repo_root() / "scripts" / "restore-db.sh"), str(snapshot)],
+        cwd=_repo_root(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 3
+    assert "M05 restore test mode requires PINVI_ENVIRONMENT=test" in result.stderr
+    assert not invocation_log.exists()

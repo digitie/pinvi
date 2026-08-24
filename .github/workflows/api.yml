@@ -5,14 +5,36 @@ on:
     paths:
       - 'apps/api/**'
       - 'contracts/**'
+      - 'scripts/api-image-provenance.sh'
+      - 'scripts/backup-db.sh'
+      - 'scripts/m05_*.py'
+      - 'scripts/n150-playwright-runner.sh'
+      - 'scripts/restore-db.sh'
+      - 'scripts/restore-hotswap.sh'
+      - 'scripts/restore-staging-drill.sh'
+      - 'infra/docker-compose.app.yml'
+      - 'infra/.env.prod.example'
+      - '.env.example'
       - '.github/workflows/api.yml'
+      - '.github/workflows/aggregate-ci.yml'
       - 'pyproject.toml'
   push:
     branches: [main]
     paths:
       - 'apps/api/**'
       - 'contracts/**'
+      - 'scripts/api-image-provenance.sh'
+      - 'scripts/backup-db.sh'
+      - 'scripts/m05_*.py'
+      - 'scripts/n150-playwright-runner.sh'
+      - 'scripts/restore-db.sh'
+      - 'scripts/restore-hotswap.sh'
+      - 'scripts/restore-staging-drill.sh'
+      - 'infra/docker-compose.app.yml'
+      - 'infra/.env.prod.example'
+      - '.env.example'
       - '.github/workflows/api.yml'
+      - '.github/workflows/aggregate-ci.yml'
   # T-VN-H07D: vendored 스냅샷이 kor-travel-map main보다 뒤처졌는지 매일 비차단으로 확인한다.
   schedule:
     - cron: '17 20 * * *'
@@ -66,6 +88,20 @@ jobs:
 
       - name: ruff check
         run: ruff check .
+
+      - name: M05 root runner lint와 shell syntax
+        working-directory: .
+        run: |
+          python -m ruff check --select E4,E7,E9,F,I \
+            scripts/m05_activation_attestation.py \
+            scripts/m05_activation_receipt.py \
+            scripts/m05_restore_drill.py
+          bash -n \
+            scripts/backup-db.sh \
+            scripts/restore-db.sh \
+            scripts/restore-hotswap.sh \
+            scripts/restore-staging-drill.sh \
+            scripts/n150-playwright-runner.sh
 
       - name: ruff format check
         run: ruff format --check .

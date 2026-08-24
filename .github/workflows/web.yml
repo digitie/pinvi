@@ -5,16 +5,28 @@ on:
     paths:
       - 'apps/web/**'
       - 'packages/**'
+      - 'scripts/m05_activation_attestation.py'
+      - 'scripts/n150-playwright-runner.sh'
+      - 'infra/docker-compose.app.yml'
+      - 'infra/.env.prod.example'
+      - '.env.example'
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig.base.json'
       - '.github/workflows/web.yml'
+      - '.github/workflows/aggregate-ci.yml'
   push:
     branches: [main]
     paths:
       - 'apps/web/**'
       - 'packages/**'
+      - 'scripts/m05_activation_attestation.py'
+      - 'scripts/n150-playwright-runner.sh'
+      - 'infra/docker-compose.app.yml'
+      - 'infra/.env.prod.example'
+      - '.env.example'
       - '.github/workflows/web.yml'
+      - '.github/workflows/aggregate-ci.yml'
 
 concurrency:
   group: web-${{ github.ref }}

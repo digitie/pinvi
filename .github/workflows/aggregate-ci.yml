@@ -48,7 +48,18 @@ jobs:
             if (hasAny([
               startsWith("apps/api/"),
               startsWith("contracts/"),
+              equals("scripts/api-image-provenance.sh"),
+              equals("scripts/backup-db.sh"),
+              startsWith("scripts/m05_"),
+              equals("scripts/n150-playwright-runner.sh"),
+              equals("scripts/restore-db.sh"),
+              equals("scripts/restore-hotswap.sh"),
+              equals("scripts/restore-staging-drill.sh"),
+              equals("infra/docker-compose.app.yml"),
+              equals("infra/.env.prod.example"),
+              equals(".env.example"),
               equals(".github/workflows/api.yml"),
+              equals(".github/workflows/aggregate-ci.yml"),
               equals("pyproject.toml"),
             ])) {
               requiredChecks.push("lint-typecheck-test");
@@ -61,10 +72,16 @@ jobs:
             if (hasAny([
               startsWith("apps/web/"),
               startsWith("packages/"),
+              equals("scripts/m05_activation_attestation.py"),
+              equals("scripts/n150-playwright-runner.sh"),
+              equals("infra/docker-compose.app.yml"),
+              equals("infra/.env.prod.example"),
+              equals(".env.example"),
               equals("package.json"),
               equals("package-lock.json"),
               equals("tsconfig.base.json"),
               equals(".github/workflows/web.yml"),
+              equals(".github/workflows/aggregate-ci.yml"),
             ])) {
               requiredChecks.push("lint-typecheck-build");
               // Web Playwright는 lint/build와 별개 job이다. Aggregate gate가 유일한

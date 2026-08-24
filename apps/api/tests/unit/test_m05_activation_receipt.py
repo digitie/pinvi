@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
@@ -77,6 +78,50 @@ def _identity_sha256(identity: dict[str, object]) -> str:
 
 def _script_sha256(name: str) -> str:
     return hashlib.sha256((REPO_ROOT / "scripts" / name).read_bytes()).hexdigest()
+
+
+def _receipt_script_module() -> object:
+    script = REPO_ROOT / "scripts" / "m05_activation_receipt.py"
+    spec = importlib.util.spec_from_file_location("m05_activation_receipt", script)
+    if spec is None or spec.loader is None:
+        raise AssertionError("activation receipt script could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_receipt_ledger_parser_accepts_dash_prefixed_urlsafe_public_key() -> None:
+    module = _receipt_script_module()
+    public_key = base64.urlsafe_b64encode(bytes([0xF8]) + bytes(31)).decode("ascii").rstrip("=")
+
+    args = module._parse_args(  # type: ignore[attr-defined]
+        [
+            "ledger",
+            "--receipt",
+            "receipt.json",
+            "--ledger",
+            "activation-ledger.jsonl",
+            "--high-watermark",
+            "activation-high-watermark.json",
+            "--durable-floor",
+            "activation-durable-floor.json",
+            "--durable-history",
+            "activation-durable-history.jsonl",
+            "--durable-anchor",
+            "activation-durable-anchor.jsonl",
+            "--public-key",
+            public_key,
+            "--evidence-dir",
+            "evidence",
+            "--review-allowlist",
+            "review-allowlist.json",
+            "--review-challenge",
+            "review-challenge.json",
+        ]
+    )
+
+    assert public_key.startswith("-")
+    assert args.public_key == public_key
 
 
 def _tool_sha256(name: str) -> str:
@@ -628,8 +673,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             str(durable_history_path),
             "--durable-anchor",
             str(durable_anchor_path),
-            "--public-key",
-            public_key,
+            f"--public-key={public_key}",
             "--evidence-dir",
             str(evidence_dir),
             "--review-allowlist",

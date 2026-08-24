@@ -562,6 +562,12 @@ async def _restore_backup_hotswap_locked(
     snapshot_id: str,
     access_reason: str,
 ) -> BackupRestoreRun:
+    if settings.pinvi_environment in _STRICT_BACKUP_ENVIRONMENTS:
+        raise BackupServiceError(
+            "staging/production schema-swap은 API 컨테이너에서 실행할 수 없습니다. "
+            "root-owned one-shot restore runner를 사용하세요."
+        )
+
     snapshot = get_backup_snapshot(snapshot_id=snapshot_id)
     if snapshot.status != "verified" or snapshot.checksum_sha256 is None:
         raise BackupSnapshotUnverifiedError(
@@ -591,7 +597,8 @@ async def _restore_backup_hotswap_locked(
         **{
             key: value
             for key, value in os.environ.items()
-            if key
+            if not key.startswith("PINVI_RESTORE_")
+            and key
             not in {
                 "BASH_ENV",
                 "CDPATH",
@@ -603,6 +610,8 @@ async def _restore_backup_hotswap_locked(
                 "LD_AUDIT",
                 "LD_LIBRARY_PATH",
                 "LD_PRELOAD",
+                "PINVI_M05_RESTORE_REQUIRE_TOOL_TRUST",
+                "PINVI_M05_RESTORE_TEST_MODE",
                 "PINVI_RESTORE_BASH_BIN",
                 "PINVI_RESTORE_BASH_SHA256",
                 "PINVI_RESTORE_PG_RESTORE_BIN",
@@ -629,6 +638,7 @@ async def _restore_backup_hotswap_locked(
         "PINVI_RESTORE_DRAIN_VERIFIED": ("1" if settings.pinvi_restore_drain_verified else "0"),
         "PINVI_RESTORE_APP_ROLE": settings.pinvi_restore_app_role,
         "PINVI_RESTORE_API_TRIGGER": "1",
+        "PINVI_M05_RESTORE_TEST_MODE": "0",
     }
     if settings.pinvi_restore_hotswap_execute:
         target_identity = await _restore_target_identity()

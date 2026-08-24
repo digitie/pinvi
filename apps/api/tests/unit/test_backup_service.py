@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import os
 from pathlib import Path
@@ -24,6 +25,7 @@ from app.services.backup_service import (
 
 @pytest.fixture(autouse=True)
 def _backup_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "pinvi_environment", "development")
     monkeypatch.setattr(settings, "pinvi_backup_dir", str(tmp_path / "backups"))
     monkeypatch.setattr(settings, "pinvi_backup_schema", "app")
     monkeypatch.setattr(settings, "pinvi_backup_timeout_seconds", 5)
@@ -227,6 +229,8 @@ set -euo pipefail
 test "$1" = run
 test -f "$2"
 test "${PINVI_RESTORE_API_TRIGGER}" = "1"
+test "${PINVI_M05_RESTORE_TEST_MODE}" = "0"
+test -z "${PINVI_RESTORE_WRITE_ROLES:-}"
 printf 'RESTORE_PHASE=preparing:success:checked\\n'
 printf 'RESTORE_PHASE=restoring:success:restored %s\\n' "$3"
 printf 'RESTORE_PHASE=validating:success:validated\\n'
@@ -234,6 +238,8 @@ printf 'RESTORE_PHASE=draining:success:drained\\n'
 printf 'RESTORE_PHASE=switching:success:switched %s\\n' "$4"
 """,
     )
+    monkeypatch.setenv("PINVI_M05_RESTORE_TEST_MODE", "1")
+    monkeypatch.setenv("PINVI_RESTORE_WRITE_ROLES", "must-not-reach-child")
     monkeypatch.setattr(settings, "pinvi_restore_hotswap_script_path", str(script))
 
     run = await restore_backup_hotswap(
@@ -246,6 +252,58 @@ printf 'RESTORE_PHASE=switching:success:switched %s\\n' "$4"
     assert run.restore_schema.startswith("app_restore_")
     assert run.previous_schema.startswith("app_previous_")
     assert [phase.status for phase in run.phases] == ["success"] * 5
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("environment", ["staging", "production"])
+async def test_restore_backup_hotswap_refuses_strict_api_execution_before_child_spawn(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    monkeypatch.setattr(settings, "pinvi_environment", environment)
+
+    async def unexpected_child(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("strict API restore must not spawn a child process")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", unexpected_child)
+
+    with pytest.raises(BackupServiceError, match="root-owned one-shot restore runner"):
+        await restore_backup_hotswap(
+            snapshot_id="must-not-be-loaded",
+            access_reason="strict boundary regression",
+        )
+
+
+def test_app_api_compose_does_not_receive_restore_executor_authority() -> None:
+    root = Path(__file__).resolve().parents[4]
+    compose = (root / "infra/docker-compose.app.yml").read_text(encoding="utf-8")
+    api_block = compose.split("  app-api:", maxsplit=1)[1].split("  app-migrator:", maxsplit=1)[0]
+
+    assert "PINVI_DATABASE_URL" in api_block
+    for variable in (
+        "PINVI_RESTORE_DATABASE_URL",
+        "PINVI_RESTORE_FENCE_DATABASE_URL",
+        "PINVI_RESTORE_HOTSWAP_EXECUTE",
+        "PINVI_RESTORE_DRAIN_COMMAND",
+        "PINVI_RESTORE_ALLOW_NO_DRAIN",
+        "PINVI_RESTORE_DRAIN_VERIFIED",
+        "PINVI_RESTORE_APP_ROLE",
+        "PINVI_RESTORE_WRITE_ROLES",
+    ):
+        assert variable not in api_block
+
+
+def test_strict_settings_reject_restore_executor_authority() -> None:
+    from app.core.config import Settings
+
+    with pytest.raises(ValueError, match="root-owned one-shot restore runner"):
+        Settings(
+            _env_file=None,
+            pinvi_environment="staging",
+            pinvi_restore_database_url="postgresql://restore-owner@db:5432/pinvi",
+            pinvi_restore_fence_database_url="postgresql://target-owner@db:5432/pinvi",
+            pinvi_restore_hotswap_execute=True,
+        )
 
 
 @pytest.mark.asyncio

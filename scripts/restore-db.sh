@@ -15,6 +15,16 @@ JOBS="${PINVI_RESTORE_JOBS:-2}"
 APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}"
 BACKUP_FILE="${1:-}"
 ORIGINAL_BACKUP_FILE="${BACKUP_FILE}"
+TEST_MODE="${PINVI_M05_RESTORE_TEST_MODE:-0}"
+
+if [[ "${TEST_MODE}" != "0" && "${TEST_MODE}" != "1" ]]; then
+  echo "PINVI_M05_RESTORE_TEST_MODE must be 0 or 1" >&2
+  exit 2
+fi
+if [[ "${TEST_MODE}" == "1" && "${PINVI_ENVIRONMENT:-}" != "test" ]]; then
+  echo "M05 restore test mode requires PINVI_ENVIRONMENT=test" >&2
+  exit 3
+fi
 
 pinned_tool() {
   local name="$1"

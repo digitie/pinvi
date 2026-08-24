@@ -13,6 +13,7 @@ import os
 import re
 import stat
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -2704,8 +2705,29 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
+    """Accept a URL-safe public key even when its first byte renders as ``-``."""
+
+    values = list(sys.argv[1:] if argv is None else argv)
+    normalized: list[str] = []
+    index = 0
+    while index < len(values):
+        value = values[index]
+        if (
+            value == "--public-key"
+            and index + 1 < len(values)
+            and values[index + 1].startswith("-")
+        ):
+            normalized.append(f"--public-key={values[index + 1]}")
+            index += 2
+            continue
+        normalized.append(value)
+        index += 1
+    return _parser().parse_args(normalized)
+
+
 def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
+    args = _parse_args(argv)
     try:
         return cast(int, args.handler(args))
     except (OSError, ReceiptError, binascii.Error) as exc:

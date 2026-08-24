@@ -64,6 +64,16 @@ if [[ "${1:-}" != "run" || -z "${SNAPSHOT}" ]]; then
   exit 2
 fi
 
+TEST_MODE="${PINVI_M05_RESTORE_TEST_MODE:-0}"
+if [[ "${TEST_MODE}" != "0" && "${TEST_MODE}" != "1" ]]; then
+  phase precheck failed "PINVI_M05_RESTORE_TEST_MODE must be 0 or 1"
+  exit 2
+fi
+if [[ "${TEST_MODE}" == "1" && "${PINVI_ENVIRONMENT:-}" != "test" ]]; then
+  phase precheck failed "M05 restore test mode requires PINVI_ENVIRONMENT=test"
+  exit 3
+fi
+
 if [[ ! "${SCHEMA}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
   phase precheck failed "unsafe schema name"
   exit 2

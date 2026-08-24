@@ -35,6 +35,7 @@ from pydantic import (
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PinviEnvironment = Literal["development", "test", "smoke", "staging", "production"]
+_STRICT_RESTORE_EXECUTOR_ENVIRONMENTS = frozenset({"staging", "production"})
 _SERVICE_PROVENANCE_FILENAME = "kor-travel-map-service-provenance-v1.json"
 _PACKAGED_SERVICE_PROVENANCE_PATH = f"_contract_data/{_SERVICE_PROVENANCE_FILENAME}"
 _M05_PAIR_PROVENANCE_FILENAME = "kor-travel-map-m05-pair-provenance-v1.json"
@@ -976,6 +977,35 @@ class Settings(BaseSettings):
 
     # Feature flag
     pinvi_enable_seed: bool = False
+
+    @model_validator(mode="after")
+    def validate_restore_executor_boundary(self) -> Self:
+        """운영 API에는 schema-swap 실행 권한을 주지 않는다."""
+
+        if self.pinvi_environment not in _STRICT_RESTORE_EXECUTOR_ENVIRONMENTS:
+            return self
+        forbidden: list[str] = []
+        if self.pinvi_restore_database_url:
+            forbidden.append("PINVI_RESTORE_DATABASE_URL")
+        if self.pinvi_restore_fence_database_url:
+            forbidden.append("PINVI_RESTORE_FENCE_DATABASE_URL")
+        if self.pinvi_restore_hotswap_execute:
+            forbidden.append("PINVI_RESTORE_HOTSWAP_EXECUTE")
+        if self.pinvi_restore_drain_command:
+            forbidden.append("PINVI_RESTORE_DRAIN_COMMAND")
+        if self.pinvi_restore_allow_no_drain:
+            forbidden.append("PINVI_RESTORE_ALLOW_NO_DRAIN")
+        if self.pinvi_restore_drain_verified:
+            forbidden.append("PINVI_RESTORE_DRAIN_VERIFIED")
+        if self.pinvi_restore_app_role:
+            forbidden.append("PINVI_RESTORE_APP_ROLE")
+        if forbidden:
+            joined = ", ".join(forbidden)
+            raise ValueError(
+                "staging/production API cannot receive schema-swap executor settings "
+                f"({joined}); use the root-owned one-shot restore runner"
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_kor_travel_map_ops(self) -> Self:
