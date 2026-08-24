@@ -203,12 +203,16 @@ def _trusted_bash_path() -> Path:
 def _trusted_postgres_tool_path(tool: str) -> Path:
     """고정된 system PostgreSQL client만 root runner에 전달한다."""
 
-    candidates = [Path("/usr/bin") / tool]
+    candidates: list[Path] = []
     postgres_directory = Path("/usr/lib/postgresql")
     if postgres_directory.is_dir():
         candidates.extend(
             sorted(postgres_directory.glob(f"[0-9]*/bin/{tool}"), reverse=True)
         )
+    # /usr/bin/psql and /usr/bin/pg_restore are pg_wrapper symlinks. The
+    # wrapper selects a client by argv[0], so passing its resolved target as
+    # an executable would invoke `pg_wrapper` without a client name.
+    candidates.append(Path("/usr/bin") / tool)
     for candidate in candidates:
         if candidate.exists():
             return _safe_trusted_executable(candidate)
@@ -665,13 +669,17 @@ def _run_psql(
     for name, value in sorted((variables or {}).items()):
         arguments.append(f"--set={name}={value}")
     if command is not None:
-        arguments.extend(["--command", command])
+        # psql does not interpolate :variables in --command text. Feed the
+        # fixed SQL through stdin so recovery observations use the validated
+        # psql variables instead of sending an unexpanded colon token.
+        arguments.extend(["--file", "-"])
     if file is not None:
         arguments.extend(["--file", str(file)])
     result = subprocess.run(
         arguments,
         check=False,
         capture_output=True,
+        input=command,
         text=True,
         env=_SAFE_ENVIRONMENT,
     )
