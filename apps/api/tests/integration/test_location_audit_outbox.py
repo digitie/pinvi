@@ -99,3 +99,68 @@ async def test_drain_empty_and_idempotent(session_factory) -> None:  # type: ign
         assert await drain_location_audit_outbox(db) == 0
     async with session_factory() as db:
         assert await db.scalar(select(func.count(LocationAccessLog.log_id))) == 1
+
+
+async def test_search_purpose_is_accepted_by_chain_contract(session_factory) -> None:  # type: ignore[no-untyped-def]
+    """`/search` 제3자 제공 purpose가 **체인 테이블까지** 적재된다 (T-328).
+
+    기존 테스트는 outbox만 확인해서, DB CHECK 제약이 `third_party_place_search`를 거부해도
+    green이었다. 감사 의무를 지키는 것은 outbox가 아니라 `location_access_log`다.
+    """
+    user_id = await _make_user(session_factory)
+    async with session_factory() as db:
+        await enqueue_location_audit_outbox(
+            db,
+            user_id=user_id,
+            endpoint="/search",
+            purpose="third_party_place_search",
+            lat=Decimal("37.5665"),
+            lng=Decimal("126.9780"),
+            request_id=uuid.uuid4(),
+            ip_hash="cd" * 32,
+        )
+    async with session_factory() as db:
+        assert await drain_location_audit_outbox(db) == 1
+    async with session_factory() as db:
+        purposes = list((await db.execute(select(LocationAccessLog.purpose))).scalars())
+    assert purposes == ["third_party_place_search"]
+
+
+async def test_one_bad_row_does_not_block_the_queue(session_factory) -> None:  # type: ignore[no-untyped-def]
+    """계약을 벗어난 행 하나가 큐 전체를 막지 않는다 (T-328).
+
+    drain이 배치를 단일 트랜잭션으로 커밋하던 때는 CHECK 위반 1건이 배치 전체를 abort시키고,
+    같은 head 행을 무한 재시도하며 이후 모든 감사 기록이 멈췄다.
+    """
+    user_id = await _make_user(session_factory)
+    async with session_factory() as db:
+        # 허용 목록에 없는 purpose — outbox에는 CHECK가 없어 enqueue는 성공한다.
+        await enqueue_location_audit_outbox(
+            db,
+            user_id=user_id,
+            endpoint="/unknown",
+            purpose="not_a_contracted_purpose",
+            lat=Decimal("37.0"),
+            lng=Decimal("127.0"),
+            request_id=uuid.uuid4(),
+            ip_hash="ef" * 32,
+        )
+    await _enqueue(session_factory, user_id, 1)
+
+    async with session_factory() as db:
+        processed = await drain_location_audit_outbox(db)
+    # 뒤 행은 정상 처리되고, 실패 행만 미처리로 남는다.
+    assert processed == 1
+    async with session_factory() as db:
+        logs = list((await db.execute(select(LocationAccessLog.purpose))).scalars())
+        pending = list(
+            (
+                await db.execute(
+                    select(LocationAuditOutbox.purpose).where(
+                        LocationAuditOutbox.processed_at.is_(None)
+                    )
+                )
+            ).scalars()
+        )
+    assert logs == ["nearby_attractions"]
+    assert pending == ["not_a_contracted_purpose"]

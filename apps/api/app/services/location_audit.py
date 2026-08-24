@@ -17,6 +17,7 @@ from decimal import Decimal
 
 from fastapi import FastAPI
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -132,26 +133,46 @@ async def drain_location_audit_outbox(session: AsyncSession, *, batch_size: int 
         await session.commit()  # advisory xact lock 해제
         return 0
     now = datetime.now(UTC)
+    # 행마다 SAVEPOINT로 격리한다. 한 행이 실패해도(예: purpose CHECK 드리프트) 배치 전체가
+    # abort되지 않게 하기 위해서다 — 그렇지 않으면 실패한 head 행을 영원히 재시도하며
+    # 이후 모든 감사 기록이 멈춘다(위치정보법 제16조 확인자료 기록 중단, T-328).
+    appended: list[int] = []
     for event in pending:
-        await append_location_log(
-            session,
-            user_id=event.user_id,
-            endpoint=event.endpoint,
-            purpose=event.purpose,
-            lat=event.lat,
-            lng=event.lng,
-            request_id=event.request_id,
-            ip_hash=event.ip_hash,
-            occurred_at=event.occurred_at,
-            commit=False,
+        try:
+            async with session.begin_nested():
+                await append_location_log(
+                    session,
+                    user_id=event.user_id,
+                    endpoint=event.endpoint,
+                    purpose=event.purpose,
+                    lat=event.lat,
+                    lng=event.lng,
+                    request_id=event.request_id,
+                    ip_hash=event.ip_hash,
+                    occurred_at=event.occurred_at,
+                    commit=False,
+                )
+        except SQLAlchemyError:
+            # 실패 행은 `processed_at`을 채우지 않아 다음 drain에서 다시 시도된다. 다만 뒤 행을
+            # 막지는 않는다. 원인은 로그로 드러내야 조용히 유실되지 않는다.
+            logger.warning(
+                "location_audit.drain_row_failed outbox_id=%s purpose=%s endpoint=%s",
+                event.outbox_id,
+                event.purpose,
+                event.endpoint,
+                exc_info=True,
+            )
+            continue
+        appended.append(event.outbox_id)
+
+    if appended:
+        await session.execute(
+            update(LocationAuditOutbox)
+            .where(LocationAuditOutbox.outbox_id.in_(appended))
+            .values(processed_at=now)
         )
-    await session.execute(
-        update(LocationAuditOutbox)
-        .where(LocationAuditOutbox.outbox_id.in_([e.outbox_id for e in pending]))
-        .values(processed_at=now)
-    )
     await session.commit()
-    return len(pending)
+    return len(appended)
 
 
 async def _drain_loop(interval: float, batch_size: int) -> None:
