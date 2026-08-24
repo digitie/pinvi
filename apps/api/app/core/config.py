@@ -2045,7 +2045,7 @@ class Settings(BaseSettings):
             verifier = M05RuntimeLeaseVerifier(
                 directory=Path(self.pinvi_m05_runtime_lease_directory),
                 binding=M05RuntimeLeaseBinding(
-                    scope=cast(Literal["staging", "production"], self.pinvi_environment),
+                    scope=self.pinvi_environment,
                     activation_generation=cast(int, receipt_payload["activation_generation"]),
                     activation_nonce=cast(str, receipt_payload["activation_nonce"]),
                     receipt_sha256=hashlib.sha256(
