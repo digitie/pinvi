@@ -25,8 +25,8 @@ active graph·rebaseline proof·M05 owner 전환과 단일 N150 target lease의 
 
 1. active `apps/api/alembic/versions/`를 `0100`/`0101` 두 revision으로 재구성한다.
 2. `0100`이 fresh PostgreSQL 16 catalog에서 `0061`의 Pinvi-owned schema를 재현하게 한다.
-3. `0101`이 N150 `0061` 뒤 current main에 합류한 location-audit·동의 이력 변경과 M05의
-   충돌했던 옛 `0062`·`0063`·`0064` 계약을 하나로 적용하게 한다.
+3. `0101`이 N150 `0061` 뒤 current main에 합류한 location-audit·동의 이력·좌표 출처 변경과
+   M05의 옛 `0062`~`0065` 계약을 하나로 적용하게 한다.
 4. root-only rebaseline helper가 `0061` catalog fingerprint와 fresh backup proof를 확인한 뒤
    version row만 `0100`으로 바꾸게 한다.
 5. 이전 기준선의 fresh bootstrap과 `0061 → 0100 → 0101` rehearsal, M05 recovery/preflight를

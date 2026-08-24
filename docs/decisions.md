@@ -3064,9 +3064,9 @@ fixture mutation 전에 fail-close할 수 있다.
 Pinvi의 active Alembic graph는 `20260601_0001`부터 `20260821_0061`까지 긴
 forward-only 이력을 갖고 있다. 현재 N150 운영 DB는 PostgreSQL 16에서 정확히
 `20260821_0061`을 가리키며, `app` schema에 실제 데이터가 있다. 최신 `main`은 그 뒤
-location audit purpose와 동의 이벤트/backfill을 `0062`·`0063`·`0064`에 추가했다. M05 branch도
-독립적으로 같은 revision 번호를 사용했으므로, 두 계보를 그대로 합치면 Alembic revision ID 충돌과
-`0061` parent가 없는 분기 그래프가 된다.
+location-audit purpose·동의 이벤트/backfill·좌표 출처를 `0062`~`0065`에 추가했다. M05 branch도
+`0062`·`0063`·`0064` revision 번호를 독립적으로 사용했으므로, 두 계보를 그대로 합치면 Alembic
+revision ID 충돌과 `0061` parent가 없는 분기 그래프가 된다.
 
 사용자는 과거 revision별 in-place upgrade 호환을 더 이상 유지하지 않기로 했다. 다만
 이 결정은 운영 데이터 삭제 권한을 주지 않는다. 따라서 새 설치는 간결한 기준선으로
@@ -3078,7 +3078,7 @@ location audit purpose와 동의 이벤트/backfill을 `0062`·`0063`·`0064`에
   - `20260824_0100`: `down_revision = None`인 Pinvi `app` schema의 새 설치 기준선.
     기존 `0001`부터 `0061`까지의 최종 catalog를 재현한다.
   - `20260824_0101`: `down_revision = 20260824_0100`이며 current main의
-    location audit purpose, 동의 이벤트 table/backfill과 M05의 anchor·audit guard·receipt
+    location-audit purpose·좌표 출처, 동의 이벤트 table/backfill과 M05의 anchor·audit guard·receipt
     DDL/권한 계약을 하나로 통합한다.
 - 과거 revision 파일은 active graph에서 제거한다. 과거 DB의 일반
   `alembic upgrade head`는 지원하지 않는다.
@@ -3093,7 +3093,7 @@ location audit purpose와 동의 이벤트/backfill을 `0062`·`0063`·`0064`에
     `COLLATE "C"`로 고정한다.
   - root-only producer가 만든 새 backup의 checksum 검증 결과가 명시적으로 주어진다.
 - rebaseline 뒤에만 표준 `alembic upgrade 20260824_0101`을 실행한다. 이 단계가 N150의
-  `0061` data에 동의 이벤트 backfill과 location audit 계약을 적용한 뒤 M05 object를 만든다.
+  `0061` data에 동의 이벤트 backfill·location-audit 좌표 출처 계약을 적용한 뒤 M05 object를 만든다.
   실패 시 version을 임의로 stamp하거나 이전 migration을 되살리지 않고, 검증한 backup으로 복구한
   뒤 원인을 수정한다.
 - `0061`이 아닌 기존 DB, fingerprint가 다른 DB, backup이 확인되지 않은 DB는
@@ -3119,8 +3119,9 @@ location audit purpose와 동의 이벤트/backfill을 `0062`·`0063`·`0064`에
 
 ### 근거
 
-옛 M05와 최신 main이 같은 `0062`·`0063`·`0064` 식별자를 사용하므로 두 계보를 유지한 채
-병합하는 것은 불가능하다. history 호환을 종료한 이상, N150의 실제 기준점인 `0061`을 `0100`으로
+옛 M05와 최신 main이 같은 `0062`·`0063`·`0064` 식별자를 사용하고, 최신 main의 `0065`도
+최종 head 계약에 포함해야 하므로 두 계보를 유지한 채 병합하는 것은 불가능하다. history 호환을
+종료한 이상, N150의 실제 기준점인 `0061`을 `0100`으로
 보존하고 그 뒤의 현재 기능을 `0101` 하나에 명시적으로 합치는 편이 가장 작고 검증 가능하다.
 반면 N150 DB에는 실제 데이터가 있으므로 단순 drop/recreate나 무검증 `alembic stamp`는 데이터
 보존과 audit chain 신뢰를 훼손한다. locale-independent structural fingerprint와 fresh backup을 함께

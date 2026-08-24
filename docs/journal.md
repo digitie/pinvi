@@ -2,6 +2,16 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-24 (codex) — M05 rebaseline 단일 final head 재결박
+
+- 최신 `main` rebase 뒤에 남은 `20260824_0065` 좌표 출처 migration을 별도 head로 두지 않고
+  `20260824_0101`에 흡수했다. active graph는 다시 `0100 → 0101` 두 revision만 가지며,
+  `FINALIZE_SCHEMA_REVISION`과 `ck_ktm_ct_boundary_contract`는 최종 `0101`에서만 재결박된다.
+- `0101` fresh install이 `coord_source` 컬럼·허용값 CHECK·`reverse_geocode` purpose까지 설치하는
+  PostgreSQL 계약 검증을 추가했다. fresh migration 및 artifact immutability 회귀 17건이 통과했다.
+- production DB mutation과 M05 activation은 수행하지 않았다. 남은 merge gate는 최종 적대 리뷰,
+  GitHub CI, 안전한 N150 paired live browser E2E다.
+
 ## 2026-08-24 (claude) — T-325: 지도 진입 시 단말기 위치로 중심점 (웹·앱)
 
 `docs/architecture/user-location.md` §1이 "지도 초기 중심점(앱 진입 시), 시군구 수준(~1km),
@@ -38,7 +48,7 @@ CHANGELOG 항목 추가. 범위를 넘는 두 건은 T-326(동의 철회 이력�
 
 ## 2026-08-24 (codex) — M05 Alembic rebaseline 최신 main 통합
 
-- 최신 `main` 리베이스에서 post-`0061`의 location-audit·동의 이벤트 `0062~0064`가 M05 branch의
+- 최신 `main` 리베이스에서 post-`0061`의 location-audit·동의 이벤트·좌표 출처 `0062~0065`가 M05 branch의
   같은 revision 번호와 충돌함을 확인했다. active graph는 `20260824_0100 → 20260824_0101`로 유지하되,
   `0100`은 PostgreSQL 16 `0061` app catalog 기준선, `0101`은 upstream 변경과 M05
   anchor·append-only audit/receipt·최소 ACL 계약을 함께 적용하도록 재정렬했다.

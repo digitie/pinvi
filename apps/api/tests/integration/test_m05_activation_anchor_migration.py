@@ -151,6 +151,60 @@ async def test_0101_installs_m05_final_contract_with_minimal_public_surface(
                 )
                 assert "schema_revision = '20260824_0101'::text" in boundary_definition
 
+                coord_source_columns = await connection.execute(
+                    text(
+                        "SELECT table_name, is_nullable, data_type "
+                        "FROM information_schema.columns "
+                        "WHERE table_schema = 'app' "
+                        "AND table_name IN ('location_access_log', 'location_audit_outbox') "
+                        "AND column_name = 'coord_source'"
+                    )
+                )
+                assert {(row[0], row[1], row[2]) for row in coord_source_columns} == {
+                    ("location_access_log", "YES", "text"),
+                    ("location_audit_outbox", "YES", "text"),
+                }
+                coord_source_constraints = dict(
+                    (
+                        await connection.execute(
+                            text(
+                                "SELECT relation.relname, pg_get_constraintdef(constraint_row.oid, true) "
+                                "FROM pg_constraint constraint_row "
+                                "JOIN pg_class relation ON relation.oid = constraint_row.conrelid "
+                                "JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace "
+                                "WHERE namespace.nspname = 'app' "
+                                "AND relation.relname IN ("
+                                "'location_access_log', 'location_audit_outbox') "
+                                "AND constraint_row.contype = 'c' "
+                                "AND pg_get_constraintdef(constraint_row.oid, true) "
+                                "LIKE '%coord_source%'"
+                            )
+                        )
+                    ).all()
+                )
+                assert set(coord_source_constraints) == {
+                    "location_access_log",
+                    "location_audit_outbox",
+                }
+                for definition in coord_source_constraints.values():
+                    assert "coord_source" in definition
+                    assert "device" in definition
+                    assert "map_pick" in definition
+                purpose_definition = await connection.scalar(
+                    text(
+                        "SELECT pg_get_constraintdef(constraint_row.oid, true) "
+                        "FROM pg_constraint constraint_row "
+                        "JOIN pg_class relation ON relation.oid = constraint_row.conrelid "
+                        "JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace "
+                        "WHERE namespace.nspname = 'app' "
+                        "AND relation.relname = 'location_access_log' "
+                        "AND constraint_row.conname = "
+                        "'ck_location_access_log_ck_location_access_log_purpose'"
+                    )
+                )
+                assert purpose_definition is not None
+                assert "reverse_geocode" in purpose_definition
+
                 trigger_rows = await connection.execute(
                     text(
                         "SELECT namespace.nspname, relation.relname, trigger_row.tgname, "

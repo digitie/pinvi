@@ -4,9 +4,9 @@ Revision ID: 20260824_0101
 Revises: 20260824_0100
 Create Date: 2026-08-24
 
-N150의 `0061` 기준선 뒤에 합류한 location-audit·동의 이력 변경과 M05의 충돌했던
-옛 `0062`~`0064` DDL을 모두 이 revision에 통합한다. 이 revision은 새 설치와
-ADR-063의 명시적 `0061` rebaseline 뒤에만 실행된다.
+N150의 `0061` 기준선 뒤에 합류한 location-audit·동의 이력·좌표 출처 변경과 M05의
+옛 `0062`~`0065` DDL을 모두 이 revision에 통합한다. 이 revision은 새 설치와
+ADR-065의 명시적 `0061` rebaseline 뒤에만 실행된다.
 """
 
 from __future__ import annotations
@@ -40,7 +40,11 @@ _BOUNDARY_CONTRACT_CHECK = (
 _LOCATION_ACCESS_LOG_PURPOSE_CONSTRAINT = "ck_location_access_log_ck_location_access_log_purpose"
 _LOCATION_ACCESS_LOG_PURPOSES = (
     "'viewport_query', 'nearby_attractions', 'weather_at_coord', "
-    "'feature_request', 'region_covering', 'region_radius', 'third_party_place_search'"
+    "'feature_request', 'region_covering', 'region_radius', 'third_party_place_search', "
+    "'reverse_geocode'"
+)
+_LOCATION_AUDIT_COORD_SOURCE_CHECK = (
+    "coord_source IS NULL OR coord_source IN ('device', 'map_pick')"
 )
 _LEGACY_REBASELINE_RECEIPT_PATH_ENV = "PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH"
 _LEGACY_REBASELINE_RECEIPT_FIELDS = frozenset(
@@ -713,6 +717,23 @@ def _install_location_audit_purpose_contract() -> None:
     )
 
 
+def _install_location_audit_coord_source_contract() -> None:
+    """좌표 출처를 기록해 device 동의 게이트와 audit ledger를 같은 계약으로 묶는다."""
+
+    for table in ("location_access_log", "location_audit_outbox"):
+        op.add_column(
+            table,
+            sa.Column("coord_source", sa.Text(), nullable=True),
+            schema="app",
+        )
+        op.create_check_constraint(
+            f"ck_{table}_coord_source",
+            table,
+            _LOCATION_AUDIT_COORD_SOURCE_CHECK,
+            schema="app",
+        )
+
+
 def _install_user_consent_event_history() -> None:
     """T-326의 현재 상태 이력 테이블과 정직한 0061 data backfill을 적용한다."""
 
@@ -1116,6 +1137,7 @@ def upgrade() -> None:
     bind = op.get_bind()
     _assert_legacy_rebaseline_handoff(bind)
     _install_location_audit_purpose_contract()
+    _install_location_audit_coord_source_contract()
     _install_user_consent_event_history()
     _advance_boundary_contract()
     _replace_admin_audit_guard()
