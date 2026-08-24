@@ -69,6 +69,12 @@ if [[ "${FENCE_DATABASE_URL}" == postgresql+asyncpg://* ]]; then
   FENCE_DATABASE_URL="postgresql://${FENCE_DATABASE_URL#postgresql+asyncpg://}"
 fi
 
+if [[ "${PINVI_RESTORE_HOTSWAP_EXECUTE:-0}" == "1" && "${TEST_MODE}" != "1" &&
+  -z "${PINVI_RESTORE_FENCE_DATABASE_URL:-}" ]]; then
+  phase preparing failed "PINVI_RESTORE_FENCE_DATABASE_URL is required for an executing schema swap"
+  exit 3
+fi
+
 if [[ -L "${SNAPSHOT}" || ! -f "${SNAPSHOT}" ]]; then
   phase preparing failed "snapshot file not found"
   exit 2
@@ -159,11 +165,6 @@ if [[ "${PINVI_RESTORE_HOTSWAP_EXECUTE:-0}" != "1" ]]; then
   phase validating skipped "restore did not run"
   phase draining skipped "restore did not run"
   phase switching skipped "restore did not run"
-  exit 3
-fi
-
-if [[ "${TEST_MODE}" != "1" && -z "${FENCE_DATABASE_URL}" ]]; then
-  phase preparing failed "PINVI_RESTORE_FENCE_DATABASE_URL is required for an executing schema swap"
   exit 3
 fi
 
@@ -349,9 +350,6 @@ assert_expected_target() {
   phase preparing success "restore target identity verified"
 }
 
-start_advisory_lock
-assert_expected_target
-
 validate_expected_target_values() {
   if [[ "${TEST_MODE}" == "1" && -z "${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" ]]; then
     return 0
@@ -371,6 +369,27 @@ validate_expected_target_values() {
 }
 
 validate_expected_target_values
+assert_expected_target
+
+assert_fence_target_identity() {
+  if [[ "${TEST_MODE}" == "1" ]]; then
+    return 0
+  fi
+  local actual
+  actual="$("${PSQL_BIN}" --no-psqlrc --tuples-only --no-align \
+    --dbname="${FENCE_DATABASE_URL}" \
+    --command="SELECT current_database() || '|' || d.oid::text || '|' || (pg_control_system()).system_identifier::text || '|' || COALESCE(host(inet_server_addr()), '') || '|' || inet_server_port()::text FROM pg_database d WHERE d.datname = current_database()" \
+    | tr -d '[:space:]')"
+  local expected="${PINVI_RESTORE_EXPECTED_DATABASE_NAME}|${PINVI_RESTORE_EXPECTED_DATABASE_OID}|${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER}|${PINVI_RESTORE_EXPECTED_HOSTADDR}|${PINVI_RESTORE_EXPECTED_PORT}"
+  if [[ "${actual}" != "${expected}" ]]; then
+    phase preparing failed "database fence target does not match the restore target"
+    exit 3
+  fi
+  phase preparing success "database fence target identity verified"
+}
+
+assert_fence_target_identity
+start_advisory_lock
 
 write_identity_guard() {
   if [[ "${TEST_MODE}" == "1" && -z "${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" ]]; then
@@ -734,6 +753,7 @@ FROM pg_roles login
 JOIN role_closure closure ON closure.login_oid = login.oid
 JOIN pg_roles effective ON effective.oid = closure.role_oid
 WHERE login.rolcanlogin
+  AND login.rolname <> current_user
   AND login.rolname <> '${FENCE_EXECUTOR_ROLE}'
   AND has_database_privilege(login.rolname, current_database(), 'CONNECT')
   AND (
@@ -1239,6 +1259,7 @@ enter_write_fence() {
     return 0
   fi
   assert_restore_executor_safe
+  assert_fence_target_identity
   assert_fence_executor_safe
   assert_configured_roles_safe
   local writer_logins

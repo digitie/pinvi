@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 SCRIPT = Path(__file__).resolve().parents[4] / "scripts/restore-hotswap.sh"
+BASH_BIN = "/usr/bin/bash"
+
+
+def _write_executable(path: Path, body: str) -> None:
+    path.write_text(body, encoding="utf-8")
+    path.chmod(path.stat().st_mode | 0o111)
 
 
 def test_restore_hotswap_rejects_session_and_lock_control_in_dump_sql() -> None:
@@ -25,6 +34,7 @@ def test_restore_hotswap_rejects_session_and_lock_control_in_dump_sql() -> None:
     assert "database fence URL must be a dedicated non-superuser target owner" in source
     assert "FENCE_EXECUTOR_ROLE" in source
     assert "login.rolname <> '${FENCE_EXECUTOR_ROLE}'" in source
+    assert source.count("login.rolname <> current_user") >= 2
     assert "SET session_replication_role = replica" not in source
 
 
@@ -89,3 +99,98 @@ SELECT 1;
 
     assert safe.returncode == 1, safe.stderr
     assert unsafe.returncode == 0, unsafe.stderr
+
+
+@pytest.mark.parametrize("environment", ["staging", "production"])
+def test_restore_hotswap_rejects_test_mode_outside_test_before_db_tool(
+    tmp_path: Path,
+    environment: str,
+) -> None:
+    marker = tmp_path / "db-tool-called"
+    fake_tool = tmp_path / "fake-db-tool"
+    _write_executable(
+        fake_tool,
+        """#!/usr/bin/env bash
+set -euo pipefail
+touch "$PINVI_TEST_TOOL_MARKER"
+exit 99
+""",
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "PINVI_M05_RESTORE_TEST_MODE": "1",
+            "PINVI_ENVIRONMENT": environment,
+            "PINVI_RESTORE_HOTSWAP_EXECUTE": "1",
+            "PINVI_DATABASE_URL": "postgresql://fixture@db:5432/pinvi",
+            "PINVI_RESTORE_PG_RESTORE_BIN": str(fake_tool),
+            "PINVI_RESTORE_PSQL_BIN": str(fake_tool),
+            "PINVI_TEST_TOOL_MARKER": str(marker),
+        }
+    )
+
+    result = subprocess.run(  # noqa: S603
+        [
+            BASH_BIN,
+            str(SCRIPT),
+            "run",
+            str(tmp_path / "never.dump"),
+            "app_restore",
+            "app_previous",
+        ],
+        cwd=SCRIPT.parents[1],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 3
+    assert "M05 restore test mode requires PINVI_ENVIRONMENT=test" in result.stdout
+    assert not marker.exists()
+
+
+def test_restore_hotswap_requires_explicit_fence_url_before_db_tool(tmp_path: Path) -> None:
+    marker = tmp_path / "db-tool-called"
+    fake_tool = tmp_path / "fake-db-tool"
+    _write_executable(
+        fake_tool,
+        """#!/usr/bin/env bash
+set -euo pipefail
+touch "$PINVI_TEST_TOOL_MARKER"
+exit 99
+""",
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "PINVI_ENVIRONMENT": "staging",
+            "PINVI_RESTORE_HOTSWAP_EXECUTE": "1",
+            "PINVI_DATABASE_URL": "postgresql://fixture@db:5432/pinvi",
+            "PINVI_RESTORE_PG_RESTORE_BIN": str(fake_tool),
+            "PINVI_RESTORE_PSQL_BIN": str(fake_tool),
+            "PINVI_TEST_TOOL_MARKER": str(marker),
+        }
+    )
+    env.pop("PINVI_M05_RESTORE_TEST_MODE", None)
+    env.pop("PINVI_RESTORE_FENCE_DATABASE_URL", None)
+
+    result = subprocess.run(  # noqa: S603
+        [
+            BASH_BIN,
+            str(SCRIPT),
+            "run",
+            str(tmp_path / "never.dump"),
+            "app_restore",
+            "app_previous",
+        ],
+        cwd=SCRIPT.parents[1],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 3
+    assert "PINVI_RESTORE_FENCE_DATABASE_URL is required" in result.stdout
+    assert not marker.exists()
