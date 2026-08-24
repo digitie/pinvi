@@ -26,7 +26,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 _BASELINE_FILE = "20260824_0100_app_schema.sql"
-_BASELINE_SHA256 = "6b9600b715d788eb5a635b6e5a970b5244c5f23851e30001fc003b104d4f23d4"
+_BASELINE_SHA256 = "cfb77c4402b49b4d03a15a1e2471cef13c6665b7b95efe4fedda6af7ae2b4b57"
 _BASELINE_STATEMENT_COUNT = 445
 _DOLLAR_QUOTE = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$")
 

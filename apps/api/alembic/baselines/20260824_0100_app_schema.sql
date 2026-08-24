@@ -2869,4 +2869,3 @@ ALTER TABLE ONLY "app"."user_oauth_identities"
 
 ALTER TABLE ONLY "app"."user_sessions"
     ADD CONSTRAINT "fk_user_sessions_user_id" FOREIGN KEY ("user_id") REFERENCES "app"."users"("user_id") ON DELETE CASCADE;
-
