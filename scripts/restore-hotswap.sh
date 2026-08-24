@@ -401,6 +401,9 @@ SQL
     fi
   done
   wait "${LOCK_HOLDER_PID}" >/dev/null 2>&1 || true
+  if [[ -s "${TMP_DIR}/lock.err" ]]; then
+    cat -- "${TMP_DIR}/lock.err" >&2 || true
+  fi
   phase preparing failed "another schema-swap is running or the restore lock could not be acquired"
   exit 3
 }
@@ -561,6 +564,9 @@ execute_sql_file() {
         return 0
       fi
     elif ! kill -0 "${LOCK_HOLDER_PID}" >/dev/null 2>&1; then
+      if [[ -s "${TMP_DIR}/lock.err" ]]; then
+        cat -- "${TMP_DIR}/lock.err" >&2 || true
+      fi
       phase "${phase_name}" failed "schema-swap lock session ended during SQL execution"
       if [[ "${CLEANUP_MODE}" == "1" ]]; then
         return 1
