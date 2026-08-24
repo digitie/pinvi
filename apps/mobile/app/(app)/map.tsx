@@ -290,10 +290,11 @@ export default function MapScreen() {
               </Muted>
             </Card>
           ) : null}
+          {/* 지도가 아직 mount되지 않았으면 `flyTo`가 무음 no-op이 된다 — 그동안은 눌리지 않게 한다. */}
           <Button
             label="현재 위치로"
             onPress={onMyLocation}
-            loading={loading || granting || consent.status === 'loading'}
+            loading={loading || granting || consent.status === 'loading' || !autoCenter.resolved}
           />
         </View>
       </View>

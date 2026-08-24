@@ -86,6 +86,11 @@ export function shouldAutoLocate({
 /**
  * 좌표가 국내 서비스 범위 안인지. 판정 기준은 `CoordSchema`(EPSG:4326 대한민국 범위)를 그대로 쓴다 —
  * 범위 상수를 여기서 다시 정의하면 두 정본이 생긴다(ADR-018 한국 전용 정책).
+ *
+ * 한계: `CoordSchema`는 lon 124~132 / lat 33~43의 **단순 bbox**라 대마도·규슈 북안처럼 이 사각형에
+ * 걸치는 일본 영토가 '국내'로 통과한다. 이 함수의 용도는 "지도를 어디에 둘 것인가"이므로 그 정도
+ * 오차는 무해하지만, 서비스 차단(geofencing) 판정에 그대로 쓰면 안 된다 — 정밀 판정이 필요하면
+ * 행정구역 폴리곤을 쓰는 별도 수단이 있어야 한다(T-327).
  */
 export function isCoordInKorea(coord: { lon: number; lat: number }): boolean {
   return CoordSchema.safeParse(coord).success;

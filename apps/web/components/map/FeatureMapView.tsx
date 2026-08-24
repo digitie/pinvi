@@ -329,7 +329,10 @@ export function FeatureMapView({
     };
   }, []);
 
-  const markUserInteracted = useCallback(() => {
+  // MapLibre는 프로그램 카메라 이동(`easeTo`/`flyTo`/`jumpTo`)에서도 zoomstart/rotatestart/pitchstart를
+  // 발화한다. 사용자 제스처만 걸러내려면 원본 DOM 이벤트가 실린 경우만 세야 한다.
+  const markUserInteracted = useCallback((event?: { originalEvent?: unknown }) => {
+    if (event && event.originalEvent == null) return;
     userInteractedRef.current = true;
   }, []);
 
@@ -337,7 +340,8 @@ export function FeatureMapView({
     (map: MapLibreMap) => {
       mapRef.current = map;
       // `VWorldMap`은 moveend/zoomend만 노출한다. 자동 센터링을 취소해야 하는 것은 "사용자가
-      // 직접 만졌는가"이므로 시작 이벤트를 직접 바인딩한다(프로그램 카메라 이동과 구분).
+      // 직접 만졌는가"이므로 시작 이벤트를 직접 바인딩하고, 핸들러가 `originalEvent` 유무로
+      // 사용자 제스처와 프로그램 이동을 가른다(`dragstart`만 사용자 전용이다).
       for (const eventName of ['dragstart', 'zoomstart', 'rotatestart', 'pitchstart'] as const) {
         map.on(eventName, markUserInteracted);
       }
@@ -548,6 +552,7 @@ export function FeatureMapView({
         gate: { alreadyResolved: false, userInteracted: userInteractedRef.current },
       });
       if (!gateWithoutConsent.proceed) {
+        // 세션에 굳히지 않는다 — 권한은 동의보다 오히려 세션 중에 더 자주 바뀐다(브라우저 설정).
         finish({ reason: gateWithoutConsent.skipReason, permission });
         return;
       }

@@ -30,40 +30,45 @@ Cookie: pinvi_access=...
 
 ### 3.1 `GET /users/me/consents`
 
+응답 `data`는 **동의 row의 평면 배열**이다(`Envelope.of(list[ConsentResponse])`).
+
 ```jsonc
 {
-  "data": {
-    "consents": [
-      { "consent_type": "tos", "version": "v1.0", "agreed_at": "...", "withdrawn_at": null },
-      {
-        "consent_type": "location_collection",
-        "version": "v1.0",
-        "agreed_at": "...",
-        "withdrawn_at": null,
-      },
-    ],
-  },
+  "data": [
+    { "consent_type": "tos", "version": "v1.0", "agreed_at": "...", "withdrawn_at": null },
+    {
+      "consent_type": "location_collection",
+      "version": "v1.0",
+      "agreed_at": "...",
+      "withdrawn_at": null,
+    },
+  ],
 }
 ```
 
-### 3.2 `POST /users/me/consents`
+### 3.2 `PUT /users/me/consents`
 
-신규 동의 추가 (예: 약관 개정 시 재동의).
+동의 기록(idempotent). body는 **항목 배열**이며, 같은 `(user, type, version)`이면 재호출해도
+같은 row를 갱신한다. 위치 기능처럼 가입 이후 추가로 받는 동의도 이 endpoint를 쓴다.
 
 ```http
-POST /users/me/consents
+PUT /users/me/consents
 Content-Type: application/json
 
-{ "consent_type": "marketing", "version": "v1.0" }
+[
+  { "consent_type": "lbs_tos", "version": "v1.0" },
+  { "consent_type": "location_collection", "version": "v1.0" }
+]
 ```
 
-### 3.3 `POST /users/me/consents/withdraw`
+응답은 §3.1과 같은 배열 형태다.
+
+### 3.3 `DELETE /users/me/consents/{consent_type}`
+
+철회. 성공 시 `204 No Content`.
 
 ```http
-POST /users/me/consents/withdraw
-Content-Type: application/json
-
-{ "consent_type": "location_collection" }
+DELETE /users/me/consents/location_collection
 ```
 
 - `app.user_consents.withdrawn_at = now()`
