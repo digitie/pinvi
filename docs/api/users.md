@@ -48,8 +48,13 @@ Cookie: pinvi_access=...
 
 ### 3.2 `PUT /users/me/consents`
 
-동의 기록(idempotent). body는 **항목 배열**이며, 같은 `(user, type, version)`이면 재호출해도
-같은 row를 갱신한다. 위치 기능처럼 가입 이후 추가로 받는 동의도 이 endpoint를 쓴다.
+동의 기록(idempotent). body는 **항목 배열**이며, 위치 기능처럼 가입 이후 추가로 받는 동의도 이
+endpoint를 쓴다. 같은 `(user, type, version)`에 대해:
+
+- **이미 유효하면 아무것도 바꾸지 않는다** — `agreed_at`은 최초 동의 시점을 유지한다(법적 증빙).
+- **철회 상태면 되살린다** — `withdrawn_at`을 지우고 `agreed_at`을 갱신한다.
+
+두 경우 모두 `app.user_consent_events`에 이벤트가 append되므로 철회 이력은 지워지지 않는다(T-326).
 
 ```http
 PUT /users/me/consents
@@ -65,7 +70,8 @@ Content-Type: application/json
 
 ### 3.3 `DELETE /users/me/consents/{consent_type}`
 
-철회. 성공 시 `204 No Content`.
+철회. 성공 시 `204 No Content`. 같은 서비스를 타는 `POST /users/me/consents/withdraw`도 있다.
+철회는 현재 상태 row의 `withdrawn_at`을 채우고 `user_consent_events`에 `withdrawn` 이벤트를 남긴다.
 
 ```http
 DELETE /users/me/consents/location_collection

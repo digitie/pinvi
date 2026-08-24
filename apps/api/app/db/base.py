@@ -54,5 +54,6 @@ from app.models import (  # noqa: E402,F401
     trip_day,
     user,
     user_consent,
+    user_consent_event,
     user_email_verification,
 )

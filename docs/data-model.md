@@ -685,6 +685,27 @@ SPEC V8 #4 M-6, M-14 + #0 O장에서 도입한 추가 테이블. 자세한 DDL�
 | `agreed_at`         |                                                                                                |
 | `withdrawn_at`      | 철회 시. 위치 동의 철회 → 새 위치 수집 비활성, 기존 확인자료는 법정 보존기간 후 archive/delete |
 
+### 8.1a `app.user_consent_events` (동의/철회 이력, T-326)
+
+`user_consents`는 type+version당 1행의 **현재 상태**만 담고 재동의가 그 row를 되살리므로,
+"언제 동의했고 언제 철회했는가"는 이 append 전용 테이블이 갖는다. 이용약관 제4조가 고지하는
+"시점·버전과 함께 기록된 동의 이력"의 실체다.
+
+| 컬럼           | 비고                                                                       |
+| -------------- | -------------------------------------------------------------------------- |
+| `event_id` (PK) | `gen_random_uuid()`                                                        |
+| `user_id` (FK)  | `ON DELETE CASCADE`                                                        |
+| `consent_type`  | `user_consents`와 동일한 6종 CHECK                                         |
+| `version`       | 동의 당시 약관 버전. 허용 목록 CHECK를 두지 않는다(과거 표기 드리프트 보존) |
+| `event`         | `agreed` / `withdrawn`                                                     |
+| `source`        | `register` / `profile_complete` / `settings` / `backfill`                  |
+| `occurred_at`   | 이벤트 시각                                                                |
+
+애플리케이션은 INSERT만 한다. hash chain·append-only 트리거는 이번 범위 밖이며, 실제 긴장은
+`CASCADE` FK다(사용자 하드 삭제가 생기면 보존 정책을 먼저 정해야 한다).
+`source='backfill'` 행은 마이그레이션 `0064`가 현재 상태에서 **복원 가능한 것만** 유도한 것이라,
+이미 덮어써진 과거 사이클은 포함하지 않는다.
+
 ### 8.2 `app.location_access_log` (위치정보법 O-3)
 
 `content_hash` chain:
