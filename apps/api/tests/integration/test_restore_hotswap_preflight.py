@@ -126,10 +126,11 @@ GRANT CONNECT ON DATABASE {_quoted(database)} TO {_quoted(app_role)};
     hotswap_url = _database_url(host=host, port=port, role=hotswap_role, database=database)
     fence_url = _database_url(host=host, port=port, role=fence_role, database=database)
     app_url = _database_url(host=host, port=port, role=app_role, database=database)
+    root_target_url = _database_url(host=host, port=port, role="m05_root", database=database)
     _require_success(
         _psql(
             tools,
-            _database_url(host=host, port=port, role="m05_root", database=database),
+            root_target_url,
             f"""
 CREATE SCHEMA x_extension AUTHORIZATION m05_root;
 REVOKE ALL ON SCHEMA x_extension FROM PUBLIC;
@@ -170,14 +171,28 @@ GRANT USAGE ON SCHEMA x_extension TO {_quoted(hotswap_role)}, {_quoted(app_role)
         )
 
     reconciliation_schema = ""
-    if kind == "canonical":
+    if kind in {"canonical", "trigger_noop", "missing_audit"}:
         # The executing hotswap validates the M05 reconciliation safeguards after
         # restore.  Keep this fixture structurally small, but include the exact
         # protected objects so this is a genuine happy-path exercise rather than
         # an ACL-only preflight probe.
-        reconciliation_schema = """
+        audit_table = "" if kind == "missing_audit" else "CREATE TABLE app.admin_audit_log (id bigint PRIMARY KEY);"
+        trigger_body = (
+            """
+  IF TG_OP = 'INSERT' THEN
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION '% is append-only', TG_TABLE_SCHEMA || '.' || TG_TABLE_NAME
+    USING ERRCODE = '55000';
+"""
+            if kind != "trigger_noop"
+            else """
+  RETURN NEW;
+"""
+        )
+        reconciliation_schema = f"""
 CREATE TABLE app.users (id bigint PRIMARY KEY);
-CREATE TABLE app.admin_audit_log (id bigint PRIMARY KEY);
+{audit_table}
 CREATE TABLE app.ktm_feature_reference_reconciliation_delivery_attempts (id bigint PRIMARY KEY);
 CREATE TABLE app.ktm_feature_reference_reconciliation_applied_receipts (id bigint PRIMARY KEY);
 CREATE TABLE app.ktm_feature_reference_reconciliation_impacts (id bigint PRIMARY KEY);
@@ -186,10 +201,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF TG_OP = 'TRUNCATE' THEN
-    RETURN NULL;
-  END IF;
-  RETURN NEW;
+{trigger_body}
 END;
 $$;
 CREATE TRIGGER trg_ktm_feature_reference_reconciliation_delivery_attempts_append_only
@@ -246,10 +258,11 @@ INSERT INTO app.widgets (value) VALUES (0);
 """  # noqa: S608 - 역할명은 내부 생성값을 quoted로 제한한다.
     _require_success(_psql(tools, hotswap_url, setup_sql))
 
-    requires_definer_proof = kind == "security_definer"
+    requires_definer_proof = kind in {"security_definer", "cross_schema_security_definer"}
     if requires_definer_proof:
+        function_schema = "app" if kind == "security_definer" else "public"
         definer_sql = f"""
-CREATE FUNCTION app.definer_write() RETURNS void
+CREATE FUNCTION {function_schema}.definer_write() RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = app, pg_catalog
@@ -263,11 +276,13 @@ REVOKE INSERT, UPDATE, DELETE ON TABLE app.widgets FROM {_quoted(app_role)};
         _require_success(
             _psql(
                 tools,
-                hotswap_url,
+                root_target_url if kind == "cross_schema_security_definer" else hotswap_url,
                 definer_sql,
             )
         )
-        _require_success(_psql(tools, app_url, "SELECT app.definer_write();"))
+        _require_success(
+            _psql(tools, app_url, f"SELECT {function_schema}.definer_write();")
+        )
         proof = _psql(tools, hotswap_url, "SELECT value FROM app.widgets WHERE id = 1;")
         _require_success(proof)
         assert proof.stdout.strip() == "1"
@@ -281,10 +296,13 @@ REVOKE INSERT, UPDATE, DELETE ON TABLE app.widgets FROM {_quoted(app_role)};
 
     expected_failure = {
         "canonical": "",
+        "trigger_noop": "M05 append-only trigger unexpectedly allowed TRUNCATE",
+        "missing_audit": "schema-swap requires canonical single-runtime-role ACLs",
         "acl": "schema-swap requires canonical single-runtime-role ACLs",
         "extra": "schema-swap requires exactly one canonical runtime writer role",
         "global_default": "schema-swap requires canonical single-runtime-role ACLs",
         "security_definer": "schema-swap requires canonical single-runtime-role ACLs",
+        "cross_schema_security_definer": "schema-swap requires canonical single-runtime-role ACLs",
     }[kind]
     return _Case(
         database=database,
@@ -353,6 +371,25 @@ SELECT to_regnamespace('app') IS NOT NULL,
     assert (can_delete == "t") is case.expected_delete
 
 
+def _assert_source_not_swapped(tools: dict[str, str], case: _Case, previous_schema: str) -> None:
+    result = _psql(
+        tools,
+        case.hotswap_url,
+        f"""
+SELECT to_regnamespace('app') IS NOT NULL,
+       to_regnamespace('{previous_schema}') IS NULL,
+       has_table_privilege('{case.app_role}', 'app.widgets', 'INSERT'),
+       has_table_privilege('{case.app_role}', 'app.widgets', 'DELETE');
+""",
+    )
+    _require_success(result)
+    app_exists, previous_missing, can_insert, can_delete = result.stdout.strip().split("|")
+    assert app_exists == "t"
+    assert previous_missing == "t"
+    assert can_insert == "t"
+    assert (can_delete == "t") is case.expected_delete
+
+
 def test_restore_hotswap_preflight_rejects_real_noncanonical_topologies_before_mutation(
     tmp_path: Path,
 ) -> None:
@@ -385,7 +422,14 @@ def test_restore_hotswap_preflight_rejects_real_noncanonical_topologies_before_m
                 suffix=suffix,
                 kind=kind,
             )
-            for kind in ("acl", "extra", "global_default", "security_definer")
+            for kind in (
+                "acl",
+                "extra",
+                "global_default",
+                "security_definer",
+                "cross_schema_security_definer",
+                "missing_audit",
+            )
         ]
 
         # 복원 실행 중 writer inventory에 root superuser가 섞이지 않도록, 모든 fixture를
@@ -443,6 +487,94 @@ def test_restore_hotswap_preflight_rejects_real_noncanonical_topologies_before_m
             assert result.returncode == 3, result.stdout + result.stderr
             assert case.expected_failure in result.stdout
             _assert_source_unchanged(tools, case, restore_schema)
+    finally:
+        container.stop()
+
+
+def test_restore_hotswap_rejects_real_noop_append_only_trigger_before_schema_switch(
+    tmp_path: Path,
+) -> None:
+    """Catalog-shaped triggers with a no-op body must not reach the schema rename."""
+
+    tools = _require_tools()
+    try:
+        import docker  # noqa: F401
+        from testcontainers.postgres import PostgresContainer
+    except Exception:
+        pytest.skip("docker SDK 미설치 — M05 실제 trigger 의미 검증을 건너뜁니다.")
+
+    suffix = uuid.uuid4().hex[:8]
+    container = PostgresContainer(
+        "postgres:16-alpine",
+        username="m05_root",
+        password=TEST_PASSWORD,
+        dbname="m05_root",
+    )
+    container.start()
+    try:
+        host = container.get_container_host_ip()
+        port = container.get_exposed_port(5432)
+        root_url = _database_url(host=host, port=port, role="m05_root", database="m05_root")
+        case = _create_case(
+            tools=tools,
+            root_url=root_url,
+            host=host,
+            port=port,
+            suffix=suffix,
+            kind="trigger_noop",
+        )
+        identity = _identity(tools, case.hotswap_url)
+        snapshot = _snapshot(tools, case.hotswap_url, tmp_path / "noop-trigger-snapshot")
+        _require_success(_psql(tools, root_url, "ALTER ROLE m05_root NOLOGIN;"))
+
+        restore_schema = f"app_restore_{suffix}"
+        previous_schema = f"app_previous_{suffix}"
+        env = os.environ.copy()
+        env.update(
+            {
+                "PINVI_ENVIRONMENT": "development",
+                "PINVI_RESTORE_HOTSWAP_EXECUTE": "1",
+                "PINVI_RESTORE_PRIVATE_TOOL_COPY": "1",
+                "PINVI_RESTORE_DATABASE_URL": case.hotswap_url,
+                "PINVI_RESTORE_FENCE_DATABASE_URL": case.fence_url,
+                "PINVI_RESTORE_APP_ROLE": case.app_role,
+                "PINVI_RESTORE_ALLOW_NO_DRAIN": "1",
+                "PINVI_RESTORE_DRAIN_VERIFIED": "1",
+                "PINVI_RESTORE_PG_RESTORE_BIN": tools["pg_restore"],
+                "PINVI_RESTORE_PG_RESTORE_SHA256": hashlib.sha256(
+                    Path(tools["pg_restore"]).read_bytes()
+                ).hexdigest(),
+                "PINVI_RESTORE_PSQL_BIN": tools["psql"],
+                "PINVI_RESTORE_PSQL_SHA256": hashlib.sha256(
+                    Path(tools["psql"]).read_bytes()
+                ).hexdigest(),
+                "PINVI_RESTORE_BASH_BIN": tools["bash"],
+                "PINVI_RESTORE_BASH_SHA256": hashlib.sha256(
+                    Path(tools["bash"]).read_bytes()
+                ).hexdigest(),
+                "PINVI_RESTORE_EXPECTED_DATABASE_NAME": identity[0],
+                "PINVI_RESTORE_EXPECTED_DATABASE_OID": identity[1],
+                "PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER": identity[2],
+                "PINVI_RESTORE_EXPECTED_HOSTADDR": identity[3],
+                "PINVI_RESTORE_EXPECTED_PORT": identity[4],
+            }
+        )
+        env.pop("PINVI_M05_RESTORE_TEST_MODE", None)
+        result = _run(
+            [
+                tools["bash"],
+                str(HOTSWAP_SCRIPT),
+                "run",
+                str(snapshot),
+                restore_schema,
+                previous_schema,
+            ],
+            env=env,
+        )
+
+        assert result.returncode == 3, result.stdout + result.stderr
+        assert "M05 append-only trigger unexpectedly allowed TRUNCATE" in result.stderr
+        _assert_source_not_swapped(tools, case, previous_schema)
     finally:
         container.stop()
 

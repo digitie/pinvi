@@ -49,6 +49,11 @@ if [[ "${TEST_MODE}" != "1" && ( "${PINVI_ENVIRONMENT:-}" == "staging" || "${PIN
 fi
 TRUSTED_SNAPSHOT_CHECKSUM=""
 TRUSTED_SNAPSHOT_LIST_SHA256=""
+TRUSTED_SOURCE_DATABASE=""
+TRUSTED_SOURCE_DATABASE_OID=""
+TRUSTED_SOURCE_SYSTEM_IDENTIFIER=""
+TRUSTED_SOURCE_HOSTADDR=""
+TRUSTED_SOURCE_PORT=""
 declare -a WRITE_ROLES=()
 declare -A WRITE_ROLE_SEEN=()
 
@@ -149,6 +154,15 @@ assert_trusted_snapshot_provenance() {
   fi
   TRUSTED_SNAPSHOT_CHECKSUM="${manifest[dump_sha256]}"
   TRUSTED_SNAPSHOT_LIST_SHA256="${manifest[pg_restore_list_sha256]}"
+  # A root-owned archive is not automatically an archive for this live target.
+  # Keep the complete source identity so the executing hotswap can bind it to
+  # the independently attested target before it acquires the advisory lock or
+  # changes any database privilege.
+  TRUSTED_SOURCE_DATABASE="${manifest[source_database]}"
+  TRUSTED_SOURCE_DATABASE_OID="${manifest[source_database_oid]}"
+  TRUSTED_SOURCE_SYSTEM_IDENTIFIER="${manifest[source_system_identifier]}"
+  TRUSTED_SOURCE_HOSTADDR="${manifest[source_hostaddr]}"
+  TRUSTED_SOURCE_PORT="${manifest[source_port]}"
 }
 
 assert_trusted_snapshot_provenance
@@ -451,6 +465,23 @@ validate_expected_target_values() {
 }
 
 validate_expected_target_values
+
+assert_trusted_snapshot_matches_target() {
+  if [[ "${STRICT_RESTORE_ENVIRONMENT}" != "1" ||
+    "${PINVI_RESTORE_HOTSWAP_EXECUTE:-0}" != "1" ]]; then
+    return 0
+  fi
+  local manifest_identity expected_identity
+  manifest_identity="${TRUSTED_SOURCE_DATABASE}|${TRUSTED_SOURCE_DATABASE_OID}|${TRUSTED_SOURCE_SYSTEM_IDENTIFIER}|${TRUSTED_SOURCE_HOSTADDR}|${TRUSTED_SOURCE_PORT}"
+  expected_identity="${PINVI_RESTORE_EXPECTED_DATABASE_NAME}|${PINVI_RESTORE_EXPECTED_DATABASE_OID}|${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER}|${PINVI_RESTORE_EXPECTED_HOSTADDR}|${PINVI_RESTORE_EXPECTED_PORT}"
+  if [[ "${manifest_identity}" != "${expected_identity}" ]]; then
+    phase preparing failed "trusted snapshot source identity does not match the restore target"
+    exit 3
+  fi
+  phase preparing success "trusted snapshot source identity bound to restore target"
+}
+
+assert_trusted_snapshot_matches_target
 assert_expected_target
 
 assert_fence_target_identity() {
@@ -537,6 +568,24 @@ execute_fence_sql_file() {
   if ! assert_advisory_lock_alive; then
     return 1
   fi
+}
+
+execute_validation_sql_file() {
+  # Validation must never use the persistent advisory-lock psql session.  A
+  # deliberate validation error (for example a rejected append-only probe)
+  # would otherwise terminate that session under ON_ERROR_STOP and make the
+  # EXIT cleanup unable to release the write fence.  The separate read/probe
+  # connection is bracketed by the holder-PID guard instead.
+  local sql_file="$1"
+  if ! assert_advisory_lock_alive; then
+    return 1
+  fi
+  if ! "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" \
+    --file="${sql_file}"; then
+    phase validating failed "restored schema validation failed"
+    return 1
+  fi
+  assert_advisory_lock_alive
 }
 
 advisory_lock_sql_guard() {
@@ -1167,9 +1216,14 @@ assert_restored_schema() {
   local sql_file="${TMP_DIR}/restored-schema-check.sql"
   cat >"${sql_file}" <<SQL
 DO \$m05\$
+DECLARE
+  protected_table text;
 BEGIN
   IF to_regclass('${RESTORE_SCHEMA}.users') IS NULL THEN
     RAISE EXCEPTION 'restored schema is missing users table';
+  END IF;
+  IF to_regclass('${RESTORE_SCHEMA}.admin_audit_log') IS NULL THEN
+    RAISE EXCEPTION 'restored schema is missing admin audit log table';
   END IF;
   IF (
     SELECT count(*)
@@ -1199,10 +1253,35 @@ BEGIN
   ) <> 6 THEN
     RAISE EXCEPTION 'restored schema is missing an ENABLE ALWAYS M05 append-only trigger';
   END IF;
+  -- A trigger name/function pair is not a behavioral proof: a malicious or
+  -- accidental no-op body can preserve all catalog rows.  Exercise the
+  -- TRUNCATE guard in a subtransaction.  A successful TRUNCATE is rolled back
+  -- by the sentinel exception, while the canonical guard must raise SQLSTATE
+  -- 55000 with its append-only diagnostic before the relation can change.
+  FOREACH protected_table IN ARRAY ARRAY[
+    'ktm_feature_reference_reconciliation_delivery_attempts',
+    'ktm_feature_reference_reconciliation_applied_receipts',
+    'ktm_feature_reference_reconciliation_impacts'
+  ] LOOP
+    BEGIN
+      EXECUTE format('TRUNCATE TABLE %I.%I', '${RESTORE_SCHEMA}', protected_table);
+      RAISE EXCEPTION 'M05 append-only trigger unexpectedly allowed TRUNCATE on %', protected_table;
+    EXCEPTION
+      WHEN SQLSTATE '55000' THEN
+        IF SQLERRM NOT ILIKE '%append-only%' THEN
+          RAISE EXCEPTION 'M05 append-only trigger returned an unexpected diagnostic for %', protected_table;
+        END IF;
+    END;
+  END LOOP;
 END
 \$m05\$;
 SQL
-  execute_sql_file "${sql_file}" validating
+  if ! execute_validation_sql_file "${sql_file}"; then
+    if [[ "${CLEANUP_MODE}" == "1" ]]; then
+      return 1
+    fi
+    exit 3
+  fi
 }
 
 assert_configured_roles_safe() {
@@ -1420,6 +1499,13 @@ SELECT
   AND NOT EXISTS (
     SELECT 1 FROM source_schema s WHERE s.nspowner <> current_user::regrole
   )
+  AND EXISTS (
+    SELECT 1
+    FROM pg_class c
+    JOIN source_schema s ON s.oid = c.relnamespace
+    WHERE c.relname = 'admin_audit_log'
+      AND c.relkind IN ('r', 'p')
+  )
   AND NOT EXISTS (
     SELECT 1
     FROM pg_auth_members m
@@ -1457,6 +1543,20 @@ SELECT
     WHERE p.proowner <> current_user::regrole
        OR p.proacl IS NOT NULL
        OR p.prosecdef
+  )
+  -- The restored app role must not retain an executable SECURITY DEFINER
+  -- escape hatch outside the swap schema.  It can otherwise mutate the app schema
+  -- through a function owned by the hotswap role even after direct DML has
+  -- been fenced.  System functions are intentionally excluded; every other
+  -- schema is part of the live authority surface.
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE p.prosecdef
+      AND n.nspname NOT IN ('pg_catalog', 'pg_toast', 'information_schema')
+      AND n.nspname <> '${SOURCE_SCHEMA}'
+      AND has_function_privilege((SELECT oid FROM app_role), p.oid, 'EXECUTE')
   )
   AND NOT EXISTS (
     SELECT 1
