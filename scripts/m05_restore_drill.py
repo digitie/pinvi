@@ -526,8 +526,8 @@ def _provisioner_role_check(
 ) -> None:
     """Disposable DB owner assignment은 root-only superuser one-shot으로만 수행한다."""
 
-    roles = (expected_role, staging_role, fence_role, runtime_role, hotswap_role)
-    if any(_ROLE_RE.fullmatch(role) is None for role in roles):
+    roles = (staging_role, fence_role, runtime_role, hotswap_role)
+    if any(_ROLE_RE.fullmatch(role) is None for role in (expected_role, *roles)):
         raise RestoreDrillError("restore provisioner role binding is invalid")
     quoted_roles = ", ".join(f"'{role}'" for role in roles)
     sql = f"""
