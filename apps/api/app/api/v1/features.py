@@ -18,7 +18,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, cast
 
-from fastapi import APIRouter, HTTPException, Path, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +32,7 @@ from app.clients.kor_travel_map import (
     KorTravelMapUnavailable,
 )
 from app.clients.naver_local import NaverLocalClient, NaverLocalClientDep, NaverLocalError
+from app.core.consent_deps import require_location_consent
 from app.core.deps import CurrentUserId, DbSession
 from app.core.time import KST
 from app.models.feature_suggestion import FeatureSuggestion
@@ -462,6 +463,8 @@ async def features_in_bounds(
 @router.get("/nearby", response_model=Envelope[list[FeatureSummary]])
 async def features_nearby(
     _current_user: CurrentUserId,
+    # 사용자 자신의 위치를 필수로 받는 경로다 — 동의 없이 좌표를 받지 않는다(T-327).
+    _location_consent: Annotated[None, Depends(require_location_consent())],
     client: KorTravelMapHttpClientDep,
     lon: Annotated[float, Query(ge=LNG_MIN, le=LNG_MAX)],
     lat: Annotated[float, Query(ge=LAT_MIN, le=LAT_MAX)],

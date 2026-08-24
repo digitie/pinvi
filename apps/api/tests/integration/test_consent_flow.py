@@ -7,10 +7,10 @@ import pytest
 pytestmark = pytest.mark.asyncio
 
 FOUR_CONSENTS = [
-    {"consent_type": "tos", "version": "2026-01"},
-    {"consent_type": "privacy", "version": "2026-01"},
-    {"consent_type": "lbs_tos", "version": "2026-01"},
-    {"consent_type": "location_collection", "version": "2026-01"},
+    {"consent_type": "tos", "version": "v1.0"},
+    {"consent_type": "privacy", "version": "v1.0"},
+    {"consent_type": "lbs_tos", "version": "v1.0"},
+    {"consent_type": "location_collection", "version": "v1.0"},
 ]
 
 
@@ -75,7 +75,7 @@ async def test_withdraw_demographic_clears_fields(
 
     await client.put(
         "/users/me/consents",
-        json=[{"consent_type": "demographic_use", "version": "2026-01"}],
+        json=[{"consent_type": "demographic_use", "version": "v1.0"}],
         cookies=cookies,
     )
     resp = await client.delete("/users/me/consents/demographic_use", cookies=cookies)
@@ -94,7 +94,7 @@ async def test_invalid_consent_type_rejected(client, verified_user, auth_cookies
     cookies = auth_cookies(user_id)
     resp = await client.put(
         "/users/me/consents",
-        json=[{"consent_type": "not_a_real_consent", "version": "2026-01"}],
+        json=[{"consent_type": "not_a_real_consent", "version": "v1.0"}],
         cookies=cookies,
     )
     assert resp.status_code == 422
@@ -135,7 +135,7 @@ async def test_withdrawal_history_survives_reconsent(  # type: ignore[no-untyped
     """
     user_id, _ = verified_user
     cookies = auth_cookies(user_id)
-    item = [{"consent_type": "location_collection", "version": "2026-01"}]
+    item = [{"consent_type": "location_collection", "version": "v1.0"}]
 
     await client.put("/users/me/consents", json=item, cookies=cookies)
     assert await _events(session_factory, user_id, "location_collection") == [
@@ -169,7 +169,7 @@ async def test_repeated_consent_does_not_rewrite_agreed_at(  # type: ignore[no-u
     """
     user_id, _ = verified_user
     cookies = auth_cookies(user_id)
-    item = [{"consent_type": "marketing", "version": "2026-01"}]
+    item = [{"consent_type": "marketing", "version": "v1.0"}]
 
     first = await client.put("/users/me/consents", json=item, cookies=cookies)
     agreed_at = next(c for c in first.json()["data"] if c["consent_type"] == "marketing")[
@@ -181,3 +181,66 @@ async def test_repeated_consent_does_not_rewrite_agreed_at(  # type: ignore[no-u
 
     assert again == agreed_at
     assert await _events(session_factory, user_id, "marketing") == [("agreed", "settings")]
+
+
+async def test_unknown_consent_version_is_rejected(client, verified_user, auth_cookies) -> None:  # type: ignore[no-untyped-def]
+    """서버가 약관 버전 정본을 갖는다 (T-327).
+
+    허용 목록 대조가 없으면 "무엇에 동의했는가"라는 법적 증빙이 클라이언트 입력에 달린다.
+    """
+    user_id, _ = verified_user
+    resp = await client.put(
+        "/users/me/consents",
+        json=[{"consent_type": "marketing", "version": "made-up-9.9"}],
+        cookies=auth_cookies(user_id),
+    )
+    assert resp.status_code == 422, resp.text
+
+
+async def test_nearby_requires_location_consent(client, verified_user, auth_cookies) -> None:  # type: ignore[no-untyped-def]
+    """동의 없이 좌표를 받지 않는다 (T-327).
+
+    `docs/api/users.md` §3.3의 "`location_collection` 철회 → 사용자 좌표 응답 차단"이 지금까지
+    미구현이라, 클라이언트를 우회하면 철회한 사용자의 좌표도 서버가 그대로 받았다.
+    """
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    params = {"lon": 126.978, "lat": 37.5665, "radius_m": 1000}
+
+    denied = await client.get("/features/nearby", params=params, cookies=cookies)
+    assert denied.status_code == 403, denied.text
+    assert denied.json()["error"]["code"] == "LOCATION_CONSENT_REQUIRED"
+
+    # 두 동의가 모두 있어야 통과한다 — 하나만으로는 열리지 않는다.
+    await client.put(
+        "/users/me/consents",
+        json=[{"consent_type": "lbs_tos", "version": "v1.0"}],
+        cookies=cookies,
+    )
+    still_denied = await client.get("/features/nearby", params=params, cookies=cookies)
+    assert still_denied.status_code == 403, still_denied.text
+
+    await client.put(
+        "/users/me/consents",
+        json=[{"consent_type": "location_collection", "version": "v1.0"}],
+        cookies=cookies,
+    )
+    allowed = await client.get("/features/nearby", params=params, cookies=cookies)
+    assert allowed.status_code != 403, allowed.text
+
+    # 철회하면 다음 요청부터 다시 막힌다(`user-location.md` §2).
+    await client.delete("/users/me/consents/location_collection", cookies=cookies)
+    after_withdraw = await client.get("/features/nearby", params=params, cookies=cookies)
+    assert after_withdraw.status_code == 403, after_withdraw.text
+
+
+async def test_keyword_search_works_without_location_consent(  # type: ignore[no-untyped-def]
+    client, verified_user, auth_cookies
+) -> None:
+    """좌표 없는 키워드 검색은 동의와 무관하다 (T-327).
+
+    `/search`를 dependency로 걸면 이 경로까지 막힌다 — near-me 분기 안에서만 검사하는 이유다.
+    """
+    user_id, _ = verified_user
+    resp = await client.get("/search", params={"q": "광안리"}, cookies=auth_cookies(user_id))
+    assert resp.status_code != 403, resp.text

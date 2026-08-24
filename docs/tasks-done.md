@@ -20,6 +20,18 @@
 
 ## 2026-08-24
 
+- [x] **T-327** — 서버측 위치 동의 게이트와 약관 버전 정본. (완료: 2026-08-24, PR TBD, claude)
+      `user-location.md` §2 "서버는 다음 요청부터 위치 추론·기록 거부"와 `api/users.md` §3.3
+      "철회 → 사용자 좌표 응답 차단"이 미구현이라 게이트가 전적으로 클라이언트 책임이었다 —
+      클라이언트를 우회하면 철회한 사용자의 좌표도 서버가 받았다. `ACCEPTED_CONSENT_VERSIONS`로
+      서버가 약관 버전 정본을 갖고(기록 시점에만 대조 — 읽기에서 걸면 과거 버전 동의가 소급 무효),
+      `assert_location_consent`/`require_location_consent()`가 T-326의 `has_valid_consents`
+      하나만 호출한다. `/features/nearby`는 dependency, `/search`는 near-me 분기 안에서만 검사한다
+      (dependency로 걸면 좌표 없는 키워드 검색까지 막힌다). `lbs_tos`+`location_collection` 둘 다
+      요구해 프런트 `hasLocationConsent`와 판정을 일치시킨다.
+      적대적 리뷰에서 미게이트 경로 3종과 미들웨어의 부분 좌표 감사, 국내 판정 bbox 잔여를
+      T-329·T-330·T-331로 승계했다.
+
 - [x] **T-326** — 동의/철회 이벤트 이력을 남겨 재동의가 철회 사실을 지우지 않게 한다.
       (완료: 2026-08-24, PR #471, claude)
       `app.user_consents`는 `(user_id, consent_type, version)` PK의 현재 상태 테이블이라 재동의가

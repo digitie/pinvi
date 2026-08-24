@@ -22,6 +22,7 @@ from app.clients.kor_travel_geo import KorTravelGeoClientDep, KorTravelGeoError
 from app.clients.kor_travel_map import KorTravelMapError, KorTravelMapHttpClientDep
 from app.clients.naver_local import NaverLocalClientDep, NaverLocalError
 from app.core.config import settings
+from app.core.consent_deps import assert_location_consent
 from app.core.deps import CurrentUserId, DbSession
 from app.models.poi import TripDayPoi
 from app.models.trip import Trip
@@ -118,6 +119,9 @@ async def unified_search(
     # 좌표로 덮어쓴다(short-circuit/ provider 부재 시 거짓 제3자 제공 기록 방지).
     near_me = lat is not None and lon is not None
     if near_me:
+        # 사용자 좌표를 제3자(Kakao)에 제공하는 경로다 — 동의를 먼저 확인한다(T-327).
+        # dependency로 걸지 않는 이유: 좌표 없는 키워드 검색까지 막히기 때문이다.
+        await assert_location_consent(db, user_id=user_id)
         request.state.location_audit_coord = (None, None)
 
     results: list[PlaceSearchResult] = []

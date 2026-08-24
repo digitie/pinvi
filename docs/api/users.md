@@ -73,6 +73,13 @@ Content-Type: application/json
 철회. 성공 시 `204 No Content`. 같은 서비스를 타는 `POST /users/me/consents/withdraw`도 있다.
 철회는 현재 상태 row의 `withdrawn_at`을 채우고 `user_consent_events`에 `withdrawn` 이벤트를 남긴다.
 
+`location_collection`(또는 `lbs_tos`)을 철회하면 **서버가 다음 요청부터 사용자 좌표를 거부한다**
+— 사용자 위치를 받는 endpoint는 `403 LOCATION_CONSENT_REQUIRED`로 응답한다(T-327).
+좌표 없는 키워드 검색이나 지도 클릭 좌표처럼 사용자 위치가 아닌 경로는 영향받지 않는다.
+
+`version`은 서버가 허용 목록(`ACCEPTED_CONSENT_VERSIONS`)과 대조하며, 목록 밖 값은 `422`다.
+프런트 정본은 `packages/domain`의 `CONSENT_VERSION`이고 두 값은 같아야 한다.
+
 ```http
 DELETE /users/me/consents/location_collection
 ```

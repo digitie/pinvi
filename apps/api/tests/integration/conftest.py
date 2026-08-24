@@ -198,6 +198,45 @@ async def verified_user(session_factory):  # type: ignore[no-untyped-def]
         return str(user.user_id), email
 
 
+@pytest_asyncio.fixture
+async def grant_location_consent(session_factory):  # type: ignore[no-untyped-def]
+    """user_id에 위치 동의 2종을 심는 helper (T-327).
+
+    서버가 좌표 endpoint에서 `lbs_tos` + `location_collection`을 요구하므로, 좌표를 쓰는 테스트는
+    실제 사용자처럼 동의를 갖춰야 한다. 게이트를 우회하지 않고 **정상 경로와 같은 상태**를 만든다.
+    """
+    from app.models.user_consent import UserConsent
+    from app.models.user_consent_event import UserConsentEvent
+    from app.schemas.consent import ACCEPTED_CONSENT_VERSIONS
+
+    async def _grant(user_id: str) -> None:
+        now = datetime.now(UTC)
+        version = ACCEPTED_CONSENT_VERSIONS[0]
+        async with session_factory() as db:
+            for consent_type in ("lbs_tos", "location_collection"):
+                db.add(
+                    UserConsent(
+                        user_id=uuid.UUID(user_id),
+                        consent_type=consent_type,
+                        version=version,
+                        agreed_at=now,
+                    )
+                )
+                db.add(
+                    UserConsentEvent(
+                        user_id=uuid.UUID(user_id),
+                        consent_type=consent_type,
+                        version=version,
+                        event="agreed",
+                        source="register",
+                        occurred_at=now,
+                    )
+                )
+            await db.commit()
+
+    return _grant
+
+
 @pytest.fixture
 def auth_cookies():  # type: ignore[no-untyped-def]
     """user_id → access cookie dict 생성 helper."""
