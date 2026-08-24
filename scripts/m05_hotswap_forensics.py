@@ -14,6 +14,7 @@ append-only forensic record다.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -21,6 +22,8 @@ import re
 import stat
 import sys
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -28,6 +31,7 @@ from typing import Final, Literal, NoReturn, cast
 
 DEFAULT_STATE_DIRECTORY: Final = Path("/var/lib/pinvi/restore-forensics")
 _CURRENT_NAME: Final = "current.json"
+_LOCK_NAME: Final = ".state.lock"
 _OPERATIONS_NAME: Final = "operations"
 _RECOVERY_NAME: Final = "recovery"
 _MAX_DOCUMENT_BYTES: Final = 64 * 1024
@@ -46,15 +50,17 @@ _STATE_ORDER: Final = (
     "fence_applied",
     "restore_ready",
     "switched",
+    "fence_release_intent",
     "fence_released",
 )
 _STATES: Final = frozenset(_STATE_ORDER)
-_NEXT_STATE: Final = {
-    "prepared": "fence_intent",
-    "fence_intent": "fence_applied",
-    "fence_applied": "restore_ready",
-    "restore_ready": "switched",
-    "switched": "fence_released",
+_NEXT_STATES: Final = {
+    "prepared": frozenset({"fence_intent"}),
+    "fence_intent": frozenset({"fence_applied"}),
+    "fence_applied": frozenset({"restore_ready"}),
+    "restore_ready": frozenset({"switched"}),
+    "switched": frozenset({"fence_release_intent"}),
+    "fence_release_intent": frozenset({"fence_released"}),
 }
 MarkerState = Literal[
     "prepared",
@@ -62,6 +68,7 @@ MarkerState = Literal[
     "fence_applied",
     "restore_ready",
     "switched",
+    "fence_release_intent",
     "fence_released",
 ]
 
@@ -152,7 +159,9 @@ def _validate_connect_restore_grants(value: object) -> list[dict[str, object]]:
     return grants
 
 
-def _validate_state_history(value: object, *, state: str) -> list[dict[str, object]]:
+def _validate_state_history(
+    value: object, *, state: str, recovery_required: bool
+) -> list[dict[str, object]]:
     if not isinstance(value, list) or not value:
         _raise("forensic marker state_history is invalid")
     history: list[dict[str, object]] = []
@@ -173,13 +182,25 @@ def _validate_state_history(value: object, *, state: str) -> list[dict[str, obje
             or not at_utc.endswith("Z")
         ):
             _raise("forensic marker state_history is invalid")
-        if previous_state is not None and _NEXT_STATE.get(previous_state) != item_state:
-            _raise("forensic marker state_history transition is invalid")
+        if previous_state is not None:
+            normal_transition = item_state in _NEXT_STATES.get(
+                previous_state, frozenset()
+            )
+            cleanup_transition = (
+                recovery_required
+                and item_state == "fence_release_intent"
+                and previous_state
+                in {"fence_intent", "fence_applied", "restore_ready", "switched"}
+            )
+            if not normal_transition and not cleanup_transition:
+                _raise("forensic marker state_history transition is invalid")
         history.append(
             {"at_utc": at_utc, "sequence": cast(int, sequence), "state": item_state}
         )
         previous_sequence = cast(int, sequence)
         previous_state = item_state
+    if history[0]["state"] != "prepared":
+        _raise("forensic marker state_history must start at prepared")
     if history[-1]["state"] != state:
         _raise("forensic marker current state does not match its history")
     return history
@@ -213,6 +234,7 @@ def _validate_marker(value: object) -> dict[str, object]:
         "pg_restore_list_sha256",
         "previous_schema",
         "public_connect_was_granted",
+        "recovery_required",
         "restore_schema",
         "script_sha256",
         "snapshot_sha256",
@@ -226,8 +248,10 @@ def _validate_marker(value: object) -> dict[str, object]:
     }
     optional = {
         "app_schema_oid_after_switch",
+        "post_release_acl_topology_sha256",
         "previous_schema_oid_after_switch",
         "restore_schema_oid",
+        "terminal_schema_mode",
     }
     if set(value).difference(fields | optional) or not fields.issubset(value):
         _raise("forensic marker schema is invalid")
@@ -236,6 +260,9 @@ def _validate_marker(value: object) -> dict[str, object]:
     state = value.get("state")
     if not isinstance(state, str) or state not in _STATES:
         _raise("forensic marker state is invalid")
+    recovery_required = value.get("recovery_required")
+    if type(recovery_required) is not bool:
+        _raise("forensic marker recovery latch is invalid")
     marker: dict[str, object] = {
         "acl_topology_sha256": _validate_sha256(
             value.get("acl_topology_sha256"), "acl topology"
@@ -264,6 +291,7 @@ def _validate_marker(value: object) -> dict[str, object]:
             value.get("previous_schema"), "previous schema", _SCHEMA_RE
         ),
         "public_connect_was_granted": value.get("public_connect_was_granted"),
+        "recovery_required": recovery_required,
         "restore_schema": _validate_identifier(
             value.get("restore_schema"), "restore schema", _SCHEMA_RE
         ),
@@ -280,7 +308,7 @@ def _validate_marker(value: object) -> dict[str, object]:
         ),
         "state": state,
         "state_history": _validate_state_history(
-            value.get("state_history"), state=state
+            value.get("state_history"), state=state, recovery_required=recovery_required
         ),
         "target_identity_sha256": _validate_sha256(
             value.get("target_identity_sha256"), "target identity"
@@ -297,35 +325,95 @@ def _validate_marker(value: object) -> dict[str, object]:
         or marker["restore_schema"] == marker["previous_schema"]
     ):
         _raise("forensic marker schema names must be distinct")
-    if marker["app_role"] in marker["write_roles"]:
-        # app role is expected to be a write role, so this name indicates the field is correct.
-        pass
-    elif marker["write_roles"]:
-        _raise("forensic marker app role is absent from writer inventory")
-    state_order = {name: index for index, name in enumerate(_STATE_ORDER)}
-    current_order = state_order[state]
+    if marker["fence_executor_role"] == marker["app_role"]:
+        _raise("forensic marker fence executor must be distinct from the app role")
+    if marker["write_roles"] != [marker["app_role"]]:
+        _raise("forensic marker writer inventory is not the strict M05 app role")
     for name in optional:
+        if name in {"terminal_schema_mode", "post_release_acl_topology_sha256"}:
+            continue
         item = value.get(name)
         if item is None:
             continue
         marker[name] = _validate_positive_int(item, name)
-    if (
-        current_order >= state_order["restore_ready"]
-        and "restore_schema_oid" not in marker
+    historical_states = {
+        cast(str, item["state"])
+        for item in cast(list[dict[str, object]], marker["state_history"])
+    }
+    fence_started = historical_states - {"prepared"}
+    if fence_started and marker["fenced_connect_roles"] != [marker["app_role"]]:
+        _raise("forensic marker fenced role inventory is not the strict M05 app role")
+    if not fence_started and (
+        marker["fenced_connect_roles"] or marker["connect_restore_grants"]
     ):
+        _raise("forensic marker pre-fence inventory is not empty")
+    if "restore_ready" in historical_states and "restore_schema_oid" not in marker:
         _raise("forensic marker restore schema oid is missing")
-    if current_order >= state_order["switched"] and (
+    if "restore_schema_oid" in marker and "restore_ready" not in historical_states:
+        _raise("forensic marker restore schema oid is premature")
+    if (
+        "restore_schema_oid" in marker
+        and marker["restore_schema_oid"] == marker["source_schema_oid_before"]
+    ):
+        _raise("forensic marker restored schema oid must differ from the source schema")
+    terminal_schema_mode = value.get("terminal_schema_mode")
+    if state in {
+        "fence_release_intent",
+        "fence_released",
+    } and terminal_schema_mode not in {
+        "no_switch",
+        "switched",
+    }:
+        _raise("forensic marker terminal schema mode is invalid")
+    if (
+        state not in {"fence_release_intent", "fence_released"}
+        and terminal_schema_mode is not None
+    ):
+        _raise("forensic marker terminal schema mode is premature")
+    if terminal_schema_mode is not None:
+        marker["terminal_schema_mode"] = terminal_schema_mode
+    post_release_acl_topology = value.get("post_release_acl_topology_sha256")
+    if state == "fence_released" and post_release_acl_topology is None:
+        _raise("forensic marker post-release acl topology is missing")
+    if state != "fence_released" and post_release_acl_topology is not None:
+        _raise("forensic marker post-release acl topology is premature")
+    if post_release_acl_topology is not None:
+        marker["post_release_acl_topology_sha256"] = _validate_sha256(
+            post_release_acl_topology, "post-release acl topology"
+        )
+    if terminal_schema_mode == "switched" and (
         "app_schema_oid_after_switch" not in marker
         or "previous_schema_oid_after_switch" not in marker
     ):
         _raise("forensic marker switch oid matrix is missing")
-    if current_order < state_order["fence_intent"] and (
-        marker["fenced_connect_roles"]
-        or marker["connect_restore_grants"]
-        or marker["source_schema_oid_before"]
+    if terminal_schema_mode == "no_switch" and (
+        "app_schema_oid_after_switch" in marker
+        or "previous_schema_oid_after_switch" in marker
     ):
-        # source schema OID is filled at begin; see caller's explicit neutral zero handling.
-        pass
+        _raise("forensic marker no-switch terminal state has a switch oid matrix")
+    switched = "switched" in historical_states
+    has_switch_matrix = (
+        "app_schema_oid_after_switch" in marker
+        and "previous_schema_oid_after_switch" in marker
+    )
+    if switched and not has_switch_matrix:
+        _raise("forensic marker switched state is missing its oid matrix")
+    if not switched and has_switch_matrix:
+        _raise("forensic marker has a switch oid matrix before the switch")
+    if switched and (
+        marker.get("app_schema_oid_after_switch") != marker.get("restore_schema_oid")
+        or marker.get("previous_schema_oid_after_switch")
+        != marker.get("source_schema_oid_before")
+    ):
+        _raise("forensic marker switched oid matrix is inconsistent")
+    if terminal_schema_mode == "switched" and not switched:
+        _raise("forensic marker switched terminal mode lacks a switch state")
+    if terminal_schema_mode == "no_switch" and switched:
+        _raise("forensic marker no-switch terminal mode follows a switch state")
+    if marker["failure"] is None and marker["recovery_required"]:
+        _raise("forensic marker recovery latch lacks failure evidence")
+    if marker["failure"] is not None and not marker["recovery_required"]:
+        _raise("forensic marker failure is not recovery latched")
     return marker
 
 
@@ -383,7 +471,9 @@ class _StateDirectory:
                 or stat.S_IMODE(child_metadata.st_mode) != 0o700
             ):
                 _raise("forensic state subdirectory permissions are invalid")
-        return cls(path=path, strict=strict)
+        store = cls(path=path, strict=strict)
+        store._ensure_lock_file()
+        return store
 
     def _directory_fd(self, relative: str = ".") -> int:
         try:
@@ -403,6 +493,76 @@ class _StateDirectory:
             os.close(descriptor)
             _raise("forensic state directory permissions are invalid")
         return descriptor
+
+    def _ensure_lock_file(self) -> None:
+        """Create or verify the fixed local mutation lock without following links."""
+
+        directory_fd = self._directory_fd()
+        try:
+            try:
+                descriptor = os.open(
+                    _LOCK_NAME,
+                    os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW,
+                    0o600,
+                    dir_fd=directory_fd,
+                )
+            except OSError:
+                _raise("forensic state lock is unavailable")
+            try:
+                os.fchmod(descriptor, 0o600)
+                metadata = os.fstat(descriptor)
+                expected_uid = 0 if self.strict else os.geteuid()
+                if (
+                    not stat.S_ISREG(metadata.st_mode)
+                    or metadata.st_uid != expected_uid
+                    or stat.S_IMODE(metadata.st_mode) != 0o600
+                ):
+                    _raise("forensic state lock permissions are invalid")
+                os.fsync(descriptor)
+                os.fsync(directory_fd)
+            finally:
+                os.close(descriptor)
+        finally:
+            os.close(directory_fd)
+
+    @contextmanager
+    def _exclusive_lock(self) -> Iterator[None]:
+        """Serialize each read/check/write state transition across host processes."""
+
+        directory_fd = self._directory_fd()
+        try:
+            try:
+                descriptor = os.open(
+                    _LOCK_NAME,
+                    os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW,
+                    dir_fd=directory_fd,
+                )
+            except OSError:
+                _raise("forensic state lock is unavailable")
+            try:
+                metadata = os.fstat(descriptor)
+                expected_uid = 0 if self.strict else os.geteuid()
+                if (
+                    not stat.S_ISREG(metadata.st_mode)
+                    or metadata.st_uid != expected_uid
+                    or stat.S_IMODE(metadata.st_mode) != 0o600
+                ):
+                    _raise("forensic state lock permissions are invalid")
+                try:
+                    fcntl.flock(descriptor, fcntl.LOCK_EX)
+                except OSError:
+                    _raise("forensic state lock could not be acquired")
+                try:
+                    yield
+                finally:
+                    try:
+                        fcntl.flock(descriptor, fcntl.LOCK_UN)
+                    except OSError:
+                        pass
+            finally:
+                os.close(descriptor)
+        finally:
+            os.close(directory_fd)
 
     def _read_regular(self, relative: str) -> bytes:
         directory, name = os.path.split(relative)
@@ -586,7 +746,7 @@ class _StateDirectory:
         finally:
             os.close(directory_fd)
 
-    def current(self) -> tuple[dict[str, object], bytes]:
+    def _current_unlocked(self) -> tuple[dict[str, object], bytes]:
         raw = self._read_regular(_CURRENT_NAME)
         try:
             parsed = json.loads(
@@ -596,136 +756,255 @@ class _StateDirectory:
             _raise("forensic marker is invalid JSON")
         return _validate_marker(parsed), raw
 
+    def current(self) -> tuple[dict[str, object], bytes]:
+        """Read the current marker without taking the writer lock."""
+
+        return self._current_unlocked()
+
+    def _write_new_or_match(self, relative: str, raw: bytes, *, mismatch: str) -> bool:
+        """Persist an immutable artifact, or accept an exact crash-resume duplicate."""
+
+        try:
+            self._write_new_regular(relative, raw)
+            return True
+        except ForensicsError:
+            existing = self._read_regular(relative)
+            if existing != raw:
+                _raise(mismatch)
+            return False
+
+    def _history_has_acknowledgement(
+        self,
+        operation_id: str,
+        *,
+        marker_sha256: str,
+        verification_sha256: str,
+    ) -> bool:
+        raw = self._read_regular(f"{_OPERATIONS_NAME}/{operation_id}.jsonl")
+        for line in raw.splitlines():
+            try:
+                event = json.loads(
+                    line.decode("utf-8"), object_pairs_hook=_reject_duplicate_json_keys
+                )
+            except (UnicodeDecodeError, json.JSONDecodeError, _DuplicateJsonKeyError):
+                _raise("forensic operation history is invalid")
+            if not isinstance(event, dict):
+                _raise("forensic operation history is invalid")
+            if (
+                event.get("type") == "recovery_acknowledged"
+                and event.get("operation_id") == operation_id
+                and event.get("marker_sha256") == marker_sha256
+                and event.get("verification_sha256") == verification_sha256
+            ):
+                return True
+        return False
+
     def begin(self, marker: dict[str, object]) -> None:
         marker = _validate_marker(marker)
         operation_id = cast(str, marker["operation_id"])
         raw = _canonical_json(marker)
-        event = {
+        intent = {
             "at_utc": _utc_now(),
             "marker_sha256": _sha256(raw),
             "operation_id": operation_id,
             "sequence": 1,
             "state": "prepared",
+            "type": "prepared_intent",
+        }
+        event = {
+            **intent,
+            "at_utc": _utc_now(),
             "type": "state",
         }
-        self._write_new_regular(
-            f"{_OPERATIONS_NAME}/{operation_id}.jsonl", _canonical_json(event) + b"\n"
-        )
-        # Operation history is intentionally retained if this pointer write fails.
-        self._write_new_regular(_CURRENT_NAME, raw)
+        with self._exclusive_lock():
+            # Keep an orphan-safe intent first, then make the pointer authoritative.
+            # A crash after the pointer write still leaves a history file for verified
+            # recovery, but no history line claims a committed future state beforehand.
+            self._write_new_regular(
+                f"{_OPERATIONS_NAME}/{operation_id}.jsonl",
+                _canonical_json(intent) + b"\n",
+            )
+            self._write_new_regular(_CURRENT_NAME, raw)
+            self._append_history(operation_id, event)
 
     def transition(
         self, operation_id: str, state: MarkerState, updates: dict[str, object]
     ) -> None:
-        marker, _ = self.current()
-        if marker["operation_id"] != operation_id:
-            _raise("forensic marker operation does not match")
-        current_state = cast(str, marker["state"])
-        if _NEXT_STATE.get(current_state) != state:
-            _raise("forensic marker state transition is invalid")
-        marker.update(updates)
-        history = cast(list[dict[str, object]], marker["state_history"])
-        marker["state"] = state
-        marker["state_history"] = [
-            *history,
-            {"at_utc": _utc_now(), "sequence": len(history) + 1, "state": state},
-        ]
-        marker = _validate_marker(marker)
-        raw = _canonical_json(marker)
-        self._append_history(
-            operation_id,
-            {
-                "at_utc": _utc_now(),
-                "marker_sha256": _sha256(raw),
-                "operation_id": operation_id,
-                "sequence": len(cast(list[object], marker["state_history"])),
-                "state": state,
-                "type": "state",
-            },
-        )
-        self._replace_regular(_CURRENT_NAME, raw)
-
-    def record_failure(self, operation_id: str, *, phase: str, code: str) -> None:
-        marker, _ = self.current()
-        if marker["operation_id"] != operation_id:
-            _raise("forensic marker operation does not match")
-        marker["failure"] = {
-            "code": _validate_identifier(code, "failure code", _CODE_RE),
-            "phase": _validate_identifier(phase, "failure phase", _CODE_RE),
-        }
-        marker = _validate_marker(marker)
-        raw = _canonical_json(marker)
-        self._append_history(
-            operation_id,
-            {
-                "at_utc": _utc_now(),
-                "marker_sha256": _sha256(raw),
-                "operation_id": operation_id,
-                "sequence": len(cast(list[object], marker["state_history"])),
-                "state": marker["state"],
-                "type": "failure",
-            },
-        )
-        self._replace_regular(_CURRENT_NAME, raw)
-
-    def acknowledge_and_archive(
-        self, operation_id: str, *, verification_sha256: str
-    ) -> None:
-        marker, raw = self.current()
-        if marker["operation_id"] != operation_id:
-            _raise("forensic marker operation does not match")
-        if marker["state"] != "fence_released":
-            _raise("forensic marker is not safe for recovery acknowledgement")
-        verification_sha256 = _validate_sha256(
-            verification_sha256, "recovery verification"
-        )
-        marker_sha256 = _sha256(raw)
-        acknowledgement = {
-            "at_utc": _utc_now(),
-            "marker_sha256": marker_sha256,
-            "operation_id": operation_id,
-            "outcome": "recovery_acknowledged",
-            "verification_sha256": verification_sha256,
-            "version": 1,
-        }
-        acknowledgement_path = f"{_RECOVERY_NAME}/{operation_id}.json"
-        wrote_acknowledgement = False
-        try:
-            self._write_new_regular(
-                acknowledgement_path, _canonical_json(acknowledgement)
-            )
-            wrote_acknowledgement = True
-        except ForensicsError:
-            try:
-                existing = json.loads(
-                    self._read_regular(acknowledgement_path).decode("utf-8"),
-                    object_pairs_hook=_reject_duplicate_json_keys,
+        with self._exclusive_lock():
+            marker, _ = self._current_unlocked()
+            if marker["operation_id"] != operation_id:
+                _raise("forensic marker operation does not match")
+            current_state = cast(str, marker["state"])
+            if marker["recovery_required"]:
+                historical_states = {
+                    cast(str, item["state"])
+                    for item in cast(list[dict[str, object]], marker["state_history"])
+                }
+                expected_mode = (
+                    "switched" if "switched" in historical_states else "no_switch"
                 )
-            except (UnicodeDecodeError, json.JSONDecodeError, _DuplicateJsonKeyError):
-                _raise("forensic recovery acknowledgement is invalid")
-            if (
-                not isinstance(existing, dict)
-                or existing.get("version") != 1
-                or existing.get("outcome") != "recovery_acknowledged"
-                or existing.get("operation_id") != operation_id
-                or existing.get("marker_sha256") != marker_sha256
-                or existing.get("verification_sha256") != verification_sha256
-            ):
-                _raise("forensic recovery acknowledgement does not match the marker")
-        if wrote_acknowledgement:
+                cleanup_transition = (
+                    state == "fence_release_intent"
+                    and current_state
+                    in {"fence_intent", "fence_applied", "restore_ready", "switched"}
+                    and updates == {"terminal_schema_mode": expected_mode}
+                ) or (
+                    state == "fence_released"
+                    and current_state == "fence_release_intent"
+                    and set(updates) == {"post_release_acl_topology_sha256"}
+                    and isinstance(updates["post_release_acl_topology_sha256"], str)
+                    and _SHA256_RE.fullmatch(
+                        cast(str, updates["post_release_acl_topology_sha256"])
+                    )
+                    is not None
+                )
+                if not cleanup_transition:
+                    _raise("forensic marker is recovery latched")
+            elif state not in _NEXT_STATES.get(current_state, frozenset()):
+                _raise("forensic marker state transition is invalid")
+            marker.update(updates)
+            history = cast(list[dict[str, object]], marker["state_history"])
+            marker["state"] = state
+            marker["state_history"] = [
+                *history,
+                {"at_utc": _utc_now(), "sequence": len(history) + 1, "state": state},
+            ]
+            marker = _validate_marker(marker)
+            raw = _canonical_json(marker)
+            # Current is authoritative; append-only history follows the durable state.
+            self._replace_regular(_CURRENT_NAME, raw)
             self._append_history(
                 operation_id,
                 {
                     "at_utc": _utc_now(),
-                    "marker_sha256": marker_sha256,
+                    "marker_sha256": _sha256(raw),
                     "operation_id": operation_id,
                     "sequence": len(cast(list[object], marker["state_history"])),
-                    "state": "fence_released",
-                    "type": "recovery_acknowledged",
-                    "verification_sha256": verification_sha256,
+                    "state": state,
+                    "type": "state",
                 },
             )
-        self._unlink_current()
+
+    def record_failure(self, operation_id: str, *, phase: str, code: str) -> None:
+        failure = {
+            "code": _validate_identifier(code, "failure code", _CODE_RE),
+            "phase": _validate_identifier(phase, "failure phase", _CODE_RE),
+        }
+        with self._exclusive_lock():
+            marker, _ = self._current_unlocked()
+            if marker["operation_id"] != operation_id:
+                _raise("forensic marker operation does not match")
+            if marker["recovery_required"]:
+                if marker["failure"] == failure:
+                    return
+                _raise("forensic marker is already recovery latched")
+            marker["failure"] = failure
+            marker["recovery_required"] = True
+            marker = _validate_marker(marker)
+            raw = _canonical_json(marker)
+            # Record the fail-close marker before an audit line. It cannot be advanced
+            # by the normal runner after a crash; only verified root recovery may close it.
+            self._replace_regular(_CURRENT_NAME, raw)
+            self._append_history(
+                operation_id,
+                {
+                    "at_utc": _utc_now(),
+                    "marker_sha256": _sha256(raw),
+                    "operation_id": operation_id,
+                    "sequence": len(cast(list[object], marker["state_history"])),
+                    "state": marker["state"],
+                    "type": "failure",
+                },
+            )
+
+    def acknowledge_and_archive(
+        self, operation_id: str, *, verification_sha256: str
+    ) -> None:
+        verification_sha256 = _validate_sha256(
+            verification_sha256, "recovery verification"
+        )
+        with self._exclusive_lock():
+            marker, raw = self._current_unlocked()
+            if marker["operation_id"] != operation_id:
+                _raise("forensic marker operation does not match")
+            if (
+                marker["state"] not in {"prepared", "fence_released"}
+                and not marker["recovery_required"]
+            ):
+                _raise("forensic marker is not safe for recovery acknowledgement")
+            marker_sha256 = _sha256(raw)
+            self._write_new_or_match(
+                f"{_OPERATIONS_NAME}/{operation_id}.final.json",
+                raw,
+                mismatch="forensic final marker does not match the active marker",
+            )
+            acknowledgement_path = f"{_RECOVERY_NAME}/{operation_id}.json"
+            acknowledgement = {
+                "at_utc": _utc_now(),
+                "marker_sha256": marker_sha256,
+                "operation_id": operation_id,
+                "outcome": "recovery_acknowledged",
+                "verification_sha256": verification_sha256,
+                "version": 1,
+            }
+            wrote_acknowledgement = False
+            try:
+                self._write_new_regular(
+                    acknowledgement_path, _canonical_json(acknowledgement)
+                )
+                wrote_acknowledgement = True
+            except ForensicsError:
+                try:
+                    existing = json.loads(
+                        self._read_regular(acknowledgement_path).decode("utf-8"),
+                        object_pairs_hook=_reject_duplicate_json_keys,
+                    )
+                except (
+                    UnicodeDecodeError,
+                    json.JSONDecodeError,
+                    _DuplicateJsonKeyError,
+                ):
+                    _raise("forensic recovery acknowledgement is invalid")
+                if (
+                    not isinstance(existing, dict)
+                    or set(existing)
+                    != {
+                        "at_utc",
+                        "marker_sha256",
+                        "operation_id",
+                        "outcome",
+                        "verification_sha256",
+                        "version",
+                    }
+                    or not isinstance(existing.get("at_utc"), str)
+                    or not cast(str, existing["at_utc"]).endswith("Z")
+                    or existing.get("version") != 1
+                    or existing.get("outcome") != "recovery_acknowledged"
+                    or existing.get("operation_id") != operation_id
+                    or existing.get("marker_sha256") != marker_sha256
+                    or existing.get("verification_sha256") != verification_sha256
+                ):
+                    _raise(
+                        "forensic recovery acknowledgement does not match the marker"
+                    )
+            if wrote_acknowledgement or not self._history_has_acknowledgement(
+                operation_id,
+                marker_sha256=marker_sha256,
+                verification_sha256=verification_sha256,
+            ):
+                self._append_history(
+                    operation_id,
+                    {
+                        "at_utc": _utc_now(),
+                        "marker_sha256": marker_sha256,
+                        "operation_id": operation_id,
+                        "sequence": len(cast(list[object], marker["state_history"])),
+                        "state": marker["state"],
+                        "type": "recovery_acknowledged",
+                        "verification_sha256": verification_sha256,
+                    },
+                )
+            self._unlink_current()
 
 
 def _split_roles(value: str, field: str) -> list[str]:
@@ -775,6 +1054,7 @@ def _marker_from_begin(args: argparse.Namespace) -> dict[str, object]:
         "pg_restore_list_sha256": args.pg_restore_list_sha256,
         "previous_schema": args.previous_schema,
         "public_connect_was_granted": False,
+        "recovery_required": False,
         "restore_schema": args.restore_schema,
         "script_sha256": args.script_sha256,
         "snapshot_sha256": args.snapshot_sha256,
@@ -816,6 +1096,12 @@ def _command_transition(args: argparse.Namespace) -> int:
             "public_connect_was_granted": args.public_connect_was_granted == "1",
             "source_schema_oid_before": args.source_schema_oid_before,
             "write_roles": _split_roles(args.write_roles, "writer roles"),
+        }
+    elif state == "fence_release_intent":
+        updates = {"terminal_schema_mode": args.terminal_schema_mode}
+    elif state == "fence_released":
+        updates = {
+            "post_release_acl_topology_sha256": args.post_release_acl_topology_sha256
         }
     elif state == "restore_ready":
         updates = {"restore_schema_oid": args.restore_schema_oid}
@@ -896,6 +1182,10 @@ def _parser() -> argparse.ArgumentParser:
     transition.add_argument("--restore-schema-oid", type=int, default=0)
     transition.add_argument("--app-schema-oid-after-switch", type=int, default=0)
     transition.add_argument("--previous-schema-oid-after-switch", type=int, default=0)
+    transition.add_argument("--post-release-acl-topology-sha256", default="")
+    transition.add_argument(
+        "--terminal-schema-mode", choices=("no_switch", "switched"), default=""
+    )
 
     failure = commands.add_parser("failure")
     _add_store_arguments(failure)
