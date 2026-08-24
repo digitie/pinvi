@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -37,6 +38,8 @@ _RESTORE_PHASE_RE = re.compile(
     re.MULTILINE,
 )
 _SNAPSHOT_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+_CATALOG_FILENAME_RE = re.compile(r"^pinvi-[A-Za-z0-9_.-]+\.dump$")
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _RESTORE_PHASES: tuple[RestorePhaseName, ...] = (
     "preparing",
     "restoring",
@@ -184,7 +187,117 @@ def _snapshot_from_file(path: Path) -> BackupSnapshot:
     )
 
 
+def _reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate catalog key")
+        result[key] = value
+    return result
+
+
+def _strict_backup_catalog_snapshots(*, limit: int) -> list[BackupSnapshot]:
+    """ordinary API에는 root producer의 metadata-only catalog만 보인다.
+
+    raw dump와 manifest는 restore runner에만 mount된다. catalog가 없거나 신뢰 경계가 틀리면
+    운영 UI는 빈 목록으로 fail-close하며 artifact 경로나 내용은 열지 않는다.
+    """
+
+    directory = backup_dir()
+    catalog_path = directory / "current.json"
+    descriptor = -1
+    try:
+        directory_metadata = directory.stat()
+        if (
+            not directory.is_absolute()
+            or directory.is_symlink()
+            or not directory.is_dir()
+            or directory_metadata.st_uid != os.geteuid()
+            or stat.S_IMODE(directory_metadata.st_mode) != 0o700
+            or catalog_path.is_symlink()
+        ):
+            return []
+        descriptor = os.open(
+            catalog_path,
+            os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
+        )
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_uid != os.geteuid()
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+            or metadata.st_size < 1
+            or metadata.st_size > 256 * 1024
+        ):
+            return []
+        raw = os.read(descriptor, metadata.st_size + 1)
+        if len(raw) != metadata.st_size:
+            return []
+        document = json.loads(raw.decode("utf-8"), object_pairs_hook=_reject_duplicate_json_keys)
+    except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError):
+        return []
+    finally:
+        if descriptor != -1:
+            os.close(descriptor)
+    if not isinstance(document, dict) or set(document) != {"snapshots", "version"}:
+        return []
+    snapshots = document.get("snapshots")
+    if document.get("version") != 1 or not isinstance(snapshots, list) or len(snapshots) > 200:
+        return []
+    result: list[BackupSnapshot] = []
+    for entry in snapshots:
+        if not isinstance(entry, dict) or set(entry) != {
+            "checksum_sha256",
+            "created_at",
+            "filename",
+            "size_bytes",
+            "snapshot_id",
+            "status",
+        }:
+            return []
+        filename = entry.get("filename")
+        snapshot_id = entry.get("snapshot_id")
+        checksum = entry.get("checksum_sha256")
+        created_at = entry.get("created_at")
+        size_bytes = entry.get("size_bytes")
+        if (
+            not isinstance(filename, str)
+            or _CATALOG_FILENAME_RE.fullmatch(filename) is None
+            or not isinstance(snapshot_id, str)
+            or _SNAPSHOT_ID_RE.fullmatch(snapshot_id) is None
+            or snapshot_id != Path(filename).stem
+            or not isinstance(checksum, str)
+            or _SHA256_RE.fullmatch(checksum) is None
+            or entry.get("status") != "verified"
+            or type(size_bytes) is not int
+            or size_bytes < 1
+            or not isinstance(created_at, str)
+        ):
+            return []
+        try:
+            parsed_created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        except ValueError:
+            return []
+        if parsed_created_at.tzinfo is None:
+            return []
+        result.append(
+            BackupSnapshot(
+                snapshot_id=snapshot_id,
+                filename=filename,
+                path=f"backup://{filename}",
+                size_bytes=size_bytes,
+                checksum_sha256=checksum,
+                status="verified",
+                created_at=parsed_created_at.astimezone(UTC),
+            )
+        )
+    result.sort(key=lambda snapshot: snapshot.created_at, reverse=True)
+    return result[:limit]
+
+
 def list_backup_snapshots(*, limit: int = 50) -> list[BackupSnapshot]:
+    if settings.pinvi_environment in _STRICT_BACKUP_ENVIRONMENTS:
+        return _strict_backup_catalog_snapshots(limit=limit)
     directory = backup_dir()
     if not directory.exists():
         return []
@@ -230,6 +343,10 @@ def sanitize_backup_message(message: str) -> str:
 def get_backup_snapshot(*, snapshot_id: str) -> BackupSnapshot:
     if not _SNAPSHOT_ID_RE.fullmatch(snapshot_id):
         raise BackupSnapshotNotFoundError("backup snapshot id 형식이 올바르지 않습니다.")
+    if settings.pinvi_environment in _STRICT_BACKUP_ENVIRONMENTS:
+        raise BackupSnapshotNotFoundError(
+            "staging/production snapshot artifact는 root restore runner에서만 선택할 수 있습니다."
+        )
     path = backup_dir() / f"{snapshot_id}.dump"
     if path.is_symlink() or not path.is_file():
         raise BackupSnapshotNotFoundError(f"backup snapshot을 찾을 수 없습니다: {snapshot_id}")

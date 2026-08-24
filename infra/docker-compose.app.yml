@@ -90,7 +90,9 @@ services:
       PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
       # non-owner application login only. Migration/restore use PINVI_MIGRATOR_DATABASE_URL.
       PINVI_DATABASE_URL: ${PINVI_DATABASE_URL:-postgresql+asyncpg://pinvi_app:pinvi_app_smoke@app-postgres:5432/pinvi}
-      PINVI_BACKUP_DIR: /var/lib/pinvi/backups
+      # ordinary API에는 raw dump를 mount하지 않는다. strict 환경의 snapshot 목록은
+      # root producer가 만드는 metadata-only catalog로만 표시한다.
+      PINVI_BACKUP_DIR: /var/lib/pinvi/backup-catalog
       PINVI_BACKUP_SCRIPT_PATH: ${PINVI_BACKUP_SCRIPT_PATH:-scripts/backup-db.sh}
       PINVI_RESTORE_SCRIPT_PATH: ${PINVI_RESTORE_SCRIPT_PATH:-scripts/restore-db.sh}
       PINVI_RESTORE_HOTSWAP_SCRIPT_PATH: ${PINVI_RESTORE_HOTSWAP_SCRIPT_PATH:-scripts/restore-hotswap.sh}
@@ -159,6 +161,8 @@ services:
       PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_PATH: ${PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_PATH:-}
       PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_PUBLIC_KEY: ${PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_PUBLIC_KEY:-}
       PINVI_M05_RUNTIME_ATTESTATION_PATH: ${PINVI_M05_RUNTIME_ATTESTATION_PATH:-/run/pinvi/m05/runtime-attestation.json}
+      PINVI_M05_RUNTIME_LEASE_DIRECTORY: ${PINVI_M05_RUNTIME_LEASE_DIRECTORY:-/run/pinvi/m05/lease}
+      PINVI_M05_RUNTIME_LEASE_MAX_LIFETIME_SECONDS: ${PINVI_M05_RUNTIME_LEASE_MAX_LIFETIME_SECONDS:-120}
       PINVI_M05_ACTIVATION_LEDGER_PATH: ${PINVI_M05_ACTIVATION_LEDGER_PATH:-}
       PINVI_M05_ACTIVATION_HIGH_WATERMARK_PATH: ${PINVI_M05_ACTIVATION_HIGH_WATERMARK_PATH:-}
       PINVI_M05_ACTIVATION_DURABLE_FLOOR_PATH: ${PINVI_M05_ACTIVATION_DURABLE_FLOOR_PATH:-}
@@ -181,14 +185,12 @@ services:
       # 전달되지 않는다.
       PINVI_API_WORKERS: ${PINVI_API_WORKERS:-1}
       PINVI_VWORLD_API_KEY: ${PINVI_VWORLD_API_KEY:-}
-    # production/staging activation ledger는 host의 root-owned·append-only 파일을
-    # API에 read-only로만 노출한다. 운영 enable 시 두 경로를 모두 명시한다.
+    # ordinary API는 raw dump·restore key·Docker socket을 받지 않는다. root producer의
+    # metadata-only catalog와 M05 trust/lease document만 read-only로 노출한다.
     volumes:
       - type: bind
-        # API는 root-owned restore trust directory를 읽기 전용으로만 볼 수 있다.
-        # 새 trusted snapshot은 maintenance one-shot producer만 작성한다.
-        source: ${PINVI_RESTORE_TRUSTED_BACKUP_HOST_DIR:-/tmp/pinvi-restore-trust}
-        target: /var/lib/pinvi/backups
+        source: ${PINVI_BACKUP_CATALOG_HOST_DIR:-/tmp/pinvi-backup-catalog}
+        target: /var/lib/pinvi/backup-catalog
         read_only: true
       - type: bind
         source: ${PINVI_M05_ACTIVATION_LEDGER_HOST_PATH:-/tmp/pinvi-m05-activation-ledger.jsonl}
@@ -218,6 +220,11 @@ services:
         source: ${PINVI_M05_RUNTIME_ATTESTATION_HOST_PATH:-/tmp/pinvi-m05-runtime-attestation.json}
         target: ${PINVI_M05_RUNTIME_ATTESTATION_PATH:-/run/pinvi/m05/runtime-attestation.json}
         read_only: true
+      # directory mount여야 root watcher의 atomic current.json rename을 다음 verify에서 본다.
+      - type: bind
+        source: ${PINVI_M05_RUNTIME_LEASE_HOST_DIR:-/tmp/pinvi-m05-runtime-lease}
+        target: ${PINVI_M05_RUNTIME_LEASE_DIRECTORY:-/run/pinvi/m05/lease}
+        read_only: true
     ports:
       - "127.0.0.1:${PINVI_API_PORT:-12801}:8000"
 
@@ -236,6 +243,7 @@ services:
     environment:
       PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
       PINVI_BACKUP_DIR: /var/lib/pinvi/restore-trust
+      PINVI_BACKUP_CATALOG_PATH: /var/lib/pinvi/backup-catalog/current.json
       PINVI_BACKUP_TRUSTED: "1"
       PINVI_BACKUP_DATABASE_URL: ${PINVI_DATABASE_URL:-postgresql+asyncpg://pinvi_app:pinvi_app_smoke@app-postgres:5432/pinvi}
       PINVI_BACKUP_SCHEMA: ${PINVI_BACKUP_SCHEMA:-app}
@@ -245,6 +253,9 @@ services:
       - type: bind
         source: ${PINVI_RESTORE_TRUSTED_BACKUP_HOST_DIR:-/tmp/pinvi-restore-trust}
         target: /var/lib/pinvi/restore-trust
+      - type: bind
+        source: ${PINVI_BACKUP_CATALOG_HOST_DIR:-/tmp/pinvi-backup-catalog}
+        target: /var/lib/pinvi/backup-catalog
     entrypoint:
       - /bin/sh
       - -ec

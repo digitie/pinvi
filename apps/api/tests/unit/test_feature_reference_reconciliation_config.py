@@ -686,6 +686,8 @@ def test_compose_and_examples_keep_m05_credentials_api_only_and_default_off() ->
         "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_BLOCKED_RECHECK_SECONDS",
         "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT",
         "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_PUBLIC_KEY",
+        "PINVI_M05_RUNTIME_LEASE_DIRECTORY",
+        "PINVI_M05_RUNTIME_LEASE_MAX_LIFETIME_SECONDS",
         "PINVI_API_IMAGE_DIGEST",
         "PINVI_WEB_IMAGE_DIGEST",
         "PINVI_DAGSTER_IMAGE_DIGEST",
@@ -727,6 +729,13 @@ def test_m05_docker_identity_does_not_expose_engine_socket() -> None:
     assert "target: /var/run/docker.sock" not in compose
     assert "PINVI_M05_RUNTIME_LIVE_CHECK" in compose
     assert "PINVI_DOCKER_SOCKET_HOST_PATH" not in compose
+    assert "PINVI_M05_RUNTIME_LEASE_PRIVATE_KEY" not in compose
+    app_api_block = compose.split("  app-api:", maxsplit=1)[1].split("  app-backup:", maxsplit=1)[0]
+    assert "PINVI_M05_RUNTIME_LEASE_HOST_DIR" in app_api_block
+    assert "target: ${PINVI_M05_RUNTIME_LEASE_DIRECTORY:-/run/pinvi/m05/lease}" in app_api_block
+    assert "source: ${PINVI_RESTORE_TRUSTED_BACKUP_HOST_DIR" not in app_api_block
+    assert "target: /var/lib/pinvi/restore-trust" not in app_api_block
+    assert "target: /var/lib/pinvi/backup-catalog" in app_api_block
     with pytest.raises(RuntimeError, match="identity input"):
         config_module._m05_docker_inspect(
             "fake-docker.sock",

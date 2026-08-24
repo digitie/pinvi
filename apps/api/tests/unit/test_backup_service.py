@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import os
 from pathlib import Path
 
@@ -171,6 +172,40 @@ def test_list_backup_snapshots_only_verifies_matching_checksum(tmp_path: Path) -
     assert snapshot.checksum_sha256 is None
 
 
+def test_strict_backup_listing_reads_only_root_metadata_catalog(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog_directory = tmp_path / "backup-catalog"
+    catalog_directory.mkdir(mode=0o700)
+    catalog = {
+        "snapshots": [
+            {
+                "checksum_sha256": "a" * 64,
+                "created_at": "2026-08-24T00:00:00Z",
+                "filename": "pinvi-app-20260824.dump",
+                "size_bytes": 123,
+                "snapshot_id": "pinvi-app-20260824",
+                "status": "verified",
+            }
+        ],
+        "version": 1,
+    }
+    current = catalog_directory / "current.json"
+    current.write_text(json.dumps(catalog), encoding="utf-8")
+    current.chmod(0o600)
+    monkeypatch.setattr(settings, "pinvi_environment", "production")
+    monkeypatch.setattr(settings, "pinvi_backup_dir", str(catalog_directory))
+
+    snapshots = list_backup_snapshots()
+
+    assert len(snapshots) == 1
+    assert snapshots[0].path == "backup://pinvi-app-20260824.dump"
+    assert snapshots[0].checksum_sha256 == "a" * 64
+    current.chmod(0o644)
+    assert list_backup_snapshots() == []
+
+
 @pytest.mark.asyncio
 async def test_create_backup_snapshot_rejects_low_disk_space(
     tmp_path: Path,
@@ -297,7 +332,9 @@ def test_app_api_compose_does_not_receive_restore_executor_authority() -> None:
     api_block = compose.split("  app-api:", maxsplit=1)[1].split("  app-backup:", maxsplit=1)[0]
 
     assert "PINVI_DATABASE_URL" in api_block
-    assert "PINVI_RESTORE_TRUSTED_BACKUP_HOST_DIR" in api_block
+    assert "PINVI_RESTORE_TRUSTED_BACKUP_HOST_DIR" not in api_block
+    assert "PINVI_BACKUP_CATALOG_HOST_DIR" in api_block
+    assert "target: /var/lib/pinvi/backup-catalog" in api_block
     assert "read_only: true" in api_block
     assert "PINVI_BACKUP_TRUSTED" not in api_block
     for variable in (
@@ -314,7 +351,7 @@ def test_app_api_compose_does_not_receive_restore_executor_authority() -> None:
 
     assert "  app-backup:" in compose
     assert 'profiles: ["maintenance"]' in compose
-    assert "PINVI_BACKUP_TRUSTED: \"1\"" in compose
+    assert 'PINVI_BACKUP_TRUSTED: "1"' in compose
 
 
 def test_strict_settings_reject_restore_executor_authority() -> None:

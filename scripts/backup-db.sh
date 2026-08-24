@@ -9,6 +9,7 @@ unset PGAPPNAME PGCONNECT_TIMEOUT PGDATABASE PGHOST PGHOSTADDR PGOPTIONS PGPASSF
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKUP_DIR="${PINVI_BACKUP_DIR:-${ROOT_DIR}/.tmp/backups}"
+BACKUP_CATALOG_PATH="${PINVI_BACKUP_CATALOG_PATH:-}"
 SCHEMA="${PINVI_BACKUP_SCHEMA:-app}"
 MIN_FREE_BYTES="${PINVI_BACKUP_MIN_FREE_BYTES:-1073741824}"
 DATABASE_URL="${PINVI_BACKUP_DATABASE_URL:-${PINVI_DATABASE_URL:-}}"
@@ -138,6 +139,15 @@ if [[ "${STRICT_ENVIRONMENT}" == "1" ]]; then
     exit 3
   fi
   umask 077
+  if [[ "${BACKUP_CATALOG_PATH}" != /* || -L "${BACKUP_CATALOG_PATH}" ]]; then
+    echo "strict backup requires an absolute non-symlink metadata catalog path" >&2
+    exit 3
+  fi
+  catalog_dir="$(dirname "${BACKUP_CATALOG_PATH}")"
+  if [[ ! -d "${catalog_dir}" || -L "${catalog_dir}" || "$(stat -c '%u:%a' "${catalog_dir}")" != "0:700" ]]; then
+    echo "strict backup metadata catalog directory must be root-owned mode 0700" >&2
+    exit 3
+  fi
 else
   mkdir -p "${BACKUP_DIR}"
 fi
@@ -154,8 +164,9 @@ tmp_file="$(mktemp "${BACKUP_DIR}/.pinvi-${SCHEMA}-${timestamp}.dump.XXXXXX")"
 PRIVATE_TOOL_DIR=""
 LIST_FILE=""
 MANIFEST_TMP_FILE=""
+CATALOG_TMP_FILE=""
 cleanup() {
-  rm -f "${tmp_file}" "${tmp_file}.sha256" "${LIST_FILE}" "${MANIFEST_TMP_FILE}"
+  rm -f "${tmp_file}" "${tmp_file}.sha256" "${LIST_FILE}" "${MANIFEST_TMP_FILE}" "${CATALOG_TMP_FILE}"
   if [[ -n "${PRIVATE_TOOL_DIR}" && -d "${PRIVATE_TOOL_DIR}" ]]; then
     rm -rf "${PRIVATE_TOOL_DIR}"
   fi
@@ -297,6 +308,22 @@ if [[ "${STRICT_ENVIRONMENT}" == "1" ]]; then
   chmod 600 "${MANIFEST_TMP_FILE}"
   mv "${MANIFEST_TMP_FILE}" "${manifest_file}"
   MANIFEST_TMP_FILE=""
+  # ordinary API는 dump/manifest가 아닌 이 metadata-only catalog만 read-only mount한다.
+  CATALOG_TMP_FILE="$(mktemp "${catalog_dir}/.pinvi-backup-catalog.XXXXXX")"
+  backup_size_bytes="$(stat -c '%s' "${backup_file}")"
+  backup_created_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  {
+    printf '{"snapshots":[{'
+    printf '"checksum_sha256":"%s",' "$(sha256sum "${backup_file}" | awk 'NR == 1 { print $1 }')"
+    printf '"created_at":"%s",' "${backup_created_at}"
+    printf '"filename":"%s",' "${backup_name}"
+    printf '"size_bytes":%s,' "${backup_size_bytes}"
+    printf '"snapshot_id":"%s",' "${backup_name%.dump}"
+    printf '"status":"verified"}],"version":1}\n'
+  } >"${CATALOG_TMP_FILE}"
+  chmod 600 "${CATALOG_TMP_FILE}"
+  mv "${CATALOG_TMP_FILE}" "${BACKUP_CATALOG_PATH}"
+  CATALOG_TMP_FILE=""
 fi
 
 trap - EXIT
