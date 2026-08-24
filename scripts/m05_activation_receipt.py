@@ -1837,8 +1837,6 @@ def _restore(
         "target_recreated",
         "trigger_guard_verified",
         "runtime_db_identity_sha256",
-        "fence_db_identity_before_restore_sha256",
-        "fence_db_identity_sha256",
     }
     if set(restore) != expected or restore["status"] != "passed":
         raise ReceiptError("restore evidence schema/status is invalid")
@@ -1881,6 +1879,8 @@ def _restore(
         "source_db_identity_sha256",
         "target_db_identity_before_restore_sha256",
         "target_db_identity_sha256",
+        "fence_db_identity_before_restore_sha256",
+        "fence_db_identity_sha256",
     ):
         _sha256(restore[field], name=f"restore.{field}")
     repository_root = Path(__file__).resolve().parents[1]
@@ -2006,44 +2006,58 @@ def _restore(
         ).hexdigest()
         if restore[digest_field] != expected_identity_sha256:
             raise ReceiptError(f"restore identity hash is not bound: {identity_field}")
+    source_identity = _object(restore["source_db_identity"], name="restore.source_db_identity")
+    source_after_backup_identity = _object(
+        restore["source_db_identity_after_backup"],
+        name="restore.source_db_identity_after_backup",
+    )
+    target_before_restore_identity = _object(
+        restore["target_db_identity_before_restore"],
+        name="restore.target_db_identity_before_restore",
+    )
+    target_identity = _object(restore["target_db_identity"], name="restore.target_db_identity")
+    runtime_identity = _object(restore["runtime_db_identity"], name="restore.runtime_db_identity")
+    fence_before_restore_identity = _object(
+        restore["fence_db_identity_before_restore"],
+        name="restore.fence_db_identity_before_restore",
+    )
+    fence_identity = _object(restore["fence_db_identity"], name="restore.fence_db_identity")
+    for label, left, right in (
+        ("source backup", source_identity, source_after_backup_identity),
+        ("target restore", target_before_restore_identity, target_identity),
+        ("target runtime", target_identity, runtime_identity),
+        ("target fence before restore", target_before_restore_identity, fence_before_restore_identity),
+        ("target fence", target_identity, fence_identity),
+    ):
+        if any(left[field] != right[field] for field in _RESTORE_IDENTITY_ENDPOINT_FIELDS):
+            raise ReceiptError(f"restore {label} endpoint identity is not bound")
     if (
-        restore["source_db_identity"]["database"]
-        != restore["source_db_identity_after_backup"]["database"]
-        or restore["source_db_identity"]["database_oid"]
-        != restore["source_db_identity_after_backup"]["database_oid"]
-        or restore["source_db_identity"]["system_identifier"]
-        != restore["source_db_identity_after_backup"]["system_identifier"]
-        or restore["target_db_identity_before_restore"]["database"]
-        != restore["target_db_identity"]["database"]
-        or restore["target_db_identity_before_restore"]["database_oid"]
-        != restore["target_db_identity"]["database_oid"]
-        or restore["target_db_identity_before_restore"]["system_identifier"]
-        != restore["target_db_identity"]["system_identifier"]
-        or restore["target_db_identity"]["database"] != restore["runtime_db_identity"]["database"]
-        or restore["target_db_identity"]["database_oid"]
-        != restore["runtime_db_identity"]["database_oid"]
-        or restore["target_db_identity"]["system_identifier"]
-        != restore["runtime_db_identity"]["system_identifier"]
-        or restore["runtime_db_identity"]["user"] != restore["runtime_role"]
-        or restore["target_db_identity_before_restore"]["user"] != restore["staging_role"]
-        or restore["source_db_identity"]["schema_exists"] is not True
-        or restore["source_db_identity_after_backup"]["schema_exists"] is not True
-        or restore["target_db_identity_before_restore"]["schema_exists"] is not False
-        or restore["target_db_identity"]["schema_exists"] is not True
-        or restore["runtime_db_identity"]["schema_exists"] is not True
+        runtime_identity["user"] != restore["runtime_role"]
+        or target_before_restore_identity["user"] != restore["staging_role"]
+        or fence_before_restore_identity["user"] != restore["fence_role"]
+        or fence_identity["user"] != restore["fence_role"]
+        or source_identity["schema_exists"] is not True
+        or source_after_backup_identity["schema_exists"] is not True
+        or target_before_restore_identity["schema_exists"] is not False
+        or target_identity["schema_exists"] is not True
+        or runtime_identity["schema_exists"] is not True
+        or fence_before_restore_identity["schema_exists"] is not False
+        or fence_identity["schema_exists"] is not True
         or _M05_RESTORE_DATABASE_RE.fullmatch(
-            restore["target_db_identity_before_restore"]["database"]
+            target_before_restore_identity["database"]
         )
         is None
-        or _M05_RESTORE_DATABASE_RE.fullmatch(restore["target_db_identity"]["database"]) is None
-        or restore["source_db_identity"]["database"]
-        == restore["target_db_identity_before_restore"]["database"]
-        or restore["source_db_identity"]["database_oid"]
-        == restore["target_db_identity_before_restore"]["database_oid"]
+        or _M05_RESTORE_DATABASE_RE.fullmatch(target_identity["database"]) is None
+        or source_identity["database"] == target_before_restore_identity["database"]
+        or source_identity["database_oid"] == target_before_restore_identity["database_oid"]
     ):
         raise ReceiptError("restore database identities or roles are not bound")
     _string(restore["runtime_role"], name="restore.runtime_role")
     _string(restore["staging_role"], name="restore.staging_role")
+    fence_role = _string(restore["fence_role"], name="restore.fence_role")
+    provisioner_role = _string(restore["provisioner_role"], name="restore.provisioner_role")
+    if provisioner_role in {restore["runtime_role"], restore["staging_role"], fence_role}:
+        raise ReceiptError("restore provisioner role is not dedicated")
     _uuid(restore["execution_id"], name="restore.execution_id")
     if _commit(restore["source_revision"], name="restore.source_revision") != pinvi_source_revision:
         raise ReceiptError("restore producer source revision does not match Pinvi")

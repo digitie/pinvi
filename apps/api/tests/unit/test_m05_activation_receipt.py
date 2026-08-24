@@ -371,6 +371,10 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         "user": "pinvi_app",
     }
     runtime_identity = target_identity.copy()
+    fence_before_restore_identity = target_before_restore_identity.copy()
+    fence_before_restore_identity["user"] = "pinvi_fence"
+    fence_identity = target_identity.copy()
+    fence_identity["user"] = "pinvi_fence"
     restore_tool_manifest_path = tmp_path / "restore-tool-trust.json"
     restore_tool_manifest = {
         "tools": {
@@ -397,6 +401,14 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "bash_tool_sha256": _tool_sha256("bash"),
             "environment": "staging",
             "fresh_target_verified": True,
+            "fence_db_identity": fence_identity,
+            "fence_db_identity_before_restore": fence_before_restore_identity,
+            "fence_db_identity_before_restore_sha256": _identity_sha256(
+                fence_before_restore_identity
+            ),
+            "fence_db_identity_sha256": _identity_sha256(fence_identity),
+            "fence_role": "pinvi_fence",
+            "fence_role_verified": True,
             "git_tool_path": str(_tool_path("git")),
             "git_tool_sha256": _tool_sha256("git"),
             "psql_tool_path": str(_tool_path("psql")),
@@ -404,6 +416,8 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "dump_sha256": "c" * 64,
             "execution_id": "33333333-3333-4333-8333-333333333333",
             "no_owner_restore": True,
+            "provisioner_login_disabled": True,
+            "provisioner_role": "pinvi_restore_provisioner",
             "restore_command": (
                 "pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges"
             ),
@@ -789,3 +803,33 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         pinvi_dagster_image_digest=PINVI_DIGESTS["dagster"],
     )
     assert loaded.pinvi_kor_travel_map_feature_reference_reconciliation_enabled is True
+
+    receipt_module = _receipt_script_module()
+    restore_evidence = json.loads((evidence_dir / "restore.json").read_text(encoding="utf-8"))
+    receipt_module._restore(  # type: ignore[attr-defined]
+        restore_evidence,
+        pinvi_source_revision=PINVI_REVISION,
+        environment="staging",
+        require_root_owned=False,
+    )
+    missing_fence = json.loads(json.dumps(restore_evidence))
+    del missing_fence["fence_role"]
+    with pytest.raises(receipt_module.ReceiptError, match="schema/status"):  # type: ignore[attr-defined]
+        receipt_module._restore(  # type: ignore[attr-defined]
+            missing_fence,
+            pinvi_source_revision=PINVI_REVISION,
+            environment="staging",
+            require_root_owned=False,
+        )
+    mismatched_fence = json.loads(json.dumps(restore_evidence))
+    mismatched_fence["fence_db_identity"]["hostaddr"] = "127.0.0.2"
+    mismatched_fence["fence_db_identity_sha256"] = _identity_sha256(
+        mismatched_fence["fence_db_identity"]
+    )
+    with pytest.raises(receipt_module.ReceiptError, match="target fence endpoint identity"):  # type: ignore[attr-defined]
+        receipt_module._restore(  # type: ignore[attr-defined]
+            mismatched_fence,
+            pinvi_source_revision=PINVI_REVISION,
+            environment="staging",
+            require_root_owned=False,
+        )

@@ -24,6 +24,8 @@ DOCKER_IMAGE="${PINVI_BACKUP_DOCKER_IMAGE:-postgis/postgis:16-3.5}"
 DOCKER_NETWORK="${PINVI_BACKUP_DOCKER_NETWORK:-}"
 CONTAINER_BACKUP_DIR="/backup"
 TRUSTED_BACKUP="${PINVI_BACKUP_TRUSTED:-0}"
+PINNED_SOURCE_HOSTADDR=""
+SOURCE_IDENTITY_BEFORE_DUMP=""
 
 pinned_tool() {
   local name="$1"
@@ -116,6 +118,18 @@ fi
 
 if [[ "${DATABASE_URL}" == postgresql+asyncpg://* ]]; then
   DATABASE_URL="postgresql://${DATABASE_URL#postgresql+asyncpg://}"
+fi
+
+if [[ "${STRICT_ENVIRONMENT}" == "1" ]]; then
+  # A dump cannot be provenance-bound if pg_dump follows a hostname through a
+  # DNS/LB/failover change and the manifest identity is read from a later
+  # connection.  The root producer receives an already resolved hostaddr and
+  # uses that exact endpoint for both identity observations and pg_dump.
+  if [[ ! "${DATABASE_URL}" =~ (^|[?&])hostaddr=([0-9A-Fa-f:.]+)(&|$) ]]; then
+    echo "strict backup requires a database URL with a pinned hostaddr" >&2
+    exit 3
+  fi
+  PINNED_SOURCE_HOSTADDR="${BASH_REMATCH[2]}"
 fi
 
 if [[ ! "${SCHEMA}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
@@ -246,8 +260,6 @@ run_pg_dump() {
   fi
 }
 
-run_pg_dump
-
 strict_source_identity() {
   local identity database_name database_oid system_identifier hostaddr port
   identity="$("${PSQL_BIN}" --no-psqlrc --tuples-only --no-align --quiet --dbname="${DATABASE_URL}" \
@@ -262,9 +274,19 @@ strict_source_identity() {
     echo "strict backup source identity is invalid" >&2
     exit 3
   fi
+  if [[ -n "${PINNED_SOURCE_HOSTADDR}" && "${hostaddr}" != "${PINNED_SOURCE_HOSTADDR}" ]]; then
+    echo "strict backup source identity does not match the pinned hostaddr" >&2
+    exit 3
+  fi
   printf '%s|%s|%s|%s|%s\n' \
     "${database_name}" "${database_oid}" "${system_identifier}" "${hostaddr}" "${port}"
 }
+
+if [[ "${STRICT_ENVIRONMENT}" == "1" ]]; then
+  SOURCE_IDENTITY_BEFORE_DUMP="$(strict_source_identity)"
+fi
+
+run_pg_dump
 
 tmp_dir="$(dirname "${tmp_file}")"
 tmp_name="$(basename "${tmp_file}")"
@@ -273,6 +295,10 @@ tmp_name="$(basename "${tmp_file}")"
 
 if [[ "${STRICT_ENVIRONMENT}" == "1" ]]; then
   source_identity="$(strict_source_identity)"
+  if [[ "${source_identity}" != "${SOURCE_IDENTITY_BEFORE_DUMP}" ]]; then
+    echo "strict backup source identity changed during pg_dump" >&2
+    exit 3
+  fi
   IFS='|' read -r source_database source_database_oid source_system_identifier source_hostaddr source_port <<<"${source_identity}"
   LIST_FILE="$(mktemp)"
   "${PG_RESTORE_BIN}" --list "${tmp_file}" >"${LIST_FILE}"
