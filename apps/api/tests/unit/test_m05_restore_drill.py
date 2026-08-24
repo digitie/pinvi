@@ -146,7 +146,8 @@ def test_m05_restore_drill_serializes_target_recreation_and_preflights_staging_r
     assert "m05_operation_lease.py" in source
     assert "staging/production restore drill requires a root-owned target lease" in source
     assert "with _acquire_root_target_lease(target_url) as lease:" in source
-    assert "return _run_drill(args, _lease_held=True, _operation_lease=lease)" in source
+    assert "_resolved_urls=_resolved_urls" in source
+    assert "restore endpoint bindings are invalid" in source
     run = source[source.index("def _run_drill(") :]
     assert run.index("with _acquire_root_target_lease(target_url) as lease:") < run.index(
         "        _staging_role_check("
@@ -166,6 +167,86 @@ def test_m05_restore_drill_serializes_target_recreation_and_preflights_staging_r
     assert 'restore_env["PINVI_M05_OPERATION_LEASE_FD"]' in source
     assert 'restore_env["PINVI_M05_OPERATION_LEASE_TOKEN"]' in source
     assert "pass_fds=restore_pass_fds" in source
+
+
+def test_m05_restore_drill_reuses_pinned_urls_after_root_lease_reentry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    module = _restore_drill_module()
+    args = SimpleNamespace(
+        output=tmp_path / "restore-evidence.json",
+        require_root_owned=True,
+        schema="app",
+        runtime_role="pinvi_app",
+        staging_role="pinvi_owner",
+        fence_role="pinvi_fence",
+        provisioner_role="pinvi_provisioner",
+        provision_disable_login=True,
+        source_database_url_env="PINVI_RESTORE_SOURCE_DATABASE_URL",
+        staging_database_url_env="PINVI_RESTORE_STAGING_DATABASE_URL",
+        runtime_database_url_env="PINVI_RESTORE_RUNTIME_DATABASE_URL",
+        hotswap_database_url_env="PINVI_RESTORE_HOTSWAP_DATABASE_URL",
+        fence_database_url_env="PINVI_RESTORE_FENCE_DATABASE_URL",
+        provision_database_url_env="PINVI_RESTORE_PROVISION_DATABASE_URL",
+        template_database_url_env="PINVI_RESTORE_TEMPLATE_DATABASE_URL",
+    )
+    resolved = {
+        "PINVI_RESTORE_SOURCE_DATABASE_URL": "postgresql://source@db/source?hostaddr=192.0.2.10",
+        "PINVI_RESTORE_STAGING_DATABASE_URL": "postgresql://owner@db/pinvi_m05_restore_target?hostaddr=192.0.2.10",
+        "PINVI_RESTORE_RUNTIME_DATABASE_URL": "postgresql://runtime@db/pinvi_m05_restore_target?hostaddr=192.0.2.10",
+        "PINVI_RESTORE_HOTSWAP_DATABASE_URL": "postgresql://hotswap@db/pinvi_m05_restore_target?hostaddr=192.0.2.10",
+        "PINVI_RESTORE_FENCE_DATABASE_URL": "postgresql://fence@db/pinvi_m05_restore_target?hostaddr=192.0.2.10",
+        "PINVI_RESTORE_PROVISION_DATABASE_URL": "postgresql://provisioner@db/postgres?hostaddr=192.0.2.10",
+        "PINVI_RESTORE_TEMPLATE_DATABASE_URL": "postgresql://owner@db/pinvi_m05_template?hostaddr=192.0.2.10",
+    }
+    observed_env_names: list[str] = []
+    recursive_calls: list[dict[str, object]] = []
+
+    class Lease:
+        token = "m05-v1-" + "a" * 64
+
+        def __enter__(self) -> Lease:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    original_run = module._run_drill
+
+    def resolve_url(name: str) -> str:
+        observed_env_names.append(name)
+        return resolved[name]
+
+    def recursive_run(_args: object, **kwargs: object) -> int:
+        recursive_calls.append(kwargs)
+        return 0
+
+    monkeypatch.setenv("PINVI_ENVIRONMENT", "staging")
+    monkeypatch.delenv("PINVI_M05_RESTORE_TEST_MODE", raising=False)
+    monkeypatch.setattr(module, "_secure_output_parent", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        module,
+        "_tool_identity",
+        lambda name: {"path": f"/{name}", "sha256": "0" * 64},
+    )
+    monkeypatch.setattr(module, "_database_url", resolve_url)
+    monkeypatch.setattr(module, "_acquire_root_target_lease", lambda _url: Lease())
+    monkeypatch.setattr(module, "_run_drill", recursive_run)
+
+    assert original_run(args) == 0
+    assert observed_env_names == list(resolved)
+    assert len(recursive_calls) == 1
+    assert recursive_calls[0]["_lease_held"] is True
+    assert isinstance(recursive_calls[0]["_operation_lease"], Lease)
+    assert recursive_calls[0]["_resolved_urls"] == {
+        "source": resolved["PINVI_RESTORE_SOURCE_DATABASE_URL"],
+        "target": resolved["PINVI_RESTORE_STAGING_DATABASE_URL"],
+        "runtime": resolved["PINVI_RESTORE_RUNTIME_DATABASE_URL"],
+        "hotswap": resolved["PINVI_RESTORE_HOTSWAP_DATABASE_URL"],
+        "fence": resolved["PINVI_RESTORE_FENCE_DATABASE_URL"],
+        "provision": resolved["PINVI_RESTORE_PROVISION_DATABASE_URL"],
+        "template": resolved["PINVI_RESTORE_TEMPLATE_DATABASE_URL"],
+    }
 
 
 def test_m05_restore_drill_requires_root_owned_target_lease_in_managed_environment(

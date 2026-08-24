@@ -1822,6 +1822,7 @@ def _run_drill(
     *,
     _lease_held: bool = False,
     _operation_lease: object | None = None,
+    _resolved_urls: dict[str, str] | None = None,
 ) -> int:
     output: Path = args.output
     environment = os.environ.get("PINVI_ENVIRONMENT", "")
@@ -1868,12 +1869,40 @@ def _run_drill(
     _PINNED_TOOL_PATHS["bash"] = bash_tool["path"]
     psql_tool = _tool_identity("psql")
     _PINNED_TOOL_PATHS["psql"] = psql_tool["path"]
-    source_url = _database_url(args.source_database_url_env)
-    target_url = _database_url(args.staging_database_url_env)
-    runtime_url = _database_url(args.runtime_database_url_env)
+    # Root lease를 다시 진입할 때 DNS를 재해석하면 lease를 잡은 endpoint와 실제
+    # mutation endpoint가 달라질 수 있다. 모든 endpoint를 한 번만 hostaddr로
+    # 결박하고, 재진입에는 같은 값을 전달한다.
+    if _resolved_urls is None:
+        _resolved_urls = {
+            "source": _database_url(args.source_database_url_env),
+            "target": _database_url(args.staging_database_url_env),
+            "runtime": _database_url(args.runtime_database_url_env),
+        }
+        if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
+            _resolved_urls.update(
+                {
+                    "hotswap": _database_url(args.hotswap_database_url_env),
+                    "fence": _database_url(args.fence_database_url_env),
+                    "provision": _database_url(args.provision_database_url_env),
+                    "template": _database_url(args.template_database_url_env),
+                }
+            )
+    required_url_names = {"source", "target", "runtime"}
+    if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
+        required_url_names.update({"hotswap", "fence", "provision", "template"})
+    if set(_resolved_urls) != required_url_names:
+        raise RestoreDrillError("restore endpoint bindings are invalid")
+    source_url = _resolved_urls["source"]
+    target_url = _resolved_urls["target"]
+    runtime_url = _resolved_urls["runtime"]
     if args.require_root_owned and not _lease_held:
         with _acquire_root_target_lease(target_url) as lease:
-            return _run_drill(args, _lease_held=True, _operation_lease=lease)
+            return _run_drill(
+                args,
+                _lease_held=True,
+                _operation_lease=lease,
+                _resolved_urls=_resolved_urls,
+            )
     if args.require_root_owned and _operation_lease is None:
         raise RestoreDrillError("restore target operation lease is unavailable")
     hotswap_url = ""
@@ -1885,10 +1914,10 @@ def _run_drill(
         if not _ROLE_RE.fullmatch(args.hotswap_role):
             raise RestoreDrillError("restore hotswap role is required")
         hotswap_role = args.hotswap_role
-        hotswap_url = _database_url(args.hotswap_database_url_env)
-        fence_url = _database_url(args.fence_database_url_env)
-        provision_url = _database_url(args.provision_database_url_env)
-        template_url = _database_url(args.template_database_url_env)
+        hotswap_url = _resolved_urls["hotswap"]
+        fence_url = _resolved_urls["fence"]
+        provision_url = _resolved_urls["provision"]
+        template_url = _resolved_urls["template"]
     try:
         source_database_name = urlsplit(source_url).path.removeprefix("/")
         target_database_name = urlsplit(target_url).path.removeprefix("/")
