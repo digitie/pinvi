@@ -50,6 +50,7 @@ COPY contracts/kor-travel-map-m05-pair-provenance-v1.json ./app/_contract_data/k
 COPY contracts/pinvi-m05-activation-receipt-trust-v1.json ./app/_contract_data/pinvi-m05-activation-receipt-trust-v1.json
 COPY contracts/pinvi-m05-reviewer-roster-v1.json ./app/_contract_data/pinvi-m05-reviewer-roster-v1.json
 COPY scripts/backup-db.sh ./scripts/backup-db.sh
+COPY scripts/trusted-backup-entrypoint.py ./scripts/trusted-backup-entrypoint.py
 COPY scripts/restore-db.sh ./scripts/restore-db.sh
 COPY scripts/restore-hotswap.sh ./scripts/restore-hotswap.sh
 

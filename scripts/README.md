@@ -11,6 +11,7 @@
 | `m05_restore_drill.py`      | 격리 source DB dump를 fresh target에 no-owner 복원하고 runtime role·append-only trigger를 검증       | 6      |
 | `docker-app-smoke-test.sh`  | `docker-app.sh smoke` 호환 wrapper                                                                         | 1      |
 | `pr_review_monitor.py`      | 열린 PR / PR 이벤트에서 최신 head SHA review reminder를 확인하고 MCP 기반 리뷰 알림 댓글을 남김            | 4      |
+| `trusted-backup-entrypoint.py` | staging/production root producer가 DB hostname을 단일 `hostaddr`로 결박한 뒤 canonical backup runner를 exec | 6      |
 | `backup-db.sh`              | `app` schema `pg_dump --format=custom` + sha256. host `pg_dump` 부재 시 Docker fallback 지원 (ADR-022 1차) | 5      |
 | `restore-db.sh`             | custom dump `pg_restore` (긴급/스테이징, 핫스왑 전 단계)                                                   | 5      |
 | `deploy-node.sh`            | 운영 노드에서 attested compose build/migrate/up/smoke 실행 (N150/Odroid 공통)                              | 6      |

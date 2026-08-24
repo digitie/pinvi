@@ -266,7 +266,9 @@ services:
         export PINVI_BACKUP_PG_DUMP_SHA256="$$(sha256sum "$${PINVI_BACKUP_PG_DUMP_BIN}" | awk 'NR == 1 { print $$1}')"
         export PINVI_BACKUP_PG_RESTORE_SHA256="$$(sha256sum "$${PINVI_BACKUP_PG_RESTORE_BIN}" | awk 'NR == 1 { print $$1}')"
         export PINVI_BACKUP_PSQL_SHA256="$$(sha256sum "$${PINVI_BACKUP_PSQL_BIN}" | awk 'NR == 1 { print $$1}')"
-        exec /app/scripts/backup-db.sh
+        # app-postgres hostname은 root producer에서 한 번만 해석해 hostaddr로
+        # 결박한다. preconfigured hostaddr/endpoint override는 dump 전에 거부한다.
+        exec python /app/scripts/trusted-backup-entrypoint.py
 
   # Explicit one-shot only: app-api is never allowed to receive the owner URL.
   # `scripts/docker-app.sh migrate` mounts the bootstrap credential and invokes it here.

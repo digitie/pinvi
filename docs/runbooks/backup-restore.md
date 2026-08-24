@@ -42,12 +42,14 @@ schema-swap 확인 체크, 운영 사유를 모두 요구한다. 실행 중에�
 dialog를 닫을 수 없고, 완료 후 API가 반환한 phase와 restore/previous schema를 표시한다.
 RustFS/외부 미러 표시는 후속 운영 보강이다.
 
-### 2.2 CLI (긴급)
+### 2.2 root maintenance producer (긴급)
 
 ```bash
-# 운영 노드 SSH
+# 운영 노드 SSH. staging/production에서는 API/host shell이 아니라 compose의
+# root-only producer만 실행한다. 이 경로는 app-postgres DNS를 한 번 해석해
+# `hostaddr`로 결박하고, preconfigured endpoint override를 dump 전에 거부한다.
 cd /opt/pinvi
-sudo ./scripts/backup-db.sh
+sudo docker compose -f infra/docker-compose.app.yml --profile maintenance run --rm app-backup
 
 # 결과
 ls -la /var/lib/pinvi/backups/
@@ -69,6 +71,14 @@ ls -la /var/lib/pinvi/backups/
 | `PINVI_BACKUP_DOCKER_IMAGE`                    | `postgis/postgis:16-3.5` | fallback `pg_dump` image                                    |
 | `PINVI_BACKUP_DOCKER_NETWORK`                  | 빈 값                    | fallback container network. compose DNS가 필요하면 명시한다 |
 | `NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED` | `0`                      | Web Restore 버튼 표시/활성화 빌드타임 플래그                |
+
+staging/production의 `app-backup`은 `PINVI_BACKUP_DATABASE_URL`에 `hostaddr`,
+`host`, `port`, `service`, `servicefile` query override를 미리 넣지 않는다. root-only
+`trusted-backup-entrypoint.py`가 compose DNS 결과가 단 하나인지 확인한 뒤 그 값을
+`hostaddr`로 추가하고 `backup-db.sh`에만 전달한다. 이 producer marker가 없는 strict
+backup은 dump를 만들기 전에 종료한다. M05 root restore drill은 독립된 source identity
+gate에서 이미 같은 endpoint를 고정하므로, 그 실행 evidence에는 별도 producer marker가
+남는다.
 
 스크립트는 `pg_dump --format=custom --schema=app --no-owner --no-privileges`로
 단일 `.dump`를 만들고, 같은 경로에 `.sha256` 파일을 남긴다. host에 `pg_dump`가 없으면

@@ -1474,6 +1474,11 @@ def _run_drill(args: argparse.Namespace) -> int:
                 "PINVI_BACKUP_DIR": str(temporary_dir),
                 "PINVI_BACKUP_CATALOG_PATH": str(temporary_dir / "backup-catalog.json"),
                 "PINVI_BACKUP_TRUSTED": "1",
+                # The drill resolves source_url itself under its root-only
+                # source/target identity gate before invoking the canonical
+                # runner.  Compose maintenance uses trusted-backup-entrypoint
+                # for the same one-time hostname-to-hostaddr transition.
+                "PINVI_M05_RESTORE_PRODUCER": "1",
                 "PINVI_BACKUP_MIN_FREE_BYTES": "0",
                 "PINVI_BACKUP_DOCKER_FALLBACK": "0",
                 "PINVI_BACKUP_PG_DUMP_BIN": private_tools["pg_dump"]["path"],

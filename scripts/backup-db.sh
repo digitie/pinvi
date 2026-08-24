@@ -129,6 +129,11 @@ if [[ "${STRICT_ENVIRONMENT}" == "1" ]]; then
     echo "strict backup requires a database URL with a pinned hostaddr" >&2
     exit 3
   fi
+  if [[ "${PINVI_BACKUP_ENDPOINT_PINNED_BY_PRODUCER:-}" != "1" &&
+    "${PINVI_M05_RESTORE_PRODUCER:-0}" != "1" ]]; then
+    echo "strict backup requires a root producer-pinned database endpoint" >&2
+    exit 3
+  fi
   PINNED_SOURCE_HOSTADDR="${BASH_REMATCH[2]}"
 fi
 
