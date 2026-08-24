@@ -9,6 +9,7 @@
 | `m05_activation_attestation.py` | M05 live UI, Map ACK, 실제 runtime image와 pinned OpenAPI를 서명된 attestation으로 봉인                 | 6      |
 | `m05_activation_receipt.py` | M05의 두 리뷰·live UI·Map pair·restore·Pinvi image 증거를 Ed25519 signed receipt로 봉인              | 6      |
 | `m05_restore_drill.py`      | 격리 source DB dump를 fresh target에 no-owner 복원하고 runtime role·append-only trigger를 검증       | 6      |
+| `m05_operation_lease.py`    | 같은 N150 host의 hotswap·fresh target provisioner가 공유하는 root-owned target별 실행 lease              | 6      |
 | `m05_hotswap_forensics.py`  | schema-swap의 root-owned forensic marker·append-only 상태전이·명시적 recovery acknowledgement 보관 | 6      |
 | `docker-app-smoke-test.sh`  | `docker-app.sh smoke` 호환 wrapper                                                                         | 1      |
 | `pr_review_monitor.py`      | 열린 PR / PR 이벤트에서 최신 head SHA review reminder를 확인하고 MCP 기반 리뷰 알림 댓글을 남김            | 4      |

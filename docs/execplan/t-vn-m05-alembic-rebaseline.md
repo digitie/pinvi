@@ -2,8 +2,9 @@
 
 ## 상태
 
-최신 main 통합 회귀를 완료했다. N150 browser E2E·최종 적대 리뷰·PR 병합을 진행한다. ADR-065의
-구현 정본이다.
+active graph·rebaseline proof·M05 owner 전환과 단일 N150 target lease의 구현 회귀를 완료했다.
+새 PostgreSQL 16 role topology, root-only legacy `0061` profile, migration 뒤 migrator login 봉인까지
+검증했다. N150 paired live browser E2E·최종 적대 리뷰·PR CI·병합이 남았다. ADR-065의 구현 정본이다.
 
 ## 목표
 
@@ -31,6 +32,10 @@
 5. 이전 기준선의 fresh bootstrap과 `0061 → 0100 → 0101` rehearsal, M05 recovery/preflight를
    통과했다. 최신 main 통합본으로 같은 검증을 다시 실행하고 N150 browser E2E와 최종 적대 리뷰를
    남긴다.
+6. fresh install은 root bootstrap이 extension·non-login app schema owner·non-login migration
+   owner·one-shot migrator login을 만들고, `0101` 안에서 M05 부분만 `SET LOCAL ROLE`로 owner를
+   전환한다. 기존 N150 `0061`은 object owner를 재작성하지 않고 승인된 root-only legacy profile로
+   같은 M05 전환만 수행한다.
 
 ## 비범위
 
@@ -57,7 +62,10 @@
 2. N150에서 helper의 read-only preflight가 `0061`·fingerprint·M05 object absence·backup proof를
    모두 통과하는지 확인한다.
 3. 별도 운영 변경 승인 뒤 helper의 `--confirm`을 한 번 실행한다.
-4. `alembic upgrade 20260824_0101`을 적용하고 revision, M05 ACL, API DB health를 확인한다.
+4. fresh DB에서는 `app-migrator` one-shot으로 `0101`을 적용하고 role/receipt owner/NOLOGIN seal,
+   M05 ACL, API DB health를 확인한다. 현재 N150 `0061`은 이 단계 직전에만 root-only
+   `PINVI_M05_LEGACY_REBASELINE=1` profile을 명시하고, 기존 app DDL 뒤 M05 object만 migration
+   owner로 전환됐는지 확인한다.
 5. 실패 시 새 history를 억지로 stamp하지 않고 snapshot 복구 후 fail-closed 원인을 해결한다.
 
 ## 완료 기준
@@ -65,5 +73,7 @@
 - fresh DB가 `0100 → 0101`로 bootstrap되고 app catalog fingerprint가 기준값과 일치한다.
 - disposable `0061` DB가 data row 보존 상태로 rebaseline 후 `0101`까지 올라간다.
 - helper는 unknown revision, data-less/dirty catalog, M05 object 존재, backup proof 누락을 모두 거부한다.
+- fresh role topology와 root-only legacy profile 모두 M05 receipt owner를 runtime/fence/database owner와
+  분리하고, 성공 후 one-shot migrator login을 `NOLOGIN`으로 봉인한다.
 - M05 focused PostgreSQL 검증·N150 browser E2E·두 전문 적대 리뷰가 통과한다.
 - production 전환은 merge 뒤 별도 승인 gate로 남고 M05 activation은 `false`다.

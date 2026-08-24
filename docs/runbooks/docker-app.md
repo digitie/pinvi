@@ -83,9 +83,13 @@ ktdctl logs storage --follow
 | `PINVI_GRAFANA_HEALTH_URL`   | `http://grafana:3000` (app compose 내부 probe용. iframe public origin은 `NEXT_PUBLIC_GRAFANA_URL`)                        |
 | `NEXT_PUBLIC_VWORLD_API_KEY` | `vworld-map-web` 지도 SDK용 (ADR-046). VWorld 개발자 센터에서 발급 + 도메인 화이트리스트 등록                             |
 | `PINVI_VWORLD_API_KEY`       | 서버 전용 VWorld key. 모바일 `/mobile/vworld/token` 발급과 `kor-travel-geo` v2 REST `key` query에 같은 값을 사용(ADR-048) |
-| `PINVI_DB_OWNER_USER` / `PINVI_POSTGRES_PASSWORD` | schema/table/trigger 소유 및 migration/restore one-shot 전용 login                                                                 |
+| `PINVI_DB_OWNER_USER` / `PINVI_POSTGRES_PASSWORD` | root-only PostgreSQL bootstrap·extension owner. API/Dagster·일반 migrator에 전달 금지                                               |
 | `PINVI_APP_DB_USER` / `PINVI_APP_DB_PASSWORD`     | API/Dagster runtime 전용 non-owner/non-superuser login                                                                              |
-| `PINVI_MIGRATOR_DATABASE_URL`                      | `app-migrator` one-shot 전용 owner URL. API/Dagster에 전달 금지                                                                     |
+| `PINVI_APP_SCHEMA_OWNER`                           | `app` object의 non-login schema owner. fresh `0100`/일반 `0101` app DDL의 effective role                                           |
+| `PINVI_MIGRATION_OWNER`                            | M05 `ops` receipt object의 non-login owner. `x_extension` `USAGE`만 받고 runtime/fence/hotswap과 분리                              |
+| `PINVI_MIGRATOR_DB_USER` / `PINVI_MIGRATOR_DB_PASSWORD` | one-shot non-inheriting login. 성공한 migration 뒤 `NOLOGIN`으로 봉인                                                            |
+| `PINVI_MIGRATOR_DATABASE_URL`                      | 위 one-shot login URL. API/Dagster에 전달 금지                                                                                      |
+| `PINVI_M05_LEGACY_REBASELINE`                      | 평상시 `0`. N150 `0061 → 0100 → 0101` 승인 전환에서만 root-only profile로 `1`; 일반 deploy 금지                                  |
 | 기타 `PINVI_*`               | Pinvi 소유 설정. 외부 서비스 소유 계약 토큰은 해당 정본 이름을 사용(Feature request writer: `KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`) |
 
 `NEXT_PUBLIC_*` 변경 시 web 이미지 재빌드 필요 (빌드 타임 embed).

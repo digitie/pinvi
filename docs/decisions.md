@@ -3100,9 +3100,17 @@ location audit purpose와 동의 이벤트/backfill을 `0062`·`0063`·`0064`에
   rebaseline을 거부한다. 해당 DB는 검증된 backup을 새 `0101` DB로 복구하는 별도
   절차만 허용한다.
 - `0101`의 `ops` receipt object owner는 app runtime·schema-swap executor·fence database
-  owner와 분리된 migration owner다. migration owner는 app schema owner의 권한을 상속해
-  필요한 DDL만 수행하고, `x_extension`에는 `USAGE`만 받는다. migration 뒤에는 runtime
-  login/CONNECT surface에 남지 않게 운영 역할을 비활성화한다.
+  owner와 분리된 migration owner다. fresh topology의 app schema owner·migration owner는 모두
+  non-login이며, one-shot migrator login은 두 역할에 `INHERIT FALSE, SET TRUE`로만 membership을
+  받고 database 기본 role은 app schema owner로 고정한다. `0101`은 기존 app DDL을 owner로 끝낸
+  뒤 M05 object만 `SET LOCAL ROLE migration_owner`로 만들고 Alembic version row 전에는 app owner로
+  복귀한다. migration owner는 database `CREATE`, `x_extension` `USAGE`와 필요한 function
+  `EXECUTE`만 받으며 runtime/fence/hotswap의 membership·CONNECT surface를 갖지 않는다. 성공한
+  migration 뒤 wrapper는 migrator login을 `NOLOGIN`으로 봉인한다.
+- 현재 N150 `0061` DB는 rebaseline에서 기존 app object owner를 바꾸지 않는다. fresh backup·read-only
+  preflight·별도 운영 승인이 모두 끝난 한 번의 root-only legacy profile에서만 기존 app owner가 app
+  portion을 수행하고 같은 transaction에서 M05 부분만 migration owner로 전환한다. 이 profile은
+  일반 deploy에 사용하지 않는다.
 - M05 activation은 이 revision 전환만으로 켜지지 않으며 계속 `false`다.
 
 ### 근거

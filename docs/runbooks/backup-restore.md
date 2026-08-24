@@ -100,7 +100,8 @@ restore 계열 스크립트는 sidecar의 첫 checksum 값과 실제 dump hash�
 
 운영 hotswap은 호출자의 환경변수나 `PATH`를 신뢰하지 않는다. launcher를 root:root 0755로
 `/usr/local/sbin/pinvi-trusted-hotswap`에 설치하고, launcher가 실행하는 entrypoint와 동료
-runner(`restore-hotswap.sh`, `m05_hotswap_forensics.py`, `m05_hotswap_topology.sql`)를 모두
+runner(`restore-hotswap.sh`, `m05_operation_lease.py`, `m05_hotswap_forensics.py`,
+`m05_hotswap_topology.sql`)를 모두
 root 소유·그룹/공개 쓰기 금지 디렉터리인 `/usr/local/libexec/pinvi`에 설치한다.
 
 ```bash
@@ -108,9 +109,10 @@ install -d -o root -g root -m 755 /usr/local/libexec/pinvi
 install -o root -g root -m 755 scripts/trusted-hotswap-root.sh \
   /usr/local/sbin/pinvi-trusted-hotswap
 install -o root -g root -m 755 scripts/trusted-hotswap-entrypoint.py \
-  scripts/restore-hotswap.sh scripts/m05_hotswap_forensics.py \
+  scripts/restore-hotswap.sh scripts/m05_operation_lease.py scripts/m05_hotswap_forensics.py \
   scripts/m05_hotswap_topology.sql /usr/local/libexec/pinvi/
 install -d -o root -g root -m 755 /etc/pinvi
+install -d -o root -g root -m 700 /var/lib/pinvi/restore-forensics/operation-leases
 install -o root -g root -m 600 /secure/bootstrap/trusted-hotswap.json \
   /etc/pinvi/trusted-hotswap.json
 ```
@@ -143,6 +145,15 @@ install -o root -g root -m 600 /secure/bootstrap/trusted-hotswap.json \
 0600 dump와 checksum sidecar 경로, UUID `--operation-id`, restore/previous schema 이름을
 전달한다. `status`와 `recover`도 같은 설정 파일과 root-only forensic state를 요구하며,
 설정의 source identity가 바뀌면 기존 설정을 재검증·교체한 뒤 실행한다.
+
+같은 N150 host에서 target DB를 바꾸는 모든 root-only 경로는 target endpoint와 database 이름에서
+파생한 `/var/lib/pinvi/restore-forensics/operation-leases/` 아래의 root-owned `flock` lease를
+먼저 얻는다. trusted entrypoint는 DB identity 조회보다 먼저 lease FD를 열어 runner에 상속하고,
+`m05_restore_drill.py`는 target 생성·drop 이전에 같은 lease를 잡는다. strict
+`restore-hotswap.sh` 직접 실행은 상속된 lease가 없으면 즉시 거부한다. target DB advisory lock은
+schema switch 동안 계속 별도 방어선으로 유지한다. 이 파일 lease는 **단일 N150 host** 전제이며,
+다른 host 또는 공유 storage로 mutation 경로를 넓힐 때는 별도 분산 coordination 설계를 먼저
+승인해야 한다.
 
 ### 2.3 live e2e
 
@@ -337,17 +348,22 @@ sudo install -o root -g root -m 0755 scripts/trusted-hotswap-entrypoint.py \
   /usr/local/libexec/pinvi/trusted-hotswap-entrypoint.py
 sudo install -o root -g root -m 0755 scripts/restore-hotswap.sh \
   /usr/local/libexec/pinvi/restore-hotswap.sh
+sudo install -o root -g root -m 0644 scripts/m05_operation_lease.py \
+  /usr/local/libexec/pinvi/m05_operation_lease.py
 sudo install -o root -g root -m 0644 scripts/m05_hotswap_forensics.py \
   /usr/local/libexec/pinvi/m05_hotswap_forensics.py
 sudo install -o root -g root -m 0644 scripts/m05_hotswap_topology.sql \
   /usr/local/libexec/pinvi/m05_hotswap_topology.sql
 sudo install -d -o root -g root -m 0700 /var/lib/pinvi/restore-forensics
+sudo install -d -o root -g root -m 0700 /var/lib/pinvi/restore-forensics/operation-leases
 ```
 
 `/etc/pinvi`도 root:root이고 group/other write가 없어야 한다. 그 아래
 `/etc/pinvi/trusted-hotswap.json`은 symlink가 아닌 root:root `0600` JSON 파일로 아래
-**정확히** 일곱 field만 둔다. hotswap은 target DB의 고정 M05 advisory lock만 사용하며,
-별도 coordination DB나 그와 관련된 가짜 상호배제 주장을 두지 않는다. URL에는 실제
+**정확히** 일곱 field만 둔다. hotswap과 fresh target provisioner는 먼저 같은 target별
+root-owned file lease를 잡고, target DB의 고정 M05 advisory lock은 계속 schema-switch 방어로
+유지한다. 이는 단일 N150 host의 공통 root boundary를 전제로 하며, 별도 coordination DB를
+대체한다고 주장하지 않는다. URL에는 실제
 credential을 문서·로그·shell history에 남기지 않으며, 운영자는 root 전용 editor/secret
 manager로 값을 넣는다.
 
@@ -375,7 +391,17 @@ manager로 값을 넣는다.
 owner인 fence role에는 table `SELECT`와 세 function `EXECUTE`만 각각 grant한다. trusted
 runner는 이 owner/fence 분리를 preflight에서 재검증한다. 따라서 receipt object를 만들
 migration role과 fence database owner를 같은 role로 구성하지 말고, migration owner는 app schema
-owner 권한과 `x_extension`의 `USAGE`만 가진 별도 비로그인 역할로 둔다. migration 뒤에는
+owner의 `SET ROLE` 권한, database `CREATE`, `x_extension`의 `USAGE`만 가진 별도 비로그인 역할로
+둔다. 새 설치에서는 non-inheriting `pinvi_migrator` login이 app schema owner와 migration owner에
+각각 `INHERIT FALSE, SET TRUE`로만 membership을 받고 database 기본 role은 app schema owner로
+고정한다. `0101`은 기존 app DDL을 그 owner로 마친 뒤에만 `SET LOCAL ROLE`로 migration owner를
+활성화해 `ops`/M05 object를 만들고, Alembic version row를 쓰기 전에 app owner로 복귀한다.
+성공한 `app-migrator` one-shot 뒤에는 bootstrap wrapper가 migrator login을 `NOLOGIN`으로 봉인한다.
+
+현재 N150의 `0061 → 0100 → 0101` 전환은 app 객체 owner를 다시 쓰지 않는다. fresh backup과
+read-only rebaseline preflight, 별도 운영 승인 뒤에만 root owner session과
+`PINVI_M05_LEGACY_REBASELINE=1`을 사용하여 기존 app DDL을 수행하고 동일 transaction 안에서
+M05 부분만 migration owner로 전환한다. 이 legacy profile은 일반 deploy에 사용하지 않는다.
 app role·schema-swap executor·fence role에 owner/추가 ACL을 부여하지 않으며, migration owner도
 runtime login 또는 database `CONNECT` surface에 남기지 않는다. receipt migration 뒤 default ACL을
 추가하거나 grant를 넓히는 변경은 허용하지 않는다.
@@ -384,8 +410,8 @@ runtime login 또는 database `CONNECT` surface에 남기지 않는다. receipt 
 확인한 뒤 `drain-receipt.json`을 root:root `0600`으로 만든다. receipt는 operation UUID,
 snapshot SHA-256, source schema, pinned target identity와 `15분` TTL을 결박한다. `run`은 이를
 hard link archive한 뒤 unlink하여 한 번만 소비하며, archive가 남아 있으면 같은 receipt를
-재발급·재사용할 수 없다. 이 proof는 runner의 DB write fence를 대체하지 않는다. run은 여전히
-전체 실행 동안 advisory lock을 유지하고 runtime writer 권한·CONNECT를 fence하고 재접속을
+재발급·재사용할 수 없다. 이 proof는 runner의 DB write fence를 대체하지 않는다. run은 root target
+lease와 target DB advisory lock을 전체 실행 동안 유지하고 runtime writer 권한·CONNECT를 fence하고 재접속을
 종료한다. data restore는 `session_replication_role`을 바꾸지 않아 M05 `ENABLE ALWAYS` trigger와
 foreign-key 검증을 유지한다.
 
