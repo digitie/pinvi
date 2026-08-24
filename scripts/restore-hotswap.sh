@@ -2197,6 +2197,16 @@ SELECT
     FROM pg_auth_members m
     JOIN app_role a ON a.oid = m.member OR a.oid = m.roleid
   )
+  AND NOT has_database_privilege(
+    (SELECT oid FROM app_role),
+    current_database(),
+    'CREATE'
+  )
+  AND NOT has_schema_privilege(
+    (SELECT oid FROM app_role),
+    'public',
+    'CREATE'
+  )
   AND NOT EXISTS (
     SELECT 1 FROM source_schema s WHERE s.nspowner <> current_user::regrole
   )

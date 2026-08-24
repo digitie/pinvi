@@ -6,6 +6,7 @@ import importlib.util
 import json
 import socket
 import sys
+from argparse import Namespace
 from pathlib import Path
 
 import pytest
@@ -131,8 +132,10 @@ def _safe_observation(
     return {
         "advisory_lock_absent": True,
         "app_connect": True,
+        "app_database_create_absent": True,
         "app_oid": app_oid,
         "app_role_safe": True,
+        "app_public_create_absent": True,
         "app_usage": True,
         "connect_restore_grants": connect_grants
         if connect_grants is not None
@@ -268,4 +271,156 @@ def test_recovery_proof_rejects_connect_acl_or_topology_drift(
             marker,
             "postgresql://unused",
             Path("/trusted/m05_hotswap_topology.sql"),
+        )
+
+
+def _configure_root_runner_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PINVI_ENVIRONMENT", "staging")
+    monkeypatch.setenv("PINVI_RESTORE_APP_ROLE", "pinvi_app")
+    monkeypatch.setenv("PINVI_RESTORE_DATABASE_URL", "postgresql://owner@target/pinvi")
+    monkeypatch.setenv("PINVI_RESTORE_FENCE_DATABASE_URL", "postgresql://fence@target/pinvi")
+    monkeypatch.setenv("PINVI_RESTORE_TRUSTED_BACKUP_DIR", "/srv/pinvi/restore-trust")
+    monkeypatch.setenv("PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME", "pinvi_source")
+    monkeypatch.setenv("PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID", "100")
+    monkeypatch.setenv("PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER", "200")
+    monkeypatch.setenv("PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR", "192.0.2.10")
+    monkeypatch.setenv("PINVI_RESTORE_EXPECTED_SOURCE_PORT", "5432")
+
+
+def test_root_run_execve_receives_only_the_explicit_trusted_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hotswap = _script_module("trusted-hotswap-entrypoint.py", "trusted_hotswap_entrypoint")
+    _configure_root_runner_environment(monkeypatch)
+    monkeypatch.setenv("PINVI_UNRELATED_INHERITED_VALUE", "must-not-reach-runner")
+    monkeypatch.setattr(hotswap, "_strict_environment", lambda: None)
+    monkeypatch.setattr(
+        hotswap,
+        "_canonical_runner_paths",
+        lambda: (
+            Path("/trusted/restore-hotswap.sh"),
+            Path("/trusted/m05_hotswap_forensics.py"),
+            Path("/trusted/m05_hotswap_topology.sql"),
+        ),
+    )
+    monkeypatch.setattr(hotswap, "_assert_no_active_marker", lambda _: None)
+    monkeypatch.setattr(hotswap, "pin_database_url", lambda value: f"pinned:{value}")
+    monkeypatch.setattr(
+        hotswap,
+        "_safe_root_only_directory",
+        lambda path, *, mode: Path("/srv/pinvi/restore-trust"),
+    )
+    monkeypatch.setattr(
+        hotswap,
+        "_prepare_trusted_drain_receipt",
+        lambda **_: ({"target_identity_sha256": "a" * 64}, "d" * 64),
+    )
+    monkeypatch.setattr(hotswap, "_consume_trusted_drain_receipt", lambda *_: None)
+    monkeypatch.setattr(
+        hotswap,
+        "_identity_sha256_from_psql",
+        lambda _: (
+            "a" * 64,
+            {
+                "database": "pinvi",
+                "database_oid": "101",
+                "hostaddr": "192.0.2.20",
+                "port": "5432",
+                "system_identifier": "201",
+            },
+        ),
+    )
+    monkeypatch.setattr(hotswap, "_trusted_bash_path", lambda: Path("/trusted/bash"))
+    monkeypatch.setattr(hotswap, "_trusted_pg_restore_path", lambda: Path("/trusted/pg_restore"))
+    monkeypatch.setattr(hotswap, "_trusted_psql_path", lambda: Path("/trusted/psql"))
+    monkeypatch.setattr(hotswap, "_trusted_file_sha256", lambda path: f"{path.name:0<64}"[:64])
+    captured: dict[str, object] = {}
+
+    class ExecveCalled(RuntimeError):
+        pass
+
+    def execve(path: str, arguments: list[str], environment: dict[str, str]) -> None:
+        captured.update({"arguments": arguments, "environment": environment, "path": path})
+        raise ExecveCalled
+
+    monkeypatch.setattr(hotswap.os, "execve", execve)
+    with pytest.raises(ExecveCalled):
+        hotswap._run(
+            Namespace(
+                snapshot="/srv/pinvi/restore-trust/pinvi.dump",
+                restore_schema="app_restore_1",
+                previous_schema="app_previous_1",
+                operation_id="123e4567-e89b-42d3-a456-426614174000",
+            )
+        )
+
+    assert captured["path"] == "/trusted/bash"
+    assert captured["arguments"] == [
+        "/trusted/bash",
+        "/trusted/restore-hotswap.sh",
+        "run",
+        "/srv/pinvi/restore-trust/pinvi.dump",
+        "app_restore_1",
+        "app_previous_1",
+    ]
+    environment = captured["environment"]
+    assert isinstance(environment, dict)
+    assert environment == {
+        "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "PINVI_BACKUP_SCHEMA": "app",
+        "PINVI_ENVIRONMENT": "staging",
+        "PINVI_M05_FORENSICS_DRAIN_RECEIPT_SHA256": "d" * 64,
+        "PINVI_M05_FORENSICS_OPERATION_ID": "123e4567-e89b-42d3-a456-426614174000",
+        "PINVI_RESTORE_ALLOW_NO_DRAIN": "1",
+        "PINVI_RESTORE_API_TRIGGER": "1",
+        "PINVI_RESTORE_APP_ROLE": "pinvi_app",
+        "PINVI_RESTORE_BASH_BIN": "/trusted/bash",
+        "PINVI_RESTORE_BASH_SHA256": f"bash{'0' * 60}",
+        "PINVI_RESTORE_DATABASE_URL": "pinned:postgresql://owner@target/pinvi",
+        "PINVI_RESTORE_DRAIN_VERIFIED": "1",
+        "PINVI_RESTORE_EXPECTED_DATABASE_NAME": "pinvi",
+        "PINVI_RESTORE_EXPECTED_DATABASE_OID": "101",
+        "PINVI_RESTORE_EXPECTED_HOSTADDR": "192.0.2.20",
+        "PINVI_RESTORE_EXPECTED_PORT": "5432",
+        "PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME": "pinvi_source",
+        "PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID": "100",
+        "PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR": "192.0.2.10",
+        "PINVI_RESTORE_EXPECTED_SOURCE_PORT": "5432",
+        "PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER": "200",
+        "PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER": "201",
+        "PINVI_RESTORE_FENCE_DATABASE_URL": "pinned:postgresql://fence@target/pinvi",
+        "PINVI_RESTORE_HOTSWAP_EXECUTE": "1",
+        "PINVI_RESTORE_PG_RESTORE_BIN": "/trusted/pg_restore",
+        "PINVI_RESTORE_PG_RESTORE_SHA256": f"pg_restore{'0' * 54}",
+        "PINVI_RESTORE_PSQL_BIN": "/trusted/psql",
+        "PINVI_RESTORE_PSQL_SHA256": f"psql{'0' * 60}",
+        "PINVI_RESTORE_TRUSTED_BACKUP_DIR": "/srv/pinvi/restore-trust",
+    }
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "PINVI_M05_RESTORE_TEST_MODE",
+        "PINVI_RESTORE_ALLOW_NO_DRAIN",
+        "PINVI_RESTORE_DRAIN_COMMAND",
+        "PINVI_RESTORE_DRAIN_VERIFIED",
+        "PINVI_RESTORE_PG_RESTORE_BIN",
+        "PINVI_RESTORE_PRIVATE_TOOL_COPY",
+        "PINVI_RESTORE_PSQL_BIN",
+    ],
+)
+def test_root_runner_rejects_inherited_tool_test_and_command_overrides(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    hotswap = _script_module("trusted-hotswap-entrypoint.py", "trusted_hotswap_entrypoint")
+    _configure_root_runner_environment(monkeypatch)
+    monkeypatch.setenv(name, "unsafe")
+
+    with pytest.raises(hotswap.TrustedHotswapError, match="inherited runner overrides"):
+        hotswap._runner_environment(
+            "postgresql://target",
+            "postgresql://fence",
+            snapshot="/srv/pinvi/restore-trust/pinvi.dump",
+            operation_id="123e4567-e89b-42d3-a456-426614174000",
         )

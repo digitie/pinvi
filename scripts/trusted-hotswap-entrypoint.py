@@ -19,6 +19,7 @@ import socket
 import stat
 import subprocess
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Final, NoReturn, cast
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -35,11 +36,56 @@ _UUID_RE: Final = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
 )
 _STATE_DIRECTORY: Final = "/var/lib/pinvi/restore-forensics"
+_DRAIN_RECEIPT_PATH: Final = Path(_STATE_DIRECTORY) / "drain-receipt.json"
+_DRAIN_RECEIPT_MAX_AGE: Final = timedelta(minutes=15)
 _LOCK_CLASSID: Final = 1414679892
 _LOCK_OBJID: Final = 1213421392
 _TOPOLOGY_FILENAME: Final = "m05_hotswap_topology.sql"
-_PSQL_PATH_RE: Final = re.compile(
-    r"(?:/usr/bin/psql|/usr/lib/postgresql/[0-9]+/bin/psql)"
+_RUNNER_UNSAFE_ENVIRONMENT_KEYS: Final = frozenset(
+    {
+        # The wrapper, rather than its inherited environment, chooses every
+        # executable and digest consumed by the root runner.
+        "PINVI_RESTORE_BASH_BIN",
+        "PINVI_RESTORE_BASH_SHA256",
+        "PINVI_RESTORE_DRAIN_COMMAND",
+        "PINVI_RESTORE_DRAIN_RECEIPT_PATH",
+        "PINVI_RESTORE_DRAIN_VERIFIED",
+        "PINVI_RESTORE_HOTSWAP_EXECUTE",
+        "PINVI_RESTORE_ALLOW_NO_DRAIN",
+        "PINVI_RESTORE_PG_RESTORE_BIN",
+        "PINVI_RESTORE_PG_RESTORE_SHA256",
+        "PINVI_RESTORE_PRIVATE_TOOL_COPY",
+        "PINVI_RESTORE_PSQL_BIN",
+        "PINVI_RESTORE_PSQL_SHA256",
+        "PINVI_RESTORE_TEST_FAIL_RELEASE_ONCE",
+        "PINVI_RESTORE_WRITE_ROLES",
+        "PINVI_M05_RESTORE_TEST_MODE",
+        # A root wrapper reads the target once and supplies the exact values
+        # to every runner SQL identity guard. Caller-provided values would
+        # turn that guard into a value selected by the caller.
+        "PINVI_RESTORE_EXPECTED_DATABASE_NAME",
+        "PINVI_RESTORE_EXPECTED_DATABASE_OID",
+        "PINVI_RESTORE_EXPECTED_HOSTADDR",
+        "PINVI_RESTORE_EXPECTED_PORT",
+        "PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER",
+    }
+)
+_SOURCE_IDENTITY_ENVIRONMENT: Final = (
+    (
+        "PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME",
+        re.compile(r"[A-Za-z_][A-Za-z0-9_]*"),
+    ),
+    ("PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID", re.compile(r"[0-9]+")),
+    ("PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER", re.compile(r"[0-9]+")),
+    ("PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR", re.compile(r"[0-9A-Fa-f:.]+")),
+    ("PINVI_RESTORE_EXPECTED_SOURCE_PORT", re.compile(r"[0-9]+")),
+)
+_TARGET_IDENTITY_ENVIRONMENT: Final = (
+    ("PINVI_RESTORE_EXPECTED_DATABASE_NAME", "database"),
+    ("PINVI_RESTORE_EXPECTED_DATABASE_OID", "database_oid"),
+    ("PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER", "system_identifier"),
+    ("PINVI_RESTORE_EXPECTED_HOSTADDR", "hostaddr"),
+    ("PINVI_RESTORE_EXPECTED_PORT", "port"),
 )
 _SAFE_ENVIRONMENT: Final = {
     "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -154,11 +200,40 @@ def _trusted_bash_path() -> Path:
     _raise("trusted hotswap shell is unavailable")
 
 
+def _trusted_postgres_tool_path(tool: str) -> Path:
+    """고정된 system PostgreSQL client만 root runner에 전달한다."""
+
+    candidates = [Path("/usr/bin") / tool]
+    postgres_directory = Path("/usr/lib/postgresql")
+    if postgres_directory.is_dir():
+        candidates.extend(
+            sorted(postgres_directory.glob(f"[0-9]*/bin/{tool}"), reverse=True)
+        )
+    for candidate in candidates:
+        if candidate.exists():
+            return _safe_trusted_executable(candidate)
+    _raise(f"trusted hotswap {tool} executable is unavailable")
+
+
 def _trusted_psql_path() -> Path:
-    configured = os.environ.get("PINVI_RESTORE_PSQL_BIN", "/usr/bin/psql")
-    if _PSQL_PATH_RE.fullmatch(configured) is None:
-        _raise("trusted recovery psql path is invalid")
-    return _safe_trusted_executable(Path(configured))
+    return _trusted_postgres_tool_path("psql")
+
+
+def _trusted_pg_restore_path() -> Path:
+    return _trusted_postgres_tool_path("pg_restore")
+
+
+def _trusted_file_sha256(path: Path) -> str:
+    """검증한 root-owned executable의 digest를 wrapper가 직접 계산한다."""
+
+    digest = hashlib.sha256()
+    with path.open("rb", buffering=0) as source:
+        while True:
+            chunk = source.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _resolved_hostaddr(hostname: str, port: int) -> str:
@@ -259,6 +334,312 @@ def _assert_no_active_marker(forensics: Path) -> None:
     if marker == {"active": False}:
         return
     _raise("unresolved hotswap forensic marker blocks a new hotswap")
+
+
+def _required_runner_environment_value(name: str, pattern: re.Pattern[str]) -> str:
+    value = os.environ.get(name, "")
+    if pattern.fullmatch(value) is None:
+        _raise(f"trusted hotswap {name} is missing or invalid")
+    return value
+
+
+def _assert_runner_environment_is_narrow() -> None:
+    configured = sorted(
+        name for name in _RUNNER_UNSAFE_ENVIRONMENT_KEYS if name in os.environ
+    )
+    if configured:
+        _raise("trusted hotswap refuses inherited runner overrides")
+
+
+def _target_identity_environment(database_url: str) -> tuple[dict[str, str], str]:
+    target_identity_sha256, identity = _identity_sha256_from_psql(database_url)
+    environment: dict[str, str] = {}
+    for environment_name, identity_name in _TARGET_IDENTITY_ENVIRONMENT:
+        value = identity.get(identity_name)
+        if not isinstance(value, str):
+            _raise("trusted hotswap database identity is invalid")
+        environment[environment_name] = value
+    return environment, target_identity_sha256
+
+
+def _safe_root_only_directory(path: Path, *, mode: int) -> Path:
+    if not path.is_absolute():
+        _raise("trusted hotswap root-only directory is invalid")
+    _safe_parent_chain(path.parent)
+    try:
+        metadata = path.lstat()
+        resolved = path.resolve(strict=True)
+    except OSError:
+        _raise("trusted hotswap root-only directory is unavailable")
+    if (
+        stat.S_ISLNK(metadata.st_mode)
+        or not stat.S_ISDIR(metadata.st_mode)
+        or metadata.st_uid != 0
+        or stat.S_IMODE(metadata.st_mode) != mode
+        or resolved != path
+    ):
+        _raise("trusted hotswap root-only directory permissions are invalid")
+    return resolved
+
+
+def _safe_root_only_file_metadata(
+    path: Path, *, mode: int, maximum_size: int | None = 16 * 1024
+) -> os.stat_result:
+    if not path.is_absolute():
+        _raise("trusted hotswap root-only file is invalid")
+    try:
+        metadata = path.lstat()
+    except OSError:
+        _raise("trusted hotswap root-only file is unavailable")
+    if (
+        stat.S_ISLNK(metadata.st_mode)
+        or not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_uid != 0
+        or stat.S_IMODE(metadata.st_mode) != mode
+        or (maximum_size is not None and metadata.st_size > maximum_size)
+    ):
+        _raise("trusted hotswap root-only file permissions are invalid")
+    return metadata
+
+
+def _safe_root_only_file(
+    path: Path, *, mode: int, maximum_size: int | None = 16 * 1024
+) -> bytes:
+    metadata = _safe_root_only_file_metadata(path, mode=mode, maximum_size=maximum_size)
+    try:
+        payload = path.read_bytes()
+    except OSError:
+        _raise("trusted hotswap root-only file is unavailable")
+    try:
+        after = path.lstat()
+    except OSError:
+        _raise("trusted hotswap root-only file is unavailable")
+    if (
+        after.st_ino != metadata.st_ino
+        or after.st_dev != metadata.st_dev
+        or after.st_size != metadata.st_size
+        or after.st_uid != 0
+        or stat.S_IMODE(after.st_mode) != mode
+    ):
+        _raise("trusted hotswap root-only file changed while reading")
+    return payload
+
+
+def _parse_receipt_timestamp(name: str, value: object) -> datetime:
+    if (
+        not isinstance(value, str)
+        or re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z", value)
+        is None
+    ):
+        _raise(f"trusted hotswap drain receipt {name} is invalid")
+    try:
+        return datetime.fromisoformat(f"{value[:-1]}+00:00").astimezone(UTC)
+    except ValueError:
+        _raise(f"trusted hotswap drain receipt {name} is invalid")
+
+
+def _trusted_snapshot_sha256(snapshot: str, trusted_directory: Path) -> str:
+    snapshot_path = Path(snapshot)
+    if not snapshot_path.is_absolute() or snapshot_path.parent != trusted_directory:
+        _raise("trusted hotswap snapshot is outside the trusted backup directory")
+    metadata = _safe_root_only_file_metadata(
+        snapshot_path, mode=0o600, maximum_size=None
+    )
+    sidecar = _safe_root_only_file(
+        snapshot_path.with_name(f"{snapshot_path.name}.sha256"), mode=0o600
+    )
+    expected = sidecar.decode("ascii", errors="strict").split(maxsplit=1)
+    if len(expected) != 2 or _SHA256_RE.fullmatch(expected[0]) is None:
+        _raise("trusted hotswap snapshot checksum sidecar is invalid")
+    digest = hashlib.sha256()
+    try:
+        with snapshot_path.open("rb", buffering=0) as source:
+            while True:
+                chunk = source.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+    except OSError:
+        _raise("trusted hotswap snapshot is unavailable")
+    try:
+        after = snapshot_path.lstat()
+    except OSError:
+        _raise("trusted hotswap snapshot is unavailable")
+    if (
+        after.st_ino != metadata.st_ino
+        or after.st_dev != metadata.st_dev
+        or after.st_size != metadata.st_size
+        or after.st_uid != 0
+        or stat.S_IMODE(after.st_mode) != 0o600
+    ):
+        _raise("trusted hotswap snapshot changed while reading")
+    actual = digest.hexdigest()
+    if actual != expected[0]:
+        _raise("trusted hotswap snapshot checksum failed")
+    return actual
+
+
+def _prepare_trusted_drain_receipt(
+    *,
+    snapshot: str,
+    operation_id: str,
+    app_role: str,
+    source_schema: str,
+    trusted_directory: Path,
+) -> tuple[dict[str, object], str]:
+    """DB 접속 전 sealed receipt·snapshot·TTL을 fail-closed로 검증한다."""
+
+    _safe_root_only_directory(_DRAIN_RECEIPT_PATH.parent, mode=0o700)
+    payload = _safe_root_only_file(_DRAIN_RECEIPT_PATH, mode=0o600)
+    try:
+        receipt = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise TrustedHotswapError("trusted hotswap drain receipt is invalid") from exc
+    required_keys = {
+        "app_role",
+        "expires_at_utc",
+        "operation_id",
+        "quiescent",
+        "snapshot_sha256",
+        "source_schema",
+        "target_identity_sha256",
+        "verified_at_utc",
+        "version",
+    }
+    if not isinstance(receipt, dict) or set(receipt) != required_keys:
+        _raise("trusted hotswap drain receipt is invalid")
+    if (
+        receipt.get("version") != 1
+        or receipt.get("operation_id") != operation_id
+        or receipt.get("app_role") != app_role
+        or receipt.get("source_schema") != source_schema
+        or receipt.get("quiescent") is not True
+        or not isinstance(receipt.get("snapshot_sha256"), str)
+        or _SHA256_RE.fullmatch(cast(str, receipt["snapshot_sha256"])) is None
+        or not isinstance(receipt.get("target_identity_sha256"), str)
+        or _SHA256_RE.fullmatch(cast(str, receipt["target_identity_sha256"])) is None
+    ):
+        _raise("trusted hotswap drain receipt does not match the operation")
+    verified_at = _parse_receipt_timestamp(
+        "verified_at_utc", receipt.get("verified_at_utc")
+    )
+    expires_at = _parse_receipt_timestamp(
+        "expires_at_utc", receipt.get("expires_at_utc")
+    )
+    now = datetime.now(UTC)
+    if (
+        verified_at > now
+        or expires_at <= now
+        or expires_at < verified_at
+        or now - verified_at > _DRAIN_RECEIPT_MAX_AGE
+        or expires_at - verified_at > _DRAIN_RECEIPT_MAX_AGE
+    ):
+        _raise("trusted hotswap drain receipt is expired or has an invalid lifetime")
+
+    snapshot_sha256 = _trusted_snapshot_sha256(snapshot, trusted_directory)
+    if receipt["snapshot_sha256"] != snapshot_sha256:
+        _raise("trusted hotswap drain receipt does not match the snapshot")
+    return cast(dict[str, object], receipt), hashlib.sha256(payload).hexdigest()
+
+
+def _consume_trusted_drain_receipt(operation_id: str, receipt_sha256: str) -> None:
+    """single-use receipt를 marker 전 root-only archive로 link+unlink 한다."""
+
+    if (
+        _UUID_RE.fullmatch(operation_id) is None
+        or _SHA256_RE.fullmatch(receipt_sha256) is None
+    ):
+        _raise("trusted hotswap drain receipt consumption input is invalid")
+    state_directory = _safe_root_only_directory(_DRAIN_RECEIPT_PATH.parent, mode=0o700)
+    payload = _safe_root_only_file(_DRAIN_RECEIPT_PATH, mode=0o600)
+    if hashlib.sha256(payload).hexdigest() != receipt_sha256:
+        _raise("trusted hotswap drain receipt changed while consuming")
+    consumed_directory = state_directory / "consumed-drain-receipts"
+    try:
+        consumed_directory.mkdir(mode=0o700, exist_ok=True)
+    except OSError:
+        _raise("trusted hotswap drain receipt archive is unavailable")
+    _safe_root_only_directory(consumed_directory, mode=0o700)
+    destination = consumed_directory / f"{operation_id}.json"
+    try:
+        os.link(_DRAIN_RECEIPT_PATH, destination, follow_symlinks=False)
+    except FileExistsError:
+        _raise("trusted hotswap drain receipt was already consumed")
+    except OSError:
+        _raise("trusted hotswap drain receipt could not be consumed")
+    try:
+        os.unlink(_DRAIN_RECEIPT_PATH)
+    except OSError:
+        _raise("trusted hotswap drain receipt could not be consumed")
+
+
+def _runner_environment(
+    database_url: str,
+    fence_url: str,
+    *,
+    snapshot: str,
+    operation_id: str,
+) -> dict[str, str]:
+    """root runner에 필요한 immutable operation input만 복사한다."""
+
+    _assert_runner_environment_is_narrow()
+    app_role = _required_runner_environment_value("PINVI_RESTORE_APP_ROLE", _ROLE_RE)
+    source_schema = os.environ.get("PINVI_BACKUP_SCHEMA", "app")
+    if _SCHEMA_RE.fullmatch(source_schema) is None:
+        _raise("trusted hotswap PINVI_BACKUP_SCHEMA is invalid")
+    trusted_backup_directory = os.environ.get("PINVI_RESTORE_TRUSTED_BACKUP_DIR", "")
+    if (
+        not trusted_backup_directory.startswith("/")
+        or _UUID_RE.fullmatch(operation_id) is None
+    ):
+        _raise("trusted hotswap trusted backup directory is missing or invalid")
+    trusted_directory = _safe_root_only_directory(
+        Path(trusted_backup_directory), mode=0o700
+    )
+    receipt, receipt_sha256 = _prepare_trusted_drain_receipt(
+        snapshot=snapshot,
+        operation_id=operation_id,
+        app_role=app_role,
+        source_schema=source_schema,
+        trusted_directory=trusted_directory,
+    )
+    target_environment, target_identity_sha256 = _target_identity_environment(
+        database_url
+    )
+    if receipt["target_identity_sha256"] != target_identity_sha256:
+        _raise("trusted hotswap drain receipt does not match the target")
+    _consume_trusted_drain_receipt(operation_id, receipt_sha256)
+
+    environment: dict[str, str] = {
+        **_SAFE_ENVIRONMENT,
+        "PINVI_BACKUP_SCHEMA": source_schema,
+        "PINVI_ENVIRONMENT": os.environ["PINVI_ENVIRONMENT"],
+        "PINVI_RESTORE_ALLOW_NO_DRAIN": "1",
+        "PINVI_RESTORE_API_TRIGGER": "1",
+        "PINVI_RESTORE_APP_ROLE": app_role,
+        "PINVI_RESTORE_DATABASE_URL": database_url,
+        "PINVI_RESTORE_DRAIN_VERIFIED": "1",
+        "PINVI_RESTORE_FENCE_DATABASE_URL": fence_url,
+        "PINVI_RESTORE_HOTSWAP_EXECUTE": "1",
+        "PINVI_RESTORE_TRUSTED_BACKUP_DIR": str(trusted_directory),
+        "PINVI_M05_FORENSICS_DRAIN_RECEIPT_SHA256": receipt_sha256,
+        "PINVI_M05_FORENSICS_OPERATION_ID": operation_id,
+    }
+    for environment_name, pattern in _SOURCE_IDENTITY_ENVIRONMENT:
+        environment[environment_name] = _required_runner_environment_value(
+            environment_name, pattern
+        )
+
+    trusted_tools = (
+        ("PINVI_RESTORE_BASH", _trusted_bash_path()),
+        ("PINVI_RESTORE_PG_RESTORE", _trusted_pg_restore_path()),
+        ("PINVI_RESTORE_PSQL", _trusted_psql_path()),
+    )
+    for prefix, path in trusted_tools:
+        environment[f"{prefix}_BIN"] = str(path)
+        environment[f"{prefix}_SHA256"] = _trusted_file_sha256(path)
+    environment.update(target_environment)
+    return environment
 
 
 def _run_psql(
@@ -482,6 +863,9 @@ SELECT json_build_object(
     WHERE locktype = 'advisory' AND classid = 1414679892 AND objid = 1213421392 AND granted
   ),
   'app_connect', has_database_privilege(:'app_role', current_database(), 'CONNECT'),
+  'app_database_create_absent', NOT has_database_privilege(
+    :'app_role', current_database(), 'CREATE'
+  ),
   'app_oid', COALESCE((SELECT oid::text FROM pg_namespace WHERE nspname = :'source_schema'), ''),
   'app_role_safe', EXISTS (
     SELECT 1
@@ -498,6 +882,9 @@ SELECT json_build_object(
         SELECT 1 FROM pg_auth_members membership
         WHERE membership.member = role_row.oid OR membership.roleid = role_row.oid
       )
+  ),
+  'app_public_create_absent', NOT has_schema_privilege(
+    :'app_role', 'public', 'CREATE'
   ),
   'app_usage', has_schema_privilege(:'app_role', :'source_schema', 'USAGE'),
   'connect_restore_grants', COALESCE((
@@ -576,8 +963,10 @@ SELECT json_build_object(
     if not isinstance(observation, dict) or set(observation) != {
         "advisory_lock_absent",
         "app_connect",
+        "app_database_create_absent",
         "app_oid",
         "app_role_safe",
+        "app_public_create_absent",
         "app_usage",
         "connect_restore_grants",
         "fence_role_safe",
@@ -592,7 +981,9 @@ SELECT json_build_object(
     boolean_keys = {
         "advisory_lock_absent",
         "app_connect",
+        "app_database_create_absent",
         "app_role_safe",
+        "app_public_create_absent",
         "app_usage",
         "fence_role_safe",
         "public_connect_granted",
@@ -606,7 +997,9 @@ SELECT json_build_object(
         or _ROLE_RE.fullmatch(cast(str, observation["restore_executor_role"])) is None
         or observation["advisory_lock_absent"] is not True
         or observation["app_connect"] is not True
+        or observation["app_database_create_absent"] is not True
         or observation["app_role_safe"] is not True
+        or observation["app_public_create_absent"] is not True
         or observation["app_usage"] is not True
         or observation["fence_role_safe"] is not True
         or observation["restore_executor_safe"] is not True
@@ -662,12 +1055,12 @@ def _run(args: argparse.Namespace) -> int:
     _assert_no_active_marker(forensics)
     database_url = pin_database_url(os.environ.get("PINVI_RESTORE_DATABASE_URL", ""))
     fence_url = pin_database_url(os.environ.get("PINVI_RESTORE_FENCE_DATABASE_URL", ""))
-    environment = {
-        **_SAFE_ENVIRONMENT,
-        **{key: value for key, value in os.environ.items() if key.startswith("PINVI_")},
-        "PINVI_RESTORE_DATABASE_URL": database_url,
-        "PINVI_RESTORE_FENCE_DATABASE_URL": fence_url,
-    }
+    environment = _runner_environment(
+        database_url,
+        fence_url,
+        snapshot=args.snapshot,
+        operation_id=args.operation_id,
+    )
     bash = _trusted_bash_path()
     os.execve(
         str(bash),
@@ -727,6 +1120,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="PinVi trusted hotswap entrypoint")
     commands = parser.add_subparsers(dest="command", required=True)
     run = commands.add_parser("run")
+    run.add_argument("--operation-id", required=True)
     run.add_argument("snapshot")
     run.add_argument("restore_schema")
     run.add_argument("previous_schema")

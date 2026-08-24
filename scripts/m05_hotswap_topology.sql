@@ -2,9 +2,11 @@
 --
 -- psql 변수는 모두 SQL literal로 치환한다. 호출자는 marker/schema validator를 통과한
 -- 값만 전달한다. 이 파일은 한 줄 hash만 출력하며, catalog 원문을 operator log에 남기지
--- 않는다. source/previous/restore schema의 객체 표면은 전부 포함하되 x_extension은
--- schema ACL만 포함한다. 확장 객체 전체를 넣으면 PinVi hotswap과 무관한 extension churn이
--- recovery proof를 불필요하게 무효화하기 때문이다.
+-- 않는다. source/previous/restore schema의 객체 표면은 전부 포함하고, public 및
+-- x_extension은 schema ACL만 포함한다. 확장 객체 전체를 넣으면 PinVi hotswap과 무관한
+-- extension churn이 recovery proof를 불필요하게 무효화하기 때문이다. public의 CREATE
+-- grant는 app role이 swap schema 밖에서 객체를 만들 수 있는 writer escape hatch이므로
+-- 반드시 topology에 남긴다.
 WITH parameters AS (
   SELECT
     :'source_schema'::name AS source_schema,
@@ -21,7 +23,8 @@ schema_scope AS (
     parameters.source_schema,
     parameters.previous_schema,
     parameters.restore_schema,
-    'x_extension'::name
+    'x_extension'::name,
+    'public'::name
   )
 ),
 active_schema_scope AS (
@@ -55,7 +58,15 @@ role_scope AS (
     role_row.rolreplication,
     role_row.rolbypassrls,
     role_row.rolconnlimit,
-    role_row.rolvaliduntil,
+    CASE
+      WHEN role_row.rolvaliduntil IS NULL THEN NULL
+      WHEN role_row.rolvaliduntil IN ('infinity'::timestamptz, '-infinity'::timestamptz)
+        THEN role_row.rolvaliduntil::text
+      ELSE to_char(
+        role_row.rolvaliduntil AT TIME ZONE 'UTC',
+        'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+      )
+    END AS valid_until_utc,
     role_row.rolconfig
   FROM pg_roles AS role_row
   CROSS JOIN parameters
@@ -88,11 +99,44 @@ procedure_scope AS (
     procedure_row.proowner,
     procedure_row.proacl,
     procedure_row.prosecdef,
-    pg_get_function_identity_arguments(procedure_row.oid) AS identity_arguments
+    pg_get_function_identity_arguments(procedure_row.oid) AS identity_arguments,
+    pg_get_functiondef(procedure_row.oid) AS definition
   FROM pg_proc AS procedure_row
   JOIN schema_scope ON schema_scope.oid = procedure_row.pronamespace
   CROSS JOIN parameters
   WHERE schema_scope.nspname = parameters.source_schema
+),
+trigger_scope AS (
+  SELECT
+    trigger_row.oid,
+    trigger_row.tgrelid,
+    trigger_row.tgname,
+    trigger_row.tgfoid,
+    trigger_row.tgtype,
+    trigger_row.tgenabled,
+    trigger_row.tgisinternal,
+    trigger_row.tgconstraint,
+    trigger_row.tgdeferrable,
+    trigger_row.tginitdeferred,
+    pg_get_triggerdef(trigger_row.oid, true) AS definition
+  FROM pg_trigger AS trigger_row
+  JOIN relation_scope ON relation_scope.oid = trigger_row.tgrelid
+),
+trigger_function_scope AS (
+  SELECT
+    procedure_row.oid,
+    procedure_row.pronamespace,
+    procedure_row.proname,
+    procedure_row.proowner,
+    procedure_row.proacl,
+    procedure_row.prosecdef,
+    pg_get_function_identity_arguments(procedure_row.oid) AS identity_arguments,
+    pg_get_functiondef(procedure_row.oid) AS definition
+  FROM pg_proc AS procedure_row
+  JOIN (
+    SELECT DISTINCT trigger_scope.tgfoid
+    FROM trigger_scope
+  ) AS trigger_function ON trigger_function.tgfoid = procedure_row.oid
 ),
 type_scope AS (
   SELECT
@@ -141,7 +185,7 @@ entries AS (
     'replication', role_scope.rolreplication,
     'bypass_rls', role_scope.rolbypassrls,
     'connection_limit', role_scope.rolconnlimit,
-    'valid_until', role_scope.rolvaliduntil,
+    'valid_until_utc', role_scope.valid_until_utc,
     'configuration', role_scope.rolconfig
   ) AS entry
   FROM role_scope
@@ -287,9 +331,43 @@ entries AS (
     'identity_arguments', procedure_scope.identity_arguments,
     'owner', procedure_scope.proowner,
     'security_definer', procedure_scope.prosecdef,
-    'acl_is_null', procedure_scope.proacl IS NULL
+    'acl_is_null', procedure_scope.proacl IS NULL,
+    'definition', procedure_scope.definition
   )
   FROM procedure_scope
+
+  UNION ALL
+
+  SELECT jsonb_build_object(
+    'kind', 'trigger',
+    'oid', trigger_scope.oid,
+    'relation_oid', trigger_scope.tgrelid,
+    'name', trigger_scope.tgname,
+    'function_oid', trigger_scope.tgfoid,
+    'type', trigger_scope.tgtype,
+    'enabled', trigger_scope.tgenabled,
+    'is_internal', trigger_scope.tgisinternal,
+    'constraint_oid', trigger_scope.tgconstraint,
+    'deferrable', trigger_scope.tgdeferrable,
+    'initially_deferred', trigger_scope.tginitdeferred,
+    'definition', trigger_scope.definition
+  )
+  FROM trigger_scope
+
+  UNION ALL
+
+  SELECT jsonb_build_object(
+    'kind', 'trigger_function',
+    'oid', trigger_function_scope.oid,
+    'schema_oid', trigger_function_scope.pronamespace,
+    'name', trigger_function_scope.proname,
+    'identity_arguments', trigger_function_scope.identity_arguments,
+    'owner', trigger_function_scope.proowner,
+    'security_definer', trigger_function_scope.prosecdef,
+    'acl_is_null', trigger_function_scope.proacl IS NULL,
+    'definition', trigger_function_scope.definition
+  )
+  FROM trigger_function_scope
 
   UNION ALL
 
