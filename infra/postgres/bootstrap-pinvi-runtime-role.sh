@@ -612,6 +612,7 @@ SELECT
         FROM pg_extension extension_row
         JOIN x_extension_schema schema ON schema.oid = extension_row.extnamespace
         WHERE extension_row.extname IN ('pgcrypto', 'pg_trgm', 'citext')
+          AND extension_row.extowner = :'bootstrap_owner'::regrole
     ) = 3;
 SQL
 )"

@@ -757,10 +757,13 @@ def test_m05_evidence_runtime_uses_non_owner_database_login() -> None:
     assert "app-db-runtime-role:" in compose
     assert "PINVI_DATABASE_URL: ${PINVI_DATABASE_URL:-postgresql+asyncpg://pinvi_app:" in api_block
     assert "PINVI_MIGRATOR_DATABASE_URL" in compose
-    assert "app-migrator pinvi-admin-bootstrap" in docker_app
-    assert "app-migrator pinvi-admin-bootstrap" in deploy
-    assert "compose run --rm app-db-runtime-role" in docker_app
-    assert "compose run --rm app-db-runtime-role" in deploy
+    for source in (docker_app, deploy):
+        assert 'local service="app-migrator"' in source
+        assert 'service="app-legacy-rebaseline-migrator"' in source
+        assert '"$service" pinvi-admin-bootstrap' in source
+    for source in (docker_app, deploy):
+        assert "compose run --rm" in source
+        assert "app-db-runtime-role" in source
     assert "NOSUPERUSER" in bootstrap
     assert "NOINHERIT" in bootstrap
     assert "ALTER DEFAULT PRIVILEGES" in bootstrap
@@ -770,18 +773,18 @@ def test_m05_evidence_runtime_uses_non_owner_database_login() -> None:
     )
     assert "--command='SELECT 1'" in bootstrap
     assert '[ "$attempt" -ge 15 ]' in bootstrap
-    assert "FROM pg_auth_members m" in bootstrap
-    assert "WHERE m.member = r.oid" in bootstrap
+    assert "FROM pg_auth_members membership" in bootstrap
+    assert "membership.member = runtime.oid" in bootstrap
+    assert "membership.roleid = runtime.oid" in bootstrap
     assert "CREATE SCHEMA IF NOT EXISTS x_extension AUTHORIZATION" in bootstrap
     assert "ALTER SCHEMA x_extension OWNER TO" in bootstrap
     assert "REVOKE ALL ON SCHEMA x_extension FROM PUBLIC;" in bootstrap
-    assert 'GRANT USAGE ON SCHEMA x_extension TO :"app_role";' in bootstrap
-    assert "n.nspname IN ('app', 'x_extension')" in bootstrap
-    assert "has_schema_privilege(r.oid, n.oid, 'CREATE')" in bootstrap
-    assert "FROM pg_proc p" in bootstrap
-    assert "FROM pg_type t" in bootstrap
-    assert "FROM pg_extension e" in bootstrap
-    assert "e.extowner = r.oid" in bootstrap
-    assert "c.relowner = r.oid" in bootstrap
-    assert "n.nspowner = r.oid" in bootstrap
-    assert "pg_has_role(r.oid, n.nspowner, 'member')" in bootstrap
+    assert 'GRANT USAGE ON SCHEMA x_extension TO :"app_role", :"schema_owner", ' in bootstrap
+    assert "has_schema_privilege(runtime.oid, 'app', 'CREATE')" in bootstrap
+    assert "FROM pg_proc procedure" in bootstrap
+    assert "FROM pg_type type_row" in bootstrap
+    assert "FROM pg_extension extension_row" in bootstrap
+    assert "extension_row.extowner = :'bootstrap_owner'::regrole" in bootstrap
+    assert "relation.relowner AS owner_oid" in bootstrap
+    assert "(SELECT nspowner FROM app_schema) = :'schema_owner'::regrole" in bootstrap
+    assert "NOT pg_has_role(migrator.oid, (SELECT oid FROM database_owner), 'MEMBER')" in bootstrap
