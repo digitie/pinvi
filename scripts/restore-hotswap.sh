@@ -466,22 +466,38 @@ validate_expected_target_values() {
 
 validate_expected_target_values
 
-assert_trusted_snapshot_matches_target() {
+assert_trusted_snapshot_matches_expected_source() {
   if [[ "${STRICT_RESTORE_ENVIRONMENT}" != "1" ||
     "${PINVI_RESTORE_HOTSWAP_EXECUTE:-0}" != "1" ]]; then
     return 0
   fi
-  local manifest_identity expected_identity
-  manifest_identity="${TRUSTED_SOURCE_DATABASE}|${TRUSTED_SOURCE_DATABASE_OID}|${TRUSTED_SOURCE_SYSTEM_IDENTIFIER}|${TRUSTED_SOURCE_HOSTADDR}|${TRUSTED_SOURCE_PORT}"
-  expected_identity="${PINVI_RESTORE_EXPECTED_DATABASE_NAME}|${PINVI_RESTORE_EXPECTED_DATABASE_OID}|${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER}|${PINVI_RESTORE_EXPECTED_HOSTADDR}|${PINVI_RESTORE_EXPECTED_PORT}"
-  if [[ "${manifest_identity}" != "${expected_identity}" ]]; then
-    phase preparing failed "trusted snapshot source identity does not match the restore target"
+  for variable in PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID \
+    PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR \
+    PINVI_RESTORE_EXPECTED_SOURCE_PORT; do
+    if [[ -z "${!variable:-}" ]]; then
+      phase preparing failed "${variable} is required for an executing schema swap"
+      exit 3
+    fi
+  done
+  if [[ ! "${PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ||
+    ! "${PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID}" =~ ^[0-9]+$ ||
+    ! "${PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER}" =~ ^[0-9]+$ ||
+    ! "${PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR}" =~ ^[0-9A-Fa-f:.]+$ ||
+    ! "${PINVI_RESTORE_EXPECTED_SOURCE_PORT}" =~ ^[0-9]+$ ]]; then
+    phase preparing failed "trusted snapshot expected source identity contains unsafe values"
     exit 3
   fi
-  phase preparing success "trusted snapshot source identity bound to restore target"
+  local manifest_identity expected_identity
+  manifest_identity="${TRUSTED_SOURCE_DATABASE}|${TRUSTED_SOURCE_DATABASE_OID}|${TRUSTED_SOURCE_SYSTEM_IDENTIFIER}|${TRUSTED_SOURCE_HOSTADDR}|${TRUSTED_SOURCE_PORT}"
+  expected_identity="${PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME}|${PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID}|${PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER}|${PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR}|${PINVI_RESTORE_EXPECTED_SOURCE_PORT}"
+  if [[ "${manifest_identity}" != "${expected_identity}" ]]; then
+    phase preparing failed "trusted snapshot source identity does not match the expected source"
+    exit 3
+  fi
+  phase preparing success "trusted snapshot source identity bound to expected source"
 }
 
-assert_trusted_snapshot_matches_target
+assert_trusted_snapshot_matches_expected_source
 assert_expected_target
 
 assert_fence_target_identity() {
