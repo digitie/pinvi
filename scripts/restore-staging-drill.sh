@@ -476,6 +476,17 @@ rollback_precheck_rehearsal() {
   evidence rollback_rehearsal "precheck_guard_schema_unchanged"
 }
 
+report_hotswap_failure() {
+  local output_path="$1"
+  local error_path="$2"
+  if [[ -s "${output_path}" ]]; then
+    cat -- "${output_path}" >&2 || true
+  fi
+  if [[ -s "${error_path}" ]]; then
+    cat -- "${error_path}" >&2 || true
+  fi
+}
+
 rollback_drain_rehearsal() {
   local ts
   ts="$(date -u +%Y%m%d%H%M%S)"
@@ -516,6 +527,9 @@ rollback_drain_rehearsal() {
     >"${TMP_DIR}/hotswap.out" 2>"${TMP_DIR}/hotswap.err"
   local code="$?"
   set -e
+  if [[ "${code}" != "0" ]]; then
+    report_hotswap_failure "${TMP_DIR}/hotswap.out" "${TMP_DIR}/hotswap.err"
+  fi
   local oid_after
   oid_after="$(schema_oid)"
   local public_connect_after lock_after
