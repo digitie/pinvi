@@ -145,7 +145,9 @@ def test_restore_staging_drill_forwards_target_binding_marker() -> None:
     script = SCRIPT.read_text(encoding="utf-8")
 
     assert "RESTORE_TARGET_BINDING=*) printf '%s\\n' \"${restore_line}\" ;;" in script
-    assert 'PINVI_RESTORE_FENCE_DATABASE_URL="${STAGING_DATABASE_URL}"' in script
+    assert 'FENCE_DATABASE_URL="${PINVI_RESTORE_FENCE_DATABASE_URL:-${STAGING_DATABASE_URL}}"' in script
+    assert 'PINVI_RESTORE_FENCE_DATABASE_URL="${FENCE_DATABASE_URL}"' in script
+    assert "PINVI_RESTORE_FENCE_DATABASE_URL is required for a non-test staging drill" in script
     assert (
         "RESTORE_PHASE=draining:failed:PINVI_RESTORE_DRAIN_COMMAND or PINVI_RESTORE_DRAIN_VERIFIED=1 is required"
         in script

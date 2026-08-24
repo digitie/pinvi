@@ -64,7 +64,11 @@ def test_restore_hotswap_rejects_noncanonical_acl_before_write_fence_mutation() 
     assert "schema-swap requires canonical single-runtime-role ACLs" in source
     assert "aclexplode(COALESCE(c.relacl" in source
     assert "a.attacl IS NOT NULL" in source
-    assert "p.proowner <> current_user::regrole OR p.proacl IS NOT NULL" in source
+    assert "OR p.prosecdef" in source
+    assert "d.defaclnamespace = 0" in source
+    assert "NOT owner_role.rolcreatedb" in source
+    assert "has_schema_privilege((SELECT oid FROM app_role), n.oid, 'USAGE')" in source
+    assert "NOT has_schema_privilege((SELECT oid FROM app_role), n.oid, 'CREATE')" in source
     enter = source.index("enter_write_fence()")
     assert source.index("  assert_supported_acl_topology\n", enter) < source.index(
         "  local writer_logins", enter
@@ -94,7 +98,14 @@ COMMIT;
 \\.
 SELECT 1;
 """
-    unsafe_sql = "SELECT 1;\nCOMMIT;\n\\! true\n"
+    unsafe_sql = (
+        "SELECT 1;\nCOMMIT;\n\\! true\n",
+        "\\copy app.users FROM PROGRAM 'id'\n",
+        "\\i /tmp/restore.sql\n",
+        "\\connect other_database\n",
+        "SELECT 'DELETE FROM app.users' AS sql \\gexec\n",
+        "\\.\n",
+    )
     awk = shutil.which("awk")
     assert awk is not None
 
@@ -105,16 +116,16 @@ SELECT 1;
         capture_output=True,
         check=False,
     )
-    unsafe = subprocess.run(  # noqa: S603
-        [awk, awk_program, "-"],
-        input=unsafe_sql,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
     assert safe.returncode == 1, safe.stderr
-    assert unsafe.returncode == 0, unsafe.stderr
+    for sample in unsafe_sql:
+        unsafe = subprocess.run(  # noqa: S603
+            [awk, awk_program, "-"],
+            input=sample,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert unsafe.returncode == 0, unsafe.stderr
 
 
 @pytest.mark.parametrize("environment", ["staging", "production"])

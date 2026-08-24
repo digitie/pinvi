@@ -5,10 +5,12 @@ DB URL과 runtime role은 명령행에 넣지 않고 다음 환경변수로만 �
 
 * ``PINVI_RESTORE_SOURCE_DATABASE_URL`` — dump source
 * ``PINVI_RESTORE_STAGING_DATABASE_URL`` — owner/migrator target
+* ``PINVI_RESTORE_FENCE_DATABASE_URL`` — dedicated target-owner fence login
 * ``PINVI_RESTORE_RUNTIME_DATABASE_URL`` — non-owner runtime target login
 * ``PINVI_RESTORE_TEMPLATE_DATABASE_URL`` — target-cluster template with x_extension
 * ``PINVI_RESTORE_HOTSWAP_DATABASE_URL`` — dedicated schema-owner target login
 * ``PINVI_RESTORE_RUNTIME_ROLE`` — runtime login name
+* ``PINVI_RESTORE_FENCE_ROLE`` — target-owner fence login name
 * ``PINVI_RESTORE_HOTSWAP_ROLE`` — dedicated hotswap executor role
 
 이 도구는 repository의 backup/restore runner를 고정 호출하고, 성공한 실행의
@@ -485,6 +487,31 @@ WHERE r.rolname = current_user
     _require_true(_scalar(database_url, sql), name="staging role")
 
 
+def _fence_role_check(database_url: str, *, expected_role: str) -> None:
+    if not _ROLE_RE.fullmatch(expected_role):
+        raise RestoreDrillError("restore fence role is invalid")
+    sql = f"""
+SELECT current_user = '{expected_role}'
+  AND r.rolcanlogin
+  AND NOT r.rolsuper
+  AND NOT r.rolcreaterole
+  AND NOT r.rolcreatedb
+  AND NOT r.rolreplication
+  AND NOT r.rolbypassrls
+  AND r.rolinherit
+  AND d.datdba = r.oid
+  AND NOT EXISTS (
+      SELECT 1 FROM pg_auth_members m
+      WHERE m.member = r.oid OR m.roleid = r.oid
+  )
+FROM pg_roles r
+JOIN pg_database d ON d.datdba = r.oid
+WHERE r.rolname = current_user
+  AND d.datname = current_database()
+""".strip()
+    _require_true(_scalar(database_url, sql), name="database fence role")
+
+
 def _hotswap_role_check(
     database_url: str,
     *,
@@ -662,6 +689,8 @@ def _recreate_disposable_target(
     database_url: str,
     *,
     staging_role: str,
+    fence_role: str,
+    fence_url: str,
     runtime_role: str,
     hotswap_role: str,
     hotswap_url: str,
@@ -671,9 +700,11 @@ def _recreate_disposable_target(
 
     try:
         parsed = urlsplit(database_url)
+        fence_parsed = urlsplit(fence_url)
         hotswap_parsed = urlsplit(hotswap_url)
         template_parsed = urlsplit(template_url)
         database_name = parsed.path.removeprefix("/")
+        fence_database_name = fence_parsed.path.removeprefix("/")
         hotswap_database_name = hotswap_parsed.path.removeprefix("/")
         template_name = template_parsed.path.removeprefix("/")
     except ValueError as exc:
@@ -684,15 +715,20 @@ def _recreate_disposable_target(
         raise RestoreDrillError("restore target template database is invalid")
     if not _ROLE_RE.fullmatch(staging_role):
         raise RestoreDrillError("restore staging role is invalid")
+    if not _ROLE_RE.fullmatch(fence_role):
+        raise RestoreDrillError("restore fence role is invalid")
     if not _ROLE_RE.fullmatch(runtime_role):
         raise RestoreDrillError("restore runtime role is invalid")
     if not _ROLE_RE.fullmatch(hotswap_role):
         raise RestoreDrillError("restore hotswap role is invalid")
     if hotswap_database_name != database_name:
         raise RestoreDrillError("restore hotswap URL must target the disposable database")
+    if fence_database_name != database_name:
+        raise RestoreDrillError("restore fence URL must target the disposable database")
     maintenance_url = urlunsplit(parsed._replace(path="/postgres"))
     quoted_database = '"' + database_name.replace('"', '""') + '"'
     quoted_role = '"' + staging_role.replace('"', '""') + '"'
+    quoted_fence_role = '"' + fence_role.replace('"', '""') + '"'
     quoted_hotswap_role = '"' + hotswap_role.replace('"', '""') + '"'
     quoted_template = '"' + template_name.replace('"', '""') + '"'
     hostaddr = parsed.query and dict(parse_qsl(parsed.query, keep_blank_values=True)).get(
@@ -704,18 +740,24 @@ def _recreate_disposable_target(
     hotswap_hostaddr = hotswap_parsed.query and dict(
         parse_qsl(hotswap_parsed.query, keep_blank_values=True)
     ).get("hostaddr", "")
+    fence_hostaddr = fence_parsed.query and dict(
+        parse_qsl(fence_parsed.query, keep_blank_values=True)
+    ).get("hostaddr", "")
     expected_port = str(parsed.port or 5432)
     hotswap_port = str(hotswap_parsed.port or 5432)
     template_port = str(template_parsed.port or 5432)
-    if not hostaddr or not template_hostaddr or not hotswap_hostaddr:
+    fence_port = str(fence_parsed.port or 5432)
+    if not hostaddr or not template_hostaddr or not hotswap_hostaddr or not fence_hostaddr:
         raise RestoreDrillError(
-            "restore target, hotswap, and template URLs need pinned hostaddr values"
+            "restore target, fence, hotswap, and template URLs need pinned hostaddr values"
         )
     if (
         hostaddr != template_hostaddr
         or hostaddr != hotswap_hostaddr
+        or hostaddr != fence_hostaddr
         or expected_port != template_port
         or expected_port != hotswap_port
+        or expected_port != fence_port
     ):
         raise RestoreDrillError(
             "restore target, hotswap, and template must use the same PostgreSQL endpoint"
@@ -728,6 +770,7 @@ def _recreate_disposable_target(
         raise RestoreDrillError("restore target system identifier is invalid")
     sql_hostaddr = hostaddr.replace("'", "''")
     sql_role = staging_role.replace("'", "''")
+    sql_fence = fence_role.replace("'", "''")
     sql_runtime = runtime_role.replace("'", "''")
     sql_hotswap = hotswap_role.replace("'", "''")
     sql_template = template_name.replace("'", "''")
@@ -747,6 +790,22 @@ SELECT current_database() = '{sql_template}'
   AND has_database_privilege('{sql_hotswap}', current_database(), 'CREATE')
   AND has_schema_privilege('{sql_hotswap}', 'x_extension', 'USAGE')
   AND NOT has_schema_privilege('{sql_hotswap}', 'x_extension', 'CREATE')
+  AND EXISTS (
+    SELECT 1
+    FROM pg_roles r
+    WHERE r.rolname = '{sql_fence}'
+      AND r.rolcanlogin
+      AND NOT r.rolsuper
+      AND NOT r.rolcreaterole
+      AND NOT r.rolcreatedb
+      AND NOT r.rolreplication
+      AND NOT r.rolbypassrls
+      AND r.rolinherit
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_auth_members m
+        WHERE m.member = r.oid OR m.roleid = r.oid
+      )
+  )
   AND EXISTS (
     SELECT 1
     FROM pg_roles r
@@ -842,10 +901,17 @@ BEGIN
 END
 $m05$;
 DROP DATABASE IF EXISTS {quoted_database} WITH (FORCE);
-CREATE DATABASE {quoted_database} WITH OWNER {quoted_role} TEMPLATE {quoted_template};
-GRANT CONNECT, CREATE ON DATABASE {quoted_database} TO {quoted_hotswap_role};
+CREATE DATABASE {quoted_database} WITH OWNER {quoted_fence_role} TEMPLATE {quoted_template};
 SELECT pg_advisory_unlock(1414679892, 1213421392);
         """,
+        check=True,
+    )
+    _psql_file(
+        fence_url,
+        f"""
+GRANT CONNECT ON DATABASE {quoted_database} TO {quoted_role};
+GRANT CONNECT, CREATE ON DATABASE {quoted_database} TO {quoted_hotswap_role};
+        """.strip(),
         check=True,
     )
 
@@ -982,6 +1048,11 @@ def _run_drill(args: argparse.Namespace) -> int:
         raise RestoreDrillError("restore runtime role is invalid")
     if not _ROLE_RE.fullmatch(args.staging_role):
         raise RestoreDrillError("restore staging role is invalid")
+    if (
+        os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1"
+        and not _ROLE_RE.fullmatch(args.fence_role)
+    ):
+        raise RestoreDrillError("restore fence role is required")
     if args.runtime_role == args.staging_role:
         raise RestoreDrillError("restore staging and runtime roles must differ")
     bash_tool = _tool_identity("bash")
@@ -992,6 +1063,7 @@ def _run_drill(args: argparse.Namespace) -> int:
     target_url = _database_url(args.staging_database_url_env)
     runtime_url = _database_url(args.runtime_database_url_env)
     hotswap_url = ""
+    fence_url = ""
     hotswap_role = ""
     template_url = ""
     if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
@@ -999,17 +1071,21 @@ def _run_drill(args: argparse.Namespace) -> int:
             raise RestoreDrillError("restore hotswap role is required")
         hotswap_role = args.hotswap_role
         hotswap_url = _database_url(args.hotswap_database_url_env)
+        fence_url = _database_url(args.fence_database_url_env)
         template_url = _database_url(args.template_database_url_env)
     try:
         source_database_name = urlsplit(source_url).path.removeprefix("/")
         target_database_name = urlsplit(target_url).path.removeprefix("/")
         hotswap_database_name = urlsplit(hotswap_url).path.removeprefix("/")
+        fence_database_name = urlsplit(fence_url).path.removeprefix("/")
     except ValueError as exc:
         raise RestoreDrillError("restore database URL is invalid") from exc
     if source_database_name == target_database_name:
         raise RestoreDrillError("restore source and disposable target databases must differ")
     if hotswap_url and hotswap_database_name != target_database_name:
         raise RestoreDrillError("restore hotswap database must match the disposable target")
+    if fence_url and fence_database_name != target_database_name:
+        raise RestoreDrillError("restore fence database must match the disposable target")
     if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
         _staging_role_check(
             target_url,
@@ -1019,6 +1095,8 @@ def _run_drill(args: argparse.Namespace) -> int:
         _recreate_disposable_target(
             target_url,
             staging_role=args.staging_role,
+            fence_role=args.fence_role,
+            fence_url=fence_url,
             runtime_role=args.runtime_role,
             hotswap_role=hotswap_role,
             hotswap_url=hotswap_url,
@@ -1027,14 +1105,17 @@ def _run_drill(args: argparse.Namespace) -> int:
     source_identity_pre = _identity(source_url, schema=args.schema)
     target_identity_pre = _identity(target_url, schema=args.schema)
     runtime_identity_pre = _identity(runtime_url, schema=args.schema)
+    fence_identity_pre = _identity(fence_url, schema=args.schema) if fence_url else None
     hotswap_identity_pre = _identity(hotswap_url, schema=args.schema) if hotswap_url else None
     source_key = _identity_key(source_identity_pre)
     target_key = _identity_key(target_identity_pre)
     runtime_key = _identity_key(runtime_identity_pre)
+    fence_key = _identity_key(fence_identity_pre) if fence_identity_pre else None
     hotswap_key = _identity_key(hotswap_identity_pre) if hotswap_identity_pre else None
     if (
         source_key in {target_key, runtime_key}
         or target_key != runtime_key
+        or (fence_key is not None and fence_key != target_key)
         or (hotswap_key is not None and hotswap_key != target_key)
     ):
         raise RestoreDrillError(
@@ -1054,6 +1135,8 @@ def _run_drill(args: argparse.Namespace) -> int:
         expected_role=args.staging_role,
         runtime_role=args.runtime_role,
     )
+    if fence_url:
+        _fence_role_check(fence_url, expected_role=args.fence_role)
     if hotswap_url:
         _hotswap_role_check(
             hotswap_url,
@@ -1118,7 +1201,7 @@ def _run_drill(args: argparse.Namespace) -> int:
             {
                 "PINVI_RESTORE_STAGING_DATABASE_URL": target_url,
                 "PINVI_RESTORE_DATABASE_URL": target_url,
-                "PINVI_RESTORE_FENCE_DATABASE_URL": target_url,
+                "PINVI_RESTORE_FENCE_DATABASE_URL": fence_url,
                 "PINVI_RESTORE_SCHEMA": args.schema,
                 "PINVI_RESTORE_APP_ROLE": args.runtime_role,
                 "PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL": "drain",
@@ -1176,6 +1259,8 @@ def _run_drill(args: argparse.Namespace) -> int:
             schema=args.schema,
             expected_role=args.runtime_role,
         )
+        if fence_url:
+            _fence_role_check(fence_url, expected_role=args.fence_role)
         if hotswap_url:
             _hotswap_role_check(
                 hotswap_url,
@@ -1188,10 +1273,12 @@ def _run_drill(args: argparse.Namespace) -> int:
         _trigger_bypass_is_blocked(trigger_url, schema=args.schema)
         target_identity = _identity(target_url, schema=args.schema)
         runtime_identity = _identity(runtime_url, schema=args.schema)
+        fence_identity = _identity(fence_url, schema=args.schema) if fence_url else None
         hotswap_identity = _identity(hotswap_url, schema=args.schema) if hotswap_url else None
         if (
             _identity_key(target_identity) != target_key
             or _identity_key(runtime_identity) != target_key
+            or (fence_identity is not None and _identity_key(fence_identity) != target_key)
             or (
                 hotswap_identity is not None
                 and _identity_key(hotswap_identity) != target_key
@@ -1237,12 +1324,16 @@ def _run_drill(args: argparse.Namespace) -> int:
             "staging_role_verified": True,
             "runtime_role": args.runtime_role,
             "staging_role": args.staging_role,
+            "fence_role_verified": fence_identity is not None,
+            "fence_role": args.fence_role,
             "source_db_identity": source_identity_pre,
             "source_db_identity_after_backup": source_identity_after_backup,
             "target_db_identity_before_restore": target_identity_before_restore,
             "target_db_identity": target_identity,
             "target_recreated": os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1",
             "runtime_db_identity": runtime_identity,
+            "fence_db_identity_before_restore": fence_identity_pre,
+            "fence_db_identity": fence_identity,
             "source_db_identity_sha256": _identity_sha256(source_identity_pre),
             "source_db_identity_after_backup_sha256": _identity_sha256(
                 source_identity_after_backup
@@ -1277,6 +1368,10 @@ def _parser() -> argparse.ArgumentParser:
         default="PINVI_RESTORE_STAGING_DATABASE_URL",
     )
     parser.add_argument(
+        "--fence-database-url-env",
+        default="PINVI_RESTORE_FENCE_DATABASE_URL",
+    )
+    parser.add_argument(
         "--runtime-database-url-env",
         default="PINVI_RESTORE_RUNTIME_DATABASE_URL",
     )
@@ -1291,6 +1386,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--hotswap-role",
         default=os.environ.get("PINVI_RESTORE_HOTSWAP_ROLE", ""),
+    )
+    parser.add_argument(
+        "--fence-role",
+        default=os.environ.get("PINVI_RESTORE_FENCE_ROLE", ""),
     )
     parser.add_argument("--require-root-owned", action="store_true")
     return parser

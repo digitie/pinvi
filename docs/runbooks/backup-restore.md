@@ -153,7 +153,7 @@ USAGE/SELECT grant를 재적용한다. 이 role은 LOGIN이고 superuser·CREATE
 | 변수                            | 기본값               | 설명                                                 |
 | ------------------------------- | -------------------- | ---------------------------------------------------- |
 | `PINVI_RESTORE_DATABASE_URL`    | `PINVI_DATABASE_URL` | restore/swap 전용 DB URL override. 실행 모드에서는 전용 non-superuser schema owner login을 지정해야 한다. |
-| `PINVI_RESTORE_FENCE_DATABASE_URL` | 빈 값              | 실행 모드에서만 필요한 target DB owner URL. hotswap executor와 분리된 non-superuser owner 연결로 database `CONNECT` fence를 적용·복구한다. target identity가 다르면 fail-close한다. |
+| `PINVI_RESTORE_FENCE_DATABASE_URL` | 빈 값              | 실행 모드에서 필요한 전용 target DB owner URL. `CREATEDB`·superuser·role membership가 없는 non-superuser 연결로 database `CONNECT` fence를 적용·복구한다. hotswap executor와 분리하고 target identity가 다르면 fail-close한다. |
 | `PINVI_RESTORE_HOTSWAP_EXECUTE` | `0`                  | staging drill 후 운영 노드에서만 `1`                 |
 | `PINVI_RESTORE_DRAIN_COMMAND`   | 빈 값                | CLI 경로에서만 실행할 write drain 명령               |
 | `PINVI_RESTORE_ALLOW_NO_DRAIN`  | `0`                  | 외부 write fence를 확인한 경우에만 `1`                |
@@ -169,13 +169,16 @@ USAGE/SELECT grant를 재적용한다. 이 role은 LOGIN이고 superuser·CREATE
 | `PINVI_RESTORE_TEMPLATE_DATABASE_URL` | 같은 PostgreSQL cluster의 template DB URL. `app`는 없고 `x_extension`만 준비해야 한다. |
 | `PINVI_RESTORE_HOTSWAP_DATABASE_URL` | 같은 disposable target을 가리키는 전용 schema-owner/hotswap executor URL. |
 | `PINVI_RESTORE_HOTSWAP_ROLE` | `PINVI_RESTORE_HOTSWAP_DATABASE_URL`의 role 이름. |
+| `PINVI_RESTORE_FENCE_ROLE` | `PINVI_RESTORE_FENCE_DATABASE_URL`의 전용 target owner role 이름. target database owner이며 `CREATEDB`와 role membership가 없어야 한다. |
 
 template DB에는 one-time privileged bootstrap으로 `x_extension` schema와 `citext`, `pgcrypto`,
 `pg_trgm`을 설치하고 runtime login에 `USAGE`만 부여한다. template에는 active connection이
 없어야 하며, hotswap executor에는 database `CREATE`와 `x_extension` `USAGE`를 부여한다.
 staging provisioner는 target을 매번 `DROP DATABASE ... WITH (FORCE)` 후
-`CREATE DATABASE ... TEMPLATE ...`로 재생성할 수 있는 `CREATEDB` 권한을 가지며, hotswap
-executor와 분리한다. `PINVI_RESTORE_HOTSWAP_DATABASE_URL`은 runtime/API container에
+`CREATE DATABASE ... TEMPLATE ...`로 재생성할 수 있는 `CREATEDB` 권한을 가지며, target owner가
+아니다. target owner는 별도 non-`CREATEDB` fence role로 고정하고, target 생성 후 staging
+provisioner에는 `CONNECT`만, hotswap executor에는 `CONNECT, CREATE`를 target database에
+부여한다. hotswap executor와 staging provisioner도 서로 분리한다. `PINVI_RESTORE_HOTSWAP_DATABASE_URL`은 runtime/API container에
 전달하지 않고 drill 실행 주체의 local-only 환경에만 둔다.
 
 실행 모드의 `PINVI_RESTORE_DATABASE_URL`은 API runtime role이 아닌 별도 restore
@@ -232,7 +235,7 @@ df -h /var/lib/postgresql /var/lib/pinvi/backups
 # 실제 실행 전 staging drill 후 PINVI_RESTORE_HOTSWAP_EXECUTE=1을 설정한다.
 PINVI_RESTORE_HOTSWAP_EXECUTE=1 \
 PINVI_RESTORE_DATABASE_URL='postgresql://<restore-owner>:<password>@<postgres-host>:5432/pinvi' \
-PINVI_RESTORE_FENCE_DATABASE_URL='postgresql://<target-owner>:<password>@<postgres-host>:5432/pinvi' \
+PINVI_RESTORE_FENCE_DATABASE_URL='postgresql://<dedicated-fence-owner>:<password>@<postgres-host>:5432/pinvi' \
 PINVI_RESTORE_DRAIN_COMMAND='docker compose -f docker-compose.app.yml stop api web' \
 PINVI_RESTORE_APP_ROLE=pinvi_app \
 PINVI_RESTORE_WRITE_ROLES=pinvi_app \
@@ -257,7 +260,7 @@ PINVI_RESTORE_HOTSWAP_EXECUTE=1
 PINVI_RESTORE_DRAIN_COMMAND=
 PINVI_RESTORE_ALLOW_NO_DRAIN=1
 PINVI_RESTORE_DRAIN_VERIFIED=1
-PINVI_RESTORE_FENCE_DATABASE_URL='postgresql://<target-owner>:<password>@<postgres-host>:5432/pinvi'
+PINVI_RESTORE_FENCE_DATABASE_URL='postgresql://<dedicated-fence-owner>:<password>@<postgres-host>:5432/pinvi'
 PINVI_RESTORE_APP_ROLE=pinvi_app
 ```
 

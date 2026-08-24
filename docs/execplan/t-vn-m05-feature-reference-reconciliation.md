@@ -140,8 +140,11 @@ fresh target은 매 실행 `DROP DATABASE ... WITH (FORCE)` 뒤 target cluster�
 login에 `x_extension` USAGE만, 별도 `PINVI_RESTORE_HOTSWAP_DATABASE_URL`의 executor에
 database `CREATE`와 `x_extension` USAGE만 부여한다. extension 설치는 one-time privileged
 bootstrap에서 수행하고 restore staging login에는 extension 생성 권한을 주지 않는다. staging
-provisioner는 disposable database 재생성을 위해 `CREATEDB`를 가지며, hotswap executor는
-`CREATEDB` 없이 `INHERIT`와 직접 `pg_signal_backend` membership만 가진다. restore는
+provisioner는 disposable database 재생성을 위해 `CREATEDB`를 가지지만 target owner가 아니다.
+별도 `PINVI_RESTORE_FENCE_DATABASE_URL`/`PINVI_RESTORE_FENCE_ROLE`의 target owner는
+`CREATEDB`와 role membership가 없어야 하며, target 생성 후 staging에는 `CONNECT`, hotswap에는
+`CONNECT, CREATE`만 부여한다. hotswap executor는 `CREATEDB` 없이 `INHERIT`와 직접
+`pg_signal_backend` membership만 가진다. restore는
 hotswap executor로 수행해 복원된 `app` schema의 owner와 schema-swap executor를 동일하게
 결박한다.
 

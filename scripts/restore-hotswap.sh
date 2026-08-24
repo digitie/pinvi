@@ -517,6 +517,16 @@ run_guarded_file() {
         if (line == "\\.") in_copy = 0
         next
       }
+      # pg_dump 16가 쓰는 dump token 경계만 허용한다. 그 외 psql meta command는
+      # \copy ... PROGRAM, \i, \connect, \gexec처럼 SQL 경계를 벗어나거나
+      # restore executor의 OS/다른 DB 권한을 사용할 수 있으므로 전부 거부한다.
+      if (line ~ /^[[:space:]]*\\/) {
+        if (line ~ /^[[:space:]]*\\(restrict|unrestrict)[[:space:]]+[^[:space:]]+[[:space:]]*$/) {
+          next
+        }
+        unsafe = 1
+        exit
+      }
       clean = ""
       for (i = 1; i <= length(line); ) {
         character = substr(line, i, 1)
@@ -614,7 +624,7 @@ run_guarded_file() {
         i++
       }
       normalized = tolower(clean)
-      if (normalized ~ /^[[:space:]]*\\!/ || normalized ~ /pg_advisory_(lock|unlock)/ || normalized ~ /pg_(cancel|terminate)_backend/ || normalized ~ /discard[[:space:]]+all/ || normalized ~ /(^|[;[:space:]])(begin|start[[:space:]]+transaction|commit|end|rollback|abort)([;[:space:]]|$)/) {
+      if (normalized ~ /(^|[[:space:];])\\(copy|include|include_relative|ir|i|connect|c|gexec|g|watch|sf|p)([[:space:]]|$)/ || normalized ~ /pg_advisory_(lock|unlock)/ || normalized ~ /pg_(cancel|terminate)_backend/ || normalized ~ /discard[[:space:]]+all/ || normalized ~ /(^|[;[:space:]])(begin|start[[:space:]]+transaction|commit|end|rollback|abort)([;[:space:]]|$)/) {
         unsafe = 1
         exit
       }
@@ -1172,6 +1182,8 @@ SELECT EXISTS (
     AND NOT r.rolreplication
     AND NOT r.rolbypassrls
     AND r.rolinherit
+    AND has_schema_privilege(current_user, 'x_extension', 'USAGE')
+    AND NOT has_schema_privilege(current_user, 'x_extension', 'CREATE')
     AND EXISTS (
       SELECT 1
       FROM pg_auth_members m
@@ -1240,8 +1252,20 @@ SELECT EXISTS (
     AND owner_role.rolcanlogin
     AND NOT owner_role.rolsuper
     AND NOT owner_role.rolcreaterole
+    AND NOT owner_role.rolcreatedb
     AND NOT owner_role.rolreplication
     AND NOT owner_role.rolbypassrls
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_auth_members membership
+      WHERE membership.member = owner_role.oid
+        AND membership.roleid <> to_regrole('pg_signal_backend')
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_auth_members membership
+      WHERE membership.roleid = owner_role.oid
+    )
 )
 " | tr -d '[:space:]')"
   if [[ "${fence_safe}" != "t" ]]; then
@@ -1293,13 +1317,51 @@ SELECT
   AND (SELECT count(*) FROM app_role) = 1
   AND (SELECT count(*) FROM fence_role) = 1
   AND (SELECT oid FROM app_role) <> (SELECT oid FROM fence_role)
+  AND EXISTS (
+    SELECT 1
+    FROM pg_roles r
+    JOIN app_role a ON a.oid = r.oid
+    WHERE r.rolcanlogin
+      AND NOT r.rolinherit
+      AND NOT r.rolsuper
+      AND NOT r.rolcreaterole
+      AND NOT r.rolcreatedb
+      AND NOT r.rolreplication
+      AND NOT r.rolbypassrls
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_auth_members m
+    JOIN app_role a ON a.oid = m.member
+  )
   AND NOT EXISTS (
     SELECT 1 FROM source_schema s WHERE s.nspowner <> current_user::regrole
   )
   AND NOT EXISTS (
     SELECT 1
     FROM pg_auth_members m
-    JOIN fence_role f ON f.oid = m.member
+    JOIN fence_role f ON f.oid = m.member OR f.oid = m.roleid
+    WHERE m.roleid = f.oid
+       OR (m.member = f.oid AND m.roleid <> to_regrole('pg_signal_backend'))
+  )
+  AND EXISTS (
+    SELECT 1
+    FROM pg_namespace n
+    WHERE n.nspname = 'x_extension'
+      AND has_schema_privilege((SELECT oid FROM app_role), n.oid, 'USAGE')
+      AND NOT has_schema_privilege((SELECT oid FROM app_role), n.oid, 'CREATE')
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_namespace n
+    JOIN fence_role f ON true
+    WHERE n.nspname = 'x_extension'
+      AND (
+        n.nspowner = f.oid
+        OR pg_has_role(f.oid, n.nspowner, 'member')
+        OR has_schema_privilege(f.oid, n.oid, 'USAGE')
+        OR has_schema_privilege(f.oid, n.oid, 'CREATE')
+      )
   )
   AND NOT EXISTS (
     SELECT 1
@@ -1311,7 +1373,9 @@ SELECT
     SELECT 1
     FROM pg_proc p
     JOIN source_schema s ON s.oid = p.pronamespace
-    WHERE p.proowner <> current_user::regrole OR p.proacl IS NOT NULL
+    WHERE p.proowner <> current_user::regrole
+       OR p.proacl IS NOT NULL
+       OR p.prosecdef
   )
   AND NOT EXISTS (
     SELECT 1
@@ -1446,6 +1510,12 @@ SELECT
           )
         )
       )
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_default_acl d
+    WHERE d.defaclrole = current_user::regrole
+      AND d.defaclnamespace = 0
   )
 " | tr -d '[:space:]')"
   if [[ "${topology_safe}" != "t" ]]; then

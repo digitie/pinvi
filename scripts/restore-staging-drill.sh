@@ -43,8 +43,9 @@ Required:
 Optional:
   PINVI_RESTORE_HOTSWAP_DATABASE_URL   dedicated schema-owner URL for restore/hotswap;
                                       defaults to the staging URL.
-  PINVI_RESTORE_FENCE_DATABASE_URL     staging DB-owner URL used for database CONNECT fencing;
-                                      defaults to the staging URL for this drill.
+  PINVI_RESTORE_FENCE_DATABASE_URL     dedicated non-CREATEDB target-owner URL used for
+                                      database CONNECT fencing; defaults to the staging URL
+                                      only in test mode.
   PINVI_RESTORE_DRILL_SCHEMA=app
   PINVI_RESTORE_DRILL_JOBS=2
   PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL=none|precheck|drain
@@ -81,19 +82,26 @@ fi
 
 STAGING_DATABASE_URL="${PINVI_RESTORE_STAGING_DATABASE_URL:-}"
 DATABASE_URL="${PINVI_RESTORE_HOTSWAP_DATABASE_URL:-${STAGING_DATABASE_URL}}"
+FENCE_DATABASE_URL="${PINVI_RESTORE_FENCE_DATABASE_URL:-${STAGING_DATABASE_URL}}"
 if [[ -z "${STAGING_DATABASE_URL}" ]]; then
   if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" == "1" &&
     "${PINVI_RESTORE_DRILL_ALLOW_NON_STAGING:-0}" == "1" ]]; then
     STAGING_DATABASE_URL="${PINVI_RESTORE_DATABASE_URL:-${PINVI_DATABASE_URL:-}}"
     DATABASE_URL="${PINVI_RESTORE_HOTSWAP_DATABASE_URL:-${STAGING_DATABASE_URL}}"
+    FENCE_DATABASE_URL="${PINVI_RESTORE_FENCE_DATABASE_URL:-${STAGING_DATABASE_URL}}"
   else
     phase precheck failed "PINVI_RESTORE_STAGING_DATABASE_URL is required for staging drill"
     exit 2
   fi
 fi
 
-if [[ -z "${STAGING_DATABASE_URL}" || -z "${DATABASE_URL}" ]]; then
+if [[ -z "${STAGING_DATABASE_URL}" || -z "${DATABASE_URL}" || -z "${FENCE_DATABASE_URL}" ]]; then
   phase precheck failed "staging database URL is empty"
+  exit 2
+fi
+if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" != "1" &&
+  -z "${PINVI_RESTORE_FENCE_DATABASE_URL:-}" ]]; then
+  phase precheck failed "PINVI_RESTORE_FENCE_DATABASE_URL is required for a non-test staging drill"
   exit 2
 fi
 
@@ -113,6 +121,9 @@ if [[ "${STAGING_DATABASE_URL}" == postgresql+asyncpg://* ]]; then
 fi
 if [[ "${DATABASE_URL}" == postgresql+asyncpg://* ]]; then
   DATABASE_URL="postgresql://${DATABASE_URL#postgresql+asyncpg://}"
+fi
+if [[ "${FENCE_DATABASE_URL}" == postgresql+asyncpg://* ]]; then
+  FENCE_DATABASE_URL="postgresql://${FENCE_DATABASE_URL#postgresql+asyncpg://}"
 fi
 
 phase precheck running "snapshot and tooling checks"
@@ -441,7 +452,7 @@ rollback_precheck_rehearsal() {
     PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER="${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER:-}" \
     PINVI_RESTORE_EXPECTED_HOSTADDR="${PINVI_RESTORE_EXPECTED_HOSTADDR:-}" \
     PINVI_RESTORE_EXPECTED_PORT="${PINVI_RESTORE_EXPECTED_PORT:-}" \
-    PINVI_RESTORE_FENCE_DATABASE_URL="${STAGING_DATABASE_URL}" \
+    PINVI_RESTORE_FENCE_DATABASE_URL="${FENCE_DATABASE_URL}" \
     PINVI_RESTORE_HOTSWAP_EXECUTE=0 \
     "${ROOT_DIR}/scripts/restore-hotswap.sh" run \
     "${SNAPSHOT}" "${restore_schema}" "${previous_schema}" \
@@ -487,7 +498,7 @@ rollback_drain_rehearsal() {
     PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER="${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER:-}" \
     PINVI_RESTORE_EXPECTED_HOSTADDR="${PINVI_RESTORE_EXPECTED_HOSTADDR:-}" \
     PINVI_RESTORE_EXPECTED_PORT="${PINVI_RESTORE_EXPECTED_PORT:-}" \
-    PINVI_RESTORE_FENCE_DATABASE_URL="${STAGING_DATABASE_URL}" \
+    PINVI_RESTORE_FENCE_DATABASE_URL="${FENCE_DATABASE_URL}" \
     PINVI_RESTORE_HOTSWAP_EXECUTE=1 \
     PINVI_RESTORE_DRAIN_COMMAND= \
     PINVI_RESTORE_ALLOW_NO_DRAIN=0 \
