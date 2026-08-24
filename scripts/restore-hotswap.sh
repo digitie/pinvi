@@ -43,6 +43,12 @@ CONNECT_RESTORE_GRANTS=""
 FENCE_EXECUTOR_ROLE=""
 TEST_MODE="${PINVI_M05_RESTORE_TEST_MODE:-0}"
 APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}"
+STRICT_RESTORE_ENVIRONMENT=0
+if [[ "${TEST_MODE}" != "1" && ( "${PINVI_ENVIRONMENT:-}" == "staging" || "${PINVI_ENVIRONMENT:-}" == "production" ) ]]; then
+  STRICT_RESTORE_ENVIRONMENT=1
+fi
+TRUSTED_SNAPSHOT_CHECKSUM=""
+TRUSTED_SNAPSHOT_LIST_SHA256=""
 declare -a WRITE_ROLES=()
 declare -A WRITE_ROLE_SEEN=()
 
@@ -79,6 +85,73 @@ if [[ -L "${SNAPSHOT}" || ! -f "${SNAPSHOT}" ]]; then
   phase preparing failed "snapshot file not found"
   exit 2
 fi
+
+assert_trusted_snapshot_provenance() {
+  if [[ "${STRICT_RESTORE_ENVIRONMENT}" != "1" ]]; then
+    return 0
+  fi
+  local trusted_dir snapshot_parent manifest_file item key value
+  trusted_dir="${PINVI_RESTORE_TRUSTED_BACKUP_DIR:-}"
+  if [[ "${trusted_dir}" != /* || -L "${trusted_dir}" || ! -d "${trusted_dir}" ]]; then
+    phase preparing failed "strict restore requires a root-owned trusted backup directory"
+    exit 3
+  fi
+  trusted_dir="$(realpath -e "${trusted_dir}")"
+  snapshot_parent="$(realpath -e "$(dirname "${SNAPSHOT}")")"
+  if [[ "${snapshot_parent}" != "${trusted_dir}" ]]; then
+    phase preparing failed "snapshot is outside the trusted backup directory"
+    exit 3
+  fi
+  if [[ "$(stat -c '%u:%a' "${trusted_dir}")" != "0:700" ]]; then
+    phase preparing failed "trusted backup directory must be root-owned mode 0700"
+    exit 3
+  fi
+  manifest_file="${SNAPSHOT}.m05-manifest"
+  for item in "${SNAPSHOT}" "${SNAPSHOT}.sha256" "${manifest_file}"; do
+    if [[ -L "${item}" || ! -f "${item}" || "$(stat -c '%u:%a' "${item}")" != "0:600" ]]; then
+      phase preparing failed "trusted snapshot artifact is not a root-owned mode 0600 regular file"
+      exit 3
+    fi
+  done
+  declare -A manifest=()
+  while IFS='=' read -r key value || [[ -n "${key:-}" ]]; do
+    case "${key}" in
+      version|dump_filename|schema|dump_sha256|pg_restore_list_sha256|source_database|source_database_oid|source_system_identifier|source_hostaddr|source_port) ;;
+      *)
+        phase preparing failed "trusted snapshot manifest has an invalid field"
+        exit 3
+        ;;
+    esac
+    if [[ -z "${value}" || -v "manifest[${key}]" || "${value}" == *$'\r'* ]]; then
+      phase preparing failed "trusted snapshot manifest is malformed"
+      exit 3
+    fi
+    manifest[${key}]="${value}"
+  done <"${manifest_file}"
+  for key in version dump_filename schema dump_sha256 pg_restore_list_sha256 source_database source_database_oid source_system_identifier source_hostaddr source_port; do
+    if [[ ! -v "manifest[${key}]" ]]; then
+      phase preparing failed "trusted snapshot manifest is incomplete"
+      exit 3
+    fi
+  done
+  if [[ "${manifest[version]}" != "1" ||
+    "${manifest[dump_filename]}" != "$(basename "${SNAPSHOT}")" ||
+    "${manifest[schema]}" != "${SOURCE_SCHEMA}" ||
+    ! "${manifest[dump_sha256]}" =~ ^[0-9a-f]{64}$ ||
+    ! "${manifest[pg_restore_list_sha256]}" =~ ^[0-9a-f]{64}$ ||
+    ! "${manifest[source_database]}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ||
+    ! "${manifest[source_database_oid]}" =~ ^[0-9]+$ ||
+    ! "${manifest[source_system_identifier]}" =~ ^[0-9]+$ ||
+    ! "${manifest[source_hostaddr]}" =~ ^[0-9A-Fa-f:.]+$ ||
+    ! "${manifest[source_port]}" =~ ^[0-9]+$ ]]; then
+    phase preparing failed "trusted snapshot manifest values are invalid"
+    exit 3
+  fi
+  TRUSTED_SNAPSHOT_CHECKSUM="${manifest[dump_sha256]}"
+  TRUSTED_SNAPSHOT_LIST_SHA256="${manifest[pg_restore_list_sha256]}"
+}
+
+assert_trusted_snapshot_provenance
 
 PINNED_TOOL_DIRS=("/usr/local/bin" "/usr/bin" "/bin" /usr/lib/postgresql/*/bin)
 pinned_tool() {
@@ -155,7 +228,8 @@ if ! command -v sha256sum >/dev/null 2>&1; then
 fi
 expected_checksum="$(awk 'NR == 1 { print $1 }' "${SNAPSHOT}.sha256")"
 actual_checksum="$(sha256sum "${SNAPSHOT}" | awk 'NR == 1 { print $1 }')"
-if [[ ! "${expected_checksum}" =~ ^[0-9a-f]{64}$ || "${expected_checksum}" != "${actual_checksum}" ]]; then
+if [[ ! "${expected_checksum}" =~ ^[0-9a-f]{64}$ || "${expected_checksum}" != "${actual_checksum}" ||
+  ( -n "${TRUSTED_SNAPSHOT_CHECKSUM}" && "${expected_checksum}" != "${TRUSTED_SNAPSHOT_CHECKSUM}" ) ]]; then
   phase preparing failed "snapshot checksum failed"
   exit 3
 fi
@@ -265,7 +339,15 @@ if [[ "$(sha256sum "${TMP_DIR}/snapshot.dump" | awk 'NR == 1 { print $1 }')" != 
 fi
 SNAPSHOT="${TMP_DIR}/snapshot.dump"
 
-"${PG_RESTORE_BIN}" --list "${SNAPSHOT}" >/dev/null
+if [[ "${STRICT_RESTORE_ENVIRONMENT}" == "1" ]]; then
+  actual_restore_list_sha256="$("${PG_RESTORE_BIN}" --list "${SNAPSHOT}" | sha256sum | awk 'NR == 1 { print $1 }')"
+  if [[ "${actual_restore_list_sha256}" != "${TRUSTED_SNAPSHOT_LIST_SHA256}" ]]; then
+    phase preparing failed "trusted snapshot archive inventory failed"
+    exit 3
+  fi
+else
+  "${PG_RESTORE_BIN}" --list "${SNAPSHOT}" >/dev/null
+fi
 phase preparing success "snapshot verified for ${RESTORE_SCHEMA}"
 
 start_advisory_lock() {
@@ -1196,6 +1278,11 @@ SELECT EXISTS (
       WHERE m.member = r.oid
         AND m.roleid <> to_regrole('pg_signal_backend')
     )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_auth_members m
+      WHERE m.roleid = r.oid
+    )
     AND current_user <> ALL(string_to_array('${roles_sql}', ','))
     AND EXISTS (
       SELECT 1
@@ -1218,7 +1305,7 @@ SELECT EXISTS (
   )
 " | tr -d '[:space:]')"
   if [[ "${executor_safe}" != "t" ]]; then
-    phase draining failed "restore executor must be a dedicated schema owner with database CREATE and only pg_signal_backend membership"
+    phase draining failed "restore executor must be a dedicated schema owner with database CREATE and only direct pg_signal_backend membership"
     exit 3
   fi
 }
@@ -1255,16 +1342,12 @@ SELECT EXISTS (
     AND NOT owner_role.rolcreatedb
     AND NOT owner_role.rolreplication
     AND NOT owner_role.rolbypassrls
+    AND owner_role.rolinherit
     AND NOT EXISTS (
       SELECT 1
       FROM pg_auth_members membership
       WHERE membership.member = owner_role.oid
-        AND membership.roleid <> to_regrole('pg_signal_backend')
-    )
-    AND NOT EXISTS (
-      SELECT 1
-      FROM pg_auth_members membership
-      WHERE membership.roleid = owner_role.oid
+         OR membership.roleid = owner_role.oid
     )
 )
 " | tr -d '[:space:]')"
@@ -1332,7 +1415,7 @@ SELECT
   AND NOT EXISTS (
     SELECT 1
     FROM pg_auth_members m
-    JOIN app_role a ON a.oid = m.member
+    JOIN app_role a ON a.oid = m.member OR a.oid = m.roleid
   )
   AND NOT EXISTS (
     SELECT 1 FROM source_schema s WHERE s.nspowner <> current_user::regrole
@@ -1341,8 +1424,6 @@ SELECT
     SELECT 1
     FROM pg_auth_members m
     JOIN fence_role f ON f.oid = m.member OR f.oid = m.roleid
-    WHERE m.roleid = f.oid
-       OR (m.member = f.oid AND m.roleid <> to_regrole('pg_signal_backend'))
   )
   AND EXISTS (
     SELECT 1

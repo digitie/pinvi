@@ -67,6 +67,7 @@ def test_restore_hotswap_rejects_noncanonical_acl_before_write_fence_mutation() 
     assert "OR p.prosecdef" in source
     assert "d.defaclnamespace = 0" in source
     assert "NOT owner_role.rolcreatedb" in source
+    assert "AND owner_role.rolinherit" in source
     assert "has_schema_privilege((SELECT oid FROM app_role), n.oid, 'USAGE')" in source
     assert "NOT has_schema_privilege((SELECT oid FROM app_role), n.oid, 'CREATE')" in source
     enter = source.index("enter_write_fence()")
