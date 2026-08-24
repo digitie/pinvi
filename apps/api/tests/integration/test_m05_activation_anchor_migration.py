@@ -804,6 +804,72 @@ async def test_rebaseline_connection_fence_evicts_ddl_clients_and_restores_admis
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("fence_kind", ("helper", "migration"))
+async def test_rebaseline_connection_fence_rejects_nonsuperuser_database_owner(
+    _database_url: str,
+    fence_kind: str,
+) -> None:
+    """다른 DDL owner를 종료할 수 없는 database owner는 lock 전에 fail-close한다."""
+
+    suffix = uuid.uuid4().hex[:12]
+    fence_role = f"m05_nonsuper_fence_{suffix}"
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_fence_auth")
+    target_database = make_url(target_url).database
+    assert target_database is not None
+    owner_url = _role_database_url(
+        target_url,
+        role=fence_role,
+        password=_ROLE_PASSWORD,
+        database=target_database,
+    )
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        await _execute_autocommit(
+            maintenance_url,
+            f'CREATE ROLE "{fence_role}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE '
+            f"NOREPLICATION NOBYPASSRLS NOINHERIT PASSWORD '{_ROLE_PASSWORD}';",
+        )
+        await _execute_autocommit(
+            maintenance_url,
+            f'ALTER DATABASE "{target_database}" OWNER TO "{fence_role}";',
+        )
+        module = _rebaseline_module() if fence_kind == "helper" else _activation_migration_module()
+        owner_engine = create_async_engine(owner_url, poolclass=NullPool)
+        blocker_engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            blocker = await blocker_engine.connect()
+            try:
+                blocker_pid = await blocker.scalar(text("SELECT pg_backend_pid()"))
+                assert isinstance(blocker_pid, int)
+                async with owner_engine.begin() as fence:
+                    with pytest.raises(
+                        RuntimeError, match="requires superuser connection fence authority"
+                    ):
+                        if fence_kind == "helper":
+                            await module._acquire_rebaseline_database_connection_fence(fence)
+                        else:
+                            await fence.run_sync(
+                                module._acquire_legacy_rebaseline_database_connection_fence
+                            )
+                assert (
+                    await blocker.scalar(
+                        text("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = :pid)"),
+                        {"pid": blocker_pid},
+                    )
+                    is True
+                )
+            finally:
+                await blocker.close()
+        finally:
+            await blocker_engine.dispose()
+            await owner_engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+        await _execute_autocommit(maintenance_url, f'DROP ROLE IF EXISTS "{fence_role}";')
+
+
+@pytest.mark.asyncio
 async def test_0101_connection_fence_evicts_ddl_clients_and_restores_admission(
     _database_url: str,
 ) -> None:

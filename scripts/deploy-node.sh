@@ -65,6 +65,8 @@ compose() {
 # compose()가 env file까지 해석한 뒤 source revision을 확정해야 한다.
 # shellcheck source=scripts/api-image-provenance.sh
 source "$ROOT_DIR/scripts/api-image-provenance.sh"
+# shellcheck source=scripts/migrator-lifecycle-lock.sh
+source "$ROOT_DIR/scripts/migrator-lifecycle-lock.sh"
 
 preflight() {
   require_command docker
@@ -244,8 +246,7 @@ reject_explicit_migrator_database_url() {
   fi
 }
 
-migrate() {
-  reject_explicit_migrator_database_url
+migrate_under_lifecycle_lock() {
   pinvi_verify_runtime_image_provenance app-api
   local credential_file
   credential_file="$(bootstrap_credential_file)"
@@ -277,6 +278,13 @@ migrate() {
     return 1
   fi
   return 1
+}
+
+migrate() {
+  reject_explicit_migrator_database_url
+  acquire_migrator_lifecycle_lock
+  migrate_under_lifecycle_lock
+  release_migrator_lifecycle_lock
 }
 
 bootstrap_credential_file() {

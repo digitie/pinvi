@@ -56,10 +56,18 @@ def test_0101_consent_backfill_and_deploy_runners_drain_legacy_writers() -> None
     docker_app = (root / "scripts" / "docker-app.sh").read_text(encoding="utf-8")
     deploy = (root / "scripts" / "deploy-node.sh").read_text(encoding="utf-8")
     for runner in (docker_app, deploy):
-        migrate = runner[
+        migration = runner[
+            runner.index("migrate_under_lifecycle_lock() {") : runner.index("migrate() {")
+        ]
+        wrapper = runner[
             runner.index("migrate() {") : runner.index("bootstrap_credential_file() {")
         ]
-        assert migrate.index("drain_runtime_writers") < migrate.index("run_admin_bootstrap")
+        assert migration.index("drain_runtime_writers") < migration.index("run_admin_bootstrap")
+        assert (
+            wrapper.index("acquire_migrator_lifecycle_lock")
+            < wrapper.index("migrate_under_lifecycle_lock")
+            < wrapper.index("release_migrator_lifecycle_lock")
+        )
         assert "compose stop app-api" in runner
 
     assert "compose --profile etl stop app-dagster" in deploy

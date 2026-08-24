@@ -70,6 +70,8 @@ compose() {
 # compose()가 env file까지 해석한 뒤 source revision을 확정해야 한다.
 # shellcheck source=scripts/api-image-provenance.sh
 source "$ROOT_DIR/scripts/api-image-provenance.sh"
+# shellcheck source=scripts/migrator-lifecycle-lock.sh
+source "$ROOT_DIR/scripts/migrator-lifecycle-lock.sh"
 
 free_host_port() {
   local port="$1"
@@ -289,8 +291,7 @@ reject_explicit_migrator_database_url() {
   fi
 }
 
-migrate() {
-  reject_explicit_migrator_database_url
+migrate_under_lifecycle_lock() {
   require_docker
   require_python
   pinvi_verify_runtime_image_provenance app-api
@@ -329,6 +330,13 @@ migrate() {
   return 1
 }
 
+migrate() {
+  reject_explicit_migrator_database_url
+  acquire_migrator_lifecycle_lock
+  migrate_under_lifecycle_lock
+  release_migrator_lifecycle_lock
+}
+
 bootstrap_credential_file() {
   local path="${PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE:-}"
   if [[ -z "$path" || "$path" != /* || "$path" == *:* || ! -f "$path" ]]; then
@@ -339,6 +347,7 @@ bootstrap_credential_file() {
 }
 
 up() {
+  reject_explicit_migrator_database_url
   require_docker
   require_python
   pinvi_verify_runtime_image_provenance app-api app-web
@@ -348,8 +357,10 @@ up() {
     legacy_rebaseline_receipt_file >/dev/null
   fi
   free_app_ports
+  acquire_migrator_lifecycle_lock
   up_deps "$legacy_rebaseline"
-  migrate
+  migrate_under_lifecycle_lock
+  release_migrator_lifecycle_lock
   log "starting API + Web"
   compose up -d app-api app-web
   pinvi_verify_or_remove_running_app

@@ -88,6 +88,7 @@ ktdctl logs storage --follow
 | `PINVI_APP_SCHEMA_OWNER`                           | `app` object의 non-login schema owner. fresh `0100`/일반 `0101` app DDL의 effective role                                           |
 | `PINVI_MIGRATION_OWNER`                            | M05 `ops` receipt object의 non-login owner. `x_extension` `USAGE`만 받고 runtime/fence/hotswap과 분리                              |
 | `PINVI_MIGRATOR_DB_USER` / `PINVI_MIGRATOR_DB_PASSWORD` | one-shot non-inheriting login. 기본은 `NOLOGIN`·database `CONNECT` 없음이며 wrapper만 일시적으로 연다. 별도 URL override는 지원하지 않는다 |
+| `PINVI_MIGRATOR_LIFECYCLE_LOCK_PATH` | 두 wrapper의 password rotation·backend seal을 같은 host에서 직렬화하는 flock 파일. staging/production은 root-owned 0600 regular file을 미리 만들고 root로만 실행한다. smoke는 미지정 시 사용자 전용 `/tmp` directory의 lock을 쓴다 |
 | `PINVI_M05_LEGACY_REBASELINE`                      | 평상시 `0`. `0061 → 0100 → 0101` 승인 전환 명령에만 `1`로 export; 일반 deploy 금지                                                 |
 | `PINVI_LEGACY_REBASELINE_DATABASE_URL`             | legacy profile 전용 root/app owner URL. 일반 migrator·API·Dagster에 전달 금지                                                       |
 | `PINVI_M05_LEGACY_REBASELINE_RECEIPT_HOST_PATH`    | `alembic_rebaseline.py apply`가 만든 root-owned `0600` applied receipt의 host 절대경로. legacy one-shot에만 read-only mount한다 |
@@ -97,7 +98,10 @@ ktdctl logs storage --follow
 
 일반 Compose 재기동은 migrator를 열지 않는다. `migrate` wrapper가 직전에만 login·`CONNECT`를
 활성화하고 dependency 재실행 없이 one-shot을 실행한다. 성공·실패 뒤 모두 login을 닫고 `CONNECT`를
-회수하며 기존 migrator backend를 종료한다. legacy 전환은 다음처럼 호출 shell에서만 명시한다.
+회수하며 기존 migrator backend를 종료한다. 두 wrapper는 writer drain 이전부터 최종 seal까지 같은
+host-local flock을 보유하므로, 동시 실행이 서로의 one-shot password와 backend를 회전·종료하지 않는다.
+staging/production은 `PINVI_MIGRATOR_LIFECYCLE_LOCK_PATH`의 파일을 root-owned `0600`으로 미리
+만들고 root로만 실행한다. legacy 전환은 다음처럼 호출 shell에서만 명시한다.
 
 ```bash
 PINVI_M05_LEGACY_REBASELINE=1 \
@@ -110,6 +114,8 @@ preflight, 별도 운영 승인이 없는 상태에서는 실행하지 않는다
 `PINVI_LEGACY_REBASELINE_DATABASE_URL`로만 주입한다. wrapper는 receipt와 직접 parent가 모두
 root-owned/private인지 확인한 뒤 container root에 read-only mount하고, `0101`은 그 applied receipt의
 `0061` preflight DB identity와 현재 `0100` handoff row가 일치할 때만 DDL을 시작한다.
+connection fence는 기존 DDL-capable backend를 종료하므로, legacy rebaseline과 receipt `apply`는
+database owner만으로는 실행할 수 없고 직접 superuser root session이 필요하다.
 
 ## 3. Docker app 스크립트
 

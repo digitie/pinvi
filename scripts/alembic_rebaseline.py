@@ -285,14 +285,15 @@ _REBASELINE_SERIALIZATION_LOCK_SQL = (
     "SELECT pg_advisory_xact_lock(1863432274, 20260824)"
 )
 
-# `apply`는 database owner/root-only 연결로만 수행한다. transaction 전체에 shared
+# `apply`는 root-only superuser 연결로만 수행한다. transaction 전체에 shared
 # `pg_database`의 AccessExclusive lock을 유지해 새 backend가 startup 중에 멈추도록
-# 하므로, 그 강한 cluster-level fence 권한을 명시적으로 요구한다.
+# 하고 기존 DDL-capable backend를 `pg_terminate_backend`로 종료한다. 단순 database
+# owner는 임의 role의 backend를 종료할 권한이 없으므로, 그보다 약한 권한을 허용하면
+# fence 중간에 permission error가 나고 부분 절차를 남긴다.
 _REBASELINE_DATABASE_FENCE_AUTHORITY_SQL = """
-SELECT current_role_row.rolsuper OR database_row.datdba = current_role_row.oid
-FROM pg_database AS database_row
-JOIN pg_roles AS current_role_row ON current_role_row.rolname = current_user
-WHERE database_row.datname = current_database()
+SELECT current_role_row.rolsuper
+FROM pg_roles AS current_role_row
+WHERE current_role_row.rolname = current_user
   AND session_user = current_user
 """
 _REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL = "SET LOCAL lock_timeout = '5s'"
@@ -1016,7 +1017,7 @@ async def _acquire_rebaseline_database_connection_fence(
     try:
         has_authority = await connection.scalar(text(_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL))
         if has_authority is not True:
-            raise RebaselineError("rebaseline requires database-owner connection fence authority")
+            raise RebaselineError("rebaseline requires superuser connection fence authority")
         await connection.execute(text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE"))
     except DBAPIError as exc:
         # 기존 backend가 pg_database AccessShare lock을 길게 보유하면 client를

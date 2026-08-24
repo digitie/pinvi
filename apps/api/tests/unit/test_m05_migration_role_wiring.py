@@ -136,6 +136,11 @@ def test_rebaseline_fence_blocks_new_backends_and_catches_inherited_catalog_owne
         assert "LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE" in source
         assert "SET LOCAL lock_timeout = '5s'" in source
         assert "could not acquire database connection fence within 5s" in source
+        assert "requires superuser connection fence authority" in source
+        assert "SELECT current_role_row.rolsuper" in source
+        authority_start = source.index("SELECT current_role_row.rolsuper")
+        authority_sql = source[authority_start : source.index('"""', authority_start)]
+        assert "database_row.datdba" not in authority_sql
         assert "SELECT pg_stat_clear_snapshot()" in source
         assert "SELECT pg_terminate_backend(:pid, 5000)" in source
         assert "pg_has_role(activity.usesysid, owner_row.owner_oid, 'USAGE')" in source
@@ -167,8 +172,10 @@ def test_rebaseline_fence_blocks_new_backends_and_catches_inherited_catalog_owne
 def test_migration_wrappers_open_only_for_the_one_shot_and_seal_afterward() -> None:
     for path in (ROOT / "scripts" / "docker-app.sh", ROOT / "scripts" / "deploy-node.sh"):
         source = path.read_text(encoding="utf-8")
-        migration = source[source.index("migrate() {") :]
+        migration = source[source.index("migrate_under_lifecycle_lock() {") :]
+        wrapper = source[source.index("migrate() {") :]
         assert "m05_legacy_rebaseline_profile()" in source
+        assert 'source "$ROOT_DIR/scripts/migrator-lifecycle-lock.sh"' in source
         assert "prepare_migrator_login()" in source
         assert "seal_migrator_login()" in source
         assert "PINVI_MIGRATOR_DISABLE_LOGIN=1" in source
@@ -187,6 +194,11 @@ def test_migration_wrappers_open_only_for_the_one_shot_and_seal_afterward() -> N
         assert 'MIGRATOR_ONE_SHOT_PASSWORD=""' in source
         assert "reject_explicit_migrator_database_url()" in source
         assert "PINVI_MIGRATOR_DATABASE_URL is unsupported" in source
+        assert (
+            wrapper.index("acquire_migrator_lifecycle_lock")
+            < wrapper.index("migrate_under_lifecycle_lock")
+            < wrapper.index("release_migrator_lifecycle_lock")
+        )
         assert 'if ! prepare_migrator_login "$legacy_rebaseline"; then' in migration
         assert "migrator preparation failed; sealing the one-shot login" in migration
         assert (
@@ -204,5 +216,9 @@ def test_docker_app_up_uses_the_explicit_legacy_role_profile_before_migration() 
     assert 'local legacy_rebaseline="${1:-0}"' in up_deps
     assert '-e PINVI_M05_LEGACY_REBASELINE="$legacy_rebaseline"' in up_deps
     assert "legacy_rebaseline_receipt_file >/dev/null" in up
-    assert 'up_deps "$legacy_rebaseline"' in up
-    assert up.index('up_deps "$legacy_rebaseline"') < up.index("migrate")
+    assert up.index("acquire_migrator_lifecycle_lock") < up.index('up_deps "$legacy_rebaseline"')
+    assert (
+        up.index('up_deps "$legacy_rebaseline"')
+        < up.index("migrate_under_lifecycle_lock")
+        < up.index("release_migrator_lifecycle_lock")
+    )

@@ -277,11 +277,13 @@ WHERE namespace.nspname = 'app'
 ORDER BY relation.relname COLLATE "C"
 """
 _LEGACY_REBASELINE_SERIALIZATION_LOCK_SQL = "SELECT pg_advisory_xact_lock(1863432274, 20260824)"
+# legacy handoff도 새 backend를 막는 database catalog fence 뒤 기존 DDL-capable
+# backend를 종료한다. database owner만으로는 다른 role backend를 종료할 수 없으므로
+# root-only superuser caller만 허용해 handoff 중간의 permission failure를 막는다.
 _LEGACY_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL = """
-SELECT current_role_row.rolsuper OR database_row.datdba = current_role_row.oid
-FROM pg_database AS database_row
-JOIN pg_roles AS current_role_row ON current_role_row.rolname = current_user
-WHERE database_row.datname = current_database()
+SELECT current_role_row.rolsuper
+FROM pg_roles AS current_role_row
+WHERE current_role_row.rolname = current_user
   AND session_user = current_user
 """
 _LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL = "SET LOCAL lock_timeout = '5s'"
@@ -759,7 +761,7 @@ def _acquire_legacy_rebaseline_database_connection_fence(bind: sa.Connection) ->
         has_authority = bind.scalar(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL))
         if has_authority is not True:
             raise RuntimeError(
-                "0101 legacy rebaseline requires database-owner connection fence authority"
+                "0101 legacy rebaseline requires superuser connection fence authority"
             )
         bind.execute(sa.text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE"))
     except sa.exc.DBAPIError as exc:
