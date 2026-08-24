@@ -60,13 +60,6 @@
 
 ## 지도 / 위치
 
-- [ ] **T-325 = Claude** — 웹·앱 지도의 **최초 중심점을 단말기 위치로** 잡는다. 지금은 양쪽 다 서울시청
-  하드코딩(`FeatureMapView.DEFAULT_CENTER`, `map.tsx`의 `SEOUL`)에서 시작하고 사용자가 버튼을 눌러야만
-  이동한다. LBS 동의(`lbs_tos`+`location_collection`)와 OS/브라우저 권한이 **이미 있는 경우에만**
-  프롬프트 없이 자동 센터링한다(권한 미결정 상태에서 진입만으로 프롬프트를 띄우지 않는다).
-  곁들여 웹의 인라인 `navigator.geolocation` 호출을 이미 있는 `webLocationAdapter` + 공용
-  `useUserLocation`으로 모은다. 브랜치 `agent/claude-t325-device-location-center`.
-
 - [ ] **T-326** — 동의 철회 이력이 재동의로 지워진다. `record_consents`는 같은
   `(user_id, consent_type, version)` row를 in-place 갱신해 `withdrawn_at`을 `None`으로 되돌리고
   `agreed_at`을 덮어쓴다(PK가 그 3튜플이고 모든 화면이 `v1.0`을 쓴다). 철회했다는 사실 자체가
