@@ -854,7 +854,7 @@ connect_restore_grants() {
   fi
   "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${FENCE_DATABASE_URL}" -tAc "
 WITH grants AS (
-  SELECT roles.rolname, bool_or(aclexplode.is_grantable) AS grantable
+  SELECT roles.rolname, bool_or(acl.is_grantable) AS grantable
   FROM pg_database db
   CROSS JOIN LATERAL aclexplode(COALESCE(db.datacl, acldefault('d', db.datdba))) acl
   JOIN pg_roles roles ON roles.oid = acl.grantee
