@@ -149,9 +149,93 @@ drain_runtime_writers() {
   compose stop app-api
 }
 
+m05_legacy_rebaseline_profile() {
+  case "${PINVI_M05_LEGACY_REBASELINE:-0}" in
+    0|1) printf '%s\n' "${PINVI_M05_LEGACY_REBASELINE:-0}" ;;
+    *) echo "PINVI_M05_LEGACY_REBASELINE must be 0 or 1" >&2; exit 2 ;;
+  esac
+}
+
+legacy_rebaseline_receipt_file() {
+  local receipt="${PINVI_M05_LEGACY_REBASELINE_RECEIPT_HOST_PATH:-}"
+  local parent receipt_uid receipt_mode parent_uid parent_mode
+  [[ "$receipt" == /* && "$receipt" != *:* && "$receipt" != *$'\n'* ]] || {
+    echo "PINVI_M05_LEGACY_REBASELINE_RECEIPT_HOST_PATH must be an absolute host path" >&2
+    exit 2
+  }
+  [[ -f "$receipt" && ! -L "$receipt" ]] || {
+    echo "legacy rebaseline receipt must be a regular non-symlink file" >&2
+    exit 2
+  }
+  parent="$(dirname -- "$receipt")"
+  [[ -d "$parent" && ! -L "$parent" ]] || {
+    echo "legacy rebaseline receipt parent must be a regular directory" >&2
+    exit 2
+  }
+  receipt_uid="$(stat -c '%u' -- "$receipt")"
+  receipt_mode="$(stat -c '%a' -- "$receipt")"
+  parent_uid="$(stat -c '%u' -- "$parent")"
+  parent_mode="$(stat -c '%a' -- "$parent")"
+  [[ "$receipt_uid" == "0" && "$receipt_mode" == "600" ]] || {
+    echo "legacy rebaseline receipt must be root-owned mode 0600" >&2
+    exit 2
+  }
+  [[ "$parent_uid" == "0" ]] && (( (8#$parent_mode & 8#077) == 0 )) || {
+    echo "legacy rebaseline receipt parent must be root-owned and private" >&2
+    exit 2
+  }
+  printf '%s\n' "$receipt"
+}
+
+prepare_migrator_login() {
+  local legacy_rebaseline="$1"
+  local disable_login="0"
+  if [[ "$legacy_rebaseline" == "1" ]]; then
+    # legacy is run as the existing root/app owner, never as the reusable migrator login.
+    disable_login="1"
+  fi
+  compose run --rm \
+    -e PINVI_M05_LEGACY_REBASELINE="$legacy_rebaseline" \
+    -e PINVI_MIGRATOR_DISABLE_LOGIN="$disable_login" \
+    app-db-runtime-role
+}
+
 seal_migrator_login() {
+  local legacy_rebaseline="$1"
   log "sealing one-shot migrator login after successful migration"
-  compose run --rm -e PINVI_MIGRATOR_DISABLE_LOGIN=1 app-db-runtime-role
+  compose run --rm \
+    -e PINVI_M05_LEGACY_REBASELINE="$legacy_rebaseline" \
+    -e PINVI_MIGRATOR_DISABLE_LOGIN=1 \
+    app-db-runtime-role
+}
+
+run_admin_bootstrap() {
+  local credential_file="$1"
+  local legacy_rebaseline="$2"
+  local legacy_receipt_file="${3:-}"
+  local service="app-migrator"
+  local runner_user="$(id -u):$(id -g)"
+  local profile_args=()
+  local legacy_args=()
+  if [[ "$legacy_rebaseline" == "1" ]]; then
+    [[ -n "$legacy_receipt_file" ]] || {
+      echo "legacy rebaseline receipt is required" >&2
+      exit 2
+    }
+    service="app-legacy-rebaseline-migrator"
+    runner_user="0:0"
+    profile_args=(--profile legacy-rebaseline)
+    legacy_args=(
+      -e PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH=/run/pinvi/m05/legacy-rebaseline-receipt.json
+      -v "$legacy_receipt_file:/run/pinvi/m05/legacy-rebaseline-receipt.json:ro"
+    )
+  fi
+  compose "${profile_args[@]}" run --rm --no-deps \
+    --user "$runner_user" \
+    -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
+    -v "$credential_file:$credential_file:ro" \
+    "${legacy_args[@]}" \
+    "$service" pinvi-admin-bootstrap
 }
 
 migrate() {
@@ -160,18 +244,22 @@ migrate() {
   pinvi_verify_runtime_image_provenance app-api
   local credential_file
   credential_file="$(bootstrap_credential_file)"
+  local legacy_rebaseline
+  legacy_rebaseline="$(m05_legacy_rebaseline_profile)"
+  local legacy_receipt_file=""
+  if [[ "$legacy_rebaseline" == "1" ]]; then
+    legacy_receipt_file="$(legacy_rebaseline_receipt_file)"
+  fi
   drain_runtime_writers
   local attempt
   for attempt in 1 2 3 4 5; do
+    prepare_migrator_login "$legacy_rebaseline"
     log "running Pinvi admin bootstrap (attempt ${attempt}/5)"
-    if compose run --rm \
-      --user "$(id -u):$(id -g)" \
-      -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
-      -v "$credential_file:$credential_file:ro" \
-      app-migrator pinvi-admin-bootstrap; then
-      seal_migrator_login
+    if run_admin_bootstrap "$credential_file" "$legacy_rebaseline" "$legacy_receipt_file"; then
+      seal_migrator_login "$legacy_rebaseline"
       return 0
     fi
+    seal_migrator_login "$legacy_rebaseline"
     sleep 3
   done
   echo "pinvi-admin-bootstrap failed after 5 attempts" >&2

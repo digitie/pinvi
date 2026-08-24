@@ -9,6 +9,7 @@ import socket
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -143,14 +144,35 @@ def test_m05_restore_drill_serializes_target_recreation_and_preflights_staging_r
     assert "_ProvisioningLock" not in source
     assert "PINVI_RESTORE_COORDINATION_DATABASE_URL" not in source
     assert "m05_operation_lease.py" in source
+    assert "staging/production restore drill requires a root-owned target lease" in source
     assert "with _acquire_root_target_lease(target_url):" in source
     assert "return _run_drill(args, _lease_held=True)" in source
     run = source[source.index("def _run_drill(") :]
     assert run.index("with _acquire_root_target_lease(target_url):") < run.index(
         "        _staging_role_check("
     )
+    recreate = source[
+        source.index("def _recreate_disposable_target(") : source.index("def _identity_key(")
+    ]
+    assert recreate.index("{disable_provisioner_sql}") < recreate.index("DROP DATABASE IF EXISTS")
     assert 'PINVI_RESTORE_HOTSWAP_EXECUTE": "1"' not in source
     assert '"PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL": "precheck"' in source
+
+
+def test_m05_restore_drill_requires_root_owned_target_lease_in_managed_environment(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    module = _restore_drill_module()
+    monkeypatch.setenv("PINVI_ENVIRONMENT", "staging")
+    monkeypatch.delenv("PINVI_M05_RESTORE_TEST_MODE", raising=False)
+
+    with pytest.raises(module.RestoreDrillError, match="root-owned target lease"):
+        module._run_drill(
+            SimpleNamespace(
+                output=tmp_path / "restore-evidence.json",
+                require_root_owned=False,
+            )
+        )
 
 
 def test_m05_operation_lease_binds_only_pinned_target_identity() -> None:

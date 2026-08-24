@@ -87,12 +87,30 @@ ktdctl logs storage --follow
 | `PINVI_APP_DB_USER` / `PINVI_APP_DB_PASSWORD`     | API/Dagster runtime 전용 non-owner/non-superuser login                                                                              |
 | `PINVI_APP_SCHEMA_OWNER`                           | `app` object의 non-login schema owner. fresh `0100`/일반 `0101` app DDL의 effective role                                           |
 | `PINVI_MIGRATION_OWNER`                            | M05 `ops` receipt object의 non-login owner. `x_extension` `USAGE`만 받고 runtime/fence/hotswap과 분리                              |
-| `PINVI_MIGRATOR_DB_USER` / `PINVI_MIGRATOR_DB_PASSWORD` | one-shot non-inheriting login. 성공한 migration 뒤 `NOLOGIN`으로 봉인                                                            |
+| `PINVI_MIGRATOR_DB_USER` / `PINVI_MIGRATOR_DB_PASSWORD` | one-shot non-inheriting login. 기본은 `NOLOGIN`·database `CONNECT` 없음이며 wrapper만 일시적으로 연다                       |
 | `PINVI_MIGRATOR_DATABASE_URL`                      | 위 one-shot login URL. API/Dagster에 전달 금지                                                                                      |
-| `PINVI_M05_LEGACY_REBASELINE`                      | 평상시 `0`. N150 `0061 → 0100 → 0101` 승인 전환에서만 root-only profile로 `1`; 일반 deploy 금지                                  |
+| `PINVI_M05_LEGACY_REBASELINE`                      | 평상시 `0`. `0061 → 0100 → 0101` 승인 전환 명령에만 `1`로 export; 일반 deploy 금지                                                 |
+| `PINVI_LEGACY_REBASELINE_DATABASE_URL`             | legacy profile 전용 root/app owner URL. 일반 migrator·API·Dagster에 전달 금지                                                       |
+| `PINVI_M05_LEGACY_REBASELINE_RECEIPT_HOST_PATH`    | `alembic_rebaseline.py apply`가 만든 root-owned `0600` applied receipt의 host 절대경로. legacy one-shot에만 read-only mount한다 |
 | 기타 `PINVI_*`               | Pinvi 소유 설정. 외부 서비스 소유 계약 토큰은 해당 정본 이름을 사용(Feature request writer: `KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`) |
 
 `NEXT_PUBLIC_*` 변경 시 web 이미지 재빌드 필요 (빌드 타임 embed).
+
+일반 Compose 재기동은 migrator를 열지 않는다. `migrate` wrapper가 직전에만 login·`CONNECT`를
+활성화하고 dependency 재실행 없이 one-shot을 실행한다. 성공·실패 뒤 모두 login을 닫고 `CONNECT`를
+회수하며 기존 migrator backend를 종료한다. legacy 전환은 다음처럼 호출 shell에서만 명시한다.
+
+```bash
+PINVI_M05_LEGACY_REBASELINE=1 \
+PINVI_M05_LEGACY_REBASELINE_RECEIPT_HOST_PATH=/secure/rebaseline/receipt.json \
+scripts/deploy-node.sh migrate
+```
+
+이 명령은 일반 `app-migrator` 대신 별도 root-only legacy profile을 사용한다. fresh backup, read-only
+preflight, 별도 운영 승인이 없는 상태에서는 실행하지 않는다. root URL은 protected env file의
+`PINVI_LEGACY_REBASELINE_DATABASE_URL`로만 주입한다. wrapper는 receipt와 직접 parent가 모두
+root-owned/private인지 확인한 뒤 container root에 read-only mount하고, `0101`은 그 applied receipt의
+`0061` preflight DB identity와 현재 `0100` handoff row가 일치할 때만 DDL을 시작한다.
 
 ## 3. Docker app 스크립트
 

@@ -62,10 +62,12 @@ active graph·rebaseline proof·M05 owner 전환과 단일 N150 target lease의 
 2. N150에서 helper의 read-only preflight가 `0061`·fingerprint·M05 object absence·backup proof를
    모두 통과하는지 확인한다.
 3. 별도 운영 변경 승인 뒤 helper의 `--confirm`을 한 번 실행한다.
-4. fresh DB에서는 `app-migrator` one-shot으로 `0101`을 적용하고 role/receipt owner/NOLOGIN seal,
+4. fresh DB에서는 `app-migrator` one-shot으로 `0101`을 적용하고 role/receipt owner/`NOLOGIN`·`CONNECT`
+   revoke·기존 migrator session 종료 seal,
    M05 ACL, API DB health를 확인한다. 현재 N150 `0061`은 이 단계 직전에만 root-only
-   `PINVI_M05_LEGACY_REBASELINE=1` profile을 명시하고, 기존 app DDL 뒤 M05 object만 migration
-   owner로 전환됐는지 확인한다.
+   `PINVI_M05_LEGACY_REBASELINE=1` + 별도 root URL profile과 root-owned `0600` applied rebaseline
+   receipt를 명시한다. `0101`이 receipt의 `0061` preflight DB identity와 현재 `0100` handoff row를
+   대조한 뒤, 기존 app DDL 뒤 M05 object만 migration owner로 전환됐는지 확인한다.
 5. 실패 시 새 history를 억지로 stamp하지 않고 snapshot 복구 후 fail-closed 원인을 해결한다.
 
 ## 완료 기준
@@ -74,6 +76,6 @@ active graph·rebaseline proof·M05 owner 전환과 단일 N150 target lease의 
 - disposable `0061` DB가 data row 보존 상태로 rebaseline 후 `0101`까지 올라간다.
 - helper는 unknown revision, data-less/dirty catalog, M05 object 존재, backup proof 누락을 모두 거부한다.
 - fresh role topology와 root-only legacy profile 모두 M05 receipt owner를 runtime/fence/database owner와
-  분리하고, 성공 후 one-shot migrator login을 `NOLOGIN`으로 봉인한다.
+  분리하고, 성공·실패 후 one-shot migrator login을 `NOLOGIN`·`CONNECT` revoke·session 0으로 봉인한다.
 - M05 focused PostgreSQL 검증·N150 browser E2E·두 전문 적대 리뷰가 통과한다.
 - production 전환은 merge 뒤 별도 승인 gate로 남고 M05 activation은 `false`다.

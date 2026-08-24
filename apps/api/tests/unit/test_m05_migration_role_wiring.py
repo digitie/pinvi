@@ -27,8 +27,21 @@ def test_compose_keeps_runtime_and_migrator_role_inputs_separate() -> None:
         "PINVI_M05_LEGACY_REBASELINE",
     ):
         assert value in role_bootstrap_block
+    assert 'PINVI_MIGRATOR_DISABLE_LOGIN: "1"' in role_bootstrap_block
+    assert 'PINVI_M05_LEGACY_REBASELINE: "0"' in role_bootstrap_block
     assert "postgresql+asyncpg://pinvi_migrator:" in migrator_block
     assert "PINVI_MIGRATION_OWNER" in migrator_block
+    assert "PINVI_MIGRATOR_DB_USER" in migrator_block
+    assert "PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}" in migrator_block
+    legacy_migrator_block = compose.split("  app-legacy-rebaseline-migrator:", maxsplit=1)[1].split(
+        "  app-web:", maxsplit=1
+    )[0]
+    assert "profiles: [legacy-rebaseline]" in legacy_migrator_block
+    assert "PINVI_LEGACY_REBASELINE_DATABASE_URL" in legacy_migrator_block
+    assert "PINVI_MIGRATOR_DB_USER" in legacy_migrator_block
+    assert 'PINVI_M05_LEGACY_REBASELINE: "1"' in legacy_migrator_block
+    assert 'user: "0:0"' in legacy_migrator_block
+    assert "PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH" in legacy_migrator_block
 
 
 def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
@@ -44,6 +57,14 @@ def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
     assert "NOT membership.inherit_option" in bootstrap
     assert "membership.set_option" in bootstrap
     assert "PINVI_M05_LEGACY_REBASELINE=1 root-only one-shot" in bootstrap
+    assert 'PINVI_MIGRATOR_DISABLE_LOGIN="${PINVI_MIGRATOR_DISABLE_LOGIN:-1}"' in bootstrap
+    assert "REVOKE CONNECT ON DATABASE" in bootstrap
+    assert "pg_terminate_backend(activity.pid, 5000)" in bootstrap
+    assert "FROM pg_stat_activity activity" in bootstrap
+    assert "REVOKE ALL ON FUNCTION x_extension.digest(bytea, text) FROM PUBLIC;" in bootstrap
+    assert "GRANT EXECUTE ON FUNCTION x_extension.digest(bytea, text)" in bootstrap
+    assert "WHERE membership.roleid = owner.oid" in bootstrap
+    assert "WHERE membership.roleid = migrator.oid" in bootstrap
 
 
 def test_0101_switches_only_m05_objects_and_restores_app_owner_for_versioning() -> None:
@@ -60,13 +81,36 @@ def test_0101_switches_only_m05_objects_and_restores_app_owner_for_versioning() 
     assert activation < ops_schema < assertion < restore
     assert migration.index("_advance_boundary_contract()") < activation
     assert migration.index("_replace_admin_audit_guard()") < activation
+    assert "_managed_deployment_requires_migration_owner" in migration
+    assert "_configured_migrator_login" in migration
+    assert "0101 managed migration requires migration and migrator roles" in migration
+    assert "membership.roleid = (SELECT oid FROM migration_role)" in migration
+    assert "_assert_legacy_rebaseline_handoff(bind)" in migration
+    assert "PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH" in migration
+    upgrade = migration[migration.index("def upgrade()") :]
+    assert upgrade.index("_assert_legacy_rebaseline_handoff(bind)") < upgrade.index(
+        "_advance_boundary_contract()"
+    )
 
 
-def test_migration_wrappers_seal_the_one_shot_login_after_success() -> None:
+def test_migration_wrappers_open_only_for_the_one_shot_and_seal_afterward() -> None:
     for path in (ROOT / "scripts" / "docker-app.sh", ROOT / "scripts" / "deploy-node.sh"):
         source = path.read_text(encoding="utf-8")
+        migration = source[source.index("migrate() {") :]
+        assert "m05_legacy_rebaseline_profile()" in source
+        assert "prepare_migrator_login()" in source
         assert "seal_migrator_login()" in source
         assert "PINVI_MIGRATOR_DISABLE_LOGIN=1" in source
-        assert source.index("app-migrator pinvi-admin-bootstrap") < source.rindex(
-            "seal_migrator_login"
+        assert "app-legacy-rebaseline-migrator" in source
+        assert "--profile legacy-rebaseline" in source
+        assert "legacy_rebaseline_receipt_file()" in source
+        assert "PINVI_M05_LEGACY_REBASELINE_RECEIPT_HOST_PATH" in source
+        assert "legacy rebaseline receipt must be root-owned mode 0600" in source
+        assert 'runner_user="0:0"' in source
+        assert "legacy-rebaseline-receipt.json:ro" in source
+        assert "run --rm --no-deps" in source
+        assert (
+            migration.index("prepare_migrator_login")
+            < migration.index("run_admin_bootstrap")
+            < migration.rindex("seal_migrator_login")
         )

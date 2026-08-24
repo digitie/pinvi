@@ -12,8 +12,10 @@ ADR-063의 명시적 `0061` rebaseline 뒤에만 실행된다.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
+import stat
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -40,6 +42,40 @@ _LOCATION_ACCESS_LOG_PURPOSES = (
     "'viewport_query', 'nearby_attractions', 'weather_at_coord', "
     "'feature_request', 'region_covering', 'region_radius', 'third_party_place_search'"
 )
+_LEGACY_REBASELINE_RECEIPT_PATH_ENV = "PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH"
+_LEGACY_REBASELINE_RECEIPT_FIELDS = frozenset(
+    {
+        "action",
+        "backup_manifest_sha256",
+        "backup_sha256",
+        "completed_at",
+        "preflight",
+        "state",
+        "target_manifest_sha256",
+        "version",
+    }
+)
+_LEGACY_REBASELINE_PREFLIGHT_FIELDS = frozenset(
+    {
+        "app_data_content_sha256",
+        "app_data_rows",
+        "app_data_table_lines",
+        "catalog_lines",
+        "catalog_sha256",
+        "current_user",
+        "database_name",
+        "database_oid",
+        "expected_catalog_lines",
+        "expected_catalog_sha256",
+        "server_addr",
+        "server_port",
+        "server_version_num",
+        "session_user",
+        "system_identifier",
+        "version_rows",
+    }
+)
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
 def _split_postgres_statements(source: str) -> tuple[str, ...]:
@@ -205,6 +241,24 @@ def _configured_migration_owner() -> str | None:
     return configured
 
 
+def _configured_migrator_login() -> str | None:
+    """Return the explicitly configured one-shot login that may activate owner roles."""
+
+    configured = os.environ.get("PINVI_MIGRATOR_DB_USER")
+    if configured is None or not configured.strip():
+        return None
+    if configured != configured.strip() or _ROLE_IDENTIFIER.fullmatch(configured) is None:
+        raise RuntimeError("0101 migrator login configuration is invalid")
+    return configured
+
+
+def _managed_deployment_requires_migration_owner() -> bool:
+    """Keep staging/production M05 receipt ownership fail-closed."""
+
+    environment = os.environ.get("PINVI_ENVIRONMENT", "").strip().lower()
+    return environment in {"staging", "production"}
+
+
 def _legacy_rebaseline_profile() -> bool:
     """Allow the one approved 0061 owner path without broadening normal migrator authority."""
 
@@ -214,6 +268,150 @@ def _legacy_rebaseline_profile() -> bool:
     if configured == "1":
         return True
     raise RuntimeError("0101 legacy rebaseline profile configuration is invalid")
+
+
+def _read_legacy_rebaseline_receipt() -> dict[str, object]:
+    """Read the root-only applied 0061→0100 receipt without a pathname race."""
+
+    configured = os.environ.get(_LEGACY_REBASELINE_RECEIPT_PATH_ENV, "")
+    if not configured:
+        raise RuntimeError("0101 legacy rebaseline requires an applied root-owned receipt")
+    path = Path(configured)
+    if not path.is_absolute():
+        raise RuntimeError("0101 legacy rebaseline receipt path must be absolute")
+    if os.geteuid() != 0:
+        raise RuntimeError("0101 legacy rebaseline requires a root OS account")
+    descriptor = -1
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_uid != 0
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+        ):
+            raise RuntimeError("0101 legacy rebaseline receipt must be root-owned mode 0600")
+        with os.fdopen(descriptor, "rb", closefd=True) as stream:
+            descriptor = -1
+            payload = stream.read(64 * 1024 + 1)
+    except OSError as exc:
+        raise RuntimeError("0101 legacy rebaseline receipt is unavailable") from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    if len(payload) > 64 * 1024:
+        raise RuntimeError("0101 legacy rebaseline receipt is too large")
+
+    def reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        value: dict[str, object] = {}
+        for key, item in pairs:
+            if key in value:
+                raise RuntimeError("0101 legacy rebaseline receipt has duplicate JSON keys")
+            value[key] = item
+        return value
+
+    try:
+        receipt = json.loads(payload.decode("utf-8"), object_pairs_hook=reject_duplicate_keys)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("0101 legacy rebaseline receipt is not valid JSON") from exc
+    if not isinstance(receipt, dict) or frozenset(receipt) != _LEGACY_REBASELINE_RECEIPT_FIELDS:
+        raise RuntimeError("0101 legacy rebaseline receipt fields are invalid")
+    if (
+        receipt["action"] != "0061_to_0100_rebaseline"
+        or receipt["version"] != 1
+        or receipt["state"] != "applied"
+        or not isinstance(receipt["completed_at"], str)
+        or not receipt["completed_at"]
+        or not isinstance(receipt["preflight"], dict)
+        or any(
+            not isinstance(receipt[field], str) or _SHA256.fullmatch(receipt[field]) is None
+            for field in (
+                "backup_manifest_sha256",
+                "backup_sha256",
+                "target_manifest_sha256",
+            )
+        )
+    ):
+        raise RuntimeError("0101 legacy rebaseline receipt values are invalid")
+    preflight = receipt["preflight"]
+    if frozenset(preflight) != _LEGACY_REBASELINE_PREFLIGHT_FIELDS:
+        raise RuntimeError("0101 legacy rebaseline receipt preflight is invalid")
+    if (
+        preflight["version_rows"] != ["20260821_0061"]
+        or any(
+            not isinstance(preflight[field], str) or not preflight[field]
+            for field in (
+                "database_name",
+                "system_identifier",
+                "server_addr",
+            )
+        )
+        or any(
+            not isinstance(preflight[field], int) or isinstance(preflight[field], bool)
+            for field in ("database_oid", "server_port")
+        )
+        or preflight["database_oid"] <= 0
+        or not 1 <= preflight["server_port"] <= 65535
+    ):
+        raise RuntimeError("0101 legacy rebaseline receipt preflight is invalid")
+    return receipt
+
+
+def _assert_legacy_rebaseline_handoff(bind: sa.Connection) -> None:
+    """Bind the privileged 0101 legacy path to its completed 0061→0100 receipt."""
+
+    if not _legacy_rebaseline_profile():
+        return
+    receipt = _read_legacy_rebaseline_receipt()
+    preflight = receipt["preflight"]
+    assert isinstance(preflight, dict)
+    expected_identity = {
+        key: preflight[key]
+        for key in (
+            "database_name",
+            "database_oid",
+            "system_identifier",
+            "server_addr",
+            "server_port",
+        )
+    }
+    identity_payload = bind.scalar(
+        sa.text(
+            """
+            SELECT json_build_object(
+                'database_name', current_database(),
+                'database_oid', (
+                    SELECT database_row.oid
+                    FROM pg_database database_row
+                    WHERE database_row.datname = current_database()
+                )::bigint,
+                'system_identifier', (pg_control_system()).system_identifier::text,
+                'server_addr', COALESCE(inet_server_addr()::text, ''),
+                'server_port', COALESCE(inet_server_port(), 0)::integer
+            )::text
+            """
+        )
+    )
+    version_rows_payload = bind.scalar(
+        sa.text(
+            """
+            SELECT COALESCE(
+                json_agg(version_num ORDER BY version_num)::text,
+                '[]'
+            )
+            FROM app.alembic_version
+            """
+        )
+    )
+    try:
+        identity = json.loads(identity_payload)
+        version_rows = json.loads(version_rows_payload)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("0101 legacy rebaseline database proof is invalid") from exc
+    if identity != expected_identity:
+        raise RuntimeError("0101 legacy rebaseline receipt does not match this database")
+    if version_rows != ["20260824_0100"]:
+        raise RuntimeError("0101 legacy rebaseline requires the 0100 handoff row")
 
 
 def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
@@ -226,10 +424,16 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
     """
 
     migration_owner = _configured_migration_owner()
+    migrator_login = _configured_migrator_login()
     legacy_rebaseline = _legacy_rebaseline_profile()
-    if migration_owner is None:
-        if legacy_rebaseline:
-            raise RuntimeError("0101 legacy rebaseline requires a migration owner")
+    if migration_owner is None or migrator_login is None:
+        if (
+            legacy_rebaseline
+            or _managed_deployment_requires_migration_owner()
+            or migration_owner is not None
+            or migrator_login is not None
+        ):
+            raise RuntimeError("0101 managed migration requires migration and migrator roles")
         return None
 
     role_contract_valid = bind.scalar(
@@ -242,6 +446,14 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
                        role_row.rolinherit
                 FROM pg_roles role_row
                 WHERE role_row.rolname = :migration_owner
+            ),
+            migrator_role AS (
+                SELECT role_row.oid, role_row.rolcanlogin, role_row.rolsuper,
+                       role_row.rolcreaterole, role_row.rolcreatedb,
+                       role_row.rolreplication, role_row.rolbypassrls,
+                       role_row.rolinherit
+                FROM pg_roles role_row
+                WHERE role_row.rolname = :migrator_login
             ),
             app_owner AS (
                 SELECT namespace.nspowner AS oid
@@ -263,6 +475,7 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
             )
             SELECT
                 (SELECT count(*) FROM migration_role) = 1
+                AND (SELECT count(*) FROM migrator_role) = 1
                 AND (SELECT count(*) FROM app_owner) = 1
                 AND (SELECT count(*) FROM database_owner) = 1
                 AND (SELECT count(*) FROM session_role) = 1
@@ -278,6 +491,27 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
                       AND NOT migration.rolinherit
                       AND migration.oid <> (SELECT oid FROM app_owner)
                       AND migration.oid <> (SELECT oid FROM database_owner)
+                )
+                AND EXISTS (
+                    SELECT 1
+                    FROM migrator_role migrator
+                    WHERE NOT migrator.rolsuper
+                      AND NOT migrator.rolcreaterole
+                      AND NOT migrator.rolcreatedb
+                      AND NOT migrator.rolreplication
+                      AND NOT migrator.rolbypassrls
+                      AND NOT migrator.rolinherit
+                      AND migrator.oid <> (SELECT oid FROM migration_role)
+                      AND migrator.oid <> (SELECT oid FROM app_owner)
+                      AND migrator.oid <> (SELECT oid FROM database_owner)
+                      AND CASE WHEN :legacy_rebaseline THEN NOT migrator.rolcanlogin
+                               ELSE migrator.rolcanlogin
+                          END
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM pg_auth_members membership
+                          WHERE membership.roleid = migrator.oid
+                      )
                 )
                 AND has_schema_privilege(
                     (SELECT oid FROM migration_role), 'x_extension', 'USAGE'
@@ -308,6 +542,31 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
                             (SELECT oid FROM migration_role),
                             'SET'
                         )
+                        AND NOT EXISTS (
+                            SELECT 1
+                            FROM pg_auth_members membership
+                            WHERE membership.roleid = (SELECT oid FROM app_owner)
+                        )
+                        AND (
+                            SELECT count(*)
+                            FROM pg_auth_members membership
+                            WHERE membership.member = (SELECT oid FROM migrator_role)
+                              AND membership.roleid = (SELECT oid FROM migration_role)
+                              AND NOT membership.admin_option
+                              AND NOT membership.inherit_option
+                              AND membership.set_option
+                        ) = 1
+                        AND NOT EXISTS (
+                            SELECT 1
+                            FROM pg_auth_members membership
+                            WHERE membership.roleid = (SELECT oid FROM migration_role)
+                              AND (
+                                  membership.member <> (SELECT oid FROM migrator_role)
+                                  OR membership.admin_option
+                                  OR membership.inherit_option
+                                  OR NOT membership.set_option
+                              )
+                        )
                     ELSE
                         session_user <> current_user
                         AND current_user::regrole = (SELECT oid FROM app_owner)
@@ -322,33 +581,53 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
                               AND NOT session_login.rolbypassrls
                               AND NOT session_login.rolinherit
                               AND session_login.oid <> (SELECT oid FROM database_owner)
+                              AND session_login.oid = (SELECT oid FROM migrator_role)
                         )
-                        AND EXISTS (
+                        AND (
+                            SELECT count(*)
+                            FROM pg_auth_members membership
+                            WHERE membership.roleid = (SELECT oid FROM app_owner)
+                              AND membership.member IN (
+                                  (SELECT oid FROM migration_role),
+                                  (SELECT oid FROM migrator_role)
+                              )
+                              AND NOT membership.admin_option
+                              AND NOT membership.inherit_option
+                              AND membership.set_option
+                        ) = 2
+                        AND NOT EXISTS (
                             SELECT 1
                             FROM pg_auth_members membership
-                            WHERE membership.member = (SELECT oid FROM session_role)
+                            WHERE membership.roleid = (SELECT oid FROM app_owner)
+                              AND (
+                                  membership.member NOT IN (
+                                      (SELECT oid FROM migration_role),
+                                      (SELECT oid FROM migrator_role)
+                                  )
+                                  OR membership.admin_option
+                                  OR membership.inherit_option
+                                  OR NOT membership.set_option
+                              )
+                        )
+                        AND (
+                            SELECT count(*)
+                            FROM pg_auth_members membership
+                            WHERE membership.member = (SELECT oid FROM migrator_role)
                               AND membership.roleid = (SELECT oid FROM migration_role)
                               AND NOT membership.admin_option
                               AND NOT membership.inherit_option
                               AND membership.set_option
-                        )
-                        AND EXISTS (
+                        ) = 1
+                        AND NOT EXISTS (
                             SELECT 1
                             FROM pg_auth_members membership
-                            WHERE membership.member = (SELECT oid FROM session_role)
-                              AND membership.roleid = (SELECT oid FROM app_owner)
-                              AND NOT membership.admin_option
-                              AND NOT membership.inherit_option
-                              AND membership.set_option
-                        )
-                        AND EXISTS (
-                            SELECT 1
-                            FROM pg_auth_members membership
-                            WHERE membership.member = (SELECT oid FROM migration_role)
-                              AND membership.roleid = (SELECT oid FROM app_owner)
-                              AND NOT membership.admin_option
-                              AND NOT membership.inherit_option
-                              AND membership.set_option
+                            WHERE membership.roleid = (SELECT oid FROM migration_role)
+                              AND (
+                                  membership.member <> (SELECT oid FROM migrator_role)
+                                  OR membership.admin_option
+                                  OR membership.inherit_option
+                                  OR NOT membership.set_option
+                              )
                         )
                         AND NOT pg_has_role(
                             (SELECT oid FROM session_role),
@@ -361,6 +640,7 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
         ),
         {
             "migration_owner": migration_owner,
+            "migrator_login": migrator_login,
             "legacy_rebaseline": legacy_rebaseline,
         },
     )
@@ -369,7 +649,12 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
 
     # The identifier has already been constrained to a portable PostgreSQL role name.
     op.execute(f'SET LOCAL ROLE "{migration_owner}"')
-    if bind.scalar(sa.text("SELECT current_user = :migration_owner"), {"migration_owner": migration_owner}) is not True:
+    if (
+        bind.scalar(
+            sa.text("SELECT current_user = :migration_owner"), {"migration_owner": migration_owner}
+        )
+        is not True
+    ):
         raise RuntimeError("0101 could not activate the migration owner")
     return bind.scalar(
         sa.text(
@@ -390,7 +675,10 @@ def _restore_app_owner(app_owner: str | None) -> None:
     if _ROLE_IDENTIFIER.fullmatch(app_owner) is None:
         raise RuntimeError("0101 app schema owner is invalid")
     op.execute(f'SET LOCAL ROLE "{app_owner}"')
-    if op.get_bind().scalar(sa.text("SELECT current_user = :app_owner"), {"app_owner": app_owner}) is not True:
+    if (
+        op.get_bind().scalar(sa.text("SELECT current_user = :app_owner"), {"app_owner": app_owner})
+        is not True
+    ):
         raise RuntimeError("0101 could not restore the app schema owner")
 
 
@@ -825,11 +1113,12 @@ def _assert_m05_acl(bind: sa.Connection) -> None:
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    _assert_legacy_rebaseline_handoff(bind)
     _install_location_audit_purpose_contract()
     _install_user_consent_event_history()
     _advance_boundary_contract()
     _replace_admin_audit_guard()
-    bind = op.get_bind()
     app_owner = _activate_m05_migration_owner(bind)
     # named ops default ACL까지 검사하려면 schema를 먼저 확보해야 한다. 이 revision은
     # partial legacy M05 object를 덮어쓰지 않고 transaction 전체를 fail-close한다.

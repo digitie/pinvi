@@ -752,6 +752,7 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
     migration_owner = f"m05_migration_{suffix}"
     migrator_login = f"m05_migrator_{suffix}"
     runtime_role = f"m05_runtime_{suffix}"
+    stale_role = f"m05_stale_{suffix}"
     parsed = make_url(_database_url)
     maintenance_url = parsed.set(database="postgres").render_as_string(hide_password=False)
     migrator_url = _role_database_url(
@@ -765,13 +766,13 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
     try:
         for statement in (
             f"CREATE ROLE \"{fence_role}\" LOGIN NOINHERIT PASSWORD '{_ROLE_PASSWORD}';",
-            f"CREATE ROLE \"{app_owner}\" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE "
+            f'CREATE ROLE "{app_owner}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE '
             "NOREPLICATION NOBYPASSRLS NOINHERIT;",
-            f"CREATE ROLE \"{migration_owner}\" NOLOGIN NOSUPERUSER NOCREATEDB "
+            f'CREATE ROLE "{migration_owner}" NOLOGIN NOSUPERUSER NOCREATEDB '
             "NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;",
-            f"CREATE ROLE \"{migrator_login}\" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE "
+            f'CREATE ROLE "{migrator_login}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE '
             f"NOREPLICATION NOBYPASSRLS NOINHERIT PASSWORD '{_ROLE_PASSWORD}';",
-            f"CREATE ROLE \"{runtime_role}\" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE "
+            f'CREATE ROLE "{runtime_role}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE '
             f"NOREPLICATION NOBYPASSRLS NOINHERIT PASSWORD '{_ROLE_PASSWORD}';",
         ):
             await _execute_autocommit(maintenance_url, statement)
@@ -780,31 +781,33 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
             f'CREATE DATABASE "{database_name}" OWNER "{fence_role}";',
         )
         for statement in (
-            f'GRANT "{app_owner}" TO "{migration_owner}" '
-            "WITH INHERIT FALSE, SET TRUE;",
-            f'GRANT "{app_owner}" TO "{migrator_login}" '
-            "WITH INHERIT FALSE, SET TRUE;",
-            f'GRANT "{migration_owner}" TO "{migrator_login}" '
-            "WITH INHERIT FALSE, SET TRUE;",
+            f'GRANT "{app_owner}" TO "{migration_owner}" WITH INHERIT FALSE, SET TRUE;',
+            f'GRANT "{app_owner}" TO "{migrator_login}" WITH INHERIT FALSE, SET TRUE;',
+            f'GRANT "{migration_owner}" TO "{migrator_login}" WITH INHERIT FALSE, SET TRUE;',
             f'ALTER ROLE "{migrator_login}" IN DATABASE "{database_name}" '
             f'SET ROLE TO "{app_owner}";',
             f'REVOKE CONNECT ON DATABASE "{database_name}" FROM PUBLIC;',
-            f'GRANT CONNECT ON DATABASE "{database_name}" TO "{runtime_role}", '
-            f'"{migrator_login}";',
-            f'GRANT CREATE ON DATABASE "{database_name}" TO "{app_owner}", '
-            f'"{migration_owner}";',
+            f'GRANT CONNECT ON DATABASE "{database_name}" TO "{runtime_role}", "{migrator_login}";',
+            f'GRANT CREATE ON DATABASE "{database_name}" TO "{app_owner}", "{migration_owner}";',
             f'CREATE SCHEMA app AUTHORIZATION "{app_owner}";',
             "CREATE SCHEMA x_extension;",
             "CREATE EXTENSION pgcrypto SCHEMA x_extension;",
             "CREATE EXTENSION pg_trgm SCHEMA x_extension;",
             "CREATE EXTENSION citext SCHEMA x_extension;",
             "REVOKE ALL ON SCHEMA x_extension FROM PUBLIC;",
+            "REVOKE ALL ON FUNCTION x_extension.digest(bytea, text) FROM PUBLIC;",
             f'GRANT USAGE ON SCHEMA x_extension TO "{app_owner}", '
+            f'"{migration_owner}", "{runtime_role}";',
+            f'GRANT EXECUTE ON FUNCTION x_extension.digest(bytea, text) TO "{app_owner}", '
             f'"{migration_owner}", "{runtime_role}";',
         ):
             await _execute_autocommit(target_url, statement)
 
-        role_environment = {"PINVI_MIGRATION_OWNER": migration_owner}
+        role_environment = {
+            "PINVI_ENVIRONMENT": "staging",
+            "PINVI_MIGRATION_OWNER": migration_owner,
+            "PINVI_MIGRATOR_DB_USER": migrator_login,
+        }
         baseline = _alembic(
             migrator_url,
             "upgrade",
@@ -812,6 +815,27 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
             environment=role_environment,
         )
         assert baseline.returncode == 0, baseline.stderr
+        await _execute_autocommit(
+            maintenance_url,
+            f"CREATE ROLE \"{stale_role}\" LOGIN NOINHERIT PASSWORD '{_ROLE_PASSWORD}';",
+        )
+        await _execute_autocommit(
+            target_url,
+            f'GRANT "{app_owner}" TO "{stale_role}" WITH INHERIT FALSE, SET TRUE;',
+        )
+        stale_membership = _alembic(
+            migrator_url,
+            "upgrade",
+            "20260824_0101",
+            check=False,
+            environment=role_environment,
+        )
+        assert stale_membership.returncode != 0
+        assert "0101 migration owner role contract is not satisfied" in (
+            stale_membership.stdout + stale_membership.stderr
+        )
+        await _execute_autocommit(target_url, f'REVOKE "{app_owner}" FROM "{stale_role}";')
+        await _execute_autocommit(maintenance_url, f'DROP ROLE "{stale_role}";')
         activation = _alembic(
             migrator_url,
             "upgrade",
@@ -861,6 +885,11 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
                                   AND NOT has_schema_privilege(
                                       role_row.oid, 'x_extension', 'CREATE'
                                   )
+                                  AND has_function_privilege(
+                                      role_row.oid,
+                                      'x_extension.digest(bytea,text)'::regprocedure,
+                                      'EXECUTE'
+                                  )
                             )
                             AND EXISTS (
                                 SELECT 1 FROM migrator role_row
@@ -889,6 +918,10 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
                                             (SELECT oid FROM schema_owner),
                                             (SELECT oid FROM migration_owner)
                                         )
+                                  )
+                                  AND NOT EXISTS (
+                                      SELECT 1 FROM pg_auth_members membership
+                                      WHERE membership.roleid = role_row.oid
                                   )
                             )
                             AND EXISTS (
@@ -962,67 +995,94 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
         await _drop_database(maintenance_url, target_url)
         await _execute_autocommit(
             maintenance_url,
-            f'DROP ROLE IF EXISTS "{runtime_role}", "{migrator_login}", '
+            f'DROP ROLE IF EXISTS "{stale_role}", "{runtime_role}", "{migrator_login}", '
             f'"{migration_owner}", "{app_owner}", "{fence_role}";',
         )
 
 
 @pytest.mark.asyncio
-async def test_0101_legacy_rebaseline_profile_switches_only_m05_objects(
+async def test_0101_requires_owner_roles_in_managed_environment(
     _database_url: str,
 ) -> None:
-    """0061 rebaseline은 기존 app owner를 보존하고 M05 object만 새 owner로 만든다."""
+    """staging/production은 M05 owner role 입력 누락을 transaction 전체에서 거부한다."""
 
-    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_legacy_owner")
-    migration_owner = f"m05_legacy_migration_{uuid.uuid4().hex[:12]}"
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_owner_required")
     try:
         baseline = _alembic(target_url, "upgrade", "20260824_0100")
         assert baseline.returncode == 0, baseline.stderr
-        await _execute_autocommit(
-            maintenance_url,
-            f"CREATE ROLE \"{migration_owner}\" NOLOGIN NOSUPERUSER NOCREATEDB "
-            "NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;",
-        )
-        for statement in (
-            f'GRANT CREATE ON DATABASE "{make_url(target_url).database}" TO "{migration_owner}";',
-            f'GRANT USAGE ON SCHEMA x_extension TO "{migration_owner}";',
-        ):
-            await _execute_autocommit(target_url, statement)
 
-        activation = _alembic(
+        failed = _alembic(
             target_url,
             "upgrade",
             "20260824_0101",
             check=False,
             environment={
-                "PINVI_MIGRATION_OWNER": migration_owner,
-                "PINVI_M05_LEGACY_REBASELINE": "1",
+                "PINVI_ENVIRONMENT": "staging",
+                "PINVI_M05_LEGACY_REBASELINE": "0",
+                "PINVI_MIGRATION_OWNER": None,
+                "PINVI_MIGRATOR_DB_USER": None,
             },
         )
-        assert activation.returncode == 0, activation.stderr
+        assert failed.returncode != 0
+        assert "0101 managed migration requires migration and migrator roles" in (
+            failed.stdout + failed.stderr
+        )
 
         engine = create_async_engine(target_url, poolclass=NullPool)
         try:
             async with engine.connect() as connection:
-                assert await connection.scalar(
-                    text(
-                        "SELECT relation.relowner::regrole::text "
-                        "FROM pg_class relation "
-                        "WHERE relation.oid = 'app.user_consent_events'::regclass"
-                    )
-                ) == make_url(target_url).username
-                assert await connection.scalar(
-                    text(
-                        "SELECT relation.relowner::regrole::text "
-                        "FROM pg_class relation "
-                        "WHERE relation.oid = 'ops.m05_hotswap_release_receipts'::regclass"
-                    )
-                ) == migration_owner
+                assert (
+                    await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
+                    == "20260824_0100"
+                )
         finally:
             await engine.dispose()
     finally:
         await _drop_database(maintenance_url, target_url)
-        await _execute_autocommit(
-            maintenance_url,
-            f'DROP ROLE IF EXISTS "{migration_owner}";',
+
+
+@pytest.mark.asyncio
+async def test_0101_legacy_rebaseline_profile_requires_root_owned_handoff(
+    _database_url: str,
+) -> None:
+    """legacy profile은 root-owned 0061→0100 인수증 없이는 DDL 전에 거부한다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_legacy_owner")
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        failed = _alembic(
+            target_url,
+            "upgrade",
+            "20260824_0101",
+            check=False,
+            environment={
+                "PINVI_ENVIRONMENT": "staging",
+                "PINVI_M05_LEGACY_REBASELINE": "1",
+                "PINVI_MIGRATION_OWNER": "pinvi_migration_owner",
+                "PINVI_MIGRATOR_DB_USER": "pinvi_migrator",
+                "PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH": None,
+            },
         )
+        assert failed.returncode != 0
+        assert "0101 legacy rebaseline requires an applied root-owned receipt" in (
+            failed.stdout + failed.stderr
+        )
+
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.connect() as connection:
+                assert (
+                    await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
+                    == "20260824_0100"
+                )
+                assert (
+                    await connection.scalar(
+                        text("SELECT to_regclass('ops.m05_hotswap_release_receipts')")
+                    )
+                    is None
+                )
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)

@@ -59,9 +59,7 @@ def test_0101_consent_backfill_and_deploy_runners_drain_legacy_writers() -> None
         migrate = runner[
             runner.index("migrate() {") : runner.index("bootstrap_credential_file() {")
         ]
-        assert migrate.index("drain_runtime_writers") < migrate.index(
-            "app-migrator pinvi-admin-bootstrap"
-        )
+        assert migrate.index("drain_runtime_writers") < migrate.index("run_admin_bootstrap")
         assert "compose stop app-api" in runner
 
     assert "compose --profile etl stop app-dagster" in deploy

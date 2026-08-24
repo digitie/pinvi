@@ -35,8 +35,10 @@ services:
       PINVI_MIGRATION_OWNER: ${PINVI_MIGRATION_OWNER:-pinvi_migration_owner}
       PINVI_MIGRATOR_DB_USER: ${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}
       PINVI_MIGRATOR_DB_PASSWORD: ${PINVI_MIGRATOR_DB_PASSWORD:-pinvi_app_smoke}
-      # 0061→0100→0101의 승인된 root-only 전환에서만 1이다. 일반 deploy는 항상 0.
-      PINVI_M05_LEGACY_REBASELINE: ${PINVI_M05_LEGACY_REBASELINE:-0}
+      # Compose의 보통 재기동은 migrator를 절대 열지 않는다. migration wrapper만 -e로 0을 준다.
+      PINVI_MIGRATOR_DISABLE_LOGIN: "1"
+      # legacy profile은 root-only service로만 실행한다. 일반 role bootstrap은 legacy ownership을 받지 않는다.
+      PINVI_M05_LEGACY_REBASELINE: "0"
     volumes:
       - ./postgres/bootstrap-pinvi-runtime-role.sh:/bootstrap/bootstrap-pinvi-runtime-role.sh:ro
     entrypoint: ["/bin/sh", "/bootstrap/bootstrap-pinvi-runtime-role.sh"]
@@ -290,10 +292,29 @@ services:
       # This command only owns schema migration/admin bootstrap. It never serves traffic.
       # The non-inheriting login defaults to app schema owner, then 0101 switches its
       # M05 receipt DDL to PINVI_MIGRATION_OWNER and restores the app owner for versioning.
-      PINVI_ENVIRONMENT: smoke
+      PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
       PINVI_DATABASE_URL: ${PINVI_MIGRATOR_DATABASE_URL:-postgresql+asyncpg://pinvi_migrator:pinvi_app_smoke@app-postgres:5432/pinvi}
       PINVI_MIGRATION_OWNER: ${PINVI_MIGRATION_OWNER:-pinvi_migration_owner}
-      PINVI_M05_LEGACY_REBASELINE: ${PINVI_M05_LEGACY_REBASELINE:-0}
+      PINVI_MIGRATOR_DB_USER: ${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}
+      PINVI_M05_LEGACY_REBASELINE: "0"
+
+  # 0061→0100→0101은 이 별도 profile에서만 root/session owner로 수행한다.
+  # ordinary app-migrator와 app-api에는 root URL을 전달하지 않는다.
+  app-legacy-rebaseline-migrator:
+    profiles: [legacy-rebaseline]
+    image: ${PINVI_API_IMAGE:-pinvi-api:local}
+    user: "0:0"
+    depends_on:
+      app-postgres:
+        condition: service_healthy
+    environment:
+      PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
+      # wrapper가 legacy를 명시하지 않은 상태에서 직접 실행하면 인증 실패로 닫힌다.
+      PINVI_DATABASE_URL: ${PINVI_LEGACY_REBASELINE_DATABASE_URL:-postgresql+asyncpg://invalid:invalid@app-postgres:5432/pinvi}
+      PINVI_MIGRATION_OWNER: ${PINVI_MIGRATION_OWNER:-pinvi_migration_owner}
+      PINVI_MIGRATOR_DB_USER: ${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}
+      PINVI_M05_LEGACY_REBASELINE: "1"
+      PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH: /run/pinvi/m05/legacy-rebaseline-receipt.json
 
   app-web:
     build:

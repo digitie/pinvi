@@ -18,7 +18,7 @@ set -eu
 : "${PINVI_MIGRATOR_DB_PASSWORD:?PINVI_MIGRATOR_DB_PASSWORD is required}"
 
 PINVI_M05_LEGACY_REBASELINE="${PINVI_M05_LEGACY_REBASELINE:-0}"
-PINVI_MIGRATOR_DISABLE_LOGIN="${PINVI_MIGRATOR_DISABLE_LOGIN:-0}"
+PINVI_MIGRATOR_DISABLE_LOGIN="${PINVI_MIGRATOR_DISABLE_LOGIN:-1}"
 
 for role_name in \
   "${POSTGRES_USER}" \
@@ -134,6 +134,7 @@ psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host=app-postgres \
   --set="migrator_role=${PINVI_MIGRATOR_DB_USER}" \
   --set="migrator_password=${PINVI_MIGRATOR_DB_PASSWORD}" \
   --set="migrator_login_attribute=${migrator_login_attribute}" \
+  --set="migrator_disabled=${PINVI_MIGRATOR_DISABLE_LOGIN}" \
   --set="database_name=${POSTGRES_DB}" \
   >/dev/null <<'SQL'
 SELECT format(
@@ -196,7 +197,19 @@ SELECT format('ALTER ROLE %I IN DATABASE %I SET ROLE TO %I',
               :'migrator_role', :'database_name', :'schema_owner')
 \gexec
 REVOKE CONNECT ON DATABASE :"database_name" FROM PUBLIC;
-GRANT CONNECT ON DATABASE :"database_name" TO :"app_role", :"migrator_role";
+GRANT CONNECT ON DATABASE :"database_name" TO :"app_role";
+SELECT format('GRANT CONNECT ON DATABASE %I TO %I', :'database_name', :'migrator_role')
+WHERE :'migrator_disabled' = '0'
+\gexec
+SELECT format('REVOKE CONNECT ON DATABASE %I FROM %I', :'database_name', :'migrator_role')
+WHERE :'migrator_disabled' = '1'
+\gexec
+SELECT pg_terminate_backend(activity.pid, 5000)
+FROM pg_stat_activity activity
+JOIN pg_roles migrator ON migrator.oid = activity.usesysid
+WHERE :'migrator_disabled' = '1'
+  AND migrator.rolname = :'migrator_role'
+  AND activity.pid <> pg_backend_pid();
 GRANT CREATE ON DATABASE :"database_name" TO :"schema_owner", :"migration_owner";
 SELECT format('CREATE SCHEMA IF NOT EXISTS x_extension AUTHORIZATION %I', :'bootstrap_owner')
 \gexec
@@ -207,6 +220,9 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA x_extension;
 CREATE EXTENSION IF NOT EXISTS citext SCHEMA x_extension;
 REVOKE ALL ON SCHEMA x_extension FROM PUBLIC;
 GRANT USAGE ON SCHEMA x_extension TO :"app_role", :"schema_owner", :"migration_owner";
+REVOKE ALL ON FUNCTION x_extension.digest(bytea, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION x_extension.digest(bytea, text)
+  TO :"app_role", :"schema_owner", :"migration_owner";
 SQL
 
 if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then
@@ -327,6 +343,31 @@ SELECT
               SELECT 1 FROM pg_auth_members membership
               WHERE membership.member = owner.oid
           )
+          AND (
+              SELECT count(*)
+              FROM pg_auth_members membership
+              WHERE membership.roleid = owner.oid
+                AND membership.member IN (
+                    (SELECT oid FROM migration_owner),
+                    (SELECT oid FROM migrator_role)
+                )
+                AND NOT membership.admin_option
+                AND NOT membership.inherit_option
+                AND membership.set_option
+          ) = 2
+          AND NOT EXISTS (
+              SELECT 1 FROM pg_auth_members membership
+              WHERE membership.roleid = owner.oid
+                AND (
+                    membership.member NOT IN (
+                        (SELECT oid FROM migration_owner),
+                        (SELECT oid FROM migrator_role)
+                    )
+                    OR membership.admin_option
+                    OR membership.inherit_option
+                    OR NOT membership.set_option
+                )
+          )
     )
     AND EXISTS (
         SELECT 1 FROM migration_owner owner
@@ -355,6 +396,25 @@ SELECT
               WHERE membership.member = owner.oid
                 AND membership.roleid <> (SELECT oid FROM schema_owner)
           )
+          AND (
+              SELECT count(*)
+              FROM pg_auth_members membership
+              WHERE membership.member = (SELECT oid FROM migrator_role)
+                AND membership.roleid = owner.oid
+                AND NOT membership.admin_option
+                AND NOT membership.inherit_option
+                AND membership.set_option
+          ) = 1
+          AND NOT EXISTS (
+              SELECT 1 FROM pg_auth_members membership
+              WHERE membership.roleid = owner.oid
+                AND (
+                    membership.member <> (SELECT oid FROM migrator_role)
+                    OR membership.admin_option
+                    OR membership.inherit_option
+                    OR NOT membership.set_option
+                )
+          )
           AND NOT EXISTS (
               SELECT 1 FROM pg_default_acl default_acl
               WHERE default_acl.defaclrole = owner.oid
@@ -371,9 +431,26 @@ SELECT
           AND NOT migrator.rolbypassrls
           AND NOT migrator.rolinherit
           AND migrator.oid <> (SELECT oid FROM database_owner)
-          AND has_database_privilege(migrator.oid, current_database(), 'CONNECT')
+          AND (
+              (:'migrator_disabled' = '0'
+                AND has_database_privilege(migrator.oid, current_database(), 'CONNECT'))
+              OR (
+                  :'migrator_disabled' = '1'
+                  AND NOT has_database_privilege(migrator.oid, current_database(), 'CONNECT')
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM pg_stat_activity activity
+                      WHERE activity.usesysid = migrator.oid
+                        AND activity.pid <> pg_backend_pid()
+                  )
+              )
+          )
           AND NOT has_database_privilege(migrator.oid, current_database(), 'CREATE')
           AND NOT pg_has_role(migrator.oid, (SELECT oid FROM database_owner), 'MEMBER')
+          AND NOT EXISTS (
+              SELECT 1 FROM pg_auth_members membership
+              WHERE membership.roleid = migrator.oid
+          )
           AND (
               SELECT count(*)
               FROM pg_auth_members membership

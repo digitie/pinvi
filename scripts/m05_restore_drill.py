@@ -1493,9 +1493,9 @@ BEGIN
   END IF;
 END
 $m05$;
+{disable_provisioner_sql}
 DROP DATABASE IF EXISTS {quoted_database} WITH (FORCE);
 CREATE DATABASE {quoted_database} WITH OWNER {quoted_fence_role} TEMPLATE {quoted_template};
-{disable_provisioner_sql}
 GRANT CONNECT ON DATABASE {quoted_database} TO {quoted_role};
 GRANT CONNECT, CREATE ON DATABASE {quoted_database} TO {quoted_hotswap_role};
 DO $m05$
@@ -1655,6 +1655,10 @@ def _source_revision(root: Path) -> str:
 def _run_drill(args: argparse.Namespace, *, _lease_held: bool = False) -> int:
     output: Path = args.output
     environment = os.environ.get("PINVI_ENVIRONMENT", "")
+    if environment in {"staging", "production"} and not args.require_root_owned:
+        raise RestoreDrillError(
+            "staging/production restore drill requires a root-owned target lease"
+        )
     _secure_output_parent(output, require_root_owned=args.require_root_owned)
     if args.require_root_owned and os.environ.get("PINVI_M05_RESTORE_TEST_MODE") == "1":
         raise RestoreDrillError("restore test mode cannot produce root-owned evidence")

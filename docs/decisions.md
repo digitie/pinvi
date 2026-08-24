@@ -3105,12 +3105,16 @@ location audit purpose와 동의 이벤트/backfill을 `0062`·`0063`·`0064`에
   받고 database 기본 role은 app schema owner로 고정한다. `0101`은 기존 app DDL을 owner로 끝낸
   뒤 M05 object만 `SET LOCAL ROLE migration_owner`로 만들고 Alembic version row 전에는 app owner로
   복귀한다. migration owner는 database `CREATE`, `x_extension` `USAGE`와 필요한 function
-  `EXECUTE`만 받으며 runtime/fence/hotswap의 membership·CONNECT surface를 갖지 않는다. 성공한
-  migration 뒤 wrapper는 migrator login을 `NOLOGIN`으로 봉인한다.
+  `EXECUTE`만 받으며 runtime/fence/hotswap의 membership·CONNECT surface를 갖지 않는다. 일반
+  Compose 재기동은 migrator를 처음부터 `NOLOGIN`·database `CONNECT` 없음으로 둔다. wrapper는
+  migration 직전에만 이를 열고 dependency 재실행 없이 one-shot을 수행하며, 성공·실패 뒤 모두
+  `CONNECT` revoke·기존 migrator backend 종료·`NOLOGIN` 검증으로 다시 봉인한다.
 - 현재 N150 `0061` DB는 rebaseline에서 기존 app object owner를 바꾸지 않는다. fresh backup·read-only
   preflight·별도 운영 승인이 모두 끝난 한 번의 root-only legacy profile에서만 기존 app owner가 app
   portion을 수행하고 같은 transaction에서 M05 부분만 migration owner로 전환한다. 이 profile은
-  일반 deploy에 사용하지 않는다.
+  일반 deploy에 사용하지 않는다. legacy는 일반 migrator URL을 재사용하지 않고 별도 Compose profile의
+  root-only URL로만 실행한다. `0101` 시작 전에는 rebaseline helper가 만든 root-owned `0600` applied
+  receipt를 read-only로 전달해 `0061` preflight의 DB identity와 현재 `0100` handoff row를 대조한다.
 - M05 activation은 이 revision 전환만으로 켜지지 않으며 계속 `false`다.
 
 ### 근거
