@@ -1410,10 +1410,23 @@ def _run_drill(args: argparse.Namespace) -> int:
                     "PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER": str(
                         target_identity_before_restore["system_identifier"]
                     ),
-                "PINVI_RESTORE_EXPECTED_HOSTADDR": str(
-                    target_identity_before_restore["hostaddr"]
-                ),
+                    "PINVI_RESTORE_EXPECTED_HOSTADDR": str(
+                        target_identity_before_restore["hostaddr"]
+                    ),
                     "PINVI_RESTORE_EXPECTED_PORT": str(target_identity_before_restore["port"]),
+                    "PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME": str(
+                        source_identity_pre["database"]
+                    ),
+                    "PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID": str(
+                        source_identity_pre["database_oid"]
+                    ),
+                    "PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER": str(
+                        source_identity_pre["system_identifier"]
+                    ),
+                    "PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR": str(
+                        source_identity_pre["hostaddr"]
+                    ),
+                    "PINVI_RESTORE_EXPECTED_SOURCE_PORT": str(source_identity_pre["port"]),
                     "PINVI_RESTORE_TRUSTED_BACKUP_DIR": str(temporary_dir),
                 }
             )
@@ -1431,6 +1444,7 @@ def _run_drill(args: argparse.Namespace) -> int:
         ]
         if os.environ.get("PINVI_M05_RESTORE_TEST_MODE") != "1":
             required_markers.append("RESTORE_TARGET_BINDING=verified")
+            required_markers.append("RESTORE_SOURCE_BINDING=verified")
         if any(marker not in restore.stdout for marker in required_markers):
             raise RestoreDrillError("restore staging runner did not produce all required markers")
 

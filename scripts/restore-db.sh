@@ -22,6 +22,11 @@ if [[ "${TEST_MODE}" != "1" && ( "${PINVI_ENVIRONMENT:-}" == "staging" || "${PIN
 fi
 TRUSTED_SNAPSHOT_CHECKSUM=""
 TRUSTED_SNAPSHOT_LIST_SHA256=""
+TRUSTED_SOURCE_DATABASE=""
+TRUSTED_SOURCE_DATABASE_OID=""
+TRUSTED_SOURCE_SYSTEM_IDENTIFIER=""
+TRUSTED_SOURCE_HOSTADDR=""
+TRUSTED_SOURCE_PORT=""
 
 if [[ "${TEST_MODE}" != "0" && "${TEST_MODE}" != "1" ]]; then
   echo "PINVI_M05_RESTORE_TEST_MODE must be 0 or 1" >&2
@@ -146,9 +151,47 @@ assert_trusted_snapshot_provenance() {
   fi
   TRUSTED_SNAPSHOT_CHECKSUM="${manifest[dump_sha256]}"
   TRUSTED_SNAPSHOT_LIST_SHA256="${manifest[pg_restore_list_sha256]}"
+  TRUSTED_SOURCE_DATABASE="${manifest[source_database]}"
+  TRUSTED_SOURCE_DATABASE_OID="${manifest[source_database_oid]}"
+  TRUSTED_SOURCE_SYSTEM_IDENTIFIER="${manifest[source_system_identifier]}"
+  TRUSTED_SOURCE_HOSTADDR="${manifest[source_hostaddr]}"
+  TRUSTED_SOURCE_PORT="${manifest[source_port]}"
 }
 
 assert_trusted_snapshot_provenance
+
+assert_trusted_snapshot_matches_expected_source() {
+  if [[ "${STRICT_RESTORE_ENVIRONMENT}" != "1" ]]; then
+    return 0
+  fi
+  for variable in PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME \
+    PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID \
+    PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER \
+    PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR PINVI_RESTORE_EXPECTED_SOURCE_PORT; do
+    if [[ -z "${!variable:-}" ]]; then
+      echo "${variable} is required for a strict restore" >&2
+      exit 3
+    fi
+  done
+  if [[ ! "${PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ || \
+    ! "${PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID}" =~ ^[0-9]+$ || \
+    ! "${PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER}" =~ ^[0-9]+$ || \
+    ! "${PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR}" =~ ^[0-9A-Fa-f:.]+$ || \
+    ! "${PINVI_RESTORE_EXPECTED_SOURCE_PORT}" =~ ^[0-9]+$ ]]; then
+    echo "strict restore expected source identity contains unsafe values" >&2
+    exit 3
+  fi
+  local manifest_identity expected_identity
+  manifest_identity="${TRUSTED_SOURCE_DATABASE}|${TRUSTED_SOURCE_DATABASE_OID}|${TRUSTED_SOURCE_SYSTEM_IDENTIFIER}|${TRUSTED_SOURCE_HOSTADDR}|${TRUSTED_SOURCE_PORT}"
+  expected_identity="${PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME}|${PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID}|${PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER}|${PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR}|${PINVI_RESTORE_EXPECTED_SOURCE_PORT}"
+  if [[ "${manifest_identity}" != "${expected_identity}" ]]; then
+    echo "trusted snapshot source identity does not match the expected source" >&2
+    exit 3
+  fi
+  printf '%s\n' "RESTORE_SOURCE_BINDING=verified"
+}
+
+assert_trusted_snapshot_matches_expected_source
 
 if [[ -L "${BACKUP_FILE}.sha256" || ! -f "${BACKUP_FILE}.sha256" ]]; then
   echo "backup checksum sidecar is required as a regular file" >&2
