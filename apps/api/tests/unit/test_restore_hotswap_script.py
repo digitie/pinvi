@@ -23,6 +23,8 @@ def test_restore_hotswap_rejects_session_and_lock_control_in_dump_sql() -> None:
     assert "execute_fence_sql_file" in source
     assert "PINVI_RESTORE_FENCE_DATABASE_URL" in source
     assert "database fence URL must be a dedicated non-superuser target owner" in source
+    assert "FENCE_EXECUTOR_ROLE" in source
+    assert "login.rolname <> '${FENCE_EXECUTOR_ROLE}'" in source
     assert "SET session_replication_role = replica" not in source
 
 

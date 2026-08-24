@@ -40,6 +40,7 @@ WRITE_FENCE_ACTIVE=0
 PUBLIC_CONNECT_REVOKED=0
 FENCED_CONNECT_ROLES=""
 CONNECT_RESTORE_GRANTS=""
+FENCE_EXECUTOR_ROLE=""
 TEST_MODE="${PINVI_M05_RESTORE_TEST_MODE:-0}"
 APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}"
 declare -a WRITE_ROLES=()
@@ -724,6 +725,7 @@ FROM pg_roles login
 JOIN role_closure closure ON closure.login_oid = login.oid
 JOIN pg_roles effective ON effective.oid = closure.role_oid
 WHERE login.rolcanlogin
+  AND login.rolname <> '${FENCE_EXECUTOR_ROLE}'
   AND has_database_privilege(login.rolname, current_database(), 'CONNECT')
   AND (
     effective.rolsuper
@@ -993,6 +995,7 @@ BEGIN
   JOIN pg_roles effective ON effective.oid = closure.role_oid
   WHERE login.rolcanlogin
     AND login.rolname <> current_user
+    AND login.rolname <> '${FENCE_EXECUTOR_ROLE}'
     AND has_database_privilege(login.rolname, current_database(), 'CONNECT')
     AND (
       effective.rolsuper
@@ -1183,13 +1186,20 @@ assert_fence_executor_safe() {
   if [[ "${TEST_MODE}" == "1" ]]; then
     return 0
   fi
-  local executor_user fence_safe
+  local executor_user fence_executor_user fence_safe
   executor_user="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -tAc \
     "SELECT current_user" | tr -d '[:space:]')"
   if [[ ! "${executor_user}" =~ ^[a-z_][a-z0-9_]*$ ]]; then
     phase draining failed "restore executor identity is invalid"
     exit 3
   fi
+  fence_executor_user="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${FENCE_DATABASE_URL}" -tAc \
+    "SELECT current_user" | tr -d '[:space:]')"
+  if [[ ! "${fence_executor_user}" =~ ^[a-z_][a-z0-9_]*$ ]]; then
+    phase draining failed "database fence executor identity is invalid"
+    exit 3
+  fi
+  FENCE_EXECUTOR_ROLE="${fence_executor_user}"
   fence_safe="$(${PSQL_BIN} --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${FENCE_DATABASE_URL}" -tAc "
 SELECT EXISTS (
   SELECT 1
