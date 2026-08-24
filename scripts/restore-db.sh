@@ -118,7 +118,7 @@ assert_trusted_snapshot_provenance() {
   declare -A manifest=()
   while IFS='=' read -r key value || [[ -n "${key:-}" ]]; do
     case "${key}" in
-      version|dump_filename|schema|dump_sha256|pg_restore_list_sha256|source_database|source_database_oid|source_system_identifier|source_hostaddr|source_port) ;;
+      version|dump_filename|schema|dump_sha256|pg_restore_list_sha256|source_database|source_database_oid|source_system_identifier|source_hostaddr|source_port|created_at) ;;
       *)
         echo "trusted snapshot manifest has an invalid field" >&2
         exit 3
@@ -147,6 +147,11 @@ assert_trusted_snapshot_provenance() {
     ! "${manifest[source_hostaddr]}" =~ ^[0-9A-Fa-f:.]+$ ||
     ! "${manifest[source_port]}" =~ ^[0-9]+$ ]]; then
     echo "trusted snapshot manifest values are invalid" >&2
+    exit 3
+  fi
+  if [[ -v "manifest[created_at]" &&
+    ! "${manifest[created_at]}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+    echo "trusted snapshot manifest created_at is invalid" >&2
     exit 3
   fi
   TRUSTED_SNAPSHOT_CHECKSUM="${manifest[dump_sha256]}"

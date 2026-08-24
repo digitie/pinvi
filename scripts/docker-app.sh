@@ -144,12 +144,18 @@ up_deps() {
   compose run --rm app-db-runtime-role
 }
 
+drain_runtime_writers() {
+  log "stopping API writers before migration"
+  compose stop app-api
+}
+
 migrate() {
   require_docker
   require_python
   pinvi_verify_runtime_image_provenance app-api
   local credential_file
   credential_file="$(bootstrap_credential_file)"
+  drain_runtime_writers
   local attempt
   for attempt in 1 2 3 4 5; do
     log "running Pinvi admin bootstrap (attempt ${attempt}/5)"

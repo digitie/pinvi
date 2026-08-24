@@ -30,6 +30,8 @@ RESTORE_SCHEMA="$3"
 PREVIOUS_SCHEMA="$4"
 DATABASE_URL="${PINVI_RESTORE_DATABASE_URL:-${PINVI_DATABASE_URL:-}}"
 FENCE_DATABASE_URL="${PINVI_RESTORE_FENCE_DATABASE_URL:-${DATABASE_URL}}"
+OPERATION_LEASE_FD="${PINVI_M05_OPERATION_LEASE_FD:-}"
+OPERATION_LEASE_TOKEN="${PINVI_M05_OPERATION_LEASE_TOKEN:-}"
 SOURCE_SCHEMA="${PINVI_BACKUP_SCHEMA:-app}"
 TMP_DIR=""
 LOCK_HOLDER_PID=""
@@ -129,6 +131,31 @@ if [[ "${PINVI_RESTORE_HOTSWAP_EXECUTE:-0}" == "1" && "${TEST_MODE}" != "1" &&
   exit 3
 fi
 
+assert_operation_lease() {
+  if [[ "${STRICT_RESTORE_ENVIRONMENT}" != "1" ]]; then
+    return 0
+  fi
+  if [[ ! "${OPERATION_LEASE_TOKEN}" =~ ^m05-v1-[0-9a-f]{64}$ ||
+    ! "${OPERATION_LEASE_FD}" =~ ^[0-9]+$ ||
+    ! -e "/proc/self/fd/${OPERATION_LEASE_FD}" ]]; then
+    phase preparing failed "strict hotswap requires a trusted target operation lease"
+    exit 3
+  fi
+  local expected_path actual_path
+  expected_path="/var/lib/pinvi/restore-forensics/operation-leases/${OPERATION_LEASE_TOKEN#m05-v1-}.lock"
+  actual_path="$(readlink -f "/proc/self/fd/${OPERATION_LEASE_FD}" 2>/dev/null || true)"
+  if [[ "${actual_path}" != "${expected_path}" || -L "${expected_path}" ||
+    ! -f "${expected_path}" || "$(stat -c '%u:%a' "${expected_path}")" != "0:600" ]]; then
+    phase preparing failed "trusted target operation lease is invalid"
+    exit 3
+  fi
+  if ! flock -n "${OPERATION_LEASE_FD}"; then
+    phase preparing failed "another M05 target mutation is already running"
+    exit 3
+  fi
+  phase preparing success "shared target operation lease acquired"
+}
+
 if [[ -L "${SNAPSHOT}" || ! -f "${SNAPSHOT}" ]]; then
   phase preparing failed "snapshot file not found"
   exit 2
@@ -164,7 +191,7 @@ assert_trusted_snapshot_provenance() {
   declare -A manifest=()
   while IFS='=' read -r key value || [[ -n "${key:-}" ]]; do
     case "${key}" in
-      version|dump_filename|schema|dump_sha256|pg_restore_list_sha256|source_database|source_database_oid|source_system_identifier|source_hostaddr|source_port) ;;
+      version|dump_filename|schema|dump_sha256|pg_restore_list_sha256|source_database|source_database_oid|source_system_identifier|source_hostaddr|source_port|created_at) ;;
       *)
         phase preparing failed "trusted snapshot manifest has an invalid field"
         exit 3
@@ -195,6 +222,11 @@ assert_trusted_snapshot_provenance() {
     phase preparing failed "trusted snapshot manifest values are invalid"
     exit 3
   fi
+  if [[ -v "manifest[created_at]" &&
+    ! "${manifest[created_at]}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+    phase preparing failed "trusted snapshot manifest created_at is invalid"
+    exit 3
+  fi
   TRUSTED_SNAPSHOT_CHECKSUM="${manifest[dump_sha256]}"
   TRUSTED_SNAPSHOT_LIST_SHA256="${manifest[pg_restore_list_sha256]}"
   # A root-owned archive is not automatically an archive for this live target.
@@ -208,6 +240,7 @@ assert_trusted_snapshot_provenance() {
   TRUSTED_SOURCE_PORT="${manifest[source_port]}"
 }
 
+assert_operation_lease
 assert_trusted_snapshot_provenance
 
 PINNED_TOOL_DIRS=("/usr/local/bin" "/usr/bin" "/bin" /usr/lib/postgresql/*/bin)

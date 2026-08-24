@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -80,6 +82,30 @@ def _rebaseline_module():  # type: ignore[no-untyped-def]
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def _rebaseline_evidence(module, preflight, tmp_path: Path):  # type: ignore[no-untyped-def]
+    backup_manifest = module.BackupManifest(
+        path=tmp_path / "snapshot.dump.m05-manifest",
+        sha256="1" * 64,
+        created_at="2026-08-24T00:00:00Z",
+        dump_sha256="0" * 64,
+        restore_list_sha256="2" * 64,
+        source_database=preflight.database_name,
+        source_database_oid=preflight.database_oid,
+        source_system_identifier=preflight.system_identifier,
+        source_hostaddr=preflight.server_addr,
+        source_port=preflight.server_port,
+    )
+    artifact = module.BackupArtifact(sha256="0" * 64, manifest=backup_manifest)
+    target = module.TargetManifest(
+        path=tmp_path / "target.json",
+        sha256="3" * 64,
+        captured_at="2026-08-24T00:00:01Z",
+        backup_manifest_sha256=backup_manifest.sha256,
+        preflight=preflight.as_dict(),
+    )
+    return artifact, target
 
 
 @pytest.mark.asyncio
@@ -332,6 +358,13 @@ async def test_rebaseline_0061_to_0100_then_0101_preserves_data_and_runs_backfil
             await engine.dispose()
 
         module = _rebaseline_module()
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.connect() as connection:
+                rebaseline_preflight = await module._preflight(connection, lock_version=False)
+        finally:
+            await engine.dispose()
+        artifact, target_manifest = _rebaseline_evidence(module, rebaseline_preflight, tmp_path)
         receipt_payloads: list[dict[str, object]] = []
         monkeypatch.setattr(
             module,
@@ -343,8 +376,11 @@ async def test_rebaseline_0061_to_0100_then_0101_preserves_data_and_runs_backfil
             "_finalize_receipt",
             lambda _path, payload: receipt_payloads.append(payload),
         )
-        preflight = await module._apply(target_url, "0" * 64, tmp_path / "receipt.json")
+        preflight, state = await module._apply(
+            target_url, artifact, target_manifest, tmp_path / "receipt.json"
+        )
         assert preflight.version_rows == ("20260821_0061",)
+        assert state == "applied"
         assert [payload["state"] for payload in receipt_payloads] == ["prepared", "applied"]
 
         activation = _alembic(target_url, "upgrade", "20260824_0101")
@@ -370,6 +406,274 @@ async def test_rebaseline_0061_to_0100_then_0101_preserves_data_and_runs_backfil
             await engine.dispose()
     finally:
         await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
+async def test_rebaseline_preflight_rejects_same_shape_constraint_drift(
+    _database_url: str,
+) -> None:
+    """제약 이름·열이 같아도 정의가 달라지면 0061 fingerprint는 fail-close한다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_drift")
+    user_id = uuid.uuid4()
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        module = _rebaseline_module()
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "INSERT INTO app.users (user_id, email, nickname) "
+                        "VALUES (:user_id, :email, 'drift')"
+                    ),
+                    {"user_id": user_id, "email": f"{user_id.hex}@pinvi.test"},
+                )
+                await connection.execute(
+                    text("UPDATE app.alembic_version SET version_num = '20260821_0061'")
+                )
+                await connection.execute(
+                    text(
+                        "ALTER TABLE app.user_consents "
+                        "DROP CONSTRAINT ck_user_consents_ck_user_consents_consent_type"
+                    )
+                )
+                await connection.execute(
+                    text(
+                        "ALTER TABLE app.user_consents "
+                        "ADD CONSTRAINT ck_user_consents_ck_user_consents_consent_type "
+                        "CHECK (consent_type IN ('tos'))"
+                    )
+                )
+            async with engine.connect() as connection:
+                with pytest.raises(module.RebaselineError, match="catalog fingerprint"):
+                    await module._preflight(connection, lock_version=False)
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
+async def test_rebaseline_preflight_rejects_data_less_0061_target(
+    _database_url: str,
+) -> None:
+    """alembic row만 있는 empty clone은 production rebaseline 대상이 아니다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_empty")
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text("UPDATE app.alembic_version SET version_num = '20260821_0061'")
+                )
+            module = _rebaseline_module()
+            async with engine.connect() as connection:
+                with pytest.raises(module.RebaselineError, match="must contain app data rows"):
+                    await module._preflight(connection, lock_version=False)
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
+async def test_rebaseline_target_manifest_rejects_changed_data_fingerprint(
+    _database_url: str,
+    tmp_path: Path,
+) -> None:
+    """target manifest는 database OID·role뿐 아니라 app data content drift도 봉인한다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_target")
+    first_user_id = uuid.uuid4()
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "INSERT INTO app.users (user_id, email, nickname) "
+                        "VALUES (:user_id, :email, 'target')"
+                    ),
+                    {
+                        "user_id": first_user_id,
+                        "email": f"{first_user_id.hex}@pinvi.test",
+                    },
+                )
+                await connection.execute(
+                    text("UPDATE app.alembic_version SET version_num = '20260821_0061'")
+                )
+            module = _rebaseline_module()
+            async with engine.begin() as connection:
+                preflight = await module._preflight(connection, lock_version=False)
+                artifact, target = _rebaseline_evidence(module, preflight, tmp_path)
+                await connection.execute(
+                    text("UPDATE app.users SET nickname = 'changed' WHERE user_id = :user_id"),
+                    {"user_id": first_user_id},
+                )
+            async with engine.connect() as connection:
+                changed = await module._preflight(connection, lock_version=False)
+            with pytest.raises(
+                module.RebaselineError, match="identity or data fingerprint changed"
+            ):
+                module._assert_target_manifest(
+                    target,
+                    changed,
+                    artifact.manifest.sha256,
+                    artifact.manifest.created_at,
+                    allow_baseline_revision=False,
+                )
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
+async def test_rebaseline_recovers_prepared_receipt_after_version_commit(
+    _database_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """commit 뒤 receipt write가 끊겨도 같은 intent로 재실행하면 finalize한다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_receipt")
+    user_id = uuid.uuid4()
+    receipt = tmp_path / "receipt.json"
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "INSERT INTO app.users (user_id, email, nickname) "
+                        "VALUES (:user_id, :email, 'receipt')"
+                    ),
+                    {"user_id": user_id, "email": f"{user_id.hex}@pinvi.test"},
+                )
+                await connection.execute(
+                    text("UPDATE app.alembic_version SET version_num = '20260821_0061'")
+                )
+            module = _rebaseline_module()
+            async with engine.connect() as connection:
+                preflight = await module._preflight(connection, lock_version=False)
+            artifact, target = _rebaseline_evidence(module, preflight, tmp_path)
+            stored: dict[str, dict[str, object]] = {}
+            finalize_attempts = 0
+
+            def prepare(_path: Path, payload: dict[str, object]) -> None:
+                receipt.write_text("prepared\n", encoding="utf-8")
+                stored["receipt"] = payload
+
+            def read(_path: Path) -> dict[str, object]:
+                return stored["receipt"]
+
+            def finalize(_path: Path, payload: dict[str, object]) -> None:
+                nonlocal finalize_attempts
+                finalize_attempts += 1
+                if finalize_attempts == 1:
+                    raise OSError("simulated crash after commit")
+                stored["receipt"] = payload
+
+            monkeypatch.setattr(module, "_prepare_receipt", prepare)
+            monkeypatch.setattr(module, "_read_receipt", read)
+            monkeypatch.setattr(module, "_finalize_receipt", finalize)
+            with pytest.raises(module.RebaselineError, match="rerun apply"):
+                await module._apply(target_url, artifact, target, receipt)
+            assert stored["receipt"]["state"] == "prepared"
+            async with engine.connect() as connection:
+                assert (
+                    await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
+                    == "20260824_0100"
+                )
+            recovered, state = await module._apply(target_url, artifact, target, receipt)
+            assert recovered.version_rows == ("20260824_0100",)
+            assert state == "recovered"
+            assert stored["receipt"]["state"] == "applied"
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+def test_rebaseline_backup_manifest_binds_archive_inventory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """checksum sidecar만이 아니라 root producer manifest와 pg_restore inventory를 요구한다."""
+
+    module = _rebaseline_module()
+    backup = tmp_path / "snapshot.dump"
+    backup.write_bytes(b"custom-archive-fixture")
+    backup_sha256 = hashlib.sha256(backup.read_bytes()).hexdigest()
+    checksum = tmp_path / "snapshot.dump.sha256"
+    checksum.write_text(f"{backup_sha256}  {backup.name}\n", encoding="utf-8")
+    manifest = tmp_path / "snapshot.dump.m05-manifest"
+    manifest.write_text(
+        "\n".join(
+            (
+                "version=1",
+                f"dump_filename={backup.name}",
+                "schema=app",
+                f"dump_sha256={backup_sha256}",
+                f"pg_restore_list_sha256={'2' * 64}",
+                "source_database=pinvi",
+                "source_database_oid=100",
+                "source_system_identifier=200",
+                "source_hostaddr=127.0.0.1",
+                "source_port=5432",
+                "created_at=2026-08-24T00:00:00Z",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(module, "_validate_private_root_file", lambda path, **_kwargs: path)
+    monkeypatch.setattr(module, "_restore_list_sha256", lambda _path: "2" * 64)
+
+    artifact = module._validate_backup(backup, checksum, manifest)
+
+    assert artifact.sha256 == backup_sha256
+    assert artifact.manifest.restore_list_sha256 == "2" * 64
+
+
+def test_rebaseline_target_manifest_requires_exact_legacy_preflight_shape(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """root-created target manifest도 partial/forged preflight를 fail-close한다."""
+
+    module = _rebaseline_module()
+    preflight = module.CatalogPreflight(
+        database_name="pinvi",
+        database_oid=100,
+        system_identifier="200",
+        server_addr="127.0.0.1",
+        server_port=5432,
+        session_user="pinvi_migrator",
+        current_user="pinvi_migrator",
+        server_version_num=160000,
+        version_rows=(module.LEGACY_REVISION,),
+        catalog_lines=module._EXPECTED_CATALOG_LINES,
+        catalog_sha256=module._EXPECTED_CATALOG_SHA256,
+        app_data_rows=1,
+        app_data_table_lines=1,
+        app_data_content_sha256="4" * 64,
+    )
+    target_path = tmp_path / "target.json"
+    payload = module._target_manifest_payload(preflight, "3" * 64)
+    del payload["preflight"]["app_data_content_sha256"]
+    target_path.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(module, "_validate_private_root_file", lambda path, **_kwargs: path)
+
+    with pytest.raises(module.RebaselineError, match="preflight fields"):
+        module._read_target_manifest(target_path)
 
 
 @pytest.mark.asyncio

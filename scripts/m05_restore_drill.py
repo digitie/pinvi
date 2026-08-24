@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import ipaddress
 import json
 import os
@@ -32,6 +33,7 @@ import shutil
 import socket
 import stat
 import subprocess
+import sys
 import tempfile
 import urllib.error
 import urllib.request
@@ -61,6 +63,31 @@ _TOOL_TRUST_MANIFEST_SHA256 = ""
 
 class RestoreDrillError(ValueError):
     """실제 복원 드릴이 M05 evidence 계약을 충족하지 못했다."""
+
+
+def _acquire_root_target_lease(database_url: str):
+    """root-owned drill의 disposable target을 trusted hotswap과 직렬화한다."""
+
+    module_name = "_pinvi_m05_operation_lease_for_drill"
+    module_path = Path(__file__).with_name("m05_operation_lease.py")
+    specification = importlib.util.spec_from_file_location(module_name, module_path)
+    if specification is None or specification.loader is None:
+        raise RestoreDrillError("restore target operation lease is unavailable")
+    module = importlib.util.module_from_spec(specification)
+    sys.modules[module_name] = module
+    try:
+        specification.loader.exec_module(module)
+        acquire = module.acquire_root_operation_lease
+        if not callable(acquire):
+            raise RestoreDrillError("restore target operation lease is unavailable")
+        lease = acquire(database_url)
+        if not hasattr(lease, "__enter__") or not hasattr(lease, "__exit__"):
+            raise RestoreDrillError("restore target operation lease is invalid")
+        return lease
+    except RestoreDrillError:
+        raise
+    except Exception as exc:
+        raise RestoreDrillError("restore target operation lease is unavailable") from exc
 
 
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -1625,7 +1652,7 @@ def _source_revision(root: Path) -> str:
     return revision
 
 
-def _run_drill(args: argparse.Namespace) -> int:
+def _run_drill(args: argparse.Namespace, *, _lease_held: bool = False) -> int:
     output: Path = args.output
     environment = os.environ.get("PINVI_ENVIRONMENT", "")
     _secure_output_parent(output, require_root_owned=args.require_root_owned)
@@ -1672,6 +1699,9 @@ def _run_drill(args: argparse.Namespace) -> int:
     source_url = _database_url(args.source_database_url_env)
     target_url = _database_url(args.staging_database_url_env)
     runtime_url = _database_url(args.runtime_database_url_env)
+    if args.require_root_owned and not _lease_held:
+        with _acquire_root_target_lease(target_url):
+            return _run_drill(args, _lease_held=True)
     hotswap_url = ""
     fence_url = ""
     provision_url = ""

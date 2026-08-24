@@ -226,6 +226,10 @@ def _install_location_audit_purpose_contract() -> None:
 def _install_user_consent_event_history() -> None:
     """T-326의 현재 상태 이력 테이블과 정직한 0061 data backfill을 적용한다."""
 
+    # 구 runtime은 user_consents만 in-place로 갱신한다. source table의 DML을 이
+    # migration transaction 끝까지 막아야 backfill snapshot 뒤에 commit된 동의/철회가
+    # event ledger에서 누락되지 않는다. deploy runner도 API/Dagster writer를 먼저 stop한다.
+    op.execute("LOCK TABLE app.user_consents IN SHARE ROW EXCLUSIVE MODE")
     op.create_table(
         "user_consent_events",
         sa.Column(

@@ -32,6 +32,12 @@ def test_restore_hotswap_rejects_session_and_lock_control_in_dump_sql() -> None:
     assert "trap terminate_restore TERM INT" in source
     assert "execute_fence_sql_file" in source
     assert "PINVI_RESTORE_FENCE_DATABASE_URL" in source
+    assert "PINVI_M05_OPERATION_LEASE_FD" in source
+    assert "PINVI_M05_OPERATION_LEASE_TOKEN" in source
+    assert "assert_operation_lease" in source
+    assert source.rindex("assert_operation_lease") < source.rindex(
+        "assert_trusted_snapshot_provenance"
+    )
     assert "database fence URL must be a dedicated non-superuser target owner" in source
     assert "FENCE_EXECUTOR_ROLE" in source
     assert "login.rolname <> '${FENCE_EXECUTOR_ROLE}'" in source
@@ -346,7 +352,7 @@ def test_restore_hotswap_rejects_api_writable_snapshot_before_pg_restore(tmp_pat
     )
 
     assert result.returncode == 3
-    assert "strict restore requires a root-owned trusted backup directory" in result.stdout
+    assert "strict hotswap requires a trusted target operation lease" in result.stdout
     assert not marker.exists()
 
 

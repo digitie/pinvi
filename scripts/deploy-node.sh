@@ -100,10 +100,19 @@ build_images() {
   fi
 }
 
+drain_runtime_writers() {
+  log "stopping API and Dagster writers before migration"
+  compose stop app-api
+  if [[ "$ENABLE_DAGSTER" != "0" ]]; then
+    compose --profile etl stop app-dagster
+  fi
+}
+
 migrate() {
   pinvi_verify_runtime_image_provenance app-api
   local credential_file
   credential_file="$(bootstrap_credential_file)"
+  drain_runtime_writers
   log "starting database dependencies and runtime DB role"
   compose up -d app-postgres app-rustfs app-rustfs-init
   compose run --rm app-db-runtime-role

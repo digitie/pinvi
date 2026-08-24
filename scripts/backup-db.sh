@@ -320,6 +320,7 @@ backup_dirname="$(dirname "${backup_file}")"
 backup_name="$(basename "${backup_file}")"
 (cd "${backup_dirname}" && sha256sum "${backup_name}" >"${backup_name}.sha256")
 (cd "${backup_dirname}" && sha256sum -c "${backup_name}.sha256") >/dev/null
+backup_created_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 if [[ "${STRICT_ENVIRONMENT}" == "1" ]]; then
   manifest_file="${backup_file}.m05-manifest"
@@ -335,6 +336,7 @@ if [[ "${STRICT_ENVIRONMENT}" == "1" ]]; then
     printf 'source_system_identifier=%s\n' "${source_system_identifier}"
     printf 'source_hostaddr=%s\n' "${source_hostaddr}"
     printf 'source_port=%s\n' "${source_port}"
+    printf 'created_at=%s\n' "${backup_created_at}"
   } >"${MANIFEST_TMP_FILE}"
   chmod 600 "${MANIFEST_TMP_FILE}"
   mv "${MANIFEST_TMP_FILE}" "${manifest_file}"
@@ -342,7 +344,6 @@ if [[ "${STRICT_ENVIRONMENT}" == "1" ]]; then
   # ordinary API는 dump/manifest가 아닌 이 metadata-only catalog만 read-only mount한다.
   CATALOG_TMP_FILE="$(mktemp "${catalog_dir}/.pinvi-backup-catalog.XXXXXX")"
   backup_size_bytes="$(stat -c '%s' "${backup_file}")"
-  backup_created_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   {
     printf '{"snapshots":[{'
     printf '"checksum_sha256":"%s",' "$(sha256sum "${backup_file}" | awk 'NR == 1 { print $1 }')"

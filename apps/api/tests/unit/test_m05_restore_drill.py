@@ -142,8 +142,39 @@ def test_m05_restore_drill_serializes_target_recreation_and_preflights_staging_r
     assert "SELECT pg_advisory_unlock(1414679892, 1213421392);" in source
     assert "_ProvisioningLock" not in source
     assert "PINVI_RESTORE_COORDINATION_DATABASE_URL" not in source
+    assert "m05_operation_lease.py" in source
+    assert "with _acquire_root_target_lease(target_url):" in source
+    assert "return _run_drill(args, _lease_held=True)" in source
+    run = source[source.index("def _run_drill(") :]
+    assert run.index("with _acquire_root_target_lease(target_url):") < run.index(
+        "        _staging_role_check("
+    )
     assert 'PINVI_RESTORE_HOTSWAP_EXECUTE": "1"' not in source
     assert '"PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL": "precheck"' in source
+
+
+def test_m05_operation_lease_binds_only_pinned_target_identity() -> None:
+    script = Path(__file__).resolve().parents[4] / "scripts/m05_operation_lease.py"
+    spec = importlib.util.spec_from_file_location("m05_operation_lease", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    first = module.operation_lease_token(
+        "postgresql://first:secret@db:5432/pinvi_m05_restore_one?hostaddr=192.0.2.10"
+    )
+    same_target = module.operation_lease_token(
+        "postgresql://second:other@db:5432/pinvi_m05_restore_one?hostaddr=192.0.2.10"
+    )
+    other_target = module.operation_lease_token(
+        "postgresql://second:other@db:5432/pinvi_m05_restore_two?hostaddr=192.0.2.10"
+    )
+
+    assert first == same_target
+    assert first != other_target
+    with pytest.raises(module.M05OperationLeaseError, match="database URL"):
+        module.operation_lease_token("postgresql://role@db:5432/pinvi_m05_restore_one")
 
 
 def _write_executable(path: Path, body: str) -> None:

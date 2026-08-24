@@ -78,6 +78,8 @@ _RUNNER_UNSAFE_ENVIRONMENT_KEYS: Final = frozenset(
         "PINVI_M05_FORENSICS_DRAIN_RECEIPT_SHA256",
         "PINVI_M05_FORENSICS_OPERATION_ID",
         "PINVI_M05_FORENSICS_STATE_DIR",
+        "PINVI_M05_OPERATION_LEASE_FD",
+        "PINVI_M05_OPERATION_LEASE_TOKEN",
         "PINVI_M05_RESTORE_DRILL",
         "PINVI_M05_RESTORE_TEST_MODE",
         # These inputs are read only from /etc/pinvi/trusted-hotswap.json.
@@ -236,6 +238,48 @@ def _canonical_runner_paths() -> tuple[Path, Path, Path]:
     ):
         _raise("trusted hotswap runner path is not canonical")
     return runner, forensics, topology
+
+
+def _canonical_operation_lease_path(forensics: Path) -> Path:
+    """runner와 같은 trusted directory의 lease helper만 실행한다."""
+
+    lease = _safe_regular_file(forensics.with_name("m05_operation_lease.py"))
+    if lease.parent != forensics.parent:
+        _raise("trusted M05 operation lease path is not canonical")
+    return lease
+
+
+def _acquire_operation_lease(lease_path: Path, database_url: str):
+    """root runner와 staging provisioner가 공유하는 target lease를 잡는다."""
+
+    module_name = "_pinvi_m05_operation_lease"
+    specification = importlib.util.spec_from_file_location(module_name, lease_path)
+    if specification is None or specification.loader is None:
+        _raise("trusted M05 operation lease is unavailable")
+    module = importlib.util.module_from_spec(specification)
+    sys.modules[module_name] = module
+    try:
+        specification.loader.exec_module(module)
+        acquire = module.acquire_root_operation_lease
+        if not callable(acquire):
+            _raise("trusted M05 operation lease is unavailable")
+        lease = acquire(database_url)
+        token = getattr(lease, "token", None)
+        fileno = getattr(lease, "fileno", None)
+        close = getattr(lease, "close", None)
+        if (
+            not isinstance(token, str)
+            or re.fullmatch(r"m05-v1-[0-9a-f]{64}", token) is None
+            or not callable(fileno)
+            or not isinstance(fileno(), int)
+            or not callable(close)
+        ):
+            _raise("trusted M05 operation lease is invalid")
+        return lease
+    except TrustedHotswapError:
+        raise
+    except Exception as exc:
+        raise TrustedHotswapError("trusted M05 operation lease is unavailable") from exc
 
 
 def _safe_trusted_executable(path: Path) -> Path:
@@ -1779,29 +1823,39 @@ def _run(args: argparse.Namespace) -> int:
     _strict_environment()
     configuration = _load_trusted_configuration()
     runner, forensics, _ = _canonical_runner_paths()
-    _assert_no_active_marker(forensics)
     database_url = pin_database_url(configuration.restore_database_url)
-    fence_url = pin_database_url(configuration.fence_database_url)
-    environment = _runner_environment(
-        configuration,
-        database_url,
-        fence_url,
-        snapshot=args.snapshot,
-        operation_id=args.operation_id,
+    lease = _acquire_operation_lease(
+        _canonical_operation_lease_path(forensics), database_url
     )
-    bash = _trusted_bash_path()
-    os.execve(
-        str(bash),
-        [
+    try:
+        _assert_no_active_marker(forensics)
+        fence_url = pin_database_url(configuration.fence_database_url)
+        environment = _runner_environment(
+            configuration,
+            database_url,
+            fence_url,
+            snapshot=args.snapshot,
+            operation_id=args.operation_id,
+        )
+        lease_descriptor = lease.fileno()
+        os.set_inheritable(lease_descriptor, True)
+        environment["PINVI_M05_OPERATION_LEASE_FD"] = str(lease_descriptor)
+        environment["PINVI_M05_OPERATION_LEASE_TOKEN"] = lease.token
+        bash = _trusted_bash_path()
+        os.execve(
             str(bash),
-            str(runner),
-            "run",
-            args.snapshot,
-            args.restore_schema,
-            args.previous_schema,
-        ],
-        environment,
-    )
+            [
+                str(bash),
+                str(runner),
+                "run",
+                args.snapshot,
+                args.restore_schema,
+                args.previous_schema,
+            ],
+            environment,
+        )
+    finally:
+        lease.close()
     return 3
 
 
@@ -1814,7 +1868,7 @@ def _status(_args: argparse.Namespace) -> int:
     return 0
 
 
-def _recover(args: argparse.Namespace) -> int:
+def _recover(args: argparse.Namespace, *, _lease_held: bool = False) -> int:
     _strict_environment()
     if not args.confirm:
         _raise("trusted recovery requires --confirm")
@@ -1836,6 +1890,12 @@ def _recover(args: argparse.Namespace) -> int:
         )
     configuration = _load_trusted_configuration()
     _, forensics, topology = _canonical_runner_paths()
+    if not _lease_held:
+        database_url = pin_database_url(configuration.restore_database_url)
+        with _acquire_operation_lease(
+            _canonical_operation_lease_path(forensics), database_url
+        ):
+            return _recover(args, _lease_held=True)
     marker = _read_marker(forensics)
     if marker.get("operation_id") != args.operation_id:
         _raise("trusted recovery operation does not match the active marker")

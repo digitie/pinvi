@@ -305,7 +305,7 @@ def test_drain_receipt_writer_refuses_pending_or_symlinked_replacement(
     def root_owned_fstat(descriptor: int):
         metadata = original_fstat(descriptor)
         return SimpleNamespace(
-            st_mode=metadata.st_mode,
+            st_mode=(metadata.st_mode & ~0o777) | 0o600,
             st_size=metadata.st_size,
             st_uid=0,
         )
@@ -705,7 +705,8 @@ def test_root_recovery_reads_release_receipt_before_acknowledgement(
 
     assert (
         hotswap._recover(
-            Namespace(confirm=True, operation_id="123e4567-e89b-42d3-a456-426614174000")
+            Namespace(confirm=True, operation_id="123e4567-e89b-42d3-a456-426614174000"),
+            _lease_held=True,
         )
         == 0
     )
@@ -823,7 +824,8 @@ def test_root_recovery_unsealed_receipt_requires_explicit_cas_escalation(
                 operation_id="123e4567-e89b-42d3-a456-426614174000",
                 escalate_unsealed_release_receipt=True,
                 expected_marker_sha256=marker_sha256,
-            )
+            ),
+            _lease_held=True,
         )
         == 0
     )
@@ -904,6 +906,25 @@ def test_root_run_execve_receives_only_the_explicit_trusted_environment(
     )
     monkeypatch.setattr(hotswap, "_assert_no_active_marker", lambda _: None)
     monkeypatch.setattr(hotswap, "pin_database_url", lambda value: f"pinned:{value}")
+    lease_closed = False
+
+    class Lease:
+        token = "m05-v1-" + "e" * 64
+
+        def fileno(self) -> int:
+            return 73
+
+        def close(self) -> None:
+            nonlocal lease_closed
+            lease_closed = True
+
+    monkeypatch.setattr(
+        hotswap,
+        "_canonical_operation_lease_path",
+        lambda _forensics: Path("/trusted/m05_operation_lease.py"),
+    )
+    monkeypatch.setattr(hotswap, "_acquire_operation_lease", lambda *_: Lease())
+    monkeypatch.setattr(hotswap.os, "set_inheritable", lambda *_: None)
     monkeypatch.setattr(
         hotswap,
         "_safe_root_only_directory",
@@ -971,6 +992,8 @@ def test_root_run_execve_receives_only_the_explicit_trusted_environment(
         "PINVI_M05_FORENSICS_DRAIN_RECEIPT_SHA256": "d" * 64,
         "PINVI_M05_FORENSICS_OPERATION_ID": "123e4567-e89b-42d3-a456-426614174000",
         "PINVI_M05_FORENSICS_STATE_DIR": "/var/lib/pinvi/restore-forensics",
+        "PINVI_M05_OPERATION_LEASE_FD": "73",
+        "PINVI_M05_OPERATION_LEASE_TOKEN": "m05-v1-" + "e" * 64,
         "PINVI_RESTORE_ALLOW_NO_DRAIN": "1",
         "PINVI_RESTORE_API_TRIGGER": "1",
         "PINVI_RESTORE_APP_ROLE": "pinvi_app",
@@ -996,6 +1019,7 @@ def test_root_run_execve_receives_only_the_explicit_trusted_environment(
         "PINVI_RESTORE_PSQL_SHA256": f"psql{'0' * 60}",
         "PINVI_RESTORE_TRUSTED_BACKUP_DIR": "/srv/pinvi/restore-trust",
     }
+    assert lease_closed is True
 
 
 @pytest.mark.parametrize(
@@ -1009,6 +1033,8 @@ def test_root_run_execve_receives_only_the_explicit_trusted_environment(
         ("PINVI_RESTORE_APP_ROLE", "caller_role"),
         ("PINVI_BACKUP_SCHEMA", "caller_schema"),
         ("PINVI_RESTORE_TRUSTED_BACKUP_DIR", "/caller-controlled/backups"),
+        ("PINVI_M05_OPERATION_LEASE_FD", "3"),
+        ("PINVI_M05_OPERATION_LEASE_TOKEN", "m05-v1-" + "a" * 64),
     ],
 )
 def test_root_run_rejects_every_caller_override_before_config_or_runner(
