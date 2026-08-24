@@ -33,6 +33,12 @@ from app.clients.kor_travel_map import (
 )
 from app.clients.naver_local import NaverLocalClient, NaverLocalClientDep, NaverLocalError
 from app.core.consent_deps import assert_location_consent, require_location_consent
+from app.core.coord_range import (
+    COORD_LAT_MAX,
+    COORD_LAT_MIN,
+    COORD_LON_MAX,
+    COORD_LON_MIN,
+)
 from app.core.deps import CurrentUserId, DbSession
 from app.core.time import KST
 from app.middleware.location_audit import declare_location_audit
@@ -64,8 +70,10 @@ from app.services.feature_request import find_active_suggestion_by_external_ref
 router = APIRouter(prefix="/features", tags=["features"])
 
 # 허용 viewport 한국 범위 (ADR-018)
-LNG_MIN, LNG_MAX = 124.0, 132.0
-LAT_MIN, LAT_MAX = 33.0, 43.0
+# 좌표 **입력 유효** 범위다(한반도 전체). 서비스 지역 판정이 아니다 — 둘의 차이는
+# `app/core/coord_range.py`와 ADR-064.
+LNG_MIN, LNG_MAX = COORD_LON_MIN, COORD_LON_MAX
+LAT_MIN, LAT_MAX = COORD_LAT_MIN, COORD_LAT_MAX
 MIN_ZOOM, MAX_ZOOM = 5, 19
 FEATURE_SUGGESTION_DAILY_LIMIT = 20
 DECIMAL_6 = Decimal("0.000001")

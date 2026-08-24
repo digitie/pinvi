@@ -1,8 +1,11 @@
 export {
   Iso8601Schema,
   NonNegativeDecimalStringSchema,
+  COORD_INPUT_BOUNDS,
   CoordSchema,
   CoordSourceSchema,
+  SERVICE_AREA_BOUNDS,
+  isInServiceArea,
   SuccessEnvelopeSchema,
   ErrorEnvelopeSchema,
 } from './common';

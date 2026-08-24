@@ -22,6 +22,7 @@ from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.core.coord_range import SERVICE_AREA_LAT_MAX
 from app.core.coord_source import CoordSource
 
 FeatureKind = Literal[
@@ -322,8 +323,10 @@ class FeatureRequestCreate(BaseModel):
             raise ValueError("correction/closure 제안은 target_feature_id가 필요합니다.")
         if self.type == "new_place" and self.target_feature_id is not None:
             raise ValueError("new_place 제안은 target_feature_id를 가질 수 없습니다.")
-        if self.type == "new_place" and self.coord.lat > 39.5:
-            raise ValueError("new_place 제안 좌표의 lat은 39.5 이하여야 합니다.")
+        # 입력 유효 범위(lat ≤ 43)가 아니라 **서비스 범위**로 본다 — 제안은 우리가 서비스하는
+        # 곳에만 만들 수 있다(ADR-064).
+        if self.type == "new_place" and self.coord.lat > SERVICE_AREA_LAT_MAX:
+            raise ValueError(f"new_place 제안 좌표의 lat은 {SERVICE_AREA_LAT_MAX} 이하여야 합니다.")
         if self.external_ref is not None:
             if self.type != "new_place":
                 raise ValueError("외부 참조(external_ref) 제안은 new_place만 가능합니다.")

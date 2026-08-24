@@ -4,7 +4,7 @@ import {
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
   coarseCoordText,
-  isCoordInKorea,
+  isCoordInServiceArea,
   resolveMapCenter,
   shouldAutoLocate,
   type LocationConsentState,
@@ -81,21 +81,41 @@ describe('shouldAutoLocate', () => {
   });
 });
 
-describe('isCoordInKorea', () => {
+describe('isCoordInServiceArea', () => {
   it.each([
     ['서울시청', 126.978, 37.5665],
     ['제주', 126.5312, 33.4996],
     ['독도', 131.8664, 37.2411],
-  ])('%s는 국내다', (_name, lon, lat) => {
-    expect(isCoordInKorea({ lon, lat })).toBe(true);
+    ['최북단 강원 고성', 128.3, 38.6],
+  ])('%s는 서비스 지역이다', (_name, lon, lat) => {
+    expect(isCoordInServiceArea({ lon, lat })).toBe(true);
   });
 
   it.each([
     ['도쿄', 139.6917, 35.6895],
     ['베이징', 116.4074, 39.9042],
     ['적도 부근', 126.978, 0],
-  ])('%s는 국내가 아니다', (_name, lon, lat) => {
-    expect(isCoordInKorea({ lon, lat })).toBe(false);
+    // 좌표 입력 유효 범위(lat ≤ 43)는 통과하지만 서비스 범위는 아니다 — 두 판정을 나눈 이유.
+    ['신의주', 124.4, 40.1],
+    ['온성(한반도 북단)', 129.9, 42.95],
+  ])('%s는 서비스 범위가 아니다', (_name, lon, lat) => {
+    expect(isCoordInServiceArea({ lon, lat })).toBe(false);
+  });
+
+  // 사각형 판정의 한계를 문서 대신 테스트로 고정한다(ADR-064). 이 함수는 "국내인가"를 답하지
+  // 않으며, 이 줄들이 그 사실의 증거다. 좌표 기반 차단에 쓰면 안 되는 이유이기도 하다.
+  it.each([
+    ['대마도(일본)', 129.3, 34.3],
+    ['평양', 125.7625, 39.0392],
+    ['개성', 126.5547, 37.9709],
+  ])('%s는 사각형을 통과한다 — 알려진 한계다', (_name, lon, lat) => {
+    expect(isCoordInServiceArea({ lon, lat })).toBe(true);
+  });
+
+  it('위도선으로는 남북한을 가를 수 없다 — 개성이 강원 고성보다 남쪽이다', () => {
+    const 개성 = 37.9709;
+    const 고성 = 38.3806;
+    expect(개성).toBeLessThan(고성);
   });
 });
 

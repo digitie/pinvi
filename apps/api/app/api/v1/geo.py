@@ -19,6 +19,7 @@ from app.clients.kor_travel_geo import (
     KorTravelGeoUnavailable,
 )
 from app.core.consent_deps import assert_location_consent
+from app.core.coord_range import COORD_LAT_MAX, COORD_LAT_MIN, COORD_LON_MAX, COORD_LON_MIN
 from app.core.coord_source import CONSENT_REQUIRED_COORD_SOURCES, CoordSource
 from app.core.deps import CurrentUserId, DbSession
 from app.middleware.location_audit import declare_location_audit
@@ -35,8 +36,8 @@ from app.schemas.geo import (
 geo_router = APIRouter(prefix="/geo", tags=["geo"])
 regions_router = APIRouter(prefix="/regions", tags=["regions"])
 
-LON = Query(ge=124.0, le=132.0, description="경도(대한민국 범위)")
-LAT = Query(ge=33.0, le=43.0, description="위도(대한민국 범위)")
+LON = Query(ge=COORD_LON_MIN, le=COORD_LON_MAX, description="경도(좌표 입력 유효 범위)")
+LAT = Query(ge=COORD_LAT_MIN, le=COORD_LAT_MAX, description="위도(좌표 입력 유효 범위)")
 
 
 def _candidate_list(payload: dict[str, Any]) -> GeoCandidateList:
