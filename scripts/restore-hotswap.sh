@@ -546,34 +546,33 @@ SQL
 execute_sql_file() {
   local sql_file="$1"
   local phase_name="$2"
-  if ! advisory_lock_is_alive; then
-    phase "${phase_name}" failed "schema-swap database advisory lock was lost before SQL dispatch"
-    if [[ "${CLEANUP_MODE}" == "1" ]]; then
-      return 1
-    fi
-    exit 3
+  if ! assert_advisory_lock_alive; then
+    return 1
   fi
-  local command_id=$((SQL_SEQUENCE + 1))
-  SQL_SEQUENCE="${command_id}"
-  cat -- "${sql_file}" >&"${LOCK_INPUT_FD}"
-  printf "\nSELECT 'M05_SQL_DONE|%s';\n" "${command_id}" >&"${LOCK_INPUT_FD}"
-  local marker=""
-  while true; do
-    if IFS= read -r -t 1 marker <&"${LOCK_SIGNAL_FD}"; then
-      if [[ "${marker}" == "M05_SQL_DONE|${command_id}" ]]; then
-        return 0
-      fi
-    elif ! kill -0 "${LOCK_HOLDER_PID}" >/dev/null 2>&1; then
-      if [[ -s "${TMP_DIR}/lock.err" ]]; then
-        cat -- "${TMP_DIR}/lock.err" >&2 || true
-      fi
-      phase "${phase_name}" failed "schema-swap lock session ended during SQL execution"
-      if [[ "${CLEANUP_MODE}" == "1" ]]; then
-        return 1
-      fi
-      exit 3
-    fi
-  done
+  # The persistent session owns only the advisory lock.  Every executable
+  # restore/fence statement uses a disposable connection that verifies the
+  # holder PID from inside its transaction, so an ordinary SQL error cannot
+  # kill the holder and strand the writer fence.
+  if ! "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" \
+    --file="${sql_file}"; then
+    phase "${phase_name}" failed "schema-swap SQL execution failed"
+    return 1
+  fi
+  assert_advisory_lock_alive
+}
+
+execute_guarded_sql_file() {
+  local sql_file="$1"
+  local phase_name="$2"
+  if ! assert_advisory_lock_alive; then
+    return 1
+  fi
+  if ! "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" \
+    --file="${sql_file}"; then
+    phase "${phase_name}" failed "guarded restore transaction rolled back"
+    return 1
+  fi
+  assert_advisory_lock_alive
 }
 
 execute_fence_sql_file() {
@@ -643,7 +642,7 @@ run_guarded_command() {
     write_identity_guard
     printf 'COMMIT;\n'
   } >"${wrapper}"
-  execute_sql_file "${wrapper}" restoring
+  execute_guarded_sql_file "${wrapper}" restoring
 }
 
 run_guarded_file() {
@@ -799,7 +798,34 @@ run_guarded_file() {
     write_identity_guard
     printf '\nCOMMIT;\n'
   } >"${wrapper}"
-  execute_sql_file "${wrapper}" restoring
+  execute_guarded_sql_file "${wrapper}" restoring
+}
+
+strip_pg_restore_transaction_wrappers() {
+  # pg_restore emits a top-level BEGIN/COMMIT pair for each generated section.
+  # The persistent lock session supplies the only transaction boundary, so
+  # remove only those generated wrapper lines before the guarded executor sees
+  # the archive SQL.  COPY payload lines are kept byte-for-byte.
+  awk '
+    BEGIN { in_copy = 0 }
+    {
+      if (in_copy) {
+        print
+        if ($0 == "\\.") in_copy = 0
+        next
+      }
+      if ($0 ~ /^[[:space:]]*COPY[[:space:]].*;[[:space:]]*$/) {
+        print
+        in_copy = 1
+        next
+      }
+      normalized = $0
+      sub(/^[[:space:]]*/, "", normalized)
+      sub(/[[:space:]]*$/, "", normalized)
+      if (normalized == "BEGIN;" || normalized == "COMMIT;") next
+      print
+    }
+  '
 }
 
 remap_sql() {
@@ -1134,8 +1160,8 @@ assert_database_fence_restored() {
 
 wait_for_database_quiescence() {
   local sql_file="${TMP_DIR}/quiescence.sql"
-  cat >"${sql_file}" <<'SQL'
-DO $m05$
+  cat >"${sql_file}" <<SQL
+DO \$m05\$
 DECLARE
   attempts integer := 0;
   active_count bigint;
@@ -1144,12 +1170,14 @@ BEGIN
     PERFORM pg_terminate_backend(activity.pid)
     FROM pg_stat_activity activity
     WHERE activity.datname = current_database()
-      AND activity.pid <> pg_backend_pid();
+      AND activity.pid <> pg_backend_pid()
+      AND activity.pid <> ${LOCK_HOLDER_BACKEND_PID};
     SELECT count(*)
       INTO active_count
     FROM pg_stat_activity activity
     WHERE activity.datname = current_database()
       AND activity.pid <> pg_backend_pid()
+      AND activity.pid <> ${LOCK_HOLDER_BACKEND_PID}
       AND (activity.xact_start IS NOT NULL OR activity.state <> 'idle');
     EXIT WHEN active_count = 0;
     attempts := attempts + 1;
@@ -1159,7 +1187,7 @@ BEGIN
     PERFORM pg_sleep(0.1);
   END LOOP;
 END
-$m05$;
+\$m05\$;
 SQL
   execute_sql_file "${sql_file}" draining
 }
@@ -1238,6 +1266,17 @@ assert_restored_schema() {
   local sql_file="${TMP_DIR}/restored-schema-check.sql"
   cat >"${sql_file}" <<SQL
 DO \$m05\$
+DECLARE
+  probe_nonce text := md5(
+    clock_timestamp()::text || ':' || txid_current()::text || ':' || pg_backend_pid()::text
+  );
+  probe_sequence bigint;
+  delivery_update_event uuid := md5(probe_nonce || ':delivery-update')::uuid;
+  delivery_delete_event uuid := md5(probe_nonce || ':delivery-delete')::uuid;
+  receipt_update_event uuid := md5(probe_nonce || ':receipt-update')::uuid;
+  receipt_delete_event uuid := md5(probe_nonce || ':receipt-delete')::uuid;
+  impact_update_event uuid := md5(probe_nonce || ':impact-update')::uuid;
+  impact_delete_event uuid := md5(probe_nonce || ':impact-delete')::uuid;
 BEGIN
   IF to_regclass('${RESTORE_SCHEMA}.users') IS NULL THEN
     RAISE EXCEPTION 'restored schema is missing users table';
@@ -1248,13 +1287,13 @@ BEGIN
   IF (
     SELECT count(*)
     FROM (VALUES
-      ('ktm_feature_reference_reconciliation_delivery_attempts', left('trg_ktm_feature_reference_reconciliation_delivery_attempts_append_only', 63)),
-      ('ktm_feature_reference_reconciliation_delivery_attempts', left('trg_ktm_feature_reference_reconciliation_delivery_attempts_truncate_append_only', 63)),
-      ('ktm_feature_reference_reconciliation_applied_receipts', left('trg_ktm_feature_reference_reconciliation_applied_receipts_append_only', 63)),
-      ('ktm_feature_reference_reconciliation_applied_receipts', left('trg_ktm_feature_reference_reconciliation_applied_receipts_truncate_append_only', 63)),
-      ('ktm_feature_reference_reconciliation_impacts', left('trg_ktm_feature_reference_reconciliation_impacts_append_only', 63)),
-      ('ktm_feature_reference_reconciliation_impacts', left('trg_ktm_feature_reference_reconciliation_impacts_truncate_append_only', 63))
-    ) expected(table_name, trigger_name)
+      ('ktm_feature_reference_reconciliation_delivery_attempts', left('trg_ktm_feature_reference_reconciliation_delivery_attempts_append_only', 63), 31),
+      ('ktm_feature_reference_reconciliation_delivery_attempts', left('trg_ktm_feature_reference_reconciliation_delivery_attempts_truncate_append_only', 63), 34),
+      ('ktm_feature_reference_reconciliation_applied_receipts', left('trg_ktm_feature_reference_reconciliation_applied_receipts_append_only', 63), 31),
+      ('ktm_feature_reference_reconciliation_applied_receipts', left('trg_ktm_feature_reference_reconciliation_applied_receipts_truncate_append_only', 63), 34),
+      ('ktm_feature_reference_reconciliation_impacts', left('trg_ktm_feature_reference_reconciliation_impacts_append_only', 63), 31),
+      ('ktm_feature_reference_reconciliation_impacts', left('trg_ktm_feature_reference_reconciliation_impacts_truncate_append_only', 63), 34)
+    ) expected(table_name, trigger_name, trigger_type)
     WHERE EXISTS (
       SELECT 1
       FROM pg_trigger t
@@ -1265,33 +1304,48 @@ BEGIN
       WHERE n.nspname = '${RESTORE_SCHEMA}'
         AND c.relname = expected.table_name
         AND t.tgname = expected.trigger_name
+        AND t.tgtype = expected.trigger_type
         AND t.tgenabled = 'A'
         AND NOT t.tgisinternal
         AND p.proname = 'guard_ktm_feature_reference_reconciliation_append_only'
         AND pn.nspname = '${RESTORE_SCHEMA}'
+        AND NOT p.prosecdef
     )
   ) <> 6 THEN
     RAISE EXCEPTION 'restored schema is missing an ENABLE ALWAYS M05 append-only trigger';
   END IF;
   -- A trigger name/function pair is not a behavioral proof: a malicious or
-  -- accidental no-op body can preserve all catalog rows.  Do not probe every
-  -- table with TRUNCATE: impacts has an actual RESTRICT FK to receipts, so a
-  -- correct restored 0060 topology would reject the parent before its trigger
-  -- fires.  Instead insert a valid disposable row and prove both row-level
-  -- UPDATE and DELETE are rejected per table.  Each exception block is a
-  -- subtransaction, so the allowed INSERT is rolled back with the expected
-  -- 55000 and cannot leave audit evidence behind.
+  -- accidental no-op body can preserve all catalog rows.  Insert valid
+  -- disposable rows and prove both row-level UPDATE and DELETE are rejected
+  -- per table.  The receipt-to-impact RESTRICT FK makes a standalone receipt
+  -- TRUNCATE invalid before any trigger fires, so direct TRUNCATE probes cover
+  -- delivery attempts and impacts, while the paired receipt/impact probe
+  -- explicitly requires the receipt diagnostic first.  Each exception block
+  -- is a subtransaction, so the allowed INSERT is rolled back with the
+  -- expected 55000 and cannot leave audit evidence behind.  The receipt table
+  -- has a globally unique event_sequence, so start above its real high-water
+  -- mark and derive every other probe key/hash from this execution's nonce.
+  SELECT COALESCE(max(event_sequence), 0)
+  INTO probe_sequence
+  FROM ${RESTORE_SCHEMA}.ktm_feature_reference_reconciliation_applied_receipts;
+  IF probe_sequence > 9223372036854775803 THEN
+    RAISE EXCEPTION 'M05 append-only probe cannot allocate an event sequence';
+  END IF;
   BEGIN
     INSERT INTO ${RESTORE_SCHEMA}.ktm_feature_reference_reconciliation_delivery_attempts (
       event_id, attempt_sequence, event_sequence, event_sha256, status,
       block_fingerprint_sha256, observation_root_sha256
     ) VALUES (
-      '10000000-0000-4000-8000-000000000001', 1, 1, repeat('1', 64), 'applied',
-      NULL, repeat('2', 64)
+      delivery_update_event, 1, probe_sequence + 1,
+      md5(probe_nonce || ':delivery-update-event-sha-a') ||
+        md5(probe_nonce || ':delivery-update-event-sha-b'),
+      'applied', NULL,
+      md5(probe_nonce || ':delivery-update-observation-a') ||
+        md5(probe_nonce || ':delivery-update-observation-b')
     );
     UPDATE ${RESTORE_SCHEMA}.ktm_feature_reference_reconciliation_delivery_attempts
     SET status = status
-    WHERE event_id = '10000000-0000-4000-8000-000000000001' AND attempt_sequence = 1;
+    WHERE event_id = delivery_update_event AND attempt_sequence = 1;
     RAISE EXCEPTION 'M05 append-only trigger unexpectedly allowed UPDATE on delivery attempts';
   EXCEPTION
     WHEN SQLSTATE '55000' THEN
@@ -1304,11 +1358,15 @@ BEGIN
       event_id, attempt_sequence, event_sequence, event_sha256, status,
       block_fingerprint_sha256, observation_root_sha256
     ) VALUES (
-      '10000000-0000-4000-8000-000000000002', 1, 1, repeat('3', 64), 'applied',
-      NULL, repeat('4', 64)
+      delivery_delete_event, 1, probe_sequence + 2,
+      md5(probe_nonce || ':delivery-delete-event-sha-a') ||
+        md5(probe_nonce || ':delivery-delete-event-sha-b'),
+      'applied', NULL,
+      md5(probe_nonce || ':delivery-delete-observation-a') ||
+        md5(probe_nonce || ':delivery-delete-observation-b')
     );
     DELETE FROM ${RESTORE_SCHEMA}.ktm_feature_reference_reconciliation_delivery_attempts
-    WHERE event_id = '10000000-0000-4000-8000-000000000002' AND attempt_sequence = 1;
+    WHERE event_id = delivery_delete_event AND attempt_sequence = 1;
     RAISE EXCEPTION 'M05 append-only trigger unexpectedly allowed DELETE on delivery attempts';
   EXCEPTION
     WHEN SQLSTATE '55000' THEN
@@ -1322,13 +1380,20 @@ BEGIN
       old_feature_uuid, replacement_feature_id, replacement_feature_uuid,
       impact_root_sha256, impact_count, receipt_sha256
     ) VALUES (
-      '20000000-0000-4000-8000-000000000001', 1, repeat('5', 64), 'detach',
-      'm05-guard-probe', '20000000-0000-4000-8000-000000000002', NULL, NULL,
-      repeat('6', 64), 0, repeat('7', 64)
+      receipt_update_event, probe_sequence + 1,
+      md5(probe_nonce || ':receipt-update-event-sha-a') ||
+        md5(probe_nonce || ':receipt-update-event-sha-b'),
+      'detach', concat('m05-guard-probe-', probe_nonce),
+      md5(probe_nonce || ':receipt-update-old-feature')::uuid, NULL, NULL,
+      md5(probe_nonce || ':receipt-update-impact-root-a') ||
+        md5(probe_nonce || ':receipt-update-impact-root-b'),
+      0,
+      md5(probe_nonce || ':receipt-update-receipt-sha-a') ||
+        md5(probe_nonce || ':receipt-update-receipt-sha-b')
     );
     UPDATE ${RESTORE_SCHEMA}.ktm_feature_reference_reconciliation_applied_receipts
     SET action = action
-    WHERE event_id = '20000000-0000-4000-8000-000000000001';
+    WHERE event_id = receipt_update_event;
     RAISE EXCEPTION 'M05 append-only trigger unexpectedly allowed UPDATE on applied receipts';
   EXCEPTION
     WHEN SQLSTATE '55000' THEN
@@ -1342,12 +1407,19 @@ BEGIN
       old_feature_uuid, replacement_feature_id, replacement_feature_uuid,
       impact_root_sha256, impact_count, receipt_sha256
     ) VALUES (
-      '20000000-0000-4000-8000-000000000003', 1, repeat('8', 64), 'detach',
-      'm05-guard-probe', '20000000-0000-4000-8000-000000000004', NULL, NULL,
-      repeat('9', 64), 0, repeat('a', 64)
+      receipt_delete_event, probe_sequence + 2,
+      md5(probe_nonce || ':receipt-delete-event-sha-a') ||
+        md5(probe_nonce || ':receipt-delete-event-sha-b'),
+      'detach', concat('m05-guard-probe-', probe_nonce),
+      md5(probe_nonce || ':receipt-delete-old-feature')::uuid, NULL, NULL,
+      md5(probe_nonce || ':receipt-delete-impact-root-a') ||
+        md5(probe_nonce || ':receipt-delete-impact-root-b'),
+      0,
+      md5(probe_nonce || ':receipt-delete-receipt-sha-a') ||
+        md5(probe_nonce || ':receipt-delete-receipt-sha-b')
     );
     DELETE FROM ${RESTORE_SCHEMA}.ktm_feature_reference_reconciliation_applied_receipts
-    WHERE event_id = '20000000-0000-4000-8000-000000000003';
+    WHERE event_id = receipt_delete_event;
     RAISE EXCEPTION 'M05 append-only trigger unexpectedly allowed DELETE on applied receipts';
   EXCEPTION
     WHEN SQLSTATE '55000' THEN
@@ -1361,21 +1433,29 @@ BEGIN
       old_feature_uuid, replacement_feature_id, replacement_feature_uuid,
       impact_root_sha256, impact_count, receipt_sha256
     ) VALUES (
-      '30000000-0000-4000-8000-000000000001', 1, repeat('b', 64), 'detach',
-      'm05-guard-probe', '30000000-0000-4000-8000-000000000002', NULL, NULL,
-      repeat('c', 64), 0, repeat('d', 64)
+      impact_update_event, probe_sequence + 3,
+      md5(probe_nonce || ':impact-update-event-sha-a') ||
+        md5(probe_nonce || ':impact-update-event-sha-b'),
+      'detach', concat('m05-guard-probe-', probe_nonce),
+      md5(probe_nonce || ':impact-update-old-feature')::uuid, NULL, NULL,
+      md5(probe_nonce || ':impact-update-root-a') ||
+        md5(probe_nonce || ':impact-update-root-b'),
+      1,
+      md5(probe_nonce || ':impact-update-receipt-sha-a') ||
+        md5(probe_nonce || ':impact-update-receipt-sha-b')
     );
     INSERT INTO ${RESTORE_SCHEMA}.ktm_feature_reference_reconciliation_impacts (
       event_id, impact_index, target_relation, target_id, old_feature_id,
       old_feature_uuid, replacement_feature_id, replacement_feature_uuid, outcome
     ) VALUES (
-      '30000000-0000-4000-8000-000000000001', 0, 'trip_day_pois',
-      '30000000-0000-4000-8000-000000000003', 'm05-guard-probe',
-      '30000000-0000-4000-8000-000000000002', NULL, NULL, 'detach'
+      impact_update_event, 0, 'trip_day_pois',
+      md5(probe_nonce || ':impact-update-target')::uuid,
+      concat('m05-guard-probe-', probe_nonce),
+      md5(probe_nonce || ':impact-update-old-feature')::uuid, NULL, NULL, 'detach'
     );
     UPDATE ${RESTORE_SCHEMA}.ktm_feature_reference_reconciliation_impacts
     SET outcome = outcome
-    WHERE event_id = '30000000-0000-4000-8000-000000000001' AND impact_index = 0;
+    WHERE event_id = impact_update_event AND impact_index = 0;
     RAISE EXCEPTION 'M05 append-only trigger unexpectedly allowed UPDATE on impacts';
   EXCEPTION
     WHEN SQLSTATE '55000' THEN
@@ -1389,20 +1469,28 @@ BEGIN
       old_feature_uuid, replacement_feature_id, replacement_feature_uuid,
       impact_root_sha256, impact_count, receipt_sha256
     ) VALUES (
-      '30000000-0000-4000-8000-000000000004', 1, repeat('e', 64), 'detach',
-      'm05-guard-probe', '30000000-0000-4000-8000-000000000005', NULL, NULL,
-      repeat('f', 64), 0, repeat('0', 64)
+      impact_delete_event, probe_sequence + 4,
+      md5(probe_nonce || ':impact-delete-event-sha-a') ||
+        md5(probe_nonce || ':impact-delete-event-sha-b'),
+      'detach', concat('m05-guard-probe-', probe_nonce),
+      md5(probe_nonce || ':impact-delete-old-feature')::uuid, NULL, NULL,
+      md5(probe_nonce || ':impact-delete-root-a') ||
+        md5(probe_nonce || ':impact-delete-root-b'),
+      1,
+      md5(probe_nonce || ':impact-delete-receipt-sha-a') ||
+        md5(probe_nonce || ':impact-delete-receipt-sha-b')
     );
     INSERT INTO ${RESTORE_SCHEMA}.ktm_feature_reference_reconciliation_impacts (
       event_id, impact_index, target_relation, target_id, old_feature_id,
       old_feature_uuid, replacement_feature_id, replacement_feature_uuid, outcome
     ) VALUES (
-      '30000000-0000-4000-8000-000000000004', 0, 'trip_day_pois',
-      '30000000-0000-4000-8000-000000000006', 'm05-guard-probe',
-      '30000000-0000-4000-8000-000000000005', NULL, NULL, 'detach'
+      impact_delete_event, 0, 'trip_day_pois',
+      md5(probe_nonce || ':impact-delete-target')::uuid,
+      concat('m05-guard-probe-', probe_nonce),
+      md5(probe_nonce || ':impact-delete-old-feature')::uuid, NULL, NULL, 'detach'
     );
     DELETE FROM ${RESTORE_SCHEMA}.ktm_feature_reference_reconciliation_impacts
-    WHERE event_id = '30000000-0000-4000-8000-000000000004' AND impact_index = 0;
+    WHERE event_id = impact_delete_event AND impact_index = 0;
     RAISE EXCEPTION 'M05 append-only trigger unexpectedly allowed DELETE on impacts';
   EXCEPTION
     WHEN SQLSTATE '55000' THEN
@@ -1410,6 +1498,238 @@ BEGIN
         RAISE EXCEPTION 'M05 append-only trigger returned an unexpected impact DELETE diagnostic';
       END IF;
   END;
+  BEGIN
+    TRUNCATE TABLE ${RESTORE_SCHEMA}.ktm_feature_reference_reconciliation_delivery_attempts;
+    RAISE EXCEPTION 'M05 append-only trigger unexpectedly allowed TRUNCATE on delivery attempts';
+  EXCEPTION
+    WHEN SQLSTATE '55000' THEN
+      IF SQLERRM NOT ILIKE '%ktm_feature_reference_reconciliation_delivery_attempts is append-only%' THEN
+        RAISE EXCEPTION 'M05 append-only trigger returned an unexpected delivery-attempt TRUNCATE diagnostic';
+      END IF;
+  END;
+  BEGIN
+    TRUNCATE TABLE ${RESTORE_SCHEMA}.ktm_feature_reference_reconciliation_impacts;
+    RAISE EXCEPTION 'M05 append-only trigger unexpectedly allowed TRUNCATE on impacts';
+  EXCEPTION
+    WHEN SQLSTATE '55000' THEN
+      IF SQLERRM NOT ILIKE '%ktm_feature_reference_reconciliation_impacts is append-only%' THEN
+        RAISE EXCEPTION 'M05 append-only trigger returned an unexpected impact TRUNCATE diagnostic';
+      END IF;
+  END;
+  BEGIN
+    TRUNCATE TABLE ${RESTORE_SCHEMA}.ktm_feature_reference_reconciliation_applied_receipts,
+      ${RESTORE_SCHEMA}.ktm_feature_reference_reconciliation_impacts;
+    RAISE EXCEPTION 'M05 append-only trigger unexpectedly allowed TRUNCATE on applied receipts';
+  EXCEPTION
+    WHEN SQLSTATE '55000' THEN
+      IF SQLERRM NOT ILIKE '%ktm_feature_reference_reconciliation_applied_receipts is append-only%' THEN
+        RAISE EXCEPTION 'M05 append-only trigger did not reject the receipt TRUNCATE first';
+      END IF;
+  END;
+END
+\$m05\$;
+SQL
+  if ! execute_validation_sql_file "${sql_file}"; then
+    if [[ "${CLEANUP_MODE}" == "1" ]]; then
+      return 1
+    fi
+    exit 3
+  fi
+}
+
+assert_admin_audit_contract() {
+  local sql_file="${TMP_DIR}/admin-audit-contract-check.sql"
+  cat >"${sql_file}" <<SQL
+DO \$m05\$
+DECLARE
+  audit_row_ctid tid;
+BEGIN
+  IF to_regclass('${RESTORE_SCHEMA}.admin_audit_log') IS NULL THEN
+    RAISE EXCEPTION 'restored schema is missing admin audit log table';
+  END IF;
+  IF (
+    SELECT count(*)
+    FROM (VALUES
+      ('log_id', 'bigint', true),
+      ('actor_user_id', 'uuid', true),
+      ('action', 'character varying(64)', true),
+      ('resource_type', 'character varying(64)', true),
+      ('resource_id', 'character varying(128)', false),
+      ('before_state', 'jsonb', false),
+      ('after_state', 'jsonb', false),
+      ('access_reason', 'text', false),
+      ('target_pii_fields', 'character varying(64)[]', false),
+      ('ip_hash', 'character varying(64)', true),
+      ('user_agent', 'character varying(512)', false),
+      ('request_id', 'uuid', true),
+      ('prev_hash', 'character varying(64)', true),
+      ('content_hash', 'character varying(64)', true),
+      ('occurred_at', 'timestamp with time zone', true)
+    ) expected(column_name, type_name, not_null)
+    WHERE EXISTS (
+      SELECT 1
+      FROM pg_attribute attribute
+      JOIN pg_class relation ON relation.oid = attribute.attrelid
+      JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+      WHERE namespace.nspname = '${RESTORE_SCHEMA}'
+        AND relation.relname = 'admin_audit_log'
+        AND attribute.attname = expected.column_name
+        AND NOT attribute.attisdropped
+        AND attribute.attnotnull = expected.not_null
+        AND format_type(attribute.atttypid, attribute.atttypmod) = expected.type_name
+    )
+  ) <> 15 THEN
+    RAISE EXCEPTION 'restored admin audit log does not satisfy the runtime column contract';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint constraint_row
+    WHERE constraint_row.conrelid = '${RESTORE_SCHEMA}.admin_audit_log'::regclass
+      AND constraint_row.contype = 'p'
+      AND constraint_row.conkey = ARRAY[
+        (SELECT attribute.attnum
+         FROM pg_attribute attribute
+         WHERE attribute.attrelid = '${RESTORE_SCHEMA}.admin_audit_log'::regclass
+           AND attribute.attname = 'log_id'
+           AND NOT attribute.attisdropped)
+      ]::smallint[]
+  ) THEN
+    RAISE EXCEPTION 'restored admin audit log is missing the log_id primary key';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint constraint_row
+    WHERE constraint_row.conrelid = '${RESTORE_SCHEMA}.admin_audit_log'::regclass
+      AND constraint_row.contype = 'u'
+      AND constraint_row.conkey = ARRAY[
+        (SELECT attribute.attnum
+         FROM pg_attribute attribute
+         WHERE attribute.attrelid = '${RESTORE_SCHEMA}.admin_audit_log'::regclass
+           AND attribute.attname = 'prev_hash'
+           AND NOT attribute.attisdropped)
+      ]::smallint[]
+  ) THEN
+    RAISE EXCEPTION 'restored admin audit log is missing the prev_hash unique chain guard';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_attrdef default_value
+    WHERE default_value.adrelid = '${RESTORE_SCHEMA}.admin_audit_log'::regclass
+      AND default_value.adnum = (
+        SELECT attribute.attnum
+        FROM pg_attribute attribute
+        WHERE attribute.attrelid = '${RESTORE_SCHEMA}.admin_audit_log'::regclass
+          AND attribute.attname = 'log_id'
+          AND NOT attribute.attisdropped
+      )
+      AND pg_get_expr(default_value.adbin, default_value.adrelid) LIKE 'nextval(%'
+  ) THEN
+    RAISE EXCEPTION 'restored admin audit log cannot allocate log_id for reflection';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint constraint_row
+    WHERE constraint_row.conrelid = '${RESTORE_SCHEMA}.admin_audit_log'::regclass
+      AND constraint_row.contype = 'f'
+      AND constraint_row.confrelid = '${RESTORE_SCHEMA}.users'::regclass
+      AND constraint_row.confdeltype = 'r'
+      AND constraint_row.conkey = ARRAY[
+        (SELECT attribute.attnum
+         FROM pg_attribute attribute
+         WHERE attribute.attrelid = '${RESTORE_SCHEMA}.admin_audit_log'::regclass
+           AND attribute.attname = 'actor_user_id'
+           AND NOT attribute.attisdropped)
+      ]::smallint[]
+      AND constraint_row.confkey = ARRAY[
+        (SELECT attribute.attnum
+         FROM pg_attribute attribute
+         WHERE attribute.attrelid = '${RESTORE_SCHEMA}.users'::regclass
+           AND attribute.attname = 'user_id'
+           AND NOT attribute.attisdropped)
+      ]::smallint[]
+  ) THEN
+    RAISE EXCEPTION 'restored admin audit log is missing the actor user foreign key';
+  END IF;
+  IF (
+    SELECT count(*)
+    FROM (VALUES
+      ('trg_admin_audit_log_append_only', 31),
+      ('trg_admin_audit_log_truncate_append_only', 34)
+    ) expected(trigger_name, trigger_type)
+    WHERE EXISTS (
+      SELECT 1
+      FROM pg_trigger trigger
+      JOIN pg_class relation ON relation.oid = trigger.tgrelid
+      JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+      JOIN pg_proc procedure ON procedure.oid = trigger.tgfoid
+      JOIN pg_namespace procedure_namespace ON procedure_namespace.oid = procedure.pronamespace
+      WHERE namespace.nspname = '${RESTORE_SCHEMA}'
+        AND relation.relname = 'admin_audit_log'
+        AND trigger.tgname = expected.trigger_name
+        AND trigger.tgtype = expected.trigger_type
+        AND trigger.tgenabled = 'A'
+        AND NOT trigger.tgisinternal
+        AND procedure.proname = 'guard_admin_audit_log_append_only'
+        AND procedure_namespace.nspname = '${RESTORE_SCHEMA}'
+        AND NOT procedure.prosecdef
+        AND procedure.proconfig = ARRAY['search_path=pg_catalog']
+        AND regexp_replace(btrim(procedure.prosrc), '[[:space:]]+', ' ', 'g') =
+          'BEGIN IF TG_OP = ''INSERT'' THEN RETURN NEW; END IF; RAISE EXCEPTION ''% is append-only'', TG_TABLE_SCHEMA || ''.'' || TG_TABLE_NAME USING ERRCODE = ''55000''; END;'
+    )
+  ) <> 2 THEN
+    RAISE EXCEPTION 'restored admin audit log is missing a canonical ENABLE ALWAYS append-only guard';
+  END IF;
+  IF EXISTS (
+    WITH ordered AS (
+      SELECT log_id, prev_hash, content_hash,
+             lag(content_hash) OVER (ORDER BY log_id) AS previous_content_hash
+      FROM ${RESTORE_SCHEMA}.admin_audit_log
+    )
+    SELECT 1
+    FROM ordered
+    WHERE prev_hash !~ '^[0-9a-f]{64}$'
+       OR content_hash !~ '^[0-9a-f]{64}$'
+       OR prev_hash <> COALESCE(previous_content_hash, repeat('0', 64))
+  ) THEN
+    RAISE EXCEPTION 'restored admin audit hash chain is invalid';
+  END IF;
+  BEGIN
+    TRUNCATE TABLE ${RESTORE_SCHEMA}.admin_audit_log;
+    RAISE EXCEPTION 'admin audit append-only trigger unexpectedly allowed TRUNCATE';
+  EXCEPTION
+    WHEN SQLSTATE '55000' THEN
+      IF SQLERRM NOT ILIKE '%${RESTORE_SCHEMA}.admin_audit_log is append-only%' THEN
+        RAISE EXCEPTION 'admin audit append-only trigger returned an unexpected TRUNCATE diagnostic';
+      END IF;
+  END;
+  SELECT ctid
+    INTO audit_row_ctid
+  FROM ${RESTORE_SCHEMA}.admin_audit_log
+  ORDER BY log_id
+  LIMIT 1;
+  IF audit_row_ctid IS NOT NULL THEN
+    BEGIN
+      UPDATE ${RESTORE_SCHEMA}.admin_audit_log
+      SET action = 'm05-audit-guard-probe'
+      WHERE ctid = audit_row_ctid;
+      RAISE EXCEPTION 'admin audit append-only trigger unexpectedly allowed UPDATE';
+    EXCEPTION
+      WHEN SQLSTATE '55000' THEN
+        IF SQLERRM NOT ILIKE '%${RESTORE_SCHEMA}.admin_audit_log is append-only%' THEN
+          RAISE EXCEPTION 'admin audit append-only trigger returned an unexpected UPDATE diagnostic';
+        END IF;
+    END;
+    BEGIN
+      DELETE FROM ${RESTORE_SCHEMA}.admin_audit_log
+      WHERE ctid = audit_row_ctid;
+      RAISE EXCEPTION 'admin audit append-only trigger unexpectedly allowed DELETE';
+    EXCEPTION
+      WHEN SQLSTATE '55000' THEN
+        IF SQLERRM NOT ILIKE '%${RESTORE_SCHEMA}.admin_audit_log is append-only%' THEN
+          RAISE EXCEPTION 'admin audit append-only trigger returned an unexpected DELETE diagnostic';
+        END IF;
+    END;
+  END IF;
 END
 \$m05\$;
 SQL
@@ -2050,7 +2370,7 @@ restore_archive_section() {
       printf 'CREATE SCHEMA IF NOT EXISTS %s;\n' "${RESTORE_SCHEMA}"
     fi
     remap_sql "${archive_sql}"
-  } >"${remapped_sql}"
+  } | strip_pg_restore_transaction_wrappers >"${remapped_sql}"
   run_guarded_file "${remapped_sql}"
 }
 
@@ -2063,6 +2383,7 @@ restore_archive_section post-data post-data
 phase restoring success "restored into ${RESTORE_SCHEMA}"
 
 phase validating running "validating restored schema"
+assert_admin_audit_contract
 assert_restored_schema
 phase validating success "restored schema passed basic checks"
 

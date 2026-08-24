@@ -171,15 +171,79 @@ GRANT USAGE ON SCHEMA x_extension TO {_quoted(hotswap_role)}, {_quoted(app_role)
         )
 
     reconciliation_schema = ""
-    if kind in {"canonical", "trigger_noop", "missing_audit"}:
+    if kind in {
+        "canonical",
+        "trigger_noop",
+        "trigger_truncate_noop",
+        "audit_trigger_noop",
+        "missing_audit",
+    }:
         # The executing hotswap validates the M05 reconciliation safeguards after
         # restore.  Keep this fixture structurally small, but include the exact
         # protected objects so this is a genuine happy-path exercise rather than
         # an ACL-only preflight probe.
+        audit_guard_body = (
+            """BEGIN
+    IF TG_OP = 'INSERT' THEN
+        RETURN NEW;
+    END IF;
+    RAISE EXCEPTION '% is append-only', TG_TABLE_SCHEMA || '.' || TG_TABLE_NAME
+        USING ERRCODE = '55000';
+END;"""
+            if kind != "audit_trigger_noop"
+            else """BEGIN
+    RETURN NEW;
+END;"""
+        )
         audit_table = (
             ""
             if kind == "missing_audit"
-            else "CREATE TABLE app.admin_audit_log (id bigint PRIMARY KEY);"
+            else """CREATE TABLE app.admin_audit_log (
+  log_id bigserial PRIMARY KEY,
+  actor_user_id uuid NOT NULL REFERENCES app.users(user_id) ON DELETE RESTRICT,
+  action varchar(64) NOT NULL,
+  resource_type varchar(64) NOT NULL,
+  resource_id varchar(128),
+  before_state jsonb,
+  after_state jsonb,
+  access_reason text,
+  target_pii_fields varchar(64)[],
+  ip_hash varchar(64) NOT NULL,
+  user_agent varchar(512),
+  request_id uuid NOT NULL,
+  prev_hash varchar(64) NOT NULL,
+  content_hash varchar(64) NOT NULL,
+  occurred_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT uq_admin_audit_log_prev_hash UNIQUE (prev_hash)
+);
+CREATE FUNCTION app.guard_admin_audit_log_append_only()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog
+AS $audit_guard__BODY__$audit_guard$;
+CREATE TRIGGER trg_admin_audit_log_append_only
+  BEFORE INSERT OR UPDATE OR DELETE ON app.admin_audit_log
+  FOR EACH ROW EXECUTE FUNCTION app.guard_admin_audit_log_append_only();
+ALTER TABLE app.admin_audit_log
+  ENABLE ALWAYS TRIGGER trg_admin_audit_log_append_only;
+CREATE TRIGGER trg_admin_audit_log_truncate_append_only
+  BEFORE TRUNCATE ON app.admin_audit_log
+  FOR EACH STATEMENT EXECUTE FUNCTION app.guard_admin_audit_log_append_only();
+ALTER TABLE app.admin_audit_log
+  ENABLE ALWAYS TRIGGER trg_admin_audit_log_truncate_append_only;
+INSERT INTO app.users (user_id)
+VALUES ('40000000-0000-4000-8000-000000000001');
+INSERT INTO app.admin_audit_log (
+  actor_user_id, action, resource_type, resource_id, before_state, after_state,
+  access_reason, target_pii_fields, ip_hash, user_agent, request_id, prev_hash,
+  content_hash
+) VALUES (
+  '40000000-0000-4000-8000-000000000001', 'm05.fixture', 'restore', NULL,
+  NULL, NULL, NULL, NULL, repeat('1', 64), NULL,
+  '40000000-0000-4000-8000-000000000002', repeat('0', 64), repeat('2', 64)
+);
+""".replace("$audit_guard__BODY__$audit_guard$", f"$audit_guard${audit_guard_body}$audit_guard$")
         )
         trigger_body = (
             """
@@ -189,13 +253,50 @@ GRANT USAGE ON SCHEMA x_extension TO {_quoted(hotswap_role)}, {_quoted(app_role)
   RAISE EXCEPTION '% is append-only', TG_TABLE_SCHEMA || '.' || TG_TABLE_NAME
     USING ERRCODE = '55000';
 """
-            if kind != "trigger_noop"
-            else """
+            if kind not in {"trigger_noop", "trigger_truncate_noop"}
+            else (
+                """
   RETURN NEW;
 """
+                if kind == "trigger_noop"
+                else """
+  IF TG_OP = 'INSERT' THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'TRUNCATE'
+    AND TG_TABLE_NAME = 'ktm_feature_reference_reconciliation_delivery_attempts' THEN
+    RETURN NULL;
+  END IF;
+  RAISE EXCEPTION '% is append-only', TG_TABLE_SCHEMA || '.' || TG_TABLE_NAME
+    USING ERRCODE = '55000';
+"""
+            )
+        )
+        canonical_reconciliation_seed = (
+            """
+INSERT INTO app.ktm_feature_reference_reconciliation_applied_receipts (
+  event_id, event_sequence, event_sha256, action, old_feature_id, old_feature_uuid,
+  replacement_feature_id, replacement_feature_uuid, impact_root_sha256, impact_count,
+  receipt_sha256
+) VALUES (
+  '40000000-0000-4000-8000-000000000010', 1, repeat('3', 64), 'detach',
+  'preexisting-feature', '40000000-0000-4000-8000-000000000011', NULL, NULL,
+  repeat('4', 64), 1, repeat('5', 64)
+);
+INSERT INTO app.ktm_feature_reference_reconciliation_impacts (
+  event_id, impact_index, target_relation, target_id, old_feature_id, old_feature_uuid,
+  replacement_feature_id, replacement_feature_uuid, outcome
+) VALUES (
+  '40000000-0000-4000-8000-000000000010', 0, 'trip_day_pois',
+  '40000000-0000-4000-8000-000000000012', 'preexisting-feature',
+  '40000000-0000-4000-8000-000000000011', NULL, NULL, 'detach'
+);
+"""
+            if kind == "canonical"
+            else ""
         )
         reconciliation_schema = f"""
-CREATE TABLE app.users (id bigint PRIMARY KEY);
+CREATE TABLE app.users (user_id uuid PRIMARY KEY);
 {audit_table}
 CREATE TABLE app.ktm_feature_reference_reconciliation_delivery_attempts (
   event_id uuid NOT NULL,
@@ -303,6 +404,7 @@ CREATE TRIGGER trg_ktm_feature_reference_reconciliation_impacts_truncate_append_
   FOR EACH STATEMENT EXECUTE FUNCTION app.guard_ktm_feature_reference_reconciliation_append_only();
 ALTER TABLE app.ktm_feature_reference_reconciliation_impacts
   ENABLE ALWAYS TRIGGER trg_ktm_feature_reference_reconciliation_impacts_truncate_append_only;
+{canonical_reconciliation_seed}
 """
 
     setup_sql = f"""
@@ -360,6 +462,8 @@ REVOKE INSERT, UPDATE, DELETE ON TABLE app.widgets FROM {_quoted(app_role)};
     expected_failure = {
         "canonical": "",
         "trigger_noop": "M05 append-only trigger unexpectedly allowed",
+        "trigger_truncate_noop": "M05 append-only trigger unexpectedly allowed TRUNCATE on delivery attempts",
+        "audit_trigger_noop": "restored admin audit log is missing a canonical ENABLE ALWAYS append-only guard",
         "missing_audit": "schema-swap requires canonical single-runtime-role ACLs",
         "acl": "schema-swap requires canonical single-runtime-role ACLs",
         "extra": "schema-swap requires exactly one canonical runtime writer role",
@@ -554,10 +658,24 @@ def test_restore_hotswap_preflight_rejects_real_noncanonical_topologies_before_m
         container.stop()
 
 
-def test_restore_hotswap_rejects_real_noop_append_only_trigger_before_schema_switch(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    ("kind", "expected_failure"),
+    [
+        ("trigger_noop", "M05 append-only trigger unexpectedly allowed"),
+        (
+            "trigger_truncate_noop",
+            "M05 append-only trigger unexpectedly allowed TRUNCATE on delivery attempts",
+        ),
+        (
+            "audit_trigger_noop",
+            "restored admin audit log is missing a canonical ENABLE ALWAYS append-only guard",
+        ),
+    ],
+)
+def test_restore_hotswap_rejects_real_append_only_trigger_drift_before_schema_switch(
+    tmp_path: Path, kind: str, expected_failure: str
 ) -> None:
-    """Catalog-shaped triggers with a no-op body must not reach the schema rename."""
+    """Catalog-shaped DML/TRUNCATE drift must not reach the schema rename."""
 
     tools = _require_tools()
     try:
@@ -584,10 +702,10 @@ def test_restore_hotswap_rejects_real_noop_append_only_trigger_before_schema_swi
             host=host,
             port=port,
             suffix=suffix,
-            kind="trigger_noop",
+            kind=kind,
         )
         identity = _identity(tools, case.hotswap_url)
-        snapshot = _snapshot(tools, case.hotswap_url, tmp_path / "noop-trigger-snapshot")
+        snapshot = _snapshot(tools, case.hotswap_url, tmp_path / f"{kind}-snapshot")
         _require_success(_psql(tools, root_url, "ALTER ROLE m05_root NOLOGIN;"))
 
         restore_schema = f"app_restore_{suffix}"
@@ -636,7 +754,7 @@ def test_restore_hotswap_rejects_real_noop_append_only_trigger_before_schema_swi
         )
 
         assert result.returncode == 3, result.stdout + result.stderr
-        assert "M05 append-only trigger unexpectedly allowed" in result.stderr
+        assert expected_failure in result.stderr
         _assert_source_not_swapped(tools, case, previous_schema)
     finally:
         container.stop()
@@ -754,6 +872,22 @@ SELECT current_user,
 
         assert result.returncode == 0, result.stdout + result.stderr
         assert "RESTORE_PHASE=switching:success:schema-swap completed" in result.stdout
+        reflection_insert = _psql(
+            tools,
+            case.hotswap_url,
+            """
+INSERT INTO app.admin_audit_log (
+  actor_user_id, action, resource_type, resource_id, before_state, after_state,
+  access_reason, target_pii_fields, ip_hash, user_agent, request_id, prev_hash,
+  content_hash
+) VALUES (
+  '40000000-0000-4000-8000-000000000001', 'm05.reflection', 'restore', NULL,
+  NULL, NULL, NULL, NULL, repeat('6', 64), NULL,
+  '40000000-0000-4000-8000-000000000003', repeat('2', 64), repeat('7', 64)
+);
+""",
+        )
+        _require_success(reflection_insert)
         after = _psql(
             tools,
             case.hotswap_url,
@@ -765,6 +899,25 @@ SELECT (SELECT oid::text FROM pg_namespace WHERE nspname = 'app'),
        has_schema_privilege('{case.app_role}', 'app', 'USAGE'),
        has_table_privilege('{case.app_role}', 'app.widgets', 'SELECT, INSERT, UPDATE, DELETE'),
        has_database_privilege('{case.fence_role}', current_database(), 'CREATE'),
+       (SELECT count(*)::text
+        FROM app.ktm_feature_reference_reconciliation_applied_receipts),
+       (SELECT event_sequence::text
+        FROM app.ktm_feature_reference_reconciliation_applied_receipts
+        WHERE event_id = '40000000-0000-4000-8000-000000000010'),
+       (SELECT count(*)::text
+        FROM app.ktm_feature_reference_reconciliation_impacts
+        WHERE event_id = '40000000-0000-4000-8000-000000000010'),
+       (SELECT count(*)::text FROM app.admin_audit_log),
+       NOT EXISTS (
+         WITH ordered AS (
+           SELECT prev_hash, content_hash,
+                  lag(content_hash) OVER (ORDER BY log_id) AS previous_content_hash
+           FROM app.admin_audit_log
+         )
+         SELECT 1
+         FROM ordered
+         WHERE prev_hash <> COALESCE(previous_content_hash, repeat('0', 64))
+       ),
        NOT EXISTS (
          SELECT 1 FROM pg_locks
          WHERE locktype = 'advisory'
@@ -783,6 +936,11 @@ SELECT (SELECT oid::text FROM pg_namespace WHERE nspname = 'app'),
             app_usage,
             app_dml,
             fence_create,
+            receipt_count,
+            receipt_sequence,
+            impact_count,
+            audit_count,
+            audit_chain_valid,
             lock_gone,
         ) = after.stdout.strip().split("|")
         assert app_oid and previous_oid and app_oid != before_schema_oid
@@ -792,6 +950,11 @@ SELECT (SELECT oid::text FROM pg_namespace WHERE nspname = 'app'),
         assert app_usage == "t"
         assert app_dml == "t"
         assert fence_create == "t"
+        assert receipt_count == "1"
+        assert receipt_sequence == "1"
+        assert impact_count == "1"
+        assert audit_count == "2"
+        assert audit_chain_valid == "t"
         assert lock_gone == "t"
     finally:
         container.stop()
