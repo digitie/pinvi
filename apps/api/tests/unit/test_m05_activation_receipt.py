@@ -706,6 +706,58 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         "_validate_m05_runtime_dependencies_live",
         lambda **_: None,
     )
+    runtime_attestation_path = evidence_dir / "runtime-attestation.json"
+    runtime_payload = json.loads(runtime_attestation_path.read_text(encoding="utf-8"))["payload"]
+    receipt_payload = json.loads(receipt)["payload"]
+    assert isinstance(runtime_payload, dict)
+    assert isinstance(receipt_payload, dict)
+    lease_directory = tmp_path / "runtime-lease"
+    lease_directory.mkdir(mode=0o700)
+    lease_private_key = Ed25519PrivateKey.generate()
+    lease_public_key = lease_private_key.public_key().public_bytes_raw()
+    lease_key_id = hashlib.sha256(lease_public_key).hexdigest()
+    _write_json(
+        lease_directory / "trust.json",
+        {
+            "key_id": lease_key_id,
+            "public_key": base64.urlsafe_b64encode(lease_public_key).decode("ascii").rstrip("="),
+            "version": 1,
+        },
+    )
+    lease_payload = {
+        "activation_generation": receipt_payload["activation_generation"],
+        "activation_nonce": receipt_payload["activation_nonce"],
+        "dependency_snapshot_sha256": hashlib.sha256(
+            json.dumps(
+                runtime_payload["dependencies"],
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest(),
+        "expires_at": int(time.time()) + 60,
+        "issued_at": int(time.time()) - 1,
+        "key_id": lease_key_id,
+        "receipt_sha256": hashlib.sha256(receipt.encode("utf-8")).hexdigest(),
+        "runtime_attestation_sha256": hashlib.sha256(
+            runtime_attestation_path.read_bytes()
+        ).hexdigest(),
+        "scope": "staging",
+        "sequence": 1,
+        "version": 1,
+    }
+    lease_material = json.dumps(
+        lease_payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+    _write_json(
+        lease_directory / "current.json",
+        {
+            "payload": lease_payload,
+            "signature": base64.urlsafe_b64encode(lease_private_key.sign(lease_material))
+            .decode("ascii")
+            .rstrip("="),
+        },
+    )
     loaded = Settings(
         _env_file=None,
         pinvi_environment="staging",
@@ -724,7 +776,8 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         ),
         pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt=receipt,
         pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt_public_key=public_key,
-        pinvi_m05_runtime_attestation_path=str(evidence_dir / "runtime-attestation.json"),
+        pinvi_m05_runtime_attestation_path=str(runtime_attestation_path),
+        pinvi_m05_runtime_lease_directory=str(lease_directory),
         pinvi_m05_activation_ledger_path=str(ledger_path),
         pinvi_m05_activation_high_watermark_path=str(high_watermark_path),
         pinvi_m05_activation_durable_floor_path=str(durable_floor_path),
