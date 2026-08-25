@@ -257,6 +257,8 @@ def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
         assert "RUNTIME_NEW_WRITERS_STARTED" in source
         assert 'elif [[ "$RUNTIME_NEW_WRITERS_STARTED" == "1" ]]' in source
         assert '|| "$RUNTIME_DAGSTER_WAS_RUNNING" == "1"' in source
+        assert "runtime_dagster_is_running()" in source
+        assert "dagster_rollout_enabled()" in source
     docker_app = (ROOT / "scripts" / "docker-app.sh").read_text(encoding="utf-8")
     assert "PINVI_DEV_FORCE_KILL" in docker_app
     assert "refusing to terminate it" in docker_app
@@ -282,6 +284,8 @@ def test_fresh_0101_and_role_bootstrap_fence_direct_app_schema_create() -> None:
     assert "app_acl.privilege_type = 'CREATE'" in migration
     assert "app_acl.privilege_type = 'CREATE'" in bootstrap
     assert "(SELECT oid FROM app_owner) <> (SELECT oid FROM database_owner)" in migration
+    assert ":legacy_rebaseline" in migration
+    assert "legacy_rebaseline\n                    OR (SELECT oid FROM app_owner)" in migration
     assert "(SELECT oid FROM schema_owner) <> (SELECT oid FROM database_owner)" in bootstrap
     assert "relation.relkind = 'r'" in migration
     assert "relation.relpersistence = 'p'" in migration

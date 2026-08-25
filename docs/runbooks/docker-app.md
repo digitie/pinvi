@@ -165,7 +165,8 @@ Compose project/service label을 사용하고 `.pinvi-predeploy` 이름은 검�
 운영 volume 삭제를 우회할 수 없다.
 
 `scripts/docker-app.sh build`는 API image source revision을 확정하고 build 뒤 OCI label을 다시
-확인한다. 로컬 `development|test|smoke`에서 revision을 지정하지 않으면 `development` label을
+확인한다. 기존 Dagster writer가 있거나 `PINVI_ENABLE_DAGSTER=1`이면 flag가 꺼진 호출에서도
+Dagster image를 함께 build·검증한다. 로컬 `development|test|smoke`에서 revision을 지정하지 않으면 `development` label을
 허용한다. exact commit을 지정하면 환경과 무관하게 clean worktree의 `HEAD`와 같아야 한다.
 `staging|production`은 wrapper가 clean `HEAD`를 자동 주입하며, wrapper를 우회한 직접 Compose
 build도 `development` 또는 비정상 revision이면 Dockerfile 단계에서 실패한다. wrapper의 immutable

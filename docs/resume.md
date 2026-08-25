@@ -11,20 +11,22 @@ seal 재시도를 fail-close로 보장하고, Web도 같은 snapshot/복구 대�
 container 탐색은 Compose project/service label과 pre-deploy 이름 제외를 사용한다.
 
 Compose 통합 검증은 실제 `app-db-runtime-role` → API image build → `app-migrator alembic upgrade head`
-→ role seal 순서를 실행해 fresh `0100/0101` version row·schema owner·권한 경계를 확인한다. DB owner와
-`app`/`ops` owner의 분리를 bootstrap·0101·통합 회귀에 결박했다. API Docker healthcheck와 readiness에는
-`/health/db`를 포함하고, reset의 운영 환경 판정은 env-file 값을 우선한다.
+→ role seal 순서를 실행해 fresh `0100/0101` version row·schema owner·권한 경계를 확인한다. managed/fresh
+경로에서는 DB owner와 `app`/`ops` owner의 분리를 bootstrap·0101·통합 회귀에 결박하고, verified legacy
+handoff의 pre-convergence `app_owner = database_owner` 상태는 별도 조건으로 허용한다. API Docker
+healthcheck와 readiness에는 `/health/db`를 포함하고, reset의 운영 환경 판정은 env-file 값을 우선한다.
 
 운영 fallback은 migration 전 실행 중인 writer의 snapshot 이름을 먼저 예약 검사해 stale snapshot
 충돌이면 기존 writer를 중지하지 않는다. 새 API/Web/Dagster가 부분 기동한 뒤 실패하면 pre-deploy
 snapshot이 아닌 새 writer만 제거하고, 기존 Dagster가 실행 중이었다면 `PINVI_ENABLE_DAGSTER=0`이어도
-복구 기동한다. ADR-065의 migration owner database CREATE 문구도 실제 ACL 정책과 일치하도록 정정했다.
+복구 기동한다. 기존 Dagster가 있는 상태의 build/pull과 rollout은 flag가 꺼져 있어도 Dagster image를
+함께 준비·검증한다. ADR-065의 migration owner database CREATE 문구도 실제 ACL 정책과 일치하도록 정정했다.
 
 **검증**: M05 PostgreSQL 통합 `32 passed, 1 warning`, Compose migrator lifecycle `1 passed`,
-API unit `1287 passed, 3 warnings`, 관련 정적·provenance·lifecycle 테스트 `64 passed`, strict
-mypy `236 source files`, Ruff/format, Python compile, shell syntax, `git diff --check` 통과. 두 전문
-적대 재리뷰와 GitHub API/Web CI, N150 live admin 인증을 최신 커밋에서 다시 확인해야 하며, live E2E
-gate는 아직 통과하지 않았다. `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 계속 보존한다.
+API unit 기준선 `1287 passed, 3 warnings`, 관련 정적·provenance·lifecycle·설정 테스트 `91 passed`,
+strict mypy `236 source files`, Ruff/format, Python compile, shell syntax, `git diff --check` 통과. 두
+전문 적대 재리뷰와 GitHub API/Web CI, N150 live admin 인증을 최신 커밋에서 다시 확인해야 하며,
+live E2E gate는 아직 통과하지 않았다. `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 계속 보존한다.
 
 **다음 한 작업**: `uv.lock`을 제외한 변경을 commit/push하고 최신 HEAD 기준 두 전문 적대 리뷰,
 GitHub API/Web CI, N150 live E2E를 재확인한다. 모든 gate가 green일 때만 PR #477을 merge한다.

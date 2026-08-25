@@ -102,7 +102,7 @@ pull_images() {
   pinvi_prepare_api_image_provenance
   log "pulling app images"
   compose pull app-api app-web
-  if [[ "$ENABLE_DAGSTER" != "0" ]]; then
+  if dagster_rollout_enabled; then
     compose --profile etl pull app-dagster
     pinvi_verify_runtime_image_provenance app-api app-web app-dagster
   else
@@ -114,14 +114,24 @@ build_images() {
   pinvi_prepare_api_image_provenance
   log "building app images from the attested source revision"
   compose build app-api app-web
-  if [[ "$ENABLE_DAGSTER" != "0" ]]; then
+  if dagster_rollout_enabled; then
     compose --profile etl build app-dagster
   fi
-  if [[ "$ENABLE_DAGSTER" != "0" ]]; then
+  if dagster_rollout_enabled; then
     pinvi_verify_runtime_image_provenance app-api app-web app-dagster
   else
     pinvi_verify_runtime_image_provenance app-api app-web
   fi
+}
+
+runtime_dagster_is_running() {
+  local -a container_ids=()
+  mapfile -t container_ids < <(pinvi_runtime_container_ids app-dagster running)
+  (( ${#container_ids[@]} > 0 ))
+}
+
+dagster_rollout_enabled() {
+  [[ "$ENABLE_DAGSTER" != "0" ]] || runtime_dagster_is_running
 }
 
 runtime_writer_container_id() {
@@ -778,7 +788,11 @@ dagster_up_under_lifecycle_lock() {
 
 up_under_lifecycle_lock() {
   local api_container_id web_container_id
-  pinvi_verify_runtime_image_provenance app-api app-web
+  if [[ "$ENABLE_DAGSTER" != "0" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
+    pinvi_verify_runtime_image_provenance app-api app-web app-dagster
+  else
+    pinvi_verify_runtime_image_provenance app-api app-web
+  fi
   log "starting API + Web"
   RUNTIME_NEW_WRITERS_STARTED="1"
   compose up -d app-api app-web

@@ -1606,7 +1606,10 @@ def _activate_m05_migration_owner(bind: sa.Connection, *, activate: bool = True)
                 AND (SELECT count(*) FROM app_owner) = 1
                 AND (SELECT count(*) FROM ops_schema) = 1
                 AND (SELECT count(*) FROM database_owner) = 1
-                AND (SELECT oid FROM app_owner) <> (SELECT oid FROM database_owner)
+                AND (
+                    :legacy_rebaseline
+                    OR (SELECT oid FROM app_owner) <> (SELECT oid FROM database_owner)
+                )
                 AND (SELECT count(*) FROM session_role) = 1
                 AND (
                     NOT :legacy_rebaseline

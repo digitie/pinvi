@@ -181,7 +181,12 @@ build() {
   pinvi_prepare_api_image_provenance
   log "building app-api and app-web"
   compose build app-api app-web
-  pinvi_verify_runtime_image_provenance app-api app-web
+  if dagster_rollout_enabled; then
+    compose --profile etl build app-dagster
+    pinvi_verify_runtime_image_provenance app-api app-web app-dagster
+  else
+    pinvi_verify_runtime_image_provenance app-api app-web
+  fi
 }
 
 require_python() {
@@ -200,6 +205,16 @@ up_deps() {
 runtime_writer_container_id() {
   local service="$1"
   pinvi_runtime_container_ids "$service" running
+}
+
+runtime_dagster_is_running() {
+  local -a container_ids=()
+  mapfile -t container_ids < <(pinvi_runtime_container_ids app-dagster running)
+  (( ${#container_ids[@]} > 0 ))
+}
+
+dagster_rollout_enabled() {
+  [[ "${PINVI_ENABLE_DAGSTER:-0}" != "0" ]] || runtime_dagster_is_running
 }
 
 runtime_writer_container_name() {
@@ -842,7 +857,11 @@ up() {
   reject_explicit_migrator_database_url
   require_docker
   require_python
-  pinvi_verify_runtime_image_provenance app-api app-web
+  if dagster_rollout_enabled; then
+    pinvi_verify_runtime_image_provenance app-api app-web app-dagster
+  else
+    pinvi_verify_runtime_image_provenance app-api app-web
+  fi
   local legacy_rebaseline
   legacy_rebaseline="$(m05_legacy_rebaseline_profile)"
   if [[ "$legacy_rebaseline" == "1" ]]; then
@@ -854,6 +873,11 @@ up() {
     log "runtime writer drain failed"
     return 1
   fi
+  if [[ "${PINVI_ENABLE_DAGSTER:-0}" != "0" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
+    pinvi_verify_runtime_image_provenance app-api app-web app-dagster
+  else
+    pinvi_verify_runtime_image_provenance app-api app-web
+  fi
   free_app_ports
   up_deps
   migrate_under_lifecycle_lock
@@ -861,7 +885,7 @@ up() {
   RUNTIME_NEW_WRITERS_STARTED="1"
   compose up -d app-api app-web
   pinvi_verify_or_remove_running_app
-  if [[ "$ENABLE_DAGSTER" != "0" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
+  if [[ "${PINVI_ENABLE_DAGSTER:-0}" != "0" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
     dagster_up_under_lifecycle_lock
   fi
   wait_for_url "http://127.0.0.1:${RUSTFS_PORT}/health/live" "RustFS"
