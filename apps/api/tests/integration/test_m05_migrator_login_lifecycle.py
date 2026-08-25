@@ -162,7 +162,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
         assert len(state) == 7
         return tuple(state)  # type: ignore[return-value]
 
-    def runtime_app_privilege_state() -> tuple[str, str, str, str]:
+    def runtime_app_privilege_state() -> tuple[str, str, str, str, str]:
         query = (
             "SELECT "
             f"has_schema_privilege('{runtime_role}', 'app', 'USAGE'), "
@@ -177,7 +177,11 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             f"(has_table_privilege('{runtime_role}', 'app.oauth_mobile_exchanges', 'SELECT') "
             f"AND has_table_privilege('{runtime_role}', 'app.oauth_mobile_exchanges', 'INSERT') "
             f"AND has_table_privilege('{runtime_role}', 'app.oauth_mobile_exchanges', 'UPDATE') "
-            f"AND has_table_privilege('{runtime_role}', 'app.oauth_mobile_exchanges', 'DELETE'))"
+            f"AND has_table_privilege('{runtime_role}', 'app.oauth_mobile_exchanges', 'DELETE')), "
+            f"(has_table_privilege('{runtime_role}', 'app.user_oauth_identities', 'SELECT') "
+            f"AND has_table_privilege('{runtime_role}', 'app.user_oauth_identities', 'INSERT') "
+            f"AND has_table_privilege('{runtime_role}', 'app.user_oauth_identities', 'UPDATE') "
+            f"AND has_table_privilege('{runtime_role}', 'app.user_oauth_identities', 'DELETE'))"
         )
         result = compose(
             "exec",
@@ -192,7 +196,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             f"--command={query}",
         )
         state = result.stdout.strip().split("|")
-        assert len(state) == 4
+        assert len(state) == 5
         return tuple(state)  # type: ignore[return-value]
 
     client_name = f"pinvi-m05-client-{suffix}"
@@ -230,7 +234,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             "t",
             "20260824_0101",
         )
-        assert runtime_app_privilege_state() == ("t", "t", "t", "t")
+        assert runtime_app_privilege_state() == ("t", "t", "t", "t", "t")
         compose(
             "exec",
             "-T",

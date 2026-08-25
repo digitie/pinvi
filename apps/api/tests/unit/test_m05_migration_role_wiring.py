@@ -261,7 +261,21 @@ def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
         assert "runtime_dagster_is_running()" in source
         assert "dagster_rollout_enabled()" in source
         assert "runtime_capture_predeploy_container_ids()" in source
+        assert "runtime_record_new_container_ids()" in source
         assert "runtime_new_container_ids()" in source
+        assert "RUNTIME_NEW_API_CONTAINER_IDS" in source
+        assert "RUNTIME_NEW_WEB_CONTAINER_IDS" in source
+        assert "RUNTIME_NEW_DAGSTER_CONTAINER_IDS" in source
+        assert "RUNTIME_API_SNAPSHOT_RENAMED" in source
+        assert "RUNTIME_WEB_SNAPSHOT_RENAMED" in source
+        assert "RUNTIME_DAGSTER_SNAPSHOT_RENAMED" in source
+        preserve = source[
+            source.index("preserve_runtime_writers()") : source.index(
+                "rollback_preserved_runtime_writers()"
+            )
+        ]
+        assert "restore_runtime_snapshot_names" in preserve
+        assert "|| true" not in preserve
         assert "pinvi_verify_running_app" in source
         assert "pinvi_verify_running_dagster" in source
         assert "pinvi_verify_or_remove_running_app" not in source

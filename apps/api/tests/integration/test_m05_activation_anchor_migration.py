@@ -1902,9 +1902,14 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
                 assert (
                     await connection.scalar(
                         text(
-                            "SELECT NOT has_table_privilege("
-                            ":runtime_role, 'app.alembic_version', "
-                            "'SELECT, INSERT, UPDATE, DELETE')"
+                            "SELECT has_table_privilege("
+                            ":runtime_role, 'app.alembic_version', 'SELECT') "
+                            "AND NOT has_table_privilege("
+                            ":runtime_role, 'app.alembic_version', 'INSERT') "
+                            "AND NOT has_table_privilege("
+                            ":runtime_role, 'app.alembic_version', 'UPDATE') "
+                            "AND NOT has_table_privilege("
+                            ":runtime_role, 'app.alembic_version', 'DELETE')"
                         ),
                         {"runtime_role": runtime_role},
                     )
@@ -1916,6 +1921,10 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
         runtime_engine = create_async_engine(runtime_url, poolclass=NullPool)
         try:
             async with runtime_engine.connect() as connection:
+                assert (
+                    await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
+                    == "20260824_0101"
+                )
                 with pytest.raises(DBAPIError) as exc_info:
                     await connection.execute(
                         text("UPDATE app.alembic_version SET version_num = 'forged'")
@@ -2081,8 +2090,10 @@ async def test_0101_legacy_converges_all_app_catalog_owners(
                         "has_sequence_privilege(:runtime_role, "
                         "'app.legacy_runtime_default_acl_probe_record_id_seq', "
                         "'USAGE, SELECT, UPDATE'), "
-                        "NOT has_table_privilege(:runtime_role, 'app.alembic_version', "
-                        "'SELECT, INSERT, UPDATE, DELETE')"
+                        "has_table_privilege(:runtime_role, 'app.alembic_version', 'SELECT') "
+                        "AND NOT has_table_privilege(:runtime_role, 'app.alembic_version', 'INSERT') "
+                        "AND NOT has_table_privilege(:runtime_role, 'app.alembic_version', 'UPDATE') "
+                        "AND NOT has_table_privilege(:runtime_role, 'app.alembic_version', 'DELETE')"
                     ),
                     {"runtime_role": runtime_role},
                 )
@@ -2099,6 +2110,7 @@ async def test_0101_legacy_converges_all_app_catalog_owners(
         runtime_engine = create_async_engine(runtime_url, poolclass=NullPool)
         try:
             async with runtime_engine.connect() as connection:
+                await connection.execute(text("SELECT version_num FROM app.alembic_version"))
                 with pytest.raises(DBAPIError) as exc_info:
                     await connection.execute(
                         text("UPDATE app.alembic_version SET version_num = 'forged'")

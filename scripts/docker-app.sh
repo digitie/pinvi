@@ -39,6 +39,12 @@ RUNTIME_DAGSTER_BACKUP_NAME=""
 RUNTIME_PREDEPLOY_API_CONTAINER_IDS=()
 RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS=()
 RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS=()
+RUNTIME_NEW_API_CONTAINER_IDS=()
+RUNTIME_NEW_WEB_CONTAINER_IDS=()
+RUNTIME_NEW_DAGSTER_CONTAINER_IDS=()
+RUNTIME_API_SNAPSHOT_RENAMED="0"
+RUNTIME_WEB_SNAPSHOT_RENAMED="0"
+RUNTIME_DAGSTER_SNAPSHOT_RENAMED="0"
 
 usage() {
   cat <<'EOF'
@@ -228,17 +234,37 @@ runtime_id_was_existing() {
   return 1
 }
 
-runtime_new_container_ids() {
+runtime_record_new_container_ids() {
   local service="$1"
   local container_id
   local -a container_ids=()
+  case "$service" in
+    app-api) RUNTIME_NEW_API_CONTAINER_IDS=() ;;
+    app-web) RUNTIME_NEW_WEB_CONTAINER_IDS=() ;;
+    app-dagster) RUNTIME_NEW_DAGSTER_CONTAINER_IDS=() ;;
+    *) return 2 ;;
+  esac
   mapfile -t container_ids < <(pinvi_runtime_container_ids "$service")
   for container_id in "${container_ids[@]}"; do
     [[ -n "$container_id" ]] || continue
     if ! runtime_id_was_existing "$service" "$container_id"; then
-      printf '%s\n' "$container_id"
+      case "$service" in
+        app-api) RUNTIME_NEW_API_CONTAINER_IDS+=("$container_id") ;;
+        app-web) RUNTIME_NEW_WEB_CONTAINER_IDS+=("$container_id") ;;
+        app-dagster) RUNTIME_NEW_DAGSTER_CONTAINER_IDS+=("$container_id") ;;
+      esac
     fi
   done
+}
+
+runtime_new_container_ids() {
+  local service="$1"
+  local container_id
+  case "$service" in
+    app-api) for container_id in "${RUNTIME_NEW_API_CONTAINER_IDS[@]}"; do printf '%s\n' "$container_id"; done ;;
+    app-web) for container_id in "${RUNTIME_NEW_WEB_CONTAINER_IDS[@]}"; do printf '%s\n' "$container_id"; done ;;
+    app-dagster) for container_id in "${RUNTIME_NEW_DAGSTER_CONTAINER_IDS[@]}"; do printf '%s\n' "$container_id"; done ;;
+  esac
 }
 
 runtime_dagster_is_running() {
@@ -285,6 +311,65 @@ runtime_snapshot_preflight() {
       app-dagster) RUNTIME_DAGSTER_CONTAINER_NAME="$container_name"; RUNTIME_DAGSTER_BACKUP_NAME="$backup_name" ;;
     esac
   done
+}
+
+runtime_update_snapshot_renamed_flag() {
+  if [[ "$RUNTIME_API_SNAPSHOT_RENAMED" == "1" || "$RUNTIME_WEB_SNAPSHOT_RENAMED" == "1" \
+    || "$RUNTIME_DAGSTER_SNAPSHOT_RENAMED" == "1" ]]; then
+    RUNTIME_SNAPSHOT_RENAMED="1"
+  else
+    RUNTIME_SNAPSHOT_RENAMED="0"
+  fi
+}
+
+restore_runtime_snapshot_name() {
+  local service="$1"
+  local renamed backup_name container_name
+  case "$service" in
+    app-api)
+      renamed="$RUNTIME_API_SNAPSHOT_RENAMED"
+      backup_name="$RUNTIME_API_BACKUP_NAME"
+      container_name="$RUNTIME_API_CONTAINER_NAME"
+      ;;
+    app-web)
+      renamed="$RUNTIME_WEB_SNAPSHOT_RENAMED"
+      backup_name="$RUNTIME_WEB_BACKUP_NAME"
+      container_name="$RUNTIME_WEB_CONTAINER_NAME"
+      ;;
+    app-dagster)
+      renamed="$RUNTIME_DAGSTER_SNAPSHOT_RENAMED"
+      backup_name="$RUNTIME_DAGSTER_BACKUP_NAME"
+      container_name="$RUNTIME_DAGSTER_CONTAINER_NAME"
+      ;;
+    *) return 2 ;;
+  esac
+  [[ "$renamed" == "1" ]] || return 0
+  if ! docker container inspect "$backup_name" >/dev/null 2>&1; then
+    echo "pre-deploy ${service} snapshot disappeared before name restoration: ${backup_name}" >&2
+    return 1
+  fi
+  if ! docker rename "$backup_name" "$container_name"; then
+    echo "pre-deploy ${service} snapshot could not be renamed back: ${backup_name}" >&2
+    return 1
+  fi
+  case "$service" in
+    app-api) RUNTIME_API_SNAPSHOT_RENAMED="0" ;;
+    app-web) RUNTIME_WEB_SNAPSHOT_RENAMED="0" ;;
+    app-dagster) RUNTIME_DAGSTER_SNAPSHOT_RENAMED="0" ;;
+  esac
+  runtime_update_snapshot_renamed_flag
+}
+
+restore_runtime_snapshot_names() {
+  local restore_failed="0"
+  local service
+  for service in app-api app-web app-dagster; do
+    if ! restore_runtime_snapshot_name "$service"; then
+      restore_failed="1"
+    fi
+  done
+  runtime_update_snapshot_renamed_flag
+  [[ "$restore_failed" == "0" ]]
 }
 
 remove_new_runtime_writers() {
@@ -355,25 +440,32 @@ preserve_runtime_writers() {
     "$RUNTIME_API_CONTAINER_ID" "$RUNTIME_API_BACKUP_NAME"; then
     return 1
   fi
+  if [[ "$RUNTIME_API_WAS_RUNNING" == "1" ]]; then
+    RUNTIME_API_SNAPSHOT_RENAMED="1"
+    runtime_update_snapshot_renamed_flag
+  fi
   if [[ "$RUNTIME_WEB_WAS_RUNNING" == "1" ]] && ! docker rename \
     "$RUNTIME_WEB_CONTAINER_ID" "$RUNTIME_WEB_BACKUP_NAME"; then
-    [[ -z "$RUNTIME_API_BACKUP_NAME" ]] || docker rename \
-      "$RUNTIME_API_BACKUP_NAME" "$RUNTIME_API_CONTAINER_NAME" || true
+    if ! restore_runtime_snapshot_names; then
+      echo "runtime snapshot name rollback failed after Web rename failure" >&2
+    fi
     return 1
+  fi
+  if [[ "$RUNTIME_WEB_WAS_RUNNING" == "1" ]]; then
+    RUNTIME_WEB_SNAPSHOT_RENAMED="1"
+    runtime_update_snapshot_renamed_flag
   fi
   if [[ "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]] && ! docker rename \
     "$RUNTIME_DAGSTER_CONTAINER_ID" "$RUNTIME_DAGSTER_BACKUP_NAME"; then
-    if [[ -n "$RUNTIME_WEB_BACKUP_NAME" ]] && docker container inspect \
-      "$RUNTIME_WEB_BACKUP_NAME" >/dev/null 2>&1; then
-      docker rename "$RUNTIME_WEB_BACKUP_NAME" "$RUNTIME_WEB_CONTAINER_NAME" || true
-    fi
-    if [[ -n "$RUNTIME_API_BACKUP_NAME" ]] && docker container inspect \
-      "$RUNTIME_API_BACKUP_NAME" >/dev/null 2>&1; then
-      docker rename "$RUNTIME_API_BACKUP_NAME" "$RUNTIME_API_CONTAINER_NAME" || true
+    if ! restore_runtime_snapshot_names; then
+      echo "runtime snapshot name rollback failed after Dagster rename failure" >&2
     fi
     return 1
   fi
-  RUNTIME_SNAPSHOT_RENAMED="1"
+  if [[ "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
+    RUNTIME_DAGSTER_SNAPSHOT_RENAMED="1"
+    runtime_update_snapshot_renamed_flag
+  fi
 }
 
 rollback_preserved_runtime_writers() {
@@ -400,11 +492,10 @@ rollback_preserved_runtime_writers() {
         rollback_failed="1"
       fi
     fi
-    if [[ "$RUNTIME_SNAPSHOT_RENAMED" == "1" ]] && \
-      docker container inspect "$backup" >/dev/null 2>&1; then
-      docker rename "$backup" "$name" || rollback_failed="1"
-    fi
   done
+  if ! restore_runtime_snapshot_names; then
+    rollback_failed="1"
+  fi
   if [[ "$rollback_failed" == "0" ]] && ! restore_runtime_writers_without_rollback; then
     rollback_failed="1"
   fi
@@ -412,6 +503,9 @@ rollback_preserved_runtime_writers() {
     RUNTIME_DEPLOY_PRESERVE="0"
     RUNTIME_NEW_WRITERS_STARTED="0"
     RUNTIME_SNAPSHOT_RENAMED="0"
+    RUNTIME_NEW_API_CONTAINER_IDS=()
+    RUNTIME_NEW_WEB_CONTAINER_IDS=()
+    RUNTIME_NEW_DAGSTER_CONTAINER_IDS=()
   fi
   [[ "$rollback_failed" == "0" ]]
 }
@@ -439,6 +533,12 @@ drain_runtime_writers() {
   RUNTIME_DAGSTER_BACKUP_NAME=""
   RUNTIME_NEW_WRITERS_STARTED="0"
   RUNTIME_SNAPSHOT_RENAMED="0"
+  RUNTIME_NEW_API_CONTAINER_IDS=()
+  RUNTIME_NEW_WEB_CONTAINER_IDS=()
+  RUNTIME_NEW_DAGSTER_CONTAINER_IDS=()
+  RUNTIME_API_SNAPSHOT_RENAMED="0"
+  RUNTIME_WEB_SNAPSHOT_RENAMED="0"
+  RUNTIME_DAGSTER_SNAPSHOT_RENAMED="0"
   if ! api_container_id="$(runtime_writer_container_id app-api)"; then
     drain_failed="1"
   elif [[ -n "$api_container_id" ]]; then
@@ -592,6 +692,12 @@ restore_runtime_writers_without_rollback() {
   RUNTIME_WRITERS_DRAINED="0"
   RUNTIME_NEW_WRITERS_STARTED="0"
   RUNTIME_SNAPSHOT_RENAMED="0"
+  RUNTIME_NEW_API_CONTAINER_IDS=()
+  RUNTIME_NEW_WEB_CONTAINER_IDS=()
+  RUNTIME_NEW_DAGSTER_CONTAINER_IDS=()
+  RUNTIME_API_SNAPSHOT_RENAMED="0"
+  RUNTIME_WEB_SNAPSHOT_RENAMED="0"
+  RUNTIME_DAGSTER_SNAPSHOT_RENAMED="0"
 }
 
 restore_runtime_writers() {
@@ -860,22 +966,28 @@ bootstrap_credential_file() {
 dagster_up_under_lifecycle_lock() {
   pinvi_verify_runtime_image_provenance app-dagster
   log "starting Dagster webserver (port ${DAGSTER_PORT})"
-  compose --profile etl up -d app-dagster
+  if ! compose --profile etl up -d app-dagster; then
+    runtime_record_new_container_ids app-dagster
+    return 1
+  fi
+  runtime_record_new_container_ids app-dagster
   pinvi_verify_running_dagster
   wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster"
   wait_for_container_health "$(runtime_writer_container_id app-dagster)" "Dagster container"
 }
 
 finalize_preserved_runtime_writers() {
-  local container_id
+  local container_id cleanup_failed="0"
   for container_id in "$RUNTIME_API_CONTAINER_ID" "$RUNTIME_WEB_CONTAINER_ID" \
     "$RUNTIME_DAGSTER_CONTAINER_ID"; do
     if [[ -n "$container_id" ]]; then
       if ! docker rm "$container_id" >/dev/null; then
-        log "pre-deploy runtime snapshot could not be removed; leaving it for manual cleanup"
+        log "pre-deploy runtime snapshot could not be removed"
+        cleanup_failed="1"
       fi
     fi
   done
+  [[ "$cleanup_failed" == "0" ]] || return 1
   RUNTIME_API_WAS_RUNNING="0"
   RUNTIME_WEB_WAS_RUNNING="0"
   RUNTIME_DAGSTER_WAS_RUNNING="0"
@@ -895,6 +1007,12 @@ finalize_preserved_runtime_writers() {
   RUNTIME_DAGSTER_BACKUP_NAME=""
   RUNTIME_NEW_WRITERS_STARTED="0"
   RUNTIME_SNAPSHOT_RENAMED="0"
+  RUNTIME_NEW_API_CONTAINER_IDS=()
+  RUNTIME_NEW_WEB_CONTAINER_IDS=()
+  RUNTIME_NEW_DAGSTER_CONTAINER_IDS=()
+  RUNTIME_API_SNAPSHOT_RENAMED="0"
+  RUNTIME_WEB_SNAPSHOT_RENAMED="0"
+  RUNTIME_DAGSTER_SNAPSHOT_RENAMED="0"
   RUNTIME_PREDEPLOY_API_CONTAINER_IDS=()
   RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS=()
   RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS=()
@@ -931,7 +1049,13 @@ up() {
   migrate_under_lifecycle_lock
   log "starting API + Web"
   RUNTIME_NEW_WRITERS_STARTED="1"
-  compose up -d app-api app-web
+  if ! compose up -d app-api app-web; then
+    runtime_record_new_container_ids app-api
+    runtime_record_new_container_ids app-web
+    return 1
+  fi
+  runtime_record_new_container_ids app-api
+  runtime_record_new_container_ids app-web
   pinvi_verify_running_app
   if [[ "${PINVI_ENABLE_DAGSTER:-0}" != "0" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
     dagster_up_under_lifecycle_lock

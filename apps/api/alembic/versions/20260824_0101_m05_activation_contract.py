@@ -2383,7 +2383,7 @@ def _grant_fresh_runtime_app_privileges(bind: sa.Connection, app_schema_owner: s
 
 
 def _revoke_runtime_alembic_version_privileges(bind: sa.Connection, app_role: str | None) -> None:
-    """application runtime이 migration provenance를 바꾸지 못하게 한다."""
+    """application runtime은 provenance를 읽되 migration provenance를 바꾸지 못하게 한다."""
 
     if app_role is None:
         return
@@ -2393,6 +2393,9 @@ def _revoke_runtime_alembic_version_privileges(bind: sa.Connection, app_role: st
         sa.text(
             f"REVOKE ALL PRIVILEGES ON TABLE app.alembic_version FROM {_quote_identifier(app_role)}"
         )
+    )
+    bind.execute(
+        sa.text(f"GRANT SELECT ON TABLE app.alembic_version TO {_quote_identifier(app_role)}")
     )
 
 
