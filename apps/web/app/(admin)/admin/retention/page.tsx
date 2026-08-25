@@ -229,7 +229,10 @@ export default function AdminRetentionPage() {
           const archived = nestedNumber(run.result, 'location', 'archived_rows');
           if (run.status === 'failed' && run.error_message) {
             return (
-              <p className="max-w-xs text-xs text-error-text" title={run.error_message}>
+              <p
+                className="max-w-xs whitespace-normal break-words text-xs text-error-text"
+                title={run.error_message}
+              >
                 {run.error_message}
               </p>
             );

@@ -28,6 +28,7 @@ from app.services.admin_retention import (
     build_retention_summary,
     create_retention_dry_run,
     execute_retention,
+    finalize_avatar_purge,
     list_retention_runs,
     record_retention_run_failure,
 )
@@ -164,7 +165,7 @@ async def execute_retention_endpoint(
     # 일어나기 전, 아직 멀쩡할 때 값을 미리 뽑아 둔다.
     actor_id = admin.user_id
     try:
-        run = await execute_retention(
+        run, avatar_storage_keys = await execute_retention(
             db,
             actor_user_id=actor_id,
             scope=body.scope,
@@ -212,6 +213,10 @@ async def execute_retention_endpoint(
             error=exc,
         )
         raise _error_response(RetentionExecutionError(str(exc))) from exc
+
+    # 파괴 트랜잭션은 위 커밋으로 이미 확정됐다 — avatar RustFS 삭제는 이제부터 열린 DB
+    # 트랜잭션 없이 진행한다(T-346 수정, idle-in-transaction 중 PII 롤백 위험 제거).
+    run = await finalize_avatar_purge(db, run=run, storage_keys=avatar_storage_keys)
 
     return Envelope.of(run)
 

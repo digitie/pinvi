@@ -152,7 +152,7 @@ async def execute_retention(
     access_reason: str,
     confirm_phrase: str,
     now: datetime | None = None,
-) -> AdminRetentionRun:
+) -> tuple[AdminRetentionRun, list[str]]:
     current = now or datetime.now(UTC)
     settings = get_settings()
     if not settings.pinvi_retention_execute_enabled:
@@ -208,8 +208,10 @@ async def execute_retention(
             {"name": f"pinvi-retention-execute:{run_id}"},
         )
         result: dict[str, Any] = {}
+        avatar_storage_keys: list[str] = []
         if scope in ("all", "pii"):
-            result["pii"] = await _execute_pii_retention(db, pii=pii, now=current)
+            pii_result, avatar_storage_keys = await _execute_pii_retention(db, pii=pii, now=current)
+            result["pii"] = pii_result
         if scope in ("all", "location"):
             result["location"] = await _execute_location_archive(
                 db, location=location, run_id=run_id
@@ -232,7 +234,7 @@ async def execute_retention(
             .mappings()
             .one()
         )
-        return _run_from_row(row)
+        return _run_from_row(row), avatar_storage_keys
     except Exception as exc:
         # **`BaseException`으로 넓히지 않는다.** 취소(`CancelledError`)를 잡고 나서 `await`를 하면
         # 두 가지 중 하나가 일어나는데 둘 다 좋지 않다 — 취소 스코프 안이면 그 `await`가 즉시
@@ -394,9 +396,19 @@ async def _execute_pii_retention(
     *,
     pii: AdminPiiRetentionSummary | None,
     now: datetime,
-) -> dict[str, int | list[str]]:
+) -> tuple[dict[str, int], list[str]]:
+    """PII 익명화 SQL만 실행한다. avatar RustFS 삭제는 이 함수가 하지 않는다(T-346 수정).
+
+    이전에는 이 함수가 avatar 삭제까지 인라인으로 수행했다 — 그래서 아직 커밋되지 않은 파괴
+    트랜잭션이 열린 채로 RustFS I/O(외부 네트워크 호출, botocore 기본 타임아웃만 60초)를
+    기다렸다. T-341의 `idle_in_transaction_session_timeout`(60초)를 넘기면 PostgreSQL이
+    커넥션을 강제 종료해 이미 끝난 PII 익명화까지 롤백된다 — "avatar 파일 하나가 남는 대가가
+    PII 익명화 롤백보다 낫다"는 이 모듈 자신의 설계 의도와 정반대 결과였다(적대적 리뷰로 발견).
+    지워야 할 키 목록만 반환하고, 실제 RustFS 삭제는 트랜잭션이 커밋된 뒤 `finalize_avatar_purge`
+    가 수행한다.
+    """
     if pii is None:
-        return {}
+        return {}, []
     row = (
         (
             await db.execute(
@@ -412,12 +424,10 @@ async def _execute_pii_retention(
         .one()
     )
     avatar_storage_keys = list(row["avatar_storage_keys"] or [])
-    result: dict[str, int | list[str]] = {
+    result: dict[str, int] = {
         key: _as_int(row[key]) for key in row.keys() if key != "avatar_storage_keys"
     }
-    if avatar_storage_keys:
-        result["avatar_delete_failures"] = await _delete_avatar_objects(avatar_storage_keys)
-    return result
+    return result, avatar_storage_keys
 
 
 async def _delete_avatar_objects(storage_keys: list[str]) -> list[str]:
@@ -430,6 +440,10 @@ async def _delete_avatar_objects(storage_keys: list[str]) -> list[str]:
     한 객체의 삭제가 실패해도 **run 전체를 중단하지 않는다.** PII 익명화(더 급한 컴플라이언스
     요구)까지 롤백시키는 대가가, avatar 파일 하나가 RustFS에 남는 대가보다 크다. 실패한 키는
     `result["pii"]["avatar_delete_failures"]`에 남겨 별도로 재시도/조사할 수 있게 한다.
+
+    **호출부 계약**: 이 함수는 열린 DB 트랜잭션이 없는 상태에서 불려야 한다(T-346 수정). 이
+    함수 자체는 DB를 건드리지 않지만, 호출부가 열린 트랜잭션 안에서 이걸 부르면 그 세션이
+    RustFS I/O가 끝날 때까지 idle-in-transaction 상태가 되어 T-341의 타임아웃에 노출된다.
     """
     failures: list[str] = []
     for key in storage_keys:
@@ -439,6 +453,54 @@ async def _delete_avatar_objects(storage_keys: list[str]) -> list[str]:
             logger.warning("retention avatar delete failed key=%s error=%s", key, exc)
             failures.append(key)
     return failures
+
+
+async def finalize_avatar_purge(
+    db: AsyncSession,
+    *,
+    run: AdminRetentionRun,
+    storage_keys: list[str],
+) -> AdminRetentionRun:
+    """PII 익명화 트랜잭션이 이미 커밋된 뒤, avatar RustFS 객체를 best-effort로 지운다(T-346 수정).
+
+    호출 시점에는 `run`이 이미 `_finalize_execute`의 커밋으로 확정된 뒤이므로, 이 함수 안의
+    RustFS 호출이 아무리 오래 걸려도 열린 DB 트랜잭션을 붙잡지 않는다 — T-341의
+    `idle_in_transaction_session_timeout`과 충돌할 여지가 없다.
+
+    실패한 키가 있으면 `result.pii.avatar_delete_failures`에 남기는 짧은 후속 UPDATE로 기록한다.
+    이 UPDATE 자체가 실패해도(예: 이 시점에 커넥션이 이미 죽어 있음) 삭제 시도 자체는 이미 끝난
+    뒤이므로 원래 응답을 막지 않는다 — 로그로만 남긴다.
+    """
+    if not storage_keys:
+        return run
+    failures = await _delete_avatar_objects(storage_keys)
+    if not failures:
+        return run
+    updated_result = dict(run.result)
+    pii_result = dict(updated_result.get("pii") or {})
+    pii_result["avatar_delete_failures"] = failures
+    updated_result["pii"] = pii_result
+    try:
+        row = (
+            (
+                await db.execute(
+                    _PATCH_RUN_RESULT_SQL,
+                    {"run_id": run.run_id, "result": _json(updated_result)},
+                )
+            )
+            .mappings()
+            .one()
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        logger.exception(
+            "retention run %s: avatar 삭제 실패 기록을 남기지 못했다 (실패 키=%s)",
+            run.run_id,
+            failures,
+        )
+        return run
+    return _run_from_row(row)
 
 
 async def _execute_location_archive(
@@ -533,6 +595,19 @@ _UPDATE_RUN_SQL = text(
         result = CAST(:result AS jsonb),
         completed_at = :completed_at,
         error_message = :error_message
+    WHERE run_id = :run_id
+    RETURNING run_id, mode, scope, status, candidate_snapshot, result, kill_switch_enabled,
+              access_reason, actor_user_id, error_message, started_at, completed_at,
+              created_at, updated_at
+    """
+)
+
+#: `finalize_avatar_purge` 전용 — 이미 `completed`로 확정된 run의 `result`만 후속으로 patch한다.
+#: `status`/`completed_at`/`error_message`는 건드리지 않는다.
+_PATCH_RUN_RESULT_SQL = text(
+    """
+    UPDATE app.retention_runs
+    SET result = CAST(:result AS jsonb)
     WHERE run_id = :run_id
     RETURNING run_id, mode, scope, status, candidate_snapshot, result, kill_switch_enabled,
               access_reason, actor_user_id, error_message, started_at, completed_at,
