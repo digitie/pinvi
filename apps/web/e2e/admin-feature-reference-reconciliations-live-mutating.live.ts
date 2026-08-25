@@ -143,9 +143,10 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
     expect(responseReceiptRecord.impact_count).toBe(Number(impactCount));
 
     const detail = page.getByTestId('admin-frr-detail');
+    const receipt = detail.getByRole('region', { name: '로컬 final receipt' });
     const receiptValue = (label: string) =>
-      detail
-        .locator('dl > dt')
+      receipt
+        .locator('dt')
         .filter({ hasText: label })
         .locator('xpath=following-sibling::dd[1]');
     await expect(
