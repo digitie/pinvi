@@ -4,8 +4,8 @@ Revision ID: 20260824_0101
 Revises: 20260824_0100
 Create Date: 2026-08-24
 
-N150의 `0061` 기준선 뒤에 합류한 location-audit·동의 이력·좌표 출처 변경과 M05의
-옛 `0062`~`0065` DDL을 모두 이 revision에 통합한다. 이 revision은 새 설치와
+N150의 `0061` 기준선 뒤에 합류한 location-audit·동의 이력·좌표 출처·보존 아카이브
+append-only 변경과 M05의 옛 `0062`~`0065` DDL을 모두 이 revision에 통합한다. 이 revision은 새 설치와
 ADR-065의 명시적 `0061` rebaseline 뒤에만 실행된다.
 """
 
@@ -48,6 +48,9 @@ _LOCATION_ACCESS_LOG_PURPOSES = (
 _LOCATION_AUDIT_COORD_SOURCE_CHECK = (
     "coord_source IS NULL OR coord_source IN ('device', 'map_pick')"
 )
+_LOCATION_ARCHIVE_TABLE = "app.location_access_log_archive"
+_LOCATION_ARCHIVE_ROW_TRIGGER = "trg_location_access_log_archive_append_only"
+_LOCATION_ARCHIVE_TRUNCATE_TRIGGER = "trg_location_access_log_archive_truncate_append_only"
 _LEGACY_REBASELINE_RECEIPT_PATH_ENV = "PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH"
 _LEGACY_REBASELINE_RECEIPT_FIELDS = frozenset(
     {
@@ -1787,6 +1790,37 @@ def _install_location_audit_coord_source_contract() -> None:
     )
 
 
+def _install_location_archive_append_only_contract() -> None:
+    """보존 아카이브가 유일한 확인자료가 된 뒤에도 수정·삭제되지 않게 한다."""
+
+    # 0101 재생 하네스는 archive table을 별도로 지우지 않으므로, trigger는 idempotent하게
+    # 교체한다. guard 함수의 retention 예외는 원본 table명으로 한정돼 있어 archive에는
+    # 적용되지 않는다.
+    op.execute(f"DROP TRIGGER IF EXISTS {_LOCATION_ARCHIVE_ROW_TRIGGER} ON {_LOCATION_ARCHIVE_TABLE}")
+    op.execute(
+        f"DROP TRIGGER IF EXISTS {_LOCATION_ARCHIVE_TRUNCATE_TRIGGER} "
+        f"ON {_LOCATION_ARCHIVE_TABLE}"
+    )
+    op.execute(
+        f"CREATE TRIGGER {_LOCATION_ARCHIVE_ROW_TRIGGER} "
+        f"BEFORE UPDATE OR DELETE ON {_LOCATION_ARCHIVE_TABLE} "
+        "FOR EACH ROW EXECUTE FUNCTION app.audit_log_append_only()"
+    )
+    op.execute(
+        f"CREATE TRIGGER {_LOCATION_ARCHIVE_TRUNCATE_TRIGGER} "
+        f"BEFORE TRUNCATE ON {_LOCATION_ARCHIVE_TABLE} "
+        "FOR EACH STATEMENT EXECUTE FUNCTION app.audit_log_append_only()"
+    )
+    op.execute(
+        f"ALTER TABLE {_LOCATION_ARCHIVE_TABLE} ENABLE ALWAYS TRIGGER "
+        f"{_LOCATION_ARCHIVE_ROW_TRIGGER}"
+    )
+    op.execute(
+        f"ALTER TABLE {_LOCATION_ARCHIVE_TABLE} ENABLE ALWAYS TRIGGER "
+        f"{_LOCATION_ARCHIVE_TRUNCATE_TRIGGER}"
+    )
+
+
 def _install_user_consent_event_history() -> None:
     """T-326의 현재 상태 이력 테이블과 정직한 0061 data backfill을 적용한다."""
 
@@ -2191,6 +2225,7 @@ def upgrade() -> None:
     _assert_legacy_rebaseline_handoff(bind)
     _install_location_audit_purpose_contract()
     _install_location_audit_coord_source_contract()
+    _install_location_archive_append_only_contract()
     _install_user_consent_event_history()
     _advance_boundary_contract()
     _replace_admin_audit_guard()

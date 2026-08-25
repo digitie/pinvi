@@ -265,6 +265,7 @@ async def test_0101_installs_m05_final_contract_with_minimal_public_surface(
                         "JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace "
                         "WHERE (namespace.nspname, relation.relname) IN ("
                         "('app', 'admin_audit_log'), "
+                        "('app', 'location_access_log_archive'), "
                         "('ops', 'm05_activation_database_anchor'), "
                         "('ops', 'm05_hotswap_release_receipts')) "
                         "AND trigger_row.tgname LIKE 'trg_%append_only%' "
@@ -273,6 +274,18 @@ async def test_0101_installs_m05_final_contract_with_minimal_public_surface(
                 )
                 assert {(row[0], row[1], row[2], row[3]) for row in trigger_rows} >= {
                     ("app", "admin_audit_log", "trg_admin_audit_log_append_only", "A"),
+                    (
+                        "app",
+                        "location_access_log_archive",
+                        "trg_location_access_log_archive_append_only",
+                        "A",
+                    ),
+                    (
+                        "app",
+                        "location_access_log_archive",
+                        "trg_location_access_log_archive_truncate_append_only",
+                        "A",
+                    ),
                     ("app", "admin_audit_log", "trg_admin_audit_log_truncate_append_only", "A"),
                     (
                         "ops",
