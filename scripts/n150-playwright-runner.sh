@@ -76,6 +76,7 @@ image="${PINVI_PLAYWRIGHT_RUNNER_IMAGE:-mcr.microsoft.com/playwright:v${playwrig
 network="${PINVI_PLAYWRIGHT_RUNNER_NETWORK:-host}"
 skip_npm_ci="${PINVI_PLAYWRIGHT_RUNNER_SKIP_NPM_CI:-0}"
 volume_prefix="${PINVI_PLAYWRIGHT_RUNNER_VOLUME_PREFIX:-pinvi-playwright}"
+evidence_owner="$(id -u):$(id -g)"
 evidence_dir="${PINVI_M05_UI_EVIDENCE_DIR:-${PINVI_M04_UI_EVIDENCE_DIR:-}}"
 if [[ -n "${PINVI_M04_UI_EVIDENCE_DIR:-}" && -n "${PINVI_M05_UI_EVIDENCE_DIR:-}" ]]; then
   echo "error: only one M04/M05 UI evidence directory may be mounted per runner invocation" >&2
@@ -144,6 +145,7 @@ docker_args=(
   --rm
   --ipc=host
   --network "$network"
+  -e "PINVI_PLAYWRIGHT_RUNNER_EVIDENCE_OWNER=$evidence_owner"
   -e HOME=/tmp/pinvi-playwright-home
   -e npm_config_cache=/tmp/.npm
   -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
@@ -224,7 +226,27 @@ docker_args+=(
 if [[ "${PINVI_PLAYWRIGHT_RUNNER_SKIP_NPM_CI:-0}" != "1" ]]; then
   npm ci --no-audit --no-fund
 fi
-exec "$@"'
+test_status=0
+"$@" || test_status=$?
+
+# Docker runner는 기본 root로 실행된다. smoke attestation은 호출자 소유 0700
+# evidence directory를 다시 읽어야 하므로, attested marker 하나만 host caller로
+# 되돌린다. staging/production runner가 root라면 root:root 소유가 그대로 유지된다.
+marker_path=""
+if [[ -n "${PINVI_M04_UI_VERIFICATION_ID:-}" ]]; then
+  marker_path="${PINVI_M04_UI_EVIDENCE_DIR}/m04-ui-run.json"
+elif [[ -n "${PINVI_M05_UI_VERIFICATION_ID:-}" ]]; then
+  marker_path="${PINVI_M05_UI_EVIDENCE_DIR}/ui-run.json"
+fi
+if [[ -n "$marker_path" && -e "$marker_path" ]]; then
+  if [[ ! -f "$marker_path" || -L "$marker_path" ]]; then
+    echo "error: attested UI evidence marker must be a regular non-symlink file" >&2
+    exit 1
+  fi
+  chown "$PINVI_PLAYWRIGHT_RUNNER_EVIDENCE_OWNER" "$marker_path"
+  chmod 600 "$marker_path"
+fi
+exit "$test_status"'
   bash
   "$@"
 )
