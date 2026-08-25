@@ -312,6 +312,10 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         {
             "event_id": "11111111-1111-4111-8111-111111111111",
             "event_sha256": "a" * 64,
+            "m04_attestation_sha256": "f" * 64,
+            "m04_feature_request_id": "33333333-3333-4333-8333-333333333333",
+            "m04_map_feature_uuid": "44444444-4444-4444-8444-444444444444",
+            "m04_server_side_chain_verified": True,
             "map_admin_endpoint": "http://127.0.0.1:12701",
             "map_ack_sha256": "b" * 64,
             "map_local_receipt_sha256": "1" * 64,
@@ -608,6 +612,10 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         "event_id": "11111111-1111-4111-8111-111111111111",
         "evidence_sha256": evidence_hashes,
         "map_ack_sha256": "b" * 64,
+        "m04_attestation_sha256": "f" * 64,
+        "m04_feature_request_id": "33333333-3333-4333-8333-333333333333",
+        "m04_map_feature_uuid": "44444444-4444-4444-8444-444444444444",
+        "m04_server_side_chain_verified": True,
         "local_receipt_sha256": "1" * 64,
         "map_admin_endpoint": "http://127.0.0.1:12701",
         "map_snapshot_sha256": "c" * 64,
@@ -621,7 +629,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         "scope": "staging",
         "status": "passed",
         "verification_id": "22222222-2222-4222-8222-222222222222",
-        "version": 1,
+        "version": 2,
     }
     attestation_bytes = json.dumps(
         attestation_payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True

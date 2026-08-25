@@ -76,10 +76,53 @@ image="${PINVI_PLAYWRIGHT_RUNNER_IMAGE:-mcr.microsoft.com/playwright:v${playwrig
 network="${PINVI_PLAYWRIGHT_RUNNER_NETWORK:-host}"
 skip_npm_ci="${PINVI_PLAYWRIGHT_RUNNER_SKIP_NPM_CI:-0}"
 volume_prefix="${PINVI_PLAYWRIGHT_RUNNER_VOLUME_PREFIX:-pinvi-playwright}"
-evidence_dir="${PINVI_M05_UI_EVIDENCE_DIR:-}"
+evidence_dir="${PINVI_M05_UI_EVIDENCE_DIR:-${PINVI_M04_UI_EVIDENCE_DIR:-}}"
+if [[ -n "${PINVI_M04_UI_EVIDENCE_DIR:-}" && -n "${PINVI_M05_UI_EVIDENCE_DIR:-}" ]]; then
+  echo "error: only one M04/M05 UI evidence directory may be mounted per runner invocation" >&2
+  exit 1
+fi
+if [[ -n "${PINVI_M04_UI_VERIFICATION_ID:-}" && -n "${PINVI_M05_UI_VERIFICATION_ID:-}" ]]; then
+  echo "error: M04 and M05 attested UI runs cannot share one runner invocation" >&2
+  exit 1
+fi
 if [[ -n "$evidence_dir" ]]; then
   if [[ "$evidence_dir" != /* || ! -d "$evidence_dir" ]]; then
-    echo "error: PINVI_M05_UI_EVIDENCE_DIR must be an existing absolute directory" >&2
+    echo "error: M04/M05 UI evidence directory must be an existing absolute directory" >&2
+    exit 1
+  fi
+fi
+
+if [[ -n "${PINVI_M04_UI_VERIFICATION_ID:-}" ]]; then
+  expected_m04_image="${PINVI_M04_PLAYWRIGHT_RUNNER_IMAGE_REF:-}"
+  if [[ "$image" != "$expected_m04_image" || "$image" != mcr.microsoft.com/playwright:*@sha256:* ]]; then
+    echo "error: M04 live UI requires the attested immutable Playwright image" >&2
+    exit 1
+  fi
+  if [[ "$network" != "host" || "$skip_npm_ci" != "0" ]]; then
+    echo "error: M04 live UI requires host networking and a fresh npm ci" >&2
+    exit 1
+  fi
+  required_m04_env=(
+    PINVI_M04_LIVE_E2E
+    PINVI_M04_LIVE_FEATURE_REQUEST_ID
+    PINVI_M04_UI_API_URL
+    PINVI_M04_UI_EVIDENCE_DIR
+    PINVI_M04_PLAYWRIGHT_RUNNER_IMAGE_ID
+    PINVI_SOURCE_REVISION
+    PINVI_LIVE_WEB_URL
+  )
+  for name in "${required_m04_env[@]}"; do
+    if [[ -z "${!name:-}" ]]; then
+      echo "error: M04 live UI requires ${name}" >&2
+      exit 1
+    fi
+  done
+  if [[ "${PINVI_M04_LIVE_E2E}" != "1" ]]; then
+    echo "error: M04 live UI requires PINVI_M04_LIVE_E2E=1" >&2
+    exit 1
+  fi
+  if [[ -z "${PINVI_M04_LIVE_STORAGE_STATE:-}" && ( -z "${PINVI_M04_LIVE_EMAIL:-}" || -z "${PINVI_M04_LIVE_PASSWORD:-}" ) ]]; then
+    echo "error: M04 live UI requires admin credentials or storage state" >&2
     exit 1
   fi
 fi
@@ -134,8 +177,13 @@ allowed_env_names=(
   PINVI_M04_LIVE_E2E
   PINVI_M04_LIVE_FEATURE_REQUEST_ID
   PINVI_M04_LIVE_PASSWORD
+  PINVI_M04_PLAYWRIGHT_RUNNER_IMAGE_ID
+  PINVI_M04_PLAYWRIGHT_RUNNER_IMAGE_REF
   PINVI_M04_LIVE_REASON
   PINVI_M04_LIVE_STORAGE_STATE
+  PINVI_M04_UI_API_URL
+  PINVI_M04_UI_EVIDENCE_DIR
+  PINVI_M04_UI_VERIFICATION_ID
   PINVI_M05_LIVE_EMAIL
   PINVI_M05_LIVE_E2E
   PINVI_M05_LIVE_EVENT_ID

@@ -1453,14 +1453,14 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
             environment=role_environment,
         )
         assert baseline.returncode == 0, baseline.stderr
-        await _execute_autocommit(
-            target_url,
-            f'GRANT USAGE ON SCHEMA app TO "{runtime_role}"; '
+        for statement in (
+            f'GRANT USAGE ON SCHEMA app TO "{runtime_role}";',
             f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app "
-            f'TO "{runtime_role}"; '
+            f'TO "{runtime_role}";',
             f'ALTER DEFAULT PRIVILEGES FOR ROLE "{app_owner}" IN SCHEMA app '
             f'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{runtime_role}";',
-        )
+        ):
+            await _execute_autocommit(target_url, statement)
         await _execute_autocommit(
             maintenance_url,
             f"CREATE ROLE \"{stale_role}\" LOGIN NOINHERIT PASSWORD '{_ROLE_PASSWORD}';",

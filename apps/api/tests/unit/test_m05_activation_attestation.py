@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 
 def _attestation_module():
@@ -47,6 +51,31 @@ def _detail() -> dict[str, object]:
     }
 
 
+def _m04_marker() -> dict[str, object]:
+    return {
+        "assertions": [
+            "pinvi_approved",
+            "map_request_id",
+            "map_pending_receipt",
+            "same_origin",
+        ],
+        "feature_request_id": "33333333-3333-4333-8333-333333333333",
+        "map_action": "submit",
+        "map_request_id": "33333333-3333-4333-8333-333333333333",
+        "map_review_mode": "feature_request_queue",
+        "map_state": "pending",
+        "pinvi_api_endpoint": "http://127.0.0.1:12801",
+        "pinvi_approval_sha256": "a" * 64,
+        "playwright_runner_image_id": "sha256:" + "1" * 64,
+        "playwright_runner_image_ref": (
+            "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:" + "2" * 64
+        ),
+        "source_revision": "f" * 40,
+        "status": "passed",
+        "verification_id": "22222222-2222-4222-8222-222222222222",
+    }
+
+
 def test_m05_marker_is_bound_to_nonce_runner_and_after_snapshot() -> None:
     module = _attestation_module()
     module._validate_ui_marker(
@@ -77,6 +106,37 @@ def test_m05_marker_is_bound_to_nonce_runner_and_after_snapshot() -> None:
             },
             pinvi_detail=_detail(),
             pinvi_detail_sha256="d" * 64,
+            expected_pinvi_api_endpoint="http://127.0.0.1:12801",
+        )
+
+
+def test_m04_marker_is_bound_to_pending_map_receipt_and_runner() -> None:
+    module = _attestation_module()
+    marker = module._validate_m04_ui_marker(
+        _m04_marker(),
+        feature_request_id="33333333-3333-4333-8333-333333333333",
+        source_revision="f" * 40,
+        verification_id="22222222-2222-4222-8222-222222222222",
+        runner_image={
+            "image_id": "sha256:" + "1" * 64,
+            "image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:" + "2" * 64,
+        },
+        expected_pinvi_api_endpoint="http://127.0.0.1:12801",
+    )
+
+    assert marker["map_state"] == "pending"
+    broken = _m04_marker()
+    broken["map_state"] = "approved"
+    with pytest.raises(module.AttestationError, match="pending receipt"):
+        module._validate_m04_ui_marker(
+            broken,
+            feature_request_id="33333333-3333-4333-8333-333333333333",
+            source_revision="f" * 40,
+            verification_id="22222222-2222-4222-8222-222222222222",
+            runner_image={
+                "image_id": "sha256:" + "1" * 64,
+                "image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:" + "2" * 64,
+            },
             expected_pinvi_api_endpoint="http://127.0.0.1:12801",
         )
 
@@ -138,3 +198,126 @@ def test_m05_map_case_binds_missing_event_hash_to_ack(monkeypatch: pytest.Monkey
 
     assert ack["event_sha256"] == ack_hash
     assert module._map_case_event_hash(_data, ack) == ack_hash
+
+
+def test_m04_server_side_chain_binds_approved_request_to_m05_old_feature(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _attestation_module()
+    monkeypatch.setenv("M05_MAP_ADMIN_PROXY_SECRET", "s" * 32)
+    feature_uuid = "44444444-4444-4444-8444-444444444444"
+    responses = iter(
+        (
+            (
+                {
+                    "data": {
+                        "request_id": "33333333-3333-4333-8333-333333333333",
+                        "status": "approved",
+                        "feature_id": "legacy-feature-ref",
+                    }
+                },
+                b"{}",
+            ),
+            (
+                {
+                    "data": {
+                        "feature_id": feature_uuid,
+                        "origin": {"origin_kind": "manual_request"},
+                    }
+                },
+                b"{}",
+            ),
+        )
+    )
+    monkeypatch.setattr(module, "_http_json", lambda *args, **kwargs: next(responses))
+    chain = module._m04_server_side_chain(
+        map_admin_url="http://127.0.0.1:14701",
+        m04={"feature_request_id": "33333333-3333-4333-8333-333333333333"},
+        map_case={
+            "manual_feature": {"feature_uuid": feature_uuid},
+            "event": {"old_feature": {"feature_uuid": feature_uuid}},
+        },
+    )
+
+    assert chain["map_feature_uuid"] == feature_uuid
+
+
+def test_m04_signed_evidence_is_bound_to_the_same_pinvi_runtime(tmp_path: Path) -> None:
+    module = _attestation_module()
+    evidence_dir = tmp_path / "m04-evidence"
+    evidence_dir.mkdir(mode=0o700)
+    live = {
+        "feature_request_id": "33333333-3333-4333-8333-333333333333",
+        "map_action": "submit",
+        "map_request_id": "33333333-3333-4333-8333-333333333333",
+        "map_review_mode": "feature_request_queue",
+        "map_state": "pending",
+        "pinvi_api_container_id": "3" * 64,
+        "pinvi_api_endpoint": "http://127.0.0.1:12801",
+        "pinvi_approval_sha256": "a" * 64,
+        "pinvi_source_revision": "f" * 40,
+        "pinvi_web_container_id": "4" * 64,
+        "pinvi_web_endpoint": "http://127.0.0.1:12805",
+        "playwright_runner_image_id": "sha256:" + "1" * 64,
+        "playwright_runner_image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:"
+        + "2" * 64,
+        "runner_exit_code": 0,
+        "runtime_identity_verified": True,
+        "status": "passed",
+        "ui_evidence_sha256": "b" * 64,
+        "verification_id": "22222222-2222-4222-8222-222222222222",
+    }
+    live_path = evidence_dir / "m04-live-ui.json"
+    live_raw = json.dumps(live, sort_keys=True).encode()
+    live_path.write_bytes(live_raw)
+    live_path.chmod(0o600)
+    key = Ed25519PrivateKey.generate()
+    payload = {
+        "created_at": 1,
+        "feature_request_id": live["feature_request_id"],
+        "m04_live_ui_sha256": hashlib.sha256(live_raw).hexdigest(),
+        "pinvi_api_endpoint": live["pinvi_api_endpoint"],
+        "pinvi_source_revision": live["pinvi_source_revision"],
+        "pinvi_web_endpoint": live["pinvi_web_endpoint"],
+        "playwright_runner_image_id": live["playwright_runner_image_id"],
+        "playwright_runner_image_ref": live["playwright_runner_image_ref"],
+        "scope": "smoke",
+        "status": "passed",
+        "verification_id": live["verification_id"],
+        "version": 1,
+    }
+    attestation = {
+        "payload": payload,
+        "signature": base64.urlsafe_b64encode(key.sign(module._canonical_json(payload)))
+        .decode()
+        .rstrip("="),
+    }
+    attestation_path = evidence_dir / "m04-attestation.json"
+    attestation_path.write_text(json.dumps(attestation), encoding="utf-8")
+    attestation_path.chmod(0o600)
+
+    evidence = module._read_m04_evidence(
+        evidence_dir,
+        require_root_owned=False,
+        public_key_bytes=key.public_key().public_bytes_raw(),
+        source_revision="f" * 40,
+        scope="smoke",
+        expected_pinvi_api_endpoint="http://127.0.0.1:12801",
+        expected_pinvi_api_container_id="3" * 64,
+        expected_pinvi_web_endpoint="http://127.0.0.1:12805",
+        expected_pinvi_web_container_id="4" * 64,
+    )
+
+    assert evidence["feature_request_id"] == live["feature_request_id"]
+    with pytest.raises(module.AttestationError, match="API runtime"):
+        module._read_m04_evidence(
+            evidence_dir,
+            require_root_owned=False,
+            public_key_bytes=key.public_key().public_bytes_raw(),
+            source_revision="f" * 40,
+            scope="smoke",
+            expected_pinvi_api_endpoint="http://127.0.0.1:12801",
+            expected_pinvi_api_container_id="5" * 64,
+            expected_pinvi_web_endpoint="http://127.0.0.1:12805",
+            expected_pinvi_web_container_id="4" * 64,
+        )

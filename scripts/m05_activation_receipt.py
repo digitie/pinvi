@@ -1696,6 +1696,10 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
     expected = {
         "event_id",
         "event_sha256",
+        "m04_attestation_sha256",
+        "m04_feature_request_id",
+        "m04_map_feature_uuid",
+        "m04_server_side_chain_verified",
         "map_admin_endpoint",
         "map_ack_sha256",
         "map_local_receipt_sha256",
@@ -1721,6 +1725,8 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
         raise ReceiptError("live-ui runner did not exit successfully")
     if live["server_side_ack_verified"] is not True:
         raise ReceiptError("live-ui server-side Map ACK was not verified")
+    if live["m04_server_side_chain_verified"] is not True:
+        raise ReceiptError("live-ui server-side M04→M05 chain was not verified")
     _uuid(live["verification_id"], name="live-ui.verification_id")
     _digest(
         live["playwright_runner_image_id"],
@@ -1758,6 +1764,15 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
     return {
         "event_id": _uuid(live["event_id"], name="live-ui.event_id"),
         "event_sha256": _sha256(live["event_sha256"], name="live-ui.event_sha256"),
+        "m04_attestation_sha256": _sha256(
+            live["m04_attestation_sha256"], name="live-ui.m04_attestation_sha256"
+        ),
+        "m04_feature_request_id": _uuid(
+            live["m04_feature_request_id"], name="live-ui.m04_feature_request_id"
+        ),
+        "m04_map_feature_uuid": _uuid(
+            live["m04_map_feature_uuid"], name="live-ui.m04_map_feature_uuid"
+        ),
         "map_ack_sha256": _sha256(live["map_ack_sha256"], name="live-ui.map_ack_sha256"),
         "map_admin_endpoint": _string(
             live["map_admin_endpoint"], name="live-ui.map_admin_endpoint"
@@ -2380,6 +2395,10 @@ def _attestation(
         "map_admin_endpoint",
         "map_ack_sha256",
         "map_snapshot_sha256",
+        "m04_attestation_sha256",
+        "m04_feature_request_id",
+        "m04_map_feature_uuid",
+        "m04_server_side_chain_verified",
         "pinvi_snapshot_sha256",
         "pinvi_api_endpoint",
         "pinvi_web_endpoint",
@@ -2395,7 +2414,7 @@ def _attestation(
         raise ReceiptError("M05 live attestation payload schema is invalid")
     if (
         type(payload["version"]) is not int
-        or payload["version"] != 1
+        or payload["version"] != 2
         or payload["status"] != "passed"
         or payload["scope"] != scope
         or _commit(payload["pinvi_source_revision"], name="attestation source revision")
@@ -2410,6 +2429,22 @@ def _attestation(
     verification_id = _uuid(payload["verification_id"], name="attestation verification ID")
     if verification_id != activation_nonce or verification_id != live_ui["verification_id"]:
         raise ReceiptError("M05 live attestation verification ID is not bound to the receipt nonce")
+    if (
+        payload["m04_server_side_chain_verified"] is not True
+        or _sha256(
+            payload["m04_attestation_sha256"], name="attestation.m04_attestation_sha256"
+        )
+        != live_ui["m04_attestation_sha256"]
+        or _uuid(
+            payload["m04_feature_request_id"], name="attestation.m04_feature_request_id"
+        )
+        != live_ui["m04_feature_request_id"]
+        or _uuid(
+            payload["m04_map_feature_uuid"], name="attestation.m04_map_feature_uuid"
+        )
+        != live_ui["m04_map_feature_uuid"]
+    ):
+        raise ReceiptError("M05 live attestation does not bind the M04→M05 chain")
     if (
         payload["playwright_runner_image_id"] != live_ui["playwright_runner_image_id"]
         or payload["playwright_runner_image_ref"] != live_ui["playwright_runner_image_ref"]

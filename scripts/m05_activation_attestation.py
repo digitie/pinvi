@@ -29,7 +29,7 @@ from http.cookiejar import CookieJar
 from pathlib import Path
 from typing import Any, cast
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 from urllib.request import (
     HTTPCookieProcessor,
     HTTPRedirectHandler,
@@ -39,8 +39,12 @@ from urllib.request import (
 )
 from uuid import UUID, uuid4
 
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
 
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
@@ -192,6 +196,13 @@ def _uuid(value: object, *, name: str) -> str:
             raise ValueError
     except ValueError as exc:
         raise AttestationError(f"{name} must be a canonical UUID") from exc
+    return value
+
+
+def _container_id(value: object, *, name: str) -> str:
+    value = _string(value, name=name)
+    if re.fullmatch(r"[0-9a-f]{64}\Z", value) is None:
+        raise AttestationError(f"{name} must be a canonical container ID")
     return value
 
 
@@ -453,6 +464,57 @@ def _map_headers() -> dict[str, str]:
     return {
         "X-Kor-Travel-Map-Admin-Proxy-Secret": secret,
         "X-Kor-Travel-Map-Actor": _string(actor, name="M05_MAP_ADMIN_ACTOR"),
+    }
+
+
+def _m04_server_side_chain(
+    *,
+    map_admin_url: str,
+    m04: dict[str, str],
+    map_case: dict[str, object],
+) -> dict[str, str]:
+    """M04 UI receipt의 Map request가 M05 old Feature와 같은 객체인지 결박한다."""
+
+    request_id = _uuid(m04["feature_request_id"], name="M04 feature request ID")
+    value, _ = _http_json(
+        _url(map_admin_url, f"/v1/admin/feature-requests/{request_id}"),
+        headers=_map_headers(),
+    )
+    request_data = _data(value, name="Map M04 feature request")
+    if _uuid(request_data.get("request_id"), name="Map M04 request ID") != request_id:
+        raise AttestationError("Map M04 request does not match the UI receipt")
+    if request_data.get("status") != "approved":
+        raise AttestationError("Map M04 request is not approved")
+    feature_ref = _string(request_data.get("feature_id"), name="Map M04 feature ref")
+    provenance_value, _ = _http_json(
+        _url(
+            map_admin_url,
+            f"/v1/admin/features/{quote(feature_ref, safe='')}/creation-provenance",
+        ),
+        headers=_map_headers(),
+    )
+    provenance = _data(provenance_value, name="Map M04 feature provenance")
+    feature_uuid = _uuid(provenance.get("feature_id"), name="Map M04 feature UUID")
+    origin = _object(provenance.get("origin"), name="Map M04 feature origin")
+    if origin.get("origin_kind") != "manual_request":
+        raise AttestationError("Map M04 feature origin is not manual_request")
+
+    manual_feature = _object(map_case.get("manual_feature"), name="Map M05 manual feature")
+    manual_feature_uuid = _uuid(
+        manual_feature.get("feature_uuid"), name="Map M05 manual feature UUID"
+    )
+    event = _object(map_case.get("event"), name="Map M05 event")
+    old_feature = _object(event.get("old_feature"), name="Map M05 old feature")
+    old_feature_uuid = _uuid(
+        old_feature.get("feature_uuid"), name="Map M05 old feature UUID"
+    )
+    if feature_uuid != manual_feature_uuid or feature_uuid != old_feature_uuid:
+        raise AttestationError("M04 approved feature does not match the M05 old feature")
+    return {
+        "feature_request_id": request_id,
+        "map_feature_uuid": feature_uuid,
+        "map_provenance_sha256": _sha256(_canonical_json(provenance)),
+        "map_request_sha256": _sha256(_canonical_json(request_data)),
     }
 
 
@@ -1067,6 +1129,75 @@ def _validate_ui_marker(
             )
 
 
+def _validate_m04_ui_marker(
+    value: object,
+    *,
+    feature_request_id: str,
+    source_revision: str,
+    verification_id: str,
+    runner_image: dict[str, str],
+    expected_pinvi_api_endpoint: str,
+) -> dict[str, str]:
+    marker = _object(value, name="M04 UI evidence marker")
+    expected = {
+        "assertions",
+        "feature_request_id",
+        "map_action",
+        "map_request_id",
+        "map_review_mode",
+        "map_state",
+        "pinvi_api_endpoint",
+        "pinvi_approval_sha256",
+        "playwright_runner_image_id",
+        "playwright_runner_image_ref",
+        "source_revision",
+        "status",
+        "verification_id",
+    }
+    if set(marker) != expected or marker.get("status") != "passed":
+        raise AttestationError("M04 UI evidence marker schema/status is invalid")
+    if _uuid(marker.get("feature_request_id"), name="M04 UI marker request ID") != feature_request_id:
+        raise AttestationError("M04 UI marker request does not match this run")
+    if _uuid(marker.get("map_request_id"), name="M04 UI marker Map request ID") != feature_request_id:
+        raise AttestationError("M04 UI marker does not bind the Map request")
+    if (
+        marker.get("map_state") != "pending"
+        or marker.get("map_review_mode") != "feature_request_queue"
+        or marker.get("map_action") != "submit"
+    ):
+        raise AttestationError("M04 UI marker does not bind the Map pending receipt")
+    if _commit(marker.get("source_revision"), name="M04 UI marker source revision") != source_revision:
+        raise AttestationError("M04 UI marker source revision does not match the runtime")
+    if marker.get("pinvi_api_endpoint") != expected_pinvi_api_endpoint:
+        raise AttestationError("M04 UI marker does not bind the actual Pinvi API endpoint")
+    if _uuid(marker.get("verification_id"), name="M04 UI marker verification ID") != verification_id:
+        raise AttestationError("M04 UI marker verification ID does not match this run")
+    if marker.get("playwright_runner_image_ref") != runner_image["image_ref"]:
+        raise AttestationError("M04 UI marker Playwright image reference does not match this run")
+    if marker.get("playwright_runner_image_id") != runner_image["image_id"]:
+        raise AttestationError("M04 UI marker Playwright image ID does not match this run")
+    if marker.get("assertions") != [
+        "pinvi_approved",
+        "map_request_id",
+        "map_pending_receipt",
+        "same_origin",
+    ]:
+        raise AttestationError("M04 UI marker assertion inventory is invalid")
+    approval_sha = _string(
+        marker.get("pinvi_approval_sha256"), name="M04 UI marker Pinvi approval hash"
+    )
+    if _SHA256_RE.fullmatch(approval_sha) is None:
+        raise AttestationError("M04 UI marker Pinvi approval hash is invalid")
+    return {
+        "feature_request_id": feature_request_id,
+        "map_action": "submit",
+        "map_request_id": feature_request_id,
+        "map_review_mode": "feature_request_queue",
+        "map_state": "pending",
+        "pinvi_approval_sha256": approval_sha,
+    }
+
+
 def _load_private_key(path: Path, *, require_root_owned: bool) -> Ed25519PrivateKey:
     raw = _secure_read(
         path, require_root_owned=require_root_owned, label="M05 private key"
@@ -1136,21 +1267,366 @@ def _assert_runtime_snapshots_unchanged(
         _assert_runtime_identity(runtime, after[name], label=name)
 
 
-def _live(args: argparse.Namespace) -> int:
-    evidence_dir: Path = args.evidence_dir
-    if evidence_dir.is_symlink() or not evidence_dir.is_dir():
+def _assert_evidence_directory(path: Path, *, require_root_owned: bool) -> None:
+    if path.is_symlink() or not path.is_dir():
         raise AttestationError("evidence directory must already exist")
-    metadata = evidence_dir.stat()
+    metadata = path.stat()
     if stat.S_IMODE(metadata.st_mode) != 0o700:
         raise AttestationError("evidence directory mode must be 0700")
-    if args.require_root_owned and metadata.st_uid != 0:
+    if require_root_owned and metadata.st_uid != 0:
         raise AttestationError("evidence directory must be root-owned")
+
+
+def _m04_runtime_snapshot(
+    args: argparse.Namespace, *, source_revision: str
+) -> dict[str, dict[str, str]]:
+    return {
+        "pinvi_api": _docker_inspect(
+            args.pinvi_api_container,
+            expected_revision=source_revision,
+            expected_environment=args.scope,
+            endpoint_url=args.pinvi_api_url,
+        ),
+        "pinvi_web": _docker_inspect(
+            args.pinvi_web_container,
+            expected_revision=source_revision,
+            expected_environment=args.scope,
+            endpoint_url=args.pinvi_web_url,
+            endpoint_container_port=3000,
+        ),
+    }
+
+
+def _read_secure_json_evidence(
+    path: Path, *, require_root_owned: bool, label: str
+) -> tuple[object, str]:
+    raw = _secure_read(path, require_root_owned=require_root_owned, label=label)
+    try:
+        return json.loads(raw, object_pairs_hook=_reject_duplicate_keys), _sha256(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError, AttestationError) as exc:
+        raise AttestationError(f"{label} is not valid JSON") from exc
+
+
+def _m04(args: argparse.Namespace) -> int:
+    evidence_dir: Path = args.evidence_dir
+    _assert_evidence_directory(
+        evidence_dir, require_root_owned=args.require_root_owned
+    )
+    feature_request_id = _uuid(
+        args.feature_request_id, name="M04 feature request ID"
+    )
+    source_revision = _commit(
+        args.pinvi_source_revision, name="Pinvi source revision"
+    )
+    if args.scope not in {"smoke", "staging", "production"}:
+        raise AttestationError("M04 attestation scope is invalid")
+    if args.scope in {"staging", "production"} and not args.require_root_owned:
+        raise AttestationError(
+            "M04 staging/production attestation requires root-owned evidence"
+        )
+    pinvi_source_root = Path(__file__).resolve().parents[1]
+    _assert_clean_checkout(
+        pinvi_source_root,
+        expected_revision=source_revision,
+        label="Pinvi source",
+    )
+    if not os.environ.get("PINVI_M04_LIVE_EMAIL") or not os.environ.get(
+        "PINVI_M04_LIVE_PASSWORD"
+    ):
+        raise AttestationError("M04 signed live UI requires admin email and password")
+    runtime_initial = _m04_runtime_snapshot(args, source_revision=source_revision)
+    runner_image = _docker_image_identity(args.playwright_runner_image)
+    private_key = _load_private_key(
+        args.private_key, require_root_owned=args.require_root_owned
+    )
+    verification_id = str(uuid4())
+    marker_path = evidence_dir / "m04-ui-run.json"
+    if marker_path.is_symlink() or marker_path.exists():
+        raise AttestationError("M04 UI evidence marker must not pre-exist the pinned run")
+
+    command = list(args.ui_command)
+    if command and command[0] == "--":
+        command = command[1:]
+    runner_path = pinvi_source_root / "scripts/n150-playwright-runner.sh"
+    expected_command = [
+        str(runner_path),
+        "--",
+        "npm",
+        "-w",
+        "@pinvi/web",
+        "run",
+        "test:e2e:live-mutating",
+        "--",
+        "apps/web/e2e/admin-feature-request-queue-live-mutating.live.ts",
+        "--workers=1",
+    ]
+    if not command or Path(command[0]).resolve() != runner_path.resolve():
+        raise AttestationError("M04 live UI must use the repository Playwright runner")
+    command[0] = str(runner_path)
+    if command != expected_command:
+        raise AttestationError("live UI command is not the pinned M04 Playwright test")
+
+    child_env = os.environ.copy()
+    for name in tuple(child_env):
+        if name.startswith(("GIT_", "DOCKER_")) or name.lower() in {
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+            "no_proxy",
+        }:
+            child_env.pop(name)
+    child_env["PATH"] = "/usr/local/bin:/usr/bin:/bin"
+    child_env["DOCKER_HOST"] = "unix:///var/run/docker.sock"
+    child_env["PINVI_M04_LIVE_E2E"] = "1"
+    child_env["PINVI_M04_LIVE_FEATURE_REQUEST_ID"] = feature_request_id
+    child_env["PINVI_M04_UI_EVIDENCE_DIR"] = str(evidence_dir)
+    child_env["PINVI_M04_UI_VERIFICATION_ID"] = verification_id
+    child_env["PINVI_M04_PLAYWRIGHT_RUNNER_IMAGE_REF"] = runner_image["image_ref"]
+    child_env["PINVI_M04_PLAYWRIGHT_RUNNER_IMAGE_ID"] = runner_image["image_id"]
+    child_env["PINVI_PLAYWRIGHT_RUNNER_IMAGE"] = runner_image["image_ref"]
+    child_env["PINVI_PLAYWRIGHT_RUNNER_NETWORK"] = "host"
+    child_env["PINVI_PLAYWRIGHT_RUNNER_REPO_ROOT"] = str(pinvi_source_root)
+    child_env["PINVI_PLAYWRIGHT_RUNNER_SKIP_NPM_CI"] = "0"
+    child_env["PINVI_LIVE_WEB_URL"] = args.pinvi_web_url
+    child_env["PINVI_LIVE_API_URL"] = args.pinvi_api_url
+    child_env["PINVI_M04_UI_API_URL"] = args.pinvi_api_url
+    child_env["PINVI_SOURCE_REVISION"] = source_revision
+    completed = subprocess.run(command, check=False, env=child_env)
+    if completed.returncode != 0:
+        raise AttestationError(f"M04 live UI command exited with {completed.returncode}")
+    _assert_clean_checkout(
+        pinvi_source_root,
+        expected_revision=source_revision,
+        label="Pinvi source after M04 live UI",
+    )
+    marker, marker_raw_hash = _read_json(marker_path)
+    marker_data = _validate_m04_ui_marker(
+        marker,
+        feature_request_id=feature_request_id,
+        source_revision=source_revision,
+        verification_id=verification_id,
+        runner_image=runner_image,
+        expected_pinvi_api_endpoint=args.pinvi_api_url.rstrip("/"),
+    )
+    runtime_after = _m04_runtime_snapshot(args, source_revision=source_revision)
+    _assert_runtime_snapshots_unchanged(runtime_initial, runtime_after)
+
+    live_ui = {
+        **marker_data,
+        "pinvi_api_container_id": runtime_initial["pinvi_api"]["container_id"],
+        "pinvi_api_endpoint": args.pinvi_api_url.rstrip("/"),
+        "pinvi_source_revision": source_revision,
+        "pinvi_web_container_id": runtime_initial["pinvi_web"]["container_id"],
+        "pinvi_web_endpoint": args.pinvi_web_url.rstrip("/"),
+        "playwright_runner_image_id": runner_image["image_id"],
+        "playwright_runner_image_ref": runner_image["image_ref"],
+        "runner_exit_code": completed.returncode,
+        "runtime_identity_verified": True,
+        "status": "passed",
+        "ui_evidence_sha256": marker_raw_hash,
+        "verification_id": verification_id,
+    }
+    live_ui_hash = _write_json(evidence_dir / "m04-live-ui.json", live_ui)
+    payload = {
+        "created_at": int(time.time()),
+        "feature_request_id": feature_request_id,
+        "m04_live_ui_sha256": live_ui_hash,
+        "pinvi_api_endpoint": args.pinvi_api_url.rstrip("/"),
+        "pinvi_source_revision": source_revision,
+        "pinvi_web_endpoint": args.pinvi_web_url.rstrip("/"),
+        "playwright_runner_image_id": runner_image["image_id"],
+        "playwright_runner_image_ref": runner_image["image_ref"],
+        "scope": args.scope,
+        "status": "passed",
+        "verification_id": verification_id,
+        "version": 1,
+    }
+    attestation = {
+        "payload": payload,
+        "signature": base64.urlsafe_b64encode(private_key.sign(_canonical_json(payload)))
+        .decode("ascii")
+        .rstrip("="),
+    }
+    attestation_hash = _write_json(evidence_dir / "m04-attestation.json", attestation)
+    print(f"m04_attestation_sha256={attestation_hash}")
+    print(f"feature_request_id={feature_request_id}")
+    return 0
+
+
+def _read_m04_evidence(
+    evidence_dir: Path,
+    *,
+    require_root_owned: bool,
+    public_key_bytes: bytes,
+    source_revision: str,
+    scope: str,
+    expected_pinvi_api_endpoint: str,
+    expected_pinvi_api_container_id: str,
+    expected_pinvi_web_endpoint: str,
+    expected_pinvi_web_container_id: str,
+) -> dict[str, str]:
+    _assert_evidence_directory(evidence_dir, require_root_owned=require_root_owned)
+    live, live_hash = _read_secure_json_evidence(
+        evidence_dir / "m04-live-ui.json",
+        require_root_owned=require_root_owned,
+        label="M04 live UI evidence",
+    )
+    attestation, attestation_hash = _read_secure_json_evidence(
+        evidence_dir / "m04-attestation.json",
+        require_root_owned=require_root_owned,
+        label="M04 attestation",
+    )
+    live_data = _object(live, name="M04 live UI evidence")
+    expected_live = {
+        "feature_request_id",
+        "map_action",
+        "map_request_id",
+        "map_review_mode",
+        "map_state",
+        "pinvi_api_container_id",
+        "pinvi_api_endpoint",
+        "pinvi_approval_sha256",
+        "pinvi_source_revision",
+        "pinvi_web_container_id",
+        "pinvi_web_endpoint",
+        "playwright_runner_image_id",
+        "playwright_runner_image_ref",
+        "runner_exit_code",
+        "runtime_identity_verified",
+        "status",
+        "ui_evidence_sha256",
+        "verification_id",
+    }
+    if set(live_data) != expected_live or live_data.get("status") != "passed":
+        raise AttestationError("M04 live UI evidence schema/status is invalid")
+    if live_data.get("runtime_identity_verified") is not True:
+        raise AttestationError("M04 live UI runtime identity was not verified")
+    if live_data.get("runner_exit_code") != 0:
+        raise AttestationError("M04 live UI runner did not exit successfully")
+    feature_request_id = _uuid(
+        live_data.get("feature_request_id"), name="M04 live UI request ID"
+    )
+    if _uuid(live_data.get("map_request_id"), name="M04 live UI Map request ID") != feature_request_id:
+        raise AttestationError("M04 live UI Map request does not match the request")
+    if (
+        live_data.get("map_action") != "submit"
+        or live_data.get("map_review_mode") != "feature_request_queue"
+        or live_data.get("map_state") != "pending"
+    ):
+        raise AttestationError("M04 live UI Map pending receipt is invalid")
+    if live_data.get("pinvi_api_endpoint") != expected_pinvi_api_endpoint:
+        raise AttestationError("M04 live UI Pinvi API endpoint does not match")
+    if _container_id(
+        live_data.get("pinvi_api_container_id"), name="M04 live UI Pinvi API container ID"
+    ) != _container_id(
+        expected_pinvi_api_container_id, name="expected Pinvi API container ID"
+    ):
+        raise AttestationError("M04 live UI Pinvi API runtime does not match")
+    if live_data.get("pinvi_web_endpoint") != expected_pinvi_web_endpoint:
+        raise AttestationError("M04 live UI Pinvi web endpoint does not match")
+    if _container_id(
+        live_data.get("pinvi_web_container_id"), name="M04 live UI Pinvi web container ID"
+    ) != _container_id(
+        expected_pinvi_web_container_id, name="expected Pinvi web container ID"
+    ):
+        raise AttestationError("M04 live UI Pinvi web runtime does not match")
+    if _commit(
+        live_data.get("pinvi_source_revision"), name="M04 live UI source revision"
+    ) != source_revision:
+        raise AttestationError("M04 live UI source revision does not match")
+    verification_id = _uuid(
+        live_data.get("verification_id"), name="M04 live UI verification ID"
+    )
+    approval_sha = _string(
+        live_data.get("pinvi_approval_sha256"), name="M04 live UI approval hash"
+    )
+    ui_evidence_sha = _string(
+        live_data.get("ui_evidence_sha256"), name="M04 live UI marker hash"
+    )
+    if _SHA256_RE.fullmatch(approval_sha) is None or _SHA256_RE.fullmatch(ui_evidence_sha) is None:
+        raise AttestationError("M04 live UI evidence hash is invalid")
+    for name in ("playwright_runner_image_id", "playwright_runner_image_ref"):
+        if not isinstance(live_data.get(name), str):
+            raise AttestationError("M04 live UI Playwright runner identity is invalid")
+    if _DIGEST_RE.fullmatch(str(live_data["playwright_runner_image_id"])) is None:
+        raise AttestationError("M04 live UI Playwright image ID is invalid")
+    if _PLAYWRIGHT_IMAGE_RE.fullmatch(str(live_data["playwright_runner_image_ref"])) is None:
+        raise AttestationError("M04 live UI Playwright image reference is invalid")
+
+    envelope = _object(attestation, name="M04 attestation")
+    if set(envelope) != {"payload", "signature"}:
+        raise AttestationError("M04 attestation envelope is invalid")
+    payload = _object(envelope.get("payload"), name="M04 attestation payload")
+    expected_payload = {
+        "created_at",
+        "feature_request_id",
+        "m04_live_ui_sha256",
+        "pinvi_api_endpoint",
+        "pinvi_source_revision",
+        "pinvi_web_endpoint",
+        "playwright_runner_image_id",
+        "playwright_runner_image_ref",
+        "scope",
+        "status",
+        "verification_id",
+        "version",
+    }
+    if (
+        set(payload) != expected_payload
+        or payload.get("version") != 1
+        or payload.get("status") != "passed"
+        or payload.get("scope") != scope
+        or type(payload.get("created_at")) is not int
+    ):
+        raise AttestationError("M04 attestation payload schema/status is invalid")
+    if (
+        _uuid(payload.get("feature_request_id"), name="M04 attestation request ID")
+        != feature_request_id
+        or _uuid(payload.get("verification_id"), name="M04 attestation verification ID")
+        != verification_id
+        or _commit(payload.get("pinvi_source_revision"), name="M04 attestation source revision")
+        != source_revision
+        or payload.get("pinvi_api_endpoint") != expected_pinvi_api_endpoint
+        or payload.get("pinvi_web_endpoint") != expected_pinvi_web_endpoint
+        or payload.get("playwright_runner_image_id")
+        != live_data["playwright_runner_image_id"]
+        or payload.get("playwright_runner_image_ref")
+        != live_data["playwright_runner_image_ref"]
+        or payload.get("m04_live_ui_sha256") != live_hash
+    ):
+        raise AttestationError("M04 attestation does not bind the live UI evidence")
+    signature = envelope.get("signature")
+    if not isinstance(signature, str) or re.fullmatch(r"[A-Za-z0-9_-]{86}\Z", signature) is None:
+        raise AttestationError("M04 attestation signature is invalid")
+    try:
+        signature_bytes = base64.urlsafe_b64decode(signature + "=" * (-len(signature) % 4))
+        Ed25519PublicKey.from_public_bytes(public_key_bytes).verify(
+            signature_bytes, _canonical_json(payload)
+        )
+    except (ValueError, TypeError, InvalidSignature) as exc:
+        raise AttestationError("M04 attestation signature is invalid") from exc
+    return {
+        "attestation_sha256": attestation_hash,
+        "feature_request_id": feature_request_id,
+        "pinvi_approval_sha256": approval_sha,
+        "ui_evidence_sha256": ui_evidence_sha,
+        "verification_id": verification_id,
+    }
+
+
+def _live(args: argparse.Namespace) -> int:
+    evidence_dir: Path = args.evidence_dir
+    _assert_evidence_directory(
+        evidence_dir, require_root_owned=args.require_root_owned
+    )
 
     event_id = _uuid(args.event_id, name="M05 event ID")
     case_id = _uuid(args.map_case_id, name="Map case ID")
     source_revision = _commit(args.pinvi_source_revision, name="Pinvi source revision")
     if args.scope not in {"staging", "production"}:
         raise AttestationError("attestation scope must be staging or production")
+    if not args.require_root_owned:
+        raise AttestationError("M05 live attestation requires root-owned evidence")
     email = os.environ.get("M05_PINVI_EMAIL", "")
     password = os.environ.get("M05_PINVI_PASSWORD", "")
 
@@ -1170,14 +1646,33 @@ def _live(args: argparse.Namespace) -> int:
         },
         label="Map source",
     )
+    private_key = _load_private_key(
+        args.private_key, require_root_owned=args.require_root_owned
+    )
     runtime_initial = _runtime_snapshot(
         args, pair=pair, source_revision=source_revision
+    )
+    m04 = _read_m04_evidence(
+        args.m04_evidence_dir,
+        require_root_owned=args.require_root_owned,
+        public_key_bytes=private_key.public_key().public_bytes_raw(),
+        source_revision=source_revision,
+        scope=args.scope,
+        expected_pinvi_api_endpoint=args.pinvi_api_url.rstrip("/"),
+        expected_pinvi_api_container_id=runtime_initial["pinvi_api"]["container_id"],
+        expected_pinvi_web_endpoint=args.pinvi_web_url.rstrip("/"),
+        expected_pinvi_web_container_id=runtime_initial["pinvi_web"]["container_id"],
     )
 
     before_map, before_ack, before_map_hash, _before_ack_hash = _map_case_snapshot(
         map_admin_url=args.map_admin_url,
         case_id=case_id,
         event_id=event_id,
+    )
+    m04_chain = _m04_server_side_chain(
+        map_admin_url=args.map_admin_url,
+        m04=m04,
+        map_case=before_map,
     )
     before_pinvi, before_pinvi_hash, before_receipt_sha = _pinvi_case_snapshot(
         pinvi_api_url=args.pinvi_api_url,
@@ -1267,6 +1762,13 @@ def _live(args: argparse.Namespace) -> int:
         case_id=case_id,
         event_id=event_id,
     )
+    after_m04_chain = _m04_server_side_chain(
+        map_admin_url=args.map_admin_url,
+        m04=m04,
+        map_case=after_map,
+    )
+    if after_m04_chain != m04_chain:
+        raise AttestationError("M04→M05 server-side chain drifted during the UI flow")
     after_pinvi, after_pinvi_hash, after_receipt_sha = _pinvi_case_snapshot(
         pinvi_api_url=args.pinvi_api_url,
         event_id=event_id,
@@ -1340,6 +1842,10 @@ def _live(args: argparse.Namespace) -> int:
     live_ui = {
         "event_id": event_id,
         "event_sha256": after_map_event_sha,
+        "m04_attestation_sha256": m04["attestation_sha256"],
+        "m04_feature_request_id": m04_chain["feature_request_id"],
+        "m04_map_feature_uuid": m04_chain["map_feature_uuid"],
+        "m04_server_side_chain_verified": True,
         "map_admin_endpoint": args.map_admin_url.rstrip("/"),
         "map_ack_sha256": after_ack_hash,
         "map_local_receipt_sha256": after_local_receipt_sha,
@@ -1367,14 +1873,15 @@ def _live(args: argparse.Namespace) -> int:
         path = evidence_dir / f"{name}.json"
         _value, output_hashes[name] = _read_json(path)
 
-    private_key = _load_private_key(
-        args.private_key, require_root_owned=args.require_root_owned
-    )
     attestation_payload = {
         "created_at": int(time.time()),
         "event_id": event_id,
         "evidence_sha256": output_hashes,
         "map_ack_sha256": after_ack_hash,
+        "m04_attestation_sha256": m04["attestation_sha256"],
+        "m04_feature_request_id": m04_chain["feature_request_id"],
+        "m04_map_feature_uuid": m04_chain["map_feature_uuid"],
+        "m04_server_side_chain_verified": True,
         "local_receipt_sha256": after_receipt_sha,
         "map_admin_endpoint": args.map_admin_url.rstrip("/"),
         "map_snapshot_sha256": after_map_hash,
@@ -1387,7 +1894,7 @@ def _live(args: argparse.Namespace) -> int:
         "scope": args.scope,
         "status": "passed",
         "verification_id": verification_id,
-        "version": 1,
+        "version": 2,
     }
     attestation = {
         "payload": attestation_payload,
@@ -1406,6 +1913,23 @@ def _live(args: argparse.Namespace) -> int:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
+    m04 = subparsers.add_parser("m04")
+    m04.add_argument("--evidence-dir", type=Path, required=True)
+    m04.add_argument("--private-key", type=Path, required=True)
+    m04.add_argument("--pinvi-api-url", required=True)
+    m04.add_argument("--pinvi-api-container", required=True)
+    m04.add_argument("--pinvi-web-url", required=True)
+    m04.add_argument("--pinvi-web-container", required=True)
+    m04.add_argument("--feature-request-id", required=True)
+    m04.add_argument("--pinvi-source-revision", required=True)
+    m04.add_argument(
+        "--scope", choices=("smoke", "staging", "production"), required=True
+    )
+    m04.add_argument("--playwright-runner-image", required=True)
+    m04.add_argument("--require-root-owned", action="store_true")
+    m04.add_argument("ui_command", nargs=argparse.REMAINDER)
+    m04.set_defaults(handler=_m04)
+
     live = subparsers.add_parser("live")
     live.add_argument("--evidence-dir", type=Path, required=True)
     live.add_argument("--private-key", type=Path, required=True)
@@ -1415,6 +1939,7 @@ def _parser() -> argparse.ArgumentParser:
     live.add_argument("--map-api-container", required=True)
     live.add_argument("--map-frontend-container", required=True)
     live.add_argument("--map-source-root", type=Path, required=True)
+    live.add_argument("--m04-evidence-dir", type=Path, required=True)
     live.add_argument("--pinvi-api-url", required=True)
     live.add_argument("--pinvi-api-container", required=True)
     live.add_argument("--pinvi-web-url", required=True)

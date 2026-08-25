@@ -6,7 +6,7 @@
 | --------------------------- | ---------------------------------------------------------------------------------------------------------- | ------ |
 | `docker-app.sh`             | App 컨테이너 build/up/down/status/logs/smoke + API image provenance 검증                                   | 1      |
 | `api_image_provenance.py`   | clean Git HEAD·build arg·API image OCI revision label fail-closed 검증                                     | ops    |
-| `m05_activation_attestation.py` | M05 live UI, Map ACK, 실제 runtime image와 pinned OpenAPI를 서명된 attestation으로 봉인                 | 6      |
+| `m05_activation_attestation.py` | M04 승인 UI 증적과 M05 live UI·Map ACK·실제 runtime image·pinned OpenAPI를 같은 chain의 서명 attestation으로 봉인 | 6      |
 | `m05_activation_receipt.py` | M05의 두 리뷰·live UI·Map pair·restore·Pinvi image 증거를 Ed25519 signed receipt로 봉인              | 6      |
 | `m05_restore_drill.py`      | 격리 source DB dump를 fresh target에 no-owner 복원하고 runtime role·append-only trigger를 검증       | 6      |
 | `m05_operation_lease.py`    | 같은 N150 host의 hotswap·fresh target provisioner가 공유하는 root-owned target별 실행 lease              | 6      |

@@ -86,6 +86,14 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      # 실제 mutation은 N150 격리 stack에서만 허용하지만, 두 pinned suite의 탐색 가능성은 PR CI에서 고정한다.
+      - name: Verify M04/M05 live-mutating E2E catalog
+        working-directory: apps/web
+        run: >-
+          npx playwright test -c playwright.live-mutating.config.ts --list
+          e2e/admin-feature-request-queue-live-mutating.live.ts
+          e2e/admin-feature-reference-reconciliations-live-mutating.live.ts
+
       - name: Install Playwright chromium
         working-directory: apps/web
         run: npx playwright install --with-deps chromium
