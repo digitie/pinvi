@@ -101,6 +101,24 @@ test.describe('M04 isolated Map feature-request queue live e2e', () => {
     await expect(page.getByTestId('admin-fr-queue-payload-notice')).toBeVisible();
     await page.getByTestId('admin-fr-reason').fill(reason);
 
+    // M04 attestation은 승인 mutation이 이 격리 API로만 전달된 경우에만 유효하다.
+    // Web 이미지의 baked endpoint가 바뀐 경우 외부/공유 API로의 요청은 전송 전에 막는다.
+    await page.route(
+      (url) => url.pathname === approvePath,
+      async (route) => {
+        const request = route.request();
+        const requestUrl = new URL(request.url());
+        if (request.method() === 'POST' && requestUrl.origin !== apiOrigin) {
+          await route.abort('blockedbyclient');
+          return;
+        }
+        await route.continue();
+      },
+    );
+    const approvalRequestPromise = page.waitForRequest((request) => {
+      const requestUrl = new URL(request.url());
+      return request.method() === 'POST' && requestUrl.pathname === approvePath;
+    });
     const responsePromise = page.waitForResponse((response) => {
       const responseUrl = new URL(response.url());
       return (
@@ -110,6 +128,8 @@ test.describe('M04 isolated Map feature-request queue live e2e', () => {
       );
     });
     await page.getByTestId('admin-fr-approve').click();
+    const approvalRequest = await approvalRequestPromise;
+    expect(new URL(approvalRequest.url()).origin).toBe(apiOrigin);
     const response = await responsePromise;
     expect(response.status()).toBe(200);
     expect(response.request().redirectedFrom()).toBeNull();

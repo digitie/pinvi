@@ -17,6 +17,7 @@ export default defineConfig({
   use: {
     baseURL,
     ignoreHTTPSErrors: true,
+    serviceWorkers: 'block',
     trace: 'retain-on-failure',
     ...devices['Desktop Chrome'],
   },
