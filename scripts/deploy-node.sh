@@ -281,6 +281,29 @@ runtime_update_snapshot_renamed_flag() {
   fi
 }
 
+runtime_snapshot_matches_captured_writer() {
+  local service="$1"
+  local backup_name="$2"
+  local expected_id expected_image actual_id actual_image actual_project actual_service metadata
+  case "$service" in
+    app-api) expected_id="$RUNTIME_API_CONTAINER_ID"; expected_image="$RUNTIME_API_IMAGE_ID" ;;
+    app-web) expected_id="$RUNTIME_WEB_CONTAINER_ID"; expected_image="$RUNTIME_WEB_IMAGE_ID" ;;
+    app-dagster) expected_id="$RUNTIME_DAGSTER_CONTAINER_ID"; expected_image="$RUNTIME_DAGSTER_IMAGE_ID" ;;
+    *) return 2 ;;
+  esac
+  if ! metadata="$(docker container inspect --format \
+    '{{.Id}}|{{.Image}}|{{ index .Config.Labels "com.docker.compose.project" }}|{{ index .Config.Labels "com.docker.compose.service" }}' \
+    "$backup_name")"; then
+    return 1
+  fi
+  IFS='|' read -r actual_id actual_image actual_project actual_service <<< "$metadata"
+  if [[ "$actual_id" != "$expected_id" || "$actual_image" != "$expected_image" \
+    || "$actual_project" != "$PROJECT" || "$actual_service" != "$service" ]]; then
+    echo "pre-deploy ${service} snapshot identity drifted; refusing name restoration" >&2
+    return 1
+  fi
+}
+
 restore_runtime_snapshot_name() {
   local service="$1"
   local renamed backup_name container_name
@@ -307,6 +330,9 @@ restore_runtime_snapshot_name() {
     echo "pre-deploy ${service} snapshot disappeared before name restoration: ${backup_name}" >&2
     return 1
   fi
+  if ! runtime_snapshot_matches_captured_writer "$service" "$backup_name"; then
+    return 1
+  fi
   if ! docker rename "$backup_name" "$container_name"; then
     echo "pre-deploy ${service} snapshot could not be renamed back: ${backup_name}" >&2
     return 1
@@ -331,13 +357,9 @@ restore_runtime_snapshot_names() {
   [[ "$restore_failed" == "0" ]]
 }
 
-remove_new_runtime_writers() {
+remove_recorded_new_runtime_writers() {
   local service container_id removal_failed="0"
   local -a container_ids=()
-  if [[ "$RUNTIME_CONTAINER_DISCOVERY_FAILED" == "1" ]]; then
-    log "runtime container discovery failed; refusing cleanup by inferred ownership"
-    return 1
-  fi
   for service in app-api app-web app-dagster; do
     mapfile -t container_ids < <(runtime_new_container_ids "$service")
     for container_id in "${container_ids[@]}"; do
@@ -348,6 +370,42 @@ remove_new_runtime_writers() {
     done
   done
   [[ "$removal_failed" == "0" ]]
+}
+
+contain_unverified_runtime_writers() {
+  local containment_failed="0"
+  # discovery가 실패한 뒤에는 이름/label을 다시 추론해 삭제하지 않는다. 대신 Compose가
+  # 관리하는 writer 세 개를 중지해 검증되지 않은 새 runtime이 요청을 받지 못하게 한다.
+  if ! compose stop app-web; then
+    containment_failed="1"
+  fi
+  if ! compose stop app-api; then
+    containment_failed="1"
+  fi
+  if ! compose --profile etl stop app-dagster; then
+    containment_failed="1"
+  fi
+  [[ "$containment_failed" == "0" ]]
+}
+
+remove_new_runtime_writers() {
+  local containment_failed="0"
+  local removal_failed="0"
+  if [[ "$RUNTIME_CONTAINER_DISCOVERY_FAILED" == "1" ]]; then
+    log "runtime container discovery failed; containing managed writers before rollback"
+    if ! contain_unverified_runtime_writers; then
+      containment_failed="1"
+    fi
+    # 이 invocation이 이미 기록한 ID만 제거한다. discovery로 새 ID를 추론하지 않는다.
+    if ! remove_recorded_new_runtime_writers; then
+      removal_failed="1"
+    fi
+    if [[ "$containment_failed" != "0" || "$removal_failed" != "0" ]]; then
+      log "runtime containment is incomplete; manual recovery is required before any snapshot restore"
+    fi
+    return 1
+  fi
+  remove_recorded_new_runtime_writers
 }
 
 preserve_runtime_writers() {
@@ -421,7 +479,9 @@ rollback_preserved_runtime_writers() {
   local rollback_failed="0"
   local current_id
   if [[ "$RUNTIME_NEW_WRITERS_STARTED" == "1" ]] && ! remove_new_runtime_writers; then
-    rollback_failed="1"
+    # Discovery/containment failure 뒤에는 현재 runtime을 다시 추론하거나 snapshot을 되살리지
+    # 않는다. 기록한 ID의 cleanup은 위에서 끝냈으며, 남은 상태는 수동 복구 전까지 검증되지 않는다.
+    return 1
   fi
   if [[ "$RUNTIME_API_WAS_RUNNING" == "1" ]]; then
     current_id="$(runtime_writer_any_container_id app-api || true)"

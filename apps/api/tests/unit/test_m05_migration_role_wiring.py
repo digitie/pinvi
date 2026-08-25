@@ -1,5 +1,7 @@
 """M05 receipt migration의 one-shot 역할 경계를 정적으로 고정한다."""
 
+import shutil
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -87,6 +89,8 @@ def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
     )
     assert "0101이 catalog fingerprint·handoff를 완료한 뒤 app runtime 권한" in bootstrap
     assert "이미 적용된 0101을 재실행하지 않는다" in bootstrap
+    assert "SELECT (to_regclass('app.alembic_version') IS NOT NULL)::text;" in bootstrap
+    assert 'if [ "${alembic_version_table_exists}" = "t" ]; then' in bootstrap
     assert 'if [ "${applied_revision}" = "20260824_0101" ]; then' in bootstrap
     assert 'SET LOCAL ROLE :"schema_owner";' in bootstrap
     assert 'REVOKE ALL PRIVILEGES ON TABLE app.alembic_version FROM :"app_role";' in bootstrap
@@ -271,7 +275,9 @@ def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
         assert "runtime_new_container_ids()" in source
         assert "pinvi_runtime_container_ids_into_array" in source
         assert "RUNTIME_CONTAINER_DISCOVERY_FAILED" in source
-        assert "refusing cleanup by inferred ownership" in source
+        assert "containing managed writers before rollback" in source
+        assert "remove_recorded_new_runtime_writers()" in source
+        assert "contain_unverified_runtime_writers()" in source
         assert "RUNTIME_NEW_API_CONTAINER_IDS" in source
         assert "RUNTIME_NEW_WEB_CONTAINER_IDS" in source
         assert "RUNTIME_NEW_DAGSTER_CONTAINER_IDS" in source
@@ -303,6 +309,111 @@ def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
     assert 'restore_runtime_writers_on_exit "$exit_code"' in docker_app
 
 
+def test_discovery_failure_stops_managed_writers_and_removes_only_recorded_ids(
+    tmp_path: Path,
+) -> None:
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    for dependency in ("api-image-provenance.sh", "migrator-lifecycle-lock.sh"):
+        shutil.copy2(ROOT / "scripts" / dependency, scripts_dir / dependency)
+
+    for name in ("docker-app.sh", "deploy-node.sh"):
+        source = (ROOT / "scripts" / name).read_text(encoding="utf-8")
+        isolated_script = scripts_dir / name
+        isolated_script.write_text(
+            source.rsplit('\nmain "$@"', maxsplit=1)[0] + "\n", encoding="utf-8"
+        )
+        event_log = tmp_path / f"{name}.events"
+        driver = r"""
+set -euo pipefail
+source "$1"
+log() { :; }
+compose() {
+  printf 'compose:%s\n' "$*" >> "$FAKE_EVENT_LOG"
+  [[ "${FAKE_STOP_APP_API_FAIL:-0}" != "1" || "$*" != "stop app-api" ]]
+}
+runtime_new_container_ids() {
+  case "$1" in
+    app-api) printf '%s\n' recorded-api ;;
+    app-web) printf '%s\n' recorded-web ;;
+    app-dagster) printf '%s\n' recorded-dagster ;;
+  esac
+}
+docker() { printf 'docker:%s\n' "$*" >> "$FAKE_EVENT_LOG"; }
+RUNTIME_CONTAINER_DISCOVERY_FAILED=1
+if remove_new_runtime_writers; then
+  exit 1
+fi
+"""
+        expected_events = [
+            "compose:stop app-web",
+            "compose:stop app-api",
+            "compose:--profile etl stop app-dagster",
+            "docker:rm -f recorded-api",
+            "docker:rm -f recorded-web",
+            "docker:rm -f recorded-dagster",
+        ]
+        for stop_failure in ("0", "1"):
+            event_log.unlink(missing_ok=True)
+            subprocess.run(  # noqa: S603 -- fixed test-only bash driver
+                ["bash", "-c", driver, "--", str(isolated_script)],  # noqa: S607 -- fixture script
+                check=True,
+                input="",
+                text=True,
+                env={
+                    "FAKE_EVENT_LOG": str(event_log),
+                    "FAKE_STOP_APP_API_FAIL": stop_failure,
+                    "PINVI_ROOT_DIR": str(tmp_path),
+                },
+            )
+            assert event_log.read_text(encoding="utf-8").splitlines() == expected_events
+
+
+def test_snapshot_identity_drift_refuses_name_restoration(tmp_path: Path) -> None:
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    for dependency in ("api-image-provenance.sh", "migrator-lifecycle-lock.sh"):
+        shutil.copy2(ROOT / "scripts" / dependency, scripts_dir / dependency)
+
+    for name in ("docker-app.sh", "deploy-node.sh"):
+        source = (ROOT / "scripts" / name).read_text(encoding="utf-8")
+        isolated_script = scripts_dir / name
+        isolated_script.write_text(
+            source.rsplit('\nmain "$@"', maxsplit=1)[0] + "\n", encoding="utf-8"
+        )
+        event_log = tmp_path / f"{name}.snapshot-events"
+        driver = r"""
+set -euo pipefail
+source "$1"
+RUNTIME_API_SNAPSHOT_RENAMED=1
+RUNTIME_API_BACKUP_NAME=app-api.pinvi-predeploy
+RUNTIME_API_CONTAINER_NAME=app-api
+RUNTIME_API_CONTAINER_ID=expected-api
+RUNTIME_API_IMAGE_ID=expected-image
+docker() {
+  case "$*" in
+    "container inspect app-api.pinvi-predeploy") return 0 ;;
+    container\ inspect\ --format\ *\ app-api.pinvi-predeploy)
+      printf '%s\n' 'impostor-api|expected-image|pinvi-app|app-api'
+      ;;
+    rename*) printf 'unexpected-rename:%s\n' "$*" >> "$FAKE_EVENT_LOG"; return 99 ;;
+    *) return 98 ;;
+  esac
+}
+if restore_runtime_snapshot_name app-api; then
+  exit 1
+fi
+"""
+        subprocess.run(  # noqa: S603 -- fixed test-only bash driver
+            ["bash", "-c", driver, "--", str(isolated_script)],  # noqa: S607 -- fixture script
+            check=True,
+            input="",
+            text=True,
+            env={"FAKE_EVENT_LOG": str(event_log), "PINVI_ROOT_DIR": str(tmp_path)},
+        )
+        assert not event_log.exists()
+
+
 def test_live_ui_gates_pin_the_exact_checkout_revision() -> None:
     runner = (ROOT / "scripts" / "n150-playwright-runner.sh").read_text(encoding="utf-8")
     gate = (ROOT / "scripts" / "verify-v100-live-gate.sh").read_text(encoding="utf-8")
@@ -312,6 +423,71 @@ def test_live_ui_gates_pin_the_exact_checkout_revision() -> None:
         assert "does not match expected" in source
     assert "assert_exact_live_checkout" in runner
     assert "require_exact_live_revision" in gate
+    assert "git status --porcelain=v1 --untracked-files=all" in runner
+    assert "git status --porcelain=v1 --untracked-files=all" in gate
+    assert "PINVI_LIVE_UI_E2E" in runner
+    for phase in (
+        "admin-live-list",
+        "admin-live-smoke",
+        "admin-live-full",
+        "live-mutating-list",
+        "trip-realtime-mutating",
+        "backup-mutating",
+    ):
+        phase_start = gate.index(f"    {phase})")
+        phase_end = gate.index("      ;;", phase_start)
+        assert "run_live_playwright" in gate[phase_start:phase_end]
+
+    for runbook in ("admin-live-e2e.md", "v100-live-gate.md"):
+        documentation = (ROOT / "docs" / "runbooks" / runbook).read_text(encoding="utf-8")
+        assert "$(git rev-parse --verify HEAD^{commit})" not in documentation
+        assert "<trusted release candidate SHA>" in documentation
+
+    attestation = (ROOT / "scripts" / "m05_activation_attestation.py").read_text(encoding="utf-8")
+    m05_runner = attestation[
+        attestation.index('child_env["PINVI_M05_UI_VERIFICATION_ID"]') : attestation.index(
+            "completed = subprocess.run(command, check=False, env=child_env)",
+            attestation.index('child_env["PINVI_M05_UI_VERIFICATION_ID"]'),
+        )
+    ]
+    assert 'child_env["PINVI_SOURCE_REVISION"] = source_revision' in m05_runner
+    assert 'child_env["PINVI_LIVE_EXPECTED_REVISION"] = source_revision' in m05_runner
+
+
+def test_runtime_discovery_failure_is_detected_without_caller_pipefail() -> None:
+    provenance = ROOT / "scripts" / "api-image-provenance.sh"
+    command = """\
+set -eu
+ROOT_DIR="$2"
+COMPOSE_FILE="$2/infra/docker-compose.app.yml"
+source "$1"
+docker() { return 73; }
+declare -a container_ids=()
+if pinvi_runtime_container_ids_into_array container_ids app-api; then
+  exit 81
+fi
+[[ "$RUNTIME_CONTAINER_DISCOVERY_FAILED" == "1" ]]
+"""
+    result = subprocess.run(  # noqa: S603 -- fixed test-only bash driver
+        ["bash", "-c", command, "bash", str(provenance), str(ROOT)],  # noqa: S607 -- fixture script
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+    for name in ("scripts/docker-app.sh", "scripts/deploy-node.sh"):
+        source = (ROOT / name).read_text(encoding="utf-8")
+        assert "remove_recorded_new_runtime_writers()" in source
+        assert "contain_unverified_runtime_writers()" in source
+        assert "containing managed writers before rollback" in source
+        assert "compose stop app-web" in source
+        assert "compose stop app-api" in source
+        assert "compose --profile etl stop app-dagster" in source
+        assert (
+            "remove_recorded_new_runtime_writers"
+            in source[source.index("remove_new_runtime_writers()") :]
+        )
 
 
 def test_fresh_0101_and_role_bootstrap_fence_direct_app_schema_create() -> None:

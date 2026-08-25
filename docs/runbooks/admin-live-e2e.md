@@ -40,13 +40,14 @@ export PINVI_ADMIN_LIVE_E2E=1
 export PINVI_ADMIN_LIVE_WEB_URL="https://pinvi.example.com"
 export PINVI_ADMIN_LIVE_EMAIL="<admin email>"
 export PINVI_ADMIN_LIVE_PASSWORD="<admin password>"
-# 반드시 검증 대상 checkout의 의도한 40자리 lowercase commit으로 고정한다.
-export PINVI_LIVE_EXPECTED_REVISION="$(git rev-parse --verify HEAD^{commit})"
+# paired release candidate/attestation에서 받은 40자리 lowercase commit으로 고정한다.
+export PINVI_LIVE_EXPECTED_REVISION="<trusted release candidate SHA>"
 ```
 
 `PINVI_LIVE_EXPECTED_REVISION`은 단순한 provenance 값이 아니라 live UI gate의 checkout pin이다.
-runner는 실행 직전 현재 checkout의 `HEAD`와 이 값을 비교하며, 불일치하면 브라우저를 실행하지
-않는다. PR 검증에서는 `HEAD`를 해당 PR의 exact head로 맞춘 뒤 그 SHA를 명시적으로 전달한다.
+runner는 실행 직전 현재 checkout의 `HEAD`와 이 값을 비교하고 tracked/untracked 변경도 거부한다.
+불일치하거나 dirty면 브라우저를 실행하지 않는다. PR 검증에서는 paired release candidate 또는
+attestation에서 얻은 exact SHA를 전달하며, 현재 checkout에서 SHA를 즉석 생성해 설정하지 않는다.
 
 UI credential 대신 짧은 수명의 Playwright storage state를 `PINVI_ADMIN_LIVE_STORAGE_STATE`로
 전달할 수 있다. 이 경우 test는 저장된 인증 상태로 시작하고 `/admin/login` 입력은 수행하지 않는다.
@@ -114,7 +115,7 @@ set -a
 source "$HOME/.pinvi-admin-live.env"
 set +a
 
-export PINVI_LIVE_EXPECTED_REVISION="$(git rev-parse --verify HEAD^{commit})"
+export PINVI_LIVE_EXPECTED_REVISION="<trusted release candidate SHA>"
 
 npm -w @pinvi/web run test:e2e:admin-live:list
 
@@ -128,7 +129,7 @@ cd ~/pinvi
 set -a
 source "$HOME/.pinvi-admin-live.env"
 set +a
-export PINVI_LIVE_EXPECTED_REVISION="$(git rev-parse --verify HEAD^{commit})"
+export PINVI_LIVE_EXPECTED_REVISION="<trusted release candidate SHA>"
 npm -w @pinvi/web run test:e2e:admin-live:list
 
 PINVI_ADMIN_LIVE_CASE_LIMIT=200 \
@@ -145,9 +146,11 @@ Playwright runner는 N150에서 먼저 실행한다. N150의 OS/브라우저 지
 없을 때만 Windows runner를 fallback으로 사용하고, fallback 사유와 대상 Web/API URL 범위를
 `docs/journal.md`에 남긴다.
 
-### 3.2 Host Chromium dependency 점검
+### 3.2 Host Chromium 의존성 진단
 
-host에서 Playwright Chromium을 직접 실행해야 할 때만 이 절차를 사용한다. 2026-06-28 T-259
+host Chromium은 Docker runner를 대신하는 live acceptance 증적 경로가 아니다. `PINVI_LIVE_EXPECTED_REVISION`의
+exact SHA 및 clean-checkout guard를 우회하므로 운영 credential·공개 운영 URL을 사용한 host 직접 실행은 금지한다.
+아래 절차는 N150 Docker runner가 시작하지 못하는 원인을 진단하는 관찰 전용 절차다. 2026-06-28 T-259
 기준 N150은 Ubuntu 26.04 LTS다. Playwright 1.60.0의
 `npx playwright install-deps --dry-run chromium`은 `ubuntu26.04-x64`를 직접 지원하지 않아
 자동 dependency 설치 목록을 만들지 못한다. 이 경우 브라우저 binary를 `ldd`로 직접 확인한다.
@@ -165,17 +168,16 @@ T-259에서 확인한 누락 라이브러리:
 - `libasound.so.2`
 - `libatspi.so.0`
 
-sudo 가능한 N150 셸에서 최소 후보 패키지를 설치한 뒤 `--grep malformed` smoke를 먼저 재시도한다.
+sudo 가능한 N150 셸에서 최소 후보 패키지를 설치한 뒤 Docker runner를 다시 실행한다.
 Ubuntu 26.04 패키지명은 apt index 기준으로 다시 확인한다.
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y libatk1.0-0 libatk-bridge2.0-0 libxdamage1 libasound2t64 libatspi2.0-0
 
-cd ~/pinvi/apps/web
-PINVI_ADMIN_LIVE_E2E=1 \
-PINVI_ADMIN_LIVE_WEB_URL=http://127.0.0.1:12805 \
-npm run test:e2e:admin-live -- --grep malformed --workers=1
+cd ~/pinvi
+export PINVI_LIVE_EXPECTED_REVISION="<trusted release candidate SHA>"
+scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:admin-live -- --grep malformed --workers=1
 ```
 
 비대화형 sudo가 없으면 Codex/CI가 직접 설치하지 않는다. Docker runner 자체도 실행할 수 없을 때만

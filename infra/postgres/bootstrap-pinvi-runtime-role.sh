@@ -712,16 +712,24 @@ fi
 # 0100 이하와 legacy rebaseline은 migration handoff가 ACL을 결정해야 하므로 여기서
 # 절대 수정하지 않는다.
 if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then
-  applied_revision="$(
+  alembic_version_table_exists="$(
     PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --tuples-only --no-align \
-      --host=app-postgres --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" <<'SQL'
-SELECT CASE
-    WHEN to_regclass('app.alembic_version') IS NULL THEN ''
-    WHEN (SELECT count(*) FROM app.alembic_version) <> 1 THEN ''
-    ELSE COALESCE((SELECT version_num FROM app.alembic_version), '')
-END;
-SQL
+      --host=app-postgres --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+      --command="SELECT (to_regclass('app.alembic_version') IS NOT NULL)::text;"
   )"
+  applied_revision=""
+  if [ "${alembic_version_table_exists}" = "t" ]; then
+    applied_revision="$(
+      PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --tuples-only --no-align \
+        --host=app-postgres --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" <<'SQL'
+SELECT CASE
+    WHEN count(*) <> 1 THEN ''
+    ELSE COALESCE((SELECT version_num FROM app.alembic_version), '')
+END
+FROM app.alembic_version;
+SQL
+    )"
+  fi
   if [ "${applied_revision}" = "20260824_0101" ]; then
     PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 \
       --host=app-postgres --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \

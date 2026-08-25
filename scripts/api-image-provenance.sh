@@ -289,14 +289,17 @@ pinvi_runtime_container_ids() {
   local service="$1"
   local project="${PROJECT:-pinvi-app}"
   local -a list_args=()
+  local raw_containers
   if [[ "${2:-all}" == "all" ]]; then
     list_args=(--all)
   fi
-  docker container ls "${list_args[@]}" \
+  if ! raw_containers="$(docker container ls --no-trunc "${list_args[@]}" \
     --filter "label=com.docker.compose.project=${project}" \
     --filter "label=com.docker.compose.service=${service}" \
-    --format '{{.ID}} {{.Names}}' \
-    | awk '$2 !~ /\.pinvi-predeploy$/ {print $1}'
+    --format '{{.ID}} {{.Names}}')"; then
+    return 1
+  fi
+  awk '$2 !~ /\.pinvi-predeploy$/ {print $1}' <<< "$raw_containers"
 }
 
 pinvi_runtime_container_ids_into_array() {
