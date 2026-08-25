@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """ADR-063의 단발 0061 → 0100 Alembic metadata rebaseline 도구.
 
-이 도구는 기존 migration을 실행하거나 app data/DDL을 바꾸지 않는다. `check`는
-읽기 전용 preflight이고, `apply`는 검증된 0061 catalog의 `app.alembic_version`
-한 행만 0100으로 바꾼다. 운영 실행은 root OS 계정과 별도 maintainer DB URL을
-요구한다.
+이 도구는 기존 migration을 실행하거나 app data/app object DDL을 바꾸지 않는다. `check`는
+읽기 전용 preflight이고, `apply`는 검증된 0061 catalog의 legacy provenance comment와
+`app.alembic_version` 한 행을 같은 transaction에서 0100 handoff로 기록한다. 운영 실행은
+root OS 계정과 별도 maintainer DB URL을 요구한다.
 """
 
 from __future__ import annotations
@@ -34,8 +34,34 @@ LEGACY_REVISION = "20260821_0061"
 BASELINE_REVISION = "20260824_0100"
 _EXPECTED_CATALOG_LINES = 1590
 _EXPECTED_CATALOG_SHA256 = (
-    "bcf526cfa62facfaf3fe4b64a62e90329552cd887865a8ed5a477fe1fcc09c73"
+    "4f2d69decc34300c597320e8a0dc78d154bd2eb4b6dbc96f0b51ba5b05c75d94"
 )
+_N150_LEGACY_CATALOG_SHA256 = (
+    # 보존한 N150 0061 app dump를 별도 PostgreSQL 16 DB에 복원해 산출한 기준선.
+    "4f2d69decc34300c597320e8a0dc78d154bd2eb4b6dbc96f0b51ba5b05c75d94"
+)
+_TARGET_PROFILE_FRESH = "fresh-postgresql-16"
+_TARGET_PROFILE_N150 = "n150-production"
+_FRESH_BASELINE_SCHEMA_COMMENT = "pinvi-0100-fresh/v1"
+_LEGACY_REBASELINE_SCHEMA_COMMENT = "pinvi-0100-legacy/v1"
+_N150_TARGET_IDENTITY_SHA256 = (
+    # current_database|system_identifier|server_addr|server_port; DB OID는 재생성 때 변한다.
+    "e04c99a4681738e0292debdceded99b1c8abe01c9b8bdee82aeef8566dd33cc1"
+)
+_TARGET_PROFILE_SPECS: dict[str, dict[str, object]] = {
+    _TARGET_PROFILE_FRESH: {
+        "catalog_sha256": _EXPECTED_CATALOG_SHA256,
+        "target_host": "test",
+        "target_identity_sha256": None,
+    },
+    _TARGET_PROFILE_N150: {
+        "catalog_sha256": _N150_LEGACY_CATALOG_SHA256,
+        "target_host": "n150",
+        "target_identity_sha256": _N150_TARGET_IDENTITY_SHA256,
+        "database_name": "pinvi",
+        "server_port": 12800,
+    },
+}
 _CHECKSUM = re.compile(r"^[0-9a-f]{64}$")
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _INTEGER = re.compile(r"^[0-9]+$")
@@ -60,6 +86,8 @@ _TARGET_MANIFEST_FIELDS = frozenset(
         "backup_manifest_sha256",
         "captured_at",
         "preflight",
+        "target_host",
+        "target_profile",
         "version",
     }
 )
@@ -75,6 +103,7 @@ _PREFLIGHT_FIELDS = frozenset(
         "database_oid",
         "expected_catalog_lines",
         "expected_catalog_sha256",
+        "role_security_sha256",
         "server_addr",
         "server_port",
         "server_version_num",
@@ -92,6 +121,8 @@ _RECEIPT_FIELDS = frozenset(
         "preflight",
         "state",
         "target_manifest_sha256",
+        "target_host",
+        "target_profile",
         "version",
     }
 )
@@ -109,20 +140,59 @@ WITH object_lines(line) AS (
   WHERE n.nspname = 'app'
   UNION ALL
   SELECT jsonb_build_array('relation', c.relname, c.relkind, c.relpersistence,
+                           c.relreplident,
                            pg_get_userbyid(c.relowner), COALESCE(c.reloptions::text, ''),
                            COALESCE(c.relacl::text, ''), c.relrowsecurity,
                            c.relforcerowsecurity, c.relispartition,
                            COALESCE(pg_get_expr(c.relpartbound, c.oid, true), ''),
-                           COALESCE(pg_get_partkeydef(c.oid), ''))::text
+                           COALESCE(pg_get_partkeydef(c.oid), ''),
+                           COALESCE(sequence_row.seqstart::text, ''),
+                           COALESCE(sequence_row.seqmin::text, ''),
+                           COALESCE(sequence_row.seqmax::text, ''),
+                           COALESCE(sequence_row.seqincrement::text, ''),
+                           COALESCE(sequence_row.seqcache::text, ''),
+                           COALESCE(sequence_row.seqcycle::text, ''),
+                           CASE WHEN sequence_row.seqtypid IS NULL THEN ''
+                                ELSE sequence_row.seqtypid::regtype::text END,
+                           COALESCE((
+                             SELECT jsonb_agg(
+                               jsonb_build_array(
+                                 dependency.deptype,
+                                 referenced_namespace.nspname,
+                                 referenced_relation.relname,
+                                 CASE WHEN dependency.refobjsubid = 0 THEN ''
+                                      ELSE referenced_attribute.attname END
+                               )
+                               ORDER BY dependency.deptype,
+                                        referenced_namespace.nspname,
+                                        referenced_relation.relname,
+                                        dependency.refobjsubid
+                             )::text
+                             FROM pg_depend AS dependency
+                             JOIN pg_class AS referenced_relation
+                               ON dependency.refclassid = 'pg_class'::regclass
+                              AND dependency.refobjid = referenced_relation.oid
+                             JOIN pg_namespace AS referenced_namespace
+                               ON referenced_namespace.oid = referenced_relation.relnamespace
+                             LEFT JOIN pg_attribute AS referenced_attribute
+                               ON referenced_attribute.attrelid = dependency.refobjid
+                              AND referenced_attribute.attnum = dependency.refobjsubid
+                              AND NOT referenced_attribute.attisdropped
+                             WHERE dependency.classid = 'pg_class'::regclass
+                               AND dependency.objid = c.oid
+                               AND dependency.deptype = 'a'
+                           ), ''))::text
   FROM pg_class AS c
   JOIN pg_namespace AS n ON n.oid = c.relnamespace
+  LEFT JOIN pg_sequence AS sequence_row ON sequence_row.seqrelid = c.oid
   WHERE n.nspname = 'app' AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f', 'c')
   UNION ALL
   SELECT jsonb_build_array('column', c.relname, a.attname, a.attnum,
                            pg_catalog.format_type(a.atttypid, a.atttypmod), a.attnotnull,
                            a.attidentity, a.attgenerated,
                            COALESCE(pg_get_expr(d.adbin, d.adrelid), ''),
-                           COALESCE(a.attcollation::regcollation::text, ''))::text
+                           COALESCE(a.attcollation::regcollation::text, ''),
+                           COALESCE(a.attacl::text, ''))::text
   FROM pg_attribute AS a
   JOIN pg_class AS c ON c.oid = a.attrelid
   JOIN pg_namespace AS n ON n.oid = c.relnamespace
@@ -231,8 +301,10 @@ WITH object_lines(line) AS (
   WHERE n.nspname = 'app'
   UNION ALL
   SELECT jsonb_build_array('trigger', c.relname, t.tgname, t.tgenabled, t.tgtype,
+                           t.tgdeferrable, t.tginitdeferred, t.tgparentid,
                            t.tgfoid::regprocedure::text, encode(t.tgargs, 'hex'),
-                           t.tgattr::text)::text
+                           t.tgattr::text,
+                           COALESCE(pg_get_expr(t.tgqual, t.tgrelid, true), ''))::text
   FROM pg_trigger AS t
   JOIN pg_class AS c ON c.oid = t.tgrelid
   JOIN pg_namespace AS n ON n.oid = c.relnamespace
@@ -268,14 +340,313 @@ WITH object_lines(line) AS (
   JOIN pg_namespace AS n ON n.oid = e.extnamespace
   WHERE e.extname IN ('pgcrypto', 'pg_trgm', 'citext')
   UNION ALL
+  SELECT jsonb_build_array(
+      'collation', collation_row.collname, collation_row.collprovider,
+      collation_row.collisdeterministic, collation_row.collencoding,
+      COALESCE(collation_row.collcollate, ''), COALESCE(collation_row.collctype, ''),
+      COALESCE(collation_row.colliculocale, ''), COALESCE(collation_row.collicurules, ''),
+      COALESCE(collation_row.collversion, ''), pg_get_userbyid(collation_row.collowner)
+    )::text
+  FROM pg_collation AS collation_row
+  JOIN pg_namespace AS namespace ON namespace.oid = collation_row.collnamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'conversion', conversion_row.conname, conversion_row.conforencoding,
+      conversion_row.contoencoding, conversion_row.conproc::regproc::text,
+      conversion_row.condefault, pg_get_userbyid(conversion_row.conowner)
+    )::text
+  FROM pg_conversion AS conversion_row
+  JOIN pg_namespace AS namespace ON namespace.oid = conversion_row.connamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'opclass', opclass_row.opcname, access_method.amname,
+      family_row.opfname, opclass_row.opcdefault,
+      opclass_row.opcintype::regtype::text, opclass_row.opckeytype::regtype::text,
+      pg_get_userbyid(opclass_row.opcowner)
+    )::text
+  FROM pg_opclass AS opclass_row
+  JOIN pg_namespace AS namespace ON namespace.oid = opclass_row.opcnamespace
+  JOIN pg_am AS access_method ON access_method.oid = opclass_row.opcmethod
+  JOIN pg_opfamily AS family_row ON family_row.oid = opclass_row.opcfamily
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'opfamily', opfamily_row.opfname, access_method.amname,
+      pg_get_userbyid(opfamily_row.opfowner)
+    )::text
+  FROM pg_opfamily AS opfamily_row
+  JOIN pg_namespace AS namespace ON namespace.oid = opfamily_row.opfnamespace
+  JOIN pg_am AS access_method ON access_method.oid = opfamily_row.opfmethod
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'ts_config', config_row.cfgname, config_row.cfgparser::regproc::text,
+      pg_get_userbyid(config_row.cfgowner)
+    )::text
+  FROM pg_ts_config AS config_row
+  JOIN pg_namespace AS namespace ON namespace.oid = config_row.cfgnamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'ts_dict', dictionary_row.dictname, dictionary_row.dicttemplate::regproc::text,
+      COALESCE(dictionary_row.dictinitoption, ''), pg_get_userbyid(dictionary_row.dictowner)
+    )::text
+  FROM pg_ts_dict AS dictionary_row
+  JOIN pg_namespace AS namespace ON namespace.oid = dictionary_row.dictnamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'statistic_ext', statistic_row.stxname, statistic_row.stxstattarget,
+      statistic_row.stxkeys::text, statistic_row.stxkind::text,
+      COALESCE(statistic_row.stxexprs::text, ''),
+      pg_get_statisticsobjdef(statistic_row.oid), pg_get_userbyid(statistic_row.stxowner)
+    )::text
+  FROM pg_statistic_ext AS statistic_row
+  JOIN pg_namespace AS namespace ON namespace.oid = statistic_row.stxnamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
   SELECT jsonb_build_array('default_acl', COALESCE(n.nspname, ''),
                            d.defaclrole::regrole::text, d.defaclobjtype,
                            COALESCE(d.defaclacl::text, ''))::text
   FROM pg_default_acl AS d
   LEFT JOIN pg_namespace AS n ON n.oid = d.defaclnamespace
-  WHERE n.nspname = 'app' OR n.nspname IS NULL
+  WHERE n.nspname IN ('app', 'x_extension') OR n.nspname IS NULL
 )
 SELECT line FROM object_lines ORDER BY line COLLATE "C"
+"""
+
+_ROLE_SECURITY_FINGERPRINT_SQL = """
+WITH RECURSIVE app_owner_roles(oid) AS (
+  SELECT namespace.nspowner
+  FROM pg_namespace AS namespace
+  WHERE namespace.nspname IN ('app', 'x_extension', 'public')
+  UNION
+  SELECT relation.relowner
+  FROM pg_class AS relation
+  JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT procedure.proowner
+  FROM pg_proc AS procedure
+  JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT type_row.typowner
+  FROM pg_type AS type_row
+  JOIN pg_namespace AS namespace ON namespace.oid = type_row.typnamespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT extension_row.extowner
+  FROM pg_extension AS extension_row
+  JOIN pg_namespace AS namespace ON namespace.oid = extension_row.extnamespace
+  WHERE namespace.nspname = 'x_extension'
+), acl_principal_roles(oid) AS (
+  SELECT acl.grantee
+  FROM pg_database AS database_row
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(database_row.datacl, acldefault('d', database_row.datdba))
+  ) AS acl
+  WHERE database_row.datname = current_database()
+  UNION
+  SELECT acl.grantor
+  FROM pg_database AS database_row
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(database_row.datacl, acldefault('d', database_row.datdba))
+  ) AS acl
+  WHERE database_row.datname = current_database()
+  UNION
+  SELECT acl.grantee
+  FROM pg_namespace AS namespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(namespace.nspacl, acldefault('n', namespace.nspowner))
+  ) AS acl
+  WHERE namespace.nspname IN ('app', 'x_extension', 'public')
+  UNION
+  SELECT acl.grantor
+  FROM pg_namespace AS namespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(namespace.nspacl, acldefault('n', namespace.nspowner))
+  ) AS acl
+  WHERE namespace.nspname IN ('app', 'x_extension', 'public')
+  UNION
+  SELECT acl.grantee
+  FROM pg_class AS relation
+  JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(
+      relation.relacl,
+      acldefault(
+        CASE WHEN relation.relkind = 'S' THEN 'S'::"char" ELSE 'r'::"char" END,
+        relation.relowner
+      )
+    )
+  ) AS acl
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT acl.grantor
+  FROM pg_class AS relation
+  JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(
+      relation.relacl,
+      acldefault(
+        CASE WHEN relation.relkind = 'S' THEN 'S'::"char" ELSE 'r'::"char" END,
+        relation.relowner
+      )
+    )
+  ) AS acl
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT acl.grantee
+  FROM pg_proc AS procedure
+  JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(procedure.proacl, acldefault('f', procedure.proowner))
+  ) AS acl
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT acl.grantor
+  FROM pg_proc AS procedure
+  JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(procedure.proacl, acldefault('f', procedure.proowner))
+  ) AS acl
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT acl.grantee
+  FROM pg_default_acl AS default_acl
+  LEFT JOIN pg_namespace AS namespace
+    ON namespace.oid = default_acl.defaclnamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(
+      default_acl.defaclacl,
+      acldefault(default_acl.defaclobjtype, default_acl.defaclrole)
+    )
+  ) AS acl
+  WHERE default_acl.defaclnamespace = 0
+     OR namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT acl.grantor
+  FROM pg_default_acl AS default_acl
+  LEFT JOIN pg_namespace AS namespace
+    ON namespace.oid = default_acl.defaclnamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(
+      default_acl.defaclacl,
+      acldefault(default_acl.defaclobjtype, default_acl.defaclrole)
+    )
+  ) AS acl
+  WHERE default_acl.defaclnamespace = 0
+     OR namespace.nspname IN ('app', 'x_extension')
+), seed_roles(oid) AS (
+  SELECT oid FROM app_owner_roles
+  UNION
+  SELECT oid FROM acl_principal_roles
+  UNION
+  SELECT role_row.oid
+  FROM pg_roles AS role_row
+  WHERE role_row.rolsuper OR role_row.rolcreaterole OR role_row.rolcreatedb
+     OR role_row.rolreplication OR role_row.rolbypassrls
+     OR role_row.rolname IN (current_user, session_user)
+     OR role_row.rolname LIKE 'pinvi%'
+  UNION
+  SELECT database_row.datdba
+  FROM pg_database AS database_row
+  WHERE database_row.datname = current_database()
+), relevant_roles(oid) AS (
+  SELECT oid FROM seed_roles
+  UNION
+  SELECT CASE
+           WHEN membership.roleid = role_row.oid THEN membership.member
+           ELSE membership.roleid
+         END
+  FROM pg_auth_members AS membership
+  JOIN relevant_roles AS role_row
+    ON membership.roleid = role_row.oid OR membership.member = role_row.oid
+), security_lines(line) AS (
+  SELECT jsonb_build_array(
+      'database_acl', database_row.datname, pg_get_userbyid(database_row.datdba),
+      COALESCE(database_row.datacl::text, '')
+    )::text
+  FROM pg_database AS database_row
+  WHERE database_row.datname = current_database()
+  UNION ALL
+  SELECT jsonb_build_array(
+      'schema_acl', namespace.nspname, pg_get_userbyid(namespace.nspowner),
+      COALESCE(namespace.nspacl::text, '')
+    )::text
+  FROM pg_namespace AS namespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'relation_acl', namespace.nspname, relation.relname, relation.relkind,
+      pg_get_userbyid(relation.relowner), COALESCE(relation.relacl::text, '')
+    )::text
+  FROM pg_class AS relation
+  JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'function_acl', namespace.nspname, procedure.oid::regprocedure::text,
+      pg_get_userbyid(procedure.proowner), COALESCE(procedure.proacl::text, '')
+    )::text
+  FROM pg_proc AS procedure
+  JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'type_acl', namespace.nspname, type_row.typname,
+      pg_get_userbyid(type_row.typowner), COALESCE(type_row.typacl::text, '')
+    )::text
+  FROM pg_type AS type_row
+  JOIN pg_namespace AS namespace ON namespace.oid = type_row.typnamespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'default_acl', COALESCE(namespace.nspname, ''),
+      pg_get_userbyid(default_acl.defaclrole), default_acl.defaclobjtype,
+      COALESCE(default_acl.defaclacl::text, '')
+    )::text
+  FROM pg_default_acl AS default_acl
+  LEFT JOIN pg_namespace AS namespace ON namespace.oid = default_acl.defaclnamespace
+  WHERE default_acl.defaclnamespace = 0
+     OR namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'role', role_row.rolname, role_row.rolsuper, role_row.rolinherit,
+      role_row.rolcreaterole, role_row.rolcreatedb, role_row.rolcanlogin,
+      role_row.rolreplication, role_row.rolbypassrls, role_row.rolconnlimit,
+      COALESCE(role_row.rolvaliduntil::text, ''),
+      COALESCE(role_row.rolconfig::text, '')
+    )::text
+  FROM pg_roles AS role_row
+  WHERE role_row.oid IN (SELECT oid FROM relevant_roles)
+  UNION ALL
+  SELECT jsonb_build_array(
+      'membership', granted_role.rolname, member_role.rolname,
+      membership.admin_option, membership.inherit_option, membership.set_option
+    )::text
+  FROM pg_auth_members AS membership
+  JOIN pg_roles AS granted_role ON granted_role.oid = membership.roleid
+  JOIN pg_roles AS member_role ON member_role.oid = membership.member
+  WHERE membership.roleid IN (SELECT oid FROM relevant_roles)
+     OR membership.member IN (SELECT oid FROM relevant_roles)
+  UNION ALL
+  SELECT jsonb_build_array(
+      'db_role_setting', database_row.datname,
+      COALESCE(role_row.rolname, 'PUBLIC'),
+      COALESCE(setting_row.setconfig::text, '')
+    )::text
+  FROM pg_db_role_setting AS setting_row
+  JOIN pg_database AS database_row
+    ON setting_row.setdatabase IN (0, database_row.oid)
+  LEFT JOIN pg_roles AS role_row ON role_row.oid = setting_row.setrole
+  WHERE database_row.datname = current_database()
+    AND (setting_row.setrole = 0 OR setting_row.setrole IN (SELECT oid FROM relevant_roles))
+)
+SELECT line FROM security_lines ORDER BY line COLLATE "C"
 """
 
 # `apply`와 0101 receipt 검증은 같은 transaction-scoped advisory lock을 잡는다.
@@ -287,9 +658,8 @@ _REBASELINE_SERIALIZATION_LOCK_SQL = (
 
 # `apply`는 root-only superuser 연결로만 수행한다. transaction 전체에 shared
 # `pg_database`의 AccessExclusive lock을 유지해 새 backend가 startup 중에 멈추도록
-# 하고 기존 DDL-capable backend를 `pg_terminate_backend`로 종료한다. 단순 database
-# owner는 임의 role의 backend를 종료할 권한이 없으므로, 그보다 약한 권한을 허용하면
-# fence 중간에 permission error가 나고 부분 절차를 남긴다.
+# 한다. 기존 DDL-capable backend가 있으면 종료하지 않고 fail-close한다. 세션 종료는
+# PostgreSQL transaction rollback으로 되돌릴 수 없는 외부 부작용이기 때문이다.
 _REBASELINE_DATABASE_FENCE_AUTHORITY_SQL = """
 SELECT current_role_row.rolsuper
 FROM pg_roles AS current_role_row
@@ -298,6 +668,10 @@ WHERE current_role_row.rolname = current_user
 """
 _REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL = "SET LOCAL lock_timeout = '5s'"
 _REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_RESET_SQL = "SET LOCAL lock_timeout = 0"
+_REBASELINE_ROLE_SECURITY_FENCE_SQL = (
+    "LOCK TABLE pg_catalog.pg_authid, pg_catalog.pg_auth_members, "
+    "pg_catalog.pg_db_role_setting IN ACCESS EXCLUSIVE MODE"
+)
 
 # table lock만으로 enum/domain/operator처럼 relation 밖에 저장되는 app DDL을 멈출 수는
 # 없다. owner role은 direct login뿐 아니라 INHERIT membership나 SET ROLE로도 쓸 수
@@ -359,6 +733,25 @@ app_catalog_owners(owner_oid) AS (
   SELECT extension_row.extowner
   FROM pg_extension AS extension_row
   JOIN app_schema AS schema ON schema.oid = extension_row.extnamespace
+  UNION
+  SELECT namespace.nspowner
+  FROM pg_namespace AS namespace
+  WHERE namespace.nspname = 'x_extension'
+  UNION
+  SELECT relation.relowner
+  FROM pg_class AS relation
+  JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+  WHERE namespace.nspname = 'x_extension'
+  UNION
+  SELECT procedure.proowner
+  FROM pg_proc AS procedure
+  JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+  WHERE namespace.nspname = 'x_extension'
+  UNION
+  SELECT type_row.typowner
+  FROM pg_type AS type_row
+  JOIN pg_namespace AS namespace ON namespace.oid = type_row.typnamespace
+  WHERE namespace.nspname = 'x_extension'
 ),
 ddl_capable_sessions(pid) AS (
   SELECT activity.pid
@@ -367,9 +760,22 @@ ddl_capable_sessions(pid) AS (
   WHERE activity.datname = current_database()
     AND activity.backend_type = 'client backend'
     AND activity.pid <> pg_backend_pid()
+    -- 같은 Alembic serialization lock을 기다리는 협력 migrator는 이 fence가
+    -- 보호하는 대상이다. 다른 DDL-capable 세션만 quiescence 위반으로 본다.
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_locks AS migration_lock
+      WHERE migration_lock.pid = activity.pid
+        AND migration_lock.locktype = 'advisory'
+        AND migration_lock.classid = 1863432274
+        AND migration_lock.objid = 20260824
+        AND NOT migration_lock.granted
+    )
     AND (
       COALESCE(role_row.rolsuper, false)
+      OR COALESCE(role_row.rolcreaterole, false)
       OR COALESCE(has_schema_privilege(activity.usesysid, 'app', 'CREATE'), false)
+      OR COALESCE(has_schema_privilege(activity.usesysid, 'x_extension', 'CREATE'), false)
       OR EXISTS (
         SELECT 1
         FROM app_catalog_owners AS owner_row
@@ -394,6 +800,14 @@ _REBASELINE_DDL_CAPABLE_SESSION_IDS_SQL = (
     _REBASELINE_DDL_CAPABLE_SESSIONS_CTE
     + "SELECT pid FROM ddl_capable_sessions ORDER BY pid"
 )
+_REBASELINE_APP_TABLES_SQL = """
+SELECT relation.relname
+FROM pg_class AS relation
+JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+WHERE namespace.nspname = 'app'
+  AND relation.relkind IN ('r', 'p')
+ORDER BY relation.relname COLLATE "C"
+"""
 
 _LEGACY_SENTINELS_SQL = """
 SELECT
@@ -447,6 +861,66 @@ class RebaselineError(RuntimeError):
     """실행자가 조치할 수 있는 rebaseline preflight 실패."""
 
 
+def _target_profile_spec(target_profile: str) -> dict[str, object]:
+    try:
+        return _TARGET_PROFILE_SPECS[target_profile]
+    except (KeyError, TypeError) as exc:
+        raise RebaselineError("rebaseline target profile is unsupported") from exc
+
+
+def _target_profile_identity_sha256(preflight: dict[str, Any]) -> str:
+    identity = "|".join(
+        str(preflight[field])
+        for field in (
+            "database_name",
+            "system_identifier",
+            "server_addr",
+            "server_port",
+        )
+    )
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+
+def _assert_target_profile_preflight(
+    target_profile: str, preflight: dict[str, Any]
+) -> None:
+    spec = _target_profile_spec(target_profile)
+    expected_catalog_sha256 = spec["catalog_sha256"]
+    if (
+        preflight.get("catalog_sha256") != expected_catalog_sha256
+        or preflight.get("expected_catalog_sha256") != expected_catalog_sha256
+        or preflight.get("catalog_lines") != _EXPECTED_CATALOG_LINES
+        or preflight.get("expected_catalog_lines") != _EXPECTED_CATALOG_LINES
+    ):
+        raise RebaselineError(
+            f"catalog fingerprint is not canonical for target profile {target_profile}"
+        )
+    expected_identity_sha256 = spec.get("target_identity_sha256")
+    if (
+        expected_identity_sha256 is not None
+        and _target_profile_identity_sha256(preflight) != expected_identity_sha256
+    ):
+        raise RebaselineError(
+            f"target database identity is not canonical for target profile {target_profile}"
+        )
+    expected_database_name = spec.get("database_name")
+    if (
+        expected_database_name is not None
+        and preflight.get("database_name") != expected_database_name
+    ):
+        raise RebaselineError(
+            f"target database name is not canonical for target profile {target_profile}"
+        )
+    expected_server_port = spec.get("server_port")
+    if (
+        expected_server_port is not None
+        and preflight.get("server_port") != expected_server_port
+    ):
+        raise RebaselineError(
+            f"target database port is not canonical for target profile {target_profile}"
+        )
+
+
 @dataclass(frozen=True)
 class CatalogPreflight:
     database_name: str
@@ -463,8 +937,10 @@ class CatalogPreflight:
     app_data_rows: int
     app_data_table_lines: int
     app_data_content_sha256: str
+    role_security_sha256: str
 
-    def as_dict(self) -> dict[str, Any]:
+    def as_dict(self, *, target_profile: str = _TARGET_PROFILE_FRESH) -> dict[str, Any]:
+        expected_catalog_sha256 = _target_profile_spec(target_profile)["catalog_sha256"]
         return {
             "app_data_rows": self.app_data_rows,
             "app_data_table_lines": self.app_data_table_lines,
@@ -481,13 +957,16 @@ class CatalogPreflight:
             "catalog_lines": self.catalog_lines,
             "catalog_sha256": self.catalog_sha256,
             "expected_catalog_lines": _EXPECTED_CATALOG_LINES,
-            "expected_catalog_sha256": _EXPECTED_CATALOG_SHA256,
+            "expected_catalog_sha256": expected_catalog_sha256,
+            "role_security_sha256": self.role_security_sha256,
         }
 
-    def stable_identity_dict(self) -> dict[str, Any]:
-        """version row만 달라질 수 있는 0061→0100 전환 전후 identity."""
+    def stable_identity_dict(
+        self, *, target_profile: str = _TARGET_PROFILE_FRESH
+    ) -> dict[str, Any]:
+        """0061→0100 전환 전후에 고정돼야 하는 catalog·database identity."""
 
-        value = self.as_dict()
+        value = self.as_dict(target_profile=target_profile)
         value.pop("version_rows")
         return value
 
@@ -519,6 +998,8 @@ class TargetManifest:
     captured_at: str
     backup_manifest_sha256: str
     preflight: dict[str, Any]
+    target_profile: str = _TARGET_PROFILE_FRESH
+    target_host: str = "test"
 
 
 def _sha256_file(path: Path) -> str:
@@ -805,13 +1286,18 @@ def _replace_private_json(path: Path, payload: dict[str, Any], *, label: str) ->
 
 
 def _target_manifest_payload(
-    preflight: CatalogPreflight, backup_manifest_sha256: str
+    preflight: CatalogPreflight,
+    backup_manifest_sha256: str,
+    target_profile: str = _TARGET_PROFILE_FRESH,
 ) -> dict[str, Any]:
+    spec = _target_profile_spec(target_profile)
     return {
         "action": "0061_to_0100_rebaseline_target",
         "backup_manifest_sha256": backup_manifest_sha256,
         "captured_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-        "preflight": preflight.as_dict(),
+        "preflight": preflight.as_dict(target_profile=target_profile),
+        "target_host": spec["target_host"],
+        "target_profile": target_profile,
         "version": _MANIFEST_VERSION,
     }
 
@@ -827,8 +1313,14 @@ def _read_target_manifest(path: Path) -> TargetManifest:
         or not isinstance(value["preflight"], dict)
         or not isinstance(value["backup_manifest_sha256"], str)
         or _CHECKSUM.fullmatch(value["backup_manifest_sha256"]) is None
+        or not isinstance(value["target_profile"], str)
+        or not isinstance(value["target_host"], str)
     ):
         raise RebaselineError("rebaseline target manifest values are invalid")
+    target_profile = value["target_profile"]
+    spec = _target_profile_spec(target_profile)
+    if value["target_host"] != spec["target_host"]:
+        raise RebaselineError("rebaseline target manifest host binding is invalid")
     _parse_utc_timestamp(value["captured_at"], label="target manifest captured_at")
     preflight = value["preflight"]
     if frozenset(preflight) != _PREFLIGHT_FIELDS:
@@ -836,9 +1328,9 @@ def _read_target_manifest(path: Path) -> TargetManifest:
     if (
         preflight["version_rows"] != [LEGACY_REVISION]
         or preflight["expected_catalog_lines"] != _EXPECTED_CATALOG_LINES
-        or preflight["expected_catalog_sha256"] != _EXPECTED_CATALOG_SHA256
+        or preflight["expected_catalog_sha256"] != spec["catalog_sha256"]
         or preflight["catalog_lines"] != _EXPECTED_CATALOG_LINES
-        or preflight["catalog_sha256"] != _EXPECTED_CATALOG_SHA256
+        or preflight["catalog_sha256"] != spec["catalog_sha256"]
         or not isinstance(preflight["database_name"], str)
         or _IDENTIFIER.fullmatch(preflight["database_name"]) is None
         or any(
@@ -868,7 +1360,7 @@ def _read_target_manifest(path: Path) -> TargetManifest:
         or any(
             not isinstance(preflight[field], str)
             or _CHECKSUM.fullmatch(preflight[field]) is None
-            for field in ("app_data_content_sha256",)
+            for field in ("app_data_content_sha256", "role_security_sha256")
         )
     ):
         raise RebaselineError("rebaseline target manifest preflight values are invalid")
@@ -878,12 +1370,15 @@ def _read_target_manifest(path: Path) -> TargetManifest:
         raise RebaselineError(
             "rebaseline target manifest preflight endpoint is invalid"
         ) from exc
+    _assert_target_profile_preflight(target_profile, preflight)
     return TargetManifest(
         path=path,
         sha256=_sha256_file(path),
         captured_at=str(value["captured_at"]),
         backup_manifest_sha256=value["backup_manifest_sha256"],
         preflight=value["preflight"],
+        target_profile=target_profile,
+        target_host=value["target_host"],
     )
 
 
@@ -895,6 +1390,9 @@ def _assert_target_manifest(
     *,
     allow_baseline_revision: bool,
 ) -> None:
+    spec = _target_profile_spec(target.target_profile)
+    if target.target_host != spec["target_host"]:
+        raise RebaselineError("target manifest host binding is invalid")
     if target.backup_manifest_sha256 != backup_manifest_sha256:
         raise RebaselineError("target manifest is not bound to this backup manifest")
     if _parse_utc_timestamp(
@@ -902,11 +1400,11 @@ def _assert_target_manifest(
     ) > _parse_utc_timestamp(target.captured_at, label="target manifest captured_at"):
         raise RebaselineError("target manifest predates the backup manifest")
     expected = target.preflight
-    actual = preflight.as_dict()
+    actual = preflight.as_dict(target_profile=target.target_profile)
     if allow_baseline_revision:
         expected = dict(expected)
         expected.pop("version_rows", None)
-        actual = preflight.stable_identity_dict()
+        actual = preflight.stable_identity_dict(target_profile=target.target_profile)
     if expected != actual:
         raise RebaselineError("target database identity or data fingerprint changed")
 
@@ -927,6 +1425,8 @@ def _receipt_payload(
         "preflight": preflight,
         "state": state,
         "target_manifest_sha256": target.sha256,
+        "target_host": target.target_host,
+        "target_profile": target.target_profile,
         "version": _MANIFEST_VERSION,
     }
 
@@ -941,6 +1441,8 @@ def _read_receipt(path: Path) -> dict[str, Any]:
         or value["action"] != "0061_to_0100_rebaseline"
         or value["state"] not in {"prepared", "applied"}
         or not isinstance(value["preflight"], dict)
+        or not isinstance(value["target_profile"], str)
+        or not isinstance(value["target_host"], str)
         or any(
             not isinstance(value[field], str)
             or _CHECKSUM.fullmatch(value[field]) is None
@@ -952,6 +1454,61 @@ def _read_receipt(path: Path) -> dict[str, Any]:
         )
     ):
         raise RebaselineError("rebaseline receipt values are invalid")
+    target_profile = value["target_profile"]
+    spec = _target_profile_spec(target_profile)
+    if value["target_host"] != spec["target_host"]:
+        raise RebaselineError("rebaseline receipt host binding is invalid")
+    preflight = value["preflight"]
+    if frozenset(preflight) != _PREFLIGHT_FIELDS:
+        raise RebaselineError("rebaseline receipt preflight fields are invalid")
+    if (
+        preflight["version_rows"] != [LEGACY_REVISION]
+        or preflight["expected_catalog_lines"] != _EXPECTED_CATALOG_LINES
+        or preflight["expected_catalog_sha256"] != spec["catalog_sha256"]
+        or preflight["catalog_lines"] != _EXPECTED_CATALOG_LINES
+        or preflight["catalog_sha256"] != spec["catalog_sha256"]
+        or not isinstance(preflight["database_name"], str)
+        or _IDENTIFIER.fullmatch(preflight["database_name"]) is None
+        or not isinstance(preflight["server_addr"], str)
+        or not preflight["server_addr"]
+        or not isinstance(preflight["server_port"], int)
+        or isinstance(preflight["server_port"], bool)
+        or not 1 <= preflight["server_port"] <= 65535
+        or not isinstance(preflight["server_version_num"], int)
+        or isinstance(preflight["server_version_num"], bool)
+        or preflight["server_version_num"] // 10000 != 16
+        or any(
+            not isinstance(preflight[field], int) or isinstance(preflight[field], bool)
+            for field in (
+                "app_data_rows",
+                "app_data_table_lines",
+                "database_oid",
+                "expected_catalog_lines",
+            )
+        )
+        or preflight["app_data_rows"] <= 0
+        or preflight["app_data_table_lines"] <= 0
+        or preflight["database_oid"] <= 0
+        or not isinstance(preflight["current_user"], str)
+        or not preflight["current_user"]
+        or not isinstance(preflight["session_user"], str)
+        or not preflight["session_user"]
+        or not isinstance(preflight["system_identifier"], str)
+        or _INTEGER.fullmatch(preflight["system_identifier"]) is None
+        or any(
+            not isinstance(preflight[field], str)
+            or _CHECKSUM.fullmatch(preflight[field]) is None
+            for field in ("app_data_content_sha256", "role_security_sha256")
+        )
+    ):
+        raise RebaselineError("rebaseline receipt preflight values are invalid")
+    try:
+        ipaddress.ip_address(preflight["server_addr"])
+    except (TypeError, ValueError) as exc:
+        raise RebaselineError(
+            "rebaseline receipt preflight endpoint is invalid"
+        ) from exc
+    _assert_target_profile_preflight(target_profile, preflight)
     if value["state"] == "prepared" and value["completed_at"] is not None:
         raise RebaselineError("prepared receipt must not have completed_at")
     if value["state"] == "applied":
@@ -966,6 +1523,8 @@ def _assert_receipt_intent(receipt: dict[str, Any], expected: dict[str, Any]) ->
         "backup_sha256",
         "preflight",
         "target_manifest_sha256",
+        "target_host",
+        "target_profile",
         "version",
     ):
         if receipt[field] != expected[field]:
@@ -986,16 +1545,28 @@ async def _catalog_fingerprint(connection: AsyncConnection) -> tuple[int, str]:
     return len(rows), hashlib.sha256(payload).hexdigest()
 
 
+async def _role_security_fingerprint(connection: AsyncConnection) -> str:
+    rows = tuple(
+        (await connection.execute(text(_ROLE_SECURITY_FINGERPRINT_SQL))).scalars()
+    )
+    payload = ("\n".join(rows) + "\n").encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+_REBASELINE_FINGERPRINT_SESSION_STATEMENTS = (
+    "SET LOCAL TIME ZONE 'UTC'",
+    "SET LOCAL DateStyle TO 'ISO, YMD'",
+    "SET LOCAL IntervalStyle TO 'iso_8601'",
+    "SET LOCAL bytea_output TO 'hex'",
+    "SET LOCAL extra_float_digits TO 3",
+    "SET LOCAL search_path TO pg_catalog, app, public",
+)
+
+
 async def _normalize_fingerprint_session(connection: AsyncConnection) -> None:
     """logical row serialization이 접속별 GUC에 흔들리지 않게 고정한다."""
 
-    for statement in (
-        "SET LOCAL TIME ZONE 'UTC'",
-        "SET LOCAL DateStyle TO 'ISO, YMD'",
-        "SET LOCAL IntervalStyle TO 'iso_8601'",
-        "SET LOCAL bytea_output TO 'hex'",
-        "SET LOCAL extra_float_digits TO 3",
-    ):
+    for statement in _REBASELINE_FINGERPRINT_SESSION_STATEMENTS:
         await connection.execute(text(statement))
 
 
@@ -1011,14 +1582,21 @@ async def _assert_rebaseline_ddl_quiescence(connection: AsyncConnection) -> None
 async def _acquire_rebaseline_database_connection_fence(
     connection: AsyncConnection,
 ) -> None:
-    """Block new backends, evict existing DDL-capable clients, then prove quiescence."""
+    """Block new backends and fail closed if a DDL-capable client is still present."""
 
     await connection.execute(text(_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL))
     try:
-        has_authority = await connection.scalar(text(_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL))
+        has_authority = await connection.scalar(
+            text(_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL)
+        )
         if has_authority is not True:
-            raise RebaselineError("rebaseline requires superuser connection fence authority")
-        await connection.execute(text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE"))
+            raise RebaselineError(
+                "rebaseline requires superuser connection fence authority"
+            )
+        await connection.execute(
+            text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE")
+        )
+        await connection.execute(text(_REBASELINE_ROLE_SECURITY_FENCE_SQL))
     except DBAPIError as exc:
         # 기존 backend가 pg_database AccessShare lock을 길게 보유하면 client를
         # 식별·종료하기도 전에 여기서 막힌다. 무기한 대기하지 않고 transaction을
@@ -1027,23 +1605,41 @@ async def _acquire_rebaseline_database_connection_fence(
             "rebaseline could not acquire database connection fence within 5s"
         ) from exc
     await connection.execute(text(_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_RESET_SQL))
-    for _ in range(20):
-        await connection.execute(text("SELECT pg_stat_clear_snapshot()"))
-        pids = tuple(
-            int(pid)
-            for pid in (
-                await connection.execute(text(_REBASELINE_DDL_CAPABLE_SESSION_IDS_SQL))
-            ).scalars()
+    await connection.execute(text("SELECT pg_stat_clear_snapshot()"))
+    pids = tuple(
+        int(pid)
+        for pid in (
+            await connection.execute(text(_REBASELINE_DDL_CAPABLE_SESSION_IDS_SQL))
+        ).scalars()
+    )
+    if pids:
+        raise RebaselineError(
+            "rebaseline requires pre-existing DDL-capable sessions to be stopped"
         )
-        if not pids:
-            await _assert_rebaseline_ddl_quiescence(connection)
-            return
-        for pid in pids:
-            await connection.scalar(
-                text("SELECT pg_terminate_backend(:pid, 5000)"), {"pid": pid}
+    await _assert_rebaseline_ddl_quiescence(connection)
+
+
+async def _lock_rebaseline_app_tables(connection: AsyncConnection) -> None:
+    """Freeze app DML while preflight and the 0061→0100 transition share one snapshot."""
+
+    tables = tuple(
+        str(table_name)
+        for table_name in (
+            await connection.execute(text(_REBASELINE_APP_TABLES_SQL))
+        ).scalars()
+    )
+    await connection.execute(text("SET LOCAL lock_timeout = '5s'"))
+    try:
+        for table_name in tables:
+            quoted_table = table_name.replace('"', '""')
+            await connection.execute(
+                text(f'LOCK TABLE app."{quoted_table}" IN SHARE ROW EXCLUSIVE MODE')
             )
-        await connection.execute(text("SELECT pg_sleep(0.05)"))
-    raise RebaselineError("rebaseline could not prove app DDL quiescence")
+    except DBAPIError as exc:
+        raise RebaselineError(
+            "rebaseline could not acquire app table DML fence within 5s"
+        ) from exc
+    await connection.execute(text("SET LOCAL lock_timeout = 0"))
 
 
 async def _app_data_fingerprint(connection: AsyncConnection) -> tuple[int, int, str]:
@@ -1110,7 +1706,9 @@ async def _preflight(
     *,
     lock_version: bool,
     expected_revision: str = LEGACY_REVISION,
+    target_profile: str = _TARGET_PROFILE_FRESH,
 ) -> CatalogPreflight:
+    _target_profile_spec(target_profile)
     await _normalize_fingerprint_session(connection)
     version_rows = await _read_version_rows(connection, lock=lock_version)
     sentinel = (await connection.execute(text(_LEGACY_SENTINELS_SQL))).mappings().one()
@@ -1120,6 +1718,7 @@ async def _preflight(
         app_data_table_lines,
         app_data_content_sha256,
     ) = await _app_data_fingerprint(connection)
+    role_security_sha256 = await _role_security_fingerprint(connection)
     preflight = CatalogPreflight(
         database_name=str(sentinel["database_name"]),
         database_oid=int(sentinel["database_oid"]),
@@ -1135,6 +1734,7 @@ async def _preflight(
         app_data_rows=app_data_rows,
         app_data_table_lines=app_data_table_lines,
         app_data_content_sha256=app_data_content_sha256,
+        role_security_sha256=role_security_sha256,
     )
     if preflight.server_version_num // 10000 != 16:
         raise RebaselineError("rebaseline requires PostgreSQL 16")
@@ -1148,8 +1748,16 @@ async def _preflight(
         raise RebaselineError("pre-existing M05 objects reject a 0061 rebaseline")
     if preflight.catalog_lines != _EXPECTED_CATALOG_LINES:
         raise RebaselineError("legacy catalog fingerprint line count is not canonical")
-    if preflight.catalog_sha256 != _EXPECTED_CATALOG_SHA256:
-        raise RebaselineError("legacy catalog fingerprint is not canonical")
+    if (
+        preflight.catalog_sha256
+        != _target_profile_spec(target_profile)["catalog_sha256"]
+    ):
+        raise RebaselineError(
+            f"legacy catalog fingerprint is not canonical for target profile {target_profile}"
+        )
+    _assert_target_profile_preflight(
+        target_profile, preflight.as_dict(target_profile=target_profile)
+    )
     if preflight.app_data_rows <= 0:
         raise RebaselineError("rebaseline target must contain app data rows")
     return preflight
@@ -1171,7 +1779,11 @@ async def _check(
     try:
         async with engine.begin() as connection:
             await connection.execute(text("SET TRANSACTION READ ONLY"))
-            preflight = await _preflight(connection, lock_version=False)
+            preflight = await _preflight(
+                connection,
+                lock_version=False,
+                target_profile=target.target_profile,
+            )
             _assert_backup_source_matches_preflight(artifact.manifest, preflight)
             _assert_target_manifest(
                 target,
@@ -1186,19 +1798,28 @@ async def _check(
 
 
 async def _capture_target(
-    database_url: str, artifact: BackupArtifact, target_path: Path
+    database_url: str,
+    artifact: BackupArtifact,
+    target_path: Path,
+    target_profile: str,
 ) -> tuple[CatalogPreflight, TargetManifest]:
     engine = create_async_engine(database_url, poolclass=NullPool)
     try:
         async with engine.begin() as connection:
             await connection.execute(text("SET TRANSACTION READ ONLY"))
-            preflight = await _preflight(connection, lock_version=False)
+            preflight = await _preflight(
+                connection,
+                lock_version=False,
+                target_profile=target_profile,
+            )
             _assert_backup_source_matches_preflight(artifact.manifest, preflight)
     finally:
         await engine.dispose()
     _create_private_json(
         target_path,
-        _target_manifest_payload(preflight, artifact.manifest.sha256),
+        _target_manifest_payload(
+            preflight, artifact.manifest.sha256, target_profile=target_profile
+        ),
         label="rebaseline target manifest",
     )
     return preflight, _read_target_manifest(target_path)
@@ -1218,6 +1839,7 @@ async def _apply(
         async with engine.begin() as connection:
             await connection.execute(text(_REBASELINE_SERIALIZATION_LOCK_SQL))
             await _acquire_rebaseline_database_connection_fence(connection)
+            await _lock_rebaseline_app_tables(connection)
             locked_versions = await _read_version_rows(connection, lock=True)
             if locked_versions not in {(LEGACY_REVISION,), (BASELINE_REVISION,)}:
                 raise RebaselineError(
@@ -1228,6 +1850,7 @@ async def _apply(
                 connection,
                 lock_version=False,
                 expected_revision=BASELINE_REVISION if recovering else LEGACY_REVISION,
+                target_profile=target.target_profile,
             )
             _assert_backup_source_matches_preflight(artifact.manifest, preflight)
             _assert_target_manifest(
@@ -1238,7 +1861,9 @@ async def _apply(
                 allow_baseline_revision=recovering,
             )
             receipt_payload = _receipt_payload(
-                target.preflight if recovering else preflight.as_dict(),
+                target.preflight
+                if recovering
+                else preflight.as_dict(target_profile=target.target_profile),
                 artifact,
                 target,
                 state="prepared",
@@ -1266,6 +1891,19 @@ async def _apply(
                     )
                 if existing_receipt is None:
                     _prepare_receipt(receipt, receipt_payload)
+                if (
+                    await _role_security_fingerprint(connection)
+                    != preflight.role_security_sha256
+                ):
+                    raise RebaselineError(
+                        "role security fingerprint changed during the locked transition"
+                    )
+                await connection.execute(
+                    text(
+                        "COMMENT ON SCHEMA app IS "
+                        f"'{_LEGACY_REBASELINE_SCHEMA_COMMENT}'"
+                    )
+                )
                 result = await connection.execute(
                     text(
                         "UPDATE app.alembic_version "
@@ -1282,6 +1920,13 @@ async def _apply(
                 if version_rows != (BASELINE_REVISION,):
                     raise RebaselineError(
                         "post-update alembic version row is not 20260824_0100"
+                    )
+                if (
+                    await _role_security_fingerprint(connection)
+                    != preflight.role_security_sha256
+                ):
+                    raise RebaselineError(
+                        "role security fingerprint changed during the locked transition"
                     )
     finally:
         await engine.dispose()
@@ -1311,6 +1956,12 @@ def _parser() -> argparse.ArgumentParser:
         command.add_argument("--backup", required=True, type=Path)
         command.add_argument("--backup-checksum", required=True, type=Path)
         command.add_argument("--backup-manifest", required=True, type=Path)
+        command.add_argument(
+            "--target-profile",
+            required=True,
+            choices=tuple(_TARGET_PROFILE_SPECS),
+            help="검증할 물리 target/profile 결박 (예: n150-production)",
+        )
 
     capture = subcommands.add_parser(
         "capture-target",
@@ -1325,14 +1976,16 @@ def _parser() -> argparse.ArgumentParser:
     add_backup_evidence_arguments(check)
     check.add_argument("--target-manifest", required=True, type=Path)
 
-    apply = subcommands.add_parser("apply", help="검증된 0061 row를 0100으로 단발 전환")
+    apply = subcommands.add_parser(
+        "apply", help="검증된 0061 provenance와 version row를 0100으로 단발 전환"
+    )
     add_backup_evidence_arguments(apply)
     apply.add_argument("--target-manifest", required=True, type=Path)
     apply.add_argument("--receipt", required=True, type=Path)
     apply.add_argument(
         "--confirm-0061-to-0100",
         action="store_true",
-        help="app.alembic_version 한 행의 단발 전환을 명시적으로 승인한다.",
+        help="legacy provenance와 app.alembic_version 한 행의 단발 전환을 명시적으로 승인한다.",
     )
     return parser
 
@@ -1345,22 +1998,26 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
             args.backup, args.backup_checksum, args.backup_manifest
         )
         preflight, target = await _capture_target(
-            database_url, artifact, args.target_manifest
+            database_url, artifact, args.target_manifest, args.target_profile
         )
         return {
             "backup_manifest_sha256": artifact.manifest.sha256,
-            "preflight": preflight.as_dict(),
+            "preflight": preflight.as_dict(target_profile=target.target_profile),
             "state": "target_captured",
             "target_manifest_sha256": target.sha256,
         }
 
     artifact = _validate_backup(args.backup, args.backup_checksum, args.backup_manifest)
     target = _read_target_manifest(args.target_manifest)
+    if target.target_profile != args.target_profile:
+        raise RebaselineError(
+            "target manifest profile does not match the requested profile"
+        )
     if args.command == "check":
         preflight = await _check(database_url, artifact, target)
         return {
             "backup_manifest_sha256": artifact.manifest.sha256,
-            "preflight": preflight.as_dict(),
+            "preflight": preflight.as_dict(target_profile=target.target_profile),
             "state": "checked",
             "target_manifest_sha256": target.sha256,
         }
@@ -1372,7 +2029,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "backup_manifest_sha256": artifact.manifest.sha256,
         "backup_sha256": artifact.sha256,
-        "preflight": preflight.as_dict(),
+        "preflight": preflight.as_dict(target_profile=target.target_profile),
         "state": state,
         "target_manifest_sha256": target.sha256,
     }

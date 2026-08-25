@@ -3084,8 +3084,9 @@ revision ID 충돌과 `0061` parent가 없는 분기 그래프가 된다.
   `alembic upgrade head`는 지원하지 않는다.
 - 새 DB는 빈 catalog에서 `alembic upgrade head`로 `0100 → 0101`을 적용한다.
 - 현재 N150 운영 DB만 별도 root-only rebaseline 도구로 지원한다. 이 도구는 다음을
-  모두 확인한 뒤 하나의 transaction에서 `app.alembic_version`을 `0061`에서
-  `0100`으로 바꾼다. 이 단계는 DDL이나 사용자 데이터를 변경하지 않는다.
+  모두 확인한 뒤 하나의 transaction에서 legacy provenance comment와
+  `app.alembic_version`을 함께 `0100` handoff로 기록한다. 이 단계는 사용자 데이터나
+  `app` 객체 DDL을 변경하지 않는다.
   - version row가 정확히 하나이고 `20260821_0061`이다.
   - M05 `ops` anchor/receipt 객체가 아직 없다.
   - shared structural catalog fingerprint와 final-boundary/M05 security·trigger sentinel이
@@ -3104,8 +3105,8 @@ revision ID 충돌과 `0061` parent가 없는 분기 그래프가 된다.
   non-login이며, one-shot migrator login은 두 역할에 `INHERIT FALSE, SET TRUE`로만 membership을
   받고 database 기본 role은 app schema owner로 고정한다. `0101`은 기존 app DDL을 owner로 끝낸
   뒤 M05 object만 `SET LOCAL ROLE migration_owner`로 만들고 Alembic version row 전에는 app owner로
-  복귀한다. migration owner는 database `CREATE`, `x_extension` `USAGE`와 필요한 function
-  `EXECUTE`만 받으며 runtime/fence/hotswap의 membership·CONNECT surface를 갖지 않는다. 일반
+  복귀한다. migration owner는 database `CREATE`를 받지 않고, `x_extension` `USAGE`와 필요한
+  function `EXECUTE`만 받으며 runtime/fence/hotswap의 membership·CONNECT surface를 갖지 않는다. 일반
   Compose 재기동은 migrator를 처음부터 `NOLOGIN`·database `CONNECT` 없음으로 둔다. wrapper는
   migration 직전에만 이를 열고 dependency 재실행 없이 one-shot을 수행하며, 성공·실패 뒤 모두
   `CONNECT` revoke·기존 migrator backend 종료·`NOLOGIN` 검증으로 다시 봉인한다.

@@ -502,6 +502,16 @@ case "$1:$2:$3" in
   container:inspect:--format)
     printf '%s\\n' "$FAKE_RUNNING_IMAGE_ID"
     ;;
+  container:ls:*)
+    if [[ "$*" == *"app-api"* ]]; then
+      [[ ! -e "$PINVI_TEST_STATE_DIR/removed" ]] && printf 'api-container-id api-container-name\\n'
+    elif [[ "$*" == *"app-web"* ]]; then
+      [[ ! -e "$PINVI_TEST_STATE_DIR/removed" ]] && printf 'web-container-id web-container-name\\n'
+    fi
+    ;;
+  container:stop:*)
+    touch "$PINVI_TEST_STATE_DIR/stopped"
+    ;;
   container:rm:-f)
     test "$4" = api-container-id
     test "$5" = web-container-id
@@ -540,16 +550,16 @@ test "$PINVI_API_IMAGE" = "$3"
 pinvi_verify_runtime_image_provenance app-api app-web app-dagster
 test "$PINVI_WEB_IMAGE" = "$3"
 test "$PINVI_DAGSTER_IMAGE" = "$3"
-pinvi_verify_or_remove_running_app
+pinvi_verify_running_app
 touch "$PINVI_TEST_STATE_DIR/retagged"
 compose up -d app-api
 pinvi_verify_running_api_image_id
 export FAKE_RUNNING_IMAGE_ID="$4"
-if pinvi_verify_or_remove_running_app; then
+if pinvi_verify_running_app; then
   exit 46
 fi
-test -e "$PINVI_TEST_STATE_DIR/stopped"
-test -e "$PINVI_TEST_STATE_DIR/removed"
+test ! -e "$PINVI_TEST_STATE_DIR/stopped"
+test ! -e "$PINVI_TEST_STATE_DIR/removed"
 """
     env = {
         "FAKE_RUNNING_IMAGE_ID": image_id,
@@ -575,7 +585,7 @@ test -e "$PINVI_TEST_STATE_DIR/removed"
     assert result.returncode == 0, result.stderr
 
 
-def test_running_web_and_dagster_image_drift_is_removed_independently(
+def test_running_web_and_dagster_image_drift_is_fail_closed_without_cleanup(
     tmp_path: Path,
 ) -> None:
     fake_bin = tmp_path / "bin"
@@ -596,6 +606,21 @@ case "$1:$2:$3" in
       dagster-container-id) printf '%s\n' "$FAKE_DAGSTER_RUNNING_IMAGE_ID" ;;
       *) exit 44 ;;
     esac
+    ;;
+  container:ls:*)
+    case "$*" in
+      *"app-api"*) [[ ! -e "$PINVI_TEST_STATE_DIR/app-cleaned" ]] && printf 'api-container-id api-container-name\\n' ;;
+      *"app-web"*) [[ ! -e "$PINVI_TEST_STATE_DIR/app-cleaned" ]] && printf 'web-container-id web-container-name\\n' ;;
+      *"app-dagster"*) [[ ! -e "$PINVI_TEST_STATE_DIR/dagster-cleaned" ]] && printf 'dagster-container-id dagster-container-name\\n' ;;
+    esac
+    ;;
+  container:stop:*)
+    if [[ "$*" == *api-container-id* || "$*" == *web-container-id* ]]; then
+      touch "$PINVI_TEST_STATE_DIR/app-cleaned"
+    fi
+    if [[ "$*" == *dagster-container-id* ]]; then
+      touch "$PINVI_TEST_STATE_DIR/dagster-cleaned"
+    fi
     ;;
   container:rm:-f) exit 0 ;;
   *) exit 45 ;;
@@ -641,16 +666,16 @@ source "$2"
 PINVI_ATTESTED_API_IMAGE_ID="$3"
 PINVI_ATTESTED_WEB_IMAGE_ID="$3"
 PINVI_ATTESTED_DAGSTER_IMAGE_ID="$3"
-pinvi_verify_or_remove_running_app
+pinvi_verify_running_app
 export FAKE_WEB_RUNNING_IMAGE_ID="$4"
-if pinvi_verify_or_remove_running_app; then
+if pinvi_verify_running_app; then
   exit 48
 fi
-test -e "$PINVI_TEST_STATE_DIR/app-cleaned"
-if pinvi_verify_or_remove_running_dagster; then
+test ! -e "$PINVI_TEST_STATE_DIR/app-cleaned"
+if pinvi_verify_running_dagster; then
   exit 49
 fi
-test -e "$PINVI_TEST_STATE_DIR/dagster-cleaned"
+test ! -e "$PINVI_TEST_STATE_DIR/dagster-cleaned"
 """
     result = subprocess.run(  # noqa: S603 - fixed local shell fixture
         [

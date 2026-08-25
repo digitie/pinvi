@@ -10,6 +10,8 @@ services:
       # smoke 기본값 — 운영은 infra/.env.prod 로 owner URL과 함께 override한다.
       POSTGRES_PASSWORD: ${PINVI_POSTGRES_PASSWORD:-pinvi_app_smoke}
       POSTGRES_DB: pinvi
+    volumes:
+      - app-postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${PINVI_DB_OWNER_USER:-pinvi_owner} -d pinvi"]
       interval: 5s
@@ -294,6 +296,8 @@ services:
       # M05 receipt DDL to PINVI_MIGRATION_OWNER and restores the app owner for versioning.
       PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
       PINVI_DATABASE_URL: postgresql+asyncpg://${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}:${PINVI_MIGRATOR_DB_PASSWORD:-pinvi_app_smoke}@app-postgres:5432/pinvi
+      # 0101 grants the fresh app runtime role only after the M05 DDL and owner fence.
+      PINVI_APP_DB_USER: ${PINVI_APP_DB_USER:-pinvi_app}
       PINVI_MIGRATION_OWNER: ${PINVI_MIGRATION_OWNER:-pinvi_migration_owner}
       PINVI_MIGRATOR_DB_USER: ${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}
       PINVI_M05_LEGACY_REBASELINE: "0"
@@ -316,6 +320,7 @@ services:
       PINVI_MIGRATION_OWNER: ${PINVI_MIGRATION_OWNER:-pinvi_migration_owner}
       PINVI_MIGRATOR_DB_USER: ${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}
       PINVI_M05_LEGACY_REBASELINE: "1"
+      PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE: ${PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE:-n150-production}
       PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH: /run/pinvi/m05/legacy-rebaseline-receipt.json
 
   app-web:
@@ -450,6 +455,7 @@ services:
         condition: service_started
 
 volumes:
+  app-postgres:
   app-prometheus:
   app-grafana:
   app-dagster:

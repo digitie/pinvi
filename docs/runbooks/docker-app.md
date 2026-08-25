@@ -90,6 +90,7 @@ ktdctl logs storage --follow
 | `PINVI_MIGRATOR_DB_USER` / `PINVI_MIGRATOR_DB_PASSWORD` | one-shot non-inheriting login. 기본은 `NOLOGIN`·database `CONNECT` 없음이며 wrapper만 일시적으로 연다. 별도 URL override는 지원하지 않는다 |
 | `PINVI_MIGRATOR_LIFECYCLE_LOCK_PATH` | 두 wrapper의 password rotation·backend seal을 같은 host에서 직렬화하는 flock 파일. staging/production은 root-owned 0600 regular file을 미리 만들고 root로만 실행한다. smoke는 미지정 시 사용자 전용 `/tmp` directory의 lock을 쓴다 |
 | `PINVI_M05_LEGACY_REBASELINE`                      | 평상시 `0`. `0061 → 0100 → 0101` 승인 전환 명령에만 `1`로 export; 일반 deploy 금지                                                 |
+| `PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE`       | `PINVI_M05_LEGACY_REBASELINE=1`일 때 필수. 운영은 `n150-production`만 사용하며 target host·catalog·DB identity를 함께 결박한다 |
 | `PINVI_LEGACY_REBASELINE_DATABASE_URL`             | legacy profile 전용 root/app owner URL. 일반 migrator·API·Dagster에 전달 금지                                                       |
 | `PINVI_M05_LEGACY_REBASELINE_RECEIPT_HOST_PATH`    | `alembic_rebaseline.py apply`가 만든 root-owned `0600` applied receipt의 host 절대경로. legacy one-shot에만 read-only mount한다 |
 | 기타 `PINVI_*`               | Pinvi 소유 설정. 외부 서비스 소유 계약 토큰은 해당 정본 이름을 사용(Feature request writer: `KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`) |
@@ -98,13 +99,26 @@ ktdctl logs storage --follow
 
 일반 Compose 재기동은 migrator를 열지 않는다. `migrate` wrapper가 직전에만 login·`CONNECT`를
 활성화하고 dependency 재실행 없이 one-shot을 실행한다. 성공·실패 뒤 모두 login을 닫고 `CONNECT`를
-회수하며 기존 migrator backend를 종료한다. 두 wrapper는 writer drain 이전부터 최종 seal까지 같은
-host-local flock을 보유하므로, 동시 실행이 서로의 one-shot password와 backend를 회전·종료하지 않는다.
+회수하며 wrapper가 관리하는 기존 migrator backend를 종료한다. 이 backend seal은 관리 대상 login에만
+적용되고, 아래 connection fence가 발견한 외부 DDL-capable 세션은 자동 종료하지 않는다. 두 wrapper는
+writer drain 이전부터 최종 seal까지 같은 host-local flock을 보유하므로, 동시 실행이 서로의 one-shot
+password와 managed backend를 회전·종료하지 않는다.
 staging/production은 `PINVI_MIGRATOR_LIFECYCLE_LOCK_PATH`의 파일을 root-owned `0600`으로 미리
 만들고 root로만 실행한다. legacy 전환은 다음처럼 호출 shell에서만 명시한다.
 
+legacy receipt의 role/database security fingerprint는 runtime role bootstrap 결과를 포함한다.
+따라서 receipt producer의 read-only preflight와 `apply`는 `app-db-runtime-role`이 같은
+database/user 설정으로 role·membership·database ACL을 먼저 정리한 뒤 실행해야 한다. 그 뒤
+bootstrap을 다시 실행해 ACL이나 membership가 바뀌면 기존 receipt를 사용하지 말고 producer를
+처음부터 다시 실행한다. fresh `0100`은 `app` schema origin marker와
+`pinvi_internal.baseline_origin` durable row를 남기며, `0101` fresh 경로는 marker·정확한
+`0100` version row·origin row를 모두 요구한다. fresh database에 이미 app data가 있어도 이
+origin 증명이 있으면 허용되며, data-bearing `0061` database는 legacy profile과 applied receipt
+없이는 `0101`로 진행하지 않는다.
+
 ```bash
 PINVI_M05_LEGACY_REBASELINE=1 \
+PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE=n150-production \
 PINVI_M05_LEGACY_REBASELINE_RECEIPT_HOST_PATH=/secure/rebaseline/receipt.json \
 scripts/deploy-node.sh migrate
 ```
@@ -114,27 +128,45 @@ preflight, 별도 운영 승인이 없는 상태에서는 실행하지 않는다
 `PINVI_LEGACY_REBASELINE_DATABASE_URL`로만 주입한다. wrapper는 receipt와 직접 parent가 모두
 root-owned/private인지 확인한 뒤 container root에 read-only mount하고, `0101`은 그 applied receipt의
 `0061` preflight DB identity와 현재 `0100` handoff row가 일치할 때만 DDL을 시작한다.
-connection fence는 기존 DDL-capable backend를 종료하므로, legacy rebaseline과 receipt `apply`는
-database owner만으로는 실행할 수 없고 직접 superuser root session이 필요하다.
+connection fence는 기존 DDL-capable backend를 자동 종료하지 않고 fail-close한다. 실패 시 해당
+세션을 운영자가 정리한 뒤 재시도해야 하며, legacy rebaseline과 receipt `apply`는 database
+owner만으로는 실행할 수 없고 직접 superuser root session이 필요하다.
 
 ## 3. Docker app 스크립트
 
 `kor-travel-geo`의 `scripts/docker_app.sh`와 같은 운영 패턴을 따른다. 포트를
-점유한 기존 컨테이너/프로세스는 시작 전에 정리한다.
+점유한 기존 컨테이너/프로세스가 있으면 기본적으로 시작을 중지하고, 명시적으로
+`PINVI_DEV_FORCE_KILL=1`을 지정한 경우에만 종료한다. 승인 없는 공유 노드의 강제종료는 하지 않는다.
 
 ```bash
 scripts/docker-app.sh build
-scripts/docker-app.sh up
+PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/secure/pinvi/bootstrap-admin.json scripts/docker-app.sh up
 scripts/docker-app.sh status
 scripts/docker-app.sh logs api
-scripts/docker-app.sh smoke
-scripts/docker-app.sh smoke --keep-running
+PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/secure/pinvi/bootstrap-admin.json scripts/docker-app.sh smoke
+PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/secure/pinvi/bootstrap-admin.json scripts/docker-app.sh smoke --keep-running
 scripts/docker-app.sh down
 scripts/docker-app.sh reset   # down -v --remove-orphans
 ```
 
+`up`과 `smoke`는 migration 및 admin bootstrap을 포함하므로 위 credential file이 필요하다. 이미
+실행 중인 stack에서 migration 없이 상태만 확인하려면 `status`와 health endpoint를 사용한다.
+
+`scripts/deploy-node.sh deploy`와 `up`은 실행 중인 API/Web/Dagster container를 migration 전에
+중지하고 원래 이름·image를 `.pinvi-predeploy` snapshot으로 보존한다. snapshot 이름은 writer 중지
+전에 사전 검사하므로 stale snapshot 충돌이면 기존 writer를 건드리지 않고 중단한다. 새 writer가
+`/health`, `/health/db`, M05 reconciliation endpoint, Web/Dagster readiness와 Docker healthcheck를
+모두 통과하고 deploy smoke가 성공한 뒤에만 snapshot을 제거한다. 중간 실패 시 새 writer만 제거하고
+snapshot을 원래 이름으로 되돌려 기동하며, 기존 Dagster가 실행 중이었다면 enable flag가 꺼져 있어도
+복구 기동한다. snapshot 복구나 healthcheck가 실패하면 명령도 실패한다. runtime container 탐색은
+Compose project/service label을 사용하고 `.pinvi-predeploy` 이름은 검증·destructive cleanup에서
+제외한다. `scripts/docker-app.sh reset`은
+`PINVI_ENV_FILE`의 `PINVI_ENVIRONMENT=staging|production`을 shell override보다 우선해 확인하므로
+운영 volume 삭제를 우회할 수 없다.
+
 `scripts/docker-app.sh build`는 API image source revision을 확정하고 build 뒤 OCI label을 다시
-확인한다. 로컬 `development|test|smoke`에서 revision을 지정하지 않으면 `development` label을
+확인한다. 기존 Dagster writer가 있거나 `PINVI_ENABLE_DAGSTER=1`이면 flag가 꺼진 호출에서도
+Dagster image를 함께 build·검증한다. 로컬 `development|test|smoke`에서 revision을 지정하지 않으면 `development` label을
 허용한다. exact commit을 지정하면 환경과 무관하게 clean worktree의 `HEAD`와 같아야 한다.
 `staging|production`은 wrapper가 clean `HEAD`를 자동 주입하며, wrapper를 우회한 직접 Compose
 build도 `development` 또는 비정상 revision이면 Dockerfile 단계에서 실패한다. wrapper의 immutable
@@ -175,18 +207,19 @@ docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml down -v --remo
 # 2) 이미지 빌드
 docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml build app-api app-web
 
-# 3) Postgres + non-owner runtime DB role + RustFS 먼저
+# 3) Postgres + RustFS 먼저
 docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml up -d app-postgres app-rustfs app-rustfs-init
-docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml run --rm app-db-runtime-role
 
 # 4) owner-only PinVi migration + one-shot admin bootstrap (auto-migrate 안 함)
 install -m 600 /dev/null /tmp/pinvi-bootstrap-admin.json
 $EDITOR /tmp/pinvi-bootstrap-admin.json
-docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml run --rm \
-  --user "$(id -u):$(id -g)" \
-  -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/run/pinvi/bootstrap-admin.json \
-  -v /tmp/pinvi-bootstrap-admin.json:/run/pinvi/bootstrap-admin.json:ro \
-  app-migrator pinvi-admin-bootstrap
+PINVI_DOCKER_PROJECT=pinvi-app-smoke \
+PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/tmp/pinvi-bootstrap-admin.json \
+scripts/docker-app.sh migrate
+# wrapper는 lifecycle lock 뒤 API/Dagster writer를 drain한 다음 role bootstrap과 migration을 실행하고,
+# migration 또는 seal 실패에도
+# 기존에 실행 중이던 writer를 다시 기동한다. DDL-capable 외부 세션은 자동 종료하지
+# 않고 migration을 fail-close하므로, 실패 시 해당 세션을 먼저 정리한 뒤 재시도한다.
 rm -f /tmp/pinvi-bootstrap-admin.json
 
 # 5) API + Web
@@ -365,7 +398,7 @@ CI에서:
 | `app-api` 시작 후 즉시 종료           | migration/bootstrap 미실행 | `pinvi-admin-bootstrap` one-shot 먼저                    |
 | `app-web` 빌드 실패                   | `NEXT_PUBLIC_*` 누락 | `.env` 확인 + 재빌드                                            |
 | `app-rustfs-init` 무한 루프           | bucket 이미 존재     | down -v로 볼륨 삭제 후 재시작                                   |
-| `12805` / `12101` port already in use | 다른 컨테이너 점유   | `scripts/docker-app.sh up`이 정리. 수동 확인은 `lsof -i:<port>` |
+| `12805` / `12101` port already in use | 다른 컨테이너 점유   | `up`은 기본적으로 중지하지 않고 실패한다. 승인된 dev 프로세스만 `PINVI_DEV_FORCE_KILL=1 scripts/docker-app.sh up`으로 종료하고, 수동 확인은 `lsof -i:<port>` |
 | Admin login `pinvi_access` 발급 안 됨 | CORS / Secure cookie | `infra/docker-compose.app.yml`의 CORS 환경변수 확인             |
 
 ## 12. 관련 문서

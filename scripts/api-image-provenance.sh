@@ -280,6 +280,43 @@ pinvi_verify_runtime_image_provenance() {
   done
 }
 
+# A stopped pre-deploy container keeps Compose's project/service labels so that
+# it can be restored with its original image. It is deliberately excluded from
+# every active-runtime discovery and destructive cleanup below; otherwise a
+# failed provenance check could delete the rollback artifact together with the
+# newly created container.
+pinvi_runtime_container_ids() {
+  local service="$1"
+  local project="${PROJECT:-pinvi-app}"
+  local -a list_args=()
+  local raw_containers
+  if [[ "${2:-all}" == "all" ]]; then
+    list_args=(--all)
+  fi
+  if ! raw_containers="$(docker container ls --no-trunc "${list_args[@]}" \
+    --filter "label=com.docker.compose.project=${project}" \
+    --filter "label=com.docker.compose.service=${service}" \
+    --format '{{.ID}} {{.Names}}')"; then
+    return 1
+  fi
+  awk '$2 !~ /\.pinvi-predeploy$/ {print $1}' <<< "$raw_containers"
+}
+
+pinvi_runtime_container_ids_into_array() {
+  local array_name="$1"
+  shift
+  local ids=""
+  local -n output_array="$array_name"
+  if ! ids="$(pinvi_runtime_container_ids "$@")"; then
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
+    return 1
+  fi
+  output_array=()
+  if [[ -n "$ids" ]]; then
+    mapfile -t output_array <<< "$ids"
+  fi
+}
+
 pinvi_verify_running_runtime_image_id() {
   local service="$1"
   local image_id container_id running_image_id
@@ -290,12 +327,9 @@ pinvi_verify_running_runtime_image_id() {
     return 2
   fi
 
-  if [[ "$service" == "app-dagster" ]]; then
-    mapfile -t container_ids < <(
-      compose --profile etl ps -q "$service" | sed '/^[[:space:]]*$/d'
-    )
-  else
-    mapfile -t container_ids < <(compose ps -q "$service" | sed '/^[[:space:]]*$/d')
+  if ! pinvi_runtime_container_ids_into_array container_ids "$service" running; then
+    echo "api image provenance preflight failed: ${service} container discovery failed" >&2
+    return 2
   fi
   if (( ${#container_ids[@]} != 1 )); then
     echo "api image provenance preflight failed: ${service} container must resolve exactly once" >&2
@@ -313,12 +347,8 @@ pinvi_verify_running_api_image_id() {
   pinvi_verify_running_runtime_image_id app-api
 }
 
-pinvi_verify_or_remove_running_app() {
+pinvi_verify_running_app() {
   local verification_status
-  local -a container_ids remaining_ids
-  mapfile -t container_ids < <(
-    compose ps -aq app-api app-web | sed '/^[[:space:]]*$/d' | sort -u
-  )
   if pinvi_verify_running_runtime_image_id app-api && \
     pinvi_verify_running_runtime_image_id app-web; then
     return 0
@@ -326,43 +356,21 @@ pinvi_verify_or_remove_running_app() {
     verification_status="$?"
   fi
 
-  # 검증되지 않은 API를 Web이 계속 노출하지 않도록 이 project의 app pair를 모두 제거한다.
-  compose stop app-web app-api >/dev/null 2>&1 || true
-  if (( ${#container_ids[@]} > 0 )); then
-    docker container rm -f "${container_ids[@]}" >/dev/null 2>&1 || true
-  fi
-  mapfile -t remaining_ids < <(
-    compose ps -aq app-api app-web | sed '/^[[:space:]]*$/d' | sort -u
-  )
-  if (( ${#remaining_ids[@]} > 0 )); then
-    echo "api image provenance preflight failed: unverified app container remains" >&2
-    return 2
-  fi
+  # Container removal belongs to the caller's invocation-scoped rollback. Do
+  # not delete every stopped container sharing the Compose service label here.
+  echo "api image provenance preflight failed: running app image is not attested" >&2
   return "$verification_status"
 }
 
-pinvi_verify_or_remove_running_dagster() {
+pinvi_verify_running_dagster() {
   local verification_status
-  local -a container_ids remaining_ids
-  mapfile -t container_ids < <(
-    compose --profile etl ps -aq app-dagster | sed '/^[[:space:]]*$/d' | sort -u
-  )
   if pinvi_verify_running_runtime_image_id app-dagster; then
     return 0
   else
     verification_status="$?"
   fi
 
-  compose --profile etl stop app-dagster >/dev/null 2>&1 || true
-  if (( ${#container_ids[@]} > 0 )); then
-    docker container rm -f "${container_ids[@]}" >/dev/null 2>&1 || true
-  fi
-  mapfile -t remaining_ids < <(
-    compose --profile etl ps -aq app-dagster | sed '/^[[:space:]]*$/d' | sort -u
-  )
-  if (( ${#remaining_ids[@]} > 0 )); then
-    echo "api image provenance preflight failed: unverified Dagster container remains" >&2
-    return 2
-  fi
+  # See pinvi_verify_running_app: rollback must be limited to this invocation.
+  echo "api image provenance preflight failed: running Dagster image is not attested" >&2
   return "$verification_status"
 }

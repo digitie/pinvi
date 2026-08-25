@@ -37,6 +37,7 @@ Environment:
   PINVI_V100_LIVE_GATE=1              Required for run.
   PINVI_V100_GATE_PHASES              Space or comma separated phase list.
   PINVI_V100_GATE_N150_RUNNER=1       Wrap Playwright phases with scripts/n150-playwright-runner.sh.
+  PINVI_LIVE_EXPECTED_REVISION        Full lowercase commit expected by every live UI phase.
   PINVI_V100_ADMIN_LIVE_CASE_LIMIT    Default 200 for admin-live-smoke.
   PINVI_ADMIN_LIVE_CASE_START         Optional 1-based Admin matrix start for resumed full catalog.
   PINVI_ADMIN_LIVE_CASE_END           Optional 1-based Admin matrix end for resumed full catalog.
@@ -90,6 +91,31 @@ run_playwright() {
   else
     run_cmd "${label}" "$@"
   fi
+}
+
+require_exact_live_revision() {
+  local expected_revision="${PINVI_LIVE_EXPECTED_REVISION:-}"
+  local actual_revision
+  if [[ -z "$expected_revision" || ! "$expected_revision" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "error: live UI phases require PINVI_LIVE_EXPECTED_REVISION as a full lowercase commit" >&2
+    exit 2
+  fi
+  actual_revision="$(git rev-parse --verify HEAD^{commit})"
+  if [[ "$actual_revision" != "$expected_revision" ]]; then
+    echo "error: live UI checkout ${actual_revision} does not match expected ${expected_revision}" >&2
+    exit 2
+  fi
+  if [[ -n "$(git status --porcelain=v1 --untracked-files=all)" ]]; then
+    echo "error: live UI checkout must be clean" >&2
+    exit 2
+  fi
+}
+
+run_live_playwright() {
+  local label="$1"
+  shift
+  require_exact_live_revision
+  PINVI_LIVE_UI_E2E=1 run_playwright "$label" "$@"
 }
 
 run_restore_staging() {
@@ -159,25 +185,25 @@ run_phase() {
       run_playwright "${phase}" npm -w @pinvi/web run test:e2e
       ;;
     admin-live-list)
-      run_playwright "${phase}" npm -w @pinvi/web run test:e2e:admin-live:list
+      run_live_playwright "${phase}" npm -w @pinvi/web run test:e2e:admin-live:list
       ;;
     admin-live-smoke)
-      run_playwright "${phase}" env \
+      run_live_playwright "${phase}" env \
         PINVI_ADMIN_LIVE_CASE_LIMIT="${PINVI_V100_ADMIN_LIVE_CASE_LIMIT:-200}" \
         npm -w @pinvi/web run test:e2e:admin-live
       ;;
     admin-live-full)
-      run_playwright "${phase}" npm -w @pinvi/web run test:e2e:admin-live
+      run_live_playwright "${phase}" npm -w @pinvi/web run test:e2e:admin-live
       ;;
     live-mutating-list)
-      run_playwright "${phase}" npm -w @pinvi/web run test:e2e:live-mutating:list
+      run_live_playwright "${phase}" npm -w @pinvi/web run test:e2e:live-mutating:list
       ;;
     trip-realtime-mutating)
-      run_playwright "${phase}" npm -w @pinvi/web run test:e2e:live-mutating -- \
+      run_live_playwright "${phase}" npm -w @pinvi/web run test:e2e:live-mutating -- \
         trip-realtime-live-mutating.live.ts --workers=1
       ;;
     backup-mutating)
-      run_playwright "${phase}" npm -w @pinvi/web run test:e2e:live-mutating -- \
+      run_live_playwright "${phase}" npm -w @pinvi/web run test:e2e:live-mutating -- \
         admin-backup-live-mutating.live.ts --workers=1
       ;;
     geofence)

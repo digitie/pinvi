@@ -2,6 +2,109 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-26 (codex) — PR #477 rebase 후 fresh catalog·운영 복구 보강
+
+- `origin/main` 최신 상태로 rebase한 뒤 fresh `0100` catalog fingerprint를 공통 모듈로 분리하고,
+  정책·collation 같은 특수 schema object drift와 schema ACL의 의미상 동등한 표현을 검증하도록
+  보강했다. 함수 owner·operator까지 fingerprint에 포함하고, 0100은 durable origin에
+  fingerprint를 저장하며 0101은 이를 재계산해 확인한다.
+- managed fresh topology는 bootstrap이 role topology 검사 전에 `ops` schema를
+  `migration_owner` 소유로 확보하고 `pinvi_internal` admission fence를 만든다. migration
+  owner에는 database CREATE를 주지 않으며, 0101 artifact의 idempotent `ops` schema 문장은
+  이미 있는 managed schema에서 건너뛰어 권한 경계를 유지한다.
+- deploy fallback은 migration 전 API/Dagster의 정확한 container/image와 원래 이름을 보존하고,
+  새 API/Web/Dagster의 readiness·Docker healthcheck·smoke가 모두 통과한 뒤에만 snapshot을
+  폐기한다. snapshot 이름은 writer 중지 전에 사전 예약 검사하므로 stale snapshot 충돌 시 기존
+  writer를 건드리지 않는다. 부분 기동 실패 시 `.pinvi-predeploy`가 아닌 새 writer만 제거하고
+  원래 이름·image의 writer를 복구하며, Web도 같은 rollback 대상이다. runtime container 탐색은
+  Compose project/service label을 사용하고 `.pinvi-predeploy` snapshot은 destructive cleanup에서
+  제외한다. 기존 Dagster가 실행 중이면 `PINVI_ENABLE_DAGSTER=0`이어도 복구 기동하며, build/pull과
+  rollout은 Dagster image를 함께 준비·검증한다. one-shot migrator seal은 최대 3회 재시도하고
+  실패 시 fail-close하며, reset은 env-file의 production 설정을 shell override보다 우선해 volume
+  삭제를 차단한다.
+- 운영 적대 재리뷰에서 확인된 rollback 범위를 보강했다. provenance 검증 함수는 같은
+  Compose label의 stopped container를 직접 삭제하지 않고 fail-close하며, 각 wrapper는
+  invocation 시작 시 container ID 목록을 보관해 이번 실행에서 새로 생긴 writer만 제거한다.
+  기존 Dagster가 복구된 경우 flag가 꺼져도 최종 `/server_info`와 Docker health를 다시 확인하고,
+  N150 migration 문서는 manager pinned pair lifecycle 명령을 정본으로 사용한다.
+- 실제 Compose lifecycle 통합 테스트에서 `app-db-runtime-role` → API image build →
+  `app-migrator alembic upgrade head` → role seal 순서를 실행해 fresh `0100/0101` version row,
+  owner, ACL 경계를 검증했다. API Docker healthcheck/readiness에는 `/health/db`를 포함하고,
+  aggregate CI API 경로에는 배포·bootstrap·lifecycle 스크립트를 추가했다. managed/fresh 경로의
+  DB owner와 `app`/`ops` owner 분리를 bootstrap·0101·Compose 회귀에 결박하고, verified legacy
+  handoff의 pre-convergence owner equality는 별도 조건으로 허용했다. ADR-065의 migration owner
+  database CREATE 문구도 실제 ACL 정책과 일치하도록 정정했다.
+- 검증: M05 PostgreSQL 통합 `32 passed, 1 warning`, Compose migrator lifecycle `1 passed`,
+  API unit 기준선 `1287 passed, 3 warnings`, 관련 정적·provenance·lifecycle·설정 테스트 `91 passed`,
+  strict mypy `236 source files`, Ruff/format, Python compile, shell syntax, `git diff --check` 통과.
+  `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 건드리지 않았으며, DB 전문 리뷰는 GO,
+  운영 전문 리뷰의 P1은 현재 작업 트리에 반영했고 새 HEAD 기준 재리뷰·CI·live admin 인증은
+  아직 남아 있다.
+
+## 2026-08-25 (codex) — PR #477 최종 fence·복구 보강
+
+- fresh `0101`이 `0100`→`0101` 전환 전에 advisory lock·app table DML lock·DDL quiescence를
+  획득하고, superuser 실행에서는 legacy database/role fence까지 사용하도록 보강했다. legacy
+  handoff는 database fence 뒤 schema marker를 재확인하며, migration owner의 직접 `app CREATE`
+  ACL도 bootstrap·migration 양쪽에서 거부한다.
+- migration wrapper는 조건문 안의 `errexit` 비활성 경로를 제거하고 실패 시 EXIT handler가 writer
+  복구와 lifecycle lock 해제를 담당하게 했다. API 복구 readiness는 `/health/db`를 사용하며,
+  Dagster는 실행 flag와 무관하게 실제 실행 중이면 drain한다. 공유 개발 포트는 명시적
+  `PINVI_DEV_FORCE_KILL=1` 없이는 기존 프로세스를 종료하지 않는다.
+- 같은 serialization lock을 기다리는 협력 migrator는 DDL quiescence 위반으로 오인하지 않도록
+  producer/helper와 `0101` consumer SQL을 동기화했다. marker TOCTOU·직접 schema ACL·복구 실패
+  경로 회귀 테스트를 추가했다.
+- 검증: 관련 unit `41 passed`, `0101` PostgreSQL 통합 `28 passed, 1 warning`, Ruff/format,
+  Python compile, shell syntax 통과. `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 건드리지
+  않았다.
+
+## 2026-08-25 (codex) — PR #477 재심 P1 추가 보강
+
+- fresh `0100`은 schema comment만 남기지 않고 `pinvi_internal.baseline_origin`에 baseline
+  artifact hash·database OID·PostgreSQL system identifier를 기록한다. `0101`은 comment와
+  `0100` version row 및 이 durable origin row·owner를 함께 확인하므로 legacy `0061` database가
+  comment만 바꿔 fresh 경로로 우회할 수 없다.
+- role security fingerprint가 `app`/`x_extension` relation·function·type ACL, default ACL과
+  elevated role closure까지 포함하도록 보강했다. rebaseline fence는 `pg_authid`,
+  `pg_auth_members`, `pg_db_role_setting`도 transaction-scoped로 잠그고 `CREATEROLE`·
+  `x_extension` DDL-capable session을 fail-close한다.
+- production fallback `deploy-node.sh`에도 API/Dagster drain 상태 보존·실패/종료 복구·readiness
+  확인을 적용했고, fallback Postgres data volume을 named volume으로 고정했다. runbook의
+  connection fence 설명도 자동 종료가 아닌 operator cleanup 후 retry로 정정했다.
+- 관련 unit `20 passed`, adversarial PostgreSQL targeted `7 passed`, M05 전체 integration
+  `28 passed, 1 warning`, Ruff/format/compile/shell syntax 통과. 이 보강은 아직 원격에
+  push하지 않았고, `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 건드리지 않았다.
+
+## 2026-08-25 (codex) — PR #477 적대 재심 P1 반영
+
+- 두 전문 리뷰에서 지적된 rebaseline writer 경합을 반영했다. `0100` helper와 `0101` legacy
+  handoff가 `app` 테이블을 `SHARE ROW EXCLUSIVE`로 잠가 preflight·fingerprint·version 전환
+  사이의 runtime DML을 막고, 5초 안에 잡히지 않으면 fail-close한다.
+- `pg_terminate_backend`로 외부 세션을 남기는 동작은 제거했다. 기존 DDL-capable 세션은 자동
+  종료하지 않고 운영자가 정리한 뒤 재시도하도록 runbook과 테스트를 맞췄다.
+- fresh `0100` marker와 legacy rebaseline marker를 분리해 0101 legacy handoff가 fresh marker를
+  가장하지 못하게 했고, role security fingerprint에 `x_extension` ACL, function ACL, default
+  ACL, `rolconfig`, `pg_db_role_setting`을 추가했다.
+- `scripts/docker-app.sh migrate`가 migration·seal 실패에도 migration 전에 실행 중이던 API와
+  Dagster writer를 복구하도록 lifecycle wrapper와 smoke runbook을 정리했다.
+- 최신 검증은 관련 unit `20 passed`, 열린 runtime DML fence PostgreSQL 통합 `1 passed`이며,
+  기존 M05 전체 통합 `26 passed, 1 warning`, Ruff/format, Python compile, shell syntax도
+  통과했다. `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 건드리지 않았다.
+
+## 2026-08-25 (codex) — PR #477 rebase 후 fingerprint·receipt 결박 재심 보강
+
+- N150 `apply` receipt의 profile 누락, 0101 환경 profile과 receipt profile 불일치, 완료 시각
+  검증 누락을 수정하고, role membership recursive closure·sequence ownership·replica identity·
+  trigger deferrable 속성·canonical `search_path`를 producer/consumer 양쪽에 맞췄다.
+- fresh `0100`은 `app` schema origin marker를 남기고, `0101`은 marker 또는 명시적 root-only
+  legacy receipt 없이는 진행하지 않는다. role/database security fingerprint는 runtime role
+  bootstrap 이후 생성하도록 운영 순서를 문서화했다.
+- disposable fresh PostgreSQL 16과 보존 N150 `0061` dump probe에서 canonical catalog가 각각
+  `1590 / 4f2d69decc34300c597320e8a0dc78d154bd2eb4b6dbc96f0b51ba5b05c75d94`로 재현되는 것을 확인했다.
+  N150 profile은 별도 system identity digest로 target을 구분한다.
+- 단위 `10 passed`, M05 PostgreSQL 통합 `26 passed, 1 warning`. N150 운영 DB·보존 dump는
+  변경하지 않았고, fingerprint 산출용 임시 DB와 로컬 임시 dump는 정리했다.
+
 ## 2026-08-25 (codex) — M05 rebaseline P1 재심 보강
 
 **작업**: 적대 재심에서 지적된 `pg_database` fence timeout 순서, legacy handoff lock 순서,
