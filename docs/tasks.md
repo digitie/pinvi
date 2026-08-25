@@ -90,8 +90,6 @@
   `@expo/router-server`는 root로 hoist돼 `expo start`가 `expo-router/_ctx-shared` 해석에 실패한다.
   현재는 root `node_modules/expo-router` 심링크로 우회 중이며, 저장소 차원 해법(단일 react 정렬 또는
   root 배치)을 정해야 `expo start`가 클린 체크아웃에서 바로 돈다.
-- [ ] **T-319** — 모바일 mutation 실패 안내가 원문 예외를 그대로 노출한다(예: 재정렬 실패 시
-  `fetch failed: java.net.ConnectException…`). 웹 상태 UI 규칙(원인+복구)에 맞춰 사용자 문구로 정리한다.
 
 ## 보류 / 미래 작업
 

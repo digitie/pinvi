@@ -36,7 +36,11 @@ export function friendlyErrorText(error: unknown): string {
       return '서버에 일시적인 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.';
     return error.message || '요청을 처리하지 못했습니다.';
   }
-  if (error instanceof Error && error.message) {
+  // 한글이 하나라도 있으면 우리 코드가 사용자에게 보이려고 의도적으로 던진 문구로 본다
+  // (실제로 저장소 전체의 의도적 `throw new Error(...)` 사용자 안내 문구는 전부 한글이다).
+  // 한글이 없으면 `fetch failed: java.net.ConnectException…`류 네트워크/런타임 원문일
+  // 가능성이 높다(T-319) — 그런 원문을 그대로 보여주면 사용자가 알 수도 고칠 수도 없다.
+  if (error instanceof Error && error.message && /[가-힣]/.test(error.message)) {
     return error.message;
   }
   return '예기치 못한 오류가 발생했습니다.';

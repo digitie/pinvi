@@ -35,8 +35,25 @@ describe('friendlyErrorText', () => {
     expect(friendlyErrorText(new ApiError('bad', '잘못된 요청', 400))).toBe('잘못된 요청');
   });
 
-  it('uses message for a plain Error', () => {
-    expect(friendlyErrorText(new Error('boom'))).toBe('boom');
+  // T-319: 저장소 전체의 의도적 사용자 안내 `throw new Error(...)`는 전부 한글이다(예:
+  // '수정할 카테고리를 선택하세요.', '위치정보 이용 동의가 필요합니다...'). 그 관례에 기대
+  // 한글 메시지는 그대로 보여준다 — admin 검증 흐름 수십 곳이 이 동작에 의존한다.
+  it('한글이 포함된 일반 Error 메시지는 그대로 보여준다', () => {
+    expect(friendlyErrorText(new Error('수정할 항목을 선택하세요.'))).toBe(
+      '수정할 항목을 선택하세요.',
+    );
+  });
+
+  // T-319: 네트워크/런타임 원문(영문, 스택 흔적)은 사용자가 알 수도 고칠 수도 없다 —
+  // 예: 모바일 재정렬 실패 시 `fetch failed: java.net.ConnectException…`이 그대로 노출됐다.
+  it('한글이 없는 일반 Error 메시지(네트워크/런타임 원문)는 기본 문구로 가린다', () => {
+    expect(friendlyErrorText(new Error('boom'))).toBe('예기치 못한 오류가 발생했습니다.');
+    expect(
+      friendlyErrorText(new Error('fetch failed: java.net.ConnectException: Connection refused')),
+    ).toBe('예기치 못한 오류가 발생했습니다.');
+    expect(friendlyErrorText(new TypeError('Network request failed'))).toBe(
+      '예기치 못한 오류가 발생했습니다.',
+    );
   });
 
   it('returns a default for empty / unknown errors', () => {
