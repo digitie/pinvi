@@ -28,6 +28,7 @@ depends_on: str | Sequence[str] | None = None
 _BASELINE_FILE = "20260824_0100_app_schema.sql"
 _BASELINE_SHA256 = "cfb77c4402b49b4d03a15a1e2471cef13c6665b7b95efe4fedda6af7ae2b4b57"
 _BASELINE_STATEMENT_COUNT = 445
+_FRESH_BASELINE_SCHEMA_COMMENT = "pinvi-0100-fresh/v1"
 _DOLLAR_QUOTE = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$")
 
 
@@ -132,6 +133,7 @@ def upgrade() -> None:
     op.execute("SET LOCAL check_function_bodies = false")
     for statement in _baseline_statements():
         op.execute(sa.text(statement))
+    op.execute(sa.text("COMMENT ON SCHEMA app IS 'pinvi-0100-fresh/v1'"))
 
 
 def downgrade() -> None:

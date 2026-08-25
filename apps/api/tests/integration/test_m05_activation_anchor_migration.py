@@ -183,6 +183,12 @@ async def test_0101_installs_m05_final_contract_with_minimal_public_surface(
                     await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
                     == "20260824_0101"
                 )
+                assert (
+                    await connection.scalar(
+                        text("SELECT obj_description('app'::regnamespace, 'pg_namespace')")
+                    )
+                    == "pinvi-0100-fresh/v1"
+                )
                 boundary_definition = await connection.scalar(
                     text(
                         "SELECT pg_get_constraintdef(constraint_row.oid) "
@@ -634,10 +640,18 @@ def test_0101_legacy_catalog_serializer_matches_rebaseline_helper() -> None:
     )
     for fragment in (
         "pg_sequence",
+        "pg_depend",
+        "c.relreplident",
         "a.attacl",
+        "t.tgdeferrable",
+        "t.tgparentid",
         "t.tgqual",
     ):
         assert fragment in rebaseline._CATALOG_FINGERPRINT_SQL
+    assert (
+        migration._LEGACY_REBASELINE_FINGERPRINT_SESSION_STATEMENTS
+        == rebaseline._REBASELINE_FINGERPRINT_SESSION_STATEMENTS
+    )
     assert (
         migration._LEGACY_REBASELINE_ROLE_SECURITY_FINGERPRINT_SQL.strip()
         == rebaseline._ROLE_SECURITY_FINGERPRINT_SQL.strip()

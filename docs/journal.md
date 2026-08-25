@@ -2,6 +2,20 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-25 (codex) — PR #477 rebase 후 fingerprint·receipt 결박 재심 보강
+
+- N150 `apply` receipt의 profile 누락, 0101 환경 profile과 receipt profile 불일치, 완료 시각
+  검증 누락을 수정하고, role membership recursive closure·sequence ownership·replica identity·
+  trigger deferrable 속성·canonical `search_path`를 producer/consumer 양쪽에 맞췄다.
+- fresh `0100`은 `app` schema origin marker를 남기고, `0101`은 marker 또는 명시적 root-only
+  legacy receipt 없이는 진행하지 않는다. role/database security fingerprint는 runtime role
+  bootstrap 이후 생성하도록 운영 순서를 문서화했다.
+- disposable fresh PostgreSQL 16과 보존 N150 `0061` dump probe에서 canonical catalog가 각각
+  `1590 / 4f2d69decc34300c597320e8a0dc78d154bd2eb4b6dbc96f0b51ba5b05c75d94`로 재현되는 것을 확인했다.
+  N150 profile은 별도 system identity digest로 target을 구분한다.
+- 단위 `10 passed`, M05 PostgreSQL 통합 `26 passed, 1 warning`. N150 운영 DB·보존 dump는
+  변경하지 않았고, fingerprint 산출용 임시 DB와 로컬 임시 dump는 정리했다.
+
 ## 2026-08-25 (codex) — M05 rebaseline P1 재심 보강
 
 **작업**: 적대 재심에서 지적된 `pg_database` fence timeout 순서, legacy handoff lock 순서,

@@ -18,6 +18,7 @@ import os
 import re
 import stat
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import sqlalchemy as sa
@@ -38,15 +39,10 @@ _LEGACY_REBASELINE_TARGET_PROFILE = "n150-production"
 _LEGACY_REBASELINE_FRESH_TARGET_HOST = "test"
 _LEGACY_REBASELINE_TARGET_HOST = "n150"
 _LEGACY_REBASELINE_CATALOG_LINES = 1590
-_EXPECTED_FRESH_CATALOG_SHA256 = (
-    "08a8c8a9f083ab13173ac99f29772e103ee0cc599dc99b87f997bc84a0c61f0f"
-)
-_N150_LEGACY_CATALOG_SHA256 = (
-    "d5774e102cfd738dae08a88981df1ea2309832627de44bdee63f414c72943f6d"
-)
-_N150_TARGET_IDENTITY_SHA256 = (
-    "e04c99a4681738e0292debdceded99b1c8abe01c9b8bdee82aeef8566dd33cc1"
-)
+_FRESH_BASELINE_SCHEMA_COMMENT = "pinvi-0100-fresh/v1"
+_EXPECTED_FRESH_CATALOG_SHA256 = "4f2d69decc34300c597320e8a0dc78d154bd2eb4b6dbc96f0b51ba5b05c75d94"
+_N150_LEGACY_CATALOG_SHA256 = "4f2d69decc34300c597320e8a0dc78d154bd2eb4b6dbc96f0b51ba5b05c75d94"
+_N150_TARGET_IDENTITY_SHA256 = "e04c99a4681738e0292debdceded99b1c8abe01c9b8bdee82aeef8566dd33cc1"
 _DOLLAR_QUOTE = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$")
 _ROLE_IDENTIFIER = re.compile(r"[a-z_][a-z0-9_]*")
 _OPERATOR_NAME = re.compile(r"[-+*/<>=~!@#%^&|`?]+")
@@ -109,6 +105,7 @@ _LEGACY_REBASELINE_FINGERPRINT_SESSION_STATEMENTS = (
     "SET LOCAL IntervalStyle TO 'iso_8601'",
     "SET LOCAL bytea_output TO 'hex'",
     "SET LOCAL extra_float_digits TO 3",
+    "SET LOCAL search_path TO pg_catalog, app, public",
 )
 # `scripts/alembic_rebaseline.py`의 0061 preflight와 같은 catalog serialization이다.
 # 0101은 receipt를 만든 뒤의 data/catalog drift를 DDL 전에 다시 검증해야 하므로, 이
@@ -121,6 +118,7 @@ WITH object_lines(line) AS (
   WHERE n.nspname = 'app'
   UNION ALL
   SELECT jsonb_build_array('relation', c.relname, c.relkind, c.relpersistence,
+                           c.relreplident,
                            pg_get_userbyid(c.relowner), COALESCE(c.reloptions::text, ''),
                            COALESCE(c.relacl::text, ''), c.relrowsecurity,
                            c.relforcerowsecurity, c.relispartition,
@@ -133,7 +131,35 @@ WITH object_lines(line) AS (
                            COALESCE(sequence_row.seqcache::text, ''),
                            COALESCE(sequence_row.seqcycle::text, ''),
                            CASE WHEN sequence_row.seqtypid IS NULL THEN ''
-                                ELSE sequence_row.seqtypid::regtype::text END)::text
+                                ELSE sequence_row.seqtypid::regtype::text END,
+                           COALESCE((
+                             SELECT jsonb_agg(
+                               jsonb_build_array(
+                                 dependency.deptype,
+                                 referenced_namespace.nspname,
+                                 referenced_relation.relname,
+                                 CASE WHEN dependency.refobjsubid = 0 THEN ''
+                                      ELSE referenced_attribute.attname END
+                               )
+                               ORDER BY dependency.deptype,
+                                        referenced_namespace.nspname,
+                                        referenced_relation.relname,
+                                        dependency.refobjsubid
+                             )::text
+                             FROM pg_depend AS dependency
+                             JOIN pg_class AS referenced_relation
+                               ON dependency.refclassid = 'pg_class'::regclass
+                              AND dependency.refobjid = referenced_relation.oid
+                             JOIN pg_namespace AS referenced_namespace
+                               ON referenced_namespace.oid = referenced_relation.relnamespace
+                             LEFT JOIN pg_attribute AS referenced_attribute
+                               ON referenced_attribute.attrelid = dependency.refobjid
+                              AND referenced_attribute.attnum = dependency.refobjsubid
+                              AND NOT referenced_attribute.attisdropped
+                             WHERE dependency.classid = 'pg_class'::regclass
+                               AND dependency.objid = c.oid
+                               AND dependency.deptype = 'a'
+                           ), ''))::text
   FROM pg_class AS c
   JOIN pg_namespace AS n ON n.oid = c.relnamespace
   LEFT JOIN pg_sequence AS sequence_row ON sequence_row.seqrelid = c.oid
@@ -253,6 +279,7 @@ WITH object_lines(line) AS (
   WHERE n.nspname = 'app'
   UNION ALL
   SELECT jsonb_build_array('trigger', c.relname, t.tgname, t.tgenabled, t.tgtype,
+                           t.tgdeferrable, t.tginitdeferred, t.tgparentid,
                            t.tgfoid::regprocedure::text, encode(t.tgargs, 'hex'),
                            t.tgattr::text,
                            COALESCE(pg_get_expr(t.tgqual, t.tgrelid, true), ''))::text
@@ -301,7 +328,7 @@ WITH object_lines(line) AS (
 SELECT line FROM object_lines ORDER BY line COLLATE "C"
 """
 _LEGACY_REBASELINE_ROLE_SECURITY_FINGERPRINT_SQL = """
-WITH app_owner_roles(oid) AS (
+WITH RECURSIVE app_owner_roles(oid) AS (
   SELECT namespace.nspowner
   FROM pg_namespace AS namespace
   WHERE namespace.nspname = 'app'
@@ -320,7 +347,7 @@ WITH app_owner_roles(oid) AS (
   FROM pg_type AS type_row
   JOIN pg_namespace AS namespace ON namespace.oid = type_row.typnamespace
   WHERE namespace.nspname = 'app'
-), relevant_roles(oid) AS (
+), seed_roles(oid) AS (
   SELECT oid FROM app_owner_roles
   UNION
   SELECT role_row.oid
@@ -331,6 +358,16 @@ WITH app_owner_roles(oid) AS (
   SELECT database_row.datdba
   FROM pg_database AS database_row
   WHERE database_row.datname = current_database()
+), relevant_roles(oid) AS (
+  SELECT oid FROM seed_roles
+  UNION
+  SELECT CASE
+           WHEN membership.roleid = role_row.oid THEN membership.member
+           ELSE membership.roleid
+         END
+  FROM pg_auth_members AS membership
+  JOIN relevant_roles AS role_row
+    ON membership.roleid = role_row.oid OR membership.member = role_row.oid
 ), security_lines(line) AS (
   SELECT jsonb_build_array(
       'database_acl', database_row.datname, pg_get_userbyid(database_row.datdba),
@@ -694,14 +731,38 @@ def _legacy_rebaseline_profile() -> bool:
     if configured == "0":
         return False
     if configured == "1":
-        target_profile = os.environ.get(_LEGACY_REBASELINE_TARGET_PROFILE_ENV, "")
-        if target_profile not in {
-            _LEGACY_REBASELINE_FRESH_TARGET_PROFILE,
-            _LEGACY_REBASELINE_TARGET_PROFILE,
-        }:
-            raise RuntimeError("0101 legacy rebaseline target profile is invalid")
+        _legacy_rebaseline_target_profile()
         return True
     raise RuntimeError("0101 legacy rebaseline profile configuration is invalid")
+
+
+def _legacy_rebaseline_target_profile() -> str:
+    """Return the explicitly selected receipt profile for this migration process."""
+
+    target_profile = os.environ.get(_LEGACY_REBASELINE_TARGET_PROFILE_ENV, "")
+    if target_profile not in {
+        _LEGACY_REBASELINE_FRESH_TARGET_PROFILE,
+        _LEGACY_REBASELINE_TARGET_PROFILE,
+    }:
+        raise RuntimeError("0101 legacy rebaseline target profile is invalid")
+    return target_profile
+
+
+def _parse_legacy_rebaseline_timestamp(value: object) -> datetime:
+    """Parse producer-compatible RFC3339 timestamps and reject implausible future receipts."""
+
+    if not isinstance(value, str) or not value:
+        raise RuntimeError("0101 legacy rebaseline receipt completed_at is invalid")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise RuntimeError("0101 legacy rebaseline receipt completed_at is invalid") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise RuntimeError("0101 legacy rebaseline receipt completed_at must include a timezone")
+    parsed = parsed.astimezone(UTC)
+    if parsed > datetime.now(UTC) + timedelta(minutes=5):
+        raise RuntimeError("0101 legacy rebaseline receipt completed_at is in the future")
+    return parsed
 
 
 def _read_legacy_rebaseline_receipt() -> dict[str, object]:
@@ -772,6 +833,7 @@ def _read_legacy_rebaseline_receipt() -> dict[str, object]:
         )
     ):
         raise RuntimeError("0101 legacy rebaseline receipt values are invalid")
+    _parse_legacy_rebaseline_timestamp(receipt["completed_at"])
     preflight = receipt["preflight"]
     target_profile = receipt["target_profile"]
     expected_catalog_sha256 = (
@@ -934,6 +996,14 @@ def _legacy_rebaseline_catalog_fingerprint(bind: sa.Connection) -> tuple[int, st
     return len(rows), hashlib.sha256(payload).hexdigest()
 
 
+def _assert_fresh_0100_marker(bind: sa.Connection) -> None:
+    """Require the non-legacy path to carry the durable fresh-baseline marker."""
+
+    marker = bind.scalar(sa.text("SELECT obj_description('app'::regnamespace, 'pg_namespace')"))
+    if marker != _FRESH_BASELINE_SCHEMA_COMMENT:
+        raise RuntimeError("0101 non-legacy handoff requires the canonical fresh 0100 marker")
+
+
 def _legacy_rebaseline_role_security_fingerprint(bind: sa.Connection) -> str:
     rows = tuple(
         str(line)
@@ -1018,6 +1088,8 @@ def _assert_legacy_rebaseline_handoff(bind: sa.Connection) -> None:
     if not _legacy_rebaseline_profile():
         return
     receipt = _read_legacy_rebaseline_receipt()
+    if receipt["target_profile"] != _legacy_rebaseline_target_profile():
+        raise RuntimeError("0101 legacy rebaseline receipt profile does not match configuration")
     preflight = receipt["preflight"]
     assert isinstance(preflight, dict)
     expected_identity = {
@@ -1084,7 +1156,7 @@ def _assert_legacy_rebaseline_handoff(bind: sa.Connection) -> None:
         raise RuntimeError("0101 legacy rebaseline requires the 0100 handoff row")
 
 
-def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
+def _activate_m05_migration_owner(bind: sa.Connection, *, activate: bool = True) -> str | None:
     """Switch only the M05 portion to its non-login receipt owner.
 
     The pre-existing app tables are still changed by their owner.  The root-only 0100
@@ -1394,6 +1466,18 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
     if role_contract_valid is not True:
         raise RuntimeError("0101 migration owner role contract is not satisfied")
 
+    app_owner = bind.scalar(
+        sa.text(
+            """
+            SELECT namespace.nspowner::regrole::text
+            FROM pg_namespace namespace
+            WHERE namespace.nspname = 'app'
+            """
+        )
+    )
+    if not activate:
+        return app_owner
+
     # The identifier has already been constrained to a portable PostgreSQL role name.
     op.execute(f'SET LOCAL ROLE "{migration_owner}"')
     if (
@@ -1403,15 +1487,7 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
         is not True
     ):
         raise RuntimeError("0101 could not activate the migration owner")
-    return bind.scalar(
-        sa.text(
-            """
-            SELECT namespace.nspowner::regrole::text
-            FROM pg_namespace namespace
-            WHERE namespace.nspname = 'app'
-            """
-        )
-    )
+    return app_owner
 
 
 def _restore_app_owner(app_owner: str | None) -> None:
@@ -1942,10 +2018,11 @@ def _install_location_archive_append_only_contract() -> None:
     # 0101 재생 하네스는 archive table을 별도로 지우지 않으므로, trigger는 idempotent하게
     # 교체한다. guard 함수의 retention 예외는 원본 table명으로 한정돼 있어 archive에는
     # 적용되지 않는다.
-    op.execute(f"DROP TRIGGER IF EXISTS {_LOCATION_ARCHIVE_ROW_TRIGGER} ON {_LOCATION_ARCHIVE_TABLE}")
     op.execute(
-        f"DROP TRIGGER IF EXISTS {_LOCATION_ARCHIVE_TRUNCATE_TRIGGER} "
-        f"ON {_LOCATION_ARCHIVE_TABLE}"
+        f"DROP TRIGGER IF EXISTS {_LOCATION_ARCHIVE_ROW_TRIGGER} ON {_LOCATION_ARCHIVE_TABLE}"
+    )
+    op.execute(
+        f"DROP TRIGGER IF EXISTS {_LOCATION_ARCHIVE_TRUNCATE_TRIGGER} ON {_LOCATION_ARCHIVE_TABLE}"
     )
     op.execute(
         f"CREATE TRIGGER {_LOCATION_ARCHIVE_ROW_TRIGGER} "
@@ -2369,6 +2446,9 @@ def _assert_m05_acl(bind: sa.Connection) -> None:
 def upgrade() -> None:
     bind = op.get_bind()
     _assert_legacy_rebaseline_handoff(bind)
+    if not _legacy_rebaseline_profile():
+        _activate_m05_migration_owner(bind, activate=False)
+        _assert_fresh_0100_marker(bind)
     _install_location_audit_purpose_contract()
     _install_location_audit_coord_source_contract()
     _install_location_archive_append_only_contract()

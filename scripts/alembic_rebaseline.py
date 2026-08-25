@@ -34,11 +34,11 @@ LEGACY_REVISION = "20260821_0061"
 BASELINE_REVISION = "20260824_0100"
 _EXPECTED_CATALOG_LINES = 1590
 _EXPECTED_CATALOG_SHA256 = (
-    "08a8c8a9f083ab13173ac99f29772e103ee0cc599dc99b87f997bc84a0c61f0f"
+    "4f2d69decc34300c597320e8a0dc78d154bd2eb4b6dbc96f0b51ba5b05c75d94"
 )
 _N150_LEGACY_CATALOG_SHA256 = (
     # 보존한 N150 0061 app dump를 별도 PostgreSQL 16 DB에 복원해 산출한 기준선.
-    "d5774e102cfd738dae08a88981df1ea2309832627de44bdee63f414c72943f6d"
+    "4f2d69decc34300c597320e8a0dc78d154bd2eb4b6dbc96f0b51ba5b05c75d94"
 )
 _TARGET_PROFILE_FRESH = "fresh-postgresql-16"
 _TARGET_PROFILE_N150 = "n150-production"
@@ -138,6 +138,7 @@ WITH object_lines(line) AS (
   WHERE n.nspname = 'app'
   UNION ALL
   SELECT jsonb_build_array('relation', c.relname, c.relkind, c.relpersistence,
+                           c.relreplident,
                            pg_get_userbyid(c.relowner), COALESCE(c.reloptions::text, ''),
                            COALESCE(c.relacl::text, ''), c.relrowsecurity,
                            c.relforcerowsecurity, c.relispartition,
@@ -150,7 +151,35 @@ WITH object_lines(line) AS (
                            COALESCE(sequence_row.seqcache::text, ''),
                            COALESCE(sequence_row.seqcycle::text, ''),
                            CASE WHEN sequence_row.seqtypid IS NULL THEN ''
-                                ELSE sequence_row.seqtypid::regtype::text END)::text
+                                ELSE sequence_row.seqtypid::regtype::text END,
+                           COALESCE((
+                             SELECT jsonb_agg(
+                               jsonb_build_array(
+                                 dependency.deptype,
+                                 referenced_namespace.nspname,
+                                 referenced_relation.relname,
+                                 CASE WHEN dependency.refobjsubid = 0 THEN ''
+                                      ELSE referenced_attribute.attname END
+                               )
+                               ORDER BY dependency.deptype,
+                                        referenced_namespace.nspname,
+                                        referenced_relation.relname,
+                                        dependency.refobjsubid
+                             )::text
+                             FROM pg_depend AS dependency
+                             JOIN pg_class AS referenced_relation
+                               ON dependency.refclassid = 'pg_class'::regclass
+                              AND dependency.refobjid = referenced_relation.oid
+                             JOIN pg_namespace AS referenced_namespace
+                               ON referenced_namespace.oid = referenced_relation.relnamespace
+                             LEFT JOIN pg_attribute AS referenced_attribute
+                               ON referenced_attribute.attrelid = dependency.refobjid
+                              AND referenced_attribute.attnum = dependency.refobjsubid
+                              AND NOT referenced_attribute.attisdropped
+                             WHERE dependency.classid = 'pg_class'::regclass
+                               AND dependency.objid = c.oid
+                               AND dependency.deptype = 'a'
+                           ), ''))::text
   FROM pg_class AS c
   JOIN pg_namespace AS n ON n.oid = c.relnamespace
   LEFT JOIN pg_sequence AS sequence_row ON sequence_row.seqrelid = c.oid
@@ -270,6 +299,7 @@ WITH object_lines(line) AS (
   WHERE n.nspname = 'app'
   UNION ALL
   SELECT jsonb_build_array('trigger', c.relname, t.tgname, t.tgenabled, t.tgtype,
+                           t.tgdeferrable, t.tginitdeferred, t.tgparentid,
                            t.tgfoid::regprocedure::text, encode(t.tgargs, 'hex'),
                            t.tgattr::text,
                            COALESCE(pg_get_expr(t.tgqual, t.tgrelid, true), ''))::text
@@ -319,7 +349,7 @@ SELECT line FROM object_lines ORDER BY line COLLATE "C"
 """
 
 _ROLE_SECURITY_FINGERPRINT_SQL = """
-WITH app_owner_roles(oid) AS (
+WITH RECURSIVE app_owner_roles(oid) AS (
   SELECT namespace.nspowner
   FROM pg_namespace AS namespace
   WHERE namespace.nspname = 'app'
@@ -338,7 +368,7 @@ WITH app_owner_roles(oid) AS (
   FROM pg_type AS type_row
   JOIN pg_namespace AS namespace ON namespace.oid = type_row.typnamespace
   WHERE namespace.nspname = 'app'
-), relevant_roles(oid) AS (
+), seed_roles(oid) AS (
   SELECT oid FROM app_owner_roles
   UNION
   SELECT role_row.oid
@@ -349,6 +379,16 @@ WITH app_owner_roles(oid) AS (
   SELECT database_row.datdba
   FROM pg_database AS database_row
   WHERE database_row.datname = current_database()
+), relevant_roles(oid) AS (
+  SELECT oid FROM seed_roles
+  UNION
+  SELECT CASE
+           WHEN membership.roleid = role_row.oid THEN membership.member
+           ELSE membership.roleid
+         END
+  FROM pg_auth_members AS membership
+  JOIN relevant_roles AS role_row
+    ON membership.roleid = role_row.oid OR membership.member = role_row.oid
 ), security_lines(line) AS (
   SELECT jsonb_build_array(
       'database_acl', database_row.datname, pg_get_userbyid(database_row.datdba),
@@ -565,7 +605,12 @@ def _target_profile_spec(target_profile: str) -> dict[str, object]:
 def _target_profile_identity_sha256(preflight: dict[str, Any]) -> str:
     identity = "|".join(
         str(preflight[field])
-        for field in ("database_name", "system_identifier", "server_addr", "server_port")
+        for field in (
+            "database_name",
+            "system_identifier",
+            "server_addr",
+            "server_port",
+        )
     )
     return hashlib.sha256(identity.encode("utf-8")).hexdigest()
 
@@ -593,12 +638,18 @@ def _assert_target_profile_preflight(
             f"target database identity is not canonical for target profile {target_profile}"
         )
     expected_database_name = spec.get("database_name")
-    if expected_database_name is not None and preflight.get("database_name") != expected_database_name:
+    if (
+        expected_database_name is not None
+        and preflight.get("database_name") != expected_database_name
+    ):
         raise RebaselineError(
             f"target database name is not canonical for target profile {target_profile}"
         )
     expected_server_port = spec.get("server_port")
-    if expected_server_port is not None and preflight.get("server_port") != expected_server_port:
+    if (
+        expected_server_port is not None
+        and preflight.get("server_port") != expected_server_port
+    ):
         raise RebaselineError(
             f"target database port is not canonical for target profile {target_profile}"
         )
@@ -1188,7 +1239,9 @@ def _read_receipt(path: Path) -> dict[str, Any]:
     try:
         ipaddress.ip_address(preflight["server_addr"])
     except (TypeError, ValueError) as exc:
-        raise RebaselineError("rebaseline receipt preflight endpoint is invalid") from exc
+        raise RebaselineError(
+            "rebaseline receipt preflight endpoint is invalid"
+        ) from exc
     _assert_target_profile_preflight(target_profile, preflight)
     if value["state"] == "prepared" and value["completed_at"] is not None:
         raise RebaselineError("prepared receipt must not have completed_at")
@@ -1234,16 +1287,20 @@ async def _role_security_fingerprint(connection: AsyncConnection) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+_REBASELINE_FINGERPRINT_SESSION_STATEMENTS = (
+    "SET LOCAL TIME ZONE 'UTC'",
+    "SET LOCAL DateStyle TO 'ISO, YMD'",
+    "SET LOCAL IntervalStyle TO 'iso_8601'",
+    "SET LOCAL bytea_output TO 'hex'",
+    "SET LOCAL extra_float_digits TO 3",
+    "SET LOCAL search_path TO pg_catalog, app, public",
+)
+
+
 async def _normalize_fingerprint_session(connection: AsyncConnection) -> None:
     """logical row serialization이 접속별 GUC에 흔들리지 않게 고정한다."""
 
-    for statement in (
-        "SET LOCAL TIME ZONE 'UTC'",
-        "SET LOCAL DateStyle TO 'ISO, YMD'",
-        "SET LOCAL IntervalStyle TO 'iso_8601'",
-        "SET LOCAL bytea_output TO 'hex'",
-        "SET LOCAL extra_float_digits TO 3",
-    ):
+    for statement in _REBASELINE_FINGERPRINT_SESSION_STATEMENTS:
         await connection.execute(text(statement))
 
 
@@ -1263,10 +1320,16 @@ async def _acquire_rebaseline_database_connection_fence(
 
     await connection.execute(text(_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL))
     try:
-        has_authority = await connection.scalar(text(_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL))
+        has_authority = await connection.scalar(
+            text(_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL)
+        )
         if has_authority is not True:
-            raise RebaselineError("rebaseline requires superuser connection fence authority")
-        await connection.execute(text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE"))
+            raise RebaselineError(
+                "rebaseline requires superuser connection fence authority"
+            )
+        await connection.execute(
+            text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE")
+        )
     except DBAPIError as exc:
         # 기존 backend가 pg_database AccessShare lock을 길게 보유하면 client를
         # 식별·종료하기도 전에 여기서 막힌다. 무기한 대기하지 않고 transaction을
@@ -1400,11 +1463,16 @@ async def _preflight(
         raise RebaselineError("pre-existing M05 objects reject a 0061 rebaseline")
     if preflight.catalog_lines != _EXPECTED_CATALOG_LINES:
         raise RebaselineError("legacy catalog fingerprint line count is not canonical")
-    if preflight.catalog_sha256 != _target_profile_spec(target_profile)["catalog_sha256"]:
+    if (
+        preflight.catalog_sha256
+        != _target_profile_spec(target_profile)["catalog_sha256"]
+    ):
         raise RebaselineError(
             f"legacy catalog fingerprint is not canonical for target profile {target_profile}"
         )
-    _assert_target_profile_preflight(target_profile, preflight.as_dict(target_profile=target_profile))
+    _assert_target_profile_preflight(
+        target_profile, preflight.as_dict(target_profile=target_profile)
+    )
     if preflight.app_data_rows <= 0:
         raise RebaselineError("rebaseline target must contain app data rows")
     return preflight
@@ -1507,7 +1575,9 @@ async def _apply(
                 allow_baseline_revision=recovering,
             )
             receipt_payload = _receipt_payload(
-                target.preflight if recovering else preflight.as_dict(),
+                target.preflight
+                if recovering
+                else preflight.as_dict(target_profile=target.target_profile),
                 artifact,
                 target,
                 state="prepared",
@@ -1632,7 +1702,9 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
     artifact = _validate_backup(args.backup, args.backup_checksum, args.backup_manifest)
     target = _read_target_manifest(args.target_manifest)
     if target.target_profile != args.target_profile:
-        raise RebaselineError("target manifest profile does not match the requested profile")
+        raise RebaselineError(
+            "target manifest profile does not match the requested profile"
+        )
     if args.command == "check":
         preflight = await _check(database_url, artifact, target)
         return {

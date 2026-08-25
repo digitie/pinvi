@@ -48,12 +48,12 @@ def _receipt(identity: dict[str, object]) -> dict[str, object]:
             "app_data_rows": 1,
             "app_data_table_lines": 1,
             "catalog_lines": 1590,
-            "catalog_sha256": "08a8c8a9f083ab13173ac99f29772e103ee0cc599dc99b87f997bc84a0c61f0f",
+            "catalog_sha256": "4f2d69decc34300c597320e8a0dc78d154bd2eb4b6dbc96f0b51ba5b05c75d94",
             "current_user": "legacy_owner",
             "database_name": identity["database_name"],
             "database_oid": identity["database_oid"],
             "expected_catalog_lines": 1590,
-            "expected_catalog_sha256": "08a8c8a9f083ab13173ac99f29772e103ee0cc599dc99b87f997bc84a0c61f0f",
+            "expected_catalog_sha256": "4f2d69decc34300c597320e8a0dc78d154bd2eb4b6dbc96f0b51ba5b05c75d94",
             "role_security_sha256": "f" * 64,
             "server_addr": identity["server_addr"],
             "server_port": identity["server_port"],
@@ -159,10 +159,10 @@ def test_0101_legacy_handoff_rejects_receipt_for_another_database(
         module._assert_legacy_rebaseline_handoff(_BoundIdentity(other_identity, ["20260824_0100"]))
 
 
-def test_rebaseline_target_profiles_do_not_share_catalog_allowlist(
+def test_rebaseline_target_profiles_bind_catalog_and_target_identity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """N150 hash는 명시적 N150 profile에서만 통과하고 fresh hash와 섞이지 않는다."""
+    """N150 profile은 canonical catalog와 재생성되지 않는 DB identity를 함께 요구한다."""
 
     module = _rebaseline_module()
     identity = {
@@ -188,9 +188,31 @@ def test_rebaseline_target_profiles_do_not_share_catalog_allowlist(
     }
     module._assert_target_profile_preflight(module._TARGET_PROFILE_N150, n150_preflight)
 
-    fresh_hash = module._EXPECTED_CATALOG_SHA256
-    forged_fresh = dict(n150_preflight)
-    forged_fresh["catalog_sha256"] = fresh_hash
-    forged_fresh["expected_catalog_sha256"] = fresh_hash
+    forged_identity = dict(n150_preflight)
+    forged_identity["database_name"] = "pinvi_m05_probe"
     with pytest.raises(module.RebaselineError, match="canonical"):
-        module._assert_target_profile_preflight(module._TARGET_PROFILE_N150, forged_fresh)
+        module._assert_target_profile_preflight(module._TARGET_PROFILE_N150, forged_identity)
+
+
+def test_0101_legacy_handoff_rejects_receipt_profile_mismatch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    module = _migration_module()
+    identity = {
+        "database_name": "pinvi_legacy",
+        "database_oid": 4242,
+        "system_identifier": "987654321",
+        "server_addr": "127.0.0.1",
+        "server_port": 5432,
+    }
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(json.dumps(_receipt(identity)), encoding="utf-8")
+    receipt_path.chmod(0o600)
+    monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE", "1")
+    monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE", "n150-production")
+    monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH", str(receipt_path))
+    monkeypatch.setattr(module.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(module.os, "fstat", _root_owned_fstat(module))
+
+    with pytest.raises(RuntimeError, match="profile does not match configuration"):
+        module._assert_legacy_rebaseline_handoff(_BoundIdentity(identity, ["20260824_0100"]))

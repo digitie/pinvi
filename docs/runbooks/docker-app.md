@@ -104,6 +104,13 @@ host-local flock을 보유하므로, 동시 실행이 서로의 one-shot passwor
 staging/production은 `PINVI_MIGRATOR_LIFECYCLE_LOCK_PATH`의 파일을 root-owned `0600`으로 미리
 만들고 root로만 실행한다. legacy 전환은 다음처럼 호출 shell에서만 명시한다.
 
+legacy receipt의 role/database security fingerprint는 runtime role bootstrap 결과를 포함한다.
+따라서 receipt producer의 read-only preflight와 `apply`는 `app-db-runtime-role`이 같은
+database/user 설정으로 role·membership·database ACL을 먼저 정리한 뒤 실행해야 한다. 그 뒤
+bootstrap을 다시 실행해 ACL이나 membership가 바뀌면 기존 receipt를 사용하지 말고 producer를
+처음부터 다시 실행한다. fresh `0100`은 `app` schema origin marker를 남기며, marker가 없는
+`0100`은 legacy profile과 receipt 없이는 `0101`로 진행하지 않는다.
+
 ```bash
 PINVI_M05_LEGACY_REBASELINE=1 \
 PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE=n150-production \
