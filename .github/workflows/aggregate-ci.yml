@@ -18,7 +18,11 @@ jobs:
     name: Aggregate CI gate
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    # T-348: 이 게이트는 대상 job이 끝나길 기다리기만 하므로 그 job의 timeout-minutes보다
+    # 여유 있게 길어야 한다 — 12분은 api.yml의 lint-typecheck-test(현재 35분)보다 짧아서,
+    # job 자체는 성공했는데 게이트만 대기를 포기하고 required check 실패를 내는 일이 있었다
+    # (PR #476). job이 끝날 시간(최대 35분) + 폴링 여유를 더해 45분으로 잡는다.
+    timeout-minutes: 45
 
     steps:
       - name: Wait for required path checks

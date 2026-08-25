@@ -55,7 +55,9 @@ jobs:
     # 예약 실행은 staleness 확인이 목적이라 전체 suite는 돌리지 않는다.
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # T-348: 통합 스위트가 계속 자라 15분으로는 부족해졌다(main 관측: 9:00 / 10:53 / 20:06).
+    # 35분은 최근 최댓값(20:06)에 70%대 여유를 둔 값이다 — 스위트가 더 자라면 다시 올려야 한다.
+    timeout-minutes: 35
 
     services:
       postgres:
