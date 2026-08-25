@@ -28,6 +28,7 @@ from app.services.admin_retention import (
     create_retention_dry_run,
     execute_retention,
     list_retention_runs,
+    record_retention_run_failure,
 )
 
 router = APIRouter(prefix="/admin/retention", tags=["admin"])
@@ -130,9 +131,44 @@ async def execute_retention_endpoint(
             confirm_phrase=body.confirm_phrase,
         )
     except RetentionExecutionError as exc:
+        # 서비스가 이미 rollback + 실패 영수증까지 끝냈다. 이 rollback은 no-op이지만, 서비스가
+        # 예외를 다른 경로로 던졌을 때를 대비해 남긴다.
         await db.rollback()
         raise _error_response(exc) from exc
 
+    # 여기까지 오면 파괴적 작업과 `completed` UPDATE가 **아직 커밋되지 않은** 상태다. 아래 감사
+    # 적재나 commit이 실패하면 파괴 작업은 폐기되는데, 그때 영수증이 `executing`으로 굳으면
+    # "무엇을 시도했고 어디서 멈췄는가"가 남지 않는다 — 이 후단도 복구 대상이다(T-339).
+    try:
+        await _finalize_execute(
+            db,
+            run=run,
+            admin=admin,
+            request=request,
+            access_reason=body.access_reason,
+            request_id=request_id,
+        )
+    except Exception as exc:
+        await record_retention_run_failure(db, run.run_id, exc)
+        raise _error_response(RetentionExecutionError(str(exc))) from exc
+
+    return Envelope.of(run)
+
+
+async def _finalize_execute(
+    db: DbSession,
+    *,
+    run: AdminRetentionRun,
+    admin: User,
+    request: Request,
+    access_reason: str,
+    request_id: uuid.UUID,
+) -> None:
+    """파괴적 작업과 감사 기록을 **한 커밋으로** 확정한다.
+
+    이 커밋이 성공해야 비로소 무언가 지워진 것이다. 그 전에 실패하면 전부 폐기된다 — 그래서
+    `executing`/`failed` 영수증은 곧 "아무것도 지워지지 않았다"를 뜻한다.
+    """
     await append_admin_audit(
         db,
         actor_user_id=admin.user_id,
@@ -141,11 +177,10 @@ async def execute_retention_endpoint(
         resource_id=str(run.run_id),
         before_state=run.candidate_snapshot,
         after_state=run.model_dump(mode="json"),
-        access_reason=body.access_reason,
+        access_reason=access_reason,
         target_pii_fields=["email", "password_hash", "oauth_identity", "location_access_log"],
         ip_hash_input=request.client.host if request.client else "",
         user_agent=request.headers.get("user-agent"),
         request_id=request_id,
     )
     await db.commit()
-    return Envelope.of(run)

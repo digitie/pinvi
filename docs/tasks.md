@@ -61,18 +61,11 @@
 
 ## 데이터 / 보존
 
-- [ ] **T-339** — retention run이 `executing` 상태로 영구히 남는 경로가 있다. `except Exception`이
-  `asyncio.CancelledError`(BaseException 직계)를 놓쳐 SIGTERM/연결 끊김 시 `failed`로도 안 남고,
-  라우트가 `RetentionExecutionError`만 잡아 후단(`append_admin_audit`, 최종 commit) 실패도 같은
-  결과를 낳는다. **데이터 손실은 없다** — 파괴 SQL과 `completed` UPDATE가 단일 커밋이라
-  `executing`은 곧 "아무것도 지워지지 않았다"를 뜻한다. 해석 규칙을 runbook에 명시하고 예외 범위를
-  넓힌다. 추가로, 최종 `_UPDATE_RUN_SQL` 단계에서 실패하면 원래 트랜잭션이 그 행 락을 쥔 채
-  `_record_failed_run`이 별도 세션으로 같은 행을 UPDATE해 **교착 가능성**이 있다 — 확인 필요.
-  T-338 적대적 리뷰에서 발견.
-- [ ] **T-340** — `test_failed_execute_leaves_a_receipt`가 불변식의 절반만 검출한다. 순수 파이썬
-  예외로 실패시켜 트랜잭션이 abort 상태가 아니므로, `_record_failed_run`을 같은 세션 구현으로
-  되돌려도 green이다. append-only 트리거 위반 같은 **DB 오류**로 실패시키고 사후 데이터 상태까지
-  검증하는 케이스가 필요하다. T-338 적대적 리뷰에서 발견.
+- [ ] **T-341** — 프로세스 전역에 `statement_timeout` / `lock_timeout` /
+  `idle_in_transaction_session_timeout`이 **하나도 없다**. `app/db/session.py`가 `connect_args`를
+  넘기지 않고, compose에 `command:` 오버라이드도 없어 서버 기본값 0이 그대로 쓰인다. 락 대기나
+  폭주 쿼리가 생기면 무한히 매달린다 — T-339의 hang이 탐지되지 않은 이유이기도 하다. 기본값을
+  정하고(요청 경로/워커 경로가 다를 수 있다) 근거와 함께 박는다. T-339 조사에서 발견.
 
 ## 웹 / 테스트 인프라
 

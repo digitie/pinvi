@@ -469,11 +469,14 @@ async def test_append_after_full_archive_keeps_the_chain_linked(session_factory)
 # --------------------------------------------------------------------------------------
 
 
-async def test_failed_execute_leaves_a_receipt(session_factory, monkeypatch):  # type: ignore[no-untyped-def]
-    """파괴적 작업이 실패하면 "시도했고 어디서 멈췄는가"가 증거로 남아야 한다.
+async def test_failed_execute_receipt_survives_the_callers_rollback(session_factory, monkeypatch):  # type: ignore[no-untyped-def]
+    """영수증이 호출부의 `rollback()`을 견디는지 — **그것만** 본다.
 
-    이전에는 영수증 행이 파괴적 작업과 **같은 트랜잭션**에 있어서, 호출부의 `rollback()`이 작업과
-    함께 영수증까지 지웠다. 실패한 실행이 아무 흔적도 남기지 않는다는 뜻이다.
+    이전에는 영수증 행이 파괴적 작업과 같은 트랜잭션이라 호출부 rollback이 함께 지웠다.
+
+    **이 테스트의 한계를 알고 써라.** 실패를 순수 파이썬 예외로 만들기 때문에 세션이 abort 상태가
+    아니다. 그래서 기록 구현이 '같은 세션 + rollback 없이 commit'으로 퇴화해도 green이다.
+    abort 상태와 락 보유 상태는 아래 두 테스트가 각각 맡는다.
     """
     import uuid
 
@@ -525,3 +528,184 @@ async def test_failed_execute_leaves_a_receipt(session_factory, monkeypatch):  #
     assert len(receipts) == 1, "실패한 실행의 영수증이 남지 않았다"
     assert receipts[0]["status"] == "failed"
     assert "아카이브 중 실패" in (receipts[0]["error_message"] or "")
+
+
+async def test_receipt_survives_a_database_abort_and_work_is_discarded(
+    session_factory, monkeypatch
+):  # type: ignore[no-untyped-def]
+    """**DB 오류로 트랜잭션이 abort된 뒤에도** 영수증이 남고, 파괴적 작업은 폐기돼야 한다.
+
+    실패를 파이썬 예외로 만들면 세션이 멀쩡해서 어떤 기록 구현이든 통과한다. 진짜 조건은 abort다 —
+    그 상태에서는 rollback 없이 아무 문장도 실행되지 않는다.
+
+    동시에 **파괴적 작업이 실제로 폐기됐는지**를 데이터로 확인한다. 영수증만 보면, 실패한 실행이
+    삭제를 커밋해 버리는 구현도 green이 된다.
+    """
+    import uuid
+    from datetime import UTC, datetime, timedelta
+    from decimal import Decimal
+
+    from app.core.config import get_settings
+    from app.models.user import User
+    from app.services import admin_retention
+    from app.services.location_audit import append_location_log
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "pinvi_retention_execute_enabled", True, raising=False)
+
+    old = datetime.now(UTC) - timedelta(days=400)
+    async with session_factory() as db:
+        actor = User(
+            email=f"ab_{uuid.uuid4().hex[:8]}@pinvi.test", status="active", roles=["user", "cpo"]
+        )
+        victim = User(
+            email=f"victim_{uuid.uuid4().hex[:8]}@pinvi.test",
+            nickname="지울이름",
+            gender="female",
+            status="deleted",
+            deleted_at=old,
+        )
+        db.add_all([actor, victim])
+        await db.commit()
+        await db.refresh(actor)
+        await db.refresh(victim)
+        actor_id, victim_id = actor.user_id, victim.user_id
+        victim_email = victim.email
+
+    async with session_factory() as db:
+        await append_location_log(
+            db,
+            user_id=actor_id,
+            endpoint="/features/nearby",
+            purpose="nearby_attractions",
+            lat=Decimal("37.5665"),
+            lng=Decimal("126.9780"),
+            request_id=uuid.uuid4(),
+            ip_hash="ab" * 32,
+            occurred_at=old,
+        )
+
+    # 결함을 **DB에서** 주입한다. 아카이브 INSERT가 여기서 터지므로 그 시점 트랜잭션은 abort가 되고,
+    # PII 익명화는 이미 실행된 뒤다 — "파괴적 작업이 일부 수행된 뒤 실패"를 정확히 만든다.
+    async with session_factory() as db:
+        await db.execute(
+            text(
+                "ALTER TABLE app.location_access_log_archive "
+                "ADD CONSTRAINT ck_t340_abort CHECK (purpose <> 'nearby_attractions')"
+            )
+        )
+        await db.commit()
+
+    try:
+        async with session_factory() as db:
+            with pytest.raises(admin_retention.RetentionExecutionError):
+                await admin_retention.execute_retention(
+                    db,
+                    actor_user_id=actor_id,
+                    scope="all",
+                    access_reason="T-340 abort test",
+                    confirm_phrase=settings.pinvi_retention_execute_confirm_phrase,
+                )
+            await db.rollback()
+    finally:
+        # 반드시 fresh 세션에서 지운다 — 오염된 세션으로는 DDL이 실행되지 않는다. 남기면 이후의
+        # 모든 아카이브 테스트가 오염된다(컨테이너가 세션 스코프다).
+        async with session_factory() as db:
+            await db.execute(
+                text("ALTER TABLE app.location_access_log_archive DROP CONSTRAINT ck_t340_abort")
+            )
+            await db.commit()
+
+    async with session_factory() as db:
+        receipts = list(
+            (
+                await db.execute(
+                    text(
+                        "SELECT status, result, error_message FROM app.retention_runs "
+                        "WHERE actor_user_id = :actor"
+                    ),
+                    {"actor": actor_id},
+                )
+            ).mappings()
+        )
+        assert len(receipts) == 1
+        assert receipts[0]["status"] == "failed"
+        # 파이썬 가짜 실패가 아니라 DB abort였음을 못 박는다.
+        assert "ck_t340_abort" in (receipts[0]["error_message"] or "")
+
+        # 파괴적 작업은 폐기됐다 — 익명화도, 아카이브도, 삭제도 남지 않았다.
+        row = (
+            (
+                await db.execute(
+                    text("SELECT email, nickname, gender FROM app.users WHERE user_id = :uid"),
+                    {"uid": victim_id},
+                )
+            )
+            .mappings()
+            .one()
+        )
+        assert row["email"] == victim_email, "실패한 실행이 익명화를 커밋했다"
+        assert row["nickname"] == "지울이름"
+        assert row["gender"] == "female"
+
+        live = await db.scalar(text("SELECT count(*) FROM app.location_access_log"))
+        archived = await db.scalar(text("SELECT count(*) FROM app.location_access_log_archive"))
+        assert live == 1, "실패한 실행이 원본 삭제를 커밋했다"
+        assert archived == 0
+
+
+async def test_failure_after_the_completed_update_does_not_hang(session_factory, monkeypatch):  # type: ignore[no-untyped-def]
+    """`completed` UPDATE가 **성공한 뒤** 실패해도 매달리지 않아야 한다.
+
+    그 시점 트랜잭션은 그 행에 `FOR NO KEY UPDATE` 락을 쥐고 있다. 별도 세션으로 같은 행을 UPDATE하면
+    **무기한 블록된다** — 대기 그래프에 간선이 하나뿐이라 PostgreSQL이 deadlock으로 탐지하지 못하고,
+    이 프로세스에는 `lock_timeout`도 `statement_timeout`도 없다. 기록 전에 rollback해 락을 먼저
+    놓는 것이 그 창을 없앤다.
+
+    **타임아웃 없이는 이 테스트를 쓰지 마라** — 회귀 시 실패가 아니라 스위트 전체가 매달린다.
+    """
+    import asyncio
+    import uuid
+
+    from app.core.config import get_settings
+    from app.models.user import User
+    from app.services import admin_retention
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "pinvi_retention_execute_enabled", True, raising=False)
+
+    async with session_factory() as db:
+        actor = User(
+            email=f"hang_{uuid.uuid4().hex[:8]}@pinvi.test", status="active", roles=["user", "cpo"]
+        )
+        db.add(actor)
+        await db.commit()
+        await db.refresh(actor)
+        actor_id = actor.user_id
+
+    def _boom(row: object) -> None:
+        raise RuntimeError("completed UPDATE 직후 실패")
+
+    # `_UPDATE_RUN_SQL`이 성공해 락을 잡은 **직후** 파이썬 예외를 만든다.
+    monkeypatch.setattr(admin_retention, "_run_from_row", _boom)
+
+    async with session_factory() as db:
+        with pytest.raises(admin_retention.RetentionExecutionError):
+            await asyncio.wait_for(
+                admin_retention.execute_retention(
+                    db,
+                    actor_user_id=actor_id,
+                    scope="location",
+                    access_reason="T-340 hang test",
+                    confirm_phrase=settings.pinvi_retention_execute_confirm_phrase,
+                ),
+                timeout=20,
+            )
+        await db.rollback()
+
+    async with session_factory() as db:
+        status = await db.scalar(
+            text("SELECT status FROM app.retention_runs WHERE actor_user_id = :actor"),
+            {"actor": actor_id},
+        )
+        assert status == "failed"

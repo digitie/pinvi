@@ -92,6 +92,42 @@ LIMIT 5;
 - `location_access_log_archive`에 archive row가 있고, active table의 6개월 초과 row가 줄었다.
 - `admin_audit_log`에 `retention.execute`가 같은 실행 사유로 남는다.
 
+### 5.1 `status`가 뜻하는 것
+
+| 값 | 뜻 |
+| --- | --- |
+| `completed` | 전부 커밋됐다. 삭제·익명화·아카이브가 실제로 일어났다. |
+| `failed` | **아무것도 지워지지 않았다.** 시도했고 실패했으며 전부 폐기됐다. |
+| `executing` | **아직 커밋되지 않았다 = 아무것도 지워지지 않았다.** 진행 중이거나, 프로세스가 중간에 죽었다. |
+
+근거: 파괴 SQL·`completed` UPDATE·admin audit 적재가 라우트의 **단일 커밋**에 묶여 있다. 영수증
+행만 그 앞에서 따로 커밋되므로(T-338), 영수증이 남아 있다고 해서 작업이 수행된 것은 아니다.
+
+**상태만으로는 "진행 중"과 "죽음"을 구분할 수 없다.** 그 판정은 §5.2다.
+
+### 5.2 `executing`이 오래 남아 있을 때
+
+```sql
+SELECT run_id, started_at, now() - started_at AS age
+FROM app.retention_runs
+WHERE status = 'executing' AND started_at < now() - interval '15 minutes';
+```
+
+`pg_stat_activity`에서 해당 요청이 살아 있는지 확인한다.
+
+- 살아 있으면 **기다린다.** 큰 배치는 오래 걸릴 수 있다.
+- 없으면 프로세스가 죽은 것이고, 위 표에 따라 **파괴적 작업은 롤백됐다.** 그대로 다시 실행해도
+  안전하다. 필요하면 다음으로 수동 종결한다.
+
+```sql
+UPDATE app.retention_runs
+SET status = 'rolled_back', error_message = 'stale executing reaped'
+WHERE run_id = '<run_id>' AND status = 'executing';
+```
+
+자동 정리 작업(reaper)은 **두지 않는다.** heartbeat가 없어 "살아 있는 장기 run"과 "죽은 run"을
+구분할 수 없고, 순진한 reaper는 진행 중인 실행을 실패로 오기록해 감사 기록을 오염시킨다.
+
 ## 6. 중지 기준
 
 - `RETENTION_PRECHECK_FAILED`: cutoff 이전 pending outbox 또는 chain bridge mismatch를 먼저 해결한다.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from contextlib import suppress
 from datetime import UTC, datetime
@@ -12,7 +13,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.db import session as db_session
 from app.schemas.admin import (
     AdminAuditRetentionSummary,
     AdminLocationLogArchiveSummary,
@@ -43,6 +43,9 @@ class RetentionConfirmPhraseError(RetentionExecutionError):
 
 class RetentionPrecheckError(RetentionExecutionError):
     code = "RETENTION_PRECHECK_FAILED"
+
+
+logger = logging.getLogger(__name__)
 
 
 async def build_retention_summary(
@@ -202,11 +205,15 @@ async def execute_retention(
             .one()
         )
         return _run_from_row(row)
-    except Exception as exc:
-        # 별도 세션을 쓴다. 원인이 DB 오류면 현재 트랜잭션은 이미 abort 상태라 어떤 문장도 실행되지
-        # 않고, 설령 실행돼도 호출부의 `rollback()`이 지운다. 영수증은 그 롤백을 견뎌야 한다.
-        await _record_failed_run(run_id, exc)
-        if isinstance(exc, RetentionExecutionError):
+    except BaseException as exc:
+        # `BaseException`까지 잡는 이유는 취소(`CancelledError`)에도 영수증을 남기기 위해서다.
+        # 다만 취소·인터럽트는 **절대 래핑하지 않는다** — 그것들은 오류가 아니라 중단 신호라
+        # `RetentionExecutionError`로 바꾸면 호출 스택이 중단을 실패로 오해한다.
+        #
+        # 취소 중에는 기록이 남지 않을 수도 있다(취소 스코프 안에서는 `await`가 즉시 되던져진다).
+        # best effort이며, 그래도 시도하지 않는 것보다 낫다.
+        await record_retention_run_failure(db, run_id, exc)
+        if isinstance(exc, RetentionExecutionError) or not isinstance(exc, Exception):
             raise
         raise RetentionExecutionError(str(exc)) from exc
     finally:
@@ -216,29 +223,40 @@ async def execute_retention(
             )
 
 
-async def _record_failed_run(run_id: uuid.UUID, exc: BaseException) -> None:
-    """실패 사실을 **독립 트랜잭션**으로 남긴다.
+async def record_retention_run_failure(
+    db: AsyncSession, run_id: uuid.UUID, exc: BaseException
+) -> None:
+    """실패 사실을 영수증에 남긴다. **호출부의 트랜잭션을 끝낸다.**
 
-    파괴적 작업의 감사 추적이라 "시도했고 실패했다"가 증거로 남아야 한다. 실패 원인이 DB 오류인
-    경우 원래 세션은 abort 상태이므로 같은 세션으로는 아무것도 기록할 수 없다 — 새 세션이 필요한
-    이유다. 여기서 나는 예외는 삼킨다. 원래 예외를 가리는 것이 더 나쁘다.
+    먼저 rollback하는 것이 이 함수의 핵심이고, 두 가지가 동시에 해소된다.
+
+    1. 원인이 DB 오류면 트랜잭션이 abort 상태라 어떤 문장도 실행되지 않는다. rollback이 그것을 푼다.
+    2. `completed` UPDATE가 **성공한 뒤** 실패하면 그 행에 `FOR NO KEY UPDATE` 락이 남아 있다.
+       그 상태에서 별도 세션으로 같은 행을 UPDATE하면 **무기한 블록된다** — 대기 그래프에 간선이
+       하나뿐이라 PostgreSQL이 deadlock으로 탐지하지 못하고, 이 프로세스에는 `lock_timeout`도
+       `statement_timeout`도 설정돼 있지 않다. rollback이 락을 먼저 놓아 그 창을 없앤다.
+
+    그 뒤 commit해야 호출부의 `rollback()`을 견딘다(T-338). 즉 이 함수는 실패 경로에서 파괴적
+    작업의 폐기와 영수증 보존을 **한 세션 안에서** 끝낸다 — 두 번째 커넥션이 필요 없어진다.
+
+    실패해도 예외를 올리지 않는다. 원래 예외를 가리는 것이 더 나쁘기 때문이다. 다만 조용히 넘기지는
+    않는다 — 영수증을 못 남긴 사실 자체가 기록돼야 한다.
     """
-    with suppress(Exception):
-        # 모듈 속성으로 참조한다. 이름으로 import하면 import 시점의 factory에 묶여, 테스트가
-        # `app.db.session`을 교체해도 이 경로만 실제 DB를 본다 — 새 소비자마다 conftest를 손봐야 하는
-        # 구조가 되고 그건 조용히 낡는다.
-        async with db_session.async_session_factory() as session:
-            await session.execute(
-                _UPDATE_RUN_SQL,
-                {
-                    "run_id": run_id,
-                    "status": "failed",
-                    "result": _json({"error": type(exc).__name__}),
-                    "completed_at": datetime.now(UTC),
-                    "error_message": str(exc)[:1000],
-                },
-            )
-            await session.commit()
+    try:
+        await db.rollback()
+        await db.execute(
+            _UPDATE_RUN_SQL,
+            {
+                "run_id": run_id,
+                "status": "failed",
+                "result": _json({"error": type(exc).__name__}),
+                "completed_at": datetime.now(UTC),
+                "error_message": str(exc)[:1000],
+            },
+        )
+        await db.commit()
+    except Exception:
+        logger.exception("retention run %s 실패 영수증을 남기지 못했다", run_id)
 
 
 async def _collect_candidates(
