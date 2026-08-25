@@ -18,6 +18,25 @@
       Map 승인부터 PinVi receipt·Map ACK까지의 격리 paired browser evidence를 기록했다.
       (완료: 2026-08-21)
 
+## 2026-08-25
+
+- [x] **T-323** — Web `e2e` job을 aggregate required check에 결박한다. (완료: 2026-08-24, codex)
+      `aggregate-ci.yml`이 Web/packages 변경 시 `lint-typecheck-build`만 기다리고 `e2e`는 기다리지
+      않아, `Aggregate CI gate`가 유일한 required check인 이 저장소에서 Playwright 실패가 머지를
+      막지 못했다. Web 변경 조건에 `requiredChecks.push("e2e")`를 추가했다(주석에 T-323 인용,
+      `.github/workflows/aggregate-ci.yml:88-91`). **tasks.md 정리 누락으로 열린 채 남아 있던 것을
+      T-324와 함께 발견해 이동한다** — 코드는 이미 완료 상태였다(codex).
+
+- [x] **T-324** — Google OAuth 런타임 배선 복원 + 라이브 검증. (완료: 2026-08-24, PR #467, codex)
+      `infra/docker-compose.app.yml`이 `PINVI_GOOGLE_OAUTH_CLIENT_ID`/`_SECRET`을 API 컨테이너에
+      전달하지 않아 `/auth/oauth/providers`가 Google을 disabled로 판정하고 있었다. compose 전달과
+      `infra/.env.prod.example` 항목을 복원하고 계약 고정 단위 테스트(`test_oauth_runtime_config.py`)를
+      추가했다. 2026-08-24 라이브 검증에서 API provider 응답의 Google 항목이 `enabled: true`이고,
+      실브라우저가 `/login`에서 Google 버튼을 표시한 뒤 authorize 요청을 시작함을 확인
+      (`LIVE_OAUTH_UI=passed provider=google button=visible authorize=started`). client secret과
+      authorize URL 값은 기록하지 않았다. **tasks.md 정리 누락으로 열린 채 남아 있던 것을 이번에
+      발견해 이동한다** — 코드·테스트·라이브 검증은 이미 완료 상태였다(codex PR #467).
+
 ## 2026-08-24
 
 - [x] **T-339 / T-340** — 실패한 retention이 매달리지 않고, 영수증이 진실을 말하게 한다.

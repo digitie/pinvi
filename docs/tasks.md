@@ -54,11 +54,6 @@
   bootstrap)는 착수되지 않은 채 F1D-C one-shot·F1F-B canonical env replace로 대체됐으며, F2 cutover는 미착수다.
   문서 헤더에 역사 기록으로 표기했다. 현행 실행 정본은 위 F1J 항목이며 두 문서가 어긋나면 F1J(신규)를 따른다.
 
-## 인증 / 외부 통합
-
-- [ ] **T-324** — Google OAuth client ID/secret이 API Compose 런타임에 전달되지 않아 사라진
-  소셜 로그인 버튼과 authorize 흐름을 운영 설정에서 복원한다.
-
 ## 데이터 / 보존
 
 - [ ] **T-347** — 503 본문에서 가린 예외 문자열이 `GET /admin/retention/runs`·`/summary`로는 그대로
@@ -101,8 +96,6 @@
   게이트가 job 완료를 기다리는 방식을 바꾼다. T-339 머지 과정에서 발견.
 - [ ] **T-VN-M05-ACTIVATION** — ADR-065 `0100/0101` rebaseline, paired live/restore/review evidence를
   요구하는 M05 production activation receipt gate와 실제 isolated activation 검증을 완료한다.
-- [ ] **T-323** — web 워크플로의 `e2e` 잡이 aggregate required check가 아니라 Playwright 실패가 머지를
-  막지 않는다. 의도된 것인지 확인하고 아니면 required로 올린다.
 
 ## 모바일
 
