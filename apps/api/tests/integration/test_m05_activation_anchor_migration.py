@@ -629,6 +629,49 @@ async def test_0101_fresh_marker_rejects_special_catalog_drift(
 
 
 @pytest.mark.asyncio
+async def test_0101_fresh_marker_rejects_function_and_operator_owner_drift(
+    _database_url: str,
+) -> None:
+    """함수 소유자와 app operator 변화도 fresh catalog fingerprint에서 검출한다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_catalog_owner")
+    role = f"m05_catalog_owner_{uuid.uuid4().hex[:12]}"
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.connect() as connection:
+                for drift_sql in (
+                    (
+                        f'CREATE ROLE "{role}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE',
+                        f'ALTER FUNCTION app.audit_log_append_only() OWNER TO "{role}"',
+                    ),
+                    (
+                        None,
+                        "CREATE OPERATOR app.#=# (LEFTARG = integer, RIGHTARG = integer, "
+                        "PROCEDURE = pg_catalog.int4eq)",
+                    ),
+                ):
+                    transaction = await connection.begin()
+                    try:
+                        if drift_sql[0] is not None:
+                            await connection.execute(text(drift_sql[0]))
+                        await connection.execute(text(drift_sql[1]))
+                        migration = _activation_migration_module()
+                        with pytest.raises(
+                            RuntimeError, match="canonical fresh 0100 catalog fingerprint"
+                        ):
+                            await connection.run_sync(migration._assert_fresh_0100_marker)
+                    finally:
+                        await transaction.rollback()
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
 async def test_0101_legacy_handoff_revalidates_receipt_data_before_ddl(
     _database_url: str,
     monkeypatch: pytest.MonkeyPatch,

@@ -151,7 +151,8 @@ WITH object_lines(line) AS (
   WHERE namespace.nspname IN ('app', 'x_extension')
   UNION ALL
   SELECT jsonb_build_array(
-      'function', procedure.oid::regprocedure::text, language.lanname,
+      'function', namespace.nspname, procedure.oid::regprocedure::text,
+      pg_get_userbyid(procedure.proowner), language.lanname,
       procedure.prosecdef, procedure.proleakproof, procedure.proisstrict,
       procedure.provolatile, procedure.proparallel, COALESCE(procedure.proconfig::text, ''),
       COALESCE(procedure.prosrc, ''), COALESCE(procedure.proacl::text, '')
@@ -159,6 +160,29 @@ WITH object_lines(line) AS (
   FROM pg_proc AS procedure
   JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
   JOIN pg_language AS language ON language.oid = procedure.prolang
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'operator', namespace.nspname, operator_row.oprname, operator_row.oprkind,
+      pg_get_userbyid(operator_row.oprowner), operator_row.oprcanmerge,
+      operator_row.oprcanhash,
+      CASE WHEN operator_row.oprleft = 0 THEN ''
+           ELSE pg_catalog.format_type(operator_row.oprleft, NULL::integer) END,
+      CASE WHEN operator_row.oprright = 0 THEN ''
+           ELSE pg_catalog.format_type(operator_row.oprright, NULL::integer) END,
+      pg_catalog.format_type(operator_row.oprresult, NULL::integer),
+      CASE WHEN operator_row.oprcom = 0 THEN ''
+           ELSE operator_row.oprcom::regoperator::text END,
+      CASE WHEN operator_row.oprnegate = 0 THEN ''
+           ELSE operator_row.oprnegate::regoperator::text END,
+      operator_row.oprcode::regprocedure::text,
+      CASE WHEN operator_row.oprrest = 0 THEN ''
+           ELSE operator_row.oprrest::regprocedure::text END,
+      CASE WHEN operator_row.oprjoin = 0 THEN ''
+           ELSE operator_row.oprjoin::regprocedure::text END
+    )::text
+  FROM pg_operator AS operator_row
+  JOIN pg_namespace AS namespace ON namespace.oid = operator_row.oprnamespace
   WHERE namespace.nspname IN ('app', 'x_extension')
   UNION ALL
   SELECT jsonb_build_array(

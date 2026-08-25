@@ -300,13 +300,18 @@ GRANT USAGE ON SCHEMA x_extension TO :"app_role", :"schema_owner", :"migration_o
 REVOKE ALL ON FUNCTION x_extension.digest(bytea, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION x_extension.digest(bytea, text)
   TO :"app_role", :"schema_owner", :"migration_owner";
+SELECT format('CREATE SCHEMA IF NOT EXISTS ops AUTHORIZATION %I', :'migration_owner')
+WHERE NOT EXISTS (
+    SELECT 1 FROM pg_namespace WHERE nspname = 'ops'
+)
+\gexec
 SELECT format('CREATE SCHEMA IF NOT EXISTS pinvi_internal AUTHORIZATION %I', :'schema_owner')
 WHERE NOT EXISTS (
     SELECT 1 FROM pg_namespace WHERE nspname = 'pinvi_internal'
 )
 \gexec
 REVOKE ALL ON SCHEMA pinvi_internal FROM PUBLIC;
-GRANT USAGE ON SCHEMA pinvi_internal TO :"schema_owner";
+GRANT USAGE ON SCHEMA pinvi_internal TO :"schema_owner", :"migration_owner";
 CREATE OR REPLACE FUNCTION pinvi_internal.acquire_fresh_0101_database_fence()
 RETURNS void
 LANGUAGE plpgsql
@@ -337,36 +342,9 @@ SELECT format('ALTER SCHEMA app OWNER TO %I', :'schema_owner')
 SQL
 fi
 
-grant_app_runtime_privileges() {
-  default_privilege_owner="$1"
-  psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host=app-postgres \
-    --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
-    --set="app_role=${PINVI_APP_DB_USER}" \
-    --set="default_privilege_owner=${default_privilege_owner}" \
-    >/dev/null <<'SQL'
-REVOKE ALL ON SCHEMA app FROM PUBLIC;
-GRANT USAGE ON SCHEMA app TO :"app_role";
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO :"app_role";
-GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA app TO :"app_role";
-ALTER DEFAULT PRIVILEGES FOR ROLE :"default_privilege_owner" IN SCHEMA app
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"app_role";
-ALTER DEFAULT PRIVILEGES FOR ROLE :"default_privilege_owner" IN SCHEMA app
-  GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"app_role";
--- runtime은 application data만 갱신할 수 있다. migration provenance는
--- schema owner / one-shot migrator만 바꿀 수 있도록 broad table grant 뒤에 제외한다.
-SELECT format('REVOKE ALL PRIVILEGES ON TABLE app.alembic_version FROM %I', :'app_role')
-WHERE to_regclass('app.alembic_version') IS NOT NULL
-\gexec
-SQL
-}
-
-if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then
-  # fresh 0100의 canonical catalog fingerprint에는 runtime ACL을 아직 넣지 않는다.
-  # 0101이 fingerprint와 M05 DDL을 완료한 뒤 app runtime 권한을 원자적으로 부여한다.
-  :
-else
-  grant_app_runtime_privileges "${PINVI_APP_SCHEMA_OWNER}"
-fi
+# fresh와 legacy 모두 0101이 catalog fingerprint·handoff를 완료한 뒤 app runtime 권한을
+# 원자적으로 부여한다. legacy receipt가 결박되기 전에는 app ACL/default ACL을 바꾸지 않는다.
+:
 
 role_topology_safe="$(
   psql --no-psqlrc --no-password --tuples-only --no-align --host=app-postgres \

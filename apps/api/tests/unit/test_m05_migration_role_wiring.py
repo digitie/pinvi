@@ -80,9 +80,11 @@ def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
     assert "GRANT EXECUTE ON FUNCTION x_extension.digest(bytea, text)" in bootstrap
     assert "WHERE membership.roleid = owner.oid" in bootstrap
     assert "WHERE membership.roleid = migrator.oid" in bootstrap
-    assert "grant_app_runtime_privileges()" in bootstrap
-    assert 'if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then' in bootstrap
-    assert 'grant_app_runtime_privileges "${PINVI_APP_SCHEMA_OWNER}"' in bootstrap
+    assert "CREATE SCHEMA IF NOT EXISTS ops AUTHORIZATION" in bootstrap
+    assert (
+        'GRANT USAGE ON SCHEMA pinvi_internal TO :"schema_owner", :"migration_owner"' in bootstrap
+    )
+    assert "0101이 catalog fingerprint·handoff를 완료한 뒤 app runtime 권한" in bootstrap
     assert "pinvi_internal.acquire_fresh_0101_database_fence()" in bootstrap
     assert 'GRANT CREATE ON DATABASE :"database_name" TO :"schema_owner";' in bootstrap
     assert (
@@ -231,10 +233,13 @@ def test_migration_wrappers_open_only_for_the_one_shot_and_seal_afterward() -> N
 def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
     for name in ("scripts/docker-app.sh", "scripts/deploy-node.sh"):
         source = (ROOT / name).read_text(encoding="utf-8")
+        recovery_name = (
+            "restore_runtime_writers_without_rollback()"
+            if "restore_runtime_writers_without_rollback()" in source
+            else "restore_runtime_writers()"
+        )
         recovery = source[
-            source.index("restore_runtime_writers() {") : source.index(
-                "m05_legacy_rebaseline_profile() {"
-            )
+            source.index(recovery_name) : source.index("m05_legacy_rebaseline_profile() {")
         ]
         assert 'local restore_failed="0"' in recovery
         assert 'docker start "$RUNTIME_API_CONTAINER_ID"' in recovery
@@ -242,14 +247,18 @@ def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
         assert "RUNTIME_API_IMAGE_ID" in recovery
         assert "RUNTIME_DAGSTER_IMAGE_ID" in recovery
         assert "pinvi_verify_or_remove_running_dagster" not in recovery
-        assert 'wait_for_url "http://127.0.0.1:${API_PORT}/health/db" "API DB restore"' in recovery
+        assert 'wait_for_url "http://127.0.0.1:${API_PORT}/health" "API restore"' in recovery
+        assert "feature-reference-reconciliation" in recovery
+        assert "wait_for_container_health" in source
         assert 'if [[ "$restore_failed" != "0" ]]; then' in recovery
         assert "release_migrator_lifecycle_lock || true" in source
     docker_app = (ROOT / "scripts" / "docker-app.sh").read_text(encoding="utf-8")
     assert "PINVI_DEV_FORCE_KILL" in docker_app
     assert "refusing to terminate it" in docker_app
+    assert "configured_environment()" in docker_app
+    assert "staging|production)" in docker_app
     assert "smoke_on_exit()" in docker_app
-    assert "restore_runtime_writers || true" in docker_app
+    assert 'restore_runtime_writers_on_exit "$exit_code"' in docker_app
 
 
 def test_fresh_0101_and_role_bootstrap_fence_direct_app_schema_create() -> None:
@@ -280,6 +289,7 @@ def test_docker_app_up_uses_the_explicit_legacy_role_profile_before_migration() 
     assert 'local legacy_rebaseline="${1:-0}"' not in up_deps
     assert "legacy_rebaseline_receipt_file >/dev/null" in up
     assert up.index("acquire_migrator_lifecycle_lock") < up.index("free_app_ports")
+    assert up.index("drain_runtime_writers") < up.index("free_app_ports")
     assert (
         up.index("free_app_ports")
         < up.index("up_deps")

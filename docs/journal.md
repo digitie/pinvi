@@ -6,16 +6,21 @@
 
 - `origin/main` 최신 상태로 rebase한 뒤 fresh `0100` catalog fingerprint를 공통 모듈로 분리하고,
   정책·collation 같은 특수 schema object drift와 schema ACL의 의미상 동등한 표현을 검증하도록
-  보강했다. 0100은 durable origin에 fingerprint를 저장하고 0101은 이를 재계산해 확인한다.
-- managed fresh topology는 bootstrap이 `pinvi_internal` admission fence와 `ops` schema를 먼저
-  확보한다. migration owner에는 database CREATE를 주지 않으며, 0101 artifact의 idempotent
-  `ops` schema 문장은 이미 있는 managed schema에서 건너뛰어 권한 경계를 유지한다.
-- deploy fallback은 migration 전 API/Dagster의 정확한 container/image를 저장·복구하고,
-  one-shot migrator seal을 최대 3회 재시도하며 실패 시 fail-close한다. 특수 catalog drift와
-  별도 non-runtime migration owner 회귀 테스트를 추가했다.
-- 검증: M05 PostgreSQL 통합 `29 passed, 1 warning`, 관련 unit `17 passed`, Ruff/format, shell
-  syntax, `git diff --check` 통과. `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 건드리지
-  않았으며, live admin 인증 실패로 현재 live E2E gate는 아직 미통과다.
+  보강했다. 함수 owner·operator까지 fingerprint에 포함하고, 0100은 durable origin에
+  fingerprint를 저장하며 0101은 이를 재계산해 확인한다.
+- managed fresh topology는 bootstrap이 role topology 검사 전에 `ops` schema를
+  `migration_owner` 소유로 확보하고 `pinvi_internal` admission fence를 만든다. migration
+  owner에는 database CREATE를 주지 않으며, 0101 artifact의 idempotent `ops` schema 문장은
+  이미 있는 managed schema에서 건너뛰어 권한 경계를 유지한다.
+- deploy fallback은 migration 전 API/Dagster의 정확한 container/image와 원래 이름을 보존하고,
+  새 API/Web/Dagster의 readiness·Docker healthcheck·smoke가 모두 통과한 뒤에만 snapshot을
+  폐기한다. 실패하면 새 writer를 제거하고 원래 이름·image의 writer를 복구하며, one-shot
+  migrator seal은 최대 3회 재시도하고 실패 시 fail-close한다. reset은 env-file의 production
+  설정도 읽어 volume 삭제를 차단한다.
+- 검증: M05 PostgreSQL 통합 `30 passed, 1 warning`, API unit `1287 passed, 3 warnings`, 관련
+  unit `14 passed`, strict mypy `236 source files`, Ruff/format, shell syntax,
+  `git diff --check` 통과. `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 건드리지 않았으며,
+  live admin 인증 실패로 현재 live E2E gate는 아직 미통과다.
 
 ## 2026-08-25 (codex) — PR #477 최종 fence·복구 보강
 

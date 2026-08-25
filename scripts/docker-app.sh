@@ -23,6 +23,7 @@ RUNTIME_API_CONTAINER_ID=""
 RUNTIME_API_IMAGE_ID=""
 RUNTIME_DAGSTER_CONTAINER_ID=""
 RUNTIME_DAGSTER_IMAGE_ID=""
+RUNTIME_WRITERS_DRAINED="0"
 
 usage() {
   cat <<'EOF'
@@ -141,6 +142,27 @@ wait_for_url() {
   return 1
 }
 
+wait_for_container_health() {
+  local container_id="$1"
+  local label="$2"
+  local status=""
+  for _ in $(seq 1 30); do
+    status="$(docker container inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+      "$container_id" 2>/dev/null || true)"
+    case "$status" in
+      healthy) return 0 ;;
+      unhealthy|exited|dead) break ;;
+      none)
+        echo "${label} has no Docker healthcheck" >&2
+        return 1
+        ;;
+    esac
+    sleep 2
+  done
+  echo "${label} did not become healthy: ${status:-missing}" >&2
+  return 1
+}
+
 build() {
   require_docker
   require_python
@@ -201,6 +223,7 @@ drain_runtime_writers() {
   RUNTIME_API_IMAGE_ID=""
   RUNTIME_DAGSTER_CONTAINER_ID=""
   RUNTIME_DAGSTER_IMAGE_ID=""
+  RUNTIME_WRITERS_DRAINED="0"
   if ! api_container_id="$(runtime_writer_container_id app-api)"; then
     drain_failed="1"
   elif [[ -n "$api_container_id" ]]; then
@@ -237,7 +260,11 @@ drain_runtime_writers() {
   if ! compose --profile etl stop app-dagster; then
     drain_failed="1"
   fi
-  [[ "$drain_failed" == "0" ]]
+  if [[ "$drain_failed" == "0" ]]; then
+    RUNTIME_WRITERS_DRAINED="1"
+    return 0
+  fi
+  return 1
 }
 
 restore_runtime_writers() {
@@ -254,7 +281,15 @@ restore_runtime_writers() {
       if ! runtime_writer_container_is_exact app-api "$RUNTIME_API_CONTAINER_ID" "$RUNTIME_API_IMAGE_ID"; then
         restore_failed="1"
       fi
-      if ! wait_for_url "http://127.0.0.1:${API_PORT}/health/db" "API DB restore"; then
+      if ! wait_for_url "http://127.0.0.1:${API_PORT}/health" "API restore"; then
+        restore_failed="1"
+      fi
+      if ! wait_for_url \
+        "http://127.0.0.1:${API_PORT}/health/feature-reference-reconciliation" \
+        "M05 worker restore"; then
+        restore_failed="1"
+      fi
+      if ! wait_for_container_health "$RUNTIME_API_CONTAINER_ID" "API container restore"; then
         restore_failed="1"
       fi
     fi
@@ -273,6 +308,10 @@ restore_runtime_writers() {
       if ! wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster restore"; then
         restore_failed="1"
       fi
+      if ! wait_for_container_health \
+        "$RUNTIME_DAGSTER_CONTAINER_ID" "Dagster container restore"; then
+        restore_failed="1"
+      fi
     fi
   fi
   if [[ "$restore_failed" != "0" ]]; then
@@ -284,10 +323,11 @@ restore_runtime_writers() {
   RUNTIME_API_IMAGE_ID=""
   RUNTIME_DAGSTER_CONTAINER_ID=""
   RUNTIME_DAGSTER_IMAGE_ID=""
+  RUNTIME_WRITERS_DRAINED="0"
 }
 
 restore_runtime_writers_on_exit() {
-  local exit_code=$?
+  local exit_code="${1:-$?}"
   local cleanup_failed="0"
   if [[ "$MIGRATOR_LOGIN_NEEDS_SEAL" == "1" ]]; then
     if ! seal_migrator_login "$MIGRATOR_LEGACY_REBASELINE"; then
@@ -472,7 +512,7 @@ migrate_under_lifecycle_lock() {
     fi
   fi
   MIGRATOR_LEGACY_REBASELINE="$legacy_rebaseline"
-  if ! drain_runtime_writers; then
+  if [[ "$RUNTIME_WRITERS_DRAINED" != "1" ]] && ! drain_runtime_writers; then
     log "runtime writer drain failed"
     restore_runtime_writers || log "runtime writer restoration failed"
     return 1
@@ -544,6 +584,10 @@ up() {
     legacy_rebaseline_receipt_file >/dev/null
   fi
   acquire_migrator_lifecycle_lock
+  if ! drain_runtime_writers; then
+    log "runtime writer drain failed"
+    return 1
+  fi
   free_app_ports
   up_deps
   migrate_under_lifecycle_lock
@@ -553,6 +597,13 @@ up() {
   wait_for_url "http://127.0.0.1:${RUSTFS_PORT}/health/live" "RustFS"
   wait_for_url "http://127.0.0.1:${API_PORT}/health" "API"
   wait_for_url "http://127.0.0.1:${API_PORT}/health/feature-reference-reconciliation" "M05 worker"
+  local api_container_id
+  api_container_id="$(runtime_writer_container_id app-api)"
+  [[ -n "$api_container_id" && "$api_container_id" != *$'\n'* ]] || {
+    echo "running API container could not be identified" >&2
+    return 1
+  }
+  wait_for_container_health "$api_container_id" "API container"
   wait_for_url "http://127.0.0.1:${WEB_PORT}/" "Web"
   release_migrator_lifecycle_lock
   log "ready: API http://127.0.0.1:${API_PORT}, Web http://127.0.0.1:${WEB_PORT}, RustFS http://127.0.0.1:${RUSTFS_PORT}"
@@ -563,9 +614,23 @@ down() {
   compose down --remove-orphans
 }
 
+configured_environment() {
+  local environment_name="${PINVI_ENVIRONMENT:-}"
+  if [[ -z "$environment_name" && -f "$ENV_FILE" ]]; then
+    environment_name="$(sed -nE \
+      's/^[[:space:]]*PINVI_ENVIRONMENT[[:space:]]*=[[:space:]]*([^[:space:]#]+).*/\1/p' \
+      "$ENV_FILE" | tail -n 1)"
+    environment_name="${environment_name#\"}"
+    environment_name="${environment_name%\"}"
+    environment_name="${environment_name#\'}"
+    environment_name="${environment_name%\'}"
+  fi
+  printf '%s\n' "${environment_name:-smoke}"
+}
+
 reset() {
   require_docker
-  case "${PINVI_ENVIRONMENT:-smoke}" in
+  case "$(configured_environment)" in
     staging|production)
       echo "reset is disabled for staging/production; use an approved recovery procedure" >&2
       return 2
@@ -599,14 +664,21 @@ smoke() {
     fi
   }
   smoke_on_exit() {
-    local exit_code=$?
-    restore_runtime_writers || true
-    cleanup_smoke || true
-    release_migrator_lifecycle_lock || true
-    pinvi_cleanup_api_build_context || true
+    local exit_code="${1:-$?}"
+    local cleanup_failed="0"
+    trap - EXIT
+    if ! restore_runtime_writers_on_exit "$exit_code"; then
+      cleanup_failed="1"
+    fi
+    if ! cleanup_smoke; then
+      cleanup_failed="1"
+    fi
+    if [[ "$exit_code" == "0" && "$cleanup_failed" != "0" ]]; then
+      exit_code="1"
+    fi
     return "$exit_code"
   }
-  trap smoke_on_exit EXIT
+  trap 'smoke_on_exit "$?"' EXIT
 
   reset
   build
@@ -624,13 +696,12 @@ smoke() {
   curl -fsS "http://127.0.0.1:${RUSTFS_PORT}/health/live"
   echo
   log "smoke test passed"
-  trap - EXIT
-  cleanup_smoke
+  smoke_on_exit 0
 }
 
 main() {
   cd "$ROOT_DIR"
-  trap restore_runtime_writers_on_exit EXIT
+  trap 'restore_runtime_writers_on_exit "$?"' EXIT
   local command="${1:-}"
   [[ -n "$command" ]] || { usage; exit 2; }
   shift || true
