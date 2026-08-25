@@ -107,6 +107,29 @@
       authorize URL 값은 기록하지 않았다. **tasks.md 정리 누락으로 열린 채 남아 있던 것을 이번에
       발견해 이동한다** — 코드·테스트·라이브 검증은 이미 완료 상태였다(codex PR #467).
 
+- [x] **T-311·T-318** — 워크스페이스 전체 react 정렬로 `apps/mobile`의 react 중복과
+      `expo-router` nest 문제를 함께 해소한다. (완료: 2026-08-25, PR #484, claude — 머지 대기)
+      루트 `overrides`에 `react`/`react-dom`을 `19.2.6`(웹과 동일본) 단일 버전으로 고정하고
+      `apps/mobile`의 `react`/`react-dom` 선언을 정확 버전(`19.2.3`)에서 caret(`^19.2.3`)로 풀어
+      override가 실제로 먹히게 했다. **기존 `package-lock.json`을 남긴 채 `npm install`만 다시
+      돌리면 override 값이 바뀌어도 이미 lock에 박힌 하위 트리는 재해석되지 않는다** — 이 사실을
+      react가 여전히 `apps/mobile/node_modules`에 `19.2.3`로 남아 있는 것으로 실측했다.
+      `package-lock.json`을 지우고 완전 재해석해야 실제로 단일본(`19.2.6`)이 된다.
+      완전 재해석은 다른 transitive 패키지도 latest-satisfying으로 끌어올려
+      `eslint-plugin-react-hooks`가 `5.2.0`→`7.1.1`로 건너뛰었고, 그 메이저에서 새로 추가된
+      React Compiler류 규칙(`react-hooks/set-state-in-effect`, `react-hooks/refs`,
+      `react-hooks/immutability`)이 web 전역 36개 파일에서 새로 실패해 lint를 깨뜨렸다 —
+      `eslint-config-next`가 실제로 요구하는 범위는 `^5.0.0`뿐이라 관련 없는 회귀임을 확인하고
+      루트 `overrides`에 `eslint-plugin-react-hooks: 5.2.0`을 추가로 고정해 원래 버전으로
+      되돌렸다. 검증: `expo-doctor`가 react/react-dom 중복 신호를 더 이상 내지 않음(잔여 2건은
+      SDK-56 patch 드리프트·Hermes V1 회귀로 T-352로 분리), `expo-router/_ctx-shared` 모듈
+      해석이 root 배치만으로 성공(T-318의 심링크 우회 불필요), mobile
+      `typecheck`/`lint`/web `typecheck`/`lint`/`build` 모두 통과. 개발 환경 메모: 이 worktree의
+      `npm install`이 WSL2 DrvFs(`/mnt/f`) 위에서 대량 파일 삭제·교체 시 `ENOTEMPTY`/`EACCES`
+      rename 경합을 반복적으로 냈다 — `node_modules` 삭제는 Windows 네이티브
+      `Remove-Item -Recurse -Force`로 재시도해 우회했고, 남은 npm 임시
+      rename 디렉터리(`.<pkg>-<hash>`)를 정리한 뒤에야 install이 안정됐다.
+
 ## 2026-08-24
 
 - [x] **T-339 / T-340** — 실패한 retention이 매달리지 않고, 영수증이 진실을 말하게 한다.

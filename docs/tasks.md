@@ -81,15 +81,12 @@
 
 - [ ] **T-320** — 모바일 위치 동의 gate 런타임 확인. VWorld 키가 있는 환경에서 지도 표면을 띄우고
   "현재 위치로"가 OS 권한 요청 전 동의를 받는지 확인한다(T-310 smoke에서 키 부재로 미확인).
-- [ ] **T-311** — `expo-doctor` 신호 정리(현재 3건 실패, informational): SDK-56 patch 드리프트
-  (`expo`/`expo-router`/`expo-*` 9종), Hermes V1 회귀, **react 중복**(root `19.2.6` ↔ `apps/mobile`
-  `19.2.3`). 중복 해소는 워크스페이스 전체 react 정렬(웹 런타임 영향)이라 T-310에서 분리했다.
-  루트 `overrides`로 단일 버전을 강제하는 안을 우선 검토하되 웹 build/e2e 재검증을 함께 건다.
-  드리프트 흡수는 dev client 재빌드를 동반하므로 별도 PR로 한다.
-- [ ] **T-318** — `npm install` 후 `expo-router`가 `apps/mobile/node_modules`에 nest되는데 그 의존
-  `@expo/router-server`는 root로 hoist돼 `expo start`가 `expo-router/_ctx-shared` 해석에 실패한다.
-  현재는 root `node_modules/expo-router` 심링크로 우회 중이며, 저장소 차원 해법(단일 react 정렬 또는
-  root 배치)을 정해야 `expo start`가 클린 체크아웃에서 바로 돈다.
+- [ ] **T-352** — `expo-doctor` 잔여 2건(T-311의 react 중복 해소 후 재확인 — react/react-dom은
+  이제 워크스페이스 전체 `19.2.6` 단일본이라 통과): SDK-56 patch 드리프트로 인한 Hermes V1 메모리
+  회귀(Expo SDK 57 `expo@^57.0.9` + React Native 0.86.2+ 업그레이드 필요)와 `react-native-screens`
+  중복(앱 직접 의존 `4.25.2` ↔ `expo-router` 내부 `4.27.0` — expo-doctor가 이제 이를 "duplicate
+  dependencies"로 분류). `npx expo install --fix`류 SDK 정렬은 dev client 재빌드를 동반하므로
+  별도 PR로 검증한다.
 
 ## 보류 / 미래 작업
 
