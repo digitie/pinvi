@@ -149,6 +149,8 @@ def test_writer_startup_stays_under_the_shared_lifecycle_lock_until_ready() -> N
     docker_app = (ROOT / "scripts" / "docker-app.sh").read_text(encoding="utf-8")
     docker_up = _function_body(docker_app, "up")
     assert docker_up.index("acquire_migrator_lifecycle_lock") < docker_up.index("up_deps")
+    assert docker_up.index("acquire_migrator_lifecycle_lock") < docker_up.index("free_app_ports")
+    assert docker_up.index("free_app_ports") < docker_up.index("up_deps")
     assert docker_up.index("migrate_under_lifecycle_lock") < docker_up.index(
         "compose up -d app-api app-web"
     )

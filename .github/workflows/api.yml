@@ -110,7 +110,11 @@ jobs:
             scripts/restore-hotswap.sh \
             scripts/restore-staging-drill.sh \
             scripts/n150-playwright-runner.sh \
-            scripts/trusted-hotswap-root.sh
+            scripts/trusted-hotswap-root.sh \
+            scripts/deploy-node.sh \
+            scripts/docker-app.sh \
+            scripts/migrator-lifecycle-lock.sh \
+            scripts/api-image-provenance.sh
 
       - name: ruff format check
         run: ruff format --check .

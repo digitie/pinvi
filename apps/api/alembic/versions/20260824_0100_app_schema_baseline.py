@@ -19,6 +19,7 @@ from pathlib import Path
 import sqlalchemy as sa
 
 from alembic import op
+from app.db.m05_catalog_fingerprint import catalog_fingerprint
 
 revision: str = "20260824_0100"
 down_revision: str | None = None
@@ -133,6 +134,7 @@ def upgrade() -> None:
     op.execute("SET LOCAL check_function_bodies = false")
     for statement in _baseline_statements():
         op.execute(sa.text(statement))
+    catalog_lines, catalog_sha256 = catalog_fingerprint(op.get_bind())
     op.execute(sa.text(f"COMMENT ON SCHEMA app IS '{_FRESH_BASELINE_SCHEMA_COMMENT}'"))
     op.execute(sa.text("CREATE SCHEMA IF NOT EXISTS pinvi_internal"))
     op.execute(
@@ -142,23 +144,33 @@ def upgrade() -> None:
                 marker text PRIMARY KEY,
                 baseline_sha256 text NOT NULL,
                 database_oid oid NOT NULL,
-                system_identifier text NOT NULL
+                system_identifier text NOT NULL,
+                catalog_lines integer NOT NULL,
+                catalog_sha256 text NOT NULL
             )
             """
         )
     )
-    op.execute(
+    op.get_bind().execute(
         sa.text(
-            f"""
+            """
             INSERT INTO pinvi_internal.baseline_origin
-                (marker, baseline_sha256, database_oid, system_identifier)
+                (marker, baseline_sha256, database_oid, system_identifier,
+                 catalog_lines, catalog_sha256)
             VALUES
-                ('{_FRESH_BASELINE_SCHEMA_COMMENT}', '{_BASELINE_SHA256}',
+                (:marker, :baseline_sha256,
                  (SELECT database_row.oid FROM pg_database AS database_row
                   WHERE database_row.datname = current_database()),
-                 (pg_control_system()).system_identifier::text)
-            """  # noqa: S608 - both interpolated values are module constants
-        )
+                 (pg_control_system()).system_identifier::text,
+                 :catalog_lines, :catalog_sha256)
+            """
+        ),
+        {
+            "marker": _FRESH_BASELINE_SCHEMA_COMMENT,
+            "baseline_sha256": _BASELINE_SHA256,
+            "catalog_lines": catalog_lines,
+            "catalog_sha256": catalog_sha256,
+        },
     )
     op.execute(sa.text("REVOKE ALL ON SCHEMA pinvi_internal FROM PUBLIC"))
     op.execute(sa.text("REVOKE ALL ON TABLE pinvi_internal.baseline_origin FROM PUBLIC"))

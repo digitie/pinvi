@@ -15,8 +15,14 @@ DAGSTER_PORT="${PINVI_DAGSTER_DEV_PORT:-12802}"
 # Dagster webserver(profile etl)를 같이 띄울지. 운영에서 pinvi-dagster.<domain>을 쓰면 1.
 ENABLE_DAGSTER="${PINVI_ENABLE_DAGSTER:-0}"
 MIGRATOR_ONE_SHOT_PASSWORD=""
+MIGRATOR_LOGIN_NEEDS_SEAL="0"
+MIGRATOR_LEGACY_REBASELINE="0"
 RUNTIME_API_WAS_RUNNING="0"
 RUNTIME_DAGSTER_WAS_RUNNING="0"
+RUNTIME_API_CONTAINER_ID=""
+RUNTIME_API_IMAGE_ID=""
+RUNTIME_DAGSTER_CONTAINER_ID=""
+RUNTIME_DAGSTER_IMAGE_ID=""
 
 usage() {
   cat <<'EOF'
@@ -105,21 +111,78 @@ build_images() {
   fi
 }
 
+runtime_writer_container_id() {
+  local service="$1"
+  if [[ "$service" == "app-dagster" ]]; then
+    compose --profile etl ps -q --status running "$service"
+  else
+    compose ps -q --status running "$service"
+  fi
+}
+
+runtime_writer_container_is_exact() {
+  local service="$1"
+  local container_id="$2"
+  local expected_image_id="$3"
+  local running actual_image_id
+  if ! running="$(docker container inspect --format '{{.State.Running}}' "$container_id")"; then
+    return 1
+  fi
+  if [[ "$running" != "true" ]]; then
+    return 1
+  fi
+  if ! actual_image_id="$(docker container inspect --format '{{.Image}}' "$container_id")"; then
+    return 1
+  fi
+  if [[ "$actual_image_id" != "$expected_image_id" ]]; then
+    echo "${service} restore image drifted from the pre-migration container" >&2
+    return 1
+  fi
+}
+
 drain_runtime_writers() {
   local drain_failed="0"
+  local api_container_id api_image_id dagster_container_id dagster_image_id
   RUNTIME_API_WAS_RUNNING="0"
   RUNTIME_DAGSTER_WAS_RUNNING="0"
-  if [[ -n "$(compose ps -q --status running app-api)" ]]; then
+  RUNTIME_API_CONTAINER_ID=""
+  RUNTIME_API_IMAGE_ID=""
+  RUNTIME_DAGSTER_CONTAINER_ID=""
+  RUNTIME_DAGSTER_IMAGE_ID=""
+  if ! api_container_id="$(runtime_writer_container_id app-api)"; then
+    drain_failed="1"
+  elif [[ -n "$api_container_id" ]]; then
+    if [[ "$api_container_id" == *$'\n'* ]]; then
+      drain_failed="1"
+    elif ! api_image_id="$(docker container inspect --format '{{.Image}}' "$api_container_id")"; then
+      drain_failed="1"
+    fi
+  fi
+  # 이미 실행 중인 Dagster는 현재 호출의 enable flag와 무관하게 writer이므로 drain한다.
+  if ! dagster_container_id="$(runtime_writer_container_id app-dagster)"; then
+    drain_failed="1"
+  elif [[ -n "$dagster_container_id" ]]; then
+    if [[ "$dagster_container_id" == *$'\n'* ]]; then
+      drain_failed="1"
+    elif ! dagster_image_id="$(docker container inspect --format '{{.Image}}' "$dagster_container_id")"; then
+      drain_failed="1"
+    fi
+  fi
+  [[ "$drain_failed" == "0" ]] || return 1
+  if [[ -n "$api_container_id" ]]; then
+    RUNTIME_API_CONTAINER_ID="$api_container_id"
+    RUNTIME_API_IMAGE_ID="$api_image_id"
     RUNTIME_API_WAS_RUNNING="1"
   fi
-  if [[ -n "$(compose --profile etl ps -q --status running app-dagster)" ]]; then
+  if [[ -n "$dagster_container_id" ]]; then
+    RUNTIME_DAGSTER_CONTAINER_ID="$dagster_container_id"
+    RUNTIME_DAGSTER_IMAGE_ID="$dagster_image_id"
     RUNTIME_DAGSTER_WAS_RUNNING="1"
   fi
   log "stopping API and Dagster writers before migration"
   if ! compose stop app-api; then
     drain_failed="1"
   fi
-  # 이미 실행 중인 Dagster는 현재 호출의 enable flag와 무관하게 writer이므로 drain한다.
   if ! compose --profile etl stop app-dagster; then
     drain_failed="1"
   fi
@@ -128,12 +191,16 @@ drain_runtime_writers() {
 
 restore_runtime_writers() {
   local restore_failed="0"
+  local running
   if [[ "$RUNTIME_API_WAS_RUNNING" == "1" ]]; then
-    log "restoring API after migration attempt"
-    if ! compose up -d app-api; then
+    log "restoring the pre-migration API container"
+    if ! running="$(docker container inspect --format '{{.State.Running}}' "$RUNTIME_API_CONTAINER_ID")"; then
       restore_failed="1"
     else
-      if ! pinvi_verify_or_remove_running_app; then
+      if [[ "$running" != "true" ]] && ! docker start "$RUNTIME_API_CONTAINER_ID" >/dev/null; then
+        restore_failed="1"
+      fi
+      if ! runtime_writer_container_is_exact app-api "$RUNTIME_API_CONTAINER_ID" "$RUNTIME_API_IMAGE_ID"; then
         restore_failed="1"
       fi
       if ! wait_for_url "http://127.0.0.1:${API_PORT}/health/db" "API DB restore"; then
@@ -142,11 +209,14 @@ restore_runtime_writers() {
     fi
   fi
   if [[ "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
-    log "restoring Dagster after migration attempt"
-    if ! compose --profile etl up -d app-dagster; then
+    log "restoring the pre-migration Dagster container"
+    if ! running="$(docker container inspect --format '{{.State.Running}}' "$RUNTIME_DAGSTER_CONTAINER_ID")"; then
       restore_failed="1"
     else
-      if ! pinvi_verify_or_remove_running_dagster; then
+      if [[ "$running" != "true" ]] && ! docker start "$RUNTIME_DAGSTER_CONTAINER_ID" >/dev/null; then
+        restore_failed="1"
+      fi
+      if ! runtime_writer_container_is_exact app-dagster "$RUNTIME_DAGSTER_CONTAINER_ID" "$RUNTIME_DAGSTER_IMAGE_ID"; then
         restore_failed="1"
       fi
       if ! wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster restore"; then
@@ -159,20 +229,30 @@ restore_runtime_writers() {
   fi
   RUNTIME_API_WAS_RUNNING="0"
   RUNTIME_DAGSTER_WAS_RUNNING="0"
+  RUNTIME_API_CONTAINER_ID=""
+  RUNTIME_API_IMAGE_ID=""
+  RUNTIME_DAGSTER_CONTAINER_ID=""
+  RUNTIME_DAGSTER_IMAGE_ID=""
 }
 
 restore_runtime_writers_on_exit() {
   local exit_code=$?
-  local restore_failed="0"
+  local cleanup_failed="0"
+  if [[ "$MIGRATOR_LOGIN_NEEDS_SEAL" == "1" ]]; then
+    if ! seal_migrator_login "$MIGRATOR_LEGACY_REBASELINE"; then
+      cleanup_failed="1"
+      log "migrator login sealing failed during process exit"
+    fi
+  fi
   if [[ "$RUNTIME_API_WAS_RUNNING" == "1" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
     if ! restore_runtime_writers; then
-      restore_failed="1"
+      cleanup_failed="1"
       log "runtime writer restoration failed during process exit"
     fi
   fi
   release_migrator_lifecycle_lock || true
   pinvi_cleanup_api_build_context || true
-  if [[ "$exit_code" == "0" && "$restore_failed" != "0" ]]; then
+  if [[ "$exit_code" == "0" && "$cleanup_failed" != "0" ]]; then
     exit_code="1"
   fi
   return "$exit_code"
@@ -253,15 +333,24 @@ compose_with_one_shot_migrator_password() {
 
 seal_migrator_login() {
   local legacy_rebaseline="$1"
+  local attempt
   log "sealing one-shot migrator login"
-  if ! compose run --rm \
-    -e PINVI_M05_LEGACY_REBASELINE="$legacy_rebaseline" \
-    -e PINVI_MIGRATOR_DISABLE_LOGIN=1 \
-    app-db-runtime-role; then
-    MIGRATOR_ONE_SHOT_PASSWORD=""
-    return 1
-  fi
-  MIGRATOR_ONE_SHOT_PASSWORD=""
+  for attempt in 1 2 3; do
+    if compose run --rm \
+      -e PINVI_M05_LEGACY_REBASELINE="$legacy_rebaseline" \
+      -e PINVI_MIGRATOR_DISABLE_LOGIN=1 \
+      app-db-runtime-role; then
+      MIGRATOR_ONE_SHOT_PASSWORD=""
+      MIGRATOR_LOGIN_NEEDS_SEAL="0"
+      return 0
+    fi
+    log "migrator seal attempt ${attempt}/3 failed"
+    if [[ "$attempt" != "3" ]]; then
+      sleep 1
+    fi
+  done
+  echo "migrator login could not be sealed after 3 attempts" >&2
+  return 1
 }
 
 run_admin_bootstrap() {
@@ -314,9 +403,7 @@ reject_explicit_migrator_database_url() {
 }
 
 migrate_under_lifecycle_lock() {
-  if ! pinvi_verify_runtime_image_provenance app-api; then
-    return 1
-  fi
+  pinvi_verify_runtime_image_provenance app-api
   local credential_file
   if ! credential_file="$(bootstrap_credential_file)"; then
     return 1
@@ -331,6 +418,7 @@ migrate_under_lifecycle_lock() {
       return 1
     fi
   fi
+  MIGRATOR_LEGACY_REBASELINE="$legacy_rebaseline"
   if ! drain_runtime_writers; then
     log "runtime writer drain failed"
     restore_runtime_writers || log "runtime writer restoration failed"
@@ -341,6 +429,9 @@ migrate_under_lifecycle_lock() {
     log "database dependency startup failed"
     restore_runtime_writers || log "runtime writer restoration failed"
     return 1
+  fi
+  if [[ "$legacy_rebaseline" == "0" ]]; then
+    MIGRATOR_LOGIN_NEEDS_SEAL="1"
   fi
   if ! prepare_migrator_login "$legacy_rebaseline"; then
     log "migrator preparation failed; sealing the one-shot login"

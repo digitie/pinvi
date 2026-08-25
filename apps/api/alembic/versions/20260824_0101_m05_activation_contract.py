@@ -24,6 +24,7 @@ from pathlib import Path
 import sqlalchemy as sa
 
 from alembic import op
+from app.db.m05_catalog_fingerprint import catalog_fingerprint as _fresh_catalog_fingerprint
 
 revision: str = "20260824_0101"
 down_revision: str | None = "20260824_0100"
@@ -45,6 +46,7 @@ _FRESH_BASELINE_SHA256 = "cfb77c4402b49b4d03a15a1e2471cef13c6665b7b95efe4fedda6a
 _EXPECTED_FRESH_CATALOG_SHA256 = "4f2d69decc34300c597320e8a0dc78d154bd2eb4b6dbc96f0b51ba5b05c75d94"
 _N150_LEGACY_CATALOG_SHA256 = "4f2d69decc34300c597320e8a0dc78d154bd2eb4b6dbc96f0b51ba5b05c75d94"
 _N150_TARGET_IDENTITY_SHA256 = "e04c99a4681738e0292debdceded99b1c8abe01c9b8bdee82aeef8566dd33cc1"
+_FRESH_0101_DATABASE_FENCE_FUNCTION = "pinvi_internal.acquire_fresh_0101_database_fence()"
 _DOLLAR_QUOTE = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$")
 _ROLE_IDENTIFIER = re.compile(r"[a-z_][a-z0-9_]*")
 _OPERATOR_NAME = re.compile(r"[-+*/<>=~!@#%^&|`?]+")
@@ -319,6 +321,73 @@ WITH object_lines(line) AS (
   FROM pg_extension AS e
   JOIN pg_namespace AS n ON n.oid = e.extnamespace
   WHERE e.extname IN ('pgcrypto', 'pg_trgm', 'citext')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'collation', collation_row.collname, collation_row.collprovider,
+      collation_row.collisdeterministic, collation_row.collencoding,
+      COALESCE(collation_row.collcollate, ''), COALESCE(collation_row.collctype, ''),
+      COALESCE(collation_row.colliculocale, ''), COALESCE(collation_row.collicurules, ''),
+      COALESCE(collation_row.collversion, ''), pg_get_userbyid(collation_row.collowner)
+    )::text
+  FROM pg_collation AS collation_row
+  JOIN pg_namespace AS namespace ON namespace.oid = collation_row.collnamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'conversion', conversion_row.conname, conversion_row.conforencoding,
+      conversion_row.contoencoding, conversion_row.conproc::regproc::text,
+      conversion_row.condefault, pg_get_userbyid(conversion_row.conowner)
+    )::text
+  FROM pg_conversion AS conversion_row
+  JOIN pg_namespace AS namespace ON namespace.oid = conversion_row.connamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'opclass', opclass_row.opcname, access_method.amname,
+      family_row.opfname, opclass_row.opcdefault,
+      opclass_row.opcintype::regtype::text, opclass_row.opckeytype::regtype::text,
+      pg_get_userbyid(opclass_row.opcowner)
+    )::text
+  FROM pg_opclass AS opclass_row
+  JOIN pg_namespace AS namespace ON namespace.oid = opclass_row.opcnamespace
+  JOIN pg_am AS access_method ON access_method.oid = opclass_row.opcmethod
+  JOIN pg_opfamily AS family_row ON family_row.oid = opclass_row.opcfamily
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'opfamily', opfamily_row.opfname, access_method.amname,
+      pg_get_userbyid(opfamily_row.opfowner)
+    )::text
+  FROM pg_opfamily AS opfamily_row
+  JOIN pg_namespace AS namespace ON namespace.oid = opfamily_row.opfnamespace
+  JOIN pg_am AS access_method ON access_method.oid = opfamily_row.opfmethod
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'ts_config', config_row.cfgname, config_row.cfgparser::regproc::text,
+      pg_get_userbyid(config_row.cfgowner)
+    )::text
+  FROM pg_ts_config AS config_row
+  JOIN pg_namespace AS namespace ON namespace.oid = config_row.cfgnamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'ts_dict', dictionary_row.dictname, dictionary_row.dicttemplate::regproc::text,
+      COALESCE(dictionary_row.dictinitoption, ''), pg_get_userbyid(dictionary_row.dictowner)
+    )::text
+  FROM pg_ts_dict AS dictionary_row
+  JOIN pg_namespace AS namespace ON namespace.oid = dictionary_row.dictnamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'statistic_ext', statistic_row.stxname, statistic_row.stxstattarget,
+      statistic_row.stxkeys::text, statistic_row.stxkind::text,
+      COALESCE(statistic_row.stxexprs::text, ''),
+      pg_get_statisticsobjdef(statistic_row.oid), pg_get_userbyid(statistic_row.stxowner)
+    )::text
+  FROM pg_statistic_ext AS statistic_row
+  JOIN pg_namespace AS namespace ON namespace.oid = statistic_row.stxnamespace
+  WHERE namespace.nspname = 'app'
   UNION ALL
   SELECT jsonb_build_array('default_acl', COALESCE(n.nspname, ''),
                            d.defaclrole::regrole::text, d.defaclobjtype,
@@ -1187,19 +1256,37 @@ def _acquire_legacy_rebaseline_database_connection_fence(bind: sa.Connection) ->
 def _acquire_fresh_0101_writer_fence(bind: sa.Connection) -> None:
     """Serialize direct 0100→0101 runs before fresh DDL and backfill.
 
-    A normal fresh migrator is not a superuser, so it cannot lock ``pg_database``.
-    It still gets the shared migration advisory lock, an app-table DML fence, and
-    two DDL-capable-session checks. A superuser fresh runner additionally gets the
-    stronger database/role-catalog fence used by the legacy path.
+    Managed non-superuser runs invoke a bootstrap-owned SECURITY DEFINER function
+    that holds the database and role-catalog admission locks for the migration
+    transaction. An unmanaged superuser may take the same locks directly; a
+    non-superuser without that capability is rejected before any DDL.
     """
 
     bind.execute(sa.text(_LEGACY_REBASELINE_SERIALIZATION_LOCK_SQL))
     _normalize_legacy_rebaseline_fingerprint_session(bind)
+    bind.execute(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL))
+    has_security_definer_fence = bind.scalar(
+        sa.text(
+            "SELECT to_regprocedure(:fence_function) IS NOT NULL "
+            "AND has_function_privilege(current_user, :fence_function, 'EXECUTE')"
+        ),
+        {"fence_function": _FRESH_0101_DATABASE_FENCE_FUNCTION},
+    )
+    if has_security_definer_fence is True:
+        try:
+            bind.execute(sa.text(f"SELECT {_FRESH_0101_DATABASE_FENCE_FUNCTION}"))
+        except sa.exc.DBAPIError as exc:
+            raise RuntimeError(
+                "0101 fresh handoff could not acquire the database admission fence within 5s"
+            ) from exc
+    elif bind.scalar(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL)) is True:
+        _acquire_legacy_rebaseline_database_connection_fence(bind)
+    else:
+        raise RuntimeError("0101 fresh handoff requires the managed database admission fence")
+    bind.execute(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_RESET_SQL))
     _assert_legacy_rebaseline_ddl_quiescence(bind)
     tables = _legacy_rebaseline_app_tables(bind)
     _lock_legacy_rebaseline_app_tables(bind, tables)
-    if bind.scalar(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL)) is True:
-        _acquire_legacy_rebaseline_database_connection_fence(bind)
     _assert_legacy_rebaseline_ddl_quiescence(bind)
 
 
@@ -1226,24 +1313,30 @@ def _assert_fresh_0100_marker(bind: sa.Connection) -> None:
     )
     if version_rows != ("20260824_0100",):
         raise RuntimeError("0101 non-legacy handoff requires exactly the 0100 version row")
+    bind.execute(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL))
     try:
+        bind.execute(
+            sa.text("LOCK TABLE pinvi_internal.baseline_origin IN SHARE ROW EXCLUSIVE MODE")
+        )
         origin = bind.execute(
             sa.text(
                 "SELECT origin.marker, origin.baseline_sha256, origin.database_oid::bigint, "
-                "origin.system_identifier, "
+                "origin.system_identifier, origin.catalog_lines, origin.catalog_sha256, "
                 "relation.relkind = 'r' AS table_is_regular, "
                 "relation.relpersistence = 'p' AS table_is_permanent, "
                 "relation.relowner = current_user::regrole AS table_owner_is_current, "
                 "namespace.nspowner = current_user::regrole AS schema_owner_is_current "
                 "FROM pinvi_internal.baseline_origin AS origin "
                 "JOIN pg_class AS relation ON relation.oid = 'pinvi_internal.baseline_origin'::regclass "
-                "JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace"
+                "JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace "
+                "FOR UPDATE OF origin"
             )
         ).all()
     except sa.exc.DBAPIError as exc:
         raise RuntimeError(
-            "0101 non-legacy handoff requires the durable fresh 0100 origin"
+            "0101 non-legacy handoff requires the durable fresh 0100 origin; could not lock it"
         ) from exc
+    bind.execute(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_RESET_SQL))
     if len(origin) != 1:
         raise RuntimeError("0101 non-legacy handoff requires the durable fresh 0100 origin")
     row = origin[0]
@@ -1256,17 +1349,18 @@ def _assert_fresh_0100_marker(bind: sa.Connection) -> None:
     expected_system_identifier = bind.scalar(
         sa.text("SELECT (pg_control_system()).system_identifier::text")
     )
-    if row != (
+    if row[:4] != (
         _FRESH_BASELINE_SCHEMA_COMMENT,
         _FRESH_BASELINE_SHA256,
         expected_database_oid,
         expected_system_identifier,
-        True,
-        True,
-        True,
-        True,
-    ):
+    ) or row[6:] != (True, True, True, True):
         raise RuntimeError("0101 non-legacy handoff requires the durable fresh 0100 origin")
+    catalog_lines, catalog_sha256 = _fresh_catalog_fingerprint(bind)
+    if (catalog_lines, catalog_sha256) != (row[4], row[5]):
+        raise RuntimeError(
+            "0101 non-legacy handoff requires the canonical fresh 0100 catalog fingerprint"
+        )
 
 
 def _assert_legacy_0100_marker(bind: sa.Connection) -> None:
@@ -1483,6 +1577,11 @@ def _activate_m05_migration_owner(bind: sa.Connection, *, activate: bool = True)
                 FROM pg_namespace namespace
                 WHERE namespace.nspname = 'app'
             ),
+            ops_schema AS (
+                SELECT namespace.oid, namespace.nspowner
+                FROM pg_namespace namespace
+                WHERE namespace.nspname = 'ops'
+            ),
             legacy_app_owner AS (
                 SELECT role_row.oid
                 FROM pg_roles role_row
@@ -1505,6 +1604,7 @@ def _activate_m05_migration_owner(bind: sa.Connection, *, activate: bool = True)
                 (SELECT count(*) FROM migration_role) = 1
                 AND (SELECT count(*) FROM migrator_role) = 1
                 AND (SELECT count(*) FROM app_owner) = 1
+                AND (SELECT count(*) FROM ops_schema) = 1
                 AND (SELECT count(*) FROM database_owner) = 1
                 AND (SELECT count(*) FROM session_role) = 1
                 AND (
@@ -1552,6 +1652,10 @@ def _activate_m05_migration_owner(bind: sa.Connection, *, activate: bool = True)
                 )
                 AND has_schema_privilege(
                     (SELECT oid FROM migration_role), 'x_extension', 'USAGE'
+                )
+                AND (SELECT nspowner FROM ops_schema) = (SELECT oid FROM migration_role)
+                AND has_schema_privilege(
+                    (SELECT oid FROM migration_role), 'ops', 'CREATE'
                 )
                 AND NOT has_schema_privilege(
                     (SELECT oid FROM migration_role), 'x_extension', 'CREATE'
@@ -2227,6 +2331,53 @@ def _grant_legacy_runtime_app_privileges(bind: sa.Connection, app_schema_owner: 
     _revoke_runtime_alembic_version_privileges(bind, app_role)
 
 
+def _grant_fresh_runtime_app_privileges(bind: sa.Connection, app_schema_owner: str | None) -> None:
+    """Grant runtime access only after the fresh 0100 proof and M05 DDL."""
+
+    app_role = _configured_app_runtime_role()
+    if app_role is None:
+        return
+    if app_schema_owner is None:
+        raise RuntimeError("0101 fresh runtime app schema owner is unavailable")
+    if _ROLE_IDENTIFIER.fullmatch(app_schema_owner) is None:
+        raise RuntimeError("0101 fresh runtime app schema owner is invalid")
+    if _ROLE_IDENTIFIER.fullmatch(app_role) is None:
+        raise RuntimeError("0101 fresh runtime app role is invalid")
+    if (
+        bind.scalar(
+            sa.text("SELECT current_user = :app_schema_owner"),
+            {"app_schema_owner": app_schema_owner},
+        )
+        is not True
+    ):
+        raise RuntimeError("0101 fresh runtime privileges require the app schema owner")
+
+    quoted_owner = _quote_identifier(app_schema_owner)
+    quoted_app_role = _quote_identifier(app_role)
+    bind.execute(sa.text("REVOKE ALL ON SCHEMA app FROM PUBLIC"))
+    bind.execute(sa.text(f"GRANT USAGE ON SCHEMA app TO {quoted_app_role}"))
+    bind.execute(
+        sa.text(
+            f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO {quoted_app_role}"
+        )
+    )
+    bind.execute(
+        sa.text(f"GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA app TO {quoted_app_role}")
+    )
+    bind.execute(
+        sa.text(
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {quoted_owner} IN SCHEMA app "
+            f"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {quoted_app_role}"
+        )
+    )
+    bind.execute(
+        sa.text(
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {quoted_owner} IN SCHEMA app "
+            f"GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {quoted_app_role}"
+        )
+    )
+
+
 def _revoke_runtime_alembic_version_privileges(bind: sa.Connection, app_role: str | None) -> None:
     """application runtime이 migration provenance를 바꾸지 못하게 한다."""
 
@@ -2749,11 +2900,17 @@ def upgrade() -> None:
     app_owner = _activate_m05_migration_owner(bind)
     # named ops default ACL까지 검사하려면 schema를 먼저 확보해야 한다. 이 revision은
     # partial legacy M05 object를 덮어쓰지 않고 transaction 전체를 fail-close한다.
-    op.execute("CREATE SCHEMA IF NOT EXISTS ops")
+    if bind.scalar(sa.text("SELECT to_regnamespace('ops') IS NULL")) is True:
+        op.execute("CREATE SCHEMA ops")
     _reject_unsafe_m05_default_privileges(bind)
     _reject_existing_m05_objects(bind)
     op.execute("SET LOCAL check_function_bodies = false")
     for statement in _m05_schema_statements():
+        if statement.strip() == 'CREATE SCHEMA IF NOT EXISTS "ops"':
+            # Managed topology pre-creates ops under the migration owner. The artifact's
+            # idempotent schema statement would still require database CREATE even when
+            # the schema already exists, so the guarded preflight above owns this step.
+            continue
         op.execute(sa.text(statement))
     _harden_m05_acl(bind)
     _assert_m05_acl(bind)
@@ -2764,6 +2921,7 @@ def upgrade() -> None:
     if _legacy_rebaseline_profile():
         _grant_legacy_runtime_app_privileges(bind, canonical_app_owner)
     else:
+        _grant_fresh_runtime_app_privileges(bind, canonical_app_owner)
         _revoke_runtime_alembic_version_privileges(bind, _configured_app_runtime_role())
     if not _legacy_rebaseline_profile():
         _assert_legacy_rebaseline_ddl_quiescence(bind)

@@ -340,6 +340,73 @@ WITH object_lines(line) AS (
   JOIN pg_namespace AS n ON n.oid = e.extnamespace
   WHERE e.extname IN ('pgcrypto', 'pg_trgm', 'citext')
   UNION ALL
+  SELECT jsonb_build_array(
+      'collation', collation_row.collname, collation_row.collprovider,
+      collation_row.collisdeterministic, collation_row.collencoding,
+      COALESCE(collation_row.collcollate, ''), COALESCE(collation_row.collctype, ''),
+      COALESCE(collation_row.colliculocale, ''), COALESCE(collation_row.collicurules, ''),
+      COALESCE(collation_row.collversion, ''), pg_get_userbyid(collation_row.collowner)
+    )::text
+  FROM pg_collation AS collation_row
+  JOIN pg_namespace AS namespace ON namespace.oid = collation_row.collnamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'conversion', conversion_row.conname, conversion_row.conforencoding,
+      conversion_row.contoencoding, conversion_row.conproc::regproc::text,
+      conversion_row.condefault, pg_get_userbyid(conversion_row.conowner)
+    )::text
+  FROM pg_conversion AS conversion_row
+  JOIN pg_namespace AS namespace ON namespace.oid = conversion_row.connamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'opclass', opclass_row.opcname, access_method.amname,
+      family_row.opfname, opclass_row.opcdefault,
+      opclass_row.opcintype::regtype::text, opclass_row.opckeytype::regtype::text,
+      pg_get_userbyid(opclass_row.opcowner)
+    )::text
+  FROM pg_opclass AS opclass_row
+  JOIN pg_namespace AS namespace ON namespace.oid = opclass_row.opcnamespace
+  JOIN pg_am AS access_method ON access_method.oid = opclass_row.opcmethod
+  JOIN pg_opfamily AS family_row ON family_row.oid = opclass_row.opcfamily
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'opfamily', opfamily_row.opfname, access_method.amname,
+      pg_get_userbyid(opfamily_row.opfowner)
+    )::text
+  FROM pg_opfamily AS opfamily_row
+  JOIN pg_namespace AS namespace ON namespace.oid = opfamily_row.opfnamespace
+  JOIN pg_am AS access_method ON access_method.oid = opfamily_row.opfmethod
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'ts_config', config_row.cfgname, config_row.cfgparser::regproc::text,
+      pg_get_userbyid(config_row.cfgowner)
+    )::text
+  FROM pg_ts_config AS config_row
+  JOIN pg_namespace AS namespace ON namespace.oid = config_row.cfgnamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'ts_dict', dictionary_row.dictname, dictionary_row.dicttemplate::regproc::text,
+      COALESCE(dictionary_row.dictinitoption, ''), pg_get_userbyid(dictionary_row.dictowner)
+    )::text
+  FROM pg_ts_dict AS dictionary_row
+  JOIN pg_namespace AS namespace ON namespace.oid = dictionary_row.dictnamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'statistic_ext', statistic_row.stxname, statistic_row.stxstattarget,
+      statistic_row.stxkeys::text, statistic_row.stxkind::text,
+      COALESCE(statistic_row.stxexprs::text, ''),
+      pg_get_statisticsobjdef(statistic_row.oid), pg_get_userbyid(statistic_row.stxowner)
+    )::text
+  FROM pg_statistic_ext AS statistic_row
+  JOIN pg_namespace AS namespace ON namespace.oid = statistic_row.stxnamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
   SELECT jsonb_build_array('default_acl', COALESCE(n.nspname, ''),
                            d.defaclrole::regrole::text, d.defaclobjtype,
                            COALESCE(d.defaclacl::text, ''))::text

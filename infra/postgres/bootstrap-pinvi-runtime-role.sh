@@ -287,7 +287,7 @@ JOIN pg_roles migrator ON migrator.oid = activity.usesysid
 WHERE :'migrator_disabled' = '1'
   AND migrator.rolname = :'migrator_role'
   AND activity.pid <> pg_backend_pid();
-GRANT CREATE ON DATABASE :"database_name" TO :"schema_owner", :"migration_owner";
+GRANT CREATE ON DATABASE :"database_name" TO :"schema_owner";
 SELECT format('CREATE SCHEMA IF NOT EXISTS x_extension AUTHORIZATION %I', :'bootstrap_owner')
 \gexec
 SELECT format('ALTER SCHEMA x_extension OWNER TO %I', :'bootstrap_owner')
@@ -300,6 +300,29 @@ GRANT USAGE ON SCHEMA x_extension TO :"app_role", :"schema_owner", :"migration_o
 REVOKE ALL ON FUNCTION x_extension.digest(bytea, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION x_extension.digest(bytea, text)
   TO :"app_role", :"schema_owner", :"migration_owner";
+SELECT format('CREATE SCHEMA IF NOT EXISTS pinvi_internal AUTHORIZATION %I', :'schema_owner')
+WHERE NOT EXISTS (
+    SELECT 1 FROM pg_namespace WHERE nspname = 'pinvi_internal'
+)
+\gexec
+REVOKE ALL ON SCHEMA pinvi_internal FROM PUBLIC;
+GRANT USAGE ON SCHEMA pinvi_internal TO :"schema_owner";
+CREATE OR REPLACE FUNCTION pinvi_internal.acquire_fresh_0101_database_fence()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $pinvi_fresh_0101_fence$
+BEGIN
+    LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE;
+    LOCK TABLE pg_catalog.pg_authid, pg_catalog.pg_auth_members,
+              pg_catalog.pg_db_role_setting IN ACCESS EXCLUSIVE MODE;
+END
+$pinvi_fresh_0101_fence$;
+ALTER FUNCTION pinvi_internal.acquire_fresh_0101_database_fence() OWNER TO :"bootstrap_owner";
+REVOKE ALL ON FUNCTION pinvi_internal.acquire_fresh_0101_database_fence() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION pinvi_internal.acquire_fresh_0101_database_fence()
+  TO :"schema_owner";
 SQL
 
 if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then
@@ -338,6 +361,10 @@ SQL
 }
 
 if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then
+  # fresh 0100의 canonical catalog fingerprint에는 runtime ACL을 아직 넣지 않는다.
+  # 0101이 fingerprint와 M05 DDL을 완료한 뒤 app runtime 권한을 원자적으로 부여한다.
+  :
+else
   grant_app_runtime_privileges "${PINVI_APP_SCHEMA_OWNER}"
 fi
 
@@ -377,6 +404,19 @@ x_extension_schema AS (
     SELECT namespace.oid, namespace.nspowner
     FROM pg_namespace namespace
     WHERE namespace.nspname = 'x_extension'
+),
+pinvi_internal_schema AS (
+    SELECT namespace.oid, namespace.nspowner
+    FROM pg_namespace namespace
+    WHERE namespace.nspname = 'pinvi_internal'
+),
+fresh_admission_fence AS (
+    SELECT procedure.oid, procedure.proowner, procedure.proacl
+    FROM pg_proc procedure
+    JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+    WHERE namespace.nspname = 'pinvi_internal'
+      AND procedure.proname = 'acquire_fresh_0101_database_fence'
+      AND procedure.pronargs = 0
 ),
 app_objects AS (
     SELECT relation.relowner AS owner_oid
@@ -435,6 +475,32 @@ SELECT
     AND (SELECT count(*) FROM database_owner) = 1
     AND (SELECT count(*) FROM app_schema) = 1
     AND (SELECT count(*) FROM x_extension_schema) = 1
+    AND (SELECT count(*) FROM pinvi_internal_schema) = 1
+    AND (SELECT count(*) FROM fresh_admission_fence) = 1
+    AND (SELECT proowner FROM fresh_admission_fence) = (SELECT oid FROM database_owner)
+    AND EXISTS (
+        SELECT 1
+        FROM fresh_admission_fence fence
+        CROSS JOIN LATERAL aclexplode(
+            COALESCE(fence.proacl, acldefault('f', fence.proowner))
+        ) AS acl
+        WHERE acl.grantee = (SELECT oid FROM schema_owner)
+          AND acl.privilege_type = 'EXECUTE'
+          AND NOT acl.is_grantable
+    )
+    AND NOT EXISTS (
+        SELECT 1
+        FROM fresh_admission_fence fence
+        CROSS JOIN LATERAL aclexplode(
+            COALESCE(fence.proacl, acldefault('f', fence.proowner))
+        ) AS acl
+        WHERE NOT (
+            acl.grantee = fence.proowner
+            OR (acl.grantee = (SELECT oid FROM schema_owner)
+                AND acl.privilege_type = 'EXECUTE'
+                AND NOT acl.is_grantable)
+        )
+    )
     AND EXISTS (
         SELECT 1 FROM runtime_role runtime
         WHERE runtime.rolcanlogin
@@ -451,10 +517,6 @@ SELECT
                  OR membership.roleid = runtime.oid
           )
           AND NOT has_database_privilege(runtime.oid, current_database(), 'CREATE')
-          AND (
-              :'legacy_rebaseline' = '1'
-              OR has_schema_privilege(runtime.oid, 'app', 'USAGE')
-          )
           AND has_schema_privilege(runtime.oid, 'x_extension', 'USAGE')
           AND NOT has_schema_privilege(runtime.oid, 'app', 'CREATE')
           AND NOT has_schema_privilege(runtime.oid, 'x_extension', 'CREATE')
@@ -508,10 +570,10 @@ SELECT
           AND NOT owner.rolbypassrls
           AND NOT owner.rolinherit
           AND owner.oid <> (SELECT oid FROM database_owner)
-          AND has_database_privilege(owner.oid, current_database(), 'CREATE')
           AND NOT has_database_privilege(owner.oid, current_database(), 'CONNECT')
           AND has_schema_privilege(owner.oid, 'x_extension', 'USAGE')
           AND NOT has_schema_privilege(owner.oid, 'x_extension', 'CREATE')
+          AND has_schema_privilege(owner.oid, 'pinvi_internal', 'USAGE')
           AND NOT EXISTS (
               SELECT 1
               FROM pg_namespace app_namespace

@@ -601,6 +601,34 @@ async def test_0101_fresh_marker_rejects_populated_app_database(
 
 
 @pytest.mark.asyncio
+async def test_0101_fresh_marker_rejects_special_catalog_drift(
+    _database_url: str,
+) -> None:
+    """0100 뒤에 추가된 collation도 fresh catalog fingerprint에서 검출한다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_fresh_catalog")
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "CREATE COLLATION app.m05_fresh_catalog_drift "
+                        "(provider = libc, locale = 'C')"
+                    )
+                )
+                migration = _activation_migration_module()
+                with pytest.raises(RuntimeError, match="canonical fresh 0100 catalog fingerprint"):
+                    await connection.run_sync(migration._assert_fresh_0100_marker)
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
 async def test_0101_legacy_handoff_revalidates_receipt_data_before_ddl(
     _database_url: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -1567,8 +1595,9 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
             f'SET ROLE TO "{app_owner}";',
             f'REVOKE CONNECT ON DATABASE "{database_name}" FROM PUBLIC;',
             f'GRANT CONNECT ON DATABASE "{database_name}" TO "{runtime_role}", "{migrator_login}";',
-            f'GRANT CREATE ON DATABASE "{database_name}" TO "{app_owner}", "{migration_owner}";',
+            f'GRANT CREATE ON DATABASE "{database_name}" TO "{app_owner}";',
             f'CREATE SCHEMA app AUTHORIZATION "{app_owner}";',
+            f'CREATE SCHEMA ops AUTHORIZATION "{migration_owner}";',
             "CREATE SCHEMA x_extension;",
             "CREATE EXTENSION pgcrypto SCHEMA x_extension;",
             "CREATE EXTENSION pg_trgm SCHEMA x_extension;",
@@ -1596,11 +1625,23 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
         )
         assert baseline.returncode == 0, baseline.stderr
         for statement in (
-            f'GRANT USAGE ON SCHEMA app TO "{runtime_role}";',
-            f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app "
-            f'TO "{runtime_role}";',
-            f'ALTER DEFAULT PRIVILEGES FOR ROLE "{app_owner}" IN SCHEMA app '
-            f'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{runtime_role}";',
+            """
+            CREATE OR REPLACE FUNCTION pinvi_internal.acquire_fresh_0101_database_fence()
+            RETURNS void
+            LANGUAGE plpgsql
+            SECURITY DEFINER
+            SET search_path = pg_catalog
+            AS $pinvi_fresh_0101_fence$
+            BEGIN
+                LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE;
+                LOCK TABLE pg_catalog.pg_authid, pg_catalog.pg_auth_members,
+                          pg_catalog.pg_db_role_setting IN ACCESS EXCLUSIVE MODE;
+            END
+            $pinvi_fresh_0101_fence$;
+            """,
+            "ALTER FUNCTION pinvi_internal.acquire_fresh_0101_database_fence() OWNER TO pinvi;",
+            "REVOKE ALL ON FUNCTION pinvi_internal.acquire_fresh_0101_database_fence() FROM PUBLIC;",
+            f'GRANT EXECUTE ON FUNCTION pinvi_internal.acquire_fresh_0101_database_fence() TO "{app_owner}";',
         ):
             await _execute_autocommit(target_url, statement)
         await _execute_autocommit(
@@ -1707,6 +1748,9 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
                                   AND NOT role_row.rolbypassrls
                                   AND NOT role_row.rolinherit
                                   AND NOT has_database_privilege(
+                                      role_row.oid, current_database(), 'CREATE'
+                                  )
+                                  AND NOT has_database_privilege(
                                       role_row.oid, current_database(), 'CONNECT'
                                   )
                                   AND has_schema_privilege(
@@ -1714,6 +1758,9 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
                                   )
                                   AND NOT has_schema_privilege(
                                       role_row.oid, 'x_extension', 'CREATE'
+                                  )
+                                  AND has_schema_privilege(
+                                      role_row.oid, 'ops', 'CREATE'
                                   )
                                   AND has_function_privilege(
                                       role_row.oid,

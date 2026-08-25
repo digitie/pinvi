@@ -194,13 +194,8 @@ docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml down -v --remo
 # 2) 이미지 빌드
 docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml build app-api app-web
 
-# 3) Postgres + non-owner runtime DB role + RustFS 먼저
+# 3) Postgres + RustFS 먼저
 docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml up -d app-postgres app-rustfs app-rustfs-init
-# 아래 role bootstrap은 migrator login을 기본적으로 봉인한다. 직접 compose run으로
-# app-migrator를 실행하지 말고, 다음 단계의 lifecycle wrapper가 one-shot login을 연다.
-docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml run --rm \
-  -e PINVI_MIGRATOR_DISABLE_LOGIN=1 \
-  app-db-runtime-role
 
 # 4) owner-only PinVi migration + one-shot admin bootstrap (auto-migrate 안 함)
 install -m 600 /dev/null /tmp/pinvi-bootstrap-admin.json
@@ -208,7 +203,8 @@ $EDITOR /tmp/pinvi-bootstrap-admin.json
 PINVI_DOCKER_PROJECT=pinvi-app-smoke \
 PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/tmp/pinvi-bootstrap-admin.json \
 scripts/docker-app.sh migrate
-# wrapper는 실행 전 API/Dagster writer를 drain하고, migration 또는 seal 실패에도
+# wrapper는 lifecycle lock 뒤 API/Dagster writer를 drain한 다음 role bootstrap과 migration을 실행하고,
+# migration 또는 seal 실패에도
 # 기존에 실행 중이던 writer를 다시 기동한다. DDL-capable 외부 세션은 자동 종료하지
 # 않고 migration을 fail-close하므로, 실패 시 해당 세션을 먼저 정리한 뒤 재시도한다.
 rm -f /tmp/pinvi-bootstrap-admin.json
@@ -389,7 +385,7 @@ CI에서:
 | `app-api` 시작 후 즉시 종료           | migration/bootstrap 미실행 | `pinvi-admin-bootstrap` one-shot 먼저                    |
 | `app-web` 빌드 실패                   | `NEXT_PUBLIC_*` 누락 | `.env` 확인 + 재빌드                                            |
 | `app-rustfs-init` 무한 루프           | bucket 이미 존재     | down -v로 볼륨 삭제 후 재시작                                   |
-| `12805` / `12101` port already in use | 다른 컨테이너 점유   | `scripts/docker-app.sh up`이 정리. 수동 확인은 `lsof -i:<port>` |
+| `12805` / `12101` port already in use | 다른 컨테이너 점유   | `up`은 기본적으로 중지하지 않고 실패한다. 승인된 dev 프로세스만 `PINVI_DEV_FORCE_KILL=1 scripts/docker-app.sh up`으로 종료하고, 수동 확인은 `lsof -i:<port>` |
 | Admin login `pinvi_access` 발급 안 됨 | CORS / Secure cookie | `infra/docker-compose.app.yml`의 CORS 환경변수 확인             |
 
 ## 12. 관련 문서

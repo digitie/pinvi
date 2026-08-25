@@ -12,10 +12,17 @@ API_PORT="${PINVI_API_PORT:-12801}"
 WEB_PORT="${PINVI_WEB_PORT:-12805}"
 RUSTFS_PORT="${PINVI_RUSTFS_PORT:-12101}"
 RUSTFS_CONSOLE_PORT="${PINVI_RUSTFS_CONSOLE_PORT:-12105}"
+DAGSTER_PORT="${PINVI_DAGSTER_DEV_PORT:-12802}"
 SMOKE_KEEP_RUNNING=""
 MIGRATOR_ONE_SHOT_PASSWORD=""
+MIGRATOR_LOGIN_NEEDS_SEAL="0"
+MIGRATOR_LEGACY_REBASELINE="0"
 RUNTIME_API_WAS_RUNNING="0"
 RUNTIME_DAGSTER_WAS_RUNNING="0"
+RUNTIME_API_CONTAINER_ID=""
+RUNTIME_API_IMAGE_ID=""
+RUNTIME_DAGSTER_CONTAINER_ID=""
+RUNTIME_DAGSTER_IMAGE_ID=""
 
 usage() {
   cat <<'EOF'
@@ -80,7 +87,7 @@ free_host_port() {
   local force_kill="${PINVI_DEV_FORCE_KILL:-0}"
   local docker_ids pids
 
-  docker_ids="$(docker ps --filter "publish=${port}" --format '{{.ID}}' || true)"
+  docker_ids="$(docker ps --filter "publish=${port}" --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.ID}}' || true)"
   pids=""
   if command -v lsof >/dev/null 2>&1; then
     pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN || true)"
@@ -115,6 +122,7 @@ free_app_ports() {
   free_host_port "$WEB_PORT"
   free_host_port "$RUSTFS_PORT"
   free_host_port "$RUSTFS_CONSOLE_PORT"
+  free_host_port "$DAGSTER_PORT"
 }
 
 wait_for_url() {
@@ -150,24 +158,76 @@ require_python() {
 }
 
 up_deps() {
-  local legacy_rebaseline="${1:-0}"
   require_docker
-  log "starting Postgres + runtime DB role + RustFS"
+  log "starting Postgres + RustFS dependencies"
   compose up -d app-postgres app-rustfs app-rustfs-init
-  compose run --rm \
-    -e PINVI_M05_LEGACY_REBASELINE="$legacy_rebaseline" \
-    -e PINVI_MIGRATOR_DISABLE_LOGIN=1 \
-    app-db-runtime-role
+}
+
+runtime_writer_container_id() {
+  local service="$1"
+  if [[ "$service" == "app-dagster" ]]; then
+    compose --profile etl ps -q --status running "$service"
+  else
+    compose ps -q --status running "$service"
+  fi
+}
+
+runtime_writer_container_is_exact() {
+  local service="$1"
+  local container_id="$2"
+  local expected_image_id="$3"
+  local running actual_image_id
+  if ! running="$(docker container inspect --format '{{.State.Running}}' "$container_id")"; then
+    return 1
+  fi
+  if [[ "$running" != "true" ]]; then
+    return 1
+  fi
+  if ! actual_image_id="$(docker container inspect --format '{{.Image}}' "$container_id")"; then
+    return 1
+  fi
+  if [[ "$actual_image_id" != "$expected_image_id" ]]; then
+    echo "${service} restore image drifted from the pre-migration container" >&2
+    return 1
+  fi
 }
 
 drain_runtime_writers() {
   local drain_failed="0"
+  local api_container_id api_image_id dagster_container_id dagster_image_id
   RUNTIME_API_WAS_RUNNING="0"
   RUNTIME_DAGSTER_WAS_RUNNING="0"
-  if [[ -n "$(compose ps -q --status running app-api)" ]]; then
+  RUNTIME_API_CONTAINER_ID=""
+  RUNTIME_API_IMAGE_ID=""
+  RUNTIME_DAGSTER_CONTAINER_ID=""
+  RUNTIME_DAGSTER_IMAGE_ID=""
+  if ! api_container_id="$(runtime_writer_container_id app-api)"; then
+    drain_failed="1"
+  elif [[ -n "$api_container_id" ]]; then
+    if [[ "$api_container_id" == *$'\n'* ]]; then
+      drain_failed="1"
+    elif ! api_image_id="$(docker container inspect --format '{{.Image}}' "$api_container_id")"; then
+      drain_failed="1"
+    fi
+  fi
+  if ! dagster_container_id="$(runtime_writer_container_id app-dagster)"; then
+    drain_failed="1"
+  elif [[ -n "$dagster_container_id" ]]; then
+    if [[ "$dagster_container_id" == *$'\n'* ]]; then
+      drain_failed="1"
+    elif ! dagster_image_id="$(docker container inspect --format '{{.Image}}' "$dagster_container_id")"; then
+      drain_failed="1"
+    fi
+  fi
+  [[ "$drain_failed" == "0" ]] || return 1
+  if [[ -n "$api_container_id" ]]; then
+    RUNTIME_API_CONTAINER_ID="$api_container_id"
+    RUNTIME_API_IMAGE_ID="$api_image_id"
     RUNTIME_API_WAS_RUNNING="1"
   fi
-  if [[ -n "$(compose --profile etl ps -q --status running app-dagster)" ]]; then
+  if [[ -n "$dagster_container_id" ]]; then
+    RUNTIME_DAGSTER_CONTAINER_ID="$dagster_container_id"
+    RUNTIME_DAGSTER_IMAGE_ID="$dagster_image_id"
     RUNTIME_DAGSTER_WAS_RUNNING="1"
   fi
   log "stopping API and Dagster writers before migration"
@@ -182,12 +242,16 @@ drain_runtime_writers() {
 
 restore_runtime_writers() {
   local restore_failed="0"
+  local running
   if [[ "$RUNTIME_API_WAS_RUNNING" == "1" ]]; then
-    log "restoring API after migration attempt"
-    if ! compose up -d app-api; then
+    log "restoring the pre-migration API container"
+    if ! running="$(docker container inspect --format '{{.State.Running}}' "$RUNTIME_API_CONTAINER_ID")"; then
       restore_failed="1"
     else
-      if ! pinvi_verify_or_remove_running_app; then
+      if [[ "$running" != "true" ]] && ! docker start "$RUNTIME_API_CONTAINER_ID" >/dev/null; then
+        restore_failed="1"
+      fi
+      if ! runtime_writer_container_is_exact app-api "$RUNTIME_API_CONTAINER_ID" "$RUNTIME_API_IMAGE_ID"; then
         restore_failed="1"
       fi
       if ! wait_for_url "http://127.0.0.1:${API_PORT}/health/db" "API DB restore"; then
@@ -196,11 +260,14 @@ restore_runtime_writers() {
     fi
   fi
   if [[ "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
-    log "restoring Dagster after migration attempt"
-    if ! compose --profile etl up -d app-dagster; then
+    log "restoring the pre-migration Dagster container"
+    if ! running="$(docker container inspect --format '{{.State.Running}}' "$RUNTIME_DAGSTER_CONTAINER_ID")"; then
       restore_failed="1"
     else
-      if ! pinvi_verify_or_remove_running_dagster; then
+      if [[ "$running" != "true" ]] && ! docker start "$RUNTIME_DAGSTER_CONTAINER_ID" >/dev/null; then
+        restore_failed="1"
+      fi
+      if ! runtime_writer_container_is_exact app-dagster "$RUNTIME_DAGSTER_CONTAINER_ID" "$RUNTIME_DAGSTER_IMAGE_ID"; then
         restore_failed="1"
       fi
       if ! wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster restore"; then
@@ -213,20 +280,30 @@ restore_runtime_writers() {
   fi
   RUNTIME_API_WAS_RUNNING="0"
   RUNTIME_DAGSTER_WAS_RUNNING="0"
+  RUNTIME_API_CONTAINER_ID=""
+  RUNTIME_API_IMAGE_ID=""
+  RUNTIME_DAGSTER_CONTAINER_ID=""
+  RUNTIME_DAGSTER_IMAGE_ID=""
 }
 
 restore_runtime_writers_on_exit() {
   local exit_code=$?
-  local restore_failed="0"
+  local cleanup_failed="0"
+  if [[ "$MIGRATOR_LOGIN_NEEDS_SEAL" == "1" ]]; then
+    if ! seal_migrator_login "$MIGRATOR_LEGACY_REBASELINE"; then
+      cleanup_failed="1"
+      log "migrator login sealing failed during process exit"
+    fi
+  fi
   if [[ "$RUNTIME_API_WAS_RUNNING" == "1" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
     if ! restore_runtime_writers; then
-      restore_failed="1"
+      cleanup_failed="1"
       log "runtime writer restoration failed during process exit"
     fi
   fi
   release_migrator_lifecycle_lock || true
   pinvi_cleanup_api_build_context || true
-  if [[ "$exit_code" == "0" && "$restore_failed" != "0" ]]; then
+  if [[ "$exit_code" == "0" && "$cleanup_failed" != "0" ]]; then
     exit_code="1"
   fi
   return "$exit_code"
@@ -307,15 +384,24 @@ compose_with_one_shot_migrator_password() {
 
 seal_migrator_login() {
   local legacy_rebaseline="$1"
+  local attempt
   log "sealing one-shot migrator login"
-  if ! compose run --rm \
-    -e PINVI_M05_LEGACY_REBASELINE="$legacy_rebaseline" \
-    -e PINVI_MIGRATOR_DISABLE_LOGIN=1 \
-    app-db-runtime-role; then
-    MIGRATOR_ONE_SHOT_PASSWORD=""
-    return 1
-  fi
-  MIGRATOR_ONE_SHOT_PASSWORD=""
+  for attempt in 1 2 3; do
+    if compose run --rm \
+      -e PINVI_M05_LEGACY_REBASELINE="$legacy_rebaseline" \
+      -e PINVI_MIGRATOR_DISABLE_LOGIN=1 \
+      app-db-runtime-role; then
+      MIGRATOR_ONE_SHOT_PASSWORD=""
+      MIGRATOR_LOGIN_NEEDS_SEAL="0"
+      return 0
+    fi
+    log "migrator seal attempt ${attempt}/3 failed"
+    if [[ "$attempt" != "3" ]]; then
+      sleep 1
+    fi
+  done
+  echo "migrator login could not be sealed after 3 attempts" >&2
+  return 1
 }
 
 run_admin_bootstrap() {
@@ -370,9 +456,7 @@ reject_explicit_migrator_database_url() {
 migrate_under_lifecycle_lock() {
   require_docker
   require_python
-  if ! pinvi_verify_runtime_image_provenance app-api; then
-    return 1
-  fi
+  pinvi_verify_runtime_image_provenance app-api
   local credential_file
   if ! credential_file="$(bootstrap_credential_file)"; then
     return 1
@@ -387,6 +471,7 @@ migrate_under_lifecycle_lock() {
       return 1
     fi
   fi
+  MIGRATOR_LEGACY_REBASELINE="$legacy_rebaseline"
   if ! drain_runtime_writers; then
     log "runtime writer drain failed"
     restore_runtime_writers || log "runtime writer restoration failed"
@@ -394,6 +479,9 @@ migrate_under_lifecycle_lock() {
   fi
   local attempt
   for attempt in 1 2 3 4 5; do
+    if [[ "$legacy_rebaseline" == "0" ]]; then
+      MIGRATOR_LOGIN_NEEDS_SEAL="1"
+    fi
     if ! prepare_migrator_login "$legacy_rebaseline"; then
       log "migrator preparation failed; sealing the one-shot login"
       seal_migrator_login "$legacy_rebaseline" || \
@@ -455,9 +543,9 @@ up() {
   if [[ "$legacy_rebaseline" == "1" ]]; then
     legacy_rebaseline_receipt_file >/dev/null
   fi
-  free_app_ports
   acquire_migrator_lifecycle_lock
-  up_deps "$legacy_rebaseline"
+  free_app_ports
+  up_deps
   migrate_under_lifecycle_lock
   log "starting API + Web"
   compose up -d app-api app-web
@@ -477,6 +565,12 @@ down() {
 
 reset() {
   require_docker
+  case "${PINVI_ENVIRONMENT:-smoke}" in
+    staging|production)
+      echo "reset is disabled for staging/production; use an approved recovery procedure" >&2
+      return 2
+      ;;
+  esac
   compose down -v --remove-orphans
 }
 

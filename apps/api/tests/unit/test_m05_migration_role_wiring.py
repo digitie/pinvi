@@ -83,6 +83,12 @@ def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
     assert "grant_app_runtime_privileges()" in bootstrap
     assert 'if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then' in bootstrap
     assert 'grant_app_runtime_privileges "${PINVI_APP_SCHEMA_OWNER}"' in bootstrap
+    assert "pinvi_internal.acquire_fresh_0101_database_fence()" in bootstrap
+    assert 'GRANT CREATE ON DATABASE :"database_name" TO :"schema_owner";' in bootstrap
+    assert (
+        'GRANT CREATE ON DATABASE :"database_name" TO :"schema_owner", :"migration_owner";'
+        not in bootstrap
+    )
 
 
 def test_0101_switches_only_m05_objects_and_restores_app_owner_for_versioning() -> None:
@@ -91,7 +97,7 @@ def test_0101_switches_only_m05_objects_and_restores_app_owner_for_versioning() 
     ).read_text(encoding="utf-8")
 
     activation = migration.index("app_owner = _activate_m05_migration_owner(bind)")
-    ops_schema = migration.index('op.execute("CREATE SCHEMA IF NOT EXISTS ops")')
+    ops_schema = migration.index("statement.strip() == 'CREATE SCHEMA IF NOT EXISTS \"ops\"'")
     assertion = migration.index("_assert_m05_acl(bind)")
     restore = migration.index("_restore_app_owner(app_owner)")
 
@@ -205,6 +211,8 @@ def test_migration_wrappers_open_only_for_the_one_shot_and_seal_afterward() -> N
         assert 'MIGRATOR_ONE_SHOT_PASSWORD=""' in source
         assert "reject_explicit_migrator_database_url()" in source
         assert "PINVI_MIGRATOR_DATABASE_URL is unsupported" in source
+        assert "MIGRATOR_LOGIN_NEEDS_SEAL" in source
+        assert "for attempt in 1 2 3; do" in source
         assert (
             wrapper.index("acquire_migrator_lifecycle_lock")
             < wrapper.index("migrate_under_lifecycle_lock")
@@ -229,7 +237,11 @@ def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
             )
         ]
         assert 'local restore_failed="0"' in recovery
-        assert "if ! compose up -d app-api; then" in recovery
+        assert 'docker start "$RUNTIME_API_CONTAINER_ID"' in recovery
+        assert 'docker start "$RUNTIME_DAGSTER_CONTAINER_ID"' in recovery
+        assert "RUNTIME_API_IMAGE_ID" in recovery
+        assert "RUNTIME_DAGSTER_IMAGE_ID" in recovery
+        assert "pinvi_verify_or_remove_running_dagster" not in recovery
         assert 'wait_for_url "http://127.0.0.1:${API_PORT}/health/db" "API DB restore"' in recovery
         assert 'if [[ "$restore_failed" != "0" ]]; then' in recovery
         assert "release_migrator_lifecycle_lock || true" in source
@@ -249,6 +261,9 @@ def test_fresh_0101_and_role_bootstrap_fence_direct_app_schema_create() -> None:
     )
 
     assert "_acquire_fresh_0101_writer_fence(bind)" in migration
+    assert "_FRESH_0101_DATABASE_FENCE_FUNCTION" in migration
+    assert "LOCK TABLE pinvi_internal.baseline_origin" in migration
+    assert "canonical fresh 0100 catalog fingerprint" in migration
     assert "app_namespace.nspname = 'app'" in migration
     assert "app_acl.privilege_type = 'CREATE'" in migration
     assert "app_acl.privilege_type = 'CREATE'" in bootstrap
@@ -261,12 +276,13 @@ def test_docker_app_up_uses_the_explicit_legacy_role_profile_before_migration() 
     up_deps = source[source.index("up_deps() {") : source.index("drain_runtime_writers() {")]
     up = source[source.index("up() {") : source.index("down() {")]
 
-    assert 'local legacy_rebaseline="${1:-0}"' in up_deps
-    assert '-e PINVI_M05_LEGACY_REBASELINE="$legacy_rebaseline"' in up_deps
+    assert "app-db-runtime-role" not in up_deps
+    assert 'local legacy_rebaseline="${1:-0}"' not in up_deps
     assert "legacy_rebaseline_receipt_file >/dev/null" in up
-    assert up.index("acquire_migrator_lifecycle_lock") < up.index('up_deps "$legacy_rebaseline"')
+    assert up.index("acquire_migrator_lifecycle_lock") < up.index("free_app_ports")
     assert (
-        up.index('up_deps "$legacy_rebaseline"')
+        up.index("free_app_ports")
+        < up.index("up_deps")
         < up.index("migrate_under_lifecycle_lock")
         < up.index("release_migrator_lifecycle_lock")
     )

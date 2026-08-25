@@ -2,6 +2,21 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-26 (codex) — PR #477 rebase 후 fresh catalog·운영 복구 보강
+
+- `origin/main` 최신 상태로 rebase한 뒤 fresh `0100` catalog fingerprint를 공통 모듈로 분리하고,
+  정책·collation 같은 특수 schema object drift와 schema ACL의 의미상 동등한 표현을 검증하도록
+  보강했다. 0100은 durable origin에 fingerprint를 저장하고 0101은 이를 재계산해 확인한다.
+- managed fresh topology는 bootstrap이 `pinvi_internal` admission fence와 `ops` schema를 먼저
+  확보한다. migration owner에는 database CREATE를 주지 않으며, 0101 artifact의 idempotent
+  `ops` schema 문장은 이미 있는 managed schema에서 건너뛰어 권한 경계를 유지한다.
+- deploy fallback은 migration 전 API/Dagster의 정확한 container/image를 저장·복구하고,
+  one-shot migrator seal을 최대 3회 재시도하며 실패 시 fail-close한다. 특수 catalog drift와
+  별도 non-runtime migration owner 회귀 테스트를 추가했다.
+- 검증: M05 PostgreSQL 통합 `29 passed, 1 warning`, 관련 unit `17 passed`, Ruff/format, shell
+  syntax, `git diff --check` 통과. `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 건드리지
+  않았으며, live admin 인증 실패로 현재 live E2E gate는 아직 미통과다.
+
 ## 2026-08-25 (codex) — PR #477 최종 fence·복구 보강
 
 - fresh `0101`이 `0100`→`0101` 전환 전에 advisory lock·app table DML lock·DDL quiescence를
