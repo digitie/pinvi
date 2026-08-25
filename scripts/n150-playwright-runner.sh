@@ -233,9 +233,9 @@ test_status=0
 # evidence directory를 다시 읽어야 하므로, attested marker 하나만 host caller로
 # 되돌린다. staging/production runner가 root라면 root:root 소유가 그대로 유지된다.
 marker_path=""
-if [[ -n "${PINVI_M04_UI_VERIFICATION_ID:-}" ]]; then
+if [[ -n "${PINVI_M04_UI_VERIFICATION_ID:-}" && -n "${PINVI_M04_UI_EVIDENCE_DIR:-}" ]]; then
   marker_path="${PINVI_M04_UI_EVIDENCE_DIR}/m04-ui-run.json"
-elif [[ -n "${PINVI_M05_UI_VERIFICATION_ID:-}" ]]; then
+elif [[ -n "${PINVI_M05_UI_VERIFICATION_ID:-}" && -n "${PINVI_M05_UI_EVIDENCE_DIR:-}" ]]; then
   marker_path="${PINVI_M05_UI_EVIDENCE_DIR}/ui-run.json"
 fi
 if [[ -n "$marker_path" && -e "$marker_path" ]]; then
