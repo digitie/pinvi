@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-25 (codex) — PR #477 재심 P1 추가 보강
+
+- fresh `0100`은 schema comment만 남기지 않고 `pinvi_internal.baseline_origin`에 baseline
+  artifact hash·database OID·PostgreSQL system identifier를 기록한다. `0101`은 comment와
+  `0100` version row 및 이 durable origin row·owner를 함께 확인하므로 legacy `0061` database가
+  comment만 바꿔 fresh 경로로 우회할 수 없다.
+- role security fingerprint가 `app`/`x_extension` relation·function·type ACL, default ACL과
+  elevated role closure까지 포함하도록 보강했다. rebaseline fence는 `pg_authid`,
+  `pg_auth_members`, `pg_db_role_setting`도 transaction-scoped로 잠그고 `CREATEROLE`·
+  `x_extension` DDL-capable session을 fail-close한다.
+- production fallback `deploy-node.sh`에도 API/Dagster drain 상태 보존·실패/종료 복구·readiness
+  확인을 적용했고, fallback Postgres data volume을 named volume으로 고정했다. runbook의
+  connection fence 설명도 자동 종료가 아닌 operator cleanup 후 retry로 정정했다.
+- 관련 unit `20 passed`, adversarial PostgreSQL targeted `7 passed`, M05 전체 integration
+  `28 passed, 1 warning`, Ruff/format/compile/shell syntax 통과. 이 보강은 아직 원격에
+  push하지 않았고, `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 건드리지 않았다.
+
 ## 2026-08-25 (codex) — PR #477 적대 재심 P1 반영
 
 - 두 전문 리뷰에서 지적된 rebaseline writer 경합을 반영했다. `0100` helper와 `0101` legacy

@@ -41,6 +41,7 @@ _LEGACY_REBASELINE_TARGET_HOST = "n150"
 _LEGACY_REBASELINE_CATALOG_LINES = 1590
 _FRESH_BASELINE_SCHEMA_COMMENT = "pinvi-0100-fresh/v1"
 _LEGACY_REBASELINE_SCHEMA_COMMENT = "pinvi-0100-legacy/v1"
+_FRESH_BASELINE_SHA256 = "cfb77c4402b49b4d03a15a1e2471cef13c6665b7b95efe4fedda6af7ae2b4b57"
 _EXPECTED_FRESH_CATALOG_SHA256 = "4f2d69decc34300c597320e8a0dc78d154bd2eb4b6dbc96f0b51ba5b05c75d94"
 _N150_LEGACY_CATALOG_SHA256 = "4f2d69decc34300c597320e8a0dc78d154bd2eb4b6dbc96f0b51ba5b05c75d94"
 _N150_TARGET_IDENTITY_SHA256 = "e04c99a4681738e0292debdceded99b1c8abe01c9b8bdee82aeef8566dd33cc1"
@@ -458,7 +459,9 @@ WITH RECURSIVE app_owner_roles(oid) AS (
   UNION
   SELECT role_row.oid
   FROM pg_roles AS role_row
-  WHERE role_row.rolname IN (current_user, session_user)
+  WHERE role_row.rolsuper OR role_row.rolcreaterole OR role_row.rolcreatedb
+     OR role_row.rolreplication OR role_row.rolbypassrls
+     OR role_row.rolname IN (current_user, session_user)
      OR role_row.rolname LIKE 'pinvi%'
   UNION
   SELECT database_row.datdba
@@ -488,6 +491,40 @@ WITH RECURSIVE app_owner_roles(oid) AS (
     )::text
   FROM pg_namespace AS namespace
   WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'relation_acl', namespace.nspname, relation.relname, relation.relkind,
+      pg_get_userbyid(relation.relowner), COALESCE(relation.relacl::text, '')
+    )::text
+  FROM pg_class AS relation
+  JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'function_acl', namespace.nspname, procedure.oid::regprocedure::text,
+      pg_get_userbyid(procedure.proowner), COALESCE(procedure.proacl::text, '')
+    )::text
+  FROM pg_proc AS procedure
+  JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'type_acl', namespace.nspname, type_row.typname,
+      pg_get_userbyid(type_row.typowner), COALESCE(type_row.typacl::text, '')
+    )::text
+  FROM pg_type AS type_row
+  JOIN pg_namespace AS namespace ON namespace.oid = type_row.typnamespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'default_acl', COALESCE(namespace.nspname, ''),
+      pg_get_userbyid(default_acl.defaclrole), default_acl.defaclobjtype,
+      COALESCE(default_acl.defaclacl::text, '')
+    )::text
+  FROM pg_default_acl AS default_acl
+  LEFT JOIN pg_namespace AS namespace ON namespace.oid = default_acl.defaclnamespace
+  WHERE default_acl.defaclnamespace = 0
+     OR namespace.nspname IN ('app', 'x_extension')
   UNION ALL
   SELECT jsonb_build_array(
       'role', role_row.rolname, role_row.rolsuper, role_row.rolinherit,
@@ -543,6 +580,10 @@ WHERE current_role_row.rolname = current_user
 """
 _LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL = "SET LOCAL lock_timeout = '5s'"
 _LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_RESET_SQL = "SET LOCAL lock_timeout = 0"
+_LEGACY_REBASELINE_ROLE_SECURITY_FENCE_SQL = (
+    "LOCK TABLE pg_catalog.pg_authid, pg_catalog.pg_auth_members, "
+    "pg_catalog.pg_db_role_setting IN ACCESS EXCLUSIVE MODE"
+)
 _LEGACY_REBASELINE_DDL_CAPABLE_SESSIONS_CTE = """
 WITH app_schema AS (
   SELECT namespace.oid, namespace.nspowner
@@ -599,6 +640,25 @@ app_catalog_owners(owner_oid) AS (
   SELECT extension_row.extowner
   FROM pg_extension AS extension_row
   JOIN app_schema AS schema ON schema.oid = extension_row.extnamespace
+  UNION
+  SELECT namespace.nspowner
+  FROM pg_namespace AS namespace
+  WHERE namespace.nspname = 'x_extension'
+  UNION
+  SELECT relation.relowner
+  FROM pg_class AS relation
+  JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+  WHERE namespace.nspname = 'x_extension'
+  UNION
+  SELECT procedure.proowner
+  FROM pg_proc AS procedure
+  JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+  WHERE namespace.nspname = 'x_extension'
+  UNION
+  SELECT type_row.typowner
+  FROM pg_type AS type_row
+  JOIN pg_namespace AS namespace ON namespace.oid = type_row.typnamespace
+  WHERE namespace.nspname = 'x_extension'
 ),
 ddl_capable_sessions(pid) AS (
   SELECT activity.pid
@@ -609,7 +669,9 @@ ddl_capable_sessions(pid) AS (
     AND activity.pid <> pg_backend_pid()
     AND (
       COALESCE(role_row.rolsuper, false)
+      OR COALESCE(role_row.rolcreaterole, false)
       OR COALESCE(has_schema_privilege(activity.usesysid, 'app', 'CREATE'), false)
+      OR COALESCE(has_schema_privilege(activity.usesysid, 'x_extension', 'CREATE'), false)
       OR EXISTS (
         SELECT 1
         FROM app_catalog_owners AS owner_row
@@ -1090,6 +1152,7 @@ def _acquire_legacy_rebaseline_database_connection_fence(bind: sa.Connection) ->
                 "0101 legacy rebaseline requires superuser connection fence authority"
             )
         bind.execute(sa.text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE"))
+        bind.execute(sa.text(_LEGACY_REBASELINE_ROLE_SECURITY_FENCE_SQL))
     except sa.exc.DBAPIError as exc:
         # pg_database AccessShare lock을 잡은 기존 backend는 DDL-capable PID 열거 전에
         # 이 fence를 막을 수 있다. 이 경우 transaction 전체를 fail-close하여 무기한
@@ -1120,11 +1183,56 @@ def _legacy_rebaseline_catalog_fingerprint(bind: sa.Connection) -> tuple[int, st
 
 
 def _assert_fresh_0100_marker(bind: sa.Connection) -> None:
-    """Require the non-legacy path to carry the durable fresh-baseline marker."""
+    """Require the durable origin row written by the fresh 0100 revision."""
 
     marker = bind.scalar(sa.text("SELECT obj_description('app'::regnamespace, 'pg_namespace')"))
     if marker != _FRESH_BASELINE_SCHEMA_COMMENT:
         raise RuntimeError("0101 non-legacy handoff requires the canonical fresh 0100 marker")
+    version_rows = tuple(
+        str(version)
+        for version in bind.execute(
+            sa.text("SELECT version_num FROM app.alembic_version ORDER BY version_num")
+        ).scalars()
+    )
+    if version_rows != ("20260824_0100",):
+        raise RuntimeError("0101 non-legacy handoff requires exactly the 0100 version row")
+    try:
+        origin = bind.execute(
+            sa.text(
+                "SELECT origin.marker, origin.baseline_sha256, origin.database_oid::bigint, "
+                "origin.system_identifier, "
+                "relation.relowner = current_user::regrole AS table_owner_is_current, "
+                "namespace.nspowner = current_user::regrole AS schema_owner_is_current "
+                "FROM pinvi_internal.baseline_origin AS origin "
+                "JOIN pg_class AS relation ON relation.oid = 'pinvi_internal.baseline_origin'::regclass "
+                "JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace"
+            )
+        ).all()
+    except sa.exc.DBAPIError as exc:
+        raise RuntimeError(
+            "0101 non-legacy handoff requires the durable fresh 0100 origin"
+        ) from exc
+    if len(origin) != 1:
+        raise RuntimeError("0101 non-legacy handoff requires the durable fresh 0100 origin")
+    row = origin[0]
+    expected_database_oid = bind.scalar(
+        sa.text(
+            "SELECT database_row.oid::bigint FROM pg_database AS database_row "
+            "WHERE database_row.datname = current_database()"
+        )
+    )
+    expected_system_identifier = bind.scalar(
+        sa.text("SELECT (pg_control_system()).system_identifier::text")
+    )
+    if row != (
+        _FRESH_BASELINE_SCHEMA_COMMENT,
+        _FRESH_BASELINE_SHA256,
+        expected_database_oid,
+        expected_system_identifier,
+        True,
+        True,
+    ):
+        raise RuntimeError("0101 non-legacy handoff requires the durable fresh 0100 origin")
 
 
 def _assert_legacy_0100_marker(bind: sa.Connection) -> None:

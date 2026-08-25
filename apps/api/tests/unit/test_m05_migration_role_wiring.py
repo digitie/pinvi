@@ -7,6 +7,11 @@ ROOT = Path(__file__).resolve().parents[4]
 
 def test_compose_keeps_runtime_and_migrator_role_inputs_separate() -> None:
     compose = (ROOT / "infra" / "docker-compose.app.yml").read_text(encoding="utf-8")
+    postgres_block = compose.split("  app-postgres:", maxsplit=1)[1].split(
+        "  # Root bootstrap", maxsplit=1
+    )[0]
+    assert "app-postgres:/var/lib/postgresql/data" in postgres_block
+    assert "\n  app-postgres:\n" in compose.rsplit("volumes:", maxsplit=1)[1]
     runtime_block = compose.split("  app-api:", maxsplit=1)[1].split(
         "  # Explicit one-shot only:", maxsplit=1
     )[0]
@@ -144,6 +149,11 @@ def test_rebaseline_fence_blocks_new_backends_and_catches_inherited_catalog_owne
         assert "SELECT pg_stat_clear_snapshot()" in source
         assert "pre-existing DDL-capable sessions to be stopped" in source
         assert "SELECT pg_terminate_backend(:pid, 5000)" not in source
+        assert "pg_catalog.pg_authid" in source
+        assert "role_row.rolcreaterole" in source
+        assert "has_schema_privilege(activity.usesysid, 'x_extension', 'CREATE')" in source
+        for fragment in ("relation_acl", "function_acl", "type_acl", "default_acl"):
+            assert fragment in source
         assert "pg_has_role(activity.usesysid, owner_row.owner_oid, 'USAGE')" in source
         assert "pg_has_role(activity.usesysid, owner_row.owner_oid, 'SET')" in source
         assert "ALLOW_CONNECTIONS false" not in source

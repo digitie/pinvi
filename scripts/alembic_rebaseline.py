@@ -480,7 +480,9 @@ WITH RECURSIVE app_owner_roles(oid) AS (
   UNION
   SELECT role_row.oid
   FROM pg_roles AS role_row
-  WHERE role_row.rolname IN (current_user, session_user)
+  WHERE role_row.rolsuper OR role_row.rolcreaterole OR role_row.rolcreatedb
+     OR role_row.rolreplication OR role_row.rolbypassrls
+     OR role_row.rolname IN (current_user, session_user)
      OR role_row.rolname LIKE 'pinvi%'
   UNION
   SELECT database_row.datdba
@@ -510,6 +512,40 @@ WITH RECURSIVE app_owner_roles(oid) AS (
     )::text
   FROM pg_namespace AS namespace
   WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'relation_acl', namespace.nspname, relation.relname, relation.relkind,
+      pg_get_userbyid(relation.relowner), COALESCE(relation.relacl::text, '')
+    )::text
+  FROM pg_class AS relation
+  JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'function_acl', namespace.nspname, procedure.oid::regprocedure::text,
+      pg_get_userbyid(procedure.proowner), COALESCE(procedure.proacl::text, '')
+    )::text
+  FROM pg_proc AS procedure
+  JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'type_acl', namespace.nspname, type_row.typname,
+      pg_get_userbyid(type_row.typowner), COALESCE(type_row.typacl::text, '')
+    )::text
+  FROM pg_type AS type_row
+  JOIN pg_namespace AS namespace ON namespace.oid = type_row.typnamespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'default_acl', COALESCE(namespace.nspname, ''),
+      pg_get_userbyid(default_acl.defaclrole), default_acl.defaclobjtype,
+      COALESCE(default_acl.defaclacl::text, '')
+    )::text
+  FROM pg_default_acl AS default_acl
+  LEFT JOIN pg_namespace AS namespace ON namespace.oid = default_acl.defaclnamespace
+  WHERE default_acl.defaclnamespace = 0
+     OR namespace.nspname IN ('app', 'x_extension')
   UNION ALL
   SELECT jsonb_build_array(
       'role', role_row.rolname, role_row.rolsuper, role_row.rolinherit,
@@ -565,6 +601,10 @@ WHERE current_role_row.rolname = current_user
 """
 _REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL = "SET LOCAL lock_timeout = '5s'"
 _REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_RESET_SQL = "SET LOCAL lock_timeout = 0"
+_REBASELINE_ROLE_SECURITY_FENCE_SQL = (
+    "LOCK TABLE pg_catalog.pg_authid, pg_catalog.pg_auth_members, "
+    "pg_catalog.pg_db_role_setting IN ACCESS EXCLUSIVE MODE"
+)
 
 # table lock만으로 enum/domain/operator처럼 relation 밖에 저장되는 app DDL을 멈출 수는
 # 없다. owner role은 direct login뿐 아니라 INHERIT membership나 SET ROLE로도 쓸 수
@@ -626,6 +666,25 @@ app_catalog_owners(owner_oid) AS (
   SELECT extension_row.extowner
   FROM pg_extension AS extension_row
   JOIN app_schema AS schema ON schema.oid = extension_row.extnamespace
+  UNION
+  SELECT namespace.nspowner
+  FROM pg_namespace AS namespace
+  WHERE namespace.nspname = 'x_extension'
+  UNION
+  SELECT relation.relowner
+  FROM pg_class AS relation
+  JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+  WHERE namespace.nspname = 'x_extension'
+  UNION
+  SELECT procedure.proowner
+  FROM pg_proc AS procedure
+  JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+  WHERE namespace.nspname = 'x_extension'
+  UNION
+  SELECT type_row.typowner
+  FROM pg_type AS type_row
+  JOIN pg_namespace AS namespace ON namespace.oid = type_row.typnamespace
+  WHERE namespace.nspname = 'x_extension'
 ),
 ddl_capable_sessions(pid) AS (
   SELECT activity.pid
@@ -636,7 +695,9 @@ ddl_capable_sessions(pid) AS (
     AND activity.pid <> pg_backend_pid()
     AND (
       COALESCE(role_row.rolsuper, false)
+      OR COALESCE(role_row.rolcreaterole, false)
       OR COALESCE(has_schema_privilege(activity.usesysid, 'app', 'CREATE'), false)
+      OR COALESCE(has_schema_privilege(activity.usesysid, 'x_extension', 'CREATE'), false)
       OR EXISTS (
         SELECT 1
         FROM app_catalog_owners AS owner_row
@@ -1457,6 +1518,7 @@ async def _acquire_rebaseline_database_connection_fence(
         await connection.execute(
             text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE")
         )
+        await connection.execute(text(_REBASELINE_ROLE_SECURITY_FENCE_SQL))
     except DBAPIError as exc:
         # 기존 backend가 pg_database AccessShare lock을 길게 보유하면 client를
         # 식별·종료하기도 전에 여기서 막힌다. 무기한 대기하지 않고 transaction을
@@ -1751,6 +1813,13 @@ async def _apply(
                     )
                 if existing_receipt is None:
                     _prepare_receipt(receipt, receipt_payload)
+                if (
+                    await _role_security_fingerprint(connection)
+                    != preflight.role_security_sha256
+                ):
+                    raise RebaselineError(
+                        "role security fingerprint changed during the locked transition"
+                    )
                 await connection.execute(
                     text(
                         "COMMENT ON SCHEMA app IS "
@@ -1773,6 +1842,13 @@ async def _apply(
                 if version_rows != (BASELINE_REVISION,):
                     raise RebaselineError(
                         "post-update alembic version row is not 20260824_0100"
+                    )
+                if (
+                    await _role_security_fingerprint(connection)
+                    != preflight.role_security_sha256
+                ):
+                    raise RebaselineError(
+                        "role security fingerprint changed during the locked transition"
                     )
     finally:
         await engine.dispose()

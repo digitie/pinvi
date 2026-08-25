@@ -171,13 +171,26 @@ restore_runtime_writers() {
   if [[ "$RUNTIME_API_WAS_RUNNING" == "1" ]]; then
     log "restoring API after migration attempt"
     compose up -d app-api
+    pinvi_verify_or_remove_running_app
+    wait_for_url "http://127.0.0.1:${API_PORT}/health" "API restore"
   fi
   if [[ "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
     log "restoring Dagster after migration attempt"
     compose --profile etl up -d app-dagster
+    pinvi_verify_or_remove_running_dagster
+    wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster restore"
   fi
   RUNTIME_API_WAS_RUNNING="0"
   RUNTIME_DAGSTER_WAS_RUNNING="0"
+}
+
+restore_runtime_writers_on_exit() {
+  local exit_code=$?
+  if [[ "$RUNTIME_API_WAS_RUNNING" == "1" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
+    restore_runtime_writers || log "runtime writer restoration failed during process exit"
+  fi
+  pinvi_cleanup_api_build_context || true
+  return "$exit_code"
 }
 
 m05_legacy_rebaseline_profile() {
@@ -366,7 +379,10 @@ migrate() {
   reject_explicit_migrator_database_url
   pinvi_prepare_api_image_provenance
   acquire_migrator_lifecycle_lock
-  migrate_under_lifecycle_lock
+  if ! migrate_under_lifecycle_lock; then
+    release_migrator_lifecycle_lock
+    return 1
+  fi
   release_migrator_lifecycle_lock
 }
 
@@ -462,7 +478,7 @@ smoke() {
 
 main() {
   cd "$ROOT_DIR"
-  trap pinvi_cleanup_api_build_context EXIT
+  trap restore_runtime_writers_on_exit EXIT
   local command="${1:-}"
   [[ -n "$command" ]] || { usage; exit 2; }
   shift || true

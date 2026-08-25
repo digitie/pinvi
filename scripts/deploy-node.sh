@@ -15,6 +15,8 @@ DAGSTER_PORT="${PINVI_DAGSTER_DEV_PORT:-12802}"
 # Dagster webserver(profile etl)를 같이 띄울지. 운영에서 pinvi-dagster.<domain>을 쓰면 1.
 ENABLE_DAGSTER="${PINVI_ENABLE_DAGSTER:-0}"
 MIGRATOR_ONE_SHOT_PASSWORD=""
+RUNTIME_API_WAS_RUNNING="0"
+RUNTIME_DAGSTER_WAS_RUNNING="0"
 
 usage() {
   cat <<'EOF'
@@ -104,11 +106,45 @@ build_images() {
 }
 
 drain_runtime_writers() {
+  RUNTIME_API_WAS_RUNNING="0"
+  RUNTIME_DAGSTER_WAS_RUNNING="0"
+  if [[ -n "$(compose ps -q --status running app-api)" ]]; then
+    RUNTIME_API_WAS_RUNNING="1"
+  fi
+  if [[ -n "$(compose --profile etl ps -q --status running app-dagster)" ]]; then
+    RUNTIME_DAGSTER_WAS_RUNNING="1"
+  fi
   log "stopping API and Dagster writers before migration"
   compose stop app-api
   if [[ "$ENABLE_DAGSTER" != "0" ]]; then
     compose --profile etl stop app-dagster
   fi
+}
+
+restore_runtime_writers() {
+  if [[ "$RUNTIME_API_WAS_RUNNING" == "1" ]]; then
+    log "restoring API after migration attempt"
+    compose up -d app-api
+    pinvi_verify_or_remove_running_app
+    wait_for_url "http://127.0.0.1:${API_PORT}/health" "API restore"
+  fi
+  if [[ "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
+    log "restoring Dagster after migration attempt"
+    compose --profile etl up -d app-dagster
+    pinvi_verify_or_remove_running_dagster
+    wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster restore"
+  fi
+  RUNTIME_API_WAS_RUNNING="0"
+  RUNTIME_DAGSTER_WAS_RUNNING="0"
+}
+
+restore_runtime_writers_on_exit() {
+  local exit_code=$?
+  if [[ "$RUNTIME_API_WAS_RUNNING" == "1" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
+    restore_runtime_writers || log "runtime writer restoration failed during process exit"
+  fi
+  pinvi_cleanup_api_build_context || true
+  return "$exit_code"
 }
 
 m05_legacy_rebaseline_profile() {
@@ -263,20 +299,28 @@ migrate_under_lifecycle_lock() {
     log "migrator preparation failed; sealing the one-shot login"
     seal_migrator_login "$legacy_rebaseline" || \
       log "migrator preparation failure could not be followed by a sealing run"
+    restore_runtime_writers || log "runtime writer restoration failed"
     return 1
   fi
   log "running Pinvi admin bootstrap"
   if run_admin_bootstrap "$credential_file" "$legacy_rebaseline" "$legacy_receipt_file"; then
     if ! seal_migrator_login "$legacy_rebaseline"; then
       log "migration succeeded but the one-shot migrator login could not be sealed"
+      restore_runtime_writers || log "runtime writer restoration failed"
       return 1
     fi
+    restore_runtime_writers || {
+      log "runtime writer restoration failed"
+      return 1
+    }
     return 0
   fi
   if ! seal_migrator_login "$legacy_rebaseline"; then
     log "failed migration could not be followed by a sealing run"
+    restore_runtime_writers || log "runtime writer restoration failed"
     return 1
   fi
+  restore_runtime_writers || log "runtime writer restoration failed"
   return 1
 }
 
@@ -284,7 +328,10 @@ migrate() {
   reject_explicit_migrator_database_url
   pinvi_prepare_api_image_provenance require-immutable
   acquire_migrator_lifecycle_lock
-  migrate_under_lifecycle_lock
+  if ! migrate_under_lifecycle_lock; then
+    release_migrator_lifecycle_lock
+    return 1
+  fi
   release_migrator_lifecycle_lock
 }
 
@@ -374,7 +421,7 @@ deploy() {
 
 main() {
   cd "$ROOT_DIR"
-  trap pinvi_cleanup_api_build_context EXIT
+  trap restore_runtime_writers_on_exit EXIT
   preflight
   case "${1:-}" in
     deploy|build|pull|migrate|up|dagster|smoke)

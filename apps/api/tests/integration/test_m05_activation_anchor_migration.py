@@ -189,6 +189,14 @@ async def test_0101_installs_m05_final_contract_with_minimal_public_surface(
                     )
                     == "pinvi-0100-fresh/v1"
                 )
+                assert (
+                    await connection.execute(
+                        text("SELECT marker, baseline_sha256 FROM pinvi_internal.baseline_origin")
+                    )
+                ).one() == (
+                    "pinvi-0100-fresh/v1",
+                    "cfb77c4402b49b4d03a15a1e2471cef13c6665b7b95efe4fedda6af7ae2b4b57",
+                )
                 boundary_definition = await connection.scalar(
                     text(
                         "SELECT pg_get_constraintdef(constraint_row.oid) "
@@ -456,12 +464,12 @@ async def test_0101_absorbs_current_main_post_0061_contracts_and_backfill(
 
 
 @pytest.mark.asyncio
-async def test_rebaseline_0061_to_0100_then_0101_preserves_data_and_runs_backfill(
+async def test_rebaseline_0061_to_0100_preserves_data_and_seals_legacy_handoff(
     _database_url: str,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """N150과 같은 0061 catalog는 version row만 전환한 뒤 current-main/M05 0101을 적용한다."""
+    """N150과 같은 0061 catalog는 data를 보존한 채 receipt-bound 0100으로 전환한다."""
 
     target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_rebaseline")
     user_id = uuid.uuid4()
@@ -535,50 +543,57 @@ async def test_rebaseline_0061_to_0100_then_0101_preserves_data_and_runs_backfil
         finally:
             await engine.dispose()
 
-        # The legacy marker/handoff itself is covered above and by the dedicated receipt
-        # test.  Re-stamp this disposable fixture as a fresh baseline to exercise the full
-        # 0101 DDL tail without manufacturing managed migration roles in the test database.
-        engine = create_async_engine(target_url, poolclass=NullPool)
-        try:
-            async with engine.begin() as connection:
-                await connection.execute(text("COMMENT ON SCHEMA app IS 'pinvi-0100-fresh/v1'"))
-        finally:
-            await engine.dispose()
-
-        migration = _activation_migration_module()
-        monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE", "0")
-
-        def run_legacy_activation(bind) -> None:  # type: ignore[no-untyped-def]
-            from alembic.migration import MigrationContext
-            from alembic.operations import Operations
-
-            migration.op = Operations(MigrationContext.configure(bind))
-            migration.upgrade()
-            bind.execute(text("UPDATE app.alembic_version SET version_num = '20260824_0101'"))
-
-        engine = create_async_engine(target_url, poolclass=NullPool)
-        try:
-            async with engine.begin() as connection:
-                await connection.run_sync(run_legacy_activation)
-        finally:
-            await engine.dispose()
         engine = create_async_engine(target_url, poolclass=NullPool)
         try:
             async with engine.connect() as connection:
                 assert (
                     await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
-                    == "20260824_0101"
+                    == "20260824_0100"
                 )
                 assert (
                     await connection.scalar(
-                        text(
-                            "SELECT count(*) FROM app.user_consent_events "
-                            "WHERE user_id = :user_id AND source = 'backfill'"
-                        ),
+                        text("SELECT count(*) FROM app.users WHERE user_id = :user_id"),
                         {"user_id": user_id},
                     )
                     == 1
                 )
+                assert (
+                    await connection.scalar(
+                        text("SELECT count(*) FROM app.user_consents WHERE user_id = :user_id"),
+                        {"user_id": user_id},
+                    )
+                    == 1
+                )
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
+async def test_0101_fresh_marker_rejects_populated_app_database(
+    _database_url: str,
+) -> None:
+    """legacy data가 fresh schema comment를 위조해도 origin row 없이는 우회하지 못한다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_fresh_marker")
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "INSERT INTO app.users (user_id, email, nickname) "
+                        "VALUES (:user_id, :email, 'forged-fresh')"
+                    ),
+                    {"user_id": uuid.uuid4(), "email": "forged-fresh@pinvi.test"},
+                )
+                await connection.execute(text("DROP SCHEMA pinvi_internal CASCADE"))
+                migration = _activation_migration_module()
+                with pytest.raises(RuntimeError, match="durable fresh 0100 origin"):
+                    await connection.run_sync(migration._assert_fresh_0100_marker)
         finally:
             await engine.dispose()
     finally:
@@ -685,6 +700,16 @@ def test_0101_legacy_catalog_serializer_matches_rebaseline_helper() -> None:
         "t.tgqual",
     ):
         assert fragment in rebaseline._CATALOG_FINGERPRINT_SQL
+    for fragment in (
+        "relation_acl",
+        "function_acl",
+        "type_acl",
+        "default_acl",
+    ):
+        assert fragment in rebaseline._ROLE_SECURITY_FINGERPRINT_SQL
+    assert "pg_catalog.pg_authid" in rebaseline._REBASELINE_ROLE_SECURITY_FENCE_SQL
+    assert "role_row.rolcreaterole" in rebaseline._REBASELINE_DDL_CAPABLE_SESSIONS_CTE
+    assert "'x_extension', 'CREATE'" in rebaseline._REBASELINE_DDL_CAPABLE_SESSIONS_CTE
     assert (
         migration._LEGACY_REBASELINE_FINGERPRINT_SESSION_STATEMENTS
         == rebaseline._REBASELINE_FINGERPRINT_SESSION_STATEMENTS

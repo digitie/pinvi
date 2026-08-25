@@ -134,6 +134,34 @@ def upgrade() -> None:
     for statement in _baseline_statements():
         op.execute(sa.text(statement))
     op.execute(sa.text(f"COMMENT ON SCHEMA app IS '{_FRESH_BASELINE_SCHEMA_COMMENT}'"))
+    op.execute(sa.text("CREATE SCHEMA IF NOT EXISTS pinvi_internal"))
+    op.execute(
+        sa.text(
+            """
+            CREATE TABLE pinvi_internal.baseline_origin (
+                marker text PRIMARY KEY,
+                baseline_sha256 text NOT NULL,
+                database_oid oid NOT NULL,
+                system_identifier text NOT NULL
+            )
+            """
+        )
+    )
+    op.execute(
+        sa.text(
+            f"""
+            INSERT INTO pinvi_internal.baseline_origin
+                (marker, baseline_sha256, database_oid, system_identifier)
+            VALUES
+                ('{_FRESH_BASELINE_SCHEMA_COMMENT}', '{_BASELINE_SHA256}',
+                 (SELECT database_row.oid FROM pg_database AS database_row
+                  WHERE database_row.datname = current_database()),
+                 (pg_control_system()).system_identifier::text)
+            """  # noqa: S608 - both interpolated values are module constants
+        )
+    )
+    op.execute(sa.text("REVOKE ALL ON SCHEMA pinvi_internal FROM PUBLIC"))
+    op.execute(sa.text("REVOKE ALL ON TABLE pinvi_internal.baseline_origin FROM PUBLIC"))
 
 
 def downgrade() -> None:

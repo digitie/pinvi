@@ -108,8 +108,11 @@ legacy receipt의 role/database security fingerprint는 runtime role bootstrap �
 따라서 receipt producer의 read-only preflight와 `apply`는 `app-db-runtime-role`이 같은
 database/user 설정으로 role·membership·database ACL을 먼저 정리한 뒤 실행해야 한다. 그 뒤
 bootstrap을 다시 실행해 ACL이나 membership가 바뀌면 기존 receipt를 사용하지 말고 producer를
-처음부터 다시 실행한다. fresh `0100`은 `app` schema origin marker를 남기며, marker가 없는
-`0100`은 legacy profile과 receipt 없이는 `0101`로 진행하지 않는다.
+처음부터 다시 실행한다. fresh `0100`은 `app` schema origin marker와
+`pinvi_internal.baseline_origin` durable row를 남기며, `0101` fresh 경로는 marker·정확한
+`0100` version row·origin row를 모두 요구한다. fresh database에 이미 app data가 있어도 이
+origin 증명이 있으면 허용되며, data-bearing `0061` database는 legacy profile과 applied receipt
+없이는 `0101`로 진행하지 않는다.
 
 ```bash
 PINVI_M05_LEGACY_REBASELINE=1 \
@@ -123,8 +126,9 @@ preflight, 별도 운영 승인이 없는 상태에서는 실행하지 않는다
 `PINVI_LEGACY_REBASELINE_DATABASE_URL`로만 주입한다. wrapper는 receipt와 직접 parent가 모두
 root-owned/private인지 확인한 뒤 container root에 read-only mount하고, `0101`은 그 applied receipt의
 `0061` preflight DB identity와 현재 `0100` handoff row가 일치할 때만 DDL을 시작한다.
-connection fence는 기존 DDL-capable backend를 종료하므로, legacy rebaseline과 receipt `apply`는
-database owner만으로는 실행할 수 없고 직접 superuser root session이 필요하다.
+connection fence는 기존 DDL-capable backend를 자동 종료하지 않고 fail-close한다. 실패 시 해당
+세션을 운영자가 정리한 뒤 재시도해야 하며, legacy rebaseline과 receipt `apply`는 database
+owner만으로는 실행할 수 없고 직접 superuser root session이 필요하다.
 
 ## 3. Docker app 스크립트
 
