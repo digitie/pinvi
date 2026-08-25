@@ -326,15 +326,8 @@ pinvi_verify_running_api_image_id() {
   pinvi_verify_running_runtime_image_id app-api
 }
 
-pinvi_verify_or_remove_running_app() {
+pinvi_verify_running_app() {
   local verification_status
-  local -a container_ids remaining_ids
-  mapfile -t container_ids < <(
-    {
-      pinvi_runtime_container_ids app-api ""
-      pinvi_runtime_container_ids app-web ""
-    } | sort -u
-  )
   if pinvi_verify_running_runtime_image_id app-api && \
     pinvi_verify_running_runtime_image_id app-web; then
     return 0
@@ -342,44 +335,21 @@ pinvi_verify_or_remove_running_app() {
     verification_status="$?"
   fi
 
-  # 검증되지 않은 API를 Web이 계속 노출하지 않도록 이 project의 app pair를 모두 제거한다.
-  if (( ${#container_ids[@]} > 0 )); then
-    docker container stop "${container_ids[@]}" >/dev/null 2>&1 || true
-    docker container rm -f "${container_ids[@]}" >/dev/null 2>&1 || true
-  fi
-  mapfile -t remaining_ids < <(
-    {
-      pinvi_runtime_container_ids app-api ""
-      pinvi_runtime_container_ids app-web ""
-    } | sort -u
-  )
-  if (( ${#remaining_ids[@]} > 0 )); then
-    echo "api image provenance preflight failed: unverified app container remains" >&2
-    return 2
-  fi
+  # Container removal belongs to the caller's invocation-scoped rollback. Do
+  # not delete every stopped container sharing the Compose service label here.
+  echo "api image provenance preflight failed: running app image is not attested" >&2
   return "$verification_status"
 }
 
-pinvi_verify_or_remove_running_dagster() {
+pinvi_verify_running_dagster() {
   local verification_status
-  local -a container_ids remaining_ids
-  mapfile -t container_ids < <(pinvi_runtime_container_ids app-dagster "")
   if pinvi_verify_running_runtime_image_id app-dagster; then
     return 0
   else
     verification_status="$?"
   fi
 
-  if (( ${#container_ids[@]} > 0 )); then
-    docker container stop "${container_ids[@]}" >/dev/null 2>&1 || true
-    docker container rm -f "${container_ids[@]}" >/dev/null 2>&1 || true
-  fi
-  mapfile -t remaining_ids < <(
-    pinvi_runtime_container_ids app-dagster ""
-  )
-  if (( ${#remaining_ids[@]} > 0 )); then
-    echo "api image provenance preflight failed: unverified Dagster container remains" >&2
-    return 2
-  fi
+  # See pinvi_verify_running_app: rollback must be limited to this invocation.
+  echo "api image provenance preflight failed: running Dagster image is not attested" >&2
   return "$verification_status"
 }

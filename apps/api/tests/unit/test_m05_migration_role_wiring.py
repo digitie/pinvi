@@ -259,6 +259,12 @@ def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
         assert '|| "$RUNTIME_DAGSTER_WAS_RUNNING" == "1"' in source
         assert "runtime_dagster_is_running()" in source
         assert "dagster_rollout_enabled()" in source
+        assert "runtime_capture_predeploy_container_ids()" in source
+        assert "runtime_new_container_ids()" in source
+        assert "pinvi_verify_running_app" in source
+        assert "pinvi_verify_running_dagster" in source
+        assert "pinvi_verify_or_remove_running_app" not in source
+        assert "pinvi_verify_or_remove_running_dagster" not in source
     docker_app = (ROOT / "scripts" / "docker-app.sh").read_text(encoding="utf-8")
     assert "PINVI_DEV_FORCE_KILL" in docker_app
     assert "refusing to terminate it" in docker_app

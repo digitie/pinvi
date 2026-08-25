@@ -36,6 +36,9 @@ RUNTIME_DAGSTER_CONTAINER_NAME=""
 RUNTIME_API_BACKUP_NAME=""
 RUNTIME_WEB_BACKUP_NAME=""
 RUNTIME_DAGSTER_BACKUP_NAME=""
+RUNTIME_PREDEPLOY_API_CONTAINER_IDS=()
+RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS=()
+RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS=()
 
 usage() {
   cat <<'EOF'
@@ -207,6 +210,37 @@ runtime_writer_container_id() {
   pinvi_runtime_container_ids "$service" running
 }
 
+runtime_capture_predeploy_container_ids() {
+  mapfile -t RUNTIME_PREDEPLOY_API_CONTAINER_IDS < <(pinvi_runtime_container_ids app-api)
+  mapfile -t RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS < <(pinvi_runtime_container_ids app-web)
+  mapfile -t RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS < <(pinvi_runtime_container_ids app-dagster)
+}
+
+runtime_id_was_existing() {
+  local service="$1"
+  local container_id="$2"
+  local old_id
+  case "$service" in
+    app-api) for old_id in "${RUNTIME_PREDEPLOY_API_CONTAINER_IDS[@]}"; do [[ "$old_id" == "$container_id" ]] && return 0; done ;;
+    app-web) for old_id in "${RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS[@]}"; do [[ "$old_id" == "$container_id" ]] && return 0; done ;;
+    app-dagster) for old_id in "${RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS[@]}"; do [[ "$old_id" == "$container_id" ]] && return 0; done ;;
+  esac
+  return 1
+}
+
+runtime_new_container_ids() {
+  local service="$1"
+  local container_id
+  local -a container_ids=()
+  mapfile -t container_ids < <(pinvi_runtime_container_ids "$service")
+  for container_id in "${container_ids[@]}"; do
+    [[ -n "$container_id" ]] || continue
+    if ! runtime_id_was_existing "$service" "$container_id"; then
+      printf '%s\n' "$container_id"
+    fi
+  done
+}
+
 runtime_dagster_is_running() {
   local -a container_ids=()
   mapfile -t container_ids < <(pinvi_runtime_container_ids app-dagster running)
@@ -224,7 +258,7 @@ runtime_writer_container_name() {
 
 runtime_writer_any_container_id() {
   local service="$1"
-  pinvi_runtime_container_ids "$service"
+  runtime_writer_container_id "$service"
 }
 
 runtime_snapshot_preflight() {
@@ -257,7 +291,7 @@ remove_new_runtime_writers() {
   local service container_id removal_failed="0"
   local -a container_ids=()
   for service in app-api app-web app-dagster; do
-    mapfile -t container_ids < <(pinvi_runtime_container_ids "$service")
+    mapfile -t container_ids < <(runtime_new_container_ids "$service")
     for container_id in "${container_ids[@]}"; do
       [[ -n "$container_id" ]] || continue
       if ! docker rm -f "$container_id" >/dev/null; then
@@ -386,6 +420,7 @@ drain_runtime_writers() {
   local drain_failed="0"
   local api_container_id api_image_id web_container_id web_image_id
   local dagster_container_id dagster_image_id
+  runtime_capture_predeploy_container_ids
   RUNTIME_API_WAS_RUNNING="0"
   RUNTIME_WEB_WAS_RUNNING="0"
   RUNTIME_DAGSTER_WAS_RUNNING="0"
@@ -822,6 +857,15 @@ bootstrap_credential_file() {
   printf '%s\n' "$path"
 }
 
+dagster_up_under_lifecycle_lock() {
+  pinvi_verify_runtime_image_provenance app-dagster
+  log "starting Dagster webserver (port ${DAGSTER_PORT})"
+  compose --profile etl up -d app-dagster
+  pinvi_verify_running_dagster
+  wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster"
+  wait_for_container_health "$(runtime_writer_container_id app-dagster)" "Dagster container"
+}
+
 finalize_preserved_runtime_writers() {
   local container_id
   for container_id in "$RUNTIME_API_CONTAINER_ID" "$RUNTIME_WEB_CONTAINER_ID" \
@@ -851,6 +895,9 @@ finalize_preserved_runtime_writers() {
   RUNTIME_DAGSTER_BACKUP_NAME=""
   RUNTIME_NEW_WRITERS_STARTED="0"
   RUNTIME_SNAPSHOT_RENAMED="0"
+  RUNTIME_PREDEPLOY_API_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS=()
 }
 
 up() {
@@ -869,6 +916,7 @@ up() {
   fi
   RUNTIME_DEPLOY_PRESERVE="1"
   acquire_migrator_lifecycle_lock
+  runtime_capture_predeploy_container_ids
   if ! drain_runtime_writers; then
     log "runtime writer drain failed"
     return 1
@@ -884,7 +932,7 @@ up() {
   log "starting API + Web"
   RUNTIME_NEW_WRITERS_STARTED="1"
   compose up -d app-api app-web
-  pinvi_verify_or_remove_running_app
+  pinvi_verify_running_app
   if [[ "${PINVI_ENABLE_DAGSTER:-0}" != "0" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
     dagster_up_under_lifecycle_lock
   fi
@@ -901,6 +949,10 @@ up() {
   wait_for_container_health "$api_container_id" "API container"
   wait_for_url "http://127.0.0.1:${WEB_PORT}/" "Web"
   wait_for_container_health "$(runtime_writer_container_id app-web)" "Web container"
+  if [[ "${PINVI_ENABLE_DAGSTER:-0}" != "0" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
+    wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster final"
+    wait_for_container_health "$(runtime_writer_container_id app-dagster)" "Dagster final container"
+  fi
   finalize_preserved_runtime_writers
   release_migrator_lifecycle_lock
   log "ready: API http://127.0.0.1:${API_PORT}, Web http://127.0.0.1:${WEB_PORT}, RustFS http://127.0.0.1:${RUSTFS_PORT}"

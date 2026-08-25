@@ -27,14 +27,15 @@ sudo chown -R pinvi:pinvi /mnt/nvme
 
 ```bash
 ssh n150
-cd /opt/pinvi
-git pull origin main
-scripts/n150-docker-doctor.sh
-scripts/deploy-node.sh deploy
+cd /opt/kor-travel-docker-manager
+sudo -n backend/.venv/bin/ktdctl pinvi-pair rebuild-pinned --confirm
 ```
 
-운영 `.env`는 `docs/runbooks/deploy.md` §2를 따른다. 특히 production에서는
-`PINVI_RATE_LIMIT_BACKEND=postgres`를 둔다.
+운영 source pin과 `.env`는 manager가 관리한다. 이 명령은 현재
+rehearsal/rebuildable 정책의 정본이며 paired Map·Pinvi DB/runtime을 재구축한다. 일반
+Pinvi fallback은 manager가 설치·기동되지 않은 경우에만 `scripts/deploy-node.sh`를 사용하고,
+production에서는 `PINVI_RATE_LIMIT_BACKEND=postgres`와 동일한 lifecycle lock/migration 경계를
+유지한다.
 
 ## Postgres
 
@@ -44,6 +45,8 @@ Postgres는 이 노드의 운영 DB로 실행한다. Odroid와 DB live sync는 �
 ## 검증
 
 ```bash
+cd /opt/pinvi
 scripts/n150-docker-doctor.sh
 curl -fsS http://127.0.0.1:12801/health/db
+curl -fsS http://127.0.0.1:12802/server_info
 ```

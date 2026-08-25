@@ -22,6 +22,11 @@
   rollout은 Dagster image를 함께 준비·검증한다. one-shot migrator seal은 최대 3회 재시도하고
   실패 시 fail-close하며, reset은 env-file의 production 설정을 shell override보다 우선해 volume
   삭제를 차단한다.
+- 운영 적대 재리뷰에서 확인된 rollback 범위를 보강했다. provenance 검증 함수는 같은
+  Compose label의 stopped container를 직접 삭제하지 않고 fail-close하며, 각 wrapper는
+  invocation 시작 시 container ID 목록을 보관해 이번 실행에서 새로 생긴 writer만 제거한다.
+  기존 Dagster가 복구된 경우 flag가 꺼져도 최종 `/server_info`와 Docker health를 다시 확인하고,
+  N150 migration 문서는 manager pinned pair lifecycle 명령을 정본으로 사용한다.
 - 실제 Compose lifecycle 통합 테스트에서 `app-db-runtime-role` → API image build →
   `app-migrator alembic upgrade head` → role seal 순서를 실행해 fresh `0100/0101` version row,
   owner, ACL 경계를 검증했다. API Docker healthcheck/readiness에는 `/health/db`를 포함하고,
@@ -32,8 +37,9 @@
 - 검증: M05 PostgreSQL 통합 `32 passed, 1 warning`, Compose migrator lifecycle `1 passed`,
   API unit 기준선 `1287 passed, 3 warnings`, 관련 정적·provenance·lifecycle·설정 테스트 `91 passed`,
   strict mypy `236 source files`, Ruff/format, Python compile, shell syntax, `git diff --check` 통과.
-  `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 건드리지 않았으며, 최신 커밋 기준 적대 재리뷰·
-  CI·live admin 인증은 아직 남아 있다.
+  `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 건드리지 않았으며, DB 전문 리뷰는 GO,
+  운영 전문 리뷰의 P1은 현재 작업 트리에 반영했고 새 HEAD 기준 재리뷰·CI·live admin 인증은
+  아직 남아 있다.
 
 ## 2026-08-25 (codex) — PR #477 최종 fence·복구 보강
 

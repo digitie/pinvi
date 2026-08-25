@@ -20,16 +20,22 @@ healthcheck와 readiness에는 `/health/db`를 포함하고, reset의 운영 환
 충돌이면 기존 writer를 중지하지 않는다. 새 API/Web/Dagster가 부분 기동한 뒤 실패하면 pre-deploy
 snapshot이 아닌 새 writer만 제거하고, 기존 Dagster가 실행 중이었다면 `PINVI_ENABLE_DAGSTER=0`이어도
 복구 기동한다. 기존 Dagster가 있는 상태의 build/pull과 rollout은 flag가 꺼져 있어도 Dagster image를
-함께 준비·검증한다. ADR-065의 migration owner database CREATE 문구도 실제 ACL 정책과 일치하도록 정정했다.
+함께 준비·검증하고 최종 `/server_info`·Docker health를 다시 확인한다. provenance 검증 함수는
+label이 같은 stopped container를 임의 삭제하지 않으며, invocation 시작 시 보관한 ID와 비교해
+이번 실행의 새 writer만 rollback한다. N150 문서와 migration 예시는 manager의 pinned pair
+lifecycle 경로로 정렬했다. ADR-065의 migration owner database CREATE 문구도 실제 ACL 정책과
+일치하도록 정정했다.
 
 **검증**: M05 PostgreSQL 통합 `32 passed, 1 warning`, Compose migrator lifecycle `1 passed`,
 API unit 기준선 `1287 passed, 3 warnings`, 관련 정적·provenance·lifecycle·설정 테스트 `91 passed`,
 strict mypy `236 source files`, Ruff/format, Python compile, shell syntax, `git diff --check` 통과. 두
-전문 적대 재리뷰와 GitHub API/Web CI, N150 live admin 인증을 최신 커밋에서 다시 확인해야 하며,
-live E2E gate는 아직 통과하지 않았다. `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 계속 보존한다.
+DB 전문 적대 리뷰는 GO였고 운영 리뷰의 P1 지적을 현재 작업 트리에 반영했다. 새 커밋 기준 두
+전문 적대 재리뷰와 GitHub API/Web CI, N150 live admin 인증을 다시 확인해야 하며, live E2E gate는
+아직 통과하지 않았다. `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 계속 보존한다.
 
-**다음 한 작업**: `uv.lock`을 제외한 변경을 commit/push하고 최신 HEAD 기준 두 전문 적대 리뷰,
-GitHub API/Web CI, N150 live E2E를 재확인한다. 모든 gate가 green일 때만 PR #477을 merge한다.
+**다음 한 작업**: `uv.lock`을 제외한 운영 복구 보강을 검증·commit/push하고 최신 HEAD 기준 두
+전문 적대 리뷰, GitHub API/Web CI, N150 live E2E를 재확인한다. 모든 gate가 green일 때만 PR #477을
+merge한다.
 
 ## 2026-08-25 (codex) — M05 P1 fence·one-shot·legacy ACL 재보강
 

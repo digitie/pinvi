@@ -550,16 +550,16 @@ test "$PINVI_API_IMAGE" = "$3"
 pinvi_verify_runtime_image_provenance app-api app-web app-dagster
 test "$PINVI_WEB_IMAGE" = "$3"
 test "$PINVI_DAGSTER_IMAGE" = "$3"
-pinvi_verify_or_remove_running_app
+pinvi_verify_running_app
 touch "$PINVI_TEST_STATE_DIR/retagged"
 compose up -d app-api
 pinvi_verify_running_api_image_id
 export FAKE_RUNNING_IMAGE_ID="$4"
-if pinvi_verify_or_remove_running_app; then
+if pinvi_verify_running_app; then
   exit 46
 fi
-test -e "$PINVI_TEST_STATE_DIR/stopped"
-test -e "$PINVI_TEST_STATE_DIR/removed"
+test ! -e "$PINVI_TEST_STATE_DIR/stopped"
+test ! -e "$PINVI_TEST_STATE_DIR/removed"
 """
     env = {
         "FAKE_RUNNING_IMAGE_ID": image_id,
@@ -585,7 +585,7 @@ test -e "$PINVI_TEST_STATE_DIR/removed"
     assert result.returncode == 0, result.stderr
 
 
-def test_running_web_and_dagster_image_drift_is_removed_independently(
+def test_running_web_and_dagster_image_drift_is_fail_closed_without_cleanup(
     tmp_path: Path,
 ) -> None:
     fake_bin = tmp_path / "bin"
@@ -666,16 +666,16 @@ source "$2"
 PINVI_ATTESTED_API_IMAGE_ID="$3"
 PINVI_ATTESTED_WEB_IMAGE_ID="$3"
 PINVI_ATTESTED_DAGSTER_IMAGE_ID="$3"
-pinvi_verify_or_remove_running_app
+pinvi_verify_running_app
 export FAKE_WEB_RUNNING_IMAGE_ID="$4"
-if pinvi_verify_or_remove_running_app; then
+if pinvi_verify_running_app; then
   exit 48
 fi
-test -e "$PINVI_TEST_STATE_DIR/app-cleaned"
-if pinvi_verify_or_remove_running_dagster; then
+test ! -e "$PINVI_TEST_STATE_DIR/app-cleaned"
+if pinvi_verify_running_dagster; then
   exit 49
 fi
-test -e "$PINVI_TEST_STATE_DIR/dagster-cleaned"
+test ! -e "$PINVI_TEST_STATE_DIR/dagster-cleaned"
 """
     result = subprocess.run(  # noqa: S603 - fixed local shell fixture
         [
