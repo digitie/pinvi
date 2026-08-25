@@ -18,7 +18,14 @@ jobs:
     name: Aggregate CI gate
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    # T-348: 이 게이트는 required check가 끝나길 기다리기만 하므로, 아래 script의 내부
+    # deadline(폴링 루프 자체가 포기하는 시점)과 이 job-level timeout-minutes(GitHub
+    # Actions가 러너를 강제 종료하는 시점) 둘 다 대상 job들 중 가장 긴 것(현재 api.yml의
+    # lint-typecheck-test, 35분)보다 길어야 한다 — 둘 중 하나만 올리면 다른 쪽에서 여전히
+    # "job은 성공했는데 게이트만 포기"가 재현된다(PR #476, #480에서 실제 재현: 당시 job
+    # timeout 12분이 아니라 아래 deadline 10분에서 먼저 끊겼다). deadline을 40분으로, 이
+    # job-level timeout은 그 위에 5분 여유를 더해 45분으로 잡는다.
+    timeout-minutes: 45
 
     steps:
       - name: Wait for required path checks
@@ -115,7 +122,7 @@ jobs:
               return;
             }
 
-            const deadline = Date.now() + 10 * 60 * 1000;
+            const deadline = Date.now() + 40 * 60 * 1000;
             const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
             while (true) {
