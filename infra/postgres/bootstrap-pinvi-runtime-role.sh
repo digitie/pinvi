@@ -466,6 +466,7 @@ SELECT
     AND (SELECT count(*) FROM migration_owner) = 1
     AND (SELECT count(*) FROM migrator_role) = 1
     AND (SELECT count(*) FROM database_owner) = 1
+    AND (SELECT oid FROM schema_owner) <> (SELECT oid FROM database_owner)
     AND (SELECT count(*) FROM app_schema) = 1
     AND (SELECT count(*) FROM x_extension_schema) = 1
     AND (SELECT count(*) FROM pinvi_internal_schema) = 1

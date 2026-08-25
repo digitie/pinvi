@@ -14,20 +14,24 @@
   이미 있는 managed schema에서 건너뛰어 권한 경계를 유지한다.
 - deploy fallback은 migration 전 API/Dagster의 정확한 container/image와 원래 이름을 보존하고,
   새 API/Web/Dagster의 readiness·Docker healthcheck·smoke가 모두 통과한 뒤에만 snapshot을
-  폐기한다. 실패하면 새 writer를 제거하고 원래 이름·image의 writer를 복구하며, Web도 같은
-  rollback 대상이다. runtime container 탐색은 Compose project/service label을 사용하고
-  `.pinvi-predeploy` snapshot은 destructive cleanup에서 제외한다. one-shot migrator seal은
-  최대 3회 재시도하고 실패 시 fail-close하며, reset은 env-file의 production 설정을 shell
-  override보다 우선해 volume 삭제를 차단한다.
+  폐기한다. snapshot 이름은 writer 중지 전에 사전 예약 검사하므로 stale snapshot 충돌 시 기존
+  writer를 건드리지 않는다. 부분 기동 실패 시 `.pinvi-predeploy`가 아닌 새 writer만 제거하고
+  원래 이름·image의 writer를 복구하며, Web도 같은 rollback 대상이다. runtime container 탐색은
+  Compose project/service label을 사용하고 `.pinvi-predeploy` snapshot은 destructive cleanup에서
+  제외한다. 기존 Dagster가 실행 중이면 `PINVI_ENABLE_DAGSTER=0`이어도 복구 기동한다. one-shot
+  migrator seal은 최대 3회 재시도하고 실패 시 fail-close하며, reset은 env-file의 production
+  설정을 shell override보다 우선해 volume 삭제를 차단한다.
 - 실제 Compose lifecycle 통합 테스트에서 `app-db-runtime-role` → API image build →
   `app-migrator alembic upgrade head` → role seal 순서를 실행해 fresh `0100/0101` version row,
   owner, ACL 경계를 검증했다. API Docker healthcheck/readiness에는 `/health/db`를 포함하고,
-  aggregate CI API 경로에는 배포·bootstrap·lifecycle 스크립트를 추가했다.
-- 검증: M05 PostgreSQL 통합 `30 passed, 1 warning`, Compose migrator lifecycle `1 passed`,
-  API unit `1287 passed, 3 warnings`, provenance 회귀 `47 passed`, 관련 정적 테스트 `15 passed`,
-  strict mypy `236 source files`, Ruff/format, shell syntax, `git diff --check` 통과.
-  `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 건드리지 않았으며, live admin 인증 실패로
-  현재 live E2E gate는 아직 미통과다.
+  aggregate CI API 경로에는 배포·bootstrap·lifecycle 스크립트를 추가했다. DB owner와 `app`/`ops`
+  owner의 분리를 bootstrap·0101·Compose 회귀에 결박했고, ADR-065의 migration owner database
+  CREATE 문구를 실제 ACL 정책과 일치하도록 정정했다.
+- 검증: M05 PostgreSQL 통합 `32 passed, 1 warning`, Compose migrator lifecycle `1 passed`,
+  API unit `1287 passed, 3 warnings`, 관련 정적·provenance·lifecycle 테스트 `64 passed`, strict
+  mypy `236 source files`, Ruff/format, Python compile, shell syntax, `git diff --check` 통과.
+  `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 건드리지 않았으며, 최신 커밋 기준 적대 재리뷰·
+  CI·live admin 인증은 아직 남아 있다.
 
 ## 2026-08-25 (codex) — PR #477 최종 fence·복구 보강
 

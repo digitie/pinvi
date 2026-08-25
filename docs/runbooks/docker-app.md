@@ -153,12 +153,14 @@ scripts/docker-app.sh reset   # down -v --remove-orphans
 실행 중인 stack에서 migration 없이 상태만 확인하려면 `status`와 health endpoint를 사용한다.
 
 `scripts/deploy-node.sh deploy`와 `up`은 실행 중인 API/Web/Dagster container를 migration 전에
-중지하고 원래 이름·image를 `.pinvi-predeploy` snapshot으로 보존한다. 새 writer가 `/health`,
-`/health/db`, M05 reconciliation endpoint, Web/Dagster readiness와 Docker healthcheck를 모두
-통과하고 deploy smoke가 성공한 뒤에만 snapshot을 제거한다. 중간 실패 시 새 writer를 제거하고
-snapshot을 원래 이름으로 되돌려 기동하며, snapshot 복구나 healthcheck가 실패하면 명령도 실패한다.
-runtime container 탐색은 Compose project/service label을 사용하고 `.pinvi-predeploy` 이름은
-검증·destructive cleanup에서 제외한다. `scripts/docker-app.sh reset`은
+중지하고 원래 이름·image를 `.pinvi-predeploy` snapshot으로 보존한다. snapshot 이름은 writer 중지
+전에 사전 검사하므로 stale snapshot 충돌이면 기존 writer를 건드리지 않고 중단한다. 새 writer가
+`/health`, `/health/db`, M05 reconciliation endpoint, Web/Dagster readiness와 Docker healthcheck를
+모두 통과하고 deploy smoke가 성공한 뒤에만 snapshot을 제거한다. 중간 실패 시 새 writer만 제거하고
+snapshot을 원래 이름으로 되돌려 기동하며, 기존 Dagster가 실행 중이었다면 enable flag가 꺼져 있어도
+복구 기동한다. snapshot 복구나 healthcheck가 실패하면 명령도 실패한다. runtime container 탐색은
+Compose project/service label을 사용하고 `.pinvi-predeploy` 이름은 검증·destructive cleanup에서
+제외한다. `scripts/docker-app.sh reset`은
 `PINVI_ENV_FILE`의 `PINVI_ENVIRONMENT=staging|production`을 shell override보다 우선해 확인하므로
 운영 volume 삭제를 우회할 수 없다.
 

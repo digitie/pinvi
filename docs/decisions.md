@@ -3105,8 +3105,8 @@ revision ID 충돌과 `0061` parent가 없는 분기 그래프가 된다.
   non-login이며, one-shot migrator login은 두 역할에 `INHERIT FALSE, SET TRUE`로만 membership을
   받고 database 기본 role은 app schema owner로 고정한다. `0101`은 기존 app DDL을 owner로 끝낸
   뒤 M05 object만 `SET LOCAL ROLE migration_owner`로 만들고 Alembic version row 전에는 app owner로
-  복귀한다. migration owner는 database `CREATE`, `x_extension` `USAGE`와 필요한 function
-  `EXECUTE`만 받으며 runtime/fence/hotswap의 membership·CONNECT surface를 갖지 않는다. 일반
+  복귀한다. migration owner는 database `CREATE`를 받지 않고, `x_extension` `USAGE`와 필요한
+  function `EXECUTE`만 받으며 runtime/fence/hotswap의 membership·CONNECT surface를 갖지 않는다. 일반
   Compose 재기동은 migrator를 처음부터 `NOLOGIN`·database `CONNECT` 없음으로 둔다. wrapper는
   migration 직전에만 이를 열고 dependency 재실행 없이 one-shot을 수행하며, 성공·실패 뒤 모두
   `CONNECT` revoke·기존 migrator backend 종료·`NOLOGIN` 검증으로 다시 봉인한다.

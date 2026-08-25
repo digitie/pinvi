@@ -197,6 +197,36 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             "t",
             "20260824_0101",
         )
+        compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            f'--command=ALTER DATABASE "pinvi" OWNER TO "{schema_owner}";',
+        )
+        database_owner_collision = compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "app-db-runtime-role",
+            check=False,
+        )
+        assert database_owner_collision.returncode != 0
+        assert "role topology is not canonical" in (
+            database_owner_collision.stdout + database_owner_collision.stderr
+        )
+        compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            f'--command=ALTER DATABASE "pinvi" OWNER TO "{root_role}";',
+        )
+        compose("run", "--rm", "--no-deps", "app-db-runtime-role")
         runtime_version_update = compose(
             "run",
             "--rm",
