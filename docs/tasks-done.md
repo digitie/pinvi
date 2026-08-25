@@ -4,6 +4,14 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-08-26
+
+- [x] **T-350** — retention 관리자 페이지의 `executing` 배지 옆 경과시간이 실시간으로 갱신되게
+      한다. `formatElapsed`는 렌더 시점의 `Date.now()`를 쓰는데 재렌더를 유발할 틱이 없어서
+      새로고침 전까지 스냅샷처럼 보였다(T-345 적대적 리뷰, PR #480). `executing` run이 있을
+      때만 1초 간격 `setInterval`로 재렌더를 유발하고, 없으면 타이머를 아예 안 돌게(불필요한
+      리렌더/배터리 소모 방지) 했다. `apps/web` typecheck/lint/build 전부 통과.
+
 ## 2026-08-22
 
 - [x] **T-VN-M04 follow-up — Feature request consumer 중립 식별자** — 범용 queue의

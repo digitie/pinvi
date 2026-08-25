@@ -67,11 +67,6 @@
 
 ## 웹 / 테스트 인프라
 
-- [ ] **T-350** — retention 관리자 페이지의 `executing` 배지 옆 경과시간(`formatElapsed`)이
-  실시간으로 갱신되지 않을 수 있다(T-345 적대적 리뷰, PR #480) — `setInterval`/`refetchInterval`이
-  없어 새로고침이나 mutation invalidate 전까지는 렌더 시점에 고정된 스냅샷처럼 보인다. 이 지적은
-  검증 기록이 placeholder로 남아 실제 반증이 안 끝났다 — 브라우저로 먼저 재현 확인하고, 확인되면
-  1s~30s 틱 또는 summary query `refetchInterval` 추가.
 - [ ] **T-351** — 통합 테스트 스위트가 계속 자라(662건+) T-348로 타임아웃을 올려도 구조적으로는
   같은 문제가 재발한다(T-348 적대적 리뷰에서 지적, PR #481 코드 주석에도 "스위트가 더 자라면
   다시 올려야 한다"고 명시). 근본 해법은 숫자 상향이 아니라 `pytest tests/integration`을 여러
