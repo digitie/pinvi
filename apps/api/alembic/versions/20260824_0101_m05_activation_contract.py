@@ -1709,6 +1709,21 @@ def _grant_legacy_runtime_app_privileges(bind: sa.Connection, app_schema_owner: 
             f"GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {quoted_app_role}"
         )
     )
+    _revoke_runtime_alembic_version_privileges(bind, app_role)
+
+
+def _revoke_runtime_alembic_version_privileges(bind: sa.Connection, app_role: str | None) -> None:
+    """application runtime이 migration provenance를 바꾸지 못하게 한다."""
+
+    if app_role is None:
+        return
+    if bind.scalar(sa.text("SELECT to_regclass('app.alembic_version') IS NOT NULL")) is not True:
+        return
+    bind.execute(
+        sa.text(
+            f"REVOKE ALL PRIVILEGES ON TABLE app.alembic_version FROM {_quote_identifier(app_role)}"
+        )
+    )
 
 
 def _advance_boundary_contract() -> None:
@@ -2194,7 +2209,10 @@ def upgrade() -> None:
     canonical_app_owner = _converge_legacy_app_ownership(bind, app_owner)
     if canonical_app_owner != app_owner:
         _restore_app_owner(canonical_app_owner)
-    _grant_legacy_runtime_app_privileges(bind, canonical_app_owner)
+    if _legacy_rebaseline_profile():
+        _grant_legacy_runtime_app_privileges(bind, canonical_app_owner)
+    else:
+        _revoke_runtime_alembic_version_privileges(bind, _configured_app_runtime_role())
 
 
 def downgrade() -> None:

@@ -141,6 +141,38 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
         compose("run", "--rm", "--no-deps", "app-db-runtime-role")
         assert role_state() == ("false", "false", "0", "false", "true")
 
+        compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            f'SET ROLE "{schema_owner}"; '
+            "CREATE TABLE app.alembic_version (version_num text NOT NULL); "
+            "RESET ROLE;",
+        )
+        compose("run", "--rm", "--no-deps", "app-db-runtime-role")
+        runtime_version_update = compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "--entrypoint",
+            "/bin/sh",
+            "app-db-runtime-role",
+            "-ec",
+            'PGPASSWORD="$PINVI_APP_DB_PASSWORD" exec psql --no-psqlrc '
+            '--no-password --host=app-postgres --username="$PINVI_APP_DB_USER" '
+            '--dbname="$POSTGRES_DB" '
+            "--command=\"UPDATE app.alembic_version SET version_num = 'forged'\"",
+            check=False,
+        )
+        assert runtime_version_update.returncode != 0
+        assert "permission denied" in (
+            runtime_version_update.stdout + runtime_version_update.stderr
+        )
+
         # legacy bootstrap은 receipt fingerprint가 결박되기 전 app ACL/default ACL을
         # 바꾸지 않는다. 복원은 0101 handoff가 끝난 뒤 migration 안에서 수행한다.
         compose(

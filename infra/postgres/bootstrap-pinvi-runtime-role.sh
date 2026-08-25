@@ -329,6 +329,11 @@ ALTER DEFAULT PRIVILEGES FOR ROLE :"default_privilege_owner" IN SCHEMA app
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"app_role";
 ALTER DEFAULT PRIVILEGES FOR ROLE :"default_privilege_owner" IN SCHEMA app
   GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"app_role";
+-- runtime은 application data만 갱신할 수 있다. migration provenance는
+-- schema owner / one-shot migrator만 바꿀 수 있도록 broad table grant 뒤에 제외한다.
+SELECT format('REVOKE ALL PRIVILEGES ON TABLE app.alembic_version FROM %I', :'app_role')
+WHERE to_regclass('app.alembic_version') IS NOT NULL
+\gexec
 SQL
 }
 

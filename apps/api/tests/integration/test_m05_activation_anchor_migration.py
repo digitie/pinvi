@@ -1392,6 +1392,12 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
         password=_ROLE_PASSWORD,
         database=database_name,
     )
+    runtime_url = _role_database_url(
+        _database_url,
+        role=runtime_role,
+        password=_ROLE_PASSWORD,
+        database=database_name,
+    )
     target_url = parsed.set(database=database_name).render_as_string(hide_password=False)
 
     try:
@@ -1436,6 +1442,7 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
 
         role_environment = {
             "PINVI_ENVIRONMENT": "staging",
+            "PINVI_APP_DB_USER": runtime_role,
             "PINVI_MIGRATION_OWNER": migration_owner,
             "PINVI_MIGRATOR_DB_USER": migrator_login,
         }
@@ -1446,6 +1453,14 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
             environment=role_environment,
         )
         assert baseline.returncode == 0, baseline.stderr
+        await _execute_autocommit(
+            target_url,
+            f'GRANT USAGE ON SCHEMA app TO "{runtime_role}"; '
+            f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app "
+            f'TO "{runtime_role}"; '
+            f'ALTER DEFAULT PRIVILEGES FOR ROLE "{app_owner}" IN SCHEMA app '
+            f'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{runtime_role}";',
+        )
         await _execute_autocommit(
             maintenance_url,
             f"CREATE ROLE \"{stale_role}\" LOGIN NOINHERIT PASSWORD '{_ROLE_PASSWORD}';",
@@ -1633,8 +1648,30 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
                     {"migration_owner": migration_owner, "fence_role": fence_role},
                 )
                 assert extension_access is True
+                assert (
+                    await connection.scalar(
+                        text(
+                            "SELECT NOT has_table_privilege("
+                            ":runtime_role, 'app.alembic_version', "
+                            "'SELECT, INSERT, UPDATE, DELETE')"
+                        ),
+                        {"runtime_role": runtime_role},
+                    )
+                    is True
+                )
         finally:
             await engine.dispose()
+
+        runtime_engine = create_async_engine(runtime_url, poolclass=NullPool)
+        try:
+            async with runtime_engine.connect() as connection:
+                with pytest.raises(DBAPIError) as exc_info:
+                    await connection.execute(
+                        text("UPDATE app.alembic_version SET version_num = 'forged'")
+                    )
+                assert getattr(exc_info.value.orig, "sqlstate", None) == "42501"
+        finally:
+            await runtime_engine.dispose()
 
         migrator_engine = create_async_engine(migrator_url, poolclass=NullPool)
         try:
@@ -1671,8 +1708,8 @@ async def test_0101_legacy_converges_all_app_catalog_owners(
         for statement in (
             f'CREATE ROLE "{app_owner}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE '
             "NOREPLICATION NOBYPASSRLS NOINHERIT;",
-            f'CREATE ROLE "{runtime_role}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE '
-            "NOREPLICATION NOBYPASSRLS NOINHERIT;",
+            f'CREATE ROLE "{runtime_role}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE '
+            f"NOREPLICATION NOBYPASSRLS NOINHERIT PASSWORD '{_ROLE_PASSWORD}';",
             f'CREATE ROLE "{migration_owner}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE '
             "NOREPLICATION NOBYPASSRLS NOINHERIT;",
             f'CREATE ROLE "{migrator_login}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE '
@@ -1687,6 +1724,9 @@ async def test_0101_legacy_converges_all_app_catalog_owners(
         try:
             async with engine.begin() as connection:
                 await connection.execute(text("CREATE SCHEMA app"))
+                await connection.execute(
+                    text("CREATE TABLE app.alembic_version (version_num text NOT NULL)")
+                )
                 await connection.execute(
                     text("CREATE TYPE app.legacy_status AS ENUM ('created', 'completed')")
                 )
@@ -1786,13 +1826,32 @@ async def test_0101_legacy_converges_all_app_catalog_owners(
                         "'SELECT, INSERT, UPDATE, DELETE'), "
                         "has_sequence_privilege(:runtime_role, "
                         "'app.legacy_runtime_default_acl_probe_record_id_seq', "
-                        "'USAGE, SELECT, UPDATE')"
+                        "'USAGE, SELECT, UPDATE'), "
+                        "NOT has_table_privilege(:runtime_role, 'app.alembic_version', "
+                        "'SELECT, INSERT, UPDATE, DELETE')"
                     ),
                     {"runtime_role": runtime_role},
                 )
-                assert runtime_privileges.one() == (True, True, True, True)
+                assert runtime_privileges.one() == (True, True, True, True, True)
         finally:
             await engine.dispose()
+
+        runtime_url = _role_database_url(
+            target_url,
+            role=runtime_role,
+            password=_ROLE_PASSWORD,
+            database=make_url(target_url).database or "",
+        )
+        runtime_engine = create_async_engine(runtime_url, poolclass=NullPool)
+        try:
+            async with runtime_engine.connect() as connection:
+                with pytest.raises(DBAPIError) as exc_info:
+                    await connection.execute(
+                        text("UPDATE app.alembic_version SET version_num = 'forged'")
+                    )
+                assert getattr(exc_info.value.orig, "sqlstate", None) == "42501"
+        finally:
+            await runtime_engine.dispose()
     finally:
         await _drop_database(maintenance_url, target_url)
         await _execute_autocommit(
