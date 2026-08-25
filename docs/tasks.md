@@ -58,34 +58,21 @@
 - [ ] **T-324** — Google OAuth client ID/secret이 API Compose 런타임에 전달되지 않아 사라진
   소셜 로그인 버튼과 authorize 흐름을 운영 설정에서 복원한다.
 
-## 지도 / 위치
+## 데이터 / 보존
 
-## 지도 / 위치
+- [ ] **T-339** — retention run이 `executing` 상태로 영구히 남는 경로가 있다. `except Exception`이
+  `asyncio.CancelledError`(BaseException 직계)를 놓쳐 SIGTERM/연결 끊김 시 `failed`로도 안 남고,
+  라우트가 `RetentionExecutionError`만 잡아 후단(`append_admin_audit`, 최종 commit) 실패도 같은
+  결과를 낳는다. **데이터 손실은 없다** — 파괴 SQL과 `completed` UPDATE가 단일 커밋이라
+  `executing`은 곧 "아무것도 지워지지 않았다"를 뜻한다. 해석 규칙을 runbook에 명시하고 예외 범위를
+  넓힌다. 추가로, 최종 `_UPDATE_RUN_SQL` 단계에서 실패하면 원래 트랜잭션이 그 행 락을 쥔 채
+  `_record_failed_run`이 별도 세션으로 같은 행을 UPDATE해 **교착 가능성**이 있다 — 확인 필요.
+  T-338 적대적 리뷰에서 발견.
+- [ ] **T-340** — `test_failed_execute_leaves_a_receipt`가 불변식의 절반만 검출한다. 순수 파이썬
+  예외로 실패시켜 트랜잭션이 abort 상태가 아니므로, `_record_failed_run`을 같은 세션 구현으로
+  되돌려도 green이다. append-only 트리거 위반 같은 **DB 오류**로 실패시키고 사후 데이터 상태까지
+  검증하는 케이스가 필요하다. T-338 적대적 리뷰에서 발견.
 
-- [ ] **T-338** — 실패한 retention execute가 영수증을 하나도 남기지 않는다. 문서는 dry-run/execute의
-  evidence를 `retention_runs`에 남긴다고 약속하는데, 실행 중 예외가 나면 같은 트랜잭션이 롤백되면서
-  run 행까지 사라진다 — "무엇을 시도했고 어디서 멈췄는가"가 증거로 남지 않는다. 파괴적 작업의
-  감사 추적이라 특히 중요하다. T-332 적대적 리뷰에서 발견.
-- [ ] **T-335** — 아카이브가 한 번이라도 실행되면 `GET /admin/audit/location`이 **상시**
-  `X-Chain-Broken: true`를 보고한다. `_is_location_window_broken`의 앵커 조회가
-  `LocationAccessLog`(active 테이블)만 보므로, 원본이 삭제된 뒤 살아남은 최고참 행의 `prev_hash`는
-  아카이브된 행의 `content_hash`를 가리키는데 앵커는 `None` → `GENESIS_HASH`와 비교돼 불일치한다.
-  위변조 탐지가 상시 켜지면 실제 변조와 구분할 수 없다 — T-329 리뷰가 잡은 차단 결함과 같은 계열이다.
-  `admin_etl`은 이미 `bridge_anchor_matches`로 같은 링크를 계산하지만 audit endpoint는 그것을 보지
-  않는다. 해법: 앵커 조회를 아카이브까지 fallback. 0029(T-276)부터의 선재 결함이며 테스트 없음.
-  T-332 조사에서 발견.
-- [ ] **T-336** — `location_access_log_archive`에 append-only 트리거가 없다.
-  `trg_location_access_log_append_only`는 원본에만 걸려 있어, **원본 삭제 후 유일한 사본이 되는**
-  테이블이 UPDATE/DELETE에 열려 있다. 아카이브되는 순간 확인자료 보호 수준이 내려간다.
-  T-332 조사에서 발견.
-- [ ] **T-337** — `_EXECUTE_PII_SQL`의 익명화가 `app.users`의 PII 컬럼을 손으로 나열한다.
-  새 PII 컬럼이 추가되면 **오류 없이** 익명화에서 빠진다 — T-332가 아카이브에서 겪은 것과 같은
-  형태의 결함이다. `test_retention_archive_fidelity.py`의 카탈로그 대조 패턴을 그대로 적용할 수 있다.
-  T-332 조사에서 발견.
-- [ ] **T-333** — 핸들러가 좌표를 선언했어도 응답이 4xx/5xx면 감사 행이 버려진다
-  (`location_audit.py`의 `if response.status_code >= 400: return response`). 상류에 좌표를 이미
-  보낸 뒤 실패한 경우(예: kor-travel-geo 호출 성공 후 응답 직렬화 실패)에는 위치 사용이 실제로
-  일어났는데 기록이 없다. 선재 조건이며 T-329 리뷰에서 발견.
 ## 웹 / 테스트 인프라
 
 - [ ] **T-323** — web 워크플로의 `e2e` 잡이 aggregate required check가 아니라 Playwright 실패가 머지를

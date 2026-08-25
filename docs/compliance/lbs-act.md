@@ -134,6 +134,11 @@ CREATE INDEX ON app.location_access_log (user_id, occurred_at DESC);
   불완전하면 핸들러가 near-me로 처리하지 않아 제3자 제공 자체가 일어나지 않았다.
 - 기록된 좌표가 핸들러가 상류에 보낸 좌표와 다른 행 — `lng` 별칭이 `lon`보다 먼저 읽혔다.
 
+아카이브도 원본과 같은 append-only 보호를 받는다(T-336). 원본 삭제 후에는 아카이브가 유일한
+사본이므로, 보호가 가장 필요해지는 순간에 열려 있어선 안 된다 — retention이 원본 삭제를 여는
+`app.retention_location_delete_allowed`는 아카이브에는 적용되지 않는다. 체인 검증도 아카이브를
+함께 읽어 경계를 넘는다(T-335): 그러지 않으면 아카이브 실행 후 정상 체인이 상시 파손으로 보고된다.
+
 **이 행들을 삭제하거나 정정하지 않는다.** `trg_location_access_log_append_only`가 UPDATE/DELETE를
 막고 있고(§3.4), 그 append-only 보증을 깨는 것이 부정확한 행을 남겨 두는 것보다 큰 손상이다.
 대신 여기 해석 규칙을 고정한다. 이후 기록은 핸들러가 선언한 좌표만 담는다.

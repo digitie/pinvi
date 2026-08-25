@@ -17,7 +17,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import FastAPI
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -36,6 +36,47 @@ def _coord_str(value: Decimal | None) -> str | None:
     if value is None:
         return None
     return str(value.quantize(Decimal("0.000001")))
+
+
+_PREV_CONTENT_HASH_SQL = text(
+    """
+    SELECT content_hash
+    FROM (
+      SELECT log_id, content_hash FROM app.location_access_log
+      UNION ALL
+      SELECT log_id, content_hash FROM app.location_access_log_archive
+    ) chain
+    -- COALESCE로 단일 부등식을 유지한다. `IS NULL OR log_id < ...` 형태는 generic plan에서
+    -- Index Cond를 잃고 체인 전체를 스캔한다 — 확인자료 열람이 행 수에 비례해 느려진다.
+    -- 캐스트는 유지한다. asyncpg는 파라미터의 타입을 추론하지 못하면 AmbiguousParameterError를 낸다.
+    -- (주석에 콜론 파라미터 표기를 쓰지 마라 — text()는 주석 안의 것도 바인드로 읽는다.)
+    WHERE log_id < COALESCE(CAST(:before_log_id AS bigint), 9223372036854775807)
+    ORDER BY log_id DESC
+    LIMIT 1
+    """
+)
+
+
+async def previous_content_hash(session: AsyncSession, *, before_log_id: int | None = None) -> str:
+    """체인에서 직전 행의 `content_hash`. 없으면 `GENESIS_HASH`.
+
+    **아카이브를 함께 본다.** retention이 실행되면 원본 행은 삭제되고 아카이브로 옮겨지는데,
+    active 테이블만 보면 그 링크가 끊긴 것처럼 보인다(T-335). 결과는 두 방향 모두 나쁘다.
+
+    - 쓰기 측(`append_location_log`): 전량 배수 후 `prev_hash`가 `GENESIS_HASH`로 돌아가 체인이
+      조용히 재시작된다. 끊긴 자리가 영구히 남는다.
+    - 검증 측(admin 확인자료 열람): 살아남은 최고참 행의 `prev_hash`가 아카이브된 해시를 가리키는데
+      앵커는 `None`이라 `GENESIS_HASH`와 비교돼 **상시 불일치**한다. 위변조 탐지가 항상 켜지면
+      실제 변조와 구분할 수 없다.
+
+    `before_log_id`가 `None`이면 체인 전체의 마지막 행을 본다(append 시). 값이 있으면 그보다 앞선
+    마지막 행을 본다(윈도우 앵커 검증 시).
+
+    아카이브 INSERT와 원본 DELETE 사이에는 같은 `log_id`가 양쪽에 잠깐 존재하지만, 같은 행의 같은
+    해시이므로 무해하다.
+    """
+    found = await session.scalar(_PREV_CONTENT_HASH_SQL, {"before_log_id": before_log_id})
+    return str(found) if found is not None else GENESIS_HASH
 
 
 def location_log_payload(
@@ -92,10 +133,7 @@ async def append_location_log(
 ) -> LocationAccessLog:
     """체인 1건 append. 호출 측이 직렬화(동일 session 순차 또는 advisory lock)를 보장해야 한다."""
     moment = occurred_at or datetime.now(UTC)
-    last = await session.scalar(
-        select(LocationAccessLog).order_by(LocationAccessLog.log_id.desc()).limit(1)
-    )
-    prev_hash = last.content_hash if last else GENESIS_HASH
+    prev_hash = await previous_content_hash(session)
     payload = location_log_payload(
         user_id=user_id,
         occurred_at=moment,

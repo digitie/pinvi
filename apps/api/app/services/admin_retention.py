@@ -12,6 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.db import session as db_session
 from app.schemas.admin import (
     AdminAuditRetentionSummary,
     AdminLocationLogArchiveSummary,
@@ -145,6 +146,9 @@ async def execute_retention(
     pii, audit, location = await _collect_candidates(db, scope=scope, now=current)
     _assert_location_precheck(location, scope=scope)
     snapshot = _candidate_snapshot(pii, audit, location, scope=scope)
+    # 영수증 행은 **파괴적 작업과 같은 트랜잭션에 두지 않는다**(T-338). 같이 두면 실패 시 라우트의
+    # `rollback()`이 작업과 함께 영수증까지 지워, "무엇을 시도했고 어디서 멈췄는가"가 남지 않는다.
+    # 먼저 독립적으로 커밋해 두면 이후 어떤 롤백에도 살아남는다.
     run = (
         (
             await db.execute(
@@ -169,6 +173,7 @@ async def execute_retention(
         .one()
     )
     run_id = run["run_id"]
+    await db.commit()
 
     try:
         result: dict[str, Any] = {}
@@ -198,8 +203,32 @@ async def execute_retention(
         )
         return _run_from_row(row)
     except Exception as exc:
+        # 별도 세션을 쓴다. 원인이 DB 오류면 현재 트랜잭션은 이미 abort 상태라 어떤 문장도 실행되지
+        # 않고, 설령 실행돼도 호출부의 `rollback()`이 지운다. 영수증은 그 롤백을 견뎌야 한다.
+        await _record_failed_run(run_id, exc)
+        if isinstance(exc, RetentionExecutionError):
+            raise
+        raise RetentionExecutionError(str(exc)) from exc
+    finally:
         with suppress(Exception):
             await db.execute(
+                text("SELECT set_config('app.retention_location_delete_allowed', 'off', true)")
+            )
+
+
+async def _record_failed_run(run_id: uuid.UUID, exc: BaseException) -> None:
+    """실패 사실을 **독립 트랜잭션**으로 남긴다.
+
+    파괴적 작업의 감사 추적이라 "시도했고 실패했다"가 증거로 남아야 한다. 실패 원인이 DB 오류인
+    경우 원래 세션은 abort 상태이므로 같은 세션으로는 아무것도 기록할 수 없다 — 새 세션이 필요한
+    이유다. 여기서 나는 예외는 삼킨다. 원래 예외를 가리는 것이 더 나쁘다.
+    """
+    with suppress(Exception):
+        # 모듈 속성으로 참조한다. 이름으로 import하면 import 시점의 factory에 묶여, 테스트가
+        # `app.db.session`을 교체해도 이 경로만 실제 DB를 본다 — 새 소비자마다 conftest를 손봐야 하는
+        # 구조가 되고 그건 조용히 낡는다.
+        async with db_session.async_session_factory() as session:
+            await session.execute(
                 _UPDATE_RUN_SQL,
                 {
                     "run_id": run_id,
@@ -209,14 +238,7 @@ async def execute_retention(
                     "error_message": str(exc)[:1000],
                 },
             )
-        if isinstance(exc, RetentionExecutionError):
-            raise
-        raise RetentionExecutionError(str(exc)) from exc
-    finally:
-        with suppress(Exception):
-            await db.execute(
-                text("SELECT set_config('app.retention_location_delete_allowed', 'off', true)")
-            )
+            await session.commit()
 
 
 async def _collect_candidates(
