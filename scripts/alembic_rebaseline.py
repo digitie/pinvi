@@ -36,6 +36,13 @@ _EXPECTED_CATALOG_LINES = 1590
 _EXPECTED_CATALOG_SHA256 = (
     "bcf526cfa62facfaf3fe4b64a62e90329552cd887865a8ed5a477fe1fcc09c73"
 )
+_N150_LEGACY_CATALOG_SHA256 = (
+    # N150 운영 0061과 fresh 0061 migration probe가 공통으로 산출한 legacy 기준선.
+    "91949a8f1b609ca99b4631ee2db75b03d8cfc933ae72c52edec8d99d3d91b501"
+)
+_ALLOWED_CATALOG_SHA256 = frozenset(
+    {_EXPECTED_CATALOG_SHA256, _N150_LEGACY_CATALOG_SHA256}
+)
 _CHECKSUM = re.compile(r"^[0-9a-f]{64}$")
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _INTEGER = re.compile(r"^[0-9]+$")
@@ -481,7 +488,11 @@ class CatalogPreflight:
             "catalog_lines": self.catalog_lines,
             "catalog_sha256": self.catalog_sha256,
             "expected_catalog_lines": _EXPECTED_CATALOG_LINES,
-            "expected_catalog_sha256": _EXPECTED_CATALOG_SHA256,
+            "expected_catalog_sha256": (
+                self.catalog_sha256
+                if self.catalog_sha256 in _ALLOWED_CATALOG_SHA256
+                else _EXPECTED_CATALOG_SHA256
+            ),
         }
 
     def stable_identity_dict(self) -> dict[str, Any]:
@@ -836,9 +847,9 @@ def _read_target_manifest(path: Path) -> TargetManifest:
     if (
         preflight["version_rows"] != [LEGACY_REVISION]
         or preflight["expected_catalog_lines"] != _EXPECTED_CATALOG_LINES
-        or preflight["expected_catalog_sha256"] != _EXPECTED_CATALOG_SHA256
+        or preflight["expected_catalog_sha256"] not in _ALLOWED_CATALOG_SHA256
         or preflight["catalog_lines"] != _EXPECTED_CATALOG_LINES
-        or preflight["catalog_sha256"] != _EXPECTED_CATALOG_SHA256
+        or preflight["catalog_sha256"] != preflight["expected_catalog_sha256"]
         or not isinstance(preflight["database_name"], str)
         or _IDENTIFIER.fullmatch(preflight["database_name"]) is None
         or any(
@@ -1148,7 +1159,7 @@ async def _preflight(
         raise RebaselineError("pre-existing M05 objects reject a 0061 rebaseline")
     if preflight.catalog_lines != _EXPECTED_CATALOG_LINES:
         raise RebaselineError("legacy catalog fingerprint line count is not canonical")
-    if preflight.catalog_sha256 != _EXPECTED_CATALOG_SHA256:
+    if preflight.catalog_sha256 not in _ALLOWED_CATALOG_SHA256:
         raise RebaselineError("legacy catalog fingerprint is not canonical")
     if preflight.app_data_rows <= 0:
         raise RebaselineError("rebaseline target must contain app data rows")
