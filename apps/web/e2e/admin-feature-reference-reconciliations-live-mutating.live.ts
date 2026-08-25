@@ -148,7 +148,11 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
         .locator('dl > dt')
         .filter({ hasText: label })
         .locator('xpath=following-sibling::dd[1]');
-    await expect(detail.getByTestId(`admin-frr-status-${String(responseStatus)}`)).toBeVisible();
+    await expect(
+      detail
+        .getByRole('region', { name: '결론' })
+        .getByTestId(`admin-frr-status-${String(responseStatus)}`),
+    ).toBeVisible();
     await expect(receiptValue('조치')).toContainText(String(responseReceiptRecord.action));
     await expect(receiptValue('이전 Feature ID')).toHaveText(oldFeatureId);
     await expect(receiptValue('대체 Feature ID')).toHaveText(replacementFeatureId);
