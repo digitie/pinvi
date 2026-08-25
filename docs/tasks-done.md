@@ -4,25 +4,6 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
-## 2026-08-26
-
-- [x] **T-352** — Expo SDK 56 → 57 + React Native 0.85.3 → 0.86.2 업그레이드로 `expo-doctor`
-      잔여 2건(Hermes V1 메모리 회귀, `react-native-screens` 중복)을 해소했다. SDK 57이 정확히
-      `react@19.2.3`을 요구해 T-311의 워크스페이스 통일 버전(`19.2.6`)과 다시 충돌했다 —
-      RN의 exact pin이 덜 유연하므로 root `overrides`를 `19.2.3`으로 내려 web(Next.js, `^19.0.0`
-      요구라 문제없음)과 맞췄다. `npx expo install expo@57.0.9 --fix`로 관련 expo-* 패키지를
-      정렬했다.
-
-      **환경 메모**: 이 클린 재설치 도중 NTFS(WSL9p) I/O 경쟁으로 `@expo/cli`, `expo` 코어,
-      `react-native-screens`, `@maplibre/maplibre-react-native` 등 여러 패키지가
-      `npm warn tar TAR_ENTRY_ERROR ENOENT`로 부분 손상됐다(T-311 때도 겪은 것과 같은 패턴).
-      npm install을 한 번 더(삭제 없이) 재실행해 손상된 패키지만 재추출되는 것으로 복구했다 —
-      대형 모노레포 npm install 후에는 `expo-doctor`/typecheck로 실제 무결성을 재확인하는 습관이
-      필요하다.
-
-      검증: `expo-doctor` 21/21 통과(잔여 이슈 0건), `apps/mobile`·`apps/web` typecheck/lint 통과,
-      `apps/web` build 통과, `@pinvi/domain` vitest 20 files/127 tests 통과.
-
 ## 2026-08-22
 
 - [x] **T-VN-M04 follow-up — Feature request consumer 중립 식별자** — 범용 queue의

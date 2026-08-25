@@ -81,7 +81,22 @@
 
 - [ ] **T-320** — 모바일 위치 동의 gate 런타임 확인. VWorld 키가 있는 환경에서 지도 표면을 띄우고
   "현재 위치로"가 OS 권한 요청 전 동의를 받는지 확인한다(T-310 smoke에서 키 부재로 미확인).
-  SDK 57 업그레이드(T-352)로 새 EAS development 빌드가 나온 뒤 그 빌드로 재확인한다.
+  **T-353이 풀릴 때까지 진행 불가** — SDK 57 EAS development 빌드가 네이티브 컴파일 단계에서
+  실패해 테스트할 빌드 자체가 없다.
+- [ ] **T-353** — SDK 57 EAS development 빌드가 네이티브 컴파일에서 실패한다(T-352 PR #486
+  검증 중 발견, CI의 typecheck/lint/build/expo-doctor는 실제 Gradle 네이티브 컴파일을 하지
+  않아 못 잡았다). 원인: `expo-modules-core@57.0.13`(최신 버전도 동일)이 `react-native-worklets`를
+  `^0.7.4 || ^0.8.0 || ^0.9.0 || ^0.10.0`로만 지원한다고 선언하는데, SDK 57이 요구하는
+  `react-native-reanimated`(4.x 라인 전체, 4.6.0 포함)는 `react-native-worklets`를 `0.12.x`로
+  강제한다 — 두 요구사항이 근본적으로 양립 불가능하다. 실제 에러:
+  `expo-modules-core/android/src/main/cpp/worklets/WorkletJSCallInvoker.cpp`가 호출하는
+  `WorkletRuntime::executeSync`가 설치된 worklets 0.12.1에는 없다. 같은 패턴의 기존 업스트림
+  이슈(expo/expo#42893, software-mansion/react-native-reanimated#9100)가 있고 공식 패치는
+  아직 없다(2026-08-26 기준, `expo-modules-core@latest`로도 재확인). 사용자 결정: 지금은 우회
+  패치(`patch-package`)나 reanimated 다운그레이드를 시도하지 않고 업스트림 수정을 기다린다.
+  **PR #486(T-352)는 이 문제가 풀릴 때까지 머지하지 않는다** — CI는 통과하지만 실제로는
+  네이티브 빌드가 안 되는 회귀이기 때문이다. 재확인 방법: `expo-modules-core`/`react-native-worklets`
+  최신 버전의 peerDependencies를 주기적으로 점검하거나, EAS development 빌드를 다시 돌려본다.
 
 ## 보류 / 미래 작업
 
