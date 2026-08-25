@@ -1369,6 +1369,19 @@ def _validate_ledger_evidence(args: argparse.Namespace, payload: dict[str, objec
     if (
         payload.get("live_ui_event_id") != live_ui["event_id"]
         or payload.get("live_ui_verification_id") != live_ui["verification_id"]
+        or payload.get("m04_attestation_sha256") != live_ui["m04_attestation_sha256"]
+        or payload.get("m04_created_at") != live_ui["m04_created_at"]
+        or payload.get("m04_feature_request_id") != live_ui["m04_feature_request_id"]
+        or payload.get("m04_map_feature_uuid") != live_ui["m04_map_feature_uuid"]
+        or payload.get("m04_map_pending_receipt_sha256")
+        != live_ui["m04_map_pending_receipt_sha256"]
+        or payload.get("m04_map_provenance_sha256")
+        != live_ui["m04_map_provenance_sha256"]
+        or payload.get("m04_map_request_sha256") != live_ui["m04_map_request_sha256"]
+        or payload.get("m04_pinvi_approval_sha256")
+        != live_ui["m04_pinvi_approval_sha256"]
+        or payload.get("m04_verification_id") != live_ui["m04_verification_id"]
+        or payload.get("activation_nonce") != live_ui["m04_verification_id"]
         or payload.get("live_ui_map_admin_endpoint") != live_ui["map_admin_endpoint"]
         or payload.get("live_ui_pinvi_api_endpoint") != live_ui["pinvi_api_endpoint"]
         or payload.get("live_ui_pinvi_web_endpoint") != live_ui["pinvi_web_endpoint"]
@@ -1691,15 +1704,21 @@ def _reviews(
     return result
 
 
-def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
+def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, object]:
     live = _object(value, name="live-ui evidence")
     expected = {
         "event_id",
         "event_sha256",
         "m04_attestation_sha256",
+        "m04_created_at",
         "m04_feature_request_id",
         "m04_map_feature_uuid",
+        "m04_map_pending_receipt_sha256",
+        "m04_map_provenance_sha256",
+        "m04_map_request_sha256",
+        "m04_pinvi_approval_sha256",
         "m04_server_side_chain_verified",
+        "m04_verification_id",
         "map_admin_endpoint",
         "map_ack_sha256",
         "map_local_receipt_sha256",
@@ -1727,7 +1746,15 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
         raise ReceiptError("live-ui server-side Map ACK was not verified")
     if live["m04_server_side_chain_verified"] is not True:
         raise ReceiptError("live-ui server-side M04→M05 chain was not verified")
-    _uuid(live["verification_id"], name="live-ui.verification_id")
+    verification_id = _uuid(live["verification_id"], name="live-ui.verification_id")
+    m04_verification_id = _uuid(
+        live["m04_verification_id"], name="live-ui.m04_verification_id"
+    )
+    if m04_verification_id != verification_id:
+        raise ReceiptError("live-ui M04 challenge is not bound to the M05 verification ID")
+    m04_created_at = live["m04_created_at"]
+    if type(m04_created_at) is not int or m04_created_at <= 0:
+        raise ReceiptError("live-ui M04 creation time is invalid")
     _digest(
         live["playwright_runner_image_id"],
         name="live-ui.playwright_runner_image_id",
@@ -1767,12 +1794,29 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
         "m04_attestation_sha256": _sha256(
             live["m04_attestation_sha256"], name="live-ui.m04_attestation_sha256"
         ),
+        "m04_created_at": m04_created_at,
         "m04_feature_request_id": _uuid(
             live["m04_feature_request_id"], name="live-ui.m04_feature_request_id"
         ),
         "m04_map_feature_uuid": _uuid(
             live["m04_map_feature_uuid"], name="live-ui.m04_map_feature_uuid"
         ),
+        "m04_map_pending_receipt_sha256": _sha256(
+            live["m04_map_pending_receipt_sha256"],
+            name="live-ui.m04_map_pending_receipt_sha256",
+        ),
+        "m04_map_provenance_sha256": _sha256(
+            live["m04_map_provenance_sha256"],
+            name="live-ui.m04_map_provenance_sha256",
+        ),
+        "m04_map_request_sha256": _sha256(
+            live["m04_map_request_sha256"], name="live-ui.m04_map_request_sha256"
+        ),
+        "m04_pinvi_approval_sha256": _sha256(
+            live["m04_pinvi_approval_sha256"],
+            name="live-ui.m04_pinvi_approval_sha256",
+        ),
+        "m04_verification_id": m04_verification_id,
         "map_ack_sha256": _sha256(live["map_ack_sha256"], name="live-ui.map_ack_sha256"),
         "map_admin_endpoint": _string(
             live["map_admin_endpoint"], name="live-ui.map_admin_endpoint"
@@ -1809,7 +1853,7 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, str]:
             live["pinvi_snapshot_before_sha256"],
             name="live-ui.pinvi_snapshot_before_sha256",
         ),
-        "verification_id": _uuid(live["verification_id"], name="live-ui.verification_id"),
+        "verification_id": verification_id,
         "ui_evidence_sha256": _sha256(
             live["ui_evidence_sha256"], name="live-ui.ui_evidence_sha256"
         ),
@@ -2375,7 +2419,7 @@ def _attestation(
     value: object,
     *,
     evidence_hashes: dict[str, str],
-    live_ui: dict[str, str],
+    live_ui: dict[str, object],
     pinvi_source_revision: str,
     scope: str,
     public_key_bytes: bytes,
@@ -2396,9 +2440,15 @@ def _attestation(
         "map_ack_sha256",
         "map_snapshot_sha256",
         "m04_attestation_sha256",
+        "m04_created_at",
         "m04_feature_request_id",
         "m04_map_feature_uuid",
+        "m04_map_pending_receipt_sha256",
+        "m04_map_provenance_sha256",
+        "m04_map_request_sha256",
+        "m04_pinvi_approval_sha256",
         "m04_server_side_chain_verified",
+        "m04_verification_id",
         "pinvi_snapshot_sha256",
         "pinvi_api_endpoint",
         "pinvi_web_endpoint",
@@ -2414,21 +2464,38 @@ def _attestation(
         raise ReceiptError("M05 live attestation payload schema is invalid")
     if (
         type(payload["version"]) is not int
-        or payload["version"] != 2
+        or payload["version"] != 3
         or payload["status"] != "passed"
         or payload["scope"] != scope
         or _commit(payload["pinvi_source_revision"], name="attestation source revision")
         != pinvi_source_revision
         or _uuid(payload["event_id"], name="attestation event ID") != live_ui["event_id"]
         or type(payload["created_at"]) is not int
+        or type(payload["m04_created_at"]) is not int
         or payload["created_at"] < issued_at - 60
         or payload["created_at"] > issued_at + 15 * 60
         or payload["created_at"] > int(time.time()) + 60
     ):
         raise ReceiptError("M05 live attestation identity/status is invalid")
     verification_id = _uuid(payload["verification_id"], name="attestation verification ID")
-    if verification_id != activation_nonce or verification_id != live_ui["verification_id"]:
+    m04_verification_id = _uuid(
+        payload["m04_verification_id"], name="attestation M04 verification ID"
+    )
+    if (
+        verification_id != activation_nonce
+        or verification_id != live_ui["verification_id"]
+        or m04_verification_id != verification_id
+        or m04_verification_id != live_ui["m04_verification_id"]
+    ):
         raise ReceiptError("M05 live attestation verification ID is not bound to the receipt nonce")
+    m04_created_at = live_ui["m04_created_at"]
+    if (
+        type(m04_created_at) is not int
+        or payload["m04_created_at"] != m04_created_at
+        or m04_created_at > payload["created_at"]
+        or payload["created_at"] - m04_created_at > 15 * 60
+    ):
+        raise ReceiptError("M05 live attestation M04 evidence is outside the activation window")
     if (
         payload["m04_server_side_chain_verified"] is not True
         or _sha256(
@@ -2443,6 +2510,25 @@ def _attestation(
             payload["m04_map_feature_uuid"], name="attestation.m04_map_feature_uuid"
         )
         != live_ui["m04_map_feature_uuid"]
+        or _sha256(
+            payload["m04_map_pending_receipt_sha256"],
+            name="attestation.m04_map_pending_receipt_sha256",
+        )
+        != live_ui["m04_map_pending_receipt_sha256"]
+        or _sha256(
+            payload["m04_map_provenance_sha256"],
+            name="attestation.m04_map_provenance_sha256",
+        )
+        != live_ui["m04_map_provenance_sha256"]
+        or _sha256(
+            payload["m04_map_request_sha256"], name="attestation.m04_map_request_sha256"
+        )
+        != live_ui["m04_map_request_sha256"]
+        or _sha256(
+            payload["m04_pinvi_approval_sha256"],
+            name="attestation.m04_pinvi_approval_sha256",
+        )
+        != live_ui["m04_pinvi_approval_sha256"]
     ):
         raise ReceiptError("M05 live attestation does not bind the M04→M05 chain")
     if (
@@ -2686,6 +2772,17 @@ def _create(args: argparse.Namespace) -> int:
         "live_ui_playwright_runner_image_id": live_ui["playwright_runner_image_id"],
         "live_ui_playwright_runner_image_ref": live_ui["playwright_runner_image_ref"],
         "live_ui_verification_id": live_ui["verification_id"],
+        "m04_attestation_sha256": live_ui["m04_attestation_sha256"],
+        "m04_created_at": live_ui["m04_created_at"],
+        "m04_feature_request_id": live_ui["m04_feature_request_id"],
+        "m04_map_feature_uuid": live_ui["m04_map_feature_uuid"],
+        "m04_map_pending_receipt_sha256": live_ui[
+            "m04_map_pending_receipt_sha256"
+        ],
+        "m04_map_provenance_sha256": live_ui["m04_map_provenance_sha256"],
+        "m04_map_request_sha256": live_ui["m04_map_request_sha256"],
+        "m04_pinvi_approval_sha256": live_ui["m04_pinvi_approval_sha256"],
+        "m04_verification_id": live_ui["m04_verification_id"],
         "map_admin_openapi_sha256": pair_expected["admin"]["openapi_sha256"],
         "map_admin_runtime_openapi_sha256": map_pair["admin_runtime_openapi_sha256"],
         "map_admin_runtime_operation_contract_sha256": map_pair[
@@ -2741,7 +2838,7 @@ def _create(args: argparse.Namespace) -> int:
         "restore_evidence_sha256": evidence_hashes["restore"],
         "review_evidence_sha256": evidence_hashes["reviews"],
         "scope": scope,
-        "version": 1,
+        "version": 2,
     }
     signed = {
         "payload": payload,

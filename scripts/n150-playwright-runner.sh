@@ -93,7 +93,7 @@ if [[ -n "$evidence_dir" ]]; then
   fi
 fi
 
-if [[ -n "${PINVI_M04_UI_VERIFICATION_ID:-}" ]]; then
+if [[ "${PINVI_M04_LIVE_E2E:-}" == "1" || -n "${PINVI_M04_UI_VERIFICATION_ID:-}" ]]; then
   expected_m04_image="${PINVI_M04_PLAYWRIGHT_RUNNER_IMAGE_REF:-}"
   if [[ "$image" != "$expected_m04_image" || "$image" != mcr.microsoft.com/playwright:*@sha256:* ]]; then
     echo "error: M04 live UI requires the attested immutable Playwright image" >&2
@@ -108,7 +108,9 @@ if [[ -n "${PINVI_M04_UI_VERIFICATION_ID:-}" ]]; then
     PINVI_M04_LIVE_FEATURE_REQUEST_ID
     PINVI_M04_UI_API_URL
     PINVI_M04_UI_EVIDENCE_DIR
+    PINVI_M04_UI_VERIFICATION_ID
     PINVI_M04_PLAYWRIGHT_RUNNER_IMAGE_ID
+    PINVI_M04_PLAYWRIGHT_RUNNER_IMAGE_REF
     PINVI_SOURCE_REVISION
     PINVI_LIVE_WEB_URL
   )

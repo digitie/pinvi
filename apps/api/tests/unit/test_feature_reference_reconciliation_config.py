@@ -229,6 +229,15 @@ def _receipt_payload(**overrides: object) -> dict[str, object]:
         "live_ui_playwright_runner_image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:"
         + "7" * 64,
         "live_ui_verification_id": "22222222-2222-4222-8222-222222222222",
+        "m04_attestation_sha256": "1" * 64,
+        "m04_created_at": int(time.time()) - 90,
+        "m04_feature_request_id": "33333333-3333-4333-8333-333333333333",
+        "m04_map_feature_uuid": "44444444-4444-4444-8444-444444444444",
+        "m04_map_pending_receipt_sha256": "2" * 64,
+        "m04_map_provenance_sha256": "3" * 64,
+        "m04_map_request_sha256": "4" * 64,
+        "m04_pinvi_approval_sha256": "5" * 64,
+        "m04_verification_id": "22222222-2222-4222-8222-222222222222",
         "map_admin_openapi_sha256": KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
         "map_admin_runtime_openapi_sha256": "9" * 64,
         "map_admin_runtime_operation_contract_sha256": KOR_TRAVEL_MAP_M05_ADMIN_RUNTIME_OPERATION_CONTRACT_SHA256,
@@ -268,7 +277,7 @@ def _receipt_payload(**overrides: object) -> dict[str, object]:
         "restore_evidence_sha256": "e" * 64,
         "review_evidence_sha256": "f" * 64,
         "scope": "production",
-        "version": 1,
+        "version": 2,
     }
     payload.update(overrides)
     return payload
@@ -630,7 +639,7 @@ def test_production_reconciliation_rejects_boolean_numeric_receipt_fields(
 ) -> None:
     monkeypatch.setenv("PINVI_SOURCE_REVISION", PINVI_REVISION)
     receipt = _receipt_payload(**{field: True})
-    with pytest.raises(ValueError, match=r"M05 activation|production v1"):
+    with pytest.raises(ValueError, match=r"M05 activation|production v2"):
         _production_settings(
             pinvi_kor_travel_map_api_base_url="http://127.0.0.1:12701",
             pinvi_kor_travel_map_admin_base_url="http://127.0.0.1:12701",
@@ -645,7 +654,7 @@ def test_production_reconciliation_rejects_duplicate_receipt_keys(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("PINVI_SOURCE_REVISION", PINVI_REVISION)
-    receipt = _signed_receipt(_receipt_payload()).replace('"version":1', '"version":1,"version":1')
+    receipt = _signed_receipt(_receipt_payload()).replace('"version":2', '"version":2,"version":2')
     with pytest.raises(ValueError, match="duplicate keys"):
         _production_settings(
             pinvi_kor_travel_map_api_base_url="http://127.0.0.1:12701",

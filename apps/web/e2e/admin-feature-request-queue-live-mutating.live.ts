@@ -63,14 +63,11 @@ test.describe('M04 isolated Map feature-request queue live e2e', () => {
     if (!adminStorageState && (!adminEmail || !adminPassword)) {
       missing.push('PINVI_M04_LIVE_EMAIL/PINVI_M04_LIVE_PASSWORD 또는 storage state');
     }
-    const attested = Boolean(evidenceDir || verificationId || playwrightRunnerImageId || playwrightRunnerImageRef);
-    if (attested) {
-      if (!evidenceDir) missing.push('PINVI_M04_UI_EVIDENCE_DIR');
-      if (!verificationId) missing.push('PINVI_M04_UI_VERIFICATION_ID');
-      if (!sourceRevision) missing.push('PINVI_SOURCE_REVISION');
-      if (!playwrightRunnerImageId) missing.push('PINVI_M04_PLAYWRIGHT_RUNNER_IMAGE_ID');
-      if (!playwrightRunnerImageRef) missing.push('PINVI_M04_PLAYWRIGHT_RUNNER_IMAGE_REF');
-    }
+    if (!evidenceDir) missing.push('PINVI_M04_UI_EVIDENCE_DIR');
+    if (!verificationId) missing.push('PINVI_M04_UI_VERIFICATION_ID');
+    if (!sourceRevision) missing.push('PINVI_SOURCE_REVISION');
+    if (!playwrightRunnerImageId) missing.push('PINVI_M04_PLAYWRIGHT_RUNNER_IMAGE_ID');
+    if (!playwrightRunnerImageRef) missing.push('PINVI_M04_PLAYWRIGHT_RUNNER_IMAGE_REF');
     if (missing.length > 0) {
       throw new Error(`M04 live E2E 환경변수가 없습니다: ${missing.join(', ')}`);
     }
@@ -117,11 +114,20 @@ test.describe('M04 isolated Map feature-request queue live e2e', () => {
     expect(response.status()).toBe(200);
     expect(response.request().redirectedFrom()).toBeNull();
     const payload = (await response.json()) as {
-      data?: { status?: string; kor_travel_map_ref?: Record<string, unknown> };
+      data?: {
+        request_id?: string;
+        status?: string;
+        kor_travel_map_ref?: Record<string, unknown>;
+        reviewed_by_admin_id?: string;
+        resolved_at?: string;
+      };
     };
     const result = payload.data;
     const mapReference = result?.kor_travel_map_ref;
+    expect(result?.request_id).toBe(featureRequestId);
     expect(result?.status).toBe('approved');
+    expect(result?.reviewed_by_admin_id).toBeTruthy();
+    expect(result?.resolved_at).toBeTruthy();
     expect(mapReference).toMatchObject({
       request_id: featureRequestId,
       state: 'pending',
@@ -131,32 +137,47 @@ test.describe('M04 isolated Map feature-request queue live e2e', () => {
     await expect(page.getByTestId('admin-fr-notice')).toContainText('Map Feature 요청 큐');
     expect(foreignDocumentOrigin).toBeNull();
 
-    if (evidenceDir) {
-      if (!verificationId || !sourceRevision || !playwrightRunnerImageId || !playwrightRunnerImageRef) {
-        throw new Error('M04 UI run binding 환경변수가 준비되지 않았습니다.');
-      }
-      const marker = {
-        assertions: ['pinvi_approved', 'map_request_id', 'map_pending_receipt', 'same_origin'],
-        feature_request_id: featureRequestId,
-        map_action: mapReference?.action,
-        map_request_id: mapReference?.request_id,
-        map_review_mode: mapReference?.review_mode,
-        map_state: mapReference?.state,
-        pinvi_api_endpoint: apiBaseUrl,
-        pinvi_approval_sha256: createHash('sha256')
-          .update(canonicalJson(result), 'utf8')
-          .digest('hex'),
-        playwright_runner_image_id: playwrightRunnerImageId,
-        playwright_runner_image_ref: playwrightRunnerImageRef,
-        source_revision: sourceRevision,
-        status: 'passed',
-        verification_id: verificationId,
-      };
-      writeFileSync(
-        path.join(evidenceDir, 'm04-ui-run.json'),
-        `${JSON.stringify(marker)}\n`,
-        { encoding: 'utf8', mode: 0o600, flag: 'wx' },
-      );
+    if (!evidenceDir || !verificationId || !sourceRevision || !playwrightRunnerImageId || !playwrightRunnerImageRef) {
+      throw new Error('M04 UI run binding 환경변수가 준비되지 않았습니다.');
     }
+    const approvalBinding = {
+      kor_travel_map_ref: mapReference,
+      request_id: result?.request_id,
+      resolved_at: result?.resolved_at,
+      reviewed_by_admin_id: result?.reviewed_by_admin_id,
+      status: result?.status,
+    };
+    const marker = {
+      assertions: [
+        'pinvi_approved',
+        'pinvi_approval_binding',
+        'map_request_id',
+        'map_pending_receipt',
+        'map_pending_receipt_fingerprint',
+        'same_origin',
+      ],
+      feature_request_id: featureRequestId,
+      map_action: mapReference?.action,
+      map_pending_receipt_sha256: createHash('sha256')
+        .update(canonicalJson(mapReference), 'utf8')
+        .digest('hex'),
+      map_request_id: mapReference?.request_id,
+      map_review_mode: mapReference?.review_mode,
+      map_state: mapReference?.state,
+      pinvi_api_endpoint: apiBaseUrl,
+      pinvi_approval_sha256: createHash('sha256')
+        .update(canonicalJson(approvalBinding), 'utf8')
+        .digest('hex'),
+      playwright_runner_image_id: playwrightRunnerImageId,
+      playwright_runner_image_ref: playwrightRunnerImageRef,
+      source_revision: sourceRevision,
+      status: 'passed',
+      verification_id: verificationId,
+    };
+    writeFileSync(
+      path.join(evidenceDir, 'm04-ui-run.json'),
+      `${JSON.stringify(marker)}\n`,
+      { encoding: 'utf8', mode: 0o600, flag: 'wx' },
+    );
   });
 });

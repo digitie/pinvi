@@ -56,6 +56,7 @@ _PAIR_PATH = Path(__file__).resolve().parents[1] / (
     "contracts/kor-travel-map-m05-pair-provenance-v1.json"
 )
 _HOST_TOOL_DIRECTORIES = (Path("/usr/bin"), Path("/bin"))
+_M04_MAX_AGE_SECONDS = 15 * 60
 
 
 class AttestationError(ValueError):
@@ -604,15 +605,9 @@ def _pinvi_case_event_hash(data: dict[str, object]) -> str:
     return event_sha
 
 
-def _pinvi_case_snapshot(
-    *,
-    pinvi_api_url: str,
-    event_id: str,
-    email: str,
-    password: str,
-) -> tuple[dict[str, object], str, str]:
+def _pinvi_admin_opener(*, pinvi_api_url: str, email: str, password: str) -> Any:
     if not email or not password:
-        raise AttestationError("M05_PINVI_EMAIL and M05_PINVI_PASSWORD are required")
+        raise AttestationError("Pinvi admin email and password are required")
     cookie_jar = CookieJar()
     opener = _direct_opener(HTTPCookieProcessor(cookie_jar))
     login, _ = _http_json(
@@ -627,6 +622,77 @@ def _pinvi_case_snapshot(
         role in {"admin", "operator", "cpo"} for role in roles
     ):
         raise AttestationError("Pinvi live account is not an admin role")
+    return opener
+
+
+def _pinvi_m04_approval_snapshot(
+    *,
+    pinvi_api_url: str,
+    request_id: str,
+    email: str,
+    password: str,
+) -> dict[str, str]:
+    """Pinvi가 저장한 M04 승인 결과를 marker fingerprint와 독립적으로 다시 계산한다."""
+
+    request_id = _uuid(request_id, name="M04 feature request ID")
+    opener = _pinvi_admin_opener(
+        pinvi_api_url=pinvi_api_url,
+        email=email,
+        password=password,
+    )
+    value, _ = _http_json(
+        _url(pinvi_api_url, "/admin/feature-requests?status=approved&limit=100"),
+        opener=opener,
+    )
+    page = _data(value, name="Pinvi M04 approved feature requests")
+    items = page.get("items")
+    if not isinstance(items, list):
+        raise AttestationError("Pinvi M04 approved feature-request list is invalid")
+    matches = [
+        _object(item, name="Pinvi M04 approved feature request")
+        for item in items
+        if isinstance(item, dict) and item.get("request_id") == request_id
+    ]
+    if len(matches) != 1:
+        raise AttestationError("Pinvi M04 approved feature request is not uniquely present")
+    item = matches[0]
+    if item.get("status") != "approved":
+        raise AttestationError("Pinvi M04 feature request is not approved")
+    map_receipt = _object(item.get("kor_travel_map_ref"), name="Pinvi M04 Map receipt")
+    if (
+        _uuid(map_receipt.get("request_id"), name="Pinvi M04 Map request ID") != request_id
+        or map_receipt.get("state") != "pending"
+        or map_receipt.get("review_mode") != "feature_request_queue"
+        or map_receipt.get("action") != "submit"
+    ):
+        raise AttestationError("Pinvi M04 Map pending receipt is invalid")
+    approval = {
+        "kor_travel_map_ref": map_receipt,
+        "request_id": request_id,
+        "resolved_at": _string(item.get("resolved_at"), name="Pinvi M04 resolved_at"),
+        "reviewed_by_admin_id": _uuid(
+            item.get("reviewed_by_admin_id"), name="Pinvi M04 reviewer ID"
+        ),
+        "status": "approved",
+    }
+    return {
+        "map_pending_receipt_sha256": _sha256(_canonical_json(map_receipt)),
+        "pinvi_approval_sha256": _sha256(_canonical_json(approval)),
+    }
+
+
+def _pinvi_case_snapshot(
+    *,
+    pinvi_api_url: str,
+    event_id: str,
+    email: str,
+    password: str,
+) -> tuple[dict[str, object], str, str]:
+    opener = _pinvi_admin_opener(
+        pinvi_api_url=pinvi_api_url,
+        email=email,
+        password=password,
+    )
     value, _ = _http_json(
         _url(pinvi_api_url, f"/admin/feature-reference-reconciliations/{event_id}"),
         opener=opener,
@@ -1137,12 +1203,15 @@ def _validate_m04_ui_marker(
     verification_id: str,
     runner_image: dict[str, str],
     expected_pinvi_api_endpoint: str,
+    expected_pinvi_approval_sha256: str,
+    expected_map_pending_receipt_sha256: str,
 ) -> dict[str, str]:
     marker = _object(value, name="M04 UI evidence marker")
     expected = {
         "assertions",
         "feature_request_id",
         "map_action",
+        "map_pending_receipt_sha256",
         "map_request_id",
         "map_review_mode",
         "map_state",
@@ -1178,22 +1247,33 @@ def _validate_m04_ui_marker(
         raise AttestationError("M04 UI marker Playwright image ID does not match this run")
     if marker.get("assertions") != [
         "pinvi_approved",
+        "pinvi_approval_binding",
         "map_request_id",
         "map_pending_receipt",
+        "map_pending_receipt_fingerprint",
         "same_origin",
     ]:
         raise AttestationError("M04 UI marker assertion inventory is invalid")
     approval_sha = _string(
         marker.get("pinvi_approval_sha256"), name="M04 UI marker Pinvi approval hash"
     )
-    if _SHA256_RE.fullmatch(approval_sha) is None:
-        raise AttestationError("M04 UI marker Pinvi approval hash is invalid")
+    map_receipt_sha = _string(
+        marker.get("map_pending_receipt_sha256"), name="M04 UI marker Map pending receipt hash"
+    )
+    if (
+        _SHA256_RE.fullmatch(approval_sha) is None
+        or _SHA256_RE.fullmatch(map_receipt_sha) is None
+        or approval_sha != expected_pinvi_approval_sha256
+        or map_receipt_sha != expected_map_pending_receipt_sha256
+    ):
+        raise AttestationError("M04 UI marker does not match Pinvi's persisted approval receipt")
     return {
         "feature_request_id": feature_request_id,
         "map_action": "submit",
         "map_request_id": feature_request_id,
         "map_review_mode": "feature_request_queue",
         "map_state": "pending",
+        "map_pending_receipt_sha256": map_receipt_sha,
         "pinvi_approval_sha256": approval_sha,
     }
 
@@ -1340,6 +1420,7 @@ def _m04(args: argparse.Namespace) -> int:
         args.private_key, require_root_owned=args.require_root_owned
     )
     verification_id = str(uuid4())
+    m04_created_at = int(time.time())
     marker_path = evidence_dir / "m04-ui-run.json"
     if marker_path.is_symlink() or marker_path.exists():
         raise AttestationError("M04 UI evidence marker must not pre-exist the pinned run")
@@ -1400,6 +1481,12 @@ def _m04(args: argparse.Namespace) -> int:
         label="Pinvi source after M04 live UI",
     )
     marker, marker_raw_hash = _read_json(marker_path)
+    approval_snapshot = _pinvi_m04_approval_snapshot(
+        pinvi_api_url=args.pinvi_api_url,
+        request_id=feature_request_id,
+        email=os.environ["PINVI_M04_LIVE_EMAIL"],
+        password=os.environ["PINVI_M04_LIVE_PASSWORD"],
+    )
     marker_data = _validate_m04_ui_marker(
         marker,
         feature_request_id=feature_request_id,
@@ -1407,12 +1494,17 @@ def _m04(args: argparse.Namespace) -> int:
         verification_id=verification_id,
         runner_image=runner_image,
         expected_pinvi_api_endpoint=args.pinvi_api_url.rstrip("/"),
+        expected_pinvi_approval_sha256=approval_snapshot["pinvi_approval_sha256"],
+        expected_map_pending_receipt_sha256=approval_snapshot[
+            "map_pending_receipt_sha256"
+        ],
     )
     runtime_after = _m04_runtime_snapshot(args, source_revision=source_revision)
     _assert_runtime_snapshots_unchanged(runtime_initial, runtime_after)
 
     live_ui = {
         **marker_data,
+        "m04_created_at": m04_created_at,
         "pinvi_api_container_id": runtime_initial["pinvi_api"]["container_id"],
         "pinvi_api_endpoint": args.pinvi_api_url.rstrip("/"),
         "pinvi_source_revision": source_revision,
@@ -1428,10 +1520,12 @@ def _m04(args: argparse.Namespace) -> int:
     }
     live_ui_hash = _write_json(evidence_dir / "m04-live-ui.json", live_ui)
     payload = {
-        "created_at": int(time.time()),
+        "created_at": m04_created_at,
         "feature_request_id": feature_request_id,
+        "map_pending_receipt_sha256": marker_data["map_pending_receipt_sha256"],
         "m04_live_ui_sha256": live_ui_hash,
         "pinvi_api_endpoint": args.pinvi_api_url.rstrip("/"),
+        "pinvi_approval_sha256": marker_data["pinvi_approval_sha256"],
         "pinvi_source_revision": source_revision,
         "pinvi_web_endpoint": args.pinvi_web_url.rstrip("/"),
         "playwright_runner_image_id": runner_image["image_id"],
@@ -1439,7 +1533,7 @@ def _m04(args: argparse.Namespace) -> int:
         "scope": args.scope,
         "status": "passed",
         "verification_id": verification_id,
-        "version": 1,
+        "version": 2,
     }
     attestation = {
         "payload": payload,
@@ -1480,9 +1574,11 @@ def _read_m04_evidence(
     expected_live = {
         "feature_request_id",
         "map_action",
+        "map_pending_receipt_sha256",
         "map_request_id",
         "map_review_mode",
         "map_state",
+        "m04_created_at",
         "pinvi_api_container_id",
         "pinvi_api_endpoint",
         "pinvi_approval_sha256",
@@ -1537,13 +1633,24 @@ def _read_m04_evidence(
     verification_id = _uuid(
         live_data.get("verification_id"), name="M04 live UI verification ID"
     )
+    m04_created_at = live_data.get("m04_created_at")
+    if type(m04_created_at) is not int or m04_created_at <= 0:
+        raise AttestationError("M04 live UI creation time is invalid")
     approval_sha = _string(
         live_data.get("pinvi_approval_sha256"), name="M04 live UI approval hash"
+    )
+    map_pending_receipt_sha = _string(
+        live_data.get("map_pending_receipt_sha256"),
+        name="M04 live UI Map pending receipt hash",
     )
     ui_evidence_sha = _string(
         live_data.get("ui_evidence_sha256"), name="M04 live UI marker hash"
     )
-    if _SHA256_RE.fullmatch(approval_sha) is None or _SHA256_RE.fullmatch(ui_evidence_sha) is None:
+    if (
+        _SHA256_RE.fullmatch(approval_sha) is None
+        or _SHA256_RE.fullmatch(map_pending_receipt_sha) is None
+        or _SHA256_RE.fullmatch(ui_evidence_sha) is None
+    ):
         raise AttestationError("M04 live UI evidence hash is invalid")
     for name in ("playwright_runner_image_id", "playwright_runner_image_ref"):
         if not isinstance(live_data.get(name), str):
@@ -1560,8 +1667,10 @@ def _read_m04_evidence(
     expected_payload = {
         "created_at",
         "feature_request_id",
+        "map_pending_receipt_sha256",
         "m04_live_ui_sha256",
         "pinvi_api_endpoint",
+        "pinvi_approval_sha256",
         "pinvi_source_revision",
         "pinvi_web_endpoint",
         "playwright_runner_image_id",
@@ -1573,7 +1682,7 @@ def _read_m04_evidence(
     }
     if (
         set(payload) != expected_payload
-        or payload.get("version") != 1
+        or payload.get("version") != 2
         or payload.get("status") != "passed"
         or payload.get("scope") != scope
         or type(payload.get("created_at")) is not int
@@ -1593,6 +1702,9 @@ def _read_m04_evidence(
         or payload.get("playwright_runner_image_ref")
         != live_data["playwright_runner_image_ref"]
         or payload.get("m04_live_ui_sha256") != live_hash
+        or payload.get("created_at") != m04_created_at
+        or payload.get("pinvi_approval_sha256") != approval_sha
+        or payload.get("map_pending_receipt_sha256") != map_pending_receipt_sha
     ):
         raise AttestationError("M04 attestation does not bind the live UI evidence")
     signature = envelope.get("signature")
@@ -1608,6 +1720,8 @@ def _read_m04_evidence(
     return {
         "attestation_sha256": attestation_hash,
         "feature_request_id": feature_request_id,
+        "m04_created_at": str(m04_created_at),
+        "map_pending_receipt_sha256": map_pending_receipt_sha,
         "pinvi_approval_sha256": approval_sha,
         "ui_evidence_sha256": ui_evidence_sha,
         "verification_id": verification_id,
@@ -1663,6 +1777,26 @@ def _live(args: argparse.Namespace) -> int:
         expected_pinvi_web_endpoint=args.pinvi_web_url.rstrip("/"),
         expected_pinvi_web_container_id=runtime_initial["pinvi_web"]["container_id"],
     )
+    m04_created_at = int(m04["m04_created_at"])
+    now = int(time.time())
+    if (
+        m04_created_at > now + 60
+        or now - m04_created_at > _M04_MAX_AGE_SECONDS
+    ):
+        raise AttestationError("M04 evidence is outside the allowed activation window")
+    m04_approval_before = _pinvi_m04_approval_snapshot(
+        pinvi_api_url=args.pinvi_api_url,
+        request_id=m04["feature_request_id"],
+        email=email,
+        password=password,
+    )
+    if (
+        m04_approval_before["pinvi_approval_sha256"]
+        != m04["pinvi_approval_sha256"]
+        or m04_approval_before["map_pending_receipt_sha256"]
+        != m04["map_pending_receipt_sha256"]
+    ):
+        raise AttestationError("M04 approval receipt no longer matches its signed evidence")
 
     before_map, before_ack, before_map_hash, _before_ack_hash = _map_case_snapshot(
         map_admin_url=args.map_admin_url,
@@ -1720,7 +1854,7 @@ def _live(args: argparse.Namespace) -> int:
     if command != expected_command:
         raise AttestationError("live UI command is not the pinned M05 Playwright test")
     runner_image = _docker_image_identity(args.playwright_runner_image)
-    verification_id = str(uuid4())
+    verification_id = m04["verification_id"]
     marker_path = evidence_dir / "ui-run.json"
     if marker_path.is_symlink() or marker_path.exists():
         raise AttestationError("UI evidence marker must not pre-exist the pinned run")
@@ -1769,6 +1903,14 @@ def _live(args: argparse.Namespace) -> int:
     )
     if after_m04_chain != m04_chain:
         raise AttestationError("M04→M05 server-side chain drifted during the UI flow")
+    m04_approval_after = _pinvi_m04_approval_snapshot(
+        pinvi_api_url=args.pinvi_api_url,
+        request_id=m04["feature_request_id"],
+        email=email,
+        password=password,
+    )
+    if m04_approval_after != m04_approval_before:
+        raise AttestationError("M04 approval receipt drifted during the UI flow")
     after_pinvi, after_pinvi_hash, after_receipt_sha = _pinvi_case_snapshot(
         pinvi_api_url=args.pinvi_api_url,
         event_id=event_id,
@@ -1843,9 +1985,15 @@ def _live(args: argparse.Namespace) -> int:
         "event_id": event_id,
         "event_sha256": after_map_event_sha,
         "m04_attestation_sha256": m04["attestation_sha256"],
+        "m04_created_at": m04_created_at,
         "m04_feature_request_id": m04_chain["feature_request_id"],
         "m04_map_feature_uuid": m04_chain["map_feature_uuid"],
+        "m04_map_pending_receipt_sha256": m04["map_pending_receipt_sha256"],
+        "m04_map_provenance_sha256": m04_chain["map_provenance_sha256"],
+        "m04_map_request_sha256": m04_chain["map_request_sha256"],
+        "m04_pinvi_approval_sha256": m04["pinvi_approval_sha256"],
         "m04_server_side_chain_verified": True,
+        "m04_verification_id": m04["verification_id"],
         "map_admin_endpoint": args.map_admin_url.rstrip("/"),
         "map_ack_sha256": after_ack_hash,
         "map_local_receipt_sha256": after_local_receipt_sha,
@@ -1863,6 +2011,7 @@ def _live(args: argparse.Namespace) -> int:
         "server_side_ack_verified": True,
         "status": "passed",
         "ui_evidence_sha256": marker_raw_hash,
+        "verification_id": verification_id,
     }
     output_hashes = {
         "live-ui": _write_json(evidence_dir / "live-ui.json", live_ui),
@@ -1879,9 +2028,15 @@ def _live(args: argparse.Namespace) -> int:
         "evidence_sha256": output_hashes,
         "map_ack_sha256": after_ack_hash,
         "m04_attestation_sha256": m04["attestation_sha256"],
+        "m04_created_at": m04_created_at,
         "m04_feature_request_id": m04_chain["feature_request_id"],
         "m04_map_feature_uuid": m04_chain["map_feature_uuid"],
+        "m04_map_pending_receipt_sha256": m04["map_pending_receipt_sha256"],
+        "m04_map_provenance_sha256": m04_chain["map_provenance_sha256"],
+        "m04_map_request_sha256": m04_chain["map_request_sha256"],
+        "m04_pinvi_approval_sha256": m04["pinvi_approval_sha256"],
         "m04_server_side_chain_verified": True,
+        "m04_verification_id": m04["verification_id"],
         "local_receipt_sha256": after_receipt_sha,
         "map_admin_endpoint": args.map_admin_url.rstrip("/"),
         "map_snapshot_sha256": after_map_hash,
@@ -1894,7 +2049,7 @@ def _live(args: argparse.Namespace) -> int:
         "scope": args.scope,
         "status": "passed",
         "verification_id": verification_id,
-        "version": 2,
+        "version": 3,
     }
     attestation = {
         "payload": attestation_payload,

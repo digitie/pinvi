@@ -1431,6 +1431,15 @@ class Settings(BaseSettings):
             "live_ui_playwright_runner_image_id",
             "live_ui_playwright_runner_image_ref",
             "live_ui_verification_id",
+            "m04_attestation_sha256",
+            "m04_created_at",
+            "m04_feature_request_id",
+            "m04_map_feature_uuid",
+            "m04_map_pending_receipt_sha256",
+            "m04_map_provenance_sha256",
+            "m04_map_request_sha256",
+            "m04_pinvi_approval_sha256",
+            "m04_verification_id",
             "map_admin_openapi_sha256",
             "map_admin_runtime_openapi_sha256",
             "map_admin_runtime_operation_contract_sha256",
@@ -1507,10 +1516,10 @@ class Settings(BaseSettings):
         except (InvalidSignature, ValueError, TypeError):
             _raise_redacted_settings_error("M05 activation receipt signature is invalid")
 
-        if type(payload["version"]) is not int or payload["version"] != 1:
+        if type(payload["version"]) is not int or payload["version"] != 2:
             _raise_redacted_settings_error(
                 "PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT "
-                "M05 activation receipt must be v1"
+                "M05 activation receipt must be v2"
             )
         if payload["scope"] != self.pinvi_environment:
             _raise_redacted_settings_error(
@@ -1533,6 +1542,16 @@ class Settings(BaseSettings):
         ):
             _raise_redacted_settings_error(
                 "M05 activation receipt freshness, generation, or nonce is invalid"
+            )
+        m04_created_at = payload["m04_created_at"]
+        if (
+            type(m04_created_at) is not int
+            or m04_created_at <= 0
+            or m04_created_at > issued_at + 60
+            or issued_at - m04_created_at > 15 * 60
+        ):
+            _raise_redacted_settings_error(
+                "M05 activation receipt M04 evidence is outside the activation window"
             )
         if (
             not isinstance(payload["pinvi_source_revision"], str)
@@ -1641,6 +1660,11 @@ class Settings(BaseSettings):
             "live_ui_local_receipt_sha256",
             "live_ui_map_snapshot_sha256",
             "live_ui_pinvi_snapshot_sha256",
+            "m04_attestation_sha256",
+            "m04_map_pending_receipt_sha256",
+            "m04_map_provenance_sha256",
+            "m04_map_request_sha256",
+            "m04_pinvi_approval_sha256",
             "map_admin_runtime_openapi_sha256",
             "map_admin_runtime_operation_contract_sha256",
             "map_admin_source_operation_contract_sha256",
@@ -1674,6 +1698,10 @@ class Settings(BaseSettings):
             is None
             or not _is_canonical_uuid(payload["live_ui_verification_id"])
             or payload["live_ui_verification_id"] != payload["activation_nonce"]
+            or not _is_canonical_uuid(payload["m04_feature_request_id"])
+            or not _is_canonical_uuid(payload["m04_map_feature_uuid"])
+            or not _is_canonical_uuid(payload["m04_verification_id"])
+            or payload["m04_verification_id"] != payload["activation_nonce"]
         ):
             _raise_redacted_settings_error(
                 "M05 live UI runner identity or verification nonce is invalid"
