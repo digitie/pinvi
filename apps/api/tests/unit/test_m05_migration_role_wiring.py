@@ -36,6 +36,7 @@ def test_compose_keeps_runtime_and_migrator_role_inputs_separate() -> None:
     assert 'PINVI_M05_LEGACY_REBASELINE: "0"' in role_bootstrap_block
     assert "postgresql+asyncpg://${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}:" in migrator_block
     assert "PINVI_MIGRATOR_DATABASE_URL" not in migrator_block
+    assert "PINVI_APP_DB_USER: ${PINVI_APP_DB_USER:-pinvi_app}" in migrator_block
     assert "PINVI_MIGRATION_OWNER" in migrator_block
     assert "PINVI_MIGRATOR_DB_USER" in migrator_block
     assert "PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}" in migrator_block

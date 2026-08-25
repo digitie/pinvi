@@ -162,6 +162,39 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
         assert len(state) == 7
         return tuple(state)  # type: ignore[return-value]
 
+    def runtime_app_privilege_state() -> tuple[str, str, str, str]:
+        query = (
+            "SELECT "
+            f"has_schema_privilege('{runtime_role}', 'app', 'USAGE'), "
+            f"(has_table_privilege('{runtime_role}', 'app.users', 'SELECT') "
+            f"AND has_table_privilege('{runtime_role}', 'app.users', 'INSERT') "
+            f"AND has_table_privilege('{runtime_role}', 'app.users', 'UPDATE') "
+            f"AND has_table_privilege('{runtime_role}', 'app.users', 'DELETE')), "
+            f"(has_table_privilege('{runtime_role}', 'app.oauth_login_states', 'SELECT') "
+            f"AND has_table_privilege('{runtime_role}', 'app.oauth_login_states', 'INSERT') "
+            f"AND has_table_privilege('{runtime_role}', 'app.oauth_login_states', 'UPDATE') "
+            f"AND has_table_privilege('{runtime_role}', 'app.oauth_login_states', 'DELETE')), "
+            f"(has_table_privilege('{runtime_role}', 'app.oauth_mobile_exchanges', 'SELECT') "
+            f"AND has_table_privilege('{runtime_role}', 'app.oauth_mobile_exchanges', 'INSERT') "
+            f"AND has_table_privilege('{runtime_role}', 'app.oauth_mobile_exchanges', 'UPDATE') "
+            f"AND has_table_privilege('{runtime_role}', 'app.oauth_mobile_exchanges', 'DELETE'))"
+        )
+        result = compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            "--no-psqlrc",
+            "--tuples-only",
+            "--no-align",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            f"--command={query}",
+        )
+        state = result.stdout.strip().split("|")
+        assert len(state) == 4
+        return tuple(state)  # type: ignore[return-value]
+
     client_name = f"pinvi-m05-client-{suffix}"
     rotated_client_name = f"pinvi-m05-rotated-client-{suffix}"
     stale_role = f"m05_stale_{suffix}"
@@ -197,6 +230,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             "t",
             "20260824_0101",
         )
+        assert runtime_app_privilege_state() == ("t", "t", "t", "t")
         compose(
             "exec",
             "-T",

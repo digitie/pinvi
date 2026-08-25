@@ -296,6 +296,8 @@ services:
       # M05 receipt DDL to PINVI_MIGRATION_OWNER and restores the app owner for versioning.
       PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
       PINVI_DATABASE_URL: postgresql+asyncpg://${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}:${PINVI_MIGRATOR_DB_PASSWORD:-pinvi_app_smoke}@app-postgres:5432/pinvi
+      # 0101 grants the fresh app runtime role only after the M05 DDL and owner fence.
+      PINVI_APP_DB_USER: ${PINVI_APP_DB_USER:-pinvi_app}
       PINVI_MIGRATION_OWNER: ${PINVI_MIGRATION_OWNER:-pinvi_migration_owner}
       PINVI_MIGRATOR_DB_USER: ${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}
       PINVI_M05_LEGACY_REBASELINE: "0"
