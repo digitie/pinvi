@@ -332,6 +332,7 @@ migrate_under_lifecycle_lock() {
 
 migrate() {
   reject_explicit_migrator_database_url
+  pinvi_prepare_api_image_provenance
   acquire_migrator_lifecycle_lock
   migrate_under_lifecycle_lock
   release_migrator_lifecycle_lock
@@ -360,7 +361,6 @@ up() {
   acquire_migrator_lifecycle_lock
   up_deps "$legacy_rebaseline"
   migrate_under_lifecycle_lock
-  release_migrator_lifecycle_lock
   log "starting API + Web"
   compose up -d app-api app-web
   pinvi_verify_or_remove_running_app
@@ -368,6 +368,7 @@ up() {
   wait_for_url "http://127.0.0.1:${API_PORT}/health" "API"
   wait_for_url "http://127.0.0.1:${API_PORT}/health/feature-reference-reconciliation" "M05 worker"
   wait_for_url "http://127.0.0.1:${WEB_PORT}/" "Web"
+  release_migrator_lifecycle_lock
   log "ready: API http://127.0.0.1:${API_PORT}, Web http://127.0.0.1:${WEB_PORT}, RustFS http://127.0.0.1:${RUSTFS_PORT}"
 }
 

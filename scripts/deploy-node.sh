@@ -282,6 +282,7 @@ migrate_under_lifecycle_lock() {
 
 migrate() {
   reject_explicit_migrator_database_url
+  pinvi_prepare_api_image_provenance require-immutable
   acquire_migrator_lifecycle_lock
   migrate_under_lifecycle_lock
   release_migrator_lifecycle_lock
@@ -296,21 +297,39 @@ bootstrap_credential_file() {
   printf '%s\n' "$path"
 }
 
-up() {
+dagster_up_under_lifecycle_lock() {
+  pinvi_verify_runtime_image_provenance app-dagster
+  log "starting Dagster webserver (port ${DAGSTER_PORT})"
+  compose --profile etl up -d app-dagster
+  pinvi_verify_or_remove_running_dagster
+  wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster"
+}
+
+up_under_lifecycle_lock() {
   pinvi_verify_runtime_image_provenance app-api app-web
   log "starting API + Web"
   compose up -d app-api app-web
   pinvi_verify_or_remove_running_app
   if [[ "$ENABLE_DAGSTER" != "0" ]]; then
-    dagster_up
+    dagster_up_under_lifecycle_lock
   fi
+  wait_for_url "http://127.0.0.1:${API_PORT}/health" "API"
+  wait_for_url "http://127.0.0.1:${API_PORT}/health/feature-reference-reconciliation" "M05 worker"
+  wait_for_url "http://127.0.0.1:${WEB_PORT}/" "Web"
+}
+
+up() {
+  pinvi_prepare_api_image_provenance require-immutable
+  acquire_migrator_lifecycle_lock
+  up_under_lifecycle_lock
+  release_migrator_lifecycle_lock
 }
 
 dagster_up() {
-  pinvi_verify_runtime_image_provenance app-dagster
-  log "starting Dagster webserver (port ${DAGSTER_PORT})"
-  compose --profile etl up -d app-dagster
-  pinvi_verify_or_remove_running_dagster
+  pinvi_prepare_api_image_provenance require-immutable
+  acquire_migrator_lifecycle_lock
+  dagster_up_under_lifecycle_lock
+  release_migrator_lifecycle_lock
 }
 
 wait_for_url() {

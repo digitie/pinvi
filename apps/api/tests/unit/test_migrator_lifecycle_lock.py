@@ -128,3 +128,53 @@ def test_both_migration_wrappers_take_the_shared_lock_before_writer_drain() -> N
             "migrate_under_lifecycle_lock"
         )
         assert lifecycle.index("drain_runtime_writers") < lifecycle.index("prepare_migrator_login")
+
+
+def _function_body(source: str, name: str) -> str:
+    start = source.index(f"{name}() {{")
+    end = source.index("\n}\n", start) + 2
+    return source[start:end]
+
+
+def test_migration_resolves_compose_environment_before_selecting_the_lock() -> None:
+    for name in ("docker-app.sh", "deploy-node.sh"):
+        source = (ROOT / "scripts" / name).read_text(encoding="utf-8")
+        migrate = _function_body(source, "migrate")
+        assert migrate.index("pinvi_prepare_api_image_provenance") < migrate.index(
+            "acquire_migrator_lifecycle_lock"
+        )
+
+
+def test_writer_startup_stays_under_the_shared_lifecycle_lock_until_ready() -> None:
+    docker_app = (ROOT / "scripts" / "docker-app.sh").read_text(encoding="utf-8")
+    docker_up = _function_body(docker_app, "up")
+    assert docker_up.index("acquire_migrator_lifecycle_lock") < docker_up.index("up_deps")
+    assert docker_up.index("migrate_under_lifecycle_lock") < docker_up.index(
+        "compose up -d app-api app-web"
+    )
+    assert docker_up.index("compose up -d app-api app-web") < docker_up.index(
+        'wait_for_url "http://127.0.0.1:${WEB_PORT}/" "Web"'
+    )
+    assert docker_up.index('wait_for_url "http://127.0.0.1:${WEB_PORT}/" "Web"') < docker_up.index(
+        "release_migrator_lifecycle_lock"
+    )
+
+    deploy = (ROOT / "scripts" / "deploy-node.sh").read_text(encoding="utf-8")
+    deploy_up = _function_body(deploy, "up")
+    assert deploy_up.index("acquire_migrator_lifecycle_lock") < deploy_up.index(
+        "up_under_lifecycle_lock"
+    )
+    assert deploy_up.index("up_under_lifecycle_lock") < deploy_up.index(
+        "release_migrator_lifecycle_lock"
+    )
+    deploy_dagster = _function_body(deploy, "dagster_up")
+    assert deploy_dagster.index("acquire_migrator_lifecycle_lock") < deploy_dagster.index(
+        "dagster_up_under_lifecycle_lock"
+    )
+    assert deploy_dagster.index("dagster_up_under_lifecycle_lock") < deploy_dagster.index(
+        "release_migrator_lifecycle_lock"
+    )
+    assert (
+        'wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster"'
+        in _function_body(deploy, "dagster_up_under_lifecycle_lock")
+    )
