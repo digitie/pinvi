@@ -34,15 +34,32 @@ LEGACY_REVISION = "20260821_0061"
 BASELINE_REVISION = "20260824_0100"
 _EXPECTED_CATALOG_LINES = 1590
 _EXPECTED_CATALOG_SHA256 = (
-    "bcf526cfa62facfaf3fe4b64a62e90329552cd887865a8ed5a477fe1fcc09c73"
+    "08a8c8a9f083ab13173ac99f29772e103ee0cc599dc99b87f997bc84a0c61f0f"
 )
 _N150_LEGACY_CATALOG_SHA256 = (
-    # N150 운영 0061과 fresh 0061 migration probe가 공통으로 산출한 legacy 기준선.
-    "91949a8f1b609ca99b4631ee2db75b03d8cfc933ae72c52edec8d99d3d91b501"
+    # 보존한 N150 0061 app dump를 별도 PostgreSQL 16 DB에 복원해 산출한 기준선.
+    "d5774e102cfd738dae08a88981df1ea2309832627de44bdee63f414c72943f6d"
 )
-_ALLOWED_CATALOG_SHA256 = frozenset(
-    {_EXPECTED_CATALOG_SHA256, _N150_LEGACY_CATALOG_SHA256}
+_TARGET_PROFILE_FRESH = "fresh-postgresql-16"
+_TARGET_PROFILE_N150 = "n150-production"
+_N150_TARGET_IDENTITY_SHA256 = (
+    # current_database|system_identifier|server_addr|server_port; DB OID는 재생성 때 변한다.
+    "e04c99a4681738e0292debdceded99b1c8abe01c9b8bdee82aeef8566dd33cc1"
 )
+_TARGET_PROFILE_SPECS: dict[str, dict[str, object]] = {
+    _TARGET_PROFILE_FRESH: {
+        "catalog_sha256": _EXPECTED_CATALOG_SHA256,
+        "target_host": "test",
+        "target_identity_sha256": None,
+    },
+    _TARGET_PROFILE_N150: {
+        "catalog_sha256": _N150_LEGACY_CATALOG_SHA256,
+        "target_host": "n150",
+        "target_identity_sha256": _N150_TARGET_IDENTITY_SHA256,
+        "database_name": "pinvi",
+        "server_port": 12800,
+    },
+}
 _CHECKSUM = re.compile(r"^[0-9a-f]{64}$")
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _INTEGER = re.compile(r"^[0-9]+$")
@@ -67,6 +84,8 @@ _TARGET_MANIFEST_FIELDS = frozenset(
         "backup_manifest_sha256",
         "captured_at",
         "preflight",
+        "target_host",
+        "target_profile",
         "version",
     }
 )
@@ -82,6 +101,7 @@ _PREFLIGHT_FIELDS = frozenset(
         "database_oid",
         "expected_catalog_lines",
         "expected_catalog_sha256",
+        "role_security_sha256",
         "server_addr",
         "server_port",
         "server_version_num",
@@ -99,6 +119,8 @@ _RECEIPT_FIELDS = frozenset(
         "preflight",
         "state",
         "target_manifest_sha256",
+        "target_host",
+        "target_profile",
         "version",
     }
 )
@@ -120,16 +142,26 @@ WITH object_lines(line) AS (
                            COALESCE(c.relacl::text, ''), c.relrowsecurity,
                            c.relforcerowsecurity, c.relispartition,
                            COALESCE(pg_get_expr(c.relpartbound, c.oid, true), ''),
-                           COALESCE(pg_get_partkeydef(c.oid), ''))::text
+                           COALESCE(pg_get_partkeydef(c.oid), ''),
+                           COALESCE(sequence_row.seqstart::text, ''),
+                           COALESCE(sequence_row.seqmin::text, ''),
+                           COALESCE(sequence_row.seqmax::text, ''),
+                           COALESCE(sequence_row.seqincrement::text, ''),
+                           COALESCE(sequence_row.seqcache::text, ''),
+                           COALESCE(sequence_row.seqcycle::text, ''),
+                           CASE WHEN sequence_row.seqtypid IS NULL THEN ''
+                                ELSE sequence_row.seqtypid::regtype::text END)::text
   FROM pg_class AS c
   JOIN pg_namespace AS n ON n.oid = c.relnamespace
+  LEFT JOIN pg_sequence AS sequence_row ON sequence_row.seqrelid = c.oid
   WHERE n.nspname = 'app' AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f', 'c')
   UNION ALL
   SELECT jsonb_build_array('column', c.relname, a.attname, a.attnum,
                            pg_catalog.format_type(a.atttypid, a.atttypmod), a.attnotnull,
                            a.attidentity, a.attgenerated,
                            COALESCE(pg_get_expr(d.adbin, d.adrelid), ''),
-                           COALESCE(a.attcollation::regcollation::text, ''))::text
+                           COALESCE(a.attcollation::regcollation::text, ''),
+                           COALESCE(a.attacl::text, ''))::text
   FROM pg_attribute AS a
   JOIN pg_class AS c ON c.oid = a.attrelid
   JOIN pg_namespace AS n ON n.oid = c.relnamespace
@@ -239,7 +271,8 @@ WITH object_lines(line) AS (
   UNION ALL
   SELECT jsonb_build_array('trigger', c.relname, t.tgname, t.tgenabled, t.tgtype,
                            t.tgfoid::regprocedure::text, encode(t.tgargs, 'hex'),
-                           t.tgattr::text)::text
+                           t.tgattr::text,
+                           COALESCE(pg_get_expr(t.tgqual, t.tgrelid, true), ''))::text
   FROM pg_trigger AS t
   JOIN pg_class AS c ON c.oid = t.tgrelid
   JOIN pg_namespace AS n ON n.oid = c.relnamespace
@@ -283,6 +316,74 @@ WITH object_lines(line) AS (
   WHERE n.nspname = 'app' OR n.nspname IS NULL
 )
 SELECT line FROM object_lines ORDER BY line COLLATE "C"
+"""
+
+_ROLE_SECURITY_FINGERPRINT_SQL = """
+WITH app_owner_roles(oid) AS (
+  SELECT namespace.nspowner
+  FROM pg_namespace AS namespace
+  WHERE namespace.nspname = 'app'
+  UNION
+  SELECT relation.relowner
+  FROM pg_class AS relation
+  JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+  WHERE namespace.nspname = 'app'
+  UNION
+  SELECT procedure.proowner
+  FROM pg_proc AS procedure
+  JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+  WHERE namespace.nspname = 'app'
+  UNION
+  SELECT type_row.typowner
+  FROM pg_type AS type_row
+  JOIN pg_namespace AS namespace ON namespace.oid = type_row.typnamespace
+  WHERE namespace.nspname = 'app'
+), relevant_roles(oid) AS (
+  SELECT oid FROM app_owner_roles
+  UNION
+  SELECT role_row.oid
+  FROM pg_roles AS role_row
+  WHERE role_row.rolname IN (current_user, session_user)
+     OR role_row.rolname LIKE 'pinvi%'
+  UNION
+  SELECT database_row.datdba
+  FROM pg_database AS database_row
+  WHERE database_row.datname = current_database()
+), security_lines(line) AS (
+  SELECT jsonb_build_array(
+      'database_acl', database_row.datname, pg_get_userbyid(database_row.datdba),
+      COALESCE(database_row.datacl::text, '')
+    )::text
+  FROM pg_database AS database_row
+  WHERE database_row.datname = current_database()
+  UNION ALL
+  SELECT jsonb_build_array(
+      'schema_acl', namespace.nspname, pg_get_userbyid(namespace.nspowner),
+      COALESCE(namespace.nspacl::text, '')
+    )::text
+  FROM pg_namespace AS namespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'role', role_row.rolname, role_row.rolsuper, role_row.rolinherit,
+      role_row.rolcreaterole, role_row.rolcreatedb, role_row.rolcanlogin,
+      role_row.rolreplication, role_row.rolbypassrls, role_row.rolconnlimit,
+      COALESCE(role_row.rolvaliduntil::text, '')
+    )::text
+  FROM pg_roles AS role_row
+  WHERE role_row.oid IN (SELECT oid FROM relevant_roles)
+  UNION ALL
+  SELECT jsonb_build_array(
+      'membership', granted_role.rolname, member_role.rolname,
+      membership.admin_option, membership.inherit_option, membership.set_option
+    )::text
+  FROM pg_auth_members AS membership
+  JOIN pg_roles AS granted_role ON granted_role.oid = membership.roleid
+  JOIN pg_roles AS member_role ON member_role.oid = membership.member
+  WHERE membership.roleid IN (SELECT oid FROM relevant_roles)
+     OR membership.member IN (SELECT oid FROM relevant_roles)
+)
+SELECT line FROM security_lines ORDER BY line COLLATE "C"
 """
 
 # `apply`와 0101 receipt 검증은 같은 transaction-scoped advisory lock을 잡는다.
@@ -454,6 +555,55 @@ class RebaselineError(RuntimeError):
     """실행자가 조치할 수 있는 rebaseline preflight 실패."""
 
 
+def _target_profile_spec(target_profile: str) -> dict[str, object]:
+    try:
+        return _TARGET_PROFILE_SPECS[target_profile]
+    except (KeyError, TypeError) as exc:
+        raise RebaselineError("rebaseline target profile is unsupported") from exc
+
+
+def _target_profile_identity_sha256(preflight: dict[str, Any]) -> str:
+    identity = "|".join(
+        str(preflight[field])
+        for field in ("database_name", "system_identifier", "server_addr", "server_port")
+    )
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+
+def _assert_target_profile_preflight(
+    target_profile: str, preflight: dict[str, Any]
+) -> None:
+    spec = _target_profile_spec(target_profile)
+    expected_catalog_sha256 = spec["catalog_sha256"]
+    if (
+        preflight.get("catalog_sha256") != expected_catalog_sha256
+        or preflight.get("expected_catalog_sha256") != expected_catalog_sha256
+        or preflight.get("catalog_lines") != _EXPECTED_CATALOG_LINES
+        or preflight.get("expected_catalog_lines") != _EXPECTED_CATALOG_LINES
+    ):
+        raise RebaselineError(
+            f"catalog fingerprint is not canonical for target profile {target_profile}"
+        )
+    expected_identity_sha256 = spec.get("target_identity_sha256")
+    if (
+        expected_identity_sha256 is not None
+        and _target_profile_identity_sha256(preflight) != expected_identity_sha256
+    ):
+        raise RebaselineError(
+            f"target database identity is not canonical for target profile {target_profile}"
+        )
+    expected_database_name = spec.get("database_name")
+    if expected_database_name is not None and preflight.get("database_name") != expected_database_name:
+        raise RebaselineError(
+            f"target database name is not canonical for target profile {target_profile}"
+        )
+    expected_server_port = spec.get("server_port")
+    if expected_server_port is not None and preflight.get("server_port") != expected_server_port:
+        raise RebaselineError(
+            f"target database port is not canonical for target profile {target_profile}"
+        )
+
+
 @dataclass(frozen=True)
 class CatalogPreflight:
     database_name: str
@@ -470,8 +620,10 @@ class CatalogPreflight:
     app_data_rows: int
     app_data_table_lines: int
     app_data_content_sha256: str
+    role_security_sha256: str
 
-    def as_dict(self) -> dict[str, Any]:
+    def as_dict(self, *, target_profile: str = _TARGET_PROFILE_FRESH) -> dict[str, Any]:
+        expected_catalog_sha256 = _target_profile_spec(target_profile)["catalog_sha256"]
         return {
             "app_data_rows": self.app_data_rows,
             "app_data_table_lines": self.app_data_table_lines,
@@ -488,17 +640,16 @@ class CatalogPreflight:
             "catalog_lines": self.catalog_lines,
             "catalog_sha256": self.catalog_sha256,
             "expected_catalog_lines": _EXPECTED_CATALOG_LINES,
-            "expected_catalog_sha256": (
-                self.catalog_sha256
-                if self.catalog_sha256 in _ALLOWED_CATALOG_SHA256
-                else _EXPECTED_CATALOG_SHA256
-            ),
+            "expected_catalog_sha256": expected_catalog_sha256,
+            "role_security_sha256": self.role_security_sha256,
         }
 
-    def stable_identity_dict(self) -> dict[str, Any]:
+    def stable_identity_dict(
+        self, *, target_profile: str = _TARGET_PROFILE_FRESH
+    ) -> dict[str, Any]:
         """version row만 달라질 수 있는 0061→0100 전환 전후 identity."""
 
-        value = self.as_dict()
+        value = self.as_dict(target_profile=target_profile)
         value.pop("version_rows")
         return value
 
@@ -530,6 +681,8 @@ class TargetManifest:
     captured_at: str
     backup_manifest_sha256: str
     preflight: dict[str, Any]
+    target_profile: str = _TARGET_PROFILE_FRESH
+    target_host: str = "test"
 
 
 def _sha256_file(path: Path) -> str:
@@ -816,13 +969,18 @@ def _replace_private_json(path: Path, payload: dict[str, Any], *, label: str) ->
 
 
 def _target_manifest_payload(
-    preflight: CatalogPreflight, backup_manifest_sha256: str
+    preflight: CatalogPreflight,
+    backup_manifest_sha256: str,
+    target_profile: str = _TARGET_PROFILE_FRESH,
 ) -> dict[str, Any]:
+    spec = _target_profile_spec(target_profile)
     return {
         "action": "0061_to_0100_rebaseline_target",
         "backup_manifest_sha256": backup_manifest_sha256,
         "captured_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-        "preflight": preflight.as_dict(),
+        "preflight": preflight.as_dict(target_profile=target_profile),
+        "target_host": spec["target_host"],
+        "target_profile": target_profile,
         "version": _MANIFEST_VERSION,
     }
 
@@ -838,8 +996,14 @@ def _read_target_manifest(path: Path) -> TargetManifest:
         or not isinstance(value["preflight"], dict)
         or not isinstance(value["backup_manifest_sha256"], str)
         or _CHECKSUM.fullmatch(value["backup_manifest_sha256"]) is None
+        or not isinstance(value["target_profile"], str)
+        or not isinstance(value["target_host"], str)
     ):
         raise RebaselineError("rebaseline target manifest values are invalid")
+    target_profile = value["target_profile"]
+    spec = _target_profile_spec(target_profile)
+    if value["target_host"] != spec["target_host"]:
+        raise RebaselineError("rebaseline target manifest host binding is invalid")
     _parse_utc_timestamp(value["captured_at"], label="target manifest captured_at")
     preflight = value["preflight"]
     if frozenset(preflight) != _PREFLIGHT_FIELDS:
@@ -847,9 +1011,9 @@ def _read_target_manifest(path: Path) -> TargetManifest:
     if (
         preflight["version_rows"] != [LEGACY_REVISION]
         or preflight["expected_catalog_lines"] != _EXPECTED_CATALOG_LINES
-        or preflight["expected_catalog_sha256"] not in _ALLOWED_CATALOG_SHA256
+        or preflight["expected_catalog_sha256"] != spec["catalog_sha256"]
         or preflight["catalog_lines"] != _EXPECTED_CATALOG_LINES
-        or preflight["catalog_sha256"] != preflight["expected_catalog_sha256"]
+        or preflight["catalog_sha256"] != spec["catalog_sha256"]
         or not isinstance(preflight["database_name"], str)
         or _IDENTIFIER.fullmatch(preflight["database_name"]) is None
         or any(
@@ -879,7 +1043,7 @@ def _read_target_manifest(path: Path) -> TargetManifest:
         or any(
             not isinstance(preflight[field], str)
             or _CHECKSUM.fullmatch(preflight[field]) is None
-            for field in ("app_data_content_sha256",)
+            for field in ("app_data_content_sha256", "role_security_sha256")
         )
     ):
         raise RebaselineError("rebaseline target manifest preflight values are invalid")
@@ -889,12 +1053,15 @@ def _read_target_manifest(path: Path) -> TargetManifest:
         raise RebaselineError(
             "rebaseline target manifest preflight endpoint is invalid"
         ) from exc
+    _assert_target_profile_preflight(target_profile, preflight)
     return TargetManifest(
         path=path,
         sha256=_sha256_file(path),
         captured_at=str(value["captured_at"]),
         backup_manifest_sha256=value["backup_manifest_sha256"],
         preflight=value["preflight"],
+        target_profile=target_profile,
+        target_host=value["target_host"],
     )
 
 
@@ -906,6 +1073,9 @@ def _assert_target_manifest(
     *,
     allow_baseline_revision: bool,
 ) -> None:
+    spec = _target_profile_spec(target.target_profile)
+    if target.target_host != spec["target_host"]:
+        raise RebaselineError("target manifest host binding is invalid")
     if target.backup_manifest_sha256 != backup_manifest_sha256:
         raise RebaselineError("target manifest is not bound to this backup manifest")
     if _parse_utc_timestamp(
@@ -913,11 +1083,11 @@ def _assert_target_manifest(
     ) > _parse_utc_timestamp(target.captured_at, label="target manifest captured_at"):
         raise RebaselineError("target manifest predates the backup manifest")
     expected = target.preflight
-    actual = preflight.as_dict()
+    actual = preflight.as_dict(target_profile=target.target_profile)
     if allow_baseline_revision:
         expected = dict(expected)
         expected.pop("version_rows", None)
-        actual = preflight.stable_identity_dict()
+        actual = preflight.stable_identity_dict(target_profile=target.target_profile)
     if expected != actual:
         raise RebaselineError("target database identity or data fingerprint changed")
 
@@ -938,6 +1108,8 @@ def _receipt_payload(
         "preflight": preflight,
         "state": state,
         "target_manifest_sha256": target.sha256,
+        "target_host": target.target_host,
+        "target_profile": target.target_profile,
         "version": _MANIFEST_VERSION,
     }
 
@@ -952,6 +1124,8 @@ def _read_receipt(path: Path) -> dict[str, Any]:
         or value["action"] != "0061_to_0100_rebaseline"
         or value["state"] not in {"prepared", "applied"}
         or not isinstance(value["preflight"], dict)
+        or not isinstance(value["target_profile"], str)
+        or not isinstance(value["target_host"], str)
         or any(
             not isinstance(value[field], str)
             or _CHECKSUM.fullmatch(value[field]) is None
@@ -963,6 +1137,59 @@ def _read_receipt(path: Path) -> dict[str, Any]:
         )
     ):
         raise RebaselineError("rebaseline receipt values are invalid")
+    target_profile = value["target_profile"]
+    spec = _target_profile_spec(target_profile)
+    if value["target_host"] != spec["target_host"]:
+        raise RebaselineError("rebaseline receipt host binding is invalid")
+    preflight = value["preflight"]
+    if frozenset(preflight) != _PREFLIGHT_FIELDS:
+        raise RebaselineError("rebaseline receipt preflight fields are invalid")
+    if (
+        preflight["version_rows"] != [LEGACY_REVISION]
+        or preflight["expected_catalog_lines"] != _EXPECTED_CATALOG_LINES
+        or preflight["expected_catalog_sha256"] != spec["catalog_sha256"]
+        or preflight["catalog_lines"] != _EXPECTED_CATALOG_LINES
+        or preflight["catalog_sha256"] != spec["catalog_sha256"]
+        or not isinstance(preflight["database_name"], str)
+        or _IDENTIFIER.fullmatch(preflight["database_name"]) is None
+        or not isinstance(preflight["server_addr"], str)
+        or not preflight["server_addr"]
+        or not isinstance(preflight["server_port"], int)
+        or isinstance(preflight["server_port"], bool)
+        or not 1 <= preflight["server_port"] <= 65535
+        or not isinstance(preflight["server_version_num"], int)
+        or isinstance(preflight["server_version_num"], bool)
+        or preflight["server_version_num"] // 10000 != 16
+        or any(
+            not isinstance(preflight[field], int) or isinstance(preflight[field], bool)
+            for field in (
+                "app_data_rows",
+                "app_data_table_lines",
+                "database_oid",
+                "expected_catalog_lines",
+            )
+        )
+        or preflight["app_data_rows"] <= 0
+        or preflight["app_data_table_lines"] <= 0
+        or preflight["database_oid"] <= 0
+        or not isinstance(preflight["current_user"], str)
+        or not preflight["current_user"]
+        or not isinstance(preflight["session_user"], str)
+        or not preflight["session_user"]
+        or not isinstance(preflight["system_identifier"], str)
+        or _INTEGER.fullmatch(preflight["system_identifier"]) is None
+        or any(
+            not isinstance(preflight[field], str)
+            or _CHECKSUM.fullmatch(preflight[field]) is None
+            for field in ("app_data_content_sha256", "role_security_sha256")
+        )
+    ):
+        raise RebaselineError("rebaseline receipt preflight values are invalid")
+    try:
+        ipaddress.ip_address(preflight["server_addr"])
+    except (TypeError, ValueError) as exc:
+        raise RebaselineError("rebaseline receipt preflight endpoint is invalid") from exc
+    _assert_target_profile_preflight(target_profile, preflight)
     if value["state"] == "prepared" and value["completed_at"] is not None:
         raise RebaselineError("prepared receipt must not have completed_at")
     if value["state"] == "applied":
@@ -977,6 +1204,8 @@ def _assert_receipt_intent(receipt: dict[str, Any], expected: dict[str, Any]) ->
         "backup_sha256",
         "preflight",
         "target_manifest_sha256",
+        "target_host",
+        "target_profile",
         "version",
     ):
         if receipt[field] != expected[field]:
@@ -995,6 +1224,14 @@ async def _catalog_fingerprint(connection: AsyncConnection) -> tuple[int, str]:
     rows = tuple((await connection.execute(text(_CATALOG_FINGERPRINT_SQL))).scalars())
     payload = ("\n".join(rows) + "\n").encode("utf-8")
     return len(rows), hashlib.sha256(payload).hexdigest()
+
+
+async def _role_security_fingerprint(connection: AsyncConnection) -> str:
+    rows = tuple(
+        (await connection.execute(text(_ROLE_SECURITY_FINGERPRINT_SQL))).scalars()
+    )
+    payload = ("\n".join(rows) + "\n").encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 async def _normalize_fingerprint_session(connection: AsyncConnection) -> None:
@@ -1121,7 +1358,9 @@ async def _preflight(
     *,
     lock_version: bool,
     expected_revision: str = LEGACY_REVISION,
+    target_profile: str = _TARGET_PROFILE_FRESH,
 ) -> CatalogPreflight:
+    _target_profile_spec(target_profile)
     await _normalize_fingerprint_session(connection)
     version_rows = await _read_version_rows(connection, lock=lock_version)
     sentinel = (await connection.execute(text(_LEGACY_SENTINELS_SQL))).mappings().one()
@@ -1131,6 +1370,7 @@ async def _preflight(
         app_data_table_lines,
         app_data_content_sha256,
     ) = await _app_data_fingerprint(connection)
+    role_security_sha256 = await _role_security_fingerprint(connection)
     preflight = CatalogPreflight(
         database_name=str(sentinel["database_name"]),
         database_oid=int(sentinel["database_oid"]),
@@ -1146,6 +1386,7 @@ async def _preflight(
         app_data_rows=app_data_rows,
         app_data_table_lines=app_data_table_lines,
         app_data_content_sha256=app_data_content_sha256,
+        role_security_sha256=role_security_sha256,
     )
     if preflight.server_version_num // 10000 != 16:
         raise RebaselineError("rebaseline requires PostgreSQL 16")
@@ -1159,8 +1400,11 @@ async def _preflight(
         raise RebaselineError("pre-existing M05 objects reject a 0061 rebaseline")
     if preflight.catalog_lines != _EXPECTED_CATALOG_LINES:
         raise RebaselineError("legacy catalog fingerprint line count is not canonical")
-    if preflight.catalog_sha256 not in _ALLOWED_CATALOG_SHA256:
-        raise RebaselineError("legacy catalog fingerprint is not canonical")
+    if preflight.catalog_sha256 != _target_profile_spec(target_profile)["catalog_sha256"]:
+        raise RebaselineError(
+            f"legacy catalog fingerprint is not canonical for target profile {target_profile}"
+        )
+    _assert_target_profile_preflight(target_profile, preflight.as_dict(target_profile=target_profile))
     if preflight.app_data_rows <= 0:
         raise RebaselineError("rebaseline target must contain app data rows")
     return preflight
@@ -1182,7 +1426,11 @@ async def _check(
     try:
         async with engine.begin() as connection:
             await connection.execute(text("SET TRANSACTION READ ONLY"))
-            preflight = await _preflight(connection, lock_version=False)
+            preflight = await _preflight(
+                connection,
+                lock_version=False,
+                target_profile=target.target_profile,
+            )
             _assert_backup_source_matches_preflight(artifact.manifest, preflight)
             _assert_target_manifest(
                 target,
@@ -1197,19 +1445,28 @@ async def _check(
 
 
 async def _capture_target(
-    database_url: str, artifact: BackupArtifact, target_path: Path
+    database_url: str,
+    artifact: BackupArtifact,
+    target_path: Path,
+    target_profile: str,
 ) -> tuple[CatalogPreflight, TargetManifest]:
     engine = create_async_engine(database_url, poolclass=NullPool)
     try:
         async with engine.begin() as connection:
             await connection.execute(text("SET TRANSACTION READ ONLY"))
-            preflight = await _preflight(connection, lock_version=False)
+            preflight = await _preflight(
+                connection,
+                lock_version=False,
+                target_profile=target_profile,
+            )
             _assert_backup_source_matches_preflight(artifact.manifest, preflight)
     finally:
         await engine.dispose()
     _create_private_json(
         target_path,
-        _target_manifest_payload(preflight, artifact.manifest.sha256),
+        _target_manifest_payload(
+            preflight, artifact.manifest.sha256, target_profile=target_profile
+        ),
         label="rebaseline target manifest",
     )
     return preflight, _read_target_manifest(target_path)
@@ -1239,6 +1496,7 @@ async def _apply(
                 connection,
                 lock_version=False,
                 expected_revision=BASELINE_REVISION if recovering else LEGACY_REVISION,
+                target_profile=target.target_profile,
             )
             _assert_backup_source_matches_preflight(artifact.manifest, preflight)
             _assert_target_manifest(
@@ -1322,6 +1580,12 @@ def _parser() -> argparse.ArgumentParser:
         command.add_argument("--backup", required=True, type=Path)
         command.add_argument("--backup-checksum", required=True, type=Path)
         command.add_argument("--backup-manifest", required=True, type=Path)
+        command.add_argument(
+            "--target-profile",
+            required=True,
+            choices=tuple(_TARGET_PROFILE_SPECS),
+            help="검증할 물리 target/profile 결박 (예: n150-production)",
+        )
 
     capture = subcommands.add_parser(
         "capture-target",
@@ -1356,22 +1620,24 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
             args.backup, args.backup_checksum, args.backup_manifest
         )
         preflight, target = await _capture_target(
-            database_url, artifact, args.target_manifest
+            database_url, artifact, args.target_manifest, args.target_profile
         )
         return {
             "backup_manifest_sha256": artifact.manifest.sha256,
-            "preflight": preflight.as_dict(),
+            "preflight": preflight.as_dict(target_profile=target.target_profile),
             "state": "target_captured",
             "target_manifest_sha256": target.sha256,
         }
 
     artifact = _validate_backup(args.backup, args.backup_checksum, args.backup_manifest)
     target = _read_target_manifest(args.target_manifest)
+    if target.target_profile != args.target_profile:
+        raise RebaselineError("target manifest profile does not match the requested profile")
     if args.command == "check":
         preflight = await _check(database_url, artifact, target)
         return {
             "backup_manifest_sha256": artifact.manifest.sha256,
-            "preflight": preflight.as_dict(),
+            "preflight": preflight.as_dict(target_profile=target.target_profile),
             "state": "checked",
             "target_manifest_sha256": target.sha256,
         }
@@ -1383,7 +1649,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "backup_manifest_sha256": artifact.manifest.sha256,
         "backup_sha256": artifact.sha256,
-        "preflight": preflight.as_dict(),
+        "preflight": preflight.as_dict(target_profile=target.target_profile),
         "state": state,
         "target_manifest_sha256": target.sha256,
     }

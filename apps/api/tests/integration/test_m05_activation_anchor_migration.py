@@ -595,6 +595,9 @@ async def test_0101_legacy_handoff_revalidates_receipt_data_before_ddl(
             receipt_path.chmod(0o600)
             migration = _activation_migration_module()
             monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE", "1")
+            monkeypatch.setenv(
+                "PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE", "fresh-postgresql-16"
+            )
             monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH", str(receipt_path))
             monkeypatch.setattr(migration.os, "geteuid", lambda: 0)
             monkeypatch.setattr(migration.os, "fstat", _root_owned_fstat(migration))
@@ -630,6 +633,16 @@ def test_0101_legacy_catalog_serializer_matches_rebaseline_helper() -> None:
     assert (
         migration._LEGACY_REBASELINE_CATALOG_FINGERPRINT_SQL.strip()
         == rebaseline._CATALOG_FINGERPRINT_SQL.strip()
+    )
+    for fragment in (
+        "pg_sequence",
+        "a.attacl",
+        "t.tgqual",
+    ):
+        assert fragment in rebaseline._CATALOG_FINGERPRINT_SQL
+    assert (
+        migration._LEGACY_REBASELINE_ROLE_SECURITY_FINGERPRINT_SQL.strip()
+        == rebaseline._ROLE_SECURITY_FINGERPRINT_SQL.strip()
     )
     assert (
         migration._LEGACY_REBASELINE_DDL_CAPABLE_SESSIONS_CTE.strip()
@@ -1319,6 +1332,7 @@ def test_rebaseline_target_manifest_requires_exact_legacy_preflight_shape(
         app_data_rows=1,
         app_data_table_lines=1,
         app_data_content_sha256="4" * 64,
+        role_security_sha256="5" * 64,
     )
     target_path = tmp_path / "target.json"
     payload = module._target_manifest_payload(preflight, "3" * 64)
@@ -1786,6 +1800,9 @@ async def test_0101_legacy_converges_all_app_catalog_owners(
                 assert isinstance(legacy_owner, str)
                 migration = _activation_migration_module()
                 monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE", "1")
+                monkeypatch.setenv(
+                    "PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE", "fresh-postgresql-16"
+                )
                 monkeypatch.setenv("PINVI_APP_DB_USER", runtime_role)
                 monkeypatch.setenv("PINVI_APP_SCHEMA_OWNER", app_owner)
                 monkeypatch.setenv("PINVI_MIGRATION_OWNER", migration_owner)
@@ -1933,6 +1950,7 @@ async def test_0101_legacy_rebaseline_profile_requires_root_owned_handoff(
             environment={
                 "PINVI_ENVIRONMENT": "staging",
                 "PINVI_M05_LEGACY_REBASELINE": "1",
+                "PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE": "fresh-postgresql-16",
                 "PINVI_MIGRATION_OWNER": "pinvi_migration_owner",
                 "PINVI_MIGRATOR_DB_USER": "pinvi_migrator",
                 "PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH": None,

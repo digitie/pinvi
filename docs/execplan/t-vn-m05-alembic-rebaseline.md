@@ -62,16 +62,18 @@ active graph·rebaseline proof·M05 owner 전환과 단일 N150 target lease의 
 1. root-only producer로 fresh app snapshot과 checksum을 만든다.
 2. N150에서 helper의 read-only preflight가 `0061`·fingerprint·M05 object absence·backup proof를
    모두 통과하는지 확인한다.
-   fresh `0100` 기준선 fingerprint는 `bcf526cfa62facfaf3fe4b64a62e90329552cd887865a8ed5a477fe1fcc09c73`,
-   기존 N150 `0061` legacy fingerprint는 `91949a8f1b609ca99b4631ee2db75b03d8cfc933ae72c52edec8d99d3d91b501`으로
-   명시적으로 결박한다. 이 두 값 이외의 catalog drift는 계속 거부한다.
+   fresh `0100` 기준선 fingerprint는 `08a8c8a9f083ab13173ac99f29772e103ee0cc599dc99b87f997bc84a0c61f0f`,
+   기존 N150 `0061` legacy fingerprint는 `d5774e102cfd738dae08a88981df1ea2309832627de44bdee63f414c72943f6d`으로
+   각각 `fresh-postgresql-16`·`n150-production` target profile에 결박한다. N150 profile은
+   `pinvi` DB와 N150 system identity/host/port까지 확인하며, profile 밖 catalog drift는 거부한다.
 3. 별도 운영 변경 승인 뒤 helper의 `--confirm`을 한 번 실행한다.
 4. fresh DB에서는 `app-migrator` one-shot으로 `0101`을 적용하고 role/receipt owner/`NOLOGIN`·`CONNECT`
    revoke·기존 migrator session 종료 seal,
    M05 ACL, API DB health를 확인한다. 현재 N150 `0061`은 이 단계 직전에만 root-only
-   `PINVI_M05_LEGACY_REBASELINE=1` + 별도 root URL profile과 root-owned `0600` applied rebaseline
-   receipt를 명시한다. `0101`이 receipt의 `0061` preflight DB identity와 현재 `0100` handoff row를
-   대조하고 data/catalog fingerprint와 writer lock을 다시 확인한 뒤, 기존 app DDL·M05 object 설치 후
+   `PINVI_M05_LEGACY_REBASELINE=1` + `PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE=n150-production`과
+   별도 root URL profile, root-owned `0600` applied rebaseline receipt를 명시한다. `0101`이 receipt의
+   target profile/host, `0061` preflight DB identity와 현재 `0100` handoff row를 대조하고
+   data/catalog 및 database ACL·role membership fingerprint와 writer lock을 다시 확인한 뒤, 기존 app DDL·M05 object 설치 후
    app schema 및 내부 object owner가 canonical non-login owner 하나로 수렴했는지 확인한다.
 5. 실패 시 새 history를 억지로 stamp하지 않고 snapshot 복구 후 fail-closed 원인을 해결한다.
 

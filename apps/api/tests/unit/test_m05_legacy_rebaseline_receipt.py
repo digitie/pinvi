@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -26,6 +27,16 @@ def _migration_module():
     return module
 
 
+def _rebaseline_module():
+    path = Path(__file__).resolve().parents[4] / "scripts" / "alembic_rebaseline.py"
+    spec = importlib.util.spec_from_file_location("m05_rebaseline_profile", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def _receipt(identity: dict[str, object]) -> dict[str, object]:
     return {
         "action": "0061_to_0100_rebaseline",
@@ -37,12 +48,13 @@ def _receipt(identity: dict[str, object]) -> dict[str, object]:
             "app_data_rows": 1,
             "app_data_table_lines": 1,
             "catalog_lines": 1590,
-            "catalog_sha256": "d" * 64,
+            "catalog_sha256": "08a8c8a9f083ab13173ac99f29772e103ee0cc599dc99b87f997bc84a0c61f0f",
             "current_user": "legacy_owner",
             "database_name": identity["database_name"],
             "database_oid": identity["database_oid"],
             "expected_catalog_lines": 1590,
-            "expected_catalog_sha256": "d" * 64,
+            "expected_catalog_sha256": "08a8c8a9f083ab13173ac99f29772e103ee0cc599dc99b87f997bc84a0c61f0f",
+            "role_security_sha256": "f" * 64,
             "server_addr": identity["server_addr"],
             "server_port": identity["server_port"],
             "server_version_num": 160000,
@@ -52,6 +64,8 @@ def _receipt(identity: dict[str, object]) -> dict[str, object]:
         },
         "state": "applied",
         "target_manifest_sha256": "e" * 64,
+        "target_host": "test",
+        "target_profile": "fresh-postgresql-16",
         "version": 1,
     }
 
@@ -103,6 +117,7 @@ def test_0101_legacy_handoff_requires_root_owned_applied_receipt(
     receipt_path.write_text(json.dumps(_receipt(identity)), encoding="utf-8")
     receipt_path.chmod(0o600)
     monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE", "1")
+    monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE", "fresh-postgresql-16")
     monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH", str(receipt_path))
     monkeypatch.setattr(module.os, "geteuid", lambda: 0)
     monkeypatch.setattr(module, "_assert_legacy_rebaseline_fingerprint", lambda *_args: None)
@@ -132,6 +147,7 @@ def test_0101_legacy_handoff_rejects_receipt_for_another_database(
     receipt_path.write_text(json.dumps(_receipt(identity)), encoding="utf-8")
     receipt_path.chmod(0o600)
     monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE", "1")
+    monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE", "fresh-postgresql-16")
     monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH", str(receipt_path))
     monkeypatch.setattr(module.os, "geteuid", lambda: 0)
     monkeypatch.setattr(module.os, "fstat", _root_owned_fstat(module))
@@ -141,3 +157,40 @@ def test_0101_legacy_handoff_rejects_receipt_for_another_database(
     other_identity["database_oid"] = 4243
     with pytest.raises(RuntimeError, match="does not match this database"):
         module._assert_legacy_rebaseline_handoff(_BoundIdentity(other_identity, ["20260824_0100"]))
+
+
+def test_rebaseline_target_profiles_do_not_share_catalog_allowlist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """N150 hash는 명시적 N150 profile에서만 통과하고 fresh hash와 섞이지 않는다."""
+
+    module = _rebaseline_module()
+    identity = {
+        "database_name": "pinvi",
+        "system_identifier": "987654321",
+        "server_addr": "127.0.0.1",
+        "server_port": 12800,
+    }
+    identity_sha256 = hashlib.sha256(
+        "|".join(str(identity[field]) for field in identity).encode("utf-8")
+    ).hexdigest()
+    monkeypatch.setitem(
+        module._TARGET_PROFILE_SPECS[module._TARGET_PROFILE_N150],
+        "target_identity_sha256",
+        identity_sha256,
+    )
+    n150_preflight = {
+        **identity,
+        "catalog_lines": module._EXPECTED_CATALOG_LINES,
+        "expected_catalog_lines": module._EXPECTED_CATALOG_LINES,
+        "catalog_sha256": module._N150_LEGACY_CATALOG_SHA256,
+        "expected_catalog_sha256": module._N150_LEGACY_CATALOG_SHA256,
+    }
+    module._assert_target_profile_preflight(module._TARGET_PROFILE_N150, n150_preflight)
+
+    fresh_hash = module._EXPECTED_CATALOG_SHA256
+    forged_fresh = dict(n150_preflight)
+    forged_fresh["catalog_sha256"] = fresh_hash
+    forged_fresh["expected_catalog_sha256"] = fresh_hash
+    with pytest.raises(module.RebaselineError, match="canonical"):
+        module._assert_target_profile_preflight(module._TARGET_PROFILE_N150, forged_fresh)

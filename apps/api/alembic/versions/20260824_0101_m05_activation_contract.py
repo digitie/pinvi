@@ -32,6 +32,21 @@ depends_on: str | Sequence[str] | None = None
 _M05_SCHEMA_FILE = "20260824_0101_m05_activation.sql"
 _M05_SCHEMA_SHA256 = "128e2b374842ca2e9755041815457625a8c2212c013c1bafd6adb93db42128cb"
 _M05_SCHEMA_STATEMENT_COUNT = 21
+_LEGACY_REBASELINE_TARGET_PROFILE_ENV = "PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE"
+_LEGACY_REBASELINE_FRESH_TARGET_PROFILE = "fresh-postgresql-16"
+_LEGACY_REBASELINE_TARGET_PROFILE = "n150-production"
+_LEGACY_REBASELINE_FRESH_TARGET_HOST = "test"
+_LEGACY_REBASELINE_TARGET_HOST = "n150"
+_LEGACY_REBASELINE_CATALOG_LINES = 1590
+_EXPECTED_FRESH_CATALOG_SHA256 = (
+    "08a8c8a9f083ab13173ac99f29772e103ee0cc599dc99b87f997bc84a0c61f0f"
+)
+_N150_LEGACY_CATALOG_SHA256 = (
+    "d5774e102cfd738dae08a88981df1ea2309832627de44bdee63f414c72943f6d"
+)
+_N150_TARGET_IDENTITY_SHA256 = (
+    "e04c99a4681738e0292debdceded99b1c8abe01c9b8bdee82aeef8566dd33cc1"
+)
 _DOLLAR_QUOTE = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$")
 _ROLE_IDENTIFIER = re.compile(r"[a-z_][a-z0-9_]*")
 _OPERATOR_NAME = re.compile(r"[-+*/<>=~!@#%^&|`?]+")
@@ -61,6 +76,8 @@ _LEGACY_REBASELINE_RECEIPT_FIELDS = frozenset(
         "preflight",
         "state",
         "target_manifest_sha256",
+        "target_host",
+        "target_profile",
         "version",
     }
 )
@@ -76,6 +93,7 @@ _LEGACY_REBASELINE_PREFLIGHT_FIELDS = frozenset(
         "database_oid",
         "expected_catalog_lines",
         "expected_catalog_sha256",
+        "role_security_sha256",
         "server_addr",
         "server_port",
         "server_version_num",
@@ -107,16 +125,26 @@ WITH object_lines(line) AS (
                            COALESCE(c.relacl::text, ''), c.relrowsecurity,
                            c.relforcerowsecurity, c.relispartition,
                            COALESCE(pg_get_expr(c.relpartbound, c.oid, true), ''),
-                           COALESCE(pg_get_partkeydef(c.oid), ''))::text
+                           COALESCE(pg_get_partkeydef(c.oid), ''),
+                           COALESCE(sequence_row.seqstart::text, ''),
+                           COALESCE(sequence_row.seqmin::text, ''),
+                           COALESCE(sequence_row.seqmax::text, ''),
+                           COALESCE(sequence_row.seqincrement::text, ''),
+                           COALESCE(sequence_row.seqcache::text, ''),
+                           COALESCE(sequence_row.seqcycle::text, ''),
+                           CASE WHEN sequence_row.seqtypid IS NULL THEN ''
+                                ELSE sequence_row.seqtypid::regtype::text END)::text
   FROM pg_class AS c
   JOIN pg_namespace AS n ON n.oid = c.relnamespace
+  LEFT JOIN pg_sequence AS sequence_row ON sequence_row.seqrelid = c.oid
   WHERE n.nspname = 'app' AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f', 'c')
   UNION ALL
   SELECT jsonb_build_array('column', c.relname, a.attname, a.attnum,
                            pg_catalog.format_type(a.atttypid, a.atttypmod), a.attnotnull,
                            a.attidentity, a.attgenerated,
                            COALESCE(pg_get_expr(d.adbin, d.adrelid), ''),
-                           COALESCE(a.attcollation::regcollation::text, ''))::text
+                           COALESCE(a.attcollation::regcollation::text, ''),
+                           COALESCE(a.attacl::text, ''))::text
   FROM pg_attribute AS a
   JOIN pg_class AS c ON c.oid = a.attrelid
   JOIN pg_namespace AS n ON n.oid = c.relnamespace
@@ -226,7 +254,8 @@ WITH object_lines(line) AS (
   UNION ALL
   SELECT jsonb_build_array('trigger', c.relname, t.tgname, t.tgenabled, t.tgtype,
                            t.tgfoid::regprocedure::text, encode(t.tgargs, 'hex'),
-                           t.tgattr::text)::text
+                           t.tgattr::text,
+                           COALESCE(pg_get_expr(t.tgqual, t.tgrelid, true), ''))::text
   FROM pg_trigger AS t
   JOIN pg_class AS c ON c.oid = t.tgrelid
   JOIN pg_namespace AS n ON n.oid = c.relnamespace
@@ -270,6 +299,73 @@ WITH object_lines(line) AS (
   WHERE n.nspname = 'app' OR n.nspname IS NULL
 )
 SELECT line FROM object_lines ORDER BY line COLLATE "C"
+"""
+_LEGACY_REBASELINE_ROLE_SECURITY_FINGERPRINT_SQL = """
+WITH app_owner_roles(oid) AS (
+  SELECT namespace.nspowner
+  FROM pg_namespace AS namespace
+  WHERE namespace.nspname = 'app'
+  UNION
+  SELECT relation.relowner
+  FROM pg_class AS relation
+  JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+  WHERE namespace.nspname = 'app'
+  UNION
+  SELECT procedure.proowner
+  FROM pg_proc AS procedure
+  JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+  WHERE namespace.nspname = 'app'
+  UNION
+  SELECT type_row.typowner
+  FROM pg_type AS type_row
+  JOIN pg_namespace AS namespace ON namespace.oid = type_row.typnamespace
+  WHERE namespace.nspname = 'app'
+), relevant_roles(oid) AS (
+  SELECT oid FROM app_owner_roles
+  UNION
+  SELECT role_row.oid
+  FROM pg_roles AS role_row
+  WHERE role_row.rolname IN (current_user, session_user)
+     OR role_row.rolname LIKE 'pinvi%'
+  UNION
+  SELECT database_row.datdba
+  FROM pg_database AS database_row
+  WHERE database_row.datname = current_database()
+), security_lines(line) AS (
+  SELECT jsonb_build_array(
+      'database_acl', database_row.datname, pg_get_userbyid(database_row.datdba),
+      COALESCE(database_row.datacl::text, '')
+    )::text
+  FROM pg_database AS database_row
+  WHERE database_row.datname = current_database()
+  UNION ALL
+  SELECT jsonb_build_array(
+      'schema_acl', namespace.nspname, pg_get_userbyid(namespace.nspowner),
+      COALESCE(namespace.nspacl::text, '')
+    )::text
+  FROM pg_namespace AS namespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'role', role_row.rolname, role_row.rolsuper, role_row.rolinherit,
+      role_row.rolcreaterole, role_row.rolcreatedb, role_row.rolcanlogin,
+      role_row.rolreplication, role_row.rolbypassrls, role_row.rolconnlimit,
+      COALESCE(role_row.rolvaliduntil::text, '')
+    )::text
+  FROM pg_roles AS role_row
+  WHERE role_row.oid IN (SELECT oid FROM relevant_roles)
+  UNION ALL
+  SELECT jsonb_build_array(
+      'membership', granted_role.rolname, member_role.rolname,
+      membership.admin_option, membership.inherit_option, membership.set_option
+    )::text
+  FROM pg_auth_members AS membership
+  JOIN pg_roles AS granted_role ON granted_role.oid = membership.roleid
+  JOIN pg_roles AS member_role ON member_role.oid = membership.member
+  WHERE membership.roleid IN (SELECT oid FROM relevant_roles)
+     OR membership.member IN (SELECT oid FROM relevant_roles)
+)
+SELECT line FROM security_lines ORDER BY line COLLATE "C"
 """
 _LEGACY_REBASELINE_APP_TABLES_SQL = """
 SELECT relation.relname
@@ -598,6 +694,12 @@ def _legacy_rebaseline_profile() -> bool:
     if configured == "0":
         return False
     if configured == "1":
+        target_profile = os.environ.get(_LEGACY_REBASELINE_TARGET_PROFILE_ENV, "")
+        if target_profile not in {
+            _LEGACY_REBASELINE_FRESH_TARGET_PROFILE,
+            _LEGACY_REBASELINE_TARGET_PROFILE,
+        }:
+            raise RuntimeError("0101 legacy rebaseline target profile is invalid")
         return True
     raise RuntimeError("0101 legacy rebaseline profile configuration is invalid")
 
@@ -655,6 +757,11 @@ def _read_legacy_rebaseline_receipt() -> dict[str, object]:
         or not isinstance(receipt["completed_at"], str)
         or not receipt["completed_at"]
         or not isinstance(receipt["preflight"], dict)
+        or receipt["target_profile"]
+        not in {
+            _LEGACY_REBASELINE_FRESH_TARGET_PROFILE,
+            _LEGACY_REBASELINE_TARGET_PROFILE,
+        }
         or any(
             not isinstance(receipt[field], str) or _SHA256.fullmatch(receipt[field]) is None
             for field in (
@@ -666,6 +773,19 @@ def _read_legacy_rebaseline_receipt() -> dict[str, object]:
     ):
         raise RuntimeError("0101 legacy rebaseline receipt values are invalid")
     preflight = receipt["preflight"]
+    target_profile = receipt["target_profile"]
+    expected_catalog_sha256 = (
+        _N150_LEGACY_CATALOG_SHA256
+        if target_profile == _LEGACY_REBASELINE_TARGET_PROFILE
+        else _EXPECTED_FRESH_CATALOG_SHA256
+    )
+    expected_target_host = (
+        _LEGACY_REBASELINE_TARGET_HOST
+        if target_profile == _LEGACY_REBASELINE_TARGET_PROFILE
+        else _LEGACY_REBASELINE_FRESH_TARGET_HOST
+    )
+    if receipt["target_host"] != expected_target_host:
+        raise RuntimeError("0101 legacy rebaseline receipt host binding is invalid")
     if frozenset(preflight) != _LEGACY_REBASELINE_PREFLIGHT_FIELDS:
         raise RuntimeError("0101 legacy rebaseline receipt preflight is invalid")
     if (
@@ -698,6 +818,7 @@ def _read_legacy_rebaseline_receipt() -> dict[str, object]:
                 "app_data_content_sha256",
                 "catalog_sha256",
                 "expected_catalog_sha256",
+                "role_security_sha256",
             )
         )
         or preflight["app_data_rows"] <= 0
@@ -705,6 +826,9 @@ def _read_legacy_rebaseline_receipt() -> dict[str, object]:
         or preflight["catalog_lines"] <= 0
         or preflight["database_oid"] <= 0
         or preflight["expected_catalog_lines"] != preflight["catalog_lines"]
+        or preflight["catalog_lines"] != _LEGACY_REBASELINE_CATALOG_LINES
+        or preflight["catalog_sha256"] != expected_catalog_sha256
+        or preflight["expected_catalog_sha256"] != expected_catalog_sha256
         or preflight["expected_catalog_sha256"] != preflight["catalog_sha256"]
         or not 1 <= preflight["server_port"] <= 65535
         or preflight["server_version_num"] // 10000 != 16
@@ -715,6 +839,15 @@ def _read_legacy_rebaseline_receipt() -> dict[str, object]:
         ipaddress.ip_address(preflight["server_addr"])
     except (TypeError, ValueError) as exc:
         raise RuntimeError("0101 legacy rebaseline receipt preflight endpoint is invalid") from exc
+    if target_profile == _LEGACY_REBASELINE_TARGET_PROFILE:
+        identity = "|".join(
+            str(preflight[field])
+            for field in ("database_name", "system_identifier", "server_addr", "server_port")
+        )
+        if hashlib.sha256(identity.encode("utf-8")).hexdigest() != _N150_TARGET_IDENTITY_SHA256:
+            raise RuntimeError("0101 legacy rebaseline receipt target identity is invalid")
+        if preflight["database_name"] != "pinvi" or preflight["server_port"] != 12800:
+            raise RuntimeError("0101 legacy rebaseline receipt target endpoint is invalid")
     return receipt
 
 
@@ -801,6 +934,17 @@ def _legacy_rebaseline_catalog_fingerprint(bind: sa.Connection) -> tuple[int, st
     return len(rows), hashlib.sha256(payload).hexdigest()
 
 
+def _legacy_rebaseline_role_security_fingerprint(bind: sa.Connection) -> str:
+    rows = tuple(
+        str(line)
+        for line in bind.execute(
+            sa.text(_LEGACY_REBASELINE_ROLE_SECURITY_FINGERPRINT_SQL)
+        ).scalars()
+    )
+    payload = ("\n".join(rows) + "\n").encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
 def _legacy_rebaseline_app_data_fingerprint(
     bind: sa.Connection, tables: tuple[str, ...]
 ) -> tuple[int, int, str]:
@@ -849,6 +993,7 @@ def _assert_legacy_rebaseline_fingerprint(
     tables = _legacy_rebaseline_app_tables(bind)
     _lock_legacy_rebaseline_app_tables(bind, tables)
     catalog_lines, catalog_sha256 = _legacy_rebaseline_catalog_fingerprint(bind)
+    role_security_sha256 = _legacy_rebaseline_role_security_fingerprint(bind)
     app_data_rows, app_data_table_lines, app_data_content_sha256 = (
         _legacy_rebaseline_app_data_fingerprint(bind, tables)
     )
@@ -858,6 +1003,7 @@ def _assert_legacy_rebaseline_fingerprint(
         "app_data_table_lines": app_data_table_lines,
         "catalog_lines": catalog_lines,
         "catalog_sha256": catalog_sha256,
+        "role_security_sha256": role_security_sha256,
     }
     expected = {field: preflight[field] for field in actual}
     if actual != expected:

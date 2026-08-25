@@ -90,6 +90,7 @@ ktdctl logs storage --follow
 | `PINVI_MIGRATOR_DB_USER` / `PINVI_MIGRATOR_DB_PASSWORD` | one-shot non-inheriting login. 기본은 `NOLOGIN`·database `CONNECT` 없음이며 wrapper만 일시적으로 연다. 별도 URL override는 지원하지 않는다 |
 | `PINVI_MIGRATOR_LIFECYCLE_LOCK_PATH` | 두 wrapper의 password rotation·backend seal을 같은 host에서 직렬화하는 flock 파일. staging/production은 root-owned 0600 regular file을 미리 만들고 root로만 실행한다. smoke는 미지정 시 사용자 전용 `/tmp` directory의 lock을 쓴다 |
 | `PINVI_M05_LEGACY_REBASELINE`                      | 평상시 `0`. `0061 → 0100 → 0101` 승인 전환 명령에만 `1`로 export; 일반 deploy 금지                                                 |
+| `PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE`       | `PINVI_M05_LEGACY_REBASELINE=1`일 때 필수. 운영은 `n150-production`만 사용하며 target host·catalog·DB identity를 함께 결박한다 |
 | `PINVI_LEGACY_REBASELINE_DATABASE_URL`             | legacy profile 전용 root/app owner URL. 일반 migrator·API·Dagster에 전달 금지                                                       |
 | `PINVI_M05_LEGACY_REBASELINE_RECEIPT_HOST_PATH`    | `alembic_rebaseline.py apply`가 만든 root-owned `0600` applied receipt의 host 절대경로. legacy one-shot에만 read-only mount한다 |
 | 기타 `PINVI_*`               | Pinvi 소유 설정. 외부 서비스 소유 계약 토큰은 해당 정본 이름을 사용(Feature request writer: `KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN`) |
@@ -105,6 +106,7 @@ staging/production은 `PINVI_MIGRATOR_LIFECYCLE_LOCK_PATH`의 파일을 root-own
 
 ```bash
 PINVI_M05_LEGACY_REBASELINE=1 \
+PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE=n150-production \
 PINVI_M05_LEGACY_REBASELINE_RECEIPT_HOST_PATH=/secure/rebaseline/receipt.json \
 scripts/deploy-node.sh migrate
 ```
