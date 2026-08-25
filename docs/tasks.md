@@ -81,12 +81,7 @@
 
 - [ ] **T-320** — 모바일 위치 동의 gate 런타임 확인. VWorld 키가 있는 환경에서 지도 표면을 띄우고
   "현재 위치로"가 OS 권한 요청 전 동의를 받는지 확인한다(T-310 smoke에서 키 부재로 미확인).
-- [ ] **T-352** — `expo-doctor` 잔여 2건(T-311의 react 중복 해소 후 재확인 — react/react-dom은
-  이제 워크스페이스 전체 `19.2.6` 단일본이라 통과): SDK-56 patch 드리프트로 인한 Hermes V1 메모리
-  회귀(Expo SDK 57 `expo@^57.0.9` + React Native 0.86.2+ 업그레이드 필요)와 `react-native-screens`
-  중복(앱 직접 의존 `4.25.2` ↔ `expo-router` 내부 `4.27.0` — expo-doctor가 이제 이를 "duplicate
-  dependencies"로 분류). `npx expo install --fix`류 SDK 정렬은 dev client 재빌드를 동반하므로
-  별도 PR로 검증한다.
+  SDK 57 업그레이드(T-352)로 새 EAS development 빌드가 나온 뒤 그 빌드로 재확인한다.
 
 ## 보류 / 미래 작업
 
