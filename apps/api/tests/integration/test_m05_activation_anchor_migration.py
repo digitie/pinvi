@@ -595,9 +595,7 @@ async def test_0101_legacy_handoff_revalidates_receipt_data_before_ddl(
             receipt_path.chmod(0o600)
             migration = _activation_migration_module()
             monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE", "1")
-            monkeypatch.setenv(
-                "PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE", "fresh-postgresql-16"
-            )
+            monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE", "fresh-postgresql-16")
             monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH", str(receipt_path))
             monkeypatch.setattr(migration.os, "geteuid", lambda: 0)
             monkeypatch.setattr(migration.os, "fstat", _root_owned_fstat(migration))
