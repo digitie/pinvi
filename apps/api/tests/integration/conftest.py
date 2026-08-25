@@ -110,7 +110,18 @@ async def session_factory(_database_url: str):  # type: ignore[no-untyped-def]
     # NullPool: 연결을 풀에 재사용하지 않는다. 테스트에서 미들웨어 세션 + 라우트
     # 세션이 같은 풀 커넥션을 공유하다 "another operation is in progress" 가 나는
     # 것을 방지(매 세션 새 커넥션).
-    engine = create_async_engine(_database_url, poolclass=NullPool, future=True)
+    #
+    # `SESSION_TIMEOUT_SERVER_SETTINGS`(T-341)를 앱과 동일하게 적용한다 — 값을 여기서 따로 두면
+    # 운영과 다른 lock_timeout/statement_timeout으로 테스트를 돌리게 되어, 그 값이 만드는 회귀를
+    # 테스트가 놓친다.
+    from app.db.session import SESSION_TIMEOUT_SERVER_SETTINGS
+
+    engine = create_async_engine(
+        _database_url,
+        poolclass=NullPool,
+        future=True,
+        connect_args={"server_settings": SESSION_TIMEOUT_SERVER_SETTINGS},
+    )
     factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
     # app 의 module-global 들을 이 엔진으로 교체 (deps.get_db + 미들웨어가 사용)
