@@ -718,7 +718,7 @@ if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then
       --command="SELECT (to_regclass('app.alembic_version') IS NOT NULL)::text;"
   )"
   applied_revision=""
-  if [ "${alembic_version_table_exists}" = "t" ]; then
+  if [ "${alembic_version_table_exists}" = "true" ]; then
     applied_revision="$(
       PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --tuples-only --no-align \
         --host=app-postgres --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" <<'SQL'
@@ -737,7 +737,6 @@ SQL
       --set="schema_owner=${PINVI_APP_SCHEMA_OWNER}" \
       >/dev/null <<'SQL'
 BEGIN;
-SET LOCAL ROLE :"schema_owner";
 REVOKE ALL ON SCHEMA app FROM PUBLIC;
 GRANT USAGE ON SCHEMA app TO :"app_role";
 REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA app FROM :"app_role";

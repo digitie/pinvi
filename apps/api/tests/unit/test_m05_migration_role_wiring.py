@@ -90,12 +90,16 @@ def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
     assert "0101이 catalog fingerprint·handoff를 완료한 뒤 app runtime 권한" in bootstrap
     assert "이미 적용된 0101을 재실행하지 않는다" in bootstrap
     assert "SELECT (to_regclass('app.alembic_version') IS NOT NULL)::text;" in bootstrap
-    assert 'if [ "${alembic_version_table_exists}" = "t" ]; then' in bootstrap
+    assert 'if [ "${alembic_version_table_exists}" = "true" ]; then' in bootstrap
     assert 'if [ "${applied_revision}" = "20260824_0101" ]; then' in bootstrap
-    assert 'SET LOCAL ROLE :"schema_owner";' in bootstrap
+    assert "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app" in bootstrap
     assert 'REVOKE ALL PRIVILEGES ON TABLE app.alembic_version FROM :"app_role";' in bootstrap
     assert 'GRANT SELECT ON TABLE app.alembic_version TO :"app_role";' in bootstrap
     assert 'ALTER DEFAULT PRIVILEGES FOR ROLE :"schema_owner" IN SCHEMA app' in bootstrap
+    m05_acl_repair = bootstrap[
+        bootstrap.index("# Alembic은 이미 적용된 0101을 재실행하지 않는다") :
+    ]
+    assert 'SET LOCAL ROLE :"schema_owner";' not in m05_acl_repair
     assert "pinvi_internal.acquire_fresh_0101_database_fence()" in bootstrap
     assert 'GRANT CREATE ON DATABASE :"database_name" TO :"schema_owner";' in bootstrap
     assert (
