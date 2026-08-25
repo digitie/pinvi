@@ -94,6 +94,11 @@
 
 ## 웹 / 테스트 인프라
 
+- [ ] **T-348** — Aggregate CI gate의 `timeout-minutes: 12`가 실제 api job 시간을 못 따라간다.
+  최근 main의 `lint-typecheck-test`는 9:00 / 10:53 / **20:06**이고, PR #476에서 11:56 실행이 게이트
+  타임아웃으로 **required check 실패**를 냈다 — job 자체는 성공했는데 게이트만 포기한 것이라
+  재실행으로 풀렸다. 통합 스위트가 계속 자라므로(662건) 주기적으로 재발한다. 한도를 올리거나
+  게이트가 job 완료를 기다리는 방식을 바꾼다. T-339 머지 과정에서 발견.
 - [ ] **T-VN-M05-ACTIVATION** — ADR-065 `0100/0101` rebaseline, paired live/restore/review evidence를
   요구하는 M05 production activation receipt gate와 실제 isolated activation 검증을 완료한다.
 - [ ] **T-323** — web 워크플로의 `e2e` 잡이 aggregate required check가 아니라 Playwright 실패가 머지를
