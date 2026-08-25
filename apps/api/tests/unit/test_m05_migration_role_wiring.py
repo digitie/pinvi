@@ -142,7 +142,8 @@ def test_rebaseline_fence_blocks_new_backends_and_catches_inherited_catalog_owne
         authority_sql = source[authority_start : source.index('"""', authority_start)]
         assert "database_row.datdba" not in authority_sql
         assert "SELECT pg_stat_clear_snapshot()" in source
-        assert "SELECT pg_terminate_backend(:pid, 5000)" in source
+        assert "pre-existing DDL-capable sessions to be stopped" in source
+        assert "SELECT pg_terminate_backend(:pid, 5000)" not in source
         assert "pg_has_role(activity.usesysid, owner_row.owner_oid, 'USAGE')" in source
         assert "pg_has_role(activity.usesysid, owner_row.owner_oid, 'SET')" in source
         assert "ALLOW_CONNECTIONS false" not in source

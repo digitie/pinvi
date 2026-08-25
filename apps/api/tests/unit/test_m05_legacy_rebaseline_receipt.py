@@ -71,9 +71,15 @@ def _receipt(identity: dict[str, object]) -> dict[str, object]:
 
 
 class _BoundIdentity:
-    def __init__(self, identity: dict[str, object], version_rows: list[str]) -> None:
+    def __init__(
+        self,
+        identity: dict[str, object],
+        version_rows: list[str],
+        marker: str = "pinvi-0100-legacy/v1",
+    ) -> None:
         self.identity = identity
         self.version_rows = version_rows
+        self.marker = marker
 
     def scalar(self, statement: object) -> str:
         sql = str(statement)
@@ -81,6 +87,8 @@ class _BoundIdentity:
             return json.dumps(self.identity)
         if "json_agg(version_num" in sql:
             return json.dumps(self.version_rows)
+        if "obj_description('app'::regnamespace" in sql:
+            return self.marker
         raise AssertionError(f"unexpected legacy handoff statement: {sql}")
 
     def execute(self, statement: object) -> None:
@@ -216,3 +224,29 @@ def test_0101_legacy_handoff_rejects_receipt_profile_mismatch(
 
     with pytest.raises(RuntimeError, match="profile does not match configuration"):
         module._assert_legacy_rebaseline_handoff(_BoundIdentity(identity, ["20260824_0100"]))
+
+
+def test_0101_legacy_handoff_rejects_fresh_marker(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    module = _migration_module()
+    identity = {
+        "database_name": "pinvi_legacy",
+        "database_oid": 4242,
+        "system_identifier": "987654321",
+        "server_addr": "127.0.0.1",
+        "server_port": 5432,
+    }
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(json.dumps(_receipt(identity)), encoding="utf-8")
+    receipt_path.chmod(0o600)
+    monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE", "1")
+    monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE", "fresh-postgresql-16")
+    monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH", str(receipt_path))
+    monkeypatch.setattr(module.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(module.os, "fstat", _root_owned_fstat(module))
+
+    with pytest.raises(RuntimeError, match="canonical legacy 0100 marker"):
+        module._assert_legacy_rebaseline_handoff(
+            _BoundIdentity(identity, ["20260824_0100"], marker="pinvi-0100-fresh/v1")
+        )

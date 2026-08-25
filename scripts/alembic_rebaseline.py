@@ -42,6 +42,8 @@ _N150_LEGACY_CATALOG_SHA256 = (
 )
 _TARGET_PROFILE_FRESH = "fresh-postgresql-16"
 _TARGET_PROFILE_N150 = "n150-production"
+_FRESH_BASELINE_SCHEMA_COMMENT = "pinvi-0100-fresh/v1"
+_LEGACY_REBASELINE_SCHEMA_COMMENT = "pinvi-0100-legacy/v1"
 _N150_TARGET_IDENTITY_SHA256 = (
     # current_database|system_identifier|server_addr|server_port; DB OID는 재생성 때 변한다.
     "e04c99a4681738e0292debdceded99b1c8abe01c9b8bdee82aeef8566dd33cc1"
@@ -343,7 +345,7 @@ WITH object_lines(line) AS (
                            COALESCE(d.defaclacl::text, ''))::text
   FROM pg_default_acl AS d
   LEFT JOIN pg_namespace AS n ON n.oid = d.defaclnamespace
-  WHERE n.nspname = 'app' OR n.nspname IS NULL
+  WHERE n.nspname IN ('app', 'x_extension') OR n.nspname IS NULL
 )
 SELECT line FROM object_lines ORDER BY line COLLATE "C"
 """
@@ -352,24 +354,129 @@ _ROLE_SECURITY_FINGERPRINT_SQL = """
 WITH RECURSIVE app_owner_roles(oid) AS (
   SELECT namespace.nspowner
   FROM pg_namespace AS namespace
-  WHERE namespace.nspname = 'app'
+  WHERE namespace.nspname IN ('app', 'x_extension', 'public')
   UNION
   SELECT relation.relowner
   FROM pg_class AS relation
   JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
-  WHERE namespace.nspname = 'app'
+  WHERE namespace.nspname IN ('app', 'x_extension')
   UNION
   SELECT procedure.proowner
   FROM pg_proc AS procedure
   JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
-  WHERE namespace.nspname = 'app'
+  WHERE namespace.nspname IN ('app', 'x_extension')
   UNION
   SELECT type_row.typowner
   FROM pg_type AS type_row
   JOIN pg_namespace AS namespace ON namespace.oid = type_row.typnamespace
-  WHERE namespace.nspname = 'app'
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT extension_row.extowner
+  FROM pg_extension AS extension_row
+  JOIN pg_namespace AS namespace ON namespace.oid = extension_row.extnamespace
+  WHERE namespace.nspname = 'x_extension'
+), acl_principal_roles(oid) AS (
+  SELECT acl.grantee
+  FROM pg_database AS database_row
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(database_row.datacl, acldefault('d', database_row.datdba))
+  ) AS acl
+  WHERE database_row.datname = current_database()
+  UNION
+  SELECT acl.grantor
+  FROM pg_database AS database_row
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(database_row.datacl, acldefault('d', database_row.datdba))
+  ) AS acl
+  WHERE database_row.datname = current_database()
+  UNION
+  SELECT acl.grantee
+  FROM pg_namespace AS namespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(namespace.nspacl, acldefault('n', namespace.nspowner))
+  ) AS acl
+  WHERE namespace.nspname IN ('app', 'x_extension', 'public')
+  UNION
+  SELECT acl.grantor
+  FROM pg_namespace AS namespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(namespace.nspacl, acldefault('n', namespace.nspowner))
+  ) AS acl
+  WHERE namespace.nspname IN ('app', 'x_extension', 'public')
+  UNION
+  SELECT acl.grantee
+  FROM pg_class AS relation
+  JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(
+      relation.relacl,
+      acldefault(
+        CASE WHEN relation.relkind = 'S' THEN 'S'::"char" ELSE 'r'::"char" END,
+        relation.relowner
+      )
+    )
+  ) AS acl
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT acl.grantor
+  FROM pg_class AS relation
+  JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(
+      relation.relacl,
+      acldefault(
+        CASE WHEN relation.relkind = 'S' THEN 'S'::"char" ELSE 'r'::"char" END,
+        relation.relowner
+      )
+    )
+  ) AS acl
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT acl.grantee
+  FROM pg_proc AS procedure
+  JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(procedure.proacl, acldefault('f', procedure.proowner))
+  ) AS acl
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT acl.grantor
+  FROM pg_proc AS procedure
+  JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(procedure.proacl, acldefault('f', procedure.proowner))
+  ) AS acl
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT acl.grantee
+  FROM pg_default_acl AS default_acl
+  LEFT JOIN pg_namespace AS namespace
+    ON namespace.oid = default_acl.defaclnamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(
+      default_acl.defaclacl,
+      acldefault(default_acl.defaclobjtype, default_acl.defaclrole)
+    )
+  ) AS acl
+  WHERE default_acl.defaclnamespace = 0
+     OR namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT acl.grantor
+  FROM pg_default_acl AS default_acl
+  LEFT JOIN pg_namespace AS namespace
+    ON namespace.oid = default_acl.defaclnamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(
+      default_acl.defaclacl,
+      acldefault(default_acl.defaclobjtype, default_acl.defaclrole)
+    )
+  ) AS acl
+  WHERE default_acl.defaclnamespace = 0
+     OR namespace.nspname IN ('app', 'x_extension')
 ), seed_roles(oid) AS (
   SELECT oid FROM app_owner_roles
+  UNION
+  SELECT oid FROM acl_principal_roles
   UNION
   SELECT role_row.oid
   FROM pg_roles AS role_row
@@ -402,13 +509,14 @@ WITH RECURSIVE app_owner_roles(oid) AS (
       COALESCE(namespace.nspacl::text, '')
     )::text
   FROM pg_namespace AS namespace
-  WHERE namespace.nspname = 'app'
+  WHERE namespace.nspname IN ('app', 'x_extension')
   UNION ALL
   SELECT jsonb_build_array(
       'role', role_row.rolname, role_row.rolsuper, role_row.rolinherit,
       role_row.rolcreaterole, role_row.rolcreatedb, role_row.rolcanlogin,
       role_row.rolreplication, role_row.rolbypassrls, role_row.rolconnlimit,
-      COALESCE(role_row.rolvaliduntil::text, '')
+      COALESCE(role_row.rolvaliduntil::text, ''),
+      COALESCE(role_row.rolconfig::text, '')
     )::text
   FROM pg_roles AS role_row
   WHERE role_row.oid IN (SELECT oid FROM relevant_roles)
@@ -422,6 +530,18 @@ WITH RECURSIVE app_owner_roles(oid) AS (
   JOIN pg_roles AS member_role ON member_role.oid = membership.member
   WHERE membership.roleid IN (SELECT oid FROM relevant_roles)
      OR membership.member IN (SELECT oid FROM relevant_roles)
+  UNION ALL
+  SELECT jsonb_build_array(
+      'db_role_setting', database_row.datname,
+      COALESCE(role_row.rolname, 'PUBLIC'),
+      COALESCE(setting_row.setconfig::text, '')
+    )::text
+  FROM pg_db_role_setting AS setting_row
+  JOIN pg_database AS database_row
+    ON setting_row.setdatabase IN (0, database_row.oid)
+  LEFT JOIN pg_roles AS role_row ON role_row.oid = setting_row.setrole
+  WHERE database_row.datname = current_database()
+    AND (setting_row.setrole = 0 OR setting_row.setrole IN (SELECT oid FROM relevant_roles))
 )
 SELECT line FROM security_lines ORDER BY line COLLATE "C"
 """
@@ -435,9 +555,8 @@ _REBASELINE_SERIALIZATION_LOCK_SQL = (
 
 # `apply`는 root-only superuser 연결로만 수행한다. transaction 전체에 shared
 # `pg_database`의 AccessExclusive lock을 유지해 새 backend가 startup 중에 멈추도록
-# 하고 기존 DDL-capable backend를 `pg_terminate_backend`로 종료한다. 단순 database
-# owner는 임의 role의 backend를 종료할 권한이 없으므로, 그보다 약한 권한을 허용하면
-# fence 중간에 permission error가 나고 부분 절차를 남긴다.
+# 한다. 기존 DDL-capable backend가 있으면 종료하지 않고 fail-close한다. 세션 종료는
+# PostgreSQL transaction rollback으로 되돌릴 수 없는 외부 부작용이기 때문이다.
 _REBASELINE_DATABASE_FENCE_AUTHORITY_SQL = """
 SELECT current_role_row.rolsuper
 FROM pg_roles AS current_role_row
@@ -542,6 +661,14 @@ _REBASELINE_DDL_CAPABLE_SESSION_IDS_SQL = (
     _REBASELINE_DDL_CAPABLE_SESSIONS_CTE
     + "SELECT pid FROM ddl_capable_sessions ORDER BY pid"
 )
+_REBASELINE_APP_TABLES_SQL = """
+SELECT relation.relname
+FROM pg_class AS relation
+JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+WHERE namespace.nspname = 'app'
+  AND relation.relkind IN ('r', 'p')
+ORDER BY relation.relname COLLATE "C"
+"""
 
 _LEGACY_SENTINELS_SQL = """
 SELECT
@@ -1316,7 +1443,7 @@ async def _assert_rebaseline_ddl_quiescence(connection: AsyncConnection) -> None
 async def _acquire_rebaseline_database_connection_fence(
     connection: AsyncConnection,
 ) -> None:
-    """Block new backends, evict existing DDL-capable clients, then prove quiescence."""
+    """Block new backends and fail closed if a DDL-capable client is still present."""
 
     await connection.execute(text(_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL))
     try:
@@ -1338,23 +1465,41 @@ async def _acquire_rebaseline_database_connection_fence(
             "rebaseline could not acquire database connection fence within 5s"
         ) from exc
     await connection.execute(text(_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_RESET_SQL))
-    for _ in range(20):
-        await connection.execute(text("SELECT pg_stat_clear_snapshot()"))
-        pids = tuple(
-            int(pid)
-            for pid in (
-                await connection.execute(text(_REBASELINE_DDL_CAPABLE_SESSION_IDS_SQL))
-            ).scalars()
+    await connection.execute(text("SELECT pg_stat_clear_snapshot()"))
+    pids = tuple(
+        int(pid)
+        for pid in (
+            await connection.execute(text(_REBASELINE_DDL_CAPABLE_SESSION_IDS_SQL))
+        ).scalars()
+    )
+    if pids:
+        raise RebaselineError(
+            "rebaseline requires pre-existing DDL-capable sessions to be stopped"
         )
-        if not pids:
-            await _assert_rebaseline_ddl_quiescence(connection)
-            return
-        for pid in pids:
-            await connection.scalar(
-                text("SELECT pg_terminate_backend(:pid, 5000)"), {"pid": pid}
+    await _assert_rebaseline_ddl_quiescence(connection)
+
+
+async def _lock_rebaseline_app_tables(connection: AsyncConnection) -> None:
+    """Freeze app DML while preflight and the 0061→0100 transition share one snapshot."""
+
+    tables = tuple(
+        str(table_name)
+        for table_name in (
+            await connection.execute(text(_REBASELINE_APP_TABLES_SQL))
+        ).scalars()
+    )
+    await connection.execute(text("SET LOCAL lock_timeout = '5s'"))
+    try:
+        for table_name in tables:
+            quoted_table = table_name.replace('"', '""')
+            await connection.execute(
+                text(f'LOCK TABLE app."{quoted_table}" IN SHARE ROW EXCLUSIVE MODE')
             )
-        await connection.execute(text("SELECT pg_sleep(0.05)"))
-    raise RebaselineError("rebaseline could not prove app DDL quiescence")
+    except DBAPIError as exc:
+        raise RebaselineError(
+            "rebaseline could not acquire app table DML fence within 5s"
+        ) from exc
+    await connection.execute(text("SET LOCAL lock_timeout = 0"))
 
 
 async def _app_data_fingerprint(connection: AsyncConnection) -> tuple[int, int, str]:
@@ -1554,6 +1699,7 @@ async def _apply(
         async with engine.begin() as connection:
             await connection.execute(text(_REBASELINE_SERIALIZATION_LOCK_SQL))
             await _acquire_rebaseline_database_connection_fence(connection)
+            await _lock_rebaseline_app_tables(connection)
             locked_versions = await _read_version_rows(connection, lock=True)
             if locked_versions not in {(LEGACY_REVISION,), (BASELINE_REVISION,)}:
                 raise RebaselineError(
@@ -1605,6 +1751,12 @@ async def _apply(
                     )
                 if existing_receipt is None:
                     _prepare_receipt(receipt, receipt_payload)
+                await connection.execute(
+                    text(
+                        "COMMENT ON SCHEMA app IS "
+                        f"'{_LEGACY_REBASELINE_SCHEMA_COMMENT}'"
+                    )
+                )
                 result = await connection.execute(
                     text(
                         "UPDATE app.alembic_version "

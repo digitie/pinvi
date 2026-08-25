@@ -186,16 +186,21 @@ docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml build app-api 
 
 # 3) Postgres + non-owner runtime DB role + RustFS 먼저
 docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml up -d app-postgres app-rustfs app-rustfs-init
-docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml run --rm app-db-runtime-role
+# 아래 role bootstrap은 migrator login을 기본적으로 봉인한다. 직접 compose run으로
+# app-migrator를 실행하지 말고, 다음 단계의 lifecycle wrapper가 one-shot login을 연다.
+docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml run --rm \
+  -e PINVI_MIGRATOR_DISABLE_LOGIN=1 \
+  app-db-runtime-role
 
 # 4) owner-only PinVi migration + one-shot admin bootstrap (auto-migrate 안 함)
 install -m 600 /dev/null /tmp/pinvi-bootstrap-admin.json
 $EDITOR /tmp/pinvi-bootstrap-admin.json
-docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml run --rm \
-  --user "$(id -u):$(id -g)" \
-  -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/run/pinvi/bootstrap-admin.json \
-  -v /tmp/pinvi-bootstrap-admin.json:/run/pinvi/bootstrap-admin.json:ro \
-  app-migrator pinvi-admin-bootstrap
+PINVI_DOCKER_PROJECT=pinvi-app-smoke \
+PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/tmp/pinvi-bootstrap-admin.json \
+scripts/docker-app.sh migrate
+# wrapper는 실행 전 API/Dagster writer를 drain하고, migration 또는 seal 실패에도
+# 기존에 실행 중이던 writer를 다시 기동한다. DDL-capable 외부 세션은 자동 종료하지
+# 않고 migration을 fail-close하므로, 실패 시 해당 세션을 먼저 정리한 뒤 재시도한다.
 rm -f /tmp/pinvi-bootstrap-admin.json
 
 # 5) API + Web

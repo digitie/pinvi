@@ -14,6 +14,8 @@ RUSTFS_PORT="${PINVI_RUSTFS_PORT:-12101}"
 RUSTFS_CONSOLE_PORT="${PINVI_RUSTFS_CONSOLE_PORT:-12105}"
 SMOKE_KEEP_RUNNING=""
 MIGRATOR_ONE_SHOT_PASSWORD=""
+RUNTIME_API_WAS_RUNNING="0"
+RUNTIME_DAGSTER_WAS_RUNNING="0"
 
 usage() {
   cat <<'EOF'
@@ -152,8 +154,30 @@ up_deps() {
 }
 
 drain_runtime_writers() {
-  log "stopping API writers before migration"
+  RUNTIME_API_WAS_RUNNING="0"
+  RUNTIME_DAGSTER_WAS_RUNNING="0"
+  if [[ -n "$(compose ps -q --status running app-api)" ]]; then
+    RUNTIME_API_WAS_RUNNING="1"
+  fi
+  if [[ -n "$(compose --profile etl ps -q --status running app-dagster)" ]]; then
+    RUNTIME_DAGSTER_WAS_RUNNING="1"
+  fi
+  log "stopping API and Dagster writers before migration"
   compose stop app-api
+  compose --profile etl stop app-dagster
+}
+
+restore_runtime_writers() {
+  if [[ "$RUNTIME_API_WAS_RUNNING" == "1" ]]; then
+    log "restoring API after migration attempt"
+    compose up -d app-api
+  fi
+  if [[ "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
+    log "restoring Dagster after migration attempt"
+    compose --profile etl up -d app-dagster
+  fi
+  RUNTIME_API_WAS_RUNNING="0"
+  RUNTIME_DAGSTER_WAS_RUNNING="0"
 }
 
 m05_legacy_rebaseline_profile() {
@@ -310,23 +334,31 @@ migrate_under_lifecycle_lock() {
       log "migrator preparation failed; sealing the one-shot login"
       seal_migrator_login "$legacy_rebaseline" || \
         log "migrator preparation failure could not be followed by a sealing run"
+      restore_runtime_writers || log "runtime writer restoration failed"
       return 1
     fi
     log "running Pinvi admin bootstrap (attempt ${attempt}/5)"
     if run_admin_bootstrap "$credential_file" "$legacy_rebaseline" "$legacy_receipt_file"; then
       if ! seal_migrator_login "$legacy_rebaseline"; then
         log "migration succeeded but the one-shot migrator login could not be sealed"
+        restore_runtime_writers || log "runtime writer restoration failed"
         return 1
       fi
+      restore_runtime_writers || {
+        log "runtime writer restoration failed"
+        return 1
+      }
       return 0
     fi
     if ! seal_migrator_login "$legacy_rebaseline"; then
       log "failed migration could not be followed by a sealing run"
+      restore_runtime_writers || log "runtime writer restoration failed"
       return 1
     fi
     sleep 3
   done
   echo "pinvi-admin-bootstrap failed after 5 attempts" >&2
+  restore_runtime_writers || log "runtime writer restoration failed"
   return 1
 }
 

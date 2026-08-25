@@ -2,6 +2,22 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-25 (codex) — PR #477 적대 재심 P1 반영
+
+- 두 전문 리뷰에서 지적된 rebaseline writer 경합을 반영했다. `0100` helper와 `0101` legacy
+  handoff가 `app` 테이블을 `SHARE ROW EXCLUSIVE`로 잠가 preflight·fingerprint·version 전환
+  사이의 runtime DML을 막고, 5초 안에 잡히지 않으면 fail-close한다.
+- `pg_terminate_backend`로 외부 세션을 남기는 동작은 제거했다. 기존 DDL-capable 세션은 자동
+  종료하지 않고 운영자가 정리한 뒤 재시도하도록 runbook과 테스트를 맞췄다.
+- fresh `0100` marker와 legacy rebaseline marker를 분리해 0101 legacy handoff가 fresh marker를
+  가장하지 못하게 했고, role security fingerprint에 `x_extension` ACL, function ACL, default
+  ACL, `rolconfig`, `pg_db_role_setting`을 추가했다.
+- `scripts/docker-app.sh migrate`가 migration·seal 실패에도 migration 전에 실행 중이던 API와
+  Dagster writer를 복구하도록 lifecycle wrapper와 smoke runbook을 정리했다.
+- 최신 검증은 관련 unit `20 passed`, 열린 runtime DML fence PostgreSQL 통합 `1 passed`이며,
+  기존 M05 전체 통합 `26 passed, 1 warning`, Ruff/format, Python compile, shell syntax도
+  통과했다. `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 건드리지 않았다.
+
 ## 2026-08-25 (codex) — PR #477 rebase 후 fingerprint·receipt 결박 재심 보강
 
 - N150 `apply` receipt의 profile 누락, 0101 환경 profile과 receipt profile 불일치, 완료 시각

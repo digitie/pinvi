@@ -133,7 +133,7 @@ def upgrade() -> None:
     op.execute("SET LOCAL check_function_bodies = false")
     for statement in _baseline_statements():
         op.execute(sa.text(statement))
-    op.execute(sa.text("COMMENT ON SCHEMA app IS 'pinvi-0100-fresh/v1'"))
+    op.execute(sa.text(f"COMMENT ON SCHEMA app IS '{_FRESH_BASELINE_SCHEMA_COMMENT}'"))
 
 
 def downgrade() -> None:

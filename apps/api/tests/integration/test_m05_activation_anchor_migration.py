@@ -523,8 +523,45 @@ async def test_rebaseline_0061_to_0100_then_0101_preserves_data_and_runs_backfil
         assert state == "applied"
         assert [payload["state"] for payload in receipt_payloads] == ["prepared", "applied"]
 
-        activation = _alembic(target_url, "upgrade", "20260824_0101")
-        assert activation.returncode == 0, activation.stderr
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as connection:
+                assert (
+                    await connection.scalar(
+                        text("SELECT obj_description('app'::regnamespace, 'pg_namespace')")
+                    )
+                    == "pinvi-0100-legacy/v1"
+                )
+        finally:
+            await engine.dispose()
+
+        # The legacy marker/handoff itself is covered above and by the dedicated receipt
+        # test.  Re-stamp this disposable fixture as a fresh baseline to exercise the full
+        # 0101 DDL tail without manufacturing managed migration roles in the test database.
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(text("COMMENT ON SCHEMA app IS 'pinvi-0100-fresh/v1'"))
+        finally:
+            await engine.dispose()
+
+        migration = _activation_migration_module()
+        monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE", "0")
+
+        def run_legacy_activation(bind) -> None:  # type: ignore[no-untyped-def]
+            from alembic.migration import MigrationContext
+            from alembic.operations import Operations
+
+            migration.op = Operations(MigrationContext.configure(bind))
+            migration.upgrade()
+            bind.execute(text("UPDATE app.alembic_version SET version_num = '20260824_0101'"))
+
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as connection:
+                await connection.run_sync(run_legacy_activation)
+        finally:
+            await engine.dispose()
         engine = create_async_engine(target_url, poolclass=NullPool)
         try:
             async with engine.connect() as connection:
@@ -664,6 +701,10 @@ def test_0101_legacy_catalog_serializer_matches_rebaseline_helper() -> None:
         migration._LEGACY_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL.strip()
         == rebaseline._REBASELINE_DATABASE_FENCE_AUTHORITY_SQL.strip()
     )
+    assert (
+        migration._LEGACY_REBASELINE_APP_TABLES_SQL.strip()
+        == rebaseline._REBASELINE_APP_TABLES_SQL.strip()
+    )
 
 
 @pytest.mark.asyncio
@@ -794,10 +835,10 @@ async def test_0101_legacy_receipt_rejects_parallel_ddl_capable_session(
 
 
 @pytest.mark.asyncio
-async def test_rebaseline_connection_fence_evicts_ddl_clients_and_restores_admission(
+async def test_rebaseline_connection_fence_rejects_ddl_clients_and_restores_admission(
     _database_url: str,
 ) -> None:
-    """0100 helper는 transaction 동안 새 접속과 기존 DDL 가능 client를 함께 막는다."""
+    """0100 helper는 세션을 강제 종료하지 않고 기존 DDL client가 있으면 fail-close한다."""
 
     target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_helper_fence")
     try:
@@ -805,35 +846,28 @@ async def test_rebaseline_connection_fence_evicts_ddl_clients_and_restores_admis
         assert baseline.returncode == 0, baseline.stderr
         rebaseline = _rebaseline_module()
         engine = create_async_engine(target_url, poolclass=NullPool)
-        rejected_engine = create_async_engine(target_url, poolclass=NullPool)
         try:
             blocker = await engine.connect()
             try:
                 blocker_pid = await blocker.scalar(text("SELECT pg_backend_pid()"))
                 assert isinstance(blocker_pid, int)
                 await blocker.rollback()
-                async with engine.begin() as fence:
-                    await rebaseline._acquire_rebaseline_database_connection_fence(fence)
-                    assert (
-                        await fence.scalar(
-                            text(
-                                "SELECT NOT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = :pid)"
-                            ),
-                            {"pid": blocker_pid},
-                        )
-                        is True
+                with pytest.raises(
+                    rebaseline.RebaselineError,
+                    match="pre-existing DDL-capable sessions",
+                ):
+                    async with engine.begin() as fence:
+                        await rebaseline._acquire_rebaseline_database_connection_fence(fence)
+                assert (
+                    await blocker.scalar(
+                        text("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = :pid)"),
+                        {"pid": blocker_pid},
                     )
-
-                    async def attempt_connection() -> None:
-                        async with rejected_engine.connect() as rejected:
-                            await rejected.execute(text("SELECT 1"))
-
-                    with pytest.raises((asyncio.TimeoutError, DBAPIError)):
-                        await asyncio.wait_for(attempt_connection(), timeout=0.5)
+                    is True
+                )
             finally:
                 await blocker.close()
         finally:
-            await rejected_engine.dispose()
             await engine.dispose()
 
         restored_engine = create_async_engine(target_url, poolclass=NullPool)
@@ -913,10 +947,10 @@ async def test_rebaseline_connection_fence_rejects_nonsuperuser_database_owner(
 
 
 @pytest.mark.asyncio
-async def test_0101_connection_fence_evicts_ddl_clients_and_restores_admission(
+async def test_0101_connection_fence_rejects_ddl_clients_and_restores_admission(
     _database_url: str,
 ) -> None:
-    """0101 legacy handoff도 같은 transaction-scoped database fence를 사용한다."""
+    """0101 legacy handoff도 세션을 강제 종료하지 않고 fail-close한다."""
 
     target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_0101_fence")
     try:
@@ -924,37 +958,30 @@ async def test_0101_connection_fence_evicts_ddl_clients_and_restores_admission(
         assert baseline.returncode == 0, baseline.stderr
         migration = _activation_migration_module()
         engine = create_async_engine(target_url, poolclass=NullPool)
-        rejected_engine = create_async_engine(target_url, poolclass=NullPool)
         try:
             blocker = await engine.connect()
             try:
                 blocker_pid = await blocker.scalar(text("SELECT pg_backend_pid()"))
                 assert isinstance(blocker_pid, int)
                 await blocker.rollback()
-                async with engine.begin() as fence:
-                    await fence.run_sync(
-                        migration._acquire_legacy_rebaseline_database_connection_fence
-                    )
-                    assert (
-                        await fence.scalar(
-                            text(
-                                "SELECT NOT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = :pid)"
-                            ),
-                            {"pid": blocker_pid},
+                with pytest.raises(
+                    RuntimeError,
+                    match="pre-existing DDL-capable sessions",
+                ):
+                    async with engine.begin() as fence:
+                        await fence.run_sync(
+                            migration._acquire_legacy_rebaseline_database_connection_fence
                         )
-                        is True
+                assert (
+                    await blocker.scalar(
+                        text("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = :pid)"),
+                        {"pid": blocker_pid},
                     )
-
-                    async def attempt_connection() -> None:
-                        async with rejected_engine.connect() as rejected:
-                            await rejected.execute(text("SELECT 1"))
-
-                    with pytest.raises((asyncio.TimeoutError, DBAPIError)):
-                        await asyncio.wait_for(attempt_connection(), timeout=0.5)
+                    is True
+                )
             finally:
                 await blocker.close()
         finally:
-            await rejected_engine.dispose()
             await engine.dispose()
 
         restored_engine = create_async_engine(target_url, poolclass=NullPool)
@@ -964,6 +991,57 @@ async def test_0101_connection_fence_evicts_ddl_clients_and_restores_admission(
         finally:
             await restored_engine.dispose()
     finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
+async def test_rebaseline_app_table_fence_rejects_open_runtime_writer(
+    _database_url: str,
+) -> None:
+    """0100/0101 app table fence는 진행 중인 runtime DML과 함께 진행하지 않는다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_app_fence")
+    writer_engine = create_async_engine(target_url, poolclass=NullPool)
+    fence_engine = create_async_engine(target_url, poolclass=NullPool)
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        rebaseline = _rebaseline_module()
+        migration = _activation_migration_module()
+        writer = await writer_engine.connect()
+        writer_transaction = await writer.begin()
+        try:
+            user_id = uuid.uuid4()
+            await writer.execute(
+                text(
+                    "INSERT INTO app.users (user_id, email, nickname) "
+                    "VALUES (:user_id, :email, 'open-writer')"
+                ),
+                {"user_id": user_id, "email": f"{user_id.hex}@pinvi.test"},
+            )
+
+            with pytest.raises(
+                rebaseline.RebaselineError,
+                match="app table DML fence within 5s",
+            ):
+                async with fence_engine.begin() as fence:
+                    await rebaseline._lock_rebaseline_app_tables(fence)
+
+            def lock_migration_tables(bind) -> None:  # type: ignore[no-untyped-def]
+                migration._lock_legacy_rebaseline_app_tables(bind, ("users",))
+
+            with pytest.raises(
+                RuntimeError,
+                match="app table DML fence within 5s",
+            ):
+                async with fence_engine.begin() as fence:
+                    await fence.run_sync(lock_migration_tables)
+        finally:
+            await writer_transaction.rollback()
+            await writer.close()
+    finally:
+        await fence_engine.dispose()
+        await writer_engine.dispose()
         await _drop_database(maintenance_url, target_url)
 
 
