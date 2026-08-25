@@ -589,6 +589,13 @@ async def test_receipt_survives_a_database_abort_and_work_is_discarded(
     # PII 익명화는 이미 실행된 뒤다 — "파괴적 작업이 일부 수행된 뒤 실패"를 정확히 만든다.
     async with session_factory() as db:
         await db.execute(
+            # 한 번이라도 누수되면 이후 아카이브 테스트가 영구히 깨지므로 양쪽을 멱등하게 둔다.
+            text(
+                "ALTER TABLE app.location_access_log_archive "
+                "DROP CONSTRAINT IF EXISTS ck_t340_abort"
+            )
+        )
+        await db.execute(
             text(
                 "ALTER TABLE app.location_access_log_archive "
                 "ADD CONSTRAINT ck_t340_abort CHECK (purpose <> 'nearby_attractions')"
@@ -612,7 +619,10 @@ async def test_receipt_survives_a_database_abort_and_work_is_discarded(
         # 모든 아카이브 테스트가 오염된다(컨테이너가 세션 스코프다).
         async with session_factory() as db:
             await db.execute(
-                text("ALTER TABLE app.location_access_log_archive DROP CONSTRAINT ck_t340_abort")
+                text(
+                    "ALTER TABLE app.location_access_log_archive "
+                    "DROP CONSTRAINT IF EXISTS ck_t340_abort"
+                )
             )
             await db.commit()
 
@@ -701,6 +711,9 @@ async def test_failure_after_the_completed_update_does_not_hang(session_factory,
                 ),
                 timeout=20,
             )
+        # `finally`의 GUC 리셋이 커밋 뒤 새 트랜잭션을 열지 않는다 — 열면 세션이
+        # `idle in transaction`으로 반환된다. 이 줄이 그 가드를 고정한다.
+        assert db.in_transaction() is False
         await db.rollback()
 
     async with session_factory() as db:
@@ -709,3 +722,163 @@ async def test_failure_after_the_completed_update_does_not_hang(session_factory,
             {"actor": actor_id},
         )
         assert status == "failed"
+
+
+async def test_route_postlude_failure_discards_work_and_records_failure(
+    client, session_factory, verified_user, auth_cookies, monkeypatch
+):  # type: ignore[no-untyped-def]
+    """감사 적재가 실패하면 파괴 작업이 폐기되고 영수증이 `failed`로 남아야 한다.
+
+    이것이 T-339이 닫은 **유일하게 실제로 존재하는** `executing` 잔존 경로다 — 파괴 SQL과
+    `completed` UPDATE가 다 끝났는데 라우트 후단(`append_admin_audit` + 최종 commit)만 실패하는 경우.
+    서비스 계층 테스트로는 이 경로에 들어갈 수 없어 HTTP를 통과시킨다.
+
+    락 관점에서도 중요하다: 이 시점 트랜잭션은 `completed` UPDATE로 그 영수증 행을 잡고 있으므로,
+    복구가 rollback 없이 다른 세션을 쓰면 무기한 블록된다. 타임아웃 안에서 확인한다.
+    """
+    import asyncio
+    import uuid
+    from datetime import UTC, datetime, timedelta
+    from decimal import Decimal
+
+    from app.api.v1.admin import retention as retention_route
+    from app.core.config import get_settings
+    from app.models.user import User
+    from app.services.location_audit import append_location_log
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "pinvi_retention_execute_enabled", True, raising=False)
+
+    async with session_factory() as db:
+        cpo = User(
+            email=f"route_{uuid.uuid4().hex[:8]}@pinvi.test",
+            status="active",
+            roles=["user", "cpo"],
+        )
+        db.add(cpo)
+        await db.commit()
+        await db.refresh(cpo)
+        cpo_id = cpo.user_id
+
+    async with session_factory() as db:
+        await append_location_log(
+            db,
+            user_id=cpo_id,
+            endpoint="/features/nearby",
+            purpose="nearby_attractions",
+            lat=Decimal("37.5665"),
+            lng=Decimal("126.9780"),
+            request_id=uuid.uuid4(),
+            ip_hash="ab" * 32,
+            occurred_at=datetime.now(UTC) - timedelta(days=400),
+        )
+
+    async def _boom(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("감사 적재 실패")
+
+    monkeypatch.setattr(retention_route, "append_admin_audit", _boom)
+
+    res = await asyncio.wait_for(
+        client.post(
+            "/admin/retention/execute",
+            json={
+                "scope": "location",
+                "access_reason": "T-339 route postlude test",
+                "confirm_phrase": settings.pinvi_retention_execute_confirm_phrase,
+            },
+            cookies=auth_cookies(str(cpo_id)),
+        ),
+        timeout=20,
+    )
+    assert res.status_code == 503, res.text
+    # 원시 DB/파이썬 예외 문자열이 본문으로 새지 않는다.
+    assert "감사 적재 실패" not in res.text
+
+    async with session_factory() as db:
+        receipts = list(
+            (
+                await db.execute(
+                    text(
+                        "SELECT status, error_message FROM app.retention_runs "
+                        "WHERE actor_user_id = :actor"
+                    ),
+                    {"actor": cpo_id},
+                )
+            ).mappings()
+        )
+        assert len(receipts) == 1
+        assert receipts[0]["status"] == "failed"
+        # **이 단언이 테스트를 T-339 경로에 고정한다.** 없으면 나머지 단언(503/failed/폐기)이
+        # `execute_retention` 안에서 실패해도 전부 성립해, 라우트 후단 복구가 한 줄도 실행되지 않은 채
+        # green이 된다. 겸해서 "상세는 본문이 아니라 영수증에 남는다"는 리댁션 계약의 나머지 절반이다.
+        assert "감사 적재 실패" in (receipts[0]["error_message"] or "")
+
+        # 파괴 작업은 폐기됐다 — `failed`가 "아무것도 지워지지 않았다"를 뜻한다는 불변식.
+        live = await db.scalar(text("SELECT count(*) FROM app.location_access_log"))
+        archived = await db.scalar(text("SELECT count(*) FROM app.location_access_log_archive"))
+        assert live == 1
+        assert archived == 0
+
+
+async def test_failure_record_does_not_overwrite_a_committed_completed_receipt(
+    session_factory,
+):  # type: ignore[no-untyped-def]
+    """이미 `completed`로 커밋된 영수증을 `failed`로 덮지 않아야 한다.
+
+    최종 커밋이 서버에서는 성공했는데 ack가 유실되면 호출부는 예외를 본다. 그때 가드 없이 덮으면
+    **파괴 작업이 실제로 수행된 run에 "아무것도 지우지 않았다"라고 새기게 된다** — `failed`의 의미를
+    정반대로 뒤집는 기록이다. 타이밍에 의존하지 않고 그 상태를 직접 만들어 확인한다.
+    """
+    import uuid
+    from datetime import UTC, datetime
+
+    from app.models.user import User
+    from app.services import admin_retention
+
+    async with session_factory() as db:
+        actor = User(
+            email=f"guard_{uuid.uuid4().hex[:8]}@pinvi.test", status="active", roles=["user", "cpo"]
+        )
+        db.add(actor)
+        await db.commit()
+        await db.refresh(actor)
+        actor_id = actor.user_id
+
+    run_id = uuid.uuid4()
+    async with session_factory() as db:
+        await db.execute(
+            text(
+                "INSERT INTO app.retention_runs "
+                "(run_id, status, mode, access_reason, actor_user_id, completed_at) "
+                "VALUES (:run_id, 'completed', 'execute', :reason, :actor, :done)"
+            ),
+            {
+                "run_id": run_id,
+                "reason": "T-339 guard test",
+                "actor": actor_id,
+                "done": datetime.now(UTC),
+            },
+        )
+        await db.commit()
+
+    async with session_factory() as db:
+        await admin_retention.record_retention_run_failure(
+            db, run_id, RuntimeError("ack 유실 후 뒤늦은 실패 기록")
+        )
+
+    async with session_factory() as db:
+        row = (
+            (
+                await db.execute(
+                    text(
+                        "SELECT status, error_message FROM app.retention_runs "
+                        "WHERE run_id = :run_id"
+                    ),
+                    {"run_id": run_id},
+                )
+            )
+            .mappings()
+            .one()
+        )
+        assert row["status"] == "completed", "커밋된 completed 영수증이 failed로 덮였다"
+        assert row["error_message"] is None

@@ -96,14 +96,26 @@ LIMIT 5;
 
 | 값 | 뜻 |
 | --- | --- |
-| `completed` | 전부 커밋됐다. 삭제·익명화·아카이브가 실제로 일어났다. |
+| `dry_run` | dry-run 실행. 파괴적 작업을 하지 않는다. |
+| `completed` | 전부 커밋됐다. **요청한 `scope`의** 삭제·익명화·아카이브가 실제로 일어났다(`scope='pii'`는 아카이브를 하지 않고 `scope='location'`은 익명화를 하지 않는다). |
 | `failed` | **아무것도 지워지지 않았다.** 시도했고 실패했으며 전부 폐기됐다. |
-| `executing` | **아직 커밋되지 않았다 = 아무것도 지워지지 않았다.** 진행 중이거나, 프로세스가 중간에 죽었다. |
+| `executing` | **아직 커밋되지 않았다 = 아무것도 지워지지 않았다.** 진행 중이거나, 프로세스가 죽었거나, 실패했는데 복구 기록 자체가 실패했다. |
+| `rolled_back` | 운영자가 §5.2 절차로 수동 종결한 stale run. 시스템이 스스로 쓰지 않는다. |
+| `approved` | CHECK 제약에는 있으나 **현재 코드가 쓰지 않는다.** |
 
 근거: 파괴 SQL·`completed` UPDATE·admin audit 적재가 라우트의 **단일 커밋**에 묶여 있다. 영수증
 행만 그 앞에서 따로 커밋되므로(T-338), 영수증이 남아 있다고 해서 작업이 수행된 것은 아니다.
 
 **상태만으로는 "진행 중"과 "죽음"을 구분할 수 없다.** 그 판정은 §5.2다.
+
+**API가 503을 반환했다고 해서 미삭제인 것은 아니다.** 최종 커밋이 서버에서는 성공했는데 응답
+ack가 유실되면 클라이언트는 503을 받지만 DB의 영수증은 `completed`이고 작업은 실제로 수행됐다.
+그 경우 서버 로그에 `실패를 기록하려 했으나 이미 종결 상태다`가 ERROR로 남는다. **응답이 아니라
+영수증을 믿어라.**
+
+**실패한 execute는 `admin_audit_log`에 아무 흔적도 남기지 않는다.** admin audit 적재가 파괴
+트랜잭션 안에 있어 실패 시 함께 폐기되기 때문이다(dry-run은 남긴다). 실패를 조사할 때는 admin
+감사 로그가 아니라 `retention_runs` 영수증을 본다.
 
 ### 5.2 `executing`이 오래 남아 있을 때
 
@@ -121,7 +133,9 @@ WHERE status = 'executing' AND started_at < now() - interval '15 minutes';
 
 ```sql
 UPDATE app.retention_runs
-SET status = 'rolled_back', error_message = 'stale executing reaped'
+SET status = 'rolled_back',
+    error_message = 'stale executing reaped',
+    completed_at = now()
 WHERE run_id = '<run_id>' AND status = 'executing';
 ```
 

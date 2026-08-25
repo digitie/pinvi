@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Annotated
 
@@ -31,6 +32,8 @@ from app.services.admin_retention import (
     record_retention_run_failure,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/admin/retention", tags=["admin"])
 
 
@@ -51,7 +54,17 @@ def _error_response(exc: RetentionExecutionError) -> HTTPException:
     elif isinstance(exc, RetentionPrecheckError):
         http_status = status.HTTP_409_CONFLICT
     else:
-        http_status = status.HTTP_503_SERVICE_UNAVAILABLE
+        # 실행 실패의 원인 문자열은 SQLAlchemy 예외 전문(SQL + 바인드 파라미터)일 수 있다.
+        # 그대로 HTTP 본문에 실으면 스키마와 데이터가 새어 나간다 — 상세는 영수증
+        # (`retention_runs.error_message`)과 서버 로그에만 둔다.
+        logger.warning("retention execute failed: %s", exc)
+        return HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": exc.code,
+                "message": "보존 작업 실행에 실패했습니다. 실행 영수증에서 원인을 확인하세요.",
+            },
+        )
     return HTTPException(
         status_code=http_status,
         detail={"code": exc.code, "message": str(exc)},

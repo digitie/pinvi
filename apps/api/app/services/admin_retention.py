@@ -205,22 +205,28 @@ async def execute_retention(
             .one()
         )
         return _run_from_row(row)
-    except BaseException as exc:
-        # `BaseException`까지 잡는 이유는 취소(`CancelledError`)에도 영수증을 남기기 위해서다.
-        # 다만 취소·인터럽트는 **절대 래핑하지 않는다** — 그것들은 오류가 아니라 중단 신호라
-        # `RetentionExecutionError`로 바꾸면 호출 스택이 중단을 실패로 오해한다.
-        #
-        # 취소 중에는 기록이 남지 않을 수도 있다(취소 스코프 안에서는 `await`가 즉시 되던져진다).
-        # best effort이며, 그래도 시도하지 않는 것보다 낫다.
+    except Exception as exc:
+        # **`BaseException`으로 넓히지 않는다.** 취소(`CancelledError`)를 잡고 나서 `await`를 하면
+        # 두 가지 중 하나가 일어나는데 둘 다 좋지 않다 — 취소 스코프 안이면 그 `await`가 즉시
+        # 되던져져 원래 예외를 가리고, 아니면 종료 중에 DB I/O를 기다리며 셧다운을 지연시킨다.
+        # 얻는 것도 없다: 이 배포에서 `CancelledError`는 클라이언트 끊김으로도(uvicorn이
+        # `disconnected` 플래그만 세운다) SIGTERM으로도(graceful timeout 미설정 → cancel 없음)
+        # 발생하지 않는다. 취소 중 영수증이 남지 않는 것은 알려진 한계이며 그렇게 문서화한다.
         await record_retention_run_failure(db, run_id, exc)
-        if isinstance(exc, RetentionExecutionError) or not isinstance(exc, Exception):
+        if isinstance(exc, RetentionExecutionError):
             raise
         raise RetentionExecutionError(str(exc)) from exc
     finally:
-        with suppress(Exception):
-            await db.execute(
-                text("SELECT set_config('app.retention_location_delete_allowed', 'off', true)")
-            )
+        # 트랜잭션이 살아 있을 때만 되돌린다. 실패 경로에서는 `record_retention_run_failure`가 이미
+        # rollback+commit으로 트랜잭션을 끝냈으므로, 여기서 문장을 실행하면 **새 트랜잭션이 열리고
+        # 아무도 닫지 않는다** — 세션이 `idle in transaction`으로 반환된다.
+        # 애초에 이 GUC는 `is_local=true`라 트랜잭션이 끝나면 함께 사라진다. 이 블록은 성공 경로에서
+        # 커밋 전에 창을 좁히는 방어일 뿐이다.
+        if db.in_transaction():
+            with suppress(Exception):
+                await db.execute(
+                    text("SELECT set_config('app.retention_location_delete_allowed', 'off', true)")
+                )
 
 
 async def record_retention_run_failure(
@@ -239,22 +245,34 @@ async def record_retention_run_failure(
     그 뒤 commit해야 호출부의 `rollback()`을 견딘다(T-338). 즉 이 함수는 실패 경로에서 파괴적
     작업의 폐기와 영수증 보존을 **한 세션 안에서** 끝낸다 — 두 번째 커넥션이 필요 없어진다.
 
+    **계약**: 이 함수는 호출부의 트랜잭션을 끝내고, 그 부작용으로 **세션의 모든 ORM 인스턴스가
+    만료된다**(SQLAlchemy rollback 규약). 이 라우트에서는 RBAC가 적재한 `admin: User`가 해당하는데
+    호출 이후 그것을 읽는 코드가 없어 지금은 무해하다. 이 함수를 부른 뒤 ORM 속성을 읽으면 새
+    SELECT가 나가거나(새 트랜잭션) 세션이 닫힌 뒤라면 예외가 난다.
+
     실패해도 예외를 올리지 않는다. 원래 예외를 가리는 것이 더 나쁘기 때문이다. 다만 조용히 넘기지는
     않는다 — 영수증을 못 남긴 사실 자체가 기록돼야 한다.
     """
     try:
         await db.rollback()
-        await db.execute(
-            _UPDATE_RUN_SQL,
+        outcome = await db.execute(
+            _FAIL_RUN_SQL,
             {
                 "run_id": run_id,
-                "status": "failed",
                 "result": _json({"error": type(exc).__name__}),
                 "completed_at": datetime.now(UTC),
                 "error_message": str(exc)[:1000],
             },
         )
         await db.commit()
+        if outcome.rowcount == 0:  # type: ignore[attr-defined]  # CursorResult에는 있다
+            # 가드가 막았다 = 이 run은 이미 종결 상태다. 거의 확실히 커밋 ack 유실이며, 파괴 작업은
+            # **실제로 수행됐다**. 조용히 넘기면 영수증과 예외가 어긋난 채로 아무도 모른다.
+            logger.error(
+                "retention run %s: 실패를 기록하려 했으나 이미 종결 상태다 "
+                "(커밋 ack 유실 가능성 — 작업은 수행됐을 수 있다)",
+                run_id,
+            )
     except Exception:
         logger.exception("retention run %s 실패 영수증을 남기지 못했다", run_id)
 
@@ -428,6 +446,22 @@ _UPDATE_RUN_SQL = text(
     RETURNING run_id, mode, scope, status, candidate_snapshot, result, kill_switch_enabled,
               access_reason, actor_user_id, error_message, started_at, completed_at,
               created_at, updated_at
+    """
+)
+
+#: 실패 영수증 전용. **`executing`인 run만** 바꾼다.
+#:
+#: 커밋이 서버에서는 성공했는데 ack가 유실되면 호출부는 예외를 보고, 그 run은 실제로 `completed`로
+#: 커밋돼 있다. 가드 없이 덮으면 **파괴 작업이 실제로 수행된 run에 "아무것도 지우지 않았다"라고
+#: 새기게 된다** — `failed`의 의미를 정반대로 뒤집는 기록이다.
+_FAIL_RUN_SQL = text(
+    """
+    UPDATE app.retention_runs
+    SET status = 'failed',
+        result = CAST(:result AS jsonb),
+        completed_at = :completed_at,
+        error_message = :error_message
+    WHERE run_id = :run_id AND status = 'executing'
     """
 )
 
