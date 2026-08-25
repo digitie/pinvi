@@ -61,18 +61,36 @@
 
 ## 데이터 / 보존
 
-- [ ] **T-339** — retention run이 `executing` 상태로 영구히 남는 경로가 있다. `except Exception`이
-  `asyncio.CancelledError`(BaseException 직계)를 놓쳐 SIGTERM/연결 끊김 시 `failed`로도 안 남고,
-  라우트가 `RetentionExecutionError`만 잡아 후단(`append_admin_audit`, 최종 commit) 실패도 같은
-  결과를 낳는다. **데이터 손실은 없다** — 파괴 SQL과 `completed` UPDATE가 단일 커밋이라
-  `executing`은 곧 "아무것도 지워지지 않았다"를 뜻한다. 해석 규칙을 runbook에 명시하고 예외 범위를
-  넓힌다. 추가로, 최종 `_UPDATE_RUN_SQL` 단계에서 실패하면 원래 트랜잭션이 그 행 락을 쥔 채
-  `_record_failed_run`이 별도 세션으로 같은 행을 UPDATE해 **교착 가능성**이 있다 — 확인 필요.
-  T-338 적대적 리뷰에서 발견.
-- [ ] **T-340** — `test_failed_execute_leaves_a_receipt`가 불변식의 절반만 검출한다. 순수 파이썬
-  예외로 실패시켜 트랜잭션이 abort 상태가 아니므로, `_record_failed_run`을 같은 세션 구현으로
-  되돌려도 green이다. append-only 트리거 위반 같은 **DB 오류**로 실패시키고 사후 데이터 상태까지
-  검증하는 케이스가 필요하다. T-338 적대적 리뷰에서 발견.
+- [ ] **T-347** — 503 본문에서 가린 예외 문자열이 `GET /admin/retention/runs`·`/summary`로는 그대로
+  나간다. `error_message`가 `str(exc)[:1000]`(SQLAlchemy 예외 전문)이고 그 두 endpoint의 role
+  집합(admin/operator/cpo)이 execute의 집합(admin/cpo)보다 **넓다** — 실행 권한이 없는 operator가
+  실행 실패의 원시 SQL을 읽는다. 실제 바인드는 cutoff/uuid뿐이라 PII 위험은 낮지만, 본문만 가리고
+  같은 문자열을 더 넓게 노출하는 것은 앞뒤가 맞지 않는다. `error_message`를 마스킹하거나 노출
+  role을 좁힌다. T-339 리뷰 2차에서 발견.
+- [ ] **T-342** — 실패한 retention execute가 `admin_audit_log`에 아무 흔적도 남기지 않는다.
+  `append_admin_audit`은 성공 경로에서만 호출되는데 `docs/compliance/lbs-act.md` §3.4는 실행 시도
+  자체가 관리자 감사에 남는다고 적는다. 익명화까지 진행된 뒤 실패한 경우에도 admin 체인은 비어 있다.
+  문서와 코드 중 어느 쪽이 옳은지 정하고 맞춘다. T-339 리뷰에서 발견.
+- [ ] **T-343** — `/admin/retention/execute`에 동시 실행 방지가 없다. 두 요청이 겹치면 서로의 파괴
+  작업과 `append_admin_audit`의 `pg_advisory_xact_lock`이 얽혀 교착할 수 있고, runbook §5.2의
+  "그대로 다시 실행해도 안전하다"가 그 노출을 키운다. run 단위 advisory lock 또는 `executing` 존재
+  검사로 막는다. T-339 리뷰에서 발견.
+- [ ] **T-344** — runbook §5.2의 stale 판정이 실행 불가능하다. `run_id`와 DB 백엔드를 잇는 수단이
+  없어 `pg_stat_activity`로 생사를 확인할 수 없고, 가장 유력한 stale 모드인 `idle in transaction`을
+  "기다린다"로 오분류한다. 또 §5.1 상태 어휘표가 CHECK의 6개 값 중 3개만 정의해 §5.2가 쓰라고
+  지시하는 `rolled_back`이 표에 없다. `application_name`에 run_id를 싣는 등 대응 수단과 함께 절차를
+  다시 쓴다. T-339 리뷰에서 발견.
+- [ ] **T-345** — 영수증의 `error_message`가 운영자가 보는 어느 화면·쿼리에도 없다. Admin 콘솔의
+  retention 목록은 `executing`을 `approved`와 같은 회색으로만 보여 주고 `started_at` 경과도 표시하지
+  않는다. §5.2를 적용할 정보가 UI에 없다는 뜻이다. T-339 리뷰에서 발견.
+- [ ] **T-346** — PII 익명화가 avatar **객체 포인터만** NULL로 만들고 RustFS의 실제 이미지 파일은
+  남긴다. runbook §5.1의 `completed` 정의("삭제·익명화가 실제로 일어났다")가 코드보다 강하다.
+  파기 범위를 정하고 문서나 코드를 맞춘다. T-339 리뷰에서 발견.
+- [ ] **T-341** — 프로세스 전역에 `statement_timeout` / `lock_timeout` /
+  `idle_in_transaction_session_timeout`이 **하나도 없다**. `app/db/session.py`가 `connect_args`를
+  넘기지 않고, compose에 `command:` 오버라이드도 없어 서버 기본값 0이 그대로 쓰인다. 락 대기나
+  폭주 쿼리가 생기면 무한히 매달린다 — T-339의 hang이 탐지되지 않은 이유이기도 하다. 기본값을
+  정하고(요청 경로/워커 경로가 다를 수 있다) 근거와 함께 박는다. T-339 조사에서 발견.
 
 ## 웹 / 테스트 인프라
 

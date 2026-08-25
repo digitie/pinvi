@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from contextlib import suppress
 from datetime import UTC, datetime
@@ -12,7 +13,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.db import session as db_session
 from app.schemas.admin import (
     AdminAuditRetentionSummary,
     AdminLocationLogArchiveSummary,
@@ -43,6 +43,9 @@ class RetentionConfirmPhraseError(RetentionExecutionError):
 
 class RetentionPrecheckError(RetentionExecutionError):
     code = "RETENTION_PRECHECK_FAILED"
+
+
+logger = logging.getLogger(__name__)
 
 
 async def build_retention_summary(
@@ -203,42 +206,75 @@ async def execute_retention(
         )
         return _run_from_row(row)
     except Exception as exc:
-        # 별도 세션을 쓴다. 원인이 DB 오류면 현재 트랜잭션은 이미 abort 상태라 어떤 문장도 실행되지
-        # 않고, 설령 실행돼도 호출부의 `rollback()`이 지운다. 영수증은 그 롤백을 견뎌야 한다.
-        await _record_failed_run(run_id, exc)
+        # **`BaseException`으로 넓히지 않는다.** 취소(`CancelledError`)를 잡고 나서 `await`를 하면
+        # 두 가지 중 하나가 일어나는데 둘 다 좋지 않다 — 취소 스코프 안이면 그 `await`가 즉시
+        # 되던져져 원래 예외를 가리고, 아니면 종료 중에 DB I/O를 기다리며 셧다운을 지연시킨다.
+        # 얻는 것도 없다: 이 배포에서 `CancelledError`는 클라이언트 끊김으로도(uvicorn이
+        # `disconnected` 플래그만 세운다) SIGTERM으로도(graceful timeout 미설정 → cancel 없음)
+        # 발생하지 않는다. 취소 중 영수증이 남지 않는 것은 알려진 한계이며 그렇게 문서화한다.
+        await record_retention_run_failure(db, run_id, exc)
         if isinstance(exc, RetentionExecutionError):
             raise
         raise RetentionExecutionError(str(exc)) from exc
     finally:
-        with suppress(Exception):
-            await db.execute(
-                text("SELECT set_config('app.retention_location_delete_allowed', 'off', true)")
-            )
+        # 트랜잭션이 살아 있을 때만 되돌린다. 실패 경로에서는 `record_retention_run_failure`가 이미
+        # rollback+commit으로 트랜잭션을 끝냈으므로, 여기서 문장을 실행하면 **새 트랜잭션이 열리고
+        # 아무도 닫지 않는다** — 세션이 `idle in transaction`으로 반환된다.
+        # 애초에 이 GUC는 `is_local=true`라 트랜잭션이 끝나면 함께 사라진다. 이 블록은 성공 경로에서
+        # 커밋 전에 창을 좁히는 방어일 뿐이다.
+        if db.in_transaction():
+            with suppress(Exception):
+                await db.execute(
+                    text("SELECT set_config('app.retention_location_delete_allowed', 'off', true)")
+                )
 
 
-async def _record_failed_run(run_id: uuid.UUID, exc: BaseException) -> None:
-    """실패 사실을 **독립 트랜잭션**으로 남긴다.
+async def record_retention_run_failure(
+    db: AsyncSession, run_id: uuid.UUID, exc: BaseException
+) -> None:
+    """실패 사실을 영수증에 남긴다. **호출부의 트랜잭션을 끝낸다.**
 
-    파괴적 작업의 감사 추적이라 "시도했고 실패했다"가 증거로 남아야 한다. 실패 원인이 DB 오류인
-    경우 원래 세션은 abort 상태이므로 같은 세션으로는 아무것도 기록할 수 없다 — 새 세션이 필요한
-    이유다. 여기서 나는 예외는 삼킨다. 원래 예외를 가리는 것이 더 나쁘다.
+    먼저 rollback하는 것이 이 함수의 핵심이고, 두 가지가 동시에 해소된다.
+
+    1. 원인이 DB 오류면 트랜잭션이 abort 상태라 어떤 문장도 실행되지 않는다. rollback이 그것을 푼다.
+    2. `completed` UPDATE가 **성공한 뒤** 실패하면 그 행에 `FOR NO KEY UPDATE` 락이 남아 있다.
+       그 상태에서 별도 세션으로 같은 행을 UPDATE하면 **무기한 블록된다** — 대기 그래프에 간선이
+       하나뿐이라 PostgreSQL이 deadlock으로 탐지하지 못하고, 이 프로세스에는 `lock_timeout`도
+       `statement_timeout`도 설정돼 있지 않다. rollback이 락을 먼저 놓아 그 창을 없앤다.
+
+    그 뒤 commit해야 호출부의 `rollback()`을 견딘다(T-338). 즉 이 함수는 실패 경로에서 파괴적
+    작업의 폐기와 영수증 보존을 **한 세션 안에서** 끝낸다 — 두 번째 커넥션이 필요 없어진다.
+
+    **계약**: 이 함수는 호출부의 트랜잭션을 끝내고, 그 부작용으로 **세션의 모든 ORM 인스턴스가
+    만료된다**(SQLAlchemy rollback 규약). 이 라우트에서는 RBAC가 적재한 `admin: User`가 해당하는데
+    호출 이후 그것을 읽는 코드가 없어 지금은 무해하다. 이 함수를 부른 뒤 ORM 속성을 읽으면 새
+    SELECT가 나가거나(새 트랜잭션) 세션이 닫힌 뒤라면 예외가 난다.
+
+    실패해도 예외를 올리지 않는다. 원래 예외를 가리는 것이 더 나쁘기 때문이다. 다만 조용히 넘기지는
+    않는다 — 영수증을 못 남긴 사실 자체가 기록돼야 한다.
     """
-    with suppress(Exception):
-        # 모듈 속성으로 참조한다. 이름으로 import하면 import 시점의 factory에 묶여, 테스트가
-        # `app.db.session`을 교체해도 이 경로만 실제 DB를 본다 — 새 소비자마다 conftest를 손봐야 하는
-        # 구조가 되고 그건 조용히 낡는다.
-        async with db_session.async_session_factory() as session:
-            await session.execute(
-                _UPDATE_RUN_SQL,
-                {
-                    "run_id": run_id,
-                    "status": "failed",
-                    "result": _json({"error": type(exc).__name__}),
-                    "completed_at": datetime.now(UTC),
-                    "error_message": str(exc)[:1000],
-                },
+    try:
+        await db.rollback()
+        outcome = await db.execute(
+            _FAIL_RUN_SQL,
+            {
+                "run_id": run_id,
+                "result": _json({"error": type(exc).__name__}),
+                "completed_at": datetime.now(UTC),
+                "error_message": str(exc)[:1000],
+            },
+        )
+        await db.commit()
+        if outcome.rowcount == 0:  # type: ignore[attr-defined]  # CursorResult에는 있다
+            # 가드가 막았다 = 이 run은 이미 종결 상태다. 거의 확실히 커밋 ack 유실이며, 파괴 작업은
+            # **실제로 수행됐다**. 조용히 넘기면 영수증과 예외가 어긋난 채로 아무도 모른다.
+            logger.error(
+                "retention run %s: 실패를 기록하려 했으나 이미 종결 상태다 "
+                "(커밋 ack 유실 가능성 — 작업은 수행됐을 수 있다)",
+                run_id,
             )
-            await session.commit()
+    except Exception:
+        logger.exception("retention run %s 실패 영수증을 남기지 못했다", run_id)
 
 
 async def _collect_candidates(
@@ -410,6 +446,22 @@ _UPDATE_RUN_SQL = text(
     RETURNING run_id, mode, scope, status, candidate_snapshot, result, kill_switch_enabled,
               access_reason, actor_user_id, error_message, started_at, completed_at,
               created_at, updated_at
+    """
+)
+
+#: 실패 영수증 전용. **`executing`인 run만** 바꾼다.
+#:
+#: 커밋이 서버에서는 성공했는데 ack가 유실되면 호출부는 예외를 보고, 그 run은 실제로 `completed`로
+#: 커밋돼 있다. 가드 없이 덮으면 **파괴 작업이 실제로 수행된 run에 "아무것도 지우지 않았다"라고
+#: 새기게 된다** — `failed`의 의미를 정반대로 뒤집는 기록이다.
+_FAIL_RUN_SQL = text(
+    """
+    UPDATE app.retention_runs
+    SET status = 'failed',
+        result = CAST(:result AS jsonb),
+        completed_at = :completed_at,
+        error_message = :error_message
+    WHERE run_id = :run_id AND status = 'executing'
     """
 )
 

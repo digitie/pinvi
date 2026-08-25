@@ -520,6 +520,10 @@ Mutation body:
 }
 ```
 
+오류:
+
+- `503 RETENTION_EXECUTION_ERROR` — 실행 중 실패. 본문 메시지는 **고정 문구**이며 원인 상세는 담지 않는다(원시 SQL·바인드 파라미터 유출 방지). 상세는 실행 영수증 `retention_runs.error_message`와 서버 로그에 있다. **503이 곧 미삭제를 뜻하지는 않는다** — 커밋 ack가 유실되면 작업은 수행되고 영수증은 `completed`다(`docs/runbooks/retention-execution.md` §5.1).
+
 ## 3. 대시보드
 
 ### 3.1 `GET /admin/stats/overview`

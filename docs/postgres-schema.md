@@ -1210,6 +1210,9 @@ CREATE TABLE app.location_access_log_archive (
 늘려야 하며, 두 테이블의 컬럼 일치는 `tests/integration/test_retention_archive_fidelity.py`가
 강제한다(T-332).
 
+파괴 SQL·`completed` UPDATE·admin audit 적재는 **한 트랜잭션**이다. 영수증 행만 그 앞에서 따로
+커밋되므로, `executing`/`failed`는 곧 **아무것도 지워지지 않았다**를 뜻한다(T-338/T-339).
+
 `/admin/retention`은 dry-run/execute batch evidence를 `retention_runs`에 남긴다.
 위치 로그 execute는 6개월 초과 `location_access_log` row를 archive table에 복사한 뒤 active
 table에서 삭제한다. `app.audit_log_append_only()`는
