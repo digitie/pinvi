@@ -67,6 +67,16 @@
       노출한다. Playwright e2e는 이번 세션에서 실행하지 못했다(N150/Windows 러너 미접근) —
       변경이 순수 조건부 렌더 추가라 기존 e2e의 assertion과 겹치지 않음을 코드로 확인했다.
 
+- [x] **T-348** — CI 타임아웃이 통합 스위트 성장 속도를 못 따라간다. (완료: 2026-08-25, PR #481, claude)
+      `api.yml`의 `lint-typecheck-test` job timeout을 15→35분, `aggregate-ci.yml`의 게이트
+      timeout을 12→45분으로 올렸다. 적대적 리뷰(2인 병렬)에서 첫 커밋이 불완전함을 발견했다 —
+      게이트의 폴링 스크립트 안에 job-level timeout과 완전히 독립된 하드코딩
+      `deadline`(`Date.now() + 10분`)이 있어, job timeout만 올려서는 PR이 고치려던 정확한 증상
+      (job은 성공했는데 게이트만 포기)이 그대로 재현됐다 — 두 번째 커밋에서 이 deadline을 40분으로
+      올려 실제로 해결했다. 실제 merged CI에서 `lint-typecheck-test` 12분13초·`Aggregate CI gate`
+      12분57초로 정상 통과를 확인했다. 남은 후속 과제(경험적으로 불확실한 "20:06" 관측치 근거,
+      통합 스위트 근본 샤딩)는 T-351로 분리했다.
+
 - [x] **T-323** — Web `e2e` job을 aggregate required check에 결박한다. (완료: 2026-08-24, codex)
       `aggregate-ci.yml`이 Web/packages 변경 시 `lint-typecheck-build`만 기다리고 `e2e`는 기다리지
       않아, `Aggregate CI gate`가 유일한 required check인 이 저장소에서 Playwright 실패가 머지를
