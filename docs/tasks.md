@@ -56,36 +56,8 @@
 
 ## 데이터 / 보존
 
-- [ ] **T-347** — 503 본문에서 가린 예외 문자열이 `GET /admin/retention/runs`·`/summary`로는 그대로
-  나간다. `error_message`가 `str(exc)[:1000]`(SQLAlchemy 예외 전문)이고 그 두 endpoint의 role
-  집합(admin/operator/cpo)이 execute의 집합(admin/cpo)보다 **넓다** — 실행 권한이 없는 operator가
-  실행 실패의 원시 SQL을 읽는다. 실제 바인드는 cutoff/uuid뿐이라 PII 위험은 낮지만, 본문만 가리고
-  같은 문자열을 더 넓게 노출하는 것은 앞뒤가 맞지 않는다. `error_message`를 마스킹하거나 노출
-  role을 좁힌다. T-339 리뷰 2차에서 발견.
-- [ ] **T-342** — 실패한 retention execute가 `admin_audit_log`에 아무 흔적도 남기지 않는다.
-  `append_admin_audit`은 성공 경로에서만 호출되는데 `docs/compliance/lbs-act.md` §3.4는 실행 시도
-  자체가 관리자 감사에 남는다고 적는다. 익명화까지 진행된 뒤 실패한 경우에도 admin 체인은 비어 있다.
-  문서와 코드 중 어느 쪽이 옳은지 정하고 맞춘다. T-339 리뷰에서 발견.
-- [ ] **T-343** — `/admin/retention/execute`에 동시 실행 방지가 없다. 두 요청이 겹치면 서로의 파괴
-  작업과 `append_admin_audit`의 `pg_advisory_xact_lock`이 얽혀 교착할 수 있고, runbook §5.2의
-  "그대로 다시 실행해도 안전하다"가 그 노출을 키운다. run 단위 advisory lock 또는 `executing` 존재
-  검사로 막는다. T-339 리뷰에서 발견.
-- [ ] **T-344** — runbook §5.2의 stale 판정이 실행 불가능하다. `run_id`와 DB 백엔드를 잇는 수단이
-  없어 `pg_stat_activity`로 생사를 확인할 수 없고, 가장 유력한 stale 모드인 `idle in transaction`을
-  "기다린다"로 오분류한다. 또 §5.1 상태 어휘표가 CHECK의 6개 값 중 3개만 정의해 §5.2가 쓰라고
-  지시하는 `rolled_back`이 표에 없다. `application_name`에 run_id를 싣는 등 대응 수단과 함께 절차를
-  다시 쓴다. T-339 리뷰에서 발견.
-- [ ] **T-345** — 영수증의 `error_message`가 운영자가 보는 어느 화면·쿼리에도 없다. Admin 콘솔의
-  retention 목록은 `executing`을 `approved`와 같은 회색으로만 보여 주고 `started_at` 경과도 표시하지
-  않는다. §5.2를 적용할 정보가 UI에 없다는 뜻이다. T-339 리뷰에서 발견.
-- [ ] **T-346** — PII 익명화가 avatar **객체 포인터만** NULL로 만들고 RustFS의 실제 이미지 파일은
-  남긴다. runbook §5.1의 `completed` 정의("삭제·익명화가 실제로 일어났다")가 코드보다 강하다.
-  파기 범위를 정하고 문서나 코드를 맞춘다. T-339 리뷰에서 발견.
-- [ ] **T-341** — 프로세스 전역에 `statement_timeout` / `lock_timeout` /
-  `idle_in_transaction_session_timeout`이 **하나도 없다**. `app/db/session.py`가 `connect_args`를
-  넘기지 않고, compose에 `command:` 오버라이드도 없어 서버 기본값 0이 그대로 쓰인다. 락 대기나
-  폭주 쿼리가 생기면 무한히 매달린다 — T-339의 hang이 탐지되지 않은 이유이기도 하다. 기본값을
-  정하고(요청 경로/워커 경로가 다를 수 있다) 근거와 함께 박는다. T-339 조사에서 발견.
+- [ ] **T-VN-M05-ACTIVATION** — ADR-065 `0100/0101` rebaseline, paired live/restore/review evidence를
+  요구하는 M05 production activation receipt gate와 실제 isolated activation 검증을 완료한다.
 
 ## 웹 / 테스트 인프라
 
@@ -94,8 +66,6 @@
   타임아웃으로 **required check 실패**를 냈다 — job 자체는 성공했는데 게이트만 포기한 것이라
   재실행으로 풀렸다. 통합 스위트가 계속 자라므로(662건) 주기적으로 재발한다. 한도를 올리거나
   게이트가 job 완료를 기다리는 방식을 바꾼다. T-339 머지 과정에서 발견.
-- [ ] **T-VN-M05-ACTIVATION** — ADR-065 `0100/0101` rebaseline, paired live/restore/review evidence를
-  요구하는 M05 production activation receipt gate와 실제 isolated activation 검증을 완료한다.
 
 ## 모바일
 

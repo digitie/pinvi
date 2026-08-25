@@ -20,6 +20,7 @@ from app.schemas.admin import (
     AdminRetentionRun,
     AdminRetentionSummary,
 )
+from app.services import rustfs_admin
 from app.services.admin_etl import (
     build_audit_retention_summary,
     build_location_log_archive_summary,
@@ -31,6 +32,14 @@ RetentionScope = Literal["all", "pii", "location"]
 
 class RetentionExecutionError(Exception):
     code = "RETENTION_EXECUTION_ERROR"
+
+    def __init__(self, message: str, *, run_id: uuid.UUID | None = None) -> None:
+        super().__init__(message)
+        #: 실제로 파괴 작업을 시도한 run의 id. kill-switch/confirm-phrase/동시실행 precheck처럼
+        #: run을 만들기도 전에 막힌 경우는 `None`이다 — 그래도 라우트는 admin_audit_log 행을 남긴다
+        #: (T-342). "누가 언제 시도했는가"는 막혔더라도 감사 가치가 있다 — 특히 kill-switch가
+        #: 반복적으로 우회 시도되는지 같은 신호는 실행이 성공했는지와 무관하게 중요하다.
+        self.run_id = run_id
 
 
 class RetentionKillSwitchDisabledError(RetentionExecutionError):
@@ -46,6 +55,11 @@ class RetentionPrecheckError(RetentionExecutionError):
 
 
 logger = logging.getLogger(__name__)
+
+#: 동시 execute 방지용 advisory lock (T-343). `admin_audit.py`의 감사 체인 락과 다른 네임스페이스를
+#: 쓴다 — 서로 무관한 두 직렬화를 하나로 묶으면 관계없는 admin 작업까지 서로 기다리게 된다.
+_RETENTION_EXECUTE_LOCK_NAMESPACE = 0x52544E58  # "RTNX"
+_RETENTION_EXECUTE_LOCK_RESOURCE = 0x45584543  # "EXEC"
 
 
 async def build_retention_summary(
@@ -149,6 +163,7 @@ async def execute_retention(
     pii, audit, location = await _collect_candidates(db, scope=scope, now=current)
     _assert_location_precheck(location, scope=scope)
     snapshot = _candidate_snapshot(pii, audit, location, scope=scope)
+    await _assert_no_concurrent_execution(db)
     # 영수증 행은 **파괴적 작업과 같은 트랜잭션에 두지 않는다**(T-338). 같이 두면 실패 시 라우트의
     # `rollback()`이 작업과 함께 영수증까지 지워, "무엇을 시도했고 어디서 멈췄는가"가 남지 않는다.
     # 먼저 독립적으로 커밋해 두면 이후 어떤 롤백에도 살아남는다.
@@ -179,6 +194,19 @@ async def execute_retention(
     await db.commit()
 
     try:
+        # 이 트랜잭션의 세션을 `pg_stat_activity`에서 찾을 수 있게 이름을 붙인다(T-344). 이전에는
+        # runbook §5.2가 "실행 중인지 확인한다"고만 적고 그걸 확인할 수단이 없었다 — 이 GUC가 그 수단
+        # 이다. `is_local=true`라 이 트랜잭션이 끝나면 세션의 다음 트랜잭션(예: 실패 복구용
+        # rollback+commit)에는 남지 않는다.
+        #
+        # "pinvi-retention-execute:" (25자) + UUID(36자) = 61자. PostgreSQL `application_name`은
+        # NAMEDATALEN 기본값상 63바이트에서 잘리므로(`test_session_timeout_settings.py`와 같은 방식
+        # 으로 `test_admin_retention_diagnostics.py`가 실측 확인한다) 여유가 2바이트뿐이지만, run_id가
+        # UUID 고정 길이라 넘칠 일이 없다.
+        await db.execute(
+            text("SELECT set_config('application_name', :name, true)"),
+            {"name": f"pinvi-retention-execute:{run_id}"},
+        )
         result: dict[str, Any] = {}
         if scope in ("all", "pii"):
             result["pii"] = await _execute_pii_retention(db, pii=pii, now=current)
@@ -213,9 +241,12 @@ async def execute_retention(
         # `disconnected` 플래그만 세운다) SIGTERM으로도(graceful timeout 미설정 → cancel 없음)
         # 발생하지 않는다. 취소 중 영수증이 남지 않는 것은 알려진 한계이며 그렇게 문서화한다.
         await record_retention_run_failure(db, run_id, exc)
+        # 여기 도달했다는 것은 run이 이미 만들어졌다는 뜻이다 — `run_id`를 실어 올려보낸다.
+        # 라우트가 이 값으로 admin_audit_log에 "무엇을 시도하다 실패했는가"를 남긴다(T-342).
         if isinstance(exc, RetentionExecutionError):
+            exc.run_id = run_id
             raise
-        raise RetentionExecutionError(str(exc)) from exc
+        raise RetentionExecutionError(str(exc), run_id=run_id) from exc
     finally:
         # 트랜잭션이 살아 있을 때만 되돌린다. 실패 경로에서는 `record_retention_run_failure`가 이미
         # rollback+commit으로 트랜잭션을 끝냈으므로, 여기서 문장을 실행하면 **새 트랜잭션이 열리고
@@ -325,12 +356,45 @@ def _assert_location_precheck(
         raise RetentionPrecheckError("location archive chain bridge anchor mismatch")
 
 
+async def _assert_no_concurrent_execution(db: AsyncSession) -> None:
+    """동시에 두 execute가 파괴 작업을 진행하지 못하게 한다(T-343).
+
+    "실행 중인 run이 있는지 조회 후 없으면 진행"은 그 자체로 경합 조건이다 — 두 요청이 거의 동시에
+    조회하면 둘 다 "없음"을 보고 통과한다. 조회 없이 걸리는 `pg_try_advisory_xact_lock`으로 조회+판정
+    구간을 직렬화해 그 경합을 없앤다.
+
+    락은 **이 함수가 끝난 뒤 첫 커밋까지만** 필요하다(xact-scoped라 자동 해제된다). 그 뒤로는 커밋된
+    `executing` 행 자체가 다음 요청의 조회에서 보이므로 락이 없어도 안전하다 — 그래서 이 함수가
+    실행 전체를 락으로 감쌀 필요가 없다.
+
+    non-blocking(`_try_`)을 쓰는 이유: 두 관리자가 거의 동시에 버튼을 누른 경우, 뒤쳐진 쪽을 몇 초
+    기다리게 하는 것보다 **즉시 409로 알리고 재시도를 안내**하는 것이 낫다 — 대기시켜도 어차피 먼저
+    커밋한 쪽이 이겨서 뒤쪽은 정확히 같은 409를 받는다.
+    """
+    acquired = await db.scalar(
+        text("SELECT pg_try_advisory_xact_lock(:namespace, :resource)"),
+        {
+            "namespace": _RETENTION_EXECUTE_LOCK_NAMESPACE,
+            "resource": _RETENTION_EXECUTE_LOCK_RESOURCE,
+        },
+    )
+    if not acquired:
+        raise RetentionPrecheckError(
+            "another retention execute request is starting concurrently — retry shortly"
+        )
+    already_executing = await db.scalar(
+        text("SELECT 1 FROM app.retention_runs WHERE status = 'executing' LIMIT 1")
+    )
+    if already_executing:
+        raise RetentionPrecheckError("a retention execute is already in progress")
+
+
 async def _execute_pii_retention(
     db: AsyncSession,
     *,
     pii: AdminPiiRetentionSummary | None,
     now: datetime,
-) -> dict[str, int]:
+) -> dict[str, int | list[str]]:
     if pii is None:
         return {}
     row = (
@@ -347,7 +411,34 @@ async def _execute_pii_retention(
         .mappings()
         .one()
     )
-    return {key: _as_int(row[key]) for key in row.keys()}
+    avatar_storage_keys = list(row["avatar_storage_keys"] or [])
+    result: dict[str, int | list[str]] = {
+        key: _as_int(row[key]) for key in row.keys() if key != "avatar_storage_keys"
+    }
+    if avatar_storage_keys:
+        result["avatar_delete_failures"] = await _delete_avatar_objects(avatar_storage_keys)
+    return result
+
+
+async def _delete_avatar_objects(storage_keys: list[str]) -> list[str]:
+    """익명화된 사용자의 RustFS avatar 객체를 best-effort로 지운다(T-346).
+
+    PII 익명화 SQL은 `avatar_bucket`/`avatar_storage_key` **포인터**만 NULL로 만든다 — RustFS의
+    실제 이미지 파일은 별도로 지워야 남는다. `apps/api/app/api/v1/users.py`의 단건 아바타 삭제
+    (`clear_avatar` + `delete_object`)와 같은 순서를 따른다.
+
+    한 객체의 삭제가 실패해도 **run 전체를 중단하지 않는다.** PII 익명화(더 급한 컴플라이언스
+    요구)까지 롤백시키는 대가가, avatar 파일 하나가 RustFS에 남는 대가보다 크다. 실패한 키는
+    `result["pii"]["avatar_delete_failures"]`에 남겨 별도로 재시도/조사할 수 있게 한다.
+    """
+    failures: list[str] = []
+    for key in storage_keys:
+        try:
+            await rustfs_admin.delete_object(key=key)
+        except Exception as exc:
+            logger.warning("retention avatar delete failed key=%s error=%s", key, exc)
+            failures.append(key)
+    return failures
 
 
 async def _execute_location_archive(
@@ -468,7 +559,10 @@ _FAIL_RUN_SQL = text(
 _EXECUTE_PII_SQL = text(
     """
     WITH deleted_users AS (
-      SELECT user_id
+      -- avatar_storage_key도 여기서 함께 잡는다 — UPDATE가 그 컬럼을 NULL로 바꾸므로,
+      -- UPDATE 이후 RETURNING으로는 원래 값을 잃는다(T-346). UPDATE 이전 시점인 이 SELECT가
+      -- "지워야 할 RustFS 객체 키"의 유일한 출처다.
+      SELECT user_id, avatar_storage_key
       FROM app.users
       WHERE status IN ('pending_delete', 'deleted')
         AND deleted_at IS NOT NULL
@@ -509,7 +603,7 @@ _EXECUTE_PII_SQL = text(
           access_token_version = access_token_version + 1
       FROM deleted_users deleted
       WHERE users.user_id = deleted.user_id
-      RETURNING users.user_id
+      RETURNING users.user_id, deleted.avatar_storage_key
     ),
     deleted_signup_verifications AS (
       DELETE FROM app.user_email_verifications
@@ -547,6 +641,11 @@ _EXECUTE_PII_SQL = text(
     )
     SELECT
       (SELECT count(*) FROM anonymized_users)::int AS anonymized_users,
+      (
+        SELECT COALESCE(array_agg(avatar_storage_key), ARRAY[]::text[])
+        FROM anonymized_users
+        WHERE avatar_storage_key IS NOT NULL
+      ) AS avatar_storage_keys,
       (SELECT count(*) FROM deleted_identities)::int AS deleted_oauth_identities,
       (SELECT count(*) FROM deleted_signup_verifications)::int AS deleted_signup_verifications,
       (SELECT count(*) FROM deleted_password_reset_verifications)::int

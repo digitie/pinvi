@@ -221,7 +221,18 @@ async def test_retention_dry_run_records_audit_and_execute_requires_kill_switch(
     async with session_factory() as db:
         actions = list((await db.scalars(select(AdminAuditLog.action))).all())
 
-    assert actions == ["retention.dry_run"]
+    # kill-switch에 막힌 시도도 이제 감사 체인에 남는다(T-342) — "누가 언제 시도했는가"는
+    # 실행이 성공했는지와 무관하게 감사 가치가 있다. run을 만들기도 전에 막혔으니 이 행의
+    # resource_id는 None이다.
+    assert actions == ["retention.dry_run", "retention.execute_failed"]
+
+    async with session_factory() as db:
+        blocked = (
+            await db.scalars(
+                select(AdminAuditLog).where(AdminAuditLog.action == "retention.execute_failed")
+            )
+        ).one()
+    assert blocked.resource_id is None
 
 
 async def test_retention_execute_anonymizes_pii_and_archives_location_logs(

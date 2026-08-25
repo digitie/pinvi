@@ -20,6 +20,53 @@
 
 ## 2026-08-25
 
+- [x] **T-341/342/343/344/345/346/347** — retention 실행이 매달리지 않고, 감사가 정직하고,
+      운영자가 진단할 수 있게 한다. (완료: 2026-08-25, PR TBD, claude)
+      전문 6인 병렬 조사가 각 task의 정확한 개입 지점을 도출했고, 그중 T-341은 이미 구현·검증까지
+      끝난 상태로 조사에 잡혀 교차검증됐다. **T-324가 codex에 의해 이미 완료된 것도 이 조사에서
+      재확인해 tasks-done.md 정리 누락을 함께 바로잡았다**(별도 PR #479).
+
+      **T-341** — `lock_timeout=30s`/`idle_in_transaction_session_timeout=60s`/
+      `statement_timeout=600s`를 세션 GUC로 건다. 요청 경로·백그라운드 워커·retention이 단일 엔진을
+      공유해 하나라도 너무 짧으면 무관한 기능이 동시에 깨지므로, 배치 작업을 죽이지 않는 선에서
+      "무기한 대기만 막는" 값을 골랐다. `lock_timeout`이 실제로 30초 만에 fail-fast하는 것을 실측
+      확인했다 — 이것이 T-339의 hang이 탐지되지 않은 근본 원인이었다.
+
+      **T-343** — 동시 execute를 advisory lock(`pg_try_advisory_xact_lock`, non-blocking)으로
+      막는다. "조회 후 없으면 진행"은 그 자체로 경합 조건이라, 실제 두 개의 독립 DB 세션으로
+      `asyncio.gather` 동시 호출을 만들어 정확히 하나만 통과함을 실측했다. 되돌려서 두 테스트 모두
+      red가 되는 것도 확인했다.
+
+      **T-342** — 실패한 execute도 `admin_audit_log`에 `retention.execute_failed`로 남는다.
+      `docs/compliance/lbs-act.md` §3.4가 이미 그렇게 규정하고 있었는데 코드는 성공 경로에서만
+      적재했다 — 문서가 옳았다. kill-switch/precheck에 막혀 run조차 안 만들어져도 남기되
+      `resource_id`는 없다. 구현 중 `db.rollback()`이 세션의 모든 ORM 인스턴스를 만료시켜
+      `admin.user_id` 접근이 `MissingGreenlet`으로 죽는 버그를 실측으로 잡았다 — rollback **전에**
+      필요한 값을 미리 뽑아 두는 것으로 고쳤다.
+
+      **T-346** — PII 익명화가 avatar `avatar_bucket`/`avatar_storage_key` **포인터만** NULL로
+      만들고 RustFS의 실제 이미지 파일은 남기던 것을 고쳤다. `deleted_users` CTE가 UPDATE 이전
+      시점에 원래 키를 함께 잡아(UPDATE 후 RETURNING으로는 이미 NULL이 된 값만 보인다) best-effort로
+      삭제한다. 삭제 실패는 `result.pii.avatar_delete_failures`에 남기고 익명화 자체는 롤백하지
+      않는다 — PII 익명화가 avatar 파일 하나 때문에 전부 실패하는 것이 더 큰 손상이다.
+
+      **T-347** — `GET /admin/retention/runs`·`/summary` 응답의 `error_message`를 고정 문구로
+      가린다. `/execute`의 503은 T-339에서 이미 가렸는데, 같은 원문이 더 넓은 role(operator 포함)
+      에게 이 두 endpoint로는 그대로 나가고 있었다. DB 컬럼 원문은 그대로 둬 runbook §5.2의 직접
+      SQL 진단 경로가 계속 동작한다.
+
+      **T-344** — `execute_retention()`이 트랜잭션 진입 직후 `application_name`에 run_id를 싣는다
+      (`'pinvi-retention-execute:' || run_id`). runbook §5.2가 "살아 있는지 확인한다"고만 적고
+      확인할 수단이 없었는데, 이제 `pg_stat_activity`로 실제 조회 가능하다 — 실행 중인 트랜잭션을
+      멈춰 둔 상태에서 그 세션을 실제로 찾아내는 것까지 실측 확인했다. `state='idle in transaction'`
+      이 T-341의 60초 타임아웃을 넘겨도 지속되면 그 자체가 이상 신호임을 §5.2에 명시했다.
+
+      **T-345** — Admin 콘솔에 `executing` 상태를 `approved`(더 이상 안 쓰는 값)와 구분해 표시하고
+      (pulse 애니메이션 — 프로젝트에 warning류 색상 토큰이 없어 새로 만들지 않았다), §5.2의 15분
+      stale 기준과 맞물리는 경과 시간, 실패 사유(`error_message`, T-347 마스킹 적용된 값)를
+      노출한다. Playwright e2e는 이번 세션에서 실행하지 못했다(N150/Windows 러너 미접근) —
+      변경이 순수 조건부 렌더 추가라 기존 e2e의 assertion과 겹치지 않음을 코드로 확인했다.
+
 - [x] **T-323** — Web `e2e` job을 aggregate required check에 결박한다. (완료: 2026-08-24, codex)
       `aggregate-ci.yml`이 Web/packages 변경 시 `lint-typecheck-build`만 기다리고 `e2e`는 기다리지
       않아, `Aggregate CI gate`가 유일한 required check인 이 저장소에서 Playwright 실패가 머지를

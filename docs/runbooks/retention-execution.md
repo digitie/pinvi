@@ -59,7 +59,7 @@ curl -sS -X POST "$PINVI_API_ORIGIN/admin/retention/execute" \
 ## 5. 검증
 
 ```sql
-SELECT run_id, mode, scope, status, result, created_at, completed_at
+SELECT run_id, mode, scope, status, result, error_message, created_at, completed_at
 FROM app.retention_runs
 ORDER BY created_at DESC
 LIMIT 5;
@@ -79,7 +79,7 @@ WHERE occurred_at <= now() - interval '6 months';
 ```sql
 SELECT action, resource_type, resource_id, occurred_at
 FROM app.admin_audit_log
-WHERE action IN ('retention.dry_run', 'retention.execute')
+WHERE action IN ('retention.dry_run', 'retention.execute', 'retention.execute_failed')
 ORDER BY log_id DESC
 LIMIT 5;
 ```
@@ -113,9 +113,12 @@ ack가 유실되면 클라이언트는 503을 받지만 DB의 영수증은 `comp
 그 경우 서버 로그에 `실패를 기록하려 했으나 이미 종결 상태다`가 ERROR로 남는다. **응답이 아니라
 영수증을 믿어라.**
 
-**실패한 execute는 `admin_audit_log`에 아무 흔적도 남기지 않는다.** admin audit 적재가 파괴
-트랜잭션 안에 있어 실패 시 함께 폐기되기 때문이다(dry-run은 남긴다). 실패를 조사할 때는 admin
-감사 로그가 아니라 `retention_runs` 영수증을 본다.
+**실패한 execute도 `admin_audit_log`에 `retention.execute_failed`로 남는다**(T-342). 파괴 작업
+자체의 감사(`retention.execute`)는 성공 트랜잭션 안에 있어 실패 시 함께 폐기되지만, 라우트가 그
+실패를 잡아 별도 트랜잭션으로 "시도했고 실패했다"를 추가로 남긴다. kill-switch/confirm-phrase처럼
+run조차 만들어지지 않은 채 막힌 경우도 남으며, 그때는 `resource_id`가 없다 — "누가 언제
+시도했는가"는 run 생성 여부와 무관하게 감사 가치가 있다. 상세 원인은 이 행이 아니라
+`retention_runs.error_message`에 있다 — 실패를 조사할 때는 두 테이블을 함께 본다.
 
 ### 5.2 `executing`이 오래 남아 있을 때
 
@@ -125,11 +128,23 @@ FROM app.retention_runs
 WHERE status = 'executing' AND started_at < now() - interval '15 minutes';
 ```
 
-`pg_stat_activity`에서 해당 요청이 살아 있는지 확인한다.
+**세션이 살아 있는지 실제로 확인할 수 있다**(T-344) — `execute_retention()`이 트랜잭션 진입 직후
+`application_name`에 run_id를 싣는다(`'pinvi-retention-execute:' || run_id`, `is_local=true`라 이
+트랜잭션이 끝나면 사라진다). `run_id`를 위 쿼리에서 얻은 값으로 바꿔 실행한다:
 
-- 살아 있으면 **기다린다.** 큰 배치는 오래 걸릴 수 있다.
-- 없으면 프로세스가 죽은 것이고, 위 표에 따라 **파괴적 작업은 롤백됐다.** 그대로 다시 실행해도
-  안전하다. 필요하면 다음으로 수동 종결한다.
+```sql
+SELECT pid, state, wait_event_type, wait_event, query_start, now() - query_start AS duration
+FROM pg_stat_activity
+WHERE application_name = 'pinvi-retention-execute:<run_id>';
+```
+
+- **행이 없으면** 프로세스가 죽은 것이고, 위 표에 따라 **파괴적 작업은 롤백됐다.** 그대로 다시
+  실행해도 안전하다. 필요하면 아래로 수동 종결한다.
+- **`state = 'active'`면 기다린다.** 큰 배치는 오래 걸릴 수 있다.
+- **`state = 'idle in transaction'`이면 기다려도 저절로 안 풀릴 수 있다** — 애플리케이션 코드가
+  다음 문장을 실행하지 않고 멈춘 상태다. 다만 T-341의 `idle_in_transaction_session_timeout=60s`가
+  있으므로, 이 상태가 60초를 넘겨도 지속된다면 그 자체가 이상 신호다(정상이라면 자동으로 끊긴다).
+  `pg_terminate_backend(pid)`로 강제 종료한 뒤 재확인한다.
 
 ```sql
 UPDATE app.retention_runs
