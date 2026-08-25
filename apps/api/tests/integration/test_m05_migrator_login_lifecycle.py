@@ -334,7 +334,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             "app-db-runtime-role",
             "-ec",
             'PGPASSWORD="$PINVI_APP_DB_PASSWORD" exec psql --no-psqlrc '
-            '--no-password --tuples-only --no-align --host=app-postgres '
+            "--no-password --tuples-only --no-align --host=app-postgres "
             '--username="$PINVI_APP_DB_USER" '
             '--dbname="$POSTGRES_DB" --command="SELECT version_num FROM app.alembic_version"',
         )
