@@ -2,6 +2,23 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-25 (codex) — PR #477 최종 fence·복구 보강
+
+- fresh `0101`이 `0100`→`0101` 전환 전에 advisory lock·app table DML lock·DDL quiescence를
+  획득하고, superuser 실행에서는 legacy database/role fence까지 사용하도록 보강했다. legacy
+  handoff는 database fence 뒤 schema marker를 재확인하며, migration owner의 직접 `app CREATE`
+  ACL도 bootstrap·migration 양쪽에서 거부한다.
+- migration wrapper는 조건문 안의 `errexit` 비활성 경로를 제거하고 실패 시 EXIT handler가 writer
+  복구와 lifecycle lock 해제를 담당하게 했다. API 복구 readiness는 `/health/db`를 사용하며,
+  Dagster는 실행 flag와 무관하게 실제 실행 중이면 drain한다. 공유 개발 포트는 명시적
+  `PINVI_DEV_FORCE_KILL=1` 없이는 기존 프로세스를 종료하지 않는다.
+- 같은 serialization lock을 기다리는 협력 migrator는 DDL quiescence 위반으로 오인하지 않도록
+  producer/helper와 `0101` consumer SQL을 동기화했다. marker TOCTOU·직접 schema ACL·복구 실패
+  경로 회귀 테스트를 추가했다.
+- 검증: 관련 unit `41 passed`, `0101` PostgreSQL 통합 `28 passed, 1 warning`, Ruff/format,
+  Python compile, shell syntax 통과. `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 건드리지
+  않았다.
+
 ## 2026-08-25 (codex) — PR #477 재심 P1 추가 보강
 
 - fresh `0100`은 schema comment만 남기지 않고 `pinvi_internal.baseline_origin`에 baseline

@@ -3084,8 +3084,9 @@ revision ID 충돌과 `0061` parent가 없는 분기 그래프가 된다.
   `alembic upgrade head`는 지원하지 않는다.
 - 새 DB는 빈 catalog에서 `alembic upgrade head`로 `0100 → 0101`을 적용한다.
 - 현재 N150 운영 DB만 별도 root-only rebaseline 도구로 지원한다. 이 도구는 다음을
-  모두 확인한 뒤 하나의 transaction에서 `app.alembic_version`을 `0061`에서
-  `0100`으로 바꾼다. 이 단계는 DDL이나 사용자 데이터를 변경하지 않는다.
+  모두 확인한 뒤 하나의 transaction에서 legacy provenance comment와
+  `app.alembic_version`을 함께 `0100` handoff로 기록한다. 이 단계는 사용자 데이터나
+  `app` 객체 DDL을 변경하지 않는다.
   - version row가 정확히 하나이고 `20260821_0061`이다.
   - M05 `ops` anchor/receipt 객체가 아직 없다.
   - shared structural catalog fingerprint와 final-boundary/M05 security·trigger sentinel이

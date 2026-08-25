@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """ADR-063의 단발 0061 → 0100 Alembic metadata rebaseline 도구.
 
-이 도구는 기존 migration을 실행하거나 app data/DDL을 바꾸지 않는다. `check`는
-읽기 전용 preflight이고, `apply`는 검증된 0061 catalog의 `app.alembic_version`
-한 행만 0100으로 바꾼다. 운영 실행은 root OS 계정과 별도 maintainer DB URL을
-요구한다.
+이 도구는 기존 migration을 실행하거나 app data/app object DDL을 바꾸지 않는다. `check`는
+읽기 전용 preflight이고, `apply`는 검증된 0061 catalog의 legacy provenance comment와
+`app.alembic_version` 한 행을 같은 transaction에서 0100 handoff로 기록한다. 운영 실행은
+root OS 계정과 별도 maintainer DB URL을 요구한다.
 """
 
 from __future__ import annotations
@@ -693,6 +693,17 @@ ddl_capable_sessions(pid) AS (
   WHERE activity.datname = current_database()
     AND activity.backend_type = 'client backend'
     AND activity.pid <> pg_backend_pid()
+    -- 같은 Alembic serialization lock을 기다리는 협력 migrator는 이 fence가
+    -- 보호하는 대상이다. 다른 DDL-capable 세션만 quiescence 위반으로 본다.
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_locks AS migration_lock
+      WHERE migration_lock.pid = activity.pid
+        AND migration_lock.locktype = 'advisory'
+        AND migration_lock.classid = 1863432274
+        AND migration_lock.objid = 20260824
+        AND NOT migration_lock.granted
+    )
     AND (
       COALESCE(role_row.rolsuper, false)
       OR COALESCE(role_row.rolcreaterole, false)
@@ -886,7 +897,7 @@ class CatalogPreflight:
     def stable_identity_dict(
         self, *, target_profile: str = _TARGET_PROFILE_FRESH
     ) -> dict[str, Any]:
-        """version row만 달라질 수 있는 0061→0100 전환 전후 identity."""
+        """0061→0100 전환 전후에 고정돼야 하는 catalog·database identity."""
 
         value = self.as_dict(target_profile=target_profile)
         value.pop("version_rows")
@@ -1898,14 +1909,16 @@ def _parser() -> argparse.ArgumentParser:
     add_backup_evidence_arguments(check)
     check.add_argument("--target-manifest", required=True, type=Path)
 
-    apply = subcommands.add_parser("apply", help="검증된 0061 row를 0100으로 단발 전환")
+    apply = subcommands.add_parser(
+        "apply", help="검증된 0061 provenance와 version row를 0100으로 단발 전환"
+    )
     add_backup_evidence_arguments(apply)
     apply.add_argument("--target-manifest", required=True, type=Path)
     apply.add_argument("--receipt", required=True, type=Path)
     apply.add_argument(
         "--confirm-0061-to-0100",
         action="store_true",
-        help="app.alembic_version 한 행의 단발 전환을 명시적으로 승인한다.",
+        help="legacy provenance와 app.alembic_version 한 행의 단발 전환을 명시적으로 승인한다.",
     )
     return parser
 

@@ -667,6 +667,17 @@ ddl_capable_sessions(pid) AS (
   WHERE activity.datname = current_database()
     AND activity.backend_type = 'client backend'
     AND activity.pid <> pg_backend_pid()
+    -- 같은 Alembic serialization lock을 기다리는 협력 migrator는 이 fence가
+    -- 보호하는 대상이다. 다른 DDL-capable 세션만 quiescence 위반으로 본다.
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_locks AS migration_lock
+      WHERE migration_lock.pid = activity.pid
+        AND migration_lock.locktype = 'advisory'
+        AND migration_lock.classid = 1863432274
+        AND migration_lock.objid = 20260824
+        AND NOT migration_lock.granted
+    )
     AND (
       COALESCE(role_row.rolsuper, false)
       OR COALESCE(role_row.rolcreaterole, false)
@@ -1173,6 +1184,25 @@ def _acquire_legacy_rebaseline_database_connection_fence(bind: sa.Connection) ->
     _assert_legacy_rebaseline_ddl_quiescence(bind)
 
 
+def _acquire_fresh_0101_writer_fence(bind: sa.Connection) -> None:
+    """Serialize direct 0100→0101 runs before fresh DDL and backfill.
+
+    A normal fresh migrator is not a superuser, so it cannot lock ``pg_database``.
+    It still gets the shared migration advisory lock, an app-table DML fence, and
+    two DDL-capable-session checks. A superuser fresh runner additionally gets the
+    stronger database/role-catalog fence used by the legacy path.
+    """
+
+    bind.execute(sa.text(_LEGACY_REBASELINE_SERIALIZATION_LOCK_SQL))
+    _normalize_legacy_rebaseline_fingerprint_session(bind)
+    _assert_legacy_rebaseline_ddl_quiescence(bind)
+    tables = _legacy_rebaseline_app_tables(bind)
+    _lock_legacy_rebaseline_app_tables(bind, tables)
+    if bind.scalar(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL)) is True:
+        _acquire_legacy_rebaseline_database_connection_fence(bind)
+    _assert_legacy_rebaseline_ddl_quiescence(bind)
+
+
 def _legacy_rebaseline_catalog_fingerprint(bind: sa.Connection) -> tuple[int, str]:
     rows = tuple(
         str(line)
@@ -1201,6 +1231,8 @@ def _assert_fresh_0100_marker(bind: sa.Connection) -> None:
             sa.text(
                 "SELECT origin.marker, origin.baseline_sha256, origin.database_oid::bigint, "
                 "origin.system_identifier, "
+                "relation.relkind = 'r' AS table_is_regular, "
+                "relation.relpersistence = 'p' AS table_is_permanent, "
                 "relation.relowner = current_user::regrole AS table_owner_is_current, "
                 "namespace.nspowner = current_user::regrole AS schema_owner_is_current "
                 "FROM pinvi_internal.baseline_origin AS origin "
@@ -1229,6 +1261,8 @@ def _assert_fresh_0100_marker(bind: sa.Connection) -> None:
         _FRESH_BASELINE_SHA256,
         expected_database_oid,
         expected_system_identifier,
+        True,
+        True,
         True,
         True,
     ):
@@ -1376,6 +1410,9 @@ def _assert_legacy_rebaseline_handoff(bind: sa.Connection) -> None:
     if identity != expected_identity:
         raise RuntimeError("0101 legacy rebaseline receipt does not match this database")
     _acquire_legacy_rebaseline_database_connection_fence(bind)
+    # Marker 검사는 identity/fence 이전에도 하되, fence를 잡은 뒤 다시 확인해
+    # schema comment 교체가 그 사이에 끼어드는 TOCTOU를 차단한다.
+    _assert_legacy_0100_marker(bind)
     _assert_legacy_rebaseline_fingerprint(bind, preflight)
     version_rows_payload = bind.scalar(
         sa.text(
@@ -1518,6 +1555,19 @@ def _activate_m05_migration_owner(bind: sa.Connection, *, activate: bool = True)
                 )
                 AND NOT has_schema_privilege(
                     (SELECT oid FROM migration_role), 'x_extension', 'CREATE'
+                )
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM pg_namespace app_namespace
+                    CROSS JOIN LATERAL aclexplode(
+                        COALESCE(
+                            app_namespace.nspacl,
+                            acldefault('n', app_namespace.nspowner)
+                        )
+                    ) AS app_acl
+                    WHERE app_namespace.nspname = 'app'
+                      AND app_acl.grantee IN ((SELECT oid FROM migration_role), 0)
+                      AND app_acl.privilege_type = 'CREATE'
                 )
                 AND has_function_privilege(
                     (SELECT oid FROM migration_role),
@@ -2687,6 +2737,7 @@ def upgrade() -> None:
     bind = op.get_bind()
     _assert_legacy_rebaseline_handoff(bind)
     if not _legacy_rebaseline_profile():
+        _acquire_fresh_0101_writer_fence(bind)
         _activate_m05_migration_owner(bind, activate=False)
         _assert_fresh_0100_marker(bind)
     _install_location_audit_purpose_contract()
@@ -2714,6 +2765,8 @@ def upgrade() -> None:
         _grant_legacy_runtime_app_privileges(bind, canonical_app_owner)
     else:
         _revoke_runtime_alembic_version_privileges(bind, _configured_app_runtime_role())
+    if not _legacy_rebaseline_profile():
+        _assert_legacy_rebaseline_ddl_quiescence(bind)
 
 
 def downgrade() -> None:

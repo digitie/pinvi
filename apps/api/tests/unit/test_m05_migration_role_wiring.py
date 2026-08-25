@@ -210,6 +210,7 @@ def test_migration_wrappers_open_only_for_the_one_shot_and_seal_afterward() -> N
             < wrapper.index("migrate_under_lifecycle_lock")
             < wrapper.index("release_migrator_lifecycle_lock")
         )
+        assert "if ! migrate_under_lifecycle_lock; then" not in wrapper
         assert 'if ! prepare_migrator_login "$legacy_rebaseline"; then' in migration
         assert "migrator preparation failed; sealing the one-shot login" in migration
         assert (
@@ -217,6 +218,42 @@ def test_migration_wrappers_open_only_for_the_one_shot_and_seal_afterward() -> N
             < migration.index("run_admin_bootstrap")
             < migration.rindex("seal_migrator_login")
         )
+
+
+def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
+    for name in ("scripts/docker-app.sh", "scripts/deploy-node.sh"):
+        source = (ROOT / name).read_text(encoding="utf-8")
+        recovery = source[
+            source.index("restore_runtime_writers() {") : source.index(
+                "m05_legacy_rebaseline_profile() {"
+            )
+        ]
+        assert 'local restore_failed="0"' in recovery
+        assert "if ! compose up -d app-api; then" in recovery
+        assert 'wait_for_url "http://127.0.0.1:${API_PORT}/health/db" "API DB restore"' in recovery
+        assert 'if [[ "$restore_failed" != "0" ]]; then' in recovery
+        assert "release_migrator_lifecycle_lock || true" in source
+    docker_app = (ROOT / "scripts" / "docker-app.sh").read_text(encoding="utf-8")
+    assert "PINVI_DEV_FORCE_KILL" in docker_app
+    assert "refusing to terminate it" in docker_app
+    assert "smoke_on_exit()" in docker_app
+    assert "restore_runtime_writers || true" in docker_app
+
+
+def test_fresh_0101_and_role_bootstrap_fence_direct_app_schema_create() -> None:
+    migration = (
+        ROOT / "apps" / "api" / "alembic" / "versions" / "20260824_0101_m05_activation_contract.py"
+    ).read_text(encoding="utf-8")
+    bootstrap = (ROOT / "infra" / "postgres" / "bootstrap-pinvi-runtime-role.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "_acquire_fresh_0101_writer_fence(bind)" in migration
+    assert "app_namespace.nspname = 'app'" in migration
+    assert "app_acl.privilege_type = 'CREATE'" in migration
+    assert "app_acl.privilege_type = 'CREATE'" in bootstrap
+    assert "relation.relkind = 'r'" in migration
+    assert "relation.relpersistence = 'p'" in migration
 
 
 def test_docker_app_up_uses_the_explicit_legacy_role_profile_before_migration() -> None:

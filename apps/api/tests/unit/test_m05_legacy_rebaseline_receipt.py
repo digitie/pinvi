@@ -76,18 +76,22 @@ class _BoundIdentity:
         identity: dict[str, object],
         version_rows: list[str],
         marker: str = "pinvi-0100-legacy/v1",
+        marker_reads: list[str] | None = None,
     ) -> None:
         self.identity = identity
         self.version_rows = version_rows
         self.marker = marker
+        self.marker_reads = list(marker_reads or [])
 
-    def scalar(self, statement: object) -> str:
+    def scalar(self, statement: object) -> object:
         sql = str(statement)
         if "json_build_object" in sql:
             return json.dumps(self.identity)
         if "json_agg(version_num" in sql:
             return json.dumps(self.version_rows)
         if "obj_description('app'::regnamespace" in sql:
+            if self.marker_reads:
+                return self.marker_reads.pop(0)
             return self.marker
         raise AssertionError(f"unexpected legacy handoff statement: {sql}")
 
@@ -250,3 +254,36 @@ def test_0101_legacy_handoff_rejects_fresh_marker(
         module._assert_legacy_rebaseline_handoff(
             _BoundIdentity(identity, ["20260824_0100"], marker="pinvi-0100-fresh/v1")
         )
+
+
+def test_0101_legacy_handoff_rechecks_marker_after_database_fence(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    module = _migration_module()
+    identity = {
+        "database_name": "pinvi_legacy",
+        "database_oid": 4242,
+        "system_identifier": "987654321",
+        "server_addr": "127.0.0.1",
+        "server_port": 5432,
+    }
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(json.dumps(_receipt(identity)), encoding="utf-8")
+    receipt_path.chmod(0o600)
+    monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE", "1")
+    monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE", "fresh-postgresql-16")
+    monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH", str(receipt_path))
+    monkeypatch.setattr(module.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(module.os, "fstat", _root_owned_fstat(module))
+    monkeypatch.setattr(module, "_assert_legacy_rebaseline_fingerprint", lambda *_args: None)
+    monkeypatch.setattr(
+        module, "_acquire_legacy_rebaseline_database_connection_fence", lambda *_args: None
+    )
+
+    bound = _BoundIdentity(
+        identity,
+        ["20260824_0100"],
+        marker_reads=["pinvi-0100-legacy/v1", "pinvi-0100-fresh/v1"],
+    )
+    with pytest.raises(RuntimeError, match="canonical legacy 0100 marker"):
+        module._assert_legacy_rebaseline_handoff(bound)

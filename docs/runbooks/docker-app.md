@@ -99,8 +99,10 @@ ktdctl logs storage --follow
 
 일반 Compose 재기동은 migrator를 열지 않는다. `migrate` wrapper가 직전에만 login·`CONNECT`를
 활성화하고 dependency 재실행 없이 one-shot을 실행한다. 성공·실패 뒤 모두 login을 닫고 `CONNECT`를
-회수하며 기존 migrator backend를 종료한다. 두 wrapper는 writer drain 이전부터 최종 seal까지 같은
-host-local flock을 보유하므로, 동시 실행이 서로의 one-shot password와 backend를 회전·종료하지 않는다.
+회수하며 wrapper가 관리하는 기존 migrator backend를 종료한다. 이 backend seal은 관리 대상 login에만
+적용되고, 아래 connection fence가 발견한 외부 DDL-capable 세션은 자동 종료하지 않는다. 두 wrapper는
+writer drain 이전부터 최종 seal까지 같은 host-local flock을 보유하므로, 동시 실행이 서로의 one-shot
+password와 managed backend를 회전·종료하지 않는다.
 staging/production은 `PINVI_MIGRATOR_LIFECYCLE_LOCK_PATH`의 파일을 root-owned `0600`으로 미리
 만들고 root로만 실행한다. legacy 전환은 다음처럼 호출 shell에서만 명시한다.
 
@@ -133,18 +135,22 @@ owner만으로는 실행할 수 없고 직접 superuser root session이 필요�
 ## 3. Docker app 스크립트
 
 `kor-travel-geo`의 `scripts/docker_app.sh`와 같은 운영 패턴을 따른다. 포트를
-점유한 기존 컨테이너/프로세스는 시작 전에 정리한다.
+점유한 기존 컨테이너/프로세스가 있으면 기본적으로 시작을 중지하고, 명시적으로
+`PINVI_DEV_FORCE_KILL=1`을 지정한 경우에만 종료한다. 승인 없는 공유 노드의 강제종료는 하지 않는다.
 
 ```bash
 scripts/docker-app.sh build
-scripts/docker-app.sh up
+PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/secure/pinvi/bootstrap-admin.json scripts/docker-app.sh up
 scripts/docker-app.sh status
 scripts/docker-app.sh logs api
-scripts/docker-app.sh smoke
-scripts/docker-app.sh smoke --keep-running
+PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/secure/pinvi/bootstrap-admin.json scripts/docker-app.sh smoke
+PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/secure/pinvi/bootstrap-admin.json scripts/docker-app.sh smoke --keep-running
 scripts/docker-app.sh down
 scripts/docker-app.sh reset   # down -v --remove-orphans
 ```
+
+`up`과 `smoke`는 migration 및 admin bootstrap을 포함하므로 위 credential file이 필요하다. 이미
+실행 중인 stack에서 migration 없이 상태만 확인하려면 `status`와 health endpoint를 사용한다.
 
 `scripts/docker-app.sh build`는 API image source revision을 확정하고 build 뒤 OCI label을 다시
 확인한다. 로컬 `development|test|smoke`에서 revision을 지정하지 않으면 `development` label을

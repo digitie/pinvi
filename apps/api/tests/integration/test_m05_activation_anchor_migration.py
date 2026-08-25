@@ -1609,6 +1609,25 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
         )
         await _execute_autocommit(
             target_url,
+            f'GRANT CREATE ON SCHEMA app TO "{migration_owner}";',
+        )
+        direct_schema_create = _alembic(
+            migrator_url,
+            "upgrade",
+            "20260824_0101",
+            check=False,
+            environment=role_environment,
+        )
+        assert direct_schema_create.returncode != 0
+        assert "0101 migration owner role contract is not satisfied" in (
+            direct_schema_create.stdout + direct_schema_create.stderr
+        )
+        await _execute_autocommit(
+            target_url,
+            f'REVOKE CREATE ON SCHEMA app FROM "{migration_owner}";',
+        )
+        await _execute_autocommit(
+            target_url,
             f'GRANT "{app_owner}" TO "{stale_role}" WITH INHERIT FALSE, SET TRUE;',
         )
         stale_membership = _alembic(

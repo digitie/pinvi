@@ -106,6 +106,7 @@ build_images() {
 }
 
 drain_runtime_writers() {
+  local drain_failed="0"
   RUNTIME_API_WAS_RUNNING="0"
   RUNTIME_DAGSTER_WAS_RUNNING="0"
   if [[ -n "$(compose ps -q --status running app-api)" ]]; then
@@ -115,24 +116,46 @@ drain_runtime_writers() {
     RUNTIME_DAGSTER_WAS_RUNNING="1"
   fi
   log "stopping API and Dagster writers before migration"
-  compose stop app-api
-  if [[ "$ENABLE_DAGSTER" != "0" ]]; then
-    compose --profile etl stop app-dagster
+  if ! compose stop app-api; then
+    drain_failed="1"
   fi
+  # 이미 실행 중인 Dagster는 현재 호출의 enable flag와 무관하게 writer이므로 drain한다.
+  if ! compose --profile etl stop app-dagster; then
+    drain_failed="1"
+  fi
+  [[ "$drain_failed" == "0" ]]
 }
 
 restore_runtime_writers() {
+  local restore_failed="0"
   if [[ "$RUNTIME_API_WAS_RUNNING" == "1" ]]; then
     log "restoring API after migration attempt"
-    compose up -d app-api
-    pinvi_verify_or_remove_running_app
-    wait_for_url "http://127.0.0.1:${API_PORT}/health" "API restore"
+    if ! compose up -d app-api; then
+      restore_failed="1"
+    else
+      if ! pinvi_verify_or_remove_running_app; then
+        restore_failed="1"
+      fi
+      if ! wait_for_url "http://127.0.0.1:${API_PORT}/health/db" "API DB restore"; then
+        restore_failed="1"
+      fi
+    fi
   fi
   if [[ "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
     log "restoring Dagster after migration attempt"
-    compose --profile etl up -d app-dagster
-    pinvi_verify_or_remove_running_dagster
-    wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster restore"
+    if ! compose --profile etl up -d app-dagster; then
+      restore_failed="1"
+    else
+      if ! pinvi_verify_or_remove_running_dagster; then
+        restore_failed="1"
+      fi
+      if ! wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster restore"; then
+        restore_failed="1"
+      fi
+    fi
+  fi
+  if [[ "$restore_failed" != "0" ]]; then
+    return 1
   fi
   RUNTIME_API_WAS_RUNNING="0"
   RUNTIME_DAGSTER_WAS_RUNNING="0"
@@ -140,10 +163,18 @@ restore_runtime_writers() {
 
 restore_runtime_writers_on_exit() {
   local exit_code=$?
+  local restore_failed="0"
   if [[ "$RUNTIME_API_WAS_RUNNING" == "1" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
-    restore_runtime_writers || log "runtime writer restoration failed during process exit"
+    if ! restore_runtime_writers; then
+      restore_failed="1"
+      log "runtime writer restoration failed during process exit"
+    fi
   fi
+  release_migrator_lifecycle_lock || true
   pinvi_cleanup_api_build_context || true
+  if [[ "$exit_code" == "0" && "$restore_failed" != "0" ]]; then
+    exit_code="1"
+  fi
   return "$exit_code"
 }
 
@@ -283,18 +314,34 @@ reject_explicit_migrator_database_url() {
 }
 
 migrate_under_lifecycle_lock() {
-  pinvi_verify_runtime_image_provenance app-api
+  if ! pinvi_verify_runtime_image_provenance app-api; then
+    return 1
+  fi
   local credential_file
-  credential_file="$(bootstrap_credential_file)"
+  if ! credential_file="$(bootstrap_credential_file)"; then
+    return 1
+  fi
   local legacy_rebaseline
-  legacy_rebaseline="$(m05_legacy_rebaseline_profile)"
+  if ! legacy_rebaseline="$(m05_legacy_rebaseline_profile)"; then
+    return 1
+  fi
   local legacy_receipt_file=""
   if [[ "$legacy_rebaseline" == "1" ]]; then
-    legacy_receipt_file="$(legacy_rebaseline_receipt_file)"
+    if ! legacy_receipt_file="$(legacy_rebaseline_receipt_file)"; then
+      return 1
+    fi
   fi
-  drain_runtime_writers
+  if ! drain_runtime_writers; then
+    log "runtime writer drain failed"
+    restore_runtime_writers || log "runtime writer restoration failed"
+    return 1
+  fi
   log "starting database dependencies and runtime DB role"
-  compose up -d app-postgres app-rustfs app-rustfs-init
+  if ! compose up -d app-postgres app-rustfs app-rustfs-init; then
+    log "database dependency startup failed"
+    restore_runtime_writers || log "runtime writer restoration failed"
+    return 1
+  fi
   if ! prepare_migrator_login "$legacy_rebaseline"; then
     log "migrator preparation failed; sealing the one-shot login"
     seal_migrator_login "$legacy_rebaseline" || \
@@ -328,10 +375,9 @@ migrate() {
   reject_explicit_migrator_database_url
   pinvi_prepare_api_image_provenance require-immutable
   acquire_migrator_lifecycle_lock
-  if ! migrate_under_lifecycle_lock; then
-    release_migrator_lifecycle_lock
-    return 1
-  fi
+  # EXIT handler가 실패 시 writer 복구와 lifecycle lock 해제를 담당한다. 조건문
+  # 안에서 호출하면 Bash가 함수 내부의 errexit을 끄므로 migration 본문은 직접 호출한다.
+  migrate_under_lifecycle_lock
   release_migrator_lifecycle_lock
 }
 

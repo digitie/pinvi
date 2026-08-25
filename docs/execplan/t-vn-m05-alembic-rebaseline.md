@@ -28,7 +28,8 @@ active graph·rebaseline proof·M05 owner 전환과 단일 N150 target lease의 
 3. `0101`이 N150 `0061` 뒤 current main에 합류한 location-audit·동의 이력·좌표 출처 변경과
    M05의 옛 `0062`~`0065` 계약을 하나로 적용하게 한다.
 4. root-only rebaseline helper가 `0061` catalog fingerprint와 fresh backup proof를 확인한 뒤
-   version row만 `0100`으로 바꾸게 한다.
+   legacy provenance comment와 version row를 하나의 transaction에서 `0100` handoff로 기록하게 한다.
+   사용자 데이터와 `app` 객체 DDL은 변경하지 않는다.
 5. 이전 기준선의 fresh bootstrap과 `0061 → 0100 → 0101` rehearsal, M05 recovery/preflight를
    통과했다. 최신 main 통합본으로 같은 검증을 다시 실행하고 N150 browser E2E와 최종 적대 리뷰를
    남긴다.

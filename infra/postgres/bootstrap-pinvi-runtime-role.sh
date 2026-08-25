@@ -512,6 +512,19 @@ SELECT
           AND NOT has_database_privilege(owner.oid, current_database(), 'CONNECT')
           AND has_schema_privilege(owner.oid, 'x_extension', 'USAGE')
           AND NOT has_schema_privilege(owner.oid, 'x_extension', 'CREATE')
+          AND NOT EXISTS (
+              SELECT 1
+              FROM pg_namespace app_namespace
+              CROSS JOIN LATERAL aclexplode(
+                  COALESCE(
+                      app_namespace.nspacl,
+                      acldefault('n', app_namespace.nspowner)
+                  )
+              ) AS app_acl
+              WHERE app_namespace.nspname = 'app'
+                AND app_acl.grantee IN (owner.oid, 0)
+                AND app_acl.privilege_type = 'CREATE'
+          )
           AND EXISTS (
               SELECT 1 FROM pg_auth_members membership
               WHERE membership.member = owner.oid
