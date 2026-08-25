@@ -62,7 +62,13 @@ cd ~/pinvi
 set -a
 source "$HOME/.pinvi-admin-live.env"
 set +a
+# live UI phase는 현재 checkout의 exact head를 명시적으로 고정한다.
+export PINVI_LIVE_EXPECTED_REVISION="$(git rev-parse --verify HEAD^{commit})"
 ```
+
+`PINVI_LIVE_EXPECTED_REVISION`은 live UI gate가 실행할 exact checkout SHA다. wrapper와
+`n150-playwright-runner.sh`는 브라우저를 시작하기 전에 현재 `HEAD`와 이 값을 비교하며,
+불일치하면 gate를 실패시킨다. PR 검증에서는 대상 PR의 exact head SHA를 이 값으로 설정한다.
 
 Playwright phase를 N150 Docker runner로 감싼다.
 

@@ -299,6 +299,21 @@ pinvi_runtime_container_ids() {
     | awk '$2 !~ /\.pinvi-predeploy$/ {print $1}'
 }
 
+pinvi_runtime_container_ids_into_array() {
+  local array_name="$1"
+  shift
+  local ids=""
+  local -n output_array="$array_name"
+  if ! ids="$(pinvi_runtime_container_ids "$@")"; then
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
+    return 1
+  fi
+  output_array=()
+  if [[ -n "$ids" ]]; then
+    mapfile -t output_array <<< "$ids"
+  fi
+}
+
 pinvi_verify_running_runtime_image_id() {
   local service="$1"
   local image_id container_id running_image_id
@@ -309,7 +324,10 @@ pinvi_verify_running_runtime_image_id() {
     return 2
   fi
 
-  mapfile -t container_ids < <(pinvi_runtime_container_ids "$service" running)
+  if ! pinvi_runtime_container_ids_into_array container_ids "$service" running; then
+    echo "api image provenance preflight failed: ${service} container discovery failed" >&2
+    return 2
+  fi
   if (( ${#container_ids[@]} != 1 )); then
     echo "api image provenance preflight failed: ${service} container must resolve exactly once" >&2
     return 2

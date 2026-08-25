@@ -60,6 +60,27 @@ fi
 repo_root="$(cd "$repo_root" && pwd)"
 cd "$repo_root"
 
+assert_exact_live_checkout() {
+  local expected_revision="${PINVI_LIVE_EXPECTED_REVISION:-${PINVI_SOURCE_REVISION:-}}"
+  local actual_revision
+  if [[ -z "$expected_revision" || ! "$expected_revision" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "error: live UI requires PINVI_LIVE_EXPECTED_REVISION as a full lowercase commit" >&2
+    exit 1
+  fi
+  actual_revision="$(git rev-parse --verify HEAD^{commit})"
+  if [[ "$actual_revision" != "$expected_revision" ]]; then
+    echo "error: live UI checkout ${actual_revision} does not match expected ${expected_revision}" >&2
+    exit 1
+  fi
+}
+
+if [[ "${PINVI_ADMIN_LIVE_E2E:-0}" == "1" \
+  || "${PINVI_M04_LIVE_E2E:-0}" == "1" \
+  || -n "${PINVI_M04_UI_VERIFICATION_ID:-}" \
+  || -n "${PINVI_M05_UI_VERIFICATION_ID:-}" ]]; then
+  assert_exact_live_checkout
+fi
+
 if ! command -v node >/dev/null 2>&1; then
   echo "error: node is required to resolve package-lock Playwright version" >&2
   exit 1
@@ -177,6 +198,7 @@ allowed_env_names=(
   PINVI_ADMIN_LIVE_WORKERS
   PINVI_LIVE_API_URL
   PINVI_LIVE_WEB_URL
+  PINVI_LIVE_EXPECTED_REVISION
   PINVI_M04_LIVE_EMAIL
   PINVI_M04_LIVE_E2E
   PINVI_M04_LIVE_FEATURE_REQUEST_ID

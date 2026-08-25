@@ -40,7 +40,13 @@ export PINVI_ADMIN_LIVE_E2E=1
 export PINVI_ADMIN_LIVE_WEB_URL="https://pinvi.example.com"
 export PINVI_ADMIN_LIVE_EMAIL="<admin email>"
 export PINVI_ADMIN_LIVE_PASSWORD="<admin password>"
+# 반드시 검증 대상 checkout의 의도한 40자리 lowercase commit으로 고정한다.
+export PINVI_LIVE_EXPECTED_REVISION="$(git rev-parse --verify HEAD^{commit})"
 ```
+
+`PINVI_LIVE_EXPECTED_REVISION`은 단순한 provenance 값이 아니라 live UI gate의 checkout pin이다.
+runner는 실행 직전 현재 checkout의 `HEAD`와 이 값을 비교하며, 불일치하면 브라우저를 실행하지
+않는다. PR 검증에서는 `HEAD`를 해당 PR의 exact head로 맞춘 뒤 그 SHA를 명시적으로 전달한다.
 
 UI credential 대신 짧은 수명의 Playwright storage state를 `PINVI_ADMIN_LIVE_STORAGE_STATE`로
 전달할 수 있다. 이 경우 test는 저장된 인증 상태로 시작하고 `/admin/login` 입력은 수행하지 않는다.
@@ -108,6 +114,8 @@ set -a
 source "$HOME/.pinvi-admin-live.env"
 set +a
 
+export PINVI_LIVE_EXPECTED_REVISION="$(git rev-parse --verify HEAD^{commit})"
+
 npm -w @pinvi/web run test:e2e:admin-live:list
 
 scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:admin-live
@@ -120,6 +128,7 @@ cd ~/pinvi
 set -a
 source "$HOME/.pinvi-admin-live.env"
 set +a
+export PINVI_LIVE_EXPECTED_REVISION="$(git rev-parse --verify HEAD^{commit})"
 npm -w @pinvi/web run test:e2e:admin-live:list
 
 PINVI_ADMIN_LIVE_CASE_LIMIT=200 \

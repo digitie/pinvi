@@ -45,6 +45,7 @@ RUNTIME_NEW_DAGSTER_CONTAINER_IDS=()
 RUNTIME_API_SNAPSHOT_RENAMED="0"
 RUNTIME_WEB_SNAPSHOT_RENAMED="0"
 RUNTIME_DAGSTER_SNAPSHOT_RENAMED="0"
+RUNTIME_CONTAINER_DISCOVERY_FAILED="0"
 
 usage() {
   cat <<'EOF'
@@ -135,12 +136,20 @@ build_images() {
 
 runtime_dagster_is_running() {
   local -a container_ids=()
-  mapfile -t container_ids < <(pinvi_runtime_container_ids app-dagster running)
+  if ! pinvi_runtime_container_ids_into_array container_ids app-dagster running; then
+    return 1
+  fi
   (( ${#container_ids[@]} > 0 ))
 }
 
 dagster_rollout_enabled() {
-  [[ "$ENABLE_DAGSTER" != "0" ]] || runtime_dagster_is_running
+  [[ "$ENABLE_DAGSTER" != "0" ]] && return 0
+  local -a container_ids=()
+  if ! pinvi_runtime_container_ids_into_array container_ids app-dagster running; then
+    echo "runtime Dagster discovery failed; refusing to continue with Dagster disabled" >&2
+    exit 1
+  fi
+  (( ${#container_ids[@]} > 0 ))
 }
 
 runtime_writer_container_id() {
@@ -149,9 +158,15 @@ runtime_writer_container_id() {
 }
 
 runtime_capture_predeploy_container_ids() {
-  mapfile -t RUNTIME_PREDEPLOY_API_CONTAINER_IDS < <(pinvi_runtime_container_ids app-api)
-  mapfile -t RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS < <(pinvi_runtime_container_ids app-web)
-  mapfile -t RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS < <(pinvi_runtime_container_ids app-dagster)
+  if ! pinvi_runtime_container_ids_into_array RUNTIME_PREDEPLOY_API_CONTAINER_IDS app-api; then
+    return 1
+  fi
+  if ! pinvi_runtime_container_ids_into_array RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS app-web; then
+    return 1
+  fi
+  if ! pinvi_runtime_container_ids_into_array RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS app-dagster; then
+    return 1
+  fi
 }
 
 runtime_id_was_existing() {
@@ -176,7 +191,9 @@ runtime_record_new_container_ids() {
     app-dagster) RUNTIME_NEW_DAGSTER_CONTAINER_IDS=() ;;
     *) return 2 ;;
   esac
-  mapfile -t container_ids < <(pinvi_runtime_container_ids "$service")
+  if ! pinvi_runtime_container_ids_into_array container_ids "$service"; then
+    return 1
+  fi
   for container_id in "${container_ids[@]}"; do
     [[ -n "$container_id" ]] || continue
     if ! runtime_id_was_existing "$service" "$container_id"; then
@@ -317,6 +334,10 @@ restore_runtime_snapshot_names() {
 remove_new_runtime_writers() {
   local service container_id removal_failed="0"
   local -a container_ids=()
+  if [[ "$RUNTIME_CONTAINER_DISCOVERY_FAILED" == "1" ]]; then
+    log "runtime container discovery failed; refusing cleanup by inferred ownership"
+    return 1
+  fi
   for service in app-api app-web app-dagster; do
     mapfile -t container_ids < <(runtime_new_container_ids "$service")
     for container_id in "${container_ids[@]}"; do
@@ -439,15 +460,47 @@ rollback_preserved_runtime_writers() {
     RUNTIME_NEW_API_CONTAINER_IDS=()
     RUNTIME_NEW_WEB_CONTAINER_IDS=()
     RUNTIME_NEW_DAGSTER_CONTAINER_IDS=()
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="0"
   fi
   [[ "$rollback_failed" == "0" ]]
+}
+
+disarm_preserved_runtime_writers_after_rollout() {
+  RUNTIME_API_WAS_RUNNING="0"
+  RUNTIME_WEB_WAS_RUNNING="0"
+  RUNTIME_DAGSTER_WAS_RUNNING="0"
+  RUNTIME_API_CONTAINER_ID=""
+  RUNTIME_API_IMAGE_ID=""
+  RUNTIME_WEB_CONTAINER_ID=""
+  RUNTIME_WEB_IMAGE_ID=""
+  RUNTIME_DAGSTER_CONTAINER_ID=""
+  RUNTIME_DAGSTER_IMAGE_ID=""
+  RUNTIME_WRITERS_DRAINED="0"
+  RUNTIME_DEPLOY_PRESERVE="0"
+  RUNTIME_API_CONTAINER_NAME=""
+  RUNTIME_WEB_CONTAINER_NAME=""
+  RUNTIME_DAGSTER_CONTAINER_NAME=""
+  RUNTIME_API_BACKUP_NAME=""
+  RUNTIME_WEB_BACKUP_NAME=""
+  RUNTIME_DAGSTER_BACKUP_NAME=""
+  RUNTIME_NEW_WRITERS_STARTED="0"
+  RUNTIME_SNAPSHOT_RENAMED="0"
+  RUNTIME_NEW_API_CONTAINER_IDS=()
+  RUNTIME_NEW_WEB_CONTAINER_IDS=()
+  RUNTIME_NEW_DAGSTER_CONTAINER_IDS=()
+  RUNTIME_API_SNAPSHOT_RENAMED="0"
+  RUNTIME_WEB_SNAPSHOT_RENAMED="0"
+  RUNTIME_DAGSTER_SNAPSHOT_RENAMED="0"
+  RUNTIME_CONTAINER_DISCOVERY_FAILED="0"
 }
 
 drain_runtime_writers() {
   local drain_failed="0"
   local api_container_id api_image_id web_container_id web_image_id
   local dagster_container_id dagster_image_id
-  runtime_capture_predeploy_container_ids
+  if ! runtime_capture_predeploy_container_ids; then
+    return 1
+  fi
   RUNTIME_API_WAS_RUNNING="0"
   RUNTIME_WEB_WAS_RUNNING="0"
   RUNTIME_DAGSTER_WAS_RUNNING="0"
@@ -915,6 +968,30 @@ dagster_up_under_lifecycle_lock() {
   wait_for_container_health "$(runtime_writer_container_id app-dagster)" "Dagster container"
 }
 
+prepare_standalone_dagster_writer() {
+  local dagster_container_id dagster_image_id
+  if ! runtime_capture_predeploy_container_ids; then
+    return 1
+  fi
+  if ! dagster_container_id="$(runtime_writer_container_id app-dagster)"; then
+    return 1
+  fi
+  [[ -n "$dagster_container_id" && "$dagster_container_id" != *$'\n'* ]] || return 0
+  if ! dagster_image_id="$(docker container inspect --format '{{.Image}}' "$dagster_container_id")"; then
+    return 1
+  fi
+  RUNTIME_DAGSTER_CONTAINER_ID="$dagster_container_id"
+  RUNTIME_DAGSTER_IMAGE_ID="$dagster_image_id"
+  RUNTIME_DAGSTER_WAS_RUNNING="1"
+  if ! runtime_snapshot_preflight; then
+    return 1
+  fi
+  if ! compose --profile etl stop app-dagster; then
+    return 1
+  fi
+  preserve_runtime_writers
+}
+
 up_under_lifecycle_lock() {
   local api_container_id web_container_id
   if [[ "$ENABLE_DAGSTER" != "0" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
@@ -973,9 +1050,11 @@ up() {
 dagster_up() {
   pinvi_prepare_api_image_provenance require-immutable
   acquire_migrator_lifecycle_lock
-  runtime_capture_predeploy_container_ids
+  RUNTIME_DEPLOY_PRESERVE="1"
+  prepare_standalone_dagster_writer
   RUNTIME_NEW_WRITERS_STARTED="1"
   dagster_up_under_lifecycle_lock
+  finalize_preserved_runtime_writers
   release_migrator_lifecycle_lock
 }
 
@@ -1054,7 +1133,11 @@ finalize_preserved_runtime_writers() {
       cleanup_failed="1"
     fi
   fi
-  [[ "$cleanup_failed" == "0" ]] || return 1
+  if [[ "$cleanup_failed" != "0" ]]; then
+    log "pre-deploy snapshot cleanup failed; keeping healthy new writers and remaining snapshots for manual cleanup"
+    disarm_preserved_runtime_writers_after_rollout
+    return 1
+  fi
   RUNTIME_API_WAS_RUNNING="0"
   RUNTIME_WEB_WAS_RUNNING="0"
   RUNTIME_DAGSTER_WAS_RUNNING="0"
