@@ -86,6 +86,12 @@ def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
         'GRANT USAGE ON SCHEMA pinvi_internal TO :"schema_owner", :"migration_owner"' in bootstrap
     )
     assert "0101이 catalog fingerprint·handoff를 완료한 뒤 app runtime 권한" in bootstrap
+    assert "이미 적용된 0101을 재실행하지 않는다" in bootstrap
+    assert 'if [ "${applied_revision}" = "20260824_0101" ]; then' in bootstrap
+    assert "SET LOCAL ROLE :\"schema_owner\";" in bootstrap
+    assert "REVOKE ALL PRIVILEGES ON TABLE app.alembic_version FROM :\"app_role\";" in bootstrap
+    assert "GRANT SELECT ON TABLE app.alembic_version TO :\"app_role\";" in bootstrap
+    assert "ALTER DEFAULT PRIVILEGES FOR ROLE :\"schema_owner\" IN SCHEMA app" in bootstrap
     assert "pinvi_internal.acquire_fresh_0101_database_fence()" in bootstrap
     assert 'GRANT CREATE ON DATABASE :"database_name" TO :"schema_owner";' in bootstrap
     assert (
@@ -263,6 +269,9 @@ def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
         assert "runtime_capture_predeploy_container_ids()" in source
         assert "runtime_record_new_container_ids()" in source
         assert "runtime_new_container_ids()" in source
+        assert "pinvi_runtime_container_ids_into_array" in source
+        assert "RUNTIME_CONTAINER_DISCOVERY_FAILED" in source
+        assert "refusing cleanup by inferred ownership" in source
         assert "RUNTIME_NEW_API_CONTAINER_IDS" in source
         assert "RUNTIME_NEW_WEB_CONTAINER_IDS" in source
         assert "RUNTIME_NEW_DAGSTER_CONTAINER_IDS" in source
@@ -280,6 +289,11 @@ def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
         assert "pinvi_verify_running_dagster" in source
         assert "pinvi_verify_or_remove_running_app" not in source
         assert "pinvi_verify_or_remove_running_dagster" not in source
+        assert "disarm_preserved_runtime_writers_after_rollout()" in source
+        assert "keeping healthy new writers and remaining snapshots" in source
+        if name == "scripts/deploy-node.sh":
+            assert "prepare_standalone_dagster_writer()" in source
+            assert "finalize_preserved_runtime_writers" in source[source.index("dagster_up() {") :]
     docker_app = (ROOT / "scripts" / "docker-app.sh").read_text(encoding="utf-8")
     assert "PINVI_DEV_FORCE_KILL" in docker_app
     assert "refusing to terminate it" in docker_app
@@ -287,6 +301,17 @@ def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
     assert "staging|production)" in docker_app
     assert "smoke_on_exit()" in docker_app
     assert 'restore_runtime_writers_on_exit "$exit_code"' in docker_app
+
+
+def test_live_ui_gates_pin_the_exact_checkout_revision() -> None:
+    runner = (ROOT / "scripts" / "n150-playwright-runner.sh").read_text(encoding="utf-8")
+    gate = (ROOT / "scripts" / "verify-v100-live-gate.sh").read_text(encoding="utf-8")
+    for source in (runner, gate):
+        assert "PINVI_LIVE_EXPECTED_REVISION" in source
+        assert "git rev-parse --verify HEAD^{commit}" in source
+        assert "does not match expected" in source
+    assert "assert_exact_live_checkout" in runner
+    assert "require_exact_live_revision" in gate
 
 
 def test_fresh_0101_and_role_bootstrap_fence_direct_app_schema_create() -> None:

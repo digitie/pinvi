@@ -199,6 +199,25 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
         assert len(state) == 5
         return tuple(state)  # type: ignore[return-value]
 
+    def runtime_version_privilege_state() -> str:
+        result = compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            "--no-psqlrc",
+            "--tuples-only",
+            "--no-align",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            f"SELECT (has_table_privilege('{runtime_role}', 'app.alembic_version', 'SELECT') "
+            f"AND NOT has_table_privilege('{runtime_role}', 'app.alembic_version', 'INSERT') "
+            f"AND NOT has_table_privilege('{runtime_role}', 'app.alembic_version', 'UPDATE') "
+            f"AND NOT has_table_privilege('{runtime_role}', 'app.alembic_version', 'DELETE'))::text;",
+        )
+        return result.stdout.strip()
+
     client_name = f"pinvi-m05-client-{suffix}"
     rotated_client_name = f"pinvi-m05-rotated-client-{suffix}"
     stale_role = f"m05_stale_{suffix}"
@@ -283,6 +302,72 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
         assert "permission denied" in (
             runtime_version_update.stdout + runtime_version_update.stderr
         )
+
+        # 이미 0101인 DB는 Alembic upgrade가 no-op이므로, 과거 0101 variant가 남긴
+        # runtime/default ACL 누락을 app-db-runtime-role만으로 복구해야 한다.
+        compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            f'REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA app FROM "{runtime_role}"; '
+            f'REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA app FROM "{runtime_role}"; '
+            f'ALTER DEFAULT PRIVILEGES FOR ROLE "{schema_owner}" IN SCHEMA app '
+            f'REVOKE ALL ON TABLES FROM "{runtime_role}"; '
+            f'ALTER DEFAULT PRIVILEGES FOR ROLE "{schema_owner}" IN SCHEMA app '
+            f'REVOKE ALL ON SEQUENCES FROM "{runtime_role}";',
+        )
+        assert runtime_app_privilege_state() == ("t", "f", "f", "f", "f")
+        assert runtime_version_privilege_state() == "false"
+        compose("run", "--rm", "--no-deps", "app-db-runtime-role")
+        assert runtime_app_privilege_state() == ("t", "t", "t", "t", "t")
+        assert runtime_version_privilege_state() == "true"
+        runtime_version_select = compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "--entrypoint",
+            "/bin/sh",
+            "app-db-runtime-role",
+            "-ec",
+            'PGPASSWORD="$PINVI_APP_DB_PASSWORD" exec psql --no-psqlrc '
+            '--no-password --tuples-only --no-align --host=app-postgres '
+            '--username="$PINVI_APP_DB_USER" '
+            '--dbname="$POSTGRES_DB" --command="SELECT version_num FROM app.alembic_version"',
+        )
+        assert runtime_version_select.stdout.strip() == "20260824_0101"
+        compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            f'SET ROLE "{schema_owner}"; '
+            "CREATE TABLE app.runtime_repair_default_acl_probe (id bigserial PRIMARY KEY); "
+            "RESET ROLE;",
+        )
+        repaired_default_acl_probe = compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            "--no-psqlrc",
+            "--tuples-only",
+            "--no-align",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            f"SELECT has_table_privilege('{runtime_role}', 'app.runtime_repair_default_acl_probe', "
+            "'SELECT, INSERT, UPDATE, DELETE')::text, "
+            f"has_sequence_privilege('{runtime_role}', 'app.runtime_repair_default_acl_probe_id_seq', "
+            "'USAGE, SELECT, UPDATE')::text;",
+        )
+        assert repaired_default_acl_probe.stdout.strip() == "true|true"
 
         # legacy bootstrap은 receipt fingerprint가 결박되기 전 app ACL/default ACL을
         # 바꾸지 않는다. 복원은 0101 handoff가 끝난 뒤 migration 안에서 수행한다.

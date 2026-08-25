@@ -706,3 +706,47 @@ if [ "${role_topology_safe}" != "t" ]; then
   echo "runtime/migrator/migration-owner role topology is not canonical" >&2
   exit 3
 fi
+
+# Alembic은 이미 적용된 0101을 재실행하지 않는다. 따라서 과거 0101 variant가 남긴
+# runtime ACL 누락은 일반 role bootstrap에서 exact head일 때만 정본 app owner로 보정한다.
+# 0100 이하와 legacy rebaseline은 migration handoff가 ACL을 결정해야 하므로 여기서
+# 절대 수정하지 않는다.
+if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then
+  applied_revision="$(
+    PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --tuples-only --no-align \
+      --host=app-postgres --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" <<'SQL'
+SELECT CASE
+    WHEN to_regclass('app.alembic_version') IS NULL THEN ''
+    WHEN (SELECT count(*) FROM app.alembic_version) <> 1 THEN ''
+    ELSE COALESCE((SELECT version_num FROM app.alembic_version), '')
+END;
+SQL
+  )"
+  if [ "${applied_revision}" = "20260824_0101" ]; then
+    PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 \
+      --host=app-postgres --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+      --set="app_role=${PINVI_APP_DB_USER}" \
+      --set="schema_owner=${PINVI_APP_SCHEMA_OWNER}" \
+      >/dev/null <<'SQL'
+BEGIN;
+SET LOCAL ROLE :"schema_owner";
+REVOKE ALL ON SCHEMA app FROM PUBLIC;
+GRANT USAGE ON SCHEMA app TO :"app_role";
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA app FROM :"app_role";
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO :"app_role";
+REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA app FROM :"app_role";
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA app TO :"app_role";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"schema_owner" IN SCHEMA app
+  REVOKE ALL ON TABLES FROM :"app_role";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"schema_owner" IN SCHEMA app
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"app_role";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"schema_owner" IN SCHEMA app
+  REVOKE ALL ON SEQUENCES FROM :"app_role";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"schema_owner" IN SCHEMA app
+  GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"app_role";
+REVOKE ALL PRIVILEGES ON TABLE app.alembic_version FROM :"app_role";
+GRANT SELECT ON TABLE app.alembic_version TO :"app_role";
+COMMIT;
+SQL
+  fi
+fi
