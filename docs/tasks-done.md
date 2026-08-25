@@ -83,6 +83,13 @@
       12분57초로 정상 통과를 확인했다. 남은 후속 과제(경험적으로 불확실한 "20:06" 관측치 근거,
       통합 스위트 근본 샤딩)는 T-351로 분리했다.
 
+- [x] **T-319** — 모바일/웹 mutation 실패 시 원문 예외 노출을 막는다. (완료: 2026-08-25, PR #483, claude)
+      `friendlyErrorText()`의 일반 `Error` fallback이 `error.message`를 무조건 그대로 보여줘,
+      재정렬 실패 시 `fetch failed: java.net.ConnectException…`류 네트워크 원문이 그대로 노출됐다.
+      저장소 전체의 의도적 사용자 안내 `throw new Error(...)`(admin 검증 흐름 30여 곳,
+      `packages/domain/upload.ts` 등)는 전부 한글임을 확인하고, 한글이 없는 메시지만 기본 문구로
+      가리도록 고쳤다 — 기존 한글 메시지 호출부는 회귀 없이 그대로 동작한다.
+
 - [x] **T-323** — Web `e2e` job을 aggregate required check에 결박한다. (완료: 2026-08-24, codex)
       `aggregate-ci.yml`이 Web/packages 변경 시 `lint-typecheck-build`만 기다리고 `e2e`는 기다리지
       않아, `Aggregate CI gate`가 유일한 required check인 이 저장소에서 Playwright 실패가 머지를
