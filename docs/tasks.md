@@ -58,14 +58,24 @@
 
 - [ ] **T-VN-M05-ACTIVATION** — ADR-065 `0100/0101` rebaseline, paired live/restore/review evidence를
   요구하는 M05 production activation receipt gate와 실제 isolated activation 검증을 완료한다.
+- [ ] **T-349** — `app.retention_runs`에 `status='executing'`이 최대 1개라는 불변식이 DB 제약이
+  아니라 `_assert_no_concurrent_execution`의 advisory lock 규율에만 의존한다(T-343 적대적 리뷰,
+  PR #480). 지금 유일한 호출 경로는 안전하지만, 향후 다른 코드 경로/수동 SQL이 이 함수를 거치지
+  않고 INSERT하면 막을 DB 차원 방어선이 없다. 후속 마이그레이션으로
+  `CREATE UNIQUE INDEX ... ON app.retention_runs (status) WHERE status = 'executing'` 추가
+  (defense-in-depth, blocking 아님).
 
 ## 웹 / 테스트 인프라
 
-- [ ] **T-348** — Aggregate CI gate의 `timeout-minutes: 12`가 실제 api job 시간을 못 따라간다.
-  최근 main의 `lint-typecheck-test`는 9:00 / 10:53 / **20:06**이고, PR #476에서 11:56 실행이 게이트
-  타임아웃으로 **required check 실패**를 냈다 — job 자체는 성공했는데 게이트만 포기한 것이라
-  재실행으로 풀렸다. 통합 스위트가 계속 자라므로(662건) 주기적으로 재발한다. 한도를 올리거나
-  게이트가 job 완료를 기다리는 방식을 바꾼다. T-339 머지 과정에서 발견.
+- [ ] **T-350** — retention 관리자 페이지의 `executing` 배지 옆 경과시간(`formatElapsed`)이
+  실시간으로 갱신되지 않을 수 있다(T-345 적대적 리뷰, PR #480) — `setInterval`/`refetchInterval`이
+  없어 새로고침이나 mutation invalidate 전까지는 렌더 시점에 고정된 스냅샷처럼 보인다. 이 지적은
+  검증 기록이 placeholder로 남아 실제 반증이 안 끝났다 — 브라우저로 먼저 재현 확인하고, 확인되면
+  1s~30s 틱 또는 summary query `refetchInterval` 추가.
+- [ ] **T-351** — 통합 테스트 스위트가 계속 자라(662건+) T-348로 타임아웃을 올려도 구조적으로는
+  같은 문제가 재발한다(T-348 적대적 리뷰에서 지적, PR #481 코드 주석에도 "스위트가 더 자라면
+  다시 올려야 한다"고 명시). 근본 해법은 숫자 상향이 아니라 `pytest tests/integration`을 여러
+  job으로 샤딩하거나 느린 테스트를 분리하는 것 — CI job 구조 변경이 필요해 별도 task로 뗀다.
 
 ## 모바일
 
