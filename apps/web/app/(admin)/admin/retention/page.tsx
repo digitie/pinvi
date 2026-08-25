@@ -43,10 +43,25 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
 }
 
+// T-345: `executing`이 `approved`(더 이상 시스템이 쓰지 않는 값) 같은 회색으로 묻히면 지난달
+// 멈춘 run과 방금 시작한 run을 구분할 수 없다. 새 색상 토큰을 만들지 않고(현재 디자인 토큰에
+// warning류가 없다) pulse 애니메이션으로 "진행 중"을 시각적으로 드러낸다.
 function statusClass(status: AdminRetentionRun['status']) {
   if (status === 'completed' || status === 'dry_run') return 'bg-success-bg text-success-text';
   if (status === 'failed' || status === 'rolled_back') return 'bg-error-bg text-error-text';
+  if (status === 'executing') return 'bg-surface-soft text-ink animate-pulse';
   return 'bg-surface-soft text-muted';
+}
+
+function formatElapsed(startedAt: string | null | undefined): string | null {
+  if (!startedAt) return null;
+  const started = new Date(startedAt).getTime();
+  if (Number.isNaN(started)) return null;
+  const seconds = Math.max(0, Math.floor((Date.now() - started) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
 function nestedNumber(value: Record<string, unknown>, section: string, key: string): number | null {
@@ -191,11 +206,20 @@ export default function AdminRetentionPage() {
         header: 'status',
         sortable: true,
         sortValue: (run) => run.status,
-        cell: (run) => (
-          <span className={`rounded-sm px-2 py-1 text-xs font-semibold ${statusClass(run.status)}`}>
-            {run.status}
-          </span>
-        ),
+        cell: (run) => {
+          const elapsed = run.status === 'executing' ? formatElapsed(run.started_at) : null;
+          return (
+            <div className="flex flex-col gap-0.5">
+              <span
+                className={`w-fit rounded-sm px-2 py-1 text-xs font-semibold ${statusClass(run.status)}`}
+              >
+                {run.status}
+              </span>
+              {/* §5.2의 15분 stale 기준과 시각적으로 맞물리게 경과 시간을 보여준다(T-345). */}
+              {elapsed && <span className="text-xs text-muted">{elapsed} 경과</span>}
+            </div>
+          );
+        },
       },
       {
         key: 'result',
@@ -203,6 +227,16 @@ export default function AdminRetentionPage() {
         cell: (run) => {
           const anonymized = nestedNumber(run.result, 'pii', 'anonymized_users');
           const archived = nestedNumber(run.result, 'location', 'archived_rows');
+          if (run.status === 'failed' && run.error_message) {
+            return (
+              <p
+                className="max-w-xs whitespace-normal break-words text-xs text-error-text"
+                title={run.error_message}
+              >
+                {run.error_message}
+              </p>
+            );
+          }
           if (anonymized === null && archived === null) return '-';
           return (
             <div className="text-xs">
