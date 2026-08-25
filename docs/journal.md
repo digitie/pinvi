@@ -2,6 +2,45 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-25 (codex) — M05 rebaseline P1 재심 보강
+
+**작업**: 적대 재심에서 지적된 `pg_database` fence timeout 순서, legacy handoff lock 순서,
+one-shot migrator URL 우회·기존 세션 생존, legacy bootstrap의 receipt fingerprint 전 ACL 변경을
+같은 범위에서 보강했다.
+
+**변경**:
+
+- authority/identity query 전에 5초 `lock_timeout`을 적용하고, legacy path의 순서를 advisory
+  serialization lock → timeout → identity proof → connection fence로 고정했다.
+- `app-migrator`는 one-shot `PINVI_MIGRATOR_DB_USER`/`PINVI_MIGRATOR_DB_PASSWORD`만 사용하고,
+  `PINVI_MIGRATOR_DATABASE_URL`은 deploy wrapper가 fail-close한다.
+- role bootstrap은 항상 기존 migrator backend를 종료·부재 확인한 뒤에만 새 one-shot password를
+  연다. legacy bootstrap은 pre-handoff `app` ACL/default ACL을 보존하며, `0101` canonical owner
+  수렴 뒤 runtime grant를 복원한다.
+
+**결정**: active Alembic graph와 final head는 계속 `0100 → 0101`뿐이다. 중간 `0062~0064` 재결박을
+되살리지 않으며, M05 activation과 production DB mutation은 수행하지 않았다.
+
+**발견**: 전체 unit test의 권한 검증은 Windows mount 임시 디렉터리에서 mode를 보존하지 않아
+실패한다. `TMPDIR=/tmp` Linux 임시 공간에서 재실행하면 코드와 무관한 이 환경 실패 없이 통과한다.
+
+**검증**: 정적 35건, PostgreSQL fence·legacy ownership 3건, Docker migrator lifecycle 1건,
+`0101` PostgreSQL integration 24건, API unit 1,271건, Ruff/format, strict mypy 235 source files,
+shell/Compose 검증을 통과했다.
+
+**다음**: 최신 `main` rebase·push 후 두 전문 적대 재심과 GitHub CI, 격리 N150 paired browser
+E2E를 모두 통과시킨 뒤에만 PR #466 merge를 검토한다.
+
+## 2026-08-24 (codex) — M05 rebaseline 단일 final head 재결박
+
+- 최신 `main` rebase 뒤에 남은 `20260824_0065`·`0066` 좌표 출처 migration을 별도 head로 두지 않고
+  `20260824_0101`에 흡수했다. active graph는 다시 `0100 → 0101` 두 revision만 가지며,
+  `FINALIZE_SCHEMA_REVISION`과 `ck_ktm_ct_boundary_contract`는 최종 `0101`에서만 재결박된다.
+- `0101` fresh install이 `coord_source` 컬럼·허용값 CHECK·`reverse_geocode` purpose까지 설치하는
+  PostgreSQL 계약 검증을 추가했다. fresh migration 및 artifact immutability 회귀 17건이 통과했다.
+- production DB mutation과 M05 activation은 수행하지 않았다. 남은 merge gate는 최종 적대 리뷰,
+  GitHub CI, 안전한 N150 paired live browser E2E다.
+
 ## 2026-08-24 (claude) — T-325: 지도 진입 시 단말기 위치로 중심점 (웹·앱)
 
 `docs/architecture/user-location.md` §1이 "지도 초기 중심점(앱 진입 시), 시군구 수준(~1km),
@@ -36,6 +75,62 @@
 CHANGELOG 항목 추가. 범위를 넘는 두 건은 T-326(동의 철회 이력이 재동의로 지워짐)·T-327(서버측
 동의 강제·버전 대조 부재, 국내 판정 bbox 한계)으로 분리했다.
 
+## 2026-08-24 (codex) — M05 Alembic rebaseline 최신 main 통합
+
+- 최신 `main` 리베이스에서 post-`0061`의 location-audit·동의 이벤트·좌표 출처 `0062~0065`가 M05 branch의
+  같은 revision 번호와 충돌함을 확인했다. active graph는 `20260824_0100 → 20260824_0101`로 유지하되,
+  `0100`은 PostgreSQL 16 `0061` app catalog 기준선, `0101`은 upstream 변경과 M05
+  anchor·append-only audit/receipt·최소 ACL 계약을 함께 적용하도록 재정렬했다.
+- root-only rebaseline helper는 정확한 `0061` version row, final-boundary sentinel, M05 object
+  부재, `COLLATE "C"` structural catalog fingerprint와 root-owned fresh backup checksum을 모두
+  확인한 뒤 version row 한 행만 `0100`으로 바꾼다. PostgreSQL 16 disposable `0061 → 0100 → 0101`
+  리허설과 N150 read-only preflight가 통과했다. 통합 `0101`의 fresh bootstrap·rebaseline,
+  동의/위치 감사·M05 복구 focused PostgreSQL 회귀 147건도 통과했다.
+- `verify_m05_hotswap_release_receipt`를 migration owner 소유 `SECURITY DEFINER` 함수로 추가해,
+  fence role에 `x_extension` 권한을 넓히지 않고 receipt hash를 검증한다. 운영 DB mutation과 M05
+  activation은 수행하지 않았다.
+
+## 2026-08-24 (codex) — M05 Alembic `0100/0101` rebaseline 정책
+
+- N150 운영 DB를 read-only로 확인했다. PostgreSQL 16, `20260821_0061`, 실제 app 데이터 보유,
+  M05 `ops` 객체 없음이다. API mount에서는 backup artifact를 확인할 수 없으므로 production
+  전환 전 fresh root-only snapshot을 필수 gate로 둔다.
+- ADR-065는 active graph를 `0100` full baseline과 current main·M05 `0101` 통합 revision만으로
+  재구성한다.
+  과거 revision upgrade는 지원하지 않되, 현재 N150 `0061` DB는 backup proof와 catalog fingerprint가
+  모두 맞을 때에만 version row를 `0100`으로 전환하고 `0101`을 적용한다.
+- M05 activation은 계속 `false`이며 production DB mutation은 별도 승인 전까지 하지 않는다.
+
+## 2026-08-24 (codex) — M05 durable release receipt·forensic recovery 완결
+
+- release failure에서 schema rename-back·restore candidate 삭제·ACL/CONNECT 자동 복구를 없앴다.
+  forensic marker는 최초 mutation 전부터 `prepared → fence_intent → fence_applied → restore_ready
+  → switched → fence_release_intent → fence_released`를 append-only로 남기며, latch된 marker는 새
+  hotswap을 차단한다.
+- 이후 `20260824_0101`로 통합된 M05 receipt 계약은 `ops.m05_hotswap_release_receipts`, `ENABLE ALWAYS` append-only
+  trigger, target DB owner에만 한정한 `SELECT`/`EXECUTE` ACL과 canonical topology/receipt 함수를
+  설치한다. CONNECT release와 receipt insert는 같은 transaction으로 commit한다.
+- root recovery는 `fence_release_intent`도 raw marker/history SHA-256, receipt의 digest/OID/ACL
+  binding, target catalog·CONNECT state를 read-only로 대조한 경우에만 archive한다. receipt가 없거나
+  recovery latch가 있으면 fail-closed 한다.
+- M05 관련 unit 96건, PostgreSQL hotswap preflight 8건, Alembic receipt migration/ACL/불변성 5건,
+  PostgreSQL 16 recovery authority proof를 통과했다. activation은 계속 `false`이며 운영 DB mutation은
+  별도 변경 승인 범위에 두었다.
+
+## 2026-08-24 (codex) — M05 trusted hotswap root 입력 경계 보강
+
+- staging/production schema-swap의 DB URL·role·source identity·backup 경로를 caller
+  environment에서 제거하고 root:root `0600` `/etc/pinvi/trusted-hotswap.json`의 exact field로
+  옮겼다. fixed `/usr/bin/python3 -I` entrypoint와 `env -i` root launcher만 이를 읽으며
+  `PYTHONPATH`, `PG*`, `PINVI_*`, caller `PATH`를 포함한 추가 환경은 config/DB/runner 실행 전에
+  거부한다.
+- root launcher의 root 검사도 fixed `/usr/bin/id`와 먼저 고정한 `PATH`만 사용한다. caller
+  `PATH`의 가짜 command가 root 권한으로 실행되지 않는 subprocess 회귀를 추가했다.
+- `prepare-drain --confirm`은 quiescent writer/empty M05 advisory lock의 read-only proof와
+  snapshot SHA-256·target identity를 15분 single-use receipt로 봉인한다. receipt는 archive
+  hard link 뒤 unlink하고, unlink 실패는 archive와 pending marker를 함께 남겨 fail-closed 한다.
+- 아직 M05 activation은 `false`다. 다음 작업은 release failure 후의 자동 schema rollback 및
+  restore candidate 삭제를 제거하고 forensic lifecycle transition을 실제 runner에 결박하는 일이다.
 
 ## 2026-08-24 (codex) — T-323 Web E2E required gate 착수
 

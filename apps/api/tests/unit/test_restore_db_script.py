@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
 from pathlib import Path
+
+import pytest
 
 BASH_BIN = "/usr/bin/bash"
 
@@ -24,6 +27,10 @@ def test_restore_db_bootstraps_schema_and_regrants_explicit_runtime_role(tmp_pat
     invocation_log = tmp_path / "invocations.log"
     snapshot = tmp_path / "m05.dump"
     snapshot.write_bytes(b"custom-format-fixture")
+    snapshot.with_name(f"{snapshot.name}.sha256").write_text(
+        f"{hashlib.sha256(snapshot.read_bytes()).hexdigest()}  {snapshot.name}\n",
+        encoding="utf-8",
+    )
     _write_executable(
         fake_bin / "psql",
         """#!/usr/bin/env bash
@@ -47,6 +54,8 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
             "PATH": f"{fake_bin}:/usr/bin:/bin",
             "PINVI_RESTORE_DATABASE_URL": "postgresql://pinvi:fixture@db:5432/pinvi",
             "PINVI_RESTORE_APP_ROLE": "pinvi_app",
+            "PINVI_M05_RESTORE_TEST_MODE": "1",
+            "PINVI_ENVIRONMENT": "test",
             "PINVI_TEST_LOG": str(invocation_log),
         }
     )
@@ -60,19 +69,27 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
         check=True,
     )
 
-    assert result.stdout == f"RESTORED_FILE={snapshot}\n"
+    assert result.stdout == (
+        "RESTORE_COMMAND=pg_restore --clean --if-exists --exit-on-error "
+        f"--no-owner --no-privileges\nRESTORED_FILE={snapshot}\n"
+    )
     calls = invocation_log.read_text(encoding="utf-8").splitlines()
     assert calls[0].startswith("psql:")
     assert "FROM pg_roles" in calls[0]
     assert "n.nspowner = r.oid" in calls[0]
     assert "pg_has_role(r.oid, n.nspowner, 'member')" in calls[0]
+    assert "NOT r.rolinherit" in calls[0]
+    assert "FROM pg_auth_members m WHERE m.member = r.oid" in calls[0]
     assert calls[1].startswith("psql:")
-    assert 'CREATE SCHEMA IF NOT EXISTS "app"' in calls[1]
-    assert calls[2].startswith("pg_restore:")
-    assert "--no-owner" in calls[2]
-    assert "--no-privileges" in calls[2]
-    assert calls[3].startswith("psql:")
-    assert 'GRANT USAGE ON SCHEMA "app" TO "pinvi_app"' in calls[3]
+    assert "WITH RECURSIVE role_closure" in calls[1]
+    assert calls[2].startswith("psql:")
+    assert 'CREATE SCHEMA IF NOT EXISTS "app"' in calls[2]
+    assert calls[3].startswith("pg_restore:")
+    assert "--no-owner" in calls[3]
+    assert "--no-privileges" in calls[3]
+    assert calls[4].startswith("psql:")
+    assert 'GRANT USAGE ON SCHEMA "app" TO "pinvi_app"' in calls[4]
+    assert "GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA" in calls[4]
 
 
 def test_restore_db_rejects_invalid_runtime_role_before_schema_mutation(tmp_path: Path) -> None:
@@ -81,6 +98,10 @@ def test_restore_db_rejects_invalid_runtime_role_before_schema_mutation(tmp_path
     invocation_log = tmp_path / "invocations.log"
     snapshot = tmp_path / "m05.dump"
     snapshot.write_bytes(b"custom-format-fixture")
+    snapshot.with_name(f"{snapshot.name}.sha256").write_text(
+        f"{hashlib.sha256(snapshot.read_bytes()).hexdigest()}  {snapshot.name}\n",
+        encoding="utf-8",
+    )
     _write_executable(
         fake_bin / "psql",
         """#!/usr/bin/env bash
@@ -102,6 +123,8 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
             "PATH": f"{fake_bin}:/usr/bin:/bin",
             "PINVI_RESTORE_DATABASE_URL": "postgresql://pinvi:fixture@db:5432/pinvi",
             "PINVI_RESTORE_APP_ROLE": "pinvi_app",
+            "PINVI_M05_RESTORE_TEST_MODE": "1",
+            "PINVI_ENVIRONMENT": "test",
             "PINVI_TEST_LOG": str(invocation_log),
         }
     )
@@ -118,8 +141,104 @@ printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
     assert result.returncode == 3
     assert "PINVI_RESTORE_APP_ROLE" in result.stderr
     calls = invocation_log.read_text(encoding="utf-8").splitlines()
-    assert len(calls) == 1
+    assert len(calls) == 2
     assert calls[0].startswith("psql:")
     assert "FROM pg_roles" in calls[0]
     assert "n.nspowner = r.oid" in calls[0]
     assert "pg_has_role(r.oid, n.nspowner, 'member')" in calls[0]
+    assert "NOT r.rolinherit" in calls[0]
+    assert "FROM pg_auth_members m WHERE m.member = r.oid" in calls[0]
+    assert "WITH RECURSIVE role_closure" in calls[1]
+
+
+def test_restore_db_rejects_api_writable_snapshot_before_pg_restore(tmp_path: Path) -> None:
+    marker = tmp_path / "pg-restore-called"
+    snapshot = tmp_path / "untrusted.dump"
+    snapshot.write_bytes(b"malicious-custom-archive")
+    snapshot.with_name(f"{snapshot.name}.sha256").write_text(
+        f"{hashlib.sha256(snapshot.read_bytes()).hexdigest()}  {snapshot.name}\n",
+        encoding="utf-8",
+    )
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(
+        fake_bin / "pg_restore",
+        '#!/usr/bin/env bash\nset -euo pipefail\ntouch "$PINVI_TEST_TOOL_MARKER"\n',
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{fake_bin}:/usr/bin:/bin",
+            "PINVI_ENVIRONMENT": "production",
+            "PINVI_RESTORE_DATABASE_URL": "postgresql://restore-owner@db:5432/pinvi",
+            "PINVI_RESTORE_PG_RESTORE_BIN": str(fake_bin / "pg_restore"),
+            "PINVI_TEST_TOOL_MARKER": str(marker),
+        }
+    )
+    env.pop("PINVI_M05_RESTORE_TEST_MODE", None)
+
+    result = subprocess.run(  # noqa: S603
+        [BASH_BIN, str(_repo_root() / "scripts" / "restore-db.sh"), str(snapshot)],
+        cwd=_repo_root(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 3
+    assert "strict restore requires a root-owned trusted backup directory" in result.stderr
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize("environment", ["staging", "production"])
+def test_restore_db_rejects_test_mode_outside_test_before_clean_restore(
+    tmp_path: Path,
+    environment: str,
+) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    invocation_log = tmp_path / "invocations.log"
+    snapshot = tmp_path / "m05.dump"
+    snapshot.write_bytes(b"custom-format-fixture")
+    snapshot.with_name(f"{snapshot.name}.sha256").write_text(
+        f"{hashlib.sha256(snapshot.read_bytes()).hexdigest()}  {snapshot.name}\n",
+        encoding="utf-8",
+    )
+    _write_executable(
+        fake_bin / "psql",
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf 'psql:%s\\n' "$*" >> "$PINVI_TEST_LOG"
+""",
+    )
+    _write_executable(
+        fake_bin / "pg_restore",
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf 'pg_restore:%s\\n' "$*" >> "$PINVI_TEST_LOG"
+""",
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{fake_bin}:/usr/bin:/bin",
+            "PINVI_RESTORE_DATABASE_URL": "postgresql://pinvi:fixture@db:5432/pinvi",
+            "PINVI_M05_RESTORE_TEST_MODE": "1",
+            "PINVI_ENVIRONMENT": environment,
+            "PINVI_TEST_LOG": str(invocation_log),
+        }
+    )
+
+    result = subprocess.run(  # noqa: S603
+        [BASH_BIN, str(_repo_root() / "scripts" / "restore-db.sh"), str(snapshot)],
+        cwd=_repo_root(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 3
+    assert "M05 restore test mode requires PINVI_ENVIRONMENT=test" in result.stderr
+    assert not invocation_log.exists()

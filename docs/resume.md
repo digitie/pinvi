@@ -1,14 +1,58 @@
 # resume.md
 
-## 2026-08-24 (claude) — T-325 지도 자동 센터링 (PR #469, 머지 대기)
+## 2026-08-25 (codex) — M05 P1 fence·one-shot·legacy ACL 재보강
 
-**방금**: 웹·앱 지도가 진입 시 단말기 위치로 중심점을 잡게 했다(동의 + 권한이 이미 있을 때만,
-프롬프트·모달 없이). 착수 중 발견한 선행 블로커 — api-client가 서버에 없는 `/users/consents`를
-호출해 **모든 동의 요청이 404** — 를 먼저 고쳤다. 적대적 리뷰 차단 3건과 minor 지적을 모두 반영했다.
+적대 재심이 발견한 네 P1을 반영했다. `pg_database` authority proof보다 먼저 5초
+`lock_timeout`을 설정하고, legacy handoff는 advisory serialization lock → timeout →
+database identity proof → connection fence 순서로 고정했다. 일반 `app-migrator`는
+`PINVI_MIGRATOR_DATABASE_URL`을 더 이상 받아들이지 않으며 wrapper가 이를 fail-close하고
+one-shot user/password만 사용한다. role bootstrap은 새 password를 열기 전에 기존 migrator
+LOGIN/CONNECT와 backend를 항상 회수·검증한다. legacy profile은 receipt fingerprint 재검증
+전 `app` ACL/default ACL을 바꾸지 않고, canonical owner 수렴 후 `0101` 안에서만 runtime grant를
+복원한다.
 
-**다음 한 작업**: PR #469 리뷰/머지(지시 대기 중). 그 다음은 T-273(v1.0.0 E2E/Live gate,
-남은 hard blocker는 geofence 운영 설정). T-326·T-327은 이번 리뷰에서 분리한 후속이다.
+**검증**: 정적 테스트 35건, PostgreSQL fence·legacy ownership integration 3건, Docker migrator
+lifecycle 1건, `0101` 통합 PostgreSQL 24건, API unit 1,271건, Ruff/format, strict mypy
+235 source files, shell/Compose 검증을 통과했다. Windows mount 임시 디렉터리의 mode 보존 한계는
+`TMPDIR=/tmp` Linux 재실행으로 분리 확인했다.
 
+**다음 한 작업**: 이 보강을 최신 `main`에 rebase·push한 뒤 두 전문 적대 재심과 GitHub CI를
+통과시키고, 격리 N150 paired live browser E2E를 실행한다. 모두 green이 되기 전에는 PR #466
+merge나 production DB mutation/M05 activation을 하지 않는다.
+
+## 2026-08-24 (codex) — M05 Alembic `0100/0101` rebaseline 최신 main 통합
+
+사용자가 과거 Alembic 이력 호환을 종료하기로 결정했다. N150 운영 DB를 읽기 전용으로
+확인한 결과 PostgreSQL 16의 `20260821_0061`이며 실제 app 데이터가 있고, M05 객체는 아직
+없다. 최신 `main` 리베이스에서 post-`0061` location-audit·동의 이력·좌표 출처 migration을
+M05의 옛 `0062~0064` 번호와 함께 하나의 final head로 접었다. ADR-065에 따라 active graph는
+새 설치용 `0100` 기준선과 이 upstream 변경·M05를 함께 적용하는 `0101` 하나만 남긴다.
+`20260824_0065`의 좌표 출처 계약도 `0101`에 통합했고, final-boundary pin과
+`ck_ktm_ct_boundary_contract`는 최종 `0101`에서만 재결박한다. N150의 read-only `0061`
+catalog fingerprint preflight, 통합 `0101` fresh bootstrap·`0061` rebaseline rehearsal,
+focused PostgreSQL 회귀 147건과 fresh migration·artifact immutability 회귀 17건을 통과했다.
+
+**다음 한 작업**: 두 전문 적대 리뷰와 N150 paired browser E2E, GitHub CI를 확인한 뒤 draft
+PR #466을 병합한다. production DB mutation과 M05 activation은 별도 승인 전까지 하지 않는다.
+
+## 2026-08-24 (codex) — M05 root-only hotswap 실행 경계
+
+M05 staging/production hotswap은 draft PR #466에서 root-only launcher와 static JSON config로
+입력을 봉인했다. caller 환경 변수·caller PATH·Python site 설정은 trusted DB URL, role, source
+identity, backup 경로를 바꿀 수 없고, drain proof도 exact operation UUID·snapshot digest·target
+identity·15분 TTL로 한 번만 소비된다. root wrapper 이전의 bare command PATH lookup도 제거했다.
+
+**상태**: 자동 rollback·candidate 삭제를 제거하고 forensic lifecycle을 실제 mutation 경계에
+결박했다. 현재 `0101`은 CONNECT release와 같은 DB transaction에 append-only release receipt를 남기며,
+root recovery는 `fence_release_intent`의 raw marker/history binding·receipt·catalog topology가 모두
+일치할 때만 acknowledgement를 기록한다. M05 activation은 계속 `false`다.
+
+**검증**: M05 관련 unit 96건, 실제 PostgreSQL schema-swap preflight 8건, Alembic receipt
+migration/ACL/append-only integration 5건, PostgreSQL 16 recovery authority proof를 통과했다.
+
+**다음 한 작업**: 최종 적대 재리뷰 결과를 반영해 최신 `main`으로 rebase·push한 뒤, N150 live UI
+E2E와 GitHub CI가 모두 green인 것을 확인하고 draft PR #466을 병합한다. 운영 DB의 실제 schema-swap은
+별도 운영 변경 승인 없이는 실행하지 않는다.
 
 ## 2026-08-22 (codex) — Map #1051 service 계약 재vendor 준비
 

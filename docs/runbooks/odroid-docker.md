@@ -126,11 +126,12 @@ git pull origin main
 # 환경변수 갱신
 $EDITOR .env
 
-# 이미지 pull
-TAG=$(git rev-parse --short HEAD)
-TAG=$TAG docker compose -f infra/docker-compose.app.yml pull
-TAG=$TAG docker compose -f infra/docker-compose.app.yml up -d
-docker compose -f infra/docker-compose.app.yml ps
+# 이미지 pull + OCI revision/image ID 검증 + 기동
+# production/staging은 raw `docker compose pull/up`로 우회하지 않는다.
+scripts/deploy-node.sh pull
+scripts/deploy-node.sh up
+scripts/deploy-node.sh smoke
+scripts/deploy-node.sh status
 ```
 
 ### 4.2 옵션 B — NTFS tar scp
@@ -139,13 +140,14 @@ docker compose -f infra/docker-compose.app.yml ps
 # 로컬에서
 scp /mnt/c/.../pinvi-{api,web,etl}-arm64-<date>.tar.gz odroid:/tmp/
 
-# Odroid에서
+# Odroid에서 — load 뒤에도 wrapper가 image label/ID와 실행 container를 재검증한다.
 ssh odroid bash -s << 'EOF'
   cd /opt/pinvi
   for img in api web etl; do
     docker load < /tmp/pinvi-${img}-arm64-*.tar.gz
   done
-  docker compose -f infra/docker-compose.app.yml up -d
+  scripts/deploy-node.sh up
+  scripts/deploy-node.sh smoke
 EOF
 ```
 

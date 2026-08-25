@@ -1,0 +1,38 @@
+{
+  "map": {
+    "admin": {
+      "openapi_sha256": "2c02ecfead95b06306db7189278c975ec83a9e2a793f3f0e18ca0bd96240f3cb",
+      "runtime_operation_contract_sha256": "82f99829a6e02994c27633863a4682e583216779091989105fc535e6454b1634",
+      "source_canonical_sha256": "0140fa6b06ae6ad9611b85058187ae97cb650c372f14869da0e5c8d5e6898b2a",
+      "source_operation_contract_sha256": "82f99829a6e02994c27633863a4682e583216779091989105fc535e6454b1634",
+      "source_revision": "fadc029ce2b0cd730c604697e04d1fccdff02ce9"
+    },
+    "full": {
+      "openapi_sha256": "7ae7fbc68eaa666fb9c22d4d6e4bc554339a0eb878dd05d14df090a5c173fae6",
+      "runtime_operation_contract_sha256": "82f99829a6e02994c27633863a4682e583216779091989105fc535e6454b1634",
+      "source_canonical_sha256": "365905328cbb2b91c3f0630e56d222743baf9bd9bddca45974904ece2dac810b",
+      "source_operation_contract_sha256": "82f99829a6e02994c27633863a4682e583216779091989105fc535e6454b1634",
+      "source_revision": "db319a4798229098d04e68e3ac64338183ad547f"
+    },
+    "service": {
+      "openapi_sha256": "99ba6c178bf55401d3e1bb638a01b96f66bbac38d604534aa126a70f4be53d3d",
+      "runtime_operation_contract_sha256": "d76ab8834e0e87cd81c2b0eaf6c2d56ce8809c3413f62923a3be4eb67ff2819a",
+      "source_canonical_sha256": "0895944a587f501408c71743b02a0a10c16c290c6963d705cca0e8c996e140a7",
+      "source_operation_contract_sha256": "d76ab8834e0e87cd81c2b0eaf6c2d56ce8809c3413f62923a3be4eb67ff2819a",
+      "source_revision": "db319a4798229098d04e68e3ac64338183ad547f"
+    },
+    "user": {
+      "openapi_sha256": "489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b",
+      "runtime_operation_contract_sha256": "2f4172c041649dd8faa5c1e17ce76fb7f6363b3424599066d6d6d1def9f8d808",
+      "source_canonical_sha256": "92d46dafbaacf88f15d745dd736bc0712c1762ab01da94a14f1db8d9113ffb7b",
+      "source_operation_contract_sha256": "2f4172c041649dd8faa5c1e17ce76fb7f6363b3424599066d6d6d1def9f8d808",
+      "source_revision": "037e24698f74e2067ea7c8572b044076dc0ac89c"
+    }
+  },
+  "runtime_image_digests": {
+    "admin": "sha256:6610eb0b61e5c2f0474990282001dfa0447094a1ef116c4350de261b519c2d7e",
+    "api": "sha256:6610eb0b61e5c2f0474990282001dfa0447094a1ef116c4350de261b519c2d7e",
+    "frontend": "sha256:089bbc5fd4be2ee85539bcad0c1ba7dc5c00fe5a4d9a1fa946636c920c9da548"
+  },
+  "version": 1
+}

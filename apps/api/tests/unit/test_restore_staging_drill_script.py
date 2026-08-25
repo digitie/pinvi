@@ -7,6 +7,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[4]
 SCRIPT = REPO_ROOT / "scripts" / "restore-staging-drill.sh"
 
@@ -34,6 +36,9 @@ def _fake_tool_env(tmp_path: Path) -> dict[str, str]:
         fake_bin / "pg_restore",
         """#!/usr/bin/env bash
 set -euo pipefail
+if [[ -n "${PINVI_TEST_TOOL_MARKER:-}" ]]; then
+  touch "$PINVI_TEST_TOOL_MARKER"
+fi
 exit 0
 """,
     )
@@ -41,6 +46,9 @@ exit 0
         fake_bin / "psql",
         """#!/usr/bin/env bash
 set -euo pipefail
+if [[ -n "${PINVI_TEST_TOOL_MARKER:-}" ]]; then
+  touch "$PINVI_TEST_TOOL_MARKER"
+fi
 sql="${*: -1}"
 if [[ "$*" == *"DROP SCHEMA"* ]]; then
   exit 0
@@ -69,9 +77,12 @@ fi
     )
     env = os.environ.copy()
     env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    env["PINVI_M05_RESTORE_TEST_MODE"] = "1"
+    env["PINVI_ENVIRONMENT"] = "test"
     for key in (
         "PINVI_DATABASE_URL",
         "PINVI_RESTORE_DATABASE_URL",
+        "PINVI_RESTORE_HOTSWAP_DATABASE_URL",
         "PINVI_RESTORE_STAGING_DATABASE_URL",
         "PINVI_RESTORE_DRILL_ALLOW_NON_STAGING",
         "PINVI_RESTORE_APP_ROLE",
@@ -96,6 +107,127 @@ def test_restore_staging_drill_requires_staging_url(tmp_path: Path) -> None:
 
     assert result.returncode == 2
     assert "PINVI_RESTORE_STAGING_DATABASE_URL is required" in result.stdout
+
+
+@pytest.mark.parametrize("environment", ["staging", "production"])
+def test_restore_staging_drill_rejects_test_mode_before_restore_tools(
+    tmp_path: Path,
+    environment: str,
+) -> None:
+    snapshot = tmp_path / "pinvi-app-test.dump"
+    _write_snapshot(snapshot)
+    marker = tmp_path / "restore-tool-called"
+    env = _fake_tool_env(tmp_path)
+    env.update(
+        {
+            "PINVI_ENVIRONMENT": environment,
+            "PINVI_DATABASE_URL": "postgresql://pinvi:fixture@db:5432/pinvi",
+            "PINVI_RESTORE_DRILL_ALLOW_NON_STAGING": "1",
+            "PINVI_TEST_TOOL_MARKER": str(marker),
+        }
+    )
+
+    result = subprocess.run(  # noqa: S603
+        [str(SCRIPT), "run", str(snapshot)],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 3
+    assert "M05 restore test mode requires PINVI_ENVIRONMENT=test" in result.stdout
+    assert not marker.exists()
+
+
+def test_restore_staging_drill_forwards_target_binding_marker() -> None:
+    script = SCRIPT.read_text(encoding="utf-8")
+
+    assert (
+        "RESTORE_TARGET_BINDING=*|RESTORE_SOURCE_BINDING=*) printf '%s\\n' \"${restore_line}\" ;;"
+        in script
+    )
+    assert (
+        'FENCE_DATABASE_URL="${PINVI_RESTORE_FENCE_DATABASE_URL:-${STAGING_DATABASE_URL}}"'
+        in script
+    )
+    assert 'TRUSTED_SNAPSHOT="${SNAPSHOT}"' in script
+    assert 'restore-db.sh" "${TRUSTED_SNAPSHOT}"' in script
+    assert 'PINVI_RESTORE_FENCE_DATABASE_URL="${FENCE_DATABASE_URL}"' in script
+    assert "PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME" in script
+    assert "PINVI_RESTORE_FENCE_DATABASE_URL is required for a non-test staging drill" in script
+    assert "PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL=none|precheck" in script
+    assert "DROP SCHEMA" not in script
+    assert "rollback_database_fence" not in script
+    assert "m05_advisory_lock_present" not in script
+    assert "drain rollback rehearsal is unavailable" in script
+    assert "PINVI_M05_OPERATION_LEASE_FD" in script
+    assert "PINVI_M05_OPERATION_LEASE_TOKEN" in script
+    assert "assert_operation_lease" in script
+    assert "strict staging drill requires a trusted target operation lease" in script
+
+
+def test_restore_staging_drill_rejects_managed_run_without_lease_before_tools(
+    tmp_path: Path,
+) -> None:
+    snapshot = tmp_path / "pinvi-app-staging.dump"
+    _write_snapshot(snapshot)
+    marker = tmp_path / "restore-tool-called"
+    env = _fake_tool_env(tmp_path)
+    env.update(
+        {
+            "PINVI_M05_RESTORE_TEST_MODE": "0",
+            "PINVI_ENVIRONMENT": "staging",
+            "PINVI_RESTORE_STAGING_DATABASE_URL": "postgresql://pinvi:pinvi@localhost:5432/pinvi_staging",
+            "PINVI_RESTORE_FENCE_DATABASE_URL": "postgresql://fence:fence@localhost:5432/pinvi_staging",
+            "PINVI_TEST_TOOL_MARKER": str(marker),
+        }
+    )
+
+    result = subprocess.run(  # noqa: S603
+        [str(SCRIPT), "run", str(snapshot)],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 3
+    assert "strict staging drill requires a trusted target operation lease" in result.stdout
+    assert not marker.exists()
+
+
+def test_restore_staging_drill_rejects_legacy_drain_before_any_database_tool(
+    tmp_path: Path,
+) -> None:
+    snapshot = tmp_path / "pinvi-app-test.dump"
+    _write_snapshot(snapshot)
+    marker = tmp_path / "restore-tool-called"
+    env = _fake_tool_env(tmp_path)
+    env.update(
+        {
+            "PINVI_RESTORE_STAGING_DATABASE_URL": (
+                "postgresql://pinvi:pinvi@localhost:5432/pinvi_staging"
+            ),
+            "PINVI_RESTORE_DRILL_ROLLBACK_REHEARSAL": "drain",
+            "PINVI_TEST_TOOL_MARKER": str(marker),
+        }
+    )
+
+    result = subprocess.run(  # noqa: S603
+        [str(SCRIPT), "run", str(snapshot)],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 3
+    assert "drain rollback rehearsal is unavailable" in result.stdout
+    assert not marker.exists()
 
 
 def test_restore_staging_drill_masks_path_and_rehearses_guard(tmp_path: Path) -> None:

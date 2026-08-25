@@ -6,8 +6,16 @@
 | --------------------------- | ---------------------------------------------------------------------------------------------------------- | ------ |
 | `docker-app.sh`             | App 컨테이너 build/up/down/status/logs/smoke + API image provenance 검증                                   | 1      |
 | `api_image_provenance.py`   | clean Git HEAD·build arg·API image OCI revision label fail-closed 검증                                     | ops    |
+| `m05_activation_attestation.py` | M04 승인 UI 증적과 M05 live UI·Map ACK·실제 runtime image·pinned OpenAPI를 같은 chain의 서명 attestation으로 봉인 | 6      |
+| `m05_activation_receipt.py` | M05의 두 리뷰·live UI·Map pair·restore·Pinvi image 증거를 Ed25519 signed receipt로 봉인              | 6      |
+| `m05_restore_drill.py`      | 격리 source DB dump를 fresh target에 no-owner 복원하고 runtime role·append-only trigger를 검증       | 6      |
+| `m05_operation_lease.py`    | 같은 N150 host의 hotswap·fresh target provisioner가 공유하는 root-owned target별 실행 lease              | 6      |
+| `m05_hotswap_forensics.py`  | schema-swap의 root-owned forensic marker·append-only 상태전이·명시적 recovery acknowledgement 보관 | 6      |
 | `docker-app-smoke-test.sh`  | `docker-app.sh smoke` 호환 wrapper                                                                         | 1      |
 | `pr_review_monitor.py`      | 열린 PR / PR 이벤트에서 최신 head SHA review reminder를 확인하고 MCP 기반 리뷰 알림 댓글을 남김            | 4      |
+| `trusted-backup-entrypoint.py` | staging/production root producer가 DB hostname을 단일 `hostaddr`로 결박한 뒤 canonical backup runner를 exec | 6      |
+| `trusted-hotswap-root.sh` | 호출자 환경을 비우고 root-owned 설정만 읽는 hotswap launcher                                                   | 6      |
+| `trusted-hotswap-entrypoint.py` | staging/production root one-shot hotswap의 endpoint pinning·forensic status/recovery acknowledgement 경계 | 6      |
 | `backup-db.sh`              | `app` schema `pg_dump --format=custom` + sha256. host `pg_dump` 부재 시 Docker fallback 지원 (ADR-022 1차) | 5      |
 | `restore-db.sh`             | custom dump `pg_restore` (긴급/스테이징, 핫스왑 전 단계)                                                   | 5      |
 | `deploy-node.sh`            | 운영 노드에서 attested compose build/migrate/up/smoke 실행 (N150/Odroid 공통)                              | 6      |

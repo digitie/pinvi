@@ -10,6 +10,9 @@ PINVI_PROVENANCE_ARCHIVE_ROOT=""
 PINVI_ATTESTED_API_IMAGE_ID=""
 PINVI_ATTESTED_WEB_IMAGE_ID=""
 PINVI_ATTESTED_DAGSTER_IMAGE_ID=""
+PINVI_API_IMAGE_DIGEST=""
+PINVI_WEB_IMAGE_DIGEST=""
+PINVI_DAGSTER_IMAGE_DIGEST=""
 PINVI_APP_BUILD_CONTEXT=""
 PINVI_PROVENANCE_PY="$ROOT_DIR/scripts/api_image_provenance.py"
 PINVI_ORIGINAL_COMPOSE_FILE="$COMPOSE_FILE"
@@ -22,6 +25,9 @@ pinvi_cleanup_api_build_context() {
   fi
   unset PINVI_API_BUILD_CONTEXT
   unset PINVI_APP_BUILD_CONTEXT
+  unset PINVI_API_IMAGE_DIGEST
+  unset PINVI_WEB_IMAGE_DIGEST
+  unset PINVI_DAGSTER_IMAGE_DIGEST
   COMPOSE_FILE="$PINVI_ORIGINAL_COMPOSE_FILE"
   PINVI_PROVENANCE_PY="$ROOT_DIR/scripts/api_image_provenance.py"
 }
@@ -206,14 +212,20 @@ pinvi_bind_attested_runtime_image_id() {
   case "$service" in
     app-api)
       PINVI_ATTESTED_API_IMAGE_ID="$image_id"
+      PINVI_API_IMAGE_DIGEST="$image_id"
+      export PINVI_API_IMAGE_DIGEST
       export PINVI_API_IMAGE="$image_id"
       ;;
     app-web)
       PINVI_ATTESTED_WEB_IMAGE_ID="$image_id"
+      PINVI_WEB_IMAGE_DIGEST="$image_id"
+      export PINVI_WEB_IMAGE_DIGEST
       export PINVI_WEB_IMAGE="$image_id"
       ;;
     app-dagster)
       PINVI_ATTESTED_DAGSTER_IMAGE_ID="$image_id"
+      PINVI_DAGSTER_IMAGE_DIGEST="$image_id"
+      export PINVI_DAGSTER_IMAGE_DIGEST
       export PINVI_DAGSTER_IMAGE="$image_id"
       ;;
     *) return 2 ;;

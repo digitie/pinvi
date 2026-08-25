@@ -20,8 +20,11 @@ from app.clients.kor_travel_map_feature_reference_reconciliation import (
 )
 from app.core.config import Settings, settings
 from app.services import feature_reference_reconciliation_worker as reconciliation_worker
+from app.services.feature_reference_reconciliation import ReconciliationApplied
 from app.services.feature_reference_reconciliation_worker import (
+    FeatureReferenceReconciliationRuntimeLeaseError,
     _worker_loop,
+    consume_feature_reference_reconciliation_once,
     feature_reference_reconciliation_worker_lifespan,
 )
 
@@ -54,6 +57,130 @@ class _ClosingClient:
 
     async def aclose(self) -> None:
         self.closed = True
+
+
+class _Session:
+    async def commit(self) -> None:
+        return None
+
+
+class _SessionContext:
+    async def __aenter__(self) -> _Session:
+        return _Session()
+
+    async def __aexit__(self, *_args: object) -> None:
+        return None
+
+
+class _SessionFactory:
+    def __call__(self) -> _SessionContext:
+        return _SessionContext()
+
+
+class _LeaseClient:
+    def __init__(self) -> None:
+        event_id = uuid.uuid4()
+        self.calls = 0
+        self.lease_value = SimpleNamespace(
+            event=SimpleNamespace(event_id=event_id, event_sequence=1),
+            event_sha256="a" * 64,
+            lease_epoch=1,
+        )
+
+    async def lease(self, *, worker_id: uuid.UUID) -> SimpleNamespace:
+        del worker_id
+        self.calls += 1
+        return self.lease_value
+
+
+class _AckClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def acknowledge(self, **_kwargs: object) -> None:
+        self.calls += 1
+
+
+@pytest.mark.asyncio
+async def test_consume_rejects_revoked_runtime_lease_before_map_read() -> None:
+    read = _LeaseClient()
+
+    with pytest.raises(FeatureReferenceReconciliationRuntimeLeaseError):
+        await consume_feature_reference_reconciliation_once(
+            cast(async_sessionmaker[AsyncSession], _SessionFactory()),
+            read_client=cast(FeatureReferenceReconciliationServiceClient, read),
+            ack_client=cast(FeatureReferenceReconciliationServiceClient, _AckClient()),
+            worker_id=uuid.uuid4(),
+            runtime_lease_validator=lambda: (_ for _ in ()).throw(RuntimeError("revoked")),
+        )
+
+    assert read.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_consume_rejects_revoked_runtime_lease_between_commit_and_ack(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    read = _LeaseClient()
+    ack = _AckClient()
+    checks = 0
+
+    def validate_runtime_lease() -> None:
+        nonlocal checks
+        checks += 1
+        if checks == 2:
+            raise RuntimeError("revoked")
+
+    async def applied(*_args: object, **_kwargs: object) -> ReconciliationApplied:
+        return ReconciliationApplied(
+            event_id=read.lease_value.event.event_id,
+            local_receipt_sha256="b" * 64,
+            replayed_local_receipt=False,
+        )
+
+    monkeypatch.setattr(
+        reconciliation_worker,
+        "apply_feature_reference_reconciliation_event",
+        applied,
+    )
+    with pytest.raises(FeatureReferenceReconciliationRuntimeLeaseError):
+        await consume_feature_reference_reconciliation_once(
+            cast(async_sessionmaker[AsyncSession], _SessionFactory()),
+            read_client=cast(FeatureReferenceReconciliationServiceClient, read),
+            ack_client=cast(FeatureReferenceReconciliationServiceClient, ack),
+            worker_id=uuid.uuid4(),
+            runtime_lease_validator=validate_runtime_lease,
+        )
+
+    assert checks == 2
+    assert read.calls == 1
+    assert ack.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_worker_stops_with_runtime_lease_fault_before_map_read() -> None:
+    read = _LeaseClient()
+    faults: list[str] = []
+    config = cast(
+        Settings,
+        SimpleNamespace(
+            pinvi_kor_travel_map_feature_reference_reconciliation_poll_seconds=0,
+            pinvi_kor_travel_map_feature_reference_reconciliation_blocked_recheck_seconds=0,
+            validate_m05_runtime_lease=lambda: (_ for _ in ()).throw(RuntimeError("revoked")),
+        ),
+    )
+
+    await _worker_loop(
+        session_factory=cast(async_sessionmaker[AsyncSession], _SessionFactory()),
+        read_client=cast(FeatureReferenceReconciliationServiceClient, read),
+        ack_client=cast(FeatureReferenceReconciliationServiceClient, _AckClient()),
+        worker_id=uuid.uuid4(),
+        config=config,
+        on_permanent_fault=faults.append,
+    )
+
+    assert faults == ["runtime_lease_fault"]
+    assert read.calls == 0
 
 
 @pytest.mark.asyncio

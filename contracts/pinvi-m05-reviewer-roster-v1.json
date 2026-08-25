@@ -1,0 +1,11 @@
+{
+  "agent_ids": [
+    "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
+    "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2"
+  ],
+  "public_keys": {
+    "01a02ce8-22cf-70b2-92cc-7dc3af16a915": "35so7uhWB5K8jjA2XVWo75e5a-Of5F4p3w9ThTlmsm4",
+    "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2": "4nwSanMrFxt_vUNNG1Ro0FAXQmzO0ep9S2WPR75bDHo"
+  },
+  "version": 2
+}

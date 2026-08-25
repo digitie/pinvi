@@ -5,7 +5,7 @@ services:
   app-postgres:
     image: postgis/postgis:16-3.5-alpine
     environment:
-      # schema/table/trigger owner. ordinary app containers never receive this login.
+      # root-only bootstrap/extension owner. ordinary app containers never receive this login.
       POSTGRES_USER: ${PINVI_DB_OWNER_USER:-pinvi_owner}
       # smoke 기본값 — 운영은 infra/.env.prod 로 owner URL과 함께 override한다.
       POSTGRES_PASSWORD: ${PINVI_POSTGRES_PASSWORD:-pinvi_app_smoke}
@@ -16,7 +16,8 @@ services:
       timeout: 5s
       retries: 10
 
-  # Migration owner가 한 번만 만드는, non-owner/non-superuser runtime login이다.
+  # Root bootstrap이 한 번만 만드는 non-owner/non-superuser runtime login과 Alembic role
+  # topology다. ordinary runtime에는 migrator/owner login을 전달하지 않는다.
   # M05 evidence trigger는 runtime login이 ALTER TABLE로 비활성화할 수 없어야 한다.
   app-db-runtime-role:
     image: postgis/postgis:16-3.5-alpine
@@ -30,6 +31,14 @@ services:
       POSTGRES_DB: pinvi
       PINVI_APP_DB_USER: ${PINVI_APP_DB_USER:-pinvi_app}
       PINVI_APP_DB_PASSWORD: ${PINVI_APP_DB_PASSWORD:-pinvi_app_smoke}
+      PINVI_APP_SCHEMA_OWNER: ${PINVI_APP_SCHEMA_OWNER:-pinvi_app_owner}
+      PINVI_MIGRATION_OWNER: ${PINVI_MIGRATION_OWNER:-pinvi_migration_owner}
+      PINVI_MIGRATOR_DB_USER: ${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}
+      PINVI_MIGRATOR_DB_PASSWORD: ${PINVI_MIGRATOR_DB_PASSWORD:-pinvi_app_smoke}
+      # Compose의 보통 재기동은 migrator를 절대 열지 않는다. migration wrapper만 -e로 0을 준다.
+      PINVI_MIGRATOR_DISABLE_LOGIN: "1"
+      # legacy profile은 root-only service로만 실행한다. 일반 role bootstrap은 legacy ownership을 받지 않는다.
+      PINVI_M05_LEGACY_REBASELINE: "0"
     volumes:
       - ./postgres/bootstrap-pinvi-runtime-role.sh:/bootstrap/bootstrap-pinvi-runtime-role.sh:ro
     entrypoint: ["/bin/sh", "/bootstrap/bootstrap-pinvi-runtime-role.sh"]
@@ -88,8 +97,20 @@ services:
       # smoke 기본값 — 운영은 infra/.env.prod 의 ${...} override 로 도메인/시크릿 주입(ADR-047).
       # 내부 endpoint(app-rustfs:9000)는 compose 내부망이라 override 대상 아님.
       PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
-      # non-owner application login only. Migration/restore use PINVI_MIGRATOR_DATABASE_URL.
+      # non-owner application login only. Migration/restore use dedicated one-shot inputs.
       PINVI_DATABASE_URL: ${PINVI_DATABASE_URL:-postgresql+asyncpg://pinvi_app:pinvi_app_smoke@app-postgres:5432/pinvi}
+      # ordinary API에는 raw dump를 mount하지 않는다. strict 환경의 snapshot 목록은
+      # root producer가 만드는 metadata-only catalog로만 표시한다.
+      PINVI_BACKUP_DIR: /var/lib/pinvi/backup-catalog
+      PINVI_BACKUP_SCRIPT_PATH: ${PINVI_BACKUP_SCRIPT_PATH:-scripts/backup-db.sh}
+      PINVI_RESTORE_SCRIPT_PATH: ${PINVI_RESTORE_SCRIPT_PATH:-scripts/restore-db.sh}
+      PINVI_RESTORE_HOTSWAP_SCRIPT_PATH: ${PINVI_RESTORE_HOTSWAP_SCRIPT_PATH:-scripts/restore-hotswap.sh}
+      PINVI_RESTORE_TIMEOUT_SECONDS: ${PINVI_RESTORE_TIMEOUT_SECONDS:-3600}
+      # app-api에는 non-owner runtime URL만 둔다. schema-owner/fence URL과 execute
+      # authority는 root-owned one-shot restore runner에만 주며, strict 환경의 API
+      # restore 요청은 audit 가능한 fail-closed 응답으로 끝낸다.
+      # API는 서명된 runtime attestation만 읽는다. Docker Engine socket은 API에 주지 않는다.
+      PINVI_M05_RUNTIME_LIVE_CHECK: ${PINVI_M05_RUNTIME_LIVE_CHECK:-false}
       PINVI_JWT_SECRET_KEY: ${PINVI_JWT_SECRET_KEY:-pinvi-smoke-jwt-secret-32-bytes-minimum}
       PINVI_MCP_JWT_SECRET: ${PINVI_MCP_JWT_SECRET:-pinvi-smoke-jwt-secret-32-bytes-minimum}
       PINVI_RESEND_API_KEY: ${PINVI_RESEND_API_KEY:-}
@@ -145,6 +166,24 @@ services:
       PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_BLOCKED_RECHECK_SECONDS: ${PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_BLOCKED_RECHECK_SECONDS:-30}
       PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_EXPECTED_OPENAPI_SHA256: ${PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_EXPECTED_OPENAPI_SHA256:-}
       PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_EXPECTED_SOURCE_REVISION: ${PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_EXPECTED_SOURCE_REVISION:-}
+      PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT: ${PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT:-}
+      PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_PATH: ${PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_PATH:-}
+      PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_PUBLIC_KEY: ${PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_PUBLIC_KEY:-}
+      PINVI_M05_RUNTIME_ATTESTATION_PATH: ${PINVI_M05_RUNTIME_ATTESTATION_PATH:-/run/pinvi/m05/runtime-attestation.json}
+      PINVI_M05_RUNTIME_LEASE_DIRECTORY: ${PINVI_M05_RUNTIME_LEASE_DIRECTORY:-/run/pinvi/m05/lease}
+      PINVI_M05_RUNTIME_LEASE_MAX_LIFETIME_SECONDS: ${PINVI_M05_RUNTIME_LEASE_MAX_LIFETIME_SECONDS:-120}
+      PINVI_M05_ACTIVATION_LEDGER_PATH: ${PINVI_M05_ACTIVATION_LEDGER_PATH:-}
+      PINVI_M05_ACTIVATION_HIGH_WATERMARK_PATH: ${PINVI_M05_ACTIVATION_HIGH_WATERMARK_PATH:-}
+      PINVI_M05_ACTIVATION_DURABLE_FLOOR_PATH: ${PINVI_M05_ACTIVATION_DURABLE_FLOOR_PATH:-}
+      PINVI_M05_ACTIVATION_DURABLE_HISTORY_PATH: ${PINVI_M05_ACTIVATION_DURABLE_HISTORY_PATH:-}
+      PINVI_M05_ACTIVATION_DURABLE_ANCHOR_PATH: ${PINVI_M05_ACTIVATION_DURABLE_ANCHOR_PATH:-}
+      PINVI_M05_ACTIVATION_PR_URL: ${PINVI_M05_ACTIVATION_PR_URL:-https://github.com/digitie/pinvi/pull/466}
+      PINVI_M05_ACTIVATION_MIN_GENERATION: ${PINVI_M05_ACTIVATION_MIN_GENERATION:-1}
+      # immutable deploy wrapper가 label/image ID 대조 뒤에만 세 digest를 주입한다.
+      # production activation receipt는 API/Web/Dagster exact image pair를 모두 결박한다.
+      PINVI_API_IMAGE_DIGEST: ${PINVI_API_IMAGE_DIGEST:-}
+      PINVI_WEB_IMAGE_DIGEST: ${PINVI_WEB_IMAGE_DIGEST:-}
+      PINVI_DAGSTER_IMAGE_DIGEST: ${PINVI_DAGSTER_IMAGE_DIGEST:-}
       PINVI_KOR_TRAVEL_MAP_CURATION_SNAPSHOT_TOKEN: ${PINVI_KOR_TRAVEL_MAP_CURATION_SNAPSHOT_TOKEN:-}
       # T-VN-40C sealed legacy plan backfill은 snapshot과 다른 maintenance mapping scope를
       # 필요로 한다. 원문은 API runtime에만 전달하며 web/dagster에는 전달하지 않는다.
@@ -155,10 +194,92 @@ services:
       # 전달되지 않는다.
       PINVI_API_WORKERS: ${PINVI_API_WORKERS:-1}
       PINVI_VWORLD_API_KEY: ${PINVI_VWORLD_API_KEY:-}
+    # ordinary API는 raw dump·restore key·Docker socket을 받지 않는다. root producer의
+    # metadata-only catalog와 M05 trust/lease document만 read-only로 노출한다.
+    volumes:
+      - type: bind
+        source: ${PINVI_BACKUP_CATALOG_HOST_DIR:-/tmp/pinvi-backup-catalog}
+        target: /var/lib/pinvi/backup-catalog
+        read_only: true
+      - type: bind
+        source: ${PINVI_M05_ACTIVATION_LEDGER_HOST_PATH:-/tmp/pinvi-m05-activation-ledger.jsonl}
+        target: ${PINVI_M05_ACTIVATION_LEDGER_PATH:-/run/pinvi/m05/activation-ledger.jsonl}
+        read_only: true
+      - type: bind
+        source: ${PINVI_M05_ACTIVATION_HIGH_WATERMARK_HOST_PATH:-/tmp/pinvi-m05-activation-high-watermark.json}
+        target: ${PINVI_M05_ACTIVATION_HIGH_WATERMARK_PATH:-/run/pinvi/m05/activation-high-watermark.json}
+        read_only: true
+      - type: bind
+        source: ${PINVI_M05_ACTIVATION_DURABLE_FLOOR_HOST_PATH:-/tmp/pinvi-m05-activation-durable-floor.json}
+        target: ${PINVI_M05_ACTIVATION_DURABLE_FLOOR_PATH:-/run/pinvi/m05/activation-durable-floor.json}
+        read_only: true
+      - type: bind
+        source: ${PINVI_M05_ACTIVATION_DURABLE_HISTORY_HOST_PATH:-/tmp/pinvi-m05-activation-durable-history.jsonl}
+        target: ${PINVI_M05_ACTIVATION_DURABLE_HISTORY_PATH:-/run/pinvi/m05/activation-durable-history.jsonl}
+        read_only: true
+      - type: bind
+        source: ${PINVI_M05_ACTIVATION_DURABLE_ANCHOR_HOST_PATH:-/tmp/pinvi-m05-activation-durable-anchor.jsonl}
+        target: ${PINVI_M05_ACTIVATION_DURABLE_ANCHOR_PATH:-/run/pinvi/m05/activation-durable-anchor.jsonl}
+        read_only: true
+      - type: bind
+        source: ${PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_HOST_PATH:-/tmp/pinvi-m05-activation-receipt.json}
+        target: ${PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_PATH:-/run/pinvi/m05/activation-receipt.json}
+        read_only: true
+      - type: bind
+        source: ${PINVI_M05_RUNTIME_ATTESTATION_HOST_PATH:-/tmp/pinvi-m05-runtime-attestation.json}
+        target: ${PINVI_M05_RUNTIME_ATTESTATION_PATH:-/run/pinvi/m05/runtime-attestation.json}
+        read_only: true
+      # directory mount여야 root watcher의 atomic current.json rename을 다음 verify에서 본다.
+      - type: bind
+        source: ${PINVI_M05_RUNTIME_LEASE_HOST_DIR:-/tmp/pinvi-m05-runtime-lease}
+        target: ${PINVI_M05_RUNTIME_LEASE_DIRECTORY:-/run/pinvi/m05/lease}
+        read_only: true
     ports:
-      - "${PINVI_API_PORT:-12801}:8000"
+      - "127.0.0.1:${PINVI_API_PORT:-12801}:8000"
 
-  # Explicit one-shot only: app-api is never allowed to receive the owner URL.
+  # root-only maintenance snapshot producer. app-api에는 이 bind의 write mount나
+  # producer credential을 주지 않는다. `docker compose --profile maintenance run --rm app-backup`만 허용한다.
+  app-backup:
+    image: ${PINVI_API_IMAGE:-pinvi-api:local}
+    profiles: ["maintenance"]
+    restart: "no"
+    user: "0:0"
+    depends_on:
+      app-postgres:
+        condition: service_healthy
+      app-db-runtime-role:
+        condition: service_completed_successfully
+    environment:
+      PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
+      PINVI_BACKUP_DIR: /var/lib/pinvi/restore-trust
+      PINVI_BACKUP_CATALOG_PATH: /var/lib/pinvi/backup-catalog/current.json
+      PINVI_BACKUP_TRUSTED: "1"
+      PINVI_BACKUP_DATABASE_URL: ${PINVI_DATABASE_URL:-postgresql+asyncpg://pinvi_app:pinvi_app_smoke@app-postgres:5432/pinvi}
+      PINVI_BACKUP_SCHEMA: ${PINVI_BACKUP_SCHEMA:-app}
+      PINVI_BACKUP_MIN_FREE_BYTES: ${PINVI_BACKUP_MIN_FREE_BYTES:-1073741824}
+      PINVI_BACKUP_DOCKER_FALLBACK: "0"
+    volumes:
+      - type: bind
+        source: ${PINVI_RESTORE_TRUSTED_BACKUP_HOST_DIR:-/tmp/pinvi-restore-trust}
+        target: /var/lib/pinvi/restore-trust
+      - type: bind
+        source: ${PINVI_BACKUP_CATALOG_HOST_DIR:-/tmp/pinvi-backup-catalog}
+        target: /var/lib/pinvi/backup-catalog
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        export PINVI_BACKUP_PG_DUMP_BIN="$$(command -v pg_dump)"
+        export PINVI_BACKUP_PG_RESTORE_BIN="$$(command -v pg_restore)"
+        export PINVI_BACKUP_PSQL_BIN="$$(command -v psql)"
+        export PINVI_BACKUP_PG_DUMP_SHA256="$$(sha256sum "$${PINVI_BACKUP_PG_DUMP_BIN}" | awk 'NR == 1 { print $$1}')"
+        export PINVI_BACKUP_PG_RESTORE_SHA256="$$(sha256sum "$${PINVI_BACKUP_PG_RESTORE_BIN}" | awk 'NR == 1 { print $$1}')"
+        export PINVI_BACKUP_PSQL_SHA256="$$(sha256sum "$${PINVI_BACKUP_PSQL_BIN}" | awk 'NR == 1 { print $$1}')"
+        # app-postgres hostname은 root producer에서 한 번만 해석해 hostaddr로
+        # 결박한다. preconfigured hostaddr/endpoint override는 dump 전에 거부한다.
+        exec python /app/scripts/trusted-backup-entrypoint.py
+
+  # Explicit one-shot only: app-api is never allowed to receive the migrator URL.
   # `scripts/docker-app.sh migrate` mounts the bootstrap credential and invokes it here.
   app-migrator:
     image: ${PINVI_API_IMAGE:-pinvi-api:local}
@@ -169,8 +290,33 @@ services:
         condition: service_completed_successfully
     environment:
       # This command only owns schema migration/admin bootstrap. It never serves traffic.
-      PINVI_ENVIRONMENT: smoke
-      PINVI_DATABASE_URL: ${PINVI_MIGRATOR_DATABASE_URL:-postgresql+asyncpg://pinvi_owner:pinvi_app_smoke@app-postgres:5432/pinvi}
+      # The non-inheriting login defaults to app schema owner, then 0101 switches its
+      # M05 receipt DDL to PINVI_MIGRATION_OWNER and restores the app owner for versioning.
+      PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
+      PINVI_DATABASE_URL: postgresql+asyncpg://${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}:${PINVI_MIGRATOR_DB_PASSWORD:-pinvi_app_smoke}@app-postgres:5432/pinvi
+      PINVI_MIGRATION_OWNER: ${PINVI_MIGRATION_OWNER:-pinvi_migration_owner}
+      PINVI_MIGRATOR_DB_USER: ${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}
+      PINVI_M05_LEGACY_REBASELINE: "0"
+
+  # 0061→0100→0101은 이 별도 profile에서만 root/session owner로 수행한다.
+  # ordinary app-migrator와 app-api에는 root URL을 전달하지 않는다.
+  app-legacy-rebaseline-migrator:
+    profiles: [legacy-rebaseline]
+    image: ${PINVI_API_IMAGE:-pinvi-api:local}
+    user: "0:0"
+    depends_on:
+      app-postgres:
+        condition: service_healthy
+    environment:
+      PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
+      # wrapper가 legacy를 명시하지 않은 상태에서 직접 실행하면 인증 실패로 닫힌다.
+      PINVI_DATABASE_URL: ${PINVI_LEGACY_REBASELINE_DATABASE_URL:-postgresql+asyncpg://invalid:invalid@app-postgres:5432/pinvi}
+      PINVI_APP_DB_USER: ${PINVI_APP_DB_USER:-pinvi_app}
+      PINVI_APP_SCHEMA_OWNER: ${PINVI_APP_SCHEMA_OWNER:-pinvi_app_owner}
+      PINVI_MIGRATION_OWNER: ${PINVI_MIGRATION_OWNER:-pinvi_migration_owner}
+      PINVI_MIGRATOR_DB_USER: ${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}
+      PINVI_M05_LEGACY_REBASELINE: "1"
+      PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH: /run/pinvi/m05/legacy-rebaseline-receipt.json
 
   app-web:
     build:
@@ -193,7 +339,7 @@ services:
     depends_on:
       - app-api
     ports:
-      - "${PINVI_WEB_PORT:-12805}:3000"
+      - "127.0.0.1:${PINVI_WEB_PORT:-12805}:3000"
 
   # Dagster webserver — 고정 포트 12802(컨테이너/호스트 동일). profile "etl"로만 기동.
   # reverse proxy: pinvi-dagster.<domain> → host :12802.

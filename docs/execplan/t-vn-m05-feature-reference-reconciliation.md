@@ -8,18 +8,18 @@ Map에 ACK한다. 이 문서는 Map ADR-095와
 `docs/reports/t-vn-m05-manual-provider-dedup-design-2026-08-21.md`를 PinVi 소비자
 경계로 구체화한다.
 
-기본 활성화는 `false`다. Map subscription activation receipt, production flag 또는
-일반 운영 stack의 mutation은 이 작업의 완료 증거가 아니다.
+기본 활성화는 `false`다. production에서 켜려면 현재 Map service contract와 PinVi image
+revision에 맞는 activation receipt가 필요하다. Map subscription activation receipt,
+production flag 또는 일반 운영 stack의 mutation만으로는 이 작업의 완료 증거가 아니다.
 
 ## 기준 계약
 
 - Map service contract source: PR #1051 merge `db319a4798229098d04e68e3ac64338183ad547f`.
-  Full/admin 표면은 PR #1054 merge `fadc029ce2b0cd730c604697e04d1fccdff02ce9`, user 표면은
-  #1029 계열 pin을 유지하며 service profile은 #1051 revision으로 재vendor한다.
-- vendored full/service/user OpenAPI SHA-256:
-  `2c02ecfead95b06306db7189278c975ec83a9e2a793f3f0e18ca0bd96240f3cb` /
-  `99ba6c178bf55401d3e1bb638a01b96f66bbac38d604534aa126a70f4be53d3d` /
-  `489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b`.
+  Full/admin 표면은 PR #1054 merge `fadc029ce2b0cd730c604697e04d1fccdff02ce9` 기준이며, user
+  표면은 #1029 계열 pin을 유지한다.
+- M05가 결박하는 admin/full/service/user OpenAPI SHA-256과 source revision의 exact 쌍은
+  [`contracts/kor-travel-map-m05-pair-provenance-v1.json`](../../contracts/kor-travel-map-m05-pair-provenance-v1.json)에
+  고정한다. service 항목은 일반 service provenance와 반드시 일치해야 한다.
 - read token은 `feature-reference-reconciliation:read`, ACK token은
   `feature-reference-reconciliation:ack` 한 scope만 가진 별도 server-only credential이다.
   M04 요청 큐·cache-target·admin·일반 service token과 값 재사용을 거부한다.
@@ -70,6 +70,110 @@ ACK한다. 달라지면 fail-close한다.
   readiness failure로 남긴다.
 - PinVi admin은 blocked/applied attempt와 final receipt·impact를 읽기 전용으로 표시한다.
   Map decision·subscription activation을 이 UI가 만들지 않는다.
+
+## production activation receipt
+
+`PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ENABLED=true`를 production에서
+사용하려면 `PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT` 또는
+root-owned `0600` bind-mounted `PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_PATH`에
+서명된 v1 envelope를 주입하고, `PINVI_KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_ACTIVATION_RECEIPT_PUBLIC_KEY`로
+Ed25519 서명을 검증한다. 이 public key는 같은 설정 채널의 receipt와 함께 임의로 바꿀 수 없으며,
+tracked `contracts/pinvi-m05-activation-receipt-trust-v1.json`의 raw public-key SHA-256 fingerprint와
+일치해야 한다. API는 기동 시 중복 JSON key·서명·닫힌 payload schema·현재 vendored
+Map pair·세 Pinvi runtime image digest·`PINVI_SOURCE_REVISION`을 모두 대조하며, 하나라도 다르면
+fail-close한다. receipt payload에는 실제 API container ID도 포함되므로 운영 배포는 inline 환경변수보다
+파일 경로를 사용한다. 최종 container를 재생성하지 않은 상태에서 receipt 파일만 봉인·교체한 뒤 기동해야 한다.
+
+```json
+{
+  "payload": {
+    "version": 1,
+    "scope": "production",
+    "adversarial_reviews": [
+      {"commit": "<reviewed commit>", "p0_p1": 0, "review_id": "<review id>", "reviewer_id": "<reviewer id>"},
+      {"commit": "<reviewed commit>", "p0_p1": 0, "review_id": "<review id>", "reviewer_id": "<reviewer id>"}
+    ],
+    "live_ui_e2e": "passed",
+    "restore_drill": "passed",
+    "map_pair_evidence_sha256": "<evidence hash>",
+    "pinvi_image_evidence_sha256": "<evidence hash>"
+  },
+  "signature": "<Ed25519 signature, base64url>"
+}
+```
+
+전체 payload는 구현된 닫힌 계약에 따라 Map admin/full/service/user artifact hash와 source
+revision, 실행 중 Map API의 HTTP OpenAPI 응답 hash, Map API/admin/frontend image digest, Pinvi
+API/Web/Dagster image digest, Pinvi source revision, live UI event·Map ACK·restore·review evidence
+hash를 포함한다. attestation 단계에서 실행 중 Map admin OpenAPI의 정규화된 JSON을 pinned Git
+blob과 비교한다. receipt는 증거 원문이나 token·private key를 담지 않는다. 두 전문 적대 리뷰,
+isolated live UI E2E, server-side Map ACK 대조, no-owner restore drill이 실제로 끝난 뒤에만
+생성한다.
+
+증거 봉인은 다음 도구가 수행한다. 입력 디렉터리는 `0700`, JSON 증거와 private key는 각각
+`0600`이어야 하며, 운영 실행에서는 `--require-root-owned`를 사용한다.
+
+```bash
+python scripts/m05_activation_receipt.py create \
+  --evidence-dir "$M05_EVIDENCE_DIR" \
+  --private-key "$M05_ACTIVATION_PRIVATE_KEY" \
+  --output "$M05_ACTIVATION_RECEIPT" \
+  --pinvi-source-revision "$PINVI_SOURCE_REVISION" \
+  --review-response-nonce "$PINVI_M05_REVIEW_RESPONSE_NONCE" \
+  --require-root-owned
+```
+
+`create`에는 challenge 파일(`--review-challenge`), 해당 실행에서만 전달한 review response nonce
+(`--review-response-nonce`), external allowlist(`--review-allowlist`)를 함께 전달한다. ledger 기록 시에는
+`--durable-history`와 `--durable-anchor`를 ledger/high-watermark/floor와
+분리된 root-owned durable 경로에 append한다. anchor는 coordinated snapshot rollback을 막기 위해
+별도 durable mount에 둔다. `PINVI_M05_ACTIVATION_ANCHOR_DATABASE_URL`을 ledger producer에만
+전달하면 `ops.m05_activation_database_anchor`에도 같은 record hash를 append한다.
+
+실제 복원 증거는 고정된 `scripts/backup-db.sh`와 `scripts/restore-staging-drill.sh`를 source→fresh
+target으로 호출하는 `scripts/m05_restore_drill.py`가 만든다. source·target URL과 runtime URL은
+환경변수로만 전달하며, 결과 JSON에는 URL·SQL 비밀값을 저장하지 않는다.
+
+fresh target은 매 실행 `DROP DATABASE ... WITH (FORCE)` 뒤 target cluster의
+`PINVI_RESTORE_TEMPLATE_DATABASE_URL`에서 재생성한다. 이 template은 `app` schema가 없어야
+하고 `x_extension` schema에 `citext`, `pgcrypto`, `pg_trgm`이 설치되어 있어야 하며 runtime
+login에 `x_extension` USAGE만, 별도 `PINVI_RESTORE_HOTSWAP_DATABASE_URL`의 executor에
+database `CREATE`와 `x_extension` USAGE만 부여한다. extension 설치는 one-time privileged
+bootstrap에서 수행하고 restore staging login에는 extension 생성 권한을 주지 않는다. staging
+provisioner는 disposable database 재생성을 위해 `CREATEDB`를 가지지만 target owner가 아니다.
+별도 `PINVI_RESTORE_FENCE_DATABASE_URL`/`PINVI_RESTORE_FENCE_ROLE`의 target owner는
+`CREATEDB`와 role membership가 없어야 하며, target 생성 후 staging에는 `CONNECT`, hotswap에는
+`CONNECT, CREATE`만 부여한다. hotswap executor는 `CREATEDB` 없이 `INHERIT`와 직접
+`pg_signal_backend` membership만 가진다. restore는
+hotswap executor로 수행해 복원된 `app` schema의 owner와 schema-swap executor를 동일하게
+결박한다.
+
+입력 파일은 `reviews.json`, `live-ui.json`, `restore.json`, `map-pair.json`,
+`pinvi-images.json`과 live verifier가 생성한 서명 `attestation.json`이다. signer는 schema·현재
+tracked pair·각 pinned Map commit의 Git blob·실제 Map HTTP OpenAPI·실제 runtime image ID/OCI
+revision·immutable `sha256:` digest와 source revision을 확인한 후 payload를 서명한다.
+`--require-root-owned` 실행에서는
+private key와 증거 디렉터리도 tracked trust anchor/소유권과 대조한다. 출력된 public key와 receipt는
+운영 secret 저장소에 등록하고, 원문 증거·append-only ledger는 root-owned 보관 위치에서 API에
+read-only로만 mount한다.
+
+리뷰 증적은 실행 전에 만든 root-owned challenge 파일에 commit, PR, 두 reviewer ID, 각 reviewer의
+원문 응답 경로와 one-run nonce의 hash를 고정한다. nonce 원문은 challenge 파일에 저장하지 않고 두
+리뷰어와 signer 프로세스에만 전달하며, 두 응답은 nonce·challenge ID와 원문 SHA-256을 함께 제출해야
+한다. signer는 allowlist와 `reviews.json`이 challenge 파일의 실제 원문에 결박되지 않으면 거부한다.
+복구 도구는
+`PINVI_M05_RESTORE_TOOL_TRUST_MANIFEST`의 root-owned `0600` manifest에 고정된 `git`, `pg_dump`,
+`pg_restore`, `psql` 경로·digest만 사용한다. live가 아닌 테스트 모드의 fake tool은 root-owned
+운영 증적으로 승격할 수 없다.
+
+복구 드릴의 target은 `pinvi_m05_restore_*` prefix 안에서 매 실행 `DROP DATABASE ... WITH (FORCE)`
+후 extension template에서 새로 만들며, source/target/runtime의 database OID·system identifier·pinned `hostaddr`·port를
+복구 직전과 직후에 대조한다. activation ledger·high-watermark와 별도로 DB snapshot에 포함하지 않는
+durable history(`PINVI_M05_ACTIVATION_DURABLE_HISTORY_PATH`)와 외부 anchor
+(`PINVI_M05_ACTIVATION_DURABLE_ANCHOR_PATH`)도 같은 generation과 receipt hash를 append-only hash
+chain으로 보존한다. 여기에 `ops.m05_activation_database_anchor` append-only DB anchor도 같은
+generation·receipt·ledger record hash를 보존한다. 네 파일과 두 anchor가 서로 어긋나거나 anchor보다
+과거인 snapshot은 API startup에서 거부한다.
 
 ## 검증과 activation gate
 

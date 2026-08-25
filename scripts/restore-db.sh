@@ -3,11 +3,61 @@
 
 set -euo pipefail
 
+unset BASH_ENV CDPATH ENV GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_SSH GIT_SSH_COMMAND \
+  LD_AUDIT LD_LIBRARY_PATH LD_PRELOAD PYTHONHOME PYTHONPATH RUBYLIB \
+  PGAPPNAME PGCONNECT_TIMEOUT PGDATABASE PGHOST PGHOSTADDR PGOPTIONS PGPASSFILE \
+  PGPASSWORD PGPORT PGSERVICE PGSERVICEFILE PGSSLCERT PGSSLMODE PGSSLKEY \
+  PGSSLROOTCERT PGTARGETSESSIONATTRS PSQLRC
+
 SCHEMA="${PINVI_RESTORE_SCHEMA:-${PINVI_BACKUP_SCHEMA:-app}}"
 DATABASE_URL="${PINVI_RESTORE_DATABASE_URL:-${PINVI_DATABASE_URL:-}}"
 JOBS="${PINVI_RESTORE_JOBS:-2}"
 APP_ROLE="${PINVI_RESTORE_APP_ROLE:-}"
 BACKUP_FILE="${1:-}"
+ORIGINAL_BACKUP_FILE="${BACKUP_FILE}"
+TEST_MODE="${PINVI_M05_RESTORE_TEST_MODE:-0}"
+STRICT_RESTORE_ENVIRONMENT=0
+if [[ "${TEST_MODE}" != "1" && ( "${PINVI_ENVIRONMENT:-}" == "staging" || "${PINVI_ENVIRONMENT:-}" == "production" ) ]]; then
+  STRICT_RESTORE_ENVIRONMENT=1
+fi
+TRUSTED_SNAPSHOT_CHECKSUM=""
+TRUSTED_SNAPSHOT_LIST_SHA256=""
+TRUSTED_SOURCE_DATABASE=""
+TRUSTED_SOURCE_DATABASE_OID=""
+TRUSTED_SOURCE_SYSTEM_IDENTIFIER=""
+TRUSTED_SOURCE_HOSTADDR=""
+TRUSTED_SOURCE_PORT=""
+
+if [[ "${TEST_MODE}" != "0" && "${TEST_MODE}" != "1" ]]; then
+  echo "PINVI_M05_RESTORE_TEST_MODE must be 0 or 1" >&2
+  exit 2
+fi
+if [[ "${TEST_MODE}" == "1" && "${PINVI_ENVIRONMENT:-}" != "test" ]]; then
+  echo "M05 restore test mode requires PINVI_ENVIRONMENT=test" >&2
+  exit 3
+fi
+
+pinned_tool() {
+  local name="$1"
+  local candidate
+  if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" == "1" ]]; then
+    command -v "${name}" || true
+    return 0
+  fi
+  for candidate in "/usr/local/bin/${name}" "/usr/bin/${name}" "/bin/${name}" \
+    /usr/lib/postgresql/*/bin/${name}; do
+    if [[ -f "${candidate}" && -x "${candidate}" && ! -L "${candidate}" ]]; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+PSQL_BIN="${PINVI_RESTORE_PSQL_BIN:-}"
+if [[ -z "${PSQL_BIN}" ]]; then
+  PSQL_BIN="$(pinned_tool psql || true)"
+fi
 
 if [[ -z "${BACKUP_FILE}" ]]; then
   echo "Usage: scripts/restore-db.sh /path/to/backup.dump" >&2
@@ -33,78 +83,353 @@ if [[ -n "${APP_ROLE}" && ! "${APP_ROLE}" =~ ^[a-z_][a-z0-9_]*$ ]]; then
   exit 2
 fi
 
-if [[ ! -f "${BACKUP_FILE}" ]]; then
+if [[ -L "${BACKUP_FILE}" || ! -f "${BACKUP_FILE}" ]]; then
   echo "backup file not found: ${BACKUP_FILE}" >&2
   exit 2
 fi
 
-if [[ -f "${BACKUP_FILE}.sha256" ]]; then
-  if ! command -v sha256sum >/dev/null 2>&1; then
-    echo "sha256sum not found" >&2
+assert_trusted_snapshot_provenance() {
+  if [[ "${STRICT_RESTORE_ENVIRONMENT}" != "1" ]]; then
+    return 0
+  fi
+  local trusted_dir snapshot_parent manifest_file item key value
+  trusted_dir="${PINVI_RESTORE_TRUSTED_BACKUP_DIR:-}"
+  if [[ "${trusted_dir}" != /* || -L "${trusted_dir}" || ! -d "${trusted_dir}" ]]; then
+    echo "strict restore requires a root-owned trusted backup directory" >&2
+    exit 3
+  fi
+  trusted_dir="$(realpath -e "${trusted_dir}")"
+  snapshot_parent="$(realpath -e "$(dirname "${BACKUP_FILE}")")"
+  if [[ "${snapshot_parent}" != "${trusted_dir}" ]]; then
+    echo "backup file is outside the trusted backup directory" >&2
+    exit 3
+  fi
+  if [[ "$(stat -c '%u:%a' "${trusted_dir}")" != "0:700" ]]; then
+    echo "trusted backup directory must be root-owned mode 0700" >&2
+    exit 3
+  fi
+  manifest_file="${BACKUP_FILE}.m05-manifest"
+  for item in "${BACKUP_FILE}" "${BACKUP_FILE}.sha256" "${manifest_file}"; do
+    if [[ -L "${item}" || ! -f "${item}" || "$(stat -c '%u:%a' "${item}")" != "0:600" ]]; then
+      echo "trusted snapshot artifact is not a root-owned mode 0600 regular file" >&2
+      exit 3
+    fi
+  done
+  declare -A manifest=()
+  while IFS='=' read -r key value || [[ -n "${key:-}" ]]; do
+    case "${key}" in
+      version|dump_filename|schema|dump_sha256|pg_restore_list_sha256|source_database|source_database_oid|source_system_identifier|source_hostaddr|source_port|created_at) ;;
+      *)
+        echo "trusted snapshot manifest has an invalid field" >&2
+        exit 3
+        ;;
+    esac
+    if [[ -z "${value}" || -v "manifest[${key}]" || "${value}" == *$'\r'* ]]; then
+      echo "trusted snapshot manifest is malformed" >&2
+      exit 3
+    fi
+    manifest[${key}]="${value}"
+  done <"${manifest_file}"
+  for key in version dump_filename schema dump_sha256 pg_restore_list_sha256 source_database source_database_oid source_system_identifier source_hostaddr source_port; do
+    if [[ ! -v "manifest[${key}]" ]]; then
+      echo "trusted snapshot manifest is incomplete" >&2
+      exit 3
+    fi
+  done
+  if [[ "${manifest[version]}" != "1" ||
+    "${manifest[dump_filename]}" != "$(basename "${BACKUP_FILE}")" ||
+    "${manifest[schema]}" != "${SCHEMA}" ||
+    ! "${manifest[dump_sha256]}" =~ ^[0-9a-f]{64}$ ||
+    ! "${manifest[pg_restore_list_sha256]}" =~ ^[0-9a-f]{64}$ ||
+    ! "${manifest[source_database]}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ||
+    ! "${manifest[source_database_oid]}" =~ ^[0-9]+$ ||
+    ! "${manifest[source_system_identifier]}" =~ ^[0-9]+$ ||
+    ! "${manifest[source_hostaddr]}" =~ ^[0-9A-Fa-f:.]+$ ||
+    ! "${manifest[source_port]}" =~ ^[0-9]+$ ]]; then
+    echo "trusted snapshot manifest values are invalid" >&2
+    exit 3
+  fi
+  if [[ -v "manifest[created_at]" &&
+    ! "${manifest[created_at]}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+    echo "trusted snapshot manifest created_at is invalid" >&2
+    exit 3
+  fi
+  TRUSTED_SNAPSHOT_CHECKSUM="${manifest[dump_sha256]}"
+  TRUSTED_SNAPSHOT_LIST_SHA256="${manifest[pg_restore_list_sha256]}"
+  TRUSTED_SOURCE_DATABASE="${manifest[source_database]}"
+  TRUSTED_SOURCE_DATABASE_OID="${manifest[source_database_oid]}"
+  TRUSTED_SOURCE_SYSTEM_IDENTIFIER="${manifest[source_system_identifier]}"
+  TRUSTED_SOURCE_HOSTADDR="${manifest[source_hostaddr]}"
+  TRUSTED_SOURCE_PORT="${manifest[source_port]}"
+}
+
+assert_trusted_snapshot_provenance
+
+assert_trusted_snapshot_matches_expected_source() {
+  if [[ "${STRICT_RESTORE_ENVIRONMENT}" != "1" ]]; then
+    return 0
+  fi
+  for variable in PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME \
+    PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID \
+    PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER \
+    PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR PINVI_RESTORE_EXPECTED_SOURCE_PORT; do
+    if [[ -z "${!variable:-}" ]]; then
+      echo "${variable} is required for a strict restore" >&2
+      exit 3
+    fi
+  done
+  if [[ ! "${PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ || \
+    ! "${PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID}" =~ ^[0-9]+$ || \
+    ! "${PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER}" =~ ^[0-9]+$ || \
+    ! "${PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR}" =~ ^[0-9A-Fa-f:.]+$ || \
+    ! "${PINVI_RESTORE_EXPECTED_SOURCE_PORT}" =~ ^[0-9]+$ ]]; then
+    echo "strict restore expected source identity contains unsafe values" >&2
+    exit 3
+  fi
+  local manifest_identity expected_identity
+  manifest_identity="${TRUSTED_SOURCE_DATABASE}|${TRUSTED_SOURCE_DATABASE_OID}|${TRUSTED_SOURCE_SYSTEM_IDENTIFIER}|${TRUSTED_SOURCE_HOSTADDR}|${TRUSTED_SOURCE_PORT}"
+  expected_identity="${PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_NAME}|${PINVI_RESTORE_EXPECTED_SOURCE_DATABASE_OID}|${PINVI_RESTORE_EXPECTED_SOURCE_SYSTEM_IDENTIFIER}|${PINVI_RESTORE_EXPECTED_SOURCE_HOSTADDR}|${PINVI_RESTORE_EXPECTED_SOURCE_PORT}"
+  if [[ "${manifest_identity}" != "${expected_identity}" ]]; then
+    echo "trusted snapshot source identity does not match the expected source" >&2
+    exit 3
+  fi
+  printf '%s\n' "RESTORE_SOURCE_BINDING=verified"
+}
+
+assert_trusted_snapshot_matches_expected_source
+
+if [[ -L "${BACKUP_FILE}.sha256" || ! -f "${BACKUP_FILE}.sha256" ]]; then
+  echo "backup checksum sidecar is required as a regular file" >&2
+  exit 3
+fi
+if ! command -v sha256sum >/dev/null 2>&1; then
+  echo "sha256sum not found" >&2
+  exit 127
+fi
+expected_checksum="$(awk 'NR == 1 { print $1 }' "${BACKUP_FILE}.sha256")"
+actual_checksum="$(sha256sum "${BACKUP_FILE}" | awk 'NR == 1 { print $1 }')"
+if [[ ! "${expected_checksum}" =~ ^[0-9a-f]{64}$ || "${expected_checksum}" != "${actual_checksum}" ||
+  ( -n "${TRUSTED_SNAPSHOT_CHECKSUM}" && "${expected_checksum}" != "${TRUSTED_SNAPSHOT_CHECKSUM}" ) ]]; then
+  echo "backup checksum failed" >&2
+  exit 3
+fi
+
+# The restore process never reads the operator-writable backup path again. A private
+# copy is re-hashed after copying so a replacement between checksum and pg_restore
+# becomes a fail-closed error instead of a TOCTOU restore.
+SNAPSHOT_TMP_DIR="$(mktemp -d)"
+cleanup_snapshot() {
+  rm -rf "${SNAPSHOT_TMP_DIR}"
+}
+trap cleanup_snapshot EXIT
+cp -- "${BACKUP_FILE}" "${SNAPSHOT_TMP_DIR}/snapshot.dump"
+if [[ "$(sha256sum "${SNAPSHOT_TMP_DIR}/snapshot.dump" | awk 'NR == 1 { print $1 }')" != "${expected_checksum}" ]]; then
+  echo "backup changed while copying" >&2
+  exit 3
+fi
+BACKUP_FILE="${SNAPSHOT_TMP_DIR}/snapshot.dump"
+
+if [[ "${PSQL_BIN}" != /* || ! -x "${PSQL_BIN}" ]]; then
+  echo "PINVI_RESTORE_PSQL_BIN is not an executable absolute path" >&2
+  exit 127
+fi
+
+if [[ -n "${PINVI_RESTORE_PG_RESTORE_BIN:-}" ]]; then
+  PG_RESTORE_BIN="${PINVI_RESTORE_PG_RESTORE_BIN}"
+else
+  PG_RESTORE_BIN="$(pinned_tool pg_restore || true)"
+  if [[ -z "${PG_RESTORE_BIN}" ]]; then
+    echo "pg_restore not found" >&2
     exit 127
   fi
-  expected_checksum="$(awk 'NR == 1 { print $1 }' "${BACKUP_FILE}.sha256")"
-  actual_checksum="$(sha256sum "${BACKUP_FILE}" | awk 'NR == 1 { print $1 }')"
-  if [[ -z "${expected_checksum}" || "${expected_checksum}" != "${actual_checksum}" ]]; then
-    echo "backup checksum failed" >&2
+fi
+if [[ "${PG_RESTORE_BIN}" != /* || ! -x "${PG_RESTORE_BIN}" ]]; then
+  echo "PINVI_RESTORE_PG_RESTORE_BIN is not an executable absolute path" >&2
+  exit 127
+fi
+assert_trusted_tool_path() {
+  local name="$1"
+  local path="$2"
+  if [[ "${path}" != /* || ! -f "${path}" || ! -x "${path}" || -L "${path}" ]]; then
+    echo "${name} path is not a trusted executable" >&2
+    exit 127
+  fi
+  local resolved
+  resolved="$(realpath -e "${path}")"
+  case "${resolved}" in
+    /usr/local/bin/${name}|/usr/bin/${name}|/bin/${name}) ;;
+    /usr/lib/postgresql/[0-9]*/bin/${name}) ;;
+    *)
+      echo "${name} path is outside the trusted tool directories" >&2
+      exit 127
+      ;;
+  esac
+}
+
+if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" != "1" &&
+  "${PINVI_RESTORE_PRIVATE_TOOL_COPY:-0}" != "1" ]]; then
+  assert_trusted_tool_path "psql" "${PSQL_BIN}"
+  assert_trusted_tool_path "pg_restore" "${PG_RESTORE_BIN}"
+  actual_psql_sha256="$(sha256sum "${PSQL_BIN}" | awk 'NR == 1 { print $1 }')"
+  actual_pg_restore_sha256="$(sha256sum "${PG_RESTORE_BIN}" | awk 'NR == 1 { print $1 }')"
+  if [[ ! "${PINVI_RESTORE_PSQL_SHA256:-}" =~ ^[0-9a-f]{64}$ || \
+    "${actual_psql_sha256}" != "${PINVI_RESTORE_PSQL_SHA256}" || \
+    ! "${PINVI_RESTORE_PG_RESTORE_SHA256:-}" =~ ^[0-9a-f]{64}$ || \
+    "${actual_pg_restore_sha256}" != "${PINVI_RESTORE_PG_RESTORE_SHA256}" ]]; then
+    echo "restore tool digest pin failed" >&2
+    exit 3
+  fi
+  cp -- "${PSQL_BIN}" "${SNAPSHOT_TMP_DIR}/psql"
+  cp -- "${PG_RESTORE_BIN}" "${SNAPSHOT_TMP_DIR}/pg_restore"
+  chmod 700 "${SNAPSHOT_TMP_DIR}/psql" "${SNAPSHOT_TMP_DIR}/pg_restore"
+  if [[ "$(sha256sum "${SNAPSHOT_TMP_DIR}/psql" | awk 'NR == 1 { print $1 }')" != "${PINVI_RESTORE_PSQL_SHA256}" || \
+    "$(sha256sum "${SNAPSHOT_TMP_DIR}/pg_restore" | awk 'NR == 1 { print $1 }')" != "${PINVI_RESTORE_PG_RESTORE_SHA256}" ]]; then
+    echo "restore tools changed while copying" >&2
+    exit 3
+  fi
+  PSQL_BIN="${SNAPSHOT_TMP_DIR}/psql"
+  PG_RESTORE_BIN="${SNAPSHOT_TMP_DIR}/pg_restore"
+fi
+
+if [[ "${STRICT_RESTORE_ENVIRONMENT}" == "1" ]]; then
+  actual_restore_list_sha256="$("${PG_RESTORE_BIN}" --list "${BACKUP_FILE}" | sha256sum | awk 'NR == 1 { print $1 }')"
+  if [[ "${actual_restore_list_sha256}" != "${TRUSTED_SNAPSHOT_LIST_SHA256}" ]]; then
+    echo "trusted snapshot archive inventory failed" >&2
     exit 3
   fi
 fi
 
-if ! command -v psql >/dev/null 2>&1; then
-  echo "psql not found" >&2
-  exit 127
-fi
+assert_expected_target() {
+  if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" == "1" ]]; then
+    return 0
+  fi
+  for variable in PINVI_RESTORE_EXPECTED_DATABASE_NAME PINVI_RESTORE_EXPECTED_DATABASE_OID \
+    PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER PINVI_RESTORE_EXPECTED_HOSTADDR PINVI_RESTORE_EXPECTED_PORT; do
+    if [[ -z "${!variable:-}" ]]; then
+      echo "${variable} is required for a non-test restore" >&2
+      exit 3
+    fi
+  done
+  local actual
+  actual="$("${PSQL_BIN}" --no-psqlrc --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT current_database() || '|' || d.oid::text || '|' || (pg_control_system()).system_identifier::text || '|' || COALESCE(host(inet_server_addr()), '') || '|' || inet_server_port()::text FROM pg_database d WHERE d.datname = current_database()" | tr -d '[:space:]')"
+  local expected="${PINVI_RESTORE_EXPECTED_DATABASE_NAME}|${PINVI_RESTORE_EXPECTED_DATABASE_OID}|${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER}|${PINVI_RESTORE_EXPECTED_HOSTADDR}|${PINVI_RESTORE_EXPECTED_PORT}"
+  if [[ "${actual}" != "${expected}" ]]; then
+    echo "restore target identity changed before mutation" >&2
+    exit 3
+  fi
+  printf '%s\n' "RESTORE_TARGET_BINDING=verified"
+}
 
-if ! command -v pg_restore >/dev/null 2>&1; then
-  echo "pg_restore not found" >&2
-  exit 127
-fi
+secure_restore_with_identity_guard() {
+  # Keep the identity check and schema bootstrap in psql, but let pg_restore
+  # consume the custom archive directly. Converting an archive to plain SQL and
+  # feeding it to psql makes function bodies look like transaction controls and
+  # exposes psql meta-command parsing to archive contents.
+  cat >"${SNAPSHOT_TMP_DIR}/restore-identity.sql" <<SQL
+DO \$m05\$
+BEGIN
+  IF current_database() <> '${PINVI_RESTORE_EXPECTED_DATABASE_NAME}'
+     OR (SELECT oid::text FROM pg_database WHERE datname = current_database()) <> '${PINVI_RESTORE_EXPECTED_DATABASE_OID}'
+     OR (pg_control_system()).system_identifier::text <> '${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER}'
+     OR COALESCE(host(inet_server_addr()), '') <> '${PINVI_RESTORE_EXPECTED_HOSTADDR}'
+     OR inet_server_port()::text <> '${PINVI_RESTORE_EXPECTED_PORT}'
+  THEN
+    RAISE EXCEPTION 'restore target identity changed before mutation';
+  END IF;
+END
+\$m05\$;
+SQL
+  "${PSQL_BIN}" \
+    --no-psqlrc \
+    --set=ON_ERROR_STOP=1 \
+    --dbname="${DATABASE_URL}" \
+    --file="${SNAPSHOT_TMP_DIR}/restore-identity.sql"
+  "${PSQL_BIN}" \
+    --no-psqlrc \
+    --set=ON_ERROR_STOP=1 \
+    --dbname="${DATABASE_URL}" \
+    --command="CREATE SCHEMA IF NOT EXISTS \"${SCHEMA}\""
+  "${PG_RESTORE_BIN}" \
+    --clean \
+    --if-exists \
+    --exit-on-error \
+    --no-owner \
+    --no-privileges \
+    --schema="${SCHEMA}" \
+    --jobs="${JOBS}" \
+    --dbname="${DATABASE_URL}" \
+    "${BACKUP_FILE}"
+  if [[ -n "${APP_ROLE}" ]]; then
+    "${PSQL_BIN}" \
+      --no-psqlrc \
+      --set=ON_ERROR_STOP=1 \
+      --dbname="${DATABASE_URL}" \
+      --command="GRANT USAGE ON SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\"; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\"; GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\""
+  fi
+}
 
 # Validate the destination authority before CREATE SCHEMA/pg_restore can alter it. A
 # role-split deployment must never discover a typo or privileged runtime login only
 # after `--clean` has dropped the existing schema objects.
+if [[ "${PINVI_RESTORE_REQUIRE_FRESH_SCHEMA:-0}" == "1" ]]; then
+  assert_expected_target
+  schema_exists="$("${PSQL_BIN}" --no-psqlrc --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT to_regnamespace('${SCHEMA}') IS NOT NULL")"
+  if [[ "${schema_exists}" != "f" ]]; then
+    echo "PINVI_RESTORE_REQUIRE_FRESH_SCHEMA requires a target without the app schema" >&2
+    exit 3
+  fi
+fi
+assert_expected_target
 if [[ -n "${APP_ROLE}" ]]; then
-  runtime_role_safe="$(psql --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT r.rolcanlogin AND NOT r.rolsuper AND NOT r.rolcreaterole AND NOT r.rolcreatedb AND NOT r.rolreplication AND NOT pg_has_role(r.oid, current_user, 'member') AND r.oid <> current_user::regrole AND NOT EXISTS (SELECT 1 FROM pg_namespace n WHERE n.nspname = '${SCHEMA}' AND (n.nspowner = r.oid OR pg_has_role(r.oid, n.nspowner, 'member'))) AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = '${SCHEMA}' AND (c.relowner = r.oid OR pg_has_role(r.oid, c.relowner, 'member'))) FROM pg_roles r WHERE r.rolname = '${APP_ROLE}'")"
-  if [[ "${runtime_role_safe}" != "t" ]]; then
+  runtime_role_safe="$("${PSQL_BIN}" --no-psqlrc --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT r.rolcanlogin AND NOT r.rolsuper AND NOT r.rolcreaterole AND NOT r.rolcreatedb AND NOT r.rolreplication AND NOT r.rolbypassrls AND NOT r.rolinherit AND NOT EXISTS (SELECT 1 FROM pg_auth_members m WHERE m.member = r.oid) AND NOT pg_has_role(r.oid, current_user, 'member') AND r.oid <> current_user::regrole AND NOT EXISTS (SELECT 1 FROM pg_namespace n WHERE n.nspname = '${SCHEMA}' AND (n.nspowner = r.oid OR pg_has_role(r.oid, n.nspowner, 'member'))) AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = '${SCHEMA}' AND (c.relowner = r.oid OR pg_has_role(r.oid, c.relowner, 'member'))) FROM pg_roles r WHERE r.rolname = '${APP_ROLE}'")"
+  runtime_role_membership_safe="$("${PSQL_BIN}" --no-psqlrc --tuples-only --no-align --dbname="${DATABASE_URL}" --command="WITH RECURSIVE role_closure(role_oid) AS ( SELECT oid FROM pg_roles WHERE rolname = '${APP_ROLE}' UNION SELECT membership.roleid FROM role_closure closure JOIN pg_auth_members membership ON membership.member = closure.role_oid ) SELECT COALESCE((SELECT bool_and( NOT effective.rolsuper AND NOT effective.rolcreaterole AND NOT effective.rolcreatedb AND NOT effective.rolreplication AND NOT effective.rolbypassrls AND NOT EXISTS (SELECT 1 FROM pg_namespace n WHERE n.nspname = '${SCHEMA}' AND (n.nspowner = effective.oid OR pg_has_role(effective.oid, n.nspowner, 'member'))) AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = '${SCHEMA}' AND (c.relowner = effective.oid OR pg_has_role(effective.oid, c.relowner, 'member') OR pg_has_role(r.oid, c.relowner, 'member'))) ) FROM role_closure closure JOIN pg_roles effective ON effective.oid = closure.role_oid JOIN pg_roles r ON r.rolname = '${APP_ROLE}'), false)")"
+  if [[ "${runtime_role_safe}" != "t" || "${runtime_role_membership_safe}" != "t" ]]; then
     echo "PINVI_RESTORE_APP_ROLE must name an existing non-superuser non-owner runtime login" >&2
     exit 3
   fi
 else
-  restore_owner_safe="$(psql --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '${SCHEMA}') OR EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '${SCHEMA}' AND nspowner = current_user::regrole)")"
+  restore_owner_safe="$("${PSQL_BIN}" --no-psqlrc --tuples-only --no-align --dbname="${DATABASE_URL}" --command="SELECT NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '${SCHEMA}') OR EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '${SCHEMA}' AND nspowner = current_user::regrole)")"
   if [[ "${restore_owner_safe}" != "t" ]]; then
     echo "PINVI_RESTORE_APP_ROLE is required when the restore executor does not own the target schema" >&2
     exit 3
   fi
 fi
 
-# ``pg_dump --schema`` does not carry CREATE SCHEMA. Bootstrap a fresh staging
-# database explicitly; an existing schema is intentionally left untouched.
-psql \
-  --set=ON_ERROR_STOP=1 \
-  --dbname="${DATABASE_URL}" \
-  --command="CREATE SCHEMA IF NOT EXISTS \"${SCHEMA}\""
-
-pg_restore \
-  --clean \
-  --if-exists \
-  --exit-on-error \
-  --no-owner \
-  --no-privileges \
-  --schema="${SCHEMA}" \
-  --jobs="${JOBS}" \
-  --dbname="${DATABASE_URL}" \
-  "${BACKUP_FILE}"
-
-# ``--no-owner --no-privileges`` does not recreate runtime grants. The login and
-# ownership safety were already checked before any mutation above.
-if [[ -n "${APP_ROLE}" ]]; then
-  psql \
+printf '%s\n' "RESTORE_COMMAND=pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges"
+if [[ "${PINVI_M05_RESTORE_TEST_MODE:-0}" != "1" ]]; then
+  secure_restore_with_identity_guard
+else
+  # ``pg_dump --schema`` does not carry CREATE SCHEMA. Bootstrap a fresh staging
+  # database explicitly; an existing schema is intentionally left untouched.
+  "${PSQL_BIN}" \
+    --no-psqlrc \
     --set=ON_ERROR_STOP=1 \
     --dbname="${DATABASE_URL}" \
-    --command="GRANT USAGE ON SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\"; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\"; GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\""
-else
-  : # preflight already established the documented single-owner mode.
+    --command="CREATE SCHEMA IF NOT EXISTS \"${SCHEMA}\""
+
+  assert_expected_target
+  "${PG_RESTORE_BIN}" \
+    --clean \
+    --if-exists \
+    --exit-on-error \
+    --no-owner \
+    --no-privileges \
+    --schema="${SCHEMA}" \
+    --jobs="${JOBS}" \
+    --dbname="${DATABASE_URL}" \
+    "${BACKUP_FILE}"
+
+  # ``--no-owner --no-privileges`` does not recreate runtime grants. The login and
+  # ownership safety were already checked before any mutation above.
+  if [[ -n "${APP_ROLE}" ]]; then
+    "${PSQL_BIN}" \
+      --no-psqlrc \
+      --set=ON_ERROR_STOP=1 \
+      --dbname="${DATABASE_URL}" \
+      --command="GRANT USAGE ON SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\"; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\"; GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA \"${SCHEMA}\" TO \"${APP_ROLE}\""
+  else
+    : # preflight already established the documented single-owner mode.
+  fi
 fi
 
-echo "RESTORED_FILE=${BACKUP_FILE}"
+echo "RESTORED_FILE=${ORIGINAL_BACKUP_FILE}"

@@ -14,6 +14,7 @@ RUSTFS_PORT="${PINVI_RUSTFS_PORT:-12101}"
 DAGSTER_PORT="${PINVI_DAGSTER_DEV_PORT:-12802}"
 # Dagster webserver(profile etl)를 같이 띄울지. 운영에서 pinvi-dagster.<domain>을 쓰면 1.
 ENABLE_DAGSTER="${PINVI_ENABLE_DAGSTER:-0}"
+MIGRATOR_ONE_SHOT_PASSWORD=""
 
 usage() {
   cat <<'EOF'
@@ -64,6 +65,8 @@ compose() {
 # compose()가 env file까지 해석한 뒤 source revision을 확정해야 한다.
 # shellcheck source=scripts/api-image-provenance.sh
 source "$ROOT_DIR/scripts/api-image-provenance.sh"
+# shellcheck source=scripts/migrator-lifecycle-lock.sh
+source "$ROOT_DIR/scripts/migrator-lifecycle-lock.sh"
 
 preflight() {
   require_command docker
@@ -100,19 +103,189 @@ build_images() {
   fi
 }
 
-migrate() {
+drain_runtime_writers() {
+  log "stopping API and Dagster writers before migration"
+  compose stop app-api
+  if [[ "$ENABLE_DAGSTER" != "0" ]]; then
+    compose --profile etl stop app-dagster
+  fi
+}
+
+m05_legacy_rebaseline_profile() {
+  case "${PINVI_M05_LEGACY_REBASELINE:-0}" in
+    0|1) printf '%s\n' "${PINVI_M05_LEGACY_REBASELINE:-0}" ;;
+    *) echo "PINVI_M05_LEGACY_REBASELINE must be 0 or 1" >&2; exit 2 ;;
+  esac
+}
+
+legacy_rebaseline_receipt_file() {
+  local receipt="${PINVI_M05_LEGACY_REBASELINE_RECEIPT_HOST_PATH:-}"
+  local parent receipt_uid receipt_mode parent_uid parent_mode
+  [[ "$receipt" == /* && "$receipt" != *:* && "$receipt" != *$'\n'* ]] || {
+    echo "PINVI_M05_LEGACY_REBASELINE_RECEIPT_HOST_PATH must be an absolute host path" >&2
+    exit 2
+  }
+  [[ -f "$receipt" && ! -L "$receipt" ]] || {
+    echo "legacy rebaseline receipt must be a regular non-symlink file" >&2
+    exit 2
+  }
+  parent="$(dirname -- "$receipt")"
+  [[ -d "$parent" && ! -L "$parent" ]] || {
+    echo "legacy rebaseline receipt parent must be a regular directory" >&2
+    exit 2
+  }
+  receipt_uid="$(stat -c '%u' -- "$receipt")"
+  receipt_mode="$(stat -c '%a' -- "$receipt")"
+  parent_uid="$(stat -c '%u' -- "$parent")"
+  parent_mode="$(stat -c '%a' -- "$parent")"
+  [[ "$receipt_uid" == "0" && "$receipt_mode" == "600" ]] || {
+    echo "legacy rebaseline receipt must be root-owned mode 0600" >&2
+    exit 2
+  }
+  [[ "$parent_uid" == "0" ]] && (( (8#$parent_mode & 8#077) == 0 )) || {
+    echo "legacy rebaseline receipt parent must be root-owned and private" >&2
+    exit 2
+  }
+  printf '%s\n' "$receipt"
+}
+
+prepare_migrator_login() {
+  local legacy_rebaseline="$1"
+  local disable_login="0"
+  MIGRATOR_ONE_SHOT_PASSWORD=""
+  if [[ "$legacy_rebaseline" == "1" ]]; then
+    # legacy is run as the existing root/app owner, never as the reusable migrator login.
+    disable_login="1"
+    compose run --rm \
+      -e PINVI_M05_LEGACY_REBASELINE="$legacy_rebaseline" \
+      -e PINVI_MIGRATOR_DISABLE_LOGIN="$disable_login" \
+      app-db-runtime-role
+    return
+  fi
+
+  MIGRATOR_ONE_SHOT_PASSWORD="$(new_migrator_one_shot_password)"
+  PINVI_MIGRATOR_DB_PASSWORD="$MIGRATOR_ONE_SHOT_PASSWORD" compose run --rm \
+    -e PINVI_M05_LEGACY_REBASELINE="$legacy_rebaseline" \
+    -e PINVI_MIGRATOR_DISABLE_LOGIN="$disable_login" \
+    app-db-runtime-role
+}
+
+new_migrator_one_shot_password() {
+  local password
+  password="$(LC_ALL=C od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+  [[ "$password" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "could not generate one-shot migrator password" >&2
+    return 1
+  }
+  printf '%s' "$password"
+}
+
+compose_with_one_shot_migrator_password() {
+  PINVI_MIGRATOR_DB_PASSWORD="$MIGRATOR_ONE_SHOT_PASSWORD" compose "$@"
+}
+
+seal_migrator_login() {
+  local legacy_rebaseline="$1"
+  log "sealing one-shot migrator login"
+  if ! compose run --rm \
+    -e PINVI_M05_LEGACY_REBASELINE="$legacy_rebaseline" \
+    -e PINVI_MIGRATOR_DISABLE_LOGIN=1 \
+    app-db-runtime-role; then
+    MIGRATOR_ONE_SHOT_PASSWORD=""
+    return 1
+  fi
+  MIGRATOR_ONE_SHOT_PASSWORD=""
+}
+
+run_admin_bootstrap() {
+  local credential_file="$1"
+  local legacy_rebaseline="$2"
+  local legacy_receipt_file="${3:-}"
+  local service="app-migrator"
+  local runner_user="$(id -u):$(id -g)"
+  local profile_args=()
+  local legacy_args=()
+  if [[ "$legacy_rebaseline" == "1" ]]; then
+    [[ -n "$legacy_receipt_file" ]] || {
+      echo "legacy rebaseline receipt is required" >&2
+      exit 2
+    }
+    service="app-legacy-rebaseline-migrator"
+    runner_user="0:0"
+    profile_args=(--profile legacy-rebaseline)
+    legacy_args=(
+      -e PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH=/run/pinvi/m05/legacy-rebaseline-receipt.json
+      -v "$legacy_receipt_file:/run/pinvi/m05/legacy-rebaseline-receipt.json:ro"
+    )
+  fi
+  if [[ "$legacy_rebaseline" == "1" ]]; then
+    compose "${profile_args[@]}" run --rm --no-deps \
+      --user "$runner_user" \
+      -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
+      -v "$credential_file:$credential_file:ro" \
+      "${legacy_args[@]}" \
+      "$service" pinvi-admin-bootstrap
+    return
+  fi
+  [[ -n "$MIGRATOR_ONE_SHOT_PASSWORD" ]] || {
+    echo "one-shot migrator password is unavailable" >&2
+    return 1
+  }
+  compose_with_one_shot_migrator_password "${profile_args[@]}" run --rm --no-deps \
+    --user "$runner_user" \
+    -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
+    -v "$credential_file:$credential_file:ro" \
+    "${legacy_args[@]}" \
+    "$service" pinvi-admin-bootstrap
+}
+
+reject_explicit_migrator_database_url() {
+  if [[ -n "${PINVI_MIGRATOR_DATABASE_URL:-}" ]]; then
+    echo "PINVI_MIGRATOR_DATABASE_URL is unsupported; use PINVI_MIGRATOR_DB_USER and PINVI_MIGRATOR_DB_PASSWORD" >&2
+    exit 2
+  fi
+}
+
+migrate_under_lifecycle_lock() {
   pinvi_verify_runtime_image_provenance app-api
   local credential_file
   credential_file="$(bootstrap_credential_file)"
+  local legacy_rebaseline
+  legacy_rebaseline="$(m05_legacy_rebaseline_profile)"
+  local legacy_receipt_file=""
+  if [[ "$legacy_rebaseline" == "1" ]]; then
+    legacy_receipt_file="$(legacy_rebaseline_receipt_file)"
+  fi
+  drain_runtime_writers
   log "starting database dependencies and runtime DB role"
   compose up -d app-postgres app-rustfs app-rustfs-init
-  compose run --rm app-db-runtime-role
+  if ! prepare_migrator_login "$legacy_rebaseline"; then
+    log "migrator preparation failed; sealing the one-shot login"
+    seal_migrator_login "$legacy_rebaseline" || \
+      log "migrator preparation failure could not be followed by a sealing run"
+    return 1
+  fi
   log "running Pinvi admin bootstrap"
-  compose run --rm \
-    --user "$(id -u):$(id -g)" \
-    -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
-    -v "$credential_file:$credential_file:ro" \
-    app-migrator pinvi-admin-bootstrap
+  if run_admin_bootstrap "$credential_file" "$legacy_rebaseline" "$legacy_receipt_file"; then
+    if ! seal_migrator_login "$legacy_rebaseline"; then
+      log "migration succeeded but the one-shot migrator login could not be sealed"
+      return 1
+    fi
+    return 0
+  fi
+  if ! seal_migrator_login "$legacy_rebaseline"; then
+    log "failed migration could not be followed by a sealing run"
+    return 1
+  fi
+  return 1
+}
+
+migrate() {
+  reject_explicit_migrator_database_url
+  pinvi_prepare_api_image_provenance require-immutable
+  acquire_migrator_lifecycle_lock
+  migrate_under_lifecycle_lock
+  release_migrator_lifecycle_lock
 }
 
 bootstrap_credential_file() {
@@ -124,21 +297,39 @@ bootstrap_credential_file() {
   printf '%s\n' "$path"
 }
 
-up() {
+dagster_up_under_lifecycle_lock() {
+  pinvi_verify_runtime_image_provenance app-dagster
+  log "starting Dagster webserver (port ${DAGSTER_PORT})"
+  compose --profile etl up -d app-dagster
+  pinvi_verify_or_remove_running_dagster
+  wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster"
+}
+
+up_under_lifecycle_lock() {
   pinvi_verify_runtime_image_provenance app-api app-web
   log "starting API + Web"
   compose up -d app-api app-web
   pinvi_verify_or_remove_running_app
   if [[ "$ENABLE_DAGSTER" != "0" ]]; then
-    dagster_up
+    dagster_up_under_lifecycle_lock
   fi
+  wait_for_url "http://127.0.0.1:${API_PORT}/health" "API"
+  wait_for_url "http://127.0.0.1:${API_PORT}/health/feature-reference-reconciliation" "M05 worker"
+  wait_for_url "http://127.0.0.1:${WEB_PORT}/" "Web"
+}
+
+up() {
+  pinvi_prepare_api_image_provenance require-immutable
+  acquire_migrator_lifecycle_lock
+  up_under_lifecycle_lock
+  release_migrator_lifecycle_lock
 }
 
 dagster_up() {
-  pinvi_verify_runtime_image_provenance app-dagster
-  log "starting Dagster webserver (port ${DAGSTER_PORT})"
-  compose --profile etl up -d app-dagster
-  pinvi_verify_or_remove_running_dagster
+  pinvi_prepare_api_image_provenance require-immutable
+  acquire_migrator_lifecycle_lock
+  dagster_up_under_lifecycle_lock
+  release_migrator_lifecycle_lock
 }
 
 wait_for_url() {

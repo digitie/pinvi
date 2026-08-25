@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import json
 import os
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from pathlib import Path
 
 import anyio
@@ -16,6 +17,7 @@ from app.services.backup_service import (
     BackupDiskGuardError,
     BackupServiceError,
     BackupSnapshotNotFoundError,
+    BackupSnapshotUnverifiedError,
     create_backup_snapshot,
     list_backup_snapshots,
     restore_backup_hotswap,
@@ -24,6 +26,7 @@ from app.services.backup_service import (
 
 @pytest.fixture(autouse=True)
 def _backup_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "pinvi_environment", "development")
     monkeypatch.setattr(settings, "pinvi_backup_dir", str(tmp_path / "backups"))
     monkeypatch.setattr(settings, "pinvi_backup_schema", "app")
     monkeypatch.setattr(settings, "pinvi_backup_timeout_seconds", 5)
@@ -37,13 +40,8 @@ def _backup_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "pinvi_restore_hotswap_execute", False)
     monkeypatch.setattr(settings, "pinvi_restore_drain_command", "")
     monkeypatch.setattr(settings, "pinvi_restore_allow_no_drain", False)
+    monkeypatch.setattr(settings, "pinvi_restore_drain_verified", False)
     monkeypatch.setattr(settings, "pinvi_restore_app_role", "")
-
-    @asynccontextmanager
-    async def _noop_restore_advisory_lock() -> AsyncIterator[None]:
-        yield
-
-    monkeypatch.setattr(backup_service, "_restore_advisory_lock", _noop_restore_advisory_lock)
 
 
 def _write_script(path: Path, body: str) -> None:
@@ -129,6 +127,23 @@ exit 9
         await create_backup_snapshot(access_reason="실패 테스트")
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("environment", ["staging", "production"])
+async def test_create_backup_snapshot_refuses_strict_api_writer_before_child_spawn(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    monkeypatch.setattr(settings, "pinvi_environment", environment)
+
+    async def unexpected_child(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("strict API backup must not spawn a child process")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", unexpected_child)
+
+    with pytest.raises(BackupServiceError, match="root-owned trusted backup producer"):
+        await create_backup_snapshot(access_reason="strict provenance regression")
+
+
 def test_list_backup_snapshots_sorts_recent_first(tmp_path: Path) -> None:
     backup_dir = Path(settings.pinvi_backup_dir)
     backup_dir.mkdir(parents=True)
@@ -155,6 +170,40 @@ def test_list_backup_snapshots_only_verifies_matching_checksum(tmp_path: Path) -
 
     assert snapshot.status == "available"
     assert snapshot.checksum_sha256 is None
+
+
+def test_strict_backup_listing_reads_only_root_metadata_catalog(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog_directory = tmp_path / "backup-catalog"
+    catalog_directory.mkdir(mode=0o700)
+    catalog = {
+        "snapshots": [
+            {
+                "checksum_sha256": "a" * 64,
+                "created_at": "2026-08-24T00:00:00Z",
+                "filename": "pinvi-app-20260824.dump",
+                "size_bytes": 123,
+                "snapshot_id": "pinvi-app-20260824",
+                "status": "verified",
+            }
+        ],
+        "version": 1,
+    }
+    current = catalog_directory / "current.json"
+    current.write_text(json.dumps(catalog), encoding="utf-8")
+    current.chmod(0o600)
+    monkeypatch.setattr(settings, "pinvi_environment", "production")
+    monkeypatch.setattr(settings, "pinvi_backup_dir", str(catalog_directory))
+
+    snapshots = list_backup_snapshots()
+
+    assert len(snapshots) == 1
+    assert snapshots[0].path == "backup://pinvi-app-20260824.dump"
+    assert snapshots[0].checksum_sha256 == "a" * 64
+    current.chmod(0o644)
+    assert list_backup_snapshots() == []
 
 
 @pytest.mark.asyncio
@@ -187,6 +236,32 @@ def test_restore_lock_database_url_accepts_psql_driverless_url(
 
 
 @pytest.mark.asyncio
+async def test_restore_target_identity_must_match_application_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    application_identity = {
+        "PINVI_RESTORE_EXPECTED_DATABASE_NAME": "pinvi",
+        "PINVI_RESTORE_EXPECTED_DATABASE_OID": "100",
+        "PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER": "200",
+        "PINVI_RESTORE_EXPECTED_HOSTADDR": "127.0.0.1",
+        "PINVI_RESTORE_EXPECTED_PORT": "5432",
+    }
+    target_identity = {**application_identity, "PINVI_RESTORE_EXPECTED_DATABASE_OID": "101"}
+    calls: list[str] = []
+
+    async def fake_database_identity(database_url: str) -> dict[str, str]:
+        calls.append(database_url)
+        return application_identity if len(calls) == 1 else target_identity
+
+    monkeypatch.setattr(backup_service, "_database_identity", fake_database_identity)
+
+    with pytest.raises(BackupServiceError, match="not the application database"):
+        await backup_service._restore_target_identity()
+
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
 async def test_restore_backup_hotswap_runs_script_and_parses_phases(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -195,6 +270,9 @@ async def test_restore_backup_hotswap_runs_script_and_parses_phases(
     await backup_dir.mkdir(parents=True)
     snapshot = backup_dir / "pinvi-app-restore.dump"
     await snapshot.write_text("dump", encoding="utf-8")
+    await (backup_dir / "pinvi-app-restore.dump.sha256").write_text(
+        f"{hashlib.sha256(b'dump').hexdigest()}\n", encoding="utf-8"
+    )
     script = tmp_path / "restore-hotswap.sh"
     _write_script(
         script,
@@ -203,6 +281,8 @@ set -euo pipefail
 test "$1" = run
 test -f "$2"
 test "${PINVI_RESTORE_API_TRIGGER}" = "1"
+test "${PINVI_M05_RESTORE_TEST_MODE}" = "0"
+test -z "${PINVI_RESTORE_WRITE_ROLES:-}"
 printf 'RESTORE_PHASE=preparing:success:checked\\n'
 printf 'RESTORE_PHASE=restoring:success:restored %s\\n' "$3"
 printf 'RESTORE_PHASE=validating:success:validated\\n'
@@ -210,6 +290,8 @@ printf 'RESTORE_PHASE=draining:success:drained\\n'
 printf 'RESTORE_PHASE=switching:success:switched %s\\n' "$4"
 """,
     )
+    monkeypatch.setenv("PINVI_M05_RESTORE_TEST_MODE", "1")
+    monkeypatch.setenv("PINVI_RESTORE_WRITE_ROLES", "must-not-reach-child")
     monkeypatch.setattr(settings, "pinvi_restore_hotswap_script_path", str(script))
 
     run = await restore_backup_hotswap(
@@ -225,43 +307,165 @@ printf 'RESTORE_PHASE=switching:success:switched %s\\n' "$4"
 
 
 @pytest.mark.asyncio
-async def test_restore_backup_hotswap_uses_advisory_lock(
+@pytest.mark.parametrize("environment", ["staging", "production"])
+async def test_restore_backup_hotswap_refuses_strict_api_execution_before_child_spawn(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    monkeypatch.setattr(settings, "pinvi_environment", environment)
+
+    async def unexpected_child(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("strict API restore must not spawn a child process")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", unexpected_child)
+
+    with pytest.raises(BackupServiceError, match="root-owned one-shot restore runner"):
+        await restore_backup_hotswap(
+            snapshot_id="must-not-be-loaded",
+            access_reason="strict boundary regression",
+        )
+
+
+def test_app_api_compose_does_not_receive_restore_executor_authority() -> None:
+    root = Path(__file__).resolve().parents[4]
+    compose = (root / "infra/docker-compose.app.yml").read_text(encoding="utf-8")
+    api_block = compose.split("  app-api:", maxsplit=1)[1].split("  app-backup:", maxsplit=1)[0]
+
+    assert "PINVI_DATABASE_URL" in api_block
+    assert "PINVI_RESTORE_TRUSTED_BACKUP_HOST_DIR" not in api_block
+    assert "PINVI_BACKUP_CATALOG_HOST_DIR" in api_block
+    assert "target: /var/lib/pinvi/backup-catalog" in api_block
+    assert "read_only: true" in api_block
+    assert "PINVI_BACKUP_TRUSTED" not in api_block
+    for variable in (
+        "PINVI_RESTORE_DATABASE_URL",
+        "PINVI_RESTORE_FENCE_DATABASE_URL",
+        "PINVI_RESTORE_HOTSWAP_EXECUTE",
+        "PINVI_RESTORE_DRAIN_COMMAND",
+        "PINVI_RESTORE_ALLOW_NO_DRAIN",
+        "PINVI_RESTORE_DRAIN_VERIFIED",
+        "PINVI_RESTORE_APP_ROLE",
+        "PINVI_RESTORE_WRITE_ROLES",
+    ):
+        assert variable not in api_block
+
+    assert "  app-backup:" in compose
+    assert 'profiles: ["maintenance"]' in compose
+    assert 'PINVI_BACKUP_TRUSTED: "1"' in compose
+
+
+def test_strict_settings_reject_restore_executor_authority() -> None:
+    from app.core.config import Settings
+
+    with pytest.raises(ValueError, match="root-owned one-shot restore runner"):
+        Settings(
+            _env_file=None,
+            pinvi_environment="staging",
+            pinvi_restore_database_url="postgresql://restore-owner@db:5432/pinvi",
+            pinvi_restore_fence_database_url="postgresql://target-owner@db:5432/pinvi",
+            pinvi_restore_hotswap_execute=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_restore_backup_hotswap_timeout_kills_script_process_group(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     backup_dir = anyio.Path(settings.pinvi_backup_dir)
     await backup_dir.mkdir(parents=True)
-    snapshot = backup_dir / "pinvi-app-lock.dump"
+    snapshot = backup_dir / "pinvi-app-timeout.dump"
     await snapshot.write_text("dump", encoding="utf-8")
-    script = tmp_path / "restore-hotswap.sh"
+    await (backup_dir / "pinvi-app-timeout.dump.sha256").write_text(
+        f"{hashlib.sha256(b'dump').hexdigest()}\n", encoding="utf-8"
+    )
+    marker = tmp_path / "child-survived"
+    script = tmp_path / "restore-hotswap-timeout.sh"
     _write_script(
         script,
         """#!/usr/bin/env bash
 set -euo pipefail
-printf 'RESTORE_PHASE=preparing:success:checked\\n'
-printf 'RESTORE_PHASE=restoring:success:restored\\n'
-printf 'RESTORE_PHASE=validating:success:validated\\n'
-printf 'RESTORE_PHASE=draining:skipped:test\\n'
-printf 'RESTORE_PHASE=switching:success:switched\\n'
+cleanup_marker="${PINVI_TIMEOUT_CLEANUP_MARKER}"
+trap 'touch "$cleanup_marker"; exit 143' TERM INT
+(sleep 20; touch "$PINVI_TIMEOUT_MARKER") &
+while :; do :; done
 """,
     )
+    monkeypatch.setenv("PINVI_TIMEOUT_MARKER", str(marker))
+    cleanup_marker = tmp_path / "timeout-cleanup"
+    monkeypatch.setenv("PINVI_TIMEOUT_CLEANUP_MARKER", str(cleanup_marker))
     monkeypatch.setattr(settings, "pinvi_restore_hotswap_script_path", str(script))
-    entered = False
+    monkeypatch.setattr(settings, "pinvi_restore_timeout_seconds", 0.05)
 
-    @asynccontextmanager
-    async def _recording_restore_advisory_lock() -> AsyncIterator[None]:
-        nonlocal entered
-        entered = True
-        yield
+    with pytest.raises(BackupServiceError, match="timed out"):
+        await restore_backup_hotswap(
+            snapshot_id="pinvi-app-timeout",
+            access_reason="timeout 테스트",
+        )
 
-    monkeypatch.setattr(backup_service, "_restore_advisory_lock", _recording_restore_advisory_lock)
+    await anyio.sleep(1.2)
+    assert not marker.exists()
+    assert cleanup_marker.exists()
 
-    await restore_backup_hotswap(
-        snapshot_id="pinvi-app-lock",
-        access_reason="락 테스트",
+
+@pytest.mark.asyncio
+async def test_restore_backup_hotswap_cancellation_kills_script_process_group(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backup_dir = anyio.Path(settings.pinvi_backup_dir)
+    await backup_dir.mkdir(parents=True)
+    snapshot = backup_dir / "pinvi-app-cancel.dump"
+    await snapshot.write_text("dump", encoding="utf-8")
+    await (backup_dir / "pinvi-app-cancel.dump.sha256").write_text(
+        f"{hashlib.sha256(b'dump').hexdigest()}\n", encoding="utf-8"
     )
+    marker = tmp_path / "child-survived-cancel"
+    script = tmp_path / "restore-hotswap-cancel.sh"
+    _write_script(
+        script,
+        """#!/usr/bin/env bash
+set -euo pipefail
+cleanup_marker="${PINVI_CANCEL_CLEANUP_MARKER}"
+trap 'touch "$cleanup_marker"; exit 143' TERM INT
+(sleep 20; touch "${PINVI_CANCEL_MARKER}") &
+while :; do :; done
+""",
+    )
+    monkeypatch.setenv("PINVI_CANCEL_MARKER", str(marker))
+    cleanup_marker = tmp_path / "cancel-cleanup"
+    monkeypatch.setenv("PINVI_CANCEL_CLEANUP_MARKER", str(cleanup_marker))
+    monkeypatch.setattr(settings, "pinvi_restore_hotswap_script_path", str(script))
 
-    assert entered is True
+    restore_task = asyncio.create_task(
+        restore_backup_hotswap(
+            snapshot_id="pinvi-app-cancel",
+            access_reason="취소 정리 테스트",
+        )
+    )
+    await anyio.sleep(0.1)
+    restore_task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await restore_task
+
+    await anyio.sleep(1.2)
+    assert not marker.exists()
+    assert cleanup_marker.exists()
+
+
+@pytest.mark.asyncio
+async def test_restore_backup_hotswap_rejects_snapshot_without_verified_checksum() -> None:
+    backup_dir = anyio.Path(settings.pinvi_backup_dir)
+    await backup_dir.mkdir(parents=True)
+    snapshot = backup_dir / "pinvi-app-unverified.dump"
+    await snapshot.write_text("dump", encoding="utf-8")
+
+    with pytest.raises(BackupSnapshotUnverifiedError):
+        await restore_backup_hotswap(
+            snapshot_id="pinvi-app-unverified",
+            access_reason="복구 훈련",
+        )
 
 
 @pytest.mark.asyncio

@@ -191,6 +191,14 @@ npm run test:e2e:live-mutating -- admin-feature-request-queue-live-mutating.live
 성공 뒤 PinVi 응답 및 Map 격리 로그에서 같은 request UUID와 pending receipt를 대조한다. 실패한
 fixture는 다시 승인하지 않고, 격리 DB만 폐기하거나 해당 제안을 운영 절차로 거절한다.
 
+M04와 M05를 activation 증적으로 사용할 때는 위 직접 실행만으로는 충분하지 않다.
+`scripts/m05_activation_attestation.py m04`가 정확히 이 suite를 immutable Playwright image로
+실행하고, API/Web container ID·source revision·Map pending receipt를 Ed25519 증적에 묶는다.
+이어지는 `live` 실행은 `--m04-evidence-dir`를 필수로 받고, 같은 PinVi API/Web container에서
+승인된 Map 요청의 `manual_request` provenance와 M05의 old Feature UUID가 동일한지 전후로
+검증한다. smoke는 격리 pair에서만 허용하며, staging/production 증적은 root-owned 0700 evidence
+directory와 0600 key를 사용한다.
+
 ### M05 Feature 참조 조정 증거 단건
 
 M04 승인, Map `rebind` 결정, PinVi worker receipt/ACK가 모두 같은 격리 pair에서 끝난 뒤에만 실행한다.
@@ -211,7 +219,8 @@ npm run test:e2e:live-mutating -- admin-feature-reference-reconciliations-live-m
 ```
 
 M05 event가 목록 첫 페이지에 없거나 terminal receipt가 없으면 fixture/worker/ACK 상태를 먼저 확인한다.
-이 테스트가 pass해도 M04 승인과 Map 결정·ACK의 server-side receipt 대조가 별도 성공 조건이다.
+activation gate에서는 단독 UI pass가 아니라, 앞 절의 서명된 M04 증적과 `live`의 Map 결정·ACK
+server-side 대조까지 모두 성공해야 한다.
 
 운영 공개 도메인으로 검증할 때는 `*_URL`을 실제 HTTPS 도메인으로 바꾼다.
 

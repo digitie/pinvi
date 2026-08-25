@@ -1,0 +1,867 @@
+"""M05 evidence signer와 production Settings 서명 검증의 왕복 계약."""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import importlib.util
+import json
+import os
+import subprocess
+import sys
+import time
+from collections.abc import Iterator
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+from app.core import config as config_module
+from app.core.config import (
+    KOR_TRAVEL_MAP_M05_ADMIN_IMAGE_DIGEST,
+    KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_M05_ADMIN_RUNTIME_OPERATION_CONTRACT_SHA256,
+    KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_CANONICAL_SHA256,
+    KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_OPERATION_CONTRACT_SHA256,
+    KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+    KOR_TRAVEL_MAP_M05_API_IMAGE_DIGEST,
+    KOR_TRAVEL_MAP_M05_FRONTEND_IMAGE_DIGEST,
+    KOR_TRAVEL_MAP_M05_FULL_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_M05_FULL_RUNTIME_OPERATION_CONTRACT_SHA256,
+    KOR_TRAVEL_MAP_M05_FULL_SOURCE_CANONICAL_SHA256,
+    KOR_TRAVEL_MAP_M05_FULL_SOURCE_OPERATION_CONTRACT_SHA256,
+    KOR_TRAVEL_MAP_M05_FULL_SOURCE_REVISION,
+    KOR_TRAVEL_MAP_M05_SERVICE_RUNTIME_OPERATION_CONTRACT_SHA256,
+    KOR_TRAVEL_MAP_M05_SERVICE_SOURCE_CANONICAL_SHA256,
+    KOR_TRAVEL_MAP_M05_SERVICE_SOURCE_OPERATION_CONTRACT_SHA256,
+    KOR_TRAVEL_MAP_M05_USER_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_M05_USER_RUNTIME_OPERATION_CONTRACT_SHA256,
+    KOR_TRAVEL_MAP_M05_USER_SOURCE_CANONICAL_SHA256,
+    KOR_TRAVEL_MAP_M05_USER_SOURCE_OPERATION_CONTRACT_SHA256,
+    KOR_TRAVEL_MAP_M05_USER_SOURCE_REVISION,
+    KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+    KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
+    Settings,
+)
+
+READ = "r" * 32
+ACK = "a" * 32
+REPO_ROOT = Path(__file__).resolve().parents[4]
+PINVI_REVISION = subprocess.run(  # noqa: S603
+    ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],  # noqa: S607
+    check=True,
+    capture_output=True,
+    text=True,
+).stdout.strip()
+PINVI_DIGESTS = {
+    "api": "sha256:" + "1" * 64,
+    "web": "sha256:" + "2" * 64,
+    "dagster": "sha256:" + "3" * 64,
+}
+
+
+def _test_trust_anchor_sha256(private_key: Ed25519PrivateKey) -> str:
+    return hashlib.sha256(private_key.public_key().public_bytes_raw()).hexdigest()
+
+
+def _write_json(path: Path, value: object) -> None:
+    path.write_text(json.dumps(value, separators=(",", ":")), encoding="utf-8")
+    path.chmod(0o600)
+
+
+def _identity_sha256(identity: dict[str, object]) -> str:
+    material = json.dumps(identity, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def _script_sha256(name: str) -> str:
+    return hashlib.sha256((REPO_ROOT / "scripts" / name).read_bytes()).hexdigest()
+
+
+def _receipt_script_module() -> object:
+    script = REPO_ROOT / "scripts" / "m05_activation_receipt.py"
+    spec = importlib.util.spec_from_file_location("m05_activation_receipt", script)
+    if spec is None or spec.loader is None:
+        raise AssertionError("activation receipt script could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_receipt_ledger_parser_accepts_dash_prefixed_urlsafe_public_key() -> None:
+    module = _receipt_script_module()
+    public_key = base64.urlsafe_b64encode(bytes([0xF8]) + bytes(31)).decode("ascii").rstrip("=")
+
+    args = module._parse_args(  # type: ignore[attr-defined]
+        [
+            "ledger",
+            "--receipt",
+            "receipt.json",
+            "--ledger",
+            "activation-ledger.jsonl",
+            "--high-watermark",
+            "activation-high-watermark.json",
+            "--durable-floor",
+            "activation-durable-floor.json",
+            "--durable-history",
+            "activation-durable-history.jsonl",
+            "--durable-anchor",
+            "activation-durable-anchor.jsonl",
+            "--public-key",
+            public_key,
+            "--evidence-dir",
+            "evidence",
+            "--review-allowlist",
+            "review-allowlist.json",
+            "--review-challenge",
+            "review-challenge.json",
+        ]
+    )
+
+    assert public_key.startswith("-")
+    assert args.public_key == public_key
+
+
+def _tool_sha256(name: str) -> str:
+    return hashlib.sha256(_tool_path(name).read_bytes()).hexdigest()
+
+
+def _tool_path(name: str) -> Path:
+    candidates = [
+        Path("/usr/local/bin") / name,
+        Path("/usr/bin") / name,
+        Path("/bin") / name,
+        *sorted(Path("/usr/lib/postgresql").glob(f"*/bin/{name}")),
+    ]
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if (
+            candidate.is_file()
+            and not candidate.is_symlink()
+            and resolved.name == name
+            and resolved.is_file()
+        ):
+            return resolved
+    raise AssertionError(f"test tool is missing: {name}")
+
+
+@pytest.fixture
+def linux_tmp_path() -> Iterator[Path]:
+    with TemporaryDirectory(prefix="pinvi-m05-receipt-", dir="/tmp") as temp_dir:
+        yield Path(temp_dir)
+
+
+def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
+    linux_tmp_path: Path,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    tmp_path = linux_tmp_path
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir(mode=0o700)
+    review_challenge_id = "66666666-6666-4666-8666-666666666666"
+    review_response_nonce = "A" * 43
+    review_response_paths = {
+        "01a02ce8-22cf-70b2-92cc-7dc3af16a915": tmp_path / "helmholtz-review.txt",
+        "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2": tmp_path / "ampere-review.txt",
+    }
+    review_response_hashes: dict[str, str] = {}
+    reviewer_private_keys = {
+        agent_id: Ed25519PrivateKey.generate() for agent_id in review_response_paths
+    }
+    review_ids = {
+        "01a02ce8-22cf-70b2-92cc-7dc3af16a915": "44444444-4444-4444-8444-444444444444",
+        "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2": "55555555-5555-4555-8555-555555555555",
+    }
+    reviewer_roster_path = tmp_path / "reviewer-roster.json"
+    _write_json(
+        reviewer_roster_path,
+        {
+            "agent_ids": list(review_response_paths),
+            "public_keys": {
+                agent_id: base64.urlsafe_b64encode(
+                    private_key.public_key().public_bytes(
+                        serialization.Encoding.Raw,
+                        serialization.PublicFormat.Raw,
+                    )
+                )
+                .decode("ascii")
+                .rstrip("=")
+                for agent_id, private_key in reviewer_private_keys.items()
+            },
+            "version": 2,
+        },
+    )
+    for agent_id, response_path in review_response_paths.items():
+        summary = "GO no P0/P1 findings"
+        signature_payload = {
+            "agent_id": agent_id,
+            "challenge_id": review_challenge_id,
+            "commit": PINVI_REVISION,
+            "p0_p1": 0,
+            "pr_url": "https://github.com/digitie/pinvi/pull/466",
+            "review_id": review_ids[agent_id],
+            "review_nonce": review_response_nonce,
+            "summary": summary,
+            "verdict": "GO",
+        }
+        review_signature = (
+            base64.urlsafe_b64encode(
+                reviewer_private_keys[agent_id].sign(
+                    json.dumps(
+                        signature_payload,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    ).encode("utf-8")
+                )
+            )
+            .decode("ascii")
+            .rstrip("=")
+        )
+        response = (
+            "verdict: GO\n"
+            "p0_p1: 0\n"
+            f"review_id: {review_ids[agent_id]}\n"
+            f"reviewer_agent_id: {agent_id}\n"
+            f"agent_id: {agent_id}\n"
+            f"review_nonce: {review_response_nonce}\n"
+            f"commit: {PINVI_REVISION}\n"
+            f"reviewed_commit: {PINVI_REVISION}\n"
+            "pr_url: https://github.com/digitie/pinvi/pull/466\n"
+            f"challenge_id: {review_challenge_id}\n"
+            f"summary: {summary}\n"
+            f"review_signature: {review_signature}\n"
+        )
+        response_path.write_text(response, encoding="utf-8")
+        response_path.chmod(0o600)
+        review_response_hashes[agent_id] = hashlib.sha256(response.encode()).hexdigest()
+    review_challenge_path = tmp_path / "review-challenge.json"
+    _write_json(
+        review_challenge_path,
+        {
+            "agent_ids": list(review_response_paths),
+            "challenge_id": review_challenge_id,
+            "commit": PINVI_REVISION,
+            "pr_url": "https://github.com/digitie/pinvi/pull/466",
+            "response_paths": {
+                agent_id: str(path) for agent_id, path in review_response_paths.items()
+            },
+            "response_nonce_sha256": hashlib.sha256(
+                review_response_nonce.encode("ascii")
+            ).hexdigest(),
+            "version": 2,
+        },
+    )
+    _write_json(
+        evidence_dir / "reviews.json",
+        [
+            {
+                "agent_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
+                "challenge_id": review_challenge_id,
+                "commit": PINVI_REVISION,
+                "p0_p1": 0,
+                "pr_url": "https://github.com/digitie/pinvi/pull/466",
+                "review_id": "44444444-4444-4444-8444-444444444444",
+                "reviewer_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
+                "response_sha256": review_response_hashes["01a02ce8-22cf-70b2-92cc-7dc3af16a915"],
+                "summary": "GO: no P0/P1 findings",
+                "summary_sha256": hashlib.sha256(b"GO: no P0/P1 findings").hexdigest(),
+                "verdict": "GO",
+            },
+            {
+                "agent_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
+                "challenge_id": review_challenge_id,
+                "commit": PINVI_REVISION,
+                "p0_p1": 0,
+                "pr_url": "https://github.com/digitie/pinvi/pull/466",
+                "review_id": "55555555-5555-4555-8555-555555555555",
+                "reviewer_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
+                "response_sha256": review_response_hashes["01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2"],
+                "summary": "GO: no P0/P1 findings",
+                "summary_sha256": hashlib.sha256(b"GO: no P0/P1 findings").hexdigest(),
+                "verdict": "GO",
+            },
+        ],
+    )
+    review_allowlist_path = tmp_path / "reviews-allowlist.json"
+    _write_json(
+        review_allowlist_path,
+        [
+            {
+                "agent_id": "01a02ce8-22cf-70b2-92cc-7dc3af16a915",
+                "challenge_id": review_challenge_id,
+                "commit": PINVI_REVISION,
+                "pr_url": "https://github.com/digitie/pinvi/pull/466",
+                "response_sha256": review_response_hashes["01a02ce8-22cf-70b2-92cc-7dc3af16a915"],
+                "review_id": "44444444-4444-4444-8444-444444444444",
+            },
+            {
+                "agent_id": "01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2",
+                "challenge_id": review_challenge_id,
+                "commit": PINVI_REVISION,
+                "pr_url": "https://github.com/digitie/pinvi/pull/466",
+                "response_sha256": review_response_hashes["01a02ce8-25b4-79f2-90e0-49a5c2f7cfc2"],
+                "review_id": "55555555-5555-4555-8555-555555555555",
+            },
+        ],
+    )
+    m04_created_at = int(time.time())
+    _write_json(
+        evidence_dir / "live-ui.json",
+        {
+            "event_id": "11111111-1111-4111-8111-111111111111",
+            "event_sha256": "a" * 64,
+            "m04_attestation_sha256": "f" * 64,
+            "m04_created_at": m04_created_at,
+            "m04_feature_request_id": "33333333-3333-4333-8333-333333333333",
+            "m04_map_feature_uuid": "44444444-4444-4444-8444-444444444444",
+            "m04_map_pending_receipt_sha256": "2" * 64,
+            "m04_map_provenance_sha256": "3" * 64,
+            "m04_map_request_sha256": "4" * 64,
+            "m04_pinvi_approval_sha256": "5" * 64,
+            "m04_server_side_chain_verified": True,
+            "m04_verification_id": "22222222-2222-4222-8222-222222222222",
+            "map_admin_endpoint": "http://127.0.0.1:12701",
+            "map_ack_sha256": "b" * 64,
+            "map_local_receipt_sha256": "1" * 64,
+            "map_snapshot_after_sha256": "c" * 64,
+            "map_snapshot_before_sha256": "c" * 64,
+            "pinvi_source_revision": PINVI_REVISION,
+            "pinvi_api_endpoint": "http://127.0.0.1:12801",
+            "pinvi_web_endpoint": "http://127.0.0.1:12805",
+            "pinvi_receipt_sha256": "1" * 64,
+            "pinvi_snapshot_after_sha256": "d" * 64,
+            "pinvi_snapshot_before_sha256": "d" * 64,
+            "runner_exit_code": 0,
+            "server_side_ack_verified": True,
+            "status": "passed",
+            "ui_evidence_sha256": "e" * 64,
+            "verification_id": "22222222-2222-4222-8222-222222222222",
+            "playwright_runner_image_id": "sha256:" + "9" * 64,
+            "playwright_runner_image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:"
+            + "8" * 64,
+        },
+    )
+    source_identity = {
+        "database": "source",
+        "database_oid": "100",
+        "host": "db",
+        "hostaddr": "127.0.0.1",
+        "port": "5432",
+        "schema_exists": True,
+        "server_version_num": "160000",
+        "sslmode": "prefer",
+        "system_identifier": "1",
+        "user": "pinvi_owner",
+    }
+    source_after_backup_identity = source_identity.copy()
+    target_before_restore_identity = {
+        "database": "pinvi_m05_restore_target",
+        "database_oid": "200",
+        "host": "db",
+        "hostaddr": "127.0.0.1",
+        "port": "5432",
+        "schema_exists": False,
+        "server_version_num": "160000",
+        "sslmode": "prefer",
+        "system_identifier": "1",
+        "user": "pinvi_owner",
+    }
+    target_identity = {
+        "database": "pinvi_m05_restore_target",
+        "database_oid": "200",
+        "host": "db",
+        "hostaddr": "127.0.0.1",
+        "port": "5432",
+        "schema_exists": True,
+        "server_version_num": "160000",
+        "sslmode": "prefer",
+        "system_identifier": "1",
+        "user": "pinvi_app",
+    }
+    runtime_identity = target_identity.copy()
+    fence_before_restore_identity = target_before_restore_identity.copy()
+    fence_before_restore_identity["user"] = "pinvi_fence"
+    fence_identity = target_identity.copy()
+    fence_identity["user"] = "pinvi_fence"
+    restore_tool_manifest_path = tmp_path / "restore-tool-trust.json"
+    restore_tool_manifest = {
+        "tools": {
+            name: {
+                "path": str(_tool_path(name)),
+                "sha256": _tool_sha256(name),
+            }
+            for name in ("bash", "git", "pg_dump", "pg_restore", "psql")
+        },
+        "version": 1,
+    }
+    _write_json(restore_tool_manifest_path, restore_tool_manifest)
+    restore_tool_manifest_sha256 = hashlib.sha256(
+        restore_tool_manifest_path.read_bytes()
+    ).hexdigest()
+    monkeypatch.setenv("PINVI_M05_RESTORE_TOOL_TRUST_MANIFEST", str(restore_tool_manifest_path))
+    _write_json(
+        evidence_dir / "restore.json",
+        {
+            "backup_runner_sha256": _script_sha256("backup-db.sh"),
+            "backup_tool_path": str(_tool_path("pg_dump")),
+            "backup_tool_sha256": _tool_sha256("pg_dump"),
+            "bash_tool_path": "/usr/bin/bash",
+            "bash_tool_sha256": _tool_sha256("bash"),
+            "environment": "staging",
+            "fresh_target_verified": True,
+            "fence_db_identity": fence_identity,
+            "fence_db_identity_before_restore": fence_before_restore_identity,
+            "fence_db_identity_before_restore_sha256": _identity_sha256(
+                fence_before_restore_identity
+            ),
+            "fence_db_identity_sha256": _identity_sha256(fence_identity),
+            "fence_role": "pinvi_fence",
+            "fence_role_verified": True,
+            "git_tool_path": str(_tool_path("git")),
+            "git_tool_sha256": _tool_sha256("git"),
+            "psql_tool_path": str(_tool_path("psql")),
+            "psql_tool_sha256": _tool_sha256("psql"),
+            "dump_sha256": "c" * 64,
+            "execution_id": "33333333-3333-4333-8333-333333333333",
+            "no_owner_restore": True,
+            "provisioner_login_disabled": True,
+            "provisioner_role": "pinvi_restore_provisioner",
+            "restore_command": (
+                "pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges"
+            ),
+            "restore_output_sha256": "2" * 64,
+            "restore_db_runner_sha256": _script_sha256("restore-db.sh"),
+            "hotswap_runner_sha256": _script_sha256("restore-hotswap.sh"),
+            "restore_runner_sha256": _script_sha256("restore-staging-drill.sh"),
+            "m05_restore_drill_sha256": _script_sha256("m05_restore_drill.py"),
+            "restore_tool_path": str(_tool_path("pg_restore")),
+            "restore_tool_sha256": _tool_sha256("pg_restore"),
+            "tool_trust_manifest_path": str(restore_tool_manifest_path),
+            "tool_trust_manifest_sha256": restore_tool_manifest_sha256,
+            "runtime_db_identity": runtime_identity,
+            "runtime_role": "pinvi_app",
+            "runtime_role_verified": True,
+            "source_db_identity": source_identity,
+            "source_db_identity_after_backup": source_after_backup_identity,
+            "source_db_identity_after_backup_sha256": _identity_sha256(
+                source_after_backup_identity
+            ),
+            "source_db_identity_sha256": _identity_sha256(source_identity),
+            "source_revision": PINVI_REVISION,
+            "staging_role": "pinvi_owner",
+            "staging_role_verified": True,
+            "status": "passed",
+            "target_db_identity": target_identity,
+            "target_db_identity_before_restore": target_before_restore_identity,
+            "target_db_identity_before_restore_sha256": _identity_sha256(
+                target_before_restore_identity
+            ),
+            "target_db_identity_sha256": _identity_sha256(target_identity),
+            "target_recreated": True,
+            "trigger_guard_verified": True,
+            "runtime_db_identity_sha256": _identity_sha256(runtime_identity),
+            "hotswap_success": True,
+            "hotswap_success_marker": "RESTORE_PHASE=switching:success:schema-swap completed",
+            "hotswap_success_output_sha256": "f" * 64,
+            "hotswap_schema_oid_before": "300",
+            "hotswap_schema_oid_after": "400",
+            "hotswap_previous_schema_oid": "300",
+            "hotswap_previous_schema_present": True,
+            "hotswap_restore_schema_absent": True,
+            "hotswap_advisory_lock_released": True,
+            "hotswap_fence_restored": True,
+            "hotswap_executor_reconnect_fenced": True,
+        },
+    )
+    _write_json(
+        evidence_dir / "map-pair.json",
+        {
+            "admin_image_digest": KOR_TRAVEL_MAP_M05_ADMIN_IMAGE_DIGEST,
+            "api_image_digest": KOR_TRAVEL_MAP_M05_API_IMAGE_DIGEST,
+            "frontend_image_digest": KOR_TRAVEL_MAP_M05_FRONTEND_IMAGE_DIGEST,
+            "admin": {
+                "openapi_sha256": KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
+                "runtime_operation_contract_sha256": KOR_TRAVEL_MAP_M05_ADMIN_RUNTIME_OPERATION_CONTRACT_SHA256,
+                "source_canonical_sha256": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_CANONICAL_SHA256,
+                "source_operation_contract_sha256": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_OPERATION_CONTRACT_SHA256,
+                "source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+            },
+            "full": {
+                "openapi_sha256": KOR_TRAVEL_MAP_M05_FULL_OPENAPI_SHA256,
+                "runtime_operation_contract_sha256": KOR_TRAVEL_MAP_M05_FULL_RUNTIME_OPERATION_CONTRACT_SHA256,
+                "source_canonical_sha256": KOR_TRAVEL_MAP_M05_FULL_SOURCE_CANONICAL_SHA256,
+                "source_operation_contract_sha256": KOR_TRAVEL_MAP_M05_FULL_SOURCE_OPERATION_CONTRACT_SHA256,
+                "source_revision": KOR_TRAVEL_MAP_M05_FULL_SOURCE_REVISION,
+            },
+            "service": {
+                "openapi_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+                "runtime_operation_contract_sha256": KOR_TRAVEL_MAP_M05_SERVICE_RUNTIME_OPERATION_CONTRACT_SHA256,
+                "source_canonical_sha256": KOR_TRAVEL_MAP_M05_SERVICE_SOURCE_CANONICAL_SHA256,
+                "source_operation_contract_sha256": KOR_TRAVEL_MAP_M05_SERVICE_SOURCE_OPERATION_CONTRACT_SHA256,
+                "source_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
+            },
+            "user": {
+                "openapi_sha256": KOR_TRAVEL_MAP_M05_USER_OPENAPI_SHA256,
+                "runtime_operation_contract_sha256": KOR_TRAVEL_MAP_M05_USER_RUNTIME_OPERATION_CONTRACT_SHA256,
+                "source_canonical_sha256": KOR_TRAVEL_MAP_M05_USER_SOURCE_CANONICAL_SHA256,
+                "source_operation_contract_sha256": KOR_TRAVEL_MAP_M05_USER_SOURCE_OPERATION_CONTRACT_SHA256,
+                "source_revision": KOR_TRAVEL_MAP_M05_USER_SOURCE_REVISION,
+            },
+            "runtime": {
+                "admin_openapi": {
+                    "canonical_sha256": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_CANONICAL_SHA256,
+                    "source_canonical_sha256": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_CANONICAL_SHA256,
+                    "source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+                    "source_sha256": KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
+                    "surface_coverage_sha256": KOR_TRAVEL_MAP_M05_ADMIN_RUNTIME_OPERATION_CONTRACT_SHA256,
+                    "transport": "http",
+                    "transport_sha256": "a" * 64,
+                },
+                "api": {
+                    "container_id": "b" * 64,
+                    "digest": KOR_TRAVEL_MAP_M05_API_IMAGE_DIGEST,
+                    "environment": "staging",
+                    "image_id": KOR_TRAVEL_MAP_M05_API_IMAGE_DIGEST,
+                    "revision_label": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+                    "source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+                    "started_at": "2026-08-23T00:00:00.000000000Z",
+                },
+                "admin": {
+                    "container_id": "a" * 64,
+                    "digest": KOR_TRAVEL_MAP_M05_ADMIN_IMAGE_DIGEST,
+                    "environment": "staging",
+                    "image_id": KOR_TRAVEL_MAP_M05_ADMIN_IMAGE_DIGEST,
+                    "revision_label": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+                    "source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+                    "started_at": "2026-08-23T00:00:00.000000000Z",
+                },
+                "frontend": {
+                    "container_id": "c" * 64,
+                    "digest": KOR_TRAVEL_MAP_M05_FRONTEND_IMAGE_DIGEST,
+                    "environment": "staging",
+                    "image_id": KOR_TRAVEL_MAP_M05_FRONTEND_IMAGE_DIGEST,
+                    "revision_label": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+                    "source_revision": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_REVISION,
+                    "started_at": "2026-08-23T00:00:00.000000000Z",
+                },
+                "full_openapi_sha256": KOR_TRAVEL_MAP_M05_FULL_OPENAPI_SHA256,
+                "full_openapi": {
+                    "canonical_sha256": KOR_TRAVEL_MAP_M05_ADMIN_SOURCE_CANONICAL_SHA256,
+                    "source_canonical_sha256": KOR_TRAVEL_MAP_M05_FULL_SOURCE_CANONICAL_SHA256,
+                    "source_revision": KOR_TRAVEL_MAP_M05_FULL_SOURCE_REVISION,
+                    "source_sha256": KOR_TRAVEL_MAP_M05_FULL_OPENAPI_SHA256,
+                    "surface_coverage_sha256": KOR_TRAVEL_MAP_M05_FULL_RUNTIME_OPERATION_CONTRACT_SHA256,
+                    "transport": "http",
+                    "transport_sha256": "a" * 64,
+                },
+                "service_openapi": {
+                    "canonical_sha256": KOR_TRAVEL_MAP_M05_SERVICE_SOURCE_CANONICAL_SHA256,
+                    "source_canonical_sha256": KOR_TRAVEL_MAP_M05_SERVICE_SOURCE_CANONICAL_SHA256,
+                    "source_revision": KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION,
+                    "source_sha256": KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256,
+                    "surface_coverage_sha256": KOR_TRAVEL_MAP_M05_SERVICE_RUNTIME_OPERATION_CONTRACT_SHA256,
+                    "transport": "source-artifact",
+                    "transport_sha256": "b" * 64,
+                },
+                "user_openapi": {
+                    "canonical_sha256": KOR_TRAVEL_MAP_M05_USER_SOURCE_CANONICAL_SHA256,
+                    "source_canonical_sha256": KOR_TRAVEL_MAP_M05_USER_SOURCE_CANONICAL_SHA256,
+                    "source_revision": KOR_TRAVEL_MAP_M05_USER_SOURCE_REVISION,
+                    "source_sha256": KOR_TRAVEL_MAP_M05_USER_OPENAPI_SHA256,
+                    "surface_coverage_sha256": KOR_TRAVEL_MAP_M05_USER_RUNTIME_OPERATION_CONTRACT_SHA256,
+                    "transport": "source-artifact",
+                    "transport_sha256": "d" * 64,
+                },
+            },
+        },
+    )
+    _write_json(
+        evidence_dir / "pinvi-images.json",
+        {
+            name: {
+                "container_id": "d" * 64,
+                "digest": digest,
+                "environment": "staging",
+                "image_id": digest,
+                "revision_label": PINVI_REVISION,
+                "source_revision": PINVI_REVISION,
+                "started_at": "2026-08-23T00:00:00.000000000Z",
+            }
+            for name, digest in PINVI_DIGESTS.items()
+        },
+    )
+
+    private_key = Ed25519PrivateKey.generate()
+    monkeypatch.setattr(
+        config_module,
+        "PINVI_M05_ACTIVATION_RECEIPT_PUBLIC_KEY_SHA256",
+        _test_trust_anchor_sha256(private_key),
+    )
+    private_key_path = tmp_path / "activation-key.pem"
+    private_key_path.write_bytes(
+        private_key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    private_key_path.chmod(0o600)
+
+    evidence_hashes = {
+        name: hashlib.sha256((evidence_dir / f"{name}.json").read_bytes()).hexdigest()
+        for name in ("live-ui", "map-pair", "pinvi-images", "restore", "reviews")
+    }
+    attestation_payload = {
+        "created_at": int(time.time()),
+        "event_id": "11111111-1111-4111-8111-111111111111",
+        "evidence_sha256": evidence_hashes,
+        "map_ack_sha256": "b" * 64,
+        "m04_attestation_sha256": "f" * 64,
+        "m04_created_at": m04_created_at,
+        "m04_feature_request_id": "33333333-3333-4333-8333-333333333333",
+        "m04_map_feature_uuid": "44444444-4444-4444-8444-444444444444",
+        "m04_map_pending_receipt_sha256": "2" * 64,
+        "m04_map_provenance_sha256": "3" * 64,
+        "m04_map_request_sha256": "4" * 64,
+        "m04_pinvi_approval_sha256": "5" * 64,
+        "m04_server_side_chain_verified": True,
+        "m04_verification_id": "22222222-2222-4222-8222-222222222222",
+        "local_receipt_sha256": "1" * 64,
+        "map_admin_endpoint": "http://127.0.0.1:12701",
+        "map_snapshot_sha256": "c" * 64,
+        "pinvi_snapshot_sha256": "d" * 64,
+        "pinvi_api_endpoint": "http://127.0.0.1:12801",
+        "pinvi_web_endpoint": "http://127.0.0.1:12805",
+        "pinvi_source_revision": PINVI_REVISION,
+        "playwright_runner_image_id": "sha256:" + "9" * 64,
+        "playwright_runner_image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:"
+        + "8" * 64,
+        "scope": "staging",
+        "status": "passed",
+        "verification_id": "22222222-2222-4222-8222-222222222222",
+        "version": 3,
+    }
+    attestation_bytes = json.dumps(
+        attestation_payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+    _write_json(
+        evidence_dir / "attestation.json",
+        {
+            "payload": attestation_payload,
+            "signature": base64.urlsafe_b64encode(private_key.sign(attestation_bytes))
+            .decode("ascii")
+            .rstrip("="),
+        },
+    )
+    receipt_path = tmp_path / "activation-receipt.json"
+    script = Path(__file__).resolve().parents[4] / "scripts/m05_activation_receipt.py"
+    completed = subprocess.run(  # noqa: S603 - invokes the repository-pinned Python test helper
+        [
+            sys.executable,
+            str(script),
+            "create",
+            "--evidence-dir",
+            str(evidence_dir),
+            "--private-key",
+            str(private_key_path),
+            "--output",
+            str(receipt_path),
+            "--scope",
+            "staging",
+            "--pinvi-source-revision",
+            PINVI_REVISION,
+            "--activation-generation",
+            "2",
+            "--review-allowlist",
+            str(review_allowlist_path),
+            "--review-challenge",
+            str(review_challenge_path),
+            "--review-response-nonce",
+            review_response_nonce,
+            "--reviewer-roster",
+            str(reviewer_roster_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PINVI_M05_RECEIPT_TEST_MODE": "1"},
+    )
+    public_key = next(
+        line.removeprefix("public_key=")
+        for line in completed.stdout.splitlines()
+        if line.startswith("public_key=")
+    )
+    receipt = receipt_path.read_text(encoding="utf-8")
+    ledger_path = tmp_path / "activation-ledger.jsonl"
+    high_watermark_path = tmp_path / "activation-high-watermark.json"
+    durable_floor_path = tmp_path / "activation-durable-floor.json"
+    durable_history_path = tmp_path / "activation-durable-history.jsonl"
+    anchor_dir = tmp_path / "anchor"
+    anchor_dir.mkdir(mode=0o700)
+    durable_anchor_path = anchor_dir / "activation-durable-anchor.jsonl"
+    ledger_completed = subprocess.run(  # noqa: S603 - invokes the repository-pinned Python test helper
+        [
+            sys.executable,
+            str(script),
+            "ledger",
+            "--receipt",
+            str(receipt_path),
+            "--ledger",
+            str(ledger_path),
+            "--high-watermark",
+            str(high_watermark_path),
+            "--durable-floor",
+            str(durable_floor_path),
+            "--durable-history",
+            str(durable_history_path),
+            "--durable-anchor",
+            str(durable_anchor_path),
+            f"--public-key={public_key}",
+            "--evidence-dir",
+            str(evidence_dir),
+            "--review-allowlist",
+            str(review_allowlist_path),
+            "--review-challenge",
+            str(review_challenge_path),
+            "--review-response-nonce",
+            review_response_nonce,
+            "--reviewer-roster",
+            str(reviewer_roster_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PINVI_M05_RECEIPT_TEST_MODE": "1"},
+    )
+    assert ledger_completed.returncode == 0, ledger_completed.stderr
+    monkeypatch.setenv("PINVI_SOURCE_REVISION", PINVI_REVISION)
+    high_watermark = json.loads(high_watermark_path.read_text(encoding="utf-8"))
+    assert high_watermark == {
+        "generation": 2,
+        "receipt_sha256": hashlib.sha256(receipt.encode("utf-8")).hexdigest(),
+    }
+    assert json.loads(durable_floor_path.read_text(encoding="utf-8")) == {"generation": 2}
+    assert len(durable_history_path.read_text(encoding="utf-8").splitlines()) == 1
+    assert len(durable_anchor_path.read_text(encoding="utf-8").splitlines()) == 1
+    monkeypatch.setattr(config_module, "_runtime_container_id", lambda: "d" * 64)
+    monkeypatch.setattr(
+        config_module,
+        "_validate_m05_runtime_dependencies_live",
+        lambda **_: None,
+    )
+    runtime_attestation_path = evidence_dir / "runtime-attestation.json"
+    runtime_payload = json.loads(runtime_attestation_path.read_text(encoding="utf-8"))["payload"]
+    receipt_payload = json.loads(receipt)["payload"]
+    assert isinstance(runtime_payload, dict)
+    assert isinstance(receipt_payload, dict)
+    lease_directory = tmp_path / "runtime-lease"
+    lease_directory.mkdir(mode=0o700)
+    lease_private_key = Ed25519PrivateKey.generate()
+    lease_public_key = lease_private_key.public_key().public_bytes_raw()
+    lease_key_id = hashlib.sha256(lease_public_key).hexdigest()
+    _write_json(
+        lease_directory / "trust.json",
+        {
+            "key_id": lease_key_id,
+            "public_key": base64.urlsafe_b64encode(lease_public_key).decode("ascii").rstrip("="),
+            "version": 1,
+        },
+    )
+    lease_payload = {
+        "activation_generation": receipt_payload["activation_generation"],
+        "activation_nonce": receipt_payload["activation_nonce"],
+        "dependency_snapshot_sha256": hashlib.sha256(
+            json.dumps(
+                runtime_payload["dependencies"],
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest(),
+        "expires_at": int(time.time()) + 60,
+        "issued_at": int(time.time()) - 1,
+        "key_id": lease_key_id,
+        "receipt_sha256": hashlib.sha256(receipt.encode("utf-8")).hexdigest(),
+        "runtime_attestation_sha256": hashlib.sha256(
+            runtime_attestation_path.read_bytes()
+        ).hexdigest(),
+        "scope": "staging",
+        "sequence": 1,
+        "version": 1,
+    }
+    lease_material = json.dumps(
+        lease_payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+    _write_json(
+        lease_directory / "current.json",
+        {
+            "payload": lease_payload,
+            "signature": base64.urlsafe_b64encode(lease_private_key.sign(lease_material))
+            .decode("ascii")
+            .rstrip("="),
+        },
+    )
+    loaded = Settings(
+        _env_file=None,
+        pinvi_environment="staging",
+        pinvi_kor_travel_map_api_base_url="http://127.0.0.1:12701",
+        pinvi_kor_travel_map_admin_base_url="http://127.0.0.1:12701",
+        pinvi_kor_travel_map_ops_read_token="o" * 32,
+        pinvi_kor_travel_map_ops_cancel_token="p" * 32,
+        pinvi_kor_travel_map_feature_reference_reconciliation_enabled=True,
+        pinvi_kor_travel_map_feature_reference_reconciliation_read_token=READ,
+        pinvi_kor_travel_map_feature_reference_reconciliation_ack_token=ACK,
+        pinvi_kor_travel_map_feature_reference_reconciliation_expected_openapi_sha256=(
+            KOR_TRAVEL_MAP_SERVICE_OPENAPI_SHA256
+        ),
+        pinvi_kor_travel_map_feature_reference_reconciliation_expected_source_revision=(
+            KOR_TRAVEL_MAP_SERVICE_RELEASE_REVISION
+        ),
+        pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt=receipt,
+        pinvi_kor_travel_map_feature_reference_reconciliation_activation_receipt_public_key=public_key,
+        pinvi_m05_runtime_attestation_path=str(runtime_attestation_path),
+        pinvi_m05_runtime_lease_directory=str(lease_directory),
+        pinvi_m05_activation_ledger_path=str(ledger_path),
+        pinvi_m05_activation_high_watermark_path=str(high_watermark_path),
+        pinvi_m05_activation_durable_floor_path=str(durable_floor_path),
+        pinvi_m05_activation_durable_history_path=str(durable_history_path),
+        pinvi_m05_activation_durable_anchor_path=str(durable_anchor_path),
+        pinvi_m05_activation_pr_url="https://github.com/digitie/pinvi/pull/466",
+        pinvi_api_image_digest=PINVI_DIGESTS["api"],
+        pinvi_web_image_digest=PINVI_DIGESTS["web"],
+        pinvi_dagster_image_digest=PINVI_DIGESTS["dagster"],
+    )
+    assert loaded.pinvi_kor_travel_map_feature_reference_reconciliation_enabled is True
+
+    receipt_module = _receipt_script_module()
+    restore_evidence = json.loads((evidence_dir / "restore.json").read_text(encoding="utf-8"))
+    receipt_module._restore(  # type: ignore[attr-defined]
+        restore_evidence,
+        pinvi_source_revision=PINVI_REVISION,
+        environment="staging",
+        require_root_owned=False,
+    )
+    missing_fence = json.loads(json.dumps(restore_evidence))
+    del missing_fence["fence_role"]
+    with pytest.raises(receipt_module.ReceiptError, match="schema/status"):  # type: ignore[attr-defined]
+        receipt_module._restore(  # type: ignore[attr-defined]
+            missing_fence,
+            pinvi_source_revision=PINVI_REVISION,
+            environment="staging",
+            require_root_owned=False,
+        )
+    mismatched_fence = json.loads(json.dumps(restore_evidence))
+    mismatched_fence["fence_db_identity"]["hostaddr"] = "127.0.0.2"
+    mismatched_fence["fence_db_identity_sha256"] = _identity_sha256(
+        mismatched_fence["fence_db_identity"]
+    )
+    with pytest.raises(receipt_module.ReceiptError, match="target fence endpoint identity"):  # type: ignore[attr-defined]
+        receipt_module._restore(  # type: ignore[attr-defined]
+            mismatched_fence,
+            pinvi_source_revision=PINVI_REVISION,
+            environment="staging",
+            require_root_owned=False,
+        )

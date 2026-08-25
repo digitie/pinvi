@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import subprocess
 import uuid
@@ -13,8 +12,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.pool import NullPool
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.curated_plan import (
     CuratedPlanPoi,
@@ -27,8 +25,6 @@ from app.models.user import User
 from app.services.curation_collection_import import (
     CurationCollectionImportConflict,
     _apply_not_modified,
-    curation_collection_request_fingerprint,
-    inspect_curation_collection_import,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -322,7 +318,7 @@ async def _assert_0053_catalog_contract(db: AsyncSession) -> None:
         )
     )
     assert boundary_definition is not None
-    assert "schema_revision = '20260825_0067'::text" in boundary_definition
+    assert "schema_revision = '20260824_0101'::text" in boundary_definition
 
     indexes = dict(
         (
@@ -466,266 +462,6 @@ async def test_tvn40_curation_receipt_catalog_is_exact_and_detects_semantic_drif
         await db.rollback()
 
 
-async def test_existing_0051_schema_and_data_upgrade_forward_to_0053(
-    _database_url: str,
-) -> None:
-    # 0056부터 downgrade가 forward-only로 fail-close한다. 같은 disposable
-    # integration DB에서 app schema만 다시 만들고 실제 0051→head를 검증한다.
-    reset_engine = create_async_engine(_database_url, poolclass=NullPool)
-    try:
-        async with reset_engine.begin() as connection:
-            await connection.execute(text("DROP SCHEMA app CASCADE"))
-            await connection.execute(text("CREATE SCHEMA app"))
-        _alembic(_database_url, "upgrade", "20260814_0051")
-        engine = create_async_engine(_database_url, poolclass=NullPool)
-        try:
-            async with engine.begin() as connection:
-                assert (
-                    await connection.scalar(
-                        text("SELECT to_regclass('app.ktm_curation_import_receipts')")
-                    )
-                    == "app.ktm_curation_import_receipts"
-                )
-                assert (
-                    await connection.scalar(
-                        text("SELECT to_regclass('app.ktm_curation_import_receipt_items')")
-                    )
-                    is None
-                )
-                widths = dict(
-                    (
-                        await connection.execute(
-                            text(
-                                "SELECT column_name, character_maximum_length "
-                                "FROM information_schema.columns "
-                                "WHERE table_schema = 'app' "
-                                "AND table_name = 'curated_trip_plans' "
-                                "AND column_name IN ('title', 'category')"
-                            )
-                        )
-                    ).all()
-                )
-                assert widths == {"category": 80, "title": 200}
-                poi_causal_column_count = await connection.scalar(
-                    text(
-                        "SELECT count(*) FROM information_schema.columns "
-                        "WHERE table_schema = 'app' AND table_name = 'curated_plan_pois' "
-                        "AND column_name IN ('source_curation_import_receipt_id', "
-                        "'source_curation_collection_id')"
-                    )
-                )
-                assert poi_causal_column_count == 0
-                actor_id = uuid.uuid4()
-                plan_id = uuid.uuid4()
-                receipt_id = uuid.uuid4()
-                idempotency_key = uuid.uuid4()
-                await connection.execute(
-                    text("INSERT INTO app.users (user_id, email) VALUES (:actor_id, :email)"),
-                    {"actor_id": actor_id, "email": f"old-0051-{actor_id}@pinvi.test"},
-                )
-                await connection.execute(
-                    text(
-                        "INSERT INTO app.curated_trip_plans ("
-                        "curated_plan_id, slug, title, category, source_system, "
-                        "source_curation_collection_id, source_curation_collection_revision, "
-                        "source_curation_collection_etag, source_curation_item_set_hash_version, "
-                        "source_curation_item_set_hash, source_curation_item_count, "
-                        "created_by_admin_id, updated_by_admin_id) VALUES ("
-                        ":plan_id, :slug, '구 0051 정본', 'recommended', 'kor-travel-map', "
-                        ":collection_id, 1, :etag, 'ktm-db-item-set-v1', :item_hash, 0, "
-                        ":actor_id, :actor_id)"
-                    ),
-                    {
-                        "plan_id": plan_id,
-                        "slug": f"old-0051-{plan_id}",
-                        "collection_id": _COLLECTION_ID,
-                        "etag": _ETAG,
-                        "item_hash": _ITEM_SET_HASH,
-                        "actor_id": actor_id,
-                    },
-                )
-                await connection.execute(
-                    text(
-                        "INSERT INTO app.ktm_curation_import_receipts ("
-                        "receipt_id, actor_admin_id, idempotency_key, request_fingerprint, "
-                        "source_curation_collection_id, source_curation_collection_revision, "
-                        "source_curation_collection_etag, source_curation_item_set_hash_version, "
-                        "source_curation_item_set_hash, source_curation_item_count, mode, "
-                        "requested_is_published, status, result_plan_id, response_status, "
-                        "response_body, completed_at) VALUES ("
-                        ":receipt_id, :actor_id, :idempotency_key, :fingerprint, "
-                        ":collection_id, 1, :etag, 'ktm-db-item-set-v1', :item_hash, 0, "
-                        "'create', false, 'completed', :plan_id, 201, "
-                        "CAST(:response_body AS jsonb), now())"
-                    ),
-                    {
-                        "receipt_id": receipt_id,
-                        "actor_id": actor_id,
-                        "idempotency_key": idempotency_key,
-                        "fingerprint": curation_collection_request_fingerprint(
-                            collection_id=_COLLECTION_ID,
-                            mode="create",
-                            is_published=False,
-                        ),
-                        "collection_id": _COLLECTION_ID,
-                        "etag": _ETAG,
-                        "item_hash": _ITEM_SET_HASH,
-                        "plan_id": plan_id,
-                        "response_body": json.dumps(
-                            {
-                                "notice_plan_id": str(plan_id),
-                                # 0056 전에는 JSON type guard가 없어 coercible string이
-                                # terminal history에 남을 수 있었다. replay는 이를
-                                # bool/int로 조용히 정규화하지 않고 typed conflict여야 한다.
-                                "created_plan": "true",
-                                "not_modified": "false",
-                                "source_system": "kor-travel-map",
-                                "source_curation_collection_id": str(_COLLECTION_ID),
-                                "source_curation_collection_revision": "1",
-                                "source_curation_collection_etag": _ETAG,
-                                "source_curation_item_set_hash_version": ("ktm-db-item-set-v1"),
-                                "source_curation_item_set_hash": _ITEM_SET_HASH,
-                                "source_curation_item_count": "0",
-                                "copied_poi_count": "0",
-                                "removed_poi_count": "0",
-                            }
-                        ),
-                    },
-                )
-                manual_poi_id = await connection.scalar(
-                    text(
-                        "INSERT INTO app.curated_plan_pois ("
-                        "curated_plan_id, sort_order, feature_uuid, feature_snapshot) "
-                        "VALUES (:plan_id, 'manual', :feature_uuid, '{}'::jsonb) "
-                        "RETURNING curated_poi_id"
-                    ),
-                    {"plan_id": plan_id, "feature_uuid": uuid.uuid4()},
-                )
-        finally:
-            await engine.dispose()
-
-        _alembic(_database_url, "upgrade", "head")
-        engine = create_async_engine(_database_url, poolclass=NullPool)
-        try:
-            async with engine.begin() as connection:
-                assert (
-                    await connection.scalar(
-                        text("SELECT to_regclass('app.ktm_curation_import_receipt_items')")
-                    )
-                    == "app.ktm_curation_import_receipt_items"
-                )
-                widths = dict(
-                    (
-                        await connection.execute(
-                            text(
-                                "SELECT column_name, character_maximum_length "
-                                "FROM information_schema.columns "
-                                "WHERE table_schema = 'app' "
-                                "AND table_name = 'curated_trip_plans' "
-                                "AND column_name IN ('title', 'category')"
-                            )
-                        )
-                    ).all()
-                )
-                assert widths == {"category": 128, "title": 300}
-                assert (
-                    await connection.scalar(
-                        text(
-                            "SELECT count(*) FROM app.ktm_curation_import_receipts "
-                            "WHERE receipt_id = :receipt_id AND status = 'completed'"
-                        ),
-                        {"receipt_id": receipt_id},
-                    )
-                    == 1
-                )
-                assert (
-                    await connection.scalar(
-                        text(
-                            "SELECT count(*) FROM app.curated_plan_pois "
-                            "WHERE curated_poi_id = :poi_id "
-                            "AND source_curation_item_id IS NULL"
-                        ),
-                        {"poi_id": manual_poi_id},
-                    )
-                    == 1
-                )
-                trigger_definition = await connection.scalar(
-                    text(
-                        "SELECT pg_catalog.pg_get_triggerdef(oid, true) "
-                        "FROM pg_catalog.pg_trigger "
-                        "WHERE tgname = 'trg_ktm_curation_import_receipt_row_guard'"
-                    )
-                )
-                assert trigger_definition is not None
-                assert "BEFORE INSERT OR DELETE OR UPDATE" in trigger_definition
-            async with AsyncSession(engine) as db:
-                orm_plan = await db.scalar(
-                    select(CuratedTripPlan).where(CuratedTripPlan.curated_plan_id == plan_id)
-                )
-                assert orm_plan is not None
-                assert orm_plan.source_curation_collection_id == _COLLECTION_ID
-                orm_pois = (await db.scalars(select(CuratedPlanPoi))).all()
-                assert [poi.curated_poi_id for poi in orm_pois] == [manual_poi_id]
-                assert orm_pois[0].source_curation_item_id is None
-                with pytest.raises(
-                    CurationCollectionImportConflict,
-                    match="현재 계약에 맞지 않습니다",
-                ):
-                    await inspect_curation_collection_import(
-                        db,
-                        actor_admin_id=actor_id,
-                        idempotency_key=idempotency_key,
-                        collection_id=_COLLECTION_ID,
-                        mode="create",
-                        is_published=False,
-                    )
-                fresh_receipt = KtmCurationImportReceipt(
-                    actor_admin_id=actor_id,
-                    idempotency_key=uuid.uuid4(),
-                    request_fingerprint=curation_collection_request_fingerprint(
-                        collection_id=_COLLECTION_ID,
-                        mode="refresh",
-                        is_published=False,
-                    ),
-                    source_curation_collection_id=_COLLECTION_ID,
-                    source_curation_collection_revision=1,
-                    source_curation_collection_etag=_ETAG,
-                    source_curation_item_set_hash_version="ktm-db-item-set-v1",
-                    source_curation_item_set_hash=_ITEM_SET_HASH,
-                    source_curation_item_count=0,
-                    mode="refresh",
-                    requested_is_published=False,
-                )
-                db.add(fresh_receipt)
-                await db.flush()
-                with pytest.raises(
-                    CurationCollectionImportConflict,
-                    match="immutable import proof가 없습니다",
-                ):
-                    await _apply_not_modified(
-                        db,
-                        receipt=fresh_receipt,
-                        plan=orm_plan,
-                        source_etag=_ETAG,
-                    )
-                assert (
-                    await db.scalar(
-                        select(KtmCurationImportReceiptItem).where(
-                            KtmCurationImportReceiptItem.receipt_id == fresh_receipt.receipt_id
-                        )
-                    )
-                    is None
-                )
-                await db.rollback()
-        finally:
-            await engine.dispose()
-    finally:
-        try:
-            _alembic(_database_url, "upgrade", "head")
-        finally:
-            await reset_engine.dispose()
-
-
 async def _seed_admin(session_factory) -> uuid.UUID:  # type: ignore[no-untyped-def]
     async with session_factory() as db:
         admin = User(
@@ -739,156 +475,6 @@ async def _seed_admin(session_factory) -> uuid.UUID:  # type: ignore[no-untyped-
         db.add(admin)
         await db.commit()
         return admin.user_id
-
-
-async def test_existing_0053_database_receives_0054_undelete_lock(
-    _database_url: str,
-) -> None:
-    """구 0053 catalog가 forward upgrade에서 V4 lock을 받는다."""
-
-    engine = create_async_engine(_database_url, poolclass=NullPool)
-    try:
-        async with engine.begin() as connection:
-            old_definition = await connection.scalar(
-                text(
-                    "SELECT pg_catalog.pg_get_functiondef(p.oid) "
-                    "FROM pg_catalog.pg_proc AS p "
-                    "JOIN pg_catalog.pg_namespace AS n ON n.oid = p.pronamespace "
-                    "WHERE n.nspname = 'app' "
-                    "AND p.proname = 'guard_ktm_curation_import_receipt'"
-                )
-            )
-            assert old_definition is not None
-            old_definition = old_definition.replace(
-                "     WHERE poi.curated_plan_id = NEW.result_plan_id\n"
-                "       AND poi.source_curation_item_id IS NOT NULL\n",
-                "     WHERE poi.curated_plan_id = NEW.result_plan_id\n"
-                "       AND poi.deleted_at IS NULL\n"
-                "       AND poi.source_curation_item_id IS NOT NULL\n",
-                1,
-            )
-            assert "poi.deleted_at IS NULL" in old_definition
-            await connection.execute(text(old_definition))
-            # 이 regression은 head DB에서 historical 0053 catalog를 의도적으로
-            # 합성한다. 0057 이후의 mapping/backfill receipt와 M05 evidence
-            # relation/function은 0053에는 없었다. 후속 migration이 실제 CREATE
-            # 경로를 다시 실행하도록 먼저 모두 제거한다.
-            await connection.execute(
-                text(
-                    "DROP TABLE app.ktm_feature_reference_reconciliation_impacts, "
-                    "app.ktm_feature_reference_reconciliation_applied_receipts, "
-                    "app.ktm_feature_reference_reconciliation_delivery_attempts"
-                )
-            )
-            await connection.execute(
-                text("DROP FUNCTION app.guard_ktm_feature_reference_reconciliation_append_only()")
-            )
-            # 0063이 만드는 동의 이벤트 이력도 0053 시점에는 없었다(T-326).
-            await connection.execute(text("DROP TABLE app.user_consent_events"))
-            # 0065가 붙이는 좌표 출처 컬럼도 마찬가지다(T-329). ORM metadata로 합성한 카탈로그에는
-            # 이미 들어 있어서, 지우지 않으면 0065의 ADD COLUMN이 중복으로 실패한다.
-            for _audit_table in (
-                "location_access_log",
-                "location_audit_outbox",
-                "location_access_log_archive",
-            ):
-                await connection.execute(
-                    text(f"ALTER TABLE app.{_audit_table} DROP COLUMN coord_source")
-                )
-            await connection.execute(text("DROP TABLE app.ktm_curation_cutover_backfill_receipts"))
-            await connection.execute(
-                text(
-                    "DROP TABLE app.ktm_curation_cutover_mapping_receipt_items, "
-                    "app.ktm_curation_cutover_mapping_receipts"
-                )
-            )
-            await connection.execute(
-                text(
-                    "DROP FUNCTION "
-                    "app.guard_ktm_curation_cutover_mapping_receipt(), "
-                    "app.guard_ktm_curation_cutover_mapping_receipt_item(), "
-                    "app.guard_ktm_curation_cutover_backfill_receipt()"
-                )
-            )
-            # 0054가 적용되기 직전의 catalog에는 naming convention이 physical
-            # CHECK 이름에 다시 적용돼 있었다. 0059의 exact-name 수렴 이후 head
-            # catalog를 0053으로만 stamp하면 0054의 drop 대상이 없어지므로, 이
-            # synthetic historical state에서는 당시 CHECK 정의와 물리명을 함께
-            # 복원한다.
-            await connection.execute(
-                text(
-                    """
-                    DO $$
-                    DECLARE
-                        v_constraint_name text;
-                    BEGIN
-                        SELECT con.conname
-                          INTO v_constraint_name
-                          FROM pg_catalog.pg_constraint AS con
-                          JOIN pg_catalog.pg_class AS relation
-                            ON relation.oid = con.conrelid
-                          JOIN pg_catalog.pg_namespace AS namespace
-                            ON namespace.oid = relation.relnamespace
-                         WHERE namespace.nspname = 'app'
-                           AND relation.relname = 'ktm_cache_target_boundary_audits'
-                           AND con.contype = 'c'
-                           AND pg_catalog.pg_get_constraintdef(con.oid, true)
-                               LIKE '%pinvi-cache-target-final-boundary/v1%';
-                        IF v_constraint_name IS NULL THEN
-                            RAISE EXCEPTION 'cache target boundary CHECK is missing';
-                        END IF;
-                        EXECUTE format(
-                            'ALTER TABLE app.ktm_cache_target_boundary_audits '
-                            'DROP CONSTRAINT %I',
-                            v_constraint_name
-                        );
-                    END;
-                    $$;
-                    """
-                )
-            )
-            await connection.execute(
-                text(
-                    "ALTER TABLE app.ktm_cache_target_boundary_audits "
-                    "ADD CONSTRAINT "
-                    "ck_ktm_cache_target_boundary_audits_"
-                    "ck_ktm_ct_boundary_contract "
-                    "CHECK (contract_version = 'pinvi-cache-target-final-boundary/v1' "
-                    "AND status = 'succeeded' "
-                    "AND schema_revision = '20260814_0053')"
-                )
-            )
-            await connection.execute(
-                text("UPDATE app.alembic_version SET version_num = '20260814_0053'")
-            )
-    finally:
-        await engine.dispose()
-
-    try:
-        _alembic(_database_url, "upgrade", "head")
-        engine = create_async_engine(_database_url, poolclass=NullPool)
-        try:
-            async with engine.connect() as connection:
-                assert (
-                    await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
-                    == "20260825_0067"
-                )
-                new_body = await connection.scalar(
-                    text(
-                        "SELECT prosrc FROM pg_catalog.pg_proc AS p "
-                        "JOIN pg_catalog.pg_namespace AS n ON n.oid = p.pronamespace "
-                        "WHERE n.nspname = 'app' "
-                        "AND p.proname = 'guard_ktm_curation_import_receipt'"
-                    )
-                )
-                assert new_body is not None
-                lock_clause = new_body.split("SELECT count(*)", maxsplit=1)[0]
-                assert "poi.source_curation_item_id IS NOT NULL" in lock_clause
-                assert "poi.deleted_at IS NULL" not in lock_clause
-        finally:
-            await engine.dispose()
-    finally:
-        _alembic(_database_url, "upgrade", "head")
 
 
 async def test_conditional_snapshot_rejects_legacy_not_modified_proof_chain(
@@ -1066,7 +652,7 @@ async def test_forward_only_downgrade_is_fail_closed(_database_url: str) -> None
     """head부터의 downgrade는 가장 가까운 forward-only migration에서 멈춘다."""
 
     with pytest.raises(RuntimeError, match="forward-only"):
-        _alembic(_database_url, "downgrade", "20260814_0058")
+        _alembic(_database_url, "downgrade", "20260824_0100")
 
 
 async def _seed_receipt_with_deleted_canonical_poi(

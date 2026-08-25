@@ -42,12 +42,14 @@ from app.services.feature_reference_reconciliation_worker import (
     feature_reference_reconciliation_worker_lifespan,
 )
 from app.services.location_audit import location_audit_outbox_worker_lifespan
+from app.services.m05_activation_anchor import verify_m05_activation_database_anchor
 from app.services.telegram_outbox import telegram_outbox_worker_lifespan
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_logging()
+    await verify_m05_activation_database_anchor()
     log = get_logger("startup")
     log.info(
         "pinvi.api.start",
