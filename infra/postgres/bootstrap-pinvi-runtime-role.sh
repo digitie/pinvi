@@ -305,8 +305,18 @@ WHERE NOT EXISTS (
     SELECT 1 FROM pg_namespace WHERE nspname = 'ops'
 )
 \gexec
+SELECT format('ALTER SCHEMA ops OWNER TO %I', :'migration_owner')
+WHERE EXISTS (
+    SELECT 1 FROM pg_namespace WHERE nspname = 'ops'
+)
+\gexec
 SELECT format('CREATE SCHEMA IF NOT EXISTS pinvi_internal AUTHORIZATION %I', :'schema_owner')
 WHERE NOT EXISTS (
+    SELECT 1 FROM pg_namespace WHERE nspname = 'pinvi_internal'
+)
+\gexec
+SELECT format('ALTER SCHEMA pinvi_internal OWNER TO %I', :'schema_owner')
+WHERE EXISTS (
     SELECT 1 FROM pg_namespace WHERE nspname = 'pinvi_internal'
 )
 \gexec
@@ -388,6 +398,11 @@ pinvi_internal_schema AS (
     FROM pg_namespace namespace
     WHERE namespace.nspname = 'pinvi_internal'
 ),
+ops_schema AS (
+    SELECT namespace.oid, namespace.nspowner
+    FROM pg_namespace namespace
+    WHERE namespace.nspname = 'ops'
+),
 fresh_admission_fence AS (
     SELECT procedure.oid, procedure.proowner, procedure.proacl
     FROM pg_proc procedure
@@ -454,6 +469,9 @@ SELECT
     AND (SELECT count(*) FROM app_schema) = 1
     AND (SELECT count(*) FROM x_extension_schema) = 1
     AND (SELECT count(*) FROM pinvi_internal_schema) = 1
+    AND (SELECT count(*) FROM ops_schema) = 1
+    AND (SELECT nspowner FROM ops_schema) = (SELECT oid FROM migration_owner)
+    AND (SELECT nspowner FROM pinvi_internal_schema) = (SELECT oid FROM schema_owner)
     AND (SELECT count(*) FROM fresh_admission_fence) = 1
     AND (SELECT proowner FROM fresh_admission_fence) = (SELECT oid FROM database_owner)
     AND EXISTS (

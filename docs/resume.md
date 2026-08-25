@@ -1,21 +1,28 @@
 # resume.md
 
-## 2026-08-26 (codex) — PR #477 rebase 후 최종 검증 대기
+## 2026-08-26 (codex) — PR #477 rebase 후 최종 검증 진행
 
 최신 `origin/main`으로 rebase한 PR #477의 fresh `0100`/`0101` 경계를 보강했다. 공통 catalog
 fingerprint가 특수 schema object와 ACL 표현 drift를 검증하고, managed topology는 admission fence와
 함수 owner·operator까지 포함한다. managed bootstrap은 role topology 검사 전에 `ops` schema를
 `migration_owner` 소유로 확보한다. deploy fallback은 원래 API/Dagster container/image를 이름까지
 보존하고 새 rollout의 readiness·Docker healthcheck·smoke 통과 뒤에만 폐기하며, one-shot migrator
-seal 재시도를 fail-close로 보장한다.
+seal 재시도를 fail-close로 보장하고, Web도 같은 snapshot/복구 대상에 포함한다. runtime
+container 탐색은 Compose project/service label과 pre-deploy 이름 제외를 사용한다.
 
-**검증**: M05 PostgreSQL 통합 `30 passed, 1 warning`, API unit `1287 passed, 3 warnings`, 관련
-unit `14 passed`, strict mypy `236 source files`, Ruff/format, shell syntax, `git diff --check`
-통과. 두 전문 적대 리뷰의 P1 반영 후 GitHub CI와 N150 live admin 인증을 다시 확인해야 하며,
-live E2E gate는 아직 통과하지 않았다. `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 계속 보존한다.
+Compose 통합 검증은 실제 `app-db-runtime-role` → API image build → `app-migrator alembic upgrade head`
+→ role seal 순서를 실행해 fresh `0100/0101` version row·schema owner·권한 경계를 확인한다. API
+Docker healthcheck와 readiness에는 `/health/db`를 포함하고, reset의 운영 환경 판정은 env-file 값을
+우선한다.
 
-**다음 한 작업**: 두 전문 적대 리뷰 결과를 반영하고 `uv.lock`을 제외한 변경을 commit/push한 뒤,
-GitHub API/Web CI와 N150 live E2E를 재확인한다. 모든 gate가 green일 때만 PR #477을 merge한다.
+**검증**: M05 PostgreSQL 통합 `30 passed, 1 warning`, Compose migrator lifecycle `1 passed`,
+API unit `1287 passed, 3 warnings`, provenance 회귀 `47 passed`, 관련 정적 테스트 `15 passed`,
+strict mypy `236 source files`, Ruff/format, shell syntax, `git diff --check` 통과. 두 전문 적대
+리뷰의 P1 반영 후 GitHub CI와 N150 live admin 인증을 다시 확인해야 하며, live E2E gate는 아직
+통과하지 않았다. `apps/api/uv.lock` 사용자 변경과 N150 운영 DB는 계속 보존한다.
+
+**다음 한 작업**: `uv.lock`을 제외한 변경을 commit/push하고 최신 HEAD 기준 두 전문 적대 리뷰,
+GitHub API/Web CI, N150 live E2E를 재확인한다. 모든 gate가 green일 때만 PR #477을 merge한다.
 
 ## 2026-08-25 (codex) — M05 P1 fence·one-shot·legacy ACL 재보강
 

@@ -62,6 +62,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
                 f"PINVI_MIGRATION_OWNER={migration_owner}",
                 f"PINVI_MIGRATOR_DB_USER={migrator_role}",
                 f"PINVI_MIGRATOR_DB_PASSWORD={password}",
+                f"PINVI_API_IMAGE=pinvi-m05-api-{suffix}:test",
                 "",
             )
         ),
@@ -133,27 +134,69 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
         assert len(state) == 5
         return state[0], state[1], state[2], state[3], state[4]
 
+    def managed_schema_state() -> tuple[str, str, str, str, str, str, str]:
+        query = (
+            "SELECT "  # noqa: S608 - role names use a fixed prefix plus UUID hex only
+            "(SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 'app'), "
+            "(SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 'ops'), "
+            "(SELECT pg_get_userbyid(nspowner) FROM pg_namespace "
+            "WHERE nspname = 'pinvi_internal'), "
+            f"has_database_privilege('{migration_owner}', current_database(), 'CREATE'), "
+            f"has_schema_privilege('{migration_owner}', 'ops', 'CREATE'), "
+            f"has_schema_privilege('{migration_owner}', 'pinvi_internal', 'USAGE'), "
+            "(SELECT version_num FROM app.alembic_version)"
+        )
+        result = compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            "--no-psqlrc",
+            "--tuples-only",
+            "--no-align",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            f"--command={query}",
+        )
+        state = result.stdout.strip().split("|")
+        assert len(state) == 7
+        return tuple(state)  # type: ignore[return-value]
+
     client_name = f"pinvi-m05-client-{suffix}"
     rotated_client_name = f"pinvi-m05-rotated-client-{suffix}"
     stale_role = f"m05_stale_{suffix}"
     try:
         compose("up", "--detach", "app-postgres")
+        compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "--env",
+            "PINVI_MIGRATOR_DISABLE_LOGIN=0",
+            "app-db-runtime-role",
+        )
+        compose("build", "app-api")
+        migration = compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "app-migrator",
+            "alembic",
+            "upgrade",
+            "head",
+        )
+        assert migration.returncode == 0, migration.stderr
         compose("run", "--rm", "--no-deps", "app-db-runtime-role")
         assert role_state() == ("false", "false", "0", "false", "true")
-
-        compose(
-            "exec",
-            "-T",
-            "app-postgres",
-            "psql",
-            f"--username={root_role}",
-            "--dbname=pinvi",
-            "--command="
-            f'SET ROLE "{schema_owner}"; '
-            "CREATE TABLE app.alembic_version (version_num text NOT NULL); "
-            "RESET ROLE;",
+        assert managed_schema_state() == (
+            schema_owner,
+            migration_owner,
+            schema_owner,
+            "f",
+            "t",
+            "t",
+            "20260824_0101",
         )
-        compose("run", "--rm", "--no-deps", "app-db-runtime-role")
         runtime_version_update = compose(
             "run",
             "--rm",

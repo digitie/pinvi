@@ -648,16 +648,16 @@ async def test_0101_fresh_marker_rejects_function_and_operator_owner_drift(
                         f'ALTER FUNCTION app.audit_log_append_only() OWNER TO "{role}"',
                     ),
                     (
-                        None,
+                        f'CREATE ROLE "{role}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE',
                         "CREATE OPERATOR app.#=# (LEFTARG = integer, RIGHTARG = integer, "
                         "PROCEDURE = pg_catalog.int4eq)",
+                        f'ALTER OPERATOR app.#=# (integer, integer) OWNER TO "{role}"',
                     ),
                 ):
                     transaction = await connection.begin()
                     try:
-                        if drift_sql[0] is not None:
-                            await connection.execute(text(drift_sql[0]))
-                        await connection.execute(text(drift_sql[1]))
+                        for statement in drift_sql:
+                            await connection.execute(text(statement))
                         migration = _activation_migration_module()
                         with pytest.raises(
                             RuntimeError, match="canonical fresh 0100 catalog fingerprint"
