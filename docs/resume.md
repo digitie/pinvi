@@ -1,5 +1,26 @@
 # resume.md
 
+## 2026-08-26 (claude) — T-354 Next.js 16 업그레이드 머지 완료
+
+`apps/web`을 Next.js 15 → 16(Turbopack)으로 올리고 PR #489를 머지했다(`c4656dc8`).
+첫 push의 CI e2e 49건 실패는 Next 16 Turbopack 프로덕션 번들러가 `vworld-map-web`
+(vendored `maplibre-vworld-react`, ADR-046)의 모듈 그래프를 청크로 나누는 과정에서 생기는
+런타임 버그(`Module ... was instantiated ... but the module factory is not available`)
+때문이었다 — 지도를 렌더링하는 모든 페이지가 크래시했고, 지도가 없는 페이지는 전부
+정상이었다. 로컬 재현 3회 결정적이었고 `next build --webpack`으로는 크래시가 사라졌다.
+`apps/web/package.json`의 `build` 스크립트를 `next build --webpack`으로 고정해
+CI·`apps/web/Dockerfile` 양쪽을 커버했다(**ADR-066**). 재push 후 CI 전체(e2e 3m51s 포함)
+통과, 사용자 승인 후 머지 완료.
+
+**다음 한 작업**: `docs/tasks.md`의 열린 T-3xx를 이어 진행한다. `T-320`/`T-352`는 별도
+브랜치(`agent/claude-t352-expo-sdk57`, draft PR #486)의 `T-353`(Expo SDK 57 업그레이드가
+`expo-modules-core`/`react-native-worklets` 버전 스큐로 네이티브 빌드 불가)이 업스트림에서
+풀릴 때까지 진행 불가 — 재개 전 `expo-modules-core@latest`의 `react-native-worklets` peer
+범위가 `react-native-reanimated`가 요구하는 `0.12.x`를 포함하는지 먼저 확인한다. 아직 안
+풀렸으면 `T-349`(retention advisory-lock defense-in-depth 마이그레이션, 작음, 안 막힘)나
+`T-350`(retention 배지 경과시간 미갱신 — 브라우저 재현부터)을 집어 든다. `T-351`은 CI job
+구조 변경이 필요해 스코프가 더 크다.
+
 ## 2026-08-26 (codex) — Manager host-network role bootstrap endpoint 결선
 
 Manager의 fresh pinned rebuild는 host network에서 PinVi runtime-role one-shot을 실행해야 하지만,
