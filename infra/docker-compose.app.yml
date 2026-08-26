@@ -369,7 +369,7 @@ services:
         condition: service_completed_successfully
     environment:
       PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
-      PINVI_DATABASE_URL: ${PINVI_DATABASE_URL:-postgresql+asyncpg://pinvi_app:pinvi_app_smoke@app-postgres:5432/pinvi}
+      PINVI_DATABASE_URL: postgresql+asyncpg://${PINVI_APP_DB_USER:-pinvi_app}:${PINVI_APP_DB_PASSWORD:-pinvi_app_smoke}@app-postgres:5432/pinvi
       PINVI_RUSTFS_ENDPOINT_URL: http://app-rustfs:9000
       PINVI_RUSTFS_BUCKET: pinvi-media
       PINVI_RUSTFS_ACCESS_KEY_ID: ${PINVI_RUSTFS_ACCESS_KEY_ID:-rustfsadmin}

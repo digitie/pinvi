@@ -189,7 +189,8 @@ scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:admin-live -
 - route render 실패: Admin guard, Next.js runtime error, 좌측 navigation document 이동 여부 확인.
 - 검색/필터/정렬 실패: 화면 test id, option 값, AdminTable column key drift를 함께 확인한다.
 - 403/404 alert: 계정 역할 또는 운영에서 숨긴 dev-only route 여부 확인.
-- 5xx alert: N150 `docker compose ps`, API 로그, DB health를 먼저 확인한다.
+- 5xx alert: N150 manager status, API 로그, DB health를 먼저 확인한다. Pinvi raw Compose
+  명령으로 운영 project를 조회하지 않는다.
 
 실패 수정 후 전체 suite를 다시 돌리기 전에 `PINVI_ADMIN_LIVE_CASE_LIMIT=200`으로 smoke를
 먼저 재확인한다.

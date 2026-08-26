@@ -100,6 +100,7 @@ FRESH_STACK_ALEMBIC_VERSION=""
 FRESH_STACK_MIGRATION_RECEIPT_SHA256=""
 FRESH_STACK_COMPOSE_SHA256=""
 FRESH_STACK_ENVIRONMENT_SOURCE_SHA256=""
+FRESH_STACK_EFFECTIVE_COMPOSE_SHA256=""
 
 usage() {
   cat <<'EOF'
@@ -307,7 +308,7 @@ require_n150_execution_host() {
 
 require_fresh_stack_contract() {
   local existing_containers existing_volumes existing_networks
-  local fixed_name fixed_container_names actual_name
+  local all_containers all_volumes all_networks actual_name
   require_fresh_stack_identity
   if ! existing_containers="$(docker container ls --all \
     --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.ID}}')"; then
@@ -328,19 +329,27 @@ require_fresh_stack_contract() {
     echo "fresh deploy refuses an existing Compose project, PostgreSQL volume, or network" >&2
     return 2
   fi
-  for fixed_name in "$PROJECT-dagster" "$PROJECT-cadvisor" "$PROJECT-blackbox" \
-    "$PROJECT-prometheus" "$PROJECT-grafana"; do
-    if ! fixed_container_names="$(docker container ls --all \
-      --filter "name=${fixed_name}" --format '{{.Names}}')"; then
-      echo "could not inspect fixed-name containers for a fresh deploy" >&2
-      return 1
-    fi
-    while IFS= read -r actual_name; do
-      [[ "$actual_name" == "$fixed_name" ]] || continue
-      echo "fresh deploy refuses the existing fixed-name container ${fixed_name}" >&2
-      return 2
-    done <<< "$fixed_container_names"
-  done
+  if ! all_containers="$(docker container ls --all --format '{{.Names}}')" \
+    || ! all_volumes="$(docker volume ls --format '{{.Name}}')" \
+    || ! all_networks="$(docker network ls --format '{{.Name}}')"; then
+    echo "could not inspect unlabelled resources for a fresh deploy" >&2
+    return 1
+  fi
+  while IFS= read -r actual_name; do
+    [[ -n "$actual_name" && "$actual_name" == "$PROJECT-"* ]] || continue
+    echo "fresh deploy refuses the existing project-scoped container ${actual_name}" >&2
+    return 2
+  done <<< "$all_containers"
+  while IFS= read -r actual_name; do
+    [[ -n "$actual_name" && ( "$actual_name" == "$PROJECT"_* || "$actual_name" == "$PROJECT-"* ) ]] || continue
+    echo "fresh deploy refuses the existing project-scoped volume ${actual_name}" >&2
+    return 2
+  done <<< "$all_volumes"
+  while IFS= read -r actual_name; do
+    [[ -n "$actual_name" && ( "$actual_name" == "$PROJECT"_* || "$actual_name" == "$PROJECT-"* ) ]] || continue
+    echo "fresh deploy refuses the existing project-scoped network ${actual_name}" >&2
+    return 2
+  done <<< "$all_networks"
 }
 
 fresh_stack_state_file_is_safe() {
@@ -394,6 +403,19 @@ fresh_stack_state_file_is_safe() {
   fi
 }
 
+effective_compose_config_sha256() {
+  compose config --format json | python3 -c '
+import json
+import sys
+
+config = json.load(sys.stdin)
+for service in config.get("services", {}).values():
+    if isinstance(service, dict):
+        service.pop("build", None)
+print(json.dumps(config, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+' | sha256sum | awk '{print $1}'
+}
+
 write_fresh_stack_state() {
   fresh_stack_state_file_is_safe || return $?
   local source_revision environment_name source_path source_sha256 compose_sha256 tmp_path
@@ -417,6 +439,10 @@ write_fresh_stack_state() {
     source_sha256="none"
   fi
   compose_sha256="$(sha256sum -- "$CANONICAL_COMPOSE_FILE" | awk '{print $1}')"
+  [[ "$FRESH_STACK_EFFECTIVE_COMPOSE_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "fresh stack state requires the effective Compose configuration proof" >&2
+    return 1
+  }
   tmp_path="$(mktemp "$(dirname -- "$FRESH_STACK_STATE_PATH")/.fresh-stack.XXXXXX")"
   if ! {
     printf 'version=2\n'
@@ -425,6 +451,7 @@ write_fresh_stack_state() {
     printf 'root_dir=%s\n' "$ROOT_DIR"
     printf 'source_revision=%s\n' "$source_revision"
     printf 'compose_sha256=%s\n' "$compose_sha256"
+    printf 'effective_compose_sha256=%s\n' "$FRESH_STACK_EFFECTIVE_COMPOSE_SHA256"
     printf 'environment_source_path=%s\n' "$source_path"
     printf 'environment_source_sha256=%s\n' "$source_sha256"
     printf 'db_container_id=%s\n' "$FRESH_STACK_DB_CONTAINER_ID"
@@ -449,9 +476,10 @@ fresh_stack_migration_receipt_sha256() {
   if ! environment_name="$(resolved_environment)"; then
     return 2
   fi
-  printf 'pinvi-fresh-migration/v2\nproject=%s\nenvironment=%s\nroot_dir=%s\nsource_revision=%s\ncompose_sha256=%s\nenvironment_source_sha256=%s\ndb_container_id=%s\ndb_volume_name=%s\ndb_system_identifier=%s\nalembic_version=%s\n' \
+  printf 'pinvi-fresh-migration/v2\nproject=%s\nenvironment=%s\nroot_dir=%s\nsource_revision=%s\ncompose_sha256=%s\neffective_compose_sha256=%s\nenvironment_source_sha256=%s\ndb_container_id=%s\ndb_volume_name=%s\ndb_system_identifier=%s\nalembic_version=%s\n' \
     "$PROJECT" "$environment_name" "$ROOT_DIR" "${PINVI_SOURCE_REVISION:-}" \
-    "$FRESH_STACK_COMPOSE_SHA256" "$FRESH_STACK_ENVIRONMENT_SOURCE_SHA256" \
+    "$FRESH_STACK_COMPOSE_SHA256" "$FRESH_STACK_EFFECTIVE_COMPOSE_SHA256" \
+    "$FRESH_STACK_ENVIRONMENT_SOURCE_SHA256" \
     "$FRESH_STACK_DB_CONTAINER_ID" "$FRESH_STACK_DB_VOLUME_NAME" \
     "$FRESH_STACK_DB_SYSTEM_IDENTIFIER" "$FRESH_STACK_ALEMBIC_VERSION" \
     | sha256sum | awk '{print $1}'
@@ -464,6 +492,14 @@ capture_fresh_stack_migration_proof() {
     return 2
   fi
   FRESH_STACK_COMPOSE_SHA256="$(sha256sum -- "$CANONICAL_COMPOSE_FILE" | awk '{print $1}')"
+  if ! FRESH_STACK_EFFECTIVE_COMPOSE_SHA256="$(effective_compose_config_sha256)"; then
+    echo "could not resolve the effective canonical Compose configuration" >&2
+    return 1
+  fi
+  [[ "$FRESH_STACK_EFFECTIVE_COMPOSE_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "effective canonical Compose configuration digest is invalid" >&2
+    return 1
+  }
   source_path="$(compose_env_source_file)"
   if [[ -n "$source_path" ]]; then
     FRESH_STACK_ENVIRONMENT_SOURCE_SHA256="$(sha256sum -- "$source_path" | awk '{print $1}')"
@@ -528,9 +564,10 @@ capture_fresh_stack_migration_proof() {
 require_reusable_fresh_stack_contract() {
   local state_version="" state_project="" state_environment="" state_root_dir="" state_revision=""
   local state_compose_sha256="" state_environment_source_path="" state_environment_source_sha256=""
+  local state_effective_compose_sha256=""
   local state_db_container_id="" state_db_volume_name="" state_db_system_identifier=""
   local state_alembic_version="" state_migration_receipt_sha256=""
-  local environment_name source_path compose_sha256 source_sha256
+  local environment_name source_path compose_sha256 source_sha256 effective_compose_sha256
   local key value seen_keys='|' existing_containers existing_volumes existing_networks db_containers rustfs_containers
   require_fresh_stack_identity
   fresh_stack_state_file_is_safe || return $?
@@ -555,6 +592,7 @@ require_reusable_fresh_stack_contract() {
       root_dir) state_root_dir="$value" ;;
       source_revision) state_revision="$value" ;;
       compose_sha256) state_compose_sha256="$value" ;;
+      effective_compose_sha256) state_effective_compose_sha256="$value" ;;
       environment_source_path) state_environment_source_path="$value" ;;
       environment_source_sha256) state_environment_source_sha256="$value" ;;
       db_container_id) state_db_container_id="$value" ;;
@@ -576,10 +614,14 @@ require_reusable_fresh_stack_contract() {
     source_sha256="none"
   fi
   compose_sha256="$(sha256sum -- "$CANONICAL_COMPOSE_FILE" | awk '{print $1}')"
+  if ! effective_compose_sha256="$(effective_compose_config_sha256)"; then
+    return 1
+  fi
   [[ "$seen_keys" == *"|version|"* && "$seen_keys" == *"|project|"* \
     && "$seen_keys" == *"|environment|"* && "$seen_keys" == *"|root_dir|"* \
     && "$seen_keys" == *"|source_revision|"* \
     && "$seen_keys" == *"|compose_sha256|"* \
+    && "$seen_keys" == *"|effective_compose_sha256|"* \
     && "$seen_keys" == *"|environment_source_path|"* \
     && "$seen_keys" == *"|environment_source_sha256|"* \
     && "$seen_keys" == *"|db_container_id|"* && "$seen_keys" == *"|db_volume_name|"* \
@@ -590,6 +632,7 @@ require_reusable_fresh_stack_contract() {
     && "$state_root_dir" == "$ROOT_DIR" \
     && "$state_revision" == "${PINVI_SOURCE_REVISION:-}" \
     && "$state_compose_sha256" == "$compose_sha256" \
+    && "$state_effective_compose_sha256" == "$effective_compose_sha256" \
     && "$state_environment_source_path" == "$source_path" \
     && "$state_environment_source_sha256" == "$source_sha256" \
     && "$state_db_container_id" =~ ^[0-9a-f]{12,64}$ \
@@ -2060,6 +2103,10 @@ deploy() {
     echo "migration succeeded but the fresh stack continuation state could not be sealed" >&2
     return 1
   fi
+  if ! require_reusable_fresh_stack_contract; then
+    echo "fresh stack continuation changed between migration and runtime startup" >&2
+    return 1
+  fi
   up_under_lifecycle_lock
   smoke
   finalize_preserved_runtime_writers
@@ -2073,6 +2120,7 @@ main() {
   case "${1:-}" in
     deploy|build|pull|migrate|up|dagster|smoke)
       require_node_mutation_environment
+      require_canonical_compose_file
       ;;
   esac
   preflight

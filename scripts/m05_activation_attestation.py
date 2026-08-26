@@ -733,6 +733,234 @@ def _pinvi_case_snapshot(
     return data, _sha256(_canonical_json(data)), receipt_sha
 
 
+def _map_feature_reference(value: object, *, name: str) -> dict[str, object]:
+    reference = _object(value, name=name)
+    row_revision = reference.get("row_revision")
+    if type(row_revision) is not int or row_revision < 1:
+        raise AttestationError(f"{name}.row_revision is invalid")
+    return {
+        "feature_id": _string(reference.get("feature_id"), name=f"{name}.feature_id"),
+        "feature_uuid": _uuid(
+            reference.get("feature_uuid"), name=f"{name}.feature_uuid"
+        ),
+        "row_revision": row_revision,
+    }
+
+
+def _validate_pinvi_impact_evidence(
+    value: dict[str, object],
+    *,
+    map_case: dict[str, object],
+    map_ack: dict[str, object],
+) -> None:
+    """PinVi local rows와 Map event material에서 terminal receipt를 재계산한다."""
+
+    map_event = _object(map_case.get("event"), name="Map M05 event")
+    event_id = _uuid(map_event.get("event_id"), name="Map M05 event ID")
+    event_sha = _map_case_event_hash(map_case, map_ack)
+    event_sequence = map_event.get("event_sequence")
+    if type(event_sequence) is not int or event_sequence < 1:
+        raise AttestationError("Map M05 event sequence is invalid")
+    action = map_event.get("action")
+    if action not in {"rebind", "detach"}:
+        raise AttestationError("Map M05 event action is invalid")
+    old_feature = _map_feature_reference(
+        map_event.get("old_feature"), name="Map M05 old feature"
+    )
+    replacement_value = map_event.get("replacement_feature")
+    replacement_feature = (
+        None
+        if replacement_value is None
+        else _map_feature_reference(
+            replacement_value, name="Map M05 replacement feature"
+        )
+    )
+    if (action == "rebind") != (replacement_feature is not None):
+        raise AttestationError("Map M05 action and replacement feature disagree")
+
+    receipt = _object(value.get("receipt"), name="PinVi local receipt")
+    if value.get("status") != "applied":
+        raise AttestationError("PinVi M05 local receipt is not applied")
+    if _uuid(receipt.get("event_id"), name="PinVi receipt event ID") != event_id:
+        raise AttestationError("PinVi receipt does not match the Map event")
+    if receipt.get("event_sequence") != event_sequence:
+        raise AttestationError(
+            "PinVi receipt event sequence does not match the Map event"
+        )
+    if receipt.get("event_sha256") != event_sha:
+        raise AttestationError("PinVi receipt event hash does not match the Map event")
+    if receipt.get("action") != action:
+        raise AttestationError("PinVi receipt action does not match the Map event")
+    if (
+        receipt.get("old_feature_id") != old_feature["feature_id"]
+        or _uuid(receipt.get("old_feature_uuid"), name="PinVi receipt old feature UUID")
+        != old_feature["feature_uuid"]
+    ):
+        raise AttestationError(
+            "PinVi receipt old feature pair does not match the Map event"
+        )
+
+    receipt_replacement_id = receipt.get("replacement_feature_id")
+    receipt_replacement_uuid = receipt.get("replacement_feature_uuid")
+    if replacement_feature is None:
+        if receipt_replacement_id is not None or receipt_replacement_uuid is not None:
+            raise AttestationError("detach receipt contains a replacement feature")
+    elif (
+        receipt_replacement_id != replacement_feature["feature_id"]
+        or _uuid(
+            receipt_replacement_uuid, name="PinVi receipt replacement feature UUID"
+        )
+        != replacement_feature["feature_uuid"]
+    ):
+        raise AttestationError(
+            "PinVi receipt replacement pair does not match the Map event"
+        )
+
+    impacts_value = value.get("impacts")
+    if not isinstance(impacts_value, list):
+        raise AttestationError("PinVi impact rows are missing")
+    impact_count = receipt.get("impact_count")
+    if (
+        type(impact_count) is not int
+        or impact_count < 0
+        or len(impacts_value) != impact_count
+    ):
+        raise AttestationError("PinVi impact count does not match its terminal receipt")
+
+    expected_keys = {
+        "event_id",
+        "impact_index",
+        "target_relation",
+        "target_id",
+        "old_feature_id",
+        "old_feature_uuid",
+        "replacement_feature_id",
+        "replacement_feature_uuid",
+        "outcome",
+        "recorded_at",
+    }
+    canonical_impacts: list[dict[str, object]] = []
+    targets: set[tuple[str, str]] = set()
+    for expected_index, raw_impact in enumerate(impacts_value):
+        impact = _object(raw_impact, name="PinVi impact row")
+        if set(impact) != expected_keys:
+            raise AttestationError("PinVi impact row schema is invalid")
+        if _uuid(impact.get("event_id"), name="PinVi impact event ID") != event_id:
+            raise AttestationError("PinVi impact row does not match the Map event")
+        if impact.get("impact_index") != expected_index:
+            raise AttestationError("PinVi impact indexes are not contiguous")
+        relation = impact.get("target_relation")
+        if relation not in {
+            "trip_day_pois",
+            "curated_plan_pois",
+            "feature_suggestions",
+        }:
+            raise AttestationError("PinVi impact target relation is invalid")
+        target_id = _uuid(impact.get("target_id"), name="PinVi impact target ID")
+        target_key = (relation, target_id)
+        if target_key in targets:
+            raise AttestationError("PinVi impact targets are duplicated")
+        targets.add(target_key)
+        if (
+            impact.get("old_feature_id") != old_feature["feature_id"]
+            or _uuid(
+                impact.get("old_feature_uuid"), name="PinVi impact old feature UUID"
+            )
+            != old_feature["feature_uuid"]
+        ):
+            raise AttestationError("PinVi impact old feature pair is invalid")
+        if replacement_feature is None:
+            if (
+                impact.get("replacement_feature_id") is not None
+                or impact.get("replacement_feature_uuid") is not None
+            ):
+                raise AttestationError("detach impact contains a replacement feature")
+            replacement_canonical = None
+        else:
+            if (
+                impact.get("replacement_feature_id")
+                != replacement_feature["feature_id"]
+                or _uuid(
+                    impact.get("replacement_feature_uuid"),
+                    name="PinVi impact replacement feature UUID",
+                )
+                != replacement_feature["feature_uuid"]
+            ):
+                raise AttestationError("PinVi impact replacement pair is invalid")
+            replacement_canonical = replacement_feature
+        if impact.get("outcome") != action:
+            raise AttestationError("PinVi impact outcome does not match the Map action")
+        canonical_impacts.append(
+            {
+                "target_relation": relation,
+                "target_id": target_id,
+                "old_feature": old_feature,
+                "replacement_feature": replacement_canonical,
+                "outcome": action,
+            }
+        )
+
+    ordered_impacts = sorted(
+        canonical_impacts,
+        key=lambda row: (str(row["target_relation"]), str(row["target_id"])),
+    )
+    if canonical_impacts != ordered_impacts:
+        raise AttestationError("PinVi impact rows are not in canonical order")
+    impact_root = _sha256(_canonical_json(ordered_impacts))
+    if receipt.get("impact_root_sha256") != impact_root:
+        raise AttestationError(
+            "PinVi receipt impact root does not match its impact rows"
+        )
+    receipt_sha = _string(receipt.get("receipt_sha256"), name="PinVi receipt hash")
+    expected_receipt_sha = _sha256(
+        _canonical_json(
+            {
+                "version": "pinvi-feature-reference-reconciliation-receipt-v1",
+                "event_id": event_id,
+                "event_sequence": event_sequence,
+                "event_sha256": event_sha,
+                "action": action,
+                "old_feature": old_feature,
+                "replacement_feature": replacement_feature,
+                "impact_root_sha256": impact_root,
+                "impact_count": impact_count,
+            }
+        )
+    )
+    if receipt_sha != expected_receipt_sha:
+        raise AttestationError("PinVi receipt hash does not match its receipt material")
+
+    attempts = value.get("attempts")
+    if not isinstance(attempts, list) or not attempts:
+        raise AttestationError("PinVi M05 delivery attempts are missing")
+    latest = _object(attempts[0], name="PinVi latest attempt")
+    if (
+        latest.get("status") != "applied"
+        or _uuid(latest.get("event_id"), name="PinVi latest attempt event ID")
+        != event_id
+        or latest.get("event_sequence") != event_sequence
+        or latest.get("event_sha256") != event_sha
+        or latest.get("block_fingerprint_sha256") is not None
+    ):
+        raise AttestationError("PinVi latest applied attempt is invalid")
+    observation_root = _sha256(
+        _canonical_json(
+            {
+                "version": "pinvi-feature-reference-reconciliation-observation-v1",
+                "event_id": event_id,
+                "event_sequence": event_sequence,
+                "event_sha256": event_sha,
+                "blocks": [],
+                "impacts": ordered_impacts,
+            }
+        )
+    )
+    if latest.get("observation_root_sha256") != observation_root:
+        raise AttestationError(
+            "PinVi applied observation root does not match its impact rows"
+        )
+
+
 def _docker_inspect(
     container: str,
     *,
@@ -1183,6 +1411,9 @@ def _validate_ui_marker(
     pinvi_detail: dict[str, object],
     pinvi_detail_sha256: str,
     expected_pinvi_api_endpoint: str,
+    expected_old_feature_id: str,
+    expected_replacement_feature_id: str,
+    expected_impact_count: int,
 ) -> None:
     marker = _object(value, name="UI evidence marker")
     expected = {
@@ -1232,6 +1463,14 @@ def _validate_ui_marker(
         raise AttestationError(
             "UI marker does not bind the after-run Pinvi detail response"
         )
+    if marker["old_feature_id"] != expected_old_feature_id:
+        raise AttestationError("UI marker old Feature ID does not match the live input")
+    if marker["replacement_feature_id"] != expected_replacement_feature_id:
+        raise AttestationError(
+            "UI marker replacement Feature ID does not match the live input"
+        )
+    if marker["impact_count"] != expected_impact_count:
+        raise AttestationError("UI marker impact count does not match the live input")
     receipt = _object(pinvi_detail.get("receipt"), name="UI marker Pinvi receipt")
     for marker_field, receipt_field in (
         ("old_feature_id", "old_feature_id"),
@@ -1914,6 +2153,11 @@ def _live(args: argparse.Namespace) -> int:
         email=email,
         password=password,
     )
+    _validate_pinvi_impact_evidence(
+        before_pinvi,
+        map_case=before_map,
+        map_ack=before_ack,
+    )
     before_map_event_sha = _map_case_event_hash(before_map, before_ack)
     before_pinvi_event_sha = _pinvi_case_event_hash(before_pinvi)
     if before_map_event_sha != before_pinvi_event_sha:
@@ -2028,6 +2272,11 @@ def _live(args: argparse.Namespace) -> int:
         email=email,
         password=password,
     )
+    _validate_pinvi_impact_evidence(
+        after_pinvi,
+        map_case=after_map,
+        map_ack=after_ack,
+    )
     after_map_event_sha = _map_case_event_hash(after_map, after_ack)
     after_pinvi_event_sha = _pinvi_case_event_hash(after_pinvi)
     if after_map_event_sha != after_pinvi_event_sha:
@@ -2056,6 +2305,9 @@ def _live(args: argparse.Namespace) -> int:
         pinvi_detail=after_pinvi,
         pinvi_detail_sha256=after_pinvi_hash,
         expected_pinvi_api_endpoint=args.pinvi_api_url.rstrip("/"),
+        expected_old_feature_id=old_feature_id,
+        expected_replacement_feature_id=replacement_feature_id,
+        expected_impact_count=int(impact_count),
     )
     runtime_after_ui = _runtime_snapshot(
         args, pair=pair, source_revision=source_revision
