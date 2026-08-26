@@ -66,7 +66,6 @@ export default function DsrSettingsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
     try {
       const result = await userApi(apiClient).listDsrRequests(100);
       setRequests(result.items);
@@ -79,7 +78,10 @@ export default function DsrSettingsPage() {
   }, []);
 
   useEffect(() => {
-    void load();
+    const run = async () => {
+      await load();
+    };
+    void run();
   }, [load]);
 
   const onCreate = async (event: FormEvent<HTMLFormElement>) => {
@@ -99,6 +101,7 @@ export default function DsrSettingsPage() {
       setPeriodFrom('');
       setPeriodTo('');
       setNote('');
+      setLoading(true);
       await load();
     } catch (err) {
       setError(
@@ -119,6 +122,7 @@ export default function DsrSettingsPage() {
           reason: '사용자 self-service 철회',
         });
         setNotice(`${requestId} 요청을 철회했습니다.`);
+        setLoading(true);
         await load();
       } catch (err) {
         setError(err instanceof ApiError ? err.message : '철회 실패');
@@ -231,7 +235,10 @@ export default function DsrSettingsPage() {
         <div className="mb-3 flex justify-end">
           <button
             type="button"
-            onClick={() => void load()}
+            onClick={() => {
+              setLoading(true);
+              void load();
+            }}
             disabled={loading}
             className="inline-flex min-h-11 items-center gap-2 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
           >

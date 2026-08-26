@@ -62,7 +62,15 @@ cd ~/pinvi
 set -a
 source "$HOME/.pinvi-admin-live.env"
 set +a
+# paired release candidate/attestation에서 받은 exact SHA를 전달한다.
+export PINVI_LIVE_EXPECTED_REVISION="<trusted release candidate SHA>"
 ```
+
+`PINVI_LIVE_EXPECTED_REVISION`은 live UI gate가 실행할 exact checkout SHA다. wrapper와
+`n150-playwright-runner.sh`는 브라우저를 시작하기 전에 현재 `HEAD`와 이 값을 비교하고
+tracked/untracked 변경이 없는지도 확인한다. 불일치하거나 dirty면 gate를 실패시킨다. PR 검증에서는
+paired release candidate 또는 attestation이 선언한 exact SHA를 이 값으로 설정하며, 현재 checkout의
+SHA를 즉석 생성해 설정하지 않는다.
 
 Playwright phase를 N150 Docker runner로 감싼다.
 

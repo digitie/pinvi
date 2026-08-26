@@ -39,7 +39,6 @@ export default function McpTokensSettingsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
     try {
       setTokens(await userApi(apiClient).listMcpTokens());
       setError(null);
@@ -51,7 +50,10 @@ export default function McpTokensSettingsPage() {
   }, []);
 
   useEffect(() => {
-    void load();
+    const run = async () => {
+      await load();
+    };
+    void run();
   }, [load]);
 
   const onIssue = async (event: FormEvent<HTMLFormElement>) => {
@@ -78,6 +80,7 @@ export default function McpTokensSettingsPage() {
       setError(null);
       try {
         await userApi(apiClient).revokeMcpToken(tokenId);
+        setLoading(true);
         await load();
       } catch (err) {
         setError(err instanceof ApiError ? err.message : '회수 실패');

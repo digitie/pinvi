@@ -70,10 +70,13 @@ function ignoreLongPressTarget(target: EventTarget | null): boolean {
 function TripMakiIcon({ icon, title }: { icon: string; title: string }) {
   const renderedIcon = makiIconName(icon);
   const [src, setSrc] = useState(() => makiIconUrl(renderedIcon));
-
-  useEffect(() => {
+  // icon(따라서 renderedIcon)이 바뀌면 이전 onError fallback 상태를 지우고 새 아이콘으로
+  // 되돌린다 — src는 onError로도 독립적으로 바뀔 수 있어 순수 파생값이 아니다.
+  const [prevRenderedIcon, setPrevRenderedIcon] = useState(renderedIcon);
+  if (renderedIcon !== prevRenderedIcon) {
+    setPrevRenderedIcon(renderedIcon);
     setSrc(makiIconUrl(renderedIcon));
-  }, [renderedIcon]);
+  }
 
   return (
     // eslint-disable-next-line @next/next/no-img-element
@@ -189,11 +192,19 @@ export function TripMapView({
     [fetchFeaturesInBounds, showFeatures],
   );
 
+  // showFeatures가 꺼지면 feature 상태를 리셋한다.
+  const [prevShowFeatures, setPrevShowFeatures] = useState(showFeatures);
+  if (showFeatures !== prevShowFeatures) {
+    setPrevShowFeatures(showFeatures);
+    if (!showFeatures) {
+      setFeatures([]);
+      setSelectedFeature(null);
+    }
+  }
+
+  // ref(진행 중인 요청 취소)는 render 중에 접근할 수 없으므로 effect로 유지한다.
   useEffect(() => {
-    if (showFeatures) return;
-    featureAbortRef.current?.abort();
-    setFeatures([]);
-    setSelectedFeature(null);
+    if (!showFeatures) featureAbortRef.current?.abort();
   }, [showFeatures]);
 
   useEffect(() => {
@@ -275,11 +286,14 @@ export function TripMapView({
     ? featureResolutionNotice(selected.featureResolutionState)
     : null;
 
-  useEffect(() => {
+  // hiddenFeatureIds가 바뀌어 현재 선택된 feature가 숨겨지면 선택을 해제한다.
+  const [prevHiddenFeatureIds, setPrevHiddenFeatureIds] = useState(hiddenFeatureIds);
+  if (hiddenFeatureIds !== prevHiddenFeatureIds) {
+    setPrevHiddenFeatureIds(hiddenFeatureIds);
     if (selectedFeature && hiddenFeatureIds?.has(selectedFeature.feature_id)) {
       setSelectedFeature(null);
     }
-  }, [hiddenFeatureIds, selectedFeature]);
+  }
 
   // 외부에서 POI 를 선택하면 해당 위치로 이동.
   useEffect(() => {

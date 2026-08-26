@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type { NoticePlan, NoticePlanCreate, NoticePlanUpdate } from '@pinvi/schemas';
@@ -109,9 +109,13 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
   const plan = planQuery.data ?? null;
   const isCanonicalPlan = plan?.source_system === 'kor-travel-map';
 
-  useEffect(() => {
-    if (plan) setDraft(draftFromPlan(plan));
-  }, [plan]);
+  // plan 데이터가 (재)로드되면 draft를 서버 값으로 리셋한다 — effect 대신 렌더 중 조정
+  // (react-hooks/set-state-in-effect가 막는 effect 내부 동기 setState를 피한다).
+  const [prevPlan, setPrevPlan] = useState<NoticePlan | null>(null);
+  if (plan && plan !== prevPlan) {
+    setPrevPlan(plan);
+    setDraft(draftFromPlan(plan));
+  }
 
   const invalidate = async (nextPlanId?: string) => {
     await queryClient.invalidateQueries({ queryKey: queryKeys.admin.noticePlansAll() });

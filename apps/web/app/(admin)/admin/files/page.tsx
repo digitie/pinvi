@@ -67,25 +67,21 @@ export default function AdminFilesPage() {
     setTotal(page.total);
   };
 
-  const loadAll = async () => {
-    const admin = adminApi(apiClient);
-    const [filePage, nextSettings] = await Promise.all([
-      admin.listFiles({ limit: 100 }),
-      admin.getFileSettings(),
-    ]);
-    setItems(filePage.items);
-    setTotal(filePage.total);
-    setSettings(nextSettings);
-    setSettingsDraft({
-      attachment_max_upload_bytes: String(nextSettings.attachment_max_upload_bytes),
-      trip_attachment_quota_bytes: String(nextSettings.trip_attachment_quota_bytes),
-      user_attachment_quota_bytes: String(nextSettings.user_attachment_quota_bytes),
-    });
-  };
-
   useEffect(() => {
     let cancelled = false;
-    void loadAll()
+    const admin = adminApi(apiClient);
+    Promise.all([admin.listFiles({ limit: 100 }), admin.getFileSettings()])
+      .then(([filePage, nextSettings]) => {
+        if (cancelled) return;
+        setItems(filePage.items);
+        setTotal(filePage.total);
+        setSettings(nextSettings);
+        setSettingsDraft({
+          attachment_max_upload_bytes: String(nextSettings.attachment_max_upload_bytes),
+          trip_attachment_quota_bytes: String(nextSettings.trip_attachment_quota_bytes),
+          user_attachment_quota_bytes: String(nextSettings.user_attachment_quota_bytes),
+        });
+      })
       .catch((err) => {
         if (!cancelled) {
           setError(err instanceof ApiError ? err.message : '파일 정보를 불러오지 못했습니다.');

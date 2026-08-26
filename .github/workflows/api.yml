@@ -6,8 +6,12 @@ on:
       - 'apps/api/**'
       - 'contracts/**'
       - 'scripts/api-image-provenance.sh'
+      - 'scripts/alembic_rebaseline.py'
       - 'scripts/backup-db.sh'
+      - 'scripts/deploy-node.sh'
+      - 'scripts/docker-app.sh'
       - 'scripts/m05_*.py'
+      - 'scripts/migrator-lifecycle-lock.sh'
       - 'scripts/trusted-hotswap-entrypoint.py'
       - 'scripts/trusted-hotswap-root.sh'
       - 'scripts/n150-playwright-runner.sh'
@@ -15,6 +19,8 @@ on:
       - 'scripts/restore-hotswap.sh'
       - 'scripts/restore-staging-drill.sh'
       - 'infra/docker-compose.app.yml'
+      - 'infra/postgres/bootstrap-pinvi-runtime-role.sh'
+      - 'docs/runbooks/docker-app.md'
       - 'infra/.env.prod.example'
       - '.env.example'
       - '.github/workflows/api.yml'
@@ -26,8 +32,12 @@ on:
       - 'apps/api/**'
       - 'contracts/**'
       - 'scripts/api-image-provenance.sh'
+      - 'scripts/alembic_rebaseline.py'
       - 'scripts/backup-db.sh'
+      - 'scripts/deploy-node.sh'
+      - 'scripts/docker-app.sh'
       - 'scripts/m05_*.py'
+      - 'scripts/migrator-lifecycle-lock.sh'
       - 'scripts/trusted-hotswap-entrypoint.py'
       - 'scripts/trusted-hotswap-root.sh'
       - 'scripts/n150-playwright-runner.sh'
@@ -35,6 +45,8 @@ on:
       - 'scripts/restore-hotswap.sh'
       - 'scripts/restore-staging-drill.sh'
       - 'infra/docker-compose.app.yml'
+      - 'infra/postgres/bootstrap-pinvi-runtime-role.sh'
+      - 'docs/runbooks/docker-app.md'
       - 'infra/.env.prod.example'
       - '.env.example'
       - '.github/workflows/api.yml'
@@ -103,6 +115,7 @@ jobs:
             scripts/m05_activation_receipt.py \
             scripts/m05_restore_drill.py \
             scripts/m05_hotswap_forensics.py \
+            scripts/alembic_rebaseline.py \
             scripts/trusted-hotswap-entrypoint.py
           bash -n \
             scripts/backup-db.sh \
@@ -110,7 +123,12 @@ jobs:
             scripts/restore-hotswap.sh \
             scripts/restore-staging-drill.sh \
             scripts/n150-playwright-runner.sh \
-            scripts/trusted-hotswap-root.sh
+            scripts/trusted-hotswap-root.sh \
+            scripts/deploy-node.sh \
+            scripts/docker-app.sh \
+            scripts/migrator-lifecycle-lock.sh \
+            scripts/api-image-provenance.sh \
+            infra/postgres/bootstrap-pinvi-runtime-role.sh
 
       - name: ruff format check
         run: ruff format --check .

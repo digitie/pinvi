@@ -3084,8 +3084,9 @@ revision ID 충돌과 `0061` parent가 없는 분기 그래프가 된다.
   `alembic upgrade head`는 지원하지 않는다.
 - 새 DB는 빈 catalog에서 `alembic upgrade head`로 `0100 → 0101`을 적용한다.
 - 현재 N150 운영 DB만 별도 root-only rebaseline 도구로 지원한다. 이 도구는 다음을
-  모두 확인한 뒤 하나의 transaction에서 `app.alembic_version`을 `0061`에서
-  `0100`으로 바꾼다. 이 단계는 DDL이나 사용자 데이터를 변경하지 않는다.
+  모두 확인한 뒤 하나의 transaction에서 legacy provenance comment와
+  `app.alembic_version`을 함께 `0100` handoff로 기록한다. 이 단계는 사용자 데이터나
+  `app` 객체 DDL을 변경하지 않는다.
   - version row가 정확히 하나이고 `20260821_0061`이다.
   - M05 `ops` anchor/receipt 객체가 아직 없다.
   - shared structural catalog fingerprint와 final-boundary/M05 security·trigger sentinel이
@@ -3104,8 +3105,8 @@ revision ID 충돌과 `0061` parent가 없는 분기 그래프가 된다.
   non-login이며, one-shot migrator login은 두 역할에 `INHERIT FALSE, SET TRUE`로만 membership을
   받고 database 기본 role은 app schema owner로 고정한다. `0101`은 기존 app DDL을 owner로 끝낸
   뒤 M05 object만 `SET LOCAL ROLE migration_owner`로 만들고 Alembic version row 전에는 app owner로
-  복귀한다. migration owner는 database `CREATE`, `x_extension` `USAGE`와 필요한 function
-  `EXECUTE`만 받으며 runtime/fence/hotswap의 membership·CONNECT surface를 갖지 않는다. 일반
+  복귀한다. migration owner는 database `CREATE`를 받지 않고, `x_extension` `USAGE`와 필요한
+  function `EXECUTE`만 받으며 runtime/fence/hotswap의 membership·CONNECT surface를 갖지 않는다. 일반
   Compose 재기동은 migrator를 처음부터 `NOLOGIN`·database `CONNECT` 없음으로 둔다. wrapper는
   migration 직전에만 이를 열고 dependency 재실행 없이 one-shot을 수행하며, 성공·실패 뒤 모두
   `CONNECT` revoke·기존 migrator backend 종료·`NOLOGIN` 검증으로 다시 봉인한다.
@@ -3151,5 +3152,74 @@ revision ID 충돌과 `0061` parent가 없는 분기 그래프가 된다.
   검증한다.
 - production rebaseline은 PR merge 뒤에도 별도 운영 변경 승인과 fresh backup 검증이 있어야 한다.
 
-- 다음 신규 ADR = **ADR-066**
+## ADR-066: Next.js 16 프로덕션 빌드는 Turbopack이 아니라 webpack을 쓴다 (지도 청크 런타임 크래시)
+
+- **상태**: accepted
+- **날짜**: 2026-08-26
+- **결정자**: 사용자 + Claude
+- **참조**: T-354, PR #489
+
+### 컨텍스트
+
+T-354로 `apps/web`을 Next.js 15 → 16(Turbopack)으로 올리자, lint·typecheck·`next build`(Turbopack)
+자체는 성공했지만 CI e2e job에서 지도(`/map`, `/trips`, admin trip 상세 등 `vworld-map-web`을
+렌더링하는 모든 페이지)를 여는 49개 테스트가 전부 실패했다. 실패 목록을 나눠보면 지도가 없는
+페이지(설정, 로그인, admin CRUD 등)는 전부 통과했고, 지도를 렌더링하는 페이지·다이얼로그·폼만
+예외 없이 실패했다 — 정확히 지도 컴포넌트를 렌더링하는 경로와 일치한다.
+
+로컬에서 CI와 같은 production build(`next build && next start`)로 재현하자 `/map` 브라우저
+콘솔에 `Error: Module 10950 was instantiated because it was required from module 77971, but
+the module factory is not available.`가 떴고, 이 예외가 앱 에러 바운더리까지 전파돼 지도
+컴포넌트가 fallback UI조차 그리지 못했다. 같은 코드를 `next build --webpack`으로 다시 빌드하면
+콘솔 에러 없이 fallback UI(VWorld 키 미설정 시 정상 동작)가 렌더링됐고, 이전에 실패했던 19개
+대표 e2e(map-*, dialog-focus, form-a11y, trips-dashboard)를 재실행하자 전부 통과했다. 이는
+이번 세션의 `react-hooks/set-state-in-effect` 리팩터나 다른 애플리케이션 코드 변경과 무관하며,
+Next.js 16 Turbopack 프로덕션 번들러가 `vworld-map-web`(vendored `maplibre-vworld-react`
+패키지, MapLibre GL JS 포함, ADR-046)의 모듈 그래프를 청크로 나누는 과정에서 인스턴스화 순서를
+깨는 런타임 버그로 확인된다.
+
+### 결정
+
+- `apps/web/package.json`의 `build` 스크립트를 `next build` → `next build --webpack`으로
+  고정한다. CI(`lint-typecheck-build`, e2e job의 playwright `webServer`)와
+  `apps/web/Dockerfile`(`npm --workspace apps/web run build`)이 모두 이 스크립트 하나를
+  거치므로 별도 수정 없이 전부 webpack 산출물을 쓴다.
+- `dev` 스크립트(`next dev`)는 이번 변경 범위에서 제외한다 — 로컬 개발 서버는 CI·배포 경로가
+  아니고, 이번 조사에서 쓴 mock 없이 dev 모드만 단독 검증하기엔 백엔드 의존성이 얽혀 결론을
+  내리기 어려웠다. 개발자가 로컬 `npm run dev`에서 같은 증상(지도가 전혀 렌더링되지 않음)을
+  보고하면 그때 `dev` 스크립트도 `--webpack`으로 맞춘다.
+- 업스트림(Next.js Turbopack) 수정이 나오기 전까지는 webpack 고정을 유지한다. Turbopack으로
+  되돌리려면 이 ADR을 갱신하고 지도 렌더 e2e 전체가 통과하는지 재검증한다.
+
+### 근거
+
+Next 16 자체의 정적 타입체크·lint·webpack 빌드 산출물은 모두 정상이라 애플리케이션 코드 결함이
+아니다. 반면 재현은 100% 결정적이었다(Turbopack 빌드 = 항상 크래시, webpack 빌드 = 항상 정상).
+코드 레벨로 우회하려면 `vworld-map-web`/`maplibre-vworld-react`의 내부 module 경계를 바꿔야
+하는데 그 패키지는 별도 vendored tarball(ADR-046)이라 이 저장소에서 원인 모듈 그래프를 직접
+고칠 수 없다. 빌드 플래그 하나로 완전히 우회되므로, 업스트림 수정을 기다리는 동안 배포 가능한
+상태를 유지하는 가장 작은 개입이다.
+
+### 결과 (긍정)
+
+- 지도 기능이 포함된 모든 페이지가 다시 정상 렌더링된다. PR #489의 e2e 49건 실패가 이 변경만으로
+  해소된다(로컬 재현·재검증 완료).
+- 코드·컴포넌트 변경이 전혀 없어 리뷰 범위가 build 스크립트 한 줄로 좁혀진다.
+
+### 결과 (부정)
+
+- Next 16의 기본값(Turbopack build)에서 벗어나므로, Turbopack 전용 빌드 최적화의 이점을 받지
+  못한다.
+- 업스트림 버그이므로 Pinvi 저장소에서 직접 고칠 수 없고, 수정 시점을 통제할 수 없다.
+
+### 후속
+
+- Next.js/Turbopack 업스트림에 유사 리포트가 있는지 확인하고, 없으면 최소 재현 사례로 이슈를
+  등록한다(vendored 패키지라 정확한 module 경로를 특정하지 못했으므로 별도 최소 재현이 필요할
+  수 있음).
+- 업스트림이 고쳐지면 `next build --webpack` → `next build`로 되돌리고 지도 e2e 전체로
+  재검증한 뒤 이 ADR을 superseded 표시한다.
+- `dev` 스크립트에서 동일 증상이 보고되면 같은 플래그를 추가한다.
+
+- 다음 신규 ADR = **ADR-067**
 - 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.

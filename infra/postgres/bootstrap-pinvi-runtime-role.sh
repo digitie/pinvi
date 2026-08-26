@@ -7,6 +7,12 @@
 
 set -eu
 
+# Root bootstrap credentials must never inherit a caller-selected libpq target.
+# Every connection below supplies the one validated endpoint explicitly.
+unset PGAPPNAME PGCONNECT_TIMEOUT PGDATABASE PGHOST PGHOSTADDR PGOPTIONS PGPASSFILE \
+  PGPASSWORD PGPORT PGSERVICE PGSERVICEFILE PGSSLCERT PGSSLMODE PGSSLKEY \
+  PGSSLROOTCERT PGTARGETSESSIONATTRS PGUSER PSQLRC
+
 : "${POSTGRES_USER:?POSTGRES_USER is required}"
 : "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
 : "${POSTGRES_DB:?POSTGRES_DB is required}"
@@ -19,6 +25,11 @@ set -eu
 
 PINVI_M05_LEGACY_REBASELINE="${PINVI_M05_LEGACY_REBASELINE:-0}"
 PINVI_MIGRATOR_DISABLE_LOGIN="${PINVI_MIGRATOR_DISABLE_LOGIN:-1}"
+# The ordinary PinVi Compose network reaches PostgreSQL as ``app-postgres:5432``.
+# The Docker Manager's host-network one-shot is the only other supported
+# topology, and it must use the dedicated loopback endpoint exactly.
+PINVI_DB_HOST="${PINVI_DB_HOST:-app-postgres}"
+PINVI_DB_PORT="${PINVI_DB_PORT:-5432}"
 
 for role_name in \
   "${POSTGRES_USER}" \
@@ -41,6 +52,13 @@ case "${PINVI_MIGRATOR_DISABLE_LOGIN}" in
   0|1 ) ;;
   * ) echo "PINVI_MIGRATOR_DISABLE_LOGIN must be 0 or 1" >&2; exit 2 ;;
 esac
+case "${PINVI_DB_HOST}:${PINVI_DB_PORT}" in
+  app-postgres:5432|127.0.0.1:12800 ) ;;
+  * )
+    echo "PINVI_DB_HOST and PINVI_DB_PORT must name an approved PostgreSQL endpoint" >&2
+    exit 2
+    ;;
+esac
 
 if [ "${POSTGRES_USER}" = "${PINVI_APP_DB_USER}" ] \
   || [ "${POSTGRES_USER}" = "${PINVI_APP_SCHEMA_OWNER}" ] \
@@ -58,7 +76,7 @@ fi
 
 export PGPASSWORD="${POSTGRES_PASSWORD}"
 attempt=0
-until psql --no-psqlrc --no-password --tuples-only --no-align --host=app-postgres \
+until psql --no-psqlrc --no-password --tuples-only --no-align --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" \
   --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" --command='SELECT 1' >/dev/null 2>&1; do
   attempt=$((attempt + 1))
   if [ "$attempt" -ge 15 ]; then
@@ -71,7 +89,7 @@ done
 
 seal_migrator_login() {
   PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 \
-    --host=app-postgres --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+    --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
     --set="migrator_role=${PINVI_MIGRATOR_DB_USER}" \
     --set="database_name=${POSTGRES_DB}" \
     >/dev/null <<'SQL'
@@ -121,7 +139,7 @@ seal_migrator_login
 # PINVI_M05_LEGACY_REBASELINE=1 root-only one-shot으로만 아래 보호를 우회한다.
 if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then
   canonical_app_ownership="$(
-    psql --no-psqlrc --no-password --tuples-only --no-align --host=app-postgres \
+    psql --no-psqlrc --no-password --tuples-only --no-align --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" \
       --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
       --set="schema_owner=${PINVI_APP_SCHEMA_OWNER}" <<'SQL'
 WITH app_schema AS (
@@ -202,7 +220,7 @@ else
   migrator_login_attribute="LOGIN"
 fi
 
-psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host=app-postgres \
+psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" \
   --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
   --set="bootstrap_owner=${POSTGRES_USER}" \
   --set="app_role=${PINVI_APP_DB_USER}" --set="app_password=${PINVI_APP_DB_PASSWORD}" \
@@ -287,7 +305,7 @@ JOIN pg_roles migrator ON migrator.oid = activity.usesysid
 WHERE :'migrator_disabled' = '1'
   AND migrator.rolname = :'migrator_role'
   AND activity.pid <> pg_backend_pid();
-GRANT CREATE ON DATABASE :"database_name" TO :"schema_owner", :"migration_owner";
+GRANT CREATE ON DATABASE :"database_name" TO :"schema_owner";
 SELECT format('CREATE SCHEMA IF NOT EXISTS x_extension AUTHORIZATION %I', :'bootstrap_owner')
 \gexec
 SELECT format('ALTER SCHEMA x_extension OWNER TO %I', :'bootstrap_owner')
@@ -300,10 +318,48 @@ GRANT USAGE ON SCHEMA x_extension TO :"app_role", :"schema_owner", :"migration_o
 REVOKE ALL ON FUNCTION x_extension.digest(bytea, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION x_extension.digest(bytea, text)
   TO :"app_role", :"schema_owner", :"migration_owner";
+SELECT format('CREATE SCHEMA IF NOT EXISTS ops AUTHORIZATION %I', :'migration_owner')
+WHERE NOT EXISTS (
+    SELECT 1 FROM pg_namespace WHERE nspname = 'ops'
+)
+\gexec
+SELECT format('ALTER SCHEMA ops OWNER TO %I', :'migration_owner')
+WHERE EXISTS (
+    SELECT 1 FROM pg_namespace WHERE nspname = 'ops'
+)
+\gexec
+SELECT format('CREATE SCHEMA IF NOT EXISTS pinvi_internal AUTHORIZATION %I', :'schema_owner')
+WHERE NOT EXISTS (
+    SELECT 1 FROM pg_namespace WHERE nspname = 'pinvi_internal'
+)
+\gexec
+SELECT format('ALTER SCHEMA pinvi_internal OWNER TO %I', :'schema_owner')
+WHERE EXISTS (
+    SELECT 1 FROM pg_namespace WHERE nspname = 'pinvi_internal'
+)
+\gexec
+REVOKE ALL ON SCHEMA pinvi_internal FROM PUBLIC;
+GRANT USAGE ON SCHEMA pinvi_internal TO :"schema_owner", :"migration_owner";
+CREATE OR REPLACE FUNCTION pinvi_internal.acquire_fresh_0101_database_fence()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $pinvi_fresh_0101_fence$
+BEGIN
+    LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE;
+    LOCK TABLE pg_catalog.pg_authid, pg_catalog.pg_auth_members,
+              pg_catalog.pg_db_role_setting IN ACCESS EXCLUSIVE MODE;
+END
+$pinvi_fresh_0101_fence$;
+ALTER FUNCTION pinvi_internal.acquire_fresh_0101_database_fence() OWNER TO :"bootstrap_owner";
+REVOKE ALL ON FUNCTION pinvi_internal.acquire_fresh_0101_database_fence() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION pinvi_internal.acquire_fresh_0101_database_fence()
+  TO :"schema_owner";
 SQL
 
 if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then
-  psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host=app-postgres \
+  psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" \
     --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
     --set="schema_owner=${PINVI_APP_SCHEMA_OWNER}" \
     >/dev/null <<'SQL'
@@ -314,35 +370,12 @@ SELECT format('ALTER SCHEMA app OWNER TO %I', :'schema_owner')
 SQL
 fi
 
-grant_app_runtime_privileges() {
-  default_privilege_owner="$1"
-  psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host=app-postgres \
-    --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
-    --set="app_role=${PINVI_APP_DB_USER}" \
-    --set="default_privilege_owner=${default_privilege_owner}" \
-    >/dev/null <<'SQL'
-REVOKE ALL ON SCHEMA app FROM PUBLIC;
-GRANT USAGE ON SCHEMA app TO :"app_role";
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO :"app_role";
-GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA app TO :"app_role";
-ALTER DEFAULT PRIVILEGES FOR ROLE :"default_privilege_owner" IN SCHEMA app
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"app_role";
-ALTER DEFAULT PRIVILEGES FOR ROLE :"default_privilege_owner" IN SCHEMA app
-  GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"app_role";
--- runtime은 application data만 갱신할 수 있다. migration provenance는
--- schema owner / one-shot migrator만 바꿀 수 있도록 broad table grant 뒤에 제외한다.
-SELECT format('REVOKE ALL PRIVILEGES ON TABLE app.alembic_version FROM %I', :'app_role')
-WHERE to_regclass('app.alembic_version') IS NOT NULL
-\gexec
-SQL
-}
-
-if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then
-  grant_app_runtime_privileges "${PINVI_APP_SCHEMA_OWNER}"
-fi
+# fresh와 legacy 모두 0101이 catalog fingerprint·handoff를 완료한 뒤 app runtime 권한을
+# 원자적으로 부여한다. legacy receipt가 결박되기 전에는 app ACL/default ACL을 바꾸지 않는다.
+:
 
 role_topology_safe="$(
-  psql --no-psqlrc --no-password --tuples-only --no-align --host=app-postgres \
+  psql --no-psqlrc --no-password --tuples-only --no-align --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" \
     --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
     --set="bootstrap_owner=${POSTGRES_USER}" \
     --set="app_role=${PINVI_APP_DB_USER}" \
@@ -377,6 +410,24 @@ x_extension_schema AS (
     SELECT namespace.oid, namespace.nspowner
     FROM pg_namespace namespace
     WHERE namespace.nspname = 'x_extension'
+),
+pinvi_internal_schema AS (
+    SELECT namespace.oid, namespace.nspowner
+    FROM pg_namespace namespace
+    WHERE namespace.nspname = 'pinvi_internal'
+),
+ops_schema AS (
+    SELECT namespace.oid, namespace.nspowner
+    FROM pg_namespace namespace
+    WHERE namespace.nspname = 'ops'
+),
+fresh_admission_fence AS (
+    SELECT procedure.oid, procedure.proowner, procedure.proacl
+    FROM pg_proc procedure
+    JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+    WHERE namespace.nspname = 'pinvi_internal'
+      AND procedure.proname = 'acquire_fresh_0101_database_fence'
+      AND procedure.pronargs = 0
 ),
 app_objects AS (
     SELECT relation.relowner AS owner_oid
@@ -433,8 +484,38 @@ SELECT
     AND (SELECT count(*) FROM migration_owner) = 1
     AND (SELECT count(*) FROM migrator_role) = 1
     AND (SELECT count(*) FROM database_owner) = 1
+    AND (SELECT oid FROM schema_owner) <> (SELECT oid FROM database_owner)
     AND (SELECT count(*) FROM app_schema) = 1
     AND (SELECT count(*) FROM x_extension_schema) = 1
+    AND (SELECT count(*) FROM pinvi_internal_schema) = 1
+    AND (SELECT count(*) FROM ops_schema) = 1
+    AND (SELECT nspowner FROM ops_schema) = (SELECT oid FROM migration_owner)
+    AND (SELECT nspowner FROM pinvi_internal_schema) = (SELECT oid FROM schema_owner)
+    AND (SELECT count(*) FROM fresh_admission_fence) = 1
+    AND (SELECT proowner FROM fresh_admission_fence) = (SELECT oid FROM database_owner)
+    AND EXISTS (
+        SELECT 1
+        FROM fresh_admission_fence fence
+        CROSS JOIN LATERAL aclexplode(
+            COALESCE(fence.proacl, acldefault('f', fence.proowner))
+        ) AS acl
+        WHERE acl.grantee = (SELECT oid FROM schema_owner)
+          AND acl.privilege_type = 'EXECUTE'
+          AND NOT acl.is_grantable
+    )
+    AND NOT EXISTS (
+        SELECT 1
+        FROM fresh_admission_fence fence
+        CROSS JOIN LATERAL aclexplode(
+            COALESCE(fence.proacl, acldefault('f', fence.proowner))
+        ) AS acl
+        WHERE NOT (
+            acl.grantee = fence.proowner
+            OR (acl.grantee = (SELECT oid FROM schema_owner)
+                AND acl.privilege_type = 'EXECUTE'
+                AND NOT acl.is_grantable)
+        )
+    )
     AND EXISTS (
         SELECT 1 FROM runtime_role runtime
         WHERE runtime.rolcanlogin
@@ -451,10 +532,6 @@ SELECT
                  OR membership.roleid = runtime.oid
           )
           AND NOT has_database_privilege(runtime.oid, current_database(), 'CREATE')
-          AND (
-              :'legacy_rebaseline' = '1'
-              OR has_schema_privilege(runtime.oid, 'app', 'USAGE')
-          )
           AND has_schema_privilege(runtime.oid, 'x_extension', 'USAGE')
           AND NOT has_schema_privilege(runtime.oid, 'app', 'CREATE')
           AND NOT has_schema_privilege(runtime.oid, 'x_extension', 'CREATE')
@@ -508,10 +585,23 @@ SELECT
           AND NOT owner.rolbypassrls
           AND NOT owner.rolinherit
           AND owner.oid <> (SELECT oid FROM database_owner)
-          AND has_database_privilege(owner.oid, current_database(), 'CREATE')
           AND NOT has_database_privilege(owner.oid, current_database(), 'CONNECT')
           AND has_schema_privilege(owner.oid, 'x_extension', 'USAGE')
           AND NOT has_schema_privilege(owner.oid, 'x_extension', 'CREATE')
+          AND has_schema_privilege(owner.oid, 'pinvi_internal', 'USAGE')
+          AND NOT EXISTS (
+              SELECT 1
+              FROM pg_namespace app_namespace
+              CROSS JOIN LATERAL aclexplode(
+                  COALESCE(
+                      app_namespace.nspacl,
+                      acldefault('n', app_namespace.nspowner)
+                  )
+              ) AS app_acl
+              WHERE app_namespace.nspname = 'app'
+                AND app_acl.grantee IN (owner.oid, 0)
+                AND app_acl.privilege_type = 'CREATE'
+          )
           AND EXISTS (
               SELECT 1 FROM pg_auth_members membership
               WHERE membership.member = owner.oid
@@ -633,4 +723,55 @@ unset PGPASSWORD
 if [ "${role_topology_safe}" != "t" ]; then
   echo "runtime/migrator/migration-owner role topology is not canonical" >&2
   exit 3
+fi
+
+# Alembic은 이미 적용된 0101을 재실행하지 않는다. 따라서 과거 0101 variant가 남긴
+# runtime ACL 누락은 일반 role bootstrap에서 exact head일 때만 정본 app owner로 보정한다.
+# 0100 이하와 legacy rebaseline은 migration handoff가 ACL을 결정해야 하므로 여기서
+# 절대 수정하지 않는다.
+if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then
+  alembic_version_table_exists="$(
+    PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --tuples-only --no-align \
+      --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+      --command="SELECT (to_regclass('app.alembic_version') IS NOT NULL)::text;"
+  )"
+  applied_revision=""
+  if [ "${alembic_version_table_exists}" = "true" ]; then
+    applied_revision="$(
+      PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --tuples-only --no-align \
+        --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" <<'SQL'
+SELECT CASE
+    WHEN count(*) <> 1 THEN ''
+    ELSE COALESCE((SELECT version_num FROM app.alembic_version), '')
+END
+FROM app.alembic_version;
+SQL
+    )"
+  fi
+  if [ "${applied_revision}" = "20260824_0101" ]; then
+    PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 \
+      --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+      --set="app_role=${PINVI_APP_DB_USER}" \
+      --set="schema_owner=${PINVI_APP_SCHEMA_OWNER}" \
+      >/dev/null <<'SQL'
+BEGIN;
+REVOKE ALL ON SCHEMA app FROM PUBLIC;
+GRANT USAGE ON SCHEMA app TO :"app_role";
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA app FROM :"app_role";
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO :"app_role";
+REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA app FROM :"app_role";
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA app TO :"app_role";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"schema_owner" IN SCHEMA app
+  REVOKE ALL ON TABLES FROM :"app_role";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"schema_owner" IN SCHEMA app
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"app_role";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"schema_owner" IN SCHEMA app
+  REVOKE ALL ON SEQUENCES FROM :"app_role";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"schema_owner" IN SCHEMA app
+  GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"app_role";
+REVOKE ALL PRIVILEGES ON TABLE app.alembic_version FROM :"app_role";
+GRANT SELECT ON TABLE app.alembic_version TO :"app_role";
+COMMIT;
+SQL
+  fi
 fi

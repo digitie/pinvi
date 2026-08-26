@@ -18,11 +18,13 @@ import os
 import re
 import stat
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import sqlalchemy as sa
 
 from alembic import op
+from app.db.m05_catalog_fingerprint import catalog_fingerprint as _fresh_catalog_fingerprint
 
 revision: str = "20260824_0101"
 down_revision: str | None = "20260824_0100"
@@ -32,6 +34,19 @@ depends_on: str | Sequence[str] | None = None
 _M05_SCHEMA_FILE = "20260824_0101_m05_activation.sql"
 _M05_SCHEMA_SHA256 = "128e2b374842ca2e9755041815457625a8c2212c013c1bafd6adb93db42128cb"
 _M05_SCHEMA_STATEMENT_COUNT = 21
+_LEGACY_REBASELINE_TARGET_PROFILE_ENV = "PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE"
+_LEGACY_REBASELINE_FRESH_TARGET_PROFILE = "fresh-postgresql-16"
+_LEGACY_REBASELINE_TARGET_PROFILE = "n150-production"
+_LEGACY_REBASELINE_FRESH_TARGET_HOST = "test"
+_LEGACY_REBASELINE_TARGET_HOST = "n150"
+_LEGACY_REBASELINE_CATALOG_LINES = 1590
+_FRESH_BASELINE_SCHEMA_COMMENT = "pinvi-0100-fresh/v1"
+_LEGACY_REBASELINE_SCHEMA_COMMENT = "pinvi-0100-legacy/v1"
+_FRESH_BASELINE_SHA256 = "cfb77c4402b49b4d03a15a1e2471cef13c6665b7b95efe4fedda6af7ae2b4b57"
+_EXPECTED_FRESH_CATALOG_SHA256 = "4f2d69decc34300c597320e8a0dc78d154bd2eb4b6dbc96f0b51ba5b05c75d94"
+_N150_LEGACY_CATALOG_SHA256 = "4f2d69decc34300c597320e8a0dc78d154bd2eb4b6dbc96f0b51ba5b05c75d94"
+_N150_TARGET_IDENTITY_SHA256 = "e04c99a4681738e0292debdceded99b1c8abe01c9b8bdee82aeef8566dd33cc1"
+_FRESH_0101_DATABASE_FENCE_FUNCTION = "pinvi_internal.acquire_fresh_0101_database_fence()"
 _DOLLAR_QUOTE = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$")
 _ROLE_IDENTIFIER = re.compile(r"[a-z_][a-z0-9_]*")
 _OPERATOR_NAME = re.compile(r"[-+*/<>=~!@#%^&|`?]+")
@@ -61,6 +76,8 @@ _LEGACY_REBASELINE_RECEIPT_FIELDS = frozenset(
         "preflight",
         "state",
         "target_manifest_sha256",
+        "target_host",
+        "target_profile",
         "version",
     }
 )
@@ -76,6 +93,7 @@ _LEGACY_REBASELINE_PREFLIGHT_FIELDS = frozenset(
         "database_oid",
         "expected_catalog_lines",
         "expected_catalog_sha256",
+        "role_security_sha256",
         "server_addr",
         "server_port",
         "server_version_num",
@@ -91,6 +109,7 @@ _LEGACY_REBASELINE_FINGERPRINT_SESSION_STATEMENTS = (
     "SET LOCAL IntervalStyle TO 'iso_8601'",
     "SET LOCAL bytea_output TO 'hex'",
     "SET LOCAL extra_float_digits TO 3",
+    "SET LOCAL search_path TO pg_catalog, app, public",
 )
 # `scripts/alembic_rebaseline.py`의 0061 preflight와 같은 catalog serialization이다.
 # 0101은 receipt를 만든 뒤의 data/catalog drift를 DDL 전에 다시 검증해야 하므로, 이
@@ -103,20 +122,59 @@ WITH object_lines(line) AS (
   WHERE n.nspname = 'app'
   UNION ALL
   SELECT jsonb_build_array('relation', c.relname, c.relkind, c.relpersistence,
+                           c.relreplident,
                            pg_get_userbyid(c.relowner), COALESCE(c.reloptions::text, ''),
                            COALESCE(c.relacl::text, ''), c.relrowsecurity,
                            c.relforcerowsecurity, c.relispartition,
                            COALESCE(pg_get_expr(c.relpartbound, c.oid, true), ''),
-                           COALESCE(pg_get_partkeydef(c.oid), ''))::text
+                           COALESCE(pg_get_partkeydef(c.oid), ''),
+                           COALESCE(sequence_row.seqstart::text, ''),
+                           COALESCE(sequence_row.seqmin::text, ''),
+                           COALESCE(sequence_row.seqmax::text, ''),
+                           COALESCE(sequence_row.seqincrement::text, ''),
+                           COALESCE(sequence_row.seqcache::text, ''),
+                           COALESCE(sequence_row.seqcycle::text, ''),
+                           CASE WHEN sequence_row.seqtypid IS NULL THEN ''
+                                ELSE sequence_row.seqtypid::regtype::text END,
+                           COALESCE((
+                             SELECT jsonb_agg(
+                               jsonb_build_array(
+                                 dependency.deptype,
+                                 referenced_namespace.nspname,
+                                 referenced_relation.relname,
+                                 CASE WHEN dependency.refobjsubid = 0 THEN ''
+                                      ELSE referenced_attribute.attname END
+                               )
+                               ORDER BY dependency.deptype,
+                                        referenced_namespace.nspname,
+                                        referenced_relation.relname,
+                                        dependency.refobjsubid
+                             )::text
+                             FROM pg_depend AS dependency
+                             JOIN pg_class AS referenced_relation
+                               ON dependency.refclassid = 'pg_class'::regclass
+                              AND dependency.refobjid = referenced_relation.oid
+                             JOIN pg_namespace AS referenced_namespace
+                               ON referenced_namespace.oid = referenced_relation.relnamespace
+                             LEFT JOIN pg_attribute AS referenced_attribute
+                               ON referenced_attribute.attrelid = dependency.refobjid
+                              AND referenced_attribute.attnum = dependency.refobjsubid
+                              AND NOT referenced_attribute.attisdropped
+                             WHERE dependency.classid = 'pg_class'::regclass
+                               AND dependency.objid = c.oid
+                               AND dependency.deptype = 'a'
+                           ), ''))::text
   FROM pg_class AS c
   JOIN pg_namespace AS n ON n.oid = c.relnamespace
+  LEFT JOIN pg_sequence AS sequence_row ON sequence_row.seqrelid = c.oid
   WHERE n.nspname = 'app' AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f', 'c')
   UNION ALL
   SELECT jsonb_build_array('column', c.relname, a.attname, a.attnum,
                            pg_catalog.format_type(a.atttypid, a.atttypmod), a.attnotnull,
                            a.attidentity, a.attgenerated,
                            COALESCE(pg_get_expr(d.adbin, d.adrelid), ''),
-                           COALESCE(a.attcollation::regcollation::text, ''))::text
+                           COALESCE(a.attcollation::regcollation::text, ''),
+                           COALESCE(a.attacl::text, ''))::text
   FROM pg_attribute AS a
   JOIN pg_class AS c ON c.oid = a.attrelid
   JOIN pg_namespace AS n ON n.oid = c.relnamespace
@@ -225,8 +283,10 @@ WITH object_lines(line) AS (
   WHERE n.nspname = 'app'
   UNION ALL
   SELECT jsonb_build_array('trigger', c.relname, t.tgname, t.tgenabled, t.tgtype,
+                           t.tgdeferrable, t.tginitdeferred, t.tgparentid,
                            t.tgfoid::regprocedure::text, encode(t.tgargs, 'hex'),
-                           t.tgattr::text)::text
+                           t.tgattr::text,
+                           COALESCE(pg_get_expr(t.tgqual, t.tgrelid, true), ''))::text
   FROM pg_trigger AS t
   JOIN pg_class AS c ON c.oid = t.tgrelid
   JOIN pg_namespace AS n ON n.oid = c.relnamespace
@@ -262,14 +322,312 @@ WITH object_lines(line) AS (
   JOIN pg_namespace AS n ON n.oid = e.extnamespace
   WHERE e.extname IN ('pgcrypto', 'pg_trgm', 'citext')
   UNION ALL
+  SELECT jsonb_build_array(
+      'collation', collation_row.collname, collation_row.collprovider,
+      collation_row.collisdeterministic, collation_row.collencoding,
+      COALESCE(collation_row.collcollate, ''), COALESCE(collation_row.collctype, ''),
+      COALESCE(collation_row.colliculocale, ''), COALESCE(collation_row.collicurules, ''),
+      COALESCE(collation_row.collversion, ''), pg_get_userbyid(collation_row.collowner)
+    )::text
+  FROM pg_collation AS collation_row
+  JOIN pg_namespace AS namespace ON namespace.oid = collation_row.collnamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'conversion', conversion_row.conname, conversion_row.conforencoding,
+      conversion_row.contoencoding, conversion_row.conproc::regproc::text,
+      conversion_row.condefault, pg_get_userbyid(conversion_row.conowner)
+    )::text
+  FROM pg_conversion AS conversion_row
+  JOIN pg_namespace AS namespace ON namespace.oid = conversion_row.connamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'opclass', opclass_row.opcname, access_method.amname,
+      family_row.opfname, opclass_row.opcdefault,
+      opclass_row.opcintype::regtype::text, opclass_row.opckeytype::regtype::text,
+      pg_get_userbyid(opclass_row.opcowner)
+    )::text
+  FROM pg_opclass AS opclass_row
+  JOIN pg_namespace AS namespace ON namespace.oid = opclass_row.opcnamespace
+  JOIN pg_am AS access_method ON access_method.oid = opclass_row.opcmethod
+  JOIN pg_opfamily AS family_row ON family_row.oid = opclass_row.opcfamily
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'opfamily', opfamily_row.opfname, access_method.amname,
+      pg_get_userbyid(opfamily_row.opfowner)
+    )::text
+  FROM pg_opfamily AS opfamily_row
+  JOIN pg_namespace AS namespace ON namespace.oid = opfamily_row.opfnamespace
+  JOIN pg_am AS access_method ON access_method.oid = opfamily_row.opfmethod
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'ts_config', config_row.cfgname, config_row.cfgparser::regproc::text,
+      pg_get_userbyid(config_row.cfgowner)
+    )::text
+  FROM pg_ts_config AS config_row
+  JOIN pg_namespace AS namespace ON namespace.oid = config_row.cfgnamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'ts_dict', dictionary_row.dictname, dictionary_row.dicttemplate::regproc::text,
+      COALESCE(dictionary_row.dictinitoption, ''), pg_get_userbyid(dictionary_row.dictowner)
+    )::text
+  FROM pg_ts_dict AS dictionary_row
+  JOIN pg_namespace AS namespace ON namespace.oid = dictionary_row.dictnamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
+  SELECT jsonb_build_array(
+      'statistic_ext', statistic_row.stxname, statistic_row.stxstattarget,
+      statistic_row.stxkeys::text, statistic_row.stxkind::text,
+      COALESCE(statistic_row.stxexprs::text, ''),
+      pg_get_statisticsobjdef(statistic_row.oid), pg_get_userbyid(statistic_row.stxowner)
+    )::text
+  FROM pg_statistic_ext AS statistic_row
+  JOIN pg_namespace AS namespace ON namespace.oid = statistic_row.stxnamespace
+  WHERE namespace.nspname = 'app'
+  UNION ALL
   SELECT jsonb_build_array('default_acl', COALESCE(n.nspname, ''),
                            d.defaclrole::regrole::text, d.defaclobjtype,
                            COALESCE(d.defaclacl::text, ''))::text
   FROM pg_default_acl AS d
   LEFT JOIN pg_namespace AS n ON n.oid = d.defaclnamespace
-  WHERE n.nspname = 'app' OR n.nspname IS NULL
+  WHERE n.nspname IN ('app', 'x_extension') OR n.nspname IS NULL
 )
 SELECT line FROM object_lines ORDER BY line COLLATE "C"
+"""
+_LEGACY_REBASELINE_ROLE_SECURITY_FINGERPRINT_SQL = """
+WITH RECURSIVE app_owner_roles(oid) AS (
+  SELECT namespace.nspowner
+  FROM pg_namespace AS namespace
+  WHERE namespace.nspname IN ('app', 'x_extension', 'public')
+  UNION
+  SELECT relation.relowner
+  FROM pg_class AS relation
+  JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT procedure.proowner
+  FROM pg_proc AS procedure
+  JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT type_row.typowner
+  FROM pg_type AS type_row
+  JOIN pg_namespace AS namespace ON namespace.oid = type_row.typnamespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT extension_row.extowner
+  FROM pg_extension AS extension_row
+  JOIN pg_namespace AS namespace ON namespace.oid = extension_row.extnamespace
+  WHERE namespace.nspname = 'x_extension'
+), acl_principal_roles(oid) AS (
+  SELECT acl.grantee
+  FROM pg_database AS database_row
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(database_row.datacl, acldefault('d', database_row.datdba))
+  ) AS acl
+  WHERE database_row.datname = current_database()
+  UNION
+  SELECT acl.grantor
+  FROM pg_database AS database_row
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(database_row.datacl, acldefault('d', database_row.datdba))
+  ) AS acl
+  WHERE database_row.datname = current_database()
+  UNION
+  SELECT acl.grantee
+  FROM pg_namespace AS namespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(namespace.nspacl, acldefault('n', namespace.nspowner))
+  ) AS acl
+  WHERE namespace.nspname IN ('app', 'x_extension', 'public')
+  UNION
+  SELECT acl.grantor
+  FROM pg_namespace AS namespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(namespace.nspacl, acldefault('n', namespace.nspowner))
+  ) AS acl
+  WHERE namespace.nspname IN ('app', 'x_extension', 'public')
+  UNION
+  SELECT acl.grantee
+  FROM pg_class AS relation
+  JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(
+      relation.relacl,
+      acldefault(
+        CASE WHEN relation.relkind = 'S' THEN 'S'::"char" ELSE 'r'::"char" END,
+        relation.relowner
+      )
+    )
+  ) AS acl
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT acl.grantor
+  FROM pg_class AS relation
+  JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(
+      relation.relacl,
+      acldefault(
+        CASE WHEN relation.relkind = 'S' THEN 'S'::"char" ELSE 'r'::"char" END,
+        relation.relowner
+      )
+    )
+  ) AS acl
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT acl.grantee
+  FROM pg_proc AS procedure
+  JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(procedure.proacl, acldefault('f', procedure.proowner))
+  ) AS acl
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT acl.grantor
+  FROM pg_proc AS procedure
+  JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(procedure.proacl, acldefault('f', procedure.proowner))
+  ) AS acl
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT acl.grantee
+  FROM pg_default_acl AS default_acl
+  LEFT JOIN pg_namespace AS namespace
+    ON namespace.oid = default_acl.defaclnamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(
+      default_acl.defaclacl,
+      acldefault(default_acl.defaclobjtype, default_acl.defaclrole)
+    )
+  ) AS acl
+  WHERE default_acl.defaclnamespace = 0
+     OR namespace.nspname IN ('app', 'x_extension')
+  UNION
+  SELECT acl.grantor
+  FROM pg_default_acl AS default_acl
+  LEFT JOIN pg_namespace AS namespace
+    ON namespace.oid = default_acl.defaclnamespace
+  CROSS JOIN LATERAL aclexplode(
+    COALESCE(
+      default_acl.defaclacl,
+      acldefault(default_acl.defaclobjtype, default_acl.defaclrole)
+    )
+  ) AS acl
+  WHERE default_acl.defaclnamespace = 0
+     OR namespace.nspname IN ('app', 'x_extension')
+), seed_roles(oid) AS (
+  SELECT oid FROM app_owner_roles
+  UNION
+  SELECT oid FROM acl_principal_roles
+  UNION
+  SELECT role_row.oid
+  FROM pg_roles AS role_row
+  WHERE role_row.rolsuper OR role_row.rolcreaterole OR role_row.rolcreatedb
+     OR role_row.rolreplication OR role_row.rolbypassrls
+     OR role_row.rolname IN (current_user, session_user)
+     OR role_row.rolname LIKE 'pinvi%'
+  UNION
+  SELECT database_row.datdba
+  FROM pg_database AS database_row
+  WHERE database_row.datname = current_database()
+), relevant_roles(oid) AS (
+  SELECT oid FROM seed_roles
+  UNION
+  SELECT CASE
+           WHEN membership.roleid = role_row.oid THEN membership.member
+           ELSE membership.roleid
+         END
+  FROM pg_auth_members AS membership
+  JOIN relevant_roles AS role_row
+    ON membership.roleid = role_row.oid OR membership.member = role_row.oid
+), security_lines(line) AS (
+  SELECT jsonb_build_array(
+      'database_acl', database_row.datname, pg_get_userbyid(database_row.datdba),
+      COALESCE(database_row.datacl::text, '')
+    )::text
+  FROM pg_database AS database_row
+  WHERE database_row.datname = current_database()
+  UNION ALL
+  SELECT jsonb_build_array(
+      'schema_acl', namespace.nspname, pg_get_userbyid(namespace.nspowner),
+      COALESCE(namespace.nspacl::text, '')
+    )::text
+  FROM pg_namespace AS namespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'relation_acl', namespace.nspname, relation.relname, relation.relkind,
+      pg_get_userbyid(relation.relowner), COALESCE(relation.relacl::text, '')
+    )::text
+  FROM pg_class AS relation
+  JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'function_acl', namespace.nspname, procedure.oid::regprocedure::text,
+      pg_get_userbyid(procedure.proowner), COALESCE(procedure.proacl::text, '')
+    )::text
+  FROM pg_proc AS procedure
+  JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'type_acl', namespace.nspname, type_row.typname,
+      pg_get_userbyid(type_row.typowner), COALESCE(type_row.typacl::text, '')
+    )::text
+  FROM pg_type AS type_row
+  JOIN pg_namespace AS namespace ON namespace.oid = type_row.typnamespace
+  WHERE namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'default_acl', COALESCE(namespace.nspname, ''),
+      pg_get_userbyid(default_acl.defaclrole), default_acl.defaclobjtype,
+      COALESCE(default_acl.defaclacl::text, '')
+    )::text
+  FROM pg_default_acl AS default_acl
+  LEFT JOIN pg_namespace AS namespace ON namespace.oid = default_acl.defaclnamespace
+  WHERE default_acl.defaclnamespace = 0
+     OR namespace.nspname IN ('app', 'x_extension')
+  UNION ALL
+  SELECT jsonb_build_array(
+      'role', role_row.rolname, role_row.rolsuper, role_row.rolinherit,
+      role_row.rolcreaterole, role_row.rolcreatedb, role_row.rolcanlogin,
+      role_row.rolreplication, role_row.rolbypassrls, role_row.rolconnlimit,
+      COALESCE(role_row.rolvaliduntil::text, ''),
+      COALESCE(role_row.rolconfig::text, '')
+    )::text
+  FROM pg_roles AS role_row
+  WHERE role_row.oid IN (SELECT oid FROM relevant_roles)
+  UNION ALL
+  SELECT jsonb_build_array(
+      'membership', granted_role.rolname, member_role.rolname,
+      membership.admin_option, membership.inherit_option, membership.set_option
+    )::text
+  FROM pg_auth_members AS membership
+  JOIN pg_roles AS granted_role ON granted_role.oid = membership.roleid
+  JOIN pg_roles AS member_role ON member_role.oid = membership.member
+  WHERE membership.roleid IN (SELECT oid FROM relevant_roles)
+     OR membership.member IN (SELECT oid FROM relevant_roles)
+  UNION ALL
+  SELECT jsonb_build_array(
+      'db_role_setting', database_row.datname,
+      COALESCE(role_row.rolname, 'PUBLIC'),
+      COALESCE(setting_row.setconfig::text, '')
+    )::text
+  FROM pg_db_role_setting AS setting_row
+  JOIN pg_database AS database_row
+    ON setting_row.setdatabase IN (0, database_row.oid)
+  LEFT JOIN pg_roles AS role_row ON role_row.oid = setting_row.setrole
+  WHERE database_row.datname = current_database()
+    AND (setting_row.setrole = 0 OR setting_row.setrole IN (SELECT oid FROM relevant_roles))
+)
+SELECT line FROM security_lines ORDER BY line COLLATE "C"
 """
 _LEGACY_REBASELINE_APP_TABLES_SQL = """
 SELECT relation.relname
@@ -280,9 +638,9 @@ WHERE namespace.nspname = 'app'
 ORDER BY relation.relname COLLATE "C"
 """
 _LEGACY_REBASELINE_SERIALIZATION_LOCK_SQL = "SELECT pg_advisory_xact_lock(1863432274, 20260824)"
-# legacy handoff도 새 backend를 막는 database catalog fence 뒤 기존 DDL-capable
-# backend를 종료한다. database owner만으로는 다른 role backend를 종료할 수 없으므로
-# root-only superuser caller만 허용해 handoff 중간의 permission failure를 막는다.
+# legacy handoff도 새 backend를 막는 database catalog fence를 사용한다. 기존
+# DDL-capable backend가 있으면 종료하지 않고 fail-close한다. 세션 종료는 PostgreSQL
+# transaction rollback으로 되돌릴 수 없는 외부 부작용이기 때문이다.
 _LEGACY_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL = """
 SELECT current_role_row.rolsuper
 FROM pg_roles AS current_role_row
@@ -291,6 +649,10 @@ WHERE current_role_row.rolname = current_user
 """
 _LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL = "SET LOCAL lock_timeout = '5s'"
 _LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_RESET_SQL = "SET LOCAL lock_timeout = 0"
+_LEGACY_REBASELINE_ROLE_SECURITY_FENCE_SQL = (
+    "LOCK TABLE pg_catalog.pg_authid, pg_catalog.pg_auth_members, "
+    "pg_catalog.pg_db_role_setting IN ACCESS EXCLUSIVE MODE"
+)
 _LEGACY_REBASELINE_DDL_CAPABLE_SESSIONS_CTE = """
 WITH app_schema AS (
   SELECT namespace.oid, namespace.nspowner
@@ -347,6 +709,25 @@ app_catalog_owners(owner_oid) AS (
   SELECT extension_row.extowner
   FROM pg_extension AS extension_row
   JOIN app_schema AS schema ON schema.oid = extension_row.extnamespace
+  UNION
+  SELECT namespace.nspowner
+  FROM pg_namespace AS namespace
+  WHERE namespace.nspname = 'x_extension'
+  UNION
+  SELECT relation.relowner
+  FROM pg_class AS relation
+  JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+  WHERE namespace.nspname = 'x_extension'
+  UNION
+  SELECT procedure.proowner
+  FROM pg_proc AS procedure
+  JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+  WHERE namespace.nspname = 'x_extension'
+  UNION
+  SELECT type_row.typowner
+  FROM pg_type AS type_row
+  JOIN pg_namespace AS namespace ON namespace.oid = type_row.typnamespace
+  WHERE namespace.nspname = 'x_extension'
 ),
 ddl_capable_sessions(pid) AS (
   SELECT activity.pid
@@ -355,9 +736,22 @@ ddl_capable_sessions(pid) AS (
   WHERE activity.datname = current_database()
     AND activity.backend_type = 'client backend'
     AND activity.pid <> pg_backend_pid()
+    -- 같은 Alembic serialization lock을 기다리는 협력 migrator는 이 fence가
+    -- 보호하는 대상이다. 다른 DDL-capable 세션만 quiescence 위반으로 본다.
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_locks AS migration_lock
+      WHERE migration_lock.pid = activity.pid
+        AND migration_lock.locktype = 'advisory'
+        AND migration_lock.classid = 1863432274
+        AND migration_lock.objid = 20260824
+        AND NOT migration_lock.granted
+    )
     AND (
       COALESCE(role_row.rolsuper, false)
+      OR COALESCE(role_row.rolcreaterole, false)
       OR COALESCE(has_schema_privilege(activity.usesysid, 'app', 'CREATE'), false)
+      OR COALESCE(has_schema_privilege(activity.usesysid, 'x_extension', 'CREATE'), false)
       OR EXISTS (
         SELECT 1
         FROM app_catalog_owners AS owner_row
@@ -598,8 +992,38 @@ def _legacy_rebaseline_profile() -> bool:
     if configured == "0":
         return False
     if configured == "1":
+        _legacy_rebaseline_target_profile()
         return True
     raise RuntimeError("0101 legacy rebaseline profile configuration is invalid")
+
+
+def _legacy_rebaseline_target_profile() -> str:
+    """Return the explicitly selected receipt profile for this migration process."""
+
+    target_profile = os.environ.get(_LEGACY_REBASELINE_TARGET_PROFILE_ENV, "")
+    if target_profile not in {
+        _LEGACY_REBASELINE_FRESH_TARGET_PROFILE,
+        _LEGACY_REBASELINE_TARGET_PROFILE,
+    }:
+        raise RuntimeError("0101 legacy rebaseline target profile is invalid")
+    return target_profile
+
+
+def _parse_legacy_rebaseline_timestamp(value: object) -> datetime:
+    """Parse producer-compatible RFC3339 timestamps and reject implausible future receipts."""
+
+    if not isinstance(value, str) or not value:
+        raise RuntimeError("0101 legacy rebaseline receipt completed_at is invalid")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise RuntimeError("0101 legacy rebaseline receipt completed_at is invalid") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise RuntimeError("0101 legacy rebaseline receipt completed_at must include a timezone")
+    parsed = parsed.astimezone(UTC)
+    if parsed > datetime.now(UTC) + timedelta(minutes=5):
+        raise RuntimeError("0101 legacy rebaseline receipt completed_at is in the future")
+    return parsed
 
 
 def _read_legacy_rebaseline_receipt() -> dict[str, object]:
@@ -655,6 +1079,11 @@ def _read_legacy_rebaseline_receipt() -> dict[str, object]:
         or not isinstance(receipt["completed_at"], str)
         or not receipt["completed_at"]
         or not isinstance(receipt["preflight"], dict)
+        or receipt["target_profile"]
+        not in {
+            _LEGACY_REBASELINE_FRESH_TARGET_PROFILE,
+            _LEGACY_REBASELINE_TARGET_PROFILE,
+        }
         or any(
             not isinstance(receipt[field], str) or _SHA256.fullmatch(receipt[field]) is None
             for field in (
@@ -665,7 +1094,21 @@ def _read_legacy_rebaseline_receipt() -> dict[str, object]:
         )
     ):
         raise RuntimeError("0101 legacy rebaseline receipt values are invalid")
+    _parse_legacy_rebaseline_timestamp(receipt["completed_at"])
     preflight = receipt["preflight"]
+    target_profile = receipt["target_profile"]
+    expected_catalog_sha256 = (
+        _N150_LEGACY_CATALOG_SHA256
+        if target_profile == _LEGACY_REBASELINE_TARGET_PROFILE
+        else _EXPECTED_FRESH_CATALOG_SHA256
+    )
+    expected_target_host = (
+        _LEGACY_REBASELINE_TARGET_HOST
+        if target_profile == _LEGACY_REBASELINE_TARGET_PROFILE
+        else _LEGACY_REBASELINE_FRESH_TARGET_HOST
+    )
+    if receipt["target_host"] != expected_target_host:
+        raise RuntimeError("0101 legacy rebaseline receipt host binding is invalid")
     if frozenset(preflight) != _LEGACY_REBASELINE_PREFLIGHT_FIELDS:
         raise RuntimeError("0101 legacy rebaseline receipt preflight is invalid")
     if (
@@ -698,6 +1141,7 @@ def _read_legacy_rebaseline_receipt() -> dict[str, object]:
                 "app_data_content_sha256",
                 "catalog_sha256",
                 "expected_catalog_sha256",
+                "role_security_sha256",
             )
         )
         or preflight["app_data_rows"] <= 0
@@ -705,6 +1149,9 @@ def _read_legacy_rebaseline_receipt() -> dict[str, object]:
         or preflight["catalog_lines"] <= 0
         or preflight["database_oid"] <= 0
         or preflight["expected_catalog_lines"] != preflight["catalog_lines"]
+        or preflight["catalog_lines"] != _LEGACY_REBASELINE_CATALOG_LINES
+        or preflight["catalog_sha256"] != expected_catalog_sha256
+        or preflight["expected_catalog_sha256"] != expected_catalog_sha256
         or preflight["expected_catalog_sha256"] != preflight["catalog_sha256"]
         or not 1 <= preflight["server_port"] <= 65535
         or preflight["server_version_num"] // 10000 != 16
@@ -715,6 +1162,15 @@ def _read_legacy_rebaseline_receipt() -> dict[str, object]:
         ipaddress.ip_address(preflight["server_addr"])
     except (TypeError, ValueError) as exc:
         raise RuntimeError("0101 legacy rebaseline receipt preflight endpoint is invalid") from exc
+    if target_profile == _LEGACY_REBASELINE_TARGET_PROFILE:
+        identity = "|".join(
+            str(preflight[field])
+            for field in ("database_name", "system_identifier", "server_addr", "server_port")
+        )
+        if hashlib.sha256(identity.encode("utf-8")).hexdigest() != _N150_TARGET_IDENTITY_SHA256:
+            raise RuntimeError("0101 legacy rebaseline receipt target identity is invalid")
+        if preflight["database_name"] != "pinvi" or preflight["server_port"] != 12800:
+            raise RuntimeError("0101 legacy rebaseline receipt target endpoint is invalid")
     return receipt
 
 
@@ -741,10 +1197,19 @@ def _legacy_rebaseline_app_tables(bind: sa.Connection) -> tuple[str, ...]:
 def _lock_legacy_rebaseline_app_tables(bind: sa.Connection, tables: tuple[str, ...]) -> None:
     """Freeze the receipt-bound app rows before calculating their rebaseline digest."""
 
-    for table_name in tables:
-        bind.execute(
-            sa.text(f"LOCK TABLE app.{_quote_identifier(table_name)} IN SHARE ROW EXCLUSIVE MODE")
-        )
+    bind.execute(sa.text("SET LOCAL lock_timeout = '5s'"))
+    try:
+        for table_name in tables:
+            bind.execute(
+                sa.text(
+                    f"LOCK TABLE app.{_quote_identifier(table_name)} IN SHARE ROW EXCLUSIVE MODE"
+                )
+            )
+    except sa.exc.DBAPIError as exc:
+        raise RuntimeError(
+            "0101 legacy rebaseline could not acquire app table DML fence within 5s"
+        ) from exc
+    bind.execute(sa.text("SET LOCAL lock_timeout = 0"))
 
 
 def _assert_legacy_rebaseline_ddl_quiescence(bind: sa.Connection) -> None:
@@ -757,7 +1222,7 @@ def _assert_legacy_rebaseline_ddl_quiescence(bind: sa.Connection) -> None:
 
 
 def _acquire_legacy_rebaseline_database_connection_fence(bind: sa.Connection) -> None:
-    """새 backend를 막고 기존 DDL 가능 client를 종료한 뒤 quiescence를 증명한다."""
+    """새 backend를 막고 기존 DDL 가능 client가 있으면 fail-close한다."""
 
     bind.execute(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL))
     try:
@@ -767,6 +1232,7 @@ def _acquire_legacy_rebaseline_database_connection_fence(bind: sa.Connection) ->
                 "0101 legacy rebaseline requires superuser connection fence authority"
             )
         bind.execute(sa.text("LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE"))
+        bind.execute(sa.text(_LEGACY_REBASELINE_ROLE_SECURITY_FENCE_SQL))
     except sa.exc.DBAPIError as exc:
         # pg_database AccessShare lock을 잡은 기존 backend는 DDL-capable PID 열거 전에
         # 이 fence를 막을 수 있다. 이 경우 transaction 전체를 fail-close하여 무기한
@@ -775,21 +1241,53 @@ def _acquire_legacy_rebaseline_database_connection_fence(bind: sa.Connection) ->
             "0101 legacy rebaseline could not acquire database connection fence within 5s"
         ) from exc
     bind.execute(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_RESET_SQL))
-    for _ in range(20):
-        bind.execute(sa.text("SELECT pg_stat_clear_snapshot()"))
-        pids = tuple(
-            int(pid)
-            for pid in bind.execute(
-                sa.text(_LEGACY_REBASELINE_DDL_CAPABLE_SESSION_IDS_SQL)
-            ).scalars()
+    bind.execute(sa.text("SELECT pg_stat_clear_snapshot()"))
+    pids = tuple(
+        int(pid)
+        for pid in bind.execute(sa.text(_LEGACY_REBASELINE_DDL_CAPABLE_SESSION_IDS_SQL)).scalars()
+    )
+    if pids:
+        raise RuntimeError(
+            "0101 legacy rebaseline requires pre-existing DDL-capable sessions to be stopped"
         )
-        if not pids:
-            _assert_legacy_rebaseline_ddl_quiescence(bind)
-            return
-        for pid in pids:
-            bind.scalar(sa.text("SELECT pg_terminate_backend(:pid, 5000)"), {"pid": pid})
-        bind.execute(sa.text("SELECT pg_sleep(0.05)"))
-    raise RuntimeError("0101 legacy rebaseline could not prove app DDL quiescence")
+    _assert_legacy_rebaseline_ddl_quiescence(bind)
+
+
+def _acquire_fresh_0101_writer_fence(bind: sa.Connection) -> None:
+    """Serialize direct 0100→0101 runs before fresh DDL and backfill.
+
+    Managed non-superuser runs invoke a bootstrap-owned SECURITY DEFINER function
+    that holds the database and role-catalog admission locks for the migration
+    transaction. An unmanaged superuser may take the same locks directly; a
+    non-superuser without that capability is rejected before any DDL.
+    """
+
+    bind.execute(sa.text(_LEGACY_REBASELINE_SERIALIZATION_LOCK_SQL))
+    _normalize_legacy_rebaseline_fingerprint_session(bind)
+    bind.execute(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL))
+    has_security_definer_fence = bind.scalar(
+        sa.text(
+            "SELECT to_regprocedure(:fence_function) IS NOT NULL "
+            "AND has_function_privilege(current_user, :fence_function, 'EXECUTE')"
+        ),
+        {"fence_function": _FRESH_0101_DATABASE_FENCE_FUNCTION},
+    )
+    if has_security_definer_fence is True:
+        try:
+            bind.execute(sa.text(f"SELECT {_FRESH_0101_DATABASE_FENCE_FUNCTION}"))
+        except sa.exc.DBAPIError as exc:
+            raise RuntimeError(
+                "0101 fresh handoff could not acquire the database admission fence within 5s"
+            ) from exc
+    elif bind.scalar(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL)) is True:
+        _acquire_legacy_rebaseline_database_connection_fence(bind)
+    else:
+        raise RuntimeError("0101 fresh handoff requires the managed database admission fence")
+    bind.execute(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_RESET_SQL))
+    _assert_legacy_rebaseline_ddl_quiescence(bind)
+    tables = _legacy_rebaseline_app_tables(bind)
+    _lock_legacy_rebaseline_app_tables(bind, tables)
+    _assert_legacy_rebaseline_ddl_quiescence(bind)
 
 
 def _legacy_rebaseline_catalog_fingerprint(bind: sa.Connection) -> tuple[int, str]:
@@ -799,6 +1297,89 @@ def _legacy_rebaseline_catalog_fingerprint(bind: sa.Connection) -> tuple[int, st
     )
     payload = ("\n".join(rows) + "\n").encode("utf-8")
     return len(rows), hashlib.sha256(payload).hexdigest()
+
+
+def _assert_fresh_0100_marker(bind: sa.Connection) -> None:
+    """Require the durable origin row written by the fresh 0100 revision."""
+
+    marker = bind.scalar(sa.text("SELECT obj_description('app'::regnamespace, 'pg_namespace')"))
+    if marker != _FRESH_BASELINE_SCHEMA_COMMENT:
+        raise RuntimeError("0101 non-legacy handoff requires the canonical fresh 0100 marker")
+    version_rows = tuple(
+        str(version)
+        for version in bind.execute(
+            sa.text("SELECT version_num FROM app.alembic_version ORDER BY version_num")
+        ).scalars()
+    )
+    if version_rows != ("20260824_0100",):
+        raise RuntimeError("0101 non-legacy handoff requires exactly the 0100 version row")
+    bind.execute(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_SQL))
+    try:
+        bind.execute(
+            sa.text("LOCK TABLE pinvi_internal.baseline_origin IN SHARE ROW EXCLUSIVE MODE")
+        )
+        origin = bind.execute(
+            sa.text(
+                "SELECT origin.marker, origin.baseline_sha256, origin.database_oid::bigint, "
+                "origin.system_identifier, origin.catalog_lines, origin.catalog_sha256, "
+                "relation.relkind = 'r' AS table_is_regular, "
+                "relation.relpersistence = 'p' AS table_is_permanent, "
+                "relation.relowner = current_user::regrole AS table_owner_is_current, "
+                "namespace.nspowner = current_user::regrole AS schema_owner_is_current "
+                "FROM pinvi_internal.baseline_origin AS origin "
+                "JOIN pg_class AS relation ON relation.oid = 'pinvi_internal.baseline_origin'::regclass "
+                "JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace "
+                "FOR UPDATE OF origin"
+            )
+        ).all()
+    except sa.exc.DBAPIError as exc:
+        raise RuntimeError(
+            "0101 non-legacy handoff requires the durable fresh 0100 origin; could not lock it"
+        ) from exc
+    bind.execute(sa.text(_LEGACY_REBASELINE_DATABASE_FENCE_LOCK_TIMEOUT_RESET_SQL))
+    if len(origin) != 1:
+        raise RuntimeError("0101 non-legacy handoff requires the durable fresh 0100 origin")
+    row = origin[0]
+    expected_database_oid = bind.scalar(
+        sa.text(
+            "SELECT database_row.oid::bigint FROM pg_database AS database_row "
+            "WHERE database_row.datname = current_database()"
+        )
+    )
+    expected_system_identifier = bind.scalar(
+        sa.text("SELECT (pg_control_system()).system_identifier::text")
+    )
+    if row[:4] != (
+        _FRESH_BASELINE_SCHEMA_COMMENT,
+        _FRESH_BASELINE_SHA256,
+        expected_database_oid,
+        expected_system_identifier,
+    ) or row[6:] != (True, True, True, True):
+        raise RuntimeError("0101 non-legacy handoff requires the durable fresh 0100 origin")
+    catalog_lines, catalog_sha256 = _fresh_catalog_fingerprint(bind)
+    if (catalog_lines, catalog_sha256) != (row[4], row[5]):
+        raise RuntimeError(
+            "0101 non-legacy handoff requires the canonical fresh 0100 catalog fingerprint"
+        )
+
+
+def _assert_legacy_0100_marker(bind: sa.Connection) -> None:
+    """Require the durable marker written by the root-only 0061→0100 helper."""
+
+    marker = bind.scalar(sa.text("SELECT obj_description('app'::regnamespace, 'pg_namespace')"))
+    if marker != _LEGACY_REBASELINE_SCHEMA_COMMENT:
+        raise RuntimeError("0101 legacy rebaseline requires the canonical legacy 0100 marker")
+
+
+def _legacy_rebaseline_role_security_fingerprint(bind: sa.Connection) -> str:
+    rows = tuple(
+        str(line)
+        for line in bind.execute(
+            sa.text(_LEGACY_REBASELINE_ROLE_SECURITY_FINGERPRINT_SQL)
+        ).scalars()
+    )
+    payload = ("\n".join(rows) + "\n").encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _legacy_rebaseline_app_data_fingerprint(
@@ -849,6 +1430,7 @@ def _assert_legacy_rebaseline_fingerprint(
     tables = _legacy_rebaseline_app_tables(bind)
     _lock_legacy_rebaseline_app_tables(bind, tables)
     catalog_lines, catalog_sha256 = _legacy_rebaseline_catalog_fingerprint(bind)
+    role_security_sha256 = _legacy_rebaseline_role_security_fingerprint(bind)
     app_data_rows, app_data_table_lines, app_data_content_sha256 = (
         _legacy_rebaseline_app_data_fingerprint(bind, tables)
     )
@@ -858,6 +1440,7 @@ def _assert_legacy_rebaseline_fingerprint(
         "app_data_table_lines": app_data_table_lines,
         "catalog_lines": catalog_lines,
         "catalog_sha256": catalog_sha256,
+        "role_security_sha256": role_security_sha256,
     }
     expected = {field: preflight[field] for field in actual}
     if actual != expected:
@@ -872,6 +1455,9 @@ def _assert_legacy_rebaseline_handoff(bind: sa.Connection) -> None:
     if not _legacy_rebaseline_profile():
         return
     receipt = _read_legacy_rebaseline_receipt()
+    if receipt["target_profile"] != _legacy_rebaseline_target_profile():
+        raise RuntimeError("0101 legacy rebaseline receipt profile does not match configuration")
+    _assert_legacy_0100_marker(bind)
     preflight = receipt["preflight"]
     assert isinstance(preflight, dict)
     expected_identity = {
@@ -918,6 +1504,9 @@ def _assert_legacy_rebaseline_handoff(bind: sa.Connection) -> None:
     if identity != expected_identity:
         raise RuntimeError("0101 legacy rebaseline receipt does not match this database")
     _acquire_legacy_rebaseline_database_connection_fence(bind)
+    # Marker 검사는 identity/fence 이전에도 하되, fence를 잡은 뒤 다시 확인해
+    # schema comment 교체가 그 사이에 끼어드는 TOCTOU를 차단한다.
+    _assert_legacy_0100_marker(bind)
     _assert_legacy_rebaseline_fingerprint(bind, preflight)
     version_rows_payload = bind.scalar(
         sa.text(
@@ -938,7 +1527,7 @@ def _assert_legacy_rebaseline_handoff(bind: sa.Connection) -> None:
         raise RuntimeError("0101 legacy rebaseline requires the 0100 handoff row")
 
 
-def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
+def _activate_m05_migration_owner(bind: sa.Connection, *, activate: bool = True) -> str | None:
     """Switch only the M05 portion to its non-login receipt owner.
 
     The pre-existing app tables are still changed by their owner.  The root-only 0100
@@ -988,6 +1577,11 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
                 FROM pg_namespace namespace
                 WHERE namespace.nspname = 'app'
             ),
+            ops_schema AS (
+                SELECT namespace.oid, namespace.nspowner
+                FROM pg_namespace namespace
+                WHERE namespace.nspname = 'ops'
+            ),
             legacy_app_owner AS (
                 SELECT role_row.oid
                 FROM pg_roles role_row
@@ -1010,7 +1604,12 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
                 (SELECT count(*) FROM migration_role) = 1
                 AND (SELECT count(*) FROM migrator_role) = 1
                 AND (SELECT count(*) FROM app_owner) = 1
+                AND (SELECT count(*) FROM ops_schema) = 1
                 AND (SELECT count(*) FROM database_owner) = 1
+                AND (
+                    :legacy_rebaseline
+                    OR (SELECT oid FROM app_owner) <> (SELECT oid FROM database_owner)
+                )
                 AND (SELECT count(*) FROM session_role) = 1
                 AND (
                     NOT :legacy_rebaseline
@@ -1058,8 +1657,25 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
                 AND has_schema_privilege(
                     (SELECT oid FROM migration_role), 'x_extension', 'USAGE'
                 )
+                AND (SELECT nspowner FROM ops_schema) = (SELECT oid FROM migration_role)
+                AND has_schema_privilege(
+                    (SELECT oid FROM migration_role), 'ops', 'CREATE'
+                )
                 AND NOT has_schema_privilege(
                     (SELECT oid FROM migration_role), 'x_extension', 'CREATE'
+                )
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM pg_namespace app_namespace
+                    CROSS JOIN LATERAL aclexplode(
+                        COALESCE(
+                            app_namespace.nspacl,
+                            acldefault('n', app_namespace.nspowner)
+                        )
+                    ) AS app_acl
+                    WHERE app_namespace.nspname = 'app'
+                      AND app_acl.grantee IN ((SELECT oid FROM migration_role), 0)
+                      AND app_acl.privilege_type = 'CREATE'
                 )
                 AND has_function_privilege(
                     (SELECT oid FROM migration_role),
@@ -1248,6 +1864,18 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
     if role_contract_valid is not True:
         raise RuntimeError("0101 migration owner role contract is not satisfied")
 
+    app_owner = bind.scalar(
+        sa.text(
+            """
+            SELECT namespace.nspowner::regrole::text
+            FROM pg_namespace namespace
+            WHERE namespace.nspname = 'app'
+            """
+        )
+    )
+    if not activate:
+        return app_owner
+
     # The identifier has already been constrained to a portable PostgreSQL role name.
     op.execute(f'SET LOCAL ROLE "{migration_owner}"')
     if (
@@ -1257,15 +1885,7 @@ def _activate_m05_migration_owner(bind: sa.Connection) -> str | None:
         is not True
     ):
         raise RuntimeError("0101 could not activate the migration owner")
-    return bind.scalar(
-        sa.text(
-            """
-            SELECT namespace.nspowner::regrole::text
-            FROM pg_namespace namespace
-            WHERE namespace.nspname = 'app'
-            """
-        )
-    )
+    return app_owner
 
 
 def _restore_app_owner(app_owner: str | None) -> None:
@@ -1715,8 +2335,55 @@ def _grant_legacy_runtime_app_privileges(bind: sa.Connection, app_schema_owner: 
     _revoke_runtime_alembic_version_privileges(bind, app_role)
 
 
+def _grant_fresh_runtime_app_privileges(bind: sa.Connection, app_schema_owner: str | None) -> None:
+    """Grant runtime access only after the fresh 0100 proof and M05 DDL."""
+
+    app_role = _configured_app_runtime_role()
+    if app_role is None:
+        return
+    if app_schema_owner is None:
+        raise RuntimeError("0101 fresh runtime app schema owner is unavailable")
+    if _ROLE_IDENTIFIER.fullmatch(app_schema_owner) is None:
+        raise RuntimeError("0101 fresh runtime app schema owner is invalid")
+    if _ROLE_IDENTIFIER.fullmatch(app_role) is None:
+        raise RuntimeError("0101 fresh runtime app role is invalid")
+    if (
+        bind.scalar(
+            sa.text("SELECT current_user = :app_schema_owner"),
+            {"app_schema_owner": app_schema_owner},
+        )
+        is not True
+    ):
+        raise RuntimeError("0101 fresh runtime privileges require the app schema owner")
+
+    quoted_owner = _quote_identifier(app_schema_owner)
+    quoted_app_role = _quote_identifier(app_role)
+    bind.execute(sa.text("REVOKE ALL ON SCHEMA app FROM PUBLIC"))
+    bind.execute(sa.text(f"GRANT USAGE ON SCHEMA app TO {quoted_app_role}"))
+    bind.execute(
+        sa.text(
+            f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO {quoted_app_role}"
+        )
+    )
+    bind.execute(
+        sa.text(f"GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA app TO {quoted_app_role}")
+    )
+    bind.execute(
+        sa.text(
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {quoted_owner} IN SCHEMA app "
+            f"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {quoted_app_role}"
+        )
+    )
+    bind.execute(
+        sa.text(
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {quoted_owner} IN SCHEMA app "
+            f"GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {quoted_app_role}"
+        )
+    )
+
+
 def _revoke_runtime_alembic_version_privileges(bind: sa.Connection, app_role: str | None) -> None:
-    """application runtime이 migration provenance를 바꾸지 못하게 한다."""
+    """application runtime은 provenance를 읽되 migration provenance를 바꾸지 못하게 한다."""
 
     if app_role is None:
         return
@@ -1726,6 +2393,9 @@ def _revoke_runtime_alembic_version_privileges(bind: sa.Connection, app_role: st
         sa.text(
             f"REVOKE ALL PRIVILEGES ON TABLE app.alembic_version FROM {_quote_identifier(app_role)}"
         )
+    )
+    bind.execute(
+        sa.text(f"GRANT SELECT ON TABLE app.alembic_version TO {_quote_identifier(app_role)}")
     )
 
 
@@ -1796,10 +2466,11 @@ def _install_location_archive_append_only_contract() -> None:
     # 0101 재생 하네스는 archive table을 별도로 지우지 않으므로, trigger는 idempotent하게
     # 교체한다. guard 함수의 retention 예외는 원본 table명으로 한정돼 있어 archive에는
     # 적용되지 않는다.
-    op.execute(f"DROP TRIGGER IF EXISTS {_LOCATION_ARCHIVE_ROW_TRIGGER} ON {_LOCATION_ARCHIVE_TABLE}")
     op.execute(
-        f"DROP TRIGGER IF EXISTS {_LOCATION_ARCHIVE_TRUNCATE_TRIGGER} "
-        f"ON {_LOCATION_ARCHIVE_TABLE}"
+        f"DROP TRIGGER IF EXISTS {_LOCATION_ARCHIVE_ROW_TRIGGER} ON {_LOCATION_ARCHIVE_TABLE}"
+    )
+    op.execute(
+        f"DROP TRIGGER IF EXISTS {_LOCATION_ARCHIVE_TRUNCATE_TRIGGER} ON {_LOCATION_ARCHIVE_TABLE}"
     )
     op.execute(
         f"CREATE TRIGGER {_LOCATION_ARCHIVE_ROW_TRIGGER} "
@@ -2223,6 +2894,10 @@ def _assert_m05_acl(bind: sa.Connection) -> None:
 def upgrade() -> None:
     bind = op.get_bind()
     _assert_legacy_rebaseline_handoff(bind)
+    if not _legacy_rebaseline_profile():
+        _acquire_fresh_0101_writer_fence(bind)
+        _activate_m05_migration_owner(bind, activate=False)
+        _assert_fresh_0100_marker(bind)
     _install_location_audit_purpose_contract()
     _install_location_audit_coord_source_contract()
     _install_location_archive_append_only_contract()
@@ -2232,11 +2907,17 @@ def upgrade() -> None:
     app_owner = _activate_m05_migration_owner(bind)
     # named ops default ACL까지 검사하려면 schema를 먼저 확보해야 한다. 이 revision은
     # partial legacy M05 object를 덮어쓰지 않고 transaction 전체를 fail-close한다.
-    op.execute("CREATE SCHEMA IF NOT EXISTS ops")
+    if bind.scalar(sa.text("SELECT to_regnamespace('ops') IS NULL")) is True:
+        op.execute("CREATE SCHEMA ops")
     _reject_unsafe_m05_default_privileges(bind)
     _reject_existing_m05_objects(bind)
     op.execute("SET LOCAL check_function_bodies = false")
     for statement in _m05_schema_statements():
+        if statement.strip() == 'CREATE SCHEMA IF NOT EXISTS "ops"':
+            # Managed topology pre-creates ops under the migration owner. The artifact's
+            # idempotent schema statement would still require database CREATE even when
+            # the schema already exists, so the guarded preflight above owns this step.
+            continue
         op.execute(sa.text(statement))
     _harden_m05_acl(bind)
     _assert_m05_acl(bind)
@@ -2247,7 +2928,10 @@ def upgrade() -> None:
     if _legacy_rebaseline_profile():
         _grant_legacy_runtime_app_privileges(bind, canonical_app_owner)
     else:
+        _grant_fresh_runtime_app_privileges(bind, canonical_app_owner)
         _revoke_runtime_alembic_version_privileges(bind, _configured_app_runtime_role())
+    if not _legacy_rebaseline_profile():
+        _assert_legacy_rebaseline_ddl_quiescence(bind)
 
 
 def downgrade() -> None:

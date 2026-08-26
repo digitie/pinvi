@@ -56,9 +56,14 @@ export default function ConsentsSettingsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    void reload().finally(() => {
-      if (!cancelled) setLoading(false);
-    });
+    const run = async () => {
+      try {
+        await reload();
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void run();
     return () => {
       cancelled = true;
     };

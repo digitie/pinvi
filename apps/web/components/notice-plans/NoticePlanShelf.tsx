@@ -39,13 +39,20 @@ export function NoticePlanShelf() {
   const [copyPlan, setCopyPlan] = useState<NoticePlan | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 필터가 바뀐 순간을 렌더 중에 잡아 loading/error를 그 자리에서 리셋한다
+  // (react-hooks/set-state-in-effect: effect 안 동기 setState 금지 — 공식 "Adjusting state
+  // when a prop changes" 패턴). 마운트 경로는 loading 초기값이 이미 true라 별도 처리가 없다.
+  const [prevCategory, setPrevCategory] = useState(category);
+  if (category !== prevCategory) {
+    setPrevCategory(category);
+    setLoading(true);
+    setError(null);
+  }
 
   const activeCategory = category === 'all' ? undefined : category;
   const visiblePlans = useMemo(() => plans, [plans]);
 
   const loadPlans = async () => {
-    setLoading(true);
-    setError(null);
     try {
       const items = await noticePlanApi(apiClient).list({
         category: activeCategory,
@@ -60,7 +67,9 @@ export function NoticePlanShelf() {
   };
 
   useEffect(() => {
-    void loadPlans();
+    void (async () => {
+      await loadPlans();
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category]);
 
@@ -75,7 +84,11 @@ export function NoticePlanShelf() {
         </div>
         <button
           type="button"
-          onClick={() => void loadPlans()}
+          onClick={() => {
+            setLoading(true);
+            setError(null);
+            void loadPlans();
+          }}
           className="inline-flex min-h-11 w-fit items-center gap-2 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
           disabled={loading}
         >

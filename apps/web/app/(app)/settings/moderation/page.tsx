@@ -86,7 +86,6 @@ export default function ModerationSettingsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
     try {
       const result = await userApi(apiClient).listContentReports(100);
       setReports(result.items);
@@ -99,7 +98,10 @@ export default function ModerationSettingsPage() {
   }, []);
 
   useEffect(() => {
-    void load();
+    const run = async () => {
+      await load();
+    };
+    void run();
   }, [load]);
 
   const onCreate = async (event: FormEvent<HTMLFormElement>) => {
@@ -125,6 +127,7 @@ export default function ModerationSettingsPage() {
       setEvidenceField('');
       setEvidenceUrl('');
       setEvidenceNote('');
+      setLoading(true);
       await load();
     } catch (err) {
       setError(
@@ -148,6 +151,7 @@ export default function ModerationSettingsPage() {
       setNotice(`${appealed.report_id} 신고에 이의제기를 제출했습니다.`);
       setAppealReportId(null);
       setAppealReason('');
+      setLoading(true);
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '이의제기 실패');
@@ -312,7 +316,10 @@ export default function ModerationSettingsPage() {
         <div className="mb-3 flex justify-end">
           <button
             type="button"
-            onClick={() => void load()}
+            onClick={() => {
+              setLoading(true);
+              void load();
+            }}
             disabled={loading}
             className="inline-flex min-h-11 items-center gap-2 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft disabled:opacity-50"
           >

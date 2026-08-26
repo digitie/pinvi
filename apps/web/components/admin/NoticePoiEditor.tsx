@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
 import type { NoticePlan, NoticePoi, NoticePoiCreate, NoticePoiUpdate } from '@pinvi/schemas';
@@ -112,9 +112,13 @@ export function NoticePoiEditor({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  // plan이 바뀌면(reload 등) 새 POI 초안의 sort_order를 다시 계산한다 — effect 대신
+  // 렌더 중 조정(react-hooks/set-state-in-effect가 막는 effect 내부 동기 setState를 피한다).
+  const [prevPlan, setPrevPlan] = useState(plan);
+  if (plan !== prevPlan) {
+    setPrevPlan(plan);
     setNewPoi(newDraft(nextSortOrder(plan)));
-  }, [plan]);
+  }
 
   const createMutation = useMutation({
     mutationFn: () => adminApi(apiClient).createNoticePoi(plan.notice_plan_id, createBody(newPoi)),

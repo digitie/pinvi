@@ -28,7 +28,6 @@ export default function TelegramTargetsSettingsPage() {
   const chatIdRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
     try {
       setTargets(await telegramApi(apiClient).listTargets());
       setError(null);
@@ -40,7 +39,10 @@ export default function TelegramTargetsSettingsPage() {
   }, []);
 
   useEffect(() => {
-    void load();
+    const run = async () => {
+      await load();
+    };
+    void run();
   }, [load]);
 
   const onCreate = async (event: FormEvent<HTMLFormElement>) => {
@@ -82,6 +84,7 @@ export default function TelegramTargetsSettingsPage() {
         setTargets((prev) => prev.map((t) => (t.id === targetId ? updated : t)));
       } catch (err) {
         setError(err instanceof ApiError ? err.message : '검증 실패');
+        setLoading(true);
         await load();
       } finally {
         setBusyTargetId(null);

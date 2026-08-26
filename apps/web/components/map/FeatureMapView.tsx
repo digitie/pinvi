@@ -234,7 +234,6 @@ export function FeatureMapView({
   const [weather, setWeather] = useState<FeatureWeatherCard | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [locationConsent, setLocationConsent] = useState<boolean | null>(null);
   const [consentOpen, setConsentOpen] = useState(false);
   const [consentSaving, setConsentSaving] = useState(false);
   const [consentError, setConsentError] = useState<string | null>(null);
@@ -380,22 +379,26 @@ export function FeatureMapView({
     });
   }, []);
 
-  // 선택된 feature 의 상세 + 날씨 로드.
-  useEffect(() => {
-    if (!selected?.featureId) {
-      setDetail(null);
-      setWeather(null);
-      return;
-    }
-    const featureId = selected.featureId;
-    let active = true;
+  // 선택된 feature가 바뀐 순간을 렌더 중에 잡아 detail/weather를 그 자리에서 리셋한다
+  // (react-hooks/set-state-in-effect: effect 안 동기 setState 금지 — 공식 "Adjusting state
+  // when a prop changes" 패턴). 실제 fetch는 아래 effect에서 비동기로만 수행한다.
+  const selectedFeatureId = selected?.featureId ?? null;
+  const [prevSelectedFeatureId, setPrevSelectedFeatureId] = useState(selectedFeatureId);
+  if (selectedFeatureId !== prevSelectedFeatureId) {
+    setPrevSelectedFeatureId(selectedFeatureId);
     setDetail(null);
     setWeather(null);
+  }
+
+  // 선택된 feature 의 상세 + 날씨 로드.
+  useEffect(() => {
+    if (!selectedFeatureId) return;
+    let active = true;
     void (async () => {
       try {
         const [d, w] = await Promise.allSettled([
-          featureApi(apiClient).get(featureId),
-          featureApi(apiClient).weather(featureId),
+          featureApi(apiClient).get(selectedFeatureId),
+          featureApi(apiClient).weather(selectedFeatureId),
         ]);
         if (!active) return;
         if (d.status === 'fulfilled') setDetail(d.value);
@@ -407,7 +410,7 @@ export function FeatureMapView({
     return () => {
       active = false;
     };
-  }, [selected?.featureId]);
+  }, [selectedFeatureId]);
 
   const flyTo = useCallback((lon: number, lat: number, zoom?: number) => {
     mapRef.current?.flyTo(zoom != null ? { center: [lon, lat], zoom } : { center: [lon, lat] });
@@ -485,17 +488,15 @@ export function FeatureMapView({
 
   // 위치 기능은 LBS 동의(lbs_tos + location_collection) 확인 후에만(위치정보법 제15·16조).
   const handleMyLocation = useCallback(async () => {
-    // 로컬 boolean으로 단축하지 않는다. `locationConsent`는 `true`로만 바뀌는 단방향 래치라,
-    // 한 번 동의한 세션은 사용자가 설정에서 철회해도 계속 위치를 잡았다 — 위치정보법 제16조
-    // "철회 즉시 위치 기능 비활성"과 어긋난다. 버튼은 사용자의 명시 액션이므로 매번 서버에
-    // 확인하는 비용(요청 1회)이 정당하고, 그래야 다른 탭에서의 철회도 즉시 반영된다.
+    // 로컬 boolean으로 단축하지 않는다. 세션에 굳힌 동의 플래그는 `true`로만 바뀌는 단방향
+    // 래치라, 한 번 동의한 세션은 사용자가 설정에서 철회해도 계속 위치를 잡았다 — 위치정보법
+    // 제16조 "철회 즉시 위치 기능 비활성"과 어긋난다. 버튼은 사용자의 명시 액션이므로 매번
+    // 서버에 확인하는 비용(요청 1회)이 정당하고, 그래야 다른 탭에서의 철회도 즉시 반영된다.
     const state = await getLocationConsentState({ force: true });
     if (state === 'granted') {
-      setLocationConsent(true);
       void locateNow();
       return;
     }
-    setLocationConsent(false);
     // 버튼은 사용자의 명시 액션이므로 여기서는 동의 다이얼로그를 띄운다(자동 경로와 다른 점).
     setConsentError(null);
     setConsentOpen(true);
@@ -506,7 +507,6 @@ export function FeatureMapView({
     setConsentError(null);
     try {
       await userApi(apiClient).putConsents(locationConsentItems());
-      setLocationConsent(true);
       // 방금 기록한 동의를 공유 캐시에도 반영해 다른 표면이 서버를 다시 묻지 않게 한다.
       setLocationConsentGranted();
       setConsentOpen(false);

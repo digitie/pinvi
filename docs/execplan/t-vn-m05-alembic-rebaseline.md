@@ -28,7 +28,8 @@ active graph·rebaseline proof·M05 owner 전환과 단일 N150 target lease의 
 3. `0101`이 N150 `0061` 뒤 current main에 합류한 location-audit·동의 이력·좌표 출처 변경과
    M05의 옛 `0062`~`0065` 계약을 하나로 적용하게 한다.
 4. root-only rebaseline helper가 `0061` catalog fingerprint와 fresh backup proof를 확인한 뒤
-   version row만 `0100`으로 바꾸게 한다.
+   legacy provenance comment와 version row를 하나의 transaction에서 `0100` handoff로 기록하게 한다.
+   사용자 데이터와 `app` 객체 DDL은 변경하지 않는다.
 5. 이전 기준선의 fresh bootstrap과 `0061 → 0100 → 0101` rehearsal, M05 recovery/preflight를
    통과했다. 최신 main 통합본으로 같은 검증을 다시 실행하고 N150 browser E2E와 최종 적대 리뷰를
    남긴다.
@@ -62,13 +63,23 @@ active graph·rebaseline proof·M05 owner 전환과 단일 N150 target lease의 
 1. root-only producer로 fresh app snapshot과 checksum을 만든다.
 2. N150에서 helper의 read-only preflight가 `0061`·fingerprint·M05 object absence·backup proof를
    모두 통과하는지 확인한다.
-3. 별도 운영 변경 승인 뒤 helper의 `--confirm`을 한 번 실행한다.
+   producer와 `0101` consumer가 `SET LOCAL search_path TO pg_catalog, app, public`을 적용한 뒤
+   산출한 canonical catalog fingerprint는 fresh `0100`과 보존한 N150 `0061` dump probe 모두
+   `1590 / 4f2d69decc34300c597320e8a0dc78d154bd2eb4b6dbc96f0b51ba5b05c75d94`이다. 두 profile은
+   catalog hash를 전역 allowlist로 공유하지 않고, `fresh-postgresql-16`은 fresh marker를,
+   `n150-production`은 `pinvi` DB와 N150 system identity/host/port digest를 추가로 요구한다.
+   profile 밖 catalog drift는 거부한다.
+3. 별도 운영 변경 승인 뒤, 같은 target 설정으로 PostgreSQL runtime role bootstrap을 먼저
+   완료하고 role·database ACL/membership가 안정된 시점에 helper의 `--confirm`을 한 번 실행한다.
+   receipt 생성 뒤 role bootstrap이나 ACL/membership를 다시 바꾸면 receipt를 폐기하고 preflight부터
+   재생성한다.
 4. fresh DB에서는 `app-migrator` one-shot으로 `0101`을 적용하고 role/receipt owner/`NOLOGIN`·`CONNECT`
    revoke·기존 migrator session 종료 seal,
    M05 ACL, API DB health를 확인한다. 현재 N150 `0061`은 이 단계 직전에만 root-only
-   `PINVI_M05_LEGACY_REBASELINE=1` + 별도 root URL profile과 root-owned `0600` applied rebaseline
-   receipt를 명시한다. `0101`이 receipt의 `0061` preflight DB identity와 현재 `0100` handoff row를
-   대조하고 data/catalog fingerprint와 writer lock을 다시 확인한 뒤, 기존 app DDL·M05 object 설치 후
+   `PINVI_M05_LEGACY_REBASELINE=1` + `PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE=n150-production`과
+   별도 root URL profile, root-owned `0600` applied rebaseline receipt를 명시한다. `0101`이 receipt의
+   target profile/host, `0061` preflight DB identity와 현재 `0100` handoff row를 대조하고
+   data/catalog 및 database ACL·role membership fingerprint와 writer lock을 다시 확인한 뒤, 기존 app DDL·M05 object 설치 후
    app schema 및 내부 object owner가 canonical non-login owner 하나로 수렴했는지 확인한다.
 5. 실패 시 새 history를 억지로 stamp하지 않고 snapshot 복구 후 fail-closed 원인을 해결한다.
 

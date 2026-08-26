@@ -65,17 +65,15 @@ export function TripAttachments({
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '첨부를 불러오지 못했습니다.');
+    } finally {
+      setLoading(false);
     }
   }, [dayIndex, poiId, tripId]);
 
   useEffect(() => {
-    let cancelled = false;
-    void reload().finally(() => {
-      if (!cancelled) setLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
+    void (async () => {
+      await reload();
+    })();
   }, [reload]);
 
   const onPick = async (file: File) => {

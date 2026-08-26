@@ -183,6 +183,20 @@ async def test_0101_installs_m05_final_contract_with_minimal_public_surface(
                     await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
                     == "20260824_0101"
                 )
+                assert (
+                    await connection.scalar(
+                        text("SELECT obj_description('app'::regnamespace, 'pg_namespace')")
+                    )
+                    == "pinvi-0100-fresh/v1"
+                )
+                assert (
+                    await connection.execute(
+                        text("SELECT marker, baseline_sha256 FROM pinvi_internal.baseline_origin")
+                    )
+                ).one() == (
+                    "pinvi-0100-fresh/v1",
+                    "cfb77c4402b49b4d03a15a1e2471cef13c6665b7b95efe4fedda6af7ae2b4b57",
+                )
                 boundary_definition = await connection.scalar(
                     text(
                         "SELECT pg_get_constraintdef(constraint_row.oid) "
@@ -450,12 +464,12 @@ async def test_0101_absorbs_current_main_post_0061_contracts_and_backfill(
 
 
 @pytest.mark.asyncio
-async def test_rebaseline_0061_to_0100_then_0101_preserves_data_and_runs_backfill(
+async def test_rebaseline_0061_to_0100_preserves_data_and_seals_legacy_handoff(
     _database_url: str,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """N150과 같은 0061 catalog는 version row만 전환한 뒤 current-main/M05 0101을 적용한다."""
+    """N150과 같은 0061 catalog는 data를 보존한 채 receipt-bound 0100으로 전환한다."""
 
     target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_rebaseline")
     user_id = uuid.uuid4()
@@ -517,25 +531,140 @@ async def test_rebaseline_0061_to_0100_then_0101_preserves_data_and_runs_backfil
         assert state == "applied"
         assert [payload["state"] for payload in receipt_payloads] == ["prepared", "applied"]
 
-        activation = _alembic(target_url, "upgrade", "20260824_0101")
-        assert activation.returncode == 0, activation.stderr
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as connection:
+                assert (
+                    await connection.scalar(
+                        text("SELECT obj_description('app'::regnamespace, 'pg_namespace')")
+                    )
+                    == "pinvi-0100-legacy/v1"
+                )
+        finally:
+            await engine.dispose()
+
         engine = create_async_engine(target_url, poolclass=NullPool)
         try:
             async with engine.connect() as connection:
                 assert (
                     await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
-                    == "20260824_0101"
+                    == "20260824_0100"
                 )
                 assert (
                     await connection.scalar(
-                        text(
-                            "SELECT count(*) FROM app.user_consent_events "
-                            "WHERE user_id = :user_id AND source = 'backfill'"
-                        ),
+                        text("SELECT count(*) FROM app.users WHERE user_id = :user_id"),
                         {"user_id": user_id},
                     )
                     == 1
                 )
+                assert (
+                    await connection.scalar(
+                        text("SELECT count(*) FROM app.user_consents WHERE user_id = :user_id"),
+                        {"user_id": user_id},
+                    )
+                    == 1
+                )
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
+async def test_0101_fresh_marker_rejects_populated_app_database(
+    _database_url: str,
+) -> None:
+    """legacy data가 fresh schema comment를 위조해도 origin row 없이는 우회하지 못한다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_fresh_marker")
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "INSERT INTO app.users (user_id, email, nickname) "
+                        "VALUES (:user_id, :email, 'forged-fresh')"
+                    ),
+                    {"user_id": uuid.uuid4(), "email": "forged-fresh@pinvi.test"},
+                )
+                await connection.execute(text("DROP SCHEMA pinvi_internal CASCADE"))
+                migration = _activation_migration_module()
+                with pytest.raises(RuntimeError, match="durable fresh 0100 origin"):
+                    await connection.run_sync(migration._assert_fresh_0100_marker)
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
+async def test_0101_fresh_marker_rejects_special_catalog_drift(
+    _database_url: str,
+) -> None:
+    """0100 뒤에 추가된 collation도 fresh catalog fingerprint에서 검출한다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_fresh_catalog")
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "CREATE COLLATION app.m05_fresh_catalog_drift "
+                        "(provider = libc, locale = 'C')"
+                    )
+                )
+                migration = _activation_migration_module()
+                with pytest.raises(RuntimeError, match="canonical fresh 0100 catalog fingerprint"):
+                    await connection.run_sync(migration._assert_fresh_0100_marker)
+        finally:
+            await engine.dispose()
+    finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
+async def test_0101_fresh_marker_rejects_function_and_operator_owner_drift(
+    _database_url: str,
+) -> None:
+    """함수 소유자와 app operator 변화도 fresh catalog fingerprint에서 검출한다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_catalog_owner")
+    role = f"m05_catalog_owner_{uuid.uuid4().hex[:12]}"
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        engine = create_async_engine(target_url, poolclass=NullPool)
+        try:
+            async with engine.connect() as connection:
+                for drift_sql in (
+                    (
+                        f'CREATE ROLE "{role}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE',
+                        f'ALTER FUNCTION app.audit_log_append_only() OWNER TO "{role}"',
+                    ),
+                    (
+                        f'CREATE ROLE "{role}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE',
+                        "CREATE OPERATOR app.#=# (LEFTARG = integer, RIGHTARG = integer, "
+                        "PROCEDURE = pg_catalog.int4eq)",
+                        f'ALTER OPERATOR app.#=# (integer, integer) OWNER TO "{role}"',
+                    ),
+                ):
+                    transaction = await connection.begin()
+                    try:
+                        for statement in drift_sql:
+                            await connection.execute(text(statement))
+                        migration = _activation_migration_module()
+                        with pytest.raises(
+                            RuntimeError, match="canonical fresh 0100 catalog fingerprint"
+                        ):
+                            await connection.run_sync(migration._assert_fresh_0100_marker)
+                    finally:
+                        await transaction.rollback()
         finally:
             await engine.dispose()
     finally:
@@ -595,6 +724,7 @@ async def test_0101_legacy_handoff_revalidates_receipt_data_before_ddl(
             receipt_path.chmod(0o600)
             migration = _activation_migration_module()
             monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE", "1")
+            monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE", "fresh-postgresql-16")
             monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH", str(receipt_path))
             monkeypatch.setattr(migration.os, "geteuid", lambda: 0)
             monkeypatch.setattr(migration.os, "fstat", _root_owned_fstat(migration))
@@ -631,6 +761,34 @@ def test_0101_legacy_catalog_serializer_matches_rebaseline_helper() -> None:
         migration._LEGACY_REBASELINE_CATALOG_FINGERPRINT_SQL.strip()
         == rebaseline._CATALOG_FINGERPRINT_SQL.strip()
     )
+    for fragment in (
+        "pg_sequence",
+        "pg_depend",
+        "c.relreplident",
+        "a.attacl",
+        "t.tgdeferrable",
+        "t.tgparentid",
+        "t.tgqual",
+    ):
+        assert fragment in rebaseline._CATALOG_FINGERPRINT_SQL
+    for fragment in (
+        "relation_acl",
+        "function_acl",
+        "type_acl",
+        "default_acl",
+    ):
+        assert fragment in rebaseline._ROLE_SECURITY_FINGERPRINT_SQL
+    assert "pg_catalog.pg_authid" in rebaseline._REBASELINE_ROLE_SECURITY_FENCE_SQL
+    assert "role_row.rolcreaterole" in rebaseline._REBASELINE_DDL_CAPABLE_SESSIONS_CTE
+    assert "'x_extension', 'CREATE'" in rebaseline._REBASELINE_DDL_CAPABLE_SESSIONS_CTE
+    assert (
+        migration._LEGACY_REBASELINE_FINGERPRINT_SESSION_STATEMENTS
+        == rebaseline._REBASELINE_FINGERPRINT_SESSION_STATEMENTS
+    )
+    assert (
+        migration._LEGACY_REBASELINE_ROLE_SECURITY_FINGERPRINT_SQL.strip()
+        == rebaseline._ROLE_SECURITY_FINGERPRINT_SQL.strip()
+    )
     assert (
         migration._LEGACY_REBASELINE_DDL_CAPABLE_SESSIONS_CTE.strip()
         == rebaseline._REBASELINE_DDL_CAPABLE_SESSIONS_CTE.strip()
@@ -638,6 +796,10 @@ def test_0101_legacy_catalog_serializer_matches_rebaseline_helper() -> None:
     assert (
         migration._LEGACY_REBASELINE_DATABASE_FENCE_AUTHORITY_SQL.strip()
         == rebaseline._REBASELINE_DATABASE_FENCE_AUTHORITY_SQL.strip()
+    )
+    assert (
+        migration._LEGACY_REBASELINE_APP_TABLES_SQL.strip()
+        == rebaseline._REBASELINE_APP_TABLES_SQL.strip()
     )
 
 
@@ -769,10 +931,10 @@ async def test_0101_legacy_receipt_rejects_parallel_ddl_capable_session(
 
 
 @pytest.mark.asyncio
-async def test_rebaseline_connection_fence_evicts_ddl_clients_and_restores_admission(
+async def test_rebaseline_connection_fence_rejects_ddl_clients_and_restores_admission(
     _database_url: str,
 ) -> None:
-    """0100 helper는 transaction 동안 새 접속과 기존 DDL 가능 client를 함께 막는다."""
+    """0100 helper는 세션을 강제 종료하지 않고 기존 DDL client가 있으면 fail-close한다."""
 
     target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_helper_fence")
     try:
@@ -780,35 +942,28 @@ async def test_rebaseline_connection_fence_evicts_ddl_clients_and_restores_admis
         assert baseline.returncode == 0, baseline.stderr
         rebaseline = _rebaseline_module()
         engine = create_async_engine(target_url, poolclass=NullPool)
-        rejected_engine = create_async_engine(target_url, poolclass=NullPool)
         try:
             blocker = await engine.connect()
             try:
                 blocker_pid = await blocker.scalar(text("SELECT pg_backend_pid()"))
                 assert isinstance(blocker_pid, int)
                 await blocker.rollback()
-                async with engine.begin() as fence:
-                    await rebaseline._acquire_rebaseline_database_connection_fence(fence)
-                    assert (
-                        await fence.scalar(
-                            text(
-                                "SELECT NOT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = :pid)"
-                            ),
-                            {"pid": blocker_pid},
-                        )
-                        is True
+                with pytest.raises(
+                    rebaseline.RebaselineError,
+                    match="pre-existing DDL-capable sessions",
+                ):
+                    async with engine.begin() as fence:
+                        await rebaseline._acquire_rebaseline_database_connection_fence(fence)
+                assert (
+                    await blocker.scalar(
+                        text("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = :pid)"),
+                        {"pid": blocker_pid},
                     )
-
-                    async def attempt_connection() -> None:
-                        async with rejected_engine.connect() as rejected:
-                            await rejected.execute(text("SELECT 1"))
-
-                    with pytest.raises((asyncio.TimeoutError, DBAPIError)):
-                        await asyncio.wait_for(attempt_connection(), timeout=0.5)
+                    is True
+                )
             finally:
                 await blocker.close()
         finally:
-            await rejected_engine.dispose()
             await engine.dispose()
 
         restored_engine = create_async_engine(target_url, poolclass=NullPool)
@@ -888,10 +1043,10 @@ async def test_rebaseline_connection_fence_rejects_nonsuperuser_database_owner(
 
 
 @pytest.mark.asyncio
-async def test_0101_connection_fence_evicts_ddl_clients_and_restores_admission(
+async def test_0101_connection_fence_rejects_ddl_clients_and_restores_admission(
     _database_url: str,
 ) -> None:
-    """0101 legacy handoff도 같은 transaction-scoped database fence를 사용한다."""
+    """0101 legacy handoff도 세션을 강제 종료하지 않고 fail-close한다."""
 
     target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_0101_fence")
     try:
@@ -899,37 +1054,30 @@ async def test_0101_connection_fence_evicts_ddl_clients_and_restores_admission(
         assert baseline.returncode == 0, baseline.stderr
         migration = _activation_migration_module()
         engine = create_async_engine(target_url, poolclass=NullPool)
-        rejected_engine = create_async_engine(target_url, poolclass=NullPool)
         try:
             blocker = await engine.connect()
             try:
                 blocker_pid = await blocker.scalar(text("SELECT pg_backend_pid()"))
                 assert isinstance(blocker_pid, int)
                 await blocker.rollback()
-                async with engine.begin() as fence:
-                    await fence.run_sync(
-                        migration._acquire_legacy_rebaseline_database_connection_fence
-                    )
-                    assert (
-                        await fence.scalar(
-                            text(
-                                "SELECT NOT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = :pid)"
-                            ),
-                            {"pid": blocker_pid},
+                with pytest.raises(
+                    RuntimeError,
+                    match="pre-existing DDL-capable sessions",
+                ):
+                    async with engine.begin() as fence:
+                        await fence.run_sync(
+                            migration._acquire_legacy_rebaseline_database_connection_fence
                         )
-                        is True
+                assert (
+                    await blocker.scalar(
+                        text("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = :pid)"),
+                        {"pid": blocker_pid},
                     )
-
-                    async def attempt_connection() -> None:
-                        async with rejected_engine.connect() as rejected:
-                            await rejected.execute(text("SELECT 1"))
-
-                    with pytest.raises((asyncio.TimeoutError, DBAPIError)):
-                        await asyncio.wait_for(attempt_connection(), timeout=0.5)
+                    is True
+                )
             finally:
                 await blocker.close()
         finally:
-            await rejected_engine.dispose()
             await engine.dispose()
 
         restored_engine = create_async_engine(target_url, poolclass=NullPool)
@@ -939,6 +1087,57 @@ async def test_0101_connection_fence_evicts_ddl_clients_and_restores_admission(
         finally:
             await restored_engine.dispose()
     finally:
+        await _drop_database(maintenance_url, target_url)
+
+
+@pytest.mark.asyncio
+async def test_rebaseline_app_table_fence_rejects_open_runtime_writer(
+    _database_url: str,
+) -> None:
+    """0100/0101 app table fence는 진행 중인 runtime DML과 함께 진행하지 않는다."""
+
+    target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_app_fence")
+    writer_engine = create_async_engine(target_url, poolclass=NullPool)
+    fence_engine = create_async_engine(target_url, poolclass=NullPool)
+    try:
+        baseline = _alembic(target_url, "upgrade", "20260824_0100")
+        assert baseline.returncode == 0, baseline.stderr
+        rebaseline = _rebaseline_module()
+        migration = _activation_migration_module()
+        writer = await writer_engine.connect()
+        writer_transaction = await writer.begin()
+        try:
+            user_id = uuid.uuid4()
+            await writer.execute(
+                text(
+                    "INSERT INTO app.users (user_id, email, nickname) "
+                    "VALUES (:user_id, :email, 'open-writer')"
+                ),
+                {"user_id": user_id, "email": f"{user_id.hex}@pinvi.test"},
+            )
+
+            with pytest.raises(
+                rebaseline.RebaselineError,
+                match="app table DML fence within 5s",
+            ):
+                async with fence_engine.begin() as fence:
+                    await rebaseline._lock_rebaseline_app_tables(fence)
+
+            def lock_migration_tables(bind) -> None:  # type: ignore[no-untyped-def]
+                migration._lock_legacy_rebaseline_app_tables(bind, ("users",))
+
+            with pytest.raises(
+                RuntimeError,
+                match="app table DML fence within 5s",
+            ):
+                async with fence_engine.begin() as fence:
+                    await fence.run_sync(lock_migration_tables)
+        finally:
+            await writer_transaction.rollback()
+            await writer.close()
+    finally:
+        await fence_engine.dispose()
+        await writer_engine.dispose()
         await _drop_database(maintenance_url, target_url)
 
 
@@ -1319,6 +1518,7 @@ def test_rebaseline_target_manifest_requires_exact_legacy_preflight_shape(
         app_data_rows=1,
         app_data_table_lines=1,
         app_data_content_sha256="4" * 64,
+        role_security_sha256="5" * 64,
     )
     target_path = tmp_path / "target.json"
     payload = module._target_manifest_payload(preflight, "3" * 64)
@@ -1438,8 +1638,9 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
             f'SET ROLE TO "{app_owner}";',
             f'REVOKE CONNECT ON DATABASE "{database_name}" FROM PUBLIC;',
             f'GRANT CONNECT ON DATABASE "{database_name}" TO "{runtime_role}", "{migrator_login}";',
-            f'GRANT CREATE ON DATABASE "{database_name}" TO "{app_owner}", "{migration_owner}";',
+            f'GRANT CREATE ON DATABASE "{database_name}" TO "{app_owner}";',
             f'CREATE SCHEMA app AUTHORIZATION "{app_owner}";',
+            f'CREATE SCHEMA ops AUTHORIZATION "{migration_owner}";',
             "CREATE SCHEMA x_extension;",
             "CREATE EXTENSION pgcrypto SCHEMA x_extension;",
             "CREATE EXTENSION pg_trgm SCHEMA x_extension;",
@@ -1467,16 +1668,47 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
         )
         assert baseline.returncode == 0, baseline.stderr
         for statement in (
-            f'GRANT USAGE ON SCHEMA app TO "{runtime_role}";',
-            f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app "
-            f'TO "{runtime_role}";',
-            f'ALTER DEFAULT PRIVILEGES FOR ROLE "{app_owner}" IN SCHEMA app '
-            f'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{runtime_role}";',
+            """
+            CREATE OR REPLACE FUNCTION pinvi_internal.acquire_fresh_0101_database_fence()
+            RETURNS void
+            LANGUAGE plpgsql
+            SECURITY DEFINER
+            SET search_path = pg_catalog
+            AS $pinvi_fresh_0101_fence$
+            BEGIN
+                LOCK TABLE pg_catalog.pg_database IN ACCESS EXCLUSIVE MODE;
+                LOCK TABLE pg_catalog.pg_authid, pg_catalog.pg_auth_members,
+                          pg_catalog.pg_db_role_setting IN ACCESS EXCLUSIVE MODE;
+            END
+            $pinvi_fresh_0101_fence$;
+            """,
+            "ALTER FUNCTION pinvi_internal.acquire_fresh_0101_database_fence() OWNER TO pinvi;",
+            "REVOKE ALL ON FUNCTION pinvi_internal.acquire_fresh_0101_database_fence() FROM PUBLIC;",
+            f'GRANT EXECUTE ON FUNCTION pinvi_internal.acquire_fresh_0101_database_fence() TO "{app_owner}";',
         ):
             await _execute_autocommit(target_url, statement)
         await _execute_autocommit(
             maintenance_url,
             f"CREATE ROLE \"{stale_role}\" LOGIN NOINHERIT PASSWORD '{_ROLE_PASSWORD}';",
+        )
+        await _execute_autocommit(
+            target_url,
+            f'GRANT CREATE ON SCHEMA app TO "{migration_owner}";',
+        )
+        direct_schema_create = _alembic(
+            migrator_url,
+            "upgrade",
+            "20260824_0101",
+            check=False,
+            environment=role_environment,
+        )
+        assert direct_schema_create.returncode != 0
+        assert "0101 migration owner role contract is not satisfied" in (
+            direct_schema_create.stdout + direct_schema_create.stderr
+        )
+        await _execute_autocommit(
+            target_url,
+            f'REVOKE CREATE ON SCHEMA app FROM "{migration_owner}";',
         )
         await _execute_autocommit(
             target_url,
@@ -1559,6 +1791,9 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
                                   AND NOT role_row.rolbypassrls
                                   AND NOT role_row.rolinherit
                                   AND NOT has_database_privilege(
+                                      role_row.oid, current_database(), 'CREATE'
+                                  )
+                                  AND NOT has_database_privilege(
                                       role_row.oid, current_database(), 'CONNECT'
                                   )
                                   AND has_schema_privilege(
@@ -1566,6 +1801,9 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
                                   )
                                   AND NOT has_schema_privilege(
                                       role_row.oid, 'x_extension', 'CREATE'
+                                  )
+                                  AND has_schema_privilege(
+                                      role_row.oid, 'ops', 'CREATE'
                                   )
                                   AND has_function_privilege(
                                       role_row.oid,
@@ -1664,9 +1902,14 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
                 assert (
                     await connection.scalar(
                         text(
-                            "SELECT NOT has_table_privilege("
-                            ":runtime_role, 'app.alembic_version', "
-                            "'SELECT, INSERT, UPDATE, DELETE')"
+                            "SELECT has_table_privilege("
+                            ":runtime_role, 'app.alembic_version', 'SELECT') "
+                            "AND NOT has_table_privilege("
+                            ":runtime_role, 'app.alembic_version', 'INSERT') "
+                            "AND NOT has_table_privilege("
+                            ":runtime_role, 'app.alembic_version', 'UPDATE') "
+                            "AND NOT has_table_privilege("
+                            ":runtime_role, 'app.alembic_version', 'DELETE')"
                         ),
                         {"runtime_role": runtime_role},
                     )
@@ -1678,6 +1921,10 @@ async def test_0101_can_use_a_separate_nonruntime_migration_owner(
         runtime_engine = create_async_engine(runtime_url, poolclass=NullPool)
         try:
             async with runtime_engine.connect() as connection:
+                assert (
+                    await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
+                    == "20260824_0101"
+                )
                 with pytest.raises(DBAPIError) as exc_info:
                     await connection.execute(
                         text("UPDATE app.alembic_version SET version_num = 'forged'")
@@ -1786,6 +2033,9 @@ async def test_0101_legacy_converges_all_app_catalog_owners(
                 assert isinstance(legacy_owner, str)
                 migration = _activation_migration_module()
                 monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE", "1")
+                monkeypatch.setenv(
+                    "PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE", "fresh-postgresql-16"
+                )
                 monkeypatch.setenv("PINVI_APP_DB_USER", runtime_role)
                 monkeypatch.setenv("PINVI_APP_SCHEMA_OWNER", app_owner)
                 monkeypatch.setenv("PINVI_MIGRATION_OWNER", migration_owner)
@@ -1840,8 +2090,10 @@ async def test_0101_legacy_converges_all_app_catalog_owners(
                         "has_sequence_privilege(:runtime_role, "
                         "'app.legacy_runtime_default_acl_probe_record_id_seq', "
                         "'USAGE, SELECT, UPDATE'), "
-                        "NOT has_table_privilege(:runtime_role, 'app.alembic_version', "
-                        "'SELECT, INSERT, UPDATE, DELETE')"
+                        "has_table_privilege(:runtime_role, 'app.alembic_version', 'SELECT') "
+                        "AND NOT has_table_privilege(:runtime_role, 'app.alembic_version', 'INSERT') "
+                        "AND NOT has_table_privilege(:runtime_role, 'app.alembic_version', 'UPDATE') "
+                        "AND NOT has_table_privilege(:runtime_role, 'app.alembic_version', 'DELETE')"
                     ),
                     {"runtime_role": runtime_role},
                 )
@@ -1858,6 +2110,7 @@ async def test_0101_legacy_converges_all_app_catalog_owners(
         runtime_engine = create_async_engine(runtime_url, poolclass=NullPool)
         try:
             async with runtime_engine.connect() as connection:
+                await connection.execute(text("SELECT version_num FROM app.alembic_version"))
                 with pytest.raises(DBAPIError) as exc_info:
                     await connection.execute(
                         text("UPDATE app.alembic_version SET version_num = 'forged'")
@@ -1933,6 +2186,7 @@ async def test_0101_legacy_rebaseline_profile_requires_root_owned_handoff(
             environment={
                 "PINVI_ENVIRONMENT": "staging",
                 "PINVI_M05_LEGACY_REBASELINE": "1",
+                "PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE": "fresh-postgresql-16",
                 "PINVI_MIGRATION_OWNER": "pinvi_migration_owner",
                 "PINVI_MIGRATOR_DB_USER": "pinvi_migrator",
                 "PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH": None,

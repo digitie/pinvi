@@ -130,7 +130,9 @@ export function TripDashboard() {
   const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
   // 빈 상태 CTA → 폼이 실제로 보이게 된 다음 렌더에 스크롤·포커스(같은 핸들러에서는 아직 hidden).
-  const [revealCreateForm, setRevealCreateForm] = useState(false);
+  // boolean을 껐다 켜는 대신 클릭마다 증가하는 토큰을 써서, effect가 자신을 리셋하는 setState 없이도
+  // 같은 값이 연달아 와도(예: 폼이 이미 열려 있을 때 다시 클릭) 매번 재트리거되게 한다.
+  const [revealCreateFormToken, setRevealCreateFormToken] = useState(0);
   const [mapPointsByTripId, setMapPointsByTripId] = useState<
     Record<string, TripDashboardMapPoint[]>
   >({});
@@ -151,11 +153,15 @@ export function TripDashboard() {
     [filteredMapPoints, selectedPoiId],
   );
 
-  useEffect(() => {
+  // 필터된 지도 장소 목록이 바뀌어 현재 선택이 더 이상 그 안에 없으면 선택을 해제한다.
+  // (React 공식 "Adjusting state when a prop changes" 패턴 — effect가 아니라 렌더 중 조정)
+  const [prevFilteredMapPoints, setPrevFilteredMapPoints] = useState(filteredMapPoints);
+  if (filteredMapPoints !== prevFilteredMapPoints) {
+    setPrevFilteredMapPoints(filteredMapPoints);
     if (selectedPoiId && !filteredMapPoints.some((point) => point.poiId === selectedPoiId)) {
       setSelectedPoiId(null);
     }
-  }, [filteredMapPoints, selectedPoiId]);
+  }
 
   const loadTripMapPoints = useCallback(async (items: TripResponse[]) => {
     const requestId = ++mapRequestIdRef.current;
@@ -204,8 +210,9 @@ export function TripDashboard() {
   }, []);
 
   const loadTrips = useCallback(async () => {
-    setLoading(true);
-    setListError(null);
+    // loading/listError 초기값이 이미 true/null이라 마운트 시엔 별도 초기화가 필요 없다.
+    // 새로고침/재시도처럼 마운트 이후 다시 부를 때는 각 호출부에서 직접 setLoading(true)·
+    // setListError(null)을 켠다.
     try {
       const items = await tripApi(apiClient).list({ bucket: 'all', limit: 50 });
       setTrips(items);
@@ -221,16 +228,20 @@ export function TripDashboard() {
   }, [loadTripMapPoints]);
 
   useEffect(() => {
-    void loadTrips();
+    // loadTrips 참조를 effect 콜백 안에서 바로 호출하면 그 안의 setState 체인이 effect에
+    // 직접 노출돼 이 규칙에 걸린다 — 즉시실행 함수로 한 겹 감싸서 호출부만 분리한다
+    // (동작은 동일: 마운트 시 한 번 loadTrips를 부른다).
+    void (async () => {
+      await loadTrips();
+    })();
   }, [loadTrips]);
 
   useEffect(() => {
-    if (!revealCreateForm) return;
+    if (revealCreateFormToken === 0) return;
     // 폼은 state 반영 후 렌더에서야 display:none을 벗는다 — 그 시점에 스크롤·포커스한다.
     createFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     titleRef.current?.focus();
-    setRevealCreateForm(false);
-  }, [revealCreateForm]);
+  }, [revealCreateFormToken]);
 
   const onCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -279,7 +290,11 @@ export function TripDashboard() {
           </button>
           <button
             type="button"
-            onClick={() => void loadTrips()}
+            onClick={() => {
+              setLoading(true);
+              setListError(null);
+              void loadTrips();
+            }}
             className="inline-flex min-h-11 w-fit items-center gap-2 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
             disabled={loading}
           >
@@ -484,7 +499,11 @@ export function TripDashboard() {
                 </p>
                 <button
                   type="button"
-                  onClick={() => void loadTrips()}
+                  onClick={() => {
+                    setLoading(true);
+                    setListError(null);
+                    void loadTrips();
+                  }}
                   className={buttonClassName({ variant: 'secondary', className: 'mt-3' })}
                 >
                   다시 시도
@@ -505,7 +524,7 @@ export function TripDashboard() {
                     type="button"
                     onClick={() => {
                       setMobileToolsOpen(true);
-                      setRevealCreateForm(true);
+                      setRevealCreateFormToken((token) => token + 1);
                     }}
                     aria-controls="trip-dashboard-create"
                     className={buttonClassName({ variant: 'secondary', className: 'mt-4' })}

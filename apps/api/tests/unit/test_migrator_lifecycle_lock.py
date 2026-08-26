@@ -149,6 +149,9 @@ def test_writer_startup_stays_under_the_shared_lifecycle_lock_until_ready() -> N
     docker_app = (ROOT / "scripts" / "docker-app.sh").read_text(encoding="utf-8")
     docker_up = _function_body(docker_app, "up")
     assert docker_up.index("acquire_migrator_lifecycle_lock") < docker_up.index("up_deps")
+    assert docker_up.index("drain_runtime_writers") < docker_up.index("free_app_ports")
+    assert docker_up.index("acquire_migrator_lifecycle_lock") < docker_up.index("free_app_ports")
+    assert docker_up.index("free_app_ports") < docker_up.index("up_deps")
     assert docker_up.index("migrate_under_lifecycle_lock") < docker_up.index(
         "compose up -d app-api app-web"
     )
@@ -165,6 +168,23 @@ def test_writer_startup_stays_under_the_shared_lifecycle_lock_until_ready() -> N
         "up_under_lifecycle_lock"
     )
     assert deploy_up.index("up_under_lifecycle_lock") < deploy_up.index(
+        "release_migrator_lifecycle_lock"
+    )
+    deploy_command = _function_body(deploy, "deploy")
+    assert deploy_command.index("acquire_migrator_lifecycle_lock") < deploy_command.index(
+        "drain_runtime_writers"
+    )
+    assert deploy_command.index("drain_runtime_writers") < deploy_command.index(
+        "migrate_under_lifecycle_lock"
+    )
+    assert deploy_command.index("migrate_under_lifecycle_lock") < deploy_command.index(
+        "up_under_lifecycle_lock"
+    )
+    assert deploy_command.index("up_under_lifecycle_lock") < deploy_command.index("smoke")
+    assert deploy_command.index("smoke") < deploy_command.index(
+        "finalize_preserved_runtime_writers"
+    )
+    assert deploy_command.index("finalize_preserved_runtime_writers") < deploy_command.index(
         "release_migrator_lifecycle_lock"
     )
     deploy_dagster = _function_body(deploy, "dagster_up")

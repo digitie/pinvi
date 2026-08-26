@@ -62,6 +62,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
                 f"PINVI_MIGRATION_OWNER={migration_owner}",
                 f"PINVI_MIGRATOR_DB_USER={migrator_role}",
                 f"PINVI_MIGRATOR_DB_PASSWORD={password}",
+                f"PINVI_API_IMAGE=pinvi-m05-api-{suffix}:test",
                 "",
             )
         ),
@@ -133,14 +134,126 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
         assert len(state) == 5
         return state[0], state[1], state[2], state[3], state[4]
 
+    def managed_schema_state() -> tuple[str, str, str, str, str, str, str]:
+        query = (
+            "SELECT "  # noqa: S608 - role names use a fixed prefix plus UUID hex only
+            "(SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 'app'), "
+            "(SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 'ops'), "
+            "(SELECT pg_get_userbyid(nspowner) FROM pg_namespace "
+            "WHERE nspname = 'pinvi_internal'), "
+            f"has_database_privilege('{migration_owner}', current_database(), 'CREATE'), "
+            f"has_schema_privilege('{migration_owner}', 'ops', 'CREATE'), "
+            f"has_schema_privilege('{migration_owner}', 'pinvi_internal', 'USAGE'), "
+            "(SELECT version_num FROM app.alembic_version)"
+        )
+        result = compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            "--no-psqlrc",
+            "--tuples-only",
+            "--no-align",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            f"--command={query}",
+        )
+        state = result.stdout.strip().split("|")
+        assert len(state) == 7
+        return tuple(state)  # type: ignore[return-value]
+
+    def runtime_app_privilege_state() -> tuple[str, str, str, str, str]:
+        query = (
+            "SELECT "
+            f"has_schema_privilege('{runtime_role}', 'app', 'USAGE'), "
+            f"(has_table_privilege('{runtime_role}', 'app.users', 'SELECT') "
+            f"AND has_table_privilege('{runtime_role}', 'app.users', 'INSERT') "
+            f"AND has_table_privilege('{runtime_role}', 'app.users', 'UPDATE') "
+            f"AND has_table_privilege('{runtime_role}', 'app.users', 'DELETE')), "
+            f"(has_table_privilege('{runtime_role}', 'app.oauth_login_states', 'SELECT') "
+            f"AND has_table_privilege('{runtime_role}', 'app.oauth_login_states', 'INSERT') "
+            f"AND has_table_privilege('{runtime_role}', 'app.oauth_login_states', 'UPDATE') "
+            f"AND has_table_privilege('{runtime_role}', 'app.oauth_login_states', 'DELETE')), "
+            f"(has_table_privilege('{runtime_role}', 'app.oauth_mobile_exchanges', 'SELECT') "
+            f"AND has_table_privilege('{runtime_role}', 'app.oauth_mobile_exchanges', 'INSERT') "
+            f"AND has_table_privilege('{runtime_role}', 'app.oauth_mobile_exchanges', 'UPDATE') "
+            f"AND has_table_privilege('{runtime_role}', 'app.oauth_mobile_exchanges', 'DELETE')), "
+            f"(has_table_privilege('{runtime_role}', 'app.user_oauth_identities', 'SELECT') "
+            f"AND has_table_privilege('{runtime_role}', 'app.user_oauth_identities', 'INSERT') "
+            f"AND has_table_privilege('{runtime_role}', 'app.user_oauth_identities', 'UPDATE') "
+            f"AND has_table_privilege('{runtime_role}', 'app.user_oauth_identities', 'DELETE'))"
+        )
+        result = compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            "--no-psqlrc",
+            "--tuples-only",
+            "--no-align",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            f"--command={query}",
+        )
+        state = result.stdout.strip().split("|")
+        assert len(state) == 5
+        return tuple(state)  # type: ignore[return-value]
+
+    def runtime_version_privilege_state() -> str:
+        result = compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            "--no-psqlrc",
+            "--tuples-only",
+            "--no-align",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            f"SELECT (has_table_privilege('{runtime_role}', 'app.alembic_version', 'SELECT') "
+            f"AND NOT has_table_privilege('{runtime_role}', 'app.alembic_version', 'INSERT') "
+            f"AND NOT has_table_privilege('{runtime_role}', 'app.alembic_version', 'UPDATE') "
+            f"AND NOT has_table_privilege('{runtime_role}', 'app.alembic_version', 'DELETE'))::text;",
+        )
+        return result.stdout.strip()
+
     client_name = f"pinvi-m05-client-{suffix}"
     rotated_client_name = f"pinvi-m05-rotated-client-{suffix}"
     stale_role = f"m05_stale_{suffix}"
     try:
         compose("up", "--detach", "app-postgres")
+        compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "--env",
+            "PINVI_MIGRATOR_DISABLE_LOGIN=0",
+            "app-db-runtime-role",
+        )
+        compose("build", "app-api")
+        migration = compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "app-migrator",
+            "alembic",
+            "upgrade",
+            "head",
+        )
+        assert migration.returncode == 0, migration.stderr
         compose("run", "--rm", "--no-deps", "app-db-runtime-role")
         assert role_state() == ("false", "false", "0", "false", "true")
-
+        assert managed_schema_state() == (
+            schema_owner,
+            migration_owner,
+            schema_owner,
+            "f",
+            "t",
+            "t",
+            "20260824_0101",
+        )
+        assert runtime_app_privilege_state() == ("t", "t", "t", "t", "t")
         compose(
             "exec",
             "-T",
@@ -148,10 +261,27 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             "psql",
             f"--username={root_role}",
             "--dbname=pinvi",
-            "--command="
-            f'SET ROLE "{schema_owner}"; '
-            "CREATE TABLE app.alembic_version (version_num text NOT NULL); "
-            "RESET ROLE;",
+            f'--command=ALTER DATABASE "pinvi" OWNER TO "{schema_owner}";',
+        )
+        database_owner_collision = compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "app-db-runtime-role",
+            check=False,
+        )
+        assert database_owner_collision.returncode != 0
+        assert "role topology is not canonical" in (
+            database_owner_collision.stdout + database_owner_collision.stderr
+        )
+        compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            f'--command=ALTER DATABASE "pinvi" OWNER TO "{root_role}";',
         )
         compose("run", "--rm", "--no-deps", "app-db-runtime-role")
         runtime_version_update = compose(
@@ -172,6 +302,72 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
         assert "permission denied" in (
             runtime_version_update.stdout + runtime_version_update.stderr
         )
+
+        # 이미 0101인 DB는 Alembic upgrade가 no-op이므로, 과거 0101 variant가 남긴
+        # runtime/default ACL 누락을 app-db-runtime-role만으로 복구해야 한다.
+        compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            f'REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA app FROM "{runtime_role}"; '
+            f'REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA app FROM "{runtime_role}"; '
+            f'ALTER DEFAULT PRIVILEGES FOR ROLE "{schema_owner}" IN SCHEMA app '
+            f'REVOKE ALL ON TABLES FROM "{runtime_role}"; '
+            f'ALTER DEFAULT PRIVILEGES FOR ROLE "{schema_owner}" IN SCHEMA app '
+            f'REVOKE ALL ON SEQUENCES FROM "{runtime_role}";',
+        )
+        assert runtime_app_privilege_state() == ("t", "f", "f", "f", "f")
+        assert runtime_version_privilege_state() == "false"
+        compose("run", "--rm", "--no-deps", "app-db-runtime-role")
+        assert runtime_app_privilege_state() == ("t", "t", "t", "t", "t")
+        assert runtime_version_privilege_state() == "true"
+        runtime_version_select = compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "--entrypoint",
+            "/bin/sh",
+            "app-db-runtime-role",
+            "-ec",
+            'PGPASSWORD="$PINVI_APP_DB_PASSWORD" exec psql --no-psqlrc '
+            "--no-password --tuples-only --no-align --host=app-postgres "
+            '--username="$PINVI_APP_DB_USER" '
+            '--dbname="$POSTGRES_DB" --command="SELECT version_num FROM app.alembic_version"',
+        )
+        assert runtime_version_select.stdout.strip() == "20260824_0101"
+        compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            f'SET ROLE "{schema_owner}"; '
+            "CREATE TABLE app.runtime_repair_default_acl_probe (id bigserial PRIMARY KEY); "
+            "RESET ROLE;",
+        )
+        repaired_default_acl_probe = compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            "--no-psqlrc",
+            "--tuples-only",
+            "--no-align",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            f"SELECT has_table_privilege('{runtime_role}', 'app.runtime_repair_default_acl_probe', "
+            "'SELECT, INSERT, UPDATE, DELETE')::text, "
+            f"has_sequence_privilege('{runtime_role}', 'app.runtime_repair_default_acl_probe_id_seq', "
+            "'USAGE, SELECT, UPDATE')::text;",
+        )
+        assert repaired_default_acl_probe.stdout.strip() == "true|true"
 
         # legacy bootstrap은 receipt fingerprint가 결박되기 전 app ACL/default ACL을
         # 바꾸지 않는다. 복원은 0101 handoff가 끝난 뒤 migration 안에서 수행한다.

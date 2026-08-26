@@ -65,6 +65,21 @@ function getProfileOAuthErrorMessage(code: string, provider: OAuthProviderName =
   return messages[code] ?? `${label} 연결을 완료하지 못했습니다.`;
 }
 
+// URL의 `?error=` 쿼리로 전달되는 OAuth 콜백 오류 — 마운트 시 1회만 읽으면 되는 순수 파생값이므로
+// effect 대신 초기 state 계산에서 바로 읽는다(react-hooks/set-state-in-effect). URL 정리(history
+// replaceState)는 별도의, setState 없는 effect로 남긴다.
+function readProfileOAuthErrorFromLocation(): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('error');
+  if (!code) {
+    return null;
+  }
+  return getProfileOAuthErrorMessage(code, parseOAuthProvider(params.get('provider')));
+}
+
 function formatBytes(value: number | null | undefined) {
   if (!value) {
     return '크기 기록 없음';
@@ -86,7 +101,7 @@ export default function ProfilePage() {
   const [avatarAction, setAvatarAction] = useState<'upload' | 'delete' | null>(null);
   const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(readProfileOAuthErrorFromLocation);
   // 파괴적 액션 확인 — native confirm 대신 공용 다이얼로그(DESIGN.md 확인 정책).
   const [pendingConfirm, setPendingConfirm] = useState<
     { kind: 'unlink'; provider: OAuthProviderName } | { kind: 'avatar' } | null
@@ -115,9 +130,14 @@ export default function ProfilePage() {
     [providers],
   );
 
+  // 마운트 시 loading 초기값이 이미 true이므로 여기서 다시 setLoading(true)를 호출할 필요는
+  // 없다 — 수동 재호출(unlink/avatar 액션 후 새로고침) 지점에서 직접 setLoading(true)를 부른다.
+  // setError(null)도 reload()를 부르는 각 핸들러(onUnlinkProvider/onAvatarFile/onDeleteAvatar)가
+  // 자신의 try 진입 전 이미 스스로 초기화하므로 여기서는 지운다 — 마운트 경로에서 지우지 않으면
+  // URL의 OAuth 오류로 채워진 초기 error state를 이 함수가 곧바로 덮어써 버린다
+  // (react-hooks/set-state-in-effect: 마운트 effect가 이 함수를 호출할 때 동기 setState가
+  // 걸리는 것도 함께 피한다).
   const reload = async () => {
-    setLoading(true);
-    setError(null);
     try {
       const api = authApi(apiClient);
       const [user, oauthProviders] = await Promise.all([api.me(), api.oauthProviders()]);
@@ -145,15 +165,17 @@ export default function ProfilePage() {
   };
 
   useEffect(() => {
-    void reload();
+    void (async () => {
+      await reload();
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
+    // 오류 메시지 자체는 초기 state(readProfileOAuthErrorFromLocation)에서 이미 읽었다 — 여기서는
+    // 쿼리스트링을 지우는 history 정리만 한다(설정 없음 → setState 없는 순수 side effect).
     const params = new URLSearchParams(window.location.search);
-    const code = params.get('error');
-    if (code) {
-      setError(getProfileOAuthErrorMessage(code, parseOAuthProvider(params.get('provider'))));
+    if (params.get('error')) {
       window.history.replaceState(null, '', window.location.pathname);
     }
   }, []);
@@ -199,6 +221,7 @@ export default function ProfilePage() {
     try {
       await authApi(apiClient).unlinkOAuth(provider);
       setMessage(`${label} 연결을 해제했습니다.`);
+      setLoading(true);
       await reload();
     } catch (err) {
       if (err instanceof ApiError && err.code === 'OAUTH_UNLINK_PASSWORD_REQUIRED') {
@@ -240,6 +263,7 @@ export default function ProfilePage() {
         public_url: upload.public_url ?? null,
       });
       setMessage('아바타를 저장했습니다.');
+      setLoading(true);
       await reload();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '아바타를 저장하지 못했습니다.');
@@ -255,6 +279,7 @@ export default function ProfilePage() {
     try {
       await authApi(apiClient).deleteAvatar();
       setMessage('아바타를 삭제했습니다.');
+      setLoading(true);
       await reload();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '아바타를 삭제하지 못했습니다.');

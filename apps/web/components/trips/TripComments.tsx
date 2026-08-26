@@ -32,22 +32,24 @@ export function TripComments({ tripId }: TripCommentsProps) {
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '댓글을 불러오지 못했습니다.');
+    } finally {
+      setLoading(false);
     }
   }, [tripId]);
 
   useEffect(() => {
     let cancelled = false;
-    authApi(apiClient)
-      .me()
-      .then((me) => {
+    void (async () => {
+      try {
+        const me = await authApi(apiClient).me();
         if (!cancelled) setCurrentUserId(me.user_id);
-      })
-      .catch(() => {
+      } catch {
         /* 비로그인/실패는 삭제 버튼만 숨김. */
-      });
-    void reload().finally(() => {
-      if (!cancelled) setLoading(false);
-    });
+      }
+    })();
+    void (async () => {
+      await reload();
+    })();
     return () => {
       cancelled = true;
     };

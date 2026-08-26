@@ -759,6 +759,9 @@ def test_m05_evidence_runtime_uses_non_owner_database_login() -> None:
     bootstrap = (root / "infra/postgres/bootstrap-pinvi-runtime-role.sh").read_text(
         encoding="utf-8"
     )
+    migration = (
+        root / "apps/api/alembic/versions/20260824_0101_m05_activation_contract.py"
+    ).read_text(encoding="utf-8")
     docker_app = (root / "scripts/docker-app.sh").read_text(encoding="utf-8")
     deploy = (root / "scripts/deploy-node.sh").read_text(encoding="utf-8")
     api_block, _ = compose.split("  app-migrator:", maxsplit=1)
@@ -777,10 +780,13 @@ def test_m05_evidence_runtime_uses_non_owner_database_login() -> None:
         assert "app-db-runtime-role" in source
     assert "NOSUPERUSER" in bootstrap
     assert "NOINHERIT" in bootstrap
-    assert "ALTER DEFAULT PRIVILEGES" in bootstrap
+    assert "0101이 catalog fingerprint·handoff를 완료한 뒤 app runtime 권한" in bootstrap
+    assert "ALTER DEFAULT PRIVILEGES FOR ROLE" in migration
+    assert 'PINVI_DB_HOST="${PINVI_DB_HOST:-app-postgres}"' in bootstrap
+    assert 'PINVI_DB_PORT="${PINVI_DB_PORT:-5432}"' in bootstrap
     assert (
-        "until psql --no-psqlrc --no-password --tuples-only --no-align --host=app-postgres"
-        in bootstrap
+        "until psql --no-psqlrc --no-password --tuples-only --no-align "
+        '--host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}"' in bootstrap
     )
     assert "--command='SELECT 1'" in bootstrap
     assert '[ "$attempt" -ge 15 ]' in bootstrap
