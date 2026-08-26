@@ -7,6 +7,12 @@
 
 set -eu
 
+# Root bootstrap credentials must never inherit a caller-selected libpq target.
+# Every connection below supplies the one validated endpoint explicitly.
+unset PGAPPNAME PGCONNECT_TIMEOUT PGDATABASE PGHOST PGHOSTADDR PGOPTIONS PGPASSFILE \
+  PGPASSWORD PGPORT PGSERVICE PGSERVICEFILE PGSSLCERT PGSSLMODE PGSSLKEY \
+  PGSSLROOTCERT PGTARGETSESSIONATTRS PGUSER PSQLRC
+
 : "${POSTGRES_USER:?POSTGRES_USER is required}"
 : "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
 : "${POSTGRES_DB:?POSTGRES_DB is required}"
@@ -19,6 +25,11 @@ set -eu
 
 PINVI_M05_LEGACY_REBASELINE="${PINVI_M05_LEGACY_REBASELINE:-0}"
 PINVI_MIGRATOR_DISABLE_LOGIN="${PINVI_MIGRATOR_DISABLE_LOGIN:-1}"
+# The ordinary PinVi Compose network reaches PostgreSQL as ``app-postgres:5432``.
+# The Docker Manager's host-network one-shot is the only other supported
+# topology, and it must use the dedicated loopback endpoint exactly.
+PINVI_DB_HOST="${PINVI_DB_HOST:-app-postgres}"
+PINVI_DB_PORT="${PINVI_DB_PORT:-5432}"
 
 for role_name in \
   "${POSTGRES_USER}" \
@@ -41,6 +52,13 @@ case "${PINVI_MIGRATOR_DISABLE_LOGIN}" in
   0|1 ) ;;
   * ) echo "PINVI_MIGRATOR_DISABLE_LOGIN must be 0 or 1" >&2; exit 2 ;;
 esac
+case "${PINVI_DB_HOST}:${PINVI_DB_PORT}" in
+  app-postgres:5432|127.0.0.1:12800 ) ;;
+  * )
+    echo "PINVI_DB_HOST and PINVI_DB_PORT must name an approved PostgreSQL endpoint" >&2
+    exit 2
+    ;;
+esac
 
 if [ "${POSTGRES_USER}" = "${PINVI_APP_DB_USER}" ] \
   || [ "${POSTGRES_USER}" = "${PINVI_APP_SCHEMA_OWNER}" ] \
@@ -58,7 +76,7 @@ fi
 
 export PGPASSWORD="${POSTGRES_PASSWORD}"
 attempt=0
-until psql --no-psqlrc --no-password --tuples-only --no-align --host=app-postgres \
+until psql --no-psqlrc --no-password --tuples-only --no-align --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" \
   --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" --command='SELECT 1' >/dev/null 2>&1; do
   attempt=$((attempt + 1))
   if [ "$attempt" -ge 15 ]; then
@@ -71,7 +89,7 @@ done
 
 seal_migrator_login() {
   PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 \
-    --host=app-postgres --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+    --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
     --set="migrator_role=${PINVI_MIGRATOR_DB_USER}" \
     --set="database_name=${POSTGRES_DB}" \
     >/dev/null <<'SQL'
@@ -121,7 +139,7 @@ seal_migrator_login
 # PINVI_M05_LEGACY_REBASELINE=1 root-only one-shot으로만 아래 보호를 우회한다.
 if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then
   canonical_app_ownership="$(
-    psql --no-psqlrc --no-password --tuples-only --no-align --host=app-postgres \
+    psql --no-psqlrc --no-password --tuples-only --no-align --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" \
       --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
       --set="schema_owner=${PINVI_APP_SCHEMA_OWNER}" <<'SQL'
 WITH app_schema AS (
@@ -202,7 +220,7 @@ else
   migrator_login_attribute="LOGIN"
 fi
 
-psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host=app-postgres \
+psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" \
   --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
   --set="bootstrap_owner=${POSTGRES_USER}" \
   --set="app_role=${PINVI_APP_DB_USER}" --set="app_password=${PINVI_APP_DB_PASSWORD}" \
@@ -341,7 +359,7 @@ GRANT EXECUTE ON FUNCTION pinvi_internal.acquire_fresh_0101_database_fence()
 SQL
 
 if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then
-  psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host=app-postgres \
+  psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" \
     --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
     --set="schema_owner=${PINVI_APP_SCHEMA_OWNER}" \
     >/dev/null <<'SQL'
@@ -357,7 +375,7 @@ fi
 :
 
 role_topology_safe="$(
-  psql --no-psqlrc --no-password --tuples-only --no-align --host=app-postgres \
+  psql --no-psqlrc --no-password --tuples-only --no-align --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" \
     --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
     --set="bootstrap_owner=${POSTGRES_USER}" \
     --set="app_role=${PINVI_APP_DB_USER}" \
@@ -714,14 +732,14 @@ fi
 if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then
   alembic_version_table_exists="$(
     PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --tuples-only --no-align \
-      --host=app-postgres --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+      --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
       --command="SELECT (to_regclass('app.alembic_version') IS NOT NULL)::text;"
   )"
   applied_revision=""
   if [ "${alembic_version_table_exists}" = "true" ]; then
     applied_revision="$(
       PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --tuples-only --no-align \
-        --host=app-postgres --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" <<'SQL'
+        --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" <<'SQL'
 SELECT CASE
     WHEN count(*) <> 1 THEN ''
     ELSE COALESCE((SELECT version_num FROM app.alembic_version), '')
@@ -732,7 +750,7 @@ SQL
   fi
   if [ "${applied_revision}" = "20260824_0101" ]; then
     PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 \
-      --host=app-postgres --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+      --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
       --set="app_role=${PINVI_APP_DB_USER}" \
       --set="schema_owner=${PINVI_APP_SCHEMA_OWNER}" \
       >/dev/null <<'SQL'

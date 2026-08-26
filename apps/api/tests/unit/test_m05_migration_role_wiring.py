@@ -1,5 +1,6 @@
 """M05 receipt migration의 one-shot 역할 경계를 정적으로 고정한다."""
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -106,6 +107,80 @@ def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
         'GRANT CREATE ON DATABASE :"database_name" TO :"schema_owner", :"migration_owner";'
         not in bootstrap
     )
+
+
+def test_bootstrap_only_accepts_the_declared_postgres_endpoints(tmp_path: Path) -> None:
+    bootstrap = (ROOT / "infra" / "postgres" / "bootstrap-pinvi-runtime-role.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'PINVI_DB_HOST="${PINVI_DB_HOST:-app-postgres}"' in bootstrap
+    assert 'PINVI_DB_PORT="${PINVI_DB_PORT:-5432}"' in bootstrap
+    assert "app-postgres:5432|127.0.0.1:12800" in bootstrap
+    assert "must name an approved PostgreSQL endpoint" in bootstrap
+    assert "PGHOSTADDR" in bootstrap
+    assert '--host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}"' in bootstrap
+    assert "--host=app-postgres" not in bootstrap
+
+    required_environment = {
+        **os.environ,
+        "POSTGRES_USER": "pinvi_owner",
+        "POSTGRES_PASSWORD": "test-root-password",
+        "POSTGRES_DB": "pinvi",
+        "PINVI_APP_DB_USER": "pinvi_app",
+        "PINVI_APP_DB_PASSWORD": "test-app-password",
+        "PINVI_APP_SCHEMA_OWNER": "pinvi_app_owner",
+        "PINVI_MIGRATION_OWNER": "pinvi_migration_owner",
+        "PINVI_MIGRATOR_DB_USER": "pinvi_migrator",
+        "PINVI_MIGRATOR_DB_PASSWORD": "test-migrator-password",
+    }
+    shell = shutil.which("sh")
+    assert shell is not None
+    for override in (
+        {"PINVI_DB_HOST": "db.example.test"},
+        {"PINVI_DB_HOST": "127.0.0.1", "PINVI_DB_PORT": "5432"},
+        {"PINVI_DB_HOST": "app-postgres", "PINVI_DB_PORT": "12800"},
+        {"PINVI_DB_PORT": "0"},
+        {"PINVI_DB_PORT": "9" * 128},
+    ):
+        result = subprocess.run(  # noqa: S603 -- fixed repository script under test
+            [shell, str(ROOT / "infra" / "postgres" / "bootstrap-pinvi-runtime-role.sh")],
+            check=False,
+            capture_output=True,
+            text=True,
+            env={**required_environment, **override},
+        )
+        assert result.returncode == 2
+        assert "must name an approved PostgreSQL endpoint" in result.stderr
+
+    fake_psql = tmp_path / "psql"
+    fake_psql.write_text(
+        "#!/bin/sh\n"
+        'if [ -n "${PGHOSTADDR:-}" ]; then\n'
+        "  exit 96\n"
+        "fi\n"
+        'case " $* " in\n'
+        "  *\" --tuples-only \"*) printf 't\\n' ;;\n"
+        "esac\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake_psql.chmod(0o700)
+    for host, port in (("app-postgres", "5432"), ("127.0.0.1", "12800")):
+        result = subprocess.run(  # noqa: S603 -- fixed repository script under test
+            [shell, str(ROOT / "infra" / "postgres" / "bootstrap-pinvi-runtime-role.sh")],
+            check=False,
+            capture_output=True,
+            text=True,
+            env={
+                **required_environment,
+                "PATH": f"{tmp_path}:{required_environment['PATH']}",
+                "PGHOSTADDR": "127.0.0.2",
+                "PINVI_DB_HOST": host,
+                "PINVI_DB_PORT": port,
+            },
+        )
+        assert result.returncode == 0, result.stderr
 
 
 def test_0101_switches_only_m05_objects_and_restores_app_owner_for_versioning() -> None:
