@@ -55,6 +55,7 @@ PROMETHEUS_PORT="$(compose_env_value PINVI_PROMETHEUS_PORT 12401)"
 GRAFANA_PORT="$(compose_env_value PINVI_GRAFANA_PORT 12205)"
 # Dagster webserver(profile etl)를 같이 띄울지. 운영에서 pinvi-dagster.<domain>을 쓰면 1.
 ENABLE_DAGSTER="$(compose_env_value PINVI_ENABLE_DAGSTER 0)"
+DAGSTER_PROFILE_OVERRIDE=""
 DEPLOY_FRESH_STACK="$(compose_env_value PINVI_DEPLOY_FRESH_STACK 0)"
 DEPLOY_MANAGER_UNAVAILABLE="$(compose_env_value PINVI_DOCKER_MANAGER_UNAVAILABLE 0)"
 MIGRATOR_ONE_SHOT_PASSWORD=""
@@ -109,6 +110,7 @@ FRESH_STACK_RESOURCE_MUTATION_STARTED="0"
 FRESH_STACK_API_IMAGE_ID=""
 FRESH_STACK_WEB_IMAGE_ID=""
 FRESH_STACK_DAGSTER_IMAGE_ID="none"
+FRESH_STACK_DAGSTER_PROFILE_ENABLED="0"
 FRESH_STACK_COMPOSE_SHA256=""
 FRESH_STACK_ENVIRONMENT_SOURCE_SHA256=""
 FRESH_STACK_EFFECTIVE_COMPOSE_SHA256=""
@@ -472,11 +474,13 @@ fresh_stack_runtime_image_proof() {
   FRESH_STACK_API_IMAGE_ID="$(pinvi_attested_runtime_image_id app-api)"
   FRESH_STACK_WEB_IMAGE_ID="$(pinvi_attested_runtime_image_id app-web)"
   if dagster_profile_enabled; then
+    FRESH_STACK_DAGSTER_PROFILE_ENABLED="1"
     pinvi_verify_runtime_image_provenance app-dagster
     FRESH_STACK_DAGSTER_IMAGE_ID="$(pinvi_attested_runtime_image_id app-dagster)"
   else
     local dagster_profile_status=$?
     [[ "$dagster_profile_status" != "2" ]] || return 1
+    FRESH_STACK_DAGSTER_PROFILE_ENABLED="0"
     FRESH_STACK_DAGSTER_IMAGE_ID="none"
   fi
   [[ "$FRESH_STACK_API_IMAGE_ID" =~ ^sha256:[0-9a-f]{64}$ \
@@ -576,9 +580,9 @@ fresh_stack_rustfs_resource_proof() {
     echo "could not inspect the fresh deploy Compose network" >&2
     return 1
   fi
-  network_name="$(printf '%s\n' "$network_names" | awk -v expected="${PROJECT}_default" '$0 == expected {print; exit}')"
+  network_name="$(printf '%s\n' "$network_names" | sed '/^$/d')"
   [[ "$network_name" == "${PROJECT}_default" ]] || {
-    echo "fresh deploy RustFS is not attached to the canonical project network" >&2
+    echo "fresh deploy RustFS must be attached only to the canonical project network" >&2
     return 2
   }
   if ! network_id="$(docker network inspect --format '{{.Id}}' "$network_name")"; then
@@ -593,6 +597,40 @@ fresh_stack_rustfs_resource_proof() {
   FRESH_STACK_RUSTFS_VOLUME_FINGERPRINT="$volume_fingerprint"
   FRESH_STACK_COMPOSE_NETWORK_NAME="$network_name"
   FRESH_STACK_COMPOSE_NETWORK_ID="$network_id"
+}
+
+fresh_stack_dagster_container_proof() {
+  local expected_profile="$1" container_ids container_id actual_image
+  if ! container_ids="$(docker container ls --all \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --filter 'label=com.docker.compose.service=app-dagster' --format '{{.ID}}')"; then
+    echo "could not inspect fresh deploy Dagster containers" >&2
+    return 1
+  fi
+  if [[ "$expected_profile" == "0" ]]; then
+    [[ -z "$container_ids" ]] || {
+      echo "fresh deploy has a Dagster container without a sealed Dagster profile" >&2
+      return 2
+    }
+    return 0
+  fi
+  [[ "$(printf '%s\n' "$container_ids" | sed '/^$/d' | wc -l)" -le 1 ]] || {
+    echo "fresh deploy requires at most one sealed Dagster container" >&2
+    return 2
+  }
+  [[ -n "$container_ids" ]] || return 0
+  container_id="$(printf '%s\n' "$container_ids" | sed '/^$/d')"
+  if ! actual_image="$(docker container inspect --format '{{.Image}}' "$container_id")"; then
+    echo "could not inspect the fresh deploy Dagster image" >&2
+    return 1
+  fi
+  [[ "$actual_image" == "$FRESH_STACK_DAGSTER_IMAGE_ID" ]] || {
+    echo "fresh deploy Dagster container drifted from the sealed image" >&2
+    return 2
+  }
+  if [[ "$(docker container inspect --format '{{.State.Running}}' "$container_id")" == "true" ]]; then
+    pinvi_verify_running_runtime_image_id app-dagster || return $?
+  fi
 }
 
 write_fresh_stack_state() {
@@ -624,7 +662,7 @@ write_fresh_stack_state() {
   }
   tmp_path="$(mktemp "$(dirname -- "$FRESH_STACK_STATE_PATH")/.fresh-stack.XXXXXX")"
   if ! {
-    printf 'version=5\n'
+    printf 'version=6\n'
     printf 'project=%s\n' "$PROJECT"
     printf 'environment=%s\n' "$environment_name"
     printf 'root_dir=%s\n' "$ROOT_DIR"
@@ -646,6 +684,7 @@ write_fresh_stack_state() {
     printf 'compose_network_id=%s\n' "$FRESH_STACK_COMPOSE_NETWORK_ID"
     printf 'api_image_id=%s\n' "$FRESH_STACK_API_IMAGE_ID"
     printf 'web_image_id=%s\n' "$FRESH_STACK_WEB_IMAGE_ID"
+    printf 'dagster_profile_enabled=%s\n' "$FRESH_STACK_DAGSTER_PROFILE_ENABLED"
     printf 'dagster_image_id=%s\n' "$FRESH_STACK_DAGSTER_IMAGE_ID"
     printf 'migration_receipt_sha256=%s\n' "$FRESH_STACK_MIGRATION_RECEIPT_SHA256"
   } >"$tmp_path"; then
@@ -665,7 +704,7 @@ fresh_stack_migration_receipt_sha256() {
   if ! environment_name="$(resolved_environment)"; then
     return 2
   fi
-  printf 'pinvi-fresh-migration/v5\nproject=%s\nenvironment=%s\nroot_dir=%s\nsource_revision=%s\ncompose_sha256=%s\neffective_compose_sha256=%s\nenvironment_source_sha256=%s\ndb_container_id=%s\ndb_volume_name=%s\ndb_system_identifier=%s\nalembic_version=%s\npostgres_image_id=%s\nrustfs_image_id=%s\nrustfs_init_image_id=%s\nrustfs_volume_name=%s\nrustfs_volume_fingerprint=%s\ncompose_network_name=%s\ncompose_network_id=%s\napi_image_id=%s\nweb_image_id=%s\ndagster_image_id=%s\n' \
+  printf 'pinvi-fresh-migration/v6\nproject=%s\nenvironment=%s\nroot_dir=%s\nsource_revision=%s\ncompose_sha256=%s\neffective_compose_sha256=%s\nenvironment_source_sha256=%s\ndb_container_id=%s\ndb_volume_name=%s\ndb_system_identifier=%s\nalembic_version=%s\npostgres_image_id=%s\nrustfs_image_id=%s\nrustfs_init_image_id=%s\nrustfs_volume_name=%s\nrustfs_volume_fingerprint=%s\ncompose_network_name=%s\ncompose_network_id=%s\napi_image_id=%s\nweb_image_id=%s\ndagster_profile_enabled=%s\ndagster_image_id=%s\n' \
     "$PROJECT" "$environment_name" "$ROOT_DIR" "${PINVI_SOURCE_REVISION:-}" \
     "$FRESH_STACK_COMPOSE_SHA256" "$FRESH_STACK_EFFECTIVE_COMPOSE_SHA256" \
     "$FRESH_STACK_ENVIRONMENT_SOURCE_SHA256" \
@@ -675,7 +714,8 @@ fresh_stack_migration_receipt_sha256() {
     "$FRESH_STACK_RUSTFS_INIT_IMAGE_ID" \
     "$FRESH_STACK_RUSTFS_VOLUME_NAME" "$FRESH_STACK_RUSTFS_VOLUME_FINGERPRINT" \
     "$FRESH_STACK_COMPOSE_NETWORK_NAME" "$FRESH_STACK_COMPOSE_NETWORK_ID" \
-    "$FRESH_STACK_API_IMAGE_ID" "$FRESH_STACK_WEB_IMAGE_ID" "$FRESH_STACK_DAGSTER_IMAGE_ID" \
+    "$FRESH_STACK_API_IMAGE_ID" "$FRESH_STACK_WEB_IMAGE_ID" \
+    "$FRESH_STACK_DAGSTER_PROFILE_ENABLED" "$FRESH_STACK_DAGSTER_IMAGE_ID" \
     | sha256sum | awk '{print $1}'
 }
 
@@ -776,6 +816,7 @@ require_reusable_fresh_stack_contract() {
   local state_rustfs_init_image_id="" state_rustfs_volume_name=""
   local state_rustfs_volume_fingerprint="" state_compose_network_name=""
   local state_compose_network_id="" state_api_image_id="" state_web_image_id=""
+  local state_dagster_profile_enabled=""
   local state_dagster_image_id="" state_migration_receipt_sha256=""
   local environment_name source_path compose_sha256 source_sha256 effective_compose_sha256
   local key value seen_keys='|' existing_containers existing_volumes existing_networks db_containers rustfs_containers
@@ -818,6 +859,7 @@ require_reusable_fresh_stack_contract() {
       compose_network_id) state_compose_network_id="$value" ;;
       api_image_id) state_api_image_id="$value" ;;
       web_image_id) state_web_image_id="$value" ;;
+      dagster_profile_enabled) state_dagster_profile_enabled="$value" ;;
       dagster_image_id) state_dagster_image_id="$value" ;;
       migration_receipt_sha256) state_migration_receipt_sha256="$value" ;;
       *) echo "fresh stack state contains an unknown field" >&2; return 2 ;;
@@ -834,6 +876,11 @@ require_reusable_fresh_stack_contract() {
     source_sha256="none"
   fi
   compose_sha256="$(sha256sum -- "$CANONICAL_COMPOSE_FILE" | awk '{print $1}')"
+  [[ "$state_dagster_profile_enabled" =~ ^[01]$ ]] || {
+    echo "fresh stack state has an invalid Dagster profile flag" >&2
+    return 2
+  }
+  DAGSTER_PROFILE_OVERRIDE="$state_dagster_profile_enabled"
   if ! effective_compose_sha256="$(effective_compose_config_sha256)"; then
     return 1
   fi
@@ -853,9 +900,10 @@ require_reusable_fresh_stack_contract() {
     && "$seen_keys" == *"|compose_network_name|"* \
     && "$seen_keys" == *"|compose_network_id|"* \
     && "$seen_keys" == *"|api_image_id|"* && "$seen_keys" == *"|web_image_id|"* \
+    && "$seen_keys" == *"|dagster_profile_enabled|"* \
     && "$seen_keys" == *"|dagster_image_id|"* \
     && "$seen_keys" == *"|migration_receipt_sha256|"* \
-    && "$state_version" == "5" && "$state_project" == "$PROJECT" \
+    && "$state_version" == "6" && "$state_project" == "$PROJECT" \
     && "$state_environment" == "$environment_name" \
     && "$state_root_dir" == "$ROOT_DIR" \
     && "$state_revision" == "${PINVI_SOURCE_REVISION:-}" \
@@ -876,8 +924,10 @@ require_reusable_fresh_stack_contract() {
     && "$state_compose_network_id" =~ ^[0-9a-f]{64}$ \
     && "$state_api_image_id" =~ ^sha256:[0-9a-f]{64}$ \
     && "$state_web_image_id" =~ ^sha256:[0-9a-f]{64}$ \
-    && ( "$state_dagster_image_id" == "none" \
-      || "$state_dagster_image_id" =~ ^sha256:[0-9a-f]{64}$ ) \
+    && "$state_dagster_profile_enabled" =~ ^[01]$ \
+    && (( "$state_dagster_profile_enabled" == "0" && "$state_dagster_image_id" == "none" ) \
+      || ( "$state_dagster_profile_enabled" == "1" \
+        && "$state_dagster_image_id" =~ ^sha256:[0-9a-f]{64}$ )) \
     && "$state_migration_receipt_sha256" =~ ^[0-9a-f]{64}$ ]] || {
     echo "fresh stack state does not match the requested project, environment, source, or migration proof" >&2
     return 2
@@ -915,6 +965,9 @@ require_reusable_fresh_stack_contract() {
   if ! capture_fresh_stack_migration_proof; then
     return 1
   fi
+  if ! fresh_stack_dagster_container_proof "$state_dagster_profile_enabled"; then
+    return 1
+  fi
   [[ "$FRESH_STACK_DB_CONTAINER_ID" == "$state_db_container_id" \
     && "$FRESH_STACK_DB_VOLUME_NAME" == "$state_db_volume_name" \
     && "$FRESH_STACK_DB_SYSTEM_IDENTIFIER" == "$state_db_system_identifier" \
@@ -928,6 +981,7 @@ require_reusable_fresh_stack_contract() {
     && "$FRESH_STACK_COMPOSE_NETWORK_ID" == "$state_compose_network_id" \
     && "$FRESH_STACK_API_IMAGE_ID" == "$state_api_image_id" \
     && "$FRESH_STACK_WEB_IMAGE_ID" == "$state_web_image_id" \
+    && "$FRESH_STACK_DAGSTER_PROFILE_ENABLED" == "$state_dagster_profile_enabled" \
     && "$FRESH_STACK_DAGSTER_IMAGE_ID" == "$state_dagster_image_id" \
     && "$FRESH_STACK_MIGRATION_RECEIPT_SHA256" == "$state_migration_receipt_sha256" ]] || {
     echo "fresh stack database identity or migration proof no longer matches the sealed state" >&2
@@ -1116,7 +1170,15 @@ runtime_dagster_is_running() {
 }
 
 dagster_profile_enabled() {
+  if [[ -n "$DAGSTER_PROFILE_OVERRIDE" ]]; then
+    case "$DAGSTER_PROFILE_OVERRIDE" in
+      1) return 0 ;;
+      0) return 1 ;;
+      *) return 2 ;;
+    esac
+  fi
   [[ "$ENABLE_DAGSTER" != "0" ]] && return 0
+  [[ "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]] && return 0
   runtime_dagster_is_running
 }
 
@@ -2237,7 +2299,8 @@ prepare_standalone_dagster_writer() {
 
 up_under_lifecycle_lock() {
   local api_container_id web_container_id
-  if [[ "$ENABLE_DAGSTER" != "0" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
+  if [[ "$ENABLE_DAGSTER" != "0" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" \
+    || "$DAGSTER_PROFILE_OVERRIDE" == "1" ]]; then
     pinvi_verify_runtime_image_provenance app-api app-web app-dagster
   else
     pinvi_verify_runtime_image_provenance app-api app-web
@@ -2252,7 +2315,8 @@ up_under_lifecycle_lock() {
   runtime_record_new_container_ids app-api
   runtime_record_new_container_ids app-web
   pinvi_verify_running_app
-  if [[ "$ENABLE_DAGSTER" != "0" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
+  if [[ "$ENABLE_DAGSTER" != "0" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" \
+    || "$DAGSTER_PROFILE_OVERRIDE" == "1" ]]; then
     dagster_up_under_lifecycle_lock
   fi
   wait_for_url "http://127.0.0.1:${API_PORT}/health" "API"
@@ -2277,7 +2341,8 @@ up_under_lifecycle_lock() {
     return 1
   }
   wait_for_container_health "$web_container_id" "Web container"
-  if [[ "$ENABLE_DAGSTER" != "0" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
+  if [[ "$ENABLE_DAGSTER" != "0" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" \
+    || "$DAGSTER_PROFILE_OVERRIDE" == "1" ]]; then
     wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster final"
     if ! dagster_container_id="$(runtime_writer_container_id app-dagster)"; then
       RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
@@ -2292,6 +2357,10 @@ up() {
   assert_host_ports_available_before_migration
   acquire_migrator_lifecycle_lock
   if ! require_reusable_fresh_stack_contract; then
+    fresh_stack_contract_failure
+  fi
+  if [[ "$ENABLE_DAGSTER" != "0" && "$DAGSTER_PROFILE_OVERRIDE" == "0" ]]; then
+    echo "up cannot enable an unsealed Dagster profile; use the dagster command to reseal it" >&2
     fresh_stack_contract_failure
   fi
   RUNTIME_DEPLOY_PRESERVE="1"
@@ -2311,6 +2380,7 @@ dagster_up() {
   if ! require_reusable_fresh_stack_contract; then
     fresh_stack_contract_failure
   fi
+  DAGSTER_PROFILE_OVERRIDE=""
   RUNTIME_DEPLOY_PRESERVE="1"
   prepare_standalone_dagster_writer
   RUNTIME_NEW_WRITERS_STARTED="1"

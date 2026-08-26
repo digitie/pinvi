@@ -3,7 +3,7 @@
 # 선택(optional) 이미지다. 기본 배포(Cloudflare Tunnel 단일 진입)는 Cloudflare WAF + FastAPI
 # fallback로 충분하므로 이 이미지를 빌드하지 않는다. Cloudflare를 우회할 수 있는 공개 nginx
 # edge를 따로 둘 때만 빌드한다. 빌드 후 반드시 `nginx -t`로 모듈 로드/문법을 검증한다.
-FROM nginx:1.27-bookworm
+FROM nginx:1.27-bookworm@sha256:6784fb0834aa7dbbe12e3d7471e69c290df3e6ba810dc38b34ae33d3c1c05f7d
 
 # Debian nginx geoip2 동적 모듈. 공식 nginx 이미지는 modules-enabled를 자동 include하지
 # 않으므로 load_module을 main 컨텍스트에 명시한다.

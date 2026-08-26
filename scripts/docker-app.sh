@@ -327,6 +327,33 @@ wait_for_container_health() {
   return 1
 }
 
+wait_for_one_shot() {
+  local service="$1" container_ids container_id exit_code
+  command -v timeout >/dev/null 2>&1 || {
+    echo "timeout not found; refusing one-shot dependency startup" >&2
+    return 127
+  }
+  if ! container_ids="$(docker container ls --all \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --filter "label=com.docker.compose.service=${service}" --format '{{.ID}}')"; then
+    echo "could not inspect ${service} one-shot container" >&2
+    return 1
+  fi
+  [[ "$(printf '%s\n' "$container_ids" | sed '/^$/d' | wc -l)" == "1" ]] || {
+    echo "expected exactly one ${service} one-shot container" >&2
+    return 2
+  }
+  container_id="$(printf '%s\n' "$container_ids" | sed '/^$/d')"
+  if ! exit_code="$(timeout --foreground 120s docker container wait "$container_id")"; then
+    echo "could not wait for ${service} one-shot container" >&2
+    return 1
+  fi
+  [[ "$exit_code" == "0" ]] || {
+    echo "${service} one-shot container exited with ${exit_code}" >&2
+    return 2
+  }
+}
+
 build() {
   require_docker
   require_python
@@ -352,6 +379,7 @@ up_deps() {
   require_docker
   log "starting Postgres + RustFS dependencies"
   compose up -d app-postgres app-rustfs app-rustfs-init
+  wait_for_one_shot app-rustfs-init
 }
 
 runtime_writer_container_id() {
