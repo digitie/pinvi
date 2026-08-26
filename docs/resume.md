@@ -1,5 +1,22 @@
 # resume.md
 
+## 2026-08-26 (claude) — T-350 머지 완료 (기존 PR #485의 main 이탈 충돌 해소)
+
+이전 세션(다른 Claude 세션, PR #485)이 이미 구현·CI green 상태로 올려둔 T-350(retention
+`executing` 배지 경과시간 실시간 갱신, `apps/web/app/(admin)/admin/retention/page.tsx`에
+`executing` run이 있을 때만 도는 1초 `setInterval`)을 머지했다. 그 사이 T-354/T-349 관련
+PR 4건(#489·#490·#492·#493)이 먼저 merge돼 PR #485가 `main`과 충돌(`docs/tasks-done.md`)
+상태가 됐다 — `origin/main`을 브랜치에 merge해 두 항목을 정확한 시간순(T-354 "(2)" 위,
+T-350 원본 무접미사 아래)으로 정리하고, 나머지 대량 파일(T-354의 44개 컴포넌트 리팩터 등)은
+git이 자동 병합했다. 병합 뒤 `apps/web` typecheck·lint(경고 4건, 기존/무관)·build(webpack)
+전부 재검증 통과, CI(e2e 2m58s, lint-typecheck-build 2m55s, Aggregate CI gate) green 확인 후
+머지(`d8d9db07`).
+
+**다음 한 작업**: T-320/T-352/T-353(Expo 업스트림 대기)과 T-349(M05 activation 대기)가 모두
+막혀 있고 T-350도 끝났다. 남은 열린 T-3xx는 `T-351`(통합 테스트 스위트 CI job 샤딩 — 스코프가
+커서 별도 설계 필요)뿐이다. `T-VN-M05-ACTIVATION`(codex 선점) 또는 `T-353`(Expo 업스트림)이
+풀리면 그쪽을 우선 재개한다.
+
 ## 2026-08-26 (claude) — T-349 시도, T-VN-M05-ACTIVATION 가드로 블록 확인
 
 T-349(`app.retention_runs` single-executing 불변식 DB defense-in-depth)를 새 Alembic
