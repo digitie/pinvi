@@ -2,6 +2,40 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-26 (claude) — T-354 Next.js 16 업그레이드 (PR #489 머지)
+
+- `apps/web`을 Next.js 15 → 16(Turbopack)으로 업그레이드했다. 공식 codemod
+  (`@next/codemod upgrade latest`, `next-lint-to-eslint-cli`)로 기계적 마이그레이션을 먼저
+  돌리고, `next-intl` 버전 스큐(3.26.5 → 4.13.7), `eslint-plugin-react-hooks` v7 채택,
+  eslint 9.x 유지 등 의존성 문제 3건을 정리했다.
+- `eslint-plugin-react-hooks@7`의 신규 `react-hooks/set-state-in-effect` 규칙 위반 44건을
+  eslint-disable 없이 실제 구조 리팩터로 고쳤다(순수 파생값 인라인화, prop 변경 시 렌더 중
+  state 리셋, 마운트 fetch 중복 setState 제거). 이 과정에서 `app/(auth)/profile/page.tsx`의
+  실제 버그(마운트 URL의 OAuth 에러가 나중에 조용히 지워짐)도 함께 고쳤다.
+- **CI e2e 49건 실패 발견 및 원인 규명**: 실패한 스펙은 예외 없이 지도(`vworld-map-web`)를
+  렌더링하는 페이지·다이얼로그·폼이었다. 로컬에서 production build(`next build && next start`)로
+  재현하니 `/map` 콘솔에 `Module ... was instantiated ... but the module factory is not
+  available` 런타임 에러가 떴고 앱 에러 바운더리까지 전파돼 지도가 fallback UI조차 그리지
+  못했다. `next build --webpack`으로는 콘솔 에러 없이 정상 렌더링됐고 실패했던 19개 대표
+  e2e가 전부 통과했다 — Next 16 Turbopack 프로덕션 번들러가 vendored `vworld-map-web`
+  (ADR-046)의 모듈 그래프를 청크로 나누는 과정에서 생기는 런타임 버그로 확정, 이번 리팩터와는
+  무관함을 확인했다. `apps/web/package.json`의 `build` 스크립트를 `next build --webpack`으로
+  고정해 CI(`lint-typecheck-build`, e2e webServer)와 `apps/web/Dockerfile`을 모두 커버했다
+  (**ADR-066**, 근거·대안·후속 계획 기록).
+- 로컬 전체 e2e 172건 재검증에서 지도/폼/다이얼로그 실패는 전부 해소됐고, `trip-collab`/
+  `trip-attachment`/`trip-conflict`/`trip-mutations` 등 20건이 남았다 — 재실행마다 실패
+  목록이 달라지는 비결정적 패턴(병렬 실행에서 통과했던 테스트가 직렬 재실행에서는 `/login`
+  리다이렉트로 실패)이라 로컬 환경(WSL2 유휴 일시정지, 백그라운드 부하) flake로 판단했다.
+  webpack 수정을 push한 뒤 GitHub Actions 클린 러너에서 e2e가 3m51s에 전부 통과해 이 판단을
+  확인했다.
+- `@next/codemod`의 `cache-components-instant-false` 변환이 15개 라우트에 추가한
+  `export const instant = false`는 `cacheComponents` 미채택 프로젝트에서 빌드를 깨서 전부
+  제거해 원본과 byte-identical하게 되돌렸다(Cache Components 도입은 별도 결정 필요, 스코프
+  밖).
+- 검증: `apps/web` typecheck·lint(에러 0)·build(webpack)·vitest(18 files/113 tests) 통과,
+  CI 전체(lint-typecheck-build, e2e, Aggregate CI gate) green. PR #489 squash 머지
+  (`c4656dc8`).
+
 ## 2026-08-26 (codex) — Manager role bootstrap loopback endpoint 제한 추가
 
 - **작업**: `T-VN-41-ABC` Manager pair 재핀의 전제로, PinVi의
