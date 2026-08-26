@@ -1,5 +1,23 @@
 # resume.md
 
+## 2026-08-26 (claude) — T-349 시도, T-VN-M05-ACTIVATION 가드로 블록 확인
+
+T-349(`app.retention_runs` single-executing 불변식 DB defense-in-depth)를 새 Alembic
+마이그레이션(`uq_retention_runs_single_executing` partial unique index)으로 구현하고
+PR #491을 올렸으나, `tests/unit/test_tvn40_migration_immutability.py`의
+`test_active_migration_artifacts_are_complete_and_digest_guarded`(PR #466)가
+`alembic/versions/`에 `20260824_0100`/`20260824_0101` 두 파일만 있어야 한다고 고정해 둬서
+CI가 실패했다. `docs/tasks.md` 상단의 "현재 선점: T-VN-M05-ACTIVATION" 공지와 같은 맥락의
+의도적 가드로 판단 — M05 activation이 끝나 그 가드가 풀리기 전에는 새 마이그레이션을 병합할
+수 없다. PR #491은 닫았고, 마이그레이션·회귀 테스트 코드는
+`agent/claude-t349-retention-unique-index` 브랜치에 보존했다. `docs/tasks.md`의 T-349 항목에
+이 블로커를 기록했다(PR #492 머지 완료).
+
+**다음 한 작업**: T-320/T-352/T-353(Expo 업스트림 대기)과 T-349(M05 activation 대기)가 모두
+막혀 있으므로 `T-350`(retention 배지 경과시간 미갱신 — 브라우저로 먼저 재현 확인 후 착수)을
+집어 든다. `T-351`은 CI job 구조 변경이 필요해 스코프가 더 크다. `T-VN-M05-ACTIVATION`
+(codex 선점) 또는 `T-353`(Expo 업스트림)이 먼저 풀리면 그쪽을 재개해도 된다.
+
 ## 2026-08-26 (claude) — T-354 Next.js 16 업그레이드 머지 완료
 
 `apps/web`을 Next.js 15 → 16(Turbopack)으로 올리고 PR #489를 머지했다(`c4656dc8`).

@@ -2,6 +2,33 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-26 (claude) — T-349 시도 → T-VN-M05-ACTIVATION 가드로 블록
+
+- `app.retention_runs`에 `status='executing'`이 최대 1개라는 불변식(T-343)의 DB 차원
+  defense-in-depth로 새 Alembic 마이그레이션(`20260826_1352_retention_runs_single_executing_unique_`,
+  partial unique index `uq_retention_runs_single_executing`)을 작성하고, advisory lock을
+  우회해 직접 두 번째 `executing` 행을 INSERT하면 `IntegrityError`가 나는 회귀 테스트를
+  추가했다. 로컬에서는 `pytest tests/integration/test_retention_concurrency.py
+  tests/integration/test_admin_retention_api.py` 9건 통과, 일회성 컨테이너에서
+  upgrade→downgrade -1→upgrade 왕복, ruff/format/mypy --strict 전부 통과해 PR #491을 올렸다.
+- CI의 `pytest (unit)`에서 `test_tvn40_migration_immutability.py::test_active_migration_artifacts_are_complete_and_digest_guarded`
+  (PR #466, M05 production activation receipt gate)가 실패했다 — 이 테스트는
+  `alembic/versions/`에 정확히 `20260824_0100`/`20260824_0101` 두 파일만 있어야 한다고
+  고정해 둔 가드다. `docs/tasks.md` 상단 "현재 선점: T-VN-M05-ACTIVATION — codex/m05-activation"
+  공지와 같은 맥락으로, M05 activation이 진행 중인 동안 마이그레이션 세트를 의도적으로
+  동결한 것으로 판단해 이 가드를 건드리지 않기로 했다.
+- PR #491은 원인 설명 코멘트를 남기고 닫았다. 마이그레이션·회귀 테스트 코드는
+  `agent/claude-t349-retention-unique-index` 브랜치에 그대로 보존했고(재사용 가능),
+  `docs/tasks.md`의 T-349 항목에 M05 activation 완료까지 진행 불가라는 블로커를 기록했다
+  (PR #492 머지).
+- **작업 중 실수 기록**: 여러 번 `gh pr comment/create --body "..."`에 백틱이 든 문자열을
+  WSL 경유 없이(또는 이중 따옴표로) 직접 넘겨 Git Bash가 백틱을 명령 치환으로 해석해 본문이
+  깨졌다(예: `` `docs/resume.md` ``가 통째로 사라짐) — 백틱이 든 PR 본문/코멘트는 항상 파일로
+  써서 `--body-file`로 넘겨야 한다. 또한 `git checkout main -- <path>`를 워크트리에서 실행해
+  로컬 `main` ref가 trunk 전용으로 매우 오래된 커밋(#462)에 머물러 있다는 걸 놓치고 문서
+  파일을 옛 상태로 되돌릴 뻔했다 — 바로 `git checkout origin/main -- <path>`로 정정했다.
+  worktree에서는 항상 `origin/main`을 기준으로 삼아야 한다(CLAUDE.md에 이미 명시돼 있었음).
+
 ## 2026-08-26 (claude) — T-354 Next.js 16 업그레이드 (PR #489 머지)
 
 - `apps/web`을 Next.js 15 → 16(Turbopack)으로 업그레이드했다. 공식 codemod
