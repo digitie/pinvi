@@ -2,6 +2,44 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-26 (claude) — T-351 머지 (PR #495, 통합 테스트 CI 4-shard 분리)
+
+- 사용자가 "t351 진행"을 요청해 착수했다. `.github/workflows/api.yml`의 `lint-typecheck-test`
+  job이 ruff/mypy/unit(1287+)/alembic sanity/`pytest tests/integration`(684건, 91개 파일)/
+  wheel-install 검증을 전부 순차 실행했는데, T-348(PR #481)에서 이미 timeout을 15→35분으로
+  올렸음에도(main 관측 최댓값 20분6초) "스위트가 더 자라면 다시 올려야 한다"는 경고가 코드
+  주석에 남아 있었다 — 근본 해법은 숫자 상향이 아니라 job 구조 자체를 바꾸는 것.
+- `pytest-split`(0.11.0, `pytest<10,>=5` 호환)을 `apps/api/pyproject.toml` dev 의존성에
+  추가했다. `lint-typecheck-test`에서 `pytest (integration)` 스텝을 제거하고, 새
+  `integration-test` job을 `strategy.matrix.group: [1, 2, 3, 4]`로 추가해 각 shard가
+  `pytest tests/integration -q --splits 4 --group N`을 실행하게 했다. 각 shard는 자체
+  PostGIS testcontainer를 띄우므로(`conftest.py`의 session-scope fixture, 기존
+  `services: postgres`와 무관) 공유 상태 없이 안전하게 나뉜다. `.test_durations` 캐시가
+  없어 pytest-split이 테스트 **개수** 기준으로 균등 분할한다(그룹당 정확히 171개).
+- `aggregate-ci.yml`의 `requiredChecks`에 `integration-test (1)`~`(4)`를 추가했다 — GitHub
+  Actions matrix job의 check 이름은 `"<job id> (<matrix 값>)"` 형식이라 정확히 일치해야
+  한다. 이 파일은 이미 `contract-pin-consistency`를 빠뜨렸다가 "게이트가 실제로 안 기다려서
+  항상 green"이 됐던 전례(그 자체가 이미 이 파일 코드 주석에 기록돼 있음)가 있어, shard 개수와
+  이 배열이 어긋나면 같은 맹점이 재발한다는 경고 주석을 남겼다.
+  `lint-typecheck-test`의 기존 `timeout-minutes: 35`는 재측정 근거 없이 낮추지 않고 그대로
+  뒀다(T-348에서 이미 "근거 없이 줄이면 다시 걸린다"는 교훈이 있었다).
+- 로컬에서 `pytest --collect-only -q --splits 4 --group N`(N=1~4)로 4그룹 분할이 정확히
+  684개를 중복 없이 커버함을 확인(4×171=684, 합집합 684, 중복 0)했고, shard 1(171건)을
+  실제로 로컬 실행해 168 passed/3 skipped/실패 0을 확인했다(로컬 WSL2/NTFS 환경은 DB
+  round-trip이 느려 5분32초 걸렸지만 실패는 없었다).
+- PR #495 CI에서 실제 4-shard 병렬 실행을 확인했다: `integration-test (1)` 2m36s→2m53s,
+  `(2)` 3m1s~3m3s, `(3)` 5m24s~5m28s(가장 느림, count 기반 분할이라 무거운 파일이 몰린
+  것으로 추정), `(4)` 4m3s~4m7s(같은 커밋을 두 번 CI 돌렸을 때의 값 두 개씩). `lint-typecheck-test`는
+  35분 timeout이던 job에서 integration을 뗀 뒤 1m59s~2m5s로 대폭 줄었다.
+  `Aggregate CI gate`가 가장 느린 shard까지 정확히 기다렸다가 5m31s~5m50s에 통과해
+  `requiredChecks` 배열이 올바르게 동작함을 확인했다. 전부 green 확인 후 사용자 승인을 받아
+  머지(`0b94cfd9`).
+- **작업 중 얻은 새 환경 교훈 2건**(메모리로 저장): (1) Bash tool에 `wsl -- bash -lc '...'`로
+  `for i in 1 2 3 4; do ... $i ... done` 같은 루프를 인라인으로 넘기면 `$i`가 매 반복 빈
+  문자열로 치환된다(루프 자체는 정상적으로 4번 돈다) — 반드시 `.sh` 파일에 써서 그 파일을
+  실행해야 한다. (2) 로컬 shard 분할 검증 시 처음에 이 문제로 group 값이 다 비어 결과가
+  깨졌었는데, 파일 기반으로 바꾸자 바로 해결됐다.
+
 ## 2026-08-26 (claude) — T-350 머지 (PR #485, main 이탈로 인한 충돌 해소)
 
 - 사용자가 PR #485(T-350, 다른 세션에서 이미 구현·CI green)의 머지를 요청해 `gh pr merge`를

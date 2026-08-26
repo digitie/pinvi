@@ -1,5 +1,24 @@
 # resume.md
 
+## 2026-08-26 (claude) — T-351 머지 완료 (통합 테스트 CI 4-shard 분리)
+
+`pytest tests/integration`(684건, 91개 파일)이 계속 자라 T-348로 job timeout을 올려도
+(15→35분) 구조적으로 재발하던 문제를 `pytest-split`으로 해결했다. `lint-typecheck-test`의
+`pytest (integration)` 스텝을 떼어내 독립된 `integration-test` matrix job(`group: [1,2,3,4]`)
+으로 병렬 실행하고, `aggregate-ci.yml`의 `requiredChecks`에 `integration-test (1)`~`(4)`를
+추가해 게이트가 4개 shard를 모두 기다리게 했다(안 하면 이 파일이 이미 여러 번 겪은 "게이트가
+실제로 안 기다려서 항상 green" 맹점 재발). `.test_durations` 캐시가 없어 테스트 개수 기준
+균등 분할(그룹당 171개)이다. PR #495 CI에서 4개 shard가 2m53s~5m28s로 병렬 green, Aggregate
+CI gate가 가장 느린 shard까지 정확히 기다려 통과 확인 후 머지(`0b94cfd9`).
+
+**다음 한 작업**: `docs/tasks.md`에 남은 T-3xx가 없다(T-320/T-352/T-353은 Expo 업스트림
+대기, T-349는 T-VN-M05-ACTIVATION 완료 대기). 다음에 착수할 만한 것은 (a) 업스트림 확인 —
+`expo-modules-core@latest`의 `react-native-worklets` peer 범위가 `react-native-reanimated`
+요구치(`0.12.x`)를 포함하는지, `T-VN-M05-ACTIVATION`(codex 선점)이 끝났는지 재확인, (b) 새
+`.test_durations` 캐시를 만들어(`pytest --store-durations`) T-351의 count 기반 분할을
+duration 기반으로 재분배(현재도 정상 동작하지만 shard 3가 유독 오래 걸림 — 5m24s~5m28s,
+1번은 2m36s~2m53s로 편차가 큼).
+
 ## 2026-08-26 (claude) — T-350 머지 완료 (기존 PR #485의 main 이탈 충돌 해소)
 
 이전 세션(다른 Claude 세션, PR #485)이 이미 구현·CI green 상태로 올려둔 T-350(retention
