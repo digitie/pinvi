@@ -12,6 +12,7 @@ import uuid
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from app.core.config import get_settings
 from app.models.user import User
@@ -98,3 +99,36 @@ async def test_two_simultaneous_executes_only_one_wins(session_factory, monkeypa
             {"actor": actor_id},
         )
         assert count == 1, "진 쪽이 영수증까지 남겼다면 안전장치가 이중으로 새고 있는 것이다"
+
+
+async def test_db_rejects_second_executing_row_bypassing_advisory_lock(session_factory):  # type: ignore[no-untyped-def]
+    """`_assert_no_concurrent_execution`을 거치지 않는 직접 INSERT도 DB가 막아야 한다(T-349).
+
+    advisory lock 규율은 애플리케이션 코드 경로에서만 강제된다 — 다른 코드 경로나 수동 SQL이
+    같은 함수를 거치지 않고 INSERT하면 그 규율은 무력하다. `uq_retention_runs_single_executing`
+    partial unique index가 이 경우의 마지막 보루다.
+    """
+    actor_id = await _make_actor(session_factory)
+
+    async with session_factory() as db:
+        await db.execute(
+            text(
+                "INSERT INTO app.retention_runs "
+                "(run_id, status, mode, access_reason, actor_user_id) "
+                "VALUES (:run_id, 'executing', 'execute', :reason, :actor)"
+            ),
+            {"run_id": uuid.uuid4(), "reason": "T-349 first row", "actor": actor_id},
+        )
+        await db.commit()
+
+    async with session_factory() as db:
+        with pytest.raises(IntegrityError, match="uq_retention_runs_single_executing"):
+            await db.execute(
+                text(
+                    "INSERT INTO app.retention_runs "
+                    "(run_id, status, mode, access_reason, actor_user_id) "
+                    "VALUES (:run_id, 'executing', 'execute', :reason, :actor)"
+                ),
+                {"run_id": uuid.uuid4(), "reason": "T-349 second row", "actor": actor_id},
+            )
+            await db.commit()

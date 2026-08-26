@@ -61,12 +61,6 @@
 
 - [ ] **T-VN-M05-ACTIVATION** — ADR-065 `0100/0101` rebaseline, paired live/restore/review evidence를
   요구하는 M05 production activation receipt gate와 실제 isolated activation 검증을 완료한다.
-- [ ] **T-349** — `app.retention_runs`에 `status='executing'`이 최대 1개라는 불변식이 DB 제약이
-  아니라 `_assert_no_concurrent_execution`의 advisory lock 규율에만 의존한다(T-343 적대적 리뷰,
-  PR #480). 지금 유일한 호출 경로는 안전하지만, 향후 다른 코드 경로/수동 SQL이 이 함수를 거치지
-  않고 INSERT하면 막을 DB 차원 방어선이 없다. 후속 마이그레이션으로
-  `CREATE UNIQUE INDEX ... ON app.retention_runs (status) WHERE status = 'executing'` 추가
-  (defense-in-depth, blocking 아님).
 
 ## 웹 / 테스트 인프라
 

@@ -4,6 +4,22 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-08-26 (3)
+
+- [x] **T-349** — `app.retention_runs`에 `status='executing'` 최대 1개 불변식의 DB 차원
+      defense-in-depth를 추가했다(T-343 적대적 리뷰, PR #480에서 지적, claude). advisory-lock
+      규율(`_assert_no_concurrent_execution`)은 그대로 두고, 새 마이그레이션
+      `20260826_1352_retention_runs_single_executing_unique_`에서
+      `uq_retention_runs_single_executing`(partial unique index, `status = 'executing'`)을
+      추가했다 — 애플리케이션 락 경로를 대체하지 않고, 그 규율을 거치지 않는 코드 경로나 수동
+      SQL이 두 번째 `executing` 행을 만드는 것만 마지막 보루로 막는다.
+      `test_retention_concurrency.py`에 advisory lock을 우회해 직접 두 번째 `executing` 행을
+      INSERT하면 `IntegrityError`가 나는 회귀를 추가했다.
+
+      검증: 새 회귀 포함 `test_retention_concurrency.py` 3건 +
+      `test_admin_retention_api.py` 6건 전부 통과, 일회성 컨테이너에서
+      upgrade → downgrade -1 → upgrade 왕복 확인, ruff/format/`mypy --strict` 통과.
+
 ## 2026-08-26 (2)
 
 - [x] **T-354** — Next.js 15 → 16 업그레이드. 사용자 요청으로 착수(npm audit
