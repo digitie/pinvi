@@ -44,18 +44,10 @@ RustFS/외부 미러 표시는 후속 운영 보강이다.
 
 ### 2.2 root maintenance producer (긴급)
 
-```bash
-# 운영 노드 SSH. staging/production에서는 API/host shell이 아니라 compose의
-# root-only producer만 실행한다. 이 경로는 app-postgres DNS를 한 번 해석해
-# `hostaddr`로 결박하고, preconfigured endpoint override를 dump 전에 거부한다.
-cd /opt/pinvi
-sudo docker compose -f infra/docker-compose.app.yml --profile maintenance run --rm app-backup
-
-# 결과
-ls -la /var/lib/pinvi/backups/
-# pinvi-app-20260606-003000.dump
-# pinvi-app-20260606-003000.dump.sha256
-```
+staging/production의 수동 backup은 `kor-travel-docker-manager`의 승인된 pinned backup
+transaction에서만 실행한다. 이 저장소의 Compose 파일을 `docker compose run`으로 직접 실행하거나
+운영 DB endpoint를 shell에서 지정하지 않는다. transaction 결과가 dump와 sidecar checksum,
+metadata-only catalog를 함께 기록한다.
 
 환경변수:
 

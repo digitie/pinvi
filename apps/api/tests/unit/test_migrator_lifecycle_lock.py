@@ -217,7 +217,24 @@ def test_deploy_node_seals_fresh_migration_before_reusing_the_stack() -> None:
     assert "require_reusable_fresh_stack_contract" in dagster
 
 
+def test_fresh_continuation_is_bound_to_the_canonical_compose_and_database_proof() -> None:
+    source = (ROOT / "scripts" / "deploy-node.sh").read_text(encoding="utf-8")
+    assert "require_canonical_compose_file" in source
+    assert "version=2" in source
+    assert "compose_sha256" in source
+    assert "environment_source_sha256" in source
+    assert "db_system_identifier" in source
+    assert 'state_alembic_version" == "20260824_0101"' in source
+    assert "migration_receipt_sha256" in source
+    assert "capture_fresh_stack_migration_proof" in source
+
+
 def test_observability_container_names_are_project_scoped() -> None:
     compose = (ROOT / "infra/docker-compose.app.yml").read_text(encoding="utf-8")
     for service in ("dagster", "cadvisor", "blackbox", "prometheus", "grafana"):
         assert f"container_name: ${{PINVI_DOCKER_PROJECT:-pinvi-app}}-{service}" in compose
+
+
+def test_dev_compose_does_not_use_global_container_names() -> None:
+    compose = (ROOT / "infra/docker-compose.yml").read_text(encoding="utf-8")
+    assert "container_name:" not in compose

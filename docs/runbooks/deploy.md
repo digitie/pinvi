@@ -14,9 +14,9 @@ ADR-067 기준 운영 배포 절차다. N150 16GB/NVMe 1TB가 유일한 실행·
 
 - 오케스트레이터: `~/kor-travel-docker-manager` (`ktdctl` CLI). 엔트리는
   `backend/ktd_venv/bin/ktdctl`(또는 `poetry run ktdctl`). 사용법은 그 저장소 `README.md`/`SKILL.md`.
-- compose: `docker-compose.yml` + `docker-compose.override.yml`. 이미지 태그/시크릿은
-  gitignore된 `.env`(템플릿 `.env.example`)에 둔다.
-- Pinvi 빌드 소스: `~/pinvi` (compose `build.context: ../pinvi`). 배포 전 항상 `origin/main`으로 동기한다.
+- 배포 manifest와 project/env/DB 결박은 manager의 frozen canonical transaction이 소유한다. 운영자는
+  Pinvi 저장소의 raw Compose 파일이나 임의 override를 직접 실행하지 않는다.
+- Pinvi 빌드 소스: `~/pinvi`. 배포 전 항상 manager가 승인한 Pinvi source revision으로 동기한다.
 - 이미지 태그: `.env`의 `PINVI_API_IMAGE`/`PINVI_WEB_IMAGE`/`PINVI_DAGSTER_IMAGE` 기본값은
   각각 `pinvi-api:latest-main` / `pinvi-web:latest-main` / `pinvi-dagster:latest-main`(로컬 빌드).
 
@@ -91,26 +91,16 @@ read/cancel token도 거부한다. 값 자체를 출력하지 않고 주입 여�
 `PINVI_ENVIRONMENT`는 `development|test|smoke|staging|production` 중 하나만 사용한다. 운영
 별칭 `prod`, 대소문자 drift, 앞뒤 공백, 알 수 없는 값은 시작 단계에서 거부한다.
 
-```bash
-docker compose exec app-api sh -lc \
-  'test ${#PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN} -ge 32 && \
-   test ${#PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN} -ge 32 && \
-   test "$PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN" != "$PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN" && \
-   case "$PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN$PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN" in \
-     *[[:space:]]*) exit 1 ;; \
-     *) exit 0 ;; \
-   esac'
-```
+manager의 pinned preflight가 두 token의 길이·공백·상호 불일치와 Map endpoint를 검사한다. 운영자는
+container shell에서 환경변수를 직접 검사하거나 주입하지 않는다.
 
 **마이그레이션이 포함된 릴리스**는 manager의 pinned pair transaction이 migration·seal·runtime
 writer lifecycle을 함께 소유한다. raw Compose `run ... alembic upgrade head`를 직접 실행하지 않는다.
 rebuildable rehearsal에서 DB를 초기화한 뒤:
 
-```bash
-cd ~/kor-travel-docker-manager
-sudo -n backend/.venv/bin/ktdctl pinvi-pair rebuild-pinned --confirm
-docker exec pinvi-postgres psql -U pinvi -d pinvi -c 'select version_num from alembic_version;'
-```
+manager의 pinned rebuild transaction이 migration·seal·runtime writer lifecycle을 수행하고,
+transaction 결과의 schema revision과 image provenance를 함께 남긴다. 운영자는 DB container에
+직접 `exec`하여 migration을 실행하거나 확인하지 않는다.
 
 검증(smoke):
 

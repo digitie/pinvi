@@ -5,6 +5,7 @@ set -euo pipefail
 
 ROOT_DIR="${PINVI_ROOT_DIR:-/opt/pinvi}"
 COMPOSE_FILE="${PINVI_COMPOSE_FILE:-infra/docker-compose.app.yml}"
+CANONICAL_COMPOSE_FILE="$ROOT_DIR/infra/docker-compose.app.yml"
 # 운영 도메인/시크릿 주입. 기본 .env, 운영은 PINVI_ENV_FILE=infra/.env.prod (gitignore, ADR-047).
 ENV_FILE="${PINVI_ENV_FILE:-.env}"
 PROJECT="${PINVI_DOCKER_PROJECT:-pinvi-app}"
@@ -92,6 +93,13 @@ RUNTIME_API_SNAPSHOT_RENAMED="0"
 RUNTIME_WEB_SNAPSHOT_RENAMED="0"
 RUNTIME_DAGSTER_SNAPSHOT_RENAMED="0"
 RUNTIME_CONTAINER_DISCOVERY_FAILED="0"
+FRESH_STACK_DB_CONTAINER_ID=""
+FRESH_STACK_DB_VOLUME_NAME=""
+FRESH_STACK_DB_SYSTEM_IDENTIFIER=""
+FRESH_STACK_ALEMBIC_VERSION=""
+FRESH_STACK_MIGRATION_RECEIPT_SHA256=""
+FRESH_STACK_COMPOSE_SHA256=""
+FRESH_STACK_ENVIRONMENT_SOURCE_SHA256=""
 
 usage() {
   cat <<'EOF'
@@ -181,6 +189,7 @@ preflight() {
   require_command curl
   require_command git
   require_command python3
+  require_command sha256sum
   docker compose version >/dev/null
   [[ -f "$COMPOSE_FILE" ]] || { echo "compose file missing: $COMPOSE_FILE" >&2; exit 2; }
 }
@@ -221,6 +230,18 @@ require_node_mutation_environment() {
   require_isolated_database_endpoint
 }
 
+require_canonical_compose_file() {
+  local configured_file="$COMPOSE_FILE"
+  if [[ "$configured_file" != /* ]]; then
+    configured_file="$ROOT_DIR/$configured_file"
+  fi
+  [[ "$configured_file" == "$CANONICAL_COMPOSE_FILE" \
+    && -f "$CANONICAL_COMPOSE_FILE" && ! -L "$CANONICAL_COMPOSE_FILE" ]] || {
+    echo "fresh deploy requires the canonical application Compose file without an override" >&2
+    return 2
+  }
+}
+
 require_isolated_database_endpoint() {
   local database_url legacy_database_url
   database_url="$(compose_env_value PINVI_DATABASE_URL "")"
@@ -258,9 +279,10 @@ validate_configured_ports() {
 }
 
 require_n150_execution_host() {
-  local actual_arch actual_hostname actual_os_version
+  local actual_arch actual_hostname actual_os_id actual_os_version
   actual_arch="$(uname -m)"
   actual_hostname="$(hostname -s 2>/dev/null || hostname)"
+  actual_os_id="$(sed -n 's/^ID=//p' /etc/os-release 2>/dev/null | tr -d '"')"
   actual_os_version="$(sed -n 's/^VERSION_ID=//p' /etc/os-release 2>/dev/null | tr -d '"')"
   [[ "$actual_arch" == "x86_64" ]] || {
     echo "deploy-node is restricted to the N150 x86_64 execution host" >&2
@@ -273,6 +295,10 @@ require_n150_execution_host() {
       return 2
       ;;
   esac
+  [[ "$actual_os_id" == "ubuntu" ]] || {
+    echo "deploy-node requires an Ubuntu N150 execution host" >&2
+    return 2
+  }
   [[ "$actual_os_version" == "26.04" ]] || {
     echo "deploy-node requires the N150 Ubuntu 26.04 execution host" >&2
     return 2
@@ -323,7 +349,10 @@ fresh_stack_state_file_is_safe() {
     echo "PINVI_FRESH_STACK_STATE_PATH must be an absolute regular-file path" >&2
     return 2
   }
-  local parent
+  local parent environment_name
+  if ! environment_name="$(resolved_environment)"; then
+    return 2
+  fi
   parent="$(dirname -- "$FRESH_STACK_STATE_PATH")"
   [[ -d "$parent" && ! -L "$parent" ]] || {
     echo "fresh stack state parent must be an existing regular directory" >&2
@@ -332,7 +361,7 @@ fresh_stack_state_file_is_safe() {
   local parent_owner parent_mode
   parent_owner="$(stat -c '%u' -- "$parent")"
   parent_mode="$(stat -c '%a' -- "$parent")"
-  if [[ "${PINVI_ENVIRONMENT:-}" == staging || "${PINVI_ENVIRONMENT:-}" == production ]]; then
+  if [[ "$environment_name" == staging || "$environment_name" == production ]]; then
     [[ "$parent_owner" == "0" ]] && (( (8#$parent_mode & 8#022) == 0 )) || {
       echo "staging/production fresh stack state parent must be root-owned and non-writable" >&2
       return 2
@@ -351,7 +380,7 @@ fresh_stack_state_file_is_safe() {
     local owner mode
     owner="$(stat -c '%u' -- "$FRESH_STACK_STATE_PATH")"
     mode="$(stat -c '%a' -- "$FRESH_STACK_STATE_PATH")"
-    if [[ "${PINVI_ENVIRONMENT:-}" == staging || "${PINVI_ENVIRONMENT:-}" == production ]]; then
+    if [[ "$environment_name" == staging || "$environment_name" == production ]]; then
       [[ "$owner" == "0" && "$mode" == "600" ]] || {
         echo "staging/production fresh stack state must be root-owned mode 0600" >&2
         return 2
@@ -367,19 +396,42 @@ fresh_stack_state_file_is_safe() {
 
 write_fresh_stack_state() {
   fresh_stack_state_file_is_safe || return $?
-  local source_revision tmp_path
+  local source_revision environment_name source_path source_sha256 compose_sha256 tmp_path
   source_revision="${PINVI_SOURCE_REVISION:-}"
   [[ "$source_revision" =~ ^[0-9a-f]{40}$ ]] || {
     echo "fresh stack state requires the resolved Pinvi source revision" >&2
     return 2
   }
+  if ! environment_name="$(resolved_environment)"; then
+    return 2
+  fi
+  if ! capture_fresh_stack_migration_proof; then
+    echo "migration succeeded but the fresh stack database proof could not be sealed" >&2
+    return 1
+  fi
+  source_path="$(compose_env_source_file)"
+  if [[ -n "$source_path" ]]; then
+    source_sha256="$(sha256sum -- "$source_path" | awk '{print $1}')"
+  else
+    source_path="none"
+    source_sha256="none"
+  fi
+  compose_sha256="$(sha256sum -- "$CANONICAL_COMPOSE_FILE" | awk '{print $1}')"
   tmp_path="$(mktemp "$(dirname -- "$FRESH_STACK_STATE_PATH")/.fresh-stack.XXXXXX")"
   if ! {
-    printf 'version=1\n'
+    printf 'version=2\n'
     printf 'project=%s\n' "$PROJECT"
-    printf 'environment=%s\n' "${PINVI_ENVIRONMENT:-}"
+    printf 'environment=%s\n' "$environment_name"
     printf 'root_dir=%s\n' "$ROOT_DIR"
     printf 'source_revision=%s\n' "$source_revision"
+    printf 'compose_sha256=%s\n' "$compose_sha256"
+    printf 'environment_source_path=%s\n' "$source_path"
+    printf 'environment_source_sha256=%s\n' "$source_sha256"
+    printf 'db_container_id=%s\n' "$FRESH_STACK_DB_CONTAINER_ID"
+    printf 'db_volume_name=%s\n' "$FRESH_STACK_DB_VOLUME_NAME"
+    printf 'db_system_identifier=%s\n' "$FRESH_STACK_DB_SYSTEM_IDENTIFIER"
+    printf 'alembic_version=%s\n' "$FRESH_STACK_ALEMBIC_VERSION"
+    printf 'migration_receipt_sha256=%s\n' "$FRESH_STACK_MIGRATION_RECEIPT_SHA256"
   } >"$tmp_path"; then
     rm -f -- "$tmp_path"
     return 1
@@ -392,8 +444,93 @@ write_fresh_stack_state() {
   fresh_stack_state_file_is_safe
 }
 
+fresh_stack_migration_receipt_sha256() {
+  local environment_name
+  if ! environment_name="$(resolved_environment)"; then
+    return 2
+  fi
+  printf 'pinvi-fresh-migration/v2\nproject=%s\nenvironment=%s\nroot_dir=%s\nsource_revision=%s\ncompose_sha256=%s\nenvironment_source_sha256=%s\ndb_container_id=%s\ndb_volume_name=%s\ndb_system_identifier=%s\nalembic_version=%s\n' \
+    "$PROJECT" "$environment_name" "$ROOT_DIR" "${PINVI_SOURCE_REVISION:-}" \
+    "$FRESH_STACK_COMPOSE_SHA256" "$FRESH_STACK_ENVIRONMENT_SOURCE_SHA256" \
+    "$FRESH_STACK_DB_CONTAINER_ID" "$FRESH_STACK_DB_VOLUME_NAME" \
+    "$FRESH_STACK_DB_SYSTEM_IDENTIFIER" "$FRESH_STACK_ALEMBIC_VERSION" \
+    | sha256sum | awk '{print $1}'
+}
+
+capture_fresh_stack_migration_proof() {
+  local environment_name source_path db_container_ids db_container_id db_volume_name
+  local owner_user db_system_identifier alembic_version
+  if ! environment_name="$(resolved_environment)"; then
+    return 2
+  fi
+  FRESH_STACK_COMPOSE_SHA256="$(sha256sum -- "$CANONICAL_COMPOSE_FILE" | awk '{print $1}')"
+  source_path="$(compose_env_source_file)"
+  if [[ -n "$source_path" ]]; then
+    FRESH_STACK_ENVIRONMENT_SOURCE_SHA256="$(sha256sum -- "$source_path" | awk '{print $1}')"
+  else
+    FRESH_STACK_ENVIRONMENT_SOURCE_SHA256="none"
+  fi
+  if ! db_container_ids="$(docker container ls --all \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --filter 'label=com.docker.compose.service=app-postgres' --format '{{.ID}}')"; then
+    echo "could not inspect the fresh deploy PostgreSQL container" >&2
+    return 1
+  fi
+  if [[ "$(printf '%s\n' "$db_container_ids" | sed '/^$/d' | wc -l)" != "1" ]]; then
+    echo "fresh deploy requires exactly one project-scoped PostgreSQL container" >&2
+    return 2
+  fi
+  db_container_id="$(printf '%s\n' "$db_container_ids" | sed '/^$/d')"
+  if [[ "$(docker container inspect --format '{{.State.Running}}' "$db_container_id")" != "true" ]]; then
+    echo "fresh deploy requires the migrated PostgreSQL container to be running" >&2
+    return 2
+  fi
+  if ! db_volume_name="$(docker container inspect --format \
+    '{{range .Mounts}}{{if and (eq .Destination "/var/lib/postgresql/data") (eq .Type "volume")}}{{.Name}}{{end}}{{end}}' \
+    "$db_container_id")"; then
+    echo "could not inspect the fresh deploy PostgreSQL volume" >&2
+    return 1
+  fi
+  [[ -n "$db_volume_name" ]] || {
+    echo "fresh deploy requires a named PostgreSQL data volume" >&2
+    return 2
+  }
+  owner_user="$(compose_env_value PINVI_DB_OWNER_USER pinvi_owner)"
+  [[ "$owner_user" =~ ^[a-z_][a-z0-9_]*$ ]] || {
+    echo "fresh deploy PostgreSQL owner name is invalid" >&2
+    return 2
+  }
+  if ! db_system_identifier="$(docker exec "$db_container_id" psql -U "$owner_user" -d pinvi -Atqc \
+    'SELECT system_identifier FROM pg_control_system();' | tr -d '[:space:]')"; then
+    echo "could not read the migrated PostgreSQL system identifier" >&2
+    return 1
+  fi
+  if ! alembic_version="$(docker exec "$db_container_id" psql -U "$owner_user" -d pinvi -Atqc \
+    "SELECT string_agg(version_num, ',' ORDER BY version_num) FROM app.alembic_version;" | tr -d '[:space:]')"; then
+    echo "could not read the migrated Alembic revision" >&2
+    return 1
+  fi
+  [[ "$db_system_identifier" =~ ^[0-9]+$ && "$alembic_version" == "20260824_0101" ]] || {
+    echo "fresh deploy requires the canonical 0101 Alembic revision and a PostgreSQL identity" >&2
+    return 2
+  }
+  FRESH_STACK_DB_CONTAINER_ID="$db_container_id"
+  FRESH_STACK_DB_VOLUME_NAME="$db_volume_name"
+  FRESH_STACK_DB_SYSTEM_IDENTIFIER="$db_system_identifier"
+  FRESH_STACK_ALEMBIC_VERSION="$alembic_version"
+  if ! FRESH_STACK_MIGRATION_RECEIPT_SHA256="$(fresh_stack_migration_receipt_sha256)"; then
+    echo "could not compute the fresh migration receipt" >&2
+    return 1
+  fi
+  [[ "$FRESH_STACK_MIGRATION_RECEIPT_SHA256" =~ ^[0-9a-f]{64}$ ]]
+}
+
 require_reusable_fresh_stack_contract() {
   local state_version="" state_project="" state_environment="" state_root_dir="" state_revision=""
+  local state_compose_sha256="" state_environment_source_path="" state_environment_source_sha256=""
+  local state_db_container_id="" state_db_volume_name="" state_db_system_identifier=""
+  local state_alembic_version="" state_migration_receipt_sha256=""
+  local environment_name source_path compose_sha256 source_sha256
   local key value seen_keys='|' existing_containers existing_volumes existing_networks db_containers rustfs_containers
   require_fresh_stack_identity
   fresh_stack_state_file_is_safe || return $?
@@ -417,17 +554,50 @@ require_reusable_fresh_stack_contract() {
       environment) state_environment="$value" ;;
       root_dir) state_root_dir="$value" ;;
       source_revision) state_revision="$value" ;;
+      compose_sha256) state_compose_sha256="$value" ;;
+      environment_source_path) state_environment_source_path="$value" ;;
+      environment_source_sha256) state_environment_source_sha256="$value" ;;
+      db_container_id) state_db_container_id="$value" ;;
+      db_volume_name) state_db_volume_name="$value" ;;
+      db_system_identifier) state_db_system_identifier="$value" ;;
+      alembic_version) state_alembic_version="$value" ;;
+      migration_receipt_sha256) state_migration_receipt_sha256="$value" ;;
       *) echo "fresh stack state contains an unknown field" >&2; return 2 ;;
     esac
   done < "$FRESH_STACK_STATE_PATH"
+  if ! environment_name="$(resolved_environment)"; then
+    return 2
+  fi
+  source_path="$(compose_env_source_file)"
+  if [[ -n "$source_path" ]]; then
+    source_sha256="$(sha256sum -- "$source_path" | awk '{print $1}')"
+  else
+    source_path="none"
+    source_sha256="none"
+  fi
+  compose_sha256="$(sha256sum -- "$CANONICAL_COMPOSE_FILE" | awk '{print $1}')"
   [[ "$seen_keys" == *"|version|"* && "$seen_keys" == *"|project|"* \
     && "$seen_keys" == *"|environment|"* && "$seen_keys" == *"|root_dir|"* \
     && "$seen_keys" == *"|source_revision|"* \
-    && "$state_version" == "1" && "$state_project" == "$PROJECT" \
-    && "$state_environment" == "${PINVI_ENVIRONMENT:-}" \
+    && "$seen_keys" == *"|compose_sha256|"* \
+    && "$seen_keys" == *"|environment_source_path|"* \
+    && "$seen_keys" == *"|environment_source_sha256|"* \
+    && "$seen_keys" == *"|db_container_id|"* && "$seen_keys" == *"|db_volume_name|"* \
+    && "$seen_keys" == *"|db_system_identifier|"* && "$seen_keys" == *"|alembic_version|"* \
+    && "$seen_keys" == *"|migration_receipt_sha256|"* \
+    && "$state_version" == "2" && "$state_project" == "$PROJECT" \
+    && "$state_environment" == "$environment_name" \
     && "$state_root_dir" == "$ROOT_DIR" \
-    && "$state_revision" == "${PINVI_SOURCE_REVISION:-}" ]] || {
-    echo "fresh stack state does not match the requested project, environment, root, or source revision" >&2
+    && "$state_revision" == "${PINVI_SOURCE_REVISION:-}" \
+    && "$state_compose_sha256" == "$compose_sha256" \
+    && "$state_environment_source_path" == "$source_path" \
+    && "$state_environment_source_sha256" == "$source_sha256" \
+    && "$state_db_container_id" =~ ^[0-9a-f]{12,64}$ \
+    && "$state_db_volume_name" != "" \
+    && "$state_db_system_identifier" =~ ^[0-9]+$ \
+    && "$state_alembic_version" == "20260824_0101" \
+    && "$state_migration_receipt_sha256" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "fresh stack state does not match the requested project, environment, source, or migration proof" >&2
     return 2
   }
   if ! existing_containers="$(docker container ls --all \
@@ -452,8 +622,20 @@ require_reusable_fresh_stack_contract() {
     echo "could not inspect reusable fresh deploy database dependencies" >&2
     return 1
   fi
-  [[ -n "$db_containers" && -n "$rustfs_containers" ]] || {
+  [[ "$(printf '%s\n' "$db_containers" | sed '/^$/d' | wc -l)" == "1" \
+    && "$(printf '%s\n' "$rustfs_containers" | sed '/^$/d' | wc -l)" == "1" ]] || {
     echo "reusable fresh deploy requires the migrated app-postgres and app-rustfs services" >&2
+    return 2
+  }
+  if ! capture_fresh_stack_migration_proof; then
+    return 1
+  fi
+  [[ "$FRESH_STACK_DB_CONTAINER_ID" == "$state_db_container_id" \
+    && "$FRESH_STACK_DB_VOLUME_NAME" == "$state_db_volume_name" \
+    && "$FRESH_STACK_DB_SYSTEM_IDENTIFIER" == "$state_db_system_identifier" \
+    && "$FRESH_STACK_ALEMBIC_VERSION" == "$state_alembic_version" \
+    && "$FRESH_STACK_MIGRATION_RECEIPT_SHA256" == "$state_migration_receipt_sha256" ]] || {
+    echo "fresh stack database identity or migration proof no longer matches the sealed state" >&2
     return 2
   }
 }
@@ -473,6 +655,7 @@ require_fresh_stack_identity() {
     return 2
   }
   require_n150_execution_host
+  require_canonical_compose_file
   require_isolated_database_endpoint
 }
 
@@ -1389,6 +1572,13 @@ run_admin_bootstrap() {
       -e PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH=/run/pinvi/m05/legacy-rebaseline-receipt.json
       -v "$legacy_receipt_file:/run/pinvi/m05/legacy-rebaseline-receipt.json:ro"
     )
+    local legacy_database_url
+    legacy_database_url="$(compose_env_value PINVI_LEGACY_REBASELINE_DATABASE_URL "")"
+    [[ -n "$legacy_database_url" ]] || {
+      echo "PINVI_LEGACY_REBASELINE_DATABASE_URL is required for the legacy wrapper" >&2
+      return 2
+    }
+    legacy_args+=( -e "PINVI_DATABASE_URL=$legacy_database_url" )
   fi
   if [[ "$legacy_rebaseline" == "1" ]]; then
     compose "${profile_args[@]}" run --rm --no-deps \
@@ -1419,10 +1609,18 @@ validate_bootstrap_admin_credential_file() {
   local service="app-migrator"
   local runner_user="$(id -u):$(id -g)"
   local profile_args=()
+  local legacy_args=()
   if [[ "$legacy_rebaseline" == "1" ]]; then
     service="app-legacy-rebaseline-migrator"
     runner_user="0:0"
     profile_args=(--profile legacy-rebaseline)
+    local legacy_database_url
+    legacy_database_url="$(compose_env_value PINVI_LEGACY_REBASELINE_DATABASE_URL "")"
+    [[ -n "$legacy_database_url" ]] || {
+      echo "PINVI_LEGACY_REBASELINE_DATABASE_URL is required for the legacy wrapper" >&2
+      return 2
+    }
+    legacy_args=( -e "PINVI_DATABASE_URL=$legacy_database_url" )
   fi
   local validation_output
   local validation_sha
@@ -1430,6 +1628,7 @@ validate_bootstrap_admin_credential_file() {
     --user "$runner_user" \
     -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
     -v "$credential_file:$credential_file:ro" \
+    "${legacy_args[@]}" \
     "$service" pinvi-admin-bootstrap validate-credential 2>&1)"; then
     return 1
   fi

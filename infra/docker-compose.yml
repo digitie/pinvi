@@ -9,7 +9,6 @@
 services:
   postgres:
     image: postgis/postgis:16-3.5-alpine
-    container_name: pinvi-postgres
     restart: unless-stopped
     network_mode: host          # → 127.0.0.1:5432
     environment:
@@ -26,7 +25,6 @@ services:
 
   rustfs:
     image: rustfs/rustfs:latest
-    container_name: pinvi-rustfs
     restart: unless-stopped
     network_mode: host          # → 127.0.0.1:12101 (API) / :12105 (console)
     environment:
@@ -63,7 +61,6 @@ services:
     build:
       context: ..
       dockerfile: apps/etl/Dockerfile
-    container_name: pinvi-dagster
     restart: unless-stopped
     network_mode: host          # webserver는 127.0.0.1:12802로 bind(apps/etl/Dockerfile)
     depends_on:
@@ -87,7 +84,6 @@ services:
   cadvisor:
     profiles: ["observability"]
     image: ${PINVI_CADVISOR_IMAGE:-gcr.io/cadvisor/cadvisor:v0.52.1}
-    container_name: pinvi-cadvisor
     restart: unless-stopped
     privileged: true
     devices:
@@ -104,7 +100,6 @@ services:
   blackbox:
     profiles: ["observability"]
     image: ${PINVI_BLACKBOX_IMAGE:-prom/blackbox-exporter:v0.25.0}
-    container_name: pinvi-blackbox
     restart: unless-stopped
     command:
       - --config.file=/etc/blackbox_exporter/config.yml
@@ -114,7 +109,6 @@ services:
   prometheus:
     profiles: ["observability"]
     image: ${PINVI_PROMETHEUS_IMAGE:-prom/prometheus:v2.53.1}
-    container_name: pinvi-prometheus
     restart: unless-stopped
     user: "${PINVI_PROMETHEUS_RUN_AS_USER:-0}"
     command:
@@ -139,7 +133,6 @@ services:
   grafana:
     profiles: ["observability"]
     image: ${PINVI_GRAFANA_IMAGE:-grafana/grafana:11.1.4}
-    container_name: pinvi-grafana
     restart: unless-stopped
     user: "${PINVI_GRAFANA_RUN_AS_USER:-0}"
     environment:

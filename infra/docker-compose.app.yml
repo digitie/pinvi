@@ -100,7 +100,7 @@ services:
       # 내부 endpoint(app-rustfs:9000)는 compose 내부망이라 override 대상 아님.
       PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
       # non-owner application login only. Migration/restore use dedicated one-shot inputs.
-      PINVI_DATABASE_URL: ${PINVI_DATABASE_URL:-postgresql+asyncpg://pinvi_app:pinvi_app_smoke@app-postgres:5432/pinvi}
+      PINVI_DATABASE_URL: postgresql+asyncpg://${PINVI_APP_DB_USER:-pinvi_app}:${PINVI_APP_DB_PASSWORD:-pinvi_app_smoke}@app-postgres:5432/pinvi
       # ordinary API에는 raw dump를 mount하지 않는다. strict 환경의 snapshot 목록은
       # root producer가 만드는 metadata-only catalog로만 표시한다.
       PINVI_BACKUP_DIR: /var/lib/pinvi/backup-catalog
@@ -256,7 +256,7 @@ services:
       PINVI_BACKUP_DIR: /var/lib/pinvi/restore-trust
       PINVI_BACKUP_CATALOG_PATH: /var/lib/pinvi/backup-catalog/current.json
       PINVI_BACKUP_TRUSTED: "1"
-      PINVI_BACKUP_DATABASE_URL: ${PINVI_DATABASE_URL:-postgresql+asyncpg://pinvi_app:pinvi_app_smoke@app-postgres:5432/pinvi}
+      PINVI_BACKUP_DATABASE_URL: postgresql+asyncpg://${PINVI_APP_DB_USER:-pinvi_app}:${PINVI_APP_DB_PASSWORD:-pinvi_app_smoke}@app-postgres:5432/pinvi
       PINVI_BACKUP_SCHEMA: ${PINVI_BACKUP_SCHEMA:-app}
       PINVI_BACKUP_MIN_FREE_BYTES: ${PINVI_BACKUP_MIN_FREE_BYTES:-1073741824}
       PINVI_BACKUP_DOCKER_FALLBACK: "0"
@@ -314,7 +314,9 @@ services:
     environment:
       PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
       # wrapper가 legacy를 명시하지 않은 상태에서 직접 실행하면 인증 실패로 닫힌다.
-      PINVI_DATABASE_URL: ${PINVI_LEGACY_REBASELINE_DATABASE_URL:-postgresql+asyncpg://invalid:invalid@app-postgres:5432/pinvi}
+      # The approved wrapper injects the protected legacy URL with `docker compose run -e`.
+      # A raw Compose invocation receives an intentionally unusable credential instead.
+      PINVI_DATABASE_URL: postgresql+asyncpg://invalid:invalid@app-postgres:5432/pinvi
       PINVI_APP_DB_USER: ${PINVI_APP_DB_USER:-pinvi_app}
       PINVI_APP_SCHEMA_OWNER: ${PINVI_APP_SCHEMA_OWNER:-pinvi_app_owner}
       PINVI_MIGRATION_OWNER: ${PINVI_MIGRATION_OWNER:-pinvi_migration_owner}
@@ -375,7 +377,7 @@ services:
       DATA_GO_KR_SERVICE_KEY: ${DATA_GO_KR_SERVICE_KEY:-}
       DAGSTER_HOME: /opt/pinvi/.dagster
     ports:
-      - "${PINVI_DAGSTER_DEV_PORT:-12802}:12802"
+      - "127.0.0.1:${PINVI_DAGSTER_DEV_PORT:-12802}:12802"
     volumes:
       - app-dagster:/opt/pinvi/.dagster
 
@@ -388,7 +390,7 @@ services:
     devices:
       - /dev/kmsg:/dev/kmsg
     ports:
-      - "${PINVI_CADVISOR_PORT:-12301}:8080"
+      - "127.0.0.1:${PINVI_CADVISOR_PORT:-12301}:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
@@ -419,7 +421,7 @@ services:
       - --web.console.templates=/usr/share/prometheus/consoles
       - --web.enable-lifecycle
     ports:
-      - "${PINVI_PROMETHEUS_PORT:-12401}:9090"
+      - "127.0.0.1:${PINVI_PROMETHEUS_PORT:-12401}:9090"
     volumes:
       - ./prometheus/prometheus.app.yml:/etc/prometheus/prometheus.yml:ro
       - app-prometheus:/prometheus
@@ -446,7 +448,7 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       GF_USERS_ALLOW_SIGN_UP: "false"
     ports:
-      - "${PINVI_GRAFANA_PORT:-12205}:3000"
+      - "127.0.0.1:${PINVI_GRAFANA_PORT:-12205}:3000"
     volumes:
       - app-grafana:/var/lib/grafana
       - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro

@@ -1195,6 +1195,13 @@ run_admin_bootstrap() {
       -e PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH=/run/pinvi/m05/legacy-rebaseline-receipt.json
       -v "$legacy_receipt_file:/run/pinvi/m05/legacy-rebaseline-receipt.json:ro"
     )
+    local legacy_database_url
+    legacy_database_url="$(compose_env_value PINVI_LEGACY_REBASELINE_DATABASE_URL "")"
+    [[ -n "$legacy_database_url" ]] || {
+      echo "PINVI_LEGACY_REBASELINE_DATABASE_URL is required for the legacy wrapper" >&2
+      return 2
+    }
+    legacy_args+=( -e "PINVI_DATABASE_URL=$legacy_database_url" )
   fi
   if [[ "$legacy_rebaseline" == "1" ]]; then
     compose "${profile_args[@]}" run --rm --no-deps \
@@ -1225,10 +1232,18 @@ validate_bootstrap_admin_credential_file() {
   local service="app-migrator"
   local runner_user="$(id -u):$(id -g)"
   local profile_args=()
+  local legacy_args=()
   if [[ "$legacy_rebaseline" == "1" ]]; then
     service="app-legacy-rebaseline-migrator"
     runner_user="0:0"
     profile_args=(--profile legacy-rebaseline)
+    local legacy_database_url
+    legacy_database_url="$(compose_env_value PINVI_LEGACY_REBASELINE_DATABASE_URL "")"
+    [[ -n "$legacy_database_url" ]] || {
+      echo "PINVI_LEGACY_REBASELINE_DATABASE_URL is required for the legacy wrapper" >&2
+      return 2
+    }
+    legacy_args=( -e "PINVI_DATABASE_URL=$legacy_database_url" )
   fi
   local validation_output
   local validation_sha
@@ -1236,6 +1251,7 @@ validate_bootstrap_admin_credential_file() {
     --user "$runner_user" \
     -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
     -v "$credential_file:$credential_file:ro" \
+    "${legacy_args[@]}" \
     "$service" pinvi-admin-bootstrap validate-credential 2>&1)"; then
     return 1
   fi

@@ -907,6 +907,8 @@ set -euo pipefail
 def test_deploy_fresh_contract_rejects_existing_compose_resources(tmp_path: Path) -> None:
     scripts_dir = tmp_path / "scripts"
     scripts_dir.mkdir()
+    (tmp_path / "infra").mkdir()
+    (tmp_path / "infra/docker-compose.app.yml").write_text("services: {}\n", encoding="utf-8")
     for dependency in ("api-image-provenance.sh", "migrator-lifecycle-lock.sh"):
         shutil.copy2(ROOT / "scripts" / dependency, scripts_dir / dependency)
     script = scripts_dir / "deploy-node.sh"
@@ -926,7 +928,11 @@ def test_deploy_fresh_contract_rejects_existing_compose_resources(tmp_path: Path
         """#!/usr/bin/env bash
 set -euo pipefail
 if [[ "${@: -1}" == "/etc/os-release" ]]; then
-  printf '26.04\\n'
+  case "$*" in
+    *'s/^ID='*) printf 'ubuntu\\n' ;;
+    *'s/^VERSION_ID='*) printf '26.04\\n' ;;
+    *) exit 0 ;;
+  esac
 else
   exec /usr/bin/sed "$@"
 fi
