@@ -942,6 +942,7 @@ esac
             "PINVI_ROOT_DIR": str(tmp_path),
             "PINVI_ENV_FILE": str(tmp_path / "missing.env"),
             "PINVI_ENVIRONMENT": "staging",
+            "PINVI_DOCKER_MANAGER_UNAVAILABLE": "1",
             "PINVI_DEPLOY_FRESH_STACK": "1",
             "PINVI_DOCKER_PROJECT": "pinvi-test",
         },

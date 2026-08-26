@@ -166,9 +166,9 @@ opaque 단기 token 또는 tile proxy로 대체한다. 모바일 지도 엔진�
   Linux에서 `git worktree repair <path>`로 고친 뒤 사용한다. 같은 worktree를
   Windows `git.exe`로 다시 조작하지 않는다.
 - **Frontend 실행**: `apps/web` dev server, lint, typecheck, build, Vitest는
-  Linux에서 실행한다. Playwright는 N150에서 먼저 실행하며, 기본은
+  Linux에서 실행한다. Playwright는 N150에서만 실행하며, 기본은
   `scripts/n150-playwright-runner.sh` Docker runner다. N150 Docker runner와 host browser 실행이
-  모두 runtime/권한 문제로 불가능할 때만 Windows runner를 fallback으로 쓴다.
+  모두 runtime/권한 문제로 불가능하면 gate를 중단한다.
 - **dev/prod 분리 + 고정 12xxx 포트 (ADR-047)**: 별도 지시가 없으면 대상은 **dev**다.
   dev는 이 worktree에서 직접 띄우고 **내부 주소 `127.0.0.1`의 12xxx 고정 포트**만 쓴다:
   PostgreSQL `5432`, API `12801`, 웹 `12805`, Dagster `12802`,
@@ -219,9 +219,9 @@ opaque 단기 token 또는 tile proxy로 대체한다. 모바일 지도 엔진�
   `/mnt/c/...`, `.exe`, `.cmd`를 가리키면 중지하고 PATH/설치를 고친다.
 - **의존성 설치·`pytest`·`docker`·장기 실행·프론트 dev/lint/typecheck/build/Vitest**:
   모두 Linux worktree에서 실행한다. 별도 rsync 미러를 source of truth로 쓰지 않는다.
-- **Playwright**: N150에서 먼저 실행한다. 기본은 `scripts/n150-playwright-runner.sh`
+- **Playwright**: N150에서만 실행한다. 기본은 `scripts/n150-playwright-runner.sh`
   Docker runner다. N150 Docker runner와 host browser 실행이 모두 브라우저 runtime/권한/네트워크
-  문제로 불가능할 때만 Windows runner를 fallback으로 사용하고, 사유와 명령을 journal/PR에
+  문제로 불가능하면 Windows로 우회하지 않고 gate를 중단하며, 사유와 명령을 journal/PR에
   남긴다.
 - **데이터(`dataset/`, `refdocs/`)**: 변경 금지 원본은 절대경로 또는 심볼릭 링크로
   참조하고 git에 커밋하지 않는다.
@@ -395,7 +395,7 @@ Telegram에 간단한 완료 요약과 PR 링크를 보낸다. PR이 없는 문�
 - 여러 파일·DB schema·서비스 경계를 건드리면 `docs/execplan/<task-name>.md`를
   작성/갱신한다.
 - 의미 있는 변경은 테스트와 문서 갱신을 포함하고, 실행한 검사 명령과 환경
-  (Linux / N150 / Windows fallback)을 보고한다.
+  (Linux / N150)을 보고한다.
 - 유사한 실수가 반복되면 원인과 재발방지 기준을 관련 문서/runbook/skill에 남긴다.
 - Docker, Compose, PostgreSQL/PostGIS, Dagster, backend test, Alembic 검증은
   Linux에서 실행한다.

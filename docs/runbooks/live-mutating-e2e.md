@@ -285,8 +285,10 @@ python scripts/m05_activation_attestation.py live \
   -- scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- apps/web/e2e/admin-feature-reference-reconciliations-live-mutating.live.ts --workers=1
 ```
 
-`m05_activation_attestation.py live`가 M05 UI verification ID와 실제 runner image ID/ref를 생성해
-child suite에 전달하므로 이 두 값을 수동으로 지정하지 않는다. M05 event가 목록 첫 페이지에 없거나
+`m05_activation_attestation.py live`가 M04 증적의 verification ID를 M05 activation nonce로
+의도적으로 재사용하고, 실제 runner image ID/ref를 생성해 child suite에 전달하므로 이 두 값을
+수동으로 지정하지 않는다. M04 challenge와 M05 activation을 같은 nonce로 결박하는 계약이다.
+M05 event가 목록 첫 페이지에 없거나
 terminal receipt가 없으면 fixture/worker/ACK 상태를 먼저 확인한다.
 activation gate에서는 단독 UI pass가 아니라, 앞 절의 서명된 M04 증적과 `live`의 Map 결정·ACK
 server-side 대조까지 모두 성공해야 한다.

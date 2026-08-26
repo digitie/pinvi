@@ -816,7 +816,7 @@ sync`가 file watcher 없이도 가능 → CI / 자동화에 친화적.
 
 ## ADR-022: Backup / Restore 핫스왑 정책
 
-- **상태**: accepted
+- **상태**: superseded by ADR-067
 - **날짜**: 2026-05-27
 - **결정자**: 사용자
 - **컨텍스트**: Sprint 6 DoD에 "백업 + 복구 훈련 1회"가 있고 SPEC V8도 RTO 1h
@@ -841,7 +841,8 @@ sync`가 file watcher 없이도 가능 → CI / 자동화에 친화적.
     - 2. restored schema가 healthy하면 짧은 write drain 후 schema rename으로
          cut-over한다: `app` → `app_previous_<ts>`,
          `app_restore_<ts>` → `app`.
-    - 3. previous schema는 N150/staging 7일, Odroid M1S 24시간 보존 후 자동 삭제한다.
+    - 3. previous schema는 N150/staging 7일 보존 후 자동 삭제한다. (당시 Odroid M1S
+      24시간 보존안은 ADR-067에 의해 폐기됐다.)
     - 핫스왑은 무중단이 아니라 near-zero downtime(목표 30~90초) schema-swap이다.
   - **훈련**: 분기 1회 staging에서 핫스왑 PoC. Sprint 6 종료 시 1회 prod에서
     훈련 (read-only mode + 가족 베타 사용자에게 안내).
@@ -2091,7 +2092,7 @@ Pinvi Dagster job의 공통 표준을 먼저 고정한다.
 - 실제 retention/location 삭제·익명화는 T-276에서 kill-switch와 운영 dashboard를 포함해 별도
   검증한다.
 
-## ADR-051: 개발·git·CodeGraph는 Linux 기준, Playwright는 N150 우선 실행
+## ADR-051: 개발·git·CodeGraph는 Linux 기준, Playwright는 N150 전용 실행
 
 - **상태**: accepted
 - **날짜**: 2026-06-28
@@ -2106,14 +2107,14 @@ git이 `fatal: not a git repository`를 내고, `git worktree list`에서는 정
 shim으로 잡히면 Linux-only 실행 원칙을 깨고, 같은 포인터/경로 혼용 문제를 다시 만든다.
 
 사용자는 2026-06-28에 “모든 개발은 WSL을 포함한 Linux 환경에서만 진행, git/CodeGraph도 Linux에서
-실행, Playwright는 N150 환경에서 실행하고 불가 시 Windows에서 실행”으로 운영 기준을 재지정했다.
+실행, Playwright live/UI gate는 N150 환경에서만 실행”으로 운영 기준을 재지정했다.
 따라서 ADR-024와 ADR-017의 Windows `git.exe` amendment를 supersede한다.
 
 ### 결정
 
 - **모든 개발 작업은 Linux 환경에서 수행한다.** 기본 로컬 실행 위치는 WSL/Linux이며, N150은
-  운영/live 검증 위치다. Windows는 Linux/N150에서 브라우저 검증이 불가능할 때의 Playwright
-  fallback runner로만 사용한다.
+  운영/live 검증 위치다. Playwright live/UI gate는 N150에서만 실행하고, N150에서 브라우저
+  검증이 불가능하면 gate를 중단한다.
 - **git / branch / commit / push / PR은 Linux git으로 수행한다.** NTFS 경로(`/mnt/f/...`)에 있는
   기존 고정 worktree도 Linux git 기준으로 `git worktree repair <path>`를 수행해 `.git`/`gitdir`
   포인터를 `/mnt/...` 경로로 맞춘다. 이후 같은 worktree를 Windows `git.exe`로 조작하지 않는다.
@@ -2137,13 +2138,13 @@ shim으로 잡히면 Linux-only 실행 원칙을 깨고, 같은 포인터/경로
 - 현재 개발·검증 명령 대부분(`pytest`, Docker, npm, dev server, CodeGraph)은 Linux에서 더 자연스럽고
   운영 N150도 Linux라 환경 차이가 줄어든다.
 - Playwright는 실제 운영 브라우저 접근성·네트워크·CORS·WebSocket drift를 잡기 위해 N150 live
-  검증을 우선해야 한다. Windows runner는 로컬 브라우저 의존성이 필요한 예외 경로로 남긴다.
+  검증을 수행한다. Windows runner는 live/UI gate의 실행 경로로 지원하지 않는다.
 
 ### 결과 (긍정)
 
 - `fatal: not a git repository ... F:/...`와 `prunable` 오판을 한 환경 기준으로 정리할 수 있다.
 - CodeGraph 인덱스와 git 포인터가 같은 Linux 경로 체계를 쓰므로 새 task 진입 절차가 단순해진다.
-- N150 우선 Playwright로 운영 drift를 더 빨리 발견한다.
+- N150 전용 Playwright로 운영 drift를 더 빨리 발견한다.
 
 ### 결과 (부정)
 
@@ -3238,8 +3239,10 @@ Odroid M1S는 더 이상 Pinvi의 실행·배포·복구 환경으로 사용하�
 - Odroid의 API/Web/Dagster 실행, DB 복구, public traffic 전환, UPS shutdown hook, doctor
   실행을 Pinvi의 지원 범위에서 영구 제거한다.
 - `N150 + kor-travel-docker-manager`를 유일한 staging/production 실행·배포 경로로 사용한다.
-- `scripts/deploy-node.sh`의 격리 fallback은 N150에서만 허용한다. Odroid doctor와 Odroid
-  runbook은 실행 가능한 절차가 아니라 퇴역 안내로 남긴다.
+- `scripts/deploy-node.sh`의 staging/production mutation과 격리 fallback은 N150의
+  `unix:///var/run/docker.sock` 로컬 Docker target에서만 허용한다. 직접 `migrate`/`up`/
+  `dagster`도 fresh-stack 계약을 우회할 수 없다. Odroid doctor와 Odroid runbook은 실행
+  가능한 절차가 아니라 퇴역 안내로 남긴다.
 - `linux/arm64` 빌드·패키지 호환성 검증처럼 실행 노드를 전제하지 않는 역사적/CI 자료는
   별도 필요가 있을 때까지 보존할 수 있지만, Odroid runtime을 생성하거나 전환하는 명령은
   제공하지 않는다.

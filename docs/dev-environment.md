@@ -245,7 +245,7 @@ SH
 
 ## 참고
 
-- ADR-051 — Linux 전용 개발·git·CodeGraph + N150 우선 Playwright.
+- ADR-051 — Linux 전용 개발·git·CodeGraph + N150 전용 Playwright.
 - ADR-017 — agent별 고정 worktree + CodeGraph 인덱스. Windows `git.exe` amendment는
   ADR-051이 supersede.
 - ADR-024 — 과거 NTFS source / WSL 미러 모델. ADR-051이 supersede.

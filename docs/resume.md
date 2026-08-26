@@ -37,6 +37,16 @@ source가 바뀌면 Manager pinset과 candidate identity도 바뀌므로, old d9
 별도 Manager PR과 새 candidate를 사용한다. 설계는
 [`t-vn-m05-role-topology-verifier.md`](execplan/t-vn-m05-role-topology-verifier.md)다.
 
+## 2026-08-26 (codex) — PR487 2차 리뷰 지적 반영 중
+
+두 전문 리뷰가 정확한 `90e958885..5316b807`에서 P1을 추가로 찾았다. 직접 migration/runtime
+entrypoint의 N150·fresh-stack 우회와 accepted ADR-022의 Odroid 복구 지시를 닫고, direct Compose의
+legacy 외부 DB·host port·원격 Docker target 및 fixed-name 충돌도 fail-closed로 보강했다. 로컬
+targeted suite는 `112 passed, 2 warnings`다.
+
+**다음 한 작업**: 변경을 commit/push한 새 exact head에서 N150 fresh `0100→0101` deploy/smoke와
+실제 Admin UI 2건을 재실행하고, 두 전문 리뷰의 P1=0·GitHub CI green을 확인한 뒤 PR #487을 머지한다.
+
 ## 2026-08-26 (claude) — T-351 머지 완료 (통합 테스트 CI 4-shard 분리)
 
 `pytest tests/integration`(684건, 91개 파일)이 계속 자라 T-348로 job timeout을 올려도

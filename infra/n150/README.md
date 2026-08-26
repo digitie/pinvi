@@ -33,8 +33,9 @@ sudo -n backend/.venv/bin/ktdctl pinvi-pair rebuild-pinned --confirm
 
 운영 source pin과 `.env`는 manager가 관리한다. 이 명령은 현재
 rehearsal/rebuildable 정책의 정본이며 paired Map·Pinvi DB/runtime을 재구축한다. 일반
-Pinvi fallback은 manager가 설치·기동되지 않은 경우에만 N150의 기존 Compose project·DB
-volume이 없는 fresh stack에서 `PINVI_DEPLOY_FRESH_STACK=1`과 고유한
+Pinvi fallback은 manager가 설치·기동되지 않은 경우에만 `PINVI_DOCKER_MANAGER_UNAVAILABLE=1`을
+명시하고, N150의 기존 Compose project·DB volume이 없는 fresh stack에서
+`PINVI_DEPLOY_FRESH_STACK=1`과 고유한
 `PINVI_DOCKER_PROJECT`를 지정해 `scripts/deploy-node.sh`를 사용하고, production에서는
 `PINVI_RATE_LIMIT_BACKEND=postgres`와 동일한 lifecycle lock/migration 경계를 유지한다.
 

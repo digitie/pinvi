@@ -45,9 +45,8 @@
 - **CodeGraph**: Linux native `codegraph`만 사용한다. `/mnt/c/...`, `.exe`, `.cmd`
   Windows shim으로 잡히면 중지하고 PATH/설치를 고친다.
 - **의존성 설치 / `pytest` / `docker` / 장기 실행 / 프론트 검증**: Linux에서 수행한다.
-- **Playwright**: N150에서 먼저 실행하고, 기본은 `scripts/n150-playwright-runner.sh` Docker
-  runner다. N150 Docker runner와 host browser 실행이 모두 불가능할 때만 Windows fallback runner를
-  쓴다.
+- **Playwright**: N150에서만 실행하고, 기본은 `scripts/n150-playwright-runner.sh` Docker
+  runner다. N150 Docker runner와 host browser 실행이 모두 불가능하면 gate를 중단한다.
 - **데이터(`dataset/`, `refdocs/`)**: 변경 금지 원본은 절대경로/심볼릭 링크로 참조한다.
 - 절차·함정 전체는 `docs/dev-environment.md` + `docs/agent-workflow.md`,
   반복 실패는 `docs/agent-failure-patterns.md`.
@@ -166,8 +165,8 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
    처리한다.
 6. **Windows git / Windows shim으로 개발 명령 실행 금지** — git, CodeGraph,
    `pytest`, `docker`, `npm`, `rg`는 Linux native로 실행한다(ADR-051). `command -v`가
-   `/mnt/c/...`, `.exe`, `.cmd`를 가리키면 중지한다. Playwright는 N150 우선,
-   Windows는 fallback만 허용한다.
+   `/mnt/c/...`, `.exe`, `.cmd`를 가리키면 중지한다. Playwright는 N150에서만 실행하고,
+   N150이 불가하면 gate를 중단한다.
 
 ### Telegram 완료 알림 MCP (모든 agent)
 

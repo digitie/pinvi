@@ -735,6 +735,14 @@ def test_direct_reset_and_down_require_isolated_runtime_identity(tmp_path: Path)
     fake_docker.write_text(
         """#!/usr/bin/env bash
 set -euo pipefail
+if [[ "$1 $2" == "context show" ]]; then
+  printf '%s\n' default
+  exit 0
+fi
+if [[ "$1 $2" == "context inspect" ]]; then
+  printf '%s\n' unix:///var/run/docker.sock
+  exit 0
+fi
 if [[ "$1 $2" == "compose version" ]]; then
   exit 0
 fi
@@ -815,6 +823,22 @@ fi
     )
     assert external_db_reset.returncode != 0
     assert "isolated app-postgres service" in external_db_reset.stderr
+    assert not event_log.exists()
+
+    external_legacy_db_reset = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
+        [str(ROOT / "scripts" / "docker-app.sh"), "reset"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=dict(
+            isolated,
+            PINVI_LEGACY_REBASELINE_DATABASE_URL=(
+                "postgresql+asyncpg://pinvi:secret@prod-db:5432/pinvi"
+            ),
+        ),
+    )
+    assert external_legacy_db_reset.returncode != 0
+    assert "PINVI_LEGACY_REBASELINE_DATABASE_URL" in external_legacy_db_reset.stderr
     assert not event_log.exists()
 
     stale_reset = subprocess.run(  # noqa: S603 -- fixed test-only shell driver

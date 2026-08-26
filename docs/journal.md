@@ -42,6 +42,23 @@
   disposable PostGIS 16 regression을 추가한다. 설계 정본은
   `docs/execplan/t-vn-m05-role-topology-verifier.md`다.
 
+## 2026-08-26 (codex) — PR487 2차 적대 리뷰 P1 보완
+
+- 정확한 `90e958885..5316b807`에 대한 두 전문 리뷰에서 직접 `migrate/up/dagster`의 fresh/N150
+  우회, accepted ADR-022의 Odroid 복구 지시, direct Compose legacy 외부 DB·비정상 port·원격
+  Docker target, fixed-name container 충돌을 지적했다.
+- `deploy-node.sh`는 모든 mutation을 N150 x86_64 Ubuntu 26.04와 로컬
+  `unix:///var/run/docker.sock`에 결박하고, `migrate/up/dagster`도 lifecycle lock 안에서
+  `PINVI_DOCKER_MANAGER_UNAVAILABLE=1`·`PINVI_DEPLOY_FRESH_STACK=1`·고유 project·빈
+  project/volume/network/fixed-name container 계약을 통과해야 실행하도록 보강했다.
+- `docker-app.sh`는 일반/legacy DB URL을 모두 `app-postgres`로 결박하고 host port 범위와
+  Docker context/endpoint를 검증한다. ADR-022/ADR-051과 활성 운영 문서의 Odroid/Windows
+  fallback 모순도 정리했다. M05 문서에는 M04 verification ID를 activation nonce로 의도적으로
+  공유하는 계약을 명시했다.
+- 로컬 검증: 운영 targeted suite `112 passed, 2 warnings`, Ruff/format, 전체 shell syntax,
+  Compose config, diff check 통과. 수정 push 뒤 새 exact head의 N150 fresh deploy/live UI,
+  두 재리뷰, CI를 다시 수행한다.
+
 ## 2026-08-26 (claude) — T-351 머지 (PR #495, 통합 테스트 CI 4-shard 분리)
 
 - 사용자가 "t351 진행"을 요청해 착수했다. `.github/workflows/api.yml`의 `lint-typecheck-test`

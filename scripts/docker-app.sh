@@ -131,6 +131,32 @@ require_docker() {
     echo "docker compose plugin not found" >&2
     exit 127
   fi
+  require_local_docker_target
+}
+
+require_local_docker_target() {
+  if [[ -n "${DOCKER_HOST:-}" || -n "${DOCKER_CONTEXT:-}" ]]; then
+    echo "docker-app requires the local default Docker target; DOCKER_HOST/DOCKER_CONTEXT are unsupported" >&2
+    return 2
+  fi
+  local context endpoint
+  if ! context="$(docker context show 2>/dev/null)"; then
+    echo "could not determine the Docker context; refusing container mutation" >&2
+    return 1
+  fi
+  if [[ "$context" != "default" ]]; then
+    echo "docker-app requires the default local Docker context" >&2
+    return 2
+  fi
+  if ! endpoint="$(docker context inspect default \
+    --format '{{ (index .Endpoints "docker").Host }}' 2>/dev/null)"; then
+    echo "could not inspect the default Docker endpoint; refusing container mutation" >&2
+    return 1
+  fi
+  if [[ "$endpoint" != "unix:///var/run/docker.sock" ]]; then
+    echo "docker-app requires Docker endpoint unix:///var/run/docker.sock" >&2
+    return 2
+  fi
 }
 
 compose() {
@@ -205,6 +231,26 @@ free_app_ports() {
   free_host_port "$CADVISOR_PORT"
   free_host_port "$PROMETHEUS_PORT"
   free_host_port "$GRAFANA_PORT"
+}
+
+validate_host_port() {
+  local name="$1"
+  local value="$2"
+  if [[ ! "$value" =~ ^[1-9][0-9]{0,4}$ ]] || (( value > 65535 )); then
+    echo "${name} must be an integer host port between 1 and 65535" >&2
+    return 2
+  fi
+}
+
+validate_configured_ports() {
+  validate_host_port PINVI_API_PORT "$API_PORT"
+  validate_host_port PINVI_WEB_PORT "$WEB_PORT"
+  validate_host_port PINVI_RUSTFS_PORT "$RUSTFS_PORT"
+  validate_host_port PINVI_RUSTFS_CONSOLE_PORT "$RUSTFS_CONSOLE_PORT"
+  validate_host_port PINVI_DAGSTER_DEV_PORT "$DAGSTER_PORT"
+  validate_host_port PINVI_CADVISOR_PORT "$CADVISOR_PORT"
+  validate_host_port PINVI_PROMETHEUS_PORT "$PROMETHEUS_PORT"
+  validate_host_port PINVI_GRAFANA_PORT "$GRAFANA_PORT"
 }
 
 assert_host_ports_available_before_migration() {
@@ -1540,16 +1586,17 @@ configured_environment() {
 }
 
 configured_database_url() {
+  local key="${1:-PINVI_DATABASE_URL}"
   local database_url="" source_file
-  if [[ -n "${PINVI_DATABASE_URL+x}" ]]; then
-    database_url="$PINVI_DATABASE_URL"
+  if [[ -n "${!key+x}" ]]; then
+    database_url="${!key}"
     printf '%s\n' "$database_url"
     return
   fi
   source_file="$(compose_env_source_file)"
   if [[ -n "$source_file" ]]; then
     database_url="$(sed -nE \
-      's/^[[:space:]]*(export[[:space:]]+)?PINVI_DATABASE_URL[[:space:]]*=[[:space:]]*([^[:space:]#]+).*/\2/p' \
+      "s/^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=[[:space:]]*([^[:space:]#]+).*/\\2/p" \
       "$source_file" | tail -n 1)"
     database_url="${database_url#\"}"
     database_url="${database_url%\"}"
@@ -1560,15 +1607,17 @@ configured_database_url() {
 }
 
 require_isolated_database_endpoint() {
-  local database_url
-  if ! database_url="$(configured_database_url)"; then
-    return 2
-  fi
-  if [[ -n "$database_url" \
-    && ! "$database_url" =~ ^postgresql\+asyncpg://[^@/]+@app-postgres:5432/pinvi$ ]]; then
-    echo "direct Compose mutation requires PINVI_DATABASE_URL to target the isolated app-postgres service" >&2
-    return 2
-  fi
+  local key database_url
+  for key in PINVI_DATABASE_URL PINVI_LEGACY_REBASELINE_DATABASE_URL; do
+    if ! database_url="$(configured_database_url "$key")"; then
+      return 2
+    fi
+    if [[ -n "$database_url" \
+      && ! "$database_url" =~ ^postgresql\+asyncpg://[^@/]+@app-postgres:5432/pinvi$ ]]; then
+      echo "direct Compose mutation requires ${key} to target the isolated app-postgres service" >&2
+      return 2
+    fi
+  done
 }
 
 require_canonical_direct_compose_target() {
@@ -1604,6 +1653,8 @@ require_isolated_direct_compose_project() {
 
 require_direct_compose_mutation_environment() {
   local environment_name
+  require_docker
+  validate_configured_ports
   if ! environment_name="$(configured_environment)"; then
     return 2
   fi

@@ -117,13 +117,17 @@ origin 증명이 있으면 허용되며, data-bearing `0061` database는 legacy 
 없이는 `0101`로 진행하지 않는다.
 
 ```bash
+PINVI_DOCKER_MANAGER_UNAVAILABLE=1 \
+PINVI_DEPLOY_FRESH_STACK=1 \
+PINVI_DOCKER_PROJECT=pinvi-<isolated-name> \
 PINVI_M05_LEGACY_REBASELINE=1 \
 PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE=n150-production \
 PINVI_M05_LEGACY_REBASELINE_RECEIPT_HOST_PATH=/secure/rebaseline/receipt.json \
 scripts/deploy-node.sh migrate
 ```
 
-이 명령은 일반 `app-migrator` 대신 별도 root-only legacy profile을 사용한다. fresh backup, read-only
+이 명령은 일반 `app-migrator` 대신 별도 root-only legacy profile을 사용한다. N150에서만 실행되며
+고유한 fresh Compose project와 기존 container/volume/network가 없는 상태를 요구한다. fresh backup, read-only
 preflight, 별도 운영 승인이 없는 상태에서는 실행하지 않는다. root URL은 protected env file의
 `PINVI_LEGACY_REBASELINE_DATABASE_URL`로만 주입한다. wrapper는 receipt와 직접 parent가 모두
 root-owned/private인지 확인한 뒤 container root에 read-only mount하고, `0101`은 그 applied receipt의

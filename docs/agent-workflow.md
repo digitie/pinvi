@@ -10,7 +10,7 @@
 | 위치                 | 정체            | 여기서 하는 것                                                     | 주의                                                       |
 | -------------------- | --------------- | ------------------------------------------------------------------ | ---------------------------------------------------------- |
 | Linux agent worktree | source of truth | 편집, git, CodeGraph, commit, push, PR, 테스트, Docker, dev server | 기존 `/mnt/f/...` worktree도 Linux 포인터로 repair 후 사용 |
-| N150                 | live 검증       | 운영/스테이징 smoke, live API/UI, Playwright 우선 실행             | 민감 host/IP/domain은 로컬 런북에만 기록                   |
+| N150                 | live 검증       | 운영/스테이징 smoke, live API/UI, Playwright 전용 실행             | 민감 host/IP/domain은 로컬 런북에만 기록                   |
 | Windows              | 비대상          | live/UI gate의 브라우저 실행 대상이 아님                         | N150 불가 시 gate 중단                                     |
 
 - 에이전트별 worktree 이름은 고정이다(ADR-017): Claude=`pinvi-claude`,
@@ -90,13 +90,9 @@ cd ~/pinvi
 scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e -- <spec> --workers=1
 ```
 
-N150 Docker runner와 host browser 실행이 모두 runtime/권한/네트워크 문제로 불가능할 때만
-Windows runner를 쓴다.
-그 경우 검증 기록에 다음 정보를 남긴다.
-
-- N150에서 실패한 이유 또는 gate 중단 사유
-- Windows에서 live/UI gate를 실행하지 않았는지 확인
-- 통과/실패한 spec
+N150 Docker runner와 host browser 실행이 모두 runtime/권한/네트워크 문제로 불가능하면
+Windows로 우회하지 않고 gate를 중단한다. 검증 기록에는 N150 runner 또는 host browser의
+실패 이유와 gate 중단 사유, 통과/실패한 spec을 남긴다.
 
 ## 6. PR 마무리
 

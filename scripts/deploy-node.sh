@@ -54,6 +54,7 @@ GRAFANA_PORT="$(compose_env_value PINVI_GRAFANA_PORT 12205)"
 # Dagster webserver(profile etl)를 같이 띄울지. 운영에서 pinvi-dagster.<domain>을 쓰면 1.
 ENABLE_DAGSTER="${PINVI_ENABLE_DAGSTER:-0}"
 DEPLOY_FRESH_STACK="$(compose_env_value PINVI_DEPLOY_FRESH_STACK 0)"
+DEPLOY_MANAGER_UNAVAILABLE="$(compose_env_value PINVI_DOCKER_MANAGER_UNAVAILABLE 0)"
 MIGRATOR_ONE_SHOT_PASSWORD=""
 MIGRATOR_LOGIN_NEEDS_SEAL="0"
 MIGRATOR_LEGACY_REBASELINE="0"
@@ -115,7 +116,8 @@ Optional env:
   PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/absolute/host/path/bootstrap-admin.json
 
 Fresh fallback deploy (N150 only):
-  PINVI_DEPLOY_FRESH_STACK=1 PINVI_DOCKER_PROJECT=pinvi-<isolated-name> scripts/deploy-node.sh deploy
+  PINVI_DOCKER_MANAGER_UNAVAILABLE=1 PINVI_DEPLOY_FRESH_STACK=1 \
+  PINVI_DOCKER_PROJECT=pinvi-<isolated-name> scripts/deploy-node.sh deploy
 
 Run this script on the target node from /opt/pinvi or set PINVI_ROOT_DIR.
 EOF
@@ -129,6 +131,31 @@ require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "$1 not found" >&2
     exit 127
+  fi
+}
+
+require_local_docker_target() {
+  if [[ -n "${DOCKER_HOST:-}" || -n "${DOCKER_CONTEXT:-}" ]]; then
+    echo "deploy-node requires the local default Docker target; DOCKER_HOST/DOCKER_CONTEXT are unsupported" >&2
+    return 2
+  fi
+  local context endpoint
+  if ! context="$(docker context show 2>/dev/null)"; then
+    echo "could not determine the Docker context; refusing container mutation" >&2
+    return 1
+  fi
+  if [[ "$context" != "default" ]]; then
+    echo "deploy-node requires the default local Docker context" >&2
+    return 2
+  fi
+  if ! endpoint="$(docker context inspect default \
+    --format '{{ (index .Endpoints "docker").Host }}' 2>/dev/null)"; then
+    echo "could not inspect the default Docker endpoint; refusing container mutation" >&2
+    return 1
+  fi
+  if [[ "$endpoint" != "unix:///var/run/docker.sock" ]]; then
+    echo "deploy-node requires Docker endpoint unix:///var/run/docker.sock" >&2
+    return 2
   fi
 }
 
@@ -148,12 +175,13 @@ source "$ROOT_DIR/scripts/migrator-lifecycle-lock.sh"
 
 preflight() {
   require_command docker
+  validate_configured_ports
+  require_local_docker_target
   require_command curl
   require_command git
   require_command python3
   docker compose version >/dev/null
   [[ -f "$COMPOSE_FILE" ]] || { echo "compose file missing: $COMPOSE_FILE" >&2; exit 2; }
-  validate_configured_ports
 }
 
 resolved_environment() {
@@ -252,6 +280,11 @@ require_n150_execution_host() {
 
 require_fresh_stack_contract() {
   local existing_containers existing_volumes existing_networks
+  local fixed_name fixed_container_names actual_name
+  [[ "$DEPLOY_MANAGER_UNAVAILABLE" == "1" ]] || {
+    echo "fresh deploy requires explicit PINVI_DOCKER_MANAGER_UNAVAILABLE=1" >&2
+    return 2
+  }
   [[ "$DEPLOY_FRESH_STACK" == "1" ]] || {
     echo "deploy-node deploy requires PINVI_DEPLOY_FRESH_STACK=1" >&2
     return 2
@@ -282,6 +315,18 @@ require_fresh_stack_contract() {
     echo "fresh deploy refuses an existing Compose project, PostgreSQL volume, or network" >&2
     return 2
   fi
+  for fixed_name in pinvi-app-dagster pinvi-cadvisor pinvi-app-blackbox pinvi-prometheus pinvi-grafana; do
+    if ! fixed_container_names="$(docker container ls --all \
+      --filter "name=${fixed_name}" --format '{{.Names}}')"; then
+      echo "could not inspect fixed-name containers for a fresh deploy" >&2
+      return 1
+    fi
+    while IFS= read -r actual_name; do
+      [[ "$actual_name" == "$fixed_name" ]] || continue
+      echo "fresh deploy refuses the existing fixed-name container ${fixed_name}" >&2
+      return 2
+    done <<< "$fixed_container_names"
+  done
 }
 
 assert_host_ports_available_before_migration() {
@@ -1361,11 +1406,19 @@ migrate_under_lifecycle_lock() {
   return 1
 }
 
+fresh_stack_contract_failure() {
+  release_migrator_lifecycle_lock
+  return 1
+}
+
 migrate() {
   reject_explicit_migrator_database_url
   pinvi_prepare_api_image_provenance require-immutable
   assert_host_ports_available_before_migration
   acquire_migrator_lifecycle_lock
+  if ! require_fresh_stack_contract; then
+    fresh_stack_contract_failure
+  fi
   # EXIT handler가 실패 시 writer 복구와 lifecycle lock 해제를 담당한다. 조건문
   # 안에서 호출하면 Bash가 함수 내부의 errexit을 끄므로 migration 본문은 직접 호출한다.
   migrate_under_lifecycle_lock
@@ -1484,6 +1537,9 @@ up() {
   pinvi_prepare_api_image_provenance require-immutable
   assert_host_ports_available_before_migration
   acquire_migrator_lifecycle_lock
+  if ! require_fresh_stack_contract; then
+    fresh_stack_contract_failure
+  fi
   RUNTIME_DEPLOY_PRESERVE="1"
   if ! drain_runtime_writers; then
     log "runtime writer drain failed"
@@ -1498,6 +1554,9 @@ dagster_up() {
   pinvi_prepare_api_image_provenance require-immutable
   assert_host_ports_available_before_migration
   acquire_migrator_lifecycle_lock
+  if ! require_fresh_stack_contract; then
+    fresh_stack_contract_failure
+  fi
   RUNTIME_DEPLOY_PRESERVE="1"
   prepare_standalone_dagster_writer
   RUNTIME_NEW_WRITERS_STARTED="1"
@@ -1633,11 +1692,13 @@ status() {
 }
 
 deploy() {
-  require_fresh_stack_contract
+  acquire_migrator_lifecycle_lock
+  if ! require_fresh_stack_contract; then
+    fresh_stack_contract_failure
+  fi
   build_images
   reject_explicit_migrator_database_url
   assert_host_ports_available_before_migration
-  acquire_migrator_lifecycle_lock
   RUNTIME_DEPLOY_PRESERVE="1"
   if ! drain_runtime_writers; then
     log "runtime writer drain failed"
@@ -1660,6 +1721,11 @@ main() {
       ;;
   esac
   preflight
+  case "${1:-}" in
+    deploy|build|pull|migrate|up|dagster|smoke)
+      require_n150_execution_host
+      ;;
+  esac
   case "${1:-}" in
     deploy|build|pull|migrate|up|dagster|smoke)
       pinvi_prepare_api_image_provenance require-immutable
