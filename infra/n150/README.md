@@ -1,8 +1,8 @@
 # N150 운영 노드
 
 N150 16GB + NVMe 1TB + Ubuntu 26.04 LTS 기준 유일한 운영 노드다(ADR-067).
-Ubuntu 26.04가 준비되지 않은 시점이면 24.04 LTS로 시작하고 문서의 OS version
-doctor 기대값만 조정한다.
+배포·live UI·V100 검증은 Ubuntu 26.04 LTS를 실행 계약으로 고정하며, 24.04 LTS는
+지원 대상이나 fallback 실행 호스트로 사용하지 않는다.
 
 ## 역할
 

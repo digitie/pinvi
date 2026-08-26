@@ -154,8 +154,9 @@ tar xf geoip.tar.gz
 mv GeoLite2-Country_*/GeoLite2-Country.mmdb /etc/nginx/GeoIP/
 mv GeoLite2-Country_*/GeoLite2-Country.mmdb /etc/pinvi/
 
-# nginx + api 재시작 (rolling)
-docker compose -f /opt/pinvi/docker-compose.app.yml restart nginx api
+# 현재 canonical Pinvi Compose에는 nginx 서비스가 없다. reverse proxy와 API 재기동은
+# 운영 manager의 승인된 target 절차에서 수행한다. 이 문서의 예전 inline Compose
+# 재시작 명령은 사용하지 않는다.
 
 rm -rf "$TMP"
 echo "$(date) GeoIP updated" >> /var/log/pinvi/geoip-update.log

@@ -63,6 +63,7 @@ _REVIEWER_ROSTER = Path(__file__).resolve().parents[1] / (
 _EVIDENCE_FILES = (
     "attestation.json",
     "reviews.json",
+    "ui-run.json",
     "live-ui.json",
     "restore.json",
     "map-pair.json",
@@ -1302,6 +1303,7 @@ def _validate_ledger_evidence(args: argparse.Namespace, payload: dict[str, objec
 
     expected_hashes = {
         "activation_attestation_sha256": evidence_hashes["attestation"],
+        "ui_run_evidence_sha256": evidence_hashes["ui_run"],
         "live_ui_evidence_sha256": evidence_hashes["live_ui"],
         "map_pair_evidence_sha256": evidence_hashes["map_pair"],
         "pinvi_image_evidence_sha256": evidence_hashes["pinvi_images"],
@@ -1336,6 +1338,12 @@ def _validate_ledger_evidence(args: argparse.Namespace, payload: dict[str, objec
     if payload.get("adversarial_reviews") != reviews:
         raise ReceiptError("receipt adversarial reviews do not match the supplied review evidence")
     live_ui = _live_ui(evidence["live_ui"], pinvi_source_revision=source_revision)
+    _ui_run(
+        evidence["ui_run"],
+        live_ui=live_ui,
+        pinvi_source_revision=source_revision,
+        ui_run_sha256=evidence_hashes["ui_run"],
+    )
     _restore(
         evidence["restore"],
         pinvi_source_revision=source_revision,
@@ -1353,6 +1361,7 @@ def _validate_ledger_evidence(args: argparse.Namespace, payload: dict[str, objec
         evidence["attestation"],
         evidence_hashes={
             "live-ui": evidence_hashes["live_ui"],
+            "ui-run": evidence_hashes["ui_run"],
             "map-pair": evidence_hashes["map_pair"],
             "pinvi-images": evidence_hashes["pinvi_images"],
             "restore": evidence_hashes["restore"],
@@ -1382,6 +1391,10 @@ def _validate_ledger_evidence(args: argparse.Namespace, payload: dict[str, objec
         != live_ui["m04_pinvi_approval_sha256"]
         or payload.get("m04_verification_id") != live_ui["m04_verification_id"]
         or payload.get("activation_nonce") != live_ui["m04_verification_id"]
+        or payload.get("m05_old_feature_id") != live_ui["old_feature_id"]
+        or payload.get("m05_replacement_feature_id") != live_ui["replacement_feature_id"]
+        or payload.get("m05_impact_count") != live_ui["impact_count"]
+        or payload.get("m05_pinvi_detail_sha256") != live_ui["pinvi_detail_sha256"]
         or payload.get("live_ui_map_admin_endpoint") != live_ui["map_admin_endpoint"]
         or payload.get("live_ui_pinvi_api_endpoint") != live_ui["pinvi_api_endpoint"]
         or payload.get("live_ui_pinvi_web_endpoint") != live_ui["pinvi_web_endpoint"]
@@ -1730,6 +1743,10 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, object]:
         "pinvi_source_revision",
         "pinvi_snapshot_after_sha256",
         "pinvi_snapshot_before_sha256",
+        "old_feature_id",
+        "replacement_feature_id",
+        "impact_count",
+        "pinvi_detail_sha256",
         "runner_exit_code",
         "server_side_ack_verified",
         "status",
@@ -1788,6 +1805,16 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, object]:
         != pinvi_source_revision
     ):
         raise ReceiptError("live-ui source revision does not match the signed Pinvi pair")
+    old_feature_id = _uuid(live["old_feature_id"], name="live-ui.old_feature_id")
+    replacement_feature_id = _uuid(
+        live["replacement_feature_id"], name="live-ui.replacement_feature_id"
+    )
+    impact_count = live["impact_count"]
+    if type(impact_count) is not int or impact_count < 0:
+        raise ReceiptError("live-ui.impact_count is invalid")
+    pinvi_detail_sha256 = _sha256(
+        live["pinvi_detail_sha256"], name="live-ui.pinvi_detail_sha256"
+    )
     return {
         "event_id": _uuid(live["event_id"], name="live-ui.event_id"),
         "event_sha256": _sha256(live["event_sha256"], name="live-ui.event_sha256"),
@@ -1837,6 +1864,10 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, object]:
             live["pinvi_web_endpoint"], name="live-ui.pinvi_web_endpoint"
         ),
         "pinvi_receipt_sha256": pinvi_receipt_sha,
+        "old_feature_id": old_feature_id,
+        "replacement_feature_id": replacement_feature_id,
+        "impact_count": impact_count,
+        "pinvi_detail_sha256": pinvi_detail_sha256,
         "playwright_runner_image_id": _digest(
             live["playwright_runner_image_id"],
             name="live-ui.playwright_runner_image_id",
@@ -1857,6 +1888,71 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, object]:
         "ui_evidence_sha256": _sha256(
             live["ui_evidence_sha256"], name="live-ui.ui_evidence_sha256"
         ),
+    }
+
+
+def _ui_run(
+    value: object,
+    *,
+    live_ui: dict[str, object],
+    pinvi_source_revision: str,
+    ui_run_sha256: str,
+) -> dict[str, object]:
+    marker = _object(value, name="UI evidence marker")
+    expected = {
+        "assertions",
+        "event_id",
+        "impact_count",
+        "old_feature_id",
+        "pinvi_api_endpoint",
+        "pinvi_detail_sha256",
+        "replacement_feature_id",
+        "source_revision",
+        "status",
+        "verification_id",
+        "playwright_runner_image_id",
+        "playwright_runner_image_ref",
+    }
+    if set(marker) != expected or marker["status"] != "passed":
+        raise ReceiptError("UI evidence marker schema/status is invalid")
+    event_id = _uuid(marker["event_id"], name="UI marker event ID")
+    verification_id = _uuid(marker["verification_id"], name="UI marker verification ID")
+    if event_id != live_ui["event_id"] or verification_id != live_ui["verification_id"]:
+        raise ReceiptError("UI marker is not bound to the live UI event and verification ID")
+    if _commit(marker["source_revision"], name="UI marker source revision") != pinvi_source_revision:
+        raise ReceiptError("UI marker source revision does not match the receipt")
+    if marker["pinvi_api_endpoint"] != live_ui["pinvi_api_endpoint"]:
+        raise ReceiptError("UI marker does not bind the live Pinvi API endpoint")
+    if marker["playwright_runner_image_id"] != live_ui["playwright_runner_image_id"] \
+        or marker["playwright_runner_image_ref"] != live_ui["playwright_runner_image_ref"]:
+        raise ReceiptError("UI marker Playwright runner does not match live UI evidence")
+    impact_count = marker["impact_count"]
+    if type(impact_count) is not int or impact_count < 0:
+        raise ReceiptError("UI marker impact count is invalid")
+    marker_values = {
+        "old_feature_id": _uuid(marker["old_feature_id"], name="UI marker old_feature_id"),
+        "replacement_feature_id": _uuid(
+            marker["replacement_feature_id"], name="UI marker replacement_feature_id"
+        ),
+        "impact_count": impact_count,
+        "pinvi_detail_sha256": _sha256(
+            marker["pinvi_detail_sha256"], name="UI marker pinvi_detail_sha256"
+        ),
+    }
+    for field, expected_value in marker_values.items():
+        if live_ui[field] != expected_value:
+            raise ReceiptError(f"UI marker does not bind live-ui.{field}")
+    if _sha256(live_ui["ui_evidence_sha256"], name="live-ui.ui_evidence_sha256") != ui_run_sha256:
+        raise ReceiptError("live-ui evidence hash does not match ui-run.json")
+    return {
+        "event_id": event_id,
+        "impact_count": impact_count,
+        "old_feature_id": marker_values["old_feature_id"],
+        "pinvi_api_endpoint": _string(marker["pinvi_api_endpoint"], name="UI marker Pinvi API endpoint"),
+        "pinvi_detail_sha256": marker_values["pinvi_detail_sha256"],
+        "replacement_feature_id": marker_values["replacement_feature_id"],
+        "source_revision": pinvi_source_revision,
+        "verification_id": verification_id,
     }
 
 
@@ -2449,6 +2545,10 @@ def _attestation(
         "m04_pinvi_approval_sha256",
         "m04_server_side_chain_verified",
         "m04_verification_id",
+        "old_feature_id",
+        "replacement_feature_id",
+        "impact_count",
+        "pinvi_detail_sha256",
         "pinvi_snapshot_sha256",
         "pinvi_api_endpoint",
         "pinvi_web_endpoint",
@@ -2536,6 +2636,16 @@ def _attestation(
         or payload["playwright_runner_image_ref"] != live_ui["playwright_runner_image_ref"]
     ):
         raise ReceiptError("M05 live attestation does not bind the Playwright runner")
+    if (
+        _uuid(payload["old_feature_id"], name="attestation.old_feature_id")
+        != live_ui["old_feature_id"]
+        or _uuid(payload["replacement_feature_id"], name="attestation.replacement_feature_id")
+        != live_ui["replacement_feature_id"]
+        or payload["impact_count"] != live_ui["impact_count"]
+        or _sha256(payload["pinvi_detail_sha256"], name="attestation.pinvi_detail_sha256")
+        != live_ui["pinvi_detail_sha256"]
+    ):
+        raise ReceiptError("M05 live attestation does not bind the UI target and impact scope")
     _digest(
         payload["playwright_runner_image_id"],
         name="attestation.playwright_runner_image_id",
@@ -2566,6 +2676,7 @@ def _attestation(
             raise ReceiptError(f"M05 live attestation does not bind {field}")
     attested_hashes = _object(payload["evidence_sha256"], name="attestation evidence hashes")
     if set(attested_hashes) != {
+        "ui-run",
         "live-ui",
         "map-pair",
         "pinvi-images",
@@ -2573,7 +2684,7 @@ def _attestation(
         "reviews",
     }:
         raise ReceiptError("M05 live attestation evidence inventory is invalid")
-    for name in ("live-ui", "map-pair", "pinvi-images", "restore", "reviews"):
+    for name in ("ui-run", "live-ui", "map-pair", "pinvi-images", "restore", "reviews"):
         if _sha256(attested_hashes[name], name=f"attestation.{name}") != evidence_hashes[name]:
             raise ReceiptError(f"M05 live attestation does not bind {name} evidence")
     signature_bytes = _decode_base64url(envelope["signature"], expected_length=64)
@@ -2702,6 +2813,12 @@ def _create(args: argparse.Namespace) -> int:
             reviewer_roster_path=reviewer_roster_path,
         )
         live_ui = _live_ui(evidence["live_ui"], pinvi_source_revision=source_revision)
+        _ui_run(
+            evidence["ui_run"],
+            live_ui=live_ui,
+            pinvi_source_revision=source_revision,
+            ui_run_sha256=evidence_hashes["ui_run"],
+        )
         _restore(
             evidence["restore"],
             pinvi_source_revision=source_revision,
@@ -2738,6 +2855,7 @@ def _create(args: argparse.Namespace) -> int:
         evidence["attestation"],
         evidence_hashes={
             "live-ui": evidence_hashes["live_ui"],
+            "ui-run": evidence_hashes["ui_run"],
             "map-pair": evidence_hashes["map_pair"],
             "pinvi-images": evidence_hashes["pinvi_images"],
             "restore": evidence_hashes["restore"],
@@ -2761,6 +2879,11 @@ def _create(args: argparse.Namespace) -> int:
         "adversarial_reviews": reviews,
         "live_ui_e2e": "passed",
         "live_ui_event_id": live_ui["event_id"],
+        "m05_old_feature_id": live_ui["old_feature_id"],
+        "m05_replacement_feature_id": live_ui["replacement_feature_id"],
+        "m05_impact_count": live_ui["impact_count"],
+        "m05_pinvi_detail_sha256": live_ui["pinvi_detail_sha256"],
+        "ui_run_evidence_sha256": evidence_hashes["ui_run"],
         "live_ui_evidence_sha256": evidence_hashes["live_ui"],
         "live_ui_map_ack_sha256": live_ui["map_ack_sha256"],
         "live_ui_local_receipt_sha256": live_ui["map_local_receipt_sha256"],

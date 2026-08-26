@@ -249,13 +249,15 @@ rm -f /tmp/pinvi-bootstrap-admin.json
 관측 스택을 함께 확인하려면 smoke stack을 유지한 뒤 profile을 올린다.
 
 ```bash
+PINVI_ENVIRONMENT=smoke PINVI_DOCKER_PROJECT=pinvi-app-smoke \
 scripts/docker-app.sh smoke --keep-running
+PINVI_ENVIRONMENT=smoke PINVI_DOCKER_PROJECT=pinvi-app-smoke \
+scripts/docker-app.sh observability
 ```
 
-관측 profile의 직접 기동은 이 wrapper의 소유 범위가 아니므로 `kor-travel-docker-manager`의
-승인된 target 절차를 사용한다. 격리 smoke project에 profile을 추가해야 하면 별도 격리
-환경·포트·DB identity를 확인한 운영 절차로 수행하고, `pinvi-app` 같은 공용 project를
-재사용하지 않는다.
+staging/production의 관측 profile은 `kor-travel-docker-manager`의 승인된 target 절차를
+사용한다. 격리 smoke project는 위 wrapper가 환경·포트·DB identity와 lifecycle lock을
+확인한 뒤에만 profile을 추가하며, `pinvi-app` 같은 공용 project를 재사용하지 않는다.
 
 ## 5. App + ETL 통합 smoke
 

@@ -1420,6 +1420,7 @@ class Settings(BaseSettings):
             "adversarial_reviews",
             "live_ui_e2e",
             "live_ui_event_id",
+            "ui_run_evidence_sha256",
             "live_ui_evidence_sha256",
             "live_ui_map_ack_sha256",
             "live_ui_local_receipt_sha256",
@@ -1440,6 +1441,10 @@ class Settings(BaseSettings):
             "m04_map_request_sha256",
             "m04_pinvi_approval_sha256",
             "m04_verification_id",
+            "m05_old_feature_id",
+            "m05_replacement_feature_id",
+            "m05_impact_count",
+            "m05_pinvi_detail_sha256",
             "map_admin_openapi_sha256",
             "map_admin_runtime_openapi_sha256",
             "map_admin_runtime_operation_contract_sha256",
@@ -1655,6 +1660,7 @@ class Settings(BaseSettings):
 
         for field in (
             "activation_attestation_sha256",
+            "ui_run_evidence_sha256",
             "live_ui_evidence_sha256",
             "live_ui_map_ack_sha256",
             "live_ui_local_receipt_sha256",
@@ -1665,6 +1671,7 @@ class Settings(BaseSettings):
             "m04_map_provenance_sha256",
             "m04_map_request_sha256",
             "m04_pinvi_approval_sha256",
+            "m05_pinvi_detail_sha256",
             "map_admin_runtime_openapi_sha256",
             "map_admin_runtime_operation_contract_sha256",
             "map_admin_source_operation_contract_sha256",
@@ -1702,6 +1709,10 @@ class Settings(BaseSettings):
             or not _is_canonical_uuid(payload["m04_map_feature_uuid"])
             or not _is_canonical_uuid(payload["m04_verification_id"])
             or payload["m04_verification_id"] != payload["activation_nonce"]
+            or not _is_canonical_uuid(payload["m05_old_feature_id"])
+            or not _is_canonical_uuid(payload["m05_replacement_feature_id"])
+            or type(payload["m05_impact_count"]) is not int
+            or payload["m05_impact_count"] < 0
         ):
             _raise_redacted_settings_error(
                 "M05 live UI runner identity or verification nonce is invalid"

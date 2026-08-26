@@ -98,6 +98,7 @@ Usage:
   scripts/docker-app.sh reset
   scripts/docker-app.sh status
   scripts/docker-app.sh logs [api|web|postgres|rustfs]
+  scripts/docker-app.sh observability
   scripts/docker-app.sh migrate   # owner-only migration + one-shot admin bootstrap
   scripts/docker-app.sh smoke [--keep-running]
 
@@ -1818,6 +1819,26 @@ status() {
   compose ps
 }
 
+observability() {
+  require_docker
+  if ! assert_host_ports_available_before_migration; then
+    return 1
+  fi
+  if ! acquire_migrator_lifecycle_lock; then
+    return 1
+  fi
+  local result=0
+  if ! compose --profile observability up -d cadvisor blackbox prometheus grafana; then
+    result=1
+  elif ! wait_for_url "http://127.0.0.1:${PROMETHEUS_PORT}/-/ready" "Prometheus"; then
+    result=1
+  elif ! wait_for_url "http://127.0.0.1:${GRAFANA_PORT}/api/health" "Grafana"; then
+    result=1
+  fi
+  release_migrator_lifecycle_lock
+  return "$result"
+}
+
 logs() {
   require_docker
   case "${1:-api}" in
@@ -1885,7 +1906,7 @@ main() {
   shift || true
 
   case "$command" in
-    build|up|down|reset|migrate|smoke)
+    build|up|down|reset|migrate|observability|smoke)
       if ! require_direct_compose_mutation_environment; then
         exit 2
       fi
@@ -1899,6 +1920,7 @@ main() {
     reset) reset ;;
     status) status ;;
     logs) logs "$@" ;;
+    observability) observability ;;
     migrate) migrate ;;
     smoke) smoke "$@" ;;
     help|-h|--help) usage ;;

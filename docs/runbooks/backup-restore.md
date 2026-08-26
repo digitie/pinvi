@@ -169,33 +169,11 @@ schema switch 동안 계속 별도 방어선으로 유지한다. 이 파일 leas
 
 ## 3. Restore — 단순 (긴급)
 
-> 단순 restore는 다운타임 발생. emergency 또는 staging에서만.
-
-```bash
-# 운영 노드 SSH
-cd /opt/pinvi
-
-# 1. 트래픽 차단 (maintenance mode)
-docker compose -f docker-compose.app.yml stop api web
-
-# 2. 검증
-pg_restore --list /var/lib/pinvi/backups/pinvi-app-20260606-003000.dump | head -20
-
-# 3. restore
-sudo ./scripts/restore-db.sh /var/lib/pinvi/backups/pinvi-app-20260606-003000.dump
-
-# 4. 정합성 점검
-docker compose -f docker-compose.app.yml start api
-sleep 5
-curl -fsS https://pinvi-api.example.com/health/db
-curl -fsS -H "Authorization: Bearer $CPO_BEARER" \
-  https://pinvi-api.example.com/admin/audit/verify-chain | jq .
-
-# 5. 트래픽 재개
-docker compose -f docker-compose.app.yml start web
-```
-
-다운타임 5~15분.
+직접 Compose로 `api`/`web`을 멈추고 재기동하는 예전 절차는 폐기했다. 현재 canonical
+Compose 서비스는 `app-api`/`app-web`이고 staging/production의 직접 Compose mutation은
+허용하지 않는다. 운영 복구는 이 문서 §4의 root-only trusted hotswap 또는
+`kor-travel-docker-manager`의 승인된 paired rebuild를 사용한다. 격리 smoke 복구만
+`scripts/docker-app.sh`의 project·환경 검사를 통과한 별도 stack에서 수행한다.
 
 `scripts/restore-db.sh` 환경변수:
 

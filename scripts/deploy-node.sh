@@ -8,6 +8,7 @@ COMPOSE_FILE="${PINVI_COMPOSE_FILE:-infra/docker-compose.app.yml}"
 # 운영 도메인/시크릿 주입. 기본 .env, 운영은 PINVI_ENV_FILE=infra/.env.prod (gitignore, ADR-047).
 ENV_FILE="${PINVI_ENV_FILE:-.env}"
 PROJECT="${PINVI_DOCKER_PROJECT:-pinvi-app}"
+FRESH_STACK_STATE_PATH="${PINVI_FRESH_STACK_STATE_PATH:-${PINVI_MIGRATOR_LIFECYCLE_LOCK_PATH:-/var/lib/pinvi/restore-forensics/migrator-lifecycle.lock}.fresh-stack}"
 
 compose_env_source_file() {
   local source_file="$ENV_FILE"
@@ -281,21 +282,7 @@ require_n150_execution_host() {
 require_fresh_stack_contract() {
   local existing_containers existing_volumes existing_networks
   local fixed_name fixed_container_names actual_name
-  [[ "$DEPLOY_MANAGER_UNAVAILABLE" == "1" ]] || {
-    echo "fresh deploy requires explicit PINVI_DOCKER_MANAGER_UNAVAILABLE=1" >&2
-    return 2
-  }
-  [[ "$DEPLOY_FRESH_STACK" == "1" ]] || {
-    echo "deploy-node deploy requires PINVI_DEPLOY_FRESH_STACK=1" >&2
-    return 2
-  }
-  [[ -n "${PINVI_DOCKER_PROJECT:-}" && "$PROJECT" != "pinvi-app" \
-    && "$PROJECT" =~ ^pinvi-[a-z0-9][a-z0-9-]*$ ]] || {
-    echo "fresh deploy requires an explicit isolated PINVI_DOCKER_PROJECT" >&2
-    return 2
-  }
-  require_n150_execution_host
-  require_isolated_database_endpoint
+  require_fresh_stack_identity
   if ! existing_containers="$(docker container ls --all \
     --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.ID}}')"; then
     echo "could not inspect the fresh deploy Compose project" >&2
@@ -328,6 +315,165 @@ require_fresh_stack_contract() {
       return 2
     done <<< "$fixed_container_names"
   done
+}
+
+fresh_stack_state_file_is_safe() {
+  [[ "$FRESH_STACK_STATE_PATH" == /* && "$FRESH_STACK_STATE_PATH" != *:* \
+    && "$FRESH_STACK_STATE_PATH" != *$'\n'* && "$FRESH_STACK_STATE_PATH" != */ ]] || {
+    echo "PINVI_FRESH_STACK_STATE_PATH must be an absolute regular-file path" >&2
+    return 2
+  }
+  local parent
+  parent="$(dirname -- "$FRESH_STACK_STATE_PATH")"
+  [[ -d "$parent" && ! -L "$parent" ]] || {
+    echo "fresh stack state parent must be an existing regular directory" >&2
+    return 2
+  }
+  local parent_owner parent_mode
+  parent_owner="$(stat -c '%u' -- "$parent")"
+  parent_mode="$(stat -c '%a' -- "$parent")"
+  if [[ "${PINVI_ENVIRONMENT:-}" == staging || "${PINVI_ENVIRONMENT:-}" == production ]]; then
+    [[ "$parent_owner" == "0" ]] && (( (8#$parent_mode & 8#022) == 0 )) || {
+      echo "staging/production fresh stack state parent must be root-owned and non-writable" >&2
+      return 2
+    }
+  else
+    [[ "$parent_owner" == "$(id -u)" ]] && (( (8#$parent_mode & 8#022) == 0 )) || {
+      echo "fresh stack state parent must be owned by the current user and non-writable" >&2
+      return 2
+    }
+  fi
+  if [[ -e "$FRESH_STACK_STATE_PATH" || -L "$FRESH_STACK_STATE_PATH" ]]; then
+    [[ -f "$FRESH_STACK_STATE_PATH" && ! -L "$FRESH_STACK_STATE_PATH" ]] || {
+      echo "fresh stack state must be a regular non-symlink file" >&2
+      return 2
+    }
+    local owner mode
+    owner="$(stat -c '%u' -- "$FRESH_STACK_STATE_PATH")"
+    mode="$(stat -c '%a' -- "$FRESH_STACK_STATE_PATH")"
+    if [[ "${PINVI_ENVIRONMENT:-}" == staging || "${PINVI_ENVIRONMENT:-}" == production ]]; then
+      [[ "$owner" == "0" && "$mode" == "600" ]] || {
+        echo "staging/production fresh stack state must be root-owned mode 0600" >&2
+        return 2
+      }
+    else
+      [[ "$owner" == "$(id -u)" && "$mode" == "600" ]] || {
+        echo "fresh stack state must be owned by the current user mode 0600" >&2
+        return 2
+      }
+    fi
+  fi
+}
+
+write_fresh_stack_state() {
+  fresh_stack_state_file_is_safe || return $?
+  local source_revision tmp_path
+  source_revision="${PINVI_SOURCE_REVISION:-}"
+  [[ "$source_revision" =~ ^[0-9a-f]{40}$ ]] || {
+    echo "fresh stack state requires the resolved Pinvi source revision" >&2
+    return 2
+  }
+  tmp_path="$(mktemp "$(dirname -- "$FRESH_STACK_STATE_PATH")/.fresh-stack.XXXXXX")"
+  if ! {
+    printf 'version=1\n'
+    printf 'project=%s\n' "$PROJECT"
+    printf 'environment=%s\n' "${PINVI_ENVIRONMENT:-}"
+    printf 'root_dir=%s\n' "$ROOT_DIR"
+    printf 'source_revision=%s\n' "$source_revision"
+  } >"$tmp_path"; then
+    rm -f -- "$tmp_path"
+    return 1
+  fi
+  chmod 600 -- "$tmp_path"
+  if ! mv -f -- "$tmp_path" "$FRESH_STACK_STATE_PATH"; then
+    rm -f -- "$tmp_path"
+    return 1
+  fi
+  fresh_stack_state_file_is_safe
+}
+
+require_reusable_fresh_stack_contract() {
+  local state_version="" state_project="" state_environment="" state_root_dir="" state_revision=""
+  local key value seen_keys='|' existing_containers existing_volumes existing_networks db_containers rustfs_containers
+  require_fresh_stack_identity
+  fresh_stack_state_file_is_safe || return $?
+  [[ -f "$FRESH_STACK_STATE_PATH" ]] || {
+    echo "standalone up/dagster requires a successful migrate state for this fresh stack" >&2
+    return 2
+  }
+  while IFS='=' read -r key value; do
+    [[ -n "$key" ]] || {
+      echo "fresh stack state contains an empty field" >&2
+      return 2
+    }
+    [[ "$seen_keys" != *"|$key|"* ]] || {
+      echo "fresh stack state contains a duplicate field" >&2
+      return 2
+    }
+    seen_keys+="$key|"
+    case "$key" in
+      version) state_version="$value" ;;
+      project) state_project="$value" ;;
+      environment) state_environment="$value" ;;
+      root_dir) state_root_dir="$value" ;;
+      source_revision) state_revision="$value" ;;
+      *) echo "fresh stack state contains an unknown field" >&2; return 2 ;;
+    esac
+  done < "$FRESH_STACK_STATE_PATH"
+  [[ "$seen_keys" == *"|version|"* && "$seen_keys" == *"|project|"* \
+    && "$seen_keys" == *"|environment|"* && "$seen_keys" == *"|root_dir|"* \
+    && "$seen_keys" == *"|source_revision|"* \
+    && "$state_version" == "1" && "$state_project" == "$PROJECT" \
+    && "$state_environment" == "${PINVI_ENVIRONMENT:-}" \
+    && "$state_root_dir" == "$ROOT_DIR" \
+    && "$state_revision" == "${PINVI_SOURCE_REVISION:-}" ]] || {
+    echo "fresh stack state does not match the requested project, environment, root, or source revision" >&2
+    return 2
+  }
+  if ! existing_containers="$(docker container ls --all \
+    --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.ID}}')" \
+    || ! existing_volumes="$(docker volume ls \
+      --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.Name}}')" \
+    || ! existing_networks="$(docker network ls \
+      --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.Name}}')"; then
+    echo "could not inspect the reusable fresh deploy Compose project" >&2
+    return 1
+  fi
+  [[ -n "$existing_containers" && -n "$existing_volumes" && -n "$existing_networks" ]] || {
+    echo "reusable fresh deploy requires the migrated Compose project, PostgreSQL volume, and network" >&2
+    return 2
+  }
+  if ! db_containers="$(docker container ls --all \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --filter 'label=com.docker.compose.service=app-postgres' --format '{{.ID}}')" \
+    || ! rustfs_containers="$(docker container ls --all \
+      --filter "label=com.docker.compose.project=${PROJECT}" \
+      --filter 'label=com.docker.compose.service=app-rustfs' --format '{{.ID}}')"; then
+    echo "could not inspect reusable fresh deploy database dependencies" >&2
+    return 1
+  fi
+  [[ -n "$db_containers" && -n "$rustfs_containers" ]] || {
+    echo "reusable fresh deploy requires the migrated app-postgres and app-rustfs services" >&2
+    return 2
+  }
+}
+
+require_fresh_stack_identity() {
+  [[ "$DEPLOY_MANAGER_UNAVAILABLE" == "1" ]] || {
+    echo "fresh deploy requires explicit PINVI_DOCKER_MANAGER_UNAVAILABLE=1" >&2
+    return 2
+  }
+  [[ "$DEPLOY_FRESH_STACK" == "1" ]] || {
+    echo "deploy-node deploy requires PINVI_DEPLOY_FRESH_STACK=1" >&2
+    return 2
+  }
+  [[ -n "${PINVI_DOCKER_PROJECT:-}" && "$PROJECT" != "pinvi-app" \
+    && "$PROJECT" =~ ^pinvi-[a-z0-9][a-z0-9-]*$ ]] || {
+    echo "fresh deploy requires an explicit isolated PINVI_DOCKER_PROJECT" >&2
+    return 2
+  }
+  require_n150_execution_host
+  require_isolated_database_endpoint
 }
 
 assert_host_ports_available_before_migration() {
@@ -1423,6 +1569,11 @@ migrate() {
   # EXIT handler가 실패 시 writer 복구와 lifecycle lock 해제를 담당한다. 조건문
   # 안에서 호출하면 Bash가 함수 내부의 errexit을 끄므로 migration 본문은 직접 호출한다.
   migrate_under_lifecycle_lock
+  if ! write_fresh_stack_state; then
+    echo "migration succeeded but the fresh stack continuation state could not be sealed" >&2
+    release_migrator_lifecycle_lock
+    return 1
+  fi
   release_migrator_lifecycle_lock
 }
 
@@ -1538,7 +1689,7 @@ up() {
   pinvi_prepare_api_image_provenance require-immutable
   assert_host_ports_available_before_migration
   acquire_migrator_lifecycle_lock
-  if ! require_fresh_stack_contract; then
+  if ! require_reusable_fresh_stack_contract; then
     fresh_stack_contract_failure
   fi
   RUNTIME_DEPLOY_PRESERVE="1"
@@ -1555,7 +1706,7 @@ dagster_up() {
   pinvi_prepare_api_image_provenance require-immutable
   assert_host_ports_available_before_migration
   acquire_migrator_lifecycle_lock
-  if ! require_fresh_stack_contract; then
+  if ! require_reusable_fresh_stack_contract; then
     fresh_stack_contract_failure
   fi
   RUNTIME_DEPLOY_PRESERVE="1"
@@ -1706,6 +1857,10 @@ deploy() {
     return 1
   fi
   migrate_under_lifecycle_lock
+  if ! write_fresh_stack_state; then
+    echo "migration succeeded but the fresh stack continuation state could not be sealed" >&2
+    return 1
+  fi
   up_under_lifecycle_lock
   smoke
   finalize_preserved_runtime_writers

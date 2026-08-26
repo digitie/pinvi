@@ -317,6 +317,23 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         ],
     )
     m04_created_at = int(time.time())
+    ui_run = {
+        "assertions": ["status", "action", "old_feature", "replacement_feature", "impact_count"],
+        "event_id": "11111111-1111-4111-8111-111111111111",
+        "impact_count": 1,
+        "old_feature_id": "55555555-5555-4555-8555-555555555555",
+        "pinvi_api_endpoint": "http://127.0.0.1:12801",
+        "pinvi_detail_sha256": "d" * 64,
+        "replacement_feature_id": "66666666-6666-4666-8666-666666666666",
+        "source_revision": PINVI_REVISION,
+        "status": "passed",
+        "verification_id": "22222222-2222-4222-8222-222222222222",
+        "playwright_runner_image_id": "sha256:" + "9" * 64,
+        "playwright_runner_image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:"
+        + "8" * 64,
+    }
+    _write_json(evidence_dir / "ui-run.json", ui_run)
+    ui_run_sha256 = hashlib.sha256((evidence_dir / "ui-run.json").read_bytes()).hexdigest()
     _write_json(
         evidence_dir / "live-ui.json",
         {
@@ -343,10 +360,14 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
             "pinvi_receipt_sha256": "1" * 64,
             "pinvi_snapshot_after_sha256": "d" * 64,
             "pinvi_snapshot_before_sha256": "d" * 64,
+            "old_feature_id": ui_run["old_feature_id"],
+            "replacement_feature_id": ui_run["replacement_feature_id"],
+            "impact_count": ui_run["impact_count"],
+            "pinvi_detail_sha256": ui_run["pinvi_detail_sha256"],
             "runner_exit_code": 0,
             "server_side_ack_verified": True,
             "status": "passed",
-            "ui_evidence_sha256": "e" * 64,
+            "ui_evidence_sha256": ui_run_sha256,
             "verification_id": "22222222-2222-4222-8222-222222222222",
             "playwright_runner_image_id": "sha256:" + "9" * 64,
             "playwright_runner_image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:"
@@ -621,7 +642,7 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
 
     evidence_hashes = {
         name: hashlib.sha256((evidence_dir / f"{name}.json").read_bytes()).hexdigest()
-        for name in ("live-ui", "map-pair", "pinvi-images", "restore", "reviews")
+        for name in ("ui-run", "live-ui", "map-pair", "pinvi-images", "restore", "reviews")
     }
     attestation_payload = {
         "created_at": int(time.time()),
@@ -641,6 +662,10 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         "local_receipt_sha256": "1" * 64,
         "map_admin_endpoint": "http://127.0.0.1:12701",
         "map_snapshot_sha256": "c" * 64,
+        "old_feature_id": ui_run["old_feature_id"],
+        "replacement_feature_id": ui_run["replacement_feature_id"],
+        "impact_count": ui_run["impact_count"],
+        "pinvi_detail_sha256": ui_run["pinvi_detail_sha256"],
         "pinvi_snapshot_sha256": "d" * 64,
         "pinvi_api_endpoint": "http://127.0.0.1:12801",
         "pinvi_web_endpoint": "http://127.0.0.1:12805",
@@ -746,6 +771,17 @@ def test_m05_signer_seals_checked_evidence_and_settings_accepts_it(
         env={**os.environ, "PINVI_M05_RECEIPT_TEST_MODE": "1"},
     )
     assert ledger_completed.returncode == 0, ledger_completed.stderr
+    tampered_ui_run = dict(ui_run)
+    tampered_ui_run["impact_count"] = 2
+    _write_json(evidence_dir / "ui-run.json", tampered_ui_run)
+    tampered_ledger = subprocess.run(  # noqa: S603 - reuses the pinned ledger command
+        ledger_completed.args,
+        check=False,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PINVI_M05_RECEIPT_TEST_MODE": "1"},
+    )
+    assert tampered_ledger.returncode != 0
     monkeypatch.setenv("PINVI_SOURCE_REVISION", PINVI_REVISION)
     high_watermark = json.loads(high_watermark_path.read_text(encoding="utf-8"))
     assert high_watermark == {

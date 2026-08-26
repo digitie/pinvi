@@ -61,6 +61,12 @@ label/image ID를 확인한 뒤 migration/up/smoke를 진행한다. 임시 archi
 삭제한다. 이미지를 명시적으로 pull하는 rollback 흐름도 현재 source `HEAD`와 label이 다르면
 중지한다. 일반 staging/production 배포는 위 manager pinned pair 경로를 사용한다.
 
+fallback을 단계별로 실행할 때 `migrate`는 성공한 동일 fresh project·root·환경·source revision을
+root-owned continuation state로 봉인한다. 그 뒤에만 같은 값으로 `scripts/deploy-node.sh up` 또는
+`dagster`를 실행할 수 있으며, state가 없거나 stack identity가 달라지면 중지한다. 초기 fresh
+검증을 통과한 뒤 생성된 DB volume/network를 다음 단계에서 다시 “빈 fresh stack”으로 오인하지
+않도록 하는 절차다.
+
 ```bash
 # 값 자체 대신 일치 여부만 확인하는 예시
 test "$(docker image inspect --format \

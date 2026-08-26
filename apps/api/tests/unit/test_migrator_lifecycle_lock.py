@@ -198,3 +198,26 @@ def test_writer_startup_stays_under_the_shared_lifecycle_lock_until_ready() -> N
         'wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster"'
         in _function_body(deploy, "dagster_up_under_lifecycle_lock")
     )
+
+
+def test_deploy_node_seals_fresh_migration_before_reusing_the_stack() -> None:
+    source = (ROOT / "scripts" / "deploy-node.sh").read_text(encoding="utf-8")
+    migrate = _function_body(source, "migrate")
+    deploy = _function_body(source, "deploy")
+    up = _function_body(source, "up")
+    dagster = _function_body(source, "dagster_up")
+
+    assert migrate.index("migrate_under_lifecycle_lock") < migrate.index(
+        "write_fresh_stack_state"
+    )
+    assert deploy.index("migrate_under_lifecycle_lock") < deploy.index(
+        "write_fresh_stack_state"
+    ) < deploy.index("up_under_lifecycle_lock")
+    assert "require_reusable_fresh_stack_contract" in up
+    assert "require_reusable_fresh_stack_contract" in dagster
+
+
+def test_observability_container_names_are_project_scoped() -> None:
+    compose = (ROOT / "infra/docker-compose.app.yml").read_text(encoding="utf-8")
+    for service in ("dagster", "cadvisor", "blackbox", "prometheus", "grafana"):
+        assert f"container_name: ${{PINVI_DOCKER_PROJECT:-pinvi-app}}-{service}" in compose

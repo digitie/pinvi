@@ -185,13 +185,10 @@ POST /admin/users/<user_id>/lifecycle/anonymize
 
 ### 3.4 Dagster ETL 수동 trigger
 
-`/admin/etl` → asset 카드 [지금 실행] 또는:
-
-```bash
-docker compose exec dagster dagster asset materialize \
-  --select feature_event_festivals \
-  -p partition_2026-06-01
-```
+`/admin/etl` → asset 카드 [지금 실행]을 사용한다. staging/production에서 raw Compose의
+`dagster` service를 직접 실행하는 예전 CLI 절차는 폐기했으며, Dagster 기동 자체는
+manager 승인 target 또는 `scripts/deploy-node.sh dagster`의 격리 fresh-stack 절차로만
+수행한다.
 
 ### 3.5 Rate-limit / abuse override
 
