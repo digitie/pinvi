@@ -10,6 +10,9 @@
 - 현재 선점: `T-VN-M05-ACTIVATION` — `codex/m05-activation`. M05 설정·compose·activation
   receipt 경계와 ADR-065 Alembic `0100/0101` rebaseline만 만지며, T-323·Google OAuth 파일과
   충돌을 피한다.
+- 현재 선점: `T-VN-41-ABC`의 Manager pair 재핀 전제 —
+  `fix/runtime-role-loopback-endpoint`. Manager host-network one-shot에 필요한 PinVi runtime-role
+  script의 허용 endpoint만 수정하며, 진행 중인 `codex/pr477-followup`의 API·wrapper 변경은 건드리지 않는다.
 
 ## kor-travel-map compatible pair
 

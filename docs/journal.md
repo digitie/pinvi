@@ -2,6 +2,22 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-26 (codex) — Manager role bootstrap loopback endpoint 제한 추가
+
+- **작업**: `T-VN-41-ABC` Manager pair 재핀의 전제로, PinVi의
+  `bootstrap-pinvi-runtime-role.sh`가 Manager host-network one-shot에서도 기존 role lifecycle을
+  재사용할 수 있도록 endpoint 입력을 추가했다.
+- **변경**: `PINVI_DB_HOST`/`PINVI_DB_PORT`는 기존 `app-postgres:5432`를 기본으로 유지한다.
+  host는 `app-postgres` 또는 `127.0.0.1`만, port는 1~65535의 10진수만 받으며 모든 `psql` 호출에
+  같은 값을 명시한다. 임의 endpoint·잘못된 port는 연결 전에 exit 2로 거부하는 unit 회귀를 추가했다.
+- **결정**: M05 role topology script를 Manager에 복제하거나 root 비밀번호를 runtime credential로
+  재사용하지 않는다. upstream script의 최소·허용목록 기반 endpoint 결선 뒤 Manager가 별도 역할
+  credential을 전달한다.
+- **검증**: Linux `/tmp` 환경에서 M05 role-wiring unit `13 passed`, Ruff/format, shell syntax,
+  `git diff --check` 통과.
+- **다음**: draft PR의 전문 적대 리뷰와 CI를 완료한 뒤 Manager frozen Compose에 역할 분리와 one-shot
+  open/seal 순서를 결선한다. 그 전에는 n150 rebuild를 다시 실행하지 않는다.
+
 ## 2026-08-26 (codex) — PR #477 rebase 후 fresh catalog·운영 복구 보강
 
 - `origin/main` 최신 상태로 rebase한 뒤 fresh `0100` catalog fingerprint를 공통 모듈로 분리하고,
