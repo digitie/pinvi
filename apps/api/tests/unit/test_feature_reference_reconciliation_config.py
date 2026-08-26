@@ -789,7 +789,7 @@ def test_m05_evidence_runtime_uses_non_owner_database_login() -> None:
         '--host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}"' in bootstrap
     )
     assert "--command='SELECT 1'" in bootstrap
-    assert '[ "$attempt" -ge 15 ]' in bootstrap
+    assert '[ "$attempt" -ge 90 ]' in bootstrap
     assert "FROM pg_auth_members membership" in bootstrap
     assert "membership.member = runtime.oid" in bootstrap
     assert "membership.roleid = runtime.oid" in bootstrap
