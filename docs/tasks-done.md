@@ -4,6 +4,25 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-08-26 (3)
+
+- [x] **T-351** — `pytest tests/integration`이 계속 자라(684건+, 91개 파일) job timeout을
+      올려도(T-348, 15→35분) 구조적으로 재발하는 문제를 job 샤딩으로 해결했다(claude).
+      `pytest-split`을 도입해 `lint-typecheck-test`의 `pytest (integration)` 스텝을 떼어내고
+      독립된 `integration-test` matrix job(`group: [1, 2, 3, 4]`)으로 병렬 실행한다. 각 shard가
+      자체 PostGIS testcontainer를 띄우므로(`conftest.py` session-scope fixture) 공유 상태 없이
+      안전하게 나뉜다. `.test_durations` 캐시가 아직 없어 테스트 개수 기준 균등 분할이다(그룹당
+      171개). `aggregate-ci.yml`의 `requiredChecks`에 `integration-test (1)`~`(4)`를 추가해
+      게이트가 4개 shard를 모두 기다리게 했다 — 안 하면 이 파일이 이미 여러 번 겪은 "게이트가
+      실제로 안 기다려서 항상 green"이 재발한다. `lint-typecheck-test`의 기존 timeout(35분)은
+      재측정 근거 없이 낮추지 않고 그대로 뒀다.
+
+      검증: 로컬에서 4그룹 분할이 정확히 684개를 중복 없이 커버함을 확인, shard 1(171건)을
+      로컬 실제 실행해 통과 확인. PR #495 CI에서 실제로 4개 shard와 `lint-typecheck-test`가
+      병렬로 green(각 2m5s~5m28s)이고 Aggregate CI gate가 가장 느린 shard까지 정확히
+      기다렸다가 통과(5m50s)함을 확인 — 이전 단일 job 순차 실행(최대 관측 20분6초) 대비
+      critical path가 크게 줄었다.
+
 ## 2026-08-26 (2)
 
 - [x] **T-354** — Next.js 15 → 16 업그레이드. 사용자 요청으로 착수(npm audit
