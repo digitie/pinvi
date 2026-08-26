@@ -335,6 +335,7 @@ def test_resolved_compose_passes_provenance_to_every_runtime_image() -> None:
         args = services[service]["build"]["args"]
         assert args["PINVI_SOURCE_REVISION"] == "a" * 40
         assert args["PINVI_BUILD_ENVIRONMENT"] == "production"
+        assert services[service]["environment"]["PINVI_ENVIRONMENT"] == "production"
 
 
 def test_all_pinvi_runtime_images_have_the_same_provenance_contract() -> None:
