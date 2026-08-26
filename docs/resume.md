@@ -5,13 +5,14 @@
 Manager의 fresh pinned rebuild는 host network에서 PinVi runtime-role one-shot을 실행해야 하지만,
 병합된 M05 script는 Compose 내부 `app-postgres:5432`만 사용할 수 있었다. script에
 `PINVI_DB_HOST`/`PINVI_DB_PORT`를 추가하되 기본값은 기존 `app-postgres:5432`로 유지하고,
-허용 endpoint를 `app-postgres`와 dedicated loopback `127.0.0.1`으로만 제한했다. host·port 값은
-PostgreSQL 연결 전에 검증하므로 임의 DB host나 범위를 벗어난 port로 root bootstrap credential을
-보내지 않는다.
+허용 endpoint 쌍을 `app-postgres:5432`와 dedicated loopback `127.0.0.1:12800`으로만 제한했다.
+host·port 값은 PostgreSQL 연결 전에 함께 검증하고, caller가 준 `PGHOSTADDR` 등 libpq 접속 변수도
+비우므로 임의 DB endpoint로 root bootstrap credential을 보내지 않는다.
 
-**검증**: Linux에서 M05 role-wiring unit `13 passed`, Ruff/format, shell syntax,
-`git diff --check`를 통과했다. pytest의 Windows TEMP mount capture 오류는 Linux `/tmp`를 명시해
-환경 문제로 분리했으며, 테스트 결과에는 영향이 없었다.
+**검증**: Linux에서 endpoint 허용/거절과 `PGHOSTADDR` 무력화를 포함한 M05 role-wiring 회귀 및
+API unit 전체 `1291 passed, 1 skipped`, Ruff/format, shell syntax, `git diff --check`를 통과했다.
+pytest의 Windows TEMP mount capture 오류는 Linux `/tmp`를 명시해 정상 test capture 경로로
+검증했다.
 
 **다음 한 작업**: 이 upstream PR의 전문 적대 리뷰·CI를 마친 뒤 Manager가 separate runtime/migrator
 credential과 `127.0.0.1:12800` endpoint를 frozen Compose에 결선하는 후속 PR을 작성한다. 그 두 PR이

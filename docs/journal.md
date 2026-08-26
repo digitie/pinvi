@@ -8,12 +8,18 @@
   `bootstrap-pinvi-runtime-role.sh`가 Manager host-network one-shot에서도 기존 role lifecycle을
   재사용할 수 있도록 endpoint 입력을 추가했다.
 - **변경**: `PINVI_DB_HOST`/`PINVI_DB_PORT`는 기존 `app-postgres:5432`를 기본으로 유지한다.
-  host는 `app-postgres` 또는 `127.0.0.1`만, port는 1~65535의 10진수만 받으며 모든 `psql` 호출에
-  같은 값을 명시한다. 임의 endpoint·잘못된 port는 연결 전에 exit 2로 거부하는 unit 회귀를 추가했다.
+  허용 endpoint 쌍은 `app-postgres:5432`와 `127.0.0.1:12800`뿐이며 모든 `psql` 호출에 같은 값을
+  명시한다. `PGHOSTADDR`를 비롯한 caller libpq 접속 변수는 먼저 비우고, 임의 host·교차 port·긴
+  숫자 port는 연결 전에 exit 2로 거부하는 unit 회귀를 추가했다.
+- **검토 반영**: 독립 적대 리뷰가 지적한 loopback 임의 port credential 전달과 `PGHOSTADDR` 우회
+  가능성을 exact endpoint pair·명시적 libpq 변수 초기화로 해소했다. 이 source PR만으로는 Manager의
+  role 분리 결선이 완성되지 않으므로, Manager PR과 pin 갱신이 병합되기 전 n150 rebuild는 재시도하지
+  않는다.
 - **결정**: M05 role topology script를 Manager에 복제하거나 root 비밀번호를 runtime credential로
   재사용하지 않는다. upstream script의 최소·허용목록 기반 endpoint 결선 뒤 Manager가 별도 역할
   credential을 전달한다.
-- **검증**: Linux `/tmp` 환경에서 M05 role-wiring unit `13 passed`, Ruff/format, shell syntax,
+- **검증**: Linux `/tmp` 환경에서 endpoint 허용/거절과 `PGHOSTADDR` 무력화를 포함한 M05
+  role-wiring 회귀 및 API unit 전체 `1291 passed, 1 skipped`, Ruff/format, shell syntax,
   `git diff --check` 통과.
 - **다음**: draft PR의 전문 적대 리뷰와 CI를 완료한 뒤 Manager frozen Compose에 역할 분리와 one-shot
   open/seal 순서를 결선한다. 그 전에는 n150 rebuild를 다시 실행하지 않는다.

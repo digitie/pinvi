@@ -7,6 +7,12 @@
 
 set -eu
 
+# Root bootstrap credentials must never inherit a caller-selected libpq target.
+# Every connection below supplies the one validated endpoint explicitly.
+unset PGAPPNAME PGCONNECT_TIMEOUT PGDATABASE PGHOST PGHOSTADDR PGOPTIONS PGPASSFILE \
+  PGPASSWORD PGPORT PGSERVICE PGSERVICEFILE PGSSLCERT PGSSLMODE PGSSLKEY \
+  PGSSLROOTCERT PGTARGETSESSIONATTRS PGUSER PSQLRC
+
 : "${POSTGRES_USER:?POSTGRES_USER is required}"
 : "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
 : "${POSTGRES_DB:?POSTGRES_DB is required}"
@@ -19,9 +25,9 @@ set -eu
 
 PINVI_M05_LEGACY_REBASELINE="${PINVI_M05_LEGACY_REBASELINE:-0}"
 PINVI_MIGRATOR_DISABLE_LOGIN="${PINVI_MIGRATOR_DISABLE_LOGIN:-1}"
-# The ordinary PinVi Compose network reaches PostgreSQL as ``app-postgres``.
+# The ordinary PinVi Compose network reaches PostgreSQL as ``app-postgres:5432``.
 # The Docker Manager's host-network one-shot is the only other supported
-# topology, and it must name the dedicated loopback endpoint explicitly.
+# topology, and it must use the dedicated loopback endpoint exactly.
 PINVI_DB_HOST="${PINVI_DB_HOST:-app-postgres}"
 PINVI_DB_PORT="${PINVI_DB_PORT:-5432}"
 
@@ -46,17 +52,13 @@ case "${PINVI_MIGRATOR_DISABLE_LOGIN}" in
   0|1 ) ;;
   * ) echo "PINVI_MIGRATOR_DISABLE_LOGIN must be 0 or 1" >&2; exit 2 ;;
 esac
-case "${PINVI_DB_HOST}" in
-  app-postgres|127.0.0.1 ) ;;
-  * ) echo "PINVI_DB_HOST must be app-postgres or 127.0.0.1" >&2; exit 2 ;;
+case "${PINVI_DB_HOST}:${PINVI_DB_PORT}" in
+  app-postgres:5432|127.0.0.1:12800 ) ;;
+  * )
+    echo "PINVI_DB_HOST and PINVI_DB_PORT must name an approved PostgreSQL endpoint" >&2
+    exit 2
+    ;;
 esac
-case "${PINVI_DB_PORT}" in
-  ''|*[!0-9]*|0* ) echo "PINVI_DB_PORT must be a decimal TCP port" >&2; exit 2 ;;
-esac
-if [ "${PINVI_DB_PORT}" -gt 65535 ]; then
-  echo "PINVI_DB_PORT must be a decimal TCP port" >&2
-  exit 2
-fi
 
 if [ "${POSTGRES_USER}" = "${PINVI_APP_DB_USER}" ] \
   || [ "${POSTGRES_USER}" = "${PINVI_APP_SCHEMA_OWNER}" ] \
