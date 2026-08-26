@@ -1,5 +1,22 @@
 # resume.md
 
+## 2026-08-26 (codex) — M05 sealed role topology 읽기 전용 진단 착수
+
+Manager의 exact d9 후보는 `map_runtime_ready` 뒤 `pinvi_role_open` 및 failure cleanup
+`pinvi_role_seal`에서 같은 `role_topology_noncanonical`로 중단됐다. 이는 Manager
+endpoint/credential 결선이 아니라 PinVi bootstrap script가 role·membership·schema·ACL을
+변경한 뒤 하나의 aggregate predicate를 false로 평가한 경우다. 현재 후보를 재실행하면
+원인을 좁히지 못한 채 cluster-global PostgreSQL catalog를 다시 root 권한으로 바꾸므로
+금지한다. admin one-shot은 실행되지 않았고, d9는 M05 activation이나 Map acceptance의 증거가
+아니다.
+
+다음 작업은 PinVi source에 sealed-only, `BEGIN READ ONLY`의 typed topology verifier를
+추가하는 것이다. 결과는 role/database 이름·OID·ACL 값·DSN·password·raw stderr 없이 fixed JSON
+reason enum만 낸다. strict topology 정책을 낮추거나 stale membership을 자동 삭제하지 않는다.
+source가 바뀌면 Manager pinset과 candidate identity도 바뀌므로, old d9 journal을 이어 쓰지 않고
+별도 Manager PR과 새 candidate를 사용한다. 설계는
+[`t-vn-m05-role-topology-verifier.md`](execplan/t-vn-m05-role-topology-verifier.md)다.
+
 ## 2026-08-26 (claude) — T-351 머지 완료 (통합 테스트 CI 4-shard 분리)
 
 `pytest tests/integration`(684건, 91개 파일)이 계속 자라 T-348로 job timeout을 올려도

@@ -13,6 +13,10 @@
 - 현재 선점: `T-VN-41-ABC`의 Manager pair 재핀 전제 —
   `fix/runtime-role-loopback-endpoint`. Manager host-network one-shot에 필요한 PinVi runtime-role
   script의 허용 endpoint만 수정하며, 진행 중인 `codex/pr477-followup`의 API·wrapper 변경은 건드리지 않는다.
+- 현재 선점: `T-VN-M05-ROLE-TOPOLOGY-VERIFIER` — `fix/role-topology-verifier`. d9의
+  `role_topology_noncanonical`을 재실행하거나 자동 수리하지 않고, sealed role topology만
+  읽기 전용·비밀 비노출으로 분류하는 PinVi source 계약을 만든다. `codex/m05-activation`의
+  Alembic·activation receipt와 기존 `codex/pr477-followup`의 API·Dockerfile 변경은 건드리지 않는다.
 
 ## kor-travel-map compatible pair
 
@@ -61,6 +65,14 @@
 
 - [ ] **T-VN-M05-ACTIVATION** — ADR-065 `0100/0101` rebaseline, paired live/restore/review evidence를
   요구하는 M05 production activation receipt gate와 실제 isolated activation 검증을 완료한다.
+- [/] **T-VN-M05-ROLE-TOPOLOGY-VERIFIER** — fixed d9가 `map_runtime_ready` 이후
+  `pinvi_role_open`과 failure cleanup `pinvi_role_seal`에서 같은 aggregate
+  `role_topology_noncanonical`로 fail-closed한 원인을, root catalog를 다시 변경하지 않고
+  판별할 sealed-only verifier를 추가한다. verifier는 canonicality를 완화하거나 stale
+  membership/ACL을 자동 수리하지 않으며, `BEGIN READ ONLY`의 fixed JSON reason enum만
+  출력한다. source PR merge 뒤 Manager invocation/pinset rotation은 별 PR·새 candidate로
+  진행한다. 설계 정본은
+  [`t-vn-m05-role-topology-verifier.md`](execplan/t-vn-m05-role-topology-verifier.md)다.
 - [ ] **T-349** — `app.retention_runs`에 `status='executing'`이 최대 1개라는 불변식이 DB 제약이
   아니라 `_assert_no_concurrent_execution`의 advisory lock 규율에만 의존한다(T-343 적대적 리뷰,
   PR #480). 지금 유일한 호출 경로는 안전하지만, 향후 다른 코드 경로/수동 SQL이 이 함수를 거치지
