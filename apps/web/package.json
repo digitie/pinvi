@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 12805",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start -p 12805",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

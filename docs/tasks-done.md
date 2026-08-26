@@ -6,8 +6,8 @@
 
 ## 2026-08-26 (2)
 
-- [x] **T-354** — Next.js 15 → 16(Turbopack) 업그레이드. 사용자 요청으로 착수(npm audit
-      union range 오독으로 미루기로 했던 과거 결정을 뒤집음, PR TBD, claude).
+- [x] **T-354** — Next.js 15 → 16 업그레이드. 사용자 요청으로 착수(npm audit
+      union range 오독으로 미루기로 했던 과거 결정을 뒤집음, PR #489, claude).
       `@next/codemod upgrade latest` + `next-lint-to-eslint-cli`로 기계적 마이그레이션을
       먼저 돌리고, 실제로 깨진 지점을 하나씩 고쳤다.
 
@@ -41,9 +41,21 @@
       켜지 않아(Cache Components 아키텍처 미채택) 그 설정 자체가 빌드를 깼다 — 15곳 전부
       제거해 원본과 byte-identical하게 되돌렸다(Cache Components 도입은 별도 결정 필요).
 
-      검증: `apps/web` typecheck·lint(에러 0, 경고 4건은 기존/무관)·build(Turbopack, 57
-      페이지 전부 생성)·vitest(18 files/113 tests, `useModalDialog.test.tsx` 14건 포함)
-      전부 통과.
+      검증: `apps/web` typecheck·lint(에러 0, 경고 4건은 기존/무관)·build·vitest(18
+      files/113 tests, `useModalDialog.test.tsx` 14건 포함) 전부 통과.
+
+      **PR #489 최초 push 후 CI e2e에서 49개 실패 발견** — 실패한 스펙은 예외 없이
+      `vworld-map-web`(지도)을 렌더링하는 페이지·다이얼로그·폼이었고, 지도가 없는 페이지는
+      전부 통과했다. 로컬에서 같은 production build로 재현하니 `/map` 콘솔에
+      `Module ... was instantiated ... but the module factory is not available`가 떴고
+      앱 에러 바운더리까지 전파돼 지도가 fallback UI조차 그리지 못했다 — Next 16 Turbopack
+      프로덕션 번들러가 `vworld-map-web`의 모듈 그래프를 청크로 나누는 과정에서 생기는
+      런타임 버그로 확인, 이번 리팩터와는 무관. `next build --webpack`으로 재빌드하니
+      콘솔 에러 없이 정상 렌더링됐고 실패했던 19개 대표 e2e(map-*, dialog-focus, form-a11y,
+      trips-dashboard)를 재실행해 전부 통과 확인. `apps/web/package.json`의 `build`
+      스크립트를 `next build --webpack`으로 고정해 CI·`apps/web/Dockerfile` 둘 다 이
+      경로를 타게 했다(**ADR-066**). `dev` 스크립트는 범위 밖 — 로컬 dev에서 같은 증상이
+      보고되면 그때 맞춘다.
 
 ## 2026-08-22
 
