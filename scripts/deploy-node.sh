@@ -54,7 +54,7 @@ CADVISOR_PORT="$(compose_env_value PINVI_CADVISOR_PORT 12301)"
 PROMETHEUS_PORT="$(compose_env_value PINVI_PROMETHEUS_PORT 12401)"
 GRAFANA_PORT="$(compose_env_value PINVI_GRAFANA_PORT 12205)"
 # Dagster webserver(profile etl)를 같이 띄울지. 운영에서 pinvi-dagster.<domain>을 쓰면 1.
-ENABLE_DAGSTER="${PINVI_ENABLE_DAGSTER:-0}"
+ENABLE_DAGSTER="$(compose_env_value PINVI_ENABLE_DAGSTER 0)"
 DEPLOY_FRESH_STACK="$(compose_env_value PINVI_DEPLOY_FRESH_STACK 0)"
 DEPLOY_MANAGER_UNAVAILABLE="$(compose_env_value PINVI_DOCKER_MANAGER_UNAVAILABLE 0)"
 MIGRATOR_ONE_SHOT_PASSWORD=""
@@ -98,6 +98,9 @@ FRESH_STACK_DB_VOLUME_NAME=""
 FRESH_STACK_DB_SYSTEM_IDENTIFIER=""
 FRESH_STACK_ALEMBIC_VERSION=""
 FRESH_STACK_MIGRATION_RECEIPT_SHA256=""
+FRESH_STACK_API_IMAGE_ID=""
+FRESH_STACK_WEB_IMAGE_ID=""
+FRESH_STACK_DAGSTER_IMAGE_ID="none"
 FRESH_STACK_COMPOSE_SHA256=""
 FRESH_STACK_ENVIRONMENT_SOURCE_SHA256=""
 FRESH_STACK_EFFECTIVE_COMPOSE_SHA256=""
@@ -236,11 +239,25 @@ require_canonical_compose_file() {
   if [[ "$configured_file" != /* ]]; then
     configured_file="$ROOT_DIR/$configured_file"
   fi
-  [[ "$configured_file" == "$CANONICAL_COMPOSE_FILE" \
-    && -f "$CANONICAL_COMPOSE_FILE" && ! -L "$CANONICAL_COMPOSE_FILE" ]] || {
-    echo "fresh deploy requires the canonical application Compose file without an override" >&2
-    return 2
-  }
+  if [[ "$configured_file" == "$CANONICAL_COMPOSE_FILE" \
+    && -f "$CANONICAL_COMPOSE_FILE" && ! -L "$CANONICAL_COMPOSE_FILE" ]]; then
+    return 0
+  fi
+  if [[ "$PINVI_PROVENANCE_PREPARED" == "1" \
+    && -n "$PINVI_PROVENANCE_ARCHIVE_ROOT" \
+    && "$configured_file" == "$PINVI_PROVENANCE_ARCHIVE_COMPOSE_FILE" \
+    && "$configured_file" == "$PINVI_PROVENANCE_ARCHIVE_ROOT/context/infra/docker-compose.app.yml" \
+    && -f "$configured_file" && ! -L "$configured_file" ]]; then
+    local archive_compose_sha256
+    archive_compose_sha256="$(sha256sum -- "$configured_file" | awk '{print $1}')"
+    [[ "$archive_compose_sha256" == "$PINVI_PROVENANCE_ARCHIVE_COMPOSE_SHA256" ]] || {
+      echo "immutable Compose archive was changed after provenance preparation" >&2
+      return 2
+    }
+    return 0
+  fi
+  echo "fresh deploy requires the canonical application Compose file without an override" >&2
+  return 2
 }
 
 require_isolated_database_endpoint() {
@@ -409,11 +426,40 @@ import json
 import sys
 
 config = json.load(sys.stdin)
-for service in config.get("services", {}).values():
-    if isinstance(service, dict):
-        service.pop("build", None)
+archive_root = sys.argv[1] if len(sys.argv) > 1 else ""
+
+def normalize(value):
+    if isinstance(value, dict):
+        return {key: normalize(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [normalize(item) for item in value]
+    if isinstance(value, str) and archive_root:
+        if value == archive_root:
+            return "${PINVI_PROVENANCE_ARCHIVE_ROOT}"
+        prefix = archive_root + "/"
+        if value.startswith(prefix):
+            return "${PINVI_PROVENANCE_ARCHIVE_ROOT}/" + value[len(prefix):]
+    return value
+
+config = normalize(config)
 print(json.dumps(config, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
-' | sha256sum | awk '{print $1}'
+' "$PINVI_PROVENANCE_ARCHIVE_ROOT" | sha256sum | awk '{print $1}'
+}
+
+fresh_stack_runtime_image_proof() {
+  pinvi_verify_runtime_image_provenance app-api app-web
+  FRESH_STACK_API_IMAGE_ID="$(pinvi_attested_runtime_image_id app-api)"
+  FRESH_STACK_WEB_IMAGE_ID="$(pinvi_attested_runtime_image_id app-web)"
+  if [[ "$ENABLE_DAGSTER" != "0" ]]; then
+    pinvi_verify_runtime_image_provenance app-dagster
+    FRESH_STACK_DAGSTER_IMAGE_ID="$(pinvi_attested_runtime_image_id app-dagster)"
+  else
+    FRESH_STACK_DAGSTER_IMAGE_ID="none"
+  fi
+  [[ "$FRESH_STACK_API_IMAGE_ID" =~ ^sha256:[0-9a-f]{64}$ \
+    && "$FRESH_STACK_WEB_IMAGE_ID" =~ ^sha256:[0-9a-f]{64}$ \
+    && ( "$FRESH_STACK_DAGSTER_IMAGE_ID" == "none" \
+      || "$FRESH_STACK_DAGSTER_IMAGE_ID" =~ ^sha256:[0-9a-f]{64}$ ) ]]
 }
 
 write_fresh_stack_state() {
@@ -445,7 +491,7 @@ write_fresh_stack_state() {
   }
   tmp_path="$(mktemp "$(dirname -- "$FRESH_STACK_STATE_PATH")/.fresh-stack.XXXXXX")"
   if ! {
-    printf 'version=2\n'
+    printf 'version=3\n'
     printf 'project=%s\n' "$PROJECT"
     printf 'environment=%s\n' "$environment_name"
     printf 'root_dir=%s\n' "$ROOT_DIR"
@@ -458,6 +504,9 @@ write_fresh_stack_state() {
     printf 'db_volume_name=%s\n' "$FRESH_STACK_DB_VOLUME_NAME"
     printf 'db_system_identifier=%s\n' "$FRESH_STACK_DB_SYSTEM_IDENTIFIER"
     printf 'alembic_version=%s\n' "$FRESH_STACK_ALEMBIC_VERSION"
+    printf 'api_image_id=%s\n' "$FRESH_STACK_API_IMAGE_ID"
+    printf 'web_image_id=%s\n' "$FRESH_STACK_WEB_IMAGE_ID"
+    printf 'dagster_image_id=%s\n' "$FRESH_STACK_DAGSTER_IMAGE_ID"
     printf 'migration_receipt_sha256=%s\n' "$FRESH_STACK_MIGRATION_RECEIPT_SHA256"
   } >"$tmp_path"; then
     rm -f -- "$tmp_path"
@@ -476,12 +525,13 @@ fresh_stack_migration_receipt_sha256() {
   if ! environment_name="$(resolved_environment)"; then
     return 2
   fi
-  printf 'pinvi-fresh-migration/v2\nproject=%s\nenvironment=%s\nroot_dir=%s\nsource_revision=%s\ncompose_sha256=%s\neffective_compose_sha256=%s\nenvironment_source_sha256=%s\ndb_container_id=%s\ndb_volume_name=%s\ndb_system_identifier=%s\nalembic_version=%s\n' \
+  printf 'pinvi-fresh-migration/v3\nproject=%s\nenvironment=%s\nroot_dir=%s\nsource_revision=%s\ncompose_sha256=%s\neffective_compose_sha256=%s\nenvironment_source_sha256=%s\ndb_container_id=%s\ndb_volume_name=%s\ndb_system_identifier=%s\nalembic_version=%s\napi_image_id=%s\nweb_image_id=%s\ndagster_image_id=%s\n' \
     "$PROJECT" "$environment_name" "$ROOT_DIR" "${PINVI_SOURCE_REVISION:-}" \
     "$FRESH_STACK_COMPOSE_SHA256" "$FRESH_STACK_EFFECTIVE_COMPOSE_SHA256" \
     "$FRESH_STACK_ENVIRONMENT_SOURCE_SHA256" \
     "$FRESH_STACK_DB_CONTAINER_ID" "$FRESH_STACK_DB_VOLUME_NAME" \
     "$FRESH_STACK_DB_SYSTEM_IDENTIFIER" "$FRESH_STACK_ALEMBIC_VERSION" \
+    "$FRESH_STACK_API_IMAGE_ID" "$FRESH_STACK_WEB_IMAGE_ID" "$FRESH_STACK_DAGSTER_IMAGE_ID" \
     | sha256sum | awk '{print $1}'
 }
 
@@ -490,6 +540,10 @@ capture_fresh_stack_migration_proof() {
   local owner_user db_system_identifier alembic_version
   if ! environment_name="$(resolved_environment)"; then
     return 2
+  fi
+  if ! fresh_stack_runtime_image_proof; then
+    echo "fresh deploy runtime image provenance could not be sealed" >&2
+    return 1
   fi
   FRESH_STACK_COMPOSE_SHA256="$(sha256sum -- "$CANONICAL_COMPOSE_FILE" | awk '{print $1}')"
   if ! FRESH_STACK_EFFECTIVE_COMPOSE_SHA256="$(effective_compose_config_sha256)"; then
@@ -566,7 +620,8 @@ require_reusable_fresh_stack_contract() {
   local state_compose_sha256="" state_environment_source_path="" state_environment_source_sha256=""
   local state_effective_compose_sha256=""
   local state_db_container_id="" state_db_volume_name="" state_db_system_identifier=""
-  local state_alembic_version="" state_migration_receipt_sha256=""
+  local state_alembic_version="" state_api_image_id="" state_web_image_id=""
+  local state_dagster_image_id="" state_migration_receipt_sha256=""
   local environment_name source_path compose_sha256 source_sha256 effective_compose_sha256
   local key value seen_keys='|' existing_containers existing_volumes existing_networks db_containers rustfs_containers
   require_fresh_stack_identity
@@ -599,6 +654,9 @@ require_reusable_fresh_stack_contract() {
       db_volume_name) state_db_volume_name="$value" ;;
       db_system_identifier) state_db_system_identifier="$value" ;;
       alembic_version) state_alembic_version="$value" ;;
+      api_image_id) state_api_image_id="$value" ;;
+      web_image_id) state_web_image_id="$value" ;;
+      dagster_image_id) state_dagster_image_id="$value" ;;
       migration_receipt_sha256) state_migration_receipt_sha256="$value" ;;
       *) echo "fresh stack state contains an unknown field" >&2; return 2 ;;
     esac
@@ -626,8 +684,10 @@ require_reusable_fresh_stack_contract() {
     && "$seen_keys" == *"|environment_source_sha256|"* \
     && "$seen_keys" == *"|db_container_id|"* && "$seen_keys" == *"|db_volume_name|"* \
     && "$seen_keys" == *"|db_system_identifier|"* && "$seen_keys" == *"|alembic_version|"* \
+    && "$seen_keys" == *"|api_image_id|"* && "$seen_keys" == *"|web_image_id|"* \
+    && "$seen_keys" == *"|dagster_image_id|"* \
     && "$seen_keys" == *"|migration_receipt_sha256|"* \
-    && "$state_version" == "2" && "$state_project" == "$PROJECT" \
+    && "$state_version" == "3" && "$state_project" == "$PROJECT" \
     && "$state_environment" == "$environment_name" \
     && "$state_root_dir" == "$ROOT_DIR" \
     && "$state_revision" == "${PINVI_SOURCE_REVISION:-}" \
@@ -639,6 +699,10 @@ require_reusable_fresh_stack_contract() {
     && "$state_db_volume_name" != "" \
     && "$state_db_system_identifier" =~ ^[0-9]+$ \
     && "$state_alembic_version" == "20260824_0101" \
+    && "$state_api_image_id" =~ ^sha256:[0-9a-f]{64}$ \
+    && "$state_web_image_id" =~ ^sha256:[0-9a-f]{64}$ \
+    && ( "$state_dagster_image_id" == "none" \
+      || "$state_dagster_image_id" =~ ^sha256:[0-9a-f]{64}$ ) \
     && "$state_migration_receipt_sha256" =~ ^[0-9a-f]{64}$ ]] || {
     echo "fresh stack state does not match the requested project, environment, source, or migration proof" >&2
     return 2
@@ -656,6 +720,9 @@ require_reusable_fresh_stack_contract() {
     echo "reusable fresh deploy requires the migrated Compose project, PostgreSQL volume, and network" >&2
     return 2
   }
+  if ! require_reusable_fresh_stack_resource_shape; then
+    return 1
+  fi
   if ! db_containers="$(docker container ls --all \
     --filter "label=com.docker.compose.project=${PROJECT}" \
     --filter 'label=com.docker.compose.service=app-postgres' --format '{{.ID}}')" \
@@ -677,8 +744,74 @@ require_reusable_fresh_stack_contract() {
     && "$FRESH_STACK_DB_VOLUME_NAME" == "$state_db_volume_name" \
     && "$FRESH_STACK_DB_SYSTEM_IDENTIFIER" == "$state_db_system_identifier" \
     && "$FRESH_STACK_ALEMBIC_VERSION" == "$state_alembic_version" \
+    && "$FRESH_STACK_API_IMAGE_ID" == "$state_api_image_id" \
+    && "$FRESH_STACK_WEB_IMAGE_ID" == "$state_web_image_id" \
+    && "$FRESH_STACK_DAGSTER_IMAGE_ID" == "$state_dagster_image_id" \
     && "$FRESH_STACK_MIGRATION_RECEIPT_SHA256" == "$state_migration_receipt_sha256" ]] || {
     echo "fresh stack database identity or migration proof no longer matches the sealed state" >&2
+    return 2
+  }
+}
+
+require_reusable_fresh_stack_resource_shape() {
+  local project_containers service container_count
+  local postgres_count=0 rustfs_count=0 rustfs_init_count=0 api_count=0 web_count=0 dagster_count=0
+  local container_id project_volumes volume project_networks network
+  if ! project_containers="$(docker container ls --all \
+    --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.ID}}')"; then
+    echo "could not inspect reusable fresh deploy containers" >&2
+    return 1
+  fi
+  while IFS= read -r container_id; do
+    [[ -n "$container_id" ]] || continue
+    if ! service="$(docker container inspect --format \
+      '{{ index .Config.Labels "com.docker.compose.service" }}' "$container_id")"; then
+      echo "could not inspect reusable fresh deploy service labels" >&2
+      return 1
+    fi
+    case "$service" in
+      app-postgres) ((postgres_count+=1)) ;;
+      app-rustfs) ((rustfs_count+=1)) ;;
+      app-rustfs-init) ((rustfs_init_count+=1)) ;;
+      app-api) ((api_count+=1)) ;;
+      app-web) ((web_count+=1)) ;;
+      app-dagster) ((dagster_count+=1)) ;;
+      *)
+        echo "reusable fresh deploy refuses unexpected Compose service: ${service:-<missing>}" >&2
+        return 2
+        ;;
+    esac
+  done <<< "$project_containers"
+  [[ "$postgres_count" == "1" && "$rustfs_count" == "1" \
+    && "$rustfs_init_count" -le 1 \
+    && "$api_count" == "$web_count" \
+    && "$api_count" -le 1 && "$dagster_count" -le 1 ]] || {
+    echo "reusable fresh deploy requires one database/object store and at most one runtime per service" >&2
+    return 2
+  }
+  if ! project_volumes="$(docker volume ls \
+    --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.Name}}')"; then
+    echo "could not inspect reusable fresh deploy volumes" >&2
+    return 1
+  fi
+  while IFS= read -r volume; do
+    [[ -n "$volume" ]] || continue
+    case "$volume" in
+      "${PROJECT}_app-postgres"|"${PROJECT}_app-dagster") ;;
+      *)
+        echo "reusable fresh deploy refuses unexpected project volume: ${volume}" >&2
+        return 2
+        ;;
+    esac
+  done <<< "$project_volumes"
+  if ! project_networks="$(docker network ls \
+    --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.Name}}')"; then
+    echo "could not inspect reusable fresh deploy networks" >&2
+    return 1
+  fi
+  [[ "$(printf '%s\n' "$project_networks" | sed '/^$/d' | wc -l)" == "1" \
+    && "$(printf '%s\n' "$project_networks" | sed '/^$/d')" == "${PROJECT}_default" ]] || {
+    echo "reusable fresh deploy requires exactly the canonical project network" >&2
     return 2
   }
 }

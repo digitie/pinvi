@@ -112,7 +112,7 @@ curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:12802/server_info  #
 curl -fsS -X POST http://127.0.0.1:12801/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"<bootstrap-admin-email>","password":"<temporary-bootstrap-password>"}' >/dev/null
-docker ps --filter name=pinvi --format '{{.Names}}  {{.Image}}  {{.Status}}'
+# 운영 project 상태는 manager의 status 명령으로 확인한다. raw Compose 조회는 하지 않는다.
 ```
 
 도메인 ↔ 포트(reverse proxy): web `:12805`, api `:12801`, dagster `:12802`,

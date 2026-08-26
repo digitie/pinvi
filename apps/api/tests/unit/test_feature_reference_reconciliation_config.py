@@ -301,11 +301,22 @@ def _write_runtime_attestation(directory: Path, receipt: str, payload: dict[str,
     def dependency(
         container_field: str, digest_field: str, revision_field: str
     ) -> dict[str, object]:
+        service_by_container = {
+            "map_admin_container_id": ("map-m05", "admin"),
+            "map_api_container_id": ("map-m05", "api"),
+            "map_frontend_container_id": ("map-m05", "frontend"),
+            "pinvi_api_container_id": ("pinvi-m05", "app-api"),
+            "pinvi_web_container_id": ("pinvi-m05", "app-web"),
+            "pinvi_dagster_container_id": ("pinvi-m05", "app-dagster"),
+        }
+        compose_project, compose_service = service_by_container[container_field]
         return {
             "container_id": payload[container_field],
             "digest": payload[digest_field],
             "environment": payload["scope"],
             "image_id": payload[digest_field],
+            "compose_project": compose_project,
+            "compose_service": compose_service,
             "revision_label": payload[revision_field],
             "source_revision": payload[revision_field],
             "started_at": "2026-08-24T00:00:00.000000000Z",
@@ -345,7 +356,7 @@ def _write_runtime_attestation(directory: Path, receipt: str, payload: dict[str,
         "pinvi_source_revision": payload["pinvi_source_revision"],
         "receipt_sha256": hashlib.sha256(receipt.encode("utf-8")).hexdigest(),
         "scope": payload["scope"],
-        "version": 1,
+        "version": 2,
     }
     canonical = json.dumps(
         runtime_payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True
@@ -772,7 +783,10 @@ def test_m05_evidence_runtime_uses_non_owner_database_login() -> None:
     api_block, _ = compose.split("  app-migrator:", maxsplit=1)
 
     assert "app-db-runtime-role:" in compose
-    assert "PINVI_DATABASE_URL: ${PINVI_DATABASE_URL:-postgresql+asyncpg://pinvi_app:" in api_block
+    assert (
+        "PINVI_DATABASE_URL: postgresql+asyncpg://${PINVI_APP_DB_USER:-pinvi_app}:"
+        "${PINVI_APP_DB_PASSWORD:-pinvi_app_smoke}@app-postgres:5432/pinvi" in api_block
+    )
     assert "PINVI_MIGRATOR_DATABASE_URL" not in compose
     for source in (docker_app, deploy):
         assert 'local service="app-migrator"' in source

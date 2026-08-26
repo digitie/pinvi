@@ -240,11 +240,16 @@ cd ~/pinvi
 : "${PINVI_M05_PRIVATE_KEY:?set the root-owned M05 signing key path}"
 : "${PINVI_M05_MAP_ADMIN_URL:?set the isolated Map admin loopback URL}"
 : "${PINVI_M05_MAP_CASE_ID:?set the isolated Map M05 case UUID}"
+: "${PINVI_M05_MAP_DOCKER_PROJECT:?set the isolated Map Compose project}"
 : "${PINVI_M05_MAP_ADMIN_CONTAINER:?set the isolated Map admin container name}"
+: "${PINVI_M05_MAP_ADMIN_SERVICE:?set the isolated Map admin Compose service}"
 : "${PINVI_M05_MAP_API_CONTAINER:?set the isolated Map API container name}"
+: "${PINVI_M05_MAP_API_SERVICE:?set the isolated Map API Compose service}"
 : "${PINVI_M05_MAP_FRONTEND_CONTAINER:?set the isolated Map frontend container name}"
+: "${PINVI_M05_MAP_FRONTEND_SERVICE:?set the isolated Map frontend Compose service}"
 : "${PINVI_M05_MAP_SOURCE_ROOT:?set the clean pinned Map source checkout}"
 : "${PINVI_M05_PINVI_API_CONTAINER:?set the isolated Pinvi API container name}"
+: "${PINVI_M05_PINVI_DOCKER_PROJECT:?set the isolated Pinvi Compose project}"
 : "${PINVI_M05_PINVI_WEB_CONTAINER:?set the isolated Pinvi Web container name}"
 : "${PINVI_M05_PINVI_DAGSTER_CONTAINER:?set the isolated Pinvi Dagster container name}"
 : "${PINVI_M05_LIVE_EVENT_ID:?set the applied M05 event UUID}"
@@ -267,12 +272,17 @@ python scripts/m05_activation_attestation.py live \
   --private-key "$PINVI_M05_PRIVATE_KEY" \
   --map-admin-url "$PINVI_M05_MAP_ADMIN_URL" \
   --map-case-id "$PINVI_M05_MAP_CASE_ID" \
+  --map-docker-project "$PINVI_M05_MAP_DOCKER_PROJECT" \
   --map-admin-container "$PINVI_M05_MAP_ADMIN_CONTAINER" \
+  --map-admin-service "$PINVI_M05_MAP_ADMIN_SERVICE" \
   --map-api-container "$PINVI_M05_MAP_API_CONTAINER" \
+  --map-api-service "$PINVI_M05_MAP_API_SERVICE" \
   --map-frontend-container "$PINVI_M05_MAP_FRONTEND_CONTAINER" \
+  --map-frontend-service "$PINVI_M05_MAP_FRONTEND_SERVICE" \
   --map-source-root "$PINVI_M05_MAP_SOURCE_ROOT" \
   --m04-evidence-dir "$PINVI_M04_UI_EVIDENCE_DIR" \
   --pinvi-api-url http://127.0.0.1:13801 \
+  --pinvi-docker-project "$PINVI_M05_PINVI_DOCKER_PROJECT" \
   --pinvi-api-container "$PINVI_M05_PINVI_API_CONTAINER" \
   --pinvi-web-url http://127.0.0.1:13805 \
   --pinvi-web-container "$PINVI_M05_PINVI_WEB_CONTAINER" \

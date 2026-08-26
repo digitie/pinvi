@@ -206,8 +206,18 @@ def _validate_m05_runtime_dependencies_live(
         digest = raw_dependency.get("digest")
         source_revision = raw_dependency.get("source_revision")
         started_at = raw_dependency.get("started_at")
+        compose_project = raw_dependency.get("compose_project")
+        compose_service = raw_dependency.get("compose_service")
         if not all(
-            isinstance(value, str) for value in (container_id, digest, source_revision, started_at)
+            isinstance(value, str)
+            for value in (
+                container_id,
+                digest,
+                source_revision,
+                started_at,
+                compose_project,
+                compose_service,
+            )
         ):
             raise RuntimeError(f"M05 runtime dependency fields are invalid: {name}")
         live = _m05_docker_inspect(
@@ -229,6 +239,8 @@ def _validate_m05_runtime_dependencies_live(
         if (
             labels.get("io.pinvi.build.environment") != environment
             or labels.get("org.opencontainers.image.revision") != source_revision
+            or labels.get("com.docker.compose.project") != compose_project
+            or labels.get("com.docker.compose.service") != compose_service
         ):
             raise RuntimeError(f"M05 runtime dependency labels drifted: {name}")
         endpoint_binding = endpoint_ports.get(name)
@@ -1931,7 +1943,7 @@ class Settings(BaseSettings):
             "scope",
             "version",
         }
-        if set(runtime_payload) != expected_fields or runtime_payload["version"] != 1:
+        if set(runtime_payload) != expected_fields or runtime_payload["version"] != 2:
             _raise_redacted_settings_error("M05 runtime attestation schema is invalid")
         if (
             runtime_payload["activation_generation"] != receipt_payload["activation_generation"]
@@ -2013,6 +2025,8 @@ class Settings(BaseSettings):
                 "digest",
                 "environment",
                 "image_id",
+                "compose_project",
+                "compose_service",
                 "revision_label",
                 "source_revision",
                 "started_at",

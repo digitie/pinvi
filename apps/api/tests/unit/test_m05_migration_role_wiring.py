@@ -47,7 +47,11 @@ def test_compose_keeps_runtime_and_migrator_role_inputs_separate() -> None:
         "  app-web:", maxsplit=1
     )[0]
     assert "profiles: [legacy-rebaseline]" in legacy_migrator_block
-    assert "PINVI_LEGACY_REBASELINE_DATABASE_URL" in legacy_migrator_block
+    assert (
+        "PINVI_DATABASE_URL: postgresql+asyncpg://invalid:invalid@app-postgres:5432/pinvi"
+        in legacy_migrator_block
+    )
+    assert "PINVI_LEGACY_REBASELINE_DATABASE_URL" not in legacy_migrator_block
     assert "PINVI_APP_DB_USER" in legacy_migrator_block
     assert "PINVI_MIGRATOR_DB_USER" in legacy_migrator_block
     assert 'PINVI_M05_LEGACY_REBASELINE: "1"' in legacy_migrator_block
@@ -1020,6 +1024,17 @@ def test_live_ui_gates_pin_the_exact_checkout_revision() -> None:
         "PINVI_M05_LIVE_PASSWORD",
     ):
         assert f'child_env["{name}"]' in m05_runner
+    for binding in (
+        "args.map_docker_project",
+        "args.map_admin_service",
+        "args.map_api_service",
+        "args.map_frontend_service",
+        "args.pinvi_docker_project",
+        'expected_compose_service="app-api"',
+        'expected_compose_service="app-web"',
+        'expected_compose_service="app-dagster"',
+    ):
+        assert binding in attestation
 
 
 def test_runtime_discovery_failure_is_detected_without_caller_pipefail() -> None:

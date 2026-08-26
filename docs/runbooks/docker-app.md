@@ -117,6 +117,7 @@ origin 증명이 있으면 허용되며, data-bearing `0061` database는 legacy 
 없이는 `0101`로 진행하지 않는다.
 
 ```bash
+PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/secure/pinvi/bootstrap-admin.json \
 PINVI_DOCKER_MANAGER_UNAVAILABLE=1 \
 PINVI_DEPLOY_FRESH_STACK=1 \
 PINVI_DOCKER_PROJECT=pinvi-<isolated-name> \

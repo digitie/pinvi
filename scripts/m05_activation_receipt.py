@@ -2394,6 +2394,8 @@ def _map_pair(
             "digest",
             "environment",
             "image_id",
+            "compose_project",
+            "compose_service",
             "revision_label",
             "source_revision",
             "started_at",
@@ -2410,6 +2412,13 @@ def _map_pair(
         _digest(runtime_image["digest"], name=f"Map runtime {name}.digest")
         _commit(runtime_image["source_revision"], name=f"Map runtime {name}.source_revision")
         _string(runtime_image["environment"], name=f"Map runtime {name}.environment")
+        for field in ("compose_project", "compose_service"):
+            value = runtime_image[field]
+            if (
+                not isinstance(value, str)
+                or re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", value) is None
+            ):
+                raise ReceiptError(f"Map runtime {name} {field} is invalid")
         if (
             not isinstance(runtime_image["container_id"], str)
             or re.fullmatch(r"[0-9a-f]{64}\Z", runtime_image["container_id"]) is None
@@ -2417,6 +2426,10 @@ def _map_pair(
             or not runtime_image["started_at"]
         ):
             raise ReceiptError(f"Map runtime {name} container identity is invalid")
+    map_projects = {runtime[name]["compose_project"] for name in ("admin", "api", "frontend")}
+    map_services = {runtime[name]["compose_service"] for name in ("admin", "api", "frontend")}
+    if len(map_projects) != 1 or len(map_services) != 3:
+        raise ReceiptError("Map runtime Compose project/service binding is inconsistent")
     image_digests = {
         "admin": _digest(pair["admin_image_digest"], name="Map admin image digest"),
         "api": _digest(pair["api_image_digest"], name="Map API image digest"),
@@ -2483,6 +2496,8 @@ def _pinvi_images(value: object, *, pinvi_source_revision: str, environment: str
             "digest",
             "environment",
             "image_id",
+            "compose_project",
+            "compose_service",
             "revision_label",
             "source_revision",
             "started_at",
@@ -2494,6 +2509,13 @@ def _pinvi_images(value: object, *, pinvi_source_revision: str, environment: str
             raise ReceiptError(f"Pinvi {name} image ID is not bound to its digest")
         if image["revision_label"] != image["source_revision"]:
             raise ReceiptError(f"Pinvi {name} image source label is not self-consistent")
+        for field in ("compose_project", "compose_service"):
+            value = image[field]
+            if (
+                not isinstance(value, str)
+                or re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", value) is None
+            ):
+                raise ReceiptError(f"Pinvi {name} image {field} is invalid")
         if (
             _commit(image["source_revision"], name=f"Pinvi {name}.source_revision")
             != pinvi_source_revision
@@ -2508,6 +2530,17 @@ def _pinvi_images(value: object, *, pinvi_source_revision: str, environment: str
             raise ReceiptError(f"Pinvi {name} container identity is invalid")
         result[name] = _digest(image["digest"], name=f"Pinvi {name}.digest")
         result[f"{name}_container_id"] = image["container_id"]
+    pinvi_projects = {images[name]["compose_project"] for name in ("api", "web", "dagster")}
+    expected_services = {
+        "api": "app-api",
+        "web": "app-web",
+        "dagster": "app-dagster",
+    }
+    if len(pinvi_projects) != 1 or any(
+        images[name]["compose_service"] != service
+        for name, service in expected_services.items()
+    ):
+        raise ReceiptError("Pinvi runtime Compose project/service binding is inconsistent")
     return result
 
 
@@ -2706,6 +2739,8 @@ def _runtime_dependency(value: object, *, name: str) -> dict[str, object]:
         "digest",
         "environment",
         "image_id",
+        "compose_project",
+        "compose_service",
         "revision_label",
         "source_revision",
         "started_at",
@@ -2725,6 +2760,13 @@ def _runtime_dependency(value: object, *, name: str) -> dict[str, object]:
         raise ReceiptError(f"{name} runtime dependency identity is invalid")
     _digest(dependency["digest"], name=f"{name}.digest")
     _string(dependency["environment"], name=f"{name}.environment")
+    for field in ("compose_project", "compose_service"):
+        value = dependency[field]
+        if (
+            not isinstance(value, str)
+            or re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", value) is None
+        ):
+            raise ReceiptError(f"{name} runtime dependency {field} is invalid")
     _commit(dependency["source_revision"], name=f"{name}.source_revision")
     return dependency
 
@@ -2993,7 +3035,7 @@ def _create(args: argparse.Namespace) -> int:
         "pinvi_source_revision": source_revision,
         "receipt_sha256": hashlib.sha256(args.output.read_bytes()).hexdigest(),
         "scope": scope,
-        "version": 1,
+        "version": 2,
     }
     runtime_attestation = {
         "payload": runtime_payload,

@@ -968,6 +968,8 @@ def _docker_inspect(
     expected_environment: str,
     require_environment_label: bool = True,
     expected_image_digest: str | None = None,
+    expected_compose_project: str | None = None,
+    expected_compose_service: str | None = None,
     endpoint_url: str | None = None,
     endpoint_container_port: int = 8000,
 ) -> dict[str, str]:
@@ -1027,6 +1029,28 @@ def _docker_inspect(
         != expected_environment
     ):
         raise AttestationError(f"runtime build environment mismatch for {container}")
+    compose_project = labels.get("com.docker.compose.project")
+    compose_service = labels.get("com.docker.compose.service")
+    compose_project = (
+        _string(compose_project, name=f"{container}.com.docker.compose.project")
+        if compose_project is not None
+        else ""
+    )
+    compose_service = (
+        _string(compose_service, name=f"{container}.com.docker.compose.service")
+        if compose_service is not None
+        else ""
+    )
+    if expected_compose_project is not None:
+        if re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", expected_compose_project) is None:
+            raise AttestationError("expected Docker Compose project is invalid")
+        if compose_project != expected_compose_project:
+            raise AttestationError(f"runtime Compose project mismatch for {container}")
+    if expected_compose_service is not None:
+        if re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", expected_compose_service) is None:
+            raise AttestationError("expected Docker Compose service is invalid")
+        if compose_service != expected_compose_service:
+            raise AttestationError(f"runtime Compose service mismatch for {container}")
     if endpoint_url is not None:
         _assert_docker_endpoint(
             item,
@@ -1041,6 +1065,8 @@ def _docker_inspect(
         "environment": expected_environment,
         "source_revision": expected_revision,
         "revision_label": revision,
+        "compose_project": compose_project,
+        "compose_service": compose_service,
         "started_at": started_at,
     }
 
@@ -1100,6 +1126,8 @@ def _assert_runtime_identity(
         "environment",
         "source_revision",
         "revision_label",
+        "compose_project",
+        "compose_service",
         "started_at",
     ):
         if before[field] != after[field]:
@@ -1614,6 +1642,8 @@ def _runtime_snapshot(
             expected_revision=pair["admin"]["source_revision"],
             expected_environment=args.scope,
             expected_image_digest=pair["runtime_image_digests"]["admin"],
+            expected_compose_project=args.map_docker_project,
+            expected_compose_service=args.map_admin_service,
             endpoint_url=args.map_admin_url,
             endpoint_container_port=13701,
         ),
@@ -1622,23 +1652,31 @@ def _runtime_snapshot(
             expected_revision=pair["admin"]["source_revision"],
             expected_environment=args.scope,
             expected_image_digest=pair["runtime_image_digests"]["api"],
+            expected_compose_project=args.map_docker_project,
+            expected_compose_service=args.map_api_service,
         ),
         "map_frontend": _docker_inspect(
             args.map_frontend_container,
             expected_revision=pair["admin"]["source_revision"],
             expected_environment=args.scope,
             expected_image_digest=pair["runtime_image_digests"]["frontend"],
+            expected_compose_project=args.map_docker_project,
+            expected_compose_service=args.map_frontend_service,
         ),
         "pinvi_api": _docker_inspect(
             args.pinvi_api_container,
             expected_revision=source_revision,
             expected_environment=args.scope,
+            expected_compose_project=args.pinvi_docker_project,
+            expected_compose_service="app-api",
             endpoint_url=args.pinvi_api_url,
         ),
         "pinvi_web": _docker_inspect(
             args.pinvi_web_container,
             expected_revision=source_revision,
             expected_environment=args.scope,
+            expected_compose_project=args.pinvi_docker_project,
+            expected_compose_service="app-web",
             endpoint_url=args.pinvi_web_url,
             endpoint_container_port=3000,
         ),
@@ -1646,6 +1684,8 @@ def _runtime_snapshot(
             args.pinvi_dagster_container,
             expected_revision=source_revision,
             expected_environment=args.scope,
+            expected_compose_project=args.pinvi_docker_project,
+            expected_compose_service="app-dagster",
         ),
     }
 
@@ -2464,12 +2504,17 @@ def _parser() -> argparse.ArgumentParser:
     live.add_argument("--private-key", type=Path, required=True)
     live.add_argument("--map-admin-url", required=True)
     live.add_argument("--map-case-id", required=True)
+    live.add_argument("--map-docker-project", required=True)
     live.add_argument("--map-admin-container", required=True)
+    live.add_argument("--map-admin-service", required=True)
     live.add_argument("--map-api-container", required=True)
+    live.add_argument("--map-api-service", required=True)
     live.add_argument("--map-frontend-container", required=True)
+    live.add_argument("--map-frontend-service", required=True)
     live.add_argument("--map-source-root", type=Path, required=True)
     live.add_argument("--m04-evidence-dir", type=Path, required=True)
     live.add_argument("--pinvi-api-url", required=True)
+    live.add_argument("--pinvi-docker-project", required=True)
     live.add_argument("--pinvi-api-container", required=True)
     live.add_argument("--pinvi-web-url", required=True)
     live.add_argument("--pinvi-web-container", required=True)
