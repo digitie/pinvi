@@ -393,6 +393,8 @@ def test_migration_wrappers_open_only_for_the_one_shot_and_seal_afterward() -> N
         migration = source[source.index("migrate_under_lifecycle_lock() {") :]
         wrapper = source[source.index("migrate() {") :]
         assert "m05_legacy_rebaseline_profile()" in source
+        assert "validate_bootstrap_admin_credential_file" in source
+        assert "pinvi-admin-bootstrap validate-credential" in source
         assert 'source "$ROOT_DIR/scripts/migrator-lifecycle-lock.sh"' in source
         assert "prepare_migrator_login()" in source
         assert "seal_migrator_login()" in source
@@ -426,6 +428,9 @@ def test_migration_wrappers_open_only_for_the_one_shot_and_seal_afterward() -> N
             migration.index("prepare_migrator_login")
             < migration.index("run_admin_bootstrap")
             < migration.rindex("seal_migrator_login")
+        )
+        assert migration.index("validate_bootstrap_admin_credential_file") < migration.index(
+            "drain_runtime_writers"
         )
 
 
@@ -600,6 +605,38 @@ fi
             env={"FAKE_EVENT_LOG": str(event_log), "PINVI_ROOT_DIR": str(tmp_path)},
         )
         assert not event_log.exists()
+
+
+def test_existing_runtime_refuses_in_place_snapshot_preflight(tmp_path: Path) -> None:
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    for dependency in ("api-image-provenance.sh", "migrator-lifecycle-lock.sh"):
+        shutil.copy2(ROOT / "scripts" / dependency, scripts_dir / dependency)
+
+    for name in ("scripts/docker-app.sh", "scripts/deploy-node.sh"):
+        source = (ROOT / name).read_text(encoding="utf-8")
+        isolated_script = scripts_dir / Path(name).name
+        isolated_script.write_text(
+            source.rsplit('\nmain "$@"', maxsplit=1)[0] + "\n", encoding="utf-8"
+        )
+        driver = r"""
+set -euo pipefail
+source "$1"
+RUNTIME_DEPLOY_PRESERVE=1
+RUNTIME_PREDEPLOY_API_CONTAINER_IDS=(existing-api)
+if runtime_snapshot_preflight; then
+  exit 1
+fi
+"""
+        result = subprocess.run(  # noqa: S603 -- fixed test-only bash driver
+            ["bash", "-c", driver, "--", str(isolated_script)],  # noqa: S607 -- fixture script
+            check=False,
+            capture_output=True,
+            text=True,
+            env={"PINVI_ROOT_DIR": str(tmp_path)},
+        )
+        assert result.returncode == 0
+        assert "in-place runtime snapshot is disabled" in result.stderr
 
 
 def test_live_ui_gates_pin_the_exact_checkout_revision() -> None:

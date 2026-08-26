@@ -297,6 +297,7 @@ pinvi_runtime_container_ids() {
     --filter "label=com.docker.compose.project=${project}" \
     --filter "label=com.docker.compose.service=${service}" \
     --format '{{.ID}} {{.Names}}')"; then
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
     return 1
   fi
   awk '$2 !~ /\.pinvi-predeploy$/ {print $1}' <<< "$raw_containers"

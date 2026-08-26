@@ -80,14 +80,14 @@ gitignore된 `docs/deploy-runbook.local.md` 또는 로컬 env 파일에만 둔�
 ## 3. 실행
 
 ```bash
-cd apps/web
+cd ~/pinvi
 npm run test:e2e:live-mutating:list
 PINVI_LIVE_MUTATING_E2E=1 \
 PINVI_LIVE_WEB_URL=http://127.0.0.1:12805 \
 PINVI_LIVE_API_URL=http://127.0.0.1:12801 \
 PINVI_LIVE_EMAIL="$PINVI_LIVE_EMAIL" \
 PINVI_LIVE_PASSWORD="$PINVI_LIVE_PASSWORD" \
-npm run test:e2e:live-mutating
+scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating
 ```
 
 Trip day hole 단건:
@@ -99,7 +99,7 @@ PINVI_LIVE_API_URL=http://127.0.0.1:12801 \
 PINVI_LIVE_EMAIL="$PINVI_LIVE_EMAIL" \
 PINVI_LIVE_PASSWORD="$PINVI_LIVE_PASSWORD" \
 PINVI_LIVE_SCREENSHOT_DIR="$PWD/../../.codex_tmp/live-e2e/trip-day-hole" \
-npm run test:e2e:live-mutating -- trip-day-hole-live-mutating.live.ts --workers=1
+scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- trip-day-hole-live-mutating.live.ts --workers=1
 ```
 
 ### Feature resolution 단건
@@ -146,10 +146,12 @@ PINVI_LIVE_MAP_PROXY_PORT=13701 \
 PINVI_LIVE_MAP_UPSTREAM_PORT="<isolated-map-api-port>" \
 PINVI_LIVE_EMAIL="$PINVI_LIVE_EMAIL" \
 PINVI_LIVE_PASSWORD="$PINVI_LIVE_PASSWORD" \
-npm run test:e2e:live-mutating -- trip-feature-resolution-live-mutating.live.ts --workers=1
+scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- trip-feature-resolution-live-mutating.live.ts --workers=1
 ```
 
-격리 stack만 사용한다. 실제 서비스 API를 proxy base URL로 재기동하지 않는다. 실패 시 현재 run이 출력한
+격리 stack만 사용한다. 실제 서비스 API를 proxy base URL로 재기동하지 않는다. 아래 live mutation 실행은
+모두 N150의 `scripts/n150-playwright-runner.sh`를 통해 exact checkout·clean worktree·digest-pinned
+Playwright image를 검증한 뒤 수행한다. 직접 `npm` 실행은 catalog list 확인에만 사용한다. 실패 시 현재 run이 출력한
 고유 prefix로 활성 Trip만 수동 soft-delete하며, 다른 prefix의 Trip을 일괄 삭제하지 않는다. VWorld
 key가 없는 fallback 환경에서는 지도 popup이 마운트되지 않으므로 상태 문구는 owner 목록의 접근성
 label로 검증하고 지도 좌표·marker 상태는 숨김 legend와 API 상태 검증으로 보완한다.
@@ -162,14 +164,14 @@ mutation을 포함하므로 기본 분당 60회 제한을 그대로 쓰면 본 �
 Backup staging:
 
 ```bash
-cd apps/web
+cd ~/pinvi
 npm run test:e2e:live-mutating:list
 PINVI_BACKUP_LIVE_MUTATING_E2E=1 \
 PINVI_BACKUP_LIVE_STAGING=1 \
 PINVI_LIVE_WEB_URL=http://127.0.0.1:12805 \
 PINVI_BACKUP_LIVE_EMAIL="$PINVI_BACKUP_LIVE_EMAIL" \
 PINVI_BACKUP_LIVE_PASSWORD="$PINVI_BACKUP_LIVE_PASSWORD" \
-npm run test:e2e:live-mutating -- admin-backup-live-mutating.live.ts --workers=1
+scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- admin-backup-live-mutating.live.ts --workers=1
 ```
 
 ### M04 Map Feature 요청 큐 단건
@@ -179,13 +181,13 @@ Map #1029와 PinVi #458의 검증한 exact image pair만 격리 포트/DB로 기
 않는다. Map service writer token은 PinVi API process에만 주입한다.
 
 ```bash
-cd apps/web
+cd ~/pinvi
 PINVI_M04_LIVE_E2E=1 \
 PINVI_LIVE_WEB_URL=http://127.0.0.1:13805 \
 PINVI_M04_LIVE_FEATURE_REQUEST_ID="$PINVI_M04_LIVE_FEATURE_REQUEST_ID" \
 PINVI_M04_LIVE_EMAIL="$PINVI_M04_LIVE_EMAIL" \
 PINVI_M04_LIVE_PASSWORD="$PINVI_M04_LIVE_PASSWORD" \
-npm run test:e2e:live-mutating -- admin-feature-request-queue-live-mutating.live.ts --workers=1
+scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- admin-feature-request-queue-live-mutating.live.ts --workers=1
 ```
 
 성공 뒤 PinVi 응답 및 Map 격리 로그에서 같은 request UUID와 pending receipt를 대조한다. 실패한
@@ -206,7 +208,7 @@ M04 승인, Map `rebind` 결정, PinVi worker receipt/ACK가 모두 같은 격�
 기록하지 않는다. 실행 자체는 읽기 전용이다.
 
 ```bash
-cd apps/web
+cd ~/pinvi
 PINVI_M05_LIVE_E2E=1 \
 PINVI_LIVE_WEB_URL=http://127.0.0.1:13805 \
 PINVI_M05_LIVE_EVENT_ID="$PINVI_M05_LIVE_EVENT_ID" \
@@ -215,14 +217,15 @@ PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID="$PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID" \
 PINVI_M05_LIVE_IMPACT_COUNT="$PINVI_M05_LIVE_IMPACT_COUNT" \
 PINVI_M05_LIVE_EMAIL="$PINVI_M05_LIVE_EMAIL" \
 PINVI_M05_LIVE_PASSWORD="$PINVI_M05_LIVE_PASSWORD" \
-npm run test:e2e:live-mutating -- admin-feature-reference-reconciliations-live-mutating.live.ts --workers=1
+scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- admin-feature-reference-reconciliations-live-mutating.live.ts --workers=1
 ```
 
 M05 event가 목록 첫 페이지에 없거나 terminal receipt가 없으면 fixture/worker/ACK 상태를 먼저 확인한다.
 activation gate에서는 단독 UI pass가 아니라, 앞 절의 서명된 M04 증적과 `live`의 Map 결정·ACK
 server-side 대조까지 모두 성공해야 한다.
 
-운영 공개 도메인으로 검증할 때는 `*_URL`을 실제 HTTPS 도메인으로 바꾼다.
+운영 공개 도메인으로 검증할 때는 `*_URL`을 실제 HTTPS 도메인으로 바꾸고, runner의 exact SHA와
+digest-pinned image 조건을 그대로 유지한다.
 
 ## 4. 실패 처리
 

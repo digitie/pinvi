@@ -78,11 +78,13 @@ assert_exact_live_checkout() {
   fi
 }
 
+live_ui_requested="0"
 if [[ "${PINVI_ADMIN_LIVE_E2E:-0}" == "1" \
   || "${PINVI_LIVE_UI_E2E:-0}" == "1" \
   || "${PINVI_M04_LIVE_E2E:-0}" == "1" \
   || -n "${PINVI_M04_UI_VERIFICATION_ID:-}" \
   || -n "${PINVI_M05_UI_VERIFICATION_ID:-}" ]]; then
+  live_ui_requested="1"
   assert_exact_live_checkout
 fi
 
@@ -103,6 +105,48 @@ network="${PINVI_PLAYWRIGHT_RUNNER_NETWORK:-host}"
 skip_npm_ci="${PINVI_PLAYWRIGHT_RUNNER_SKIP_NPM_CI:-0}"
 volume_prefix="${PINVI_PLAYWRIGHT_RUNNER_VOLUME_PREFIX:-pinvi-playwright}"
 evidence_owner="$(id -u):$(id -g)"
+generic_live_requested="0"
+if [[ "${PINVI_LIVE_MUTATING_E2E:-0}" == "1" \
+  || "${PINVI_BACKUP_LIVE_MUTATING_E2E:-0}" == "1" \
+  || "${PINVI_LIVE_FEATURE_RESOLUTION_E2E:-0}" == "1" \
+  || "${PINVI_LIVE_ATTACHMENT_E2E:-0}" == "1" ]]; then
+  generic_live_requested="1"
+fi
+if [[ "$live_ui_requested" == "1" || "$generic_live_requested" == "1" ]]; then
+  if [[ "$image" != mcr.microsoft.com/playwright:*@sha256:* ]]; then
+    echo "error: every live UI phase requires an official digest-pinned Playwright image" >&2
+    exit 1
+  fi
+  if [[ "$network" != "host" || "$skip_npm_ci" != "0" ]]; then
+    echo "error: every live UI phase requires host networking and a fresh npm ci" >&2
+    exit 1
+  fi
+fi
+if [[ "$generic_live_requested" == "1" ]]; then
+  if [[ "${PINVI_LIVE_MUTATING_E2E:-0}" == "1" \
+    || "${PINVI_LIVE_FEATURE_RESOLUTION_E2E:-0}" == "1" \
+    || "${PINVI_LIVE_ATTACHMENT_E2E:-0}" == "1" ]]; then
+    if [[ -z "${PINVI_LIVE_WEB_URL:-}" || -z "${PINVI_LIVE_API_URL:-}" \
+      || -z "${PINVI_LIVE_EMAIL:-}" || -z "${PINVI_LIVE_PASSWORD:-}" ]]; then
+      echo "error: generic live UI requires PINVI_LIVE_WEB_URL, PINVI_LIVE_API_URL, PINVI_LIVE_EMAIL, and PINVI_LIVE_PASSWORD" >&2
+      exit 1
+    fi
+  fi
+  if [[ "${PINVI_BACKUP_LIVE_MUTATING_E2E:-0}" == "1" ]]; then
+    if [[ "${PINVI_BACKUP_LIVE_STAGING:-0}" != "1" ]]; then
+      echo "error: backup live mutation requires PINVI_BACKUP_LIVE_STAGING=1" >&2
+      exit 1
+    fi
+    if [[ -z "${PINVI_LIVE_WEB_URL:-${PINVI_ADMIN_LIVE_WEB_URL:-}}" \
+      || ( -z "${PINVI_BACKUP_LIVE_EMAIL:-${PINVI_ADMIN_LIVE_EMAIL:-}}" \
+        && -z "${PINVI_BACKUP_LIVE_STORAGE_STATE:-${PINVI_ADMIN_LIVE_STORAGE_STATE:-}}" ) \
+      || ( -z "${PINVI_BACKUP_LIVE_PASSWORD:-${PINVI_ADMIN_LIVE_PASSWORD:-}}" \
+        && -z "${PINVI_BACKUP_LIVE_STORAGE_STATE:-${PINVI_ADMIN_LIVE_STORAGE_STATE:-}}" ) ]]; then
+      echo "error: backup live mutation requires an explicit web URL and admin credential or storage state" >&2
+      exit 1
+    fi
+  fi
+fi
 evidence_dir="${PINVI_M05_UI_EVIDENCE_DIR:-${PINVI_M04_UI_EVIDENCE_DIR:-}}"
 if [[ -n "${PINVI_M04_UI_EVIDENCE_DIR:-}" && -n "${PINVI_M05_UI_EVIDENCE_DIR:-}" ]]; then
   echo "error: only one M04/M05 UI evidence directory may be mounted per runner invocation" >&2
@@ -201,10 +245,44 @@ allowed_env_names=(
   PINVI_ADMIN_LIVE_THROTTLE_MS
   PINVI_ADMIN_LIVE_WEB_URL
   PINVI_ADMIN_LIVE_WORKERS
+  PINVI_BACKUP_LIVE_EMAIL
+  PINVI_BACKUP_LIVE_MUTATING_E2E
+  PINVI_BACKUP_LIVE_PASSWORD
+  PINVI_BACKUP_LIVE_REASON_PREFIX
+  PINVI_BACKUP_LIVE_STAGING
+  PINVI_BACKUP_LIVE_STORAGE_STATE
+  PINVI_BACKUP_LIVE_THROTTLE_MS
   PINVI_LIVE_API_URL
+  PINVI_LIVE_ATTACHMENT_E2E
+  PINVI_LIVE_EMAIL
+  PINVI_LIVE_FEATURE_CACHE_REVALIDATION
+  PINVI_LIVE_FEATURE_CACHE_WAIT_MS
+  PINVI_LIVE_FEATURE_RESOLUTION_E2E
+  PINVI_LIVE_FOUND_FEATURE_ID
+  PINVI_LIVE_FOUND_FEATURE_LAT
+  PINVI_LIVE_FOUND_FEATURE_LON
+  PINVI_LIVE_FOUND_FEATURE_NAME
+  PINVI_LIVE_MAP_PROXY_PORT
+  PINVI_LIVE_MAP_UPSTREAM_PORT
+  PINVI_LIVE_MISSING_FEATURE_ID
+  PINVI_LIVE_MUTATING_E2E
+  PINVI_LIVE_PASSWORD
+  PINVI_LIVE_RETIRED_FEATURE_ID
+  PINVI_LIVE_SCREENSHOT_DIR
+  PINVI_LIVE_SUPPRESSED_FEATURE_ID
+  PINVI_LIVE_TRIP_PREFIX
   PINVI_LIVE_UI_E2E
   PINVI_LIVE_WEB_URL
   PINVI_LIVE_EXPECTED_REVISION
+  PINVI_LIVE_WEATHER_DATE
+  PINVI_LIVE_WEATHER_FEATURE_ID
+  PINVI_LIVE_WEATHER_FEATURE_LAT
+  PINVI_LIVE_WEATHER_FEATURE_LON
+  PINVI_LIVE_WEATHER_FEATURE_NAME
+  PINVI_LIVE_WEATHER_NO_DATA_FEATURE_ID
+  PINVI_LIVE_WEATHER_NO_DATA_FEATURE_LAT
+  PINVI_LIVE_WEATHER_NO_DATA_FEATURE_LON
+  PINVI_LIVE_WEATHER_NO_DATA_FEATURE_NAME
   PINVI_M04_LIVE_EMAIL
   PINVI_M04_LIVE_E2E
   PINVI_M04_LIVE_FEATURE_REQUEST_ID

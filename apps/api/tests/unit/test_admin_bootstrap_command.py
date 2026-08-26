@@ -159,6 +159,32 @@ def test_candidate_head_command_reads_no_credential_or_database(
     )
 
 
+def test_validate_credential_command_reads_credential_without_bootstrap(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    credential_file = Path("/run/pinvi/bootstrap-admin.json")
+    monkeypatch.setenv(admin_bootstrap.CREDENTIAL_FILE_ENV, str(credential_file))
+    monkeypatch.setattr(
+        admin_bootstrap,
+        "read_bootstrap_admin_credential_file",
+        lambda path: (
+            None if path == credential_file else pytest.fail("unexpected credential path")
+        ),
+    )
+    monkeypatch.setattr(
+        admin_bootstrap,
+        "run_pinvi_admin_bootstrap",
+        lambda: pytest.fail("credential validation must not run migration or bootstrap"),
+    )
+
+    admin_bootstrap.main(["validate-credential"])
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert captured.out.strip() == '{"action":"credential_valid"}'
+
+
 def test_static_candidate_head_never_executes_revision_modules(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

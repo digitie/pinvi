@@ -240,13 +240,19 @@ def _credential_file_from_env() -> Path:
 
 
 def run_pinvi_admin_bootstrap() -> PinviAdminBootstrapResult:
-    credential_file = _credential_file_from_env()
-    expected_head = get_static_pinvi_head()
-    try:
-        run_alembic_upgrade_head()
-        return asyncio.run(_run_admin_phase(expected_head, credential_file))
-    finally:
-        asyncio.run(db_session.engine.dispose())
+  credential_file = _credential_file_from_env()
+  expected_head = get_static_pinvi_head()
+  try:
+    run_alembic_upgrade_head()
+    return asyncio.run(_run_admin_phase(expected_head, credential_file))
+  finally:
+    asyncio.run(db_session.engine.dispose())
+
+
+def validate_pinvi_admin_credential_file() -> None:
+    """Validate the bootstrap credential without opening a database connection."""
+
+    read_bootstrap_admin_credential_file(_credential_file_from_env())
 
 
 class _SecretFreeArgumentParser(argparse.ArgumentParser):
@@ -261,7 +267,7 @@ class _SecretFreeArgumentParser(argparse.ArgumentParser):
 
 def _parse_args(argv: Sequence[str] | None = None) -> str:
     parser = _SecretFreeArgumentParser(description=__doc__)
-    parser.add_argument("command", nargs="?", choices=("head",))
+    parser.add_argument("command", nargs="?", choices=("head", "validate-credential"))
     parsed = parser.parse_args(argv)
     command: str | None = parsed.command
     return command or "bootstrap"
@@ -289,6 +295,10 @@ def main(argv: Sequence[str] | None = None) -> None:
                     "schema": CANDIDATE_HEAD_SCHEMA,
                 }
             )
+            return
+        if command == "validate-credential":
+            validate_pinvi_admin_credential_file()
+            _print_json({"action": "credential_valid"})
             return
         result = run_pinvi_admin_bootstrap()
     except BootstrapAdminError as exc:

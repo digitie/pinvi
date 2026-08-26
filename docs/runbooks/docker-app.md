@@ -134,9 +134,11 @@ owner만으로는 실행할 수 없고 직접 superuser root session이 필요�
 
 ## 3. Docker app 스크립트
 
-`kor-travel-geo`의 `scripts/docker_app.sh`와 같은 운영 패턴을 따른다. 포트를
-점유한 기존 컨테이너/프로세스가 있으면 기본적으로 시작을 중지하고, 명시적으로
-`PINVI_DEV_FORCE_KILL=1`을 지정한 경우에만 종료한다. 승인 없는 공유 노드의 강제종료는 하지 않는다.
+`kor-travel-geo`의 `scripts/docker_app.sh`와 같은 개발용 폴백 패턴을 따른다. 직접 Compose
+변경은 `development|test|smoke`에서만 허용하며 staging/production은 manager 또는
+격리된 staging 절차를 사용한다. 포트를 점유한 현재 프로젝트의 컨테이너는
+`PINVI_DEV_FORCE_KILL=1`을 명시적으로 지정한 경우에만 제거하고, 다른 프로젝트의
+컨테이너나 호스트 프로세스는 자동 종료하지 않고 중단한다.
 
 ```bash
 scripts/docker-app.sh build
@@ -152,24 +154,24 @@ scripts/docker-app.sh reset   # down -v --remove-orphans
 `up`과 `smoke`는 migration 및 admin bootstrap을 포함하므로 위 credential file이 필요하다. 이미
 실행 중인 stack에서 migration 없이 상태만 확인하려면 `status`와 health endpoint를 사용한다.
 
-`scripts/deploy-node.sh deploy`와 `up`은 실행 중인 API/Web/Dagster container를 migration 전에
-중지하고 원래 이름·image를 `.pinvi-predeploy` snapshot으로 보존한다. snapshot 이름은 writer 중지
-전에 사전 검사하므로 stale snapshot 충돌이면 기존 writer를 건드리지 않고 중단한다. 새 writer가
-`/health`, `/health/db`, M05 reconciliation endpoint, Web/Dagster readiness와 Docker healthcheck를
-모두 통과하고 deploy smoke가 성공한 뒤에만 snapshot을 제거한다. 중간 실패 시 새 writer만 제거하고
-snapshot을 원래 이름으로 되돌려 기동하며, 기존 Dagster가 실행 중이었다면 enable flag가 꺼져 있어도
-복구 기동한다. snapshot 복구나 healthcheck가 실패하면 명령도 실패한다. runtime container 탐색은
-Compose project/service label을 사용하고 `.pinvi-predeploy` 이름은 검증·destructive cleanup에서
-제외한다. `scripts/docker-app.sh reset`은
-`PINVI_ENV_FILE`의 `PINVI_ENVIRONMENT=staging|production`을 shell override보다 우선해 확인하므로
-운영 volume 삭제를 우회할 수 없다.
+`scripts/deploy-node.sh deploy`와 `up`은 기존 API/Web/Dagster container가 하나라도
+발견되면 in-place snapshot을 만들지 않고 fail-closed로 중단한다. 중지된 container도
+기존 runtime으로 간주한다. Compose가 이름을 바꾼 snapshot을 다시 사용하거나 삭제할
+수 있기 때문에, 기존 runtime이 있는 staging/production은 manager의 pinned rebuild나
+별도 프로젝트의 fresh stack으로 진행한다. fresh stack에서는 `/health`, `/health/db`,
+M05 reconciliation endpoint, Web/Dagster readiness와 Docker healthcheck를 모두 통과한
+뒤에만 다음 단계로 진행한다. runtime 탐색·rollback에서 discovery가 실패하면 새로
+기록한 ID만 정리하고 managed writer를 중지한 뒤 수동 복구로 닫는다.
+`scripts/docker-app.sh reset`은 `PINVI_ENV_FILE`의 `PINVI_ENVIRONMENT=staging|production`을
+shell override보다 우선해 확인하므로 운영 volume 삭제를 우회할 수 없다.
 
 `scripts/docker-app.sh build`는 API image source revision을 확정하고 build 뒤 OCI label을 다시
 확인한다. 기존 Dagster writer가 있거나 `PINVI_ENABLE_DAGSTER=1`이면 flag가 꺼진 호출에서도
 Dagster image를 함께 build·검증한다. 로컬 `development|test|smoke`에서 revision을 지정하지 않으면 `development` label을
 허용한다. exact commit을 지정하면 환경과 무관하게 clean worktree의 `HEAD`와 같아야 한다.
-`staging|production`은 wrapper가 clean `HEAD`를 자동 주입하며, wrapper를 우회한 직접 Compose
-build도 `development` 또는 비정상 revision이면 Dockerfile 단계에서 실패한다. wrapper의 immutable
+`staging|production`은 `scripts/deploy-node.sh` 또는 manager 경로에서만 다룬다.
+`scripts/docker-app.sh`의 직접 Compose build는 `development|test|smoke`에서만 허용된다.
+wrapper를 우회한 직접 Compose build도 `development` 또는 비정상 revision이면 Dockerfile 단계에서 실패한다. wrapper의 immutable
 build context는 exact commit `git archive` 임시 디렉터리이며 live worktree와 ignored/untracked 파일을
 읽지 않는다. Dockerfile·Compose·검증 helper는 archive 내부 regular file만 허용하고 symlink를
 거부하며, preflight에서 확정한 환경/revision은 env-file이 바뀌어도 유지한다. build 뒤 tag는 검증된
@@ -398,7 +400,7 @@ CI에서:
 | `app-api` 시작 후 즉시 종료           | migration/bootstrap 미실행 | `pinvi-admin-bootstrap` one-shot 먼저                    |
 | `app-web` 빌드 실패                   | `NEXT_PUBLIC_*` 누락 | `.env` 확인 + 재빌드                                            |
 | `app-rustfs-init` 무한 루프           | bucket 이미 존재     | down -v로 볼륨 삭제 후 재시작                                   |
-| `12805` / `12101` port already in use | 다른 컨테이너 점유   | `up`은 기본적으로 중지하지 않고 실패한다. 승인된 dev 프로세스만 `PINVI_DEV_FORCE_KILL=1 scripts/docker-app.sh up`으로 종료하고, 수동 확인은 `lsof -i:<port>` |
+| `12805` / `12101` port already in use | 다른 프로젝트 컨테이너 또는 호스트 listener 점유 | 현재 프로젝트 컨테이너만 `PINVI_DEV_FORCE_KILL=1 scripts/docker-app.sh up`으로 제거할 수 있다. 다른 점유자는 자동 종료하지 않고 `ss -ltn`으로 확인 후 수동 정리한다. |
 | Admin login `pinvi_access` 발급 안 됨 | CORS / Secure cookie | `infra/docker-compose.app.yml`의 CORS 환경변수 확인             |
 
 ## 12. 관련 문서

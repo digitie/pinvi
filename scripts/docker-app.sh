@@ -39,6 +39,9 @@ RUNTIME_DAGSTER_BACKUP_NAME=""
 RUNTIME_PREDEPLOY_API_CONTAINER_IDS=()
 RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS=()
 RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS=()
+RUNTIME_PREDEPLOY_API_STOPPED_CONTAINER_IDS=()
+RUNTIME_PREDEPLOY_WEB_STOPPED_CONTAINER_IDS=()
+RUNTIME_PREDEPLOY_DAGSTER_STOPPED_CONTAINER_IDS=()
 RUNTIME_NEW_API_CONTAINER_IDS=()
 RUNTIME_NEW_WEB_CONTAINER_IDS=()
 RUNTIME_NEW_DAGSTER_CONTAINER_IDS=()
@@ -108,35 +111,36 @@ source "$ROOT_DIR/scripts/migrator-lifecycle-lock.sh"
 free_host_port() {
   local port="$1"
   local force_kill="${PINVI_DEV_FORCE_KILL:-0}"
-  local docker_ids pids
+  local docker_id listeners=""
+  local -a docker_ids=()
 
-  docker_ids="$(docker ps --filter "publish=${port}" --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.ID}}' || true)"
-  pids=""
-  if command -v lsof >/dev/null 2>&1; then
-    pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN || true)"
-  fi
-  if [[ -z "$pids" ]] && command -v fuser >/dev/null 2>&1; then
-    pids="$(fuser -n tcp "$port" 2>/dev/null || true)"
-  fi
-  if [[ -n "$docker_ids" || -n "$pids" ]] && [[ "$force_kill" != "1" ]]; then
+  mapfile -t docker_ids < <(
+    docker ps --filter "publish=${port}" \
+      --filter "label=com.docker.compose.project=${PROJECT}" \
+      --format '{{.ID}}' || true
+  )
+  if (( ${#docker_ids[@]} > 0 )) && [[ "$force_kill" != "1" ]]; then
     echo "host port ${port} is already in use; refusing to terminate it" >&2
     echo "set PINVI_DEV_FORCE_KILL=1 only after explicitly approving termination" >&2
     return 2
   fi
 
-  if [[ -n "$docker_ids" ]]; then
+  if (( ${#docker_ids[@]} > 0 )); then
     log "removing containers publishing host port ${port}"
-    # shellcheck disable=SC2086
-    docker rm -f $docker_ids >/dev/null
+    for docker_id in "${docker_ids[@]}"; do
+      docker rm -f "$docker_id" >/dev/null
+    done
   fi
 
-  if [[ -n "$pids" ]]; then
-    log "stopping processes listening on host port ${port}: ${pids//$'\n'/ }"
-    # shellcheck disable=SC2086
-    kill $pids 2>/dev/null || true
-    sleep 1
-    # shellcheck disable=SC2086
-    kill -9 $pids 2>/dev/null || true
+  if ! command -v ss >/dev/null 2>&1; then
+    echo "ss is required to verify that host port ${port} is free" >&2
+    return 127
+  fi
+  listeners="$(ss -H -ltn "sport = :${port}" 2>/dev/null || true)"
+  if [[ -n "$listeners" ]]; then
+    echo "host port ${port} remains occupied by a non-project listener; refusing host-process termination" >&2
+    echo "inspect the listener and stop it manually before retrying" >&2
+    return 2
   fi
 }
 
@@ -218,6 +222,12 @@ runtime_writer_container_id() {
 }
 
 runtime_capture_predeploy_container_ids() {
+  RUNTIME_PREDEPLOY_API_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_API_STOPPED_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_WEB_STOPPED_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_DAGSTER_STOPPED_CONTAINER_IDS=()
   if ! pinvi_runtime_container_ids_into_array RUNTIME_PREDEPLOY_API_CONTAINER_IDS app-api; then
     return 1
   fi
@@ -227,6 +237,39 @@ runtime_capture_predeploy_container_ids() {
   if ! pinvi_runtime_container_ids_into_array RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS app-dagster; then
     return 1
   fi
+  runtime_capture_predeploy_stopped_container_ids
+}
+
+runtime_capture_predeploy_stopped_container_ids() {
+  local service container_id running
+  for service in app-api app-web app-dagster; do
+    case "$service" in
+      app-api) for container_id in "${RUNTIME_PREDEPLOY_API_CONTAINER_IDS[@]}"; do
+        if ! running="$(docker container inspect --format '{{.State.Running}}' "$container_id")"; then
+          return 1
+        fi
+        if [[ "$running" != "true" ]]; then
+          RUNTIME_PREDEPLOY_API_STOPPED_CONTAINER_IDS+=("$container_id")
+        fi
+      done ;;
+      app-web) for container_id in "${RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS[@]}"; do
+        if ! running="$(docker container inspect --format '{{.State.Running}}' "$container_id")"; then
+          return 1
+        fi
+        if [[ "$running" != "true" ]]; then
+          RUNTIME_PREDEPLOY_WEB_STOPPED_CONTAINER_IDS+=("$container_id")
+        fi
+      done ;;
+      app-dagster) for container_id in "${RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS[@]}"; do
+        if ! running="$(docker container inspect --format '{{.State.Running}}' "$container_id")"; then
+          return 1
+        fi
+        if [[ "$running" != "true" ]]; then
+          RUNTIME_PREDEPLOY_DAGSTER_STOPPED_CONTAINER_IDS+=("$container_id")
+        fi
+      done ;;
+    esac
+  done
 }
 
 runtime_id_was_existing() {
@@ -239,6 +282,36 @@ runtime_id_was_existing() {
     app-dagster) for old_id in "${RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS[@]}"; do [[ "$old_id" == "$container_id" ]] && return 0; done ;;
   esac
   return 1
+}
+
+runtime_stop_reused_predeploy_stopped_writers() {
+  local service container_id running stop_failed="0"
+  for service in app-api app-web app-dagster; do
+    case "$service" in
+      app-api) for container_id in "${RUNTIME_PREDEPLOY_API_STOPPED_CONTAINER_IDS[@]}"; do
+        if ! running="$(docker container inspect --format '{{.State.Running}}' "$container_id")"; then
+          stop_failed="1"
+        elif [[ "$running" == "true" ]] && ! docker stop "$container_id" >/dev/null; then
+          stop_failed="1"
+        fi
+      done ;;
+      app-web) for container_id in "${RUNTIME_PREDEPLOY_WEB_STOPPED_CONTAINER_IDS[@]}"; do
+        if ! running="$(docker container inspect --format '{{.State.Running}}' "$container_id")"; then
+          stop_failed="1"
+        elif [[ "$running" == "true" ]] && ! docker stop "$container_id" >/dev/null; then
+          stop_failed="1"
+        fi
+      done ;;
+      app-dagster) for container_id in "${RUNTIME_PREDEPLOY_DAGSTER_STOPPED_CONTAINER_IDS[@]}"; do
+        if ! running="$(docker container inspect --format '{{.State.Running}}' "$container_id")"; then
+          stop_failed="1"
+        elif [[ "$running" == "true" ]] && ! docker stop "$container_id" >/dev/null; then
+          stop_failed="1"
+        fi
+      done ;;
+    esac
+  done
+  [[ "$stop_failed" == "0" ]]
 }
 
 runtime_record_new_container_ids() {
@@ -299,13 +372,14 @@ runtime_writer_container_name() {
   docker container inspect --format '{{.Name}}' "$container_id" | sed 's#^/##'
 }
 
-runtime_writer_any_container_id() {
-  local service="$1"
-  runtime_writer_container_id "$service"
-}
-
 runtime_snapshot_preflight() {
   [[ "$RUNTIME_DEPLOY_PRESERVE" == "1" ]] || return 0
+  if (( ${#RUNTIME_PREDEPLOY_API_CONTAINER_IDS[@]} > 0 \
+    || ${#RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS[@]} > 0 \
+    || ${#RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS[@]} > 0 )); then
+    echo "in-place runtime snapshot is disabled; use the manager pinned rebuild for an existing runtime" >&2
+    return 2
+  fi
   local service container_id container_name backup_name
   for service in app-api app-web app-dagster; do
     case "$service" in
@@ -549,31 +623,17 @@ preserve_runtime_writers() {
 
 rollback_preserved_runtime_writers() {
   local rollback_failed="0"
-  local current_id
-  local service backup name
+  if ! runtime_stop_reused_predeploy_stopped_writers; then
+    rollback_failed="1"
+  fi
   if [[ "$RUNTIME_NEW_WRITERS_STARTED" == "1" ]] && ! remove_new_runtime_writers; then
     # Discovery/containment failure 뒤에는 현재 runtime을 다시 추론하거나 snapshot을 되살리지
     # 않는다. 기록한 ID의 cleanup은 위에서 끝냈으며, 남은 상태는 수동 복구 전까지 검증되지 않는다.
     return 1
   fi
-  for service in app-api app-web app-dagster; do
-    case "$service" in
-      app-api) [[ "$RUNTIME_API_WAS_RUNNING" == "1" ]] || continue ;;
-      app-web) [[ "$RUNTIME_WEB_WAS_RUNNING" == "1" ]] || continue ;;
-      app-dagster) [[ "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]] || continue ;;
-    esac
-    current_id="$(runtime_writer_any_container_id "$service" || true)"
-    case "$service" in
-      app-api) [[ "$current_id" == "$RUNTIME_API_CONTAINER_ID" ]] && current_id=""; backup="$RUNTIME_API_BACKUP_NAME"; name="$RUNTIME_API_CONTAINER_NAME" ;;
-      app-web) [[ "$current_id" == "$RUNTIME_WEB_CONTAINER_ID" ]] && current_id=""; backup="$RUNTIME_WEB_BACKUP_NAME"; name="$RUNTIME_WEB_CONTAINER_NAME" ;;
-      app-dagster) [[ "$current_id" == "$RUNTIME_DAGSTER_CONTAINER_ID" ]] && current_id=""; backup="$RUNTIME_DAGSTER_BACKUP_NAME"; name="$RUNTIME_DAGSTER_CONTAINER_NAME" ;;
-    esac
-    if [[ -n "$current_id" ]]; then
-      if [[ "$current_id" == *$'\n'* ]] || ! docker rm -f "$current_id" >/dev/null; then
-        rollback_failed="1"
-      fi
-    fi
-  done
+  if [[ "$rollback_failed" != "0" ]]; then
+    return 1
+  fi
   if ! restore_runtime_snapshot_names; then
     rollback_failed="1"
   fi
@@ -587,6 +647,12 @@ rollback_preserved_runtime_writers() {
     RUNTIME_NEW_API_CONTAINER_IDS=()
     RUNTIME_NEW_WEB_CONTAINER_IDS=()
     RUNTIME_NEW_DAGSTER_CONTAINER_IDS=()
+    RUNTIME_PREDEPLOY_API_CONTAINER_IDS=()
+    RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS=()
+    RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS=()
+    RUNTIME_PREDEPLOY_API_STOPPED_CONTAINER_IDS=()
+    RUNTIME_PREDEPLOY_WEB_STOPPED_CONTAINER_IDS=()
+    RUNTIME_PREDEPLOY_DAGSTER_STOPPED_CONTAINER_IDS=()
     RUNTIME_CONTAINER_DISCOVERY_FAILED="0"
   fi
   [[ "$rollback_failed" == "0" ]]
@@ -619,6 +685,12 @@ disarm_preserved_runtime_writers_after_rollout() {
   RUNTIME_WEB_SNAPSHOT_RENAMED="0"
   RUNTIME_DAGSTER_SNAPSHOT_RENAMED="0"
   RUNTIME_CONTAINER_DISCOVERY_FAILED="0"
+  RUNTIME_PREDEPLOY_API_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_API_STOPPED_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_WEB_STOPPED_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_DAGSTER_STOPPED_CONTAINER_IDS=()
 }
 
 drain_runtime_writers() {
@@ -653,6 +725,7 @@ drain_runtime_writers() {
   RUNTIME_WEB_SNAPSHOT_RENAMED="0"
   RUNTIME_DAGSTER_SNAPSHOT_RENAMED="0"
   if ! api_container_id="$(runtime_writer_container_id app-api)"; then
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
     drain_failed="1"
   elif [[ -n "$api_container_id" ]]; then
     if [[ "$api_container_id" == *$'\n'* ]]; then
@@ -662,6 +735,7 @@ drain_runtime_writers() {
     fi
   fi
   if ! web_container_id="$(runtime_writer_container_id app-web)"; then
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
     drain_failed="1"
   elif [[ -n "$web_container_id" ]]; then
     if [[ "$web_container_id" == *$'\n'* ]]; then
@@ -671,6 +745,7 @@ drain_runtime_writers() {
     fi
   fi
   if ! dagster_container_id="$(runtime_writer_container_id app-dagster)"; then
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
     drain_failed="1"
   elif [[ -n "$dagster_container_id" ]]; then
     if [[ "$dagster_container_id" == *$'\n'* ]]; then
@@ -811,6 +886,12 @@ restore_runtime_writers_without_rollback() {
   RUNTIME_API_SNAPSHOT_RENAMED="0"
   RUNTIME_WEB_SNAPSHOT_RENAMED="0"
   RUNTIME_DAGSTER_SNAPSHOT_RENAMED="0"
+  RUNTIME_PREDEPLOY_API_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_API_STOPPED_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_WEB_STOPPED_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_DAGSTER_STOPPED_CONTAINER_IDS=()
 }
 
 restore_runtime_writers() {
@@ -987,6 +1068,24 @@ run_admin_bootstrap() {
     "$service" pinvi-admin-bootstrap
 }
 
+validate_bootstrap_admin_credential_file() {
+  local credential_file="$1"
+  local legacy_rebaseline="$2"
+  local service="app-migrator"
+  local runner_user="$(id -u):$(id -g)"
+  local profile_args=()
+  if [[ "$legacy_rebaseline" == "1" ]]; then
+    service="app-legacy-rebaseline-migrator"
+    runner_user="0:0"
+    profile_args=(--profile legacy-rebaseline)
+  fi
+  compose "${profile_args[@]}" run --rm --no-deps \
+    --user "$runner_user" \
+    -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
+    -v "$credential_file:$credential_file:ro" \
+    "$service" pinvi-admin-bootstrap validate-credential
+}
+
 reject_explicit_migrator_database_url() {
   if [[ -n "${PINVI_MIGRATOR_DATABASE_URL:-}" ]]; then
     echo "PINVI_MIGRATOR_DATABASE_URL is unsupported; use PINVI_MIGRATOR_DB_USER and PINVI_MIGRATOR_DB_PASSWORD" >&2
@@ -1013,6 +1112,10 @@ migrate_under_lifecycle_lock() {
     fi
   fi
   MIGRATOR_LEGACY_REBASELINE="$legacy_rebaseline"
+  if ! validate_bootstrap_admin_credential_file "$credential_file" "$legacy_rebaseline"; then
+    log "bootstrap admin credential validation failed before any migration"
+    return 1
+  fi
   if [[ "$RUNTIME_WRITERS_DRAINED" != "1" ]] && ! drain_runtime_writers; then
     log "runtime writer drain failed"
     restore_runtime_writers || log "runtime writer restoration failed"
@@ -1086,7 +1189,12 @@ dagster_up_under_lifecycle_lock() {
   runtime_record_new_container_ids app-dagster
   pinvi_verify_running_dagster
   wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster"
-  wait_for_container_health "$(runtime_writer_container_id app-dagster)" "Dagster container"
+  local dagster_container_id
+  if ! dagster_container_id="$(runtime_writer_container_id app-dagster)"; then
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
+    return 1
+  fi
+  wait_for_container_health "$dagster_container_id" "Dagster container"
 }
 
 finalize_preserved_runtime_writers() {
@@ -1133,6 +1241,9 @@ finalize_preserved_runtime_writers() {
   RUNTIME_PREDEPLOY_API_CONTAINER_IDS=()
   RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS=()
   RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_API_STOPPED_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_WEB_STOPPED_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_DAGSTER_STOPPED_CONTAINER_IDS=()
 }
 
 up() {
@@ -1184,17 +1295,29 @@ up() {
   wait_for_url "http://127.0.0.1:${API_PORT}/health/db" "API DB"
   wait_for_url "http://127.0.0.1:${API_PORT}/health/feature-reference-reconciliation" "M05 worker"
   local api_container_id
-  api_container_id="$(runtime_writer_container_id app-api)"
+  if ! api_container_id="$(runtime_writer_container_id app-api)"; then
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
+    return 1
+  fi
   [[ -n "$api_container_id" && "$api_container_id" != *$'\n'* ]] || {
     echo "running API container could not be identified" >&2
     return 1
   }
   wait_for_container_health "$api_container_id" "API container"
   wait_for_url "http://127.0.0.1:${WEB_PORT}/" "Web"
-  wait_for_container_health "$(runtime_writer_container_id app-web)" "Web container"
+  local web_container_id dagster_container_id
+  if ! web_container_id="$(runtime_writer_container_id app-web)"; then
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
+    return 1
+  fi
+  wait_for_container_health "$web_container_id" "Web container"
   if [[ "${PINVI_ENABLE_DAGSTER:-0}" != "0" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
     wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster final"
-    wait_for_container_health "$(runtime_writer_container_id app-dagster)" "Dagster final container"
+    if ! dagster_container_id="$(runtime_writer_container_id app-dagster)"; then
+      RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
+      return 1
+    fi
+    wait_for_container_health "$dagster_container_id" "Dagster final container"
   fi
   finalize_preserved_runtime_writers
   release_migrator_lifecycle_lock
@@ -1218,6 +1341,11 @@ configured_environment() {
     file_environment_name="${file_environment_name#\'}"
     file_environment_name="${file_environment_name%\'}"
   fi
+  if [[ -n "$environment_name" && -n "$file_environment_name" \
+    && "$environment_name" != "$file_environment_name" ]]; then
+    echo "PINVI_ENVIRONMENT disagrees with ${ENV_FILE}; refusing ambiguous Compose environment" >&2
+    return 2
+  fi
   # An explicitly selected staging/production env file is authoritative. A
   # shell override must not turn a destructive reset back into a dev reset.
   if [[ "$file_environment_name" == "staging" || "$file_environment_name" == "production" ]]; then
@@ -1226,6 +1354,24 @@ configured_environment() {
     environment_name="$file_environment_name"
   fi
   printf '%s\n' "${environment_name:-smoke}"
+}
+
+require_direct_compose_mutation_environment() {
+  local environment_name
+  if ! environment_name="$(configured_environment)"; then
+    return 2
+  fi
+  case "$environment_name" in
+    production|staging)
+      echo "direct Compose mutation is disabled for ${environment_name}; use the approved manager or isolated staging procedure" >&2
+      return 2
+      ;;
+    development|test|smoke) ;;
+    *)
+      echo "direct Compose mutation requires an explicit development/test/smoke/staging environment" >&2
+      return 2
+      ;;
+  esac
 }
 
 reset() {
@@ -1305,6 +1451,12 @@ main() {
   local command="${1:-}"
   [[ -n "$command" ]] || { usage; exit 2; }
   shift || true
+
+  case "$command" in
+    build|up|down|reset|migrate|smoke)
+      require_direct_compose_mutation_environment
+      ;;
+  esac
 
   case "$command" in
     build) build ;;
