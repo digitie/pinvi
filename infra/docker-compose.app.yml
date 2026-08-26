@@ -358,7 +358,7 @@ services:
         - PINVI_SOURCE_REVISION
         - PINVI_BUILD_ENVIRONMENT=${PINVI_ENVIRONMENT:-smoke}
     image: ${PINVI_DAGSTER_IMAGE:-pinvi-dagster:local}
-    container_name: pinvi-app-dagster
+    container_name: ${PINVI_DOCKER_PROJECT:-pinvi-app}-dagster
     restart: unless-stopped
     depends_on:
       app-postgres:
@@ -382,7 +382,7 @@ services:
   cadvisor:
     profiles: ["observability"]
     image: ${PINVI_CADVISOR_IMAGE:-gcr.io/cadvisor/cadvisor:v0.52.1}
-    container_name: pinvi-cadvisor
+    container_name: ${PINVI_DOCKER_PROJECT:-pinvi-app}-cadvisor
     restart: unless-stopped
     privileged: true
     devices:
@@ -399,7 +399,7 @@ services:
   blackbox:
     profiles: ["observability"]
     image: ${PINVI_BLACKBOX_IMAGE:-prom/blackbox-exporter:v0.25.0}
-    container_name: pinvi-app-blackbox
+    container_name: ${PINVI_DOCKER_PROJECT:-pinvi-app}-blackbox
     restart: unless-stopped
     command:
       - --config.file=/etc/blackbox_exporter/config.yml
@@ -409,7 +409,7 @@ services:
   prometheus:
     profiles: ["observability"]
     image: ${PINVI_PROMETHEUS_IMAGE:-prom/prometheus:v2.53.1}
-    container_name: pinvi-prometheus
+    container_name: ${PINVI_DOCKER_PROJECT:-pinvi-app}-prometheus
     restart: unless-stopped
     user: "${PINVI_PROMETHEUS_RUN_AS_USER:-0}"
     command:
@@ -434,7 +434,7 @@ services:
   grafana:
     profiles: ["observability"]
     image: ${PINVI_GRAFANA_IMAGE:-grafana/grafana:11.1.4}
-    container_name: pinvi-grafana
+    container_name: ${PINVI_DOCKER_PROJECT:-pinvi-app}-grafana
     restart: unless-stopped
     user: "${PINVI_GRAFANA_RUN_AS_USER:-0}"
     environment:

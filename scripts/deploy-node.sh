@@ -161,9 +161,9 @@ require_local_docker_target() {
 
 compose() {
   if [[ -f "$ENV_FILE" ]]; then
-    docker compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
+    PINVI_DOCKER_PROJECT="$PROJECT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
   else
-    docker compose -p "$PROJECT" -f "$COMPOSE_FILE" "$@"
+    PINVI_DOCKER_PROJECT="$PROJECT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" "$@"
   fi
 }
 
@@ -315,7 +315,8 @@ require_fresh_stack_contract() {
     echo "fresh deploy refuses an existing Compose project, PostgreSQL volume, or network" >&2
     return 2
   fi
-  for fixed_name in pinvi-app-dagster pinvi-cadvisor pinvi-app-blackbox pinvi-prometheus pinvi-grafana; do
+  for fixed_name in "$PROJECT-dagster" "$PROJECT-cadvisor" "$PROJECT-blackbox" \
+    "$PROJECT-prometheus" "$PROJECT-grafana"; do
     if ! fixed_container_names="$(docker container ls --all \
       --filter "name=${fixed_name}" --format '{{.Names}}')"; then
       echo "could not inspect fixed-name containers for a fresh deploy" >&2

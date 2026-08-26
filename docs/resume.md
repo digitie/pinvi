@@ -37,6 +37,16 @@ source가 바뀌면 Manager pinset과 candidate identity도 바뀌므로, old d9
 별도 Manager PR과 새 candidate를 사용한다. 설계는
 [`t-vn-m05-role-topology-verifier.md`](execplan/t-vn-m05-role-topology-verifier.md)다.
 
+## 2026-08-26 (codex) — PR487 N150 fixed-name 충돌 해소 중
+
+새 `0dcaba0a` N150 fresh 시도에서 기존 manager의 stopped `pinvi-app-dagster`가 발견되어
+fail-closed로 중단됐다. 운영/manager 컨테이너와 운영 DB는 건드리지 않았다. Compose의
+Dagster/observability `container_name`을 `PINVI_DOCKER_PROJECT` 기반으로 바꾸고 wrapper가
+interpolation 값을 전달하도록 보완했다.
+
+**다음 한 작업**: 이 보완을 commit/push하고 새 exact head로 N150 fresh `0100→0101` 및 Admin
+live UI를 통과시킨 뒤 두 전문 리뷰·CI green을 확인하고 PR #487을 머지한다.
+
 ## 2026-08-26 (codex) — PR487 2차 리뷰 지적 반영 중
 
 두 전문 리뷰가 정확한 `90e958885..5316b807`에서 P1을 추가로 찾았다. 직접 migration/runtime

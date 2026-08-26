@@ -42,6 +42,18 @@
   disposable PostGIS 16 regression을 추가한다. 설계 정본은
   `docs/execplan/t-vn-m05-role-topology-verifier.md`다.
 
+## 2026-08-26 (codex) — PR487 N150 fixed-name 충돌 해소
+
+- 새 `0dcaba0a`를 N150 격리 `pinvi-pr477-stage`에 올리기 전 fresh gate가 기존 manager의
+  stopped `pinvi-app-dagster`(`tvnm05-current-pinvi`)를 발견해 정확히 중단했다. 운영/manager
+  컨테이너나 운영 DB는 삭제하지 않았다.
+- `infra/docker-compose.app.yml`의 Dagster/observability `container_name`을
+  `PINVI_DOCKER_PROJECT` 기반으로 바꾸고 두 wrapper가 Compose interpolation에 실제 project를
+  전달하게 했다. 이제 격리 project는 manager의 전역 이름과 충돌하지 않으며 fresh check는
+  현재 project의 예상 이름만 검사한다.
+- 이 보완 commit 뒤 N150 fresh `0100→0101` deploy/smoke, Admin live UI, 두 exact-head 리뷰와
+  CI를 다시 수행해야 한다.
+
 ## 2026-08-26 (codex) — PR487 2차 적대 리뷰 P1 보완
 
 - 정확한 `90e958885..5316b807`에 대한 두 전문 리뷰에서 직접 `migrate/up/dagster`의 fresh/N150

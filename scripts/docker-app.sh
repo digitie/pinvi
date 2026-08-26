@@ -161,9 +161,9 @@ require_local_docker_target() {
 
 compose() {
   if [[ -f "$ENV_FILE" ]]; then
-    docker compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
+    PINVI_DOCKER_PROJECT="$PROJECT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
   else
-    docker compose -p "$PROJECT" -f "$COMPOSE_FILE" "$@"
+    PINVI_DOCKER_PROJECT="$PROJECT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" "$@"
   fi
 }
 
