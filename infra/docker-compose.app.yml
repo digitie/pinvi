@@ -3,7 +3,7 @@
 
 services:
   app-postgres:
-    image: postgis/postgis:16-3.5-alpine
+    image: postgis/postgis@sha256:8b33190b6486ab9905dea999171817c1ac461733a7078dd4c836091c6e6b5d40
     environment:
       # root-only bootstrap/extension owner. ordinary app containers never receive this login.
       POSTGRES_USER: ${PINVI_DB_OWNER_USER:-pinvi_owner}
@@ -22,7 +22,7 @@ services:
   # topology다. ordinary runtime에는 migrator/owner login을 전달하지 않는다.
   # M05 evidence trigger는 runtime login이 ALTER TABLE로 비활성화할 수 없어야 한다.
   app-db-runtime-role:
-    image: postgis/postgis:16-3.5-alpine
+    image: postgis/postgis@sha256:8b33190b6486ab9905dea999171817c1ac461733a7078dd4c836091c6e6b5d40
     restart: "no"
     depends_on:
       app-postgres:
@@ -46,7 +46,7 @@ services:
     entrypoint: ["/bin/sh", "/bootstrap/bootstrap-pinvi-runtime-role.sh"]
 
   app-rustfs:
-    image: rustfs/rustfs:latest
+    image: rustfs/rustfs@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21
     restart: unless-stopped
     environment:
       RUSTFS_ACCESS_KEY: rustfsadmin
@@ -55,6 +55,8 @@ services:
       RUSTFS_ADDRESS: ":9000"
       RUSTFS_CONSOLE_ENABLE: "true"
       RUSTFS_CONSOLE_ADDRESS: ":9001"
+    volumes:
+      - app-rustfs:/data
     ports:
       - "127.0.0.1:${PINVI_RUSTFS_PORT:-12101}:9000"
       - "127.0.0.1:${PINVI_RUSTFS_CONSOLE_PORT:-12105}:9001"
@@ -65,7 +67,7 @@ services:
       retries: 10
 
   app-rustfs-init:
-    image: minio/mc:latest
+    image: minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
     depends_on:
       app-rustfs:
         condition: service_healthy
@@ -460,6 +462,7 @@ services:
 
 volumes:
   app-postgres:
+  app-rustfs:
   app-prometheus:
   app-grafana:
   app-dagster:

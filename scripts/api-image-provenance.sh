@@ -247,6 +247,7 @@ pinvi_verify_runtime_image_provenance() {
   fi
 
   local service image_reference image_id actual_revision actual_environment
+  local -a config_profile_args=()
   for service in "$@"; do
     case "$service" in
       app-api|app-web|app-dagster) ;;
@@ -255,11 +256,16 @@ pinvi_verify_runtime_image_provenance() {
         return 2
         ;;
     esac
+    if [[ "$service" == "app-dagster" ]]; then
+      config_profile_args=(--profile etl)
+    else
+      config_profile_args=()
+    fi
     image_id="$(pinvi_attested_runtime_image_id "$service")"
     if [[ -n "$image_id" ]]; then
       :
     else
-      image_reference="$({ compose config --format json; } | \
+      image_reference="$({ compose "${config_profile_args[@]}" config --format json; } | \
         python3 "$PINVI_PROVENANCE_PY" compose-image-reference --service "$service")"
       image_id="$(docker image inspect --format '{{.Id}}' "$image_reference")"
       if [[ ! "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]; then

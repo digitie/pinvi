@@ -88,9 +88,18 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
     const apiOrigin = new URL(apiBaseUrl).origin;
     const detailPath = `/admin/feature-reference-reconciliations/${eventId}`;
     let observedApiRequests = 0;
+    const unexpectedApiMutations: string[] = [];
     let foreignDocumentOrigin: string | null = null;
     page.on('request', (request) => {
-      if (new URL(request.url()).origin === apiOrigin) observedApiRequests += 1;
+      const requestUrl = new URL(request.url());
+      if (requestUrl.origin !== apiOrigin) return;
+      observedApiRequests += 1;
+      const method = request.method();
+      const isAuthenticationRequest =
+        requestUrl.pathname === '/auth/login' && (method === 'POST' || method === 'OPTIONS');
+      if (method !== 'GET' && !isAuthenticationRequest) {
+        unexpectedApiMutations.push(`${method} ${requestUrl.pathname}`);
+      }
     });
     page.on('framenavigated', (frame) => {
       if (frame === page.mainFrame() && frame.url() !== 'about:blank') {
@@ -194,6 +203,7 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
     expect(foreignDocumentOrigin).toBeNull();
     await expect(detail).not.toContainText('승인');
     await expect(detail).not.toContainText('거절');
+    expect(unexpectedApiMutations).toEqual([]);
     await expect.poll(() => observedApiRequests).toBeGreaterThan(0);
 
     const evidenceDir = process.env.PINVI_M05_UI_EVIDENCE_DIR;

@@ -529,6 +529,10 @@ COMPOSE_FILE="$ROOT_DIR/infra/docker-compose.app.yml"
 ENV_FILE="$ROOT_DIR/missing.env"
 EXPECTED_IMAGE_ID="$3"
 compose() {
+  if [[ "$1" == --profile ]]; then
+    test "$2" = etl
+    shift 2
+  fi
   if [[ "$1" == config ]]; then
     printf '%s\n' '{"services":{"app-api":{"environment":{"PINVI_ENVIRONMENT":"smoke"},"build":{"args":{"PINVI_SOURCE_REVISION":"development"}},"image":"pinvi-api:test"},"app-web":{"image":"pinvi-web:test"},"app-dagster":{"image":"pinvi-dagster:test"}}}'
   elif [[ "$1 $2" == "ps -q" ]]; then

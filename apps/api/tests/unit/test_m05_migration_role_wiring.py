@@ -1035,6 +1035,12 @@ def test_live_ui_gates_pin_the_exact_checkout_revision() -> None:
         'expected_compose_service="app-dagster"',
     ):
         assert binding in attestation
+    live_e2e = (
+        ROOT / "apps/web/e2e/admin-feature-reference-reconciliations-live-mutating.live.ts"
+    ).read_text(encoding="utf-8")
+    assert "unexpectedApiMutations" in live_e2e
+    assert "requestUrl.pathname === '/auth/login'" in live_e2e
+    assert "method !== 'GET'" in live_e2e
 
 
 def test_runtime_discovery_failure_is_detected_without_caller_pipefail() -> None:

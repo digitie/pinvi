@@ -220,11 +220,14 @@ def test_deploy_node_seals_fresh_migration_before_reusing_the_stack() -> None:
 def test_fresh_continuation_is_bound_to_the_canonical_compose_and_database_proof() -> None:
     source = (ROOT / "scripts" / "deploy-node.sh").read_text(encoding="utf-8")
     assert "require_canonical_compose_file" in source
-    assert "version=3" in source
+    assert "version=4" in source
     assert "compose_sha256" in source
     assert "environment_source_sha256" in source
     assert "db_system_identifier" in source
     assert 'state_alembic_version" == "20260824_0101"' in source
+    assert "postgres_image_id" in source
+    assert "rustfs_image_id" in source
+    assert "rustfs_init_image_id" in source
     assert "migration_receipt_sha256" in source
     assert "capture_fresh_stack_migration_proof" in source
 

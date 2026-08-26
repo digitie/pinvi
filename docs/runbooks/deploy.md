@@ -58,8 +58,9 @@ PinVi 저장소의 fallback 경로도 같은 검증을 포함하지만, manager�
 않고 exact archive의 canonical Compose·Dockerfile·Python helper regular file만 허용하며
 symlink·외부 override와 기존 API/Web/Dagster runtime 재사용을 거부한다. API를 build하고 API
 label/image ID를 확인한 뒤 migration/up/smoke를 진행한다. 임시 archive는 전체 명령이 끝날 때
-삭제한다. 이미지를 명시적으로 pull하는 rollback 흐름도 현재 source `HEAD`와 label이 다르면
-중지한다. 일반 staging/production 배포는 위 manager pinned pair 경로를 사용한다.
+삭제한다. `deploy-node pull`은 staging/production에서 fail-closed로 비활성화되어 있으며, 이미지
+rollback도 manager의 pinned rebuild 또는 승인된 로컬 rollback image만 사용한다. 일반
+staging/production 배포는 위 manager pinned pair 경로를 사용한다.
 
 fallback을 단계별로 실행할 때 `migrate`는 성공한 동일 fresh project·root·환경·source revision을
 root-owned continuation state로 봉인한다. 그 뒤에만 같은 값으로 `scripts/deploy-node.sh up` 또는

@@ -97,7 +97,11 @@ FRESH_STACK_DB_CONTAINER_ID=""
 FRESH_STACK_DB_VOLUME_NAME=""
 FRESH_STACK_DB_SYSTEM_IDENTIFIER=""
 FRESH_STACK_ALEMBIC_VERSION=""
+FRESH_STACK_POSTGRES_IMAGE_ID=""
+FRESH_STACK_RUSTFS_IMAGE_ID=""
+FRESH_STACK_RUSTFS_INIT_IMAGE_ID=""
 FRESH_STACK_MIGRATION_RECEIPT_SHA256=""
+FRESH_STACK_RESOURCE_MUTATION_STARTED="0"
 FRESH_STACK_API_IMAGE_ID=""
 FRESH_STACK_WEB_IMAGE_ID=""
 FRESH_STACK_DAGSTER_IMAGE_ID="none"
@@ -462,6 +466,45 @@ fresh_stack_runtime_image_proof() {
       || "$FRESH_STACK_DAGSTER_IMAGE_ID" =~ ^sha256:[0-9a-f]{64}$ ) ]]
 }
 
+fresh_stack_dependency_image_id() {
+  local service="$1" container_ids container_id actual_image expected_image image_reference
+  if ! container_ids="$(docker container ls --all \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --filter "label=com.docker.compose.service=${service}" --format '{{.ID}}')"; then
+    echo "could not inspect fresh deploy ${service} container" >&2
+    return 1
+  fi
+  [[ "$(printf '%s\n' "$container_ids" | sed '/^$/d' | wc -l)" == "1" ]] || {
+    echo "fresh deploy requires exactly one project-scoped ${service} container" >&2
+    return 2
+  }
+  container_id="$(printf '%s\n' "$container_ids" | sed '/^$/d')"
+  if ! actual_image="$(docker container inspect --format '{{.Image}}' "$container_id")"; then
+    echo "could not inspect fresh deploy ${service} image identity" >&2
+    return 1
+  fi
+  if ! image_reference="$({ compose config --format json; } | \
+    python3 "$PINVI_PROVENANCE_PY" compose-image-reference --service "$service")"; then
+    echo "could not resolve the pinned ${service} image reference" >&2
+    return 1
+  fi
+  if ! expected_image="$(docker image inspect --format '{{.Id}}' "$image_reference")"; then
+    echo "could not inspect the pinned ${service} image" >&2
+    return 1
+  fi
+  [[ "$actual_image" == "$expected_image" && "$actual_image" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+    echo "fresh deploy ${service} image drifted from the pinned Compose image" >&2
+    return 2
+  }
+  printf '%s\n' "$actual_image"
+}
+
+fresh_stack_dependency_image_proof() {
+  FRESH_STACK_POSTGRES_IMAGE_ID="$(fresh_stack_dependency_image_id app-postgres)" || return $?
+  FRESH_STACK_RUSTFS_IMAGE_ID="$(fresh_stack_dependency_image_id app-rustfs)" || return $?
+  FRESH_STACK_RUSTFS_INIT_IMAGE_ID="$(fresh_stack_dependency_image_id app-rustfs-init)" || return $?
+}
+
 write_fresh_stack_state() {
   fresh_stack_state_file_is_safe || return $?
   local source_revision environment_name source_path source_sha256 compose_sha256 tmp_path
@@ -491,7 +534,7 @@ write_fresh_stack_state() {
   }
   tmp_path="$(mktemp "$(dirname -- "$FRESH_STACK_STATE_PATH")/.fresh-stack.XXXXXX")"
   if ! {
-    printf 'version=3\n'
+    printf 'version=4\n'
     printf 'project=%s\n' "$PROJECT"
     printf 'environment=%s\n' "$environment_name"
     printf 'root_dir=%s\n' "$ROOT_DIR"
@@ -504,6 +547,9 @@ write_fresh_stack_state() {
     printf 'db_volume_name=%s\n' "$FRESH_STACK_DB_VOLUME_NAME"
     printf 'db_system_identifier=%s\n' "$FRESH_STACK_DB_SYSTEM_IDENTIFIER"
     printf 'alembic_version=%s\n' "$FRESH_STACK_ALEMBIC_VERSION"
+    printf 'postgres_image_id=%s\n' "$FRESH_STACK_POSTGRES_IMAGE_ID"
+    printf 'rustfs_image_id=%s\n' "$FRESH_STACK_RUSTFS_IMAGE_ID"
+    printf 'rustfs_init_image_id=%s\n' "$FRESH_STACK_RUSTFS_INIT_IMAGE_ID"
     printf 'api_image_id=%s\n' "$FRESH_STACK_API_IMAGE_ID"
     printf 'web_image_id=%s\n' "$FRESH_STACK_WEB_IMAGE_ID"
     printf 'dagster_image_id=%s\n' "$FRESH_STACK_DAGSTER_IMAGE_ID"
@@ -525,12 +571,14 @@ fresh_stack_migration_receipt_sha256() {
   if ! environment_name="$(resolved_environment)"; then
     return 2
   fi
-  printf 'pinvi-fresh-migration/v3\nproject=%s\nenvironment=%s\nroot_dir=%s\nsource_revision=%s\ncompose_sha256=%s\neffective_compose_sha256=%s\nenvironment_source_sha256=%s\ndb_container_id=%s\ndb_volume_name=%s\ndb_system_identifier=%s\nalembic_version=%s\napi_image_id=%s\nweb_image_id=%s\ndagster_image_id=%s\n' \
+  printf 'pinvi-fresh-migration/v4\nproject=%s\nenvironment=%s\nroot_dir=%s\nsource_revision=%s\ncompose_sha256=%s\neffective_compose_sha256=%s\nenvironment_source_sha256=%s\ndb_container_id=%s\ndb_volume_name=%s\ndb_system_identifier=%s\nalembic_version=%s\npostgres_image_id=%s\nrustfs_image_id=%s\nrustfs_init_image_id=%s\napi_image_id=%s\nweb_image_id=%s\ndagster_image_id=%s\n' \
     "$PROJECT" "$environment_name" "$ROOT_DIR" "${PINVI_SOURCE_REVISION:-}" \
     "$FRESH_STACK_COMPOSE_SHA256" "$FRESH_STACK_EFFECTIVE_COMPOSE_SHA256" \
     "$FRESH_STACK_ENVIRONMENT_SOURCE_SHA256" \
     "$FRESH_STACK_DB_CONTAINER_ID" "$FRESH_STACK_DB_VOLUME_NAME" \
     "$FRESH_STACK_DB_SYSTEM_IDENTIFIER" "$FRESH_STACK_ALEMBIC_VERSION" \
+    "$FRESH_STACK_POSTGRES_IMAGE_ID" "$FRESH_STACK_RUSTFS_IMAGE_ID" \
+    "$FRESH_STACK_RUSTFS_INIT_IMAGE_ID" \
     "$FRESH_STACK_API_IMAGE_ID" "$FRESH_STACK_WEB_IMAGE_ID" "$FRESH_STACK_DAGSTER_IMAGE_ID" \
     | sha256sum | awk '{print $1}'
 }
@@ -543,6 +591,10 @@ capture_fresh_stack_migration_proof() {
   fi
   if ! fresh_stack_runtime_image_proof; then
     echo "fresh deploy runtime image provenance could not be sealed" >&2
+    return 1
+  fi
+  if ! fresh_stack_dependency_image_proof; then
+    echo "fresh deploy dependency image provenance could not be sealed" >&2
     return 1
   fi
   FRESH_STACK_COMPOSE_SHA256="$(sha256sum -- "$CANONICAL_COMPOSE_FILE" | awk '{print $1}')"
@@ -620,7 +672,8 @@ require_reusable_fresh_stack_contract() {
   local state_compose_sha256="" state_environment_source_path="" state_environment_source_sha256=""
   local state_effective_compose_sha256=""
   local state_db_container_id="" state_db_volume_name="" state_db_system_identifier=""
-  local state_alembic_version="" state_api_image_id="" state_web_image_id=""
+  local state_alembic_version="" state_postgres_image_id="" state_rustfs_image_id=""
+  local state_rustfs_init_image_id="" state_api_image_id="" state_web_image_id=""
   local state_dagster_image_id="" state_migration_receipt_sha256=""
   local environment_name source_path compose_sha256 source_sha256 effective_compose_sha256
   local key value seen_keys='|' existing_containers existing_volumes existing_networks db_containers rustfs_containers
@@ -654,6 +707,9 @@ require_reusable_fresh_stack_contract() {
       db_volume_name) state_db_volume_name="$value" ;;
       db_system_identifier) state_db_system_identifier="$value" ;;
       alembic_version) state_alembic_version="$value" ;;
+      postgres_image_id) state_postgres_image_id="$value" ;;
+      rustfs_image_id) state_rustfs_image_id="$value" ;;
+      rustfs_init_image_id) state_rustfs_init_image_id="$value" ;;
       api_image_id) state_api_image_id="$value" ;;
       web_image_id) state_web_image_id="$value" ;;
       dagster_image_id) state_dagster_image_id="$value" ;;
@@ -684,10 +740,12 @@ require_reusable_fresh_stack_contract() {
     && "$seen_keys" == *"|environment_source_sha256|"* \
     && "$seen_keys" == *"|db_container_id|"* && "$seen_keys" == *"|db_volume_name|"* \
     && "$seen_keys" == *"|db_system_identifier|"* && "$seen_keys" == *"|alembic_version|"* \
+    && "$seen_keys" == *"|postgres_image_id|"* && "$seen_keys" == *"|rustfs_image_id|"* \
+    && "$seen_keys" == *"|rustfs_init_image_id|"* \
     && "$seen_keys" == *"|api_image_id|"* && "$seen_keys" == *"|web_image_id|"* \
     && "$seen_keys" == *"|dagster_image_id|"* \
     && "$seen_keys" == *"|migration_receipt_sha256|"* \
-    && "$state_version" == "3" && "$state_project" == "$PROJECT" \
+    && "$state_version" == "4" && "$state_project" == "$PROJECT" \
     && "$state_environment" == "$environment_name" \
     && "$state_root_dir" == "$ROOT_DIR" \
     && "$state_revision" == "${PINVI_SOURCE_REVISION:-}" \
@@ -699,6 +757,9 @@ require_reusable_fresh_stack_contract() {
     && "$state_db_volume_name" != "" \
     && "$state_db_system_identifier" =~ ^[0-9]+$ \
     && "$state_alembic_version" == "20260824_0101" \
+    && "$state_postgres_image_id" =~ ^sha256:[0-9a-f]{64}$ \
+    && "$state_rustfs_image_id" =~ ^sha256:[0-9a-f]{64}$ \
+    && "$state_rustfs_init_image_id" =~ ^sha256:[0-9a-f]{64}$ \
     && "$state_api_image_id" =~ ^sha256:[0-9a-f]{64}$ \
     && "$state_web_image_id" =~ ^sha256:[0-9a-f]{64}$ \
     && ( "$state_dagster_image_id" == "none" \
@@ -744,6 +805,9 @@ require_reusable_fresh_stack_contract() {
     && "$FRESH_STACK_DB_VOLUME_NAME" == "$state_db_volume_name" \
     && "$FRESH_STACK_DB_SYSTEM_IDENTIFIER" == "$state_db_system_identifier" \
     && "$FRESH_STACK_ALEMBIC_VERSION" == "$state_alembic_version" \
+    && "$FRESH_STACK_POSTGRES_IMAGE_ID" == "$state_postgres_image_id" \
+    && "$FRESH_STACK_RUSTFS_IMAGE_ID" == "$state_rustfs_image_id" \
+    && "$FRESH_STACK_RUSTFS_INIT_IMAGE_ID" == "$state_rustfs_init_image_id" \
     && "$FRESH_STACK_API_IMAGE_ID" == "$state_api_image_id" \
     && "$FRESH_STACK_WEB_IMAGE_ID" == "$state_web_image_id" \
     && "$FRESH_STACK_DAGSTER_IMAGE_ID" == "$state_dagster_image_id" \
@@ -797,7 +861,7 @@ require_reusable_fresh_stack_resource_shape() {
   while IFS= read -r volume; do
     [[ -n "$volume" ]] || continue
     case "$volume" in
-      "${PROJECT}_app-postgres"|"${PROJECT}_app-dagster") ;;
+      "${PROJECT}_app-postgres"|"${PROJECT}_app-rustfs"|"${PROJECT}_app-dagster") ;;
       *)
         echo "reusable fresh deploy refuses unexpected project volume: ${volume}" >&2
         return 2
@@ -835,6 +899,20 @@ require_fresh_stack_identity() {
   require_isolated_database_endpoint
 }
 
+cleanup_failed_fresh_stack() {
+  [[ "$FRESH_STACK_RESOURCE_MUTATION_STARTED" == "1" ]] || return 0
+  [[ "$DEPLOY_FRESH_STACK" == "1" && "$DEPLOY_MANAGER_UNAVAILABLE" == "1" ]] || {
+    echo "failed fresh stack cleanup requires the explicit isolated fallback identity" >&2
+    return 2
+  }
+  log "cleaning failed fresh stack resources for a safe retry"
+  if ! compose down --volumes --remove-orphans; then
+    echo "failed fresh stack resources could not be cleaned; refusing retry" >&2
+    return 1
+  fi
+  FRESH_STACK_RESOURCE_MUTATION_STARTED="0"
+}
+
 assert_host_ports_available_before_migration() {
   require_command ss
   local port listeners container_ids container_id actual_project
@@ -869,15 +947,8 @@ assert_host_ports_available_before_migration() {
 }
 
 pull_images() {
-  pinvi_prepare_api_image_provenance
-  log "pulling app images"
-  compose pull app-api app-web
-  if dagster_rollout_enabled; then
-    compose --profile etl pull app-dagster
-    pinvi_verify_runtime_image_provenance app-api app-web app-dagster
-  else
-    pinvi_verify_runtime_image_provenance app-api app-web
-  fi
+  echo "deploy-node pull is disabled for staging/production; use the manager pinned rebuild or deploy-node build" >&2
+  return 2
 }
 
 build_images() {
@@ -1625,6 +1696,12 @@ restore_runtime_writers_on_exit() {
       log "new runtime writer cleanup failed during process exit"
     fi
   fi
+  if [[ "$FRESH_STACK_RESOURCE_MUTATION_STARTED" == "1" ]]; then
+    if ! cleanup_failed_fresh_stack; then
+      cleanup_failed="1"
+      log "failed fresh stack cleanup requires manual recovery"
+    fi
+  fi
   release_migrator_lifecycle_lock || true
   pinvi_cleanup_api_build_context || true
   if [[ "$exit_code" == "0" && "$cleanup_failed" != "0" ]]; then
@@ -1877,6 +1954,7 @@ migrate_under_lifecycle_lock() {
     return 1
   fi
   log "starting database dependencies and runtime DB role"
+  FRESH_STACK_RESOURCE_MUTATION_STARTED="1"
   if ! compose up -d app-postgres app-rustfs app-rustfs-init; then
     log "database dependency startup failed"
     restore_runtime_writers || log "runtime writer restoration failed"
@@ -1944,12 +2022,9 @@ migrate() {
   # EXIT handler가 실패 시 writer 복구와 lifecycle lock 해제를 담당한다. 조건문
   # 안에서 호출하면 Bash가 함수 내부의 errexit을 끄므로 migration 본문은 직접 호출한다.
   migrate_under_lifecycle_lock
-  if ! write_fresh_stack_state; then
-    echo "migration succeeded but the fresh stack continuation state could not be sealed" >&2
-    release_migrator_lifecycle_lock
-    return 1
-  fi
+  write_fresh_stack_state
   release_migrator_lifecycle_lock
+  FRESH_STACK_RESOURCE_MUTATION_STARTED="0"
 }
 
 bootstrap_credential_file() {
@@ -2232,10 +2307,7 @@ deploy() {
     return 1
   fi
   migrate_under_lifecycle_lock
-  if ! write_fresh_stack_state; then
-    echo "migration succeeded but the fresh stack continuation state could not be sealed" >&2
-    return 1
-  fi
+  write_fresh_stack_state
   if ! require_reusable_fresh_stack_contract; then
     echo "fresh stack continuation changed between migration and runtime startup" >&2
     return 1
@@ -2245,6 +2317,7 @@ deploy() {
   finalize_preserved_runtime_writers
   release_migrator_lifecycle_lock
   status
+  FRESH_STACK_RESOURCE_MUTATION_STARTED="0"
 }
 
 main() {
