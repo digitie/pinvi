@@ -200,6 +200,7 @@ cd ~/pinvi
 : "${PINVI_M04_LIVE_FEATURE_REQUEST_ID:?set the isolated pending feature-request UUID}"
 : "${PINVI_M04_LIVE_EMAIL:?set the isolated admin email}"
 : "${PINVI_M04_LIVE_PASSWORD:?set the isolated admin password}"
+export PINVI_M04_LIVE_EMAIL PINVI_M04_LIVE_PASSWORD
 python scripts/m05_activation_attestation.py m04 \
   --evidence-dir "$PINVI_M04_UI_EVIDENCE_DIR" \
   --private-key "$PINVI_M04_PRIVATE_KEY" \
@@ -255,8 +256,12 @@ cd ~/pinvi
 export PINVI_M05_LIVE_E2E=1
 export PINVI_LIVE_WEB_URL=http://127.0.0.1:13805
 export PINVI_LIVE_API_URL=http://127.0.0.1:13801
+export PINVI_M05_LIVE_EMAIL PINVI_M05_LIVE_PASSWORD
 export M05_PINVI_EMAIL="$PINVI_M05_LIVE_EMAIL"
 export M05_PINVI_PASSWORD="$PINVI_M05_LIVE_PASSWORD"
+export PINVI_M05_LIVE_OLD_FEATURE_ID
+export PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID
+export PINVI_M05_LIVE_IMPACT_COUNT
 python scripts/m05_activation_attestation.py live \
   --evidence-dir "$PINVI_M05_UI_EVIDENCE_DIR" \
   --private-key "$PINVI_M05_PRIVATE_KEY" \

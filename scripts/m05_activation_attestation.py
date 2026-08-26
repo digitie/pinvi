@@ -1832,6 +1832,19 @@ def _live(args: argparse.Namespace) -> int:
         raise AttestationError("M05 live attestation requires root-owned evidence")
     email = os.environ.get("M05_PINVI_EMAIL", "")
     password = os.environ.get("M05_PINVI_PASSWORD", "")
+    if not email or not password:
+        raise AttestationError("M05 live attestation requires admin email and password")
+    old_feature_id = _uuid(
+        os.environ.get("PINVI_M05_LIVE_OLD_FEATURE_ID", ""),
+        name="M05 old Feature ID",
+    )
+    replacement_feature_id = _uuid(
+        os.environ.get("PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID", ""),
+        name="M05 replacement Feature ID",
+    )
+    impact_count = os.environ.get("PINVI_M05_LIVE_IMPACT_COUNT", "")
+    if re.fullmatch(r"[0-9]+", impact_count) is None:
+        raise AttestationError("M05 impact count must be a non-negative integer")
 
     pair = _load_pair()
     pinvi_source_root = Path(__file__).resolve().parents[1]
@@ -1960,6 +1973,13 @@ def _live(args: argparse.Namespace) -> int:
     child_env["DOCKER_HOST"] = "unix:///var/run/docker.sock"
     child_env["PINVI_M05_UI_EVIDENCE_DIR"] = str(evidence_dir)
     child_env["PINVI_M05_LIVE_EVENT_ID"] = event_id
+    child_env["PINVI_M05_LIVE_OLD_FEATURE_ID"] = old_feature_id
+    child_env["PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID"] = replacement_feature_id
+    child_env["PINVI_M05_LIVE_IMPACT_COUNT"] = impact_count
+    child_env["PINVI_M05_LIVE_EMAIL"] = email
+    child_env["PINVI_M05_LIVE_PASSWORD"] = password
+    child_env["M05_PINVI_EMAIL"] = email
+    child_env["M05_PINVI_PASSWORD"] = password
     child_env["PINVI_M05_UI_VERIFICATION_ID"] = verification_id
     child_env["PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_REF"] = runner_image["image_ref"]
     child_env["PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_ID"] = runner_image["image_id"]

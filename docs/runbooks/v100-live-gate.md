@@ -72,7 +72,8 @@ tracked/untracked 변경이 없는지도 확인한다. 불일치하거나 dirty�
 paired release candidate 또는 attestation이 선언한 exact SHA를 이 값으로 설정하며, 현재 checkout의
 SHA를 즉석 생성해 설정하지 않는다.
 
-Playwright phase를 N150 Docker runner로 감싼다.
+모든 live Playwright phase는 N150 Docker runner를 의무적으로 사용한다. runner가 준비되지
+않으면 host browser로 우회하지 말고 gate를 중단한 뒤 fallback 사유를 별도 기록한다.
 
 ```bash
 PINVI_V100_LIVE_GATE=1 \

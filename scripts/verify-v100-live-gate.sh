@@ -36,7 +36,7 @@ Phases:
 Environment:
   PINVI_V100_LIVE_GATE=1              Required for run.
   PINVI_V100_GATE_PHASES              Space or comma separated phase list.
-  PINVI_V100_GATE_N150_RUNNER=1       Wrap Playwright phases with scripts/n150-playwright-runner.sh.
+  PINVI_V100_GATE_N150_RUNNER=1       Required for every live Playwright phase; use the N150 Docker runner.
   PINVI_LIVE_EXPECTED_REVISION        Full lowercase commit expected by every live UI phase.
   PINVI_V100_ADMIN_LIVE_CASE_LIMIT    Default 200 for admin-live-smoke.
   PINVI_ADMIN_LIVE_CASE_START         Optional 1-based Admin matrix start for resumed full catalog.
@@ -115,6 +115,10 @@ run_live_playwright() {
   local label="$1"
   shift
   require_exact_live_revision
+  if [[ "${PINVI_V100_GATE_N150_RUNNER:-0}" != "1" ]]; then
+    echo "error: live Playwright phases require PINVI_V100_GATE_N150_RUNNER=1" >&2
+    exit 2
+  fi
   PINVI_LIVE_UI_E2E=1 run_playwright "$label" "$@"
 }
 

@@ -209,46 +209,35 @@ PINVI_SOURCE_REVISION="$(git rev-parse --verify HEAD^{commit})" scripts/docker-a
 ## 4. Smoke test 시퀀스
 
 ```bash
-# 1) 정리
-docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml down -v --remove-orphans
-
-# 2) 이미지 빌드
-docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml build app-api app-web
-
-# 3) Postgres + RustFS 먼저
-docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml up -d app-postgres app-rustfs app-rustfs-init
-
-# 4) owner-only PinVi migration + one-shot admin bootstrap (auto-migrate 안 함)
+# 격리 project와 환경을 고정한다. 직접 Compose 명령은 사용하지 않는다.
+export PINVI_ENVIRONMENT=smoke
+export PINVI_DOCKER_PROJECT=pinvi-app-smoke
 install -m 600 /dev/null /tmp/pinvi-bootstrap-admin.json
 $EDITOR /tmp/pinvi-bootstrap-admin.json
-PINVI_DOCKER_PROJECT=pinvi-app-smoke \
 PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/tmp/pinvi-bootstrap-admin.json \
-scripts/docker-app.sh migrate
+scripts/docker-app.sh smoke --keep-running
 # wrapper는 lifecycle lock 뒤 API/Dagster writer를 drain한 다음 role bootstrap과 migration을 실행하고,
 # migration 또는 seal 실패에도
 # 기존에 실행 중이던 writer를 다시 기동한다. DDL-capable 외부 세션은 자동 종료하지
 # 않고 migration을 fail-close하므로, 실패 시 해당 세션을 먼저 정리한 뒤 재시도한다.
-rm -f /tmp/pinvi-bootstrap-admin.json
 
-# 5) API + Web
-docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml up -d app-api app-web
-
-# 6) 헬스 체크
+# smoke wrapper가 build/dependency/migration/API/Web 기동을 수행한 뒤의 추가 확인
 curl -fsS http://127.0.0.1:12801/health
 curl -fsS http://127.0.0.1:12801/health/db
 curl -fsS http://127.0.0.1:12805/admin/login
 curl -fsS http://127.0.0.1:12101/health/live
 
-# 7) Admin 로그인
+# Admin 로그인
 curl -fsS -X POST http://127.0.0.1:12801/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"<bootstrap-admin-email>","password":"<temporary-bootstrap-password>"}'
 
-# 8) Admin datasets
+# Admin datasets
 curl -fsS -b cookies.txt http://127.0.0.1:12801/admin/datasets
 
-# 9) 정리
-docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml down -v --remove-orphans
+# wrapper가 project/DB identity/stale snapshot/lifecycle lock을 확인한 뒤 격리 DB를 제거한다.
+scripts/docker-app.sh reset
+rm -f /tmp/pinvi-bootstrap-admin.json
 ```
 
 `--keep-running` 옵션으로 검증 후 컨테이너 유지 (수동 확인).
@@ -257,10 +246,12 @@ docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml down -v --remo
 
 ```bash
 scripts/docker-app.sh smoke --keep-running
-docker compose -p pinvi-app -f infra/docker-compose.app.yml --profile observability up -d cadvisor blackbox prometheus grafana
-curl -fsS http://127.0.0.1:12401/-/ready
-curl -fsS http://127.0.0.1:12205/api/health
 ```
+
+관측 profile의 직접 기동은 이 wrapper의 소유 범위가 아니므로 `kor-travel-docker-manager`의
+승인된 target 절차를 사용한다. 격리 smoke project에 profile을 추가해야 하면 별도 격리
+환경·포트·DB identity를 확인한 운영 절차로 수행하고, `pinvi-app` 같은 공용 project를
+재사용하지 않는다.
 
 ## 5. App + ETL 통합 smoke
 

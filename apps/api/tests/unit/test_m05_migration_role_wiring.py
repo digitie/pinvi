@@ -507,6 +507,7 @@ def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
     assert '"$GRAFANA_PORT"' in docker_app
     assert "host-port preflight failed at the migration boundary" in docker_app
     assert "host-port preflight failed immediately before migration" in docker_app
+    assert 'ss -H -ltn "sport = :${port}" 2>/dev/null || true' not in docker_app
     assert "require_isolated_database_endpoint" in docker_app
     assert "isolated app-postgres service" in docker_app
     assert (
@@ -525,14 +526,26 @@ def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
     assert 'GRAFANA_PORT="${PINVI_GRAFANA_PORT:-12205}"' in deploy_node
     assert "host-port preflight failed at the migration boundary" in deploy_node
     assert "host-port preflight failed immediately before migration" in deploy_node
+    assert 'ss -H -ltn "sport = :${port}" 2>/dev/null || true' not in deploy_node
     assert (
         '"$RUSTFS_CONSOLE_PORT"'
         in deploy_node[deploy_node.index("assert_host_ports_available_before_migration()") :]
+    )
+    dagster_start = deploy_node.index("dagster_up() {")
+    assert "assert_host_ports_available_before_migration" in deploy_node[dagster_start:]
+    standalone_start = deploy_node.index("prepare_standalone_dagster_writer()")
+    standalone_end = deploy_node.index("\n}\n", standalone_start) + 3
+    standalone = deploy_node[standalone_start:standalone_end]
+    assert "runtime_snapshot_preflight" in standalone
+    assert standalone.index("runtime_snapshot_preflight") < standalone.index(
+        "runtime_writer_container_id"
     )
     for cleanup in ("down() {", "reset() {"):
         cleanup_start = docker_app.index(cleanup)
         cleanup_end = docker_app.find("\n}\n", cleanup_start) + 3
         assert "runtime_snapshot_preflight" in docker_app[cleanup_start:cleanup_end]
+        assert "acquire_migrator_lifecycle_lock" in docker_app[cleanup_start:cleanup_end]
+        assert "release_migrator_lifecycle_lock" in docker_app[cleanup_start:cleanup_end]
 
 
 def test_discovery_failure_stops_managed_writers_and_removes_only_recorded_ids(
@@ -843,6 +856,7 @@ def test_live_ui_gates_pin_the_exact_checkout_revision() -> None:
         assert "does not match expected" in source
     assert "assert_exact_live_checkout" in runner
     assert "require_exact_live_revision" in gate
+    assert "live Playwright phases require PINVI_V100_GATE_N150_RUNNER=1" in gate
     assert "git status --porcelain=v1 --untracked-files=all" in runner
     assert "git status --porcelain=v1 --untracked-files=all" in gate
     assert "PINVI_LIVE_UI_E2E" in runner
@@ -867,13 +881,21 @@ def test_live_ui_gates_pin_the_exact_checkout_revision() -> None:
 
     attestation = (ROOT / "scripts" / "m05_activation_attestation.py").read_text(encoding="utf-8")
     m05_runner = attestation[
-        attestation.index('child_env["PINVI_M05_UI_VERIFICATION_ID"]') : attestation.index(
+        attestation.index('child_env["PINVI_M05_LIVE_EVENT_ID"]') : attestation.index(
             "completed = subprocess.run(command, check=False, env=child_env)",
-            attestation.index('child_env["PINVI_M05_UI_VERIFICATION_ID"]'),
+            attestation.index('child_env["PINVI_M05_LIVE_EVENT_ID"]'),
         )
     ]
     assert 'child_env["PINVI_SOURCE_REVISION"] = source_revision' in m05_runner
     assert 'child_env["PINVI_LIVE_EXPECTED_REVISION"] = source_revision' in m05_runner
+    for name in (
+        "PINVI_M05_LIVE_OLD_FEATURE_ID",
+        "PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID",
+        "PINVI_M05_LIVE_IMPACT_COUNT",
+        "PINVI_M05_LIVE_EMAIL",
+        "PINVI_M05_LIVE_PASSWORD",
+    ):
+        assert f'child_env["{name}"]' in m05_runner
 
 
 def test_runtime_discovery_failure_is_detected_without_caller_pipefail() -> None:

@@ -155,7 +155,10 @@ assert_host_ports_available_before_migration() {
   local port listeners container_ids container_id actual_project
   for port in "$API_PORT" "$WEB_PORT" "$RUSTFS_PORT" "$RUSTFS_CONSOLE_PORT" \
     "$DAGSTER_PORT" "$CADVISOR_PORT" "$PROMETHEUS_PORT" "$GRAFANA_PORT"; do
-    listeners="$(ss -H -ltn "sport = :${port}" 2>/dev/null || true)"
+    if ! listeners="$(ss -H -ltn "sport = :${port}" 2>/dev/null)"; then
+      echo "could not inspect host port ${port}; refusing migration" >&2
+      return 1
+    fi
     [[ -n "$listeners" ]] || continue
     if ! container_ids="$(docker ps --filter "publish=${port}" --format '{{.ID}}')"; then
       echo "could not inspect containers publishing host port ${port}; refusing migration" >&2
@@ -1245,6 +1248,10 @@ bootstrap_credential_file() {
 }
 
 dagster_up_under_lifecycle_lock() {
+  if ! assert_host_ports_available_before_migration; then
+    log "host-port preflight failed immediately before Dagster start"
+    return 1
+  fi
   pinvi_verify_runtime_image_provenance app-dagster
   log "starting Dagster webserver (port ${DAGSTER_PORT})"
   if ! compose --profile etl up -d app-dagster; then
@@ -1267,6 +1274,9 @@ prepare_standalone_dagster_writer() {
   if ! runtime_capture_predeploy_container_ids; then
     return 1
   fi
+  if ! runtime_snapshot_preflight; then
+    return 1
+  fi
   if ! dagster_container_id="$(runtime_writer_container_id app-dagster)"; then
     RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
     return 1
@@ -1278,9 +1288,6 @@ prepare_standalone_dagster_writer() {
   RUNTIME_DAGSTER_CONTAINER_ID="$dagster_container_id"
   RUNTIME_DAGSTER_IMAGE_ID="$dagster_image_id"
   RUNTIME_DAGSTER_WAS_RUNNING="1"
-  if ! runtime_snapshot_preflight; then
-    return 1
-  fi
   if ! compose --profile etl stop app-dagster; then
     return 1
   fi
@@ -1355,6 +1362,7 @@ up() {
 
 dagster_up() {
   pinvi_prepare_api_image_provenance require-immutable
+  assert_host_ports_available_before_migration
   acquire_migrator_lifecycle_lock
   RUNTIME_DEPLOY_PRESERVE="1"
   prepare_standalone_dagster_writer

@@ -116,14 +116,28 @@ source "$ROOT_DIR/scripts/migrator-lifecycle-lock.sh"
 free_host_port() {
   local port="$1"
   local force_kill="${PINVI_DEV_FORCE_KILL:-0}"
-  local docker_id listeners=""
+  local docker_id listeners="" docker_ids_output=""
   local -a docker_ids=()
 
-  mapfile -t docker_ids < <(
-    docker ps --filter "publish=${port}" \
-      --filter "label=com.docker.compose.project=${PROJECT}" \
-      --format '{{.ID}}' || true
-  )
+  if ! command -v ss >/dev/null 2>&1; then
+    echo "ss is required to verify that host port ${port} is free" >&2
+    return 127
+  fi
+  if ! listeners="$(ss -H -ltn "sport = :${port}" 2>/dev/null)"; then
+    echo "could not inspect host port ${port}; refusing to mutate containers" >&2
+    return 1
+  fi
+  [[ -n "$listeners" ]] || return 0
+
+  if ! docker_ids_output="$(docker ps --filter "publish=${port}" \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --format '{{.ID}}')"; then
+    echo "could not inspect containers publishing host port ${port}; refusing to mutate containers" >&2
+    return 1
+  fi
+  if [[ -n "$docker_ids_output" ]]; then
+    mapfile -t docker_ids <<< "$docker_ids_output"
+  fi
   if (( ${#docker_ids[@]} > 0 )) && [[ "$force_kill" != "1" ]]; then
     echo "host port ${port} is already in use; refusing to terminate it" >&2
     echo "set PINVI_DEV_FORCE_KILL=1 only after explicitly approving termination" >&2
@@ -137,11 +151,10 @@ free_host_port() {
     done
   fi
 
-  if ! command -v ss >/dev/null 2>&1; then
-    echo "ss is required to verify that host port ${port} is free" >&2
-    return 127
+  if ! listeners="$(ss -H -ltn "sport = :${port}" 2>/dev/null)"; then
+    echo "could not recheck host port ${port}; refusing to continue" >&2
+    return 1
   fi
-  listeners="$(ss -H -ltn "sport = :${port}" 2>/dev/null || true)"
   if [[ -n "$listeners" ]]; then
     echo "host port ${port} remains occupied by a non-project listener; refusing host-process termination" >&2
     echo "inspect the listener and stop it manually before retrying" >&2
@@ -155,6 +168,9 @@ free_app_ports() {
   free_host_port "$RUSTFS_PORT"
   free_host_port "$RUSTFS_CONSOLE_PORT"
   free_host_port "$DAGSTER_PORT"
+  free_host_port "$CADVISOR_PORT"
+  free_host_port "$PROMETHEUS_PORT"
+  free_host_port "$GRAFANA_PORT"
 }
 
 assert_host_ports_available_before_migration() {
@@ -165,7 +181,10 @@ assert_host_ports_available_before_migration() {
   local port listeners container_ids container_id actual_project
   for port in "$API_PORT" "$WEB_PORT" "$RUSTFS_PORT" "$RUSTFS_CONSOLE_PORT" \
     "$DAGSTER_PORT" "$CADVISOR_PORT" "$PROMETHEUS_PORT" "$GRAFANA_PORT"; do
-    listeners="$(ss -H -ltn "sport = :${port}" 2>/dev/null || true)"
+    if ! listeners="$(ss -H -ltn "sport = :${port}" 2>/dev/null)"; then
+      echo "could not inspect host port ${port}; refusing migration" >&2
+      return 1
+    fi
     [[ -n "$listeners" ]] || continue
     if ! container_ids="$(docker ps --filter "publish=${port}" --format '{{.ID}}')"; then
       echo "could not inspect containers publishing host port ${port}; refusing migration" >&2
@@ -1281,6 +1300,10 @@ bootstrap_credential_file() {
 }
 
 dagster_up_under_lifecycle_lock() {
+  if ! assert_host_ports_available_before_migration; then
+    log "host-port preflight failed immediately before Dagster start"
+    return 1
+  fi
   pinvi_verify_runtime_image_provenance app-dagster
   log "starting Dagster webserver (port ${DAGSTER_PORT})"
   if ! compose --profile etl up -d app-dagster; then
@@ -1434,14 +1457,20 @@ down() {
   if ! environment_name="$(configured_environment)"; then
     return 2
   fi
+  if ! acquire_migrator_lifecycle_lock; then
+    return 1
+  fi
+  local result=0
   if ! verify_existing_runtime_environment "$environment_name"; then
-    return 1
-  fi
-  if ! runtime_snapshot_preflight; then
+    result=1
+  elif ! runtime_snapshot_preflight; then
     echo "down refused because a stale pre-deploy snapshot exists or could not be inspected" >&2
-    return 1
+    result=1
+  elif ! compose down --remove-orphans; then
+    result=1
   fi
-  compose down --remove-orphans
+  release_migrator_lifecycle_lock
+  return "$result"
 }
 
 configured_environment() {
@@ -1677,16 +1706,21 @@ reset() {
       return 2
       ;;
   esac
+  if ! acquire_migrator_lifecycle_lock; then
+    return 1
+  fi
+  local result=0
   if ! runtime_snapshot_preflight; then
     echo "reset refused because a stale pre-deploy snapshot exists or could not be inspected" >&2
-    return 1
-  fi
-  if ! verify_reset_database_identity "$environment_name"; then
+    result=1
+  elif ! verify_reset_database_identity "$environment_name"; then
     echo "reset refused because the isolated database identity could not be verified" >&2
-    return 1
+    result=1
+  elif [[ "$RESET_NOOP" != "1" ]] && ! compose down -v --remove-orphans; then
+    result=1
   fi
-  [[ "$RESET_NOOP" == "1" ]] && return 0
-  compose down -v --remove-orphans
+  release_migrator_lifecycle_lock
+  return "$result"
 }
 
 status() {
