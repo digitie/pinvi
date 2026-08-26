@@ -853,6 +853,104 @@ printf '%s\n' "$*" >> "$PINVI_TEST_MUTATION_LOG"
     assert not mutation_log.exists()
 
 
+def test_deploy_entry_rejects_external_database_endpoint(tmp_path: Path) -> None:
+    env_file = tmp_path / "stage.env"
+    env_file.write_text("PINVI_ENVIRONMENT=staging\n", encoding="utf-8")
+    result = subprocess.run(  # noqa: S603
+        [str(ROOT / "scripts/deploy-node.sh"), "build"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": "/usr/bin:/bin",
+            "PINVI_ROOT_DIR": str(ROOT),
+            "PINVI_ENV_FILE": str(env_file),
+            "PINVI_ENVIRONMENT": "staging",
+            "PINVI_DATABASE_URL": "postgresql+asyncpg://pinvi:secret@external-db.example:5432/pinvi",
+        },
+    )
+
+    assert result.returncode != 0
+    assert "isolated app-postgres service" in result.stderr
+
+
+def test_deploy_entry_rejects_invalid_host_port(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(
+        fake_bin / "docker",
+        """#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1 $2" == "compose version" ]]
+""",
+    )
+    env_file = tmp_path / "stage.env"
+    env_file.write_text("PINVI_ENVIRONMENT=staging\n", encoding="utf-8")
+    result = subprocess.run(  # noqa: S603
+        [str(ROOT / "scripts/deploy-node.sh"), "build"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": f"{fake_bin}:/usr/bin:/bin",
+            "PINVI_ROOT_DIR": str(ROOT),
+            "PINVI_ENV_FILE": str(env_file),
+            "PINVI_ENVIRONMENT": "staging",
+            "PINVI_API_PORT": "0",
+        },
+    )
+
+    assert result.returncode != 0
+    assert "PINVI_API_PORT" in result.stderr
+
+
+def test_deploy_fresh_contract_rejects_existing_compose_resources(tmp_path: Path) -> None:
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    for dependency in ("api-image-provenance.sh", "migrator-lifecycle-lock.sh"):
+        shutil.copy2(ROOT / "scripts" / dependency, scripts_dir / dependency)
+    script = scripts_dir / "deploy-node.sh"
+    script.write_text(
+        (ROOT / "scripts/deploy-node.sh")
+        .read_text(encoding="utf-8")
+        .rsplit('\nmain "$@"', maxsplit=1)[0]
+        + "\n",
+        encoding="utf-8",
+    )
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(fake_bin / "uname", "#!/usr/bin/env bash\nprintf '%s\\n' x86_64\n")
+    _write_executable(fake_bin / "hostname", "#!/usr/bin/env bash\nprintf '%s\\n' n150\n")
+    _write_executable(
+        fake_bin / "docker",
+        """#!/usr/bin/env bash
+set -euo pipefail
+case "$1 $2" in
+  "container ls") printf '%s\\n' existing-container ;;
+  "volume ls"|"network ls") ;;
+  *) exit 0 ;;
+esac
+""",
+    )
+    result = subprocess.run(  # noqa: S603
+        ["/usr/bin/bash", "-c", 'source "$1"; require_fresh_stack_contract', "bash", str(script)],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": f"{fake_bin}:/usr/bin:/bin",
+            "PINVI_ROOT_DIR": str(tmp_path),
+            "PINVI_ENV_FILE": str(tmp_path / "missing.env"),
+            "PINVI_ENVIRONMENT": "staging",
+            "PINVI_DEPLOY_FRESH_STACK": "1",
+            "PINVI_DOCKER_PROJECT": "pinvi-test",
+        },
+    )
+
+    assert result.returncode != 0
+    assert "existing Compose project" in result.stderr
+
+
 @pytest.mark.parametrize("failure_mode", ["archive", "build", "label"])
 def test_pre_start_provenance_failure_leaves_no_container_or_temp_context(
     tmp_path: Path,

@@ -53,8 +53,8 @@ Environment:
   PINVI_V100_REQUIRE_HSTS=1           Add --require-hsts to security phase.
 
 Notes:
-  - Run from Linux/N150 first. Use Windows only when the N150 Docker runner and
-    host browser are both unavailable, and record the fallback reason.
+  - Live UI phases run only on the N150 x86_64 host through the N150 Docker
+    runner. If that host or runner is unavailable, stop the gate.
   - Actual domains, credentials, tokens, and DB URLs must remain in local env files.
 USAGE
 }
@@ -117,6 +117,15 @@ run_live_playwright() {
   require_exact_live_revision
   if [[ "${PINVI_V100_GATE_N150_RUNNER:-0}" != "1" ]]; then
     echo "error: live Playwright phases require PINVI_V100_GATE_N150_RUNNER=1" >&2
+    exit 2
+  fi
+  local live_hostname live_os_version
+  live_hostname="$(hostname -s 2>/dev/null || hostname)"
+  live_os_version="$(sed -n 's/^VERSION_ID=//p' /etc/os-release 2>/dev/null | tr -d '"')"
+  if [[ "$(uname -s)" != "Linux" || "$(uname -m)" != "x86_64" \
+    || ( "$live_hostname" != "n150" && "$live_hostname" != "digitie-at-n150" ) \
+    || "$live_os_version" != "26.04" ]]; then
+    echo "error: live Playwright phases require the N150 x86_64 host" >&2
     exit 2
   fi
   PINVI_LIVE_UI_E2E=1 run_playwright "$label" "$@"

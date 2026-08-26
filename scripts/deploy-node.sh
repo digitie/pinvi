@@ -53,6 +53,7 @@ PROMETHEUS_PORT="$(compose_env_value PINVI_PROMETHEUS_PORT 12401)"
 GRAFANA_PORT="$(compose_env_value PINVI_GRAFANA_PORT 12205)"
 # Dagster webserver(profile etl)를 같이 띄울지. 운영에서 pinvi-dagster.<domain>을 쓰면 1.
 ENABLE_DAGSTER="${PINVI_ENABLE_DAGSTER:-0}"
+DEPLOY_FRESH_STACK="$(compose_env_value PINVI_DEPLOY_FRESH_STACK 0)"
 MIGRATOR_ONE_SHOT_PASSWORD=""
 MIGRATOR_LOGIN_NEEDS_SEAL="0"
 MIGRATOR_LEGACY_REBASELINE="0"
@@ -113,6 +114,9 @@ Optional env:
   PINVI_ENABLE_DAGSTER=1           # up/deploy 시 Dagster webserver(:12802)도 기동
   PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/absolute/host/path/bootstrap-admin.json
 
+Fresh fallback deploy (N150 only):
+  PINVI_DEPLOY_FRESH_STACK=1 PINVI_DOCKER_PROJECT=pinvi-<isolated-name> scripts/deploy-node.sh deploy
+
 Run this script on the target node from /opt/pinvi or set PINVI_ROOT_DIR.
 EOF
 }
@@ -149,6 +153,7 @@ preflight() {
   require_command python3
   docker compose version >/dev/null
   [[ -f "$COMPOSE_FILE" ]] || { echo "compose file missing: $COMPOSE_FILE" >&2; exit 2; }
+  validate_configured_ports
 }
 
 resolved_environment() {
@@ -184,6 +189,99 @@ require_node_mutation_environment() {
       return 2
       ;;
   esac
+  require_isolated_database_endpoint
+}
+
+require_isolated_database_endpoint() {
+  local database_url legacy_database_url
+  database_url="$(compose_env_value PINVI_DATABASE_URL "")"
+  if [[ -n "$database_url" \
+    && ! "$database_url" =~ ^postgresql\+asyncpg://[^@/]+@app-postgres:5432/pinvi$ ]]; then
+    echo "deploy-node requires PINVI_DATABASE_URL to target the isolated app-postgres service" >&2
+    return 2
+  fi
+  legacy_database_url="$(compose_env_value PINVI_LEGACY_REBASELINE_DATABASE_URL "")"
+  if [[ -n "$legacy_database_url" \
+    && ! "$legacy_database_url" =~ ^postgresql\+asyncpg://[^@/]+@app-postgres:5432/pinvi$ ]]; then
+    echo "deploy-node requires the legacy rebaseline database URL to target the isolated app-postgres service" >&2
+    return 2
+  fi
+}
+
+validate_host_port() {
+  local name="$1"
+  local value="$2"
+  if [[ ! "$value" =~ ^[1-9][0-9]{0,4}$ ]] || (( value > 65535 )); then
+    echo "${name} must be an integer host port between 1 and 65535" >&2
+    return 2
+  fi
+}
+
+validate_configured_ports() {
+  validate_host_port PINVI_API_PORT "$API_PORT"
+  validate_host_port PINVI_WEB_PORT "$WEB_PORT"
+  validate_host_port PINVI_RUSTFS_PORT "$RUSTFS_PORT"
+  validate_host_port PINVI_RUSTFS_CONSOLE_PORT "$RUSTFS_CONSOLE_PORT"
+  validate_host_port PINVI_DAGSTER_DEV_PORT "$DAGSTER_PORT"
+  validate_host_port PINVI_CADVISOR_PORT "$CADVISOR_PORT"
+  validate_host_port PINVI_PROMETHEUS_PORT "$PROMETHEUS_PORT"
+  validate_host_port PINVI_GRAFANA_PORT "$GRAFANA_PORT"
+}
+
+require_n150_execution_host() {
+  local actual_arch actual_hostname actual_os_version
+  actual_arch="$(uname -m)"
+  actual_hostname="$(hostname -s 2>/dev/null || hostname)"
+  actual_os_version="$(sed -n 's/^VERSION_ID=//p' /etc/os-release 2>/dev/null | tr -d '"')"
+  [[ "$actual_arch" == "x86_64" ]] || {
+    echo "deploy-node is restricted to the N150 x86_64 execution host" >&2
+    return 2
+  }
+  case "$actual_hostname" in
+    n150|digitie-at-n150) ;;
+    *)
+      echo "deploy-node is restricted to the N150 execution host" >&2
+      return 2
+      ;;
+  esac
+  [[ "$actual_os_version" == "26.04" ]] || {
+    echo "deploy-node requires the N150 Ubuntu 26.04 execution host" >&2
+    return 2
+  }
+}
+
+require_fresh_stack_contract() {
+  local existing_containers existing_volumes existing_networks
+  [[ "$DEPLOY_FRESH_STACK" == "1" ]] || {
+    echo "deploy-node deploy requires PINVI_DEPLOY_FRESH_STACK=1" >&2
+    return 2
+  }
+  [[ -n "${PINVI_DOCKER_PROJECT:-}" && "$PROJECT" != "pinvi-app" \
+    && "$PROJECT" =~ ^pinvi-[a-z0-9][a-z0-9-]*$ ]] || {
+    echo "fresh deploy requires an explicit isolated PINVI_DOCKER_PROJECT" >&2
+    return 2
+  }
+  require_n150_execution_host
+  require_isolated_database_endpoint
+  if ! existing_containers="$(docker container ls --all \
+    --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.ID}}')"; then
+    echo "could not inspect the fresh deploy Compose project" >&2
+    return 1
+  fi
+  if ! existing_volumes="$(docker volume ls \
+    --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.Name}}')"; then
+    echo "could not inspect the fresh deploy PostgreSQL volume" >&2
+    return 1
+  fi
+  if ! existing_networks="$(docker network ls \
+    --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.Name}}')"; then
+    echo "could not inspect the fresh deploy Compose network" >&2
+    return 1
+  fi
+  if [[ -n "$existing_containers" || -n "$existing_volumes" || -n "$existing_networks" ]]; then
+    echo "fresh deploy refuses an existing Compose project, PostgreSQL volume, or network" >&2
+    return 2
+  fi
 }
 
 assert_host_ports_available_before_migration() {
@@ -1535,6 +1633,7 @@ status() {
 }
 
 deploy() {
+  require_fresh_stack_contract
   build_images
   reject_explicit_migrator_database_url
   assert_host_ports_available_before_migration

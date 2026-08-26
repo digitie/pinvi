@@ -47,6 +47,16 @@ if [[ "$(uname -s)" != "Linux" ]]; then
   exit 1
 fi
 
+actual_arch="$(uname -m)"
+actual_hostname="$(hostname -s 2>/dev/null || hostname)"
+actual_os_version="$(sed -n 's/^VERSION_ID=//p' /etc/os-release 2>/dev/null | tr -d '"')"
+if [[ "$actual_arch" != "x86_64" ]] \
+  || [[ "$actual_hostname" != "n150" && "$actual_hostname" != "digitie-at-n150" ]] \
+  || [[ "$actual_os_version" != "26.04" ]]; then
+  echo "error: this runner must be launched on the N150 x86_64 host" >&2
+  exit 1
+fi
+
 docker_bin="/usr/bin/docker"
 if [[ ! -x "${docker_bin}" ]]; then
   echo "error: pinned /usr/bin/docker is required" >&2
