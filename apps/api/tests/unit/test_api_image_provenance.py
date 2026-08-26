@@ -922,6 +922,17 @@ def test_deploy_fresh_contract_rejects_existing_compose_resources(tmp_path: Path
     _write_executable(fake_bin / "uname", "#!/usr/bin/env bash\nprintf '%s\\n' x86_64\n")
     _write_executable(fake_bin / "hostname", "#!/usr/bin/env bash\nprintf '%s\\n' n150\n")
     _write_executable(
+        fake_bin / "sed",
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${@: -1}" == "/etc/os-release" ]]; then
+  printf '26.04\\n'
+else
+  exec /usr/bin/sed "$@"
+fi
+""",
+    )
+    _write_executable(
         fake_bin / "docker",
         """#!/usr/bin/env bash
 set -euo pipefail
