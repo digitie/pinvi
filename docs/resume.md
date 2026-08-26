@@ -1,5 +1,42 @@
 # resume.md
 
+## 2026-08-26 (codex) — M05 sealed role topology verifier P1/P2 보정 완료
+
+`PINVI_ROLE_TOPOLOGY_VERIFY_ONLY=1` verifier와 normal bootstrap final gate가 예전처럼 서로
+독립된 aggregate predicate 사본을 갖지 않도록 `evaluate_role_topology` 하나로 결박했다. common
+evaluator는 mode별로 normal `t`/`f` 또는 sealed diagnostic의 ordered record를 내고, 모두
+`BEGIN READ ONLY` catalog query 뒤 `ROLLBACK`으로 끝난다. 즉 verifier 추가는 normal role
+reconciliation·open→admin→seal lifecycle과 policy source of truth를 분리하지 않는다.
+
+shell parser는 exact `canonical|` 또는 fixed 10-enum의 strictly increasing
+`noncanonical|…`만 JSON으로 재구성한다. empty·unknown·duplicate·역순·multiple record와
+unexpected status는 raw output을 전달하지 않고 `verification_unavailable`으로 닫힌다. disposable
+PostGIS 16 lifecycle proof는 canonical 및 fixed 10-enum 전체를 실제 catalog mutation으로
+falsify하고, 각 verifier 실행 전후 확장 fingerprint가 같은 것을 확인했다. focused unit 13건과
+integration 1건이 통과했고 두 전문 적대 리뷰는 P0/P1 없음으로 GO를 냈다.
+
+다음 작업은 PinVi draft PR을 rebase·보안 점검·push·CI 완료 뒤 병합하는 것이다. 그 뒤 별도
+Manager PR에서 새 PinVi revision을 immutable pinset으로 회전하고 host-network sealed verifier를
+failure attribution으로만 실행한다. 기존 d9 journal은 재개하거나 source를 끼워 넣지 않으며, 새
+candidate로만 final rebuild를 재개한다.
+
+## 2026-08-26 (codex) — M05 sealed role topology 읽기 전용 진단 착수
+
+Manager의 exact d9 후보는 `map_runtime_ready` 뒤 `pinvi_role_open` 및 failure cleanup
+`pinvi_role_seal`에서 같은 `role_topology_noncanonical`로 중단됐다. 이는 Manager
+endpoint/credential 결선이 아니라 PinVi bootstrap script가 role·membership·schema·ACL을
+변경한 뒤 하나의 aggregate predicate를 false로 평가한 경우다. 현재 후보를 재실행하면
+원인을 좁히지 못한 채 cluster-global PostgreSQL catalog를 다시 root 권한으로 바꾸므로
+금지한다. admin one-shot은 실행되지 않았고, d9는 M05 activation이나 Map acceptance의 증거가
+아니다.
+
+다음 작업은 PinVi source에 sealed-only, `BEGIN READ ONLY`의 typed topology verifier를
+추가하는 것이다. 결과는 role/database 이름·OID·ACL 값·DSN·password·raw stderr 없이 fixed JSON
+reason enum만 낸다. strict topology 정책을 낮추거나 stale membership을 자동 삭제하지 않는다.
+source가 바뀌면 Manager pinset과 candidate identity도 바뀌므로, old d9 journal을 이어 쓰지 않고
+별도 Manager PR과 새 candidate를 사용한다. 설계는
+[`t-vn-m05-role-topology-verifier.md`](execplan/t-vn-m05-role-topology-verifier.md)다.
+
 ## 2026-08-26 (claude) — T-351 머지 완료 (통합 테스트 CI 4-shard 분리)
 
 `pytest tests/integration`(684건, 91개 파일)이 계속 자라 T-348로 job timeout을 올려도

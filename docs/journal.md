@@ -2,6 +2,46 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-26 (codex) — M05 topology diagnostic common evaluator와 strict transport
+
+- sealed verifier와 normal bootstrap final gate가 약 300행의 aggregate SQL을 별도 보유하던
+  drift 위험을 제거했다. `evaluate_role_topology`가 principal/catalog/fence/runtime/schema/
+  migration/migrator/app/extension의 같은 10개 불변식을 평가하고, normal은 `t`/`f`, sealed
+  verifier는 `status|ordered reasons` record를 받는다. evaluator는 `BEGIN READ ONLY`와 catalog
+  `SELECT`, `ROLLBACK`만 사용한다.
+- verifier transport는 raw psql JSON/regex/glob 수용을 제거했다. exact `canonical|` 또는
+  increasing fixed enum `noncanonical|…`만 locally JSON으로 다시 만들며, empty·unknown·duplicate·
+  역순·newline/multiple record·unexpected status는 `verification_unavailable` fixed JSON으로
+  fail-close한다. endpoint/input failure도 기존처럼 값 없는 typed JSON이다.
+- disposable PostGIS 16 Compose lifecycle proof를 확장했다. canonical 및 fixed 10-enum 전체를
+  explicit catalog mutation으로 확인했고, database owner collision은
+  `principal_identity`·`fence_acl`·`migrator_sealed`의 ordered multi-reason을 냈다. verifier
+  fingerprint에는 role attributes, database/schema ACL, default ACL, fence function owner/ACL,
+  extension owner를 포함했고 각 read-only probe 전후 동일함을 확인했다.
+- 검증: `sh -n`, `git diff --check`, focused unit **13 passed**, disposable PostGIS 16 integration
+  **1 passed**. 두 전문 적대 리뷰가 재검토해 P0/P1 없음, GO를 확인했다. 이 source PR은
+  Manager invocation을 포함하지 않으며, merge 뒤 별도 immutable pinset/new candidate만 허용한다.
+
+## 2026-08-26 (codex) — M05 role topology aggregate failure의 안전한 진단 설계
+
+- fixed PinVi source `93296aee…`를 쓰는 Manager d9 candidate가 `map_runtime_ready` 뒤
+  `pinvi_role_open`과 failure cleanup `pinvi_role_seal` 모두에서
+  `role_topology_noncanonical`으로 끝났다. admin one-shot은 시작되지 않았고 journal phase도
+  advance하지 않았다. 이는 Map runtime·admin credential 문제가 아니라 PinVi role script의
+  final aggregate topology predicate가 false인 경우다.
+- script는 predicate 전 root 권한으로 role attribute, membership, database CONNECT, schema,
+  extension, fence function을 변경한다. Manager의 DB reset은 cluster-global role/membership/default
+  setting을 제거하지 않으므로, aggregate string만 보고 d9를 재실행하면 관찰이 아니라 catalog
+  재변경이 된다. manual SQL, raw Compose, automatic broad revoke로 우회하지 않는다.
+- 두 전문 적대 검토는 PinVi source verifier → Docker Manager trusted invocation/pinset rotation의
+  두 PR 순서를 권고했다. PinVi는 sealed-only `BEGIN READ ONLY` typed JSON을 소유하고, Manager는
+  exact source·frozen Compose·global lock 아래 그 verifier를 실행하는 별 PR을 소유한다. source
+  revision이 바뀌면 d9 journal은 재사용하지 않고 새 candidate가 필요하다.
+- 이 PR은 첫 단계만 맡는다. canonicality를 낮추거나 stale membership/ACL을 자동 수리하지 않고,
+  role/database 이름, OID, endpoint, DSN, password, raw stderr를 내보내지 않는 fixed reason enum과
+  disposable PostGIS 16 regression을 추가한다. 설계 정본은
+  `docs/execplan/t-vn-m05-role-topology-verifier.md`다.
+
 ## 2026-08-26 (claude) — T-351 머지 (PR #495, 통합 테스트 CI 4-shard 분리)
 
 - 사용자가 "t351 진행"을 요청해 착수했다. `.github/workflows/api.yml`의 `lint-typecheck-test`
