@@ -2113,11 +2113,11 @@ def _live(args: argparse.Namespace) -> int:
     password = os.environ.get("M05_PINVI_PASSWORD", "")
     if not email or not password:
         raise AttestationError("M05 live attestation requires admin email and password")
-    old_feature_id = _uuid(
+    old_feature_id = _string(
         os.environ.get("PINVI_M05_LIVE_OLD_FEATURE_ID", ""),
         name="M05 old Feature ID",
     )
-    replacement_feature_id = _uuid(
+    replacement_feature_id = _string(
         os.environ.get("PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID", ""),
         name="M05 replacement Feature ID",
     )

@@ -1721,8 +1721,8 @@ class Settings(BaseSettings):
             or not _is_canonical_uuid(payload["m04_map_feature_uuid"])
             or not _is_canonical_uuid(payload["m04_verification_id"])
             or payload["m04_verification_id"] != payload["activation_nonce"]
-            or not _is_canonical_uuid(payload["m05_old_feature_id"])
-            or not _is_canonical_uuid(payload["m05_replacement_feature_id"])
+            or not _is_non_empty_token_free_string(payload["m05_old_feature_id"])
+            or not _is_non_empty_token_free_string(payload["m05_replacement_feature_id"])
             or type(payload["m05_impact_count"]) is not int
             or payload["m05_impact_count"] < 0
         ):
@@ -2509,6 +2509,14 @@ def _is_canonical_uuid(value: object) -> bool:
         return str(UUID(value)) == value
     except ValueError:
         return False
+
+
+def _is_non_empty_token_free_string(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and bool(value)
+        and not any(character.isspace() for character in value)
+    )
 
 
 @lru_cache(maxsize=1)

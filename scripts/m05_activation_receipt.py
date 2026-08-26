@@ -1805,8 +1805,8 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, object]:
         != pinvi_source_revision
     ):
         raise ReceiptError("live-ui source revision does not match the signed Pinvi pair")
-    old_feature_id = _uuid(live["old_feature_id"], name="live-ui.old_feature_id")
-    replacement_feature_id = _uuid(
+    old_feature_id = _string(live["old_feature_id"], name="live-ui.old_feature_id")
+    replacement_feature_id = _string(
         live["replacement_feature_id"], name="live-ui.replacement_feature_id"
     )
     impact_count = live["impact_count"]
@@ -1930,8 +1930,8 @@ def _ui_run(
     if type(impact_count) is not int or impact_count < 0:
         raise ReceiptError("UI marker impact count is invalid")
     marker_values = {
-        "old_feature_id": _uuid(marker["old_feature_id"], name="UI marker old_feature_id"),
-        "replacement_feature_id": _uuid(
+        "old_feature_id": _string(marker["old_feature_id"], name="UI marker old_feature_id"),
+        "replacement_feature_id": _string(
             marker["replacement_feature_id"], name="UI marker replacement_feature_id"
         ),
         "impact_count": impact_count,
@@ -2670,9 +2670,9 @@ def _attestation(
     ):
         raise ReceiptError("M05 live attestation does not bind the Playwright runner")
     if (
-        _uuid(payload["old_feature_id"], name="attestation.old_feature_id")
+        _string(payload["old_feature_id"], name="attestation.old_feature_id")
         != live_ui["old_feature_id"]
-        or _uuid(payload["replacement_feature_id"], name="attestation.replacement_feature_id")
+        or _string(payload["replacement_feature_id"], name="attestation.replacement_feature_id")
         != live_ui["replacement_feature_id"]
         or payload["impact_count"] != live_ui["impact_count"]
         or _sha256(payload["pinvi_detail_sha256"], name="attestation.pinvi_detail_sha256")

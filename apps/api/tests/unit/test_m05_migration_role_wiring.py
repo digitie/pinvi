@@ -15,6 +15,13 @@ def test_compose_keeps_runtime_and_migrator_role_inputs_separate() -> None:
     )[0]
     assert "app-postgres:/var/lib/postgresql/data" in postgres_block
     assert "\n  app-postgres:\n" in compose.rsplit("volumes:", maxsplit=1)[1]
+    rustfs_init_block = compose.split("  app-rustfs-init:", maxsplit=1)[1].split(
+        "  app-api:", maxsplit=1
+    )[0]
+    assert "set -eu" in rustfs_init_block
+    assert "mc ls local/pinvi-media" in rustfs_init_block
+    assert "mc mb -p local/pinvi-media" in rustfs_init_block
+    assert "|| true" not in rustfs_init_block
     runtime_block = compose.split("  app-api:", maxsplit=1)[1].split(
         "  # Explicit one-shot only:", maxsplit=1
     )[0]
@@ -1100,6 +1107,14 @@ def test_fresh_0101_and_role_bootstrap_fence_direct_app_schema_create() -> None:
     assert "(SELECT oid FROM schema_owner) <> (SELECT oid FROM database_owner)" in bootstrap
     assert "relation.relkind = 'r'" in migration
     assert "relation.relpersistence = 'p'" in migration
+
+
+def test_fresh_deploy_waits_for_a_successful_rustfs_bucket_initializer() -> None:
+    source = (ROOT / "scripts" / "deploy-node.sh").read_text(encoding="utf-8")
+    assert "wait_for_fresh_stack_one_shot()" in source
+    assert "wait_for_fresh_stack_one_shot app-rustfs-init" in source
+    assert 'docker container wait "$container_id"' in source
+    assert '"$state" == "exited 0"' in source
 
 
 def test_docker_app_up_uses_the_explicit_legacy_role_profile_before_migration() -> None:

@@ -73,8 +73,9 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
+      set -eu;
       mc alias set local http://app-rustfs:9000 rustfsadmin rustfsadmin;
-      mc mb -p local/pinvi-media || true;
+      mc ls local/pinvi-media >/dev/null 2>&1 || mc mb -p local/pinvi-media;
       "
 
   app-api:

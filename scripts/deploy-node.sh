@@ -467,7 +467,7 @@ fresh_stack_runtime_image_proof() {
 }
 
 fresh_stack_dependency_image_id() {
-  local service="$1" container_ids container_id actual_image expected_image image_reference
+  local service="$1" container_ids container_id actual_image expected_image image_reference state
   if ! container_ids="$(docker container ls --all \
     --filter "label=com.docker.compose.project=${PROJECT}" \
     --filter "label=com.docker.compose.service=${service}" --format '{{.ID}}')"; then
@@ -496,6 +496,16 @@ fresh_stack_dependency_image_id() {
     echo "fresh deploy ${service} image drifted from the pinned Compose image" >&2
     return 2
   }
+  if [[ "$service" == "app-rustfs-init" ]]; then
+    if ! state="$(docker container inspect --format '{{.State.Status}} {{.State.ExitCode}}' "$container_id")"; then
+      echo "could not inspect fresh deploy RustFS bucket initializer state" >&2
+      return 1
+    fi
+    [[ "$state" == "exited 0" ]] || {
+      echo "fresh deploy RustFS bucket initializer did not exit successfully" >&2
+      return 2
+    }
+  fi
   printf '%s\n' "$actual_image"
 }
 
@@ -911,6 +921,29 @@ cleanup_failed_fresh_stack() {
     return 1
   fi
   FRESH_STACK_RESOURCE_MUTATION_STARTED="0"
+}
+
+wait_for_fresh_stack_one_shot() {
+  local service="$1" container_ids container_id exit_code
+  if ! container_ids="$(docker container ls --all \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --filter "label=com.docker.compose.service=${service}" --format '{{.ID}}')"; then
+    echo "could not inspect fresh deploy ${service} one-shot container" >&2
+    return 1
+  fi
+  [[ "$(printf '%s\n' "$container_ids" | sed '/^$/d' | wc -l)" == "1" ]] || {
+    echo "fresh deploy requires exactly one project-scoped ${service} one-shot container" >&2
+    return 2
+  }
+  container_id="$(printf '%s\n' "$container_ids" | sed '/^$/d')"
+  if ! exit_code="$(docker container wait "$container_id")"; then
+    echo "could not wait for fresh deploy ${service} one-shot container" >&2
+    return 1
+  fi
+  [[ "$exit_code" == "0" ]] || {
+    echo "fresh deploy ${service} one-shot container exited with ${exit_code}" >&2
+    return 2
+  }
 }
 
 assert_host_ports_available_before_migration() {
@@ -1957,6 +1990,11 @@ migrate_under_lifecycle_lock() {
   FRESH_STACK_RESOURCE_MUTATION_STARTED="1"
   if ! compose up -d app-postgres app-rustfs app-rustfs-init; then
     log "database dependency startup failed"
+    restore_runtime_writers || log "runtime writer restoration failed"
+    return 1
+  fi
+  if ! wait_for_fresh_stack_one_shot app-rustfs-init; then
+    log "RustFS bucket initialization failed"
     restore_runtime_writers || log "runtime writer restoration failed"
     return 1
   fi
