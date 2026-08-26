@@ -100,25 +100,30 @@ scp /mnt/c/Users/Me/artifacts/pinvi-api-arm64-$(date +%Y%m%d).tar.gz odroid:/tmp
 ssh odroid 'cd /opt/pinvi && docker load < /tmp/pinvi-api-arm64-*.tar.gz'
 ```
 
-## 3. 초기 배포 (`scripts/deploy-node.sh`)
+## 3. 초기 배포 (manager 정본)
 
 ```bash
-cd /opt/pinvi
-scripts/odroid-docker-doctor.sh
-scripts/deploy-node.sh deploy
+ssh odroid
+cd ~/pinvi && git pull --ff-only origin main
+cd ~/kor-travel-docker-manager
+sudo -n backend/.venv/bin/ktdctl pinvi-pair rebuild-pinned --confirm
+cd ~/pinvi
 scripts/odroid-docker-doctor.sh
 ```
 
 평상시 Odroid는 public traffic을 받지 않는다. ARM64 API/Web smoke만 필요하면
-`scripts/deploy-node.sh up && scripts/deploy-node.sh smoke`를 사용한다.
+manager의 pinned pair rebuild 후 `scripts/odroid-docker-doctor.sh`와 local health를 확인한다.
+`scripts/deploy-node.sh`는 manager를 사용할 수 없는 경우의 fallback이며, 기존
+API/Web/Dagster runtime이 없는 별도 fresh stack에서만 사용한다. 기존 runtime이 발견되면
+in-place 변경을 거부한다.
 
 ## 4. 배포 (운영)
 
-### 4.1 옵션 A — GHCR pull
+### 4.1 옵션 A — manager pinned rebuild
 
 ```bash
 ssh odroid
-cd /opt/pinvi
+cd ~/pinvi
 
 # 새 git pull (compose 파일 변경 시)
 git pull origin main
@@ -126,27 +131,30 @@ git pull origin main
 # 환경변수 갱신
 $EDITOR .env
 
-# 이미지 pull + OCI revision/image ID 검증 + 기동
-# production/staging은 raw `docker compose pull/up`로 우회하지 않는다.
-scripts/deploy-node.sh pull
-scripts/deploy-node.sh up
-scripts/deploy-node.sh smoke
-scripts/deploy-node.sh status
+# 운영 build·migration·writer lifecycle·smoke를 함께 소유하는 manager 경로
+cd ~/kor-travel-docker-manager
+sudo -n backend/.venv/bin/ktdctl pinvi-pair rebuild-pinned --confirm
+cd ~/pinvi
+scripts/odroid-docker-doctor.sh
 ```
 
-### 4.2 옵션 B — NTFS tar scp
+### 4.2 옵션 B — 별도 fresh fallback stack
+
+manager를 사용할 수 없고 기존 운영 runtime이 없는 경우에만 exact archive와
+canonical Compose를 사용한다. 기존 project를 재사용하거나 raw Compose로 우회하지 않는다.
 
 ```bash
 # 로컬에서
 scp /mnt/c/.../pinvi-{api,web,etl}-arm64-<date>.tar.gz odroid:/tmp/
 
-# Odroid에서 — load 뒤에도 wrapper가 image label/ID와 실행 container를 재검증한다.
+# Odroid에서 — 별도 project/fresh stack에서만 load·검증한다.
 ssh odroid bash -s << 'EOF'
-  cd /opt/pinvi
+  cd ~/pinvi
   for img in api web etl; do
     docker load < /tmp/pinvi-${img}-arm64-*.tar.gz
   done
-  scripts/deploy-node.sh up
+  export PINVI_DOCKER_PROJECT=pinvi-app-odroid-fresh
+  scripts/deploy-node.sh deploy
   scripts/deploy-node.sh smoke
 EOF
 ```

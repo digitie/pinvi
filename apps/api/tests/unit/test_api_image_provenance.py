@@ -828,9 +828,11 @@ fi
 printf '%s\n' "$*" >> "$PINVI_TEST_MUTATION_LOG"
 """,
     )
+    empty_env_file = tmp_path / "empty.env"
+    empty_env_file.write_text("", encoding="utf-8")
     env = {
         "PATH": f"{fake_bin}:/usr/bin:/bin",
-        "PINVI_ENV_FILE": str(tmp_path / "missing.env"),
+        "PINVI_ENV_FILE": str(empty_env_file),
         "PINVI_ROOT_DIR": str(ROOT),
         "PINVI_TEST_MUTATION_LOG": str(mutation_log),
     }

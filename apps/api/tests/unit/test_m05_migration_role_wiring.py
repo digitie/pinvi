@@ -520,10 +520,12 @@ def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
         "assert_host_ports_available_before_migration"
         in deploy_node[deploy_node.index("migrate() {") :]
     )
-    assert 'RUSTFS_CONSOLE_PORT="${PINVI_RUSTFS_CONSOLE_PORT:-12105}"' in deploy_node
-    assert 'CADVISOR_PORT="${PINVI_CADVISOR_PORT:-12301}"' in deploy_node
-    assert 'PROMETHEUS_PORT="${PINVI_PROMETHEUS_PORT:-12401}"' in deploy_node
-    assert 'GRAFANA_PORT="${PINVI_GRAFANA_PORT:-12205}"' in deploy_node
+    assert (
+        'RUSTFS_CONSOLE_PORT="$(compose_env_value PINVI_RUSTFS_CONSOLE_PORT 12105)"' in deploy_node
+    )
+    assert 'CADVISOR_PORT="$(compose_env_value PINVI_CADVISOR_PORT 12301)"' in deploy_node
+    assert 'PROMETHEUS_PORT="$(compose_env_value PINVI_PROMETHEUS_PORT 12401)"' in deploy_node
+    assert 'GRAFANA_PORT="$(compose_env_value PINVI_GRAFANA_PORT 12205)"' in deploy_node
     assert "host-port preflight failed at the migration boundary" in deploy_node
     assert "host-port preflight failed immediately before migration" in deploy_node
     assert 'ss -H -ltn "sport = :${port}" 2>/dev/null || true' not in deploy_node
@@ -769,10 +771,12 @@ fi
         encoding="utf-8",
     )
     fake_docker.chmod(0o755)
+    isolated_env_file = tmp_path / "smoke.env"
+    isolated_env_file.write_text("PINVI_ENVIRONMENT=smoke\n", encoding="utf-8")
 
     base_env = {
         "PATH": f"{fake_bin}:/usr/bin:/bin",
-        "PINVI_ENV_FILE": str(tmp_path / "missing.env"),
+        "PINVI_ENV_FILE": str(isolated_env_file),
         "PINVI_ENVIRONMENT": "smoke",
         "PINVI_ROOT_DIR": str(ROOT),
         "PINVI_TEST_EVENT_LOG": str(event_log),
@@ -845,6 +849,102 @@ fi
     assert stale_down.returncode != 0
     assert "stale pre-deploy snapshot" in stale_down.stderr
     assert not event_log.exists()
+
+
+def test_compose_preflight_uses_effective_env_file_and_root_dotenv_fallback(
+    tmp_path: Path,
+) -> None:
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    for dependency in ("api-image-provenance.sh", "migrator-lifecycle-lock.sh"):
+        shutil.copy2(ROOT / "scripts" / dependency, scripts_dir / dependency)
+
+    env_file = tmp_path / "stage.env"
+    env_file.write_text(
+        "PINVI_API_PORT=13801\n"
+        "PINVI_WEB_PORT=13805\n"
+        "PINVI_RUSTFS_PORT=13101\n"
+        "PINVI_RUSTFS_CONSOLE_PORT=13105\n"
+        "PINVI_DAGSTER_DEV_PORT=13802\n"
+        "PINVI_CADVISOR_PORT=13301\n"
+        "PINVI_PROMETHEUS_PORT=13401\n"
+        "PINVI_GRAFANA_PORT=13205\n",
+        encoding="utf-8",
+    )
+    root_dotenv = tmp_path / ".env"
+    root_dotenv.write_text(
+        "PINVI_ENVIRONMENT=production\n"
+        "PINVI_DATABASE_URL=postgresql+asyncpg://pinvi:secret@production-db:5432/pinvi\n"
+        "PINVI_API_PORT=13901\n",
+        encoding="utf-8",
+    )
+
+    for name in ("docker-app.sh", "deploy-node.sh"):
+        source = (ROOT / "scripts" / name).read_text(encoding="utf-8")
+        isolated_script = scripts_dir / name
+        isolated_script.write_text(
+            source.rsplit('\nmain "$@"', maxsplit=1)[0] + "\n", encoding="utf-8"
+        )
+        result = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
+            [
+                "/usr/bin/bash",
+                "-c",
+                """
+set -euo pipefail
+source "$1"
+[[ "$API_PORT" == "13801" ]]
+[[ "$WEB_PORT" == "13805" ]]
+[[ "$RUSTFS_PORT" == "13101" ]]
+[[ "$RUSTFS_CONSOLE_PORT" == "13105" ]]
+[[ "$DAGSTER_PORT" == "13802" ]]
+[[ "$CADVISOR_PORT" == "13301" ]]
+[[ "$PROMETHEUS_PORT" == "13401" ]]
+[[ "$GRAFANA_PORT" == "13205" ]]
+""",
+                "bash",
+                str(isolated_script),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            env={
+                "PATH": "/usr/bin:/bin",
+                "PINVI_ROOT_DIR": str(tmp_path),
+                "PINVI_ENV_FILE": str(env_file),
+            },
+        )
+        assert result.returncode == 0, result.stderr
+
+    source = (ROOT / "scripts" / "docker-app.sh").read_text(encoding="utf-8")
+    isolated_script = scripts_dir / "docker-app-dotenv.sh"
+    isolated_script.write_text(source.rsplit('\nmain "$@"', maxsplit=1)[0] + "\n", encoding="utf-8")
+    result = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
+        [
+            "/usr/bin/bash",
+            "-c",
+            """
+set -euo pipefail
+source "$1"
+[[ "$API_PORT" == "13901" ]]
+[[ "$(configured_environment)" == "production" ]]
+if require_isolated_database_endpoint; then
+  exit 1
+fi
+""",
+            "bash",
+            str(isolated_script),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": "/usr/bin:/bin",
+            "PINVI_ROOT_DIR": str(tmp_path),
+            "PINVI_ENV_FILE": str(tmp_path / "missing.env"),
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert "isolated app-postgres service" in result.stderr
 
 
 def test_live_ui_gates_pin_the_exact_checkout_revision() -> None:

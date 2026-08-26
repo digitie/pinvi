@@ -291,8 +291,12 @@ terminal receipt가 없으면 fixture/worker/ACK 상태를 먼저 확인한다.
 activation gate에서는 단독 UI pass가 아니라, 앞 절의 서명된 M04 증적과 `live`의 Map 결정·ACK
 server-side 대조까지 모두 성공해야 한다.
 
-운영 공개 도메인으로 검증할 때는 `*_URL`을 실제 HTTPS 도메인으로 바꾸고, runner의 exact SHA와
-digest-pinned image 조건을 그대로 유지한다.
+일반 live-mutating suite는 공개 HTTPS origin을 사용할 수 있다. 단,
+`m05_activation_attestation.py m04/live`는 API·Web·Map의 runtime peer를 검증하므로
+`127.0.0.1`/`localhost` loopback URL만 허용한다. `--scope production`은 증적의 운영 범위를
+뜻하며 공개 HTTPS URL을 허용한다는 뜻이 아니다. production 증적이 필요하면 승인된 N150
+loopback port-forward/proxy를 통해 실행하고, 공개 도메인을 attestation CLI의 `*_URL` 인자로
+직접 넣지 않는다. runner의 exact SHA와 digest-pinned image 조건은 그대로 유지한다.
 
 ## 4. 실패 처리
 

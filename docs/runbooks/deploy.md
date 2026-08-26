@@ -51,11 +51,13 @@ archive를 source build context와 Dockerfile로 사용한다. raw/resolved buil
 image ID를 pin한다. 기동 container가 그 image ID를 실제 사용한 경우에만 C6c compatible pair에 넣으며,
 불일치하면 같은 Compose project의 API/Web container를 제거한다.
 
-PinVi 저장소의 fallback 경로는 같은 검증을 포함한다. `scripts/deploy-node.sh deploy`는 image를
-pull하지 않고 exact archive의 canonical Compose·Dockerfile·Python helper regular file만 허용하며
-symlink·외부 override를 거부한다. API를 build하고 API label/image ID를 확인한 뒤
-migration/up/smoke를 진행한다. 임시 archive는 전체 명령이 끝날 때 삭제한다. 이미지를 명시적으로
-pull하는 rollback 흐름도 현재 source `HEAD`와 label이 다르면 중지한다.
+PinVi 저장소의 fallback 경로도 같은 검증을 포함하지만, manager를 사용할 수 없고 기존 운영
+runtime이 없는 별도 fresh stack에서만 사용한다. `scripts/deploy-node.sh deploy`는 image를 pull하지
+않고 exact archive의 canonical Compose·Dockerfile·Python helper regular file만 허용하며
+symlink·외부 override와 기존 API/Web/Dagster runtime 재사용을 거부한다. API를 build하고 API
+label/image ID를 확인한 뒤 migration/up/smoke를 진행한다. 임시 archive는 전체 명령이 끝날 때
+삭제한다. 이미지를 명시적으로 pull하는 rollback 흐름도 현재 source `HEAD`와 label이 다르면
+중지한다. 일반 staging/production 배포는 위 manager pinned pair 경로를 사용한다.
 
 ```bash
 # 값 자체 대신 일치 여부만 확인하는 예시

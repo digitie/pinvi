@@ -8,14 +8,49 @@ COMPOSE_FILE="${PINVI_COMPOSE_FILE:-infra/docker-compose.app.yml}"
 # 운영 도메인/시크릿 주입. 기본 .env, 운영은 PINVI_ENV_FILE=infra/.env.prod (gitignore, ADR-047).
 ENV_FILE="${PINVI_ENV_FILE:-.env}"
 PROJECT="${PINVI_DOCKER_PROJECT:-pinvi-app}"
-API_PORT="${PINVI_API_PORT:-12801}"
-WEB_PORT="${PINVI_WEB_PORT:-12805}"
-RUSTFS_PORT="${PINVI_RUSTFS_PORT:-12101}"
-RUSTFS_CONSOLE_PORT="${PINVI_RUSTFS_CONSOLE_PORT:-12105}"
-DAGSTER_PORT="${PINVI_DAGSTER_DEV_PORT:-12802}"
-CADVISOR_PORT="${PINVI_CADVISOR_PORT:-12301}"
-PROMETHEUS_PORT="${PINVI_PROMETHEUS_PORT:-12401}"
-GRAFANA_PORT="${PINVI_GRAFANA_PORT:-12205}"
+
+compose_env_source_file() {
+  local source_file="$ENV_FILE"
+  [[ "$source_file" == /* ]] || source_file="$ROOT_DIR/$source_file"
+  if [[ -f "$source_file" ]]; then
+    printf '%s\n' "$source_file"
+  elif [[ -f "$ROOT_DIR/.env" ]]; then
+    # Compose falls back to the project-root .env when --env-file is absent.
+    printf '%s\n' "$ROOT_DIR/.env"
+  fi
+}
+
+compose_env_value() {
+  local key="$1" default_value="$2" source_file value
+  if [[ -n "${!key+x}" ]]; then
+    printf '%s\n' "${!key}"
+    return
+  fi
+  source_file="$(compose_env_source_file)"
+  if [[ -n "$source_file" ]]; then
+    value="$(sed -nE \
+      "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*([^[:space:]#]+).*/\\1/p" \
+      "$source_file" | tail -n 1)"
+    value="${value#\"}"
+    value="${value%\"}"
+    value="${value#\'}"
+    value="${value%\'}"
+    if [[ -n "$value" ]]; then
+      printf '%s\n' "$value"
+      return
+    fi
+  fi
+  printf '%s\n' "$default_value"
+}
+
+API_PORT="$(compose_env_value PINVI_API_PORT 12801)"
+WEB_PORT="$(compose_env_value PINVI_WEB_PORT 12805)"
+RUSTFS_PORT="$(compose_env_value PINVI_RUSTFS_PORT 12101)"
+RUSTFS_CONSOLE_PORT="$(compose_env_value PINVI_RUSTFS_CONSOLE_PORT 12105)"
+DAGSTER_PORT="$(compose_env_value PINVI_DAGSTER_DEV_PORT 12802)"
+CADVISOR_PORT="$(compose_env_value PINVI_CADVISOR_PORT 12301)"
+PROMETHEUS_PORT="$(compose_env_value PINVI_PROMETHEUS_PORT 12401)"
+GRAFANA_PORT="$(compose_env_value PINVI_GRAFANA_PORT 12205)"
 # Dagster webserver(profile etl)를 같이 띄울지. 운영에서 pinvi-dagster.<domain>을 쓰면 1.
 ENABLE_DAGSTER="${PINVI_ENABLE_DAGSTER:-0}"
 MIGRATOR_ONE_SHOT_PASSWORD=""
@@ -118,11 +153,12 @@ preflight() {
 
 resolved_environment() {
   local environment_name="${PINVI_ENVIRONMENT:-}"
-  local file_environment_name=""
-  if [[ -f "$ENV_FILE" ]]; then
+  local file_environment_name="" source_file
+  source_file="$(compose_env_source_file)"
+  if [[ -n "$source_file" ]]; then
     file_environment_name="$(sed -nE \
       's/^[[:space:]]*PINVI_ENVIRONMENT[[:space:]]*=[[:space:]]*([^[:space:]#]+).*/\1/p' \
-      "$ENV_FILE" | tail -n 1)"
+      "$source_file" | tail -n 1)"
     file_environment_name="${file_environment_name#\"}"
     file_environment_name="${file_environment_name%\"}"
     file_environment_name="${file_environment_name#\'}"
@@ -130,7 +166,7 @@ resolved_environment() {
   fi
   if [[ -n "$environment_name" && -n "$file_environment_name" \
     && "$environment_name" != "$file_environment_name" ]]; then
-    echo "PINVI_ENVIRONMENT disagrees with ${ENV_FILE}; refusing ambiguous deployment environment" >&2
+    echo "PINVI_ENVIRONMENT disagrees with ${source_file}; refusing ambiguous deployment environment" >&2
     return 2
   fi
   printf '%s\n' "${file_environment_name:-$environment_name}"
