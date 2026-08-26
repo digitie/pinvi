@@ -13,6 +13,9 @@ WEB_PORT="${PINVI_WEB_PORT:-12805}"
 RUSTFS_PORT="${PINVI_RUSTFS_PORT:-12101}"
 RUSTFS_CONSOLE_PORT="${PINVI_RUSTFS_CONSOLE_PORT:-12105}"
 DAGSTER_PORT="${PINVI_DAGSTER_DEV_PORT:-12802}"
+CADVISOR_PORT="${PINVI_CADVISOR_PORT:-12301}"
+PROMETHEUS_PORT="${PINVI_PROMETHEUS_PORT:-12401}"
+GRAFANA_PORT="${PINVI_GRAFANA_PORT:-12205}"
 SMOKE_KEEP_RUNNING=""
 MIGRATOR_ONE_SHOT_PASSWORD=""
 MIGRATOR_LOGIN_NEEDS_SEAL="0"
@@ -160,7 +163,8 @@ assert_host_ports_available_before_migration() {
     return 127
   fi
   local port listeners container_ids container_id actual_project
-  for port in "$API_PORT" "$WEB_PORT" "$RUSTFS_PORT" "$RUSTFS_CONSOLE_PORT" "$DAGSTER_PORT"; do
+  for port in "$API_PORT" "$WEB_PORT" "$RUSTFS_PORT" "$RUSTFS_CONSOLE_PORT" \
+    "$DAGSTER_PORT" "$CADVISOR_PORT" "$PROMETHEUS_PORT" "$GRAFANA_PORT"; do
     listeners="$(ss -H -ltn "sport = :${port}" 2>/dev/null || true)"
     [[ -n "$listeners" ]] || continue
     if ! container_ids="$(docker ps --filter "publish=${port}" --format '{{.ID}}')"; then
@@ -1205,6 +1209,11 @@ migrate_under_lifecycle_lock() {
     restore_runtime_writers || log "runtime writer restoration failed"
     return 1
   fi
+  if ! assert_host_ports_available_before_migration; then
+    log "host-port preflight failed at the migration boundary"
+    restore_runtime_writers || log "runtime writer restoration failed"
+    return 1
+  fi
   local attempt
   for attempt in 1 2 3 4 5; do
     if [[ "$legacy_rebaseline" == "0" ]]; then
@@ -1214,6 +1223,13 @@ migrate_under_lifecycle_lock() {
       log "migrator preparation failed; sealing the one-shot login"
       seal_migrator_login "$legacy_rebaseline" || \
         log "migrator preparation failure could not be followed by a sealing run"
+      restore_runtime_writers || log "runtime writer restoration failed"
+      return 1
+    fi
+    if ! assert_host_ports_available_before_migration; then
+      log "host-port preflight failed immediately before migration"
+      seal_migrator_login "$legacy_rebaseline" || \
+        log "pre-migration port failure could not be followed by a sealing run"
       restore_runtime_writers || log "runtime writer restoration failed"
       return 1
     fi
@@ -1410,13 +1426,17 @@ up() {
 }
 
 down() {
-  require_direct_compose_mutation_environment
+  if ! require_direct_compose_mutation_environment; then
+    return 2
+  fi
   require_docker
   local environment_name
   if ! environment_name="$(configured_environment)"; then
     return 2
   fi
-  verify_existing_runtime_environment "$environment_name"
+  if ! verify_existing_runtime_environment "$environment_name"; then
+    return 1
+  fi
   if ! runtime_snapshot_preflight; then
     echo "down refused because a stale pre-deploy snapshot exists or could not be inspected" >&2
     return 1
@@ -1455,6 +1475,34 @@ configured_environment() {
   printf '%s\n' "$environment_name"
 }
 
+configured_database_url() {
+  local database_url=""
+  if [[ -n "${PINVI_DATABASE_URL+x}" ]]; then
+    database_url="$PINVI_DATABASE_URL"
+  elif [[ -f "$ENV_FILE" ]]; then
+    database_url="$(sed -nE \
+      's/^[[:space:]]*PINVI_DATABASE_URL[[:space:]]*=[[:space:]]*([^[:space:]#]+).*/\1/p' \
+      "$ENV_FILE" | tail -n 1)"
+    database_url="${database_url#\"}"
+    database_url="${database_url%\"}"
+    database_url="${database_url#\'}"
+    database_url="${database_url%\'}"
+  fi
+  printf '%s\n' "$database_url"
+}
+
+require_isolated_database_endpoint() {
+  local database_url
+  if ! database_url="$(configured_database_url)"; then
+    return 2
+  fi
+  if [[ -n "$database_url" \
+    && ! "$database_url" =~ ^postgresql\+asyncpg://[^@/]+@app-postgres:5432/pinvi$ ]]; then
+    echo "direct Compose mutation requires PINVI_DATABASE_URL to target the isolated app-postgres service" >&2
+    return 2
+  fi
+}
+
 require_canonical_direct_compose_target() {
   if [[ "$COMPOSE_FILE" != "infra/docker-compose.app.yml" ]]; then
     echo "direct Compose mutation requires the canonical application Compose file" >&2
@@ -1491,14 +1539,21 @@ require_direct_compose_mutation_environment() {
   if ! environment_name="$(configured_environment)"; then
     return 2
   fi
-  require_canonical_direct_compose_target
+  if ! require_canonical_direct_compose_target; then
+    return 2
+  fi
   case "$environment_name" in
     production|staging)
       echo "direct Compose mutation is disabled for ${environment_name}; use the approved manager or isolated staging procedure" >&2
       return 2
       ;;
     development|test|smoke)
-      require_isolated_direct_compose_project "$environment_name"
+      if ! require_isolated_direct_compose_project "$environment_name"; then
+        return 2
+      fi
+      if ! require_isolated_database_endpoint; then
+        return 2
+      fi
       ;;
     *)
       echo "direct Compose mutation requires an explicit development/test/smoke/staging environment" >&2
@@ -1601,12 +1656,16 @@ verify_reset_database_identity() {
     echo "reset PostgreSQL mount does not match the isolated volume" >&2
     return 2
   fi
-  verify_existing_runtime_environment "$environment_name"
+  if ! verify_existing_runtime_environment "$environment_name"; then
+    return 1
+  fi
 }
 
 reset() {
   RESET_NOOP="0"
-  require_direct_compose_mutation_environment
+  if ! require_direct_compose_mutation_environment; then
+    return 2
+  fi
   require_docker
   local environment_name
   if ! environment_name="$(configured_environment)"; then
@@ -1622,7 +1681,10 @@ reset() {
     echo "reset refused because a stale pre-deploy snapshot exists or could not be inspected" >&2
     return 1
   fi
-  verify_reset_database_identity "$environment_name"
+  if ! verify_reset_database_identity "$environment_name"; then
+    echo "reset refused because the isolated database identity could not be verified" >&2
+    return 1
+  fi
   [[ "$RESET_NOOP" == "1" ]] && return 0
   compose down -v --remove-orphans
 }
@@ -1648,7 +1710,9 @@ smoke() {
   require_docker
   cleanup_smoke() {
     if [[ "$SMOKE_KEEP_RUNNING" != "--keep-running" ]]; then
-      reset
+      if ! reset; then
+        return 1
+      fi
     fi
   }
   smoke_on_exit() {
@@ -1668,7 +1732,9 @@ smoke() {
   }
   trap 'smoke_on_exit "$?"' EXIT
 
-  reset
+  if ! reset; then
+    return 1
+  fi
   build
   up
 
@@ -1696,7 +1762,9 @@ main() {
 
   case "$command" in
     build|up|down|reset|migrate|smoke)
-      require_direct_compose_mutation_environment
+      if ! require_direct_compose_mutation_environment; then
+        exit 2
+      fi
       ;;
   esac
 

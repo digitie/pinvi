@@ -13,6 +13,9 @@ WEB_PORT="${PINVI_WEB_PORT:-12805}"
 RUSTFS_PORT="${PINVI_RUSTFS_PORT:-12101}"
 RUSTFS_CONSOLE_PORT="${PINVI_RUSTFS_CONSOLE_PORT:-12105}"
 DAGSTER_PORT="${PINVI_DAGSTER_DEV_PORT:-12802}"
+CADVISOR_PORT="${PINVI_CADVISOR_PORT:-12301}"
+PROMETHEUS_PORT="${PINVI_PROMETHEUS_PORT:-12401}"
+GRAFANA_PORT="${PINVI_GRAFANA_PORT:-12205}"
 # Dagster webserver(profile etl)를 같이 띄울지. 운영에서 pinvi-dagster.<domain>을 쓰면 1.
 ENABLE_DAGSTER="${PINVI_ENABLE_DAGSTER:-0}"
 MIGRATOR_ONE_SHOT_PASSWORD=""
@@ -150,7 +153,8 @@ require_node_mutation_environment() {
 assert_host_ports_available_before_migration() {
   require_command ss
   local port listeners container_ids container_id actual_project
-  for port in "$API_PORT" "$WEB_PORT" "$RUSTFS_PORT" "$RUSTFS_CONSOLE_PORT" "$DAGSTER_PORT"; do
+  for port in "$API_PORT" "$WEB_PORT" "$RUSTFS_PORT" "$RUSTFS_CONSOLE_PORT" \
+    "$DAGSTER_PORT" "$CADVISOR_PORT" "$PROMETHEUS_PORT" "$GRAFANA_PORT"; do
     listeners="$(ss -H -ltn "sport = :${port}" 2>/dev/null || true)"
     [[ -n "$listeners" ]] || continue
     if ! container_ids="$(docker ps --filter "publish=${port}" --format '{{.ID}}')"; then
@@ -1174,6 +1178,11 @@ migrate_under_lifecycle_lock() {
     restore_runtime_writers || log "runtime writer restoration failed"
     return 1
   fi
+  if ! assert_host_ports_available_before_migration; then
+    log "host-port preflight failed at the migration boundary"
+    restore_runtime_writers || log "runtime writer restoration failed"
+    return 1
+  fi
   if [[ "$legacy_rebaseline" == "0" ]]; then
     MIGRATOR_LOGIN_NEEDS_SEAL="1"
   fi
@@ -1181,6 +1190,13 @@ migrate_under_lifecycle_lock() {
     log "migrator preparation failed; sealing the one-shot login"
     seal_migrator_login "$legacy_rebaseline" || \
       log "migrator preparation failure could not be followed by a sealing run"
+    restore_runtime_writers || log "runtime writer restoration failed"
+    return 1
+  fi
+  if ! assert_host_ports_available_before_migration; then
+    log "host-port preflight failed immediately before migration"
+    seal_migrator_login "$legacy_rebaseline" || \
+      log "pre-migration port failure could not be followed by a sealing run"
     restore_runtime_writers || log "runtime writer restoration failed"
     return 1
   fi

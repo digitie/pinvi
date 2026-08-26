@@ -502,6 +502,13 @@ def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
     assert "smoke_on_exit()" in docker_app
     assert 'restore_runtime_writers_on_exit "$exit_code"' in docker_app
     assert "assert_host_ports_available_before_migration()" in docker_app
+    assert '"$CADVISOR_PORT"' in docker_app
+    assert '"$PROMETHEUS_PORT"' in docker_app
+    assert '"$GRAFANA_PORT"' in docker_app
+    assert "host-port preflight failed at the migration boundary" in docker_app
+    assert "host-port preflight failed immediately before migration" in docker_app
+    assert "require_isolated_database_endpoint" in docker_app
+    assert "isolated app-postgres service" in docker_app
     assert (
         "assert_host_ports_available_before_migration"
         in docker_app[docker_app.index("migrate() {") :]
@@ -513,6 +520,11 @@ def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
         in deploy_node[deploy_node.index("migrate() {") :]
     )
     assert 'RUSTFS_CONSOLE_PORT="${PINVI_RUSTFS_CONSOLE_PORT:-12105}"' in deploy_node
+    assert 'CADVISOR_PORT="${PINVI_CADVISOR_PORT:-12301}"' in deploy_node
+    assert 'PROMETHEUS_PORT="${PINVI_PROMETHEUS_PORT:-12401}"' in deploy_node
+    assert 'GRAFANA_PORT="${PINVI_GRAFANA_PORT:-12205}"' in deploy_node
+    assert "host-port preflight failed at the migration boundary" in deploy_node
+    assert "host-port preflight failed immediately before migration" in deploy_node
     assert (
         '"$RUSTFS_CONSOLE_PORT"'
         in deploy_node[deploy_node.index("assert_host_ports_available_before_migration()") :]
@@ -720,6 +732,20 @@ if [[ "${PINVI_TEST_STALE_SNAPSHOT:-0}" == "1" \
   esac
   exit 0
 fi
+if [[ "${PINVI_TEST_DB_IDENTITY_FAIL:-0}" == "1" \
+  && "$1 $2" == "container ls" && "$*" != *"service="* ]]; then
+  printf '%s\n' db-container
+  exit 0
+fi
+if [[ "${PINVI_TEST_DB_IDENTITY_FAIL:-0}" == "1" \
+  && "$1 $2" == "volume ls" ]]; then
+  printf '%s\n' app-postgres-volume
+  exit 0
+fi
+if [[ "${PINVI_TEST_DB_IDENTITY_FAIL:-0}" == "1" \
+  && "$1 $2" == "volume inspect" ]]; then
+  exit 1
+fi
 if [[ "$1 $2" == "container ls" || "$1 $2" == "volume ls" ]]; then
   exit 0
 fi
@@ -747,6 +773,31 @@ fi
         env=isolated,
     )
     assert reset.returncode == 0
+    assert not event_log.exists()
+
+    identity_reset = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
+        [str(ROOT / "scripts" / "docker-app.sh"), "reset"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=dict(isolated, PINVI_TEST_DB_IDENTITY_FAIL="1"),
+    )
+    assert identity_reset.returncode != 0
+    assert "database identity" in identity_reset.stderr
+    assert not event_log.exists()
+
+    external_db_reset = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
+        [str(ROOT / "scripts" / "docker-app.sh"), "reset"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=dict(
+            isolated,
+            PINVI_DATABASE_URL="postgresql+asyncpg://pinvi:secret@prod-db:5432/pinvi",
+        ),
+    )
+    assert external_db_reset.returncode != 0
+    assert "isolated app-postgres service" in external_db_reset.stderr
     assert not event_log.exists()
 
     stale_reset = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
