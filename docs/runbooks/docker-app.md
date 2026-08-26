@@ -1,7 +1,7 @@
 # Docker App Smoke Test Runbook
 
 App 컨테이너 (`docker-compose.app.yml`) smoke test — API + Web + PostgreSQL +
-RustFS. CI 통합 및 Odroid 배포 전 검증용. v1 `scripts/docker-app-smoke-test.sh`
+RustFS. CI와 N150 배포 전 검증용. v1 `scripts/docker-app-smoke-test.sh`
 이전.
 
 ## 0. Docker 빌드/실행 진입 경로 (ADR-040)
@@ -370,27 +370,7 @@ PINVI_GEOFENCE_BLOCK_UNKNOWN=false
   켠다. `PINVI_GEOFENCE_BLOCK_UNKNOWN=true`는 trusted signal 누락 요청도 451로 차단하므로,
   `docs/runbooks/korea-only.md`의 smoke를 통과하기 전 운영 기본값으로 두지 않는다.
 
-## 10. ARM64 빌드
-
-CI에서:
-
-```yaml
-- name: Set up QEMU
-  uses: docker/setup-qemu-action@v3
-- name: Set up Docker Buildx
-  uses: docker/setup-buildx-action@v3
-- name: Build & push
-  uses: docker/build-push-action@v5
-  with:
-    context: .
-    platforms: linux/amd64,linux/arm64
-    push: true
-    tags: ghcr.io/<owner>/pinvi-api:${{ github.sha }}
-```
-
-자세히는 [odroid-docker.md](./odroid-docker.md).
-
-## 11. 트러블슈팅
+## 10. 트러블슈팅
 
 | 증상                                  | 원인                 | 해결                                                            |
 | ------------------------------------- | -------------------- | --------------------------------------------------------------- |
@@ -400,9 +380,9 @@ CI에서:
 | `12805` / `12101` port already in use | 다른 프로젝트 컨테이너 또는 호스트 listener 점유 | 현재 프로젝트 컨테이너만 `PINVI_DEV_FORCE_KILL=1 scripts/docker-app.sh up`으로 제거할 수 있다. 다른 점유자는 자동 종료하지 않고 `ss -ltn`으로 확인 후 수동 정리한다. |
 | Admin login `pinvi_access` 발급 안 됨 | CORS / Secure cookie | `infra/docker-compose.app.yml`의 CORS 환경변수 확인             |
 
-## 12. 관련 문서
+## 11. 관련 문서
 
 - [local-dev.md](./local-dev.md) — 일상 개발
-- [odroid-docker.md](./odroid-docker.md) — 운영 배포
+- [deploy.md](./deploy.md) — N150 운영 배포
 - `docs/api/health.md` — `/health` endpoint
 - `docs/api/admin.md` — Admin 인증 흐름

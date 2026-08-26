@@ -148,9 +148,9 @@ HTTP 호출한다(ADR-025, `docs/integrations/kor-travel-geo.md`).
 3. `app.kasi_special_days`에 upsert
 4. 별도 삭제 없이 로그 + 메타데이터는 Dagster `ops` schema에 기록
 
-## 5. 운영 환경 (Odroid M1S)
+## 5. 운영 환경 (N150)
 
-- Ubuntu 24.04 + Docker Compose plugin
+- N150 16GB + Docker Compose plugin
 - 서비스 컨테이너:
   - PostgreSQL 16 + PostGIS 3.5 (단일 DB `pinvi`)
   - RustFS (S3 호환)
@@ -160,8 +160,8 @@ HTTP 호출한다(ADR-025, `docs/integrations/kor-travel-geo.md`).
 - Reverse proxy: Cloudflare Tunnel (또는 nginx)
 - 백업: PostgreSQL pg_dump + RustFS snapshot (별도 schedule)
 
-자세한 운영 절차는 `docs/runbooks/odroid-docker.md`와
-`docs/runbooks/deploy.md`를 따른다.
+자세한 운영 절차는 `docs/runbooks/deploy.md`를 따른다. Odroid 실행 경로는
+ADR-067에 따라 영구 퇴역했으며 배포·복구·UPS 제어 대상으로 사용하지 않는다.
 
 ## 6. 보안 / 권한
 

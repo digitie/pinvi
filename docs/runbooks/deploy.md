@@ -1,8 +1,8 @@
-# 운영 배포 Runbook — N150 + Odroid
+# 운영 배포 Runbook — N150
 
-ADR-023/ADR-039 기준 운영 배포 절차다. N150 16GB/NVMe 1TB가 기본 운영 노드이고,
-Odroid M1S는 ARM64 검증과 수동 대체 배포가 가능한 노드다. 노드 간 DB live sync는
-사용하지 않는다. 장애 대응은 백업/복구 후 수동 DNS/nginx upstream switch를 정본으로 둔다.
+ADR-067 기준 운영 배포 절차다. N150 16GB/NVMe 1TB가 유일한 실행·운영 노드다.
+배포·복구·live UI 검증은 N150의 manager 경로를 정본으로 둔다. 장애 대응은
+백업/복구 후 수동 DNS/nginx upstream switch를 N150 안에서 수행한다.
 
 > **이미지는 GHCR에 올리지 않는다.** Pinvi API/Web/Dagster 이미지는 운영 노드에서
 > `kor-travel-docker-manager`(`ktdctl`)가 `~/pinvi` 소스로 **로컬 빌드**한다
@@ -52,7 +52,7 @@ image ID를 pin한다. 기동 container가 그 image ID를 실제 사용한 경�
 불일치하면 같은 Compose project의 API/Web container를 제거한다.
 
 PinVi 저장소의 fallback 경로도 같은 검증을 포함하지만, manager를 사용할 수 없고 기존 운영
-runtime이 없는 별도 fresh stack에서만 사용한다. `scripts/deploy-node.sh deploy`는 image를 pull하지
+runtime이 없는 N150의 별도 fresh stack에서만 사용한다. `scripts/deploy-node.sh deploy`는 image를 pull하지
 않고 exact archive의 canonical Compose·Dockerfile·Python helper regular file만 허용하며
 symlink·외부 override와 기존 API/Web/Dagster runtime 재사용을 거부한다. API를 build하고 API
 label/image ID를 확인한 뒤 migration/up/smoke를 진행한다. 임시 archive는 전체 명령이 끝날 때
@@ -124,29 +124,7 @@ RustFS API(`s3-api`) `:12101`, RustFS 콘솔(`s3`) `:12105`.
 > 이 경로는 rehearsal/rebuildable 정책의 destructive rebuild이므로, 일반 운영 변경은 manager의
 > 별도 승인된 release 절차를 사용한다.
 
-## 3. Odroid 대체 노드 배포
-
-Odroid도 같은 방식으로 `~/pinvi` 소스에서 ARM64 로컬 빌드한다. 평상시 public traffic을 받지
-않는다. DB는 N150과 live sync하지 않는다. 대체 운영이 필요할 때는 최신 snapshot을 복구한 뒤
-manager의 pinned pair 명령으로 API/Web/Dagster를 올리고 public traffic을 전환한다.
-
-```bash
-ssh odroid
-cd ~/pinvi && git pull --ff-only origin main
-cd ~/kor-travel-docker-manager && sudo -n backend/.venv/bin/ktdctl pinvi-pair rebuild-pinned --confirm
-scripts/odroid-docker-doctor.sh   # arch aarch64 / OS 24.04 / env·local health
-```
-
-## 4. 수동 대체 운영
-
-1. N150 장애 확인: `/health`, Docker, 전원, 네트워크.
-2. `docs/runbooks/backup-restore.md` 절차로 Odroid Postgres에 최신 snapshot을 복구한다.
-3. RustFS 파일은 운영에서 선택한 mirror/backup 위치에서 복구한다.
-4. Odroid에서 승인된 manager release 절차로 API/Web/Dagster를 시작/재기동하고 local smoke(§2)를 확인한다.
-5. Cloudflare Tunnel 또는 nginx upstream을 Odroid로 전환한다.
-6. N150 복구 후에는 어느 DB가 정본인지 먼저 확정한다. 양쪽에서 동시에 write를 받지 않는다.
-
-## 5. Rollback
+## 3. Rollback
 
 이미지는 로컬 빌드이므로 이전 커밋으로 되돌려 재빌드한다.
 
@@ -161,19 +139,16 @@ cd ~/kor-travel-docker-manager && sudo -n backend/.venv/bin/ktdctl pinvi-pair re
 DB migration rollback은 자동으로 하지 않는다. schema 변경이 포함된 release는
 `docs/runbooks/backup-restore.md`의 snapshot/restore 절차를 우선한다.
 
-## 6. 운영 체크
+## 4. 운영 체크
 
 - `scripts/n150-docker-doctor.sh`가 arch `x86_64`, OS `26.04`, env/local health를 확인.
-- `scripts/odroid-docker-doctor.sh`가 arch `aarch64`, OS `24.04`, env/local health를 확인.
 - `PINVI_RATE_LIMIT_BACKEND=postgres` 또는 `auto + PINVI_ENVIRONMENT=production`.
 - API/Web/Dagster 이미지는 같은 clean `~/pinvi` 커밋에서 빌드한다. API는
   `org.opencontainers.image.revision` label까지 exact `HEAD`와 대조한다.
 - Cloudflare/reverse proxy가 origin 직접 접근을 막을 때만
   `PINVI_RATE_LIMIT_CLIENT_IP_HEADER=CF-Connecting-IP` 사용.
 
-## 7. 관련 문서
+## 5. 관련 문서
 
-- [odroid-docker.md](./odroid-docker.md)
 - [../../infra/n150/README.md](../../infra/n150/README.md)
-- [../../infra/odroid/README.md](../../infra/odroid/README.md)
 - [backup-restore.md](./backup-restore.md)

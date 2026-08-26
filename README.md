@@ -203,7 +203,7 @@ npm --workspace apps/web run lint && npm --workspace apps/web run typecheck
 **운영 Runbook**
 
 - 인덱스: [`docs/runbooks/README.md`](docs/runbooks/README.md)
-- [`local-dev`](docs/runbooks/local-dev.md) / [`docker-app`](docs/runbooks/docker-app.md) / [`etl`](docs/runbooks/etl.md) / [`admin`](docs/runbooks/admin.md) / [`file-storage`](docs/runbooks/file-storage.md) / [`odroid-docker`](docs/runbooks/odroid-docker.md)
+- [`local-dev`](docs/runbooks/local-dev.md) / [`docker-app`](docs/runbooks/docker-app.md) / [`etl`](docs/runbooks/etl.md) / [`admin`](docs/runbooks/admin.md) / [`file-storage`](docs/runbooks/file-storage.md) / [`deploy`](docs/runbooks/deploy.md)
 
 **컴플라이언스 / 법무**
 

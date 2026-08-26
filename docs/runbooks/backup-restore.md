@@ -291,7 +291,7 @@ target operation lease FD와 token을 `m05_restore_drill.py`가 명시적으로 
    - validating: row count + audit chain (10s)
    - draining: write drain + API/Web 연결 종료 (10~30s)
    - switching: schema rename + 권한 재부여 + API/Web 재시작 (30~90s)
-7. 완료 후 previous schema 보존 기한 안내 (N150 7일 / Odroid 24시간)
+7. 완료 후 previous schema 보존 기한 안내 (N150 7일)
 ```
 
 신규 DB instance 방식은 사용하지 않는다. 같은 Postgres database 안에서

@@ -2,6 +2,9 @@
 
 원본: `spec_v8_5_execution.docx` (A 결정 / P Sprint / C 추가 결정 대기).
 
+> ADR-067에 따라 아래의 Odroid 운영 결정을 superseded한다. 현재 실행·배포 대상은 N150
+> 하나이며, 이 문서의 Odroid 항목은 역사적 결정 기록이다.
+
 ## 1. 필수 결정 6건 (A-1, 모두 확정)
 
 | #   | 항목                                                         | 결정                                                                          | Pinvi v2 매핑                                                                       |
@@ -10,7 +13,7 @@
 | 2   | 참여자 동의 UI                                               | 프로필 입력 시 통합. 필수/선택 분리                                           | G-5 4 분리 동의 (`docs/spec/v8/02-backend.md` §4.2)                                 |
 | 3   | 소셜 로그인 매칭                                             | 이메일 인증 방식. verify 후만 활성/연결                                       | G-4 안전 매칭 (F-3)                                                                 |
 | 4   | ~~카카오맵 SDK~~ → **`vworld-map-web`** (ADR-015/046로 정정) | `vworld-map-web` (`maplibre-vworld-react`, VWorld + MapLibre GL JS) 직접 사용 | 좌표 lon-lat 일관 + 선언형 + 16색 마커 + Place/Price/Weather 마커 라이브러리에 내장 |
-| 5   | 운영 환경                                                    | Odroid M1S + Ubuntu 24.04 + Docker. 셀프호스팅                                | N-7 (`docs/spec/v8/00-infrastructure.md` §2.1)                                      |
+| 5   | 운영 환경                                                    | N150 + Ubuntu 26.04 + Docker. 셀프호스팅                                      | N-7 (`docs/spec/v8/00-infrastructure.md` §2.1)                                      |
 | 6   | 이메일 발송                                                  | Resend (React Email + SPF/DKIM/DMARC + webhook)                               | G-6 (`docs/spec/v8/02-backend.md` §4.3)                                             |
 
 ## 2. 권장 채택 (A-2)
@@ -127,7 +130,7 @@ DoD: 외부 정식 출시 가능 상태.
 | Git 리포지토리            | ✓ `pinvi`        | 본 저장소 + `kor-travel-map` 별 저장소                                      |
 | CI/CD 플랫폼              | ✓ GitHub Actions | Sprint 1에서 활성화                                                         |
 | Container Registry        | ❓ 대기          | GHCR 권장                                                                   |
-| Odroid NVMe 용량          | ❓ 대기          | 256GB 시작 권장                                                             |
+| N150 NVMe 용량            | ✓               | 운영 노드에 이미 반영됨                                                        |
 
 ### C-2 Sprint 2~4 사이
 

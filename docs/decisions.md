@@ -877,7 +877,7 @@ sync`가 file watcher 없이도 가능 → CI / 자동화에 친화적.
 
 ## ADR-023: 운영 하드웨어 확장 — Odroid M1S + N150 16GB 병행
 
-- **상태**: accepted (Postgres streaming replication / hot-standby 가정은 ADR-039가 supersede)
+- **상태**: superseded by ADR-067 (Postgres streaming replication / hot-standby 가정은 ADR-039가 supersede)
 - **날짜**: 2026-05-27
 - **결정자**: 사용자
 - **컨텍스트**: 원래 운영 환경은 Odroid M1S (ARM64, Ubuntu 24.04, ADR
@@ -3221,5 +3221,42 @@ Next 16 자체의 정적 타입체크·lint·webpack 빌드 산출물은 모두 
   재검증한 뒤 이 ADR을 superseded 표시한다.
 - `dev` 스크립트에서 동일 증상이 보고되면 같은 플래그를 추가한다.
 
-- 다음 신규 ADR = **ADR-067**
-- 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.
+## ADR-067: Odroid 실행 환경 영구 퇴역, N150 단일 운영
+
+- **상태**: accepted
+- **날짜**: 2026-08-26
+- **결정자**: 사용자 + Codex
+- **대체**: ADR-023의 Odroid 실행·대체 운영 범위
+
+### 컨텍스트
+
+Odroid M1S는 더 이상 Pinvi의 실행·배포·복구 환경으로 사용하지 않는다. N150이 유일한 운영
+노드이며, 운영 배포와 live UI 검증은 N150의 manager 경로와 N150 Playwright runner만을
+정본으로 삼는다. Odroid를 계속 실행 대상으로 남겨 두면 UPS shutdown hook, ARM64 fallback,
+대체 DB 복구 절차가 실제 운영 계약처럼 남아 정전·복구 시 잘못된 경로를 선택할 수 있다.
+
+### 결정
+
+- Odroid의 API/Web/Dagster 실행, DB 복구, public traffic 전환, UPS shutdown hook, doctor
+  실행을 Pinvi의 지원 범위에서 영구 제거한다.
+- `N150 + kor-travel-docker-manager`를 유일한 staging/production 실행·배포 경로로 사용한다.
+- `scripts/deploy-node.sh`의 격리 fallback은 N150에서만 허용한다. Odroid doctor와 Odroid
+  runbook은 실행 가능한 절차가 아니라 퇴역 안내로 남긴다.
+- `linux/arm64` 빌드·패키지 호환성 검증처럼 실행 노드를 전제하지 않는 역사적/CI 자료는
+  별도 필요가 있을 때까지 보존할 수 있지만, Odroid runtime을 생성하거나 전환하는 명령은
+  제공하지 않는다.
+
+### 결과
+
+- 운영 대상과 장애 전환 대상이 N150 하나로 고정되어 배포·복구·UPS 제어의 책임 경계가
+  분명해진다.
+- 기존 ADR-023, SPEC V8, Sprint 기록의 Odroid 언급은 역사 기록으로 남고, 현재 진입
+  문서·런북·스크립트는 이 ADR을 따른다.
+- Odroid 자산을 다시 실행 대상으로 되돌리려면 이 ADR을 superseded로 갱신하고 별도 운영
+  검증·복구·전원 정책을 새로 승인해야 한다.
+
+### 후속
+
+- 진입 문서와 N150 배포 런북에서 Odroid active path를 제거한다.
+- Odroid doctor는 fail-closed 퇴역 안내만 출력한다.
+- PR 검증은 N150 격리 배포와 N150 live UI gate로 완료한다.

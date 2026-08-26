@@ -37,7 +37,7 @@
 | Postgres schema (`kor-travel-map` 소유) | `feature`, `provider_sync`                                                                                     |
 | Dagster code location                   | `apps/etl`                                                                                                     |
 | Admin 콘솔                              | `apps/web/app/admin/`                                                                                          |
-| 운영 노드                               | N150 16GB + Odroid M1S 병행 (ADR-023, Docker Compose)                                                          |
+| 운영 노드                               | N150 16GB 단일 운영 (ADR-067, Docker Compose)                                                               |
 
 ### 개발 환경 (Linux / WSL / N150) — ADR-051
 
@@ -121,7 +121,7 @@ packages/                    ← 공유 TS 패키지 (필요 시)
 infra/
   docker-compose.yml         ← 개발용
   docker-compose.app.yml     ← 운영용
-  odroid/                    ← Odroid M1S 배포 manifest
+  n150/                      ← N150 운영 manifest
 
 docs/
   architecture.md

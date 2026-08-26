@@ -155,7 +155,7 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
   New Architecture + NativeWind. Expo Go는 사용하지 않고 Android `minSdkVersion`은
   24 이상이다(ADR-043, SDK 56 요구).
 - 인프라: PostgreSQL 16 + PostGIS 3.5 + pg_trgm + pgcrypto / RustFS (S3 호환)
-  / Docker Compose / N150 16GB + Odroid M1S 병행 운영 (ADR-023)
+  / Docker Compose / N150 16GB 단일 운영 (ADR-067)
 - 패키지 매니저: 백엔드 `uv`, 프론트 `npm`(workspaces)
 
 ## 5. 절대 금지 (가장 중요한 6개)
@@ -204,7 +204,7 @@ lint` + `npm run typecheck` (`apps/web`, Linux) + Playwright는 N150 우선/Wind
 | ETL asset                                       | `docs/runbooks/etl.md` + `docs/architecture/dagster-etl-bridge.md`                                                             |
 | 사용자 위치 사용                                | `docs/architecture/user-location.md` + `docs/compliance/lbs-act.md`                                                            |
 | Notice plan (추천 여행)                         | `docs/architecture/notice-plans.md` + `docs/api/notice-plans.md`                                                               |
-| 인프라 / 배포                                   | `docs/runbooks/{local-dev,docker-app,odroid-docker}.md` (Sprint 6에 N150 병행 — ADR-023)                                       |
+| 인프라 / 배포                                   | `docs/runbooks/{local-dev,docker-app,deploy}.md` (N150 단일 운영 — ADR-067)                                                    |
 | 릴리즈 마일스톤                                 | `docs/sprints/README.md` (v0.1.0 / v0.2.0 / v1.0.0 표)                                                                         |
 | MCP 외부 인터페이스                             | `docs/architecture/mcp-server.md` + `docs/runbooks/mcp-server.md` (ADR-019, Sprint 6)                                          |
 | 한국 전용 geofencing                            | `docs/architecture/korea-only-policy.md` + `docs/runbooks/korea-only.md` (ADR-018, Sprint 6)                                   |

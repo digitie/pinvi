@@ -72,6 +72,17 @@ git이 자동 병합했다. 병합 뒤 `apps/web` typecheck·lint(경고 4건, �
 막혀 있고 T-350도 끝났다. 남은 열린 T-3xx는 `T-351`(통합 테스트 스위트 CI job 샤딩 — 스코프가
 커서 별도 설계 필요)뿐이다. `T-VN-M05-ACTIVATION`(codex 선점) 또는 `T-353`(Expo 업스트림)이
 풀리면 그쪽을 우선 재개한다.
+## 2026-08-26 (codex) — PR487 운영 게이트 보완 및 Odroid 퇴역 결정
+
+PR #477의 후속 운영 게이트 PR #487을 최신 `origin/main`에 리베이스했다. exported Compose
+dotenv 값이 외부 DB URL/host port guard를 우회하지 않도록 parser를 보완했고, Web/Dagster
+runtime에도 `PINVI_ENVIRONMENT`를 주입해 `down/reset` identity 검증이 정상 동작하도록 했다.
+사용자 결정에 따라 ADR-067을 추가해 Odroid 실행·배포·복구·UPS 경로를 영구 퇴역시키고 N150
+단일 운영 문서·doctor·live gate로 정리했다.
+
+**다음 한 작업**: 변경을 커밋·push한 뒤 exact head에 대한 전문 적대 리뷰 2건, N150 격리
+fresh deploy/migration/smoke, authenticated Admin live UI를 재실행하고 CI green 후 PR #487을
+머지한다. PR #477 자체는 이미 머지 완료다.
 
 ## 2026-08-26 (claude) — T-349 시도, T-VN-M05-ACTIVATION 가드로 블록 확인
 

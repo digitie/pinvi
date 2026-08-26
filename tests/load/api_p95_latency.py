@@ -2,7 +2,7 @@
 """Small API p95 latency gate for T-270.
 
 The script intentionally uses only the Python standard library so it can run on
-N150, Odroid, or a CI shell without extra load-test dependencies.
+N150 or a CI shell without extra load-test dependencies.
 """
 
 from __future__ import annotations

@@ -98,7 +98,7 @@ event / notice / price / weather / route / area) 정규화·저장은 별 저장
 | 객체 저장소                             | RustFS (S3 호환) — `app` 도메인 첨부 + `feature` 미디어 분리 버킷 |
 | Dagster code location                   | `apps/etl`                                                        |
 | Admin 콘솔                              | `apps/web/app/admin/`                                             |
-| 운영 노드                               | N150 16GB + Odroid M1S 병행 (ADR-023, Docker Compose)             |
+| 운영 노드                               | N150 16GB 단일 운영 (ADR-067, Docker Compose)                     |
 
 ## 의존 라이브러리 (별 저장소)
 
@@ -287,7 +287,7 @@ git 포인터 복구는 `docs/runbooks/codegraph-worktrees.md`(ADR-017/051)가 1
 | Frontend UI                                                  | `docs/architecture/frontend.md` → `docs/design/marker-palette.md` → 루트 `DESIGN.md`                                         |
 | Admin 콘솔                                                   | `docs/api/admin.md` → `docs/runbooks/admin.md` → `docs/spec/v8/04-admin.md`                                                  |
 | ETL asset                                                    | `docs/runbooks/etl.md` → `docs/architecture/dagster-etl-bridge.md`                                                           |
-| 인프라 / 배포                                                | `docs/runbooks/{local-dev,docker-app,odroid-docker}.md`                                                                      |
+| 인프라 / 배포                                                | `docs/runbooks/{local-dev,docker-app,deploy}.md`                                                                             |
 | 개발 환경 셋업 / 검증 실행 (Linux git + CodeGraph)           | `docs/agent-workflow.md` (런북) → `docs/dev-environment.md` (ADR-051) → `docs/runbooks/codegraph-worktrees.md` (ADR-017/051) |
 | 환경/도구 실패가 의심될 때                                   | `docs/agent-failure-patterns.md` (git 포인터·PATH shim·런처·escape·통합테스트 함정)                                          |
 | 컴플라이언스 (PII/위치)                                      | `docs/compliance/{lbs-act,pipa}.md` → `docs/architecture/user-location.md`                                                   |

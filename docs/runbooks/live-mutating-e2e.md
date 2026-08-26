@@ -1,9 +1,9 @@
 # Live mutating E2E Runbook
 
-N150 또는 운영에 준하는 live 환경에서 실제 상태 변경을 수행하는 Playwright suite다. 기존
+N150 live 환경에서 실제 상태 변경을 수행하는 Playwright suite다. 기존
 mock e2e와 Admin read-only live matrix와 분리하며, 각 suite의 명시적 opt-in 환경변수가 없으면
-항상 skip한다. Playwright runner는 N150에서 먼저 실행하고, N150에서 실행할 수 없을 때만
-Windows runner를 fallback으로 사용한다.
+항상 skip한다. Playwright runner는 N150 Docker runner만 사용한다. N150에서 실행할 수 없으면
+gate를 중단하고 사유를 기록한다.
 
 ## 1. 범위
 

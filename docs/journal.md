@@ -97,6 +97,19 @@
   페이지 전부 생성, `/admin/retention` 포함) 전부 재검증 통과. push 후 CI 재실행 —
   `e2e` 2m58s, `lint-typecheck-build` 2m55s, `Aggregate CI gate` 3m9s 전부 green.
   `gh pr merge --squash`로 머지(`d8d9db07`).
+## 2026-08-26 (codex) — PR487 N150 단일 운영·Odroid 퇴역 및 runtime guard 보완
+
+- PR #487을 최신 `origin/main`에 리베이스한 뒤 exported Compose dotenv(`export KEY=value`)도
+  `PINVI_ENVIRONMENT`, port, database URL parser가 읽도록 보완했다.
+- Compose의 app-web/app-dagster에 `PINVI_ENVIRONMENT`를 명시해 `docker-app.sh down/reset`의
+  기존 runtime environment 검증이 실제 container env와 일치하도록 고정했다.
+- 사용자 결정(2026-08-26)에 따라 ADR-067을 추가했다. N150을 유일한 운영 실행 노드로 두고
+  Odroid의 runtime, fallback, DB/RustFS 복구, public traffic 전환, UPS hook, doctor 실행을
+  지원 범위에서 영구 제거했다. 활성 runbook·진입 문서·spec은 N150 기준으로 정리하고, 기존
+  ADR/Sprint/journal 기록은 역사 자료로 보존했다.
+- **검증 진행 중**: shell syntax, 변경 Python의 Ruff/format, diff check 통과. 다음은 전체
+  운영 unit/integration targeted suite, N150 fresh deploy, live Admin UI, exact-head 적대 리뷰
+  2건, CI green이다.
 
 ## 2026-08-26 (claude) — T-349 시도 → T-VN-M05-ACTIVATION 가드로 블록
 

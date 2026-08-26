@@ -310,15 +310,14 @@ uv run dagster dev --host 0.0.0.0 --port 12802   # http://localhost:12802
 | Docker 컨테이너 시작 안 됨                      | Docker Desktop 종료               | Docker Desktop 시작 + WSL2 backend 확인                                                     |
 | PostgreSQL 연결 실패                            | host 포트 충돌 (5432)             | `5432`로 host 포트 변경                                                                     |
 | `next dev` 느림                                 | NTFS 파일 watch 비용              | 필요하면 ext4 Linux worktree를 source-of-truth로 새로 만들고 그곳에서 실행                  |
-| Playwright가 N150 host에서 브라우저 의존성 오류 | host Chromium shared library 누락 | `scripts/n150-playwright-runner.sh` Docker runner 사용, 그래도 불가할 때만 Windows fallback |
+| Playwright가 N150 host에서 브라우저 의존성 오류 | host Chromium shared library 누락 | `scripts/n150-playwright-runner.sh` Docker runner 사용 후 gate 중단 |
 | Alembic `relation does not exist`               | 다른 DB에 마이그레이션 적용됨     | `PINVI_DATABASE_URL` 확인                                                                   |
-| `exec format error` (Odroid)                    | ARM64 이미지 아님                 | `docker buildx build --platform linux/arm64`                                                |
 
 ## 12. 관련 문서
 
 - [docker-app.md](./docker-app.md) — Docker smoke test
 - [etl.md](./etl.md) — Dagster 운영
-- [odroid-docker.md](./odroid-docker.md) — 운영 배포
+- [deploy.md](./deploy.md) — N150 운영 배포
 - `docs/agent-workflow.md` — agent별 작업 순서
 - `docs/dev-environment.md` — 큰 그림
 - `docs/decisions.md` ADR-051 (Linux 개발·git·CodeGraph + N150 우선 Playwright)

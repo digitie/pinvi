@@ -1,6 +1,6 @@
 # 운영 Runbook
 
-Pinvi 로컬 개발 / Docker / ETL / Admin / Odroid 배포 / 백업 / 파일 저장소 운영
+Pinvi 로컬 개발 / Docker / ETL / Admin / N150 배포 / 백업 / 파일 저장소 운영
 가이드. AI agent + 운영자 모두 이용.
 
 ## 1. 인덱스
@@ -15,9 +15,9 @@ Pinvi 로컬 개발 / Docker / ETL / Admin / Odroid 배포 / 백업 / 파일 저
 | [admin-live-e2e.md](./admin-live-e2e.md)                       | N150/live Admin UI e2e 매트릭스 실행                             | 4~6      |
 | [live-mutating-e2e.md](./live-mutating-e2e.md)                 | N150/live 상태 변경 e2e 실행                                     | 5~6      |
 | [file-storage.md](./file-storage.md)                           | RustFS 운영 + kor-travel-map 공유                                | 2        |
-| [odroid-docker.md](./odroid-docker.md)                         | Odroid M1S 배포 + ARM64 빌드                                     | 6        |
+| [odroid-docker.md](./odroid-docker.md)                         | Odroid 실행 경로 퇴역 안내                                       | 6        |
 | [backup-restore.md](./backup-restore.md)                       | Backup/Restore 핫스왑 (ADR-022) — pg_dump + 신규 schema cut-over | 5~6      |
-| [deploy.md](./deploy.md)                                       | 배포 절차 + rollback (Odroid + N150, ADR-023)                    | 6        |
+| [deploy.md](./deploy.md)                                       | N150 배포 절차 + rollback (ADR-067)                              | 6        |
 | [observability.md](./observability.md)                         | Prometheus + cAdvisor + Grafana 운영                             | 5        |
 | [performance-security-gate.md](./performance-security-gate.md) | 성능 / 부하 / 보안 smoke gate                                    | 6        |
 | [security-incidents.md](./security-incidents.md)               | 인시던트 대응 + PIPA 통지                                        | 6        |

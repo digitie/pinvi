@@ -39,7 +39,7 @@ production에서는 `PINVI_RATE_LIMIT_BACKEND=postgres`와 동일한 lifecycle l
 
 ## Postgres
 
-Postgres는 이 노드의 운영 DB로 실행한다. Odroid와 DB live sync는 구성하지 않는다.
+Postgres는 이 노드의 유일한 운영 DB로 실행한다.
 장애 대응은 `docs/runbooks/backup-restore.md`의 snapshot/restore 절차를 따른다.
 
 ## 검증

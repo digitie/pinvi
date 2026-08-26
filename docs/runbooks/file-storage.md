@@ -8,7 +8,7 @@ RustFS (S3 호환) 운영 — 컨테이너 / bucket / presigned URL / `kor-trave
 - MinIO 커뮤니티 변경 사실상 중단 → 장기 유지보수 우려
 - Rust 기반 성능 (4KB 페이로드 MinIO 대비 2.3배)
 - Apache 2.0 라이선스 (상용 친화) — MinIO AGPL 대비
-- ARM64 공식 이미지 (Odroid 직접 지원)
+- 공식 이미지와 단일 노드 운영 지원
 - S3 API 100% 호환 — 향후 MinIO / Ceph / AWS S3 / Cloudflare R2 swap 자유
 - 단일 노드 production 가능
 

@@ -1,8 +1,7 @@
 # 성능 / 부하 / 보안 Gate
 
 T-270의 반복 실행용 gate다. 로컬 Linux worktree에서 스크립트를 검증하고, v1.0 live gate의
-실제 운영 수치는 N150 기준으로 기록한다. T-271 제거 기준에 따라 Odroid 결과는 추가 참고
-자료일 수 있지만 v1.0 blocker로 요구하지 않는다.
+실제 운영 수치는 N150 기준으로 기록한다. N150이 유일한 운영 실행 대상이다.
 
 ## 1. 대상
 
@@ -51,7 +50,6 @@ python tests/security/csp_cors_rate_limit.py \
 ## 4. 기록 기준
 
 - N150 결과를 v1.0 gate의 기준 결과로 기록한다.
-- Odroid 결과를 추가로 실행한 경우 N150 결과와 같은 표에 섞지 않고 참고 결과로 분리한다.
 - JSON 출력 전체를 PR에 붙이지 않는다. `p95_ms`, `error_rate`, `passed`, 실행 host, 실행 시각만 기록한다.
 - 실패하면 threshold를 완화하지 않고 원인을 분류한다: app regression, DB/infra saturation, 네트워크,
   측정 환경 문제.

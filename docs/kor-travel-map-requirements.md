@@ -55,7 +55,7 @@ openapi.user.json, 포트 12701, `/pinvi/features/batch` 등)은 kor-travel-map 
 
 - kor-travel-map 추가 작업: **HTTP 서버 불필요.** §2의 누락 client 메서드만 구현.
 - Pinvi 추가 작업: ADR-026 철회, `kor-travel-map` 의존성 추가, DI(`AsyncKorTravelMapClient`) 구성, `feature` schema에 접근할 engine/DSN 주입.
-- 장점: 단일 노드(Odroid/N150)에서 네트워크 hop 0, 직렬화 비용 0, kor-travel-map 9개월 설계와 일치.
+- 장점: 단일 노드(N150)에서 네트워크 hop 0, 직렬화 비용 0, kor-travel-map 9개월 설계와 일치.
 - 단점: Pinvi가 kor-travel-map의 Postgres(`feature`/`provider_sync` schema)에 직접 연결해야 함 → 배포/스키마 결합도 ↑.
 
 ### 1-B. 운영급 HTTP 서비스(현 Pinvi ADR-026 유지)

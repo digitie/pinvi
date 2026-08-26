@@ -77,7 +77,7 @@ scripts/restore-db.sh backup-20260601.dump
 
 ## 5. Restore — 핫스왑 (Sprint 6 T-111, T-145 확정)
 
-T-145 결정: **신규 DB instance 방식은 폐기**한다. Odroid M1S와 N150 단일 노드 운영에서
+T-145 결정: **신규 DB instance 방식은 폐기**한다. N150 단일 노드 운영에서
 별도 Postgres instance/container를 띄우면 RAM과 디스크 예산이 과하다. 핫스왑은 같은
 Postgres database 안에서 임시 restore schema를 만들고, cut-over 순간에 schema 이름을
 바꾸는 **동일호스트 schema-swap**으로 구현한다.
@@ -118,7 +118,6 @@ Postgres database 안에서 임시 restore schema를 만들고, cut-over 순간�
    ↓
 6. previous schema 보존 후 DROP
    - N150/staging 기본 7일
-   - Odroid M1S 기본 24시간 (디스크 여유 부족 시 즉시 drop 가능)
    - 보존 중에는 forensic/debug read-only만 허용
    - 이 보존본은 자동 rollback 또는 이전 Alembic revision 복귀에 쓰지 않는다. 삭제는 별도
      운영 승인과 forensic 보존 정책에 따른 정리 작업이다.
@@ -142,7 +141,7 @@ restore 준비 시간을 사용자 트래픽과 병렬로 처리하고, 쓰기 �
   - 각 단계 estimate + 실시간 로그 표시 (WebSocket 또는 SSE)
   - 실패 시 forensic operation UUID·단계·명시적 root escalation 상태를 표시한다. UI/API는
     schema rename-back, candidate 삭제, 권한/CONNECT 복구를 자동으로 요청하지 않는다.
-  - 완료 후 previous schema 보존 기한 표시 (N150 7일 / Odroid 24시간)
+  - 완료 후 previous schema 보존 기한 표시 (N150 7일)
 
 ### 5.3 audit chain 안전성
 

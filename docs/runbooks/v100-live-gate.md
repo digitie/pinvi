@@ -16,9 +16,8 @@ phase를 한 곳에 묶는 얇은 wrapper다. 각 phase의 위험도와 opt-in g
 - API p95/error-rate 성능 smoke
 - CSP/CORS/security header smoke
 
-T-271 제거 기준에 따라 Odroid 병행 운영 smoke는 v1.0 blocker가 아니다. v1.0 live gate의 운영
-기준은 N150이며, Playwright는 N150 Docker runner를 먼저 사용한다. N150 Docker runner와 host browser가
-모두 불가능할 때만 Windows fallback을 사용하고 사유와 명령을 `docs/journal.md`와 PR에 남긴다.
+v1.0 live gate의 운영 기준은 N150 단일 노드이며, Playwright는 N150 Docker runner를 사용한다.
+N150 runner가 준비되지 않으면 gate를 중단하고 사유와 명령을 `docs/journal.md`와 PR에 남긴다.
 
 ## 2. Guard
 
