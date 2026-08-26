@@ -231,8 +231,17 @@ def test_fresh_continuation_is_bound_to_the_canonical_compose_and_database_proof
     assert "rustfs_volume_fingerprint" in source
     assert "compose_network_id" in source
     assert "compose_config()" in source
+    assert "dagster_profile_enabled" in source
     assert "migration_receipt_sha256" in source
     assert "capture_fresh_stack_migration_proof" in source
+
+
+def test_standalone_dagster_reseals_the_fresh_stack_runtime_proof() -> None:
+    source = (ROOT / "scripts" / "deploy-node.sh").read_text(encoding="utf-8")
+    dagster = _function_body(source, "dagster_up")
+    assert dagster.index("dagster_up_under_lifecycle_lock") < dagster.index(
+        "write_fresh_stack_state"
+    )
 
 
 def test_observability_container_names_are_project_scoped() -> None:

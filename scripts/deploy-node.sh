@@ -189,9 +189,14 @@ compose() {
 }
 
 compose_config() {
-  if [[ "$ENABLE_DAGSTER" != "0" ]]; then
+  if dagster_profile_enabled; then
     compose --profile etl config "$@"
   else
+    local dagster_profile_status=$?
+    if [[ "$dagster_profile_status" == "2" ]]; then
+      echo "could not determine whether the fresh stack Dagster profile is active" >&2
+      return 1
+    fi
     compose config "$@"
   fi
 }
@@ -466,10 +471,12 @@ fresh_stack_runtime_image_proof() {
   pinvi_verify_runtime_image_provenance app-api app-web
   FRESH_STACK_API_IMAGE_ID="$(pinvi_attested_runtime_image_id app-api)"
   FRESH_STACK_WEB_IMAGE_ID="$(pinvi_attested_runtime_image_id app-web)"
-  if [[ "$ENABLE_DAGSTER" != "0" ]]; then
+  if dagster_profile_enabled; then
     pinvi_verify_runtime_image_provenance app-dagster
     FRESH_STACK_DAGSTER_IMAGE_ID="$(pinvi_attested_runtime_image_id app-dagster)"
   else
+    local dagster_profile_status=$?
+    [[ "$dagster_profile_status" != "2" ]] || return 1
     FRESH_STACK_DAGSTER_IMAGE_ID="none"
   fi
   [[ "$FRESH_STACK_API_IMAGE_ID" =~ ^sha256:[0-9a-f]{64}$ \
@@ -1103,9 +1110,14 @@ build_images() {
 runtime_dagster_is_running() {
   local -a container_ids=()
   if ! pinvi_runtime_container_ids_into_array container_ids app-dagster running; then
-    return 1
+    return 2
   fi
   (( ${#container_ids[@]} > 0 ))
+}
+
+dagster_profile_enabled() {
+  [[ "$ENABLE_DAGSTER" != "0" ]] && return 0
+  runtime_dagster_is_running
 }
 
 dagster_rollout_enabled() {
@@ -2303,6 +2315,10 @@ dagster_up() {
   prepare_standalone_dagster_writer
   RUNTIME_NEW_WRITERS_STARTED="1"
   dagster_up_under_lifecycle_lock
+  if ! write_fresh_stack_state; then
+    log "Dagster started but the fresh stack state could not be resealed"
+    return 1
+  fi
   finalize_preserved_runtime_writers
   release_migrator_lifecycle_lock
 }
