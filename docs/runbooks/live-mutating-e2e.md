@@ -80,7 +80,8 @@ gitignore된 `docs/deploy-runbook.local.md` 또는 로컬 env 파일에만 둔�
 ## 3. 실행
 
 아래 명령을 실행하기 전에 이미 검증한 release candidate의 full SHA를 외부 입력으로 지정하고,
-runner가 사용할 Playwright image를 고정한다. image는 tag가 아닌 공식 digest를 사용한다.
+runner가 사용할 Playwright image를 고정한다. image는 공식 registry의 immutable digest를 포함해야
+하며, tag는 선택 사항이다.
 
 ```bash
 cd ~/pinvi
@@ -233,18 +234,55 @@ M04 승인, Map `rebind` 결정, PinVi worker receipt/ACK가 모두 같은 격�
 
 ```bash
 cd ~/pinvi
-PINVI_M05_LIVE_E2E=1 \
-PINVI_LIVE_WEB_URL=http://127.0.0.1:13805 \
-PINVI_M05_LIVE_EVENT_ID="$PINVI_M05_LIVE_EVENT_ID" \
-PINVI_M05_LIVE_OLD_FEATURE_ID="$PINVI_M05_LIVE_OLD_FEATURE_ID" \
-PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID="$PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID" \
-PINVI_M05_LIVE_IMPACT_COUNT="$PINVI_M05_LIVE_IMPACT_COUNT" \
-PINVI_M05_LIVE_EMAIL="$PINVI_M05_LIVE_EMAIL" \
-PINVI_M05_LIVE_PASSWORD="$PINVI_M05_LIVE_PASSWORD" \
-scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- admin-feature-reference-reconciliations-live-mutating.live.ts --workers=1
+: "${PINVI_M05_UI_EVIDENCE_DIR:?set a new empty root-owned evidence directory}"
+: "${PINVI_M04_UI_EVIDENCE_DIR:?set the matching signed M04 evidence directory}"
+: "${PINVI_M05_PRIVATE_KEY:?set the root-owned M05 signing key path}"
+: "${PINVI_M05_MAP_ADMIN_URL:?set the isolated Map admin loopback URL}"
+: "${PINVI_M05_MAP_CASE_ID:?set the isolated Map M05 case UUID}"
+: "${PINVI_M05_MAP_ADMIN_CONTAINER:?set the isolated Map admin container name}"
+: "${PINVI_M05_MAP_API_CONTAINER:?set the isolated Map API container name}"
+: "${PINVI_M05_MAP_FRONTEND_CONTAINER:?set the isolated Map frontend container name}"
+: "${PINVI_M05_MAP_SOURCE_ROOT:?set the clean pinned Map source checkout}"
+: "${PINVI_M05_PINVI_API_CONTAINER:?set the isolated Pinvi API container name}"
+: "${PINVI_M05_PINVI_WEB_CONTAINER:?set the isolated Pinvi Web container name}"
+: "${PINVI_M05_PINVI_DAGSTER_CONTAINER:?set the isolated Pinvi Dagster container name}"
+: "${PINVI_M05_LIVE_EVENT_ID:?set the applied M05 event UUID}"
+: "${PINVI_M05_LIVE_OLD_FEATURE_ID:?set the old Feature UUID from the fixture}"
+: "${PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID:?set the replacement Feature UUID from the fixture}"
+: "${PINVI_M05_LIVE_IMPACT_COUNT:?set the expected impact row count}"
+: "${PINVI_M05_LIVE_EMAIL:?set the isolated admin email}"
+: "${PINVI_M05_LIVE_PASSWORD:?set the isolated admin password}"
+export PINVI_M05_LIVE_E2E=1
+export PINVI_LIVE_WEB_URL=http://127.0.0.1:13805
+export PINVI_LIVE_API_URL=http://127.0.0.1:13801
+export M05_PINVI_EMAIL="$PINVI_M05_LIVE_EMAIL"
+export M05_PINVI_PASSWORD="$PINVI_M05_LIVE_PASSWORD"
+python scripts/m05_activation_attestation.py live \
+  --evidence-dir "$PINVI_M05_UI_EVIDENCE_DIR" \
+  --private-key "$PINVI_M05_PRIVATE_KEY" \
+  --map-admin-url "$PINVI_M05_MAP_ADMIN_URL" \
+  --map-case-id "$PINVI_M05_MAP_CASE_ID" \
+  --map-admin-container "$PINVI_M05_MAP_ADMIN_CONTAINER" \
+  --map-api-container "$PINVI_M05_MAP_API_CONTAINER" \
+  --map-frontend-container "$PINVI_M05_MAP_FRONTEND_CONTAINER" \
+  --map-source-root "$PINVI_M05_MAP_SOURCE_ROOT" \
+  --m04-evidence-dir "$PINVI_M04_UI_EVIDENCE_DIR" \
+  --pinvi-api-url http://127.0.0.1:13801 \
+  --pinvi-api-container "$PINVI_M05_PINVI_API_CONTAINER" \
+  --pinvi-web-url http://127.0.0.1:13805 \
+  --pinvi-web-container "$PINVI_M05_PINVI_WEB_CONTAINER" \
+  --pinvi-dagster-container "$PINVI_M05_PINVI_DAGSTER_CONTAINER" \
+  --event-id "$PINVI_M05_LIVE_EVENT_ID" \
+  --pinvi-source-revision "$PINVI_LIVE_EXPECTED_REVISION" \
+  --scope staging \
+  --playwright-runner-image "$PINVI_PLAYWRIGHT_RUNNER_IMAGE" \
+  --require-root-owned \
+  -- scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- apps/web/e2e/admin-feature-reference-reconciliations-live-mutating.live.ts --workers=1
 ```
 
-M05 event가 목록 첫 페이지에 없거나 terminal receipt가 없으면 fixture/worker/ACK 상태를 먼저 확인한다.
+`m05_activation_attestation.py live`가 M05 UI verification ID와 실제 runner image ID/ref를 생성해
+child suite에 전달하므로 이 두 값을 수동으로 지정하지 않는다. M05 event가 목록 첫 페이지에 없거나
+terminal receipt가 없으면 fixture/worker/ACK 상태를 먼저 확인한다.
 activation gate에서는 단독 UI pass가 아니라, 앞 절의 서명된 M04 증적과 `live`의 Map 결정·ACK
 server-side 대조까지 모두 성공해야 한다.
 

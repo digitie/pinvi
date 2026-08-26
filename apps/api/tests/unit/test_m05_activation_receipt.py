@@ -90,6 +90,15 @@ def _receipt_script_module() -> object:
     return module
 
 
+def test_receipt_accepts_digest_only_or_tagged_playwright_image_reference() -> None:
+    module = _receipt_script_module()
+    for image_ref in (
+        "mcr.microsoft.com/playwright@sha256:" + "2" * 64,
+        "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:" + "2" * 64,
+    ):
+        assert module._PLAYWRIGHT_IMAGE_RE.fullmatch(image_ref) is not None
+
+
 def test_receipt_ledger_parser_accepts_dash_prefixed_urlsafe_public_key() -> None:
     module = _receipt_script_module()
     public_key = base64.urlsafe_b64encode(bytes([0xF8]) + bytes(31)).decode("ascii").rstrip("=")

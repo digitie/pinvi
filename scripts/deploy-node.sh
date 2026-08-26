@@ -11,6 +11,7 @@ PROJECT="${PINVI_DOCKER_PROJECT:-pinvi-app}"
 API_PORT="${PINVI_API_PORT:-12801}"
 WEB_PORT="${PINVI_WEB_PORT:-12805}"
 RUSTFS_PORT="${PINVI_RUSTFS_PORT:-12101}"
+RUSTFS_CONSOLE_PORT="${PINVI_RUSTFS_CONSOLE_PORT:-12105}"
 DAGSTER_PORT="${PINVI_DAGSTER_DEV_PORT:-12802}"
 # Dagster webserver(profile etl)를 같이 띄울지. 운영에서 pinvi-dagster.<domain>을 쓰면 1.
 ENABLE_DAGSTER="${PINVI_ENABLE_DAGSTER:-0}"
@@ -149,7 +150,7 @@ require_node_mutation_environment() {
 assert_host_ports_available_before_migration() {
   require_command ss
   local port listeners container_ids container_id actual_project
-  for port in "$API_PORT" "$WEB_PORT" "$RUSTFS_PORT" "$DAGSTER_PORT"; do
+  for port in "$API_PORT" "$WEB_PORT" "$RUSTFS_PORT" "$RUSTFS_CONSOLE_PORT" "$DAGSTER_PORT"; do
     listeners="$(ss -H -ltn "sport = :${port}" 2>/dev/null || true)"
     [[ -n "$listeners" ]] || continue
     if ! container_ids="$(docker ps --filter "publish=${port}" --format '{{.ID}}')"; then
@@ -1134,6 +1135,10 @@ reject_explicit_migrator_database_url() {
 }
 
 migrate_under_lifecycle_lock() {
+  if ! assert_host_ports_available_before_migration; then
+    log "host-port preflight failed before migration"
+    return 1
+  fi
   pinvi_verify_runtime_image_provenance app-api
   if [[ "$RUNTIME_WRITERS_DRAINED" != "1" ]] && ! runtime_snapshot_preflight; then
     log "stale pre-deploy snapshot preflight failed before migration"

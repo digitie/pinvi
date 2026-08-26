@@ -512,6 +512,15 @@ def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
         "assert_host_ports_available_before_migration"
         in deploy_node[deploy_node.index("migrate() {") :]
     )
+    assert 'RUSTFS_CONSOLE_PORT="${PINVI_RUSTFS_CONSOLE_PORT:-12105}"' in deploy_node
+    assert (
+        '"$RUSTFS_CONSOLE_PORT"'
+        in deploy_node[deploy_node.index("assert_host_ports_available_before_migration()") :]
+    )
+    for cleanup in ("down() {", "reset() {"):
+        cleanup_start = docker_app.index(cleanup)
+        cleanup_end = docker_app.find("\n}\n", cleanup_start) + 3
+        assert "runtime_snapshot_preflight" in docker_app[cleanup_start:cleanup_end]
 
 
 def test_discovery_failure_stops_managed_writers_and_removes_only_recorded_ids(
@@ -702,6 +711,15 @@ set -euo pipefail
 if [[ "$1 $2" == "compose version" ]]; then
   exit 0
 fi
+if [[ "${PINVI_TEST_STALE_SNAPSHOT:-0}" == "1" \
+  && "$*" == *Names* ]]; then
+  case "$*" in
+    *"service=app-api"*) printf '%s\n' 'stale-api app-api.pinvi-predeploy' ;;
+    *"service=app-web"*) printf '%s\n' 'stale-web app-web.pinvi-predeploy' ;;
+    *"service=app-dagster"*) printf '%s\n' 'stale-dagster app-dagster.pinvi-predeploy' ;;
+  esac
+  exit 0
+fi
 if [[ "$1 $2" == "container ls" || "$1 $2" == "volume ls" ]]; then
   exit 0
 fi
@@ -731,6 +749,17 @@ fi
     assert reset.returncode == 0
     assert not event_log.exists()
 
+    stale_reset = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
+        [str(ROOT / "scripts" / "docker-app.sh"), "reset"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=dict(isolated, PINVI_TEST_STALE_SNAPSHOT="1"),
+    )
+    assert stale_reset.returncode != 0
+    assert "stale pre-deploy snapshot" in stale_reset.stderr
+    assert not event_log.exists()
+
     arbitrary = dict(base_env, PINVI_DOCKER_PROJECT="pinvi-app-prod")
     down = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
         [str(ROOT / "scripts" / "docker-app.sh"), "down"],
@@ -740,6 +769,17 @@ fi
         env=arbitrary,
     )
     assert down.returncode != 0
+    assert not event_log.exists()
+
+    stale_down = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
+        [str(ROOT / "scripts" / "docker-app.sh"), "down"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=dict(isolated, PINVI_TEST_STALE_SNAPSHOT="1"),
+    )
+    assert stale_down.returncode != 0
+    assert "stale pre-deploy snapshot" in stale_down.stderr
     assert not event_log.exists()
 
 

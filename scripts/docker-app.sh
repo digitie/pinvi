@@ -1172,6 +1172,10 @@ reject_explicit_migrator_database_url() {
 migrate_under_lifecycle_lock() {
   require_docker
   require_python
+  if ! assert_host_ports_available_before_migration; then
+    log "host-port preflight failed before migration"
+    return 1
+  fi
   pinvi_verify_runtime_image_provenance app-api
   if [[ "$RUNTIME_WRITERS_DRAINED" != "1" ]] && ! runtime_snapshot_preflight; then
     log "stale pre-deploy snapshot preflight failed before migration"
@@ -1413,6 +1417,10 @@ down() {
     return 2
   fi
   verify_existing_runtime_environment "$environment_name"
+  if ! runtime_snapshot_preflight; then
+    echo "down refused because a stale pre-deploy snapshot exists or could not be inspected" >&2
+    return 1
+  fi
   compose down --remove-orphans
 }
 
@@ -1610,6 +1618,10 @@ reset() {
       return 2
       ;;
   esac
+  if ! runtime_snapshot_preflight; then
+    echo "reset refused because a stale pre-deploy snapshot exists or could not be inspected" >&2
+    return 1
+  fi
   verify_reset_database_identity "$environment_name"
   [[ "$RESET_NOOP" == "1" ]] && return 0
   compose down -v --remove-orphans

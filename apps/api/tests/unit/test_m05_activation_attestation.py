@@ -198,6 +198,15 @@ def test_m05_map_checkout_allowlist_uses_only_source_revisions() -> None:
     assert pair["full"]["source_revision"] in allowed
 
 
+def test_playwright_image_reference_accepts_digest_only_or_tagged_digest() -> None:
+    module = _attestation_module()
+    for image_ref in (
+        "mcr.microsoft.com/playwright@sha256:" + "2" * 64,
+        "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:" + "2" * 64,
+    ):
+        assert module._PLAYWRIGHT_IMAGE_RE.fullmatch(image_ref) is not None
+
+
 def test_m05_map_case_binds_missing_event_hash_to_ack(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _attestation_module()
     monkeypatch.setenv("M05_MAP_ADMIN_PROXY_SECRET", "s" * 32)
