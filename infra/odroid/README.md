@@ -13,15 +13,27 @@ Odroid M1S는 ARM64 검증과 수동 대체 배포가 가능한 노드다(ADR-02
 
 ```bash
 ssh odroid
-cd /opt/pinvi
-git pull origin main
+cd ~/pinvi
+git pull --ff-only origin main
+cd ~/kor-travel-docker-manager
+sudo -n backend/.venv/bin/ktdctl pinvi-pair rebuild-pinned --confirm
+cd ~/pinvi
 scripts/odroid-docker-doctor.sh
 ```
 
-API/Web을 켤 때:
+manager를 사용할 수 없는 경우에만 기존 API/Web/Dagster runtime이 없는 별도 fresh project에서
+fallback wrapper를 사용한다. 이때는 `PINVI_ENVIRONMENT=staging`, `PINVI_ENV_FILE`과
+owner-only `PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE`을 명시하고 raw Compose를 실행하지 않는다.
+기존 runtime이 발견되면 wrapper가 fail-closed로 중단한다.
+
+fallback API/Web smoke:
 
 ```bash
-scripts/deploy-node.sh up
+export PINVI_DOCKER_PROJECT=pinvi-app-odroid-fresh
+export PINVI_ENVIRONMENT=staging
+export PINVI_ENV_FILE=/secure/pinvi/odroid-staging.env
+export PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/secure/pinvi/bootstrap-admin.json
+scripts/deploy-node.sh deploy
 scripts/deploy-node.sh smoke
 ```
 

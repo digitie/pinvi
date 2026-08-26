@@ -36,69 +36,12 @@ sudo mkdir -p /mnt/nvme/{pgdata,rustfs,dagster,backups,loki,grafana}
 sudo chown -R pinvi:pinvi /mnt/nvme
 ```
 
-## 2. ARM64 multi-arch 이미지
+## 2. ARM64 이미지
 
-현재 정본 workflow는 `.github/workflows/docker-images.yml`이다. tag `v*` push 또는
-수동 실행으로 API/Web image를 `linux/amd64,linux/arm64` manifest로 GHCR에 push한다.
-아래 YAML은 구상 참고이며, 실제 값은 workflow 파일을 본다.
-
-### 2.1 CI 빌드 (`x86_64` 호스트에서 `linux/arm64` 포함)
-
-```yaml
-# .github/workflows/build.yml
-- name: Set up QEMU
-  uses: docker/setup-qemu-action@v3
-- name: Set up Docker Buildx
-  uses: docker/setup-buildx-action@v3
-- name: Login to GHCR
-  uses: docker/login-action@v3
-  with:
-    registry: ghcr.io
-    username: ${{ github.actor }}
-    password: ${{ secrets.GITHUB_TOKEN }}
-- name: Build & push api
-  uses: docker/build-push-action@v5
-  with:
-    context: ./apps/api
-    platforms: linux/amd64,linux/arm64
-    push: true
-    tags: |
-      ghcr.io/digitie/pinvi-api:${{ github.sha }}
-      ghcr.io/digitie/pinvi-api:latest
-    cache-from: type=registry,ref=ghcr.io/digitie/pinvi-api:cache
-    cache-to: type=registry,ref=ghcr.io/digitie/pinvi-api:cache,mode=max
-- name: Build & push web
-  uses: docker/build-push-action@v5
-  with:
-    context: ./apps/web
-    platforms: linux/amd64,linux/arm64
-    push: true
-    tags: ghcr.io/digitie/pinvi-web:${{ github.sha }}
-- name: Build & push etl
-  uses: docker/build-push-action@v5
-  with:
-    context: ./apps/etl
-    platforms: linux/amd64,linux/arm64
-    push: true
-    tags: ghcr.io/digitie/pinvi-etl:${{ github.sha }}
-```
-
-### 2.2 로컬 빌드 + scp 전송 (대안, GHCR 안 쓸 때)
-
-```bash
-# WSL2에서 cross-build
-docker buildx build --platform linux/arm64 \
-  -t pinvi-api:dev --load ./apps/api
-
-# NTFS artifacts로 save
-docker save pinvi-api:dev | gzip > /mnt/c/Users/Me/artifacts/pinvi-api-arm64-$(date +%Y%m%d).tar.gz
-
-# Odroid로 전송
-scp /mnt/c/Users/Me/artifacts/pinvi-api-arm64-$(date +%Y%m%d).tar.gz odroid:/tmp/
-
-# Odroid에서 load
-ssh odroid 'cd /opt/pinvi && docker load < /tmp/pinvi-api-arm64-*.tar.gz'
-```
+Pinvi는 GHCR push workflow를 사용하지 않는다. Odroid의 정본 경로는 `~/pinvi`의 exact
+`origin/main`을 manager의 pinned pair transaction으로 local build하는 방식이다. 이미지
+revision label, image ID, migration, writer lifecycle, smoke를 한 transaction 안에서 검증하므로
+임의의 GHCR tag나 raw Compose image를 운영에 주입하지 않는다.
 
 ## 3. 초기 배포 (manager 정본)
 
@@ -140,23 +83,21 @@ scripts/odroid-docker-doctor.sh
 
 ### 4.2 옵션 B — 별도 fresh fallback stack
 
-manager를 사용할 수 없고 기존 운영 runtime이 없는 경우에만 exact archive와
-canonical Compose를 사용한다. 기존 project를 재사용하거나 raw Compose로 우회하지 않는다.
+manager를 사용할 수 없고 기존 운영 runtime이 없는 경우에만 canonical Compose를 사용한다.
+기존 project를 재사용하거나 raw Compose로 우회하지 않는다. fallback은 source build 경로이므로
+tarball을 `docker load`한 뒤에도 그 이미지를 자동으로 선택하지 않는다. 별도 fresh project와
+승인된 staging env/credential file을 명시한다.
 
 ```bash
-# 로컬에서
-scp /mnt/c/.../pinvi-{api,web,etl}-arm64-<date>.tar.gz odroid:/tmp/
-
-# Odroid에서 — 별도 project/fresh stack에서만 load·검증한다.
-ssh odroid bash -s << 'EOF'
-  cd ~/pinvi
-  for img in api web etl; do
-    docker load < /tmp/pinvi-${img}-arm64-*.tar.gz
-  done
-  export PINVI_DOCKER_PROJECT=pinvi-app-odroid-fresh
-  scripts/deploy-node.sh deploy
-  scripts/deploy-node.sh smoke
-EOF
+# Odroid에서 — manager fallback은 exact source checkout을 사용한다.
+ssh odroid
+cd ~/pinvi
+export PINVI_DOCKER_PROJECT=pinvi-app-odroid-fresh
+export PINVI_ENVIRONMENT=staging
+export PINVI_ENV_FILE=/secure/pinvi/odroid-staging.env
+export PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/secure/pinvi/bootstrap-admin.json
+scripts/deploy-node.sh deploy
+scripts/deploy-node.sh smoke
 ```
 
 ## 5. Doctor (사전 점검)

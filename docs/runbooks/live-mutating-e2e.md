@@ -294,9 +294,12 @@ server-side 대조까지 모두 성공해야 한다.
 일반 live-mutating suite는 공개 HTTPS origin을 사용할 수 있다. 단,
 `m05_activation_attestation.py m04/live`는 API·Web·Map의 runtime peer를 검증하므로
 `127.0.0.1`/`localhost` loopback URL만 허용한다. `--scope production`은 증적의 운영 범위를
-뜻하며 공개 HTTPS URL을 허용한다는 뜻이 아니다. production 증적이 필요하면 승인된 N150
-loopback port-forward/proxy를 통해 실행하고, 공개 도메인을 attestation CLI의 `*_URL` 인자로
-직접 넣지 않는다. runner의 exact SHA와 digest-pinned image 조건은 그대로 유지한다.
+뜻하며 공개 HTTPS URL을 허용한다는 뜻이 아니다. production 증적이 필요하면 승인된 N150에서
+실제 API/Web/Map container의 `127.0.0.1` host binding과 정확히 같은 port를 가리키는 loopback
+port-forward/proxy를 통해 실행한다. proxy가 다른 host port로 변환되면 attestation의 Docker
+binding 검증이 실패하므로, container port와 host port 매핑을 증적 전에 확인한다. 공개 도메인을
+attestation CLI의 `*_URL` 인자로 직접 넣지 않는다. runner의 exact SHA와 digest-pinned image
+조건은 그대로 유지한다.
 
 ## 4. 실패 처리
 
