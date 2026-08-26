@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ApiClient,
@@ -52,6 +52,11 @@ const inputClass = 'rounded-sm border border-hairline px-2 py-1 text-sm';
 
 function formatDateTime(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString('ko-KR') : '—';
+}
+
+function getInitialSearchQuery(): string {
+  if (typeof window === 'undefined') return '';
+  return new URLSearchParams(window.location.search).get('q')?.trim() ?? '';
 }
 
 function JsonBlock({ value }: { value: unknown }) {
@@ -302,20 +307,12 @@ function DetailPanel({
 }
 
 export default function AdminFeatureChangeRequestsPage() {
-  const [queryInput, setQueryInput] = useState('');
-  const [submittedQ, setSubmittedQ] = useState('');
+  const [queryInput, setQueryInput] = useState(getInitialSearchQuery);
+  const [submittedQ, setSubmittedQ] = useState(getInitialSearchQuery);
   const [statusFilter, setStatusFilter] =
     useState<(typeof STATUS_OPTIONS)[number]['value']>('pending');
   const [actionFilter, setActionFilter] = useState<(typeof ACTION_OPTIONS)[number]['value']>('all');
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const initialQ = new URLSearchParams(window.location.search).get('q')?.trim() ?? '';
-    if (initialQ) {
-      setQueryInput(initialQ);
-      setSubmittedQ(initialQ);
-    }
-  }, []);
 
   const params = useMemo<AdminFeatureChangeRequestListParams>(
     () => ({

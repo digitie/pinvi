@@ -102,16 +102,23 @@ export function TripManualPoiDialog({
   const [title, setTitle] = useState('');
   const [candidate, setCandidate] = useState<GeoCandidate | null>(null);
   const [addressLabel, setAddressLabel] = useState<string | null>(null);
-  const [geoLoading, setGeoLoading] = useState(false);
+  const [geoLoading, setGeoLoading] = useState(true);
   const [geoError, setGeoError] = useState<string | null>(null);
   const [titleError, setTitleError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const controller = new AbortController();
+  // 렌더 중 prop 변화에 맞춰 state 조정 패턴 — 좌표가 바뀔 때만 이전 조회 결과를 리셋한다.
+  // 실제 조회(부수효과)는 아래 effect가 담당한다.
+  const [syncedCoord, setSyncedCoord] = useState(coord);
+  if (coord.lat !== syncedCoord.lat || coord.lon !== syncedCoord.lon) {
+    setSyncedCoord(coord);
     setCandidate(null);
     setAddressLabel(null);
     setGeoError(null);
     setGeoLoading(true);
+  }
+
+  useEffect(() => {
+    const controller = new AbortController();
 
     void (async () => {
       try {

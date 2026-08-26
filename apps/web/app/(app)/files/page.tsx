@@ -40,15 +40,18 @@ export default function MyFilesPage() {
 
   useEffect(() => {
     let cancelled = false;
-    void reload()
-      .catch((err) => {
+    const run = async () => {
+      try {
+        await reload();
+      } catch (err) {
         if (!cancelled) {
           setError(err instanceof ApiError ? err.message : '파일을 불러오지 못했습니다.');
         }
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    };
+    void run();
     return () => {
       cancelled = true;
     };

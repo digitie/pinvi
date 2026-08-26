@@ -47,6 +47,20 @@ function getOAuthErrorMessage(code: string, provider: OAuthProviderName = 'googl
   return messages[code] ?? `${label} 로그인을 완료하지 못했습니다.`;
 }
 
+// URL의 `?error=` 쿼리로 전달되는 OAuth 콜백 오류 — 마운트 시 1회만 읽으면 되는 순수 파생값이므로
+// effect 대신 초기 state 계산에서 바로 읽는다(react-hooks/set-state-in-effect).
+function readOAuthErrorFromLocation(): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('error');
+  if (!code) {
+    return null;
+  }
+  return getOAuthErrorMessage(code, parseOAuthProvider(params.get('provider')));
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -59,18 +73,10 @@ export default function LoginPage() {
   const [oauthProviders, setOauthProviders] = useState(DISABLED_OAUTH_PROVIDERS);
   const [oauthLoading, setOauthLoading] = useState<OAuthProviderName | null>(null);
   const [oauthProvidersLoading, setOauthProvidersLoading] = useState(true);
-  const [oauthError, setOauthError] = useState<string | null>(null);
+  const [oauthError, setOauthError] = useState<string | null>(readOAuthErrorFromLocation);
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendNotice, setResendNotice] = useState<string | null>(null);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('error');
-    if (code) {
-      setOauthError(getOAuthErrorMessage(code, parseOAuthProvider(params.get('provider'))));
-    }
-  }, []);
 
   useEffect(() => {
     let active = true;

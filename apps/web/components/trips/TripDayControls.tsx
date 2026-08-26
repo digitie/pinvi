@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Check, Pencil, Plus, Trash2 } from 'lucide-react';
 import { MARKER_PALETTE, type MarkerColorKey, paletteHex } from '@pinvi/domain';
 import type { DayUpdateResult } from '@/components/trips/TripDetail';
@@ -67,12 +67,30 @@ export function TripDayControls({
   // 열려 있는 폼은 서버 갱신으로 덮지 않는다 — 409 후 reload가 사용자가 입력한 이름·날짜·색을
   // 지우고 다이얼로그까지 닫던 문제(T-315 4차 리뷰). 닫혀 있을 때만 서버 값과 동기화한다.
   // (인스턴스는 일자마다 key={day_index}로 분리돼 있어 '다른 일자로 전환' 분기는 필요 없다.)
-  useEffect(() => {
-    if (settingsOpen) return;
-    setTitle(selectedDay?.title ?? '');
-    setDate(selectedDay?.date ?? '');
-    setColor(selectedDay?.marker_color ?? null);
-  }, [settingsOpen, selectedDay?.title, selectedDay?.date, selectedDay?.marker_color]);
+  // useEffect 대신 "렌더 중 prop 변화에 맞춰 state 조정" 패턴을 쓴다 — 마지막으로 동기화한
+  // 값을 별도 state로 추적해, 바뀌었을 때만 렌더 본문에서 바로 setState한다.
+  const [syncedDay, setSyncedDay] = useState({
+    title: selectedDay?.title ?? null,
+    date: selectedDay?.date ?? null,
+    color: selectedDay?.marker_color ?? null,
+  });
+  if (!settingsOpen) {
+    const nextSyncedDay = {
+      title: selectedDay?.title ?? null,
+      date: selectedDay?.date ?? null,
+      color: selectedDay?.marker_color ?? null,
+    };
+    if (
+      nextSyncedDay.title !== syncedDay.title ||
+      nextSyncedDay.date !== syncedDay.date ||
+      nextSyncedDay.color !== syncedDay.color
+    ) {
+      setSyncedDay(nextSyncedDay);
+      setTitle(nextSyncedDay.title ?? '');
+      setDate(nextSyncedDay.date ?? '');
+      setColor(nextSyncedDay.color);
+    }
+  }
 
   const openSettings = () => {
     setSaveError(null);

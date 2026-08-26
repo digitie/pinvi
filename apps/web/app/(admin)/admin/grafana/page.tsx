@@ -50,7 +50,6 @@ export default function AdminGrafanaPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setHealthStatus('checking');
     fetch('/admin/grafana/health', { cache: 'no-store' })
       .then(async (response) => {
         const payload = (await response.json()) as GrafanaHealthPayload;
@@ -73,7 +72,10 @@ export default function AdminGrafanaPage() {
     };
   }, [frameKey, grafanaOrigin]);
 
-  const refresh = () => setFrameKey((value) => value + 1);
+  const refresh = () => {
+    setHealthStatus('checking');
+    setFrameKey((value) => value + 1);
+  };
 
   return (
     <AdminPage

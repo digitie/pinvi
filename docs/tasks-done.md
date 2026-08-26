@@ -4,6 +4,47 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-08-26 (2)
+
+- [x] **T-354** — Next.js 15 → 16(Turbopack) 업그레이드. 사용자 요청으로 착수(npm audit
+      union range 오독으로 미루기로 했던 과거 결정을 뒤집음, PR TBD, claude).
+      `@next/codemod upgrade latest` + `next-lint-to-eslint-cli`로 기계적 마이그레이션을
+      먼저 돌리고, 실제로 깨진 지점을 하나씩 고쳤다.
+
+      **의존성 버전 스큐 3건**: (1) `next-intl@3.26.5`가 Next 16을 지원 안 해 워크스페이스에
+      `next`가 두 버전 공존 → npm arborist가 혼란스러워하며 vendored `file:` 패키지
+      (`vworld-map-*`)를 레지스트리에서 찾으려다 404로 전체 install이 깨졌다(재현 3회 확인,
+      순정 origin/main은 재현 안 됨 — bisect로 확정). `next-intl`이 실제로는 코드 어디서도
+      import되지 않는 미사용 의존성임을 확인하고 4.13.7(Next 16 공식 지원)로 올려 단일
+      `next` 버전으로 정리했다. (2) `eslint-config-next@16.3.3`이 `eslint-plugin-react-hooks
+      @^7.0.0`을 원하는데 T-311이 걸어둔 `5.2.0` 루트 override와 충돌 — 이번엔 의도적
+      업그레이드이니 override를 제거하고 실제로 v7 규칙을 채택했다. (3) `eslint@10.9.1`(codemod가
+      자동 승격)은 `eslint-plugin-react`가 아직 지원 안 해(`context.getFilename is not a
+      function`, 최신 7.37.5도 peer가 `<=9.7`) 9.x대로 유지했다 — `eslint-config-next`의 peer는
+      `>=9.0.0`이라 10 강제가 아니었다.
+
+      **`react-hooks/set-state-in-effect`(eslint-plugin-react-hooks v7의 새 React Compiler
+      시대 규칙) 위반 44건**을 Workflow(10개 배치, 파일별 실제 구조 리팩터)로 고쳤다 — 순수
+      파생값은 useEffect를 없애고 렌더 중 계산으로, prop 변경 시 여러 state를 리셋하는 곳은
+      React 공식 문서의 "adjusting state when a prop changes" 렌더 중 패턴으로, 마운트 시
+      fetch 패턴은 초기 state 값과 중복되는 동기 setState를 제거하는 방식으로. 이 과정에서
+      `app/(auth)/profile/page.tsx`의 실제 버그(마운트 URL의 OAuth 에러가 나중에 조용히
+      지워지던 문제)도 함께 발견해 고쳤다. `useModalDialog.ts`(포커스 관리가 타이밍에 민감해
+      직접 처리)는 `dialogProps` 구성을 spread로 바꿔 "렌더 중 ref 접근" 오탐을 없앴고,
+      `portalNode`(useState lazy init, setter 미사용) 뮤테이션은 useRef 전환을 시도했다가
+      오히려 새 위반(렌더 중 ref 읽기)을 만들어 되돌리고 그 한 줄만 국소 eslint-disable +
+      사유 주석으로 처리했다(React 공식 문서가 인정하는 lazy-ref-init 패턴을 이 lint 규칙이
+      막는 경우라 구조를 바꾸는 게 더 위험하다고 판단).
+
+      `@next/codemod`의 `cache-components-instant-false` 변환이 15개 라우트에
+      `export const instant = false`를 추가했는데, 이 프로젝트는 `cacheComponents`를
+      켜지 않아(Cache Components 아키텍처 미채택) 그 설정 자체가 빌드를 깼다 — 15곳 전부
+      제거해 원본과 byte-identical하게 되돌렸다(Cache Components 도입은 별도 결정 필요).
+
+      검증: `apps/web` typecheck·lint(에러 0, 경고 4건은 기존/무관)·build(Turbopack, 57
+      페이지 전부 생성)·vitest(18 files/113 tests, `useModalDialog.test.tsx` 14건 포함)
+      전부 통과.
+
 ## 2026-08-22
 
 - [x] **T-VN-M04 follow-up — Feature request consumer 중립 식별자** — 범용 queue의

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { FeatureDetailModal } from '@/components/map/FeatureDetailModal';
 import { FeatureDetailCardBody } from '@/components/map/FeatureDetailCardBody';
 import { useFeatureDetailCard, type EnrichmentProvider } from '@/lib/useFeatureDetailCard';
@@ -27,9 +27,12 @@ export function FeatureDetailModalController({
 }: FeatureDetailModalControllerProps) {
   const [providers, setProviders] = useState<EnrichmentProvider[]>([]);
   // feature가 바뀌면 enrichment 요청 상태를 초기화(새 장소는 내부 정보만으로 시작).
-  useEffect(() => {
+  // effect 대신 렌더 중 조정(react-hooks/set-state-in-effect가 막는 effect 내부 동기 setState를 피한다).
+  const [prevFeatureId, setPrevFeatureId] = useState(featureId);
+  if (featureId !== prevFeatureId) {
+    setPrevFeatureId(featureId);
     setProviders([]);
-  }, [featureId]);
+  }
 
   const { card, loading, error } = useFeatureDetailCard(featureId, providers);
   const enrichmentRequested = providers.length > 0;

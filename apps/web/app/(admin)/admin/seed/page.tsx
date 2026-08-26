@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type { AdminSeedScenario } from '@pinvi/schemas';
@@ -40,13 +40,17 @@ export default function AdminSeedPage() {
         : 'seed scenario 조회에 실패했습니다.'
       : null;
 
-  useEffect(() => {
-    if (!selected) return;
+  // selected scenario가 바뀌면(사용자 선택 또는 목록 재조회로 default가 바뀜) 폼을
+  // 리셋한다 — effect 대신 렌더 중 이전 값과 비교해 그 자리에서 반영한다(React
+  // "Adjusting state when a prop changes" 패턴).
+  const [prevSelectedKey, setPrevSelectedKey] = useState<string | null>(null);
+  if (selected && selected.key !== prevSelectedKey) {
+    setPrevSelectedKey(selected.key);
     setSelectedKey(selected.key);
     setConfirm('');
     setMutationError(null);
     setMutationNotice(null);
-  }, [selected]);
+  }
 
   const runMutation = useMutation({
     mutationFn: (scenario: AdminSeedScenario) =>

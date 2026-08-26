@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { CheckCircle2, Loader2, RotateCcw, ShieldAlert, XCircle } from 'lucide-react';
 import { ApiError, adminApi } from '@pinvi/api-client';
@@ -59,15 +59,20 @@ export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreH
   const [restoring, setRestoring] = useState(false);
   const [run, setRun] = useState<AdminBackupRestoreRun | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!snapshot) return;
-    setReason('');
-    setConfirmed(false);
-    setConfirmation('');
-    setRestoring(false);
-    setRun(null);
-    setError(null);
-  }, [snapshot]);
+  // snapshot(복구 대상)이 바뀌면 폼 상태를 리셋한다 — effect 대신 렌더 중 조정
+  // (react-hooks/set-state-in-effect가 막는 effect 내부 동기 setState를 피한다).
+  const [prevSnapshot, setPrevSnapshot] = useState(snapshot);
+  if (snapshot !== prevSnapshot) {
+    setPrevSnapshot(snapshot);
+    if (snapshot) {
+      setReason('');
+      setConfirmed(false);
+      setConfirmation('');
+      setRestoring(false);
+      setRun(null);
+      setError(null);
+    }
+  }
 
   const closeIfIdle = useCallback(() => {
     if (!restoring) onClose();

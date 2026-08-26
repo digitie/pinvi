@@ -664,7 +664,9 @@ export default function AdminTripDetailPage() {
   useEffect(() => {
     if (!showOperationDialog) return;
     let cancelled = false;
-    setOperationImpact(null);
+    // operationImpact 리셋은 이 effect를 트리거하는 모든 경로(openOperationDialog,
+    // 작업/원본 날짜 select onChange)에서 이미 동기적으로 처리된다 — 여기서 다시
+    // setState할 필요가 없다.
     const request = operationMode.startsWith('day_')
       ? adminApi(apiClient).getDayOperationImpact(tripId, operationDayIndex)
       : adminApi(apiClient).getTripOperationImpact(tripId);
@@ -1077,6 +1079,7 @@ export default function AdminTripDetailPage() {
                     setOperationMode(e.target.value as TripOperationMode);
                     setOperationResult(null);
                     setOperationError(null);
+                    setOperationImpact(null);
                   }}
                   className="w-full rounded-sm border border-hairline px-3 py-2"
                   data-testid="admin-trip-operation-mode"
@@ -1099,6 +1102,7 @@ export default function AdminTripDetailPage() {
                     onChange={(e) => {
                       setOperationDayIndex(Number(e.target.value));
                       setOperationResult(null);
+                      setOperationImpact(null);
                     }}
                     className="w-full rounded-sm border border-hairline px-3 py-2"
                     data-testid="admin-trip-operation-source-day"

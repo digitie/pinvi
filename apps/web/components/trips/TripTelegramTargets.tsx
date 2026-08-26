@@ -25,7 +25,6 @@ export function TripTelegramTargets({ tripId }: TripTelegramTargetsProps) {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
     try {
       const api = telegramApi(apiClient);
       const [allTargets, tripTargets] = await Promise.all([
@@ -43,7 +42,9 @@ export function TripTelegramTargets({ tripId }: TripTelegramTargetsProps) {
   }, [tripId]);
 
   useEffect(() => {
-    void load();
+    void (async () => {
+      await load();
+    })();
   }, [load]);
 
   const linkedIds = new Set(linked.map((t) => t.id));
