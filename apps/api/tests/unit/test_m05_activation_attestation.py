@@ -366,6 +366,7 @@ def test_m04_server_side_chain_binds_approved_request_to_m05_old_feature(
 ) -> None:
     module = _attestation_module()
     monkeypatch.setenv("M05_MAP_ADMIN_PROXY_SECRET", "s" * 32)
+    feature_id = "feature-m04-approved"
     feature_uuid = "44444444-4444-4444-8444-444444444444"
     responses = iter(
         (
@@ -374,7 +375,7 @@ def test_m04_server_side_chain_binds_approved_request_to_m05_old_feature(
                     "data": {
                         "request_id": "33333333-3333-4333-8333-333333333333",
                         "status": "approved",
-                        "feature_id": "legacy-feature-ref",
+                        "feature_id": feature_id,
                     }
                 },
                 b"{}",
@@ -382,7 +383,7 @@ def test_m04_server_side_chain_binds_approved_request_to_m05_old_feature(
             (
                 {
                     "data": {
-                        "feature_id": feature_uuid,
+                        "feature_id": feature_id,
                         "origin": {"origin_kind": "manual_request"},
                     }
                 },
@@ -395,11 +396,12 @@ def test_m04_server_side_chain_binds_approved_request_to_m05_old_feature(
         map_admin_url="http://127.0.0.1:14701",
         m04={"feature_request_id": "33333333-3333-4333-8333-333333333333"},
         map_case={
-            "manual_feature": {"feature_uuid": feature_uuid},
-            "event": {"old_feature": {"feature_uuid": feature_uuid}},
+            "manual_feature": {"feature_id": feature_id, "feature_uuid": feature_uuid},
+            "event": {"old_feature": {"feature_id": feature_id, "feature_uuid": feature_uuid}},
         },
     )
 
+    assert chain["map_feature_id"] == feature_id
     assert chain["map_feature_uuid"] == feature_uuid
 
 

@@ -1047,7 +1047,8 @@ def test_live_ui_gates_pin_the_exact_checkout_revision() -> None:
     ).read_text(encoding="utf-8")
     assert "unexpectedApiMutations" in live_e2e
     assert "requestUrl.pathname === '/auth/login'" in live_e2e
-    assert "method !== 'GET'" in live_e2e
+    assert "isReadOnlyRequest" in live_e2e
+    assert "method === 'OPTIONS'" in live_e2e
 
 
 def test_runtime_discovery_failure_is_detected_without_caller_pipefail() -> None:
@@ -1113,7 +1114,7 @@ def test_fresh_deploy_waits_for_a_successful_rustfs_bucket_initializer() -> None
     source = (ROOT / "scripts" / "deploy-node.sh").read_text(encoding="utf-8")
     assert "wait_for_fresh_stack_one_shot()" in source
     assert "wait_for_fresh_stack_one_shot app-rustfs-init" in source
-    assert 'docker container wait "$container_id"' in source
+    assert 'timeout --foreground 120s docker container wait "$container_id"' in source
     assert '"$state" == "exited 0"' in source
 
 

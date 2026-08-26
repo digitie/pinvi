@@ -502,7 +502,9 @@ def _m04_server_side_chain(
         headers=_map_headers(),
     )
     provenance = _data(provenance_value, name="Map M04 feature provenance")
-    feature_uuid = _uuid(provenance.get("feature_id"), name="Map M04 feature UUID")
+    feature_id = _string(provenance.get("feature_id"), name="Map M04 feature ID")
+    if feature_id != feature_ref:
+        raise AttestationError("Map M04 provenance does not match the approved feature")
     origin = _object(provenance.get("origin"), name="Map M04 feature origin")
     if origin.get("origin_kind") != "manual_request":
         raise AttestationError("Map M04 feature origin is not manual_request")
@@ -510,21 +512,30 @@ def _m04_server_side_chain(
     manual_feature = _object(
         map_case.get("manual_feature"), name="Map M05 manual feature"
     )
+    manual_feature_id = _string(
+        manual_feature.get("feature_id"), name="Map M05 manual feature ID"
+    )
     manual_feature_uuid = _uuid(
         manual_feature.get("feature_uuid"), name="Map M05 manual feature UUID"
     )
     event = _object(map_case.get("event"), name="Map M05 event")
     old_feature = _object(event.get("old_feature"), name="Map M05 old feature")
+    old_feature_id = _string(old_feature.get("feature_id"), name="Map M05 old feature ID")
     old_feature_uuid = _uuid(
         old_feature.get("feature_uuid"), name="Map M05 old feature UUID"
     )
-    if feature_uuid != manual_feature_uuid or feature_uuid != old_feature_uuid:
+    if (
+        feature_id != manual_feature_id
+        or feature_id != old_feature_id
+        or manual_feature_uuid != old_feature_uuid
+    ):
         raise AttestationError(
             "M04 approved feature does not match the M05 old feature"
         )
     return {
         "feature_request_id": request_id,
-        "map_feature_uuid": feature_uuid,
+        "map_feature_id": feature_id,
+        "map_feature_uuid": manual_feature_uuid,
         "map_provenance_sha256": _sha256(_canonical_json(provenance)),
         "map_request_sha256": _sha256(_canonical_json(request_data)),
     }

@@ -100,6 +100,10 @@ FRESH_STACK_ALEMBIC_VERSION=""
 FRESH_STACK_POSTGRES_IMAGE_ID=""
 FRESH_STACK_RUSTFS_IMAGE_ID=""
 FRESH_STACK_RUSTFS_INIT_IMAGE_ID=""
+FRESH_STACK_RUSTFS_VOLUME_NAME=""
+FRESH_STACK_RUSTFS_VOLUME_FINGERPRINT=""
+FRESH_STACK_COMPOSE_NETWORK_NAME=""
+FRESH_STACK_COMPOSE_NETWORK_ID=""
 FRESH_STACK_MIGRATION_RECEIPT_SHA256=""
 FRESH_STACK_RESOURCE_MUTATION_STARTED="0"
 FRESH_STACK_API_IMAGE_ID=""
@@ -181,6 +185,14 @@ compose() {
     PINVI_DOCKER_PROJECT="$PROJECT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
   else
     PINVI_DOCKER_PROJECT="$PROJECT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" "$@"
+  fi
+}
+
+compose_config() {
+  if [[ "$ENABLE_DAGSTER" != "0" ]]; then
+    compose --profile etl config "$@"
+  else
+    compose config "$@"
   fi
 }
 
@@ -425,7 +437,7 @@ fresh_stack_state_file_is_safe() {
 }
 
 effective_compose_config_sha256() {
-  compose config --format json | python3 -c '
+  compose_config --format json | python3 -c '
 import json
 import sys
 
@@ -483,7 +495,7 @@ fresh_stack_dependency_image_id() {
     echo "could not inspect fresh deploy ${service} image identity" >&2
     return 1
   fi
-  if ! image_reference="$({ compose config --format json; } | \
+  if ! image_reference="$({ compose_config --format json; } | \
     python3 "$PINVI_PROVENANCE_PY" compose-image-reference --service "$service")"; then
     echo "could not resolve the pinned ${service} image reference" >&2
     return 1
@@ -515,6 +527,67 @@ fresh_stack_dependency_image_proof() {
   FRESH_STACK_RUSTFS_INIT_IMAGE_ID="$(fresh_stack_dependency_image_id app-rustfs-init)" || return $?
 }
 
+fresh_stack_rustfs_resource_proof() {
+  local container_ids container_id volume_name volume_fingerprint network_names network_name network_id
+  if ! container_ids="$(docker container ls --all \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --filter 'label=com.docker.compose.service=app-rustfs' --format '{{.ID}}')"; then
+    echo "could not inspect fresh deploy RustFS container" >&2
+    return 1
+  fi
+  [[ "$(printf '%s\n' "$container_ids" | sed '/^$/d' | wc -l)" == "1" ]] || {
+    echo "fresh deploy requires exactly one project-scoped RustFS container" >&2
+    return 2
+  }
+  container_id="$(printf '%s\n' "$container_ids" | sed '/^$/d')"
+  [[ "$(docker container inspect --format '{{.State.Running}}' "$container_id")" == "true" ]] || {
+    echo "fresh deploy requires the RustFS container to be running" >&2
+    return 2
+  }
+  if ! volume_name="$(docker container inspect --format \
+    '{{range .Mounts}}{{if and (eq .Destination "/data") (eq .Type "volume")}}{{.Name}}{{end}}{{end}}' \
+    "$container_id")"; then
+    echo "could not inspect the fresh deploy RustFS volume" >&2
+    return 1
+  fi
+  [[ "$volume_name" == "${PROJECT}_app-rustfs" ]] || {
+    echo "fresh deploy RustFS volume is not the canonical project volume" >&2
+    return 2
+  }
+  if ! volume_fingerprint="$(docker volume inspect --format '{{json .}}' "$volume_name" | \
+    sha256sum | awk '{print $1}')"; then
+    echo "could not fingerprint the fresh deploy RustFS volume" >&2
+    return 1
+  fi
+  [[ "$volume_fingerprint" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "fresh deploy RustFS volume fingerprint is invalid" >&2
+    return 2
+  }
+  if ! network_names="$(docker container inspect --format \
+    '{{range $name, $network := .NetworkSettings.Networks}}{{println $name}}{{end}}' \
+    "$container_id")"; then
+    echo "could not inspect the fresh deploy Compose network" >&2
+    return 1
+  fi
+  network_name="$(printf '%s\n' "$network_names" | awk -v expected="${PROJECT}_default" '$0 == expected {print; exit}')"
+  [[ "$network_name" == "${PROJECT}_default" ]] || {
+    echo "fresh deploy RustFS is not attached to the canonical project network" >&2
+    return 2
+  }
+  if ! network_id="$(docker network inspect --format '{{.Id}}' "$network_name")"; then
+    echo "could not inspect the fresh deploy Compose network identity" >&2
+    return 1
+  fi
+  [[ "$network_id" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "fresh deploy Compose network identity is invalid" >&2
+    return 2
+  }
+  FRESH_STACK_RUSTFS_VOLUME_NAME="$volume_name"
+  FRESH_STACK_RUSTFS_VOLUME_FINGERPRINT="$volume_fingerprint"
+  FRESH_STACK_COMPOSE_NETWORK_NAME="$network_name"
+  FRESH_STACK_COMPOSE_NETWORK_ID="$network_id"
+}
+
 write_fresh_stack_state() {
   fresh_stack_state_file_is_safe || return $?
   local source_revision environment_name source_path source_sha256 compose_sha256 tmp_path
@@ -544,7 +617,7 @@ write_fresh_stack_state() {
   }
   tmp_path="$(mktemp "$(dirname -- "$FRESH_STACK_STATE_PATH")/.fresh-stack.XXXXXX")"
   if ! {
-    printf 'version=4\n'
+    printf 'version=5\n'
     printf 'project=%s\n' "$PROJECT"
     printf 'environment=%s\n' "$environment_name"
     printf 'root_dir=%s\n' "$ROOT_DIR"
@@ -560,6 +633,10 @@ write_fresh_stack_state() {
     printf 'postgres_image_id=%s\n' "$FRESH_STACK_POSTGRES_IMAGE_ID"
     printf 'rustfs_image_id=%s\n' "$FRESH_STACK_RUSTFS_IMAGE_ID"
     printf 'rustfs_init_image_id=%s\n' "$FRESH_STACK_RUSTFS_INIT_IMAGE_ID"
+    printf 'rustfs_volume_name=%s\n' "$FRESH_STACK_RUSTFS_VOLUME_NAME"
+    printf 'rustfs_volume_fingerprint=%s\n' "$FRESH_STACK_RUSTFS_VOLUME_FINGERPRINT"
+    printf 'compose_network_name=%s\n' "$FRESH_STACK_COMPOSE_NETWORK_NAME"
+    printf 'compose_network_id=%s\n' "$FRESH_STACK_COMPOSE_NETWORK_ID"
     printf 'api_image_id=%s\n' "$FRESH_STACK_API_IMAGE_ID"
     printf 'web_image_id=%s\n' "$FRESH_STACK_WEB_IMAGE_ID"
     printf 'dagster_image_id=%s\n' "$FRESH_STACK_DAGSTER_IMAGE_ID"
@@ -581,7 +658,7 @@ fresh_stack_migration_receipt_sha256() {
   if ! environment_name="$(resolved_environment)"; then
     return 2
   fi
-  printf 'pinvi-fresh-migration/v4\nproject=%s\nenvironment=%s\nroot_dir=%s\nsource_revision=%s\ncompose_sha256=%s\neffective_compose_sha256=%s\nenvironment_source_sha256=%s\ndb_container_id=%s\ndb_volume_name=%s\ndb_system_identifier=%s\nalembic_version=%s\npostgres_image_id=%s\nrustfs_image_id=%s\nrustfs_init_image_id=%s\napi_image_id=%s\nweb_image_id=%s\ndagster_image_id=%s\n' \
+  printf 'pinvi-fresh-migration/v5\nproject=%s\nenvironment=%s\nroot_dir=%s\nsource_revision=%s\ncompose_sha256=%s\neffective_compose_sha256=%s\nenvironment_source_sha256=%s\ndb_container_id=%s\ndb_volume_name=%s\ndb_system_identifier=%s\nalembic_version=%s\npostgres_image_id=%s\nrustfs_image_id=%s\nrustfs_init_image_id=%s\nrustfs_volume_name=%s\nrustfs_volume_fingerprint=%s\ncompose_network_name=%s\ncompose_network_id=%s\napi_image_id=%s\nweb_image_id=%s\ndagster_image_id=%s\n' \
     "$PROJECT" "$environment_name" "$ROOT_DIR" "${PINVI_SOURCE_REVISION:-}" \
     "$FRESH_STACK_COMPOSE_SHA256" "$FRESH_STACK_EFFECTIVE_COMPOSE_SHA256" \
     "$FRESH_STACK_ENVIRONMENT_SOURCE_SHA256" \
@@ -589,6 +666,8 @@ fresh_stack_migration_receipt_sha256() {
     "$FRESH_STACK_DB_SYSTEM_IDENTIFIER" "$FRESH_STACK_ALEMBIC_VERSION" \
     "$FRESH_STACK_POSTGRES_IMAGE_ID" "$FRESH_STACK_RUSTFS_IMAGE_ID" \
     "$FRESH_STACK_RUSTFS_INIT_IMAGE_ID" \
+    "$FRESH_STACK_RUSTFS_VOLUME_NAME" "$FRESH_STACK_RUSTFS_VOLUME_FINGERPRINT" \
+    "$FRESH_STACK_COMPOSE_NETWORK_NAME" "$FRESH_STACK_COMPOSE_NETWORK_ID" \
     "$FRESH_STACK_API_IMAGE_ID" "$FRESH_STACK_WEB_IMAGE_ID" "$FRESH_STACK_DAGSTER_IMAGE_ID" \
     | sha256sum | awk '{print $1}'
 }
@@ -605,6 +684,10 @@ capture_fresh_stack_migration_proof() {
   fi
   if ! fresh_stack_dependency_image_proof; then
     echo "fresh deploy dependency image provenance could not be sealed" >&2
+    return 1
+  fi
+  if ! fresh_stack_rustfs_resource_proof; then
+    echo "fresh deploy RustFS resource identity could not be sealed" >&2
     return 1
   fi
   FRESH_STACK_COMPOSE_SHA256="$(sha256sum -- "$CANONICAL_COMPOSE_FILE" | awk '{print $1}')"
@@ -683,7 +766,9 @@ require_reusable_fresh_stack_contract() {
   local state_effective_compose_sha256=""
   local state_db_container_id="" state_db_volume_name="" state_db_system_identifier=""
   local state_alembic_version="" state_postgres_image_id="" state_rustfs_image_id=""
-  local state_rustfs_init_image_id="" state_api_image_id="" state_web_image_id=""
+  local state_rustfs_init_image_id="" state_rustfs_volume_name=""
+  local state_rustfs_volume_fingerprint="" state_compose_network_name=""
+  local state_compose_network_id="" state_api_image_id="" state_web_image_id=""
   local state_dagster_image_id="" state_migration_receipt_sha256=""
   local environment_name source_path compose_sha256 source_sha256 effective_compose_sha256
   local key value seen_keys='|' existing_containers existing_volumes existing_networks db_containers rustfs_containers
@@ -720,6 +805,10 @@ require_reusable_fresh_stack_contract() {
       postgres_image_id) state_postgres_image_id="$value" ;;
       rustfs_image_id) state_rustfs_image_id="$value" ;;
       rustfs_init_image_id) state_rustfs_init_image_id="$value" ;;
+      rustfs_volume_name) state_rustfs_volume_name="$value" ;;
+      rustfs_volume_fingerprint) state_rustfs_volume_fingerprint="$value" ;;
+      compose_network_name) state_compose_network_name="$value" ;;
+      compose_network_id) state_compose_network_id="$value" ;;
       api_image_id) state_api_image_id="$value" ;;
       web_image_id) state_web_image_id="$value" ;;
       dagster_image_id) state_dagster_image_id="$value" ;;
@@ -752,10 +841,14 @@ require_reusable_fresh_stack_contract() {
     && "$seen_keys" == *"|db_system_identifier|"* && "$seen_keys" == *"|alembic_version|"* \
     && "$seen_keys" == *"|postgres_image_id|"* && "$seen_keys" == *"|rustfs_image_id|"* \
     && "$seen_keys" == *"|rustfs_init_image_id|"* \
+    && "$seen_keys" == *"|rustfs_volume_name|"* \
+    && "$seen_keys" == *"|rustfs_volume_fingerprint|"* \
+    && "$seen_keys" == *"|compose_network_name|"* \
+    && "$seen_keys" == *"|compose_network_id|"* \
     && "$seen_keys" == *"|api_image_id|"* && "$seen_keys" == *"|web_image_id|"* \
     && "$seen_keys" == *"|dagster_image_id|"* \
     && "$seen_keys" == *"|migration_receipt_sha256|"* \
-    && "$state_version" == "4" && "$state_project" == "$PROJECT" \
+    && "$state_version" == "5" && "$state_project" == "$PROJECT" \
     && "$state_environment" == "$environment_name" \
     && "$state_root_dir" == "$ROOT_DIR" \
     && "$state_revision" == "${PINVI_SOURCE_REVISION:-}" \
@@ -770,6 +863,10 @@ require_reusable_fresh_stack_contract() {
     && "$state_postgres_image_id" =~ ^sha256:[0-9a-f]{64}$ \
     && "$state_rustfs_image_id" =~ ^sha256:[0-9a-f]{64}$ \
     && "$state_rustfs_init_image_id" =~ ^sha256:[0-9a-f]{64}$ \
+    && "$state_rustfs_volume_name" == "${PROJECT}_app-rustfs" \
+    && "$state_rustfs_volume_fingerprint" =~ ^[0-9a-f]{64}$ \
+    && "$state_compose_network_name" == "${PROJECT}_default" \
+    && "$state_compose_network_id" =~ ^[0-9a-f]{64}$ \
     && "$state_api_image_id" =~ ^sha256:[0-9a-f]{64}$ \
     && "$state_web_image_id" =~ ^sha256:[0-9a-f]{64}$ \
     && ( "$state_dagster_image_id" == "none" \
@@ -818,6 +915,10 @@ require_reusable_fresh_stack_contract() {
     && "$FRESH_STACK_POSTGRES_IMAGE_ID" == "$state_postgres_image_id" \
     && "$FRESH_STACK_RUSTFS_IMAGE_ID" == "$state_rustfs_image_id" \
     && "$FRESH_STACK_RUSTFS_INIT_IMAGE_ID" == "$state_rustfs_init_image_id" \
+    && "$FRESH_STACK_RUSTFS_VOLUME_NAME" == "$state_rustfs_volume_name" \
+    && "$FRESH_STACK_RUSTFS_VOLUME_FINGERPRINT" == "$state_rustfs_volume_fingerprint" \
+    && "$FRESH_STACK_COMPOSE_NETWORK_NAME" == "$state_compose_network_name" \
+    && "$FRESH_STACK_COMPOSE_NETWORK_ID" == "$state_compose_network_id" \
     && "$FRESH_STACK_API_IMAGE_ID" == "$state_api_image_id" \
     && "$FRESH_STACK_WEB_IMAGE_ID" == "$state_web_image_id" \
     && "$FRESH_STACK_DAGSTER_IMAGE_ID" == "$state_dagster_image_id" \
@@ -936,7 +1037,8 @@ wait_for_fresh_stack_one_shot() {
     return 2
   }
   container_id="$(printf '%s\n' "$container_ids" | sed '/^$/d')"
-  if ! exit_code="$(docker container wait "$container_id")"; then
+  require_command timeout
+  if ! exit_code="$(timeout --foreground 120s docker container wait "$container_id")"; then
     echo "could not wait for fresh deploy ${service} one-shot container" >&2
     return 1
   fi

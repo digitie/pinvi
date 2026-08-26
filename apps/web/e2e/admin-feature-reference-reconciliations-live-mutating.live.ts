@@ -97,7 +97,8 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
       const method = request.method();
       const isAuthenticationRequest =
         requestUrl.pathname === '/auth/login' && (method === 'POST' || method === 'OPTIONS');
-      if (method !== 'GET' && !isAuthenticationRequest) {
+      const isReadOnlyRequest = method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
+      if (!isReadOnlyRequest && !isAuthenticationRequest) {
         unexpectedApiMutations.push(`${method} ${requestUrl.pathname}`);
       }
     });
