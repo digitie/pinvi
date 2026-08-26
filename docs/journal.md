@@ -2,6 +2,24 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-26 (claude) — T-350 머지 (PR #485, main 이탈로 인한 충돌 해소)
+
+- 사용자가 PR #485(T-350, 다른 세션에서 이미 구현·CI green)의 머지를 요청해 `gh pr merge`를
+  시도했으나 `mergeable: CONFLICTING`이었다 — PR #485는 2026-08-25 저녁에 만들어졌는데 그
+  사이 이번 세션의 T-354/T-349 관련 PR 4건(#489·#490·#492·#493)이 먼저 `main`에 들어가
+  뒤처졌다.
+- `agent/claude-t350-retention-elapsed` 브랜치에서 `origin/main`을 merge했다.
+  `docs/tasks-done.md`에서만 실제 충돌이 났다 — 두 세션이 같은 날짜 헤더
+  (`## 2026-08-26`) 아래에 각자 엔트리를 추가해서다. 시간순대로 T-354 "(2)" 섹션을 위에,
+  T-350의 원본(무접미사) 섹션을 그 아래에 두는 것으로 정리했다. `docs/tasks.md`와 나머지
+  대량 파일(T-354의 `react-hooks/set-state-in-effect` 리팩터가 건드린 44개 컴포넌트 등)은
+  git이 자동 병합했고 실제 텍스트 충돌은 없었다 — 두 세션이 건드린 파일이 겹치지 않았다
+  (T-350은 `apps/web/app/(admin)/admin/retention/page.tsx` 하나만 수정).
+- 병합 뒤 `apps/web` typecheck·lint(0 에러, 경고 4건은 기존/무관)·`build`(webpack, 57
+  페이지 전부 생성, `/admin/retention` 포함) 전부 재검증 통과. push 후 CI 재실행 —
+  `e2e` 2m58s, `lint-typecheck-build` 2m55s, `Aggregate CI gate` 3m9s 전부 green.
+  `gh pr merge --squash`로 머지(`d8d9db07`).
+
 ## 2026-08-26 (claude) — T-349 시도 → T-VN-M05-ACTIVATION 가드로 블록
 
 - `app.retention_runs`에 `status='executing'`이 최대 1개라는 불변식(T-343)의 DB 차원
