@@ -207,12 +207,12 @@ def test_deploy_node_seals_fresh_migration_before_reusing_the_stack() -> None:
     up = _function_body(source, "up")
     dagster = _function_body(source, "dagster_up")
 
-    assert migrate.index("migrate_under_lifecycle_lock") < migrate.index(
-        "write_fresh_stack_state"
+    assert migrate.index("migrate_under_lifecycle_lock") < migrate.index("write_fresh_stack_state")
+    assert (
+        deploy.index("migrate_under_lifecycle_lock")
+        < deploy.index("write_fresh_stack_state")
+        < deploy.index("up_under_lifecycle_lock")
     )
-    assert deploy.index("migrate_under_lifecycle_lock") < deploy.index(
-        "write_fresh_stack_state"
-    ) < deploy.index("up_under_lifecycle_lock")
     assert "require_reusable_fresh_stack_contract" in up
     assert "require_reusable_fresh_stack_contract" in dagster
 
