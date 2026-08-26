@@ -13,16 +13,7 @@ unset PGAPPNAME PGCONNECT_TIMEOUT PGDATABASE PGHOST PGHOSTADDR PGOPTIONS PGPASSF
   PGPASSWORD PGPORT PGSERVICE PGSERVICEFILE PGSSLCERT PGSSLMODE PGSSLKEY \
   PGSSLROOTCERT PGTARGETSESSIONATTRS PGUSER PSQLRC
 
-: "${POSTGRES_USER:?POSTGRES_USER is required}"
-: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
-: "${POSTGRES_DB:?POSTGRES_DB is required}"
-: "${PINVI_APP_DB_USER:?PINVI_APP_DB_USER is required}"
-: "${PINVI_APP_DB_PASSWORD:?PINVI_APP_DB_PASSWORD is required}"
-: "${PINVI_APP_SCHEMA_OWNER:?PINVI_APP_SCHEMA_OWNER is required}"
-: "${PINVI_MIGRATION_OWNER:?PINVI_MIGRATION_OWNER is required}"
-: "${PINVI_MIGRATOR_DB_USER:?PINVI_MIGRATOR_DB_USER is required}"
-: "${PINVI_MIGRATOR_DB_PASSWORD:?PINVI_MIGRATOR_DB_PASSWORD is required}"
-
+PINVI_ROLE_TOPOLOGY_VERIFY_ONLY="${PINVI_ROLE_TOPOLOGY_VERIFY_ONLY:-0}"
 PINVI_M05_LEGACY_REBASELINE="${PINVI_M05_LEGACY_REBASELINE:-0}"
 PINVI_MIGRATOR_DISABLE_LOGIN="${PINVI_MIGRATOR_DISABLE_LOGIN:-1}"
 # The ordinary PinVi Compose network reaches PostgreSQL as ``app-postgres:5432``.
@@ -31,6 +22,46 @@ PINVI_MIGRATOR_DISABLE_LOGIN="${PINVI_MIGRATOR_DISABLE_LOGIN:-1}"
 PINVI_DB_HOST="${PINVI_DB_HOST:-app-postgres}"
 PINVI_DB_PORT="${PINVI_DB_PORT:-5432}"
 
+emit_role_topology_diagnostic() {
+  status="$1"
+  reason="$2"
+  printf '%s\n' \
+    "{\"schema\":\"pinvi.role-topology-diagnostic.v1\",\"status\":\"${status}\",\"mode\":\"sealed\",\"reasons\":[\"${reason}\"]}"
+  exit 0
+}
+
+input_error() {
+  message="$1"
+  if [ "${PINVI_ROLE_TOPOLOGY_VERIFY_ONLY}" = "1" ]; then
+    emit_role_topology_diagnostic "invalid" "input_invalid"
+  fi
+  echo "${message}" >&2
+  exit 2
+}
+
+require_value() {
+  name="$1"
+  value="$2"
+  if [ -z "${value}" ]; then
+    input_error "${name} is required"
+  fi
+}
+
+case "${PINVI_ROLE_TOPOLOGY_VERIFY_ONLY}" in
+  0|1 ) ;;
+  * ) input_error "PINVI_ROLE_TOPOLOGY_VERIFY_ONLY must be 0 or 1" ;;
+esac
+
+require_value "POSTGRES_USER" "${POSTGRES_USER:-}"
+require_value "POSTGRES_PASSWORD" "${POSTGRES_PASSWORD:-}"
+require_value "POSTGRES_DB" "${POSTGRES_DB:-}"
+require_value "PINVI_APP_DB_USER" "${PINVI_APP_DB_USER:-}"
+require_value "PINVI_APP_DB_PASSWORD" "${PINVI_APP_DB_PASSWORD:-}"
+require_value "PINVI_APP_SCHEMA_OWNER" "${PINVI_APP_SCHEMA_OWNER:-}"
+require_value "PINVI_MIGRATION_OWNER" "${PINVI_MIGRATION_OWNER:-}"
+require_value "PINVI_MIGRATOR_DB_USER" "${PINVI_MIGRATOR_DB_USER:-}"
+require_value "PINVI_MIGRATOR_DB_PASSWORD" "${PINVI_MIGRATOR_DB_PASSWORD:-}"
+
 for role_name in \
   "${POSTGRES_USER}" \
   "${PINVI_APP_DB_USER}" \
@@ -38,25 +69,24 @@ for role_name in \
   "${PINVI_MIGRATION_OWNER}" \
   "${PINVI_MIGRATOR_DB_USER}"; do
   case "${role_name}" in
-    ''|[!a-z_]*|*[!a-z0-9_]* ) echo "invalid PostgreSQL role name" >&2; exit 2 ;;
+    ''|[!a-z_]*|*[!a-z0-9_]* ) input_error "invalid PostgreSQL role name" ;;
   esac
 done
 case "${POSTGRES_DB}" in
-  ''|[!a-z_]*|*[!a-z0-9_]* ) echo "invalid POSTGRES_DB" >&2; exit 2 ;;
+  ''|[!a-z_]*|*[!a-z0-9_]* ) input_error "invalid POSTGRES_DB" ;;
 esac
 case "${PINVI_M05_LEGACY_REBASELINE}" in
   0|1 ) ;;
-  * ) echo "PINVI_M05_LEGACY_REBASELINE must be 0 or 1" >&2; exit 2 ;;
+  * ) input_error "PINVI_M05_LEGACY_REBASELINE must be 0 or 1" ;;
 esac
 case "${PINVI_MIGRATOR_DISABLE_LOGIN}" in
   0|1 ) ;;
-  * ) echo "PINVI_MIGRATOR_DISABLE_LOGIN must be 0 or 1" >&2; exit 2 ;;
+  * ) input_error "PINVI_MIGRATOR_DISABLE_LOGIN must be 0 or 1" ;;
 esac
 case "${PINVI_DB_HOST}:${PINVI_DB_PORT}" in
   app-postgres:5432|127.0.0.1:12800 ) ;;
   * )
-    echo "PINVI_DB_HOST and PINVI_DB_PORT must name an approved PostgreSQL endpoint" >&2
-    exit 2
+    input_error "PINVI_DB_HOST and PINVI_DB_PORT must name an approved PostgreSQL endpoint"
     ;;
 esac
 
@@ -70,22 +100,524 @@ if [ "${POSTGRES_USER}" = "${PINVI_APP_DB_USER}" ] \
   || [ "${PINVI_APP_SCHEMA_OWNER}" = "${PINVI_MIGRATION_OWNER}" ] \
   || [ "${PINVI_APP_SCHEMA_OWNER}" = "${PINVI_MIGRATOR_DB_USER}" ] \
   || [ "${PINVI_MIGRATION_OWNER}" = "${PINVI_MIGRATOR_DB_USER}" ]; then
-  echo "runtime, schema owner, migration owner, migrator, and bootstrap roles must differ" >&2
-  exit 2
+  input_error "runtime, schema owner, migration owner, migrator, and bootstrap roles must differ"
 fi
 
 export PGPASSWORD="${POSTGRES_PASSWORD}"
-attempt=0
-until psql --no-psqlrc --no-password --tuples-only --no-align --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" \
-  --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" --command='SELECT 1' >/dev/null 2>&1; do
-  attempt=$((attempt + 1))
-  if [ "$attempt" -ge 15 ]; then
+if [ "${PINVI_ROLE_TOPOLOGY_VERIFY_ONLY}" = "1" ]; then
+  if ! psql --no-psqlrc --no-password --tuples-only --no-align --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" \
+    --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" --command='SELECT 1' >/dev/null 2>&1; then
     unset PGPASSWORD
-    echo "Postgres TCP endpoint did not become ready for DB role bootstrap" >&2
-    exit 1
+    emit_role_topology_diagnostic "unavailable" "endpoint_unavailable"
   fi
-  sleep 1
-done
+else
+  attempt=0
+  until psql --no-psqlrc --no-password --tuples-only --no-align --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" \
+    --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" --command='SELECT 1' >/dev/null 2>&1; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 15 ]; then
+      unset PGPASSWORD
+      echo "Postgres TCP endpoint did not become ready for DB role bootstrap" >&2
+      exit 1
+    fi
+    sleep 1
+  done
+fi
+
+evaluate_role_topology() {
+  topology_output="${1}"
+  PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --quiet --tuples-only --no-align --set=ON_ERROR_STOP=1 \
+      --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" \
+      --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+      --set="bootstrap_owner=${POSTGRES_USER}" \
+      --set="app_role=${PINVI_APP_DB_USER}" \
+      --set="schema_owner=${PINVI_APP_SCHEMA_OWNER}" \
+      --set="migration_owner=${PINVI_MIGRATION_OWNER}" \
+      --set="migrator_role=${PINVI_MIGRATOR_DB_USER}" \
+      --set="legacy_rebaseline=${PINVI_M05_LEGACY_REBASELINE}" \
+      --set="migrator_disabled=${PINVI_MIGRATOR_DISABLE_LOGIN}" \
+      --set="topology_output=${topology_output}" 2>/dev/null <<'SQL'
+BEGIN READ ONLY;
+WITH runtime_role AS (
+    SELECT * FROM pg_roles WHERE rolname = :'app_role'
+),
+schema_owner AS (
+    SELECT * FROM pg_roles WHERE rolname = :'schema_owner'
+),
+migration_owner AS (
+    SELECT * FROM pg_roles WHERE rolname = :'migration_owner'
+),
+migrator_role AS (
+    SELECT * FROM pg_roles WHERE rolname = :'migrator_role'
+),
+database_owner AS (
+    SELECT database_row.datdba AS oid, database_row.oid AS database_oid
+    FROM pg_database database_row
+    WHERE database_row.datname = current_database()
+),
+app_schema AS (
+    SELECT namespace.oid, namespace.nspowner
+    FROM pg_namespace namespace
+    WHERE namespace.nspname = 'app'
+),
+x_extension_schema AS (
+    SELECT namespace.oid, namespace.nspowner
+    FROM pg_namespace namespace
+    WHERE namespace.nspname = 'x_extension'
+),
+pinvi_internal_schema AS (
+    SELECT namespace.oid, namespace.nspowner
+    FROM pg_namespace namespace
+    WHERE namespace.nspname = 'pinvi_internal'
+),
+ops_schema AS (
+    SELECT namespace.oid, namespace.nspowner
+    FROM pg_namespace namespace
+    WHERE namespace.nspname = 'ops'
+),
+fresh_admission_fence AS (
+    SELECT procedure.oid, procedure.proowner, procedure.proacl
+    FROM pg_proc procedure
+    JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+    WHERE namespace.nspname = 'pinvi_internal'
+      AND procedure.proname = 'acquire_fresh_0101_database_fence'
+      AND procedure.pronargs = 0
+),
+app_objects AS (
+    SELECT relation.relowner AS owner_oid
+    FROM pg_class relation
+    JOIN app_schema schema ON schema.oid = relation.relnamespace
+    UNION ALL
+    SELECT procedure.proowner
+    FROM pg_proc procedure
+    JOIN app_schema schema ON schema.oid = procedure.pronamespace
+    UNION ALL
+    SELECT type_row.typowner
+    FROM pg_type type_row
+    JOIN app_schema schema ON schema.oid = type_row.typnamespace
+    UNION ALL
+    SELECT operator_row.oprowner
+    FROM pg_operator operator_row
+    JOIN app_schema schema ON schema.oid = operator_row.oprnamespace
+    UNION ALL
+    SELECT collation_row.collowner
+    FROM pg_collation collation_row
+    JOIN app_schema schema ON schema.oid = collation_row.collnamespace
+    UNION ALL
+    SELECT conversion_row.conowner
+    FROM pg_conversion conversion_row
+    JOIN app_schema schema ON schema.oid = conversion_row.connamespace
+    UNION ALL
+    SELECT opclass_row.opcowner
+    FROM pg_opclass opclass_row
+    JOIN app_schema schema ON schema.oid = opclass_row.opcnamespace
+    UNION ALL
+    SELECT opfamily_row.opfowner
+    FROM pg_opfamily opfamily_row
+    JOIN app_schema schema ON schema.oid = opfamily_row.opfnamespace
+    UNION ALL
+    SELECT config_row.cfgowner
+    FROM pg_ts_config config_row
+    JOIN app_schema schema ON schema.oid = config_row.cfgnamespace
+    UNION ALL
+    SELECT dictionary_row.dictowner
+    FROM pg_ts_dict dictionary_row
+    JOIN app_schema schema ON schema.oid = dictionary_row.dictnamespace
+    UNION ALL
+    SELECT statistic_row.stxowner
+    FROM pg_statistic_ext statistic_row
+    JOIN app_schema schema ON schema.oid = statistic_row.stxnamespace
+    UNION ALL
+    SELECT extension_row.extowner
+    FROM pg_extension extension_row
+    JOIN app_schema schema ON schema.oid = extension_row.extnamespace
+),
+diagnostic_checks(position, reason, passed) AS (
+    VALUES
+        (
+            1,
+            'principal_identity',
+            (SELECT count(*) FROM runtime_role) = 1
+                AND (SELECT count(*) FROM schema_owner) = 1
+                AND (SELECT count(*) FROM migration_owner) = 1
+                AND (SELECT count(*) FROM migrator_role) = 1
+                AND (SELECT count(*) FROM database_owner) = 1
+                AND COALESCE(
+                    (SELECT oid FROM schema_owner) <> (SELECT oid FROM database_owner),
+                    false
+                )
+        ),
+        (
+            2,
+            'bootstrap_catalog',
+            (SELECT count(*) FROM app_schema) = 1
+                AND (SELECT count(*) FROM x_extension_schema) = 1
+                AND (SELECT count(*) FROM pinvi_internal_schema) = 1
+                AND (SELECT count(*) FROM ops_schema) = 1
+                AND COALESCE(
+                    (SELECT nspowner FROM ops_schema) = (SELECT oid FROM migration_owner),
+                    false
+                )
+                AND COALESCE(
+                    (SELECT nspowner FROM pinvi_internal_schema) = (SELECT oid FROM schema_owner),
+                    false
+                )
+                AND COALESCE(
+                    (SELECT nspowner FROM x_extension_schema) = :'bootstrap_owner'::regrole,
+                    false
+                )
+        ),
+        (
+            3,
+            'fence_acl',
+            (SELECT count(*) FROM fresh_admission_fence) = 1
+                AND COALESCE(
+                    (SELECT proowner FROM fresh_admission_fence) = (SELECT oid FROM database_owner),
+                    false
+                )
+                AND EXISTS (
+                    SELECT 1
+                    FROM fresh_admission_fence fence
+                    CROSS JOIN LATERAL aclexplode(
+                        COALESCE(fence.proacl, acldefault('f', fence.proowner))
+                    ) AS acl
+                    WHERE acl.grantee = (SELECT oid FROM schema_owner)
+                      AND acl.privilege_type = 'EXECUTE'
+                      AND NOT acl.is_grantable
+                )
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM fresh_admission_fence fence
+                    CROSS JOIN LATERAL aclexplode(
+                        COALESCE(fence.proacl, acldefault('f', fence.proowner))
+                    ) AS acl
+                    WHERE NOT (
+                        acl.grantee = fence.proowner
+                        OR (acl.grantee = (SELECT oid FROM schema_owner)
+                            AND acl.privilege_type = 'EXECUTE'
+                            AND NOT acl.is_grantable)
+                    )
+                )
+        ),
+        (
+            4,
+            'runtime_role',
+            EXISTS (
+                SELECT 1 FROM runtime_role runtime
+                WHERE runtime.rolcanlogin
+                  AND NOT runtime.rolsuper
+                  AND NOT runtime.rolcreaterole
+                  AND NOT runtime.rolcreatedb
+                  AND NOT runtime.rolreplication
+                  AND NOT runtime.rolbypassrls
+                  AND NOT runtime.rolinherit
+                  AND runtime.oid <> (SELECT oid FROM database_owner)
+                  AND NOT EXISTS (
+                      SELECT 1 FROM pg_auth_members membership
+                      WHERE membership.member = runtime.oid
+                         OR membership.roleid = runtime.oid
+                  )
+                  AND NOT has_database_privilege(runtime.oid, current_database(), 'CREATE')
+                  AND has_schema_privilege(runtime.oid, 'x_extension', 'USAGE')
+                  AND NOT has_schema_privilege(runtime.oid, 'app', 'CREATE')
+                  AND NOT has_schema_privilege(runtime.oid, 'x_extension', 'CREATE')
+            )
+        ),
+        (
+            5,
+            'schema_owner_membership',
+            EXISTS (
+                SELECT 1 FROM schema_owner owner
+                WHERE NOT owner.rolcanlogin
+                  AND NOT owner.rolsuper
+                  AND NOT owner.rolcreaterole
+                  AND NOT owner.rolcreatedb
+                  AND NOT owner.rolreplication
+                  AND NOT owner.rolbypassrls
+                  AND NOT owner.rolinherit
+                  AND NOT EXISTS (
+                      SELECT 1 FROM pg_auth_members membership
+                      WHERE membership.member = owner.oid
+                  )
+                  AND (
+                      SELECT count(*)
+                      FROM pg_auth_members membership
+                      WHERE membership.roleid = owner.oid
+                        AND membership.member IN (
+                            (SELECT oid FROM migration_owner),
+                            (SELECT oid FROM migrator_role)
+                        )
+                        AND NOT membership.admin_option
+                        AND NOT membership.inherit_option
+                        AND membership.set_option
+                  ) = 2
+                  AND NOT EXISTS (
+                      SELECT 1 FROM pg_auth_members membership
+                      WHERE membership.roleid = owner.oid
+                        AND (
+                            membership.member NOT IN (
+                                (SELECT oid FROM migration_owner),
+                                (SELECT oid FROM migrator_role)
+                            )
+                            OR membership.admin_option
+                            OR membership.inherit_option
+                            OR NOT membership.set_option
+                        )
+                  )
+            )
+        ),
+        (
+            6,
+            'migration_owner_policy',
+            EXISTS (
+                SELECT 1 FROM migration_owner owner
+                WHERE NOT owner.rolcanlogin
+                  AND NOT owner.rolsuper
+                  AND NOT owner.rolcreaterole
+                  AND NOT owner.rolcreatedb
+                  AND NOT owner.rolreplication
+                  AND NOT owner.rolbypassrls
+                  AND NOT owner.rolinherit
+                  AND owner.oid <> (SELECT oid FROM database_owner)
+                  AND NOT has_database_privilege(owner.oid, current_database(), 'CONNECT')
+                  AND has_schema_privilege(owner.oid, 'x_extension', 'USAGE')
+                  AND NOT has_schema_privilege(owner.oid, 'x_extension', 'CREATE')
+                  AND has_schema_privilege(owner.oid, 'pinvi_internal', 'USAGE')
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM pg_namespace app_namespace
+                      CROSS JOIN LATERAL aclexplode(
+                          COALESCE(
+                              app_namespace.nspacl,
+                              acldefault('n', app_namespace.nspowner)
+                          )
+                      ) AS app_acl
+                      WHERE app_namespace.nspname = 'app'
+                        AND app_acl.grantee IN (owner.oid, 0)
+                        AND app_acl.privilege_type = 'CREATE'
+                  )
+                  AND EXISTS (
+                      SELECT 1 FROM pg_auth_members membership
+                      WHERE membership.member = owner.oid
+                        AND membership.roleid = (SELECT oid FROM schema_owner)
+                        AND NOT membership.admin_option
+                        AND NOT membership.inherit_option
+                        AND membership.set_option
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM pg_auth_members membership
+                      WHERE membership.member = owner.oid
+                        AND membership.roleid <> (SELECT oid FROM schema_owner)
+                  )
+                  AND (
+                      SELECT count(*)
+                      FROM pg_auth_members membership
+                      WHERE membership.member = (SELECT oid FROM migrator_role)
+                        AND membership.roleid = owner.oid
+                        AND NOT membership.admin_option
+                        AND NOT membership.inherit_option
+                        AND membership.set_option
+                  ) = 1
+                  AND NOT EXISTS (
+                      SELECT 1 FROM pg_auth_members membership
+                      WHERE membership.roleid = owner.oid
+                        AND (
+                            membership.member <> (SELECT oid FROM migrator_role)
+                            OR membership.admin_option
+                            OR membership.inherit_option
+                            OR NOT membership.set_option
+                        )
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM pg_default_acl default_acl
+                      WHERE default_acl.defaclrole = owner.oid
+                        AND default_acl.defaclnamespace = 0
+                  )
+            )
+        ),
+        (
+            7,
+            'migrator_sealed',
+            EXISTS (
+                SELECT 1 FROM migrator_role migrator
+                WHERE (:'migrator_disabled' = '1') = NOT migrator.rolcanlogin
+                  AND NOT migrator.rolsuper
+                  AND NOT migrator.rolcreaterole
+                  AND NOT migrator.rolcreatedb
+                  AND NOT migrator.rolreplication
+                  AND NOT migrator.rolbypassrls
+                  AND NOT migrator.rolinherit
+                  AND migrator.oid <> (SELECT oid FROM database_owner)
+                  AND (
+                      (:'migrator_disabled' = '0'
+                        AND has_database_privilege(migrator.oid, current_database(), 'CONNECT'))
+                      OR (
+                          :'migrator_disabled' = '1'
+                          AND NOT has_database_privilege(migrator.oid, current_database(), 'CONNECT')
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM pg_stat_activity activity
+                              WHERE activity.usesysid = migrator.oid
+                                AND activity.pid <> pg_backend_pid()
+                          )
+                      )
+                  )
+                  AND NOT has_database_privilege(migrator.oid, current_database(), 'CREATE')
+                  AND NOT pg_has_role(migrator.oid, (SELECT oid FROM database_owner), 'MEMBER')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM pg_auth_members membership
+                      WHERE membership.roleid = migrator.oid
+                  )
+            )
+        ),
+        (
+            8,
+            'migrator_membership_setting',
+            EXISTS (
+                SELECT 1 FROM migrator_role migrator
+                WHERE (
+                    SELECT count(*)
+                    FROM pg_auth_members membership
+                    WHERE membership.member = migrator.oid
+                      AND membership.roleid IN (
+                          (SELECT oid FROM schema_owner),
+                          (SELECT oid FROM migration_owner)
+                      )
+                      AND NOT membership.admin_option
+                      AND NOT membership.inherit_option
+                      AND membership.set_option
+                ) = 2
+                  AND NOT EXISTS (
+                      SELECT 1 FROM pg_auth_members membership
+                      WHERE membership.member = migrator.oid
+                        AND membership.roleid NOT IN (
+                            (SELECT oid FROM schema_owner),
+                            (SELECT oid FROM migration_owner)
+                        )
+                  )
+                  AND EXISTS (
+                      SELECT 1
+                      FROM pg_db_role_setting setting_row
+                      WHERE setting_row.setrole = migrator.oid
+                        AND setting_row.setdatabase = (SELECT database_oid FROM database_owner)
+                        AND ('role=' || :'schema_owner') = ANY(setting_row.setconfig)
+                  )
+            )
+        ),
+        (
+            9,
+            'app_ownership',
+            :'legacy_rebaseline' = '1'
+                OR (
+                    (SELECT count(*) FROM app_schema) = 1
+                    AND COALESCE(
+                        (SELECT nspowner FROM app_schema) = :'schema_owner'::regrole,
+                        false
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM app_objects
+                        WHERE owner_oid <> :'schema_owner'::regrole
+                    )
+                )
+        ),
+        (
+            10,
+            'extension_ownership',
+            (
+                SELECT count(*)
+                FROM pg_extension extension_row
+                JOIN x_extension_schema schema ON schema.oid = extension_row.extnamespace
+                WHERE extension_row.extname IN ('pgcrypto', 'pg_trgm', 'citext')
+                  AND extension_row.extowner = :'bootstrap_owner'::regrole
+            ) = 3
+        )
+)
+SELECT CASE
+    WHEN :'topology_output' = 'diagnostic' THEN format(
+        '%s|%s',
+        CASE WHEN bool_and(passed) THEN 'canonical' ELSE 'noncanonical' END,
+        COALESCE(string_agg(reason, ',' ORDER BY position) FILTER (WHERE NOT passed), '')
+    )
+    ELSE CASE WHEN bool_and(passed) THEN 't' ELSE 'f' END
+END
+FROM diagnostic_checks;
+ROLLBACK;
+SQL
+}
+
+run_sealed_role_topology_verifier() {
+  if [ "${PINVI_M05_LEGACY_REBASELINE}" != "0" ] \
+    || [ "${PINVI_MIGRATOR_DISABLE_LOGIN}" != "1" ]; then
+    unset PGPASSWORD
+    emit_role_topology_diagnostic "invalid" "input_invalid"
+  fi
+
+  if ! verification_result="$(evaluate_role_topology diagnostic)"; then
+    unset PGPASSWORD
+    emit_role_topology_diagnostic "unavailable" "verification_unavailable"
+  fi
+  unset PGPASSWORD
+
+  case "${verification_result}" in
+    *'
+'*) emit_role_topology_diagnostic "unavailable" "verification_unavailable" ;;
+  esac
+
+  case "${verification_result}" in
+    'canonical|')
+      printf '%s\n' '{"schema":"pinvi.role-topology-diagnostic.v1","status":"canonical","mode":"sealed","reasons":[]}'
+      exit 0
+      ;;
+    'noncanonical|'*)
+      verification_reasons="${verification_result#noncanonical|}"
+      if [ -z "${verification_reasons}" ]; then
+        emit_role_topology_diagnostic "unavailable" "verification_unavailable"
+      fi
+      previous_position=0
+      json_reasons=""
+      while [ -n "${verification_reasons}" ]; do
+        case "${verification_reasons}" in
+          *,*)
+            verification_reason="${verification_reasons%%,*}"
+            verification_reasons="${verification_reasons#*,}"
+            ;;
+          *)
+            verification_reason="${verification_reasons}"
+            verification_reasons=""
+            ;;
+        esac
+        case "${verification_reason}" in
+          principal_identity) reason_position=1 ;;
+          bootstrap_catalog) reason_position=2 ;;
+          fence_acl) reason_position=3 ;;
+          runtime_role) reason_position=4 ;;
+          schema_owner_membership) reason_position=5 ;;
+          migration_owner_policy) reason_position=6 ;;
+          migrator_sealed) reason_position=7 ;;
+          migrator_membership_setting) reason_position=8 ;;
+          app_ownership) reason_position=9 ;;
+          extension_ownership) reason_position=10 ;;
+          *) emit_role_topology_diagnostic "unavailable" "verification_unavailable" ;;
+        esac
+        if [ "${reason_position}" -le "${previous_position}" ]; then
+          emit_role_topology_diagnostic "unavailable" "verification_unavailable"
+        fi
+        previous_position="${reason_position}"
+        if [ -n "${json_reasons}" ]; then
+          json_reasons="${json_reasons},"
+        fi
+        json_reasons="${json_reasons}\"${verification_reason}\""
+      done
+      printf '%s\n' "{\"schema\":\"pinvi.role-topology-diagnostic.v1\",\"status\":\"noncanonical\",\"mode\":\"sealed\",\"reasons\":[${json_reasons}]}"
+      exit 0
+      ;;
+    *) emit_role_topology_diagnostic "unavailable" "verification_unavailable" ;;
+  esac
+}
+
+if [ "${PINVI_ROLE_TOPOLOGY_VERIFY_ONLY}" = "1" ]; then
+  run_sealed_role_topology_verifier
+fi
 
 seal_migrator_login() {
   PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 \
@@ -374,350 +906,7 @@ fi
 # 원자적으로 부여한다. legacy receipt가 결박되기 전에는 app ACL/default ACL을 바꾸지 않는다.
 :
 
-role_topology_safe="$(
-  psql --no-psqlrc --no-password --tuples-only --no-align --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" \
-    --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
-    --set="bootstrap_owner=${POSTGRES_USER}" \
-    --set="app_role=${PINVI_APP_DB_USER}" \
-    --set="schema_owner=${PINVI_APP_SCHEMA_OWNER}" \
-    --set="migration_owner=${PINVI_MIGRATION_OWNER}" \
-    --set="migrator_role=${PINVI_MIGRATOR_DB_USER}" \
-    --set="legacy_rebaseline=${PINVI_M05_LEGACY_REBASELINE}" \
-    --set="migrator_disabled=${PINVI_MIGRATOR_DISABLE_LOGIN}" <<'SQL'
-WITH runtime_role AS (
-    SELECT * FROM pg_roles WHERE rolname = :'app_role'
-),
-schema_owner AS (
-    SELECT * FROM pg_roles WHERE rolname = :'schema_owner'
-),
-migration_owner AS (
-    SELECT * FROM pg_roles WHERE rolname = :'migration_owner'
-),
-migrator_role AS (
-    SELECT * FROM pg_roles WHERE rolname = :'migrator_role'
-),
-database_owner AS (
-    SELECT database_row.datdba AS oid, database_row.oid AS database_oid
-    FROM pg_database database_row
-    WHERE database_row.datname = current_database()
-),
-app_schema AS (
-    SELECT namespace.oid, namespace.nspowner
-    FROM pg_namespace namespace
-    WHERE namespace.nspname = 'app'
-),
-x_extension_schema AS (
-    SELECT namespace.oid, namespace.nspowner
-    FROM pg_namespace namespace
-    WHERE namespace.nspname = 'x_extension'
-),
-pinvi_internal_schema AS (
-    SELECT namespace.oid, namespace.nspowner
-    FROM pg_namespace namespace
-    WHERE namespace.nspname = 'pinvi_internal'
-),
-ops_schema AS (
-    SELECT namespace.oid, namespace.nspowner
-    FROM pg_namespace namespace
-    WHERE namespace.nspname = 'ops'
-),
-fresh_admission_fence AS (
-    SELECT procedure.oid, procedure.proowner, procedure.proacl
-    FROM pg_proc procedure
-    JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
-    WHERE namespace.nspname = 'pinvi_internal'
-      AND procedure.proname = 'acquire_fresh_0101_database_fence'
-      AND procedure.pronargs = 0
-),
-app_objects AS (
-    SELECT relation.relowner AS owner_oid
-    FROM pg_class relation
-    JOIN app_schema schema ON schema.oid = relation.relnamespace
-    UNION ALL
-    SELECT procedure.proowner
-    FROM pg_proc procedure
-    JOIN app_schema schema ON schema.oid = procedure.pronamespace
-    UNION ALL
-    SELECT type_row.typowner
-    FROM pg_type type_row
-    JOIN app_schema schema ON schema.oid = type_row.typnamespace
-    UNION ALL
-    SELECT operator_row.oprowner
-    FROM pg_operator operator_row
-    JOIN app_schema schema ON schema.oid = operator_row.oprnamespace
-    UNION ALL
-    SELECT collation_row.collowner
-    FROM pg_collation collation_row
-    JOIN app_schema schema ON schema.oid = collation_row.collnamespace
-    UNION ALL
-    SELECT conversion_row.conowner
-    FROM pg_conversion conversion_row
-    JOIN app_schema schema ON schema.oid = conversion_row.connamespace
-    UNION ALL
-    SELECT opclass_row.opcowner
-    FROM pg_opclass opclass_row
-    JOIN app_schema schema ON schema.oid = opclass_row.opcnamespace
-    UNION ALL
-    SELECT opfamily_row.opfowner
-    FROM pg_opfamily opfamily_row
-    JOIN app_schema schema ON schema.oid = opfamily_row.opfnamespace
-    UNION ALL
-    SELECT config_row.cfgowner
-    FROM pg_ts_config config_row
-    JOIN app_schema schema ON schema.oid = config_row.cfgnamespace
-    UNION ALL
-    SELECT dictionary_row.dictowner
-    FROM pg_ts_dict dictionary_row
-    JOIN app_schema schema ON schema.oid = dictionary_row.dictnamespace
-    UNION ALL
-    SELECT statistic_row.stxowner
-    FROM pg_statistic_ext statistic_row
-    JOIN app_schema schema ON schema.oid = statistic_row.stxnamespace
-    UNION ALL
-    SELECT extension_row.extowner
-    FROM pg_extension extension_row
-    JOIN app_schema schema ON schema.oid = extension_row.extnamespace
-)
-SELECT
-    (SELECT count(*) FROM runtime_role) = 1
-    AND (SELECT count(*) FROM schema_owner) = 1
-    AND (SELECT count(*) FROM migration_owner) = 1
-    AND (SELECT count(*) FROM migrator_role) = 1
-    AND (SELECT count(*) FROM database_owner) = 1
-    AND (SELECT oid FROM schema_owner) <> (SELECT oid FROM database_owner)
-    AND (SELECT count(*) FROM app_schema) = 1
-    AND (SELECT count(*) FROM x_extension_schema) = 1
-    AND (SELECT count(*) FROM pinvi_internal_schema) = 1
-    AND (SELECT count(*) FROM ops_schema) = 1
-    AND (SELECT nspowner FROM ops_schema) = (SELECT oid FROM migration_owner)
-    AND (SELECT nspowner FROM pinvi_internal_schema) = (SELECT oid FROM schema_owner)
-    AND (SELECT count(*) FROM fresh_admission_fence) = 1
-    AND (SELECT proowner FROM fresh_admission_fence) = (SELECT oid FROM database_owner)
-    AND EXISTS (
-        SELECT 1
-        FROM fresh_admission_fence fence
-        CROSS JOIN LATERAL aclexplode(
-            COALESCE(fence.proacl, acldefault('f', fence.proowner))
-        ) AS acl
-        WHERE acl.grantee = (SELECT oid FROM schema_owner)
-          AND acl.privilege_type = 'EXECUTE'
-          AND NOT acl.is_grantable
-    )
-    AND NOT EXISTS (
-        SELECT 1
-        FROM fresh_admission_fence fence
-        CROSS JOIN LATERAL aclexplode(
-            COALESCE(fence.proacl, acldefault('f', fence.proowner))
-        ) AS acl
-        WHERE NOT (
-            acl.grantee = fence.proowner
-            OR (acl.grantee = (SELECT oid FROM schema_owner)
-                AND acl.privilege_type = 'EXECUTE'
-                AND NOT acl.is_grantable)
-        )
-    )
-    AND EXISTS (
-        SELECT 1 FROM runtime_role runtime
-        WHERE runtime.rolcanlogin
-          AND NOT runtime.rolsuper
-          AND NOT runtime.rolcreaterole
-          AND NOT runtime.rolcreatedb
-          AND NOT runtime.rolreplication
-          AND NOT runtime.rolbypassrls
-          AND NOT runtime.rolinherit
-          AND runtime.oid <> (SELECT oid FROM database_owner)
-          AND NOT EXISTS (
-              SELECT 1 FROM pg_auth_members membership
-              WHERE membership.member = runtime.oid
-                 OR membership.roleid = runtime.oid
-          )
-          AND NOT has_database_privilege(runtime.oid, current_database(), 'CREATE')
-          AND has_schema_privilege(runtime.oid, 'x_extension', 'USAGE')
-          AND NOT has_schema_privilege(runtime.oid, 'app', 'CREATE')
-          AND NOT has_schema_privilege(runtime.oid, 'x_extension', 'CREATE')
-    )
-    AND EXISTS (
-        SELECT 1 FROM schema_owner owner
-        WHERE NOT owner.rolcanlogin
-          AND NOT owner.rolsuper
-          AND NOT owner.rolcreaterole
-          AND NOT owner.rolcreatedb
-          AND NOT owner.rolreplication
-          AND NOT owner.rolbypassrls
-          AND NOT owner.rolinherit
-          AND NOT EXISTS (
-              SELECT 1 FROM pg_auth_members membership
-              WHERE membership.member = owner.oid
-          )
-          AND (
-              SELECT count(*)
-              FROM pg_auth_members membership
-              WHERE membership.roleid = owner.oid
-                AND membership.member IN (
-                    (SELECT oid FROM migration_owner),
-                    (SELECT oid FROM migrator_role)
-                )
-                AND NOT membership.admin_option
-                AND NOT membership.inherit_option
-                AND membership.set_option
-          ) = 2
-          AND NOT EXISTS (
-              SELECT 1 FROM pg_auth_members membership
-              WHERE membership.roleid = owner.oid
-                AND (
-                    membership.member NOT IN (
-                        (SELECT oid FROM migration_owner),
-                        (SELECT oid FROM migrator_role)
-                    )
-                    OR membership.admin_option
-                    OR membership.inherit_option
-                    OR NOT membership.set_option
-                )
-          )
-    )
-    AND EXISTS (
-        SELECT 1 FROM migration_owner owner
-        WHERE NOT owner.rolcanlogin
-          AND NOT owner.rolsuper
-          AND NOT owner.rolcreaterole
-          AND NOT owner.rolcreatedb
-          AND NOT owner.rolreplication
-          AND NOT owner.rolbypassrls
-          AND NOT owner.rolinherit
-          AND owner.oid <> (SELECT oid FROM database_owner)
-          AND NOT has_database_privilege(owner.oid, current_database(), 'CONNECT')
-          AND has_schema_privilege(owner.oid, 'x_extension', 'USAGE')
-          AND NOT has_schema_privilege(owner.oid, 'x_extension', 'CREATE')
-          AND has_schema_privilege(owner.oid, 'pinvi_internal', 'USAGE')
-          AND NOT EXISTS (
-              SELECT 1
-              FROM pg_namespace app_namespace
-              CROSS JOIN LATERAL aclexplode(
-                  COALESCE(
-                      app_namespace.nspacl,
-                      acldefault('n', app_namespace.nspowner)
-                  )
-              ) AS app_acl
-              WHERE app_namespace.nspname = 'app'
-                AND app_acl.grantee IN (owner.oid, 0)
-                AND app_acl.privilege_type = 'CREATE'
-          )
-          AND EXISTS (
-              SELECT 1 FROM pg_auth_members membership
-              WHERE membership.member = owner.oid
-                AND membership.roleid = (SELECT oid FROM schema_owner)
-                AND NOT membership.admin_option
-                AND NOT membership.inherit_option
-                AND membership.set_option
-          )
-          AND NOT EXISTS (
-              SELECT 1 FROM pg_auth_members membership
-              WHERE membership.member = owner.oid
-                AND membership.roleid <> (SELECT oid FROM schema_owner)
-          )
-          AND (
-              SELECT count(*)
-              FROM pg_auth_members membership
-              WHERE membership.member = (SELECT oid FROM migrator_role)
-                AND membership.roleid = owner.oid
-                AND NOT membership.admin_option
-                AND NOT membership.inherit_option
-                AND membership.set_option
-          ) = 1
-          AND NOT EXISTS (
-              SELECT 1 FROM pg_auth_members membership
-              WHERE membership.roleid = owner.oid
-                AND (
-                    membership.member <> (SELECT oid FROM migrator_role)
-                    OR membership.admin_option
-                    OR membership.inherit_option
-                    OR NOT membership.set_option
-                )
-          )
-          AND NOT EXISTS (
-              SELECT 1 FROM pg_default_acl default_acl
-              WHERE default_acl.defaclrole = owner.oid
-                AND default_acl.defaclnamespace = 0
-          )
-    )
-    AND EXISTS (
-        SELECT 1 FROM migrator_role migrator
-        WHERE (:'migrator_disabled' = '1') = NOT migrator.rolcanlogin
-          AND NOT migrator.rolsuper
-          AND NOT migrator.rolcreaterole
-          AND NOT migrator.rolcreatedb
-          AND NOT migrator.rolreplication
-          AND NOT migrator.rolbypassrls
-          AND NOT migrator.rolinherit
-          AND migrator.oid <> (SELECT oid FROM database_owner)
-          AND (
-              (:'migrator_disabled' = '0'
-                AND has_database_privilege(migrator.oid, current_database(), 'CONNECT'))
-              OR (
-                  :'migrator_disabled' = '1'
-                  AND NOT has_database_privilege(migrator.oid, current_database(), 'CONNECT')
-                  AND NOT EXISTS (
-                      SELECT 1
-                      FROM pg_stat_activity activity
-                      WHERE activity.usesysid = migrator.oid
-                        AND activity.pid <> pg_backend_pid()
-                  )
-              )
-          )
-          AND NOT has_database_privilege(migrator.oid, current_database(), 'CREATE')
-          AND NOT pg_has_role(migrator.oid, (SELECT oid FROM database_owner), 'MEMBER')
-          AND NOT EXISTS (
-              SELECT 1 FROM pg_auth_members membership
-              WHERE membership.roleid = migrator.oid
-          )
-          AND (
-              SELECT count(*)
-              FROM pg_auth_members membership
-              WHERE membership.member = migrator.oid
-                AND membership.roleid IN (
-                    (SELECT oid FROM schema_owner),
-                    (SELECT oid FROM migration_owner)
-                )
-                AND NOT membership.admin_option
-                AND NOT membership.inherit_option
-                AND membership.set_option
-          ) = 2
-          AND NOT EXISTS (
-              SELECT 1 FROM pg_auth_members membership
-              WHERE membership.member = migrator.oid
-                AND membership.roleid NOT IN (
-                    (SELECT oid FROM schema_owner),
-                    (SELECT oid FROM migration_owner)
-                )
-          )
-          AND EXISTS (
-              SELECT 1
-              FROM pg_db_role_setting setting_row
-              WHERE setting_row.setrole = migrator.oid
-                AND setting_row.setdatabase = (SELECT database_oid FROM database_owner)
-                AND ('role=' || :'schema_owner') = ANY(setting_row.setconfig)
-          )
-    )
-    AND (SELECT nspowner FROM x_extension_schema) = :'bootstrap_owner'::regrole
-    AND (
-        :'legacy_rebaseline' = '1'
-        OR (
-            (SELECT nspowner FROM app_schema) = :'schema_owner'::regrole
-            AND NOT EXISTS (
-                SELECT 1 FROM app_objects
-                WHERE owner_oid <> :'schema_owner'::regrole
-            )
-        )
-    )
-    AND (
-        SELECT count(*)
-        FROM pg_extension extension_row
-        JOIN x_extension_schema schema ON schema.oid = extension_row.extnamespace
-        WHERE extension_row.extname IN ('pgcrypto', 'pg_trgm', 'citext')
-          AND extension_row.extowner = :'bootstrap_owner'::regrole
-    ) = 3;
-SQL
-)"
+role_topology_safe="$(evaluate_role_topology normal)"
 unset PGPASSWORD
 
 if [ "${role_topology_safe}" != "t" ]; then

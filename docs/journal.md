@@ -2,6 +2,26 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-26 (codex) — M05 topology diagnostic common evaluator와 strict transport
+
+- sealed verifier와 normal bootstrap final gate가 약 300행의 aggregate SQL을 별도 보유하던
+  drift 위험을 제거했다. `evaluate_role_topology`가 principal/catalog/fence/runtime/schema/
+  migration/migrator/app/extension의 같은 10개 불변식을 평가하고, normal은 `t`/`f`, sealed
+  verifier는 `status|ordered reasons` record를 받는다. evaluator는 `BEGIN READ ONLY`와 catalog
+  `SELECT`, `ROLLBACK`만 사용한다.
+- verifier transport는 raw psql JSON/regex/glob 수용을 제거했다. exact `canonical|` 또는
+  increasing fixed enum `noncanonical|…`만 locally JSON으로 다시 만들며, empty·unknown·duplicate·
+  역순·newline/multiple record·unexpected status는 `verification_unavailable` fixed JSON으로
+  fail-close한다. endpoint/input failure도 기존처럼 값 없는 typed JSON이다.
+- disposable PostGIS 16 Compose lifecycle proof를 확장했다. canonical 및 fixed 10-enum 전체를
+  explicit catalog mutation으로 확인했고, database owner collision은
+  `principal_identity`·`fence_acl`·`migrator_sealed`의 ordered multi-reason을 냈다. verifier
+  fingerprint에는 role attributes, database/schema ACL, default ACL, fence function owner/ACL,
+  extension owner를 포함했고 각 read-only probe 전후 동일함을 확인했다.
+- 검증: `sh -n`, `git diff --check`, focused unit **13 passed**, disposable PostGIS 16 integration
+  **1 passed**. 두 전문 적대 리뷰가 재검토해 P0/P1 없음, GO를 확인했다. 이 source PR은
+  Manager invocation을 포함하지 않으며, merge 뒤 별도 immutable pinset/new candidate만 허용한다.
+
 ## 2026-08-26 (codex) — M05 role topology aggregate failure의 안전한 진단 설계
 
 - fixed PinVi source `93296aee…`를 쓰는 Manager d9 candidate가 `map_runtime_ready` 뒤

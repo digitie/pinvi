@@ -1,5 +1,25 @@
 # resume.md
 
+## 2026-08-26 (codex) — M05 sealed role topology verifier P1/P2 보정 완료
+
+`PINVI_ROLE_TOPOLOGY_VERIFY_ONLY=1` verifier와 normal bootstrap final gate가 예전처럼 서로
+독립된 aggregate predicate 사본을 갖지 않도록 `evaluate_role_topology` 하나로 결박했다. common
+evaluator는 mode별로 normal `t`/`f` 또는 sealed diagnostic의 ordered record를 내고, 모두
+`BEGIN READ ONLY` catalog query 뒤 `ROLLBACK`으로 끝난다. 즉 verifier 추가는 normal role
+reconciliation·open→admin→seal lifecycle과 policy source of truth를 분리하지 않는다.
+
+shell parser는 exact `canonical|` 또는 fixed 10-enum의 strictly increasing
+`noncanonical|…`만 JSON으로 재구성한다. empty·unknown·duplicate·역순·multiple record와
+unexpected status는 raw output을 전달하지 않고 `verification_unavailable`으로 닫힌다. disposable
+PostGIS 16 lifecycle proof는 canonical 및 fixed 10-enum 전체를 실제 catalog mutation으로
+falsify하고, 각 verifier 실행 전후 확장 fingerprint가 같은 것을 확인했다. focused unit 13건과
+integration 1건이 통과했고 두 전문 적대 리뷰는 P0/P1 없음으로 GO를 냈다.
+
+다음 작업은 PinVi draft PR을 rebase·보안 점검·push·CI 완료 뒤 병합하는 것이다. 그 뒤 별도
+Manager PR에서 새 PinVi revision을 immutable pinset으로 회전하고 host-network sealed verifier를
+failure attribution으로만 실행한다. 기존 d9 journal은 재개하거나 source를 끼워 넣지 않으며, 새
+candidate로만 final rebuild를 재개한다.
+
 ## 2026-08-26 (codex) — M05 sealed role topology 읽기 전용 진단 착수
 
 Manager의 exact d9 후보는 `map_runtime_ready` 뒤 `pinvi_role_open` 및 failure cleanup

@@ -70,7 +70,9 @@
   `role_topology_noncanonical`로 fail-closed한 원인을, root catalog를 다시 변경하지 않고
   판별할 sealed-only verifier를 추가한다. verifier는 canonicality를 완화하거나 stale
   membership/ACL을 자동 수리하지 않으며, `BEGIN READ ONLY`의 fixed JSON reason enum만
-  출력한다. source PR merge 뒤 Manager invocation/pinset rotation은 별 PR·새 candidate로
+  출력한다. normal final gate와 verifier는 같은 catalog evaluator를 공유하며, parser는 한 record의
+  ordered fixed enum만 JSON으로 재구성한다. disposable PostGIS 16 canonical·fixed 10-enum 전체
+  noncanonical reason·expanded fingerprint 회귀를 통과했다. source PR merge 뒤 Manager invocation/pinset rotation은 별 PR·새 candidate로
   진행한다. 설계 정본은
   [`t-vn-m05-role-topology-verifier.md`](execplan/t-vn-m05-role-topology-verifier.md)다.
 - [ ] **T-349** — `app.retention_runs`에 `status='executing'`이 최대 1개라는 불변식이 DB 제약이

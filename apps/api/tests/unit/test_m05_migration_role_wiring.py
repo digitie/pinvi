@@ -61,6 +61,26 @@ def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
     )
 
     assert "PINVI_MIGRATOR_DISABLE_LOGIN" in bootstrap
+    assert "PINVI_ROLE_TOPOLOGY_VERIFY_ONLY" in bootstrap
+    assert "evaluate_role_topology()" in bootstrap
+    assert "run_sealed_role_topology_verifier()" in bootstrap
+    assert "BEGIN READ ONLY;" in bootstrap
+    assert '"schema":"pinvi.role-topology-diagnostic.v1"' in bootstrap
+    assert "migrator_sealed" in bootstrap
+    assert "migrator_membership_setting" in bootstrap
+    verifier = bootstrap[
+        bootstrap.index("evaluate_role_topology()") : bootstrap.index("seal_migrator_login()")
+    ]
+    for mutation in (
+        "ALTER ",
+        "CREATE ",
+        "GRANT ",
+        "REVOKE ",
+        "DROP ",
+        "pg_terminate_backend",
+        "\\gexec",
+    ):
+        assert mutation not in verifier
     assert "WITH INHERIT FALSE, SET TRUE" in bootstrap
     assert "REVOKE CONNECT ON DATABASE" in bootstrap
     assert "NOT has_database_privilege(owner.oid, current_database(), 'CONNECT')" in bootstrap
@@ -80,6 +100,9 @@ def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
     assert "FROM pg_operator operator_row" in bootstrap
     assert "FROM pg_collation collation" in bootstrap
     assert "FROM pg_extension extension" in bootstrap
+    assert 'role_topology_safe="$(evaluate_role_topology normal)"' in bootstrap
+    assert '--set="topology_output=${topology_output}"' in bootstrap
+    assert "grep -E" not in verifier
     assert "REVOKE ALL ON FUNCTION x_extension.digest(bytea, text) FROM PUBLIC;" in bootstrap
     assert "GRANT EXECUTE ON FUNCTION x_extension.digest(bytea, text)" in bootstrap
     assert "WHERE membership.roleid = owner.oid" in bootstrap
@@ -160,6 +183,8 @@ def test_bootstrap_only_accepts_the_declared_postgres_endpoints(tmp_path: Path) 
         "  exit 96\n"
         "fi\n"
         'case " $* " in\n'
+        "  *topology_output=diagnostic*) printf '%s\\n' \"${PINVI_TEST_TOPOLOGY_RESULT:-canonical|}\" ;;\n"
+        "  *topology_output=normal*) printf 't\\n' ;;\n"
         "  *\" --tuples-only \"*) printf 't\\n' ;;\n"
         "esac\n"
         "exit 0\n",
@@ -181,6 +206,90 @@ def test_bootstrap_only_accepts_the_declared_postgres_endpoints(tmp_path: Path) 
             },
         )
         assert result.returncode == 0, result.stderr
+
+    verifier = subprocess.run(  # noqa: S603 -- fixed repository script under test
+        [shell, str(ROOT / "infra" / "postgres" / "bootstrap-pinvi-runtime-role.sh")],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            **required_environment,
+            "PATH": f"{tmp_path}:{required_environment['PATH']}",
+            "PGHOSTADDR": "127.0.0.2",
+            "PINVI_ROLE_TOPOLOGY_VERIFY_ONLY": "1",
+        },
+    )
+    assert verifier.returncode == 0
+    assert verifier.stderr == ""
+    assert verifier.stdout.strip() == (
+        '{"schema":"pinvi.role-topology-diagnostic.v1","status":"canonical",'
+        '"mode":"sealed","reasons":[]}'
+    )
+
+    accepted_noncanonical = subprocess.run(  # noqa: S603 -- fixed repository script under test
+        [shell, str(ROOT / "infra" / "postgres" / "bootstrap-pinvi-runtime-role.sh")],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            **required_environment,
+            "PATH": f"{tmp_path}:{required_environment['PATH']}",
+            "PINVI_ROLE_TOPOLOGY_VERIFY_ONLY": "1",
+            "PINVI_TEST_TOPOLOGY_RESULT": "noncanonical|bootstrap_catalog,migrator_membership_setting",
+        },
+    )
+    assert accepted_noncanonical.returncode == 0
+    assert accepted_noncanonical.stderr == ""
+    assert accepted_noncanonical.stdout.strip() == (
+        '{"schema":"pinvi.role-topology-diagnostic.v1","status":"noncanonical",'
+        '"mode":"sealed","reasons":["bootstrap_catalog","migrator_membership_setting"]}'
+    )
+
+    for malformed_result in (
+        "noncanonical|",
+        "noncanonical|unknown_reason",
+        "noncanonical|runtime_role,runtime_role",
+        "noncanonical|runtime_role,bootstrap_catalog",
+        "canonical|\nnoncanonical|runtime_role",
+        "canonical|unexpected",
+    ):
+        malformed_verifier = subprocess.run(  # noqa: S603 -- fixed repository script under test
+            [shell, str(ROOT / "infra" / "postgres" / "bootstrap-pinvi-runtime-role.sh")],
+            check=False,
+            capture_output=True,
+            text=True,
+            env={
+                **required_environment,
+                "PATH": f"{tmp_path}:{required_environment['PATH']}",
+                "PINVI_ROLE_TOPOLOGY_VERIFY_ONLY": "1",
+                "PINVI_TEST_TOPOLOGY_RESULT": malformed_result,
+            },
+        )
+        assert malformed_verifier.returncode == 0
+        assert malformed_verifier.stderr == ""
+        assert malformed_verifier.stdout.strip() == (
+            '{"schema":"pinvi.role-topology-diagnostic.v1","status":"unavailable",'
+            '"mode":"sealed","reasons":["verification_unavailable"]}'
+        )
+
+    invalid_verifier = subprocess.run(  # noqa: S603 -- fixed repository script under test
+        [shell, str(ROOT / "infra" / "postgres" / "bootstrap-pinvi-runtime-role.sh")],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            **required_environment,
+            "PATH": f"{tmp_path}:{required_environment['PATH']}",
+            "PINVI_ROLE_TOPOLOGY_VERIFY_ONLY": "1",
+            "PINVI_DB_HOST": "db.example.test",
+        },
+    )
+    assert invalid_verifier.returncode == 0
+    assert invalid_verifier.stderr == ""
+    assert invalid_verifier.stdout.strip() == (
+        '{"schema":"pinvi.role-topology-diagnostic.v1","status":"invalid",'
+        '"mode":"sealed","reasons":["input_invalid"]}'
+    )
 
 
 def test_0101_switches_only_m05_objects_and_restores_app_owner_for_versioning() -> None:

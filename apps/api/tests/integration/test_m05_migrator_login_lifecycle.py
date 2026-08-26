@@ -162,6 +162,84 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
         assert len(state) == 7
         return tuple(state)  # type: ignore[return-value]
 
+    def role_catalog_fingerprint() -> str:
+        query = (
+            "WITH catalog_rows(value) AS ("  # noqa: S608 - role names use a fixed prefix plus UUID hex only
+            "SELECT 'role|' || rolname || '|' || rolcanlogin::text || '|' || rolsuper::text "
+            "|| '|' || rolcreaterole::text || '|' || rolcreatedb::text || '|' "
+            "|| rolreplication::text || '|' || rolbypassrls::text || '|' || rolinherit::text "
+            "FROM pg_roles "
+            f"WHERE rolname IN ('{root_role}', '{runtime_role}', '{schema_owner}', "
+            f"'{migration_owner}', '{migrator_role}') "
+            "UNION ALL "
+            "SELECT 'membership|' || roleid::text || '|' || member::text || '|' "
+            "|| admin_option::text || '|' || inherit_option::text || '|' || set_option::text "
+            "FROM pg_auth_members "
+            "UNION ALL "
+            "SELECT 'setting|' || setdatabase::text || '|' || setrole::text || '|' "
+            "|| array_to_string(setconfig, ',') "
+            "FROM pg_db_role_setting "
+            "UNION ALL "
+            "SELECT 'database|' || datname || '|' || datdba::text || '|' || COALESCE(datacl::text, '') "
+            "FROM pg_database WHERE datname = current_database() "
+            "UNION ALL "
+            "SELECT 'schema|' || nspname || '|' || nspowner::text || '|' || COALESCE(nspacl::text, '') "
+            "FROM pg_namespace "
+            "WHERE nspname IN ('app', 'ops', 'pinvi_internal', 'x_extension') "
+            "UNION ALL "
+            "SELECT 'default_acl|' || defaclrole::text || '|' || defaclnamespace::text || '|' "
+            "|| defaclobjtype::text || '|' || COALESCE(defaclacl::text, '') "
+            "FROM pg_default_acl "
+            "UNION ALL "
+            "SELECT 'fence|' || procedure.proowner::text || '|' || COALESCE(procedure.proacl::text, '') "
+            "FROM pg_proc procedure JOIN pg_namespace namespace "
+            "ON namespace.oid = procedure.pronamespace "
+            "WHERE namespace.nspname = 'pinvi_internal' "
+            "AND procedure.proname = 'acquire_fresh_0101_database_fence' "
+            "AND procedure.pronargs = 0 "
+            "UNION ALL "
+            "SELECT 'extension|' || extname || '|' || extowner::text "
+            "FROM pg_extension "
+            "WHERE extname IN ('pgcrypto', 'pg_trgm', 'citext')"
+            ") "
+            "SELECT md5(COALESCE(string_agg(value, E'\\n' ORDER BY value), '')) "
+            "FROM catalog_rows"
+        )
+        result = compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            "--no-psqlrc",
+            "--tuples-only",
+            "--no-align",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            f"--command={query}",
+        )
+        return result.stdout.strip()
+
+    def sealed_role_topology_diagnostic() -> str:
+        result = compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "--env",
+            "PINVI_ROLE_TOPOLOGY_VERIFY_ONLY=1",
+            "--env",
+            "PINVI_MIGRATOR_DISABLE_LOGIN=1",
+            "app-db-runtime-role",
+        )
+        return result.stdout.strip()
+
+    def assert_sealed_noncanonical(reason: str) -> None:
+        before = role_catalog_fingerprint()
+        assert sealed_role_topology_diagnostic() == (
+            '{"schema":"pinvi.role-topology-diagnostic.v1","status":"noncanonical",'
+            f'"mode":"sealed","reasons":["{reason}"]}}'
+        )
+        assert role_catalog_fingerprint() == before
+
     def runtime_app_privilege_state() -> tuple[str, str, str, str, str]:
         query = (
             "SELECT "
@@ -253,7 +331,88 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             "t",
             "20260824_0101",
         )
+        canonical_fingerprint = role_catalog_fingerprint()
+        assert sealed_role_topology_diagnostic() == (
+            '{"schema":"pinvi.role-topology-diagnostic.v1","status":"canonical",'
+            '"mode":"sealed","reasons":[]}'
+        )
+        assert role_catalog_fingerprint() == canonical_fingerprint
         assert runtime_app_privilege_state() == ("t", "t", "t", "t", "t")
+
+        # The evaluator is shared by the normal final gate and the sealed-only
+        # diagnostic.  Each injected canonicality violation has one stable
+        # typed reason; the diagnostic itself must not change the catalog.
+        topology_cases = (
+            (
+                "bootstrap_catalog",
+                f'ALTER SCHEMA ops OWNER TO "{root_role}";',
+                f'ALTER SCHEMA ops OWNER TO "{migration_owner}";',
+            ),
+            (
+                "fence_acl",
+                "REVOKE EXECUTE ON FUNCTION pinvi_internal.acquire_fresh_0101_database_fence() "
+                f'FROM "{schema_owner}";',
+                "GRANT EXECUTE ON FUNCTION pinvi_internal.acquire_fresh_0101_database_fence() "
+                f'TO "{schema_owner}";',
+            ),
+            (
+                "runtime_role",
+                f'ALTER ROLE "{runtime_role}" NOLOGIN;',
+                f'ALTER ROLE "{runtime_role}" LOGIN;',
+            ),
+            (
+                "migration_owner_policy",
+                f'GRANT CONNECT ON DATABASE "pinvi" TO "{migration_owner}";',
+                f'REVOKE CONNECT ON DATABASE "pinvi" FROM "{migration_owner}";',
+            ),
+            (
+                "migrator_sealed",
+                f'ALTER ROLE "{migrator_role}" LOGIN; '
+                f'GRANT CONNECT ON DATABASE "pinvi" TO "{migrator_role}";',
+                f'ALTER ROLE "{migrator_role}" NOLOGIN; '
+                f'REVOKE CONNECT ON DATABASE "pinvi" FROM "{migrator_role}";',
+            ),
+            (
+                "migrator_membership_setting",
+                f'ALTER ROLE "{migrator_role}" IN DATABASE "pinvi" RESET ROLE;',
+                f'ALTER ROLE "{migrator_role}" IN DATABASE "pinvi" SET ROLE TO "{schema_owner}";',
+            ),
+            (
+                "app_ownership",
+                f'ALTER SCHEMA app OWNER TO "{root_role}";',
+                f'ALTER SCHEMA app OWNER TO "{schema_owner}";',
+            ),
+            (
+                "extension_ownership",
+                "DROP EXTENSION citext;",
+                "CREATE EXTENSION citext SCHEMA x_extension;",
+            ),
+        )
+        for reason, inject, restore in topology_cases:
+            compose(
+                "exec",
+                "-T",
+                "app-postgres",
+                "psql",
+                f"--username={root_role}",
+                "--dbname=pinvi",
+                f"--command={inject}",
+            )
+            assert_sealed_noncanonical(reason)
+            compose(
+                "exec",
+                "-T",
+                "app-postgres",
+                "psql",
+                f"--username={root_role}",
+                "--dbname=pinvi",
+                f"--command={restore}",
+            )
+            assert sealed_role_topology_diagnostic() == (
+                '{"schema":"pinvi.role-topology-diagnostic.v1","status":"canonical",'
+                '"mode":"sealed","reasons":[]}'
+            )
+
         compose(
             "exec",
             "-T",
@@ -263,6 +422,12 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             "--dbname=pinvi",
             f'--command=ALTER DATABASE "pinvi" OWNER TO "{schema_owner}";',
         )
+        database_owner_diagnostic_fingerprint = role_catalog_fingerprint()
+        assert sealed_role_topology_diagnostic() == (
+            '{"schema":"pinvi.role-topology-diagnostic.v1","status":"noncanonical",'
+            '"mode":"sealed","reasons":["principal_identity","fence_acl","migrator_sealed"]}'
+        )
+        assert role_catalog_fingerprint() == database_owner_diagnostic_fingerprint
         database_owner_collision = compose(
             "run",
             "--rm",
@@ -435,6 +600,12 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             f'CREATE ROLE "{stale_role}" LOGIN NOINHERIT; '
             f'GRANT "{schema_owner}" TO "{stale_role}" WITH INHERIT FALSE, SET TRUE;',
         )
+        stale_membership_fingerprint = role_catalog_fingerprint()
+        assert sealed_role_topology_diagnostic() == (
+            '{"schema":"pinvi.role-topology-diagnostic.v1","status":"noncanonical",'
+            '"mode":"sealed","reasons":["schema_owner_membership"]}'
+        )
+        assert role_catalog_fingerprint() == stale_membership_fingerprint
         stale_membership = compose(
             "run",
             "--rm",

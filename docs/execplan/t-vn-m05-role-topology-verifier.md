@@ -49,19 +49,28 @@ sealed 상태만 관찰하는 비밀 비노출 진단 계약을 PinVi source에 
 ## 구현 순서
 
 1. bootstrap script의 input validation과 endpoint readiness 뒤에 verify-only early-return을 둔다.
-2. 기존 aggregate predicate와 같은 catalog facts를 class별 boolean으로 분리해 JSON 한 줄로
-   만든다. SQL은 `BEGIN READ ONLY`와 `SELECT` 외 문장을 쓰지 않는다.
-3. disposable PostGIS 16 Compose test에서 canonical sealed result, stale membership의 typed
-   noncanonical result, verifier 전후 catalog fingerprint 불변을 확인한다.
-4. static test에서 verify-only가 mutation 경로·raw output을 갖지 않고 endpoint/input failure도
-   typed JSON으로 닫히는지 확인한다.
-5. PinVi PR merge 뒤 별도 Docker Manager PR이 exact revision/pinset과 root-only verifier
+2. normal final gate와 sealed verifier가 **하나의** catalog evaluator를 사용하게 한다. evaluator는
+   normal에는 `t`/`f`, verifier에는 status와 ordered reason record만 내며, SQL은 `BEGIN READ ONLY`와
+   catalog `SELECT`·`ROLLBACK` 외 문장을 쓰지 않는다.
+3. verifier는 evaluator record를 fixed enum/strictly increasing order로 다시 검증한 뒤 JSON 한 줄을
+   재구성한다. empty·unknown·duplicate·역순·multiple record는 `verification_unavailable`으로
+   fail-close한다.
+4. disposable PostGIS 16 Compose test에서 canonical sealed result와 fixed 10-enum 전체의
+   typed noncanonical result를 확인한다. `principal_identity`는 database owner collision이
+   함께 위반하는 `fence_acl`·`migrator_sealed`까지 ordered multi-reason으로 증명하며, verifier
+   전후 확장 catalog fingerprint 불변도 확인한다.
+5. static test에서 verify-only가 mutation 경로·raw output을 갖지 않고 endpoint/input failure 및
+   malformed evaluator record도 typed JSON으로 닫히는지 확인한다.
+6. PinVi PR merge 뒤 별도 Docker Manager PR이 exact revision/pinset과 root-only verifier
    command를 추가한다. 새 source는 old d9 journal의 authority가 아니며 새 candidate가 필요하다.
 
 ## 완료 조건
 
 - 통합 test가 실제 PostGIS 16에서 canonical과 stale membership의 typed 결과를 증명한다.
-- verify-only 전후 catalog fingerprint가 동일하다.
+- normal gate와 verifier가 common evaluator를 사용하며, verify-only 전후 확장 catalog fingerprint가
+  동일하다.
+- JSON은 exactly one record와 ordered fixed enum만 수용하고 malformed record는
+  `verification_unavailable`으로 닫힌다.
 - verifier output과 오류 경로에 secret·DSN·catalog 값이 없다.
 - 두 전문 적대 리뷰가 PinVi source PR을 승인한다.
 - Manager wiring은 이 PR과 분리하고, 새 immutable pinset/candidate에서만 사용한다.
