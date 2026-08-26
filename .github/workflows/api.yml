@@ -67,8 +67,10 @@ jobs:
     # 예약 실행은 staleness 확인이 목적이라 전체 suite는 돌리지 않는다.
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    # T-348: 통합 스위트가 계속 자라 15분으로는 부족해졌다(main 관측: 9:00 / 10:53 / 20:06).
-    # 35분은 최근 최댓값(20:06)에 70%대 여유를 둔 값이다 — 스위트가 더 자라면 다시 올려야 한다.
+    # T-348/T-351: 통합 스위트가 계속 자라 15분으로는 부족해졌다(main 관측: 9:00 / 10:53 / 20:06).
+    # T-351에서 `pytest tests/integration`을 아래 `integration-test` 4-shard job으로 떼어냈으므로
+    # 이 job은 다시 가벼워졌다 — 35분은 그 이전 최댓값에 맞춘 값이라 지금은 넉넉한 여유다.
+    # 재측정 없이 낮추지 않는다(T-348에서 겪은 실수: 근거 없이 줄이면 다시 걸린다).
     timeout-minutes: 35
 
     services:
@@ -148,12 +150,6 @@ jobs:
           PINVI_DATABASE_URL: postgresql+asyncpg://pinvi:pinvi_ci_password@localhost:5432/pinvi_ci
         run: alembic upgrade head
 
-      - name: pytest (integration)
-        env:
-          PINVI_JWT_SECRET_KEY: pinvi-ci-jwt-secret-32-bytes-minimum-aaaa
-          PINVI_DATABASE_URL: postgresql+asyncpg://pinvi:pinvi_ci_password@localhost:5432/pinvi_ci
-        run: pytest tests/integration -q
-
       - name: wheel install resolves the packaged Map service provenance
         run: |
           rm -rf /tmp/pinvi-api-wheel /tmp/pinvi-api-wheel-verify
@@ -179,6 +175,45 @@ jobs:
           assert config.KOR_TRAVEL_MAP_FEATURE_REFERENCE_RECONCILIATION_CAPABILITY_GENERATION == 1
           PY
           )
+
+  # T-351: 통합 스위트가 계속 자라(684건+, 파일 91개) 한 job 안에서 순차 실행하면 job
+  # timeout을 계속 올려야 하는 문제가 재발한다(T-348). `pytest-split`으로 4개 독립 job에
+  # 나눠 병렬 실행한다 — 각 shard가 자체 PostGIS testcontainer를 띄우므로(conftest.py
+  # session-scope fixture) 공유 상태 없이 안전하게 나뉜다. 아직 `.test_durations` 캐시가
+  # 없어 테스트 개수 기준 균등 분할이다(그룹당 정확히 171개) — 특정 shard가 유독 무거운
+  # 테스트를 몰아 받으면 나중에 `pytest --store-durations`로 캐시를 만들어 재분배한다.
+  integration-test:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3, 4]
+
+    defaults:
+      run:
+        working-directory: apps/api
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: pytest (integration, shard ${{ matrix.group }}/4)
+        env:
+          PINVI_JWT_SECRET_KEY: pinvi-ci-jwt-secret-32-bytes-minimum-aaaa
+        run: pytest tests/integration -q --splits 4 --group ${{ matrix.group }}
 
   docker-provenance-image:
     # 예약 실행은 staleness 확인만 수행한다. Docker image 검증은 변경 가능한 PR/push에서만 한다.

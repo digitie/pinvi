@@ -81,6 +81,16 @@ jobs:
               // `Aggregate CI gate`가 유일한 required check이므로 여기에 넣지 않으면
               // job이 red여도 머지가 막히지 않는다(= 과거 항상-skip 테스트와 같은 강도).
               requiredChecks.push("contract-pin-consistency");
+              // T-351: api.yml의 `integration-test` matrix(`group: [1, 2, 3, 4]`)가 만드는
+              // 4개 check 이름이다 — GitHub Actions matrix job의 check 이름은
+              // "<job id> (<matrix 값>)" 형식이라 여기 문자열 그대로 정확히 맞아야 한다.
+              // api.yml의 group 개수를 바꾸면 이 배열도 같이 바꿔야 한다 — 안 바꾸면 늘어난/
+              // 줄어든 shard를 게이트가 기다리지 않아 위 contract-pin-consistency와 같은
+              // 항상-skip 맹점이 재발한다.
+              requiredChecks.push("integration-test (1)");
+              requiredChecks.push("integration-test (2)");
+              requiredChecks.push("integration-test (3)");
+              requiredChecks.push("integration-test (4)");
             }
             if (hasAny([
               startsWith("apps/web/"),
