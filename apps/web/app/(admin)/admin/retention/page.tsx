@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Archive,
@@ -123,6 +123,17 @@ export default function AdminRetentionPage() {
   const location = summary?.location_log_archive ?? null;
   const runs = runsQuery.data?.items ?? summary?.latest_runs ?? [];
   const expectedConfirmPhrase = summary?.confirm_phrase ?? 'EXECUTE RETENTION';
+
+  // T-350: `executing` 배지 옆 경과시간(`formatElapsed`)은 렌더 시점의 `Date.now()`를 쓴다 —
+  // 이 컴포넌트를 재렌더시킬 틱이 없으면 마지막 fetch 시점에 고정된 스냅샷처럼 보인다. `executing`
+  // run이 있을 때만 1초마다 재렌더시켜 §5.2의 15분 stale 기준과 실제로 맞물리게 한다.
+  const hasExecutingRun = runs.some((run) => run.status === 'executing');
+  const [, setElapsedTick] = useState(0);
+  useEffect(() => {
+    if (!hasExecutingRun) return;
+    const id = setInterval(() => setElapsedTick((tick) => tick + 1), 1000);
+    return () => clearInterval(id);
+  }, [hasExecutingRun]);
 
   const dryRunMutation = useMutation({
     mutationFn: () =>
