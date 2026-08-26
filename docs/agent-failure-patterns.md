@@ -135,21 +135,21 @@ SH
 
 ## 7. Playwright 실패 분류
 
-1. 먼저 N150에서 실행한다.
-2. 브라우저 runtime, 권한, display, 네트워크 문제로 N150 실행이 불가능하면 Windows
-   fallback을 사용한다.
-3. fallback을 쓴 경우 journal/PR에 N150 실패 사유와 Windows 실행 명령을 적는다.
+1. N150에서 실행한다.
+2. 브라우저 runtime, 권한, display, 네트워크 문제로 N150 실행이 불가능하면 live gate를
+   중단한다.
+3. 중단한 경우 journal/PR에 N150 실패 사유와 중단 명령을 적는다.
 
 - Ubuntu 26.04 N150에서 `npx playwright install chromium`이 "Playwright does not support
   chromium on ubuntu26.04-x64"로 실패할 수 있다. 이 경우 N150 Web/API health를 먼저 확인한 뒤
-  Windows fallback runner로 동일 live suite를 실행하고, 실패 사유를 journal/PR에 남긴다.
+  Docker runner를 사용하고, runner도 준비되지 않으면 live gate를 중단해 실패 사유를 journal/PR에 남긴다.
 
 ## 8. 표준 fallback 순서
 
 1. **Git/branch/commit**: Linux git + Linux worktree 포인터.
 2. **탐색**: Linux native `rg`, `sed`, `git`, CodeGraph.
 3. **검증**: Linux `pytest` / `ruff` / `mypy` / `npm` / Docker.
-4. **브라우저**: N150 Playwright 우선, 불가 시 Windows fallback.
+4. **브라우저**: N150 x86_64 Playwright Docker runner만 사용. 불가 시 gate 중단.
 5. **문서화**: 새 실패 패턴이 재현되면 `docs/journal.md`와 본 문서에 추가.
 
 ## 참고

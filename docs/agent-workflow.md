@@ -11,7 +11,7 @@
 | -------------------- | --------------- | ------------------------------------------------------------------ | ---------------------------------------------------------- |
 | Linux agent worktree | source of truth | 편집, git, CodeGraph, commit, push, PR, 테스트, Docker, dev server | 기존 `/mnt/f/...` worktree도 Linux 포인터로 repair 후 사용 |
 | N150                 | live 검증       | 운영/스테이징 smoke, live API/UI, Playwright 우선 실행             | 민감 host/IP/domain은 로컬 런북에만 기록                   |
-| Windows              | fallback runner | N150 Playwright가 불가능할 때 브라우저 e2e fallback                | 사유를 journal/PR에 기록                                   |
+| Windows              | 비대상          | live/UI gate의 브라우저 실행 대상이 아님                         | N150 불가 시 gate 중단                                     |
 
 - 에이전트별 worktree 이름은 고정이다(ADR-017): Claude=`pinvi-claude`,
   Codex=`pinvi-codex`, Antigravity=`pinvi-antigravity`.
@@ -54,7 +54,7 @@ codegraph sync
 영향 평가  컴포넌트/함수/서비스 변경 전 codegraph_explore 우선
 편집       동일 Linux worktree에서 파일 수정
 검증       Linux pytest/ruff/mypy/npm/docker/dev server
-브라우저   N150 Playwright 우선, 불가 시 Windows fallback
+브라우저   N150 x86_64 Playwright Docker runner만 사용, 불가 시 gate 중단
 기록       journal/resume/tasks/ADR/CHANGELOG 해당 항목 갱신
 publish    Linux git add/commit/push + PR
 ```
@@ -94,8 +94,8 @@ N150 Docker runner와 host browser 실행이 모두 runtime/권한/네트워크 
 Windows runner를 쓴다.
 그 경우 검증 기록에 다음 정보를 남긴다.
 
-- N150에서 실패한 이유
-- Windows fallback에서 실행한 명령
+- N150에서 실패한 이유 또는 gate 중단 사유
+- Windows에서 live/UI gate를 실행하지 않았는지 확인
 - 통과/실패한 spec
 
 ## 6. PR 마무리

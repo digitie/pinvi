@@ -55,6 +55,14 @@ CI gate가 가장 느린 shard까지 정확히 기다려 통과 확인 후 머�
 `.test_durations` 캐시를 만들어(`pytest --store-durations`) T-351의 count 기반 분할을
 duration 기반으로 재분배(현재도 정상 동작하지만 shard 3가 유독 오래 걸림 — 5m24s~5m28s,
 1번은 2m36s~2m53s로 편차가 큼).
+## 2026-08-26 (codex) — PR487 리뷰 차단 해소 진행
+
+exact head `e442cc63`에 대한 두 전문 리뷰에서 외부 DB 주입, fresh-stack 재사용, 포트 검증,
+N150-only 실행, ADR-039 충돌이 P1으로 판정되어 코드를 fail-closed로 보강하고 현재 문서를
+ADR-067 기준으로 정리했다. 신규 회귀 포함 운영 unit 53건과 shell/Compose/diff 검증은 통과했다.
+
+**다음 한 작업**: 변경을 커밋·push한 뒤 N150 fresh deploy/migration/smoke와 authenticated Admin
+live UI를 exact head로 통과시키고, 두 전문 리뷰와 CI green을 확인한 뒤 PR #487을 머지한다.
 
 ## 2026-08-26 (claude) — T-350 머지 완료 (기존 PR #485의 main 이탈 충돌 해소)
 

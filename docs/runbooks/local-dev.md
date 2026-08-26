@@ -61,8 +61,8 @@ codegraph sync
 - git / branch / commit / push / PR은 Linux git으로 수행한다.
 - CodeGraph는 Linux native `codegraph`만 사용한다. `/mnt/c/...`, `.exe`, `.cmd` shim이면 중지한다.
 - 의존성 설치, 테스트, Docker, dev server, lint/typecheck/build/Vitest도 Linux에서 수행한다.
-- Playwright는 N150에서 먼저 실행하고, N150 Docker runner 또는 host browser 실행이 모두 불가능할 때만
-  Windows fallback을 쓴다.
+- Playwright live/UI gate는 N150 x86_64 Docker runner에서만 실행한다. runner와 host browser가
+  모두 불가능하면 gate를 중단한다.
 
 ## 4. Windows shell wrapper
 
@@ -205,8 +205,8 @@ PINVI_DATABASE_URL='postgresql+psycopg://pinvi:changeme@localhost:5432/pinvi_mig
 
 ## 7. 프론트 (`apps/web`)
 
-프론트 개발 서버와 일반 검증은 **Linux worktree**에서 실행한다. Windows에서 실행하는 프론트 명령은
-N150 Playwright가 불가능할 때의 fallback runner로 제한한다.
+프론트 개발 서버와 일반 검증은 **Linux worktree**에서 실행한다. Windows는 live/UI gate 실행
+대상이 아니다.
 
 ```bash
 cd /mnt/f/dev/pinvi-codex
@@ -227,8 +227,8 @@ npm --workspace apps/web test       # Vitest
 
 Playwright 기반 브라우저 e2e는 N150에서 먼저 실행한다. Ubuntu 26.04 host Chromium
 dependency 문제를 피하려면 `scripts/n150-playwright-runner.sh` Docker runner를 사용한다.
-N150 Docker runner와 host browser 실행이 모두 불가능할 때만 Windows runner를 fallback으로
-사용하고, 사유와 명령을 journal/PR에 기록한다.
+N150 Docker runner와 host browser 실행이 모두 불가능하면 gate를 중단하고, 사유와 명령을
+journal/PR에 기록한다.
 
 ```bash
 ssh n150
@@ -241,7 +241,7 @@ scripts/n150-playwright-runner.sh -- \
 ```
 
 Windows에서 `npm run dev`, `npm run lint`, `npm run typecheck`, `npm run build`를 실행하지 않는다.
-Windows Node/npm은 N150 Playwright가 불가능할 때의 fallback runner로만 쓴다.
+Windows Node/npm은 live/UI gate에 사용하지 않는다.
 
 ## 8. 인프라 (Docker)
 

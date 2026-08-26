@@ -35,9 +35,9 @@ Pinvi 로컬 개발 / Docker / ETL / Admin / N150 배포 / 백업 / 파일 저�
 ### 2.1 작업 흐름
 
 git / 편집 / commit / push / PR은 **Linux worktree**에서 Linux `git`으로 실행한다(ADR-051).
-CodeGraph, 테스트, Docker, 의존성 설치, 장기 실행도 Linux에서 수행한다. Playwright는 N150을
-우선하고, N150 Docker runner 또는 host browser 실행이 불가능할 때만 Windows runner를 fallback으로
-사용한다. 자세한 순서는 [agent-workflow](../agent-workflow.md)와 [local-dev.md](./local-dev.md)를
+CodeGraph, 테스트, Docker, 의존성 설치, 장기 실행도 Linux에서 수행한다. Playwright live/UI gate는
+N150 x86_64 Docker runner에서만 실행하며, runner 또는 host browser가 불가능하면 gate를 중단한다.
+자세한 순서는 [agent-workflow](../agent-workflow.md)와 [local-dev.md](./local-dev.md)를
 따른다.
 
 ### 2.2 포트 규약

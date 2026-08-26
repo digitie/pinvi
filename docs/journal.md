@@ -79,6 +79,17 @@
   문자열로 치환된다(루프 자체는 정상적으로 4번 돈다) — 반드시 `.sh` 파일에 써서 그 파일을
   실행해야 한다. (2) 로컬 shard 분할 검증 시 처음에 이 문제로 group 값이 다 비어 결과가
   깨졌었는데, 파일 기반으로 바꾸자 바로 해결됐다.
+## 2026-08-26 (codex) — PR487 적대 리뷰 P1 반영
+
+- exact head `e442cc63`에 대한 전문 리뷰 2건이 외부 DB URL 주입, 기존 Compose project/DB volume
+  재사용, 비정상 host port, N150 실행 위치 미강제, ADR-039와 ADR-067 충돌을 각각 P1으로 지적했다.
+- `scripts/deploy-node.sh`에 isolated `app-postgres` endpoint, 1~65535 port, N150 x86_64 hostname,
+  명시적 `PINVI_DEPLOY_FRESH_STACK=1`·고유 project·기존 container/volume/network 거부를 추가했다.
+  RustFS API/console도 loopback으로 결박하고 N150 live runner/gate는 다른 호스트 fallback을 거부한다.
+- ADR-039를 ADR-067에 supersede된 역사 결정으로 정리하고, Sprint/ops/geocoding/Sentry/Loki/live gate의
+  현재 문서를 N150 단일 운영 기준으로 맞췄다.
+- 신규 회귀 포함 Pinvi 운영 unit 53건 통과, shell syntax·Compose 정적 검증·diff check 통과.
+  변경 후 exact-head N150 재배포·live UI·새 적대 리뷰·CI는 아직 남아 있다.
 
 ## 2026-08-26 (claude) — T-350 머지 (PR #485, main 이탈로 인한 충돌 해소)
 

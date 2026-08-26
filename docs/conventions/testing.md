@@ -29,8 +29,8 @@ SPEC V8 N-5 정리.
 
 - 백엔드 / DB / geospatial / ETL / Alembic 검증은 Linux worktree에서 실행한다(ADR-051).
 - git / commit / push / PR도 같은 Linux worktree에서 Linux `git`으로 수행한다.
-- Playwright는 N150에서 먼저 실행하고, N150 Docker runner 또는 host browser 실행이 불가능할
-  때만 Windows fallback을 사용한다.
+- Playwright live/UI gate는 N150 x86_64에서만 실행한다. N150 Docker runner 또는 host browser
+  실행이 불가능하면 gate를 중단한다.
 - 예: `wsl.exe -e bash -lc "cd /mnt/f/dev/pinvi-codex && pytest apps/api/tests -q"`
 
 ## 4. 백엔드 단위 테스트

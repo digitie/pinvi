@@ -172,8 +172,8 @@ PINVI_V100_REQUIRE_HSTS=1 \
 
 ## 7. 기록 기준
 
-- 실행 위치를 `Linux`, `N150`, `Windows fallback` 중 하나로 적는다.
-- N150 fallback을 쓴 경우 Docker runner 실패 사유와 host browser 실패 사유를 모두 적는다.
+- 실행 위치는 `N150`으로만 기록한다.
+- N150 Docker runner 또는 host browser가 준비되지 않아 중단한 경우 그 사유를 기록한다.
 - 실제 credential, token, 운영 origin, SSH target, IP는 공개 문서에 기록하지 않는다.
 - Admin live catalog는 `npm -w @pinvi/web run test:e2e:admin-live:list`의 최종 total을 함께 기록한다.
 - JSON 출력 전체를 붙이지 않고, 통과 여부와 핵심 수치만 기록한다.
@@ -186,8 +186,8 @@ T-273의 repo-side 실행 가능성 보강과 read-only gate evidence는 대부�
 
 | Phase                        | 현재 상태                                                                                                                                 | 다음 조건                                                                    |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Admin read-only full catalog | 통과. `6343 tests in 5 files` 기준이며 N150 우선 시도 후 Windows fallback으로 잔여 구간을 닫았다.                                         | release 직전 drift가 있으면 `admin-live-smoke` → 필요한 범위만 재실행        |
-| Local/fallback smoke         | 통과. local DB migration, API `/health`, Web `/admin/login`, Windows fallback `CASE_LIMIT=1` 확인.                                        | release evidence 대체가 아니라 repo-side 실행 가능성 확인용                  |
+| Admin read-only full catalog | 통과. `6343 tests in 5 files` 기준이며 N150 runner에서 확인했다.                                                                        | release 직전 drift가 있으면 `admin-live-smoke` → 필요한 범위만 재실행        |
+| Local smoke                  | 통과. local DB migration, API `/health`, Web `/admin/login` 확인.                                                                       | release evidence 대체가 아니라 repo-side 실행 가능성 확인용                  |
 | MCP live                     | 통과. 일회성 token 발급, tool list, `list_trips`, `search_features`, token 회수 확인.                                                     | release 직전 token/도메인 변경 시 재실행                                     |
 | Perf/Security smoke          | 통과. API p95/error-rate와 CSP/CORS/security header 확인. rate-limit probe는 운영 안전상 skip.                                            | release 직전 운영 HTTPS 대상 재실행                                          |
 | Restore staging drill        | 통과. N150 staging Postgres에 PostgreSQL Docker runner로 snapshot restore, checksum, audit chain, rollback guard 확인.                    | snapshot/schema가 바뀌면 staging에서 재실행                                  |

@@ -1,6 +1,6 @@
 # N150 운영 노드
 
-N150 16GB + NVMe 1TB + Ubuntu 26.04 LTS 기준 기본 운영 노드다(ADR-023/ADR-039).
+N150 16GB + NVMe 1TB + Ubuntu 26.04 LTS 기준 유일한 운영 노드다(ADR-067).
 Ubuntu 26.04가 준비되지 않은 시점이면 24.04 LTS로 시작하고 문서의 OS version
 doctor 기대값만 조정한다.
 
@@ -33,9 +33,10 @@ sudo -n backend/.venv/bin/ktdctl pinvi-pair rebuild-pinned --confirm
 
 운영 source pin과 `.env`는 manager가 관리한다. 이 명령은 현재
 rehearsal/rebuildable 정책의 정본이며 paired Map·Pinvi DB/runtime을 재구축한다. 일반
-Pinvi fallback은 manager가 설치·기동되지 않은 경우에만 `scripts/deploy-node.sh`를 사용하고,
-production에서는 `PINVI_RATE_LIMIT_BACKEND=postgres`와 동일한 lifecycle lock/migration 경계를
-유지한다.
+Pinvi fallback은 manager가 설치·기동되지 않은 경우에만 N150의 기존 Compose project·DB
+volume이 없는 fresh stack에서 `PINVI_DEPLOY_FRESH_STACK=1`과 고유한
+`PINVI_DOCKER_PROJECT`를 지정해 `scripts/deploy-node.sh`를 사용하고, production에서는
+`PINVI_RATE_LIMIT_BACKEND=postgres`와 동일한 lifecycle lock/migration 경계를 유지한다.
 
 ## Postgres
 

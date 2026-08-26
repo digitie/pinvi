@@ -55,7 +55,7 @@ SPEC V8 #5 (P장)와 정합. **Sprint 3 (Admin)이 Sprint 4 (지도)보다 앞**
 - **ADR-020** — AI companion 별도 repo 분리
 - **ADR-021** — GitHub Actions CI/CD 재활성화
 - **ADR-022** — Backup / Restore 핫스왑 정책
-- **ADR-023** — Odroid M1S + N150 병행 운영
+- **ADR-067** — Odroid 실행 환경 영구 퇴역, N150 단일 운영
 - **ADR-024** — NTFS worktree + WSL ext4 테스트 미러 (ADR-051로 superseded)
 - **ADR-025** — geocoding은 kor-travel-geo v2 REST 직접
 - **ADR-026** — Pinvi ↔ `kor-travel-map` OpenAPI HTTP 계약

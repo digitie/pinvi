@@ -35,7 +35,6 @@
   - content moderation report/hide/takedown, RBAC role grant/revoke, user lifecycle admin actions,
     rate-limit/abuse admin surface
   - 운영 환경 배포 smoke test 통과 — **N150 16GB / NVMe 1TB / Ubuntu 26.04** 기준.
-    T-271 제거 기준에 따라 Odroid 병행 운영 smoke는 v1.0 blocker가 아니다.
   - 백업 + 복구 훈련 1회 — **핫스왑 패턴 검증** (ADR-022)
   - **MCP 외부 인터페이스 서빙** — `apps/api/app/mcp/` 모듈 + `/mcp/sse`
     엔드포인트. 외부 AI agent가 Pinvi의 trip/poi/feature 데이터를
@@ -129,12 +128,11 @@
 
 ### 인프라 / 운영
 
-- `infra/odroid/README.md` (배포 절차) — 유지
-- `infra/n150/README.md` (ADR-023) — N150 16GB / NVMe 1TB / Ubuntu 26.04
-  배포 + Odroid 대비 변경점 (x86_64 vs ARM64 이미지)
+- `infra/n150/README.md` (ADR-067) — N150 16GB / NVMe 1TB / Ubuntu 26.04
+  단일 운영 노드 배포
 - Docker image는 운영 노드별 로컬 checkout + 로컬 build로 만든다. ARM image와 GHCR 배포는
   Sprint 6 범위에서 제외한다.
-- `scripts/deploy-node.sh` + `scripts/{n150,odroid}-docker-doctor.sh`
+- `scripts/deploy-node.sh` + `scripts/n150-docker-doctor.sh`
 - `scripts/{backup-db,restore-db,restore-hotswap}.sh`
 - `infra/docker-compose.app.yml` 최종 — 노드 로컬 build 기준
 - `infra/nginx/{nginx.conf,geo-kr.conf}` — 한국 IP 화이트리스트 (ADR-018)
@@ -161,7 +159,7 @@
 - **ADR-019** (참조): Pinvi MCP 외부 인터페이스 서빙 (tool 목록 / 인증 / scope)
 - **ADR-020** (참조): T-107 (Gemini AI) 별도 서비스 분리
 - **ADR-022** (참조): Backup/Restore 핫스왑 정책 (snapshot → restore schema → schema-swap)
-- **ADR-023** (참조): 운영 하드웨어 확장 (Odroid M1S + N150 16GB 병행)
+- **ADR-067** (참조): Odroid 실행 환경 영구 퇴역, N150 단일 운영
 
 ## SPEC V8 매핑
 
@@ -213,7 +211,7 @@
 - [ ] DoD 모두 통과
 - [ ] E2E **10** 시나리오 통과 (기존 6 + MCP / Backup 핫스왑 / Geofence / Legal-ops)
 - [ ] `scripts/verify-v100-live-gate.sh` 기준 v1.0 live gate phase와 결과 기록
-- [ ] 운영 환경 smoke test 통과 — **N150 기준**. Odroid 병행 운영 smoke는 T-271 제거로 제외.
+- [ ] 운영 환경 smoke test 통과 — **N150 기준**.
 - [ ] **MCP 외부 인터페이스 1차 client 실증** (Claude Code MCP server 등록 후
       Pinvi trip 조회 성공)
 - [ ] **Backup 핫스왑 분기 1회 훈련 통과 (RTO 1h / RPO 24h)**

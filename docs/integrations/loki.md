@@ -41,8 +41,8 @@ services:
       - /mnt/nvme/grafana:/var/lib/grafana
 ```
 
-스택 합계 ~1.1GB — Odroid 8GB RAM에 들어감. vworld 임포트 같은 무거운 작업 시
-일시적으로 promtail 비활성 옵션.
+스택 합계 ~1.1GB — N150 16GB 운영 자원 예산 안에서 관리한다. vworld 임포트 같은 무거운
+작업 시 일시적으로 promtail 비활성 옵션을 사용할 수 있다.
 
 ## 2. Promtail config (`/etc/promtail/config.yml`)
 
@@ -190,7 +190,7 @@ LogQL 예시:
 
 ## 7. Retention
 
-- Loki 7일 (Odroid 디스크 용량 고려)
+- Loki 7일 (N150 NVMe 보존 예산 기준)
 - PostgreSQL slow query 로그는 별도 30일 (vacuum)
 - Grafana 대시보드 export는 git에 (`infra/grafana/dashboards/*.json`)
 

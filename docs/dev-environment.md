@@ -11,9 +11,9 @@
 >   Windows shim으로 잡히면 중지하고 PATH/설치를 고친다.
 > - **의존성 설치, 테스트, Docker, dev server, lint/typecheck/build/Vitest도
 >   Linux에서 수행한다.**
-> - **Playwright는 N150에서 먼저 실행한다.** 기본은 `scripts/n150-playwright-runner.sh`
->   Docker runner다. N150 Docker runner와 host browser 실행이 모두 브라우저/runtime/권한 문제로
->   불가능할 때만 Windows runner를 fallback으로 사용하고, 사유를 journal/PR에 남긴다.
+> - **Playwright live/UI gate는 N150에서만 실행한다.** 기본은
+>   `scripts/n150-playwright-runner.sh` Docker runner다. N150 Docker runner와 host browser 실행이
+>   모두 브라우저/runtime/권한 문제로 불가능하면 다른 호스트로 우회하지 않고 gate를 중단한다.
 >
 > ADR-024의 "NTFS worktree = git source of truth + Windows git" 모델과 ADR-017의
 > 2026-05-31 Windows `git.exe` amendment는 ADR-051이 supersede한다.
@@ -55,7 +55,7 @@ Linux로 고정한다.
 | git / 편집 / commit / PR               | Linux에서 접근 가능한 agent worktree | `/mnt/f/...` 기존 worktree도 Linux git 포인터로 복구 후 사용 가능 |
 | 의존성·테스트·Docker·장기 실행         | Linux worktree                       | 별도 rsync 미러를 source of truth로 쓰지 않는다                   |
 | 프론트 dev/lint/typecheck/build/Vitest | Linux worktree                       | Linux Node/npm                                                    |
-| Playwright 브라우저 e2e                | N150 우선                            | Docker runner 우선, 불가 시 Windows fallback과 사유 기록          |
+| Playwright 브라우저 e2e                | N150 전용                            | x86_64 Docker runner, 불가 시 live/UI gate 중단                   |
 | 데이터 (`dataset/`, `refdocs/`)        | 로컬 원본 또는 symlink               | 변경 금지 데이터는 절대경로/symlink로 참조                        |
 | 빌드 산출물 (`.next`, `build`)         | Linux worktree 내부                  | `.gitignore` 대상, 폐기 가능                                      |
 
@@ -198,12 +198,11 @@ ADR-047을 따른다.
 
 ## 8. Playwright 실행 우선순위
 
-1. **N150 우선**: live 또는 UI e2e는 N150 환경에서 먼저 실행한다. 운영 public
-   Web/API, 컨테이너 상태, CORS/WebSocket, reverse proxy drift를 함께 잡기 위함이다.
-2. **Windows fallback**: N150에서 브라우저 설치, 권한, display/runtime, 네트워크 접근
-   문제가 있어 실행할 수 없을 때만 Windows runner를 사용한다.
-3. **기록 필수**: 검증 로그에는 `N150`, `Windows fallback`, 또는 `Linux local` 중
-   실제 실행 위치와 fallback 사유를 적는다.
+1. **N150 전용**: live 또는 UI e2e는 N150 x86_64 환경에서만 실행한다. 운영 public
+   Web/API, 컨테이너 상태, CORS/WebSocket, reverse proxy drift를 함께 검증한다.
+2. **실패 시 중단**: N150 Docker runner 또는 host browser가 준비되지 않으면 live/UI gate를
+   다른 호스트로 우회하지 않는다.
+3. **기록 필수**: 검증 로그에는 `N150` 실행 여부와 중단 사유를 적는다.
 
 예:
 
@@ -212,11 +211,10 @@ ADR-047을 따른다.
 npm -w @pinvi/web run test:e2e -- admin-etl-provider-sync.e2e.ts --workers=1
 ```
 
-Windows fallback을 썼다면 PR 검증에는 다음처럼 남긴다.
+N150 gate를 중단했다면 PR 검증에는 다음처럼 남긴다.
 
 ```text
-Playwright: N150 브라우저 runtime 미설치로 Windows fallback runner에서
-admin-etl-provider-sync.e2e.ts 1건 통과.
+Playwright: N150 Docker runner runtime 미준비로 live/UI gate를 중단했다.
 ```
 
 ## 9. 원격/N150 명령
@@ -240,7 +238,7 @@ SH
 - [ ] Linux `git status --short --branch`로 변경 범위 확인
 - [ ] Linux `codegraph status` / `codegraph sync` 확인 (`/mnt/c` shim 금지)
 - [ ] 관련 Linux 테스트/lint/typecheck 실행
-- [ ] UI/e2e면 N150 Playwright 우선 실행, 불가 시 Windows fallback 사유 기록
+- [ ] UI/e2e면 N150 x86_64 Playwright runner 실행, 불가 시 gate 중단 사유 기록
 - [ ] `docs/journal.md`, `docs/resume.md`, 관련 task 문서 갱신
 - [ ] push 직전 보안 감사 실행
 - [ ] Linux git으로 commit/push/PR 생성
