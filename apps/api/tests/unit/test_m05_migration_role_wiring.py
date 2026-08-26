@@ -861,21 +861,21 @@ def test_compose_preflight_uses_effective_env_file_and_root_dotenv_fallback(
 
     env_file = tmp_path / "stage.env"
     env_file.write_text(
-        "PINVI_API_PORT=13801\n"
-        "PINVI_WEB_PORT=13805\n"
-        "PINVI_RUSTFS_PORT=13101\n"
-        "PINVI_RUSTFS_CONSOLE_PORT=13105\n"
-        "PINVI_DAGSTER_DEV_PORT=13802\n"
-        "PINVI_CADVISOR_PORT=13301\n"
-        "PINVI_PROMETHEUS_PORT=13401\n"
-        "PINVI_GRAFANA_PORT=13205\n",
+        "export PINVI_API_PORT=13801\n"
+        "export PINVI_WEB_PORT=13805\n"
+        "export PINVI_RUSTFS_PORT=13101\n"
+        "export PINVI_RUSTFS_CONSOLE_PORT=13105\n"
+        "export PINVI_DAGSTER_DEV_PORT=13802\n"
+        "export PINVI_CADVISOR_PORT=13301\n"
+        "export PINVI_PROMETHEUS_PORT=13401\n"
+        "export PINVI_GRAFANA_PORT=13205\n",
         encoding="utf-8",
     )
     root_dotenv = tmp_path / ".env"
     root_dotenv.write_text(
-        "PINVI_ENVIRONMENT=production\n"
-        "PINVI_DATABASE_URL=postgresql+asyncpg://pinvi:secret@production-db:5432/pinvi\n"
-        "PINVI_API_PORT=13901\n",
+        "export PINVI_ENVIRONMENT=production\n"
+        "export PINVI_DATABASE_URL=postgresql+asyncpg://pinvi:secret@production-db:5432/pinvi\n"
+        "export PINVI_API_PORT=13901\n",
         encoding="utf-8",
     )
 

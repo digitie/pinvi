@@ -29,7 +29,7 @@ compose_env_value() {
   source_file="$(compose_env_source_file)"
   if [[ -n "$source_file" ]]; then
     value="$(sed -nE \
-      "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*([^[:space:]#]+).*/\\1/p" \
+      "s/^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=[[:space:]]*([^[:space:]#]+).*/\\2/p" \
       "$source_file" | tail -n 1)"
     value="${value#\"}"
     value="${value%\"}"
@@ -157,7 +157,7 @@ resolved_environment() {
   source_file="$(compose_env_source_file)"
   if [[ -n "$source_file" ]]; then
     file_environment_name="$(sed -nE \
-      's/^[[:space:]]*PINVI_ENVIRONMENT[[:space:]]*=[[:space:]]*([^[:space:]#]+).*/\1/p' \
+      's/^[[:space:]]*(export[[:space:]]+)?PINVI_ENVIRONMENT[[:space:]]*=[[:space:]]*([^[:space:]#]+).*/\2/p' \
       "$source_file" | tail -n 1)"
     file_environment_name="${file_environment_name#\"}"
     file_environment_name="${file_environment_name%\"}"
