@@ -79,6 +79,16 @@ gitignore된 `docs/deploy-runbook.local.md` 또는 로컬 env 파일에만 둔�
 
 ## 3. 실행
 
+아래 명령을 실행하기 전에 runner가 사용할 checkout과 Playwright image를 고정한다. 이미 검증한
+release candidate SHA를 지정하려면 첫 줄의 기본값을 해당 full SHA로 바꾼다. image는 tag가 아닌
+공식 digest를 사용한다.
+
+```bash
+cd ~/pinvi
+export PINVI_LIVE_EXPECTED_REVISION="${PINVI_LIVE_EXPECTED_REVISION:-$(git rev-parse --verify HEAD^{commit})}"
+export PINVI_PLAYWRIGHT_RUNNER_IMAGE="${PINVI_PLAYWRIGHT_RUNNER_IMAGE:-mcr.microsoft.com/playwright@sha256:9bd26ad900bb5e0f4dee75839e957a89ae89c2b7ab1e76050e559790e946b948}"
+```
+
 ```bash
 cd ~/pinvi
 npm run test:e2e:live-mutating:list

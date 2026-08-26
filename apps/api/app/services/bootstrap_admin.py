@@ -42,6 +42,12 @@ class BootstrapAdminCredential:
     def email_sha256(self) -> str:
         return hashlib.sha256(self.email.casefold().encode("utf-8")).hexdigest()
 
+    @property
+    def binding_sha256(self) -> str:
+        return hashlib.sha256(
+            self.email.encode("utf-8") + b"\0" + self.password.encode("utf-8")
+        ).hexdigest()
+
 
 @dataclass(frozen=True)
 class BootstrapAdminResult:

@@ -29,8 +29,10 @@ from app.services.bootstrap_admin import (
 )
 
 CREDENTIAL_FILE_ENV = "PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE"
+CREDENTIAL_BINDING_ENV = "PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_SHA256"
 CANDIDATE_HEAD_SCHEMA = "pinvi.candidate-head.v1"
 _REVISION_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _ERROR_PHASE_BY_CODE = {
     "alembic_config_missing": "migration",
     "credential_file_changed": "credential_file",
@@ -207,13 +209,23 @@ async def run_admin_bootstrap_transaction(
     *,
     expected_head: str,
     credential_file: Path,
+    expected_binding: str | None = None,
 ) -> PinviAdminBootstrapResult:
+    if expected_binding is None:
+        expected_binding = os.environ.get(CREDENTIAL_BINDING_ENV)
     async with db_session.async_session_factory() as db:
         async with db.begin():
             database_head = await get_database_pinvi_head(db)
             if database_head != expected_head:
                 raise BootstrapAdminError("schema_revision_mismatch", "schema_check")
             credential = read_bootstrap_admin_credential_file(credential_file)
+            if expected_binding is None:
+                expected_binding = credential.binding_sha256
+            if (
+                _SHA256.fullmatch(expected_binding) is None
+                or credential.binding_sha256 != expected_binding
+            ):
+                raise BootstrapAdminError("credential_file_changed", "credential_file")
             result: BootstrapAdminResult = await ensure_bootstrap_admin(
                 db,
                 credential=credential,
@@ -225,10 +237,15 @@ async def run_admin_bootstrap_transaction(
             )
 
 
-async def _run_admin_phase(expected_head: str, credential_file: Path) -> PinviAdminBootstrapResult:
+async def _run_admin_phase(
+    expected_head: str,
+    credential_file: Path,
+    expected_binding: str | None = None,
+) -> PinviAdminBootstrapResult:
     return await run_admin_bootstrap_transaction(
         expected_head=expected_head,
         credential_file=credential_file,
+        expected_binding=expected_binding,
     )
 
 
@@ -239,20 +256,31 @@ def _credential_file_from_env() -> Path:
     return Path(value)
 
 
+def _validated_credential_binding(credential_file: Path) -> str:
+    credential = read_bootstrap_admin_credential_file(credential_file)
+    expected_binding = os.environ.get(CREDENTIAL_BINDING_ENV)
+    if expected_binding is not None and (
+        _SHA256.fullmatch(expected_binding) is None or credential.binding_sha256 != expected_binding
+    ):
+        raise BootstrapAdminError("credential_file_changed", "credential_file")
+    return expected_binding or credential.binding_sha256
+
+
 def run_pinvi_admin_bootstrap() -> PinviAdminBootstrapResult:
-  credential_file = _credential_file_from_env()
-  expected_head = get_static_pinvi_head()
-  try:
-    run_alembic_upgrade_head()
-    return asyncio.run(_run_admin_phase(expected_head, credential_file))
-  finally:
-    asyncio.run(db_session.engine.dispose())
+    credential_file = _credential_file_from_env()
+    expected_binding = _validated_credential_binding(credential_file)
+    expected_head = get_static_pinvi_head()
+    try:
+        run_alembic_upgrade_head()
+        return asyncio.run(_run_admin_phase(expected_head, credential_file, expected_binding))
+    finally:
+        asyncio.run(db_session.engine.dispose())
 
 
-def validate_pinvi_admin_credential_file() -> None:
+def validate_pinvi_admin_credential_file() -> str:
     """Validate the bootstrap credential without opening a database connection."""
 
-    read_bootstrap_admin_credential_file(_credential_file_from_env())
+    return read_bootstrap_admin_credential_file(_credential_file_from_env()).binding_sha256
 
 
 class _SecretFreeArgumentParser(argparse.ArgumentParser):
@@ -297,8 +325,12 @@ def main(argv: Sequence[str] | None = None) -> None:
             )
             return
         if command == "validate-credential":
-            validate_pinvi_admin_credential_file()
-            _print_json({"action": "credential_valid"})
+            _print_json(
+                {
+                    "action": "credential_valid",
+                    "credential_binding_sha256": validate_pinvi_admin_credential_file(),
+                }
+            )
             return
         result = run_pinvi_admin_bootstrap()
     except BootstrapAdminError as exc:

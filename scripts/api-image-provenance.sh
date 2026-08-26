@@ -281,10 +281,10 @@ pinvi_verify_runtime_image_provenance() {
 }
 
 # A stopped pre-deploy container keeps Compose's project/service labels so that
-# it can be restored with its original image. It is deliberately excluded from
-# every active-runtime discovery and destructive cleanup below; otherwise a
-# failed provenance check could delete the rollback artifact together with the
-# newly created container.
+# it can be restored with its original image. It is excluded from active-runtime
+# IDs and cleanup; the explicit preflight helper below still discovers stale
+# snapshots so a failed rollout cannot silently reconcile or delete the rollback
+# artifact together with the newly created container.
 pinvi_runtime_container_ids() {
   local service="$1"
   local project="${PROJECT:-pinvi-app}"
@@ -301,6 +301,20 @@ pinvi_runtime_container_ids() {
     return 1
   fi
   awk '$2 !~ /\.pinvi-predeploy$/ {print $1}' <<< "$raw_containers"
+}
+
+pinvi_runtime_predeploy_snapshot_ids() {
+  local service="$1"
+  local project="${PROJECT:-pinvi-app}"
+  local raw_containers
+  if ! raw_containers="$(docker container ls --no-trunc --all \
+    --filter "label=com.docker.compose.project=${project}" \
+    --filter "label=com.docker.compose.service=${service}" \
+    --format '{{.ID}} {{.Names}}')"; then
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
+    return 1
+  fi
+  awk '$2 ~ /\.pinvi-predeploy$/ {print $1}' <<< "$raw_containers"
 }
 
 pinvi_runtime_container_ids_into_array() {

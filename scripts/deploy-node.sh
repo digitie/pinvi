@@ -17,6 +17,7 @@ ENABLE_DAGSTER="${PINVI_ENABLE_DAGSTER:-0}"
 MIGRATOR_ONE_SHOT_PASSWORD=""
 MIGRATOR_LOGIN_NEEDS_SEAL="0"
 MIGRATOR_LEGACY_REBASELINE="0"
+BOOTSTRAP_ADMIN_CREDENTIAL_SHA256=""
 RUNTIME_API_WAS_RUNNING="0"
 RUNTIME_WEB_WAS_RUNNING="0"
 RUNTIME_DAGSTER_WAS_RUNNING="0"
@@ -349,6 +350,17 @@ runtime_writer_container_name() {
 
 runtime_snapshot_preflight() {
   [[ "$RUNTIME_DEPLOY_PRESERVE" == "1" ]] || return 0
+  local service stale_snapshot_ids
+  for service in app-api app-web app-dagster; do
+    if ! stale_snapshot_ids="$(pinvi_runtime_predeploy_snapshot_ids "$service")"; then
+      echo "pre-deploy ${service} snapshot discovery failed; refusing runtime mutation" >&2
+      return 1
+    fi
+    if [[ -n "$stale_snapshot_ids" ]]; then
+      echo "pre-deploy ${service} snapshot already exists; refusing stale rollback artifact" >&2
+      return 2
+    fi
+  done
   if (( ${#RUNTIME_PREDEPLOY_API_CONTAINER_IDS[@]} > 0 \
     || ${#RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS[@]} > 0 \
     || ${#RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS[@]} > 0 )); then
@@ -1019,6 +1031,7 @@ run_admin_bootstrap() {
     compose "${profile_args[@]}" run --rm --no-deps \
       --user "$runner_user" \
       -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
+      -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_SHA256="$BOOTSTRAP_ADMIN_CREDENTIAL_SHA256" \
       -v "$credential_file:$credential_file:ro" \
       "${legacy_args[@]}" \
       "$service" pinvi-admin-bootstrap
@@ -1031,6 +1044,7 @@ run_admin_bootstrap() {
   compose_with_one_shot_migrator_password "${profile_args[@]}" run --rm --no-deps \
     --user "$runner_user" \
     -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
+    -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_SHA256="$BOOTSTRAP_ADMIN_CREDENTIAL_SHA256" \
     -v "$credential_file:$credential_file:ro" \
     "${legacy_args[@]}" \
     "$service" pinvi-admin-bootstrap
@@ -1047,11 +1061,40 @@ validate_bootstrap_admin_credential_file() {
     runner_user="0:0"
     profile_args=(--profile legacy-rebaseline)
   fi
-  compose "${profile_args[@]}" run --rm --no-deps \
+  local validation_output
+  local validation_sha
+  if ! validation_output="$(compose "${profile_args[@]}" run --rm --no-deps \
     --user "$runner_user" \
     -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
     -v "$credential_file:$credential_file:ro" \
-    "$service" pinvi-admin-bootstrap validate-credential
+    "$service" pinvi-admin-bootstrap validate-credential 2>&1)"; then
+    return 1
+  fi
+  if ! validation_sha="$(printf '%s\n' "$validation_output" | bootstrap_credential_binding_from_validation_output)"; then
+    return 1
+  fi
+  if [[ ! "$validation_sha" =~ ^[0-9a-f]{64}$ ]]; then
+    return 1
+  fi
+  BOOTSTRAP_ADMIN_CREDENTIAL_SHA256="$validation_sha"
+}
+
+bootstrap_credential_binding_from_validation_output() {
+  python3 -c '
+import json
+import sys
+
+for line in reversed(sys.stdin.read().splitlines()):
+    try:
+        payload = json.loads(line)
+    except json.JSONDecodeError:
+        continue
+    value = payload.get("credential_binding_sha256") if isinstance(payload, dict) else None
+    if isinstance(value, str) and len(value) == 64 and all(char in "0123456789abcdef" for char in value):
+        print(value)
+        raise SystemExit(0)
+raise SystemExit(1)
+'
 }
 
 reject_explicit_migrator_database_url() {

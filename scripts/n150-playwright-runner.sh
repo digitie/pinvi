@@ -83,7 +83,12 @@ if [[ "${PINVI_ADMIN_LIVE_E2E:-0}" == "1" \
   || "${PINVI_LIVE_UI_E2E:-0}" == "1" \
   || "${PINVI_M04_LIVE_E2E:-0}" == "1" \
   || -n "${PINVI_M04_UI_VERIFICATION_ID:-}" \
-  || -n "${PINVI_M05_UI_VERIFICATION_ID:-}" ]]; then
+  || -n "${PINVI_M05_UI_VERIFICATION_ID:-}" \
+  || "${PINVI_M05_LIVE_E2E:-0}" == "1" \
+  || "${PINVI_LIVE_MUTATING_E2E:-0}" == "1" \
+  || "${PINVI_BACKUP_LIVE_MUTATING_E2E:-0}" == "1" \
+  || "${PINVI_LIVE_FEATURE_RESOLUTION_E2E:-0}" == "1" \
+  || "${PINVI_LIVE_ATTACHMENT_E2E:-0}" == "1" ]]; then
   live_ui_requested="1"
   assert_exact_live_checkout
 fi
@@ -113,7 +118,7 @@ if [[ "${PINVI_LIVE_MUTATING_E2E:-0}" == "1" \
   generic_live_requested="1"
 fi
 if [[ "$live_ui_requested" == "1" || "$generic_live_requested" == "1" ]]; then
-  if [[ "$image" != mcr.microsoft.com/playwright:*@sha256:* ]]; then
+  if [[ ! "$image" =~ ^mcr\.microsoft\.com/playwright(:[^@[:space:]]+)?@sha256:[0-9a-f]{64}$ ]]; then
     echo "error: every live UI phase requires an official digest-pinned Playwright image" >&2
     exit 1
   fi
