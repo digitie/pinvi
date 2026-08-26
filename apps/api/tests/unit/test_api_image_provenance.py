@@ -846,7 +846,7 @@ printf '%s\n' "$*" >> "$PINVI_TEST_MUTATION_LOG"
     )
 
     assert result.returncode != 0
-    assert "requires staging or production" in result.stderr
+    assert "requires PINVI_ENVIRONMENT=staging or production" in result.stderr
     assert not mutation_log.exists()
 
 

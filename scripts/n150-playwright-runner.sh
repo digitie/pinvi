@@ -78,6 +78,10 @@ assert_exact_live_checkout() {
   fi
 }
 
+is_digest_pinned_playwright_image() {
+  [[ "$1" =~ ^mcr\.microsoft\.com/playwright(:[^@[:space:]]+)?@sha256:[0-9a-f]{64}$ ]]
+}
+
 live_ui_requested="0"
 if [[ "${PINVI_ADMIN_LIVE_E2E:-0}" == "1" \
   || "${PINVI_LIVE_UI_E2E:-0}" == "1" \
@@ -118,7 +122,7 @@ if [[ "${PINVI_LIVE_MUTATING_E2E:-0}" == "1" \
   generic_live_requested="1"
 fi
 if [[ "$live_ui_requested" == "1" || "$generic_live_requested" == "1" ]]; then
-  if [[ ! "$image" =~ ^mcr\.microsoft\.com/playwright(:[^@[:space:]]+)?@sha256:[0-9a-f]{64}$ ]]; then
+  if ! is_digest_pinned_playwright_image "$image"; then
     echo "error: every live UI phase requires an official digest-pinned Playwright image" >&2
     exit 1
   fi
@@ -170,7 +174,7 @@ fi
 
 if [[ "${PINVI_M04_LIVE_E2E:-}" == "1" || -n "${PINVI_M04_UI_VERIFICATION_ID:-}" ]]; then
   expected_m04_image="${PINVI_M04_PLAYWRIGHT_RUNNER_IMAGE_REF:-}"
-  if [[ "$image" != "$expected_m04_image" || "$image" != mcr.microsoft.com/playwright:*@sha256:* ]]; then
+  if [[ "$image" != "$expected_m04_image" ]] || ! is_digest_pinned_playwright_image "$image"; then
     echo "error: M04 live UI requires the attested immutable Playwright image" >&2
     exit 1
   fi
@@ -207,7 +211,7 @@ fi
 
 if [[ -n "${PINVI_M05_UI_VERIFICATION_ID:-}" ]]; then
   expected_m05_image="${PINVI_M05_PLAYWRIGHT_RUNNER_IMAGE_REF:-}"
-  if [[ "$image" != "$expected_m05_image" || "$image" != mcr.microsoft.com/playwright:*@sha256:* ]]; then
+  if [[ "$image" != "$expected_m05_image" ]] || ! is_digest_pinned_playwright_image "$image"; then
     echo "error: M05 live UI requires the attested immutable Playwright image" >&2
     exit 1
   fi

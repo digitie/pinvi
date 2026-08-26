@@ -501,6 +501,17 @@ def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
     assert "staging|production)" in docker_app
     assert "smoke_on_exit()" in docker_app
     assert 'restore_runtime_writers_on_exit "$exit_code"' in docker_app
+    assert "assert_host_ports_available_before_migration()" in docker_app
+    assert (
+        "assert_host_ports_available_before_migration"
+        in docker_app[docker_app.index("migrate() {") :]
+    )
+    deploy_node = (ROOT / "scripts" / "deploy-node.sh").read_text(encoding="utf-8")
+    assert "assert_host_ports_available_before_migration()" in deploy_node
+    assert (
+        "assert_host_ports_available_before_migration"
+        in deploy_node[deploy_node.index("migrate() {") :]
+    )
 
 
 def test_discovery_failure_stops_managed_writers_and_removes_only_recorded_ids(
@@ -653,24 +664,83 @@ def test_stale_predeploy_snapshot_refuses_runtime_mutation(tmp_path: Path) -> No
         isolated_script.write_text(
             source.rsplit('\nmain "$@"', maxsplit=1)[0] + "\n", encoding="utf-8"
         )
-        driver = r"""
+        driver_template = r"""
 set -euo pipefail
 source "$1"
-pinvi_runtime_predeploy_snapshot_ids() { printf '%s\n' stale-snapshot; }
-RUNTIME_DEPLOY_PRESERVE=1
+pinvi_runtime_predeploy_snapshot_ids() {{ printf '%s\n' stale-snapshot; }}
+RUNTIME_DEPLOY_PRESERVE={preserve}
 if runtime_snapshot_preflight; then
   exit 1
 fi
 """
-        result = subprocess.run(  # noqa: S603 -- fixed test-only bash driver
-            ["bash", "-c", driver, "--", str(isolated_script)],  # noqa: S607 -- fixture
-            check=False,
-            capture_output=True,
-            text=True,
-            env={"PINVI_ROOT_DIR": str(tmp_path)},
-        )
-        assert result.returncode == 0
-        assert "stale rollback artifact" in result.stderr
+        for preserve in ("0", "1"):
+            result = subprocess.run(  # noqa: S603 -- fixed test-only bash driver
+                [
+                    "/usr/bin/bash",
+                    "-c",
+                    driver_template.format(preserve=preserve),
+                    "--",
+                    str(isolated_script),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                env={"PINVI_ROOT_DIR": str(tmp_path)},
+            )
+            assert result.returncode == 0
+            assert "stale rollback artifact" in result.stderr
+
+
+def test_direct_reset_and_down_require_isolated_runtime_identity(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    event_log = tmp_path / "compose-events.log"
+    fake_docker = fake_bin / "docker"
+    fake_docker.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1 $2" == "compose version" ]]; then
+  exit 0
+fi
+if [[ "$1 $2" == "container ls" || "$1 $2" == "volume ls" ]]; then
+  exit 0
+fi
+if [[ "$1" == "compose" ]]; then
+  printf '%s\\n' "$*" >> "$PINVI_TEST_EVENT_LOG"
+fi
+""",
+        encoding="utf-8",
+    )
+    fake_docker.chmod(0o755)
+
+    base_env = {
+        "PATH": f"{fake_bin}:/usr/bin:/bin",
+        "PINVI_ENV_FILE": str(tmp_path / "missing.env"),
+        "PINVI_ENVIRONMENT": "smoke",
+        "PINVI_ROOT_DIR": str(ROOT),
+        "PINVI_TEST_EVENT_LOG": str(event_log),
+    }
+    isolated = dict(base_env, PINVI_DOCKER_PROJECT="pinvi-app-smoke")
+    reset = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
+        [str(ROOT / "scripts" / "docker-app.sh"), "reset"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=isolated,
+    )
+    assert reset.returncode == 0
+    assert not event_log.exists()
+
+    arbitrary = dict(base_env, PINVI_DOCKER_PROJECT="pinvi-app-prod")
+    down = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
+        [str(ROOT / "scripts" / "docker-app.sh"), "down"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=arbitrary,
+    )
+    assert down.returncode != 0
+    assert not event_log.exists()
 
 
 def test_live_ui_gates_pin_the_exact_checkout_revision() -> None:

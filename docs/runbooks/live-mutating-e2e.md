@@ -79,13 +79,13 @@ gitignore된 `docs/deploy-runbook.local.md` 또는 로컬 env 파일에만 둔�
 
 ## 3. 실행
 
-아래 명령을 실행하기 전에 runner가 사용할 checkout과 Playwright image를 고정한다. 이미 검증한
-release candidate SHA를 지정하려면 첫 줄의 기본값을 해당 full SHA로 바꾼다. image는 tag가 아닌
-공식 digest를 사용한다.
+아래 명령을 실행하기 전에 이미 검증한 release candidate의 full SHA를 외부 입력으로 지정하고,
+runner가 사용할 Playwright image를 고정한다. image는 tag가 아닌 공식 digest를 사용한다.
 
 ```bash
 cd ~/pinvi
-export PINVI_LIVE_EXPECTED_REVISION="${PINVI_LIVE_EXPECTED_REVISION:-$(git rev-parse --verify HEAD^{commit})}"
+: "${PINVI_LIVE_EXPECTED_REVISION:?export the trusted release-candidate full SHA before running live UI}"
+export PINVI_LIVE_EXPECTED_REVISION
 export PINVI_PLAYWRIGHT_RUNNER_IMAGE="${PINVI_PLAYWRIGHT_RUNNER_IMAGE:-mcr.microsoft.com/playwright@sha256:9bd26ad900bb5e0f4dee75839e957a89ae89c2b7ab1e76050e559790e946b948}"
 ```
 
@@ -192,12 +192,26 @@ Map #1029와 PinVi #458의 검증한 exact image pair만 격리 포트/DB로 기
 
 ```bash
 cd ~/pinvi
-PINVI_M04_LIVE_E2E=1 \
-PINVI_LIVE_WEB_URL=http://127.0.0.1:13805 \
-PINVI_M04_LIVE_FEATURE_REQUEST_ID="$PINVI_M04_LIVE_FEATURE_REQUEST_ID" \
-PINVI_M04_LIVE_EMAIL="$PINVI_M04_LIVE_EMAIL" \
-PINVI_M04_LIVE_PASSWORD="$PINVI_M04_LIVE_PASSWORD" \
-scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- admin-feature-request-queue-live-mutating.live.ts --workers=1
+: "${PINVI_M04_UI_EVIDENCE_DIR:?set a new empty root-owned evidence directory}"
+: "${PINVI_M04_PRIVATE_KEY:?set the root-owned M05 signing key path}"
+: "${PINVI_M04_PINVI_API_CONTAINER:?set the isolated Pinvi API container name}"
+: "${PINVI_M04_PINVI_WEB_CONTAINER:?set the isolated Pinvi Web container name}"
+: "${PINVI_M04_LIVE_FEATURE_REQUEST_ID:?set the isolated pending feature-request UUID}"
+: "${PINVI_M04_LIVE_EMAIL:?set the isolated admin email}"
+: "${PINVI_M04_LIVE_PASSWORD:?set the isolated admin password}"
+python scripts/m05_activation_attestation.py m04 \
+  --evidence-dir "$PINVI_M04_UI_EVIDENCE_DIR" \
+  --private-key "$PINVI_M04_PRIVATE_KEY" \
+  --pinvi-api-url http://127.0.0.1:13801 \
+  --pinvi-api-container "$PINVI_M04_PINVI_API_CONTAINER" \
+  --pinvi-web-url http://127.0.0.1:13805 \
+  --pinvi-web-container "$PINVI_M04_PINVI_WEB_CONTAINER" \
+  --feature-request-id "$PINVI_M04_LIVE_FEATURE_REQUEST_ID" \
+  --pinvi-source-revision "$PINVI_LIVE_EXPECTED_REVISION" \
+  --scope staging \
+  --playwright-runner-image "$PINVI_PLAYWRIGHT_RUNNER_IMAGE" \
+  --require-root-owned \
+  -- scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- apps/web/e2e/admin-feature-request-queue-live-mutating.live.ts --workers=1
 ```
 
 성공 뒤 PinVi 응답 및 Map 격리 로그에서 같은 request UUID와 pending receipt를 대조한다. 실패한

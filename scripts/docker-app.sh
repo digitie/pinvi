@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-PROJECT="${PINVI_DOCKER_PROJECT:-pinvi-app}"
+PROJECT="${PINVI_DOCKER_PROJECT:-pinvi-app-smoke}"
 COMPOSE_FILE="${PINVI_DOCKER_COMPOSE_FILE:-infra/docker-compose.app.yml}"
 # 운영 도메인/시크릿 주입. 기본 .env, 운영은 PINVI_ENV_FILE=infra/.env.prod (gitignore, ADR-047).
 ENV_FILE="${PINVI_ENV_FILE:-.env}"
@@ -50,6 +50,7 @@ RUNTIME_API_SNAPSHOT_RENAMED="0"
 RUNTIME_WEB_SNAPSHOT_RENAMED="0"
 RUNTIME_DAGSTER_SNAPSHOT_RENAMED="0"
 RUNTIME_CONTAINER_DISCOVERY_FAILED="0"
+RESET_NOOP="0"
 
 usage() {
   cat <<'EOF'
@@ -70,7 +71,7 @@ Defaults:
   RustFS console URL: http://127.0.0.1:12105
 
 Environment overrides:
-  PINVI_DOCKER_PROJECT=pinvi-app
+  PINVI_DOCKER_PROJECT=pinvi-app-smoke
   PINVI_DOCKER_COMPOSE_FILE=infra/docker-compose.app.yml
   PINVI_API_PORT=12801
   PINVI_WEB_PORT=12805
@@ -151,6 +152,38 @@ free_app_ports() {
   free_host_port "$RUSTFS_PORT"
   free_host_port "$RUSTFS_CONSOLE_PORT"
   free_host_port "$DAGSTER_PORT"
+}
+
+assert_host_ports_available_before_migration() {
+  if ! command -v ss >/dev/null 2>&1; then
+    echo "ss is required to verify host ports before migration" >&2
+    return 127
+  fi
+  local port listeners container_ids container_id actual_project
+  for port in "$API_PORT" "$WEB_PORT" "$RUSTFS_PORT" "$RUSTFS_CONSOLE_PORT" "$DAGSTER_PORT"; do
+    listeners="$(ss -H -ltn "sport = :${port}" 2>/dev/null || true)"
+    [[ -n "$listeners" ]] || continue
+    if ! container_ids="$(docker ps --filter "publish=${port}" --format '{{.ID}}')"; then
+      echo "could not inspect containers publishing host port ${port}; refusing migration" >&2
+      return 1
+    fi
+    if [[ -z "$container_ids" ]]; then
+      echo "host port ${port} is occupied by a non-project listener; refusing migration" >&2
+      return 2
+    fi
+    while IFS= read -r container_id; do
+      [[ -n "$container_id" ]] || continue
+      if ! actual_project="$(docker container inspect --format \
+        '{{ index .Config.Labels "com.docker.compose.project" }}' "$container_id")"; then
+        echo "could not inspect the host port ${port} container; refusing migration" >&2
+        return 1
+      fi
+      if [[ "$actual_project" != "$PROJECT" ]]; then
+        echo "host port ${port} is occupied by another Compose project; refusing migration" >&2
+        return 2
+      fi
+    done <<< "$container_ids"
+  done
 }
 
 wait_for_url() {
@@ -374,7 +407,6 @@ runtime_writer_container_name() {
 }
 
 runtime_snapshot_preflight() {
-  [[ "$RUNTIME_DEPLOY_PRESERVE" == "1" ]] || return 0
   local service stale_snapshot_ids
   for service in app-api app-web app-dagster; do
     if ! stale_snapshot_ids="$(pinvi_runtime_predeploy_snapshot_ids "$service")"; then
@@ -386,6 +418,7 @@ runtime_snapshot_preflight() {
       return 2
     fi
   done
+  [[ "$RUNTIME_DEPLOY_PRESERVE" == "1" ]] || return 0
   if (( ${#RUNTIME_PREDEPLOY_API_CONTAINER_IDS[@]} > 0 \
     || ${#RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS[@]} > 0 \
     || ${#RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS[@]} > 0 )); then
@@ -1140,6 +1173,10 @@ migrate_under_lifecycle_lock() {
   require_docker
   require_python
   pinvi_verify_runtime_image_provenance app-api
+  if [[ "$RUNTIME_WRITERS_DRAINED" != "1" ]] && ! runtime_snapshot_preflight; then
+    log "stale pre-deploy snapshot preflight failed before migration"
+    return 1
+  fi
   local credential_file
   if ! credential_file="$(bootstrap_credential_file)"; then
     return 1
@@ -1206,6 +1243,7 @@ migrate_under_lifecycle_lock() {
 migrate() {
   reject_explicit_migrator_database_url
   pinvi_prepare_api_image_provenance
+  assert_host_ports_available_before_migration
   acquire_migrator_lifecycle_lock
   # EXIT handler가 실패 시 writer 복구와 lifecycle lock 해제를 담당한다. 조건문
   # 안에서 호출하면 Bash가 함수 내부의 errexit을 끄므로 migration 본문은 직접 호출한다.
@@ -1368,7 +1406,13 @@ up() {
 }
 
 down() {
+  require_direct_compose_mutation_environment
   require_docker
+  local environment_name
+  if ! environment_name="$(configured_environment)"; then
+    return 2
+  fi
+  verify_existing_runtime_environment "$environment_name"
   compose down --remove-orphans
 }
 
@@ -1396,7 +1440,42 @@ configured_environment() {
   elif [[ -z "$environment_name" ]]; then
     environment_name="$file_environment_name"
   fi
-  printf '%s\n' "${environment_name:-smoke}"
+  if [[ -z "$environment_name" ]]; then
+    echo "PINVI_ENVIRONMENT must be explicit; refusing ambiguous direct Compose mutation" >&2
+    return 2
+  fi
+  printf '%s\n' "$environment_name"
+}
+
+require_canonical_direct_compose_target() {
+  if [[ "$COMPOSE_FILE" != "infra/docker-compose.app.yml" ]]; then
+    echo "direct Compose mutation requires the canonical application Compose file" >&2
+    return 2
+  fi
+}
+
+require_isolated_direct_compose_project() {
+  local environment_name="$1"
+  case "$environment_name" in
+    development)
+      [[ "$PROJECT" =~ ^pinvi-app-(dev|development)(-[a-z0-9-]+)?$ ]] || {
+        echo "development direct Compose mutation requires a pinvi-app-dev* or pinvi-app-development* project" >&2
+        return 2
+      }
+      ;;
+    test)
+      [[ "$PROJECT" =~ ^pinvi-app-test(-[a-z0-9-]+)?$ ]] || {
+        echo "test direct Compose mutation requires a pinvi-app-test* project" >&2
+        return 2
+      }
+      ;;
+    smoke)
+      [[ "$PROJECT" =~ ^pinvi-app-smoke(-[a-z0-9-]+)?$ ]] || {
+        echo "smoke direct Compose mutation requires a pinvi-app-smoke* project" >&2
+        return 2
+      }
+      ;;
+  esac
 }
 
 require_direct_compose_mutation_environment() {
@@ -1404,12 +1483,15 @@ require_direct_compose_mutation_environment() {
   if ! environment_name="$(configured_environment)"; then
     return 2
   fi
+  require_canonical_direct_compose_target
   case "$environment_name" in
     production|staging)
       echo "direct Compose mutation is disabled for ${environment_name}; use the approved manager or isolated staging procedure" >&2
       return 2
       ;;
-    development|test|smoke) ;;
+    development|test|smoke)
+      require_isolated_direct_compose_project "$environment_name"
+      ;;
     *)
       echo "direct Compose mutation requires an explicit development/test/smoke/staging environment" >&2
       return 2
@@ -1417,19 +1499,109 @@ require_direct_compose_mutation_environment() {
   esac
 }
 
+verify_existing_runtime_environment() {
+  local environment_name="$1"
+  local service container_ids container_id actual_environment
+  for service in app-api app-web app-dagster; do
+    if ! container_ids="$(docker container ls --all \
+      --filter "label=com.docker.compose.project=${PROJECT}" \
+      --filter "label=com.docker.compose.service=${service}" \
+      --format '{{.ID}}')"; then
+      echo "could not verify the existing ${service} environment" >&2
+      return 1
+    fi
+    while IFS= read -r container_id; do
+      [[ -n "$container_id" ]] || continue
+      if ! actual_environment="$(docker container inspect --format \
+        '{{range .Config.Env}}{{println .}}{{end}}' "$container_id" \
+        | sed -n 's/^PINVI_ENVIRONMENT=//p' | tail -n 1)"; then
+        echo "could not inspect the existing ${service} environment" >&2
+        return 1
+      fi
+      if [[ "$actual_environment" != "$environment_name" ]]; then
+        echo "configured environment does not match the existing ${service} runtime" >&2
+        return 2
+      fi
+    done <<< "$container_ids"
+  done
+}
+
+verify_reset_database_identity() {
+  local environment_name="$1"
+  local project_container_ids db_container_ids volume_names
+  local db_container_id volume_name actual_volume actual_project actual_volume_label
+  if ! project_container_ids="$(docker container ls --all \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --format '{{.ID}}')"; then
+    echo "reset could not inspect the isolated Compose project" >&2
+    return 1
+  fi
+  if ! volume_names="$(docker volume ls \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --filter "label=com.docker.compose.volume=app-postgres" \
+    --format '{{.Name}}')"; then
+    echo "reset could not inspect the isolated PostgreSQL volume" >&2
+    return 1
+  fi
+  if [[ -z "$project_container_ids" && -z "$volume_names" ]]; then
+    log "isolated Compose project has no containers or PostgreSQL volume; reset is a safe no-op"
+    RESET_NOOP="1"
+    return 0
+  fi
+  if [[ -z "$project_container_ids" || -z "$volume_names" ]]; then
+    echo "reset requires matching project containers and PostgreSQL volume evidence" >&2
+    return 2
+  fi
+  if [[ "$(printf '%s\n' "$volume_names" | sed '/^$/d' | wc -l)" != "1" ]]; then
+    echo "reset requires exactly one isolated PostgreSQL volume" >&2
+    return 2
+  fi
+  volume_name="$(printf '%s\n' "$volume_names" | sed '/^$/d')"
+  if ! actual_project="$(docker volume inspect --format \
+    '{{ index .Labels "com.docker.compose.project" }}' "$volume_name")"; then
+    echo "reset could not inspect the isolated PostgreSQL volume identity" >&2
+    return 1
+  fi
+  if ! actual_volume_label="$(docker volume inspect --format \
+    '{{ index .Labels "com.docker.compose.volume" }}' "$volume_name")"; then
+    echo "reset could not inspect the isolated PostgreSQL volume label" >&2
+    return 1
+  fi
+  if [[ "$actual_project" != "$PROJECT" || "$actual_volume_label" != "app-postgres" ]]; then
+    echo "reset PostgreSQL volume identity does not match the isolated project" >&2
+    return 2
+  fi
+  if ! db_container_ids="$(docker container ls --all \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --filter "label=com.docker.compose.service=app-postgres" \
+    --format '{{.ID}}')"; then
+    echo "reset could not inspect the isolated PostgreSQL container" >&2
+    return 1
+  fi
+  if [[ "$(printf '%s\n' "$db_container_ids" | sed '/^$/d' | wc -l)" != "1" ]]; then
+    echo "reset requires exactly one isolated PostgreSQL container" >&2
+    return 2
+  fi
+  db_container_id="$(printf '%s\n' "$db_container_ids" | sed '/^$/d')"
+  if ! actual_volume="$(docker container inspect --format \
+    '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Name}}{{end}}{{end}}' \
+    "$db_container_id")"; then
+    echo "reset could not inspect the isolated PostgreSQL mount" >&2
+    return 1
+  fi
+  if [[ "$actual_volume" != "$volume_name" ]]; then
+    echo "reset PostgreSQL mount does not match the isolated volume" >&2
+    return 2
+  fi
+  verify_existing_runtime_environment "$environment_name"
+}
+
 reset() {
+  RESET_NOOP="0"
+  require_direct_compose_mutation_environment
   require_docker
   local environment_name
   if ! environment_name="$(configured_environment)"; then
-    return 2
-  fi
-  if [[ "$COMPOSE_FILE" != "infra/docker-compose.app.yml" ]]; then
-    echo "reset requires the canonical application Compose file" >&2
-    return 2
-  fi
-  if [[ "$PROJECT" != "pinvi-app" \
-    && ( "${PINVI_RESET_ISOLATED:-0}" != "1" || "$PROJECT" != pinvi-app-* ) ]]; then
-    echo "reset requires the default pinvi-app project or PINVI_RESET_ISOLATED=1 with a pinvi-app-* project" >&2
     return 2
   fi
   case "$environment_name" in
@@ -1438,29 +1610,8 @@ reset() {
       return 2
       ;;
   esac
-  local service container_ids container_id actual_environment
-  for service in app-api app-web app-dagster; do
-    if ! container_ids="$(docker container ls --all \
-      --filter "label=com.docker.compose.project=${PROJECT}" \
-      --filter "label=com.docker.compose.service=${service}" \
-      --format '{{.ID}}')"; then
-      echo "reset could not verify the existing ${service} environment" >&2
-      return 1
-    fi
-    while IFS= read -r container_id; do
-      [[ -n "$container_id" ]] || continue
-      if ! actual_environment="$(docker container inspect --format \
-        '{{range .Config.Env}}{{println .}}{{end}}' "$container_id" \
-        | sed -n 's/^PINVI_ENVIRONMENT=//p' | tail -n 1)"; then
-        echo "reset could not inspect the existing ${service} environment" >&2
-        return 1
-      fi
-      if [[ "$actual_environment" != "$environment_name" ]]; then
-        echo "reset environment does not match the existing ${service} runtime" >&2
-        return 2
-      fi
-    done <<< "$container_ids"
-  done
+  verify_reset_database_identity "$environment_name"
+  [[ "$RESET_NOOP" == "1" ]] && return 0
   compose down -v --remove-orphans
 }
 

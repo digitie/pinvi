@@ -141,6 +141,8 @@ owner만으로는 실행할 수 없고 직접 superuser root session이 필요�
 컨테이너나 호스트 프로세스는 자동 종료하지 않고 중단한다.
 
 ```bash
+export PINVI_ENVIRONMENT=smoke
+export PINVI_DOCKER_PROJECT=pinvi-app-smoke
 scripts/docker-app.sh build
 PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/secure/pinvi/bootstrap-admin.json scripts/docker-app.sh up
 scripts/docker-app.sh status
@@ -150,6 +152,10 @@ PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/secure/pinvi/bootstrap-admin.json scripts
 scripts/docker-app.sh down
 scripts/docker-app.sh reset   # down -v --remove-orphans
 ```
+
+직접 Compose wrapper는 환경을 생략하거나 기본/운영 project를 재사용하지 않는다. `development`는
+`pinvi-app-dev*`, `test`는 `pinvi-app-test*`, `smoke`는 `pinvi-app-smoke*`처럼 격리 project를
+명시해야 하며, Compose 파일은 저장소의 canonical `infra/docker-compose.app.yml`만 허용한다.
 
 `up`과 `smoke`는 migration 및 admin bootstrap을 포함하므로 위 credential file이 필요하다. 이미
 실행 중인 stack에서 migration 없이 상태만 확인하려면 `status`와 health endpoint를 사용한다.

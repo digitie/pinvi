@@ -146,6 +146,35 @@ require_node_mutation_environment() {
   esac
 }
 
+assert_host_ports_available_before_migration() {
+  require_command ss
+  local port listeners container_ids container_id actual_project
+  for port in "$API_PORT" "$WEB_PORT" "$RUSTFS_PORT" "$DAGSTER_PORT"; do
+    listeners="$(ss -H -ltn "sport = :${port}" 2>/dev/null || true)"
+    [[ -n "$listeners" ]] || continue
+    if ! container_ids="$(docker ps --filter "publish=${port}" --format '{{.ID}}')"; then
+      echo "could not inspect containers publishing host port ${port}; refusing migration" >&2
+      return 1
+    fi
+    if [[ -z "$container_ids" ]]; then
+      echo "host port ${port} is occupied by a non-project listener; refusing migration" >&2
+      return 2
+    fi
+    while IFS= read -r container_id; do
+      [[ -n "$container_id" ]] || continue
+      if ! actual_project="$(docker container inspect --format \
+        '{{ index .Config.Labels "com.docker.compose.project" }}' "$container_id")"; then
+        echo "could not inspect the host port ${port} container; refusing migration" >&2
+        return 1
+      fi
+      if [[ "$actual_project" != "$PROJECT" ]]; then
+        echo "host port ${port} is occupied by another Compose project; refusing migration" >&2
+        return 2
+      fi
+    done <<< "$container_ids"
+  done
+}
+
 pull_images() {
   pinvi_prepare_api_image_provenance
   log "pulling app images"
@@ -349,7 +378,6 @@ runtime_writer_container_name() {
 }
 
 runtime_snapshot_preflight() {
-  [[ "$RUNTIME_DEPLOY_PRESERVE" == "1" ]] || return 0
   local service stale_snapshot_ids
   for service in app-api app-web app-dagster; do
     if ! stale_snapshot_ids="$(pinvi_runtime_predeploy_snapshot_ids "$service")"; then
@@ -361,6 +389,7 @@ runtime_snapshot_preflight() {
       return 2
     fi
   done
+  [[ "$RUNTIME_DEPLOY_PRESERVE" == "1" ]] || return 0
   if (( ${#RUNTIME_PREDEPLOY_API_CONTAINER_IDS[@]} > 0 \
     || ${#RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS[@]} > 0 \
     || ${#RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS[@]} > 0 )); then
@@ -1106,6 +1135,10 @@ reject_explicit_migrator_database_url() {
 
 migrate_under_lifecycle_lock() {
   pinvi_verify_runtime_image_provenance app-api
+  if [[ "$RUNTIME_WRITERS_DRAINED" != "1" ]] && ! runtime_snapshot_preflight; then
+    log "stale pre-deploy snapshot preflight failed before migration"
+    return 1
+  fi
   local credential_file
   if ! credential_file="$(bootstrap_credential_file)"; then
     return 1
@@ -1173,6 +1206,7 @@ migrate_under_lifecycle_lock() {
 migrate() {
   reject_explicit_migrator_database_url
   pinvi_prepare_api_image_provenance require-immutable
+  assert_host_ports_available_before_migration
   acquire_migrator_lifecycle_lock
   # EXIT handler가 실패 시 writer 복구와 lifecycle lock 해제를 담당한다. 조건문
   # 안에서 호출하면 Bash가 함수 내부의 errexit을 끄므로 migration 본문은 직접 호출한다.
@@ -1286,6 +1320,7 @@ up_under_lifecycle_lock() {
 
 up() {
   pinvi_prepare_api_image_provenance require-immutable
+  assert_host_ports_available_before_migration
   acquire_migrator_lifecycle_lock
   RUNTIME_DEPLOY_PRESERVE="1"
   if ! drain_runtime_writers; then
@@ -1437,6 +1472,7 @@ status() {
 deploy() {
   build_images
   reject_explicit_migrator_database_url
+  assert_host_ports_available_before_migration
   acquire_migrator_lifecycle_lock
   RUNTIME_DEPLOY_PRESERVE="1"
   if ! drain_runtime_writers; then
