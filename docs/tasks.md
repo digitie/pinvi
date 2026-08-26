@@ -66,7 +66,13 @@
   PR #480). 지금 유일한 호출 경로는 안전하지만, 향후 다른 코드 경로/수동 SQL이 이 함수를 거치지
   않고 INSERT하면 막을 DB 차원 방어선이 없다. 후속 마이그레이션으로
   `CREATE UNIQUE INDEX ... ON app.retention_runs (status) WHERE status = 'executing'` 추가
-  (defense-in-depth, blocking 아님).
+  (defense-in-depth, blocking 아님). **T-VN-M05-ACTIVATION이 끝날 때까지 진행 불가** —
+  `tests/unit/test_tvn40_migration_immutability.py`의
+  `test_active_migration_artifacts_are_complete_and_digest_guarded`(PR #466)가
+  `alembic/versions/`에 `20260824_0100`/`20260824_0101` 두 파일만 있어야 한다고 고정해 둬서,
+  이 activation이 끝나 그 가드가 풀리기 전에는 새 마이그레이션이 CI를 통과할 수 없다(claude,
+  PR #491에서 실제로 막힘 확인, 마이그레이션·회귀 테스트 코드는
+  `agent/claude-t349-retention-unique-index` 브랜치에 보존).
 
 ## 웹 / 테스트 인프라
 
