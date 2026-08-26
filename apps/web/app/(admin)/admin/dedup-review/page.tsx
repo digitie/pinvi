@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ApiClient,
@@ -64,6 +64,7 @@ export default function AdminDedupReviewPage() {
     useState<(typeof STATUS_OPTIONS)[number]['value']>('pending');
   const [minScore, setMinScore] = useState('70');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [prevSelectedReviewId, setPrevSelectedReviewId] = useState<string | null>(null);
   const [decision, setDecision] = useState<AdminDedupDecision>('merged');
   const [masterFeatureId, setMasterFeatureId] = useState('');
   const [accessReason, setAccessReason] = useState('');
@@ -97,15 +98,15 @@ export default function AdminDedupReviewPage() {
       : 'dedup review 조회에 실패했습니다.'
     : null;
 
-  useEffect(() => {
-    if (!selectedReviewId) return;
+  if (selectedReviewId && selectedReviewId !== prevSelectedReviewId) {
+    setPrevSelectedReviewId(selectedReviewId);
     setDecision('merged');
     setMasterFeatureId(selectedDefaultMasterFeatureId);
     setAccessReason('');
     setMapReason('');
     setMutationError(null);
     setMutationNotice(null);
-  }, [selectedDefaultMasterFeatureId, selectedReviewId]);
+  }
 
   const decisionMutation = useMutation({
     mutationFn: ({ item }: { item: AdminDedupReviewRecord }) =>

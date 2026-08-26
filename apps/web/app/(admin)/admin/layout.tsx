@@ -126,8 +126,11 @@ function getActiveNavHref(pathname: string) {
 function AdminGuard({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [sidebarPreferenceReady, setSidebarPreferenceReady] = useState(false);
+  // 최초 렌더에서 lazy initializer로 한 번만 읽는다 — sidebar 마크업은 meQuery가
+  // pending인 동안(SSR·hydration 포함) 렌더되지 않으므로 여기서 window 접근이 안전하다.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => typeof window !== 'undefined' && window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === '1',
+  );
   // login 페이지 자체는 가드 적용 X (무한 redirect 방지)
   const isLoginPage = pathname === '/admin/login';
 
@@ -143,15 +146,8 @@ function AdminGuard({ children }: { children: ReactNode }) {
   const hasAdmin = me ? me.roles.some((r) => ADMIN_ROLES.has(r)) : false;
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
-    setSidebarCollapsed(stored === '1');
-    setSidebarPreferenceReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (!sidebarPreferenceReady) return;
     window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, sidebarCollapsed ? '1' : '0');
-  }, [sidebarCollapsed, sidebarPreferenceReady]);
+  }, [sidebarCollapsed]);
 
   useEffect(() => {
     if (isLoginPage) return;

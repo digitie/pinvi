@@ -1,15 +1,5 @@
-// Next.js + TypeScript ESLint config.
-// `next lint`가 본 파일을 자동 선택.
-
-import { FlatCompat } from '@eslint/eslintrc';
-import { dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
+import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
+import nextTypescript from "eslint-config-next/typescript";
 
 /**
  * Hallmark 잠금 시스템(DESIGN.md) 재발 방지 가드 — T-316/T-317.
@@ -44,45 +34,48 @@ const HALLMARK_CLASS_GUARDS = [
   },
 ];
 
-const config = [
-  ...compat.config({
-    extends: ['next/core-web-vitals', 'next/typescript'],
-    rules: {
-      'react/no-unescaped-entities': 'off',
-      // Pinvi `(lng, lat)` 좌표 순서 일관 — react-kakao 호환 잔존 코드 방지
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: ['*react-kakao-maps-sdk*'],
-              message:
-                'ADR-015/046 — Kakao Maps SDK 폐기. vworld-map-web 사용 (`docs/integrations/maplibre-vworld.md`).',
-            },
-          ],
-        },
-      ],
-    },
-  }),
-  {
-    // 사용자 표면(공개·앱)만 — `(admin)`과 admin 컴포넌트는 밀도 규칙이 달라 제외한다.
-    files: ['app/**/*.tsx', 'components/**/*.tsx'],
-    ignores: ['app/(admin)/**', 'components/admin/**'],
-    rules: {
-      'no-restricted-syntax': [
-        'error',
-        // esquery 선택자 안의 `/`는 정규식 종료로 읽히므로 이스케이프한다.
-        ...HALLMARK_CLASS_GUARDS.map(({ pattern, message }) => ({
-          selector: `Literal[value=/${pattern.replace(/\//g, '\\/')}/]`,
-          message,
-        })),
-        ...HALLMARK_CLASS_GUARDS.map(({ pattern, message }) => ({
-          selector: `TemplateElement[value.raw=/${pattern.replace(/\//g, '\\/')}/]`,
-          message,
-        })),
-      ],
-    },
+const config = [...nextCoreWebVitals, ...nextTypescript, {
+  rules: {
+    'react/no-unescaped-entities': 'off',
+    // Pinvi `(lng, lat)` 좌표 순서 일관 — react-kakao 호환 잔존 코드 방지
+    'no-restricted-imports': [
+      'error',
+      {
+        patterns: [
+          {
+            group: ['*react-kakao-maps-sdk*'],
+            message:
+              'ADR-015/046 — Kakao Maps SDK 폐기. vworld-map-web 사용 (`docs/integrations/maplibre-vworld.md`).',
+          },
+        ],
+      },
+    ],
+  }
+}, {
+  // 사용자 표면(공개·앱)만 — `(admin)`과 admin 컴포넌트는 밀도 규칙이 달라 제외한다.
+  files: ['app/**/*.tsx', 'components/**/*.tsx'],
+  ignores: ['app/(admin)/**', 'components/admin/**'],
+  rules: {
+    'no-restricted-syntax': [
+      'error',
+      // esquery 선택자 안의 `/`는 정규식 종료로 읽히므로 이스케이프한다.
+      ...HALLMARK_CLASS_GUARDS.map(({ pattern, message }) => ({
+        selector: `Literal[value=/${pattern.replace(/\//g, '\\/')}/]`,
+        message,
+      })),
+      ...HALLMARK_CLASS_GUARDS.map(({ pattern, message }) => ({
+        selector: `TemplateElement[value.raw=/${pattern.replace(/\//g, '\\/')}/]`,
+        message,
+      })),
+    ],
   },
-];
+}, {
+  // Playwright fixture 파일의 `use(page)`는 React hook이 아니다 — 이름이 `use*`로 시작한다는
+  // 이유만으로 react-hooks/rules-of-hooks가 오탐한다(ESLint 10 + eslint-plugin-react-hooks 7).
+  files: ['e2e/**/*.ts'],
+  rules: {
+    'react-hooks/rules-of-hooks': 'off',
+  },
+}];
 
 export default config;

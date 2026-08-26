@@ -62,19 +62,32 @@ export function MapSearchBox({ onSelect, className }: MapSearchBoxProps) {
     }
   }, []);
 
-  // 디바운스 자동완성(F3) — 2자 이상 입력 시 250ms 뒤 검색. 입력마다 재요청/직전 요청은 취소.
-  useEffect(() => {
-    const term = query.trim();
+  // 입력이 최소 글자 수 밑으로 떨어진 순간을 렌더 중에 잡아 결과/에러/로딩을 그 자리에서
+  // 리셋한다(react-hooks/set-state-in-effect: effect 안 동기 setState 금지 — 공식
+  // "Adjusting state when a prop changes" 패턴). 디바운스 타이머 예약과 abort는 side effect라
+  // 아래 effect에 그대로 둔다.
+  const term = query.trim();
+  const [prevTerm, setPrevTerm] = useState(term);
+  if (term !== prevTerm) {
+    setPrevTerm(term);
     if (term.length < MIN_CHARS) {
-      searchAbort.current?.abort();
       setResults([]);
       setError(null);
       setLoading(false);
+    }
+  }
+
+  // 디바운스 자동완성(F3) — 2자 이상 입력 시 250ms 뒤 검색. 입력마다 재요청/직전 요청은 취소.
+  // 트림 값이 아니라 원본 `query`를 dep으로 둬야 공백만 바뀌어도 디바운스가 그대로 재시작된다
+  // (기존 동작 유지).
+  useEffect(() => {
+    if (term.length < MIN_CHARS) {
+      searchAbort.current?.abort();
       return;
     }
     const timer = setTimeout(() => void runSearch(term), DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [query, runSearch]);
+  }, [query, term, runSearch]);
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();

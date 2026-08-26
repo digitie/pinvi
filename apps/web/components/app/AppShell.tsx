@@ -77,9 +77,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const secondaryActive = MOBILE_SECONDARY.some((item) => isActivePath(pathname, item.href));
 
   // 라우트가 바뀌면 시트를 닫는다 — 네이티브 <details>는 클라이언트 네비게이션 후에도 열린 채 남았다.
-  useEffect(() => {
+  // effect 대신 렌더 중 조정(react-hooks/set-state-in-effect가 막는 effect 내부 동기 setState를 피한다).
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
     setMoreOpen(false);
-  }, [pathname]);
+  }
 
   // 바깥 포인터·포커스 이탈·Escape로도 닫는다(브라우저 기본 동작에 기대지 않는다).
   useEffect(() => {

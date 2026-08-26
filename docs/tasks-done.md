@@ -4,6 +4,59 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-08-26 (2)
+
+- [x] **T-354** — Next.js 15 → 16 업그레이드. 사용자 요청으로 착수(npm audit
+      union range 오독으로 미루기로 했던 과거 결정을 뒤집음, PR #489, claude).
+      `@next/codemod upgrade latest` + `next-lint-to-eslint-cli`로 기계적 마이그레이션을
+      먼저 돌리고, 실제로 깨진 지점을 하나씩 고쳤다.
+
+      **의존성 버전 스큐 3건**: (1) `next-intl@3.26.5`가 Next 16을 지원 안 해 워크스페이스에
+      `next`가 두 버전 공존 → npm arborist가 혼란스러워하며 vendored `file:` 패키지
+      (`vworld-map-*`)를 레지스트리에서 찾으려다 404로 전체 install이 깨졌다(재현 3회 확인,
+      순정 origin/main은 재현 안 됨 — bisect로 확정). `next-intl`이 실제로는 코드 어디서도
+      import되지 않는 미사용 의존성임을 확인하고 4.13.7(Next 16 공식 지원)로 올려 단일
+      `next` 버전으로 정리했다. (2) `eslint-config-next@16.3.3`이 `eslint-plugin-react-hooks
+      @^7.0.0`을 원하는데 T-311이 걸어둔 `5.2.0` 루트 override와 충돌 — 이번엔 의도적
+      업그레이드이니 override를 제거하고 실제로 v7 규칙을 채택했다. (3) `eslint@10.9.1`(codemod가
+      자동 승격)은 `eslint-plugin-react`가 아직 지원 안 해(`context.getFilename is not a
+      function`, 최신 7.37.5도 peer가 `<=9.7`) 9.x대로 유지했다 — `eslint-config-next`의 peer는
+      `>=9.0.0`이라 10 강제가 아니었다.
+
+      **`react-hooks/set-state-in-effect`(eslint-plugin-react-hooks v7의 새 React Compiler
+      시대 규칙) 위반 44건**을 Workflow(10개 배치, 파일별 실제 구조 리팩터)로 고쳤다 — 순수
+      파생값은 useEffect를 없애고 렌더 중 계산으로, prop 변경 시 여러 state를 리셋하는 곳은
+      React 공식 문서의 "adjusting state when a prop changes" 렌더 중 패턴으로, 마운트 시
+      fetch 패턴은 초기 state 값과 중복되는 동기 setState를 제거하는 방식으로. 이 과정에서
+      `app/(auth)/profile/page.tsx`의 실제 버그(마운트 URL의 OAuth 에러가 나중에 조용히
+      지워지던 문제)도 함께 발견해 고쳤다. `useModalDialog.ts`(포커스 관리가 타이밍에 민감해
+      직접 처리)는 `dialogProps` 구성을 spread로 바꿔 "렌더 중 ref 접근" 오탐을 없앴고,
+      `portalNode`(useState lazy init, setter 미사용) 뮤테이션은 useRef 전환을 시도했다가
+      오히려 새 위반(렌더 중 ref 읽기)을 만들어 되돌리고 그 한 줄만 국소 eslint-disable +
+      사유 주석으로 처리했다(React 공식 문서가 인정하는 lazy-ref-init 패턴을 이 lint 규칙이
+      막는 경우라 구조를 바꾸는 게 더 위험하다고 판단).
+
+      `@next/codemod`의 `cache-components-instant-false` 변환이 15개 라우트에
+      `export const instant = false`를 추가했는데, 이 프로젝트는 `cacheComponents`를
+      켜지 않아(Cache Components 아키텍처 미채택) 그 설정 자체가 빌드를 깼다 — 15곳 전부
+      제거해 원본과 byte-identical하게 되돌렸다(Cache Components 도입은 별도 결정 필요).
+
+      검증: `apps/web` typecheck·lint(에러 0, 경고 4건은 기존/무관)·build·vitest(18
+      files/113 tests, `useModalDialog.test.tsx` 14건 포함) 전부 통과.
+
+      **PR #489 최초 push 후 CI e2e에서 49개 실패 발견** — 실패한 스펙은 예외 없이
+      `vworld-map-web`(지도)을 렌더링하는 페이지·다이얼로그·폼이었고, 지도가 없는 페이지는
+      전부 통과했다. 로컬에서 같은 production build로 재현하니 `/map` 콘솔에
+      `Module ... was instantiated ... but the module factory is not available`가 떴고
+      앱 에러 바운더리까지 전파돼 지도가 fallback UI조차 그리지 못했다 — Next 16 Turbopack
+      프로덕션 번들러가 `vworld-map-web`의 모듈 그래프를 청크로 나누는 과정에서 생기는
+      런타임 버그로 확인, 이번 리팩터와는 무관. `next build --webpack`으로 재빌드하니
+      콘솔 에러 없이 정상 렌더링됐고 실패했던 19개 대표 e2e(map-*, dialog-focus, form-a11y,
+      trips-dashboard)를 재실행해 전부 통과 확인. `apps/web/package.json`의 `build`
+      스크립트를 `next build --webpack`으로 고정해 CI·`apps/web/Dockerfile` 둘 다 이
+      경로를 타게 했다(**ADR-066**). `dev` 스크립트는 범위 밖 — 로컬 dev에서 같은 증상이
+      보고되면 그때 맞춘다.
+
 ## 2026-08-22
 
 - [x] **T-VN-M04 follow-up — Feature request consumer 중립 식별자** — 범용 queue의

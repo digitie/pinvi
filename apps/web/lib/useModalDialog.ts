@@ -269,6 +269,13 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
   // portal 컨테이너를 body 직계 자식으로 붙인다 — 배경 inert의 선행 조건이다.
   useEffect(() => {
     if (!active || !portalNode) return;
+    // react-hooks/immutability: `portalNode`는 useState의 lazy initializer로 딱 한 번만
+    // 만들어지는 실제 DOM 엘리먼트다(setter는 쓰지 않는다) — React 상태 값 자체가 아니라
+    // effect에서 자유롭게 다뤄도 되는 ref 성격의 DOM 노드를 담는 그릇일 뿐이다. ref로 바꾸면
+    // "렌더 중 ref.current 접근 금지" 규칙과 정면충돌한다(첫 렌더에 동기로 컨테이너가 있어야
+    // 한다는 위 주석의 요구 때문에 렌더 중 읽기가 불가피하다) — 두 규칙이 이 패턴에서
+    // 서로 양립 불가능해 여기서만 끈다.
+    // eslint-disable-next-line react-hooks/immutability
     portalNode.dataset.modalPortal = '';
     // portal 자체는 layout box를 만들지 않는다. fixed scrim/panel만 viewport 레이어에 남겨
     // 모바일 nav의 가로 scroll area가 root scrollWidth로 새지 않게 한다.
@@ -472,15 +479,9 @@ export function useModalDialog(options: UseModalDialogOptions): ModalDialogA11y 
     tabIndex: -1,
     role: 'dialog',
     'aria-modal': true,
+    ...(ariaLabel ? { 'aria-label': ariaLabel } : { 'aria-labelledby': titleId }),
+    ...(ariaDescribedBy ? { 'aria-describedby': ariaDescribedBy } : {}),
   };
-  if (ariaLabel) {
-    dialogProps['aria-label'] = ariaLabel;
-  } else {
-    dialogProps['aria-labelledby'] = titleId;
-  }
-  if (ariaDescribedBy) {
-    dialogProps['aria-describedby'] = ariaDescribedBy;
-  }
 
   return {
     dialogRef,

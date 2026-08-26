@@ -29,16 +29,22 @@ export function useFeatureDetailCard(
   // providers 배열은 렌더마다 새 참조가 될 수 있으므로 문자열 키로 안정화해 deps에 쓴다.
   const providersKey = providers.join(',');
 
-  useEffect(() => {
-    if (!featureId) {
-      setCard(null);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-    const controller = new AbortController();
-    setLoading(true);
+  // featureId/providersKey가 바뀐 순간을 렌더 중에 잡아 card/error/loading을 그 자리에서
+  // 리셋한다(react-hooks/set-state-in-effect: effect 안 동기 setState 금지 — 공식 "Adjusting
+  // state when a prop changes" 패턴). 실제 fetch는 아래 effect에서 비동기로만 수행한다.
+  const [prevFeatureId, setPrevFeatureId] = useState(featureId);
+  const [prevProvidersKey, setPrevProvidersKey] = useState(providersKey);
+  if (featureId !== prevFeatureId || providersKey !== prevProvidersKey) {
+    setPrevFeatureId(featureId);
+    setPrevProvidersKey(providersKey);
+    setCard(null);
     setError(null);
+    setLoading(!!featureId);
+  }
+
+  useEffect(() => {
+    if (!featureId) return;
+    const controller = new AbortController();
     void (async () => {
       try {
         const requested = providersKey

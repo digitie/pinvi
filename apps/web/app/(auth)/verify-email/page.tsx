@@ -32,13 +32,15 @@ function VerifyEmailContent() {
   const router = useRouter();
   const params = useSearchParams();
   const token = params.get('token');
-  const [status, setStatus] = useState<'pending' | 'success' | 'error'>('pending');
-  const [error, setError] = useState<string | null>(null);
+  // token 유무는 useSearchParams()로 렌더 중에 이미 알 수 있는 값이므로, "토큰 없음" 상태는
+  // effect에서 setState하지 않고 초기 state 계산에서 바로 반영한다(react-hooks/set-state-in-effect).
+  const [status, setStatus] = useState<'pending' | 'success' | 'error'>(
+    token ? 'pending' : 'error',
+  );
+  const [error, setError] = useState<string | null>(token ? null : '인증 토큰이 없습니다.');
 
   useEffect(() => {
     if (!token) {
-      setStatus('error');
-      setError('인증 토큰이 없습니다.');
       return;
     }
 

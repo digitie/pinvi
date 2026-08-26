@@ -194,7 +194,9 @@ export default function AdminPoiDetailPage() {
   useEffect(() => {
     if (!showOperationDialog) return;
     let cancelled = false;
-    setOperationImpact(null);
+    // operationImpact는 이 effect를 트리거하는 유일한 경로인 openOperationDialog에서
+    // 이미 null로 리셋된 뒤 진입한다(poiId는 이 페이지 안에서 바뀌지 않음) — 여기서
+    // 다시 동기 setState할 필요가 없다.
     adminApi(apiClient)
       .getPoiOperationImpact(poiId)
       .then((impact) => {

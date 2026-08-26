@@ -432,8 +432,23 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const reloadInFlightRef = useRef<Promise<TripView | null> | null>(null);
   // Track the latest viewing day so a freshly (re)created realtime client can re-apply it
   // without adding selectedDayIndex to the client-creation effect deps (T-289).
+  // 렌더 중 ref.current를 쓰지 않는다(react-hooks/refs) — 대신 effect에서 동기화한다. 이 ref는
+  // 아래 realtime 클라이언트 생성 effect에서만 읽고, 그 effect는 이 effect보다 뒤에 선언돼
+  // 있어 같은 커밋에서 항상 이 effect가 먼저 실행된다 — 최신값이 항상 보장된다.
   const selectedDayIndexRef = useRef(selectedDayIndex);
-  selectedDayIndexRef.current = selectedDayIndex;
+  useEffect(() => {
+    selectedDayIndexRef.current = selectedDayIndex;
+  }, [selectedDayIndex]);
+
+  // 다른 여행으로 전환되면(언마운트 없이 tripId prop만 바뀌는 경우) 로딩 표시와 참가자 현황을
+  // 새 여행 기준으로 즉시 리셋한다. 두 값 모두 effect 안에서 동기 setState로 리셋하면 커밋 이후
+  // 추가 렌더를 유발한다(react-hooks/set-state-in-effect) — 렌더 중 조정 패턴으로 옮긴다.
+  const [loadedTripId, setLoadedTripId] = useState(tripId);
+  if (loadedTripId !== tripId) {
+    setLoadedTripId(tripId);
+    setLoading(true);
+    setPresence(new Map());
+  }
 
   const reload = useCallback(async (): Promise<TripView | null> => {
     if (reloadInFlightRef.current) return reloadInFlightRef.current;
@@ -459,7 +474,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    // loading의 초기값이 이미 true이고, 트립 전환 시 리셋은 위 loadedTripId 조정에서 처리한다 —
+    // 여기서 또 setLoading(true)을 부르면 매 effect 실행마다 불필요한 동기 setState가 된다.
     void reload().then((res) => {
       if (cancelled) return;
       if (res) setSelectedDayIndex((current) => current ?? res.days[0]?.day_index ?? null);
@@ -502,7 +518,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
   );
 
   useEffect(() => {
-    setPresence(new Map());
+    // presence 리셋도 위 loadedTripId 조정에서 렌더 중에 처리한다(같은 이유).
     const client = new TripRealtimeClient({
       apiBaseUrl: PINVI_API_URL,
       tripId,
@@ -542,7 +558,12 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const dayIndexes = useMemo(() => view?.days.map((day) => day.day_index) ?? [], [view]);
   const dayIndexesKey = dayIndexes.join('|');
 
-  useEffect(() => {
+  // 일자 구성이 바뀌면(추가/삭제/reload) visibleDayIndexes를 조정한다. 이전 값에 기대는 조정이라
+  // 순수 파생값(useMemo)으로는 못 옮기지만, "prop/id가 바뀔 때 리셋"과 같은 모양이라 렌더 중
+  // 조정 패턴을 쓴다 — effect 안 동기 setState(react-hooks/set-state-in-effect)를 피한다.
+  const [prevDayIndexesKey, setPrevDayIndexesKey] = useState(dayIndexesKey);
+  if (dayIndexesKey !== prevDayIndexesKey) {
+    setPrevDayIndexesKey(dayIndexesKey);
     setVisibleDayIndexes((current) => {
       if (dayIndexes.length === 0) return current.size === 0 ? current : new Set();
 
@@ -556,7 +577,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
       }
       return new Set(nextIndexes);
     });
-  }, [dayIndexes, dayIndexesKey]);
+  }
 
   const allMapPoints = useMemo(() => (view ? tripDaysToMapPoints(view.days) : []), [view]);
   const mapPoints = useMemo(() => {
