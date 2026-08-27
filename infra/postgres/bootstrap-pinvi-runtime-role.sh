@@ -16,6 +16,7 @@ unset PGAPPNAME PGCONNECT_TIMEOUT PGDATABASE PGHOST PGHOSTADDR PGOPTIONS PGPASSF
 PINVI_ROLE_TOPOLOGY_VERIFY_ONLY="${PINVI_ROLE_TOPOLOGY_VERIFY_ONLY:-0}"
 PINVI_ROLE_CATALOG_RESET_ONLY="${PINVI_ROLE_CATALOG_RESET_ONLY:-0}"
 PINVI_ROLE_CATALOG_RESET_PERMIT_FILE="${PINVI_ROLE_CATALOG_RESET_PERMIT_FILE:-}"
+PINVI_ROLE_CATALOG_RESET_RESULT_FILE="${PINVI_ROLE_CATALOG_RESET_RESULT_FILE:-}"
 PINVI_M05_LEGACY_REBASELINE="${PINVI_M05_LEGACY_REBASELINE:-0}"
 PINVI_MIGRATOR_DISABLE_LOGIN="${PINVI_MIGRATOR_DISABLE_LOGIN:-1}"
 # The ordinary PinVi Compose network reaches PostgreSQL as ``app-postgres:5432``.
@@ -806,23 +807,45 @@ load_fresh_role_catalog_reset_permit() {
   fi
 }
 
-if [ "${PINVI_ROLE_CATALOG_RESET_ONLY}" = "1" ]; then
-  if [ "${PINVI_M05_LEGACY_REBASELINE}" != "0" ] \
-    || [ "${PINVI_MIGRATOR_DISABLE_LOGIN}" != "1" ]; then
-    unset PGPASSWORD
-    echo "fresh PinVi role catalog reset has invalid lifecycle input" >&2
-    exit 2
+load_fresh_role_catalog_reset_result_file() {
+  if [ -z "${PINVI_ROLE_CATALOG_RESET_RESULT_FILE}" ] \
+    || [ ! -f "${PINVI_ROLE_CATALOG_RESET_RESULT_FILE}" ] \
+    || [ -L "${PINVI_ROLE_CATALOG_RESET_RESULT_FILE}" ]; then
+    return 1
   fi
-  if ! load_fresh_role_catalog_reset_permit; then
+  result_mode="$(stat -c '%u:%g:%a' "${PINVI_ROLE_CATALOG_RESET_RESULT_FILE}" 2>/dev/null)" || return 1
+  [ "${result_mode}" = "0:0:600" ]
+}
+
+write_fresh_role_catalog_reset_result() {
+  result_status="$1"
+  result_class="$2"
+  printf '%s\n' \
+    "{\"schema\":\"pinvi.role-catalog-reset-diagnostic.v1\",\"status\":\"${result_status}\",\"class\":\"${result_class}\",\"transaction\":\"${permit_transaction}\",\"pinset\":\"${permit_pinset}\"}" \
+    > "${PINVI_ROLE_CATALOG_RESET_RESULT_FILE}"
+}
+
+if [ "${PINVI_ROLE_CATALOG_RESET_ONLY}" = "1" ]; then
+  if ! load_fresh_role_catalog_reset_permit \
+    || ! load_fresh_role_catalog_reset_result_file; then
     unset PGPASSWORD
     echo "fresh PinVi role catalog reset permit is invalid" >&2
     exit 2
   fi
+  if [ "${PINVI_M05_LEGACY_REBASELINE}" != "0" ] \
+    || [ "${PINVI_MIGRATOR_DISABLE_LOGIN}" != "1" ]; then
+    write_fresh_role_catalog_reset_result "failed" "lifecycle_invalid"
+    unset PGPASSWORD
+    echo "fresh PinVi role catalog reset has invalid lifecycle input" >&2
+    exit 2
+  fi
   if ! reset_fresh_role_catalog; then
+    write_fresh_role_catalog_reset_result "failed" "target_not_isolated"
     unset PGPASSWORD
     echo "fresh PinVi role catalog reset could not prove an isolated target" >&2
     exit 3
   fi
+  write_fresh_role_catalog_reset_result "completed" "completed"
   unset PGPASSWORD
   exit 0
 fi
