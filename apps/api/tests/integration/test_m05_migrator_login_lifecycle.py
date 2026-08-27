@@ -186,7 +186,8 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
             "psql",
             f"--username={root_role}",
             "--dbname=pinvi",
-            "--command=" f"{role_creation}; "
+            "--command="
+            f"{role_creation}; "
             "CREATE TYPE public.stale_catalog_type AS ENUM ('residue');",
         )
         failed = compose(
