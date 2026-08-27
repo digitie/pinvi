@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-27 (claude) — T-355: 배포 게이트 bare-call errexit P0 3건 수정 (#498)
+
+PR #487(`codex/pr477-followup`)이 codex의 실시간 작업 중이라 완전 대기했다가, codex가 merge를
+마친 직후(01:44:42Z) merge된 `main`을 직접 확인했다. 이전에 적대적 리뷰(5개 관점 병렬)가
+`scripts/deploy-node.sh`/`scripts/docker-app.sh`에서 찾은 P0 3건 — `if ! FUNC` 호출부 아래에서
+bash errexit이 꺼진 채 하위 체크가 bare statement로 실행돼 실패해도 무시되던 문제 — 가 codex의
+대규모 재작성에도 그대로 남아 있음을 재확인했다. `require_fresh_stack_identity()`,
+`fresh_stack_runtime_image_proof()`, `require_direct_compose_mutation_environment()` 세 곳
+모두 하위 체크를 `|| return $?`로 명시 확인하도록 고쳤다(로컬에 보존해 뒀던 커밋을 fresh
+`main` 위에 cherry-pick). sed 함수 추출 재현(수정 전/후)과 관련 unit 139건으로 검증하고 T-355로
+등록·PR #498·merge까지 완료했다. M05 activation 관련 그 다음 작업(Map provenance consumer·vendor
+정합화)은 codex가 계속 진행 중 — 위 최근 엔트리 참고.
+
 ## 2026-08-27 (codex) — Map main Admin provenance 재vendor와 M05 UUID 결박
 
 - Map PR #1081 merge `cf65e97345b5792420cfbc994e49ce6a7e3cd650`의 Admin/full `openapi.json`을

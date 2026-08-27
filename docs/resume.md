@@ -1,5 +1,18 @@
 # resume.md
 
+## 2026-08-27 (claude) — T-355 배포 게이트 P0 완료, M05 activation은 codex 진행 중
+
+PR #487(codex/pr477-followup)이 merge된 직후 확인해보니, PR #487 이전에 별도로 발견해 뒀던
+배포 게이트 bare-call errexit P0 3건(`scripts/deploy-node.sh`/`scripts/docker-app.sh`)이 codex의
+재작성에도 고쳐지지 않은 채 `main`에 남아 있었다. T-355로 등록하고 별도 PR #498로 분리 수정·
+검증(sed 재현 + unit 139건)·merge까지 완료했다(자세한 내용은 `docs/tasks-done.md` 2026-08-27,
+`docs/journal.md` 동일 날짜 참고).
+
+M05 activation의 다음 코드 작업(Map provenance consumer·vendor 정합화, n150 live E2E 전 단계)은
+codex가 계속 진행 중이다(아래 codex 엔트리, `docs/tasks.md`의 `T-VN-M05-ACTIVATION` 선점 참고).
+이 흐름과 겹치는 파일은 건드리지 않는다 — 다음에 이어받을 사람은 먼저 codex의 진행 상태(열린 PR,
+살아있는 프로세스)를 확인하고, 별도로 분리 가능한 gap이 있는지부터 찾는다.
+
 ## 2026-08-27 (codex) — M05 provenance consumer·vendor 정합화 진행
 
 Map `main` merge `cf65e97345b5792420cfbc994e49ce6a7e3cd650`의 Admin/full OpenAPI를 PinVi vendor와
