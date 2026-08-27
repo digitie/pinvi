@@ -505,6 +505,7 @@ def _m04_server_side_chain(
     feature_id = _string(provenance.get("feature_id"), name="Map M04 feature ID")
     if feature_id != feature_ref:
         raise AttestationError("Map M04 provenance does not match the approved feature")
+    feature_uuid = _uuid(provenance.get("feature_uuid"), name="Map M04 feature UUID")
     origin = _object(provenance.get("origin"), name="Map M04 feature origin")
     if origin.get("origin_kind") != "manual_request":
         raise AttestationError("Map M04 feature origin is not manual_request")
@@ -527,6 +528,7 @@ def _m04_server_side_chain(
     if (
         feature_id != manual_feature_id
         or feature_id != old_feature_id
+        or feature_uuid != manual_feature_uuid
         or manual_feature_uuid != old_feature_uuid
     ):
         raise AttestationError(
@@ -535,7 +537,7 @@ def _m04_server_side_chain(
     return {
         "feature_request_id": request_id,
         "map_feature_id": feature_id,
-        "map_feature_uuid": manual_feature_uuid,
+        "map_feature_uuid": feature_uuid,
         "map_provenance_sha256": _sha256(_canonical_json(provenance)),
         "map_request_sha256": _sha256(_canonical_json(request_data)),
     }

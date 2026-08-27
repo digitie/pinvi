@@ -384,6 +384,7 @@ def test_m04_server_side_chain_binds_approved_request_to_m05_old_feature(
                 {
                     "data": {
                         "feature_id": feature_id,
+                        "feature_uuid": feature_uuid,
                         "origin": {"origin_kind": "manual_request"},
                     }
                 },
@@ -403,6 +404,68 @@ def test_m04_server_side_chain_binds_approved_request_to_m05_old_feature(
 
     assert chain["map_feature_id"] == feature_id
     assert chain["map_feature_uuid"] == feature_uuid
+
+
+@pytest.mark.parametrize(
+    ("provenance_feature_id", "provenance_feature_uuid", "error"),
+    (
+        (
+            "feature-other-approved",
+            "44444444-4444-4444-8444-444444444444",
+            "Map M04 provenance does not match the approved feature",
+        ),
+        (
+            "feature-m04-approved",
+            "55555555-5555-4555-8555-555555555555",
+            "M04 approved feature does not match the M05 old feature",
+        ),
+    ),
+)
+def test_m04_server_side_chain_rejects_provenance_identity_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+    provenance_feature_id: str,
+    provenance_feature_uuid: str,
+    error: str,
+) -> None:
+    module = _attestation_module()
+    monkeypatch.setenv("M05_MAP_ADMIN_PROXY_SECRET", "s" * 32)
+    feature_id = "feature-m04-approved"
+    feature_uuid = "44444444-4444-4444-8444-444444444444"
+    responses = iter(
+        (
+            (
+                {
+                    "data": {
+                        "request_id": "33333333-3333-4333-8333-333333333333",
+                        "status": "approved",
+                        "feature_id": feature_id,
+                    }
+                },
+                b"{}",
+            ),
+            (
+                {
+                    "data": {
+                        "feature_id": provenance_feature_id,
+                        "feature_uuid": provenance_feature_uuid,
+                        "origin": {"origin_kind": "manual_request"},
+                    }
+                },
+                b"{}",
+            ),
+        )
+    )
+    monkeypatch.setattr(module, "_http_json", lambda *args, **kwargs: next(responses))
+
+    with pytest.raises(module.AttestationError, match=error):
+        module._m04_server_side_chain(
+            map_admin_url="http://127.0.0.1:14701",
+            m04={"feature_request_id": "33333333-3333-4333-8333-333333333333"},
+            map_case={
+                "manual_feature": {"feature_id": feature_id, "feature_uuid": feature_uuid},
+                "event": {"old_feature": {"feature_id": feature_id, "feature_uuid": feature_uuid}},
+            },
+        )
 
 
 def test_m04_approval_snapshot_recomputes_the_persisted_receipt(

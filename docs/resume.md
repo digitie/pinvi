@@ -1,5 +1,17 @@
 # resume.md
 
+## 2026-08-27 (codex) — M05 provenance consumer·vendor 정합화 진행
+
+Map `main` merge `cf65e97345b5792420cfbc994e49ce6a7e3cd650`의 Admin/full OpenAPI를 PinVi vendor와
+M05 pair에 `0a1548a94c80bab1af6ab79c10b6f07eba32450adccd8ec2751a8c5256144c1d`로 다시 고정했다.
+attestation은 opaque `feature_id`와 canonical `feature_uuid`를 다른 축으로 다루며, 후자는 M05
+manual/old UUID 양쪽과 대조하고 검증된 값을 receipt에 기록한다. service/user artifact와 service
+release pin은 바이트가 불변이므로 유지했다.
+
+다음 한 작업은 대상 unit·contract/format gate와 source artifact byte equality를 통과시키고, 문서·pair
+정합성을 재검토한 뒤 PinVi draft PR을 원격 checkpoint로 push하는 것이다. 새 Map/PinVi source를 묶는
+runtime image digest와 n150 M05 live E2E는 Docker Manager의 immutable candidate build 뒤에만 실행한다.
+
 ## 2026-08-26 (codex) — M05 sealed role topology verifier P1/P2 보정 완료
 
 `PINVI_ROLE_TOPOLOGY_VERIFY_ONLY=1` verifier와 normal bootstrap final gate가 예전처럼 서로

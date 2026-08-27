@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-27 (codex) — Map main Admin provenance 재vendor와 M05 UUID 결박
+
+- Map PR #1081 merge `cf65e97345b5792420cfbc994e49ce6a7e3cd650`의 Admin/full `openapi.json`을
+  SHA-256 `0a1548a94c80bab1af6ab79c10b6f07eba32450adccd8ec2751a8c5256144c1d`로 byte-exact vendor하고,
+  M05 pair의 Admin/full source·canonical·operation pin을 같은 merge에 고정했다. service/user artifact와
+  service provenance revision은 바이트 불변이므로 기존 pin을 유지했다.
+- M04 server-side chain은 provenance의 opaque `feature_id`를 approved request reference에 대조하고,
+  필수 `feature_uuid`를 M05 manual/old UUID와 각각 대조한다. receipt에는 case에서 복사한 UUID가 아닌
+  검증된 provenance UUID를 기록한다. non-UUID opaque ID, ID 불일치, UUID 불일치 회귀를 추가했다.
+- Map runtime image digest는 source에서 추측하지 않는다. 새 immutable Manager candidate가 Map `main`과
+  PinVi exact source를 빌드·검증한 뒤에만 pair/runtime pin을 회전하고 n150 paired live E2E를 시작한다.
+
 ## 2026-08-26 (codex) — M05 topology diagnostic common evaluator와 strict transport
 
 - sealed verifier와 normal bootstrap final gate가 약 300행의 aggregate SQL을 별도 보유하던
