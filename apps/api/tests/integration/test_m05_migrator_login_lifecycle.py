@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -107,6 +108,19 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
         return result
 
     permit = tmp_path / "role-catalog-reset.permit"
+    result_receipt = tmp_path / "role-catalog-reset.result"
+
+    def read_root_owned_receipt() -> dict[str, str]:
+        completed = subprocess.run(  # noqa: S603 - test-owned root artifact
+            [sudo, "-n", "cat", str(result_receipt)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        assert isinstance(payload, dict)
+        return payload
+
     try:
         compose("up", "--detach", "--wait", "app-postgres")
         # Manager의 application-300 reset과 같이 template0에서 target을 다시 만든다.
@@ -152,6 +166,15 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
         )
         subprocess.run([sudo, "-n", "chown", "root:root", str(permit)], check=True)  # noqa: S603
         subprocess.run([sudo, "-n", "chmod", "0600", str(permit)], check=True)  # noqa: S603
+        # The reset service can only overwrite this Manager-owned, regular receipt.
+        # The test keeps its transaction/pinset binding explicit to prove the wire contract.
+        result_receipt.write_text("{}", encoding="utf-8")
+        subprocess.run(  # noqa: S603
+            [sudo, "-n", "chown", "root:root", str(result_receipt)], check=True
+        )
+        subprocess.run(  # noqa: S603
+            [sudo, "-n", "chmod", "0600", str(result_receipt)], check=True
+        )
         role_creation = "; ".join(
             f"CREATE ROLE \"{role}\" LOGIN PASSWORD '{password}'"
             for role in (runtime_role, schema_owner, migration_owner, migrator_role)
@@ -174,6 +197,8 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
             "--no-deps",
             "--volume",
             f"{permit}:/run/pinvi/role-catalog-reset.permit:ro",
+            "--volume",
+            f"{result_receipt}:/run/pinvi/role-catalog-reset.result",
             "--env",
             "PINVI_ROLE_CATALOG_RESET_ONLY=1",
             "--env",
@@ -182,6 +207,8 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
             "PINVI_M05_LEGACY_REBASELINE=0",
             "--env",
             "PINVI_ROLE_CATALOG_RESET_PERMIT_FILE=/run/pinvi/role-catalog-reset.permit",
+            "--env",
+            "PINVI_ROLE_CATALOG_RESET_RESULT_FILE=/run/pinvi/role-catalog-reset.result",
             "app-db-runtime-role",
             check=False,
         )
@@ -189,6 +216,13 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
         assert "fresh PinVi role catalog reset could not prove an isolated target" in (
             failed.stdout + failed.stderr
         )
+        assert read_root_owned_receipt() == {
+            "schema": "pinvi.role-catalog-reset-diagnostic.v1",
+            "status": "failed",
+            "class": "target_not_isolated",
+            "transaction": "test-transaction",
+            "pinset": "test-pinset",
+        }
         remaining_roles = compose(
             "exec",
             "-T",
@@ -222,6 +256,8 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
             "--no-deps",
             "--volume",
             f"{permit}:/run/pinvi/role-catalog-reset.permit:ro",
+            "--volume",
+            f"{result_receipt}:/run/pinvi/role-catalog-reset.result",
             "--env",
             "PINVI_ROLE_CATALOG_RESET_ONLY=1",
             "--env",
@@ -230,8 +266,17 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
             "PINVI_M05_LEGACY_REBASELINE=0",
             "--env",
             "PINVI_ROLE_CATALOG_RESET_PERMIT_FILE=/run/pinvi/role-catalog-reset.permit",
+            "--env",
+            "PINVI_ROLE_CATALOG_RESET_RESULT_FILE=/run/pinvi/role-catalog-reset.result",
             "app-db-runtime-role",
         )
+        assert read_root_owned_receipt() == {
+            "schema": "pinvi.role-catalog-reset-diagnostic.v1",
+            "status": "completed",
+            "class": "completed",
+            "transaction": "test-transaction",
+            "pinset": "test-pinset",
+        }
         assert (
             compose(
                 "exec",
@@ -274,7 +319,9 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
         )
     finally:
         compose("down", "--volumes", "--remove-orphans", check=False)
-        subprocess.run([sudo, "-n", "rm", "-f", str(permit)], check=False)  # noqa: S603
+        subprocess.run(  # noqa: S603
+            [sudo, "-n", "rm", "-f", str(permit), str(result_receipt)], check=False
+        )
 
 
 def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
