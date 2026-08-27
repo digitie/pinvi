@@ -1,5 +1,13 @@
 # resume.md
 
+## 2026-08-28 (codex) — M05 attestation provenance를 committed Map runtime에 재결박
+
+PinVi M05 attestation은 Map source revision과 image identity를 exact pair로 검사한다. committed generation의
+Map source는 `9c64e862…`, API image는 `2260ec…`, UI image는 `5dc547…`인데 기존 pair는 이전 source/image를
+고정해 fail-closed하므로, 이 generation을 provenance source로 재결박했다. PinVi `a90b1f06…`와 Map
+`9c64e862…`의 새 Manager pinset `87fe2abc…`에서만 다음 trusted candidate를 정확히 한 번 실행하고,
+M04/M05 activation을 진행한다. 기존 `030b12fc…`은 재실행하지 않는다.
+
 ## 2026-08-28 (codex) — v2 permit candidate committed generation 확인
 
 Manager `519edd9…`, PinVi `69a5ac65…`, Map `9c64e862…`의 pinset `030b12fc…`은 trusted n150
@@ -7,7 +15,7 @@ release에서 `rebuild-pinned --confirm --json`을 정확히 한 번 실행해 c
 application head는 `300`, Map Dagster head는 `29b539ebc72a`, PinVi head는 `20260824_0101`이며, 이
 pinset은 재실행하지 않는다. 다음 한 작업은 같은 committed candidate에서 root-owned isolated M04 승인 →
 Map rebind → PinVi terminal receipt/Map ACK → M05 read-only browser E2E와 signed activation attestation을
-완료하는 것이다.
+완료하는 것이다. 이 기록은 새 provenance 재결박 전 generation의 결과이며, `030b12fc…` 재실행 근거가 아니다.
 
 ## 2026-08-28 (codex) — scoped v2 permit으로 external membership cleanup 승인
 

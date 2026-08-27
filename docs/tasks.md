@@ -6,8 +6,8 @@
 [`docs/resume.md`](resume.md)가 정본이다.
 
 - [/] T-VN-M05-TEMPLATE0-PINSET — `68d99705…`·`285618c0…`·`37932169…`·`31fe73ad…`·`b22bfb8c…`·`89330403…`·`c6c73cdf…` n150 candidate는 terminal로 보존하며 재시도하지 않는다. `c6c73cdf…`은 `foreign_membership` terminal이며 원문 builder 출력·stderr·catalog row는 읽지 않았다.
-- [x] T-VN-M05-NEW-CANDIDATE — Manager v2 permit의 transaction·pinset·DB identity·`revoke_external_memberships` scope를 소비하는 PinVi `69a5ac65…`·Map `9c64e862…`의 pinset `030b12fc…`을 trusted n150 release에 설치하고 `rebuild-pinned --confirm --json`을 정확히 한 번 실행했다. transaction은 `committed`, Map application head는 `300`, Map Dagster head는 `29b539ebc72a`, PinVi head는 `20260824_0101`이다. 이 pinset은 재실행하지 않는다.
-- [/] T-VN-M05-ACTIVATION — committed candidate에서만 isolated M04/M05 live mutating E2E와 activation attestation을 통과한다.
+- [/] T-VN-M05-NEW-CANDIDATE — PinVi `69a5ac65…`·Map `9c64e862…`의 pinset `030b12fc…`은 `committed` generation(Map application `300`, Map Dagster `29b539ebc72a`, PinVi `20260824_0101`)으로 보존하며 재실행하지 않는다. committed Map runtime provenance를 반영한 PinVi `a90b1f06…`·Map `9c64e862…`의 pinset `87fe2abc…`만 다음 trusted release candidate다. 이 새 pinset에서만 `rebuild-pinned --confirm --json`을 정확히 한 번 실행한다.
+- [ ] T-VN-M05-ACTIVATION — provenance가 재결박된 committed candidate에서만 isolated M04/M05 live mutating E2E와 activation attestation을 통과한다.
 - [ ] T-VN-41F1D-D1 — 최종 격리 리허설과 provenance attestation을 기록한다.
 - [ ] T-VN-41F1D-D2 — data-dependent Map/PinVi admin live E2E와 receipt 승격을 완료한다.
 - [ ] T-VN-41C — relay, reconciliation, consumer enable paired acceptance를 완료한다.
