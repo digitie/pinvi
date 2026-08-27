@@ -679,6 +679,21 @@ target_roles AS (
         :'migrator_role'
     )
 ),
+foreign_membership AS (
+    SELECT 1
+    FROM pg_auth_members membership
+    WHERE (
+        membership.roleid IN (SELECT oid FROM target_roles)
+        OR membership.member IN (SELECT oid FROM target_roles)
+    )
+      -- target 밖 role과의 membership을 role drop으로 함께 철회하면 외부
+      -- principal의 authorization 관계를 바꾸게 된다. target 네 role 내부
+      -- edge만 수용하고 그 밖의 edge는 isolation boundary에서 닫는다.
+      AND NOT (
+        membership.roleid IN (SELECT oid FROM target_roles)
+        AND membership.member IN (SELECT oid FROM target_roles)
+      )
+),
 foreign_database_owner AS (
     SELECT 1
     FROM pg_database database_row
@@ -763,6 +778,7 @@ isolation AS (
             JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
             WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
         ) AS routine_absent,
+        NOT EXISTS (SELECT 1 FROM foreign_membership) AS foreign_membership_absent,
         NOT EXISTS (SELECT 1 FROM foreign_database_owner) AS foreign_database_owner_absent,
         NOT EXISTS (SELECT 1 FROM foreign_role_setting) AS foreign_role_setting_absent,
         NOT EXISTS (SELECT 1 FROM foreign_shared_dependency) AS foreign_shared_dependency_absent,
@@ -778,6 +794,7 @@ reset_classification AS (
             WHEN NOT extension_absent THEN 'extension_present'
             WHEN NOT relation_absent THEN 'relation_present'
             WHEN NOT routine_absent THEN 'routine_present'
+            WHEN NOT foreign_membership_absent THEN 'foreign_membership'
             WHEN NOT foreign_database_owner_absent THEN 'foreign_database_owner'
             WHEN NOT foreign_role_setting_absent THEN 'foreign_role_setting'
             WHEN NOT foreign_shared_dependency_absent THEN 'foreign_shared_dependency'
@@ -790,6 +807,7 @@ reset_classification AS (
             AND extension_absent
             AND relation_absent
             AND routine_absent
+            AND foreign_membership_absent
             AND foreign_database_owner_absent
             AND foreign_role_setting_absent
             AND foreign_shared_dependency_absent
@@ -800,9 +818,6 @@ SELECT reset_class, reset_isolated FROM reset_classification
 \gset
 \echo :reset_class
 \if :reset_isolated
--- PostgreSQL DROP ROLE는 target role이 주고받은 membership을 자동 철회한다.
--- 외부 role은 삭제·변경하지 않으므로 membership 자체는 fresh reset의 외부
--- ownership/dependency가 아니다. 이 transaction의 role drop 뒤에는 target edge도 남지 않는다.
 SELECT format('DROP ROLE IF EXISTS %I', :'migrator_role')
 \gexec
 SELECT format('DROP ROLE IF EXISTS %I', :'migration_owner')

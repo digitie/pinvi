@@ -156,7 +156,7 @@ def test_fresh_role_catalog_reset_is_narrow_and_preflighted() -> None:
     assert "fresh PinVi role catalog reset has invalid lifecycle input" in reset
     assert "fresh PinVi role catalog reset could not prove an isolated target" in reset
     assert "BEGIN;" in reset
-    assert "DROP ROLE는 target role이 주고받은 membership을 자동 철회한다" in reset
+    assert "foreign_membership" in reset
     assert "foreign_database_owner" in reset
     assert "foreign_role_setting" in reset
     assert "foreign_shared_dependency" in reset
@@ -172,7 +172,7 @@ def test_fresh_role_catalog_reset_is_narrow_and_preflighted() -> None:
     assert "0:0:600" in reset
     assert "pg_control_system" in reset
     assert "membership.grantor" not in reset
-    assert "target role이 주고받은 membership" in reset
+    assert "target 네 role 내부" in reset
     assert "target_identity_invalid" in reset
     assert "foreign_namespace_object" in reset
     assert "\\gset" in reset
