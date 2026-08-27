@@ -80,7 +80,9 @@ def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
     assert "migrator_sealed" in bootstrap
     assert "migrator_membership_setting" in bootstrap
     verifier = bootstrap[
-        bootstrap.index("evaluate_role_topology()") : bootstrap.index("seal_migrator_login()")
+        bootstrap.index("evaluate_role_topology()") : bootstrap.index(
+            "reset_fresh_role_catalog()"
+        )
     ]
     for mutation in (
         "ALTER ",
@@ -141,6 +143,30 @@ def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
         'GRANT CREATE ON DATABASE :"database_name" TO :"schema_owner", :"migration_owner";'
         not in bootstrap
     )
+
+
+def test_fresh_role_catalog_reset_is_narrow_and_preflighted() -> None:
+    bootstrap = (ROOT / "infra" / "postgres" / "bootstrap-pinvi-runtime-role.sh").read_text(
+        encoding="utf-8"
+    )
+    reset = bootstrap[
+        bootstrap.index("reset_fresh_role_catalog()") : bootstrap.index("seal_migrator_login()")
+    ]
+
+    assert 'PINVI_ROLE_CATALOG_RESET_ONLY="${PINVI_ROLE_CATALOG_RESET_ONLY:-0}"' in bootstrap
+    assert "role topology verification and catalog reset cannot run together" in bootstrap
+    assert "fresh PinVi role catalog reset has invalid lifecycle input" in reset
+    assert "fresh PinVi role catalog reset could not prove an isolated target" in reset
+    assert "BEGIN;" in reset
+    assert "foreign_membership" in reset
+    assert "foreign_database_owner" in reset
+    assert "foreign_role_setting" in reset
+    assert "foreign_shared_dependency" in reset
+    assert "pg_shdepend" in reset
+    assert "DROP ROLE IF EXISTS" in reset
+    assert 'DROP OWNED' not in reset
+    assert 'REASSIGN OWNED' not in reset
+    assert '>/dev/null 2>&1' in reset
 
 
 def test_bootstrap_only_accepts_the_declared_postgres_endpoints(tmp_path: Path) -> None:

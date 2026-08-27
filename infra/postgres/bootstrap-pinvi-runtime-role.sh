@@ -14,6 +14,7 @@ unset PGAPPNAME PGCONNECT_TIMEOUT PGDATABASE PGHOST PGHOSTADDR PGOPTIONS PGPASSF
   PGSSLROOTCERT PGTARGETSESSIONATTRS PGUSER PSQLRC
 
 PINVI_ROLE_TOPOLOGY_VERIFY_ONLY="${PINVI_ROLE_TOPOLOGY_VERIFY_ONLY:-0}"
+PINVI_ROLE_CATALOG_RESET_ONLY="${PINVI_ROLE_CATALOG_RESET_ONLY:-0}"
 PINVI_M05_LEGACY_REBASELINE="${PINVI_M05_LEGACY_REBASELINE:-0}"
 PINVI_MIGRATOR_DISABLE_LOGIN="${PINVI_MIGRATOR_DISABLE_LOGIN:-1}"
 # The ordinary PinVi Compose network reaches PostgreSQL as ``app-postgres:5432``.
@@ -51,6 +52,14 @@ case "${PINVI_ROLE_TOPOLOGY_VERIFY_ONLY}" in
   0|1 ) ;;
   * ) input_error "PINVI_ROLE_TOPOLOGY_VERIFY_ONLY must be 0 or 1" ;;
 esac
+case "${PINVI_ROLE_CATALOG_RESET_ONLY}" in
+  0|1 ) ;;
+  * ) input_error "PINVI_ROLE_CATALOG_RESET_ONLY must be 0 or 1" ;;
+esac
+if [ "${PINVI_ROLE_TOPOLOGY_VERIFY_ONLY}" = "1" ] \
+  && [ "${PINVI_ROLE_CATALOG_RESET_ONLY}" = "1" ]; then
+  input_error "role topology verification and catalog reset cannot run together"
+fi
 
 require_value "POSTGRES_USER" "${POSTGRES_USER:-}"
 require_value "POSTGRES_PASSWORD" "${POSTGRES_PASSWORD:-}"
@@ -620,6 +629,108 @@ run_sealed_role_topology_verifier() {
 
 if [ "${PINVI_ROLE_TOPOLOGY_VERIFY_ONLY}" = "1" ]; then
   run_sealed_role_topology_verifier
+fi
+
+reset_fresh_role_catalog() {
+  # This is deliberately narrower than normal reconciliation: it is only for a
+  # just-recreated PinVi database.  A database drop does not remove cluster-wide
+  # role memberships or per-role settings, so a prior failed candidate can make
+  # the otherwise fresh target fail the strict normal topology gate.  Refuse any
+  # dependency outside the four generated non-root roles and this target DB
+  # before issuing a single role mutation.
+  PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 \
+    --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+    --set="database_name=${POSTGRES_DB}" \
+    --set="app_role=${PINVI_APP_DB_USER}" \
+    --set="schema_owner=${PINVI_APP_SCHEMA_OWNER}" \
+    --set="migration_owner=${PINVI_MIGRATION_OWNER}" \
+    --set="migrator_role=${PINVI_MIGRATOR_DB_USER}" \
+    >/dev/null 2>&1 <<'SQL'
+BEGIN;
+WITH target_database AS (
+    SELECT database_row.oid
+    FROM pg_database database_row
+    WHERE database_row.datname = :'database_name'
+),
+target_roles AS (
+    SELECT role_row.oid
+    FROM pg_roles role_row
+    WHERE role_row.rolname IN (
+        :'app_role',
+        :'schema_owner',
+        :'migration_owner',
+        :'migrator_role'
+    )
+),
+foreign_membership AS (
+    SELECT 1
+    FROM pg_auth_members membership
+    WHERE (
+        membership.roleid IN (SELECT oid FROM target_roles)
+        OR membership.member IN (SELECT oid FROM target_roles)
+    )
+      AND NOT (
+        membership.roleid IN (SELECT oid FROM target_roles)
+        AND membership.member IN (SELECT oid FROM target_roles)
+      )
+),
+foreign_database_owner AS (
+    SELECT 1
+    FROM pg_database database_row
+    WHERE database_row.datdba IN (SELECT oid FROM target_roles)
+),
+foreign_role_setting AS (
+    SELECT 1
+    FROM pg_db_role_setting setting_row
+    WHERE setting_row.setrole IN (SELECT oid FROM target_roles)
+      AND setting_row.setdatabase NOT IN (0, (SELECT oid FROM target_database))
+),
+foreign_shared_dependency AS (
+    SELECT 1
+    FROM pg_shdepend dependency
+    WHERE dependency.refobjid IN (SELECT oid FROM target_roles)
+      AND (
+        dependency.dbid <> 0
+        OR dependency.classid <> 'pg_auth_members'::regclass
+      )
+)
+SELECT 1 / CASE WHEN
+    (SELECT count(*) FROM target_database) = 1
+    AND to_regnamespace('app') IS NULL
+    AND to_regnamespace('ops') IS NULL
+    AND to_regnamespace('pinvi_internal') IS NULL
+    AND to_regnamespace('x_extension') IS NULL
+    AND NOT EXISTS (SELECT 1 FROM foreign_membership)
+    AND NOT EXISTS (SELECT 1 FROM foreign_database_owner)
+    AND NOT EXISTS (SELECT 1 FROM foreign_role_setting)
+    AND NOT EXISTS (SELECT 1 FROM foreign_shared_dependency)
+THEN 1 ELSE 0 END;
+SELECT format('DROP ROLE IF EXISTS %I', :'migrator_role')
+\gexec
+SELECT format('DROP ROLE IF EXISTS %I', :'migration_owner')
+\gexec
+SELECT format('DROP ROLE IF EXISTS %I', :'schema_owner')
+\gexec
+SELECT format('DROP ROLE IF EXISTS %I', :'app_role')
+\gexec
+COMMIT;
+SQL
+}
+
+if [ "${PINVI_ROLE_CATALOG_RESET_ONLY}" = "1" ]; then
+  if [ "${PINVI_M05_LEGACY_REBASELINE}" != "0" ] \
+    || [ "${PINVI_MIGRATOR_DISABLE_LOGIN}" != "1" ]; then
+    unset PGPASSWORD
+    echo "fresh PinVi role catalog reset has invalid lifecycle input" >&2
+    exit 2
+  fi
+  if ! reset_fresh_role_catalog; then
+    unset PGPASSWORD
+    echo "fresh PinVi role catalog reset could not prove an isolated target" >&2
+    exit 3
+  fi
+  unset PGPASSWORD
+  exit 0
 fi
 
 seal_migrator_login() {

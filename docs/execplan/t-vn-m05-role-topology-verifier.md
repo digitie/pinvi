@@ -20,6 +20,11 @@ sealed 상태만 관찰하는 비밀 비노출 진단 계약을 PinVi source에 
   endpoint, 경로, password, psql raw stderr는 출력하지 않는다.
 - normal bootstrap의 role reconciliation·open→admin→seal 규칙과 failure behavior는 바꾸지
   않는다. unexpected membership/ACL을 자동으로 제거하지 않는다.
+- 단, 새 candidate가 target PinVi DB를 파기·재생성한 직후에만 `PINVI_ROLE_CATALOG_RESET_ONLY=1`
+  one-shot을 허용한다. 이는 일반 reconciliation이 아니라 이전 terminal candidate가 남긴
+  cluster-global role membership/setting을 제거하기 위한 fresh-target bootstrap 전용 경계다.
+  정확히 네 generated non-root role만 대상으로 하며, target 밖 membership·database ownership·
+  role setting·shared dependency가 하나라도 있으면 role을 변경하지 않고 실패한다.
 
 ## 진단 계약
 
@@ -61,12 +66,17 @@ sealed 상태만 관찰하는 비밀 비노출 진단 계약을 PinVi source에 
    전후 확장 catalog fingerprint 불변도 확인한다.
 5. static test에서 verify-only가 mutation 경로·raw output을 갖지 않고 endpoint/input failure 및
    malformed evaluator record도 typed JSON으로 닫히는지 확인한다.
-6. PinVi PR merge 뒤 별도 Docker Manager PR이 exact revision/pinset과 root-only verifier
+6. fresh catalog reset은 target DB가 비어 있는지와 foreign dependency 부재를 한 transaction에서
+   확인한 뒤 exact four-role `DROP ROLE`만 실행한다. `DROP OWNED`, `REASSIGN OWNED`, bootstrap
+   root role 변경, legacy profile, 일반 runtime에서의 실행은 금지한다. 실패 출력에는 role·DSN·
+   catalog raw 값을 남기지 않는다.
+7. PinVi PR merge 뒤 별도 Docker Manager PR이 exact revision/pinset과 root-only reset·verifier
    command를 추가한다. sealed verifier는 폐기 대상인 기존 DB의 admission이 아니라 fresh target-state
-   후조건이다. 따라서 Manager는 DB reset 뒤 role open → admin/migration bootstrap → seal 및 exact head
-   확인 뒤, PinVi runtime start/manifest commit 전에만 이를 호출한다. noncanonical·unavailable failure는
-   원문이나 reason enum 없이 owner-only terminal receipt로 같은 pinset을 봉인한다. 새 source는 old d9
-   journal의 authority가 아니며 새 candidate가 필요하다.
+   후조건이다. 따라서 Manager는 durable reset intent 뒤 DB reset → fresh catalog reset → role open →
+   admin/migration bootstrap → seal 및 exact head 확인 뒤, PinVi runtime start/manifest commit 전에만
+   이를 호출한다. noncanonical·unavailable/reset failure는 원문이나 reason enum 없이 owner-only terminal
+   receipt로 같은 pinset을 봉인한다. 새 source는 old d9·cbb·52·06045 journal의 authority가 아니며
+   새 candidate가 필요하다.
 
 ## 완료 조건
 
@@ -76,5 +86,7 @@ sealed 상태만 관찰하는 비밀 비노출 진단 계약을 PinVi source에 
 - JSON은 exactly one record와 ordered fixed enum만 수용하고 malformed record는
   `verification_unavailable`으로 닫힌다.
 - verifier output과 오류 경로에 secret·DSN·catalog 값이 없다.
+- fresh catalog reset은 stale four-role residue를 제거한 뒤 canonical normal open을 통과하며,
+  foreign dependency면 mutation 없이 fail-close한다.
 - 두 전문 적대 리뷰가 PinVi source PR을 승인한다.
 - Manager wiring은 이 PR과 분리하고, 새 immutable pinset/candidate에서만 사용한다.
