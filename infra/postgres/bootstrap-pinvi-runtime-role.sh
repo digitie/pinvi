@@ -658,6 +658,7 @@ reset_fresh_role_catalog() {
     --set="expected_system_identifier=${reset_expected_system_identifier}" \
     --set="expected_database_oid=${reset_expected_database_oid}" \
     --set="expected_database_owner=${reset_expected_database_owner}" \
+    --set="external_membership_cleanup=${permit_scope}" \
     2>/dev/null <<'SQL'
 BEGIN;
 LOCK TABLE pg_catalog.pg_authid, pg_catalog.pg_auth_members,
@@ -686,12 +687,12 @@ foreign_membership AS (
         membership.roleid IN (SELECT oid FROM target_roles)
         OR membership.member IN (SELECT oid FROM target_roles)
     )
-      -- target 밖 role과의 membership을 role drop으로 함께 철회하면 외부
-      -- principal의 authorization 관계를 바꾸게 된다. target 네 role 내부
-      -- edge만 수용하고 그 밖의 edge는 isolation boundary에서 닫는다.
+      -- v2 permit이 명시한 경우에만 role drop이 target 밖 membership을
+      -- 자동 철회할 수 있다. 그 외에는 target 네 role 내부 edge만 수용한다.
+      AND :'external_membership_cleanup' <> 'revoke_external_memberships'
       AND NOT (
-        membership.roleid IN (SELECT oid FROM target_roles)
-        AND membership.member IN (SELECT oid FROM target_roles)
+          membership.roleid IN (SELECT oid FROM target_roles)
+          AND membership.member IN (SELECT oid FROM target_roles)
       )
 ),
 foreign_database_owner AS (
@@ -855,10 +856,11 @@ load_fresh_role_catalog_reset_permit() {
   fi
   IFS='|' read -r permit_version permit_transaction permit_pinset \
     reset_expected_system_identifier reset_expected_database_oid \
-    reset_expected_database_name reset_expected_database_owner permit_extra \
+    reset_expected_database_name reset_expected_database_owner permit_scope permit_extra \
     < "${PINVI_ROLE_CATALOG_RESET_PERMIT_FILE}" || return 1
   if [ -n "${permit_extra}" ] \
-    || [ "${permit_version}" != "pinvi-role-catalog-reset-v1" ] \
+    || [ "${permit_version}" != "pinvi-role-catalog-reset-v2" ] \
+    || [ "${permit_scope}" != "revoke_external_memberships" ] \
     || [ "${reset_expected_database_name}" != "${POSTGRES_DB}" ] \
     || [ -z "${permit_transaction}" ] \
     || [ -z "${permit_pinset}" ] \

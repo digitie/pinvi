@@ -168,7 +168,8 @@ def test_fresh_role_catalog_reset_is_narrow_and_preflighted() -> None:
     assert "pg_depend" in reset
     assert "complete namespace-scoped object inventory" in reset
     assert "PINVI_ROLE_CATALOG_RESET_PERMIT_FILE" in reset
-    assert "pinvi-role-catalog-reset-v1" in reset
+    assert "pinvi-role-catalog-reset-v2" in reset
+    assert "revoke_external_memberships" in reset
     assert "0:0:600" in reset
     assert "pg_control_system" in reset
     assert "membership.grantor" not in reset

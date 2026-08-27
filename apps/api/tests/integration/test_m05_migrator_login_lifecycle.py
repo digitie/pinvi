@@ -52,6 +52,7 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
     schema_owner = f"m05_app_owner_{suffix}"
     migration_owner = f"m05_migration_owner_{suffix}"
     migrator_role = f"m05_migrator_{suffix}"
+    external_role = f"m05_external_{suffix}"
     password = "m05-catalog-reset-test-password"
     environment_file = tmp_path / "compose.env"
     environment_file.write_text(
@@ -161,7 +162,8 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
             "FROM pg_control_system();",
         ).stdout.strip()
         permit.write_text(
-            f"pinvi-role-catalog-reset-v1|test-transaction|test-pinset|{identity}\n",
+            "pinvi-role-catalog-reset-v2|test-transaction|test-pinset|"
+            f"{identity}|revoke_external_memberships\n",
             encoding="utf-8",
         )
         subprocess.run([sudo, "-n", "chown", "root:root", str(permit)], check=True)  # noqa: S603
@@ -237,9 +239,9 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
             f"('{runtime_role}', '{schema_owner}', '{migration_owner}', '{migrator_role}');",
         ).stdout.strip()
         assert remaining_roles == "4"
-        # Type-only residue를 없앤 뒤 stale SET ROLE/membership를 더한다. reset은
-        # 그것을 포함한 generated four-role catalog만 제거하고 normal bootstrap이
-        # 다시 sealed canonical state를 만들 수 있어야 한다.
+        # Type-only residue를 없앤 뒤 stale SET ROLE/membership를 더한다. v2 permit은
+        # target role과 external role의 membership 자동 철회도 명시 승인하되,
+        # external role 자체는 남겨야 한다.
         compose(
             "exec",
             "-T",
@@ -257,6 +259,8 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
             f"--username={root_role}",
             "--dbname=pinvi",
             "--command="
+            f'CREATE ROLE "{external_role}" NOLOGIN; '
+            f'GRANT "{schema_owner}" TO "{external_role}"; '
             f'GRANT "{schema_owner}" TO "{migrator_role}"; '
             f'ALTER ROLE "{migrator_role}" IN DATABASE pinvi SET ROLE TO "{schema_owner}";',
         )
@@ -303,6 +307,28 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
                 f"('{runtime_role}', '{schema_owner}', '{migration_owner}', '{migrator_role}');",
             ).stdout.strip()
             == "0"
+        )
+        assert (
+            compose(
+                "exec",
+                "-T",
+                "app-postgres",
+                "psql",
+                "--no-psqlrc",
+                "--tuples-only",
+                "--no-align",
+                f"--username={root_role}",
+                "--dbname=pinvi",
+                "--command="
+                "SELECT ("
+                f"EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{external_role}')"
+                " AND NOT EXISTS ("
+                "SELECT 1 FROM pg_auth_members membership "
+                f"JOIN pg_roles role_row ON role_row.oid = membership.member "
+                f"WHERE role_row.rolname = '{external_role}'"
+                "))::text;",
+            ).stdout.strip()
+            == "true"
         )
         compose(
             "run",
