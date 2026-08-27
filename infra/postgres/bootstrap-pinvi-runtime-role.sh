@@ -115,7 +115,10 @@ else
   until psql --no-psqlrc --no-password --tuples-only --no-align --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" \
     --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" --command='SELECT 1' >/dev/null 2>&1; do
     attempt=$((attempt + 1))
-    if [ "$attempt" -ge 15 ]; then
+    # postgis' first-run entrypoint can briefly report a healthy bootstrap server,
+    # shut it down, and then start the final server. Keep the role bootstrap alive
+    # across that restart instead of treating the transient window as a deploy failure.
+    if [ "$attempt" -ge 90 ]; then
       unset PGPASSWORD
       echo "Postgres TCP endpoint did not become ready for DB role bootstrap" >&2
       exit 1

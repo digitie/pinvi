@@ -59,6 +59,120 @@ def _detail() -> dict[str, object]:
     }
 
 
+def test_m05_impact_evidence_recomputes_rows_and_receipts() -> None:
+    module = _attestation_module()
+    event_id = "11111111-1111-4111-8111-111111111111"
+    event_sha = "a" * 64
+    old_feature = {
+        "feature_id": "feature-old",
+        "feature_uuid": "55555555-5555-4555-8555-555555555555",
+        "row_revision": 2,
+    }
+    replacement_feature = {
+        "feature_id": "feature-new",
+        "feature_uuid": "66666666-6666-4666-8666-666666666666",
+        "row_revision": 3,
+    }
+    canonical_impact = {
+        "target_relation": "trip_day_pois",
+        "target_id": "77777777-7777-4777-8777-777777777777",
+        "old_feature": old_feature,
+        "replacement_feature": replacement_feature,
+        "outcome": "rebind",
+    }
+    impact_root = module._sha256(module._canonical_json([canonical_impact]))
+    receipt_material = {
+        "version": "pinvi-feature-reference-reconciliation-receipt-v1",
+        "event_id": event_id,
+        "event_sequence": 7,
+        "event_sha256": event_sha,
+        "action": "rebind",
+        "old_feature": old_feature,
+        "replacement_feature": replacement_feature,
+        "impact_root_sha256": impact_root,
+        "impact_count": 1,
+    }
+    receipt_sha = module._sha256(module._canonical_json(receipt_material))
+    observation_root = module._sha256(
+        module._canonical_json(
+            {
+                "version": "pinvi-feature-reference-reconciliation-observation-v1",
+                "event_id": event_id,
+                "event_sequence": 7,
+                "event_sha256": event_sha,
+                "blocks": [],
+                "impacts": [canonical_impact],
+            }
+        )
+    )
+    map_case = {
+        "event": {
+            "event_id": event_id,
+            "event_sequence": 7,
+            "event_sha256": event_sha,
+            "action": "rebind",
+            "old_feature": old_feature,
+            "replacement_feature": replacement_feature,
+        }
+    }
+    map_ack = {"event_id": event_id, "event_sha256": event_sha}
+    detail = {
+        "status": "applied",
+        "receipt": {
+            "event_id": event_id,
+            "event_sequence": 7,
+            "event_sha256": event_sha,
+            "action": "rebind",
+            "old_feature_id": old_feature["feature_id"],
+            "old_feature_uuid": old_feature["feature_uuid"],
+            "replacement_feature_id": replacement_feature["feature_id"],
+            "replacement_feature_uuid": replacement_feature["feature_uuid"],
+            "impact_root_sha256": impact_root,
+            "impact_count": 1,
+            "receipt_sha256": receipt_sha,
+        },
+        "impacts": [
+            {
+                "event_id": event_id,
+                "impact_index": 0,
+                "target_relation": "trip_day_pois",
+                "target_id": canonical_impact["target_id"],
+                "old_feature_id": old_feature["feature_id"],
+                "old_feature_uuid": old_feature["feature_uuid"],
+                "replacement_feature_id": replacement_feature["feature_id"],
+                "replacement_feature_uuid": replacement_feature["feature_uuid"],
+                "outcome": "rebind",
+                "recorded_at": "2026-08-26T00:00:00Z",
+            }
+        ],
+        "attempts": [
+            {
+                "event_id": event_id,
+                "attempt_sequence": 1,
+                "event_sequence": 7,
+                "event_sha256": event_sha,
+                "status": "applied",
+                "block_fingerprint_sha256": None,
+                "observation_root_sha256": observation_root,
+            }
+        ],
+    }
+    module._validate_pinvi_impact_evidence(
+        detail,
+        map_case=map_case,
+        map_ack=map_ack,
+    )
+
+    tampered = json.loads(json.dumps(detail))
+    tampered["impacts"][0]["old_feature_id"] = "feature-tampered"
+    with pytest.raises(module.AttestationError, match="old feature pair"):
+        module._validate_pinvi_impact_evidence(
+            tampered,
+            map_case=map_case,
+            map_ack=map_ack,
+        )
+
+
 def _m04_marker() -> dict[str, object]:
     return {
         "assertions": [
@@ -101,11 +215,14 @@ def test_m05_marker_is_bound_to_nonce_runner_and_after_snapshot() -> None:
         pinvi_detail=_detail(),
         pinvi_detail_sha256="d" * 64,
         expected_pinvi_api_endpoint="http://127.0.0.1:12801",
+        expected_old_feature_id="feature-old",
+        expected_replacement_feature_id="feature-new",
+        expected_impact_count=0,
     )
 
     broken = _marker()
     broken["impact_count"] = 1
-    with pytest.raises(module.AttestationError, match="receipt field"):
+    with pytest.raises(module.AttestationError, match="live input"):
         module._validate_ui_marker(
             broken,
             event_id="11111111-1111-4111-8111-111111111111",
@@ -118,6 +235,9 @@ def test_m05_marker_is_bound_to_nonce_runner_and_after_snapshot() -> None:
             pinvi_detail=_detail(),
             pinvi_detail_sha256="d" * 64,
             expected_pinvi_api_endpoint="http://127.0.0.1:12801",
+            expected_old_feature_id="feature-old",
+            expected_replacement_feature_id="feature-new",
+            expected_impact_count=0,
         )
 
     broken = _m04_marker()
@@ -198,6 +318,15 @@ def test_m05_map_checkout_allowlist_uses_only_source_revisions() -> None:
     assert pair["full"]["source_revision"] in allowed
 
 
+def test_playwright_image_reference_accepts_digest_only_or_tagged_digest() -> None:
+    module = _attestation_module()
+    for image_ref in (
+        "mcr.microsoft.com/playwright@sha256:" + "2" * 64,
+        "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:" + "2" * 64,
+    ):
+        assert module._PLAYWRIGHT_IMAGE_RE.fullmatch(image_ref) is not None
+
+
 def test_m05_map_case_binds_missing_event_hash_to_ack(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _attestation_module()
     monkeypatch.setenv("M05_MAP_ADMIN_PROXY_SECRET", "s" * 32)
@@ -237,6 +366,7 @@ def test_m04_server_side_chain_binds_approved_request_to_m05_old_feature(
 ) -> None:
     module = _attestation_module()
     monkeypatch.setenv("M05_MAP_ADMIN_PROXY_SECRET", "s" * 32)
+    feature_id = "feature-m04-approved"
     feature_uuid = "44444444-4444-4444-8444-444444444444"
     responses = iter(
         (
@@ -245,7 +375,7 @@ def test_m04_server_side_chain_binds_approved_request_to_m05_old_feature(
                     "data": {
                         "request_id": "33333333-3333-4333-8333-333333333333",
                         "status": "approved",
-                        "feature_id": "legacy-feature-ref",
+                        "feature_id": feature_id,
                     }
                 },
                 b"{}",
@@ -253,7 +383,8 @@ def test_m04_server_side_chain_binds_approved_request_to_m05_old_feature(
             (
                 {
                     "data": {
-                        "feature_id": feature_uuid,
+                        "feature_id": feature_id,
+                        "feature_uuid": feature_uuid,
                         "origin": {"origin_kind": "manual_request"},
                     }
                 },
@@ -266,12 +397,75 @@ def test_m04_server_side_chain_binds_approved_request_to_m05_old_feature(
         map_admin_url="http://127.0.0.1:14701",
         m04={"feature_request_id": "33333333-3333-4333-8333-333333333333"},
         map_case={
-            "manual_feature": {"feature_uuid": feature_uuid},
-            "event": {"old_feature": {"feature_uuid": feature_uuid}},
+            "manual_feature": {"feature_id": feature_id, "feature_uuid": feature_uuid},
+            "event": {"old_feature": {"feature_id": feature_id, "feature_uuid": feature_uuid}},
         },
     )
 
+    assert chain["map_feature_id"] == feature_id
     assert chain["map_feature_uuid"] == feature_uuid
+
+
+@pytest.mark.parametrize(
+    ("provenance_feature_id", "provenance_feature_uuid", "error"),
+    (
+        (
+            "feature-other-approved",
+            "44444444-4444-4444-8444-444444444444",
+            "Map M04 provenance does not match the approved feature",
+        ),
+        (
+            "feature-m04-approved",
+            "55555555-5555-4555-8555-555555555555",
+            "M04 approved feature does not match the M05 old feature",
+        ),
+    ),
+)
+def test_m04_server_side_chain_rejects_provenance_identity_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+    provenance_feature_id: str,
+    provenance_feature_uuid: str,
+    error: str,
+) -> None:
+    module = _attestation_module()
+    monkeypatch.setenv("M05_MAP_ADMIN_PROXY_SECRET", "s" * 32)
+    feature_id = "feature-m04-approved"
+    feature_uuid = "44444444-4444-4444-8444-444444444444"
+    responses = iter(
+        (
+            (
+                {
+                    "data": {
+                        "request_id": "33333333-3333-4333-8333-333333333333",
+                        "status": "approved",
+                        "feature_id": feature_id,
+                    }
+                },
+                b"{}",
+            ),
+            (
+                {
+                    "data": {
+                        "feature_id": provenance_feature_id,
+                        "feature_uuid": provenance_feature_uuid,
+                        "origin": {"origin_kind": "manual_request"},
+                    }
+                },
+                b"{}",
+            ),
+        )
+    )
+    monkeypatch.setattr(module, "_http_json", lambda *args, **kwargs: next(responses))
+
+    with pytest.raises(module.AttestationError, match=error):
+        module._m04_server_side_chain(
+            map_admin_url="http://127.0.0.1:14701",
+            m04={"feature_request_id": "33333333-3333-4333-8333-333333333333"},
+            map_case={
+                "manual_feature": {"feature_id": feature_id, "feature_uuid": feature_uuid},
+                "event": {"old_feature": {"feature_id": feature_id, "feature_uuid": feature_uuid}},
+            },
+        )
 
 
 def test_m04_approval_snapshot_recomputes_the_persisted_receipt(

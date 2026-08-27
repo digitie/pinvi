@@ -4,6 +4,9 @@
 Pinvi v2 컨텍스트로 재구성한 적용 노트다. 원본 docx는 운영자가 보관하고,
 본 문서가 v2 작업의 단일 참조원이 된다.
 
+> **현재 운영 예외:** ADR-067이 이 문서의 Odroid 실행·배포 가정을 supersede한다.
+> 현재 운영 노드는 N150 하나이며, 아래의 Odroid/ARM64 내용은 역사적 설계 참고로만 읽는다.
+
 원본 docx 파일명:
 
 - `spec_v8_0_infrastructure.docx` — 인프라 · 컴플라이언스
@@ -17,7 +20,7 @@ Pinvi v2 컨텍스트로 재구성한 적용 노트다. 원본 docx는 운영자
 
 | 파일                                           | 원본    | 다루는 범위                                                |
 | ---------------------------------------------- | ------- | ---------------------------------------------------------- |
-| [00-infrastructure.md](./00-infrastructure.md) | spec #0 | Odroid M1S, RustFS, Sentry, Loki, 위치정보법, PIPA         |
+| [00-infrastructure.md](./00-infrastructure.md) | spec #0 | N150, RustFS, Sentry, Loki, 위치정보법, PIPA                 |
 | [01-data.md](./01-data.md)                     | spec #1 | 7 Feature 모델, PostGIS DDL, Record Linkage, vworld 임포트 |
 | [02-backend.md](./02-backend.md)               | spec #2 | FastAPI 스택, JWT/OAuth, Resend, API 명세, OR-Tools        |
 | [03-frontend.md](./03-frontend.md)             | spec #3 | Next.js 15, 16색 팔레트, 우클릭, 실시간 동기화             |

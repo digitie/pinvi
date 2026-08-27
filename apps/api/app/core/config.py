@@ -206,8 +206,18 @@ def _validate_m05_runtime_dependencies_live(
         digest = raw_dependency.get("digest")
         source_revision = raw_dependency.get("source_revision")
         started_at = raw_dependency.get("started_at")
+        compose_project = raw_dependency.get("compose_project")
+        compose_service = raw_dependency.get("compose_service")
         if not all(
-            isinstance(value, str) for value in (container_id, digest, source_revision, started_at)
+            isinstance(value, str)
+            for value in (
+                container_id,
+                digest,
+                source_revision,
+                started_at,
+                compose_project,
+                compose_service,
+            )
         ):
             raise RuntimeError(f"M05 runtime dependency fields are invalid: {name}")
         live = _m05_docker_inspect(
@@ -229,6 +239,8 @@ def _validate_m05_runtime_dependencies_live(
         if (
             labels.get("io.pinvi.build.environment") != environment
             or labels.get("org.opencontainers.image.revision") != source_revision
+            or labels.get("com.docker.compose.project") != compose_project
+            or labels.get("com.docker.compose.service") != compose_service
         ):
             raise RuntimeError(f"M05 runtime dependency labels drifted: {name}")
         endpoint_binding = endpoint_ports.get(name)
@@ -1420,6 +1432,7 @@ class Settings(BaseSettings):
             "adversarial_reviews",
             "live_ui_e2e",
             "live_ui_event_id",
+            "ui_run_evidence_sha256",
             "live_ui_evidence_sha256",
             "live_ui_map_ack_sha256",
             "live_ui_local_receipt_sha256",
@@ -1440,6 +1453,10 @@ class Settings(BaseSettings):
             "m04_map_request_sha256",
             "m04_pinvi_approval_sha256",
             "m04_verification_id",
+            "m05_old_feature_id",
+            "m05_replacement_feature_id",
+            "m05_impact_count",
+            "m05_pinvi_detail_sha256",
             "map_admin_openapi_sha256",
             "map_admin_runtime_openapi_sha256",
             "map_admin_runtime_operation_contract_sha256",
@@ -1655,6 +1672,7 @@ class Settings(BaseSettings):
 
         for field in (
             "activation_attestation_sha256",
+            "ui_run_evidence_sha256",
             "live_ui_evidence_sha256",
             "live_ui_map_ack_sha256",
             "live_ui_local_receipt_sha256",
@@ -1665,6 +1683,7 @@ class Settings(BaseSettings):
             "m04_map_provenance_sha256",
             "m04_map_request_sha256",
             "m04_pinvi_approval_sha256",
+            "m05_pinvi_detail_sha256",
             "map_admin_runtime_openapi_sha256",
             "map_admin_runtime_operation_contract_sha256",
             "map_admin_source_operation_contract_sha256",
@@ -1702,6 +1721,10 @@ class Settings(BaseSettings):
             or not _is_canonical_uuid(payload["m04_map_feature_uuid"])
             or not _is_canonical_uuid(payload["m04_verification_id"])
             or payload["m04_verification_id"] != payload["activation_nonce"]
+            or not _is_non_empty_token_free_string(payload["m05_old_feature_id"])
+            or not _is_non_empty_token_free_string(payload["m05_replacement_feature_id"])
+            or type(payload["m05_impact_count"]) is not int
+            or payload["m05_impact_count"] < 0
         ):
             _raise_redacted_settings_error(
                 "M05 live UI runner identity or verification nonce is invalid"
@@ -1920,7 +1943,7 @@ class Settings(BaseSettings):
             "scope",
             "version",
         }
-        if set(runtime_payload) != expected_fields or runtime_payload["version"] != 1:
+        if set(runtime_payload) != expected_fields or runtime_payload["version"] != 2:
             _raise_redacted_settings_error("M05 runtime attestation schema is invalid")
         if (
             runtime_payload["activation_generation"] != receipt_payload["activation_generation"]
@@ -2002,6 +2025,8 @@ class Settings(BaseSettings):
                 "digest",
                 "environment",
                 "image_id",
+                "compose_project",
+                "compose_service",
                 "revision_label",
                 "source_revision",
                 "started_at",
@@ -2484,6 +2509,14 @@ def _is_canonical_uuid(value: object) -> bool:
         return str(UUID(value)) == value
     except ValueError:
         return False
+
+
+def _is_non_empty_token_free_string(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and bool(value)
+        and not any(character.isspace() for character in value)
+    )
 
 
 @lru_cache(maxsize=1)

@@ -7,9 +7,10 @@ Dagster (apps/etl) 3 곳에 통합.
 
 - **SaaS Free**: 월 5K events, 90일 보관, $0 — v1.0 시작 (SPEC V8 결정)
 - **Team**: $26~$80, 월 50K~250K — DAU 100+ 시 검토
-- **Self-hosted**: Sentry 자체가 RAM 8GB+ 필요 → Odroid 부적합. 클라우드 마이그레이션
-  단계에 검토
-- **GlitchTip**: Sentry 호환 API, 가볍고 ARM64 지원 — Odroid에 1GB 정도로 셀프호스팅 가능 (대안)
+- **Self-hosted**: Sentry 자체가 RAM 8GB+ 필요하므로 N150 자원·운영비를 확인한 뒤 클라우드
+  마이그레이션 단계에서 검토
+- **GlitchTip**: Sentry 호환 API를 사용하는 경량 self-hosted 대안. N150 단일 운영 자원과
+  보존 정책을 확인한 뒤 검토
 
 ## 2. 환경변수
 
@@ -19,8 +20,8 @@ Dagster (apps/etl) 3 곳에 통합.
 | `NEXT_PUBLIC_SENTRY_DSN`            | 프론트 (빌드 타임 embed)                 |
 | `PINVI_SENTRY_ENVIRONMENT`          | `production` / `staging` / `development` |
 | `PINVI_SENTRY_RELEASE`              | git short sha (CI 주입)                  |
-| `PINVI_SENTRY_TRACES_SAMPLE_RATE`   | `0.1` (10%, Odroid 부하 고려)            |
-| `PINVI_SENTRY_PROFILES_SAMPLE_RATE` | `0.0` (ARM 프로파일링 제한)              |
+| `PINVI_SENTRY_TRACES_SAMPLE_RATE`   | `0.1` (10%, N150 자원 예산 기준)         |
+| `PINVI_SENTRY_PROFILES_SAMPLE_RATE` | `0.0` (운영 프로파일링 기본 비활성)       |
 | `SENTRY_AUTH_TOKEN`                 | source map 업로드용 (CI)                 |
 
 ## 3. 백엔드 (FastAPI + SQLAlchemy + Dagster)

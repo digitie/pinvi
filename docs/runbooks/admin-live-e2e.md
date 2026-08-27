@@ -1,6 +1,6 @@
 # Admin live E2E Runbook
 
-N150 또는 운영에 준하는 live 환경에서 Admin 기능을 검증하는 Playwright 전용 suite다.
+N150 live 환경에서 Admin 기능을 검증하는 Playwright 전용 suite다.
 기존 `apps/web/playwright.config.ts`는 API mock 기반 회귀 테스트를 실행하므로,
 live 검증은 별도 설정 `apps/web/playwright.admin-live.config.ts`로만 실행한다.
 
@@ -142,8 +142,8 @@ scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:admin-live
 운영 공개 도메인으로 검증할 때는 `*_URL`을 실제 HTTPS 도메인으로 바꾼다. 실제
 도메인과 credential은 공개 repo에 기록하지 않는다.
 
-Playwright runner는 N150에서 먼저 실행한다. N150의 OS/브라우저 지원 문제 등으로 실행할 수
-없을 때만 Windows runner를 fallback으로 사용하고, fallback 사유와 대상 Web/API URL 범위를
+Playwright runner는 N150 Docker runner만 사용한다. N150의 OS/브라우저 지원 문제 등으로
+실행할 수 없으면 host/Windows runner로 우회하지 않고 gate를 중단하며 사유를
 `docs/journal.md`에 남긴다.
 
 ### 3.2 Host Chromium 의존성 진단
@@ -180,9 +180,8 @@ export PINVI_LIVE_EXPECTED_REVISION="<trusted release candidate SHA>"
 scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:admin-live -- --grep malformed --workers=1
 ```
 
-비대화형 sudo가 없으면 Codex/CI가 직접 설치하지 않는다. Docker runner 자체도 실행할 수 없을 때만
-Windows fallback runner를 쓰고, N150 missing library 또는 Docker 실행 실패 사유를 release gate
-문서에 남긴다.
+비대화형 sudo가 없으면 Codex/CI가 직접 설치하지 않는다. Docker runner 자체를 실행할 수
+없으면 N150 missing library 또는 Docker 실행 실패 사유를 release gate 문서에 남기고 중단한다.
 
 ## 4. 실패 처리
 
@@ -190,7 +189,8 @@ Windows fallback runner를 쓰고, N150 missing library 또는 Docker 실행 실
 - route render 실패: Admin guard, Next.js runtime error, 좌측 navigation document 이동 여부 확인.
 - 검색/필터/정렬 실패: 화면 test id, option 값, AdminTable column key drift를 함께 확인한다.
 - 403/404 alert: 계정 역할 또는 운영에서 숨긴 dev-only route 여부 확인.
-- 5xx alert: N150 `docker compose ps`, API 로그, DB health를 먼저 확인한다.
+- 5xx alert: N150 manager status, API 로그, DB health를 먼저 확인한다. Pinvi raw Compose
+  명령으로 운영 project를 조회하지 않는다.
 
 실패 수정 후 전체 suite를 다시 돌리기 전에 `PINVI_ADMIN_LIVE_CASE_LIMIT=200`으로 smoke를
 먼저 재확인한다.

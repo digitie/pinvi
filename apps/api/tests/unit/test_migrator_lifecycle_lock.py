@@ -198,3 +198,59 @@ def test_writer_startup_stays_under_the_shared_lifecycle_lock_until_ready() -> N
         'wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster"'
         in _function_body(deploy, "dagster_up_under_lifecycle_lock")
     )
+
+
+def test_deploy_node_seals_fresh_migration_before_reusing_the_stack() -> None:
+    source = (ROOT / "scripts" / "deploy-node.sh").read_text(encoding="utf-8")
+    migrate = _function_body(source, "migrate")
+    deploy = _function_body(source, "deploy")
+    up = _function_body(source, "up")
+    dagster = _function_body(source, "dagster_up")
+
+    assert migrate.index("migrate_under_lifecycle_lock") < migrate.index("write_fresh_stack_state")
+    assert (
+        deploy.index("migrate_under_lifecycle_lock")
+        < deploy.index("write_fresh_stack_state")
+        < deploy.index("up_under_lifecycle_lock")
+    )
+    assert "require_reusable_fresh_stack_contract" in up
+    assert "require_reusable_fresh_stack_contract" in dagster
+
+
+def test_fresh_continuation_is_bound_to_the_canonical_compose_and_database_proof() -> None:
+    source = (ROOT / "scripts" / "deploy-node.sh").read_text(encoding="utf-8")
+    assert "require_canonical_compose_file" in source
+    assert "version=6" in source
+    assert "compose_sha256" in source
+    assert "environment_source_sha256" in source
+    assert "db_system_identifier" in source
+    assert 'state_alembic_version" == "20260824_0101"' in source
+    assert "postgres_image_id" in source
+    assert "rustfs_image_id" in source
+    assert "rustfs_init_image_id" in source
+    assert "rustfs_volume_fingerprint" in source
+    assert "compose_network_id" in source
+    assert "compose_config()" in source
+    assert "dagster_profile_enabled" in source
+    assert "dagster_profile_enabled=%s" in source
+    assert "migration_receipt_sha256" in source
+    assert "capture_fresh_stack_migration_proof" in source
+
+
+def test_standalone_dagster_reseals_the_fresh_stack_runtime_proof() -> None:
+    source = (ROOT / "scripts" / "deploy-node.sh").read_text(encoding="utf-8")
+    dagster = _function_body(source, "dagster_up")
+    assert dagster.index("dagster_up_under_lifecycle_lock") < dagster.index(
+        "write_fresh_stack_state"
+    )
+
+
+def test_observability_container_names_are_project_scoped() -> None:
+    compose = (ROOT / "infra/docker-compose.app.yml").read_text(encoding="utf-8")
+    for service in ("dagster", "cadvisor", "blackbox", "prometheus", "grafana"):
+        assert f"container_name: ${{PINVI_DOCKER_PROJECT:-pinvi-app}}-{service}" in compose
+
+
+def test_dev_compose_does_not_use_global_container_names() -> None:
+    compose = (ROOT / "infra/docker-compose.yml").read_text(encoding="utf-8")
+    assert "container_name:" not in compose

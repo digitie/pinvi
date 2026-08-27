@@ -39,7 +39,7 @@
 
 - **맥락**: 자동완성(`/geo/search`)은 호출량이 많다.
 - **선택지**: (A) 캐시 없음 / (B) in-process TTL(LRU, 단일 노드) / (C) Redis.
-- **잠정 기본값**: **(B) in-process TTL 60s** + 클라이언트 디바운스 250ms. Odroid
+- **잠정 기본값**: **(B) in-process TTL 60s** + 클라이언트 디바운스 250ms. N150
   단일 노드(현 단계)에 충분.
 - **추천**: (B)로 시작. Sprint 5 실시간/다중 워커 진입 시 (C) 재검토(WebSocket
   broker와 함께).

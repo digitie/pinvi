@@ -15,6 +15,7 @@ on:
       - 'scripts/trusted-hotswap-entrypoint.py'
       - 'scripts/trusted-hotswap-root.sh'
       - 'scripts/n150-playwright-runner.sh'
+      - 'scripts/verify-v100-live-gate.sh'
       - 'scripts/restore-db.sh'
       - 'scripts/restore-hotswap.sh'
       - 'scripts/restore-staging-drill.sh'
@@ -41,6 +42,7 @@ on:
       - 'scripts/trusted-hotswap-entrypoint.py'
       - 'scripts/trusted-hotswap-root.sh'
       - 'scripts/n150-playwright-runner.sh'
+      - 'scripts/verify-v100-live-gate.sh'
       - 'scripts/restore-db.sh'
       - 'scripts/restore-hotswap.sh'
       - 'scripts/restore-staging-drill.sh'
@@ -125,6 +127,7 @@ jobs:
             scripts/restore-hotswap.sh \
             scripts/restore-staging-drill.sh \
             scripts/n150-playwright-runner.sh \
+            scripts/verify-v100-live-gate.sh \
             scripts/trusted-hotswap-root.sh \
             scripts/deploy-node.sh \
             scripts/docker-app.sh \

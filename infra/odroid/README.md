@@ -1,32 +1,7 @@
-# Odroid M1S 운영 노드
+# Odroid manifest 퇴역 안내
 
-Odroid M1S는 ARM64 검증과 수동 대체 배포가 가능한 노드다(ADR-023/ADR-039).
-평상시에는 public traffic을 받지 않는다. N150과 DB live sync는 구성하지 않는다.
+Odroid M1S는 ADR-067에 따라 Pinvi 실행 환경에서 영구 퇴역했다. 이 디렉터리는
+호환 경로를 다시 활성화하지 않으며, 배포·복구·UPS·doctor 작업에 사용하지 않는다.
 
-## 역할
-
-- API/Web ARM64 smoke.
-- backup/restore 복구 훈련 대상.
-- 필요 시 수동 대체 운영 노드.
-
-## 배포
-
-```bash
-ssh odroid
-cd /opt/pinvi
-git pull origin main
-scripts/odroid-docker-doctor.sh
-```
-
-API/Web을 켤 때:
-
-```bash
-scripts/deploy-node.sh up
-scripts/deploy-node.sh smoke
-```
-
-## 대체 운영 주의
-
-Odroid를 대체 운영 노드로 쓰려면 먼저 최신 DB snapshot과 RustFS 파일을 복구한다.
-복구 후 Cloudflare Tunnel 또는 nginx upstream을 Odroid로 전환한다. N150이 복구되면
-어느 쪽 DB가 정본인지 확정하기 전까지 양쪽에서 동시에 write를 받지 않는다.
+현재 운영 노드는 N150 하나다. 운영 절차는 [`docs/runbooks/deploy.md`](../../docs/runbooks/deploy.md)를
+따르고, 기존 ARM64 자료는 역사 기록으로만 취급한다.

@@ -335,6 +335,7 @@ def test_resolved_compose_passes_provenance_to_every_runtime_image() -> None:
         args = services[service]["build"]["args"]
         assert args["PINVI_SOURCE_REVISION"] == "a" * 40
         assert args["PINVI_BUILD_ENVIRONMENT"] == "production"
+        assert services[service]["environment"]["PINVI_ENVIRONMENT"] == "production"
 
 
 def test_all_pinvi_runtime_images_have_the_same_provenance_contract() -> None:
@@ -528,6 +529,10 @@ COMPOSE_FILE="$ROOT_DIR/infra/docker-compose.app.yml"
 ENV_FILE="$ROOT_DIR/missing.env"
 EXPECTED_IMAGE_ID="$3"
 compose() {
+  if [[ "$1" == --profile ]]; then
+    test "$2" = etl
+    shift 2
+  fi
   if [[ "$1" == config ]]; then
     printf '%s\n' '{"services":{"app-api":{"environment":{"PINVI_ENVIRONMENT":"smoke"},"build":{"args":{"PINVI_SOURCE_REVISION":"development"}},"image":"pinvi-api:test"},"app-web":{"image":"pinvi-web:test"},"app-dagster":{"image":"pinvi-dagster:test"}}}'
   elif [[ "$1 $2" == "ps -q" ]]; then
@@ -828,9 +833,11 @@ fi
 printf '%s\n' "$*" >> "$PINVI_TEST_MUTATION_LOG"
 """,
     )
+    empty_env_file = tmp_path / "empty.env"
+    empty_env_file.write_text("", encoding="utf-8")
     env = {
         "PATH": f"{fake_bin}:/usr/bin:/bin",
-        "PINVI_ENV_FILE": str(tmp_path / "missing.env"),
+        "PINVI_ENV_FILE": str(empty_env_file),
         "PINVI_ROOT_DIR": str(ROOT),
         "PINVI_TEST_MUTATION_LOG": str(mutation_log),
     }
@@ -846,8 +853,124 @@ printf '%s\n' "$*" >> "$PINVI_TEST_MUTATION_LOG"
     )
 
     assert result.returncode != 0
-    assert "requires staging or production" in result.stderr
+    assert "requires PINVI_ENVIRONMENT=staging or production" in result.stderr
     assert not mutation_log.exists()
+
+
+def test_deploy_entry_rejects_external_database_endpoint(tmp_path: Path) -> None:
+    env_file = tmp_path / "stage.env"
+    env_file.write_text("PINVI_ENVIRONMENT=staging\n", encoding="utf-8")
+    result = subprocess.run(  # noqa: S603
+        [str(ROOT / "scripts/deploy-node.sh"), "build"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": "/usr/bin:/bin",
+            "PINVI_ROOT_DIR": str(ROOT),
+            "PINVI_ENV_FILE": str(env_file),
+            "PINVI_ENVIRONMENT": "staging",
+            "PINVI_DATABASE_URL": "postgresql+asyncpg://pinvi:secret@external-db.example:5432/pinvi",
+        },
+    )
+
+    assert result.returncode != 0
+    assert "isolated app-postgres service" in result.stderr
+
+
+def test_deploy_entry_rejects_invalid_host_port(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(
+        fake_bin / "docker",
+        """#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1 $2" == "compose version" ]]
+""",
+    )
+    env_file = tmp_path / "stage.env"
+    env_file.write_text("PINVI_ENVIRONMENT=staging\n", encoding="utf-8")
+    result = subprocess.run(  # noqa: S603
+        [str(ROOT / "scripts/deploy-node.sh"), "build"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": f"{fake_bin}:/usr/bin:/bin",
+            "PINVI_ROOT_DIR": str(ROOT),
+            "PINVI_ENV_FILE": str(env_file),
+            "PINVI_ENVIRONMENT": "staging",
+            "PINVI_API_PORT": "0",
+        },
+    )
+
+    assert result.returncode != 0
+    assert "PINVI_API_PORT" in result.stderr
+
+
+def test_deploy_fresh_contract_rejects_existing_compose_resources(tmp_path: Path) -> None:
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    (tmp_path / "infra").mkdir()
+    (tmp_path / "infra/docker-compose.app.yml").write_text("services: {}\n", encoding="utf-8")
+    for dependency in ("api-image-provenance.sh", "migrator-lifecycle-lock.sh"):
+        shutil.copy2(ROOT / "scripts" / dependency, scripts_dir / dependency)
+    script = scripts_dir / "deploy-node.sh"
+    script.write_text(
+        (ROOT / "scripts/deploy-node.sh")
+        .read_text(encoding="utf-8")
+        .rsplit('\nmain "$@"', maxsplit=1)[0]
+        + "\n",
+        encoding="utf-8",
+    )
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(fake_bin / "uname", "#!/usr/bin/env bash\nprintf '%s\\n' x86_64\n")
+    _write_executable(fake_bin / "hostname", "#!/usr/bin/env bash\nprintf '%s\\n' n150\n")
+    _write_executable(
+        fake_bin / "sed",
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${@: -1}" == "/etc/os-release" ]]; then
+  case "$*" in
+    *'s/^ID='*) printf 'ubuntu\\n' ;;
+    *'s/^VERSION_ID='*) printf '26.04\\n' ;;
+    *) exit 0 ;;
+  esac
+else
+  exec /usr/bin/sed "$@"
+fi
+""",
+    )
+    _write_executable(
+        fake_bin / "docker",
+        """#!/usr/bin/env bash
+set -euo pipefail
+case "$1 $2" in
+  "container ls") printf '%s\\n' existing-container ;;
+  "volume ls"|"network ls") ;;
+  *) exit 0 ;;
+esac
+""",
+    )
+    result = subprocess.run(  # noqa: S603
+        ["/usr/bin/bash", "-c", 'source "$1"; require_fresh_stack_contract', "bash", str(script)],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": f"{fake_bin}:/usr/bin:/bin",
+            "PINVI_ROOT_DIR": str(tmp_path),
+            "PINVI_ENV_FILE": str(tmp_path / "missing.env"),
+            "PINVI_ENVIRONMENT": "staging",
+            "PINVI_DOCKER_MANAGER_UNAVAILABLE": "1",
+            "PINVI_DEPLOY_FRESH_STACK": "1",
+            "PINVI_DOCKER_PROJECT": "pinvi-test",
+        },
+    )
+
+    assert result.returncode != 0
+    assert "existing Compose project" in result.stderr
 
 
 @pytest.mark.parametrize("failure_mode", ["archive", "build", "label"])

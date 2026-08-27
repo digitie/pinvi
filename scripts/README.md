@@ -18,11 +18,11 @@
 | `trusted-hotswap-entrypoint.py` | staging/production root one-shot hotswap의 endpoint pinning·forensic status/recovery acknowledgement 경계 | 6      |
 | `backup-db.sh`              | `app` schema `pg_dump --format=custom` + sha256. host `pg_dump` 부재 시 Docker fallback 지원 (ADR-022 1차) | 5      |
 | `restore-db.sh`             | custom dump `pg_restore` (긴급/스테이징, 핫스왑 전 단계)                                                   | 5      |
-| `deploy-node.sh`            | 운영 노드에서 attested compose build/migrate/up/smoke 실행 (N150/Odroid 공통)                              | 6      |
+| `deploy-node.sh`            | N150에서 attested compose build/migrate/up/smoke 실행                                                        | 6      |
 | `ops-node-doctor.sh`        | 운영 노드 공통 사전 점검(비밀값 출력 없음)                                                                 | 6      |
 | `n150-docker-doctor.sh`     | N150 운영 노드 사전 점검 wrapper                                                                           | 6      |
 | `n150-playwright-runner.sh` | N150에서 공식 Playwright Docker image로 live/mock e2e 실행                                                 | 6      |
-| `odroid-docker-doctor.sh`   | Odroid ARM64 노드 사전 점검 wrapper                                                                        | 6      |
+| `odroid-docker-doctor.sh`   | 퇴역된 Odroid 경로를 fail-closed로 거부                                                                      | 6      |
 | `remote-docker-python.sh`   | WSL에서 SSH 원격 Docker 컨테이너에 Python stdin 전달(중첩 quote 회피)                                      | ops    |
 
 루트 npm alias:

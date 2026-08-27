@@ -2,6 +2,18 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-27 (codex) — Map main Admin provenance 재vendor와 M05 UUID 결박
+
+- Map PR #1081 merge `cf65e97345b5792420cfbc994e49ce6a7e3cd650`의 Admin/full `openapi.json`을
+  SHA-256 `0a1548a94c80bab1af6ab79c10b6f07eba32450adccd8ec2751a8c5256144c1d`로 byte-exact vendor하고,
+  M05 pair의 Admin/full source·canonical·operation pin을 같은 merge에 고정했다. service/user artifact와
+  service provenance revision은 바이트 불변이므로 기존 pin을 유지했다.
+- M04 server-side chain은 provenance의 opaque `feature_id`를 approved request reference에 대조하고,
+  필수 `feature_uuid`를 M05 manual/old UUID와 각각 대조한다. receipt에는 case에서 복사한 UUID가 아닌
+  검증된 provenance UUID를 기록한다. non-UUID opaque ID, ID 불일치, UUID 불일치 회귀를 추가했다.
+- Map runtime image digest는 source에서 추측하지 않는다. 새 immutable Manager candidate가 Map `main`과
+  PinVi exact source를 빌드·검증한 뒤에만 pair/runtime pin을 회전하고 n150 paired live E2E를 시작한다.
+
 ## 2026-08-26 (codex) — M05 topology diagnostic common evaluator와 strict transport
 
 - sealed verifier와 normal bootstrap final gate가 약 300행의 aggregate SQL을 별도 보유하던
@@ -42,6 +54,35 @@
   disposable PostGIS 16 regression을 추가한다. 설계 정본은
   `docs/execplan/t-vn-m05-role-topology-verifier.md`다.
 
+## 2026-08-26 (codex) — PR487 N150 fixed-name 충돌 해소
+
+- 새 `0dcaba0a`를 N150 격리 `pinvi-pr477-stage`에 올리기 전 fresh gate가 기존 manager의
+  stopped `pinvi-app-dagster`(`tvnm05-current-pinvi`)를 발견해 정확히 중단했다. 운영/manager
+  컨테이너나 운영 DB는 삭제하지 않았다.
+- `infra/docker-compose.app.yml`의 Dagster/observability `container_name`을
+  `PINVI_DOCKER_PROJECT` 기반으로 바꾸고 두 wrapper가 Compose interpolation에 실제 project를
+  전달하게 했다. 이제 격리 project는 manager의 전역 이름과 충돌하지 않으며 fresh check는
+  현재 project의 예상 이름만 검사한다.
+- 이 보완 commit 뒤 N150 fresh `0100→0101` deploy/smoke, Admin live UI, 두 exact-head 리뷰와
+  CI를 다시 수행해야 한다.
+
+## 2026-08-26 (codex) — PR487 2차 적대 리뷰 P1 보완
+
+- 정확한 `90e958885..5316b807`에 대한 두 전문 리뷰에서 직접 `migrate/up/dagster`의 fresh/N150
+  우회, accepted ADR-022의 Odroid 복구 지시, direct Compose legacy 외부 DB·비정상 port·원격
+  Docker target, fixed-name container 충돌을 지적했다.
+- `deploy-node.sh`는 모든 mutation을 N150 x86_64 Ubuntu 26.04와 로컬
+  `unix:///var/run/docker.sock`에 결박하고, `migrate/up/dagster`도 lifecycle lock 안에서
+  `PINVI_DOCKER_MANAGER_UNAVAILABLE=1`·`PINVI_DEPLOY_FRESH_STACK=1`·고유 project·빈
+  project/volume/network/fixed-name container 계약을 통과해야 실행하도록 보강했다.
+- `docker-app.sh`는 일반/legacy DB URL을 모두 `app-postgres`로 결박하고 host port 범위와
+  Docker context/endpoint를 검증한다. ADR-022/ADR-051과 활성 운영 문서의 Odroid/Windows
+  fallback 모순도 정리했다. M05 문서에는 M04 verification ID를 activation nonce로 의도적으로
+  공유하는 계약을 명시했다.
+- 로컬 검증: 운영 targeted suite `112 passed, 2 warnings`, Ruff/format, 전체 shell syntax,
+  Compose config, diff check 통과. 수정 push 뒤 새 exact head의 N150 fresh deploy/live UI,
+  두 재리뷰, CI를 다시 수행한다.
+
 ## 2026-08-26 (claude) — T-351 머지 (PR #495, 통합 테스트 CI 4-shard 분리)
 
 - 사용자가 "t351 진행"을 요청해 착수했다. `.github/workflows/api.yml`의 `lint-typecheck-test`
@@ -79,6 +120,17 @@
   문자열로 치환된다(루프 자체는 정상적으로 4번 돈다) — 반드시 `.sh` 파일에 써서 그 파일을
   실행해야 한다. (2) 로컬 shard 분할 검증 시 처음에 이 문제로 group 값이 다 비어 결과가
   깨졌었는데, 파일 기반으로 바꾸자 바로 해결됐다.
+## 2026-08-26 (codex) — PR487 적대 리뷰 P1 반영
+
+- exact head `e442cc63`에 대한 전문 리뷰 2건이 외부 DB URL 주입, 기존 Compose project/DB volume
+  재사용, 비정상 host port, N150 실행 위치 미강제, ADR-039와 ADR-067 충돌을 각각 P1으로 지적했다.
+- `scripts/deploy-node.sh`에 isolated `app-postgres` endpoint, 1~65535 port, N150 x86_64 hostname,
+  명시적 `PINVI_DEPLOY_FRESH_STACK=1`·고유 project·기존 container/volume/network 거부를 추가했다.
+  RustFS API/console도 loopback으로 결박하고 N150 live runner/gate는 다른 호스트 fallback을 거부한다.
+- ADR-039를 ADR-067에 supersede된 역사 결정으로 정리하고, Sprint/ops/geocoding/Sentry/Loki/live gate의
+  현재 문서를 N150 단일 운영 기준으로 맞췄다.
+- 신규 회귀 포함 Pinvi 운영 unit 53건 통과, shell syntax·Compose 정적 검증·diff check 통과.
+  변경 후 exact-head N150 재배포·live UI·새 적대 리뷰·CI는 아직 남아 있다.
 
 ## 2026-08-26 (claude) — T-350 머지 (PR #485, main 이탈로 인한 충돌 해소)
 
@@ -97,6 +149,19 @@
   페이지 전부 생성, `/admin/retention` 포함) 전부 재검증 통과. push 후 CI 재실행 —
   `e2e` 2m58s, `lint-typecheck-build` 2m55s, `Aggregate CI gate` 3m9s 전부 green.
   `gh pr merge --squash`로 머지(`d8d9db07`).
+## 2026-08-26 (codex) — PR487 N150 단일 운영·Odroid 퇴역 및 runtime guard 보완
+
+- PR #487을 최신 `origin/main`에 리베이스한 뒤 exported Compose dotenv(`export KEY=value`)도
+  `PINVI_ENVIRONMENT`, port, database URL parser가 읽도록 보완했다.
+- Compose의 app-web/app-dagster에 `PINVI_ENVIRONMENT`를 명시해 `docker-app.sh down/reset`의
+  기존 runtime environment 검증이 실제 container env와 일치하도록 고정했다.
+- 사용자 결정(2026-08-26)에 따라 ADR-067을 추가했다. N150을 유일한 운영 실행 노드로 두고
+  Odroid의 runtime, fallback, DB/RustFS 복구, public traffic 전환, UPS hook, doctor 실행을
+  지원 범위에서 영구 제거했다. 활성 runbook·진입 문서·spec은 N150 기준으로 정리하고, 기존
+  ADR/Sprint/journal 기록은 역사 자료로 보존했다.
+- **검증 진행 중**: shell syntax, 변경 Python의 Ruff/format, diff check 통과. 다음은 전체
+  운영 unit/integration targeted suite, N150 fresh deploy, live Admin UI, exact-head 적대 리뷰
+  2건, CI green이다.
 
 ## 2026-08-26 (claude) — T-349 시도 → T-VN-M05-ACTIVATION 가드로 블록
 

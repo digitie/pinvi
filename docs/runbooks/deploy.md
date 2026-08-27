@@ -1,8 +1,8 @@
-# 운영 배포 Runbook — N150 + Odroid
+# 운영 배포 Runbook — N150
 
-ADR-023/ADR-039 기준 운영 배포 절차다. N150 16GB/NVMe 1TB가 기본 운영 노드이고,
-Odroid M1S는 ARM64 검증과 수동 대체 배포가 가능한 노드다. 노드 간 DB live sync는
-사용하지 않는다. 장애 대응은 백업/복구 후 수동 DNS/nginx upstream switch를 정본으로 둔다.
+ADR-067 기준 운영 배포 절차다. N150 16GB/NVMe 1TB가 유일한 실행·운영 노드다.
+배포·복구·live UI 검증은 N150의 manager 경로를 정본으로 둔다. 장애 대응은
+백업/복구 후 수동 DNS/nginx upstream switch를 N150 안에서 수행한다.
 
 > **이미지는 GHCR에 올리지 않는다.** Pinvi API/Web/Dagster 이미지는 운영 노드에서
 > `kor-travel-docker-manager`(`ktdctl`)가 `~/pinvi` 소스로 **로컬 빌드**한다
@@ -14,9 +14,9 @@ Odroid M1S는 ARM64 검증과 수동 대체 배포가 가능한 노드다. 노�
 
 - 오케스트레이터: `~/kor-travel-docker-manager` (`ktdctl` CLI). 엔트리는
   `backend/ktd_venv/bin/ktdctl`(또는 `poetry run ktdctl`). 사용법은 그 저장소 `README.md`/`SKILL.md`.
-- compose: `docker-compose.yml` + `docker-compose.override.yml`. 이미지 태그/시크릿은
-  gitignore된 `.env`(템플릿 `.env.example`)에 둔다.
-- Pinvi 빌드 소스: `~/pinvi` (compose `build.context: ../pinvi`). 배포 전 항상 `origin/main`으로 동기한다.
+- 배포 manifest와 project/env/DB 결박은 manager의 frozen canonical transaction이 소유한다. 운영자는
+  Pinvi 저장소의 raw Compose 파일이나 임의 override를 직접 실행하지 않는다.
+- Pinvi 빌드 소스: `~/pinvi`. 배포 전 항상 manager가 승인한 Pinvi source revision으로 동기한다.
 - 이미지 태그: `.env`의 `PINVI_API_IMAGE`/`PINVI_WEB_IMAGE`/`PINVI_DAGSTER_IMAGE` 기본값은
   각각 `pinvi-api:latest-main` / `pinvi-web:latest-main` / `pinvi-dagster:latest-main`(로컬 빌드).
 
@@ -51,11 +51,22 @@ archive를 source build context와 Dockerfile로 사용한다. raw/resolved buil
 image ID를 pin한다. 기동 container가 그 image ID를 실제 사용한 경우에만 C6c compatible pair에 넣으며,
 불일치하면 같은 Compose project의 API/Web container를 제거한다.
 
-PinVi 저장소의 fallback 경로는 같은 검증을 포함한다. `scripts/deploy-node.sh deploy`는 image를
-pull하지 않고 exact archive의 canonical Compose·Dockerfile·Python helper regular file만 허용하며
-symlink·외부 override를 거부한다. API를 build하고 API label/image ID를 확인한 뒤
-migration/up/smoke를 진행한다. 임시 archive는 전체 명령이 끝날 때 삭제한다. 이미지를 명시적으로
-pull하는 rollback 흐름도 현재 source `HEAD`와 label이 다르면 중지한다.
+PinVi 저장소의 fallback 경로도 같은 검증을 포함하지만, manager를 사용할 수 없다는 명시적
+`PINVI_DOCKER_MANAGER_UNAVAILABLE=1` 확인과 기존 운영 runtime이 없는 N150의 별도 fresh stack에서만
+`PINVI_DEPLOY_FRESH_STACK=1`과 고유한
+`PINVI_DOCKER_PROJECT`를 지정해 사용한다. `scripts/deploy-node.sh deploy`는 image를 pull하지
+않고 exact archive의 canonical Compose·Dockerfile·Python helper regular file만 허용하며
+symlink·외부 override와 기존 API/Web/Dagster runtime 재사용을 거부한다. API를 build하고 API
+label/image ID를 확인한 뒤 migration/up/smoke를 진행한다. 임시 archive는 전체 명령이 끝날 때
+삭제한다. `deploy-node pull`은 staging/production에서 fail-closed로 비활성화되어 있으며, 이미지
+rollback도 manager의 pinned rebuild 또는 승인된 로컬 rollback image만 사용한다. 일반
+staging/production 배포는 위 manager pinned pair 경로를 사용한다.
+
+fallback을 단계별로 실행할 때 `migrate`는 성공한 동일 fresh project·root·환경·source revision을
+root-owned continuation state로 봉인한다. 그 뒤에만 같은 값으로 `scripts/deploy-node.sh up` 또는
+`dagster`를 실행할 수 있으며, state가 없거나 stack identity가 달라지면 중지한다. 초기 fresh
+검증을 통과한 뒤 생성된 DB volume/network를 다음 단계에서 다시 “빈 fresh stack”으로 오인하지
+않도록 하는 절차다.
 
 ```bash
 # 값 자체 대신 일치 여부만 확인하는 예시
@@ -81,26 +92,16 @@ read/cancel token도 거부한다. 값 자체를 출력하지 않고 주입 여�
 `PINVI_ENVIRONMENT`는 `development|test|smoke|staging|production` 중 하나만 사용한다. 운영
 별칭 `prod`, 대소문자 drift, 앞뒤 공백, 알 수 없는 값은 시작 단계에서 거부한다.
 
-```bash
-docker compose exec app-api sh -lc \
-  'test ${#PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN} -ge 32 && \
-   test ${#PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN} -ge 32 && \
-   test "$PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN" != "$PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN" && \
-   case "$PINVI_KOR_TRAVEL_MAP_OPS_READ_TOKEN$PINVI_KOR_TRAVEL_MAP_OPS_CANCEL_TOKEN" in \
-     *[[:space:]]*) exit 1 ;; \
-     *) exit 0 ;; \
-   esac'
-```
+manager의 pinned preflight가 두 token의 길이·공백·상호 불일치와 Map endpoint를 검사한다. 운영자는
+container shell에서 환경변수를 직접 검사하거나 주입하지 않는다.
 
 **마이그레이션이 포함된 릴리스**는 manager의 pinned pair transaction이 migration·seal·runtime
 writer lifecycle을 함께 소유한다. raw Compose `run ... alembic upgrade head`를 직접 실행하지 않는다.
 rebuildable rehearsal에서 DB를 초기화한 뒤:
 
-```bash
-cd ~/kor-travel-docker-manager
-sudo -n backend/.venv/bin/ktdctl pinvi-pair rebuild-pinned --confirm
-docker exec pinvi-postgres psql -U pinvi -d pinvi -c 'select version_num from alembic_version;'
-```
+manager의 pinned rebuild transaction이 migration·seal·runtime writer lifecycle을 수행하고,
+transaction 결과의 schema revision과 image provenance를 함께 남긴다. 운영자는 DB container에
+직접 `exec`하여 migration을 실행하거나 확인하지 않는다.
 
 검증(smoke):
 
@@ -112,7 +113,7 @@ curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:12802/server_info  #
 curl -fsS -X POST http://127.0.0.1:12801/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"<bootstrap-admin-email>","password":"<temporary-bootstrap-password>"}' >/dev/null
-docker ps --filter name=pinvi --format '{{.Names}}  {{.Image}}  {{.Status}}'
+# 운영 project 상태는 manager의 status 명령으로 확인한다. raw Compose 조회는 하지 않는다.
 ```
 
 도메인 ↔ 포트(reverse proxy): web `:12805`, api `:12801`, dagster `:12802`,
@@ -122,29 +123,7 @@ RustFS API(`s3-api`) `:12101`, RustFS 콘솔(`s3`) `:12105`.
 > 이 경로는 rehearsal/rebuildable 정책의 destructive rebuild이므로, 일반 운영 변경은 manager의
 > 별도 승인된 release 절차를 사용한다.
 
-## 3. Odroid 대체 노드 배포
-
-Odroid도 같은 방식으로 `~/pinvi` 소스에서 ARM64 로컬 빌드한다. 평상시 public traffic을 받지
-않는다. DB는 N150과 live sync하지 않는다. 대체 운영이 필요할 때는 최신 snapshot을 복구한 뒤
-manager의 pinned pair 명령으로 API/Web/Dagster를 올리고 public traffic을 전환한다.
-
-```bash
-ssh odroid
-cd ~/pinvi && git pull --ff-only origin main
-cd ~/kor-travel-docker-manager && sudo -n backend/.venv/bin/ktdctl pinvi-pair rebuild-pinned --confirm
-scripts/odroid-docker-doctor.sh   # arch aarch64 / OS 24.04 / env·local health
-```
-
-## 4. 수동 대체 운영
-
-1. N150 장애 확인: `/health`, Docker, 전원, 네트워크.
-2. `docs/runbooks/backup-restore.md` 절차로 Odroid Postgres에 최신 snapshot을 복구한다.
-3. RustFS 파일은 운영에서 선택한 mirror/backup 위치에서 복구한다.
-4. Odroid에서 승인된 manager release 절차로 API/Web/Dagster를 시작/재기동하고 local smoke(§2)를 확인한다.
-5. Cloudflare Tunnel 또는 nginx upstream을 Odroid로 전환한다.
-6. N150 복구 후에는 어느 DB가 정본인지 먼저 확정한다. 양쪽에서 동시에 write를 받지 않는다.
-
-## 5. Rollback
+## 3. Rollback
 
 이미지는 로컬 빌드이므로 이전 커밋으로 되돌려 재빌드한다.
 
@@ -159,19 +138,16 @@ cd ~/kor-travel-docker-manager && sudo -n backend/.venv/bin/ktdctl pinvi-pair re
 DB migration rollback은 자동으로 하지 않는다. schema 변경이 포함된 release는
 `docs/runbooks/backup-restore.md`의 snapshot/restore 절차를 우선한다.
 
-## 6. 운영 체크
+## 4. 운영 체크
 
 - `scripts/n150-docker-doctor.sh`가 arch `x86_64`, OS `26.04`, env/local health를 확인.
-- `scripts/odroid-docker-doctor.sh`가 arch `aarch64`, OS `24.04`, env/local health를 확인.
 - `PINVI_RATE_LIMIT_BACKEND=postgres` 또는 `auto + PINVI_ENVIRONMENT=production`.
 - API/Web/Dagster 이미지는 같은 clean `~/pinvi` 커밋에서 빌드한다. API는
   `org.opencontainers.image.revision` label까지 exact `HEAD`와 대조한다.
 - Cloudflare/reverse proxy가 origin 직접 접근을 막을 때만
   `PINVI_RATE_LIMIT_CLIENT_IP_HEADER=CF-Connecting-IP` 사용.
 
-## 7. 관련 문서
+## 5. 관련 문서
 
-- [odroid-docker.md](./odroid-docker.md)
 - [../../infra/n150/README.md](../../infra/n150/README.md)
-- [../../infra/odroid/README.md](../../infra/odroid/README.md)
 - [backup-restore.md](./backup-restore.md)

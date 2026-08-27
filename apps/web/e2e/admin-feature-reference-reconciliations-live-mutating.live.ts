@@ -88,9 +88,19 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
     const apiOrigin = new URL(apiBaseUrl).origin;
     const detailPath = `/admin/feature-reference-reconciliations/${eventId}`;
     let observedApiRequests = 0;
+    const unexpectedApiMutations: string[] = [];
     let foreignDocumentOrigin: string | null = null;
     page.on('request', (request) => {
-      if (new URL(request.url()).origin === apiOrigin) observedApiRequests += 1;
+      const requestUrl = new URL(request.url());
+      if (requestUrl.origin !== apiOrigin) return;
+      observedApiRequests += 1;
+      const method = request.method();
+      const isAuthenticationRequest =
+        requestUrl.pathname === '/auth/login' && (method === 'POST' || method === 'OPTIONS');
+      const isReadOnlyRequest = method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
+      if (!isReadOnlyRequest && !isAuthenticationRequest) {
+        unexpectedApiMutations.push(`${method} ${requestUrl.pathname}`);
+      }
     });
     page.on('framenavigated', (frame) => {
       if (frame === page.mainFrame() && frame.url() !== 'about:blank') {
@@ -136,11 +146,29 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
     }
     const responseReceiptRecord = responseReceipt as Record<string, unknown>;
     const responseStatus = responseData.status;
+    const responseImpacts = responseData.impacts;
+    if (!Array.isArray(responseImpacts)) {
+      throw new Error('M05 detail response impacts가 array가 아닙니다.');
+    }
+    expect(responseImpacts).toHaveLength(Number(impactCount));
     expect(responseStatus).toBe('applied');
     expect(responseReceiptRecord.action).toBe('rebind');
     expect(responseReceiptRecord.old_feature_id).toBe(oldFeatureId);
     expect(responseReceiptRecord.replacement_feature_id).toBe(replacementFeatureId);
     expect(responseReceiptRecord.impact_count).toBe(Number(impactCount));
+    responseImpacts.forEach((rawImpact, index) => {
+      if (!rawImpact || typeof rawImpact !== 'object' || Array.isArray(rawImpact)) {
+        throw new Error(`M05 impact[${index}]가 object가 아닙니다.`);
+      }
+      const impact = rawImpact as Record<string, unknown>;
+      expect(impact.event_id).toBe(eventId);
+      expect(impact.impact_index).toBe(index);
+      expect(typeof impact.target_relation).toBe('string');
+      expect(typeof impact.target_id).toBe('string');
+      expect(impact.old_feature_id).toBe(oldFeatureId);
+      expect(impact.replacement_feature_id).toBe(replacementFeatureId);
+      expect(typeof impact.outcome).toBe('string');
+    });
 
     const detail = page.getByTestId('admin-frr-detail');
     const receipt = detail.getByRole('region', { name: '로컬 final receipt' });
@@ -158,9 +186,25 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
     await expect(receiptValue('이전 Feature ID')).toHaveText(oldFeatureId);
     await expect(receiptValue('대체 Feature ID')).toHaveText(replacementFeatureId);
     await expect(receiptValue('영향 행 수')).toHaveText(`${responseReceiptRecord.impact_count}건`);
+    const impactRegion = detail.getByRole('region', { name: 'Row-level impact' });
+    await expect(impactRegion).toBeVisible();
+    await expect(impactRegion.locator('[data-testid^="admin-frr-impact-"]')).toHaveCount(
+      responseImpacts.length,
+    );
+    for (const rawImpact of responseImpacts) {
+      const impact = rawImpact as Record<string, unknown>;
+      const row = impactRegion.getByTestId(`admin-frr-impact-${String(impact.impact_index)}`);
+      await expect(row).toBeVisible();
+      await expect(row).toContainText(String(impact.target_relation));
+      await expect(row).toContainText(String(impact.target_id));
+      await expect(row).toContainText(String(impact.old_feature_id));
+      await expect(row).toContainText(String(impact.replacement_feature_id));
+      await expect(row).toContainText(String(impact.outcome));
+    }
     expect(foreignDocumentOrigin).toBeNull();
     await expect(detail).not.toContainText('승인');
     await expect(detail).not.toContainText('거절');
+    expect(unexpectedApiMutations).toEqual([]);
     await expect.poll(() => observedApiRequests).toBeGreaterThan(0);
 
     const evidenceDir = process.env.PINVI_M05_UI_EVIDENCE_DIR;
@@ -170,7 +214,14 @@ test.describe('M05 isolated Feature reference reconciliation live e2e', () => {
         throw new Error('M05 UI run binding 환경변수가 준비되지 않았습니다.');
       }
       const marker = {
-        assertions: ['status', 'action', 'old_feature', 'replacement_feature', 'impact_count'],
+        assertions: [
+          'status',
+          'action',
+          'old_feature',
+          'replacement_feature',
+          'impact_count',
+          'impact_rows',
+        ],
         event_id: eventId,
         impact_count: Number(impactCount),
         old_feature_id: oldFeatureId,

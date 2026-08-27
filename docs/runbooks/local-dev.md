@@ -61,8 +61,8 @@ codegraph sync
 - git / branch / commit / push / PR은 Linux git으로 수행한다.
 - CodeGraph는 Linux native `codegraph`만 사용한다. `/mnt/c/...`, `.exe`, `.cmd` shim이면 중지한다.
 - 의존성 설치, 테스트, Docker, dev server, lint/typecheck/build/Vitest도 Linux에서 수행한다.
-- Playwright는 N150에서 먼저 실행하고, N150 Docker runner 또는 host browser 실행이 모두 불가능할 때만
-  Windows fallback을 쓴다.
+- Playwright live/UI gate는 N150 x86_64 Docker runner에서만 실행한다. runner와 host browser가
+  모두 불가능하면 gate를 중단한다.
 
 ## 4. Windows shell wrapper
 
@@ -205,8 +205,8 @@ PINVI_DATABASE_URL='postgresql+psycopg://pinvi:changeme@localhost:5432/pinvi_mig
 
 ## 7. 프론트 (`apps/web`)
 
-프론트 개발 서버와 일반 검증은 **Linux worktree**에서 실행한다. Windows에서 실행하는 프론트 명령은
-N150 Playwright가 불가능할 때의 fallback runner로 제한한다.
+프론트 개발 서버와 일반 검증은 **Linux worktree**에서 실행한다. Windows는 live/UI gate 실행
+대상이 아니다.
 
 ```bash
 cd /mnt/f/dev/pinvi-codex
@@ -227,8 +227,8 @@ npm --workspace apps/web test       # Vitest
 
 Playwright 기반 브라우저 e2e는 N150에서 먼저 실행한다. Ubuntu 26.04 host Chromium
 dependency 문제를 피하려면 `scripts/n150-playwright-runner.sh` Docker runner를 사용한다.
-N150 Docker runner와 host browser 실행이 모두 불가능할 때만 Windows runner를 fallback으로
-사용하고, 사유와 명령을 journal/PR에 기록한다.
+N150 Docker runner와 host browser 실행이 모두 불가능하면 gate를 중단하고, 사유와 명령을
+journal/PR에 기록한다.
 
 ```bash
 ssh n150
@@ -241,7 +241,7 @@ scripts/n150-playwright-runner.sh -- \
 ```
 
 Windows에서 `npm run dev`, `npm run lint`, `npm run typecheck`, `npm run build`를 실행하지 않는다.
-Windows Node/npm은 N150 Playwright가 불가능할 때의 fallback runner로만 쓴다.
+Windows Node/npm은 live/UI gate에 사용하지 않는다.
 
 ## 8. 인프라 (Docker)
 
@@ -310,15 +310,14 @@ uv run dagster dev --host 0.0.0.0 --port 12802   # http://localhost:12802
 | Docker 컨테이너 시작 안 됨                      | Docker Desktop 종료               | Docker Desktop 시작 + WSL2 backend 확인                                                     |
 | PostgreSQL 연결 실패                            | host 포트 충돌 (5432)             | `5432`로 host 포트 변경                                                                     |
 | `next dev` 느림                                 | NTFS 파일 watch 비용              | 필요하면 ext4 Linux worktree를 source-of-truth로 새로 만들고 그곳에서 실행                  |
-| Playwright가 N150 host에서 브라우저 의존성 오류 | host Chromium shared library 누락 | `scripts/n150-playwright-runner.sh` Docker runner 사용, 그래도 불가할 때만 Windows fallback |
+| Playwright가 N150 host에서 브라우저 의존성 오류 | host Chromium shared library 누락 | `scripts/n150-playwright-runner.sh` Docker runner 사용 후 gate 중단 |
 | Alembic `relation does not exist`               | 다른 DB에 마이그레이션 적용됨     | `PINVI_DATABASE_URL` 확인                                                                   |
-| `exec format error` (Odroid)                    | ARM64 이미지 아님                 | `docker buildx build --platform linux/arm64`                                                |
 
 ## 12. 관련 문서
 
 - [docker-app.md](./docker-app.md) — Docker smoke test
 - [etl.md](./etl.md) — Dagster 운영
-- [odroid-docker.md](./odroid-docker.md) — 운영 배포
+- [deploy.md](./deploy.md) — N150 운영 배포
 - `docs/agent-workflow.md` — agent별 작업 순서
 - `docs/dev-environment.md` — 큰 그림
 - `docs/decisions.md` ADR-051 (Linux 개발·git·CodeGraph + N150 우선 Playwright)

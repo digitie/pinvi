@@ -15,6 +15,13 @@ def test_compose_keeps_runtime_and_migrator_role_inputs_separate() -> None:
     )[0]
     assert "app-postgres:/var/lib/postgresql/data" in postgres_block
     assert "\n  app-postgres:\n" in compose.rsplit("volumes:", maxsplit=1)[1]
+    rustfs_init_block = compose.split("  app-rustfs-init:", maxsplit=1)[1].split(
+        "  app-api:", maxsplit=1
+    )[0]
+    assert "set -eu" in rustfs_init_block
+    assert "mc ls local/pinvi-media" in rustfs_init_block
+    assert "mc mb -p local/pinvi-media" in rustfs_init_block
+    assert "|| true" not in rustfs_init_block
     runtime_block = compose.split("  app-api:", maxsplit=1)[1].split(
         "  # Explicit one-shot only:", maxsplit=1
     )[0]
@@ -47,7 +54,11 @@ def test_compose_keeps_runtime_and_migrator_role_inputs_separate() -> None:
         "  app-web:", maxsplit=1
     )[0]
     assert "profiles: [legacy-rebaseline]" in legacy_migrator_block
-    assert "PINVI_LEGACY_REBASELINE_DATABASE_URL" in legacy_migrator_block
+    assert (
+        "PINVI_DATABASE_URL: postgresql+asyncpg://invalid:invalid@app-postgres:5432/pinvi"
+        in legacy_migrator_block
+    )
+    assert "PINVI_LEGACY_REBASELINE_DATABASE_URL" not in legacy_migrator_block
     assert "PINVI_APP_DB_USER" in legacy_migrator_block
     assert "PINVI_MIGRATOR_DB_USER" in legacy_migrator_block
     assert 'PINVI_M05_LEGACY_REBASELINE: "1"' in legacy_migrator_block
@@ -393,6 +404,9 @@ def test_migration_wrappers_open_only_for_the_one_shot_and_seal_afterward() -> N
         migration = source[source.index("migrate_under_lifecycle_lock() {") :]
         wrapper = source[source.index("migrate() {") :]
         assert "m05_legacy_rebaseline_profile()" in source
+        assert "validate_bootstrap_admin_credential_file" in source
+        assert "pinvi-admin-bootstrap validate-credential" in source
+        assert "PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_SHA256" in source
         assert 'source "$ROOT_DIR/scripts/migrator-lifecycle-lock.sh"' in source
         assert "prepare_migrator_login()" in source
         assert "seal_migrator_login()" in source
@@ -426,6 +440,9 @@ def test_migration_wrappers_open_only_for_the_one_shot_and_seal_afterward() -> N
             migration.index("prepare_migrator_login")
             < migration.index("run_admin_bootstrap")
             < migration.rindex("seal_migrator_login")
+        )
+        assert migration.index("validate_bootstrap_admin_credential_file") < migration.index(
+            "drain_runtime_writers"
         )
 
 
@@ -495,6 +512,53 @@ def test_runtime_writer_recovery_is_fail_closed_and_database_ready() -> None:
     assert "staging|production)" in docker_app
     assert "smoke_on_exit()" in docker_app
     assert 'restore_runtime_writers_on_exit "$exit_code"' in docker_app
+    assert "assert_host_ports_available_before_migration()" in docker_app
+    assert '"$CADVISOR_PORT"' in docker_app
+    assert '"$PROMETHEUS_PORT"' in docker_app
+    assert '"$GRAFANA_PORT"' in docker_app
+    assert "host-port preflight failed at the migration boundary" in docker_app
+    assert "host-port preflight failed immediately before migration" in docker_app
+    assert 'ss -H -ltn "sport = :${port}" 2>/dev/null || true' not in docker_app
+    assert "require_isolated_database_endpoint" in docker_app
+    assert "isolated app-postgres service" in docker_app
+    assert (
+        "assert_host_ports_available_before_migration"
+        in docker_app[docker_app.index("migrate() {") :]
+    )
+    deploy_node = (ROOT / "scripts" / "deploy-node.sh").read_text(encoding="utf-8")
+    assert "assert_host_ports_available_before_migration()" in deploy_node
+    assert (
+        "assert_host_ports_available_before_migration"
+        in deploy_node[deploy_node.index("migrate() {") :]
+    )
+    assert (
+        'RUSTFS_CONSOLE_PORT="$(compose_env_value PINVI_RUSTFS_CONSOLE_PORT 12105)"' in deploy_node
+    )
+    assert 'CADVISOR_PORT="$(compose_env_value PINVI_CADVISOR_PORT 12301)"' in deploy_node
+    assert 'PROMETHEUS_PORT="$(compose_env_value PINVI_PROMETHEUS_PORT 12401)"' in deploy_node
+    assert 'GRAFANA_PORT="$(compose_env_value PINVI_GRAFANA_PORT 12205)"' in deploy_node
+    assert "host-port preflight failed at the migration boundary" in deploy_node
+    assert "host-port preflight failed immediately before migration" in deploy_node
+    assert 'ss -H -ltn "sport = :${port}" 2>/dev/null || true' not in deploy_node
+    assert (
+        '"$RUSTFS_CONSOLE_PORT"'
+        in deploy_node[deploy_node.index("assert_host_ports_available_before_migration()") :]
+    )
+    dagster_start = deploy_node.index("dagster_up() {")
+    assert "assert_host_ports_available_before_migration" in deploy_node[dagster_start:]
+    standalone_start = deploy_node.index("prepare_standalone_dagster_writer()")
+    standalone_end = deploy_node.index("\n}\n", standalone_start) + 3
+    standalone = deploy_node[standalone_start:standalone_end]
+    assert "runtime_snapshot_preflight" in standalone
+    assert standalone.index("runtime_snapshot_preflight") < standalone.index(
+        "runtime_writer_container_id"
+    )
+    for cleanup in ("down() {", "reset() {"):
+        cleanup_start = docker_app.index(cleanup)
+        cleanup_end = docker_app.find("\n}\n", cleanup_start) + 3
+        assert "runtime_snapshot_preflight" in docker_app[cleanup_start:cleanup_end]
+        assert "acquire_migrator_lifecycle_lock" in docker_app[cleanup_start:cleanup_end]
+        assert "release_migrator_lifecycle_lock" in docker_app[cleanup_start:cleanup_end]
 
 
 def test_discovery_failure_stops_managed_writers_and_removes_only_recorded_ids(
@@ -602,6 +666,322 @@ fi
         assert not event_log.exists()
 
 
+def test_existing_runtime_refuses_in_place_snapshot_preflight(tmp_path: Path) -> None:
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    for dependency in ("api-image-provenance.sh", "migrator-lifecycle-lock.sh"):
+        shutil.copy2(ROOT / "scripts" / dependency, scripts_dir / dependency)
+
+    for name in ("scripts/docker-app.sh", "scripts/deploy-node.sh"):
+        source = (ROOT / name).read_text(encoding="utf-8")
+        isolated_script = scripts_dir / Path(name).name
+        isolated_script.write_text(
+            source.rsplit('\nmain "$@"', maxsplit=1)[0] + "\n", encoding="utf-8"
+        )
+        driver = r"""
+set -euo pipefail
+source "$1"
+pinvi_runtime_predeploy_snapshot_ids() { return 0; }
+RUNTIME_DEPLOY_PRESERVE=1
+RUNTIME_PREDEPLOY_API_CONTAINER_IDS=(existing-api)
+if runtime_snapshot_preflight; then
+  exit 1
+fi
+"""
+        result = subprocess.run(  # noqa: S603 -- fixed test-only bash driver
+            ["bash", "-c", driver, "--", str(isolated_script)],  # noqa: S607 -- fixture script
+            check=False,
+            capture_output=True,
+            text=True,
+            env={"PINVI_ROOT_DIR": str(tmp_path)},
+        )
+        assert result.returncode == 0
+        assert "in-place runtime snapshot is disabled" in result.stderr
+
+
+def test_stale_predeploy_snapshot_refuses_runtime_mutation(tmp_path: Path) -> None:
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    for dependency in ("api-image-provenance.sh", "migrator-lifecycle-lock.sh"):
+        shutil.copy2(ROOT / "scripts" / dependency, scripts_dir / dependency)
+
+    for name in ("scripts/docker-app.sh", "scripts/deploy-node.sh"):
+        source = (ROOT / name).read_text(encoding="utf-8")
+        isolated_script = scripts_dir / Path(name).name
+        isolated_script.write_text(
+            source.rsplit('\nmain "$@"', maxsplit=1)[0] + "\n", encoding="utf-8"
+        )
+        driver_template = r"""
+set -euo pipefail
+source "$1"
+pinvi_runtime_predeploy_snapshot_ids() {{ printf '%s\n' stale-snapshot; }}
+RUNTIME_DEPLOY_PRESERVE={preserve}
+if runtime_snapshot_preflight; then
+  exit 1
+fi
+"""
+        for preserve in ("0", "1"):
+            result = subprocess.run(  # noqa: S603 -- fixed test-only bash driver
+                [
+                    "/usr/bin/bash",
+                    "-c",
+                    driver_template.format(preserve=preserve),
+                    "--",
+                    str(isolated_script),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                env={"PINVI_ROOT_DIR": str(tmp_path)},
+            )
+            assert result.returncode == 0
+            assert "stale rollback artifact" in result.stderr
+
+
+def test_direct_reset_and_down_require_isolated_runtime_identity(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    event_log = tmp_path / "compose-events.log"
+    fake_docker = fake_bin / "docker"
+    fake_docker.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1 $2" == "context show" ]]; then
+  printf '%s\n' default
+  exit 0
+fi
+if [[ "$1 $2" == "context inspect" ]]; then
+  printf '%s\n' unix:///var/run/docker.sock
+  exit 0
+fi
+if [[ "$1 $2" == "compose version" ]]; then
+  exit 0
+fi
+if [[ "${PINVI_TEST_STALE_SNAPSHOT:-0}" == "1" \
+  && "$*" == *Names* ]]; then
+  case "$*" in
+    *"service=app-api"*) printf '%s\n' 'stale-api app-api.pinvi-predeploy' ;;
+    *"service=app-web"*) printf '%s\n' 'stale-web app-web.pinvi-predeploy' ;;
+    *"service=app-dagster"*) printf '%s\n' 'stale-dagster app-dagster.pinvi-predeploy' ;;
+  esac
+  exit 0
+fi
+if [[ "${PINVI_TEST_DB_IDENTITY_FAIL:-0}" == "1" \
+  && "$1 $2" == "container ls" && "$*" != *"service="* ]]; then
+  printf '%s\n' db-container
+  exit 0
+fi
+if [[ "${PINVI_TEST_DB_IDENTITY_FAIL:-0}" == "1" \
+  && "$1 $2" == "volume ls" ]]; then
+  printf '%s\n' app-postgres-volume
+  exit 0
+fi
+if [[ "${PINVI_TEST_DB_IDENTITY_FAIL:-0}" == "1" \
+  && "$1 $2" == "volume inspect" ]]; then
+  exit 1
+fi
+if [[ "$1 $2" == "container ls" || "$1 $2" == "volume ls" ]]; then
+  exit 0
+fi
+if [[ "$1" == "compose" ]]; then
+  printf '%s\\n' "$*" >> "$PINVI_TEST_EVENT_LOG"
+fi
+""",
+        encoding="utf-8",
+    )
+    fake_docker.chmod(0o755)
+    isolated_env_file = tmp_path / "smoke.env"
+    isolated_env_file.write_text("PINVI_ENVIRONMENT=smoke\n", encoding="utf-8")
+
+    base_env = {
+        "PATH": f"{fake_bin}:/usr/bin:/bin",
+        "PINVI_ENV_FILE": str(isolated_env_file),
+        "PINVI_ENVIRONMENT": "smoke",
+        "PINVI_ROOT_DIR": str(ROOT),
+        "PINVI_TEST_EVENT_LOG": str(event_log),
+    }
+    isolated = dict(base_env, PINVI_DOCKER_PROJECT="pinvi-app-smoke")
+    reset = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
+        [str(ROOT / "scripts" / "docker-app.sh"), "reset"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=isolated,
+    )
+    assert reset.returncode == 0
+    assert not event_log.exists()
+
+    identity_reset = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
+        [str(ROOT / "scripts" / "docker-app.sh"), "reset"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=dict(isolated, PINVI_TEST_DB_IDENTITY_FAIL="1"),
+    )
+    assert identity_reset.returncode != 0
+    assert "database identity" in identity_reset.stderr
+    assert not event_log.exists()
+
+    external_db_reset = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
+        [str(ROOT / "scripts" / "docker-app.sh"), "reset"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=dict(
+            isolated,
+            PINVI_DATABASE_URL="postgresql+asyncpg://pinvi:secret@prod-db:5432/pinvi",
+        ),
+    )
+    assert external_db_reset.returncode != 0
+    assert "isolated app-postgres service" in external_db_reset.stderr
+    assert not event_log.exists()
+
+    external_legacy_db_reset = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
+        [str(ROOT / "scripts" / "docker-app.sh"), "reset"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=dict(
+            isolated,
+            PINVI_LEGACY_REBASELINE_DATABASE_URL=(
+                "postgresql+asyncpg://pinvi:secret@prod-db:5432/pinvi"
+            ),
+        ),
+    )
+    assert external_legacy_db_reset.returncode != 0
+    assert "PINVI_LEGACY_REBASELINE_DATABASE_URL" in external_legacy_db_reset.stderr
+    assert not event_log.exists()
+
+    stale_reset = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
+        [str(ROOT / "scripts" / "docker-app.sh"), "reset"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=dict(isolated, PINVI_TEST_STALE_SNAPSHOT="1"),
+    )
+    assert stale_reset.returncode != 0
+    assert "stale pre-deploy snapshot" in stale_reset.stderr
+    assert not event_log.exists()
+
+    arbitrary = dict(base_env, PINVI_DOCKER_PROJECT="pinvi-app-prod")
+    down = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
+        [str(ROOT / "scripts" / "docker-app.sh"), "down"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=arbitrary,
+    )
+    assert down.returncode != 0
+    assert not event_log.exists()
+
+    stale_down = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
+        [str(ROOT / "scripts" / "docker-app.sh"), "down"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=dict(isolated, PINVI_TEST_STALE_SNAPSHOT="1"),
+    )
+    assert stale_down.returncode != 0
+    assert "stale pre-deploy snapshot" in stale_down.stderr
+    assert not event_log.exists()
+
+
+def test_compose_preflight_uses_effective_env_file_and_root_dotenv_fallback(
+    tmp_path: Path,
+) -> None:
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    for dependency in ("api-image-provenance.sh", "migrator-lifecycle-lock.sh"):
+        shutil.copy2(ROOT / "scripts" / dependency, scripts_dir / dependency)
+
+    env_file = tmp_path / "stage.env"
+    env_file.write_text(
+        "export PINVI_API_PORT=13801\n"
+        "export PINVI_WEB_PORT=13805\n"
+        "export PINVI_RUSTFS_PORT=13101\n"
+        "export PINVI_RUSTFS_CONSOLE_PORT=13105\n"
+        "export PINVI_DAGSTER_DEV_PORT=13802\n"
+        "export PINVI_CADVISOR_PORT=13301\n"
+        "export PINVI_PROMETHEUS_PORT=13401\n"
+        "export PINVI_GRAFANA_PORT=13205\n",
+        encoding="utf-8",
+    )
+    root_dotenv = tmp_path / ".env"
+    root_dotenv.write_text(
+        "export PINVI_ENVIRONMENT=production\n"
+        "export PINVI_DATABASE_URL=postgresql+asyncpg://pinvi:secret@production-db:5432/pinvi\n"
+        "export PINVI_API_PORT=13901\n",
+        encoding="utf-8",
+    )
+
+    for name in ("docker-app.sh", "deploy-node.sh"):
+        source = (ROOT / "scripts" / name).read_text(encoding="utf-8")
+        isolated_script = scripts_dir / name
+        isolated_script.write_text(
+            source.rsplit('\nmain "$@"', maxsplit=1)[0] + "\n", encoding="utf-8"
+        )
+        result = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
+            [
+                "/usr/bin/bash",
+                "-c",
+                """
+set -euo pipefail
+source "$1"
+[[ "$API_PORT" == "13801" ]]
+[[ "$WEB_PORT" == "13805" ]]
+[[ "$RUSTFS_PORT" == "13101" ]]
+[[ "$RUSTFS_CONSOLE_PORT" == "13105" ]]
+[[ "$DAGSTER_PORT" == "13802" ]]
+[[ "$CADVISOR_PORT" == "13301" ]]
+[[ "$PROMETHEUS_PORT" == "13401" ]]
+[[ "$GRAFANA_PORT" == "13205" ]]
+""",
+                "bash",
+                str(isolated_script),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            env={
+                "PATH": "/usr/bin:/bin",
+                "PINVI_ROOT_DIR": str(tmp_path),
+                "PINVI_ENV_FILE": str(env_file),
+            },
+        )
+        assert result.returncode == 0, result.stderr
+
+    source = (ROOT / "scripts" / "docker-app.sh").read_text(encoding="utf-8")
+    isolated_script = scripts_dir / "docker-app-dotenv.sh"
+    isolated_script.write_text(source.rsplit('\nmain "$@"', maxsplit=1)[0] + "\n", encoding="utf-8")
+    result = subprocess.run(  # noqa: S603 -- fixed test-only shell driver
+        [
+            "/usr/bin/bash",
+            "-c",
+            """
+set -euo pipefail
+source "$1"
+[[ "$API_PORT" == "13901" ]]
+[[ "$(configured_environment)" == "production" ]]
+if require_isolated_database_endpoint; then
+  exit 1
+fi
+""",
+            "bash",
+            str(isolated_script),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": "/usr/bin:/bin",
+            "PINVI_ROOT_DIR": str(tmp_path),
+            "PINVI_ENV_FILE": str(tmp_path / "missing.env"),
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert "isolated app-postgres service" in result.stderr
+
+
 def test_live_ui_gates_pin_the_exact_checkout_revision() -> None:
     runner = (ROOT / "scripts" / "n150-playwright-runner.sh").read_text(encoding="utf-8")
     gate = (ROOT / "scripts" / "verify-v100-live-gate.sh").read_text(encoding="utf-8")
@@ -611,9 +991,12 @@ def test_live_ui_gates_pin_the_exact_checkout_revision() -> None:
         assert "does not match expected" in source
     assert "assert_exact_live_checkout" in runner
     assert "require_exact_live_revision" in gate
+    assert "live Playwright phases require PINVI_V100_GATE_N150_RUNNER=1" in gate
     assert "git status --porcelain=v1 --untracked-files=all" in runner
     assert "git status --porcelain=v1 --untracked-files=all" in gate
     assert "PINVI_LIVE_UI_E2E" in runner
+    assert "PINVI_M05_LIVE_E2E" in runner
+    assert "sha256:[0-9a-f]{64}" in runner
     for phase in (
         "admin-live-list",
         "admin-live-smoke",
@@ -633,13 +1016,39 @@ def test_live_ui_gates_pin_the_exact_checkout_revision() -> None:
 
     attestation = (ROOT / "scripts" / "m05_activation_attestation.py").read_text(encoding="utf-8")
     m05_runner = attestation[
-        attestation.index('child_env["PINVI_M05_UI_VERIFICATION_ID"]') : attestation.index(
+        attestation.index('child_env["PINVI_M05_LIVE_EVENT_ID"]') : attestation.index(
             "completed = subprocess.run(command, check=False, env=child_env)",
-            attestation.index('child_env["PINVI_M05_UI_VERIFICATION_ID"]'),
+            attestation.index('child_env["PINVI_M05_LIVE_EVENT_ID"]'),
         )
     ]
     assert 'child_env["PINVI_SOURCE_REVISION"] = source_revision' in m05_runner
     assert 'child_env["PINVI_LIVE_EXPECTED_REVISION"] = source_revision' in m05_runner
+    for name in (
+        "PINVI_M05_LIVE_OLD_FEATURE_ID",
+        "PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID",
+        "PINVI_M05_LIVE_IMPACT_COUNT",
+        "PINVI_M05_LIVE_EMAIL",
+        "PINVI_M05_LIVE_PASSWORD",
+    ):
+        assert f'child_env["{name}"]' in m05_runner
+    for binding in (
+        "args.map_docker_project",
+        "args.map_admin_service",
+        "args.map_api_service",
+        "args.map_frontend_service",
+        "args.pinvi_docker_project",
+        'expected_compose_service="app-api"',
+        'expected_compose_service="app-web"',
+        'expected_compose_service="app-dagster"',
+    ):
+        assert binding in attestation
+    live_e2e = (
+        ROOT / "apps/web/e2e/admin-feature-reference-reconciliations-live-mutating.live.ts"
+    ).read_text(encoding="utf-8")
+    assert "unexpectedApiMutations" in live_e2e
+    assert "requestUrl.pathname === '/auth/login'" in live_e2e
+    assert "isReadOnlyRequest" in live_e2e
+    assert "method === 'OPTIONS'" in live_e2e
 
 
 def test_runtime_discovery_failure_is_detected_without_caller_pipefail() -> None:
@@ -699,6 +1108,14 @@ def test_fresh_0101_and_role_bootstrap_fence_direct_app_schema_create() -> None:
     assert "(SELECT oid FROM schema_owner) <> (SELECT oid FROM database_owner)" in bootstrap
     assert "relation.relkind = 'r'" in migration
     assert "relation.relpersistence = 'p'" in migration
+
+
+def test_fresh_deploy_waits_for_a_successful_rustfs_bucket_initializer() -> None:
+    source = (ROOT / "scripts" / "deploy-node.sh").read_text(encoding="utf-8")
+    assert "wait_for_fresh_stack_one_shot()" in source
+    assert "wait_for_fresh_stack_one_shot app-rustfs-init" in source
+    assert 'timeout --foreground 120s docker container wait "$container_id"' in source
+    assert '"$state" == "exited 0"' in source
 
 
 def test_docker_app_up_uses_the_explicit_legacy_role_profile_before_migration() -> None:

@@ -346,7 +346,8 @@ tag/Release notes 정리 단계**다.
 - **CodeGraph**: Linux native `codegraph`만 사용한다. `/mnt/c/...`, `.exe`, `.cmd`
   shim으로 잡히면 중지하고 PATH/설치를 고친다.
 - **`pytest` / `ruff` / `mypy` / `docker` / `npm` 등 실행**: Linux에서 수행한다.
-- **Playwright**: N150에서 먼저 실행하고, 불가능할 때만 Windows fallback runner를 쓴다.
+- **Playwright**: live/UI gate는 N150 x86_64 Docker runner에서만 실행한다. N150을 사용할 수
+  없으면 gate를 중단한다.
 - "어떤 순서로 무엇을 치는가"는 `docs/agent-workflow.md`(런북), 셋업·함정 전체는
   `docs/dev-environment.md`(ADR-051), 반복 실패는 `docs/agent-failure-patterns.md`.
 

@@ -3,20 +3,58 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-PROJECT="${PINVI_DOCKER_PROJECT:-pinvi-app}"
+PROJECT="${PINVI_DOCKER_PROJECT:-pinvi-app-smoke}"
 COMPOSE_FILE="${PINVI_DOCKER_COMPOSE_FILE:-infra/docker-compose.app.yml}"
 # 운영 도메인/시크릿 주입. 기본 .env, 운영은 PINVI_ENV_FILE=infra/.env.prod (gitignore, ADR-047).
 ENV_FILE="${PINVI_ENV_FILE:-.env}"
 
-API_PORT="${PINVI_API_PORT:-12801}"
-WEB_PORT="${PINVI_WEB_PORT:-12805}"
-RUSTFS_PORT="${PINVI_RUSTFS_PORT:-12101}"
-RUSTFS_CONSOLE_PORT="${PINVI_RUSTFS_CONSOLE_PORT:-12105}"
-DAGSTER_PORT="${PINVI_DAGSTER_DEV_PORT:-12802}"
+compose_env_source_file() {
+  local source_file="$ENV_FILE"
+  [[ "$source_file" == /* ]] || source_file="$ROOT_DIR/$source_file"
+  if [[ -f "$source_file" ]]; then
+    printf '%s\n' "$source_file"
+  elif [[ -f "$ROOT_DIR/.env" ]]; then
+    # Compose falls back to the project-root .env when --env-file is absent.
+    printf '%s\n' "$ROOT_DIR/.env"
+  fi
+}
+
+compose_env_value() {
+  local key="$1" default_value="$2" source_file value
+  if [[ -n "${!key+x}" ]]; then
+    printf '%s\n' "${!key}"
+    return
+  fi
+  source_file="$(compose_env_source_file)"
+  if [[ -n "$source_file" ]]; then
+    value="$(sed -nE \
+      "s/^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=[[:space:]]*([^[:space:]#]+).*/\\2/p" \
+      "$source_file" | tail -n 1)"
+    value="${value#\"}"
+    value="${value%\"}"
+    value="${value#\'}"
+    value="${value%\'}"
+    if [[ -n "$value" ]]; then
+      printf '%s\n' "$value"
+      return
+    fi
+  fi
+  printf '%s\n' "$default_value"
+}
+
+API_PORT="$(compose_env_value PINVI_API_PORT 12801)"
+WEB_PORT="$(compose_env_value PINVI_WEB_PORT 12805)"
+RUSTFS_PORT="$(compose_env_value PINVI_RUSTFS_PORT 12101)"
+RUSTFS_CONSOLE_PORT="$(compose_env_value PINVI_RUSTFS_CONSOLE_PORT 12105)"
+DAGSTER_PORT="$(compose_env_value PINVI_DAGSTER_DEV_PORT 12802)"
+CADVISOR_PORT="$(compose_env_value PINVI_CADVISOR_PORT 12301)"
+PROMETHEUS_PORT="$(compose_env_value PINVI_PROMETHEUS_PORT 12401)"
+GRAFANA_PORT="$(compose_env_value PINVI_GRAFANA_PORT 12205)"
 SMOKE_KEEP_RUNNING=""
 MIGRATOR_ONE_SHOT_PASSWORD=""
 MIGRATOR_LOGIN_NEEDS_SEAL="0"
 MIGRATOR_LEGACY_REBASELINE="0"
+BOOTSTRAP_ADMIN_CREDENTIAL_SHA256=""
 RUNTIME_API_WAS_RUNNING="0"
 RUNTIME_WEB_WAS_RUNNING="0"
 RUNTIME_DAGSTER_WAS_RUNNING="0"
@@ -39,6 +77,9 @@ RUNTIME_DAGSTER_BACKUP_NAME=""
 RUNTIME_PREDEPLOY_API_CONTAINER_IDS=()
 RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS=()
 RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS=()
+RUNTIME_PREDEPLOY_API_STOPPED_CONTAINER_IDS=()
+RUNTIME_PREDEPLOY_WEB_STOPPED_CONTAINER_IDS=()
+RUNTIME_PREDEPLOY_DAGSTER_STOPPED_CONTAINER_IDS=()
 RUNTIME_NEW_API_CONTAINER_IDS=()
 RUNTIME_NEW_WEB_CONTAINER_IDS=()
 RUNTIME_NEW_DAGSTER_CONTAINER_IDS=()
@@ -46,6 +87,7 @@ RUNTIME_API_SNAPSHOT_RENAMED="0"
 RUNTIME_WEB_SNAPSHOT_RENAMED="0"
 RUNTIME_DAGSTER_SNAPSHOT_RENAMED="0"
 RUNTIME_CONTAINER_DISCOVERY_FAILED="0"
+RESET_NOOP="0"
 
 usage() {
   cat <<'EOF'
@@ -56,6 +98,7 @@ Usage:
   scripts/docker-app.sh reset
   scripts/docker-app.sh status
   scripts/docker-app.sh logs [api|web|postgres|rustfs]
+  scripts/docker-app.sh observability
   scripts/docker-app.sh migrate   # owner-only migration + one-shot admin bootstrap
   scripts/docker-app.sh smoke [--keep-running]
 
@@ -66,7 +109,7 @@ Defaults:
   RustFS console URL: http://127.0.0.1:12105
 
 Environment overrides:
-  PINVI_DOCKER_PROJECT=pinvi-app
+  PINVI_DOCKER_PROJECT=pinvi-app-smoke
   PINVI_DOCKER_COMPOSE_FILE=infra/docker-compose.app.yml
   PINVI_API_PORT=12801
   PINVI_WEB_PORT=12805
@@ -89,13 +132,39 @@ require_docker() {
     echo "docker compose plugin not found" >&2
     exit 127
   fi
+  require_local_docker_target
+}
+
+require_local_docker_target() {
+  if [[ -n "${DOCKER_HOST:-}" || -n "${DOCKER_CONTEXT:-}" ]]; then
+    echo "docker-app requires the local default Docker target; DOCKER_HOST/DOCKER_CONTEXT are unsupported" >&2
+    return 2
+  fi
+  local context endpoint
+  if ! context="$(docker context show 2>/dev/null)"; then
+    echo "could not determine the Docker context; refusing container mutation" >&2
+    return 1
+  fi
+  if [[ "$context" != "default" ]]; then
+    echo "docker-app requires the default local Docker context" >&2
+    return 2
+  fi
+  if ! endpoint="$(docker context inspect default \
+    --format '{{ (index .Endpoints "docker").Host }}' 2>/dev/null)"; then
+    echo "could not inspect the default Docker endpoint; refusing container mutation" >&2
+    return 1
+  fi
+  if [[ "$endpoint" != "unix:///var/run/docker.sock" ]]; then
+    echo "docker-app requires Docker endpoint unix:///var/run/docker.sock" >&2
+    return 2
+  fi
 }
 
 compose() {
   if [[ -f "$ENV_FILE" ]]; then
-    docker compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
+    PINVI_DOCKER_PROJECT="$PROJECT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
   else
-    docker compose -p "$PROJECT" -f "$COMPOSE_FILE" "$@"
+    PINVI_DOCKER_PROJECT="$PROJECT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" "$@"
   fi
 }
 
@@ -108,35 +177,49 @@ source "$ROOT_DIR/scripts/migrator-lifecycle-lock.sh"
 free_host_port() {
   local port="$1"
   local force_kill="${PINVI_DEV_FORCE_KILL:-0}"
-  local docker_ids pids
+  local docker_id listeners="" docker_ids_output=""
+  local -a docker_ids=()
 
-  docker_ids="$(docker ps --filter "publish=${port}" --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.ID}}' || true)"
-  pids=""
-  if command -v lsof >/dev/null 2>&1; then
-    pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN || true)"
+  if ! command -v ss >/dev/null 2>&1; then
+    echo "ss is required to verify that host port ${port} is free" >&2
+    return 127
   fi
-  if [[ -z "$pids" ]] && command -v fuser >/dev/null 2>&1; then
-    pids="$(fuser -n tcp "$port" 2>/dev/null || true)"
+  if ! listeners="$(ss -H -ltn "sport = :${port}" 2>/dev/null)"; then
+    echo "could not inspect host port ${port}; refusing to mutate containers" >&2
+    return 1
   fi
-  if [[ -n "$docker_ids" || -n "$pids" ]] && [[ "$force_kill" != "1" ]]; then
+  [[ -n "$listeners" ]] || return 0
+
+  if ! docker_ids_output="$(docker ps --filter "publish=${port}" \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --format '{{.ID}}')"; then
+    echo "could not inspect containers publishing host port ${port}; refusing to mutate containers" >&2
+    return 1
+  fi
+  if [[ -n "$docker_ids_output" ]]; then
+    mapfile -t docker_ids <<< "$docker_ids_output"
+  fi
+  if (( ${#docker_ids[@]} > 0 )) && [[ "$force_kill" != "1" ]]; then
     echo "host port ${port} is already in use; refusing to terminate it" >&2
     echo "set PINVI_DEV_FORCE_KILL=1 only after explicitly approving termination" >&2
     return 2
   fi
 
-  if [[ -n "$docker_ids" ]]; then
+  if (( ${#docker_ids[@]} > 0 )); then
     log "removing containers publishing host port ${port}"
-    # shellcheck disable=SC2086
-    docker rm -f $docker_ids >/dev/null
+    for docker_id in "${docker_ids[@]}"; do
+      docker rm -f "$docker_id" >/dev/null
+    done
   fi
 
-  if [[ -n "$pids" ]]; then
-    log "stopping processes listening on host port ${port}: ${pids//$'\n'/ }"
-    # shellcheck disable=SC2086
-    kill $pids 2>/dev/null || true
-    sleep 1
-    # shellcheck disable=SC2086
-    kill -9 $pids 2>/dev/null || true
+  if ! listeners="$(ss -H -ltn "sport = :${port}" 2>/dev/null)"; then
+    echo "could not recheck host port ${port}; refusing to continue" >&2
+    return 1
+  fi
+  if [[ -n "$listeners" ]]; then
+    echo "host port ${port} remains occupied by a non-project listener; refusing host-process termination" >&2
+    echo "inspect the listener and stop it manually before retrying" >&2
+    return 2
   fi
 }
 
@@ -146,6 +229,65 @@ free_app_ports() {
   free_host_port "$RUSTFS_PORT"
   free_host_port "$RUSTFS_CONSOLE_PORT"
   free_host_port "$DAGSTER_PORT"
+  free_host_port "$CADVISOR_PORT"
+  free_host_port "$PROMETHEUS_PORT"
+  free_host_port "$GRAFANA_PORT"
+}
+
+validate_host_port() {
+  local name="$1"
+  local value="$2"
+  if [[ ! "$value" =~ ^[1-9][0-9]{0,4}$ ]] || (( value > 65535 )); then
+    echo "${name} must be an integer host port between 1 and 65535" >&2
+    return 2
+  fi
+}
+
+validate_configured_ports() {
+  validate_host_port PINVI_API_PORT "$API_PORT"
+  validate_host_port PINVI_WEB_PORT "$WEB_PORT"
+  validate_host_port PINVI_RUSTFS_PORT "$RUSTFS_PORT"
+  validate_host_port PINVI_RUSTFS_CONSOLE_PORT "$RUSTFS_CONSOLE_PORT"
+  validate_host_port PINVI_DAGSTER_DEV_PORT "$DAGSTER_PORT"
+  validate_host_port PINVI_CADVISOR_PORT "$CADVISOR_PORT"
+  validate_host_port PINVI_PROMETHEUS_PORT "$PROMETHEUS_PORT"
+  validate_host_port PINVI_GRAFANA_PORT "$GRAFANA_PORT"
+}
+
+assert_host_ports_available_before_migration() {
+  if ! command -v ss >/dev/null 2>&1; then
+    echo "ss is required to verify host ports before migration" >&2
+    return 127
+  fi
+  local port listeners container_ids container_id actual_project
+  for port in "$API_PORT" "$WEB_PORT" "$RUSTFS_PORT" "$RUSTFS_CONSOLE_PORT" \
+    "$DAGSTER_PORT" "$CADVISOR_PORT" "$PROMETHEUS_PORT" "$GRAFANA_PORT"; do
+    if ! listeners="$(ss -H -ltn "sport = :${port}" 2>/dev/null)"; then
+      echo "could not inspect host port ${port}; refusing migration" >&2
+      return 1
+    fi
+    [[ -n "$listeners" ]] || continue
+    if ! container_ids="$(docker ps --filter "publish=${port}" --format '{{.ID}}')"; then
+      echo "could not inspect containers publishing host port ${port}; refusing migration" >&2
+      return 1
+    fi
+    if [[ -z "$container_ids" ]]; then
+      echo "host port ${port} is occupied by a non-project listener; refusing migration" >&2
+      return 2
+    fi
+    while IFS= read -r container_id; do
+      [[ -n "$container_id" ]] || continue
+      if ! actual_project="$(docker container inspect --format \
+        '{{ index .Config.Labels "com.docker.compose.project" }}' "$container_id")"; then
+        echo "could not inspect the host port ${port} container; refusing migration" >&2
+        return 1
+      fi
+      if [[ "$actual_project" != "$PROJECT" ]]; then
+        echo "host port ${port} is occupied by another Compose project; refusing migration" >&2
+        return 2
+      fi
+    done <<< "$container_ids"
+  done
 }
 
 wait_for_url() {
@@ -185,6 +327,33 @@ wait_for_container_health() {
   return 1
 }
 
+wait_for_one_shot() {
+  local service="$1" container_ids container_id exit_code
+  command -v timeout >/dev/null 2>&1 || {
+    echo "timeout not found; refusing one-shot dependency startup" >&2
+    return 127
+  }
+  if ! container_ids="$(docker container ls --all \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --filter "label=com.docker.compose.service=${service}" --format '{{.ID}}')"; then
+    echo "could not inspect ${service} one-shot container" >&2
+    return 1
+  fi
+  [[ "$(printf '%s\n' "$container_ids" | sed '/^$/d' | wc -l)" == "1" ]] || {
+    echo "expected exactly one ${service} one-shot container" >&2
+    return 2
+  }
+  container_id="$(printf '%s\n' "$container_ids" | sed '/^$/d')"
+  if ! exit_code="$(timeout --foreground 120s docker container wait "$container_id")"; then
+    echo "could not wait for ${service} one-shot container" >&2
+    return 1
+  fi
+  [[ "$exit_code" == "0" ]] || {
+    echo "${service} one-shot container exited with ${exit_code}" >&2
+    return 2
+  }
+}
+
 build() {
   require_docker
   require_python
@@ -210,6 +379,7 @@ up_deps() {
   require_docker
   log "starting Postgres + RustFS dependencies"
   compose up -d app-postgres app-rustfs app-rustfs-init
+  wait_for_one_shot app-rustfs-init
 }
 
 runtime_writer_container_id() {
@@ -218,6 +388,12 @@ runtime_writer_container_id() {
 }
 
 runtime_capture_predeploy_container_ids() {
+  RUNTIME_PREDEPLOY_API_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_API_STOPPED_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_WEB_STOPPED_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_DAGSTER_STOPPED_CONTAINER_IDS=()
   if ! pinvi_runtime_container_ids_into_array RUNTIME_PREDEPLOY_API_CONTAINER_IDS app-api; then
     return 1
   fi
@@ -227,6 +403,39 @@ runtime_capture_predeploy_container_ids() {
   if ! pinvi_runtime_container_ids_into_array RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS app-dagster; then
     return 1
   fi
+  runtime_capture_predeploy_stopped_container_ids
+}
+
+runtime_capture_predeploy_stopped_container_ids() {
+  local service container_id running
+  for service in app-api app-web app-dagster; do
+    case "$service" in
+      app-api) for container_id in "${RUNTIME_PREDEPLOY_API_CONTAINER_IDS[@]}"; do
+        if ! running="$(docker container inspect --format '{{.State.Running}}' "$container_id")"; then
+          return 1
+        fi
+        if [[ "$running" != "true" ]]; then
+          RUNTIME_PREDEPLOY_API_STOPPED_CONTAINER_IDS+=("$container_id")
+        fi
+      done ;;
+      app-web) for container_id in "${RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS[@]}"; do
+        if ! running="$(docker container inspect --format '{{.State.Running}}' "$container_id")"; then
+          return 1
+        fi
+        if [[ "$running" != "true" ]]; then
+          RUNTIME_PREDEPLOY_WEB_STOPPED_CONTAINER_IDS+=("$container_id")
+        fi
+      done ;;
+      app-dagster) for container_id in "${RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS[@]}"; do
+        if ! running="$(docker container inspect --format '{{.State.Running}}' "$container_id")"; then
+          return 1
+        fi
+        if [[ "$running" != "true" ]]; then
+          RUNTIME_PREDEPLOY_DAGSTER_STOPPED_CONTAINER_IDS+=("$container_id")
+        fi
+      done ;;
+    esac
+  done
 }
 
 runtime_id_was_existing() {
@@ -239,6 +448,36 @@ runtime_id_was_existing() {
     app-dagster) for old_id in "${RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS[@]}"; do [[ "$old_id" == "$container_id" ]] && return 0; done ;;
   esac
   return 1
+}
+
+runtime_stop_reused_predeploy_stopped_writers() {
+  local service container_id running stop_failed="0"
+  for service in app-api app-web app-dagster; do
+    case "$service" in
+      app-api) for container_id in "${RUNTIME_PREDEPLOY_API_STOPPED_CONTAINER_IDS[@]}"; do
+        if ! running="$(docker container inspect --format '{{.State.Running}}' "$container_id")"; then
+          stop_failed="1"
+        elif [[ "$running" == "true" ]] && ! docker stop "$container_id" >/dev/null; then
+          stop_failed="1"
+        fi
+      done ;;
+      app-web) for container_id in "${RUNTIME_PREDEPLOY_WEB_STOPPED_CONTAINER_IDS[@]}"; do
+        if ! running="$(docker container inspect --format '{{.State.Running}}' "$container_id")"; then
+          stop_failed="1"
+        elif [[ "$running" == "true" ]] && ! docker stop "$container_id" >/dev/null; then
+          stop_failed="1"
+        fi
+      done ;;
+      app-dagster) for container_id in "${RUNTIME_PREDEPLOY_DAGSTER_STOPPED_CONTAINER_IDS[@]}"; do
+        if ! running="$(docker container inspect --format '{{.State.Running}}' "$container_id")"; then
+          stop_failed="1"
+        elif [[ "$running" == "true" ]] && ! docker stop "$container_id" >/dev/null; then
+          stop_failed="1"
+        fi
+      done ;;
+    esac
+  done
+  [[ "$stop_failed" == "0" ]]
 }
 
 runtime_record_new_container_ids() {
@@ -299,13 +538,25 @@ runtime_writer_container_name() {
   docker container inspect --format '{{.Name}}' "$container_id" | sed 's#^/##'
 }
 
-runtime_writer_any_container_id() {
-  local service="$1"
-  runtime_writer_container_id "$service"
-}
-
 runtime_snapshot_preflight() {
+  local service stale_snapshot_ids
+  for service in app-api app-web app-dagster; do
+    if ! stale_snapshot_ids="$(pinvi_runtime_predeploy_snapshot_ids "$service")"; then
+      echo "pre-deploy ${service} snapshot discovery failed; refusing runtime mutation" >&2
+      return 1
+    fi
+    if [[ -n "$stale_snapshot_ids" ]]; then
+      echo "pre-deploy ${service} snapshot already exists; refusing stale rollback artifact" >&2
+      return 2
+    fi
+  done
   [[ "$RUNTIME_DEPLOY_PRESERVE" == "1" ]] || return 0
+  if (( ${#RUNTIME_PREDEPLOY_API_CONTAINER_IDS[@]} > 0 \
+    || ${#RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS[@]} > 0 \
+    || ${#RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS[@]} > 0 )); then
+    echo "in-place runtime snapshot is disabled; use the manager pinned rebuild for an existing runtime" >&2
+    return 2
+  fi
   local service container_id container_name backup_name
   for service in app-api app-web app-dagster; do
     case "$service" in
@@ -549,31 +800,17 @@ preserve_runtime_writers() {
 
 rollback_preserved_runtime_writers() {
   local rollback_failed="0"
-  local current_id
-  local service backup name
+  if ! runtime_stop_reused_predeploy_stopped_writers; then
+    rollback_failed="1"
+  fi
   if [[ "$RUNTIME_NEW_WRITERS_STARTED" == "1" ]] && ! remove_new_runtime_writers; then
     # Discovery/containment failure 뒤에는 현재 runtime을 다시 추론하거나 snapshot을 되살리지
     # 않는다. 기록한 ID의 cleanup은 위에서 끝냈으며, 남은 상태는 수동 복구 전까지 검증되지 않는다.
     return 1
   fi
-  for service in app-api app-web app-dagster; do
-    case "$service" in
-      app-api) [[ "$RUNTIME_API_WAS_RUNNING" == "1" ]] || continue ;;
-      app-web) [[ "$RUNTIME_WEB_WAS_RUNNING" == "1" ]] || continue ;;
-      app-dagster) [[ "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]] || continue ;;
-    esac
-    current_id="$(runtime_writer_any_container_id "$service" || true)"
-    case "$service" in
-      app-api) [[ "$current_id" == "$RUNTIME_API_CONTAINER_ID" ]] && current_id=""; backup="$RUNTIME_API_BACKUP_NAME"; name="$RUNTIME_API_CONTAINER_NAME" ;;
-      app-web) [[ "$current_id" == "$RUNTIME_WEB_CONTAINER_ID" ]] && current_id=""; backup="$RUNTIME_WEB_BACKUP_NAME"; name="$RUNTIME_WEB_CONTAINER_NAME" ;;
-      app-dagster) [[ "$current_id" == "$RUNTIME_DAGSTER_CONTAINER_ID" ]] && current_id=""; backup="$RUNTIME_DAGSTER_BACKUP_NAME"; name="$RUNTIME_DAGSTER_CONTAINER_NAME" ;;
-    esac
-    if [[ -n "$current_id" ]]; then
-      if [[ "$current_id" == *$'\n'* ]] || ! docker rm -f "$current_id" >/dev/null; then
-        rollback_failed="1"
-      fi
-    fi
-  done
+  if [[ "$rollback_failed" != "0" ]]; then
+    return 1
+  fi
   if ! restore_runtime_snapshot_names; then
     rollback_failed="1"
   fi
@@ -587,6 +824,12 @@ rollback_preserved_runtime_writers() {
     RUNTIME_NEW_API_CONTAINER_IDS=()
     RUNTIME_NEW_WEB_CONTAINER_IDS=()
     RUNTIME_NEW_DAGSTER_CONTAINER_IDS=()
+    RUNTIME_PREDEPLOY_API_CONTAINER_IDS=()
+    RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS=()
+    RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS=()
+    RUNTIME_PREDEPLOY_API_STOPPED_CONTAINER_IDS=()
+    RUNTIME_PREDEPLOY_WEB_STOPPED_CONTAINER_IDS=()
+    RUNTIME_PREDEPLOY_DAGSTER_STOPPED_CONTAINER_IDS=()
     RUNTIME_CONTAINER_DISCOVERY_FAILED="0"
   fi
   [[ "$rollback_failed" == "0" ]]
@@ -619,6 +862,12 @@ disarm_preserved_runtime_writers_after_rollout() {
   RUNTIME_WEB_SNAPSHOT_RENAMED="0"
   RUNTIME_DAGSTER_SNAPSHOT_RENAMED="0"
   RUNTIME_CONTAINER_DISCOVERY_FAILED="0"
+  RUNTIME_PREDEPLOY_API_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_API_STOPPED_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_WEB_STOPPED_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_DAGSTER_STOPPED_CONTAINER_IDS=()
 }
 
 drain_runtime_writers() {
@@ -653,6 +902,7 @@ drain_runtime_writers() {
   RUNTIME_WEB_SNAPSHOT_RENAMED="0"
   RUNTIME_DAGSTER_SNAPSHOT_RENAMED="0"
   if ! api_container_id="$(runtime_writer_container_id app-api)"; then
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
     drain_failed="1"
   elif [[ -n "$api_container_id" ]]; then
     if [[ "$api_container_id" == *$'\n'* ]]; then
@@ -662,6 +912,7 @@ drain_runtime_writers() {
     fi
   fi
   if ! web_container_id="$(runtime_writer_container_id app-web)"; then
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
     drain_failed="1"
   elif [[ -n "$web_container_id" ]]; then
     if [[ "$web_container_id" == *$'\n'* ]]; then
@@ -671,6 +922,7 @@ drain_runtime_writers() {
     fi
   fi
   if ! dagster_container_id="$(runtime_writer_container_id app-dagster)"; then
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
     drain_failed="1"
   elif [[ -n "$dagster_container_id" ]]; then
     if [[ "$dagster_container_id" == *$'\n'* ]]; then
@@ -811,6 +1063,12 @@ restore_runtime_writers_without_rollback() {
   RUNTIME_API_SNAPSHOT_RENAMED="0"
   RUNTIME_WEB_SNAPSHOT_RENAMED="0"
   RUNTIME_DAGSTER_SNAPSHOT_RENAMED="0"
+  RUNTIME_PREDEPLOY_API_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_API_STOPPED_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_WEB_STOPPED_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_DAGSTER_STOPPED_CONTAINER_IDS=()
 }
 
 restore_runtime_writers() {
@@ -965,11 +1223,19 @@ run_admin_bootstrap() {
       -e PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH=/run/pinvi/m05/legacy-rebaseline-receipt.json
       -v "$legacy_receipt_file:/run/pinvi/m05/legacy-rebaseline-receipt.json:ro"
     )
+    local legacy_database_url
+    legacy_database_url="$(compose_env_value PINVI_LEGACY_REBASELINE_DATABASE_URL "")"
+    [[ -n "$legacy_database_url" ]] || {
+      echo "PINVI_LEGACY_REBASELINE_DATABASE_URL is required for the legacy wrapper" >&2
+      return 2
+    }
+    legacy_args+=( -e "PINVI_DATABASE_URL=$legacy_database_url" )
   fi
   if [[ "$legacy_rebaseline" == "1" ]]; then
     compose "${profile_args[@]}" run --rm --no-deps \
       --user "$runner_user" \
       -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
+      -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_SHA256="$BOOTSTRAP_ADMIN_CREDENTIAL_SHA256" \
       -v "$credential_file:$credential_file:ro" \
       "${legacy_args[@]}" \
       "$service" pinvi-admin-bootstrap
@@ -982,9 +1248,66 @@ run_admin_bootstrap() {
   compose_with_one_shot_migrator_password "${profile_args[@]}" run --rm --no-deps \
     --user "$runner_user" \
     -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
+    -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_SHA256="$BOOTSTRAP_ADMIN_CREDENTIAL_SHA256" \
     -v "$credential_file:$credential_file:ro" \
     "${legacy_args[@]}" \
     "$service" pinvi-admin-bootstrap
+}
+
+validate_bootstrap_admin_credential_file() {
+  local credential_file="$1"
+  local legacy_rebaseline="$2"
+  local service="app-migrator"
+  local runner_user="$(id -u):$(id -g)"
+  local profile_args=()
+  local legacy_args=()
+  if [[ "$legacy_rebaseline" == "1" ]]; then
+    service="app-legacy-rebaseline-migrator"
+    runner_user="0:0"
+    profile_args=(--profile legacy-rebaseline)
+    local legacy_database_url
+    legacy_database_url="$(compose_env_value PINVI_LEGACY_REBASELINE_DATABASE_URL "")"
+    [[ -n "$legacy_database_url" ]] || {
+      echo "PINVI_LEGACY_REBASELINE_DATABASE_URL is required for the legacy wrapper" >&2
+      return 2
+    }
+    legacy_args=( -e "PINVI_DATABASE_URL=$legacy_database_url" )
+  fi
+  local validation_output
+  local validation_sha
+  if ! validation_output="$(compose "${profile_args[@]}" run --rm --no-deps \
+    --user "$runner_user" \
+    -e PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE="$credential_file" \
+    -v "$credential_file:$credential_file:ro" \
+    "${legacy_args[@]}" \
+    "$service" pinvi-admin-bootstrap validate-credential 2>&1)"; then
+    return 1
+  fi
+  if ! validation_sha="$(printf '%s\n' "$validation_output" | bootstrap_credential_binding_from_validation_output)"; then
+    return 1
+  fi
+  if [[ ! "$validation_sha" =~ ^[0-9a-f]{64}$ ]]; then
+    return 1
+  fi
+  BOOTSTRAP_ADMIN_CREDENTIAL_SHA256="$validation_sha"
+}
+
+bootstrap_credential_binding_from_validation_output() {
+  python3 -c '
+import json
+import sys
+
+for line in reversed(sys.stdin.read().splitlines()):
+    try:
+        payload = json.loads(line)
+    except json.JSONDecodeError:
+        continue
+    value = payload.get("credential_binding_sha256") if isinstance(payload, dict) else None
+    if isinstance(value, str) and len(value) == 64 and all(char in "0123456789abcdef" for char in value):
+        print(value)
+        raise SystemExit(0)
+raise SystemExit(1)
+'
 }
 
 reject_explicit_migrator_database_url() {
@@ -997,7 +1320,15 @@ reject_explicit_migrator_database_url() {
 migrate_under_lifecycle_lock() {
   require_docker
   require_python
+  if ! assert_host_ports_available_before_migration; then
+    log "host-port preflight failed before migration"
+    return 1
+  fi
   pinvi_verify_runtime_image_provenance app-api
+  if [[ "$RUNTIME_WRITERS_DRAINED" != "1" ]] && ! runtime_snapshot_preflight; then
+    log "stale pre-deploy snapshot preflight failed before migration"
+    return 1
+  fi
   local credential_file
   if ! credential_file="$(bootstrap_credential_file)"; then
     return 1
@@ -1013,8 +1344,17 @@ migrate_under_lifecycle_lock() {
     fi
   fi
   MIGRATOR_LEGACY_REBASELINE="$legacy_rebaseline"
+  if ! validate_bootstrap_admin_credential_file "$credential_file" "$legacy_rebaseline"; then
+    log "bootstrap admin credential validation failed before any migration"
+    return 1
+  fi
   if [[ "$RUNTIME_WRITERS_DRAINED" != "1" ]] && ! drain_runtime_writers; then
     log "runtime writer drain failed"
+    restore_runtime_writers || log "runtime writer restoration failed"
+    return 1
+  fi
+  if ! assert_host_ports_available_before_migration; then
+    log "host-port preflight failed at the migration boundary"
     restore_runtime_writers || log "runtime writer restoration failed"
     return 1
   fi
@@ -1027,6 +1367,13 @@ migrate_under_lifecycle_lock() {
       log "migrator preparation failed; sealing the one-shot login"
       seal_migrator_login "$legacy_rebaseline" || \
         log "migrator preparation failure could not be followed by a sealing run"
+      restore_runtime_writers || log "runtime writer restoration failed"
+      return 1
+    fi
+    if ! assert_host_ports_available_before_migration; then
+      log "host-port preflight failed immediately before migration"
+      seal_migrator_login "$legacy_rebaseline" || \
+        log "pre-migration port failure could not be followed by a sealing run"
       restore_runtime_writers || log "runtime writer restoration failed"
       return 1
     fi
@@ -1060,6 +1407,7 @@ migrate_under_lifecycle_lock() {
 migrate() {
   reject_explicit_migrator_database_url
   pinvi_prepare_api_image_provenance
+  assert_host_ports_available_before_migration
   acquire_migrator_lifecycle_lock
   # EXIT handler가 실패 시 writer 복구와 lifecycle lock 해제를 담당한다. 조건문
   # 안에서 호출하면 Bash가 함수 내부의 errexit을 끄므로 migration 본문은 직접 호출한다.
@@ -1077,6 +1425,10 @@ bootstrap_credential_file() {
 }
 
 dagster_up_under_lifecycle_lock() {
+  if ! assert_host_ports_available_before_migration; then
+    log "host-port preflight failed immediately before Dagster start"
+    return 1
+  fi
   pinvi_verify_runtime_image_provenance app-dagster
   log "starting Dagster webserver (port ${DAGSTER_PORT})"
   if ! compose --profile etl up -d app-dagster; then
@@ -1086,7 +1438,12 @@ dagster_up_under_lifecycle_lock() {
   runtime_record_new_container_ids app-dagster
   pinvi_verify_running_dagster
   wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster"
-  wait_for_container_health "$(runtime_writer_container_id app-dagster)" "Dagster container"
+  local dagster_container_id
+  if ! dagster_container_id="$(runtime_writer_container_id app-dagster)"; then
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
+    return 1
+  fi
+  wait_for_container_health "$dagster_container_id" "Dagster container"
 }
 
 finalize_preserved_runtime_writers() {
@@ -1133,6 +1490,9 @@ finalize_preserved_runtime_writers() {
   RUNTIME_PREDEPLOY_API_CONTAINER_IDS=()
   RUNTIME_PREDEPLOY_WEB_CONTAINER_IDS=()
   RUNTIME_PREDEPLOY_DAGSTER_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_API_STOPPED_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_WEB_STOPPED_CONTAINER_IDS=()
+  RUNTIME_PREDEPLOY_DAGSTER_STOPPED_CONTAINER_IDS=()
 }
 
 up() {
@@ -1184,17 +1544,29 @@ up() {
   wait_for_url "http://127.0.0.1:${API_PORT}/health/db" "API DB"
   wait_for_url "http://127.0.0.1:${API_PORT}/health/feature-reference-reconciliation" "M05 worker"
   local api_container_id
-  api_container_id="$(runtime_writer_container_id app-api)"
+  if ! api_container_id="$(runtime_writer_container_id app-api)"; then
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
+    return 1
+  fi
   [[ -n "$api_container_id" && "$api_container_id" != *$'\n'* ]] || {
     echo "running API container could not be identified" >&2
     return 1
   }
   wait_for_container_health "$api_container_id" "API container"
   wait_for_url "http://127.0.0.1:${WEB_PORT}/" "Web"
-  wait_for_container_health "$(runtime_writer_container_id app-web)" "Web container"
+  local web_container_id dagster_container_id
+  if ! web_container_id="$(runtime_writer_container_id app-web)"; then
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
+    return 1
+  fi
+  wait_for_container_health "$web_container_id" "Web container"
   if [[ "${PINVI_ENABLE_DAGSTER:-0}" != "0" || "$RUNTIME_DAGSTER_WAS_RUNNING" == "1" ]]; then
     wait_for_url "http://127.0.0.1:${DAGSTER_PORT}/server_info" "Dagster final"
-    wait_for_container_health "$(runtime_writer_container_id app-dagster)" "Dagster final container"
+    if ! dagster_container_id="$(runtime_writer_container_id app-dagster)"; then
+      RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
+      return 1
+    fi
+    wait_for_container_health "$dagster_container_id" "Dagster final container"
   fi
   finalize_preserved_runtime_writers
   release_migrator_lifecycle_lock
@@ -1202,21 +1574,47 @@ up() {
 }
 
 down() {
+  if ! require_direct_compose_mutation_environment; then
+    return 2
+  fi
   require_docker
-  compose down --remove-orphans
+  local environment_name
+  if ! environment_name="$(configured_environment)"; then
+    return 2
+  fi
+  if ! acquire_migrator_lifecycle_lock; then
+    return 1
+  fi
+  local result=0
+  if ! verify_existing_runtime_environment "$environment_name"; then
+    result=1
+  elif ! runtime_snapshot_preflight; then
+    echo "down refused because a stale pre-deploy snapshot exists or could not be inspected" >&2
+    result=1
+  elif ! compose down --remove-orphans; then
+    result=1
+  fi
+  release_migrator_lifecycle_lock
+  return "$result"
 }
 
 configured_environment() {
   local environment_name="${PINVI_ENVIRONMENT:-}"
-  local file_environment_name=""
-  if [[ -f "$ENV_FILE" ]]; then
+  local file_environment_name="" source_file
+  source_file="$(compose_env_source_file)"
+  if [[ -n "$source_file" ]]; then
     file_environment_name="$(sed -nE \
-      's/^[[:space:]]*PINVI_ENVIRONMENT[[:space:]]*=[[:space:]]*([^[:space:]#]+).*/\1/p' \
-      "$ENV_FILE" | tail -n 1)"
+      's/^[[:space:]]*(export[[:space:]]+)?PINVI_ENVIRONMENT[[:space:]]*=[[:space:]]*([^[:space:]#]+).*/\2/p' \
+      "$source_file" | tail -n 1)"
     file_environment_name="${file_environment_name#\"}"
     file_environment_name="${file_environment_name%\"}"
     file_environment_name="${file_environment_name#\'}"
     file_environment_name="${file_environment_name%\'}"
+  fi
+  if [[ -n "$environment_name" && -n "$file_environment_name" \
+    && "$environment_name" != "$file_environment_name" ]]; then
+    echo "PINVI_ENVIRONMENT disagrees with ${source_file}; refusing ambiguous Compose environment" >&2
+    return 2
   fi
   # An explicitly selected staging/production env file is authoritative. A
   # shell override must not turn a destructive reset back into a dev reset.
@@ -1225,23 +1623,264 @@ configured_environment() {
   elif [[ -z "$environment_name" ]]; then
     environment_name="$file_environment_name"
   fi
-  printf '%s\n' "${environment_name:-smoke}"
+  if [[ -z "$environment_name" ]]; then
+    echo "PINVI_ENVIRONMENT must be explicit; refusing ambiguous direct Compose mutation" >&2
+    return 2
+  fi
+  printf '%s\n' "$environment_name"
+}
+
+configured_database_url() {
+  local key="${1:-PINVI_DATABASE_URL}"
+  local database_url="" source_file
+  if [[ -n "${!key+x}" ]]; then
+    database_url="${!key}"
+    printf '%s\n' "$database_url"
+    return
+  fi
+  source_file="$(compose_env_source_file)"
+  if [[ -n "$source_file" ]]; then
+    database_url="$(sed -nE \
+      "s/^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=[[:space:]]*([^[:space:]#]+).*/\\2/p" \
+      "$source_file" | tail -n 1)"
+    database_url="${database_url#\"}"
+    database_url="${database_url%\"}"
+    database_url="${database_url#\'}"
+    database_url="${database_url%\'}"
+  fi
+  printf '%s\n' "$database_url"
+}
+
+require_isolated_database_endpoint() {
+  local key database_url
+  for key in PINVI_DATABASE_URL PINVI_LEGACY_REBASELINE_DATABASE_URL; do
+    if ! database_url="$(configured_database_url "$key")"; then
+      return 2
+    fi
+    if [[ -n "$database_url" \
+      && ! "$database_url" =~ ^postgresql\+asyncpg://[^@/]+@app-postgres:5432/pinvi$ ]]; then
+      echo "direct Compose mutation requires ${key} to target the isolated app-postgres service" >&2
+      return 2
+    fi
+  done
+}
+
+require_canonical_direct_compose_target() {
+  if [[ "$COMPOSE_FILE" != "infra/docker-compose.app.yml" ]]; then
+    echo "direct Compose mutation requires the canonical application Compose file" >&2
+    return 2
+  fi
+}
+
+require_isolated_direct_compose_project() {
+  local environment_name="$1"
+  case "$environment_name" in
+    development)
+      [[ "$PROJECT" =~ ^pinvi-app-(dev|development)(-[a-z0-9-]+)?$ ]] || {
+        echo "development direct Compose mutation requires a pinvi-app-dev* or pinvi-app-development* project" >&2
+        return 2
+      }
+      ;;
+    test)
+      [[ "$PROJECT" =~ ^pinvi-app-test(-[a-z0-9-]+)?$ ]] || {
+        echo "test direct Compose mutation requires a pinvi-app-test* project" >&2
+        return 2
+      }
+      ;;
+    smoke)
+      [[ "$PROJECT" =~ ^pinvi-app-smoke(-[a-z0-9-]+)?$ ]] || {
+        echo "smoke direct Compose mutation requires a pinvi-app-smoke* project" >&2
+        return 2
+      }
+      ;;
+  esac
+}
+
+require_direct_compose_mutation_environment() {
+  local environment_name
+  require_docker
+  validate_configured_ports
+  if ! environment_name="$(configured_environment)"; then
+    return 2
+  fi
+  if ! require_canonical_direct_compose_target; then
+    return 2
+  fi
+  case "$environment_name" in
+    production|staging)
+      echo "direct Compose mutation is disabled for ${environment_name}; use the approved manager or isolated staging procedure" >&2
+      return 2
+      ;;
+    development|test|smoke)
+      if ! require_isolated_direct_compose_project "$environment_name"; then
+        return 2
+      fi
+      if ! require_isolated_database_endpoint; then
+        return 2
+      fi
+      ;;
+    *)
+      echo "direct Compose mutation requires an explicit development/test/smoke/staging environment" >&2
+      return 2
+      ;;
+  esac
+}
+
+verify_existing_runtime_environment() {
+  local environment_name="$1"
+  local service container_ids container_id actual_environment
+  for service in app-api app-web app-dagster; do
+    if ! container_ids="$(docker container ls --all \
+      --filter "label=com.docker.compose.project=${PROJECT}" \
+      --filter "label=com.docker.compose.service=${service}" \
+      --format '{{.ID}}')"; then
+      echo "could not verify the existing ${service} environment" >&2
+      return 1
+    fi
+    while IFS= read -r container_id; do
+      [[ -n "$container_id" ]] || continue
+      if ! actual_environment="$(docker container inspect --format \
+        '{{range .Config.Env}}{{println .}}{{end}}' "$container_id" \
+        | sed -n 's/^PINVI_ENVIRONMENT=//p' | tail -n 1)"; then
+        echo "could not inspect the existing ${service} environment" >&2
+        return 1
+      fi
+      if [[ "$actual_environment" != "$environment_name" ]]; then
+        echo "configured environment does not match the existing ${service} runtime" >&2
+        return 2
+      fi
+    done <<< "$container_ids"
+  done
+}
+
+verify_reset_database_identity() {
+  local environment_name="$1"
+  local project_container_ids db_container_ids volume_names
+  local db_container_id volume_name actual_volume actual_project actual_volume_label
+  if ! project_container_ids="$(docker container ls --all \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --format '{{.ID}}')"; then
+    echo "reset could not inspect the isolated Compose project" >&2
+    return 1
+  fi
+  if ! volume_names="$(docker volume ls \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --filter "label=com.docker.compose.volume=app-postgres" \
+    --format '{{.Name}}')"; then
+    echo "reset could not inspect the isolated PostgreSQL volume" >&2
+    return 1
+  fi
+  if [[ -z "$project_container_ids" && -z "$volume_names" ]]; then
+    log "isolated Compose project has no containers or PostgreSQL volume; reset is a safe no-op"
+    RESET_NOOP="1"
+    return 0
+  fi
+  if [[ -z "$project_container_ids" || -z "$volume_names" ]]; then
+    echo "reset requires matching project containers and PostgreSQL volume evidence" >&2
+    return 2
+  fi
+  if [[ "$(printf '%s\n' "$volume_names" | sed '/^$/d' | wc -l)" != "1" ]]; then
+    echo "reset requires exactly one isolated PostgreSQL volume" >&2
+    return 2
+  fi
+  volume_name="$(printf '%s\n' "$volume_names" | sed '/^$/d')"
+  if ! actual_project="$(docker volume inspect --format \
+    '{{ index .Labels "com.docker.compose.project" }}' "$volume_name")"; then
+    echo "reset could not inspect the isolated PostgreSQL volume identity" >&2
+    return 1
+  fi
+  if ! actual_volume_label="$(docker volume inspect --format \
+    '{{ index .Labels "com.docker.compose.volume" }}' "$volume_name")"; then
+    echo "reset could not inspect the isolated PostgreSQL volume label" >&2
+    return 1
+  fi
+  if [[ "$actual_project" != "$PROJECT" || "$actual_volume_label" != "app-postgres" ]]; then
+    echo "reset PostgreSQL volume identity does not match the isolated project" >&2
+    return 2
+  fi
+  if ! db_container_ids="$(docker container ls --all \
+    --filter "label=com.docker.compose.project=${PROJECT}" \
+    --filter "label=com.docker.compose.service=app-postgres" \
+    --format '{{.ID}}')"; then
+    echo "reset could not inspect the isolated PostgreSQL container" >&2
+    return 1
+  fi
+  if [[ "$(printf '%s\n' "$db_container_ids" | sed '/^$/d' | wc -l)" != "1" ]]; then
+    echo "reset requires exactly one isolated PostgreSQL container" >&2
+    return 2
+  fi
+  db_container_id="$(printf '%s\n' "$db_container_ids" | sed '/^$/d')"
+  if ! actual_volume="$(docker container inspect --format \
+    '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Name}}{{end}}{{end}}' \
+    "$db_container_id")"; then
+    echo "reset could not inspect the isolated PostgreSQL mount" >&2
+    return 1
+  fi
+  if [[ "$actual_volume" != "$volume_name" ]]; then
+    echo "reset PostgreSQL mount does not match the isolated volume" >&2
+    return 2
+  fi
+  if ! verify_existing_runtime_environment "$environment_name"; then
+    return 1
+  fi
 }
 
 reset() {
+  RESET_NOOP="0"
+  if ! require_direct_compose_mutation_environment; then
+    return 2
+  fi
   require_docker
-  case "$(configured_environment)" in
+  local environment_name
+  if ! environment_name="$(configured_environment)"; then
+    return 2
+  fi
+  case "$environment_name" in
     staging|production)
       echo "reset is disabled for staging/production; use an approved recovery procedure" >&2
       return 2
       ;;
   esac
-  compose down -v --remove-orphans
+  if ! acquire_migrator_lifecycle_lock; then
+    return 1
+  fi
+  local result=0
+  if ! runtime_snapshot_preflight; then
+    echo "reset refused because a stale pre-deploy snapshot exists or could not be inspected" >&2
+    result=1
+  elif ! verify_reset_database_identity "$environment_name"; then
+    echo "reset refused because the isolated database identity could not be verified" >&2
+    result=1
+  elif [[ "$RESET_NOOP" != "1" ]] && ! compose down -v --remove-orphans; then
+    result=1
+  fi
+  release_migrator_lifecycle_lock
+  return "$result"
 }
 
 status() {
   require_docker
   compose ps
+}
+
+observability() {
+  require_docker
+  if ! assert_host_ports_available_before_migration; then
+    return 1
+  fi
+  if ! acquire_migrator_lifecycle_lock; then
+    return 1
+  fi
+  local result=0
+  if ! compose --profile observability up -d cadvisor blackbox prometheus grafana; then
+    result=1
+  elif ! wait_for_url "http://127.0.0.1:${PROMETHEUS_PORT}/-/ready" "Prometheus"; then
+    result=1
+  elif ! wait_for_url "http://127.0.0.1:${GRAFANA_PORT}/api/health" "Grafana"; then
+    result=1
+  fi
+  release_migrator_lifecycle_lock
+  return "$result"
 }
 
 logs() {
@@ -1260,7 +1899,9 @@ smoke() {
   require_docker
   cleanup_smoke() {
     if [[ "$SMOKE_KEEP_RUNNING" != "--keep-running" ]]; then
-      reset
+      if ! reset; then
+        return 1
+      fi
     fi
   }
   smoke_on_exit() {
@@ -1280,7 +1921,9 @@ smoke() {
   }
   trap 'smoke_on_exit "$?"' EXIT
 
-  reset
+  if ! reset; then
+    return 1
+  fi
   build
   up
 
@@ -1307,12 +1950,21 @@ main() {
   shift || true
 
   case "$command" in
+    build|up|down|reset|migrate|observability|smoke)
+      if ! require_direct_compose_mutation_environment; then
+        exit 2
+      fi
+      ;;
+  esac
+
+  case "$command" in
     build) build ;;
     up) up ;;
     down) down ;;
     reset) reset ;;
     status) status ;;
     logs) logs "$@" ;;
+    observability) observability ;;
     migrate) migrate ;;
     smoke) smoke "$@" ;;
     help|-h|--help) usage ;;

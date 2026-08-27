@@ -7,6 +7,8 @@
 PINVI_PROVENANCE_PREPARED=0
 PINVI_PROVENANCE_ENVIRONMENT=""
 PINVI_PROVENANCE_ARCHIVE_ROOT=""
+PINVI_PROVENANCE_ARCHIVE_COMPOSE_FILE=""
+PINVI_PROVENANCE_ARCHIVE_COMPOSE_SHA256=""
 PINVI_ATTESTED_API_IMAGE_ID=""
 PINVI_ATTESTED_WEB_IMAGE_ID=""
 PINVI_ATTESTED_DAGSTER_IMAGE_ID=""
@@ -23,6 +25,8 @@ pinvi_cleanup_api_build_context() {
     rm -rf -- "$PINVI_PROVENANCE_ARCHIVE_ROOT"
     PINVI_PROVENANCE_ARCHIVE_ROOT=""
   fi
+  PINVI_PROVENANCE_ARCHIVE_COMPOSE_FILE=""
+  PINVI_PROVENANCE_ARCHIVE_COMPOSE_SHA256=""
   unset PINVI_API_BUILD_CONTEXT
   unset PINVI_APP_BUILD_CONTEXT
   unset PINVI_API_IMAGE_DIGEST
@@ -108,6 +112,8 @@ pinvi_materialize_api_build_context() {
   done
 
   PINVI_PROVENANCE_ARCHIVE_ROOT="$archive_root"
+  PINVI_PROVENANCE_ARCHIVE_COMPOSE_FILE="$context_root/infra/docker-compose.app.yml"
+  PINVI_PROVENANCE_ARCHIVE_COMPOSE_SHA256="$(sha256sum -- "$PINVI_PROVENANCE_ARCHIVE_COMPOSE_FILE" | awk '{print $1}')"
   export PINVI_API_BUILD_CONTEXT="$context_root"
   export PINVI_APP_BUILD_CONTEXT="$context_root"
   COMPOSE_FILE="$context_root/infra/docker-compose.app.yml"
@@ -241,6 +247,7 @@ pinvi_verify_runtime_image_provenance() {
   fi
 
   local service image_reference image_id actual_revision actual_environment
+  local -a config_profile_args=()
   for service in "$@"; do
     case "$service" in
       app-api|app-web|app-dagster) ;;
@@ -249,11 +256,16 @@ pinvi_verify_runtime_image_provenance() {
         return 2
         ;;
     esac
+    if [[ "$service" == "app-dagster" ]]; then
+      config_profile_args=(--profile etl)
+    else
+      config_profile_args=()
+    fi
     image_id="$(pinvi_attested_runtime_image_id "$service")"
     if [[ -n "$image_id" ]]; then
       :
     else
-      image_reference="$({ compose config --format json; } | \
+      image_reference="$({ compose "${config_profile_args[@]}" config --format json; } | \
         python3 "$PINVI_PROVENANCE_PY" compose-image-reference --service "$service")"
       image_id="$(docker image inspect --format '{{.Id}}' "$image_reference")"
       if [[ ! "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]; then
@@ -281,10 +293,10 @@ pinvi_verify_runtime_image_provenance() {
 }
 
 # A stopped pre-deploy container keeps Compose's project/service labels so that
-# it can be restored with its original image. It is deliberately excluded from
-# every active-runtime discovery and destructive cleanup below; otherwise a
-# failed provenance check could delete the rollback artifact together with the
-# newly created container.
+# it can be restored with its original image. It is excluded from active-runtime
+# IDs and cleanup; the explicit preflight helper below still discovers stale
+# snapshots so a failed rollout cannot silently reconcile or delete the rollback
+# artifact together with the newly created container.
 pinvi_runtime_container_ids() {
   local service="$1"
   local project="${PROJECT:-pinvi-app}"
@@ -297,9 +309,24 @@ pinvi_runtime_container_ids() {
     --filter "label=com.docker.compose.project=${project}" \
     --filter "label=com.docker.compose.service=${service}" \
     --format '{{.ID}} {{.Names}}')"; then
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
     return 1
   fi
   awk '$2 !~ /\.pinvi-predeploy$/ {print $1}' <<< "$raw_containers"
+}
+
+pinvi_runtime_predeploy_snapshot_ids() {
+  local service="$1"
+  local project="${PROJECT:-pinvi-app}"
+  local raw_containers
+  if ! raw_containers="$(docker container ls --no-trunc --all \
+    --filter "label=com.docker.compose.project=${project}" \
+    --filter "label=com.docker.compose.service=${service}" \
+    --format '{{.ID}} {{.Names}}')"; then
+    RUNTIME_CONTAINER_DISCOVERY_FAILED="1"
+    return 1
+  fi
+  awk '$2 ~ /\.pinvi-predeploy$/ {print $1}' <<< "$raw_containers"
 }
 
 pinvi_runtime_container_ids_into_array() {

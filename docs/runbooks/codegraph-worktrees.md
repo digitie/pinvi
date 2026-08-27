@@ -205,10 +205,10 @@ Windows git 사용을 중지한다.
 
 ## 5. N150 / Playwright
 
-UI 또는 live 검증은 N150 Playwright를 우선한다. 기본은
-`scripts/n150-playwright-runner.sh` Docker runner이고, N150 Docker runner와 host browser 실행이
-모두 runtime, 권한, display, 네트워크 문제로 불가능할 때만 Windows runner를 fallback으로 사용한다.
-fallback을 쓰면 journal/PR 검증에 사유와 명령을 남긴다.
+UI 또는 live 검증은 N150 Playwright에서만 수행한다. 기본은
+`scripts/n150-playwright-runner.sh` Docker runner이며, N150 Docker runner와 host browser 실행이
+모두 runtime, 권한, display, 네트워크 문제로 불가능하면 gate를 중단하고 journal/PR 검증에
+사유와 명령을 남긴다.
 
 ## 참고
 

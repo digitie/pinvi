@@ -25,9 +25,9 @@
 > `git worktree repair <path>`를 먼저 실행한다. `command -v codegraph`가 `/mnt/c/...`,
 > `.exe`, `.cmd`를 가리키면 중지하고 Linux native 설치/PATH로 교정한다. 의존성 설치,
 > `pytest`, Docker, dev server, lint/typecheck/build/Vitest도 Linux에서 실행한다.
-> Playwright는 N150에서 먼저 실행하고, 기본은 `scripts/n150-playwright-runner.sh` Docker
+> Playwright는 N150에서만 실행하고, 기본은 `scripts/n150-playwright-runner.sh` Docker
 > runner다. N150 Docker runner와 host browser 실행이 모두 runtime/권한/네트워크 문제로
-> 불가능할 때만 Windows runner를 fallback으로 사용하며 사유를 기록한다. 절차·함정은
+> 불가능하면 Windows로 우회하지 않고 gate를 중단하며 사유를 기록한다. 절차·함정은
 > `docs/dev-environment.md`. **dev/prod 분리(ADR-047)**: 별도 지시가 없으면
 > 작업 대상은 **dev**다. **dev**는 이 worktree에서 직접(`npm run dev:up`) 또는 ktdctl로
 > 띄우며 **내부 주소 `127.0.0.1`의 12xxx 고정 포트**만 쓴다(외부 미노출). **prod**는
@@ -110,7 +110,7 @@ compose `--env-file`로 주입, 추적 문서는 `*.example.com` placeholder + D
 kor-travel-map 큐레이션 import는 admin `detail-snapshot`(`plan`→`content`, 서비스 토큰),
 kor-travel-geo `/v2/regions/within-radius`는 `radius_km`+`levels[]`(`legal_dong`→`emd`) 그룹 응답),
 ADR-050 (Pinvi app-owned Dagster job 표준 — retry/backoff, idempotency, failure notification,
-destructive dry-run gate), ADR-051 (개발·git·CodeGraph는 Linux 기준, Playwright는 N150 우선),
+destructive dry-run gate), ADR-051 (개발·git·CodeGraph는 Linux 기준, Playwright는 N150 전용),
 ADR-052 (category mapping은 taxonomy가 아니라 Admin presentation override만 저장),
 ADR-053 (trip day 경로 최적화 = 순수 Python nearest-neighbor + 2-opt, haversine),
 ADR-054 (외부 장소 provider Kakao/Naver Local = 서버측 display-only 검색·place-link + `GET /search`
@@ -155,7 +155,7 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
   New Architecture + NativeWind. Expo Go는 사용하지 않고 Android `minSdkVersion`은
   24 이상이다(ADR-043, SDK 56 요구).
 - 인프라: PostgreSQL 16 + PostGIS 3.5 + pg_trgm + pgcrypto / RustFS (S3 호환)
-  / Docker Compose / N150 16GB + Odroid M1S 병행 운영 (ADR-023)
+  / Docker Compose / N150 16GB 단일 운영 (ADR-067)
 - 패키지 매니저: 백엔드 `uv`, 프론트 `npm`(workspaces)
 
 ## 5. 절대 금지 (가장 중요한 6개)
@@ -169,8 +169,8 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
 4. **Pinvi 사용자 경로에서 `kor-travel-map` import 금지** — feature read/write
    request는 `PINVI_KOR_TRAVEL_MAP_API_BASE_URL`의 OpenAPI HTTP 계약을 호출한다.
 5. **Windows git / Windows CodeGraph shim 사용 금지** — 개발·git·CodeGraph·테스트·
-   docker·의존성은 Linux에서 실행한다. Playwright는 N150 우선, Windows는 fallback만
-   허용한다(ADR-051, `docs/dev-environment.md`).
+   docker·의존성은 Linux에서 실행한다. Playwright는 N150에서만 실행하며 N150이 불가하면
+   gate를 중단한다(ADR-051, `docs/dev-environment.md`).
 6. **trunk** (`/mnt/f/dev/pinvi`, `~/pinvi-workspaces/pinvi`) **에 AI 도구가
    체크아웃 / 편집 금지** — Claude는 `pinvi-claude` worktree에서만 작업 (ADR-017,
    `docs/runbooks/codegraph-worktrees.md`).
@@ -180,7 +180,7 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
 ## 6. 작업 후 체크리스트 (1줄)
 
 `pytest -q` + `ruff check` + `mypy --strict` (`apps/api`, Linux) + `npm run
-lint` + `npm run typecheck` (`apps/web`, Linux) + Playwright는 N150 우선/Windows fallback +
+lint` + `npm run typecheck` (`apps/web`, Linux) + Playwright는 N150 전용 +
 `docs/journal.md` + `docs/resume.md` (+ ADR/CHANGELOG/OpenAPI 해당 시) +
 **remote 푸시 직전 보안 감사**(`git diff --cached` 비밀/민감값 스캔 — 걸리면 push 금지. AGENTS.md "remote 푸시 전 보안 감사").
 
@@ -204,7 +204,7 @@ lint` + `npm run typecheck` (`apps/web`, Linux) + Playwright는 N150 우선/Wind
 | ETL asset                                       | `docs/runbooks/etl.md` + `docs/architecture/dagster-etl-bridge.md`                                                             |
 | 사용자 위치 사용                                | `docs/architecture/user-location.md` + `docs/compliance/lbs-act.md`                                                            |
 | Notice plan (추천 여행)                         | `docs/architecture/notice-plans.md` + `docs/api/notice-plans.md`                                                               |
-| 인프라 / 배포                                   | `docs/runbooks/{local-dev,docker-app,odroid-docker}.md` (Sprint 6에 N150 병행 — ADR-023)                                       |
+| 인프라 / 배포                                   | `docs/runbooks/{local-dev,docker-app,deploy}.md` (N150 단일 운영 — ADR-067)                                                    |
 | 릴리즈 마일스톤                                 | `docs/sprints/README.md` (v0.1.0 / v0.2.0 / v1.0.0 표)                                                                         |
 | MCP 외부 인터페이스                             | `docs/architecture/mcp-server.md` + `docs/runbooks/mcp-server.md` (ADR-019, Sprint 6)                                          |
 | 한국 전용 geofencing                            | `docs/architecture/korea-only-policy.md` + `docs/runbooks/korea-only.md` (ADR-018, Sprint 6)                                   |

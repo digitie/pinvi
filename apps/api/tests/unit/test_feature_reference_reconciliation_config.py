@@ -218,6 +218,7 @@ def _receipt_payload(**overrides: object) -> dict[str, object]:
         "live_ui_e2e": "passed",
         "live_ui_event_id": "11111111-1111-4111-8111-111111111111",
         "live_ui_evidence_sha256": "a" * 64,
+        "ui_run_evidence_sha256": "9" * 64,
         "live_ui_map_admin_endpoint": "http://127.0.0.1:12701",
         "live_ui_map_ack_sha256": "b" * 64,
         "live_ui_local_receipt_sha256": "1" * 64,
@@ -238,6 +239,10 @@ def _receipt_payload(**overrides: object) -> dict[str, object]:
         "m04_map_request_sha256": "4" * 64,
         "m04_pinvi_approval_sha256": "5" * 64,
         "m04_verification_id": "22222222-2222-4222-8222-222222222222",
+        "m05_old_feature_id": "feature-old",
+        "m05_replacement_feature_id": "feature-new",
+        "m05_impact_count": 1,
+        "m05_pinvi_detail_sha256": "6" * 64,
         "map_admin_openapi_sha256": KOR_TRAVEL_MAP_M05_ADMIN_OPENAPI_SHA256,
         "map_admin_runtime_openapi_sha256": "9" * 64,
         "map_admin_runtime_operation_contract_sha256": KOR_TRAVEL_MAP_M05_ADMIN_RUNTIME_OPERATION_CONTRACT_SHA256,
@@ -296,11 +301,22 @@ def _write_runtime_attestation(directory: Path, receipt: str, payload: dict[str,
     def dependency(
         container_field: str, digest_field: str, revision_field: str
     ) -> dict[str, object]:
+        service_by_container = {
+            "map_admin_container_id": ("map-m05", "admin"),
+            "map_api_container_id": ("map-m05", "api"),
+            "map_frontend_container_id": ("map-m05", "frontend"),
+            "pinvi_api_container_id": ("pinvi-m05", "app-api"),
+            "pinvi_web_container_id": ("pinvi-m05", "app-web"),
+            "pinvi_dagster_container_id": ("pinvi-m05", "app-dagster"),
+        }
+        compose_project, compose_service = service_by_container[container_field]
         return {
             "container_id": payload[container_field],
             "digest": payload[digest_field],
             "environment": payload["scope"],
             "image_id": payload[digest_field],
+            "compose_project": compose_project,
+            "compose_service": compose_service,
             "revision_label": payload[revision_field],
             "source_revision": payload[revision_field],
             "started_at": "2026-08-24T00:00:00.000000000Z",
@@ -340,7 +356,7 @@ def _write_runtime_attestation(directory: Path, receipt: str, payload: dict[str,
         "pinvi_source_revision": payload["pinvi_source_revision"],
         "receipt_sha256": hashlib.sha256(receipt.encode("utf-8")).hexdigest(),
         "scope": payload["scope"],
-        "version": 1,
+        "version": 2,
     }
     canonical = json.dumps(
         runtime_payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True
@@ -767,7 +783,10 @@ def test_m05_evidence_runtime_uses_non_owner_database_login() -> None:
     api_block, _ = compose.split("  app-migrator:", maxsplit=1)
 
     assert "app-db-runtime-role:" in compose
-    assert "PINVI_DATABASE_URL: ${PINVI_DATABASE_URL:-postgresql+asyncpg://pinvi_app:" in api_block
+    assert (
+        "PINVI_DATABASE_URL: postgresql+asyncpg://${PINVI_APP_DB_USER:-pinvi_app}:"
+        "${PINVI_APP_DB_PASSWORD:-pinvi_app_smoke}@app-postgres:5432/pinvi" in api_block
+    )
     assert "PINVI_MIGRATOR_DATABASE_URL" not in compose
     for source in (docker_app, deploy):
         assert 'local service="app-migrator"' in source
@@ -789,7 +808,7 @@ def test_m05_evidence_runtime_uses_non_owner_database_login() -> None:
         '--host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}"' in bootstrap
     )
     assert "--command='SELECT 1'" in bootstrap
-    assert '[ "$attempt" -ge 15 ]' in bootstrap
+    assert '[ "$attempt" -ge 90 ]' in bootstrap
     assert "FROM pg_auth_members membership" in bootstrap
     assert "membership.member = runtime.oid" in bootstrap
     assert "membership.roleid = runtime.oid" in bootstrap

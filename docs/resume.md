@@ -1,5 +1,17 @@
 # resume.md
 
+## 2026-08-27 (codex) — M05 provenance consumer·vendor 정합화 진행
+
+Map `main` merge `cf65e97345b5792420cfbc994e49ce6a7e3cd650`의 Admin/full OpenAPI를 PinVi vendor와
+M05 pair에 `0a1548a94c80bab1af6ab79c10b6f07eba32450adccd8ec2751a8c5256144c1d`로 다시 고정했다.
+attestation은 opaque `feature_id`와 canonical `feature_uuid`를 다른 축으로 다루며, 후자는 M05
+manual/old UUID 양쪽과 대조하고 검증된 값을 receipt에 기록한다. service/user artifact와 service
+release pin은 바이트가 불변이므로 유지했다.
+
+다음 한 작업은 대상 unit·contract/format gate와 source artifact byte equality를 통과시키고, 문서·pair
+정합성을 재검토한 뒤 PinVi draft PR을 원격 checkpoint로 push하는 것이다. 새 Map/PinVi source를 묶는
+runtime image digest와 n150 M05 live E2E는 Docker Manager의 immutable candidate build 뒤에만 실행한다.
+
 ## 2026-08-26 (codex) — M05 sealed role topology verifier P1/P2 보정 완료
 
 `PINVI_ROLE_TOPOLOGY_VERIFY_ONLY=1` verifier와 normal bootstrap final gate가 예전처럼 서로
@@ -37,6 +49,26 @@ source가 바뀌면 Manager pinset과 candidate identity도 바뀌므로, old d9
 별도 Manager PR과 새 candidate를 사용한다. 설계는
 [`t-vn-m05-role-topology-verifier.md`](execplan/t-vn-m05-role-topology-verifier.md)다.
 
+## 2026-08-26 (codex) — PR487 N150 fixed-name 충돌 해소 중
+
+새 `0dcaba0a` N150 fresh 시도에서 기존 manager의 stopped `pinvi-app-dagster`가 발견되어
+fail-closed로 중단됐다. 운영/manager 컨테이너와 운영 DB는 건드리지 않았다. Compose의
+Dagster/observability `container_name`을 `PINVI_DOCKER_PROJECT` 기반으로 바꾸고 wrapper가
+interpolation 값을 전달하도록 보완했다.
+
+**다음 한 작업**: 이 보완을 commit/push하고 새 exact head로 N150 fresh `0100→0101` 및 Admin
+live UI를 통과시킨 뒤 두 전문 리뷰·CI green을 확인하고 PR #487을 머지한다.
+
+## 2026-08-26 (codex) — PR487 2차 리뷰 지적 반영 중
+
+두 전문 리뷰가 정확한 `90e958885..5316b807`에서 P1을 추가로 찾았다. 직접 migration/runtime
+entrypoint의 N150·fresh-stack 우회와 accepted ADR-022의 Odroid 복구 지시를 닫고, direct Compose의
+legacy 외부 DB·host port·원격 Docker target 및 fixed-name 충돌도 fail-closed로 보강했다. 로컬
+targeted suite는 `112 passed, 2 warnings`다.
+
+**다음 한 작업**: 변경을 commit/push한 새 exact head에서 N150 fresh `0100→0101` deploy/smoke와
+실제 Admin UI 2건을 재실행하고, 두 전문 리뷰의 P1=0·GitHub CI green을 확인한 뒤 PR #487을 머지한다.
+
 ## 2026-08-26 (claude) — T-351 머지 완료 (통합 테스트 CI 4-shard 분리)
 
 `pytest tests/integration`(684건, 91개 파일)이 계속 자라 T-348로 job timeout을 올려도
@@ -55,6 +87,14 @@ CI gate가 가장 느린 shard까지 정확히 기다려 통과 확인 후 머�
 `.test_durations` 캐시를 만들어(`pytest --store-durations`) T-351의 count 기반 분할을
 duration 기반으로 재분배(현재도 정상 동작하지만 shard 3가 유독 오래 걸림 — 5m24s~5m28s,
 1번은 2m36s~2m53s로 편차가 큼).
+## 2026-08-26 (codex) — PR487 리뷰 차단 해소 진행
+
+exact head `e442cc63`에 대한 두 전문 리뷰에서 외부 DB 주입, fresh-stack 재사용, 포트 검증,
+N150-only 실행, ADR-039 충돌이 P1으로 판정되어 코드를 fail-closed로 보강하고 현재 문서를
+ADR-067 기준으로 정리했다. 신규 회귀 포함 운영 unit 53건과 shell/Compose/diff 검증은 통과했다.
+
+**다음 한 작업**: 변경을 커밋·push한 뒤 N150 fresh deploy/migration/smoke와 authenticated Admin
+live UI를 exact head로 통과시키고, 두 전문 리뷰와 CI green을 확인한 뒤 PR #487을 머지한다.
 
 ## 2026-08-26 (claude) — T-350 머지 완료 (기존 PR #485의 main 이탈 충돌 해소)
 
@@ -72,6 +112,17 @@ git이 자동 병합했다. 병합 뒤 `apps/web` typecheck·lint(경고 4건, �
 막혀 있고 T-350도 끝났다. 남은 열린 T-3xx는 `T-351`(통합 테스트 스위트 CI job 샤딩 — 스코프가
 커서 별도 설계 필요)뿐이다. `T-VN-M05-ACTIVATION`(codex 선점) 또는 `T-353`(Expo 업스트림)이
 풀리면 그쪽을 우선 재개한다.
+## 2026-08-26 (codex) — PR487 운영 게이트 보완 및 Odroid 퇴역 결정
+
+PR #477의 후속 운영 게이트 PR #487을 최신 `origin/main`에 리베이스했다. exported Compose
+dotenv 값이 외부 DB URL/host port guard를 우회하지 않도록 parser를 보완했고, Web/Dagster
+runtime에도 `PINVI_ENVIRONMENT`를 주입해 `down/reset` identity 검증이 정상 동작하도록 했다.
+사용자 결정에 따라 ADR-067을 추가해 Odroid 실행·배포·복구·UPS 경로를 영구 퇴역시키고 N150
+단일 운영 문서·doctor·live gate로 정리했다.
+
+**다음 한 작업**: 변경을 커밋·push한 뒤 exact head에 대한 전문 적대 리뷰 2건, N150 격리
+fresh deploy/migration/smoke, authenticated Admin live UI를 재실행하고 CI green 후 PR #487을
+머지한다. PR #477 자체는 이미 머지 완료다.
 
 ## 2026-08-26 (claude) — T-349 시도, T-VN-M05-ACTIVATION 가드로 블록 확인
 

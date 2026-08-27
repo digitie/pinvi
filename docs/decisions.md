@@ -816,7 +816,7 @@ sync`가 file watcher 없이도 가능 → CI / 자동화에 친화적.
 
 ## ADR-022: Backup / Restore 핫스왑 정책
 
-- **상태**: accepted
+- **상태**: superseded by ADR-067
 - **날짜**: 2026-05-27
 - **결정자**: 사용자
 - **컨텍스트**: Sprint 6 DoD에 "백업 + 복구 훈련 1회"가 있고 SPEC V8도 RTO 1h
@@ -841,7 +841,8 @@ sync`가 file watcher 없이도 가능 → CI / 자동화에 친화적.
     - 2. restored schema가 healthy하면 짧은 write drain 후 schema rename으로
          cut-over한다: `app` → `app_previous_<ts>`,
          `app_restore_<ts>` → `app`.
-    - 3. previous schema는 N150/staging 7일, Odroid M1S 24시간 보존 후 자동 삭제한다.
+    - 3. previous schema는 N150/staging 7일 보존 후 자동 삭제한다. (당시 Odroid M1S
+      24시간 보존안은 ADR-067에 의해 폐기됐다.)
     - 핫스왑은 무중단이 아니라 near-zero downtime(목표 30~90초) schema-swap이다.
   - **훈련**: 분기 1회 staging에서 핫스왑 PoC. Sprint 6 종료 시 1회 prod에서
     훈련 (read-only mode + 가족 베타 사용자에게 안내).
@@ -877,7 +878,7 @@ sync`가 file watcher 없이도 가능 → CI / 자동화에 친화적.
 
 ## ADR-023: 운영 하드웨어 확장 — Odroid M1S + N150 16GB 병행
 
-- **상태**: accepted (Postgres streaming replication / hot-standby 가정은 ADR-039가 supersede)
+- **상태**: superseded by ADR-067 (Postgres streaming replication / hot-standby 가정은 ADR-039가 supersede)
 - **날짜**: 2026-05-27
 - **결정자**: 사용자
 - **컨텍스트**: 원래 운영 환경은 Odroid M1S (ARM64, Ubuntu 24.04, ADR
@@ -1281,7 +1282,7 @@ address/*`)도 신규 사용하지 않는다 — candidate 중심 v2만.
 - **날짜**: 2026-06-06
 - **결정자**: 구현 기준 백필 (T-128)
 - **컨텍스트**: Sprint 5 DoD는 `WS /ws/trips/{trip_id}` 기반 POI CRUD/reorder
-  broadcast와 presence를 요구한다. 현재 운영 모델은 Odroid M1S/N150 단일 노드 가족
+  broadcast와 presence를 요구한다. 현재 운영 모델은 N150 단일 노드 가족
   베타이며, WebSocket 수평 확장보다 빠른 vertical slice와 명확한 HTTP optimistic lock
   계약이 우선이다.
 - **결정**:
@@ -1385,7 +1386,7 @@ address/*`)도 신규 사용하지 않는다 — candidate 중심 v2만.
 - **결정자**: Codex
 - **컨텍스트**: T-195는 `/public/*`, 인증 사용자 경로, 로그인/가입/재설정 같은 abuse
   표면에 공통 rate-limit를 요구한다. 단순 process-local memory limiter는 Uvicorn worker
-  2개와 Odroid+N150 양 노드 운영에서 한도를 worker/node 수만큼 늘려 버린다. Redis는
+  2개에서 한도를 worker 수만큼 늘려 버린다. Redis는
   현재 Pinvi 운영 스택에 없고, Postgres는 이미 필수 의존이다.
 - **결정**:
   - FastAPI 전역 `RateLimitMiddleware`를 둔다.
@@ -1412,32 +1413,30 @@ address/*`)도 신규 사용하지 않는다 — candidate 중심 v2만.
 
 ## ADR-039: 운영 노드 간 Postgres streaming replication은 사용하지 않는다
 
-- **상태**: accepted
+- **상태**: superseded by ADR-067
 - **날짜**: 2026-06-13
 - **결정자**: 사용자
-- **컨텍스트**: T-108 운영 배포 자동화 foundation에서 N150을 primary, Odroid를 replica/hot-standby로
-  두고 Postgres streaming replication runbook과 doctor 점검을 추가하려 했다. 사용자는 현재 운영
-  모델에서 streaming replication을 사용하지 않는다고 결정했다.
+- **컨텍스트**: ADR-067 이전 운영 모델에서 N150을 primary, Odroid를 replica/hot-standby로
+  두는 안을 검토했다. 이 항목은 당시 streaming replication을 채택하지 않은 역사 기록이다.
 - **결정**:
-  - N150/Odroid 병행 운영은 유지하되, Postgres streaming replication은 구성하지 않는다.
+  - 당시 N150/Odroid 병행 운영에서도 Postgres streaming replication은 구성하지 않았다.
   - `pg_basebackup`, physical replication slot, `pg_is_in_recovery()` 기반 doctor,
     `pg_promote()` 기반 failover 절차를 Pinvi 운영 문서와 스크립트에 두지 않는다.
-  - Odroid는 replica/hot-standby가 아니라 ARM64 smoke, backup/restore 훈련, 필요 시 수동
-    대체 배포 노드로 둔다.
+  - 현재 Odroid 실행·복구·대체 배포 경로는 ADR-067에 따라 폐기한다.
   - 장애 대응은 `docs/runbooks/backup-restore.md`의 snapshot/restore 절차와 수동
     Cloudflare/nginx 전환을 따른다.
 - **근거**:
   - 현재 운영 규모에서는 live replication의 설정·감시·split-brain 위험이 이득보다 크다.
   - 이미 ADR-022에 backup/restore 핫스왑 정책이 있으므로, 우선 그 절차를 정본으로 삼는다.
 - **결과 (긍정)**:
-  - 운영 runbook과 doctor가 실제 운영 방식과 일치한다.
+  - (당시) 운영 runbook과 doctor가 streaming replication을 구성하지 않는 방식과 일치했다.
   - replica/promote 오조작으로 인한 split-brain 위험을 줄인다.
 - **결과 (부정)**:
   - N150 장애 시 RPO/RTO는 최신 backup과 수동 복구 숙련도에 의존한다.
-  - Odroid는 즉시 write 가능한 hot standby가 아니다.
+  - 현재 운영 노드·복구 대상은 ADR-067의 N150 하나다.
 - **후속**:
   - T-108 문서/스크립트에서 streaming replication 관련 내용과 코드를 제거한다.
-  - 향후 live replication이 다시 필요해지면 새 ADR로 Patroni/repmgr/managed Postgres 등
+  - 향후 live replication이 다시 필요해지면 ADR-067을 supersede하는 새 ADR로 Patroni/repmgr/managed Postgres 등
     대안을 비교한다.
 - **참조**: ADR-022, ADR-023, `docs/runbooks/deploy.md`,
   `docs/runbooks/backup-restore.md`.
@@ -2093,7 +2092,7 @@ Pinvi Dagster job의 공통 표준을 먼저 고정한다.
 - 실제 retention/location 삭제·익명화는 T-276에서 kill-switch와 운영 dashboard를 포함해 별도
   검증한다.
 
-## ADR-051: 개발·git·CodeGraph는 Linux 기준, Playwright는 N150 우선 실행
+## ADR-051: 개발·git·CodeGraph는 Linux 기준, Playwright는 N150 전용 실행
 
 - **상태**: accepted
 - **날짜**: 2026-06-28
@@ -2108,14 +2107,14 @@ git이 `fatal: not a git repository`를 내고, `git worktree list`에서는 정
 shim으로 잡히면 Linux-only 실행 원칙을 깨고, 같은 포인터/경로 혼용 문제를 다시 만든다.
 
 사용자는 2026-06-28에 “모든 개발은 WSL을 포함한 Linux 환경에서만 진행, git/CodeGraph도 Linux에서
-실행, Playwright는 N150 환경에서 실행하고 불가 시 Windows에서 실행”으로 운영 기준을 재지정했다.
+실행, Playwright live/UI gate는 N150 환경에서만 실행”으로 운영 기준을 재지정했다.
 따라서 ADR-024와 ADR-017의 Windows `git.exe` amendment를 supersede한다.
 
 ### 결정
 
 - **모든 개발 작업은 Linux 환경에서 수행한다.** 기본 로컬 실행 위치는 WSL/Linux이며, N150은
-  운영/live 검증 위치다. Windows는 Linux/N150에서 브라우저 검증이 불가능할 때의 Playwright
-  fallback runner로만 사용한다.
+  운영/live 검증 위치다. Playwright live/UI gate는 N150에서만 실행하고, N150에서 브라우저
+  검증이 불가능하면 gate를 중단한다.
 - **git / branch / commit / push / PR은 Linux git으로 수행한다.** NTFS 경로(`/mnt/f/...`)에 있는
   기존 고정 worktree도 Linux git 기준으로 `git worktree repair <path>`를 수행해 `.git`/`gitdir`
   포인터를 `/mnt/...` 경로로 맞춘다. 이후 같은 worktree를 Windows `git.exe`로 조작하지 않는다.
@@ -2125,10 +2124,10 @@ shim으로 잡히면 Linux-only 실행 원칙을 깨고, 같은 포인터/경로
 - **의존성 설치, `pytest`, Docker, dev server, lint/typecheck/build/Vitest도 Linux에서 수행한다.**
   기존 “NTFS source + ext4 테스트 미러” 모델은 폐기한다. 필요하면 `/mnt/f/...` 고정 worktree를
   Linux git으로 직접 운용하거나, Linux ext4 worktree를 새로 만들어 그곳을 source of truth로 삼는다.
-- **Playwright 우선순위는 N150 → Windows fallback이다.** live 또는 UI e2e는 먼저 N150에서 실행한다.
-  N150에 브라우저/runtime/권한이 없거나 원격 검증이 작업 목적에 맞지 않을 때만 Windows runner를
-  fallback으로 사용하고, 그 사유와 실행 위치를 journal/PR 검증에 남긴다.
-- **기록 문서는 실행 위치를 “Linux / N150 / Windows fallback”으로 구체적으로 적는다.**
+- **Playwright live/UI gate는 N150 x86_64 전용이다.** N150 Docker runner와 host browser가
+  준비되지 않으면 다른 호스트로 우회하지 않고 gate를 중단한다.
+- **기록 문서는 실행 위치를 “Linux / N150”으로 구체적으로 적는다.** live/UI gate 중단 시에는
+  N150 runner 또는 host browser의 실패 사유와 실행 명령을 남긴다.
   “WSL ext4 미러”, “NTFS git”, “Windows Playwright 기본” 같은 구 문구는 새 PR에서 발견되는 대로
   ADR-051 기준으로 정정한다.
 
@@ -2139,19 +2138,19 @@ shim으로 잡히면 Linux-only 실행 원칙을 깨고, 같은 포인터/경로
 - 현재 개발·검증 명령 대부분(`pytest`, Docker, npm, dev server, CodeGraph)은 Linux에서 더 자연스럽고
   운영 N150도 Linux라 환경 차이가 줄어든다.
 - Playwright는 실제 운영 브라우저 접근성·네트워크·CORS·WebSocket drift를 잡기 위해 N150 live
-  검증을 우선해야 한다. Windows runner는 로컬 브라우저 의존성이 필요한 예외 경로로 남긴다.
+  검증을 수행한다. Windows runner는 live/UI gate의 실행 경로로 지원하지 않는다.
 
 ### 결과 (긍정)
 
 - `fatal: not a git repository ... F:/...`와 `prunable` 오판을 한 환경 기준으로 정리할 수 있다.
 - CodeGraph 인덱스와 git 포인터가 같은 Linux 경로 체계를 쓰므로 새 task 진입 절차가 단순해진다.
-- N150 우선 Playwright로 운영 drift를 더 빨리 발견한다.
+- N150 전용 Playwright로 운영 drift를 더 빨리 발견한다.
 
 ### 결과 (부정)
 
 - 기존 Windows git 기반 worktree는 1회 `git worktree repair`가 필요하다.
 - Linux native `codegraph`가 설치되지 않은 WSL은 먼저 PATH/설치를 고쳐야 한다.
-- N150 Playwright runtime이 준비되지 않은 기간에는 Windows fallback 사유를 반복 기록해야 한다.
+- N150 Playwright runtime이 준비되지 않은 기간에는 live/UI gate를 중단하고 사유를 기록한다.
 
 ### 후속
 
@@ -2235,7 +2234,7 @@ Sprint 6 일정 최적화(T-261~263, SPEC H-8/I-8)는 trip day의 POI 순서를 
 
 ### 근거
 
-- trip day 규모에서 NN + 2-opt는 사실상 최적에 근접하며 native 의존성 0으로 Odroid ARM/N150 양쪽에서
+- trip day 규모에서 NN + 2-opt는 사실상 최적에 근접하며 native 의존성 0으로 N150에서
   동일 동작한다. haversine는 도보/관광 동선 재정렬에 충분하고 외부 호출이 없어 비용/장애 표면이 없다.
 
 ### 결과
@@ -3221,5 +3220,44 @@ Next 16 자체의 정적 타입체크·lint·webpack 빌드 산출물은 모두 
   재검증한 뒤 이 ADR을 superseded 표시한다.
 - `dev` 스크립트에서 동일 증상이 보고되면 같은 플래그를 추가한다.
 
-- 다음 신규 ADR = **ADR-067**
-- 사용자 정의 결정이 새로 발생하면 본 §끝에 추가.
+## ADR-067: Odroid 실행 환경 영구 퇴역, N150 단일 운영
+
+- **상태**: accepted
+- **날짜**: 2026-08-26
+- **결정자**: 사용자 + Codex
+- **대체**: ADR-023의 Odroid 실행·대체 운영 범위
+
+### 컨텍스트
+
+Odroid M1S는 더 이상 Pinvi의 실행·배포·복구 환경으로 사용하지 않는다. N150이 유일한 운영
+노드이며, 운영 배포와 live UI 검증은 N150의 manager 경로와 N150 Playwright runner만을
+정본으로 삼는다. Odroid를 계속 실행 대상으로 남겨 두면 UPS shutdown hook, ARM64 fallback,
+대체 DB 복구 절차가 실제 운영 계약처럼 남아 정전·복구 시 잘못된 경로를 선택할 수 있다.
+
+### 결정
+
+- Odroid의 API/Web/Dagster 실행, DB 복구, public traffic 전환, UPS shutdown hook, doctor
+  실행을 Pinvi의 지원 범위에서 영구 제거한다.
+- `N150 + kor-travel-docker-manager`를 유일한 staging/production 실행·배포 경로로 사용한다.
+- `scripts/deploy-node.sh`의 staging/production mutation과 격리 fallback은 N150의
+  `unix:///var/run/docker.sock` 로컬 Docker target에서만 허용한다. 직접 `migrate`/`up`/
+  `dagster`도 fresh-stack 계약을 우회할 수 없다. Odroid doctor와 Odroid runbook은 실행
+  가능한 절차가 아니라 퇴역 안내로 남긴다.
+- `linux/arm64` 빌드·패키지 호환성 검증처럼 실행 노드를 전제하지 않는 역사적/CI 자료는
+  별도 필요가 있을 때까지 보존할 수 있지만, Odroid runtime을 생성하거나 전환하는 명령은
+  제공하지 않는다.
+
+### 결과
+
+- 운영 대상과 장애 전환 대상이 N150 하나로 고정되어 배포·복구·UPS 제어의 책임 경계가
+  분명해진다.
+- 기존 ADR-023, SPEC V8, Sprint 기록의 Odroid 언급은 역사 기록으로 남고, 현재 진입
+  문서·런북·스크립트는 이 ADR을 따른다.
+- Odroid 자산을 다시 실행 대상으로 되돌리려면 이 ADR을 superseded로 갱신하고 별도 운영
+  검증·복구·전원 정책을 새로 승인해야 한다.
+
+### 후속
+
+- 진입 문서와 N150 배포 런북에서 Odroid active path를 제거한다.
+- Odroid doctor는 fail-closed 퇴역 안내만 출력한다.
+- PR 검증은 N150 격리 배포와 N150 live UI gate로 완료한다.

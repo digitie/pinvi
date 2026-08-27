@@ -378,6 +378,7 @@ function EvidenceDetail({
               <li
                 key={`${impact.target_relation}:${impact.target_id}`}
                 className="min-w-0 rounded-sm border border-hairline bg-canvas p-3 text-sm"
+                data-testid={`admin-frr-impact-${impact.impact_index}`}
               >
                 <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
                   <span className="font-semibold text-ink">

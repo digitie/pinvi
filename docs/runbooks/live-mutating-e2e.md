@@ -1,9 +1,9 @@
 # Live mutating E2E Runbook
 
-N150 또는 운영에 준하는 live 환경에서 실제 상태 변경을 수행하는 Playwright suite다. 기존
+N150 live 환경에서 실제 상태 변경을 수행하는 Playwright suite다. 기존
 mock e2e와 Admin read-only live matrix와 분리하며, 각 suite의 명시적 opt-in 환경변수가 없으면
-항상 skip한다. Playwright runner는 N150에서 먼저 실행하고, N150에서 실행할 수 없을 때만
-Windows runner를 fallback으로 사용한다.
+항상 skip한다. Playwright runner는 N150 Docker runner만 사용한다. N150에서 실행할 수 없으면
+gate를 중단하고 사유를 기록한다.
 
 ## 1. 범위
 
@@ -79,15 +79,26 @@ gitignore된 `docs/deploy-runbook.local.md` 또는 로컬 env 파일에만 둔�
 
 ## 3. 실행
 
+아래 명령을 실행하기 전에 이미 검증한 release candidate의 full SHA를 외부 입력으로 지정하고,
+runner가 사용할 Playwright image를 고정한다. image는 공식 registry의 immutable digest를 포함해야
+하며, tag는 선택 사항이다.
+
 ```bash
-cd apps/web
+cd ~/pinvi
+: "${PINVI_LIVE_EXPECTED_REVISION:?export the trusted release-candidate full SHA before running live UI}"
+export PINVI_LIVE_EXPECTED_REVISION
+export PINVI_PLAYWRIGHT_RUNNER_IMAGE="${PINVI_PLAYWRIGHT_RUNNER_IMAGE:-mcr.microsoft.com/playwright@sha256:9bd26ad900bb5e0f4dee75839e957a89ae89c2b7ab1e76050e559790e946b948}"
+```
+
+```bash
+cd ~/pinvi
 npm run test:e2e:live-mutating:list
 PINVI_LIVE_MUTATING_E2E=1 \
 PINVI_LIVE_WEB_URL=http://127.0.0.1:12805 \
 PINVI_LIVE_API_URL=http://127.0.0.1:12801 \
 PINVI_LIVE_EMAIL="$PINVI_LIVE_EMAIL" \
 PINVI_LIVE_PASSWORD="$PINVI_LIVE_PASSWORD" \
-npm run test:e2e:live-mutating
+scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating
 ```
 
 Trip day hole 단건:
@@ -99,7 +110,7 @@ PINVI_LIVE_API_URL=http://127.0.0.1:12801 \
 PINVI_LIVE_EMAIL="$PINVI_LIVE_EMAIL" \
 PINVI_LIVE_PASSWORD="$PINVI_LIVE_PASSWORD" \
 PINVI_LIVE_SCREENSHOT_DIR="$PWD/../../.codex_tmp/live-e2e/trip-day-hole" \
-npm run test:e2e:live-mutating -- trip-day-hole-live-mutating.live.ts --workers=1
+scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- trip-day-hole-live-mutating.live.ts --workers=1
 ```
 
 ### Feature resolution 단건
@@ -146,10 +157,12 @@ PINVI_LIVE_MAP_PROXY_PORT=13701 \
 PINVI_LIVE_MAP_UPSTREAM_PORT="<isolated-map-api-port>" \
 PINVI_LIVE_EMAIL="$PINVI_LIVE_EMAIL" \
 PINVI_LIVE_PASSWORD="$PINVI_LIVE_PASSWORD" \
-npm run test:e2e:live-mutating -- trip-feature-resolution-live-mutating.live.ts --workers=1
+scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- trip-feature-resolution-live-mutating.live.ts --workers=1
 ```
 
-격리 stack만 사용한다. 실제 서비스 API를 proxy base URL로 재기동하지 않는다. 실패 시 현재 run이 출력한
+격리 stack만 사용한다. 실제 서비스 API를 proxy base URL로 재기동하지 않는다. 아래 live mutation 실행은
+모두 N150의 `scripts/n150-playwright-runner.sh`를 통해 exact checkout·clean worktree·digest-pinned
+Playwright image를 검증한 뒤 수행한다. 직접 `npm` 실행은 catalog list 확인에만 사용한다. 실패 시 현재 run이 출력한
 고유 prefix로 활성 Trip만 수동 soft-delete하며, 다른 prefix의 Trip을 일괄 삭제하지 않는다. VWorld
 key가 없는 fallback 환경에서는 지도 popup이 마운트되지 않으므로 상태 문구는 owner 목록의 접근성
 label로 검증하고 지도 좌표·marker 상태는 숨김 legend와 API 상태 검증으로 보완한다.
@@ -162,14 +175,14 @@ mutation을 포함하므로 기본 분당 60회 제한을 그대로 쓰면 본 �
 Backup staging:
 
 ```bash
-cd apps/web
+cd ~/pinvi
 npm run test:e2e:live-mutating:list
 PINVI_BACKUP_LIVE_MUTATING_E2E=1 \
 PINVI_BACKUP_LIVE_STAGING=1 \
 PINVI_LIVE_WEB_URL=http://127.0.0.1:12805 \
 PINVI_BACKUP_LIVE_EMAIL="$PINVI_BACKUP_LIVE_EMAIL" \
 PINVI_BACKUP_LIVE_PASSWORD="$PINVI_BACKUP_LIVE_PASSWORD" \
-npm run test:e2e:live-mutating -- admin-backup-live-mutating.live.ts --workers=1
+scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- admin-backup-live-mutating.live.ts --workers=1
 ```
 
 ### M04 Map Feature 요청 큐 단건
@@ -179,13 +192,28 @@ Map #1029와 PinVi #458의 검증한 exact image pair만 격리 포트/DB로 기
 않는다. Map service writer token은 PinVi API process에만 주입한다.
 
 ```bash
-cd apps/web
-PINVI_M04_LIVE_E2E=1 \
-PINVI_LIVE_WEB_URL=http://127.0.0.1:13805 \
-PINVI_M04_LIVE_FEATURE_REQUEST_ID="$PINVI_M04_LIVE_FEATURE_REQUEST_ID" \
-PINVI_M04_LIVE_EMAIL="$PINVI_M04_LIVE_EMAIL" \
-PINVI_M04_LIVE_PASSWORD="$PINVI_M04_LIVE_PASSWORD" \
-npm run test:e2e:live-mutating -- admin-feature-request-queue-live-mutating.live.ts --workers=1
+cd ~/pinvi
+: "${PINVI_M04_UI_EVIDENCE_DIR:?set a new empty root-owned evidence directory}"
+: "${PINVI_M04_PRIVATE_KEY:?set the root-owned M05 signing key path}"
+: "${PINVI_M04_PINVI_API_CONTAINER:?set the isolated Pinvi API container name}"
+: "${PINVI_M04_PINVI_WEB_CONTAINER:?set the isolated Pinvi Web container name}"
+: "${PINVI_M04_LIVE_FEATURE_REQUEST_ID:?set the isolated pending feature-request UUID}"
+: "${PINVI_M04_LIVE_EMAIL:?set the isolated admin email}"
+: "${PINVI_M04_LIVE_PASSWORD:?set the isolated admin password}"
+export PINVI_M04_LIVE_EMAIL PINVI_M04_LIVE_PASSWORD
+python scripts/m05_activation_attestation.py m04 \
+  --evidence-dir "$PINVI_M04_UI_EVIDENCE_DIR" \
+  --private-key "$PINVI_M04_PRIVATE_KEY" \
+  --pinvi-api-url http://127.0.0.1:13801 \
+  --pinvi-api-container "$PINVI_M04_PINVI_API_CONTAINER" \
+  --pinvi-web-url http://127.0.0.1:13805 \
+  --pinvi-web-container "$PINVI_M04_PINVI_WEB_CONTAINER" \
+  --feature-request-id "$PINVI_M04_LIVE_FEATURE_REQUEST_ID" \
+  --pinvi-source-revision "$PINVI_LIVE_EXPECTED_REVISION" \
+  --scope staging \
+  --playwright-runner-image "$PINVI_PLAYWRIGHT_RUNNER_IMAGE" \
+  --require-root-owned \
+  -- scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- apps/web/e2e/admin-feature-request-queue-live-mutating.live.ts --workers=1
 ```
 
 성공 뒤 PinVi 응답 및 Map 격리 로그에서 같은 request UUID와 pending receipt를 대조한다. 실패한
@@ -206,23 +234,84 @@ M04 승인, Map `rebind` 결정, PinVi worker receipt/ACK가 모두 같은 격�
 기록하지 않는다. 실행 자체는 읽기 전용이다.
 
 ```bash
-cd apps/web
-PINVI_M05_LIVE_E2E=1 \
-PINVI_LIVE_WEB_URL=http://127.0.0.1:13805 \
-PINVI_M05_LIVE_EVENT_ID="$PINVI_M05_LIVE_EVENT_ID" \
-PINVI_M05_LIVE_OLD_FEATURE_ID="$PINVI_M05_LIVE_OLD_FEATURE_ID" \
-PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID="$PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID" \
-PINVI_M05_LIVE_IMPACT_COUNT="$PINVI_M05_LIVE_IMPACT_COUNT" \
-PINVI_M05_LIVE_EMAIL="$PINVI_M05_LIVE_EMAIL" \
-PINVI_M05_LIVE_PASSWORD="$PINVI_M05_LIVE_PASSWORD" \
-npm run test:e2e:live-mutating -- admin-feature-reference-reconciliations-live-mutating.live.ts --workers=1
+cd ~/pinvi
+: "${PINVI_M05_UI_EVIDENCE_DIR:?set a new empty root-owned evidence directory}"
+: "${PINVI_M04_UI_EVIDENCE_DIR:?set the matching signed M04 evidence directory}"
+: "${PINVI_M05_PRIVATE_KEY:?set the root-owned M05 signing key path}"
+: "${PINVI_M05_MAP_ADMIN_URL:?set the isolated Map admin loopback URL}"
+: "${PINVI_M05_MAP_CASE_ID:?set the isolated Map M05 case UUID}"
+: "${PINVI_M05_MAP_DOCKER_PROJECT:?set the isolated Map Compose project}"
+: "${PINVI_M05_MAP_ADMIN_CONTAINER:?set the isolated Map admin container name}"
+: "${PINVI_M05_MAP_ADMIN_SERVICE:?set the isolated Map admin Compose service}"
+: "${PINVI_M05_MAP_API_CONTAINER:?set the isolated Map API container name}"
+: "${PINVI_M05_MAP_API_SERVICE:?set the isolated Map API Compose service}"
+: "${PINVI_M05_MAP_FRONTEND_CONTAINER:?set the isolated Map frontend container name}"
+: "${PINVI_M05_MAP_FRONTEND_SERVICE:?set the isolated Map frontend Compose service}"
+: "${PINVI_M05_MAP_SOURCE_ROOT:?set the clean pinned Map source checkout}"
+: "${PINVI_M05_PINVI_API_CONTAINER:?set the isolated Pinvi API container name}"
+: "${PINVI_M05_PINVI_DOCKER_PROJECT:?set the isolated Pinvi Compose project}"
+: "${PINVI_M05_PINVI_WEB_CONTAINER:?set the isolated Pinvi Web container name}"
+: "${PINVI_M05_PINVI_DAGSTER_CONTAINER:?set the isolated Pinvi Dagster container name}"
+: "${PINVI_M05_LIVE_EVENT_ID:?set the applied M05 event UUID}"
+: "${PINVI_M05_LIVE_OLD_FEATURE_ID:?set the old opaque Feature ID from the fixture}"
+: "${PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID:?set the replacement opaque Feature ID from the fixture}"
+: "${PINVI_M05_LIVE_IMPACT_COUNT:?set the expected impact row count}"
+: "${PINVI_M05_LIVE_EMAIL:?set the isolated admin email}"
+: "${PINVI_M05_LIVE_PASSWORD:?set the isolated admin password}"
+export PINVI_M05_LIVE_E2E=1
+export PINVI_LIVE_WEB_URL=http://127.0.0.1:13805
+export PINVI_LIVE_API_URL=http://127.0.0.1:13801
+export PINVI_M05_LIVE_EMAIL PINVI_M05_LIVE_PASSWORD
+export M05_PINVI_EMAIL="$PINVI_M05_LIVE_EMAIL"
+export M05_PINVI_PASSWORD="$PINVI_M05_LIVE_PASSWORD"
+export PINVI_M05_LIVE_OLD_FEATURE_ID
+export PINVI_M05_LIVE_REPLACEMENT_FEATURE_ID
+export PINVI_M05_LIVE_IMPACT_COUNT
+python scripts/m05_activation_attestation.py live \
+  --evidence-dir "$PINVI_M05_UI_EVIDENCE_DIR" \
+  --private-key "$PINVI_M05_PRIVATE_KEY" \
+  --map-admin-url "$PINVI_M05_MAP_ADMIN_URL" \
+  --map-case-id "$PINVI_M05_MAP_CASE_ID" \
+  --map-docker-project "$PINVI_M05_MAP_DOCKER_PROJECT" \
+  --map-admin-container "$PINVI_M05_MAP_ADMIN_CONTAINER" \
+  --map-admin-service "$PINVI_M05_MAP_ADMIN_SERVICE" \
+  --map-api-container "$PINVI_M05_MAP_API_CONTAINER" \
+  --map-api-service "$PINVI_M05_MAP_API_SERVICE" \
+  --map-frontend-container "$PINVI_M05_MAP_FRONTEND_CONTAINER" \
+  --map-frontend-service "$PINVI_M05_MAP_FRONTEND_SERVICE" \
+  --map-source-root "$PINVI_M05_MAP_SOURCE_ROOT" \
+  --m04-evidence-dir "$PINVI_M04_UI_EVIDENCE_DIR" \
+  --pinvi-api-url http://127.0.0.1:13801 \
+  --pinvi-docker-project "$PINVI_M05_PINVI_DOCKER_PROJECT" \
+  --pinvi-api-container "$PINVI_M05_PINVI_API_CONTAINER" \
+  --pinvi-web-url http://127.0.0.1:13805 \
+  --pinvi-web-container "$PINVI_M05_PINVI_WEB_CONTAINER" \
+  --pinvi-dagster-container "$PINVI_M05_PINVI_DAGSTER_CONTAINER" \
+  --event-id "$PINVI_M05_LIVE_EVENT_ID" \
+  --pinvi-source-revision "$PINVI_LIVE_EXPECTED_REVISION" \
+  --scope staging \
+  --playwright-runner-image "$PINVI_PLAYWRIGHT_RUNNER_IMAGE" \
+  --require-root-owned \
+  -- scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- apps/web/e2e/admin-feature-reference-reconciliations-live-mutating.live.ts --workers=1
 ```
 
-M05 event가 목록 첫 페이지에 없거나 terminal receipt가 없으면 fixture/worker/ACK 상태를 먼저 확인한다.
+`m05_activation_attestation.py live`가 M04 증적의 verification ID를 M05 activation nonce로
+의도적으로 재사용하고, 실제 runner image ID/ref를 생성해 child suite에 전달하므로 이 두 값을
+수동으로 지정하지 않는다. M04 challenge와 M05 activation을 같은 nonce로 결박하는 계약이다.
+M05 event가 목록 첫 페이지에 없거나
+terminal receipt가 없으면 fixture/worker/ACK 상태를 먼저 확인한다.
 activation gate에서는 단독 UI pass가 아니라, 앞 절의 서명된 M04 증적과 `live`의 Map 결정·ACK
 server-side 대조까지 모두 성공해야 한다.
 
-운영 공개 도메인으로 검증할 때는 `*_URL`을 실제 HTTPS 도메인으로 바꾼다.
+일반 live-mutating suite는 공개 HTTPS origin을 사용할 수 있다. 단,
+`m05_activation_attestation.py m04/live`는 API·Web·Map의 runtime peer를 검증하므로
+`127.0.0.1`/`localhost` loopback URL만 허용한다. `--scope production`은 증적의 운영 범위를
+뜻하며 공개 HTTPS URL을 허용한다는 뜻이 아니다. production 증적이 필요하면 승인된 N150에서
+실제 API/Web/Map container의 `127.0.0.1` host binding과 정확히 같은 port를 가리키는 loopback
+port-forward/proxy를 통해 실행한다. proxy가 다른 host port로 변환되면 attestation의 Docker
+binding 검증이 실패하므로, container port와 host port 매핑을 증적 전에 확인한다. 공개 도메인을
+attestation CLI의 `*_URL` 인자로 직접 넣지 않는다. runner의 exact SHA와 digest-pinned image
+조건은 그대로 유지한다.
 
 ## 4. 실패 처리
 

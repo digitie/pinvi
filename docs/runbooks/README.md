@@ -1,6 +1,6 @@
 # 운영 Runbook
 
-Pinvi 로컬 개발 / Docker / ETL / Admin / Odroid 배포 / 백업 / 파일 저장소 운영
+Pinvi 로컬 개발 / Docker / ETL / Admin / N150 배포 / 백업 / 파일 저장소 운영
 가이드. AI agent + 운영자 모두 이용.
 
 ## 1. 인덱스
@@ -15,9 +15,9 @@ Pinvi 로컬 개발 / Docker / ETL / Admin / Odroid 배포 / 백업 / 파일 저
 | [admin-live-e2e.md](./admin-live-e2e.md)                       | N150/live Admin UI e2e 매트릭스 실행                             | 4~6      |
 | [live-mutating-e2e.md](./live-mutating-e2e.md)                 | N150/live 상태 변경 e2e 실행                                     | 5~6      |
 | [file-storage.md](./file-storage.md)                           | RustFS 운영 + kor-travel-map 공유                                | 2        |
-| [odroid-docker.md](./odroid-docker.md)                         | Odroid M1S 배포 + ARM64 빌드                                     | 6        |
+| [odroid-docker.md](./odroid-docker.md)                         | Odroid 실행 경로 퇴역 안내                                       | 6        |
 | [backup-restore.md](./backup-restore.md)                       | Backup/Restore 핫스왑 (ADR-022) — pg_dump + 신규 schema cut-over | 5~6      |
-| [deploy.md](./deploy.md)                                       | 배포 절차 + rollback (Odroid + N150, ADR-023)                    | 6        |
+| [deploy.md](./deploy.md)                                       | N150 배포 절차 + rollback (ADR-067)                              | 6        |
 | [observability.md](./observability.md)                         | Prometheus + cAdvisor + Grafana 운영                             | 5        |
 | [performance-security-gate.md](./performance-security-gate.md) | 성능 / 부하 / 보안 smoke gate                                    | 6        |
 | [security-incidents.md](./security-incidents.md)               | 인시던트 대응 + PIPA 통지                                        | 6        |
@@ -35,9 +35,9 @@ Pinvi 로컬 개발 / Docker / ETL / Admin / Odroid 배포 / 백업 / 파일 저
 ### 2.1 작업 흐름
 
 git / 편집 / commit / push / PR은 **Linux worktree**에서 Linux `git`으로 실행한다(ADR-051).
-CodeGraph, 테스트, Docker, 의존성 설치, 장기 실행도 Linux에서 수행한다. Playwright는 N150을
-우선하고, N150 Docker runner 또는 host browser 실행이 불가능할 때만 Windows runner를 fallback으로
-사용한다. 자세한 순서는 [agent-workflow](../agent-workflow.md)와 [local-dev.md](./local-dev.md)를
+CodeGraph, 테스트, Docker, 의존성 설치, 장기 실행도 Linux에서 수행한다. Playwright live/UI gate는
+N150 x86_64 Docker runner에서만 실행하며, runner 또는 host browser가 불가능하면 gate를 중단한다.
+자세한 순서는 [agent-workflow](../agent-workflow.md)와 [local-dev.md](./local-dev.md)를
 따른다.
 
 ### 2.2 포트 규약

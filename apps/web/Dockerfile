@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7-labs
-FROM node:22-bookworm-slim AS deps
+FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS deps
 WORKDIR /repo
 
 # workspace package.json 만 먼저 복사 — install 캐시 layer
@@ -18,7 +18,7 @@ COPY apps/web/vendor/vworld-map-web-1.0.0.tgz apps/web/vendor/
 RUN npm install --no-audit --no-fund
 
 # ─────────────────────────────────────────────
-FROM node:22-bookworm-slim AS build
+FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS build
 WORKDIR /repo
 COPY --from=deps /repo/node_modules ./node_modules
 COPY . .
@@ -35,7 +35,7 @@ ENV NEXT_PUBLIC_VWORLD_API_KEY=${NEXT_PUBLIC_VWORLD_API_KEY}
 RUN npm --workspace apps/web run build
 
 # ─────────────────────────────────────────────
-FROM node:22-bookworm-slim AS runtime
+FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS runtime
 WORKDIR /app
 
 ARG PINVI_BUILD_ENVIRONMENT=development

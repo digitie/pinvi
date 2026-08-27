@@ -26,17 +26,21 @@ Docker 이미지의 Uvicorn worker는 2개이므로 `apps/api/Dockerfile`은
 multiprocess metric 파일을 비운다. 로컬 `uvicorn --reload` dev 실행은 단일 process
 기준으로 동작한다.
 
-## 2. 로컬 dev
+## 2. 격리 smoke
 
-API/Web은 기존 방식으로 띄운 뒤 observability profile만 추가로 올린다.
+API/Web을 격리 smoke project로 띄운 뒤 같은 wrapper로 observability profile을 추가한다.
+운영·staging은 이 절차를 사용하지 않고 `kor-travel-docker-manager`의 승인된 target을
+사용한다.
 
 ```bash
-cd ~/pinvi-workspaces/pinvi-codex
-scripts/dev-up.sh
-docker compose -f infra/docker-compose.yml --profile observability up -d cadvisor blackbox prometheus grafana
+cd /mnt/f/dev/pinvi-codex
+export PINVI_ENVIRONMENT=smoke
+export PINVI_DOCKER_PROJECT=pinvi-app-smoke
+scripts/docker-app.sh up
+scripts/docker-app.sh observability
 ```
 
-dev compose의 Prometheus scrape target:
+app smoke compose의 Prometheus scrape target:
 
 - `prometheus:9090`
 - `cadvisor:8080`
@@ -48,9 +52,11 @@ dev compose의 Prometheus scrape target:
 ## 3. App smoke compose
 
 ```bash
-cd ~/pinvi-workspaces/pinvi-codex
+cd /mnt/f/dev/pinvi-codex
+export PINVI_ENVIRONMENT=smoke
+export PINVI_DOCKER_PROJECT=pinvi-app-smoke
 scripts/docker-app.sh up
-docker compose -p pinvi-app -f infra/docker-compose.app.yml --profile observability up -d cadvisor blackbox prometheus grafana
+scripts/docker-app.sh observability
 ```
 
 app compose의 Prometheus scrape target:

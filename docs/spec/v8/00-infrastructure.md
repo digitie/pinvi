@@ -2,11 +2,14 @@
 
 원본: `spec_v8_0_infrastructure.docx` (N장 비기능 + O장 법률).
 
+> ADR-067에 따라 이 문서의 Odroid 운영 하드웨어·실행 경로는 superseded다. 현재 배포·복구
+> 대상은 N150 하나이며, 아래 ARM64 항목은 역사적/CI 호환성 참고로만 보존한다.
+
 ## 1. 적용 범위
 
 | 항목                                  | 본 저장소 | `kor-travel-map` | 비고                                                           |
 | ------------------------------------- | --------- | ---------------- | -------------------------------------------------------------- |
-| docker-compose / Odroid 운영 manifest | ✓         | —                | `infra/docker-compose.yml`은 Pinvi 소유. 라이브러리는 import만 |
+| docker-compose / N150 운영 manifest  | ✓         | —                | `infra/docker-compose.yml`은 Pinvi 소유. 라이브러리는 import만 |
 | Sentry SaaS Free 통합                 | ✓         | ✓                | 양쪽 모두 동일 DSN + environment 태그                          |
 | Loki+Promtail+Grafana                 | ✓         | —                | `apps/api` / `apps/web` / `apps/etl` 로그 수집                 |
 | RustFS 객체 저장소                    | ✓         | —                | Pinvi가 운영. 라이브러리는 `file_store` 주입 받음              |
@@ -15,12 +18,10 @@
 
 ## 2. 핵심 채택 (Pinvi v2)
 
-### 2.1 운영 환경 — Odroid M1S
+### 2.1 운영 환경 — N150 (현재)
 
-- ARM64 (Rockchip RK3566 quad-core @ 1.8GHz), 8GB RAM
-- Ubuntu 24.04 LTS + Docker 28.x + Docker Compose v2
-- NVMe SSD (256GB 권장)
-- 평상시 5W, 부하 시 10W — 24/7 가정 운영
+- x86_64, 16GB RAM, NVMe SSD
+- Ubuntu 26.04 LTS + Docker Compose v2
 - `infra/docker-compose.yml`(개발) / `infra/docker-compose.app.yml`(운영) 분리
   (`docs/architecture.md` §5)
 
@@ -40,7 +41,7 @@
 
 - CI: GitHub Actions + docker buildx + QEMU
 - `linux/amd64,linux/arm64` 양쪽 manifest push
-- 운영(Odroid)은 arm64 manifest 자동 선택
+- ARM64 manifest는 실행 노드가 아닌 CI/패키지 호환성 자료로만 보존한다.
 - 단일 arch 빌드 → "exec format error"로 컨테이너 안 뜸 — 사고 사례로 ADR에 명시 후보
 
 ### 2.3 NTFS worktree + WSL 테스트 미러

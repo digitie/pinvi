@@ -8,7 +8,7 @@ import pytest
 
 from app.commands import admin_bootstrap
 from app.commands.admin_bootstrap import CANDIDATE_HEAD_SCHEMA, PinviAdminBootstrapResult
-from app.services.bootstrap_admin import BootstrapAdminError
+from app.services.bootstrap_admin import BootstrapAdminCredential, BootstrapAdminError
 
 
 def _candidate_image_root(
@@ -156,6 +156,41 @@ def test_candidate_head_command_reads_no_credential_or_database(
     assert captured.out.strip() == (
         '{"pinvi_head":"20260804_0049_feature_uuid_shadow_columns",'
         f'"schema":"{CANDIDATE_HEAD_SCHEMA}"}}'
+    )
+
+
+def test_validate_credential_command_reads_credential_without_bootstrap(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    credential_file = Path("/run/pinvi/bootstrap-admin.json")
+    monkeypatch.setenv(admin_bootstrap.CREDENTIAL_FILE_ENV, str(credential_file))
+    monkeypatch.setattr(
+        admin_bootstrap,
+        "read_bootstrap_admin_credential_file",
+        lambda path: (
+            BootstrapAdminCredential(
+                email="bootstrap-admin@example.com",
+                password="redaction-sentinel-value",
+            )
+            if path == credential_file
+            else pytest.fail("unexpected credential path")
+        ),
+    )
+    monkeypatch.setattr(
+        admin_bootstrap,
+        "run_pinvi_admin_bootstrap",
+        lambda: pytest.fail("credential validation must not run migration or bootstrap"),
+    )
+
+    admin_bootstrap.main(["validate-credential"])
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert captured.out.strip() == (
+        '{"action":"credential_valid","credential_binding_sha256":'
+        '"'
+        'b6be51d8640fc4e2cdd332fcf66acedc31a9d66359f55921b186090946109734"}'
     )
 
 

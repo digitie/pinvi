@@ -1,7 +1,7 @@
 # Docker App Smoke Test Runbook
 
 App 컨테이너 (`docker-compose.app.yml`) smoke test — API + Web + PostgreSQL +
-RustFS. CI 통합 및 Odroid 배포 전 검증용. v1 `scripts/docker-app-smoke-test.sh`
+RustFS. CI와 N150 배포 전 검증용. v1 `scripts/docker-app-smoke-test.sh`
 이전.
 
 ## 0. Docker 빌드/실행 진입 경로 (ADR-040)
@@ -117,13 +117,18 @@ origin 증명이 있으면 허용되며, data-bearing `0061` database는 legacy 
 없이는 `0101`로 진행하지 않는다.
 
 ```bash
+PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/secure/pinvi/bootstrap-admin.json \
+PINVI_DOCKER_MANAGER_UNAVAILABLE=1 \
+PINVI_DEPLOY_FRESH_STACK=1 \
+PINVI_DOCKER_PROJECT=pinvi-<isolated-name> \
 PINVI_M05_LEGACY_REBASELINE=1 \
 PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE=n150-production \
 PINVI_M05_LEGACY_REBASELINE_RECEIPT_HOST_PATH=/secure/rebaseline/receipt.json \
 scripts/deploy-node.sh migrate
 ```
 
-이 명령은 일반 `app-migrator` 대신 별도 root-only legacy profile을 사용한다. fresh backup, read-only
+이 명령은 일반 `app-migrator` 대신 별도 root-only legacy profile을 사용한다. N150에서만 실행되며
+고유한 fresh Compose project와 기존 container/volume/network가 없는 상태를 요구한다. fresh backup, read-only
 preflight, 별도 운영 승인이 없는 상태에서는 실행하지 않는다. root URL은 protected env file의
 `PINVI_LEGACY_REBASELINE_DATABASE_URL`로만 주입한다. wrapper는 receipt와 직접 parent가 모두
 root-owned/private인지 확인한 뒤 container root에 read-only mount하고, `0101`은 그 applied receipt의
@@ -134,11 +139,15 @@ owner만으로는 실행할 수 없고 직접 superuser root session이 필요�
 
 ## 3. Docker app 스크립트
 
-`kor-travel-geo`의 `scripts/docker_app.sh`와 같은 운영 패턴을 따른다. 포트를
-점유한 기존 컨테이너/프로세스가 있으면 기본적으로 시작을 중지하고, 명시적으로
-`PINVI_DEV_FORCE_KILL=1`을 지정한 경우에만 종료한다. 승인 없는 공유 노드의 강제종료는 하지 않는다.
+`kor-travel-geo`의 `scripts/docker_app.sh`와 같은 개발용 폴백 패턴을 따른다. 직접 Compose
+변경은 `development|test|smoke`에서만 허용하며 staging/production은 manager 또는
+격리된 staging 절차를 사용한다. 포트를 점유한 현재 프로젝트의 컨테이너는
+`PINVI_DEV_FORCE_KILL=1`을 명시적으로 지정한 경우에만 제거하고, 다른 프로젝트의
+컨테이너나 호스트 프로세스는 자동 종료하지 않고 중단한다.
 
 ```bash
+export PINVI_ENVIRONMENT=smoke
+export PINVI_DOCKER_PROJECT=pinvi-app-smoke
 scripts/docker-app.sh build
 PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/secure/pinvi/bootstrap-admin.json scripts/docker-app.sh up
 scripts/docker-app.sh status
@@ -149,27 +158,31 @@ scripts/docker-app.sh down
 scripts/docker-app.sh reset   # down -v --remove-orphans
 ```
 
+직접 Compose wrapper는 환경을 생략하거나 기본/운영 project를 재사용하지 않는다. `development`는
+`pinvi-app-dev*`, `test`는 `pinvi-app-test*`, `smoke`는 `pinvi-app-smoke*`처럼 격리 project를
+명시해야 하며, Compose 파일은 저장소의 canonical `infra/docker-compose.app.yml`만 허용한다.
+
 `up`과 `smoke`는 migration 및 admin bootstrap을 포함하므로 위 credential file이 필요하다. 이미
 실행 중인 stack에서 migration 없이 상태만 확인하려면 `status`와 health endpoint를 사용한다.
 
-`scripts/deploy-node.sh deploy`와 `up`은 실행 중인 API/Web/Dagster container를 migration 전에
-중지하고 원래 이름·image를 `.pinvi-predeploy` snapshot으로 보존한다. snapshot 이름은 writer 중지
-전에 사전 검사하므로 stale snapshot 충돌이면 기존 writer를 건드리지 않고 중단한다. 새 writer가
-`/health`, `/health/db`, M05 reconciliation endpoint, Web/Dagster readiness와 Docker healthcheck를
-모두 통과하고 deploy smoke가 성공한 뒤에만 snapshot을 제거한다. 중간 실패 시 새 writer만 제거하고
-snapshot을 원래 이름으로 되돌려 기동하며, 기존 Dagster가 실행 중이었다면 enable flag가 꺼져 있어도
-복구 기동한다. snapshot 복구나 healthcheck가 실패하면 명령도 실패한다. runtime container 탐색은
-Compose project/service label을 사용하고 `.pinvi-predeploy` 이름은 검증·destructive cleanup에서
-제외한다. `scripts/docker-app.sh reset`은
-`PINVI_ENV_FILE`의 `PINVI_ENVIRONMENT=staging|production`을 shell override보다 우선해 확인하므로
-운영 volume 삭제를 우회할 수 없다.
+`scripts/deploy-node.sh deploy`와 `up`은 기존 API/Web/Dagster container가 하나라도
+발견되면 in-place snapshot을 만들지 않고 fail-closed로 중단한다. 중지된 container도
+기존 runtime으로 간주한다. Compose가 이름을 바꾼 snapshot을 다시 사용하거나 삭제할
+수 있기 때문에, 기존 runtime이 있는 staging/production은 manager의 pinned rebuild나
+별도 프로젝트의 fresh stack으로 진행한다. fresh stack에서는 `/health`, `/health/db`,
+M05 reconciliation endpoint, Web/Dagster readiness와 Docker healthcheck를 모두 통과한
+뒤에만 다음 단계로 진행한다. runtime 탐색·rollback에서 discovery가 실패하면 새로
+기록한 ID만 정리하고 managed writer를 중지한 뒤 수동 복구로 닫는다.
+`scripts/docker-app.sh reset`은 `PINVI_ENV_FILE`의 `PINVI_ENVIRONMENT=staging|production`을
+shell override보다 우선해 확인하므로 운영 volume 삭제를 우회할 수 없다.
 
 `scripts/docker-app.sh build`는 API image source revision을 확정하고 build 뒤 OCI label을 다시
 확인한다. 기존 Dagster writer가 있거나 `PINVI_ENABLE_DAGSTER=1`이면 flag가 꺼진 호출에서도
 Dagster image를 함께 build·검증한다. 로컬 `development|test|smoke`에서 revision을 지정하지 않으면 `development` label을
 허용한다. exact commit을 지정하면 환경과 무관하게 clean worktree의 `HEAD`와 같아야 한다.
-`staging|production`은 wrapper가 clean `HEAD`를 자동 주입하며, wrapper를 우회한 직접 Compose
-build도 `development` 또는 비정상 revision이면 Dockerfile 단계에서 실패한다. wrapper의 immutable
+`staging|production`은 `scripts/deploy-node.sh` 또는 manager 경로에서만 다룬다.
+`scripts/docker-app.sh`의 직접 Compose build는 `development|test|smoke`에서만 허용된다.
+wrapper를 우회한 직접 Compose build도 `development` 또는 비정상 revision이면 Dockerfile 단계에서 실패한다. wrapper의 immutable
 build context는 exact commit `git archive` 임시 디렉터리이며 live worktree와 ignored/untracked 파일을
 읽지 않는다. Dockerfile·Compose·검증 helper는 archive 내부 regular file만 허용하고 symlink를
 거부하며, preflight에서 확정한 환경/revision은 env-file이 바뀌어도 유지한다. build 뒤 tag는 검증된
@@ -201,46 +214,35 @@ PINVI_SOURCE_REVISION="$(git rev-parse --verify HEAD^{commit})" scripts/docker-a
 ## 4. Smoke test 시퀀스
 
 ```bash
-# 1) 정리
-docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml down -v --remove-orphans
-
-# 2) 이미지 빌드
-docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml build app-api app-web
-
-# 3) Postgres + RustFS 먼저
-docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml up -d app-postgres app-rustfs app-rustfs-init
-
-# 4) owner-only PinVi migration + one-shot admin bootstrap (auto-migrate 안 함)
+# 격리 project와 환경을 고정한다. 직접 Compose 명령은 사용하지 않는다.
+export PINVI_ENVIRONMENT=smoke
+export PINVI_DOCKER_PROJECT=pinvi-app-smoke
 install -m 600 /dev/null /tmp/pinvi-bootstrap-admin.json
 $EDITOR /tmp/pinvi-bootstrap-admin.json
-PINVI_DOCKER_PROJECT=pinvi-app-smoke \
 PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/tmp/pinvi-bootstrap-admin.json \
-scripts/docker-app.sh migrate
+scripts/docker-app.sh smoke --keep-running
 # wrapper는 lifecycle lock 뒤 API/Dagster writer를 drain한 다음 role bootstrap과 migration을 실행하고,
 # migration 또는 seal 실패에도
 # 기존에 실행 중이던 writer를 다시 기동한다. DDL-capable 외부 세션은 자동 종료하지
 # 않고 migration을 fail-close하므로, 실패 시 해당 세션을 먼저 정리한 뒤 재시도한다.
-rm -f /tmp/pinvi-bootstrap-admin.json
 
-# 5) API + Web
-docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml up -d app-api app-web
-
-# 6) 헬스 체크
+# smoke wrapper가 build/dependency/migration/API/Web 기동을 수행한 뒤의 추가 확인
 curl -fsS http://127.0.0.1:12801/health
 curl -fsS http://127.0.0.1:12801/health/db
 curl -fsS http://127.0.0.1:12805/admin/login
 curl -fsS http://127.0.0.1:12101/health/live
 
-# 7) Admin 로그인
+# Admin 로그인
 curl -fsS -X POST http://127.0.0.1:12801/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"<bootstrap-admin-email>","password":"<temporary-bootstrap-password>"}'
 
-# 8) Admin datasets
+# Admin datasets
 curl -fsS -b cookies.txt http://127.0.0.1:12801/admin/datasets
 
-# 9) 정리
-docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml down -v --remove-orphans
+# wrapper가 project/DB identity/stale snapshot/lifecycle lock을 확인한 뒤 격리 DB를 제거한다.
+scripts/docker-app.sh reset
+rm -f /tmp/pinvi-bootstrap-admin.json
 ```
 
 `--keep-running` 옵션으로 검증 후 컨테이너 유지 (수동 확인).
@@ -248,11 +250,15 @@ docker compose -p pinvi-app-smoke -f infra/docker-compose.app.yml down -v --remo
 관측 스택을 함께 확인하려면 smoke stack을 유지한 뒤 profile을 올린다.
 
 ```bash
+PINVI_ENVIRONMENT=smoke PINVI_DOCKER_PROJECT=pinvi-app-smoke \
 scripts/docker-app.sh smoke --keep-running
-docker compose -p pinvi-app -f infra/docker-compose.app.yml --profile observability up -d cadvisor blackbox prometheus grafana
-curl -fsS http://127.0.0.1:12401/-/ready
-curl -fsS http://127.0.0.1:12205/api/health
+PINVI_ENVIRONMENT=smoke PINVI_DOCKER_PROJECT=pinvi-app-smoke \
+scripts/docker-app.sh observability
 ```
+
+staging/production의 관측 profile은 `kor-travel-docker-manager`의 승인된 target 절차를
+사용한다. 격리 smoke project는 위 wrapper가 환경·포트·DB identity와 lifecycle lock을
+확인한 뒤에만 profile을 추가하며, `pinvi-app` 같은 공용 project를 재사용하지 않는다.
 
 ## 5. App + ETL 통합 smoke
 
@@ -371,39 +377,19 @@ PINVI_GEOFENCE_BLOCK_UNKNOWN=false
   켠다. `PINVI_GEOFENCE_BLOCK_UNKNOWN=true`는 trusted signal 누락 요청도 451로 차단하므로,
   `docs/runbooks/korea-only.md`의 smoke를 통과하기 전 운영 기본값으로 두지 않는다.
 
-## 10. ARM64 빌드
-
-CI에서:
-
-```yaml
-- name: Set up QEMU
-  uses: docker/setup-qemu-action@v3
-- name: Set up Docker Buildx
-  uses: docker/setup-buildx-action@v3
-- name: Build & push
-  uses: docker/build-push-action@v5
-  with:
-    context: .
-    platforms: linux/amd64,linux/arm64
-    push: true
-    tags: ghcr.io/<owner>/pinvi-api:${{ github.sha }}
-```
-
-자세히는 [odroid-docker.md](./odroid-docker.md).
-
-## 11. 트러블슈팅
+## 10. 트러블슈팅
 
 | 증상                                  | 원인                 | 해결                                                            |
 | ------------------------------------- | -------------------- | --------------------------------------------------------------- |
 | `app-api` 시작 후 즉시 종료           | migration/bootstrap 미실행 | `pinvi-admin-bootstrap` one-shot 먼저                    |
 | `app-web` 빌드 실패                   | `NEXT_PUBLIC_*` 누락 | `.env` 확인 + 재빌드                                            |
 | `app-rustfs-init` 무한 루프           | bucket 이미 존재     | down -v로 볼륨 삭제 후 재시작                                   |
-| `12805` / `12101` port already in use | 다른 컨테이너 점유   | `up`은 기본적으로 중지하지 않고 실패한다. 승인된 dev 프로세스만 `PINVI_DEV_FORCE_KILL=1 scripts/docker-app.sh up`으로 종료하고, 수동 확인은 `lsof -i:<port>` |
+| `12805` / `12101` port already in use | 다른 프로젝트 컨테이너 또는 호스트 listener 점유 | 현재 프로젝트 컨테이너만 `PINVI_DEV_FORCE_KILL=1 scripts/docker-app.sh up`으로 제거할 수 있다. 다른 점유자는 자동 종료하지 않고 `ss -ltn`으로 확인 후 수동 정리한다. |
 | Admin login `pinvi_access` 발급 안 됨 | CORS / Secure cookie | `infra/docker-compose.app.yml`의 CORS 환경변수 확인             |
 
-## 12. 관련 문서
+## 11. 관련 문서
 
 - [local-dev.md](./local-dev.md) — 일상 개발
-- [odroid-docker.md](./odroid-docker.md) — 운영 배포
+- [deploy.md](./deploy.md) — N150 운영 배포
 - `docs/api/health.md` — `/health` endpoint
 - `docs/api/admin.md` — Admin 인증 흐름

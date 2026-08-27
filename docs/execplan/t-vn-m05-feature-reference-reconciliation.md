@@ -15,11 +15,15 @@ production flag 또는 일반 운영 stack의 mutation만으로는 이 작업의
 ## 기준 계약
 
 - Map service contract source: PR #1051 merge `db319a4798229098d04e68e3ac64338183ad547f`.
-  Full/admin 표면은 PR #1054 merge `fadc029ce2b0cd730c604697e04d1fccdff02ce9` 기준이며, user
-  표면은 #1029 계열 pin을 유지한다.
+  Full/admin 표면은 Map `main` merge `cf65e97345b5792420cfbc994e49ce6a7e3cd650`의
+  `openapi.json`(SHA-256 `0a1548a94c80bab1af6ab79c10b6f07eba32450adccd8ec2751a8c5256144c1d`) 기준이며,
+  user 표면은 #1029 계열 pin을 유지한다.
 - M05가 결박하는 admin/full/service/user OpenAPI SHA-256과 source revision의 exact 쌍은
   [`contracts/kor-travel-map-m05-pair-provenance-v1.json`](../../contracts/kor-travel-map-m05-pair-provenance-v1.json)에
   고정한다. service 항목은 일반 service provenance와 반드시 일치해야 한다.
+- M04 approval을 M05 old Feature에 결박할 때는 provenance의 opaque `feature_id`를 approved request의
+  resolved reference와 대조하고, 별도 `feature_uuid`를 manual/old Feature UUID에 각각 대조한다.
+  receipt에는 manual case의 복사본이 아니라 검증된 provenance UUID만 기록한다.
 - read token은 `feature-reference-reconciliation:read`, ACK token은
   `feature-reference-reconciliation:ack` 한 scope만 가진 별도 server-only credential이다.
   M04 요청 큐·cache-target·admin·일반 service token과 값 재사용을 거부한다.

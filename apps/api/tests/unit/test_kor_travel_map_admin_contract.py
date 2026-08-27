@@ -12,8 +12,11 @@ from app.schemas.admin import AdminFeatureDetailCuration, AdminFeatureWeatherMet
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-admin.json"
 )
-_UPSTREAM_COMMIT = "fadc029ce2b0cd730c604697e04d1fccdff02ce9"
-_SNAPSHOT_SHA256 = "2c02ecfead95b06306db7189278c975ec83a9e2a793f3f0e18ca0bd96240f3cb"
+_M05_PAIR = (
+    Path(__file__).resolve().parents[4] / "contracts" / "kor-travel-map-m05-pair-provenance-v1.json"
+)
+_UPSTREAM_COMMIT = "cf65e97345b5792420cfbc994e49ce6a7e3cd650"
+_SNAPSHOT_SHA256 = "0a1548a94c80bab1af6ab79c10b6f07eba32450adccd8ec2751a8c5256144c1d"
 
 _ADMIN_FEATURE_QUERY_PARAMETERS = {
     "q",
@@ -59,8 +62,47 @@ def _query_names(operation: dict[str, Any]) -> set[str]:
 
 
 def test_admin_snapshot_is_byte_pinned_to_a_reviewed_map_revision() -> None:
-    assert _UPSTREAM_COMMIT == "fadc029ce2b0cd730c604697e04d1fccdff02ce9"
+    assert _UPSTREAM_COMMIT == "cf65e97345b5792420cfbc994e49ce6a7e3cd650"
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
+
+
+def test_m05_pair_admin_and_full_are_bound_to_the_admin_vendor() -> None:
+    pair = json.loads(_M05_PAIR.read_bytes())
+    assert isinstance(pair, dict)
+    map_pair = pair["map"]
+    assert isinstance(map_pair, dict)
+    for name in ("admin", "full"):
+        entry = map_pair[name]
+        assert isinstance(entry, dict)
+        assert entry["openapi_sha256"] == _SNAPSHOT_SHA256
+        assert entry["source_revision"] == _UPSTREAM_COMMIT
+
+
+def test_manual_feature_provenance_exposes_separate_opaque_id_and_uuid() -> None:
+    spec = _spec()
+    operation = spec["paths"]["/v1/admin/features/{feature_id}/creation-provenance"]["get"]
+
+    assert operation["security"] == [{"AdminBFF": []}]
+    assert operation["parameters"] == [
+        {
+            "in": "path",
+            "name": "feature_id",
+            "required": True,
+            "schema": {"title": "Feature Id", "type": "string"},
+        }
+    ]
+    assert _response_ref(operation) == "#/components/schemas/AdminManualFeatureProvenanceResponse"
+    data = _schema(spec, "AdminManualFeatureProvenanceData")
+    assert {"feature_id", "feature_uuid", "claim", "origin"} == set(data["required"])
+    assert data["properties"]["feature_id"] == {
+        "title": "Feature Id",
+        "type": "string",
+    }
+    assert data["properties"]["feature_uuid"] == {
+        "format": "uuid",
+        "title": "Feature Uuid",
+        "type": "string",
+    }
 
 
 def test_manual_feature_create_contract_is_exact_but_not_yet_consumed() -> None:
