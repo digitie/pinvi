@@ -29,9 +29,9 @@ local 파일에서만 보관한다.
 
 - `030b12fc…` committed generation은 Map `9c64e862…`와 API image `2260ec…`, UI image `5dc547…`을 사용한다.
   기존 M05 pair provenance는 이전 Map source/image identity를 고정해 activation attestation이 fail-closed한다.
-- pair의 Admin/full source와 Map runtime image identity를 이 committed generation으로 재결박했다. PinVi source가
-  `a90b1f06…`으로 바뀌므로 Manager의 새 pinset `87fe2abc…`만 다음 한 번의 trusted candidate다. 기존
-  `030b12fc…`은 재실행하지 않으며, 새 candidate committed 뒤에만 M04/M05 signed live attestation을 실행한다.
+- pair의 Admin/full source와 Map runtime image identity를 이 committed generation으로 재결박했다. 이후 PinVi
+  source가 main rebase로 회전했으므로 Manager도 exact rebase head로 pinset을 다시 계산한다. 기존 `030b12fc…`은
+  재실행하지 않으며, 새 candidate committed 뒤에만 M04/M05 signed live attestation을 실행한다.
 
 ## 2026-08-28 (codex) — v2 permit candidate committed generation
 
