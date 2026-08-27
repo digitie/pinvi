@@ -99,6 +99,16 @@
   dependencies"로 분류). `npx expo install --fix`류 SDK 정렬은 dev client 재빌드를 동반하므로
   별도 PR로 검증한다.
 
+## 배포 스크립트 안전성
+
+- [ ] **T-355** — `scripts/deploy-node.sh`/`scripts/docker-app.sh`의 bare-call errexit 무력화
+  P0 3건(`require_fresh_stack_identity`의 하위 체크 3개, `fresh_stack_runtime_image_proof`의
+  `pinvi_verify_runtime_image_provenance` 호출, `require_direct_compose_mutation_environment`의
+  `require_docker`/`validate_configured_ports` 호출)을 `|| return $?`로 고친다. PR #487
+  (`codex/pr477-followup`, merged 2026-08-27)이 다른 방식으로 이 영역을 대폭 재작성했지만 이
+  3건은 그대로 남아 merge된 main에 살아있음을 재확인했다(claude, 적대적 리뷰 워크플로가 최초
+  발견, 로컬 브랜치 `pr487-continue` 커밋 `4a383cb6`에 수정 코드 보존).
+
 ## 보류 / 미래 작업
 
 - [ ] **T-273 — v1.0.0 E2E / Live Gate** — geofence 운영 설정과 전용 staging Web/API가 준비될 때까지

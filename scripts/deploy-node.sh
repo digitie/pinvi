@@ -349,7 +349,7 @@ require_n150_execution_host() {
 require_fresh_stack_contract() {
   local existing_containers existing_volumes existing_networks
   local all_containers all_volumes all_networks actual_name
-  require_fresh_stack_identity
+  require_fresh_stack_identity || return $?
   if ! existing_containers="$(docker container ls --all \
     --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.ID}}')"; then
     echo "could not inspect the fresh deploy Compose project" >&2
@@ -470,12 +470,15 @@ print(json.dumps(config, ensure_ascii=False, sort_keys=True, separators=(",", ":
 }
 
 fresh_stack_runtime_image_proof() {
-  pinvi_verify_runtime_image_provenance app-api app-web
+  # bare 호출 금지: 이 함수는 항상 `if ! fresh_stack_runtime_image_proof` 형태로 불려
+  # errexit이 꺼진 채 실행된다. provenance 검증이 실패해도 무시하고 넘어가면, 뒤이은
+  # 정규식 검사는 검증되지 않은 이미지 ID든 그대로 통과시켜 이 함수가 성공을 반환한다.
+  pinvi_verify_runtime_image_provenance app-api app-web || return $?
   FRESH_STACK_API_IMAGE_ID="$(pinvi_attested_runtime_image_id app-api)"
   FRESH_STACK_WEB_IMAGE_ID="$(pinvi_attested_runtime_image_id app-web)"
   if dagster_profile_enabled; then
     FRESH_STACK_DAGSTER_PROFILE_ENABLED="1"
-    pinvi_verify_runtime_image_provenance app-dagster
+    pinvi_verify_runtime_image_provenance app-dagster || return $?
     FRESH_STACK_DAGSTER_IMAGE_ID="$(pinvi_attested_runtime_image_id app-dagster)"
   else
     local dagster_profile_status=$?
@@ -820,7 +823,7 @@ require_reusable_fresh_stack_contract() {
   local state_dagster_image_id="" state_migration_receipt_sha256=""
   local environment_name source_path compose_sha256 source_sha256 effective_compose_sha256
   local key value seen_keys='|' existing_containers existing_volumes existing_networks db_containers rustfs_containers
-  require_fresh_stack_identity
+  require_fresh_stack_identity || return $?
   fresh_stack_state_file_is_safe || return $?
   [[ -f "$FRESH_STACK_STATE_PATH" ]] || {
     echo "standalone up/dagster requires a successful migrate state for this fresh stack" >&2
@@ -1066,9 +1069,13 @@ require_fresh_stack_identity() {
     echo "fresh deploy requires an explicit isolated PINVI_DOCKER_PROJECT" >&2
     return 2
   }
-  require_n150_execution_host
-  require_canonical_compose_file
-  require_isolated_database_endpoint
+  # bare로 호출하면 `if ! require_fresh_stack_identity` 형태의 호출부가 이 함수 전체의
+  # errexit을 끈다 — 그 상태에서 하위 체크를 bare로 두면 실패해도 무시되고 마지막
+  # statement의 종료코드만 전파된다. 각 하위 체크를 명시적으로 확인해야 앞쪽 실패가
+  # 조용히 삼켜지지 않는다.
+  require_n150_execution_host || return $?
+  require_canonical_compose_file || return $?
+  require_isolated_database_endpoint || return $?
 }
 
 cleanup_failed_fresh_stack() {

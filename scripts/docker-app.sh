@@ -1698,8 +1698,11 @@ require_isolated_direct_compose_project() {
 
 require_direct_compose_mutation_environment() {
   local environment_name
-  require_docker
-  validate_configured_ports
+  # bare 호출 금지: 이 함수는 항상 `if ! require_direct_compose_mutation_environment`
+  # 형태로 불려 errexit이 꺼진 채 실행된다. require_docker/validate_configured_ports를
+  # bare로 두면 실패해도 무시되고 뒤 statement의 종료코드만 전파된다.
+  require_docker || return $?
+  validate_configured_ports || return $?
   if ! environment_name="$(configured_environment)"; then
     return 2
   fi
