@@ -171,7 +171,8 @@ def test_fresh_role_catalog_reset_is_narrow_and_preflighted() -> None:
     assert "pinvi-role-catalog-reset-v1" in reset
     assert "0:0:600" in reset
     assert "pg_control_system" in reset
-    assert "membership.grantor" in reset
+    assert "membership.grantor" not in reset
+    assert "target four-role" in reset
     assert "target_identity_invalid" in reset
     assert "foreign_namespace_object" in reset
     assert "\\gset" in reset

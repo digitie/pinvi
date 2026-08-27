@@ -669,11 +669,6 @@ WITH target_database AS (
     FROM pg_database database_row
     WHERE database_row.datname = :'database_name'
 ),
-bootstrap_owner AS (
-    SELECT role_row.oid
-    FROM pg_roles role_row
-    WHERE role_row.rolname = current_user
-),
 target_roles AS (
     SELECT role_row.oid
     FROM pg_roles role_row
@@ -691,10 +686,13 @@ foreign_membership AS (
         membership.roleid IN (SELECT oid FROM target_roles)
         OR membership.member IN (SELECT oid FROM target_roles)
     )
+      -- grantor는 membership을 기록한 역할일 뿐, target four-role 안의
+      -- edge가 target 밖 privilege/ownership에 의존한다는 증거는 아니다.
+      -- 네 target role만 roleid/member로 갖는 edge는 모두 DROP ROLE과 함께
+      -- 제거되므로 permit-bound fresh reset이 안전하게 수용할 수 있다.
       AND NOT (
         membership.roleid IN (SELECT oid FROM target_roles)
         AND membership.member IN (SELECT oid FROM target_roles)
-        AND membership.grantor IN (SELECT oid FROM bootstrap_owner)
       )
 ),
 foreign_database_owner AS (
