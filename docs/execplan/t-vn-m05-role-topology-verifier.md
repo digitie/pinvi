@@ -62,7 +62,11 @@ sealed 상태만 관찰하는 비밀 비노출 진단 계약을 PinVi source에 
 5. static test에서 verify-only가 mutation 경로·raw output을 갖지 않고 endpoint/input failure 및
    malformed evaluator record도 typed JSON으로 닫히는지 확인한다.
 6. PinVi PR merge 뒤 별도 Docker Manager PR이 exact revision/pinset과 root-only verifier
-   command를 추가한다. 새 source는 old d9 journal의 authority가 아니며 새 candidate가 필요하다.
+   command를 추가한다. sealed verifier는 폐기 대상인 기존 DB의 admission이 아니라 fresh target-state
+   후조건이다. 따라서 Manager는 DB reset 뒤 role open → admin/migration bootstrap → seal 및 exact head
+   확인 뒤, PinVi runtime start/manifest commit 전에만 이를 호출한다. noncanonical·unavailable failure는
+   원문이나 reason enum 없이 owner-only terminal receipt로 같은 pinset을 봉인한다. 새 source는 old d9
+   journal의 authority가 아니며 새 candidate가 필요하다.
 
 ## 완료 조건
 
