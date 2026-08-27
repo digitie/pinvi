@@ -52,7 +52,8 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
     schema_owner = f"m05_app_owner_{suffix}"
     migration_owner = f"m05_migration_owner_{suffix}"
     migrator_role = f"m05_migrator_{suffix}"
-    external_role = f"m05_external_{suffix}"
+    external_member = f"m05_external_member_{suffix}"
+    external_parent = f"m05_external_parent_{suffix}"
     password = "m05-catalog-reset-test-password"
     environment_file = tmp_path / "compose.env"
     environment_file.write_text(
@@ -241,7 +242,7 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
         assert remaining_roles == "4"
         # Type-only residue를 없앤 뒤 stale SET ROLE/membership를 더한다. v2 permit은
         # target role과 external role의 membership 자동 철회도 명시 승인하되,
-        # external role 자체는 남겨야 한다.
+        # 양방향 external role은 남겨야 한다.
         compose(
             "exec",
             "-T",
@@ -259,8 +260,10 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
             f"--username={root_role}",
             "--dbname=pinvi",
             "--command="
-            f'CREATE ROLE "{external_role}" NOLOGIN; '
-            f'GRANT "{schema_owner}" TO "{external_role}"; '
+            f'CREATE ROLE "{external_member}" NOLOGIN; '
+            f'CREATE ROLE "{external_parent}" NOLOGIN; '
+            f'GRANT "{schema_owner}" TO "{external_member}"; '
+            f'GRANT "{external_parent}" TO "{migrator_role}"; '
             f'GRANT "{schema_owner}" TO "{migrator_role}"; '
             f'ALTER ROLE "{migrator_role}" IN DATABASE pinvi SET ROLE TO "{schema_owner}";',
         )
@@ -321,11 +324,12 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
                 "--dbname=pinvi",
                 "--command="
                 "SELECT ("
-                f"EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{external_role}')"
+                "(SELECT count(*) FROM pg_roles WHERE rolname IN "
+                f"('{external_member}', '{external_parent}')) = 2"
                 " AND NOT EXISTS ("
                 "SELECT 1 FROM pg_auth_members membership "
-                f"JOIN pg_roles role_row ON role_row.oid = membership.member "
-                f"WHERE role_row.rolname = '{external_role}'"
+                "JOIN pg_roles role_row ON role_row.oid IN (membership.roleid, membership.member) "
+                f"WHERE role_row.rolname IN ('{external_member}', '{external_parent}')"
                 "))::text;",
             ).stdout.strip()
             == "true"
