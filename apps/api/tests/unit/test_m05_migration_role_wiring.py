@@ -80,9 +80,7 @@ def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
     assert "migrator_sealed" in bootstrap
     assert "migrator_membership_setting" in bootstrap
     verifier = bootstrap[
-        bootstrap.index("evaluate_role_topology()") : bootstrap.index(
-            "reset_fresh_role_catalog()"
-        )
+        bootstrap.index("evaluate_role_topology()") : bootstrap.index("reset_fresh_role_catalog()")
     ]
     for mutation in (
         "ALTER ",
@@ -175,9 +173,9 @@ def test_fresh_role_catalog_reset_is_narrow_and_preflighted() -> None:
     assert "pg_control_system" in reset
     assert "membership.grantor" in reset
     assert "DROP ROLE IF EXISTS" in reset
-    assert 'DROP OWNED' not in reset
-    assert 'REASSIGN OWNED' not in reset
-    assert '>/dev/null 2>&1' in reset
+    assert "DROP OWNED" not in reset
+    assert "REASSIGN OWNED" not in reset
+    assert ">/dev/null 2>&1" in reset
 
 
 def test_bootstrap_only_accepts_the_declared_postgres_endpoints(tmp_path: Path) -> None:

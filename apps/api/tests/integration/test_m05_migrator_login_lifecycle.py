@@ -129,8 +129,7 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
             "--no-psqlrc",
             f"--username={root_role}",
             "--dbname=postgres",
-            "--command="
-            f'CREATE DATABASE pinvi WITH OWNER "{root_role}" TEMPLATE template0;',
+            f'--command=CREATE DATABASE pinvi WITH OWNER "{root_role}" TEMPLATE template0;',
         )
         identity = compose(
             "exec",
@@ -154,7 +153,7 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
         subprocess.run([sudo, "-n", "chown", "root:root", str(permit)], check=True)  # noqa: S603
         subprocess.run([sudo, "-n", "chmod", "0600", str(permit)], check=True)  # noqa: S603
         role_creation = "; ".join(
-            f'CREATE ROLE "{role}" LOGIN PASSWORD \'{password}\''
+            f"CREATE ROLE \"{role}\" LOGIN PASSWORD '{password}'"
             for role in (runtime_role, schema_owner, migration_owner, migrator_role)
         )
         compose(
@@ -165,8 +164,8 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
             f"--username={root_role}",
             "--dbname=pinvi",
             "--command="
-            f"{role_creation}; GRANT \"{schema_owner}\" TO \"{migrator_role}\"; "
-            f"ALTER ROLE \"{migrator_role}\" IN DATABASE pinvi SET ROLE TO \"{schema_owner}\"; "
+            f'{role_creation}; GRANT "{schema_owner}" TO "{migrator_role}"; '
+            f'ALTER ROLE "{migrator_role}" IN DATABASE pinvi SET ROLE TO "{schema_owner}"; '
             "CREATE TYPE public.stale_catalog_type AS ENUM ('residue');",
         )
         failed = compose(
@@ -233,20 +232,23 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
             "PINVI_ROLE_CATALOG_RESET_PERMIT_FILE=/run/pinvi/role-catalog-reset.permit",
             "app-db-runtime-role",
         )
-        assert compose(
-            "exec",
-            "-T",
-            "app-postgres",
-            "psql",
-            "--no-psqlrc",
-            "--tuples-only",
-            "--no-align",
-            f"--username={root_role}",
-            "--dbname=pinvi",
-            "--command="
-            "SELECT count(*) FROM pg_roles WHERE rolname IN "
-            f"('{runtime_role}', '{schema_owner}', '{migration_owner}', '{migrator_role}');",
-        ).stdout.strip() == "0"
+        assert (
+            compose(
+                "exec",
+                "-T",
+                "app-postgres",
+                "psql",
+                "--no-psqlrc",
+                "--tuples-only",
+                "--no-align",
+                f"--username={root_role}",
+                "--dbname=pinvi",
+                "--command="
+                "SELECT count(*) FROM pg_roles WHERE rolname IN "
+                f"('{runtime_role}', '{schema_owner}', '{migration_owner}', '{migrator_role}');",
+            ).stdout.strip()
+            == "0"
+        )
         compose(
             "run",
             "--rm",
