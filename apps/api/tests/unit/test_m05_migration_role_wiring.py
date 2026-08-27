@@ -163,6 +163,13 @@ def test_fresh_role_catalog_reset_is_narrow_and_preflighted() -> None:
     assert "foreign_role_setting" in reset
     assert "foreign_shared_dependency" in reset
     assert "pg_shdepend" in reset
+    assert "LOCK TABLE pg_catalog.pg_authid, pg_catalog.pg_auth_members" in reset
+    assert "pg_db_role_setting" in reset
+    assert "PINVI_ROLE_CATALOG_RESET_PERMIT_FILE" in reset
+    assert "pinvi-role-catalog-reset-v1" in reset
+    assert "0:0:600" in reset
+    assert "pg_control_system" in reset
+    assert "membership.grantor" in reset
     assert "DROP ROLE IF EXISTS" in reset
     assert 'DROP OWNED' not in reset
     assert 'REASSIGN OWNED' not in reset

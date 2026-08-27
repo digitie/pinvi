@@ -15,6 +15,7 @@ unset PGAPPNAME PGCONNECT_TIMEOUT PGDATABASE PGHOST PGHOSTADDR PGOPTIONS PGPASSF
 
 PINVI_ROLE_TOPOLOGY_VERIFY_ONLY="${PINVI_ROLE_TOPOLOGY_VERIFY_ONLY:-0}"
 PINVI_ROLE_CATALOG_RESET_ONLY="${PINVI_ROLE_CATALOG_RESET_ONLY:-0}"
+PINVI_ROLE_CATALOG_RESET_PERMIT_FILE="${PINVI_ROLE_CATALOG_RESET_PERMIT_FILE:-}"
 PINVI_M05_LEGACY_REBASELINE="${PINVI_M05_LEGACY_REBASELINE:-0}"
 PINVI_MIGRATOR_DISABLE_LOGIN="${PINVI_MIGRATOR_DISABLE_LOGIN:-1}"
 # The ordinary PinVi Compose network reaches PostgreSQL as ``app-postgres:5432``.
@@ -645,12 +646,23 @@ reset_fresh_role_catalog() {
     --set="schema_owner=${PINVI_APP_SCHEMA_OWNER}" \
     --set="migration_owner=${PINVI_MIGRATION_OWNER}" \
     --set="migrator_role=${PINVI_MIGRATOR_DB_USER}" \
+    --set="expected_system_identifier=${reset_expected_system_identifier}" \
+    --set="expected_database_oid=${reset_expected_database_oid}" \
+    --set="expected_database_owner=${reset_expected_database_owner}" \
     >/dev/null 2>&1 <<'SQL'
 BEGIN;
+LOCK TABLE pg_catalog.pg_authid, pg_catalog.pg_auth_members,
+           pg_catalog.pg_db_role_setting, pg_catalog.pg_database,
+           pg_catalog.pg_shdepend IN ACCESS EXCLUSIVE MODE;
 WITH target_database AS (
-    SELECT database_row.oid
+    SELECT database_row.oid, database_row.datdba
     FROM pg_database database_row
     WHERE database_row.datname = :'database_name'
+),
+bootstrap_owner AS (
+    SELECT role_row.oid
+    FROM pg_roles role_row
+    WHERE role_row.rolname = current_user
 ),
 target_roles AS (
     SELECT role_row.oid
@@ -672,6 +684,7 @@ foreign_membership AS (
       AND NOT (
         membership.roleid IN (SELECT oid FROM target_roles)
         AND membership.member IN (SELECT oid FROM target_roles)
+        AND membership.grantor IN (SELECT oid FROM bootstrap_owner)
       )
 ),
 foreign_database_owner AS (
@@ -690,16 +703,49 @@ foreign_shared_dependency AS (
     FROM pg_shdepend dependency
     WHERE dependency.refobjid IN (SELECT oid FROM target_roles)
       AND (
-        dependency.dbid <> 0
-        OR dependency.classid <> 'pg_auth_members'::regclass
+        NOT (
+            dependency.dbid = 0
+            AND dependency.classid = 'pg_auth_members'::regclass
+        )
+        AND NOT (
+            dependency.dbid IN (0, (SELECT oid FROM target_database))
+            AND dependency.classid = 'pg_db_role_setting'::regclass
+        )
       )
 )
 SELECT 1 / CASE WHEN
     (SELECT count(*) FROM target_database) = 1
+    AND (SELECT system_identifier::text FROM pg_control_system()) = :'expected_system_identifier'
+    AND (SELECT oid::text FROM target_database) = :'expected_database_oid'
+    AND (SELECT datdba::regrole::text FROM target_database) = :'expected_database_owner'
     AND to_regnamespace('app') IS NULL
     AND to_regnamespace('ops') IS NULL
     AND to_regnamespace('pinvi_internal') IS NULL
     AND to_regnamespace('x_extension') IS NULL
+    AND NOT EXISTS (
+        SELECT 1 FROM pg_namespace namespace
+        WHERE namespace.nspname NOT IN (
+            'pg_catalog', 'information_schema', 'pg_toast', 'public'
+        )
+          AND namespace.nspname NOT LIKE 'pg_temp_%'
+          AND namespace.nspname NOT LIKE 'pg_toast_temp_%'
+    )
+    AND NOT EXISTS (
+        SELECT 1 FROM pg_extension extension_row
+        WHERE extension_row.extname <> 'plpgsql'
+    )
+    AND NOT EXISTS (
+        SELECT 1 FROM pg_class relation
+        JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+        WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+          AND namespace.nspname NOT LIKE 'pg_temp_%'
+          AND namespace.nspname NOT LIKE 'pg_toast_temp_%'
+    )
+    AND NOT EXISTS (
+        SELECT 1 FROM pg_proc procedure
+        JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+        WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+    )
     AND NOT EXISTS (SELECT 1 FROM foreign_membership)
     AND NOT EXISTS (SELECT 1 FROM foreign_database_owner)
     AND NOT EXISTS (SELECT 1 FROM foreign_role_setting)
@@ -717,11 +763,42 @@ COMMIT;
 SQL
 }
 
+load_fresh_role_catalog_reset_permit() {
+  if [ -z "${PINVI_ROLE_CATALOG_RESET_PERMIT_FILE}" ] \
+    || [ ! -f "${PINVI_ROLE_CATALOG_RESET_PERMIT_FILE}" ] \
+    || [ -L "${PINVI_ROLE_CATALOG_RESET_PERMIT_FILE}" ]; then
+    return 1
+  fi
+  permit_mode="$(stat -c '%u:%g:%a' "${PINVI_ROLE_CATALOG_RESET_PERMIT_FILE}" 2>/dev/null)" || return 1
+  if [ "${permit_mode}" != "0:0:600" ]; then
+    return 1
+  fi
+  IFS='|' read -r permit_version permit_transaction permit_pinset \
+    reset_expected_system_identifier reset_expected_database_oid \
+    reset_expected_database_name reset_expected_database_owner permit_extra \
+    < "${PINVI_ROLE_CATALOG_RESET_PERMIT_FILE}" || return 1
+  if [ -n "${permit_extra}" ] \
+    || [ "${permit_version}" != "pinvi-role-catalog-reset-v1" ] \
+    || [ "${reset_expected_database_name}" != "${POSTGRES_DB}" ] \
+    || [ -z "${permit_transaction}" ] \
+    || [ -z "${permit_pinset}" ] \
+    || [ -z "${reset_expected_system_identifier}" ] \
+    || [ -z "${reset_expected_database_oid}" ] \
+    || [ -z "${reset_expected_database_owner}" ]; then
+    return 1
+  fi
+}
+
 if [ "${PINVI_ROLE_CATALOG_RESET_ONLY}" = "1" ]; then
   if [ "${PINVI_M05_LEGACY_REBASELINE}" != "0" ] \
     || [ "${PINVI_MIGRATOR_DISABLE_LOGIN}" != "1" ]; then
     unset PGPASSWORD
     echo "fresh PinVi role catalog reset has invalid lifecycle input" >&2
+    exit 2
+  fi
+  if ! load_fresh_role_catalog_reset_permit; then
+    unset PGPASSWORD
+    echo "fresh PinVi role catalog reset permit is invalid" >&2
     exit 2
   fi
   if ! reset_fresh_role_catalog; then

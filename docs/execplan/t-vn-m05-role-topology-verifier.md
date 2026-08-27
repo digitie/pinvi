@@ -66,10 +66,11 @@ sealed 상태만 관찰하는 비밀 비노출 진단 계약을 PinVi source에 
    전후 확장 catalog fingerprint 불변도 확인한다.
 5. static test에서 verify-only가 mutation 경로·raw output을 갖지 않고 endpoint/input failure 및
    malformed evaluator record도 typed JSON으로 닫히는지 확인한다.
-6. fresh catalog reset은 target DB가 비어 있는지와 foreign dependency 부재를 한 transaction에서
-   확인한 뒤 exact four-role `DROP ROLE`만 실행한다. `DROP OWNED`, `REASSIGN OWNED`, bootstrap
-   root role 변경, legacy profile, 일반 runtime에서의 실행은 금지한다. 실패 출력에는 role·DSN·
-   catalog raw 값을 남기지 않는다.
+6. fresh catalog reset은 Manager가 reset intent 뒤 발행한 root-owned `0600` permit의 pinset·transaction·
+   PostgreSQL system identifier·DB OID/name/owner를 현재 target과 대조한 뒤에만 실행한다. catalog lock 뒤
+   target DB의 user object/extension 부재와 foreign dependency를 한 transaction에서 확인하고 exact four-role
+   `DROP ROLE`만 실행한다. `DROP OWNED`, `REASSIGN OWNED`, bootstrap root role 변경, legacy profile,
+   일반 runtime에서의 실행은 금지한다. 실패 출력에는 role·DSN·catalog raw 값을 남기지 않는다.
 7. PinVi PR merge 뒤 별도 Docker Manager PR이 exact revision/pinset과 root-only reset·verifier
    command를 추가한다. sealed verifier는 폐기 대상인 기존 DB의 admission이 아니라 fresh target-state
    후조건이다. 따라서 Manager는 durable reset intent 뒤 DB reset → fresh catalog reset → role open →
