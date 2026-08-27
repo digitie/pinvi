@@ -4,6 +4,22 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-08-27
+
+- [x] **T-355** — `scripts/deploy-node.sh`/`scripts/docker-app.sh`의 bare-call errexit 무력화
+      P0 3건을 `|| return $?`로 고쳤다(claude, #498). `if ! FUNC` 형태로 호출되는 함수는 그
+      동적 호출 트리 전체에서 errexit이 꺼지는데, 그 안에서 하위 체크를 bare statement로 호출하면
+      실패해도 무시되고 마지막 statement의 종료코드만 함수 반환값이 되던 문제다.
+      `require_fresh_stack_identity()`의 하위 체크 3개(`require_n150_execution_host`,
+      `require_canonical_compose_file`, `require_isolated_database_endpoint`),
+      `fresh_stack_runtime_image_proof()`의 `pinvi_verify_runtime_image_provenance` 호출,
+      `require_direct_compose_mutation_environment()`의 `require_docker`/
+      `validate_configured_ports` 호출을 고쳤다. PR #487(`codex/pr477-followup`, 같은 날
+      merge)이 같은 파일을 대폭 재작성했지만 이 3건은 고치지 않은 채 main에 살아있었음을
+      merge 직후 재확인해 별도 PR로 분리했다. 검증: sed로 추출한 실제 함수 본문을 stub
+      하위 함수로 재현해 수정 전/후 동작 확인(3건 모두), `bash -n` 통과, 관련 unit 테스트
+      139건 통과.
+
 ## 2026-08-26 (3)
 
 - [x] **T-351** — `pytest tests/integration`이 계속 자라(684건+, 91개 파일) job timeout을
