@@ -34,6 +34,9 @@ candidate를 정확히 한 번 실행하고 M04/M05 activation을 진행한다. 
 동일 pinset을 재실행하지 않고, 다음 PinVi source와 Manager pinset에서 root-owned structured result launcher를 통해서만
 후보 상태를 판정한다.
 
+`53d4639f…`도 재실행하지 않는다. 이 후보는 trusted release가 launcher execute bit을 보존하지 않아 admission 이전에
+끝났고 durable output·ledger·raw stderr가 없다. installer 보정 뒤 다음 PinVi source와 새 pinset만 허용한다.
+
 ## 2026-08-28 (codex) — v2 permit candidate committed generation 확인
 
 Manager `519edd9…`, PinVi `69a5ac65…`, Map `9c64e862…`의 pinset `030b12fc…`은 trusted n150
