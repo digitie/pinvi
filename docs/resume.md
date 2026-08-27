@@ -1,5 +1,105 @@
 # resume.md
 
+## 2026-08-28 (codex) — M05 attestation provenance를 committed Map runtime에 재결박
+
+PinVi M05 attestation은 Map source revision과 image identity를 exact pair로 검사한다. committed generation의
+Map source는 `9c64e862…`, API image는 `2260ec…`, UI image는 `5dc547…`인데 기존 pair는 이전 source/image를
+고정해 fail-closed하므로, 이 generation을 provenance source로 재결박했다. PinVi `a90b1f06…`와 Map
+`9c64e862…`의 새 Manager pinset `87fe2abc…`에서만 다음 trusted candidate를 정확히 한 번 실행하고,
+M04/M05 activation을 진행한다. 기존 `030b12fc…`은 재실행하지 않는다.
+
+## 2026-08-28 (codex) — v2 permit candidate committed generation 확인
+
+Manager `519edd9…`, PinVi `69a5ac65…`, Map `9c64e862…`의 pinset `030b12fc…`은 trusted n150
+release에서 `rebuild-pinned --confirm --json`을 정확히 한 번 실행해 committed generation이 됐다. Map
+application head는 `300`, Map Dagster head는 `29b539ebc72a`, PinVi head는 `20260824_0101`이며, 이
+pinset은 재실행하지 않는다. 다음 한 작업은 같은 committed candidate에서 root-owned isolated M04 승인 →
+Map rebind → PinVi terminal receipt/Map ACK → M05 read-only browser E2E와 signed activation attestation을
+완료하는 것이다. 이 기록은 새 provenance 재결박 전 generation의 결과이며, `030b12fc…` 재실행 근거가 아니다.
+
+## 2026-08-28 (codex) — scoped v2 permit으로 external membership cleanup 승인
+
+사용자의 완주 지시에 따라 target 밖 stale membership 철회는 Manager root-owned v2 permit에
+`revoke_external_memberships` scope가 있을 때만 수행한다. permit은 transaction·pinset·PinVi DB identity와 함께
+결박되며, PinVi는 version·필드 수·scope가 정확히 일치하지 않으면 reset을 거부한다. 실제 PostGIS 회귀는 target이
+external role에 주어진 경우와 external role이 target에 주어진 경우 모두에서 target membership만 사라지고 두 external
+role이 남음을 확인한다.
+
+## 2026-08-27 (codex) — target 내부 membership grantor 과잉 차단 보정
+
+`b22bfb8c…` candidate는 정확히 한 번 실행되어 `map_runtime_ready` reset intent 뒤
+`role_catalog_reset_failed/foreign_membership` terminal로 보존됐다. receipt는 raw catalog를 열지 않고 fixed enum만
+기록했다. 이는 target 네 role 내부 membership의 `grantor` provenance까지 외부 dependency로 취급한 과잉 차단이다.
+reset은 roleid/member가 모두 target four-role이면 grantor와 무관하게 수용하고, 어느 한쪽이라도 target 밖에
+닿으면 계속 `foreign_membership`으로 fail-close한다. target 내부 edge는 같은 transaction의 `DROP ROLE`과 함께
+제거된다. PinVi unit 19건과 PostGIS integration 1건, 두 전문 적대 리뷰 GO를 확인했다. 다음 한 작업은 새
+PinVi revision을 Manager pinset에 결박하고 n150 official rebuild를 정확히 한 번 실행하는 것이다.
+
+## 2026-08-27 (codex) — reset isolation refusal의 안전한 원인 분류
+
+`31fe73ad…` candidate는 정확히 한 번 실행되어 `map_runtime_ready`의 reset intent 뒤
+`role_catalog_reset_failed/target_not_isolated` terminal로 보존됐다. raw psql 출력·stderr·catalog 값은
+읽지 않았다. PinVi reset transaction은 이제 같은 ACCESS EXCLUSIVE proof-to-mutation 경계 안에서
+identity·namespace·extension·object·role dependency를 고정 enum 하나로만 분류해 root-owned result
+receipt에 쓴다. Manager는 그 enum만 strict parse해 terminal journal에 기록한다. PinVi unit 19건,
+PostGIS integration 1건, Manager focused 회귀 170건을 통과했다. 다음 한 작업은 두 전문 적대 리뷰와
+CI 뒤 새 PinVi revision을 pinset으로 결박하고 n150에서 새 후보를 단 한 번 실행하는 것이다.
+
+## 2026-08-27 (codex) — identity DTO 경계 보정 뒤 새 candidate 준비
+
+`37932169…` candidate는 reset one-shot 전 identity admission에서 terminal 처리됐고 재시도하지 않는다.
+Manager가 live database identity를 journal DTO로 정규화한 뒤 비교하도록 보정했으며, PinVi source는 이 terminal
+기록을 포함하는 새 immutable revision으로 회전한다. 다음 한 작업은 새 PinVi revision으로 Manager pinset을
+회전하고 재리뷰·CI를 확인한 뒤 n150에서 새 pinset을 정확히 한 번 실행하는 것이다.
+
+## 2026-08-27 (codex) — reset 결과 영수증 회귀 추가
+
+fresh role-catalog reset은 Manager-owned `0600` result file에만 transaction/pinset-bound fixed JSON을 쓴다.
+실제 Compose 회귀는 strict target isolation 거부와 성공을 각각 그 영수증으로 확인했으며, raw stdout/stderr는
+판정 계약 밖에 둔다. 다음 한 작업은 이 새 immutable PinVi revision의 전문 재리뷰·CI 완료를 확인하고,
+Manager가 source pin을 회전한 뒤 새 candidate에서만 n150 official rebuild를 한 번 실행하는 것이다.
+
+## 2026-08-27 (codex) — template0 fresh reset candidate 재결박
+
+`68d99705…` n150 candidate는 `map_runtime_ready` 뒤 role-catalog reset terminal로 끝났으며 재시도하지 않는다.
+두 전문 리뷰가 Manager default `template1`과 PinVi strict empty-catalog reset의 불일치를 P1으로 판정했다.
+Manager는 PinVi create에만 `--template template0`을 추가했고, PinVi source에도 같은 precondition을 명시했다.
+두 새 source revision의 검증·리뷰·trusted deployment 뒤에만 새 pinset official candidate를 한 번 실행한다.
+
+## 2026-08-27 (codex) — fresh role catalog reset의 type-only residue P1 보정
+
+전문 데이터 계약 리뷰에서 기존 target-empty 검사가 relation/procedure만 보므로 `public` enum·domain·type
+같은 namespace object가 남아도 reset이 진행될 수 있는 P1을 확인했다. reset transaction은 이제
+`pg_namespace`와 `pg_depend`도 ACCESS EXCLUSIVE로 잠그고, system/temp namespace 밖을 참조하는
+dependency가 하나라도 있으면 role mutation 전에 거부한다.
+
+실제 PostGIS 16 Compose 회귀는 Manager application-300과 같이 target DB를 `template0`에서 다시 만든 뒤,
+stale generated four-role membership/`SET ROLE`과 public enum을 넣었다. enum이 있는 reset은 generic failure로
+끝나고 네 role은 변하지 않았으며, enum 제거 뒤 reset은 네 role만 제거했다. normal open→seal 뒤
+sealed verifier는 canonical을 반환했다. 다음 한 작업은 두 전문 리뷰의 재승인 뒤 이 immutable revision을
+PinVi draft PR에 push하고 Manager pinset을 새 SHA로 회전하는 것이다.
+
+## 2026-08-27 (codex) — M05 sealed verifier의 fresh target-state 순서 정합화
+
+n150의 새 `06045da…` candidate는 PinVi DB drop/create 뒤에도 `pinvi_role_open`에서
+`role_topology_noncanonical`로 terminal 처리됐다. DB reset은 cluster-global PostgreSQL role catalog의
+membership·role setting을 제거하지 않고 normal bootstrap은 expected edge만 GRANT하므로, 과거 terminal
+candidate residue가 fresh database에서도 strict gate를 막는다. 해당 candidate는 재실행하지 않는다.
+
+다음 한 작업은 새 PinVi source에 target-empty/foreign dependency preflight를 가진 fresh-only exact four-role
+catalog reset one-shot을 두고, Manager가 durable intent 뒤 이를 role open 직전에만 호출하도록 별도 pinset으로
+회전하는 것이다. `DROP OWNED`/전역 role reset/old journal 재개는 금지한다.
+
+n150의 `52c6e538…` candidate는 historical/partial catalog에 sealed 후조건을 적용해 v8 journal 전
+fail-close했다. `app_ownership`은 fresh role bootstrap이 만든 뒤 migration이 채우는 target-state predicate라
+기존 DB admission에 적용하면 안 된다. PinVi source 계약은 sealed verifier의 불변식·read-only 보장은 유지하되,
+Manager가 DB reset 뒤 role open → admin/migration bootstrap → seal 및 PinVi head 확인 뒤, runtime start와
+manifest commit 전에만 호출하도록 명시했다. verifier 원문·reason enum은 receipt/CLI에 저장하지 않고 terminal
+class만 owner-only journal에 남겨 같은 pinset 재시도를 막는다.
+
+다음 한 작업은 이 문서 revision과 Manager의 순서 보정 PR을 각각 두 전문 리뷰·검증·draft PR로 고정하고,
+새 PinVi revision으로 계산한 immutable pinset에서만 trusted n150 official rebuild를 한 번 실행하는 것이다.
+
 ## 2026-08-27 (claude) — T-355 배포 게이트 P0 완료, M05 activation은 codex 진행 중
 
 PR #487(codex/pr477-followup)이 merge된 직후 확인해보니, PR #487 이전에 별도로 발견해 뒀던
