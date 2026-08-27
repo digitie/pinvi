@@ -638,7 +638,9 @@ reset_fresh_role_catalog() {
   # role memberships or per-role settings, so a prior failed candidate can make
   # the otherwise fresh target fail the strict normal topology gate.  Refuse any
   # dependency outside the four generated non-root roles and this target DB
-  # before issuing a single role mutation.
+  # before issuing a single role mutation.  The Manager must create this target
+  # from template0: template1 may carry extension/type/namespace residue and is
+  # therefore deliberately rejected by the isolation proof below.
   PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 \
     --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
     --set="database_name=${POSTGRES_DB}" \
