@@ -653,7 +653,8 @@ reset_fresh_role_catalog() {
 BEGIN;
 LOCK TABLE pg_catalog.pg_authid, pg_catalog.pg_auth_members,
            pg_catalog.pg_db_role_setting, pg_catalog.pg_database,
-           pg_catalog.pg_shdepend IN ACCESS EXCLUSIVE MODE;
+           pg_catalog.pg_shdepend, pg_catalog.pg_namespace,
+           pg_catalog.pg_depend IN ACCESS EXCLUSIVE MODE;
 WITH target_database AS (
     SELECT database_row.oid, database_row.datdba
     FROM pg_database database_row
@@ -712,6 +713,19 @@ foreign_shared_dependency AS (
             AND dependency.classid = 'pg_db_role_setting'::regclass
         )
       )
+),
+foreign_user_namespace_object AS (
+    -- pg_depend is the complete namespace-scoped object inventory.  Looking
+    -- only at relations and procedures misses a public enum/domain/type and
+    -- several other object kinds that can survive a failed prior candidate.
+    SELECT 1
+    FROM pg_depend dependency
+    JOIN pg_namespace namespace
+      ON dependency.refclassid = 'pg_namespace'::regclass
+     AND dependency.refobjid = namespace.oid
+    WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+      AND namespace.nspname NOT LIKE 'pg_temp_%'
+      AND namespace.nspname NOT LIKE 'pg_toast_temp_%'
 )
 SELECT 1 / CASE WHEN
     (SELECT count(*) FROM target_database) = 1
@@ -750,6 +764,7 @@ SELECT 1 / CASE WHEN
     AND NOT EXISTS (SELECT 1 FROM foreign_database_owner)
     AND NOT EXISTS (SELECT 1 FROM foreign_role_setting)
     AND NOT EXISTS (SELECT 1 FROM foreign_shared_dependency)
+    AND NOT EXISTS (SELECT 1 FROM foreign_user_namespace_object)
 THEN 1 ELSE 0 END;
 SELECT format('DROP ROLE IF EXISTS %I', :'migrator_role')
 \gexec

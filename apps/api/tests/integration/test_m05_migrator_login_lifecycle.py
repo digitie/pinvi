@@ -1,3 +1,4 @@
+# ruff: noqa: S608 -- every interpolated identifier is generated from UUID hex in an isolated test project.
 """Compose-level lifecycle proof for the sealed M05 one-shot migrator login."""
 
 from __future__ import annotations
@@ -31,6 +32,247 @@ def _docker_compose_binary() -> str | None:
     ):
         return None
     return docker
+
+
+def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) -> None:
+    """실제 PostgreSQL 16에서 type-only residue는 역할을 건드리지 않고 거부한다."""
+
+    docker = _docker_compose_binary()
+    sudo = shutil.which("sudo")
+    if docker is None or sudo is None:
+        pytest.skip("Docker와 root-owned permit을 만들 sudo가 필요하다")
+    if subprocess.run([sudo, "-n", "true"], check=False).returncode != 0:  # noqa: S603
+        pytest.skip("root-owned permit을 만들 passwordless sudo가 필요하다")
+
+    suffix = uuid4().hex[:10]
+    project = f"pinvi-m05-reset-{suffix}"
+    root_role = f"m05_root_{suffix}"
+    runtime_role = f"m05_runtime_{suffix}"
+    schema_owner = f"m05_app_owner_{suffix}"
+    migration_owner = f"m05_migration_owner_{suffix}"
+    migrator_role = f"m05_migrator_{suffix}"
+    password = "m05-catalog-reset-test-password"
+    environment_file = tmp_path / "compose.env"
+    environment_file.write_text(
+        "\n".join(
+            (
+                f"PINVI_DB_OWNER_USER={root_role}",
+                f"PINVI_POSTGRES_PASSWORD={password}",
+                f"PINVI_APP_DB_USER={runtime_role}",
+                f"PINVI_APP_DB_PASSWORD={password}",
+                f"PINVI_APP_SCHEMA_OWNER={schema_owner}",
+                f"PINVI_MIGRATION_OWNER={migration_owner}",
+                f"PINVI_MIGRATOR_DB_USER={migrator_role}",
+                f"PINVI_MIGRATOR_DB_PASSWORD={password}",
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+    compose_environment = os.environ.copy()
+    for name in (
+        "PINVI_DB_OWNER_USER",
+        "PINVI_POSTGRES_PASSWORD",
+        "PINVI_APP_DB_USER",
+        "PINVI_APP_DB_PASSWORD",
+        "PINVI_APP_SCHEMA_OWNER",
+        "PINVI_MIGRATION_OWNER",
+        "PINVI_MIGRATOR_DB_USER",
+        "PINVI_MIGRATOR_DB_PASSWORD",
+    ):
+        compose_environment.pop(name, None)
+
+    def compose(*arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+        result = subprocess.run(  # noqa: S603 - isolated, fixed Compose invocation
+            (
+                docker,
+                "compose",
+                "--project-name",
+                project,
+                "--file",
+                str(COMPOSE_FILE),
+                "--env-file",
+                str(environment_file),
+                *arguments,
+            ),
+            check=False,
+            cwd=ROOT,
+            env=compose_environment,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if check:
+            assert result.returncode == 0, result.stderr
+        return result
+
+    permit = tmp_path / "role-catalog-reset.permit"
+    try:
+        compose("up", "--detach", "--wait", "app-postgres")
+        # Manager의 application-300 reset과 같이 template0에서 target을 다시 만든다.
+        # postgis image 초기 DB의 extension은 이 reset 단계의 target baseline이 아니다.
+        compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            "--no-psqlrc",
+            f"--username={root_role}",
+            "--dbname=postgres",
+            "--command=DROP DATABASE pinvi;",
+        )
+        compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            "--no-psqlrc",
+            f"--username={root_role}",
+            "--dbname=postgres",
+            "--command="
+            f'CREATE DATABASE pinvi WITH OWNER "{root_role}" TEMPLATE template0;',
+        )
+        identity = compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            "--no-psqlrc",
+            "--tuples-only",
+            "--no-align",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            "SELECT system_identifier::text || '|' || (SELECT oid::text FROM pg_database "
+            "WHERE datname = current_database()) || '|' || current_database() || '|' || current_user "
+            "FROM pg_control_system();",
+        ).stdout.strip()
+        permit.write_text(
+            f"pinvi-role-catalog-reset-v1|test-transaction|test-pinset|{identity}\n",
+            encoding="utf-8",
+        )
+        subprocess.run([sudo, "-n", "chown", "root:root", str(permit)], check=True)  # noqa: S603
+        subprocess.run([sudo, "-n", "chmod", "0600", str(permit)], check=True)  # noqa: S603
+        role_creation = "; ".join(
+            f'CREATE ROLE "{role}" LOGIN PASSWORD \'{password}\''
+            for role in (runtime_role, schema_owner, migration_owner, migrator_role)
+        )
+        compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            f"{role_creation}; GRANT \"{schema_owner}\" TO \"{migrator_role}\"; "
+            f"ALTER ROLE \"{migrator_role}\" IN DATABASE pinvi SET ROLE TO \"{schema_owner}\"; "
+            "CREATE TYPE public.stale_catalog_type AS ENUM ('residue');",
+        )
+        failed = compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "--volume",
+            f"{permit}:/run/pinvi/role-catalog-reset.permit:ro",
+            "--env",
+            "PINVI_ROLE_CATALOG_RESET_ONLY=1",
+            "--env",
+            "PINVI_MIGRATOR_DISABLE_LOGIN=1",
+            "--env",
+            "PINVI_M05_LEGACY_REBASELINE=0",
+            "--env",
+            "PINVI_ROLE_CATALOG_RESET_PERMIT_FILE=/run/pinvi/role-catalog-reset.permit",
+            "app-db-runtime-role",
+            check=False,
+        )
+        assert failed.returncode != 0
+        assert "fresh PinVi role catalog reset could not prove an isolated target" in (
+            failed.stdout + failed.stderr
+        )
+        remaining_roles = compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            "--no-psqlrc",
+            "--tuples-only",
+            "--no-align",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            "SELECT count(*) FROM pg_roles WHERE rolname IN "
+            f"('{runtime_role}', '{schema_owner}', '{migration_owner}', '{migrator_role}');",
+        ).stdout.strip()
+        assert remaining_roles == "4"
+        # Type-only residue를 없앤 뒤에는 stale SET ROLE/membership만 남는다. reset은
+        # 그것을 포함한 generated four-role catalog만 제거하고 normal bootstrap이
+        # 다시 sealed canonical state를 만들 수 있어야 한다.
+        compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command=DROP TYPE public.stale_catalog_type;",
+        )
+        compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "--volume",
+            f"{permit}:/run/pinvi/role-catalog-reset.permit:ro",
+            "--env",
+            "PINVI_ROLE_CATALOG_RESET_ONLY=1",
+            "--env",
+            "PINVI_MIGRATOR_DISABLE_LOGIN=1",
+            "--env",
+            "PINVI_M05_LEGACY_REBASELINE=0",
+            "--env",
+            "PINVI_ROLE_CATALOG_RESET_PERMIT_FILE=/run/pinvi/role-catalog-reset.permit",
+            "app-db-runtime-role",
+        )
+        assert compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            "--no-psqlrc",
+            "--tuples-only",
+            "--no-align",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            "SELECT count(*) FROM pg_roles WHERE rolname IN "
+            f"('{runtime_role}', '{schema_owner}', '{migration_owner}', '{migrator_role}');",
+        ).stdout.strip() == "0"
+        compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "--env",
+            "PINVI_MIGRATOR_DISABLE_LOGIN=0",
+            "app-db-runtime-role",
+        )
+        compose("run", "--rm", "--no-deps", "app-db-runtime-role")
+        sealed = compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "--env",
+            "PINVI_ROLE_TOPOLOGY_VERIFY_ONLY=1",
+            "--env",
+            "PINVI_MIGRATOR_DISABLE_LOGIN=1",
+            "app-db-runtime-role",
+        )
+        assert sealed.stdout.strip() == (
+            '{"schema":"pinvi.role-topology-diagnostic.v1","status":"canonical",'
+            '"mode":"sealed","reasons":[]}'
+        )
+    finally:
+        compose("down", "--volumes", "--remove-orphans", check=False)
+        subprocess.run([sudo, "-n", "rm", "-f", str(permit)], check=False)  # noqa: S603
 
 
 def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
@@ -109,7 +351,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
 
     def role_state() -> tuple[str, str, str, str, str]:
         query = (
-            "SELECT "  # noqa: S608 - role names use a fixed prefix plus UUID hex only
+            "SELECT "
             f"(SELECT rolcanlogin::text FROM pg_roles WHERE rolname = '{migrator_role}'), "
             f"has_database_privilege('{migrator_role}', current_database(), 'CONNECT')::text, "
             f"(SELECT count(*)::text FROM pg_stat_activity WHERE usename = '{migrator_role}'), "
@@ -136,7 +378,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
 
     def managed_schema_state() -> tuple[str, str, str, str, str, str, str]:
         query = (
-            "SELECT "  # noqa: S608 - role names use a fixed prefix plus UUID hex only
+            "SELECT "
             "(SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 'app'), "
             "(SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 'ops'), "
             "(SELECT pg_get_userbyid(nspowner) FROM pg_namespace "
@@ -164,7 +406,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
 
     def role_catalog_fingerprint() -> str:
         query = (
-            "WITH catalog_rows(value) AS ("  # noqa: S608 - role names use a fixed prefix plus UUID hex only
+            "WITH catalog_rows(value) AS ("
             "SELECT 'role|' || rolname || '|' || rolcanlogin::text || '|' || rolsuper::text "
             "|| '|' || rolcreaterole::text || '|' || rolcreatedb::text || '|' "
             "|| rolreplication::text || '|' || rolbypassrls::text || '|' || rolinherit::text "

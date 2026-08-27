@@ -162,9 +162,13 @@ def test_fresh_role_catalog_reset_is_narrow_and_preflighted() -> None:
     assert "foreign_database_owner" in reset
     assert "foreign_role_setting" in reset
     assert "foreign_shared_dependency" in reset
+    assert "foreign_user_namespace_object" in reset
     assert "pg_shdepend" in reset
     assert "LOCK TABLE pg_catalog.pg_authid, pg_catalog.pg_auth_members" in reset
     assert "pg_db_role_setting" in reset
+    assert "pg_namespace" in reset
+    assert "pg_depend" in reset
+    assert "complete namespace-scoped object inventory" in reset
     assert "PINVI_ROLE_CATALOG_RESET_PERMIT_FILE" in reset
     assert "pinvi-role-catalog-reset-v1" in reset
     assert "0:0:600" in reset
