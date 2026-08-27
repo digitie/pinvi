@@ -2,6 +2,126 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-28 (codex) — v2 permit candidate committed generation
+
+- Manager `519edd9…`, PinVi `69a5ac65…`, Map `9c64e862…`의 pinset `030b12fc…`을 trusted n150 release에서
+  `rebuild-pinned --confirm --json`으로 정확히 한 번 실행해 committed generation을 확인했다. Map application
+  head `300`, Map Dagster head `29b539ebc72a`, PinVi head `20260824_0101`이 같은 generation에 결박됐다.
+- 이 pinset은 재실행하지 않는다. 다음 activation 증거는 이 committed candidate를 source로 하는 isolated M04/M05
+  live mutating E2E와 signed attestation만 수용한다.
+
+## 2026-08-28 (codex) — v2 permit으로 scoped external membership cleanup
+
+- 사용자의 완주 지시에 따라 Manager가 transaction·pinset·PinVi DB identity와 `revoke_external_memberships`를 함께
+  결박한 root-owned v2 permit을 발행할 때만 target 밖 membership 자동 철회를 허용한다. legacy v1 permit 또는 다른
+  scope는 PinVi가 reset 전에 거부한다.
+- PostGIS 회귀는 target→external 및 external→target 두 방향 edge에서 target membership만 제거되고 external role은
+  남는 것을 확인한다. database owner·role setting·shared dependency·namespace/object guard는 바꾸지 않았다.
+
+## 2026-08-27 (codex) — external membership terminal의 non-interference 보존
+
+- `c6c73cdf…` n150 candidate는 정확히 한 번 실행돼 `map_runtime_ready` 뒤
+  `role_catalog_reset_failed/foreign_membership` terminal로 보존됐다. raw membership row·catalog 값·stderr는 읽지
+  않았고 같은 pinset을 재시도하지 않는다.
+- PostgreSQL `DROP ROLE`의 자동 membership 철회는 target 밖 role이 얽힌 경우 외부 principal의 권한 관계를
+  바꾼다. target 네 role 내부 edge만 허용하고 target 밖 edge를 `foreign_membership`으로 fail-close하는
+  isolation contract를 유지한다. 운영 권한 결정 전에는 다음 candidate를 만들지 않는다.
+
+## 2026-08-27 (codex) — journal 이전 builder 실패의 안전 분류를 다음 후보에 결박
+
+- `89330403…` n150 candidate는 정확히 한 번 실행되고 journal을 만들기 전에 끝났다. root-owned expected journal 부재와 종료 코드만 확인했으며, raw builder 출력·stderr·경로는 열지 않았고 같은 pinset을 재시도하지 않는다.
+- Manager는 이후 pre-journal `DeploymentContractError`를 stage 고정 enum으로 봉인해 JSON에는 `prejournal_failure`와 허용 단계만 출력하게 보강했다. 이 문서 commit은 그 보강을 소비하는 새 immutable PinVi revision을 만들며, 다음 candidate는 새 source pinset에서만 한 번 실행한다.
+
+## 2026-08-27 (codex) — target 내부 membership의 grantor provenance 분리
+
+- `b22bfb8c…` n150 candidate는 정확히 한 번 실행돼 `map_runtime_ready` 뒤
+  `role_catalog_reset_failed/foreign_membership` terminal로 보존됐다. raw membership row·catalog 값·stderr는 읽지
+  않았고 같은 candidate를 재실행하지 않는다.
+- reset의 기존 `foreign_membership`은 target four-role 내부 edge라도 `grantor`가 bootstrap owner가 아니면
+  외부 의존으로 오판했다. `grantor`는 grant 기록 주체일 뿐 membership privilege의 roleid/member 경계가 아니며,
+  target 네 role만 잇는 edge는 같은 locked transaction의 `DROP ROLE`로 함께 제거된다. roleid/member 중 하나라도
+  target 밖이면 계속 fail-close하고, database owner·role setting·shared dependency·namespace guard는 바꾸지 않았다.
+
+## 2026-08-27 (codex) — reset isolation refusal의 고정 범주 영수증
+
+- `31fe73ad…` n150 candidate는 한 번만 실행돼 `map_runtime_ready` 뒤
+  `role_catalog_reset_failed/target_not_isolated` terminal로 보존됐다. result의 고정 범주 외 raw DB 값·psql
+  출력·stderr는 열지 않았고, 같은 candidate를 재실행하지 않는다.
+- PinVi reset은 ACCESS EXCLUSIVE proof와 role mutation을 한 transaction으로 유지하면서
+  `target_identity_invalid`, namespace/extension/object residue, membership/database-owner/role-setting/shared
+  dependency를 고정 enum 하나로만 분류한다. Manager는 transaction·pinset·inode 결박을 통과한 enum만
+  durable journal에 쓴다. public type residue와 stale generated-role catalog를 분리한 PostGIS integration
+  회귀가 각각 거부·이후 정상 reset을 확인한다.
+
+## 2026-08-27 (codex) — identity DTO 경계 terminal과 새 candidate 분리
+
+- `37932169…` n150 candidate는 정확히 한 번 실행되어 `map_runtime_ready` reset intent 뒤
+  `role_catalog_reset_failed/unclassified` terminal로 보존됐다. result receipt가 없으므로 PinVi reset one-shot은
+  실행되지 않았고, 이 pinset·journal·DB를 재시도하거나 수정하지 않는다.
+- Manager는 live `PinnedDatabaseIdentity`를 journal `PinnedRuntimeDatabaseIdentity`와 직접 비교해 항상
+  mismatch가 되던 경계를 발견했다. live 값을 journal DTO로 변환한 뒤 비교하도록 보정했다. 이 기록을 포함한
+  새 immutable PinVi source와 새 pinset에서만 다음 official rebuild를 한 번 실행한다.
+
+## 2026-08-27 (codex) — fresh reset 결과 영수증의 Compose 회귀 고정
+
+- Manager가 생성한 root-owned `0600` result file만 reset one-shot에 read-write bind mount한다.
+  PinVi는 성공과 strict isolation 거부를 각기 fixed JSON schema·status·class와 permit의 transaction/pinset으로
+  기록한다. stdout/stderr는 Manager의 판정 입력이 아니다.
+- disposable PostGIS 16 Compose 회귀는 `public` type residue의 거부 receipt
+  (`failed/foreign_namespace_object`)와 residue 제거 뒤 성공 receipt (`completed/completed`)를 실제 mount에서
+  확인했다. 이 추가 증적을 포함한 immutable source만 Manager가 다음 pinset으로 결박할 수 있다.
+
+## 2026-08-27 (codex) — fresh role-catalog reset의 template0 source 계약 고정
+
+- n150의 `68d99705…` official candidate는 정확히 한 번 실행되어 role-catalog reset terminal로 보존됐다.
+  원문·DB·permit을 복구하거나 같은 pinset을 재시도하지 않는다.
+- 두 전문 적대 리뷰는 Manager가 PinVi target을 기본 `template1`에서 생성한 반면 reset이 `template0` 수준의
+  empty catalog만 수용한 P1 계약 불일치를 확인했다. PinVi reset source에도 `template0` 생성 전제를 명시해,
+  새 immutable PinVi revision과 새 pinset에서만 Manager의 PinVi-only `--template template0` 보정을 실행하도록
+  결박한다. strict isolation predicate와 four-role 삭제 범위는 완화하지 않는다.
+
+## 2026-08-27 (codex) — role catalog reset의 namespace residue fail-closed 보정
+
+- 적대 데이터 계약 리뷰가 `public` enum/domain/type 등 type-only residue가 기존 empty-target query를
+  통과하는 P1을 발견했다. reset transaction은 `pg_namespace`·`pg_depend`까지 ACCESS EXCLUSIVE로
+  잠그고, system/temp namespace 밖을 ref로 하는 dependency를 complete namespace-scoped inventory로
+  거부하도록 보정했다.
+- disposable PostGIS 16 Compose에서 Manager와 동일하게 target DB를 `template0`으로 재생성했다.
+  stale generated four role·membership·per-DB `SET ROLE`과 public enum을 넣은 reset은 generic
+  fail-close로 끝나 role 네 개를 보존했다. enum 제거 후 reset은 role 네 개만 제거했고 normal
+  open→seal→sealed verifier는 canonical이었다.
+- 검증: `sh -n`, focused static unit **19 passed**, PostGIS 16 integration **1 passed**. 이 증적은
+  old candidate 재시도 근거가 아니며, 새 immutable PinVi source와 새 Manager pinset만 다음 공식
+  rebuild를 허용한다.
+
+## 2026-08-27 (codex) — fresh DB와 PostgreSQL role catalog의 범위 분리 보정
+
+- 새 `06045da…` candidate는 PinVi target database drop/create 뒤 `pinvi_role_open`에서
+  `role_topology_noncanonical`로 terminal 처리됐다. 이는 DB reset이 cluster-global role membership·
+  per-role setting을 지우지 않고 normal bootstrap이 expected graph만 GRANT한다는 경계 누락이다.
+  raw diagnostic을 열거나 이 candidate를 재실행하지 않는다.
+- 새 PinVi source는 `PINVI_ROLE_CATALOG_RESET_ONLY=1` fresh-only one-shot을 추가했다. target database가
+  비어 있고 exact generated four-role의 foreign membership/database ownership/role setting/shared dependency가
+  없음을 먼저 확인한 뒤에만 그 네 role을 transaction 안에서 제거한다. `DROP OWNED`·`REASSIGN OWNED`·root role
+  변경·legacy/general bootstrap 수리는 하지 않으며 stderr도 generic으로 닫는다.
+- 적대 리뷰의 fresh-proof/race P1 보정으로 reset은 Manager-issued root-owned `0600` permit의 pinset·transaction·
+  system identifier·DB OID/name/owner를 비교하고, `pg_authid`·membership·role-setting·database·shared dependency
+  catalog lock 뒤 full empty-target/foreign dependency를 재검증한다.
+- 후속 Manager candidate는 durable intent를 기록한 뒤에만 이 one-shot을 DB reset과 normal role open 사이에
+  호출한다. old d9·cbb·52·06045 journal은 모두 historical terminal evidence로 남기고 새 immutable source/pinset만
+  한 번 실행한다.
+
+## 2026-08-27 (codex) — sealed role topology의 target-state 호출 순서 고정
+
+- n150 `52c6e538…` candidate가 v8 journal 전 종료한 원인은 sealed verifier가 폐기할 기존 catalog에
+  `app_ownership`을 포함한 fresh target-state 후조건을 적용한 순서 불일치였다. verifier의 SQL·fixed enum·raw
+  비노출 정책은 완화하지 않는다.
+- 구현 계약은 Manager가 DB reset 뒤 role open → admin/migration bootstrap → migrator seal·exact PinVi head
+  확인 뒤, PinVi runtime start/manifest commit 전에 same verifier를 호출하도록 고정한다. failure는 원문 또는
+  reason enum을 보존하지 않는 owner-only terminal receipt로 같은 pinset을 봉인한다.
+- `cbb577d3…`와 `52c6e538…` candidate/journal은 역사 증거로 보존하며 재시도·수정하지 않는다. 이 문서
+  revision을 포함하는 새 immutable PinVi source와 새 Manager pinset에서만 다음 official rebuild를 실행한다.
+
 ## 2026-08-27 (claude) — T-355: 배포 게이트 bare-call errexit P0 3건 수정 (#498)
 
 PR #487(`codex/pr477-followup`)이 codex의 실시간 작업 중이라 완전 대기했다가, codex가 merge를
