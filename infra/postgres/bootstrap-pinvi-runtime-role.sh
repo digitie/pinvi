@@ -642,7 +642,13 @@ reset_fresh_role_catalog() {
   # before issuing a single role mutation.  The Manager must create this target
   # from template0: template1 may carry extension/type/namespace residue and is
   # therefore deliberately rejected by the isolation proof below.
-  PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 \
+  # A fresh-reset refusal is deliberately diagnosable only by a fixed enum.
+  # Never expose catalog names, OIDs, ACLs, or psql stderr through the
+  # root-owned receipt: the Manager persists that receipt in its durable
+  # journal.  Keeping the classification inside this one transaction also
+  # preserves the proof-to-mutation lock boundary.
+  reset_fresh_role_catalog_diagnostic="unclassified"
+  reset_fresh_role_catalog_diagnostic="$(PGPASSWORD="${POSTGRES_PASSWORD}" psql --quiet --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --tuples-only --no-align \
     --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
     --set="database_name=${POSTGRES_DB}" \
     --set="app_role=${PINVI_APP_DB_USER}" \
@@ -652,7 +658,7 @@ reset_fresh_role_catalog() {
     --set="expected_system_identifier=${reset_expected_system_identifier}" \
     --set="expected_database_oid=${reset_expected_database_oid}" \
     --set="expected_database_owner=${reset_expected_database_owner}" \
-    >/dev/null 2>&1 <<'SQL'
+    2>/dev/null <<'SQL'
 BEGIN;
 LOCK TABLE pg_catalog.pg_authid, pg_catalog.pg_auth_members,
            pg_catalog.pg_db_role_setting, pg_catalog.pg_database,
@@ -729,46 +735,92 @@ foreign_user_namespace_object AS (
     WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
       AND namespace.nspname NOT LIKE 'pg_temp_%'
       AND namespace.nspname NOT LIKE 'pg_toast_temp_%'
+),
+isolation AS (
+    SELECT
+        (SELECT count(*) FROM target_database) = 1
+            AND COALESCE(
+                (SELECT system_identifier::text FROM pg_control_system())
+                    = :'expected_system_identifier',
+                false
+            )
+            AND COALESCE(
+                (SELECT oid::text FROM target_database) = :'expected_database_oid',
+                false
+            )
+            AND COALESCE(
+                (SELECT datdba::regrole::text FROM target_database)
+                    = :'expected_database_owner',
+                false
+            ) AS target_identity_valid,
+        to_regnamespace('app') IS NULL
+            AND to_regnamespace('ops') IS NULL
+            AND to_regnamespace('pinvi_internal') IS NULL
+            AND to_regnamespace('x_extension') IS NULL AS protected_namespace_absent,
+        NOT EXISTS (
+            SELECT 1 FROM pg_namespace namespace
+            WHERE namespace.nspname NOT IN (
+                'pg_catalog', 'information_schema', 'pg_toast', 'public'
+            )
+              AND namespace.nspname NOT LIKE 'pg_temp_%'
+              AND namespace.nspname NOT LIKE 'pg_toast_temp_%'
+        ) AS extra_namespace_absent,
+        NOT EXISTS (
+            SELECT 1 FROM pg_extension extension_row
+            WHERE extension_row.extname <> 'plpgsql'
+        ) AS extension_absent,
+        NOT EXISTS (
+            SELECT 1 FROM pg_class relation
+            JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+            WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+              AND namespace.nspname NOT LIKE 'pg_temp_%'
+              AND namespace.nspname NOT LIKE 'pg_toast_temp_%'
+        ) AS relation_absent,
+        NOT EXISTS (
+            SELECT 1 FROM pg_proc procedure
+            JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+            WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+        ) AS routine_absent,
+        NOT EXISTS (SELECT 1 FROM foreign_membership) AS foreign_membership_absent,
+        NOT EXISTS (SELECT 1 FROM foreign_database_owner) AS foreign_database_owner_absent,
+        NOT EXISTS (SELECT 1 FROM foreign_role_setting) AS foreign_role_setting_absent,
+        NOT EXISTS (SELECT 1 FROM foreign_shared_dependency) AS foreign_shared_dependency_absent,
+        NOT EXISTS (SELECT 1 FROM foreign_user_namespace_object)
+            AS foreign_user_namespace_object_absent
+),
+reset_classification AS (
+    SELECT
+        CASE
+            WHEN NOT target_identity_valid THEN 'target_identity_invalid'
+            WHEN NOT protected_namespace_absent THEN 'protected_namespace_present'
+            WHEN NOT extra_namespace_absent THEN 'extra_namespace_present'
+            WHEN NOT extension_absent THEN 'extension_present'
+            WHEN NOT relation_absent THEN 'relation_present'
+            WHEN NOT routine_absent THEN 'routine_present'
+            WHEN NOT foreign_membership_absent THEN 'foreign_membership'
+            WHEN NOT foreign_database_owner_absent THEN 'foreign_database_owner'
+            WHEN NOT foreign_role_setting_absent THEN 'foreign_role_setting'
+            WHEN NOT foreign_shared_dependency_absent THEN 'foreign_shared_dependency'
+            WHEN NOT foreign_user_namespace_object_absent THEN 'foreign_namespace_object'
+            ELSE 'completed'
+        END AS reset_class,
+        target_identity_valid
+            AND protected_namespace_absent
+            AND extra_namespace_absent
+            AND extension_absent
+            AND relation_absent
+            AND routine_absent
+            AND foreign_membership_absent
+            AND foreign_database_owner_absent
+            AND foreign_role_setting_absent
+            AND foreign_shared_dependency_absent
+            AND foreign_user_namespace_object_absent AS reset_isolated
+    FROM isolation
 )
-SELECT 1 / CASE WHEN
-    (SELECT count(*) FROM target_database) = 1
-    AND (SELECT system_identifier::text FROM pg_control_system()) = :'expected_system_identifier'
-    AND (SELECT oid::text FROM target_database) = :'expected_database_oid'
-    AND (SELECT datdba::regrole::text FROM target_database) = :'expected_database_owner'
-    AND to_regnamespace('app') IS NULL
-    AND to_regnamespace('ops') IS NULL
-    AND to_regnamespace('pinvi_internal') IS NULL
-    AND to_regnamespace('x_extension') IS NULL
-    AND NOT EXISTS (
-        SELECT 1 FROM pg_namespace namespace
-        WHERE namespace.nspname NOT IN (
-            'pg_catalog', 'information_schema', 'pg_toast', 'public'
-        )
-          AND namespace.nspname NOT LIKE 'pg_temp_%'
-          AND namespace.nspname NOT LIKE 'pg_toast_temp_%'
-    )
-    AND NOT EXISTS (
-        SELECT 1 FROM pg_extension extension_row
-        WHERE extension_row.extname <> 'plpgsql'
-    )
-    AND NOT EXISTS (
-        SELECT 1 FROM pg_class relation
-        JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
-        WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
-          AND namespace.nspname NOT LIKE 'pg_temp_%'
-          AND namespace.nspname NOT LIKE 'pg_toast_temp_%'
-    )
-    AND NOT EXISTS (
-        SELECT 1 FROM pg_proc procedure
-        JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
-        WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
-    )
-    AND NOT EXISTS (SELECT 1 FROM foreign_membership)
-    AND NOT EXISTS (SELECT 1 FROM foreign_database_owner)
-    AND NOT EXISTS (SELECT 1 FROM foreign_role_setting)
-    AND NOT EXISTS (SELECT 1 FROM foreign_shared_dependency)
-    AND NOT EXISTS (SELECT 1 FROM foreign_user_namespace_object)
-THEN 1 ELSE 0 END;
+SELECT reset_class, reset_isolated FROM reset_classification
+\gset
+\echo :reset_class
+\if :reset_isolated
 SELECT format('DROP ROLE IF EXISTS %I', :'migrator_role')
 \gexec
 SELECT format('DROP ROLE IF EXISTS %I', :'migration_owner')
@@ -778,7 +830,20 @@ SELECT format('DROP ROLE IF EXISTS %I', :'schema_owner')
 SELECT format('DROP ROLE IF EXISTS %I', :'app_role')
 \gexec
 COMMIT;
+\else
+ROLLBACK;
+\endif
 SQL
+  )" || return 1
+  case "${reset_fresh_role_catalog_diagnostic}" in
+    completed|target_identity_invalid|protected_namespace_present|extra_namespace_present|extension_present|relation_present|routine_present|foreign_membership|foreign_database_owner|foreign_role_setting|foreign_shared_dependency|foreign_namespace_object)
+      ;;
+    *)
+      reset_fresh_role_catalog_diagnostic="unclassified"
+      return 1
+      ;;
+  esac
+  [ "${reset_fresh_role_catalog_diagnostic}" = "completed" ]
 }
 
 load_fresh_role_catalog_reset_permit() {
@@ -840,7 +905,7 @@ if [ "${PINVI_ROLE_CATALOG_RESET_ONLY}" = "1" ]; then
     exit 2
   fi
   if ! reset_fresh_role_catalog; then
-    write_fresh_role_catalog_reset_result "failed" "target_not_isolated"
+    write_fresh_role_catalog_reset_result "failed" "${reset_fresh_role_catalog_diagnostic}"
     unset PGPASSWORD
     echo "fresh PinVi role catalog reset could not prove an isolated target" >&2
     exit 3

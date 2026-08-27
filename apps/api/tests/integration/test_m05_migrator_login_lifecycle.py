@@ -186,9 +186,7 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
             "psql",
             f"--username={root_role}",
             "--dbname=pinvi",
-            "--command="
-            f'{role_creation}; GRANT "{schema_owner}" TO "{migrator_role}"; '
-            f'ALTER ROLE "{migrator_role}" IN DATABASE pinvi SET ROLE TO "{schema_owner}"; '
+            "--command=" f"{role_creation}; "
             "CREATE TYPE public.stale_catalog_type AS ENUM ('residue');",
         )
         failed = compose(
@@ -219,7 +217,7 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
         assert read_root_owned_receipt() == {
             "schema": "pinvi.role-catalog-reset-diagnostic.v1",
             "status": "failed",
-            "class": "target_not_isolated",
+            "class": "foreign_namespace_object",
             "transaction": "test-transaction",
             "pinset": "test-pinset",
         }
@@ -238,7 +236,7 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
             f"('{runtime_role}', '{schema_owner}', '{migration_owner}', '{migrator_role}');",
         ).stdout.strip()
         assert remaining_roles == "4"
-        # Type-only residue를 없앤 뒤에는 stale SET ROLE/membership만 남는다. reset은
+        # Type-only residue를 없앤 뒤 stale SET ROLE/membership를 더한다. reset은
         # 그것을 포함한 generated four-role catalog만 제거하고 normal bootstrap이
         # 다시 sealed canonical state를 만들 수 있어야 한다.
         compose(
@@ -249,6 +247,17 @@ def test_fresh_role_catalog_reset_rejects_public_type_residue(tmp_path: Path) ->
             f"--username={root_role}",
             "--dbname=pinvi",
             "--command=DROP TYPE public.stale_catalog_type;",
+        )
+        compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            f'GRANT "{schema_owner}" TO "{migrator_role}"; '
+            f'ALTER ROLE "{migrator_role}" IN DATABASE pinvi SET ROLE TO "{schema_owner}";',
         )
         compose(
             "run",

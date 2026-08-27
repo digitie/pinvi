@@ -172,10 +172,15 @@ def test_fresh_role_catalog_reset_is_narrow_and_preflighted() -> None:
     assert "0:0:600" in reset
     assert "pg_control_system" in reset
     assert "membership.grantor" in reset
+    assert "target_identity_invalid" in reset
+    assert "foreign_namespace_object" in reset
+    assert "\\gset" in reset
+    assert "\\echo :reset_class" in reset
     assert "DROP ROLE IF EXISTS" in reset
     assert "DROP OWNED" not in reset
     assert "REASSIGN OWNED" not in reset
-    assert ">/dev/null 2>&1" in reset
+    assert "2>/dev/null" in reset
+    assert ">/dev/null 2>&1" not in reset
 
 
 def test_bootstrap_only_accepts_the_declared_postgres_endpoints(tmp_path: Path) -> None:
