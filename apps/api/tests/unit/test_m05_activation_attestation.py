@@ -59,6 +59,26 @@ def _detail() -> dict[str, object]:
     }
 
 
+def test_write_json_syncs_the_evidence_file_and_parent_directory(
+    monkeypatch: pytest.MonkeyPatch, linux_tmp_path: Path
+) -> None:
+    module = _attestation_module()
+    calls: list[int] = []
+    real_fsync = module.os.fsync
+
+    def recording_fsync(descriptor: int) -> None:
+        calls.append(descriptor)
+        real_fsync(descriptor)
+
+    monkeypatch.setattr(module.os, "fsync", recording_fsync)
+
+    output = linux_tmp_path / "attestation.json"
+    module._write_json(output, {"status": "passed"})
+
+    assert output.is_file()
+    assert len(calls) == 2
+
+
 def test_m05_impact_evidence_recomputes_rows_and_receipts() -> None:
     module = _attestation_module()
     event_id = "11111111-1111-4111-8111-111111111111"

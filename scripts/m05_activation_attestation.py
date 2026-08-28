@@ -260,6 +260,22 @@ def _write_json(path: Path, value: object) -> str:
     finally:
         if fd != -1:
             os.close(fd)
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC
+    directory_flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        directory_fd = os.open(path.parent, directory_flags)
+    except OSError as exc:
+        raise AttestationError(
+            f"evidence output directory is not durable: {path.parent.name}"
+        ) from exc
+    try:
+        os.fsync(directory_fd)
+    except OSError as exc:
+        raise AttestationError(
+            f"evidence output directory is not durable: {path.parent.name}"
+        ) from exc
+    finally:
+        os.close(directory_fd)
     return _sha256(raw)
 
 
