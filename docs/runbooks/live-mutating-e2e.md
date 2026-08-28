@@ -240,6 +240,7 @@ cd ~/pinvi
 : "${PINVI_M05_UI_EVIDENCE_DIR:?set a new empty root-owned evidence directory}"
 : "${PINVI_M04_UI_EVIDENCE_DIR:?set the matching signed M04 evidence directory}"
 : "${PINVI_M05_PRIVATE_KEY:?set the root-owned M05 signing key path}"
+: "${PINVI_M05_ISOLATED_RUNTIME_PROVENANCE:?set the root-owned Manager isolated runtime provenance receipt}"
 : "${PINVI_M05_MAP_ADMIN_URL:?set the isolated Map admin loopback URL}"
 : "${PINVI_M05_MAP_CASE_ID:?set the isolated Map M05 case UUID}"
 : "${PINVI_M05_MAP_DOCKER_PROJECT:?set the isolated Map Compose project}"
@@ -292,6 +293,7 @@ python scripts/m05_activation_attestation.py live \
   --event-id "$PINVI_M05_LIVE_EVENT_ID" \
   --pinvi-source-revision "$PINVI_LIVE_EXPECTED_REVISION" \
   --scope isolated \
+  --isolated-runtime-provenance "$PINVI_M05_ISOLATED_RUNTIME_PROVENANCE" \
   --playwright-runner-image "$PINVI_PLAYWRIGHT_RUNNER_IMAGE" \
   --require-root-owned \
   -- scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- apps/web/e2e/admin-feature-reference-reconciliations-live-mutating.live.ts --workers=1
@@ -304,6 +306,11 @@ M05 event가 목록 첫 페이지에 없거나
 terminal receipt가 없으면 fixture/worker/ACK 상태를 먼저 확인한다.
 activation gate에서는 단독 UI pass가 아니라, 앞 절의 서명된 M04 증적과 `live`의 Map 결정·ACK
 server-side 대조까지 모두 성공해야 한다.
+
+`--scope isolated`는 Manager가 root-owned `0600`으로 만든 runtime provenance receipt를 반드시
+함께 받는다. 이 receipt는 exact Map/PinVi source, Map full OpenAPI, 새로 build한 여섯 runtime image
+ID를 고정한다. 기존 canonical runtime image ID를 재사용하거나 production/staging receipt로 바꾸는
+입력은 attestation이 거부한다.
 
 일반 live-mutating suite는 공개 HTTPS origin을 사용할 수 있다. 단,
 `m05_activation_attestation.py m04/live`는 API·Web·Map의 runtime peer를 검증하므로

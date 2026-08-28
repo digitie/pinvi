@@ -79,6 +79,64 @@ def test_write_json_syncs_the_evidence_file_and_parent_directory(
     assert len(calls) == 2
 
 
+def test_isolated_runtime_provenance_binds_exact_source_openapi_and_images(
+    linux_tmp_path: Path,
+) -> None:
+    module = _attestation_module()
+    pair = module._load_pair()
+    provenance = {
+        "kind": "m05-isolated-runtime-provenance-v1",
+        "manager_source_revision": "a" * 40,
+        "map": {
+            "admin_image_id": "sha256:" + "1" * 64,
+            "api_image_id": "sha256:" + "2" * 64,
+            "frontend_image_id": "sha256:" + "3" * 64,
+            "full_openapi_sha256": pair["full"]["openapi_sha256"],
+            "source_revision": pair["full"]["source_revision"],
+        },
+        "pinset_sha256": "4" * 64,
+        "pinvi": {
+            "api_image_id": "sha256:" + "5" * 64,
+            "dagster_image_id": "sha256:" + "6" * 64,
+            "source_revision": "f" * 40,
+            "web_image_id": "sha256:" + "7" * 64,
+        },
+        "transaction_id": "8" * 32,
+        "version": 1,
+    }
+    path = linux_tmp_path / "isolated-runtime-provenance.json"
+    path.write_text(json.dumps(provenance), encoding="utf-8")
+    path.chmod(0o600)
+
+    loaded = module._load_isolated_runtime_provenance(
+        path,
+        pair=pair,
+        pinvi_source_revision="f" * 40,
+        require_root_owned=False,
+    )
+
+    assert loaded["map_images"] == {
+        "admin": "sha256:" + "1" * 64,
+        "api": "sha256:" + "2" * 64,
+        "frontend": "sha256:" + "3" * 64,
+    }
+    assert loaded["pinvi_images"] == {
+        "api": "sha256:" + "5" * 64,
+        "dagster": "sha256:" + "6" * 64,
+        "web": "sha256:" + "7" * 64,
+    }
+
+    provenance["map"]["full_openapi_sha256"] = "0" * 64
+    path.write_text(json.dumps(provenance), encoding="utf-8")
+    with pytest.raises(module.AttestationError, match="differs from the pair"):
+        module._load_isolated_runtime_provenance(
+            path,
+            pair=pair,
+            pinvi_source_revision="f" * 40,
+            require_root_owned=False,
+        )
+
+
 def test_m05_impact_evidence_recomputes_rows_and_receipts() -> None:
     module = _attestation_module()
     event_id = "11111111-1111-4111-8111-111111111111"

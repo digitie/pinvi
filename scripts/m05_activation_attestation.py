@@ -27,7 +27,7 @@ import subprocess
 import time
 from http.cookiejar import CookieJar
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Mapping, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import (
@@ -55,6 +55,7 @@ _PLAYWRIGHT_IMAGE_RE = re.compile(
 _PAIR_PATH = Path(__file__).resolve().parents[1] / (
     "contracts/kor-travel-map-m05-pair-provenance-v1.json"
 )
+_ISOLATED_RUNTIME_PROVENANCE_KIND = "m05-isolated-runtime-provenance-v1"
 _HOST_TOOL_DIRECTORIES = (Path("/usr/bin"), Path("/bin"))
 _M04_MAX_AGE_SECONDS = 15 * 60
 
@@ -342,6 +343,114 @@ def _load_pair() -> dict[str, dict[str, str]]:
             raise AttestationError(f"runtime_image_digests.{name} is invalid")
         result["runtime_image_digests"][name] = digest
     return result
+
+
+def _isolated_image_id(value: object, *, name: str) -> str:
+    image_id = _string(value, name=name)
+    if _DIGEST_RE.fullmatch(image_id) is None:
+        raise AttestationError(f"{name} is invalid")
+    return image_id
+
+
+def _load_isolated_runtime_provenance(
+    path: Path,
+    *,
+    pair: dict[str, dict[str, str]],
+    pinvi_source_revision: str,
+    require_root_owned: bool,
+) -> dict[str, object]:
+    """Manager의 root-only isolated image/source receipt를 M05 runtime에 결박한다."""
+
+    raw = _secure_read(
+        path,
+        require_root_owned=require_root_owned,
+        label="M05 isolated runtime provenance",
+    )
+    try:
+        value = json.loads(raw, object_pairs_hook=_reject_duplicate_keys)
+    except (UnicodeDecodeError, json.JSONDecodeError, AttestationError) as exc:
+        raise AttestationError("M05 isolated runtime provenance is invalid") from exc
+    envelope = _object(value, name="M05 isolated runtime provenance")
+    if (
+        set(envelope)
+        != {
+            "kind",
+            "manager_source_revision",
+            "map",
+            "pinset_sha256",
+            "pinvi",
+            "transaction_id",
+            "version",
+        }
+        or envelope["kind"] != _ISOLATED_RUNTIME_PROVENANCE_KIND
+        or envelope["version"] != 1
+    ):
+        raise AttestationError("M05 isolated runtime provenance schema is invalid")
+    _commit(
+        envelope["manager_source_revision"], name="M05 isolated Manager source revision"
+    )
+    pinset = _string(envelope["pinset_sha256"], name="M05 isolated pinset")
+    transaction = _string(envelope["transaction_id"], name="M05 isolated transaction")
+    if (
+        _SHA256_RE.fullmatch(pinset) is None
+        or re.fullmatch(r"[0-9a-f]{32}\Z", transaction) is None
+    ):
+        raise AttestationError("M05 isolated runtime provenance identity is invalid")
+    map_value = _object(envelope["map"], name="M05 isolated Map runtime")
+    if set(map_value) != {
+        "admin_image_id",
+        "api_image_id",
+        "frontend_image_id",
+        "full_openapi_sha256",
+        "source_revision",
+    }:
+        raise AttestationError("M05 isolated Map runtime schema is invalid")
+    if (
+        _commit(map_value["source_revision"], name="M05 isolated Map source revision")
+        != pair["full"]["source_revision"]
+        or map_value["full_openapi_sha256"] != pair["full"]["openapi_sha256"]
+    ):
+        raise AttestationError("M05 isolated Map runtime provenance differs from the pair")
+    map_images = {
+        "admin": _isolated_image_id(
+            map_value["admin_image_id"], name="M05 isolated Map admin image"
+        ),
+        "api": _isolated_image_id(
+            map_value["api_image_id"], name="M05 isolated Map API image"
+        ),
+        "frontend": _isolated_image_id(
+            map_value["frontend_image_id"], name="M05 isolated Map frontend image"
+        ),
+    }
+    pinvi_value = _object(envelope["pinvi"], name="M05 isolated PinVi runtime")
+    if set(pinvi_value) != {
+        "api_image_id",
+        "dagster_image_id",
+        "source_revision",
+        "web_image_id",
+    }:
+        raise AttestationError("M05 isolated PinVi runtime schema is invalid")
+    if (
+        _commit(pinvi_value["source_revision"], name="M05 isolated PinVi source revision")
+        != pinvi_source_revision
+    ):
+        raise AttestationError("M05 isolated PinVi runtime provenance differs from the source")
+    pinvi_images = {
+        "api": _isolated_image_id(
+            pinvi_value["api_image_id"], name="M05 isolated PinVi API image"
+        ),
+        "web": _isolated_image_id(
+            pinvi_value["web_image_id"], name="M05 isolated PinVi Web image"
+        ),
+        "dagster": _isolated_image_id(
+            pinvi_value["dagster_image_id"], name="M05 isolated PinVi Dagster image"
+        ),
+    }
+    return {
+        "map_images": map_images,
+        "pinvi_images": pinvi_images,
+        "sha256": _sha256(raw),
+    }
 
 
 def _url(base: str, path: str) -> str:
@@ -1664,6 +1773,7 @@ def _runtime_snapshot(
     *,
     pair: dict[str, dict[str, str]],
     source_revision: str,
+    pinvi_image_digests: Mapping[str, str] | None = None,
 ) -> dict[str, dict[str, str]]:
     return {
         "map_admin": _docker_inspect(
@@ -1696,6 +1806,9 @@ def _runtime_snapshot(
             args.pinvi_api_container,
             expected_revision=source_revision,
             expected_environment=args.scope,
+            expected_image_digest=(
+                pinvi_image_digests["api"] if pinvi_image_digests is not None else None
+            ),
             expected_compose_project=args.pinvi_docker_project,
             expected_compose_service="app-api",
             endpoint_url=args.pinvi_api_url,
@@ -1704,6 +1817,9 @@ def _runtime_snapshot(
             args.pinvi_web_container,
             expected_revision=source_revision,
             expected_environment=args.scope,
+            expected_image_digest=(
+                pinvi_image_digests["web"] if pinvi_image_digests is not None else None
+            ),
             expected_compose_project=args.pinvi_docker_project,
             expected_compose_service="app-web",
             endpoint_url=args.pinvi_web_url,
@@ -1713,6 +1829,9 @@ def _runtime_snapshot(
             args.pinvi_dagster_container,
             expected_revision=source_revision,
             expected_environment=args.scope,
+            expected_image_digest=(
+                pinvi_image_digests["dagster"] if pinvi_image_digests is not None else None
+            ),
             expected_compose_project=args.pinvi_docker_project,
             expected_compose_service="app-dagster",
         ),
@@ -2155,6 +2274,26 @@ def _live(args: argparse.Namespace) -> int:
         raise AttestationError("M05 impact count must be a non-negative integer")
 
     pair = _load_pair()
+    isolated_runtime: dict[str, object] | None = None
+    if args.scope == "isolated":
+        if args.isolated_runtime_provenance is None:
+            raise AttestationError("isolated M05 attestation requires runtime provenance")
+        isolated_runtime = _load_isolated_runtime_provenance(
+            args.isolated_runtime_provenance,
+            pair=pair,
+            pinvi_source_revision=source_revision,
+            require_root_owned=True,
+        )
+        pair["runtime_image_digests"] = cast(
+            dict[str, str], isolated_runtime["map_images"]
+        )
+    elif args.isolated_runtime_provenance is not None:
+        raise AttestationError("runtime provenance is only valid for isolated M05 attestation")
+    pinvi_image_digests = (
+        cast(dict[str, str], isolated_runtime["pinvi_images"])
+        if isolated_runtime is not None
+        else None
+    )
     pinvi_source_root = Path(__file__).resolve().parents[1]
     _assert_clean_checkout(
         pinvi_source_root,
@@ -2174,7 +2313,10 @@ def _live(args: argparse.Namespace) -> int:
         args.private_key, require_root_owned=args.require_root_owned
     )
     runtime_initial = _runtime_snapshot(
-        args, pair=pair, source_revision=source_revision
+        args,
+        pair=pair,
+        source_revision=source_revision,
+        pinvi_image_digests=pinvi_image_digests,
     )
     m04 = _read_m04_evidence(
         args.m04_evidence_dir,
@@ -2241,7 +2383,10 @@ def _live(args: argparse.Namespace) -> int:
             "Map ACK local receipt hash does not match the Pinvi terminal receipt"
         )
     runtime_before_ui = _runtime_snapshot(
-        args, pair=pair, source_revision=source_revision
+        args,
+        pair=pair,
+        source_revision=source_revision,
+        pinvi_image_digests=pinvi_image_digests,
     )
     _assert_runtime_snapshots_unchanged(runtime_initial, runtime_before_ui)
 
@@ -2378,8 +2523,12 @@ def _live(args: argparse.Namespace) -> int:
         expected_replacement_feature_id=replacement_feature_id,
         expected_impact_count=int(impact_count),
     )
+    marker = _object(marker, name="M05 UI evidence marker")
     runtime_after_ui = _runtime_snapshot(
-        args, pair=pair, source_revision=source_revision
+        args,
+        pair=pair,
+        source_revision=source_revision,
+        pinvi_image_digests=pinvi_image_digests,
     )
     _assert_runtime_snapshots_unchanged(runtime_initial, runtime_after_ui)
 
@@ -2390,7 +2539,10 @@ def _live(args: argparse.Namespace) -> int:
         expected=pair,
     )
     runtime_after_openapi = _runtime_snapshot(
-        args, pair=pair, source_revision=source_revision
+        args,
+        pair=pair,
+        source_revision=source_revision,
+        pinvi_image_digests=pinvi_image_digests,
     )
     _assert_runtime_snapshots_unchanged(runtime_after_ui, runtime_after_openapi)
     map_pair = {
@@ -2551,6 +2703,7 @@ def _parser() -> argparse.ArgumentParser:
     live.add_argument("--event-id", required=True)
     live.add_argument("--pinvi-source-revision", required=True)
     live.add_argument("--scope", choices=("isolated", "staging", "production"), required=True)
+    live.add_argument("--isolated-runtime-provenance", type=Path)
     live.add_argument("--playwright-runner-image", required=True)
     live.add_argument("--require-root-owned", action="store_true")
     live.add_argument("ui_command", nargs=argparse.REMAINDER)
