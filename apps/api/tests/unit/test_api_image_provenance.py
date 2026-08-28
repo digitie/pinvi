@@ -56,6 +56,14 @@ def test_production_derives_exact_clean_head(monkeypatch: pytest.MonkeyPatch) ->
     assert script.resolve_revision(environment="production", repo_root=ROOT, requested=None) == head
 
 
+def test_isolated_derives_exact_clean_head(monkeypatch: pytest.MonkeyPatch) -> None:
+    script = _load_script()
+    head = "a" * 40
+    monkeypatch.setattr(script, "_clean_head", lambda _: head)
+
+    assert script.resolve_revision(environment="isolated", repo_root=ROOT, requested=None) == head
+
+
 @pytest.mark.parametrize("revision", ["development", "A" * 40, "a" * 39, "main"])
 def test_production_rejects_non_commit_revision(revision: str) -> None:
     script = _load_script()
@@ -292,7 +300,7 @@ def test_docker_and_deploy_files_bind_the_same_revision_contract() -> None:
     assert "PINVI_SOURCE_REVISION=${PINVI_SOURCE_REVISION}" in dockerfile
     assert 'org.opencontainers.image.revision="${PINVI_SOURCE_REVISION}"' in dockerfile
     assert 'io.pinvi.build.environment="${PINVI_BUILD_ENVIRONMENT}"' in dockerfile
-    assert "staging|production" in validator
+    assert "isolated|staging|production" in validator
     assert "- PINVI_SOURCE_REVISION" in compose
     assert "PINVI_BUILD_ENVIRONMENT=${PINVI_ENVIRONMENT:-smoke}" in compose
     assert "PINVI_API_BUILD_CONTEXT" in compose
@@ -341,7 +349,7 @@ def test_resolved_compose_passes_provenance_to_every_runtime_image() -> None:
 def test_all_pinvi_runtime_images_have_the_same_provenance_contract() -> None:
     validator = (ROOT / "scripts/validate-image-provenance.sh").read_text(encoding="utf-8")
 
-    assert "staging|production" in validator
+    assert "isolated|staging|production" in validator
     assert "exact source commit" in validator
     for dockerfile_path in (
         ROOT / "apps/api/Dockerfile",
@@ -362,6 +370,8 @@ def test_all_pinvi_runtime_images_have_the_same_provenance_contract() -> None:
 @pytest.mark.parametrize(
     ("environment", "revision", "returncode"),
     [
+        ("isolated", "a" * 40, 0),
+        ("isolated", "development", 2),
         ("production", "a" * 40, 0),
         ("staging", "development", 2),
         ("production", "A" * 40, 2),

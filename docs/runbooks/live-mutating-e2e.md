@@ -210,7 +210,7 @@ python scripts/m05_activation_attestation.py m04 \
   --pinvi-web-container "$PINVI_M04_PINVI_WEB_CONTAINER" \
   --feature-request-id "$PINVI_M04_LIVE_FEATURE_REQUEST_ID" \
   --pinvi-source-revision "$PINVI_LIVE_EXPECTED_REVISION" \
-  --scope staging \
+  --scope isolated \
   --playwright-runner-image "$PINVI_PLAYWRIGHT_RUNNER_IMAGE" \
   --require-root-owned \
   -- scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- apps/web/e2e/admin-feature-request-queue-live-mutating.live.ts --workers=1
@@ -224,8 +224,10 @@ M04와 M05를 activation 증적으로 사용할 때는 위 직접 실행만으�
 실행하고, API/Web container ID·source revision·Map pending receipt를 Ed25519 증적에 묶는다.
 이어지는 `live` 실행은 `--m04-evidence-dir`를 필수로 받고, 같은 PinVi API/Web container에서
 승인된 Map 요청의 `manual_request` provenance와 M05의 old Feature UUID가 동일한지 전후로
-검증한다. smoke는 격리 pair에서만 허용하며, staging/production 증적은 root-owned 0700 evidence
-directory와 0600 key를 사용한다.
+검증한다. Docker Manager가 만드는 일회성 격리 harness는 `--scope isolated`만 사용하며,
+root-owned `0700` evidence directory와 `0600` key를 사용한다. 이는 production activation receipt나
+staging 증적이 아니며 그 환경의 receipt 생성 명령을 호출하지 않는다. smoke는 격리 pair에서만 허용하고,
+staging/production 증적도 같은 root-owned 파일 보호를 요구한다.
 
 ### M05 Feature 참조 조정 증거 단건
 
@@ -289,7 +291,7 @@ python scripts/m05_activation_attestation.py live \
   --pinvi-dagster-container "$PINVI_M05_PINVI_DAGSTER_CONTAINER" \
   --event-id "$PINVI_M05_LIVE_EVENT_ID" \
   --pinvi-source-revision "$PINVI_LIVE_EXPECTED_REVISION" \
-  --scope staging \
+  --scope isolated \
   --playwright-runner-image "$PINVI_PLAYWRIGHT_RUNNER_IMAGE" \
   --require-root-owned \
   -- scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- apps/web/e2e/admin-feature-reference-reconciliations-live-mutating.live.ts --workers=1

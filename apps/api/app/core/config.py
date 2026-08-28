@@ -40,7 +40,9 @@ from app.core.m05_runtime_lease import (
     M05RuntimeLeaseVerifier,
 )
 
-PinviEnvironment = Literal["development", "test", "smoke", "staging", "production"]
+PinviEnvironment = Literal[
+    "development", "test", "smoke", "isolated", "staging", "production"
+]
 _STRICT_RESTORE_EXECUTOR_ENVIRONMENTS = frozenset({"staging", "production"})
 _SERVICE_PROVENANCE_FILENAME = "kor-travel-map-service-provenance-v1.json"
 _PACKAGED_SERVICE_PROVENANCE_PATH = f"_contract_data/{_SERVICE_PROVENANCE_FILENAME}"

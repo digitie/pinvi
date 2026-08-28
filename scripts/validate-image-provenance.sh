@@ -14,9 +14,9 @@ is_commit() {
 
 case "$build_environment" in
     development|test|smoke) ;;
-    staging|production)
+    isolated|staging|production)
         is_commit "$source_revision" || {
-            echo 'staging/production image requires an exact source commit' >&2
+            echo 'isolated/staging/production image requires an exact source commit' >&2
             exit 2
         }
         ;;

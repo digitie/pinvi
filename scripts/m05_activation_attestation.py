@@ -1756,11 +1756,11 @@ def _m04(args: argparse.Namespace) -> int:
     _assert_evidence_directory(evidence_dir, require_root_owned=args.require_root_owned)
     feature_request_id = _uuid(args.feature_request_id, name="M04 feature request ID")
     source_revision = _commit(args.pinvi_source_revision, name="Pinvi source revision")
-    if args.scope not in {"smoke", "staging", "production"}:
+    if args.scope not in {"smoke", "isolated", "staging", "production"}:
         raise AttestationError("M04 attestation scope is invalid")
-    if args.scope in {"staging", "production"} and not args.require_root_owned:
+    if args.scope in {"isolated", "staging", "production"} and not args.require_root_owned:
         raise AttestationError(
-            "M04 staging/production attestation requires root-owned evidence"
+            "M04 isolated/staging/production attestation requires root-owned evidence"
         )
     pinvi_source_root = Path(__file__).resolve().parents[1]
     _assert_clean_checkout(
@@ -2118,8 +2118,8 @@ def _live(args: argparse.Namespace) -> int:
     event_id = _uuid(args.event_id, name="M05 event ID")
     case_id = _uuid(args.map_case_id, name="Map case ID")
     source_revision = _commit(args.pinvi_source_revision, name="Pinvi source revision")
-    if args.scope not in {"staging", "production"}:
-        raise AttestationError("attestation scope must be staging or production")
+    if args.scope not in {"isolated", "staging", "production"}:
+        raise AttestationError("attestation scope must be isolated, staging, or production")
     if not args.require_root_owned:
         raise AttestationError("M05 live attestation requires root-owned evidence")
     email = os.environ.get("M05_PINVI_EMAIL", "")
@@ -2505,7 +2505,7 @@ def _parser() -> argparse.ArgumentParser:
     m04.add_argument("--feature-request-id", required=True)
     m04.add_argument("--pinvi-source-revision", required=True)
     m04.add_argument(
-        "--scope", choices=("smoke", "staging", "production"), required=True
+        "--scope", choices=("smoke", "isolated", "staging", "production"), required=True
     )
     m04.add_argument("--playwright-runner-image", required=True)
     m04.add_argument("--require-root-owned", action="store_true")
@@ -2534,7 +2534,7 @@ def _parser() -> argparse.ArgumentParser:
     live.add_argument("--pinvi-dagster-container", required=True)
     live.add_argument("--event-id", required=True)
     live.add_argument("--pinvi-source-revision", required=True)
-    live.add_argument("--scope", choices=("staging", "production"), required=True)
+    live.add_argument("--scope", choices=("isolated", "staging", "production"), required=True)
     live.add_argument("--playwright-runner-image", required=True)
     live.add_argument("--require-root-owned", action="store_true")
     live.add_argument("ui_command", nargs=argparse.REMAINDER)
