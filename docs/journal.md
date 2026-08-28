@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-29 (codex) — Manager-aware M05 execution identity 계약 착수
+
+Map/PinVi v5 source pinset이 Manager revision을 digest에 넣지 않아, Manager의 실제 terminal 보정을 배포해도 같은
+source pair가 이미 terminal pinset으로 막히는 구조를 확인했다. source revision이나 문서 merge로 이를 우회하면
+CI·리뷰·one-shot을 불필요하게 소비하고 historical evidence의 설명도 흔들린다.
+
+후속은 Docker Manager `ktdctl`의 v6 execution identity로 분리한다. canonical execution input은 v5 source
+pinset, canonical Manager repository URL, trusted installer Manager revision이며, Manager revision은 user-controlled
+CLI/환경값을 받지 않는다. PinVi direct Compose admission과 activation receipt는 이 execution identity를 exact
+대조하도록 확장한다. v5 terminal evidence는 legacy audit으로 보존하고 새 v6 identity만 새 one-shot namespace를
+갖는다. 문서-only merge는 즉시 병합하지만 runtime tuple/pinset을 바꾸지 않는다. raw E2E forensic은 gitignored
+local 파일에서만 보관한다.
+
 ## 2026-08-29 (codex) — M05 Map health transport terminal의 PinVi 범위 분리
 
 - Map `86d38d46…`·PinVi runtime source `3b9d6026…`·Manager `1dbd7cc…`의 pinset `9b6eab1e…`은
