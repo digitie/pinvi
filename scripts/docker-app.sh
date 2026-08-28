@@ -1693,6 +1693,20 @@ require_isolated_direct_compose_project() {
         return 2
       }
       ;;
+    isolated)
+      # M05는 Manager가 root-owned source snapshot·global mutation lock·one-shot
+      # ledger를 함께 소유하는 disposable bridge runtime만 허용한다. 일반 local
+      # Compose가 isolated라는 이름으로 canonical/공유 project를 변경하지 못하게
+      # project namespace와 root harness marker를 둘 다 고정한다.
+      [[ "$PROJECT" =~ ^m05i-pinvi-[0-9a-f]{32}$ ]] || {
+        echo "isolated direct Compose mutation requires an m05i-pinvi transaction project" >&2
+        return 2
+      }
+      [[ "${PINVI_M05_ISOLATED_MANAGER_HARNESS:-}" == "1" && "$(id -u)" == "0" ]] || {
+        echo "isolated direct Compose mutation requires the root Manager M05 harness" >&2
+        return 2
+      }
+      ;;
   esac
 }
 
@@ -1714,7 +1728,7 @@ require_direct_compose_mutation_environment() {
       echo "direct Compose mutation is disabled for ${environment_name}; use the approved manager or isolated staging procedure" >&2
       return 2
       ;;
-    development|test|smoke)
+    development|test|smoke|isolated)
       if ! require_isolated_direct_compose_project "$environment_name"; then
         return 2
       fi
@@ -1723,7 +1737,7 @@ require_direct_compose_mutation_environment() {
       fi
       ;;
     *)
-      echo "direct Compose mutation requires an explicit development/test/smoke/staging environment" >&2
+      echo "direct Compose mutation requires an explicit development/test/smoke/isolated/staging environment" >&2
       return 2
       ;;
   esac
