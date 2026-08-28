@@ -1,5 +1,13 @@
 # resume.md
 
+## 2026-08-29 (codex) — M05 terminal 반복의 다음 입력
+
+PinVi runtime source `3b9d60261ea69318270392291103b88ff9ed0a6e`는 Map `86d38d46…`과 결박한
+`9b6eab1e…` candidate에서 PinVi 기동 전 Map host-loopback health transport terminal을 만났다. 서로 다른
+세 이전 candidate도 같은 위치에서 종료했으므로 PinVi의 admission, provenance, consumer 동작은 아직 실행되지
+않았으며 원인으로 단정하지 않는다. 다음 source는 Manager `bc99ce1…`의 bounded transport retry와 exact-head
+CI·전문 적대 리뷰가 충족된 뒤 `ktdctl pin rotate-pair`로만 다시 결박한다.
+
 ## 2026-08-28 (codex) — M05 attestation provenance를 committed Map runtime에 재결박
 
 PinVi M05 attestation은 Map source revision과 image identity를 exact pair로 검사한다. committed generation의
