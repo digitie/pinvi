@@ -15,8 +15,10 @@ terminal pinset 재사용은 금지한다.
 
 one-shot 전에는 인증된 Manager API `GET /api/v1/runtime-pins`와
 `GET /api/v1/pinned-runtime/generation` 공개 사본을 확인한다. generation의
-`pinset_binding`은 새 pair 회전 직후 완전한 이전 committed generation의 `pending_rebuild` 또는
-`match`여야 한다. partial·malformed·`drift`·`unknown`이면 이 runbook을 중단한다. 새 launcher가
+`pinset_binding`은 새 pair 회전 직후 완전한 이전 committed generation 또는 Manager registry가
+Map·PinVi revision과 pinset까지 exact로 차단한 unconditional terminal generation의
+`pending_rebuild` 또는 `match`여야 한다. partial·malformed·phase-scoped block·`drift`·`unknown`이면
+이 runbook을 중단한다. 새 launcher가
 끝난 뒤 activation attestation을 승격하려면 반드시 `match`를 다시 확인한다. private
 manifest/journal, raw launcher output, 이전 terminal artifact는 PinVi가 읽거나
 보관하지 않는다. PinVi M05 provenance의 Map `admin`·`full` source revision은 Manager registry
