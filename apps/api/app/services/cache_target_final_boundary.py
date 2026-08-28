@@ -339,10 +339,8 @@ async def _validate_database_identity(db: AsyncSession, request: CacheTargetBoun
             text(
                 "SELECT current_database(), (pg_control_system()).system_identifier::text, "
                 "(SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() "
-                "AND pid <> pg_backend_pid() AND state <> 'idle' "
-                "AND application_name <> :application_name)"
-            ),
-            {"application_name": _APPLICATION_NAME},
+                "AND pid <> pg_backend_pid() AND state <> 'idle')"
+            )
         )
     ).one()
     database_name, system_identifier, in_flight = row

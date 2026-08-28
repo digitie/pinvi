@@ -1060,6 +1060,42 @@ async def test_boundary_preflight_is_read_only_and_requires_empty_0047_material(
         )
 
 
+async def test_boundary_preflight_rejects_another_boundary_named_transaction(
+    session_factory,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    request = await _boundary_request(
+        session_factory,
+        operation="preflight",
+        transaction_id=uuid.uuid4(),
+        cutover_id=uuid.uuid4(),
+        canary_run_id=None,
+    )
+
+    async def schema_0047(_db) -> str:  # type: ignore[no-untyped-def]
+        return "20260801_0047"
+
+    monkeypatch.setattr(boundary_service, "_schema_revision", schema_0047)
+    async with session_factory() as held:
+        await held.execute(
+            text("SET LOCAL application_name = 'pinvi-cache-target-final-boundary'")
+        )
+        await held.execute(text("SELECT 1"))
+        with pytest.raises(CacheTargetBoundaryFailure, match="database_not_quiescent"):
+            await run_cache_target_boundary_preflight(
+                session_factory,
+                request=request,
+                runtime_source_revision="a" * 40,
+            )
+
+    receipt = await run_cache_target_boundary_preflight(
+        session_factory,
+        request=request,
+        runtime_source_revision="a" * 40,
+    )
+    assert receipt["database_in_flight_transaction_count"] == 0
+
+
 @pytest.mark.parametrize("statement", ["UPDATE", "DELETE", "TRUNCATE"])
 async def test_final_boundary_audit_rejects_all_mutation(
     session_factory,
