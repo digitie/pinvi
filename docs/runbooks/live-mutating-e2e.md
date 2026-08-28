@@ -13,6 +13,13 @@ M05의 runtime pinning, Map·PinVi source pair 결박, isolated launcher 실행�
 `ktdctl pin rotate-pair` 한 번으로 Map·PinVi revision을 함께 회전한다. role별 회전이나
 terminal pinset 재사용은 금지한다.
 
+`PINVI_ENVIRONMENT=isolated`의 PinVi `scripts/docker-app.sh` 변이도 이 원칙의 예외가 아니다.
+호출자가 설정할 수 있는 `PINVI_M05_ISOLATED_MANAGER_HARNESS` 환경변수는 권한 근거로 쓰지
+않으며, Manager root driver가 private runtime directory에 만든 `0600` admission 파일을
+no-follow로 검증한 경우만 허용한다. admission은 exact transaction project, pinset, Manager·Map·PinVi
+source revision을 함께 결박한다. 직접 Compose, 임의 root marker, 수동 environment 설정은 이
+검증을 대신하지 못한다.
+
 one-shot 전에는 인증된 Manager API `GET /api/v1/runtime-pins`와
 `GET /api/v1/pinned-runtime/generation` 공개 사본을 확인한다. generation의
 `pinset_binding`은 새 pair 회전 직후 완전한 이전 committed generation 또는 Manager registry가

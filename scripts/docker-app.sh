@@ -1694,16 +1694,28 @@ require_isolated_direct_compose_project() {
       }
       ;;
     isolated)
-      # M05는 Manager가 root-owned source snapshot·global mutation lock·one-shot
-      # ledger를 함께 소유하는 disposable bridge runtime만 허용한다. 일반 local
-      # Compose가 isolated라는 이름으로 canonical/공유 project를 변경하지 못하게
-      # project namespace와 root harness marker를 둘 다 고정한다.
+      # M05는 Manager가 source snapshot·global mutation lock·one-shot ledger를 함께
+      # 소유하는 disposable bridge runtime만 허용한다. 호출자가 설정할 수 있는 환경변수는
+      # 권한 근거가 아니며, Manager가 transaction·pinset·source pair에 결박해 만든
+      # root-owned admission만 이 경계를 연다.
       [[ "$PROJECT" =~ ^m05i-pinvi-[0-9a-f]{32}$ ]] || {
         echo "isolated direct Compose mutation requires an m05i-pinvi transaction project" >&2
         return 2
       }
-      [[ "${PINVI_M05_ISOLATED_MANAGER_HARNESS:-}" == "1" && "$(id -u)" == "0" ]] || {
-        echo "isolated direct Compose mutation requires the root Manager M05 harness" >&2
+      [[ -z "${PINVI_M05_ISOLATED_MANAGER_HARNESS:-}" ]] || {
+        echo "isolated direct Compose mutation rejects the legacy Manager harness environment marker" >&2
+        return 2
+      }
+      [[ -n "${PINVI_M05_ISOLATED_MANAGER_ADMISSION_PATH:-}" && -n "${PINVI_M05_PINSET_SHA256:-}" ]] || {
+        echo "isolated direct Compose mutation requires a Manager M05 admission" >&2
+        return 2
+      }
+      python3 "$ROOT_DIR/scripts/m05_isolated_manager_admission.py" \
+        "$PINVI_M05_ISOLATED_MANAGER_ADMISSION_PATH" \
+        "$PROJECT" \
+        "${PINVI_SOURCE_REVISION:-}" \
+        "$PINVI_M05_PINSET_SHA256" >/dev/null 2>&1 || {
+        echo "isolated direct Compose mutation requires a valid Manager M05 admission" >&2
         return 2
       }
       ;;
