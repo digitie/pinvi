@@ -25,9 +25,10 @@ import re
 import stat
 import subprocess
 import time
+from collections.abc import Mapping
 from http.cookiejar import CookieJar
 from pathlib import Path
-from typing import Any, Mapping, cast
+from typing import Any, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import (
@@ -357,6 +358,8 @@ def _load_isolated_runtime_provenance(
     *,
     pair: dict[str, dict[str, str]],
     pinvi_source_revision: str,
+    expected_manager_source_revision: str,
+    expected_pinset_sha256: str,
     require_root_owned: bool,
 ) -> dict[str, object]:
     """Manager의 root-only isolated image/source receipt를 M05 runtime에 결박한다."""
@@ -386,9 +389,13 @@ def _load_isolated_runtime_provenance(
         or envelope["version"] != 1
     ):
         raise AttestationError("M05 isolated runtime provenance schema is invalid")
-    _commit(
+    manager_revision = _commit(
         envelope["manager_source_revision"], name="M05 isolated Manager source revision"
     )
+    if manager_revision != _commit(
+        expected_manager_source_revision, name="expected isolated Manager source revision"
+    ):
+        raise AttestationError("M05 isolated Manager source revision differs from expectation")
     pinset = _string(envelope["pinset_sha256"], name="M05 isolated pinset")
     transaction = _string(envelope["transaction_id"], name="M05 isolated transaction")
     if (
@@ -396,6 +403,8 @@ def _load_isolated_runtime_provenance(
         or re.fullmatch(r"[0-9a-f]{32}\Z", transaction) is None
     ):
         raise AttestationError("M05 isolated runtime provenance identity is invalid")
+    if pinset != _string(expected_pinset_sha256, name="expected isolated pinset"):
+        raise AttestationError("M05 isolated pinset differs from expectation")
     map_value = _object(envelope["map"], name="M05 isolated Map runtime")
     if set(map_value) != {
         "admin_image_id",
@@ -2276,12 +2285,18 @@ def _live(args: argparse.Namespace) -> int:
     pair = _load_pair()
     isolated_runtime: dict[str, object] | None = None
     if args.scope == "isolated":
-        if args.isolated_runtime_provenance is None:
+        if (
+            args.isolated_runtime_provenance is None
+            or args.isolated_manager_source_revision is None
+            or args.isolated_pinset_sha256 is None
+        ):
             raise AttestationError("isolated M05 attestation requires runtime provenance")
         isolated_runtime = _load_isolated_runtime_provenance(
             args.isolated_runtime_provenance,
             pair=pair,
             pinvi_source_revision=source_revision,
+            expected_manager_source_revision=args.isolated_manager_source_revision,
+            expected_pinset_sha256=args.isolated_pinset_sha256,
             require_root_owned=True,
         )
         pair["runtime_image_digests"] = cast(
@@ -2704,6 +2719,8 @@ def _parser() -> argparse.ArgumentParser:
     live.add_argument("--pinvi-source-revision", required=True)
     live.add_argument("--scope", choices=("isolated", "staging", "production"), required=True)
     live.add_argument("--isolated-runtime-provenance", type=Path)
+    live.add_argument("--isolated-manager-source-revision")
+    live.add_argument("--isolated-pinset-sha256")
     live.add_argument("--playwright-runner-image", required=True)
     live.add_argument("--require-root-owned", action="store_true")
     live.add_argument("ui_command", nargs=argparse.REMAINDER)

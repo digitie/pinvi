@@ -94,7 +94,7 @@ def test_isolated_runtime_provenance_binds_exact_source_openapi_and_images(
             "full_openapi_sha256": pair["full"]["openapi_sha256"],
             "source_revision": pair["full"]["source_revision"],
         },
-        "pinset_sha256": "4" * 64,
+        "pinset_sha256": "e" * 64,
         "pinvi": {
             "api_image_id": "sha256:" + "5" * 64,
             "dagster_image_id": "sha256:" + "6" * 64,
@@ -112,6 +112,8 @@ def test_isolated_runtime_provenance_binds_exact_source_openapi_and_images(
         path,
         pair=pair,
         pinvi_source_revision="f" * 40,
+        expected_manager_source_revision="a" * 40,
+        expected_pinset_sha256="e" * 64,
         require_root_owned=False,
     )
 
@@ -126,6 +128,16 @@ def test_isolated_runtime_provenance_binds_exact_source_openapi_and_images(
         "web": "sha256:" + "7" * 64,
     }
 
+    with pytest.raises(module.AttestationError, match="pinset differs"):
+        module._load_isolated_runtime_provenance(
+            path,
+            pair=pair,
+            pinvi_source_revision="f" * 40,
+            expected_manager_source_revision="a" * 40,
+            expected_pinset_sha256="4" * 64,
+            require_root_owned=False,
+        )
+
     provenance["map"]["full_openapi_sha256"] = "0" * 64
     path.write_text(json.dumps(provenance), encoding="utf-8")
     with pytest.raises(module.AttestationError, match="differs from the pair"):
@@ -133,6 +145,8 @@ def test_isolated_runtime_provenance_binds_exact_source_openapi_and_images(
             path,
             pair=pair,
             pinvi_source_revision="f" * 40,
+            expected_manager_source_revision="a" * 40,
+            expected_pinset_sha256="e" * 64,
             require_root_owned=False,
         )
 
