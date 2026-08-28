@@ -1039,6 +1039,16 @@ def test_live_ui_gates_pin_the_exact_checkout_revision() -> None:
     assert "PINVI_LIVE_UI_E2E" in runner
     assert "PINVI_M05_LIVE_E2E" in runner
     assert "sha256:[0-9a-f]{64}" in runner
+    assert "--tmpfs /work/apps/web/test-results:rw,noexec,nosuid,size=64m" in runner
+    assert "--tmpfs /work/apps/web/playwright-report:rw,noexec,nosuid,size=64m" in runner
+    assert '-v "${volume_prefix}-test-results:/work/apps/web/test-results"' not in runner
+    assert '-v "${volume_prefix}-playwright-report:/work/apps/web/playwright-report"' not in runner
+    live_config = (ROOT / "apps" / "web" / "playwright.live-mutating.config.ts").read_text(
+        encoding="utf-8"
+    )
+    assert "trace: 'off'" in live_config
+    assert "screenshot: 'off'" in live_config
+    assert "video: 'off'" in live_config
     for phase in (
         "admin-live-list",
         "admin-live-smoke",

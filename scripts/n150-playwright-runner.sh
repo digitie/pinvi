@@ -338,8 +338,10 @@ docker_args+=(
   -v "$repo_root:/work"
   -v "${volume_prefix}-node-modules:/work/node_modules"
   -v "${volume_prefix}-npm-cache:/tmp/.npm"
-  -v "${volume_prefix}-test-results:/work/apps/web/test-results"
-  -v "${volume_prefix}-playwright-report:/work/apps/web/playwright-report"
+  # live runner가 실패해도 trace/report가 named volume이나 clean checkout에 남지 않는다.
+  # M04/M05 증거는 아래 별도 evidence directory의 fixed marker만 허용한다.
+  --tmpfs /work/apps/web/test-results:rw,noexec,nosuid,size=64m
+  --tmpfs /work/apps/web/playwright-report:rw,noexec,nosuid,size=64m
 )
 if [[ -n "$evidence_dir" ]]; then
   docker_args+=( -v "$evidence_dir:$evidence_dir" )
