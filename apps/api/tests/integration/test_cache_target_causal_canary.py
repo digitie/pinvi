@@ -53,6 +53,14 @@ pytestmark = pytest.mark.asyncio
 CONSUMER_ID = "pinvi-cache-target-consumer"
 
 
+async def test_preflight_activity_query_does_not_require_finalize_audit_relation() -> None:
+    """0047 preflight는 아직 없는 finalize audit relation을 해석하지 않는다."""
+    assert "ktm_cache_target_boundary_audits" not in str(boundary_service._DATABASE_ACTIVITY_QUERY)
+    assert "ktm_cache_target_boundary_audits" in str(
+        boundary_service._FINALIZE_DATABASE_ACTIVITY_QUERY
+    )
+
+
 class _SnapshotClient:
     def __init__(
         self,

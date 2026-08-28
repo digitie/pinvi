@@ -72,9 +72,15 @@ _DATABASE_ACTIVITY_QUERY = text(
     "(SELECT count(*) FROM pg_stat_activity AS activity "
     "WHERE activity.datname = current_database() "
     "AND activity.pid <> pg_backend_pid() AND activity.state <> 'idle' "
+    ")"
+)
+_FINALIZE_DATABASE_ACTIVITY_QUERY = text(
+    "SELECT current_database(), (pg_control_system()).system_identifier::text, "
+    "(SELECT count(*) FROM pg_stat_activity AS activity "
+    "WHERE activity.datname = current_database() "
+    "AND activity.pid <> pg_backend_pid() AND activity.state <> 'idle' "
     "AND NOT ("
-    ":allow_serialized_replay_waiter "
-    "AND activity.application_name = :application_name "
+    "activity.application_name = :application_name "
     "AND activity.wait_event_type = 'Lock' "
     "AND EXISTS (SELECT 1 FROM pg_locks AS waiting_lock "
     "WHERE waiting_lock.pid = activity.pid "
@@ -365,15 +371,13 @@ async def _validate_database_identity(
     Finalize 재시도는 audit 직렬화 lock에서만 기다리는 동일 실행의 무변경 대기자만
     좁게 제외한다. application_name만 같다는 이유로는 절대 제외하지 않는다.
     """
-    row = (
-        await db.execute(
-            _DATABASE_ACTIVITY_QUERY,
-            {
-                "allow_serialized_replay_waiter": allow_serialized_replay_waiter,
-                "application_name": _APPLICATION_NAME,
-            },
-        )
-    ).one()
+    query = (
+        _FINALIZE_DATABASE_ACTIVITY_QUERY
+        if allow_serialized_replay_waiter
+        else _DATABASE_ACTIVITY_QUERY
+    )
+    parameters = {"application_name": _APPLICATION_NAME} if allow_serialized_replay_waiter else {}
+    row = (await db.execute(query, parameters)).one()
     database_name, system_identifier, in_flight = row
     if (
         not isinstance(database_name, str)
