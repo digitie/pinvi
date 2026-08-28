@@ -2,6 +2,16 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-29 (codex) — M05 Map health transport terminal의 PinVi 범위 분리
+
+- Map `86d38d46…`·PinVi runtime source `3b9d6026…`·Manager `1dbd7cc…`의 pinset `9b6eab1e…`은
+  trusted `ktdctl pin rotate-pair`, 단발 rebuild/public generation `match` 뒤 isolated M04/M05 E2E에서
+  `map_health_transport_failed` terminal로 차단됐다. `41be91fe…`·`5512ce12…`·`b46743ea…`도 같은 Map
+  host-loopback health 단계에서 끝났고, PinVi runtime·M04/M05 consumer 단계에는 도달하지 않았다.
+- 따라서 PinVi provenance/consumer 코드를 terminal 원인으로 단정하거나 같은 pinset을 재시도하지 않는다.
+  Manager `bc99ce1…`은 container health와 host publish socket의 일시 경합만 같은 candidate 안에서 최대 6회
+  재시도한다. 새 candidate는 exact-head CI·전문 적대 리뷰와 새 Manager source를 충족할 때만 만든다.
+
 ## 2026-08-28 (codex) — M05 pair provenance의 committed Map runtime identity 재결박
 
 - `030b12fc…` committed generation은 Map `9c64e862…`와 API image `2260ec…`, UI image `5dc547…`을 사용한다.
