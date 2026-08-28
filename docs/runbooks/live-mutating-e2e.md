@@ -5,6 +5,23 @@ mock e2e와 Admin read-only live matrix와 분리하며, 각 suite의 명시적 
 항상 skip한다. Playwright runner는 N150 Docker runner만 사용한다. N150에서 실행할 수 없으면
 gate를 중단하고 사유를 기록한다.
 
+## M05 Docker Manager pinning·결박 정본
+
+M05의 runtime pinning, Map·PinVi source pair 결박, isolated launcher 실행은
+**`kor-travel-docker-manager` trusted release의 `ktdctl`만 사용한다.** PinVi script, Compose,
+환경변수, 수동 SHA 전사로 current pinset을 만들거나 바꾸지 않는다. 새 후보는
+`ktdctl pin rotate-pair` 한 번으로 Map·PinVi revision을 함께 회전한다. role별 회전이나
+terminal pinset 재사용은 금지한다.
+
+one-shot 전에는 인증된 Manager API `GET /api/v1/runtime-pins`와
+`GET /api/v1/pinned-runtime/generation` 공개 사본을 확인한다. generation의
+`pinset_binding`은 새 pair 회전 직후 완전한 이전 committed generation의 `pending_rebuild` 또는
+`match`여야 한다. partial·malformed·`drift`·`unknown`이면 이 runbook을 중단한다. 새 launcher가
+끝난 뒤 activation attestation을 승격하려면 반드시 `match`를 다시 확인한다. private
+manifest/journal, raw launcher output, 이전 terminal artifact는 PinVi가 읽거나
+보관하지 않는다. PinVi M05 provenance의 Map `admin`·`full` source revision은 Manager registry
+pair와 정확히 같아야 하며, v6/v8 generation schema 변경은 Map·Manager와 paired PR로만 허용한다.
+
 ## 1. 범위
 
 - `apps/web/e2e/trip-realtime-live-mutating.live.ts`
