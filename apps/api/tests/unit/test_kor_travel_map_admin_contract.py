@@ -15,7 +15,7 @@ _SNAPSHOT = (
 _M05_PAIR = (
     Path(__file__).resolve().parents[4] / "contracts" / "kor-travel-map-m05-pair-provenance-v1.json"
 )
-_UPSTREAM_COMMIT = "9c64e862c9da82016e12038e2e135526b300ca9d"
+_UPSTREAM_COMMIT = "e6c08e2598a6f8b6fda605be271e8d384213de58"
 _SNAPSHOT_SHA256 = "0a1548a94c80bab1af6ab79c10b6f07eba32450adccd8ec2751a8c5256144c1d"
 
 _ADMIN_FEATURE_QUERY_PARAMETERS = {
@@ -62,7 +62,7 @@ def _query_names(operation: dict[str, Any]) -> set[str]:
 
 
 def test_admin_snapshot_is_byte_pinned_to_a_reviewed_map_revision() -> None:
-    assert _UPSTREAM_COMMIT == "9c64e862c9da82016e12038e2e135526b300ca9d"
+    assert _UPSTREAM_COMMIT == "e6c08e2598a6f8b6fda605be271e8d384213de58"
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
 
 
