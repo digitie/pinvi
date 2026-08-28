@@ -24,8 +24,10 @@ import os
 import re
 import stat
 import subprocess
+import tempfile
 import time
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager, nullcontext
 from http.cookiejar import CookieJar
 from pathlib import Path
 from typing import Any, cast
@@ -40,12 +42,19 @@ from urllib.request import (
 )
 from uuid import UUID, uuid4
 
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-    Ed25519PrivateKey,
-    Ed25519PublicKey,
-)
+try:
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+        Ed25519PrivateKey,
+        Ed25519PublicKey,
+    )
+except ModuleNotFoundError as exc:
+    if exc.name != "cryptography":
+        raise
+    _CRYPTOGRAPHY_AVAILABLE = False
+else:
+    _CRYPTOGRAPHY_AVAILABLE = True
 
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
@@ -59,10 +68,162 @@ _PAIR_PATH = Path(__file__).resolve().parents[1] / (
 _ISOLATED_RUNTIME_PROVENANCE_KIND = "m05-isolated-runtime-provenance-v1"
 _HOST_TOOL_DIRECTORIES = (Path("/usr/bin"), Path("/bin"))
 _M04_MAX_AGE_SECONDS = 15 * 60
+_ED25519_SUBJECT_PUBLIC_KEY_INFO_PREFIX = bytes.fromhex("302a300506032b6570032100")
 
 
 class AttestationError(ValueError):
     """원격 live evidence가 attestation 계약을 위반했다."""
+
+
+def _openssl_env() -> dict[str, str]:
+    """host OpenSSL이 호출자 config/provider override를 상속하지 않게 한다."""
+
+    return {
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    }
+
+
+@contextmanager
+def _temporary_0600_file(raw: bytes) -> Iterator[str]:
+    path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w+b", prefix="pinvi-m05-", dir="/tmp", delete=False
+        ) as stream:
+            path = stream.name
+            os.fchmod(stream.fileno(), 0o600)
+            metadata = os.fstat(stream.fileno())
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or stat.S_IMODE(metadata.st_mode) != 0o600
+                or metadata.st_uid != os.geteuid()
+            ):
+                raise AttestationError("OpenSSL temporary key file is unsafe")
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        yield path
+    finally:
+        if path is not None:
+            try:
+                os.unlink(path)
+            except OSError as exc:
+                raise AttestationError("OpenSSL temporary key cleanup failed") from exc
+
+
+class _OpenSslEd25519PrivateKey:
+    """host-only attestation을 위한 최소 Ed25519 signer다.
+
+    Docker Manager의 offline wheelhouse에는 PinVi application dependency를 복제하지
+    않는다. cryptography가 없는 trusted host에서는 system OpenSSL의 Ed25519 primitive만
+    사용하며, key/payload는 0600 임시 regular file로 한 번의 child 호출에만 준다.
+    """
+
+    def __init__(self, raw: bytes) -> None:
+        self._raw = raw
+        self._assert_ed25519()
+
+    def _run(
+        self,
+        arguments: list[str],
+        *,
+        key_option: str,
+        payload: bytes | None = None,
+    ) -> bytes:
+        payload_context = (
+            _temporary_0600_file(payload) if payload is not None else nullcontext(None)
+        )
+        with (
+            _temporary_0600_file(self._raw) as key_path,
+            payload_context as payload_path,
+        ):
+            command = [_host_tool("openssl"), *arguments, key_option, key_path]
+            if payload_path is not None:
+                command.extend(("-in", payload_path))
+            try:
+                completed = subprocess.run(
+                    command,
+                    check=False,
+                    capture_output=True,
+                    env=_openssl_env(),
+                )
+            except OSError as exc:
+                raise AttestationError(
+                    "OpenSSL Ed25519 operation could not run"
+                ) from exc
+        if completed.returncode != 0:
+            raise AttestationError("OpenSSL Ed25519 operation failed")
+        return completed.stdout
+
+    def _assert_ed25519(self) -> None:
+        details = self._run(["pkey", "-text", "-noout"], key_option="-in")
+        if not details.startswith(b"ED25519 Private-Key:\n"):
+            raise AttestationError("M05 private key is not Ed25519")
+
+    def sign(self, payload: bytes) -> bytes:
+        signature = self._run(
+            ["pkeyutl", "-sign", "-rawin"], key_option="-inkey", payload=payload
+        )
+        if len(signature) != 64:
+            raise AttestationError("OpenSSL Ed25519 signature is invalid")
+        return signature
+
+    def public_bytes_raw(self) -> bytes:
+        encoded = self._run(["pkey", "-pubout", "-outform", "DER"], key_option="-in")
+        if len(encoded) != len(
+            _ED25519_SUBJECT_PUBLIC_KEY_INFO_PREFIX
+        ) + 32 or not encoded.startswith(_ED25519_SUBJECT_PUBLIC_KEY_INFO_PREFIX):
+            raise AttestationError("OpenSSL Ed25519 public key is invalid")
+        return encoded[len(_ED25519_SUBJECT_PUBLIC_KEY_INFO_PREFIX) :]
+
+
+def _verify_ed25519_signature(
+    public_key_bytes: bytes, signature: bytes, payload: bytes
+) -> None:
+    if len(public_key_bytes) != 32 or len(signature) != 64:
+        raise AttestationError("M04 attestation signature is invalid")
+    if _CRYPTOGRAPHY_AVAILABLE:
+        try:
+            Ed25519PublicKey.from_public_bytes(public_key_bytes).verify(
+                signature, payload
+            )
+        except (ValueError, TypeError, InvalidSignature) as exc:
+            raise AttestationError("M04 attestation signature is invalid") from exc
+        return
+
+    public_key = _ED25519_SUBJECT_PUBLIC_KEY_INFO_PREFIX + public_key_bytes
+    with (
+        _temporary_0600_file(public_key) as public_key_path,
+        _temporary_0600_file(signature) as signature_path,
+        _temporary_0600_file(payload) as payload_path,
+    ):
+        try:
+            completed = subprocess.run(
+                [
+                    _host_tool("openssl"),
+                    "pkeyutl",
+                    "-verify",
+                    "-rawin",
+                    "-pubin",
+                    "-keyform",
+                    "DER",
+                    "-inkey",
+                    public_key_path,
+                    "-in",
+                    payload_path,
+                    "-sigfile",
+                    signature_path,
+                ],
+                check=False,
+                capture_output=True,
+                env=_openssl_env(),
+            )
+        except OSError as exc:
+            raise AttestationError("OpenSSL Ed25519 operation could not run") from exc
+    if completed.returncode != 0:
+        raise AttestationError("M04 attestation signature is invalid")
 
 
 def _host_tool(name: str) -> str:
@@ -1764,10 +1925,14 @@ def _validate_m04_ui_marker(
     }
 
 
-def _load_private_key(path: Path, *, require_root_owned: bool) -> Ed25519PrivateKey:
+def _load_private_key(
+    path: Path, *, require_root_owned: bool
+) -> Ed25519PrivateKey | _OpenSslEd25519PrivateKey:
     raw = _secure_read(
         path, require_root_owned=require_root_owned, label="M05 private key"
     )
+    if not _CRYPTOGRAPHY_AVAILABLE:
+        return _OpenSslEd25519PrivateKey(raw)
     try:
         value = serialization.load_pem_private_key(raw, password=None)
     except (TypeError, ValueError) as exc:
@@ -1775,6 +1940,20 @@ def _load_private_key(path: Path, *, require_root_owned: bool) -> Ed25519Private
     if not isinstance(value, Ed25519PrivateKey):
         raise AttestationError("M05 private key is not Ed25519")
     return value
+
+
+def _sign(
+    private_key: Ed25519PrivateKey | _OpenSslEd25519PrivateKey, payload: bytes
+) -> bytes:
+    return private_key.sign(payload)
+
+
+def _public_key_bytes(
+    private_key: Ed25519PrivateKey | _OpenSslEd25519PrivateKey,
+) -> bytes:
+    if isinstance(private_key, _OpenSslEd25519PrivateKey):
+        return private_key.public_bytes_raw()
+    return private_key.public_key().public_bytes_raw()
 
 
 def _runtime_snapshot(
@@ -2045,7 +2224,7 @@ def _m04(args: argparse.Namespace) -> int:
     attestation = {
         "payload": payload,
         "signature": base64.urlsafe_b64encode(
-            private_key.sign(_canonical_json(payload))
+            _sign(private_key, _canonical_json(payload))
         )
         .decode("ascii")
         .rstrip("="),
@@ -2239,10 +2418,10 @@ def _read_m04_evidence(
         signature_bytes = base64.urlsafe_b64decode(
             signature + "=" * (-len(signature) % 4)
         )
-        Ed25519PublicKey.from_public_bytes(public_key_bytes).verify(
-            signature_bytes, _canonical_json(payload)
+        _verify_ed25519_signature(
+            public_key_bytes, signature_bytes, _canonical_json(payload)
         )
-    except (ValueError, TypeError, InvalidSignature) as exc:
+    except (ValueError, TypeError, AttestationError) as exc:
         raise AttestationError("M04 attestation signature is invalid") from exc
     return {
         "attestation_sha256": attestation_hash,
@@ -2336,7 +2515,7 @@ def _live(args: argparse.Namespace) -> int:
     m04 = _read_m04_evidence(
         args.m04_evidence_dir,
         require_root_owned=args.require_root_owned,
-        public_key_bytes=private_key.public_key().public_bytes_raw(),
+        public_key_bytes=_public_key_bytes(private_key),
         source_revision=source_revision,
         scope=args.scope,
         expected_pinvi_api_endpoint=args.pinvi_api_url.rstrip("/"),
@@ -2664,7 +2843,7 @@ def _live(args: argparse.Namespace) -> int:
     attestation = {
         "payload": attestation_payload,
         "signature": base64.urlsafe_b64encode(
-            private_key.sign(_canonical_json(attestation_payload))
+            _sign(private_key, _canonical_json(attestation_payload))
         )
         .decode("ascii")
         .rstrip("="),

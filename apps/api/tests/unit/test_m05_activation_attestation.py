@@ -11,6 +11,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pytest
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 
@@ -695,3 +696,32 @@ def test_m04_signed_evidence_is_bound_to_the_same_pinvi_runtime(linux_tmp_path: 
             expected_pinvi_web_endpoint="http://127.0.0.1:12805",
             expected_pinvi_web_container_id="4" * 64,
         )
+
+
+def test_host_openssl_fallback_signs_and_verifies_ed25519(
+    linux_tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module = _attestation_module()
+    key = Ed25519PrivateKey.generate()
+    key_path = linux_tmp_path / "m05-private-key.pem"
+    key_path.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    key_path.chmod(0o600)
+    monkeypatch.setattr(module, "_CRYPTOGRAPHY_AVAILABLE", False)
+
+    loaded = module._load_private_key(key_path, require_root_owned=False)
+    payload = module._canonical_json({"scope": "isolated", "status": "passed"})
+    signature = module._sign(loaded, payload)
+    public_key = module._public_key_bytes(loaded)
+
+    assert public_key == key.public_key().public_bytes_raw()
+    assert len(signature) == 64
+    key.public_key().verify(signature, payload)
+    module._verify_ed25519_signature(public_key, signature, payload)
+    with pytest.raises(module.AttestationError, match="signature is invalid"):
+        module._verify_ed25519_signature(public_key, signature, payload + b"!")
