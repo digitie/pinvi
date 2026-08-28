@@ -17,8 +17,9 @@ terminal pinset 재사용은 금지한다.
 호출자가 설정할 수 있는 `PINVI_M05_ISOLATED_MANAGER_HARNESS` 환경변수는 권한 근거로 쓰지
 않으며, Manager root driver가 private runtime directory에 만든 `0600` admission 파일을
 no-follow로 검증한 경우만 허용한다. admission은 exact transaction project, pinset, Manager·Map·PinVi
-source revision을 함께 결박한다. 직접 Compose, 임의 root marker, 수동 environment 설정은 이
-검증을 대신하지 못한다.
+source revision을 함께 결박한다. 검증기는 root EUID에서만 `/usr/bin/python3 -I`를 깨끗한
+환경으로 실행하므로 호출자 `PATH`·`PYTHON*`은 interpreter·import를 바꾸지 못한다. 직접 Compose,
+임의 root marker, 수동 environment 설정은 이 검증을 대신하지 못한다.
 
 one-shot 전에는 인증된 Manager API `GET /api/v1/runtime-pins`와
 `GET /api/v1/pinned-runtime/generation` 공개 사본을 확인한다. generation의

@@ -1702,6 +1702,10 @@ require_isolated_direct_compose_project() {
         echo "isolated direct Compose mutation requires an m05i-pinvi transaction project" >&2
         return 2
       }
+      [[ "$EUID" -eq 0 ]] || {
+        echo "isolated direct Compose mutation requires the Manager root runtime" >&2
+        return 2
+      }
       [[ -z "${PINVI_M05_ISOLATED_MANAGER_HARNESS:-}" ]] || {
         echo "isolated direct Compose mutation rejects the legacy Manager harness environment marker" >&2
         return 2
@@ -1710,7 +1714,10 @@ require_isolated_direct_compose_project() {
         echo "isolated direct Compose mutation requires a Manager M05 admission" >&2
         return 2
       }
-      python3 "$ROOT_DIR/scripts/m05_isolated_manager_admission.py" \
+      # 호출자 PATH·PYTHON*은 verifier 선택이나 import에 영향을 줄 수 없다. Manager가
+      # trusted root runtime에서 준 private receipt만 절대 interpreter로 검증한다.
+      /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/python3 -I \
+        "$ROOT_DIR/scripts/m05_isolated_manager_admission.py" \
         "$PINVI_M05_ISOLATED_MANAGER_ADMISSION_PATH" \
         "$PROJECT" \
         "${PINVI_SOURCE_REVISION:-}" \

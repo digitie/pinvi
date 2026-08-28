@@ -107,3 +107,13 @@ def test_rejects_non_private_or_symlink_admission(tmp_path: Path) -> None:
             pinset_sha256="c" * 64,
             expected_uid=os.getuid(),
         )
+
+
+def test_isolated_compose_gate_uses_root_and_a_trusted_interpreter() -> None:
+    script = (Path(__file__).resolve().parents[4] / "scripts/docker-app.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert '[[ "$EUID" -eq 0 ]]' in script
+    assert "/usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/python3 -I" in script
+    assert 'python3 "$ROOT_DIR/scripts/m05_isolated_manager_admission.py"' not in script
