@@ -9,7 +9,9 @@ admission은 이제 source `pinset_sha256`와 Manager revision 외에 exact
 `execution_identity_sha256`도 strict schema·root-owned private file·호출 인자로 모두
 대조한다. 따라서 같은 source pair라도 다른 Manager release의 admission을 환경 변수만
 바꿔 재사용할 수 없다. POSIX mode가 보존되지 않는 공유 mount의 pytest 임시 경로는 `/tmp`의
-명시적 fixture로 한정했고, execution mismatch를 포함한 7개 회귀를 추가했다.
+명시적 fixture로 한정했고, execution mismatch를 포함한 7개 회귀를 추가했다. isolated live 성공
+`live-ui.json`과 서명 `attestation.json`에도 execution ID·Manager revision·pinset·runtime provenance
+SHA-256을 남겨 사후 증명이 private runtime file의 cleanup에 의존하지 않게 했다.
 
 ## 2026-08-29 (codex) — Manager-aware M05 execution identity 계약 착수
 

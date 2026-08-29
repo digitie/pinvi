@@ -628,7 +628,10 @@ def _load_isolated_runtime_provenance(
         ),
     }
     return {
+        "execution_identity_sha256": execution_identity,
+        "manager_source_revision": manager_revision,
         "map_images": map_images,
+        "pinset_sha256": pinset,
         "pinvi_images": pinvi_images,
         "sha256": _sha256(raw),
     }
@@ -2810,6 +2813,19 @@ def _live(args: argparse.Namespace) -> int:
         "ui_evidence_sha256": marker_raw_hash,
         "verification_id": verification_id,
     }
+    if isolated_runtime is not None:
+        live_ui.update(
+            {
+                "isolated_execution_identity_sha256": isolated_runtime[
+                    "execution_identity_sha256"
+                ],
+                "isolated_manager_source_revision": isolated_runtime[
+                    "manager_source_revision"
+                ],
+                "isolated_pinset_sha256": isolated_runtime["pinset_sha256"],
+                "isolated_runtime_provenance_sha256": isolated_runtime["sha256"],
+            }
+        )
     output_hashes = {
         "ui-run": marker_raw_hash,
         "live-ui": _write_json(evidence_dir / "live-ui.json", live_ui),
@@ -2853,6 +2869,19 @@ def _live(args: argparse.Namespace) -> int:
         "verification_id": verification_id,
         "version": 3,
     }
+    if isolated_runtime is not None:
+        attestation_payload.update(
+            {
+                "isolated_execution_identity_sha256": isolated_runtime[
+                    "execution_identity_sha256"
+                ],
+                "isolated_manager_source_revision": isolated_runtime[
+                    "manager_source_revision"
+                ],
+                "isolated_pinset_sha256": isolated_runtime["pinset_sha256"],
+                "isolated_runtime_provenance_sha256": isolated_runtime["sha256"],
+            }
+        )
     attestation = {
         "payload": attestation_payload,
         "signature": base64.urlsafe_b64encode(

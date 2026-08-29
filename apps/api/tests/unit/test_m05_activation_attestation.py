@@ -130,6 +130,9 @@ def test_isolated_runtime_provenance_binds_exact_source_openapi_and_images(
         "dagster": "sha256:" + "6" * 64,
         "web": "sha256:" + "7" * 64,
     }
+    assert loaded["execution_identity_sha256"] == "d" * 64
+    assert loaded["manager_source_revision"] == "a" * 40
+    assert loaded["pinset_sha256"] == "e" * 64
 
     with pytest.raises(module.AttestationError, match="pinset differs"):
         module._load_isolated_runtime_provenance(
