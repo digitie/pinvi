@@ -13,6 +13,7 @@ import time
 from collections.abc import Iterator
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import ModuleType
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -69,6 +70,72 @@ def _test_trust_anchor_sha256(private_key: Ed25519PrivateKey) -> str:
 def _write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, separators=(",", ":")), encoding="utf-8")
     path.chmod(0o600)
+
+
+def _receipt_module() -> ModuleType:
+    path = REPO_ROOT / "scripts" / "m05_activation_receipt.py"
+    spec = importlib.util.spec_from_file_location("m05_activation_receipt", path)
+    if spec is None or spec.loader is None:
+        raise AssertionError("activation receipt module could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _isolated_live_ui() -> dict[str, object]:
+    return {
+        "event_id": "11111111-1111-4111-8111-111111111111",
+        "event_sha256": "a" * 64,
+        "impact_count": 1,
+        "isolated_execution_identity_sha256": "b" * 64,
+        "isolated_manager_source_revision": "c" * 40,
+        "isolated_pinset_sha256": "d" * 64,
+        "isolated_runtime_provenance_sha256": "e" * 64,
+        "m04_attestation_sha256": "f" * 64,
+        "m04_created_at": 1,
+        "m04_feature_request_id": "22222222-2222-4222-8222-222222222222",
+        "m04_map_feature_uuid": "33333333-3333-4333-8333-333333333333",
+        "m04_map_pending_receipt_sha256": "0" * 64,
+        "m04_map_provenance_sha256": "1" * 64,
+        "m04_map_request_sha256": "2" * 64,
+        "m04_pinvi_approval_sha256": "3" * 64,
+        "m04_server_side_chain_verified": True,
+        "m04_verification_id": "44444444-4444-4444-8444-444444444444",
+        "map_ack_sha256": "4" * 64,
+        "map_admin_endpoint": "http://127.0.0.1:12701",
+        "map_local_receipt_sha256": "5" * 64,
+        "map_snapshot_after_sha256": "6" * 64,
+        "map_snapshot_before_sha256": "6" * 64,
+        "old_feature_id": "feature-old",
+        "pinvi_api_endpoint": "http://127.0.0.1:12801",
+        "pinvi_detail_sha256": "7" * 64,
+        "pinvi_receipt_sha256": "5" * 64,
+        "pinvi_snapshot_after_sha256": "8" * 64,
+        "pinvi_snapshot_before_sha256": "8" * 64,
+        "pinvi_source_revision": PINVI_REVISION,
+        "pinvi_web_endpoint": "http://127.0.0.1:12805",
+        "playwright_runner_image_id": "sha256:" + "9" * 64,
+        "playwright_runner_image_ref": "mcr.microsoft.com/playwright:v1.60.0-noble@sha256:"
+        + "a" * 64,
+        "replacement_feature_id": "feature-new",
+        "runner_exit_code": 0,
+        "server_side_ack_verified": True,
+        "status": "passed",
+        "ui_evidence_sha256": "b" * 64,
+        "verification_id": "44444444-4444-4444-8444-444444444444",
+    }
+
+
+def test_isolated_live_ui_requires_the_complete_execution_binding() -> None:
+    module = _receipt_module()
+    live_ui = _isolated_live_ui()
+
+    parsed = module._live_ui(live_ui, pinvi_source_revision=PINVI_REVISION)
+    assert parsed["isolated_execution_identity_sha256"] == "b" * 64
+    incomplete = dict(live_ui)
+    incomplete.pop("isolated_pinset_sha256")
+    with pytest.raises(module.ReceiptError, match="isolated execution binding is incomplete"):
+        module._live_ui(incomplete, pinvi_source_revision=PINVI_REVISION)
 
 
 def _identity_sha256(identity: dict[str, object]) -> str:
