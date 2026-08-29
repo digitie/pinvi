@@ -67,6 +67,33 @@ _FINALIZE_TABLE_LOCK = text(
 _AUDIT_SERIALIZE_LOCK = text(
     "LOCK TABLE app.ktm_cache_target_boundary_audits IN SHARE ROW EXCLUSIVE MODE"
 )
+_DATABASE_ACTIVITY_QUERY = text(
+    "SELECT current_database(), (pg_control_system()).system_identifier::text, "
+    "(SELECT count(*) FROM pg_stat_activity AS activity "
+    "WHERE activity.datname = current_database() "
+    "AND activity.pid <> pg_backend_pid() AND activity.state <> 'idle' "
+    ")"
+)
+_FINALIZE_DATABASE_ACTIVITY_QUERY = text(
+    "SELECT current_database(), (pg_control_system()).system_identifier::text, "
+    "(SELECT count(*) FROM pg_stat_activity AS activity "
+    "WHERE activity.datname = current_database() "
+    "AND activity.pid <> pg_backend_pid() AND activity.state <> 'idle' "
+    "AND NOT ("
+    "activity.application_name = :application_name "
+    "AND activity.wait_event_type = 'Lock' "
+    "AND EXISTS (SELECT 1 FROM pg_locks AS waiting_lock "
+    "WHERE waiting_lock.pid = activity.pid "
+    "AND waiting_lock.locktype = 'relation' "
+    "AND waiting_lock.relation = 'app.ktm_cache_target_boundary_audits'::regclass "
+    "AND waiting_lock.mode = 'ShareRowExclusiveLock' "
+    "AND NOT waiting_lock.granted) "
+    "AND NOT EXISTS (SELECT 1 FROM pg_locks AS granted_lock "
+    "WHERE granted_lock.pid = activity.pid AND granted_lock.granted "
+    "AND NOT (granted_lock.locktype = 'virtualxid' "
+    "AND granted_lock.mode = 'ExclusiveLock'))"
+    "))"
+)
 
 
 class CacheTargetBoundaryFailure(RuntimeError):
@@ -333,18 +360,24 @@ def _database_identity_v1(
     return hashlib.sha256(payload).hexdigest()
 
 
-async def _validate_database_identity(db: AsyncSession, request: CacheTargetBoundaryRequest) -> int:
-    row = (
-        await db.execute(
-            text(
-                "SELECT current_database(), (pg_control_system()).system_identifier::text, "
-                "(SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() "
-                "AND pid <> pg_backend_pid() AND state <> 'idle' "
-                "AND application_name <> :application_name)"
-            ),
-            {"application_name": _APPLICATION_NAME},
-        )
-    ).one()
+async def _validate_database_identity(
+    db: AsyncSession,
+    request: CacheTargetBoundaryRequest,
+    *,
+    allow_serialized_replay_waiter: bool = False,
+) -> int:
+    """DB identity와 외부 활동을 fail-close로 확인한다.
+
+    Finalize 재시도는 audit 직렬화 lock에서만 기다리는 동일 실행의 무변경 대기자만
+    좁게 제외한다. application_name만 같다는 이유로는 절대 제외하지 않는다.
+    """
+    query = (
+        _FINALIZE_DATABASE_ACTIVITY_QUERY
+        if allow_serialized_replay_waiter
+        else _DATABASE_ACTIVITY_QUERY
+    )
+    parameters = {"application_name": _APPLICATION_NAME} if allow_serialized_replay_waiter else {}
+    row = (await db.execute(query, parameters)).one()
     database_name, system_identifier, in_flight = row
     if (
         not isinstance(database_name, str)
@@ -755,7 +788,11 @@ async def run_cache_target_boundary_finalize(
         if revision != FINALIZE_SCHEMA_REVISION:
             raise CacheTargetBoundaryFailure("schema_revision_mismatch", "finalize")
         await db.execute(_FINALIZE_TABLE_LOCK)
-        in_flight = await _validate_database_identity(db, request)
+        in_flight = await _validate_database_identity(
+            db,
+            request,
+            allow_serialized_replay_waiter=True,
+        )
         run = await db.scalar(
             select(KtmCacheTargetCanaryRun)
             .where(KtmCacheTargetCanaryRun.run_id == request.canary_run_id)

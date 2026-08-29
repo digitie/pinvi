@@ -144,7 +144,24 @@ SH
   chromium on ubuntu26.04-x64"로 실패할 수 있다. 이 경우 N150 Web/API health를 먼저 확인한 뒤
   Docker runner를 사용하고, runner도 준비되지 않으면 live gate를 중단해 실패 사유를 journal/PR에 남긴다.
 
-## 8. 표준 fallback 순서
+## 8. N150 host-only runner와 offline dependency 혼동
+
+N150 live gate의 `scripts/n150-playwright-runner.sh`는 host의 Linux/architecture/hostname/OS와
+Node를 확인한 뒤 Docker daemon에 source·evidence의 **host 절대경로**를 bind한다. 따라서 Python
+dependency가 없다는 이유로 attestation 전체를 API container에서 실행하면 host preflight·Node·nested
+Docker path가 모두 달라져 one-shot ledger만 소진할 수 있다.
+
+대응 순서:
+
+1. live UI runner·source checkout·evidence writer는 N150 host에 둔다.
+2. 없는 dependency가 서명 primitive처럼 좁은 host-only tool이면, 기존 운영 도구의 immutable system
+   binary를 이용한 fail-closed fallback을 먼저 검토한다. container 내부 도구를 host runner 대체물로
+   취급하지 않는다.
+3. fallback은 key/input의 mode·owner·non-symlink, fixed binary path, signature length/type, cleanup
+   실패를 검사하고 raw key·stderr를 출력하지 않는다.
+4. candidate ledger를 claim하기 전에 local fallback 회귀와 전문 리뷰를 완료한다.
+
+## 9. 표준 fallback 순서
 
 1. **Git/branch/commit**: Linux git + Linux worktree 포인터.
 2. **탐색**: Linux native `rg`, `sed`, `git`, CodeGraph.

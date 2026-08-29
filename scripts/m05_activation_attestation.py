@@ -24,7 +24,10 @@ import os
 import re
 import stat
 import subprocess
+import tempfile
 import time
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager, nullcontext
 from http.cookiejar import CookieJar
 from pathlib import Path
 from typing import Any, cast
@@ -39,12 +42,19 @@ from urllib.request import (
 )
 from uuid import UUID, uuid4
 
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-    Ed25519PrivateKey,
-    Ed25519PublicKey,
-)
+try:
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+        Ed25519PrivateKey,
+        Ed25519PublicKey,
+    )
+except ModuleNotFoundError as exc:
+    if exc.name != "cryptography":
+        raise
+    _CRYPTOGRAPHY_AVAILABLE = False
+else:
+    _CRYPTOGRAPHY_AVAILABLE = True
 
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
@@ -55,12 +65,165 @@ _PLAYWRIGHT_IMAGE_RE = re.compile(
 _PAIR_PATH = Path(__file__).resolve().parents[1] / (
     "contracts/kor-travel-map-m05-pair-provenance-v1.json"
 )
+_ISOLATED_RUNTIME_PROVENANCE_KIND = "m05-isolated-runtime-provenance-v1"
 _HOST_TOOL_DIRECTORIES = (Path("/usr/bin"), Path("/bin"))
 _M04_MAX_AGE_SECONDS = 15 * 60
+_ED25519_SUBJECT_PUBLIC_KEY_INFO_PREFIX = bytes.fromhex("302a300506032b6570032100")
 
 
 class AttestationError(ValueError):
     """원격 live evidence가 attestation 계약을 위반했다."""
+
+
+def _openssl_env() -> dict[str, str]:
+    """host OpenSSL이 호출자 config/provider override를 상속하지 않게 한다."""
+
+    return {
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    }
+
+
+@contextmanager
+def _temporary_0600_file(raw: bytes) -> Iterator[str]:
+    path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w+b", prefix="pinvi-m05-", dir="/tmp", delete=False
+        ) as stream:
+            path = stream.name
+            os.fchmod(stream.fileno(), 0o600)
+            metadata = os.fstat(stream.fileno())
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or stat.S_IMODE(metadata.st_mode) != 0o600
+                or metadata.st_uid != os.geteuid()
+            ):
+                raise AttestationError("OpenSSL temporary key file is unsafe")
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        yield path
+    finally:
+        if path is not None:
+            try:
+                os.unlink(path)
+            except OSError as exc:
+                raise AttestationError("OpenSSL temporary key cleanup failed") from exc
+
+
+class _OpenSslEd25519PrivateKey:
+    """host-only attestation을 위한 최소 Ed25519 signer다.
+
+    Docker Manager의 offline wheelhouse에는 PinVi application dependency를 복제하지
+    않는다. cryptography가 없는 trusted host에서는 system OpenSSL의 Ed25519 primitive만
+    사용하며, key/payload는 0600 임시 regular file로 한 번의 child 호출에만 준다.
+    """
+
+    def __init__(self, raw: bytes) -> None:
+        self._raw = raw
+        self._assert_ed25519()
+
+    def _run(
+        self,
+        arguments: list[str],
+        *,
+        key_option: str,
+        payload: bytes | None = None,
+    ) -> bytes:
+        payload_context = (
+            _temporary_0600_file(payload) if payload is not None else nullcontext(None)
+        )
+        with (
+            _temporary_0600_file(self._raw) as key_path,
+            payload_context as payload_path,
+        ):
+            command = [_host_tool("openssl"), *arguments, key_option, key_path]
+            if payload_path is not None:
+                command.extend(("-in", payload_path))
+            try:
+                completed = subprocess.run(
+                    command,
+                    check=False,
+                    capture_output=True,
+                    env=_openssl_env(),
+                )
+            except OSError as exc:
+                raise AttestationError(
+                    "OpenSSL Ed25519 operation could not run"
+                ) from exc
+        if completed.returncode != 0:
+            raise AttestationError("OpenSSL Ed25519 operation failed")
+        return completed.stdout
+
+    def _assert_ed25519(self) -> None:
+        details = self._run(["pkey", "-text", "-noout"], key_option="-in")
+        if not details.startswith(b"ED25519 Private-Key:\n"):
+            raise AttestationError("M05 private key is not Ed25519")
+
+    def sign(self, payload: bytes) -> bytes:
+        signature = self._run(
+            ["pkeyutl", "-sign", "-rawin"], key_option="-inkey", payload=payload
+        )
+        if len(signature) != 64:
+            raise AttestationError("OpenSSL Ed25519 signature is invalid")
+        return signature
+
+    def public_bytes_raw(self) -> bytes:
+        encoded = self._run(["pkey", "-pubout", "-outform", "DER"], key_option="-in")
+        if len(encoded) != len(
+            _ED25519_SUBJECT_PUBLIC_KEY_INFO_PREFIX
+        ) + 32 or not encoded.startswith(_ED25519_SUBJECT_PUBLIC_KEY_INFO_PREFIX):
+            raise AttestationError("OpenSSL Ed25519 public key is invalid")
+        return encoded[len(_ED25519_SUBJECT_PUBLIC_KEY_INFO_PREFIX) :]
+
+
+def _verify_ed25519_signature(
+    public_key_bytes: bytes, signature: bytes, payload: bytes
+) -> None:
+    if len(public_key_bytes) != 32 or len(signature) != 64:
+        raise AttestationError("M04 attestation signature is invalid")
+    if _CRYPTOGRAPHY_AVAILABLE:
+        try:
+            Ed25519PublicKey.from_public_bytes(public_key_bytes).verify(
+                signature, payload
+            )
+        except (ValueError, TypeError, InvalidSignature) as exc:
+            raise AttestationError("M04 attestation signature is invalid") from exc
+        return
+
+    public_key = _ED25519_SUBJECT_PUBLIC_KEY_INFO_PREFIX + public_key_bytes
+    with (
+        _temporary_0600_file(public_key) as public_key_path,
+        _temporary_0600_file(signature) as signature_path,
+        _temporary_0600_file(payload) as payload_path,
+    ):
+        try:
+            completed = subprocess.run(
+                [
+                    _host_tool("openssl"),
+                    "pkeyutl",
+                    "-verify",
+                    "-rawin",
+                    "-pubin",
+                    "-keyform",
+                    "DER",
+                    "-inkey",
+                    public_key_path,
+                    "-in",
+                    payload_path,
+                    "-sigfile",
+                    signature_path,
+                ],
+                check=False,
+                capture_output=True,
+                env=_openssl_env(),
+            )
+        except OSError as exc:
+            raise AttestationError("OpenSSL Ed25519 operation could not run") from exc
+    if completed.returncode != 0:
+        raise AttestationError("M04 attestation signature is invalid")
 
 
 def _host_tool(name: str) -> str:
@@ -260,6 +423,22 @@ def _write_json(path: Path, value: object) -> str:
     finally:
         if fd != -1:
             os.close(fd)
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC
+    directory_flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        directory_fd = os.open(path.parent, directory_flags)
+    except OSError as exc:
+        raise AttestationError(
+            f"evidence output directory is not durable: {path.parent.name}"
+        ) from exc
+    try:
+        os.fsync(directory_fd)
+    except OSError as exc:
+        raise AttestationError(
+            f"evidence output directory is not durable: {path.parent.name}"
+        ) from exc
+    finally:
+        os.close(directory_fd)
     return _sha256(raw)
 
 
@@ -326,6 +505,136 @@ def _load_pair() -> dict[str, dict[str, str]]:
             raise AttestationError(f"runtime_image_digests.{name} is invalid")
         result["runtime_image_digests"][name] = digest
     return result
+
+
+def _isolated_image_id(value: object, *, name: str) -> str:
+    image_id = _string(value, name=name)
+    if _DIGEST_RE.fullmatch(image_id) is None:
+        raise AttestationError(f"{name} is invalid")
+    return image_id
+
+
+def _load_isolated_runtime_provenance(
+    path: Path,
+    *,
+    pair: dict[str, dict[str, str]],
+    pinvi_source_revision: str,
+    expected_manager_source_revision: str,
+    expected_pinset_sha256: str,
+    expected_execution_identity_sha256: str,
+    require_root_owned: bool,
+) -> dict[str, object]:
+    """Manager의 root-only isolated image/source receipt를 M05 runtime에 결박한다."""
+
+    raw = _secure_read(
+        path,
+        require_root_owned=require_root_owned,
+        label="M05 isolated runtime provenance",
+    )
+    try:
+        value = json.loads(raw, object_pairs_hook=_reject_duplicate_keys)
+    except (UnicodeDecodeError, json.JSONDecodeError, AttestationError) as exc:
+        raise AttestationError("M05 isolated runtime provenance is invalid") from exc
+    envelope = _object(value, name="M05 isolated runtime provenance")
+    if (
+        set(envelope)
+        != {
+            "kind",
+            "execution_identity_sha256",
+            "manager_source_revision",
+            "map",
+            "pinset_sha256",
+            "pinvi",
+            "transaction_id",
+            "version",
+        }
+        or envelope["kind"] != _ISOLATED_RUNTIME_PROVENANCE_KIND
+        or envelope["version"] != 1
+    ):
+        raise AttestationError("M05 isolated runtime provenance schema is invalid")
+    manager_revision = _commit(
+        envelope["manager_source_revision"], name="M05 isolated Manager source revision"
+    )
+    if manager_revision != _commit(
+        expected_manager_source_revision, name="expected isolated Manager source revision"
+    ):
+        raise AttestationError("M05 isolated Manager source revision differs from expectation")
+    pinset = _string(envelope["pinset_sha256"], name="M05 isolated pinset")
+    transaction = _string(envelope["transaction_id"], name="M05 isolated transaction")
+    if (
+        _SHA256_RE.fullmatch(pinset) is None
+        or re.fullmatch(r"[0-9a-f]{32}\Z", transaction) is None
+    ):
+        raise AttestationError("M05 isolated runtime provenance identity is invalid")
+    if pinset != _string(expected_pinset_sha256, name="expected isolated pinset"):
+        raise AttestationError("M05 isolated pinset differs from expectation")
+    execution_identity = _string(
+        envelope["execution_identity_sha256"], name="M05 isolated execution identity"
+    )
+    if _SHA256_RE.fullmatch(execution_identity) is None:
+        raise AttestationError("M05 isolated execution identity is invalid")
+    if execution_identity != _string(
+        expected_execution_identity_sha256, name="expected isolated execution identity"
+    ):
+        raise AttestationError("M05 isolated execution identity differs from expectation")
+    map_value = _object(envelope["map"], name="M05 isolated Map runtime")
+    if set(map_value) != {
+        "admin_image_id",
+        "api_image_id",
+        "frontend_image_id",
+        "full_openapi_sha256",
+        "source_revision",
+    }:
+        raise AttestationError("M05 isolated Map runtime schema is invalid")
+    if (
+        _commit(map_value["source_revision"], name="M05 isolated Map source revision")
+        != pair["full"]["source_revision"]
+        or map_value["full_openapi_sha256"] != pair["full"]["openapi_sha256"]
+    ):
+        raise AttestationError("M05 isolated Map runtime provenance differs from the pair")
+    map_images = {
+        "admin": _isolated_image_id(
+            map_value["admin_image_id"], name="M05 isolated Map admin image"
+        ),
+        "api": _isolated_image_id(
+            map_value["api_image_id"], name="M05 isolated Map API image"
+        ),
+        "frontend": _isolated_image_id(
+            map_value["frontend_image_id"], name="M05 isolated Map frontend image"
+        ),
+    }
+    pinvi_value = _object(envelope["pinvi"], name="M05 isolated PinVi runtime")
+    if set(pinvi_value) != {
+        "api_image_id",
+        "dagster_image_id",
+        "source_revision",
+        "web_image_id",
+    }:
+        raise AttestationError("M05 isolated PinVi runtime schema is invalid")
+    if (
+        _commit(pinvi_value["source_revision"], name="M05 isolated PinVi source revision")
+        != pinvi_source_revision
+    ):
+        raise AttestationError("M05 isolated PinVi runtime provenance differs from the source")
+    pinvi_images = {
+        "api": _isolated_image_id(
+            pinvi_value["api_image_id"], name="M05 isolated PinVi API image"
+        ),
+        "web": _isolated_image_id(
+            pinvi_value["web_image_id"], name="M05 isolated PinVi Web image"
+        ),
+        "dagster": _isolated_image_id(
+            pinvi_value["dagster_image_id"], name="M05 isolated PinVi Dagster image"
+        ),
+    }
+    return {
+        "execution_identity_sha256": execution_identity,
+        "manager_source_revision": manager_revision,
+        "map_images": map_images,
+        "pinset_sha256": pinset,
+        "pinvi_images": pinvi_images,
+        "sha256": _sha256(raw),
+    }
 
 
 def _url(base: str, path: str) -> str:
@@ -1630,10 +1939,14 @@ def _validate_m04_ui_marker(
     }
 
 
-def _load_private_key(path: Path, *, require_root_owned: bool) -> Ed25519PrivateKey:
+def _load_private_key(
+    path: Path, *, require_root_owned: bool
+) -> Ed25519PrivateKey | _OpenSslEd25519PrivateKey:
     raw = _secure_read(
         path, require_root_owned=require_root_owned, label="M05 private key"
     )
+    if not _CRYPTOGRAPHY_AVAILABLE:
+        return _OpenSslEd25519PrivateKey(raw)
     try:
         value = serialization.load_pem_private_key(raw, password=None)
     except (TypeError, ValueError) as exc:
@@ -1643,11 +1956,26 @@ def _load_private_key(path: Path, *, require_root_owned: bool) -> Ed25519Private
     return value
 
 
+def _sign(
+    private_key: Ed25519PrivateKey | _OpenSslEd25519PrivateKey, payload: bytes
+) -> bytes:
+    return private_key.sign(payload)
+
+
+def _public_key_bytes(
+    private_key: Ed25519PrivateKey | _OpenSslEd25519PrivateKey,
+) -> bytes:
+    if isinstance(private_key, _OpenSslEd25519PrivateKey):
+        return private_key.public_bytes_raw()
+    return private_key.public_key().public_bytes_raw()
+
+
 def _runtime_snapshot(
     args: argparse.Namespace,
     *,
     pair: dict[str, dict[str, str]],
     source_revision: str,
+    pinvi_image_digests: Mapping[str, str] | None = None,
 ) -> dict[str, dict[str, str]]:
     return {
         "map_admin": _docker_inspect(
@@ -1680,6 +2008,9 @@ def _runtime_snapshot(
             args.pinvi_api_container,
             expected_revision=source_revision,
             expected_environment=args.scope,
+            expected_image_digest=(
+                pinvi_image_digests["api"] if pinvi_image_digests is not None else None
+            ),
             expected_compose_project=args.pinvi_docker_project,
             expected_compose_service="app-api",
             endpoint_url=args.pinvi_api_url,
@@ -1688,6 +2019,9 @@ def _runtime_snapshot(
             args.pinvi_web_container,
             expected_revision=source_revision,
             expected_environment=args.scope,
+            expected_image_digest=(
+                pinvi_image_digests["web"] if pinvi_image_digests is not None else None
+            ),
             expected_compose_project=args.pinvi_docker_project,
             expected_compose_service="app-web",
             endpoint_url=args.pinvi_web_url,
@@ -1697,6 +2031,9 @@ def _runtime_snapshot(
             args.pinvi_dagster_container,
             expected_revision=source_revision,
             expected_environment=args.scope,
+            expected_image_digest=(
+                pinvi_image_digests["dagster"] if pinvi_image_digests is not None else None
+            ),
             expected_compose_project=args.pinvi_docker_project,
             expected_compose_service="app-dagster",
         ),
@@ -1756,11 +2093,11 @@ def _m04(args: argparse.Namespace) -> int:
     _assert_evidence_directory(evidence_dir, require_root_owned=args.require_root_owned)
     feature_request_id = _uuid(args.feature_request_id, name="M04 feature request ID")
     source_revision = _commit(args.pinvi_source_revision, name="Pinvi source revision")
-    if args.scope not in {"smoke", "staging", "production"}:
+    if args.scope not in {"smoke", "isolated", "staging", "production"}:
         raise AttestationError("M04 attestation scope is invalid")
-    if args.scope in {"staging", "production"} and not args.require_root_owned:
+    if args.scope in {"isolated", "staging", "production"} and not args.require_root_owned:
         raise AttestationError(
-            "M04 staging/production attestation requires root-owned evidence"
+            "M04 isolated/staging/production attestation requires root-owned evidence"
         )
     pinvi_source_root = Path(__file__).resolve().parents[1]
     _assert_clean_checkout(
@@ -1901,7 +2238,7 @@ def _m04(args: argparse.Namespace) -> int:
     attestation = {
         "payload": payload,
         "signature": base64.urlsafe_b64encode(
-            private_key.sign(_canonical_json(payload))
+            _sign(private_key, _canonical_json(payload))
         )
         .decode("ascii")
         .rstrip("="),
@@ -2095,10 +2432,10 @@ def _read_m04_evidence(
         signature_bytes = base64.urlsafe_b64decode(
             signature + "=" * (-len(signature) % 4)
         )
-        Ed25519PublicKey.from_public_bytes(public_key_bytes).verify(
-            signature_bytes, _canonical_json(payload)
+        _verify_ed25519_signature(
+            public_key_bytes, signature_bytes, _canonical_json(payload)
         )
-    except (ValueError, TypeError, InvalidSignature) as exc:
+    except (ValueError, TypeError, AttestationError) as exc:
         raise AttestationError("M04 attestation signature is invalid") from exc
     return {
         "attestation_sha256": attestation_hash,
@@ -2118,8 +2455,8 @@ def _live(args: argparse.Namespace) -> int:
     event_id = _uuid(args.event_id, name="M05 event ID")
     case_id = _uuid(args.map_case_id, name="Map case ID")
     source_revision = _commit(args.pinvi_source_revision, name="Pinvi source revision")
-    if args.scope not in {"staging", "production"}:
-        raise AttestationError("attestation scope must be staging or production")
+    if args.scope not in {"isolated", "staging", "production"}:
+        raise AttestationError("attestation scope must be isolated, staging, or production")
     if not args.require_root_owned:
         raise AttestationError("M05 live attestation requires root-owned evidence")
     email = os.environ.get("M05_PINVI_EMAIL", "")
@@ -2139,6 +2476,34 @@ def _live(args: argparse.Namespace) -> int:
         raise AttestationError("M05 impact count must be a non-negative integer")
 
     pair = _load_pair()
+    isolated_runtime: dict[str, object] | None = None
+    if args.scope == "isolated":
+        if (
+            args.isolated_runtime_provenance is None
+            or args.isolated_manager_source_revision is None
+            or args.isolated_pinset_sha256 is None
+            or args.isolated_execution_identity_sha256 is None
+        ):
+            raise AttestationError("isolated M05 attestation requires runtime provenance")
+        isolated_runtime = _load_isolated_runtime_provenance(
+            args.isolated_runtime_provenance,
+            pair=pair,
+            pinvi_source_revision=source_revision,
+            expected_manager_source_revision=args.isolated_manager_source_revision,
+            expected_pinset_sha256=args.isolated_pinset_sha256,
+            expected_execution_identity_sha256=args.isolated_execution_identity_sha256,
+            require_root_owned=True,
+        )
+        pair["runtime_image_digests"] = cast(
+            dict[str, str], isolated_runtime["map_images"]
+        )
+    elif args.isolated_runtime_provenance is not None:
+        raise AttestationError("runtime provenance is only valid for isolated M05 attestation")
+    pinvi_image_digests = (
+        cast(dict[str, str], isolated_runtime["pinvi_images"])
+        if isolated_runtime is not None
+        else None
+    )
     pinvi_source_root = Path(__file__).resolve().parents[1]
     _assert_clean_checkout(
         pinvi_source_root,
@@ -2158,12 +2523,15 @@ def _live(args: argparse.Namespace) -> int:
         args.private_key, require_root_owned=args.require_root_owned
     )
     runtime_initial = _runtime_snapshot(
-        args, pair=pair, source_revision=source_revision
+        args,
+        pair=pair,
+        source_revision=source_revision,
+        pinvi_image_digests=pinvi_image_digests,
     )
     m04 = _read_m04_evidence(
         args.m04_evidence_dir,
         require_root_owned=args.require_root_owned,
-        public_key_bytes=private_key.public_key().public_bytes_raw(),
+        public_key_bytes=_public_key_bytes(private_key),
         source_revision=source_revision,
         scope=args.scope,
         expected_pinvi_api_endpoint=args.pinvi_api_url.rstrip("/"),
@@ -2225,7 +2593,10 @@ def _live(args: argparse.Namespace) -> int:
             "Map ACK local receipt hash does not match the Pinvi terminal receipt"
         )
     runtime_before_ui = _runtime_snapshot(
-        args, pair=pair, source_revision=source_revision
+        args,
+        pair=pair,
+        source_revision=source_revision,
+        pinvi_image_digests=pinvi_image_digests,
     )
     _assert_runtime_snapshots_unchanged(runtime_initial, runtime_before_ui)
 
@@ -2362,8 +2733,12 @@ def _live(args: argparse.Namespace) -> int:
         expected_replacement_feature_id=replacement_feature_id,
         expected_impact_count=int(impact_count),
     )
+    marker = _object(marker, name="M05 UI evidence marker")
     runtime_after_ui = _runtime_snapshot(
-        args, pair=pair, source_revision=source_revision
+        args,
+        pair=pair,
+        source_revision=source_revision,
+        pinvi_image_digests=pinvi_image_digests,
     )
     _assert_runtime_snapshots_unchanged(runtime_initial, runtime_after_ui)
 
@@ -2374,7 +2749,10 @@ def _live(args: argparse.Namespace) -> int:
         expected=pair,
     )
     runtime_after_openapi = _runtime_snapshot(
-        args, pair=pair, source_revision=source_revision
+        args,
+        pair=pair,
+        source_revision=source_revision,
+        pinvi_image_digests=pinvi_image_digests,
     )
     _assert_runtime_snapshots_unchanged(runtime_after_ui, runtime_after_openapi)
     map_pair = {
@@ -2435,6 +2813,19 @@ def _live(args: argparse.Namespace) -> int:
         "ui_evidence_sha256": marker_raw_hash,
         "verification_id": verification_id,
     }
+    if isolated_runtime is not None:
+        live_ui.update(
+            {
+                "isolated_execution_identity_sha256": isolated_runtime[
+                    "execution_identity_sha256"
+                ],
+                "isolated_manager_source_revision": isolated_runtime[
+                    "manager_source_revision"
+                ],
+                "isolated_pinset_sha256": isolated_runtime["pinset_sha256"],
+                "isolated_runtime_provenance_sha256": isolated_runtime["sha256"],
+            }
+        )
     output_hashes = {
         "ui-run": marker_raw_hash,
         "live-ui": _write_json(evidence_dir / "live-ui.json", live_ui),
@@ -2476,12 +2867,25 @@ def _live(args: argparse.Namespace) -> int:
         "scope": args.scope,
         "status": "passed",
         "verification_id": verification_id,
-        "version": 3,
+        "version": 4 if isolated_runtime is not None else 3,
     }
+    if isolated_runtime is not None:
+        attestation_payload.update(
+            {
+                "isolated_execution_identity_sha256": isolated_runtime[
+                    "execution_identity_sha256"
+                ],
+                "isolated_manager_source_revision": isolated_runtime[
+                    "manager_source_revision"
+                ],
+                "isolated_pinset_sha256": isolated_runtime["pinset_sha256"],
+                "isolated_runtime_provenance_sha256": isolated_runtime["sha256"],
+            }
+        )
     attestation = {
         "payload": attestation_payload,
         "signature": base64.urlsafe_b64encode(
-            private_key.sign(_canonical_json(attestation_payload))
+            _sign(private_key, _canonical_json(attestation_payload))
         )
         .decode("ascii")
         .rstrip("="),
@@ -2505,7 +2909,7 @@ def _parser() -> argparse.ArgumentParser:
     m04.add_argument("--feature-request-id", required=True)
     m04.add_argument("--pinvi-source-revision", required=True)
     m04.add_argument(
-        "--scope", choices=("smoke", "staging", "production"), required=True
+        "--scope", choices=("smoke", "isolated", "staging", "production"), required=True
     )
     m04.add_argument("--playwright-runner-image", required=True)
     m04.add_argument("--require-root-owned", action="store_true")
@@ -2534,7 +2938,11 @@ def _parser() -> argparse.ArgumentParser:
     live.add_argument("--pinvi-dagster-container", required=True)
     live.add_argument("--event-id", required=True)
     live.add_argument("--pinvi-source-revision", required=True)
-    live.add_argument("--scope", choices=("staging", "production"), required=True)
+    live.add_argument("--scope", choices=("isolated", "staging", "production"), required=True)
+    live.add_argument("--isolated-runtime-provenance", type=Path)
+    live.add_argument("--isolated-manager-source-revision")
+    live.add_argument("--isolated-pinset-sha256")
+    live.add_argument("--isolated-execution-identity-sha256")
     live.add_argument("--playwright-runner-image", required=True)
     live.add_argument("--require-root-owned", action="store_true")
     live.add_argument("ui_command", nargs=argparse.REMAINDER)

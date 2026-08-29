@@ -1,0 +1,155 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+import os
+import shutil
+import tempfile
+from collections.abc import Iterator
+from pathlib import Path
+from types import ModuleType
+
+import pytest
+
+
+@pytest.fixture
+def linux_tmp_path() -> Iterator[Path]:
+    path = Path(tempfile.mkdtemp(prefix="pinvi-m05-admission-", dir="/tmp"))
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
+
+
+def _admission_module() -> ModuleType:
+    path = Path(__file__).resolve().parents[4] / "scripts/m05_isolated_manager_admission.py"
+    spec = importlib.util.spec_from_file_location("m05_isolated_manager_admission", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _write_admission(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "pinvi-m05-isolated-manager-admission-v1",
+                "execution_identity_sha256": "f" * 64,
+                "manager_source_revision": "a" * 40,
+                "map_source_revision": "b" * 40,
+                "pinset_sha256": "c" * 64,
+                "pinvi_source_revision": "d" * 40,
+                "transaction_id": "e" * 32,
+                "version": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+    path.chmod(0o600)
+
+
+def test_accepts_only_a_bound_root_admission(linux_tmp_path: Path) -> None:
+    module = _admission_module()
+    runtime = linux_tmp_path / "runtime"
+    runtime.mkdir(mode=0o700)
+    admission = runtime / "manager-admission.json"
+    _write_admission(admission)
+
+    module.validate_admission(
+        path=str(admission),
+        project="m05i-pinvi-" + "e" * 32,
+        pinvi_source_revision="d" * 40,
+        pinset_sha256="c" * 64,
+        execution_identity_sha256="f" * 64,
+        expected_uid=os.getuid(),
+    )
+
+
+@pytest.mark.parametrize(
+    ("project", "revision", "pinset"),
+    [
+        ("m05i-pinvi-" + "f" * 32, "d" * 40, "c" * 64),
+        ("m05i-pinvi-" + "e" * 32, "f" * 40, "c" * 64),
+        ("m05i-pinvi-" + "e" * 32, "d" * 40, "f" * 64),
+    ],
+)
+def test_rejects_project_or_pair_mismatch(
+    linux_tmp_path: Path, project: str, revision: str, pinset: str
+) -> None:
+    module = _admission_module()
+    runtime = linux_tmp_path / "runtime"
+    runtime.mkdir(mode=0o700)
+    admission = runtime / "manager-admission.json"
+    _write_admission(admission)
+
+    with pytest.raises(module.AdmissionError):
+        module.validate_admission(
+            path=str(admission),
+            project=project,
+            pinvi_source_revision=revision,
+            pinset_sha256=pinset,
+            execution_identity_sha256="f" * 64,
+            expected_uid=os.getuid(),
+        )
+
+
+def test_rejects_execution_identity_mismatch(linux_tmp_path: Path) -> None:
+    module = _admission_module()
+    runtime = linux_tmp_path / "runtime"
+    runtime.mkdir(mode=0o700)
+    admission = runtime / "manager-admission.json"
+    _write_admission(admission)
+
+    with pytest.raises(module.AdmissionError):
+        module.validate_admission(
+            path=str(admission),
+            project="m05i-pinvi-" + "e" * 32,
+            pinvi_source_revision="d" * 40,
+            pinset_sha256="c" * 64,
+            execution_identity_sha256="0" * 64,
+            expected_uid=os.getuid(),
+        )
+
+
+def test_rejects_non_private_or_symlink_admission(linux_tmp_path: Path) -> None:
+    module = _admission_module()
+    runtime = linux_tmp_path / "runtime"
+    runtime.mkdir(mode=0o700)
+    admission = runtime / "manager-admission.json"
+    _write_admission(admission)
+    admission.chmod(0o644)
+
+    with pytest.raises(module.AdmissionError):
+        module.validate_admission(
+            path=str(admission),
+            project="m05i-pinvi-" + "e" * 32,
+            pinvi_source_revision="d" * 40,
+            pinset_sha256="c" * 64,
+            execution_identity_sha256="f" * 64,
+            expected_uid=os.getuid(),
+        )
+
+    admission.chmod(0o600)
+    linked = runtime / "linked-admission.json"
+    linked.symlink_to(admission)
+    with pytest.raises(module.AdmissionError):
+        module.validate_admission(
+            path=str(linked),
+            project="m05i-pinvi-" + "e" * 32,
+            pinvi_source_revision="d" * 40,
+            pinset_sha256="c" * 64,
+            execution_identity_sha256="f" * 64,
+            expected_uid=os.getuid(),
+        )
+
+
+def test_isolated_compose_gate_uses_root_and_a_trusted_interpreter() -> None:
+    script = (Path(__file__).resolve().parents[4] / "scripts/docker-app.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert '[[ "$EUID" -eq 0 ]]' in script
+    assert "/usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/python3 -I" in script
+    assert 'python3 "$ROOT_DIR/scripts/m05_isolated_manager_admission.py"' not in script
+    assert "PINVI_M05_EXECUTION_IDENTITY_SHA256" in script

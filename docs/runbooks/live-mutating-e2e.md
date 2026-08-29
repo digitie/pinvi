@@ -5,6 +5,33 @@ mock e2e와 Admin read-only live matrix와 분리하며, 각 suite의 명시적 
 항상 skip한다. Playwright runner는 N150 Docker runner만 사용한다. N150에서 실행할 수 없으면
 gate를 중단하고 사유를 기록한다.
 
+## M05 Docker Manager pinning·결박 정본
+
+M05의 runtime pinning, Map·PinVi source pair 결박, isolated launcher 실행은
+**`kor-travel-docker-manager` trusted release의 `ktdctl`만 사용한다.** PinVi script, Compose,
+환경변수, 수동 SHA 전사로 current pinset을 만들거나 바꾸지 않는다. 새 후보는
+`ktdctl pin rotate-pair` 한 번으로 Map·PinVi revision을 함께 회전한다. role별 회전이나
+terminal pinset 재사용은 금지한다.
+
+`PINVI_ENVIRONMENT=isolated`의 PinVi `scripts/docker-app.sh` 변이도 이 원칙의 예외가 아니다.
+호출자가 설정할 수 있는 `PINVI_M05_ISOLATED_MANAGER_HARNESS` 환경변수는 권한 근거로 쓰지
+않으며, Manager root driver가 private runtime directory에 만든 `0600` admission 파일을
+no-follow로 검증한 경우만 허용한다. admission은 exact transaction project, pinset, Manager·Map·PinVi
+source revision을 함께 결박한다. 검증기는 root EUID에서만 `/usr/bin/python3 -I`를 깨끗한
+환경으로 실행하므로 호출자 `PATH`·`PYTHON*`은 interpreter·import를 바꾸지 못한다. 직접 Compose,
+임의 root marker, 수동 environment 설정은 이 검증을 대신하지 못한다.
+
+one-shot 전에는 인증된 Manager API `GET /api/v1/runtime-pins`와
+`GET /api/v1/pinned-runtime/generation` 공개 사본을 확인한다. generation의
+`pinset_binding`은 새 pair 회전 직후 완전한 이전 committed generation 또는 Manager registry가
+Map·PinVi revision과 pinset까지 exact로 차단한 unconditional terminal generation의
+`pending_rebuild` 또는 `match`여야 한다. partial·malformed·phase-scoped block·`drift`·`unknown`이면
+이 runbook을 중단한다. 새 launcher가
+끝난 뒤 activation attestation을 승격하려면 반드시 `match`를 다시 확인한다. private
+manifest/journal, raw launcher output, 이전 terminal artifact는 PinVi가 읽거나
+보관하지 않는다. PinVi M05 provenance의 Map `admin`·`full` source revision은 Manager registry
+pair와 정확히 같아야 하며, v6/v8 generation schema 변경은 Map·Manager와 paired PR로만 허용한다.
+
 ## 1. 범위
 
 - `apps/web/e2e/trip-realtime-live-mutating.live.ts`
@@ -210,7 +237,7 @@ python scripts/m05_activation_attestation.py m04 \
   --pinvi-web-container "$PINVI_M04_PINVI_WEB_CONTAINER" \
   --feature-request-id "$PINVI_M04_LIVE_FEATURE_REQUEST_ID" \
   --pinvi-source-revision "$PINVI_LIVE_EXPECTED_REVISION" \
-  --scope staging \
+  --scope isolated \
   --playwright-runner-image "$PINVI_PLAYWRIGHT_RUNNER_IMAGE" \
   --require-root-owned \
   -- scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- apps/web/e2e/admin-feature-request-queue-live-mutating.live.ts --workers=1
@@ -224,8 +251,10 @@ M04와 M05를 activation 증적으로 사용할 때는 위 직접 실행만으�
 실행하고, API/Web container ID·source revision·Map pending receipt를 Ed25519 증적에 묶는다.
 이어지는 `live` 실행은 `--m04-evidence-dir`를 필수로 받고, 같은 PinVi API/Web container에서
 승인된 Map 요청의 `manual_request` provenance와 M05의 old Feature UUID가 동일한지 전후로
-검증한다. smoke는 격리 pair에서만 허용하며, staging/production 증적은 root-owned 0700 evidence
-directory와 0600 key를 사용한다.
+검증한다. Docker Manager가 만드는 일회성 격리 harness는 `--scope isolated`만 사용하며,
+root-owned `0700` evidence directory와 `0600` key를 사용한다. 이는 production activation receipt나
+staging 증적이 아니며 그 환경의 receipt 생성 명령을 호출하지 않는다. smoke는 격리 pair에서만 허용하고,
+staging/production 증적도 같은 root-owned 파일 보호를 요구한다.
 
 ### M05 Feature 참조 조정 증거 단건
 
@@ -238,6 +267,7 @@ cd ~/pinvi
 : "${PINVI_M05_UI_EVIDENCE_DIR:?set a new empty root-owned evidence directory}"
 : "${PINVI_M04_UI_EVIDENCE_DIR:?set the matching signed M04 evidence directory}"
 : "${PINVI_M05_PRIVATE_KEY:?set the root-owned M05 signing key path}"
+: "${PINVI_M05_ISOLATED_RUNTIME_PROVENANCE:?set the root-owned Manager isolated runtime provenance receipt}"
 : "${PINVI_M05_MAP_ADMIN_URL:?set the isolated Map admin loopback URL}"
 : "${PINVI_M05_MAP_CASE_ID:?set the isolated Map M05 case UUID}"
 : "${PINVI_M05_MAP_DOCKER_PROJECT:?set the isolated Map Compose project}"
@@ -289,7 +319,8 @@ python scripts/m05_activation_attestation.py live \
   --pinvi-dagster-container "$PINVI_M05_PINVI_DAGSTER_CONTAINER" \
   --event-id "$PINVI_M05_LIVE_EVENT_ID" \
   --pinvi-source-revision "$PINVI_LIVE_EXPECTED_REVISION" \
-  --scope staging \
+  --scope isolated \
+  --isolated-runtime-provenance "$PINVI_M05_ISOLATED_RUNTIME_PROVENANCE" \
   --playwright-runner-image "$PINVI_PLAYWRIGHT_RUNNER_IMAGE" \
   --require-root-owned \
   -- scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- apps/web/e2e/admin-feature-reference-reconciliations-live-mutating.live.ts --workers=1
@@ -302,6 +333,11 @@ M05 event가 목록 첫 페이지에 없거나
 terminal receipt가 없으면 fixture/worker/ACK 상태를 먼저 확인한다.
 activation gate에서는 단독 UI pass가 아니라, 앞 절의 서명된 M04 증적과 `live`의 Map 결정·ACK
 server-side 대조까지 모두 성공해야 한다.
+
+`--scope isolated`는 Manager가 root-owned `0600`으로 만든 runtime provenance receipt를 반드시
+함께 받는다. 이 receipt는 exact Map/PinVi source, Map full OpenAPI, 새로 build한 여섯 runtime image
+ID를 고정한다. 기존 canonical runtime image ID를 재사용하거나 production/staging receipt로 바꾸는
+입력은 attestation이 거부한다.
 
 일반 live-mutating suite는 공개 HTTPS origin을 사용할 수 있다. 단,
 `m05_activation_attestation.py m04/live`는 API·Web·Map의 runtime peer를 검증하므로

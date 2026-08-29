@@ -53,6 +53,14 @@ pytestmark = pytest.mark.asyncio
 CONSUMER_ID = "pinvi-cache-target-consumer"
 
 
+async def test_preflight_activity_query_does_not_require_finalize_audit_relation() -> None:
+    """0047 preflight는 아직 없는 finalize audit relation을 해석하지 않는다."""
+    assert "ktm_cache_target_boundary_audits" not in str(boundary_service._DATABASE_ACTIVITY_QUERY)
+    assert "ktm_cache_target_boundary_audits" in str(
+        boundary_service._FINALIZE_DATABASE_ACTIVITY_QUERY
+    )
+
+
 class _SnapshotClient:
     def __init__(
         self,
@@ -992,6 +1000,18 @@ async def test_final_boundary_appends_exact_audit_and_replays_only_exact_evidenc
         assert audit.audit_request_sha256.hex() == first["audit_request_sha256"]
         assert audit.evidence_sha256.hex() == first["evidence_sha256"]
 
+    # 같은 application_name만으로는 외부 transaction을 replay 대기자로 취급할 수 없다.
+    async with session_factory() as held:
+        await held.execute(text("SET LOCAL application_name = 'pinvi-cache-target-final-boundary'"))
+        await held.execute(text("SELECT 1"))
+        with pytest.raises(CacheTargetBoundaryFailure, match="database_not_quiescent"):
+            await run_cache_target_boundary_finalize(
+                session_factory,
+                request=request,
+                runtime_source_revision="a" * 40,
+                consumer_id=CONSUMER_ID,
+            )
+
     mismatched = await _boundary_request(
         session_factory,
         operation="finalize",
@@ -1058,6 +1078,40 @@ async def test_boundary_preflight_is_read_only_and_requires_empty_0047_material(
             request=request,
             runtime_source_revision="a" * 40,
         )
+
+
+async def test_boundary_preflight_rejects_another_boundary_named_transaction(
+    session_factory,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    request = await _boundary_request(
+        session_factory,
+        operation="preflight",
+        transaction_id=uuid.uuid4(),
+        cutover_id=uuid.uuid4(),
+        canary_run_id=None,
+    )
+
+    async def schema_0047(_db) -> str:  # type: ignore[no-untyped-def]
+        return "20260801_0047"
+
+    monkeypatch.setattr(boundary_service, "_schema_revision", schema_0047)
+    async with session_factory() as held:
+        await held.execute(text("SET LOCAL application_name = 'pinvi-cache-target-final-boundary'"))
+        await held.execute(text("SELECT 1"))
+        with pytest.raises(CacheTargetBoundaryFailure, match="database_not_quiescent"):
+            await run_cache_target_boundary_preflight(
+                session_factory,
+                request=request,
+                runtime_source_revision="a" * 40,
+            )
+
+    receipt = await run_cache_target_boundary_preflight(
+        session_factory,
+        request=request,
+        runtime_source_revision="a" * 40,
+    )
+    assert receipt["database_in_flight_transaction_count"] == 0
 
 
 @pytest.mark.parametrize("statement", ["UPDATE", "DELETE", "TRUNCATE"])

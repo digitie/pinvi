@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import NoReturn
 
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
-_ENVIRONMENTS = {"development", "test", "smoke", "staging", "production"}
-_IMMUTABLE_ENVIRONMENTS = {"staging", "production"}
+_ENVIRONMENTS = {"development", "test", "smoke", "isolated", "staging", "production"}
+_IMMUTABLE_ENVIRONMENTS = {"isolated", "staging", "production"}
 
 
 class ProvenanceError(ValueError):
@@ -74,7 +74,7 @@ def resolve_revision(
     if requested == "development":
         if environment in _IMMUTABLE_ENVIRONMENTS:
             raise ProvenanceError(
-                "staging/production image는 development revision을 금지합니다."
+                "isolated/staging/production image는 development revision을 금지합니다."
             )
         return requested
     if requested is not None and _COMMIT_RE.fullmatch(requested) is None:

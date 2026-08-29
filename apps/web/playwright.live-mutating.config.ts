@@ -18,7 +18,11 @@ export default defineConfig({
     baseURL,
     ignoreHTTPSErrors: true,
     serviceWorkers: 'block',
-    trace: 'retain-on-failure',
+    // M04/M05 live failure는 root-owned fixed receipt만 남긴다. 인증·HTTP 원문이 담길 수
+    // 있는 trace·screenshot·video artifact는 disposable runner 밖으로 내보내지 않는다.
+    trace: 'off',
+    screenshot: 'off',
+    video: 'off',
     ...devices['Desktop Chrome'],
   },
 });

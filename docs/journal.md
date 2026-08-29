@@ -2,6 +2,19 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-29 (codex) — Manager 실행 ID를 isolated admission에 실제 결박
+
+Docker Manager의 범용 v6 execution identity를 M05의 첫 소비자로 연결했다. direct Compose
+admission은 이제 source `pinset_sha256`와 Manager revision 외에 exact
+`execution_identity_sha256`도 strict schema·root-owned private file·호출 인자로 모두
+대조한다. 따라서 같은 source pair라도 다른 Manager release의 admission을 환경 변수만
+바꿔 재사용할 수 없다. POSIX mode가 보존되지 않는 공유 mount의 pytest 임시 경로는 `/tmp`의
+명시적 fixture로 한정했고, execution mismatch를 포함한 7개 회귀를 추가했다. isolated live 성공
+`live-ui.json`과 서명 `attestation.json`에도 execution ID·Manager revision·pinset·runtime provenance
+SHA-256을 남겨 사후 증명이 private runtime file의 cleanup에 의존하지 않게 했다.
+`m05_activation_receipt.py`의 strict consumer도 isolated scope에서만 네 field와 version 4를 exact하게
+수용·서명 대조하도록 같이 전환했고, 기존 staging/production version 3 receipt는 변경하지 않았다.
+
 ## 2026-08-29 (codex) — Manager-aware M05 execution identity 계약 착수
 
 Map/PinVi v5 source pinset이 Manager revision을 digest에 넣지 않아, Manager의 실제 terminal 보정을 배포해도 같은
@@ -29,9 +42,9 @@ local 파일에서만 보관한다.
 
 - `030b12fc…` committed generation은 Map `9c64e862…`와 API image `2260ec…`, UI image `5dc547…`을 사용한다.
   기존 M05 pair provenance는 이전 Map source/image identity를 고정해 activation attestation이 fail-closed한다.
-- pair의 Admin/full source와 Map runtime image identity를 이 committed generation으로 재결박했다. PinVi source가
-  `a90b1f06…`으로 바뀌므로 Manager의 새 pinset `87fe2abc…`만 다음 한 번의 trusted candidate다. 기존
-  `030b12fc…`은 재실행하지 않으며, 새 candidate committed 뒤에만 M04/M05 signed live attestation을 실행한다.
+- pair의 Admin/full source와 Map runtime image identity를 이 committed generation으로 재결박했다. 이후 PinVi
+  source가 main rebase로 회전했으므로 Manager도 exact rebase head로 pinset을 다시 계산한다. 기존 `030b12fc…`은
+  재실행하지 않으며, 새 candidate committed 뒤에만 M04/M05 signed live attestation을 실행한다.
 
 ## 2026-08-28 (codex) — v2 permit candidate committed generation
 

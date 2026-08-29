@@ -61,7 +61,7 @@ pinvi_read_provenance_input() {
 
 pinvi_materialize_api_build_context() {
   case "$PINVI_PROVENANCE_ENVIRONMENT" in
-    staging|production) ;;
+    isolated|staging|production) ;;
     *) return 0 ;;
   esac
   if [[ -n "$PINVI_PROVENANCE_ARCHIVE_ROOT" ]]; then

@@ -26,9 +26,16 @@ CI·전문 적대 리뷰가 충족된 뒤 `ktdctl pin rotate-pair`로만 다시 
 
 PinVi M05 attestation은 Map source revision과 image identity를 exact pair로 검사한다. committed generation의
 Map source는 `9c64e862…`, API image는 `2260ec…`, UI image는 `5dc547…`인데 기존 pair는 이전 source/image를
-고정해 fail-closed하므로, 이 generation을 provenance source로 재결박했다. PinVi `a90b1f06…`와 Map
-`9c64e862…`의 새 Manager pinset `87fe2abc…`에서만 다음 trusted candidate를 정확히 한 번 실행하고,
-M04/M05 activation을 진행한다. 기존 `030b12fc…`은 재실행하지 않는다.
+고정해 fail-closed하므로, 이 generation을 provenance source로 재결박했다. 이후 main rebase로 PinVi source
+identity가 바뀌었으므로, rebase된 exact PinVi source와 Map `9c64e862…`의 새 Manager pinset에서만 다음 trusted
+candidate를 정확히 한 번 실행하고 M04/M05 activation을 진행한다. 기존 `030b12fc…`은 재실행하지 않는다.
+
+`6269138f…`은 구조화된 journal/manifest를 남기지 못한 pre-journal 단회 시도로 보존하며, 원문 stderr는 읽지 않는다.
+동일 pinset을 재실행하지 않고, 다음 PinVi source와 Manager pinset에서 root-owned structured result launcher를 통해서만
+후보 상태를 판정한다.
+
+`53d4639f…`도 재실행하지 않는다. 이 후보는 trusted release가 launcher execute bit을 보존하지 않아 admission 이전에
+끝났고 durable output·ledger·raw stderr가 없다. installer 보정 뒤 다음 PinVi source와 새 pinset만 허용한다.
 
 ## 2026-08-28 (codex) — v2 permit candidate committed generation 확인
 

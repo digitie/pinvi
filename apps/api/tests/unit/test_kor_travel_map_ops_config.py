@@ -118,7 +118,7 @@ def test_environment_rejects_alias_whitespace_and_unknown_values(environment: st
         Settings(_env_file=None, pinvi_environment=environment)  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize("environment", ["development", "test", "smoke", "staging"])
+@pytest.mark.parametrize("environment", ["development", "test", "smoke", "isolated", "staging"])
 def test_non_production_allows_only_both_empty_ops_tokens(environment: str) -> None:
     loaded = Settings(_env_file=None, pinvi_environment=environment)  # type: ignore[arg-type]
 

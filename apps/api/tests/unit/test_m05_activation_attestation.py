@@ -11,6 +11,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pytest
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 
@@ -57,6 +58,116 @@ def _detail() -> dict[str, object]:
             "impact_count": 0,
         }
     }
+
+
+def test_write_json_syncs_the_evidence_file_and_parent_directory(
+    monkeypatch: pytest.MonkeyPatch, linux_tmp_path: Path
+) -> None:
+    module = _attestation_module()
+    calls: list[int] = []
+    real_fsync = module.os.fsync
+
+    def recording_fsync(descriptor: int) -> None:
+        calls.append(descriptor)
+        real_fsync(descriptor)
+
+    monkeypatch.setattr(module.os, "fsync", recording_fsync)
+
+    output = linux_tmp_path / "attestation.json"
+    module._write_json(output, {"status": "passed"})
+
+    assert output.is_file()
+    assert len(calls) == 2
+
+
+def test_isolated_runtime_provenance_binds_exact_source_openapi_and_images(
+    linux_tmp_path: Path,
+) -> None:
+    module = _attestation_module()
+    pair = module._load_pair()
+    provenance = {
+        "kind": "m05-isolated-runtime-provenance-v1",
+        "execution_identity_sha256": "d" * 64,
+        "manager_source_revision": "a" * 40,
+        "map": {
+            "admin_image_id": "sha256:" + "1" * 64,
+            "api_image_id": "sha256:" + "2" * 64,
+            "frontend_image_id": "sha256:" + "3" * 64,
+            "full_openapi_sha256": pair["full"]["openapi_sha256"],
+            "source_revision": pair["full"]["source_revision"],
+        },
+        "pinset_sha256": "e" * 64,
+        "pinvi": {
+            "api_image_id": "sha256:" + "5" * 64,
+            "dagster_image_id": "sha256:" + "6" * 64,
+            "source_revision": "f" * 40,
+            "web_image_id": "sha256:" + "7" * 64,
+        },
+        "transaction_id": "8" * 32,
+        "version": 1,
+    }
+    path = linux_tmp_path / "isolated-runtime-provenance.json"
+    path.write_text(json.dumps(provenance), encoding="utf-8")
+    path.chmod(0o600)
+
+    loaded = module._load_isolated_runtime_provenance(
+        path,
+        pair=pair,
+        pinvi_source_revision="f" * 40,
+        expected_manager_source_revision="a" * 40,
+        expected_pinset_sha256="e" * 64,
+        expected_execution_identity_sha256="d" * 64,
+        require_root_owned=False,
+    )
+
+    assert loaded["map_images"] == {
+        "admin": "sha256:" + "1" * 64,
+        "api": "sha256:" + "2" * 64,
+        "frontend": "sha256:" + "3" * 64,
+    }
+    assert loaded["pinvi_images"] == {
+        "api": "sha256:" + "5" * 64,
+        "dagster": "sha256:" + "6" * 64,
+        "web": "sha256:" + "7" * 64,
+    }
+    assert loaded["execution_identity_sha256"] == "d" * 64
+    assert loaded["manager_source_revision"] == "a" * 40
+    assert loaded["pinset_sha256"] == "e" * 64
+
+    with pytest.raises(module.AttestationError, match="pinset differs"):
+        module._load_isolated_runtime_provenance(
+            path,
+            pair=pair,
+            pinvi_source_revision="f" * 40,
+            expected_manager_source_revision="a" * 40,
+            expected_pinset_sha256="4" * 64,
+            expected_execution_identity_sha256="d" * 64,
+            require_root_owned=False,
+        )
+
+    with pytest.raises(module.AttestationError, match="execution identity differs"):
+        module._load_isolated_runtime_provenance(
+            path,
+            pair=pair,
+            pinvi_source_revision="f" * 40,
+            expected_manager_source_revision="a" * 40,
+            expected_pinset_sha256="e" * 64,
+            expected_execution_identity_sha256="0" * 64,
+            require_root_owned=False,
+        )
+
+    provenance["map"]["full_openapi_sha256"] = "0" * 64
+    path.write_text(json.dumps(provenance), encoding="utf-8")
+    with pytest.raises(module.AttestationError, match="differs from the pair"):
+        module._load_isolated_runtime_provenance(
+            path,
+            pair=pair,
+            pinvi_source_revision="f" * 40,
+            expected_manager_source_revision="a" * 40,
+            expected_pinset_sha256="e" * 64,
+            expected_execution_identity_sha256="d" * 64,
+            require_root_owned=False,
+        )
 
 
 def test_m05_impact_evidence_recomputes_rows_and_receipts() -> None:
@@ -603,3 +714,32 @@ def test_m04_signed_evidence_is_bound_to_the_same_pinvi_runtime(linux_tmp_path: 
             expected_pinvi_web_endpoint="http://127.0.0.1:12805",
             expected_pinvi_web_container_id="4" * 64,
         )
+
+
+def test_host_openssl_fallback_signs_and_verifies_ed25519(
+    linux_tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module = _attestation_module()
+    key = Ed25519PrivateKey.generate()
+    key_path = linux_tmp_path / "m05-private-key.pem"
+    key_path.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    key_path.chmod(0o600)
+    monkeypatch.setattr(module, "_CRYPTOGRAPHY_AVAILABLE", False)
+
+    loaded = module._load_private_key(key_path, require_root_owned=False)
+    payload = module._canonical_json({"scope": "isolated", "status": "passed"})
+    signature = module._sign(loaded, payload)
+    public_key = module._public_key_bytes(loaded)
+
+    assert public_key == key.public_key().public_bytes_raw()
+    assert len(signature) == 64
+    key.public_key().verify(signature, payload)
+    module._verify_ed25519_signature(public_key, signature, payload)
+    with pytest.raises(module.AttestationError, match="signature is invalid"):
+        module._verify_ed25519_signature(public_key, signature, payload + b"!")

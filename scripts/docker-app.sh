@@ -1693,6 +1693,40 @@ require_isolated_direct_compose_project() {
         return 2
       }
       ;;
+    isolated)
+      # M05는 Manager가 source snapshot·global mutation lock·one-shot ledger를 함께
+      # 소유하는 disposable bridge runtime만 허용한다. 호출자가 설정할 수 있는 환경변수는
+      # 권한 근거가 아니며, Manager가 transaction·pinset·source pair에 결박해 만든
+      # root-owned admission만 이 경계를 연다.
+      [[ "$PROJECT" =~ ^m05i-pinvi-[0-9a-f]{32}$ ]] || {
+        echo "isolated direct Compose mutation requires an m05i-pinvi transaction project" >&2
+        return 2
+      }
+      [[ "$EUID" -eq 0 ]] || {
+        echo "isolated direct Compose mutation requires the Manager root runtime" >&2
+        return 2
+      }
+      [[ -z "${PINVI_M05_ISOLATED_MANAGER_HARNESS:-}" ]] || {
+        echo "isolated direct Compose mutation rejects the legacy Manager harness environment marker" >&2
+        return 2
+      }
+      [[ -n "${PINVI_M05_ISOLATED_MANAGER_ADMISSION_PATH:-}" && -n "${PINVI_M05_PINSET_SHA256:-}" && -n "${PINVI_M05_EXECUTION_IDENTITY_SHA256:-}" ]] || {
+        echo "isolated direct Compose mutation requires a Manager M05 admission" >&2
+        return 2
+      }
+      # 호출자 PATH·PYTHON*은 verifier 선택이나 import에 영향을 줄 수 없다. Manager가
+      # trusted root runtime에서 준 private receipt만 절대 interpreter로 검증한다.
+      /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/python3 -I \
+        "$ROOT_DIR/scripts/m05_isolated_manager_admission.py" \
+        "$PINVI_M05_ISOLATED_MANAGER_ADMISSION_PATH" \
+        "$PROJECT" \
+        "${PINVI_SOURCE_REVISION:-}" \
+        "$PINVI_M05_PINSET_SHA256" \
+        "$PINVI_M05_EXECUTION_IDENTITY_SHA256" >/dev/null 2>&1 || {
+        echo "isolated direct Compose mutation requires a valid Manager M05 admission" >&2
+        return 2
+      }
+      ;;
   esac
 }
 
@@ -1714,7 +1748,7 @@ require_direct_compose_mutation_environment() {
       echo "direct Compose mutation is disabled for ${environment_name}; use the approved manager or isolated staging procedure" >&2
       return 2
       ;;
-    development|test|smoke)
+    development|test|smoke|isolated)
       if ! require_isolated_direct_compose_project "$environment_name"; then
         return 2
       fi
@@ -1723,7 +1757,7 @@ require_direct_compose_mutation_environment() {
       fi
       ;;
     *)
-      echo "direct Compose mutation requires an explicit development/test/smoke/staging environment" >&2
+      echo "direct Compose mutation requires an explicit development/test/smoke/isolated/staging environment" >&2
       return 2
       ;;
   esac
