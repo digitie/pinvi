@@ -12,6 +12,8 @@ admission은 이제 source `pinset_sha256`와 Manager revision 외에 exact
 명시적 fixture로 한정했고, execution mismatch를 포함한 7개 회귀를 추가했다. isolated live 성공
 `live-ui.json`과 서명 `attestation.json`에도 execution ID·Manager revision·pinset·runtime provenance
 SHA-256을 남겨 사후 증명이 private runtime file의 cleanup에 의존하지 않게 했다.
+`m05_activation_receipt.py`의 strict consumer도 isolated scope에서만 네 field와 version 4를 exact하게
+수용·서명 대조하도록 같이 전환했고, 기존 staging/production version 3 receipt는 변경하지 않았다.
 
 ## 2026-08-29 (codex) — Manager-aware M05 execution identity 계약 착수
 

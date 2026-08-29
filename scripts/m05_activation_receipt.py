@@ -1755,6 +1755,16 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, object]:
         "playwright_runner_image_id",
         "playwright_runner_image_ref",
     }
+    isolated_fields = {
+        "isolated_execution_identity_sha256",
+        "isolated_manager_source_revision",
+        "isolated_pinset_sha256",
+        "isolated_runtime_provenance_sha256",
+    }
+    supplied_isolated_fields = set(live) & isolated_fields
+    if supplied_isolated_fields and supplied_isolated_fields != isolated_fields:
+        raise ReceiptError("live-ui isolated execution binding is incomplete")
+    expected |= supplied_isolated_fields
     if set(live) != expected or live["status"] != "passed":
         raise ReceiptError("live-ui evidence schema/status is invalid")
     if type(live["runner_exit_code"]) is not int or live["runner_exit_code"] != 0:
@@ -1815,7 +1825,7 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, object]:
     pinvi_detail_sha256 = _sha256(
         live["pinvi_detail_sha256"], name="live-ui.pinvi_detail_sha256"
     )
-    return {
+    result = {
         "event_id": _uuid(live["event_id"], name="live-ui.event_id"),
         "event_sha256": _sha256(live["event_sha256"], name="live-ui.event_sha256"),
         "m04_attestation_sha256": _sha256(
@@ -1889,6 +1899,27 @@ def _live_ui(value: object, *, pinvi_source_revision: str) -> dict[str, object]:
             live["ui_evidence_sha256"], name="live-ui.ui_evidence_sha256"
         ),
     }
+    if supplied_isolated_fields:
+        result.update(
+            {
+                "isolated_execution_identity_sha256": _sha256(
+                    live["isolated_execution_identity_sha256"],
+                    name="live-ui.isolated_execution_identity_sha256",
+                ),
+                "isolated_manager_source_revision": _commit(
+                    live["isolated_manager_source_revision"],
+                    name="live-ui.isolated_manager_source_revision",
+                ),
+                "isolated_pinset_sha256": _sha256(
+                    live["isolated_pinset_sha256"], name="live-ui.isolated_pinset_sha256"
+                ),
+                "isolated_runtime_provenance_sha256": _sha256(
+                    live["isolated_runtime_provenance_sha256"],
+                    name="live-ui.isolated_runtime_provenance_sha256",
+                ),
+            }
+        )
+    return result
 
 
 def _ui_run(
@@ -2593,11 +2624,19 @@ def _attestation(
         "verification_id",
         "version",
     }
+    isolated_fields = {
+        "isolated_execution_identity_sha256",
+        "isolated_manager_source_revision",
+        "isolated_pinset_sha256",
+        "isolated_runtime_provenance_sha256",
+    }
+    if scope == "isolated":
+        expected |= isolated_fields
     if set(payload) != expected:
         raise ReceiptError("M05 live attestation payload schema is invalid")
     if (
         type(payload["version"]) is not int
-        or payload["version"] != 3
+        or payload["version"] != (4 if scope == "isolated" else 3)
         or payload["status"] != "passed"
         or payload["scope"] != scope
         or _commit(payload["pinvi_source_revision"], name="attestation source revision")
@@ -2679,6 +2718,10 @@ def _attestation(
         != live_ui["pinvi_detail_sha256"]
     ):
         raise ReceiptError("M05 live attestation does not bind the UI target and impact scope")
+    if scope == "isolated" and any(
+        payload[field] != live_ui[field] for field in isolated_fields
+    ):
+        raise ReceiptError("M05 live attestation does not bind the isolated execution")
     _digest(
         payload["playwright_runner_image_id"],
         name="attestation.playwright_runner_image_id",

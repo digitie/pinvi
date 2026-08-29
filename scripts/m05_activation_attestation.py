@@ -2867,7 +2867,7 @@ def _live(args: argparse.Namespace) -> int:
         "scope": args.scope,
         "status": "passed",
         "verification_id": verification_id,
-        "version": 3,
+        "version": 4 if isolated_runtime is not None else 3,
     }
     if isolated_runtime is not None:
         attestation_payload.update(
