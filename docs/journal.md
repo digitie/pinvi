@@ -2,6 +2,15 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-29 (codex) — Manager isolated lifecycle 소비 상태 동기화
+
+현재 M05 source pair는 trusted Docker Manager v6 execution마다 exact one-shot으로만 소비한다.
+Map runtime admission은 rendered Compose publish, bridge gateway admin peer와 subscription까지 통과했고,
+PinVi image build도 통과했다. 최신 terminal은 PinVi wrapper가 startup 직전 dynamic host port collision을
+fail-close한 경우이며, PinVi source provenance·admission contract·activation receipt는 원인이 아니다.
+다음 후보는 새 immutable source pair와 Manager의 port ownership 보정 후에만 실행한다. Docker Manager는
+일반 lifecycle tool로 사용하며 이 consumer 기록은 PinVi 운영 문서에서만 유지한다.
+
 ## 2026-08-29 (codex) — Manager 실행 ID를 isolated admission에 실제 결박
 
 Docker Manager의 범용 v6 execution identity를 M05의 첫 소비자로 연결했다. direct Compose
