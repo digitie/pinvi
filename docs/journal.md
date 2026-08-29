@@ -2,6 +2,15 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-08-29 (codex) — Manager 실행 ID를 isolated admission에 실제 결박
+
+Docker Manager의 범용 v6 execution identity를 M05의 첫 소비자로 연결했다. direct Compose
+admission은 이제 source `pinset_sha256`와 Manager revision 외에 exact
+`execution_identity_sha256`도 strict schema·root-owned private file·호출 인자로 모두
+대조한다. 따라서 같은 source pair라도 다른 Manager release의 admission을 환경 변수만
+바꿔 재사용할 수 없다. POSIX mode가 보존되지 않는 공유 mount의 pytest 임시 경로는 `/tmp`의
+명시적 fixture로 한정했고, execution mismatch를 포함한 7개 회귀를 추가했다.
+
 ## 2026-08-29 (codex) — Manager-aware M05 execution identity 계약 착수
 
 Map/PinVi v5 source pinset이 Manager revision을 digest에 넣지 않아, Manager의 실제 terminal 보정을 배포해도 같은

@@ -73,7 +73,13 @@ def _read_root_owned_file(path: str, *, expected_uid: int) -> bytes:
 
 
 def validate_admission(
-    *, path: str, project: str, pinvi_source_revision: str, pinset_sha256: str, expected_uid: int = 0
+    *,
+    path: str,
+    project: str,
+    pinvi_source_revision: str,
+    pinset_sha256: str,
+    execution_identity_sha256: str,
+    expected_uid: int = 0,
 ) -> None:
     transaction_prefix = "m05i-pinvi-"
     if not project.startswith(transaction_prefix):
@@ -82,12 +88,14 @@ def validate_admission(
     _required_hex(transaction, pattern=_TRANSACTION)
     _required_hex(pinvi_source_revision, pattern=_COMMIT)
     _required_hex(pinset_sha256, pattern=_PINSET)
+    _required_hex(execution_identity_sha256, pattern=_PINSET)
     try:
         value = json.loads(_read_root_owned_file(path, expected_uid=expected_uid))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise AdmissionError from error
     if not isinstance(value, dict) or set(value) != {
         "kind",
+        "execution_identity_sha256",
         "manager_source_revision",
         "map_source_revision",
         "pinset_sha256",
@@ -104,12 +112,17 @@ def validate_admission(
         raise AdmissionError
     if _required_hex(value["pinset_sha256"], pattern=_PINSET) != pinset_sha256:
         raise AdmissionError
+    if (
+        _required_hex(value["execution_identity_sha256"], pattern=_PINSET)
+        != execution_identity_sha256
+    ):
+        raise AdmissionError
     if _required_hex(value["transaction_id"], pattern=_TRANSACTION) != transaction:
         raise AdmissionError
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 5:
+    if len(argv) != 6:
         return 2
     try:
         validate_admission(
@@ -117,6 +130,7 @@ def main(argv: list[str]) -> int:
             project=argv[2],
             pinvi_source_revision=argv[3],
             pinset_sha256=argv[4],
+            execution_identity_sha256=argv[5],
         )
     except AdmissionError:
         return 1

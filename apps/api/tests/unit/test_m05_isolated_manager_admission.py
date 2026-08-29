@@ -3,10 +3,22 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import shutil
+import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 
 import pytest
+
+
+@pytest.fixture
+def linux_tmp_path() -> Iterator[Path]:
+    path = Path(tempfile.mkdtemp(prefix="pinvi-m05-admission-", dir="/tmp"))
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
 
 
 def _admission_module() -> ModuleType:
@@ -23,6 +35,7 @@ def _write_admission(path: Path) -> None:
         json.dumps(
             {
                 "kind": "pinvi-m05-isolated-manager-admission-v1",
+                "execution_identity_sha256": "f" * 64,
                 "manager_source_revision": "a" * 40,
                 "map_source_revision": "b" * 40,
                 "pinset_sha256": "c" * 64,
@@ -36,9 +49,9 @@ def _write_admission(path: Path) -> None:
     path.chmod(0o600)
 
 
-def test_accepts_only_a_bound_root_admission(tmp_path: Path) -> None:
+def test_accepts_only_a_bound_root_admission(linux_tmp_path: Path) -> None:
     module = _admission_module()
-    runtime = tmp_path / "runtime"
+    runtime = linux_tmp_path / "runtime"
     runtime.mkdir(mode=0o700)
     admission = runtime / "manager-admission.json"
     _write_admission(admission)
@@ -48,6 +61,7 @@ def test_accepts_only_a_bound_root_admission(tmp_path: Path) -> None:
         project="m05i-pinvi-" + "e" * 32,
         pinvi_source_revision="d" * 40,
         pinset_sha256="c" * 64,
+        execution_identity_sha256="f" * 64,
         expected_uid=os.getuid(),
     )
 
@@ -61,10 +75,10 @@ def test_accepts_only_a_bound_root_admission(tmp_path: Path) -> None:
     ],
 )
 def test_rejects_project_or_pair_mismatch(
-    tmp_path: Path, project: str, revision: str, pinset: str
+    linux_tmp_path: Path, project: str, revision: str, pinset: str
 ) -> None:
     module = _admission_module()
-    runtime = tmp_path / "runtime"
+    runtime = linux_tmp_path / "runtime"
     runtime.mkdir(mode=0o700)
     admission = runtime / "manager-admission.json"
     _write_admission(admission)
@@ -75,13 +89,32 @@ def test_rejects_project_or_pair_mismatch(
             project=project,
             pinvi_source_revision=revision,
             pinset_sha256=pinset,
+            execution_identity_sha256="f" * 64,
             expected_uid=os.getuid(),
         )
 
 
-def test_rejects_non_private_or_symlink_admission(tmp_path: Path) -> None:
+def test_rejects_execution_identity_mismatch(linux_tmp_path: Path) -> None:
     module = _admission_module()
-    runtime = tmp_path / "runtime"
+    runtime = linux_tmp_path / "runtime"
+    runtime.mkdir(mode=0o700)
+    admission = runtime / "manager-admission.json"
+    _write_admission(admission)
+
+    with pytest.raises(module.AdmissionError):
+        module.validate_admission(
+            path=str(admission),
+            project="m05i-pinvi-" + "e" * 32,
+            pinvi_source_revision="d" * 40,
+            pinset_sha256="c" * 64,
+            execution_identity_sha256="0" * 64,
+            expected_uid=os.getuid(),
+        )
+
+
+def test_rejects_non_private_or_symlink_admission(linux_tmp_path: Path) -> None:
+    module = _admission_module()
+    runtime = linux_tmp_path / "runtime"
     runtime.mkdir(mode=0o700)
     admission = runtime / "manager-admission.json"
     _write_admission(admission)
@@ -93,6 +126,7 @@ def test_rejects_non_private_or_symlink_admission(tmp_path: Path) -> None:
             project="m05i-pinvi-" + "e" * 32,
             pinvi_source_revision="d" * 40,
             pinset_sha256="c" * 64,
+            execution_identity_sha256="f" * 64,
             expected_uid=os.getuid(),
         )
 
@@ -105,6 +139,7 @@ def test_rejects_non_private_or_symlink_admission(tmp_path: Path) -> None:
             project="m05i-pinvi-" + "e" * 32,
             pinvi_source_revision="d" * 40,
             pinset_sha256="c" * 64,
+            execution_identity_sha256="f" * 64,
             expected_uid=os.getuid(),
         )
 
@@ -117,3 +152,4 @@ def test_isolated_compose_gate_uses_root_and_a_trusted_interpreter() -> None:
     assert '[[ "$EUID" -eq 0 ]]' in script
     assert "/usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/python3 -I" in script
     assert 'python3 "$ROOT_DIR/scripts/m05_isolated_manager_admission.py"' not in script
+    assert "PINVI_M05_EXECUTION_IDENTITY_SHA256" in script

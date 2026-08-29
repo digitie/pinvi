@@ -87,6 +87,7 @@ def test_isolated_runtime_provenance_binds_exact_source_openapi_and_images(
     pair = module._load_pair()
     provenance = {
         "kind": "m05-isolated-runtime-provenance-v1",
+        "execution_identity_sha256": "d" * 64,
         "manager_source_revision": "a" * 40,
         "map": {
             "admin_image_id": "sha256:" + "1" * 64,
@@ -115,6 +116,7 @@ def test_isolated_runtime_provenance_binds_exact_source_openapi_and_images(
         pinvi_source_revision="f" * 40,
         expected_manager_source_revision="a" * 40,
         expected_pinset_sha256="e" * 64,
+        expected_execution_identity_sha256="d" * 64,
         require_root_owned=False,
     )
 
@@ -136,6 +138,18 @@ def test_isolated_runtime_provenance_binds_exact_source_openapi_and_images(
             pinvi_source_revision="f" * 40,
             expected_manager_source_revision="a" * 40,
             expected_pinset_sha256="4" * 64,
+            expected_execution_identity_sha256="d" * 64,
+            require_root_owned=False,
+        )
+
+    with pytest.raises(module.AttestationError, match="execution identity differs"):
+        module._load_isolated_runtime_provenance(
+            path,
+            pair=pair,
+            pinvi_source_revision="f" * 40,
+            expected_manager_source_revision="a" * 40,
+            expected_pinset_sha256="e" * 64,
+            expected_execution_identity_sha256="0" * 64,
             require_root_owned=False,
         )
 
@@ -148,6 +162,7 @@ def test_isolated_runtime_provenance_binds_exact_source_openapi_and_images(
             pinvi_source_revision="f" * 40,
             expected_manager_source_revision="a" * 40,
             expected_pinset_sha256="e" * 64,
+            expected_execution_identity_sha256="d" * 64,
             require_root_owned=False,
         )
 

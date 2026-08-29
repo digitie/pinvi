@@ -521,6 +521,7 @@ def _load_isolated_runtime_provenance(
     pinvi_source_revision: str,
     expected_manager_source_revision: str,
     expected_pinset_sha256: str,
+    expected_execution_identity_sha256: str,
     require_root_owned: bool,
 ) -> dict[str, object]:
     """Manager의 root-only isolated image/source receipt를 M05 runtime에 결박한다."""
@@ -539,6 +540,7 @@ def _load_isolated_runtime_provenance(
         set(envelope)
         != {
             "kind",
+            "execution_identity_sha256",
             "manager_source_revision",
             "map",
             "pinset_sha256",
@@ -566,6 +568,15 @@ def _load_isolated_runtime_provenance(
         raise AttestationError("M05 isolated runtime provenance identity is invalid")
     if pinset != _string(expected_pinset_sha256, name="expected isolated pinset"):
         raise AttestationError("M05 isolated pinset differs from expectation")
+    execution_identity = _string(
+        envelope["execution_identity_sha256"], name="M05 isolated execution identity"
+    )
+    if _SHA256_RE.fullmatch(execution_identity) is None:
+        raise AttestationError("M05 isolated execution identity is invalid")
+    if execution_identity != _string(
+        expected_execution_identity_sha256, name="expected isolated execution identity"
+    ):
+        raise AttestationError("M05 isolated execution identity differs from expectation")
     map_value = _object(envelope["map"], name="M05 isolated Map runtime")
     if set(map_value) != {
         "admin_image_id",
@@ -2468,6 +2479,7 @@ def _live(args: argparse.Namespace) -> int:
             args.isolated_runtime_provenance is None
             or args.isolated_manager_source_revision is None
             or args.isolated_pinset_sha256 is None
+            or args.isolated_execution_identity_sha256 is None
         ):
             raise AttestationError("isolated M05 attestation requires runtime provenance")
         isolated_runtime = _load_isolated_runtime_provenance(
@@ -2476,6 +2488,7 @@ def _live(args: argparse.Namespace) -> int:
             pinvi_source_revision=source_revision,
             expected_manager_source_revision=args.isolated_manager_source_revision,
             expected_pinset_sha256=args.isolated_pinset_sha256,
+            expected_execution_identity_sha256=args.isolated_execution_identity_sha256,
             require_root_owned=True,
         )
         pair["runtime_image_digests"] = cast(
@@ -2900,6 +2913,7 @@ def _parser() -> argparse.ArgumentParser:
     live.add_argument("--isolated-runtime-provenance", type=Path)
     live.add_argument("--isolated-manager-source-revision")
     live.add_argument("--isolated-pinset-sha256")
+    live.add_argument("--isolated-execution-identity-sha256")
     live.add_argument("--playwright-runner-image", required=True)
     live.add_argument("--require-root-owned", action="store_true")
     live.add_argument("ui_command", nargs=argparse.REMAINDER)

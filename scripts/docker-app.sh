@@ -1710,7 +1710,7 @@ require_isolated_direct_compose_project() {
         echo "isolated direct Compose mutation rejects the legacy Manager harness environment marker" >&2
         return 2
       }
-      [[ -n "${PINVI_M05_ISOLATED_MANAGER_ADMISSION_PATH:-}" && -n "${PINVI_M05_PINSET_SHA256:-}" ]] || {
+      [[ -n "${PINVI_M05_ISOLATED_MANAGER_ADMISSION_PATH:-}" && -n "${PINVI_M05_PINSET_SHA256:-}" && -n "${PINVI_M05_EXECUTION_IDENTITY_SHA256:-}" ]] || {
         echo "isolated direct Compose mutation requires a Manager M05 admission" >&2
         return 2
       }
@@ -1721,7 +1721,8 @@ require_isolated_direct_compose_project() {
         "$PINVI_M05_ISOLATED_MANAGER_ADMISSION_PATH" \
         "$PROJECT" \
         "${PINVI_SOURCE_REVISION:-}" \
-        "$PINVI_M05_PINSET_SHA256" >/dev/null 2>&1 || {
+        "$PINVI_M05_PINSET_SHA256" \
+        "$PINVI_M05_EXECUTION_IDENTITY_SHA256" >/dev/null 2>&1 || {
         echo "isolated direct Compose mutation requires a valid Manager M05 admission" >&2
         return 2
       }
