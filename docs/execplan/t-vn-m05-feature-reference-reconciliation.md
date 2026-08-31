@@ -15,8 +15,8 @@ production flag 또는 일반 운영 stack의 mutation만으로는 이 작업의
 ## 기준 계약
 
 - Map service contract source: PR #1051 merge `db319a4798229098d04e68e3ac64338183ad547f`.
-  Full/admin 표면은 Map `main` merge `cf65e97345b5792420cfbc994e49ce6a7e3cd650`의
-  `openapi.json`(SHA-256 `0a1548a94c80bab1af6ab79c10b6f07eba32450adccd8ec2751a8c5256144c1d`) 기준이며,
+  Full/admin 표면은 Map `main` merge `2845e14243ae7f342a7dc840e834ddffd3220436`의
+  `openapi.json`(SHA-256 `6419c1332ba95ab03b8ec794d9d2e7c2a6f2e6da012d23118708e4e4bc5343bb`) 기준이며,
   user 표면은 #1029 계열 pin을 유지한다.
 - M05가 결박하는 admin/full/service/user OpenAPI SHA-256과 source revision의 exact 쌍은
   [`contracts/kor-travel-map-m05-pair-provenance-v1.json`](../../contracts/kor-travel-map-m05-pair-provenance-v1.json)에

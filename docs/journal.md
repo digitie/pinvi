@@ -2,6 +2,30 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-01 (claude) — M05 pair를 Map 2845e142로 재핀 + 스냅샷 핀 단일화
+
+Map pinned rebuild가 generation 2a246fbf(Map `2845e142` / PinVi `e0750505`)로
+완주했고, isolated one-shot preflight가 pair의 `full.source_revision`(3916ebfd)
+불일치로 설계대로 fail-close했다. pair provenance의 admin/full을 2845e142 기준
+(openapi_sha256 `6419c133…` — Map contracts/vnext 핀과 일치, canonical
+`a130ad54…`)으로 갱신하고, runtime_image_digests를 generation 2a246fbf 실측
+(`docker inspect --format '{{.Id}}'`: api/admin `sha256:e36b9170…`, frontend
+`sha256:04790c5e…`)으로 교체했다. operation contract sha(`9a4e058a…`)는 재계산
+결과 불변 — 단 이는 projection(operationId/parameters/requestBody/responses/
+security) 기준이며 `components.schemas` 델타(`CurationImportManualChildView`
+추가 등)는 보지 못한다. breaking 스키마 검출은 openapi_sha256/canonical이 담당.
+
+적대 리뷰 2인이 critical을 적발했다: admin/ops 두 게이트가 같은 스냅샷을 각자
+리터럴로 핀(2모듈×2리터럴)해 절반만 갱신되면 CI가 깨지는 구조. 핀을
+`tests/unit/_kor_travel_map_snapshot_pin.py` 단일 모듈로 합치고 이중 핀
+리터럴(리뷰 강제 장치)은 admin 게이트 한 곳만 남겼다. 런북(§갱신 절차 5)도
+단일 핀 기준으로 고쳤다.
+
+**순서 주의(리뷰 지적)**: 이 PR 머지만으로 preflight가 풀리지 않는다 — Manager
+드라이버는 pair를 pinned PinVi source에서 읽으므로, 머지 후 `pin rotate-pair`
+(Map 2845e142 / PinVi 새 머지 커밋) → `run-pinned-rebuild-once`로 새 generation
+커밋 → 그 다음에야 isolated one-shot이 성립한다.
+
 ## 2026-08-29 (codex) — Manager isolated lifecycle 소비 상태 동기화
 
 현재 M05 source pair는 trusted Docker Manager v6 execution마다 exact one-shot으로만 소비한다.

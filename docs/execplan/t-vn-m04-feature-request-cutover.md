@@ -12,9 +12,9 @@ Map #1029와 PinVi #458의 구현은 병합됐지만, Map #1051 service 계약�
 
 - Map implementation merge: PR #1029 `57c9d99a`; user artifact source commit은
   `037e24698f74e2067ea7c8572b044076dc0ac89c`이고, full/admin ops artifact는
-  Map `main` merge `cf65e97345b5792420cfbc994e49ce6a7e3cd650` 기준이다.
+  Map `main` merge `2845e14243ae7f342a7dc840e834ddffd3220436` 기준이다.
 - full/admin OpenAPI SHA-256:
-  `0a1548a94c80bab1af6ab79c10b6f07eba32450adccd8ec2751a8c5256144c1d`.
+  `6419c1332ba95ab03b8ec794d9d2e7c2a6f2e6da012d23118708e4e4bc5343bb`.
 - service OpenAPI SHA-256:
   `99ba6c178bf55401d3e1bb638a01b96f66bbac38d604534aa126a70f4be53d3d` (Map #1051,
   PinVi #465에서 재vendor 중).

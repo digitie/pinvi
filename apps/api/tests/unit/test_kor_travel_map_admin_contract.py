@@ -8,15 +8,18 @@ from pathlib import Path
 from typing import Any
 
 from app.schemas.admin import AdminFeatureDetailCuration, AdminFeatureWeatherMetric
-
-_SNAPSHOT = (
-    Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-admin.json"
+from tests.unit._kor_travel_map_snapshot_pin import (
+    SNAPSHOT,
+    SNAPSHOT_SHA256,
+    UPSTREAM_COMMIT,
 )
+
 _M05_PAIR = (
     Path(__file__).resolve().parents[4] / "contracts" / "kor-travel-map-m05-pair-provenance-v1.json"
 )
-_UPSTREAM_COMMIT = "2845e14243ae7f342a7dc840e834ddffd3220436"
-_SNAPSHOT_SHA256 = "6419c1332ba95ab03b8ec794d9d2e7c2a6f2e6da012d23118708e4e4bc5343bb"
+_SNAPSHOT = SNAPSHOT
+_UPSTREAM_COMMIT = UPSTREAM_COMMIT
+_SNAPSHOT_SHA256 = SNAPSHOT_SHA256
 
 _ADMIN_FEATURE_QUERY_PARAMETERS = {
     "q",
