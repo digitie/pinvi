@@ -36,11 +36,7 @@ def test_sealed_baseline_artifacts_are_immutable_and_lineage_is_linear() -> None
     import hashlib
 
     versions_dir = API_DIR / "alembic" / "versions"
-    present = {
-        path.name: path
-        for path in versions_dir.glob("*.py")
-        if path.name != "__init__.py"
-    }
+    present = {path.name: path for path in versions_dir.glob("*.py") if path.name != "__init__.py"}
 
     # ① 봉인 artifact는 존재해야 하고 바이트가 불변이어야 한다. 종전 테스트는 목록만
     #    보고 **내용은 보지 않았다** — 이름이 같으면 내용을 바꿔도 통과했다.
@@ -53,8 +49,7 @@ def test_sealed_baseline_artifacts_are_immutable_and_lineage_is_linear() -> None
             else "missing"
         )
         for name, sealed in _SEALED_BASELINE_SHA256.items()
-        if name not in present
-        or hashlib.sha256(present[name].read_bytes()).hexdigest() != sealed
+        if name not in present or hashlib.sha256(present[name].read_bytes()).hexdigest() != sealed
     ]
     assert not drifted, (
         "봉인된 기준선 migration의 바이트가 변했다 — 기준선은 수정이 아니라 새 "
@@ -67,15 +62,11 @@ def test_sealed_baseline_artifacts_are_immutable_and_lineage_is_linear() -> None
         module = _load(path, f"pinvi_alembic_probe_{name.split('_', 1)[0]}")
         # 같은 revision을 가진 파일 두 개는 dict에서 조용히 덮인다 — 충돌은
         # 계보 검사가 아니라 여기서 즉시 잡는다(R1-S8).
-        assert module.revision not in revisions, (
-            f"revision 충돌: {module.revision} ({name})"
-        )
+        assert module.revision not in revisions, f"revision 충돌: {module.revision} ({name})"
         revisions[module.revision] = module.down_revision
     heads = set(revisions) - {d for d in revisions.values() if d is not None}
     roots = [r for r, d in revisions.items() if d is None]
-    dangling = [
-        f"{r} → {d}" for r, d in revisions.items() if d is not None and d not in revisions
-    ]
+    dangling = [f"{r} → {d}" for r, d in revisions.items() if d is not None and d not in revisions]
 
     assert roots == ["20260824_0100"], f"root는 봉인 기준선 하나여야 한다: {roots}"
     assert len(heads) == 1, f"migration 계보가 분기했다: {sorted(heads)}"

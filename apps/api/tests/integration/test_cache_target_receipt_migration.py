@@ -52,6 +52,7 @@ async def test_active_graph_has_the_sealed_baseline_prefix(session_factory) -> N
     # fresh install DB는 exact 문자열이 아니라 **현재 단일 head**에 있어야 한다 —
     # 신규 migration이 추가되면 head가 전진하고, 이 대조는 그대로 유효하다.
     async with session_factory() as session:
-        assert await session.scalar(
-            text("SELECT version_num FROM app.alembic_version")
-        ) == head_revision
+        assert (
+            await session.scalar(text("SELECT version_num FROM app.alembic_version"))
+            == head_revision
+        )
