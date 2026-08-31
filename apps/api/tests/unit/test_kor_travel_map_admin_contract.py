@@ -8,15 +8,18 @@ from pathlib import Path
 from typing import Any
 
 from app.schemas.admin import AdminFeatureDetailCuration, AdminFeatureWeatherMetric
-
-_SNAPSHOT = (
-    Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-admin.json"
+from tests.unit._kor_travel_map_snapshot_pin import (
+    SNAPSHOT,
+    SNAPSHOT_SHA256,
+    UPSTREAM_COMMIT,
 )
+
 _M05_PAIR = (
     Path(__file__).resolve().parents[4] / "contracts" / "kor-travel-map-m05-pair-provenance-v1.json"
 )
-_UPSTREAM_COMMIT = "3916ebfd601d97166c55dadfec938c3eeed6bc45"
-_SNAPSHOT_SHA256 = "0a1548a94c80bab1af6ab79c10b6f07eba32450adccd8ec2751a8c5256144c1d"
+_SNAPSHOT = SNAPSHOT
+_UPSTREAM_COMMIT = UPSTREAM_COMMIT
+_SNAPSHOT_SHA256 = SNAPSHOT_SHA256
 
 _ADMIN_FEATURE_QUERY_PARAMETERS = {
     "q",
@@ -62,7 +65,7 @@ def _query_names(operation: dict[str, Any]) -> set[str]:
 
 
 def test_admin_snapshot_is_byte_pinned_to_a_reviewed_map_revision() -> None:
-    assert _UPSTREAM_COMMIT == "3916ebfd601d97166c55dadfec938c3eeed6bc45"
+    assert _UPSTREAM_COMMIT == "2845e14243ae7f342a7dc840e834ddffd3220436"
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
 
 

@@ -70,7 +70,7 @@ sort, order]`이며 `status`·`provider`·`dataset_key`는 **없다**(보내면 
 > `apps/api/tests/contract/kor-travel-map-openapi-service.json`
 > (SHA-256 `99ba6c178bf55401d3e1bb638a01b96f66bbac38d604534aa126a70f4be53d3d`)으로 byte-exact
 > vendor한다. admin snapshot SHA-256은
-> `0a1548a94c80bab1af6ab79c10b6f07eba32450adccd8ec2751a8c5256144c1d`, user SHA-256은
+> `6419c1332ba95ab03b8ec794d9d2e7c2a6f2e6da012d23118708e4e4bc5343bb`, user SHA-256은
 > `489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b`다. Pinvi의 `new_place`
 > 승인은 이제 전용 `ServiceToken`과 동일 UUID body/header로
 > `POST /v1/service/feature-requests`만 호출한다. `pending` receipt는 Pinvi `approved`, verified
@@ -676,8 +676,8 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   (byte-핀 소유는 `test_kor_travel_map_cache_target_contract.py`) 기준으로 검증하고,
   두 profile에 겹치는 schema(`Meta`/`WeatherMetricOut` 등)는 양쪽 모두에서 고정한다.
 - **Admin/ops 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map `main`
-  merge `cf65e97345b5792420cfbc994e49ce6a7e3cd650`의 전체 `openapi.json` 원본이며
-  SHA-256은 `0a1548a94c80bab1af6ab79c10b6f07eba32450adccd8ec2751a8c5256144c1d`이다.
+  merge `2845e14243ae7f342a7dc840e834ddffd3220436`의 전체 `openapi.json` 원본이며
+  SHA-256은 `6419c1332ba95ab03b8ec794d9d2e7c2a6f2e6da012d23118708e4e4bc5343bb`이다.
   `test_kor_travel_map_ops_contract.py`는
   provider ETL이 소비하는 ops 경로·인증·query·응답 schema 연결과 폐기 필드 부재를 고정한다.
   Admin feature 소비 필드/query 게이트와 M04 request queue 후보 계약은 같은 source revision을 사용한다.
@@ -709,9 +709,9 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   `test_public_view_contracts_cover_every_validated_model_field`가 `app/schemas/public.py`
   모델의 `model_fields` ⊆ 계약을 강제한다(모델에 필드를 추가하면 타입 계약도 함께 적어야 통과).
 - **Admin vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map `main`
-  merge `cf65e97345b5792420cfbc994e49ce6a7e3cd650`의
+  merge `2845e14243ae7f342a7dc840e834ddffd3220436`의
   `packages/kor-travel-map-api/openapi.json` 전체 파일, SHA-256
-  `0a1548a94c80bab1af6ab79c10b6f07eba32450adccd8ec2751a8c5256144c1d`.
+  `6419c1332ba95ab03b8ec794d9d2e7c2a6f2e6da012d23118708e4e4bc5343bb`.
   `test_kor_travel_map_admin_contract.py`가 Admin feature 목록/상세/weather의 path·AdminBFF security,
   query exact 집합, 응답 container `$ref`, 3축·state transition·curation·weather 소비 shape를 고정한다.
   feature request service gate는 별도 service vendor의 `ServiceToken`, UUID `Idempotency-Key`, request
@@ -737,7 +737,10 @@ apps/api/tests/contract/kor-travel-map-openapi-user.json`
      `_CONSUMED_FIELD_CONTRACTS`에 맞춰 갱신(= kor_travel_map drift 대응 PR).
      `_SCHEMA_FIELDS`는 파생 집합이므로 직접 편집하지 않는다.
   5. Admin feature 계약이 바뀌면 같은 exact commit의 `openapi.json` 전체 파일을
-     `kor-travel-map-openapi-admin.json`으로 교체하고 `test_kor_travel_map_admin_contract.py`의
-     commit/hash와 소비 가정을 함께 갱신한다.
+     `kor-travel-map-openapi-admin.json`으로 교체하고, 단일 핀
+     `tests/unit/_kor_travel_map_snapshot_pin.py`(commit/hash 소유)와
+     `test_kor_travel_map_admin_contract.py`의 이중 핀 리터럴·소비 가정을 함께
+     갱신한다. admin/ops 두 게이트 모두 이 핀 모듈에서 import하므로 다른 곳에
+     리터럴 사본을 만들지 않는다.
 - **codegen(선택)**: frontend `openapi-typescript` + Zod mirror는 미도입(후속). 백엔드는 본
   스냅샷 게이트로 충분(kor_travel_map 권고: 수기 httpx 유지).

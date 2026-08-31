@@ -1,18 +1,18 @@
 {
   "map": {
     "admin": {
-      "openapi_sha256": "0a1548a94c80bab1af6ab79c10b6f07eba32450adccd8ec2751a8c5256144c1d",
+      "openapi_sha256": "6419c1332ba95ab03b8ec794d9d2e7c2a6f2e6da012d23118708e4e4bc5343bb",
       "runtime_operation_contract_sha256": "9a4e058ad9e8540d882046d3f36e897da6ee9665cfb9846bdfb1ff146958d917",
-      "source_canonical_sha256": "2639a7dbd5441b7712e415f84b1b276a4d7051cc235eddf541f14d15dd3d8e8e",
+      "source_canonical_sha256": "a130ad541ece790f30f4eacd587eca0d8091c52b3e30a6fd791d7a4a041a4480",
       "source_operation_contract_sha256": "9a4e058ad9e8540d882046d3f36e897da6ee9665cfb9846bdfb1ff146958d917",
-      "source_revision": "3916ebfd601d97166c55dadfec938c3eeed6bc45"
+      "source_revision": "2845e14243ae7f342a7dc840e834ddffd3220436"
     },
     "full": {
-      "openapi_sha256": "0a1548a94c80bab1af6ab79c10b6f07eba32450adccd8ec2751a8c5256144c1d",
+      "openapi_sha256": "6419c1332ba95ab03b8ec794d9d2e7c2a6f2e6da012d23118708e4e4bc5343bb",
       "runtime_operation_contract_sha256": "9a4e058ad9e8540d882046d3f36e897da6ee9665cfb9846bdfb1ff146958d917",
-      "source_canonical_sha256": "2639a7dbd5441b7712e415f84b1b276a4d7051cc235eddf541f14d15dd3d8e8e",
+      "source_canonical_sha256": "a130ad541ece790f30f4eacd587eca0d8091c52b3e30a6fd791d7a4a041a4480",
       "source_operation_contract_sha256": "9a4e058ad9e8540d882046d3f36e897da6ee9665cfb9846bdfb1ff146958d917",
-      "source_revision": "3916ebfd601d97166c55dadfec938c3eeed6bc45"
+      "source_revision": "2845e14243ae7f342a7dc840e834ddffd3220436"
     },
     "service": {
       "openapi_sha256": "99ba6c178bf55401d3e1bb638a01b96f66bbac38d604534aa126a70f4be53d3d",
@@ -30,9 +30,9 @@
     }
   },
   "runtime_image_digests": {
-    "admin": "sha256:2260ec364dbc7c8e0ab60554e93d664d6b2c163696a6fdf32bc8962a6363c262",
-    "api": "sha256:2260ec364dbc7c8e0ab60554e93d664d6b2c163696a6fdf32bc8962a6363c262",
-    "frontend": "sha256:5dc5471b4795f2636cb3c48fd732189ac94efb1438e3d170146ab70d95c66300"
+    "admin": "sha256:e36b9170249216a7998189496dcc6ac42fecac517a5929740612a5284c86c93d",
+    "api": "sha256:e36b9170249216a7998189496dcc6ac42fecac517a5929740612a5284c86c93d",
+    "frontend": "sha256:04790c5e3c026978ef850fda14532403b39156607c6afe76ea12cdd89ae1b200"
   },
   "version": 1
 }

@@ -10,16 +10,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 from typing import Any
 
 import pytest
 
-_SNAPSHOT = (
-    Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-admin.json"
-)
-_UPSTREAM_COMMIT = "cf65e97345b5792420cfbc994e49ce6a7e3cd650"
-_SNAPSHOT_SHA256 = "0a1548a94c80bab1af6ab79c10b6f07eba32450adccd8ec2751a8c5256144c1d"
+from tests.unit._kor_travel_map_snapshot_pin import SNAPSHOT, SNAPSHOT_SHA256
+
+_SNAPSHOT = SNAPSHOT
+_SNAPSHOT_SHA256 = SNAPSHOT_SHA256
 
 _OPS_SECURITY = [{"AdminBFF": []}, {"OpsScope": [], "OpsToken": []}]
 _CONSUMED_ENDPOINTS: dict[tuple[str, str], tuple[set[str], str]] = {
@@ -169,7 +167,8 @@ def spec() -> dict[str, Any]:
 
 
 def test_admin_snapshot_is_exact_upstream_artifact() -> None:
-    assert _UPSTREAM_COMMIT == "cf65e97345b5792420cfbc994e49ce6a7e3cd650"
+    # 리비전 이중 핀(리뷰 강제 장치)은 admin 게이트 한 곳만 갖는다 —
+    # tests/unit/_kor_travel_map_snapshot_pin.py docstring 참조.
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
 
 

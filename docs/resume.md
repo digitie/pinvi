@@ -1,5 +1,13 @@
 # resume.md
 
+## 2026-09-01 (claude) — M05 재개: pair 재핀 후 rotate→rebuild→one-shot 순서
+
+Map 쪽 두 수리(#1128 packaging, #1129 permit head-인지)로 pinned rebuild가
+generation 2a246fbf로 완주했다. 이 브랜치가 pair를 Map 2845e142로 재핀한다.
+다음 한 작업: 머지 → Manager `pin rotate-pair`(Map 2845e142 / PinVi 새 커밋,
+pinset 변경) → `run-pinned-rebuild-once`(Map 이미지는 캐시 재현) → committed
+generation 갱신 → `run-m05-isolated-e2e-once` 정확히 1회.
+
 ## 2026-08-29 (codex) — M05 execution identity v6로 terminal 반복 제거
 
 같은 Map·PinVi pair에서 Docker Manager 코드만 고쳤을 때도 v5 `pinset_sha256` terminal block이 그대로 남아
