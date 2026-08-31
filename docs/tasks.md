@@ -15,3 +15,4 @@
 - [ ] T-VN-41C — relay, reconciliation, consumer enable paired acceptance를 완료한다.
 - [ ] T-VN-41F1D-E — 이전 generation 퇴역과 v6/v8 attestation 전환을 완료한다.
 - [ ] T-VN-H49 — standalone backup의 주기 실행, bounded retention, off-box 증거를 완료한다.
+- [ ] T-356 — pinvi admin 화면을 kor-travel-map admin과 색상톤만 제외하고 look and feel·기능(테이블 필터·정렬·페이지네이션 등)까지 일치시킨다. 브랜치 `agent/claude-admin-ui-parity`, 범위는 `apps/web/app/(admin)`·`apps/web/components/admin`·admin 전용 UI 프리미티브로 한정하고 사용자 표면은 건드리지 않는다.

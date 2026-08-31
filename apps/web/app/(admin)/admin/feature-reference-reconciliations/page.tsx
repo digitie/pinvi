@@ -195,7 +195,12 @@ function EvidenceDetail({
         ref={boundaryRef}
         tabIndex={-1}
         role="status"
-        className="focus-ring rounded-sm bg-surface-soft px-3 py-2 text-sm text-body outline-none"
+        // Tailwind v4에서 `outline-none`은 `--tw-outline-style: none`을 박고, `.focus-ring`의
+        // `:focus-visible` 규칙은 스타일을 그 변수에서 읽는다 — 둘을 같이 두면 키보드 포커스 링이
+        // 사라진다(v3에서는 `outline-none`이 투명 outline이라 공존이 가능했다). 최신 브라우저는
+        // div/p의 프로그램적 focus에 `:focus-visible`을 매치하지 않아 기본 링도 그리지 않으므로
+        // `outline-none` 없이 `.focus-ring`만 두는 것이 v4의 등가 동작이다.
+        className="focus-ring rounded-sm bg-surface-soft px-3 py-2 text-sm text-body"
         data-testid="admin-frr-readonly-boundary"
       >
         이 화면은 읽기 전용입니다. 로컬 final receipt, delivery attempt 관측 hash, row-level

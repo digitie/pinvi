@@ -7,9 +7,12 @@
 /* Pretendard Variable — npm `pretendard` dynamic subset(한글 서브셋 분할, font-display: swap). 외부 CDN·render-blocking @import 없음. */
 @import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+/* Tailwind v4에서도 토큰 정본은 `@pinvi/design-tokens`의 v3 preset 하나다(ADR: 웹만 v4, 모바일은
+   NativeWind 4 + Tailwind v3 유지). `@config`로 그 preset을 그대로 읽어 토큰 정의가 웹/모바일로
+   갈라지지 않게 한다 — `@theme`로 옮겨 적으면 두 곳이 조용히 드리프트한다. */
+@config '../tailwind.config.ts';
 
 :root {
   /* 앱 셸 모바일 하단 탭바 높이 — main 하단 패딩 예산의 단일 출처. */
@@ -48,7 +51,7 @@ body {
 @layer components {
   /* 20px 커스텀 체크박스 — 네이티브 13px는 44px 터치 타깃·시스템 톤에 못 미친다. 체크 마크는 인라인 SVG. */
   .checkbox {
-    @apply size-5 shrink-0 cursor-pointer appearance-none rounded-[4px] border border-border-strong bg-canvas transition-colors duration-normal ease-pinvi checked:border-ink checked:bg-ink disabled:cursor-not-allowed disabled:bg-surface-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus;
+    @apply size-5 shrink-0 cursor-pointer appearance-none rounded-[4px] border border-border-strong bg-canvas transition-colors duration-normal ease-pinvi checked:border-ink checked:bg-ink disabled:cursor-not-allowed disabled:bg-surface-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus;
     background-position: center;
     background-repeat: no-repeat;
     background-size: 14px 14px;
@@ -89,7 +92,7 @@ body {
   /* 포커스 링은 outline(즉시 표시, transition 무관·레이아웃 불변). ring 대신 outline인 이유:
      `transition-*` 유틸이 붙은 요소에서 ring이 페이드인되며 늦게 보이는 것을 막는다. */
   .focus-ring {
-    @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus;
+    @apply focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus;
   }
 }
 
