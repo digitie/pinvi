@@ -36,12 +36,22 @@ def test_sealed_baseline_artifacts_are_immutable_and_lineage_is_linear() -> None
     import hashlib
 
     versions_dir = API_DIR / "alembic" / "versions"
-    present = {path.name: path for path in versions_dir.glob("*.py")}
+    present = {
+        path.name: path
+        for path in versions_dir.glob("*.py")
+        if path.name != "__init__.py"
+    }
 
     # ① 봉인 artifact는 존재해야 하고 바이트가 불변이어야 한다. 종전 테스트는 목록만
     #    보고 **내용은 보지 않았다** — 이름이 같으면 내용을 바꿔도 통과했다.
+    #    (파일이 없으면 KeyError가 아니라 "missing"으로 보고한다 — R1-S8.)
     drifted = [
-        f"{name}: observed={hashlib.sha256(present[name].read_bytes()).hexdigest()[:12]}…"
+        f"{name}: observed="
+        + (
+            hashlib.sha256(present[name].read_bytes()).hexdigest()[:12] + "…"
+            if name in present
+            else "missing"
+        )
         for name, sealed in _SEALED_BASELINE_SHA256.items()
         if name not in present
         or hashlib.sha256(present[name].read_bytes()).hexdigest() != sealed
@@ -55,6 +65,11 @@ def test_sealed_baseline_artifacts_are_immutable_and_lineage_is_linear() -> None
     revisions: dict[str, str | None] = {}
     for name, path in sorted(present.items()):
         module = _load(path, f"pinvi_alembic_probe_{name.split('_', 1)[0]}")
+        # 같은 revision을 가진 파일 두 개는 dict에서 조용히 덮인다 — 충돌은
+        # 계보 검사가 아니라 여기서 즉시 잡는다(R1-S8).
+        assert module.revision not in revisions, (
+            f"revision 충돌: {module.revision} ({name})"
+        )
         revisions[module.revision] = module.down_revision
     heads = set(revisions) - {d for d in revisions.values() if d is not None}
     roots = [r for r, d in revisions.items() if d is None]
