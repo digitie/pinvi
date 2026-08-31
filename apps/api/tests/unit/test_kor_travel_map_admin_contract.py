@@ -15,8 +15,8 @@ _SNAPSHOT = (
 _M05_PAIR = (
     Path(__file__).resolve().parents[4] / "contracts" / "kor-travel-map-m05-pair-provenance-v1.json"
 )
-_UPSTREAM_COMMIT = "3916ebfd601d97166c55dadfec938c3eeed6bc45"
-_SNAPSHOT_SHA256 = "0a1548a94c80bab1af6ab79c10b6f07eba32450adccd8ec2751a8c5256144c1d"
+_UPSTREAM_COMMIT = "2845e14243ae7f342a7dc840e834ddffd3220436"
+_SNAPSHOT_SHA256 = "6419c1332ba95ab03b8ec794d9d2e7c2a6f2e6da012d23118708e4e4bc5343bb"
 
 _ADMIN_FEATURE_QUERY_PARAMETERS = {
     "q",
