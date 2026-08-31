@@ -5,6 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 PROJECT="${PINVI_DOCKER_PROJECT:-pinvi-app-smoke}"
 COMPOSE_FILE="${PINVI_DOCKER_COMPOSE_FILE:-infra/docker-compose.app.yml}"
+# 선택적 overlay. Manager isolated M05 harness처럼 상위 오케스트레이터가 network
+# join·label 등을 겹칠 때 쓴다 — 미설정이면 종전과 동일하게 단일 파일이다.
+COMPOSE_EXTRA_FILE="${PINVI_DOCKER_COMPOSE_EXTRA_FILE:-}"
 # 운영 도메인/시크릿 주입. 기본 .env, 운영은 PINVI_ENV_FILE=infra/.env.prod (gitignore, ADR-047).
 ENV_FILE="${PINVI_ENV_FILE:-.env}"
 
@@ -111,6 +114,7 @@ Defaults:
 Environment overrides:
   PINVI_DOCKER_PROJECT=pinvi-app-smoke
   PINVI_DOCKER_COMPOSE_FILE=infra/docker-compose.app.yml
+  PINVI_DOCKER_COMPOSE_EXTRA_FILE=/absolute/host/path/overlay.yml (선택 overlay)
   PINVI_API_PORT=12801
   PINVI_WEB_PORT=12805
   PINVI_RUSTFS_PORT=12101
@@ -161,10 +165,14 @@ require_local_docker_target() {
 }
 
 compose() {
+  local -a compose_files=(-f "$COMPOSE_FILE")
+  if [[ -n "$COMPOSE_EXTRA_FILE" ]]; then
+    compose_files+=(-f "$COMPOSE_EXTRA_FILE")
+  fi
   if [[ -f "$ENV_FILE" ]]; then
-    PINVI_DOCKER_PROJECT="$PROJECT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
+    PINVI_DOCKER_PROJECT="$PROJECT" docker compose -p "$PROJECT" "${compose_files[@]}" --env-file "$ENV_FILE" "$@"
   else
-    PINVI_DOCKER_PROJECT="$PROJECT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" "$@"
+    PINVI_DOCKER_PROJECT="$PROJECT" docker compose -p "$PROJECT" "${compose_files[@]}" "$@"
   fi
 }
 
