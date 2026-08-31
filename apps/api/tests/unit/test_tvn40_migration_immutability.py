@@ -16,12 +16,55 @@ def _load(path: Path, name: str):  # type: ignore[no-untyped-def]
     return module
 
 
-def test_active_migration_artifacts_are_complete_and_digest_guarded() -> None:
+#: 봉인된 기준선 artifact와 그 sha256. **기존 파일의 불변**이 이 테스트가 지키는
+#: 성질이고, 종전의 exact 파일 목록 비교는 그 성질에 더해 **신규 migration 추가까지**
+#: 금지하고 있었다 — T-349(신규 migration이 필요한 태스크)가 이 한 줄 때문에 진행
+#: 불가로 표시됐다(57cf93da). 목록 동등 대신 digest 불변 + 계보 무결로 바꾼다
+#: (kor-travel-map `docs/reports/map-stall-root-cause-2026-08-31.md` §3 I-10,
+#: 적대 검증 CONFIRMED — "국소 테스트 결함 수정"으로 분류).
+_SEALED_BASELINE_SHA256 = {
+    "20260824_0100_app_schema_baseline.py": (
+        "8045687ffbb2d8a582ffb9e2121675328947e8514f5472e91a9f306573b32cb7"
+    ),
+    "20260824_0101_m05_activation_contract.py": (
+        "7ab664705a9a25f11f615a35b34408c231c03a4c09ae38fff5f906ec2e220919"
+    ),
+}
+
+
+def test_sealed_baseline_artifacts_are_immutable_and_lineage_is_linear() -> None:
+    import hashlib
+
     versions_dir = API_DIR / "alembic" / "versions"
-    assert sorted(path.name for path in versions_dir.glob("*.py")) == [
-        "20260824_0100_app_schema_baseline.py",
-        "20260824_0101_m05_activation_contract.py",
+    present = {path.name: path for path in versions_dir.glob("*.py")}
+
+    # ① 봉인 artifact는 존재해야 하고 바이트가 불변이어야 한다. 종전 테스트는 목록만
+    #    보고 **내용은 보지 않았다** — 이름이 같으면 내용을 바꿔도 통과했다.
+    drifted = [
+        f"{name}: observed={hashlib.sha256(present[name].read_bytes()).hexdigest()[:12]}…"
+        for name, sealed in _SEALED_BASELINE_SHA256.items()
+        if name not in present
+        or hashlib.sha256(present[name].read_bytes()).hexdigest() != sealed
     ]
+    assert not drifted, (
+        "봉인된 기준선 migration의 바이트가 변했다 — 기준선은 수정이 아니라 새 "
+        f"migration으로만 진화한다: {drifted}"
+    )
+
+    # ② 신규 migration은 허용하되 계보는 단일 선형 체인이어야 한다.
+    revisions: dict[str, str | None] = {}
+    for name, path in sorted(present.items()):
+        module = _load(path, f"pinvi_alembic_probe_{name.split('_', 1)[0]}")
+        revisions[module.revision] = module.down_revision
+    heads = set(revisions) - {d for d in revisions.values() if d is not None}
+    roots = [r for r, d in revisions.items() if d is None]
+    dangling = [
+        f"{r} → {d}" for r, d in revisions.items() if d is not None and d not in revisions
+    ]
+
+    assert roots == ["20260824_0100"], f"root는 봉인 기준선 하나여야 한다: {roots}"
+    assert len(heads) == 1, f"migration 계보가 분기했다: {sorted(heads)}"
+    assert not dangling, f"끊어진 down_revision: {dangling}"
 
     baseline = _load(
         versions_dir / "20260824_0100_app_schema_baseline.py",
@@ -31,9 +74,6 @@ def test_active_migration_artifacts_are_complete_and_digest_guarded() -> None:
         versions_dir / "20260824_0101_m05_activation_contract.py",
         "pinvi_alembic_0101_test",
     )
-    assert baseline.revision == "20260824_0100"
-    assert baseline.down_revision is None
-    assert activation.revision == "20260824_0101"
     assert activation.down_revision == baseline.revision
     assert len(baseline._baseline_statements()) == baseline._BASELINE_STATEMENT_COUNT
     assert len(activation._m05_schema_statements()) == activation._M05_SCHEMA_STATEMENT_COUNT
