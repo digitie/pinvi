@@ -5,6 +5,34 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 PROJECT="${PINVI_DOCKER_PROJECT:-pinvi-app-smoke}"
 COMPOSE_FILE="${PINVI_DOCKER_COMPOSE_FILE:-infra/docker-compose.app.yml}"
+# 선택적 overlay. Manager isolated M05 harness처럼 상위 오케스트레이터가 network
+# join·label 등을 겹칠 때 쓴다 — 미설정이면 종전과 동일하게 단일 파일이다.
+# caller가 설정할 수 있는 환경변수는 권한 근거가 아니므로(아래 isolated 경계 주석과
+# 동일 원칙), overlay는 Manager M05 isolated admission 맥락에서만, root 소유
+# private 파일일 때만 받아들인다 — require_valid_compose_extra_file가 강제한다.
+COMPOSE_EXTRA_FILE="${PINVI_DOCKER_COMPOSE_EXTRA_FILE:-}"
+
+require_valid_compose_extra_file() {
+  if [[ -z "$COMPOSE_EXTRA_FILE" ]]; then
+    return 0
+  fi
+  if [[ -z "${PINVI_M05_ISOLATED_MANAGER_ADMISSION_PATH:-}"     || -z "${PINVI_M05_PINSET_SHA256:-}"     || -z "${PINVI_M05_EXECUTION_IDENTITY_SHA256:-}" ]]; then
+    echo "PINVI_DOCKER_COMPOSE_EXTRA_FILE requires the Manager M05 isolated admission context" >&2
+    return 2
+  fi
+  if [[ "$COMPOSE_EXTRA_FILE" != /* || -L "$COMPOSE_EXTRA_FILE" || ! -f "$COMPOSE_EXTRA_FILE" ]]; then
+    echo "PINVI_DOCKER_COMPOSE_EXTRA_FILE must be an absolute regular non-symlink file" >&2
+    return 2
+  fi
+  local extra_owner extra_mode
+  extra_owner="$(stat -c '%u' "$COMPOSE_EXTRA_FILE")" || return 2
+  extra_mode="$(stat -c '%a' "$COMPOSE_EXTRA_FILE")" || return 2
+  if [[ "$extra_owner" != "0" || $((8#$extra_mode & 077)) -ne 0 ]]; then
+    echo "PINVI_DOCKER_COMPOSE_EXTRA_FILE must be root-owned and private (0600)" >&2
+    return 2
+  fi
+  return 0
+}
 # 운영 도메인/시크릿 주입. 기본 .env, 운영은 PINVI_ENV_FILE=infra/.env.prod (gitignore, ADR-047).
 ENV_FILE="${PINVI_ENV_FILE:-.env}"
 
@@ -111,6 +139,7 @@ Defaults:
 Environment overrides:
   PINVI_DOCKER_PROJECT=pinvi-app-smoke
   PINVI_DOCKER_COMPOSE_FILE=infra/docker-compose.app.yml
+  PINVI_DOCKER_COMPOSE_EXTRA_FILE=/absolute/host/path/overlay.yml (선택 overlay — Manager M05 isolated admission 맥락 + root 소유 0600 파일만)
   PINVI_API_PORT=12801
   PINVI_WEB_PORT=12805
   PINVI_RUSTFS_PORT=12101
@@ -161,10 +190,15 @@ require_local_docker_target() {
 }
 
 compose() {
+  require_valid_compose_extra_file || return 2
+  local -a compose_files=(-f "$COMPOSE_FILE")
+  if [[ -n "$COMPOSE_EXTRA_FILE" ]]; then
+    compose_files+=(-f "$COMPOSE_EXTRA_FILE")
+  fi
   if [[ -f "$ENV_FILE" ]]; then
-    PINVI_DOCKER_PROJECT="$PROJECT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
+    PINVI_DOCKER_PROJECT="$PROJECT" docker compose -p "$PROJECT" "${compose_files[@]}" --env-file "$ENV_FILE" "$@"
   else
-    PINVI_DOCKER_PROJECT="$PROJECT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" "$@"
+    PINVI_DOCKER_PROJECT="$PROJECT" docker compose -p "$PROJECT" "${compose_files[@]}" "$@"
   fi
 }
 
