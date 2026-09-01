@@ -82,7 +82,7 @@ export function ConfirmDialog({
       <div
         {...dialogProps}
         data-testid={testId}
-        className="w-full max-w-md space-y-4 rounded-md border border-hairline bg-canvas p-5 shadow-overlay outline-none"
+        className="w-full max-w-md space-y-4 rounded-md border border-hairline bg-canvas p-5 shadow-overlay outline-hidden"
       >
         <div className="flex items-start gap-3">
           {isDanger && (

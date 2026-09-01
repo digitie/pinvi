@@ -5,7 +5,8 @@
 //   갖춘 자체 셸을 소유한다. KTM `AdminShell`(510줄)은 nav 정본·로그아웃·rail 접힘까지 한 컴포넌트에
 //   묶여 있어 통째 교체는 admin 전 페이지의 라우팅/권한 동작을 한 번에 바꾼다. 그래서 **pinvi에 대응이
 //   없는 표면 조각만** 뽑았다: skip link · 헤더 밴드(제목/설명/breadcrumb/actions/meta) · rail 그리드.
-//   layout.tsx는 이 작업에서 한 줄도 건드리지 않았다.
+//   layout.tsx는 셸 구조를 그대로 두고 skip link 배선(`AdminSkipLink` + `<main>`의
+//   `id`/`tabIndex`)만 받았다.
 //
 // 원문에서 바꾼 부분과 이유:
 //   1) nav(NAV_GROUPS)·rail 마크업·로그아웃·접힘 상태·`usePathname` 기반 section 추론을 전부 뺐다.
@@ -50,9 +51,9 @@ import { cn } from '@/lib/admin/cn';
 /**
  * skip link의 기본 대상 id.
  *
- * NOTE: pinvi `app/(admin)/admin/layout.tsx`의 `<main>`에는 아직 id가 없다. 이 상수를 그
- * `<main>`에 붙이기 전까지 `AdminSkipLink`의 기본 대상은 존재하지 않는다 — layout.tsx 수정은 이
- * 작업 범위 밖이라 후속으로 남긴다. 그 전에는 대상 id를 직접 갖는 페이지에서 `targetId`로 넘겨 쓴다.
+ * `app/(admin)/admin/layout.tsx`의 `<main>`이 이 id와 `tabIndex={-1}`을 갖는다. `tabIndex`가
+ * 없으면 앵커가 스크롤만 시키고 포커스는 nav에 남아 다음 Tab이 다시 nav로 들어간다 — skip link가
+ * 무의미해진다.
  */
 const ADMIN_MAIN_CONTENT_ID = 'admin-main-content';
 

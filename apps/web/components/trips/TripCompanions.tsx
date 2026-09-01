@@ -72,7 +72,7 @@ export function TripCompanions({ tripId, companions, onChanged }: TripCompanions
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="friend@example.com"
-            className="mt-1 block min-h-11 w-full rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-none focus:border-primary"
+            className="mt-1 block min-h-11 w-full rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-hidden focus:border-primary"
           />
         </label>
         <label className="text-xs font-semibold text-ink">
@@ -80,7 +80,7 @@ export function TripCompanions({ tripId, companions, onChanged }: TripCompanions
           <select
             value={role}
             onChange={(event) => setRole(event.target.value as TripCompanionRole)}
-            className="mt-1 block min-h-11 rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-none focus:border-primary"
+            className="mt-1 block min-h-11 rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-hidden focus:border-primary"
           >
             {ROLES.map((r) => (
               <option key={r} value={r}>

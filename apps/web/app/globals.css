@@ -51,22 +51,34 @@
    * 컨트롤 경계로 쓰면 1.4.11 위반이다. 컨트롤용으로는 기존 `border-strong`(#c1c1c1, 2.7:1)보다
    * 더 진한 값이 필요해 admin 전용으로 3:1을 넘는 값을 새로 둔다. */
   --color-admin-line: #dddddd; /* = hairline. 장식 구분선 */
-  --color-admin-control-line: #949494; /* 흰 배경 3.06:1 — 컨트롤 경계(1.4.11 충족) */
+  /* 컨트롤 경계는 admin 본문 배경(#f7f7f7)과 muted 표면(#f2f2f2) 위에서도 3:1을 넘어야 한다 —
+     흰 배경만 보고 고르면 실제 화면에서 미달한다(#949494는 흰 3.03이지만 #f7f7f7에서 2.83).
+     실측: white 4.54 / #f7f7f7 4.24 / #f2f2f2 4.06. */
+  --color-admin-control-line: #767676;
 
   /* 표면 3단 — KTM surface-page/subtle/muted 구조에 pinvi 값 매핑 */
   --color-admin-page: #ffffff; /* = canvas */
   --color-admin-subtle: #f7f7f7; /* = surface-soft */
   --color-admin-muted: #f2f2f2; /* = surface-strong */
 
-  /* 상태 tint — KTM은 팔레트 alpha(/10, /50)를 금지하고 불투명 *-tint 토큰을 쓴다. 그 규율을 따른다. */
-  --color-admin-success: #1b873f; /* = success-text */
+  /* 상태 tint — KTM은 팔레트 alpha(/10, /50)를 금지하고 불투명 *-tint 토큰을 쓴다. 그 규율을 따른다.
+     아래 대비 수치는 전부 실측이다. tint 위 잉크는 12px 본문이라 AA 4.5:1이 기준이다. */
+  --color-admin-success: #177536; /* tint 위 5.09 (#1b873f는 4.03으로 미달이라 한 단계 어둡게) */
   --color-admin-success-tint: #e6f4ea; /* = success-bg */
-  --color-admin-danger: #c13515; /* = error-text */
+  --color-admin-danger: #c13515; /* = error-text. tint 위 4.85 */
   --color-admin-danger-tint: #fdecea; /* = error-bg */
-  --color-admin-warning: #8a5300; /* 흰 배경 4.6:1 */
+  --color-admin-warning: #8a5300; /* tint 위 5.76 (흰 배경 6.33) */
   --color-admin-warning-tint: #fdf3e3;
-  --color-admin-info: #1c5fbd; /* 흰 배경 5.3:1 */
+  --color-admin-info: #1c5fbd; /* tint 위 5.35 (흰 배경 6.14) */
   --color-admin-info-tint: #e8f0fc;
+
+  /* 브랜드 tint는 danger tint와 **다른 값이어야 한다**. 처음에는 KTM `bg-brand-tint`를 기존
+     `error-bg`(#fdecea)로 매핑했는데, 그 값이 `--color-admin-danger-tint`와 완전히 같아서
+     secondary 버튼/배지(브랜드 강조)와 destructive 표면이 화면에서 구분되지 않았다.
+     pinvi Rausch 계열에서 별도로 뽑는다. 잉크는 `cta`(#e00b41)를 쓴다 — Rausch(#ff385c)는
+     tint 위 3.07로 AA 미달이다(DESIGN.md C5도 본문 크기 채운 CTA에 Rausch를 금지한다). */
+  --color-admin-brand-tint: #ffeef1;
+  --color-admin-brand-ink: #c8093a;
 }
 
 :root {
@@ -100,6 +112,16 @@ body {
     /* 한글 줄바꿈 — 어절 단위(keep-all). 긴 영문 토큰/URL만 overflow 시 강제 개행. */
     word-break: keep-all;
     overflow-wrap: break-word;
+  }
+
+  /* Tailwind v3 preflight에는 `button, [role="button"] { cursor: pointer }`가 있었지만 v4가
+     이를 제거했다(브라우저 기본을 따르는 쪽으로 바뀌었다). 그대로 두면 사용자 표면의 거의 모든
+     버튼 커서가 손가락이 아니라 화살표가 된다 — 이 저장소에서 `cursor-pointer`를 명시한 곳은
+     손에 꼽고 공용 `Button` 프리미티브에도 없다. v4 전환이 만든 회귀라 base에서 복원한다.
+     비활성 컨트롤은 제외해야 `disabled:cursor-not-allowed` 유틸이 이긴다. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
   }
 }
 

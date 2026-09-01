@@ -116,7 +116,7 @@ export function Dialog({
       <div
         {...dialogProps}
         data-testid={testId}
-        className={`flex max-h-[88dvh] w-full min-w-0 max-w-full flex-col overflow-hidden border border-hairline bg-canvas shadow-overlay outline-none ${
+        className={`flex max-h-[88dvh] w-full min-w-0 max-w-full flex-col overflow-hidden border border-hairline bg-canvas shadow-overlay outline-hidden ${
           sheet ? 'rounded-t-xl sm:rounded-md' : 'rounded-md'
         } ${SIZE[size]}`}
       >

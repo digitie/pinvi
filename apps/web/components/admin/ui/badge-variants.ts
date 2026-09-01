@@ -4,7 +4,7 @@
  * 원문에서 바꾼 부분 (색 토큰 치환표만 적용, `h-6`/`px-2`/`text-2xs`/`rounded-control`/전환 속성
  * 열거는 원문 그대로):
  * - `bg-brand`→`bg-primary`, `bg-brand-hover`→`bg-primary-active`, `text-brand`→`text-primary`,
- *   `text-brand-foreground`→`text-on-primary`, `bg-brand-tint`→`bg-error-bg`
+ *   `text-brand-foreground`→`text-on-primary`, `bg-brand-tint`→`bg-admin-brand-tint`
  * - `border-brand`→`border-primary` (치환표에 없는 항목. `bg-brand`/`text-brand`가 primary로
  *   가므로 같은 역할축을 그대로 확장했다.)
  * - `bg-card`→`bg-canvas`, `border-border`→`border-admin-line`,
@@ -35,8 +35,11 @@ export const badgeVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-primary text-on-primary [a]:hover:bg-primary-active',
-        secondary: 'bg-error-bg text-primary [a]:hover:border-primary',
+        // 채운 배지는 `cta`(white 4.89). Rausch(`primary`)는 3.52로 AA 미달이다(DESIGN.md C5).
+        default: 'bg-cta text-on-primary [a]:hover:bg-cta-hover',
+        // 브랜드 tint 전용 토큰 + 그 위에서 AA를 넘는 잉크(5.27). `error-bg`+`primary` 조합은
+        // danger 배지와 픽셀이 겹치고 대비도 3.07로 미달이었다.
+        secondary: 'bg-admin-brand-tint text-admin-brand-ink [a]:hover:border-primary',
         destructive: 'bg-admin-danger-tint text-admin-danger [a]:hover:border-admin-danger',
         outline:
           'border-admin-line bg-canvas text-body [a]:hover:bg-admin-subtle [a]:hover:text-ink',

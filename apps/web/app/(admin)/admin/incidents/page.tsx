@@ -60,9 +60,9 @@ type SeverityFilter = Exclude<(typeof SEVERITY_OPTIONS)[number]['value'], ''>;
 type OverdueFilter = Exclude<(typeof OVERDUE_OPTIONS)[number]['value'], ''>;
 
 const inputClass =
-  'h-10 rounded-sm border border-hairline px-3 text-sm outline-none focus:border-primary';
+  'h-10 rounded-sm border border-hairline px-3 text-sm outline-hidden focus:border-primary';
 const textareaClass =
-  'min-h-24 rounded-sm border border-hairline px-3 py-2 text-sm outline-none focus:border-primary';
+  'min-h-24 rounded-sm border border-hairline px-3 py-2 text-sm outline-hidden focus:border-primary';
 
 function formatDateTime(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString('ko-KR') : '-';

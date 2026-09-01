@@ -143,6 +143,10 @@ export interface DataTableProps<TData> {
   rowIdentity?: (row: TData) => string | undefined;
   /** 가상화(대용량/무한 목록만). 켜면 display:grid 레이아웃 + 명시 role=table 계열 ARIA. */
   virtualized?: boolean;
+  /** 헤더 고정. pinvi 추가(T-356) — 가상화 여부와 **독립**이어야 한다. 호출부는 높이를 제한할
+   *  때 이 값을 켜고, 실제 윈도잉(`virtualized`)은 행수가 임계를 넘을 때만 켠다. 하나로 묶으면
+   *  임계 미만 행수에서 sticky가 조용히 사라진다(`e2e/admin-table.e2e.ts`가 3행으로 잠근다). */
+  stickyHeader?: boolean;
   estimateRowSize?: number;
   overscan?: number;
   /** 스크롤 컨테이너 className — Table 자신의 컨테이너(hairline 1층)에 합쳐진다: 높이 제한
@@ -399,6 +403,7 @@ export function DataTable<TData>({
   rowTestId,
   rowIdentity,
   virtualized = false,
+  stickyHeader = false,
   estimateRowSize = 40,
   overscan = 12,
   containerClassName,
@@ -424,6 +429,9 @@ export function DataTable<TData>({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: manualSorting ? undefined : getSortedRowModel(),
     manualSorting,
+    // 서버 정렬은 단일 축만 지원하고 admin 표의 기존 동작도 단일 정렬이었다. TanStack 기본은
+    // shift+헤더클릭 다중 정렬이라 명시적으로 끈다(이식 전 AdminTable도 false였다).
+    enableMultiSort: false,
     enableRowSelection,
     state: {
       sorting: sorting ?? internalSorting,
@@ -446,7 +454,7 @@ export function DataTable<TData>({
   const bulkBar =
     enableRowSelection && renderBulkActions && selectedRows.length > 0 ? (
       <div
-        className="flex flex-wrap items-center gap-2 rounded-control bg-error-bg px-3 py-2 text-xs text-ink"
+        className="flex flex-wrap items-center gap-2 rounded-control bg-admin-brand-tint px-3 py-2 text-xs text-ink"
         data-slot="bulk-actions"
         role="region"
         aria-label="선택 항목 작업"
@@ -485,7 +493,7 @@ export function DataTable<TData>({
           containerStyle={containerStyle}
           containerTestId={containerTestId}
         >
-          <TableHeader>
+          <TableHeader sticky={stickyHeader}>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
@@ -530,7 +538,10 @@ export function DataTable<TData>({
                     data-row-identity={rowIdentity?.(row.original)}
                     data-testid={rowTestId?.(row.original)}
                     data-state={active ? 'selected' : undefined}
-                    aria-selected={onRowClick ? active : undefined}
+                    // `role="table"`의 row에는 `aria-selected`가 유효하지 않다(grid/treegrid 전용).
+                    // 선택 강조는 `data-state="selected"`가 담당하고, 클릭 가능 여부는
+                    // tabIndex/onKeyDown이 이미 노출한다.
+                    data-clickable={onRowClick ? '' : undefined}
                     className={onRowClick ? CLICKABLE_ROW_CLASS : undefined}
                     tabIndex={onRowClick ? 0 : undefined}
                     onClick={onRowClick ? () => onRowClick(row.original) : undefined}
@@ -782,13 +793,13 @@ function VirtualizedTable<TData>({
                   data-testid={rowTestId?.(row.original)}
                   data-index={virtualRow.index}
                   aria-rowindex={virtualRow.index + headerRowCount + 1}
-                  aria-selected={onRowClick ? active : undefined}
                   ref={(node) => virtualizer.measureElement(node)}
                   data-state={active ? 'selected' : undefined}
                   role="row"
                   className={cn(
-                    'absolute flex w-full border-b border-admin-line transition-[color,background-color,border-color] hover:bg-admin-subtle data-[state=selected]:bg-error-bg',
-                    onRowClick && CLICKABLE_ROW_CLASS,
+                    // hover 배경은 클릭 가능한 행에만(비가상 경로 TableRow와 같은 규칙).
+                    'absolute flex w-full border-b border-admin-line transition-[color,background-color,border-color] data-[state=selected]:bg-admin-brand-tint',
+                    onRowClick && `${CLICKABLE_ROW_CLASS} hover:bg-admin-subtle`,
                   )}
                   style={{ transform: `translateY(${virtualRow.start}px)` }}
                   tabIndex={onRowClick ? 0 : undefined}

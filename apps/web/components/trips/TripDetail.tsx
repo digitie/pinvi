@@ -1638,7 +1638,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 <section
                   ref={dayListRef}
                   tabIndex={-1}
-                  className="space-y-3 outline-none"
+                  className="space-y-3 outline-hidden"
                   aria-label="일자 목록"
                   data-testid="trip-layer-list"
                 >

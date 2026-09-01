@@ -163,7 +163,7 @@ export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreH
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             disabled={restoring || Boolean(run)}
-            className="min-h-20 w-full rounded-sm border border-hairline px-3 py-2 text-sm font-normal text-ink outline-none focus:border-primary disabled:opacity-60"
+            className="min-h-20 w-full rounded-sm border border-hairline px-3 py-2 text-sm font-normal text-ink outline-hidden focus:border-primary disabled:opacity-60"
             maxLength={500}
             placeholder="복구 사유를 입력하세요."
             data-testid="restore-reason"
@@ -190,7 +190,7 @@ export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreH
             value={confirmation}
             onChange={(event) => setConfirmation(event.target.value)}
             disabled={restoring || Boolean(run)}
-            className="h-10 w-full rounded-sm border border-hairline px-3 font-mono text-sm font-normal text-ink outline-none focus:border-primary disabled:opacity-60"
+            className="h-10 w-full rounded-sm border border-hairline px-3 font-mono text-sm font-normal text-ink outline-hidden focus:border-primary disabled:opacity-60"
             aria-invalid={confirmation.length > 0 && !confirmationMatches ? 'true' : undefined}
             data-testid="restore-confirmation"
           />

@@ -58,6 +58,13 @@ export interface AdminTableProps<R> {
   /** 전체 정렬 토글(개별은 컬럼 `sortable`). */
   enableSorting?: boolean;
   initialSort?: { columnKey: string; desc: boolean };
+  /** 표의 접근성 이름. 주지 않으면 한 화면에 표가 둘 이상일 때 스크린리더가 구분하지 못한다. */
+  ariaLabel?: string;
+  /** 조회 실패 표면 — 주면 표 대신 what/why/다시 시도 Alert를 렌더한다. */
+  isError?: boolean;
+  error?: { message?: string } | null;
+  /** `다시 시도` 버튼에 연결할 refetch. Promise를 돌려주면 resolve까지 버튼이 잠긴다. */
+  onRetry?: () => void | Promise<unknown>;
 }
 
 /**
@@ -85,6 +92,10 @@ export function AdminTable<R>({
   mobileCard,
   enableSorting = true,
   initialSort,
+  ariaLabel,
+  isError,
+  error,
+  onRetry,
 }: AdminTableProps<R>) {
   const tableColumns = useMemo<ColumnDef<R, unknown>[]>(
     () =>
@@ -114,15 +125,38 @@ export function AdminTable<R>({
     [columns, enableSorting],
   );
 
-  // 가상화는 실제로 임계 행수를 넘길 때만 켠다(1행 e2e mock 안정성 — 기존 동작 유지).
+  // `virtualized` prop과 **실제 윈도잉**을 분리한다.
+  //
+  // pinvi에서 이 prop의 의미는 "높이를 제한하고 세로로 스크롤한다"이고, DOM 윈도잉은 행이
+  // 임계(기본 30)를 넘을 때만 켠다(1행 e2e mock 안정성). 둘을 한 플래그로 묶으면 3행짜리
+  // 로그 표에서 sticky 헤더와 maxHeight가 함께 사라진다 —
+  // `e2e/admin-table.e2e.ts`가 정확히 3행으로 sticky를 잠그고 있고, 로그 필터를 좁게 걸면
+  // 표 내부 스크롤이 페이지 전체 스크롤로 튄다.
   const useVirtual = virtualized && rows.length > virtualizeThreshold;
   const showMobileCards = mobileCard != null && !loading && rows.length > 0;
+
+  // 모바일 카드는 표와 같은 순서로 보여야 한다. 표는 DataTable 내부에서 정렬되므로 여기서는
+  // `initialSort`만 재현한다(모바일에서는 헤더가 `hidden`이라 정렬을 바꿀 수단이 없어 초기
+  // 정렬이 곧 최종 순서다). 정렬 지정이 없으면 원본 순서를 그대로 쓴다.
+  const mobileRows = useMemo(() => {
+    if (!showMobileCards || !initialSort) return rows;
+    const column = columns.find((col) => col.key === initialSort.columnKey);
+    if (!column?.sortValue) return rows;
+    const sortValue = column.sortValue;
+    const direction = initialSort.desc ? -1 : 1;
+    return [...rows].sort((a, b) => {
+      const left = sortValue(a);
+      const right = sortValue(b);
+      if (left === right) return 0;
+      return (left < right ? -1 : 1) * direction;
+    });
+  }, [showMobileCards, initialSort, rows, columns]);
 
   return (
     <>
       {showMobileCards && (
         <div className="space-y-2 md:hidden" data-testid="admin-mobile-cards">
-          {rows.map((row) => (
+          {mobileRows.map((row) => (
             <div key={rowKey(row)}>{mobileCard(row)}</div>
           ))}
         </div>
@@ -134,13 +168,21 @@ export function AdminTable<R>({
           data={rows}
           getRowId={(row) => rowKey(row)}
           isLoading={loading}
+          isError={isError}
+          error={error}
+          onRetry={onRetry}
+          ariaLabel={ariaLabel}
           emptyMessage={empty}
           manualSorting={false}
           sorting={undefined}
           onRowClick={onRowClick}
           rowTestId={rowTestId}
           virtualized={useVirtual}
-          containerStyle={useVirtual ? { maxHeight } : undefined}
+          stickyHeader={virtualized}
+          // Table 컨테이너 기본은 `overflow-x-auto`다. 높이를 제한하면 세로도 스크롤해야 하므로
+          // 명시적으로 양축을 연다(구버전도 가상화일 때 `overflow-auto`였다).
+          containerClassName={virtualized ? 'overflow-auto' : undefined}
+          containerStyle={virtualized ? { maxHeight } : undefined}
           // `admin-table-scroll`은 e2e가 **직접 스크롤**하는 요소다(`el.scrollTo`). 바깥 래퍼가
           // 아니라 DataTable 내부의 진짜 스크롤 컨테이너가 이 testid를 가져야 한다.
           containerTestId="admin-table-scroll"

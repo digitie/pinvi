@@ -24,7 +24,7 @@ import { cn } from '@/lib/admin/cn';
  *    `text-text-secondary`→`text-body`, `border-border`→`border-admin-line`,
  *    `bg-surface-page`→`bg-admin-page`, `text-destructive`→`text-admin-danger`,
  *    `text-brand`→`text-primary`, `border-brand`→`border-primary`,
- *    `bg-brand-tint`→`bg-error-bg`). 간격/radius/타이포/`data-*` variant 문자열은 원문 그대로다.
+ *    `bg-brand-tint`→`bg-admin-brand-tint`). 간격/radius/타이포/`data-*` variant 문자열은 원문 그대로다.
  * 2. 컨테이너 쿼리 제거: `FieldGroup`의 `@container/field-group`과 `orientation="responsive"`의
  *    `@md/field-group:*` variant를 뺐다(이식 지침 — pinvi에 컨테이너 쿼리 전제를 두지 않는다).
  *    그 결과 `responsive`는 `vertical`과 동일하게 동작한다. prop은 호출부 호환을 위해 남긴다.
@@ -135,7 +135,7 @@ function FieldLabel({
         'group/field-label peer/field-label flex w-fit items-center gap-1.5',
         fieldLabelClassName,
         // 라벨이 Field(체크박스 카드 등)를 감싸는 경우: hairline 1층 + 선택 시 brand-tint(불투명)
-        'has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-[>[data-slot=field]]:rounded-control has-[>[data-slot=field]]:border has-[>[data-slot=field]]:border-admin-line has-[>[data-slot=field]]:text-ink *:data-[slot=field]:p-2.5 has-[>[data-slot=field]]:has-data-[state=checked]:border-primary has-[>[data-slot=field]]:has-data-[state=checked]:bg-error-bg',
+        'has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-[>[data-slot=field]]:rounded-control has-[>[data-slot=field]]:border has-[>[data-slot=field]]:border-admin-line has-[>[data-slot=field]]:text-ink *:data-[slot=field]:p-2.5 has-[>[data-slot=field]]:has-data-[state=checked]:border-primary has-[>[data-slot=field]]:has-data-[state=checked]:bg-admin-brand-tint',
         className,
       )}
       {...props}

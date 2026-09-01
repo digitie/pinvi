@@ -1127,7 +1127,7 @@ export default function AdminTripDetailPage() {
                       <input
                         value={targetTripQuery}
                         onChange={(e) => setTargetTripQuery(e.target.value)}
-                        className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                        className="min-w-0 flex-1 bg-transparent text-sm outline-hidden"
                         placeholder="여행 제목 또는 owner 검색"
                         data-testid="admin-operation-target-search"
                       />

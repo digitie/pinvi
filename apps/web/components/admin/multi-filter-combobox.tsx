@@ -182,7 +182,7 @@ function MultiFilterCombobox({
           aria-expanded={popupOpen}
           aria-label={ariaLabel}
           /* 포커스 링은 컨테이너가 대신 그린다(`has-[input:focus-visible]`). 안쪽 입력의 링은
-             `outline-none`(= outline-style 파괴)이 아니라 폭 0으로 끈다 — twMerge 가 같은 그룹의
+             `outline-hidden`(= outline-style 파괴)이 아니라 폭 0으로 끈다 — twMerge 가 같은 그룹의
              `focus-visible:outline-2`를 이 값으로 대체하므로 CSS 순서에 기대지 않는다(P1-1). */
           className="min-w-28 flex-1 border-0 bg-transparent px-1 shadow-none data-[size=sm]:px-1 hover:bg-transparent focus-visible:border-transparent focus-visible:bg-transparent focus-visible:outline-0"
           placeholder={selected.length === 0 ? placeholder : '추가'}

@@ -327,7 +327,7 @@ export default function AdminFilesPage() {
         </div>
       ) : (
         // 삭제 성공 후 행 버튼이 사라지면 포커스가 이 컨테이너로 돌아온다.
-        <div ref={fileSectionRef} tabIndex={-1} className="outline-none">
+        <div ref={fileSectionRef} tabIndex={-1} className="outline-hidden">
           <AdminTable
             columns={columns}
             rows={items}

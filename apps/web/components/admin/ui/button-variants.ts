@@ -3,7 +3,7 @@
  *
  * 원문에서 바꾼 부분 (색 토큰 치환표만 적용, 레이아웃/간격/radius/높이/타이포/모션은 원문 그대로):
  * - `bg-brand`→`bg-primary`, `bg-brand-hover`→`bg-primary-active`, `text-brand`→`text-primary`,
- *   `text-brand-foreground`→`text-on-primary`, `bg-brand-tint`→`bg-error-bg`(연한 브랜드 tint 대용)
+ *   `text-brand-foreground`→`text-on-primary`, `bg-brand-tint`→`bg-admin-brand-tint`
  * - `border-brand`/`border-brand-hover`→`border-primary`/`border-primary-active`
  *   (치환표에 없는 항목. `bg-brand`/`text-brand`가 primary로 가므로 같은 역할축을 그대로 확장했다.)
  * - `bg-card`→`bg-canvas`, `text-text-primary`→`text-ink`, `text-text-secondary`→`text-body`
@@ -60,12 +60,19 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
+        // 채운 CTA는 `cta`(#e00b41, white 4.89)를 쓴다. Rausch(`primary` #ff385c)는 white 라벨
+        // 대비가 3.52라 AA 미달이고, DESIGN.md C5가 본문 크기 채운 CTA에 이를 금지한다
+        // (Rausch는 아이콘·워드마크·포커스 링·≥24px 텍스트 전용). rest보다 hover가 더 잘 읽히는
+        // 대비 역전도 함께 사라진다.
         default:
-          'bg-primary text-on-primary hover:bg-primary-active active:bg-primary-active disabled:bg-admin-muted disabled:text-ink aria-disabled:bg-admin-muted aria-disabled:text-ink',
+          'bg-cta text-on-primary hover:bg-cta-hover active:bg-cta-hover disabled:bg-admin-muted disabled:text-ink aria-disabled:bg-admin-muted aria-disabled:text-ink',
         outline:
           'border-admin-control-line bg-canvas text-ink hover:bg-admin-subtle active:bg-admin-muted aria-expanded:bg-admin-subtle aria-expanded:text-ink disabled:border-admin-control-line disabled:bg-canvas aria-disabled:border-admin-control-line aria-disabled:bg-canvas',
+        // 브랜드 tint는 `admin-brand-tint`(전용 토큰)다. 처음에는 `error-bg`로 매핑했는데 그 값이
+        // danger tint와 완전히 같아 secondary와 destructive가 구분되지 않았다. 잉크도
+        // `admin-brand-ink`(#c8093a, tint 위 5.27)로 — `primary`는 tint 위 3.07이라 AA 미달이다.
         secondary:
-          'border-primary bg-error-bg text-primary hover:border-primary-active hover:text-primary-active active:border-primary-active active:text-primary-active aria-expanded:border-primary aria-expanded:bg-error-bg aria-expanded:text-primary disabled:border-primary disabled:text-primary aria-disabled:border-primary aria-disabled:text-primary',
+          'border-primary bg-admin-brand-tint text-admin-brand-ink hover:border-primary-active hover:text-primary-active active:border-primary-active active:text-primary-active aria-expanded:border-primary aria-expanded:bg-admin-brand-tint aria-expanded:text-admin-brand-ink disabled:border-primary disabled:text-admin-brand-ink aria-disabled:border-primary aria-disabled:text-admin-brand-ink',
         ghost:
           'text-body hover:bg-admin-subtle hover:text-ink active:bg-admin-muted aria-expanded:bg-admin-subtle aria-expanded:text-ink disabled:bg-transparent disabled:text-body aria-disabled:bg-transparent aria-disabled:text-body',
         destructive:

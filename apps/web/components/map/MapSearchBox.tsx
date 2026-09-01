@@ -114,7 +114,7 @@ export function MapSearchBox({ onSelect, className }: MapSearchBoxProps) {
           onChange={(event) => setQuery(event.target.value)}
           placeholder="장소·주소 검색"
           aria-label="장소·주소 검색"
-          className="min-h-11 w-full bg-transparent text-sm text-ink outline-none"
+          className="min-h-11 w-full bg-transparent text-sm text-ink outline-hidden"
         />
         {loading && (
           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted" aria-hidden="true" />

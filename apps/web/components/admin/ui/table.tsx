@@ -6,7 +6,7 @@
 //   2) 색 토큰만 pinvi 팔레트 이름으로 치환. 사용자 요구가 "색상톤 제외 일치"라 색 외에는
 //      건드리지 않는다:
 //        bg-card -> bg-canvas / bg-surface-subtle -> bg-admin-subtle
-//        border-border -> border-admin-line / bg-brand-tint -> bg-error-bg
+//        border-border -> border-admin-line / bg-brand-tint -> bg-admin-brand-tint
 //        text-text-primary -> text-ink / text-text-secondary -> text-body
 //   3) `[&_tr]:border-b`에 `[&_tr]:border-admin-line`을 덧붙였다. KTM globals.css는
 //      `@layer base { * { @apply border-border } }`로 모든 요소의 기본 테두리 색을 hairline으로
@@ -67,11 +67,31 @@ function Table({
   );
 }
 
-function TableHeader({ className, ...props }: React.ComponentProps<'thead'>) {
+function TableHeader({
+  className,
+  sticky,
+  ...props
+}: React.ComponentProps<'thead'> & {
+  /**
+   * 스크롤 컨테이너에 높이 제한이 걸린 표에서 헤더를 고정한다. pinvi 추가(T-356).
+   *
+   * KTM은 sticky를 가상화(grid) 경로에만 둔다. pinvi는 `virtualized` prop의 의미가 달라서
+   * 분리가 필요했다 — pinvi에서 그 prop은 "높이를 제한하고 세로로 스크롤한다"는 뜻이고,
+   * 실제 윈도잉은 행수가 임계(기본 30)를 넘을 때만 켠다. 둘을 한 플래그로 묶으면 3행짜리
+   * 로그 표에서 sticky와 maxHeight가 함께 사라진다.
+   *
+   * z-10은 pinvi named z-index 최하단(nav 30)보다 낮아 모달을 가로채지 않는다.
+   */
+  sticky?: boolean;
+}) {
   return (
     <thead
       data-slot="table-header"
-      className={cn('bg-admin-subtle [&_tr]:border-b [&_tr]:border-admin-line', className)}
+      className={cn(
+        'bg-admin-subtle [&_tr]:border-b [&_tr]:border-admin-line',
+        sticky && 'sticky top-0 z-10',
+        className,
+      )}
       {...props}
     />
   );
@@ -107,7 +127,11 @@ function TableRow({ className, ...props }: React.ComponentProps<'tr'>) {
       className={cn(
         // 전환 속성은 열거한다: v4 `transition-colors`는 `outline-color`까지 포함해
         // 클릭 가능한 행(`tabIndex=0`)의 포커스 링이 100ms 페이드인 된다(design.md §Focus).
-        'border-b border-admin-line transition-[color,background-color,border-color] hover:bg-admin-subtle has-aria-expanded:bg-admin-subtle data-[state=selected]:bg-error-bg',
+        // hover 배경은 **실제로 클릭 가능한 행에만** 준다. KTM은 모든 행에 무조건 주지만
+        // pinvi admin 표 대부분은 행 클릭이 없어서, 그대로 두면 클릭 불가 행이 클릭 가능처럼
+        // 보인다(이식 전 AdminTable도 `onRowClick`이 있을 때만 hover를 줬다).
+        // `data-clickable`은 DataTable이 `onRowClick` 유무로 붙인다.
+        'border-b border-admin-line transition-[color,background-color,border-color] data-[clickable]:hover:bg-admin-subtle has-aria-expanded:bg-admin-subtle data-[state=selected]:bg-admin-brand-tint',
         className,
       )}
       {...props}
@@ -115,12 +139,17 @@ function TableRow({ className, ...props }: React.ComponentProps<'tr'>) {
   );
 }
 
-function TableHead({ className, ...props }: React.ComponentProps<'th'>) {
+function TableHead({ className, scope = 'col', ...props }: React.ComponentProps<'th'>) {
   return (
     <th
       data-slot="table-head"
+      // `scope="col"`은 이식 전 AdminTable이 갖고 있던 것이다. 없으면 스크린리더가 셀과 헤더의
+      // 연결을 추론에 의존한다 — 복합 헤더가 없는 단순 표에서도 명시가 원칙이다.
+      scope={scope}
       className={cn(
-        'h-9 px-3 text-left align-middle text-2xs leading-none font-semibold whitespace-nowrap text-body [&:has([role=checkbox])]:pr-0',
+        // 선택 열은 `[data-slot=checkbox]` 기준으로 잡는다. 원문의 `[role=checkbox]`는 base-ui
+        // 버튼 구현을 노린 것이라, 네이티브 input으로 대체한 pinvi checkbox에는 걸리지 않는다.
+        'h-9 px-3 text-left align-middle text-2xs leading-none font-semibold whitespace-nowrap text-body [&:has([data-slot=checkbox])]:pr-0',
         className,
       )}
       {...props}
@@ -133,7 +162,8 @@ function TableCell({ className, ...props }: React.ComponentProps<'td'>) {
     <td
       data-slot="table-cell"
       className={cn(
-        'px-3 py-2 align-middle whitespace-nowrap text-ink [&:has([role=checkbox])]:pr-0',
+        // 위 TableHead와 같은 이유로 `[data-slot=checkbox]` 기준(네이티브 input 대체분).
+        'px-3 py-2 align-middle whitespace-nowrap text-ink [&:has([data-slot=checkbox])]:pr-0',
         className,
       )}
       {...props}

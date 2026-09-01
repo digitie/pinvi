@@ -166,7 +166,7 @@ export default function MyFilesPage() {
           <ul
             ref={fileListRef}
             tabIndex={-1}
-            className="divide-y divide-hairline outline-none"
+            className="divide-y divide-hairline outline-hidden"
             data-testid="my-file-list"
           >
             {items.map((item) => (

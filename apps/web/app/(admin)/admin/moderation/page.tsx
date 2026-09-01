@@ -46,7 +46,7 @@ type StatusFilter = Exclude<(typeof STATUS_OPTIONS)[number]['value'], ''>;
 type TargetFilter = Exclude<(typeof TARGET_OPTIONS)[number]['value'], ''>;
 
 const textareaClass =
-  'min-h-24 rounded-sm border border-hairline px-3 py-2 text-sm outline-none focus:border-primary';
+  'min-h-24 rounded-sm border border-hairline px-3 py-2 text-sm outline-hidden focus:border-primary';
 
 function formatDateTime(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString('ko-KR') : '-';
@@ -296,7 +296,7 @@ export default function AdminModerationPage() {
                 <select
                   value={selectedAction}
                   onChange={(event) => setSelectedAction(event.target.value as ModerationAction)}
-                  className="h-10 rounded-sm border border-hairline px-3 text-sm outline-none focus:border-primary"
+                  className="h-10 rounded-sm border border-hairline px-3 text-sm outline-hidden focus:border-primary"
                 >
                   {availableActions(selectedReport).map((action) => (
                     <option key={action} value={action}>
