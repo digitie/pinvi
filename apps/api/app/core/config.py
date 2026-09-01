@@ -1711,7 +1711,12 @@ class Settings(BaseSettings):
             is None
             or not isinstance(payload["live_ui_playwright_runner_image_ref"], str)
             or re.fullmatch(
-                r"mcr\.microsoft\.com/playwright:[A-Za-z0-9][A-Za-z0-9._-]*@sha256:[0-9a-f]{64}",
+                # 세 선언(여기 + scripts/m05_activation_{receipt,attestation}.py)이
+                # 문자 단위로 같아야 한다 — tag는 optional이다. Manager가 고정한
+                # runner 핀은 digest-only(`playwright@sha256:...`)라 tag를 강제하면
+                # 같은 값이 한쪽에서만 거부된다.
+                r"mcr\.microsoft\.com/playwright(?::[A-Za-z0-9][A-Za-z0-9._-]*)?"
+                r"@sha256:[0-9a-f]{64}",
                 payload["live_ui_playwright_runner_image_ref"],
             )
             is None
