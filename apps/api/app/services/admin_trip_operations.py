@@ -800,6 +800,9 @@ def _clone_poi(
         day_index=day_index,
         sort_order=sort_order,
         feature_id=poi.feature_id,
+        # 두 축은 한 참조의 양면이다 — 복사에서 한쪽만 옮기면 원본은 정상인데
+        # 사본만 짝이 깨져 reconciliation이 그 행에서 막힌다.
+        feature_uuid=poi.feature_uuid,
         feature_link_broken_at=poi.feature_link_broken_at,
         feature_snapshot=poi.feature_snapshot,
         custom_marker_color=poi.custom_marker_color,

@@ -97,82 +97,76 @@ def _feature_canonical(reference: FeatureReference | None) -> dict[str, object] 
     }
 
 
-def _pair_matches(
+def _row_is_reconcilable(
     feature_id: str | None,
     feature_uuid: uuid.UUID | None,
     reference: FeatureReference,
 ) -> bool:
-    return feature_id == reference.feature_id and feature_uuid == reference.feature_uuid
+    """행이 old reference를 가리키고 있고 안전하게 rebind할 수 있는가.
+
+    exact 짝은 물론, **legacy 축만 맞고 canonical UUID shadow가 아직 비어
+    있는 행**도 포함한다. `feature_uuid`는 검증된 alias map 이관이 채우기
+    전까지 정상적으로 NULL이고(models/poi.py), 일상적인 POI 추가 경로는
+    `feature_id`만 채운다. 그 NULL을 "값이 어긋났다"로 읽으면 평범한 행 하나가
+    reconciliation 피드를 영구히 막는다 — blocked event는 ack되지 않고 Map은
+    같은 event를 계속 재공급하므로 head-of-line stall이 된다.
+
+    rebind는 두 컬럼을 함께 쓰므로, 이런 행을 처리하면 짝이 **복구**된다.
+    """
+
+    if feature_id != reference.feature_id:
+        return False
+    return feature_uuid is None or feature_uuid == reference.feature_uuid
 
 
-def _trip_pair_condition(reference: FeatureReference) -> ColumnElement[bool]:
-    return or_(
-        and_(
-            TripDayPoi.feature_id == reference.feature_id,
-            TripDayPoi.feature_uuid == reference.feature_uuid,
-        ),
-        _trip_partial_pair_condition(reference),
+def _reconcilable_condition(
+    id_column: ColumnElement[str | None],
+    uuid_column: ColumnElement[uuid.UUID | None],
+    reference: FeatureReference,
+) -> ColumnElement[bool]:
+    """`_row_is_reconcilable`의 SQL 대응."""
+
+    return and_(
+        id_column == reference.feature_id,
+        or_(uuid_column.is_(None), uuid_column == reference.feature_uuid),
     )
 
 
-def _curated_pair_condition(reference: FeatureReference) -> ColumnElement[bool]:
-    return or_(
-        and_(
-            CuratedPlanPoi.feature_id == reference.feature_id,
-            CuratedPlanPoi.feature_uuid == reference.feature_uuid,
-        ),
-        _curated_partial_pair_condition(reference),
-    )
+def _conflicting_condition(
+    id_column: ColumnElement[str | None],
+    uuid_column: ColumnElement[uuid.UUID | None],
+    reference: FeatureReference,
+) -> ColumnElement[bool]:
+    """두 축이 **실제로 어긋난** 행 — 여기서만 block해야 한다.
 
-
-def _suggestion_pair_condition(reference: FeatureReference) -> ColumnElement[bool]:
-    return or_(
-        and_(
-            FeatureSuggestion.target_feature_id == reference.feature_id,
-            FeatureSuggestion.target_feature_uuid == reference.feature_uuid,
-        ),
-        _suggestion_partial_pair_condition(reference),
-    )
-
-
-def _trip_partial_pair_condition(reference: FeatureReference) -> ColumnElement[bool]:
-    """old tuple 중 하나만 같은 행을 SQL NULL 삼값 논리 없이 잡는다."""
+    UUID만 맞고 `feature_id`가 다르거나 NULL인 방향은 rebind 대상으로 넣지
+    않는다. `feature_id`는 client가 준 자유 문자열이라 UUID만 보고 써 넣으면
+    값을 합성하게 된다 — 그건 cutover가 명시적으로 거부하는 자기-정본화다.
+    """
 
     return or_(
         and_(
-            TripDayPoi.feature_id == reference.feature_id,
-            TripDayPoi.feature_uuid.is_distinct_from(reference.feature_uuid),
+            id_column == reference.feature_id,
+            uuid_column.is_not(None),
+            uuid_column != reference.feature_uuid,
         ),
         and_(
-            TripDayPoi.feature_uuid == reference.feature_uuid,
-            TripDayPoi.feature_id.is_distinct_from(reference.feature_id),
-        ),
-    )
-
-
-def _curated_partial_pair_condition(reference: FeatureReference) -> ColumnElement[bool]:
-    return or_(
-        and_(
-            CuratedPlanPoi.feature_id == reference.feature_id,
-            CuratedPlanPoi.feature_uuid.is_distinct_from(reference.feature_uuid),
-        ),
-        and_(
-            CuratedPlanPoi.feature_uuid == reference.feature_uuid,
-            CuratedPlanPoi.feature_id.is_distinct_from(reference.feature_id),
+            uuid_column == reference.feature_uuid,
+            id_column.is_distinct_from(reference.feature_id),
         ),
     )
 
 
-def _suggestion_partial_pair_condition(reference: FeatureReference) -> ColumnElement[bool]:
+def _pair_condition(
+    id_column: ColumnElement[str | None],
+    uuid_column: ColumnElement[uuid.UUID | None],
+    reference: FeatureReference,
+) -> ColumnElement[bool]:
+    """rebind 대상과 conflict를 **한 번에** 잠근다(각 행을 두 번 읽지 않는다)."""
+
     return or_(
-        and_(
-            FeatureSuggestion.target_feature_id == reference.feature_id,
-            FeatureSuggestion.target_feature_uuid.is_distinct_from(reference.feature_uuid),
-        ),
-        and_(
-            FeatureSuggestion.target_feature_uuid == reference.feature_uuid,
-            FeatureSuggestion.target_feature_id.is_distinct_from(reference.feature_id),
-        ),
+        _reconcilable_condition(id_column, uuid_column, reference),
+        _conflicting_condition(id_column, uuid_column, reference),
     )
 
 
@@ -260,7 +254,9 @@ async def _load_trip_rows(
                 select(TripDayPoi)
                 .where(
                     TripDayPoi.deleted_at.is_(None),
-                    _trip_pair_condition(reference),
+                    _pair_condition(
+                        TripDayPoi.feature_id, TripDayPoi.feature_uuid, reference
+                    ),
                 )
                 .order_by(TripDayPoi.attachment_id)
                 .with_for_update()
@@ -268,8 +264,8 @@ async def _load_trip_rows(
         ).all()
     )
     return (
-        [row for row in rows if _pair_matches(row.feature_id, row.feature_uuid, reference)],
-        [row for row in rows if not _pair_matches(row.feature_id, row.feature_uuid, reference)],
+        [row for row in rows if _row_is_reconcilable(row.feature_id, row.feature_uuid, reference)],
+        [row for row in rows if not _row_is_reconcilable(row.feature_id, row.feature_uuid, reference)],
     )
 
 
@@ -284,7 +280,9 @@ async def _load_curated_rows(
                 select(CuratedPlanPoi)
                 .where(
                     CuratedPlanPoi.deleted_at.is_(None),
-                    _curated_pair_condition(reference),
+                    _pair_condition(
+                        CuratedPlanPoi.feature_id, CuratedPlanPoi.feature_uuid, reference
+                    ),
                 )
                 .order_by(CuratedPlanPoi.curated_poi_id)
                 .with_for_update()
@@ -292,8 +290,8 @@ async def _load_curated_rows(
         ).all()
     )
     return (
-        [row for row in rows if _pair_matches(row.feature_id, row.feature_uuid, reference)],
-        [row for row in rows if not _pair_matches(row.feature_id, row.feature_uuid, reference)],
+        [row for row in rows if _row_is_reconcilable(row.feature_id, row.feature_uuid, reference)],
+        [row for row in rows if not _row_is_reconcilable(row.feature_id, row.feature_uuid, reference)],
     )
 
 
@@ -308,7 +306,11 @@ async def _load_suggestion_rows(
                 select(FeatureSuggestion)
                 .where(
                     FeatureSuggestion.suggestion_type.in_(("correction", "closure")),
-                    _suggestion_pair_condition(reference),
+                    _pair_condition(
+                        FeatureSuggestion.target_feature_id,
+                        FeatureSuggestion.target_feature_uuid,
+                        reference,
+                    ),
                 )
                 .order_by(FeatureSuggestion.request_id)
                 .with_for_update()
@@ -319,12 +321,12 @@ async def _load_suggestion_rows(
         [
             row
             for row in rows
-            if _pair_matches(row.target_feature_id, row.target_feature_uuid, reference)
+            if _row_is_reconcilable(row.target_feature_id, row.target_feature_uuid, reference)
         ],
         [
             row
             for row in rows
-            if not _pair_matches(row.target_feature_id, row.target_feature_uuid, reference)
+            if not _row_is_reconcilable(row.target_feature_id, row.target_feature_uuid, reference)
         ],
     )
 

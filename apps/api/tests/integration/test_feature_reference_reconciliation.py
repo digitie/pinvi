@@ -422,6 +422,84 @@ async def test_worker_calls_ack_only_after_final_receipt_commit(
 
 
 @pytest.mark.asyncio
+async def test_null_uuid_shadow_is_filled_not_blocked(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """UUID shadow가 아직 비어 있는 평범한 행은 block이 아니라 rebind 대상이다.
+
+    `feature_uuid`는 검증된 alias map 이관이 채우기 전까지 정상적으로 NULL이고
+    (models/poi.py), 일상적인 POI 추가 경로는 `feature_id`만 채운다. 그 NULL을
+    "값이 어긋났다"로 읽으면 평범한 행 하나가 피드를 영구히 세운다 — blocked
+    event는 ack되지 않고 Map은 같은 event를 계속 재공급한다.
+
+    rebind는 두 컬럼을 함께 쓰므로 이 행을 처리하면 짝이 복구된다."""
+
+    old_uuid = uuid.uuid4()
+    replacement_uuid = uuid.uuid4()
+    shadowless_id: uuid.UUID
+    async with session_factory() as db:
+        user = User(
+            email=f"m05-{uuid.uuid4().hex}@pinvi.test",
+            password_hash=None,
+            nickname="M05",
+            status="active",
+            email_verified_at=datetime.now(UTC),
+        )
+        db.add(user)
+        await db.flush()
+        trip = Trip(owner_user_id=user.user_id, title="M05 shadowless")
+        db.add(trip)
+        await db.flush()
+        db.add(TripDay(trip_id=trip.trip_id, day_index=1))
+        await db.flush()
+        shadowless = TripDayPoi(
+            trip_id=trip.trip_id,
+            day_index=1,
+            sort_order="a0",
+            feature_id="feature-old",
+            feature_uuid=None,
+            feature_snapshot={},
+            added_by_user_id=user.user_id,
+        )
+        db.add(shadowless)
+        await db.flush()
+        shadowless_id = shadowless.attachment_id
+        applied = await apply_feature_reference_reconciliation_event(
+            db,
+            _lease(
+                event_id=uuid.uuid4(),
+                event_sequence=2,
+                event_sha256="d" * 64,
+                old_feature_id="feature-old",
+                old_feature_uuid=old_uuid,
+                replacement_feature_id="feature-new",
+                replacement_feature_uuid=replacement_uuid,
+            ),
+        )
+        assert isinstance(applied, ReconciliationApplied)
+        await db.commit()
+
+    async with session_factory() as db:
+        row = await db.get(TripDayPoi, shadowless_id)
+        assert row is not None
+        # 짝이 복구됐다 — 두 축 모두 replacement를 가리킨다.
+        assert row.feature_id == "feature-new"
+        assert row.feature_uuid == replacement_uuid
+
+        impacts = list(
+            (
+                await db.scalars(
+                    select(KtmFeatureReferenceReconciliationImpact).where(
+                        KtmFeatureReferenceReconciliationImpact.target_id == shadowless_id
+                    )
+                )
+            ).all()
+        )
+        assert len(impacts) == 1
+        assert impacts[0].outcome == "rebind"
+
+
+@pytest.mark.asyncio
 async def test_partial_pair_blocks_without_mutation_and_evidence_is_append_only(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
