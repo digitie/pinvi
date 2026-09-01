@@ -51,6 +51,7 @@ function PopoverContent({
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Positioner align={align} sideOffset={sideOffset} className="z-50">
         <PopoverPrimitive.Popup
+          data-pv-surface="admin"
           data-slot="popover-content"
           data-motion="crossfade"
           className={cn(

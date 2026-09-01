@@ -54,6 +54,7 @@ function TooltipContent({
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Positioner sideOffset={sideOffset} className="z-50">
         <TooltipPrimitive.Popup
+          data-pv-surface="admin"
           data-slot="tooltip-content"
           data-motion="crossfade"
           className={cn(

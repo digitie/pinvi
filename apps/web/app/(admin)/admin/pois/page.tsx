@@ -217,9 +217,14 @@ function AdminPoiCreateDialog({ onClose }: { onClose: () => void }) {
 
   return (
     // `open`은 상수 true다 — 이 컴포넌트 자체가 호출부에서 조건부 마운트되므로 열림/닫힘
-    // 상태의 소유자는 그대로 `showCreateDialog`다(동작 변경 없음).
+    // 상태의 **소유자**는 그대로 `showCreateDialog`다. 다만 base-ui는 소유자와 별개로
+    // Escape·바깥클릭이라는 **닫기 경로**를 추가하므로, 폼 입력을 지키려면 `hasUnsavedInput`으로
+    // 그 둘을 꺼야 한다(아래).
     <Dialog
+      // 미저장 폼 입력 보호 — Escape/바깥클릭 닫기를 막는다(전환 전 수제 모달에는
+      // 그 경로가 없었다). 명시적 닫기(×/취소/제출)는 그대로 동작한다.
       open
+      hasUnsavedInput
       onOpenChange={(open) => {
         if (!open) onClose();
       }}

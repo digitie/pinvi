@@ -10,7 +10,7 @@ import type {
   AdminFeatureWeatherMetric,
 } from '@pinvi/schemas';
 import { ArrowLeft, CloudSun, Database, History, RefreshCw } from 'lucide-react';
-import { AdminPage, FilterBar, Section } from '@/components/admin/AdminPage';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 
 const apiClient = new ApiClient({
@@ -73,7 +73,11 @@ function TabNav({ featureId, activeTab }: { featureId: string; activeTab: Featur
     { tab: 'weather-values', icon: CloudSun },
   ];
   return (
-    <FilterBar>
+    // 이것은 **필터 툴바가 아니라 탭 스트립**이다. 예전에는 `AdminPage.FilterBar`를 재사용했지만,
+    // 그 컴포넌트가 KTM `FilterBar`(프레임 없음 + `items-end`)로 위임되면서 이 스트립까지
+    // 테두리·배경을 잃고 정렬이 바뀌었다. FilterBar 소비처 중 유일한 비필터 용도라 여기서만
+    // 원래 프레임을 직접 갖는다.
+    <div className="flex flex-wrap items-center gap-2 rounded-sm border border-hairline bg-surface-soft p-3">
       <Link
         href="/admin/features"
         className="inline-flex items-center gap-1 rounded-sm border border-hairline px-3 py-1 text-sm"
@@ -99,7 +103,7 @@ function TabNav({ featureId, activeTab }: { featureId: string; activeTab: Featur
         </Link>
       ))}
       <span className="min-w-0 break-all font-mono text-xs text-muted">{featureId}</span>
-    </FilterBar>
+    </div>
   );
 }
 

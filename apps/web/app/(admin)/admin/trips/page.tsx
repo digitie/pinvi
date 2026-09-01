@@ -199,9 +199,13 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
 
   return (
     // `open`은 상수 true — 이 컴포넌트를 조건부로 마운트하는 호출부(`showCreateDialog`)가
-    // 계속 열림/닫힘 상태를 소유한다(동작 변경 없음).
+    // 계속 열림/닫힘 상태를 **소유**한다. 다만 base-ui는 소유자와 별개로 Escape·바깥클릭이라는
+    // **닫기 경로**를 추가하므로 폼 입력 보호는 `hasUnsavedInput`이 담당한다(아래).
     <Dialog
+      // 미저장 폼 입력 보호 — Escape/바깥클릭 닫기를 막는다(전환 전 수제 모달에는
+      // 그 경로가 없었다). 명시적 닫기(×/취소/제출)는 그대로 동작한다.
       open
+      hasUnsavedInput
       onOpenChange={(open) => {
         if (!open) onClose();
       }}

@@ -539,7 +539,10 @@ export default function AdminIntegrityPage() {
           selectedIssue를 잃고 깨지는 문제도 함께 없앤다). */}
       {selectedIssue && (
         <Dialog
+          // 미저장 폼 입력 보호 — Escape/바깥클릭 닫기를 막는다(전환 전 수제 모달에는
+          // 그 경로가 없었다). 명시적 닫기(×/취소/제출)는 그대로 동작한다.
           open
+          hasUnsavedInput
           onOpenChange={(open) => {
             // Escape·scrim 클릭·닫기 버튼 전부 이 한 경로로 모인다(기존 closeIssueActionDialog 그대로).
             if (!open) closeIssueActionDialog();

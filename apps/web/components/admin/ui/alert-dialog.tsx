@@ -50,9 +50,15 @@ function AlertDialogContent({ className, children, ...props }: AlertDialogPrimit
       />
       <AlertDialogPrimitive.Viewport
         data-slot="alert-dialog-viewport"
-        className="fixed inset-0 z-50 flex items-center justify-center overflow-auto p-4"
+        // `items-start`(dialog.tsx와 동일). KTM 원문은 `items-center`인데, flex 컨테이너에서
+        // `align-items: center`로 넘친 아이템은 block-start가 컨테이너 위로 밀려 `scrollTop >= 0`
+        // 제약상 **스크롤로 위쪽에 도달할 수 없다**. pinvi는 되돌릴 수 없는 확인 다이얼로그에
+        // 가변 길이 사유(최대 500자, `whitespace-pre-wrap`)를 그려서, 개행이 많으면 "무엇을
+        // 확정하는지 못 읽은 채 확정 가능"해진다(푸터 버튼은 아래라 도달 가능).
+        className="fixed inset-0 z-50 flex items-start justify-center overflow-auto p-4"
       >
         <AlertDialogPrimitive.Popup
+          data-pv-surface="admin"
           data-slot="alert-dialog-content"
           data-motion="crossfade"
           className={cn(

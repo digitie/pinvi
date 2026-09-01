@@ -150,7 +150,10 @@ export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreH
 
   return (
     <Dialog
+      // 미저장 폼 입력 보호 — Escape/바깥클릭 닫기를 막는다(전환 전 수제 모달에는
+      // 그 경로가 없었다). 명시적 닫기(×/취소/제출)는 그대로 동작한다.
       open
+      hasUnsavedInput
       onOpenChange={(open) => {
         // restoring 중에는 closeIfIdle이 삼킨다 — Escape/scrim으로 파괴적 요청을 잃지 않는다.
         if (!open) closeIfIdle();

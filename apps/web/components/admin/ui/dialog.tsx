@@ -41,8 +41,38 @@ const OVERLAY_BACKDROP_CLASS =
 const OVERLAY_POPUP_MOTION_CLASS =
   'transition-[opacity,scale] duration-normal ease-out data-[starting-style]:scale-98 data-[starting-style]:opacity-0 data-[ending-style]:scale-98 data-[ending-style]:opacity-0 data-[ending-style]:duration-fast data-[ending-style]:ease-in';
 
-function Dialog({ ...props }: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />;
+export type DialogProps = DialogPrimitive.Root.Props & {
+  /**
+   * 미저장 입력이 있는 폼 다이얼로그면 `true`. pinvi 추가(T-356).
+   *
+   * base-ui 기본값은 Escape와 바깥 클릭 양쪽으로 닫힌다(`disablePointerDismissal` 기본 false,
+   * escapeKey 활성). 그런데 admin의 생성/운영작업 모달은 전환 전 손수 만든 `role="dialog"`
+   * div였고 **`onClick`/`onKeyDown`이 아예 없어 그 경로가 존재하지 않았다** — 닫는 길은 헤더 ×와
+   * 푸터 취소뿐이었다. base-ui로 옮기면서 그 두 경로가 자동으로 생겼고, 조건부 마운트라
+   * 닫히는 즉시 내부 `useState`가 전부 소실된다(POI 생성 모달은 21개).
+   *
+   * 즉 여백을 한 번 잘못 클릭하거나 IME 조합 취소로 Escape를 누르면 확인 없이 입력이 날아간다.
+   * 이 prop을 켜면 그 **실수 경로 둘만** 막고, 명시적 닫기(×/취소/제출)는 그대로 둔다.
+   * base-ui가 새로 제공한 focus trap·`aria-modal`·스크롤 락은 유지된다 — 되돌리는 게 아니라
+   * dismissal 정책만 좁히는 것이다.
+   */
+  hasUnsavedInput?: boolean;
+};
+
+function Dialog({ hasUnsavedInput = false, onOpenChange, ...props }: DialogProps) {
+  return (
+    <DialogPrimitive.Root
+      data-slot="dialog"
+      // 바깥 클릭(Viewport 여백 포함)으로 닫히지 않게 한다.
+      disablePointerDismissal={hasUnsavedInput || props.disablePointerDismissal}
+      onOpenChange={(open, details) => {
+        // Escape는 `disablePointerDismissal`이 막지 않으므로 reason으로 따로 거른다.
+        if (hasUnsavedInput && !open && details?.reason === 'escape-key') return;
+        onOpenChange?.(open, details);
+      }}
+      {...props}
+    />
+  );
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
@@ -87,6 +117,7 @@ function DialogContent({
         {...viewportProps}
       >
         <DialogPrimitive.Popup
+          data-pv-surface="admin"
           data-slot="dialog-content"
           data-motion="crossfade"
           className={cn(

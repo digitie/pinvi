@@ -72,7 +72,10 @@ const buttonVariants = cva(
         // danger tint와 완전히 같아 secondary와 destructive가 구분되지 않았다. 잉크도
         // `admin-brand-ink`(#c8093a, tint 위 5.27)로 — `primary`는 tint 위 3.07이라 AA 미달이다.
         secondary:
-          'border-primary bg-admin-brand-tint text-admin-brand-ink hover:border-primary-active hover:text-primary-active active:border-primary-active active:text-primary-active aria-expanded:border-primary aria-expanded:bg-admin-brand-tint aria-expanded:text-admin-brand-ink disabled:border-primary disabled:text-admin-brand-ink aria-disabled:border-primary aria-disabled:text-admin-brand-ink',
+          // hover/active 잉크는 `admin-brand-ink`(#c8093a)를 유지한다. `primary-active`(#e00b41)로
+          // 바꾸면 tint(#ffeef1) 위 대비가 4.37로 **rest(5.27)보다 떨어져** AA를 밑돈다 —
+          // hover에서 배경은 그대로라 잉크만 밝아지는 역전이 생긴다.
+          'border-primary bg-admin-brand-tint text-admin-brand-ink hover:border-primary-active active:border-primary-active aria-expanded:border-primary aria-expanded:bg-admin-brand-tint aria-expanded:text-admin-brand-ink disabled:border-primary disabled:text-admin-brand-ink aria-disabled:border-primary aria-disabled:text-admin-brand-ink',
         ghost:
           'text-body hover:bg-admin-subtle hover:text-ink active:bg-admin-muted aria-expanded:bg-admin-subtle aria-expanded:text-ink disabled:bg-transparent disabled:text-body aria-disabled:bg-transparent aria-disabled:text-body',
         destructive:

@@ -483,7 +483,10 @@ export default function AdminPoiDetailPage() {
       {showOperationDialog && (
         // `open`은 상수 true — 열림/닫힘 상태는 계속 `showOperationDialog`가 소유한다.
         <Dialog
+          // 미저장 폼 입력 보호 — Escape/바깥클릭 닫기를 막는다(전환 전 수제 모달에는
+          // 그 경로가 없었다). 명시적 닫기(×/취소/제출)는 그대로 동작한다.
           open
+          hasUnsavedInput
           onOpenChange={(open) => {
             if (!open) setShowOperationDialog(false);
           }}
