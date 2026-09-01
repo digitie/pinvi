@@ -14,6 +14,61 @@
    갈라지지 않게 한다 — `@theme`로 옮겨 적으면 두 곳이 조용히 드리프트한다. */
 @config '../tailwind.config.ts';
 
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Admin 전용 토큰 (T-356) — kor-travel-map admin 규약 정렬
+ *
+ * DESIGN.md는 `(admin)`·`components/admin`을 사용자 표면 Hallmark 잠금에서 제외한다(밀도 규칙이
+ * 다르다). 그 예외 위에 kor-travel-map admin의 **구조** 규약만 들여온다. 색은 pinvi 팔레트를
+ * 그대로 쓰고 KTM의 oklch 팔레트는 이식하지 않는다 — 사용자 요구가 "색상톤 제외"다.
+ *
+ * 여기 이름은 전부 신규라 기존 유틸과 충돌하지 않는다(rounded-sm/md/lg/xl, duration-fast/normal,
+ * ease-pinvi 등은 preset이 계속 소유한다). `@theme`는 `@config`의 preset과 병합된다.
+ * ───────────────────────────────────────────────────────────────────────────── */
+@theme {
+  /* 구조: radius 2종 · control 높이 2종 · inspector rail 1종 (KTM 값 그대로, 테마 불변) */
+  --radius-control: 0.375rem; /* 6px — button/input/badge */
+  --radius-panel: 0.5rem; /* 8px — card/dialog/popover */
+  --spacing-control: 2.25rem; /* 36px — h-control */
+  --spacing-control-sm: 1.875rem; /* 30px — h-control-sm */
+  --spacing-rail: 22rem; /* w-rail — 우측 inspector */
+  --container-rail: 22rem;
+
+  /* 타이포: KTM 7단 스케일. 기존 text-xs/sm/base 등은 preset이 소유하므로 admin 전용 이름만 추가. */
+  --text-2xs: 0.75rem; /* 12px */
+  --text-2xs--line-height: 1.5;
+  --text-md: 1.0625rem; /* 17px */
+  --text-md--line-height: 1.4;
+
+  /* motion: KTM 2단 duration + 2종 easing. preset의 fast(100ms)와 값이 같아 이름만 추가한다. */
+  --ease-admin-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-admin-in: cubic-bezier(0.7, 0, 0.84, 0);
+
+  /* ── 색 역할 구조만 KTM에서 가져오고 값은 pinvi 팔레트 ──
+   * KTM의 핵심 규율 하나를 그대로 들여온다: hairline을 2종으로 분리한다.
+   *   border-admin        = 장식 구분선(대비 요건 없음)
+   *   border-admin-control = 컨트롤 경계(WCAG 1.4.11의 3:1 대상)
+   * pinvi는 지금 `hairline` 하나로 뭉뚱그려 쓰는데, 그 값(#dddddd)은 흰 배경 대비 1.6:1이라
+   * 컨트롤 경계로 쓰면 1.4.11 위반이다. 컨트롤용으로는 기존 `border-strong`(#c1c1c1, 2.7:1)보다
+   * 더 진한 값이 필요해 admin 전용으로 3:1을 넘는 값을 새로 둔다. */
+  --color-admin-line: #dddddd; /* = hairline. 장식 구분선 */
+  --color-admin-control-line: #949494; /* 흰 배경 3.06:1 — 컨트롤 경계(1.4.11 충족) */
+
+  /* 표면 3단 — KTM surface-page/subtle/muted 구조에 pinvi 값 매핑 */
+  --color-admin-page: #ffffff; /* = canvas */
+  --color-admin-subtle: #f7f7f7; /* = surface-soft */
+  --color-admin-muted: #f2f2f2; /* = surface-strong */
+
+  /* 상태 tint — KTM은 팔레트 alpha(/10, /50)를 금지하고 불투명 *-tint 토큰을 쓴다. 그 규율을 따른다. */
+  --color-admin-success: #1b873f; /* = success-text */
+  --color-admin-success-tint: #e6f4ea; /* = success-bg */
+  --color-admin-danger: #c13515; /* = error-text */
+  --color-admin-danger-tint: #fdecea; /* = error-bg */
+  --color-admin-warning: #8a5300; /* 흰 배경 4.6:1 */
+  --color-admin-warning-tint: #fdf3e3;
+  --color-admin-info: #1c5fbd; /* 흰 배경 5.3:1 */
+  --color-admin-info-tint: #e8f0fc;
+}
+
 :root {
   /* 앱 셸 모바일 하단 탭바 높이 — main 하단 패딩 예산의 단일 출처. */
   --app-tabbar-h: 56px;
