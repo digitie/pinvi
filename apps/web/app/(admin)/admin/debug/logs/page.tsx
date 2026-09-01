@@ -13,8 +13,13 @@ import {
 } from '@pinvi/api-client';
 import type { AdminUpstreamApiCallLogRecord, AdminUpstreamSystemLogRecord } from '@pinvi/schemas';
 import { Pause, Play, Radio, RefreshCw, Search } from 'lucide-react';
-import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
+import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -29,7 +34,6 @@ const LEVEL_OPTIONS = [
   { value: 'critical', label: 'critical' },
 ] as const;
 
-const inputClass = 'rounded-sm border border-hairline px-2 py-1 text-sm';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function formatDateTime(value: string | null | undefined) {
@@ -265,27 +269,28 @@ export default function AdminDebugLogsPage() {
       <FilterBar>
         <form
           onSubmit={onTimelineSearch}
-          className="flex min-w-0 flex-1 flex-wrap items-center gap-2"
+          className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-2"
         >
-          <label htmlFor="admin-debug-request-id" className="text-xs text-muted">
-            Request ID
-          </label>
-          <input
-            id="admin-debug-request-id"
-            value={timelineRequestId}
-            onChange={(event) => setTimelineRequestId(event.target.value)}
-            className={`${inputClass} w-[24rem] max-w-full font-mono`}
-            placeholder="00000000-0000-0000-0000-000000000000"
-            data-testid="admin-debug-request-id"
-          />
-          <button
-            type="submit"
-            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-3 py-1 text-sm"
-            data-testid="admin-debug-request-submit"
+          <FilterField
+            className="w-96 max-w-full"
+            htmlFor="admin-debug-request-id"
+            label="Request ID"
           >
-            <Search className="h-3.5 w-3.5" aria-hidden="true" />
-            Timeline
-          </button>
+            <Input
+              id="admin-debug-request-id"
+              value={timelineRequestId}
+              onChange={(event) => setTimelineRequestId(event.target.value)}
+              className="font-mono"
+              placeholder="00000000-0000-0000-0000-000000000000"
+              data-testid="admin-debug-request-id"
+            />
+          </FilterField>
+          <FilterActions>
+            <Button type="submit" variant="outline" data-testid="admin-debug-request-submit">
+              <Search aria-hidden="true" />
+              Timeline
+            </Button>
+          </FilterActions>
         </form>
       </FilterBar>
 
@@ -329,66 +334,85 @@ export default function AdminDebugLogsPage() {
       </FilterBar>
 
       <FilterBar>
-        <form onSubmit={onSearch} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <select
-            value={level}
-            onChange={(event) => setLevel(event.target.value as typeof level)}
-            className={inputClass}
-            data-testid="admin-debug-level"
-          >
-            {LEVEL_OPTIONS.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-          <input
-            value={source}
-            onChange={(event) => setSource(event.target.value)}
-            className={`${inputClass} w-36`}
-            placeholder="source"
-            data-testid="admin-debug-source"
-          />
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2 top-2 h-4 w-4 text-muted" />
-            <input
-              value={queryInput}
-              onChange={(event) => setQueryInput(event.target.value)}
-              className={`${inputClass} w-48 pl-7`}
-              placeholder="message"
-              data-testid="admin-debug-q"
+        {/* system log 3종은 전환 전과 같이 한 form 안에 둔다(레벨/소스는 즉시, 메시지 검색만
+            제출로 적용). API call log 3종은 form 밖이라 입력 즉시 적용된다. */}
+        <form
+          onSubmit={onSearch}
+          className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-2"
+        >
+          <FilterField htmlFor="admin-debug-level" label="레벨">
+            <NativeSelect
+              id="admin-debug-level"
+              value={level}
+              onChange={(event) => setLevel(event.target.value as typeof level)}
+              data-testid="admin-debug-level"
+            >
+              {LEVEL_OPTIONS.map((item) => (
+                <NativeSelectOption key={item.value} value={item.value}>
+                  {item.label}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </FilterField>
+          <FilterField className="w-36" htmlFor="admin-debug-source" label="소스">
+            <Input
+              id="admin-debug-source"
+              value={source}
+              onChange={(event) => setSource(event.target.value)}
+              placeholder="source"
+              data-testid="admin-debug-source"
             />
-          </div>
-          <button
-            type="submit"
-            className="rounded-sm border border-hairline px-3 py-1 text-sm"
-            data-testid="admin-debug-submit"
-          >
-            조회
-          </button>
+          </FilterField>
+          <FilterField className="w-48" htmlFor="admin-debug-q" label="메시지 검색">
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
+                aria-hidden="true"
+              />
+              <Input
+                id="admin-debug-q"
+                value={queryInput}
+                onChange={(event) => setQueryInput(event.target.value)}
+                className="pl-9"
+                placeholder="message"
+                data-testid="admin-debug-q"
+              />
+            </div>
+          </FilterField>
+          <FilterActions>
+            <Button type="submit" variant="outline" data-testid="admin-debug-submit">
+              조회
+            </Button>
+          </FilterActions>
         </form>
-        <input
-          value={method}
-          onChange={(event) => setMethod(event.target.value)}
-          className={`${inputClass} w-20`}
-          placeholder="method"
-          data-testid="admin-debug-method"
-        />
-        <input
-          value={minStatus}
-          onChange={(event) => setMinStatus(event.target.value)}
-          className={`${inputClass} w-24`}
-          inputMode="numeric"
-          placeholder="min"
-          data-testid="admin-debug-min-status"
-        />
-        <input
-          value={path}
-          onChange={(event) => setPath(event.target.value)}
-          className={`${inputClass} w-40`}
-          placeholder="path"
-          data-testid="admin-debug-path"
-        />
+        <FilterField className="w-20" htmlFor="admin-debug-method" label="메서드">
+          <Input
+            id="admin-debug-method"
+            value={method}
+            onChange={(event) => setMethod(event.target.value)}
+            placeholder="method"
+            data-testid="admin-debug-method"
+          />
+        </FilterField>
+        <FilterField className="w-24" htmlFor="admin-debug-min-status" label="최소 status">
+          <Input
+            id="admin-debug-min-status"
+            value={minStatus}
+            onChange={(event) => setMinStatus(event.target.value)}
+            inputMode="numeric"
+            placeholder="min"
+            data-testid="admin-debug-min-status"
+          />
+        </FilterField>
+        <FilterField className="w-40" htmlFor="admin-debug-path" label="경로">
+          <Input
+            id="admin-debug-path"
+            value={path}
+            onChange={(event) => setPath(event.target.value)}
+            placeholder="path"
+            data-testid="admin-debug-path"
+          />
+        </FilterField>
       </FilterBar>
 
       {systemError && <ErrorBox message={systemError} />}

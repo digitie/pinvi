@@ -10,8 +10,11 @@ import {
   type AdminContentReportListParams,
 } from '@pinvi/api-client';
 import type { AdminContentReportRecord, ContentModerationActionType } from '@pinvi/schemas';
-import { AdminPage, FilterBar, Section } from '@/components/admin/AdminPage';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import { apiClient } from '@/lib/api';
 
 const STATUS_OPTIONS = [
@@ -46,7 +49,7 @@ type StatusFilter = Exclude<(typeof STATUS_OPTIONS)[number]['value'], ''>;
 type TargetFilter = Exclude<(typeof TARGET_OPTIONS)[number]['value'], ''>;
 
 const textareaClass =
-  'min-h-24 rounded-sm border border-hairline px-3 py-2 text-sm outline-none focus:border-primary';
+  'min-h-24 rounded-sm border border-hairline px-3 py-2 text-sm outline-hidden focus:border-primary';
 
 function formatDateTime(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString('ko-KR') : '-';
@@ -249,33 +252,37 @@ export default function AdminModerationPage() {
       {error && <ErrorBox message={error} />}
 
       <FilterBar>
-        <select
-          value={statusFilter}
-          onChange={(event) =>
-            setStatusFilter(event.target.value as (typeof STATUS_OPTIONS)[number]['value'])
-          }
-          className="rounded-sm border border-hairline px-2 py-1 text-sm"
-          data-testid="admin-moderation-status-filter"
-        >
-          {STATUS_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={targetFilter}
-          onChange={(event) =>
-            setTargetFilter(event.target.value as (typeof TARGET_OPTIONS)[number]['value'])
-          }
-          className="rounded-sm border border-hairline px-2 py-1 text-sm"
-        >
-          {TARGET_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <FilterField htmlFor="admin-moderation-status" label="상태">
+          <NativeSelect
+            id="admin-moderation-status"
+            value={statusFilter}
+            onChange={(event) =>
+              setStatusFilter(event.target.value as (typeof STATUS_OPTIONS)[number]['value'])
+            }
+            data-testid="admin-moderation-status-filter"
+          >
+            {STATUS_OPTIONS.map((option) => (
+              <NativeSelectOption key={option.value} value={option.value}>
+                {option.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
+        <FilterField htmlFor="admin-moderation-target" label="대상">
+          <NativeSelect
+            id="admin-moderation-target"
+            value={targetFilter}
+            onChange={(event) =>
+              setTargetFilter(event.target.value as (typeof TARGET_OPTIONS)[number]['value'])
+            }
+          >
+            {TARGET_OPTIONS.map((option) => (
+              <NativeSelectOption key={option.value} value={option.value}>
+                {option.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
       </FilterBar>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -296,7 +303,7 @@ export default function AdminModerationPage() {
                 <select
                   value={selectedAction}
                   onChange={(event) => setSelectedAction(event.target.value as ModerationAction)}
-                  className="h-10 rounded-sm border border-hairline px-3 text-sm outline-none focus:border-primary"
+                  className="h-10 rounded-sm border border-hairline px-3 text-sm outline-hidden focus:border-primary"
                 >
                   {availableActions(selectedReport).map((action) => (
                     <option key={action} value={action}>

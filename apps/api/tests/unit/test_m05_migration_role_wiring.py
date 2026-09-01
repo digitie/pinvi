@@ -1,6 +1,7 @@
 """M05 receipt migration의 one-shot 역할 경계를 정적으로 고정한다."""
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -1039,8 +1040,18 @@ def test_live_ui_gates_pin_the_exact_checkout_revision() -> None:
     assert "PINVI_LIVE_UI_E2E" in runner
     assert "PINVI_M05_LIVE_E2E" in runner
     assert "sha256:[0-9a-f]{64}" in runner
-    assert "--tmpfs /work/apps/web/test-results:rw,noexec,nosuid,size=64m" in runner
-    assert "--tmpfs /work/apps/web/playwright-report:rw,noexec,nosuid,size=64m" in runner
+    # 이 가드가 지키려는 것은 "trace/report가 tmpfs에만 남고 named volume이나 clean checkout으로
+    # 새지 않는다"는 격리 속성이다. 크기 리터럴이 아니다 — 64m 고정은 실제로 e2e에서
+    # `ENOSPC: no space left on device`를 냈고(T-356), 그때 크기를 올리려면 이 테스트를 함께
+    # 고쳐야 했다. 그래서 마운트 종류·경로·플래그만 검사하고 크기는 값이 아니라 형식으로 본다.
+    for mount_path in ("test-results", "playwright-report"):
+        pattern = (
+            r'--tmpfs "?/work/apps/web/' + mount_path + r':rw,noexec,nosuid,size=\$\{tmpfs_size\}"?'
+        )
+        assert re.search(pattern, runner), f"{mount_path} must stay on a tmpfs mount"
+    # 크기는 env로 조절 가능하되 형식 검증을 거쳐야 한다(오타가 docker 인자로 새면 안 된다).
+    assert "PINVI_PLAYWRIGHT_RUNNER_TMPFS_SIZE" in runner
+    assert "must look like 512m or 2g" in runner
     assert '-v "${volume_prefix}-test-results:/work/apps/web/test-results"' not in runner
     assert '-v "${volume_prefix}-playwright-report:/work/apps/web/playwright-report"' not in runner
     live_config = (ROOT / "apps" / "web" / "playwright.live-mutating.config.ts").read_text(

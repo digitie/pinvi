@@ -21,6 +21,16 @@ import type {
 import { Copy, Download, ExternalLink, MapPin, MoveRight, Search, Trash2, X } from 'lucide-react';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { Button } from '@/components/admin/ui/button';
+// KTM `src/components/ui/dialog.tsx` 프리미티브로 수렴(T-356) — 이 페이지의 세 모달이 손으로
+// 들고 있던 scrim/`role="dialog"`/`aria-modal`을 base-ui가 대신한다.
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/admin/ui/dialog';
 import { FormTextArea } from '@/components/forms/FormTextArea';
 import {
   MakiMarker,
@@ -408,19 +418,17 @@ function AdminTripPoiDialog({ poi, onClose }: { poi: AdminTripPoiSummary; onClos
     snapshot: poi.feature_snapshot,
   });
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-scrim/50 p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="admin-trip-poi-dialog-title"
-        className="max-h-[90dvh] w-full max-w-5xl overflow-auto rounded-sm bg-canvas p-5 shadow-overlay"
-        data-testid="admin-trip-poi-dialog"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 id="admin-trip-poi-dialog-title" className="text-lg font-bold text-ink">
-              {title}
-            </h3>
+    // `open`은 상수 true — 열림/닫힘은 계속 호출부의 `selectedPoi`가 소유한다.
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="max-w-5xl" data-testid="admin-trip-poi-dialog">
+        <DialogHeader>
+          <div className="min-w-0">
+            <DialogTitle>{title}</DialogTitle>
             <p className="mt-1 font-mono text-xs text-muted">{poi.attachment_id}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -432,18 +440,21 @@ function AdminTripPoiDialog({ poi, onClose }: { poi: AdminTripPoiSummary; onClos
               <ExternalLink className="h-4 w-4" aria-hidden="true" />
               POI 상세
             </Link>
-            <button
+            {/* e2e는 `getByRole('button', { name: '닫기' })`를 strict mode로 잡는다 —
+                이 화면의 '닫기' 버튼은 이 하나뿐이어야 한다. */}
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-sm"
               onClick={onClose}
               aria-label="닫기"
-              className="flex h-10 w-10 items-center justify-center rounded-sm border border-hairline text-ink hover:bg-surface-soft"
             >
-              <X className="h-4 w-4" aria-hidden="true" />
-            </button>
+              <X aria-hidden="true" />
+            </Button>
           </div>
-        </div>
+        </DialogHeader>
 
-        <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="grid gap-5 p-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="space-y-4">
             <AdminPoiMapPreview poi={poi} />
             <pre
@@ -510,8 +521,8 @@ function AdminTripPoiDialog({ poi, onClose }: { poi: AdminTripPoiSummary; onClos
             </div>
           </dl>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1005,298 +1016,310 @@ export default function AdminTripDetailPage() {
       </Section>
 
       {showStatusDialog && (
-        <div className="fixed inset-0 flex items-center justify-center bg-scrim/50 p-4">
-          <div className="w-full max-w-md space-y-4 rounded-sm bg-canvas p-6">
-            <h3 className="text-lg font-bold text-ink">여행 상태 변경</h3>
-            <p className="text-xs text-muted">
-              {trip.status} → {statusDraft}
-            </p>
-            <FormTextArea
-              id="admin-trip-action-reason"
-              label="사유"
-              hint="감사 로그에 기록됩니다."
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={3}
-              data-testid="admin-trip-action-reason"
-            />
-            <div className="flex justify-end gap-2">
-              <button
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            // Escape·scrim도 취소 버튼과 같은 정리 경로를 탄다(사유 입력값을 남기지 않는다).
+            if (!open) {
+              setShowStatusDialog(false);
+              setReason('');
+            }
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>여행 상태 변경</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 p-4">
+              <p className="text-xs text-muted">
+                {trip.status} → {statusDraft}
+              </p>
+              <FormTextArea
+                id="admin-trip-action-reason"
+                label="사유"
+                hint="감사 로그에 기록됩니다."
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                data-testid="admin-trip-action-reason"
+              />
+            </div>
+            <DialogFooter>
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => {
                   setShowStatusDialog(false);
                   setReason('');
                 }}
-                className="rounded-sm border border-hairline px-3 py-2 text-sm"
               >
                 취소
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 disabled={acting || reason.trim().length < 1}
                 onClick={onStatusSave}
-                className="rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm text-on-primary disabled:opacity-50"
                 data-testid="admin-trip-action-confirm"
               >
                 {acting ? '처리 중…' : '확인'}
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
       {showOperationDialog && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-scrim/50 p-4">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="admin-trip-operation-title"
-            className="max-h-[90dvh] w-full max-w-3xl overflow-auto rounded-sm bg-canvas p-6 shadow-overlay"
-            data-testid="admin-trip-operation-dialog"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 id="admin-trip-operation-title" className="text-lg font-bold text-ink">
-                  {TRIP_OPERATION_LABELS[operationMode]}
-                </h3>
+        <Dialog
+          // 미저장 폼 입력 보호 — Escape/바깥클릭 닫기를 막는다(전환 전 수제 모달에는
+          // 그 경로가 없었다). 명시적 닫기(×/취소/제출)는 그대로 동작한다.
+          open
+          hasUnsavedInput
+          onOpenChange={(open) => {
+            if (!open) setShowOperationDialog(false);
+          }}
+        >
+          <DialogContent className="max-w-3xl" data-testid="admin-trip-operation-dialog">
+            <DialogHeader>
+              <div className="min-w-0">
+                <DialogTitle>{TRIP_OPERATION_LABELS[operationMode]}</DialogTitle>
                 <p className="mt-1 font-mono text-xs text-muted">{trip.trip_id}</p>
               </div>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon-sm"
                 onClick={() => setShowOperationDialog(false)}
                 aria-label="닫기"
-                className="flex h-10 w-10 items-center justify-center rounded-sm border border-hairline text-ink hover:bg-surface-soft"
               >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
+                <X aria-hidden="true" />
+              </Button>
+            </DialogHeader>
 
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <label className="space-y-1 text-sm">
-                <span className="block text-xs uppercase tracking-wide text-muted">작업</span>
-                <select
-                  value={operationMode}
-                  onChange={(e) => {
-                    setOperationMode(e.target.value as TripOperationMode);
-                    setOperationResult(null);
-                    setOperationError(null);
-                    setOperationImpact(null);
-                  }}
-                  className="w-full rounded-sm border border-hairline px-3 py-2"
-                  data-testid="admin-trip-operation-mode"
-                >
-                  {OPERATION_MODES.map((mode) => (
-                    <option key={mode.value} value={mode.value}>
-                      {mode.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              {operationMode.startsWith('day_') && (
+            <div className="p-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 <label className="space-y-1 text-sm">
-                  <span className="block text-xs uppercase tracking-wide text-muted">
-                    원본 날짜
-                  </span>
+                  <span className="block text-xs uppercase tracking-wide text-muted">작업</span>
                   <select
-                    value={operationDayIndex}
+                    value={operationMode}
                     onChange={(e) => {
-                      setOperationDayIndex(Number(e.target.value));
+                      setOperationMode(e.target.value as TripOperationMode);
                       setOperationResult(null);
+                      setOperationError(null);
                       setOperationImpact(null);
                     }}
                     className="w-full rounded-sm border border-hairline px-3 py-2"
-                    data-testid="admin-trip-operation-source-day"
+                    data-testid="admin-trip-operation-mode"
                   >
-                    {trip.days.map((day) => (
-                      <option key={day.day_index} value={day.day_index}>
-                        {formatDayLabel(day.day_index, day.date, day.title)}
+                    {OPERATION_MODES.map((mode) => (
+                      <option key={mode.value} value={mode.value}>
+                        {mode.label}
                       </option>
                     ))}
                   </select>
                 </label>
-              )}
 
-              {(operationMode === 'trip_copy' || operationNeedsTargetTrip) && (
-                <div className="space-y-2 md:col-span-2">
+                {operationMode.startsWith('day_') && (
                   <label className="space-y-1 text-sm">
                     <span className="block text-xs uppercase tracking-wide text-muted">
-                      대상 여행 검색
+                      원본 날짜
                     </span>
-                    <span className="flex items-center gap-2 rounded-sm border border-hairline px-3 py-2">
-                      <Search className="h-4 w-4 text-muted" aria-hidden="true" />
-                      <input
-                        value={targetTripQuery}
-                        onChange={(e) => setTargetTripQuery(e.target.value)}
-                        className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-                        placeholder="여행 제목 또는 owner 검색"
-                        data-testid="admin-operation-target-search"
-                      />
-                    </span>
+                    <select
+                      value={operationDayIndex}
+                      onChange={(e) => {
+                        setOperationDayIndex(Number(e.target.value));
+                        setOperationResult(null);
+                        setOperationImpact(null);
+                      }}
+                      className="w-full rounded-sm border border-hairline px-3 py-2"
+                      data-testid="admin-trip-operation-source-day"
+                    >
+                      {trip.days.map((day) => (
+                        <option key={day.day_index} value={day.day_index}>
+                          {formatDayLabel(day.day_index, day.date, day.title)}
+                        </option>
+                      ))}
+                    </select>
                   </label>
-                  <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_8rem]">
+                )}
+
+                {(operationMode === 'trip_copy' || operationNeedsTargetTrip) && (
+                  <div className="space-y-2 md:col-span-2">
                     <label className="space-y-1 text-sm">
                       <span className="block text-xs uppercase tracking-wide text-muted">
-                        대상 여행
+                        대상 여행 검색
                       </span>
-                      <select
-                        value={targetTripId}
-                        onChange={(e) => setTargetTripId(e.target.value)}
-                        className="w-full rounded-sm border border-hairline px-3 py-2"
-                        data-testid="admin-operation-target-trip"
-                      >
-                        {operationMode === 'trip_copy' && <option value="">새 여행 생성</option>}
-                        {targetTrips.map((item) => (
-                          <option key={item.trip_id} value={item.trip_id}>
-                            {item.title} · {item.owner_email_masked}
-                          </option>
-                        ))}
-                      </select>
+                      <span className="flex items-center gap-2 rounded-sm border border-hairline px-3 py-2">
+                        <Search className="h-4 w-4 text-muted" aria-hidden="true" />
+                        <input
+                          value={targetTripQuery}
+                          onChange={(e) => setTargetTripQuery(e.target.value)}
+                          className="min-w-0 flex-1 bg-transparent text-sm outline-hidden"
+                          placeholder="여행 제목 또는 owner 검색"
+                          data-testid="admin-operation-target-search"
+                        />
+                      </span>
                     </label>
-                    {operationNeedsTargetDay && (
+                    <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_8rem]">
                       <label className="space-y-1 text-sm">
                         <span className="block text-xs uppercase tracking-wide text-muted">
-                          대상 일차
+                          대상 여행
                         </span>
-                        <input
-                          type="number"
-                          min={1}
-                          value={targetDayIndex}
-                          onChange={(e) => setTargetDayIndex(Number(e.target.value))}
+                        <select
+                          value={targetTripId}
+                          onChange={(e) => setTargetTripId(e.target.value)}
                           className="w-full rounded-sm border border-hairline px-3 py-2"
-                          data-testid="admin-operation-target-day"
-                        />
+                          data-testid="admin-operation-target-trip"
+                        >
+                          {operationMode === 'trip_copy' && <option value="">새 여행 생성</option>}
+                          {targetTrips.map((item) => (
+                            <option key={item.trip_id} value={item.trip_id}>
+                              {item.title} · {item.owner_email_masked}
+                            </option>
+                          ))}
+                        </select>
                       </label>
-                    )}
+                      {operationNeedsTargetDay && (
+                        <label className="space-y-1 text-sm">
+                          <span className="block text-xs uppercase tracking-wide text-muted">
+                            대상 일차
+                          </span>
+                          <input
+                            type="number"
+                            min={1}
+                            value={targetDayIndex}
+                            onChange={(e) => setTargetDayIndex(Number(e.target.value))}
+                            className="w-full rounded-sm border border-hairline px-3 py-2"
+                            data-testid="admin-operation-target-day"
+                          />
+                        </label>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {operationMode === 'trip_move' && (
-                <label className="space-y-1 text-sm md:col-span-2">
-                  <span className="block text-xs uppercase tracking-wide text-muted">
-                    새 owner_user_id
-                  </span>
-                  <input
-                    value={targetOwnerUserId}
-                    onChange={(e) => setTargetOwnerUserId(e.target.value)}
-                    className="w-full rounded-sm border border-hairline px-3 py-2 font-mono text-sm"
-                    placeholder="UUID"
-                    data-testid="admin-operation-owner-id"
+                {operationMode === 'trip_move' && (
+                  <label className="space-y-1 text-sm md:col-span-2">
+                    <span className="block text-xs uppercase tracking-wide text-muted">
+                      새 owner_user_id
+                    </span>
+                    <input
+                      value={targetOwnerUserId}
+                      onChange={(e) => setTargetOwnerUserId(e.target.value)}
+                      className="w-full rounded-sm border border-hairline px-3 py-2 font-mono text-sm"
+                      placeholder="UUID"
+                      data-testid="admin-operation-owner-id"
+                    />
+                  </label>
+                )}
+
+                {operationMode === 'trip_delete' && (
+                  <label className="space-y-1 text-sm">
+                    <span className="block text-xs uppercase tracking-wide text-muted">
+                      하위 항목
+                    </span>
+                    <select
+                      value={tripDeleteChildPolicy}
+                      onChange={(e) =>
+                        setTripDeleteChildPolicy(e.target.value as 'keep' | 'delete')
+                      }
+                      className="w-full rounded-sm border border-hairline px-3 py-2"
+                      data-testid="admin-operation-child-policy"
+                    >
+                      <option value="keep">유지</option>
+                      <option value="delete">함께 삭제</option>
+                    </select>
+                  </label>
+                )}
+
+                {operationMode === 'day_move' && (
+                  <label className="space-y-1 text-sm">
+                    <span className="block text-xs uppercase tracking-wide text-muted">
+                      하위 POI/파일/댓글
+                    </span>
+                    <select
+                      value={childMovePolicy}
+                      onChange={(e) => setChildMovePolicy(e.target.value as 'move' | 'delete')}
+                      className="w-full rounded-sm border border-hairline px-3 py-2"
+                      data-testid="admin-operation-move-policy"
+                    >
+                      <option value="move">대상으로 이동</option>
+                      <option value="delete">함께 삭제</option>
+                    </select>
+                  </label>
+                )}
+
+                {operationMode === 'day_copy' && (
+                  <div className="grid gap-2 text-sm">
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={includePois}
+                        onChange={(e) => setIncludePois(e.target.checked)}
+                        data-testid="admin-operation-include-pois"
+                      />
+                      POI 포함
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={includeAttachments}
+                        onChange={(e) => setIncludeAttachments(e.target.checked)}
+                        data-testid="admin-operation-include-attachments"
+                      />
+                      파일 포함
+                    </label>
+                  </div>
+                )}
+
+                <div className="md:col-span-2">
+                  <FormTextArea
+                    id="admin-trip-operation-reason"
+                    label="사유"
+                    hint="감사 로그에 기록됩니다."
+                    value={operationReason}
+                    onChange={(e) => setOperationReason(e.target.value)}
+                    rows={3}
+                    data-testid="admin-trip-operation-reason"
                   />
-                </label>
-              )}
-
-              {operationMode === 'trip_delete' && (
-                <label className="space-y-1 text-sm">
-                  <span className="block text-xs uppercase tracking-wide text-muted">
-                    하위 항목
-                  </span>
-                  <select
-                    value={tripDeleteChildPolicy}
-                    onChange={(e) => setTripDeleteChildPolicy(e.target.value as 'keep' | 'delete')}
-                    className="w-full rounded-sm border border-hairline px-3 py-2"
-                    data-testid="admin-operation-child-policy"
-                  >
-                    <option value="keep">유지</option>
-                    <option value="delete">함께 삭제</option>
-                  </select>
-                </label>
-              )}
-
-              {operationMode === 'day_move' && (
-                <label className="space-y-1 text-sm">
-                  <span className="block text-xs uppercase tracking-wide text-muted">
-                    하위 POI/파일/댓글
-                  </span>
-                  <select
-                    value={childMovePolicy}
-                    onChange={(e) => setChildMovePolicy(e.target.value as 'move' | 'delete')}
-                    className="w-full rounded-sm border border-hairline px-3 py-2"
-                    data-testid="admin-operation-move-policy"
-                  >
-                    <option value="move">대상으로 이동</option>
-                    <option value="delete">함께 삭제</option>
-                  </select>
-                </label>
-              )}
-
-              {operationMode === 'day_copy' && (
-                <div className="grid gap-2 text-sm">
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={includePois}
-                      onChange={(e) => setIncludePois(e.target.checked)}
-                      data-testid="admin-operation-include-pois"
-                    />
-                    POI 포함
-                  </label>
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={includeAttachments}
-                      onChange={(e) => setIncludeAttachments(e.target.checked)}
-                      data-testid="admin-operation-include-attachments"
-                    />
-                    파일 포함
-                  </label>
                 </div>
-              )}
-
-              <div className="md:col-span-2">
-                <FormTextArea
-                  id="admin-trip-operation-reason"
-                  label="사유"
-                  hint="감사 로그에 기록됩니다."
-                  value={operationReason}
-                  onChange={(e) => setOperationReason(e.target.value)}
-                  rows={3}
-                  data-testid="admin-trip-operation-reason"
-                />
               </div>
+
+              <div className="mt-4">
+                <OperationImpactPanel impact={operationImpact} />
+              </div>
+
+              {operationError && (
+                <p
+                  className="mt-4 rounded-sm bg-error-bg p-3 text-sm text-error-text"
+                  data-testid="admin-trip-operation-error"
+                >
+                  {operationError}
+                </p>
+              )}
+              {operationResult && (
+                <p
+                  className="mt-4 rounded-sm bg-success-bg p-3 text-sm text-success-text"
+                  data-testid="admin-trip-operation-result"
+                >
+                  {operationResult.action} 완료 · {formatAffected(operationResult.affected)}
+                </p>
+              )}
             </div>
 
-            <div className="mt-4">
-              <OperationImpactPanel impact={operationImpact} />
-            </div>
-
-            {operationError && (
-              <p
-                className="mt-4 rounded-sm bg-error-bg p-3 text-sm text-error-text"
-                data-testid="admin-trip-operation-error"
-              >
-                {operationError}
-              </p>
-            )}
-            {operationResult && (
-              <p
-                className="mt-4 rounded-sm bg-success-bg p-3 text-sm text-success-text"
-                data-testid="admin-trip-operation-result"
-              >
-                {operationResult.action} 완료 · {formatAffected(operationResult.affected)}
-              </p>
-            )}
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowOperationDialog(false)}
-                className="rounded-sm border border-hairline px-3 py-2 text-sm"
-              >
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowOperationDialog(false)}>
                 취소
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 disabled={operationConfirmDisabled}
                 onClick={onOperationSave}
-                className="rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm text-on-primary disabled:opacity-50"
                 data-testid="admin-trip-operation-confirm"
               >
                 {acting ? '처리 중…' : '실행'}
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
       {selectedPoi && <AdminTripPoiDialog poi={selectedPoi} onClose={() => setSelectedPoi(null)} />}
     </AdminPage>

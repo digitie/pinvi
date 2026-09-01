@@ -7,9 +7,85 @@
 /* Pretendard Variable — npm `pretendard` dynamic subset(한글 서브셋 분할, font-display: swap). 외부 CDN·render-blocking @import 없음. */
 @import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+/* Tailwind v4에서도 토큰 정본은 `@pinvi/design-tokens`의 v3 preset 하나다(ADR: 웹만 v4, 모바일은
+   NativeWind 4 + Tailwind v3 유지). `@config`로 그 preset을 그대로 읽어 토큰 정의가 웹/모바일로
+   갈라지지 않게 한다 — `@theme`로 옮겨 적으면 두 곳이 조용히 드리프트한다. */
+@config '../tailwind.config.ts';
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Admin 전용 토큰 (T-356) — kor-travel-map admin 규약 정렬
+ *
+ * DESIGN.md는 `(admin)`·`components/admin`을 사용자 표면 Hallmark 잠금에서 제외한다(밀도 규칙이
+ * 다르다). 그 예외 위에 kor-travel-map admin의 **구조** 규약만 들여온다. 색은 pinvi 팔레트를
+ * 그대로 쓰고 KTM의 oklch 팔레트는 이식하지 않는다 — 사용자 요구가 "색상톤 제외"다.
+ *
+ * 여기 이름은 전부 신규라 기존 유틸과 충돌하지 않는다(rounded-sm/md/lg/xl, duration-fast/normal,
+ * ease-pinvi 등은 preset이 계속 소유한다). `@theme`는 `@config`의 preset과 병합된다.
+ * ───────────────────────────────────────────────────────────────────────────── */
+@theme {
+  /* 구조: radius 2종 · control 높이 2종 · inspector rail 1종 (KTM 값 그대로, 테마 불변) */
+  --radius-control: 0.375rem; /* 6px — button/input/badge */
+  --radius-panel: 0.5rem; /* 8px — card/dialog/popover */
+  /* 컨트롤 높이는 KTM 값(36/30px)을 그대로 받는다. pinvi 사용자 표면의 44px 터치 타깃 관행은
+     admin에 적용하지 않는다 — DESIGN.md가 `(admin)`을 제외하는 사유 자체가 "밀도 규칙이 다르다"
+     이고, 36px는 WCAG 2.5.8(24px)을 넉넉히 넘는다. 예외는 이미 44px를 단언하는 e2e가 붙어 있는
+     `feature-requests`·`feature-reference-reconciliations` 두 쪽뿐이고, 그 자리에 사유 주석이 있다. */
+  --spacing-control: 2.25rem; /* 36px — h-control */
+  --spacing-control-sm: 1.875rem; /* 30px — h-control-sm */
+  --spacing-rail: 22rem; /* w-rail — 우측 inspector */
+  --container-rail: 22rem;
+
+  /* 타이포: KTM 7단 스케일 중 pinvi에 **이름 자체가 없던** 두 단만 전역에 추가한다.
+     나머지 단(xs/sm/base/lg/xl/2xl)은 이름이 사용자 표면과 겹치므로 전역에서 바꾸지 않고
+     admin scope에서만 값을 가린다(아래 `[data-pv-surface='admin']` 블록). */
+  --text-2xs: 0.75rem; /* 12px */
+  --text-2xs--line-height: 1.5;
+  --text-md: 1.0625rem; /* 17px */
+  --text-md--line-height: 1.4;
+
+  /* motion: KTM 2단 duration + 2종 easing. preset의 fast(100ms)와 값이 같아 이름만 추가한다. */
+  --ease-admin-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-admin-in: cubic-bezier(0.7, 0, 0.84, 0);
+
+  /* ── 색 역할 구조만 KTM에서 가져오고 값은 pinvi 팔레트 ──
+   * KTM의 핵심 규율 하나를 그대로 들여온다: hairline을 2종으로 분리한다.
+   *   border-admin        = 장식 구분선(대비 요건 없음)
+   *   border-admin-control = 컨트롤 경계(WCAG 1.4.11의 3:1 대상)
+   * pinvi는 지금 `hairline` 하나로 뭉뚱그려 쓰는데, 그 값(#dddddd)은 흰 배경 대비 1.6:1이라
+   * 컨트롤 경계로 쓰면 1.4.11 위반이다. 컨트롤용으로는 기존 `border-strong`(#c1c1c1, 2.7:1)보다
+   * 더 진한 값이 필요해 admin 전용으로 3:1을 넘는 값을 새로 둔다. */
+  --color-admin-line: #dddddd; /* = hairline. 장식 구분선 */
+  /* 컨트롤 경계는 admin 본문 배경(#f7f7f7)과 muted 표면(#f2f2f2) 위에서도 3:1을 넘어야 한다 —
+     흰 배경만 보고 고르면 실제 화면에서 미달한다(#949494는 흰 3.03이지만 #f7f7f7에서 2.83).
+     실측: white 4.54 / #f7f7f7 4.24 / #f2f2f2 4.06. */
+  --color-admin-control-line: #767676;
+
+  /* 표면 3단 — KTM surface-page/subtle/muted 구조에 pinvi 값 매핑 */
+  --color-admin-page: #ffffff; /* = canvas */
+  --color-admin-subtle: #f7f7f7; /* = surface-soft */
+  --color-admin-muted: #f2f2f2; /* = surface-strong */
+
+  /* 상태 tint — KTM은 팔레트 alpha(/10, /50)를 금지하고 불투명 *-tint 토큰을 쓴다. 그 규율을 따른다.
+     아래 대비 수치는 전부 실측이다. tint 위 잉크는 12px 본문이라 AA 4.5:1이 기준이다. */
+  --color-admin-success: #177536; /* tint 위 5.09 (#1b873f는 4.03으로 미달이라 한 단계 어둡게) */
+  --color-admin-success-tint: #e6f4ea; /* = success-bg */
+  --color-admin-danger: #c13515; /* = error-text. tint 위 4.85 */
+  --color-admin-danger-tint: #fdecea; /* = error-bg */
+  --color-admin-warning: #8a5300; /* tint 위 5.76 (흰 배경 6.33) */
+  --color-admin-warning-tint: #fdf3e3;
+  --color-admin-info: #1c5fbd; /* tint 위 5.35 (흰 배경 6.14) */
+  --color-admin-info-tint: #e8f0fc;
+
+  /* 브랜드 tint는 danger tint와 **다른 값이어야 한다**. 처음에는 KTM `bg-brand-tint`를 기존
+     `error-bg`(#fdecea)로 매핑했는데, 그 값이 `--color-admin-danger-tint`와 완전히 같아서
+     secondary 버튼/배지(브랜드 강조)와 destructive 표면이 화면에서 구분되지 않았다.
+     pinvi Rausch 계열에서 별도로 뽑는다. 잉크는 `cta`(#e00b41)를 쓴다 — Rausch(#ff385c)는
+     tint 위 3.07로 AA 미달이다(DESIGN.md C5도 본문 크기 채운 CTA에 Rausch를 금지한다). */
+  --color-admin-brand-tint: #ffeef1;
+  --color-admin-brand-ink: #c8093a;
+}
 
 :root {
   /* 앱 셸 모바일 하단 탭바 높이 — main 하단 패딩 예산의 단일 출처. */
@@ -18,6 +94,36 @@
   --tm-trip-tab-h: 44px;
   --tm-panel-w-left: 340px;
   --tm-panel-w-right: 320px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Admin 전용 타이포 스케일 (T-356) — kor-travel-map admin의 7단 스케일
+ *   12 / 13.5 / 15 / 17 / 20 / 24 / 30 px
+ *
+ * `@theme`에서 전역으로 바꾸지 않는 이유: `text-xs`/`text-sm`/`text-base`/`text-lg`/`text-xl`/
+ * `text-2xl`은 사용자 표면(랜딩·여행·지도·법적 문서)이 이미 쓰는 이름이다. 전역에서 값을
+ * 바꾸면 admin과 무관한 화면의 활자가 통째로 흔들린다 — DESIGN.md의 Hallmark 잠금 대상이다.
+ *
+ * 대신 Tailwind v4 유틸이 `font-size: var(--text-sm)` 형태로 **변수를 참조**한다는 점을 이용해
+ * admin subtree에서 변수만 가린다. 유틸 정의는 하나 그대로이고 클래스 이름도 그대로다.
+ * 스코프 표식은 `app/(admin)/layout.tsx`가 건다.
+ *
+ * `--text-*--line-height`도 함께 가려야 한다 — 유틸이
+ * `line-height: var(--tw-leading, var(--text-sm--line-height))`로 읽기 때문이다.
+ * ───────────────────────────────────────────────────────────────────────────── */
+[data-pv-surface='admin'] {
+  --text-xs: 0.84375rem; /* 13.5px — pinvi 기본 12px */
+  --text-xs--line-height: 1.5;
+  --text-sm: 0.9375rem; /* 15px — pinvi 기본 14px. admin 본문 크기 */
+  --text-sm--line-height: 1.5;
+  --text-base: 0.9375rem; /* 15px — 본문과 같은 값(KTM의 legacy alias) */
+  --text-base--line-height: 1.5;
+  --text-lg: 1.25rem; /* 20px — pinvi 기본 18px */
+  --text-lg--line-height: 1.3;
+  --text-xl: 1.5rem; /* 24px — pinvi 기본 20px */
+  --text-xl--line-height: 1.25;
+  --text-2xl: 1.875rem; /* 30px — pinvi 기본 24px */
+  --text-2xl--line-height: 1.2;
 }
 
 html,
@@ -43,12 +149,22 @@ body {
     word-break: keep-all;
     overflow-wrap: break-word;
   }
+
+  /* Tailwind v3 preflight에는 `button, [role="button"] { cursor: pointer }`가 있었지만 v4가
+     이를 제거했다(브라우저 기본을 따르는 쪽으로 바뀌었다). 그대로 두면 사용자 표면의 거의 모든
+     버튼 커서가 손가락이 아니라 화살표가 된다 — 이 저장소에서 `cursor-pointer`를 명시한 곳은
+     손에 꼽고 공용 `Button` 프리미티브에도 없다. v4 전환이 만든 회귀라 base에서 복원한다.
+     비활성 컨트롤은 제외해야 `disabled:cursor-not-allowed` 유틸이 이긴다. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
 }
 
 @layer components {
   /* 20px 커스텀 체크박스 — 네이티브 13px는 44px 터치 타깃·시스템 톤에 못 미친다. 체크 마크는 인라인 SVG. */
   .checkbox {
-    @apply size-5 shrink-0 cursor-pointer appearance-none rounded-[4px] border border-border-strong bg-canvas transition-colors duration-normal ease-pinvi checked:border-ink checked:bg-ink disabled:cursor-not-allowed disabled:bg-surface-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus;
+    @apply size-5 shrink-0 cursor-pointer appearance-none rounded-[4px] border border-border-strong bg-canvas transition-colors duration-normal ease-pinvi checked:border-ink checked:bg-ink disabled:cursor-not-allowed disabled:bg-surface-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus;
     background-position: center;
     background-repeat: no-repeat;
     background-size: 14px 14px;
@@ -58,27 +174,42 @@ body {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23ffffff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-6'/%3E%3C/svg%3E");
   }
 
-  /* 앱 셸 — 모바일 하단 탭바가 fixed라 main 하단에 그만큼 자리를 비운다.
-     Tailwind는 variant 유틸(md:py-8)을 base 유틸(pb-24) 뒤에 방출하므로 하단 패딩은 유틸 대신 여기서만 준다. */
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * 앱 셸 오버라이드 — **레이어 밖**에 둔다(unlayered).
+ *
+ * Tailwind v4는 `@layer`를 네이티브 CSS 캐스케이드 레이어로 발행한다. 네이티브 레이어에서는
+ * **레이어 순서가 specificity를 이긴다** — `utilities`가 `components`보다 뒤라서, components에 둔
+ * `[data-mobile-layout='on'] .app-shell-tabbar`(0,2,0)가 `.lg\:hidden`(0,1,0)에게 진다.
+ * v3에서는 `@layer`가 PostCSS 지시어라 출력 순서만 정했고 specificity가 승부를 갈랐다 — 그래서
+ * 이 블록의 옛 주석이 "레이어 순서와 무관하게 이긴다"고 적을 수 있었다. v4에서 그 전제가 깨졌다.
+ *
+ * unlayered 스타일은 캐스케이드에서 **모든 레이어보다 우선**하므로, 유틸을 이겨야 하는 앱 레벨
+ * 오버라이드는 여기에 둔다. (N150 e2e `app-shell-mobile.e2e.ts`가 이 회귀를 잡았다.)
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+/* 모바일 하단 탭바가 fixed라 main 하단에 그만큼 자리를 비운다. Tailwind는 variant 유틸(md:py-8)을
+   base 유틸(pb-24) 뒤에 방출하므로 하단 패딩은 유틸 대신 여기서만 준다. */
+.app-shell-main {
+  padding-bottom: calc(var(--app-tabbar-h) + 1.5rem + env(safe-area-inset-bottom));
+}
+@media (min-width: 1024px) {
   .app-shell-main {
-    padding-bottom: calc(var(--app-tabbar-h) + 1.5rem + env(safe-area-inset-bottom));
+    padding-bottom: 2rem;
   }
-  @media (min-width: 1024px) {
-    .app-shell-main {
-      padding-bottom: 2rem;
-    }
-  }
-  /* 넓은 layout viewport를 쓰는 폰 보정(useMobileWebLayout) — lg 이상이어도 모바일 셸을 유지한다.
-     속성+클래스(0,2,0)라 Tailwind 유틸(0,1,0)을 레이어 순서와 무관하게 이긴다. */
-  [data-mobile-layout='on'] .app-shell-main {
-    padding-bottom: calc(var(--app-tabbar-h) + 1.5rem + env(safe-area-inset-bottom));
-  }
-  [data-mobile-layout='on'] .app-shell-desktop-nav {
-    display: none;
-  }
-  [data-mobile-layout='on'] .app-shell-tabbar {
-    display: block;
-  }
+}
+
+/* 넓은 layout viewport를 쓰는 폰 보정(useMobileWebLayout) — lg 이상이어도 모바일 셸을 유지한다.
+   `.lg\:hidden`/`.lg\:block` 유틸을 이겨야 하므로 반드시 unlayered여야 한다. */
+[data-mobile-layout='on'] .app-shell-main {
+  padding-bottom: calc(var(--app-tabbar-h) + 1.5rem + env(safe-area-inset-bottom));
+}
+[data-mobile-layout='on'] .app-shell-desktop-nav {
+  display: none;
+}
+[data-mobile-layout='on'] .app-shell-tabbar {
+  display: block;
 }
 
 @layer utilities {
@@ -89,7 +220,7 @@ body {
   /* 포커스 링은 outline(즉시 표시, transition 무관·레이아웃 불변). ring 대신 outline인 이유:
      `transition-*` 유틸이 붙은 요소에서 ring이 페이드인되며 늦게 보이는 것을 막는다. */
   .focus-ring {
-    @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus;
+    @apply focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus;
   }
 }
 

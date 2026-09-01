@@ -131,7 +131,7 @@ export function TripTelegramTargets({ tripId }: TripTelegramTargetsProps) {
                   value={selected}
                   onChange={(event) => setSelected(event.target.value)}
                   disabled={atLimit || linkable.length === 0}
-                  className="mt-1 block min-h-11 min-w-48 rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-none focus:border-primary disabled:opacity-50"
+                  className="mt-1 block min-h-11 min-w-48 rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-hidden focus:border-primary disabled:opacity-50"
                   data-testid="trip-telegram-select"
                 >
                   <option value="">

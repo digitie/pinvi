@@ -1,4 +1,24 @@
 'use client';
+// T-356 배선 단계 — 이 화면의 **수제 상태 배지**를 KTM admin idiom으로 갈아끼웠다.
+// (KTM `src/components/status-badge.tsx` 이식본 소비처)
+//
+// 원문(= 전환 전 pinvi 코드)에서 바꾼 부분과 이유:
+//  1) 로컬 `StatusBadge`(수제 `<span className="… rounded-full border …">` + blocked/applied
+//     삼항 색 분기 + 수제 dot) → `@/components/admin/status-badge`의 `StatusBadge`.
+//     dot·색·크기는 이제 badge recipe와 tone 테이블이 소유한다.
+//  2) **문구·testid는 그대로다.** `data-testid="admin-frr-status-${status}"`는 live e2e
+//     (`admin-feature-reference-reconciliations-live-mutating.live.ts`)가 잡고, '반영 완료'/'차단됨'은
+//     `admin-feature-reference-reconciliations.e2e.ts`가 잡는다. 그래서 로컬 `STATUS_LABELS`를
+//     계속 1순위 문구로 쓰고 `label` prop으로 넘긴다.
+//     (공용 `lib/admin/status-label.ts`는 `applied`를 '반영됨'이라고 부른다 — 다르므로 쓰지 않았다.)
+//  3) tone은 공용 테이블에서 그대로 읽힌다: `applied` → success, `blocked` → destructive.
+//     전환 전 수제 색(성공=초록 / 차단=빨강)과 같은 의미라 `tone` prop을 강제하지 않았다.
+//     스키마상 이 축은 `'blocked' | 'applied'` 둘뿐이라 fallback 경로가 실제로 돌지 않는다.
+//  4) 로컬 헬퍼 `statusLabel`의 fallback만 `?? status`(raw enum) → 공용 `statusLabel()`로 바꿨다.
+//     계약상 두 값밖에 없지만 upstream이 값을 늘려도 raw 영문이 화면에 새지 않는다.
+//
+// 보존한 것(계약): 모든 `data-testid`, '반영 완료'/'차단됨' 문구, 배지가 놓인 4곳
+// (결론 헤더 · attempt 목록 · 모바일 카드 · 테이블 status 컬럼)과 그 순서·정렬 키.
 
 import {
   useCallback,
@@ -15,12 +35,28 @@ import type {
   AdminFeatureReferenceReconciliationDetail,
   AdminFeatureReferenceReconciliationSummary,
 } from '@pinvi/schemas';
-import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
+import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
-import { FormSelect } from '@/components/forms/FormSelect';
+import { FilterBar, FilterField } from '@/components/admin/filter-bar';
+// T-356: 상세 모달을 사용자 표면 `components/ui/Dialog`(useModalDialog)에서 admin base-ui
+// `Dialog`로 옮겼다. admin 화면에서는 두 모달 스택을 섞지 않는다. 본문의 `Button`(앱 공용)은
+// 이번 작업 범위가 아니라 그대로 두고, 다이얼로그 닫기 버튼만 admin `Button`을 별칭으로 쓴다.
+import { Button as AdminButton } from '@/components/admin/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/admin/ui/dialog';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import { Button } from '@/components/ui/Button';
-import { Dialog } from '@/components/ui/Dialog';
+// `isRestorableFocusTarget`은 모달 프리미티브가 아니라 순수 DOM 판별 헬퍼다 —
+// 이 페이지가 breakpoint 전환 뒤 "지금 보이는 트리거"로 포커스를 되돌릴 때 계속 쓴다.
 import { isRestorableFocusTarget } from '@/lib/useModalDialog';
+import { StatusBadge as AdminStatusBadge } from '@/components/admin/status-badge';
+import { statusLabel as sharedStatusLabel } from '@/lib/admin/status-label';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -57,7 +93,7 @@ const TARGET_RELATION_LABELS: Record<string, string> = {
 const formatDateTime = (value: string | null | undefined) =>
   value ? new Date(value).toLocaleString('ko-KR') : '—';
 
-const statusLabel = (status: string) => STATUS_LABELS[status] ?? status;
+const statusLabel = (status: string) => STATUS_LABELS[status] ?? sharedStatusLabel(status);
 const actionLabel = (action: string) => ACTION_LABELS[action] ?? action;
 const outcomeLabel = (outcome: string) => OUTCOME_LABELS[outcome] ?? outcome;
 const relationLabel = (relation: string) => TARGET_RELATION_LABELS[relation] ?? relation;
@@ -122,22 +158,12 @@ function EvidenceFieldList({ items }: { items: EvidenceField[] }) {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const blocked = status === 'blocked';
   return (
-    <span
-      className={`inline-flex min-h-6 items-center gap-1 rounded-full border px-2 text-xs font-semibold ${
-        blocked
-          ? 'border-error-text bg-error-bg text-error-text'
-          : 'border-success-text bg-success-bg text-success-text'
-      }`}
+    <AdminStatusBadge
       data-testid={`admin-frr-status-${status}`}
-    >
-      <span
-        aria-hidden="true"
-        className={`size-1.5 rounded-full ${blocked ? 'bg-error-text' : 'bg-success-text'}`}
-      />
-      {statusLabel(status)}
-    </span>
+      label={statusLabel(status)}
+      status={status}
+    />
   );
 }
 
@@ -195,7 +221,12 @@ function EvidenceDetail({
         ref={boundaryRef}
         tabIndex={-1}
         role="status"
-        className="focus-ring rounded-sm bg-surface-soft px-3 py-2 text-sm text-body outline-none"
+        // Tailwind v4에서 `outline-none`은 `--tw-outline-style: none`을 박고, `.focus-ring`의
+        // `:focus-visible` 규칙은 스타일을 그 변수에서 읽는다 — 둘을 같이 두면 키보드 포커스 링이
+        // 사라진다(v3에서는 `outline-none`이 투명 outline이라 공존이 가능했다). 최신 브라우저는
+        // div/p의 프로그램적 focus에 `:focus-visible`을 매치하지 않아 기본 링도 그리지 않으므로
+        // `outline-none` 없이 `.focus-ring`만 두는 것이 v4의 등가 동작이다.
+        className="focus-ring rounded-sm bg-surface-soft px-3 py-2 text-sm text-body"
         data-testid="admin-frr-readonly-boundary"
       >
         이 화면은 읽기 전용입니다. 로컬 final receipt, delivery attempt 관측 hash, row-level
@@ -562,10 +593,7 @@ export default function AdminFeatureReferenceReconciliationsPage() {
     let remainingFrames = 8;
     const tryFocus = () => {
       const target = resolveTarget();
-      if (
-        target &&
-        isRestorableFocusTarget(target)
-      ) {
+      if (target && isRestorableFocusTarget(target)) {
         target.focus({ preventScroll: true });
         return;
       }
@@ -578,9 +606,7 @@ export default function AdminFeatureReferenceReconciliationsPage() {
     if (selectedEventId !== null || !pendingDetailFocusRestoreRef.current) return;
     pendingDetailFocusRestoreRef.current = false;
     focusAfterDialogTeardown(
-      () =>
-        findCurrentFocusTarget(detailReturnFocusKeyRef.current) ??
-        detailReturnFocusRef.current,
+      () => findCurrentFocusTarget(detailReturnFocusKeyRef.current) ?? detailReturnFocusRef.current,
     );
   }, [focusAfterDialogTeardown, selectedEventId]);
   const closeDetail = () => {
@@ -651,25 +677,34 @@ export default function AdminFeatureReferenceReconciliationsPage() {
       title="Feature 참조 조정 증거"
       description="Map M05 event의 append-only receipt, blocked 관측 및 영향 행을 읽기 전용으로 확인합니다."
     >
+      {/*
+        T-356 필터 툴바 전환 — `FormSelect`(라벨 + helper 슬롯 예약)를
+        `FilterField` + `NativeSelect`로 바꿨다. 라벨 문구(`상태`)·`id`·`data-testid`·
+        초기화 로직(page/selectedEventId)은 그대로다.
+        `[&>select]:min-h-11`은 KTM `h-control`(36px) 대신 44px 터치 타깃을 유지하기 위한
+        보정 — `admin-feature-reference-reconciliations.e2e.ts`가 320~768px에서
+        `admin-frr-status-filter`의 높이 ≥ 44px를 검증한다.
+      */}
       <FilterBar>
-        <FormSelect
-          id="admin-frr-status"
-          label="상태"
-          value={statusFilter}
-          onChange={(event) => {
-            setStatusFilter(event.target.value as (typeof STATUS_FILTERS)[number]['value']);
-            setPage(1);
-            setSelectedEventId(null);
-          }}
-          className="min-w-44"
-          data-testid="admin-frr-status-filter"
-        >
-          {STATUS_FILTERS.map((filter) => (
-            <option key={filter.value} value={filter.value}>
-              {filter.label}
-            </option>
-          ))}
-        </FormSelect>
+        <FilterField htmlFor="admin-frr-status" label="상태">
+          <NativeSelect
+            id="admin-frr-status"
+            value={statusFilter}
+            onChange={(event) => {
+              setStatusFilter(event.target.value as (typeof STATUS_FILTERS)[number]['value']);
+              setPage(1);
+              setSelectedEventId(null);
+            }}
+            className="min-w-44 [&>select]:min-h-11"
+            data-testid="admin-frr-status-filter"
+          >
+            {STATUS_FILTERS.map((filter) => (
+              <NativeSelectOption key={filter.value} value={filter.value}>
+                {filter.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
       </FilterBar>
 
       {error && (
@@ -735,24 +770,50 @@ export default function AdminFeatureReferenceReconciliationsPage() {
         </Button>
       </div>
 
-      <Dialog
-        open={selectedEventId !== null}
-        onClose={closeDetail}
-        title="Feature 참조 조정 증거 상세"
-        description="Receipt, 관측, 영향 행을 확인하는 읽기 전용 M05 상세입니다."
-        size="lg"
-        initialFocusRef={detailInitialFocusRef}
-        returnFocusRef={detailReturnFocusRef}
-        testId="admin-frr-detail-dialog"
-      >
-        {detailQuery.isLoading ? (
-          <LoadingState label="증거 상세를 불러오는 중입니다." />
-        ) : detailQuery.isError ? (
-          <DetailError onRetry={() => void detailQuery.refetch()} />
-        ) : detailQuery.data ? (
-          <EvidenceDetail detail={detailQuery.data} boundaryRef={detailInitialFocusRef} />
-        ) : null}
-      </Dialog>
+      {/* 조건부 마운트 — 열림/닫힘 상태 소유자는 그대로 `selectedEventId`다. 닫힘 트랜지션
+          동안 `detailQuery.data`가 사라져 본문이 빈칸으로 깜빡이는 것도 함께 막는다.
+          접근성 이름은 `DialogTitle` 텍스트가 준다(e2e의 getByRole('dialog', { name: … })). */}
+      {selectedEventId !== null && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) closeDetail();
+          }}
+        >
+          <DialogContent
+            className="max-w-3xl"
+            data-testid="admin-frr-detail-dialog"
+            initialFocus={detailInitialFocusRef}
+          >
+            <DialogHeader>
+              <div className="min-w-0">
+                <DialogTitle>Feature 참조 조정 증거 상세</DialogTitle>
+                <DialogDescription className="mt-1">
+                  Receipt, 관측, 영향 행을 확인하는 읽기 전용 M05 상세입니다.
+                </DialogDescription>
+              </div>
+              <AdminButton
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={closeDetail}
+                data-testid="admin-frr-detail-dialog-close"
+              >
+                닫기
+              </AdminButton>
+            </DialogHeader>
+            <div className="p-4">
+              {detailQuery.isLoading ? (
+                <LoadingState label="증거 상세를 불러오는 중입니다." />
+              ) : detailQuery.isError ? (
+                <DetailError onRetry={() => void detailQuery.refetch()} />
+              ) : detailQuery.data ? (
+                <EvidenceDetail detail={detailQuery.data} boundaryRef={detailInitialFocusRef} />
+              ) : null}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </AdminPage>
   );
 }

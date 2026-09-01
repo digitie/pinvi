@@ -196,7 +196,7 @@ export default function AdminBackupPage() {
             <input
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              className="h-10 w-full rounded-sm border border-hairline px-3 text-sm font-normal text-ink outline-none focus:border-primary"
+              className="h-10 w-full rounded-sm border border-hairline px-3 text-sm font-normal text-ink outline-hidden focus:border-primary"
               maxLength={500}
               data-testid="admin-backup-reason"
             />
@@ -225,7 +225,7 @@ export default function AdminBackupPage() {
             <input
               value={snapshotQuery}
               onChange={(event) => setSnapshotQuery(event.target.value)}
-              className="h-10 w-full rounded-sm border border-hairline px-3 text-sm font-normal text-ink outline-none focus:border-primary"
+              className="h-10 w-full rounded-sm border border-hairline px-3 text-sm font-normal text-ink outline-hidden focus:border-primary"
               data-testid="admin-backup-search"
               maxLength={120}
             />
@@ -237,7 +237,7 @@ export default function AdminBackupPage() {
               onChange={(event) =>
                 setStatusFilter(event.target.value as 'all' | AdminBackupSnapshot['status'])
               }
-              className="h-10 w-full rounded-sm border border-hairline px-3 text-sm font-normal text-ink outline-none focus:border-primary"
+              className="h-10 w-full rounded-sm border border-hairline px-3 text-sm font-normal text-ink outline-hidden focus:border-primary"
               data-testid="admin-backup-status-filter"
             >
               <option value="all">전체</option>

@@ -18,6 +18,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@base-ui/react": "^1.7.0",
     "@hookform/resolvers": "^3.9.0",
     "@pinvi/api-client": "*",
     "@pinvi/design-tokens": "*",
@@ -29,6 +30,8 @@
     "@tanstack/react-query": "^5.59.0",
     "@tanstack/react-table": "^8.20.5",
     "@tanstack/react-virtual": "^3.10.8",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "lucide-react": "^0.460.0",
     "maplibre-gl": "^5.24.0",
     "next": "16.3.3",
@@ -37,6 +40,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.54.0",
+    "tailwind-merge": "^3.6.0",
     "vworld-map-core": "file:../mobile/vendor/vworld-map-core-1.0.0.tgz",
     "vworld-map-web": "file:vendor/vworld-map-web-1.0.0.tgz",
     "zod": "^4.4.3",
@@ -44,17 +48,18 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",
+    "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
+    "@testing-library/user-event": "^14.6.6",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "autoprefixer": "^10.4.20",
     "eslint": "^9.16.0",
     "eslint-config-next": "16.3.3",
     "jsdom": "^25.0.0",
     "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.15",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.6.0",
     "vitest": "^4.1.10"
   }

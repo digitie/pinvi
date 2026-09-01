@@ -102,7 +102,7 @@ export function TripComments({ tripId }: TripCommentsProps) {
           rows={2}
           placeholder="여행에 대한 의견을 남겨보세요."
           aria-label="댓글 입력"
-          className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-sm text-ink outline-none focus:border-primary"
+          className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-sm text-ink outline-hidden focus:border-primary"
         />
         <button
           type="button"

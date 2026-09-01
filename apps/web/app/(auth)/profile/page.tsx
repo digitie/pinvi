@@ -332,7 +332,7 @@ export default function ProfilePage() {
         <div
           ref={accountSectionRef}
           tabIndex={-1}
-          className="flex flex-col gap-4 outline-none sm:flex-row sm:items-center sm:justify-between"
+          className="flex flex-col gap-4 outline-hidden sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="flex items-center gap-3">
             {avatarSrc ? (

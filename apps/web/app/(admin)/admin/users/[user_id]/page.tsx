@@ -34,7 +34,26 @@ import type {
   MutableAdminRole,
 } from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+// T-356: 이 화면의 두 모달을 admin base-ui 프리미티브로 수렴했다.
+//  - 사유를 입력받는 운영 액션(이메일 원본 보기/강제 인증/비활성화) → `Dialog`
+//    (수제 `fixed inset-0` scrim + role 없는 패널이었다 — 이제 role/포커스/Escape는 base-ui).
+//  - 되돌릴 수 없는 확인(아바타 삭제·삭제 대기·즉시 익명화) → KTM 규약대로 `AlertDialog`.
+//    사용자 표면 `components/ui/ConfirmDialog`(useModalDialog)를 대체한다.
+import { Button } from '@/components/admin/ui/button';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+} from '@/components/admin/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/admin/ui/dialog';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FormTextArea } from '@/components/forms/FormTextArea';
 
@@ -128,6 +147,8 @@ export default function AdminUserDetailPage() {
     reason: string;
   } | null>(null);
   const destructiveTriggerRef = useRef<HTMLElement | null>(null);
+  // 파괴적 확인의 기본 포커스는 '취소'(안전한 쪽) — 전환 전 ConfirmDialog와 같은 계약.
+  const destructiveCancelRef = useRef<HTMLButtonElement | null>(null);
   const [sessionBusy, setSessionBusy] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1032,92 +1053,128 @@ export default function AdminUserDetailPage() {
       </Section>
 
       {actionDialog && (
-        <div className="fixed inset-0 flex items-center justify-center bg-scrim/50 p-4">
-          <div className="w-full max-w-md space-y-4 rounded-sm bg-canvas p-6">
-            <h3 className="text-lg font-bold text-ink">
-              {actionDialog === 'reveal-email'
-                ? '이메일 원본 보기'
-                : actionDialog === 'force-verify'
-                  ? '강제 이메일 인증'
-                  : '사용자 비활성화'}
-            </h3>
-            <FormTextArea
-              id="admin-user-action-reason"
-              label="사유"
-              hint="사유는 감사 로그에 기록됩니다. (최소 1자, 최대 500자)"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={3}
-              maxLength={500}
-              data-testid="admin-user-action-reason"
-            />
-            <div className="flex justify-end gap-2">
-              <button
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            // Escape·scrim도 취소 버튼과 같은 정리 경로를 탄다(사유 입력값을 남기지 않는다).
+            if (!open) {
+              setActionDialog(null);
+              setReason('');
+            }
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                {actionDialog === 'reveal-email'
+                  ? '이메일 원본 보기'
+                  : actionDialog === 'force-verify'
+                    ? '강제 이메일 인증'
+                    : '사용자 비활성화'}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="p-4">
+              <FormTextArea
+                id="admin-user-action-reason"
+                label="사유"
+                hint="사유는 감사 로그에 기록됩니다. (최소 1자, 최대 500자)"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                maxLength={500}
+                data-testid="admin-user-action-reason"
+              />
+            </div>
+            <DialogFooter>
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => {
                   setActionDialog(null);
                   setReason('');
                 }}
-                className="rounded-sm border border-hairline px-3 py-2 text-sm"
               >
                 취소
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 disabled={acting || reason.trim().length < 1}
                 onClick={onAction}
-                className="rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm text-on-primary disabled:opacity-50"
                 data-testid="admin-user-action-confirm"
               >
                 {acting ? '처리 중…' : '확인'}
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
-      <ConfirmDialog
-        open={pendingDestructive != null}
-        tone="danger"
-        title={
-          pendingDestructive?.kind === 'avatar'
-            ? '이 사용자의 아바타 이미지를 삭제할까요?'
-            : pendingDestructive?.kind === 'delete'
-              ? '이 사용자를 삭제 대기 상태로 전환할까요?'
-              : '이 사용자의 계정을 즉시 익명화할까요?'
-        }
-        description={
-          pendingDestructive?.kind === 'anonymize'
-            ? '즉시 실행되며 되돌릴 수 없습니다.'
-            : pendingDestructive?.kind === 'delete'
-              ? '삭제 대기로 전환되며 보존 정책에 따라 처리됩니다.'
-              : '삭제하면 되돌릴 수 없습니다.'
-        }
-        confirmLabel={
-          pendingDestructive?.kind === 'avatar'
-            ? '아바타 삭제'
-            : pendingDestructive?.kind === 'delete'
-              ? '삭제 대기로 전환'
-              : '즉시 익명화'
-        }
-        cancelLabel="취소"
-        busy={lifecycleBusy !== null || avatarAction !== null}
-        onConfirm={() => {
-          const target = pendingDestructive;
-          if (!target) return;
-          if (target.kind === 'avatar') void onDeleteAvatar();
-          else void onLifecycleAction(target.kind);
-        }}
-        onCancel={() => setPendingDestructive(null)}
-        returnFocusRef={destructiveTriggerRef}
-        testId="admin-user-destructive-confirm"
-      >
-        {/* 사유를 재수집하지 않는다 — 폼에서 이미 받은 값을 그대로 보여 준다(이중 입력 방지). */}
-        {pendingDestructive ? (
-          <p className="rounded-sm bg-surface-soft px-3 py-2 text-sm text-body">
-            사유: {pendingDestructive.reason}
-          </p>
-        ) : null}
-      </ConfirmDialog>
+      {/* 되돌릴 수 없는 확인 — KTM 규약대로 AlertDialog(role=alertdialog). scrim 클릭 닫기는
+          base-ui가 alertdialog에서 강제로 끈다. 조건부 마운트라 닫힘 중 제목/라벨이 비지 않는다. */}
+      {pendingDestructive != null && (
+        <AlertDialog
+          open
+          onOpenChange={(open) => {
+            if (!open && lifecycleBusy === null && avatarAction === null) {
+              setPendingDestructive(null);
+            }
+          }}
+        >
+          <AlertDialogContent
+            data-testid="admin-user-destructive-confirm"
+            initialFocus={destructiveCancelRef}
+            finalFocus={destructiveTriggerRef}
+          >
+            <AlertDialogTitle>
+              {pendingDestructive.kind === 'avatar'
+                ? '이 사용자의 아바타 이미지를 삭제할까요?'
+                : pendingDestructive.kind === 'delete'
+                  ? '이 사용자를 삭제 대기 상태로 전환할까요?'
+                  : '이 사용자의 계정을 즉시 익명화할까요?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDestructive.kind === 'anonymize'
+                ? '즉시 실행되며 되돌릴 수 없습니다.'
+                : pendingDestructive.kind === 'delete'
+                  ? '삭제 대기로 전환되며 보존 정책에 따라 처리됩니다.'
+                  : '삭제하면 되돌릴 수 없습니다.'}
+            </AlertDialogDescription>
+            {/* 사유를 재수집하지 않는다 — 폼에서 이미 받은 값을 그대로 보여 준다(이중 입력 방지). */}
+            <p className="mt-4 rounded-sm bg-surface-soft px-3 py-2 text-sm text-body">
+              사유: {pendingDestructive.reason}
+            </p>
+            <AlertDialogFooter>
+              <Button
+                ref={destructiveCancelRef}
+                type="button"
+                variant="outline"
+                disabled={lifecycleBusy !== null || avatarAction !== null}
+                onClick={() => setPendingDestructive(null)}
+                data-testid="admin-user-destructive-confirm-cancel"
+              >
+                취소
+              </Button>
+              {/* design.md §CTA voice: destructive fill은 confirm dialog 안에서만 쓴다. */}
+              <Button
+                type="button"
+                variant="destructive-solid"
+                disabled={lifecycleBusy !== null || avatarAction !== null}
+                onClick={() => {
+                  const target = pendingDestructive;
+                  if (target.kind === 'avatar') void onDeleteAvatar();
+                  else void onLifecycleAction(target.kind);
+                }}
+                data-testid="admin-user-destructive-confirm-confirm"
+              >
+                {pendingDestructive.kind === 'avatar'
+                  ? '아바타 삭제'
+                  : pendingDestructive.kind === 'delete'
+                    ? '삭제 대기로 전환'
+                    : '즉시 익명화'}
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </AdminPage>
   );
 }

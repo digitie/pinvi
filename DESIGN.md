@@ -333,8 +333,14 @@ There are no progressive elevation tiers — the system either has the one shado
 (사용자 표면 한정 — 밀도 규칙이 다른 `(admin)`·`components/admin`은 제외). 규칙을 바꾸려면 이 문서와
 가드를 함께 고친다.
 
-**모달 계약**(T-315/T-316, `components/ui/Dialog` + `lib/useModalDialog`): **모든** 모달은 프리미티브로
-뜬다(예외 없음 — `RestoreHotswapDialog`도 T-316에서 수렴했다).
+**모달 계약**(T-315/T-316, `components/ui/Dialog` + `lib/useModalDialog`): **사용자 표면**의 모달은
+전부 이 프리미티브로 뜬다.
+
+> **admin 예외**(T-356): `(admin)`·`components/admin`은 이 계약에서 제외한다. admin 표면은
+> kor-travel-map admin 규약에 정렬하며 `components/admin/ui/{dialog,alert-dialog,popover,tooltip}`
+> (base-ui 기반)을 쓴다. 아래 격리·포커스·busy 규칙은 그쪽 프리미티브가 자체 구현으로 만족시킨다.
+> 두 스택이 공존하지만 표면이 갈라져 있어 한 화면에서 섞이지 않는다 — 섞으면 focus trap과 `inert`
+> 스냅샷이 서로를 덮으므로, admin 페이지에서 `components/ui/Dialog`를 새로 쓰지 않는다.
 
 - **격리**: body 직계 컨테이너로 portal하고, 스택 최상단 모달의 컨테이너만 남긴 채 나머지 body 자식에
   `inert`를 건다. `aria-hidden`은 걸지 않는다(inert가 이미 접근성 트리에서 제거하고, focused 요소의

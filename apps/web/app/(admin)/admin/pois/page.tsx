@@ -7,8 +7,22 @@ import { Plus } from 'lucide-react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type { AdminPoiCreateRequest, AdminPoiSummary, AdminTripSummary } from '@pinvi/schemas';
-import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
+import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Button } from '@/components/admin/ui/button';
+// KTM `src/components/ui/dialog.tsx` 프리미티브로 수렴(T-356) — 손수 만든
+// `role="dialog"` + scrim + `aria-modal`을 base-ui가 대신한다.
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/admin/ui/dialog';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -202,290 +216,289 @@ function AdminPoiCreateDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="admin-poi-create-heading"
-      className="fixed inset-0 z-50 flex items-start justify-center bg-scrim/50 p-4 pt-12"
-      data-testid="admin-poi-create-dialog"
+    // `open`은 상수 true다 — 이 컴포넌트 자체가 호출부에서 조건부 마운트되므로 열림/닫힘
+    // 상태의 **소유자**는 그대로 `showCreateDialog`다. 다만 base-ui는 소유자와 별개로
+    // Escape·바깥클릭이라는 **닫기 경로**를 추가하므로, 폼 입력을 지키려면 `hasUnsavedInput`으로
+    // 그 둘을 꺼야 한다(아래).
+    <Dialog
+      // 미저장 폼 입력 보호 — Escape/바깥클릭 닫기를 막는다(전환 전 수제 모달에는
+      // 그 경로가 없었다). 명시적 닫기(×/취소/제출)는 그대로 동작한다.
+      open
+      hasUnsavedInput
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
     >
-      <div className="max-h-[calc(100dvh-6rem)] w-full max-w-3xl overflow-auto rounded-sm bg-canvas p-5 shadow-overlay">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h2 id="admin-poi-create-heading" className="text-lg font-semibold text-ink">
-              POI 생성
-            </h2>
-            <p className="mt-1 text-sm text-muted">여행계획과 일차를 지정합니다.</p>
+      <DialogContent className="max-w-3xl" data-testid="admin-poi-create-dialog">
+        <DialogHeader>
+          <div className="min-w-0">
+            <DialogTitle>POI 생성</DialogTitle>
+            <DialogDescription className="mt-1">여행계획과 일차를 지정합니다.</DialogDescription>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-sm border border-hairline px-3 py-1 text-sm"
-          >
+          <Button type="button" variant="ghost" size="sm" onClick={onClose}>
             닫기
-          </button>
-        </div>
-
-        {formError && (
-          <p
-            role="alert"
-            className="mb-4 rounded-sm bg-error-bg p-3 text-sm text-error-text"
-            data-testid="admin-poi-create-error"
-          >
-            {formError}
-          </p>
-        )}
-
-        <form onSubmit={onTripSearch} className="mb-4 flex flex-wrap items-end gap-2">
-          <label className="flex min-w-64 flex-1 flex-col gap-1 text-sm">
-            <span className="text-xs text-muted">여행계획 검색</span>
-            <input
-              type="search"
-              value={tripQueryInput}
-              onChange={(event) => setTripQueryInput(event.target.value)}
-              className="rounded-sm border border-hairline px-3 py-2"
-              placeholder="제목, 지역, trip_id, owner"
-              data-testid="admin-poi-trip-search"
-            />
-          </label>
-          <button
-            type="submit"
-            className="rounded-sm border border-hairline px-3 py-2 text-sm"
-            data-testid="admin-poi-trip-search-submit"
-          >
-            검색
-          </button>
-        </form>
-
-        {tripQuery.length > 0 && (
-          <div className="mb-4 max-h-40 overflow-auto border-y border-hairline py-2">
-            {tripQueryResult.isLoading && <p className="text-sm text-muted">검색 중…</p>}
-            {tripQueryResult.data?.items.length === 0 && (
-              <p className="text-sm text-muted">검색 결과 없음</p>
-            )}
-            <div className="grid gap-2">
-              {tripQueryResult.data?.items.map((trip) => (
-                <button
-                  key={trip.trip_id}
-                  type="button"
-                  onClick={() => setSelectedTrip(trip)}
-                  className="flex items-center justify-between gap-3 rounded-sm border border-hairline px-3 py-2 text-left text-sm"
-                  data-testid={`admin-poi-trip-result-${trip.trip_id}`}
-                >
-                  <span>
-                    <span className="font-medium text-ink">{trip.title}</span>
-                    <span className="ml-2 text-muted">{trip.owner_email_masked}</span>
-                  </span>
-                  <span className="text-xs text-muted">{trip.status}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {selectedTrip && (
-          <p
-            className="mb-4 rounded-sm bg-surface-soft px-3 py-2 text-sm"
-            data-testid="admin-poi-trip-selected"
-          >
-            선택: {selectedTrip.title} · {selectedTrip.trip_id}
-          </p>
-        )}
-
-        <form onSubmit={onCreate} className="grid gap-4">
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">일차</span>
-              <input
-                type="number"
-                min={1}
-                value={dayIndex}
-                onChange={(event) => setDayIndex(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                data-testid="admin-poi-create-day"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">정렬 순서</span>
-              <input
-                value={sortOrder}
-                onChange={(event) => setSortOrder(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                maxLength={80}
-                data-testid="admin-poi-create-sort"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">feature_id</span>
-              <input
-                value={featureId}
-                onChange={(event) => setFeatureId(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                maxLength={200}
-                data-testid="admin-poi-create-feature-id"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">POI 이름</span>
-              <input
-                value={poiName}
-                onChange={(event) => setPoiName(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                data-testid="admin-poi-create-name"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">lon</span>
-              <input
-                inputMode="decimal"
-                value={lon}
-                onChange={(event) => setLon(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                data-testid="admin-poi-create-lon"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">lat</span>
-              <input
-                inputMode="decimal"
-                value={lat}
-                onChange={(event) => setLat(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                data-testid="admin-poi-create-lat"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm md:col-span-2">
-              <span className="text-xs text-muted">주소</span>
-              <input
-                value={addressLabel}
-                onChange={(event) => setAddressLabel(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                data-testid="admin-poi-create-address"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">마커 색상</span>
-              <input
-                value={markerColor}
-                onChange={(event) => setMarkerColor(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                placeholder="P-08"
-                data-testid="admin-poi-create-marker-color"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">마커 아이콘</span>
-              <input
-                value={markerIcon}
-                onChange={(event) => setMarkerIcon(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                maxLength={64}
-                data-testid="admin-poi-create-marker-icon"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">도착</span>
-              <input
-                type="datetime-local"
-                value={arrivalAt}
-                onChange={(event) => setArrivalAt(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                data-testid="admin-poi-create-arrival"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">출발</span>
-              <input
-                type="datetime-local"
-                value={departureAt}
-                onChange={(event) => setDepartureAt(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                data-testid="admin-poi-create-departure"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">예산</span>
-              <input
-                inputMode="decimal"
-                value={budgetAmount}
-                onChange={(event) => setBudgetAmount(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                data-testid="admin-poi-create-budget"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">실제 금액</span>
-              <input
-                inputMode="decimal"
-                value={actualAmount}
-                onChange={(event) => setActualAmount(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                data-testid="admin-poi-create-actual"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">통화</span>
-              <input
-                value={currency}
-                onChange={(event) => setCurrency(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2 uppercase"
-                maxLength={3}
-                data-testid="admin-poi-create-currency"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">URL</span>
-              <input
-                value={userUrl}
-                onChange={(event) => setUserUrl(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                data-testid="admin-poi-create-url"
-              />
-            </label>
-          </div>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs text-muted">메모</span>
-            <textarea
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              className="min-h-16 rounded-sm border border-hairline px-3 py-2"
-              data-testid="admin-poi-create-note"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs text-muted">작업 사유</span>
-            <textarea
-              value={accessReason}
-              onChange={(event) => setAccessReason(event.target.value)}
-              className="min-h-16 rounded-sm border border-hairline px-3 py-2"
-              maxLength={500}
-              data-testid="admin-poi-create-reason"
-            />
-          </label>
-
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-sm border border-hairline px-3 py-2 text-sm"
+          </Button>
+        </DialogHeader>
+        <div className="p-4">
+          {formError && (
+            <p
+              role="alert"
+              className="mb-4 rounded-sm bg-error-bg p-3 text-sm text-error-text"
+              data-testid="admin-poi-create-error"
             >
-              취소
-            </button>
+              {formError}
+            </p>
+          )}
+
+          <form onSubmit={onTripSearch} className="mb-4 flex flex-wrap items-end gap-2">
+            <label className="flex min-w-64 flex-1 flex-col gap-1 text-sm">
+              <span className="text-xs text-muted">여행계획 검색</span>
+              <input
+                type="search"
+                value={tripQueryInput}
+                onChange={(event) => setTripQueryInput(event.target.value)}
+                className="rounded-sm border border-hairline px-3 py-2"
+                placeholder="제목, 지역, trip_id, owner"
+                data-testid="admin-poi-trip-search"
+              />
+            </label>
             <button
               type="submit"
-              disabled={createMutation.isPending}
-              className="inline-flex items-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm text-on-primary disabled:opacity-60"
-              data-testid="admin-poi-create-submit"
+              className="rounded-sm border border-hairline px-3 py-2 text-sm"
+              data-testid="admin-poi-trip-search-submit"
             >
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              생성
+              검색
             </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          </form>
+
+          {tripQuery.length > 0 && (
+            <div className="mb-4 max-h-40 overflow-auto border-y border-hairline py-2">
+              {tripQueryResult.isLoading && <p className="text-sm text-muted">검색 중…</p>}
+              {tripQueryResult.data?.items.length === 0 && (
+                <p className="text-sm text-muted">검색 결과 없음</p>
+              )}
+              <div className="grid gap-2">
+                {tripQueryResult.data?.items.map((trip) => (
+                  <button
+                    key={trip.trip_id}
+                    type="button"
+                    onClick={() => setSelectedTrip(trip)}
+                    className="flex items-center justify-between gap-3 rounded-sm border border-hairline px-3 py-2 text-left text-sm"
+                    data-testid={`admin-poi-trip-result-${trip.trip_id}`}
+                  >
+                    <span>
+                      <span className="font-medium text-ink">{trip.title}</span>
+                      <span className="ml-2 text-muted">{trip.owner_email_masked}</span>
+                    </span>
+                    <span className="text-xs text-muted">{trip.status}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {selectedTrip && (
+            <p
+              className="mb-4 rounded-sm bg-surface-soft px-3 py-2 text-sm"
+              data-testid="admin-poi-trip-selected"
+            >
+              선택: {selectedTrip.title} · {selectedTrip.trip_id}
+            </p>
+          )}
+
+          <form onSubmit={onCreate} className="grid gap-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">일차</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={dayIndex}
+                  onChange={(event) => setDayIndex(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  data-testid="admin-poi-create-day"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">정렬 순서</span>
+                <input
+                  value={sortOrder}
+                  onChange={(event) => setSortOrder(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  maxLength={80}
+                  data-testid="admin-poi-create-sort"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">feature_id</span>
+                <input
+                  value={featureId}
+                  onChange={(event) => setFeatureId(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  maxLength={200}
+                  data-testid="admin-poi-create-feature-id"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">POI 이름</span>
+                <input
+                  value={poiName}
+                  onChange={(event) => setPoiName(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  data-testid="admin-poi-create-name"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">lon</span>
+                <input
+                  inputMode="decimal"
+                  value={lon}
+                  onChange={(event) => setLon(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  data-testid="admin-poi-create-lon"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">lat</span>
+                <input
+                  inputMode="decimal"
+                  value={lat}
+                  onChange={(event) => setLat(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  data-testid="admin-poi-create-lat"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm md:col-span-2">
+                <span className="text-xs text-muted">주소</span>
+                <input
+                  value={addressLabel}
+                  onChange={(event) => setAddressLabel(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  data-testid="admin-poi-create-address"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">마커 색상</span>
+                <input
+                  value={markerColor}
+                  onChange={(event) => setMarkerColor(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  placeholder="P-08"
+                  data-testid="admin-poi-create-marker-color"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">마커 아이콘</span>
+                <input
+                  value={markerIcon}
+                  onChange={(event) => setMarkerIcon(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  maxLength={64}
+                  data-testid="admin-poi-create-marker-icon"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">도착</span>
+                <input
+                  type="datetime-local"
+                  value={arrivalAt}
+                  onChange={(event) => setArrivalAt(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  data-testid="admin-poi-create-arrival"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">출발</span>
+                <input
+                  type="datetime-local"
+                  value={departureAt}
+                  onChange={(event) => setDepartureAt(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  data-testid="admin-poi-create-departure"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">예산</span>
+                <input
+                  inputMode="decimal"
+                  value={budgetAmount}
+                  onChange={(event) => setBudgetAmount(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  data-testid="admin-poi-create-budget"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">실제 금액</span>
+                <input
+                  inputMode="decimal"
+                  value={actualAmount}
+                  onChange={(event) => setActualAmount(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  data-testid="admin-poi-create-actual"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">통화</span>
+                <input
+                  value={currency}
+                  onChange={(event) => setCurrency(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2 uppercase"
+                  maxLength={3}
+                  data-testid="admin-poi-create-currency"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">URL</span>
+                <input
+                  value={userUrl}
+                  onChange={(event) => setUserUrl(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  data-testid="admin-poi-create-url"
+                />
+              </label>
+            </div>
+
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-xs text-muted">메모</span>
+              <textarea
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                className="min-h-16 rounded-sm border border-hairline px-3 py-2"
+                data-testid="admin-poi-create-note"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-xs text-muted">작업 사유</span>
+              <textarea
+                value={accessReason}
+                onChange={(event) => setAccessReason(event.target.value)}
+                className="min-h-16 rounded-sm border border-hairline px-3 py-2"
+                maxLength={500}
+                data-testid="admin-poi-create-reason"
+              />
+            </label>
+
+            {/* 제출 버튼은 이 form 안에 남아야 onCreate가 발화한다 — 그래서 KTM `DialogFooter`
+              (Content 직계) 대신 form 안 액션 행을 쓴다. KTM dedup-review dialog와 같은
+              "닫기는 header, 액션은 본문 하단" 구성이다. */}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button type="button" variant="outline" onClick={onClose}>
+                취소
+              </Button>
+              <Button
+                type="submit"
+                disabled={createMutation.isPending}
+                data-testid="admin-poi-create-submit"
+              >
+                <Plus data-icon="inline-start" aria-hidden="true" />
+                생성
+              </Button>
+            </div>
+          </form>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -544,47 +557,46 @@ export default function AdminPoisPage() {
     >
       {showCreateDialog && <AdminPoiCreateDialog onClose={() => setShowCreateDialog(false)} />}
 
+      {/* 검색만 form 안이다(제출로 적용) — 연결 필터는 form 밖에 두어 select 위 Enter가
+          검색을 제출하지 않게 한다. 전환 전 구조 그대로다. */}
       <FilterBar>
-        <form onSubmit={onSearch} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <label htmlFor="admin-pois-search" className="text-xs text-muted">
-            검색
-          </label>
-          <input
-            id="admin-pois-search"
-            type="search"
-            value={queryInput}
-            onChange={(e) => setQueryInput(e.target.value)}
-            className="min-w-56 rounded-sm border border-hairline px-2 py-1 text-sm"
-            placeholder="feature_id, label, trip, owner email, poi_id"
-            data-testid="admin-pois-search"
-          />
-          <button
-            type="submit"
-            className="rounded-sm border border-hairline px-3 py-1 text-sm"
-            data-testid="admin-pois-search-submit"
-          >
-            조회
-          </button>
-        </form>
-        <label htmlFor="admin-pois-broken-filter" className="text-xs text-muted">
-          연결
-        </label>
-        <select
-          id="admin-pois-broken-filter"
-          value={linkFilter}
-          onChange={(e) => {
-            setLinkFilter(e.target.value);
-            setPage(1);
-          }}
-          className="rounded-sm border border-hairline px-2 py-1 text-sm"
-          data-testid="admin-pois-broken-filter"
+        <form
+          onSubmit={onSearch}
+          className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-2"
         >
-          {LINK_FILTERS.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
+          <FilterField className="w-64" htmlFor="admin-pois-search" label="검색">
+            <Input
+              id="admin-pois-search"
+              type="search"
+              value={queryInput}
+              onChange={(e) => setQueryInput(e.target.value)}
+              placeholder="feature_id, label, trip, owner email, poi_id"
+              data-testid="admin-pois-search"
+            />
+          </FilterField>
+          <FilterActions>
+            <Button type="submit" variant="outline" data-testid="admin-pois-search-submit">
+              조회
+            </Button>
+          </FilterActions>
+        </form>
+        <FilterField htmlFor="admin-pois-broken-filter" label="연결">
+          <NativeSelect
+            id="admin-pois-broken-filter"
+            value={linkFilter}
+            onChange={(e) => {
+              setLinkFilter(e.target.value);
+              setPage(1);
+            }}
+            data-testid="admin-pois-broken-filter"
+          >
+            {LINK_FILTERS.map((item) => (
+              <NativeSelectOption key={item.value} value={item.value}>
+                {item.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
         <span className="ml-auto text-xs text-muted">총 {total}건</span>
       </FilterBar>
 

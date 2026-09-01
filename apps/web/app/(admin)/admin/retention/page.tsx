@@ -27,9 +27,9 @@ const SCOPE_OPTIONS = [
 type RetentionScope = (typeof SCOPE_OPTIONS)[number]['value'];
 
 const inputClass =
-  'h-10 rounded-sm border border-hairline px-3 text-sm outline-none focus:border-primary';
+  'h-10 rounded-sm border border-hairline px-3 text-sm outline-hidden focus:border-primary';
 const textareaClass =
-  'min-h-20 rounded-sm border border-hairline px-3 py-2 text-sm outline-none focus:border-primary';
+  'min-h-20 rounded-sm border border-hairline px-3 py-2 text-sm outline-hidden focus:border-primary';
 
 function formatMetric(value: number | null | undefined) {
   return new Intl.NumberFormat('ko-KR').format(value ?? 0);

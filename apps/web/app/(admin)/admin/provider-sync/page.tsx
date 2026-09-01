@@ -20,8 +20,13 @@ import {
 } from '@pinvi/api-client';
 import type { AdminProviderDatasetSummary, AdminProviderImportJobRecord } from '@pinvi/schemas';
 import { Ban, RefreshCw, Search, X } from 'lucide-react';
-import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
+import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -50,7 +55,6 @@ const STATUS_LABEL: Record<string, string> = {
   completed: '취소 완료',
 };
 
-const inputClass = 'rounded-sm border border-hairline px-2 py-1 text-sm';
 const CANCEL_REASON_MAX_LENGTH = 500;
 const DETERMINISTIC_CANCEL_REJECTION_STATUSES = new Set([400, 401, 403, 422, 429]);
 
@@ -519,50 +523,50 @@ export default function AdminProviderSyncPage() {
       }
     >
       <FilterBar>
-        <form onSubmit={onSearch} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <label htmlFor="admin-provider-sync-key" className="text-xs text-muted">
-            provider/dataset
-          </label>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2 top-2 h-4 w-4 text-muted" />
-            <input
-              id="admin-provider-sync-key"
-              value={keyInput}
-              onChange={(event) => setKeyInput(event.target.value)}
-              className={`${inputClass} w-56 pl-7`}
-              placeholder="kma, visitkorea…"
-              data-testid="admin-provider-sync-key"
-            />
-          </div>
-          <button
-            type="submit"
-            className="rounded-sm border border-hairline px-3 py-1 text-sm"
-            data-testid="admin-provider-sync-submit"
-          >
-            조회
-          </button>
+        {/* provider/dataset 키만 제출로 적용된다 — job 상태 select는 전환 전과 같이 즉시
+            반영이라 form 밖에 둔다. */}
+        <form onSubmit={onSearch} className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-2">
+          <FilterField className="w-56" htmlFor="admin-provider-sync-key" label="provider/dataset">
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
+                aria-hidden="true"
+              />
+              <Input
+                id="admin-provider-sync-key"
+                value={keyInput}
+                onChange={(event) => setKeyInput(event.target.value)}
+                className="pl-9"
+                placeholder="kma, visitkorea…"
+                data-testid="admin-provider-sync-key"
+              />
+            </div>
+          </FilterField>
+          <FilterActions>
+            <Button type="submit" variant="outline" data-testid="admin-provider-sync-submit">
+              조회
+            </Button>
+          </FilterActions>
         </form>
-        <label htmlFor="admin-provider-sync-job-status" className="text-xs text-muted">
-          job
-        </label>
-        <select
-          id="admin-provider-sync-job-status"
-          value={jobStatus}
-          onChange={(event) => {
-            setJobStatus(event.target.value as typeof jobStatus);
-            setJobCursor(null);
-            setJobCursorHistory([]);
-            setCancelJobId(null);
-          }}
-          className={inputClass}
-          data-testid="admin-provider-sync-job-status"
-        >
-          {IMPORT_JOB_STATUS_OPTIONS.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
+        <FilterField htmlFor="admin-provider-sync-job-status" label="job">
+          <NativeSelect
+            id="admin-provider-sync-job-status"
+            value={jobStatus}
+            onChange={(event) => {
+              setJobStatus(event.target.value as typeof jobStatus);
+              setJobCursor(null);
+              setJobCursorHistory([]);
+              setCancelJobId(null);
+            }}
+            data-testid="admin-provider-sync-job-status"
+          >
+            {IMPORT_JOB_STATUS_OPTIONS.map((item) => (
+              <NativeSelectOption key={item.value} value={item.value}>
+                {item.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
         <span className="ml-auto text-xs text-muted">{providers.length} datasets</span>
       </FilterBar>
 

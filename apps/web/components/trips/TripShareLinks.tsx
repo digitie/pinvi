@@ -86,7 +86,7 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
           <select
             value={visibility}
             onChange={(event) => setVisibility(event.target.value as TripShareLinkVisibility)}
-            className="mt-1 block min-h-11 rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-none focus:border-primary"
+            className="mt-1 block min-h-11 rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-hidden focus:border-primary"
           >
             {VISIBILITIES.map((v) => (
               <option key={v} value={v}>
@@ -101,7 +101,7 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
             type="date"
             value={expiresAt}
             onChange={(event) => setExpiresAt(event.target.value)}
-            className="mt-1 block min-h-11 rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-none focus:border-primary"
+            className="mt-1 block min-h-11 rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-hidden focus:border-primary"
           />
         </label>
         <button

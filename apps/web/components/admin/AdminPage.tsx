@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import { FilterBar as AdminFilterBar } from '@/components/admin/filter-bar';
+
 export interface AdminPageProps {
   title: string;
   description?: string;
@@ -27,12 +29,19 @@ export interface FilterBarProps {
   children: ReactNode;
 }
 
+/**
+ * kor-travel-map admin의 `FilterBar`로 위임한다(T-356).
+ *
+ * 원래는 카드 프레임(`rounded-sm border-hairline bg-surface-soft p-3`)을 둘렀지만 KTM 툴바는
+ * 프레임이 없다 — 목록 위 컨트롤 줄은 표 자신의 hairline 하나만 두고 겹치지 않는다(C3).
+ * 이름과 `{children}` 시그니처를 유지해 23개 소비 페이지가 import를 바꾸지 않고 KTM 레이아웃
+ * (`items-end` baseline 정렬 + `gap-x-3 gap-y-2` wrap)을 받는다.
+ *
+ * `items-center`→`items-end`가 핵심이다: `FilterField`가 라벨을 컨트롤 **위**에 두므로 가운데
+ * 정렬하면 라벨 있는 필드와 없는 버튼의 밑선이 어긋난다.
+ */
 export function FilterBar({ children }: FilterBarProps) {
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-sm border border-hairline bg-surface-soft p-3">
-      {children}
-    </div>
-  );
+  return <AdminFilterBar>{children}</AdminFilterBar>;
 }
 
 export interface SectionProps {
