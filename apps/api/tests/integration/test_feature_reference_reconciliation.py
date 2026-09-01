@@ -422,6 +422,153 @@ async def test_worker_calls_ack_only_after_final_receipt_commit(
 
 
 @pytest.mark.asyncio
+async def test_canonical_uuid_match_with_a_legacy_alias_is_not_a_conflict(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """UUID가 맞으면 텍스트 축이 달라도 rebind 대상이다.
+
+    canonical 축은 UUID다(Map ADR-068). cutover는 feature_uuid만 채우고
+    feature_id는 legacy `f_*` alias로 남기는데, curation import는 이미
+    feature_id에 UUID 문자열을 쓴다 — 한 컬럼에 두 세대가 공존한다. UUID
+    일치를 conflict로 읽으면 Map이 어느 세대를 보내든 **반대 세대 전부**가
+    피드를 영구히 막는다(적대 리뷰 M1)."""
+
+    old_uuid = uuid.uuid4()
+    replacement_uuid = uuid.uuid4()
+    legacy_id: uuid.UUID
+    async with session_factory() as db:
+        user = User(
+            email=f"m05-{uuid.uuid4().hex}@pinvi.test",
+            password_hash=None,
+            nickname="M05",
+            status="active",
+            email_verified_at=datetime.now(UTC),
+        )
+        db.add(user)
+        await db.flush()
+        trip = Trip(owner_user_id=user.user_id, title="M05 legacy alias")
+        db.add(trip)
+        await db.flush()
+        db.add(TripDay(trip_id=trip.trip_id, day_index=1))
+        await db.flush()
+        legacy = TripDayPoi(
+            trip_id=trip.trip_id,
+            day_index=1,
+            sort_order="a0",
+            # cutover가 만든 상태: legacy alias + canonical UUID.
+            feature_id="f_1168010100_p_3c0c2820e96d28d3",
+            feature_uuid=old_uuid,
+            feature_snapshot={},
+            added_by_user_id=user.user_id,
+        )
+        db.add(legacy)
+        await db.flush()
+        legacy_id = legacy.attachment_id
+        # Map은 canonical UUID 리터럴을 feature_id로 보낸다(값 전환 이후).
+        applied = await apply_feature_reference_reconciliation_event(
+            db,
+            _lease(
+                event_id=uuid.uuid4(),
+                event_sequence=2,
+                event_sha256="e" * 64,
+                old_feature_id=str(old_uuid),
+                old_feature_uuid=old_uuid,
+                replacement_feature_id=str(replacement_uuid),
+                replacement_feature_uuid=replacement_uuid,
+            ),
+        )
+        assert isinstance(applied, ReconciliationApplied)
+        await db.commit()
+
+    async with session_factory() as db:
+        row = await db.get(TripDayPoi, legacy_id)
+        assert row is not None
+        assert row.feature_id == str(replacement_uuid)
+        # 이미 검증된 결박이 있던 행은 replacement로 **이동**한다.
+        assert row.feature_uuid == replacement_uuid
+
+
+@pytest.mark.asyncio
+async def test_null_uuid_shadow_is_filled_not_blocked(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """UUID shadow가 아직 비어 있는 평범한 행은 block이 아니라 rebind 대상이다.
+
+    `feature_uuid`는 검증된 alias map 이관이 채우기 전까지 정상적으로 NULL이고
+    (models/poi.py), 일상적인 POI 추가 경로는 `feature_id`만 채운다. 그 NULL을
+    "값이 어긋났다"로 읽으면 평범한 행 하나가 피드를 영구히 세운다 — blocked
+    event는 ack되지 않고 Map은 같은 event를 계속 재공급한다.
+
+    rebind는 두 컬럼을 함께 쓰므로 이 행을 처리하면 짝이 복구된다."""
+
+    old_uuid = uuid.uuid4()
+    replacement_uuid = uuid.uuid4()
+    shadowless_id: uuid.UUID
+    async with session_factory() as db:
+        user = User(
+            email=f"m05-{uuid.uuid4().hex}@pinvi.test",
+            password_hash=None,
+            nickname="M05",
+            status="active",
+            email_verified_at=datetime.now(UTC),
+        )
+        db.add(user)
+        await db.flush()
+        trip = Trip(owner_user_id=user.user_id, title="M05 shadowless")
+        db.add(trip)
+        await db.flush()
+        db.add(TripDay(trip_id=trip.trip_id, day_index=1))
+        await db.flush()
+        shadowless = TripDayPoi(
+            trip_id=trip.trip_id,
+            day_index=1,
+            sort_order="a0",
+            feature_id="feature-old",
+            feature_uuid=None,
+            feature_snapshot={},
+            added_by_user_id=user.user_id,
+        )
+        db.add(shadowless)
+        await db.flush()
+        shadowless_id = shadowless.attachment_id
+        applied = await apply_feature_reference_reconciliation_event(
+            db,
+            _lease(
+                event_id=uuid.uuid4(),
+                event_sequence=2,
+                event_sha256="d" * 64,
+                old_feature_id="feature-old",
+                old_feature_uuid=old_uuid,
+                replacement_feature_id="feature-new",
+                replacement_feature_uuid=replacement_uuid,
+            ),
+        )
+        assert isinstance(applied, ReconciliationApplied)
+        await db.commit()
+
+    async with session_factory() as db:
+        row = await db.get(TripDayPoi, shadowless_id)
+        assert row is not None
+        assert row.feature_id == "feature-new"
+        # canonical 축은 **주조하지 않는다**. 이 행이 old feature를 가리킨다는
+        # 유일한 근거가 길이만 검증되는 client 자유 문자열이기 때문이다 —
+        # 정본화 권한은 검증된 alias map 이관(cutover)에 남는다.
+        assert row.feature_uuid is None
+
+        impacts = list(
+            (
+                await db.scalars(
+                    select(KtmFeatureReferenceReconciliationImpact).where(
+                        KtmFeatureReferenceReconciliationImpact.target_id == shadowless_id
+                    )
+                )
+            ).all()
+        )
+        assert len(impacts) == 1
+        assert impacts[0].outcome == "rebind"
+
+
+@pytest.mark.asyncio
 async def test_partial_pair_blocks_without_mutation_and_evidence_is_append_only(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

@@ -364,7 +364,14 @@ async def update_admin_poi(
     _check_version(actual=poi.version, expected=expected_version)
     _reject_canonical_poi_projection_edit(poi)
     if "feature_id" in values:
-        poi.feature_id = _optional_feature_id(values.get("feature_id"))
+        new_feature_id = _optional_feature_id(values.get("feature_id"))
+        if new_feature_id != poi.feature_id:
+            # feature_id만 바꾸고 UUID shadow를 남겨두면 두 축이 실제로
+            # 어긋난 행이 생긴다 — reconciliation이 유일하게 block해야 할
+            # 상태이고, 그건 피드를 영구히 세운다. 새 참조의 UUID는 여기서
+            # 알 수 없으므로(feature_id는 client 자유 문자열) 비운다.
+            poi.feature_uuid = None
+        poi.feature_id = new_feature_id
     if "feature_snapshot" in values:
         poi.feature_snapshot = dict(_mapping(values.get("feature_snapshot")))
     for field in (
@@ -545,6 +552,8 @@ async def copy_plan_to_trip(
             day_index=day_index,
             sort_order=new_sort,
             feature_id=src.feature_id,
+            # curated plan → trip 이관도 참조의 두 축을 함께 옮긴다.
+            feature_uuid=src.feature_uuid,
             feature_snapshot=src.feature_snapshot,
             custom_marker_color=src.custom_marker_color,
             custom_marker_icon=src.custom_marker_icon,

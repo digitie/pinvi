@@ -15,6 +15,7 @@ from typing import Literal, cast
 
 from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import InstrumentedAttribute
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.clients.kor_travel_map_feature_reference_reconciliation import (
@@ -97,83 +98,112 @@ def _feature_canonical(reference: FeatureReference | None) -> dict[str, object] 
     }
 
 
-def _pair_matches(
+def _row_is_reconcilable(
     feature_id: str | None,
     feature_uuid: uuid.UUID | None,
     reference: FeatureReference,
 ) -> bool:
-    return feature_id == reference.feature_id and feature_uuid == reference.feature_uuid
+    """행이 old reference를 가리키고 있고 안전하게 rebind할 수 있는가.
+
+    **canonical 축은 UUID다**(Map ADR-068). UUID가 맞으면 텍스트 축이 무엇이든
+    같은 feature를 가리키는 것이 확정이므로 rebind 대상이다 — 텍스트가 다른 건
+    값이 어긋난 게 아니라 legacy alias와 canonical 표기가 공존하는 이행기의
+    정상 상태다. cutover는 `feature_uuid`만 채우고 `feature_id`는 legacy `f_*`
+    alias로 남기는데(feature_uuid_cutover), curation import는 이미 `feature_id`에
+    UUID 문자열을 쓴다(curation_collection_import). 즉 한 컬럼에 두 세대가
+    공존하고, UUID 일치를 conflict로 읽으면 Map이 어느 세대를 보내든 **반대
+    세대 전부**가 피드를 영구히 막는다.
+
+    UUID shadow가 아직 비어 있으면 legacy 축으로 판정한다. 이쪽이 약한 신호다 —
+    `feature_id`는 client가 준 자유 문자열이라 검증되지 않는다. 그래도 앱이
+    실제로 feature를 그 문자열로 해소하고 있으므로 같은 근거를 그대로 쓴다.
+
+    rebind는 두 컬럼을 event가 준 replacement로 함께 덮으므로(값을 합성하지
+    않는다), 어느 경로든 처리하면 짝이 **복구**된다.
+    """
+
+    if feature_uuid is not None:
+        return feature_uuid == reference.feature_uuid
+    return feature_id == reference.feature_id
 
 
-def _trip_pair_condition(reference: FeatureReference) -> ColumnElement[bool]:
+def _reconcilable_condition(
+    id_column: InstrumentedAttribute[str | None],
+    uuid_column: InstrumentedAttribute[uuid.UUID | None],
+    reference: FeatureReference,
+) -> ColumnElement[bool]:
+    """`_row_is_reconcilable`의 SQL 대응."""
+
     return or_(
-        and_(
-            TripDayPoi.feature_id == reference.feature_id,
-            TripDayPoi.feature_uuid == reference.feature_uuid,
-        ),
-        _trip_partial_pair_condition(reference),
+        uuid_column == reference.feature_uuid,
+        and_(uuid_column.is_(None), id_column == reference.feature_id),
     )
 
 
-def _curated_pair_condition(reference: FeatureReference) -> ColumnElement[bool]:
-    return or_(
-        and_(
-            CuratedPlanPoi.feature_id == reference.feature_id,
-            CuratedPlanPoi.feature_uuid == reference.feature_uuid,
-        ),
-        _curated_partial_pair_condition(reference),
+def _conflicting_condition(
+    id_column: InstrumentedAttribute[str | None],
+    uuid_column: InstrumentedAttribute[uuid.UUID | None],
+    reference: FeatureReference,
+) -> ColumnElement[bool]:
+    """두 축이 **실제로 어긋난** 행 — 여기서만 block해야 한다.
+
+    legacy 축은 old feature를 가리키는데 canonical 축이 **다른** feature를
+    가리킨다. 이건 이행기의 정상 상태가 아니라 데이터가 실제로 모순인 것이고,
+    사람이 보지 않고 rebind하면 사용자 여정이 무관한 장소에 붙는다.
+    """
+
+    return and_(
+        id_column == reference.feature_id,
+        uuid_column.is_not(None),
+        uuid_column != reference.feature_uuid,
     )
 
 
-def _suggestion_pair_condition(reference: FeatureReference) -> ColumnElement[bool]:
+def _pair_condition(
+    id_column: InstrumentedAttribute[str | None],
+    uuid_column: InstrumentedAttribute[uuid.UUID | None],
+    reference: FeatureReference,
+) -> ColumnElement[bool]:
+    """rebind 대상과 conflict를 **한 번에** 잠근다(각 행을 두 번 읽지 않는다).
+
+    두 술어에서 **파생**시킨다. 접힌 형태(`id=X or uuid=U`)를 직접 쓰면 세 번째
+    독립 선언이 생기고, 구성 술어가 바뀔 때 lock 술어만 조용히 좁아진다 —
+    그 결과는 눈에 보이는 block이 아니라 **행이 아예 안 잡히는 무성 누락**이다
+    (적대 리뷰). 동치성은 테스트가 대조한다.
+    """
+
     return or_(
-        and_(
-            FeatureSuggestion.target_feature_id == reference.feature_id,
-            FeatureSuggestion.target_feature_uuid == reference.feature_uuid,
-        ),
-        _suggestion_partial_pair_condition(reference),
+        _reconcilable_condition(id_column, uuid_column, reference),
+        _conflicting_condition(id_column, uuid_column, reference),
     )
 
 
-def _trip_partial_pair_condition(reference: FeatureReference) -> ColumnElement[bool]:
-    """old tuple 중 하나만 같은 행을 SQL NULL 삼값 논리 없이 잡는다."""
+def _rebound_uuid(
+    current: uuid.UUID | None, replacement: FeatureReference | None
+) -> uuid.UUID | None:
+    """canonical 축을 **주조하지 않고** 이동시킨다.
 
-    return or_(
-        and_(
-            TripDayPoi.feature_id == reference.feature_id,
-            TripDayPoi.feature_uuid.is_distinct_from(reference.feature_uuid),
-        ),
-        and_(
-            TripDayPoi.feature_uuid == reference.feature_uuid,
-            TripDayPoi.feature_id.is_distinct_from(reference.feature_id),
-        ),
-    )
+    행이 canonical 축을 이미 갖고 있었다면(= 검증된 alias map 이관이 채웠다)
+    그 결박을 replacement로 옮긴다. 갖고 있지 않았다면 계속 비워 둔다 —
+    그 행이 old feature를 가리킨다는 유일한 근거는 `feature_id`이고, 그건
+    길이만 검증되는 client 자유 문자열이다(schemas/poi.py).
 
+    미검증 문자열을 근거로 canonical UUID를 새로 새기면 저장소가 이미 적대
+    리뷰로 정한 불변식이 깨진다 — "검증된 alias map만 채운다"
+    (feature_uuid_cutover.py, models/poi.py). 특히 cutover가 **의도적으로**
+    NULL로 남기고 보고하는 stale ref(정리된 feature를 가리키던 참조)와,
+    cutover 이후에 생긴 평범한 행을 이 술어는 구분하지 못한다. legacy
+    feature_id는 내용 파생이라 같은 원본이 재적재되면 같은 문자열이 다른
+    feature에 붙을 수 있고, 그 경우 주조는 사용자 여정을 무관한 장소에
+    **canonical하게** 결박한다.
 
-def _curated_partial_pair_condition(reference: FeatureReference) -> ColumnElement[bool]:
-    return or_(
-        and_(
-            CuratedPlanPoi.feature_id == reference.feature_id,
-            CuratedPlanPoi.feature_uuid.is_distinct_from(reference.feature_uuid),
-        ),
-        and_(
-            CuratedPlanPoi.feature_uuid == reference.feature_uuid,
-            CuratedPlanPoi.feature_id.is_distinct_from(reference.feature_id),
-        ),
-    )
+    legacy 축만 고쳐 쓰면 피드는 그대로 풀리고, 정본화 권한은 cutover에
+    남는다. 다음 cutover가 새 참조를 alias map으로 검증해 채운다.
+    """
 
-
-def _suggestion_partial_pair_condition(reference: FeatureReference) -> ColumnElement[bool]:
-    return or_(
-        and_(
-            FeatureSuggestion.target_feature_id == reference.feature_id,
-            FeatureSuggestion.target_feature_uuid.is_distinct_from(reference.feature_uuid),
-        ),
-        and_(
-            FeatureSuggestion.target_feature_uuid == reference.feature_uuid,
-            FeatureSuggestion.target_feature_id.is_distinct_from(reference.feature_id),
-        ),
-    )
+    if current is None:
+        return None
+    return replacement.feature_uuid if replacement is not None else None
 
 
 def _block(
@@ -260,7 +290,7 @@ async def _load_trip_rows(
                 select(TripDayPoi)
                 .where(
                     TripDayPoi.deleted_at.is_(None),
-                    _trip_pair_condition(reference),
+                    _pair_condition(TripDayPoi.feature_id, TripDayPoi.feature_uuid, reference),
                 )
                 .order_by(TripDayPoi.attachment_id)
                 .with_for_update()
@@ -268,8 +298,12 @@ async def _load_trip_rows(
         ).all()
     )
     return (
-        [row for row in rows if _pair_matches(row.feature_id, row.feature_uuid, reference)],
-        [row for row in rows if not _pair_matches(row.feature_id, row.feature_uuid, reference)],
+        [row for row in rows if _row_is_reconcilable(row.feature_id, row.feature_uuid, reference)],
+        [
+            row
+            for row in rows
+            if not _row_is_reconcilable(row.feature_id, row.feature_uuid, reference)
+        ],
     )
 
 
@@ -284,7 +318,9 @@ async def _load_curated_rows(
                 select(CuratedPlanPoi)
                 .where(
                     CuratedPlanPoi.deleted_at.is_(None),
-                    _curated_pair_condition(reference),
+                    _pair_condition(
+                        CuratedPlanPoi.feature_id, CuratedPlanPoi.feature_uuid, reference
+                    ),
                 )
                 .order_by(CuratedPlanPoi.curated_poi_id)
                 .with_for_update()
@@ -292,8 +328,12 @@ async def _load_curated_rows(
         ).all()
     )
     return (
-        [row for row in rows if _pair_matches(row.feature_id, row.feature_uuid, reference)],
-        [row for row in rows if not _pair_matches(row.feature_id, row.feature_uuid, reference)],
+        [row for row in rows if _row_is_reconcilable(row.feature_id, row.feature_uuid, reference)],
+        [
+            row
+            for row in rows
+            if not _row_is_reconcilable(row.feature_id, row.feature_uuid, reference)
+        ],
     )
 
 
@@ -308,7 +348,11 @@ async def _load_suggestion_rows(
                 select(FeatureSuggestion)
                 .where(
                     FeatureSuggestion.suggestion_type.in_(("correction", "closure")),
-                    _suggestion_pair_condition(reference),
+                    _pair_condition(
+                        FeatureSuggestion.target_feature_id,
+                        FeatureSuggestion.target_feature_uuid,
+                        reference,
+                    ),
                 )
                 .order_by(FeatureSuggestion.request_id)
                 .with_for_update()
@@ -319,12 +363,12 @@ async def _load_suggestion_rows(
         [
             row
             for row in rows
-            if _pair_matches(row.target_feature_id, row.target_feature_uuid, reference)
+            if _row_is_reconcilable(row.target_feature_id, row.target_feature_uuid, reference)
         ],
         [
             row
             for row in rows
-            if not _pair_matches(row.target_feature_id, row.target_feature_uuid, reference)
+            if not _row_is_reconcilable(row.target_feature_id, row.target_feature_uuid, reference)
         ],
     )
 
@@ -487,7 +531,7 @@ async def apply_feature_reference_reconciliation_event(
             )
         )
         trip_row.feature_id = replacement.feature_id if replacement is not None else None
-        trip_row.feature_uuid = replacement.feature_uuid if replacement is not None else None
+        trip_row.feature_uuid = _rebound_uuid(trip_row.feature_uuid, replacement)
         if replacement is None:
             trip_row.feature_link_broken_at = func.now()
     for curated_row in curated_matches:
@@ -501,7 +545,7 @@ async def apply_feature_reference_reconciliation_event(
             )
         )
         curated_row.feature_id = replacement.feature_id if replacement is not None else None
-        curated_row.feature_uuid = replacement.feature_uuid if replacement is not None else None
+        curated_row.feature_uuid = _rebound_uuid(curated_row.feature_uuid, replacement)
     for suggestion_row in suggestion_matches:
         # terminal suggestions는 historical evidence라 target tuple을 수정하지 않는다.
         if suggestion_row.status in {"rejected", "added", "duplicate"}:
@@ -518,8 +562,8 @@ async def apply_feature_reference_reconciliation_event(
         suggestion_row.target_feature_id = (
             replacement.feature_id if replacement is not None else None
         )
-        suggestion_row.target_feature_uuid = (
-            replacement.feature_uuid if replacement is not None else None
+        suggestion_row.target_feature_uuid = _rebound_uuid(
+            suggestion_row.target_feature_uuid, replacement
         )
 
     impacts.sort(key=lambda impact: (impact.target_relation, str(impact.target_id)))

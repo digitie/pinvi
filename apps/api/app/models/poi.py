@@ -86,10 +86,13 @@ class TripDayPoi(Base, TimestampMixin):
     # LexoRank — JS ASCII와 PG 정렬 일관을 위해 COLLATE "C"
     sort_order: Mapped[str] = mapped_column(Text(collation="C"), nullable=False)
     feature_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
-    # T-VN-32C(Map ADR-068): legacy f_* 참조의 UUID shadow. 값 채움은
+    # T-VN-32C(Map ADR-068): legacy f_* 참조의 UUID shadow. 값 **채움**은
     # 검증된 alias map 이관(services/feature_uuid_cutover)이 수행한다 —
     # Map 값 전환(PR-2) 이후 canonical UUID 리터럴 참조는 같은 runner의
     # opt-in(accept_uuid_literals) 자기-정본화 경로로만 채운다.
+    # M05 reconciliation은 이 축을 **이동만** 시킨다: 이미 채워져 있던 결박을
+    # replacement로 옮기되, 비어 있던 행에는 새로 새기지 않는다. 채움 권한은
+    # 위 이관에 남는다(services/feature_reference_reconciliation._rebound_uuid).
     feature_uuid: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     feature_link_broken_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     feature_snapshot: Mapped[dict[str, Any]] = mapped_column(

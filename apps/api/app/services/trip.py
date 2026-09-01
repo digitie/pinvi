@@ -618,6 +618,8 @@ async def copy_trip(
             day_index=source_poi.day_index,
             sort_order=sort_order,
             feature_id=source_poi.feature_id,
+            # 참조의 두 축은 함께 옮긴다(admin_trip_operations._clone_poi와 동일).
+            feature_uuid=source_poi.feature_uuid,
             feature_link_broken_at=source_poi.feature_link_broken_at,
             feature_snapshot=source_poi.feature_snapshot,
             custom_marker_color=source_poi.custom_marker_color,
