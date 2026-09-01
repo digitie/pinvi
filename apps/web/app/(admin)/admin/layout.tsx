@@ -40,6 +40,7 @@ import {
   Workflow,
   type LucideIcon,
 } from 'lucide-react';
+import { ADMIN_MAIN_CONTENT_ID, AdminSkipLink } from '@/components/admin/admin-shell-parts';
 import { AdminQueryProvider } from '@/components/admin/AdminQueryProvider';
 // 좌측 메뉴 이동 중 RSC/client transition 실패가 Next 기본 오류 화면으로 새지 않도록
 // document navigation으로 이동한다 (kor-travel-geo T-278 이식).
@@ -181,6 +182,9 @@ function AdminGuard({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-dvh min-w-0 max-w-full flex-col overflow-x-clip bg-surface-soft lg:flex-row">
+      {/* 좌측 rail은 nav 항목이 30개가 넘는다 — 키보드/스크린리더 사용자가 매 페이지마다 그걸
+          전부 통과하지 않도록 본문 건너뛰기를 nav 앞에 둔다(kor-travel-map admin 규약, T-356). */}
+      <AdminSkipLink />
       <aside
         className={`w-full max-w-[100dvw] min-w-0 shrink-0 overflow-x-hidden border-b border-hairline bg-canvas transition-[width] duration-200 lg:sticky lg:top-0 lg:h-dvh lg:overflow-y-auto lg:border-b-0 lg:border-r ${
           sidebarCollapsed ? 'lg:w-20' : 'lg:w-64'
@@ -299,7 +303,13 @@ function AdminGuard({ children }: { children: ReactNode }) {
           </div>
         </nav>
       </aside>
-      <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      {/* `tabIndex={-1}`이라야 skip link가 실제로 포커스를 옮긴다(그냥 앵커면 스크롤만 되고
+          다음 Tab이 nav로 되돌아간다). 링 자체는 이 컨테이너에 필요 없어 끈다. */}
+      <main
+        className="min-w-0 flex-1 overflow-x-hidden px-4 py-6 focus-visible:outline-0 sm:px-6 lg:px-8 lg:py-8"
+        id={ADMIN_MAIN_CONTENT_ID}
+        tabIndex={-1}
+      >
         {children}
       </main>
     </div>

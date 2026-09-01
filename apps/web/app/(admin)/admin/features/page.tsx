@@ -1,4 +1,35 @@
 'use client';
+// T-356 2단계 파일럿 — 이 화면의 **필터 툴바와 페이저**를 KTM admin idiom으로 전환했다.
+// (KTM `src/components/filter-bar.tsx` / `src/components/pagination-bar.tsx` 이식본 소비처)
+//
+// 원문(= 전환 전 pinvi 코드)에서 바꾼 부분과 이유:
+//  1) `@/components/admin/AdminPage`의 `FilterBar`(카드 프레임 + `items-center`) →
+//     `@/components/admin/filter-bar`의 `FilterBar`/`FilterField`/`FilterActions`.
+//     같은 이름의 다른 컴포넌트라 import 출처만 바꿨다. 나머지 22개 admin 페이지는
+//     아직 AdminPage 쪽 `FilterBar`를 쓰므로 그 export는 건드리지 않았다.
+//  2) 모든 필터에 **가시 라벨**을 붙였다(M26). 전환 전에는 placeholder(`provider_dataset_id`,
+//     `category`)와 `aria-label`이 라벨을 대신했다 — placeholder는 입력이 들어가는 순간 사라져
+//     "이 칸이 무엇이었는지"가 없어진다. 라벨이 접근성 이름을 갖게 됐으므로 중복이 되는
+//     `aria-label`(`provider dataset id`, `lifecycle_state 필터`, `publication_state 필터`,
+//     `quality_state 필터`)은 제거했다 — 저장소 전체에서 이 문자열을 잡는 e2e/단위 테스트는 없다.
+//  3) 지금까지 코드에만 있던 두 규칙을 `FilterField hint`로 화면에 꺼냈다:
+//     provider_dataset_id는 정수 1 이상만 전송하고(그 외는 조용히 버려졌다),
+//     category는 쉼표 CSV로 여러 개를 보낸다. 동작은 그대로고 설명만 보이게 됐다.
+//  4) 수제 input/select/button className(`inputClass`, `rounded-sm border border-hairline …`) →
+//     `@/components/admin/ui/{input,native-select,native-select-option,button}`.
+//     폭은 런타임 값이 아니라 정적 클래스(`w-56`/`w-36`)이므로 FilterField에 그대로 얹었다.
+//  5) 수제 이전/다음 페이저 → `CursorPager`. 경계(첫 페이지)는 native disabled 그대로,
+//     전환 중에는 `Button loading`(aria-busy + spinner, 포커스 유지)으로 바뀐다.
+//     `data-testid="admin-features-first" / "admin-features-next"`는 CursorPager에 부착점이
+//     없어 사라졌다 — 저장소 어디에서도 참조하지 않는 것을 확인하고 뺐다(대신 pager 버튼은
+//     `aria-label="첫 페이지" / "다음 페이지"`로 잡을 수 있다).
+//  6) 갱신 버튼은 `disabled={isFetching}` → `loading={isFetching}`. 눌림 방지는 동일하고
+//     (Button이 활성화를 막는다) 방금 누른 버튼이 탭 순서에서 빠지지 않는다.
+//
+// 보존한 것(계약): 모든 `data-testid`(위 5의 두 개 제외), 쿼리 파라미터 조립(`params`),
+// 필터 적용 시점(텍스트 3종은 제출, select는 즉시), 커서 스택 동작, 한국어 문구(`조회`/`갱신`/
+// `첫 페이지`/`다음`), option 텍스트·value, 로컬 `formatDateTime`(ko-KR `toLocaleString` —
+// `@/lib/admin/format`의 것으로 바꾸면 표시 포맷이 달라진다).
 
 import Link from 'next/link';
 import { useMemo, useState, type FormEvent } from 'react';
@@ -20,8 +51,14 @@ import type {
   AdminFeatureSummary,
 } from '@pinvi/schemas';
 import { Eye, RefreshCw, Search } from 'lucide-react';
-import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
+import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { CursorPager } from '@/components/admin/pagination-bar';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -59,8 +96,6 @@ type LifecycleFilter = AdminFeatureLifecycleState | 'all';
 type PublicationFilter = AdminFeaturePublicationState | 'all';
 type QualityFilter = AdminFeatureQualityState | 'all';
 type IssueFilter = (typeof ISSUE_FILTERS)[number]['value'];
-
-const inputClass = 'rounded-sm border border-hairline px-2 py-1 text-sm';
 
 function valuesFromCsv(value: string): string[] | undefined {
   const values = value
@@ -169,15 +204,15 @@ function DetailInspector({ featureId }: { featureId: string | null }) {
           </h2>
           <p className="break-all font-mono text-xs text-muted">{featureId}</p>
         </div>
-        <button
-          type="button"
+        <Button
+          size="sm"
+          variant="outline"
           onClick={() => void detailQuery.refetch()}
-          className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-xs"
           data-testid="admin-features-detail-refresh"
         >
-          <RefreshCw className="h-3 w-3" aria-hidden="true" />
+          <RefreshCw aria-hidden="true" />
           갱신
-        </button>
+        </Button>
       </header>
 
       {detailQuery.isLoading && <p className="text-sm text-muted">불러오는 중…</p>}
@@ -431,18 +466,18 @@ export default function AdminFeaturesPage() {
       key: 'action',
       header: '',
       cell: (feature) => (
-        <button
-          type="button"
+        <Button
+          size="sm"
+          variant="ghost"
           onClick={(event) => {
             event.stopPropagation();
             setSelectedFeatureId(feature.feature_id);
           }}
-          className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-xs"
           data-testid={`admin-features-detail-${feature.feature_id}`}
         >
-          <Eye className="h-3 w-3" aria-hidden="true" />
+          <Eye aria-hidden="true" />
           상세
-        </button>
+        </Button>
       ),
     },
   ];
@@ -452,199 +487,215 @@ export default function AdminFeaturesPage() {
       title="Features"
       description="kor-travel-map admin API 기반 feature 목록과 원천 상세 조회"
     >
-      <FilterBar>
-        <form onSubmit={onSearch} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <label htmlFor="admin-features-search" className="text-xs text-muted">
-            검색
-          </label>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2 top-2 h-4 w-4 text-muted" />
-            <input
-              id="admin-features-search"
-              type="search"
-              value={queryInput}
-              onChange={(event) => setQueryInput(event.target.value)}
-              className={`${inputClass} w-56 pl-7`}
-              placeholder="name, address, feature_id"
-              data-testid="admin-features-search"
-            />
-          </div>
-          <input
-            type="number"
-            min={1}
-            step={1}
-            value={providerDatasetInput}
-            onChange={(event) => setProviderDatasetInput(event.target.value)}
-            className={`${inputClass} w-36`}
-            placeholder="provider_dataset_id"
-            aria-label="provider dataset id"
-            data-testid="admin-features-provider-dataset-filter"
-          />
-          <input
-            type="text"
-            value={categoryInput}
-            onChange={(event) => setCategoryInput(event.target.value)}
-            className={`${inputClass} w-36`}
-            placeholder="category"
-            data-testid="admin-features-category-filter"
-          />
-          <button
-            type="submit"
-            className="rounded-sm border border-hairline px-3 py-1 text-sm"
-            data-testid="admin-features-search-submit"
-          >
-            조회
-          </button>
+      {/* 툴바는 한 묶음(space-y-3)으로 붙여 둔다 — AdminPage의 space-y-6은 섹션 간격이다. */}
+      <div className="space-y-3">
+        {/* 텍스트 3종만 제출로 적용된다(전환 전과 동일) — select는 form 밖에 두어 Firefox에서
+            select 위 Enter가 폼을 제출하는 일이 없게 한다. */}
+        <form onSubmit={onSearch}>
+          <FilterBar>
+            <FilterField className="w-56" htmlFor="admin-features-search" label="검색">
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
+                  aria-hidden="true"
+                />
+                <Input
+                  id="admin-features-search"
+                  type="search"
+                  value={queryInput}
+                  onChange={(event) => setQueryInput(event.target.value)}
+                  className="pl-9"
+                  placeholder="name, address, feature_id"
+                  data-testid="admin-features-search"
+                />
+              </div>
+            </FilterField>
+            <FilterField className="w-36" hint="정수 1 이상" label="provider dataset ID">
+              <Input
+                type="number"
+                min={1}
+                step={1}
+                value={providerDatasetInput}
+                onChange={(event) => setProviderDatasetInput(event.target.value)}
+                placeholder="provider_dataset_id"
+                data-testid="admin-features-provider-dataset-filter"
+              />
+            </FilterField>
+            <FilterField className="w-36" hint="쉼표로 여러 개" label="category">
+              <Input
+                type="text"
+                value={categoryInput}
+                onChange={(event) => setCategoryInput(event.target.value)}
+                placeholder="category"
+                data-testid="admin-features-category-filter"
+              />
+            </FilterField>
+            <FilterActions>
+              <Button type="submit" variant="outline" data-testid="admin-features-search-submit">
+                조회
+              </Button>
+            </FilterActions>
+          </FilterBar>
         </form>
 
-        <select
-          value={kind}
-          onChange={(event) => {
-            setKind(event.target.value as KindFilter);
-            resetCursor();
-          }}
-          className={inputClass}
-          data-testid="admin-features-kind-filter"
-        >
-          <option value="all">kind 전체</option>
-          {FEATURE_KINDS.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-        <select
-          value={lifecycle}
-          onChange={(event) => {
-            setLifecycle(event.target.value as LifecycleFilter);
-            resetCursor();
-          }}
-          className={inputClass}
-          aria-label="lifecycle_state 필터"
-          data-testid="admin-features-lifecycle-filter"
-        >
-          <option value="all">lifecycle 전체</option>
-          {LIFECYCLE_STATES.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-        <select
-          value={publication}
-          onChange={(event) => {
-            setPublication(event.target.value as PublicationFilter);
-            resetCursor();
-          }}
-          className={inputClass}
-          aria-label="publication_state 필터"
-          data-testid="admin-features-publication-filter"
-        >
-          <option value="all">publication 전체</option>
-          {PUBLICATION_STATES.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-        <select
-          value={quality}
-          onChange={(event) => {
-            setQuality(event.target.value as QualityFilter);
-            resetCursor();
-          }}
-          className={inputClass}
-          aria-label="quality_state 필터"
-          data-testid="admin-features-quality-filter"
-        >
-          <option value="all">quality 전체</option>
-          {QUALITY_STATES.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-        <select
-          value={issue}
-          onChange={(event) => {
-            setIssue(event.target.value as IssueFilter);
-            resetCursor();
-          }}
-          className={inputClass}
-          data-testid="admin-features-issue-filter"
-        >
-          {ISSUE_FILTERS.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-      </FilterBar>
+        <FilterBar>
+          <FilterField label="kind">
+            <NativeSelect
+              value={kind}
+              onChange={(event) => {
+                setKind(event.target.value as KindFilter);
+                resetCursor();
+              }}
+              data-testid="admin-features-kind-filter"
+            >
+              <NativeSelectOption value="all">kind 전체</NativeSelectOption>
+              {FEATURE_KINDS.map((item) => (
+                <NativeSelectOption key={item} value={item}>
+                  {item}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </FilterField>
+          <FilterField label="lifecycle">
+            <NativeSelect
+              value={lifecycle}
+              onChange={(event) => {
+                setLifecycle(event.target.value as LifecycleFilter);
+                resetCursor();
+              }}
+              data-testid="admin-features-lifecycle-filter"
+            >
+              <NativeSelectOption value="all">lifecycle 전체</NativeSelectOption>
+              {LIFECYCLE_STATES.map((item) => (
+                <NativeSelectOption key={item} value={item}>
+                  {item}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </FilterField>
+          <FilterField label="publication">
+            <NativeSelect
+              value={publication}
+              onChange={(event) => {
+                setPublication(event.target.value as PublicationFilter);
+                resetCursor();
+              }}
+              data-testid="admin-features-publication-filter"
+            >
+              <NativeSelectOption value="all">publication 전체</NativeSelectOption>
+              {PUBLICATION_STATES.map((item) => (
+                <NativeSelectOption key={item} value={item}>
+                  {item}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </FilterField>
+          <FilterField label="quality">
+            <NativeSelect
+              value={quality}
+              onChange={(event) => {
+                setQuality(event.target.value as QualityFilter);
+                resetCursor();
+              }}
+              data-testid="admin-features-quality-filter"
+            >
+              <NativeSelectOption value="all">quality 전체</NativeSelectOption>
+              {QUALITY_STATES.map((item) => (
+                <NativeSelectOption key={item} value={item}>
+                  {item}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </FilterField>
+          <FilterField label="이슈">
+            <NativeSelect
+              value={issue}
+              onChange={(event) => {
+                setIssue(event.target.value as IssueFilter);
+                resetCursor();
+              }}
+              data-testid="admin-features-issue-filter"
+            >
+              {ISSUE_FILTERS.map((item) => (
+                <NativeSelectOption key={item.value} value={item.value}>
+                  {item.label}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </FilterField>
+        </FilterBar>
 
-      <FilterBar>
-        <label htmlFor="admin-features-sort" className="text-xs text-muted">
-          정렬
-        </label>
-        <select
-          id="admin-features-sort"
-          value={sort}
-          onChange={(event) => {
-            setSort(event.target.value as AdminFeatureSort);
-            resetCursor();
-          }}
-          className={inputClass}
-          data-testid="admin-features-sort-filter"
-        >
-          {SORT_OPTIONS.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-        <select
-          value={order}
-          onChange={(event) => {
-            setOrder(event.target.value as AdminFeatureSortOrder);
-            resetCursor();
-          }}
-          className={inputClass}
-          data-testid="admin-features-order-filter"
-        >
-          <option value="asc">asc</option>
-          <option value="desc">desc</option>
-        </select>
-        <select
-          value={String(pageSize)}
-          onChange={(event) => {
-            setPageSize(Number(event.target.value) as typeof pageSize);
-            resetCursor();
-          }}
-          className={inputClass}
-          data-testid="admin-features-page-size"
-        >
-          {PAGE_SIZE_OPTIONS.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          disabled={featuresQuery.isFetching}
-          onClick={() => void featuresQuery.refetch()}
-          className="inline-flex items-center gap-1 rounded-sm border border-hairline px-3 py-1 text-sm disabled:opacity-50"
-          data-testid="admin-features-refresh"
-        >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-          갱신
-        </button>
-        <span className="ml-auto text-xs text-muted">
-          {data?.items.length ?? 0}행 / page {pageIndex}
-          {data?.duration_ms !== null && data?.duration_ms !== undefined
-            ? ` / ${data.duration_ms}ms`
-            : ''}
-        </span>
-      </FilterBar>
+        {/*
+          정렬은 서버(`sort`/`order` 쿼리)에서 일어난다 — AdminTable의 헤더 클릭 정렬은 현재
+          페이지 안에서만 도는 클라이언트 정렬이라 이 두 컨트롤을 대신하지 못한다. 그래서
+          KTM의 "정렬은 column header에만"(M26)을 여기서는 적용하지 않고 툴바에 남긴다.
+        */}
+        <FilterBar>
+          <FilterField htmlFor="admin-features-sort" label="정렬">
+            <NativeSelect
+              id="admin-features-sort"
+              value={sort}
+              onChange={(event) => {
+                setSort(event.target.value as AdminFeatureSort);
+                resetCursor();
+              }}
+              data-testid="admin-features-sort-filter"
+            >
+              {SORT_OPTIONS.map((item) => (
+                <NativeSelectOption key={item} value={item}>
+                  {item}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </FilterField>
+          <FilterField label="정렬 방향">
+            <NativeSelect
+              value={order}
+              onChange={(event) => {
+                setOrder(event.target.value as AdminFeatureSortOrder);
+                resetCursor();
+              }}
+              data-testid="admin-features-order-filter"
+            >
+              <NativeSelectOption value="asc">asc</NativeSelectOption>
+              <NativeSelectOption value="desc">desc</NativeSelectOption>
+            </NativeSelect>
+          </FilterField>
+          <FilterField label="페이지 크기">
+            <NativeSelect
+              value={String(pageSize)}
+              onChange={(event) => {
+                setPageSize(Number(event.target.value) as typeof pageSize);
+                resetCursor();
+              }}
+              data-testid="admin-features-page-size"
+            >
+              {PAGE_SIZE_OPTIONS.map((item) => (
+                <NativeSelectOption key={item} value={item}>
+                  {item}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </FilterField>
+          <FilterActions>
+            <Button
+              variant="outline"
+              loading={featuresQuery.isFetching}
+              onClick={() => void featuresQuery.refetch()}
+              data-testid="admin-features-refresh"
+            >
+              <RefreshCw aria-hidden="true" />
+              갱신
+            </Button>
+          </FilterActions>
+          <span className="ml-auto self-end text-xs text-muted">
+            {data?.items.length ?? 0}행 / page {pageIndex}
+            {data?.duration_ms !== null && data?.duration_ms !== undefined
+              ? ` / ${data.duration_ms}ms`
+              : ''}
+          </span>
+        </FilterBar>
+      </div>
 
       {error && (
         <p
@@ -668,34 +719,24 @@ export default function AdminFeaturesPage() {
             empty="feature가 없습니다."
           />
 
-          <div className="flex items-center justify-between text-sm">
-            <button
-              type="button"
-              disabled={cursorStack.length === 0}
-              onClick={() => {
-                setCursorStack([]);
-                setSelectedFeatureId(null);
-              }}
-              className="rounded-sm border border-hairline px-3 py-1 disabled:opacity-50"
-              data-testid="admin-features-first"
-            >
-              첫 페이지
-            </button>
-            <span className="text-muted">page {pageIndex}</span>
-            <button
-              type="button"
-              disabled={!nextCursor}
-              onClick={() => {
-                if (!nextCursor) return;
-                setCursorStack((stack) => [...stack, nextCursor]);
-                setSelectedFeatureId(null);
-              }}
-              className="rounded-sm border border-hairline px-3 py-1 disabled:opacity-50"
-              data-testid="admin-features-next"
-            >
-              다음
-            </button>
-          </div>
+          {/*
+            cursor 스택을 들고 있지만 `previous`는 넘기지 않는다 — 전환 전에도 `이전`은 없었고
+            (첫 페이지 / 다음 두 개뿐) 여기서 켜면 요청 밖의 동작 변경이 된다. 필요해지면
+            `previous={{ available: cursorStack.length > 0, onActivate: pop }}` 한 줄이면 된다.
+          */}
+          <CursorPager
+            hasNext={Boolean(nextCursor)}
+            isFetching={featuresQuery.isFetching}
+            isFirst={cursorStack.length === 0}
+            placement="bottom"
+            summary={<>페이지 {pageIndex}</>}
+            onFirst={resetCursor}
+            onNext={() => {
+              if (!nextCursor) return;
+              setCursorStack((stack) => [...stack, nextCursor]);
+              setSelectedFeatureId(null);
+            }}
+          />
         </div>
 
         <DetailInspector featureId={selectedFeatureId} />
