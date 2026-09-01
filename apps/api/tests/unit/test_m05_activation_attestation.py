@@ -781,3 +781,20 @@ def test_isolated_scope_does_not_require_external_review_evidence() -> None:
     assert marker in source
     guard = source[: source.index(marker)].rstrip().splitlines()[-1].strip()
     assert guard == 'if args.scope != "isolated":', guard
+
+
+def test_receipt_verifier_evidence_inventory_matches_the_producer_by_scope() -> None:
+    """생산자(attestation)와 검증자(receipt)가 같은 scope 규칙으로 evidence
+    목록을 선언해야 한다 — 한쪽만 고치면 이중 선언이 방향만 바뀐다(적대 리뷰)."""
+
+    root = Path(__file__).resolve().parents[4] / "scripts"
+    receipt = (root / "m05_activation_receipt.py").read_text(encoding="utf-8")
+    attestation = (root / "m05_activation_attestation.py").read_text(encoding="utf-8")
+
+    assert 'expected_evidence = ("ui-run", "live-ui", "map-pair", "pinvi-images")' in receipt
+    assert 'if scope != "isolated":' in receipt
+    assert 'expected_evidence += ("restore", "reviews")' in receipt
+    # 생산자도 같은 조건으로 두 외부 증거를 건너뛴다.
+    marker = 'for name in ("reviews", "restore"):'
+    guard = attestation[: attestation.index(marker)].rstrip().splitlines()[-1].strip()
+    assert guard == 'if args.scope != "isolated":', guard
