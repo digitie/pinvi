@@ -25,6 +25,9 @@ Environment:
   PINVI_PLAYWRIGHT_RUNNER_REPO_ROOT    Repository root, default: script parent.
   PINVI_PLAYWRIGHT_RUNNER_SKIP_NPM_CI  Set to 1 to reuse the node_modules volume.
   PINVI_PLAYWRIGHT_RUNNER_VOLUME_PREFIX Named volume prefix, default: pinvi-playwright.
+  PINVI_PLAYWRIGHT_RUNNER_TMPFS_SIZE   test-results/playwright-report tmpfs size,
+                                       default: 1g (e.g. 512m, 2g). Raise this if a run
+                                       fails with ENOSPC while writing traces.
 USAGE
 }
 
@@ -123,6 +126,20 @@ image="${PINVI_PLAYWRIGHT_RUNNER_IMAGE:-mcr.microsoft.com/playwright:v${playwrig
 network="${PINVI_PLAYWRIGHT_RUNNER_NETWORK:-host}"
 skip_npm_ci="${PINVI_PLAYWRIGHT_RUNNER_SKIP_NPM_CI:-0}"
 volume_prefix="${PINVI_PLAYWRIGHT_RUNNER_VOLUME_PREFIX:-pinvi-playwright}"
+
+# test-results/playwright-report tmpfs 크기.
+#
+# 기본이 64m일 때 T-356 e2e에서 `ENOSPC: no space left on device`로 실패가 났다. 실패 원인이
+# assertion이 아니라 `finally`의 `context.close()`였다 — 즉 코드가 아니라 러너 한계다.
+# `trace: 'retain-on-failure'`는 통과 케이스도 일단 기록한 뒤 버리므로, 워커가 여럿이면
+# 순간 사용량이 64m를 쉽게 넘는다. 증거를 잃으면 게이트 신뢰도가 떨어지므로 기본을 올리고
+# 조절 가능하게 둔다. tmpfs 자체는 유지한다 — trace/report가 named volume이나 clean
+# checkout에 남지 않게 하는 격리 장치다.
+tmpfs_size="${PINVI_PLAYWRIGHT_RUNNER_TMPFS_SIZE:-1g}"
+if [[ ! "$tmpfs_size" =~ ^[0-9]+[kmgKMG]$ ]]; then
+  echo "error: PINVI_PLAYWRIGHT_RUNNER_TMPFS_SIZE must look like 512m or 2g" >&2
+  exit 1
+fi
 evidence_owner="$(id -u):$(id -g)"
 generic_live_requested="0"
 if [[ "${PINVI_LIVE_MUTATING_E2E:-0}" == "1" \
@@ -340,8 +357,8 @@ docker_args+=(
   -v "${volume_prefix}-npm-cache:/tmp/.npm"
   # live runner가 실패해도 trace/report가 named volume이나 clean checkout에 남지 않는다.
   # M04/M05 증거는 아래 별도 evidence directory의 fixed marker만 허용한다.
-  --tmpfs /work/apps/web/test-results:rw,noexec,nosuid,size=64m
-  --tmpfs /work/apps/web/playwright-report:rw,noexec,nosuid,size=64m
+  --tmpfs "/work/apps/web/test-results:rw,noexec,nosuid,size=${tmpfs_size}"
+  --tmpfs "/work/apps/web/playwright-report:rw,noexec,nosuid,size=${tmpfs_size}"
 )
 if [[ -n "$evidence_dir" ]]; then
   docker_args+=( -v "$evidence_dir:$evidence_dir" )
