@@ -2644,6 +2644,10 @@ def _live(args: argparse.Namespace) -> int:
             child_env.pop(name)
     child_env["PATH"] = "/usr/local/bin:/usr/bin:/bin"
     child_env["DOCKER_HOST"] = "unix:///var/run/docker.sock"
+    # M05 rebind UI 스펙의 beforeAll 게이트 — M04 쌍둥이(:PINVI_M04_LIVE_E2E)와
+    # 대칭이어야 한다. 빠지면 스펙이 브라우저 동작 하나 없이 중단되고 격리
+    # execution 하나가 통째로 소각된다(2026-09-01 정합성 스윕 blocker).
+    child_env["PINVI_M05_LIVE_E2E"] = "1"
     child_env["PINVI_M05_UI_EVIDENCE_DIR"] = str(evidence_dir)
     child_env["PINVI_M05_LIVE_EVENT_ID"] = event_id
     child_env["PINVI_M05_LIVE_OLD_FEATURE_ID"] = old_feature_id
@@ -2837,9 +2841,15 @@ def _live(args: argparse.Namespace) -> int:
         "map-pair": _write_json(evidence_dir / "map-pair.json", map_pair),
         "pinvi-images": _write_json(evidence_dir / "pinvi-images.json", pinvi_images),
     }
-    for name in ("reviews", "restore"):
-        path = evidence_dir / f"{name}.json"
-        _value, output_hashes[name] = _read_json(path)
+    # reviews/restore는 사람 리뷰와 복구 드릴의 **외부** 증거다 — staging/
+    # production 활성화 경로에서만 존재하고, 격리 harness는 기계 체인만
+    # 증명하므로 생산하지 않는다. isolated에서 이를 요구하면 UI가 완전히
+    # green이어도 봉인 직전에 'invalid JSON evidence: reviews.json'으로
+    # 죽는다(정합성 스윕 high). 격리 payload는 이미 별도 버전(v4)이다.
+    if args.scope != "isolated":
+        for name in ("reviews", "restore"):
+            path = evidence_dir / f"{name}.json"
+            _value, output_hashes[name] = _read_json(path)
 
     attestation_payload = {
         "created_at": int(time.time()),
