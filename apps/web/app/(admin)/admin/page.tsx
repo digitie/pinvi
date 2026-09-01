@@ -1,4 +1,27 @@
 'use client';
+// T-356 배선 단계 — 대시보드의 **9칸 통계 카드 그리드**를 KTM admin idiom으로 갈아끼웠다.
+// (KTM `src/components/stat-strip.tsx` 이식본 소비처)
+//
+// 원문(= 전환 전 pinvi 코드)에서 바꾼 부분과 이유:
+//  1) `cards.map()`이 그리던 `<div className="rounded-sm border … p-4">` 카드 그리드
+//     (`grid-cols-1 md:grid-cols-2 lg:grid-cols-4`) → `StatStrip size="lg"`.
+//     KTM의 KPI idiom은 카드 프레임이 아니라 hairline 구분선만 있는 타이포그래피 strip이다
+//     (`grid-cols-[repeat(auto-fit,minmax(9rem,1fr))]`). 카드 9장이 만들던 테두리 격자가 사라지고
+//     숫자가 1급 요소가 된다.
+//  2) `label`/`value`/`hint` 3필드는 StatStrip의 `label`/`value`/`caption`에 그대로 대응한다.
+//     **문구는 한 글자도 바꾸지 않았다.** `value`는 이미 페이지의 로컬 포매터
+//     (`formatNumber`/`formatLatency`)가 만든 문자열이라 StatStrip의 `formatCount`를 타지 않고
+//     그대로 렌더된다 — `'320 ms'`, `'12'` 같은 e2e 문자열이 유지된다.
+//  3) `data-testid={`admin-stat-${card.label}`}`는 StatStrip의 `testId` 항목 필드로 옮겼다.
+//     testid 문자열 자체는 동일하다(`admin-stat-사용자 총 수` 등을 e2e가 잡는다).
+//  4) 로딩 표기가 `'…'` → `'—'`(StatStrip이 쓰는 NULL_GLYPH)로 바뀐다. 이 문자열을 잡는
+//     테스트는 저장소에 없고, KTM 규율상 미지 값 글리프는 `—` 하나다(가짜 0/유사 값 금지).
+//     `isLoading`을 넘기면 `aria-busy`도 함께 붙는다.
+//  5) 시스템 상태 보드·그래프·용량 패널은 **바꾸지 않았다** — 카드 안에 상태 배지·막대·
+//     진행바가 들어 있어 "숫자 + 라벨" strip으로 접히지 않는다.
+//
+// 보존한 것(계약): `admin-stat-<라벨>` testid 9개, 라벨/hint 문구, 값 포맷,
+// 카드 배열 순서, 나머지 Section 구조.
 
 import { useEffect, useState } from 'react';
 import { ApiError, adminApi } from '@pinvi/api-client';
@@ -8,6 +31,7 @@ import type {
   AdminSystemSummary,
 } from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
+import { StatStrip } from '@/components/admin/stat-strip';
 import { apiClient } from '@/lib/api';
 
 const formatNumber = (value: number | null | undefined) =>
@@ -240,19 +264,17 @@ export default function AdminDashboardPage() {
         </div>
       </Section>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-        {cards.map((card) => (
-          <div
-            key={card.label}
-            className="rounded-sm border border-hairline bg-canvas p-4"
-            data-testid={`admin-stat-${card.label}`}
-          >
-            <p className="text-xs uppercase tracking-wide text-muted">{card.label}</p>
-            <p className="mt-2 text-2xl font-bold text-ink">{loading ? '…' : card.value}</p>
-            {card.hint && <p className="mt-1 text-xs text-muted">{card.hint}</p>}
-          </div>
-        ))}
-      </div>
+      <StatStrip
+        ariaLabel="운영 지표"
+        isLoading={loading}
+        items={cards.map((card) => ({
+          caption: card.hint,
+          label: card.label,
+          testId: `admin-stat-${card.label}`,
+          value: card.value,
+        }))}
+        size="lg"
+      />
 
       <Section title="운영 그래프">
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">

@@ -7,16 +7,26 @@ import type { AdminFileStorageSettings, AttachmentLibraryItem } from '@pinvi/sch
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
-// 필터 툴바만 admin 프리미티브로 전환한다(T-356). 다이얼로그 푸터는 앱 공용 `Button`을 계속
-// 쓰므로 이름이 겹치지 않게 별칭으로 받는다.
+// T-356: 필터 툴바에 이어 삭제 다이얼로그까지 admin 프리미티브로 전환했다. `AdminButton`
+// 별칭은 기존 호출부를 그대로 두기 위해 유지한다(앱 공용 `Button` import는 제거됨).
 import { Button as AdminButton } from '@/components/admin/ui/button';
+// 사용자 표면 `components/ui/Dialog`(useModalDialog) → admin base-ui `Dialog`.
+// AlertDialog가 아니라 Dialog인 이유: 이 다이얼로그는 필수 사유를 **입력받는 폼**이고,
+// base-ui AlertDialog는 scrim 클릭 닫기를 강제로 끈다 — 전환 전 동작(Escape·scrim 닫기)을
+// 유지하려면 Dialog여야 한다.
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/admin/ui/dialog';
 import { Input } from '@/components/admin/ui/input';
 import { NativeSelect } from '@/components/admin/ui/native-select';
 import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import { FormTextArea } from '@/components/forms/FormTextArea';
 import { apiClient } from '@/lib/api';
-import { Button } from '@/components/ui/Button';
-import { Dialog } from '@/components/ui/Dialog';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -348,53 +358,70 @@ export default function AdminFilesPage() {
           />
         </div>
       )}
-      <Dialog
-        open={pendingDelete != null}
-        onClose={() => setPendingDelete(null)}
-        busy={busyId != null}
-        size="sm"
-        title="파일을 삭제할까요?"
-        description={pendingDelete?.original_filename}
-        initialFocusRef={deleteReasonRef}
-        returnFocusRef={deleteTriggerRef}
-        testId="admin-file-delete-dialog"
-        footer={
-          <>
-            <Button
-              variant="secondary"
-              onClick={() => setPendingDelete(null)}
-              disabled={busyId != null}
-            >
-              취소
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => void remove()}
-              loading={busyId != null}
-              data-testid="admin-file-delete-submit"
-            >
-              삭제
-            </Button>
-          </>
-        }
-      >
-        <FormTextArea
-          ref={deleteReasonRef}
-          id="admin-file-delete-reason"
-          label="삭제 사유"
-          hint="audit log에 남습니다."
-          value={deleteReason}
-          onChange={(event) => {
-            if (deleteReasonError) setDeleteReasonError(null);
-            setDeleteReason(event.target.value);
+      {/* 삭제 대상이 있을 때만 마운트한다 — 닫힘 트랜지션 동안 `pendingDelete`가 null이 되어
+          제목/파일명이 사라지는 깜빡임을 피한다. 열림/닫힘 상태 소유자는 그대로 `pendingDelete`. */}
+      {pendingDelete != null && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            // 진행 중(busyId)에는 Escape/scrim으로 닫히지 않게 한다 — 전환 전 `busy` 계약 그대로.
+            if (!open && busyId == null) setPendingDelete(null);
           }}
-          error={deleteReasonError ?? undefined}
-          disabled={busyId != null}
-          maxLength={500}
-          rows={3}
-          data-testid="admin-file-delete-reason"
-        />
-      </Dialog>
+        >
+          <DialogContent
+            className="max-w-md"
+            data-testid="admin-file-delete-dialog"
+            initialFocus={deleteReasonRef}
+            finalFocus={deleteTriggerRef}
+          >
+            <DialogHeader>
+              <div className="min-w-0">
+                <DialogTitle>파일을 삭제할까요?</DialogTitle>
+                <DialogDescription className="mt-1">
+                  {pendingDelete.original_filename}
+                </DialogDescription>
+              </div>
+            </DialogHeader>
+            <div className="p-4">
+              <FormTextArea
+                ref={deleteReasonRef}
+                id="admin-file-delete-reason"
+                label="삭제 사유"
+                hint="audit log에 남습니다."
+                value={deleteReason}
+                onChange={(event) => {
+                  if (deleteReasonError) setDeleteReasonError(null);
+                  setDeleteReason(event.target.value);
+                }}
+                error={deleteReasonError ?? undefined}
+                disabled={busyId != null}
+                maxLength={500}
+                rows={3}
+                data-testid="admin-file-delete-reason"
+              />
+            </div>
+            <DialogFooter>
+              <AdminButton
+                type="button"
+                variant="outline"
+                onClick={() => setPendingDelete(null)}
+                disabled={busyId != null}
+              >
+                취소
+              </AdminButton>
+              <AdminButton
+                type="button"
+                variant="destructive-solid"
+                onClick={() => void remove()}
+                loading={busyId != null}
+                data-testid="admin-file-delete-submit"
+              >
+                삭제
+              </AdminButton>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </AdminPage>
   );
 }

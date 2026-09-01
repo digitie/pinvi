@@ -4,7 +4,8 @@
  * KTM `packages/kor-travel-map-admin/frontend/src/components/ui/input.tsx`에서 이식(T-356).
  *
  * 원문에서 바꾼 부분:
- * - **`@base-ui/react/input` 제거.** pinvi에는 base-ui가 없다. `InputPrimitive` → 네이티브
+ * - **`@base-ui/react/input` 제거.** pinvi는 base-ui를 오버레이 프리미티브
+ *   (dialog/alert-dialog/popover/tooltip/tabs)에만 쓴다. `InputPrimitive` → 네이티브
  *   `<input>`. base-ui `Input`은 이 자리에서 스타일 hook만 얹는 얇은 래퍼라 동작 차이가 없다.
  * - `@/lib/utils` → `@/lib/admin/cn`.
  * - `'use client'` 추가 — 값/핸들러를 받는 인터랙티브 컨트롤이다(Next.js App Router).

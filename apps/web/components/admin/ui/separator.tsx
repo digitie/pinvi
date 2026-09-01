@@ -1,7 +1,8 @@
 // kor-travel-map admin `src/components/ui/separator.tsx`에서 이식(T-356).
 //
 // 원문에서 바꾼 부분과 이유:
-//   1) `@base-ui/react/separator`의 `Separator` 제거. pinvi는 base-ui를 도입하지 않으므로
+//   1) `@base-ui/react/separator`의 `Separator` 제거. pinvi는 base-ui를 오버레이 프리미티브
+//      (dialog/alert-dialog/popover/tooltip/tabs)에만 쓰므로
 //      네이티브 `<div role="separator">`로 대체했다. base-ui가 하던 일은 (a) role/aria 부여,
 //      (b) 방향 data 속성 부여 둘뿐이라 div로 완전히 대체된다.
 //   2) 방향 variant — 원문의 `data-horizontal:` / `data-vertical:`는 KTM globals.css의

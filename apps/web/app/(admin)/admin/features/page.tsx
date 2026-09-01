@@ -25,6 +25,18 @@
 //     `aria-label="첫 페이지" / "다음 페이지"`로 잡을 수 있다).
 //  6) 갱신 버튼은 `disabled={isFetching}` → `loading={isFetching}`. 눌림 방지는 동일하고
 //     (Button이 활성화를 막는다) 방금 누른 버튼이 탭 순서에서 빠지지 않는다.
+//  7) (T-356 배선 단계) `StateAxes`의 3축이 **raw enum 문자열**(`active`/`published`/`valid` …)을
+//     그대로 찍고 있었다 → KTM `status-badge.tsx` 이식본 + `lib/admin/status-label.ts` 톤/라벨
+//     테이블로 교체했다. status-label은 "enum 값은 raw로 렌더하지 않는다"가 규약이고, 3축
+//     6개 값(active·retired / draft·published·suppressed / valid·quarantined)이 전부 그
+//     테이블에 이미 있어 라벨을 새로 지어낼 필요가 없었다. `title={축 이름}`은 그대로 남겨
+//     "어느 축의 값인가"를 계속 hover로 확인할 수 있게 했다(색만으로 축을 구분하지 않는다).
+//     `data-testid="admin-features-state-axes"`와 3개 span의 순서는 유지했다.
+//  8) 수제 `JsonBlock`(`<pre className="max-h-52 … bg-surface-soft">`) → KTM `json-viewer.tsx`
+//     이식본(`JsonViewer maxHeight="md"`). 그룹 안 JSON 렌더러를 하나로 모은다(M42).
+//     `max-h-52`(13rem)는 JsonViewer의 3단 스케일(sm 10rem / md 18rem / lg 32rem)에 없어
+//     한 단 위인 `md`로 올렸다 — 런타임 값으로 `max-h-[…]`를 조립하지 않는다는 규칙 때문에
+//     중간값을 새로 만들지 않았다.
 //
 // 보존한 것(계약): 모든 `data-testid`(위 5의 두 개 제외), 쿼리 파라미터 조립(`params`),
 // 필터 적용 시점(텍스트 3종은 제출, select는 즉시), 커서 스택 동작, 한국어 문구(`조회`/`갱신`/
@@ -59,6 +71,8 @@ import { Button } from '@/components/admin/ui/button';
 import { Input } from '@/components/admin/ui/input';
 import { NativeSelect } from '@/components/admin/ui/native-select';
 import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
+import { JsonViewer } from '@/components/admin/json-viewer';
+import { StatusBadge } from '@/components/admin/status-badge';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -115,7 +129,12 @@ function coordLabel(feature: Pick<AdminFeatureSummary, 'lon' | 'lat'>) {
     : '—';
 }
 
-/** 3축을 한 줄로 붙여 표시(합성 status를 만들지 않는다 — 축 값은 그대로 보인다). */
+/**
+ * 3축을 한 줄로 붙여 표시(합성 status를 만들지 않는다 — 축 값은 그대로 보인다).
+ * 라벨/톤은 `lib/admin/status-label.ts` 한 곳에서 읽는다: active 활성(success) ·
+ * retired 종료(neutral) · draft 초안(info) · published 공개(success) · suppressed 비공개(neutral) ·
+ * valid 유효(info) · quarantined 격리(warning). `title`은 어느 축의 값인지를 남긴다.
+ */
 function StateAxes({
   feature,
 }: {
@@ -123,15 +142,9 @@ function StateAxes({
 }) {
   return (
     <div className="flex flex-wrap gap-1" data-testid="admin-features-state-axes">
-      <span className="rounded-sm bg-surface-soft px-1" title="lifecycle_state">
-        {feature.lifecycle_state}
-      </span>
-      <span className="rounded-sm bg-surface-soft px-1" title="publication_state">
-        {feature.publication_state}
-      </span>
-      <span className="rounded-sm bg-surface-soft px-1" title="quality_state">
-        {feature.quality_state}
-      </span>
+      <StatusBadge status={feature.lifecycle_state} title="lifecycle_state" />
+      <StatusBadge status={feature.publication_state} title="publication_state" />
+      <StatusBadge status={feature.quality_state} title="quality_state" />
     </div>
   );
 }
@@ -141,11 +154,7 @@ function featureTabHref(featureId: string, tab: 'sources' | 'overrides' | 'weath
 }
 
 function JsonBlock({ value }: { value: unknown }) {
-  return (
-    <pre className="max-h-52 overflow-auto rounded-sm bg-surface-soft p-3 text-xs leading-relaxed text-body">
-      {JSON.stringify(value, null, 2)}
-    </pre>
-  );
+  return <JsonViewer value={value} maxHeight="md" />;
 }
 
 function CountLine({ detail }: { detail: AdminFeatureDetail }) {

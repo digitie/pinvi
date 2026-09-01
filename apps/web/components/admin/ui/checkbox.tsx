@@ -2,8 +2,10 @@
 // kor-travel-map admin `src/components/ui/checkbox.tsx`에서 이식(T-356).
 //
 // 원문은 `@base-ui/react/checkbox`의 `Checkbox.Root`/`Indicator`를 쓴다. pinvi는 base-ui를
-// 도입하지 않으므로(모달 프리미티브가 `lib/useModalDialog` 하나로 잠겨 있어 focus-trap/inert
-// 스택이 두 벌이 되는 것을 막는다) 네이티브 `<input type="checkbox">` 기반으로 다시 만들었다.
+// 오버레이 프리미티브(dialog/alert-dialog/popover/tooltip/tabs)에만 쓰고 폼 컨트롤에는 쓰지
+// 않으므로 네이티브 `<input type="checkbox">` 기반으로 다시 만들었다. 체크박스는 포털도
+// 포커스 트랩도 없어 base-ui가 대신 해 줄 일이 없고, 네이티브 input이라야 폼 제출·라벨
+// 연결·기존 e2e의 `check()`/`isChecked()` 계약이 그대로 유지된다.
 // 시각 사양(16px + ::after 32px hit target, 상태 8종, 글리프 분리)과 className은 원문 그대로다.
 //
 // base-ui와의 API 차이:

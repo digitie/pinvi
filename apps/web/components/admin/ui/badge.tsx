@@ -2,7 +2,9 @@
  * KTM `packages/kor-travel-map-admin/frontend/src/components/ui/badge.tsx`에서 이식(T-356).
  *
  * 원문에서 바꾼 부분:
- * - **`@base-ui/react/use-render` + `merge-props` 제거.** pinvi에는 base-ui가 없다.
+ * - **`@base-ui/react/use-render` + `merge-props` 제거.** pinvi는 base-ui를 오버레이
+ *   프리미티브(dialog/alert-dialog/popover/tooltip/tabs)에만 쓴다 — 배지는 포털도 포커스
+ *   트랩도 없어 base-ui가 대신 해 줄 일이 없다.
  *   `useRender({ defaultTagName: 'span', render, ... })` → 그냥 `<span>`을 렌더한다.
  *   `render` prop / `asLink` 같은 대체 prop은 만들지 않는다 — 링크 배지가 필요하면 호출부가
  *   `<a className={badgeVariants({ variant })}>`를 쓴다(`[a]:hover:*` 규칙이 그대로 걸린다).

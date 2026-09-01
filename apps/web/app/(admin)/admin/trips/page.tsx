@@ -17,6 +17,15 @@ import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
 import { Button } from '@/components/admin/ui/button';
+// KTM `src/components/ui/dialog.tsx` 프리미티브로 수렴(T-356) — 손수 만든
+// `role="dialog"` + scrim + `aria-modal`을 base-ui가 대신한다.
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/admin/ui/dialog';
 import { Input } from '@/components/admin/ui/input';
 import { NativeSelect } from '@/components/admin/ui/native-select';
 import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
@@ -189,224 +198,217 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="admin-trip-create-heading"
-      className="fixed inset-0 z-50 flex items-start justify-center bg-scrim/50 p-4 pt-12"
-      data-testid="admin-trip-create-dialog"
+    // `open`은 상수 true — 이 컴포넌트를 조건부로 마운트하는 호출부(`showCreateDialog`)가
+    // 계속 열림/닫힘 상태를 소유한다(동작 변경 없음).
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
     >
-      <div className="max-h-[calc(100dvh-6rem)] w-full max-w-3xl overflow-auto rounded-sm bg-canvas p-5 shadow-overlay">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h2 id="admin-trip-create-heading" className="text-lg font-semibold text-ink">
-              여행계획 생성
-            </h2>
-            <p className="mt-1 text-sm text-muted">소유자와 기본 정보를 지정합니다.</p>
+      <DialogContent className="max-w-3xl" data-testid="admin-trip-create-dialog">
+        <DialogHeader>
+          <div className="min-w-0">
+            <DialogTitle>여행계획 생성</DialogTitle>
+            <DialogDescription className="mt-1">소유자와 기본 정보를 지정합니다.</DialogDescription>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-sm border border-hairline px-3 py-1 text-sm"
-          >
+          <Button type="button" variant="ghost" size="sm" onClick={onClose}>
             닫기
-          </button>
-        </div>
-
-        {formError && (
-          <p
-            role="alert"
-            className="mb-4 rounded-sm bg-error-bg p-3 text-sm text-error-text"
-            data-testid="admin-trip-create-error"
-          >
-            {formError}
-          </p>
-        )}
-
-        <form onSubmit={onOwnerSearch} className="mb-4 flex flex-wrap items-end gap-2">
-          <label className="flex min-w-64 flex-1 flex-col gap-1 text-sm">
-            <span className="text-xs text-muted">소유자 검색</span>
-            <input
-              type="search"
-              value={ownerQueryInput}
-              onChange={(event) => setOwnerQueryInput(event.target.value)}
-              className="rounded-sm border border-hairline px-3 py-2"
-              placeholder="마스킹 이메일, 닉네임, user_id"
-              data-testid="admin-trip-owner-search"
-            />
-          </label>
-          <button
-            type="submit"
-            className="rounded-sm border border-hairline px-3 py-2 text-sm"
-            data-testid="admin-trip-owner-search-submit"
-          >
-            검색
-          </button>
-        </form>
-
-        {ownerQuery.length > 0 && (
-          <div className="mb-4 max-h-40 overflow-auto border-y border-hairline py-2">
-            {ownerQueryResult.isLoading && <p className="text-sm text-muted">검색 중…</p>}
-            {ownerQueryResult.data?.items.length === 0 && (
-              <p className="text-sm text-muted">검색 결과 없음</p>
-            )}
-            <div className="grid gap-2">
-              {ownerQueryResult.data?.items.map((user) => (
-                <button
-                  key={user.user_id}
-                  type="button"
-                  onClick={() => setSelectedOwner(user)}
-                  className="flex items-center justify-between gap-3 rounded-sm border border-hairline px-3 py-2 text-left text-sm"
-                  data-testid={`admin-trip-owner-result-${user.user_id}`}
-                >
-                  <span>
-                    <span className="font-medium text-ink">
-                      {user.nickname ?? user.email_masked}
-                    </span>
-                    <span className="ml-2 text-muted">{user.email_masked}</span>
-                  </span>
-                  <span className="text-xs text-muted">{user.status}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {selectedOwner && (
-          <p
-            className="mb-4 rounded-sm bg-surface-soft px-3 py-2 text-sm"
-            data-testid="admin-trip-owner-selected"
-          >
-            선택: {selectedOwner.nickname ?? selectedOwner.email_masked} · {selectedOwner.user_id}
-          </p>
-        )}
-
-        <form onSubmit={onCreate} className="grid gap-4">
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">여행계획명</span>
-              <input
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                maxLength={200}
-                data-testid="admin-trip-create-title"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">지역 힌트</span>
-              <input
-                value={regionHint}
-                onChange={(event) => setRegionHint(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                maxLength={120}
-                data-testid="admin-trip-create-region"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">행정구역 코드</span>
-              <input
-                value={primaryRegionCode}
-                onChange={(event) => setPrimaryRegionCode(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                pattern="[0-9]{2,10}"
-                data-testid="admin-trip-create-region-code"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">공개 범위</span>
-              <select
-                value={visibility}
-                onChange={(event) => setVisibility(event.target.value as TripVisibility)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                data-testid="admin-trip-create-visibility"
-              >
-                {CREATE_VISIBILITIES.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">상태</span>
-              <select
-                value={status}
-                onChange={(event) => setStatus(event.target.value as TripStatus)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                data-testid="admin-trip-create-status"
-              >
-                {CREATE_STATUSES.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">시작일</span>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(event) => setStartDate(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                data-testid="admin-trip-create-start"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted">종료일</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(event) => setEndDate(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
-                data-testid="admin-trip-create-end"
-              />
-            </label>
-          </div>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs text-muted">설명</span>
-            <textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              className="min-h-20 rounded-sm border border-hairline px-3 py-2"
-              data-testid="admin-trip-create-description"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs text-muted">작업 사유</span>
-            <textarea
-              value={accessReason}
-              onChange={(event) => setAccessReason(event.target.value)}
-              className="min-h-16 rounded-sm border border-hairline px-3 py-2"
-              maxLength={500}
-              data-testid="admin-trip-create-reason"
-            />
-          </label>
-
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-sm border border-hairline px-3 py-2 text-sm"
+          </Button>
+        </DialogHeader>
+        <div className="p-4">
+          {formError && (
+            <p
+              role="alert"
+              className="mb-4 rounded-sm bg-error-bg p-3 text-sm text-error-text"
+              data-testid="admin-trip-create-error"
             >
-              취소
-            </button>
+              {formError}
+            </p>
+          )}
+
+          <form onSubmit={onOwnerSearch} className="mb-4 flex flex-wrap items-end gap-2">
+            <label className="flex min-w-64 flex-1 flex-col gap-1 text-sm">
+              <span className="text-xs text-muted">소유자 검색</span>
+              <input
+                type="search"
+                value={ownerQueryInput}
+                onChange={(event) => setOwnerQueryInput(event.target.value)}
+                className="rounded-sm border border-hairline px-3 py-2"
+                placeholder="마스킹 이메일, 닉네임, user_id"
+                data-testid="admin-trip-owner-search"
+              />
+            </label>
             <button
               type="submit"
-              disabled={createMutation.isPending}
-              className="inline-flex items-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm text-on-primary disabled:opacity-60"
-              data-testid="admin-trip-create-submit"
+              className="rounded-sm border border-hairline px-3 py-2 text-sm"
+              data-testid="admin-trip-owner-search-submit"
             >
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              생성
+              검색
             </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          </form>
+
+          {ownerQuery.length > 0 && (
+            <div className="mb-4 max-h-40 overflow-auto border-y border-hairline py-2">
+              {ownerQueryResult.isLoading && <p className="text-sm text-muted">검색 중…</p>}
+              {ownerQueryResult.data?.items.length === 0 && (
+                <p className="text-sm text-muted">검색 결과 없음</p>
+              )}
+              <div className="grid gap-2">
+                {ownerQueryResult.data?.items.map((user) => (
+                  <button
+                    key={user.user_id}
+                    type="button"
+                    onClick={() => setSelectedOwner(user)}
+                    className="flex items-center justify-between gap-3 rounded-sm border border-hairline px-3 py-2 text-left text-sm"
+                    data-testid={`admin-trip-owner-result-${user.user_id}`}
+                  >
+                    <span>
+                      <span className="font-medium text-ink">
+                        {user.nickname ?? user.email_masked}
+                      </span>
+                      <span className="ml-2 text-muted">{user.email_masked}</span>
+                    </span>
+                    <span className="text-xs text-muted">{user.status}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {selectedOwner && (
+            <p
+              className="mb-4 rounded-sm bg-surface-soft px-3 py-2 text-sm"
+              data-testid="admin-trip-owner-selected"
+            >
+              선택: {selectedOwner.nickname ?? selectedOwner.email_masked} · {selectedOwner.user_id}
+            </p>
+          )}
+
+          <form onSubmit={onCreate} className="grid gap-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">여행계획명</span>
+                <input
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  maxLength={200}
+                  data-testid="admin-trip-create-title"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">지역 힌트</span>
+                <input
+                  value={regionHint}
+                  onChange={(event) => setRegionHint(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  maxLength={120}
+                  data-testid="admin-trip-create-region"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">행정구역 코드</span>
+                <input
+                  value={primaryRegionCode}
+                  onChange={(event) => setPrimaryRegionCode(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  pattern="[0-9]{2,10}"
+                  data-testid="admin-trip-create-region-code"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">공개 범위</span>
+                <select
+                  value={visibility}
+                  onChange={(event) => setVisibility(event.target.value as TripVisibility)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  data-testid="admin-trip-create-visibility"
+                >
+                  {CREATE_VISIBILITIES.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">상태</span>
+                <select
+                  value={status}
+                  onChange={(event) => setStatus(event.target.value as TripStatus)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  data-testid="admin-trip-create-status"
+                >
+                  {CREATE_STATUSES.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">시작일</span>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(event) => setStartDate(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  data-testid="admin-trip-create-start"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted">종료일</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(event) => setEndDate(event.target.value)}
+                  className="rounded-sm border border-hairline px-3 py-2"
+                  data-testid="admin-trip-create-end"
+                />
+              </label>
+            </div>
+
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-xs text-muted">설명</span>
+              <textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                className="min-h-20 rounded-sm border border-hairline px-3 py-2"
+                data-testid="admin-trip-create-description"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-xs text-muted">작업 사유</span>
+              <textarea
+                value={accessReason}
+                onChange={(event) => setAccessReason(event.target.value)}
+                className="min-h-16 rounded-sm border border-hairline px-3 py-2"
+                maxLength={500}
+                data-testid="admin-trip-create-reason"
+              />
+            </label>
+
+            {/* 제출 버튼은 이 form 안에 남아야 onCreate가 발화한다 — KTM `DialogFooter`
+              (Content 직계) 대신 form 안 액션 행. */}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button type="button" variant="outline" onClick={onClose}>
+                취소
+              </Button>
+              <Button
+                type="submit"
+                disabled={createMutation.isPending}
+                data-testid="admin-trip-create-submit"
+              >
+                <Plus data-icon="inline-start" aria-hidden="true" />
+                생성
+              </Button>
+            </div>
+          </form>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

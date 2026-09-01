@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ApiClient,
@@ -16,6 +16,16 @@ import { Ban, CheckCircle2, ChevronRight, RefreshCw, RotateCcw, X } from 'lucide
 import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Button } from '@/components/admin/ui/button';
+// KTM `src/components/ui/dialog.tsx` 프리미티브로 수렴(T-356). 이 페이지의 손수 만든
+// `role="dialog"` + scrim + Escape/Tab 트랩은 base-ui가 대신한다.
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/admin/ui/dialog';
 import { Input } from '@/components/admin/ui/input';
 import { NativeSelect } from '@/components/admin/ui/native-select';
 import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
@@ -108,7 +118,6 @@ export default function AdminIntegrityPage() {
   const [issueCursor, setIssueCursor] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [mutationNotice, setMutationNotice] = useState<string | null>(null);
-  const actionDialogRef = useRef<HTMLElement | null>(null);
   const accessReasonRef = useRef<HTMLTextAreaElement | null>(null);
   const actionTriggerRef = useRef<HTMLElement | null>(null);
 
@@ -132,36 +141,8 @@ export default function AdminIntegrityPage() {
     }
   }, [selectedIssue]);
 
-  const handleDialogKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      closeIssueActionDialog();
-      return;
-    }
-    if (event.key !== 'Tab') {
-      return;
-    }
-    const focusable = Array.from(
-      actionDialogRef.current?.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ) ?? [],
-    ).filter((element) => !element.hasAttribute('disabled') && element.tabIndex !== -1);
-    if (focusable.length === 0) {
-      return;
-    }
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (!first || !last) {
-      return;
-    }
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  };
+  // Escape 닫기 + Tab focus-trap은 base-ui `Dialog`가 담당한다(T-356) — 손수 만든
+  // `handleDialogKeyDown`은 걷어냈다. 두 트랩을 겹치면 서로의 preventDefault를 밟는다.
 
   const issueParams = useMemo<AdminIntegrityIssueListParams>(
     () => ({
@@ -553,96 +534,95 @@ export default function AdminIntegrityPage() {
         />
       </section>
 
+      {/* 다이얼로그를 조건부로 **마운트**한다(`open`은 상수 true) — `selectedIssue`가 null이 되는
+          즉시 사라지던 기존 동작·상태를 그대로 유지하기 위해서다(닫힘 트랜지션 동안 본문이
+          selectedIssue를 잃고 깨지는 문제도 함께 없앤다). */}
       {selectedIssue && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/50 p-4"
-          role="presentation"
-          onClick={closeIssueActionDialog}
-          data-testid="admin-integrity-action-overlay"
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            // Escape·scrim 클릭·닫기 버튼 전부 이 한 경로로 모인다(기존 closeIssueActionDialog 그대로).
+            if (!open) closeIssueActionDialog();
+          }}
         >
-          <section
-            ref={actionDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="admin-integrity-action-title"
-            className="w-full max-w-lg rounded-sm border border-hairline bg-canvas p-4 shadow-overlay"
+          <DialogContent
             data-testid="admin-integrity-action-dialog"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={handleDialogKeyDown}
+            initialFocus={accessReasonRef}
+            viewportProps={{ 'data-testid': 'admin-integrity-action-overlay' }}
           >
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <h2 id="admin-integrity-action-title" className="text-base font-semibold text-ink">
-                  정합성 issue {ACTION_LABEL[selectedAction]}
-                </h2>
-                <p className="font-mono text-xs text-muted">{selectedIssue.issue_id}</p>
-              </div>
-              <button
-                type="button"
-                onClick={closeIssueActionDialog}
-                className="rounded-sm border border-hairline p-1 text-muted hover:text-ink"
-                aria-label="닫기"
-                data-testid="admin-integrity-action-close"
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-            <dl className="mb-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
-              <dt className="text-muted">status</dt>
-              <dd>{selectedIssue.status}</dd>
-              <dt className="text-muted">type</dt>
-              <dd>{selectedIssue.violation_type}</dd>
-              <dt className="text-muted">target</dt>
-              <dd className="break-all font-mono text-xs">
-                {selectedIssue.feature_id ?? selectedIssue.source_record_key ?? '—'}
-              </dd>
-              <dt className="text-muted">message</dt>
-              <dd>{selectedIssue.message}</dd>
-            </dl>
-            <form className="space-y-3" onSubmit={submitIssueAction}>
-              <label className="block text-xs text-muted">
-                운영 사유 (Pinvi audit)
-                <textarea
-                  ref={accessReasonRef}
-                  value={accessReason}
-                  onChange={(event) => setAccessReason(event.target.value)}
-                  className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
-                  rows={2}
-                  data-testid="admin-integrity-action-access-reason"
-                />
-              </label>
-              <label className="block text-xs text-muted">
-                kor_travel_map 전달 사유
-                <textarea
-                  value={mapReason}
-                  onChange={(event) => setMapReason(event.target.value)}
-                  className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
-                  rows={2}
-                  data-testid="admin-integrity-action-map-reason"
-                />
-              </label>
-              <div className="flex items-center justify-end gap-2 border-t border-hairline pt-3">
-                <button
+            <form onSubmit={submitIssueAction}>
+              <DialogHeader>
+                <div className="min-w-0">
+                  <DialogTitle>정합성 issue {ACTION_LABEL[selectedAction]}</DialogTitle>
+                  <p className="font-mono text-xs text-muted">{selectedIssue.issue_id}</p>
+                </div>
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon-sm"
                   onClick={closeIssueActionDialog}
-                  className="rounded-sm border border-hairline px-3 py-1 text-sm"
+                  aria-label="닫기"
+                  data-testid="admin-integrity-action-close"
+                >
+                  <X aria-hidden="true" />
+                </Button>
+              </DialogHeader>
+              <div className="flex flex-col gap-3 p-4">
+                <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
+                  <dt className="text-muted">status</dt>
+                  <dd>{selectedIssue.status}</dd>
+                  <dt className="text-muted">type</dt>
+                  <dd>{selectedIssue.violation_type}</dd>
+                  <dt className="text-muted">target</dt>
+                  <dd className="break-all font-mono text-xs">
+                    {selectedIssue.feature_id ?? selectedIssue.source_record_key ?? '—'}
+                  </dd>
+                  <dt className="text-muted">message</dt>
+                  <dd>{selectedIssue.message}</dd>
+                </dl>
+                <label className="block text-xs text-muted">
+                  운영 사유 (Pinvi audit)
+                  <textarea
+                    ref={accessReasonRef}
+                    value={accessReason}
+                    onChange={(event) => setAccessReason(event.target.value)}
+                    className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
+                    rows={2}
+                    data-testid="admin-integrity-action-access-reason"
+                  />
+                </label>
+                <label className="block text-xs text-muted">
+                  kor_travel_map 전달 사유
+                  <textarea
+                    value={mapReason}
+                    onChange={(event) => setMapReason(event.target.value)}
+                    className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
+                    rows={2}
+                    data-testid="admin-integrity-action-map-reason"
+                  />
+                </label>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={closeIssueActionDialog}
                   data-testid="admin-integrity-action-cancel"
                 >
                   취소
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
                   disabled={actionMutation.isPending}
-                  className="inline-flex items-center gap-1 rounded-sm border border-ink bg-ink px-3 py-1 text-sm text-canvas disabled:opacity-50"
                   data-testid="admin-integrity-action-submit"
                 >
                   <IssueActionIcon action={selectedAction} />
                   반영
-                </button>
-              </div>
+                </Button>
+              </DialogFooter>
             </form>
-          </section>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
     </AdminPage>
   );

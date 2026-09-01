@@ -1,4 +1,26 @@
 'use client';
+// T-356 배선 단계 — 이 화면의 **"일정 / 비용" 수제 `<dl>`**과 **Snapshot 수제 `<pre>`**를
+// KTM admin idiom으로 갈아끼웠다.
+// (KTM `src/components/detail-list.tsx` / `src/components/json-viewer.tsx` 이식본 소비처)
+//
+// 원문(= 전환 전 pinvi 코드)에서 바꾼 부분과 이유:
+//  1) "일정 / 비용"의 `<dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">` +
+//     `<dt className="text-xs uppercase tracking-wide text-muted">` 6쌍 → `DetailList columns={2}`.
+//     라벨 문구(도착/출발/예산/실사용/마커/URL)와 값 계산식은 한 글자도 바꾸지 않았다.
+//     `uppercase tracking-wide`는 DetailList가 쓰지 않는다 — KTM 규율상 한글 라벨에 uppercase/
+//     letter-spacing을 주지 않는다(대문자 변환이 한글에 무의미하고 자간만 벌어진다).
+//     URL은 `break-all`이 DetailList dd의 기본값이라 따로 클래스를 얹지 않았다.
+//  2) "기본 정보" `<dl>`(`data-testid="admin-poi-info"`)은 **바꾸지 않았다** — `<dd>` 안에
+//     연결 상태 `<select>` + 저장 버튼이 들어 있는 상호작용 셀이고, e2e가 그 testid로
+//     마스킹 이메일까지 검사한다. 가장 안전한 한 곳만 바꾸라는 지시에 따라 손대지 않았다.
+//  3) Snapshot `<pre className="max-h-80 … bg-surface-soft">` → `JsonViewer maxHeight="lg"`.
+//     `data-testid="admin-poi-snapshot"`은 JsonViewer가 받는 prop이 아니라서 **감싸는 `<div>`로
+//     옮겼다** — e2e는 `getByTestId('admin-poi-snapshot')).toContainText('beach')`라 자손 텍스트를
+//     보므로 계약은 유지된다. `max-h-80`(20rem)은 JsonViewer 3단 스케일(sm 10rem / md 18rem /
+//     lg 32rem)에 없어 잘리지 않는 쪽인 `lg`로 올렸다(런타임 값으로 `max-h-[…]` 조립 금지).
+//
+// 보존한 것(계약): 모든 `data-testid`, 라벨/값 문구, `formatDateTime`·`formatAmount`의 `—` 글리프,
+// Section 제목과 순서.
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -14,7 +36,19 @@ import type {
 import { Copy, MoveRight, Search, Trash2, X } from 'lucide-react';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { Button } from '@/components/admin/ui/button';
+// KTM `src/components/ui/dialog.tsx` 프리미티브로 수렴(T-356) — 손수 만든 scrim +
+// `role="dialog"`/`aria-modal`을 base-ui가 대신한다(Escape·focus trap·scroll lock 포함).
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/admin/ui/dialog';
 import { FormTextArea } from '@/components/forms/FormTextArea';
+import { DetailList } from '@/components/admin/detail-list';
+import { JsonViewer } from '@/components/admin/json-viewer';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -412,44 +446,27 @@ export default function AdminPoiDetailPage() {
       </Section>
 
       <Section title="일정 / 비용">
-        <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">도착</dt>
-            <dd>{formatDateTime(poi.planned_arrival_at)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">출발</dt>
-            <dd>{formatDateTime(poi.planned_departure_at)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">예산</dt>
-            <dd>{formatAmount(poi.budget_amount, poi.currency)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">실사용</dt>
-            <dd>{formatAmount(poi.actual_amount, poi.currency)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">마커</dt>
-            <dd>
-              {poi.custom_marker_color ?? '—'} / {poi.custom_marker_icon ?? '—'}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">URL</dt>
-            <dd className="break-all">{poi.user_url ?? '—'}</dd>
-          </div>
-        </dl>
+        <DetailList
+          columns={2}
+          items={[
+            { label: '도착', value: formatDateTime(poi.planned_arrival_at) },
+            { label: '출발', value: formatDateTime(poi.planned_departure_at) },
+            { label: '예산', value: formatAmount(poi.budget_amount, poi.currency) },
+            { label: '실사용', value: formatAmount(poi.actual_amount, poi.currency) },
+            {
+              label: '마커',
+              value: `${poi.custom_marker_color ?? '—'} / ${poi.custom_marker_icon ?? '—'}`,
+            },
+            { label: 'URL', value: poi.user_url ?? '—' },
+          ]}
+        />
         {poi.user_note && <p className="mt-4 text-sm text-ink">{poi.user_note}</p>}
       </Section>
 
       <Section title="Snapshot">
-        <pre
-          className="max-h-80 overflow-auto rounded-sm border border-hairline bg-surface-soft p-3 text-xs"
-          data-testid="admin-poi-snapshot"
-        >
-          {JSON.stringify(poi.feature_snapshot, null, 2)}
-        </pre>
+        <div data-testid="admin-poi-snapshot">
+          <JsonViewer maxHeight="lg" value={poi.feature_snapshot} />
+        </div>
       </Section>
 
       <Section title="최근 Audit">
@@ -464,229 +481,237 @@ export default function AdminPoiDetailPage() {
       </Section>
 
       {showOperationDialog && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-scrim/50 p-4">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="admin-poi-operation-title"
-            className="max-h-[90dvh] w-full max-w-3xl overflow-auto rounded-sm bg-canvas p-6 shadow-overlay"
-            data-testid="admin-poi-operation-dialog"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 id="admin-poi-operation-title" className="text-lg font-bold text-ink">
-                  {POI_OPERATION_LABELS[operationMode]}
-                </h3>
+        // `open`은 상수 true — 열림/닫힘 상태는 계속 `showOperationDialog`가 소유한다.
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setShowOperationDialog(false);
+          }}
+        >
+          <DialogContent className="max-w-3xl" data-testid="admin-poi-operation-dialog">
+            <DialogHeader>
+              <div className="min-w-0">
+                <DialogTitle>{POI_OPERATION_LABELS[operationMode]}</DialogTitle>
                 <p className="mt-1 font-mono text-xs text-muted">{poi.attachment_id}</p>
               </div>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon-sm"
                 onClick={() => setShowOperationDialog(false)}
                 aria-label="닫기"
-                className="flex h-10 w-10 items-center justify-center rounded-sm border border-hairline text-ink hover:bg-surface-soft"
               >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
+                <X aria-hidden="true" />
+              </Button>
+            </DialogHeader>
 
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <label className="space-y-1 text-sm">
-                <span className="block text-xs uppercase tracking-wide text-muted">작업</span>
-                <select
-                  value={operationMode}
-                  onChange={(e) => {
-                    setOperationMode(e.target.value as PoiOperationMode);
-                    setOperationResult(null);
-                    setOperationError(null);
-                  }}
-                  className="w-full rounded-sm border border-hairline px-3 py-2"
-                  data-testid="admin-poi-operation-mode"
-                >
-                  {POI_OPERATION_MODES.map((mode) => (
-                    <option key={mode.value} value={mode.value}>
-                      {mode.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              {operationNeedsTarget && (
+            <div className="p-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 <label className="space-y-1 text-sm">
-                  <span className="block text-xs uppercase tracking-wide text-muted">
-                    대상 일차
-                  </span>
-                  <input
-                    type="number"
-                    min={1}
-                    value={targetDayIndex}
-                    onChange={(e) => setTargetDayIndex(Number(e.target.value))}
-                    className="w-full rounded-sm border border-hairline px-3 py-2"
-                    data-testid="admin-poi-operation-target-day"
-                  />
-                </label>
-              )}
-
-              {operationNeedsTarget && (
-                <div className="space-y-2 md:col-span-2">
-                  <label className="space-y-1 text-sm">
-                    <span className="block text-xs uppercase tracking-wide text-muted">
-                      대상 여행 검색
-                    </span>
-                    <span className="flex items-center gap-2 rounded-sm border border-hairline px-3 py-2">
-                      <Search className="h-4 w-4 text-muted" aria-hidden="true" />
-                      <input
-                        value={targetTripQuery}
-                        onChange={(e) => setTargetTripQuery(e.target.value)}
-                        className="min-w-0 flex-1 bg-transparent text-sm outline-hidden"
-                        placeholder="여행 제목 또는 owner 검색"
-                        data-testid="admin-poi-operation-target-search"
-                      />
-                    </span>
-                  </label>
-                  <label className="space-y-1 text-sm">
-                    <span className="block text-xs uppercase tracking-wide text-muted">
-                      대상 여행
-                    </span>
-                    <select
-                      value={targetTripId}
-                      onChange={(e) => setTargetTripId(e.target.value)}
-                      className="w-full rounded-sm border border-hairline px-3 py-2"
-                      data-testid="admin-poi-operation-target-trip"
-                    >
-                      {targetTrips.map((item) => (
-                        <option key={item.trip_id} value={item.trip_id}>
-                          {item.title} · {item.owner_email_masked}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              )}
-
-              {operationMode === 'poi_copy' && (
-                <label className="inline-flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={includeAttachments}
-                    onChange={(e) => setIncludeAttachments(e.target.checked)}
-                    data-testid="admin-poi-operation-include-attachments"
-                  />
-                  파일 포함
-                </label>
-              )}
-
-              {operationMode === 'poi_move' && (
-                <label className="space-y-1 text-sm">
-                  <span className="block text-xs uppercase tracking-wide text-muted">
-                    파일/댓글
-                  </span>
+                  <span className="block text-xs uppercase tracking-wide text-muted">작업</span>
                   <select
-                    value={childPolicy}
-                    onChange={(e) => setChildPolicy(e.target.value as 'move' | 'delete')}
+                    value={operationMode}
+                    onChange={(e) => {
+                      setOperationMode(e.target.value as PoiOperationMode);
+                      setOperationResult(null);
+                      setOperationError(null);
+                    }}
                     className="w-full rounded-sm border border-hairline px-3 py-2"
-                    data-testid="admin-poi-operation-policy"
+                    data-testid="admin-poi-operation-mode"
                   >
-                    <option value="move">대상으로 이동</option>
-                    <option value="delete">함께 삭제</option>
+                    {POI_OPERATION_MODES.map((mode) => (
+                      <option key={mode.value} value={mode.value}>
+                        {mode.label}
+                      </option>
+                    ))}
                   </select>
                 </label>
-              )}
 
-              <div className="md:col-span-2">
-                <FormTextArea
-                  id="admin-poi-operation-reason"
-                  label="사유"
-                  hint="감사 로그에 기록됩니다."
-                  value={operationReason}
-                  onChange={(e) => setOperationReason(e.target.value)}
-                  rows={3}
-                  data-testid="admin-poi-operation-reason"
-                />
+                {operationNeedsTarget && (
+                  <label className="space-y-1 text-sm">
+                    <span className="block text-xs uppercase tracking-wide text-muted">
+                      대상 일차
+                    </span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={targetDayIndex}
+                      onChange={(e) => setTargetDayIndex(Number(e.target.value))}
+                      className="w-full rounded-sm border border-hairline px-3 py-2"
+                      data-testid="admin-poi-operation-target-day"
+                    />
+                  </label>
+                )}
+
+                {operationNeedsTarget && (
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="space-y-1 text-sm">
+                      <span className="block text-xs uppercase tracking-wide text-muted">
+                        대상 여행 검색
+                      </span>
+                      <span className="flex items-center gap-2 rounded-sm border border-hairline px-3 py-2">
+                        <Search className="h-4 w-4 text-muted" aria-hidden="true" />
+                        <input
+                          value={targetTripQuery}
+                          onChange={(e) => setTargetTripQuery(e.target.value)}
+                          className="min-w-0 flex-1 bg-transparent text-sm outline-hidden"
+                          placeholder="여행 제목 또는 owner 검색"
+                          data-testid="admin-poi-operation-target-search"
+                        />
+                      </span>
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="block text-xs uppercase tracking-wide text-muted">
+                        대상 여행
+                      </span>
+                      <select
+                        value={targetTripId}
+                        onChange={(e) => setTargetTripId(e.target.value)}
+                        className="w-full rounded-sm border border-hairline px-3 py-2"
+                        data-testid="admin-poi-operation-target-trip"
+                      >
+                        {targetTrips.map((item) => (
+                          <option key={item.trip_id} value={item.trip_id}>
+                            {item.title} · {item.owner_email_masked}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                )}
+
+                {operationMode === 'poi_copy' && (
+                  <label className="inline-flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={includeAttachments}
+                      onChange={(e) => setIncludeAttachments(e.target.checked)}
+                      data-testid="admin-poi-operation-include-attachments"
+                    />
+                    파일 포함
+                  </label>
+                )}
+
+                {operationMode === 'poi_move' && (
+                  <label className="space-y-1 text-sm">
+                    <span className="block text-xs uppercase tracking-wide text-muted">
+                      파일/댓글
+                    </span>
+                    <select
+                      value={childPolicy}
+                      onChange={(e) => setChildPolicy(e.target.value as 'move' | 'delete')}
+                      className="w-full rounded-sm border border-hairline px-3 py-2"
+                      data-testid="admin-poi-operation-policy"
+                    >
+                      <option value="move">대상으로 이동</option>
+                      <option value="delete">함께 삭제</option>
+                    </select>
+                  </label>
+                )}
+
+                <div className="md:col-span-2">
+                  <FormTextArea
+                    id="admin-poi-operation-reason"
+                    label="사유"
+                    hint="감사 로그에 기록됩니다."
+                    value={operationReason}
+                    onChange={(e) => setOperationReason(e.target.value)}
+                    rows={3}
+                    data-testid="admin-poi-operation-reason"
+                  />
+                </div>
               </div>
+
+              <div className="mt-4">
+                <OperationImpactPanel impact={operationImpact} />
+              </div>
+
+              {operationError && (
+                <p
+                  className="mt-4 rounded-sm bg-error-bg p-3 text-sm text-error-text"
+                  data-testid="admin-poi-operation-error"
+                >
+                  {operationError}
+                </p>
+              )}
+              {operationResult && (
+                <p
+                  className="mt-4 rounded-sm bg-success-bg p-3 text-sm text-success-text"
+                  data-testid="admin-poi-operation-result"
+                >
+                  {operationResult.action} 완료 · {formatAffected(operationResult.affected)}
+                </p>
+              )}
             </div>
 
-            <div className="mt-4">
-              <OperationImpactPanel impact={operationImpact} />
-            </div>
-
-            {operationError && (
-              <p
-                className="mt-4 rounded-sm bg-error-bg p-3 text-sm text-error-text"
-                data-testid="admin-poi-operation-error"
-              >
-                {operationError}
-              </p>
-            )}
-            {operationResult && (
-              <p
-                className="mt-4 rounded-sm bg-success-bg p-3 text-sm text-success-text"
-                data-testid="admin-poi-operation-result"
-              >
-                {operationResult.action} 완료 · {formatAffected(operationResult.affected)}
-              </p>
-            )}
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowOperationDialog(false)}
-                className="rounded-sm border border-hairline px-3 py-2 text-sm"
-              >
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowOperationDialog(false)}>
                 취소
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 disabled={operationConfirmDisabled}
                 onClick={onOperationSave}
-                className="rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm text-on-primary disabled:opacity-50"
                 data-testid="admin-poi-operation-confirm"
               >
                 {acting ? '처리 중…' : '실행'}
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {showStatusDialog && (
-        <div className="fixed inset-0 flex items-center justify-center bg-scrim/50 p-4">
-          <div className="w-full max-w-md space-y-4 rounded-sm bg-canvas p-6">
-            <h3 className="text-lg font-bold text-ink">POI 연결 상태 변경</h3>
-            <p className="text-xs text-muted">
-              {currentBroken ? '끊김' : '정상'} → {brokenDraft ? '끊김' : '정상'}
-            </p>
-            <FormTextArea
-              id="admin-poi-action-reason"
-              label="사유"
-              hint="감사 로그에 기록됩니다."
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={3}
-              data-testid="admin-poi-action-reason"
-            />
-            <div className="flex justify-end gap-2">
-              <button
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            // Escape·scrim도 취소 버튼과 같은 정리 경로를 탄다(사유 입력값을 남기지 않는다).
+            if (!open) {
+              setShowStatusDialog(false);
+              setReason('');
+            }
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>POI 연결 상태 변경</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 p-4">
+              <p className="text-xs text-muted">
+                {currentBroken ? '끊김' : '정상'} → {brokenDraft ? '끊김' : '정상'}
+              </p>
+              <FormTextArea
+                id="admin-poi-action-reason"
+                label="사유"
+                hint="감사 로그에 기록됩니다."
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                data-testid="admin-poi-action-reason"
+              />
+            </div>
+            <DialogFooter>
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => {
                   setShowStatusDialog(false);
                   setReason('');
                 }}
-                className="rounded-sm border border-hairline px-3 py-2 text-sm"
               >
                 취소
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 disabled={acting || reason.trim().length < 1}
                 onClick={onLinkStatusSave}
-                className="rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm text-on-primary disabled:opacity-50"
                 data-testid="admin-poi-action-confirm"
               >
                 {acting ? '처리 중…' : '확인'}
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </AdminPage>
   );

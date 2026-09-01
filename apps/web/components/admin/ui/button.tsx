@@ -4,7 +4,8 @@
  * KTM `packages/kor-travel-map-admin/frontend/src/components/ui/button.tsx`에서 이식(T-356).
  *
  * 원문에서 바꾼 부분:
- * - **`@base-ui/react/button` 제거.** pinvi에는 base-ui가 없다. `ButtonPrimitive` → 네이티브
+ * - **`@base-ui/react/button` 제거.** pinvi는 base-ui를 오버레이 프리미티브
+ *   (dialog/alert-dialog/popover/tooltip/tabs)에만 쓴다. `ButtonPrimitive` → 네이티브
  *   `<button>` + `React.forwardRef<HTMLButtonElement, ButtonProps>`. `render` prop / `asChild`는
  *   만들지 않는다 — 링크 버튼이 필요하면 호출부가 `<a className={buttonVariants(...)}>`를 쓴다.
  * - `ButtonPrimitive.Props` → `React.ComponentPropsWithoutRef<'button'>`,
