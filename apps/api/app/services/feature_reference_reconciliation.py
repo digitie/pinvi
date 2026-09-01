@@ -105,19 +105,26 @@ def _row_is_reconcilable(
 ) -> bool:
     """행이 old reference를 가리키고 있고 안전하게 rebind할 수 있는가.
 
-    exact 짝은 물론, **legacy 축만 맞고 canonical UUID shadow가 아직 비어
-    있는 행**도 포함한다. `feature_uuid`는 검증된 alias map 이관이 채우기
-    전까지 정상적으로 NULL이고(models/poi.py), 일상적인 POI 추가 경로는
-    `feature_id`만 채운다. 그 NULL을 "값이 어긋났다"로 읽으면 평범한 행 하나가
-    reconciliation 피드를 영구히 막는다 — blocked event는 ack되지 않고 Map은
-    같은 event를 계속 재공급하므로 head-of-line stall이 된다.
+    **canonical 축은 UUID다**(Map ADR-068). UUID가 맞으면 텍스트 축이 무엇이든
+    같은 feature를 가리키는 것이 확정이므로 rebind 대상이다 — 텍스트가 다른 건
+    값이 어긋난 게 아니라 legacy alias와 canonical 표기가 공존하는 이행기의
+    정상 상태다. cutover는 `feature_uuid`만 채우고 `feature_id`는 legacy `f_*`
+    alias로 남기는데(feature_uuid_cutover), curation import는 이미 `feature_id`에
+    UUID 문자열을 쓴다(curation_collection_import). 즉 한 컬럼에 두 세대가
+    공존하고, UUID 일치를 conflict로 읽으면 Map이 어느 세대를 보내든 **반대
+    세대 전부**가 피드를 영구히 막는다.
 
-    rebind는 두 컬럼을 함께 쓰므로, 이런 행을 처리하면 짝이 **복구**된다.
+    UUID shadow가 아직 비어 있으면 legacy 축으로 판정한다. 이쪽이 약한 신호다 —
+    `feature_id`는 client가 준 자유 문자열이라 검증되지 않는다. 그래도 앱이
+    실제로 feature를 그 문자열로 해소하고 있으므로 같은 근거를 그대로 쓴다.
+
+    rebind는 두 컬럼을 event가 준 replacement로 함께 덮으므로(값을 합성하지
+    않는다), 어느 경로든 처리하면 짝이 **복구**된다.
     """
 
-    if feature_id != reference.feature_id:
-        return False
-    return feature_uuid is None or feature_uuid == reference.feature_uuid
+    if feature_uuid is not None:
+        return feature_uuid == reference.feature_uuid
+    return feature_id == reference.feature_id
 
 
 def _reconcilable_condition(
@@ -127,9 +134,9 @@ def _reconcilable_condition(
 ) -> ColumnElement[bool]:
     """`_row_is_reconcilable`의 SQL 대응."""
 
-    return and_(
-        id_column == reference.feature_id,
-        or_(uuid_column.is_(None), uuid_column == reference.feature_uuid),
+    return or_(
+        uuid_column == reference.feature_uuid,
+        and_(uuid_column.is_(None), id_column == reference.feature_id),
     )
 
 
@@ -140,21 +147,15 @@ def _conflicting_condition(
 ) -> ColumnElement[bool]:
     """두 축이 **실제로 어긋난** 행 — 여기서만 block해야 한다.
 
-    UUID만 맞고 `feature_id`가 다르거나 NULL인 방향은 rebind 대상으로 넣지
-    않는다. `feature_id`는 client가 준 자유 문자열이라 UUID만 보고 써 넣으면
-    값을 합성하게 된다 — 그건 cutover가 명시적으로 거부하는 자기-정본화다.
+    legacy 축은 old feature를 가리키는데 canonical 축이 **다른** feature를
+    가리킨다. 이건 이행기의 정상 상태가 아니라 데이터가 실제로 모순인 것이고,
+    사람이 보지 않고 rebind하면 사용자 여정이 무관한 장소에 붙는다.
     """
 
-    return or_(
-        and_(
-            id_column == reference.feature_id,
-            uuid_column.is_not(None),
-            uuid_column != reference.feature_uuid,
-        ),
-        and_(
-            uuid_column == reference.feature_uuid,
-            id_column.is_distinct_from(reference.feature_id),
-        ),
+    return and_(
+        id_column == reference.feature_id,
+        uuid_column.is_not(None),
+        uuid_column != reference.feature_uuid,
     )
 
 
@@ -163,11 +164,21 @@ def _pair_condition(
     uuid_column: InstrumentedAttribute[uuid.UUID | None],
     reference: FeatureReference,
 ) -> ColumnElement[bool]:
-    """rebind 대상과 conflict를 **한 번에** 잠근다(각 행을 두 번 읽지 않는다)."""
+    """rebind 대상과 conflict를 **한 번에** 잠근다(각 행을 두 번 읽지 않는다).
+
+    reconcilable OR conflicting을 전개하면 정확히 두 항 OR로 접힌다:
+
+        (uuid=U) or (id=X and uuid IS NULL) or (id=X and uuid!=U and uuid NOT NULL)
+      = (uuid=U) or (id=X and not (uuid=U))
+      = (uuid=U) or (id=X)
+
+    두 항 OR라 planner가 BitmapOr를 쓸 수 있다 — 술어를 그대로 두면 UUID 축이
+    색인 불가라 `FOR UPDATE` seq-scan이 된다(적대 리뷰).
+    """
 
     return or_(
-        _reconcilable_condition(id_column, uuid_column, reference),
-        _conflicting_condition(id_column, uuid_column, reference),
+        id_column == reference.feature_id,
+        uuid_column == reference.feature_uuid,
     )
 
 
