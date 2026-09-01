@@ -9,8 +9,11 @@ import type {
   AdminRateLimitOverrideRecord,
   AdminRateLimitSuspiciousActivityRecord,
 } from '@pinvi/schemas';
-import { AdminPage, FilterBar, Section } from '@/components/admin/AdminPage';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import { apiClient } from '@/lib/api';
 
 const POLICY_IDENTITY = {
@@ -459,20 +462,23 @@ export default function AdminAbusePage() {
 
       <Section title="Buckets">
         <FilterBar>
-          <select
-            value={limitFilter}
-            onChange={(event) => setLimitFilter(event.target.value)}
-            className={inputClass}
-            aria-label="Bucket policy filter"
-            data-testid="admin-abuse-filter"
-          >
-            <option value="">정책 전체</option>
-            {policies.map((policy) => (
-              <option key={policy.name} value={policy.name}>
-                {policy.name}
-              </option>
-            ))}
-          </select>
+          {/* 가시 라벨이 접근성 이름을 갖게 됐으므로 중복이 되는 aria-label("Bucket policy
+              filter")은 제거했다 — 저장소에서 그 문자열을 잡는 테스트는 없다(T-356). */}
+          <FilterField htmlFor="admin-abuse-bucket-policy" label="정책">
+            <NativeSelect
+              id="admin-abuse-bucket-policy"
+              value={limitFilter}
+              onChange={(event) => setLimitFilter(event.target.value)}
+              data-testid="admin-abuse-filter"
+            >
+              <NativeSelectOption value="">정책 전체</NativeSelectOption>
+              {policies.map((policy) => (
+                <NativeSelectOption key={policy.name} value={policy.name}>
+                  {policy.name}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </FilterField>
         </FilterBar>
         <AdminTable
           columns={bucketColumns}

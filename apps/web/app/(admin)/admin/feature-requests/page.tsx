@@ -12,9 +12,12 @@ import {
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type { AdminFeatureRequestSummary } from '@pinvi/schemas';
-import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
+import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
-import { FormField, inputClassName } from '@/components/forms/FormField';
+import { FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
+import { FormField } from '@/components/forms/FormField';
 import { FormTextArea } from '@/components/forms/FormTextArea';
 import { Button, ButtonLink } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -708,28 +711,36 @@ export default function AdminFeatureRequestsPage() {
       title="Feature 제안 검토"
       description="사용자 feature 제안을 검토해 Map 요청 큐 또는 변경 API에 전달하거나 거절"
     >
+      {/*
+        T-356 필터 툴바 전환 — 옆에 붙여 두던 `<label>` + 수제 `<select>`를
+        `FilterField`(라벨 위 · 컨트롤 아래) + `NativeSelect`로 바꿨다. 라벨 문구(`상태`),
+        `id`, `data-testid`, `onChange` 배선은 그대로다.
+        `[&>select]:min-h-11`은 KTM `h-control`(36px)이 pinvi의 44px 터치 타깃 게이트보다
+        낮기 때문에 넣은 보정이다 — `admin-feature-requests.e2e.ts`가 320~768px에서
+        `admin-fr-status-filter`의 boundingBox 높이 ≥ 44px를 검증한다. `NativeSelect`의
+        `className`은 래퍼 div로 가므로 자식 `<select>`를 직접 가리킨다(정적 클래스).
+      */}
       <FilterBar>
-        <label htmlFor="admin-fr-status" className="text-sm font-medium text-ink">
-          상태
-        </label>
-        <select
-          id="admin-fr-status"
-          value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value);
-            setPage(1);
-            setSelected(null);
-          }}
-          className={inputClassName({ className: 'w-auto min-w-36' })}
-          data-testid="admin-fr-status-filter"
-        >
-          {STATUS_FILTERS.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-        <span className="ml-auto text-sm text-muted">총 {total}건</span>
+        <FilterField htmlFor="admin-fr-status" label="상태">
+          <NativeSelect
+            id="admin-fr-status"
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+              setSelected(null);
+            }}
+            className="min-w-36 [&>select]:min-h-11"
+            data-testid="admin-fr-status-filter"
+          >
+            {STATUS_FILTERS.map((item) => (
+              <NativeSelectOption key={item.value} value={item.value}>
+                {item.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
+        <span className="ml-auto text-xs text-muted">총 {total}건</span>
       </FilterBar>
 
       {notice && (

@@ -5,8 +5,13 @@ import { useState, type FormEvent } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type { AdminUserSummary } from '@pinvi/schemas';
-import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
+import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -99,46 +104,43 @@ export default function AdminUsersPage() {
   return (
     <AdminPage title="사용자" description="운영 계정 조회와 상태 관리">
       <FilterBar>
-        <form onSubmit={onSearch} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <label htmlFor="admin-users-search" className="text-xs text-muted">
-            검색
-          </label>
-          <input
-            id="admin-users-search"
-            type="search"
-            value={queryInput}
-            onChange={(e) => setQueryInput(e.target.value)}
-            className="min-w-48 rounded-sm border border-hairline px-2 py-1 text-sm"
-            placeholder="이메일, 닉네임, user_id"
-            data-testid="admin-users-search"
-          />
-          <button
-            type="submit"
-            className="rounded-sm border border-hairline px-3 py-1 text-sm"
-            data-testid="admin-users-search-submit"
-          >
-            조회
-          </button>
+        {/* 검색만 제출로 적용된다(전환 전과 동일) — 상태 select는 form 밖에 두어 select 위
+            Enter가 폼을 제출하지 않게 한다. form 자신이 툴바 행의 flex 아이템이라
+            FilterBar와 같은 `items-end`/gap으로 안쪽 필드를 정렬한다. */}
+        <form onSubmit={onSearch} className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-2">
+          <FilterField className="w-56" htmlFor="admin-users-search" label="검색">
+            <Input
+              id="admin-users-search"
+              type="search"
+              value={queryInput}
+              onChange={(e) => setQueryInput(e.target.value)}
+              placeholder="이메일, 닉네임, user_id"
+              data-testid="admin-users-search"
+            />
+          </FilterField>
+          <FilterActions>
+            <Button type="submit" variant="outline" data-testid="admin-users-search-submit">
+              조회
+            </Button>
+          </FilterActions>
         </form>
-        <label htmlFor="admin-users-status-filter" className="text-xs text-muted">
-          상태
-        </label>
-        <select
-          id="admin-users-status-filter"
-          value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value);
-            setPage(1);
-          }}
-          className="rounded-sm border border-hairline px-2 py-1 text-sm"
-          data-testid="admin-users-status-filter"
-        >
-          {STATUSES.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
+        <FilterField htmlFor="admin-users-status-filter" label="상태">
+          <NativeSelect
+            id="admin-users-status-filter"
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
+            data-testid="admin-users-status-filter"
+          >
+            {STATUSES.map((s) => (
+              <NativeSelectOption key={s.value} value={s.value}>
+                {s.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
         <span className="ml-auto text-xs text-muted">총 {total}명</span>
       </FilterBar>
 

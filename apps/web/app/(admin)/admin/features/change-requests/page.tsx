@@ -14,8 +14,13 @@ import type {
   AdminFeatureChangeRequestRecord,
 } from '@pinvi/schemas';
 import { Check, RefreshCw, Search, X } from 'lucide-react';
-import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
+import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -47,8 +52,6 @@ const ACTION_LABEL: Record<string, string> = {
   update: '수정',
   delete: '삭제',
 };
-
-const inputClass = 'rounded-sm border border-hairline px-2 py-1 text-sm';
 
 function formatDateTime(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString('ko-KR') : '—';
@@ -423,70 +426,77 @@ export default function AdminFeatureChangeRequestsPage() {
       description="kor-travel-map admin change request 큐 검수와 적용 상태 추적"
     >
       <FilterBar>
-        <form onSubmit={onSearch} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <label htmlFor="admin-fcr-search" className="text-xs text-muted">
-            검색
-          </label>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2 top-2 h-4 w-4 text-muted" />
-            <input
-              id="admin-fcr-search"
-              value={queryInput}
-              onChange={(event) => setQueryInput(event.target.value)}
-              className={`${inputClass} w-56 pl-7`}
-              placeholder="request, feature, reason"
-              data-testid="admin-fcr-search"
-            />
-          </div>
-          <button
-            type="submit"
-            className="rounded-sm border border-hairline px-3 py-1 text-sm"
-            data-testid="admin-fcr-search-submit"
-          >
-            조회
-          </button>
+        {/* 검색어(q)만 제출로 적용된다 — 상태/액션 select는 전환 전과 같이 즉시 반영이라
+            form 밖에 둔다. */}
+        <form onSubmit={onSearch} className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-2">
+          <FilterField className="w-56" htmlFor="admin-fcr-search" label="검색">
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
+                aria-hidden="true"
+              />
+              <Input
+                id="admin-fcr-search"
+                value={queryInput}
+                onChange={(event) => setQueryInput(event.target.value)}
+                className="pl-9"
+                placeholder="request, feature, reason"
+                data-testid="admin-fcr-search"
+              />
+            </div>
+          </FilterField>
+          <FilterActions>
+            <Button type="submit" variant="outline" data-testid="admin-fcr-search-submit">
+              조회
+            </Button>
+          </FilterActions>
         </form>
 
-        <select
-          value={statusFilter}
-          onChange={(event) => {
-            setStatusFilter(event.target.value as typeof statusFilter);
-            setSelectedRequestId(null);
-          }}
-          className={inputClass}
-          data-testid="admin-fcr-status-filter"
-        >
-          {STATUS_OPTIONS.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={actionFilter}
-          onChange={(event) => {
-            setActionFilter(event.target.value as typeof actionFilter);
-            setSelectedRequestId(null);
-          }}
-          className={inputClass}
-          data-testid="admin-fcr-action-filter"
-        >
-          {ACTION_OPTIONS.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          disabled={changeRequestsQuery.isFetching}
-          onClick={() => void changeRequestsQuery.refetch()}
-          className="inline-flex items-center gap-1 rounded-sm border border-hairline px-3 py-1 text-sm disabled:opacity-50"
-          data-testid="admin-fcr-refresh"
-        >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-          갱신
-        </button>
+        <FilterField htmlFor="admin-fcr-status-filter" label="상태">
+          <NativeSelect
+            id="admin-fcr-status-filter"
+            value={statusFilter}
+            onChange={(event) => {
+              setStatusFilter(event.target.value as typeof statusFilter);
+              setSelectedRequestId(null);
+            }}
+            data-testid="admin-fcr-status-filter"
+          >
+            {STATUS_OPTIONS.map((item) => (
+              <NativeSelectOption key={item.value} value={item.value}>
+                {item.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
+        <FilterField htmlFor="admin-fcr-action-filter" label="액션">
+          <NativeSelect
+            id="admin-fcr-action-filter"
+            value={actionFilter}
+            onChange={(event) => {
+              setActionFilter(event.target.value as typeof actionFilter);
+              setSelectedRequestId(null);
+            }}
+            data-testid="admin-fcr-action-filter"
+          >
+            {ACTION_OPTIONS.map((item) => (
+              <NativeSelectOption key={item.value} value={item.value}>
+                {item.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
+        <FilterActions>
+          <Button
+            variant="outline"
+            disabled={changeRequestsQuery.isFetching}
+            onClick={() => void changeRequestsQuery.refetch()}
+            data-testid="admin-fcr-refresh"
+          >
+            <RefreshCw aria-hidden="true" />
+            갱신
+          </Button>
+        </FilterActions>
         <span className="ml-auto text-xs text-muted">
           {data?.items.length ?? 0}행{data?.review_mode ? ` / ${data.review_mode}` : ''}
         </span>

@@ -12,8 +12,13 @@ import {
 import type { AdminCategoryMappingItem, AdminCategoryMappingUpdateRequest } from '@pinvi/schemas';
 import { CATEGORY_MARKER, markerStyleFor, paletteHex, paletteLabelColor } from '@pinvi/domain';
 import { Download, Edit3, RefreshCw, RotateCcw, Save, Search, X } from 'lucide-react';
-import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
+import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -366,39 +371,45 @@ export default function AdminCategoryMappingPage() {
       }
     >
       <FilterBar>
-        <form onSubmit={onSearch} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <label htmlFor="admin-category-search" className="text-xs text-muted">
-            검색
-          </label>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2 top-2 h-4 w-4 text-muted" />
-            <input
-              id="admin-category-search"
-              value={queryInput}
-              onChange={(event) => setQueryInput(event.target.value)}
-              className={`${inputClass} w-56 pl-7`}
-              placeholder="code, label, icon…"
-              data-testid="admin-category-search"
-            />
-          </div>
-          <button
-            type="submit"
-            className="rounded-sm border border-hairline px-3 py-1 text-sm"
-            data-testid="admin-category-submit"
-          >
-            조회
-          </button>
+        {/* 검색만 제출로 적용된다(전환 전과 동일) — select/checkbox는 form 밖에 두어 즉시
+            적용을 유지한다. */}
+        <form onSubmit={onSearch} className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-2">
+          <FilterField className="w-56" htmlFor="admin-category-search" label="검색">
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
+                aria-hidden="true"
+              />
+              <Input
+                id="admin-category-search"
+                value={queryInput}
+                onChange={(event) => setQueryInput(event.target.value)}
+                className="pl-9"
+                placeholder="code, label, icon…"
+                data-testid="admin-category-search"
+              />
+            </div>
+          </FilterField>
+          <FilterActions>
+            <Button type="submit" variant="outline" data-testid="admin-category-submit">
+              조회
+            </Button>
+          </FilterActions>
         </form>
-        <select
-          value={activeMode}
-          onChange={(event) => setActiveMode(event.target.value as typeof activeMode)}
-          className={inputClass}
-          data-testid="admin-category-active"
-        >
-          <option value="all">전체</option>
-          <option value="active">active</option>
-        </select>
-        <label className="flex items-center gap-2 text-xs text-muted">
+        <FilterField htmlFor="admin-category-active" label="활성 상태">
+          <NativeSelect
+            id="admin-category-active"
+            value={activeMode}
+            onChange={(event) => setActiveMode(event.target.value as typeof activeMode)}
+            data-testid="admin-category-active"
+          >
+            <NativeSelectOption value="all">전체</NativeSelectOption>
+            <NativeSelectOption value="active">active</NativeSelectOption>
+          </NativeSelect>
+        </FilterField>
+        {/* checkbox는 라벨이 컨트롤 옆에 붙는 것이 정본이라 FilterField(라벨 위·컨트롤 아래)로
+            감싸지 않는다. e2e가 `.uncheck()`로 잡는 네이티브 input이라 마크업도 그대로 둔다. */}
+        <label className="flex items-center gap-2 self-end pb-2 text-xs text-muted">
           <input
             type="checkbox"
             checked={includeCounts}

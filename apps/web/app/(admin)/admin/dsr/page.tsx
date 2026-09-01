@@ -13,8 +13,11 @@ import {
 } from 'lucide-react';
 import { ApiError, adminApi, queryKeys, type AdminDsrRequestListParams } from '@pinvi/api-client';
 import type { AdminDsrRequestRecord } from '@pinvi/schemas';
-import { AdminPage, FilterBar, Section } from '@/components/admin/AdminPage';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import { apiClient } from '@/lib/api';
 
 const STATUS_OPTIONS = [
@@ -319,44 +322,50 @@ export default function AdminDsrPage() {
       {error && <ErrorBox message={error} />}
 
       <FilterBar>
-        <select
-          value={statusFilter}
-          onChange={(event) =>
-            setStatusFilter(event.target.value as (typeof STATUS_OPTIONS)[number]['value'])
-          }
-          className="rounded-sm border border-hairline px-2 py-1 text-sm"
-          data-testid="admin-dsr-status-filter"
-        >
-          {STATUS_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={typeFilter}
-          onChange={(event) =>
-            setTypeFilter(event.target.value as (typeof TYPE_OPTIONS)[number]['value'])
-          }
-          className="rounded-sm border border-hairline px-2 py-1 text-sm"
-        >
-          {TYPE_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={overdueFilter}
-          onChange={(event) => setOverdueFilter(event.target.value as OverdueFilter)}
-          className="rounded-sm border border-hairline px-2 py-1 text-sm"
-        >
-          {OVERDUE_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <FilterField htmlFor="admin-dsr-status" label="상태">
+          <NativeSelect
+            id="admin-dsr-status"
+            value={statusFilter}
+            onChange={(event) =>
+              setStatusFilter(event.target.value as (typeof STATUS_OPTIONS)[number]['value'])
+            }
+            data-testid="admin-dsr-status-filter"
+          >
+            {STATUS_OPTIONS.map((option) => (
+              <NativeSelectOption key={option.value} value={option.value}>
+                {option.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
+        <FilterField htmlFor="admin-dsr-type" label="유형">
+          <NativeSelect
+            id="admin-dsr-type"
+            value={typeFilter}
+            onChange={(event) =>
+              setTypeFilter(event.target.value as (typeof TYPE_OPTIONS)[number]['value'])
+            }
+          >
+            {TYPE_OPTIONS.map((option) => (
+              <NativeSelectOption key={option.value} value={option.value}>
+                {option.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
+        <FilterField htmlFor="admin-dsr-overdue" label="마감">
+          <NativeSelect
+            id="admin-dsr-overdue"
+            value={overdueFilter}
+            onChange={(event) => setOverdueFilter(event.target.value as OverdueFilter)}
+          >
+            {OVERDUE_OPTIONS.map((option) => (
+              <NativeSelectOption key={option.value} value={option.value}>
+                {option.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
       </FilterBar>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">

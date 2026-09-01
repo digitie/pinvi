@@ -11,8 +11,13 @@ import {
 } from '@pinvi/api-client';
 import type { AdminDedupDecision, AdminDedupReviewRecord } from '@pinvi/schemas';
 import { Check, GitMerge, RefreshCw, Search, X } from 'lucide-react';
-import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
+import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -232,52 +237,54 @@ export default function AdminDedupReviewPage() {
       }
     >
       <FilterBar>
-        <form onSubmit={onSearch} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <label htmlFor="admin-dedup-search" className="text-xs text-muted">
-            검색
-          </label>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2 top-2 h-4 w-4 text-muted" />
-            <input
-              id="admin-dedup-search"
-              value={queryInput}
-              onChange={(event) => setQueryInput(event.target.value)}
-              className={`${inputClass} w-56 pl-7`}
-              placeholder="feature, provider…"
-              data-testid="admin-dedup-search"
-            />
-          </div>
-          <button
-            type="submit"
-            className="rounded-sm border border-hairline px-3 py-1 text-sm"
-            data-testid="admin-dedup-submit"
-          >
-            조회
-          </button>
+        {/* 검색어(q)만 제출로 적용된다 — 상태/min score는 전환 전과 같이 즉시 반영이라
+            form 밖에 둔다. */}
+        <form onSubmit={onSearch} className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-2">
+          <FilterField className="w-56" htmlFor="admin-dedup-search" label="검색">
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
+                aria-hidden="true"
+              />
+              <Input
+                id="admin-dedup-search"
+                value={queryInput}
+                onChange={(event) => setQueryInput(event.target.value)}
+                className="pl-9"
+                placeholder="feature, provider…"
+                data-testid="admin-dedup-search"
+              />
+            </div>
+          </FilterField>
+          <FilterActions>
+            <Button type="submit" variant="outline" data-testid="admin-dedup-submit">
+              조회
+            </Button>
+          </FilterActions>
         </form>
-        <select
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
-          className={inputClass}
-          data-testid="admin-dedup-status"
-        >
-          {STATUS_OPTIONS.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-        <label className="text-xs text-muted" htmlFor="admin-dedup-min-score">
-          min score
-        </label>
-        <input
-          id="admin-dedup-min-score"
-          value={minScore}
-          onChange={(event) => setMinScore(event.target.value)}
-          className={`${inputClass} w-20`}
-          inputMode="numeric"
-          data-testid="admin-dedup-min-score"
-        />
+        <FilterField htmlFor="admin-dedup-status" label="상태">
+          <NativeSelect
+            id="admin-dedup-status"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+            data-testid="admin-dedup-status"
+          >
+            {STATUS_OPTIONS.map((item) => (
+              <NativeSelectOption key={item.value} value={item.value}>
+                {item.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
+        <FilterField className="w-20" htmlFor="admin-dedup-min-score" label="min score">
+          <Input
+            id="admin-dedup-min-score"
+            value={minScore}
+            onChange={(event) => setMinScore(event.target.value)}
+            inputMode="numeric"
+            data-testid="admin-dedup-min-score"
+          />
+        </FilterField>
         <span className="ml-auto text-xs text-muted">{data?.items.length ?? 0}행</span>
       </FilterBar>
 

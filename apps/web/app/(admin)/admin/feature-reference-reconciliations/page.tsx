@@ -15,9 +15,11 @@ import type {
   AdminFeatureReferenceReconciliationDetail,
   AdminFeatureReferenceReconciliationSummary,
 } from '@pinvi/schemas';
-import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
+import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
-import { FormSelect } from '@/components/forms/FormSelect';
+import { FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { isRestorableFocusTarget } from '@/lib/useModalDialog';
@@ -656,25 +658,34 @@ export default function AdminFeatureReferenceReconciliationsPage() {
       title="Feature 참조 조정 증거"
       description="Map M05 event의 append-only receipt, blocked 관측 및 영향 행을 읽기 전용으로 확인합니다."
     >
+      {/*
+        T-356 필터 툴바 전환 — `FormSelect`(라벨 + helper 슬롯 예약)를
+        `FilterField` + `NativeSelect`로 바꿨다. 라벨 문구(`상태`)·`id`·`data-testid`·
+        초기화 로직(page/selectedEventId)은 그대로다.
+        `[&>select]:min-h-11`은 KTM `h-control`(36px) 대신 44px 터치 타깃을 유지하기 위한
+        보정 — `admin-feature-reference-reconciliations.e2e.ts`가 320~768px에서
+        `admin-frr-status-filter`의 높이 ≥ 44px를 검증한다.
+      */}
       <FilterBar>
-        <FormSelect
-          id="admin-frr-status"
-          label="상태"
-          value={statusFilter}
-          onChange={(event) => {
-            setStatusFilter(event.target.value as (typeof STATUS_FILTERS)[number]['value']);
-            setPage(1);
-            setSelectedEventId(null);
-          }}
-          className="min-w-44"
-          data-testid="admin-frr-status-filter"
-        >
-          {STATUS_FILTERS.map((filter) => (
-            <option key={filter.value} value={filter.value}>
-              {filter.label}
-            </option>
-          ))}
-        </FormSelect>
+        <FilterField htmlFor="admin-frr-status" label="상태">
+          <NativeSelect
+            id="admin-frr-status"
+            value={statusFilter}
+            onChange={(event) => {
+              setStatusFilter(event.target.value as (typeof STATUS_FILTERS)[number]['value']);
+              setPage(1);
+              setSelectedEventId(null);
+            }}
+            className="min-w-44 [&>select]:min-h-11"
+            data-testid="admin-frr-status-filter"
+          >
+            {STATUS_FILTERS.map((filter) => (
+              <NativeSelectOption key={filter.value} value={filter.value}>
+                {filter.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
       </FilterBar>
 
       {error && (

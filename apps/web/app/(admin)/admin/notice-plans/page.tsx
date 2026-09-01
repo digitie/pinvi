@@ -12,16 +12,19 @@ import {
 } from '@pinvi/api-client';
 import type { NoticePlan } from '@pinvi/schemas';
 import { Edit3, Plus, RefreshCw, Search } from 'lucide-react';
-import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
+import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { KorTravelMapCurationCollectionImportPanel } from '@/components/admin/KorTravelMapCurationCollectionImportPanel';
 import { KorTravelMapCurationCutoverBackfillPanel } from '@/components/admin/KorTravelMapCurationCutoverBackfillPanel';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
 });
-
-const inputClass = 'rounded-sm border border-hairline px-2 py-1 text-sm';
 
 function formatDate(value: string | null): string {
   return value ? new Date(value).toLocaleDateString('ko-KR') : '—';
@@ -122,48 +125,50 @@ export default function AdminNoticePlansPage() {
         </Link>
       }
     >
+      {/* 전환 전과 동일하게 select도 form 안이다 — 카테고리/공개 여부는 값이 바뀌는 즉시
+          `params`에 반영되고(제출 불필요) 검색어만 제출로 확정된다. */}
       <form onSubmit={submit}>
         <FilterBar>
-          <input
-            value={q}
-            onChange={(event) => setQ(event.target.value)}
-            className={inputClass}
-            placeholder="제목 / slug / 목적지"
-            data-testid="admin-notice-search"
-          />
-          <input
-            value={category}
-            onChange={(event) => setCategory(event.target.value)}
-            className={inputClass}
-            placeholder="category"
-            data-testid="admin-notice-category-filter"
-          />
-          <select
-            value={published}
-            onChange={(event) => setPublished(event.target.value as typeof published)}
-            className={inputClass}
-            data-testid="admin-notice-published-filter"
-          >
-            <option value="all">전체</option>
-            <option value="true">공개</option>
-            <option value="false">초안</option>
-          </select>
-          <button
-            type="submit"
-            className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline px-3 text-sm font-semibold"
-            data-testid="admin-notice-submit"
-          >
-            <Search className="h-4 w-4" aria-hidden="true" />
-            검색
-          </button>
-          <button
-            type="button"
-            onClick={() => void plansQuery.refetch()}
-            className="inline-flex h-8 items-center gap-1 rounded-sm border border-hairline px-3 text-sm font-semibold"
-          >
-            <RefreshCw className="h-4 w-4" aria-hidden="true" />
-            새로고침
-          </button>
+          <FilterField className="w-56" htmlFor="admin-notice-search" label="검색">
+            <Input
+              id="admin-notice-search"
+              value={q}
+              onChange={(event) => setQ(event.target.value)}
+              placeholder="제목 / slug / 목적지"
+              data-testid="admin-notice-search"
+            />
+          </FilterField>
+          <FilterField className="w-36" htmlFor="admin-notice-category" label="카테고리">
+            <Input
+              id="admin-notice-category"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+              placeholder="category"
+              data-testid="admin-notice-category-filter"
+            />
+          </FilterField>
+          <FilterField htmlFor="admin-notice-published" label="공개 여부">
+            <NativeSelect
+              id="admin-notice-published"
+              value={published}
+              onChange={(event) => setPublished(event.target.value as typeof published)}
+              data-testid="admin-notice-published-filter"
+            >
+              <NativeSelectOption value="all">전체</NativeSelectOption>
+              <NativeSelectOption value="true">공개</NativeSelectOption>
+              <NativeSelectOption value="false">초안</NativeSelectOption>
+            </NativeSelect>
+          </FilterField>
+          <FilterActions>
+            <Button type="submit" variant="outline" data-testid="admin-notice-submit">
+              <Search aria-hidden="true" />
+              검색
+            </Button>
+            <Button variant="outline" onClick={() => void plansQuery.refetch()}>
+              <RefreshCw aria-hidden="true" />
+              새로고침
+            </Button>
+          </FilterActions>
         </FilterBar>
       </form>
 

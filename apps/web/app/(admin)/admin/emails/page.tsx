@@ -5,8 +5,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import { AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
 import type { AdminEmailDeliverability, AdminEmailEntry } from '@pinvi/schemas';
-import { AdminPage, FilterBar, Section } from '@/components/admin/AdminPage';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import { apiClient } from '@/lib/api';
 
 const STATUSES = [
@@ -257,26 +260,24 @@ export default function AdminEmailsPage() {
       </Section>
 
       <FilterBar>
-        <label htmlFor="admin-emails-status-filter" className="text-xs text-muted">
-          상태
-        </label>
-        <select
-          id="admin-emails-status-filter"
-          value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value);
-            // 목록 컨텍스트가 바뀌면 이전 재발송 실패 배너를 정리(원래 reload-시-에러초기화 동작 복원).
-            resendMutation.reset();
-          }}
-          className="rounded-sm border border-hairline px-2 py-1 text-sm"
-          data-testid="admin-emails-status-filter"
-        >
-          {STATUSES.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
+        <FilterField htmlFor="admin-emails-status-filter" label="상태">
+          <NativeSelect
+            id="admin-emails-status-filter"
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              // 목록 컨텍스트가 바뀌면 이전 재발송 실패 배너를 정리(원래 reload-시-에러초기화 동작 복원).
+              resendMutation.reset();
+            }}
+            data-testid="admin-emails-status-filter"
+          >
+            {STATUSES.map((s) => (
+              <NativeSelectOption key={s.value} value={s.value}>
+                {s.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
       </FilterBar>
 
       {error && (

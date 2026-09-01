@@ -13,8 +13,13 @@ import type {
   TripStatus,
   TripVisibility,
 } from '@pinvi/schemas';
-import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
+import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -465,66 +470,63 @@ export default function AdminTripsPage() {
     >
       {showCreateDialog && <AdminTripCreateDialog onClose={() => setShowCreateDialog(false)} />}
 
+      {/* 검색만 form 안이다(제출로 적용) — 상태/공개 select는 form 밖에 두어 select 위 Enter가
+          검색을 제출하지 않게 한다. 전환 전 구조 그대로다. */}
       <FilterBar>
-        <form onSubmit={onSearch} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <label htmlFor="admin-trips-search" className="text-xs text-muted">
-            검색
-          </label>
-          <input
-            id="admin-trips-search"
-            type="search"
-            value={queryInput}
-            onChange={(e) => setQueryInput(e.target.value)}
-            className="min-w-56 rounded-sm border border-hairline px-2 py-1 text-sm"
-            placeholder="제목, 지역, owner email, trip_id"
-            data-testid="admin-trips-search"
-          />
-          <button
-            type="submit"
-            className="rounded-sm border border-hairline px-3 py-1 text-sm"
-            data-testid="admin-trips-search-submit"
-          >
-            조회
-          </button>
+        <form
+          onSubmit={onSearch}
+          className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-2"
+        >
+          <FilterField className="w-64" htmlFor="admin-trips-search" label="검색">
+            <Input
+              id="admin-trips-search"
+              type="search"
+              value={queryInput}
+              onChange={(e) => setQueryInput(e.target.value)}
+              placeholder="제목, 지역, owner email, trip_id"
+              data-testid="admin-trips-search"
+            />
+          </FilterField>
+          <FilterActions>
+            <Button type="submit" variant="outline" data-testid="admin-trips-search-submit">
+              조회
+            </Button>
+          </FilterActions>
         </form>
-        <label htmlFor="admin-trips-status-filter" className="text-xs text-muted">
-          상태
-        </label>
-        <select
-          id="admin-trips-status-filter"
-          value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value);
-            setPage(1);
-          }}
-          className="rounded-sm border border-hairline px-2 py-1 text-sm"
-          data-testid="admin-trips-status-filter"
-        >
-          {STATUSES.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-        <label htmlFor="admin-trips-visibility-filter" className="text-xs text-muted">
-          공개
-        </label>
-        <select
-          id="admin-trips-visibility-filter"
-          value={visibilityFilter}
-          onChange={(e) => {
-            setVisibilityFilter(e.target.value);
-            setPage(1);
-          }}
-          className="rounded-sm border border-hairline px-2 py-1 text-sm"
-          data-testid="admin-trips-visibility-filter"
-        >
-          {VISIBILITIES.map((v) => (
-            <option key={v.value} value={v.value}>
-              {v.label}
-            </option>
-          ))}
-        </select>
+        <FilterField htmlFor="admin-trips-status-filter" label="상태">
+          <NativeSelect
+            id="admin-trips-status-filter"
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
+            data-testid="admin-trips-status-filter"
+          >
+            {STATUSES.map((s) => (
+              <NativeSelectOption key={s.value} value={s.value}>
+                {s.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
+        <FilterField htmlFor="admin-trips-visibility-filter" label="공개">
+          <NativeSelect
+            id="admin-trips-visibility-filter"
+            value={visibilityFilter}
+            onChange={(e) => {
+              setVisibilityFilter(e.target.value);
+              setPage(1);
+            }}
+            data-testid="admin-trips-visibility-filter"
+          >
+            {VISIBILITIES.map((v) => (
+              <NativeSelectOption key={v.value} value={v.value}>
+                {v.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
         <span className="ml-auto text-xs text-muted">총 {total}건</span>
       </FilterBar>
 

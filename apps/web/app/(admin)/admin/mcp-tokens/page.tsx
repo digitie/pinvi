@@ -5,8 +5,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Copy, KeyRound, Trash2 } from 'lucide-react';
 import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type { McpToken } from '@pinvi/schemas';
-import { AdminPage, FilterBar, Section } from '@/components/admin/AdminPage';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import { FormField } from '@/components/forms/FormField';
 import { FormSelect } from '@/components/forms/FormSelect';
 
@@ -210,35 +215,45 @@ export default function AdminMcpTokensPage() {
 
   return (
     <AdminPage title="MCP 토큰" description="외부 agent read-only 토큰 관리">
+      {/*
+        T-356 필터 툴바 전환 — `FormField`/`FormSelect`/수제 제출 버튼을
+        `FilterField` + `Input`/`NativeSelect` + `FilterActions`로 바꿨다. 라벨 문구(`검색`/`상태`),
+        버튼 문구(`조회`), `id`, `data-testid`, placeholder는 그대로다
+        (`admin-live-matrix.live.ts`가 `admin-mcp-search`·`admin-mcp-status`·`조회` 버튼을 잡는다).
+        상태 select는 전환 전과 똑같이 **form 밖**에 둔다 — 안으로 넣으면 select 위 Enter가
+        검색을 제출하게 돼 동작이 바뀌고, 상태는 제출 없이 즉시 적용되는 필터다.
+      */}
       <FilterBar>
-        <form onSubmit={onSearch} className="flex min-w-0 flex-1 flex-wrap items-end gap-2">
-          <FormField
-            id="admin-mcp-search"
-            label="검색"
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="이름 또는 token_id"
-            className="min-w-64 px-2 py-1"
-            data-testid="admin-mcp-search"
-          />
-          <button type="submit" className="h-9 rounded-sm border border-hairline px-3 text-sm">
-            조회
-          </button>
+        <form onSubmit={onSearch} className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-2">
+          <FilterField className="w-64" htmlFor="admin-mcp-search" label="검색">
+            <Input
+              id="admin-mcp-search"
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="이름 또는 token_id"
+              data-testid="admin-mcp-search"
+            />
+          </FilterField>
+          <FilterActions>
+            <Button type="submit" variant="outline">
+              조회
+            </Button>
+          </FilterActions>
         </form>
-        <FormSelect
-          id="admin-mcp-status"
-          label="상태"
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
-          className="px-2 py-1"
-          data-testid="admin-mcp-status"
-        >
-          <option value="">전체</option>
-          <option value="active">active</option>
-          <option value="expired">expired</option>
-          <option value="revoked">revoked</option>
-        </FormSelect>
+        <FilterField htmlFor="admin-mcp-status" label="상태">
+          <NativeSelect
+            id="admin-mcp-status"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+            data-testid="admin-mcp-status"
+          >
+            <NativeSelectOption value="">전체</NativeSelectOption>
+            <NativeSelectOption value="active">active</NativeSelectOption>
+            <NativeSelectOption value="expired">expired</NativeSelectOption>
+            <NativeSelectOption value="revoked">revoked</NativeSelectOption>
+          </NativeSelect>
+        </FilterField>
       </FilterBar>
 
       {error && (

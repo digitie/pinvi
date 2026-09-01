@@ -26,8 +26,11 @@ import {
   ShieldCheck,
   Workflow,
 } from 'lucide-react';
-import { AdminPage, FilterBar, Section } from '@/components/admin/AdminPage';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -55,8 +58,6 @@ const STATUS_LABEL: Record<string, string> = {
   unavailable: '미가용',
   error: '오류',
 };
-
-const inputClass = 'rounded-sm border border-hairline px-2 py-1 text-sm';
 
 function formatDateTime(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString('ko-KR') : '—';
@@ -294,22 +295,20 @@ export default function AdminEtlPage() {
       }
     >
       <FilterBar>
-        <label htmlFor="admin-etl-import-status-filter" className="text-xs text-muted">
-          import job 상태
-        </label>
-        <select
-          id="admin-etl-import-status-filter"
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
-          className={inputClass}
-          data-testid="admin-etl-import-status-filter"
-        >
-          {IMPORT_JOB_STATUS_OPTIONS.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
+        <FilterField htmlFor="admin-etl-import-status-filter" label="import job 상태">
+          <NativeSelect
+            id="admin-etl-import-status-filter"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+            data-testid="admin-etl-import-status-filter"
+          >
+            {IMPORT_JOB_STATUS_OPTIONS.map((item) => (
+              <NativeSelectOption key={item.value} value={item.value}>
+                {item.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
         <span className="ml-auto text-xs text-muted">
           {summary?.generated_at ? `요약 ${formatDateTime(summary.generated_at)}` : '요약 대기'}
         </span>

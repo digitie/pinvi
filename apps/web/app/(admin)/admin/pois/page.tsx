@@ -7,8 +7,13 @@ import { Plus } from 'lucide-react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type { AdminPoiCreateRequest, AdminPoiSummary, AdminTripSummary } from '@pinvi/schemas';
-import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
+import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -544,47 +549,46 @@ export default function AdminPoisPage() {
     >
       {showCreateDialog && <AdminPoiCreateDialog onClose={() => setShowCreateDialog(false)} />}
 
+      {/* 검색만 form 안이다(제출로 적용) — 연결 필터는 form 밖에 두어 select 위 Enter가
+          검색을 제출하지 않게 한다. 전환 전 구조 그대로다. */}
       <FilterBar>
-        <form onSubmit={onSearch} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <label htmlFor="admin-pois-search" className="text-xs text-muted">
-            검색
-          </label>
-          <input
-            id="admin-pois-search"
-            type="search"
-            value={queryInput}
-            onChange={(e) => setQueryInput(e.target.value)}
-            className="min-w-56 rounded-sm border border-hairline px-2 py-1 text-sm"
-            placeholder="feature_id, label, trip, owner email, poi_id"
-            data-testid="admin-pois-search"
-          />
-          <button
-            type="submit"
-            className="rounded-sm border border-hairline px-3 py-1 text-sm"
-            data-testid="admin-pois-search-submit"
-          >
-            조회
-          </button>
-        </form>
-        <label htmlFor="admin-pois-broken-filter" className="text-xs text-muted">
-          연결
-        </label>
-        <select
-          id="admin-pois-broken-filter"
-          value={linkFilter}
-          onChange={(e) => {
-            setLinkFilter(e.target.value);
-            setPage(1);
-          }}
-          className="rounded-sm border border-hairline px-2 py-1 text-sm"
-          data-testid="admin-pois-broken-filter"
+        <form
+          onSubmit={onSearch}
+          className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-2"
         >
-          {LINK_FILTERS.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
+          <FilterField className="w-64" htmlFor="admin-pois-search" label="검색">
+            <Input
+              id="admin-pois-search"
+              type="search"
+              value={queryInput}
+              onChange={(e) => setQueryInput(e.target.value)}
+              placeholder="feature_id, label, trip, owner email, poi_id"
+              data-testid="admin-pois-search"
+            />
+          </FilterField>
+          <FilterActions>
+            <Button type="submit" variant="outline" data-testid="admin-pois-search-submit">
+              조회
+            </Button>
+          </FilterActions>
+        </form>
+        <FilterField htmlFor="admin-pois-broken-filter" label="연결">
+          <NativeSelect
+            id="admin-pois-broken-filter"
+            value={linkFilter}
+            onChange={(e) => {
+              setLinkFilter(e.target.value);
+              setPage(1);
+            }}
+            data-testid="admin-pois-broken-filter"
+          >
+            {LINK_FILTERS.map((item) => (
+              <NativeSelectOption key={item.value} value={item.value}>
+                {item.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
         <span className="ml-auto text-xs text-muted">총 {total}건</span>
       </FilterBar>
 

@@ -19,8 +19,11 @@ import {
   type AdminSecurityIncidentListParams,
 } from '@pinvi/api-client';
 import type { AdminSecurityIncidentRecord } from '@pinvi/schemas';
-import { AdminPage, FilterBar, Section } from '@/components/admin/AdminPage';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import { apiClient } from '@/lib/api';
 
 const STATUS_OPTIONS = [
@@ -358,47 +361,56 @@ export default function AdminIncidentsPage() {
       )}
       {error && <ErrorBox message={error} />}
 
+      {/* 전환 전에는 라벨이 없고 첫 option 문구(`상태 전체`/`severity 전체`/`SLA 전체`)가
+          라벨 대신이었다 — 값을 고르는 순간 그 문구가 사라져 무슨 칸인지 알 수 없었다.
+          option 문구·값은 그대로 두고 가시 라벨만 얹는다. */}
       <FilterBar>
-        <select
-          value={statusFilter}
-          onChange={(event) =>
-            setStatusFilter(event.target.value as (typeof STATUS_OPTIONS)[number]['value'])
-          }
-          className="rounded-sm border border-hairline px-2 py-1 text-sm"
-          data-testid="admin-incidents-status-filter"
-        >
-          {STATUS_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={severityFilter}
-          onChange={(event) =>
-            setSeverityFilter(event.target.value as (typeof SEVERITY_OPTIONS)[number]['value'])
-          }
-          className="rounded-sm border border-hairline px-2 py-1 text-sm"
-        >
-          {SEVERITY_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={overdueFilter}
-          onChange={(event) =>
-            setOverdueFilter(event.target.value as (typeof OVERDUE_OPTIONS)[number]['value'])
-          }
-          className="rounded-sm border border-hairline px-2 py-1 text-sm"
-        >
-          {OVERDUE_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <FilterField htmlFor="admin-incidents-status-filter" label="상태">
+          <NativeSelect
+            id="admin-incidents-status-filter"
+            value={statusFilter}
+            onChange={(event) =>
+              setStatusFilter(event.target.value as (typeof STATUS_OPTIONS)[number]['value'])
+            }
+            data-testid="admin-incidents-status-filter"
+          >
+            {STATUS_OPTIONS.map((option) => (
+              <NativeSelectOption key={option.value} value={option.value}>
+                {option.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
+        <FilterField htmlFor="admin-incidents-severity-filter" label="심각도">
+          <NativeSelect
+            id="admin-incidents-severity-filter"
+            value={severityFilter}
+            onChange={(event) =>
+              setSeverityFilter(event.target.value as (typeof SEVERITY_OPTIONS)[number]['value'])
+            }
+          >
+            {SEVERITY_OPTIONS.map((option) => (
+              <NativeSelectOption key={option.value} value={option.value}>
+                {option.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
+        <FilterField htmlFor="admin-incidents-overdue-filter" label="SLA">
+          <NativeSelect
+            id="admin-incidents-overdue-filter"
+            value={overdueFilter}
+            onChange={(event) =>
+              setOverdueFilter(event.target.value as (typeof OVERDUE_OPTIONS)[number]['value'])
+            }
+          >
+            {OVERDUE_OPTIONS.map((option) => (
+              <NativeSelectOption key={option.value} value={option.value}>
+                {option.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
       </FilterBar>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">

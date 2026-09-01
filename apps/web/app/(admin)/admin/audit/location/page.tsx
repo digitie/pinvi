@@ -5,8 +5,11 @@ import { useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type { AdminLocationAuditEntry } from '@pinvi/schemas';
-import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
+import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
 import { apiClient } from '@/lib/api';
 
 const formatDateTime = (value: string) => new Date(value).toLocaleString('ko-KR');
@@ -127,49 +130,43 @@ export default function AdminLocationAuditPage() {
         </Link>
       }
     >
-      <FilterBar>
-        <form onSubmit={onSubmit} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <label htmlFor="admin-location-user" className="text-xs text-muted">
-            User ID
-          </label>
-          <input
-            id="admin-location-user"
-            value={userIdInput}
-            onChange={(event) => setUserIdInput(event.target.value)}
-            className="min-w-64 rounded-sm border border-hairline px-2 py-1 text-sm"
-            data-testid="admin-location-user"
-          />
-          <label htmlFor="admin-location-from" className="text-xs text-muted">
-            From
-          </label>
-          <input
-            id="admin-location-from"
-            type="datetime-local"
-            value={fromInput}
-            onChange={(event) => setFromInput(event.target.value)}
-            className="rounded-sm border border-hairline px-2 py-1 text-sm"
-            data-testid="admin-location-from"
-          />
-          <label htmlFor="admin-location-to" className="text-xs text-muted">
-            To
-          </label>
-          <input
-            id="admin-location-to"
-            type="datetime-local"
-            value={toInput}
-            onChange={(event) => setToInput(event.target.value)}
-            className="rounded-sm border border-hairline px-2 py-1 text-sm"
-            data-testid="admin-location-to"
-          />
-          <button
-            type="submit"
-            className="rounded-sm border border-hairline px-3 py-1 text-sm"
-            data-testid="admin-location-submit"
-          >
-            조회
-          </button>
-        </form>
-      </FilterBar>
+      {/* 세 필터 모두 제출로만 적용된다(전환 전과 동일) — form이 툴바 전체를 감싼다.
+          User ID 폭은 input이 아니라 FilterField가 갖는다(Input이 `w-full`). */}
+      <form onSubmit={onSubmit}>
+        <FilterBar>
+          <FilterField className="w-64" htmlFor="admin-location-user" label="User ID">
+            <Input
+              id="admin-location-user"
+              value={userIdInput}
+              onChange={(event) => setUserIdInput(event.target.value)}
+              data-testid="admin-location-user"
+            />
+          </FilterField>
+          <FilterField htmlFor="admin-location-from" label="From">
+            <Input
+              id="admin-location-from"
+              type="datetime-local"
+              value={fromInput}
+              onChange={(event) => setFromInput(event.target.value)}
+              data-testid="admin-location-from"
+            />
+          </FilterField>
+          <FilterField htmlFor="admin-location-to" label="To">
+            <Input
+              id="admin-location-to"
+              type="datetime-local"
+              value={toInput}
+              onChange={(event) => setToInput(event.target.value)}
+              data-testid="admin-location-to"
+            />
+          </FilterField>
+          <FilterActions>
+            <Button type="submit" variant="outline" data-testid="admin-location-submit">
+              조회
+            </Button>
+          </FilterActions>
+        </FilterBar>
+      </form>
 
       {error && (
         <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">

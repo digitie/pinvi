@@ -13,8 +13,12 @@ import {
 } from '@pinvi/api-client';
 import type { AdminConsistencyReportRecord, AdminIntegrityIssueRecord } from '@pinvi/schemas';
 import { Ban, CheckCircle2, ChevronRight, RefreshCw, RotateCcw, X } from 'lucide-react';
-import { AdminPage, FilterBar } from '@/components/admin/AdminPage';
+import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -55,8 +59,6 @@ const ACTION_LABEL: Record<IssueAction, string> = {
   ignore: '무시',
   reopen: '재오픈',
 };
-
-const inputClass = 'rounded-sm border border-hairline px-2 py-1 text-sm';
 
 function formatDateTime(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString('ko-KR') : '—';
@@ -398,73 +400,84 @@ export default function AdminIntegrityPage() {
       }
     >
       <FilterBar>
-        <select
-          value={issueSource}
-          onChange={(event) => {
-            setIssueSource(event.target.value as typeof issueSource);
-            resetIssueCursor();
-          }}
-          className={inputClass}
-          data-testid="admin-integrity-source"
-        >
-          {ISSUE_SOURCE_OPTIONS.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={issueStatus}
-          onChange={(event) => {
-            setIssueStatus(event.target.value as typeof issueStatus);
-            resetIssueCursor();
-          }}
-          className={inputClass}
-          data-testid="admin-integrity-status"
-        >
-          {ISSUE_STATUS_OPTIONS.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={severity}
-          onChange={(event) => {
-            setSeverity(event.target.value as typeof severity);
-            resetIssueCursor();
-          }}
-          className={inputClass}
-          data-testid="admin-integrity-severity"
-        >
-          {SEVERITY_OPTIONS.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-        <input
-          value={provider}
-          onChange={(event) => {
-            setProvider(event.target.value);
-            resetIssueCursor();
-          }}
-          className={`${inputClass} w-40`}
-          placeholder="provider"
-          data-testid="admin-integrity-provider"
-        />
-        <select
-          value={reportSeverity}
-          onChange={(event) => setReportSeverity(event.target.value as typeof reportSeverity)}
-          className={inputClass}
-          data-testid="admin-integrity-report-severity"
-        >
-          {REPORT_SEVERITY_OPTIONS.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
+        <FilterField htmlFor="admin-integrity-source-filter" label="source">
+          <NativeSelect
+            id="admin-integrity-source-filter"
+            value={issueSource}
+            onChange={(event) => {
+              setIssueSource(event.target.value as typeof issueSource);
+              resetIssueCursor();
+            }}
+            data-testid="admin-integrity-source"
+          >
+            {ISSUE_SOURCE_OPTIONS.map((item) => (
+              <NativeSelectOption key={item.value} value={item.value}>
+                {item.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
+        <FilterField htmlFor="admin-integrity-status-filter" label="상태">
+          <NativeSelect
+            id="admin-integrity-status-filter"
+            value={issueStatus}
+            onChange={(event) => {
+              setIssueStatus(event.target.value as typeof issueStatus);
+              resetIssueCursor();
+            }}
+            data-testid="admin-integrity-status"
+          >
+            {ISSUE_STATUS_OPTIONS.map((item) => (
+              <NativeSelectOption key={item.value} value={item.value}>
+                {item.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
+        <FilterField htmlFor="admin-integrity-severity-filter" label="severity">
+          <NativeSelect
+            id="admin-integrity-severity-filter"
+            value={severity}
+            onChange={(event) => {
+              setSeverity(event.target.value as typeof severity);
+              resetIssueCursor();
+            }}
+            data-testid="admin-integrity-severity"
+          >
+            {SEVERITY_OPTIONS.map((item) => (
+              <NativeSelectOption key={item.value} value={item.value}>
+                {item.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
+        <FilterField className="w-40" htmlFor="admin-integrity-provider-filter" label="provider">
+          <Input
+            id="admin-integrity-provider-filter"
+            value={provider}
+            onChange={(event) => {
+              setProvider(event.target.value);
+              resetIssueCursor();
+            }}
+            placeholder="provider"
+            data-testid="admin-integrity-provider"
+          />
+        </FilterField>
+        {/* 이 컨트롤만 Issues가 아니라 아래 Reports 표를 거른다 — 라벨에 그 대상을 드러낸다. */}
+        <FilterField htmlFor="admin-integrity-report-severity-filter" label="report severity">
+          <NativeSelect
+            id="admin-integrity-report-severity-filter"
+            value={reportSeverity}
+            onChange={(event) => setReportSeverity(event.target.value as typeof reportSeverity)}
+            data-testid="admin-integrity-report-severity"
+          >
+            {REPORT_SEVERITY_OPTIONS.map((item) => (
+              <NativeSelectOption key={item.value} value={item.value}>
+                {item.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
         <span className="ml-auto text-xs text-muted">
           {issuesQuery.data?.items.length ?? 0} issues / {reportsQuery.data?.items.length ?? 0}{' '}
           reports

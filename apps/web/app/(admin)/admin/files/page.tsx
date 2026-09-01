@@ -4,8 +4,15 @@ import { useEffect, useRef, useState } from 'react';
 import { Download, Loader2, Save, Trash2 } from 'lucide-react';
 import { ApiError, adminApi } from '@pinvi/api-client';
 import type { AdminFileStorageSettings, AttachmentLibraryItem } from '@pinvi/schemas';
-import { AdminPage, FilterBar, Section } from '@/components/admin/AdminPage';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+// 필터 툴바만 admin 프리미티브로 전환한다(T-356). 다이얼로그 푸터는 앱 공용 `Button`을 계속
+// 쓰므로 이름이 겹치지 않게 별칭으로 받는다.
+import { Button as AdminButton } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import { FormTextArea } from '@/components/forms/FormTextArea';
 import { apiClient } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
@@ -290,34 +297,39 @@ export default function AdminFilesPage() {
       </Section>
 
       <FilterBar>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="파일명, 여행명, 이메일"
-          className="h-10 min-w-64 rounded-sm border border-hairline px-3 text-sm"
-          data-testid="admin-files-search"
-        />
-        <select
-          value={scope}
-          onChange={(e) => setScope(e.target.value as '' | AttachmentLibraryItem['target_scope'])}
-          className="h-10 rounded-sm border border-hairline px-3 text-sm"
-          data-testid="admin-files-scope"
-        >
-          {scopeOptions.map((option) => (
-            <option key={option.value || 'all'} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          onClick={applyFilter}
-          className="h-10 rounded-sm border border-primary px-3 text-sm font-semibold text-primary"
-          data-testid="admin-files-search-submit"
-        >
-          검색
-        </button>
-        <span className="text-sm text-muted">{total.toLocaleString('ko-KR')}개</span>
+        <FilterField className="w-64" htmlFor="admin-files-search" label="검색">
+          <Input
+            id="admin-files-search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="파일명, 여행명, 이메일"
+            data-testid="admin-files-search"
+          />
+        </FilterField>
+        <FilterField htmlFor="admin-files-scope" label="대상">
+          <NativeSelect
+            id="admin-files-scope"
+            value={scope}
+            onChange={(e) => setScope(e.target.value as '' | AttachmentLibraryItem['target_scope'])}
+            data-testid="admin-files-scope"
+          >
+            {scopeOptions.map((option) => (
+              <NativeSelectOption key={option.value || 'all'} value={option.value}>
+                {option.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
+        <FilterActions>
+          <AdminButton
+            variant="outline"
+            onClick={applyFilter}
+            data-testid="admin-files-search-submit"
+          >
+            검색
+          </AdminButton>
+        </FilterActions>
+        <span className="self-end text-sm text-muted">{total.toLocaleString('ko-KR')}개</span>
       </FilterBar>
 
       {loading ? (

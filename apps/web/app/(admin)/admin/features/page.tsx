@@ -688,7 +688,7 @@ export default function AdminFeaturesPage() {
               갱신
             </Button>
           </FilterActions>
-          <span className="ml-auto self-end text-xs text-muted">
+          <span className="ml-auto text-xs text-muted">
             {data?.items.length ?? 0}행 / page {pageIndex}
             {data?.duration_ms !== null && data?.duration_ms !== undefined
               ? ` / ${data.duration_ms}ms`
