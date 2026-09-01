@@ -477,7 +477,9 @@ def test_m04_server_side_chain_binds_approved_request_to_m05_old_feature(
 ) -> None:
     module = _attestation_module()
     monkeypatch.setenv("M05_MAP_ADMIN_PROXY_SECRET", "s" * 32)
-    feature_id = "feature-m04-approved"
+    # 승인 응답의 feature_id는 UUID 정본(T-VN-32C), provenance의 feature_id는
+    # 해석된 opaque TEXT storage identity다 — 결박은 feature_uuid 축.
+    feature_id = "f_global_p_0123456789abcdef"
     feature_uuid = "44444444-4444-4444-8444-444444444444"
     responses = iter(
         (
@@ -486,7 +488,7 @@ def test_m04_server_side_chain_binds_approved_request_to_m05_old_feature(
                     "data": {
                         "request_id": "33333333-3333-4333-8333-333333333333",
                         "status": "approved",
-                        "feature_id": feature_id,
+                        "feature_id": feature_uuid,
                     }
                 },
                 b"{}",
@@ -521,13 +523,13 @@ def test_m04_server_side_chain_binds_approved_request_to_m05_old_feature(
     ("provenance_feature_id", "provenance_feature_uuid", "error"),
     (
         (
-            "feature-other-approved",
-            "44444444-4444-4444-8444-444444444444",
+            "f_global_p_0123456789abcdef",
+            "55555555-5555-4555-8555-555555555555",
             "Map M04 provenance does not match the approved feature",
         ),
         (
-            "feature-m04-approved",
-            "55555555-5555-4555-8555-555555555555",
+            "f_global_p_feedfeedfeedfeed",
+            "44444444-4444-4444-8444-444444444444",
             "M04 approved feature does not match the M05 old feature",
         ),
     ),
@@ -540,7 +542,7 @@ def test_m04_server_side_chain_rejects_provenance_identity_mismatch(
 ) -> None:
     module = _attestation_module()
     monkeypatch.setenv("M05_MAP_ADMIN_PROXY_SECRET", "s" * 32)
-    feature_id = "feature-m04-approved"
+    feature_id = "f_global_p_0123456789abcdef"
     feature_uuid = "44444444-4444-4444-8444-444444444444"
     responses = iter(
         (
@@ -549,7 +551,7 @@ def test_m04_server_side_chain_rejects_provenance_identity_mismatch(
                     "data": {
                         "request_id": "33333333-3333-4333-8333-333333333333",
                         "status": "approved",
-                        "feature_id": feature_id,
+                        "feature_id": feature_uuid,
                     }
                 },
                 b"{}",
