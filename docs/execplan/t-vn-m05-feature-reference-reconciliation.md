@@ -48,16 +48,26 @@ update/delete/truncate를 거부한다. trigger는 `ENABLE ALWAYS`라서
 이미 receipt가 있으면 event sequence/hash/action이 동일한지 대조하고 기존 final receipt만
 ACK한다. 달라지면 fail-close한다.
 
-1. `trip_day_pois`의 old `feature_id`와 `feature_uuid`가 모두 같은 행, 그리고 one-column만
-   같은 partial 행을 `FOR UPDATE`로 읽는다.
+1. `trip_day_pois`에서 old reference를 가리키는 행을 `FOR UPDATE`로 읽는다. canonical
+   축은 UUID다(Map ADR-068): `feature_uuid`가 같으면 텍스트 축이 무엇이든 같은 feature다.
+   `feature_uuid`가 NULL이면(= 검증된 alias map 이관 전 정상 상태) legacy 축으로 판정한다.
+   **one-column만 같으면 partial**이라는 종전 규칙은 폐기했다 — 그 규칙 아래에서는 평범한
+   행 하나가 피드를 영구히 세웠고, cutover가 만드는 `(legacy alias, canonical UUID)` 전체가
+   Map의 값 전환 이후 통째로 blocked가 됐다.
 2. `curated_plan_pois`도 같은 방식으로 읽는다. curation receipt six-column proof가 있는
    행은 바꾸지 않고 blocked evidence를 남긴다. receipt가 없는 행만 rebind/detach 가능하며,
    snapshot은 변경하지 않는다.
 3. `feature_suggestions`의 correction/closure target pair를 잠근다. `pending|approved`는
    blocked이고, `rejected|added|duplicate` target은 절대 고치지 않는다.
-4. partial pair, source mismatch, receipt-bound curation POI 또는 nonterminal suggestion가 하나라도
+4. **진짜 모순**(legacy 축은 old를 가리키는데 canonical 축이 *다른* feature를 가리킴),
+   source mismatch, receipt-bound curation POI 또는 nonterminal suggestion가 하나라도
    있으면 mutation 없이 `blocked` attempt만 commit하고 Map ACK을 호출하지 않는다.
-5. block이 없을 때 `rebind`는 두 pair column을 replacement pair로 같은 flush 안에 바꾸고,
+5. block이 없을 때 `rebind`는 legacy 축을 replacement로 바꾼다. canonical 축은
+   **이미 채워져 있던 행에서만** replacement로 이동하고, 비어 있던 행에는 새로 새기지
+   않는다 — 그 행이 old를 가리킨다는 유일한 근거가 길이만 검증되는 client 자유 문자열이라,
+   미검증 값을 정본화하면 "검증된 alias map만 채운다"는 모델 불변식이 깨진다(적대 리뷰 F1,
+   `feature_uuid_cutover`). 정본화 권한은 cutover에 남고, 다음 이관이 새 참조를 검증해 채운다.
+   두 column 변경은 같은 flush 안에 이뤄지고,
    `detach`는 두 column을 `NULL`로 만들며 Trip POI에는 `feature_link_broken_at`을 기록한다.
    이전 final receipt가 같은 event material을 증명한 경우에만 그 receipt를 재사용해 ACK한다.
    단지 replacement tuple이 보인다는 사실만으로는 인과를 추론하지 않으며, 별도의

@@ -166,20 +166,44 @@ def _pair_condition(
 ) -> ColumnElement[bool]:
     """rebind 대상과 conflict를 **한 번에** 잠근다(각 행을 두 번 읽지 않는다).
 
-    reconcilable OR conflicting을 전개하면 정확히 두 항 OR로 접힌다:
-
-        (uuid=U) or (id=X and uuid IS NULL) or (id=X and uuid!=U and uuid NOT NULL)
-      = (uuid=U) or (id=X and not (uuid=U))
-      = (uuid=U) or (id=X)
-
-    두 항 OR라 planner가 BitmapOr를 쓸 수 있다 — 술어를 그대로 두면 UUID 축이
-    색인 불가라 `FOR UPDATE` seq-scan이 된다(적대 리뷰).
+    두 술어에서 **파생**시킨다. 접힌 형태(`id=X or uuid=U`)를 직접 쓰면 세 번째
+    독립 선언이 생기고, 구성 술어가 바뀔 때 lock 술어만 조용히 좁아진다 —
+    그 결과는 눈에 보이는 block이 아니라 **행이 아예 안 잡히는 무성 누락**이다
+    (적대 리뷰). 동치성은 테스트가 대조한다.
     """
 
     return or_(
-        id_column == reference.feature_id,
-        uuid_column == reference.feature_uuid,
+        _reconcilable_condition(id_column, uuid_column, reference),
+        _conflicting_condition(id_column, uuid_column, reference),
     )
+
+
+def _rebound_uuid(
+    current: uuid.UUID | None, replacement: FeatureReference | None
+) -> uuid.UUID | None:
+    """canonical 축을 **주조하지 않고** 이동시킨다.
+
+    행이 canonical 축을 이미 갖고 있었다면(= 검증된 alias map 이관이 채웠다)
+    그 결박을 replacement로 옮긴다. 갖고 있지 않았다면 계속 비워 둔다 —
+    그 행이 old feature를 가리킨다는 유일한 근거는 `feature_id`이고, 그건
+    길이만 검증되는 client 자유 문자열이다(schemas/poi.py).
+
+    미검증 문자열을 근거로 canonical UUID를 새로 새기면 저장소가 이미 적대
+    리뷰로 정한 불변식이 깨진다 — "검증된 alias map만 채운다"
+    (feature_uuid_cutover.py, models/poi.py). 특히 cutover가 **의도적으로**
+    NULL로 남기고 보고하는 stale ref(정리된 feature를 가리키던 참조)와,
+    cutover 이후에 생긴 평범한 행을 이 술어는 구분하지 못한다. legacy
+    feature_id는 내용 파생이라 같은 원본이 재적재되면 같은 문자열이 다른
+    feature에 붙을 수 있고, 그 경우 주조는 사용자 여정을 무관한 장소에
+    **canonical하게** 결박한다.
+
+    legacy 축만 고쳐 쓰면 피드는 그대로 풀리고, 정본화 권한은 cutover에
+    남는다. 다음 cutover가 새 참조를 alias map으로 검증해 채운다.
+    """
+
+    if current is None:
+        return None
+    return replacement.feature_uuid if replacement is not None else None
 
 
 def _block(
@@ -507,7 +531,7 @@ async def apply_feature_reference_reconciliation_event(
             )
         )
         trip_row.feature_id = replacement.feature_id if replacement is not None else None
-        trip_row.feature_uuid = replacement.feature_uuid if replacement is not None else None
+        trip_row.feature_uuid = _rebound_uuid(trip_row.feature_uuid, replacement)
         if replacement is None:
             trip_row.feature_link_broken_at = func.now()
     for curated_row in curated_matches:
@@ -521,7 +545,7 @@ async def apply_feature_reference_reconciliation_event(
             )
         )
         curated_row.feature_id = replacement.feature_id if replacement is not None else None
-        curated_row.feature_uuid = replacement.feature_uuid if replacement is not None else None
+        curated_row.feature_uuid = _rebound_uuid(curated_row.feature_uuid, replacement)
     for suggestion_row in suggestion_matches:
         # terminal suggestions는 historical evidence라 target tuple을 수정하지 않는다.
         if suggestion_row.status in {"rejected", "added", "duplicate"}:
@@ -538,8 +562,8 @@ async def apply_feature_reference_reconciliation_event(
         suggestion_row.target_feature_id = (
             replacement.feature_id if replacement is not None else None
         )
-        suggestion_row.target_feature_uuid = (
-            replacement.feature_uuid if replacement is not None else None
+        suggestion_row.target_feature_uuid = _rebound_uuid(
+            suggestion_row.target_feature_uuid, replacement
         )
 
     impacts.sort(key=lambda impact: (impact.target_relation, str(impact.target_id)))

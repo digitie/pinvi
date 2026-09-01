@@ -484,6 +484,7 @@ async def test_canonical_uuid_match_with_a_legacy_alias_is_not_a_conflict(
         row = await db.get(TripDayPoi, legacy_id)
         assert row is not None
         assert row.feature_id == str(replacement_uuid)
+        # 이미 검증된 결박이 있던 행은 replacement로 **이동**한다.
         assert row.feature_uuid == replacement_uuid
 
 
@@ -548,9 +549,11 @@ async def test_null_uuid_shadow_is_filled_not_blocked(
     async with session_factory() as db:
         row = await db.get(TripDayPoi, shadowless_id)
         assert row is not None
-        # 짝이 복구됐다 — 두 축 모두 replacement를 가리킨다.
         assert row.feature_id == "feature-new"
-        assert row.feature_uuid == replacement_uuid
+        # canonical 축은 **주조하지 않는다**. 이 행이 old feature를 가리킨다는
+        # 유일한 근거가 길이만 검증되는 client 자유 문자열이기 때문이다 —
+        # 정본화 권한은 검증된 alias map 이관(cutover)에 남는다.
+        assert row.feature_uuid is None
 
         impacts = list(
             (

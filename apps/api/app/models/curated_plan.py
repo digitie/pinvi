@@ -194,6 +194,8 @@ class CuratedPlanPoi(Base, TimestampMixin):
     feature_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
     # T-VN-32C(Map ADR-068): legacy f_* 참조의 UUID shadow — 검증된 alias map
     # 이관만 채운다.
+    # M05 reconciliation은 이 축을 **이동만** 시킨다 — 비어 있던 행에 새로 새기지
+    # 않는다(services/feature_reference_reconciliation._rebound_uuid).
     feature_uuid: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True), nullable=True)
     feature_snapshot: Mapped[dict[str, Any]] = mapped_column(
         JSONB(astext_type=Text()),
