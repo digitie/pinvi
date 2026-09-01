@@ -15,6 +15,7 @@ from typing import Literal, cast
 
 from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import InstrumentedAttribute
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.clients.kor_travel_map_feature_reference_reconciliation import (
@@ -120,8 +121,8 @@ def _row_is_reconcilable(
 
 
 def _reconcilable_condition(
-    id_column: ColumnElement[str | None],
-    uuid_column: ColumnElement[uuid.UUID | None],
+    id_column: InstrumentedAttribute[str | None],
+    uuid_column: InstrumentedAttribute[uuid.UUID | None],
     reference: FeatureReference,
 ) -> ColumnElement[bool]:
     """`_row_is_reconcilable`의 SQL 대응."""
@@ -133,8 +134,8 @@ def _reconcilable_condition(
 
 
 def _conflicting_condition(
-    id_column: ColumnElement[str | None],
-    uuid_column: ColumnElement[uuid.UUID | None],
+    id_column: InstrumentedAttribute[str | None],
+    uuid_column: InstrumentedAttribute[uuid.UUID | None],
     reference: FeatureReference,
 ) -> ColumnElement[bool]:
     """두 축이 **실제로 어긋난** 행 — 여기서만 block해야 한다.
@@ -158,8 +159,8 @@ def _conflicting_condition(
 
 
 def _pair_condition(
-    id_column: ColumnElement[str | None],
-    uuid_column: ColumnElement[uuid.UUID | None],
+    id_column: InstrumentedAttribute[str | None],
+    uuid_column: InstrumentedAttribute[uuid.UUID | None],
     reference: FeatureReference,
 ) -> ColumnElement[bool]:
     """rebind 대상과 conflict를 **한 번에** 잠근다(각 행을 두 번 읽지 않는다)."""
