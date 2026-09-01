@@ -254,9 +254,7 @@ async def _load_trip_rows(
                 select(TripDayPoi)
                 .where(
                     TripDayPoi.deleted_at.is_(None),
-                    _pair_condition(
-                        TripDayPoi.feature_id, TripDayPoi.feature_uuid, reference
-                    ),
+                    _pair_condition(TripDayPoi.feature_id, TripDayPoi.feature_uuid, reference),
                 )
                 .order_by(TripDayPoi.attachment_id)
                 .with_for_update()
@@ -265,7 +263,11 @@ async def _load_trip_rows(
     )
     return (
         [row for row in rows if _row_is_reconcilable(row.feature_id, row.feature_uuid, reference)],
-        [row for row in rows if not _row_is_reconcilable(row.feature_id, row.feature_uuid, reference)],
+        [
+            row
+            for row in rows
+            if not _row_is_reconcilable(row.feature_id, row.feature_uuid, reference)
+        ],
     )
 
 
@@ -291,7 +293,11 @@ async def _load_curated_rows(
     )
     return (
         [row for row in rows if _row_is_reconcilable(row.feature_id, row.feature_uuid, reference)],
-        [row for row in rows if not _row_is_reconcilable(row.feature_id, row.feature_uuid, reference)],
+        [
+            row
+            for row in rows
+            if not _row_is_reconcilable(row.feature_id, row.feature_uuid, reference)
+        ],
     )
 
 
