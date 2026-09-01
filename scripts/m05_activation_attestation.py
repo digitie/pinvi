@@ -802,7 +802,12 @@ def _m04_server_side_chain(
         raise AttestationError("Map M04 request does not match the UI receipt")
     if request_data.get("status") != "approved":
         raise AttestationError("Map M04 request is not approved")
-    feature_ref = _string(request_data.get("feature_id"), name="Map M04 feature ref")
+    # 승인 응답의 feature_id는 T-VN-32C 규약대로 **UUID 정본**이고, provenance
+    # 리더의 최상위 feature_id는 해석된 opaque TEXT storage identity다(Map
+    # admin_features 모델 주석). 결박은 feature_uuid 축으로 해야 한다 — TEXT와
+    # UUID의 동일성 요구는 원리적으로 항상 실패한다(적대 리뷰, e2e15 이후
+    # 잠재 관문으로 실측 예측됨).
+    feature_ref = _uuid(request_data.get("feature_id"), name="Map M04 feature ref")
     provenance_value, _ = _http_json(
         _url(
             map_admin_url,
@@ -812,9 +817,9 @@ def _m04_server_side_chain(
     )
     provenance = _data(provenance_value, name="Map M04 feature provenance")
     feature_id = _string(provenance.get("feature_id"), name="Map M04 feature ID")
-    if feature_id != feature_ref:
-        raise AttestationError("Map M04 provenance does not match the approved feature")
     feature_uuid = _uuid(provenance.get("feature_uuid"), name="Map M04 feature UUID")
+    if feature_uuid != feature_ref:
+        raise AttestationError("Map M04 provenance does not match the approved feature")
     origin = _object(provenance.get("origin"), name="Map M04 feature origin")
     if origin.get("origin_kind") != "manual_request":
         raise AttestationError("Map M04 feature origin is not manual_request")
