@@ -1,5 +1,26 @@
 # resume.md
 
+## 2026-09-01 (claude) — T-356 admin UI 정렬: 검증 완료, 리뷰·머지 대기
+
+`agent/claude-admin-ui-parity`(커밋 9건)가 push돼 있고 **머지하지 않았다**. admin 화면을
+kor-travel-map admin과 색상톤만 빼고 일치시킨 작업이다. 상세는 `docs/journal.md` 2026-09-01
+동일 제목 엔트리.
+
+검증은 끝났다: 로컬 4종(tsc / lint 0 error / vitest 145 / build 57쪽) + 모바일 tsc +
+**N150 격리 컨테이너 e2e 169건 전체 통과**(운영 스택 무영향 — 운영 repo 브랜치 전환 없음,
+운영 컨테이너 9개 그대로).
+
+다음 한 작업은 PR 리뷰다. 리뷰어가 특히 볼 것:
+- **Tailwind v4 전환의 사용자 표면 영향.** admin 범위 밖이지만 v4 전환은 앱 전체를 탄다.
+  이미 잡아 고친 것: `button{cursor:pointer}` 소실, `outline-none`의 forced-colors 폴백 소실,
+  네이티브 `@layer`가 specificity를 이기면서 생긴 앱 셸 오버라이드 무력화.
+- **모달 스택 분리.** admin은 base-ui, 사용자 표면은 `lib/useModalDialog`. 한 화면에서 섞으면
+  focus trap과 `inert` 스냅샷이 서로를 덮는다. DESIGN.md에 명문화했고 현재 혼용 0건이다.
+
+남은 후속(이 PR 범위 밖): 상세 페이지의 `detail-list`/`json-viewer` 확대 적용, 아직 소비처가
+적은 `stat-strip`·`multi-filter-combobox`, 서버 정렬과 헤더 정렬 통합(`features`는 지금 헤더가
+현재 페이지 한정 클라이언트 정렬이고 툴바 select가 서버 정렬이라 둘이 서로를 모른다).
+
 ## 2026-09-01 (claude) — M05 재개: pair 재핀 후 rotate→rebuild→one-shot 순서
 
 Map 쪽 두 수리(#1128 packaging, #1129 permit head-인지)로 pinned rebuild가

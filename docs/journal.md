@@ -2,6 +2,48 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-01 (claude) — T-356: admin UI를 kor-travel-map admin에 정렬 (Tailwind v4 + 프리미티브 이식)
+
+`agent/claude-admin-ui-parity` (커밋 9건, 미머지). admin 화면을 kor-travel-map(KTM) admin과
+색상톤만 빼고 일치시켰다. DESIGN.md가 `(admin)`을 사용자 표면 Hallmark 잠금에서 제외하고
+`docs/architecture/frontend.md`가 Admin 목표 스택을 "shadcn/ui DataTable / FilterBar"로 적어 둔
+것과 방향이 같다.
+
+- **Tailwind v3 → v4 (웹만).** admin만 올리는 것은 불가능하다 — 앱 하나에 PostCSS 파이프라인이
+  하나뿐이라 v3/v4가 각각 preflight를 발행하면 충돌한다. 모바일 안전성은 최소 재현 워크스페이스로
+  실제 설치해 확인했다: npm이 v3를 root에, v4를 `apps/web`에 중첩시키고 NativeWind가 하드 의존하는
+  v3 내부 경로 3개(`lib/util/flattenColorPalette`, `plugin`, `lib/cli/build`)가 온전하다.
+  NativeWind 5는 v4를 받지만 아직 preview고 `latest`는 4.2.6이라 모바일은 v3 유지.
+  토큰 정본은 `@pinvi/design-tokens` preset 하나를 유지했다 — v4 `@config`로 그대로 읽어
+  웹/모바일 토큰이 갈라지지 않게 했다.
+- **프리미티브 28종 + DataTable 799줄 이식.** `AdminTable`을 KTM `DataTable` 위의 어댑터로
+  재작성해 소비 페이지 36곳을 한 줄도 고치지 않고 skeleton·오류/재시도·키보드 접근성을 얻었다.
+- **필터 툴바 23쪽 전환.** `FilterField` 66개. placeholder를 라벨 대용으로 쓰던 것을 가시 라벨 +
+  `htmlFor`/`id` 연결로 바꿨다.
+- **타이포 7단(12/13.5/15/17/20/24/30px)을 admin scope로만 이식.** `text-xs`/`text-sm` 등은
+  사용자 표면도 쓰는 이름이라 전역에서 바꾸면 랜딩·여행·지도 활자가 흔들린다. v4 유틸이
+  `font-size: var(--text-sm)`으로 변수를 참조하는 점을 이용해 `[data-pv-surface='admin']`에서
+  변수만 가렸다.
+- **모달 단일화 규칙 해제(사용자 지시).** DESIGN.md의 모달 계약을 사용자 표면 한정으로 좁히고
+  admin은 base-ui 기반 dialog/alert-dialog/popover/tooltip/tabs를 쓴다. 수제 `role="dialog"`
+  5쪽 7개 모달을 수렴했다. 두 스택 혼용은 0건(양방향 확인).
+
+게이트가 못 잡은 회귀를 여러 건 잡았다. 특히 **런타임 조립 Tailwind 클래스**(`max-h-[${x}]`)는
+정적 추출이 불가능해 CSS가 아예 생성되지 않았고, `admin-table-scroll`을 래퍼에 달면 e2e의
+`el.scrollTo`가 조용히 no-op이 됐다. 전문 리뷰어 2명 적대적 리뷰 + 교차검증으로 sticky 헤더가
+행수 게이트에 묶인 P0, v4가 없앤 `button{cursor:pointer}`, `outline-none`의 forced-colors 폴백
+소실, `control-line` 대비 미달(#f7f7f7에서 2.83), brand/danger tint 픽셀 충돌을 확인·수정했다.
+
+**N150 격리 e2e가 로컬 4개 게이트를 전부 통과한 회귀를 잡았다**: v4가 `@layer`를 네이티브
+캐스케이드 레이어로 발행하면서 레이어 순서가 specificity를 이기게 됐고, `components`의
+`[data-mobile-layout='on'] .app-shell-tabbar`(0,2,0)가 `utilities`의 `.lg\:hidden`(0,1,0)에게
+졌다. globals.css 주석이 "레이어 순서와 무관하게 이긴다"고 못박아 둔 전제가 정확히 무효화된
+사례다. 앱 레벨 오버라이드 4개를 unlayered로 옮겨 해소했다.
+
+검증: 로컬 4종(tsc/lint 0 error/vitest 145/build 57쪽) + 모바일 tsc + **N150 격리 컨테이너 e2e
+169건 전체 통과**. 운영 스택 무영향(운영 repo 브랜치 전환 없음, 운영 컨테이너 9개 그대로).
+부수로 runner tmpfs 64m가 trace 기록 중 ENOSPC를 내던 것을 1g 기본 + env 조절로 고쳤다.
+
 ## 2026-09-01 (claude) — M05 pair를 Map 2845e142로 재핀 + 스냅샷 핀 단일화
 
 Map pinned rebuild가 generation 2a246fbf(Map `2845e142` / PinVi `e0750505`)로
