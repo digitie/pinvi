@@ -745,3 +745,56 @@ def test_host_openssl_fallback_signs_and_verifies_ed25519(
     module._verify_ed25519_signature(public_key, signature, payload)
     with pytest.raises(module.AttestationError, match="signature is invalid"):
         module._verify_ed25519_signature(public_key, signature, payload + b"!")
+
+
+def test_live_child_env_sets_the_m05_spec_gate() -> None:
+    """m05 rebind UI 스펙의 beforeAll 게이트를 child_env가 설정해야 한다.
+
+    빠지면 스펙이 브라우저 동작 하나 없이 중단되고 격리 execution이 통째로
+    소각된다(2026-09-01 정합성 스윕 blocker). M04 쌍둥이와 대칭이어야 한다.
+    """
+
+    source = (
+        Path(__file__).resolve().parents[4] / "scripts" / "m05_activation_attestation.py"
+    ).read_text(encoding="utf-8")
+    assert 'child_env["PINVI_M05_LIVE_E2E"] = "1"' in source
+    assert 'child_env["PINVI_M04_LIVE_E2E"] = "1"' in source
+
+    spec = (
+        Path(__file__).resolve().parents[3]
+        / "web"
+        / "e2e"
+        / "admin-feature-reference-reconciliations-live-mutating.live.ts"
+    ).read_text(encoding="utf-8")
+    # 스펙이 요구하는 게이트 이름과 attestation이 설정하는 이름이 같아야 한다.
+    assert "PINVI_M05_LIVE_E2E" in spec
+
+
+def test_isolated_scope_does_not_require_external_review_evidence() -> None:
+    """reviews/restore는 사람 리뷰·복구 드릴의 외부 증거다 — 격리 harness는
+    생산하지 않으므로 isolated scope에서 요구하면 안 된다(정합성 스윕 high)."""
+
+    source = (
+        Path(__file__).resolve().parents[4] / "scripts" / "m05_activation_attestation.py"
+    ).read_text(encoding="utf-8")
+    marker = 'for name in ("reviews", "restore"):'
+    assert marker in source
+    guard = source[: source.index(marker)].rstrip().splitlines()[-1].strip()
+    assert guard == 'if args.scope != "isolated":', guard
+
+
+def test_receipt_verifier_evidence_inventory_matches_the_producer_by_scope() -> None:
+    """생산자(attestation)와 검증자(receipt)가 같은 scope 규칙으로 evidence
+    목록을 선언해야 한다 — 한쪽만 고치면 이중 선언이 방향만 바뀐다(적대 리뷰)."""
+
+    root = Path(__file__).resolve().parents[4] / "scripts"
+    receipt = (root / "m05_activation_receipt.py").read_text(encoding="utf-8")
+    attestation = (root / "m05_activation_attestation.py").read_text(encoding="utf-8")
+
+    assert 'expected_evidence = ("ui-run", "live-ui", "map-pair", "pinvi-images")' in receipt
+    assert 'if scope != "isolated":' in receipt
+    assert 'expected_evidence += ("restore", "reviews")' in receipt
+    # 생산자도 같은 조건으로 두 외부 증거를 건너뛴다.
+    marker = 'for name in ("reviews", "restore"):'
+    guard = attestation[: attestation.index(marker)].rstrip().splitlines()[-1].strip()
+    assert guard == 'if args.scope != "isolated":', guard

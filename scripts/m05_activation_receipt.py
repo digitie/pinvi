@@ -2751,16 +2751,16 @@ def _attestation(
         if _sha256(payload[field], name=f"attestation.{field}") != expected_value:
             raise ReceiptError(f"M05 live attestation does not bind {field}")
     attested_hashes = _object(payload["evidence_sha256"], name="attestation evidence hashes")
-    if set(attested_hashes) != {
-        "ui-run",
-        "live-ui",
-        "map-pair",
-        "pinvi-images",
-        "restore",
-        "reviews",
-    }:
+    # reviews/restore는 사람 리뷰·복구 드릴의 **외부** 증거로 staging/production
+    # 활성화 경로에만 존재한다. 격리 harness는 기계 체인만 증명하므로 그 둘을
+    # 생산하지 않으며, 생산자(attestation)와 검증자(여기)가 서로 다른 목록을
+    # 선언하면 같은 이중 선언 결함이 방향만 바뀌어 남는다(적대 리뷰).
+    expected_evidence = ("ui-run", "live-ui", "map-pair", "pinvi-images")
+    if scope != "isolated":
+        expected_evidence += ("restore", "reviews")
+    if set(attested_hashes) != set(expected_evidence):
         raise ReceiptError("M05 live attestation evidence inventory is invalid")
-    for name in ("ui-run", "live-ui", "map-pair", "pinvi-images", "restore", "reviews"):
+    for name in expected_evidence:
         if _sha256(attested_hashes[name], name=f"attestation.{name}") != evidence_hashes[name]:
             raise ReceiptError(f"M05 live attestation does not bind {name} evidence")
     signature_bytes = _decode_base64url(envelope["signature"], expected_length=64)
