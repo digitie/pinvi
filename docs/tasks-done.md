@@ -4,6 +4,39 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+## 2026-09-02
+
+- [x] **T-356** — pinvi admin 화면을 kor-travel-map(KTM) admin과 색상톤만 제외하고 look and
+      feel·기능까지 일치시켰다(claude, PR #515). `apps/web`을 Tailwind v4로 올리고(모바일은
+      NativeWind 4 + v3 유지 — npm이 v3를 root에, v4를 `apps/web`에 중첩시키는 것을 최소 재현
+      워크스페이스 실측으로 확인), KTM 프리미티브 28종 + `DataTable` 799줄을 이식했다.
+      `AdminTable`을 어댑터로 재작성해 소비 페이지 36곳을 무수정으로 전환했고, 필터 툴바 23쪽에
+      `FilterField` 66개를 배선했다. KTM 7단 타이포는 `[data-pv-surface='admin']` scope로만 넣어
+      사용자 표면 활자를 보호했다. 사용자 지시로 "모든 모달은 `lib/useModalDialog`" 단일화 규칙을
+      해제하고 admin 모달을 base-ui로 전환했다(수제 `role="dialog"` 5쪽 7개 수렴).
+
+      게이트가 못 잡는 회귀를 여러 건 잡았다. 런타임 조립 Tailwind 클래스가 CSS를 아예 만들지
+      않던 것, `admin-table-scroll`을 래퍼에 달아 e2e의 `scrollTo`가 no-op이 되던 것, sticky
+      헤더가 행수 게이트에 묶인 것, v4가 없앤 `button{cursor:pointer}`, `outline-none`의
+      forced-colors 폴백 소실, `control-line` 대비가 실제 admin 배경(#f7f7f7)에서 2.83으로 미달,
+      brand/danger tint 픽셀 충돌.
+
+      **N150 격리 e2e가 로컬 4개 게이트를 전부 통과한 회귀를 두 번 잡았다.** (1) v4가 `@layer`를
+      네이티브 캐스케이드 레이어로 발행하면서 레이어 순서가 specificity를 이기게 돼
+      `[data-mobile-layout] .app-shell-tabbar`(0,2,0)가 `.lg\:hidden`(0,1,0)에게 진 것 —
+      globals.css 주석이 "레이어 순서와 무관하게 이긴다"고 못박아 둔 전제가 무효화됐다.
+      (2) 미저장 폼 입력 보호를 "폼이면 보호"로 잡았다가 전에도 Escape로 닫히던 모달까지 막아
+      새 회귀를 만든 것 — 올바른 기준은 "전환으로 없던 경로가 새로 생긴 곳"이었다.
+
+      전문 리뷰어 2명 적대적 리뷰 + 교차검증을 두 차례 돌렸다(2차 판정 NO-GO → P0/P1 수정 후
+      해소). 검증: CI 블로킹 체크 13종 pass, 로컬 tsc/lint 0 error/vitest 152/build 57쪽,
+      API pytest unit 1333, 모바일 tsc clean, **N150 격리 컨테이너 e2e 169 passed / 0 failed**
+      (운영 스택 무영향 — 운영 repo 브랜치 전환 없음, 운영 컨테이너 9개 그대로).
+
+      부수: Playwright runner의 `test-results` tmpfs가 64m 고정이라 trace 기록 중 ENOSPC를 내던
+      것을 1g 기본 + `PINVI_PLAYWRIGHT_RUNNER_TMPFS_SIZE`로 고쳤다. 그 크기를 리터럴로 잠그던
+      API 가드도 격리 속성 검사로 바꿨다.
+
 ## 2026-08-27
 
 - [x] **T-355** — `scripts/deploy-node.sh`/`scripts/docker-app.sh`의 bare-call errexit 무력화

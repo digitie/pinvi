@@ -15,4 +15,3 @@
 - [ ] T-VN-41C — relay, reconciliation, consumer enable paired acceptance를 완료한다.
 - [ ] T-VN-41F1D-E — 이전 generation 퇴역과 v6/v8 attestation 전환을 완료한다.
 - [ ] T-VN-H49 — standalone backup의 주기 실행, bounded retention, off-box 증거를 완료한다.
-- [/] T-356 — pinvi admin 화면을 kor-travel-map admin과 색상톤만 제외하고 look and feel·기능까지 일치시킨다. 브랜치 `agent/claude-admin-ui-parity`(커밋 9건, 미머지). 로컬 4개 게이트 + N150 격리 e2e 169건 통과. 리뷰·머지 대기.
