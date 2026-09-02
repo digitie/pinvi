@@ -109,6 +109,10 @@ jobs:
               equals(".github/workflows/aggregate-ci.yml"),
             ])) {
               requiredChecks.push("lint-typecheck-build");
+              // `lint-typecheck-build`는 전체 체크아웃 트리를 검증하고 이미지는
+              // 다른 트리를 만든다. 이걸 기다리지 않으면 이미지가 서지 않는 main이
+              // merge되고, 그 사실이 1~2시간짜리 pinned rebuild에서야 드러난다.
+              requiredChecks.push("docker-image");
               // Web Playwright는 lint/build와 별개 job이다. Aggregate gate가 유일한
               // required check이므로 여기서 기다리지 않으면 E2E 실패가 merge를 막지 못한다(T-323).
               requiredChecks.push("e2e");

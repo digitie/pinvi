@@ -69,6 +69,33 @@ jobs:
           NEXT_PUBLIC_PINVI_API_URL: http://localhost:12801
         run: npm run build
 
+  docker-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # `lint-typecheck-build`는 **전체 체크아웃**에서 `npm ci`로 돈다. 이미지 빌드는
+    # 그 트리를 쓰지 않는다 — deps 스테이지가 manifest만 복사해 따로 install한다.
+    # 그래서 두 트리가 갈라져도 CI는 초록이고, 깨진 main은 1~2시간짜리 pinned
+    # rebuild에서야 드러났다(2026-09-02: `Can't resolve 'tailwindcss'`로 회전
+    # 사이클 1회 소각). 이미지가 실제로 서는지는 이미지로만 증명된다.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Build the production web image
+        run: >-
+          docker build --file apps/web/Dockerfile
+          --build-arg PINVI_BUILD_ENVIRONMENT=production
+          --build-arg PINVI_SOURCE_REVISION="${GITHUB_SHA}"
+          --tag "pinvi-web-ci:${GITHUB_SHA}" .
+
+      - name: The built image resolves apps/web's own dependency tree
+        run: |
+          # 루트에 hoist된 버전이 아니라 `apps/web`이 결박한 버전이 이겨야 한다.
+          # 이 둘이 갈라지는 것이 위 실패의 기전이었다.
+          docker run --rm --entrypoint node "pinvi-web-ci:${GITHUB_SHA}"             -e "const p=require.resolve('next/package.json');console.log(p)"
+
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
