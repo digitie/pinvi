@@ -6,6 +6,42 @@
 
 ## 2026-09-02
 
+- [x] **T-357** — T-356 후속 3건을 마무리했다(claude, PR #516, squash `301aafe4`).
+      **모달 경계를 eslint로 강제**했다: T-356이 문서로만 두고 온 "admin은 base-ui / 사용자
+      표면은 `lib/useModalDialog`" 분리를 `no-restricted-imports` 양방향 가드로 옮겼다.
+      개별 파일(`components/ui/Dialog`) 하나만 막으면 `trips/ConflictDialog` 경유로 우회되고
+      디렉터리를 통째로 막으면 모달과 무관한 `Button`·`FormField`까지 걸리므로,
+      `lib/useModalDialog`에서 역방향 BFS로 **전이 도달 집합 17개**를 뽑아 그것만 막았다.
+      포커스 복원 대상 판별은 `lib/focusTarget`으로 스택 밖에 분리해 admin이 가드를 넘지 않고
+      쓰게 했다. 그 밖에 `features` 표 헤더 정렬을 서버 정렬과 연동했고(헤더가 현재 페이지만
+      정렬해 화면이 사실과 달랐다), 수요 없는 모듈 3개를 지웠다
+      (`multi-filter-combobox` 277줄, `ui/tabs` + `tabs-variants` 155줄).
+
+      **적대적 리뷰 2회차가 NO-GO와 함께 P0 1건**을 냈다: `serverSort` 헤더가 두 번째 클릭부터
+      죽었다. TanStack Table은 `sortDescFirst:false` + `enableSortingRemoval` 기본값(true)에서
+      desc 다음 상태로 "정렬 제거"(빈 배열)를 돌려주는데 어댑터가 `if (!first) return;`으로
+      그것을 삼켰다. 서버 정렬 모드에서 `enableSortingRemoval={false}`로 3-state 순환을 끈다.
+      회귀 테스트는 **수정을 되돌려 실제로 실패하는 것을 확인한 뒤** 넣었다 — 첫 시도에서
+      되돌리기 스크립트의 문자열이 안 맞아 "수정 없이도 통과"하는 가짜 초록을 봤고 `assert`로
+      되돌리기 자체를 검증하게 고쳤다.
+
+      P1 6건도 반영했다. flat config가 같은 규칙의 옵션을 **병합하지 않고 교체**해 kakao 가드가
+      조용히 사라져 있던 것을 복원했고, `.ts`를 가드 대상에 넣었다(`lib/admin/*.ts`로 우회
+      가능했다). `Section` → `SectionCard` 위임이 남긴 시각 델타도 걷었다: `CardContent`의
+      `space-y-4`(16px) 위에 자식의 `mb-3`/`mt-3`(12px)이 더해져 28px가 되던 4곳을 정리하고,
+      헤더에 버튼이 필요해 `Section`을 못 쓰던 패널을 위해 `actions` 슬롯을 열어
+      (`SectionCard`는 원래 갖고 있었고 어댑터만 막고 있었다) 손수 패널 7개를 흡수했다.
+      높이를 제한한 표가 카드 안에서 프레임을 잃어 스크롤 경계가 안 보이던 것도 고쳤다.
+
+      **`Section` 렌더 계약 테스트가 0건이었다** — 소비처 60곳이 한 번에 움직이는 지점인데 위
+      시각 델타를 로컬 4개 게이트가 전부 놓쳤다. `tests/AdminSectionContract.test.tsx`로
+      제목 heading·카드 위임·표 flush(일반)/프레임 유지(높이 제한)를 잠갔다.
+
+      검증: CI 블로킹 4종 pass, 로컬 4종(tsc / lint 0 error / **vitest 165** / build 57쪽),
+      **N150 격리 e2e 169 passed / 0 failed**(rc=0, 체크아웃 SHA 가드 통과). 운영 스택 무영향 —
+      박스에서 가장 최근 생성된 컨테이너가 e2e 실행 시각보다 8시간 앞서 e2e가 만든 잔여물이
+      없다.
+
 - [x] **T-356** — pinvi admin 화면을 kor-travel-map(KTM) admin과 색상톤만 제외하고 look and
       feel·기능까지 일치시켰다(claude, PR #515). `apps/web`을 Tailwind v4로 올리고(모바일은
       NativeWind 4 + v3 유지 — npm이 v3를 root에, v4를 `apps/web`에 중첩시키는 것을 최소 재현
