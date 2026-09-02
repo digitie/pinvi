@@ -413,6 +413,8 @@ export default function AdminFeaturesPage() {
       key: 'feature',
       header: 'feature',
       sortable: true,
+      // 컬럼 id는 'feature'지만 서버 정렬 파라미터는 'name'이다.
+      sortKey: 'name',
       sortValue: (feature) => feature.name,
       cell: (feature) => (
         <div>
@@ -635,9 +637,10 @@ export default function AdminFeaturesPage() {
         </FilterBar>
 
         {/*
-          정렬은 서버(`sort`/`order` 쿼리)에서 일어난다 — AdminTable의 헤더 클릭 정렬은 현재
-          페이지 안에서만 도는 클라이언트 정렬이라 이 두 컨트롤을 대신하지 못한다. 그래서
-          KTM의 "정렬은 column header에만"(M26)을 여기서는 적용하지 않고 툴바에 남긴다.
+          정렬은 서버(`sort`/`order` 쿼리)에서 일어나고, 표 헤더 클릭도 **같은 상태**를 움직인다
+          (`AdminTable`의 `serverSort`). 두 경로가 한 상태를 공유하므로 어느 쪽으로 바꿔도 전체
+          정렬이 바뀐다. 툴바 select를 남기는 이유는 `created_at`처럼 표에 대응 컬럼이 없는 정렬
+          축이 있고, 방향만 따로 고르는 경로도 필요하기 때문이다.
         */}
         <FilterBar>
           <FilterField htmlFor="admin-features-sort" label="정렬">
@@ -726,6 +729,19 @@ export default function AdminFeaturesPage() {
             rowTestId={(feature) => `admin-features-row-${feature.feature_id}`}
             onRowClick={(feature) => setSelectedFeatureId(feature.feature_id)}
             empty="feature가 없습니다."
+            ariaLabel="Feature 목록"
+            // 헤더 클릭이 툴바 select와 **같은 서버 상태**를 움직인다. 예전에는 헤더가 현재
+            // 페이지 안에서만 도는 클라이언트 정렬이라, 사용자에게는 전체가 정렬된 것처럼
+            // 보이지만 실제로는 한 페이지 창만 뒤집혔다.
+            serverSort={{
+              key: sort,
+              order,
+              onChange: (nextSort, nextOrder) => {
+                setSort(nextSort as AdminFeatureSort);
+                setOrder(nextOrder);
+                resetCursor();
+              },
+            }}
           />
 
           {/*

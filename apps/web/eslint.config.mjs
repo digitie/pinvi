@@ -70,6 +70,79 @@ const config = [...nextCoreWebVitals, ...nextTypescript, {
     ],
   },
 }, {
+  // ── 모달 스택 경계: admin 표면 (T-356) ──
+  //
+  // admin은 base-ui 기반 `components/admin/ui/{dialog,alert-dialog,popover,tooltip}`을 쓰고,
+  // 사용자 표면은 `lib/useModalDialog` + `components/ui/Dialog`를 쓴다. **한 화면에서 섞으면
+  // focus trap과 `inert` 스냅샷이 서로를 덮는다** — 두 구현이 각자 body 자식에 inert를 걸고
+  // 각자 복원 스냅샷을 들고 있어서, 나중에 닫히는 쪽이 상대의 복원을 무효화한다.
+  //
+  // DESIGN.md의 "모달 계약" 절이 이 분리를 명문화하지만 문서만으로는 약하다 — 이 저장소는
+  // T-356에서 "로컬 4개 게이트를 전부 통과한 회귀"를 두 번 겪었다. 규칙을 실행 가능한
+  // 가드로 옮긴다.
+  files: ['app/(admin)/**/*.tsx', 'components/admin/**/*.tsx'],
+  rules: {
+    'no-restricted-imports': [
+      'error',
+      {
+        patterns: [
+          {
+            group: [
+              '**/components/ui/Dialog',
+              '**/components/ui/ConfirmDialog',
+              '@/components/ui/Dialog',
+              '@/components/ui/ConfirmDialog',
+            ],
+            message:
+              'T-356 — admin 모달은 `@/components/admin/ui/dialog`(또는 `alert-dialog`)를 쓴다. ' +
+              '사용자 표면 Dialog는 `lib/useModalDialog` 기반이라 base-ui와 focus trap·inert ' +
+              '스냅샷이 충돌한다(DESIGN.md 모달 계약).',
+          },
+          {
+            group: ['**/lib/useModalDialog', '@/lib/useModalDialog'],
+            message:
+              'T-356 — admin은 base-ui가 focus trap을 소유한다. `useModalDialog`를 함께 쓰면 ' +
+              '트랩이 두 벌이 된다. `isRestorableFocusTarget` 같은 순수 헬퍼가 필요하면 ' +
+              '그 심볼만 직접 import하지 말고 admin 쪽에 복제하거나 공용 유틸로 분리하라.',
+          },
+        ],
+      },
+    ],
+  },
+}, {
+  // ── 모달 스택 경계: 사용자 표면 (T-356, 반대 방향) ──
+  //
+  // 사용자 표면이 admin 컴포넌트나 base-ui를 끌어오면 같은 충돌이 반대로 일어나고, admin 전용
+  // 번들(cva/clsx/tailwind-merge/base-ui)이 사용자 표면 코드 스플릿 경계로 새어 들어간다.
+  files: ['app/**/*.tsx', 'components/**/*.tsx'],
+  ignores: ['app/(admin)/**', 'components/admin/**'],
+  rules: {
+    'no-restricted-imports': [
+      'error',
+      {
+        patterns: [
+          {
+            group: ['*react-kakao-maps-sdk*'],
+            message:
+              'ADR-015/046 — Kakao Maps SDK 폐기. vworld-map-web 사용 (`docs/integrations/maplibre-vworld.md`).',
+          },
+          {
+            group: ['**/components/admin/**', '@/components/admin/**'],
+            message:
+              'T-356 — admin 컴포넌트는 admin 표면 전용이다. 사용자 표면은 `components/ui/*`와 ' +
+              '`lib/useModalDialog`를 쓴다(DESIGN.md Hallmark 잠금 + 모달 계약).',
+          },
+          {
+            group: ['@base-ui/react', '@base-ui/react/**'],
+            message:
+              'T-356 — base-ui는 admin 오버레이 프리미티브 전용이다. 사용자 표면 모달은 ' +
+              '`lib/useModalDialog`가 소유한다.',
+          },
+        ],
+      },
+    ],
+  },
+}, {
   // Playwright fixture 파일의 `use(page)`는 React hook이 아니다 — 이름이 `use*`로 시작한다는
   // 이유만으로 react-hooks/rules-of-hooks가 오탐한다(ESLint 10 + eslint-plugin-react-hooks 7).
   files: ['e2e/**/*.ts'],

@@ -1,7 +1,7 @@
 'use client';
 
-import { type ReactNode, useMemo } from 'react';
-import type { ColumnDef } from '@tanstack/react-table';
+import { type ReactNode, useCallback, useMemo } from 'react';
+import type { ColumnDef, OnChangeFn, SortingState } from '@tanstack/react-table';
 
 import { DataTable, type DataTableColumnMeta } from '@/components/admin/ui/data-table';
 
@@ -33,8 +33,13 @@ export interface AdminTableColumn<R> {
   cell: (row: R) => ReactNode;
   /** 헤더 클릭 정렬 활성화. 정렬 키는 `sortValue`로만 결정(렌더 결과로 정렬하지 않음). */
   sortable?: boolean;
-  /** 정렬 비교용 값. `sortable`이면 필수. 렌더는 항상 `cell`이 담당. */
+  /** 정렬 비교용 값. `sortable`이면 필수(서버 정렬 모드에서는 불필요). 렌더는 항상 `cell`이 담당. */
   sortValue?: (row: R) => string | number;
+  /**
+   * 서버 정렬 파라미터 이름. `serverSort`를 쓸 때만 의미가 있고, 없으면 `key`를 그대로 쓴다.
+   * 컬럼 key와 서버 정렬 키가 다를 때 필요하다(예: 컬럼 `feature` → 서버 `name`).
+   */
+  sortKey?: string;
   align?: 'left' | 'right';
 }
 
@@ -58,6 +63,21 @@ export interface AdminTableProps<R> {
   /** 전체 정렬 토글(개별은 컬럼 `sortable`). */
   enableSorting?: boolean;
   initialSort?: { columnKey: string; desc: boolean };
+  /**
+   * 서버 정렬 연동(T-357). 주면 헤더 클릭이 **클라이언트 정렬 대신 서버 쿼리**를 바꾼다.
+   *
+   * 없으면 헤더 정렬은 `getSortedRowModel`로 도는 클라이언트 정렬이고, 그건 **현재 페이지
+   * 안에서만** 유효하다. cursor/offset 페이징 목록에서 그대로 두면 사용자에게 "전체가 정렬된 것
+   * 처럼" 보이지만 실제로는 20행짜리 창만 뒤집힌다 — 화면이 거짓말을 한다.
+   *
+   * `key`는 서버 파라미터 값이고 컬럼의 `sortKey ?? key`와 대응한다. 목록에 없는 키가 오면
+   * 아무 헤더도 활성으로 표시되지 않는다(툴바 select로만 고를 수 있는 정렬 축이 있을 수 있다).
+   */
+  serverSort?: {
+    key: string;
+    order: 'asc' | 'desc';
+    onChange: (key: string, order: 'asc' | 'desc') => void;
+  };
   /** 표의 접근성 이름. 주지 않으면 한 화면에 표가 둘 이상일 때 스크린리더가 구분하지 못한다. */
   ariaLabel?: string;
   /** 조회 실패 표면 — 주면 표 대신 what/why/다시 시도 Alert를 렌더한다. */
@@ -96,11 +116,15 @@ export function AdminTable<R>({
   isError,
   error,
   onRetry,
+  serverSort,
 }: AdminTableProps<R>) {
   const tableColumns = useMemo<ColumnDef<R, unknown>[]>(
     () =>
       columns.map((col) => {
-        const canSort = Boolean(enableSorting && col.sortable && col.sortValue);
+        // 서버 정렬 모드에서는 `sortValue`가 필요 없다 — 비교를 서버가 한다.
+        const canSort = Boolean(
+          enableSorting && col.sortable && (serverSort ? true : col.sortValue),
+        );
         const meta: DataTableColumnMeta = {
           align: col.align,
           // KTM DataTable에는 <colgroup>이 없다 — 폭은 헤더 셀로 옮긴다. 클래스가 아니라
@@ -120,9 +144,42 @@ export function AdminTable<R>({
           sortDescFirst: false,
           meta,
         };
-        return canSort ? { ...base, accessorFn: (row: R) => col.sortValue!(row) } : base;
+        if (!canSort) return base;
+        // TanStack `getCanSort()`는 `accessorFn` 존재를 요구한다 — 없으면 정렬 버튼 자체가
+        // 렌더되지 않는다. 서버 정렬 모드에서도 accessor는 남기되, `manualSorting`이 켜져 있어
+        // `getSortedRowModel`이 돌지 않으므로 이 값으로 행이 재정렬되지는 않는다.
+        // 서버 모드에서 `sortValue`가 없는 컬럼은 상수 accessor로 충분하다(비교는 서버 몫).
+        const accessorFn = col.sortValue ?? (() => '');
+        return { ...base, accessorFn: (row: R) => accessorFn(row) };
       }),
-    [columns, enableSorting],
+    [columns, enableSorting, serverSort],
+  );
+
+  // ── 서버 정렬 연동 ──
+  // 서버 파라미터(`key`/`order`)를 TanStack `SortingState`로 비추고, 헤더 클릭을 다시 서버
+  // 파라미터로 되돌린다. 컬럼 id는 `col.key`이고 서버 키는 `col.sortKey ?? col.key`라 양방향
+  // 매핑이 필요하다(예: 컬럼 `feature` ↔ 서버 `name`).
+  const serverSortState = useMemo<SortingState | undefined>(() => {
+    if (!serverSort) return undefined;
+    const column = columns.find((col) => (col.sortKey ?? col.key) === serverSort.key);
+    // 서버 정렬 축이 어느 컬럼에도 없을 수 있다(툴바 select 전용 축). 그때는 활성 헤더가 없다.
+    if (!column) return [];
+    return [{ id: column.key, desc: serverSort.order === 'desc' }];
+  }, [serverSort, columns]);
+
+  const handleServerSortingChange = useCallback<OnChangeFn<SortingState>>(
+    (updater) => {
+      if (!serverSort) return;
+      const next = typeof updater === 'function' ? updater(serverSortState ?? []) : updater;
+      const first = next[0];
+      // 세 번째 클릭은 정렬 해제인데, 서버 목록은 정렬 없이 조회할 수 없다(cursor 안정성).
+      // 그래서 해제 대신 현재 축을 유지한다.
+      if (!first) return;
+      const column = columns.find((col) => col.key === first.id);
+      if (!column) return;
+      serverSort.onChange(column.sortKey ?? column.key, first.desc ? 'desc' : 'asc');
+    },
+    [serverSort, serverSortState, columns],
   );
 
   // `virtualized` prop과 **실제 윈도잉**을 분리한다.
@@ -173,8 +230,10 @@ export function AdminTable<R>({
           onRetry={onRetry}
           ariaLabel={ariaLabel}
           emptyMessage={empty}
-          manualSorting={false}
-          sorting={undefined}
+          // 서버 정렬 모드면 TanStack에게 비교를 맡기지 않고(제어) 헤더 클릭을 쿼리로 돌린다.
+          manualSorting={Boolean(serverSort)}
+          sorting={serverSortState}
+          onSortingChange={serverSort ? handleServerSortingChange : undefined}
           onRowClick={onRowClick}
           rowTestId={rowTestId}
           virtualized={useVirtual}
