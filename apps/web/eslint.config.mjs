@@ -34,22 +34,56 @@ const HALLMARK_CLASS_GUARDS = [
   },
 ];
 
+/**
+ * flat config는 같은 규칙을 뒤 블록이 정의하면 **옵션을 병합하지 않고 통째로 교체**한다.
+ * 그래서 `no-restricted-imports`를 재정의하는 모든 블록이 이 공통 패턴을 직접 펴야 한다 —
+ * 안 그러면 그 블록 대상 파일에서 kakao 가드가 조용히 사라진다(T-357 리뷰가 실제로 잡았다).
+ */
+const KAKAO_IMPORT_GUARD = {
+  group: ['*react-kakao-maps-sdk*'],
+  message:
+    'ADR-015/046 — Kakao Maps SDK 폐기. vworld-map-web 사용 (`docs/integrations/maplibre-vworld.md`).',
+};
+
+/**
+ * `lib/useModalDialog`에 **전이로 닿는** 사용자 표면 컴포넌트.
+ *
+ * admin이 이 중 하나를 import하면 base-ui와 `useModalDialog` focus trap이 한 화면에서
+ * 겹친다. 개별 파일(`components/ui/Dialog`)만 막으면 우회된다 — `components/trips/ConflictDialog`가
+ * 그 안에서 Dialog를 끌어오기 때문이다.
+ *
+ * 반대로 디렉터리 통째로(`components/ui/**`) 막으면 모달과 무관한 `Button`·`FormField`·
+ * `DocumentNavLink`까지 걸려 과잉 차단이 된다. 그래서 import 그래프에서 실제 도달 집합만
+ * 골라 명시한다. 목록 산출: `lib/useModalDialog`에서 역방향 BFS(페이지 제외, 컴포넌트만).
+ *
+ * 새 모달 컴포넌트를 사용자 표면에 추가하면 여기에도 넣어야 한다 — 자동 전이 분석이 필요하면
+ * `eslint-plugin-boundaries` 같은 룰로 승격하는 것이 다음 단계다.
+ */
+const MODAL_STACK_MODULES = [
+  'components/ui/Dialog',
+  'components/ui/ConfirmDialog',
+  'components/map/FeatureDetailModal',
+  'components/map/FeatureDetailModalController',
+  'components/map/FeatureMapView',
+  'components/map/FeatureRequestDialog',
+  'components/map/LocationConsentDialog',
+  'components/notice-plans/NoticePlanCopyDialog',
+  'components/notice-plans/NoticePlanShelf',
+  'components/trips/ConflictDialog',
+  'components/trips/SharedTripView',
+  'components/trips/TripDashboard',
+  'components/trips/TripDayControls',
+  'components/trips/TripDetail',
+  'components/trips/TripEditDialog',
+  'components/trips/TripManualPoiDialog',
+  'components/trips/TripMapView',
+];
+
 const config = [...nextCoreWebVitals, ...nextTypescript, {
   rules: {
     'react/no-unescaped-entities': 'off',
     // Pinvi `(lng, lat)` 좌표 순서 일관 — react-kakao 호환 잔존 코드 방지
-    'no-restricted-imports': [
-      'error',
-      {
-        patterns: [
-          {
-            group: ['*react-kakao-maps-sdk*'],
-            message:
-              'ADR-015/046 — Kakao Maps SDK 폐기. vworld-map-web 사용 (`docs/integrations/maplibre-vworld.md`).',
-          },
-        ],
-      },
-    ],
+    'no-restricted-imports': ['error', { patterns: [KAKAO_IMPORT_GUARD] }],
   }
 }, {
   // 사용자 표면(공개·앱)만 — `(admin)`과 admin 컴포넌트는 밀도 규칙이 달라 제외한다.
@@ -80,30 +114,37 @@ const config = [...nextCoreWebVitals, ...nextTypescript, {
   // DESIGN.md의 "모달 계약" 절이 이 분리를 명문화하지만 문서만으로는 약하다 — 이 저장소는
   // T-356에서 "로컬 4개 게이트를 전부 통과한 회귀"를 두 번 겪었다. 규칙을 실행 가능한
   // 가드로 옮긴다.
-  files: ['app/(admin)/**/*.tsx', 'components/admin/**/*.tsx'],
+  // `.ts`도 포함한다 — admin에는 `lib/admin/*.ts`, `components/admin/ui/form-field.ts`,
+  // route handler 등 `.ts` 파일이 여럿 있고, 거기서 헤더를 만들면 가드를 우회하게 된다.
+  files: [
+    'app/(admin)/**/*.{ts,tsx}',
+    'components/admin/**/*.{ts,tsx}',
+    // `lib/admin/**`도 admin 소유다 — 여기서 헬퍼를 만들면서 사용자 표면 모듈을 끌어오면
+    // 그 헬퍼를 쓰는 admin 컴포넌트로 모달 스택이 전이된다.
+    'lib/admin/**/*.{ts,tsx}',
+  ],
   rules: {
     'no-restricted-imports': [
       'error',
       {
         patterns: [
+          KAKAO_IMPORT_GUARD,
           {
-            group: [
-              '**/components/ui/Dialog',
-              '**/components/ui/ConfirmDialog',
-              '@/components/ui/Dialog',
-              '@/components/ui/ConfirmDialog',
-            ],
+            // 전이 도달 집합을 명시한다(위 MODAL_STACK_MODULES 주석 참고). `components/ui/Dialog`
+            // 하나만 막으면 `components/trips/ConflictDialog` 경유로 우회되고, 디렉터리 통째로
+            // 막으면 모달과 무관한 Button·FormField까지 걸린다.
+            group: MODAL_STACK_MODULES.flatMap((mod) => [`**/${mod}`, `@/${mod}`]),
             message:
-              'T-356 — admin 모달은 `@/components/admin/ui/dialog`(또는 `alert-dialog`)를 쓴다. ' +
-              '사용자 표면 Dialog는 `lib/useModalDialog` 기반이라 base-ui와 focus trap·inert ' +
-              '스냅샷이 충돌한다(DESIGN.md 모달 계약).',
+              'T-356 — 이 모듈은 `lib/useModalDialog` 기반 모달 스택에 (전이로) 닿는다. admin에서 ' +
+              '쓰면 base-ui와 focus trap·inert 스냅샷이 충돌한다. admin 모달은 ' +
+              '`@/components/admin/ui/dialog`(또는 `alert-dialog`)를 쓴다.',
           },
           {
             group: ['**/lib/useModalDialog', '@/lib/useModalDialog'],
             message:
               'T-356 — admin은 base-ui가 focus trap을 소유한다. `useModalDialog`를 함께 쓰면 ' +
-              '트랩이 두 벌이 된다. `isRestorableFocusTarget` 같은 순수 헬퍼가 필요하면 ' +
-              '그 심볼만 직접 import하지 말고 admin 쪽에 복제하거나 공용 유틸로 분리하라.',
+              '트랩이 두 벌이 된다. 포커스 복원 대상 판별이 필요하면 `@/lib/focusTarget`의 ' +
+              '`isRestorableFocusTarget`을 쓴다(T-357에서 스택 밖으로 분리했다 — 복제하지 마라).',
           },
         ],
       },
@@ -114,18 +155,16 @@ const config = [...nextCoreWebVitals, ...nextTypescript, {
   //
   // 사용자 표면이 admin 컴포넌트나 base-ui를 끌어오면 같은 충돌이 반대로 일어나고, admin 전용
   // 번들(cva/clsx/tailwind-merge/base-ui)이 사용자 표면 코드 스플릿 경계로 새어 들어간다.
-  files: ['app/**/*.tsx', 'components/**/*.tsx'],
-  ignores: ['app/(admin)/**', 'components/admin/**'],
+  // `.ts`도 포함한다 — `lib/**` 같은 사용자 표면 `.ts`가 가드 밖이면 거기서 base-ui나 admin
+  // 컴포넌트를 끌어와도 침묵한다. `lib/admin/**`은 admin 소유라 제외한다.
+  files: ['app/**/*.{ts,tsx}', 'components/**/*.{ts,tsx}', 'lib/**/*.{ts,tsx}'],
+  ignores: ['app/(admin)/**', 'components/admin/**', 'lib/admin/**'],
   rules: {
     'no-restricted-imports': [
       'error',
       {
         patterns: [
-          {
-            group: ['*react-kakao-maps-sdk*'],
-            message:
-              'ADR-015/046 — Kakao Maps SDK 폐기. vworld-map-web 사용 (`docs/integrations/maplibre-vworld.md`).',
-          },
+          KAKAO_IMPORT_GUARD,
           {
             group: ['**/components/admin/**', '@/components/admin/**'],
             message:

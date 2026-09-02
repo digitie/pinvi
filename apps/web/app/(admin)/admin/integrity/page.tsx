@@ -13,7 +13,7 @@ import {
 } from '@pinvi/api-client';
 import type { AdminConsistencyReportRecord, AdminIntegrityIssueRecord } from '@pinvi/schemas';
 import { Ban, CheckCircle2, ChevronRight, RefreshCw, RotateCcw, X } from 'lucide-react';
-import { AdminPage } from '@/components/admin/AdminPage';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FilterBar, FilterField } from '@/components/admin/filter-bar';
 import { Button } from '@/components/admin/ui/button';
@@ -484,9 +484,9 @@ export default function AdminIntegrityPage() {
         </p>
       )}
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Issues</h2>
+      <Section
+        title="Issues"
+        actions={
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -509,7 +509,8 @@ export default function AdminIntegrityPage() {
               <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
-        </div>
+        }
+      >
         <AdminTable
           columns={issueColumns}
           rows={issuesQuery.data?.items ?? []}
@@ -518,12 +519,11 @@ export default function AdminIntegrityPage() {
           rowTestId={(item) => `admin-integrity-issue-row-${item.issue_id}`}
           empty="정합성 issue가 없습니다."
         />
-      </section>
+      </Section>
 
       {reportsError && <ErrorBox message={reportsError} />}
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Reports</h2>
+      <Section title="Reports">
         <AdminTable
           columns={reportColumns}
           rows={reportsQuery.data?.items ?? []}
@@ -532,7 +532,7 @@ export default function AdminIntegrityPage() {
           rowTestId={(item) => `admin-integrity-report-row-${item.report_id}`}
           empty="정합성 report가 없습니다."
         />
-      </section>
+      </Section>
 
       {/* 다이얼로그를 조건부로 **마운트**한다(`open`은 상수 true) — `selectedIssue`가 null이 되는
           즉시 사라지던 기존 동작·상태를 그대로 유지하기 위해서다(닫힘 트랜지션 동안 본문이

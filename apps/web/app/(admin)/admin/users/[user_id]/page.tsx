@@ -1019,7 +1019,7 @@ export default function AdminUserDetailPage() {
       </Section>
 
       <Section title="액션 (admin role만)">
-        <div className="mt-3 flex gap-2">
+        <div className="flex gap-2">
           <button
             type="button"
             disabled={!!user.email_verified_at}

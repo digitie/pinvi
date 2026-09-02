@@ -1,5 +1,26 @@
 # resume.md
 
+## 2026-09-02 (claude) — T-357 admin 후속 (PR #516, 리뷰 반영 중)
+
+T-356 후속 3건: 모달 경계 eslint 가드, `features` 표 헤더 정렬의 서버 정렬 연동, 수요 없는
+admin 모듈 3개 정리 + `Section`의 `SectionCard` 위임.
+
+적대적 리뷰 2회차가 P0 1건을 잡았다 — **`serverSort` 헤더가 두 번째 클릭부터 죽었다.**
+TanStack Table은 `sortDescFirst:false` + `enableSortingRemoval` 기본값(true)에서 desc 다음
+상태로 "제거"(빈 배열)를 돌려주는데, 어댑터가 `if (!first) return;`으로 그걸 삼켰다.
+서버 정렬 모드에서는 `enableSortingRemoval={false}`를 넘겨 3-state 순환 자체를 끈다.
+회귀 테스트는 **수정을 되돌려 실제로 실패하는 것을 확인**하고 넣었다.
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+- **`Section`은 이제 `SectionCard`(KTM 카드 언어)다.** 자식 간격은 `CardContent`의
+  `space-y-4`가 소유한다 — 자식에 `mb-3`/`mt-3`을 직접 달면 28px로 겹친다(T-357에서 4곳 제거).
+- **헤더에 버튼이 필요한 패널은 `Section`의 `actions`를 쓴다.** 이 슬롯이 막혀 있어서
+  `integrity`·`provider-sync`가 손으로 박스를 만들었고, 그래서 한 화면에 패널 언어가 두 벌
+  남아 있었다. `SectionCard`는 원래 이 슬롯을 갖고 있었고 어댑터만 막고 있었다.
+- **`tests/AdminSectionContract.test.tsx`가 렌더 계약을 잠근다.** 소비처가 60곳이라 위임 대상이
+  바뀌면 전부가 한 번에 움직인다. 표 flush(일반)와 프레임 유지(높이 제한)가 서로 반대인 점에
+  주의.
+
 ## 2026-09-02 (claude) — T-356 admin UI 정렬 완료 (PR #515 머지)
 
 admin 화면을 kor-travel-map admin과 색상톤만 빼고 일치시킨 작업을 PR #515로 머지했다
@@ -14,17 +35,19 @@ API pytest unit 1333, 모바일 tsc clean, **N150 격리 컨테이너 e2e 169 pa
 다음에 이 영역을 만질 사람이 알아야 할 것:
 - **모달 스택이 둘이다.** admin은 base-ui(`components/admin/ui/dialog` 등), 사용자 표면은
   `lib/useModalDialog`. 한 화면에서 섞으면 focus trap과 `inert` 스냅샷이 서로를 덮는다.
-  DESIGN.md에 명문화했고 현재 혼용 0건이다. 자동 가드는 아직 없다.
+  DESIGN.md에 명문화했고 현재 혼용 0건이며, T-357에서 `eslint.config.mjs`의
+  `no-restricted-imports` 양방향 가드로 강제한다. **가드는 전이 도달 집합을 손으로 적은
+  목록**(`MODAL_STACK_MODULES` 17개)이라 사용자 표면에 새 모달 컴포넌트를 만들면 여기에도
+  넣어야 한다 — `components/ui/Dialog` 하나만 막으면 `trips/ConflictDialog` 경유로 우회된다.
 - **폼 모달의 `hasUnsavedInput`은 "전환 전에 없던 닫기 경로가 새로 생긴 곳"에만 건다.**
   "폼이면 보호"로 잡았다가 전에도 Escape로 닫히던 모달까지 막아 새 회귀를 만들었고 N150 e2e가
   잡았다. 지금 걸린 4곳(pois 생성, trips 생성, trips/[id] POI, pois/[id] 운영작업)이 그 기준이다.
 - **Tailwind v4의 `@layer`는 네이티브 캐스케이드 레이어다.** 유틸을 이겨야 하는 앱 레벨
   오버라이드는 레이어 밖(unlayered)에 둬야 한다 — specificity로는 안 된다.
 
-남은 후속(이 PR 범위 밖): 상세 페이지의 `detail-list`/`json-viewer` 확대 적용, 아직 소비처가
-적은 `stat-strip`·`multi-filter-combobox`·`tabs`, 서버 정렬과 헤더 정렬 통합(`features`는 지금
-헤더가 현재 페이지 한정 클라이언트 정렬이고 툴바 select가 서버 정렬이라 둘이 서로를 모른다),
-"admin에서 `components/ui/Dialog` 금지" 규칙의 eslint 가드.
+남은 후속: 상세 페이지의 `detail-list`/`json-viewer` 확대 적용, 아직 소비처가 적은
+`stat-strip`·`multi-filter-combobox`. (서버 정렬·헤더 정렬 통합과 eslint 모달 가드는
+T-357에서 끝났다. `tabs`는 T-356 모달 수렴에서 이미 소비처가 생겼다.)
 
 ## 2026-09-01 (claude) — M05 재개: pair 재핀 후 rotate→rebuild→one-shot 순서
 

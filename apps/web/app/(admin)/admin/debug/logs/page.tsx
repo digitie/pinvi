@@ -13,7 +13,7 @@ import {
 } from '@pinvi/api-client';
 import type { AdminUpstreamApiCallLogRecord, AdminUpstreamSystemLogRecord } from '@pinvi/schemas';
 import { Pause, Play, Radio, RefreshCw, Search } from 'lucide-react';
-import { AdminPage } from '@/components/admin/AdminPage';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
 import { Button } from '@/components/admin/ui/button';
@@ -417,8 +417,7 @@ export default function AdminDebugLogsPage() {
 
       {systemError && <ErrorBox message={systemError} />}
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">System logs</h2>
+      <Section title="System logs">
         <AdminTable
           columns={systemColumns}
           rows={systemLogsQuery.data?.items ?? []}
@@ -427,12 +426,11 @@ export default function AdminDebugLogsPage() {
           rowTestId={(item) => `admin-debug-system-row-${item.log_id}`}
           empty="system log가 없습니다."
         />
-      </section>
+      </Section>
 
       {apiError && <ErrorBox message={apiError} />}
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">API call logs</h2>
+      <Section title="API call logs">
         <AdminTable
           columns={apiColumns}
           rows={apiLogsQuery.data?.items ?? []}
@@ -441,7 +439,7 @@ export default function AdminDebugLogsPage() {
           rowTestId={(item) => `admin-debug-api-row-${item.log_id}`}
           empty="API call log가 없습니다."
         />
-      </section>
+      </Section>
     </AdminPage>
   );
 }

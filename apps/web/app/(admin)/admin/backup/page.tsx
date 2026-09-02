@@ -219,7 +219,7 @@ export default function AdminBackupPage() {
       </Section>
 
       <Section title="Snapshot 목록">
-        <div className="mb-3 grid gap-3 md:grid-cols-[1fr_180px_auto]">
+        <div className="grid gap-3 md:grid-cols-[1fr_180px_auto]">
           <label className="space-y-1 text-sm font-semibold text-ink">
             검색
             <input

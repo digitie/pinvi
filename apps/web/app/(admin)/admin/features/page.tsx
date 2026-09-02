@@ -103,6 +103,17 @@ const SORT_OPTIONS: AdminFeatureSort[] = [
   'provider',
   'issue_count',
 ];
+
+/**
+ * 표 헤더가 넘겨주는 정렬 키가 API가 아는 값인지 확인한다.
+ *
+ * `AdminTable`의 `serverSort.onChange`는 `column.sortKey ?? column.key`(그냥 string)를 준다 —
+ * 컬럼에 `sortable`을 붙이면서 서버가 모르는 키를 쓰면 그 값이 그대로 쿼리에 실린다.
+ * 캐스트로 눌러 두면 그 순간이 조용히 지나가므로 여기서 걸러낸다.
+ */
+function isFeatureSort(value: string): value is AdminFeatureSort {
+  return (SORT_OPTIONS as string[]).includes(value);
+}
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 200, 500] as const;
 
 type KindFilter = (typeof FEATURE_KINDS)[number] | 'all';
@@ -737,7 +748,12 @@ export default function AdminFeaturesPage() {
               key: sort,
               order,
               onChange: (nextSort, nextOrder) => {
-                setSort(nextSort as AdminFeatureSort);
+                if (!isFeatureSort(nextSort)) {
+                  // 서버가 모르는 키다. 정렬을 바꾸지 않는 편이 잘못된 목록을 보여주는 것보다 낫다.
+                  console.warn(`[admin/features] 알 수 없는 정렬 키: ${nextSort}`);
+                  return;
+                }
+                setSort(nextSort);
                 setOrder(nextOrder);
                 resetCursor();
               },

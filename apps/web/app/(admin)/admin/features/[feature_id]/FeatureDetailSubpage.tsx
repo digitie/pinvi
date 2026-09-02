@@ -349,7 +349,7 @@ function WeatherValuesTab({ featureId }: { featureId: string }) {
   const data = query.data ?? null;
   return (
     <Section title="weather values">
-      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
         <span>asof {formatDateTime(data?.asof)}</span>
         <span>latest {formatDateTime(data?.latest_at)}</span>
         <span>{data?.is_stale ? 'stale' : 'fresh'}</span>

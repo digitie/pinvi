@@ -172,9 +172,14 @@ export function AdminTable<R>({
       if (!serverSort) return;
       const next = typeof updater === 'function' ? updater(serverSortState ?? []) : updater;
       const first = next[0];
-      // 세 번째 클릭은 정렬 해제인데, 서버 목록은 정렬 없이 조회할 수 없다(cursor 안정성).
-      // 그래서 해제 대신 현재 축을 유지한다.
-      if (!first) return;
+      // `enableSortingRemoval={false}`(아래 DataTable에 전달)라 정상 경로에서는 빈 배열이 오지
+      // 않는다. 그래도 방어적으로 처리하되 **early-return 하지 않는다** — 예전에 그렇게 했더니
+      // TanStack이 `desc`에서 항상 해제를 돌려주는 탓에(`sortDescFirst: false` + 기본
+      // `enableSortingRemoval: true`) 클릭이 매번 삼켜져 헤더가 `desc`에 영구히 갇혔다.
+      if (!first) {
+        serverSort.onChange(serverSort.key, serverSort.order === 'asc' ? 'desc' : 'asc');
+        return;
+      }
       const column = columns.find((col) => col.key === first.id);
       if (!column) return;
       serverSort.onChange(column.sortKey ?? column.key, first.desc ? 'desc' : 'asc');
@@ -234,13 +239,25 @@ export function AdminTable<R>({
           manualSorting={Boolean(serverSort)}
           sorting={serverSortState}
           onSortingChange={serverSort ? handleServerSortingChange : undefined}
+          // 서버 목록은 정렬 없이 조회할 수 없다(cursor 안정성). 해제를 허용하면 TanStack이
+          // `desc`에서 해제만 돌려주고 asc로 돌아갈 길이 없어진다 — asc ↔ desc 2상태로 만든다.
+          enableSortingRemoval={serverSort ? false : undefined}
           onRowClick={onRowClick}
           rowTestId={rowTestId}
           virtualized={useVirtual}
           stickyHeader={virtualized}
           // Table 컨테이너 기본은 `overflow-x-auto`다. 높이를 제한하면 세로도 스크롤해야 하므로
           // 명시적으로 양축을 연다(구버전도 가상화일 때 `overflow-auto`였다).
-          containerClassName={virtualized ? 'overflow-auto' : undefined}
+          //
+          // Card(=`Section`) 안에 놓이면 Table이 자동으로 flush가 된다 — 테두리·모서리·배경을
+          // 버려 containment를 1층으로 유지하는 KTM 규약이고, 일반 표에는 그게 맞다. 다만
+          // **높이를 제한한 표**는 스크롤 경계가 보여야 하므로 그 경우에만 프레임을 되살린다.
+          // 안 그러면 내용이 잘리는 지점이 시각적으로 사라져 "더 있는지" 알 수 없다.
+          containerClassName={
+            virtualized
+              ? 'overflow-auto group-data-[slot=card]/card:rounded-panel group-data-[slot=card]/card:border group-data-[slot=card]/card:border-admin-line group-data-[slot=card]/card:bg-canvas'
+              : undefined
+          }
           containerStyle={virtualized ? { maxHeight } : undefined}
           // `admin-table-scroll`은 e2e가 **직접 스크롤**하는 요소다(`el.scrollTo`). 바깥 래퍼가
           // 아니라 DataTable 내부의 진짜 스크롤 컨테이너가 이 testid를 가져야 한다.

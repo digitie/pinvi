@@ -2,6 +2,39 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-02 (claude) — T-357: T-356 후속 3건 + 적대적 리뷰 2회차 P0/P1 반영
+
+`agent/claude-t357-admin-followup`, PR #516.
+
+- **모달 경계를 eslint로 강제.** T-356이 문서로만 두고 온 "admin base-ui / 사용자 표면
+  `useModalDialog`" 분리를 `no-restricted-imports` 양방향 가드로 옮겼다. 개별 파일
+  (`components/ui/Dialog`) 하나만 막으면 `trips/ConflictDialog` 경유로 우회되고, 디렉터리를
+  통째로 막으면 모달과 무관한 `Button`·`FormField`까지 걸린다. `lib/useModalDialog`에서
+  역방향 BFS로 **전이 도달 집합 17개 모듈**을 뽑아 그것만 막았다. 포커스 복원 대상 판별은
+  `lib/focusTarget`으로 스택 밖에 분리해 admin이 가드를 넘지 않고 쓰게 했다.
+- **`features` 표 헤더 정렬을 서버 정렬과 연동.** 헤더가 현재 페이지만 정렬해 화면이 사실과
+  달랐다.
+- **`Section` → KTM `SectionCard` 위임 + 수요 없는 모듈 3개 삭제**
+  (`multi-filter-combobox` 277줄, `ui/tabs` + `tabs-variants` 155줄).
+
+적대적 리뷰 2회차가 **P0 1건**을 잡았다. `serverSort` 헤더가 두 번째 클릭부터 죽었다 —
+TanStack Table은 `sortDescFirst:false` + `enableSortingRemoval` 기본값(true)에서 desc 다음
+상태로 "정렬 제거"(빈 배열)를 돌려주는데, 어댑터가 `if (!first) return;`으로 그걸 삼켰다.
+서버 정렬 모드에서는 `enableSortingRemoval={false}`로 3-state 순환 자체를 끈다.
+회귀 테스트는 **수정을 되돌려 실제로 실패하는 것을 확인한 뒤** 넣었다 — 첫 시도에서 되돌리기
+스크립트의 문자열이 안 맞아 "수정 없이도 통과"하는 가짜 초록을 봤고, `assert`로 되돌리기
+자체를 검증하게 고쳤다.
+
+P1 반영 중 드러난 것:
+- **`Section`의 `space-y-4`가 자식의 수동 마진과 겹쳤다.** 4곳에서 `mb-3`/`mt-3`이 16px 위에
+  12px을 더해 28px이 됐다. 간격 소유권을 `SectionCard`로 넘기고 자식 마진을 걷었다.
+- **헤더에 버튼이 필요한 패널은 `Section`을 쓸 수 없었다.** `SectionCard`는 `actions` 슬롯을
+  원래 갖고 있었는데 어댑터가 막고 있었고, 그래서 `integrity`·`provider-sync`가 손으로 박스를
+  만들어 한 화면에 패널 언어가 두 벌 남았다. 어댑터를 열고 손수 패널 7개를 흡수했다.
+- **`Section` 렌더 계약 테스트가 0건이었다.** 소비처 60곳이 한 번에 움직이는 지점인데 CI가
+  침묵했다 — 실제로 위 시각 델타를 어느 게이트도 잡지 못했다.
+  `tests/AdminSectionContract.test.tsx`로 잠갔다.
+
 ## 2026-09-01 (claude) — T-356: admin UI를 kor-travel-map admin에 정렬 (Tailwind v4 + 프리미티브 이식)
 
 `agent/claude-admin-ui-parity` (커밋 9건, 미머지). admin 화면을 kor-travel-map(KTM) admin과
@@ -25,7 +58,7 @@
   `font-size: var(--text-sm)`으로 변수를 참조하는 점을 이용해 `[data-pv-surface='admin']`에서
   변수만 가렸다.
 - **모달 단일화 규칙 해제(사용자 지시).** DESIGN.md의 모달 계약을 사용자 표면 한정으로 좁히고
-  admin은 base-ui 기반 dialog/alert-dialog/popover/tooltip/tabs를 쓴다. 수제 `role="dialog"`
+  admin은 base-ui 기반 dialog/alert-dialog/popover/tooltip을 쓴다. 수제 `role="dialog"`
   5쪽 7개 모달을 수렴했다. 두 스택 혼용은 0건(양방향 확인).
 
 게이트가 못 잡은 회귀를 여러 건 잡았다. 특히 **런타임 조립 Tailwind 클래스**(`max-h-[${x}]`)는

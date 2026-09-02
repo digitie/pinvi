@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
@@ -111,6 +112,53 @@ describe('AdminTable — 서버 정렬 연동', () => {
 
     expect(screen.getByRole('columnheader', { name: /이름/ })).toHaveAttribute('aria-sort', 'none');
     expect(screen.getByRole('columnheader', { name: /건수/ })).toHaveAttribute('aria-sort', 'none');
+  });
+
+  it('같은 헤더를 반복 클릭하면 asc ↔ desc를 계속 오간다 (상태 되먹임)', () => {
+    // **이 테스트가 정적 prop이 아니라 상태 되먹임 하네스인 이유**:
+    // 정적 prop으로 1회씩만 클릭하면 사이클을 관측할 수 없다. 실제로 그렇게 짠 초판 테스트는
+    // 아래 회귀를 놓쳤다 — TanStack `getNextSortingOrder`는 `sortDescFirst: false` +
+    // `enableSortingRemoval: true`(기본)에서 `desc` 상태일 때 **항상** `false`(해제)를 돌려준다.
+    // 그 값을 무시하면 헤더가 `desc`에 갇혀 몇 번을 눌러도 아무 일이 일어나지 않는다.
+    const seen: Array<[string, string]> = [];
+
+    function Harness() {
+      const [sort, setSort] = useState<{ key: string; order: 'asc' | 'desc' }>({
+        key: 'name',
+        order: 'asc',
+      });
+      return (
+        <AdminTable
+          columns={COLUMNS}
+          rows={ROWS}
+          rowKey={(r) => r.id}
+          serverSort={{
+            key: sort.key,
+            order: sort.order,
+            onChange: (key, order) => {
+              seen.push([key, order]);
+              setSort({ key, order });
+            },
+          }}
+        />
+      );
+    }
+
+    render(<Harness />);
+    const header = () => screen.getByRole('columnheader', { name: /이름/ });
+    expect(header()).toHaveAttribute('aria-sort', 'ascending');
+
+    for (let i = 0; i < 4; i += 1) {
+      fireEvent.click(screen.getByTestId('admin-table-sort-feature'));
+    }
+
+    expect(seen).toEqual([
+      ['name', 'desc'],
+      ['name', 'asc'],
+      ['name', 'desc'],
+      ['name', 'asc'],
+    ]);
+    expect(header()).toHaveAttribute('aria-sort', 'ascending');
   });
 
   it('serverSort가 없으면 기존 클라이언트 정렬이 그대로 동작한다', () => {
