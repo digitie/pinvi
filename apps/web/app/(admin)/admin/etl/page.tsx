@@ -839,11 +839,14 @@ export default function AdminEtlPage() {
 
       {jobsError && <ErrorBox message={jobsError} />}
 
-      <section className="space-y-3">
-        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted">
-          <Activity className="h-4 w-4" aria-hidden="true" />
-          Provider import jobs
-        </h2>
+      <Section
+        title={
+          <span className="flex items-center gap-2">
+            <Activity className="h-4 w-4" aria-hidden="true" />
+            Provider import jobs
+          </span>
+        }
+      >
         <AdminTable
           columns={columns}
           rows={importJobs}
@@ -852,7 +855,7 @@ export default function AdminEtlPage() {
           rowTestId={(item) => `admin-etl-import-row-${item.job_id}`}
           empty="조회된 import job이 없습니다."
         />
-      </section>
+      </Section>
     </AdminPage>
   );
 }

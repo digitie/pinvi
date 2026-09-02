@@ -64,7 +64,7 @@ import {
 } from '@/components/admin/ui/dialog';
 // `isRestorableFocusTarget`은 모달 프리미티브가 아니라 순수 DOM 판별 헬퍼다 — breakpoint가
 // 바뀐 뒤 "지금 보이는 트리거"로 포커스를 되돌리는 이 페이지 로직이 계속 쓴다.
-import { isRestorableFocusTarget } from '@/lib/useModalDialog';
+import { isRestorableFocusTarget } from '@/lib/focusTarget';
 import { JsonViewer } from '@/components/admin/json-viewer';
 import { StatusBadge as AdminStatusBadge } from '@/components/admin/status-badge';
 import {

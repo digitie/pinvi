@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { FilterBar as AdminFilterBar } from '@/components/admin/filter-bar';
+import { SectionCard } from '@/components/admin/section-card';
 
 export interface AdminPageProps {
   title: string;
@@ -45,16 +46,46 @@ export function FilterBar({ children }: FilterBarProps) {
 }
 
 export interface SectionProps {
-  title: string;
-  defaultCollapsed?: boolean;
+  /** 대부분 문자열이지만 아이콘을 앞에 두는 패널이 있어 `ReactNode`를 받는다(T-357). */
+  title: ReactNode;
+  /** 제목 아래 한 문장 보조 설명. */
+  description?: ReactNode;
+  /**
+   * 헤더 우측 액션(새로고침·페이지네이션 등).
+   *
+   * 이게 없으면 헤더에 버튼이 필요한 패널은 `Section`을 못 쓰고 손으로 박스를 만들게 된다 —
+   * 실제로 T-357 전까지 `integrity`/`provider-sync`가 그랬고, 그래서 같은 화면에 패널 언어가
+   * 두 벌 남았다. `SectionCard`는 원래 이 슬롯을 갖고 있었고 어댑터만 막고 있었다.
+   */
+  actions?: ReactNode;
+  /**
+   * 제목의 heading 레벨. `SectionCard`로 그대로 전달한다 — 페이지 h1 아래에 섹션이 오므로
+   * 기본은 2이고, 중첩 섹션이 있는 화면만 낮춘다. 없으면 문서 개요가 h1 → h2로 고정된다.
+   */
+  headingLevel?: 2 | 3 | 4;
   children: ReactNode;
 }
 
-export function Section({ title, children }: SectionProps) {
+/**
+ * kor-travel-map admin의 `SectionCard`로 위임한다(T-357).
+ *
+ * `FilterBar`와 같은 방식이다 — 이름과 `{ title, children }` 시그니처를 유지해 소비 페이지
+ * 20곳이 import를 바꾸지 않고 KTM 섹션 외관(Card 헤더/본문 분리, hairline 1층, `text-md`
+ * 제목)을 받는다.
+ *
+ * 시각 차이 하나: 기존 제목은 `uppercase tracking-wide text-muted`였는데 KTM은 그런 장식을
+ * 쓰지 않는다(한글 제목에 `uppercase`는 무의미하고 `tracking-wide`는 자간만 벌린다).
+ * `SectionCard`의 `CardTitle`을 그대로 따른다.
+ */
+export function Section({ title, description, actions, headingLevel, children }: SectionProps) {
   return (
-    <section className="space-y-3 rounded-sm border border-hairline bg-canvas p-4">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">{title}</h2>
-      <div>{children}</div>
-    </section>
+    <SectionCard
+      title={title}
+      description={description}
+      actions={actions}
+      headingLevel={headingLevel}
+    >
+      {children}
+    </SectionCard>
   );
 }

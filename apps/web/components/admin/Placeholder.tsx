@@ -24,7 +24,7 @@ export function Placeholder({
       description={description ?? `Sprint ${sprint} 후보 기능. 현재는 구현 gap으로 추적 중.`}
     >
       <Section title="작업 범위">
-        <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
           {taskId && (
             <span
               className="rounded-sm border border-hairline bg-surface-soft px-2 py-1 font-semibold text-ink"

@@ -54,7 +54,7 @@ import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import { Button } from '@/components/ui/Button';
 // `isRestorableFocusTarget`은 모달 프리미티브가 아니라 순수 DOM 판별 헬퍼다 —
 // 이 페이지가 breakpoint 전환 뒤 "지금 보이는 트리거"로 포커스를 되돌릴 때 계속 쓴다.
-import { isRestorableFocusTarget } from '@/lib/useModalDialog';
+import { isRestorableFocusTarget } from '@/lib/focusTarget';
 import { StatusBadge as AdminStatusBadge } from '@/components/admin/status-badge';
 import { statusLabel as sharedStatusLabel } from '@/lib/admin/status-label';
 

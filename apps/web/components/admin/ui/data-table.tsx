@@ -121,6 +121,15 @@ export interface DataTableProps<TData> {
    *  getSortedRowModel을 켠다. cursor/page_size 목록은 서버가 정렬을 소유하므로
    *  기본값(true)을 그대로 두고, 서버가 정렬하지 않는 accessor는 enableSorting:false로. */
   manualSorting?: boolean;
+  /**
+   * 정렬 해제(3번째 클릭) 허용 여부. pinvi 추가(T-357) — TanStack 기본은 `true`다.
+   *
+   * `sortDescFirst: false`와 결합하면 `getNextSortingOrder`가 `desc` 상태에서 **항상**
+   * `false`(=해제)를 돌려준다. 서버 정렬처럼 "해제"를 표현할 수 없는 목록에서 그 값을 그냥
+   * 무시하면 헤더가 `desc`에 갇혀 영구히 죽는다 — 몇 번을 눌러도 아무 일이 일어나지 않는다.
+   * 그런 호출부는 `false`를 넘겨 asc ↔ desc 2상태 사이클로 만든다.
+   */
+  enableSortingRemoval?: boolean;
   /** 행 선택(opt-in) — 체크박스 컬럼 + 선택 상태. 함수를 주면 행별 선택 가능 여부
    *  (react-table getCanSelect) — 선택 불가 행은 체크박스 disabled + select-all 제외. */
   enableRowSelection?: boolean | ((row: Row<TData>) => boolean);
@@ -393,6 +402,7 @@ export function DataTable<TData>({
   initialSorting,
   onSortingChange,
   manualSorting = true,
+  enableSortingRemoval,
   enableRowSelection = false,
   rowSelection,
   onRowSelectionChange,
@@ -432,6 +442,9 @@ export function DataTable<TData>({
     // 서버 정렬은 단일 축만 지원하고 admin 표의 기존 동작도 단일 정렬이었다. TanStack 기본은
     // shift+헤더클릭 다중 정렬이라 명시적으로 끈다(이식 전 AdminTable도 false였다).
     enableMultiSort: false,
+    // 정렬 3상태(asc → desc → 해제) 허용 여부. 서버 정렬 목록은 정렬 없이 조회할 수 없어
+    // (cursor 안정성) 호출부가 `false`를 넘겨 2상태 사이클로 만든다. pinvi 추가(T-357).
+    enableSortingRemoval,
     enableRowSelection,
     state: {
       sorting: sorting ?? internalSorting,

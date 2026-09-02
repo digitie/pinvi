@@ -20,7 +20,7 @@ import {
 } from '@pinvi/api-client';
 import type { AdminProviderDatasetSummary, AdminProviderImportJobRecord } from '@pinvi/schemas';
 import { Ban, RefreshCw, Search, X } from 'lucide-react';
-import { AdminPage } from '@/components/admin/AdminPage';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
 import { Button } from '@/components/admin/ui/button';
@@ -584,10 +584,7 @@ export default function AdminProviderSyncPage() {
         </p>
       )}
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-          Provider datasets
-        </h2>
+      <Section title="Provider datasets">
         <AdminTable
           columns={providerColumns}
           rows={providers}
@@ -604,7 +601,7 @@ export default function AdminProviderSyncPage() {
           }
           empty="provider sync 상태가 없습니다."
         />
-      </section>
+      </Section>
 
       {jobsError && <ErrorBox message={jobsError} />}
       {mutationError && <ErrorBox message={mutationError} />}
@@ -642,8 +639,7 @@ export default function AdminProviderSyncPage() {
           </div>
         ))}
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Import jobs</h2>
+      <Section title="Import jobs">
         <AdminTable
           columns={jobColumns}
           rows={importJobs}
@@ -685,7 +681,7 @@ export default function AdminProviderSyncPage() {
             다음
           </button>
         </div>
-      </section>
+      </Section>
 
       {cancelJob && (
         <section

@@ -9,6 +9,14 @@ import {
   type RefObject,
 } from 'react';
 
+// `isRestorableFocusTarget`은 모달 스택과 무관한 순수 DOM 술어라 `lib/focusTarget`으로
+// 옮겼다(T-357). admin은 base-ui가 focus trap을 소유해서 이 모듈을 import할 수 없는데
+// (eslint 경계 가드), 그 판별만은 양쪽이 똑같이 필요하다. 이 모듈 내부에서도 계속 쓰므로
+// import하고, 기존 소비처 호환을 위해 재수출한다.
+import { isRestorableFocusTarget } from './focusTarget';
+
+export { isRestorableFocusTarget };
+
 /**
  * 모달 다이얼로그의 공통 a11y·상호작용을 한 곳에 모은다(TDR, ADR-056).
  *
@@ -129,23 +137,6 @@ function isInertCandidate(element: Element): element is HTMLElement {
   return true;
 }
 
-export function isRestorableFocusTarget(
-  element: HTMLElement | null | undefined,
-): element is HTMLElement {
-  if (typeof document === 'undefined') return false;
-  const computedStyle = element ? window.getComputedStyle(element) : null;
-  return Boolean(
-    element &&
-      element !== document.body &&
-      document.contains(element) &&
-      !(element as HTMLElement & { disabled?: boolean }).disabled &&
-      computedStyle?.display !== 'none' &&
-      computedStyle?.visibility !== 'hidden' &&
-      element.getClientRects().length > 0 &&
-      // inert는 하위로 상속된다 — 자기 속성만 보면 배경 안 버튼을 "포커스 가능"으로 오판한다.
-      element.closest('[inert]') === null,
-  );
-}
 
 function releaseManagedInert(element: HTMLElement | null | undefined): void {
   const inertAncestor = element?.closest('[inert]');
