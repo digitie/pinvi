@@ -15,3 +15,4 @@
 - [ ] T-VN-41C — relay, reconciliation, consumer enable paired acceptance를 완료한다.
 - [ ] T-VN-41F1D-E — 이전 generation 퇴역과 v6/v8 attestation 전환을 완료한다.
 - [ ] T-VN-H49 — standalone backup의 주기 실행, bounded retention, off-box 증거를 완료한다.
+- [/] T-357 — T-356 후속: 모달 스택 경계를 eslint로 강제하고, `features` 표 헤더 정렬을 서버 정렬과 통합하며(헤더가 현재 페이지만 정렬해 화면이 사실과 달랐다), 수요 없는 admin 모듈 3개를 정리한다. 브랜치 `agent/claude-t357-admin-followup`, PR #516. 로컬 4개 게이트 + N150 격리 e2e 169건 통과. 리뷰 대기.
