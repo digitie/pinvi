@@ -1,9 +1,13 @@
 # resume.md
 
-## 2026-09-02 (claude) — T-357 admin 후속 (PR #516, 리뷰 반영 중)
+## 2026-09-02 (claude) — T-357 admin 후속 완료 (PR #516 머지)
 
-T-356 후속 3건: 모달 경계 eslint 가드, `features` 표 헤더 정렬의 서버 정렬 연동, 수요 없는
-admin 모듈 3개 정리 + `Section`의 `SectionCard` 위임.
+T-356 후속 3건을 PR #516으로 머지했다(squash `301aafe4`): 모달 경계 eslint 가드,
+`features` 표 헤더 정렬의 서버 정렬 연동, 수요 없는 admin 모듈 3개 정리 +
+`Section`의 `SectionCard` 위임.
+
+검증: CI 블로킹 4종 pass, 로컬 4종(tsc / lint 0 error / vitest 165 / build 57쪽),
+**N150 격리 e2e 169 passed / 0 failed**(체크아웃 SHA 가드 통과, 운영 스택 무영향).
 
 적대적 리뷰 2회차가 P0 1건을 잡았다 — **`serverSort` 헤더가 두 번째 클릭부터 죽었다.**
 TanStack Table은 `sortDescFirst:false` + `enableSortingRemoval` 기본값(true)에서 desc 다음

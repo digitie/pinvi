@@ -15,4 +15,3 @@
 - [ ] T-VN-41C — relay, reconciliation, consumer enable paired acceptance를 완료한다.
 - [ ] T-VN-41F1D-E — 이전 generation 퇴역과 v6/v8 attestation 전환을 완료한다.
 - [ ] T-VN-H49 — standalone backup의 주기 실행, bounded retention, off-box 증거를 완료한다.
-- [/] T-357 — T-356 후속: 모달 스택 경계를 eslint로 강제하고, `features` 표 헤더 정렬을 서버 정렬과 통합하며(헤더가 현재 페이지만 정렬해 화면이 사실과 달랐다), 수요 없는 admin 모듈 3개를 정리한다. 브랜치 `agent/claude-t357-admin-followup`, PR #516. 적대적 리뷰 2회차가 P0 1건(서버 정렬 헤더가 두 번째 클릭부터 무반응 — TanStack의 `enableSortingRemoval` 기본값)과 P1 6건을 냈고 커밋 `d4dcac6b`으로 전부 반영했다: kakao 가드 복원(flat config가 옵션을 교체한다), `.ts` 대상 포함, 전이 우회 차단, `Section`에 `actions` 개방 + 손수 패널 7개 흡수, `space-y-4`와 겹치던 자식 마진 4곳 제거, `Section` 렌더 계약 테스트 신설, 문서 사실 오류 교정. 로컬 4개 게이트 재통과(vitest 165). N150 격리 e2e 재실행 중.
