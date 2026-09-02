@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { FilterBar as AdminFilterBar } from '@/components/admin/filter-bar';
+import { SectionCard } from '@/components/admin/section-card';
 
 export interface AdminPageProps {
   title: string;
@@ -50,11 +51,17 @@ export interface SectionProps {
   children: ReactNode;
 }
 
+/**
+ * kor-travel-map admin의 `SectionCard`로 위임한다(T-357).
+ *
+ * `FilterBar`와 같은 방식이다 — 이름과 `{ title, children }` 시그니처를 유지해 소비 페이지
+ * 20곳이 import를 바꾸지 않고 KTM 섹션 외관(Card 헤더/본문 분리, hairline 1층, `text-md`
+ * 제목)을 받는다.
+ *
+ * 시각 차이 하나: 기존 제목은 `uppercase tracking-wide text-muted`였는데 KTM은 그런 장식을
+ * 쓰지 않는다(한글 제목에 `uppercase`는 무의미하고 `tracking-wide`는 자간만 벌린다).
+ * `SectionCard`의 `CardTitle`을 그대로 따른다.
+ */
 export function Section({ title, children }: SectionProps) {
-  return (
-    <section className="space-y-3 rounded-sm border border-hairline bg-canvas p-4">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">{title}</h2>
-      <div>{children}</div>
-    </section>
-  );
+  return <SectionCard title={title}>{children}</SectionCard>;
 }
