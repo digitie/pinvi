@@ -6,8 +6,13 @@
 .vscode
 .idea
 .tmp
-.next
-node_modules
+**/.next
+# 맨 위 디렉터리만 매치하던 패턴이었다. `apps/web/node_modules`,
+# `apps/mobile/node_modules`는 컨텍스트에 그대로 들어가 `COPY . .`이
+# **호스트의 낡은 트리**를 deps 스테이지 결과 위에 덮었다 — 이 저장소가
+# 방금 닫은 버전 드리프트를, 개발자가 수정을 검증하는 바로 그 경로에서
+# 다시 만든다(적대 리뷰 MAJOR-5).
+**/node_modules
 .venv*
 __pycache__
 *.pyc
