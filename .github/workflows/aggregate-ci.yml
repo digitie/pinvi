@@ -56,11 +56,15 @@ jobs:
               startsWith("apps/api/"),
               startsWith("contracts/"),
               equals("scripts/api-image-provenance.sh"),
+              equals("scripts/validate-image-provenance.sh"),
+              equals("scripts/trusted-backup-entrypoint.py"),
+              equals(".dockerignore"),
+              equals("scripts/alembic_rebaseline.py"),
+              equals("scripts/backup-db.sh"),
               equals("scripts/deploy-node.sh"),
               equals("scripts/docker-app.sh"),
-              equals("scripts/migrator-lifecycle-lock.sh"),
-              equals("scripts/backup-db.sh"),
               startsWith("scripts/m05_"),
+              equals("scripts/migrator-lifecycle-lock.sh"),
               equals("scripts/trusted-hotswap-entrypoint.py"),
               equals("scripts/trusted-hotswap-root.sh"),
               equals("scripts/n150-playwright-runner.sh"),
@@ -70,11 +74,11 @@ jobs:
               equals("scripts/restore-staging-drill.sh"),
               equals("infra/docker-compose.app.yml"),
               equals("infra/postgres/bootstrap-pinvi-runtime-role.sh"),
+              equals("docs/runbooks/docker-app.md"),
               equals("infra/.env.prod.example"),
               equals(".env.example"),
               equals(".github/workflows/api.yml"),
               equals(".github/workflows/aggregate-ci.yml"),
-              equals("pyproject.toml"),
             ])) {
               requiredChecks.push("lint-typecheck-test");
               requiredChecks.push("docker-provenance-image");
@@ -138,6 +142,10 @@ jobs:
               equals(".github/workflows/etl.yml"),
             ])) {
               requiredChecks.push("sanity");
+              // `sanity`는 전체 체크아웃 트리를 검증하고 이미지는 다른 트리를
+              // 만든다. 이걸 기다리지 않으면 이미지가 서지 않는 main이 머지되고,
+              // 그 사실이 1~2시간짜리 pinned rebuild에서야 드러난다.
+              requiredChecks.push("docker-image");
             }
 
             core.info(`Changed files: ${changed.join(", ") || "(none)"}`);

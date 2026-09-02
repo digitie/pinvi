@@ -4,11 +4,17 @@ on:
   pull_request:
     paths:
       - "apps/etl/**"
+      - "scripts/validate-image-provenance.sh"
+      - ".dockerignore"
+      - ".github/workflows/aggregate-ci.yml"
       - ".github/workflows/etl.yml"
   push:
     branches: [main]
     paths:
       - "apps/etl/**"
+      - "scripts/validate-image-provenance.sh"
+      - ".dockerignore"
+      - ".github/workflows/aggregate-ci.yml"
       - ".github/workflows/etl.yml"
 
 concurrency:
@@ -16,6 +22,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  docker-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # `sanity`는 **전체 체크아웃**에서 `pip install -e` 후 ruff/pytest를 돈다.
+    # 이미지 빌드는 그 트리를 쓰지 않는다 — Dockerfile이 pyproject와 패키지
+    # 디렉터리만 COPY해 따로 install한다. 그래서 두 트리가 갈라져도 CI는 초록이고,
+    # 깨진 main은 1~2시간짜리 pinned rebuild에서야 드러난다. 2026-09-02에 web이
+    # 정확히 그렇게 회전 사이클 1회를 태웠고, 그 직후 이 etl 이미지가 같은 자리에서
+    # rebuild를 세웠다. 이미지가 서는지는 이미지로만 증명된다.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Build the production ETL image
+        run: >-
+          docker build --file apps/etl/Dockerfile
+          --build-arg PINVI_BUILD_ENVIRONMENT=production
+          --build-arg PINVI_SOURCE_REVISION="${GITHUB_SHA}"
+          --tag "pinvi-etl-ci:${GITHUB_SHA}" .
+
+      - name: The built image loads its Dagster code location
+        run: |
+          # HEALTHCHECK의 `/server_info`는 webserver가 정적으로 주는 버전 문서라
+          # code location 로드 실패를 잡지 못한다(별도 gRPC로 로드되고 실패해도
+          # webserver는 산다). 여기서는 정의를 **직접 로드**해 그 구멍을 덮는다.
+          docker run --rm --entrypoint python "pinvi-etl-ci:${GITHUB_SHA}"             -c "import pinvi.etl.definitions as d; print(sorted(n for n in dir(d) if not n.startswith('_'))[:5])"
+
   sanity:
     runs-on: ubuntu-latest
     timeout-minutes: 10

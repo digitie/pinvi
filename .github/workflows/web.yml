@@ -22,6 +22,7 @@ on:
       - 'apps/mobile/package.json'
       - 'apps/mobile/vendor/**'
       - '.dockerignore'
+      - 'scripts/validate-image-provenance.sh'
   push:
     branches: [main]
     paths:
@@ -44,6 +45,7 @@ on:
       - 'apps/mobile/package.json'
       - 'apps/mobile/vendor/**'
       - '.dockerignore'
+      - 'scripts/validate-image-provenance.sh'
 
 concurrency:
   group: web-${{ github.ref }}
