@@ -392,14 +392,29 @@ build() {
   require_docker
   require_python
   pinvi_prepare_api_image_provenance
-  log "building app-api and app-web"
-  compose build app-api app-web
+  # 굽는 대상과 provenance를 검증하는 대상은 하나의 사실이다. 한 번만 선언하고
+  # 둘 다 여기서 파생시킨다 — 종전처럼 두 곳에 따로 적으면 한쪽만 늘어나도
+  # 아무도 막지 못한다.
+  local -a services=(app-api app-web)
+  local -a build_args=(build)
   if dagster_rollout_enabled; then
-    compose --profile etl build app-dagster
-    pinvi_verify_runtime_image_provenance app-api app-web app-dagster
-  else
-    pinvi_verify_runtime_image_provenance app-api app-web
+    services+=(app-dagster)
+    build_args=(--profile etl build)
   fi
+  log "building ${services[*]}"
+  # 타깃을 한 요청에 묶지 않는다. Compose는 다중 타깃 build를 BuildKit bake 요청
+  # 하나로 바꾸고, 그 요청은 프런트엔드 세션을 동시에 여러 개 연다. 작은 호스트
+  # 에서는 그것만으로 데몬의 세션 한도를 넘겨 모든 타깃이 컨텍스트 마감까지
+  # 대기하다 조용히 죽는다(2026-09-03 격리 e2e 침묵사: dockerd가
+  # "only one connection allowed"를 남기고 Solve가 취소됐다). 타깃마다 요청을
+  # 나눠 하나가 끝난 뒤 다음이 시작하게 한다 — Manager의 pinned rebuild 경로는
+  # 같은 이유로 이미 서비스별로 굽는다.
+  local service
+  for service in "${services[@]}"; do
+    log "building ${service}"
+    compose "${build_args[@]}" "$service"
+  done
+  pinvi_verify_runtime_image_provenance "${services[@]}"
 }
 
 require_python() {
