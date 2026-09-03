@@ -94,14 +94,23 @@ def test_generated_contract_declares_no_source_revision() -> None:
     선언하는 바람에 Map의 문서 한 줄이 PinVi 커밋 → 새 pinset → 1~2시간 rebuild를
     불렀고, 2026-09-01 이후 그 재핀이 네 번이었다.
 
-    커밋된 계약은 아직 v1이라 그 필드를 갖는다 — 이 검사는 **생성기**가 그 습관을
-    다시 만들지 않는지만 본다. v2 전환이 끝나면 커밋된 계약도 같아진다.
+    커밋된 계약은 아직 v1이라 그 필드를 갖는다 — 이 검사는 **생성기가 유도하는
+    값**에 그 습관이 없는지를 본다. v2 전환이 끝나면 커밋된 계약도 같아진다.
+
+    봉투(version)까지 단언하지는 않는다. 생성기는 커밋된 판을 그대로 되돌려 주기
+    때문이다 — v2를 무조건 내면 `--write` 한 번이 소비자를 import에서 죽인다
+    (`test_m05_pair_contract_generator_preserves_envelope.py`, 2026-09-03 적대
+    리뷰). 유도의 내용과 봉투의 판은 서로 다른 사실이고, 여기서는 앞의 것만 본다.
     """
 
     generated = _generator().build_contract()
+    committed = json.loads(_CONTRACT.read_text(encoding="utf-8"))
 
-    assert generated["version"] == 2
-    assert set(generated) == {"map", "version"}
+    # 봉투는 커밋된 계약을 따른다.
+    assert generated["version"] == committed["version"]
     for name, entry in generated["map"].items():
-        assert "source_revision" not in entry, name
-        assert set(entry) == set(_DIGEST_KEYS), name
+        # v1 봉투에서는 비-유도 필드가 커밋된 값 그대로 옮겨진다.
+        derived_keys = set(entry) - {"source_revision"}
+        assert derived_keys == set(_DIGEST_KEYS), name
+        if "source_revision" in entry:
+            assert entry["source_revision"] == committed["map"][name]["source_revision"], name

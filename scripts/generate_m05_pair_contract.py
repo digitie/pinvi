@@ -85,7 +85,58 @@ def build_contract() -> dict[str, object]:
     # 전자는 pin registry가 유일한 생산자여야 하고, 후자는 격리 경로가 이미
     # Manager receipt의 실측 image ID로 전량 대체하고 있었다(그래서 커밋된 값이
     # 두 pinset 낡은 채 방치돼 있었다).
-    return {"map": surfaces, "version": 2}
+    #
+    # 그러나 **봉투 판(version)은 이 생성기가 정하지 않는다.** 커밋된 계약이
+    # v1이면 v1로 되돌려 준다. 그러지 않으면 `--write` 한 번이 소비자를 죽인다 —
+    # `apps/api/app/core/config.py`의 검사는 `set(raw) == {"map",
+    # "runtime_image_digests", "version"}`과 `version == 1`을 요구하고, 그 검사는
+    # **모듈 스코프**에서 돈다. 즉 API 컨테이너가 import에서 실패한다. Manager의
+    # 격리 preflight는 v1/v2를 함께 읽으므로 회전 전에 잡지도 못하고, 실패는
+    # 71분짜리 rebuild를 태운 뒤에야 드러난다(2026-09-03 적대 리뷰).
+    #
+    # v2 전환은 소비자를 함께 옮기는 **의도된 한 걸음**이어야 한다. 재생성이
+    # 그것을 대신 결정하면 안 된다.
+    return _in_committed_envelope({"map": surfaces, "version": 2})
+
+
+def _in_committed_envelope(derived: dict[str, object]) -> dict[str, object]:
+    """유도한 값을 **커밋된 계약과 같은 판**으로 담아 돌려준다.
+
+    v1은 surface마다 `source_revision`을, 최상위에 `runtime_image_digests`를
+    갖는다. 둘 다 이 저장소에서 유도할 수 없는 값이므로(각각 pin registry와
+    Manager receipt가 정본) 커밋된 값을 **그대로 옮긴다** — 생성기는 digest만
+    다시 계산하고 판과 비-유도 필드는 건드리지 않는다.
+    """
+
+    try:
+        committed = json.loads(_CONTRACT.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return derived
+    if not isinstance(committed, dict) or committed.get("version") != 1:
+        return derived
+
+    surfaces = derived["map"]
+    assert isinstance(surfaces, dict)
+    committed_map = committed.get("map")
+    if not isinstance(committed_map, dict) or set(committed_map) != set(surfaces):
+        raise SystemExit(
+            "committed v1 contract inventory differs from the derived surfaces"
+        )
+    for name, surface in surfaces.items():
+        committed_surface = committed_map[name]
+        if (
+            not isinstance(committed_surface, dict)
+            or "source_revision" not in committed_surface
+        ):
+            raise SystemExit(f"committed v1 surface {name} has no source_revision")
+        surface["source_revision"] = committed_surface["source_revision"]
+    if "runtime_image_digests" not in committed:
+        raise SystemExit("committed v1 contract has no runtime_image_digests")
+    return {
+        "map": surfaces,
+        "runtime_image_digests": committed["runtime_image_digests"],
+        "version": 1,
+    }
 
 
 def main() -> int:
