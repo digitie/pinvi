@@ -758,11 +758,54 @@ def _http_json(
             _assert_loopback_response(response, expected_url=url)
             raw = response.read()
     except (HTTPError, URLError, TimeoutError, OSError) as exc:
-        raise AttestationError(f"live HTTP verification failed: {url}") from exc
+        raise AttestationError(
+            f"live HTTP verification failed: {url} [{_http_failure_diagnostic(exc)}]"
+        ) from exc
     try:
         return json.loads(raw, object_pairs_hook=_reject_duplicate_keys), raw
     except (UnicodeDecodeError, json.JSONDecodeError, AttestationError) as exc:
         raise AttestationError(f"live HTTP response is not valid JSON: {url}") from exc
+
+
+_TRANSPORT_DIAGNOSTICS: frozenset[str] = frozenset(
+    {
+        "BadStatusLine",
+        "ConnectionAbortedError",
+        "ConnectionRefusedError",
+        "ConnectionResetError",
+        "IncompleteRead",
+        "RemoteDisconnected",
+        "TimeoutError",
+        "gaierror",
+    }
+)
+
+
+def _http_failure_diagnostic(exc: BaseException) -> str:
+    """live HTTP 실패를 **비밀 없는 고정 어휘**로 좁힌다.
+
+    종전에는 `HTTPError`·`URLError`·`TimeoutError`·`OSError`가 한 문자열로 접혀
+    429(스로틀)·401(자격증명)·ConnectionRefused(컨테이너 헬스)가 구분되지 않았다.
+    셋의 처방이 서로 배타적인데 증거는 하나였다 — 2026-09-02에 그 때문에
+    1~2시간짜리 격리 실행 1회를 태우고도 원인을 몰랐다.
+
+    내보내는 값의 생산자는 둘뿐이다: `HTTPError.code`(http.client가 만든 int, 범위
+    검증 후) 와 stdlib 예외 클래스명. 어느 쪽도 요청 헤더(proxy secret)·본문
+    (email/password)·환경변수·파일경로에서 파생되지 않는다. 구조적으로 비밀이 될 수
+    없다.
+
+    `str(HTTPError)`·`exc.read()`·`exc.headers`·`str(URLError.reason)`은 **쓰지
+    않는다** — 응답 본문·헤더·원문 사유가 섞일 수 있다.
+    """
+
+    if isinstance(exc, HTTPError):
+        code = exc.code
+        if type(code) is int and 100 <= code <= 599:
+            return f"http_status_{code}"
+        return "http_status_invalid"
+    reason = getattr(exc, "reason", None)
+    name = type(reason if isinstance(reason, BaseException) else exc).__name__
+    return f"transport_{name}" if name in _TRANSPORT_DIAGNOSTICS else "transport_other"
 
 
 def _data(value: object, *, name: str) -> dict[str, object]:

@@ -798,3 +798,64 @@ def test_receipt_verifier_evidence_inventory_matches_the_producer_by_scope() -> 
     marker = 'for name in ("reviews", "restore"):'
     guard = attestation[: attestation.index(marker)].rstrip().splitlines()[-1].strip()
     assert guard == 'if args.scope != "isolated":', guard
+
+
+def test_live_http_failure_diagnostic_separates_throttle_from_credentials() -> None:
+    """429·401·connection refused가 서로 다른 고정 어휘로 나와야 한다.
+
+    2026-09-02: 셋이 한 문자열(`live HTTP verification failed: <url>`)로 접혀 있어,
+    1~2시간짜리 격리 e2e를 태우고도 원인을 몰랐다. 셋의 처방은 서로 배타적이다 —
+    스로틀은 로그인 횟수를 줄이거나 한도를 풀어야 하고, 자격증명은 부트스트랩을,
+    connection refused는 컨테이너 헬스를 봐야 한다.
+    """
+
+    from urllib.error import HTTPError, URLError
+
+    module = _attestation_module()
+
+    throttled = HTTPError("http://127.0.0.1:1/auth/login", 429, "Too Many Requests", {}, None)
+    unauthorized = HTTPError("http://127.0.0.1:1/auth/login", 401, "Unauthorized", {}, None)
+    refused = URLError(ConnectionRefusedError(111, "Connection refused"))
+
+    assert module._http_failure_diagnostic(throttled) == "http_status_429"
+    assert module._http_failure_diagnostic(unauthorized) == "http_status_401"
+    assert module._http_failure_diagnostic(refused) == "transport_ConnectionRefusedError"
+
+
+def test_live_http_failure_diagnostic_never_leaks_request_material() -> None:
+    """진단에 비밀이 섞일 경로가 **구조적으로** 없어야 한다.
+
+    이 문자열은 Manager forensic leaf(root 0600)에 실린다. 그 채널은 raw stderr를
+    받도록 설계돼 있지만, 그렇다고 응답 본문·헤더·원문 사유를 흘려도 된다는 뜻은
+    아니다 — 생산자를 두 가지(정수 상태코드, stdlib 예외 클래스명)로 묶는다.
+    """
+
+    from urllib.error import HTTPError, URLError
+
+    module = _attestation_module()
+
+    secret = "s3cr3t-proxy-token-value"
+    leaky = HTTPError(
+        f"http://127.0.0.1:1/auth/login?token={secret}",
+        403,
+        f"Forbidden {secret}",
+        {"X-Secret": secret},
+        None,
+    )
+    assert module._http_failure_diagnostic(leaky) == "http_status_403"
+
+    # 범위 밖 상태코드는 값을 그대로 내보내지 않는다.
+    bogus = HTTPError("http://127.0.0.1:1/", 999, "nope", {}, None)
+    assert module._http_failure_diagnostic(bogus) == "http_status_invalid"
+
+    # 알 수 없는 transport 사유는 클래스명을 흘리지 않고 고정 문자열로 접는다.
+    class _WeirdReason(Exception):
+        pass
+
+    assert module._http_failure_diagnostic(URLError(_WeirdReason(secret))) == "transport_other"
+
+    for produced in (
+        module._http_failure_diagnostic(leaky),
+        module._http_failure_diagnostic(URLError(_WeirdReason(secret))),
+    ):
+        assert secret not in produced
