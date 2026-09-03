@@ -81,8 +81,7 @@ def test_app_api_delivers_every_pinvi_setting_the_harness_declares() -> None:
 
     missing = sorted(runtime_scoped - delivered)
     assert not missing, (
-        "하네스가 넘기지만 app-api environment에 없어 **조용히 무시되는** 설정: "
-        + repr(missing)
+        "하네스가 넘기지만 app-api environment에 없어 **조용히 무시되는** 설정: " + repr(missing)
     )
 
 
@@ -100,8 +99,8 @@ def test_rate_limit_settings_are_deliverable_and_documented() -> None:
         "PINVI_RATE_LIMIT_AUTH_PER_MINUTE",
     }
 
-    assert required <= delivered, (
-        "app-api environment에 없는 rate limit 설정: " + repr(sorted(required - delivered))
+    assert required <= delivered, "app-api environment에 없는 rate limit 설정: " + repr(
+        sorted(required - delivered)
     )
 
 
