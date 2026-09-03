@@ -141,7 +141,16 @@ services:
       PINVI_GEOFENCE_BLOCK_UNKNOWN: ${PINVI_GEOFENCE_BLOCK_UNKNOWN:-false}
       PINVI_GEOFENCE_BYPASS_PATHS: '${PINVI_GEOFENCE_BYPASS_PATHS:-["/health","/health/db","/metrics","/docs","/redoc","/openapi.json"]}'
       PINVI_SENTRY_ENVIRONMENT: ${PINVI_SENTRY_ENVIRONMENT:-smoke}
+      # `ENABLED`가 여기 없으면 env-file에 뭐라 적든 컨테이너에 **도달하지 않는다**.
+      # 2026-09-02: Manager 격리 하네스가 `PINVI_RATE_LIMIT_ENABLED=false`를
+      # env-file에 넣었는데 이 블록이 `BACKEND`만 매핑해 기본값 `True`가 살았고,
+      # `/auth/login`(auth_low, 5회/분, 키=(ip,email))에 M04·M05 로그인 6회가 같은
+      # 버킷으로 몰려 429가 났다. 그 실패는 **1~2시간짜리 격리 e2e를 태운 뒤에야**
+      # 드러났다 — 설정이 한 곳에 선언되고 다른 곳에서 소비되는데 둘을 묶는 기계가
+      # 없었기 때문이다.
+      PINVI_RATE_LIMIT_ENABLED: ${PINVI_RATE_LIMIT_ENABLED:-true}
       PINVI_RATE_LIMIT_BACKEND: ${PINVI_RATE_LIMIT_BACKEND:-auto}
+      PINVI_RATE_LIMIT_AUTH_PER_MINUTE: ${PINVI_RATE_LIMIT_AUTH_PER_MINUTE:-5}
       # user-facing read는 service token 우선, public route만 전용 API key header fallback을 쓴다.
       PINVI_KOR_TRAVEL_MAP_API_BASE_URL: ${PINVI_KOR_TRAVEL_MAP_API_BASE_URL:-http://host.docker.internal:12701}
       PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN: ${PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN:-}
