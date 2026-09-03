@@ -46,9 +46,11 @@ jobs:
 
       - name: The built image loads its Dagster code location
         run: |
-          # HEALTHCHECK의 `/server_info`는 webserver가 정적으로 주는 버전 문서라
-          # code location 로드 실패를 잡지 못한다(별도 gRPC로 로드되고 실패해도
-          # webserver는 산다). 여기서는 정의를 **직접 로드**해 그 구멍을 덮는다.
+          # HEALTHCHECK는 이제 `repositoriesOrError`로 code location 로드를 직접
+          # 묻는다(`/server_info`는 정적 버전 문서라 그 실패를 못 잡았다). 그래도
+          # 이 단계를 남긴다 — 런타임 probe는 **기동한 뒤** 알려주지만 여기서는
+          # 머지 전에 알려주고, 둘은 서로 다른 실패(이미지 빌드 vs 기동 후 회귀)를
+          # 잡는다.
           docker run --rm --entrypoint python "pinvi-etl-ci:${GITHUB_SHA}"             -c "import pinvi.etl.definitions as d; print(sorted(n for n in dir(d) if not n.startswith('_'))[:5])"
 
   sanity:

@@ -36,7 +36,16 @@ RUN pip install --upgrade pip && pip install -e .
 # Dagster webserver는 12802로 바인딩한다(host도 12802 매핑).
 EXPOSE 12802
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD curl -fsS http://localhost:12802/server_info || exit 1
+# `/server_info`는 webserver가 **정적으로** 주는 버전 문서다. code location은
+# 별도로 로드되고, 실패해도 webserver는 살아 있으므로 그 probe는 컨테이너를
+# 끝까지 healthy로 보고한다 — PII 보존 job이 조용히 멈춰도 아무도 모른다.
+# code location이 실제로 로드됐는지 묻는다. 성공이면 `RepositoryConnection`,
+# 실패면 `PythonError`가 온다(운영 컨테이너 실측, dagster 1.13.20). curl이
+# 실패하면 출력이 비어 grep이 떨어지므로 그 경로도 함께 닫힌다.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -fsS -X POST http://localhost:12802/graphql \
+        -H 'Content-Type: application/json' \
+        -d '{"query":"{repositoriesOrError{__typename}}"}' \
+        | grep -q '"__typename":"RepositoryConnection"' || exit 1
 
 CMD ["dagster-webserver", "-h", "0.0.0.0", "-p", "12802", "-m", "pinvi.etl.definitions"]
