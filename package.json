@@ -1,7 +1,7 @@
 {
   "name": "pinvi",
-  "version": "0.1.0",
   "private": true,
+  "version": "0.1.0",
   "description": "Pinvi v2 — 한국 여행 계획·기록·공유 애플리케이션",
   "workspaces": [
     "apps/web",
@@ -27,7 +27,13 @@
     "postcss@8.4.31": "^8.5.23",
     "sharp@^0.34.3": "^0.35.0",
     "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "react-dom": "19.2.6",
+    "react-native": "0.86.3",
+    "react-native-reanimated": "4.6.0",
+    "react-native-worklets": "0.12.1"
+  },
+  "dependencies": {
+    "expo": "~57.0.16"
   },
   "devDependencies": {
     "prettier": "^3.3.3",
