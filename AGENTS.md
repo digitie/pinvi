@@ -68,7 +68,7 @@
 
 본 저장소(GitHub 이름 `pinvi`)는 **한국 여행 계획·기록·공유 애플리케이션**의
 모노레포다. 백엔드(FastAPI) / 프론트엔드(Next.js) / 모바일 Expo Dev Client
-앱(`apps/mobile`, 활성 — Sprint M-1, SDK 56 / minSdk 24) / ETL(Dagster) /
+앱(`apps/mobile`, 활성 — Sprint M-1, SDK 57 / minSdk 24) / ETL(Dagster) /
 인프라 manifest / 문서가 들어 있다.
 
 본 앱은 지도 feature 도메인을 직접 소유하지 않는다. 지도 feature(place /
@@ -127,9 +127,9 @@ event / notice / price / weather / route / area) 정규화·저장은 별 저장
 | `python-kraddr-gop`     | 우편번호 / 도로명 base                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `maplibre-vworld-react` | **Pinvi 지도 클라이언트** — VWorld + MapLibre 선언형 React 계열. Web은 `vworld-map-web`을 `apps/web/vendor/*.tgz` `file:` 핀으로 소비하고, 공통 `vworld-map-core`는 기존 `apps/mobile/vendor/*.tgz` pin을 공유한다(ADR-046). Mobile은 `vworld-map-rn` + `vworld-map-core`를 `apps/mobile/vendor/*.tgz` `file:` 핀으로 소비한다(ADR-044). Place/Price/Weather 마커 + `PolygonArea` + `RouteLine` + `ClusterLayer` + `Popup` generic primitive 제공 (Pinvi 도메인 wrapper / 16색 팔레트 상수는 라이브러리에 없음 — `apps/web/lib`에서 직접 구현). wrapper 금지 — 부족 기능은 라이브러리 PR (ADR-005 mirror) |
 
-모바일 앱 기준선은 ADR-043: `apps/mobile`은 Expo SDK 56 + Expo Router + **Expo Dev
+모바일 앱 기준선은 ADR-043: `apps/mobile`은 Expo SDK 57 + Expo Router + **Expo Dev
 Client** + EAS Build + React Native New Architecture를 사용한다. Expo Go는 사용하지
-않고, Android `minSdkVersion`은 24 이상이며(SDK 56 요구), VWorld API key는 앱에 번들하지 않고
+않고, Android `minSdkVersion`은 24 이상이며(SDK 56+ 요구), VWorld API key는 앱에 번들하지 않고
 `GET /mobile/vworld/token`으로 server-issued 발급한다. 이 발급은 ADR-045의 인터림 정책을 따른다
 — 현 단계는 인증 게이트 + 감사 로깅(키 원본 미로깅)의 "문서화된 운영 제한"이며, 공개 배포 전에는
 opaque 단기 token 또는 tile proxy로 대체한다. 모바일 지도 엔진은 ADR-044: 별 저장소
