@@ -2,6 +2,33 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-05 (claude) — T-358: npm 11 상시 + 내가 넣은 lockfile 무결성 회귀 복구
+
+`agent/claude-t358-npm11`, PR #530(squash `b53005b4`).
+
+npm 11 고정은 작은 작업이었는데, 하다가 **바로 앞 작업(T-352, PR #528)이 넣은 공급망 회귀**를
+발견했다. lockfile 재생성이 `integrity` 보유율을 **100%(1143/1143) → 4.8%(53/1106)** 로
+떨어뜨린 채 머지돼 있었다. `npm ci`가 패키지 95%를 무결성 검증 없이 설치하는 상태였다.
+
+**원인 추정이 한 번 틀렸다.** 처음엔 `--package-lock-only` 플래그 탓이라고 봤는데, 전체
+`npm install`로 재생성해도 똑같이 재현됐다. 진짜 원인은 **`node_modules`가 존재하는 상태에서
+해석한 것**이다 — npm이 디스크에서 트리를 읽으면(`loadActual`) `resolved`/`integrity`를 적지
+않는다. 플래그가 아니라 **순서** 문제였다. `node_modules`를 치우고 다시 풀자 29초 만에
+99.5%로 복구됐다.
+
+여기서 배울 것: **트리가 맞다고 lockfile이 맞은 게 아니다.** T-352에서 나는 사본 개수와 버전을
+꼼꼼히 검증했고 `npm ci`·`expo config`·`expo-doctor`·EAS 빌드까지 통과시켰지만, lockfile의
+*내용 품질*은 한 번도 보지 않았다. 로컬 4개 게이트도 CI 8종도 같은 사각지대에 있었다.
+그래서 `scripts/check-lockfile-integrity.mjs`(하한 99%)를 만들어 CI에 `npm ci` **전에** 배선했고,
+가드가 실제로 실패를 잡는 것을 확인한 뒤(integrity 400개 제거 → `rc=1`) 넣었다.
+
+npm 11 쪽은 원래 목적대로다. npm 10.9.7이 lockfile 없는 설치에서 arborist 버그로 죽는 문제
+(`edgesOut`, `apps/web`의 `vitest` optional peer 체인)를 피하려면 npm 11이 필요하다.
+`engines.npm >= 11` + CI 5개 job에 `npm install -g npm@11.19.1`. 로컬 전역 npm 업그레이드는
+npm이 자기 자신을 교체하다 `promise-retry`를 잃는 경합이 있어 `npx npm@11 install -g npm@11`로
+우회했다. `/mnt/f`에서 `node_modules`를 치울 때 rename 후 `( rm -rf & )`로 돌리면 셸 종료와
+함께 끊긴다는 것도 실측으로 확인해(1.1G가 남았다) 문서 명령을 `setsid nohup`으로 고쳤다.
+
 ## 2026-09-05 (claude) — T-352/T-353: SDK 57 동결 해제 — 진단이 6주간 틀려 있었다
 
 `agent/claude-t352-sdk57-retry`, PR #528(squash `737b0d7a`). 구 PR #486은 대체되어 닫았다.

@@ -7,6 +7,36 @@
 
 ## 2026-09-05
 
+- [x] **T-358** — npm 11을 상시 버전으로 고정하고, 그 과정에서 **T-352가 넣은 lockfile 무결성
+      회귀를 복구**했다(claude, PR #530, squash `b53005b4`).
+
+      **무결성 회귀가 본체였다.** T-352(PR #528)가 lockfile을 재생성하며 `integrity` 보유율을
+      **100%(1143/1143) → 4.8%(53/1106)** 로 떨어뜨린 채 머지됐다. `npm ci`가 패키지 95%를
+      무결성 검증 없이 설치하는 상태였고, **로컬 4개 게이트도 CI 8종도 잡지 못했다** — 트리
+      정합성(사본 개수·버전)만 봤고 lockfile의 *내용 품질*은 아무도 안 봤다.
+      원인은 `--package-lock-only` 플래그가 아니라 **`node_modules`가 존재하는 상태에서 해석한
+      것**이다. npm이 디스크에서 트리를 읽으면(`loadActual`) `resolved`/`integrity`를 적지 않으며,
+      전체 `npm install`로도 `node_modules`가 있으면 똑같이 재현된다 — 플래그가 아니라 순서 문제다.
+      `node_modules`를 치우고 재생성해 **99.5%(1252/1258)** 로 복구했다(남은 6건은
+      `@tailwindcss/oxide-wasm32-wasi`의 번들 하위 의존으로 npm이 원래 `resolved`를 적지 않는 부류).
+      재발 방지로 `scripts/check-lockfile-integrity.mjs`(하한 99%)를 만들어 `web.yml`의
+      `lint-typecheck-build`에 **`npm ci` 전에** 배선했고 `npm run check:lockfile`로도 돌린다.
+      가드가 실제로 실패를 잡는 것을 확인했다(integrity 400개 제거 → `rc=1`, 복구 → `rc=0`).
+      CI 실행 로그에서 `lockfile 무결성 검사 — 1252/1258 (99.5%) / OK`를 확인했다.
+
+      **npm 11 상시**(원래 요청): npm 10.9.7은 lockfile 없이 의존성을 처음부터 풀 때
+      `Cannot read properties of null (reading 'edgesOut')`(`@npmcli/arborist` `#loadPeerSet`)로
+      죽는다. 크래시 지점은 `apps/web`의 `vitest` optional peer 체인이고 모바일과 무관하다.
+      `engines.npm`을 `>=11`로 올리고 CI 5개 job(`web.yml` 2, `mobile.yml` 3)에
+      `npm install -g npm@11.19.1` 스텝을 넣었다. 로컬 전역 npm도 11.19.1로 올렸다 —
+      npm이 자기 자신을 교체하다 `promise-retry`를 잃는 경합이 있어
+      `npx npm@11 install -g npm@11`로 우회해야 했다.
+      `docs/dev-environment.md`에 요구 사항과 **lockfile 재생성 절차**를 남겼다.
+
+      검증: lockfile integrity 99.5%, 네이티브 모듈 단일 사본(SDK 57 / RN 0.86.3), `npm ci` 통과,
+      mobile tsc 0 / lint 0 / expo-doctor 21/21, web tsc 0 / lint 0 error / vitest 165 / build 통과,
+      CI 8종 pass.
+
 - [x] **T-352 / T-353** — 모바일을 **Expo SDK 57 + React Native 0.86.3**으로 올렸다
       (claude, PR #528. 구 PR #486은 대체되어 닫음).
       **EAS Android development 빌드 성공으로 실증**했다 — `b3a52da4`, 19분, APK 산출.
