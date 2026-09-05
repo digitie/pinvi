@@ -2,6 +2,47 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-05 (claude) — T-352/T-353: SDK 57 동결 해제 — 진단이 6주간 틀려 있었다
+
+`agent/claude-t352-sdk57-retry`, PR #528(squash `737b0d7a`). 구 PR #486은 대체되어 닫았다.
+
+**동결 근거가 틀린 진단이었다.** T-353은 "`expo-modules-core`와 SDK 57이 요구하는 reanimated가
+근본적으로 양립 불가능"으로 적혀 8월 26일부터 PR을 묶어 뒀는데, SDK 57은 reanimated 4.x 전체가
+아니라 `bundledNativeModules.json`에서 4.5.1 / worklets 0.10.1을 핀하며 그 조합엔 충돌이 없다.
+SDK 57이 널리 쓰이는데 우리만 깨졌다면 우리 구성 문제라는 사용자의 지적이 정확했다.
+
+실제 원인은 두 겹이었다. (1) `apps/mobile`이 reanimated/worklets를 **선언하지 않아** 전이 의존
+(`expo-router` `*`, `react-native-css-interop` `>=3.6.2`, `react-native-drawer-layout` `>= 2.0.0`)이
+전부 열린 범위였고 npm이 늘 최신을 골랐다. (2) worklets가 0.10→0.12에서
+`WorkletRuntime::executeSync`를 `runSync`로 개명했는데 `expo-modules-core@57.0.13`이 옛 이름을
+불렀다 — **업스트림은 `57.0.15`(2026-09-01 게시)에서 이미 고쳤다.** 8/26 실패 당시엔 57.0.13이
+최신이라 패치가 존재하지 않았을 뿐이고, 그 뒤 아무도 재확인하지 않아 6주 가까이 묶여 있었다.
+
+여기서 배울 것: **"업스트림 대기"는 만료된다.** 대기 결정을 적을 때 재확인 방법과 주기를 함께
+적지 않으면 패치가 나와도 아무도 모른다. 게다가 처음 재확인 때 나는 **peer 범위 메타데이터만
+보고 "변화 없음"이라고 잘못 판단**했다 — 그 선언은 지금도 낡은 채로 남아 있고, 정작 고쳐진 것은
+C++ 호출부였다. 버전 선언이 아니라 **실제 심볼을 봐야 했다.**
+
+고치는 과정에서 **npm workspace hoisting 분열 3건**이 드러났고 셋 다 EAS 빌드를 깨뜨린다.
+- **reanimated 이중 인스턴스.** `nativewind`/`css-interop`이 root로 hoist되면서 npm이 root에
+  4.6.0을 peer로 깔았고 `overrides`는 `apps/mobile` 쪽에만 먹었다. 앱은 4.5.1을, NativeWind는
+  4.6.0을 해석한다. reanimated는 네이티브 상태를 가져 두 벌이면 깨진다. SDK 정본 조합은
+  hoisting상 **도달 불가**여서 최신(4.6.0/0.12.1)으로 통일했다 — `runSync`는 0.10/0.12 양쪽에 있다.
+- **`react-native` 이중 사본.** root에 0.85.3이 남았다(`@react-native/virtualized-lists`가 그
+  버전을 peer로 못박는다). `overrides`로 0.86.3 고정.
+- **`expo`가 `apps/mobile`에만 중첩.** root로 hoist된 `@maplibre/maplibre-react-native`의 config
+  plugin이 `require('expo/config-plugins')`에 실패해 **`expo config`가 죽었다** — `expo prebuild`도
+  같은 경로라 빌드가 시작조차 못 했다. root에 `expo`를 선언해 hoist시켰다. npm이 모바일의 다른
+  네이티브 의존을 이미 전부 root로 올리고 있어 expo만 빠진 것이 오히려 불일치였다.
+
+lockfile은 전면 재생성했다 — 증분 설치로는 SDK 56 그림자 트리가 root에 통째로 남아 가지치기되지
+않는다(재생성 후 3320줄 감소). 그 과정에서 **npm 10.9.7이 lockfile 없는 설치에서 arborist 버그로
+죽는다**는 것도 드러나 `npx npm@11`로 우회했고 T-358로 등록했다.
+
+검증: 네이티브 모듈 전부 단일 사본, SDK 56 잔재 0, `npm ci`(npm 10 = CI 경로) 통과,
+`expo config` rc=0, **expo-doctor 21/21**, mobile tsc/lint 0, web tsc/lint 0 error, web vitest 165,
+CI 8종 pass, **EAS Android development 빌드 FINISHED**(`b3a52da4`, 19분, APK 산출).
+
 ## 2026-09-02 (claude) — T-357: T-356 후속 3건 + 적대적 리뷰 2회차 P0/P1 반영
 
 `agent/claude-t357-admin-followup`, PR #516.
