@@ -159,10 +159,47 @@ uv venv .venv --python 3.12
 uv pip install -e ".[dev]"
 uv pip install "gdal==$(gdal-config --version)"
 
-# Node
+# Node — npm 11이 필요하다 (아래 참고)
 cd /mnt/f/dev/pinvi-codex
 npm install
 ```
+
+### npm은 11 이상이어야 한다 (T-358)
+
+`package.json`의 `engines.npm`이 `>=11`이고 CI도 `npm@11.19.1`로 고정한다.
+npm 10.9.7은 **lockfile 없이** 의존성을 처음부터 풀 때 arborist 버그로 죽는다
+(`Cannot read properties of null (reading 'edgesOut')`). `npm ci`는 npm 10에서도
+동작하지만, 로컬과 CI가 다른 메이저면 `npm install`이 lockfile을 건드릴 때 해석이 갈린다.
+
+```bash
+npm -v                                  # 11.x 여야 한다
+npx -y npm@11 install -g npm@11.19.1    # 올릴 때. npm 자기 자신을 교체하면 경합으로 실패한다
+```
+
+### `package-lock.json`을 다시 만들어야 한다면
+
+**`node_modules`를 먼저 치운다.** 남아 있으면 npm이 디스크에서 트리를 읽어
+(`loadActual`) `resolved`/`integrity`를 lockfile에 적지 않는다. T-352에서 실제로
+무결성 보유율이 **100% → 4.8%** 로 떨어진 채 머지됐고, 그 상태의 `npm ci`는 패키지
+대부분을 무결성 검증 없이 설치한다. 전체 `npm install`을 써도 `node_modules`가 있으면
+똑같이 재현되므로, 플래그 문제가 아니라 **순서 문제**다.
+
+```bash
+# /mnt/f(Windows 마운트)에서 rm -rf는 매우 느리다. rename으로 즉시 비켜 두고 삭제는 뒤로 돌린다.
+TRASH=".nm-trash-$(date +%s)" && mkdir -p "$TRASH"
+for d in node_modules apps/*/node_modules packages/*/node_modules; do
+  [ -d "$d" ] && mv "$d" "$TRASH/$(echo "$d" | tr '/' '_')"
+done
+setsid nohup rm -rf "$TRASH" >/dev/null 2>&1 </dev/null &   # 셸이 끝나도 안 끊기게
+
+rm -f package-lock.json
+npm install --package-lock-only     # node_modules가 없으면 30초 안에 끝난다
+npm run check:lockfile              # 무결성 보유율 검사 (하한 99%)
+npm ci                              # 트리 실체화
+```
+
+`npm run check:lockfile`은 `scripts/check-lockfile-integrity.mjs`이며 CI의
+`lint-typecheck-build`에서도 `npm ci` 전에 돈다.
 
 Linux ext4 worktree를 별도로 쓰는 경우 경로만 `~/pinvi-workspaces/pinvi-codex`로
 바꾼다. 어떤 경로든 commit/push는 그 **동일 Linux worktree**에서 수행한다.
