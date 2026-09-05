@@ -1,5 +1,23 @@
 # resume.md
 
+## 2026-09-05 (claude) — T-358 완료: npm 11 상시 + lockfile 무결성 가드 (PR #530 머지)
+
+npm 11을 상시 버전으로 고정하고, T-352가 넣었던 lockfile 무결성 회귀를 복구했다
+(100% → 4.8% → **99.5%**). 상세는 `docs/tasks-done.md` 2026-09-05와 `docs/journal.md` 같은 날.
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+- **npm은 11 이상이어야 한다.** `engines.npm >= 11`이고 CI도 `npm@11.19.1`로 고정한다.
+  npm 10.9.7은 lockfile 없는 설치에서 arborist 버그로 죽는다.
+- **`package-lock.json`을 재생성할 땐 `node_modules`를 먼저 치운다.** 남아 있으면 npm이 디스크에서
+  트리를 읽어 `integrity`를 적지 않는다. 전체 `npm install`을 써도 마찬가지다 — 플래그가 아니라
+  순서 문제다. 절차는 `docs/dev-environment.md`.
+- **`npm run check:lockfile`이 이걸 지킨다**(하한 99%). CI `lint-typecheck-build`에서 `npm ci`
+  **전에** 돈다. 실패하면 재생성 절차를 밟으라는 뜻이지 하한을 낮추라는 뜻이 아니다.
+
+**다음 한 작업**: T-320 — SDK 57 development APK(EAS `b3a52da4`)를 VWorld 키가 있는 환경에
+설치해 "현재 위치로"가 OS 권한 요청 **전에** 동의를 받는지 확인한다. 실기기/키가 필요해 사람이
+해야 하는 부분이 있다. 그 밖의 열린 작업은 M05 계열.
+
 ## 2026-09-05 (claude) — T-352/T-353 완료: 모바일 SDK 57 (PR #528 머지)
 
 모바일을 **Expo SDK 57 + RN 0.86.3**으로 올리고 **EAS Android development 빌드 성공**으로
