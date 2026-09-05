@@ -66,7 +66,7 @@
 제공한다.
 
 **구성**: `apps/api` (FastAPI), `apps/web` (Next.js), `apps/mobile` (Expo Dev Client
-앱, 활성 — Sprint M-1, SDK 56 / minSdk 24), `apps/etl` (Dagster) + `infra/`, `docs/`. 지도 feature 도메인은 본
+앱, 활성 — Sprint M-1, SDK 57 / minSdk 24), `apps/etl` (Dagster) + `infra/`, `docs/`. 지도 feature 도메인은 본
 저장소가 아니라 **별 저장소**
 `kor-travel-map`이 소유한다. Pinvi ↔ `kor-travel-map`은 최신
 `kor-travel-map` **OpenAPI HTTP 계약**으로 통신한다(ADR-026, API/Admin API
@@ -151,9 +151,9 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
 - 프론트엔드: Next.js 15 (App Router) + React 19 + TanStack Query v5 + Zustand +
   React Hook Form + Zod + shadcn/ui + Tailwind + **`vworld-map-web`**
   (`maplibre-vworld-react` Web 패키지, VWorld + MapLibre GL JS, ADR-046)
-- 모바일: Expo SDK 56 + Expo Router + **Expo Dev Client** + EAS Build + React Native
+- 모바일: Expo SDK 57 + Expo Router + **Expo Dev Client** + EAS Build + React Native
   New Architecture + NativeWind. Expo Go는 사용하지 않고 Android `minSdkVersion`은
-  24 이상이다(ADR-043, SDK 56 요구).
+  24 이상이다(ADR-043, SDK 56+ 요구). SDK 57 + RN 0.86.3 상향은 T-352/T-353.
 - 인프라: PostgreSQL 16 + PostGIS 3.5 + pg_trgm + pgcrypto / RustFS (S3 호환)
   / Docker Compose / N150 16GB 단일 운영 (ADR-067)
 - 패키지 매니저: 백엔드 `uv`, 프론트 `npm`(workspaces)

@@ -15,3 +15,24 @@
 - [ ] T-VN-41C — relay, reconciliation, consumer enable paired acceptance를 완료한다.
 - [ ] T-VN-41F1D-E — 이전 generation 퇴역과 v6/v8 attestation 전환을 완료한다.
 - [ ] T-VN-H49 — standalone backup의 주기 실행, bounded retention, off-box 증거를 완료한다.
+
+## 도구·환경
+
+- [ ] **T-358** — `package-lock.json` 없이 `npm install`이 죽는다. 로컬/CI의 npm 10.9.7에서
+  `TypeError: Cannot read properties of null (reading 'edgesOut')`
+  (`@npmcli/arborist/lib/arborist/build-ideal-tree.js` `#loadPeerSet`)로 실패하며, 크래시 지점은
+  `apps/web`의 `vitest ^4.1.10`이 끌어오는 **optional peer** 체인
+  (`@vitest/browser-playwright@5.0.0`, `jsdom`→`canvas@^3.2.3`)이다. 모바일과 무관하다.
+  기존 lockfile이 이 해석을 이미 담고 있어 지금까지 드러나지 않았다 — 즉 **이 저장소는 현재
+  lockfile 없이는 의존성을 처음부터 풀 수 없다.**
+  T-352에서 lockfile 전면 재생성이 필요해 `npx npm@11 install --package-lock-only`로 우회했다
+  (npm 11에는 해당 arborist 수정이 들어 있다). 산출된 lockfile은 `lockfileVersion: 3`이라
+  npm 10의 `npm ci`와 호환된다.
+  할 일: npm 11 상시 사용(`engines`/CI 고정)으로 갈지, `vitest` optional peer 쪽을 정리할지 정한다.
+  방치하면 다음에 lockfile을 다시 만들어야 할 때 같은 벽에 부딪힌다.
+
+## 모바일
+
+- [ ] **T-320** — 모바일 위치 동의 gate 런타임 확인. VWorld 키가 있는 환경에서 지도 표면을
+  띄우고 "현재 위치로"가 OS 권한 요청 전 동의를 받는지 확인한다(T-310 smoke에서 키 부재로
+  미확인). T-353이 풀려 SDK 57 development APK가 나왔으므로(EAS `b3a52da4`, 2026-09-05) 이제 진행 가능하다. VWorld 키가 있는 환경에서 그 APK를 설치해 확인한다.

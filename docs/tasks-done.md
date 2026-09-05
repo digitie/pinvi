@@ -4,6 +4,44 @@
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.
 
+
+## 2026-09-05
+
+- [x] **T-352 / T-353** — 모바일을 **Expo SDK 57 + React Native 0.86.3**으로 올렸다
+      (claude, PR #528. 구 PR #486은 대체되어 닫음).
+      **EAS Android development 빌드 성공으로 실증**했다 — `b3a52da4`, 19분, APK 산출.
+
+      T-353은 "`expo-modules-core`와 SDK 57이 요구하는 reanimated가 근본적으로 양립 불가능"으로
+      기록돼 8월부터 PR을 동결시켰는데 **그 전제가 틀렸다**. SDK 57은 reanimated 4.x 전체가 아니라
+      `bundledNativeModules.json`에서 4.5.1 / worklets 0.10.1을 핀하며 충돌이 없다. 실제 원인은
+      두 겹이었다: (1) `apps/mobile`이 reanimated/worklets를 선언하지 않아 전이 의존
+      (`expo-router` `*`, `react-native-css-interop` `>=3.6.2`, `react-native-drawer-layout`
+      `>= 2.0.0`)이 전부 열린 범위였고 npm이 늘 최신을 골랐다. (2) worklets가 0.10→0.12에서
+      `WorkletRuntime::executeSync`를 `runSync`로 개명했는데 `expo-modules-core@57.0.13`이 옛
+      이름을 불렀다 — **업스트림은 `57.0.15`(2026-09-01)에서 이미 고쳤고**, 8/26 실패 당시엔
+      57.0.13이 최신이라 패치가 존재하지 않았을 뿐이다. 그 뒤 아무도 재확인하지 않아 6주 가까이
+      동결돼 있었다.
+
+      고치는 과정에서 **npm workspace hoisting 분열 3건**이 드러났고 셋 다 EAS 빌드를 깨뜨린다:
+      **reanimated 이중 인스턴스**(nativewind/css-interop이 root로 hoist되며 npm이 root에 4.6.0을
+      peer로 깔고 `overrides`가 그 자리표시자엔 안 먹어, 앱은 4.5.1·NativeWind는 4.6.0을 해석.
+      SDK 정본 조합은 hoisting상 **도달 불가**라 최신 4.6.0/0.12.1로 통일 — `runSync`는 0.10/0.12
+      양쪽에 있다), **`react-native` 이중 사본**(root에 0.85.3 잔존, `@react-native/virtualized-lists`가
+      그 버전을 peer로 못박음 → `overrides`로 0.86.3 고정), **`expo`가 `apps/mobile`에만 중첩**
+      (root로 hoist된 `@maplibre/maplibre-react-native`의 config plugin이
+      `require('expo/config-plugins')`에 실패해 **`expo config`가 죽었다** → `expo prebuild`도 같은
+      경로라 빌드 시작조차 불가. root에 `expo`를 선언해 hoist).
+
+      lockfile은 전면 재생성했다 — 증분 설치로는 SDK 56 그림자 트리가 root에 통째로 남아
+      가지치기되지 않았다(재생성 후 lockfile 3320줄 감소). 그 과정에서 **npm 10.9.7이 lockfile 없는
+      설치에서 arborist 버그로 죽는다**는 것도 드러나 `npx npm@11`로 우회했고 **T-358**로 등록했다.
+      `expo.install.exclude`로 의도된 편차를 명시했다(react/react-dom은 웹과 공유,
+      reanimated/worklets는 위 hoisting 사유, typescript는 TS 6이 웹·API까지 걸리는 별개 결정).
+
+      검증: 네이티브 모듈 전부 단일 사본, SDK 56 잔재 0, `npm ci`(npm 10 = CI 경로) 통과,
+      `expo config` rc=0, **expo-doctor 21/21**, mobile tsc/lint 0, web tsc/lint 0 error,
+      web vitest 165, **CI 6종 pass**, **EAS Android development 빌드 FINISHED**.
+
 ## 2026-09-02
 
 - [x] **T-357** — T-356 후속 3건을 마무리했다(claude, PR #516, squash `301aafe4`).
