@@ -1,5 +1,29 @@
 # resume.md
 
+## 2026-09-05 (claude) — T-352/T-353 완료: 모바일 SDK 57 (PR #528 머지)
+
+모바일을 **Expo SDK 57 + RN 0.86.3**으로 올리고 **EAS Android development 빌드 성공**으로
+실증했다(`b3a52da4`, 19분, APK). 8월부터 동결돼 있던 PR #486은 대체되어 닫았다.
+상세는 `docs/tasks-done.md` 2026-09-05와 `docs/journal.md` 같은 날 엔트리.
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+- **`apps/mobile`의 reanimated/worklets는 이제 명시 선언이다.** 전에는 전이 의존으로만 떠 있어
+  npm이 늘 최신을 골랐고 그게 T-353의 1차 원인이었다. 버전을 바꿀 땐 root `overrides`의
+  `react-native` / `react-native-reanimated` / `react-native-worklets`도 **같이** 움직여야 한다 —
+  한쪽만 바꾸면 root와 `apps/mobile`이 갈려 네이티브 모듈이 두 벌이 된다.
+- **root `package.json`이 `expo`를 의존한다.** 이상해 보이지만 의도적이다. 없으면 npm이 expo를
+  `apps/mobile`에만 중첩시키고, root로 hoist된 `@maplibre/maplibre-react-native`의 config plugin이
+  `require('expo/config-plugins')`에 실패해 **`expo config`/`expo prebuild`가 죽는다.**
+- **`expo-doctor`의 버전 편차는 `expo.install.exclude`로 명시된 의도적 편차다**(react/react-dom은
+  웹과 공유, reanimated/worklets는 hoisting 사유, typescript는 TS 6이 별개 결정). 지우면 21/21이
+  깨진다.
+- **lockfile을 다시 만들어야 하면 `npx npm@11`을 쓴다.** npm 10.9.7은 lockfile 없는 설치에서
+  arborist 버그로 죽는다(T-358). 산출물은 `lockfileVersion: 3`이라 npm 10의 `npm ci`와 호환된다.
+
+**다음 한 작업**: T-320 — SDK 57 development APK가 나왔으므로 VWorld 키가 있는 환경에서
+설치해 "현재 위치로"가 OS 권한 요청 **전에** 동의를 받는지 확인한다. 그 밖의 열린 작업은
+T-358(npm 설치 경로)과 M05 계열.
+
 ## 2026-09-02 (claude) — T-357 admin 후속 완료 (PR #516 머지)
 
 T-356 후속 3건을 PR #516으로 머지했다(squash `301aafe4`): 모달 경계 eslint 가드,
