@@ -67,6 +67,17 @@ jobs:
           node-version: '22'
           cache: npm
 
+      # T-358 — npm 10.9.7은 lockfile 없는 설치에서 arborist 버그(`edgesOut`)로 죽는다.
+      # `npm ci`만 쓰는 job도 로컬(npm 11)과 해석이 갈리지 않도록 같은 버전으로 맞춘다.
+      - name: Pin npm 11.19.1
+        run: npm install -g npm@11.19.1
+
+      # T-358 — lockfile을 node_modules가 있는 상태에서 재생성하면 npm이 디스크에서
+      # 트리를 읽어 `integrity`를 적지 않는다. T-352에서 실제로 보유율이 100% -> 4.8%로
+      # 떨어진 채 머지됐고 어떤 게이트도 잡지 못했다. lockfile만 읽으므로 설치 전에 둔다.
+      - name: Check lockfile integrity coverage
+        run: node scripts/check-lockfile-integrity.mjs
+
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
@@ -144,6 +155,11 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+
+      # T-358 — npm 10.9.7은 lockfile 없는 설치에서 arborist 버그(`edgesOut`)로 죽는다.
+      # `npm ci`만 쓰는 job도 로컬(npm 11)과 해석이 갈리지 않도록 같은 버전으로 맞춘다.
+      - name: Pin npm 11.19.1
+        run: npm install -g npm@11.19.1
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund

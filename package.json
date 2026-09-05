@@ -20,6 +20,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "check:lockfile": "node scripts/check-lockfile-integrity.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,js,mjs,cjs,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,cjs,json,md}\""
   },
@@ -41,6 +42,6 @@
   },
   "engines": {
     "node": ">=20",
-    "npm": ">=10"
+    "npm": ">=11"
   }
 }
