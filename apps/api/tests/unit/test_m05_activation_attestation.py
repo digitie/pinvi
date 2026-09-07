@@ -465,7 +465,11 @@ def test_m05_map_checkout_allowlist_covers_every_surface_revision() -> None:
     # 같은 표면을 쓴다. 다른 표면으로 배선하면 v1 계약(표면마다 revision이 다를 수
     # 있다)에서 두 단계가 서로 모순된 요구를 한다(2차 적대 리뷰).
     assert source.count('map_admin_revision=surface_revisions["admin"],') == 4
-    assert "expected_revision=map_source_revision," not in source
+    assert source.count("expected_revision=map_admin_revision,") == 3
+    # `map_source_revision`은 checkout HEAD 대조에도 쓰인다 — 그 자리는 정당하므로
+    # 문자열 존재 자체를 금지하지 않는다. 결박할 것은 **세 컨테이너**가 admin 표면을
+    # 쓴다는 사실 하나다(종전 단언은 그 구분을 못 해 CI에서 red가 났다).
+    assert "\n    map_admin_revision: str,\n" in source
 
 
 def test_playwright_image_reference_accepts_digest_only_or_tagged_digest() -> None:
