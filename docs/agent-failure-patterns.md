@@ -14,6 +14,7 @@
 | `node`, `npm`, `rg`, `git`이 `.exe`/`.cmd`로 잡힘                      | Windows shim 오염                                               | 해당 셸에서 중지하고 Linux 도구로 교정     |
 | PowerShell → WSL → SSH → Docker → Python quote가 반복 실패             | 여러 shell이 따옴표/escape를 재해석                             | Linux 셸에서 stdin script 방식 사용        |
 | 통합 테스트가 "table does not exist" / "another operation in progress" | async alembic commit 또는 pytest-asyncio loop/pool 문제         | env.py commit, 함수 스코프 엔진 + NullPool |
+| `file:` tarball 내용을 바꿔도 `npm install`이 lockfile `integrity`를 그대로 둠 | 기존 lockfile 항목이 "이미 충족됨"으로 판단돼 재해시를 건너뜀 | `package-lock.json` 삭제 후 처음부터 재설치(패턴 F) |
 
 ## 2. 패턴 A — worktree 포인터가 Windows 경로로 남음
 
@@ -161,7 +162,45 @@ Docker path가 모두 달라져 one-shot ledger만 소진할 수 있다.
    실패를 검사하고 raw key·stderr를 출력하지 않는다.
 4. candidate ledger를 claim하기 전에 local fallback 회귀와 전문 리뷰를 완료한다.
 
-## 9. 표준 fallback 순서
+## 9. 패턴 F — 로컬 `file:` tarball 의존성 갱신이 lockfile에 반영 안 됨
+
+### 증상
+
+vendored `file:` tarball(예: `apps/web/vendor/*.tgz`)의 실제 파일을 새 내용으로
+덮어써도, `npm install`(플래그 무관 — `--package-lock-only`도, 일반 설치도 동일)이
+`package-lock.json`의 `integrity`를 갱신하지 않는다. `node_modules`를 지우고
+다시 설치해도, `npm cache clean --force`로 npm 캐시를 비워도 재현된다. 오직
+`npm ci`만 실제 파일을 열어 해시를 계산하다가 lockfile과 불일치를 발견하고
+`EINTEGRITY`로 실패한다 — 즉 문제를 드러내지만 스스로 고치지는 않는다.
+
+### 원인
+
+`package-lock.json`이 이미 그 `file:` 의존성에 대한 만족스러운 항목(같은 패키지명 +
+같은 specifier 문자열)을 갖고 있으면, npm은 "이미 충족됨"으로 판단해 실제 파일을
+다시 열어 해시를 계산하지 않고 기존 lockfile의 `integrity` 값을 그대로 들고 간다.
+이 지름길은 `node_modules` 유무나 npm 캐시 상태와 무관하다 — lockfile 자체가
+근거이기 때문이다.
+
+### 재발 방지
+
+`package-lock.json`을 완전히 지우고(단순히 `node_modules`만 지우는 것으로는 안 된다)
+lockfile 없는 상태에서 처음부터 다시 설치해야 한다. 이래야 npm이 기존 lockfile을
+참조할 수 없어 모든 `file:` 의존성을 실제로 열어 해시를 새로 계산한다.
+
+```bash
+rm -f package-lock.json
+# node_modules도 없는 상태여야 한다 (T-358 절차 — docs/dev-environment.md)
+npm install
+node scripts/check-lockfile-integrity.mjs   # 100%에 가까워야 정상
+npm ci                                       # EINTEGRITY 없이 통과해야 검증 완료
+```
+
+교체 직후 `sha512sum`(또는 `hashlib.sha512`)으로 디스크 위 tgz 파일의 실제 해시를
+구해 `package-lock.json`의 `integrity`와 직접 대조하면, 이 지름길이 다시 발동했는지
+바로 확인할 수 있다. `npm view`류 명령이나 `--package-lock-only`만으로는 이 문제를
+발견할 수 없다는 점에 주의 — 그 경로들은 전부 침묵한 채 stale 값을 유지한다.
+
+## 10. 표준 fallback 순서
 
 1. **Git/branch/commit**: Linux git + Linux worktree 포인터.
 2. **탐색**: Linux native `rg`, `sed`, `git`, CodeGraph.

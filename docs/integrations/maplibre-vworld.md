@@ -30,11 +30,50 @@ MapLibre GL JS 채택 결정은 유지하되, 기존 Web 의존성 `maplibre-vwo
   "dependencies": {
     "vworld-map-core": "file:../mobile/vendor/vworld-map-core-1.0.0.tgz",
     "vworld-map-web": "file:vendor/vworld-map-web-1.0.0.tgz",
-    "maplibre-gl": "^5.24.0",
+    "maplibre-gl": "^6.9.0",
     "zod": "^4.4.3"
   }
 }
 ```
+
+### 1.1 vendored tarball 갱신 절차
+
+`maplibre-vworld-react` 저장소(`F:\dev\maplibre-vworld-react`)는 npm에 발행하지
+않으므로, 최신화는 항상 다음 순서로 한다(2026-09-11, T-VWORLD-V6 기준 확립):
+
+```bash
+# 1) trunk를 건드리지 않고 origin/main만 클린 클론해서 빌드한다
+#    (trunk 워킹트리는 다른 세션의 WIP로 dirty할 수 있다 — 커밋된 origin/main이
+#    "최신 레포"의 기준이다)
+git clone --branch main https://github.com/digitie/maplibre-vworld-react.git /tmp/mvr-build
+cd /tmp/mvr-build && npm install && npm run build && npm run typecheck && npm run lint && npm run test
+
+# 2) 각 패키지를 pack해서 tarball 생성
+mkdir -p /tmp/mvr-tarballs
+(cd packages/vworld-map-core && npm pack --pack-destination /tmp/mvr-tarballs)
+(cd packages/vworld-map-web  && npm pack --pack-destination /tmp/mvr-tarballs)
+(cd packages/vworld-map-rn   && npm pack --pack-destination /tmp/mvr-tarballs)
+
+# 3) Pinvi vendor 디렉터리에 같은 파일명으로 덮어쓴다 (버전이 1.0.0에 고정돼 있어도 무방 —
+#    npm이 신경 쓰는 건 tarball 내용의 해시지 파일명이 아니다)
+cp /tmp/mvr-tarballs/vworld-map-core-1.0.0.tgz apps/mobile/vendor/
+cp /tmp/mvr-tarballs/vworld-map-rn-1.0.0.tgz   apps/mobile/vendor/
+cp /tmp/mvr-tarballs/vworld-map-web-1.0.0.tgz  apps/web/vendor/
+
+# 4) package-lock.json을 완전히 지우고 node_modules 없는 상태에서 처음부터 재설치한다.
+#    `npm install`/`--package-lock-only`를 lockfile이 남은 채로 돌리면 npm이 file:
+#    tarball의 integrity를 재계산하지 않고 그대로 둔다(캐시를 지워도 재현) —
+#    `docs/agent-failure-patterns.md` §9 "패턴 F" 참고.
+rm -f package-lock.json
+npm install
+node scripts/check-lockfile-integrity.mjs   # 100%에 가까워야 정상
+npm ci                                       # EINTEGRITY 없이 통과해야 검증 완료
+```
+
+peer dependency(`maplibre-gl`, `@maplibre/maplibre-react-native` 등)의 요구 범위가
+바뀌었으면 Pinvi `apps/web`·`apps/mobile`의 `package.json`도 함께 올리고, `npm run
+typecheck`로 breaking change(예: named/default export 전환)를 잡는다. 지도는 시각적
+핵심 기능이므로 로컬 게이트 통과 후 **N150 e2e(`test:e2e:map` 포함)까지 통과한 뒤 머지**한다.
 
 ## 2. 정책 (Kakao 대비 변경점)
 

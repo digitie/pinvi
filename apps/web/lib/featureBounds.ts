@@ -6,7 +6,8 @@
  * 밖까지 늘어난 viewport 는 한국 범위로 clamp 해서 422 를 피한다.
  */
 
-import type maplibregl from 'maplibre-gl';
+// maplibre-gl v6부터 default export가 사라지고 named export만 남았다(named import로 전환).
+import type { LngLatBounds } from 'maplibre-gl';
 
 export const KOREA_BOUNDS = {
   lngMin: 124,
@@ -55,7 +56,7 @@ export function bboxPrecisionForZoom(zoom: number): number {
 }
 
 /** maplibre 지도 경계 → bbox 파라미터. */
-export function boundsToBbox(bounds: maplibregl.LngLatBounds, zoom?: number): string {
+export function boundsToBbox(bounds: LngLatBounds, zoom?: number): string {
   const precision = zoom == null ? 5 : bboxPrecisionForZoom(zoom);
   return toBboxParam(
     bounds.getWest(),
