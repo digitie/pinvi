@@ -1,5 +1,23 @@
 # resume.md
 
+## 2026-09-11 (claude) — maplibre-vworld-react 최신화 완료 (PR #540 머지)
+
+`maplibre-vworld-react` vendored tarball을 최신 `origin/main`으로 갱신했다(maplibre-gl
+v5 → v6). CI가 로컬에서 안 보이던 lockfile 불일치 2건을 잡아 함께 고쳤다. 상세는
+`docs/journal.md` 2026-09-11 엔트리.
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+- **vendored tarball 갱신 절차는 `docs/integrations/maplibre-vworld.md` §1.1에 문서화돼 있다.**
+  트렁크(`F:\dev\maplibre-vworld-react`)가 dirty해도 건드리지 않고 clean clone으로 빌드한다.
+- **lockfile을 크게 바꿀 땐 `npm ci`(npm 11)만으로 안심하지 않는다.** Docker build(npm 10,
+  `apps/web/Dockerfile`)가 더 엄격하게 self-consistency를 검증한다 — 로컬에서
+  `docker build --file apps/web/Dockerfile --target deps ...`로 값싸게 먼저 걸러낼 수 있다.
+- **N150에 prod pinvi 스택이 host network mode로 떠 있다.** 격리 e2e를 돌릴 때 기본
+  `PLAYWRIGHT_BASE_URL`(12805)이 prod와 충돌한다 — 다른 포트(예: 19805)로 override한다.
+
+**다음 한 작업**: N150 prod 배포(`ktdctl pinvi-pair rebuild-pinned --confirm`) — 진행 중.
+그 밖의 열린 작업은 T-320과 M05 계열.
+
 ## 2026-09-05 (claude) — T-358 완료: npm 11 상시 + lockfile 무결성 가드 (PR #530 머지)
 
 npm 11을 상시 버전으로 고정하고, T-352가 넣었던 lockfile 무결성 회귀를 복구했다
