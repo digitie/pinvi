@@ -2,6 +2,51 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-11 (claude) — maplibre-vworld-react 최신화 (maplibre-gl v6), CI가 lockfile 버그 2건을 잡음
+
+`agent/claude-mvr-update`, PR #540(squash `ecf65046`).
+
+`maplibre-vworld-react`(`F:\dev\maplibre-vworld-react`)의 vendored tarball(`vworld-map-core`/
+`vworld-map-web`/`vworld-map-rn`)을 최신 `origin/main`으로 갱신했다. 트렁크 자체는 다른 세션의
+미커밋 WIP(54개 파일, 5290/5290 삽입·삭제 — line-ending 정규화로 보이는 전체 파일 치환)로
+dirty해서 건드리지 않고, 별도 clean clone에서 `origin/main`을 빌드해 tarball을 만들었다.
+
+실제 변화의 핵심은 **`vworld-map-web`이 CJS → ESM으로 전환**되며 peer `maplibre-gl`이
+`*` → `^6.0.0`으로 좁혀진 것. Pinvi 소비 코드는 이미 전부 `next/dynamic` + `import()`만 써서
+전환 자체의 영향은 없었다(CJS `require()` 사용처 0건). `apps/web/lib/featureBounds.ts`가 v6에서
+사라진 `maplibre-gl` default export에 의존하고 있어 named import로 전환.
+
+**첫 커밋은 로컬에서 전부 통과했지만 CI의 `docker-image` job(Docker `node:22-bookworm-slim`이
+쓰는 npm 10)이 `npm ci`로 실제 lockfile 일관성을 검증하자 실패했다** — 로컬 npm 11의 `npm ci`는
+같은 lockfile을 그냥 통과시켰다. 두 버그 모두 "npm 11은 관대, npm 10/Docker build만 엄격히
+거부"하는 유형이었다.
+
+1. `@react-native/metro-config`/`babel-preset`/`metro-babel-transformer`가 react-native
+   본체(0.86.3)와 다른 버전(0.87.1)으로 top-level에 떠 있었다. react-native의 중첩
+   `community-cli-plugin`이 peer로 정확히 `0.86.3`을 요구하는데 불일치 — T-352에서 이미
+   `react-native`/`reanimated`/`worklets`에 적용했던 root override 패턴을 이 3개에도 확장해
+   고정.
+2. `@types/react`가 apps/web(`^19.0.0`)/apps/mobile(`~19.2.4`) 사이에서 사본 2개(19.2.18 /
+   19.3.0)로 갈라져, `@base-ui/react`를 쓰는 admin dialog에서 두 사본의 `Key` 타입이 구조적으로
+   달라 `tsc`가 "unique symbol is not assignable to Key"로 깨졌다. root override로
+   19.2.18 단일 사본 고정.
+
+두 버그 다 CI 왕복 없이 **로컬 `docker build`로 직접 재현·검증**했다(같은 베이스 이미지, 같은
+npm 10) — 최종 프로덕션 이미지가 빌드·기동·200 응답까지 확인됐다.
+
+배운 것: **로컬 npm 11로 통과했다고 lockfile이 실제로 self-consistent인 것은 아니다.**
+Docker build(npm 10)가 훨씬 엄격한 검증기 역할을 했고, 이 검증을 로컬에서도 값싸게(같은
+Dockerfile로 `--target deps`만 먼저 빌드) 돌릴 수 있다는 것도 확인했다 — 다음에 lockfile을
+크게 바꿀 때는 CI에 먼저 올리기 전에 로컬 `docker build`로 한 번 더 걸러낸다.
+
+검증: lockfile integrity 100%, `npm ci`(npm 11) 통과, 로컬 `docker build`(npm 10) 통과 + 이미지
+부팅 200 확인, web tsc/lint(0 error)/vitest(165)/build 통과, mobile tsc/lint/
+expo-doctor(21/21) 통과, CI 8종 pass, **N150 격리 e2e 169 passed / 3 skipped / 0 failed**
+(map-shell.e2e.ts 포함). N150에 prod pinvi 스택(`pinvi-web-latest` 등)이 host network mode로
+떠 있어 격리 e2e의 기본 webServer 포트(12805)와 충돌 — `PLAYWRIGHT_BASE_URL`을 19805로 돌려
+회피(prod 재시작 없음 확인). 이 충돌은 T-356/357 시점엔 없었다 — 그 사이 N150에 prod pinvi가
+실제로 배포됐기 때문이다.
+
 ## 2026-09-05 (claude) — T-358: npm 11 상시 + 내가 넣은 lockfile 무결성 회귀 복구
 
 `agent/claude-t358-npm11`, PR #530(squash `b53005b4`).
