@@ -2,6 +2,35 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-15 (claude) — apps/etl: python-kasi-api async-only 통합 반영
+
+`agent/claude-kasi-async-unify`.
+
+`python-kasi-api`(pinvi가 직접 소비하는 유일한 `python-*-api` 패키지 — 나머지는
+전부 `kor-travel-map`이 provider 통합으로 소유한다)가 sync/async 클라이언트 두
+벌을 `KasiClient` 하나(async-only)로 통합하며 `AsyncKasiClient` export를
+없앴다(2026-09-14, "Unify KASI async-only clients" #6, `bc8fd49`). `apps/etl/
+pinvi/etl/resources.py`의 `KasiResource.create_client()`가 그 이름을 import해서
+Dagster code location이 실제로 실행되면 `ImportError`로 죽는 상태였다.
+
+- import를 `AsyncKasiClient` → `KasiClient`로 교체. 생성자 kwarg
+  (`service_key`/`timeout`/`retries`/`max_rps`)는 그대로라 이름만 바뀌면 된다.
+- `apps/etl/pyproject.toml`의 의존성을 `@main`(floating) → 정확한 40자 SHA로
+  고정 — `kor-travel-map`의 나머지 `python-*-api` pin들과 같은 재현성 관례를
+  맞췄다. `apps/etl`엔 lock file이 없어(`pip install -e .`만 씀) 이 문자열
+  자체가 유일한 고정점이다.
+
+**`test_definitions.py::test_definitions_load`가 이 회귀를 못 잡는다는 것도
+확인했다** — Dagster `Definitions`는 resource를 등록만 하고 `create_client()`를
+실제로 호출하지 않는다. 되돌리기 검증을 두 번 했다: 1차는 이 기존 테스트로
+"통과"가 나와 회귀 확인을 오인할 뻔했고, `create_client()`를 직접 호출하는
+새 테스트(`test_resources.py`)로 다시 검증하자 되돌린 상태에서 실제
+`ImportError`가 났다. 그 테스트를 남겨 같은 사각지대를 재발 방지한다.
+
+검증: pytest 20 passed(신규 테스트 포함), ruff 0, mypy — 되돌린 상태와 비교해
+내 변경이 관련 에러 1건(`Module "kasi" has no attribute "AsyncKasiClient"`)만
+없앴고 나머지 9건은 무관한 기존 에러임을 확인.
+
 ## 2026-09-11 (claude) — maplibre-vworld-react 최신화 (maplibre-gl v6), CI가 lockfile 버그 2건을 잡음
 
 `agent/claude-mvr-update`, PR #540(squash `ecf65046`).
