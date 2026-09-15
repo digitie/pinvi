@@ -1,5 +1,26 @@
 # resume.md
 
+## 2026-09-15 (claude) — apps/etl: python-kasi-api async-only 통합 (PR 대기)
+
+`python-kasi-api`가 `AsyncKasiClient`를 없애고 `KasiClient`(async-only)로
+통합해, `apps/etl`의 `KasiResource.create_client()`가 Dagster 실행 시
+`ImportError`로 죽는 상태였다. import를 고치고 의존성을 floating `@main`에서
+정확한 SHA(`bc8fd49...`)로 고정했다. 상세는 `docs/journal.md` 같은 날 엔트리.
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+- **pinvi가 직접 소비하는 `python-*-api`는 `python-kasi-api` 하나뿐이다.**
+  나머지(`python-krforest-api`, `python-visitkorea-api` 등)는 전부
+  `kor-travel-map`이 provider 통합으로 소유한다 — pinvi에서 건드리지 않는다.
+- **`apps/etl`엔 lock file이 없다.** `pyproject.toml`의 git dependency 문자열
+  자체(`@<sha>`)가 유일한 재현성 고정점이다. Dockerfile도 `pip install -e .`만
+  쓴다.
+- **`test_definitions.py`는 resource의 `create_client()`를 실제로 호출하지
+  않는다** — 새 `test_resources.py`가 그 사각지대를 메운다.
+
+**다음 한 작업**: PR 머지 후 N150 prod 배포. 배포는 `pinvi-pair rebuild-pinned`
+경로를 쓴다(T-VN-...-쪽 pin registry 작업은 별도 세션 기록 참고 — pin 시스템
+사용법은 이미 확인됨).
+
 ## 2026-09-11 (claude) — maplibre-vworld-react 최신화 완료 (PR #540 머지)
 
 `maplibre-vworld-react` vendored tarball을 최신 `origin/main`으로 갱신했다(maplibre-gl

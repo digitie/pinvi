@@ -19,7 +19,13 @@ class PinviDatabaseResource(ConfigurableResource[Any]):
 
 
 class KasiResource(ConfigurableResource[Any]):
-    """`python-kasi-api` async client resource."""
+    """`python-kasi-api` async client resource.
+
+    라이브러리가 `AsyncKasiClient`/`KasiClient`(sync) 두 벌을 `KasiClient` 하나로
+    통합(async-only)하면서 `AsyncKasiClient` export가 사라졌다(2026-09-14,
+    "Unify KASI async-only clients" 커밋). 생성자 kwarg(`service_key`/`timeout`/
+    `retries`/`max_rps`)는 그대로라 이름만 바꾸면 된다.
+    """
 
     service_key: str
     timeout: float = 10.0
@@ -27,9 +33,9 @@ class KasiResource(ConfigurableResource[Any]):
     max_rps: float = 5.0
 
     def create_client(self) -> Any:
-        from kasi import AsyncKasiClient
+        from kasi import KasiClient
 
-        return AsyncKasiClient(
+        return KasiClient(
             service_key=self.service_key,
             timeout=self.timeout,
             retries=self.retries,
