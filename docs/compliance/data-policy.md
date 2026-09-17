@@ -86,11 +86,10 @@ v1 `docs/data-sources.md` + `skills/data-policy.ko.md` 정리.
 다음 provider는 본 저장소가 직접 호출하지 않음 — `kor-travel-map.providers`가
 호출 + raw 적재:
 
-- 기상청 (`python-kma-api`): 단기 / 중기 / 실황 / 특보
 - 한국관광공사 (`python-visitkorea-api`): 축제 / 관광지 / 국가유산 후보
 - 한국석유공사 (`python-opinet-api`): 유가
-- 한국도로공사 (`python-krex-api`): 휴게소 / 휴게소 날씨
-- 환경공단 (`python-airkorea-api`): 대기질
+- 한국도로공사 (`python-krex-api`): 휴게소
+- 환경공단 (`python-airkorea-api`): 대기질(장소 상세 표시)
 - 행정안전부 (`python-krmois-api`): 인허가 LOCALDATA
 - 국립해양조사원 (`python-khoa-api`): 해양 지수 / 해수욕장
 - 국립공원공단 (`python-knps-api`): 트래킹 / 안전
@@ -103,34 +102,68 @@ v1 `docs/data-sources.md` + `skills/data-policy.ko.md` 정리.
 제공한다. kor-travel-map provider TOS 준수는 kor-travel-map 책임이고, KASI 직접 호출은
 Pinvi 책임이다.
 
+### 3-1. 날씨 (`kor-travel-weather` 소유, ADR-068 — 2026-09-17 이관 완료, T-360~365)
+
+**날씨는 더 이상 `kor-travel-map`을 경유하지 않는다.** `kor-travel-weather`
+공개 REST(`docs/integrations/kor-travel-weather.md`)가 아래 provider를 직접
+호출·정규화하며, 본 저장소는 그 결과값만 소비한다(원천 raw 파싱을 직접
+작성하지 않는다 — 금지룰 3과 동일한 위임 구조, 위임처만 바뀌었다).
+
+provider 우선순위(동률 시 기상청 계열 우선, `docs/decisions.md` ADR-068 결정
+10):
+
+| 순위 | 기관/서비스                       | provider key           | 소재            | 용도                       |
+| ---- | ---------------------------------- | ----------------------- | --------------- | -------------------------- |
+| 1    | 기상청                             | `python-kma-api`        | 국내(공공기관)  | 단기/중기/실황/특보        |
+| 2    | 환경공단                           | `python-airkorea-api`   | 국내(공공기관)  | 대기질(습도 등 보조 지표)  |
+| 3    | 국립해양조사원                     | `python-khoa-api`       | 국내(공공기관)  | 해양 지수                  |
+| 4    | 산림청                             | `python-krforest-api`   | 국내(공공기관)  | 산악/휴양림 인근 관측      |
+| 5    | 한국도로공사                       | `python-krex-api`       | 국내(공공기관)  | 휴게소 인근 관측           |
+| 6    | OpenWeatherMap                     | `openweathermap`        | **국외(상용)**  | 기상청 격자 밖 지점 예보   |
+| 7    | WeatherAPI.com                     | `weatherapi`             | **국외(상용)**  | 기상청 격자 밖 지점 예보   |
+| 8    | Open-Meteo                         | `open_meteo`             | **국외(상용)**  | 기상청 격자 밖 지점 예보   |
+| 9    | wttr.in                            | `wttr_in`                 | **국외(상용)**  | 기상청 격자 밖 지점 예보   |
+
+> **소재국 표기에 대한 주의**: 위 국외 상용 4개 provider의 정확한 데이터
+> 처리 법인·소재국은 각 서비스 자체 약관/개인정보처리방침을 원문으로 대조해
+> 확정해야 한다(변호사 검토 필요 — `docs/legal/privacy-policy.md`의 다른
+> 위탁자 항목과 동일한 원칙). 이 표는 "국내 공공기관이 아니다 = 국외 이전이
+> 발생한다"는 사실만 확정하며, 국가명을 단정하지 않는다.
+
+**2026-09-17 실측**: 전국 KMA 격자 앵커가 `e2e-seoul` 1개뿐이라, 대부분 지점의
+현재 날씨는 1~5(국내 공공기관)가 아니라 6~9(국외 상용)에서 온다. 순위 1~5가
+비어 있을 때만 6~9가 노출되는 게 아니라, **1~5가 애초에 그 지점에 커버리지가
+없어** 사실상 6~9가 기본값이 되는 지점이 대다수다(게이트 G-1, T-365 cutover
+차단 사유로 남아 있음 — provider 구성 자체는 이미 확정).
+
+**2026-09-17 사용자 결정으로 추가 확정**: `kor-travel-map`은 weather 관련
+기능을 `kind='weather'` feature type 포함해 완전히 제거할 예정이다 —
+weather는 이 표(§3-1)가 유일한 정본이 되고, §3의 `kor-travel-map` 목록에는
+더 이상 날씨가 등장하지 않는다(ADR-068 결정 11).
+
+**표시 정책(사용자 결정 2026-09-17)**: 국외 상용 provider 값도 표시하되,
+**weather 카드에 출처(provider)를 명시**해 사용자가 기상청 계열 값과 상용
+값을 구분할 수 있게 한다 — `WeatherMetric.provider` 필드를 그대로 UI에
+노출한다(`TripWeatherSummary.tsx`, `docs/integrations/kor-travel-weather.md`
+§7-2).
+
 처리방침에는 위탁자 명시:
 
 - "지도 / 행정구역 데이터: 한국토지정보공사 (VWorld), 행정안전부 (도로명주소
   Juso)"
 - "여행 정보: 한국관광공사 (TourAPI), 문화체육관광부, 산림청, 국가유산청, 국립공원공단"
-- "날씨: 기상청"
+- "날씨: 기상청, 환경공단, 국립해양조사원, 산림청, 한국도로공사(이상 국내
+  공공기관) + OpenWeatherMap, WeatherAPI.com, Open-Meteo, wttr.in(국외 상용,
+  §3-1 표 참조) — 모두 `kor-travel-weather` 경유"
 - "유가: 한국석유공사"
 - "휴게소: 한국도로공사"
 - "해양: 국립해양조사원"
 - "대기질: 환경공단"
 - "천문/특일: 한국천문연구원"
 
-(모두 국내 정부/공공기관 — 국외 이전 의무 발생 안 함)
-
-> ⚠️ **날씨 소스 이관 시 위 두 줄이 사실과 어긋난다 (ADR-068, 게이트 G-2)**.
-> `kor-travel-weather`는 기상청 외에 OpenWeatherMap·WeatherAPI·wttr.in·Open-Meteo 등
-> **국외 상용 provider**의 값을 함께 담는다. 2026-09-17 실측 기준 전국 KMA 격자 앵커가
-> 1개뿐이라, 지금 전환하면 대부분 지점의 날씨가 국외 사업자에서 온다.
->
-> **비KMA provider 값을 사용자에게 표시하기 전에** "날씨: 기상청" 기재와 "국외 이전
-> 의무 발생 안 함" 선언을 재작성하고 국외 이전 판단을 마쳐야 한다. 이것이 cutover
-> 게이트 G-2이며, 기술 판단이 아니라 법적 의무다.
->
-> **사용자 결정(2026-09-17)**: 표시하지 않는 쪽이 아니라 **처리방침을 갱신하고
-> 표시하되 카드에 출처(provider)를 명시**하는 쪽으로 간다. 순서 고정 —
-> ① 본 문서 재작성 → ② 출처 표기 UI → ③ 표시 허용. 작업은 **T-366**이며
-> cutover(T-365)보다 **먼저** 끝나야 한다.
-> 설계 = [`docs/integrations/kor-travel-weather.md`](../integrations/kor-travel-weather.md) §1.2b·§7-2.
+(날씨의 국외 상용 provider 4개를 **제외**하면 모두 국내 정부/공공기관 —
+국외 이전 의무 발생 안 함. **날씨는 국외 이전이 발생한다** — 국외 이전
+위탁자 표는 `docs/compliance/pipa.md` §4.3에 별도 기재.)
 
 ## 4. 데이터 캐싱 정책
 
