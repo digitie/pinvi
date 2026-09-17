@@ -1,5 +1,30 @@
 # resume.md
 
+## 2026-09-17 (claude) — T-361(P2) 완료, T-362(P3) 대기
+
+`app.weather_location_links` + `resolve_weather_location`을 만들었다. 반경 20→50→100km
+확대, `source_location_ids` 전체 dedupe 저장, 좌표 변경 시 stale 먼저 커밋 후 재해석.
+**아직 어떤 라우터도 안 쓴다.**
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+- `kor-travel-weather`의 `/resolve`는 반경 내 매치가 없으면 **404**를 준다 —
+  OpenAPI 스펙에는 선언 안 돼 있는 실제 동작이다(재vendor해도 이 사실은 스펙에 안
+  나온다). `KorTravelWeatherNotFound`로 이미 매핑돼 있으니 그대로 잡아 쓰면 된다.
+- `WeatherLocationNoData`(반경 100km까지도 매치 없음)는 캐시 행을 **만들지 않는다** —
+  같은 feature_id를 또 조회하면 3개 반경을 처음부터 다시 시도한다. 부정 캐싱은
+  일부러 안 넣었다(요청받지 않았고, 실측상 커버리지 자체는 충분해 자주 발생할 상황이
+  아니다).
+- `tests/integration`을 이 worktree에서 돌릴 땐
+  `PATH="<repo>/apps/api/.venv/bin:$PATH"`를 앞에 붙여야 한다 — 안 그러면 `alembic`
+  실행 파일을 못 찾고 **전부** 즉시 실패한다(내가 만들기 전부터 있던 문제, CI는
+  영향 없음).
+
+**다음 한 작업**: T-362(P3) — 단건 `GET /features/{id}/weather`를 flag로 전환. 이번
+task에서 처음으로 `kor_travel_weather_client_lifespan`을 `main.py`에 배선하고
+`resolve_weather_location`을 실제로 호출하게 된다. provider 우선순위 상수 + `unit`
+무가정 매핑 + `?asof=` 축소 반영 + `kind='weather'` feature 마커 분기까지 함께
+결정해야 한다(설계 §3.1/§4.6).
+
 ## 2026-09-17 (claude) — T-360(P1) 완료, T-361(P2) 대기
 
 `kor-travel-weather` client(`apps/api/app/clients/kor_travel_weather.py`)를 만들었다.

@@ -24,7 +24,6 @@ P1~P5는 게이트와 무관하게 진행 가능하고, **P6(기본값 on)만 G-
 사용자 결정(2026-09-17): 과거 날씨는 **C — 대상 서비스 보존 연장**(Pinvi 스냅샷 테이블
 없음, G-3), 상용 provider는 **처리방침 갱신 후 출처 명시해 표시**(G-2/T-366).
 
-- [ ] **T-361** — (P2) `app.weather_location_links` + 좌표→location 해석기(반경 20→50→100 확대). **`source_location_ids` 전체를 저장·합산**해야 한다 — 대표 location만 쓰면 기상청 예보가 조용히 누락된다(설계 §3.3).
 - [ ] **T-362** — (P3) 단건 `GET /features/{id}/weather`를 flag로 전환. provider 우선순위 상수 + `unit` 무가정 매핑 + `alerts[]`→`advisory` 정규화. **metric key 정규화 결정**(안 하면 `TripWeatherSummary.tsx`가 상용 어휘를 조용히 버린다), **`?asof=` 축소 반영**, **`kind='weather'` feature 마커 분기**(설계 §4.6). 구/신 경로 응답 비교 테스트.
 - [ ] **T-363** — (P4) Trip view 전환. batch 1회 → `/markers` 1회 + location별 `/forecast` fanout, `card_key := location_id`, 10초 예산·취소 전파, `retired` 판정을 선행 feature batch로 이관. e2e 단언(`trip-detail.e2e.ts` 단건 0회, `PINVI_LIVE_WEATHER_*` 픽스처)과 `live-mutating-e2e.md` 게이트를 **새 호출 모양으로 재정의**.
 - [ ] **T-364** — (P5) Admin weather-values 전환. `kor_travel_map_admin.py`(별도 client 파일) 경로 이전 + **`provider_dataset_id`·`dataset_display_name`·`known_at`을 nullable로 넓히고** Pydantic·Zod·Admin 렌더러 동반 수정 — 새 소스에 대응물이 없다. 값을 지어내 채우지 않는다. `asof` 422는 사유를 다시 세운 뒤 결정.

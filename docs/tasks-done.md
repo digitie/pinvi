@@ -21,6 +21,15 @@
       `Settings pinvi_kor_travel_weather_*` + `.env.example`(claude).
       **배선 없음** — `main.py`에 lifespan을 등록하지 않았다(코드는 자기 테스트에서만
       쓰인다). 인증 헤더 없음(공개 read). ruff/mypy --strict/기존 unit 1428건 전부 green.
+- [x] **T-361** — (P2) `app.weather_location_links` Alembic migration(20260917_0102) +
+      `WeatherLocationLink` 모델 + `resolve_weather_location`
+      (`apps/api/app/services/weather_location_resolver.py`, claude). 반경 20→50→100km
+      확대(`KorTravelWeatherNotFound` 404 — OpenAPI 미선언이지만 실측 확인됨), 3단계 모두
+      실패 시 장애가 아닌 `WeatherLocationNoData`(행 미생성). `source_location_ids`
+      전체를 dedupe 유지 순서로 저장(설계 §3.3 함정 방지). 좌표 변경 시 `stale=True` 먼저
+      커밋 후 재해석(중간 실패해도 재시도 가능). 실제 Postgres(testcontainers)로 migration
+      upgrade/downgrade 확인 + 리졸버 통합테스트 8건 전부 green. **배선 없음** — 라우터
+      미사용, T-362/T-363이 처음 쓴다.
 
 ## 2026-09-05
 

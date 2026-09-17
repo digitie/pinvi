@@ -2,6 +2,52 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-17 (claude) — T-361(P2): `weather_location_links` + 해석기 (ADR-068)
+
+`agent/claude-weather-t360-client`(계속). Alembic `20260917_0102_weather_location_links`
++ `WeatherLocationLink` 모델 + `resolve_weather_location`.
+
+### 실측으로 확인한 것 — `/resolve`는 반경 내 매치가 없으면 404다
+
+OpenAPI 스펙에는 `/v1/weather/resolve`의 오류 응답이 200/422뿐이고 404가 **선언돼
+있지 않다.** 실측(`radius_km=1`로 커버리지 희박 좌표 조회)해 보니 실제로는
+`404 {"detail":"요청 좌표 주변에 위치가 없습니다."}`가 온다 — 문서화 누락이다.
+`kor_travel_weather.py`의 `_unwrap_data`가 404를 메서드 불문 `KorTravelWeatherNotFound`로
+매핑하도록 이미 짜여 있어서 client 쪽 수정은 필요 없었다 — 리졸버가 그 예외를 반경
+확대 신호로 그대로 받아 쓴다.
+
+### 설계 그대로 구현한 것
+
+- 반경 20 → 50 → 100km 확대, 세 단계 모두 `KorTravelWeatherNotFound`면
+  `WeatherLocationNoData`(장애 아님, 행을 만들지 않음 — 다음 호출이 다시 시도).
+- `source_location_ids`는 대표 `location` + `source_locations` 전체를 dedupe하되
+  **순서를 보존**해 저장한다(설계 §3.3 — 대표 location 하나만 저장하면 기상청 예보가
+  조용히 사라지는 함정을 실측으로 이미 확인했었다).
+- 좌표 변경 감지 시 **먼저 `stale=True`를 커밋**하고 그 다음 재해석한다 — 재해석
+  도중(네트워크 실패 등) 예외가 나도 `stale=True`만은 남아 다음 호출이 재시도하게
+  만든다. `trip_day_rise_set.py`의 stale 마킹과 정신은 같지만, weather는 요청 경로에서
+  지금 답이 필요해 동기적으로 즉시 재해석까지 한다는 점이 다르다.
+
+### 환경 문제 하나 발견 겸 해결 — `tests/integration`이 이 worktree에서 전부 막혀 있었다
+
+`tests/integration/conftest.py`가 `subprocess.run(["alembic", ...])`로 migration을
+적용하는데, `.venv/bin/python -m pytest`로 실행하면 venv의 `bin/`이 `PATH`에 없어
+`alembic` 실행 파일을 못 찾고 **모든** 통합 테스트가 즉시 죽는다(내가 만들기 전부터
+그랬다 — `test_admin_abuse_api.py`/`test_trip_day_rise_set.py`로 재현 확인). venv를
+activate하지 않고 `.venv/bin/python` 절대경로만 쓰는 이 worktree의 관례가 원인이다.
+`PATH="<repo>/apps/api/.venv/bin:$PATH"` 앞에 붙이면 정상 동작한다 — CI는 셸 스텝에서
+venv를 activate하므로 이 문제가 없었다(T-360 PR의 `integration-test (1..4)` 전부
+green). 문서에는 남기지 않는다(이 worktree 세션의 실행 습관 문제일 뿐, 코드/CI 결함
+아님) — 다음에 통합 테스트가 이유 없이 전멸하면 이 PATH 트릭을 먼저 시도할 것.
+
+검증: 새 리졸버 통합테스트 8건(캐시 히트/미스, 반경 확대, 3단계 소진 시 no_data +
+행 미생성, 좌표 변경 → stale 커밋 → 재해석, stale 행은 좌표가 같아도 캐시 히트 아님,
+measurement_point 없음 → NULL 저장, source_locations 비어도 대표 location 포함) 전부
+실제 Postgres(testcontainers)로 green. migration은 `docs/conventions/database.md`
+§4.3 절차대로 별도 DB에 upgrade/downgrade 왕복 확인(`\d app.weather_location_links`로
+컬럼/인덱스 셰입 눈으로 대조). ruff 0, `mypy --strict app`(239파일) 0, 기존
+`tests/unit` 1428건 회귀 없음.
+
 ## 2026-09-17 (claude) — T-360(P1): `kor-travel-weather` client 신설 (ADR-068)
 
 `agent/claude-weather-t360-client`.
