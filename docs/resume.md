@@ -1,5 +1,24 @@
 # resume.md
 
+## 2026-09-17 (claude) — T-360(P1) 완료, T-361(P2) 대기
+
+`kor-travel-weather` client(`apps/api/app/clients/kor_travel_weather.py`)를 만들었다.
+`resolve`/`markers`/`latest`/`forecast` 4개, 인증 없음, strict-decode dataclass DTO,
+vendored OpenAPI 스냅샷 SHA-256 드리프트 게이트. **어디에도 배선되지 않았다** —
+`main.py` lifespan 등록도 안 했다. 운영 날씨는 여전히 100% `kor-travel-map`에서 온다.
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+- client 메서드는 설계 문서 §2.1의 4개뿐이다. `nearby`/`get_location`/`list_locations`/
+  admin 표면은 **의도적으로 안 만들었다** — Pinvi가 쓸 계획이 없다.
+- `markers`의 500개 상한은 OpenAPI 스키마에 없다(서버 코드 전용 422). 재vendor해도
+  이 숫자는 계약 테스트로 못 잡는다 — `docs/weather-api.md` 서술을 믿고 옮긴 값이다.
+- 계약 게이트는 `kor-travel-map` 것보다 훨씬 작다(필드 이름 집합 + query 상한만).
+  T-362에서 실제로 배선할 때, 필요하면 타입/format까지 정밀화한다.
+
+**다음 한 작업**: T-361(P2) — `app.weather_location_links` Alembic migration + 좌표→
+location 해석기. **`source_location_ids` 전체를 저장·합산해야 한다** — 대표 location만
+쓰면 기상청 예보가 조용히 누락된다(설계 §3.3, 실측으로 이미 확인된 함정).
+
 ## 2026-09-17 (claude) — 날씨 소스 이관 설계 완료, 구현 대기 (T-359 ✅ / T-360~366 열림)
 
 날씨를 `kor-travel-map` → `kor-travel-weather`로 옮기는 **설계·문서·task를 확정**했다.
