@@ -1,5 +1,41 @@
 # resume.md
 
+## 2026-09-17 (claude) — T-363 e2e 코드 완료, 실행은 kor-travel-map fixture 대기
+
+T-363의 e2e 코드(live-mutating weather proxy + flag-on sub-test + 런북)를 완성했다.
+실제 N150 실행은 **kor-travel-map 운영 DB에 `retired`/`suppressed` feature가 0개라
+막혔다** — Admin UI에서 더미 feature 2개를 만들어야 하는데 그 생성 토큰이 서버엔
+SHA-256 해시로만 있어(원문은 admin BFF만 앎) 관리자가 직접 만들어야 한다.
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+- **N150(`digitie@192.168.1.14`)은 SSH로 접근 가능하고 완전한 운영 스택이다** —
+  pinvi/kor-travel-map/kor-travel-weather/kor-travel-geo/kor-travel-concierge/
+  kor-travel-airport가 전부 실제로 떠 있다. `kor-travel-map-postgres`는 포트
+  `12700`(기본 5432 아님)에서 리슨하며 `docker exec kor-travel-map-postgres psql -p
+  12700 -U kor_travel_map -d kor_travel_map`으로 trust auth 조회가 된다(비밀번호
+  불필요) — 읽기 전용 조회 용도로 유용하다.
+- **kor-travel-map 운영 DB는 `place` feature 1047개뿐이고 weather 데이터가
+  0행이다.** 즉 이 환경에서 실 weather 값을 요구하는 어떤 검증(flag off든 on이든)도
+  지금은 "값이 있어야 하는" 케이스를 만족 못 한다 — Map 자체의 weather 생성 파이프라인
+  상태를 별도로 확인할 필요가 있어 보인다(T-363 범위 밖).
+- **kor-travel-map의 manual feature 생성/상태 전환 API는 의도적으로 프로그램적
+  우회를 막아 뒀다** — `POST /v1/admin/features`는 `X-Kor-Travel-Map-Admin-Proxy-Secret`
+  + `X-Kor-Travel-Map-Admin-Feature-Create-Token`(서버는 SHA-256 해시만 보관) +
+  trusted proxy CIDR 3중 검증이다. 이런 건 시크릿을 캐내서 우회하지 말고 관리자에게
+  직접 요청할 것.
+- e2e 코드 자체(`startWeatherProxy`, flag-on sub-test)는 `PINVI_LIVE_WEATHER_TRIP_VIEW_E2E=1`
+  로 게이트돼 있고 기존 fixture(found/retired/suppressed/missing/weatherFeature)를
+  그대로 재사용하므로, fixture 2개(retired 1·suppressed 1)만 Admin UI에서 만들어
+  ID를 넘겨받으면 바로 실행 가능하다.
+
+**다음 한 작업**: T-364(P5) — Admin weather-values 전환. `kor_travel_map_admin.py`
+(별도 client 파일)의 `get_feature_weather` 경로를 새 소스로 옮기고,
+`provider_dataset_id`·`dataset_display_name`·`known_at`을 nullable로 넓혀 Pydantic·
+Zod·Admin 렌더러를 동반 수정한다 — 새 소스에 대응물이 없는 필드라 값을 지어내
+채우지 않는다. `asof` 422 사유도 다시 세운다(ADR-068 결정 2의 두 번째 예외).
+T-363의 "feature batch와 완전 분리" 원칙이 T-364에도 적용되는지(Admin은 POI가
+아니라 feature 단건 조회라 T-362와 같은 제약— 분리 불가)를 먼저 판단하고 시작한다.
+
 ## 2026-09-17 (claude) — T-363(P4) 백엔드 완료, e2e 남음
 
 trip view weather를 `pinvi_kor_travel_weather_trip_view_enabled` flag(기본

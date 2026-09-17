@@ -29,6 +29,16 @@ const cacheWaitMs = Number(process.env.PINVI_LIVE_FEATURE_CACHE_WAIT_MS ?? '250'
 const featureCacheRevalidationConfirmed = process.env.PINVI_LIVE_FEATURE_CACHE_REVALIDATION === '1';
 const longTripDayCount = 40;
 
+// T-363(P4, ADR-068) — kor-travel-weather 전환 flag on 경로. 격리 API가
+// PINVI_KOR_TRAVEL_WEATHER_TRIP_VIEW_ENABLED=true로 뜬 별도 run에서만 켠다.
+// 이 게이트는 위 기본 시나리오와 같은 fixture(found/retired/suppressed/missing/
+// weatherFeature)를 재사용한다 — weather가 feature batch와 완전히 분리됐다는
+// 것 자체가 핵심 단언이므로 새 fixture가 필요 없다(§3.4 개정, `trip_weather_batch.py`
+// 모듈 docstring).
+const weatherTripViewLiveEnabled = process.env.PINVI_LIVE_WEATHER_TRIP_VIEW_E2E === '1';
+const weatherProxyPort = Number(process.env.PINVI_LIVE_WEATHER_PROXY_PORT ?? '13702');
+const weatherUpstreamPort = Number(process.env.PINVI_LIVE_WEATHER_UPSTREAM_PORT ?? '14101');
+
 type FeatureSummary = {
   feature_id: string;
   name: string;
@@ -460,6 +470,83 @@ async function startMapProxy() {
   };
 }
 
+/**
+ * T-363(P4, ADR-068) — `kor-travel-weather`용 프록시. `startMapProxy`와 같은 구조지만
+ * `/v1/weather/markers`·`/v1/weather/locations/{id}/forecast` 호출을 추적한다.
+ * `/v1/weather/resolve`(3.1 MB 응답, 캐시 우선)는 추적하지 않는다 — 요청 경로에서
+ * 호출 횟수가 안정적이지 않다(신규 POI에서만 발생, T-361).
+ */
+async function startWeatherProxy() {
+  let outage = false;
+  const markersCalls: string[][] = [];
+  const forecastCalls: Array<{ locationId: string; from: string | null; to: string | null }> = [];
+
+  const server = http.createServer(async (request, response) => {
+    const requestUrl = new URL(request.url ?? '/', `http://127.0.0.1:${weatherProxyPort}`);
+    const isMarkers = requestUrl.pathname === '/v1/weather/markers';
+    const forecastMatch = requestUrl.pathname.match(
+      /^\/v1\/weather\/locations\/([^/]+)\/forecast$/,
+    );
+    if (isMarkers) {
+      markersCalls.push(requestUrl.searchParams.getAll('location_id'));
+    }
+    if (forecastMatch) {
+      forecastCalls.push({
+        locationId: forecastMatch[1]!,
+        from: requestUrl.searchParams.get('from'),
+        to: requestUrl.searchParams.get('to'),
+      });
+    }
+
+    if (outage) {
+      response.writeHead(503, { 'content-type': 'application/problem+json', connection: 'close' });
+      response.end(JSON.stringify({ code: 'LIVE_TRANSPORT_OUTAGE', title: 'live weather outage' }));
+      return;
+    }
+
+    const headers = { ...request.headers, host: `127.0.0.1:${weatherUpstreamPort}` };
+    const upstream = http.request(
+      {
+        hostname: '127.0.0.1',
+        port: weatherUpstreamPort,
+        method: request.method,
+        path: request.url,
+        headers,
+      },
+      (upstreamResponse) => {
+        response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);
+        upstreamResponse.pipe(response);
+      },
+    );
+    upstream.on('error', (error) => {
+      if (!response.headersSent) response.writeHead(502, { 'content-type': 'text/plain' });
+      response.end(`weather proxy upstream error: ${error.message}`);
+    });
+    upstream.end();
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(weatherProxyPort, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+
+  return {
+    markersCalls,
+    forecastCalls,
+    setOutage(value: boolean) {
+      outage = value;
+    },
+    async close() {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    },
+  };
+}
+
 test.describe('Trip feature resolution live mutating flow', () => {
   test.skip(
     !liveEnabled,
@@ -735,6 +822,109 @@ test.describe('Trip feature resolution live mutating flow', () => {
         if (tripId) await cleanupTrip(page, tripId);
       } finally {
         await proxy.close();
+      }
+    }
+  });
+
+  test('flag on: weather는 feature batch와 완전히 독립적으로 markers/forecast를 쓴다', async ({
+    page,
+  }) => {
+    test.skip(
+      !weatherTripViewLiveEnabled,
+      'PINVI_LIVE_WEATHER_TRIP_VIEW_E2E=1 일 때만 실행합니다 — 격리 API가 ' +
+        'pinvi_kor_travel_weather_trip_view_enabled=true로 떠 있어야 합니다(T-363/P4).',
+    );
+    assertLiveEnv();
+
+    const mapProxy = await startMapProxy();
+    const weatherProxy = await startWeatherProxy();
+    const title = `${testPrefix!} weather-independent ${Date.now()}`;
+    let tripId: string | null = null;
+
+    try {
+      await login(page);
+      const created = await createTrip(page, title);
+      tripId = created.tripId;
+      const realFeature: FeatureSummary = {
+        feature_id: foundFeatureId!,
+        name: foundFeatureName!,
+        coord: { lon: foundFeatureLon, lat: foundFeatureLat },
+      };
+      const realWeatherFeature: FeatureSummary = {
+        feature_id: weatherFeatureId!,
+        name: weatherFeatureName!,
+        coord: { lon: weatherFeatureLon, lat: weatherFeatureLat },
+      };
+
+      // 같은 weather feature를 여러 날에 걸쳐 넣는다 — "날짜 fanout 없음"을 증명하려면
+      // 날짜가 여럿이어야 한다(location마다 forecast 1회, 날짜 수와 무관).
+      await addFeaturePoi(page, tripId, realWeatherFeature, realWeatherFeature.feature_id, 'a01', 1);
+      for (let dayIndex = 2; dayIndex <= longTripDayCount; dayIndex += 1) {
+        await addFeaturePoi(
+          page,
+          tripId,
+          realWeatherFeature,
+          realWeatherFeature.feature_id,
+          'a0',
+          dayIndex,
+        );
+      }
+      // retired/suppressed/missing도 좌표가 있는 snapshot으로 넣는다 — 실제
+      // kor-travel-map feature 상태와 무관하게 weather가 시도되는지가 이 테스트의 핵심이다.
+      await addFeaturePoi(
+        page,
+        tripId,
+        { ...realFeature, name: 'retired 독립성 저장본' },
+        retiredFeatureId!,
+        'a1',
+      );
+      await addFeaturePoi(
+        page,
+        tripId,
+        { ...realFeature, name: 'suppressed 독립성 저장본' },
+        suppressedFeatureId!,
+        'a2',
+      );
+      await addFeaturePoi(
+        page,
+        tripId,
+        { ...realFeature, name: 'missing 독립성 저장본' },
+        missingFeatureId!,
+        'a3',
+      );
+
+      const healthy = await readTrip(page, tripId);
+
+      // 핵심 불변식 1 — flag on이면 구 kor-travel-map weather batch/단건을 더는 부르지 않는다.
+      expect(mapProxy.weatherBatchRequests).toHaveLength(0);
+      expect(mapProxy.singleWeatherRequestCount).toBe(0);
+
+      // 핵심 불변식 2 — 새 경로는 markers 1회(청크) + location마다 forecast 정확히 1회다
+      // (날짜 fanout 없음 — 40일 여행인데도 location 수만큼만 호출된다).
+      expect(weatherProxy.markersCalls.length).toBeGreaterThan(0);
+      const uniqueForecastLocations = new Set(weatherProxy.forecastCalls.map((c) => c.locationId));
+      expect(weatherProxy.forecastCalls).toHaveLength(uniqueForecastLocations.size);
+      expect(weatherProxy.forecastCalls.length).toBeLessThan(longTripDayCount);
+
+      // 핵심 불변식 3 — retired/suppressed/missing feature도 좌표가 있으면 weather는
+      // feature 상태와 무관하게 시도된다(§3.4 방향 전환, trip_weather_batch.py 모듈
+      // docstring). map 쪽 feature_resolution_state는 그대로 retired/suppressed/
+      // missing이지만, weather_by_feature_id는 그 상태를 절대 내지 않는다.
+      const healthyPois = poisByFeatureId(healthy);
+      expect(healthyPois.get(retiredFeatureId!)?.feature_resolution_state).toBe('retired');
+      expect(healthyPois.get(suppressedFeatureId!)?.feature_resolution_state).toBe('suppressed');
+      expect(healthyPois.get(missingFeatureId!)?.feature_resolution_state).toBe('missing');
+      const weatherStates = healthy.days[0]!.weather_by_feature_id;
+      for (const featureId of [retiredFeatureId!, suppressedFeatureId!, missingFeatureId!]) {
+        expect(['retired', 'suppressed', 'missing']).not.toContain(weatherStates[featureId]?.state);
+      }
+    } finally {
+      weatherProxy.setOutage(false);
+      try {
+        if (tripId) await cleanupTrip(page, tripId);
+      } finally {
+        await mapProxy.close();
+        await weatherProxy.close();
       }
     }
   });

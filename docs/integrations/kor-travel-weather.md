@@ -476,21 +476,25 @@ map 소유이므로 건드리지 않는다.
 | web       | `apps/web/components/trips/TripWeatherSummary.tsx` (분류기 — §3.1-(3)) — **서버 정규화로 무변경 확인**              | T-362/363 |
 | web       | `apps/web/components/map/FeatureMapView.tsx`, `vworldPrimitives.tsx` (§4.6) — **경로 동일 확인, 무변경**            | T-362     |
 | web       | Admin weather-values 탭 `FeatureDetailSubpage.tsx`                                                                  | T-364     |
-| e2e       | `apps/web/e2e/trip-detail.e2e.ts` (단건 weather 요청 0회 단언) — **미착수, N150 Playwright 필요**                  | T-363     |
-| e2e       | `trip-feature-resolution-live-mutating.live.ts` + `PINVI_LIVE_WEATHER_*` env — **미착수, N150 Playwright 필요**    | T-363     |
-| 런북      | `docs/runbooks/live-mutating-e2e.md` ("weather batch POST 정확히 1회" 게이트) — **미착수**                          | T-363     |
+| e2e       | `apps/web/e2e/trip-detail.e2e.ts` (단건 weather 요청 0회 단언) — **검토 결과 무변경**(mock 기반, 응답 셰입 불변) | T-363     |
+| e2e       | `trip-feature-resolution-live-mutating.live.ts` + `startWeatherProxy` + 새 flag-on sub-test — **코드 완료, 실행은 fixture 대기** | T-363     |
+| 런북      | `docs/runbooks/live-mutating-e2e.md` ("T-363 weather flag on 게이트 단건" 절 신설) — **완료**                       | T-363     |
 | 계약      | `apps/api/tests/contract/kor-travel-map-openapi-*.json` (SHA-256 핀) + `tests/unit/test_kor_travel_map_contract.py` | T-365     |
 | 설정      | `pinvi_kor_travel_map_*` / `pinvi_kor_travel_weather_*`, `.env.example`                                             | T-360/365 |
 
 > `pinvi_kor_travel_map_service_token`은 **제거하지 않는다** — feature batch가 계속
 > 쓴다. weather 경로에서만 빠진다.
 >
-> **e2e/live-mutating 재정의는 T-363 백엔드와 별도로 남아 있다.** Playwright는
-> N150 전용이라(ADR-051) 이 개발 세션(WSL)에서는 실행·검증할 수 없어 gate를
-> 중단하고 사유를 남긴다 — 백엔드(`trip_weather_batch.py`, flag,
-> 통합테스트 12건)는 완료했지만 `trip-detail.e2e.ts`/
-> `trip-feature-resolution-live-mutating.live.ts`/`live-mutating-e2e.md`는
-> N150에서 이어서 다뤄야 한다.
+> **e2e 실행은 kor-travel-map 운영 DB의 fixture 부재로 보류됐다(2026-09-17).**
+> N150 SSH 접속과 `kor-travel-map-postgres` 직접 조회로 확인 — 운영 DB에는 `place`
+> feature 1047개뿐이고 `retired`/`suppressed` 상태 feature가 **0개**, weather 값도
+> **0행**이다. `retired`/`suppressed` fixture를 새로 만들려면 kor-travel-map Admin UI의
+> manual-feature-create 토큰이 필요한데 API 컨테이너에는 그 토큰의 **SHA-256 해시만**
+> 있고 원문은 admin BFF만 안다 — 의도적으로 프로그램적 우회가 막혀 있는 경로라 임의로
+> 뚫지 않았다. 관리자가 Admin UI에서 더미 feature 2개(retired 1·suppressed 1)를 만들어
+> feature_id를 주면 그대로 실행 가능하다 — 코드(`startWeatherProxy`, flag-on sub-test,
+> 런북 실행 예시)는 이미 완성했다. `trip-detail.e2e.ts`는 실행 없이 코드 검토만으로
+> 무변경임을 확인했다(순수 mock, 백엔드 무관 계약).
 
 ---
 

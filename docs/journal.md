@@ -2,6 +2,72 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-17 (claude) — T-363(P4) e2e 코드 작성 — N150 운영 DB에 fixture 없음 확인
+
+`agent/claude-weather-t363-trip-view`(백엔드는 이미 머지 대상 PR #547 draft). "e2e
+마무리"를 이어받아 N150에 직접 SSH 접속(`digitie@192.168.1.14`, LAN 접근 가능 확인)해
+실제 실행을 시도했다.
+
+### N150 조사 — 이 환경 자체가 완전한 운영 스택이었다
+
+`docker ps`로 확인: `pinvi`/`kor-travel-map`/`kor-travel-weather`(전체 스택 —
+api/web/db/dagster/prometheus)/`kor-travel-geo`/`kor-travel-concierge`/
+`kor-travel-airport`가 전부 실제로 떠서 서비스 중이었다(pinvi는 44시간 전 기동, PR #541
+시점 — 아직 T-362/T-363 미반영). `trip-feature-resolution-live-mutating.live.ts`를
+실행하려면 격리 PinVi API(13801/13805, Map proxy 13701 경유) + 운영 kor-travel-map
+DB의 `found`/`retired`/`suppressed`/`missing` fixture feature ID가 필요하다는 걸
+런북에서 재확인했다.
+
+**kor-travel-map-postgres를 직접 조회**(`docker exec ... psql -p 12700`)해 fixture
+후보를 찾다가 중요한 사실을 발견했다:
+- `feature.features`에 `place` kind 1047개뿐 — event/notice/price/route/area/weather
+  kind가 전혀 없다.
+- `lifecycle_state='retired'` 또는 `publication_state='suppressed'`인 feature가
+  **0개**.
+- `feature.feature_weather_values`, `feature.current_weather_summary` 모두
+  **0행** — kor-travel-map 자체 weather 데이터가 완전히 비어 있다. 즉 flag off(구
+  경로)의 "weather found" 단언은 **이 환경에서 지금 애초에 재현 불가능**하다 — T-363
+  변경과 무관한 사전 조건.
+
+**retired/suppressed fixture는 새로 만들어야 한다**는 뜻이었고, `POST
+/v1/admin/features` + `PATCH .../state`(스키마는 Pinvi가 이미 벤더링한
+`kor-travel-map-openapi-admin.json`에서 확인 — `AdminFeatureCreateRequest`,
+discriminated `{action: "retire"|"patch", ...}`)로 더미 feature를 만들 수 있는지
+확인했다. 그런데 `KOR_TRAVEL_MAP_API_ADMIN_FEATURE_CREATE_TOKEN_SHA256` 환경변수
+이름에서 보듯 **API 컨테이너는 그 토큰의 SHA-256 해시만 갖고 있고 원문은 admin
+BFF(실제 Admin UI)만 안다** — 게다가 trusted proxy CIDR 검증까지 있다. 프로그램적
+우회를 의도적으로 막아 둔 경로로 판단해 여기서 멈췄다. 사용자에게 두 번
+`AskUserQuestion`으로 확인한 뒤(격리 스택 범위 확대 → 운영 DB 상태 발견 → fixture
+생성 주체 확인) **"지금은 fixture 생성이 어려우니 코드만 완성"**으로 방향을
+확정했다.
+
+### 완성한 코드
+
+- `apps/web/e2e/trip-feature-resolution-live-mutating.live.ts`: `startWeatherProxy()`
+  신설(`startMapProxy`와 같은 구조, `/v1/weather/markers`·
+  `/v1/weather/locations/{id}/forecast` 호출을 추적하며 실 `kor-travel-weather`
+  인스턴스로 포워딩) + `PINVI_LIVE_WEATHER_TRIP_VIEW_E2E=1`로 게이트한 새 sub-test.
+  기존 fixture(found/retired/suppressed/missing/weatherFeature)를 그대로 재사용한다
+  — weather가 feature batch와 완전히 분리됐다는 것 자체가 핵심 단언이라 새 fixture가
+  필요 없다. 40일 여행에 같은 weather feature를 반복 배치해 `forecast()` 호출이
+  **location마다 정확히 1회**(날짜 수와 무관)임을, 그리고 `retired`/`suppressed`/
+  `missing` feature도 `weather_by_feature_id`가 그 상태를 **절대 내지 않음**(feature
+  상태와 무관하게 `found`/`no_data`/`unavailable`)을 검증한다. `mapProxy`의
+  `weatherBatchRequests`/`singleWeatherRequestCount`가 0인지도 함께 고정.
+- `docs/runbooks/live-mutating-e2e.md`: "T-363 weather flag on 게이트 단건" 절 신설
+  — 격리 API를 `PINVI_KOR_TRAVEL_WEATHER_TRIP_VIEW_ENABLED=true`로 띄우고
+  `PINVI_KOR_TRAVEL_WEATHER_BASE_URL`을 새 weather proxy로 돌리는 실행 예시,
+  fixture 부재로 미착수라는 사실을 정직하게 명시.
+- `apps/web/e2e/trip-detail.e2e.ts`는 **코드 검토 결과 무변경 확인**하고 문서에
+  남겼다 — 이 파일은 순수 mock(트립 뷰 JSON을 직접 조립해 라우트 인터셉트)이라
+  weather 소스가 무엇이든 응답 셰입(`weather_cards`/`weather_by_feature_id`)이
+  같으면 프론트 동작은 동일하다. "새 호출 모양으로 재정의"가 필요했던 건 실제
+  backend transport를 프록시로 세는 live-mutating 쪽뿐이었다.
+
+검증: `npm run typecheck -w @pinvi/web`, `npm run lint -w @pinvi/web` 모두 0 error
+(기존 무관 warning 3건만). Playwright 실행 자체는 fixture 부재로 미수행 —
+`docs/integrations/kor-travel-weather.md` §4.7에 정직하게 남겼다.
+
 ## 2026-09-17 (claude) — T-363(P4) 백엔드: Trip view weather, feature batch와 완전 독립 (ADR-068)
 
 `agent/claude-weather-t363-trip-view`. `pinvi_kor_travel_weather_trip_view_enabled`
