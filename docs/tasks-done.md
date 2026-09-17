@@ -7,6 +7,45 @@
 
 ## 2026-09-17
 
+- [x] **T-364** — (P5) Admin weather-values를 flag
+      `pinvi_kor_travel_weather_admin_enabled`(기본 `false`)로 전환(claude, #549).
+      `AdminFeatureWeatherMetric`의 `provider_dataset_id`·`dataset_display_name`·
+      `known_at`을 nullable로 넓혔다(`dataset_key`는 두 소스 모두 있어 required
+      유지) — `kor-travel-weather`에는 `kor-travel-map`의 정수 dataset registry
+      대응물이 없다, 값을 지어내지 않는다. 좌표는 `kor_travel_map_admin.
+      get_feature_detail`에서 얻는다 — T-362와 마찬가지로 POI 문맥이 없는 bare
+      `feature_id`라 T-363의 "feature batch와 완전 분리"는 적용되지 않는다.
+      flag on에서는 `asof`도 T-362와 같은 축소 규칙(보존 2일)으로 지원(flag off는
+      Map Admin 계약이 그 파라미터를 몰라 기존 422 유지). `weather_card.py`의
+      resolve+fetch+dedupe pipeline을 `resolve_and_collect_deduped_values`로
+      추출해 T-362/T-364가 공유하도록 리팩터. 신규 통합테스트 8건 + 기존 admin
+      16건 green, `packages/schemas` vitest(기존 "provenance 필수" 테스트를
+      nullable 계약에 맞게 재작성) 포함 21건 green. **머지 과정 사고**: T-363을
+      squash 머지 + 브랜치 삭제하면서 그 위에 쌓았던 스택 PR이 GitHub에 의해
+      자동 closed됐다(base 삭제 시 자동 재타겟 안 됨) — cherry-pick으로 커밋을
+      새 main 기준에 재적용해 복구.
+- [x] **T-363** — (P4) Trip view 전환을 flag
+      `pinvi_kor_travel_weather_trip_view_enabled`(기본 `false`)로(claude, #547).
+      batch 1회 → `/markers` 1회 + location별 `/forecast` fanout, `card_key :=
+      location_id`, 10초 예산·취소 전파. **구현 도중 사용자 방향 전환** — 당초
+      T-361/T-362처럼 feature batch(`resolved_features`/`resolution_states`)를
+      weather 함수에 넘기려 했으나 "기존 map feature과 완전히 분리된 형태로
+      kor-travel-weather를 활용할 것"이라는 지시로 `trip_weather_batch.py`를
+      feature batch와 아무 중간 결과도 주고받지 않는 완전 독립 함수로 재작성.
+      POI 자신의 `feature_snapshot.coord`(POI 추가 시점에 저장된 Pinvi 소유
+      좌표)만 보고 동작해 feature가 `retired`/`suppressed`/`missing`이든 feature
+      batch 자체가 실패했든 weather는 영향받지 않는다 — 이 경로는
+      `found`/`no_data`/`unavailable` 셋만 낸다. §3.3 회귀 가드(대표 location에
+      사실이 없어도 번들의 다른 location 값을 씀), 부분 실패 규칙(일부 실패해도
+      다른 곳에 값 있으면 found, 부분 실패+0행이면 unavailable, 전부 성공+0행만
+      no_data) 명문화. `trip-detail.e2e.ts`는 검토 결과 무변경(mock 기반).
+      `trip-feature-resolution-live-mutating.live.ts`에 `startWeatherProxy` +
+      flag-on sub-test, `live-mutating-e2e.md`에 실행 절 신설. 신규 통합테스트
+      12건 + 관련 기존 65건 + `tests/unit` 1428건 green. **e2e 실제 실행은
+      미완**(`docs/tasks.md` 참조) — kor-travel-map 운영 DB에 `retired`/
+      `suppressed` fixture가 0개라 Admin UI에서 더미 feature를 만들어야 하는데
+      그 생성 토큰이 서버엔 SHA-256 해시로만 있어(원문은 admin BFF만 앎) 관리자가
+      직접 만들어야 한다. 코드는 완성, fixture 준비되면 N150에서 실행.
 - [x] **T-362** — (P3) 단건 `GET /features/{id}/weather`를 flag(
       `pinvi_kor_travel_weather_single_feature_enabled`, 기본 `false`)로 전환(claude).
       `apps/api/app/services/weather_card.py` 신설 — feature 좌표 조회(kor-travel-map

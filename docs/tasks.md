@@ -24,8 +24,14 @@ P1~P5는 게이트와 무관하게 진행 가능하고, **P6(기본값 on)만 G-
 사용자 결정(2026-09-17): 과거 날씨는 **C — 대상 서비스 보존 연장**(Pinvi 스냅샷 테이블
 없음, G-3), 상용 provider는 **처리방침 갱신 후 출처 명시해 표시**(G-2/T-366).
 
-- [/] **T-363** — (P4) Trip view 전환. **백엔드 + e2e 코드 완료**: batch 1회 → `/markers` 1회 + location별 `/forecast` fanout, `card_key := location_id`, 10초 예산·취소 전파. **2026-09-17 방향 전환(사용자 결정) — feature batch 파이프라인과 완전 독립**: `retired` 판정을 선행 feature batch로 이관하는 대신, weather는 POI 자신의 `feature_snapshot.coord`만 보고 feature 관리 상태(`retired`/`suppressed`/`missing`)를 아예 참조하지 않는다(`trip_weather_batch.py` 신설, `docs/integrations/kor-travel-weather.md` §3.4/§3.5 개정). `trip-detail.e2e.ts`는 검토 결과 **무변경**(mock 기반, 응답 셰입 불변). `trip-feature-resolution-live-mutating.live.ts`에 `startWeatherProxy` + flag-on sub-test, `live-mutating-e2e.md`에 실행 절 신설 — **코드 완료, 실행은 fixture 대기**. **남은 일**: kor-travel-map 운영 DB에 `retired`/`suppressed` feature가 0개라(place 1047개뿐) Admin UI에서 더미 feature 2개를 만들어야 실행 가능 — manual-feature-create 토큰이 SHA-256 해시로만 저장돼 있어 관리자만 만들 수 있다(2026-09-17 N150 조사). fixture 준비되면 N150에서 실행.
-- [x] **T-364** — (P5) Admin weather-values 전환. flag `pinvi_kor_travel_weather_admin_enabled`(기본 off). **`provider_dataset_id`·`dataset_display_name`·`known_at`을 nullable로 넓힘**(`dataset_key`는 두 소스 모두 있어 required 유지) — 값을 지어내지 않는다. `asof`는 flag on에서 T-362와 같은 축소 규칙으로 지원(flag off는 기존 422 유지). T-362와 마찬가지로 POI 문맥이 없는 bare `feature_id`라 T-363의 "feature batch와 완전 분리"는 적용되지 않는다. 통합테스트 24건 green.
+- [ ] **T-363 e2e 실행 검증** — 기능 자체는 머지 완료(#547, `docs/tasks-done.md`).
+      코드(`startWeatherProxy` + flag-on sub-test + `live-mutating-e2e.md` 실행
+      절)도 완성돼 있으나, kor-travel-map 운영 DB에 `retired`/`suppressed`
+      fixture가 0개라(place 1047개뿐) 실행이 막혀 있다. Admin UI에서 더미 feature
+      2개(retired 1·suppressed 1)를 만들어 feature_id를 넘겨받으면 N150에서
+      `PINVI_LIVE_WEATHER_TRIP_VIEW_E2E=1`로 바로 실행 가능(2026-09-17 N150
+      조사 — manual-feature-create 토큰이 서버엔 SHA-256 해시로만 있어 관리자만
+      만들 수 있다).
 - [ ] **T-365** — (P6, **G-1 + G-2 + G-3 게이트**) 게이트 F(커버리지)·H(처리방침)·I(보존 지평) 통과 확인 후 flag 기본값 `on` + 구 경로 제거(**client 두 파일**: `kor_travel_map.py` 사용자 3경로 + `kor_travel_map_admin.py` 잔여) + map OpenAPI 계약 테스트·**SHA-256 핀 픽스처** 동반 갱신. `pinvi_kor_travel_map_service_token`은 feature batch가 계속 쓰므로 **남긴다**. P3~P5 운영 관측이 선행 조건. **2026-09-17 사용자 결정**: 데이터 복원·하위 호환은 고려 대상이 아니다 — kor-travel-map이 weather 기능을 완전히 제거할 예정이라 이 제거는 결국 필수가 된다.
 - [ ] **T-366** — (P7, **G-2를 푸는 작업 — T-365보다 먼저 끝나야 한다**) `docs/compliance/data-policy.md`의 "날씨: 기상청" 위탁 기재와 "국외 이전 의무 발생 안 함" 선언을 실제 provider 구성(국외 상용 사업자 포함)에 맞게 재작성 + **카드에 출처(provider) 표시 UI**. 그 뒤에야 비KMA provider 값 표시를 허용한다.
 - [ ] **T-367** — 보존 지평 가드(게이트 I). `kor-travel-weather` 실효 보존이 **15일 미만**이면 실패하는 점검. 외부 설정 회귀로 과거 여행 날씨가 **조용히** 사라지는 것을 막는 유일한 장치다(설계 §4.2 대가 2). 배포 전(현재 2일)에는 항상 실패 — 의도된 동작.
