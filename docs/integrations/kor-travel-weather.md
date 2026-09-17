@@ -296,9 +296,36 @@ location이 **아닌** 쪽에 있었고, 대표 location만 `/locations/{id}/for
 - 전체 예산은 현재와 같이 **view당 10초**, 동시성 상한을 두고 부모 취소를 전파한다.
 - 부분 실패는 추측하지 않는다 — 미결 location의 weather는 `unavailable`.
 
+> **2026-09-17 방향 전환 — feature batch 파이프라인과 완전히 분리한다(T-363 구현
+> 중 사용자 결정).** 위 1)의 "trip의 POI 좌표"는 `kor_travel_map.get_features`
+> feature batch가 이번 요청에서 돌려준 좌표가 **아니라**, POI 자신이 이미 들고
+> 있는 `feature_snapshot.coord`(POI 추가 시점에 저장된, Pinvi가 소유하는 값)다.
+> `trip_view_builder.py`의 feature batch 단계(POI 존재·마커 표시용)와 이 weather
+> 단계는 서로의 중간 산출물(`resolved_features`/`resolution_states`)을 **주고받지
+> 않는 별도 함수**로 나눈다(`app/services/trip_weather_batch.py`). 결과:
+>
+> - weather 조회는 그 요청의 feature batch 성공 여부, 그리고 feature의
+>   `retired`/`suppressed`/`missing` 여부와 **완전히 무관**하다 — feature 행정
+>   상태가 어떻든 POI가 좌표를 들고 있으면 그 물리적 지점의 날씨를 그대로 낸다.
+>   feature batch(`get_features`)가 이번 요청에서 실패해도 weather는 영향받지
+>   않는다.
+> - 이 경로가 내는 상태는 **`found`/`no_data`/`unavailable` 셋뿐**이다.
+>   `retired`/`suppressed`/`missing`은 flag off일 때의 구 `kor_travel_map` 경로
+>   에서만 나온다(§3.5 개정판 참조). §4.3이 서술했던 "retired는 선행 feature
+>   batch에서 가져온다"는 **trip view(P4)에는 더 이상 적용되지 않는다** — 대신
+>   "feature batch와 완전히 분리한다"로 대체된다. 단건 `GET /features/{id}/weather`
+>   (T-362/P3)는 이 원칙의 적용 대상이 **아니다** — 그 endpoint는 POI 문맥이 없는
+>   bare `feature_id` 하나만 받으므로 좌표를 알 방법이 `kor_travel_map.get_feature`
+>   뿐이라 완전 분리가 물리적으로 불가능하다(fallback할 Pinvi 소유 snapshot이
+>   없다). 분리는 **POI 문맥이 있는 trip view에서만** 성립한다.
+
 ### 3.5 상태 모델 매핑
 
-현재 6-상태 union을 유지하되 의미를 다시 건다.
+**flag off인 trip view(구 `kor_travel_map` 경로) · Admin weather-values(T-364 예정)**
+— 이 두 경로는 `kor_travel_map`의 weather-batch/admin 프로토콜을 그대로 쓴다.
+현재 6-상태 union을 유지하되 의미를 다시 건다. (T-362 단건 `GET
+/features/{id}/weather`는 discriminated union이 아니라 `FeatureWeatherCard`
+하나만 돌려주므로 이 표의 대상이 아니다 — §2.3 참조.)
 
 | 상태                     | 현재 근거                        | 이관 후 근거                     |
 | ------------------------ | -------------------------------- | -------------------------------- |
@@ -307,6 +334,19 @@ location이 **아닌** 쪽에 있었고, 대표 location만 `/locations/{id}/for
 | `retired`                | `public_features`에 없음         | **근거 소멸** — §4.3             |
 | `suppressed` / `missing` | 선행 feature batch의 parent 상태 | **변화 없음** (Pinvi 자체 판정)  |
 | `unavailable`            | transport/계약/예산 실패         | 동일                             |
+
+**Trip view(T-363/P4, flag on)** — 위 표는 적용되지 않는다. feature batch와
+완전히 분리되므로 상태는 3개뿐이고 전부 POI 자신의 `feature_snapshot.coord`와
+weather 서비스 응답만으로 결정된다.
+
+| 상태          | 근거                                                                                                    |
+| ------------- | --------------------------------------------------------------------------------------------------------- |
+| `found`       | `feature_snapshot.coord` 있음 + location 해석 성공 + 그 날짜 사실 ≥ 1행                                    |
+| `no_data`     | 좌표 없음(snapshot에 coord 미기록) **또는** location 해석 실패(반경 100km 밖) **또는** 성공한 location 전부의 그 날짜 사실이 0행 |
+| `unavailable` | location fanout 중 일부/전부 실패 + 성공한 부분의 그 날짜 사실도 0행, 또는 전체 예산(10초) 초과              |
+
+`retired`/`suppressed`/`missing`은 이 경로에서 **나오지 않는다** — feature의
+행정 상태를 참조하지 않기 때문이다(위 방향 전환 참조).
 
 ---
 
@@ -371,6 +411,17 @@ Pinvi는 `app.trip_day_weather_snapshots` 같은 별도 스냅샷 테이블을 *
 가져온다. 실제로 `suppressed`/`missing`이 이미 그렇게 동작하므로 같은 자리로 옮기면
 된다 — 상태 자체는 보존된다.
 
+> **2026-09-17 개정 — 이 절은 trip view(T-363/P4)에는 더 이상 적용되지 않는다.**
+> 사용자 결정으로 weather를 feature batch 파이프라인과 완전히 분리했다(§3.4
+> 방향 전환 참조). trip view weather는 `retired`/`suppressed`/`missing`을 아예
+> 참조하지 않고 POI의 `feature_snapshot.coord`만 본다 — "근거 소멸을 선행
+> batch로 메운다"가 아니라 "애초에 그 근거를 묻지 않는다"로 바뀌었다. 이 절이
+> 서술한 원래 접근은 flag off인 구 경로와 Admin weather-values(T-364 예정)에는
+> 여전히 유효하다 — 둘 다 `kor_travel_map`의 weather-batch/admin 프로토콜을
+> 그대로 쓴다(§3.5 개정판 참조). T-362 단건 `GET /features/{id}/weather`는
+> 애초에 discriminated union이 아니라(`retired` 같은 상태 자체가 없다) 이 절의
+> 대상이 아니었다.
+
 ### 4.4 중기예보(`mid`) · 특보 표면
 
 - `mid`: `forecast_style`에 어휘는 있으나 현재 KMA 커버리지가 없어 사실상 0행. G-1과
@@ -379,6 +430,13 @@ Pinvi는 `app.trip_day_weather_snapshots` 같은 별도 스냅샷 테이블을 *
   `/v1/features/{id}/weather/forecast`)를 **이미 갖고 있다** — vendored OpenAPI 스냅샷에
   있다. 다만 Pinvi가 **소비하지 않았을** 뿐이다. 즉 `alerts[]`는 이관이 만들어 주는
   신규 능력이 아니라 **새로 소비하기로 하는 선택**이다(범위 밖, 후속 task).
+
+### 4.5 영향 없음이 확인된 것
+
+- **일출/일몰**: KASI 기반 Pinvi 자체 소유. 무관.
+- **모바일**: `apps/mobile`에 날씨 코드가 **없다**. 이관 작업 없음.
+- **공개 beach view**: `latest_weather`/`upcoming_index_forecasts`는 불투명
+  passthrough라 소스 교체와 독립.
 
 ### 4.6 `kind='weather'` feature는 그대로 남는다 (이원 구조)
 
@@ -411,28 +469,32 @@ map 소유이므로 건드리지 않는다.
 | transport | `apps/api/app/clients/kor_travel_map_admin.py` `get_feature_weather`                                                | T-364/365 |
 | 라우터    | `apps/api/app/api/v1/features.py` (`normalize_asof_query`, `_weather_from_kor_travel_map`) — **완료**              | T-362     |
 | 라우터    | `apps/api/app/api/v1/admin/features.py` (weather-values, `asof` 422)                                                | T-364     |
-| 서비스    | `apps/api/app/services/trip_view_builder.py` (`_weather_resolution`, 10초 예산, fanout)                             | T-363     |
+| 서비스    | `apps/api/app/services/trip_weather_batch.py`(신설, feature batch와 완전 독립) + `trip_view_builder.py` 배선 — **완료** | T-363     |
 | 스키마    | `apps/api/app/schemas/{feature,trip,admin}.py`                                                                      | T-362~364 |
 | 스키마    | `packages/schemas/src/{feature,trip,admin}.ts` (Zod 미러 + partition superRefine)                                   | T-362~364 |
 | client    | `packages/api-client/src/endpoints/{feature,admin}.ts`, `query-keys.ts`                                             | T-362/364 |
 | web       | `apps/web/components/trips/TripWeatherSummary.tsx` (분류기 — §3.1-(3)) — **서버 정규화로 무변경 확인**              | T-362/363 |
 | web       | `apps/web/components/map/FeatureMapView.tsx`, `vworldPrimitives.tsx` (§4.6) — **경로 동일 확인, 무변경**            | T-362     |
 | web       | Admin weather-values 탭 `FeatureDetailSubpage.tsx`                                                                  | T-364     |
-| e2e       | `apps/web/e2e/trip-detail.e2e.ts` (단건 weather 요청 0회 단언)                                                      | T-363     |
-| e2e       | `trip-feature-resolution-live-mutating.live.ts` + `PINVI_LIVE_WEATHER_*` env                                        | T-363     |
-| 런북      | `docs/runbooks/live-mutating-e2e.md` ("weather batch POST 정확히 1회" 게이트)                                       | T-363     |
+| e2e       | `apps/web/e2e/trip-detail.e2e.ts` (단건 weather 요청 0회 단언) — **검토 결과 무변경**(mock 기반, 응답 셰입 불변) | T-363     |
+| e2e       | `trip-feature-resolution-live-mutating.live.ts` + `startWeatherProxy` + 새 flag-on sub-test — **코드 완료, 실행은 fixture 대기** | T-363     |
+| 런북      | `docs/runbooks/live-mutating-e2e.md` ("T-363 weather flag on 게이트 단건" 절 신설) — **완료**                       | T-363     |
 | 계약      | `apps/api/tests/contract/kor-travel-map-openapi-*.json` (SHA-256 핀) + `tests/unit/test_kor_travel_map_contract.py` | T-365     |
 | 설정      | `pinvi_kor_travel_map_*` / `pinvi_kor_travel_weather_*`, `.env.example`                                             | T-360/365 |
 
 > `pinvi_kor_travel_map_service_token`은 **제거하지 않는다** — feature batch가 계속
 > 쓴다. weather 경로에서만 빠진다.
-
-### 4.5 영향 없음이 확인된 것
-
-- **일출/일몰**: KASI 기반 Pinvi 자체 소유. 무관.
-- **모바일**: `apps/mobile`에 날씨 코드가 **없다**. 이관 작업 없음.
-- **공개 beach view**: `latest_weather`/`upcoming_index_forecasts`는 불투명
-  passthrough라 소스 교체와 독립.
+>
+> **e2e 실행은 kor-travel-map 운영 DB의 fixture 부재로 보류됐다(2026-09-17).**
+> N150 SSH 접속과 `kor-travel-map-postgres` 직접 조회로 확인 — 운영 DB에는 `place`
+> feature 1047개뿐이고 `retired`/`suppressed` 상태 feature가 **0개**, weather 값도
+> **0행**이다. `retired`/`suppressed` fixture를 새로 만들려면 kor-travel-map Admin UI의
+> manual-feature-create 토큰이 필요한데 API 컨테이너에는 그 토큰의 **SHA-256 해시만**
+> 있고 원문은 admin BFF만 안다 — 의도적으로 프로그램적 우회가 막혀 있는 경로라 임의로
+> 뚫지 않았다. 관리자가 Admin UI에서 더미 feature 2개(retired 1·suppressed 1)를 만들어
+> feature_id를 주면 그대로 실행 가능하다 — 코드(`startWeatherProxy`, flag-on sub-test,
+> 런북 실행 예시)는 이미 완성했다. `trip-detail.e2e.ts`는 실행 없이 코드 검토만으로
+> 무변경임을 확인했다(순수 mock, 백엔드 무관 계약).
 
 ---
 

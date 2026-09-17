@@ -54,11 +54,18 @@ pair와 정확히 같아야 하며, v6/v8 generation schema 변경은 Map·Manag
   weather가 없는 feature, retired parent를 40일 여행의 sparse 다중 날짜 batch로 조회한다.
   직접 Trip read 한 번당 weather batch POST가 정확히 1회인지, 40일차가 과거 31일 상한으로
   생략되지 않는지 검증한다. weather batch만 강제 503으로 바꿔 `unavailable`과 복구를 확인하고
-  단건 weather 요청이 0회인지도 고정한다.
-  (**ADR-068 이관 시 이 게이트는 새 호출 모양으로 다시 쓴다** — batch POST 1회가 아니라
-  `/markers` 1회 + location별 `/forecast` fanout이 된다. 삭제가 아니라 재정의이며 T-363
-  범위다.) 격리 API는 짧은 TTL의 feature cache를 켜고, 40일
-  fixture 생성 요청이 일반 사용자 rate limit을 소진하지 않도록 rate limit을 비활성화한다.
+  단건 weather 요청이 0회인지도 고정한다. **이 게이트는 `pinvi_kor_travel_weather_trip_view_enabled`
+  가 off인(기본값) 격리 API를 가정한다** — flag on 경로의 게이트는 아래 별도 하위 항목 참조.
+- **T-363(P4, ADR-068) weather flag on 게이트 — `pinvi_kor_travel_weather_trip_view_enabled=true`
+  로 뜬 별도 격리 API에서만 실행.** 위와 같은 fixture를 재사용하되(§2 참조), 새 호출 모양을
+  검증한다: 구 `POST /v1/features/weather/batch`·단건 `/v1/features/{id}/weather`는 0회여야
+  하고, 대신 `GET /v1/weather/markers` 1회(청크) + location마다 `GET
+  /v1/weather/locations/{id}/forecast` **정확히 1회**(40일 여행이어도 날짜 fanout 없음)가
+  나와야 한다. **핵심 불변식**: `retired`/`suppressed`/`missing` feature도 POI
+  snapshot에 좌표가 있으면 weather는 그 상태와 무관하게 시도된다 — `weather_by_feature_id`가
+  `retired`/`suppressed`/`missing`을 절대 내지 않는 것으로 고정한다(feature batch와 완전히
+  분리됐다는 것 자체가 이 게이트의 목적이다, `trip_weather_batch.py` 모듈 docstring). 삭제가
+  아니라 **추가**다 — flag off 게이트는 그대로 유지된다.
 - Trip day hole suite는 날짜가 있는 3박 4일 여행을 실제 UI에서 생성하고, 1~4일차 자동 생성,
   1일차 삭제 후 가장 빠른 빈 day 재생성, 일자 설정 팝업의 날짜 수정, 진행 중 스크린샷 저장을 확인한다.
 - Backup mutating suite는 staging admin 계정으로 `/admin/backup` 수동 snapshot을 1회 생성하고,
@@ -201,6 +208,64 @@ weather 날짜는 fixture의 `valid_at|observed_at|issued_at` 범위 안에서 �
 `PINVI_RATE_LIMIT_ENABLED=false`는 격리 API에만 적용한다. 40일 여행 생성은 39개의 추가 POI
 mutation을 포함하므로 기본 분당 60회 제한을 그대로 쓰면 본 검증이 아니라 마지막 cleanup이
 429로 실패할 수 있다.
+
+### T-363 weather flag on 게이트 단건 (ADR-068)
+
+위 "Feature resolution 단건"과 **같은 fixture**를 재사용하되, 격리 API를
+`PINVI_KOR_TRAVEL_WEATHER_TRIP_VIEW_ENABLED=true`로 새로 띄운 뒤 실행한다(flag off
+격리 API와 동시에 띄우려면 포트를 분리한다 — 아래 예시는 `13801/13805`를 그대로 쓰되
+**flag on 전용으로 재기동**한 상태를 가정한다). `PINVI_KOR_TRAVEL_WEATHER_BASE_URL`은
+weather proxy(`13702`, 기본값)를 가리키게 한다 — 이 proxy가 실제 `kor-travel-weather`
+인스턴스(N150 고정 포트 `14101`)로 포워딩하며 `markers`/`forecast` 호출을 센다.
+
+```bash
+# 격리 API container/server 환경 — 위 Feature resolution 단건의 값에 다음을 더한다
+export PINVI_KOR_TRAVEL_WEATHER_TRIP_VIEW_ENABLED=true
+export PINVI_KOR_TRAVEL_WEATHER_BASE_URL=http://127.0.0.1:13702
+
+# Playwright 환경 — 위 Feature resolution 단건과 같은 fixture 값 + 아래를 추가
+PINVI_LIVE_FEATURE_RESOLUTION_E2E=1 \
+PINVI_LIVE_WEATHER_TRIP_VIEW_E2E=1 \
+PINVI_LIVE_FEATURE_CACHE_REVALIDATION=1 \
+PINVI_LIVE_WEATHER_PROXY_PORT=13702 \
+PINVI_LIVE_WEATHER_UPSTREAM_PORT=14101 \
+PINVI_LIVE_FOUND_FEATURE_ID="<fixture-found-id>" \
+PINVI_LIVE_FOUND_FEATURE_NAME="<fixture-found-name>" \
+PINVI_LIVE_FOUND_FEATURE_LON="<fixture-found-lon>" \
+PINVI_LIVE_FOUND_FEATURE_LAT="<fixture-found-lat>" \
+PINVI_LIVE_RETIRED_FEATURE_ID="<fixture-retired-id>" \
+PINVI_LIVE_SUPPRESSED_FEATURE_ID="<fixture-suppressed-id>" \
+PINVI_LIVE_MISSING_FEATURE_ID="<fixture-missing-id>" \
+PINVI_LIVE_WEATHER_DATE="<YYYY-MM-DD>" \
+PINVI_LIVE_WEATHER_FEATURE_ID="<fixture-weather-found-id>" \
+PINVI_LIVE_WEATHER_FEATURE_NAME="<fixture-weather-found-name>" \
+PINVI_LIVE_WEATHER_FEATURE_LON="<fixture-weather-found-lon>" \
+PINVI_LIVE_WEATHER_FEATURE_LAT="<fixture-weather-found-lat>" \
+PINVI_LIVE_WEATHER_NO_DATA_FEATURE_ID="<fixture-weather-no-data-id>" \
+PINVI_LIVE_WEATHER_NO_DATA_FEATURE_NAME="<fixture-weather-no-data-name>" \
+PINVI_LIVE_WEATHER_NO_DATA_FEATURE_LON="<fixture-weather-no-data-lon>" \
+PINVI_LIVE_WEATHER_NO_DATA_FEATURE_LAT="<fixture-weather-no-data-lat>" \
+PINVI_LIVE_TRIP_PREFIX="[codex-tvn11-weather-<unique-run-id>]" \
+PINVI_LIVE_WEB_URL=http://127.0.0.1:13805 \
+PINVI_LIVE_API_URL=http://127.0.0.1:13801 \
+PINVI_LIVE_MAP_PROXY_PORT=13701 \
+PINVI_LIVE_MAP_UPSTREAM_PORT="<isolated-map-api-port>" \
+PINVI_LIVE_EMAIL="$PINVI_LIVE_EMAIL" \
+PINVI_LIVE_PASSWORD="$PINVI_LIVE_PASSWORD" \
+scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- trip-feature-resolution-live-mutating.live.ts --grep "flag on" --workers=1
+```
+
+`retired`/`suppressed`/`missing` fixture는 이 게이트에서도 좌표가 있는 snapshot으로
+POI에 연결된다 — kor-travel-map에 그 feature가 실제로 있는지 없는지와 무관하게 weather가
+시도되는지가 이 게이트의 핵심이다(§1 참조). `PINVI_LIVE_WEATHER_NO_DATA_*` 값은 이
+sub-test가 직접 쓰진 않지만 `assertLiveEnv()`가 공통으로 요구하므로 그대로 채운다.
+
+**2026-09-17 현재 미착수** — 이 게이트를 실제로 돌리려면 kor-travel-map 운영 DB에
+`retired`/`suppressed` 상태인 fixture가 필요한데, 이 DB에는 현재 그런 feature가 0개다
+(전량 `place`/`published`/`active`). 더미 feature를 만들어 상태를 전환하려면 Admin UI의
+manual-feature-create 토큰(서버엔 SHA-256 해시만 있고 원문은 admin BFF만 안다)이 필요해
+관리자가 직접 Admin UI에서 만들어야 한다. 코드(위 sub-test, weather proxy)는 완성돼
+있으니 fixture가 준비되면 그대로 실행한다.
 
 Backup staging:
 

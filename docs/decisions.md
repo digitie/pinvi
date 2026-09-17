@@ -3346,8 +3346,19 @@ Admin 1개는 별도 transport인 `apps/api/app/clients/kor_travel_map_admin.py`
    - **외부 설정에 종속된다.** 보존이 되돌아가면(15일 미만으로 후퇴) 과거 여행 날씨가
      조용히 사라진다. Pinvi 측에 보존 지평 가드(**임계 15일** 미만이면 실패하는 점검,
      T-367)를 둔다.
-9. **`retired` 상태는 선행 feature batch에서 가져온다.** 날씨 서비스는 feature
-   lifecycle을 모르므로 판정처를 옮긴다. `suppressed`/`missing`이 이미 그 구조다.
+9. **`retired` 상태는 선행 feature batch에서 가져온다** — flag off인 구 경로와
+   Admin weather-values(T-364)에 적용된다. 날씨 서비스는 feature lifecycle을
+   모르므로 판정처를 옮긴다. `suppressed`/`missing`이 이미 그 구조다.
+   **9b(2026-09-17, T-363 구현 중 사용자 결정으로 개정)**: **trip view(P4, flag
+   on)에는 결정 9를 적용하지 않는다.** weather 조회는 feature batch 파이프라인과
+   완전히 분리한다 — `resolved_features`/`resolution_states`를 주고받지 않는
+   별도 함수(`app/services/trip_weather_batch.py`)로 두고, POI 자신의
+   `feature_snapshot.coord`(POI 추가 시점에 저장된 Pinvi 소유 값)만으로 동작한다.
+   그 결과 이 경로는 `retired`/`suppressed`/`missing`을 내지 않고
+   `found`/`no_data`/`unavailable` 셋만 낸다 — feature가 관리상 사라졌어도 POI가
+   좌표를 들고 있으면 그 물리적 지점의 날씨를 그대로 보여준다(날씨는 장소의 행정
+   상태를 모른다는 원칙을 극단까지 적용). 단건(T-362)은 POI 문맥이 없어(bare
+   `feature_id`만 받음) 이 분리가 불가능하므로 결정 9의 원 설계 그대로 유지한다.
 10. **provider 우선순위를 Pinvi 상수로 고정한다** — KMA > AirKorea(대기질) > 상용,
     동률 시 `known_at` 최신. 한 location에 provider별 어휘 두 벌이 동시에 오므로 `unit`
     필드를 항상 읽고 가정하지 않는다.
@@ -3400,3 +3411,8 @@ Admin 1개는 별도 transport인 `apps/api/app/clients/kor_travel_map_admin.py`
   - 상용 provider = **처리방침 갱신 후 표시**하되 카드에 출처를 명시한다.
 - 남은 외부 의존 둘 다 `kor-travel-weather` 소관: **G-1**(KMA 격자 커버리지),
   **G-3**(보존 연장).
+- **T-363 진행 상황(2026-09-17)**: 백엔드(`trip_weather_batch.py` 신설, flag
+  `pinvi_kor_travel_weather_trip_view_enabled`, 통합테스트 12건) 완료 — 결정 9b
+  (feature batch와 완전 분리)까지 반영. e2e(`trip-detail.e2e.ts`,
+  `trip-feature-resolution-live-mutating.live.ts`, `live-mutating-e2e.md`)는
+  Playwright가 N150 전용이라 미착수 — 다음 세션에서 N150 환경 확보 후 진행.

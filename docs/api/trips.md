@@ -109,10 +109,15 @@ revision이 같은 캐시를 재사용한 성공 상태이므로 소비자 응�
 `found` 상태는 `card_key`만 가지며, 같은 일자·기상 격자의 여러 feature가 같은 카드를
 참조한다. 참조된 card가 빠지거나 참조되지 않은 card가 있으면 응답 계약 오류다.
 
-> **소스 이관 예정 (ADR-068)**: dedupe 근거가 "기상 격자"에서 `kor-travel-weather`의
-> `location_id`로 바뀐다(`card_key := location_id`). **파티션 불변식과 응답 셰입은
-> 그대로**다. 전환은 T-363(P4) —
-> [`docs/integrations/kor-travel-weather.md`](../integrations/kor-travel-weather.md).
+> **소스 이관 (ADR-068, T-363/P4 — flag `pinvi_kor_travel_weather_trip_view_enabled`,
+> 기본 off)**: dedupe 근거가 "기상 격자"에서 `kor-travel-weather`의 `location_id`로
+> 바뀐다(`card_key := location_id`). **파티션 불변식과 응답 셰입은 그대로**다. flag가
+> on이면 weather 조회는 feature batch(위 `feature_resolution_state`)와 **완전히
+> 독립**이다 — POI 자신의 `feature_snapshot.coord`만 보고 결정하므로
+> `weather_by_feature_id`의 상태는 `found`/`no_data`/`unavailable` 셋뿐이며,
+> feature가 `retired`/`suppressed`/`missing`이어도 좌표가 있으면 그 지점의 날씨를
+> 그대로 낸다. 상세 —
+> [`docs/integrations/kor-travel-weather.md`](../integrations/kor-travel-weather.md) §3.4/§3.5.
 
 응답 shape:
 
