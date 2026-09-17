@@ -2,6 +2,27 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-17 (claude) — T-363(#547)·T-364(#549) 머지 완료
+
+사용자 지시 "머지후진행"에 따라 PR #547(T-363)을 draft에서 ready로 전환 후 CI
+green 확인, squash 머지(`cd39ffbb`). 스택 PR #548(T-364, base=#547 브랜치)이 그
+직후 **자동으로 closed**됐다 — GitHub가 base 브랜치 삭제 시 자동 재타겟하지
+않는다는 걸 실측으로 확인. 재오픈도 "closed PR의 base는 못 바꾼다"로 막혀,
+같은 커밋(`4da2b6d6`)을 `origin/main` 기준 새 브랜치에 cherry-pick(충돌 없이
+그대로 적용 — 내용이 이미 main에 들어간 T-363 위에 순수 추가였다는 뜻)한 뒤
+PR #549로 다시 열어 머지했다(`f6e86e2a`). **교훈**: squash 머지 예정인 브랜치
+위에 스택 PR을 쌓을 땐, 아래 PR이 머지되는 즉시 위 PR의 브랜치를 같은 커밋으로
+`origin/main` 기준에 재배치(cherry-pick)할 준비를 해 둘 것 — rebase는 이미
+squash된 커밋들과 재생 대상 개별 커밋들이 충돌하므로 쓸 수 없다(실측).
+
+`docs/tasks-done.md`에 T-363·T-364 완료 기록을 남기고, `docs/tasks.md`에서
+T-364를 제거·T-363은 "e2e 실행 검증"만 남은 잔여 항목으로 축소했다(기능 자체는
+머지 완료).
+
+다음: T-366(P7, G-2 해소) — `docs/compliance/data-policy.md`의 날씨 출처
+기재를 실제 provider 구성(국외 상용 사업자 포함)에 맞게 재작성 + 카드에 출처
+표시 UI. 순수 Pinvi 소관이라 외부 게이트 없이 지금 진행 가능.
+
 ## 2026-09-17 (claude) — T-363(P4) e2e 코드 작성 — N150 운영 DB에 fixture 없음 확인
 
 `agent/claude-weather-t363-trip-view`(백엔드는 이미 머지 대상 PR #547 draft). "e2e

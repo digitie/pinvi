@@ -1,5 +1,32 @@
 # resume.md
 
+## 2026-09-17 (claude) — T-363·T-364 머지 완료, 다음은 T-366
+
+T-363(#547)·T-364(#549) 둘 다 main에 머지됐다. T-363의 e2e 실제 실행만
+kor-travel-map fixture 부재로 남아 있다(`docs/tasks.md` "T-363 e2e 실행
+검증" 항목).
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+- **squash-merge 예정 브랜치 위에 스택 PR을 쌓지 말 것 — 부득이하면 머지 직후
+  즉시 cherry-pick으로 재배치할 준비를 해 둘 것.** GitHub는 base 브랜치가
+  삭제되면 스택 PR을 자동 closed시키고, closed PR은 base를 바꿀 수 없으며,
+  rebase는 이미 squash된 커밋과 충돌한다. 안전한 복구법은: 새 브랜치를
+  `origin/main`에서 따고 그 위 PR의 커밋 SHA를 `git cherry-pick`(내용이 이미
+  main에 들어간 하위 PR 위에 순수 추가였다면 충돌 없이 적용된다).
+- T-365/T-367은 여전히 외부 게이트(G-1 KMA 커버리지, G-3 보존 연장) 대기 —
+  지금 코드로 진행할 수 없다.
+- T-368(미정)은 kor-travel-map이 weather 기능을 완전히 제거할 예정이라는
+  2026-09-17 사용자 결정 때문에 새로 열린 항목이다 — `FeatureMapView.tsx`
+  weather marker의 위치 공급원 대체 설계. 아직 착수 전.
+
+**다음 한 작업**: T-366(P7, 게이트 G-2 해소 — T-365보다 먼저 끝나야 함).
+`docs/compliance/data-policy.md`의 "날씨: 기상청" 위탁 기재와 "국외 이전 의무
+발생 안 함" 선언을 실제 provider 구성(KMA/AirKorea/KHOA/KRForest는 국내
+공공기관, OpenWeatherMap/WeatherAPI/Open-Meteo/wttr.in은 국외 상용 사업자)에
+맞게 재작성하고, weather 카드에 출처(provider) 표시 UI를 추가한다. 순서
+고정: 처리방침 갱신 → 출처 표기 구현 → (T-365에서) 비KMA provider 값 표시
+허용. 순수 Pinvi 소관이라 외부 게이트 없이 바로 진행 가능.
+
 ## 2026-09-17 (claude) — T-363 e2e 코드 완료, 실행은 kor-travel-map fixture 대기
 
 T-363의 e2e 코드(live-mutating weather proxy + flag-on sub-test + 런북)를 완성했다.
