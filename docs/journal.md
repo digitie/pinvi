@@ -48,6 +48,66 @@ measurement_point 없음 → NULL 저장, source_locations 비어도 대표 loca
 컬럼/인덱스 셰입 눈으로 대조). ruff 0, `mypy --strict app`(239파일) 0, 기존
 `tests/unit` 1428건 회귀 없음.
 
+### PR CI에서 발견한 진짜 회귀 — 0101이 운영 스크립트에 하드코딩돼 있었다
+
+PR #545 CI의 `integration-test (2)`가 실패했다. 조사해 보니 **flaky 4건**
+(`test_cache_target_causal_canary.py` — origin/main 단독 실행에서도 재현, 내 변경과
+무관 확인)과 **결정론적 회귀 3건**이 섞여 있었다.
+
+결정론적 회귀의 진짜 원인: `infra/postgres/bootstrap-pinvi-runtime-role.sh`가
+```sh
+if [ "${applied_revision}" = "20260824_0101" ]; then
+    ...GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app...
+fi
+```
+로 **현재 Alembic head 리터럴을 하드코딩**하고 있었다. 주석: "Alembic은 이미 적용된
+0101을 재실행하지 않는다. 따라서 과거 0101 variant가 남긴 runtime ACL 누락은 일반
+role bootstrap에서 **exact head일 때만** 정본 app owner로 보정한다." — 즉 0101 뒤에
+아무 migration이나 추가하면 `applied_revision`이 새 head로 바뀌어 이 조건이 거짓이
+되고, **runtime role의 테이블 권한 부여 전체가 조용히 스킵된다.**
+`test_m05_migrator_login_lifecycle.py::test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions`
+(실제 Docker Compose + Postgres로 role topology 전체를 검증하는 보안 경계 통합
+테스트)가 이를 결정론적으로 잡아냈다 — 2번 재현 모두 동일하게 실패.
+
+`docs/decisions.md`의 ADR-065를 다시 읽었지만 "0101 뒤에 새 migration을 추가하는
+절차"는 어디에도 없었다. `docs/conventions/database.md`의 일반 Alembic 작성
+가이드(`YYYYMMDD_NNNN_<slug>.py`로 새 revision 추가)는 이 M05 특수 제약과 정면으로
+충돌한다 — 문서 갭이다.
+
+**사용자에게 확인**(AskUserQuestion) — 세 선택지(가드를 0102까지 확장 / T-361 보류
+/ 0101 파일에 직접 추가) 중 **"가드를 0102까지 확장(권장)"**을 선택받았다.
+
+### 수정하며 겪은 두 번째 함정 — golden 테스트가 정확한 shell 구문·주석 문자열을 고정한다
+
+처음엔 `if`를 `case "${applied_revision}" in 20260824_0101 | 20260917_0102) ... ;; esac`로
+바꾸고 주석도 "0101" → "revision"으로 일반화했다. 그랬더니 이번엔
+`tests/unit/test_m05_migration_role_wiring.py`가 깨졌다 — 이 테스트는 스크립트
+내용을 **문자 그대로** 여러 곳에서 부분일치 검증한다:
+`'if [ "${applied_revision}" = "20260824_0101" ]; then'`(정확한 `if` 구문),
+`"이미 적용된 0101을 재실행하지 않는다"`(정확한 주석 문구, `bootstrap.index(...)`로
+슬라이스 시작점으로도 씀). `case`문으로 바꾸면 그 `if` 리터럴이 사라지고, 주석을
+일반화하면 그 문구도 사라진다.
+
+**최종 형태**: `if` 구문과 원래 주석 문구는 **손대지 않고 그대로 둔 채**, GRANT SQL을
+`apply_runtime_acl_repair()` 함수로 뽑아내고, `if [ = "20260824_0101" ]; then
+apply_runtime_acl_repair; fi` 뒤에 `if [ = "20260917_0102" ]; then
+apply_runtime_acl_repair; fi`를 **별개의 `if` 블록으로** 추가했다(하나의 `if`에
+`||`로 합치면 다시 그 golden 리터럴이 깨진다). SQL은 한 곳에만 쓰고 두 `if`가
+같은 함수를 부른다.
+
+검증: `sh -n` 구문 확인, `shellcheck -s sh` 0 warning,
+`test_m05_migration_role_wiring.py` 19건 green, 영향받은 통합 테스트 3파일 40건
+green(`test_m05_activation_anchor_migration.py`, `test_m05_migrator_login_lifecycle.py`,
+`test_weather_location_resolver.py`), `tests/unit` 1428건 회귀 없음.
+
+### 환경 함정 하나 더 — `git switch --detach`는 uncommitted 변경을 지우지 않는다
+
+원인 격리(내 변경 vs 기존 flaky)를 위해 `git switch --detach origin/main`을 했는데,
+**working tree의 uncommitted 수정은 그대로 남아** 비교 실험이 한 번 오염됐다
+(stash 없이 switch만 하면 코드는 origin/main인데 테스트 파일은 내 수정본인 채로
+돌아간다). `git stash` 후 switch해야 진짜 격리된 비교가 된다. 이후로는
+switch 전에 반드시 `git status --short`로 clean을 확인했다.
+
 ## 2026-09-17 (claude) — T-360(P1): `kor-travel-weather` client 신설 (ADR-068)
 
 `agent/claude-weather-t360-client`.

@@ -660,7 +660,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             "f",
             "t",
             "t",
-            "20260824_0101",
+            "20260917_0102",  # 현재 head — T-361이 20260824_0101 뒤에 추가
         )
         canonical_fingerprint = role_catalog_fingerprint()
         assert sealed_role_topology_diagnostic() == (
@@ -834,7 +834,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             '--username="$PINVI_APP_DB_USER" '
             '--dbname="$POSTGRES_DB" --command="SELECT version_num FROM app.alembic_version"',
         )
-        assert runtime_version_select.stdout.strip() == "20260824_0101"
+        assert runtime_version_select.stdout.strip() == "20260917_0102"  # 현재 head
         compose(
             "exec",
             "-T",

@@ -19,6 +19,18 @@
   실행 파일을 못 찾고 **전부** 즉시 실패한다(내가 만들기 전부터 있던 문제, CI는
   영향 없음).
 
+**중요 — 0101 뒤에 새 Alembic migration을 추가하려면 반드시 함께 고칠 파일이
+하나 더 있다.** `infra/postgres/bootstrap-pinvi-runtime-role.sh`가 "exact head가
+20260824_0101일 때만" runtime role에 테이블 권한을 부여하도록 **리터럴 하드코딩**돼
+있다 — 이 사실이 문서 어디에도 없어서 T-361 PR CI에서 보안 경계 통합 테스트가 실패한
+뒤에야 발견했다(`docs/journal.md` 2026-09-17 같은 날 후속 항목 참조). 지금은 0101과
+20260917_0102(이번 migration) 둘 다 인식하도록 고쳤다. **다음에 또 새 migration을
+추가하는 사람은 이 스크립트의 `apply_runtime_acl_repair` 호출부에 새 `if` 블록을
+반드시 추가할 것** — 빠뜨리면 runtime role이 테이블 권한을 조용히 잃는다. 이 스크립트
+내용은 `tests/unit/test_m05_migration_role_wiring.py`가 정확한 shell 구문·주석
+문자열까지 golden으로 고정하므로, 구조를 바꿀 땐(`if`→`case` 등) 그 테스트부터
+돌려볼 것.
+
 **다음 한 작업**: T-362(P3) — 단건 `GET /features/{id}/weather`를 flag로 전환. 이번
 task에서 처음으로 `kor_travel_weather_client_lifespan`을 `main.py`에 배선하고
 `resolve_weather_location`을 실제로 호출하게 된다. provider 우선순위 상수 + `unit`

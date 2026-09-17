@@ -30,6 +30,13 @@
       커밋 후 재해석(중간 실패해도 재시도 가능). 실제 Postgres(testcontainers)로 migration
       upgrade/downgrade 확인 + 리졸버 통합테스트 8건 전부 green. **배선 없음** — 라우터
       미사용, T-362/T-363이 처음 쓴다.
+      **PR CI에서 발견한 별도 회귀**: `infra/postgres/bootstrap-pinvi-runtime-role.sh`가
+      "exact head == 20260824_0101" 리터럴로 runtime role 테이블 권한 부여를 게이팅하고
+      있어, 새 migration(0102) 추가만으로 그 GRANT 전체가 조용히 스킵됐다(보안 경계
+      통합 테스트가 결정론적으로 재현). 사용자 확인 후 스크립트를 0102도 인식하도록
+      수정(`apply_runtime_acl_repair()` 함수화 + 별개 `if` 블록 추가, golden 테스트
+      `test_m05_migration_role_wiring.py`가 요구하는 정확한 `if` 구문·주석 문구는
+      보존). 상세는 `docs/journal.md` 2026-09-17 후속 항목.
 
 ## 2026-09-05
 
