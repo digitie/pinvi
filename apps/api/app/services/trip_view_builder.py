@@ -34,6 +34,7 @@ from app.clients.kor_travel_map import (
     SuppressedFeatureBatchItem,
     UnchangedFeatureBatchItem,
 )
+from app.clients.kor_travel_weather import KorTravelWeatherClient
 from app.core.config import settings
 from app.core.markers import resolve_display_marker_color
 from app.models.companion import TripCompanion
@@ -44,6 +45,7 @@ from app.models.trip import Trip
 from app.models.trip_day import TripDay
 from app.services.feature_cache import CachedFeature, cache_generation_observer, feature_cache
 from app.services.poi import get_poi_rise_sets, poi_rise_set_to_dict
+from app.services.trip_weather_batch import build_trip_weather_via_kor_travel_weather
 
 logger = logging.getLogger(__name__)
 _SEOUL = ZoneInfo("Asia/Seoul")
@@ -87,6 +89,7 @@ async def build_trip_view(
     *,
     trip: Trip,
     kor_travel_map_client: KorTravelMapClient | None,
+    weather_client: KorTravelWeatherClient | None = None,
     include_management: bool = True,
 ) -> dict[str, Any]:
     """Trip + 모든 Day + 모든 POI + (feature snapshot 또는 라이브러리 fresh fetch).
@@ -104,10 +107,16 @@ async def build_trip_view(
     kor_travel_map client가 미주입 (`kor_travel_map_client=None`) 인 경우 — POI의 stored `feature_snapshot`
     만 사용 (fresh fetch 없음). 사용자에게 stale 경고 표시.
 
+    `pinvi_kor_travel_weather_trip_view_enabled`(기본 off, ADR-068/T-363)가 켜지고
+    `weather_client`가 주입되면 4번 단계는 `kor_travel_map`의 날짜별 batch 대신
+    `kor-travel-weather`의 location 축 batch(`trip_weather_batch.py`)를 쓴다 —
+    셰입(`weather_cards`/`weather_by_feature_id`)은 동일하다.
+
     Args:
         db: AsyncSession.
         trip: Trip 인스턴스 (eager loaded 권장).
         kor_travel_map_client: 라이브러리 client. None 가능 (placeholder).
+        weather_client: `kor-travel-weather` client. flag on일 때만 쓰인다. None 가능.
 
     Returns:
         dict: {
@@ -297,76 +306,90 @@ async def build_trip_view(
 
     # weather는 POI의 영구 속성이 아니라 일자별 feature snapshot이다. 같은 날짜에 같은
     # feature가 여러 번 등장해도 한 번만 요청하고, 동일 날짜의 여러 day에도 결과를 공유한다.
-    weather_by_day_index: dict[int, dict[str, dict[str, Any]]] = {day.day_index: {} for day in days}
-    weather_cards_by_day_index: dict[int, dict[str, dict[str, Any]]] = {
-        day.day_index: {} for day in days
-    }
-    pending_weather: dict[date, dict[str, list[int]]] = {}
-    for poi in pois:
-        feature_id = poi.feature_id
-        effective_date = day_effective_date.get(poi.day_index)
-        if feature_id is None or effective_date is None:
-            continue
-        resolution_state = resolution_states.get(feature_id, "unverified")
-        if resolution_state in {"missing", "retired", "suppressed"}:
-            weather_by_day_index[poi.day_index][feature_id] = {"state": resolution_state}
-            continue
-        if kor_travel_map_client is None or feature_batch_failed:
-            weather_by_day_index[poi.day_index][feature_id] = {"state": "unavailable"}
-            continue
-        day_indexes = pending_weather.setdefault(effective_date, {}).setdefault(feature_id, [])
-        if poi.day_index not in day_indexes:
-            day_indexes.append(poi.day_index)
-
-    known_at = datetime.now(UTC)
-    if pending_weather:
-        weather_client = kor_travel_map_client
-        assert weather_client is not None
-        weather_dates = sorted(pending_weather)
-        target_at_by_date = {
-            effective_date: _weather_target_at(effective_date) for effective_date in weather_dates
-        }
-        try:
-            async with asyncio.timeout(_WEATHER_BATCH_VIEW_BUDGET_SECONDS):
-                weather_batch_by_target = await weather_client.get_weather_batch(
-                    {
-                        target_at_by_date[effective_date]: list(pending_weather[effective_date])
-                        for effective_date in weather_dates
-                    },
-                    known_at=known_at,
-                )
-        except (KorTravelMapError, OverflowError, TimeoutError, ValueError) as exc:
-            logger.error(
-                "get_weather_batch 실패: %s — 전체 미결 weather를 unavailable 처리",
-                exc,
+    if settings.pinvi_kor_travel_weather_trip_view_enabled and weather_client is not None:
+        # 위 feature batch(resolved_features/resolution_states/feature_batch_failed)는
+        # 넘기지 않는다 — weather는 POI 자신의 feature_snapshot.coord만으로 완전히
+        # 독립된 경로를 탄다(trip_weather_batch.py 모듈 docstring, 2026-09-17 방향 전환).
+        weather_by_day_index, weather_cards_by_day_index = (
+            await build_trip_weather_via_kor_travel_weather(
+                db,
+                pois=pois,
+                day_effective_date=day_effective_date,
+                weather_client=weather_client,
+                budget_seconds=_WEATHER_BATCH_VIEW_BUDGET_SECONDS,
             )
-        else:
-            for effective_date in weather_dates:
-                target_at = target_at_by_date[effective_date]
-                weather_batch = weather_batch_by_target[target_at]
-                target_weather_cards: dict[str, dict[str, Any]] = {}
-                for feature_id, day_indexes in pending_weather[effective_date].items():
-                    resolution = _weather_resolution(
-                        weather_batch[feature_id],
-                        target_at=target_at,
-                        weather_cards=target_weather_cards,
-                    )
-                    for day_index in day_indexes:
-                        weather_by_day_index[day_index][feature_id] = resolution
-                        if resolution["state"] == "found":
-                            card_key = resolution["card_key"]
-                            weather_cards_by_day_index[day_index][card_key] = target_weather_cards[
-                                card_key
-                            ]
+        )
+    else:
+        weather_by_day_index = {day.day_index: {} for day in days}
+        weather_cards_by_day_index = {day.day_index: {} for day in days}
+        pending_weather: dict[date, dict[str, list[int]]] = {}
+        for poi in pois:
+            feature_id = poi.feature_id
+            effective_date = day_effective_date.get(poi.day_index)
+            if feature_id is None or effective_date is None:
+                continue
+            resolution_state = resolution_states.get(feature_id, "unverified")
+            if resolution_state in {"missing", "retired", "suppressed"}:
+                weather_by_day_index[poi.day_index][feature_id] = {"state": resolution_state}
+                continue
+            if kor_travel_map_client is None or feature_batch_failed:
+                weather_by_day_index[poi.day_index][feature_id] = {"state": "unavailable"}
+                continue
+            day_indexes = pending_weather.setdefault(effective_date, {}).setdefault(feature_id, [])
+            if poi.day_index not in day_indexes:
+                day_indexes.append(poi.day_index)
 
-        for effective_date in weather_dates:
-            slots = pending_weather[effective_date]
-            for feature_id, day_indexes in slots.items():
-                for day_index in day_indexes:
-                    weather_by_day_index[day_index].setdefault(
-                        feature_id,
-                        {"state": "unavailable"},
+        known_at = datetime.now(UTC)
+        if pending_weather:
+            assert kor_travel_map_client is not None
+            weather_dates = sorted(pending_weather)
+            target_at_by_date = {
+                effective_date: _weather_target_at(effective_date)
+                for effective_date in weather_dates
+            }
+            try:
+                async with asyncio.timeout(_WEATHER_BATCH_VIEW_BUDGET_SECONDS):
+                    weather_batch_by_target = await kor_travel_map_client.get_weather_batch(
+                        {
+                            target_at_by_date[effective_date]: list(
+                                pending_weather[effective_date]
+                            )
+                            for effective_date in weather_dates
+                        },
+                        known_at=known_at,
                     )
+            except (KorTravelMapError, OverflowError, TimeoutError, ValueError) as exc:
+                logger.error(
+                    "get_weather_batch 실패: %s — 전체 미결 weather를 unavailable 처리",
+                    exc,
+                )
+            else:
+                for effective_date in weather_dates:
+                    target_at = target_at_by_date[effective_date]
+                    weather_batch = weather_batch_by_target[target_at]
+                    target_weather_cards: dict[str, dict[str, Any]] = {}
+                    for feature_id, day_indexes in pending_weather[effective_date].items():
+                        resolution = _weather_resolution(
+                            weather_batch[feature_id],
+                            target_at=target_at,
+                            weather_cards=target_weather_cards,
+                        )
+                        for day_index in day_indexes:
+                            weather_by_day_index[day_index][feature_id] = resolution
+                            if resolution["state"] == "found":
+                                card_key = resolution["card_key"]
+                                weather_cards_by_day_index[day_index][card_key] = (
+                                    target_weather_cards[card_key]
+                                )
+
+            for effective_date in weather_dates:
+                slots = pending_weather[effective_date]
+                for feature_id, day_indexes in slots.items():
+                    for day_index in day_indexes:
+                        weather_by_day_index[day_index].setdefault(
+                            feature_id,
+                            {"state": "unavailable"},
+                        )
 
     # day_index → POI 리스트
     pois_by_day_index: dict[int, list[dict[str, Any]]] = {}

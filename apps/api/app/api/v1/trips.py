@@ -13,6 +13,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, Request, status
 
 from app.api.request_url import public_api_base_url
 from app.clients.kor_travel_map import OptionalKorTravelMapHttpClientDep
+from app.clients.kor_travel_weather import OptionalKorTravelWeatherClientDep
 from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
 from app.models.attachment import CuratedPlanAttachment
@@ -417,6 +418,7 @@ async def get_trip_endpoint(
     current_user_id: CurrentUserId,
     db: DbSession,
     kor_travel_map_client: OptionalKorTravelMapHttpClientDep,
+    weather_client: OptionalKorTravelWeatherClientDep,
 ) -> Envelope[TripView]:
     try:
         trip, role = await get_trip_access(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
@@ -432,6 +434,7 @@ async def get_trip_endpoint(
                 db,
                 trip=trip,
                 kor_travel_map_client=kor_travel_map_client,
+                weather_client=weather_client,
                 include_management=can_manage_trip(role),
             )
         )
@@ -771,6 +774,7 @@ async def get_shared_trip_endpoint(
     token: str,
     db: DbSession,
     kor_travel_map_client: OptionalKorTravelMapHttpClientDep,
+    weather_client: OptionalKorTravelWeatherClientDep,
 ) -> Envelope[TripSharedView]:
     try:
         trip, share = await get_trip_for_share_token(db, trip_id=trip_id, token=token)
@@ -781,7 +785,11 @@ async def get_shared_trip_endpoint(
         ) from exc
     view = TripView.model_validate(
         await build_trip_view(
-            db, trip=trip, kor_travel_map_client=kor_travel_map_client, include_management=False
+            db,
+            trip=trip,
+            kor_travel_map_client=kor_travel_map_client,
+            weather_client=weather_client,
+            include_management=False,
         )
     )
     return Envelope.of(

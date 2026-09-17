@@ -897,6 +897,10 @@ class Settings(BaseSettings):
     # 풀렸다(`docs/tasks.md` 게이트 절). on이면 단건 `GET /features/{id}/weather`가
     # `kor-travel-map` 대신 이 서비스를 쓴다.
     pinvi_kor_travel_weather_single_feature_enabled: bool = False
+    # T-363(P4). 기본값 off — 위와 같은 게이트. on이면 trip view(`GET /trips/{id}`,
+    # `GET /trips/{id}/shared/{token}`)의 weather 조회가 `kor-travel-map`의 날짜별
+    # batch 대신 `kor-travel-weather`의 location 축 batch(markers+forecast)를 쓴다.
+    pinvi_kor_travel_weather_trip_view_enabled: bool = False
 
     # VWorld 지도 키 (ADR-043/048) — 웹은 빌드타임 NEXT_PUBLIC_VWORLD_API_KEY를 쓰지만,
     # 모바일 앱(`apps/mobile`)은 키를 번들하지 않고 GET /mobile/vworld/token 으로 인증 후

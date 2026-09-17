@@ -1,5 +1,45 @@
 # resume.md
 
+## 2026-09-17 (claude) — T-363(P4) 백엔드 완료, e2e 남음
+
+trip view weather를 `pinvi_kor_travel_weather_trip_view_enabled` flag(기본
+`false`)로 전환할 수 있게 했다. **구현 도중 사용자가 방향을 바꿨다** — 당초
+T-361/T-362 패턴대로 feature batch(`resolved_features`/`resolution_states`)를
+weather 함수에 넘기려 했으나, "기존 map feature과 완전히 분리된 형태로
+kor-travel-weather를 활용할 것"이라는 지시로 `trip_weather_batch.py`를
+feature batch와 아무 것도 주고받지 않는 완전 독립 함수로 다시 썼다 — POI 자신의
+`feature_snapshot.coord`만 보고, feature의 `retired`/`suppressed`/`missing`
+상태를 아예 참조하지 않는다.
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+- **trip view weather는 feature batch와 완전히 독립이다(T-363부터).** T-362
+  (단건)와 다르다 — 단건은 POI 문맥이 없어 `kor_travel_map.get_feature`로 좌표를
+  얻을 수밖에 없지만, trip view는 POI가 이미 `feature_snapshot.coord`를 들고
+  있으므로 그것만 쓴다. 새 weather 관련 코드를 trip view에 추가할 때 feature
+  batch 결과(`resolved_features` 등)를 다시 끌어오려는 유혹을 주의할 것 —
+  ADR-068 결정 9b, `docs/integrations/kor-travel-weather.md` §3.4/§3.5가 이
+  분리를 명문화했다.
+- **부분 실패 규칙이 T-362와 다르다.** T-362는 location 하나 실패하면 조용히
+  빈 값으로 넘어가지만(단일 카드라 실패/무데이터 구분이 덜 중요), T-363은
+  "실패"와 "확인된 없음"을 구분한다 — bundle이 일부라도 실패했는데 그 날짜 값이
+  0행이면 `unavailable`(모른다), 전부 성공했는데 0행이면 `no_data`(확인된 없음).
+  이 구분을 없애는 리팩터는 규레션이다.
+- **card_key는 대표 location_id이고 day마다 다른 카드를 가질 수 있다.** 같은
+  location을 여러 날짜에 참조해도 forecast 호출은 location당 1회(날짜 fanout
+  없음) — day별로 그 날짜에 맞게 슬라이스해서 카드를 구성한다.
+- `weather_metrics.py`(신설)가 metric 정규화·provider 우선순위·dedupe를 T-362/
+  T-363 공용으로 갖고 있다 — 이 규칙을 한쪽만 고치면 같은 사실이 화면마다 다르게
+  보이는 정합성 버그가 된다.
+
+**다음 한 작업**: T-363 e2e 마무리 — `apps/web/e2e/trip-detail.e2e.ts`의 "단건
+weather 요청 0회" 단언, `trip-feature-resolution-live-mutating.live.ts`의
+"weather batch POST 정확히 1회" 게이트를 새 호출 모양(`/v1/weather/markers` +
+`/v1/weather/locations/{id}/forecast`)으로 재정의, `live-mutating-e2e.md`
+게이트 문서 갱신. **Playwright는 N150 전용**(ADR-051)이라 N150 환경(Docker
+runner 또는 host browser)을 확보한 세션에서 이어간다 — 이 WSL 개발 세션에서는
+실행·검증이 불가능해 착수하지 않았다. e2e 완료 후 PR을 만들고 CI green 확인 →
+머지 → T-364(P5, Admin weather-values 전환)로 진행.
+
 ## 2026-09-17 (claude) — T-362(P3) 완료, T-363(P4) 대기
 
 단건 `GET /features/{id}/weather`를 `pinvi_kor_travel_weather_single_feature_enabled`

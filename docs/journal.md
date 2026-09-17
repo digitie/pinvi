@@ -2,6 +2,81 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-17 (claude) — T-363(P4) 백엔드: Trip view weather, feature batch와 완전 독립 (ADR-068)
+
+`agent/claude-weather-t363-trip-view`. `pinvi_kor_travel_weather_trip_view_enabled`
+(기본 `false`)로 trip view weather 조회를 `kor-travel-map` 날짜별 batch 대신
+`kor-travel-weather`의 location 축 batch(markers+forecast)로 전환할 수 있게 했다.
+**e2e/live-mutating 재정의는 미착수**(아래 참조) — 백엔드만 완료.
+
+### 설계 중 방향 전환 — "feature batch와 완전히 분리"(사용자 결정, 구현 도중)
+
+초안은 T-361/T-362와 같은 패턴으로 `trip_view_builder.py`의 feature batch가 만든
+`resolved_features`/`resolution_states`를 weather 함수에 그대로 넘겨 좌표를 얻고
+`retired`/`suppressed`/`missing`을 그대로 투영했다(원래 ADR-068 결정 9 그대로).
+구현 중 사용자가 "기존 map feature과 완전히 분리된 형태로 kor-travel-weather를
+활용할 것"을 명시적으로 지시했다 — `AskUserQuestion`으로 정확한 분리 범위를
+확인한 결과 "코드 모듈 자체를 완전 독립 경로로"(feature batch와 weather가 서로의
+중간 결과를 주고받지 않고, POI가 가진 feature_id/좌표만 입력으로 받음)를 선택했다.
+
+`apps/api/app/services/trip_weather_batch.py`(신설)를 이 원칙대로 다시 썼다 —
+`resolved_features`/`resolution_states`/`feature_batch_failed`를 **받지 않는다**.
+대신 POI 자신의 `feature_snapshot.coord`(POI 추가 시점에 이미 저장된, Pinvi가
+소유하는 좌표 — `apps/api/app/services/poi.py`가 POI 생성 시 `body.feature_snapshot`
+을 그대로 저장)만 본다. 그 결과:
+
+- weather 조회는 그 요청의 feature batch(`get_features`) 성공 여부, 그리고 feature가
+  `retired`/`suppressed`/`missing`인지와 **완전히 무관**하다 — feature 행정 상태가
+  어떻든 POI가 좌표를 들고 있으면 그 물리적 지점의 날씨를 그대로 낸다(날씨는 장소의
+  행정 상태를 모른다는 원칙을 극단까지 적용). feature batch가 이번 요청에서
+  실패해도(`KorTravelMapUnavailable` 등) weather는 영향받지 않는다 — 통합테스트
+  `test_flag_on_weather_survives_feature_batch_failure`로 고정.
+- 이 경로가 내는 상태는 `found`/`no_data`/`unavailable` 셋뿐이다.
+  `retired`/`suppressed`/`missing`은 flag off인 구 `kor_travel_map` 경로에서만
+  나온다 — 통합테스트
+  `test_flag_on_weather_ignores_retired_feature_state_when_snapshot_has_coord`로
+  고정(map client가 항상 retired를 답해도 weather는 found).
+- `docs/decisions.md` ADR-068에 결정 9b로, `docs/integrations/kor-travel-weather.md`
+  §3.4/§3.5/§4.3에 개정 blockquote로 남겼다. **T-362(단건)는 이 원칙의 적용 대상이
+  아니다** — POI 문맥이 없는 bare `feature_id`만 받으므로 fallback할 Pinvi 소유
+  snapshot이 없어 완전 분리가 물리적으로 불가능하다.
+
+### 나머지 설계(변경 없음, §3.4 원안 그대로)
+
+1. weather가 필요한 POI마다 `resolve_weather_location`(T-361 캐시)으로 location
+   해석.
+2. 해석된 모든 feature의 `source_location_ids` 합집합 `L` 계산(§3.3 — 대표
+   location 하나만 쓰면 기상청 예보가 조용히 누락된다).
+3. `GET /markers(L)` 1회(현재값+특보, 500개씩 청크) + `GET /forecast(location,
+   from=필요한 최소 날짜, to=최대 날짜+1일)` location마다 1회·병렬(동시성 상한
+   10) — 날짜 fanout 없음, location마다 정확히 1회.
+4. `card_key := 대표 location_id`. 같은 대표 id를 공유하는 모든 feature의
+   `source_location_ids` 합집합에서 나온 값을 merge해 provider 우선순위로
+   dedupe(§3.3 회귀 가드 — 대표 location에 KMA 사실이 없어도 번들의 다른 location
+   값을 쓴다, 통합테스트로 고정). day마다 그 날짜로 슬라이스해 카드를 만든다(같은
+   card_key라도 날짜별 카드 내용은 다르다).
+5. **부분 실패 규칙**(§3.4, 신규 명문화) — bundle 안 일부 location만 실패해도
+   다른 location이 그 날짜 값을 줬다면 `found`(추측이 아니라 실제 데이터). bundle
+   전부 실패했거나 성공한 location들의 그 날짜 값이 0행이면서 하나라도 실패한
+   location이 있으면 `unavailable`("모른다"를 `no_data`로 지어내지 않는다). 전부
+   성공했는데 0행이면 그때만 `no_data`(확인된 없음). 예산 10초 초과/전체 실패는
+   미결 전체 `unavailable`.
+- `app/services/weather_metrics.py`(신설) — provider 우선순위·metric key
+  정규화·dedupe를 `weather_card.py`(T-362)와 공유하도록 추출(중복 제거, 두
+  소비자가 같은 규칙을 따르도록 강제).
+
+검증: 신규 통합테스트 12건(flag off 무영향, 카드 조립+공유, retired 무시, feature
+batch 실패 생존, §3.3 번들 merge, no anchor, 좌표 없음, 부분 실패 found, 전체
+실패 unavailable, 성공+0행 no_data, 날짜 슬라이싱+fanout 없음, markers latest
+반영) + 관련 기존 통합 65건 + `tests/unit` 1428건 전부 green, `mypy --strict app`
+242파일 0, `ruff` 0.
+
+**남은 일(다음 세션)**: `trip-detail.e2e.ts`("단건 weather 요청 0회" 단언),
+`trip-feature-resolution-live-mutating.live.ts`("weather batch POST 정확히 1회"
+→ 새 호출 모양), `docs/runbooks/live-mutating-e2e.md` 게이트 재정의. Playwright는
+N150 전용(ADR-051)이라 이 WSL 개발 세션에서는 실행·검증할 수 없어 gate를
+중단했다 — 사유를 `docs/integrations/kor-travel-weather.md` §4.7에 남겼다.
+
 ## 2026-09-17 (claude) — T-362(P3): 단건 weather를 flag로 전환 (ADR-068)
 
 `agent/claude-weather-t362-single-feature`. `pinvi_kor_travel_weather_single_feature_enabled`

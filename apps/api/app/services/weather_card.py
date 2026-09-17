@@ -32,7 +32,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -44,130 +43,14 @@ from app.clients.kor_travel_weather import (
     KorTravelWeatherError,
     WeatherValueOut,
 )
-from app.schemas.feature import FeatureWeatherCard, WeatherMetric
+from app.schemas.feature import FeatureWeatherCard
 from app.services.weather_location_resolver import (
     WeatherLocationFound,
     resolve_weather_location,
 )
+from app.services.weather_metrics import dedupe_by_provider_priority, to_weather_metric
 
 _SEOUL = ZoneInfo("Asia/Seoul")
-
-# provider 우선순위 — 왼쪽일수록 우선. 동률(같은 provider가 여러 개일 순 없으므로
-# 사실상 "이 목록에 없는 provider"는 최하위로 취급한다.
-_PROVIDER_PRIORITY: tuple[str, ...] = (
-    "python-kma-api",
-    "python-airkorea-api",
-    "python-khoa-api",
-    "python-krforest-api",
-    "python-krex-api",
-    "openweathermap",
-    "weatherapi",
-    "open_meteo",
-    "wttr_in",
-)
-
-
-def _provider_rank(provider: str) -> int:
-    try:
-        return _PROVIDER_PRIORITY.index(provider)
-    except ValueError:
-        return len(_PROVIDER_PRIORITY)
-
-
-# ── metric key 정규화 — 안전하게 1:1 대응 가능한 것만(설계 §3.1-(3)) ──────────────
-
-_TEMP_KEYS = {"TEMP"}
-_HUMIDITY_KEYS = {"HUMIDITY"}
-_WIND_SPEED_KEYS = {"WIND_SPEED"}
-_WIND_DIRECTION_KEYS = {"WIND_DIRECTION"}
-_PRECIP_PROB_KEYS = {"PRECIP_PROB"}
-_PRECIP_KEYS = {"PRECIP"}
-_OBSERVED_STYLES = {"observed", "nowcast"}
-
-
-def _normalize_metric(value: WeatherValueOut) -> tuple[str, float | None, str | None]:
-    """`(metric_key, value_number, unit)` — 정규화 가능하면 KMA 코드로, 아니면 원본 그대로.
-
-    단위가 provider마다 다를 수 있어(`docs/integrations/kor-travel-weather.md` §2.3)
-    `unit`을 항상 확인하고 무가정 변환하지 않는다. 풍속만 km/h -> m/s 변환이 필요할
-    수 있어 명시 처리한다.
-    """
-    key = value.metric_key
-    unit = value.unit
-    number = value.value_number
-
-    if key in _TEMP_KEYS:
-        kma_key = "T1H" if value.forecast_style in _OBSERVED_STYLES else "TMP"
-        return kma_key, number, unit or "deg_c"
-    if key in _HUMIDITY_KEYS:
-        return "REH", number, unit or "%"
-    if key in _WIND_SPEED_KEYS:
-        if unit == "km/h" and number is not None:
-            return "WSD", number / 3.6, "m/s"
-        return "WSD", number, unit or "m/s"
-    if key in _WIND_DIRECTION_KEYS:
-        return "VEC", number, unit or "deg"
-    if key in _PRECIP_PROB_KEYS:
-        return "POP", number, unit or "%"
-    if key in _PRECIP_KEYS:
-        kma_key = "RN1" if value.forecast_style == "ultra_short" else "PCP"
-        return kma_key, number, unit
-    # 매핑 불가 — CLOUD_COVER/VISIBILITY/UV_INDEX/WEATHER_CODE, AirKorea O3/NO2/SO2/CO 등.
-    # 원래 값 그대로 통과한다(틀린 값보다 미인식이 안전).
-    return key, number, unit
-
-
-def _to_weather_metric(value: WeatherValueOut) -> WeatherMetric:
-    is_alert = value.weather_domain == "weather_alert"
-    forecast_style = "advisory" if is_alert else value.forecast_style
-    if is_alert:
-        metric_key, metric_number, unit = value.metric_key, value.value_number, value.unit
-    else:
-        metric_key, metric_number, unit = _normalize_metric(value)
-    return WeatherMetric(
-        metric_key=metric_key,
-        metric_name=value.metric_name,
-        forecast_style=forecast_style,
-        timeline_bucket=value.timeline_bucket,
-        provider=value.provider,
-        weather_domain=value.weather_domain,
-        valid_at=value.valid_at or value.target_at,
-        valid_from=value.valid_from,
-        valid_until=value.valid_until,
-        effective_at=None,  # kor-travel-weather에는 대응 필드가 없다.
-        issued_at=value.issued_at,
-        observed_at=value.observed_at,
-        value_number=metric_number,
-        value_text=value.value_text,
-        unit=unit,
-        severity=value.severity,
-    )
-
-
-def _dedupe_by_provider_priority(values: Sequence[WeatherValueOut]) -> list[WeatherValueOut]:
-    """같은 `(metric_key, forecast_style, target_at)`는 provider 우선순위로 하나만 남긴다.
-
-    동률이면 `known_at`이 더 최신인 쪽. `known_at`이 없으면(nullable) `collected_at`으로
-    대신한다.
-    """
-    best: dict[tuple[str, str, datetime], WeatherValueOut] = {}
-    for value in values:
-        key = (value.metric_key, value.forecast_style, value.target_at)
-        current = best.get(key)
-        if current is None:
-            best[key] = value
-            continue
-        current_rank = _provider_rank(current.provider)
-        new_rank = _provider_rank(value.provider)
-        if new_rank < current_rank:
-            best[key] = value
-            continue
-        if new_rank == current_rank:
-            current_known = current.known_at or current.collected_at
-            new_known = value.known_at or value.collected_at
-            if new_known > current_known:
-                best[key] = value
-    return list(best.values())
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,8 +122,8 @@ async def build_feature_weather_card(
     if not all_values:
         return FeatureWeatherCard(feature_id=feature_id, asof=asof)
 
-    deduped = _dedupe_by_provider_priority(all_values)
-    metrics = [_to_weather_metric(value) for value in deduped]
+    deduped = dedupe_by_provider_priority(all_values)
+    metrics = [to_weather_metric(value) for value in deduped]
     source_styles = sorted({metric.forecast_style for metric in metrics})
     latest_known = max((value.known_at or value.collected_at for value in deduped), default=None)
 
