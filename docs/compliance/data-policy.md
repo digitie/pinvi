@@ -125,7 +125,12 @@ Pinvi 책임이다.
 > **비KMA provider 값을 사용자에게 표시하기 전에** "날씨: 기상청" 기재와 "국외 이전
 > 의무 발생 안 함" 선언을 재작성하고 국외 이전 판단을 마쳐야 한다. 이것이 cutover
 > 게이트 G-2이며, 기술 판단이 아니라 법적 의무다.
-> 설계 = [`docs/integrations/kor-travel-weather.md`](../integrations/kor-travel-weather.md) §1.2b.
+>
+> **사용자 결정(2026-09-17)**: 표시하지 않는 쪽이 아니라 **처리방침을 갱신하고
+> 표시하되 카드에 출처(provider)를 명시**하는 쪽으로 간다. 순서 고정 —
+> ① 본 문서 재작성 → ② 출처 표기 UI → ③ 표시 허용. 작업은 **T-366**이며
+> cutover(T-365)보다 **먼저** 끝나야 한다.
+> 설계 = [`docs/integrations/kor-travel-weather.md`](../integrations/kor-travel-weather.md) §1.2b·§7-2.
 
 ## 4. 데이터 캐싱 정책
 

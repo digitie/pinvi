@@ -3267,7 +3267,7 @@ Odroid M1S는 더 이상 Pinvi의 실행·배포·복구 환경으로 사용하�
 - **상태**: accepted (설계 확정, cutover는 게이트 G-1 조건부)
 - **날짜**: 2026-09-17
 - **결정자**: 사용자 + Claude
-- **참조**: T-359(설계) ~ T-366, `docs/integrations/kor-travel-weather.md`,
+- **참조**: T-359(설계) ~ T-367, `docs/integrations/kor-travel-weather.md`,
   `docs/execplan/t-359-weather-source-cutover.md`
 - **대체**: 없음. Pinvi ADR 중 "날씨 소스는 `kor-travel-map`"을 **명시 결정한 ADR은
   존재하지 않는다** — 관행으로 굳었을 뿐이다(ADR-015/026은 지도 클라이언트와 HTTP 계약
@@ -3326,12 +3326,23 @@ Admin 1개는 별도 transport인 `apps/api/app/clients/kor_travel_map_admin.py`
    (OpenWeatherMap·WeatherAPI·wttr.in·Open-Meteo 등 국외 사업자)의 값을 표시하는 순간 그
    선언이 사실과 어긋난다. 처리방침·위탁 목록 갱신과 국외 이전 판단을 마치기 전에는
    비KMA provider 값을 사용자에게 **표시하지 않는다**. 이는 UX 판단이 아니라 법적 의무다.
+   **갱신을 마친 뒤에는 표시한다** (사용자 결정 2026-09-17) — 단 카드에 **출처(provider)를
+   명시**해 사용자가 기상청 값과 상용 값을 구분할 수 있게 한다. 즉 순서가 고정이다:
+   처리방침 갱신 → 출처 표기 구현 → 표시 허용.
 7. **KMA 격자 provisioning은 `kor-travel-weather`가 구현한다.** Pinvi는 provider 원천
    변환을 작성하지 않는다(금지룰 3 유지).
-8. **과거 날씨는 Pinvi가 스냅샷으로 보존한다.** `kor-travel-weather` 기본 보존은 2일
-   (`known_at` day partition drop)이고 Pinvi는 여행 기록 앱이므로, 지난 여행 일자의
-   카드를 Pinvi 측에 확정 저장한다. Pinvi는 `known_at`을 항상 "지금"으로만 보내 왔으므로
-   bitemporal replay 손실은 없고, 손실 축은 `target_at` 과거 구간 하나다.
+8. **과거 날씨는 `kor-travel-weather`의 보존 연장으로 해결한다** (사용자 결정
+   2026-09-17, 선택지 C). Pinvi는 별도 스냅샷 테이블을 만들지 않는다.
+   `kor-travel-weather` 기본 보존은 2일(`known_at` day partition drop)이고 Pinvi는 여행
+   기록 앱이므로 지난 여행 일자 날씨가 필요하다. Pinvi는 `known_at`을 항상 "지금"으로만
+   보내 왔으므로 bitemporal replay 손실은 없고, 손실 축은 `target_at` 과거 구간 하나다.
+   해당 저장소는 이미 3년 보존을 **목표로 선언**해 뒀으므로(그쪽 ADR-062) 배포 기본값
+   조정과 스토리지 확보가 실제 작업이다. **이는 외부 저장소 소관이며 게이트 G-3으로
+   건다.** 두 결과를 감수한다:
+   - **소급되지 않는다.** 보존을 늘려도 이미 drop된 partition은 돌아오지 않는다.
+     연장 시점 이전 여행의 날씨는 영구 소실이다.
+   - **외부 설정에 종속된다.** 보존이 되돌아가면 과거 여행 날씨가 조용히 사라진다.
+     Pinvi 측에 보존 지평 가드(임계 미만이면 실패하는 점검)를 둔다.
 9. **`retired` 상태는 선행 feature batch에서 가져온다.** 날씨 서비스는 feature
    lifecycle을 모르므로 판정처를 옮긴다. `suppressed`/`missing`이 이미 그 구조다.
 10. **provider 우선순위를 Pinvi 상수로 고정한다** — KMA > AirKorea(대기질) > 상용,
@@ -3377,6 +3388,12 @@ Admin 1개는 별도 transport인 `apps/api/app/clients/kor_travel_map_admin.py`
 - 실행: `docs/execplan/t-359-weather-source-cutover.md` — P0~P7, flag 기반
 - Task: **T-359**(P0 설계, 완료) · **T-360**(P1 client) · **T-361**(P2 해석·캐시) ·
   **T-362**(P3 단건) · **T-363**(P4 Trip view) · **T-364**(P5 Admin) ·
-  **T-365**(P6 기본값 on + 구 경로 제거, G-1·G-2 게이트) · **T-366**(P7 과거 스냅샷)
-- 미해결 사용자 결정: 과거 날씨 정책 A/B/C(권장 B), G-2 해소 후 비KMA 지점의 상용
-  provider 표시 허용 범위 — 두 건 모두 설계 문서 §7.
+  **T-365**(P6 기본값 on + 구 경로 제거, G-1·G-2·G-3 게이트) ·
+  **T-366**(P7 처리방침 갱신 + 출처 표기 — G-2 해소, T-365보다 선행) ·
+  **T-367**(보존 지평 가드 — G-3 회귀 탐지)
+- **사용자 결정 완료(2026-09-17)** — 설계 문서 §7에 확정 기록:
+  - 과거 날씨 = **C**(`kor-travel-weather` 보존 연장). Pinvi 스냅샷 테이블은 만들지
+    않는다 → 게이트 **G-3**.
+  - 상용 provider = **처리방침 갱신 후 표시**하되 카드에 출처를 명시한다.
+- 남은 외부 의존 둘 다 `kor-travel-weather` 소관: **G-1**(KMA 격자 커버리지),
+  **G-3**(보존 연장).
