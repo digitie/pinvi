@@ -3362,6 +3362,19 @@ Admin 1개는 별도 transport인 `apps/api/app/clients/kor_travel_map_admin.py`
 10. **provider 우선순위를 Pinvi 상수로 고정한다** — KMA > AirKorea(대기질) > 상용,
     동률 시 `known_at` 최신. 한 location에 provider별 어휘 두 벌이 동시에 오므로 `unit`
     필드를 항상 읽고 가정하지 않는다.
+11. **(2026-09-17 사용자 결정, T-364 구현 중 추가) `kor-travel-map`은 weather 관련
+    기능을 `kind='weather'` feature type을 포함해 완전히 제거할 예정이다 — weather
+    feature 개념은 Pinvi(=`kor-travel-weather` 소비)에만 남는다.** 데이터 복원·
+    하위 호환은 고려 대상이 아니다(map 쪽 weather 데이터/feature는 소급 보존
+    없이 사라진다). 이 결정은 이관 이유(결정 없음)를 강화할 뿐 아니라 새 공백을
+    만든다 — `FeatureMapView.tsx`의 `WeatherMarker`는 지금 map의 `kind='weather'`
+    feature inbounds 조회로 **위치**를 얻는데, map이 그 feature type을 없애면 이
+    marker들이 조용히 0개가 된다. `kor-travel-weather`는 "feature"가 아니라
+    "location" 개념만 가지므로 marker 위치 공급에는 **새 경로**(viewport 기준
+    location 목록 조회, 해당 서비스가 그런 API를 갖고 있는지부터 확인 필요)가
+    필요하다 — 단순 소스 교체가 아니라 별도 설계 대상이다. **범위 밖으로 남기고
+    후속 task(T-368, 미정)로 연다** — `docs/integrations/kor-travel-weather.md`
+    §4.6 참조.
 
 ### 근거
 
@@ -3413,6 +3426,19 @@ Admin 1개는 별도 transport인 `apps/api/app/clients/kor_travel_map_admin.py`
   **G-3**(보존 연장).
 - **T-363 진행 상황(2026-09-17)**: 백엔드(`trip_weather_batch.py` 신설, flag
   `pinvi_kor_travel_weather_trip_view_enabled`, 통합테스트 12건) 완료 — 결정 9b
-  (feature batch와 완전 분리)까지 반영. e2e(`trip-detail.e2e.ts`,
-  `trip-feature-resolution-live-mutating.live.ts`, `live-mutating-e2e.md`)는
-  Playwright가 N150 전용이라 미착수 — 다음 세션에서 N150 환경 확보 후 진행.
+  (feature batch와 완전 분리)까지 반영. e2e 코드(`startWeatherProxy`, flag-on
+  sub-test, `live-mutating-e2e.md` 실행 절)도 완료했으나 **실행은 보류** —
+  kor-travel-map 운영 DB에 `retired`/`suppressed` fixture가 0개라 Admin UI에서
+  더미 feature를 만들어야 하는데 그 생성 토큰이 서버엔 SHA-256 해시로만 있어
+  (원문은 admin BFF만 앎) 의도적으로 프로그램적 우회가 막힌 경로였다.
+- **T-364 완료(2026-09-17)**: Admin weather-values를 flag
+  `pinvi_kor_travel_weather_admin_enabled`(기본 off)로 전환. `AdminFeatureWeatherMetric`의
+  `provider_dataset_id`/`dataset_display_name`/`known_at`을 nullable로 넓혔다
+  (`dataset_key`는 두 소스 모두 있어 그대로 required). `asof`는 flag on에서
+  T-362와 같은 축소 규칙으로 지원(flag off는 기존 422 유지) — T-362와 마찬가지로
+  POI 문맥이 없는 bare `feature_id`라 결정 9b(완전 분리)는 적용되지 않는다.
+  통합테스트 24건 green.
+- **결정 11(2026-09-17) 후속 — T-368(미정, 설계 필요)**: `kor-travel-map`의
+  weather 기능·`kind='weather'` feature type 완전 제거에 대비해 `FeatureMapView.tsx`
+  weather marker의 **위치** 공급원을 `kor-travel-weather` 자체 location 목록으로
+  옮기는 설계. T-359~T-367 범위 밖 — 별도로 연다.

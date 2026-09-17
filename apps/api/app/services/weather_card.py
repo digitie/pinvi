@@ -89,6 +89,49 @@ async def _fetch_location_values(
     return [*latest, *forecast]
 
 
+async def resolve_and_collect_deduped_values(
+    db: AsyncSession,
+    *,
+    feature_id: str,
+    lat: float,
+    lon: float,
+    asof: datetime | None,
+    weather_client: KorTravelWeatherClient,
+) -> tuple[list[WeatherValueOut], datetime | None]:
+    """`feature_id`의 좌표로 location을 해석하고 사실을 모아 dedupe한다 — 단건(T-362)과
+    Admin(T-364) weather 카드 조립이 공유하는 pipeline. asof 축소·location 해석 실패·
+    사실 0건은 전부 빈 리스트로 뭉뚱그린다(호출자가 각자의 "빈 카드" 셰입으로 투영).
+
+    반환: `(deduped_values, latest_known_at)`. 빈 값이면 `latest_known_at`도 `None`.
+    """
+    now = datetime.now(UTC)
+    window = _asof_window(asof, now=now)
+    if window.no_data:
+        # 과거 조회는 location 해석(3.1 MB `/resolve`, DB 캐시 upsert)조차 필요 없다 —
+        # 대상 서비스 보존(2일) 밖이면 어차피 no_data이므로 여기서 먼저 걸러낸다.
+        return [], None
+
+    resolution = await resolve_weather_location(
+        db, feature_id=feature_id, lat=lat, lon=lon, client=weather_client
+    )
+    if not isinstance(resolution, WeatherLocationFound):
+        return [], None
+
+    per_location = await asyncio.gather(
+        *(
+            _fetch_location_values(weather_client, location_id, window=window)
+            for location_id in resolution.source_location_ids
+        )
+    )
+    all_values = [value for values in per_location for value in values]
+    if not all_values:
+        return [], None
+
+    deduped = dedupe_by_provider_priority(all_values)
+    latest_known = max((value.known_at or value.collected_at for value in deduped), default=None)
+    return deduped, latest_known
+
+
 async def build_feature_weather_card(
     db: AsyncSession,
     *,
@@ -99,33 +142,14 @@ async def build_feature_weather_card(
     weather_client: KorTravelWeatherClient,
 ) -> FeatureWeatherCard:
     """`feature_id`의 좌표로 `kor-travel-weather` 사실을 모아 `FeatureWeatherCard`를 만든다."""
-    now = datetime.now(UTC)
-    window = _asof_window(asof, now=now)
-    if window.no_data:
-        # 과거 조회는 location 해석(3.1 MB `/resolve`, DB 캐시 upsert)조차 필요 없다 —
-        # 대상 서비스 보존(2일) 밖이면 어차피 no_data이므로 여기서 먼저 걸러낸다.
-        return FeatureWeatherCard(feature_id=feature_id, asof=asof)
-
-    resolution = await resolve_weather_location(
-        db, feature_id=feature_id, lat=lat, lon=lon, client=weather_client
+    deduped, latest_known = await resolve_and_collect_deduped_values(
+        db, feature_id=feature_id, lat=lat, lon=lon, asof=asof, weather_client=weather_client
     )
-    if not isinstance(resolution, WeatherLocationFound):
+    if not deduped:
         return FeatureWeatherCard(feature_id=feature_id, asof=asof)
 
-    per_location = await asyncio.gather(
-        *(
-            _fetch_location_values(weather_client, location_id, window=window)
-            for location_id in resolution.source_location_ids
-        )
-    )
-    all_values = [value for values in per_location for value in values]
-    if not all_values:
-        return FeatureWeatherCard(feature_id=feature_id, asof=asof)
-
-    deduped = dedupe_by_provider_priority(all_values)
     metrics = [to_weather_metric(value) for value in deduped]
     source_styles = sorted({metric.forecast_style for metric in metrics})
-    latest_known = max((value.known_at or value.collected_at for value in deduped), default=None)
 
     return FeatureWeatherCard(
         feature_id=feature_id,
