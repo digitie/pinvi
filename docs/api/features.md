@@ -125,6 +125,12 @@ kor-travel-map 호출: `GET /v1/features/{feature_id}` (`name`, 구조화 `addre
 
 해당 좌표/지점의 날씨 (관측 + 예보 + 특보).
 
+> **소스 이관 예정 (ADR-068)**: 상류 소스를 `kor-travel-map`에서 `kor-travel-weather`로
+> 옮긴다. **본 공개 계약(경로·query·응답 셰입)은 바뀌지 않는다** — 교체는 Pinvi API
+> 내부에 가둔다. 현재는 아직 `kor-travel-map`에서 받는다. 설계는
+> [`docs/integrations/kor-travel-weather.md`](../integrations/kor-travel-weather.md),
+> 실행은 T-362(P3).
+
 ```http
 GET /features/{feature_id}/weather?asof=2026-06-02T14:00:00+09:00
 ```

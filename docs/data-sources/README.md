@@ -13,19 +13,23 @@
 
 다음은 모두 `kor-travel-map` 저장소에서 문서/적재. 본 저장소는 cross-ref만.
 
-| 도메인                                    | provider                                                                                                                                                                   | 라이브러리 문서                                     |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| 날씨                                      | `python-kma-api` (단기/중기/실황/특보), `python-krex-api` (휴게소 날씨), `python-krairport-api` (공항 날씨), `python-khoa-api` (해양 지수), `python-airkorea-api` (대기질) | `kor-travel-map/docs/kma-weather-etl.md` 외         |
-| 축제 / 행사                               | `python-visitkorea-api`, `data.go.kr` 표준 (15013104), `python-krheritage-api`                                                                                             | `kor-travel-map/docs/event-feature-etl.md`          |
-| 유가                                      | `python-opinet-api`                                                                                                                                                        | `kor-travel-map/docs/opinet-place-price-etl.md`     |
-| 휴게소                                    | `python-krex-api`                                                                                                                                                          | `kor-travel-map/docs/krex-rest-area-feature-etl.md` |
-| 해수욕장                                  | `python-khoa-api`, `python-kma-api`                                                                                                                                        | `kor-travel-map/docs/khoa-beach-info-etl.md`        |
-| 휴양림 / 트래킹 / 국립공원                | `python-krforest-api`, `python-knps-api`                                                                                                                                   | `kor-travel-map/docs/{forest,knps}-feature-etl.md`  |
-| 국가유산                                  | `python-krheritage-api`                                                                                                                                                    | `kor-travel-map/docs/krheritage-feature-etl.md`     |
-| 인허가 (MOIS LOCALDATA)                   | `python-krmois-api`, `python-mois-api`                                                                                                                                     | `kor-travel-map/docs/mois-feature-etl.md`           |
-| 공항                                      | `python-krairport-api`                                                                                                                                                     | `kor-travel-map/docs/`                              |
-| 문화/여가/도서관                          | `python-mcst-api`                                                                                                                                                          | `kor-travel-map/docs/`                              |
-| 표준데이터 (관광지/박물관/주차장/길/축제) | `data.go.kr-standard` (15017321, 15017323, 15012896, 15021141, 15013104)                                                                                                   | `kor-travel-map/docs/standard-data-feature-etl.md`  |
+> **날씨는 이관 예정(ADR-068)**: 소스를 형제 저장소 `kor-travel-weather`로 옮긴다.
+> 적재 주체가 바뀔 뿐 Pinvi가 provider 원천을 파싱하지 않는 원칙은 그대로다.
+> 설계 = [`docs/integrations/kor-travel-weather.md`](../integrations/kor-travel-weather.md).
+
+| 도메인                                             | provider                                                                                                                                                                   | 라이브러리 문서                                     |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| 날씨 _(이관 예정 → `kor-travel-weather`, ADR-068)_ | `python-kma-api` (단기/중기/실황/특보), `python-krex-api` (휴게소 날씨), `python-krairport-api` (공항 날씨), `python-khoa-api` (해양 지수), `python-airkorea-api` (대기질) | `kor-travel-map/docs/kma-weather-etl.md` 외         |
+| 축제 / 행사                                        | `python-visitkorea-api`, `data.go.kr` 표준 (15013104), `python-krheritage-api`                                                                                             | `kor-travel-map/docs/event-feature-etl.md`          |
+| 유가                                               | `python-opinet-api`                                                                                                                                                        | `kor-travel-map/docs/opinet-place-price-etl.md`     |
+| 휴게소                                             | `python-krex-api`                                                                                                                                                          | `kor-travel-map/docs/krex-rest-area-feature-etl.md` |
+| 해수욕장                                           | `python-khoa-api`, `python-kma-api`                                                                                                                                        | `kor-travel-map/docs/khoa-beach-info-etl.md`        |
+| 휴양림 / 트래킹 / 국립공원                         | `python-krforest-api`, `python-knps-api`                                                                                                                                   | `kor-travel-map/docs/{forest,knps}-feature-etl.md`  |
+| 국가유산                                           | `python-krheritage-api`                                                                                                                                                    | `kor-travel-map/docs/krheritage-feature-etl.md`     |
+| 인허가 (MOIS LOCALDATA)                            | `python-krmois-api`, `python-mois-api`                                                                                                                                     | `kor-travel-map/docs/mois-feature-etl.md`           |
+| 공항                                               | `python-krairport-api`                                                                                                                                                     | `kor-travel-map/docs/`                              |
+| 문화/여가/도서관                                   | `python-mcst-api`                                                                                                                                                          | `kor-travel-map/docs/`                              |
+| 표준데이터 (관광지/박물관/주차장/길/축제)          | `data.go.kr-standard` (15017321, 15017323, 15012896, 15021141, 15013104)                                                                                                   | `kor-travel-map/docs/standard-data-feature-etl.md`  |
 
 ## 2. Pinvi 직접 사용 데이터 소스
 

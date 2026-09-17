@@ -1,5 +1,39 @@
 # resume.md
 
+## 2026-09-17 (claude) — 날씨 소스 이관 설계 완료, 구현 대기 (T-359 ✅ / T-360~366 열림)
+
+날씨를 `kor-travel-map` → `kor-travel-weather`로 옮기는 **설계·문서·task를 확정**했다.
+코드는 아직 한 줄도 바뀌지 않았고 운영 날씨는 여전히 `kor-travel-map`에서 온다.
+
+정본: ADR-068, `docs/integrations/kor-travel-weather.md`,
+`docs/execplan/t-359-weather-source-cutover.md`.
+
+다음에 이 영역을 만질 사람이 **반드시** 알아야 할 것:
+
+- **cutover는 게이트 G-1에 막혀 있다.** `kor-travel-weather`의 전국 KMA 격자 앵커가
+  현재 1개(`e2e-seoul`, 테스트 픽스처)뿐이라, 지금 전환하면 대부분 지점에서 기상청이
+  아니라 상용 API 예보를 표시하게 된다. **P1~P5는 G-1과 무관하게 진행 가능**하고
+  P6(기본값 on)만 막힌다. G-1 해소는 `kor-travel-weather` 저장소 소관이다.
+- **대표 `location` 하나만 캐시하면 기상청 예보가 조용히 누락된다.** 실측으로 확인했다.
+  `source_location_ids` 전체를 저장·합산해야 하며 회귀 테스트(게이트 B)로 고정한다.
+- **`/resolve`는 3.1 MB / 1.9초다.** 좌표 해석 1회용이며 조회 경로에 두면 안 된다.
+- 대상 서비스는 **ETag/Cache-Control/rate limit이 없다** — 캐시는 전적으로 Pinvi 책임.
+- 일출/일몰(KASI)과 `apps/mobile`은 이관 대상이 **아니다**(모바일엔 날씨 코드 자체가 없다).
+
+**사용자 결정 완료(2026-09-17)** (설계 §7):
+1. 과거 날씨 = **C(대상 서비스 보존 연장)**. Pinvi 스냅샷 테이블은 만들지 않는다 →
+   게이트 **G-3**. 보존은 **소급되지 않으므로** G-1을 기다리지 말고 지금 요청해 두는
+   편이 낫다 — 늦을수록 영구히 잃는 과거 구간이 길어진다.
+2. 상용 provider = **처리방침 갱신 후 표시 + 카드에 출처 명시**. 순서 고정 →
+   게이트 **G-2**, 작업은 T-366(cutover보다 먼저).
+
+게이트 셋: **G-1**(KMA 커버리지, 외부) · **G-2**(처리방침, Pinvi/T-366) ·
+**G-3**(보존 연장 15일 목표, 외부, 반영 예정). Pinvi 측 강제 수단은 T-367 보존 지평
+가드(임계 15일). 15일 도달 후에도 그보다 늦게 열람하는 과거 여행은 여전히 `no_data`다.
+
+**다음 한 작업**: T-360(P1) — `kor-travel-weather` client + OpenAPI 생성 DTO + vendored
+스냅샷 드리프트 게이트. 배선 없이 머지 가능하다.
+
 ## 2026-09-15 (claude) — apps/etl: python-kasi-api async-only 통합 (PR 대기)
 
 `python-kasi-api`가 `AsyncKasiClient`를 없애고 `KasiClient`(async-only)로

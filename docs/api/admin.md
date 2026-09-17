@@ -1315,6 +1315,12 @@ Pinvi는 detail subpage를 위해 `kor-travel-map` 데이터를 read-only로 투
 공개되지 않은 feature도 운영자가 조회할 수 있다. Pinvi는
 `feature.*` 또는 `provider_sync.*` 테이블을 직접 조회하거나 override mutation을 만들지 않는다.
 
+> **`weather-values` 소스 이관 예정 (ADR-068)**: `kor-travel-weather`로 옮긴다. 이 표면은
+> **셰입이 바뀐다** — `provider_dataset_id`·`dataset_display_name`은 새 소스에 대응물이
+> 없고 `known_at`은 nullable이라 셋을 nullable로 넓힌다(없는 값을 지어내 채우지 않는다).
+> `asof` 422 정책의 근거도 다시 세운다. 전환은 T-364(P5) —
+> [`docs/integrations/kor-travel-weather.md`](../integrations/kor-travel-weather.md) §3.1-(2).
+
 #### `GET /admin/features/{feature_id}/sources`
 
 응답 `data`:
