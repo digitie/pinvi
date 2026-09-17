@@ -267,6 +267,13 @@ manual-feature-create 토큰(서버엔 SHA-256 해시만 있고 원문은 admin 
 관리자가 직접 Admin UI에서 만들어야 한다. 코드(위 sub-test, weather proxy)는 완성돼
 있으니 fixture가 준비되면 그대로 실행한다.
 
+**2026-09-18 결정**: flag가 기본값 off인 동안은 이 live e2e를 독립 blocking
+항목으로 두지 않는다 — 같은 시나리오를 mock 기반 integration test 12건
+(`apps/api/tests/integration/test_trip_view_weather_cutover.py`)이 이미
+커버한다. 이 게이트는 **T-365가 flag를 기본값 on으로 전환하기 직전의 운영
+관측 절차**로 흡수됐다(`docs/tasks.md` T-365 항목) — 그때 관리자에게 fixture
+생성을 함께 요청한다.
+
 Backup staging:
 
 ```bash

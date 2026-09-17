@@ -2,6 +2,28 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-18 (claude) — "T-363 e2e 실행 검증" 독립 항목 제거, T-365 선행 조건으로 흡수
+
+사용자 질문("t363은 필요한거야?")에 답하며 재검토했다: flag가 기본값 off인
+동안은 이 live e2e를 별도 blocking 항목으로 둘 이유가 약하다 — 같은
+시나리오(retired/suppressed 독립성, feature batch 실패 생존, 날짜 fanout
+없음)를 mock 기반 integration test 12건(`test_trip_view_weather_cutover.py`)이
+이미 커버하고, 막힌 이유도 기능 결함이 아니라 관리자의 수동 fixture 생성
+절차다. 이 e2e가 실제로 의미 있어지는 시점은 T-365가 flag를 켜는 순간인데
+T-365 자체가 이미 외부 게이트(G-1·G-3)에 막혀 있어 지금 뚫어도 당장 진행되는
+게 없다.
+
+사용자 결정: "고치고 진행" — `docs/tasks.md`에서 "T-363 e2e 실행 검증"을
+독립 항목에서 제거하고 T-365의 "P3~P5 운영 관측" 선행 조건에 흡수시켰다.
+`docs/runbooks/live-mutating-e2e.md`와 `docs/integrations/kor-travel-weather.md`
+§4.7 file-impact 표에도 같은 결정을 반영했다. 코드는 이미 전부 완성돼 있으므로
+변경 없음 — 문서 정리만.
+
+다음: T-368(미정, 설계 필요) 투자 착수 여부를 사용자에게 확인 중이었다 —
+`kor-travel-weather`의 `/v1/weather/nearby`(반경 기반, lat/lon+radius_km,
+limit≤100)가 `FeatureMapView.tsx` `WeatherMarker` 위치 공급원 대체 후보로
+유력하다는 사실을 발견했으나 아직 정식 설계는 시작하지 않았다.
+
 ## 2026-09-17 (claude) — T-366 머지, T-367(보존 지평 가드) 구현 완료
 
 T-366(PR #551)을 CI green 확인 후 squash 머지했다(`4a02b5a8`). 로컬이 자동으로
