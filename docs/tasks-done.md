@@ -7,6 +7,22 @@
 
 ## 2026-09-17
 
+- [x] **T-362** — (P3) 단건 `GET /features/{id}/weather`를 flag(
+      `pinvi_kor_travel_weather_single_feature_enabled`, 기본 `false`)로 전환(claude).
+      `apps/api/app/services/weather_card.py` 신설 — feature 좌표 조회(kor-travel-map
+      `get_feature`) → `resolve_weather_location` → `source_location_ids` 전체 latest+
+      forecast → provider 우선순위(KMA>AirKorea>상용, 동률 시 known_at 최신) dedupe →
+      metric key 정규화(안전 매핑만: TEMP→T1H/TMP, HUMIDITY→REH, WIND_SPEED→WSD(km/h→m/s
+      변환), WIND_DIRECTION→VEC, PRECIP_PROB→POP, PRECIP→RN1/PCP — CLOUD_COVER 등 대응
+      없는 것은 원본 통과) → `weather_domain=weather_alert`를 `forecast_style=advisory`로
+      투영. `?asof=`가 어제(KST) 이전이면 location 해석조차 없이 빈 카드(no_data, §3.1-(1)).
+      `main.py`에 `kor_travel_weather_client_lifespan` 배선. **실측으로 발견한 회귀**:
+      필수 dependency로 선언하면 flag off인 기존 테스트까지 501/503 맞음 — optional
+      dependency(`OptionalKorTravelWeatherClientDep`)로 바꿔 해결. `TripWeatherSummary.tsx`/
+      `FeatureMapView.tsx` 둘 다 **무변경 확인**(경로·셰입 동일 + 서버 정규화로 "web 변경
+      0" 성립). 신규 통합테스트 9건 + 기존 weather 테스트 3건 + 관련 25건 전부 green,
+      `tests/unit` 1428건 회귀 없음.
+
 - [x] **T-359** — 날씨 소스 이관(`kor-travel-map` → `kor-travel-weather`) **설계·계약 고정**
       (P0). ADR-068 + `docs/integrations/kor-travel-weather.md` +
       `docs/execplan/t-359-weather-source-cutover.md` + T-360~366 등록 + 교차 문서 정합

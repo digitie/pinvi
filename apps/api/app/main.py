@@ -23,6 +23,7 @@ from app.clients.kor_travel_map_curation import (
     curation_snapshot_service_client_lifespan,
 )
 from app.clients.kor_travel_map_feature_request import feature_request_service_client_lifespan
+from app.clients.kor_travel_weather import kor_travel_weather_client_lifespan
 from app.clients.naver_local import naver_local_client_lifespan
 from app.core.config import settings
 from app.core.errors import http_exception_handler, validation_exception_handler
@@ -68,6 +69,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         curation_snapshot_service_client_lifespan(app),
         curation_cutover_mapping_service_client_lifespan(app),
         kor_travel_geo_client_lifespan(app),
+        # T-362(P3, ADR-068). flag(`pinvi_kor_travel_weather_single_feature_enabled`)가
+        # 꺼져 있어도 client는 항상 준비해 둔다 — httpx.AsyncClient 하나 생성뿐이라
+        # 비용이 없고, flag on/off를 재배포 없이 바꿀 수 있게 한다.
+        kor_travel_weather_client_lifespan(app),
         kakao_local_client_lifespan(app),
         naver_local_client_lifespan(app),
         email_outbox_worker_lifespan(app),

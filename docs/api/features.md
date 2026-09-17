@@ -125,11 +125,11 @@ kor-travel-map 호출: `GET /v1/features/{feature_id}` (`name`, 구조화 `addre
 
 해당 좌표/지점의 날씨 (관측 + 예보 + 특보).
 
-> **소스 이관 예정 (ADR-068)**: 상류 소스를 `kor-travel-map`에서 `kor-travel-weather`로
-> 옮긴다. **본 공개 계약(경로·query·응답 셰입)은 바뀌지 않는다** — 교체는 Pinvi API
-> 내부에 가둔다. 현재는 아직 `kor-travel-map`에서 받는다. 설계는
-> [`docs/integrations/kor-travel-weather.md`](../integrations/kor-travel-weather.md),
-> 실행은 T-362(P3).
+> **소스 이관 진행 중 (ADR-068, T-362)**: `pinvi_kor_travel_weather_single_feature_enabled`
+> flag로 전환한다. **기본값은 아직 `false`**(G-1/G-2/G-3 게이트 전) — 운영은 계속
+> `kor-travel-map`에서 받는다. **경로·응답 셰입은 두 소스가 같다**(교체는 API 내부에
+> 가둔다). 다만 `asof`의 **동작 범위가 좁아진다** — 아래 참조. 설계는
+> [`docs/integrations/kor-travel-weather.md`](../integrations/kor-travel-weather.md).
 
 ```http
 GET /features/{feature_id}/weather?asof=2026-06-02T14:00:00+09:00
@@ -147,6 +147,14 @@ valid time)과 `known_at`(knowledge time = 호출 시각, "지금 아는 최신 
 받는다. Pinvi는 knowledge 축을 사용자에게 노출하지 않는다 — 시점 축은 `asof` 하나뿐이다.
 (`GET …/weather`에는 시각 query가 아예 없어서 예전처럼 `?asof=`를 붙이면 조용히 무시되고 늘
 최신 카드가 돌아왔다 — kor-travel-map bitemporal cutover `6650aa71`.)
+
+> **flag on일 때 `asof`가 동작을 바꾼다(ADR-068 §3.1-(1)).** `kor-travel-weather`에는
+> 시점 재현(snapshot) 엔드포인트가 없고 보존이 2일이다. `asof`가 **어제(KST) 이전**이면
+> location 해석조차 시도하지 않고 빈 카드(`metrics: []`)를 준다 — 404/422가 아니라
+> 조용한 no_data다. 그 외(오늘~예보 가능 범위)는 그 날짜 하루 구간의 예보로 좁혀
+> 응답한다. `asof` 없음(기본, 가장 흔한 경로)은 현재값 + 가까운 며칠 예보를 합친다.
+> 지난 여행 상세를 열람하는 흔한 사용 패턴에서 이 축소가 체감된다 — T-366(G-2)에서
+> 대상 서비스 보존이 15일로 늘어난 뒤에도 15일보다 오래된 조회는 여전히 빈 카드다.
 
 응답 200 — kor_travel_map는 **평탄한 metric 목록 + `forecast_style` 태그**를 준다(KMA
 시간축 그룹핑은 프런트 표현 계층):

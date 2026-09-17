@@ -890,10 +890,13 @@ class Settings(BaseSettings):
 
     # kor-travel-weather 공개 REST (날씨, ADR-068 — 이관 진행 중) —
     # `docs/integrations/kor-travel-weather.md`. 공개 read는 인증 헤더가 없다.
-    # T-360(P1) 시점에는 client만 존재하고 어떤 라우터도 배선하지 않는다.
     pinvi_kor_travel_weather_base_url: str = "http://localhost:14101"
     pinvi_kor_travel_weather_timeout_seconds: float = 10.0
     pinvi_kor_travel_weather_max_attempts: int = 3
+    # T-362(P3). 기본값 off — G-1(KMA 커버리지)·G-2(처리방침)·G-3(보존)가 아직 안
+    # 풀렸다(`docs/tasks.md` 게이트 절). on이면 단건 `GET /features/{id}/weather`가
+    # `kor-travel-map` 대신 이 서비스를 쓴다.
+    pinvi_kor_travel_weather_single_feature_enabled: bool = False
 
     # VWorld 지도 키 (ADR-043/048) — 웹은 빌드타임 NEXT_PUBLIC_VWORLD_API_KEY를 쓰지만,
     # 모바일 앱(`apps/mobile`)은 키를 번들하지 않고 GET /mobile/vworld/token 으로 인증 후

@@ -2,6 +2,65 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-17 (claude) — T-362(P3): 단건 weather를 flag로 전환 (ADR-068)
+
+`agent/claude-weather-t362-single-feature`. `pinvi_kor_travel_weather_single_feature_enabled`
+(기본 `false`)로 `GET /features/{id}/weather`를 전환할 수 있게 했다 — 운영은 여전히
+`kor-travel-map`에서 온다.
+
+### 핵심 설계 — `apps/api/app/services/weather_card.py`
+
+1. `client.get_feature(feature_id)`로 좌표(lon/lat)를 얻는다(기존 `_coord_from_kor_travel_map`
+   재사용).
+2. `resolve_weather_location`으로 location 해석(T-361 재사용, 캐시 우선).
+3. `source_location_ids` **전체**에 `latest()` + `forecast()`를 부르고 합친다(대표 하나만
+   쓰면 안 된다는 T-361의 교훈을 그대로 적용).
+4. 같은 `(metric_key, forecast_style, target_at)`에 여러 provider가 값을 주면 우선순위
+   (KMA > AirKorea > 상용, 동률 시 `known_at` 최신)로 하나만 남긴다.
+5. metric key를 **안전하게 매핑 가능한 것만** KMA 어휘로 정규화한다 — 설계 문서가 권장한
+   "서버 정규화" 방향을 그대로 채택했다. `TEMP`(forecast_style로 T1H/TMP 분기),
+   `HUMIDITY→REH`, `WIND_SPEED→WSD`(unit이 `km/h`면 `/3.6`으로 `m/s` 변환), `WIND_DIRECTION→VEC`,
+   `PRECIP_PROB→POP`, `PRECIP→RN1`(초단기)/`PCP`. `CLOUD_COVER`/`VISIBILITY`/`UV_INDEX`/
+   `WEATHER_CODE`, AirKorea `O3`/`NO2`/`SO2`/`CO`처럼 척도가 다르거나 1:1 대응이 없는
+   건 **원본 그대로 통과**시켰다 — 틀린 값을 보여주는 것보다 클라이언트가 인식 못해
+   카드에서 빠지는 편이 안전하다는 판단.
+6. `weather_domain == "weather_alert"`는 `forecast_style="advisory"`로 투영(대상
+   서비스엔 `advisory` forecast_style이 없다 — 특보는 별도 도메인으로 온다).
+
+`?asof=` 축소(설계 §3.1-(1))도 여기서 처리한다 — 어제(KST) 이전이면 **location 해석
+자체를 생략**하고 빈 카드를 준다(3.1 MB `/resolve` 호출과 DB 캐시 upsert를 아낀다 —
+처음엔 이 체크를 resolve **뒤에** 뒀다가 테스트로 낭비를 발견하고 순서를 바꿨다).
+
+### 실측으로 발견한 회귀 — 필수 dependency는 flag off 테스트까지 깬다
+
+`weather_client: KorTravelWeatherClientDep`을 함수 시그니처에 **필수**로 선언했더니,
+기존 `test_features_api.py`의 weather 테스트 3건이 flag off(기본값)인데도 503으로
+깨졌다. 원인: FastAPI dependency resolution은 라우터 본문 실행 **전에** 일어나므로,
+flag 분기와 무관하게 이 dependency가 항상 resolve된다 — 그런데 이 테스트 스위트는
+`ASGITransport(app=app)`로 client를 만들어(`conftest.py`) **lifespan을 아예 안 태운다**.
+기존 client들이 문제없었던 이유는 각 테스트가 `app.dependency_overrides`로 명시
+오버라이드했기 때문이다 — weather 테스트는 새 client를 오버라이드할 이유가 없었으니
+그대로 501(관련 dependency 기본 provider가 `app.state`에서 못 찾아 503)을 맞았다.
+`get_optional_kor_travel_weather_client`(`kor_travel_map.py`의 optional dependency
+선례를 그대로 따름 — None 반환, 503 없음)로 바꾸고 flag on인데 None이면 라우터가
+직접 503으로 승격하는 형태로 고쳤다. `Request`를 받아 함수 본문에서 수동으로 client를
+꺼내는 방식도 검토했지만, 그러면 `app.dependency_overrides`가 안 먹혀 테스트 자체가
+안 되므로 폐기했다.
+
+### `kind='weather'` feature 마커 — 코드 변경 없이 확인만
+
+설계 문서가 우려했던 "지도에 마커는 있는데 값이 안 뜬다" 분기를 확인했다.
+`FeatureMapView.tsx`는 `GET /features/{id}/weather`만 호출하고 경로·셰입이 flag
+무관하게 같으므로 **프론트 코드는 무변경**이다. 다만 `currentTempC`가
+`/temp|기온|T1H|TMP|TMN|TMX/i`로 상용 `TEMP`도 대소문자 무관 매치라 우연히
+살아남는다는 걸 재확인했다(설계 문서 실수 정정 — 이 컴포넌트가 아니라
+`TripWeatherSummary.tsx`의 `WEATHER_RE`가 실제로 정규화 없이는 죽었을 컴포넌트다).
+
+검증: 새 통합테스트 9건(flag off 무영향, 좌표 조회+카드 조립, 풍속 단위 변환,
+미매핑 metric 원본 통과, alert→advisory, 반경 3단계 소진 시 빈 카드+resolve 미호출,
+좌표 없음, 과거 asof, feature 404) + 기존 weather 테스트 3건 + 관련 통합 25건 전부
+green, `tests/unit` 1428건 회귀 없음, `mypy --strict app` 240파일 0, `ruff` 0.
+
 ## 2026-09-17 (claude) — T-361(P2): `weather_location_links` + 해석기 (ADR-068)
 
 `agent/claude-weather-t360-client`(계속). Alembic `20260917_0102_weather_location_links`
