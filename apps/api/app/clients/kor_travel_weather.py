@@ -592,7 +592,9 @@ def create_kor_travel_weather_client(app_settings: Settings) -> KorTravelWeather
 async def kor_travel_weather_client_lifespan(app: FastAPI) -> AsyncIterator[None]:
     """FastAPI lifespan — httpx client 1개 생성 후 `app.state`에 보관.
 
-    T-360(P1) 시점에는 어떤 라우터도 이 client를 쓰지 않는다 — 인프라만 갖춘다.
+    flag(`pinvi_kor_travel_weather_single_feature_enabled`)가 꺼져 있어도 항상
+    생성한다 — httpx.AsyncClient 하나 생성뿐이라 비용이 없고, flag를 재배포 없이
+    바꿀 수 있게 한다.
     """
     client = create_kor_travel_weather_client(settings)
     app.state.kor_travel_weather_client = client
@@ -623,4 +625,23 @@ def get_kor_travel_weather_client(request: Request) -> KorTravelWeatherClient:
 
 KorTravelWeatherClientDep = Annotated[
     KorTravelWeatherClient, Depends(get_kor_travel_weather_client)
+]
+
+
+def get_optional_kor_travel_weather_client(request: Request) -> KorTravelWeatherClient | None:
+    """FastAPI 의존성 — client 또는 None(503 없음).
+
+    T-362(P3)의 단건 weather 라우터가 쓴다 — flag가 꺼져 있으면(기본값) 이 client를
+    아예 쓰지 않으므로, **필수 dependency로 선언하면 flag off인 기존 경로 테스트까지
+    이 dependency를 항상 resolve하게 되어**(client override가 없는 테스트는 lifespan도
+    안 걸린 채 503을 맞는다) 실측으로 회귀가 났다. optional로 선언해 두면
+    `app.dependency_overrides`는 그대로 쓰면서 flag off 경로는 영향받지 않는다. flag
+    on인데 None이면(배선 누락) 호출부가 직접 503으로 승격한다.
+    """
+    client = getattr(request.app.state, "kor_travel_weather_client", None)
+    return client if isinstance(client, KorTravelWeatherClient) else None
+
+
+OptionalKorTravelWeatherClientDep = Annotated[
+    KorTravelWeatherClient | None, Depends(get_optional_kor_travel_weather_client)
 ]

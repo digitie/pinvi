@@ -1,5 +1,33 @@
 # resume.md
 
+## 2026-09-17 (claude) — T-362(P3) 완료, T-363(P4) 대기
+
+단건 `GET /features/{id}/weather`를 `pinvi_kor_travel_weather_single_feature_enabled`
+flag(기본 `false`)로 전환할 수 있게 했다. `apps/api/app/services/weather_card.py`가
+핵심 — feature 좌표 → location 해석(T-361 재사용) → 여러 location의 latest+forecast
+→ provider 우선순위 dedupe → metric key 안전 정규화 → alert→advisory 투영.
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+- **weather 관련 새 dependency는 반드시 optional로 선언할 것.** 필수로 선언하면
+  flag off인 기존 테스트까지 dependency resolution 단계에서 503을 맞는다(이 테스트
+  스위트는 `ASGITransport`로 lifespan을 안 태우고 명시 override에만 의존한다) —
+  `get_optional_kor_travel_weather_client` 패턴을 그대로 따를 것.
+- **`?asof=` 과거 체크는 location 해석보다 먼저 해야 한다** — 순서를 반대로 하면
+  no_data로 버릴 조회에도 3.1 MB `/resolve`와 DB 캐시 upsert를 낭비한다.
+- **web/mobile 코드는 무변경으로 확인됐다** — `TripWeatherSummary.tsx`,
+  `FeatureMapView.tsx` 둘 다 경로·셰입이 그대로라 자동으로 새 소스를 탄다. 단
+  metric key 정규화(서버 측)를 빠뜨리면 `TripWeatherSummary.tsx`가 상용 어휘를
+  조용히 버린다 — 이미 처리했지만 후속 작업에서 새 metric key를 추가할 땐 이 함수
+  (`_normalize_metric`)도 같이 볼 것.
+- metric key 정규화는 **안전한 것만** 한다 — `CLOUD_COVER` 등 척도가 다른 건 일부러
+  원본 그대로 둔다(틀린 값보다 미인식이 안전). 이 잔여 한계는 문서에 정직하게 남겼다.
+
+**다음 한 작업**: T-363(P4) — Trip view 전환. batch 1회 → `/markers` 1회 + location별
+`/forecast` fanout, `card_key := location_id`, 10초 예산·취소 전파, `retired` 판정을
+선행 feature batch로 이관. e2e 단언(`trip-detail.e2e.ts` 단건 0회,
+`PINVI_LIVE_WEATHER_*` 픽스처)과 `live-mutating-e2e.md` 게이트를 새 호출 모양으로
+재정의해야 한다(설계 §3.4).
+
 ## 2026-09-17 (claude) — T-361(P2) 완료, T-362(P3) 대기
 
 `app.weather_location_links` + `resolve_weather_location`을 만들었다. 반경 20→50→100km

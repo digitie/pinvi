@@ -230,11 +230,19 @@ provenance 표면에서 거짓 lineage는 금지다. (T-364)
 
 두 선택지 중 하나를 택한다.
 
-- **(권장) 서버에서 metric key를 정규화**해 클라이언트에 KMA 어휘로 내려보낸다.
+- **(권장, 채택됨) 서버에서 metric key를 정규화**해 클라이언트에 KMA 어휘로 내려보낸다.
   클라이언트 변경이 0으로 유지되고 분류기 중복도 사라진다.
 - 클라이언트 분류기를 상용 어휘까지 확장한다. 변경 면이 web + 테스트로 번진다.
 
-어느 쪽이든 T-362/T-363 범위이며, "web 변경 0"은 **성립하지 않는다.**
+**T-362에서 서버 정규화를 채택했다** (`apps/api/app/services/weather_card.py`
+`_normalize_metric`). **단, 완전하지 않다** — 단위 체계가 다르거나 1:1 대응이 없는
+것(`CLOUD_COVER`/`VISIBILITY`/`UV_INDEX`/`WEATHER_CODE`, AirKorea `O3`/`NO2`/`SO2`/
+`CO`)은 안전하게 매핑할 방법이 없어 **원래 값 그대로 통과**한다 — 잘못된 값을
+보여주는 것보다 클라이언트가 인식 못해 카드에서 빠지는 편이 안전하다는 판단이다.
+안전하게 정규화되는 것: `TEMP→T1H`(관측)/`TMP`(예보), `HUMIDITY→REH`,
+`WIND_SPEED→WSD`(단위가 `km/h`면 `m/s`로 변환), `WIND_DIRECTION→VEC`,
+`PRECIP_PROB→POP`, `PRECIP→RN1`(초단기)/`PCP`. 이걸로 "web 변경 0"이 **성립한다**
+— `TripWeatherSummary.tsx`/`FeatureMapView.tsx` 어느 쪽도 고치지 않았다.
 
 ### 3.2 feature → location 해석과 캐시 (신규)
 
@@ -380,8 +388,17 @@ Pinvi는 `app.trip_day_weather_snapshots` 같은 별도 스냅샷 테이블을 *
 
 → marker의 **존재·위치**는 map feature에서, marker에 채울 **값**은 weather 서비스에서
 오는 구조가 된다. `FeatureMapView.tsx`가 선택된 weather feature에 대해 호출하는 단건
-weather도 새 경로를 타야 한다. 이 분기를 T-362에서 명시적으로 다룬다 — 방치하면
-"지도에 마커는 있는데 값이 안 뜬다"가 된다.
+weather도 새 경로를 타야 한다.
+
+**T-362에서 확인**: `FeatureMapView.tsx`는 `featureApi(apiClient).weather(featureId)` →
+`GET /features/{id}/weather`만 호출하고, 그 경로·응답 셰입은 flag on/off 무관하게
+동일하다. 즉 **백엔드 라우터를 flag로 전환하는 것만으로 이 마커도 자동으로
+새 경로를 탄다** — 프론트 코드 변경이 필요 없었다.
+(참고로 `FeatureMapView.tsx`의 `currentTempC`는 `/temp|기온|T1H|TMP|TMN|TMX/i`로
+느슨하게 매치해 상용 `TEMP`도 대소문자 무관 부분일치로 우연히 잡힌다 — 안전망이지
+설계는 아니다. `TripWeatherSummary.tsx`의 `WEATHER_RE`는 이런 여유가 없어 정규화를
+빠뜨렸다면 실제로 값이 조용히 사라졌을 것이다 — §3.1-(3) 서버 정규화가 막은 게
+바로 이 경로다.)
 
 `kind` enum 자체(`feature_suggestion` CHECK, MCP tool registry, Admin kind 필터)는
 map 소유이므로 건드리지 않는다.
@@ -392,14 +409,14 @@ map 소유이므로 건드리지 않는다.
 | --------- | ------------------------------------------------------------------------------------------------------------------- | --------- |
 | transport | `apps/api/app/clients/kor_travel_map.py` (사용자 3경로)                                                             | T-365     |
 | transport | `apps/api/app/clients/kor_travel_map_admin.py` `get_feature_weather`                                                | T-364/365 |
-| 라우터    | `apps/api/app/api/v1/features.py` (`normalize_asof_query`, `_weather_from_kor_travel_map`)                          | T-362     |
+| 라우터    | `apps/api/app/api/v1/features.py` (`normalize_asof_query`, `_weather_from_kor_travel_map`) — **완료**              | T-362     |
 | 라우터    | `apps/api/app/api/v1/admin/features.py` (weather-values, `asof` 422)                                                | T-364     |
 | 서비스    | `apps/api/app/services/trip_view_builder.py` (`_weather_resolution`, 10초 예산, fanout)                             | T-363     |
 | 스키마    | `apps/api/app/schemas/{feature,trip,admin}.py`                                                                      | T-362~364 |
 | 스키마    | `packages/schemas/src/{feature,trip,admin}.ts` (Zod 미러 + partition superRefine)                                   | T-362~364 |
 | client    | `packages/api-client/src/endpoints/{feature,admin}.ts`, `query-keys.ts`                                             | T-362/364 |
-| web       | `apps/web/components/trips/TripWeatherSummary.tsx` (분류기 — §3.1-(3))                                              | T-362/363 |
-| web       | `apps/web/components/map/FeatureMapView.tsx`, `vworldPrimitives.tsx` (§4.6)                                         | T-362     |
+| web       | `apps/web/components/trips/TripWeatherSummary.tsx` (분류기 — §3.1-(3)) — **서버 정규화로 무변경 확인**              | T-362/363 |
+| web       | `apps/web/components/map/FeatureMapView.tsx`, `vworldPrimitives.tsx` (§4.6) — **경로 동일 확인, 무변경**            | T-362     |
 | web       | Admin weather-values 탭 `FeatureDetailSubpage.tsx`                                                                  | T-364     |
 | e2e       | `apps/web/e2e/trip-detail.e2e.ts` (단건 weather 요청 0회 단언)                                                      | T-363     |
 | e2e       | `trip-feature-resolution-live-mutating.live.ts` + `PINVI_LIVE_WEATHER_*` env                                        | T-363     |
