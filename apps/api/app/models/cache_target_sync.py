@@ -606,11 +606,16 @@ class KtmCacheTargetBoundaryAudit(Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint(
-            # schema_revision pin은 final migration마다 의식적 re-pin (0101에서
-            # 갱신 — services/cache_target_final_boundary.FINALIZE_SCHEMA_REVISION
-            # 과 반드시 동일).
+            # schema_revision pin은 final migration마다 의식적 re-pin (0102에서
+            # 0101/0102 둘 다 허용하도록 확장 — T-361, ADR-068). **IN이 아니라 OR
+            # 체인**이어야 한다 — PostgreSQL이 IN을 `= ANY(ARRAY[...])`로 정규화해
+            # scripts/restore-hotswap.sh의 리터럴 LIKE 검증이 깨진다(실측 확인).
+            # 반드시 services/cache_target_final_boundary.FINALIZE_SCHEMA_REVISIONS 및
+            # alembic/versions/20260917_0102_weather_location_links.py의
+            # _BOUNDARY_CONTRACT_CHECK와 동일해야 한다.
             "contract_version = 'pinvi-cache-target-final-boundary/v1' "
-            "AND status = 'succeeded' AND schema_revision = '20260824_0101'",
+            "AND status = 'succeeded' "
+            "AND (schema_revision = '20260824_0101' OR schema_revision = '20260917_0102')",
             name=conv("ck_ktm_ct_boundary_contract"),
         ),
         CheckConstraint(

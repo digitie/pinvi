@@ -2,6 +2,182 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-17 (claude) — T-361(P2): `weather_location_links` + 해석기 (ADR-068)
+
+`agent/claude-weather-t360-client`(계속). Alembic `20260917_0102_weather_location_links`
++ `WeatherLocationLink` 모델 + `resolve_weather_location`.
+
+### 실측으로 확인한 것 — `/resolve`는 반경 내 매치가 없으면 404다
+
+OpenAPI 스펙에는 `/v1/weather/resolve`의 오류 응답이 200/422뿐이고 404가 **선언돼
+있지 않다.** 실측(`radius_km=1`로 커버리지 희박 좌표 조회)해 보니 실제로는
+`404 {"detail":"요청 좌표 주변에 위치가 없습니다."}`가 온다 — 문서화 누락이다.
+`kor_travel_weather.py`의 `_unwrap_data`가 404를 메서드 불문 `KorTravelWeatherNotFound`로
+매핑하도록 이미 짜여 있어서 client 쪽 수정은 필요 없었다 — 리졸버가 그 예외를 반경
+확대 신호로 그대로 받아 쓴다.
+
+### 설계 그대로 구현한 것
+
+- 반경 20 → 50 → 100km 확대, 세 단계 모두 `KorTravelWeatherNotFound`면
+  `WeatherLocationNoData`(장애 아님, 행을 만들지 않음 — 다음 호출이 다시 시도).
+- `source_location_ids`는 대표 `location` + `source_locations` 전체를 dedupe하되
+  **순서를 보존**해 저장한다(설계 §3.3 — 대표 location 하나만 저장하면 기상청 예보가
+  조용히 사라지는 함정을 실측으로 이미 확인했었다).
+- 좌표 변경 감지 시 **먼저 `stale=True`를 커밋**하고 그 다음 재해석한다 — 재해석
+  도중(네트워크 실패 등) 예외가 나도 `stale=True`만은 남아 다음 호출이 재시도하게
+  만든다. `trip_day_rise_set.py`의 stale 마킹과 정신은 같지만, weather는 요청 경로에서
+  지금 답이 필요해 동기적으로 즉시 재해석까지 한다는 점이 다르다.
+
+### 환경 문제 하나 발견 겸 해결 — `tests/integration`이 이 worktree에서 전부 막혀 있었다
+
+`tests/integration/conftest.py`가 `subprocess.run(["alembic", ...])`로 migration을
+적용하는데, `.venv/bin/python -m pytest`로 실행하면 venv의 `bin/`이 `PATH`에 없어
+`alembic` 실행 파일을 못 찾고 **모든** 통합 테스트가 즉시 죽는다(내가 만들기 전부터
+그랬다 — `test_admin_abuse_api.py`/`test_trip_day_rise_set.py`로 재현 확인). venv를
+activate하지 않고 `.venv/bin/python` 절대경로만 쓰는 이 worktree의 관례가 원인이다.
+`PATH="<repo>/apps/api/.venv/bin:$PATH"` 앞에 붙이면 정상 동작한다 — CI는 셸 스텝에서
+venv를 activate하므로 이 문제가 없었다(T-360 PR의 `integration-test (1..4)` 전부
+green). 문서에는 남기지 않는다(이 worktree 세션의 실행 습관 문제일 뿐, 코드/CI 결함
+아님) — 다음에 통합 테스트가 이유 없이 전멸하면 이 PATH 트릭을 먼저 시도할 것.
+
+검증: 새 리졸버 통합테스트 8건(캐시 히트/미스, 반경 확대, 3단계 소진 시 no_data +
+행 미생성, 좌표 변경 → stale 커밋 → 재해석, stale 행은 좌표가 같아도 캐시 히트 아님,
+measurement_point 없음 → NULL 저장, source_locations 비어도 대표 location 포함) 전부
+실제 Postgres(testcontainers)로 green. migration은 `docs/conventions/database.md`
+§4.3 절차대로 별도 DB에 upgrade/downgrade 왕복 확인(`\d app.weather_location_links`로
+컬럼/인덱스 셰입 눈으로 대조). ruff 0, `mypy --strict app`(239파일) 0, 기존
+`tests/unit` 1428건 회귀 없음.
+
+### PR CI에서 발견한 진짜 회귀 — 0101이 운영 스크립트에 하드코딩돼 있었다
+
+PR #545 CI의 `integration-test (2)`가 실패했다. 조사해 보니 **flaky 4건**
+(`test_cache_target_causal_canary.py` — origin/main 단독 실행에서도 재현, 내 변경과
+무관 확인)과 **결정론적 회귀 3건**이 섞여 있었다.
+
+결정론적 회귀의 진짜 원인: `infra/postgres/bootstrap-pinvi-runtime-role.sh`가
+```sh
+if [ "${applied_revision}" = "20260824_0101" ]; then
+    ...GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app...
+fi
+```
+로 **현재 Alembic head 리터럴을 하드코딩**하고 있었다. 주석: "Alembic은 이미 적용된
+0101을 재실행하지 않는다. 따라서 과거 0101 variant가 남긴 runtime ACL 누락은 일반
+role bootstrap에서 **exact head일 때만** 정본 app owner로 보정한다." — 즉 0101 뒤에
+아무 migration이나 추가하면 `applied_revision`이 새 head로 바뀌어 이 조건이 거짓이
+되고, **runtime role의 테이블 권한 부여 전체가 조용히 스킵된다.**
+`test_m05_migrator_login_lifecycle.py::test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions`
+(실제 Docker Compose + Postgres로 role topology 전체를 검증하는 보안 경계 통합
+테스트)가 이를 결정론적으로 잡아냈다 — 2번 재현 모두 동일하게 실패.
+
+`docs/decisions.md`의 ADR-065를 다시 읽었지만 "0101 뒤에 새 migration을 추가하는
+절차"는 어디에도 없었다. `docs/conventions/database.md`의 일반 Alembic 작성
+가이드(`YYYYMMDD_NNNN_<slug>.py`로 새 revision 추가)는 이 M05 특수 제약과 정면으로
+충돌한다 — 문서 갭이다.
+
+**사용자에게 확인**(AskUserQuestion) — 세 선택지(가드를 0102까지 확장 / T-361 보류
+/ 0101 파일에 직접 추가) 중 **"가드를 0102까지 확장(권장)"**을 선택받았다.
+
+### 수정하며 겪은 두 번째 함정 — golden 테스트가 정확한 shell 구문·주석 문자열을 고정한다
+
+처음엔 `if`를 `case "${applied_revision}" in 20260824_0101 | 20260917_0102) ... ;; esac`로
+바꾸고 주석도 "0101" → "revision"으로 일반화했다. 그랬더니 이번엔
+`tests/unit/test_m05_migration_role_wiring.py`가 깨졌다 — 이 테스트는 스크립트
+내용을 **문자 그대로** 여러 곳에서 부분일치 검증한다:
+`'if [ "${applied_revision}" = "20260824_0101" ]; then'`(정확한 `if` 구문),
+`"이미 적용된 0101을 재실행하지 않는다"`(정확한 주석 문구, `bootstrap.index(...)`로
+슬라이스 시작점으로도 씀). `case`문으로 바꾸면 그 `if` 리터럴이 사라지고, 주석을
+일반화하면 그 문구도 사라진다.
+
+**최종 형태**: `if` 구문과 원래 주석 문구는 **손대지 않고 그대로 둔 채**, GRANT SQL을
+`apply_runtime_acl_repair()` 함수로 뽑아내고, `if [ = "20260824_0101" ]; then
+apply_runtime_acl_repair; fi` 뒤에 `if [ = "20260917_0102" ]; then
+apply_runtime_acl_repair; fi`를 **별개의 `if` 블록으로** 추가했다(하나의 `if`에
+`||`로 합치면 다시 그 golden 리터럴이 깨진다). SQL은 한 곳에만 쓰고 두 `if`가
+같은 함수를 부른다.
+
+검증: `sh -n` 구문 확인, `shellcheck -s sh` 0 warning,
+`test_m05_migration_role_wiring.py` 19건 green, 영향받은 통합 테스트 3파일 40건
+green(`test_m05_activation_anchor_migration.py`, `test_m05_migrator_login_lifecycle.py`,
+`test_weather_location_resolver.py`), `tests/unit` 1428건 회귀 없음.
+
+### 환경 함정 하나 더 — `git switch --detach`는 uncommitted 변경을 지우지 않는다
+
+원인 격리(내 변경 vs 기존 flaky)를 위해 `git switch --detach origin/main`을 했는데,
+**working tree의 uncommitted 수정은 그대로 남아** 비교 실험이 한 번 오염됐다
+(stash 없이 switch만 하면 코드는 origin/main인데 테스트 파일은 내 수정본인 채로
+돌아간다). `git stash` 후 switch해야 진짜 격리된 비교가 된다. 이후로는
+switch 전에 반드시 `git status --short`로 clean을 확인했다.
+
+### 후속 — CI가 또 실패해서 발견한 진짜 규모: canonical head가 5곳에 하드코딩돼 있었다
+
+`bootstrap-pinvi-runtime-role.sh` 수정 후 PR을 다시 올렸는데 `integration-test (2)`가
+계속 실패했다. 처음엔 `test_cache_target_causal_canary.py`의 flaky 4건(이미 origin/main
+단독에서도 재현 확인)이라고 판단했지만, **3번 재실행 모두 정확히 같은 4건이 같은
+`schema_revision_mismatch`로 죽는 게** 우연치고는 일치도가 너무 높았다. 사용자에게
+"더 깊이 조사"를 요청받아 다시 팠다.
+
+진짜 원인: `app/services/cache_target_final_boundary.py`의
+**`FINALIZE_SCHEMA_REVISION = "20260824_0101"`** — 실제 프로덕션 애플리케이션 코드에
+있는 **세 번째** exact-head 하드코딩이었다. 주석: "이 pin과 DB CHECK
+(`ck_ktm_ct_boundary_contract`)는 최종 migration에서 함께 갱신해야 finalize가 열린다 —
+**fail-close by design**."
+
+전체 저장소를 `grep`해서 `"20260824_0101"`을 참조하는 프로덕션 코드(테스트 제외)를 다
+찾았다 — **총 5곳**:
+1. `infra/postgres/bootstrap-pinvi-runtime-role.sh` (이미 수정)
+2. `app/services/cache_target_final_boundary.py` — 파이썬 런타임 게이트
+3. `app/models/cache_target_sync.py` — DB CHECK 제약 SQLAlchemy 선언
+4. `scripts/deploy-node.sh` — **N150 실제 fresh 배포 스크립트** (2곳: fresh 판정 +
+   idempotent 재사용 판정)
+5. `scripts/restore-hotswap.sh` — **N150 실제 DB 복구 스크립트**
+
+이건 "인프라 스크립트 하나 고치기"가 아니라 M05 activation contract의 canonical
+exact head를 시스템 전체에 걸쳐 0101→(0101, 0102)로 공식 확장하는 작업이었다.
+사용자에게 규모를 명확히 보고하고("나머지 4곳도 확장할지" 확인) 승인받은 뒤 진행했다.
+
+#### 실측이 또 한 번 설계를 뒤집었다 — `IN`이 아니라 `OR`을 써야 한다
+
+`ck_ktm_ct_boundary_contract` CHECK를 처음엔 `schema_revision IN ('20260824_0101',
+'20260917_0102')`로 넓혔다. 그런데 `scripts/restore-hotswap.sh`가
+`pg_get_constraintdef()`의 반환 텍스트에 `LIKE '%schema_revision = ''20260824_0101''%'`
+로 리터럴 매치를 건다. 실제 Postgres에 만들어서 확인해 보니:
+
+- `IN (...)` → `pg_get_constraintdef()`가 `schema_revision = ANY (ARRAY['20260824_0101'::text, '20260917_0102'::text])`로 **정규화** — LIKE가 더 이상 매치 안 됨
+- `(schema_revision = '20260824_0101' OR schema_revision = '20260917_0102')` →
+  `(schema_revision = '20260824_0101'::text) OR (schema_revision = '20260917_0102'::text)`로
+  **원래 리터럴 형태 보존** — LIKE 그대로 매치
+
+`OR` 체인으로 바꾸니 `restore-hotswap.sh`는 **한 글자도 안 고쳐도** 기존 검증이
+그대로 통과했다(설명 주석만 추가). 이걸 실측 없이 그냥 "논리적으로 동등하니 `IN`이
+낫겠다"고 골랐으면 또 다른 조용한 회귀를 심을 뻔했다.
+
+#### deploy-node.sh — golden 테스트를 또 만났다
+
+`tests/unit/test_migrator_lifecycle_lock.py:227`가
+`assert 'state_alembic_version" == "20260824_0101"' in source`로 정확한 셸 비교
+리터럴을 고정하고 있었다. `bootstrap-pinvi-runtime-role.sh` 때와 같은 전략 —
+그 정확한 부분 문자열은 건드리지 않고, `( "$state_alembic_version" == "20260824_0101" \
+  || "$state_alembic_version" == "20260917_0102" )`로 괄호를 씌워 OR를 추가했다.
+
+#### `test_tvn40_migration_immutability.py`를 읽고 안심함
+
+이름 때문에 "새 migration 추가 자체를 막는 테스트인가" 걱정했는데, 오히려 그 반대였다.
+주석: "종전의 exact 파일 목록 비교는 그 성질에 더해 **신규 migration 추가까지**
+금지하고 있었다 — T-349(신규 migration이 필요한 태스크)가 이 한 줄 때문에 진행
+불가로 표시됐다. 목록 동등 대신 digest 불변 + 계보 무결로 바꾼다." 즉 과거에
+정확히 같은 문제를 다른 세션이 이미 겪었고, "봉인된 기준선은 바이트 불변, 새
+migration 추가는 명시 허용, 계보는 단일 선형"으로 고쳐 뒀다. 내 접근(0101 뒤에
+0102를 선형으로 추가)이 정확히 이 테스트가 지원하도록 설계된 패턴이었다.
+
+검증: `pg_get_constraintdef()` 실측(위 참조), migration upgrade/downgrade 왕복 후
+CHECK 텍스트가 정확히 기대한 형태로 나오는지 재확인, `shellcheck` 3개 스크립트 전부
+새 경고 0(라인 번호만 밀림), `mypy --strict app` 239파일 0, `ruff` 0, `tests/unit`
+1428건, `test_cache_target_causal_canary.py` 41건 **전부 통과**(`schema_revision_mismatch`
+완전 소멸 — 재실행 3회 결정론적으로 나던 것이 이제 안 남), `test_restore_hotswap_preflight.py`
++ `test_tvn40_curation_import_receipts.py` + `test_weather_location_resolver.py` +
+`test_m05_activation_anchor_migration.py` + `test_m05_migrator_login_lifecycle.py`
+58건 전부 통과.
+
 ## 2026-09-17 (claude) — T-360(P1): `kor-travel-weather` client 신설 (ADR-068)
 
 `agent/claude-weather-t360-client`.

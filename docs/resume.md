@@ -1,5 +1,60 @@
 # resume.md
 
+## 2026-09-17 (claude) — T-361(P2) 완료, T-362(P3) 대기
+
+`app.weather_location_links` + `resolve_weather_location`을 만들었다. 반경 20→50→100km
+확대, `source_location_ids` 전체 dedupe 저장, 좌표 변경 시 stale 먼저 커밋 후 재해석.
+**아직 어떤 라우터도 안 쓴다.**
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+- `kor-travel-weather`의 `/resolve`는 반경 내 매치가 없으면 **404**를 준다 —
+  OpenAPI 스펙에는 선언 안 돼 있는 실제 동작이다(재vendor해도 이 사실은 스펙에 안
+  나온다). `KorTravelWeatherNotFound`로 이미 매핑돼 있으니 그대로 잡아 쓰면 된다.
+- `WeatherLocationNoData`(반경 100km까지도 매치 없음)는 캐시 행을 **만들지 않는다** —
+  같은 feature_id를 또 조회하면 3개 반경을 처음부터 다시 시도한다. 부정 캐싱은
+  일부러 안 넣었다(요청받지 않았고, 실측상 커버리지 자체는 충분해 자주 발생할 상황이
+  아니다).
+- `tests/integration`을 이 worktree에서 돌릴 땐
+  `PATH="<repo>/apps/api/.venv/bin:$PATH"`를 앞에 붙여야 한다 — 안 그러면 `alembic`
+  실행 파일을 못 찾고 **전부** 즉시 실패한다(내가 만들기 전부터 있던 문제, CI는
+  영향 없음).
+
+**매우 중요 — 0101 뒤에 새 Alembic migration을 추가하려면 반드시 함께 고칠 파일이
+"5곳" 있다.** M05 activation contract의 "canonical exact head"가 다음 5곳에
+하드코딩돼 있고, 하나라도 빠뜨리면 운영 배포/복구 경로 또는 cache-target finalize가
+조용히(또는 시끄럽게) 죽는다:
+
+1. `infra/postgres/bootstrap-pinvi-runtime-role.sh` — `apply_runtime_acl_repair()`
+   호출부에 새 `if` 블록 추가
+2. `apps/api/app/services/cache_target_final_boundary.py` —
+   `FINALIZE_SCHEMA_REVISIONS` 튜플에 추가
+3. `apps/api/app/models/cache_target_sync.py` — `ck_ktm_ct_boundary_contract`
+   CheckConstraint 문자열(모델 선언)
+4. `scripts/deploy-node.sh` — N150 fresh 배포 판정 2곳(fresh 확인 + idempotent 재사용
+   확인)
+5. `scripts/restore-hotswap.sh` — 원칙적으로 **손댈 필요 없음**(아래 참조), 단 설명
+   주석은 갱신
+
+**DB CHECK를 넓힐 땐 반드시 `IN (...)`이 아니라 `(a = x OR a = y)` 형태로 쓸 것.**
+PostgreSQL이 `IN`을 `= ANY (ARRAY[...])`로 정규화해 `restore-hotswap.sh`의
+`pg_get_constraintdef()` 리터럴 LIKE 검증이 조용히 깨진다 — 실측으로 확인했다
+(`docs/journal.md` 2026-09-17 후속 항목). 새 migration에 이 CHECK 갱신 DDL도
+포함해야 한다(`op.drop_constraint` + `op.create_check_constraint`,
+`20260917_0102_weather_location_links.py`의 `_set_boundary_contract()` 참조).
+
+여러 곳이 `tests/unit/test_m05_migration_role_wiring.py`·
+`tests/unit/test_migrator_lifecycle_lock.py`같은 golden 테스트로 **정확한 shell
+구문·주석 문자열**까지 고정한다 — 구조를 바꿀 땐(`if`→`case` 등) 그 테스트부터
+먼저 돌려볼 것. 반대로 `tests/unit/test_tvn40_migration_immutability.py`는 "봉인된
+기준선은 바이트 불변, 새 migration 추가는 명시 허용"을 검증하므로 **새 migration
+자체는 안심하고 추가해도 된다.**
+
+**다음 한 작업**: T-362(P3) — 단건 `GET /features/{id}/weather`를 flag로 전환. 이번
+task에서 처음으로 `kor_travel_weather_client_lifespan`을 `main.py`에 배선하고
+`resolve_weather_location`을 실제로 호출하게 된다. provider 우선순위 상수 + `unit`
+무가정 매핑 + `?asof=` 축소 반영 + `kind='weather'` feature 마커 분기까지 함께
+결정해야 한다(설계 §3.1/§4.6).
+
 ## 2026-09-17 (claude) — T-360(P1) 완료, T-361(P2) 대기
 
 `kor-travel-weather` client(`apps/api/app/clients/kor_travel_weather.py`)를 만들었다.

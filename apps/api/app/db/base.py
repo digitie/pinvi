@@ -56,4 +56,5 @@ from app.models import (  # noqa: E402,F401
     user_consent,
     user_consent_event,
     user_email_verification,
+    weather_location_link,
 )

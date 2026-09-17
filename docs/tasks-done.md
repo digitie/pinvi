@@ -21,6 +21,31 @@
       `Settings pinvi_kor_travel_weather_*` + `.env.example`(claude).
       **배선 없음** — `main.py`에 lifespan을 등록하지 않았다(코드는 자기 테스트에서만
       쓰인다). 인증 헤더 없음(공개 read). ruff/mypy --strict/기존 unit 1428건 전부 green.
+- [x] **T-361** — (P2) `app.weather_location_links` Alembic migration(20260917_0102) +
+      `WeatherLocationLink` 모델 + `resolve_weather_location`
+      (`apps/api/app/services/weather_location_resolver.py`, claude). 반경 20→50→100km
+      확대(`KorTravelWeatherNotFound` 404 — OpenAPI 미선언이지만 실측 확인됨), 3단계 모두
+      실패 시 장애가 아닌 `WeatherLocationNoData`(행 미생성). `source_location_ids`
+      전체를 dedupe 유지 순서로 저장(설계 §3.3 함정 방지). 좌표 변경 시 `stale=True` 먼저
+      커밋 후 재해석(중간 실패해도 재시도 가능). 실제 Postgres(testcontainers)로 migration
+      upgrade/downgrade 확인 + 리졸버 통합테스트 8건 전부 green. **배선 없음** — 라우터
+      미사용, T-362/T-363이 처음 쓴다.
+      **PR CI에서 발견한 훨씬 큰 회귀**: M05 activation contract의 "canonical exact
+      head"가 5곳에 하드코딩돼 있어, 새 migration(0102) 추가만으로 조용히 깨졌다 —
+      `infra/postgres/bootstrap-pinvi-runtime-role.sh`(runtime role GRANT),
+      `apps/api/app/services/cache_target_final_boundary.py`(파이썬 런타임 게이트,
+      `FINALIZE_SCHEMA_REVISIONS`), `apps/api/app/models/cache_target_sync.py`(DB
+      CHECK 제약 선언), `scripts/deploy-node.sh`(N150 fresh 배포, 2곳),
+      `scripts/restore-hotswap.sh`(N150 복구, 결국 무수정 — 아래 참조). 사용자 확인
+      후 5곳 모두 (0101, 0102) 둘 다 인식하도록 확장.
+      **핵심 함정**: DB CHECK를 `IN (...)`으로 넓히면 PostgreSQL이
+      `= ANY (ARRAY[...])`로 정규화해 `restore-hotswap.sh`의 `pg_get_constraintdef()`
+      리터럴 LIKE 검증이 조용히 깨진다(실측 확인) — `(a = x OR a = y)` 형태로 써야
+      원래 리터럴이 보존된다. golden 테스트(`test_m05_migration_role_wiring.py`,
+      `test_migrator_lifecycle_lock.py`)가 요구하는 정확한 shell 구문·주석 문구는
+      보존. `test_cache_target_causal_canary.py` 41건 전부 green으로 최종 확인
+      (`schema_revision_mismatch` 완전 소멸). 상세는 `docs/journal.md` 2026-09-17
+      후속 항목 2건.
 
 ## 2026-09-05
 

@@ -795,8 +795,15 @@ capture_fresh_stack_migration_proof() {
     echo "could not read the migrated Alembic revision" >&2
     return 1
   fi
-  [[ "$db_system_identifier" =~ ^[0-9]+$ && "$alembic_version" == "20260824_0101" ]] || {
-    echo "fresh deploy requires the canonical 0101 Alembic revision and a PostgreSQL identity" >&2
+  # canonical exact head 목록 — 새 Alembic migration이 head를 전진시킬 때마다 이 두
+  # 곳(여기와 write_fresh_stack_state 아래 재사용 검증)에 그 revision을 추가할 것.
+  # 같은 패턴을 apps/api/app/services/cache_target_final_boundary.py
+  # (FINALIZE_SCHEMA_REVISIONS), infra/postgres/bootstrap-pinvi-runtime-role.sh,
+  # scripts/restore-hotswap.sh에도 반복해야 한다(T-361, ADR-068 — weather_location_links
+  # 추가 중 이 게이트가 CI에서 결정론적으로 실패해 발견됨).
+  [[ "$db_system_identifier" =~ ^[0-9]+$ \
+    && ( "$alembic_version" == "20260824_0101" || "$alembic_version" == "20260917_0102" ) ]] || {
+    echo "fresh deploy requires a canonical Alembic head (20260824_0101 or 20260917_0102) and a PostgreSQL identity" >&2
     return 2
   }
   FRESH_STACK_DB_CONTAINER_ID="$db_container_id"
@@ -917,7 +924,8 @@ require_reusable_fresh_stack_contract() {
     && "$state_db_container_id" =~ ^[0-9a-f]{12,64}$ \
     && "$state_db_volume_name" != "" \
     && "$state_db_system_identifier" =~ ^[0-9]+$ \
-    && "$state_alembic_version" == "20260824_0101" \
+    && ( "$state_alembic_version" == "20260824_0101" \
+      || "$state_alembic_version" == "20260917_0102" ) \
     && "$state_postgres_image_id" =~ ^sha256:[0-9a-f]{64}$ \
     && "$state_rustfs_image_id" =~ ^sha256:[0-9a-f]{64}$ \
     && "$state_rustfs_init_image_id" =~ ^sha256:[0-9a-f]{64}$ \

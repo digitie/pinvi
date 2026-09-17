@@ -1213,6 +1213,38 @@ fi
 # runtime ACL 누락은 일반 role bootstrap에서 exact head일 때만 정본 app owner로 보정한다.
 # 0100 이하와 legacy rebaseline은 migration handoff가 ACL을 결정해야 하므로 여기서
 # 절대 수정하지 않는다.
+#
+# **exact head 리터럴은 여기서 하드코딩된 비교다 — 새 Alembic migration을 0101 뒤에
+# 추가할 때마다 그 revision id로 `if` 블록을 하나 더 추가할 것.** 빠뜨리면 이 GRANT가
+# 조용히 스킵되어 runtime role이 테이블 권한을 잃는다(T-361, ADR-068 —
+# `weather_location_links` 추가 중 결정론적으로 재현·발견됨. 20260917_0102부터 적용).
+apply_runtime_acl_repair() {
+  PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 \
+    --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
+    --set="app_role=${PINVI_APP_DB_USER}" \
+    --set="schema_owner=${PINVI_APP_SCHEMA_OWNER}" \
+    >/dev/null <<'SQL'
+BEGIN;
+REVOKE ALL ON SCHEMA app FROM PUBLIC;
+GRANT USAGE ON SCHEMA app TO :"app_role";
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA app FROM :"app_role";
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO :"app_role";
+REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA app FROM :"app_role";
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA app TO :"app_role";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"schema_owner" IN SCHEMA app
+  REVOKE ALL ON TABLES FROM :"app_role";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"schema_owner" IN SCHEMA app
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"app_role";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"schema_owner" IN SCHEMA app
+  REVOKE ALL ON SEQUENCES FROM :"app_role";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"schema_owner" IN SCHEMA app
+  GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"app_role";
+REVOKE ALL PRIVILEGES ON TABLE app.alembic_version FROM :"app_role";
+GRANT SELECT ON TABLE app.alembic_version TO :"app_role";
+COMMIT;
+SQL
+}
+
 if [ "${PINVI_M05_LEGACY_REBASELINE}" = "0" ]; then
   alembic_version_table_exists="$(
     PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --tuples-only --no-align \
@@ -1233,29 +1265,11 @@ SQL
     )"
   fi
   if [ "${applied_revision}" = "20260824_0101" ]; then
-    PGPASSWORD="${POSTGRES_PASSWORD}" psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 \
-      --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
-      --set="app_role=${PINVI_APP_DB_USER}" \
-      --set="schema_owner=${PINVI_APP_SCHEMA_OWNER}" \
-      >/dev/null <<'SQL'
-BEGIN;
-REVOKE ALL ON SCHEMA app FROM PUBLIC;
-GRANT USAGE ON SCHEMA app TO :"app_role";
-REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA app FROM :"app_role";
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO :"app_role";
-REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA app FROM :"app_role";
-GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA app TO :"app_role";
-ALTER DEFAULT PRIVILEGES FOR ROLE :"schema_owner" IN SCHEMA app
-  REVOKE ALL ON TABLES FROM :"app_role";
-ALTER DEFAULT PRIVILEGES FOR ROLE :"schema_owner" IN SCHEMA app
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"app_role";
-ALTER DEFAULT PRIVILEGES FOR ROLE :"schema_owner" IN SCHEMA app
-  REVOKE ALL ON SEQUENCES FROM :"app_role";
-ALTER DEFAULT PRIVILEGES FOR ROLE :"schema_owner" IN SCHEMA app
-  GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"app_role";
-REVOKE ALL PRIVILEGES ON TABLE app.alembic_version FROM :"app_role";
-GRANT SELECT ON TABLE app.alembic_version TO :"app_role";
-COMMIT;
-SQL
+    apply_runtime_acl_repair
+  fi
+  # 20260917_0102 — weather_location_links(T-361, ADR-068). 위와 별개 `if`로 두는 이유는
+  # `20260824_0101` 리터럴 비교를 다른 게이트(테스트·문서)가 그대로 참조하기 때문이다.
+  if [ "${applied_revision}" = "20260917_0102" ]; then
+    apply_runtime_acl_repair
   fi
 fi
