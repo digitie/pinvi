@@ -125,9 +125,9 @@ reconciliation/cutover와 sync enable은 deployment control plane이 별도 성�
 | `GET`      | `/v1/features/search`                 | feature 텍스트 검색                                                         |
 | `GET`      | `/v1/features/nearby` (+`/by-target`) | 반경/기준 feature 주변 조회                                                 |
 | `GET`      | `/v1/features/{feature_id}`           | feature 상세 조회                                                           |
-| `GET`      | `/v1/features/{feature_id}/weather`   | 날씨 카드                                                                   |
+| `GET`      | `/v1/features/{feature_id}/weather`   | 날씨 카드 *(이관 예정 → `kor-travel-weather`, ADR-068)*                     |
 | `POST`     | `/v1/features/batch`                  | POI/일정 응답 조립용 batch 조회 (응답 `data.found`+`missing`, ServiceToken) |
-| `POST`     | `/v1/features/weather/batch`          | Trip 전체 날짜의 sparse 날씨 batch 조회 (ServiceToken)                      |
+| `POST`     | `/v1/features/weather/batch`          | Trip 전체 날짜의 sparse 날씨 batch 조회 (ServiceToken) *(이관 예정, ADR-068)* |
 | `GET`      | `/v1/categories`                      | 카테고리 카탈로그                                                           |
 | `GET`      | `/v1/public/beaches*`                 | Pinvi `/public/beaches*` 공개 해수욕장 목록·상세·marker                     |
 | `GET`      | `/v1/public/festivals*`               | Pinvi `/public/festivals*` 공개 축제 월별 목록·상세·marker                  |

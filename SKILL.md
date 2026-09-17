@@ -31,13 +31,13 @@
 | 백엔드 import (계획)                    | `from pinvi.api import ...`, `from pinvi.etl import ...`                                                       |
 | 프론트 패키지 (계획)                    | `apps/web` (Next.js App Router)                                                                                |
 | 모바일 패키지 (활성, Sprint M-1)        | `apps/mobile` (Expo SDK 56 + Expo Dev Client + EAS Build, Expo Go 미사용, Android minSdk 24 — ADR-043/044/045) |
-| 환경변수 prefix                         | `PINVI_*` (외부 서비스 소유 계약 토큰은 해당 정본 이름)                                                     |
+| 환경변수 prefix                         | `PINVI_*` (외부 서비스 소유 계약 토큰은 해당 정본 이름)                                                        |
 | PostgreSQL DB 이름 (개발)               | `pinvi`                                                                                                        |
 | Postgres schema (자체)                  | `app`, `ops`                                                                                                   |
 | Postgres schema (`kor-travel-map` 소유) | `feature`, `provider_sync`                                                                                     |
 | Dagster code location                   | `apps/etl`                                                                                                     |
 | Admin 콘솔                              | `apps/web/app/admin/`                                                                                          |
-| 운영 노드                               | N150 16GB 단일 운영 (ADR-067, Docker Compose)                                                               |
+| 운영 노드                               | N150 16GB 단일 운영 (ADR-067, Docker Compose)                                                                  |
 
 ### 개발 환경 (Linux / WSL / N150) — ADR-051
 
@@ -158,6 +158,8 @@ refdocs/                     ← 외부 spec/문서 (.gitignore)
    도메인만 관리.
 3. **provider raw → DTO 변환 직접 작성 금지** — `kor-travel-map.providers`에
    위임. 새 provider는 그쪽 저장소에 PR.
+   **날씨는 이관 후 `kor-travel-weather`가 같은 역할을 맡는다(ADR-068)** — 위임처만
+   바뀌고 "Pinvi는 원천을 파싱하지 않는다"는 원칙은 동일하다.
 4. **Pinvi 사용자 경로에서 `kor-travel-map` import 금지** — 최신
    `openapi.user.json` 기반 HTTP client만 사용한다.
 5. **`feature` 도메인 wrapper 신규 생성 금지** — HTTP client는 transport 역할만.

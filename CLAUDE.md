@@ -80,7 +80,7 @@ post-v0.1.0 `Unreleased` 보강 진행 단계다. 이후 Sprint 5 (실시간 + E
 6 (MCP 외부 인터페이스 + Backup UI 핫스왑 + Korean geofencing + T108 N150 병행
 배포 + 법무 → **v1.0.0**). 릴리즈 마일스톤 표는 `docs/sprints/README.md`.
 
-ADR 현황: ADR-001 ~ **ADR-056**. 최근 박힘: ADR-024 (ADR-051로 superseded —
+ADR 현황: ADR-001 ~ **ADR-068**. 최근 박힘: ADR-024 (ADR-051로 superseded —
 과거 NTFS/WSL 미러 모델), ADR-025 (geocoding은 kor-travel-geo v2 REST 직접), ADR-026 (kor-travel-map은 OpenAPI
 HTTP 계약), **ADR-027** (그 HTTP 계약은 kor-travel-map이 신규 구축해야 할 목표 — 현재
 미존재, DEC-01=B), ADR-028 (정규 feature_id = kor_travel_map `make_feature_id`),
@@ -117,8 +117,21 @@ ADR-054 (외부 장소 provider Kakao/Naver Local = 서버측 display-only 검�
 통합 + feature-request 확장, ADR-015의 Local-검색 부분 supersede),
 ADR-055 (Trip-day 표시 모델 — 파생 effective_date + 일자 팔레트 색 + 서버 display_marker_color +
 전용 `trip_day_rise_sets`),
-ADR-056 (Feature 상세 = kind별 `detail-card` 투영 + 옵트인 외부 enrichment + 공용 `useModalDialog`).
-다음 신규 = ADR-057. **TDR(Trip Detail Rewrite)** 마스터 계획 = `docs/execplan/trip-detail-rewrite.md`.
+ADR-056 (Feature 상세 = kind별 `detail-card` 투영 + 옵트인 외부 enrichment + 공용 `useModalDialog`),
+ADR-057 (5상태 feature batch),
+ADR-058 (POI cache target은 DB source generation + ServiceToken pull outbox로 동기화),
+ADR-059 (cache target command와 consumer 권한을 generation 7에서 clean-cut 분리),
+ADR-060 (production causal receipt = frozen local evidence + bracketing remote attestation),
+ADR-061 (Map service provenance는 단일 vendor artifact로 고정),
+ADR-062 (동의 이력은 append 전용 이벤트 테이블),
+ADR-063 (위치 확인자료에 출처 기록 + 동의 게이트는 `device`에만),
+ADR-064 (좌표 범위는 사각형 둘, 행정구역 폴리곤 미도입),
+ADR-065 (Alembic 이력 0100/0101 재기준화),
+ADR-066 (Next.js 16 프로덕션 빌드는 Turbopack이 아니라 webpack),
+ADR-067 (Odroid 퇴역, N150 단일 운영),
+**ADR-068** (날씨 소스를 `kor-travel-map` → `kor-travel-weather`로 이관 — 공개 계약은
+불변, cutover는 기상청 커버리지 게이트 G-1 조건부).
+다음 신규 = ADR-069. **TDR(Trip Detail Rewrite)** 마스터 계획 = `docs/execplan/trip-detail-rewrite.md`.
 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
 
@@ -166,6 +179,8 @@ v1 산출물 요약: `v1` 브랜치에 9개월간 누적된 `apps/`, `docs/`, `i
    Pinvi는 `app` schema와 자체 도메인만 관리한다.
 3. **Pinvi에서 provider raw → DTO 변환 직접 작성 금지** —
    `kor-travel-map.providers`에 위임. 새 provider는 그쪽 저장소에 PR.
+   **날씨는 이관 후 `kor-travel-weather`가 같은 역할을 맡는다(ADR-068)** — 위임처만
+   바뀌고 "Pinvi는 원천을 파싱하지 않는다"는 원칙은 동일하다.
 4. **Pinvi 사용자 경로에서 `kor-travel-map` import 금지** — feature read/write
    request는 `PINVI_KOR_TRAVEL_MAP_API_BASE_URL`의 OpenAPI HTTP 계약을 호출한다.
 5. **Windows git / Windows CodeGraph shim 사용 금지** — 개발·git·CodeGraph·테스트·
@@ -191,32 +206,33 @@ lint` + `npm run typecheck` (`apps/web`, Linux) + Playwright는 N150 전용 +
 
 ## 7. 빠른 문서 검색
 
-| 무엇을 하려는가                                 | 어디 보나                                                                                                                      |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| API endpoint 구현 / 변경                        | `docs/api/<도메인>.md` + `docs/api/common.md`                                                                                  |
-| DB schema 변경                                  | `docs/postgres-schema.md` + `docs/conventions/database.md`                                                                     |
-| kor-travel-map OpenAPI 호출 (feature 데이터)    | `docs/integrations/kor-travel-map-rest-api.md` (REST 계약 정본 + 연결 작업) + `docs/kor-travel-map-integration.md` (패턴 개요) |
-| Geocoding (주소/좌표/행정구역)                  | `docs/integrations/kor-travel-geo.md` (ADR-025, kor-travel-geo v2 REST 직접) + `docs/architecture/geocoding-open-decisions.md` |
-| 외부 통합 (이메일/OAuth/AI companion 호출 계약) | `docs/integrations/<서비스>.md`                                                                                                |
-| Frontend UI                                     | `docs/architecture/frontend.md` + `DESIGN.md`                                                                                  |
-| 지도 (`vworld-map-web`)                         | `docs/integrations/maplibre-vworld.md` + `docs/design/marker-palette.md`                                                       |
-| Admin 콘솔                                      | `docs/api/admin.md` + `docs/runbooks/admin.md`                                                                                 |
-| ETL asset                                       | `docs/runbooks/etl.md` + `docs/architecture/dagster-etl-bridge.md`                                                             |
-| 사용자 위치 사용                                | `docs/architecture/user-location.md` + `docs/compliance/lbs-act.md`                                                            |
-| Notice plan (추천 여행)                         | `docs/architecture/notice-plans.md` + `docs/api/notice-plans.md`                                                               |
-| 인프라 / 배포                                   | `docs/runbooks/{local-dev,docker-app,deploy}.md` (N150 단일 운영 — ADR-067)                                                    |
-| 릴리즈 마일스톤                                 | `docs/sprints/README.md` (v0.1.0 / v0.2.0 / v1.0.0 표)                                                                         |
-| MCP 외부 인터페이스                             | `docs/architecture/mcp-server.md` + `docs/runbooks/mcp-server.md` (ADR-019, Sprint 6)                                          |
-| 한국 전용 geofencing                            | `docs/architecture/korea-only-policy.md` + `docs/runbooks/korea-only.md` (ADR-018, Sprint 6)                                   |
-| Backup / Restore                                | `docs/architecture/backup-restore.md` + `docs/runbooks/backup-restore.md` (ADR-022, Sprint 5~6)                                |
-| Admin Grafana embed                             | `docs/runbooks/grafana-admin-embed.md` (Sprint 5)                                                                              |
-| Worktree + CodeGraph 운영                       | `docs/runbooks/codegraph-worktrees.md` (ADR-017)                                                                               |
-| 개발 환경 (Linux git + CodeGraph)               | `docs/agent-workflow.md` (런북) + `docs/dev-environment.md` (ADR-051)                                                          |
-| 환경/도구 실패 패턴                             | `docs/agent-failure-patterns.md`                                                                                               |
-| 컴플라이언스 / PII                              | `docs/compliance/{lbs-act,pipa,data-policy}.md`                                                                                |
-| 테스트 작성                                     | `docs/conventions/testing.md`                                                                                                  |
-| Sprint 작업                                     | `docs/sprints/SPRINT-<N>.md`                                                                                                   |
-| 결정 / ADR                                      | `docs/decisions.md`                                                                                                            |
-| v1과 비교                                       | `docs/v1-to-v2-mapping.md`                                                                                                     |
+| 무엇을 하려는가                                 | 어디 보나                                                                                                                                      |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| API endpoint 구현 / 변경                        | `docs/api/<도메인>.md` + `docs/api/common.md`                                                                                                  |
+| DB schema 변경                                  | `docs/postgres-schema.md` + `docs/conventions/database.md`                                                                                     |
+| kor-travel-map OpenAPI 호출 (feature 데이터)    | `docs/integrations/kor-travel-map-rest-api.md` (REST 계약 정본 + 연결 작업) + `docs/kor-travel-map-integration.md` (패턴 개요)                 |
+| 날씨 (소스 이관 설계)                           | `docs/integrations/kor-travel-weather.md` (ADR-068, `kor-travel-map` → `kor-travel-weather`) + `docs/execplan/t-359-weather-source-cutover.md` |
+| Geocoding (주소/좌표/행정구역)                  | `docs/integrations/kor-travel-geo.md` (ADR-025, kor-travel-geo v2 REST 직접) + `docs/architecture/geocoding-open-decisions.md`                 |
+| 외부 통합 (이메일/OAuth/AI companion 호출 계약) | `docs/integrations/<서비스>.md`                                                                                                                |
+| Frontend UI                                     | `docs/architecture/frontend.md` + `DESIGN.md`                                                                                                  |
+| 지도 (`vworld-map-web`)                         | `docs/integrations/maplibre-vworld.md` + `docs/design/marker-palette.md`                                                                       |
+| Admin 콘솔                                      | `docs/api/admin.md` + `docs/runbooks/admin.md`                                                                                                 |
+| ETL asset                                       | `docs/runbooks/etl.md` + `docs/architecture/dagster-etl-bridge.md`                                                                             |
+| 사용자 위치 사용                                | `docs/architecture/user-location.md` + `docs/compliance/lbs-act.md`                                                                            |
+| Notice plan (추천 여행)                         | `docs/architecture/notice-plans.md` + `docs/api/notice-plans.md`                                                                               |
+| 인프라 / 배포                                   | `docs/runbooks/{local-dev,docker-app,deploy}.md` (N150 단일 운영 — ADR-067)                                                                    |
+| 릴리즈 마일스톤                                 | `docs/sprints/README.md` (v0.1.0 / v0.2.0 / v1.0.0 표)                                                                                         |
+| MCP 외부 인터페이스                             | `docs/architecture/mcp-server.md` + `docs/runbooks/mcp-server.md` (ADR-019, Sprint 6)                                                          |
+| 한국 전용 geofencing                            | `docs/architecture/korea-only-policy.md` + `docs/runbooks/korea-only.md` (ADR-018, Sprint 6)                                                   |
+| Backup / Restore                                | `docs/architecture/backup-restore.md` + `docs/runbooks/backup-restore.md` (ADR-022, Sprint 5~6)                                                |
+| Admin Grafana embed                             | `docs/runbooks/grafana-admin-embed.md` (Sprint 5)                                                                                              |
+| Worktree + CodeGraph 운영                       | `docs/runbooks/codegraph-worktrees.md` (ADR-017)                                                                                               |
+| 개발 환경 (Linux git + CodeGraph)               | `docs/agent-workflow.md` (런북) + `docs/dev-environment.md` (ADR-051)                                                                          |
+| 환경/도구 실패 패턴                             | `docs/agent-failure-patterns.md`                                                                                                               |
+| 컴플라이언스 / PII                              | `docs/compliance/{lbs-act,pipa,data-policy}.md`                                                                                                |
+| 테스트 작성                                     | `docs/conventions/testing.md`                                                                                                                  |
+| Sprint 작업                                     | `docs/sprints/SPRINT-<N>.md`                                                                                                                   |
+| 결정 / ADR                                      | `docs/decisions.md`                                                                                                                            |
+| v1과 비교                                       | `docs/v1-to-v2-mapping.md`                                                                                                                     |
 
 자세한 진입 순서는 `AGENTS.md` "AI Agent 작업 진입 절차".

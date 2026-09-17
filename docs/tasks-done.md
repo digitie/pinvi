@@ -5,6 +5,17 @@
 따른다.
 
 
+## 2026-09-17
+
+- [x] **T-359** — 날씨 소스 이관(`kor-travel-map` → `kor-travel-weather`) **설계·계약 고정**
+      (P0). ADR-068 + `docs/integrations/kor-travel-weather.md` +
+      `docs/execplan/t-359-weather-source-cutover.md` + T-360~366 등록 + 교차 문서 정합
+      (claude). 코드 변경 없음 — 구현은 T-360부터.
+      운영 인스턴스 실측으로 문서상 가정 셋을 뒤집었다: 대표 `location` 하나만 캐시하면
+      기상청 예보가 조용히 누락되고(번들이 여러 location에 걸침), 전국 KMA 격자 앵커는
+      `e2e-seoul` 1개뿐이며(→ 게이트 G-1), 처리방침의 "국외 이전 의무 발생 안 함" 선언이
+      상용 provider 표시 시 거짓이 된다(→ 게이트 G-2).
+
 ## 2026-09-05
 
 - [x] **T-358** — npm 11을 상시 버전으로 고정하고, 그 과정에서 **T-352가 넣은 lockfile 무결성

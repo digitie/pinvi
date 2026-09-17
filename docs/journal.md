@@ -2,6 +2,56 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-17 (claude) — 날씨 소스 이관 설계 (`kor-travel-map` → `kor-travel-weather`)
+
+`agent/claude-weather-service-split`. **설계·문서·task만. 코드 변경 없음.**
+
+ADR-068 + `docs/integrations/kor-travel-weather.md` +
+`docs/execplan/t-359-weather-source-cutover.md` + `docs/tasks.md` T-359~T-366.
+
+### 조사에서 뒤집힌 것
+
+문서만 읽었으면 틀렸을 판단이 셋 있었다. 전부 운영 인스턴스 **실측**으로 바로잡았다.
+
+1. **"`/resolve`로 대표 `location_id` 하나를 캐시하면 된다" — 틀렸다.**
+   서울시청 `/resolve`의 대표 location은 AirKorea 측정소(`airkorea-station-5852754068ed`)였고
+   KMA 단기예보 1,415행은 **다른** location(`e2e-seoul`)에 있었다. 대표 location만
+   `/locations/{id}/forecast`로 부르면 `openweathermap`만 돌아온다. → `source_locations`
+   **전체**를 캐시·합산해야 한다. 놓치면 "이관했더니 기상청 예보가 사라졌다"가 조용히
+   발생한다.
+
+2. **"kor-travel-weather는 전국 날씨 서비스다" — 데이터상 아직 아니다.**
+   카탈로그 1,430개 중 **KMA 격자 앵커는 `e2e-seoul` 1개뿐**이다(airkorea 673 /
+   krforest 520 / krex 187 / khoa 49 / e2e 1). 부산 해운대 최근접 앵커
+   (`khoa-BCH001`) `/latest`는 `weatherapi` 149행 + `openweathermap` 48행, **KMA 0행**.
+   공간 커버리지는 충분한데(표본 8개 관광지 최근접 0.1~7.7 km) **출처**가 문제다.
+   → 게이트 G-1으로 cutover를 기계적으로 막는다. 해소는 `kor-travel-weather` 소관.
+
+3. **"bitemporal 이력을 잃는다" — 절반만 맞다.**
+   Pinvi는 `known_at`을 늘 "지금"으로만 보내 왔으므로 knowledge-time replay는 원래
+   안 쓰고 있었다. 실제 손실은 `target_at`이 2일 이전인 **과거 구간** 하나다(대상 서비스
+   보존 기본 2일). 여행 기록 앱이므로 이건 실제 후퇴이며 → Pinvi 측 스냅샷(T-366)으로
+   답한다.
+
+### 설계 요지
+
+- **공개 계약 불변**. `feature_id` ↔ `location_id` 해석을 API 내부에 가둬 web/mobile/
+  `packages` 변경을 0에 가깝게 두고, 되돌리기를 서버 flag 하나로 끝낸다.
+- `card_key := location_id` — 현재 `weather_cards` 파티션 불변식(Pydantic + Zod)이
+  오히려 단순해진다.
+- Trip 조회는 batch 1회 → `/markers` 1회 + location별 `/forecast` fanout(날짜 fanout
+  아님 — `from`/`to`로 여행 전 구간을 덮는다).
+- `retired` 판정처를 선행 feature batch로 옮긴다(날씨 서비스는 feature lifecycle을 모름).
+- provider 어휘가 둘(KMA 계열 / 상용 계열)이라 `unit`을 항상 읽고 가정하지 않는다.
+  이는 원천 파싱이 아니라 정규화된 DTO 두 벌의 표시 계층 통합이므로 금지룰 3에 저촉되지
+  않는다 — 게이트 A로 고정한다.
+
+### 겸사겸사 바로잡은 것
+
+`CLAUDE.md`가 "ADR-001 ~ ADR-056, 다음 신규 = ADR-057"이라고 적고 있었는데 실제
+`decisions.md`는 ADR-067까지 있었다. 같은 파일 안에서 ADR-067을 두 번 참조하면서도
+범위는 056이라 **자기 모순**이었다. ADR-068까지 반영하고 "다음 신규 = ADR-069"로 고쳤다.
+
 ## 2026-09-15 (claude) — apps/etl: python-kasi-api async-only 통합 반영
 
 `agent/claude-kasi-async-unify`.

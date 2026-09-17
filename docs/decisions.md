@@ -3261,3 +3261,122 @@ Odroid M1S는 더 이상 Pinvi의 실행·배포·복구 환경으로 사용하�
 - 진입 문서와 N150 배포 런북에서 Odroid active path를 제거한다.
 - Odroid doctor는 fail-closed 퇴역 안내만 출력한다.
 - PR 검증은 N150 격리 배포와 N150 live UI gate로 완료한다.
+
+## ADR-068: 날씨 소스를 `kor-travel-map`에서 `kor-travel-weather`로 이관한다 (기상청 커버리지 게이트 조건부)
+
+- **상태**: accepted (설계 확정, cutover는 게이트 G-1 조건부)
+- **날짜**: 2026-09-17
+- **결정자**: 사용자 + Claude
+- **참조**: T-359(설계) ~ T-366, `docs/integrations/kor-travel-weather.md`,
+  `docs/execplan/t-359-weather-source-cutover.md`
+- **대체**: 없음. Pinvi ADR 중 "날씨 소스는 `kor-travel-map`"을 **명시 결정한 ADR은
+  존재하지 않는다** — 관행으로 굳었을 뿐이다(ADR-015/026은 지도 클라이언트와 HTTP 계약
+  전환이지 날씨 소유권이 아니다). 본 ADR이 그 공백을 처음으로 명문화한다.
+  feature/지도 도메인 소유권은 그대로 `kor-travel-map`이다.
+
+### 컨텍스트
+
+Pinvi는 날씨를 전량 `kor-travel-map`의 feature API에서 받는다 — 단건
+`GET /v1/features/{id}/weather`, 시점 조회 `…/weather/snapshot`, 여행 일자
+`POST /v1/features/weather/batch`, Admin `…/admin/features/{id}/weather`. 진입은
+**client 두 파일**이다 — 사용자 경로 3개는 `apps/api/app/clients/kor_travel_map.py`
+(`feature_weather`가 `/weather`와 `/weather/snapshot` 둘을 겸한다, `get_weather_batch`),
+Admin 1개는 별도 transport인 `apps/api/app/clients/kor_travel_map_admin.py`
+(`get_feature_weather`)다.
+
+형제 저장소 `kor-travel-weather`가 독립 날씨 서비스로 운영 중이다(2026-08-30 최초 커밋,
+141 커밋, 운영 인스턴스 `git_commit 3411ecc` 확인). 그 저장소의
+`docs/integration-map.md`는 Pinvi를 **명시적 1급 소비자**로 적고 호출 순서까지
+규정해 뒀으나, 양쪽 어디에도 실제 연동 코드는 없다. Pinvi가 첫 소비자가 된다.
+
+날씨를 전용 서비스가 갖는 편이 경계상 옳다 — `kor-travel-map`은 장소/축제/가격 도메인을
+갖고, 날씨는 장소에 종속되지 않는 독립 시계열이다.
+
+### 결정
+
+1. **Pinvi의 날씨 소스를 `kor-travel-weather` 공개 REST(`/v1/weather/*`)로 이관한다.**
+   `kor-travel-map`의 weather 4개 소비 경로는 전환 완료 후 제거한다.
+2. **Pinvi 공개 계약의 경로·응답 셰입은 바꾸지 않는다.**
+   `GET /features/{id}/weather`, `TripViewDay.weather_by_feature_id` + `weather_cards`를
+   유지하고 `location_id`를 web/mobile에 노출하지 않는다. 소스 교체를 API 내부에 가둔다.
+   **예외 둘을 명시한다.**
+   - **`?asof=` 의미가 좁아진다.** 대상 서비스에는 시점 조회 엔드포인트가 없고 보존이
+     2일이라, `target_at`이 과거인 조회는 결정 8의 스냅샷이 붙기 전까지 `no_data`가 된다.
+     경로·파라미터는 남지만 **동작 범위가 줄어드는 공개 계약 변경**이다.
+   - **Admin weather-values는 셰입이 바뀐다.** `AdminFeatureWeatherMetric`의
+     `provider_dataset_id`(int)·`dataset_display_name`(str)은 `kor-travel-map`의 정수
+     dataset registry에서 오며 `kor-travel-weather`에 **대응물이 없다**. `known_at`도
+     nullable이 된다. 세 필드를 nullable로 넓히고 Pydantic·Zod·Admin 테이블 렌더러를
+     함께 고친다. 없는 값을 지어내 채우지 않는다 — provenance 표면에서 거짓 lineage는
+     금지다.
+3. **`feature_id` ↔ `location_id` 해석은 Pinvi가 소유·캐시한다**
+   (`app.weather_location_links`). `/v1/weather/resolve`는 응답이 3.1 MB이므로 좌표
+   해석 1회용으로만 쓰고 조회 경로에 두지 않는다.
+4. **번들 구성원 전체(`source_locations`)를 캐시하고 합산한다.** 대표 `location` 하나만
+   쓰면 기상청 예보가 조용히 누락된다(실측 확인).
+5. **`card_key := location_id`**. 현재 `weather_cards` 파티션 불변식(Pydantic + Zod)을
+   그대로 유지한다.
+6. **cutover는 게이트 G-1에 건다** — `kor-travel-weather`가 임의 좌표에 대해 KMA 격자
+   앵커를 provisioning하기 전에는 전환하지 않는다. 2026-09-17 실측 기준 전국 KMA 격자
+   앵커는 `e2e-seoul` 1개뿐이고, 실제 관광지에서는 상용 provider 예보만 잡힌다.
+   G-1은 표본 좌표 커버리지 테스트로 **기계적으로** 강제한다.
+6b. **cutover는 게이트 G-2(개인정보 처리방침 정합)에도 건다.** 현재
+   `docs/compliance/data-policy.md`는 날씨 출처를 "기상청"으로 적고 제공 provider가 전부
+   국내 공공기관이므로 **국외 이전 의무가 발생하지 않는다**고 선언한다. 상용 provider
+   (OpenWeatherMap·WeatherAPI·wttr.in·Open-Meteo 등 국외 사업자)의 값을 표시하는 순간 그
+   선언이 사실과 어긋난다. 처리방침·위탁 목록 갱신과 국외 이전 판단을 마치기 전에는
+   비KMA provider 값을 사용자에게 **표시하지 않는다**. 이는 UX 판단이 아니라 법적 의무다.
+7. **KMA 격자 provisioning은 `kor-travel-weather`가 구현한다.** Pinvi는 provider 원천
+   변환을 작성하지 않는다(금지룰 3 유지).
+8. **과거 날씨는 Pinvi가 스냅샷으로 보존한다.** `kor-travel-weather` 기본 보존은 2일
+   (`known_at` day partition drop)이고 Pinvi는 여행 기록 앱이므로, 지난 여행 일자의
+   카드를 Pinvi 측에 확정 저장한다. Pinvi는 `known_at`을 항상 "지금"으로만 보내 왔으므로
+   bitemporal replay 손실은 없고, 손실 축은 `target_at` 과거 구간 하나다.
+9. **`retired` 상태는 선행 feature batch에서 가져온다.** 날씨 서비스는 feature
+   lifecycle을 모르므로 판정처를 옮긴다. `suppressed`/`missing`이 이미 그 구조다.
+10. **provider 우선순위를 Pinvi 상수로 고정한다** — KMA > AirKorea(대기질) > 상용,
+    동률 시 `known_at` 최신. 한 location에 provider별 어휘 두 벌이 동시에 오므로 `unit`
+    필드를 항상 읽고 가정하지 않는다.
+
+### 근거
+
+- 실측이 문서 주장을 뒤집었다. 서울시청 `/resolve`의 대표 location은 AirKorea
+  측정소였고 KMA 예보는 **다른** location에 있었다. 대표 location 단건 조회는
+  `openweathermap`만 돌려줬다 — 결정 4는 이 실측에서 나왔다.
+- 공간 커버리지 자체는 충분하다(표본 8개 관광지 최근접 앵커 0.1~7.7 km). 막는 것은
+  밀도가 아니라 **출처**다 — 결정 6.
+- 공개 계약 유지(결정 2)로 web/mobile/`packages` 변경이 사실상 0이 되고, 되돌리기가
+  서버 feature flag 하나로 끝난다.
+
+### 결과
+
+- `apps/mobile`에는 날씨 코드가 없으므로 이관 대상이 아니다.
+- 일출/일몰(KASI, ADR-055 `app.trip_day_rise_sets`)은 Pinvi 자체 소유라 무관하다.
+- 인증이 사라진다 — `kor-travel-weather` 공개 read는 토큰이 없다. ServiceToken 배선이
+  weather 경로에서 빠진다.
+- 캐싱 책임이 Pinvi로 온다 — 대상 서비스는 ETag/Cache-Control/rate limit이 없다.
+- 특보(`alerts[]`)를 직접 받게 되어 신규 표면을 붙일 여지가 생긴다(범위 밖, 후속).
+- `kor-travel-map`은 weather 생산을 계속한다. 이 ADR은 map의 ADR-062를 되돌리지 않고
+  **소비자 하나가 빠지는 것**이다. map 측 중복 투자 고지 여부는 사용자 판단으로 남긴다.
+- `kor-travel-map`의 `weather-feature-normalization.md`에 있는 "PinVi는 별도 weather DB를
+  만들지 않는다"는 문장은 map을 소스로 쓰는 전제에서 쓰였다. 결정 8이 그 전제를 대체한다.
+- **개인정보 처리방침·위탁 목록이 갱신 대상이 된다** — 결정 6b. `docs/compliance/
+  data-policy.md`의 "날씨: 기상청"과 "국외 이전 의무 발생 안 함"이 사실과 어긋나게 된다.
+- **web 변경은 0이 아니다.** `TripWeatherSummary.tsx`의 `WEATHER_LABELS`·`WEATHER_RE`·
+  `DUST_RE`는 KMA 코드 전용이라 상용 어휘(`TEMP`/`HUMIDITY`/`WIND_SPEED`/`PRECIP_PROB`
+  등)를 **한 건도 인식하지 못하고 조용히 버린다**. metric key를 서버에서 정규화하거나
+  클라이언트 분류기를 함께 고쳐야 한다 — 어느 쪽이든 T-362/T-363 범위다.
+- **`kind='weather'` feature 표면은 그대로 남는다.** map이 KMA 격자마다 weather-kind
+  feature를 계속 생성하고 Pinvi 지도는 그것을 `WeatherMarker`로 그린다
+  (`FeatureMapView.tsx`). 즉 marker의 **존재**는 map feature에서, marker에 채울 **값**은
+  weather 서비스에서 오는 이원 구조가 된다. 이 분기를 T-362에서 명시적으로 다룬다.
+
+### 후속
+
+- 설계 정본: `docs/integrations/kor-travel-weather.md`
+- 실행: `docs/execplan/t-359-weather-source-cutover.md` — P0~P7, flag 기반
+- Task: **T-359**(P0 설계, 완료) · **T-360**(P1 client) · **T-361**(P2 해석·캐시) ·
+  **T-362**(P3 단건) · **T-363**(P4 Trip view) · **T-364**(P5 Admin) ·
+  **T-365**(P6 기본값 on + 구 경로 제거, G-1·G-2 게이트) · **T-366**(P7 과거 스냅샷)
+- 미해결 사용자 결정: 과거 날씨 정책 A/B/C(권장 B), G-2 해소 후 비KMA 지점의 상용
+  provider 표시 허용 범위 — 두 건 모두 설계 문서 §7.

@@ -54,7 +54,10 @@ pair와 정확히 같아야 하며, v6/v8 generation schema 변경은 Map·Manag
   weather가 없는 feature, retired parent를 40일 여행의 sparse 다중 날짜 batch로 조회한다.
   직접 Trip read 한 번당 weather batch POST가 정확히 1회인지, 40일차가 과거 31일 상한으로
   생략되지 않는지 검증한다. weather batch만 강제 503으로 바꿔 `unavailable`과 복구를 확인하고
-  단건 weather 요청이 0회인지도 고정한다. 격리 API는 짧은 TTL의 feature cache를 켜고, 40일
+  단건 weather 요청이 0회인지도 고정한다.
+  (**ADR-068 이관 시 이 게이트는 새 호출 모양으로 다시 쓴다** — batch POST 1회가 아니라
+  `/markers` 1회 + location별 `/forecast` fanout이 된다. 삭제가 아니라 재정의이며 T-363
+  범위다.) 격리 API는 짧은 TTL의 feature cache를 켜고, 40일
   fixture 생성 요청이 일반 사용자 rate limit을 소진하지 않도록 rate limit을 비활성화한다.
 - Trip day hole suite는 날짜가 있는 3박 4일 여행을 실제 UI에서 생성하고, 1~4일차 자동 생성,
   1일차 삭제 후 가장 빠른 빈 day 재생성, 일자 설정 팝업의 날짜 수정, 진행 중 스크린샷 저장을 확인한다.

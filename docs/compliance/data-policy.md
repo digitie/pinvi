@@ -117,6 +117,16 @@ Pinvi 책임이다.
 
 (모두 국내 정부/공공기관 — 국외 이전 의무 발생 안 함)
 
+> ⚠️ **날씨 소스 이관 시 위 두 줄이 사실과 어긋난다 (ADR-068, 게이트 G-2)**.
+> `kor-travel-weather`는 기상청 외에 OpenWeatherMap·WeatherAPI·wttr.in·Open-Meteo 등
+> **국외 상용 provider**의 값을 함께 담는다. 2026-09-17 실측 기준 전국 KMA 격자 앵커가
+> 1개뿐이라, 지금 전환하면 대부분 지점의 날씨가 국외 사업자에서 온다.
+>
+> **비KMA provider 값을 사용자에게 표시하기 전에** "날씨: 기상청" 기재와 "국외 이전
+> 의무 발생 안 함" 선언을 재작성하고 국외 이전 판단을 마쳐야 한다. 이것이 cutover
+> 게이트 G-2이며, 기술 판단이 아니라 법적 의무다.
+> 설계 = [`docs/integrations/kor-travel-weather.md`](../integrations/kor-travel-weather.md) §1.2b.
+
 ## 4. 데이터 캐싱 정책
 
 - 같은 (region, time window) 외부 API 반복 호출 X — TTL 캐시

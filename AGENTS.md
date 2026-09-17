@@ -91,7 +91,7 @@ event / notice / price / weather / route / area) 정규화·저장은 별 저장
 | GitHub 저장소 이름                      | `pinvi`                                                           |
 | 백엔드 import (계획)                    | `from pinvi.api import ...`, `from pinvi.etl import ...`          |
 | 프론트 패키지 (계획)                    | `apps/web` (Next.js App Router)                                   |
-| 환경변수 prefix                         | `PINVI_*` (외부 서비스 소유 계약 토큰은 해당 정본 이름)             |
+| 환경변수 prefix                         | `PINVI_*` (외부 서비스 소유 계약 토큰은 해당 정본 이름)           |
 | PostgreSQL DB 이름 (개발)               | `pinvi`                                                           |
 | Postgres schema (자체)                  | `app`, `ops` (Pinvi 소유)                                         |
 | Postgres schema (`kor-travel-map` 소유) | `feature`, `provider_sync`                                        |
@@ -424,10 +424,21 @@ Telegram에 간단한 완료 요약과 PR 링크를 보낸다. PR이 없는 문�
 
 - Feature 정규화 / `feature_id` 생성 / SourceRecord 관리
 - Postgres schema `feature` / `provider_sync` 의 DDL과 raw SQL
-- Provider 원천 → DTO 변환 (KMA, VisitKorea, OpiNet, MOIS, ...)
+- Provider 원천 → DTO 변환 (VisitKorea, OpiNet, MOIS, ... / 날씨는 이관 예정 — 아래)
 - Record Linkage / dedup queue
 - 지도 좌표·CRS 정책 (`coord_5179` 반경 검색 등)
 - Coverage / 정합성 / OpenAPI gate (자체 CI)
+
+### `kor-travel-weather` 책임 (별 저장소, 공개 REST — 이관 예정, ADR-068)
+
+- 날씨 provider 원천 → DTO 변환 (KMA, AirKorea, KHOA, 산림청, 도로공사, 상용 provider)
+- 날씨 사실 저장·보존, location 카탈로그와 `location_id` 안정성
+- 좌표 → 관측/예보 지점 해석(`/v1/weather/resolve`)
+
+Pinvi는 이 서비스의 공개 REST를 **소비만** 한다. 날씨 원천 파싱을 Pinvi에 작성하지
+않는 원칙은 `kor-travel-map`과 동일하며, 위임처만 바뀐다. **전환은 기상청 커버리지
+게이트(G-1) 조건부**이며 현재 운영 날씨는 아직 `kor-travel-map`에서 온다 —
+`docs/integrations/kor-travel-weather.md`.
 
 본 저장소의 코드가 위 책임을 침범하지 않는지 모든 PR에서 자가 검토한다.
 

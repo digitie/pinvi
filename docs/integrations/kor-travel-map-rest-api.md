@@ -313,6 +313,12 @@ detail(object), updated_at }` (`status` 삭제 — Map `1f2bdc3a`).
 - **소비처**: 통합 검색(`GET /search`)의 **feature 파트만**. 주소 후보는 Pinvi가
   **kor-travel-geo v2 직접**(ADR-025), 내 POI는 Pinvi 로컬 — 합쳐서 응답.
 
+> **§2.6 / §2.6a / §2.6b는 이관 예정이다 (ADR-068)**. Pinvi의 날씨 소스를 형제 저장소
+> `kor-travel-weather`의 공개 REST로 옮긴다. 아래 세 절은 **전환 완료 전까지 현행
+> 계약**이며, 전환 후(T-365/P6) Pinvi 소비 경로에서 제거된다. `kor-travel-map`은 다른
+> 소비자를 위해 이 표면을 계속 제공한다 — 생산 중단이 아니라 **소비자 하나가 빠지는
+> 것**이다. 설계 = [`kor-travel-weather.md`](kor-travel-weather.md).
+
 ### 2.6 `GET /v1/features/{feature_id}/weather` — 날씨 카드(최신)
 
 - **params**: `feature_id*` **뿐**. query parameter는 하나도 없다 — 시점 조회는 §2.6b.

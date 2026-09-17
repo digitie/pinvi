@@ -8,6 +8,10 @@
 > 후속 T-VN-16C가 날짜별 fanout·31일 `not_requested` 설계를 sparse 다중 날짜 단일 요청으로
 > 대체했다. 아래 설계는 T-VN-16B 시점의 구현 근거를 보존하는 역사 기록이며 현재 계약은
 > `docs/integrations/kor-travel-map-rest-api.md` §2.6a를 따른다.
+>
+> **ADR-068로 이 batch 경로 자체가 이관 대상이 됐다** — Trip 날씨는 `kor-travel-weather`의
+> `/markers` + location별 `/forecast` fanout으로 바뀐다(T-363/P4). 전환 후 본 문서 전체가
+> 역사 기록이 된다. 새 설계 = `docs/integrations/kor-travel-weather.md`.
 
 ## 목표
 

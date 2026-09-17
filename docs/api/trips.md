@@ -109,6 +109,11 @@ revision이 같은 캐시를 재사용한 성공 상태이므로 소비자 응�
 `found` 상태는 `card_key`만 가지며, 같은 일자·기상 격자의 여러 feature가 같은 카드를
 참조한다. 참조된 card가 빠지거나 참조되지 않은 card가 있으면 응답 계약 오류다.
 
+> **소스 이관 예정 (ADR-068)**: dedupe 근거가 "기상 격자"에서 `kor-travel-weather`의
+> `location_id`로 바뀐다(`card_key := location_id`). **파티션 불변식과 응답 셰입은
+> 그대로**다. 전환은 T-363(P4) —
+> [`docs/integrations/kor-travel-weather.md`](../integrations/kor-travel-weather.md).
+
 응답 shape:
 
 ```json

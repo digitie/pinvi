@@ -151,7 +151,14 @@ kinds=None, limit=20) -> list[dict]` 신설. trigram 유사도 + (선택)viewpor
   주소 후보는 Pinvi가 kor-travel-geo로 별도 조회하므로 kor-travel-map은 **feature만**
   돌려주면 된다.
 
-### 2.6 날씨 카드 — `build_weather_card` **[누락]**
+### 2.6 날씨 카드 — `build_weather_card` **[철회 예정 — ADR-068]**
+
+> **이 요청은 더 이상 유효하지 않다.** 아래 서술은 역사 기록이다. 두 가지가 바뀌었다:
+> (1) `kor-travel-map`은 그 사이 weather를 **구현했고**(§2.6/2.6a/2.6b 계약이 운영 중),
+> (2) ADR-068로 Pinvi의 날씨 소스를 `kor-travel-weather`로 옮기기로 했다.
+> 따라서 map에 추가 weather 기능을 **요청하지 않는다** — 중복 투자를 부른다.
+> 아래 제안 셰입(`{nowcast, ultra_short[], short[], mid, advisories[]}`)도 채택되지
+> 않았다(실제 계약은 평탄 `metrics[]` + `forecast_style`).
 
 - **용도**: feature 상세의 날씨(`GET /features/{id}/weather`, features.md §2.3).
   관측+예보+특보를 KMA 시간축 기준 한 카드로. trip brief(텔레그램)도 사용.
