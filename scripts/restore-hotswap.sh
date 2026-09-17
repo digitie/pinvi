@@ -2532,6 +2532,13 @@ SQL
   fi
 }
 
+# 아래 LIKE 검증은 CHECK 정의 텍스트에서 정확히 `schema_revision = '20260824_0101'`
+# 부분 문자열을 찾는다. canonical head가 새 revision(현재 20260917_0102, T-361)을
+# 더할 때는 그 CHECK를 **OR 체인**으로 넓혀야 한다 — `IN (...)`으로 쓰면
+# PostgreSQL이 `= ANY (ARRAY[...])`로 정규화해 이 LIKE가 조용히 깨진다(실측 확인,
+# alembic/versions/20260917_0102_weather_location_links.py 참조). OR 체인이면
+# `pg_get_constraintdef()`가 원래 리터럴 형태를 그대로 보존하므로 이 함수는 손댈
+# 필요가 없다 — 실제로 0102 추가 후에도 이 검증은 그대로 통과함을 확인했다.
 assert_cache_target_boundary_contract() {
   local sql_file="${TMP_DIR}/cache-target-boundary-contract-check.sql"
   cat >"${sql_file}" <<SQL

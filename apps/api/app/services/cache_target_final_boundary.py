@@ -40,10 +40,11 @@ CONTRACT_VERSION: Literal["pinvi-cache-target-final-boundary/v1"] = (
     "pinvi-cache-target-final-boundary/v1"
 )
 PREFLIGHT_SCHEMA_REVISION = "20260801_0047"
-# 20260824_0101은 M05 schema-swap CONNECT release 영수증까지 고정한 유일한 현재 head다.
-# 이 pin과 DB CHECK (ck_ktm_ct_boundary_contract)는 최종 migration에서 함께 갱신해야
-# finalize가 열린다 — fail-close by design.
-FINALIZE_SCHEMA_REVISION = "20260824_0101"
+# 20260824_0101은 M05 schema-swap CONNECT release 영수증까지 고정한 최초 canonical
+# head다. 20260917_0102(T-361, weather_location_links, ADR-068)가 그 뒤를 잇는 두
+# 번째 head다. 이 pin 목록과 DB CHECK (ck_ktm_ct_boundary_contract)는 새 final
+# migration마다 함께 갱신해야 finalize가 열린다 — fail-close by design.
+FINALIZE_SCHEMA_REVISIONS = ("20260824_0101", "20260917_0102")
 WRITER_REGISTRY_SHA256 = "526240609e2919357699b90244eb8cc8b9505f37db6c60552a98c7a37ed22d7c"
 _APPLICATION_NAME = "pinvi-cache-target-final-boundary"
 
@@ -776,7 +777,7 @@ async def run_cache_target_boundary_finalize(
     async with session_factory() as db:
         # 0047에서는 audit relation이 아직 없으므로 먼저 typed schema failure를 만든다.
         # 이 관측 transaction은 끝내고, 실제 evidence snapshot은 아래 lock 뒤에 새로 연다.
-        if await _schema_revision(db) != FINALIZE_SCHEMA_REVISION:
+        if await _schema_revision(db) not in FINALIZE_SCHEMA_REVISIONS:
             raise CacheTargetBoundaryFailure("schema_revision_mismatch", "finalize")
         await db.rollback()
         await db.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
@@ -785,7 +786,7 @@ async def run_cache_target_boundary_finalize(
         # transaction의 committed audit를 같은 실행에서 볼 수 있다.
         await db.execute(_AUDIT_SERIALIZE_LOCK)
         revision = await _schema_revision(db)
-        if revision != FINALIZE_SCHEMA_REVISION:
+        if revision not in FINALIZE_SCHEMA_REVISIONS:
             raise CacheTargetBoundaryFailure("schema_revision_mismatch", "finalize")
         await db.execute(_FINALIZE_TABLE_LOCK)
         in_flight = await _validate_database_identity(

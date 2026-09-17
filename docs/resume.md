@@ -19,17 +19,35 @@
   실행 파일을 못 찾고 **전부** 즉시 실패한다(내가 만들기 전부터 있던 문제, CI는
   영향 없음).
 
-**중요 — 0101 뒤에 새 Alembic migration을 추가하려면 반드시 함께 고칠 파일이
-하나 더 있다.** `infra/postgres/bootstrap-pinvi-runtime-role.sh`가 "exact head가
-20260824_0101일 때만" runtime role에 테이블 권한을 부여하도록 **리터럴 하드코딩**돼
-있다 — 이 사실이 문서 어디에도 없어서 T-361 PR CI에서 보안 경계 통합 테스트가 실패한
-뒤에야 발견했다(`docs/journal.md` 2026-09-17 같은 날 후속 항목 참조). 지금은 0101과
-20260917_0102(이번 migration) 둘 다 인식하도록 고쳤다. **다음에 또 새 migration을
-추가하는 사람은 이 스크립트의 `apply_runtime_acl_repair` 호출부에 새 `if` 블록을
-반드시 추가할 것** — 빠뜨리면 runtime role이 테이블 권한을 조용히 잃는다. 이 스크립트
-내용은 `tests/unit/test_m05_migration_role_wiring.py`가 정확한 shell 구문·주석
-문자열까지 golden으로 고정하므로, 구조를 바꿀 땐(`if`→`case` 등) 그 테스트부터
-돌려볼 것.
+**매우 중요 — 0101 뒤에 새 Alembic migration을 추가하려면 반드시 함께 고칠 파일이
+"5곳" 있다.** M05 activation contract의 "canonical exact head"가 다음 5곳에
+하드코딩돼 있고, 하나라도 빠뜨리면 운영 배포/복구 경로 또는 cache-target finalize가
+조용히(또는 시끄럽게) 죽는다:
+
+1. `infra/postgres/bootstrap-pinvi-runtime-role.sh` — `apply_runtime_acl_repair()`
+   호출부에 새 `if` 블록 추가
+2. `apps/api/app/services/cache_target_final_boundary.py` —
+   `FINALIZE_SCHEMA_REVISIONS` 튜플에 추가
+3. `apps/api/app/models/cache_target_sync.py` — `ck_ktm_ct_boundary_contract`
+   CheckConstraint 문자열(모델 선언)
+4. `scripts/deploy-node.sh` — N150 fresh 배포 판정 2곳(fresh 확인 + idempotent 재사용
+   확인)
+5. `scripts/restore-hotswap.sh` — 원칙적으로 **손댈 필요 없음**(아래 참조), 단 설명
+   주석은 갱신
+
+**DB CHECK를 넓힐 땐 반드시 `IN (...)`이 아니라 `(a = x OR a = y)` 형태로 쓸 것.**
+PostgreSQL이 `IN`을 `= ANY (ARRAY[...])`로 정규화해 `restore-hotswap.sh`의
+`pg_get_constraintdef()` 리터럴 LIKE 검증이 조용히 깨진다 — 실측으로 확인했다
+(`docs/journal.md` 2026-09-17 후속 항목). 새 migration에 이 CHECK 갱신 DDL도
+포함해야 한다(`op.drop_constraint` + `op.create_check_constraint`,
+`20260917_0102_weather_location_links.py`의 `_set_boundary_contract()` 참조).
+
+여러 곳이 `tests/unit/test_m05_migration_role_wiring.py`·
+`tests/unit/test_migrator_lifecycle_lock.py`같은 golden 테스트로 **정확한 shell
+구문·주석 문자열**까지 고정한다 — 구조를 바꿀 땐(`if`→`case` 등) 그 테스트부터
+먼저 돌려볼 것. 반대로 `tests/unit/test_tvn40_migration_immutability.py`는 "봉인된
+기준선은 바이트 불변, 새 migration 추가는 명시 허용"을 검증하므로 **새 migration
+자체는 안심하고 추가해도 된다.**
 
 **다음 한 작업**: T-362(P3) — 단건 `GET /features/{id}/weather`를 flag로 전환. 이번
 task에서 처음으로 `kor_travel_weather_client_lifespan`을 `main.py`에 배선하고

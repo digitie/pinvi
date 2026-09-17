@@ -30,13 +30,22 @@
       커밋 후 재해석(중간 실패해도 재시도 가능). 실제 Postgres(testcontainers)로 migration
       upgrade/downgrade 확인 + 리졸버 통합테스트 8건 전부 green. **배선 없음** — 라우터
       미사용, T-362/T-363이 처음 쓴다.
-      **PR CI에서 발견한 별도 회귀**: `infra/postgres/bootstrap-pinvi-runtime-role.sh`가
-      "exact head == 20260824_0101" 리터럴로 runtime role 테이블 권한 부여를 게이팅하고
-      있어, 새 migration(0102) 추가만으로 그 GRANT 전체가 조용히 스킵됐다(보안 경계
-      통합 테스트가 결정론적으로 재현). 사용자 확인 후 스크립트를 0102도 인식하도록
-      수정(`apply_runtime_acl_repair()` 함수화 + 별개 `if` 블록 추가, golden 테스트
-      `test_m05_migration_role_wiring.py`가 요구하는 정확한 `if` 구문·주석 문구는
-      보존). 상세는 `docs/journal.md` 2026-09-17 후속 항목.
+      **PR CI에서 발견한 훨씬 큰 회귀**: M05 activation contract의 "canonical exact
+      head"가 5곳에 하드코딩돼 있어, 새 migration(0102) 추가만으로 조용히 깨졌다 —
+      `infra/postgres/bootstrap-pinvi-runtime-role.sh`(runtime role GRANT),
+      `apps/api/app/services/cache_target_final_boundary.py`(파이썬 런타임 게이트,
+      `FINALIZE_SCHEMA_REVISIONS`), `apps/api/app/models/cache_target_sync.py`(DB
+      CHECK 제약 선언), `scripts/deploy-node.sh`(N150 fresh 배포, 2곳),
+      `scripts/restore-hotswap.sh`(N150 복구, 결국 무수정 — 아래 참조). 사용자 확인
+      후 5곳 모두 (0101, 0102) 둘 다 인식하도록 확장.
+      **핵심 함정**: DB CHECK를 `IN (...)`으로 넓히면 PostgreSQL이
+      `= ANY (ARRAY[...])`로 정규화해 `restore-hotswap.sh`의 `pg_get_constraintdef()`
+      리터럴 LIKE 검증이 조용히 깨진다(실측 확인) — `(a = x OR a = y)` 형태로 써야
+      원래 리터럴이 보존된다. golden 테스트(`test_m05_migration_role_wiring.py`,
+      `test_migrator_lifecycle_lock.py`)가 요구하는 정확한 shell 구문·주석 문구는
+      보존. `test_cache_target_causal_canary.py` 41건 전부 green으로 최종 확인
+      (`schema_revision_mismatch` 완전 소멸). 상세는 `docs/journal.md` 2026-09-17
+      후속 항목 2건.
 
 ## 2026-09-05
 

@@ -108,6 +108,76 @@ green(`test_m05_activation_anchor_migration.py`, `test_m05_migrator_login_lifecy
 돌아간다). `git stash` 후 switch해야 진짜 격리된 비교가 된다. 이후로는
 switch 전에 반드시 `git status --short`로 clean을 확인했다.
 
+### 후속 — CI가 또 실패해서 발견한 진짜 규모: canonical head가 5곳에 하드코딩돼 있었다
+
+`bootstrap-pinvi-runtime-role.sh` 수정 후 PR을 다시 올렸는데 `integration-test (2)`가
+계속 실패했다. 처음엔 `test_cache_target_causal_canary.py`의 flaky 4건(이미 origin/main
+단독에서도 재현 확인)이라고 판단했지만, **3번 재실행 모두 정확히 같은 4건이 같은
+`schema_revision_mismatch`로 죽는 게** 우연치고는 일치도가 너무 높았다. 사용자에게
+"더 깊이 조사"를 요청받아 다시 팠다.
+
+진짜 원인: `app/services/cache_target_final_boundary.py`의
+**`FINALIZE_SCHEMA_REVISION = "20260824_0101"`** — 실제 프로덕션 애플리케이션 코드에
+있는 **세 번째** exact-head 하드코딩이었다. 주석: "이 pin과 DB CHECK
+(`ck_ktm_ct_boundary_contract`)는 최종 migration에서 함께 갱신해야 finalize가 열린다 —
+**fail-close by design**."
+
+전체 저장소를 `grep`해서 `"20260824_0101"`을 참조하는 프로덕션 코드(테스트 제외)를 다
+찾았다 — **총 5곳**:
+1. `infra/postgres/bootstrap-pinvi-runtime-role.sh` (이미 수정)
+2. `app/services/cache_target_final_boundary.py` — 파이썬 런타임 게이트
+3. `app/models/cache_target_sync.py` — DB CHECK 제약 SQLAlchemy 선언
+4. `scripts/deploy-node.sh` — **N150 실제 fresh 배포 스크립트** (2곳: fresh 판정 +
+   idempotent 재사용 판정)
+5. `scripts/restore-hotswap.sh` — **N150 실제 DB 복구 스크립트**
+
+이건 "인프라 스크립트 하나 고치기"가 아니라 M05 activation contract의 canonical
+exact head를 시스템 전체에 걸쳐 0101→(0101, 0102)로 공식 확장하는 작업이었다.
+사용자에게 규모를 명확히 보고하고("나머지 4곳도 확장할지" 확인) 승인받은 뒤 진행했다.
+
+#### 실측이 또 한 번 설계를 뒤집었다 — `IN`이 아니라 `OR`을 써야 한다
+
+`ck_ktm_ct_boundary_contract` CHECK를 처음엔 `schema_revision IN ('20260824_0101',
+'20260917_0102')`로 넓혔다. 그런데 `scripts/restore-hotswap.sh`가
+`pg_get_constraintdef()`의 반환 텍스트에 `LIKE '%schema_revision = ''20260824_0101''%'`
+로 리터럴 매치를 건다. 실제 Postgres에 만들어서 확인해 보니:
+
+- `IN (...)` → `pg_get_constraintdef()`가 `schema_revision = ANY (ARRAY['20260824_0101'::text, '20260917_0102'::text])`로 **정규화** — LIKE가 더 이상 매치 안 됨
+- `(schema_revision = '20260824_0101' OR schema_revision = '20260917_0102')` →
+  `(schema_revision = '20260824_0101'::text) OR (schema_revision = '20260917_0102'::text)`로
+  **원래 리터럴 형태 보존** — LIKE 그대로 매치
+
+`OR` 체인으로 바꾸니 `restore-hotswap.sh`는 **한 글자도 안 고쳐도** 기존 검증이
+그대로 통과했다(설명 주석만 추가). 이걸 실측 없이 그냥 "논리적으로 동등하니 `IN`이
+낫겠다"고 골랐으면 또 다른 조용한 회귀를 심을 뻔했다.
+
+#### deploy-node.sh — golden 테스트를 또 만났다
+
+`tests/unit/test_migrator_lifecycle_lock.py:227`가
+`assert 'state_alembic_version" == "20260824_0101"' in source`로 정확한 셸 비교
+리터럴을 고정하고 있었다. `bootstrap-pinvi-runtime-role.sh` 때와 같은 전략 —
+그 정확한 부분 문자열은 건드리지 않고, `( "$state_alembic_version" == "20260824_0101" \
+  || "$state_alembic_version" == "20260917_0102" )`로 괄호를 씌워 OR를 추가했다.
+
+#### `test_tvn40_migration_immutability.py`를 읽고 안심함
+
+이름 때문에 "새 migration 추가 자체를 막는 테스트인가" 걱정했는데, 오히려 그 반대였다.
+주석: "종전의 exact 파일 목록 비교는 그 성질에 더해 **신규 migration 추가까지**
+금지하고 있었다 — T-349(신규 migration이 필요한 태스크)가 이 한 줄 때문에 진행
+불가로 표시됐다. 목록 동등 대신 digest 불변 + 계보 무결로 바꾼다." 즉 과거에
+정확히 같은 문제를 다른 세션이 이미 겪었고, "봉인된 기준선은 바이트 불변, 새
+migration 추가는 명시 허용, 계보는 단일 선형"으로 고쳐 뒀다. 내 접근(0101 뒤에
+0102를 선형으로 추가)이 정확히 이 테스트가 지원하도록 설계된 패턴이었다.
+
+검증: `pg_get_constraintdef()` 실측(위 참조), migration upgrade/downgrade 왕복 후
+CHECK 텍스트가 정확히 기대한 형태로 나오는지 재확인, `shellcheck` 3개 스크립트 전부
+새 경고 0(라인 번호만 밀림), `mypy --strict app` 239파일 0, `ruff` 0, `tests/unit`
+1428건, `test_cache_target_causal_canary.py` 41건 **전부 통과**(`schema_revision_mismatch`
+완전 소멸 — 재실행 3회 결정론적으로 나던 것이 이제 안 남), `test_restore_hotswap_preflight.py`
++ `test_tvn40_curation_import_receipts.py` + `test_weather_location_resolver.py` +
+`test_m05_activation_anchor_migration.py` + `test_m05_migrator_login_lifecycle.py`
+58건 전부 통과.
+
 ## 2026-09-17 (claude) — T-360(P1): `kor-travel-weather` client 신설 (ADR-068)
 
 `agent/claude-weather-t360-client`.
