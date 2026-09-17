@@ -33,7 +33,6 @@ P1~P5는 게이트와 무관하게 진행 가능하고, **P6(기본값 on)만 G-
       조사 — manual-feature-create 토큰이 서버엔 SHA-256 해시로만 있어 관리자만
       만들 수 있다).
 - [ ] **T-365** — (P6, **G-1 + G-3 게이트, G-2는 T-366으로 해소됨**) 게이트 F(커버리지)·I(보존 지평) 통과 확인 후 flag 기본값 `on` + 구 경로 제거(**client 두 파일**: `kor_travel_map.py` 사용자 3경로 + `kor_travel_map_admin.py` 잔여) + map OpenAPI 계약 테스트·**SHA-256 핀 픽스처** 동반 갱신. `pinvi_kor_travel_map_service_token`은 feature batch가 계속 쓰므로 **남긴다**. P3~P5 운영 관측이 선행 조건. **2026-09-17 사용자 결정**: 데이터 복원·하위 호환은 고려 대상이 아니다 — kor-travel-map이 weather 기능을 완전히 제거할 예정이라 이 제거는 결국 필수가 된다.
-- [ ] **T-367** — 보존 지평 가드(게이트 I). `kor-travel-weather` 실효 보존이 **15일 미만**이면 실패하는 점검. 외부 설정 회귀로 과거 여행 날씨가 **조용히** 사라지는 것을 막는 유일한 장치다(설계 §4.2 대가 2). 배포 전(현재 2일)에는 항상 실패 — 의도된 동작.
 - [ ] **T-368**(미정, 설계 필요) — `kor-travel-map`이 weather 관련 기능을 `kind='weather'` feature type 포함해 완전히 제거할 예정(2026-09-17 사용자 결정, ADR-068 결정 11)이라, `FeatureMapView.tsx`의 `WeatherMarker` **위치** 공급원이 사라진다(값은 T-362로 이미 새 경로, 위치는 여전히 map inbounds 의존). `kor-travel-weather`는 "location" 개념만 갖고 "feature"가 없으므로 viewport 기준 location 목록을 그 서비스에서 직접 조회하는 새 경로가 필요 — 그런 API가 있는지부터 확인 필요. 단순 소스 교체가 아니라 신규 설계 대상. `docs/integrations/kor-travel-weather.md` §4.6 참조.
 
 **게이트 G-1 (외부 선행 조건)** — `kor-travel-weather`가 임의 좌표에 대해 KMA 격자
@@ -56,8 +55,11 @@ provider(OpenWeatherMap 등 국외 사업자) 값을 표시하면 그 선언이 
 ADR-062의 3년 목표 중 일부만 먼저 배포하는 것이며 **여전히 짧다** — 여행 종료 15일
 이후 열람하면 그 날짜 날씨는 계속 `no_data`다. **소급되지 않으므로**(이미 drop된
 partition은 복구 불가) **G-1을 기다리지 말고 지금 요청해 두는 편이 낫다** — 늦을수록
-영구히 잃는 과거 구간이 길어진다. Pinvi 측 강제 수단은 T-367 보존 지평 가드(임계
-15일)다.
+영구히 잃는 과거 구간이 길어진다. Pinvi 측 강제 수단은 **T-367 보존 지평 가드
+(임계 15일) — ✅ 구현 완료(2026-09-17)**, `pinvi_weather_retention_horizon_guard`
+Dagster asset(매일 KST 05:00). 가드는 게이트 자체를 해소하지 않는다 — 실효 보존이
+15일 미만인 동안(현재 2일)은 계속 실패하는 게 의도된 동작이며, 15일로 실제
+연장된 뒤에도 회귀를 잡아내는 상시 감시 역할이다.
 
 ## 모바일
 

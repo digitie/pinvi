@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
 from dagster import ConfigurableResource
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -41,3 +42,20 @@ class KasiResource(ConfigurableResource[Any]):
             retries=self.retries,
             max_rps=self.max_rps,
         )
+
+
+class KorTravelWeatherResource(ConfigurableResource[Any]):
+    """`kor-travel-weather` 공개 read 전용 최소 client resource.
+
+    T-367 보존 지평 가드 전용이다. 인증이 없는 공개 read 표면만 호출하므로(§2.1,
+    `docs/integrations/kor-travel-weather.md`) 별도 credential이 필요 없다. `apps/api`의
+    풍부한 `KorTravelWeatherClient`(app.clients.kor_travel_weather)는 별도 Python
+    패키지(apps/etl)에서 import할 수 없어, 여기서는 진단 목적에 필요한 최소한의 httpx
+    client만 만든다 — decode는 asset 모듈이 담당한다(pinvi_kasi_special_days와 동일 원칙).
+    """
+
+    base_url: str
+    timeout: float = 10.0
+
+    def create_client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout)

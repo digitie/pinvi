@@ -9,7 +9,9 @@
 
 from __future__ import annotations
 
-from pinvi.etl.resources import KasiResource
+import httpx
+
+from pinvi.etl.resources import KasiResource, KorTravelWeatherResource
 
 
 def test_kasi_resource_create_client_returns_client() -> None:
@@ -20,3 +22,12 @@ def test_kasi_resource_create_client_returns_client() -> None:
     from kasi import KasiClient
 
     assert isinstance(client, KasiClient)
+
+
+def test_kor_travel_weather_resource_create_client_returns_httpx_client() -> None:
+    resource = KorTravelWeatherResource(base_url="http://weather.invalid")
+
+    client = resource.create_client()
+
+    assert isinstance(client, httpx.AsyncClient)
+    assert str(client.base_url) == "http://weather.invalid"

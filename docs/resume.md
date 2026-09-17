@@ -1,5 +1,41 @@
 # resume.md
 
+## 2026-09-17 (claude) — T-367(보존 지평 가드) 완료, 남은 건 외부 게이트뿐
+
+T-366(#551) 머지 후 T-367(보존 지평 가드, ADR-068 게이트 G-3 상시 감시)을
+완료했다 — `pinvi_weather_retention_horizon_guard` Dagster asset(매일 KST
+05:00)이 `kor-travel-weather`의 실효 보존을 직접 측정해 15일 미만이면 실패한다.
+T-359~T-367 실행 계획(`docs/execplan/t-359-weather-source-cutover.md`)의
+Pinvi 소관 항목은 이것으로 전부 끝났다.
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+- **T-367은 게이트 G-3을 해소하지 않는다** — `kor-travel-weather` 실효 보존이
+  실제로 15일 이상이 되기 전까지는 이 가드가 **항상 실패한다**(현재 2일).
+  이건 버그가 아니라 설계 의도다. G-3 자체(15일 연장)는 그 서비스 소관의
+  외부 선행 조건으로 여전히 열려 있다.
+- **T-365는 이제 외부 게이트 G-1(KMA 커버리지)·G-3(보존 연장)만 남았다** —
+  둘 다 `kor-travel-weather` 저장소 소관이라 Pinvi 쪽에서 더 진행할 코드
+  작업이 없다. G-1/G-3이 풀리면 T-365(flag 기본값 on + 구 경로 제거)로
+  이어간다.
+- **apps/etl은 apps/api와 별도 Python 패키지**라 `app.clients.kor_travel_weather`를
+  import할 수 없다 — 향후 apps/etl에서 외부 서비스를 호출해야 하면
+  `KorTravelWeatherResource`처럼 진단 목적에 필요한 최소 client를 새로
+  만드는 패턴을 따를 것(`KasiResource`와 동일 원칙).
+- **`mypy --strict`는 개별 파일 지정 실행보다 패키지 전체 실행이 더
+  엄격하다** — 개별 파일만 돌려 통과했다고 끝내지 말고, `mypy --strict
+  pinvi/`(apps/etl) 또는 대응 전체 경로로 한 번 더 돌려 새로 만든 코드가
+  아니라 사전 존재 오류인지 확인할 것(이번에 `sensors.py`/`pinvi_pii_retention.py`
+  등에서 이 작업과 무관한 사전 존재 오류 9건을 발견 — `git stash`로
+  baseline 재현 후 손대지 않고 넘어갔다).
+- T-368(미정)은 여전히 착수 전이다 — `FeatureMapView.tsx`의 `WeatherMarker`
+  위치 공급원 대체 설계, kor-travel-map이 weather feature를 완전히 제거할
+  예정이라는 2026-09-17 사용자 결정 때문에 열린 항목.
+
+**다음 한 작업**: Pinvi 소관으로 즉시 진행 가능한 T-359~T-367 항목은 모두
+끝났다. 다음 후보는 (1) T-368 설계 착수(`kor-travel-weather`에 viewport 기준
+location 목록 API가 있는지부터 확인) 또는 (2) 외부 게이트 G-1/G-3 해소 대기
+— 둘 다 사용자 판단이 필요하다.
+
 ## 2026-09-17 (claude) — T-366(게이트 G-2) 완료, 다음은 T-367
 
 T-366(P7)을 완료했다 — 컴플라이언스 문서(`data-policy.md` §3-1,

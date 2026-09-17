@@ -2,6 +2,49 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-17 (claude) — T-366 머지, T-367(보존 지평 가드) 구현 완료
+
+T-366(PR #551)을 CI green 확인 후 squash 머지했다(`4a02b5a8`). 로컬이 자동으로
+`main`으로 전환돼 즉시 `agent/claude-t367-retention-guard`로 갈아탔다(worktree
+규칙 — trunk가 local main ref를 점유).
+
+이어서 T-367(보존 지평 가드, ADR-068 게이트 G-3 상시 감시)을 구현했다. 설계
+핵심: `kor-travel-weather`가 공개하는 설정값(`KOR_TRAVEL_WEATHER_RETENTION_DAYS`)을
+신뢰하지 않고 **실효** 보존을 직접 측정한다. `GET /v1/weather/locations/{id}/forecast`가
+`from`을 생략하면 가장 오래된 행부터 여는 문서화된 동작(§2)을 진단 목적으로
+역이용해, 서울시청 좌표로 얻은 대표 anchor location의 살아남은 가장 오래된
+행의 `known_at`(없으면 `collected_at`)과 지금 사이 간격을 실효 보존 일수로
+계산한다. 15일 미만이면 asset이 실패해 기존 `run_failure_sensor`(ADR-050)로
+통지된다.
+
+- `apps/etl/pinvi/etl/assets/pinvi_weather_retention_horizon.py` 신설 —
+  `pinvi_weather_retention_horizon_guard` asset(매일 KST 05:00).
+- `apps/etl/pinvi/etl/resources.py`에 `KorTravelWeatherResource`(인증 불필요
+  공개 read 전용 최소 httpx client) 추가. `apps/api`의 풍부한
+  `KorTravelWeatherClient`는 별도 Python 패키지라 apps/etl에서 import 불가 —
+  진단 목적에 필요한 최소 client만 새로 만들었다.
+- `apps/etl/pinvi/etl/{schedules,definitions,sensors}.py` 배선, 기존
+  `_MONITORED_JOBS`에 추가.
+- 순수 함수(`compute_oldest_known_at`, `evaluate_retention_horizon`) +
+  `httpx.MockTransport` 기반 fetch 함수 테스트 신규 9건. `apps/etl` 전체 31건
+  green, ruff check/format, mypy --strict 모두 clean(개별 파일 대상 첫 mypy
+  실행은 통과했지만, 패키지 전체 `mypy --strict pinvi/` 실행에서
+  `sensors.py`/`pinvi_pii_retention.py` 등에 **이 변경과 무관한 사전 존재
+  오류 9건**을 발견했다 — `git stash`로 baseline에서 재현 확인 후 stash pop으로
+  복원, 이 PR 범위에서는 손대지 않는다).
+- `docs/integrations/kor-travel-weather.md` §4.2/§6-I, `docs/runbooks/etl.md`
+  (파일 트리, §3.5 신설, §4/§5 코드 샘플, §6 env var 표)에 설계·구현 반영.
+
+**교훈**: `apps/etl`은 `apps/api`와 별도 Python 패키지/venv라 client를
+재사용할 수 없다 — 향후 apps/etl에서 다른 외부 서비스를 호출할 때도 최소
+전용 client를 새로 만드는 패턴(`KasiResource`와 동일 원칙)을 따를 것.
+`mypy --strict`는 개별 파일 지정 실행과 패키지 전체 실행의 결과가 다를 수
+있다(전체 실행이 더 엄격) — 새 코드 검증 후 반드시 패키지 전체로 한 번 더
+돌려 사전 존재 오류와 신규 오류를 구분할 것.
+
+다음: T-368(미정, 설계 필요 — `kor-travel-map`의 weather feature 제거 이후
+`WeatherMarker` 위치 공급원 대체) 또는 외부 게이트(G-1/G-3) 해소 대기.
+
 ## 2026-09-17 (claude) — T-366(게이트 G-2 해소) 코드·문서 완료, PR 준비
 
 "머지후진행"으로 T-363·T-364를 머지한 직후 이어받은 T-366(P7)을 완료했다.

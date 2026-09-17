@@ -11,9 +11,10 @@ from pinvi.etl.assets import (
     pinvi_pii_retention,
     pinvi_telegram_system_outbox,
     pinvi_trip_day_rise_sets,
+    pinvi_weather_retention_horizon_guard,
 )
 from pinvi.etl.jobs import kasi_poi_rise_set_job
-from pinvi.etl.resources import KasiResource, PinviDatabaseResource
+from pinvi.etl.resources import KasiResource, KorTravelWeatherResource, PinviDatabaseResource
 from pinvi.etl.schedules import (
     kasi_special_days_job,
     pinvi_email_outbox_job,
@@ -21,6 +22,7 @@ from pinvi.etl.schedules import (
     pinvi_pii_retention_job,
     pinvi_telegram_system_outbox_job,
     pinvi_trip_day_rise_sets_job,
+    pinvi_weather_retention_horizon_job,
     schedules,
 )
 from pinvi.etl.sensors import pinvi_run_failure_sensor
@@ -33,6 +35,7 @@ defs = Definitions(
         pinvi_pii_retention,
         pinvi_telegram_system_outbox,
         pinvi_trip_day_rise_sets,
+        pinvi_weather_retention_horizon_guard,
     ],
     # asset job을 명시 등록한다. run_failure_sensor가 있으면 schedule-only job의
     # get_job_def가 dig_for_warning→sensor.jobs(raise) 경로를 타므로, 명시 등록으로
@@ -45,6 +48,7 @@ defs = Definitions(
         pinvi_location_log_archive_job,
         pinvi_telegram_system_outbox_job,
         pinvi_trip_day_rise_sets_job,
+        pinvi_weather_retention_horizon_job,
     ],
     schedules=schedules,
     sensors=[pinvi_run_failure_sensor],
@@ -55,6 +59,9 @@ defs = Definitions(
         ),
         "kasi": KasiResource(
             service_key=EnvVar("DATA_GO_KR_SERVICE_KEY"),
+        ),
+        "kor_travel_weather": KorTravelWeatherResource(
+            base_url=EnvVar("PINVI_KOR_TRAVEL_WEATHER_BASE_URL"),
         ),
     },
 )
