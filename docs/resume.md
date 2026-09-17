@@ -1,5 +1,28 @@
 # resume.md
 
+## 2026-09-18 (claude) — "T-363 e2e" 정리 완료, 다음은 T-368 착수 여부 확인 중
+
+`docs/tasks.md`의 "T-363 e2e 실행 검증" 독립 항목을 제거하고 T-365의 운영
+관측 선행 조건으로 흡수했다(사용자 결정, "고치고 진행"). 근거: flag off인
+동안은 mock 기반 integration test가 이미 같은 시나리오를 커버하고, live e2e가
+실제로 의미 있어지는 시점은 T-365가 flag를 켜는 순간인데 그 자체가 외부
+게이트(G-1·G-3)에 막혀 있다.
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+- T-363의 **코드**(startWeatherProxy, flag-on sub-test, 런북 절)는 전부
+  완성돼 있다 — 실행만 T-365 flag-on 직전으로 미뤘을 뿐, 아무것도 되돌리지
+  않았다.
+- T-368(미정) 투자 착수 여부는 아직 사용자 확인 대기 중이다. 투자 착수 시
+  참고할 단서: `kor-travel-weather`의 vendored OpenAPI 스펙에 `GET
+  /v1/weather/nearby?lat=&lon=&radius_km=&limit=`(반경 기반, bbox 아님,
+  limit≤100, `NearbyOut`에 위치+현재값 포함)가 이미 존재한다 —
+  `FeatureMapView.tsx`의 `WeatherMarker` 위치 공급원 대체 후보로 유력하지만
+  아직 정식 설계는 없다.
+
+**다음 한 작업**: 사용자가 T-368 착수를 확인하면, `/v1/weather/nearby`
+기반 설계(viewport → center+radius 변환, 줌아웃 시 limit 100 초과 처리)부터
+시작한다. 확인 전까지는 대기.
+
 ## 2026-09-17 (claude) — T-367(보존 지평 가드) 완료, 남은 건 외부 게이트뿐
 
 T-366(#551) 머지 후 T-367(보존 지평 가드, ADR-068 게이트 G-3 상시 감시)을

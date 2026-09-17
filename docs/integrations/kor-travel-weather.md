@@ -496,7 +496,7 @@ Pinvi 쪽도 같이 정리한다(T-368 범위).
 | web       | `apps/web/components/map/FeatureMapView.tsx`, `vworldPrimitives.tsx` (§4.6) — **경로 동일 확인, 무변경**            | T-362     |
 | web       | Admin weather-values 탭 `FeatureDetailSubpage.tsx` — **완료**(dataset 컬럼 null-safe)                               | T-364     |
 | e2e       | `apps/web/e2e/trip-detail.e2e.ts` (단건 weather 요청 0회 단언) — **검토 결과 무변경**(mock 기반, 응답 셰입 불변) | T-363     |
-| e2e       | `trip-feature-resolution-live-mutating.live.ts` + `startWeatherProxy` + 새 flag-on sub-test — **코드 완료, 실행은 fixture 대기** | T-363     |
+| e2e       | `trip-feature-resolution-live-mutating.live.ts` + `startWeatherProxy` + 새 flag-on sub-test — **코드 완료, 실행은 T-365 flag-on 직전 운영 관측으로 흡수(2026-09-18)** | T-363/365 |
 | 런북      | `docs/runbooks/live-mutating-e2e.md` ("T-363 weather flag on 게이트 단건" 절 신설) — **완료**                       | T-363     |
 | 계약      | `apps/api/tests/contract/kor-travel-map-openapi-*.json` (SHA-256 핀) + `tests/unit/test_kor_travel_map_contract.py` | T-365     |
 | 설정      | `pinvi_kor_travel_map_*` / `pinvi_kor_travel_weather_*`, `.env.example` — **완료**(flag 3개: single_feature/trip_view/admin) | T-360~364 |
