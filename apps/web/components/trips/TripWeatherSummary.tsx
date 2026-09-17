@@ -19,6 +19,26 @@ const WEATHER_LABELS: Record<string, string> = {
   PM25: '초미세',
 };
 
+// T-366(ADR-068, 게이트 G-2) — 사용자가 국내 공공기관 값과 국외 상용 provider
+// 값을 구분할 수 있어야 한다. `docs/compliance/data-policy.md` §3-1 정본과
+// 일치시킨다.
+const PROVIDER_LABELS: Record<string, string> = {
+  'python-kma-api': '기상청',
+  'python-airkorea-api': '환경공단',
+  'python-khoa-api': '국립해양조사원',
+  'python-krforest-api': '산림청',
+  'python-krex-api': '한국도로공사',
+  openweathermap: 'OpenWeatherMap',
+  weatherapi: 'WeatherAPI',
+  open_meteo: 'Open-Meteo',
+  wttr_in: 'wttr.in',
+};
+
+function providerLabel(provider: string | null | undefined): string | null {
+  if (!provider) return null;
+  return PROVIDER_LABELS[provider] ?? provider;
+}
+
 const CURRENT_STYLE_RE = /observed|nowcast|current/i;
 const FORECAST_STYLE_RE = /ultra|short|mid|forecast/i;
 const DUST_RE = /pm10|pm25|미세|초미세|dust|air.?quality|cai|khai/i;
@@ -80,6 +100,29 @@ function formatMetric(metric: WeatherMetric): string | null {
   return `${metricLabel(metric)} ${value}${suffix}`;
 }
 
+interface MetricGroup {
+  items: string[];
+  /** 실제 표시된 값의 출처만 담는다(잘려나간 값의 출처는 포함하지 않는다). */
+  providers: string[];
+}
+
+function toGroup(metrics: WeatherMetric[]): MetricGroup {
+  const shown = metrics
+    .map((metric) => ({ metric, text: formatMetric(metric) }))
+    .filter((entry): entry is { metric: WeatherMetric; text: string } => entry.text != null)
+    .slice(0, 2);
+  return {
+    items: shown.map((entry) => entry.text),
+    providers: Array.from(
+      new Set(
+        shown
+          .map((entry) => providerLabel(entry.metric.provider))
+          .filter((value): value is string => value != null),
+      ),
+    ),
+  };
+}
+
 function pickMetrics(metrics: WeatherMetric[], date: string) {
   const matched = metrics.filter((metric) => metricDate(metric) === date);
   const dust = matched.filter((metric) => DUST_RE.test(metricHaystack(metric)));
@@ -95,18 +138,9 @@ function pickMetrics(metrics: WeatherMetric[], date: string) {
   );
 
   return {
-    current: current
-      .map(formatMetric)
-      .filter((value): value is string => value != null)
-      .slice(0, 2),
-    forecast: forecast
-      .map(formatMetric)
-      .filter((value): value is string => value != null)
-      .slice(0, 2),
-    dust: dust
-      .map(formatMetric)
-      .filter((value): value is string => value != null)
-      .slice(0, 2),
+    current: toGroup(current),
+    forecast: toGroup(forecast),
+    dust: toGroup(dust),
   };
 }
 
@@ -131,9 +165,9 @@ export function TripWeatherSummary({
     if (!card || !date) return [];
     const picked = pickMetrics(card.metrics, date);
     return [
-      { key: 'current', label: '현재', items: picked.current, icon: CloudSun },
-      { key: 'forecast', label: '예보', items: picked.forecast, icon: CloudSun },
-      { key: 'dust', label: '미세먼지', items: picked.dust, icon: Wind },
+      { key: 'current', label: '현재', icon: CloudSun, ...picked.current },
+      { key: 'forecast', label: '예보', icon: CloudSun, ...picked.forecast },
+      { key: 'dust', label: '미세먼지', icon: Wind, ...picked.dust },
     ].filter((group) => group.items.length > 0);
   }, [card, date]);
 
@@ -180,6 +214,14 @@ export function TripWeatherSummary({
               <Icon className="h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
               <span className="shrink-0 font-semibold text-ink">{group.label}</span>
               <span className="min-w-0 truncate">{group.items.join(' · ')}</span>
+              {group.providers.length > 0 && (
+                <span
+                  className="shrink-0 text-muted"
+                  title={`출처: ${group.providers.join(', ')}`}
+                >
+                  ({group.providers.join(', ')})
+                </span>
+              )}
             </span>
           );
         })}

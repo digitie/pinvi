@@ -7,6 +7,24 @@
 
 ## 2026-09-17
 
+- [x] **T-366** — (P7, 게이트 G-2 해소) `docs/compliance/data-policy.md` §3-1
+      신설(claude) — "날씨: 기상청" 단독 기재와 "모두 국내 정부/공공기관 —
+      국외 이전 의무 발생 안 함" 선언을 실제 provider 구성(국내 5:
+      기상청/환경공단/국립해양조사원/산림청/한국도로공사 + 국외 상용 4:
+      OpenWeatherMap/WeatherAPI.com/Open-Meteo/wttr.in, 전부
+      `kor-travel-weather` 경유)에 맞게 재작성. `docs/compliance/pipa.md` §4.3
+      국외 이전 표에 국외 상용 provider 4개 추가(정확한 소재국은 각 서비스
+      약관 원문 대조가 필요해 **[변호사 검토 필요]**로 명시, 국가명 단정하지
+      않음 — 이 프로젝트의 기존 관례). `docs/legal/privacy-policy.md` §4 위탁
+      목록에도 날씨 위탁 항목 추가. `apps/web/components/trips/
+      TripWeatherSummary.tsx`에 출처(provider) 표시 배지 신설 —
+      `WeatherMetric.provider`를 국문 라벨(`PROVIDER_LABELS`)로 매핑해 그룹별
+      실제 표시된 값의 출처만(잘려나간 값 제외) 뱃지로 노출. 신규 vitest
+      1건 포함 8건 green. `docs/integrations/kor-travel-weather.md` §7-2를
+      완료로, §7-3을 "map이 weather 기능을 완전히 제거할 예정"이라는
+      2026-09-17 사용자 결정으로 재작성(§4.6과 함께 T-368 forward-reference).
+      **결과**: `docs/tasks.md`의 게이트 G-2가 해소되어 T-365는 이제 G-1·G-3만
+      남는다.
 - [x] **T-364** — (P5) Admin weather-values를 flag
       `pinvi_kor_travel_weather_admin_enabled`(기본 `false`)로 전환(claude, #549).
       `AdminFeatureWeatherMetric`의 `provider_dataset_id`·`dataset_display_name`·

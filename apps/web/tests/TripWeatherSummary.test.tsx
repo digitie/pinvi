@@ -68,6 +68,37 @@ describe('TripWeatherSummary', () => {
     expect(screen.getByTestId('trip-weather-summary')).not.toHaveTextContent('99℃');
   });
 
+  it('T-366(ADR-068 게이트 G-2): 값의 출처(provider)를 국내/국외 구분 없이 표시한다', () => {
+    const cardKey = 'weather-card:busan';
+    render(
+      <TripWeatherSummary
+        weather={{ state: 'found', card_key: cardKey }}
+        weatherCards={{
+          [cardKey]: {
+            asof: '2026-07-30T00:00:00+09:00',
+            latest_at: '2026-07-30T15:00:00+09:00',
+            is_stale: false,
+            source_styles: ['observed'],
+            metrics: [
+              {
+                forecast_style: 'observed',
+                metric_key: 'T1H',
+                metric_name: '기온',
+                effective_at: '2026-07-30T09:00:00Z',
+                value_number: 26,
+                unit: '℃',
+                provider: 'openweathermap',
+              },
+            ],
+          },
+        }}
+        date="2026-07-30"
+      />,
+    );
+
+    expect(screen.getByTestId('trip-weather-summary')).toHaveTextContent('OpenWeatherMap');
+  });
+
   it('found card에 해당 날짜 metric이 없으면 명시적인 no-data 상태를 표시한다', () => {
     render(
       <TripWeatherSummary

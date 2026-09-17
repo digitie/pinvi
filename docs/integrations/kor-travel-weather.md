@@ -484,21 +484,25 @@ Pinvi 쪽도 같이 정리한다(T-368 범위).
 | 영역      | 파일                                                                                                                | 단계      |
 | --------- | ------------------------------------------------------------------------------------------------------------------- | --------- |
 | transport | `apps/api/app/clients/kor_travel_map.py` (사용자 3경로)                                                             | T-365     |
-| transport | `apps/api/app/clients/kor_travel_map_admin.py` `get_feature_weather`                                                | T-364/365 |
+| transport | `apps/api/app/clients/kor_travel_map_admin.py` `get_feature_weather`                                                | T-365     |
 | 라우터    | `apps/api/app/api/v1/features.py` (`normalize_asof_query`, `_weather_from_kor_travel_map`) — **완료**              | T-362     |
-| 라우터    | `apps/api/app/api/v1/admin/features.py` (weather-values, `asof` 422)                                                | T-364     |
+| 라우터    | `apps/api/app/api/v1/admin/features.py` (weather-values, `asof`) — **완료**                                        | T-364     |
 | 서비스    | `apps/api/app/services/trip_weather_batch.py`(신설, feature batch와 완전 독립) + `trip_view_builder.py` 배선 — **완료** | T-363     |
-| 스키마    | `apps/api/app/schemas/{feature,trip,admin}.py`                                                                      | T-362~364 |
-| 스키마    | `packages/schemas/src/{feature,trip,admin}.ts` (Zod 미러 + partition superRefine)                                   | T-362~364 |
+| 서비스    | `apps/api/app/services/admin_weather_values.py`(신설) + `weather_card.py`의 `resolve_and_collect_deduped_values` 공유 추출 — **완료** | T-364     |
+| 스키마    | `apps/api/app/schemas/{feature,trip,admin}.py` — **완료**(`AdminFeatureWeatherMetric` nullable widening 포함)      | T-362~364 |
+| 스키마    | `packages/schemas/src/{feature,trip,admin}.ts` (Zod 미러 + partition superRefine) — **완료**                        | T-362~364 |
 | client    | `packages/api-client/src/endpoints/{feature,admin}.ts`, `query-keys.ts`                                             | T-362/364 |
-| web       | `apps/web/components/trips/TripWeatherSummary.tsx` (분류기 — §3.1-(3)) — **서버 정규화로 무변경 확인**              | T-362/363 |
+| web       | `apps/web/components/trips/TripWeatherSummary.tsx` (분류기 §3.1-(3) — 서버 정규화로 무변경 확인, T-362/363) + **출처(provider) 표시 배지 신설 — 완료** | T-362/363/366 |
 | web       | `apps/web/components/map/FeatureMapView.tsx`, `vworldPrimitives.tsx` (§4.6) — **경로 동일 확인, 무변경**            | T-362     |
-| web       | Admin weather-values 탭 `FeatureDetailSubpage.tsx`                                                                  | T-364     |
+| web       | Admin weather-values 탭 `FeatureDetailSubpage.tsx` — **완료**(dataset 컬럼 null-safe)                               | T-364     |
 | e2e       | `apps/web/e2e/trip-detail.e2e.ts` (단건 weather 요청 0회 단언) — **검토 결과 무변경**(mock 기반, 응답 셰입 불변) | T-363     |
 | e2e       | `trip-feature-resolution-live-mutating.live.ts` + `startWeatherProxy` + 새 flag-on sub-test — **코드 완료, 실행은 fixture 대기** | T-363     |
 | 런북      | `docs/runbooks/live-mutating-e2e.md` ("T-363 weather flag on 게이트 단건" 절 신설) — **완료**                       | T-363     |
 | 계약      | `apps/api/tests/contract/kor-travel-map-openapi-*.json` (SHA-256 핀) + `tests/unit/test_kor_travel_map_contract.py` | T-365     |
-| 설정      | `pinvi_kor_travel_map_*` / `pinvi_kor_travel_weather_*`, `.env.example`                                             | T-360/365 |
+| 설정      | `pinvi_kor_travel_map_*` / `pinvi_kor_travel_weather_*`, `.env.example` — **완료**(flag 3개: single_feature/trip_view/admin) | T-360~364 |
+| 컴플라이언스 | `docs/compliance/data-policy.md` §3-1(신설) — **완료**                                                            | T-366     |
+| 컴플라이언스 | `docs/compliance/pipa.md` §4.3 국외 이전 표(국외 provider 4개 추가) — **완료**                                    | T-366     |
+| 컴플라이언스 | `docs/legal/privacy-policy.md` §4 위탁 목록 — **완료**                                                             | T-366     |
 
 > `pinvi_kor_travel_map_service_token`은 **제거하지 않는다** — feature batch가 계속
 > 쓴다. weather 경로에서만 빠진다.
@@ -579,24 +583,46 @@ Pinvi는 스냅샷 테이블을 **만들지 않는다.** 보존은 사실을 소
 소실이므로, 연장이 늦어질수록 잃는 구간이 길어진다. **G-1보다 먼저 요청해 둘수록
 손실이 줄어든다** — 커버리지(G-1)를 기다리는 동안에도 보존(G-3)은 병행할 수 있다.
 
-### 7-2. 상용 provider 표시 → **처리방침 갱신 후 표시 + 출처 명시** ✅
+### 7-2. 상용 provider 표시 → **처리방침 갱신 후 표시 + 출처 명시** ✅ (2026-09-17 완료, T-366)
 
-순서를 고정한다. 건너뛸 수 없다.
+순서를 고정했다. 건너뛰지 않았다.
 
-1. `docs/compliance/data-policy.md`의 "날씨: 기상청" 위탁 기재와 "국외 이전 의무 발생
-   안 함" 선언을 실제 provider 구성에 맞게 재작성한다.
-2. 카드에 **출처(provider)를 표시**하는 UI를 구현한다 — 사용자가 기상청 값과 상용 값을
-   구분할 수 있어야 한다.
-3. 그 뒤에야 비KMA provider 값을 표시한다.
+1. ✅ `docs/compliance/data-policy.md` §3-1 신설 + `docs/compliance/pipa.md` §4.3
+   국외 이전 표에 4개 provider 추가 + `docs/legal/privacy-policy.md` §4 위탁
+   목록 갱신. "날씨: 기상청" 단독 기재와 "모두 국내 정부/공공기관 — 국외 이전
+   의무 발생 안 함" 선언을 실제 provider 구성(국내 5 + 국외 상용 4)에 맞게
+   재작성했다. 정확한 소재국은 각 provider 약관 원문 대조가 필요해 **[변호사
+   검토 필요]**로 명시적으로 남겼다(국가명을 확정 단정하지 않음).
+2. ✅ weather 카드에 **출처(provider) 표시 UI**를 구현했다 — `WeatherMetric.provider`
+   필드를 `TripWeatherSummary.tsx`에 노출.
+3. → 이제 비KMA provider 값 표시 자체는 게이트 G-2 관점에서 허용된다. 실제
+   **노출**(flag 기본값 `on`)은 여전히 G-1(커버리지)·G-3(보존)까지 함께 풀려야
+   하는 T-365 몫이다 — G-2 하나만으로 cutover하지 않는다.
 
-→ **T-366**이 1·2를 소유한다(G-2 해소).
+→ **T-366**이 1·2를 소유했다(G-2 해소 완료).
 
-### 7-3. 남은 판단 — `kor-travel-map` 쪽 정합
+### 7-3. `kor-travel-map` 쪽 정합 — 2026-09-17 개정, 결론 확정
 
-**`kor-travel-map` ADR-062**는 "weather는 feature의 속성"이라고 결정했고 weather 투자가
-진행 중이다(T-VN-38/39). Pinvi가 소비를 끊는 것은 map의 결정을 되돌리는 게 아니라
-**소비자 하나가 빠지는 것**이다. 다만 map에 그 사실을 알려 중복 투자를 막을지 여부는
-사용자 판단으로 남아 있다.
+원래 서술(§7-3 구판)은 "`kor-travel-map` ADR-062가 'weather는 feature의
+속성'이라고 결정했고 weather 투자가 진행 중이다(T-VN-38/39). Pinvi가 소비를
+끊는 것은 map의 결정을 되돌리는 게 아니라 소비자 하나가 빠지는 것이며, map에
+알려 중복 투자를 막을지는 사용자 판단으로 남긴다"였다.
+
+**이제 판단이 끝났다.** 사용자 결정(2026-09-17): `kor-travel-map`은 weather
+관련 기능을 **`kind='weather'` feature type을 포함해 완전히 제거할
+예정**이고, weather feature 개념은 **Pinvi(=`kor-travel-weather` 소비)에만
+남는다.** 데이터 복원·하위 호환은 고려 대상이 아니다 — map 쪽 weather
+데이터/feature는 소급 보존 없이 사라진다(ADR-068 결정 11). map의 T-VN-38/39
+weather 투자는 이 결정으로 중복 투자가 되므로 계속하지 않는 쪽으로 정리된다.
+
+**새로 생기는 공백** — `FeatureMapView.tsx`의 `WeatherMarker`는 지금
+`kor-travel-map`의 `kind='weather'` feature inbounds 조회로 **위치**를
+얻는다. map이 그 feature type을 없애면 이 marker들은 **조용히 0개**가 된다.
+`kor-travel-weather`는 "location"만 있고 "feature" 개념이 없으므로, marker
+위치 공급에는 **viewport 기준 location 목록을 그 서비스에서 직접 조회하는
+새 경로**가 필요하다 — 단순 소스 교체가 아니라 별도 설계 대상이다. 이 문서
+(T-359~T-367)는 이를 다루지 않는다 — 후속 task **T-368**(미정, `docs/tasks.md`)
+로 연다.
 
 ---
 

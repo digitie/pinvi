@@ -104,6 +104,10 @@ Dagster job 일 1회:
 | VWorld (국토교통부) | 국내 (정부) | 지도 SDK 타일 — `vworld-map-web` 경유                                                                                                                                          |
 | Telegram            | 글로벌 (LU) | 알림 봇 (사용자 선택) — 신규 여행/동반자 초대 알림 발송. 수령 정보: 사용자가 등록한 `telegram_chat_id`만(메시지 본문에 이메일 등 PII 미포함). bot token 원본 미저장(T-106 §1). |
 | BackBlaze B2 (v2)   | 미국        | 백업 저장 (운영자 결정 시)                                                                                                                                                     |
+| OpenWeatherMap      | 국외 **[변호사 검토 필요: 정확한 소재국]** | 날씨 — `kor-travel-weather` 경유(ADR-068, T-366). 수령 정보: 여행 POI 좌표(위도/경도)만, 이메일 등 PII 미포함.                          |
+| WeatherAPI.com      | 국외 **[변호사 검토 필요: 정확한 소재국]** | 날씨 — `kor-travel-weather` 경유(ADR-068, T-366). 수령 정보: 여행 POI 좌표만.                                                            |
+| Open-Meteo          | 국외 **[변호사 검토 필요: 정확한 소재국]** | 날씨 — `kor-travel-weather` 경유(ADR-068, T-366). 수령 정보: 여행 POI 좌표만.                                                            |
+| wttr.in             | 국외 **[변호사 검토 필요: 정확한 소재국]** | 날씨 — `kor-travel-weather` 경유(ADR-068, T-366). 수령 정보: 여행 POI 좌표만.                                                            |
 
 ### 4.4 위탁자 명시 시 추가 정보
 

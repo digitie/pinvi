@@ -2,6 +2,36 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-17 (claude) — T-366(게이트 G-2 해소) 코드·문서 완료, PR 준비
+
+"머지후진행"으로 T-363·T-364를 머지한 직후 이어받은 T-366(P7)을 완료했다.
+`docs/compliance/data-policy.md`가 날씨 출처를 "기상청" 단독으로 적고 제공
+provider가 전부 국내 공공기관이라 "국외 이전 의무가 발생하지 않는다"고 선언한
+부분이, 상용 provider(OpenWeatherMap 등 국외 사업자) 값을 표시하는 순간 거짓
+선언이 되는 문제를 해소했다.
+
+- `docs/compliance/data-policy.md` §3-1 신설 — 날씨 provider 9개(국내 공공기관
+  5: 기상청/환경공단/국립해양조사원/산림청/한국도로공사 + 국외 상용 4:
+  OpenWeatherMap/WeatherAPI.com/Open-Meteo/wttr.in) 우선순위 표, "날씨는 국외
+  이전이 발생한다"는 정정된 선언, kor-travel-map이 weather 기능을 완전히
+  제거할 예정(ADR-068 결정 11)이라는 사실 반영.
+- `docs/compliance/pipa.md` §4.3 국외 이전 표에 국외 상용 provider 4개 행
+  추가 — 소재국은 각 서비스 약관 원문 대조가 필요해 **[변호사 검토 필요]**로
+  명시(국가명 단정하지 않음 — 이 프로젝트의 기존 관례를 그대로 따름).
+- `docs/legal/privacy-policy.md` §4 위탁 목록에 날씨 위탁 항목 추가.
+- `apps/web/components/trips/TripWeatherSummary.tsx` — `WeatherMetric.provider`를
+  국문 라벨로 매핑해 카드에 출처 표시 배지 신설. 그룹별로 실제 화면에 표시된
+  값(슬라이스 이후)의 출처만 뱃지로 노출하도록 `toGroup()` 헬퍼를 새로 추출.
+  vitest 신규 1건 포함 8건 green, typecheck/lint 모두 clean(기존 무관 경고
+  3건만 잔존).
+- `docs/integrations/kor-travel-weather.md` §7-2를 완료로 표시, §7-3을
+  "kor-travel-map이 weather를 완전히 제거할 예정"이라는 사용자 결정으로
+  재작성(T-368 forward-reference).
+- `docs/tasks.md` 게이트 G-2를 "✅ 해소됨"으로 갱신 — T-365는 이제 G-1(KMA
+  커버리지)·G-3(보존 연장)만 남는다. `docs/tasks-done.md`에 T-366 완료 기록.
+
+다음: T-367(보존 지평 가드, Pinvi 소관·게이트 무관, 지금 바로 착수 가능).
+
 ## 2026-09-17 (claude) — T-363(#547)·T-364(#549) 머지 완료
 
 사용자 지시 "머지후진행"에 따라 PR #547(T-363)을 draft에서 ready로 전환 후 CI
