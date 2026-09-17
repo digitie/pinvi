@@ -15,6 +15,12 @@
       기상청 예보가 조용히 누락되고(번들이 여러 location에 걸침), 전국 KMA 격자 앵커는
       `e2e-seoul` 1개뿐이며(→ 게이트 G-1), 처리방침의 "국외 이전 의무 발생 안 함" 선언이
       상용 provider 표시 시 거짓이 된다(→ 게이트 G-2).
+- [x] **T-360** — (P1) `kor-travel-weather` client(`apps/api/app/clients/kor_travel_weather.py`)
+      + `resolve`/`markers`/`latest`/`forecast` 4개(설계 §2.1이 정한 Pinvi 소비 표면 전체) +
+      strict-decode dataclass DTO + vendored OpenAPI 스냅샷(SHA-256 핀) 드리프트 게이트 +
+      `Settings pinvi_kor_travel_weather_*` + `.env.example`(claude).
+      **배선 없음** — `main.py`에 lifespan을 등록하지 않았다(코드는 자기 테스트에서만
+      쓰인다). 인증 헤더 없음(공개 read). ruff/mypy --strict/기존 unit 1428건 전부 green.
 
 ## 2026-09-05
 

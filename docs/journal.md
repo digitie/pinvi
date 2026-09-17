@@ -2,6 +2,45 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-17 (claude) — T-360(P1): `kor-travel-weather` client 신설 (ADR-068)
+
+`agent/claude-weather-t360-client`.
+
+날씨 이관(T-359/ADR-068) 실행의 첫 코드 작업. `apps/api/app/clients/kor_travel_weather.py`
+신설 — 설계 문서 §2.1이 정한 Pinvi 소비 표면 4개(`resolve`/`markers`/`latest`/`forecast`)
+만 구현했다(`nearby`/`get_location`/admin 표면은 Pinvi가 쓰지 않으므로 만들지 않았다).
+
+- `kor_travel_geo.py`(공개 read, 인증 없음, GET 위주)를 템플릿으로 삼고
+  `kor_travel_map.py`의 dataclass + 명시 field allow-list strict-decode 관례를 따랐다.
+  `kor-travel-weather` 공개 read는 인증 헤더가 전혀 없다 — client에 auth 로직 없음을
+  테스트로도 고정했다(`test_client_max_attempts_and_no_auth_headers`).
+- DTO(`WeatherValueOut`/`LocationOut`/`MeasurementPointOut`/`ResolvedWeatherOut`/
+  `WeatherMarkerOut`)는 `kor-travel-weather`의 실제 `openapi.json`(commit `3411ecc`,
+  live 서비스와 동일 확인됨)에서 필드를 그대로 옮겼다 — 손으로 추측하지 않았다.
+- client-side 사전 검증(서버가 거절하기 전에 먼저 막음): `resolve`의 `lat 33..43`/
+  `lon 124..132`/`radius_km ≤500`, `markers`의 location_id 1..500개(500은 OpenAPI
+  스키마 밖 서버 코드 상한이라 계약 테스트로 못 박지 못한다는 점을 테스트 주석에
+  남겼다), `forecast`의 naive datetime 거부(`kor_travel_map.py`의 단일 시간대 정책과
+  동일 원칙 — naive→aware 보정은 라우터가, transport는 추측하지 않는다).
+- 계약 드리프트 게이트(`test_kor_travel_weather_contract.py`): vendored
+  `tests/contract/kor-travel-weather-openapi.json`을 SHA-256으로 핀하고, decoder의
+  required/optional field set이 스냅샷과 정확히 일치하는지, client가 하드코딩한
+  query 상한(lat/lon/radius_km/limit)이 스냅샷 파라미터 스키마와 일치하는지 검증한다.
+  **`kor-travel-map` 계약 게이트(1600줄, 전체 필드 type/format 정밀 검증)보다 스코프를
+  줄였다** — 이 client는 아직 어떤 라우터에도 배선되지 않아 그 정도 정밀도가 아직
+  필요 없다고 판단했다. 배선 시점(T-362)에 필요하면 넓힌다.
+- **배선 없음 — 의도된 축소.** `main.py`의 lifespan에도 등록하지 않았다. "배선 없음(코드
+  미사용 상태로 머지)"을 "라우터 미사용"보다 좁게, "앱 시작 경로에도 안 나타남"으로
+  해석했다 — client/lifespan/dependency 함수는 존재하지만 어디서도 import되지 않는다.
+  T-362가 처음 `main.py`에 등록한다.
+
+검증: `test_kor_travel_weather_client.py`(MockTransport, 23개 — 요청 구성, 좌표/개수
+경계값, 404/422/RFC7807 매핑, 5xx 재시도, transport 오류, 필수/추가 필드 드리프트) +
+`test_kor_travel_weather_contract.py`, ruff 0, `mypy --strict app`(237파일) 0,
+기존 `tests/unit` 1428건 전부 green(회귀 없음). `tests/integration`은 이 worktree에
+`alembic` 실행 파일/Docker testcontainers가 없어 환경 문제로 미실행(내 변경과 무관 —
+integration 디렉토리를 건드리지 않았다).
+
 ## 2026-09-17 (claude) — 날씨 소스 이관 설계 (`kor-travel-map` → `kor-travel-weather`)
 
 `agent/claude-weather-service-split`. **설계·문서·task만. 코드 변경 없음.**
