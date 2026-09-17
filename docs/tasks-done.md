@@ -7,6 +7,27 @@
 
 ## 2026-09-17
 
+- [x] **T-367** — 보존 지평 가드(게이트 G-3 상시 감시, Pinvi 소관, 게이트 무관하게
+      바로 구현). `apps/etl/pinvi/etl/assets/pinvi_weather_retention_horizon.py`
+      신설 — `pinvi_weather_retention_horizon_guard` Dagster asset(매일 KST
+      05:00, `KorTravelWeatherResource` 신규 httpx client resource). `kor-travel-weather`가
+      공개하는 설정값(`KOR_TRAVEL_WEATHER_RETENTION_DAYS`)을 신뢰하지 않고,
+      서울시청 좌표로 `GET /v1/weather/resolve`해 대표 anchor `location_id`를
+      얻은 뒤 `GET .../forecast`를 **`from` 없이** 호출해(그 endpoint가 `from`
+      생략 시 가장 오래된 행부터 여는 문서화된 동작을 진단 목적으로 역이용,
+      `docs/integrations/kor-travel-weather.md` §2) 살아남은 가장 오래된 행의
+      `known_at`(없으면 `collected_at`)과 지금 사이 간격으로 **실효** 보존
+      일수를 직접 측정한다. 15일 미만이거나 데이터가 아예 없으면 asset이
+      실패해 기존 `run_failure_sensor`(ADR-050)로 통지된다 — DB에 쓰지 않고
+      이미 정규화된 응답 필드 2개만 읽으므로 provider raw → DTO 변환(금지룰
+      3)에 해당하지 않는다. `apps/etl/pinvi/etl/{resources,schedules,
+      definitions,sensors}.py`에 배선. 순수 함수(`compute_oldest_known_at`,
+      `evaluate_retention_horizon`) + `httpx.MockTransport` 기반 fetch 함수
+      테스트 신규 9건 포함 `apps/etl` 전체 31건 green, ruff/mypy --strict
+      clean. **결과**: 배포 전(현재 실효 보존 2일)에는 항상 실패한다 —
+      의도된 동작이며, G-3이 실제로 15일로 연장된 뒤에도 외부 설정 회귀를
+      잡아내는 상시 감시로 남는다. 게이트 자체는 여전히 `kor-travel-weather`
+      소관(외부 선행 조건)이라 이 asset은 G-3을 해소하지 않는다.
 - [x] **T-366** — (P7, 게이트 G-2 해소) `docs/compliance/data-policy.md` §3-1
       신설(claude) — "날씨: 기상청" 단독 기재와 "모두 국내 정부/공공기관 —
       국외 이전 의무 발생 안 함" 선언을 실제 provider 구성(국내 5:

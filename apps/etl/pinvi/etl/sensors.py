@@ -25,6 +25,7 @@ from pinvi.etl.schedules import (
     pinvi_location_log_archive_job,
     pinvi_pii_retention_job,
     pinvi_telegram_system_outbox_job,
+    pinvi_weather_retention_horizon_job,
 )
 
 # ADR-050: app-owned Dagster job 전체를 실패 통지 대상으로 명시한다. monitored_jobs를
@@ -36,6 +37,7 @@ _MONITORED_JOBS = [
     pinvi_pii_retention_job,
     pinvi_location_log_archive_job,
     pinvi_telegram_system_outbox_job,
+    pinvi_weather_retention_horizon_job,
 ]
 
 OUTBOX_CATEGORY = "etl_run_failure"

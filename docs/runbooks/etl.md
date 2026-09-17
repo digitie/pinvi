@@ -34,8 +34,8 @@ apps/etl/
 │   └── etl/
 │       ├── __init__.py
 │       ├── definitions.py               # Dagster code location entry (sensors=[pinvi_run_failure_sensor])
-│       ├── resources.py                 # PinviDatabaseResource, KasiResource
-│       ├── schedules.py                 # KASI cron + email/telegram/retention/location cron
+│       ├── resources.py                 # PinviDatabaseResource, KasiResource, KorTravelWeatherResource
+│       ├── schedules.py                 # KASI cron + email/telegram/retention/location/weather cron
 │       ├── jobs.py                      # kasi_poi_rise_set_job (POI 출몰시각 one-shot)
 │       ├── sensors.py                   # pinvi_run_failure_sensor (ADR-050 실패 통지, T-291)
 │       └── assets/
@@ -44,7 +44,8 @@ apps/etl/
 │           ├── pinvi_kasi_special_days.py
 │           ├── pinvi_location_log_archive.py
 │           ├── pinvi_pii_retention.py
-│           └── pinvi_telegram_system_outbox.py
+│           ├── pinvi_telegram_system_outbox.py
+│           └── pinvi_weather_retention_horizon.py
 └── tests/
     ├── test_definitions.py
     ├── test_run_failure_sensor.py
@@ -52,7 +53,9 @@ apps/etl/
     ├── test_kasi_special_days.py
     ├── test_location_log_archive.py
     ├── test_pii_retention.py
-    └── test_telegram_system_outbox.py
+    ├── test_telegram_system_outbox.py
+    ├── test_resources.py
+    └── test_weather_retention_horizon.py
 ```
 
 계획(미구현 — `app` schema 소유 job 후보):
@@ -162,6 +165,24 @@ lifespan `telegram_outbox_worker_lifespan`이며, Dagster asset은 retry/backoff
 Admin summary 노출만 담당한다. metadata와 `/admin/etl/summary` 응답에는 category와 count만
 남기고 payload, message text, user id, chat id, token, last_error 원문은 넣지 않는다.
 
+### 3.5 Weather retention horizon guard asset (ADR-068 게이트 G-3, T-367)
+
+구현 상태(2026-09-17): `pinvi_weather_retention_horizon_guard` asset과
+`pinvi_weather_retention_horizon_job` schedule이 등록되어 있다. 매일 KST 05:00
+`kor-travel-weather`의 공개 read 표면(인증 불필요)을 호출해 **실효 보존**을
+직접 측정한다 — 그 서비스가 선언하는 설정값을 신뢰하지 않는다.
+
+측정 절차: 서울시청 좌표(37.5665, 126.9780)로 `GET /v1/weather/resolve`해 대표
+anchor `location_id`를 얻고, `GET /v1/weather/locations/{id}/forecast`를 **`from`
+없이** 호출한다 — 그 endpoint는 `from`을 생략하면 가장 오래된 행부터 열어 주므로
+(`docs/integrations/kor-travel-weather.md` §2), 살아남은 가장 오래된 행의
+`known_at`(없으면 `collected_at`)과 지금 사이 간격이 곧 실효 보존 일수다. 임계
+15일 미만이거나 데이터가 아예 없으면 asset이 실패한다. 배포 전(2026-09-17 현재
+실효 보존 2일)에는 항상 실패한다 — **의도된 동작**이다.
+
+DB에 쓰지 않고 kor-travel-weather의 이미 정규화된 응답 필드 2개만 읽으므로 provider
+raw → DTO 변환(ADR-068 관련 금지룰 3)에 해당하지 않는다.
+
 ## 4. Resource
 
 ```python
@@ -186,6 +207,16 @@ class KasiResource(ConfigurableResource):
 
     def create_client(self) -> AsyncKasiClient:
         return AsyncKasiClient(service_key=self.service_key, timeout=self.timeout)
+
+
+class KorTravelWeatherResource(ConfigurableResource):
+    """`kor-travel-weather` 공개 read 전용 최소 httpx client (T-367, 인증 불필요)."""
+
+    base_url: str
+    timeout: float = 10.0
+
+    def create_client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout)
 ```
 
 ## 5. Schedule
@@ -204,6 +235,10 @@ pinvi_location_log_archive_job = define_asset_job(
 pinvi_telegram_system_outbox_job = define_asset_job(
     "pinvi_telegram_system_outbox_job",
     selection=["pinvi_telegram_system_outbox"],
+)
+pinvi_weather_retention_horizon_job = define_asset_job(
+    "pinvi_weather_retention_horizon_job",
+    selection=["pinvi_weather_retention_horizon_guard"],
 )
 
 schedules = [
@@ -232,6 +267,12 @@ schedules = [
         cron_schedule="*/15 * * * *",
         execution_timezone="Asia/Seoul",
     ),
+    ScheduleDefinition(
+        name="pinvi_weather_retention_horizon_schedule",
+        job=pinvi_weather_retention_horizon_job,
+        cron_schedule="0 5 * * *",
+        execution_timezone="Asia/Seoul",
+    ),
 ]
 ```
 
@@ -251,6 +292,7 @@ KST 강제. import 시점 DB / 네트워크 접근 X.
 | `DATA_GO_KR_SERVICE_KEY`                   | KASI 등 data.go.kr 공통 서비스키                          |
 | `PINVI_KASI_SPECIAL_DAYS_LOOKBACK_MONTHS`  | `6`                                                       |
 | `PINVI_KASI_SPECIAL_DAYS_LOOKAHEAD_MONTHS` | `18`                                                      |
+| `PINVI_KOR_TRAVEL_WEATHER_BASE_URL`        | `http://localhost:14101` (T-367, 인증 불필요 공개 read)  |
 | `PINVI_SENTRY_DSN`                         | (선택)                                                    |
 
 `DATA_GO_KR_SERVICE_KEY`가 없으면 KASI live job은 skip/fail-fast 정책 중 하나를
