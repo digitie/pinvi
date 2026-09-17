@@ -1357,12 +1357,18 @@ class AdminFeatureOverridesResponse(BaseModel):
 
 
 class AdminFeatureWeatherMetric(WeatherMetric):
-    """Admin weather metric — 공개 metric에 Map dataset/knowledge provenance를 보존."""
+    """Admin weather metric — 공개 metric에 Map dataset/knowledge provenance를 보존.
 
-    provider_dataset_id: int
+    T-364(P5, ADR-068): `provider_dataset_id`·`dataset_display_name`·`known_at`을
+    nullable로 넓혔다 — `kor-travel-weather`는 `kor-travel-map`의 정수 dataset
+    registry가 없어 앞의 둘은 대응물이 없다(값을 지어내지 않는다, ADR-068 결정 2).
+    `dataset_key`는 두 소스 모두 갖고 있어 그대로 required다.
+    """
+
+    provider_dataset_id: int | None = None
     dataset_key: str
-    dataset_display_name: str
-    known_at: datetime
+    dataset_display_name: str | None = None
+    known_at: datetime | None = None
 
 
 class AdminFeatureWeatherValuesResponse(BaseModel):

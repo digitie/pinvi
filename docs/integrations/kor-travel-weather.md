@@ -438,20 +438,37 @@ Pinvi는 `app.trip_day_weather_snapshots` 같은 별도 스냅샷 테이블을 *
 - **공개 beach view**: `latest_weather`/`upcoming_index_forecasts`는 불투명
   passthrough라 소스 교체와 독립.
 
-### 4.6 `kind='weather'` feature는 그대로 남는다 (이원 구조)
+### 4.6 `kind='weather'` feature — (구) 이원 구조 → (신) map에서 완전히 소멸 예정
 
-`kor-travel-map`은 KMA 격자마다 weather-kind feature를 생성하고, Pinvi 지도는 그것을
-`WeatherMarker`로 그린다(`FeatureMapView.tsx`). 이관 후에도 map은 이 feature 생산을
-계속한다.
+**2026-09-17 개정 — 사용자 결정으로 이 절의 전제가 바뀌었다.** 원래 서술(T-360~T-362
+시점)은 "`kor-travel-map`이 KMA 격자마다 weather-kind feature를 계속 생성하고,
+Pinvi 지도는 그것을 `WeatherMarker`로 그리는 이원 구조(존재는 map, 값은 weather
+서비스)가 이관 후에도 유지된다"였다. **이제는 아니다**: `kor-travel-map`은
+**weather 관련 기능을 `kind='weather'` feature type을 포함해 완전히 제거할
+예정**이고, weather feature 개념 자체가 **Pinvi(=kor-travel-weather 소비)에만
+존재**하게 된다. **데이터 복원·하위 호환은 고려 대상이 아니다** — map 쪽 weather
+데이터/feature는 소급 보존 없이 사라진다.
 
-→ marker의 **존재·위치**는 map feature에서, marker에 채울 **값**은 weather 서비스에서
-오는 구조가 된다. `FeatureMapView.tsx`가 선택된 weather feature에 대해 호출하는 단건
-weather도 새 경로를 타야 한다.
+→ 이 변화가 만드는 새 공백: `FeatureMapView.tsx`가 지도에 `WeatherMarker`를 그릴
+때 "어디에 marker를 놓을지"는 지금 `kor-travel-map`의 `kind='weather'` feature
+inbounds 조회에서 온다. map이 그 feature type을 없애면 이 markers는 **조용히
+0개**가 된다 — Pinvi가 marker 위치를 알 다른 방법이 없기 때문이다.
+`kor-travel-weather`는 "feature"가 아니라 "location"(측정/앵커 지점) 개념만 갖고
+있으므로, marker 위치를 보여주려면 **`kor-travel-weather`의 location 목록을 지도
+viewport 기준으로 직접 조회하는 새 경로**가 필요하다 — 이는 단순 소스 교체가
+아니라 **새 기능**이다(해당 서비스가 bbox/nearby location 목록 API를 이미 갖고
+있는지부터 확인 필요, T-362/T-363 시점엔 조사하지 않았다).
 
-**T-362에서 확인**: `FeatureMapView.tsx`는 `featureApi(apiClient).weather(featureId)` →
-`GET /features/{id}/weather`만 호출하고, 그 경로·응답 셰입은 flag on/off 무관하게
-동일하다. 즉 **백엔드 라우터를 flag로 전환하는 것만으로 이 마커도 자동으로
-새 경로를 탄다** — 프론트 코드 변경이 필요 없었다.
+**범위 밖으로 남긴다 — 별도 설계 필요.** 이 문서(T-359~T-367)는 marker 위치 공급을
+다루지 않는다. map의 weather feature 제거 시점이 오기 전에 후속 설계·task를 새로
+연다(잠정 T-368, `docs/tasks.md` 참조). 그 전까지는 map이 계속 `kind='weather'`
+feature를 주므로 아래 T-362 확인 내용(값 채우기 경로)은 여전히 유효하다.
+
+**T-362에서 확인(값 채우기 경로, 여전히 유효)**: `FeatureMapView.tsx`는
+`featureApi(apiClient).weather(featureId)` → `GET /features/{id}/weather`만 호출하고,
+그 경로·응답 셰입은 flag on/off 무관하게 동일하다. 백엔드 라우터를 flag로 전환하는
+것만으로 이 마커의 **값**도 자동으로 새 경로를 탄다 — 프론트 코드 변경이 필요
+없었다. marker의 **존재**(위 공백)는 별개 문제다.
 (참고로 `FeatureMapView.tsx`의 `currentTempC`는 `/temp|기온|T1H|TMP|TMN|TMX/i`로
 느슨하게 매치해 상용 `TEMP`도 대소문자 무관 부분일치로 우연히 잡힌다 — 안전망이지
 설계는 아니다. `TripWeatherSummary.tsx`의 `WEATHER_RE`는 이런 여유가 없어 정규화를
@@ -459,7 +476,8 @@ weather도 새 경로를 타야 한다.
 바로 이 경로다.)
 
 `kind` enum 자체(`feature_suggestion` CHECK, MCP tool registry, Admin kind 필터)는
-map 소유이므로 건드리지 않는다.
+map 소유이므로 건드리지 않는다 — map이 `weather`를 enum에서 빼는 시점에 맞춰
+Pinvi 쪽도 같이 정리한다(T-368 범위).
 
 ### 4.7 영향 받는 파일 (이관 시 반드시 함께 보는 목록)
 

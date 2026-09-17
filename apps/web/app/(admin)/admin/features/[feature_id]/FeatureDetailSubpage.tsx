@@ -236,12 +236,14 @@ const weatherColumns: AdminTableColumn<AdminFeatureWeatherMetric>[] = [
     key: 'dataset',
     header: 'dataset',
     sortable: true,
-    sortValue: (row) => `${row.dataset_display_name}:${row.provider_dataset_id}:${row.dataset_key}`,
+    sortValue: (row) =>
+      `${row.dataset_display_name ?? ''}:${row.provider_dataset_id ?? ''}:${row.dataset_key}`,
     cell: (row) => (
       <div className="text-xs">
-        <div>{row.dataset_display_name}</div>
+        <div>{row.dataset_display_name ?? '—'}</div>
         <div className="font-mono text-muted">
-          #{row.provider_dataset_id} · {row.dataset_key}
+          {row.provider_dataset_id != null ? `#${row.provider_dataset_id} · ` : ''}
+          {row.dataset_key}
         </div>
       </div>
     ),
