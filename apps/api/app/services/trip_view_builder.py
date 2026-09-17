@@ -310,14 +310,15 @@ async def build_trip_view(
         # 위 feature batch(resolved_features/resolution_states/feature_batch_failed)는
         # 넘기지 않는다 — weather는 POI 자신의 feature_snapshot.coord만으로 완전히
         # 독립된 경로를 탄다(trip_weather_batch.py 모듈 docstring, 2026-09-17 방향 전환).
-        weather_by_day_index, weather_cards_by_day_index = (
-            await build_trip_weather_via_kor_travel_weather(
-                db,
-                pois=pois,
-                day_effective_date=day_effective_date,
-                weather_client=weather_client,
-                budget_seconds=_WEATHER_BATCH_VIEW_BUDGET_SECONDS,
-            )
+        (
+            weather_by_day_index,
+            weather_cards_by_day_index,
+        ) = await build_trip_weather_via_kor_travel_weather(
+            db,
+            pois=pois,
+            day_effective_date=day_effective_date,
+            weather_client=weather_client,
+            budget_seconds=_WEATHER_BATCH_VIEW_BUDGET_SECONDS,
         )
     else:
         weather_by_day_index = {day.day_index: {} for day in days}
@@ -351,9 +352,7 @@ async def build_trip_view(
                 async with asyncio.timeout(_WEATHER_BATCH_VIEW_BUDGET_SECONDS):
                     weather_batch_by_target = await kor_travel_map_client.get_weather_batch(
                         {
-                            target_at_by_date[effective_date]: list(
-                                pending_weather[effective_date]
-                            )
+                            target_at_by_date[effective_date]: list(pending_weather[effective_date])
                             for effective_date in weather_dates
                         },
                         known_at=known_at,

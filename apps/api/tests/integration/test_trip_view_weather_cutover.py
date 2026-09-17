@@ -349,7 +349,9 @@ async def test_flag_on_builds_card_and_shares_across_same_location(session_facto
     weather_client = _WeatherClient(
         resolutions={(lat, lon): _resolved(lat=lat, lon=lon, location_id="loc-1")},
         forecast_values={
-            "loc-1": (_weather_value(location_id="loc-1", metric_key="TEMP", target_at=_at(eff_date)),)
+            "loc-1": (
+                _weather_value(location_id="loc-1", metric_key="TEMP", target_at=_at(eff_date)),
+            )
         },
     )
 
@@ -386,7 +388,9 @@ async def test_flag_on_weather_ignores_retired_feature_state_when_snapshot_has_c
     weather_client = _WeatherClient(
         resolutions={(lat, lon): _resolved(lat=lat, lon=lon, location_id="loc-1")},
         forecast_values={
-            "loc-1": (_weather_value(location_id="loc-1", metric_key="TEMP", target_at=_at(eff_date)),)
+            "loc-1": (
+                _weather_value(location_id="loc-1", metric_key="TEMP", target_at=_at(eff_date)),
+            )
         },
     )
 
@@ -414,7 +418,9 @@ async def test_flag_on_weather_survives_feature_batch_failure(session_factory) -
     weather_client = _WeatherClient(
         resolutions={(lat, lon): _resolved(lat=lat, lon=lon, location_id="loc-1")},
         forecast_values={
-            "loc-1": (_weather_value(location_id="loc-1", metric_key="TEMP", target_at=_at(eff_date)),)
+            "loc-1": (
+                _weather_value(location_id="loc-1", metric_key="TEMP", target_at=_at(eff_date)),
+            )
         },
     )
 
@@ -447,7 +453,9 @@ async def test_flag_on_merges_full_source_location_bundle(session_factory) -> No
         },
         forecast_values={
             "loc-a": (),  # 대표 location에는 KMA 사실이 없다.
-            "loc-b": (_weather_value(location_id="loc-b", metric_key="TEMP", target_at=_at(eff_date)),),
+            "loc-b": (
+                _weather_value(location_id="loc-b", metric_key="TEMP", target_at=_at(eff_date)),
+            ),
         },
     )
 
@@ -515,7 +523,9 @@ async def test_flag_on_partial_location_failure_still_found(session_factory) -> 
             )
         },
         forecast_values={
-            "loc-b": (_weather_value(location_id="loc-b", metric_key="TEMP", target_at=_at(eff_date)),)
+            "loc-b": (
+                _weather_value(location_id="loc-b", metric_key="TEMP", target_at=_at(eff_date)),
+            )
         },
         failing_locations=frozenset({"loc-a"}),
     )
@@ -532,8 +542,10 @@ async def test_flag_on_partial_location_failure_still_found(session_factory) -> 
     assert [m["metric_key"] for m in day["weather_cards"]["loc-a"]["metrics"]] == ["TMP"]
 
 
-async def test_flag_on_total_location_failure_marks_unavailable_not_no_data(session_factory) -> None:  # type: ignore[no-untyped-def]
-    """"부분 실패는 추측하지 않는다" — 실패를 no_data로 지어내지 않고 unavailable로 둔다."""
+async def test_flag_on_total_location_failure_marks_unavailable_not_no_data(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    """ "부분 실패는 추측하지 않는다" — 실패를 no_data로 지어내지 않고 unavailable로 둔다."""
     settings.pinvi_kor_travel_weather_trip_view_enabled = True
     eff_date = date(2026, 10, 1)
     lat, lon = 37.5, 127.0
@@ -587,10 +599,16 @@ async def test_flag_on_date_slicing_and_no_date_fanout(session_factory) -> None:
         forecast_values={
             "loc-a": (
                 _weather_value(
-                    location_id="loc-a", metric_key="TEMP", value_number=10.0, target_at=_at(day1_date)
+                    location_id="loc-a",
+                    metric_key="TEMP",
+                    value_number=10.0,
+                    target_at=_at(day1_date),
                 ),
                 _weather_value(
-                    location_id="loc-a", metric_key="HUMIDITY", value_number=50.0, target_at=_at(day2_date)
+                    location_id="loc-a",
+                    metric_key="HUMIDITY",
+                    value_number=50.0,
+                    target_at=_at(day2_date),
                 ),
             )
         },

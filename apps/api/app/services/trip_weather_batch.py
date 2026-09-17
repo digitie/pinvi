@@ -123,7 +123,9 @@ async def build_trip_weather_via_kor_travel_weather(
     """
     day_indexes = sorted(day_effective_date)
     weather_by_day_index: dict[int, dict[str, dict[str, Any]]] = {di: {} for di in day_indexes}
-    weather_cards_by_day_index: dict[int, dict[str, dict[str, Any]]] = {di: {} for di in day_indexes}
+    weather_cards_by_day_index: dict[int, dict[str, dict[str, Any]]] = {
+        di: {} for di in day_indexes
+    }
 
     # 1) POI마다 좌표 유무만으로 대상 여부를 판정한다 — feature의 관리 상태(retired 등)는
     #    이 모듈이 알지도, 묻지도 않는다.
@@ -250,7 +252,10 @@ async def build_trip_weather_via_kor_travel_weather(
                         "source_styles": sorted({metric.forecast_style for metric in metrics}),
                         "metrics": [metric.model_dump() for metric in metrics],
                     }
-                weather_by_day_index[day_index][feature_id] = {"state": "found", "card_key": card_key}
+                weather_by_day_index[day_index][feature_id] = {
+                    "state": "found",
+                    "card_key": card_key,
+                }
             elif any_failed_by_card_key[card_key]:
                 weather_by_day_index[day_index][feature_id] = {"state": "unavailable"}
             else:
