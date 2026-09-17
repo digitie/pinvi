@@ -11,6 +11,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import ValidationError
 
+from app.api.v1.features import normalize_asof_query
 from app.clients.kor_travel_map import (
     KorTravelMapBadRequest,
     KorTravelMapConflict,
@@ -21,6 +22,8 @@ from app.clients.kor_travel_map import (
     KorTravelMapUnavailable,
 )
 from app.clients.kor_travel_map_admin import KorTravelMapAdminClientDep
+from app.clients.kor_travel_weather import OptionalKorTravelWeatherClientDep
+from app.core.config import settings
 from app.core.deps import DbSession
 from app.core.rbac import require_role
 from app.models.user import User
@@ -42,6 +45,7 @@ from app.schemas.admin import (
 )
 from app.schemas.envelope import Envelope
 from app.services.admin_audit import append_admin_audit
+from app.services.admin_weather_values import build_admin_feature_weather_values
 
 router = APIRouter(prefix="/admin/features", tags=["admin"])
 
@@ -457,17 +461,55 @@ async def get_feature_weather_values_endpoint(
     feature_id: str,
     _admin: Annotated[User, Depends(require_role("admin", "operator"))],
     admin_client: KorTravelMapAdminClientDep,
+    db: DbSession,
+    weather_client: OptionalKorTravelWeatherClientDep,
     asof: Annotated[
         datetime | None,
-        Query(description="미지원. Map Admin weather 계약은 현재값만 제공한다."),
+        Query(description="flag off면 미지원(Map Admin weather 계약은 현재값만 제공)."),
     ] = None,
 ) -> Envelope[AdminFeatureWeatherValuesResponse]:
-    """비공개 feature도 보이는 Map Admin 최신 weather card를 값 목록으로 투영.
+    """비공개 feature도 보이는 최신 weather card를 값 목록으로 투영.
 
-    Map Admin 경로는 `asof` query를 선언하지 않는다. FastAPI upstream이 모르는 query를
-    조용히 버리는 일을 막기 위해, 기존 Pinvi query가 오면 현재값으로 가장하지 않고 422로
-    명시 거부한다. Admin 시점 조회는 Map에 별도 계약이 생긴 뒤 복원한다.
+    T-364(P5, ADR-068): `pinvi_kor_travel_weather_admin_enabled`가 켜지면
+    `kor_travel_map_admin` 대신 `kor-travel-weather`를 쓴다 — 좌표는 admin feature
+    상세(`get_feature_detail`)에서 얻는다(POI 문맥이 없어 T-363의 "feature batch와
+    완전 분리"는 여기 적용되지 않는다, `admin_weather_values.py` 모듈 docstring).
+    `asof`도 T-362와 같은 축소 규칙(보존 2일)으로 지원한다.
+
+    flag off(구 경로)는 `asof` query를 선언하지 않는 Map Admin 계약 그대로 — FastAPI
+    upstream이 모르는 query를 조용히 버리는 일을 막기 위해 현재값으로 가장하지 않고
+    422로 명시 거부한다.
+
+    `weather_client`는 T-362/T-363과 동일하게 **optional** dependency다 — 필수로
+    선언하면 flag off인 기존 테스트까지 이 dependency를 항상 resolve하게 된다.
     """
+    if settings.pinvi_kor_travel_weather_admin_enabled:
+        if weather_client is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "code": "WEATHER_SERVICE_UNAVAILABLE",
+                    "message": "날씨 서비스가 일시적으로 사용 불가합니다.",
+                },
+            )
+        with _map_admin_errors():
+            detail_payload = await admin_client.get_feature_detail(feature_id)
+        detail = _validate_feature_detail(detail_payload)
+        lon, lat = detail.feature.lon, detail.feature.lat
+        if lon is None or lat is None:
+            return Envelope.of(AdminFeatureWeatherValuesResponse(feature_id=feature_id, asof=asof))
+        normalized_asof = normalize_asof_query(asof)
+        return Envelope.of(
+            await build_admin_feature_weather_values(
+                db,
+                feature_id=feature_id,
+                lat=lat,
+                lon=lon,
+                asof=normalized_asof,
+                weather_client=weather_client,
+            )
+        )
+
     if asof is not None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

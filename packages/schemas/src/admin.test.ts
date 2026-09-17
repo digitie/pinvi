@@ -70,15 +70,35 @@ describe('AdminFeatureWeatherValuesResponseSchema', () => {
     ],
   };
 
-  it('preserves required Admin weather dataset and knowledge provenance', () => {
+  it('preserves Admin weather dataset and knowledge provenance when present', () => {
     const parsed = AdminFeatureWeatherValuesResponseSchema.parse(response);
 
     expect(parsed.items[0]!).toMatchObject(response.items[0]!);
   });
 
-  it('rejects an Admin weather metric without provenance', () => {
+  it('T-364(ADR-068): kor-travel-weather source has no provider_dataset_id/dataset_display_name/known_at — nullable, defaults to null', () => {
     const metric = { ...response.items[0] };
+    delete (metric as Partial<typeof metric>).provider_dataset_id;
+    delete (metric as Partial<typeof metric>).dataset_display_name;
     delete (metric as Partial<typeof metric>).known_at;
+
+    const parsed = AdminFeatureWeatherValuesResponseSchema.safeParse({
+      ...response,
+      items: [metric],
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.items[0]).toMatchObject({
+        provider_dataset_id: null,
+        dataset_display_name: null,
+        known_at: null,
+      });
+    }
+  });
+
+  it('still rejects an Admin weather metric missing dataset_key — both sources always have it', () => {
+    const metric = { ...response.items[0] };
+    delete (metric as Partial<typeof metric>).dataset_key;
 
     expect(
       AdminFeatureWeatherValuesResponseSchema.safeParse({ ...response, items: [metric] }).success,
