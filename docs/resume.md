@@ -1,5 +1,36 @@
 # resume.md
 
+## 2026-09-18 (claude) — M05/T-VN-41 저장소간 모순 정리 (문서만, 코드 변경 없음)
+
+사용자 지시: "m05 완료되었는지 kor travel map까지 확인해서 조사" → "저장소간
+모순부터 정리". pinvi/kor-travel-map/kor-travel-docker-manager 세 저장소를
+조사(workflow 병렬 조사 + 직접 재검증)해 `docs/tasks.md`/`docs/tasks-done.md`를
+갱신했다. **어느 저장소도 코드/설정을 편집하지 않았다** — 순수 문서 정리다.
+상세 근거는 `docs/journal.md` 최신 항목.
+
+- Pinvi `docs/tasks.md`에서 18일간 갱신 누락됐던 완료 4건
+  (`T-VN-41F1D-D1/E/D2`, `T-VN-M05-MAP-HEALTH-TRANSPORT`)을 `tasks-done.md`로
+  이관 — `kor-travel-map`의 명확한 날짜·근거 기록 근거.
+- `T-VN-41C`는 기술 blocker가 아니라 2026-09-07 owner timing 결정(보류)임을
+  명시.
+- **미해소 진짜 모순 2건은 임의로 닫지 않고 `docs/tasks.md`에 양쪽 근거를
+  병기**: `T-VN-M05-EXECUTION-IDENTITY-V6`(Map `[x]` 8/31 vs
+  kor-travel-docker-manager `[/]`), `T-VN-M05-ACTIVATION`(Map `[x]` 9/8 vs
+  kor-travel-docker-manager `[ ]`, "남은 판정은 소유자 몫"). 다음 단계는
+  ktdctl 쪽 실행 트리거 재가동 + 사람 오너 sign-off — **Pinvi 세션이
+  단독으로 트리거할 일이 아니다**(이 M05 클러스터는 역사적으로 거의 전부
+  "(codex)" 저자, 별도 `kor-travel-docker-manager-e8` peer 세션도 존재).
+- 부수 발견: `kor-travel-map`의 `docs/tasks-done.md` line 577에 미해결 git
+  merge conflict marker가 origin/main에 커밋돼 있음(commit `ae547dead7`,
+  2026-08-31, 작성자 digitie 본인) — Pinvi 소관 밖이라 기록만 남기고 그
+  저장소는 건드리지 않았다.
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+- 이번 변경은 문서 전용이다 — 커밋 전 별도 테스트 불필요, 다만 pre-push
+  보안 스캔은 여전히 표준 절차대로 수행할 것.
+- M05 activation을 실제로 트리거할지는 여전히 사용자 판단 대기 중이다.
+- 남은 백로그: T-VN-H49(설계 미착수), T-320(모바일, VWorld 키+디바이스 필요).
+
 ## 2026-09-18 (claude) — T-365 완료. 날씨 소스 이관(T-359~T-368) 전체 완료
 
 사용자가 "진행. g1은 더 개선 불가"로 명시 승인해, G-1(KMA 전국 커버리지)이

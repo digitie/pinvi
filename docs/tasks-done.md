@@ -7,6 +7,51 @@
 
 ## 2026-09-18
 
+- [x] **T-VN-41F1D-D1** — 최종 격리 리허설·provenance attestation
+      (`kor-travel-map` 저장소 `docs/tasks-done.md`가 2026-09-04 완료로 기록).
+      여섯 요구가 전부 candidate `e6b52db4`에서 충족됐다 — 일곱 image ID가 실행
+      중 컨테이너와 일치, 세 schema head 대조, v8 `cancel_probe`의 canonical
+      `409 PIPELINE_CANCELLATION_UNSAFE`/`finalized`, `resolved_compose_sha256`·
+      `pinset`·`e2e025` OpenAPI exact 대조, 데이터 비의존 admin UI smoke 11
+      passed. 격리 M04/M05 attestation은 `e2e025`가 `status: passed`로 발행.
+      **Pinvi 쪽 `docs/tasks.md`는 이 완료를 반영하지 못한 채 `[ ]`로 18일간
+      남아 있었다** — 2026-09-18 교차 저장소 감사(사용자 요청 "저장소간 모순부터
+      정리")로 발견해 이관한다. Pinvi 자체 검증은 하지 않았고 `kor-travel-map`의
+      기록을 근거로 신뢰한다.
+- [x] **T-VN-41F1D-E** — 구 generation 퇴역·v6/v8 attestation 전환
+      (`kor-travel-map` 저장소 기록, 2026-09-06 완료). 저장소측은 2026-08-25에
+      끝났고 남은 "n150 data-dependent" 항목까지 마저 닫혔다. D1과 같은 이유로
+      Pinvi `docs/tasks.md`에서 갱신 누락됐다가 이관.
+- [x] **T-VN-41F1D-D2** — data-dependent Map/PinVi admin live E2E + receipt 승격
+      (`kor-travel-map` 저장소 기록, 2026-09-06 완료). 배포 스택에서 lane이
+      `phase: passed`/`status: complete`로 닫혔다. `T-VN-FINAL-REBUILD`(Map,
+      2026-09-04 해제)가 연 배리어가 `T-VN-41F1D-D1 → -E → -D2 → T-VN-41C` 순서로
+      풀렸다고 Map 쪽에 명시돼 있다 — D1/E/D2는 모두 닫혔고 `T-VN-41C`만 열려
+      있다(아래 `docs/tasks.md`에 보류 상태로 유지, 오너 지시 2026-09-07).
+- [x] **T-VN-M05-MAP-HEALTH-TRANSPORT** — Map host-loopback health transport
+      terminal 원인 규명·보정 완료(`kor-travel-map` 저장소 기록, 2026-08-31
+      완료). 원인은 Compose override의 `ports: !reset`(빈 값으로 되돌리는 태그,
+      의도는 `!override`) 한 줄 — host publish socket이 애초에 없어 네
+      candidate(`9b6eab1e…`/`41be91fe…`/`5512ce12…`/`b46743ea…`)가 서로 다른
+      revision에서 동일 지점에 멈췄다. 보정 후 phase가 PinVi 경계까지
+      전진했다. Pinvi `docs/tasks.md`가 갱신되지 않은 채 남아 있던 것을
+      2026-09-18 교차 저장소 감사로 이관.
+
+  **2026-09-18 M05/T-VN-41 교차 저장소 감사 요약** (사용자 요청): pinvi/
+  kor-travel-map/kor-travel-docker-manager 세 저장소의 `docs/tasks.md`·
+  `tasks-done.md`·`journal.md`를 workflow로 병렬 조사했다. 위 4건은 Map 쪽에
+  명확한 날짜·근거가 있고 다른 저장소의 경합하는 "아직 열림" 주장이 없어
+  이관했다. 반면 `T-VN-M05-EXECUTION-IDENTITY-V6`와 `T-VN-M05-ACTIVATION`은
+  Map은 `[x]` 완료로 기록했지만 실 구현 저장소인 `kor-travel-docker-manager`는
+  여전히 열려 있고 종결 기록이 없어 **이관하지 않고** `docs/tasks.md`에
+  미해소 모순으로 명시했다 — 같은 "M05" 라벨이 저장소마다 다른 범위(ktdctl 쪽
+  execution-identity 게이트 vs Map의 자체 attestation + ADR-097 dedup
+  프로토콜)를 가리켜 혼선이 생겼다. `kor-travel-map` 저장소 자체의
+  `docs/tasks-done.md`에도 무관한 결함을 하나 발견했다 — line 577에 미해결
+  git merge conflict marker(`|||||||`, commit `ae547dead7`, 2026-08-31,
+  "parent of c7360b8e")가 그대로 커밋돼 있다. Pinvi가 고칠 파일이 아니므로
+  여기 기록만 남기고 그 저장소는 건드리지 않았다.
+
 - [x] **T-365** — (P6, 최종) flag 3개 완전 삭제 + 구 `kor-travel-map` 날씨 경로
       전량 제거 — `kor-travel-weather`가 유일한 날씨 소스가 됐다(ADR-068 결정
       13, T-359~T-368 전체 완료). N150 프로덕션 재실측: KMA 격자 앵커
