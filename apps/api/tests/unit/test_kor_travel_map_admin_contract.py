@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.schemas.admin import AdminFeatureDetailCuration, AdminFeatureWeatherMetric
+from app.schemas.admin import AdminFeatureDetailCuration
 from tests.unit._kor_travel_map_snapshot_pin import (
     SNAPSHOT,
     SNAPSHOT_SHA256,
@@ -214,22 +214,15 @@ def test_admin_feature_paths_auth_responses_and_query_sets_are_exact() -> None:
     operations = {
         "/v1/admin/features": spec["paths"]["/v1/admin/features"]["get"],
         "/v1/admin/features/{feature_id}": spec["paths"]["/v1/admin/features/{feature_id}"]["get"],
-        "/v1/admin/features/{feature_id}/weather": spec["paths"][
-            "/v1/admin/features/{feature_id}/weather"
-        ]["get"],
     }
     assert all(operation["security"] == [{"AdminBFF": []}] for operation in operations.values())
     assert _query_names(operations["/v1/admin/features"]) == _ADMIN_FEATURE_QUERY_PARAMETERS
     assert _query_names(operations["/v1/admin/features/{feature_id}"]) == set()
-    assert _query_names(operations["/v1/admin/features/{feature_id}/weather"]) == set()
     assert _response_ref(operations["/v1/admin/features"]) == (
         "#/components/schemas/AdminFeaturesListResponse"
     )
     assert _response_ref(operations["/v1/admin/features/{feature_id}"]) == (
         "#/components/schemas/AdminFeatureDetailResponse"
-    )
-    assert _response_ref(operations["/v1/admin/features/{feature_id}/weather"]) == (
-        "#/components/schemas/FeatureWeatherResponse"
     )
 
 
@@ -370,36 +363,3 @@ def test_admin_feature_state_axes_transition_and_curation_shapes_are_pinned() ->
         "item_summary",
     ):
         assert {"type": "null"} in curation["properties"][name]["anyOf"]
-
-
-def test_admin_weather_card_keeps_the_fields_pinvi_projects() -> None:
-    spec = _spec()
-    weather_response = _schema(spec, "FeatureWeatherResponse")
-    assert weather_response["properties"]["data"]["$ref"] == (
-        "#/components/schemas/WeatherCardData"
-    )
-    weather = _schema(spec, "WeatherCardData")
-    assert {"feature_id", "is_stale", "source_styles", "metrics"} <= set(weather["required"])
-    assert {"selected_at", "latest_at"} <= set(weather["properties"])
-    assert {
-        tuple(sorted(item.items())) for item in weather["properties"]["selected_at"]["anyOf"]
-    } == {
-        (("format", "date-time"), ("type", "string")),
-        (("type", "null"),),
-    }
-    assert weather["properties"]["metrics"]["items"]["$ref"] == (
-        "#/components/schemas/WeatherMetricOut"
-    )
-    metric = _schema(spec, "WeatherMetricOut")
-    required_metric_fields = {
-        "forecast_style",
-        "metric_key",
-        "provider_dataset_id",
-        "dataset_key",
-        "dataset_display_name",
-        "known_at",
-    }
-    assert set(metric["required"]) == required_metric_fields
-    assert required_metric_fields <= set(AdminFeatureWeatherMetric.model_fields)
-    assert metric["properties"]["provider_dataset_id"]["type"] == "integer"
-    assert metric["properties"]["known_at"]["format"] == "date-time"

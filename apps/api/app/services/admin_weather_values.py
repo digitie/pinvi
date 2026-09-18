@@ -12,10 +12,9 @@ dataset registry에서 왔고 `kor-travel-weather`에는 대응물이 없다 —
 
 **`asof` 지원(ADR-068 결정 2 두 번째 예외 재검토)**: 구 `kor_travel_map_admin` 경로는
 `asof` query 자체를 선언하지 않아 항상 422였다(Map Admin 계약이 현재값만 주므로).
-`kor-travel-weather` 기반 transport는 T-362와 동일하게 시점 조회가 가능하므로, flag on
-에서는 T-362와 같은 축소 규칙(`weather_card._asof_window` — 보존 2일, 어제 이전은
-`no_data`)을 그대로 적용해 **허용한다**. flag off(구 경로)는 기존 422를 유지한다 — Map
-Admin transport 자체가 여전히 그 파라미터를 모르기 때문이다.
+`kor-travel-weather` 기반 transport는 T-362와 동일하게 시점 조회가 가능해, T-362와
+같은 축소 규칙(`weather_card._asof_window` — 대상 서비스 보존 지평 밖은 `no_data`)을
+그대로 적용해 **허용한다**(T-365에서 구 경로·422 거부를 완전히 제거했다).
 
 T-362(단건 사용자 경로)와 마찬가지로 이 endpoint는 POI 문맥이 없는 bare `feature_id`
 하나만 받으므로 좌표를 알 방법이 `kor_travel_map_admin.get_feature_detail`뿐이다 —

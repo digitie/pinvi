@@ -123,13 +123,9 @@ kor-travel-map 호출: `GET /v1/features/{feature_id}` (`name`, 구조화 `addre
 
 ### 2.3 `GET /features/{feature_id}/weather`
 
-해당 좌표/지점의 날씨 (관측 + 예보 + 특보).
-
-> **소스 이관 진행 중 (ADR-068, T-362)**: `pinvi_kor_travel_weather_single_feature_enabled`
-> flag로 전환한다. **기본값은 아직 `false`**(G-1/G-2/G-3 게이트 전) — 운영은 계속
-> `kor-travel-map`에서 받는다. **경로·응답 셰입은 두 소스가 같다**(교체는 API 내부에
-> 가둔다). 다만 `asof`의 **동작 범위가 좁아진다** — 아래 참조. 설계는
-> [`docs/integrations/kor-travel-weather.md`](../integrations/kor-travel-weather.md).
+해당 좌표/지점의 날씨 (관측 + 예보 + 특보). 소스는 `kor-travel-weather`다(ADR-068 —
+T-362~T-365로 `kor-travel-map`에서 완전히 이관했다. 구 소스·flag는 더 남아있지 않다).
+설계는 [`docs/integrations/kor-travel-weather.md`](../integrations/kor-travel-weather.md).
 
 ```http
 GET /features/{feature_id}/weather?asof=2026-06-02T14:00:00+09:00
@@ -138,35 +134,24 @@ GET /features/{feature_id}/weather?asof=2026-06-02T14:00:00+09:00
 `asof`(선택): 보고 싶은 **관측/예보 시각**(valid time). 생략하면 최신 카드.
 offset을 붙인 KST 값(`+09:00`)을 권장한다 — offset 없이 보내면 서버가 **KST(Asia/Seoul)로
 해석**하고(`app/api/v1/features.py normalize_asof_query`), offset이 있으면 그대로 존중한다.
-(예전에는 offset 없는 값을 UTC로 읽어 9시간 어긋난 시점이 돌아왔다.)
 
-**`asof`를 주면 upstream 경로가 달라진다.** Pinvi는 `asof` 없이는 kor-travel-map
-`GET /v1/features/{id}/weather`(query 없음)를, `asof`가 있으면 bitemporal 시점 경로
-`GET /v1/features/{id}/weather/snapshot`을 호출한다. 후자는 `target_at`(=Pinvi `asof`,
-valid time)과 `known_at`(knowledge time = 호출 시각, "지금 아는 최신 지식")을 **둘 다 필수**로
-받는다. Pinvi는 knowledge 축을 사용자에게 노출하지 않는다 — 시점 축은 `asof` 하나뿐이다.
-(`GET …/weather`에는 시각 query가 아예 없어서 예전처럼 `?asof=`를 붙이면 조용히 무시되고 늘
-최신 카드가 돌아왔다 — kor-travel-map bitemporal cutover `6650aa71`.)
+`kor-travel-weather`에는 시점 재현(snapshot) 엔드포인트가 없고 보존이 15일이다
+(ADR-068, T-366/G-2). `asof`가 **보존 기간 이전**이면 location 해석조차 시도하지
+않고 빈 카드(`metrics: []`)를 준다 — 404/422가 아니라 조용한 no_data다. 그 외(오늘~예보
+가능 범위)는 그 날짜 하루 구간의 예보로 좁혀 응답한다. `asof` 없음(기본, 가장 흔한
+경로)은 현재값 + 가까운 며칠 예보를 합친다.
 
-> **flag on일 때 `asof`가 동작을 바꾼다(ADR-068 §3.1-(1)).** `kor-travel-weather`에는
-> 시점 재현(snapshot) 엔드포인트가 없고 보존이 2일이다. `asof`가 **어제(KST) 이전**이면
-> location 해석조차 시도하지 않고 빈 카드(`metrics: []`)를 준다 — 404/422가 아니라
-> 조용한 no_data다. 그 외(오늘~예보 가능 범위)는 그 날짜 하루 구간의 예보로 좁혀
-> 응답한다. `asof` 없음(기본, 가장 흔한 경로)은 현재값 + 가까운 며칠 예보를 합친다.
-> 지난 여행 상세를 열람하는 흔한 사용 패턴에서 이 축소가 체감된다 — T-366(G-2)에서
-> 대상 서비스 보존이 15일로 늘어난 뒤에도 15일보다 오래된 조회는 여전히 빈 카드다.
+`kor-travel-weather` client가 (설정 오류 등으로) 주입되지 않은 경우 `503
+WEATHER_SERVICE_UNAVAILABLE`을 반환한다.
 
-응답 200 — kor_travel_map는 **평탄한 metric 목록 + `forecast_style` 태그**를 준다(KMA
-시간축 그룹핑은 프런트 표현 계층):
+응답 200 — **평탄한 metric 목록 + `forecast_style` 태그**를 준다(KMA 시간축 그룹핑은
+프런트 표현 계층):
 
 ```jsonc
 {
   "data": {
     "feature_id": "...",
-    // 응답의 `asof`는 요청 `asof`의 에코가 아니라 **서버가 실제로 고른 시각**이다.
-    // 소스는 kor-travel-map `WeatherCardData.selected_at`(구 `asof`가 `6650aa71`에서 개명).
-    // Pinvi 공개 필드 이름만 `asof`로 유지하고 소스를 갈아끼웠다.
-    "asof": "2026-06-10T12:00:00+09:00", // null 가능
+    "asof": "2026-06-10T12:00:00+09:00", // null 가능 — 요청 asof의 에코가 아니라 서버가 실제로 고른 시각
     "latest_at": "2026-06-10T11:00:00+09:00", // null 가능
     "is_stale": false,
     "source_styles": ["nowcast", "short"],
@@ -190,8 +175,8 @@ valid time)과 `known_at`(knowledge time = 호출 시각, "지금 아는 최신 
 ```
 
 프런트는 `forecast_style` 별로 metric을 그룹핑해 한 카드로 표시한다. Pinvi가
-별도 KMA provider 변환을 직접 구현하지 않는다(금지룰). 날씨 제공 여부/필드는
-kor-travel-map 최신 `openapi.user.json` 계약을 따른다.
+별도 KMA/AirKorea provider 변환을 직접 구현하지 않는다(금지룰 — `kor-travel-weather`에
+위임).
 
 ### 2.4 `GET /features/nearby`
 

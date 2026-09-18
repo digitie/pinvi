@@ -209,7 +209,7 @@ FeatureDetailCard = Annotated[
 
 
 class WeatherMetric(BaseModel):
-    """kor_travel_map 평탄 weather metric — `forecast_style` 태그로 카드 그룹핑(표현 계층)."""
+    """`kor-travel-weather` 평탄 weather metric — `forecast_style` 태그로 카드 그룹핑(표현 계층)."""
 
     metric_key: str
     metric_name: str | None = None
@@ -230,10 +230,11 @@ class WeatherMetric(BaseModel):
 
 
 class FeatureWeatherCard(BaseModel):
-    """weather 응답 — `GET /features/{id}/weather` (kor_travel_map `WeatherCardData` 투영).
+    """weather 응답 — `GET /features/{id}/weather` (`kor-travel-weather` 사실 투영, T-362/T-365).
 
-    kor_travel_map는 평탄 `metrics` 목록 + `source_styles`를 준다. 프런트는 `forecast_style`
-    별로 그룹핑해 카드를 구성한다(KMA provider 변환을 Pinvi가 직접 작성하지 않음).
+    구 `kor_travel_map` 셰입을 그대로 유지한 채 소스만 이관했다(ADR-068) — 평탄
+    `metrics` 목록 + `source_styles`를 주고, 프런트는 `forecast_style`별로 그룹핑해
+    카드를 구성한다(provider 변환을 Pinvi가 직접 작성하지 않음).
     """
 
     feature_id: str = Field(min_length=1, max_length=200)

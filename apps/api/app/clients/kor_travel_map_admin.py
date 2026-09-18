@@ -508,10 +508,6 @@ class KorTravelMapAdminClient:
         """GET /v1/admin/features/{id} — admin feature 상세 data 반환."""
         return self._data(await self._send("GET", f"/v1/admin/features/{feature_id}"))
 
-    async def get_feature_weather(self, feature_id: str) -> dict[str, Any]:
-        """GET /v1/admin/features/{id}/weather — 비공개 feature 포함 최신 weather card."""
-        return self._data(await self._send("GET", f"/v1/admin/features/{feature_id}/weather"))
-
     async def _feature_revision_etag(self, feature_id: str) -> str:
         """stable revision GET의 canonical ETag를 mutation precondition으로 보존한다."""
         resp = await self._send("GET", f"/v1/admin/features/{feature_id}/revision")

@@ -1,5 +1,53 @@
 # resume.md
 
+## 2026-09-18 (claude) — T-365 완료. 날씨 소스 이관(T-359~T-368) 전체 완료
+
+사용자가 "진행. g1은 더 개선 불가"로 명시 승인해, G-1(KMA 전국 커버리지)이
+원래 기준(~9%, 수도권·강원 위주)을 채우지 못한 상태를 영구 수용하고 T-365를
+진행·완료했다. G-2(T-366)는 이미 해소, G-3(T-367 guard)은 실효 보존 약
+9.6일로 15일 목표를 향해 자연 증가 중이라 두 게이트는 이 결정을 막지
+않았다.
+
+- 세 flag(`pinvi_kor_travel_weather_{single_feature,trip_view,admin}_enabled`)를
+  기본값 전환이 아니라 **완전히 삭제**하고, `kor_travel_map.py`/
+  `kor_travel_map_admin.py`의 구 날씨 client 메서드·dataclass·decode 헬퍼를
+  전량 삭제했다. `features.py`/`admin/features.py`의 weather 엔드포인트는
+  `OptionalKorTravelWeatherClientDep` + 명시적 503 체크를 유지해 기존 test
+  override 계약(`get_optional_kor_travel_weather_client`)을 보존했다.
+- `build_trip_view`의 `weather_client`는 계속 Optional — MCP tool registry가
+  weather client를 주입하지 않으므로, 미주입 시 POI마다 균일하게
+  `unavailable`로 표시하는 fallback을 신설했다(feature 해석 상태와 무관).
+- 테스트 13개 파일에서 구 flag/kor_travel_map weather 경로 관련 코드를
+  정리했다 — 전체 `mypy --strict .` 스윕에서 `test_feature_mapping.py`가
+  삭제된 `_weather_from_kor_travel_map`을 여전히 import하던 실제 누락을
+  찾아 수정했다(개별 파일 검증만으로는 놓쳤을 회귀).
+- 문서: `docs/decisions.md`(ADR-068 결정 13), `docs/integrations/kor-travel-weather.md`
+  (전면 갱신 — 상태 배너, §7-4 신설), `docs/api/features.md`/`docs/api/admin.md`
+  (flag/이관-진행-중 프레이밍 제거), `docs/tasks.md`(날씨 이관 섹션 제거),
+  `docs/tasks-done.md`(T-365 항목 추가).
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+
+- **G-1은 앞으로도 부분 상태(~9%)로 남을 수 있다** — `kor-travel-weather`
+  저장소 쪽에서 KMA anchor를 확장하면 Pinvi 쪽 추가 작업 없이 자동으로
+  개선된다(Pinvi는 이 이상 밀어붙이지 않기로 했다).
+- **T-368의 `pinvi_kor_travel_weather_map_markers_enabled` flag는 별도**이고
+  T-365가 건드리지 않았다 — 기본 `false`인 채로 남아 있다.
+- 브랜치 `agent/claude-t365-scoping`가 아직 PR로 올라가지 않았다면, 커밋 전
+  `apps/api` 전체 `ruff check`/`ruff format --check`/`mypy --strict`와 전체
+  `pytest` 스위트가 green인지 재확인할 것 — T-365 세션에서 이미 확인했지만
+  후속 세션이 이어받을 경우 재검증이 안전하다.
+- **적대적 리뷰(fork agent)가 실제 버그 하나를 더 찾았다** —
+  `weather_client is None` fallback이 effective_date 없는 day를
+  `trip_weather_batch.py`의 live 경로와 다르게(누락 없이 전부 포함) 처리하던
+  문제. 수정 + 회귀 테스트(`test_build_trip_view_weather_client_none_omits_undated_day`)
+  추가 완료 — `docs/journal.md` 최신 항목 참조.
+
+**전체 `pytest -q` green 확인 완료(2142 passed, 3 skipped, 0 failed)**.
+**다음 한 작업**: pre-push 보안 스캔(`git diff --cached` 비밀값 grep) → 커밋 →
+`agent/claude-t365-scoping` push → `gh pr create` → CI green 확인 → squash
+merge.
+
 ## 2026-09-18 (claude) — mobile-doctor 해소 + G-1·G-3 재실측(부분 진행, T-365 보류)
 
 mobile-doctor CI 경고(expo SDK 57 패키지 버전 드리프트)를 `npx expo install

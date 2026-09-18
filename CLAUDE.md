@@ -129,8 +129,9 @@ ADR-064 (좌표 범위는 사각형 둘, 행정구역 폴리곤 미도입),
 ADR-065 (Alembic 이력 0100/0101 재기준화),
 ADR-066 (Next.js 16 프로덕션 빌드는 Turbopack이 아니라 webpack),
 ADR-067 (Odroid 퇴역, N150 단일 운영),
-**ADR-068** (날씨 소스를 `kor-travel-map` → `kor-travel-weather`로 이관 — 공개 계약은
-불변, cutover는 기상청 커버리지 게이트 G-1 조건부).
+**ADR-068** (날씨 소스를 `kor-travel-map` → `kor-travel-weather`로 완전 이관 —
+공개 계약은 불변, 2026-09-18 T-365로 완료. 기상청 커버리지 게이트 G-1은 원래
+기준 미달인 부분 상태(~9%)를 사용자 결정으로 영구 수용).
 다음 신규 = ADR-069. **TDR(Trip Detail Rewrite)** 마스터 계획 = `docs/execplan/trip-detail-rewrite.md`.
 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
@@ -211,7 +212,7 @@ lint` + `npm run typecheck` (`apps/web`, Linux) + Playwright는 N150 전용 +
 | API endpoint 구현 / 변경                        | `docs/api/<도메인>.md` + `docs/api/common.md`                                                                                                  |
 | DB schema 변경                                  | `docs/postgres-schema.md` + `docs/conventions/database.md`                                                                                     |
 | kor-travel-map OpenAPI 호출 (feature 데이터)    | `docs/integrations/kor-travel-map-rest-api.md` (REST 계약 정본 + 연결 작업) + `docs/kor-travel-map-integration.md` (패턴 개요)                 |
-| 날씨 (소스 이관 설계)                           | `docs/integrations/kor-travel-weather.md` (ADR-068, `kor-travel-map` → `kor-travel-weather`) + `docs/execplan/t-359-weather-source-cutover.md` |
+| 날씨 (`kor-travel-weather` 연동)                | `docs/integrations/kor-travel-weather.md` (ADR-068, 이관 완료) + `docs/execplan/t-359-weather-source-cutover.md` |
 | Geocoding (주소/좌표/행정구역)                  | `docs/integrations/kor-travel-geo.md` (ADR-025, kor-travel-geo v2 REST 직접) + `docs/architecture/geocoding-open-decisions.md`                 |
 | 외부 통합 (이메일/OAuth/AI companion 호출 계약) | `docs/integrations/<서비스>.md`                                                                                                                |
 | Frontend UI                                     | `docs/architecture/frontend.md` + `DESIGN.md`                                                                                                  |

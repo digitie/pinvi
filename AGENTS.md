@@ -429,16 +429,17 @@ Telegram에 간단한 완료 요약과 PR 링크를 보낸다. PR이 없는 문�
 - 지도 좌표·CRS 정책 (`coord_5179` 반경 검색 등)
 - Coverage / 정합성 / OpenAPI gate (자체 CI)
 
-### `kor-travel-weather` 책임 (별 저장소, 공개 REST — 이관 예정, ADR-068)
+### `kor-travel-weather` 책임 (별 저장소, 공개 REST — 유일한 날씨 소스, ADR-068)
 
 - 날씨 provider 원천 → DTO 변환 (KMA, AirKorea, KHOA, 산림청, 도로공사, 상용 provider)
 - 날씨 사실 저장·보존, location 카탈로그와 `location_id` 안정성
 - 좌표 → 관측/예보 지점 해석(`/v1/weather/resolve`)
 
 Pinvi는 이 서비스의 공개 REST를 **소비만** 한다. 날씨 원천 파싱을 Pinvi에 작성하지
-않는 원칙은 `kor-travel-map`과 동일하며, 위임처만 바뀐다. **전환은 기상청 커버리지
-게이트(G-1) 조건부**이며 현재 운영 날씨는 아직 `kor-travel-map`에서 온다 —
-`docs/integrations/kor-travel-weather.md`.
+않는 원칙은 `kor-travel-map`과 동일하며, 위임처만 바뀐다. **이관 완료(T-365,
+2026-09-18)** — `kor-travel-map`에는 날씨 관련 코드가 남아있지 않다. 기상청
+커버리지 게이트(G-1)는 원래 기준 미달(~9%)인 채로 사용자 결정에 따라 영구
+수용했다 — `docs/integrations/kor-travel-weather.md` §7-4.
 
 본 저장소의 코드가 위 책임을 침범하지 않는지 모든 PR에서 자가 검토한다.
 

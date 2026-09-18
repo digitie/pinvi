@@ -11,9 +11,10 @@ feature batch(POI 존재·좌표·마커 표시용, `kor_travel_map.get_features
 - weather 조회는 그 요청에서 `kor_travel_map` feature batch가 성공했는지, 그 feature가
   `retired`/`suppressed`/`missing`인지와 **무관**하다 — feature의 관리 상태가 어떻든
   POI가 좌표를 들고 있는 한 그 물리적 지점의 날씨를 그대로 보여준다(날씨는 장소의
-  행정 상태를 모른다). 이 경로가 내는 상태는 `found`/`no_data`/`unavailable` 셋뿐이고
-  `retired`/`suppressed`/`missing`은 내지 않는다(그 상태들은 flag off일 때의 구
-  `kor_travel_map` 경로에서만 나온다).
+  행정 상태를 모른다). 이 경로가 내는 상태는 `found`/`no_data`/`unavailable` 셋뿐이다
+  — weather_client 미주입(`trip_view_builder.py`) 시에도 균일하게 `unavailable`이지
+  feature 상태를 반영하지 않는다(T-365에서 구 `kor_travel_map` 날짜별 batch 경로와
+  그 5-state 투영을 완전히 제거했다).
 - feature batch(`get_features`) 호출이 이번 요청에서 실패하거나 아예 스킵돼도 weather
   조회는 영향받지 않는다 — snapshot에 좌표가 있으면 그대로 시도한다.
 

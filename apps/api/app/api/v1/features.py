@@ -34,7 +34,6 @@ from app.clients.kor_travel_map import (
 from app.clients.kor_travel_weather import OptionalKorTravelWeatherClientDep
 from app.clients.naver_local import NaverLocalClient, NaverLocalClientDep, NaverLocalError
 from app.core.bbox import MAX_ZOOM, MIN_ZOOM, parse_bbox
-from app.core.config import settings
 from app.core.consent_deps import assert_location_consent, require_location_consent
 from app.core.coord_range import (
     COORD_LAT_MAX,
@@ -64,7 +63,6 @@ from app.schemas.feature import (
     FeatureSummary,
     FeatureWeatherCard,
     PlaceDetailCard,
-    WeatherMetric,
 )
 from app.services.feature_detail import best_match_enrichment, build_detail_card
 from app.services.feature_request import find_active_suggestion_by_external_ref
@@ -212,51 +210,6 @@ def _detail_from_kor_travel_map(dto: dict[str, Any]) -> FeatureDetail:
         urls=dto.get("urls") if isinstance(dto.get("urls"), dict) else {},
         detail=dto.get("detail") if isinstance(dto.get("detail"), dict) else {},
         updated_at=dto.get("updated_at") or datetime.now(UTC),
-    )
-
-
-def _weather_metric_from_kor_travel_map(metric: dict[str, Any]) -> WeatherMetric:
-    return WeatherMetric(
-        metric_key=str(metric["metric_key"]),
-        metric_name=metric.get("metric_name"),
-        forecast_style=str(metric.get("forecast_style") or "observed"),
-        timeline_bucket=metric.get("timeline_bucket"),
-        provider=metric.get("provider"),
-        weather_domain=metric.get("weather_domain"),
-        valid_at=metric.get("valid_at"),
-        valid_from=metric.get("valid_from"),
-        valid_until=metric.get("valid_until"),
-        effective_at=metric.get("effective_at"),
-        issued_at=metric.get("issued_at"),
-        observed_at=metric.get("observed_at"),
-        value_number=metric.get("value_number"),
-        value_text=metric.get("value_text"),
-        unit=metric.get("unit"),
-        severity=metric.get("severity"),
-    )
-
-
-def _weather_from_kor_travel_map(dto: dict[str, Any], *, feature_id: str) -> FeatureWeatherCard:
-    """kor_travel_map `WeatherCardData`/`WeatherSnapshotData` → Pinvi FeatureWeatherCard.
-
-    snapshot 응답은 card 응답의 상위집합이라 같은 매핑을 쓴다(client가 `asof` 유무로
-    경로를 고른다 — `clients/kor_travel_map.py` `feature_weather`).
-    """
-    metrics = [
-        _weather_metric_from_kor_travel_map(m)
-        for m in dto.get("metrics", [])
-        if isinstance(m, dict)
-    ]
-    return FeatureWeatherCard(
-        feature_id=str(dto.get("feature_id") or feature_id),
-        # Map bitemporal cutover(`6650aa71`)로 `WeatherCardData.asof`가 사라지고
-        # `selected_at`(실제로 선택된 관측/예보 시각)이 그 자리를 대신한다. Pinvi 공개 필드
-        # 이름 `asof`는 web/mobile 계약이라 유지하고 소스만 갈아끼운다.
-        asof=dto.get("selected_at"),
-        latest_at=dto.get("latest_at"),
-        is_stale=bool(dto.get("is_stale", False)),
-        source_styles=list(dto.get("source_styles", [])),
-        metrics=metrics,
     )
 
 
@@ -662,54 +615,43 @@ async def get_feature_weather(
     weather_client: OptionalKorTravelWeatherClientDep,
     asof: Annotated[datetime | None, Query()] = None,
 ) -> Envelope[FeatureWeatherCard]:
-    """weather card — kor_travel_map 평탄 metric 목록 + source_styles.
+    """weather card — `kor-travel-weather` location 축(ADR-068, T-362/T-365).
 
-    `asof`를 주면 transport가 bitemporal snapshot 경로(`…/weather/snapshot`,
-    `target_at`=asof / `known_at`=호출 시각)로 나간다. offset 없는 값은 KST로 해석한다
-    (`normalize_asof_query`).
+    `feature_id`로 `kor-travel-map`에서 좌표만 얻고(feature 정보는 여전히 그쪽
+    소관), 실제 weather 조회는 `kor-travel-weather`를 쓴다 —
+    `build_feature_weather_card`가 좌표로 location을 해석하고 카드를 조립한다.
 
-    T-362(P3, ADR-068): `pinvi_kor_travel_weather_single_feature_enabled`가 켜지면
-    `kor-travel-map` 대신 `kor-travel-weather`를 쓴다 — `feature_id`로 좌표를 얻어
-    `build_feature_weather_card`가 location을 해석하고 카드를 조립한다. `asof`가
-    어제 이전이면 대상 서비스 보존(2일) 밖이라 빈 카드가 된다(§3.1-(1)). flag가 꺼져
-    있으면(기본값, G-1/G-2/G-3 게이트 전) 기존 경로를 그대로 쓴다.
-
-    `weather_client`는 **optional** dependency다 — 필수로 선언하면 flag off인 기존
-    경로 테스트까지 이 dependency를 항상 resolve하게 되어(client override가 없는
-    테스트는 lifespan도 안 걸린 채 503을 맞는다) 회귀가 생긴다(실측으로 발견).
+    `asof`를 주면 offset 없는 값은 KST로 해석한다(`normalize_asof_query`). 대상
+    서비스 보존 지평(T-367 가드 기준 15일) 밖이면 빈 카드가 된다(§3.1-(1)).
     """
-    normalized_asof = normalize_asof_query(asof)
-    if settings.pinvi_kor_travel_weather_single_feature_enabled:
-        if weather_client is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail={
-                    "code": "WEATHER_SERVICE_UNAVAILABLE",
-                    "message": "날씨 서비스가 일시적으로 사용 불가합니다.",
-                },
-            )
-        with _map_kor_travel_map_errors():
-            feature_dto = await client.get_feature(feature_id)
-        if feature_dto is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={"code": "RESOURCE_NOT_FOUND", "message": "Feature not found."},
-            )
-        coord = _coord_from_kor_travel_map(feature_dto)
-        if coord is None:
-            return Envelope.of(FeatureWeatherCard(feature_id=feature_id, asof=normalized_asof))
-        card = await build_feature_weather_card(
-            db,
-            feature_id=feature_id,
-            lat=coord.lat,
-            lon=coord.lon,
-            asof=normalized_asof,
-            weather_client=weather_client,
+    if weather_client is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "WEATHER_SERVICE_UNAVAILABLE",
+                "message": "날씨 서비스가 일시적으로 사용 불가합니다.",
+            },
         )
-        return Envelope.of(card)
+    normalized_asof = normalize_asof_query(asof)
     with _map_kor_travel_map_errors():
-        dto = await client.feature_weather(feature_id, asof=normalized_asof)
-    return Envelope.of(_weather_from_kor_travel_map(dto, feature_id=feature_id))
+        feature_dto = await client.get_feature(feature_id)
+    if feature_dto is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "Feature not found."},
+        )
+    coord = _coord_from_kor_travel_map(feature_dto)
+    if coord is None:
+        return Envelope.of(FeatureWeatherCard(feature_id=feature_id, asof=normalized_asof))
+    card = await build_feature_weather_card(
+        db,
+        feature_id=feature_id,
+        lat=coord.lat,
+        lon=coord.lon,
+        asof=normalized_asof,
+        weather_client=weather_client,
+    )
+    return Envelope.of(card)
 
 
 @router.post(

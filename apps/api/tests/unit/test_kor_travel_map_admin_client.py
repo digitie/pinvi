@@ -394,39 +394,6 @@ async def test_get_feature_detail_uses_admin_detail_path() -> None:
     await client.aclose()
 
 
-async def test_get_feature_weather_uses_admin_path_without_query() -> None:
-    seen: dict[str, object] = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen["method"] = request.method
-        seen["path"] = request.url.path
-        seen["query"] = list(request.url.params.multi_items())
-        return httpx.Response(
-            200,
-            json={
-                "data": {
-                    "feature_id": "f_private_1",
-                    "selected_at": "2026-06-12T10:00:00+09:00",
-                    "latest_at": "2026-06-12T09:30:00+09:00",
-                    "is_stale": False,
-                    "source_styles": ["nowcast"],
-                    "metrics": [],
-                },
-                "meta": {},
-            },
-        )
-
-    client = _client(handler)
-    data = await client.get_feature_weather("f_private_1")
-    assert seen == {
-        "method": "GET",
-        "path": "/v1/admin/features/f_private_1/weather",
-        "query": [],
-    }
-    assert data["feature_id"] == "f_private_1"
-    await client.aclose()
-
-
 async def test_patch_feature_targets_feature_id() -> None:
     seen: list[tuple[str, str, str | None]] = []
 

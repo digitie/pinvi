@@ -23,7 +23,6 @@ from app.clients.kor_travel_map import (
 )
 from app.clients.kor_travel_map_admin import KorTravelMapAdminClientDep
 from app.clients.kor_travel_weather import OptionalKorTravelWeatherClientDep
-from app.core.config import settings
 from app.core.deps import DbSession
 from app.core.rbac import require_role
 from app.models.user import User
@@ -160,32 +159,6 @@ def _validate_feature_detail(data: dict[str, Any]) -> AdminFeatureDetail:
             detail={
                 "code": "FEATURE_SERVICE_BAD_GATEWAY",
                 "message": "kor_travel_map admin 상세 응답 형식이 올바르지 않습니다.",
-            },
-        ) from exc
-
-
-def _weather_values_from_payload(
-    payload: dict[str, Any], *, feature_id: str
-) -> AdminFeatureWeatherValuesResponse:
-    """Admin weather card의 최신값을 admin weather-values 응답으로 투영."""
-    try:
-        return AdminFeatureWeatherValuesResponse.model_validate(
-            {
-                "feature_id": str(payload.get("feature_id") or feature_id),
-                # 공개 필드 이름 `asof`는 admin UI 계약이라 유지하고 소스만 갈아끼운다.
-                "asof": payload.get("selected_at"),
-                "latest_at": payload.get("latest_at"),
-                "is_stale": bool(payload.get("is_stale", False)),
-                "source_styles": payload.get("source_styles", []),
-                "items": payload.get("metrics", []),
-            }
-        )
-    except ValidationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={
-                "code": "FEATURE_SERVICE_BAD_GATEWAY",
-                "message": "kor_travel_map weather 응답 형식이 올바르지 않습니다.",
             },
         ) from exc
 
@@ -463,64 +436,40 @@ async def get_feature_weather_values_endpoint(
     admin_client: KorTravelMapAdminClientDep,
     db: DbSession,
     weather_client: OptionalKorTravelWeatherClientDep,
-    asof: Annotated[
-        datetime | None,
-        Query(description="flag off면 미지원(Map Admin weather 계약은 현재값만 제공)."),
-    ] = None,
+    asof: Annotated[datetime | None, Query()] = None,
 ) -> Envelope[AdminFeatureWeatherValuesResponse]:
-    """비공개 feature도 보이는 최신 weather card를 값 목록으로 투영.
+    """비공개 feature도 보이는 최신 weather card를 값 목록으로 투영(ADR-068, T-364/T-365).
 
-    T-364(P5, ADR-068): `pinvi_kor_travel_weather_admin_enabled`가 켜지면
-    `kor_travel_map_admin` 대신 `kor-travel-weather`를 쓴다 — 좌표는 admin feature
-    상세(`get_feature_detail`)에서 얻는다(POI 문맥이 없어 T-363의 "feature batch와
-    완전 분리"는 여기 적용되지 않는다, `admin_weather_values.py` 모듈 docstring).
-    `asof`도 T-362와 같은 축소 규칙(보존 2일)으로 지원한다.
-
-    flag off(구 경로)는 `asof` query를 선언하지 않는 Map Admin 계약 그대로 — FastAPI
-    upstream이 모르는 query를 조용히 버리는 일을 막기 위해 현재값으로 가장하지 않고
-    422로 명시 거부한다.
-
-    `weather_client`는 T-362/T-363과 동일하게 **optional** dependency다 — 필수로
-    선언하면 flag off인 기존 테스트까지 이 dependency를 항상 resolve하게 된다.
+    `kor-travel-weather`를 쓴다 — 좌표는 admin feature 상세(`get_feature_detail`)에서
+    얻는다(POI 문맥이 없어 T-363의 "feature batch와 완전 분리"는 여기 적용되지 않는다,
+    `admin_weather_values.py` 모듈 docstring). `asof`는 T-362와 같은 축소 규칙(보존
+    지평 밖은 빈 카드)으로 지원한다.
     """
-    if settings.pinvi_kor_travel_weather_admin_enabled:
-        if weather_client is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail={
-                    "code": "WEATHER_SERVICE_UNAVAILABLE",
-                    "message": "날씨 서비스가 일시적으로 사용 불가합니다.",
-                },
-            )
-        with _map_admin_errors():
-            detail_payload = await admin_client.get_feature_detail(feature_id)
-        detail = _validate_feature_detail(detail_payload)
-        lon, lat = detail.feature.lon, detail.feature.lat
-        if lon is None or lat is None:
-            return Envelope.of(AdminFeatureWeatherValuesResponse(feature_id=feature_id, asof=asof))
-        normalized_asof = normalize_asof_query(asof)
-        return Envelope.of(
-            await build_admin_feature_weather_values(
-                db,
-                feature_id=feature_id,
-                lat=lat,
-                lon=lon,
-                asof=normalized_asof,
-                weather_client=weather_client,
-            )
-        )
-
-    if asof is not None:
+    if weather_client is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
-                "code": "VALIDATION_ERROR",
-                "message": "admin weather-values는 현재값만 지원하며 asof를 받을 수 없습니다.",
+                "code": "WEATHER_SERVICE_UNAVAILABLE",
+                "message": "날씨 서비스가 일시적으로 사용 불가합니다.",
             },
         )
     with _map_admin_errors():
-        data = await admin_client.get_feature_weather(feature_id)
-    return Envelope.of(_weather_values_from_payload(data, feature_id=feature_id))
+        detail_payload = await admin_client.get_feature_detail(feature_id)
+    detail = _validate_feature_detail(detail_payload)
+    lon, lat = detail.feature.lon, detail.feature.lat
+    if lon is None or lat is None:
+        return Envelope.of(AdminFeatureWeatherValuesResponse(feature_id=feature_id, asof=asof))
+    normalized_asof = normalize_asof_query(asof)
+    return Envelope.of(
+        await build_admin_feature_weather_values(
+            db,
+            feature_id=feature_id,
+            lat=lat,
+            lon=lon,
+            asof=normalized_asof,
+            weather_client=weather_client,
+        )
+    )
 
 
 @router.get("/{feature_id}", response_model=Envelope[AdminFeatureDetail])

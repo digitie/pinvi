@@ -9,13 +9,14 @@ vendor하고 pinned SHA-256으로 수기 graft를 차단한다. 스냅샷(`tests
 (type/format/enum/array item/map value/required/nullable)이 유지되는지 검증한다(T-VN-H07B).
 
 **profile 분리(Map `96814b2a` "split service openapi profile")**: ServiceToken 전용
-batch 2경로(`/v1/features/batch`·`/v1/features/weather/batch`)는 user profile에서
-분리돼 `openapi.service.json` 소속이 됐다. user client는 여전히 두 경로를 호출하므로
-본 게이트는 해당 경로·batch schema 계약을 vendored **service** 스냅샷
-(`tests/contract/kor-travel-map-openapi-service.json` — byte-핀은
-`test_kor_travel_map_cache_target_contract.py` 소유)에서 검증하고, 나머지는 user
-스냅샷에서 검증한다. 두 스냅샷에 모두 있는 schema는 양쪽 모두에서 계약을 고정한다
-(profile 간 silent 분화 차단).
+batch 경로(`/v1/features/batch`)는 user profile에서 분리돼 `openapi.service.json`
+소속이 됐다. user client는 여전히 그 경로를 호출하므로 본 게이트는 해당 경로·batch
+schema 계약을 vendored **service** 스냅샷(`tests/contract/kor-travel-map-openapi-service.json`
+— byte-핀은 `test_kor_travel_map_cache_target_contract.py` 소유)에서 검증하고, 나머지는
+user 스냅샷에서 검증한다. 두 스냅샷에 모두 있는 schema는 양쪽 모두에서 계약을 고정한다
+(profile 간 silent 분화 차단). 날씨 batch 경로(`/v1/features/weather/batch`)는
+`kor-travel-weather` 이관(T-365, ADR-068)으로 client에서 삭제돼 더는 이 게이트가
+보지 않는다.
 
 운영: kor_travel_map 스펙이 갱신되면 스냅샷을 교체(`docs/integrations/kor-travel-map-rest-api.md`
 "드리프트 게이트" 절)하고 본 테스트를 돌린다. 우리 가정이 깨졌으면 여기서 실패 → client/매핑을
@@ -31,10 +32,8 @@ import os
 import re
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
-from datetime import datetime
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -61,20 +60,17 @@ _SERVICE_SNAPSHOT = (
 
 # Map `96814b2a`가 user profile에서 분리한 ServiceToken 전용 경로 — user client가
 # 여전히 호출하므로 계약은 service 스냅샷 기준으로 검증한다.
-_SERVICE_PROFILE_PATHS: frozenset[str] = frozenset(
-    {"/v1/features/batch", "/v1/features/weather/batch"}
-)
+_SERVICE_PROFILE_PATHS: frozenset[str] = frozenset({"/v1/features/batch"})
 
 # Pinvi user client(`clients/kor_travel_map.py`)가 호출하는 kor_travel_map 경로.
+# 날씨 경로(`/v1/features/{feature_id}/weather`·`/weather/snapshot`·`/weather/batch`)는
+# `kor-travel-weather`로 이관되며 T-365에서 client에서 삭제됐다(ADR-068).
 _CLIENT_PATHS = [
     "/v1/features/in-bounds",
     "/v1/features/nearby",
     "/v1/features/search",
     "/v1/features/{feature_id}",
-    "/v1/features/{feature_id}/weather",
-    "/v1/features/{feature_id}/weather/snapshot",  # asof 지정 시 (bitemporal 시점 조회)
     "/v1/features/batch",  # service profile (_SERVICE_PROFILE_PATHS)
-    "/v1/features/weather/batch",  # service profile (_SERVICE_PROFILE_PATHS)
     "/v1/categories",
     "/v1/public/beaches",
     "/v1/public/beaches/map-markers",
@@ -143,16 +139,9 @@ _CLIENT_QUERY_PARAMETERS: dict[str, set[str]] = {
         "include_total",
     },
     "/v1/features/{feature_id}": set(),
-    # weather card 경로는 query를 하나도 받지 않는다. Map bitemporal cutover(`6650aa71`)
-    # 전에는 `asof`가 있었고, 사라진 뒤에도 client가 계속 `?asof=`를 보냈지만 FastAPI가
-    # 모르는 query를 조용히 버려 늘 최신 카드가 돌아왔다(silent drift). 이 빈 집합이
-    # "여기에 시점 query가 없다"를 고정한다 — 시점 조회는 아래 snapshot 경로다.
-    "/v1/features/{feature_id}/weather": set(),
-    "/v1/features/{feature_id}/weather/snapshot": {"target_at", "known_at"},
-    # service profile POST 2경로 — 입력은 전부 body이고 query는 없다. 빈 집합이 "query로
+    # service profile POST 1경로 — 입력은 전부 body이고 query는 없다. 빈 집합이 "query로
     # 새는 필터가 없다"를 고정한다.
     "/v1/features/batch": set(),
-    "/v1/features/weather/batch": set(),
     # `include_counts` 단 하나. 옛 `active_only`는 Map T-VN-04 F-1에서 제거됐고(비공개 분포
     # 노출), 애초에 item 목록이 아니라 counts 집계 기준만 바꾸던 스위치였다. Pinvi의
     # `active_only`는 이제 소비 계층이 `is_active`로 직접 거른다(`api/v1/features.py`).
@@ -246,11 +235,8 @@ _PUBLIC_API_KEY_SECURITY = [{"PublicApiKey": []}, {"ServiceToken": []}]
 #     더 이상 dto에서 읽지 않고, 한동안 남겨 뒀던 Pinvi 공개 스키마의 `status` 필드도
 #     T-VN-42에서 제거했다(재도입 방지는 `tests/unit/test_feature_schemas.py`).
 #
-# 이름이 바뀐 필드:
-#   * `WeatherCardData.asof` → `selected_at` (Map bitemporal cutover `6650aa71`). Pinvi 공개
-#     필드 이름 `asof`는 유지하고 소스만 `selected_at`으로 갈아끼웠으므로 계약 표는
-#     **스냅샷에 실제로 있는** `selected_at`을 고정한다. `refresh_after`는 소비하지 않아
-#     고정하지 않는다(표는 "우리가 읽는 필드"만 본다).
+# 날씨 스키마(`WeatherCardData`/`WeatherBatchData` 등)는 T-365에서 client·계약 모두
+# 삭제됐다 — 날씨는 이제 `kor-travel-weather`가 소유한다(ADR-068).
 #
 # 반대로 `features.py`의 `data.get("cluster_unit")`은 방어 코드가 아니다 — client가
 # `meta.cluster.cluster_unit`를 `data`로 re-projection하므로 실제 값이 온다(위 `ClusterMeta` 핀).
@@ -302,234 +288,6 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
             "required": True,
             "nullable": False,
         },
-    },
-    "WeatherCardData": {
-        "feature_id": {"type": "string", "required": True, "nullable": False},
-        # Pinvi 공개 `asof`의 소스(Map `6650aa71` 이후 이름) — `features.py`
-        # `_weather_from_kor_travel_map`, `admin/features.py` `_weather_values_from_payload`.
-        "selected_at": {
-            "type": "string",
-            "format": "date-time",
-            "required": False,
-            "nullable": True,
-        },
-        "latest_at": {"type": "string", "format": "date-time", "required": False, "nullable": True},
-        "is_stale": {"type": "boolean", "required": True, "nullable": False},
-        "source_styles": {
-            "type": "array",
-            "items_type": "string",
-            "required": True,
-            "nullable": False,
-        },
-        "metrics": {
-            "type": "array",
-            "items_ref": "WeatherMetricOut",
-            "required": True,
-            "nullable": False,
-        },
-    },
-    # `asof` 지정 시 client가 부르는 bitemporal 시점 조회 응답. `WeatherCardData`의
-    # 상위집합이라 소비 측 매핑(`_weather_from_kor_travel_map`)을 그대로 재사용하므로
-    # **같은 필드 집합**을 고정한다 — 한쪽만 분화하면 여기서 드러난다.
-    "WeatherSnapshotData": {
-        "feature_id": {"type": "string", "required": True, "nullable": False},
-        "selected_at": {
-            "type": "string",
-            "format": "date-time",
-            "required": False,
-            "nullable": True,
-        },
-        "latest_at": {"type": "string", "format": "date-time", "required": False, "nullable": True},
-        "is_stale": {"type": "boolean", "required": True, "nullable": False},
-        "source_styles": {
-            "type": "array",
-            "items_type": "string",
-            "required": True,
-            "nullable": False,
-        },
-        "metrics": {
-            "type": "array",
-            "items_ref": "WeatherMetricOut",
-            "required": True,
-            "nullable": False,
-        },
-    },
-    "WeatherMetricOut": {
-        "metric_key": {"type": "string", "required": True, "nullable": False},
-        "metric_name": {"type": "string", "required": False, "nullable": True},
-        "forecast_style": {"type": "string", "required": True, "nullable": False},
-        "timeline_bucket": {"type": "string", "required": False, "nullable": True},
-        "valid_at": {"type": "string", "format": "date-time", "required": False, "nullable": True},
-        "valid_from": {
-            "type": "string",
-            "format": "date-time",
-            "required": False,
-            "nullable": True,
-        },
-        "valid_until": {
-            "type": "string",
-            "format": "date-time",
-            "required": False,
-            "nullable": True,
-        },
-        "issued_at": {"type": "string", "format": "date-time", "required": False, "nullable": True},
-        "observed_at": {
-            "type": "string",
-            "format": "date-time",
-            "required": False,
-            "nullable": True,
-        },
-        "effective_at": {
-            "type": "string",
-            "format": "date-time",
-            "required": False,
-            "nullable": True,
-        },
-        "provider": {"type": "string", "required": False, "nullable": True},
-        "weather_domain": {"type": "string", "required": False, "nullable": True},
-        "value_number": {"type": "number", "required": False, "nullable": True},
-        "value_text": {"type": "string", "required": False, "nullable": True},
-        "unit": {"type": "string", "required": False, "nullable": True},
-        "severity": {"type": "string", "required": False, "nullable": True},
-    },
-    "WeatherBatchRequest": {
-        "targets": {
-            "type": "array",
-            "items_ref": "WeatherBatchTargetRequest",
-            "min_items": 1,
-            "max_items": 366,
-            "required": True,
-            "nullable": False,
-        },
-        "known_at": {
-            "type": "string",
-            "format": "date-time",
-            "required": True,
-            "nullable": False,
-        },
-    },
-    "WeatherBatchTargetRequest": {
-        "target_at": {
-            "type": "string",
-            "format": "date-time",
-            "required": True,
-            "nullable": False,
-        },
-        "feature_ids": {
-            "type": "array",
-            "items_type": "string",
-            "items_max_length": 256,
-            "unique_items": True,
-            "min_items": 1,
-            "max_items": 200,
-            "required": True,
-            "nullable": False,
-        },
-    },
-    "WeatherBatchData": {
-        "known_at": {
-            "type": "string",
-            "format": "date-time",
-            "required": True,
-            "nullable": False,
-        },
-        "targets": {
-            "type": "array",
-            "items_ref": "WeatherBatchTargetData",
-            "required": True,
-            "nullable": False,
-        },
-    },
-    "WeatherBatchTargetData": {
-        "target_at": {
-            "type": "string",
-            "format": "date-time",
-            "required": True,
-            "nullable": False,
-        },
-        "timeline_until": {
-            "type": "string",
-            "format": "date-time",
-            "required": True,
-            "nullable": False,
-        },
-        "items": {
-            "type": "array",
-            "items_one_of_refs": {
-                "WeatherBatchFoundItem",
-                "WeatherBatchNoDataItem",
-                "WeatherBatchRetiredItem",
-            },
-            "items_discriminator": {
-                "found": "WeatherBatchFoundItem",
-                "no_data": "WeatherBatchNoDataItem",
-                "retired": "WeatherBatchRetiredItem",
-            },
-            "required": True,
-            "nullable": False,
-        },
-        "cards": {
-            "type": "array",
-            "items_ref": "WeatherBatchCardOut",
-            "required": True,
-            "nullable": False,
-        },
-    },
-    "WeatherBatchFoundItem": {
-        "state": {
-            "type": "string",
-            "const": "found",
-            "required": True,
-            "nullable": False,
-        },
-        "feature_id": {"type": "string", "required": True, "nullable": False},
-        "card_key": {"type": "string", "required": True, "nullable": False},
-    },
-    "WeatherBatchCardOut": {
-        "card_key": {"type": "string", "required": True, "nullable": False},
-        "source_styles": {
-            "type": "array",
-            "items_type": "string",
-            "required": True,
-            "nullable": False,
-        },
-        "current": {
-            "type": "array",
-            "items_ref": "WeatherMetricOut",
-            "required": True,
-            "nullable": False,
-        },
-        "timeline": {
-            "type": "array",
-            "items_ref": "WeatherMetricOut",
-            "required": True,
-            "nullable": False,
-        },
-        "latest_at": {
-            "type": "string",
-            "format": "date-time",
-            "required": False,
-            "nullable": True,
-        },
-        "is_stale": {"type": "boolean", "required": True, "nullable": False},
-    },
-    "WeatherBatchNoDataItem": {
-        "state": {
-            "type": "string",
-            "const": "no_data",
-            "required": True,
-            "nullable": False,
-        },
-        "feature_id": {"type": "string", "required": True, "nullable": False},
-    },
-    "WeatherBatchRetiredItem": {
-        "state": {
-            "type": "string",
-            "const": "retired",
-            "required": True,
-            "nullable": False,
-        },
-        "feature_id": {"type": "string", "required": True, "nullable": False},
     },
     "CategorySummary": {
         "code": {"type": "string", "required": True, "nullable": False},
@@ -888,10 +646,7 @@ _ENDPOINT_DATA_SCHEMAS: dict[tuple[str, str], str] = {
     ("get", "/v1/features/nearby"): "FeaturesNearbyData",
     ("get", "/v1/features/search"): "FeatureSearchData",
     ("get", "/v1/features/{feature_id}"): "FeatureDetailResponse",
-    ("get", "/v1/features/{feature_id}/weather"): "WeatherCardData",
-    ("get", "/v1/features/{feature_id}/weather/snapshot"): "WeatherSnapshotData",
     ("post", "/v1/features/batch"): "FeatureBatchData",
-    ("post", "/v1/features/weather/batch"): "WeatherBatchData",
     ("get", "/v1/categories"): "CategoriesData",
     ("get", "/v1/public/beaches"): "PublicBeachListData",
     ("get", "/v1/public/beaches/map-markers"): "PublicMapMarkerLayerData",
@@ -1045,7 +800,6 @@ async def test_client_never_sends_a_query_the_snapshot_does_not_declare() -> Non
         sent.append(request)
         return httpx.Response(200, json={"data": {}, "meta": {}})
 
-    asof = datetime(2026, 7, 1, 23, 59, 59, tzinfo=ZoneInfo("Asia/Seoul"))
     probes: list[tuple[str, Callable[[KorTravelMapClient], Awaitable[object]]]] = [
         (
             "/v1/features/in-bounds",
@@ -1090,18 +844,9 @@ async def test_client_never_sends_a_query_the_snapshot_does_not_declare() -> Non
             ),
         ),
         ("/v1/features/{feature_id}", lambda c: c.get_feature("f1")),
-        ("/v1/features/{feature_id}/weather", lambda c: c.feature_weather("f1")),
-        (
-            "/v1/features/{feature_id}/weather/snapshot",
-            lambda c: c.feature_weather("f1", asof=asof, known_at=asof),
-        ),
         (
             "/v1/features/batch",
             lambda c: c.get_features(["f1"], known_row_revisions={"f1": 3}),
-        ),
-        (
-            "/v1/features/weather/batch",
-            lambda c: c.get_weather_batch({asof: ["f1"]}, known_at=asof),
         ),
         ("/v1/categories", lambda c: c.categories(include_counts=True)),
         (
@@ -1179,32 +924,6 @@ async def test_client_never_sends_a_query_the_snapshot_does_not_declare() -> Non
             f"{path}: 스냅샷이 선언하지 않은 query를 보낸다(서버가 조용히 버린다): "
             f"{sorted(undeclared)}"
         )
-
-
-def test_weather_snapshot_route_requires_the_bitemporal_query_pair() -> None:
-    """시점 조회 경로가 `target_at`/`known_at`을 **둘 다 required**로 받는지 고정한다.
-
-    client(`feature_weather`)는 `asof`가 오면 이 경로로 라우팅하며 두 값을 항상 함께
-    보낸다. producer가 한쪽을 optional로 풀면 "안 보내도 되는 값"으로 오해할 여지가
-    생기고, 반대로 required 파라미터가 늘면 client가 422를 맞는다.
-    """
-    spec = _spec()
-    parameters = {
-        parameter["name"]: parameter
-        for parameter in spec["paths"]["/v1/features/{feature_id}/weather/snapshot"]["get"][
-            "parameters"
-        ]
-        if parameter.get("in") == "query"
-    }
-    assert set(parameters) == {"target_at", "known_at"}
-    for name, parameter in parameters.items():
-        assert parameter.get("required") is True, (name, "required")
-        resolved, nullable = _resolve_property(parameter["schema"], f"snapshot.{name}")
-        assert (resolved.get("type"), resolved.get("format"), nullable) == (
-            "string",
-            "date-time",
-            False,
-        ), (name, parameter["schema"])
 
 
 def test_public_api_key_contract_is_header_only() -> None:
@@ -1536,18 +1255,6 @@ def test_feature_batch_request_binds_to_pinned_container() -> None:
     assert actual == "FeatureBatchRequest"
     assert "FeatureBatchRequest" in _CONSUMED_FIELD_CONTRACTS
     assert "FeatureBatchRequestItem" in _CONSUMED_FIELD_CONTRACTS
-
-
-def test_weather_batch_request_binds_to_pinned_container() -> None:
-    """weather batch body가 bitemporal request component에 결합되는지 고정한다."""
-    spec = _service_spec()
-    request_schema = spec["paths"]["/v1/features/weather/batch"]["post"]["requestBody"]["content"][
-        "application/json"
-    ]["schema"]
-    actual = str(request_schema.get("$ref", "")).rsplit("/", 1)[-1]
-    assert actual == "WeatherBatchRequest"
-    assert "WeatherBatchRequest" in _CONSUMED_FIELD_CONTRACTS
-    assert "WeatherBatchTargetRequest" in _CONSUMED_FIELD_CONTRACTS
 
 
 def test_feature_batch_declares_service_unavailable_problem() -> None:

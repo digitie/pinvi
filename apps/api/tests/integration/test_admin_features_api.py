@@ -13,7 +13,6 @@ from app.clients.kor_travel_map import (
     KorTravelMapConflict,
     KorTravelMapFeatureNotFound,
     KorTravelMapPreconditionFailed,
-    KorTravelMapUnavailable,
 )
 from app.clients.kor_travel_map_admin import get_kor_travel_map_admin_client
 from app.main import app
@@ -199,7 +198,6 @@ class _FakeAdminClient:
         not_found: bool = False,
         approve_conflict: bool = False,
         approve_precondition: bool = False,
-        weather_unavailable: bool = False,
     ) -> None:
         self.list_kwargs: dict[str, Any] | None = None
         self.detail_id: str | None = None
@@ -209,7 +207,6 @@ class _FakeAdminClient:
         self.not_found = not_found
         self.approve_conflict = approve_conflict
         self.approve_precondition = approve_precondition
-        self.weather_unavailable = weather_unavailable
 
     async def list_features(self, **kwargs: Any) -> dict[str, Any]:
         self.list_kwargs = kwargs
@@ -223,34 +220,6 @@ class _FakeAdminClient:
         if self.not_found:
             raise KorTravelMapFeatureNotFound("not found")
         return _detail()
-
-    async def get_feature_weather(self, feature_id: str) -> dict[str, Any]:
-        self.detail_id = feature_id
-        if self.weather_unavailable:
-            raise KorTravelMapUnavailable("kor-travel-map weather down")
-        return {
-            "feature_id": feature_id,
-            "selected_at": "2026-06-12T10:00:00+09:00",
-            "refresh_after": "2026-06-12T11:00:00+09:00",
-            "latest_at": "2026-06-12T09:30:00+09:00",
-            "is_stale": False,
-            "source_styles": ["nowcast", "short"],
-            "metrics": [
-                {
-                    "metric_key": "T1H",
-                    "metric_name": "기온",
-                    "forecast_style": "nowcast",
-                    "timeline_bucket": "current",
-                    "provider_dataset_id": 41,
-                    "dataset_key": "kma_vilage_forecast",
-                    "dataset_display_name": "기상청 단기예보",
-                    "known_at": "2026-06-12T09:35:00+09:00",
-                    "valid_at": "2026-06-12T10:00:00+09:00",
-                    "value_number": 24.5,
-                    "unit": "℃",
-                }
-            ],
-        }
 
     async def list_change_requests(self, **kwargs: Any) -> dict[str, Any]:
         self.change_request_kwargs = kwargs
@@ -537,78 +506,6 @@ async def test_get_admin_feature_sources_and_overrides_return_projections(
     assert overrides["feature_id"] == "f_place_1"
     assert overrides["items"][0]["field_path"] == "detail.phone"
     assert overrides["items"][0]["prevent_provider_reactivation"] is True
-
-
-async def test_get_admin_feature_weather_values_proxies_weather_card(
-    client: Any, session_factory: Any, auth_cookies: Any
-) -> None:
-    admin_id = await _create_user(
-        session_factory, email="admin@example.com", roles=["user", "admin"]
-    )
-    fake = _FakeAdminClient()
-    _override(fake)
-    try:
-        resp = await client.get(
-            "/admin/features/f_weather_1/weather-values",
-            cookies=auth_cookies(str(admin_id)),
-        )
-    finally:
-        _clear()
-
-    assert resp.status_code == 200, resp.text
-    data = resp.json()["data"]
-    assert fake.detail_id == "f_weather_1"
-    assert data["feature_id"] == "f_weather_1"
-    assert data["asof"] == "2026-06-12T10:00:00+09:00"
-    assert data["source_styles"] == ["nowcast", "short"]
-    assert data["items"][0]["metric_key"] == "T1H"
-    assert data["items"][0]["provider_dataset_id"] == 41
-    assert data["items"][0]["dataset_key"] == "kma_vilage_forecast"
-    assert data["items"][0]["dataset_display_name"] == "기상청 단기예보"
-    assert data["items"][0]["known_at"] == "2026-06-12T09:35:00+09:00"
-
-
-async def test_get_admin_feature_weather_values_rejects_unsupported_asof(
-    client: Any, session_factory: Any, auth_cookies: Any
-) -> None:
-    """Map Admin 계약에 없는 `asof`를 조용히 버리고 최신값을 반환하면 안 된다."""
-    admin_id = await _create_user(
-        session_factory, email="admin@example.com", roles=["user", "operator"]
-    )
-    fake = _FakeAdminClient()
-    _override(fake)
-    try:
-        resp = await client.get(
-            "/admin/features/f_weather_1/weather-values",
-            params={"asof": "2026-06-12T10:00:00"},
-            cookies=auth_cookies(str(admin_id)),
-        )
-    finally:
-        _clear()
-
-    assert resp.status_code == 422, resp.text
-    assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
-    assert fake.detail_id is None
-
-
-async def test_get_admin_feature_weather_values_maps_upstream_unavailable(
-    client: Any, session_factory: Any, auth_cookies: Any
-) -> None:
-    admin_id = await _create_user(
-        session_factory, email="admin@example.com", roles=["user", "operator"]
-    )
-    fake = _FakeAdminClient(weather_unavailable=True)
-    _override(fake)
-    try:
-        resp = await client.get(
-            "/admin/features/f_weather_1/weather-values",
-            cookies=auth_cookies(str(admin_id)),
-        )
-    finally:
-        _clear()
-
-    assert resp.status_code == 503
-    assert resp.json()["error"]["code"] == "FEATURE_SERVICE_UNAVAILABLE"
 
 
 async def test_get_admin_feature_maps_upstream_404(
