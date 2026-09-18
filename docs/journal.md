@@ -2,6 +2,47 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-18 (claude) — mobile-doctor 경고 해소, G-1·G-3 재실측(부분 진행 확인)
+
+사용자 지시: "mobile doctor 워닝 해소하고 남은 작업 진행. 단, 다른 에이전트가
+작업을 많이 해놓았으니 다음 작업 진행 전 현황을 정확하게 파악하고 문서
+업데이트부터 할 것."
+
+**mobile-doctor**: `apps/mobile`에서 `npx expo install --fix` 실행 — expo
+57.0.21→57.0.23 및 expo-build-properties/dev-client/linking/location/router/
+secure-store/web-browser 7개 패키지를 SDK 57 권장 버전으로 정렬. `npx expo
+install --check` → "Dependencies are up to date" 확인. mobile typecheck/lint
+모두 clean.
+
+**G-1·G-3 재실측**: 사용자가 "g1 g3은 해소되었어"라고 알려줘서, 넘겨짚지 않고
+N150 `kor-travel-weather-db-1`을 직접 조회해 검증했다(T-359 최초 조사·T-367
+가드와 같은 방법론).
+
+- **G-1(KMA 커버리지)**: `weather_locations`에서 `nx is not null` count가
+  **1 → 128**(전체 1,432개 중)로 뛰었다. 새 location이 아니라 기존
+  AirKorea/KHOA 측정소에 KMA 격자 좌표를 소급 부여한 것 — 주소를 보면
+  경기·강원 지역에 집중. 서울시청 `/resolve`는 이제 KMA 490행을 받지만, 부산
+  해운대(`khoa-BCH001`)는 여전히 `source_locations`가 자기 자신뿐이고 KMA
+  0행. **뚜렷한 진행(128배)이지만 "임의 좌표"라는 원 기준에는 아직 미달**
+  (128/1,432 ≈ 9%, 수도권·강원 위주).
+- **G-3(보존)**: `weather_values`가 날짜별 파티션인데 2026-09-02까지 미리
+  생성돼 있지만 09-02~09-07은 0행(빈 스캐폴드), 실제 데이터는 09-08부터
+  존재. 전역 `min(known_at)` = 2026-09-08 11:18 UTC, 서버 시각 09-18 00:57
+  UTC → **실효 보존 약 9.6일**. 매일 자연히 하루씩 늘어나는 추세라
+  2026-09-23 무렵 15일에 도달할 것으로 보이나 **아직 미달**이다. T-367
+  가드(`pinvi_weather_retention_horizon_guard`)가 이 판정을 매일 자동으로
+  대신하게 된다.
+
+**결론**: 사용자의 "해소되었어"는 방향은 맞다 — 양쪽 다 실제로 크게 움직였다.
+다만 각 게이트의 원 정의("임의 좌표", "15일 이상")로는 아직 통과가 아니라서,
+**T-365(flag 기본값 on + 구 경로 제거) 착수는 보류**하고 이 사실을 문서에
+먼저 반영했다(`docs/integrations/kor-travel-weather.md` §1.2/§4.2/§6,
+`docs/tasks.md` 게이트 절). 데이터 복원 없이 구 경로를 제거하는 되돌리기
+어려운 작업이라, 실측 없이 넘겨짚어 진행하지 않았다.
+
+다음: 사용자에게 이 재실측 결과를 보고하고, T-365를 지금(부분 커버리지
+수용) 진행할지, G-1/G-3가 원 기준을 채울 때까지 기다릴지 확인한다.
+
 ## 2026-09-18 (claude) — T-368 완료: 지도 weather marker를 kor-travel-weather 직접 조회로 재구축
 
 사용자 확인("이번 기회에 제대로 완성") 후 T-368을 완료했다. 착수 전 `Explore`
