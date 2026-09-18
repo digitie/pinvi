@@ -2,6 +2,59 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-18 (claude) — M05/T-VN-41 저장소간 모순 정리 (사용자 요청)
+
+사용자 지시: "m05 완료되었는지 kor travel map까지 확인해서 조사" → "저장소간
+모순부터 정리". Workflow로 pinvi/kor-travel-map/kor-travel-docker-manager 세
+저장소를 병렬 조사(read-only, git checkout/edit 없음)한 뒤, 발견한 사실을
+직접 재확인하고(agent의 요약을 그대로 신뢰하지 않고 각 저장소의 `docs/tasks-done.md`를
+`git show origin/main:...`로 직접 읽어 날짜·근거를 재대조) `docs/tasks.md`/
+`docs/tasks-done.md`를 갱신했다.
+
+**발견 1 — Pinvi 쪽 추적 파일이 18일 갱신 누락**: `kor-travel-map`의
+`docs/tasks-done.md`가 이미 완료로 기록한 4건(`T-VN-41F1D-D1` 9/4,
+`T-VN-41F1D-E`/`T-VN-41F1D-D2` 9/6, `T-VN-M05-MAP-HEALTH-TRANSPORT` 8/31)이
+Pinvi `docs/tasks.md`에는 여전히 `[ ]`/`[/]`로 남아 있었다. 다른 저장소의
+"아직 열림" 경합 주장이 없어 `tasks-done.md`로 이관했다(Map의 기록을 근거로
+신뢰, Pinvi 자체 재검증은 하지 않음).
+
+**발견 2 — `T-VN-41C`는 기술적 blocker가 아니라 owner timing 결정**: Map이
+2026-09-07 오너 지시로 "실 production 전환 시점까지" 의도적으로 보류
+중이었다 — enable과 pinned rebuild가 현재 lifecycle에서 상호배타이기 때문.
+`docs/tasks.md`에 그 근거를 그대로 옮겨 적었다.
+
+**발견 3 — 진짜 미해소 교차 저장소 모순 (해결하지 않고 명시만 함)**:
+`T-VN-M05-EXECUTION-IDENTITY-V6`와 `T-VN-M05-ACTIVATION` 둘 다 Map은
+`[x]` 완료(각각 8/31, 9/8)로 기록했지만, 실 구현 저장소인
+`kor-travel-docker-manager`는 같은 ID를 여전히 열어 두고 있고
+(`registry/ktdctl/ledger/terminal-block/public-binding 배선 잔여`,
+"M05 activation" `[ ]`) 종결 기록이 없다. 같은 "M05" 라벨이 저장소마다
+다른 범위(ktdctl 쪽 execution-identity 게이트 vs Map 자체 attestation +
+별도 ADR-097 provider-dedup 프로토콜)를 가리켜 생긴 혼선으로 보인다.
+docker-manager의 2026-09-03 측정 기록은 "남은 판정은 소유자 몫"이라고
+명시했고, 그 직후 pair 계약이 v1→v2로 승격(9/7~9/8, Pinvi PR #538/539)해
+"fresh candidate" 요건상 이전 측정이 무효화됐을 가능성이 있다 — v2 계약
+위에서 재실행된 기록이 세 저장소 어디에도 없다. **어느 한쪽 판정을 임의로
+택하지 않고 `docs/tasks.md`에 양쪽 근거를 그대로 병기했다** — 다음 단계는
+ktdctl 쪽 실행 트리거(`pin rotate-pair → run-pinned-rebuild-once →
+run-m05-isolated-e2e-once → activation attestation`)와 사람 오너의
+sign-off다.
+
+**발견 4 — 무관하지만 실재하는 결함**: `kor-travel-map` 저장소 자체의
+`docs/tasks-done.md` line 577에 **미해결 git merge/rebase conflict marker**
+(`|||||||`, "parent of c7360b8e")가 origin/main에 그대로 커밋돼 있다.
+`git blame`으로 확인: commit `ae547dead7`(작성자 digitie, 2026-08-31)에서
+도입됐다 — 봇 rebase 충돌 해소 중 diff3 조상 마커 줄을 지우지 않고 커밋한
+것으로 보인다. Pinvi가 고칠 파일이 아니므로 여기 기록만 남기고 그 저장소는
+건드리지 않았다.
+
+**방법론 노트**: 처음 workflow가 낸 synthesis는 "Map이 9/8에 M05를 끝냈다"는
+식으로 날짜를 뭉뚱그렸다 — 실제로 직접 `git show`/`grep -n '^## '`로 재대조하니
+EXECUTION-IDENTITY-V6는 8/31, MAP-HEALTH-TRANSPORT도 8/31이었고 처음
+`docs/tasks.md` 편집 초안에도 9/8로 잘못 옮겨 적었다가 재검증 과정에서 스스로
+발견해 고쳤다. **workflow/subagent의 요약을 최종 문서에 그대로 옮기지 않고
+원본을 다시 확인하는 습관이 실제 오류를 잡았다.**
+
 ## 2026-09-18 (claude) — T-365 완료: flag 3개 삭제 + 구 kor-travel-map 날씨 경로 전량 제거
 
 사용자 지시: "진행. g1은 더 개선 불가" — 직전 재실측(아래 항목)에서 확인한
