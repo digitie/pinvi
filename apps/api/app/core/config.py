@@ -888,25 +888,14 @@ class Settings(BaseSettings):
     pinvi_kor_travel_geo_timeout_seconds: float = 5.0
     pinvi_kor_travel_geo_max_attempts: int = 3
 
-    # kor-travel-weather 공개 REST (날씨, ADR-068 — 이관 진행 중) —
+    # kor-travel-weather 공개 REST (날씨, ADR-068) —
     # `docs/integrations/kor-travel-weather.md`. 공개 read는 인증 헤더가 없다.
+    # T-362/T-363/T-364의 flag는 T-365(2026-09-18)에서 기본값 on 검증 후 구
+    # kor-travel-map 경로와 함께 완전히 제거됐다 — 이 서비스가 유일한 날씨
+    # 소스다(feature 단건/trip view/Admin weather-values 셋 다).
     pinvi_kor_travel_weather_base_url: str = "http://localhost:14101"
     pinvi_kor_travel_weather_timeout_seconds: float = 10.0
     pinvi_kor_travel_weather_max_attempts: int = 3
-    # T-362(P3). 기본값 off — G-1(KMA 커버리지)·G-2(처리방침)·G-3(보존)가 아직 안
-    # 풀렸다(`docs/tasks.md` 게이트 절). on이면 단건 `GET /features/{id}/weather`가
-    # `kor-travel-map` 대신 이 서비스를 쓴다.
-    pinvi_kor_travel_weather_single_feature_enabled: bool = False
-    # T-363(P4). 기본값 off — 위와 같은 게이트. on이면 trip view(`GET /trips/{id}`,
-    # `GET /trips/{id}/shared/{token}`)의 weather 조회가 `kor-travel-map`의 날짜별
-    # batch 대신 `kor-travel-weather`의 location 축 batch(markers+forecast)를 쓴다.
-    pinvi_kor_travel_weather_trip_view_enabled: bool = False
-    # T-364(P5). 기본값 off — 위와 같은 게이트. on이면 Admin `GET
-    # /admin/features/{id}/weather-values`가 `kor_travel_map_admin` 대신
-    # `kor-travel-weather`를 쓴다. `provider_dataset_id`/`dataset_display_name`은
-    # 대응물이 없어 항상 null이 된다(ADR-068 결정 2). flag on에서는 `asof`도 지원한다
-    # (구 경로는 Map Admin 계약이 몰라 여전히 422).
-    pinvi_kor_travel_weather_admin_enabled: bool = False
     # T-368. 기본값 off. on이면 `GET /weather/markers-in-bounds`가 지도 weather
     # marker를 `kor-travel-weather`의 `/nearby`로 직접 조회해 노출한다 — `kor-travel-map`을
     # 전혀 거치지 않는다(위 세 flag의 "완전 분리"를 지도 marker 표면까지 확장, T-363과

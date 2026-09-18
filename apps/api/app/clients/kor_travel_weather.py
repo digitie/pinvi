@@ -664,9 +664,10 @@ def create_kor_travel_weather_client(app_settings: Settings) -> KorTravelWeather
 async def kor_travel_weather_client_lifespan(app: FastAPI) -> AsyncIterator[None]:
     """FastAPI lifespan — httpx client 1개 생성 후 `app.state`에 보관.
 
-    flag(`pinvi_kor_travel_weather_single_feature_enabled`)가 꺼져 있어도 항상
-    생성한다 — httpx.AsyncClient 하나 생성뿐이라 비용이 없고, flag를 재배포 없이
-    바꿀 수 있게 한다.
+    T-362/T-363/T-364는 이 client가 유일한 날씨 소스다(구 kor-travel-map 경로는
+    T-365에서 제거됨). `pinvi_kor_travel_weather_map_markers_enabled`(T-368,
+    지도 marker 전용)가 꺼져 있어도 항상 생성한다 — httpx.AsyncClient 하나
+    생성뿐이라 비용이 없고, 그 flag를 재배포 없이 바꿀 수 있게 한다.
     """
     client = create_kor_travel_weather_client(settings)
     app.state.kor_travel_weather_client = client

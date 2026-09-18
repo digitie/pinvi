@@ -2,6 +2,123 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-18 (claude) — T-365 완료: flag 3개 삭제 + 구 kor-travel-map 날씨 경로 전량 제거
+
+사용자 지시: "진행. g1은 더 개선 불가" — 직전 재실측(아래 항목)에서 확인한
+G-1(KMA 커버리지 ~9%) 부분 상태를 영구 수용하고 T-365를 진행하라는 명시
+승인. G-2는 T-366으로 이미 해소, G-3(T-367 guard)은 실효 보존 약 9.6일로
+15일 목표를 향해 자연 증가 중이라 두 게이트는 진행을 막지 않았다.
+
+**설계 결정**: flag는 기본값 `on` 전환이 아니라 **완전히 삭제**한다 — 구
+`kor-travel-map` fallback 경로를 함께 제거하면 대체 코드 경로가 없는 flag는
+의미 없는 dead config라는 이 프로젝트의 anti-backward-compat-shim 원칙을
+그대로 적용했다.
+
+**구현**:
+
+- `apps/api/app/core/config.py`/`.env.example`에서 세 flag
+  (`pinvi_kor_travel_weather_{single_feature,trip_view,admin}_enabled`) 삭제.
+  T-368의 `pinvi_kor_travel_weather_map_markers_enabled`는 별도 범위라 손대지
+  않았다.
+- `apps/api/app/clients/kor_travel_map.py`에서 `get_weather_batch`/
+  `feature_weather`와 관련 dataclass(`WeatherBatchMetric`/`WeatherBatchCard`/
+  `Found·NoData·RetiredWeatherBatchItem`)·상수·decode 헬퍼를 전량 삭제 —
+  `ruff --fix`가 이제 쓰이지 않는 `datetime`/`UTC`/`timedelta` import까지
+  자동 정리했다(모듈 전체에서 datetime 사용이 weather-batch 전용이었다).
+  `kor_travel_map_admin.py`의 `get_feature_weather`도 삭제.
+- `features.py`/`admin/features.py`의 weather 엔드포인트에서
+  `_weather_from_kor_travel_map`/`_weather_values_from_payload`(구
+  kor_travel_map dict 매핑) 분기를 삭제. **처음에는** `OptionalKorTravelWeatherClientDep`
+  + 수동 `None` 체크를 `KorTravelWeatherClientDep`(required, 자동 503)로
+  바꾸려 했으나, 기존 테스트가 `app.dependency_overrides[get_optional_kor_travel_weather_client]`로
+  override하는 것을 발견하고 되돌렸다 — FastAPI override는 callable 정체성으로
+  매칭되므로 의존성 함수를 바꾸면 override가 조용히 무효화되고 실제 미설정
+  client를 resolve하려 든다. `OptionalKorTravelWeatherClientDep` + 명시적
+  `if weather_client is None: raise HTTPException(503, ...)`를 양쪽 endpoint에
+  유지해 기존 override 계약과 일관성을 보존했다.
+- `build_trip_view`의 `weather_client`는 계속 Optional로 남겼다 —
+  `apps/api/app/mcp/tools/registry.py`의 `_get_trip`이 weather client를 전혀 주입하지
+  않기 때문(kor_travel_map_client=None "저장 snapshot만 사용" 패턴과 동일한
+  MCP 설계 의도). 미주입 시 POI마다(day별) 균일하게 `{"state": "unavailable"}`로
+  표시하는 fallback을 신설했다 — feature 해석 상태(missing/retired/suppressed)와
+  **무관**하다(T-363 "완전 분리" 원칙을 fallback 경로에도 논리적 극한까지
+  적용한 결과).
+- `trip_view_builder.py`에서 `_weather_target_at()`/`_weather_resolution()`
+  함수, `_SEOUL` 상수, `asyncio`/`time`/`ZoneInfo` import를 함께 삭제. 남은
+  `feature_batch_failed` 지역 변수가 (구 `_weather_resolution` 호출의 유일한
+  소비처였는데) 이제 아무도 읽지 않는 것을 `ruff check`가 잡아내 함께 정리.
+
+**테스트 정리** (13개 파일, 기계적이지만 정확성이 중요한 대규모 삭제):
+
+- `test_features_weather_cutover.py`/`test_admin_features_weather_cutover.py`/
+  `test_trip_view_weather_cutover.py`: `_reset_flag` fixture·flag-off 테스트
+  삭제, `test_flag_on_*` → `test_*` sed rename, `weather_client=None` fallback
+  신규 테스트 3건 추가(각 파일 관점에 맞게).
+- `test_features_api.py`/`test_admin_features_api.py`: 구 kor_travel_map
+  weather 매핑 mock·테스트 6건 삭제.
+- `test_trip_view_builder.py`: `_WeatherFeatureClient`/`_build_weather_date_view`
+  헬퍼 + 구 경로 전용 테스트 6건 삭제, `test_build_trip_view_exposes_missing_and_transport_unverified`의
+  parametrize에서 `expected_weather_state` 컬럼 제거(이제 4개 케이스 전부
+  `unavailable`), `weather_client=None` 신규 테스트 1건 추가.
+- `test_kor_travel_map_client.py`: `sed -i '478,942d'`로 구 client 메서드
+  테스트 9건 일괄 삭제 — 삭제 전후 문맥을 직접 읽어 빈 줄 수가 유지되는지
+  확인한 뒤 실행.
+- `test_kor_travel_map_admin_client.py`: `get_feature_weather` 테스트 1건 삭제.
+- `test_kor_travel_map_contract.py`/`test_kor_travel_map_admin_contract.py`:
+  weather 경로 3개 + schema 11종을 `_CLIENT_PATHS`/`_CONSUMED_FIELD_CONTRACTS`/
+  `_ENDPOINT_DATA_SCHEMAS`/probe 목록에서 제거, 독립 테스트 3건 삭제.
+  **vendored snapshot(byte-SHA256 핀) 자체는 재추출하지 않았다** — Map은
+  여전히 그 경로를 노출하므로 스냅샷은 정확하고, Pinvi 쪽 "소비 범위" 표만
+  줄였다.
+- `test_normalize_asof_query.py` 신설 — `normalize_asof_query`의 유일한
+  간접 커버리지였던 `test_features_api.py`의 구 경로 테스트가 삭제되면서
+  생긴 커버리지 공백을 순수 함수 단위 테스트로 메꿨다.
+- **적대적 검증에서 실제 회귀 발견**: 개별 파일 단위로는 전부 green이었지만,
+  `apps/api` 전체 `mypy --strict .` 스윕에서 `test_feature_mapping.py`가
+  삭제된 `_weather_from_kor_travel_map`을 여전히 import하고 있다는 실제
+  오류(`attr-defined`)를 잡았다 — T-365 사전 계획에 이 파일이 아예 없었던
+  누락이었다. import 제거 + 관련 테스트 3건 삭제로 수정. **교훈**: 개별
+  파일 mypy만 돌리고 "5개 core 파일 clean"이라고 넘어갔으면 놓칠 뻔했다 —
+  전체 앱 스윕이 없었다면 CI에서만 드러났을 회귀.
+
+**문서**: `docs/decisions.md`(ADR-068 결정 13 추가) · `docs/integrations/kor-travel-weather.md`
+(상단 상태 배너를 "설계 단계"에서 "이관 완료"로, §0 요약표, G-1 게이트 문단에
+오버라이드 note, §6 게이트 F, §7-4 신설, §4.7 표 갱신) · `docs/api/features.md`
+§2.3·`docs/api/admin.md` §8.3(flag/이관-진행-중 프레이밍을 확정 계약 설명으로
+재작성) · `docs/tasks.md`(날씨 이관 전체 섹션 제거, T-359~T-368 전부 완료) ·
+`docs/tasks-done.md`(T-365 항목 추가) · `app/schemas/feature.py`/
+`app/services/trip_weather_batch.py`/`app/services/admin_weather_values.py`의
+stale docstring(구 `kor_travel_map`/flag on-off 프레이밍) 정정.
+
+**검증**: `apps/api` 전체 `ruff check`/`ruff format --check`/`mypy --strict`
+clean(남은 mypy 오류는 baseline과 동일한 pre-existing 항목만 확인 —
+`git stash` 전후 비교로 검증). 개별 수정 파일 pytest 전부 green.
+
+**진짜 적대적 리뷰(fork agent, 별도 컨텍스트)에서 두 번째 실제 회귀 발견**:
+`weather_client is None` fallback(`trip_view_builder.py`)과 live 경로
+(`trip_weather_batch.py`)가 "effective_date가 없는 day"(날짜 미지정 day +
+`trip.start_date`도 없음)를 다르게 처리했다 — live 경로는 그 day의
+feature-linked POI를 `weather_by_feature_id`에서 **아예 생략**하는데
+(`day_effective_date.get(...) is None`이면 continue), fallback은 그런 필터
+없이 전부 `unavailable`로 채워 넣어 같은 입력에 대해 두 경로의 응답 셰입이
+달라지는 문제였다. `weather_by_day_index` 딕셔너리 컴프리헨션에
+`day_effective_date.get(poi.day_index) is not None` 조건을 추가해 두 경로를
+맞추고, 이 케이스(날짜 미지정 trip+day)를 직접 검증하는 회귀 테스트
+(`test_build_trip_view_weather_client_none_omits_undated_day`)를 추가했다.
+기존 테스트는 전부 날짜가 있는 day만 써서 이 case가 커버되지 않았었다.
+리뷰는 사소한 오타(문서 여러 곳의 `apps/mcp/tools/registry.py` → 실제 경로
+`apps/api/app/mcp/tools/registry.py`)도 잡아 `sed`로 일괄 수정했다. 이걸로
+셋째 라운드째 "개별 검증은 통과했지만 더 넓은 시야에서만 보이는 결함"이
+나왔다 — 이 프로젝트에서 적대적 리뷰를 생략하면 안 되는 이유가 계속
+누적되고 있다.
+
+**최종 검증**: 위 fix 반영 후 5개 core 파일 mypy --strict 재확인(clean),
+`test_trip_view_builder.py`/`test_trip_view_weather_cutover.py`/
+`test_features_weather_cutover.py`/`test_admin_features_weather_cutover.py`
+49건 전부 green. 전체 `apps/api` `pytest -q` 스위트 — **2142 passed, 3
+skipped, 0 failed**(baseline 2177 passed 대비 -35는 flag-off/구경로 테스트
+삭제·rename 순감소, WSL2 I/O로 34분 38초 소요).
+
 ## 2026-09-18 (claude) — mobile-doctor 경고 해소, G-1·G-3 재실측(부분 진행 확인)
 
 사용자 지시: "mobile doctor 워닝 해소하고 남은 작업 진행. 단, 다른 에이전트가

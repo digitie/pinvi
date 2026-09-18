@@ -106,17 +106,17 @@ revision이 같은 캐시를 재사용한 성공 상태이므로 소비자 응�
 `retired|missing`만 집계하며 `suppressed|unverified`는 포함하지 않는다.
 
 일자 날씨는 `weather_by_feature_id`의 상태와 `weather_cards`의 정규화된 카드로 나뉜다.
-`found` 상태는 `card_key`만 가지며, 같은 일자·기상 격자의 여러 feature가 같은 카드를
-참조한다. 참조된 card가 빠지거나 참조되지 않은 card가 있으면 응답 계약 오류다.
+`found` 상태는 `card_key`만 가지며, 같은 일자·`kor-travel-weather` `location_id`의
+여러 feature가 같은 카드를 참조한다(`card_key := location_id`). 참조된 card가
+빠지거나 참조되지 않은 card가 있으면 응답 계약 오류다.
 
-> **소스 이관 (ADR-068, T-363/P4 — flag `pinvi_kor_travel_weather_trip_view_enabled`,
-> 기본 off)**: dedupe 근거가 "기상 격자"에서 `kor-travel-weather`의 `location_id`로
-> 바뀐다(`card_key := location_id`). **파티션 불변식과 응답 셰입은 그대로**다. flag가
-> on이면 weather 조회는 feature batch(위 `feature_resolution_state`)와 **완전히
-> 독립**이다 — POI 자신의 `feature_snapshot.coord`만 보고 결정하므로
-> `weather_by_feature_id`의 상태는 `found`/`no_data`/`unavailable` 셋뿐이며,
-> feature가 `retired`/`suppressed`/`missing`이어도 좌표가 있으면 그 지점의 날씨를
-> 그대로 낸다. 상세 —
+> **소스: `kor-travel-weather`(ADR-068, T-363/T-365로 완료)**. weather 조회는
+> feature batch(위 `feature_resolution_state`)와 **완전히 독립**이다 — POI 자신의
+> `feature_snapshot.coord`만 보고 결정하므로 `weather_by_feature_id`의 상태는
+> `found`/`no_data`/`unavailable` 셋뿐이며, feature가 `retired`/`suppressed`/`missing`이어도
+> 좌표가 있으면 그 지점의 날씨를 그대로 낸다. `kor-travel-weather` client가
+> 주입되지 않은 호출 경로(예: MCP 도구)는 조회를 시도하지 않고 모든 feature-linked
+> POI를 균일하게 `unavailable`로 표시한다. 상세 —
 > [`docs/integrations/kor-travel-weather.md`](../integrations/kor-travel-weather.md) §3.4/§3.5.
 
 응답 shape:

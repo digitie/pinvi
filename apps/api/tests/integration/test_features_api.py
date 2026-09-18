@@ -7,7 +7,6 @@ items/clusters, found/missing, metrics)을 반환한다.
 
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -91,31 +90,6 @@ class _FakeKorTravelMapClient:
             "urls": {"homepage": "https://example.test"},
             "detail": {"phones": ["051-000-0000"]},
             "updated_at": "2026-06-10T12:00:00+09:00",
-        }
-
-    async def feature_weather(
-        self, feature_id: str, *, asof: Any = None, known_at: Any = None
-    ) -> dict[str, Any]:
-        # 시그니처는 실제 client(`clients/kor_travel_map.py feature_weather`)와 같아야 한다 —
-        # kwarg가 빠져 있으면 라우터가 새 인자를 넘기기 시작해도 fake에서만 TypeError로 늦게 터진다.
-        self.calls["weather"] = {"feature_id": feature_id, "asof": asof, "known_at": known_at}
-        # Map bitemporal cutover(`6650aa71`) 이후 카드에는 `asof`가 없고 `selected_at`이 있다.
-        return {
-            "feature_id": feature_id,
-            "selected_at": "2026-06-10T12:00:00+09:00",
-            "refresh_after": "2026-06-10T13:00:00+09:00",
-            "latest_at": "2026-06-10T11:00:00+09:00",
-            "is_stale": False,
-            "source_styles": ["nowcast", "short"],
-            "metrics": [
-                {
-                    "metric_key": "T1H",
-                    "metric_name": "기온",
-                    "forecast_style": "nowcast",
-                    "value_number": 23.0,
-                    "unit": "℃",
-                }
-            ],
         }
 
     async def categories(self, *, include_counts: bool = False) -> dict[str, Any]:
@@ -270,77 +244,6 @@ async def test_feature_detail_returns_404_when_missing(
         _clear()
 
     assert resp.status_code == 404
-
-
-async def test_weather_maps_flat_metrics(
-    client: Any, verified_user: tuple[str, str], auth_cookies: Any
-) -> None:
-    user_id, _email = verified_user
-    fake = _FakeKorTravelMapClient()
-    _override(fake)
-    try:
-        resp = await client.get(
-            "/features/f_x_p_1/weather?asof=2026-07-01T23:59:59%2B09:00",
-            cookies=auth_cookies(user_id),
-        )
-    finally:
-        _clear()
-
-    assert resp.status_code == 200, resp.text
-    assert fake.calls["weather"]["asof"].isoformat() == "2026-07-01T23:59:59+09:00"
-    data = resp.json()["data"]
-    # Pinvi 공개 필드 `asof`의 소스는 Map `selected_at`이다(Map `6650aa71`).
-    assert data["asof"] == "2026-06-10T12:00:00+09:00"
-    assert data["is_stale"] is False
-    assert data["source_styles"] == ["nowcast", "short"]
-    assert data["metrics"][0]["metric_key"] == "T1H"
-    assert data["metrics"][0]["value_number"] == 23.0
-    # knowledge time은 라우터가 넘기지 않는다 — client가 "지금"을 채운다(client docstring 참조).
-    assert fake.calls["weather"]["known_at"] is None
-
-
-async def test_weather_naive_asof_is_read_as_kst_not_utc(
-    client: Any, verified_user: tuple[str, str], auth_cookies: Any
-) -> None:
-    """offset 없는 `?asof=`는 KST로 해석한다 — UTC로 읽으면 9시간 어긋난 시점이 조용히 돌아온다.
-
-    transport는 naive를 거절하므로(`clients/kor_travel_map.py _require_aware_datetime`)
-    보정은 시간대 의미를 아는 이 경계 한 곳에서만 일어난다(`features.py normalize_asof_query`).
-    """
-    user_id, _email = verified_user
-    fake = _FakeKorTravelMapClient()
-    _override(fake)
-    try:
-        resp = await client.get(
-            "/features/f_x_p_1/weather?asof=2026-07-01T23:59:59",
-            cookies=auth_cookies(user_id),
-        )
-    finally:
-        _clear()
-
-    assert resp.status_code == 200, resp.text
-    passed = fake.calls["weather"]["asof"]
-    assert passed.utcoffset() == timedelta(hours=9)
-    assert passed.isoformat() == "2026-07-01T23:59:59+09:00"
-
-
-async def test_weather_aware_asof_keeps_caller_offset(
-    client: Any, verified_user: tuple[str, str], auth_cookies: Any
-) -> None:
-    """명시된 offset은 덮어쓰지 않는다(`Z`도 그대로 UTC로 나간다)."""
-    user_id, _email = verified_user
-    fake = _FakeKorTravelMapClient()
-    _override(fake)
-    try:
-        resp = await client.get(
-            "/features/f_x_p_1/weather?asof=2026-07-01T23:59:59Z",
-            cookies=auth_cookies(user_id),
-        )
-    finally:
-        _clear()
-
-    assert resp.status_code == 200, resp.text
-    assert fake.calls["weather"]["asof"].utcoffset() == timedelta(0)
 
 
 async def test_in_bounds_returns_503_when_kor_travel_map_unavailable(

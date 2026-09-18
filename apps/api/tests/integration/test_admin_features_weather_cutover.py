@@ -1,12 +1,11 @@
-"""Admin `GET /admin/features/{id}/weather-values` — `kor-travel-weather` 전환 flag
-(T-364/P5, ADR-068).
+"""Admin `GET /admin/features/{id}/weather-values` — `kor-travel-weather` location 축
+(ADR-068, T-364/T-365).
 
-flag가 꺼져 있으면(기본값) 기존 `kor_travel_map_admin` 경로를 그대로 쓴다는 것은
-`test_admin_features_api.py`의 기존 weather-values 테스트가 이미 고정한다. 여기서는
-flag on일 때의 **새 경로**를 검증한다: admin feature 상세(`get_feature_detail`)로
-좌표를 얻고 `weather_card.resolve_and_collect_deduped_values` → admin 전용 metric으로
-투영한다. T-362와 달리 POI 문맥이 없으므로(bare `feature_id`) T-363의 "feature batch와
-완전 분리" 원칙은 적용되지 않는다(설계 `admin_weather_values.py` 모듈 docstring).
+admin feature 상세(`get_feature_detail`)로 좌표를 얻고
+`weather_card.resolve_and_collect_deduped_values` → admin 전용 metric으로 투영한다
+(구 `kor_travel_map_admin` 경로는 T-365에서 제거됐다). T-362와 달리 POI 문맥이
+없으므로(bare `feature_id`) T-363의 "feature batch와 완전 분리" 원칙은 적용되지
+않는다(설계 `admin_weather_values.py` 모듈 docstring).
 """
 
 from __future__ import annotations
@@ -27,7 +26,6 @@ from app.clients.kor_travel_weather import (
     WeatherValueOut,
     get_optional_kor_travel_weather_client,
 )
-from app.core.config import settings
 from app.main import app
 
 pytestmark = pytest.mark.asyncio
@@ -67,7 +65,7 @@ def _admin_detail(feature_id: str, *, lon: float | None, lat: float | None) -> d
 
 
 class _FakeAdminClient:
-    """`get_feature_detail`/`get_feature_weather`만 구현."""
+    """`get_feature_detail`만 구현."""
 
     def __init__(
         self, *, lon: float | None = _FEATURE_LON, lat: float | None = _FEATURE_LAT
@@ -79,27 +77,6 @@ class _FakeAdminClient:
     async def get_feature_detail(self, feature_id: str) -> dict[str, Any]:
         self.calls["detail"] = feature_id
         return _admin_detail(feature_id, lon=self.lon, lat=self.lat)
-
-    async def get_feature_weather(self, feature_id: str) -> dict[str, Any]:
-        """flag off 테스트 전용 — 구 경로가 여전히 호출되는지 확인하는 용도."""
-        self.calls["weather"] = feature_id
-        return {
-            "feature_id": feature_id,
-            "selected_at": "2026-06-12T10:00:00+09:00",
-            "is_stale": False,
-            "source_styles": ["nowcast"],
-            "metrics": [
-                {
-                    "metric_key": "T1H",
-                    "forecast_style": "nowcast",
-                    "provider_dataset_id": 41,
-                    "dataset_key": "kma_vilage_forecast",
-                    "dataset_display_name": "기상청 단기예보",
-                    "known_at": "2026-06-12T09:35:00+09:00",
-                    "value_number": 23.0,
-                }
-            ],
-        }
 
 
 def _weather_value(
@@ -202,49 +179,7 @@ def _clear() -> None:
     app.dependency_overrides.pop(get_optional_kor_travel_weather_client, None)
 
 
-@pytest.fixture(autouse=True)
-def _reset_flag() -> Any:
-    original = settings.pinvi_kor_travel_weather_admin_enabled
-    yield
-    settings.pinvi_kor_travel_weather_admin_enabled = original
-
-
-async def test_flag_off_uses_kor_travel_map_admin_and_ignores_weather_client(
-    client: Any, session_factory: Any, auth_cookies: Any
-) -> None:
-    from app.models.user import User
-
-    async with session_factory() as db:
-        admin = User(
-            email="admin_flag_off@example.com",
-            password_hash="x",
-            status="active",
-            roles=["user", "admin"],
-            email_verified_at=datetime.now(UTC),
-        )
-        db.add(admin)
-        await db.commit()
-        await db.refresh(admin)
-        admin_id = admin.user_id
-
-    settings.pinvi_kor_travel_weather_admin_enabled = False
-    admin_client = _FakeAdminClient()
-    weather_client = _FakeWeatherClient()
-    _override(admin_client, weather_client)
-    try:
-        resp = await client.get(
-            "/admin/features/f_flag_off/weather-values", cookies=auth_cookies(str(admin_id))
-        )
-    finally:
-        _clear()
-
-    assert resp.status_code == 200, resp.text
-    assert admin_client.calls["weather"] == "f_flag_off"
-    assert "detail" not in admin_client.calls
-    assert weather_client.calls["resolve"] == []
-
-
-async def test_flag_on_resolves_coord_via_admin_detail_and_builds_values(
+async def test_resolves_coord_via_admin_detail_and_builds_values(
     client: Any, session_factory: Any, auth_cookies: Any
 ) -> None:
     from app.models.user import User
@@ -262,7 +197,6 @@ async def test_flag_on_resolves_coord_via_admin_detail_and_builds_values(
         await db.refresh(admin)
         admin_id = admin.user_id
 
-    settings.pinvi_kor_travel_weather_admin_enabled = True
     now = datetime.now(UTC)
     admin_client = _FakeAdminClient()
     weather_client = _FakeWeatherClient(
@@ -297,7 +231,7 @@ async def test_flag_on_resolves_coord_via_admin_detail_and_builds_values(
     assert weather_client.calls["resolve"][0]["lon"] == _FEATURE_LON
 
 
-async def test_flag_on_supports_asof_within_retention(
+async def test_supports_asof_within_retention(
     client: Any, session_factory: Any, auth_cookies: Any
 ) -> None:
     """구 경로는 asof를 422로 거절하지만 새 경로는 T-362와 같은 규칙으로 지원한다."""
@@ -316,7 +250,6 @@ async def test_flag_on_supports_asof_within_retention(
         await db.refresh(admin)
         admin_id = admin.user_id
 
-    settings.pinvi_kor_travel_weather_admin_enabled = True
     admin_client = _FakeAdminClient()
     weather_client = _FakeWeatherClient()
     _override(admin_client, weather_client)
@@ -333,7 +266,7 @@ async def test_flag_on_supports_asof_within_retention(
     assert weather_client.calls["resolve"] != []
 
 
-async def test_flag_on_past_asof_beyond_retention_returns_empty_items(
+async def test_past_asof_beyond_retention_returns_empty_items(
     client: Any, session_factory: Any, auth_cookies: Any
 ) -> None:
     from app.models.user import User
@@ -351,7 +284,6 @@ async def test_flag_on_past_asof_beyond_retention_returns_empty_items(
         await db.refresh(admin)
         admin_id = admin.user_id
 
-    settings.pinvi_kor_travel_weather_admin_enabled = True
     admin_client = _FakeAdminClient()
     weather_client = _FakeWeatherClient()
     past = datetime.now(UTC) - timedelta(days=10)
@@ -370,7 +302,7 @@ async def test_flag_on_past_asof_beyond_retention_returns_empty_items(
     assert weather_client.calls["resolve"] == []  # 과거로 판정되면 해석 자체를 시도하지 않는다
 
 
-async def test_flag_on_feature_without_coord_returns_empty_items(
+async def test_feature_without_coord_returns_empty_items(
     client: Any, session_factory: Any, auth_cookies: Any
 ) -> None:
     from app.models.user import User
@@ -388,7 +320,6 @@ async def test_flag_on_feature_without_coord_returns_empty_items(
         await db.refresh(admin)
         admin_id = admin.user_id
 
-    settings.pinvi_kor_travel_weather_admin_enabled = True
     admin_client = _FakeAdminClient(lon=None, lat=None)
     weather_client = _FakeWeatherClient()
     _override(admin_client, weather_client)
@@ -404,7 +335,7 @@ async def test_flag_on_feature_without_coord_returns_empty_items(
     assert weather_client.calls["resolve"] == []
 
 
-async def test_flag_on_no_anchor_returns_empty_items(
+async def test_no_anchor_returns_empty_items(
     client: Any, session_factory: Any, auth_cookies: Any
 ) -> None:
     from app.models.user import User
@@ -422,7 +353,6 @@ async def test_flag_on_no_anchor_returns_empty_items(
         await db.refresh(admin)
         admin_id = admin.user_id
 
-    settings.pinvi_kor_travel_weather_admin_enabled = True
     admin_client = _FakeAdminClient()
     weather_client = _FakeWeatherClient(no_match=True)
     _override(admin_client, weather_client)
@@ -437,7 +367,7 @@ async def test_flag_on_no_anchor_returns_empty_items(
     assert resp.json()["data"]["items"] == []
 
 
-async def test_flag_on_weather_service_unavailable_returns_503(
+async def test_weather_service_unavailable_returns_503(
     client: Any, session_factory: Any, auth_cookies: Any
 ) -> None:
     from app.models.user import User
@@ -455,7 +385,6 @@ async def test_flag_on_weather_service_unavailable_returns_503(
         await db.refresh(admin)
         admin_id = admin.user_id
 
-    settings.pinvi_kor_travel_weather_admin_enabled = True
     admin_client = _FakeAdminClient()
     _override(admin_client, None)
     try:
@@ -469,7 +398,7 @@ async def test_flag_on_weather_service_unavailable_returns_503(
     assert resp.json()["error"]["code"] == "WEATHER_SERVICE_UNAVAILABLE"
 
 
-async def test_flag_on_feature_not_found_maps_404(
+async def test_feature_not_found_maps_404(
     client: Any, session_factory: Any, auth_cookies: Any
 ) -> None:
     from app.models.user import User
@@ -491,7 +420,6 @@ async def test_flag_on_feature_not_found_maps_404(
         async def get_feature_detail(self, feature_id: str) -> dict[str, Any]:
             raise KorTravelMapFeatureNotFound("not found")
 
-    settings.pinvi_kor_travel_weather_admin_enabled = True
     admin_client = _NotFoundAdminClient()
     weather_client = _FakeWeatherClient()
     _override(admin_client, weather_client)

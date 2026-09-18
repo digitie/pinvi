@@ -1,17 +1,16 @@
 """Trip view weather — `kor-travel-weather` location 축 batch, feature batch와 완전 독립
-(T-363/P4, ADR-068, 2026-09-17 사용자 방향 전환).
+(ADR-068, T-363/T-365, 2026-09-17 사용자 방향 전환).
 
-flag가 꺼져 있으면(기본값) 기존 `kor-travel-map` 날짜별 batch 경로를 그대로 쓴다는
-것은 `test_trip_view_builder.py`의 기존 weather 테스트가 이미 고정한다. 여기서는
-flag on일 때의 **새 경로**(`trip_weather_batch.build_trip_weather_via_kor_travel_weather`)
-를 `build_trip_view` 전체 파이프라인을 통해 검증한다.
+`trip_weather_batch.build_trip_weather_via_kor_travel_weather`를 `build_trip_view`
+전체 파이프라인을 통해 검증한다(구 `kor-travel-map` 날짜별 batch 경로는 T-365에서
+제거됐다).
 
-**핵심 불변식** — 이 새 경로는 feature batch(`get_features`)의 산출물을 전혀 받지
+**핵심 불변식** — 이 경로는 feature batch(`get_features`)의 산출물을 전혀 받지
 않는다. weather 조회는 POI 자신의 `feature_snapshot.coord`만으로 동작하고, feature가
 `retired`/`suppressed`/`missing`이든 feature batch 자체가 실패했든 영향받지 않는다.
 아래 테스트들은 이 독립성을 직접 고정한다(특히
-`test_flag_on_weather_ignores_retired_feature_state_when_snapshot_has_coord`와
-`test_flag_on_weather_survives_feature_batch_failure`).
+`test_weather_ignores_retired_feature_state_when_snapshot_has_coord`와
+`test_weather_survives_feature_batch_failure`).
 """
 
 from __future__ import annotations
@@ -24,13 +23,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from app.clients.kor_travel_map import (
-    FeatureTripCard,
-    FoundFeatureBatchItem,
-    KorTravelMapUnavailable,
-    NoDataWeatherBatchItem,
-    RetiredFeatureBatchItem,
-)
+from app.clients.kor_travel_map import KorTravelMapUnavailable, RetiredFeatureBatchItem
 from app.clients.kor_travel_weather import (
     CoordinateRequestOut,
     KorTravelWeatherNotFound,
@@ -40,7 +33,6 @@ from app.clients.kor_travel_weather import (
     WeatherMarkerOut,
     WeatherValueOut,
 )
-from app.core.config import settings
 
 pytestmark = pytest.mark.asyncio
 
@@ -109,51 +101,6 @@ class _FailingMapClient:
         known_row_revisions: Mapping[str, int] | None = None,
     ) -> dict[str, Any]:
         raise KorTravelMapUnavailable("feature batch down")
-
-
-class _LegacyMapClient:
-    """flag off 테스트 전용 — `get_features`는 found를 돌려줘 구 weather batch 경로가
-    실제로 호출되게 한다(retired 등은 애초에 weather batch를 부르지 않으므로 이
-    테스트의 목적인 "새 client가 무시됨"을 검증할 수 없다)."""
-
-    async def get_features(
-        self,
-        feature_ids: list[str],
-        *,
-        known_row_revisions: Mapping[str, int] | None = None,
-    ) -> dict[str, Any]:
-        return {
-            feature_id: FoundFeatureBatchItem(
-                feature_id=feature_id,
-                row_revision=1,
-                trip_card=FeatureTripCard(
-                    feature_id=feature_id,
-                    kind="place",
-                    name=feature_id,
-                    category="attraction",
-                    lon=127.0,
-                    lat=37.5,
-                    address={},
-                    marker_icon="marker",
-                    marker_color="P-01",
-                ),
-            )
-            for feature_id in feature_ids
-        }
-
-    async def get_weather_batch(
-        self,
-        targets: Mapping[datetime, Sequence[str]],
-        *,
-        known_at: datetime,
-    ) -> dict[datetime, dict[str, Any]]:
-        return {
-            target_at: {
-                feature_id: NoDataWeatherBatchItem(feature_id=feature_id)
-                for feature_id in feature_ids
-            }
-            for target_at, feature_ids in targets.items()
-        }
 
 
 def _location(location_id: str, *, lat: float, lon: float) -> LocationOut:
@@ -314,34 +261,24 @@ def _at(target_date: date, hour: int = 9) -> datetime:
     return datetime(target_date.year, target_date.month, target_date.day, hour, tzinfo=_SEOUL)
 
 
-@pytest.fixture(autouse=True)
-def _reset_flag() -> Any:
-    original = settings.pinvi_kor_travel_weather_trip_view_enabled
-    yield
-    settings.pinvi_kor_travel_weather_trip_view_enabled = original
-
-
-async def test_flag_off_ignores_new_weather_client(session_factory) -> None:  # type: ignore[no-untyped-def]
-    settings.pinvi_kor_travel_weather_trip_view_enabled = False
+async def test_weather_client_none_marks_all_unavailable(session_factory) -> None:  # type: ignore[no-untyped-def]
+    """T-365 — weather_client 미주입(MCP 도구 등)이면 조회를 시도하지 않고 균일하게
+    unavailable로 표시한다. feature 상태(retired)와 무관하다."""
     eff_date = date(2026, 10, 1)
     feature_id = f"f_{uuid.uuid4().hex[:8]}"
-    map_client = _LegacyMapClient()
-    weather_client = _WeatherClient()
+    map_client = _MapClient()  # get_features는 retired를 답하지만 weather는 보지 않는다.
 
     view = await _build_view(
         session_factory,
         pois=[(1, eff_date, feature_id, _snapshot(127.0, 37.5))],
         map_client=map_client,
-        weather_client=weather_client,
+        weather_client=None,
     )
 
-    assert weather_client.resolve_calls == []
-    assert weather_client.markers_calls == []
-    assert _day(view, 1)["weather_by_feature_id"][feature_id]["state"] == "no_data"
+    assert _day(view, 1)["weather_by_feature_id"][feature_id] == {"state": "unavailable"}
 
 
-async def test_flag_on_builds_card_and_shares_across_same_location(session_factory) -> None:  # type: ignore[no-untyped-def]
-    settings.pinvi_kor_travel_weather_trip_view_enabled = True
+async def test_builds_card_and_shares_across_same_location(session_factory) -> None:  # type: ignore[no-untyped-def]
     eff_date = date(2026, 10, 1)
     lat, lon = 37.5, 127.0
     f1, f2 = f"f1_{uuid.uuid4().hex[:8]}", f"f2_{uuid.uuid4().hex[:8]}"
@@ -376,11 +313,10 @@ async def test_flag_on_builds_card_and_shares_across_same_location(session_facto
     assert weather_client.forecast_calls[0]["location_id"] == "loc-1"
 
 
-async def test_flag_on_weather_ignores_retired_feature_state_when_snapshot_has_coord(  # type: ignore[no-untyped-def]
+async def test_weather_ignores_retired_feature_state_when_snapshot_has_coord(  # type: ignore[no-untyped-def]
     session_factory,
 ) -> None:
     """핵심 불변식 — `_MapClient`는 항상 retired를 돌려주지만 weather는 그와 무관하게 found다."""
-    settings.pinvi_kor_travel_weather_trip_view_enabled = True
     eff_date = date(2026, 10, 1)
     lat, lon = 37.5, 127.0
     feature_id = f"f_{uuid.uuid4().hex[:8]}"
@@ -408,9 +344,8 @@ async def test_flag_on_weather_ignores_retired_feature_state_when_snapshot_has_c
     assert day["weather_by_feature_id"][feature_id] == {"state": "found", "card_key": "loc-1"}
 
 
-async def test_flag_on_weather_survives_feature_batch_failure(session_factory) -> None:  # type: ignore[no-untyped-def]
+async def test_weather_survives_feature_batch_failure(session_factory) -> None:  # type: ignore[no-untyped-def]
     """핵심 불변식 — feature batch(get_features) 자체가 실패해도 weather는 정상 동작한다."""
-    settings.pinvi_kor_travel_weather_trip_view_enabled = True
     eff_date = date(2026, 10, 1)
     lat, lon = 37.5, 127.0
     feature_id = f"f_{uuid.uuid4().hex[:8]}"
@@ -438,9 +373,8 @@ async def test_flag_on_weather_survives_feature_batch_failure(session_factory) -
     assert day["weather_by_feature_id"][feature_id] == {"state": "found", "card_key": "loc-1"}
 
 
-async def test_flag_on_merges_full_source_location_bundle(session_factory) -> None:  # type: ignore[no-untyped-def]
+async def test_merges_full_source_location_bundle(session_factory) -> None:  # type: ignore[no-untyped-def]
     """§3.3 회귀 가드 — 대표 location에 사실이 없어도 번들의 다른 location 값을 쓴다."""
-    settings.pinvi_kor_travel_weather_trip_view_enabled = True
     eff_date = date(2026, 10, 1)
     lat, lon = 37.5, 127.0
     feature_id = f"f_{uuid.uuid4().hex[:8]}"
@@ -473,8 +407,7 @@ async def test_flag_on_merges_full_source_location_bundle(session_factory) -> No
     assert requested_locations == {"loc-a", "loc-b"}
 
 
-async def test_flag_on_no_anchor_marks_no_data_without_network_calls(session_factory) -> None:  # type: ignore[no-untyped-def]
-    settings.pinvi_kor_travel_weather_trip_view_enabled = True
+async def test_no_anchor_marks_no_data_without_network_calls(session_factory) -> None:  # type: ignore[no-untyped-def]
     eff_date = date(2026, 10, 1)
     feature_id = f"f_{uuid.uuid4().hex[:8]}"
     map_client = _MapClient()
@@ -492,8 +425,7 @@ async def test_flag_on_no_anchor_marks_no_data_without_network_calls(session_fac
     assert weather_client.forecast_calls == []
 
 
-async def test_flag_on_snapshot_without_coord_is_unavailable(session_factory) -> None:  # type: ignore[no-untyped-def]
-    settings.pinvi_kor_travel_weather_trip_view_enabled = True
+async def test_snapshot_without_coord_is_unavailable(session_factory) -> None:  # type: ignore[no-untyped-def]
     eff_date = date(2026, 10, 1)
     feature_id = f"f_{uuid.uuid4().hex[:8]}"
     map_client = _MapClient()
@@ -510,8 +442,7 @@ async def test_flag_on_snapshot_without_coord_is_unavailable(session_factory) ->
     assert weather_client.resolve_calls == []
 
 
-async def test_flag_on_partial_location_failure_still_found(session_factory) -> None:  # type: ignore[no-untyped-def]
-    settings.pinvi_kor_travel_weather_trip_view_enabled = True
+async def test_partial_location_failure_still_found(session_factory) -> None:  # type: ignore[no-untyped-def]
     eff_date = date(2026, 10, 1)
     lat, lon = 37.5, 127.0
     feature_id = f"f_{uuid.uuid4().hex[:8]}"
@@ -542,11 +473,10 @@ async def test_flag_on_partial_location_failure_still_found(session_factory) -> 
     assert [m["metric_key"] for m in day["weather_cards"]["loc-a"]["metrics"]] == ["TMP"]
 
 
-async def test_flag_on_total_location_failure_marks_unavailable_not_no_data(
+async def test_total_location_failure_marks_unavailable_not_no_data(
     session_factory,
 ) -> None:  # type: ignore[no-untyped-def]
     """ "부분 실패는 추측하지 않는다" — 실패를 no_data로 지어내지 않고 unavailable로 둔다."""
-    settings.pinvi_kor_travel_weather_trip_view_enabled = True
     eff_date = date(2026, 10, 1)
     lat, lon = 37.5, 127.0
     feature_id = f"f_{uuid.uuid4().hex[:8]}"
@@ -566,8 +496,7 @@ async def test_flag_on_total_location_failure_marks_unavailable_not_no_data(
     assert _day(view, 1)["weather_by_feature_id"][feature_id] == {"state": "unavailable"}
 
 
-async def test_flag_on_all_success_but_empty_marks_no_data(session_factory) -> None:  # type: ignore[no-untyped-def]
-    settings.pinvi_kor_travel_weather_trip_view_enabled = True
+async def test_all_success_but_empty_marks_no_data(session_factory) -> None:  # type: ignore[no-untyped-def]
     eff_date = date(2026, 10, 1)
     lat, lon = 37.5, 127.0
     feature_id = f"f_{uuid.uuid4().hex[:8]}"
@@ -587,9 +516,8 @@ async def test_flag_on_all_success_but_empty_marks_no_data(session_factory) -> N
     assert _day(view, 1)["weather_by_feature_id"][feature_id] == {"state": "no_data"}
 
 
-async def test_flag_on_date_slicing_and_no_date_fanout(session_factory) -> None:  # type: ignore[no-untyped-def]
+async def test_date_slicing_and_no_date_fanout(session_factory) -> None:  # type: ignore[no-untyped-def]
     """같은 feature가 이틀에 걸쳐 나와도 forecast는 location당 1회, day별로 다른 카드를 얻는다."""
-    settings.pinvi_kor_travel_weather_trip_view_enabled = True
     day1_date, day2_date = date(2026, 10, 1), date(2026, 10, 3)
     lat, lon = 37.5, 127.0
     feature_id = f"f_{uuid.uuid4().hex[:8]}"
@@ -635,9 +563,8 @@ async def test_flag_on_date_slicing_and_no_date_fanout(session_factory) -> None:
     assert call["to"] == datetime(2026, 10, 4, tzinfo=_SEOUL)
 
 
-async def test_flag_on_markers_latest_feeds_the_card(session_factory) -> None:  # type: ignore[no-untyped-def]
+async def test_markers_latest_feeds_the_card(session_factory) -> None:  # type: ignore[no-untyped-def]
     """`markers()`의 `latest`도 카드에 반영된다(현재값+특보, forecast()와 별개 경로)."""
-    settings.pinvi_kor_travel_weather_trip_view_enabled = True
     eff_date = date(2026, 10, 1)
     lat, lon = 37.5, 127.0
     feature_id = f"f_{uuid.uuid4().hex[:8]}"

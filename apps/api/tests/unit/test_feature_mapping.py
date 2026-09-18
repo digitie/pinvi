@@ -1,13 +1,12 @@
 """features.py kor_travel_map → Pinvi 매핑 helper 단위 테스트 (DB 불필요).
 
 kor_travel_map 평면 lon/lat·name·구조화 address·cluster_key·평탄 metrics 투영을 검증한다.
-Map cutover로 **제거한** 필드(`status`, T-VN-42)와 **이름이 바뀐** 소스(`asof` ← `selected_at`)도
-여기서 고정한다.
+Map cutover로 **제거한** 필드(`status`, T-VN-42)를 여기서 고정한다. 날씨 매핑
+(`_weather_from_kor_travel_map`)은 T-365에서 `kor-travel-weather`로 이관되며 삭제됐다
+(ADR-068).
 """
 
 from __future__ import annotations
-
-from datetime import datetime, timedelta, timezone
 
 from app.api.v1.features import (
     _category_from_kor_travel_map,
@@ -15,7 +14,6 @@ from app.api.v1.features import (
     _coord_from_kor_travel_map,
     _detail_from_kor_travel_map,
     _summary_from_kor_travel_map,
-    _weather_from_kor_travel_map,
 )
 
 
@@ -131,57 +129,3 @@ def test_detail_maps_structured_address_and_codes() -> None:
     assert detail.address == {"road": "부산 광안로 1"}
     assert detail.sigungu_code == "11680"
     assert detail.urls == {"homepage": "h"}
-
-
-def test_weather_asof_comes_from_map_selected_at() -> None:
-    """Pinvi 공개 필드 `asof`의 소스는 Map `selected_at`이다(bitemporal cutover `6650aa71`).
-
-    구 `asof` 키가 payload에 남아 있어도 읽지 않는다 — 사라진 필드를 계속 소비하면
-    다음 드리프트에서 조용히 None이 된다.
-    """
-    card = _weather_from_kor_travel_map(
-        {
-            "feature_id": "f1",
-            "selected_at": "2026-07-01T23:00:00+09:00",
-            "asof": "1999-01-01T00:00:00+09:00",
-            "refresh_after": "2026-07-02T00:00:00+09:00",
-            "latest_at": "2026-07-01T23:30:00+09:00",
-            "is_stale": False,
-            "source_styles": [],
-            "metrics": [],
-        },
-        feature_id="f1",
-    )
-    assert card.asof == datetime(2026, 7, 1, 23, 0, tzinfo=timezone(timedelta(hours=9)))
-    assert card.latest_at == datetime(2026, 7, 1, 23, 30, tzinfo=timezone(timedelta(hours=9)))
-
-
-def test_weather_asof_is_none_when_map_omits_selected_at() -> None:
-    card = _weather_from_kor_travel_map(
-        {"feature_id": "f1", "is_stale": False, "source_styles": [], "metrics": []},
-        feature_id="f1",
-    )
-    assert card.asof is None
-
-
-def test_weather_maps_flat_metrics() -> None:
-    card = _weather_from_kor_travel_map(
-        {
-            "feature_id": "f1",
-            "is_stale": True,
-            "source_styles": ["nowcast"],
-            "metrics": [
-                {
-                    "metric_key": "T1H",
-                    "forecast_style": "nowcast",
-                    "value_number": 23.0,
-                    "unit": "℃",
-                }
-            ],
-        },
-        feature_id="f1",
-    )
-    assert card.is_stale is True
-    assert card.source_styles == ["nowcast"]
-    assert card.metrics[0].metric_key == "T1H"
-    assert card.metrics[0].value_number == 23.0

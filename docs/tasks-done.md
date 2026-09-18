@@ -7,6 +7,62 @@
 
 ## 2026-09-18
 
+- [x] **T-365** — (P6, 최종) flag 3개 완전 삭제 + 구 `kor-travel-map` 날씨 경로
+      전량 제거 — `kor-travel-weather`가 유일한 날씨 소스가 됐다(ADR-068 결정
+      13, T-359~T-368 전체 완료). N150 프로덕션 재실측: KMA 격자 앵커
+      128/1,432 location(~9%, 수도권·강원 위주) — 원래 기준(전국 임의 좌표)
+      미달이나 사용자가 "g1은 더 개선 불가"로 명시 승인해 이 부분 상태를
+      영구 수용하고 진행했다(G-1은 `kor-travel-weather` 저장소 소관, 금지룰
+      3). G-2(T-366)는 이미 해소, G-3(T-367 guard)은 실효 보존 약 9.6일로
+      자연 증가 중(15일 목표를 향해 2026-09-23경 도달 예상)이라 두 게이트는
+      이 결정을 막지 않았다.
+      - **flag는 기본값 전환이 아니라 완전히 삭제**했다 —
+        `pinvi_kor_travel_weather_{single_feature,trip_view,admin}_enabled`
+        3개(`config.py`, `.env.example`). 대체 코드 경로가 없는 flag는 의미
+        없는 dead config라는 프로젝트 anti-backward-compat-shim 원칙을 그대로
+        적용. T-368의 `pinvi_kor_travel_weather_map_markers_enabled`는 별도
+        범위라 손대지 않았다.
+      - `apps/api/app/clients/kor_travel_map.py`에서 `get_weather_batch`/
+        `feature_weather`와 관련 dataclass(`WeatherBatchMetric`/`WeatherBatchCard`/
+        `Found·NoData·RetiredWeatherBatchItem`)·상수·decode 헬퍼를 전량 삭제
+        — `ruff --fix`가 이제 쓰이지 않는 `datetime`/`UTC`/`timedelta` import까지
+        자동 정리했다. `kor_travel_map_admin.py`의 `get_feature_weather`도 삭제.
+      - `features.py`/`admin/features.py`의 weather 엔드포인트는
+        `_weather_from_kor_travel_map`/`_weather_values_from_payload`(구
+        kor_travel_map dict 매핑) 분기를 삭제하고 `OptionalKorTravelWeatherClientDep`
+        + 명시적 `weather_client is None → 503` 체크만 남겼다 — 기존 테스트가
+        `get_optional_kor_travel_weather_client`를 override하는 계약을 그대로
+        유지하기 위해 `KorTravelWeatherClientDep`(required)로 바꾸는 최초 시도를
+        되돌렸다(FastAPI override는 callable 정체성으로 매칭돼 함수를 바꾸면
+        override가 조용히 무효화된다).
+      - `build_trip_view`의 `weather_client`는 계속 Optional로 남겼다 — MCP
+        tool registry(`apps/api/app/mcp/tools/registry.py`)가 weather client를 전혀
+        주입하지 않기 때문. 미주입 시 POI마다 균일하게 `{"state": "unavailable"}`로
+        표시하는 fallback을 신설했다 — feature 해석 상태(missing/retired/
+        suppressed)와 무관하다(T-363 "완전 분리" 원칙을 fallback 경로에도
+        동일 적용).
+      - 테스트: `test_features_weather_cutover.py`/`test_admin_features_weather_cutover.py`/
+        `test_trip_view_weather_cutover.py` 3개 cutover 파일에서 flag-off 테스트·
+        `_reset_flag` fixture 삭제, `test_flag_on_*` → `test_*` rename,
+        `weather_client=None` fallback 신규 테스트 추가. `test_features_api.py`/
+        `test_admin_features_api.py`/`test_feature_mapping.py`의 구 kor_travel_map
+        weather 매핑 테스트 전량 삭제. `test_kor_travel_map_client.py`/
+        `test_kor_travel_map_admin_client.py`에서 구 client 메서드 테스트 삭제.
+        `test_kor_travel_map_contract.py`/`test_kor_travel_map_admin_contract.py`에서
+        weather 경로·schema(11종) 계약 표 항목 제거(vendored snapshot 자체는
+        재추출하지 않음 — 표만 축소). `normalize_asof_query` 순수 함수는 별도
+        `test_normalize_asof_query.py`로 커버리지 이전(구 경로 삭제로 간접
+        커버가 사라졌으므로). `apps/api` 전체 ruff/mypy --strict clean, 전체
+        테스트 스위트 green(기존 2177건 기준, 삭제·rename 반영).
+      - 적대적 리뷰(진짜 두 번째 시각) 없이 기계적 삭제 위주였으나, 전체
+        `mypy --strict .` 스윕에서 `test_feature_mapping.py`가 삭제된
+        `_weather_from_kor_travel_map`을 여전히 import하고 있던 실제 누락을
+        찾아 수정 — 개별 파일 단위 검증만으로는 놓쳤을 회귀였다.
+      - `docs/decisions.md` ADR-068 결정 13 추가,
+        `docs/integrations/kor-travel-weather.md` 전면 갱신(§0 요약, 상단
+        상태 배너, G-1 오버라이드 note, §7-4 신설), `docs/api/features.md`
+        §2.3·`docs/api/admin.md` §8.3 weather-values를 flag/이관-진행-중
+        프레이밍에서 확정 계약 설명으로 재작성.
 - [x] **T-368** — 지도 weather marker를 `kor-travel-weather` 직접 조회로 완성
       (ADR-068 결정 12). 조사 결과 `FeatureMapView.tsx`의 유일한 마커 조회
       경로(`GET /features/in-bounds`)가 `weather` kind를 기본에서 이미

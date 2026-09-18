@@ -5,9 +5,17 @@ Pinvi 날씨 데이터 소스를 `kor-travel-map`에서 **`kor-travel-weather`**
 [`docs/execplan/t-359-weather-source-cutover.md`](../execplan/t-359-weather-source-cutover.md)에
 있다.
 
-> **현재 상태**: 설계·계약 고정 단계. **코드는 아직 한 줄도 바뀌지 않았다.** 운영
-> 날씨는 여전히 `kor-travel-map`에서 온다(§2.6/2.6a/2.6b,
-> [`kor-travel-map-rest-api.md`](kor-travel-map-rest-api.md)).
+> **현재 상태(2026-09-18)**: **이관 완료.** T-362(단건 feature weather) → T-363(trip
+> view) → T-364(admin weather-values) → T-365(flag 삭제 + 구 `kor-travel-map` 날씨
+> 경로 완전 제거)까지 순서대로 구현·머지됐다. `kor-travel-weather`가 이제 **유일한**
+> 날씨 소스이고, `kor-travel-map`에는 날씨 관련 코드가 전혀 남아있지 않다(구
+> `feature_weather`/`get_weather_batch` client 메서드, 3개 flag 모두 삭제). **G-1
+> (KMA 전국 커버리지)은 원래 기준을 충족하지 못한 채(부분 커버리지 ~9%, §1.2)
+> 사용자 결정(2026-09-18)으로 영구 수용하고 진행했다** — 상용 provider 표시는
+> G-2(T-366, 처리방침 갱신)로 이미 법적으로 해소됐으므로 막을 이유가 없어졌다.
+> G-3(보존 15일)은 아직 미달(§4.2)이나 자연 증가 중이며 T-367의 retention-horizon
+> guard가 계속 감시한다. T-368(지도 마커)은 별도 flag(`..._map_markers_enabled`,
+> 기본 off)로 이 cutover와 독립적으로 존재한다.
 
 ---
 
@@ -20,11 +28,12 @@ Pinvi 날씨 데이터 소스를 `kor-travel-map`에서 **`kor-travel-weather`**
 | Trip 조회        | `POST /v1/features/weather/batch` **1회**    | location별 fanout (`/markers` 1회 + location당 `/forecast` 1회)  |
 | 인증             | ServiceToken 필수                            | **인증 없음** (공개 read)                                        |
 | 카드 dedupe      | 서버 계산 `card_key` (anchor bundle ordinal) | **`location_id`가 곧 dedupe 키**                                 |
-| 보존             | 3년 immutable                                | 현재 **기본 2일** → **15일로 연장 예정**(G-3, 아직 미배포, §4.2) |
-| 기상청(KMA) 예보 | 전국 격자 자동 생성                          | **현재 1개 지점뿐** — §1.2 차단 사유                             |
+| 보존             | 3년 immutable                                | 실효 ~9.6일(2026-09-18 실측), **15일 목표**(G-3, §4.2) — 자연 증가 중, T-367 guard가 감시 |
+| 기상청(KMA) 예보 | 전국 격자 자동 생성                          | **128/1,432 location(~9%, 수도권·강원 위주)** — §1.2, G-1은 이 부분 상태로 영구 수용 |
 
-**한 줄 요약**: 계약 정합은 어렵지 않다. 막는 것은 **데이터 커버리지(G-1)** ·
-**개인정보 처리방침 정합(G-2)** · **보존 지평(G-3)** 셋이다.
+**한 줄 요약(2026-09-18 갱신)**: 이관은 완료됐다. G-2(처리방침)는 T-366으로 해소,
+G-3(보존)은 자연 증가로 목표에 근접 중, **G-1(전국 커버리지)만 원래 기준 미달**이며
+사용자 결정으로 그 상태 그대로 cutover했다(§7-4).
 
 ---
 
@@ -83,6 +92,11 @@ Feature를 자동 생성한다(`providers/kma.py grid_to_weather_bundle`). `kor-
 > **게이트 G-1**: `kor-travel-weather`가 요청 좌표에 대해 KMA 격자 앵커를 생성·수집하기
 > 전에는 cutover하지 않는다. 이 작업은 `kor-travel-weather` 저장소 소관이며 Pinvi가
 > 대신 구현하지 않는다(금지룰 3: provider 원천 변환은 Pinvi 밖).
+>
+> **→ 2026-09-18 사용자 결정으로 오버라이드**: 재실측 결과 128/1,432(~9%)에서 더는
+> 개선되지 않을 것으로 판단해("g1은 더 개선 불가") 이 게이트를 원래 기준(전국)으로
+> 통과시키길 기다리지 않고 T-365를 진행했다. `kor-travel-weather` 저장소 쪽 KMA
+> anchor 확장이 나중에 진행되면 자동으로 커버리지가 넓어진다(Pinvi 쪽 추가 작업 불필요).
 
 **🟡 2026-09-18 재실측 — 진행 중, 아직 미완료.** N150 `kor-travel-weather-db-1`
 직접 조회(`weather_locations` 테이블):
@@ -100,7 +114,8 @@ KMA 격자 앵커(nx is not null)     128   (2026-09-17 대비 1 → 128, 128배
 행 **0건**이다. 즉 **수도권/강원 일부는 뚫렸지만 전국 커버리지는 아직 아니다**
 (128/1,432 ≈ 9%). 경상·전라·충청·제주는 표본 확인 결과 여전히 커버리지가 없다.
 **게이트 G-1은 부분 진행 — "임의 좌표"라는 원래 기준으로는 아직 통과하지
-못한다.** 재검증 절차·전체 지역 표본은 T-365 착수 직전에 다시 실측한다.
+못한다.** 이 상태로 영구 고정될 것으로 판단해(사용자 결정, §7-4) T-365를
+진행했다 — 더 이상 T-365 착수 전 재검증을 기다리지 않는다.
 
 ### 1.2b **차단 사유 2 — 개인정보 처리방침이 사실과 어긋나게 된다 (게이트 G-2)**
 
@@ -535,8 +550,8 @@ Pinvi 쪽도 같이 정리한다(잔여 정리, 범위 작음).
 
 | 영역      | 파일                                                                                                                | 단계      |
 | --------- | ------------------------------------------------------------------------------------------------------------------- | --------- |
-| transport | `apps/api/app/clients/kor_travel_map.py` (사용자 3경로)                                                             | T-365     |
-| transport | `apps/api/app/clients/kor_travel_map_admin.py` `get_feature_weather`                                                | T-365     |
+| transport | `apps/api/app/clients/kor_travel_map.py` (사용자 3경로 — `get_weather_batch`/`feature_weather` 전량 삭제) — **완료** | T-365     |
+| transport | `apps/api/app/clients/kor_travel_map_admin.py` `get_feature_weather` — **완료(삭제)**                              | T-365     |
 | 라우터    | `apps/api/app/api/v1/features.py` (`normalize_asof_query`, `_weather_from_kor_travel_map`) — **완료**              | T-362     |
 | 라우터    | `apps/api/app/api/v1/admin/features.py` (weather-values, `asof`) — **완료**                                        | T-364     |
 | 서비스    | `apps/api/app/services/trip_weather_batch.py`(신설, feature batch와 완전 독립) + `trip_view_builder.py` 배선 — **완료** | T-363     |
@@ -554,10 +569,10 @@ Pinvi 쪽도 같이 정리한다(잔여 정리, 범위 작음).
 | web       | `apps/web/components/map/FeatureMapView.tsx`(`fetchWeatherMarkers`, `weatherPoints`, `selectedWeatherMarker` — `kor-travel-weather` 직접 조회로 전면 교체) + `apps/web/lib/weatherProviderLabels.ts`(신설, `TripWeatherSummary.tsx`와 공유) — **완료** | T-368     |
 | 문서      | `docs/api/weather.md`(신설) — **완료**                                                                            | T-368     |
 | e2e       | `apps/web/e2e/trip-detail.e2e.ts` (단건 weather 요청 0회 단언) — **검토 결과 무변경**(mock 기반, 응답 셰입 불변) | T-363     |
-| e2e       | `trip-feature-resolution-live-mutating.live.ts` + `startWeatherProxy` + 새 flag-on sub-test — **코드 완료, 실행은 T-365 flag-on 직전 운영 관측으로 흡수(2026-09-18)** | T-363/365 |
-| 런북      | `docs/runbooks/live-mutating-e2e.md` ("T-363 weather flag on 게이트 단건" 절 신설) — **완료**                       | T-363     |
-| 계약      | `apps/api/tests/contract/kor-travel-map-openapi-*.json` (SHA-256 핀) + `tests/unit/test_kor_travel_map_contract.py` | T-365     |
-| 설정      | `pinvi_kor_travel_map_*` / `pinvi_kor_travel_weather_*`, `.env.example` — **완료**(flag 3개: single_feature/trip_view/admin) | T-360~364 |
+| e2e       | `trip-feature-resolution-live-mutating.live.ts` + `startWeatherProxy` — **코드 완료, 실행은 T-365 완료 뒤 운영 관측으로 흡수(2026-09-18)**(flag 자체가 삭제돼 "flag-on sub-test"라는 틀은 더 이상 성립하지 않는다) | T-363/365 |
+| 런북      | `docs/runbooks/live-mutating-e2e.md` ("T-363 weather flag on 게이트 단건" 절 신설) — **완료**(flag 삭제로 절 제목은 역사적 서술로 남는다) | T-363     |
+| 계약      | `apps/api/tests/contract/kor-travel-map-openapi-*.json` (SHA-256 핀) + `tests/unit/test_kor_travel_map_contract.py`(weather 경로·schema 11종 계약 표에서 제거) — **완료** | T-365     |
+| 설정      | `pinvi_kor_travel_map_*` / `pinvi_kor_travel_weather_*`, `.env.example` — flag 3개(single_feature/trip_view/admin)는 T-365에서 **완전히 삭제**(기본값 전환이 아니다) | T-360~365 |
 | 컴플라이언스 | `docs/compliance/data-policy.md` §3-1(신설) — **완료**                                                            | T-366     |
 | 컴플라이언스 | `docs/compliance/pipa.md` §4.3 국외 이전 표(국외 provider 4개 추가) — **완료**                                    | T-366     |
 | 컴플라이언스 | `docs/legal/privacy-policy.md` §4 위탁 목록 — **완료**                                                             | T-366     |
@@ -616,10 +631,10 @@ Pinvi 쪽도 같이 정리한다(잔여 정리, 범위 작음).
 - **E. 계약 스냅샷** — `kor-travel-weather` `openapi.json`을 vendored snapshot으로 두고
   드리프트를 CI에서 깬다(현재 `kor-travel-map`에 적용 중인 방식과 동일).
 - **F. 커버리지 게이트(G-1)** — 표본 좌표 집합에서 KMA `forecast_style ∈
-{nowcast, ultra_short, short}` 행이 임계치 이상일 때만 통과. **이 게이트가 cutover를
-  기계적으로 막는다.** 🟡 2026-09-18 재실측: 128/1,432 location이 KMA 앵커
-  확보(수도권·강원 위주) — 진행 중이나 아직 이 자동 게이트를 통과할 만큼
-  전국적이지 않다(§1.2 참조).
+{nowcast, ultra_short, short}` 행이 임계치 이상일 때만 통과. 이 자동 게이트 자체는
+  구현하지 않았다 — 🟡 2026-09-18 실측(128/1,432, ~9%, 수도권·강원 위주)에서 더
+  개선되지 않을 것으로 판단해 사용자 결정으로 이 상태를 영구 수용하고 T-365를
+  진행했다(§7-4). 전국 커버리지를 기계적으로 강제하는 CI 게이트는 만들지 않는다.
 - **G. e2e** — Playwright는 N150에서만(ADR-051). `trip-detail.e2e.ts`의 "단건 weather
   요청 0회" 단언과 `live-mutating-e2e.md`의 "weather batch POST 정확히 1회" 게이트는
   P4에서 **새 호출 모양으로 다시 쓴다**(삭제가 아니라 재정의).
@@ -694,6 +709,29 @@ weather 투자는 이 결정으로 중복 투자가 되므로 계속하지 않�
 `kor-travel-weather`의 `/nearby`(viewport 중심+반경 기준 location 목록 + 현재값)를
 직접 조회한다 — map을 전혀 거치지 않으므로 이 정합 문제 자체가 사라졌다. 상세는
 §4.6.
+
+### 7-4. T-365 cutover 최종 결정 (2026-09-18) — G-1 부분 상태 그대로 진행
+
+G-2(T-366)·G-3(T-367 guard 배포)까지 소유가 명확한 반면 G-1은 Pinvi가 직접 고칠
+수 없는 `kor-travel-weather` 저장소 소관이다(금지룰 3). 2026-09-18 N150 프로덕션
+재실측 결과 128/1,432 location(~9%, 수도권·강원 위주)에서 더 넓어지지 않을
+것으로 판단해, 사용자가 **"g1은 더 개선 불가"로 명시 승인**하고 G-1의 원래
+기준(전국 임의 좌표) 미달을 영구 수용한 채 cutover를 진행했다.
+
+- 세 flag(`pinvi_kor_travel_weather_{single_feature,trip_view,admin}_enabled`)를
+  **기본값 전환이 아니라 완전히 삭제**했다 — 구 `kor-travel-map` 날씨 fallback
+  경로를 함께 제거하면 대체 코드 경로가 없는 flag는 의미 없는 dead config이기
+  때문(프로젝트 anti-backward-compat-shim 원칙).
+- `apps/api/app/clients/kor_travel_map.py`에서 `get_weather_batch`/`feature_weather`
+  및 관련 dataclass·상수·decode 헬퍼를 전량 삭제했다.
+  `kor_travel_map_admin.py`의 `get_feature_weather`도 삭제했다.
+- `build_trip_view`의 `weather_client`는 계속 Optional이다 — MCP 도구
+  레지스트리(`apps/api/app/mcp/tools/registry.py`)가 weather client를 전혀 주입하지
+  않으므로, 미주입 시 POI마다 균일하게 `unavailable`로 표시하는 fallback을
+  유지한다(§3.5의 "완전 분리" 원칙을 fallback 경로에도 동일 적용).
+- `kor-travel-weather` 저장소 쪽에서 KMA anchor를 더 넓히면 Pinvi 쪽 추가 작업
+  없이 자동으로 커버리지가 개선된다 — 이 결정은 "영원히 9%"가 아니라 "Pinvi가
+  이를 더 밀어붙이지 않는다"는 뜻이다.
 
 ---
 

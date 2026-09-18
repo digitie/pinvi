@@ -1310,15 +1310,17 @@ legacy 두 키를 남겨 둔 것은 소비자 호환 때문이며 값이 채워�
 
 Pinvi는 detail subpage를 위해 `kor-travel-map` 데이터를 read-only로 투영한다. `sources`와
 `overrides`는 `GET /v1/admin/features/{feature_id}` detail payload에서 필요한 list만 잘라
-반환하고, `weather-values`는 Admin 전용 weather card 계약
-`GET /v1/admin/features/{feature_id}/weather`의 `metrics`를 Admin tab용 `items`로 반환한다. 따라서
-공개되지 않은 feature도 운영자가 조회할 수 있다. Pinvi는
+반환한다. `weather-values`는 `sources`/`overrides`와 달리 `kor-travel-map`이 아니라
+`kor-travel-weather`가 소스다(ADR-068, T-364/T-365로 완전 이관 — 구 Map Admin weather
+경로는 남아있지 않다) — 좌표만 Map Admin feature 상세에서 얻고, 값은 `kor-travel-weather`에서
+직접 모은다. 따라서 공개되지 않은 feature도 운영자가 조회할 수 있다. Pinvi는
 `feature.*` 또는 `provider_sync.*` 테이블을 직접 조회하거나 override mutation을 만들지 않는다.
 
-> **`weather-values` 소스 이관 예정 (ADR-068)**: `kor-travel-weather`로 옮긴다. 이 표면은
-> **셰입이 바뀐다** — `provider_dataset_id`·`dataset_display_name`은 새 소스에 대응물이
-> 없고 `known_at`은 nullable이라 셋을 nullable로 넓힌다(없는 값을 지어내 채우지 않는다).
-> `asof` 422 정책의 근거도 다시 세운다. 전환은 T-364(P5) —
+> **`weather-values` 셰입 노트 (ADR-068 결정 2)**: `AdminFeatureWeatherMetric`의
+> `provider_dataset_id`·`dataset_display_name`은 `kor-travel-map`의 정수 dataset registry에서
+> 왔고 `kor-travel-weather`에는 대응물이 없어 **항상 `null`**이다(없는 값을 지어내 채우지
+> 않는다). `dataset_key`는 두 소스 모두 가져 그대로 채워진다. `known_at`은 nullable이고
+> 실제 값이 온다. 설계는
 > [`docs/integrations/kor-travel-weather.md`](../integrations/kor-travel-weather.md) §3.1-(2).
 
 #### `GET /admin/features/{feature_id}/sources`
@@ -1374,12 +1376,13 @@ Pinvi는 detail subpage를 위해 `kor-travel-map` 데이터를 read-only로 투
 
 #### `GET /admin/features/{feature_id}/weather-values`
 
-Query 없음. Map Admin weather 계약은 현재 카드만 제공한다. 이전 Pinvi 계약의 `asof`를 보내면
-upstream이 모르는 query를 조용히 버리고 최신값을 반환하는 대신 `422 VALIDATION_ERROR`로 명시 거부한다.
-공개 feature의 시점 조회는 사용자 표면(`GET /features/{id}/weather?asof=...`)을 사용한다. 비공개
-feature의 시점 조회는 Map Admin 계약에 별도 snapshot 경로가 추가되기 전까지 지원하지 않는다.
+`asof`(선택, 사용자 표면과 같은 KST-naive 해석 정책)를 지원한다 — `kor-travel-weather`
+기반 transport는 시점 조회가 가능하므로 T-362 단건 사용자 경로와 같은 축소 규칙(대상
+서비스 보존 지평 밖은 빈 카드)을 그대로 적용한다. `kor-travel-weather` client가
+주입되지 않은 경우 `503 WEATHER_SERVICE_UNAVAILABLE`을 반환한다.
 
-응답 `data`:
+응답 `data` — `provider_dataset_id`·`dataset_display_name`은 `kor-travel-weather`에
+대응물이 없어 항상 `null`이다(ADR-068 결정 2):
 
 ```jsonc
 {
@@ -1394,9 +1397,9 @@ feature의 시점 조회는 Map Admin 계약에 별도 snapshot 경로가 추가
       "metric_name": "기온",
       "forecast_style": "nowcast",
       "timeline_bucket": "current",
-      "provider_dataset_id": 41,
+      "provider_dataset_id": null,
       "dataset_key": "kma_vilage_forecast",
-      "dataset_display_name": "기상청 단기예보",
+      "dataset_display_name": null,
       "known_at": "2026-06-12T09:35:00+09:00",
       "valid_at": "2026-06-12T10:00:00+09:00",
       "value_number": 24.5,

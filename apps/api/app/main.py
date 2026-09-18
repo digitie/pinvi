@@ -69,9 +69,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         curation_snapshot_service_client_lifespan(app),
         curation_cutover_mapping_service_client_lifespan(app),
         kor_travel_geo_client_lifespan(app),
-        # T-362(P3, ADR-068). flag(`pinvi_kor_travel_weather_single_feature_enabled`)가
-        # 꺼져 있어도 client는 항상 준비해 둔다 — httpx.AsyncClient 하나 생성뿐이라
-        # 비용이 없고, flag on/off를 재배포 없이 바꿀 수 있게 한다.
+        # ADR-068 — 날씨 유일 소스(T-362/T-363/T-364, 구 kor-travel-map 경로는
+        # T-365에서 제거됨). T-368(지도 marker) flag가 꺼져 있어도 client는 항상
+        # 준비해 둔다 — httpx.AsyncClient 하나 생성뿐이라 비용이 없다.
         kor_travel_weather_client_lifespan(app),
         kakao_local_client_lifespan(app),
         naver_local_client_lifespan(app),

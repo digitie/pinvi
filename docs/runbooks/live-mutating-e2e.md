@@ -50,22 +50,19 @@ pair와 정확히 같아야 하며, v6/v8 generation schema 변경은 Map·Manag
   제거한다. DB row와 POI는 retention 정책 대상이며 즉시 hard-delete하지 않는다.
 - Feature resolution suite는 실 Map DB의 `found|retired|suppressed|missing` fixture를 Trip POI로
   연결하고, 만료 cache의 `row_revision` 재검증(`unchanged`), proxy 강제 503의 `unverified`, 복구를
-  owner 목록·API 상태·집계에서 확인한다. 같은 suite가 실 weather 값이 있는 feature, 공개 parent지만
-  weather가 없는 feature, retired parent를 40일 여행의 sparse 다중 날짜 batch로 조회한다.
-  직접 Trip read 한 번당 weather batch POST가 정확히 1회인지, 40일차가 과거 31일 상한으로
-  생략되지 않는지 검증한다. weather batch만 강제 503으로 바꿔 `unavailable`과 복구를 확인하고
-  단건 weather 요청이 0회인지도 고정한다. **이 게이트는 `pinvi_kor_travel_weather_trip_view_enabled`
-  가 off인(기본값) 격리 API를 가정한다** — flag on 경로의 게이트는 아래 별도 하위 항목 참조.
-- **T-363(P4, ADR-068) weather flag on 게이트 — `pinvi_kor_travel_weather_trip_view_enabled=true`
-  로 뜬 별도 격리 API에서만 실행.** 위와 같은 fixture를 재사용하되(§2 참조), 새 호출 모양을
-  검증한다: 구 `POST /v1/features/weather/batch`·단건 `/v1/features/{id}/weather`는 0회여야
-  하고, 대신 `GET /v1/weather/markers` 1회(청크) + location마다 `GET
+  owner 목록·API 상태·집계에서 확인한다. feature 축과 weather 축은 T-365(2026-09-18)로 완전히
+  분리됐으므로 이 suite는 feature resolution만 검증하고 weather 호출은 별도 항목(아래)이 본다.
+- **T-363/T-365(ADR-068) weather 호출 모양 게이트.** 위와 같은 fixture를 재사용하되(§2 참조),
+  `kor-travel-weather` 기반 호출 모양을 검증한다: 구 `POST /v1/features/weather/batch`·단건
+  `/v1/features/{id}/weather`(kor-travel-map 경로)는 **코드 자체가 삭제**돼 발생할 수 없다.
+  대신 `GET /v1/weather/markers` 1회(청크) + location마다 `GET
   /v1/weather/locations/{id}/forecast` **정확히 1회**(40일 여행이어도 날짜 fanout 없음)가
   나와야 한다. **핵심 불변식**: `retired`/`suppressed`/`missing` feature도 POI
   snapshot에 좌표가 있으면 weather는 그 상태와 무관하게 시도된다 — `weather_by_feature_id`가
   `retired`/`suppressed`/`missing`을 절대 내지 않는 것으로 고정한다(feature batch와 완전히
-  분리됐다는 것 자체가 이 게이트의 목적이다, `trip_weather_batch.py` 모듈 docstring). 삭제가
-  아니라 **추가**다 — flag off 게이트는 그대로 유지된다.
+  분리됐다는 것 자체가 이 게이트의 목적이다, `trip_weather_batch.py` 모듈 docstring). T-365
+  이전에는 이 게이트가 별도 flag-on 격리 API에서만 도는 "추가" 시나리오였으나, flag가
+  삭제된 지금은 **유일한** 운영 경로다.
 - Trip day hole suite는 날짜가 있는 3박 4일 여행을 실제 UI에서 생성하고, 1~4일차 자동 생성,
   1일차 삭제 후 가장 빠른 빈 day 재생성, 일자 설정 팝업의 날짜 수정, 진행 중 스크린샷 저장을 확인한다.
 - Backup mutating suite는 staging admin 계정으로 `/admin/backup` 수동 snapshot을 1회 생성하고,
@@ -209,18 +206,17 @@ weather 날짜는 fixture의 `valid_at|observed_at|issued_at` 범위 안에서 �
 mutation을 포함하므로 기본 분당 60회 제한을 그대로 쓰면 본 검증이 아니라 마지막 cleanup이
 429로 실패할 수 있다.
 
-### T-363 weather flag on 게이트 단건 (ADR-068)
+### T-363/T-365 weather 호출 모양 게이트 단건 (ADR-068)
 
-위 "Feature resolution 단건"과 **같은 fixture**를 재사용하되, 격리 API를
-`PINVI_KOR_TRAVEL_WEATHER_TRIP_VIEW_ENABLED=true`로 새로 띄운 뒤 실행한다(flag off
-격리 API와 동시에 띄우려면 포트를 분리한다 — 아래 예시는 `13801/13805`를 그대로 쓰되
-**flag on 전용으로 재기동**한 상태를 가정한다). `PINVI_KOR_TRAVEL_WEATHER_BASE_URL`은
+위 "Feature resolution 단건"과 **같은 fixture**를 재사용하되, 격리 API를 띄운 뒤
+실행한다. **T-365(2026-09-18)로 `PINVI_KOR_TRAVEL_WEATHER_TRIP_VIEW_ENABLED` flag
+자체가 삭제됐다** — 더 이상 설정할 필요가 없다(설정해도 무시된다). 이제 이 절차는
+"flag on 경로"가 아니라 **유일한** 운영 경로를 검증한다. `PINVI_KOR_TRAVEL_WEATHER_BASE_URL`은
 weather proxy(`13702`, 기본값)를 가리키게 한다 — 이 proxy가 실제 `kor-travel-weather`
 인스턴스(N150 고정 포트 `14101`)로 포워딩하며 `markers`/`forecast` 호출을 센다.
 
 ```bash
 # 격리 API container/server 환경 — 위 Feature resolution 단건의 값에 다음을 더한다
-export PINVI_KOR_TRAVEL_WEATHER_TRIP_VIEW_ENABLED=true
 export PINVI_KOR_TRAVEL_WEATHER_BASE_URL=http://127.0.0.1:13702
 
 # Playwright 환경 — 위 Feature resolution 단건과 같은 fixture 값 + 아래를 추가
@@ -252,7 +248,7 @@ PINVI_LIVE_MAP_PROXY_PORT=13701 \
 PINVI_LIVE_MAP_UPSTREAM_PORT="<isolated-map-api-port>" \
 PINVI_LIVE_EMAIL="$PINVI_LIVE_EMAIL" \
 PINVI_LIVE_PASSWORD="$PINVI_LIVE_PASSWORD" \
-scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- trip-feature-resolution-live-mutating.live.ts --grep "flag on" --workers=1
+scripts/n150-playwright-runner.sh -- npm -w @pinvi/web run test:e2e:live-mutating -- trip-feature-resolution-live-mutating.live.ts --grep "완전히 독립적으로" --workers=1
 ```
 
 `retired`/`suppressed`/`missing` fixture는 이 게이트에서도 좌표가 있는 snapshot으로

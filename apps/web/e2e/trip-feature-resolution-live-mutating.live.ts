@@ -29,12 +29,14 @@ const cacheWaitMs = Number(process.env.PINVI_LIVE_FEATURE_CACHE_WAIT_MS ?? '250'
 const featureCacheRevalidationConfirmed = process.env.PINVI_LIVE_FEATURE_CACHE_REVALIDATION === '1';
 const longTripDayCount = 40;
 
-// T-363(P4, ADR-068) — kor-travel-weather 전환 flag on 경로. 격리 API가
-// PINVI_KOR_TRAVEL_WEATHER_TRIP_VIEW_ENABLED=true로 뜬 별도 run에서만 켠다.
-// 이 게이트는 위 기본 시나리오와 같은 fixture(found/retired/suppressed/missing/
-// weatherFeature)를 재사용한다 — weather가 feature batch와 완전히 분리됐다는
-// 것 자체가 핵심 단언이므로 새 fixture가 필요 없다(§3.4 개정, `trip_weather_batch.py`
-// 모듈 docstring).
+// T-363/T-365(ADR-068) — `kor-travel-weather` 경로(현재 유일한 운영 경로,
+// 구 backend flag `pinvi_kor_travel_weather_trip_view_enabled`는 T-365에서
+// 삭제됨). `PINVI_LIVE_WEATHER_TRIP_VIEW_E2E=1`인 별도 run에서만 켠다(fixture
+// 준비 비용이 커 기본 스위트에 포함하지 않는다). 이 게이트는 위 기본
+// 시나리오와 같은 fixture(found/retired/suppressed/missing/weatherFeature)를
+// 재사용한다 — weather가 feature batch와 완전히 분리됐다는 것 자체가 핵심
+// 단언이므로 새 fixture가 필요 없다(§3.4 개정, `trip_weather_batch.py` 모듈
+// docstring).
 const weatherTripViewLiveEnabled = process.env.PINVI_LIVE_WEATHER_TRIP_VIEW_E2E === '1';
 const weatherProxyPort = Number(process.env.PINVI_LIVE_WEATHER_PROXY_PORT ?? '13702');
 const weatherUpstreamPort = Number(process.env.PINVI_LIVE_WEATHER_UPSTREAM_PORT ?? '14101');
@@ -826,13 +828,12 @@ test.describe('Trip feature resolution live mutating flow', () => {
     }
   });
 
-  test('flag on: weather는 feature batch와 완전히 독립적으로 markers/forecast를 쓴다', async ({
+  test('weather는 feature batch와 완전히 독립적으로 markers/forecast를 쓴다', async ({
     page,
   }) => {
     test.skip(
       !weatherTripViewLiveEnabled,
-      'PINVI_LIVE_WEATHER_TRIP_VIEW_E2E=1 일 때만 실행합니다 — 격리 API가 ' +
-        'pinvi_kor_travel_weather_trip_view_enabled=true로 떠 있어야 합니다(T-363/P4).',
+      'PINVI_LIVE_WEATHER_TRIP_VIEW_E2E=1 일 때만 실행합니다(T-363/T-365).',
     );
     assertLiveEnv();
 
@@ -895,7 +896,7 @@ test.describe('Trip feature resolution live mutating flow', () => {
 
       const healthy = await readTrip(page, tripId);
 
-      // 핵심 불변식 1 — flag on이면 구 kor-travel-map weather batch/단건을 더는 부르지 않는다.
+      // 핵심 불변식 1 — 구 kor-travel-map weather batch/단건은 코드 자체가 삭제됐다(T-365).
       expect(mapProxy.weatherBatchRequests).toHaveLength(0);
       expect(mapProxy.singleWeatherRequestCount).toBe(0);
 

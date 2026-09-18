@@ -3391,6 +3391,23 @@ Admin 1개는 별도 transport인 `apps/api/app/clients/kor_travel_map_admin.py`
     단정하지 않는다는 기존 원칙의 연장). (c) 온도를 못 구한 location은 목록에서
     뺀다 — 예전처럼 `0`으로 가장하지 않는다. 상세는
     `docs/integrations/kor-travel-weather.md` §4.6/§7-3, `docs/api/weather.md`.
+13. **(2026-09-18, T-365 완료) G-1은 원래 기준(전국 임의 좌표) 미달 상태로 영구
+    수용하고 cutover를 완료한다.** N150 프로덕션 재실측: KMA 격자 앵커 128/1,432
+    location(~9%, 수도권·강원 위주 — 2026-09-17의 1개에서 128배 증가했으나 여전히
+    부분적). 사용자 판단: "g1은 더 개선 불가"로 명시 승인 — `kor-travel-weather`
+    저장소 쪽 KMA anchor 확장은 Pinvi 소관 밖(금지룰 3)이라 그 완료를 무기한 기다리지
+    않는다. G-2(T-366)는 이미 해소, G-3(T-367 guard)은 자연 증가 중(실측 시점 약
+    9.6일, 15일 목표를 향해 계속 증가)이라 두 게이트는 이 결정을 막지 않는다. 실행:
+    세 flag(`pinvi_kor_travel_weather_{single_feature,trip_view,admin}_enabled`)를
+    기본값 전환이 아니라 **완전히 삭제**하고, `kor_travel_map.py`/`kor_travel_map_admin.py`의
+    구 날씨 client 메서드(`get_weather_batch`/`feature_weather`/`get_feature_weather`)와
+    관련 dataclass·decode 헬퍼·상수를 전량 삭제했다 — 대체 코드 경로가 없는 flag는
+    의미 없는 dead config라는 이 프로젝트의 anti-backward-compat-shim 원칙을 그대로
+    적용했다. `build_trip_view`의 `weather_client`는 계속 Optional로 남긴다 — MCP
+    tool registry(`apps/api/app/mcp/tools/registry.py`)가 weather client를 전혀 주입하지
+    않으므로, 미주입 시 POI마다 균일하게 `unavailable`로 표시하는 fallback이
+    필요하다(feature 해석 상태와 무관 — 결정 9b "완전 분리"를 fallback 경로에도
+    동일 적용). 상세는 `docs/integrations/kor-travel-weather.md` §7-4.
 
 ### 근거
 
@@ -3461,3 +3478,6 @@ Admin 1개는 별도 transport인 `apps/api/app/clients/kor_travel_map_admin.py`
   POI 문맥이 없는 bare `feature_id`라 결정 9b(완전 분리)는 적용되지 않는다.
   통합테스트 24건 green.
 - **결정 11 후속은 결정 12로 해소됐다(T-368, 2026-09-18)** — 위 참조.
+- **T-365 완료(2026-09-18)**: 결정 13 참조 — G-1 부분 상태(~9%)를 영구 수용하고
+  세 flag·구 `kor-travel-map` 날씨 경로를 완전히 삭제해 `kor-travel-weather`가
+  유일한 날씨 소스가 됐다. T-359~T-368 전체 완료.
