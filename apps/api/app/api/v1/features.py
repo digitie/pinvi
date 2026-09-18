@@ -33,6 +33,7 @@ from app.clients.kor_travel_map import (
 )
 from app.clients.kor_travel_weather import OptionalKorTravelWeatherClientDep
 from app.clients.naver_local import NaverLocalClient, NaverLocalClientDep, NaverLocalError
+from app.core.bbox import MAX_ZOOM, MIN_ZOOM, parse_bbox
 from app.core.config import settings
 from app.core.consent_deps import assert_location_consent, require_location_consent
 from app.core.coord_range import (
@@ -47,7 +48,6 @@ from app.middleware.location_audit import declare_location_audit
 from app.models.feature_suggestion import FeatureSuggestion
 from app.schemas.envelope import Envelope
 from app.schemas.feature import (
-    BBox,
     Coord,
     ExternalRef,
     ExternalRefProvider,
@@ -77,7 +77,6 @@ router = APIRouter(prefix="/features", tags=["features"])
 # `app/core/coord_range.py`와 ADR-064.
 LNG_MIN, LNG_MAX = COORD_LON_MIN, COORD_LON_MAX
 LAT_MIN, LAT_MAX = COORD_LAT_MIN, COORD_LAT_MAX
-MIN_ZOOM, MAX_ZOOM = 5, 19
 FEATURE_SUGGESTION_DAILY_LIMIT = 20
 DECIMAL_6 = Decimal("0.000001")
 # ADR-056: price 마커도 기본 뷰포트에 포함(주유소/휴게소 가격 등 일반 표시).
@@ -151,27 +150,6 @@ def _map_kor_travel_map_errors() -> Iterator[None]:
                 "message": "지도 feature 서비스가 일시적으로 사용 불가합니다.",
             },
         ) from exc
-
-
-def _parse_bbox(bbox_str: str) -> BBox:
-    """`lng_min,lat_min,lng_max,lat_max` → BBox."""
-    parts = bbox_str.split(",")
-    if len(parts) != 4:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "VALIDATION_ERROR",
-                "message": "bbox 는 'lng_min,lat_min,lng_max,lat_max' 형식이어야 합니다.",
-            },
-        )
-    try:
-        nums = [float(p) for p in parts]
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "VALIDATION_ERROR", "message": "bbox 숫자 변환 실패."},
-        ) from exc
-    return BBox(lng_min=nums[0], lat_min=nums[1], lng_max=nums[2], lat_max=nums[3])
 
 
 def _coord_from_kor_travel_map(dto: dict[str, Any]) -> Coord | None:
@@ -444,7 +422,7 @@ async def features_in_bounds(
     limit: Annotated[int, Query(ge=1, le=2000)] = 500,
 ) -> Envelope[FeaturesInBoundsResponse]:
     """viewport 내 feature(`items`) + 서버 클러스터(`clusters`). 클러스터링은 kor_travel_map 책임."""
-    bbox_obj = _parse_bbox(bbox)
+    bbox_obj = parse_bbox(bbox)
     with _map_kor_travel_map_errors():
         data = await client.features_in_bounds(
             min_lon=bbox_obj.lng_min,

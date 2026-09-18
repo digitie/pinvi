@@ -7,12 +7,14 @@
 - transport 역할만 한다(kor_travel_map.py와 동일 원칙). 응답은 envelope(`{data, meta}`)에서
   `data`만 풀어 반환한다. Pinvi schema(`FeatureWeatherCard` 등)로의 매핑은 라우터/서비스
   계층 책임이다(P3/P4/P5, T-362~364).
-- 4개 엔드포인트만 구현한다 — 설계 문서 §2.1이 정한 Pinvi 소비 표면 전체다:
+- 5개 엔드포인트를 구현한다 — 설계 문서 §2.1이 정한 Pinvi 소비 표면 전체다:
   `resolve`(좌표→location 1회 해석) / `markers`(다지점 현재값+특보) / `latest`(단일 지점
-  현재값) / `forecast`(단일 지점 예보 구간). `nearby`/`get_location`/`list_locations`/
-  admin 표면은 Pinvi가 쓰지 않으므로 만들지 않는다.
-- 이 client는 **아직 어떤 라우터에도 배선되지 않는다**(T-360/P1). 기존
-  `GET /features/{id}/weather` 등은 계속 `kor_travel_map.py`를 쓴다.
+  현재값) / `forecast`(단일 지점 예보 구간) / `nearby`(반경 내 location 목록 +
+  현재값, T-368 지도 weather marker 전용). `get_location`/`list_locations`/admin
+  표면은 Pinvi가 쓰지 않으므로 만들지 않는다.
+- 최초 라우팅 대상은 `GET /features/{id}/weather` 등 feature 축 weather였다
+  (T-360/P1). T-368부터는 feature와 무관한 지도 marker 축도 이 client를 쓴다 —
+  두 축 모두 `kor_travel_map.py`를 거치지 않는다는 점은 동일하다.
 
 계약: `docs/integrations/kor-travel-weather.md`, 원본
 `kor-travel-weather` `packages/kor-travel-weather-api/openapi.json`.
@@ -43,6 +45,7 @@ _RADIUS_KM_MAX = 500.0
 _MARKERS_MAX_LOCATION_IDS = 500  # 서버 422 상한(OpenAPI 스키마 밖, `docs/weather-api.md`)
 _LATEST_MAX_LIMIT = 1000
 _FORECAST_MAX_LIMIT = 5000
+_NEARBY_LIMIT_MAX = 100  # 서버 스키마 상한(OpenAPI `nearby` limit maximum)
 
 
 class KorTravelWeatherError(Exception):
@@ -399,6 +402,52 @@ def _decode_marker_list(raw: object) -> tuple[WeatherMarkerOut, ...]:
     return tuple(_decode_marker(item) for item in raw)
 
 
+_NEARBY_REQUIRED = {"location_id", "name", "latitude", "longitude", "enabled", "distance_km"}
+_NEARBY_OPTIONAL = {
+    "nx",
+    "ny",
+    "region_code",
+    "metadata",
+    "measurement_point",
+    "latest",
+    "forecast",
+    "alerts",
+}
+_NEARBY_FIELDS = _NEARBY_REQUIRED | _NEARBY_OPTIONAL
+
+
+def _decode_nearby(raw: object) -> NearbyOut:
+    obj = _require_mapping(raw, what="nearby")
+    _check_fields(obj, required=_NEARBY_REQUIRED, allowed=_NEARBY_FIELDS, what="nearby")
+    metadata = obj.get("metadata", {})
+    if not isinstance(metadata, Mapping):
+        raise KorTravelWeatherContractError(
+            "kor-travel-weather nearby.metadata가 object가 아닙니다."
+        )
+    return NearbyOut(
+        location_id=obj["location_id"],
+        name=obj["name"],
+        latitude=obj["latitude"],
+        longitude=obj["longitude"],
+        enabled=obj["enabled"],
+        distance_km=obj["distance_km"],
+        nx=obj.get("nx"),
+        ny=obj.get("ny"),
+        region_code=obj.get("region_code"),
+        metadata=dict(metadata),
+        measurement_point=_decode_optional_measurement_point(obj.get("measurement_point")),
+        latest=_decode_weather_value_list(obj.get("latest", []), what="nearby.latest"),
+        forecast=_decode_weather_value_list(obj.get("forecast", []), what="nearby.forecast"),
+        alerts=_decode_weather_value_list(obj.get("alerts", []), what="nearby.alerts"),
+    )
+
+
+def _decode_nearby_list(raw: object) -> tuple[NearbyOut, ...]:
+    if not isinstance(raw, list):
+        raise KorTravelWeatherContractError("kor-travel-weather nearby 응답이 배열이 아닙니다.")
+    return tuple(_decode_nearby(item) for item in raw)
+
+
 def _require_aware_datetime(value: datetime, *, field_name: str) -> None:
     """transport로 나가는 시각은 offset이 있어야 한다(`kor_travel_map.py`와 동일 정책).
 
@@ -525,6 +574,29 @@ class KorTravelWeatherClient:
             )
         resp = await self._send("GET", "/v1/weather/markers", params={"location_id": ids})
         return _decode_marker_list(self._unwrap_data(resp, path="/v1/weather/markers"))
+
+    async def nearby(
+        self, *, lat: float, lon: float, radius_km: float = 25.0, limit: int = 20
+    ) -> tuple[NearbyOut, ...]:
+        """좌표 반경 내 location 목록 + 현재값(latest)/예보/특보. T-368 지도 weather marker 전용.
+
+        `/resolve`(1회용 discovery, 3.1 MB급 응답)와 달리 `limit`으로 bounded돼 viewport
+        반복 호출에 쓸 수 있다.
+        """
+        if not _LAT_MIN <= lat <= _LAT_MAX:
+            raise ValueError(f"lat는 {_LAT_MIN}..{_LAT_MAX} 범위여야 합니다: {lat}")
+        if not _LON_MIN <= lon <= _LON_MAX:
+            raise ValueError(f"lon은 {_LON_MIN}..{_LON_MAX} 범위여야 합니다: {lon}")
+        if not 0 < radius_km <= _RADIUS_KM_MAX:
+            raise ValueError(f"radius_km은 0 초과 {_RADIUS_KM_MAX} 이하여야 합니다: {radius_km}")
+        if not 1 <= limit <= _NEARBY_LIMIT_MAX:
+            raise ValueError(f"limit은 1..{_NEARBY_LIMIT_MAX} 범위여야 합니다: {limit}")
+        resp = await self._send(
+            "GET",
+            "/v1/weather/nearby",
+            params={"lat": lat, "lon": lon, "radius_km": radius_km, "limit": limit},
+        )
+        return _decode_nearby_list(self._unwrap_data(resp, path="/v1/weather/nearby"))
 
     async def latest(
         self, location_id: str, *, limit: int | None = None

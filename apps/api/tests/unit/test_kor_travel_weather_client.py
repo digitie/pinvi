@@ -176,6 +176,58 @@ async def test_latest_builds_path_and_decodes_list() -> None:
     await client.aclose()
 
 
+async def test_nearby_sends_lat_lon_radius_limit_and_decodes() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["params"] = dict(request.url.params)
+        return httpx.Response(
+            200,
+            json=_envelope(
+                [
+                    {
+                        **_LOCATION,
+                        "distance_km": 1.2,
+                        "measurement_point": None,
+                        "latest": [_WEATHER_VALUE],
+                        "forecast": [],
+                        "alerts": [],
+                    }
+                ]
+            ),
+        )
+
+    client = _client(handler)
+    result = await client.nearby(lat=37.5665, lon=126.978, radius_km=10, limit=30)
+    assert seen["path"] == "/v1/weather/nearby"
+    assert seen["params"] == {"lat": "37.5665", "lon": "126.978", "radius_km": "10", "limit": "30"}
+    assert result[0].location_id == "airkorea-station-abc"
+    assert result[0].distance_km == 1.2
+    assert result[0].latest[0].metric_key == "TMP"
+    await client.aclose()
+
+
+async def test_nearby_rejects_out_of_range_params_before_request() -> None:
+    called = {"value": False}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        called["value"] = True
+        return httpx.Response(200, json=_envelope([]))
+
+    client = _client(handler)
+    with pytest.raises(ValueError):
+        await client.nearby(lat=50.0, lon=126.0)
+    with pytest.raises(ValueError):
+        await client.nearby(lat=37.0, lon=126.0, radius_km=501)
+    with pytest.raises(ValueError):
+        await client.nearby(lat=37.0, lon=126.0, limit=101)
+    with pytest.raises(ValueError):
+        await client.nearby(lat=37.0, lon=126.0, limit=0)
+    assert called["value"] is False
+    await client.aclose()
+
+
 async def test_forecast_requires_aware_datetime() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=_envelope([]))

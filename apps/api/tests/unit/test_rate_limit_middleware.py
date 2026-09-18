@@ -8,7 +8,11 @@ from fastapi.testclient import TestClient
 
 from app.core.config import settings
 from app.core.security import create_access_token
-from app.middleware.rate_limit import MemoryRateLimitBackend, RateLimitMiddleware
+from app.middleware.rate_limit import (
+    MemoryRateLimitBackend,
+    RateLimitMiddleware,
+    _policy_for_request,
+)
 
 USER_ID = "00000000-0000-0000-0000-000000000101"
 
@@ -54,6 +58,17 @@ def _client(backend: MemoryRateLimitBackend | None = None) -> TestClient:
         return {"ok": True}
 
     return TestClient(app)
+
+
+def test_weather_markers_in_bounds_shares_feature_search_bucket() -> None:
+    """T-368 — 같은 pan/zoom 이벤트로 병렬 호출되므로 `/features/in-bounds`와 같은
+    버킷이어야 한다. 다르면 빠른 팬 중 weather marker만 조용히 사라진다."""
+
+    feature_policy = _policy_for_request("/features/in-bounds")
+    search_policy = _policy_for_request("/search")
+    weather_policy = _policy_for_request("/weather/markers-in-bounds")
+
+    assert weather_policy.name == feature_policy.name == search_policy.name == "feature_search"
 
 
 def test_public_paths_are_limited_by_ip(monkeypatch: pytest.MonkeyPatch) -> None:

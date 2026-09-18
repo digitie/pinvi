@@ -718,6 +718,12 @@ export type {
   FeatureDetailCard,
 } from './feature';
 export {
+  WeatherConditionSchema,
+  WeatherMapMarkerSchema,
+  WeatherMarkersInBoundsResponseSchema,
+} from './weather-map';
+export type { WeatherCondition, WeatherMapMarker, WeatherMarkersInBoundsResponse } from './weather-map';
+export {
   PublicBeachListSchema,
   PublicBeachViewSchema,
   PublicFestivalMonthSchema,

@@ -230,7 +230,7 @@ GET /admin/users?q=email:gmail.com+-status:disabled&sort=-created_at&page=1
 | OAuth start / callback                        | 분당 10회 | IP                                            |
 | `/storage/upload-urls`                        | 분당 30회 | user_id                                       |
 | `/public/*`                                   | 분당 60회 | IP                                            |
-| `/features/in-bounds`                         | 분당 60회 | user_id 또는 IP                               |
+| `/features/in-bounds`, `/weather/markers-in-bounds` | 분당 60회 | user_id 또는 IP                         |
 | `/features/search`, `/search`                 | 분당 60회 | user_id 또는 IP                               |
 | `/trips/{id}/exports/*`                       | 분당 20회 | user_id                                       |
 | 그 외 인증 사용자 경로                        | 분당 60회 | user_id 또는 token                            |

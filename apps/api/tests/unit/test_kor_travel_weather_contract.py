@@ -30,6 +30,8 @@ from app.clients.kor_travel_weather import (
     _LOCATION_REQUIRED,
     _MEASUREMENT_POINT_FIELDS,
     _MEASUREMENT_POINT_REQUIRED,
+    _NEARBY_FIELDS,
+    _NEARBY_REQUIRED,
     _WEATHER_VALUE_FIELDS,
     _WEATHER_VALUE_REQUIRED,
     KorTravelWeatherClient,
@@ -44,6 +46,7 @@ _CLIENT_PATHS = [
     "/v1/weather/markers",
     "/v1/weather/locations/{location_id}/latest",
     "/v1/weather/locations/{location_id}/forecast",
+    "/v1/weather/nearby",
 ]
 
 
@@ -99,6 +102,13 @@ def test_measurement_point_out_field_set_matches_decoder() -> None:
     assert allowed == _MEASUREMENT_POINT_FIELDS
 
 
+def test_nearby_out_field_set_matches_decoder() -> None:
+    spec = _load_snapshot()
+    required, allowed = _field_sets(_schema(spec, "NearbyOut"))
+    assert required == _NEARBY_REQUIRED
+    assert allowed == _NEARBY_FIELDS
+
+
 def _param(spec: dict[str, Any], path: str, name: str) -> dict[str, Any]:
     for param in spec["paths"][path]["get"]["parameters"]:
         if param["name"] == name:
@@ -132,6 +142,18 @@ def test_forecast_limit_bound_matches_client() -> None:
     spec = _load_snapshot()
     limit = _param(spec, "/v1/weather/locations/{location_id}/forecast", "limit")
     assert (limit["minimum"], limit["maximum"]) == (1, 5000)
+
+
+def test_nearby_bounds_match_client() -> None:
+    spec = _load_snapshot()
+    lat = _param(spec, "/v1/weather/nearby", "lat")
+    lon = _param(spec, "/v1/weather/nearby", "lon")
+    radius = _param(spec, "/v1/weather/nearby", "radius_km")
+    limit = _param(spec, "/v1/weather/nearby", "limit")
+    assert (lat["minimum"], lat["maximum"]) == (33, 43)
+    assert (lon["minimum"], lon["maximum"]) == (124, 132)
+    assert radius["maximum"] == 500
+    assert (limit["minimum"], limit["maximum"]) == (1, 100)
 
 
 def test_markers_location_id_is_repeated_array_query() -> None:

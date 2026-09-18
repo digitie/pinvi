@@ -3375,6 +3375,22 @@ Admin 1개는 별도 transport인 `apps/api/app/clients/kor_travel_map_admin.py`
     필요하다 — 단순 소스 교체가 아니라 별도 설계 대상이다. **범위 밖으로 남기고
     후속 task(T-368, 미정)로 연다** — `docs/integrations/kor-travel-weather.md`
     §4.6 참조.
+12. **(2026-09-18, T-368 조사·구현) 위 결정 11의 "공백" 우려는 조사 결과 이미
+    현실이었다 — `FeatureMapView.tsx`가 지도 마커를 가져오는 유일한 경로가
+    `weather` kind를 기본에서 이미 제외하고 있어 weather marker가 운영에서
+    하나도 표시되지 않고 있었다.** 사용자 판단: 단순 원복이 아니라 **이번
+    기회에 제대로 완성한다** — `kor-travel-weather`의 `GET /v1/weather/nearby`
+    (반경 기반, 위치+현재값을 한 번에 줌)를 직접 조회하는 완전히 독립된 새
+    endpoint(`GET /weather/markers-in-bounds`)를 만든다. `kor-travel-map`을
+    전혀 참조하지 않으므로 결정 11이 만든 정합 문제 자체가 사라진다. 부수
+    결정: (a) 전국 스케일(zoom<8)에서는 표시하지 않는다 — bbox가
+    `kor-travel-weather` 반경 상한(500km)을 한 번의 원형 쿼리로 못 덮는다.
+    (b) `condition`(맑음/흐림/비/눈)은 provider마다 하늘상태 코드 체계가 달라
+    안전하게 정규화 못 하므로, 강수 신호가 있을 때만 rainy/snowy로 판정하고
+    없으면 항상 cloudy다 — **sunny는 절대 반환하지 않는다**(결정 없이 "맑음"을
+    단정하지 않는다는 기존 원칙의 연장). (c) 온도를 못 구한 location은 목록에서
+    뺀다 — 예전처럼 `0`으로 가장하지 않는다. 상세는
+    `docs/integrations/kor-travel-weather.md` §4.6/§7-3, `docs/api/weather.md`.
 
 ### 근거
 
@@ -3431,6 +3447,12 @@ Admin 1개는 별도 transport인 `apps/api/app/clients/kor_travel_map_admin.py`
   kor-travel-map 운영 DB에 `retired`/`suppressed` fixture가 0개라 Admin UI에서
   더미 feature를 만들어야 하는데 그 생성 토큰이 서버엔 SHA-256 해시로만 있어
   (원문은 admin BFF만 앎) 의도적으로 프로그램적 우회가 막힌 경로였다.
+- **T-367 완료(2026-09-17)**: 보존 지평 가드(`pinvi_weather_retention_horizon_guard`
+  Dagster asset, 매일 KST 05:00) — 실효 보존을 직접 측정해 15일 미만이면 실패한다.
+  게이트 G-3 자체는 해소하지 않는다(외부 선행 조건은 그대로) — 회귀를 잡는 상시
+  감시다.
+- **T-368 완료(2026-09-18)**: 결정 12 참조 — `kor-travel-map`을 전혀 거치지 않는
+  `GET /weather/markers-in-bounds` 신설로 지도 weather marker를 완성했다.
 - **T-364 완료(2026-09-17)**: Admin weather-values를 flag
   `pinvi_kor_travel_weather_admin_enabled`(기본 off)로 전환. `AdminFeatureWeatherMetric`의
   `provider_dataset_id`/`dataset_display_name`/`known_at`을 nullable로 넓혔다
@@ -3438,7 +3460,4 @@ Admin 1개는 별도 transport인 `apps/api/app/clients/kor_travel_map_admin.py`
   T-362와 같은 축소 규칙으로 지원(flag off는 기존 422 유지) — T-362와 마찬가지로
   POI 문맥이 없는 bare `feature_id`라 결정 9b(완전 분리)는 적용되지 않는다.
   통합테스트 24건 green.
-- **결정 11(2026-09-17) 후속 — T-368(미정, 설계 필요)**: `kor-travel-map`의
-  weather 기능·`kind='weather'` feature type 완전 제거에 대비해 `FeatureMapView.tsx`
-  weather marker의 **위치** 공급원을 `kor-travel-weather` 자체 location 목록으로
-  옮기는 설계. T-359~T-367 범위 밖 — 별도로 연다.
+- **결정 11 후속은 결정 12로 해소됐다(T-368, 2026-09-18)** — 위 참조.
