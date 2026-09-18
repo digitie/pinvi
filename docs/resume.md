@@ -1,5 +1,37 @@
 # resume.md
 
+## 2026-09-18 (claude) — mobile-doctor 해소 + G-1·G-3 재실측(부분 진행, T-365 보류)
+
+mobile-doctor CI 경고(expo SDK 57 패키지 버전 드리프트)를 `npx expo install
+--fix`로 해소했다(typecheck/lint clean).
+
+사용자가 "g1 g3은 해소되었어"라고 알려줘서, 넘겨짚지 않고 N150
+`kor-travel-weather-db-1`을 직접 조회해 검증했다. 결과: **방향은 맞지만
+아직 원 기준 미달**이다.
+
+- **G-1**: KMA 앵커 location이 1→128(전체 1,432개 중)로 늘었다 — 수도권·강원
+  위주. 서울은 KMA 데이터가 잡히지만 부산·제주 등은 여전히 0건. "임의
+  좌표"라는 원 기준에는 미달(약 9%).
+- **G-3**: 실효 보존이 2일→약 9.6일로 늘었다(전역 `min(known_at)` =
+  2026-09-08). 매일 하루씩 늘어나는 추세라 2026-09-23 무렵 15일 도달
+  예상이나 아직 미달.
+
+**T-365(flag 기본값 on + 구 경로 제거) 착수는 보류했다** — 데이터 복원 없이
+되돌리기 어려운 작업이라 실측 없이 넘겨짚어 진행하지 않았다. 상세 근거는
+`docs/journal.md` 최신 항목, `docs/integrations/kor-travel-weather.md`
+§1.2/§4.2.
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+- G-1/G-3 재실측 방법은 N150 SSH → `docker exec -u postgres
+  kor-travel-weather-db-1 psql -U weather -d weather`로 직접 쿼리하는
+  것이다(자세한 명령은 journal.md 참조). WSL2에서 SSH 연결이 간헐적으로
+  끊긴다("No route to host") — 재시도하면 대개 붙는다.
+- T-367 가드가 실제 스케줄대로 돌기 시작하면(배포 확인 필요) G-3 재실측을
+  수동으로 반복할 필요가 없어진다 — 그 asset의 최신 run 결과를 보면 된다.
+- **다음 한 작업**: 사용자에게 이 재실측 결과를 보고하고, T-365를 지금
+  (부분 커버리지 수용) 진행할지 G-1/G-3가 원 기준을 채울 때까지 기다릴지
+  확인 대기 중.
+
 ## 2026-09-18 (claude) — T-368 완료. T-359~T-368 중 Pinvi가 진행할 수 있는 항목 모두 끝
 
 T-368(지도 weather marker 재구축)을 완료했다. 조사 중 `FeatureMapView.tsx`의
