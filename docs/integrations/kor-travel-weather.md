@@ -438,7 +438,7 @@ Pinvi는 `app.trip_day_weather_snapshots` 같은 별도 스냅샷 테이블을 *
 - **공개 beach view**: `latest_weather`/`upcoming_index_forecasts`는 불투명
   passthrough라 소스 교체와 독립.
 
-### 4.6 `kind='weather'` feature — (구) 이원 구조 → (신) map에서 완전히 소멸 예정
+### 4.6 `kind='weather'` feature — (구) 이원 구조 → (신) `kor-travel-weather` 직접 조회로 교체 완료
 
 **2026-09-17 개정 — 사용자 결정으로 이 절의 전제가 바뀌었다.** 원래 서술(T-360~T-362
 시점)은 "`kor-travel-map`이 KMA 격자마다 weather-kind feature를 계속 생성하고,
@@ -449,35 +449,49 @@ Pinvi 지도는 그것을 `WeatherMarker`로 그리는 이원 구조(존재는 m
 존재**하게 된다. **데이터 복원·하위 호환은 고려 대상이 아니다** — map 쪽 weather
 데이터/feature는 소급 보존 없이 사라진다.
 
-→ 이 변화가 만드는 새 공백: `FeatureMapView.tsx`가 지도에 `WeatherMarker`를 그릴
-때 "어디에 marker를 놓을지"는 지금 `kor-travel-map`의 `kind='weather'` feature
-inbounds 조회에서 온다. map이 그 feature type을 없애면 이 markers는 **조용히
-0개**가 된다 — Pinvi가 marker 위치를 알 다른 방법이 없기 때문이다.
-`kor-travel-weather`는 "feature"가 아니라 "location"(측정/앵커 지점) 개념만 갖고
-있으므로, marker 위치를 보여주려면 **`kor-travel-weather`의 location 목록을 지도
-viewport 기준으로 직접 조회하는 새 경로**가 필요하다 — 이는 단순 소스 교체가
-아니라 **새 기능**이다(해당 서비스가 bbox/nearby location 목록 API를 이미 갖고
-있는지부터 확인 필요, T-362/T-363 시점엔 조사하지 않았다).
+**✅ 2026-09-18 완료(T-368).** 조사 결과 중요한 사실을 하나 발견했다:
+`FeatureMapView.tsx`가 지도 마커를 가져오는 유일한 경로(`GET /features/in-bounds`)는
+`_DEFAULT_INBOUNDS_KINDS = ["place", "event", "notice", "price"]`로 `weather`를
+**기본에서 이미 제외**하고 있었고, 프론트도 `kinds`를 명시적으로 넘기지 않았다 —
+즉 **지금 운영 중인 지도에는 weather marker가 애초에 하나도 표시되지 않고
+있었다.** 위에서 우려한 "공백"은 이미 현실이었던 셈이다. 게다가 기존 설계 자체도
+미완성이었다: 값(온도)은 마커를 **선택했을 때만** 별도 `/features/{id}/weather`
+호출로 채워졌고, 선택 전에는 `temperature={0}`으로 그려졌다.
 
-**범위 밖으로 남긴다 — 별도 설계 필요.** 이 문서(T-359~T-367)는 marker 위치 공급을
-다루지 않는다. map의 weather feature 제거 시점이 오기 전에 후속 설계·task를 새로
-연다(잠정 T-368, `docs/tasks.md` 참조). 그 전까지는 map이 계속 `kind='weather'`
-feature를 주므로 아래 T-362 확인 내용(값 채우기 경로)은 여전히 유효하다.
+사용자 판단(2026-09-18): "이번 기회에 제대로 완성" — 단순 원복이 아니라
+`kor-travel-weather`의 `GET /v1/weather/nearby?lat=&lon=&radius_km=&limit=`(반경
+기반, `NearbyOut`에 위치+현재값이 함께 옴)를 새로 소비하는 **완전히 독립된
+경로**를 만들었다:
 
-**T-362에서 확인(값 채우기 경로, 여전히 유효)**: `FeatureMapView.tsx`는
-`featureApi(apiClient).weather(featureId)` → `GET /features/{id}/weather`만 호출하고,
-그 경로·응답 셰입은 flag on/off 무관하게 동일하다. 백엔드 라우터를 flag로 전환하는
-것만으로 이 마커의 **값**도 자동으로 새 경로를 탄다 — 프론트 코드 변경이 필요
-없었다. marker의 **존재**(위 공백)는 별개 문제다.
-(참고로 `FeatureMapView.tsx`의 `currentTempC`는 `/temp|기온|T1H|TMP|TMN|TMX/i`로
-느슨하게 매치해 상용 `TEMP`도 대소문자 무관 부분일치로 우연히 잡힌다 — 안전망이지
-설계는 아니다. `TripWeatherSummary.tsx`의 `WEATHER_RE`는 이런 여유가 없어 정규화를
-빠뜨렸다면 실제로 값이 조용히 사라졌을 것이다 — §3.1-(3) 서버 정규화가 막은 게
-바로 이 경로다.)
+- 신규 `GET /weather/markers-in-bounds`(`docs/api/weather.md`) — `kor-travel-map`을
+  **전혀 참조하지 않는다.** `bbox`/`zoom`은 `/features/in-bounds`와 같은 계약을
+  쓰되(프론트 재사용), 백엔드가 내부에서 bbox 중심+반경으로 변환해 `/nearby`를
+  호출한다.
+- **줌 하한 8** — 전국 스케일(zoom 5)에서는 bbox 대각선이 `kor-travel-weather`
+  반경 상한(500km)을 한 번의 원형 쿼리로 못 덮는다. 도시/지역 스케일부터 표시하고
+  전국 뷰에서는 마커를 아예 안 띄운다.
+- `condition`(맑음/흐림/비/눈)은 provider마다 하늘상태 코드 체계가 달라 안전하게
+  정규화 못 한다(`weather_metrics.py`도 `WEATHER_CODE`를 원문 그대로 통과시키고
+  매핑 안 함) — 강수량(안전 정규화된 `PRECIP`)이 있을 때만 rainy/snowy로
+  판정하고, 신호가 없으면 항상 `cloudy`다. **`sunny`는 절대 반환하지 않는다.**
+  근거 없이 "맑음"을 단정하지 않는다는 이 프로젝트의 기존 원칙(§3.1)을 그대로
+  따른다.
+- 온도를 못 구한 location은 목록에서 뺀다 — 예전처럼 `0`으로 가장하지 않는다.
+- `pinvi_kor_travel_weather_map_markers_enabled` flag(기본 `false`) — 지금 켜도
+  관측상 아무 변화가 없다(이미 아무도 못 보고 있었으므로). 검증 후 켠다.
+- `FeatureMapView.tsx`의 `weatherConditionFromIcon`(marker_icon 문자열 정규식
+  분류)과 `featureKind === 'weather'` 특수 분기는 **전부 제거**했다 — 죽은
+  코드였다. weather marker는 이제 `featureId`가 아니라 `location_id`로 식별되는
+  완전히 별도 `ClusterLayer`/state(`weatherPoints`, `selectedWeatherMarker`)로
+  렌더된다. 선택 시 별도 fetch가 필요 없다 — 값이 이미 marker 데이터 자체에
+  있다.
+
+`hourlyForecast`(primitive가 이미 지원하는 prop)는 마커당 `/forecast` 추가 호출이
+필요해 N+1 확산이라 이번 범위에서 제외했다 — 후속 개선으로 남긴다.
 
 `kind` enum 자체(`feature_suggestion` CHECK, MCP tool registry, Admin kind 필터)는
 map 소유이므로 건드리지 않는다 — map이 `weather`를 enum에서 빼는 시점에 맞춰
-Pinvi 쪽도 같이 정리한다(T-368 범위).
+Pinvi 쪽도 같이 정리한다(잔여 정리, 범위 작음).
 
 ### 4.7 영향 받는 파일 (이관 시 반드시 함께 보는 목록)
 
@@ -493,8 +507,14 @@ Pinvi 쪽도 같이 정리한다(T-368 범위).
 | 스키마    | `packages/schemas/src/{feature,trip,admin}.ts` (Zod 미러 + partition superRefine) — **완료**                        | T-362~364 |
 | client    | `packages/api-client/src/endpoints/{feature,admin}.ts`, `query-keys.ts`                                             | T-362/364 |
 | web       | `apps/web/components/trips/TripWeatherSummary.tsx` (분류기 §3.1-(3) — 서버 정규화로 무변경 확인, T-362/363) + **출처(provider) 표시 배지 신설 — 완료** | T-362/363/366 |
-| web       | `apps/web/components/map/FeatureMapView.tsx`, `vworldPrimitives.tsx` (§4.6) — **경로 동일 확인, 무변경**            | T-362     |
+| web       | `apps/web/components/map/FeatureMapView.tsx` (T-362 시점 "경로 동일 확인"은 T-368에서 전면 교체됨, §4.6) | T-362     |
 | web       | Admin weather-values 탭 `FeatureDetailSubpage.tsx` — **완료**(dataset 컬럼 null-safe)                               | T-364     |
+| client    | `apps/api/app/clients/kor_travel_weather.py` `nearby()`(신설) — **완료**                                           | T-368     |
+| 서비스    | `apps/api/app/services/weather_map_markers.py`(신설, bbox→center+radius, 순수 함수) — **완료**                     | T-368     |
+| 라우터    | `apps/api/app/api/v1/weather_markers.py`(신설), `app/core/bbox.py`(신설, `features.py`와 공유) — **완료**          | T-368     |
+| 스키마    | `apps/api/app/schemas/weather_map.py`, `packages/schemas/src/weather-map.ts`(신설, feature와 완전 분리) — **완료** | T-368     |
+| web       | `apps/web/components/map/FeatureMapView.tsx`(`fetchWeatherMarkers`, `weatherPoints`, `selectedWeatherMarker` — `kor-travel-weather` 직접 조회로 전면 교체) + `apps/web/lib/weatherProviderLabels.ts`(신설, `TripWeatherSummary.tsx`와 공유) — **완료** | T-368     |
+| 문서      | `docs/api/weather.md`(신설) — **완료**                                                                            | T-368     |
 | e2e       | `apps/web/e2e/trip-detail.e2e.ts` (단건 weather 요청 0회 단언) — **검토 결과 무변경**(mock 기반, 응답 셰입 불변) | T-363     |
 | e2e       | `trip-feature-resolution-live-mutating.live.ts` + `startWeatherProxy` + 새 flag-on sub-test — **코드 완료, 실행은 T-365 flag-on 직전 운영 관측으로 흡수(2026-09-18)** | T-363/365 |
 | 런북      | `docs/runbooks/live-mutating-e2e.md` ("T-363 weather flag on 게이트 단건" 절 신설) — **완료**                       | T-363     |
@@ -624,14 +644,14 @@ Pinvi는 스냅샷 테이블을 **만들지 않는다.** 보존은 사실을 소
 데이터/feature는 소급 보존 없이 사라진다(ADR-068 결정 11). map의 T-VN-38/39
 weather 투자는 이 결정으로 중복 투자가 되므로 계속하지 않는 쪽으로 정리된다.
 
-**새로 생기는 공백** — `FeatureMapView.tsx`의 `WeatherMarker`는 지금
-`kor-travel-map`의 `kind='weather'` feature inbounds 조회로 **위치**를
-얻는다. map이 그 feature type을 없애면 이 marker들은 **조용히 0개**가 된다.
-`kor-travel-weather`는 "location"만 있고 "feature" 개념이 없으므로, marker
-위치 공급에는 **viewport 기준 location 목록을 그 서비스에서 직접 조회하는
-새 경로**가 필요하다 — 단순 소스 교체가 아니라 별도 설계 대상이다. 이 문서
-(T-359~T-367)는 이를 다루지 않는다 — 후속 task **T-368**(미정, `docs/tasks.md`)
-로 연다.
+**✅ 공백 해소(T-368, 2026-09-18)** — `FeatureMapView.tsx`의 `WeatherMarker`가
+`kor-travel-map`의 `kind='weather'` feature inbounds 조회로 위치를 얻던 경로는
+조사 결과 **이미 죽은 코드였다**(§4.6 — 기본 kinds가 `weather`를 제외해 마커가
+애초에 하나도 안 보이고 있었다). map이 그 feature type을 없애도 잃을 게 없다.
+새 경로는 `GET /weather/markers-in-bounds`(`docs/api/weather.md`)로,
+`kor-travel-weather`의 `/nearby`(viewport 중심+반경 기준 location 목록 + 현재값)를
+직접 조회한다 — map을 전혀 거치지 않으므로 이 정합 문제 자체가 사라졌다. 상세는
+§4.6.
 
 ---
 

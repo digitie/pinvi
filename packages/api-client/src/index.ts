@@ -27,6 +27,7 @@ export type { PinviQueryKey, TripRealtimeInvalidationEvent } from './query-keys'
 export { authApi } from './endpoints/auth';
 export { adminApi } from './endpoints/admin';
 export { featureApi } from './endpoints/feature';
+export { weatherApi } from './endpoints/weather';
 export { geoApi } from './endpoints/geo';
 export { userApi } from './endpoints/users';
 export { tripApi } from './endpoints/trips';

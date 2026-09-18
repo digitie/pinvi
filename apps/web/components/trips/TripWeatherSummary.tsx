@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { CloudSun, Wind } from 'lucide-react';
 import type { TripWeatherCard, TripWeatherResolution, WeatherMetric } from '@pinvi/schemas';
+import { providerLabel } from '@/lib/weatherProviderLabels';
 
 const WEATHER_LABELS: Record<string, string> = {
   T1H: '기온',
@@ -18,26 +19,6 @@ const WEATHER_LABELS: Record<string, string> = {
   PM10: '미세',
   PM25: '초미세',
 };
-
-// T-366(ADR-068, 게이트 G-2) — 사용자가 국내 공공기관 값과 국외 상용 provider
-// 값을 구분할 수 있어야 한다. `docs/compliance/data-policy.md` §3-1 정본과
-// 일치시킨다.
-const PROVIDER_LABELS: Record<string, string> = {
-  'python-kma-api': '기상청',
-  'python-airkorea-api': '환경공단',
-  'python-khoa-api': '국립해양조사원',
-  'python-krforest-api': '산림청',
-  'python-krex-api': '한국도로공사',
-  openweathermap: 'OpenWeatherMap',
-  weatherapi: 'WeatherAPI',
-  open_meteo: 'Open-Meteo',
-  wttr_in: 'wttr.in',
-};
-
-function providerLabel(provider: string | null | undefined): string | null {
-  if (!provider) return null;
-  return PROVIDER_LABELS[provider] ?? provider;
-}
 
 const CURRENT_STYLE_RE = /observed|nowcast|current/i;
 const FORECAST_STYLE_RE = /ultra|short|mid|forecast/i;

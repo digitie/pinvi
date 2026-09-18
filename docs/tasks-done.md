@@ -5,6 +5,57 @@
 따른다.
 
 
+## 2026-09-18
+
+- [x] **T-368** — 지도 weather marker를 `kor-travel-weather` 직접 조회로 완성
+      (ADR-068 결정 12). 조사 결과 `FeatureMapView.tsx`의 유일한 마커 조회
+      경로(`GET /features/in-bounds`)가 `weather` kind를 기본에서 이미
+      제외하고 있어 weather marker가 운영에서 하나도 표시되지 않고 있었다는
+      사실을 발견 — 기존 설계(선택 전 온도 `0` 표시, `marker_icon` 정규식으로
+      condition 추정)도 미완성이었다. 사용자 판단 "이번 기회에 제대로 완성"에
+      따라 단순 원복이 아니라 `kor-travel-map`을 전혀 참조하지 않는 완전히
+      독립된 새 경로를 만들었다.
+      - 신규 `GET /weather/markers-in-bounds`(`docs/api/weather.md`) —
+        `kor-travel-weather`의 `GET /v1/weather/nearby`(반경 기반, 위치+현재값
+        동시 제공)를 직접 조회. bbox/zoom 계약은 `/features/in-bounds`와
+        동일(프론트 `boundsToBbox`/`clampZoom` 재사용), 백엔드가 내부에서
+        bbox 중심+반경으로 변환(`app/services/weather_map_markers.py`,
+        haversine 네 모서리 최댓값).
+      - **줌 하한 8** — 전국 스케일에서는 bbox 대각선이 `kor-travel-weather`
+        반경 상한(500km)을 한 번의 원형 쿼리로 못 덮는다.
+      - `condition`은 강수 신호(안전 정규화된 `PRECIP`)가 있을 때만
+        rainy/snowy로 판정하고 없으면 항상 cloudy — **sunny는 절대 반환하지
+        않는다**(provider마다 하늘상태 코드 체계가 달라 안전하게 정규화
+        불가, `weather_metrics.py`의 기존 원칙 연장). 온도를 못 구한
+        location은 목록에서 뺀다(예전처럼 `0`으로 가장하지 않음).
+      - `apps/api/app/clients/kor_travel_weather.py`에 `nearby()` 신설(5번째
+        endpoint), 계약 드리프트 게이트(`test_kor_travel_weather_contract.py`)
+        갱신.
+      - `app/core/bbox.py` 신설 — `features.py`의 `_parse_bbox`/`MIN_ZOOM`/
+        `MAX_ZOOM`을 추출해 새 라우터와 공유(두 번째 소비자 등장 시점의
+        정당한 리팩터).
+      - flag `pinvi_kor_travel_weather_map_markers_enabled`(기본 `false`,
+        T-362~364와 같은 패턴).
+      - **rate limit 버킷 정합 발견·수정**: `/features/in-bounds`와 같은
+        pan/zoom 이벤트로 병렬 호출되는데 기본 버킷을 쓰면 빠른 팬 중
+        weather marker만 조용히 사라진다 — `feature_search` 버킷에 합류시켰다
+        (`app/middleware/rate_limit.py`).
+      - 프론트: `FeatureMapView.tsx`의 죽은 코드(`weatherConditionFromIcon`,
+        `featureKind === 'weather'` 특수 분기, `MapPoint.featureKind`)를
+        전부 제거하고 `fetchWeatherMarkers`(독립 debounce/abort/cache) +
+        별도 `ClusterLayer`/`selectedWeatherMarker` state로 교체. 선택 시
+        별도 fetch가 필요 없다 — 값이 marker 데이터 자체에 이미 있다.
+        `apps/web/lib/weatherProviderLabels.ts` 신설(`TripWeatherSummary.tsx`와
+        provider 라벨 공유).
+      - `hourlyForecast`(primitive 지원 prop)는 마커당 `/forecast` 추가 호출이
+        필요해 N+1 확산이라 범위 제외 — 후속 개선으로 남김.
+      - 신규 테스트: 백엔드 unit 14건(`test_weather_map_markers.py`) + client
+        4건(`nearby`) + 계약 2건 + integration 6건(`test_weather_markers_api.py`)
+        + rate-limit 1건, 프론트 unit 3건(`toWeatherPoints`). `apps/api` 전체
+        + `apps/web` 전체 green, ruff/mypy --strict clean.
+      - `docs/decisions.md` ADR-068 결정 12 추가, `docs/api/weather.md` 신설,
+        `docs/integrations/kor-travel-weather.md` §4.6/§7-3/§4.7 갱신.
+
 ## 2026-09-17
 
 - [x] **T-367** — 보존 지평 가드(게이트 G-3 상시 감시, Pinvi 소관, 게이트 무관하게

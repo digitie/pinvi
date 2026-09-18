@@ -2,6 +2,67 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-18 (claude) — T-368 완료: 지도 weather marker를 kor-travel-weather 직접 조회로 재구축
+
+사용자 확인("이번 기회에 제대로 완성") 후 T-368을 완료했다. 착수 전 `Explore`
+에이전트로 `FeatureMapView.tsx`의 현재 weather marker 코드 경로를 조사했는데,
+중요한 사실을 발견했다 — 지도 마커를 가져오는 유일한 경로(`GET
+/features/in-bounds`)가 `_DEFAULT_INBOUNDS_KINDS = ["place", "event", "notice",
+"price"]`로 `weather`를 **이미 기본에서 제외**하고 있었고, 프론트도 `kinds`를
+명시적으로 넘기지 않아서 **지금 운영 중인 지도에는 weather marker가 애초에
+하나도 표시되지 않고 있었다.** `WeatherMarker` 렌더 분기, `weatherConditionFromIcon`
+파서, 모바일 팝업 예외 처리가 전부 죽은 코드였다. 게다가 설계 자체도
+미완성이었다 — 값(온도)은 마커 선택 시에만 별도 fetch로 채워졌고 선택 전에는
+`temperature={0}`으로 그려졌다.
+
+이 발견을 `AskUserQuestion`으로 공유하고 세 방향(제거/제대로 완성/보류)을
+물었다 — "이번 기회에 제대로 완성"을 선택받았다.
+
+**구현**:
+
+- 백엔드: `apps/api/app/clients/kor_travel_weather.py`에 `nearby()`(5번째
+  endpoint, `GET /v1/weather/nearby` — 반경 기반, 위치+현재값 동시 제공) 신설.
+  `app/schemas/weather_map.py`/`app/services/weather_map_markers.py`/
+  `app/api/v1/weather_markers.py` 신설 — `kor-travel-map`을 전혀 참조하지
+  않는다(T-363과 같은 "완전 분리" 원칙). `app/core/bbox.py` 신설 —
+  `features.py`의 `_parse_bbox`/`MIN_ZOOM`/`MAX_ZOOM`을 추출해 새 라우터와
+  공유(두 번째 소비자가 생긴 시점의 정당한 리팩터).
+- 줌 하한 8(전국 스케일에서는 bbox 대각선이 `kor-travel-weather` 반경
+  상한 500km를 한 원형 쿼리로 못 덮는다). `condition`은 강수 신호가 있을
+  때만 rainy/snowy로 판정하고 없으면 항상 cloudy — **sunny는 절대
+  반환하지 않는다**(provider마다 하늘상태 코드 체계가 달라 안전하게
+  정규화 불가하다는, `weather_metrics.py`가 이미 세운 원칙의 연장). 온도를
+  못 구한 location은 목록에서 뺀다.
+- flag `pinvi_kor_travel_weather_map_markers_enabled`(기본 off, T-362~364와
+  같은 패턴) — 지금 켜도 관측상 변화 없음(이미 아무도 못 보고 있었으므로).
+- **적대적 리뷰로 발견한 버그**: `/weather/markers-in-bounds`가
+  `/features/in-bounds`와 같은 pan/zoom 이벤트로 병렬 호출되는데, rate limit
+  기본 버킷(`authenticated_default`)에 맡기면 빠른 팬 중 weather marker만
+  조용히 사라질 수 있었다 — `feature_search` 버킷에 합류시키고
+  회귀 테스트를 추가했다(`app/middleware/rate_limit.py`).
+- 프론트: `FeatureMapView.tsx`의 죽은 코드를 전부 제거하고 `fetchWeatherMarkers`
+  (독립 debounce/abort/cache, 실패해도 장소 마커에 영향 없음) + 별도
+  `ClusterLayer`/`weatherPoints`/`selectedWeatherMarker` state로 교체. 선택 시
+  별도 fetch가 필요 없다 — 값이 marker 데이터 자체에 이미 있다(이게 "제대로
+  완성"의 핵심 개선). `apps/web/lib/weatherProviderLabels.ts` 신설 —
+  `TripWeatherSummary.tsx`(T-366)와 provider 라벨을 공유(두 번째 소비자 등장
+  시점의 정당한 추출).
+- 범위 제외: `hourlyForecast`(primitive가 이미 지원하는 prop)는 마커당
+  `/forecast` 추가 호출이 필요해 N+1 확산이라 이번엔 안 건드렸다.
+
+**검증**: 백엔드 unit 14건 + client 4건 + 계약 2건 + integration 6건 +
+rate-limit 1건, 프론트 unit 3건. `apps/api`/`apps/web` 전체 테스트,
+ruff/mypy --strict(백엔드), lint/typecheck(프론트) 모두 green(전체 suite는
+백그라운드로 재확인 중 — 완료 후 PR).
+
+**문서**: `docs/decisions.md` ADR-068 결정 12 추가(결정 11의 "공백" 우려가
+조사 결과 이미 현실이었다는 사실 포함), `docs/api/weather.md` 신설,
+`docs/integrations/kor-travel-weather.md` §4.6/§7-3/§4.7 갱신, `docs/tasks.md`/
+`docs/tasks-done.md` 반영.
+
+이로써 T-359~T-368 실행 계획에서 Pinvi가 지금 진행할 수 있는 항목은 모두
+끝났다. 남은 T-365는 외부 게이트(G-1·G-3)에만 막혀 있다.
+
 ## 2026-09-18 (claude) — "T-363 e2e 실행 검증" 독립 항목 제거, T-365 선행 조건으로 흡수
 
 사용자 질문("t363은 필요한거야?")에 답하며 재검토했다: flag가 기본값 off인

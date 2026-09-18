@@ -2,17 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LocateFixed } from 'lucide-react';
-import { ApiError, featureApi, userApi } from '@pinvi/api-client';
+import { ApiError, featureApi, userApi, weatherApi } from '@pinvi/api-client';
 import type {
   FeatureDetail,
   FeaturesInBoundsResponse,
-  FeatureSummary,
   FeatureWeatherCard,
   PlaceSearchResult,
+  WeatherMarkersInBoundsResponse,
 } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
+import { providerLabel } from '@/lib/weatherProviderLabels';
 import {
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
@@ -66,6 +67,12 @@ const CLUSTER_MARKER_COLOR = 'cluster';
 const DEBOUNCE_MS = 250;
 const VIEWPORT_CACHE_MAX = 32;
 const VIEWPORT_CACHE_TTL_MS = 60_000;
+/**
+ * 도시/지역 스케일부터 weather marker를 표시한다(T-368). 전국 스케일(zoom<8)에서는
+ * `kor-travel-weather`의 반경 상한(500km)을 bbox 한 번으로 못 덮어 서버가 항상 빈
+ * 목록을 돌려준다 — 클라이언트에서도 같은 문턱으로 미리 걸러 무의미한 호출을 줄인다.
+ */
+const MIN_WEATHER_MARKER_ZOOM = 8;
 
 type MapPoint = ClusterPoint & {
   kind: 'feature' | 'cluster';
@@ -78,8 +85,17 @@ type MapPoint = ClusterPoint & {
   lat: number;
   category?: string | null;
   featureId?: string;
-  featureKind?: FeatureSummary['kind'];
   count?: number;
+};
+
+/** T-368 — feature가 아니라 `kor-travel-weather`의 location을 직접 노출한다. */
+export type WeatherMapPoint = ClusterPoint & {
+  kind: 'weather';
+  locationId: string;
+  title: string;
+  temperatureC: number;
+  condition: WeatherCondition;
+  provider: string | null;
 };
 
 interface ContextMenuState {
@@ -89,8 +105,8 @@ interface ContextMenuState {
   lat: number;
 }
 
-type ViewportCacheEntry = {
-  data: FeaturesInBoundsResponse;
+type ViewportCacheEntry<T> = {
+  data: T;
   cachedAt: number;
 };
 
@@ -118,7 +134,6 @@ function toPoints(data: FeaturesInBoundsResponse): MapPoint[] {
         lat: f.coord.lat,
         category: style.category,
         featureId: f.feature_id,
-        featureKind: f.kind,
       },
     ];
   });
@@ -138,19 +153,7 @@ function toPoints(data: FeaturesInBoundsResponse): MapPoint[] {
   return [...features, ...clusters];
 }
 
-function weatherConditionFromIcon(icon: string | null | undefined): WeatherCondition {
-  const value = (icon ?? '').toLowerCase();
-  if (/snow|sleet|ice|hail|blizzard|눈|한파/.test(value)) return 'snowy';
-  if (/rain|shower|storm|thunder|drizzle|precip|비|호우/.test(value)) return 'rainy';
-  if (/sun|clear|day|맑/.test(value)) return 'sunny';
-  return 'cloudy';
-}
-
-function rememberViewport(
-  cache: Map<string, ViewportCacheEntry>,
-  key: string,
-  data: FeaturesInBoundsResponse,
-) {
+function rememberViewport<T>(cache: Map<string, ViewportCacheEntry<T>>, key: string, data: T) {
   if (cache.has(key)) cache.delete(key);
   cache.set(key, { data, cachedAt: Date.now() });
   while (cache.size > VIEWPORT_CACHE_MAX) {
@@ -160,10 +163,7 @@ function rememberViewport(
   }
 }
 
-function cachedViewport(
-  cache: Map<string, ViewportCacheEntry>,
-  key: string,
-): FeaturesInBoundsResponse | null {
+function cachedViewport<T>(cache: Map<string, ViewportCacheEntry<T>>, key: string): T | null {
   const entry = cache.get(key);
   if (!entry) return null;
   if (Date.now() - entry.cachedAt > VIEWPORT_CACHE_TTL_MS) {
@@ -171,6 +171,20 @@ function cachedViewport(
     return null;
   }
   return entry.data;
+}
+
+/** T-368 — `kor-travel-weather` `/nearby` 투영 응답 → 지도 point. */
+export function toWeatherPoints(data: WeatherMarkersInBoundsResponse): WeatherMapPoint[] {
+  return data.items.map((m) => ({
+    id: `weather:${m.location_id}`,
+    lngLat: [m.coord.lon, m.coord.lat] as [number, number],
+    kind: 'weather' as const,
+    locationId: m.location_id,
+    title: m.name,
+    temperatureC: m.temperature_c,
+    condition: m.condition,
+    provider: m.provider ?? null,
+  }));
 }
 
 /** kor_travel_map 구조화 `address` 객체에서 표시용 한 줄을 뽑는다(키 미확정 → 방어적). */
@@ -221,9 +235,20 @@ export function FeatureMapView({
   const latestRequest = useRef(0);
   const inBoundsAbort = useRef<AbortController | null>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const viewportCache = useRef<Map<string, ViewportCacheEntry>>(new Map());
+  const viewportCache = useRef<Map<string, ViewportCacheEntry<FeaturesInBoundsResponse>>>(
+    new Map(),
+  );
+  // T-368 — weather marker는 완전히 별도 경로(kor-travel-map을 거치지 않는다)라 자체
+  // request/abort/cache를 갖는다. 실패해도 장소 마커(위)에 영향이 없어야 한다.
+  const latestWeatherRequest = useRef(0);
+  const weatherAbort = useRef<AbortController | null>(null);
+  const weatherViewportCache = useRef<
+    Map<string, ViewportCacheEntry<WeatherMarkersInBoundsResponse>>
+  >(new Map());
 
   const [points, setPoints] = useState<MapPoint[]>([]);
+  const [weatherPoints, setWeatherPoints] = useState<WeatherMapPoint[]>([]);
+  const [selectedWeatherMarker, setSelectedWeatherMarker] = useState<WeatherMapPoint | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<MapPoint | null>(null);
@@ -313,18 +338,66 @@ export function FeatureMapView({
     }
   }, []);
 
+  /**
+   * T-368 — weather marker 전용 조회. `kor-travel-map`을 전혀 거치지 않는다(완전 분리,
+   * T-363과 같은 원칙). 실패해도 조용히 무시한다 — 장소 마커가 지도의 핵심 기능이고,
+   * weather marker 하나 실패했다고 그 위에 에러 배너를 겹쳐 띄우지 않는다.
+   */
+  const fetchWeatherMarkers = useCallback(async (map: MapLibreMap) => {
+    // request-id 발급 + 이전 요청 abort를 zoom 게이트보다 먼저 한다 — 그렇지 않으면
+    // "zoom 10에서 조회 시작 → 응답 대기 중 zoom 6으로 축소"할 때 조기 반환 분기가
+    // latestWeatherRequest를 건드리지 않아, 뒤늦게 도착한 zoom-10 응답이 stale-check를
+    // 통과해 방금 비운 목록을 다시 채워버린다(줌아웃 숨김이 깨짐).
+    const requestId = latestWeatherRequest.current + 1;
+    latestWeatherRequest.current = requestId;
+    weatherAbort.current?.abort();
+
+    const zoom = clampZoom(map.getZoom());
+    if (zoom < MIN_WEATHER_MARKER_ZOOM) {
+      setWeatherPoints([]);
+      return;
+    }
+    const bbox = boundsToBbox(map.getBounds(), zoom);
+    const cacheKey = `${zoom}:${bbox}`;
+
+    const cached = cachedViewport(weatherViewportCache.current, cacheKey);
+    if (cached) {
+      setWeatherPoints(toWeatherPoints(cached));
+      return;
+    }
+
+    const controller = new AbortController();
+    weatherAbort.current = controller;
+    try {
+      const data = await weatherApi(apiClient).markersInBounds(
+        { bbox, zoom },
+        { signal: controller.signal },
+      );
+      if (requestId !== latestWeatherRequest.current) return;
+      rememberViewport(weatherViewportCache.current, cacheKey, data);
+      setWeatherPoints(toWeatherPoints(data));
+    } catch (err) {
+      if (isAbortError(err) || requestId !== latestWeatherRequest.current) return;
+      // 조용히 무시(위 docstring). 장소 마커 error 배너와 공유하지 않는다.
+    }
+  }, []);
+
   const scheduleFetch = useCallback(
     (map: MapLibreMap) => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
-      debounceTimer.current = setTimeout(() => void fetchInBounds(map), DEBOUNCE_MS);
+      debounceTimer.current = setTimeout(() => {
+        void fetchInBounds(map);
+        void fetchWeatherMarkers(map);
+      }, DEBOUNCE_MS);
     },
-    [fetchInBounds],
+    [fetchInBounds, fetchWeatherMarkers],
   );
 
   useEffect(() => {
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
       inBoundsAbort.current?.abort();
+      weatherAbort.current?.abort();
     };
   }, []);
 
@@ -347,11 +420,12 @@ export function FeatureMapView({
       // 자동 센터링이 확정되기 전에 조회하면 곧바로 다른 viewport로 다시 조회하게 된다.
       if (autoCenterSettledRef.current) {
         void fetchInBounds(map);
+        void fetchWeatherMarkers(map);
       } else {
         pendingFetchRef.current = map;
       }
     },
-    [fetchInBounds, markUserInteracted],
+    [fetchInBounds, fetchWeatherMarkers, markUserInteracted],
   );
 
   /** 자동 센터링 결정이 끝났음을 알리고 보류된 in-bounds 조회를 연다. */
@@ -360,8 +434,11 @@ export function FeatureMapView({
     autoCenterSettledRef.current = true;
     const map = pendingFetchRef.current;
     pendingFetchRef.current = null;
-    if (map) void fetchInBounds(map);
-  }, [fetchInBounds]);
+    if (map) {
+      void fetchInBounds(map);
+      void fetchWeatherMarkers(map);
+    }
+  }, [fetchInBounds, fetchWeatherMarkers]);
 
   const handleViewportChange = useCallback(
     (event: MapLibreEvent) => {
@@ -424,8 +501,11 @@ export function FeatureMapView({
         return;
       }
       setSelected(point);
-      // 모바일: weather가 아닌 feature 마커 탭은 중간 팝업 없이 상세 시트를 바로 연다(ADR-056).
-      if (mobileLayout && point.featureId && point.featureKind !== 'weather') {
+      // feature/weather marker 팝업은 동시에 두 개가 뜨면 안 된다(T-368).
+      setSelectedWeatherMarker(null);
+      // 모바일: feature 마커 탭은 중간 팝업 없이 상세 시트를 바로 연다(ADR-056).
+      // weather marker는 이제 feature가 아니라 별도 경로(selectedWeatherMarker)로 처리된다(T-368).
+      if (mobileLayout && point.featureId) {
         setDetailFeatureId(point.featureId);
       }
     },
@@ -456,7 +536,6 @@ export function FeatureMapView({
           lat: coord.lat,
           category: style.category,
           featureId: result.feature_id,
-          featureKind: undefined,
         });
       } else {
         // 외부/주소 결과는 feature 상세가 없으므로 선택 해제하고 이동만 한다.
@@ -757,21 +836,6 @@ export function FeatureMapView({
                 const mapPoint = point as MapPoint;
                 const isSelected =
                   mapPoint.featureId != null && mapPoint.featureId === selected?.featureId;
-                if (mapPoint.featureKind === 'weather') {
-                  return (
-                    <WeatherMarker
-                      key={mapPoint.id}
-                      lngLat={mapPoint.lngLat}
-                      temperature={isSelected && currentTemp != null ? Math.round(currentTemp) : 0}
-                      condition={weatherConditionFromIcon(mapPoint.icon)}
-                      title={mapPoint.title}
-                      selected={isSelected}
-                      ariaLabel={mapPoint.title}
-                      simplifyAtZoom={isSelected ? 5 : 20}
-                      onClick={() => handlePointClick(mapPoint)}
-                    />
-                  );
-                }
                 return (
                   <MakiMarker
                     key={mapPoint.id}
@@ -782,6 +846,33 @@ export function FeatureMapView({
                     selected={isSelected}
                     ariaLabel={mapPoint.title}
                     onClick={() => handlePointClick(mapPoint)}
+                  />
+                );
+              }}
+            />
+            {/* T-368 — kor-travel-weather 직접 조회. feature와 완전히 분리된 별도 layer다. */}
+            <ClusterLayer
+              points={weatherPoints}
+              radius={48}
+              maxZoom={15}
+              renderMarker={(point) => {
+                const weatherPoint = point as WeatherMapPoint;
+                const isSelected = weatherPoint.locationId === selectedWeatherMarker?.locationId;
+                return (
+                  <WeatherMarker
+                    key={weatherPoint.id}
+                    lngLat={weatherPoint.lngLat}
+                    temperature={Math.round(weatherPoint.temperatureC)}
+                    condition={weatherPoint.condition}
+                    title={weatherPoint.title}
+                    selected={isSelected}
+                    ariaLabel={weatherPoint.title}
+                    simplifyAtZoom={isSelected ? 5 : 20}
+                    onClick={() => {
+                      setSelectedWeatherMarker(weatherPoint);
+                      // feature/weather marker 팝업은 동시에 두 개가 뜨면 안 된다(T-368).
+                      setSelected(null);
+                    }}
                   />
                 );
               }}
@@ -809,8 +900,7 @@ export function FeatureMapView({
                     <p className="text-xs text-body">현재 기온 {currentTemp.toFixed(0)}°C</p>
                   )}
                   {!detail && <p className="text-xs text-muted">상세 불러오는 중…</p>}
-                  {/* weather는 인라인 기온만(풀스크린 상세 제외, ADR-056). */}
-                  {selected.featureId && selected.featureKind !== 'weather' && (
+                  {selected.featureId && (
                     <button
                       type="button"
                       onClick={() => setDetailFeatureId(selected.featureId ?? null)}
@@ -819,6 +909,33 @@ export function FeatureMapView({
                     >
                       상세보기
                     </button>
+                  )}
+                </div>
+              </Popup>
+            )}
+            {/* T-368 — weather marker는 feature가 아니므로 상세보기가 없다. 값은 marker 자체
+                (`selectedWeatherMarker`)에 이미 있어 선택 시 별도 fetch가 필요 없다. */}
+            {selectedWeatherMarker && (
+              <Popup lngLat={selectedWeatherMarker.lngLat} maxWidth="220px" closeButton={false}>
+                <div className="space-y-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold text-ink">{selectedWeatherMarker.title}</p>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedWeatherMarker(null)}
+                      className="text-xs text-muted hover:text-ink"
+                      aria-label="닫기"
+                    >
+                      닫기
+                    </button>
+                  </div>
+                  <p className="text-xs text-body">
+                    현재 기온 {Math.round(selectedWeatherMarker.temperatureC)}°C
+                  </p>
+                  {selectedWeatherMarker.provider && (
+                    <p className="text-xs text-muted">
+                      출처: {providerLabel(selectedWeatherMarker.provider)}
+                    </p>
                   )}
                 </div>
               </Popup>
@@ -841,6 +958,28 @@ export function FeatureMapView({
                     : 'false'
                 }
                 data-marker-count={point.count ?? ''}
+              >
+                {point.title}
+              </span>
+            ))}
+          </div>
+          {/* T-368 — VWorld 키 없는 CI에서도 weather marker 데이터를 검증할 수 있게 노출한다. */}
+          <div
+            className="sr-only"
+            aria-hidden="true"
+            data-testid="feature-map-weather-marker-legend"
+          >
+            {weatherPoints.map((point) => (
+              <span
+                key={point.id}
+                data-testid="feature-map-weather-marker"
+                data-location-id={point.locationId}
+                data-temperature-c={point.temperatureC}
+                data-condition={point.condition}
+                data-provider={point.provider ?? ''}
+                data-selected={
+                  point.locationId === selectedWeatherMarker?.locationId ? 'true' : 'false'
+                }
               >
                 {point.title}
               </span>

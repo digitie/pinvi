@@ -23,6 +23,8 @@
 P1~P5는 게이트와 무관하게 진행 가능하고, **P6(기본값 on)만 G-1·G-2·G-3에 막힌다.**
 사용자 결정(2026-09-17): 과거 날씨는 **C — 대상 서비스 보존 연장**(Pinvi 스냅샷 테이블
 없음, G-3), 상용 provider는 **처리방침 갱신 후 출처 명시해 표시**(G-2/T-366).
+**T-359~T-364·T-366~T-368 전부 완료.** Pinvi가 지금 진행할 수 있는 항목은
+T-365(아래) 하나뿐이고, 그마저 외부 게이트(G-1·G-3)에 막혀 있다.
 
 - [ ] **T-365** — (P6, **G-1 + G-3 게이트, G-2는 T-366으로 해소됨**) 게이트 F(커버리지)·I(보존 지평) 통과 확인 후 flag 기본값 `on` + 구 경로 제거(**client 두 파일**: `kor_travel_map.py` 사용자 3경로 + `kor_travel_map_admin.py` 잔여) + map OpenAPI 계약 테스트·**SHA-256 핀 픽스처** 동반 갱신. `pinvi_kor_travel_map_service_token`은 feature batch가 계속 쓰므로 **남긴다**. P3~P5 운영 관측이 선행 조건. **2026-09-17 사용자 결정**: 데이터 복원·하위 호환은 고려 대상이 아니다 — kor-travel-map이 weather 기능을 완전히 제거할 예정이라 이 제거는 결국 필수가 된다.
       **P3~P5 운영 관측에 T-363 live e2e 실행을 포함한다** — 기능 자체는 머지
@@ -36,8 +38,6 @@ P1~P5는 게이트와 무관하게 진행 가능하고, **P6(기본값 on)만 G-
       커버하므로 별도 blocking 항목으로 두지 않는다 — T-365가 flag를 실제로
       켜기 직전, 관리자에게 더미 feature 2개(retired 1·suppressed 1) 생성을
       함께 요청해 `PINVI_LIVE_WEATHER_TRIP_VIEW_E2E=1`로 마지막 확인한다.
-- [ ] **T-368**(미정, 설계 필요) — `kor-travel-map`이 weather 관련 기능을 `kind='weather'` feature type 포함해 완전히 제거할 예정(2026-09-17 사용자 결정, ADR-068 결정 11)이라, `FeatureMapView.tsx`의 `WeatherMarker` **위치** 공급원이 사라진다(값은 T-362로 이미 새 경로, 위치는 여전히 map inbounds 의존). `kor-travel-weather`는 "location" 개념만 갖고 "feature"가 없으므로 viewport 기준 location 목록을 그 서비스에서 직접 조회하는 새 경로가 필요 — 그런 API가 있는지부터 확인 필요. 단순 소스 교체가 아니라 신규 설계 대상. `docs/integrations/kor-travel-weather.md` §4.6 참조.
-
 **게이트 G-1 (외부 선행 조건)** — `kor-travel-weather`가 임의 좌표에 대해 KMA 격자
 앵커를 provisioning해야 한다. 2026-09-17 실측 기준 전국 KMA 격자 앵커는 `e2e-seoul`
 1개뿐이고 실제 관광지에서는 상용 provider 예보만 잡힌다. **해당 저장소 소관이며 Pinvi가

@@ -18,6 +18,7 @@ from app.api.v1 import (
     trip_telegram_targets,
     trips,
     users,
+    weather_markers,
     ws,
 )
 from app.api.v1.admin import admin_router
@@ -38,6 +39,7 @@ api_router.include_router(ws.router)
 api_router.include_router(notice_plans.router)
 api_router.include_router(public.router)
 api_router.include_router(features.router)
+api_router.include_router(weather_markers.router)
 api_router.include_router(geo.geo_router)
 api_router.include_router(geo.regions_router)
 api_router.include_router(search.router)

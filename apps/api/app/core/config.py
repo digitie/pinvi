@@ -907,6 +907,13 @@ class Settings(BaseSettings):
     # 대응물이 없어 항상 null이 된다(ADR-068 결정 2). flag on에서는 `asof`도 지원한다
     # (구 경로는 Map Admin 계약이 몰라 여전히 422).
     pinvi_kor_travel_weather_admin_enabled: bool = False
+    # T-368. 기본값 off. on이면 `GET /weather/markers-in-bounds`가 지도 weather
+    # marker를 `kor-travel-weather`의 `/nearby`로 직접 조회해 노출한다 — `kor-travel-map`을
+    # 전혀 거치지 않는다(위 세 flag의 "완전 분리"를 지도 marker 표면까지 확장, T-363과
+    # 같은 원칙). 이 flag가 off거나 `weather_client`가 없으면 항상 빈 목록을 돌려준다
+    # (지금 운영 중인 `_DEFAULT_INBOUNDS_KINDS`가 `weather`를 제외해 마커가 애초에 하나도
+    # 안 보이는 것과 관측상 동일 — 새 기능이 켜지기 전까지 사용자 경험 변화가 없다).
+    pinvi_kor_travel_weather_map_markers_enabled: bool = False
 
     # VWorld 지도 키 (ADR-043/048) — 웹은 빌드타임 NEXT_PUBLIC_VWORLD_API_KEY를 쓰지만,
     # 모바일 앱(`apps/mobile`)은 키를 번들하지 않고 GET /mobile/vworld/token 으로 인증 후

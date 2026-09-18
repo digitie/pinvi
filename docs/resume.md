@@ -1,5 +1,34 @@
 # resume.md
 
+## 2026-09-18 (claude) — T-368 완료. T-359~T-368 중 Pinvi가 진행할 수 있는 항목 모두 끝
+
+T-368(지도 weather marker 재구축)을 완료했다. 조사 중 `FeatureMapView.tsx`의
+weather marker가 운영에서 이미 하나도 안 보이고 있었다는 사실을 발견해
+사용자에게 공유했고, "이번 기회에 제대로 완성"을 선택받아 `kor-travel-map`을
+전혀 참조하지 않는 새 endpoint(`GET /weather/markers-in-bounds`)로 재구축했다.
+상세는 `docs/journal.md` 최신 항목.
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+- **weather marker 표시는 flag `pinvi_kor_travel_weather_map_markers_enabled`
+  (기본 off)에 달려 있다** — 지금 켜도 관측상 아무 변화가 없다(이전에도 아무도
+  못 보고 있었으므로). 검증 후 켜는 결정은 아직 안 내려졌다.
+- **rate limit 버킷을 반드시 확인할 것** — viewport 이벤트로 병렬 호출되는
+  새 endpoint를 추가할 때는 `/features/in-bounds`가 속한 `feature_search`
+  버킷에 합류시켜야 한다. 이번에 이 정합을 놓칠 뻔했다가 적대적 리뷰 과정에서
+  발견해 고쳤다(`app/middleware/rate_limit.py`).
+- **`app/core/bbox.py`가 신설**돼 `features.py`와 `weather_markers.py`가 bbox
+  파싱/줌 범위를 공유한다 — 향후 세 번째 viewport 기반 endpoint가 생기면 여기를
+  먼저 본다.
+- T-365는 여전히 외부 게이트(G-1 KMA 커버리지·G-3 보존 연장)에 막혀 있다 —
+  Pinvi 쪽에서 더 진행할 코드 작업이 없다. 게이트가 풀리면 flag 기본값 on +
+  구 경로 제거로 이어간다.
+- `hourlyForecast`(primitive 지원 prop)는 이번에 안 건드렸다 — 마커당
+  `/forecast` 추가 호출이 필요해 N+1 확산이라는 이유였다. 후속 개선 후보.
+
+**다음 한 작업**: T-359~T-368 실행 계획에서 Pinvi가 지금 진행할 수 있는 항목은
+모두 끝났다. T-365는 외부 게이트 대기 — 사용자에게 다음 방향(다른 작업 시작,
+또는 여기서 대기)을 확인한다.
+
 ## 2026-09-18 (claude) — "T-363 e2e" 정리 완료, 다음은 T-368 착수 여부 확인 중
 
 `docs/tasks.md`의 "T-363 e2e 실행 검증" 독립 항목을 제거하고 T-365의 운영
