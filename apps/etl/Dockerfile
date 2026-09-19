@@ -33,6 +33,13 @@ COPY apps/etl/pyproject.toml ./pyproject.toml
 COPY apps/etl/pinvi ./pinvi
 RUN pip install --upgrade pip && pip install -e .
 
+# instance 설정을 이미지에 굽는다. 마운트로 주입하지 않는 이유는 이 파일이
+# **어느 storage를 쓰는지**를 정하기 때문이다 — 마운트가 빠지면 Dagster가
+# 경고 한 줄만 남기고 SQLite로 조용히 떨어지고, 그 SQLite는 볼륨이 없어
+# 컨테이너 재생성마다 사라진다. 구워 두면 그 경로가 닫힌다.
+# DSN 자체는 파일에 없다 — `PINVI_DAGSTER_PG_URL` env로 받는다.
+COPY apps/etl/dagster.yaml "$DAGSTER_HOME/dagster.yaml"
+
 # Dagster webserver는 12802로 바인딩한다(host도 12802 매핑).
 EXPOSE 12802
 
