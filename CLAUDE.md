@@ -33,7 +33,8 @@
 > 띄우며 **내부 주소 `127.0.0.1`의 12xxx 고정 포트**만 쓴다(외부 미노출). **prod**는
 > `kor-travel-docker-manager`(`ktdctl`)로 컨테이너를 올리고 **공식 도메인**(gitignore된
 > `infra/.env.prod`)을 적용한다. 로컬 장기 실행 12xxx 고정 포트는 PostgreSQL `5432`,
-> API `12801`, 웹 `12805`, Dagster `12802`, kor-travel-map API/Admin API `12701`,
+> API `12801`, 웹 `12805`, Dagster webserver `12802`, Dagster code-server(gRPC,
+> ADR-069) `12803`, kor-travel-map API/Admin API `12701`,
 > RustFS API `12101`, RustFS console `12105`다. **포트 충돌 정책(ADR-047)**: 고정 포트가
 > 이미 점유돼 있으면 **새 포트로 바꾸지 않고**, prod/dev 무관하게 **강제종료 여부를
 > 사용자에게 묻는다**. 사용자가 거부하면(또는 비대화형 기본) **작업을 중지**한다
@@ -131,8 +132,13 @@ ADR-066 (Next.js 16 프로덕션 빌드는 Turbopack이 아니라 webpack),
 ADR-067 (Odroid 퇴역, N150 단일 운영),
 **ADR-068** (날씨 소스를 `kor-travel-map` → `kor-travel-weather`로 완전 이관 —
 공개 계약은 불변, 2026-09-18 T-365로 완료. 기상청 커버리지 게이트 G-1은 원래
-기준 미달인 부분 상태(~9%)를 사용자 결정으로 영구 수용).
-다음 신규 = ADR-069. **TDR(Trip Detail Rewrite)** 마스터 계획 = `docs/execplan/trip-detail-rewrite.md`.
+기준 미달인 부분 상태(~9%)를 사용자 결정으로 영구 수용),
+**ADR-069** (Dagster를 code-server(gRPC)로 분리 — webserver/daemon은 유저 코드를
+더는 직접 import하지 않고 `workspace.yaml`로 별도 `pinvi-dagster-code-server`에
+접속. `kor-travel-weather`를 참조 구현으로 삼되 PinVi의 `network_mode: host`
+배포에 맞게 `host: 127.0.0.1`을 쓴다. Manager compose 쪽 배선은
+`kor-travel-docker-manager`의 짝 PR이 소유).
+다음 신규 = ADR-070. **TDR(Trip Detail Rewrite)** 마스터 계획 = `docs/execplan/trip-detail-rewrite.md`.
 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
 

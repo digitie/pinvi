@@ -16,7 +16,10 @@ location이다. kor-travel-map feature provider 적재는 최신 ADR-026 이후
 - app-owned job은 ADR-050의 retry/backoff, idempotency, bounded metadata,
   failure notification, destructive dry-run gate를 따른다.
 
-자세한 운영은 [`docs/runbooks/etl.md`](../runbooks/etl.md).
+자세한 운영은 [`docs/runbooks/etl.md`](../runbooks/etl.md). **배포 topology**
+(webserver/daemon/code-server 3역 분리, instance storage)는 이 문서가 아니라
+ADR-069와 `docs/runbooks/etl.md` §2.0이 정본이다 — 여기는 asset의 **도메인
+경계**(무엇을 `app` schema에서 다루는가)만 다룬다.
 
 ## 2. 구조
 
@@ -24,22 +27,23 @@ location이다. kor-travel-map feature provider 적재는 최신 ADR-026 이후
 > 없으므로 kor-travel-map으로 이관할 레거시 스켈레톤도 없다. 아래는 현재 구현과
 > 계획(미구현)을 구분한 것이며, 상세 트리는 [`docs/runbooks/etl.md`](../runbooks/etl.md) §2.
 
-현재 구현(2026-06-28):
+현재 구현(2026-09-19):
 
 ```
 apps/etl/
 ├── pyproject.toml
 ├── pinvi/etl/
-│   ├── definitions.py     # code location (KASI + email/telegram/retention/location assets)
-│   ├── resources.py       # PinviDatabaseResource, KasiResource
-│   ├── schedules.py       # kasi_special_days_job + email/telegram/retention/location jobs
+│   ├── definitions.py     # code location (KASI + email/telegram/retention/location/weather assets)
+│   ├── resources.py       # PinviDatabaseResource, KasiResource, KorTravelWeatherResource
+│   ├── schedules.py       # kasi_special_days_job + email/telegram/retention/location/weather jobs
 │   ├── jobs.py            # kasi_poi_rise_set_job (one-shot)
 │   └── assets/
 │       ├── pinvi_kasi_special_days.py
 │       ├── pinvi_email_outbox.py
 │       ├── pinvi_location_log_archive.py
 │       ├── pinvi_pii_retention.py
-│       └── pinvi_telegram_system_outbox.py
+│       ├── pinvi_telegram_system_outbox.py
+│       └── pinvi_weather_retention_horizon.py   # ADR-068 게이트 G-3 상시 감시, T-367
 └── tests/
 ```
 
@@ -109,6 +113,16 @@ apps/etl/
 - payload, message text, user id, chat id, token, last_error 원문은 metadata/API 응답에 넣지 않는다.
 - 실제 발송은 FastAPI lifespan worker가 계속 담당한다. 주간/일간 사용자 브리프 생성은
   `pinvi_telegram_weekly` 후속 범위다.
+
+### 3.7 `pinvi_weather_retention_horizon_guard` (ADR-068 게이트 G-3, T-367)
+
+- 매일 KST 05:00 실행.
+- `kor-travel-weather`의 공개 read 표면(인증 불필요)만 호출해 **실효 보존
+  일수**를 직접 측정한다 — 그 서비스가 선언하는 설정값을 신뢰하지 않는다.
+- 15일 미만이거나 데이터가 아예 없으면 asset이 실패한다(의도된 동작).
+- DB에 쓰지 않고 이미 정규화된 응답 필드만 읽으므로 provider raw → DTO 변환
+  금지룰(ADR-068 관련)에 해당하지 않는다. 상세는
+  `docs/runbooks/etl.md` §3.5.
 
 ## 4. Schedule
 

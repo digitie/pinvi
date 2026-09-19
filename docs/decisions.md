@@ -3481,3 +3481,112 @@ Admin 1개는 별도 transport인 `apps/api/app/clients/kor_travel_map_admin.py`
 - **T-365 완료(2026-09-18)**: 결정 13 참조 — G-1 부분 상태(~9%)를 영구 수용하고
   세 flag·구 `kor-travel-map` 날씨 경로를 완전히 삭제해 `kor-travel-weather`가
   유일한 날씨 소스가 됐다. T-359~T-368 전체 완료.
+
+## ADR-069: Dagster를 code-server(gRPC)로 분리한다 — webserver/daemon은 유저 코드를 만지지 않는다
+
+- **상태**: accepted
+- **날짜**: 2026-09-19
+- **결정자**: 사용자 + Claude
+
+### 컨텍스트
+
+2026-09-19 N150 실측(PR #558/kor-travel-docker-manager#356)으로 PinVi Dagster가
+**한 번도 job을 실행한 적이 없다**는 사실이 드러났다 — instance storage가
+컨테이너 로컬 SQLite였고(`DAGSTER_HOME`에 볼륨 없음), `QueuedRunCoordinator`를
+dequeue할 daemon도 없었다. 그 두 가지는 이미 고쳤다: `apps/etl/dagster.yaml`을
+이미지에 굽고 `dagster-postgres`를 의존성에 추가해 instance storage를
+`pinvi-postgres`의 별도 database(`pinvi_dagster`)로 옮겼고, Manager compose에
+`pinvi-dagster-daemon` 서비스를 등록했다.
+
+이 ADR은 **그다음 겹**을 다룬다. `pinvi-dagster`(webserver)와
+`pinvi-dagster-daemon`은 지금 `pinvi.etl.definitions`를 **각자 프로세스 안에서
+직접 import**한다. 형제 프로젝트 `kor-travel-weather`는 같은 형태에서 실제
+장애를 겪었다 — `dagster dev`가 내부에서 관리하는 code-server 자식 프로세스가
+"살아있지만 응답 없음(wedged)" 상태에 빠졌는데, `dagster dev`의 자체
+`ProxyServerManager`는 바깥 proxy의 생존만 감시하고 그 안의 worker는 감시하지
+않는다(`dagster-io/dagster#24050`). 그 결과 8시간 동안 수집이 멈췄고 아무도
+몰랐다.
+
+PinVi는 `dagster dev`를 프로덕션에 쓰지 않으므로 **그 특정 사고와 100% 같은
+경로는 아니다** — 하지만 구조적으로 같은 위험이 남아 있다: webserver/daemon이
+유저 코드(job/asset/resource)를 자기 프로세스 안에서 직접 실행하므로, 그 코드의
+버그·무거운 import·리소스 누수가 UI 응답성이나 daemon의 schedule/sensor
+tick·heartbeat 자체를 끌고 내려갈 수 있다. `kor-travel-docker-manager`의
+`docs/platform-topology.md` §5/§7도 같은 문제를 "**어느 프로젝트도
+code-server(gRPC)를 분리해 쓰지 않는다**"로 명시하고, 향후 프로젝트 간 공유
+control-plane 전환의 **1단계 선행 조건**으로 "프로젝트마다 code-server를
+분리한다"를 이미 지정해 두었다.
+
+사용자 지시: "pinvi의 dagster 구조를 weather와 같이 변경. 공용 db 및
+기타구조와 원칙은 manager 레포 참조." — `kor-travel-weather`의 이미 검증된
+3-프로세스 분리(code-server/webserver/daemon)를 참조 구현으로 삼되, PinVi의
+실제 배포 모델(Manager `ktdctl`이 소유하는 `network_mode: host` 단일 호스트
+compose, 자체 nginx 게이트웨이 없음)에 맞게 적용한다.
+
+### 결정
+
+1. **`pinvi.etl.definitions`를 실제로 import·실행하는 프로세스를 별도
+   `pinvi-dagster-code-server` 컨테이너로 분리한다.** `dagster api grpc -p 12803
+   -m pinvi.etl.definitions`. webserver/daemon은 새 `apps/etl/workspace.yaml`의
+   `grpc_server` 항목으로 이 컨테이너에 접속하고(`-w` 플래그), **더 이상 유저
+   코드를 직접 import하지 않는다.**
+2. **`host: 127.0.0.1`을 쓴다 — weather의 서비스명 DNS(bridge network)가 아니다.**
+   Manager compose와 PinVi 자체 dev compose 모두 PinVi 서비스를
+   `network_mode: host`로 띄운다(ADR-047 dev/prod 운영 모델, `platform-topology.md`
+   §5) — 컨테이너 간 통신은 전부 host의 loopback을 거친다. weather는 자체 bridge
+   network + `dagster-code-server` 서비스명으로 접속하지만, PinVi는 그 모델을
+   쓰지 않으므로 그대로 베끼지 않는다.
+3. **workspace.yaml도 dagster.yaml과 같은 원칙으로 이미지에 굽는다(마운트 금지).**
+   마운트가 빠지면 `-w` 플래그가 파일을 못 찾아 그 자리에서 죽는다 — 조용한 실패
+   경로는 아니지만, 이미지 하나로 세 역할(webserver/daemon/code-server)을 전부
+   command만 바꿔 돌리는 이 구조에서 이미지 자체가 자기완결적이어야 로컬 smoke와
+   프로덕션이 갈리지 않는다.
+4. **자체 nginx 게이트웨이는 두지 않는다.** weather는 자체 basic-auth
+   게이트웨이(`dagster-gateway`)로 UI를 보호하지만, PinVi의 Dagster UI는 이미
+   ADR-047의 reverse proxy(`pinvi-dagster.<domain>` → `:12802`) 뒤에 있고 Manager가
+   그 경계를 소유한다 — 같은 보호를 이중으로 두지 않는다.
+5. **Manager compose 쪽 배선**(`pinvi-dagster-code-server` 신설, `pinvi-dagster`/
+   `pinvi-dagster-daemon`의 command를 `-w`로 전환, `config/docker-targets.yml`
+   등록)은 `kor-travel-docker-manager` 저장소의 짝이 되는 PR이 소유한다 — 이
+   ADR은 PinVi가 공급하는 이미지 쪽 계약(포트 12803, workspace.yaml의 경로와
+   내용)만 고정한다.
+
+### 근거
+
+- weather의 사고는 `dagster dev`가 code-server 자식을 감시하지 못하는 데서
+  왔지만, PinVi가 겪을 수 있는 실제 위험은 더 넓다 — webserver/daemon 프로세스
+  자체가 유저 코드를 담고 있으면, 그 코드의 어떤 결함도 UI/schedule/sensor의
+  가용성과 직접 묶인다. 분리하면 code-server가 죽어도(`restart: unless-stopped`가
+  되살린다) webserver/daemon은 계속 뜬 채로 상태를 정확히 보고한다 —
+  `test_dagster_daemon_liveness_contract.py`가 이미 요구하는 "생존을 무엇이
+  보는가"의 연장이다.
+- `platform-topology.md` §7의 미래 공유 control-plane 전환은 "프로젝트마다
+  code-server를 먼저 분리"를 1단계 전제로 이미 명시한다 — 이번 변경은 그
+  1단계를 PinVi에서 충족시키지만, 공유 control-plane 자체(§7의 11000/11001/11002
+  대역)는 이 ADR의 범위가 아니다. 그 전환은 여러 프로젝트를 함께 묶는 별도
+  결정이 필요하다.
+- host 네트워크 모델을 그대로 따르는 이유는 일관성이다 — PinVi만 bridge
+  network로 바꾸면 Manager의 다른 모든 서비스와 다른 네트워크 모델을 쓰게 되고,
+  `PINVI_DAGSTER_PG_URL`/`PINVI_DATABASE_URL` 등 기존 환경변수가 전부
+  `127.0.0.1` 가정 위에 있어 그 하나만 바꾸는 것은 비용 대비 이득이 없다.
+
+### 결과
+
+- 신규: `apps/etl/workspace.yaml`.
+- 변경: `apps/etl/Dockerfile`(workspace.yaml COPY, `EXPOSE 12803`).
+- `apps/etl/dagster.yaml`/`pyproject.toml`은 이미 T-온 PR #558로 갖춰져 있어
+  변경 없음 — 이 ADR은 그 위에 code-server 계층만 얹는다.
+- Manager 쪽 `pinvi-dagster-code-server` 서비스·`docker-targets.yml`·
+  `platform-topology.md` §5 표 갱신은 `kor-travel-docker-manager` 저장소의 짝
+  PR이 담당(위 결정 5).
+- `docs/runbooks/etl.md`/`docs/architecture/dagster-etl-bridge.md` 갱신 — 3-역할
+  topology, workspace.yaml, 포트 12803 반영.
+
+### 후속
+
+- Manager 쪽 짝 PR이 머지되고 N150에 배포된 뒤, code-server를 강제로 죽여
+  webserver/daemon이 살아있는 채로 상태를 정확히 보고하는지 실측 확인한다
+  (weather PR #61의 "force-killed dagster-code-server" 검증과 동일한 절차).
+- `platform-topology.md` §7의 공유 control-plane 전환은 이 ADR이 만들지
+  않는다 — 다음 단계(공유 instance storage로 이전)는 여러 프로젝트가 함께
+  움직여야 하는 별도 결정이며, 그 결정이 내려지면 새 ADR로 갈음한다.

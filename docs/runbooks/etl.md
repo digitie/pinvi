@@ -24,10 +24,13 @@ Dagster는 Pinvi `app` schema 소유 job(KASI 특일/출몰시각, 알림, 보�
 > (그 책임은 `kor-travel-map` 소유), 따라서 이관할 "레거시 feature provider
 > 스켈레톤"은 존재하지 않는다. 신규 asset은 `app` schema 소유 job일 때만 여기 둔다.
 
-현재 구현(2026-06-28):
+현재 구현(2026-09-19):
 
 ```
 apps/etl/
+├── Dockerfile                            # 이미지 하나로 webserver/daemon/code-server 3역 (ADR-069)
+├── dagster.yaml                          # instance 설정 — Postgres storage (PR #558)
+├── workspace.yaml                        # webserver/daemon → code-server(gRPC) 접속 (ADR-069)
 ├── pyproject.toml                       # dagster + Pinvi app-owned ETL deps
 ├── pinvi/
 │   ├── __init__.py
@@ -48,6 +51,7 @@ apps/etl/
 │           └── pinvi_weather_retention_horizon.py
 └── tests/
     ├── test_definitions.py
+    ├── test_dagster_topology.py          # dagster.yaml/workspace.yaml 배포 계약 (ADR-069)
     ├── test_run_failure_sensor.py
     ├── test_email_outbox.py
     ├── test_kasi_special_days.py
@@ -57,6 +61,34 @@ apps/etl/
     ├── test_resources.py
     └── test_weather_retention_horizon.py
 ```
+
+### 2.0 배포 topology — code-server 분리 (ADR-069, 2026-09-19)
+
+같은 이미지를 command만 바꿔 세 역할로 띄운다(Map·kor-travel-weather와 같은 형태):
+
+| 역할 | 포트 | command | 유저 코드 import |
+| --- | --- | --- | --- |
+| `pinvi-dagster` (webserver) | `12802` | `dagster-webserver -w workspace.yaml` | ✗ |
+| `pinvi-dagster-daemon` | 없음(내부) | `dagster-daemon run -w workspace.yaml` | ✗ |
+| `pinvi-dagster-code-server` | `12803` | `dagster api grpc -m pinvi.etl.definitions` | ✓ (유일) |
+
+`pinvi.etl.definitions`를 실제로 import하고 매 run의 forked subprocess를 갖는
+프로세스는 code-server 하나뿐이다. webserver/daemon은 `workspace.yaml`의
+`grpc_server` 항목으로 그 프로세스에 접속만 하므로, job 코드의 버그나 무거운
+import가 UI 응답성이나 schedule/sensor tick 자체를 끌고 내려가지 않는다.
+`host: 127.0.0.1`인 이유는 PinVi 배포(Manager compose·자체 dev compose 모두)가
+`network_mode: host`이기 때문이다 — bridge network 서비스명 DNS가 없다(weather의
+`host: dagster-code-server`를 그대로 베끼지 않는 이유).
+
+`dagster.yaml`/`workspace.yaml`은 **마운트가 아니라 이미지에 굽는다** — 마운트가
+빠지면 각각 "조용히 SQLite로 대체"·"`-w`가 파일을 못 찾아 즉시 죽음"으로 실패
+모드가 갈리지만, 어느 쪽이든 이미지 자체가 자기완결적이어야 로컬 smoke와
+프로덕션이 갈리지 않는다.
+
+Manager compose(`kor-travel-docker-manager/docker-compose.yml`)가 세 서비스의
+실제 정의(command/depends_on/healthcheck)를 소유한다 — 이 저장소의
+`infra/docker-compose*.yml`은 로컬 smoke 전용이며 프로덕션 topology의 정본이
+아니다(`docs/runbooks/deploy.md` 참조).
 
 계획(미구현 — `app` schema 소유 job 후보):
 
@@ -282,11 +314,9 @@ KST 강제. import 시점 DB / 네트워크 접근 X.
 
 | 환경변수                                   | 예시                                                      |
 | ------------------------------------------ | --------------------------------------------------------- |
+| `DAGSTER_HOME`                             | `/opt/pinvi/.dagster` (이미지 고정값, `dagster.yaml`/`workspace.yaml`을 여기서 읽는다) |
+| `PINVI_DAGSTER_PG_URL`                     | `postgresql://pinvi_app@127.0.0.1:12800/pinvi_dagster` (instance storage, ADR-069) |
 | `PINVI_DATABASE_URL`                       | `postgresql+asyncpg://pinvi:changeme@postgres:5432/pinvi` |
-| `PINVI_DAGSTER_DOWNLOAD_DIR`               | `/opt/pinvi/.tmp/dagster-downloads`                       |
-| `PINVI_DAGSTER_LOG_DIR`                    | `/opt/pinvi/.tmp/dagster-logs`                            |
-| `PINVI_DAGSTER_HOME`                       | `/opt/pinvi/.tmp/dagster`                                 |
-| `PINVI_ETL_CONFIG_PATH`                    | `/opt/pinvi/config/etl-datasets.json`                     |
 | `PINVI_RUSTFS_ENDPOINT_URL`                | `http://rustfs:9000`                                      |
 | `PINVI_RUSTFS_BUCKET_FEATURE`              | `pinvi-feature-media`                                     |
 | `DATA_GO_KR_SERVICE_KEY`                   | KASI 등 data.go.kr 공통 서비스키                          |
@@ -297,6 +327,11 @@ KST 강제. import 시점 DB / 네트워크 접근 X.
 
 `DATA_GO_KR_SERVICE_KEY`가 없으면 KASI live job은 skip/fail-fast 정책 중 하나를
 명시한다. OpenAI API key는 사용하지 않는다.
+
+> 이전 판(2026-06-28)에 있던 `PINVI_DAGSTER_DOWNLOAD_DIR`/`PINVI_DAGSTER_LOG_DIR`/
+> `PINVI_DAGSTER_HOME`(밑줄 위치가 다른 오기)/`PINVI_ETL_CONFIG_PATH`는 코드
+> 어디에서도 읽지 않는다 — 실제로 쓰인 적 없는 계획 문서 잔재였다. 2026-09-19
+> ADR-069 갱신에서 제거했다.
 
 ## 7. 실행
 
@@ -311,22 +346,51 @@ uv run dagster dev --host 0.0.0.0 --port 12802   # UI + daemon http://localhost:
 
 ### 7.2 Docker
 
+로컬 smoke(`infra/docker-compose.yml`/`infra/docker-compose.app.yml`)는 아직
+webserver 단일 서비스다 — `apps/etl/Dockerfile`을 빌드하고 host network로
+`12802`에 직접 bind한다(ADR-047 dev 운영 모델). 3-역할 분리(§2.0)를 로컬에서도
+재현하려면 `command`를 code-server/daemon 각각으로 override하는 서비스를
+추가한다:
+
 ```yaml
-# infra/docker-compose.yml — dagster service
+# infra/docker-compose.app.yml 예시 — 3역 재현
 services:
-  dagster:
-    build: ./apps/etl
-    depends_on: [postgres]
-    ports:
-      - '12802:3000'
+  app-dagster-code-server:
+    build:
+      context: ..
+      dockerfile: apps/etl/Dockerfile
+    network_mode: host
+    command: ['dagster', 'api', 'grpc', '-h', '0.0.0.0', '-p', '12803', '-m', 'pinvi.etl.definitions']
     environment:
-      PINVI_DATABASE_URL: postgresql+asyncpg://pinvi:changeme@postgres:5432/pinvi
-      PINVI_RUSTFS_ENDPOINT_URL: http://rustfs:9000
-      # ...
-    volumes:
-      - ./apps/etl:/opt/pinvi/apps/etl
-      - ./.tmp/dagster:/opt/pinvi/.tmp/dagster
+      PINVI_DATABASE_URL: postgresql+asyncpg://pinvi:changeme@127.0.0.1:12800/pinvi
+      PINVI_DAGSTER_PG_URL: postgresql://pinvi_app@127.0.0.1:12800/pinvi_dagster
+
+  app-dagster:
+    build:
+      context: ..
+      dockerfile: apps/etl/Dockerfile
+    network_mode: host
+    depends_on: [app-dagster-code-server]
+    command: ['dagster-webserver', '-h', '0.0.0.0', '-p', '12802', '-w', '/opt/pinvi/.dagster/workspace.yaml']
+    environment:
+      PINVI_DATABASE_URL: postgresql+asyncpg://pinvi:changeme@127.0.0.1:12800/pinvi
+      PINVI_DAGSTER_PG_URL: postgresql://pinvi_app@127.0.0.1:12800/pinvi_dagster
+
+  app-dagster-daemon:
+    build:
+      context: ..
+      dockerfile: apps/etl/Dockerfile
+    network_mode: host
+    depends_on: [app-dagster-code-server]
+    command: ['dagster-daemon', 'run', '-w', '/opt/pinvi/.dagster/workspace.yaml']
+    environment:
+      PINVI_DATABASE_URL: postgresql+asyncpg://pinvi:changeme@127.0.0.1:12800/pinvi
+      PINVI_DAGSTER_PG_URL: postgresql://pinvi_app@127.0.0.1:12800/pinvi_dagster
 ```
+
+프로덕션(N150)의 정본은 이 저장소가 아니라 `kor-travel-docker-manager`
+`docker-compose.yml`의 `pinvi-dagster`/`pinvi-dagster-daemon`/
+`pinvi-dagster-code-server` 서비스다 — 위 예시는 로컬 재현용이다.
 
 ## 8. Soak (장시간 검증)
 
@@ -443,3 +507,4 @@ retry 소진된 마지막 시도에서만 발송 (`RetryPolicy(max_retries=3)` �
 - `docs/integrations/telegram.md` — Admin 알림
 - ADR-006 — Dagster code location 분리
 - ADR-050 — Pinvi app-owned Dagster job 표준
+- ADR-069 — Dagster code-server(gRPC) 분리, instance storage Postgres 전환
