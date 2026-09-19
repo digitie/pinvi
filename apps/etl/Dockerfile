@@ -40,8 +40,15 @@ RUN pip install --upgrade pip && pip install -e .
 # DSN 자체는 파일에 없다 — `PINVI_DAGSTER_PG_URL` env로 받는다.
 COPY apps/etl/dagster.yaml "$DAGSTER_HOME/dagster.yaml"
 
-# Dagster webserver는 12802로 바인딩한다(host도 12802 매핑).
-EXPOSE 12802
+# code-server 분리 topology(ADR-069)에서 webserver/daemon이 쓰는 workspace.
+# 마운트가 아니라 굽는 이유는 dagster.yaml과 같다 — 빠지면 `-w` 플래그 자체가
+# 파일을 못 찾아 즉시 죽으므로 조용한 실패 경로는 없지만, 굽지 않으면 이미지
+# 재사용성이 마운트 유무에 의존하게 된다.
+COPY apps/etl/workspace.yaml "$DAGSTER_HOME/workspace.yaml"
+
+# Dagster webserver는 12802로 바인딩한다(host도 12802 매핑). code-server(gRPC,
+# ADR-069)는 12803 — 같은 이미지를 command만 바꿔 띄운다(Map·weather와 같은 형태).
+EXPOSE 12802 12803
 
 # `/server_info`는 webserver가 **정적으로** 주는 버전 문서다. code location은
 # 별도로 로드되고, 실패해도 webserver는 살아 있으므로 그 probe는 컨테이너를
@@ -55,4 +62,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
         -d '{"query":"{repositoriesOrError{__typename}}"}' \
         | grep -q '"__typename":"RepositoryConnection"' || exit 1
 
+# 기본 CMD는 code location을 직접 import하는 단일 프로세스 webserver다 — 로컬
+# smoke/`docker compose up dagster`용 최소 동작 경로로 남긴다. 실제 프로덕션
+# 3-프로세스 분리(webserver/daemon -w workspace.yaml + code-server, ADR-069)는
+# Manager compose가 서비스별 command로 덮어써 만든다. 이 이미지 하나로 세 역할
+# 전부를 돈다(Map·weather와 같은 형태) — Dockerfile을 셋으로 나누지 않는다.
 CMD ["dagster-webserver", "-h", "0.0.0.0", "-p", "12802", "-m", "pinvi.etl.definitions"]

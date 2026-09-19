@@ -171,7 +171,8 @@ opaque 단기 token 또는 tile proxy로 대체한다. 모바일 지도 엔진�
   모두 runtime/권한 문제로 불가능하면 gate를 중단한다.
 - **dev/prod 분리 + 고정 12xxx 포트 (ADR-047)**: 별도 지시가 없으면 대상은 **dev**다.
   dev는 이 worktree에서 직접 띄우고 **내부 주소 `127.0.0.1`의 12xxx 고정 포트**만 쓴다:
-  PostgreSQL `5432`, API `12801`, 웹 `12805`, Dagster `12802`,
+  PostgreSQL `5432`, API `12801`, 웹 `12805`, Dagster webserver `12802`,
+  Dagster code-server(gRPC, ADR-069) `12803`,
   kor-travel-map API/Admin API `12701`, RustFS API `12101`, RustFS console `12105`.
   prod는 `kor-travel-docker-manager`(`ktdctl`)로 컨테이너를 올리고 **공식 도메인**
   (gitignore `infra/.env.prod`)을 적용한다. **포트 충돌 시 새 포트로 바꾸지 않고**,
@@ -229,7 +230,8 @@ opaque 단기 token 또는 tile proxy로 대체한다. 모바일 지도 엔진�
   Windows shim으로 잡히면 안 된다(`command -v`로 확인).
 - **Frontend 실행**: `apps/web` dev server / lint / typecheck / build / Vitest는
   Linux에서 실행한다.
-- **고정 dev 포트**: PostgreSQL `5432`, API `12801`, 웹 `12805`, Dagster `12802`,
+- **고정 dev 포트**: PostgreSQL `5432`, API `12801`, 웹 `12805`, Dagster webserver
+  `12802`, Dagster code-server(gRPC, ADR-069) `12803`,
   kor-travel-map API/Admin API `12701`, RustFS API `12101`, RustFS console `12105`.
   포트가 점유돼 있으면 기존 프로세스를 종료하고 같은 포트로 재기동한다
   (`npm run dev:up` / `npm run dev:down`, Linux worktree). Docker 빌드/실행은

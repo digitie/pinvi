@@ -1,0 +1,20 @@
+# dagster-webserver/dagster-daemon이 이 파일로 뜨면 `pinvi.etl.definitions`를
+# **더는 직접 import하지 않는다** — 대신 별도 `pinvi-dagster-code-server` 컨테이너에
+# gRPC로 접속한다. 그 컨테이너만 job 코드를 실제로 실행하고 매 run의 forked
+# subprocess를 갖는다(가장 무거운 역할). webserver/daemon은 UI/GraphQL과
+# schedule/sensor/run 큐잉만 맡고 유저 코드를 전혀 만지지 않으므로, job 코드
+# 버그나 무거운 import가 그 둘의 헬스체크·프로세스 자체를 끌고 내려가지 않는다
+# (kor-travel-weather의 `deploy/workspace.yaml`과 같은 구조, T-069/ADR-069).
+#
+# `host: 127.0.0.1`인 이유: Manager compose(`kor-travel-docker-manager`)는 PinVi
+# 서비스를 전부 `network_mode: host`로 띄운다(플랫폼 전역 원칙, `docs/platform-topology.md`
+# §5) — Docker bridge network의 서비스명 DNS(`pinvi-dagster-code-server` 같은)가
+# 없고, 컨테이너끼리 전부 host의 loopback으로 통신한다. 이 파일은 이미지에
+# 구워지므로(Dockerfile) 로컬(`dagster dev`, `-m` 직접 import)과 프로덕션
+# (`-w` 이 파일)이 같은 이미지 안에서 공존한다 — 어느 쪽을 쓸지는 command가
+# 정한다.
+load_from:
+  - grpc_server:
+      host: 127.0.0.1
+      port: 12803
+      location_name: pinvi.etl.definitions
