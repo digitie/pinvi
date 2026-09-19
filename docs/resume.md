@@ -1,5 +1,37 @@
 # resume.md
 
+## 2026-09-19 (claude) — Dagster code-server(gRPC) 분리 완료 (ADR-069, 3-저장소)
+
+사용자 지시: "pinvi의 dagster 구조를 weather와 같이 변경. 공용 db 및
+기타구조와 원칙은 manager 레포 참조." **완료** — Pinvi PR #559, manager PR
+#358(+ 동시성 doc 정정 #359) 전부 머지, CI green. 상세 근거는
+`docs/journal.md` 최신 항목.
+
+- PinVi Dagster는 이제 code-server(gRPC, `12803`)/webserver/daemon 3-프로세스
+  분리다 — webserver/daemon은 더 이상 유저 코드를 직접 import하지 않는다.
+- 이 작업 착수 전, `/mnt/f/dev/pinvi-dagster-pg`(다른 세션이 남긴 worktree,
+  Windows 경로 깨짐을 `git worktree repair`로 복구)에서 PinVi Dagster가
+  "한 번도 job을 실행한 적이 없었다"는 더 급한 선행 회귀를 발견 — 이미 PR
+  #558/#356으로 고쳐져 있었다(instance storage SQLite→Postgres, daemon
+  신설).
+- N150 배포는 아직 안 했다 — 다음에 이 영역을 만질 사람이 할 일:
+  ktdctl로 두 이미지(pinvi-dagster, 그대로 재사용) 재빌드 + Manager compose
+  재기동 후, code-server 강제 종료(`docker kill -s KILL`)로 webserver/daemon이
+  살아남는지 실측 확인(weather PR #61과 같은 절차, Manager PR #358 test
+  plan의 마지막 미체크 항목).
+
+다음에 이 영역을 만질 사람이 알아야 할 것:
+- `docs/platform-topology.md` §5에 `pinvi`·`geo` 둘 다 code-server 분리를
+  마친 것으로 기록돼 있다 — `map`/`conc`는 아직이다. 같은 패턴을 다른
+  프로젝트에 적용할 때는 그 프로젝트의 network 모델(host vs bridge)을 먼저
+  확인할 것 — PinVi는 `host: 127.0.0.1`을 썼지만 weather는 서비스명 DNS를
+  쓴다(둘 다 맞다, 배포 모델이 다를 뿐).
+- kor-travel-docker-manager에서 PR 머지 후 `gh pr merge --delete-branch`가
+  로컬 checkout 단계에서 실패할 수 있다(다른 worktree가 `main`을 쥐고 있어서)
+  — GitHub 쪽 머지 자체는 성공하므로 `gh pr view --json state`로 확인 후
+  `git push origin --delete <branch>` + `git switch --detach origin/main`로
+  수동 정리하면 된다.
+
 ## 2026-09-18 (claude) — M05/T-VN-41 저장소간 모순 정리 (문서만, 코드 변경 없음)
 
 사용자 지시: "m05 완료되었는지 kor travel map까지 확인해서 조사" → "저장소간

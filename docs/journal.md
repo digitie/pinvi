@@ -2,6 +2,46 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-19 (claude) — Dagster code-server(gRPC) 분리, ADR-069 (3-저장소 작업)
+
+사용자 지시: "pinvi의 dagster 구조를 weather와 같이 변경. 공용 db 및
+기타구조와 원칙은 manager 레포 참조." 착수 직전 `kor-travel-weather`의
+"dagster 구조 변경" 제안을 Pinvi 세션에서 오인해 되짚었다가, 그 작업은 이미
+`kor-travel-weather` PR #61로 완료·배포돼 있음을 N150 SSH로 직접 확인하고
+정정했다(별도 세션 작업).
+
+이번 작업의 진짜 출발점은 예상 밖이었다 — 조사 중 `/mnt/f/dev/pinvi-dagster-pg`
+worktree(Windows `F:/` 경로가 남아 깨져 있던 것을 `git worktree repair`로
+복구, CLAUDE.md 문서화된 절차)에서 다른 세션(Claude Opus 5, 1M context)이
+이미 커밋해 둔 훨씬 급한 회귀를 발견했다 — **PinVi Dagster가 한 번도 job을
+실행한 적이 없었다**(`QueuedRunCoordinator` + daemon 부재 + instance storage가
+볼륨 없는 컨테이너 로컬 SQLite). 그 fix는 Pinvi PR #558 +
+kor-travel-docker-manager PR #356으로 이미 머지돼 있었다 — 이번 세션이 한
+것은 그 위에 code-server 분리(ADR-069)를 얹는 것이었다.
+
+- **Pinvi**(PR #559): `apps/etl/workspace.yaml` 신설(`host: 127.0.0.1` —
+  Manager compose가 강제하는 `network_mode: host` 때문에 weather의 서비스명
+  DNS를 그대로 못 씀), Dockerfile에 굽고 `EXPOSE 12803`,
+  `test_dagster_topology.py` 신설(이 사각지대를 처음 덮음), ADR-069.
+- **kor-travel-docker-manager**(PR #358): `pinvi-dagster-code-server` 서비스
+  신설, webserver/daemon command를 `-m` 직접 import에서 `-w workspace.yaml`로
+  전환, `config/docker-targets.yml` 등록, `test_dagster_daemon_liveness_
+  contract.py`에 code-server 섹션 추가(2021 passed, 3 skipped, 회귀 없음).
+- **동시성 사고 하나 발견·정정**(PR #359): `docs/platform-topology.md`에
+  "pinvi가 code-server 분리 1단계를 밟은 첫 프로젝트"라고 적었는데, 거의
+  동시에 머지된 PR #357이 `kor-travel-geo`도 같은 걸 이미 했다는 걸
+  발견 — 표를 갱신하고 이제 사실이 아닌 "첫 프로젝트" 단정을 뺐다. 여러
+  세션이 같은 순간 같은 아키텍처 문제(§7 1단계)를 동시에 풀고 있었다는
+  뜻이다.
+- **PR merge 시 로컬 checkout 실패 패턴**: `kor-travel-docker-manager`에서
+  `gh pr merge --delete-branch`가 "'main' is already used by worktree
+  at .../kor-travel-docker-manager-codex"로 실패했다 — GitHub 쪽 머지는
+  이미 성공한 뒤였다(`gh pr view --json state`로 확인). 로컬 정리만
+  `git push origin --delete <branch>` + `git switch --detach origin/main`로
+  수동 완료했다. Pinvi worktree 관례(로컬 main은 trunk가 점유)와 같은
+  패턴이 이 저장소에도 있다 — 여기는 `kor-travel-docker-manager-codex`가
+  그 자리를 쥐고 있었다.
+
 ## 2026-09-18 (claude) — M05/T-VN-41 저장소간 모순 정리 (사용자 요청)
 
 사용자 지시: "m05 완료되었는지 kor travel map까지 확인해서 조사" → "저장소간
