@@ -137,8 +137,13 @@ ADR-067 (Odroid 퇴역, N150 단일 운영),
 더는 직접 import하지 않고 `workspace.yaml`로 별도 `pinvi-dagster-code-server`에
 접속. `kor-travel-weather`를 참조 구현으로 삼되 PinVi의 `network_mode: host`
 배포에 맞게 `host: 127.0.0.1`을 쓴다. Manager compose 쪽 배선은
-`kor-travel-docker-manager`의 짝 PR이 소유).
-다음 신규 = ADR-070. **TDR(Trip Detail Rewrite)** 마스터 계획 = `docs/execplan/trip-detail-rewrite.md`.
+`kor-travel-docker-manager`의 짝 PR이 소유),
+**ADR-070** (DB를 공용 제어 평면 instance `kor-travel-shared-postgres`(:11000)로
+이전 — 데이터 보존 없이 fresh 구성. M05 role topology bootstrap
+(`bootstrap-pinvi-runtime-role.sh`)의 endpoint allowlist에 `127.0.0.1:11000` 추가,
+role 분리 로직 자체는 불변. Manager 쪽 compose·provisioning·C6c 계약 확장은
+`kor-travel-docker-manager` ADR-45가 소유).
+다음 신규 = ADR-071. **TDR(Trip Detail Rewrite)** 마스터 계획 = `docs/execplan/trip-detail-rewrite.md`.
 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
 

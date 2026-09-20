@@ -20,8 +20,10 @@ PINVI_ROLE_CATALOG_RESET_RESULT_FILE="${PINVI_ROLE_CATALOG_RESET_RESULT_FILE:-}"
 PINVI_M05_LEGACY_REBASELINE="${PINVI_M05_LEGACY_REBASELINE:-0}"
 PINVI_MIGRATOR_DISABLE_LOGIN="${PINVI_MIGRATOR_DISABLE_LOGIN:-1}"
 # The ordinary PinVi Compose network reaches PostgreSQL as ``app-postgres:5432``.
-# The Docker Manager's host-network one-shot is the only other supported
-# topology, and it must use the dedicated loopback endpoint exactly.
+# The Docker Manager's host-network one-shot supports two loopback endpoints:
+# the dedicated PinVi instance (``127.0.0.1:12800``) and, since the shared
+# control-plane cutover, ``127.0.0.1:11000`` (``kor-travel-shared-postgres``).
+# No other host:port pair is accepted.
 PINVI_DB_HOST="${PINVI_DB_HOST:-app-postgres}"
 PINVI_DB_PORT="${PINVI_DB_PORT:-5432}"
 
@@ -95,7 +97,7 @@ case "${PINVI_MIGRATOR_DISABLE_LOGIN}" in
   * ) input_error "PINVI_MIGRATOR_DISABLE_LOGIN must be 0 or 1" ;;
 esac
 case "${PINVI_DB_HOST}:${PINVI_DB_PORT}" in
-  app-postgres:5432|127.0.0.1:12800 ) ;;
+  app-postgres:5432|127.0.0.1:12800|127.0.0.1:11000 ) ;;
   * )
     input_error "PINVI_DB_HOST and PINVI_DB_PORT must name an approved PostgreSQL endpoint"
     ;;

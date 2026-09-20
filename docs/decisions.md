@@ -3590,3 +3590,72 @@ compose, 자체 nginx 게이트웨이 없음)에 맞게 적용한다.
 - `platform-topology.md` §7의 공유 control-plane 전환은 이 ADR이 만들지
   않는다 — 다음 단계(공유 instance storage로 이전)는 여러 프로젝트가 함께
   움직여야 하는 별도 결정이며, 그 결정이 내려지면 새 ADR로 갈음한다.
+
+## ADR-070: DB를 `kor-travel-shared-postgres`(:11000)로 옮긴다 — M05 role topology bootstrap의 endpoint allowlist 확장
+
+- **상태**: accepted
+- **날짜**: 2026-09-20
+- **결정자**: 사용자("kor-travel-shared-postgres로 db를 옮겨놔", "데이터 보존 불필요") + Claude
+- **관련**: `kor-travel-docker-manager` ADR-45, `infra/postgres/bootstrap-pinvi-runtime-role.sh`
+
+### 컨텍스트
+
+`kor-travel-docker-manager`가 concierge에 이어 PinVi도 공용 제어 평면 PostgreSQL
+instance(`kor-travel-shared-postgres`, `:11000`)로 옮기기로 결정했다(그쪽 ADR-45).
+Manager 쪽 compose·역할·데이터베이스 provisioning은 그 저장소가 소유하지만, PinVi
+자신의 M05 role topology bootstrap 스크립트(`infra/postgres/bootstrap-pinvi-runtime-role.sh`)는
+**하드코딩된 endpoint allowlist**로 접속 대상을 `app-postgres:5432`(일반 PinVi
+compose 네트워크)와 `127.0.0.1:12800`(Manager의 구 전용 instance) 둘로만 제한하고
+있었다. 공용 instance(`127.0.0.1:11000`)는 이 allowlist에 없어, Manager 쪽에서
+DSN을 아무리 바꿔도 이 스크립트 자체가 그 endpoint를 거부한다.
+
+사용자는 이 마이그레이션에서 **데이터 보존을 요구하지 않았다** — 옛 `pinvi`/
+`pinvi_dagster`의 데이터는 옮기지 않고, 공용 instance에 fresh 상태로 M05 role
+topology(app/schema-owner/migration-owner/migrator 4개 role 분리, `x_extension`/
+`ops`/`pinvi_internal` 스키마, CONNECT 격리)를 처음부터 재구성한다. 이 스크립트는
+원래 fresh database를 대상으로 처음부터 role topology를 세우도록 설계돼 있어
+(`reset_fresh_role_catalog` 경로), 이 요구사항과 정확히 맞는다.
+
+### 결정
+
+`bootstrap-pinvi-runtime-role.sh`의 endpoint allowlist에 `127.0.0.1:11000`을
+세 번째 허용 endpoint로 추가한다. 스크립트의 나머지 로직(role 생성, 스키마 소유권,
+CONNECT 격리, migrator sealing)은 **손대지 않는다** — 이 스크립트는 이미
+`PGHOST`/`PGPORT`를 환경변수로 받아 그대로 psql에 전달하므로, endpoint 자체가
+role/schema/database 이름에 하드코딩돼 있지 않다. 허용된 endpoint 목록만 넓히면
+같은 스크립트가 공용 instance에서도 동일하게 동작한다.
+
+Manager 쪽에서 이 스크립트를 실행할 root bootstrap 계정(`POSTGRES_USER`)은 이제
+PinVi 전용 instance 자신의 superuser가 아니라 공용 cluster 관리자
+(`shared_admin`/`KOR_TRAVEL_SHARED_POSTGRES_USER`)다 — 이 스크립트는 그 계정이
+LOCK/CREATE ROLE 등 superuser급 권한을 갖는다고만 가정하고, 어떤 특정 계정 이름도
+요구하지 않으므로 이 전환에 영향받지 않는다.
+
+### 근거
+
+- **allowlist를 없애지 않고 항목만 추가한 이유**: 이 allowlist는 M05 보안 모델의
+  의도적인 fail-closed 방어선이다(임의 endpoint로의 우회 방지). 완전히 열거나
+  정규식으로 느슨하게 만들면 이 방어의 목적이 사라진다 — Manager가 실제로 쓰는
+  좌표(dedicated 12800, shared 11000)만 정확히 나열하는 것이 이 설계의 취지에
+  맞다.
+- **role topology 로직 자체를 단순화(예: 단일 role 모델로 축소)하지 않은 이유**:
+  concierge처럼 단일 앱 role로 충분한 프로젝트와 달리, PinVi는 이미 4-role 분리
+  (app/schema-owner/migration-owner/migrator)를 자체 보안 설계로 갖고 있다.
+  instance를 옮긴다는 이유만으로 이 분리를 포기하는 것은 이번 마이그레이션의
+  범위를 넘는 별도의 보안 결정이며, 사용자가 그런 지시를 하지 않았다.
+
+### 결과
+
+- `infra/postgres/bootstrap-pinvi-runtime-role.sh`: endpoint allowlist에
+  `127.0.0.1:11000` 추가, 관련 주석 갱신.
+- `apps/api/tests/unit/test_m05_migration_role_wiring.py`:
+  `test_bootstrap_only_accepts_the_declared_postgres_endpoints`가 새 allowlist
+  문자열과 `(127.0.0.1, 11000)` 성공 케이스를 검증하도록 갱신.
+- Manager 쪽 compose·역할·데이터베이스 provisioning, C6c 배포 계약 확장은
+  `kor-travel-docker-manager` ADR-45가 소유한다.
+
+### 확인하지 않은 것
+
+- n150에서의 실제 fresh bootstrap 실행과 `DATABASE_URL` cutover는 Manager 쪽
+  배포 단계에서 수행한다 — 이 ADR은 PinVi가 제공하는 스크립트 계약만 고정한다.
+- 옛 전용 instance(`pinvi-postgres`)의 데이터·폐기 시점은 이 ADR이 정하지 않는다.
