@@ -2,6 +2,64 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-20 (claude) — DB를 공용 제어 평면 PostgreSQL instance로 이전, ADR-070 (2-저장소 작업)
+
+사용자 지시: "kor-travel-shared-postgres로 db를 옮겨놔." 작업 도중 인터럽트로
+"데이터 보존 불필요"를 전달받았다 — concierge(ADR-44)/geo가 밟은 hard cutover
+(pg_dump/restore)가 필요 없다는 뜻. 이어진 AskUserQuestion에서 이전 대상을
+확인 — "둘 다(pinvi + pinvi_dagster)", 즉 `pinvi-postgres` 전용 instance 전체를
+사실상 폐역하는 결정이었다.
+
+조사 단계에서 이 작업이 예상보다 훨씬 깊다는 것을 발견했다:
+
+- Pinvi는 이미 자체 M05 role topology 보안 모델
+  (`infra/postgres/bootstrap-pinvi-runtime-role.sh`)을 갖고 있다 — root
+  bootstrap 계정과 별개로 4개 role(app/schema-owner/migration-owner/migrator)을
+  fresh database에서 처음부터 구성한다. 이 스크립트는 **하드코딩된 endpoint
+  allowlist**(`app-postgres:5432`/`127.0.0.1:12800`)로 접속 대상을 제한하고
+  있어, 공용 instance(`:11000`)를 쓰려면 그 allowlist부터 넓혀야 했다.
+- kor-travel-docker-manager 쪽은 `ktdctl pinvi-pair rebuild-pinned`라는 별도
+  pinned-image 재구축 계약(`c6c_deployment.py`)이 `PINVI_DATABASE_URL`/
+  `PINVI_DAGSTER_PG_URL`의 포트를 `PINVI_DB_PORT == 12800`으로 하드핀하고
+  있었다 — DSN만 공용 instance로 바꿔도 다음 pinned rebuild가 그 compose
+  후보를 거부한다는 뜻이었다. 사용자에게 이 계약도 함께 확장할지 물었고(옵션
+  A/B 제시), 처음엔 "이번엔 DB만, 검증기는 후속 작업"으로 답했다가 뒤이어
+  "A"(전부 포함)로 정정받았다.
+
+**결과**:
+
+- **Pinvi**(PR #561): `bootstrap-pinvi-runtime-role.sh`의 endpoint allowlist에
+  `127.0.0.1:11000` 추가(role topology 로직 자체는 불변),
+  `test_m05_migration_role_wiring.py` 갱신, ADR-070.
+- **kor-travel-docker-manager**(PR #366, ADR-46): 새
+  `kor-travel-shared-db-init-pinvi`(pinvi db 생성, pinvi_dagster는 M05 app
+  role 존재 조건부로 생성 — 순서 문제를 직접 발견해 방어 로직을 추가했다) +
+  `pinvi-shared-db-runtime-role`(profile bootstrap, M05 bootstrap을 공용
+  instance 대상으로 재실행) 두 one-shot 신설. `pinvi-api`/`pinvi-dagster*`/
+  `pinvi-admin-bootstrap`의 DSN을 `KOR_TRAVEL_SHARED_DB_PORT`(11000)로 전환,
+  옛 `pinvi-postgres`/`pinvi-db-init` 의존은 롤백 안전망으로 유지. `c6c_deployment.py`
+  확장: `PINVI_DB_PORT == 12800`(전용 instance) 핀과 `KOR_TRAVEL_SHARED_DB_PORT
+  == 11000`(공용 instance) 핀을 **같은 전역 함수**에 나란히 두어, 분리 과정에서
+  실제로 한 번 핀 하나를 놓칠 뻔한 것을 테스트 회귀로 잡았다(아래 참고).
+- **ADR 번호 충돌과 rebase**: 같은 세션 안에서 사용자가 geo에도 같은 지시를
+  병행 세션에 내렸다는 것을 뒤늦게 발견했다 — geo의 "ADR-45" PR(#365)이 이
+  작업 도중 먼저 main에 머지됐다. 원래 이 작업도 ADR-45로 작성했었는데, rebase
+  중 `.env.example`/`AGENTS.md`/`docker-compose.yml`/`docs/decisions.md`/
+  `docs/ports.md` 5개 파일에서 실제 충돌이 나 하나씩 수동 병합하고 번호를
+  ADR-46으로 재조정했다. 여러 세션이 같은 순간 같은 인프라 영역(§7 5단계,
+  concierge 이후 애플리케이션 DB 이전)을 동시에 확장하고 있었다는 뜻이다 —
+  ADR-069 때의 geo 동시 착지(PR #357/#358/#359)와 같은 패턴이 반복됐다.
+
+**적대적으로 스스로 잡은 회귀 하나**: c6c_deployment.py의 포트 핀을 분리하면서
+`PINVI_DB_PORT`(전용 instance)를 `_validate_pinvi_database_url_environment`에서
+빼려다, 그 함수가 그동안 "Map 대역(`12700`) 탈취" 공격을 막던 유일한 자리였다는
+것을 테스트가 즉시 잡아냈다(`test_pinvi_database_env_invariants_survive_without_
+the_services` 실패) — `PINVI_DB_PORT == 12800` 핀을 같은 함수에 그대로 남기고
+`KOR_TRAVEL_SHARED_DB_PORT == 11000` 핀을 추가하는 것으로 고쳤다.
+
+N150 실제 fresh bootstrap 실행(순서: db-init → role bootstrap → db-init 재실행 →
+DSN 전환 → live 검증)은 다음 배포 단계로 남아 있다 — `docs/resume.md` 참고.
+
 ## 2026-09-19 (claude) — Dagster code-server(gRPC) 분리, ADR-069 (3-저장소 작업)
 
 사용자 지시: "pinvi의 dagster 구조를 weather와 같이 변경. 공용 db 및

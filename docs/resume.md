@@ -1,5 +1,39 @@
 # resume.md
 
+## 2026-09-20 (claude) — DB를 공용 제어 평면 instance로 이전 완료 (ADR-070, 2-저장소)
+
+사용자 지시: "kor-travel-shared-postgres로 db를 옮겨놔" → (중간 인터럽트)
+"데이터 보존 불필요" → (AskUserQuestion) "둘 다(pinvi + pinvi_dagster)". **완료** —
+Pinvi PR #561, kor-travel-docker-manager PR #366(ADR-46, 원래 ADR-45로 작성했으나
+같은 시점에 착지한 geo의 병행 PR #365가 ADR-45를 먼저 가져가 rebase 중 재조정)
+전부 머지, CI green.
+
+- `pinvi`/`pinvi_dagster` 둘 다 `kor-travel-shared-postgres`(`:11000`)로 옮겼다 —
+  **데이터는 보존하지 않았다**. 옛 전용 instance(`pinvi-postgres:12800`)는 데이터를
+  그 시점에 멈춘 채 롤백 안전망으로 그대로 둔다.
+- Pinvi 쪽 변경은 `infra/postgres/bootstrap-pinvi-runtime-role.sh`의 endpoint
+  allowlist에 `127.0.0.1:11000` 한 줄 추가뿐이다 — M05 role topology(app/
+  schema-owner/migration-owner/migrator 4-role 분리) 로직 자체는 손대지 않았다.
+  이 스크립트는 fresh database에서 처음부터 role topology를 세우도록 이미 설계돼
+  있어 "데이터 보존 불필요" 요구와 정확히 맞았다.
+- Manager 쪽은 새 `kor-travel-shared-db-init-pinvi` + `pinvi-shared-db-runtime-role`
+  (profile bootstrap) one-shot, `pinvi-api`/`pinvi-dagster*`/`pinvi-admin-bootstrap`의
+  DSN 포트를 `KOR_TRAVEL_SHARED_DB_PORT`(11000)로 전환, `ktdctl pinvi-pair
+  rebuild-pinned`의 C6c 계약(`c6c_deployment.py`) 확장까지 포함했다.
+- **N150 실제 fresh bootstrap 실행은 아직 안 했다** — 다음에 이 영역을 만질
+  사람이 할 일: (1) `kor-travel-shared-db-init-pinvi` 최초 실행(pinvi db만
+  생성됨), (2) `pinvi-shared-db-runtime-role` 수동 실행(`--profile bootstrap`,
+  M05 role topology를 공용 instance에 세움), (3) `kor-travel-shared-db-init-pinvi`
+  재실행(멱등, 이제 role이 있으니 pinvi_dagster까지 생성), (4) 재기동·live 검증.
+  순서를 지키지 않으면 (1)의 `pinvi_dagster` 생성은 조용히 건너뛴다(의도된 동작,
+  로그에 이유가 남는다).
+- 다음에 이 영역을 만질 사람이 알아야 할 것: 이 세션 진행 중 사용자가 **geo에도
+  같은 지시("kor-travel-shared-postgres로 db를 옮겨놔")를 병행 세션에 내렸다** —
+  geo는 ADR-45로 role/database만 만들고 실 데이터 cutover는 아직이다(PinVi와 달리
+  geo는 데이터 보존이 필요해 hard cutover 방식). Manager의 `docs/decisions.md`
+  ADR 번호가 44(concierge)→45(geo)→46(PinVi) 순으로 이미 소비됐다 — 다음 신규는
+  ADR-47.
+
 ## 2026-09-19 (claude) — Dagster code-server(gRPC) 분리 완료 (ADR-069, 3-저장소)
 
 사용자 지시: "pinvi의 dagster 구조를 weather와 같이 변경. 공용 db 및
