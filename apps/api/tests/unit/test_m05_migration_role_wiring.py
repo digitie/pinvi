@@ -193,7 +193,7 @@ def test_bootstrap_only_accepts_the_declared_postgres_endpoints(tmp_path: Path) 
 
     assert 'PINVI_DB_HOST="${PINVI_DB_HOST:-app-postgres}"' in bootstrap
     assert 'PINVI_DB_PORT="${PINVI_DB_PORT:-5432}"' in bootstrap
-    assert "app-postgres:5432|127.0.0.1:12800" in bootstrap
+    assert "app-postgres:5432|127.0.0.1:12800|127.0.0.1:11000" in bootstrap
     assert "must name an approved PostgreSQL endpoint" in bootstrap
     assert "PGHOSTADDR" in bootstrap
     assert '--host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}"' in bootstrap
@@ -245,7 +245,11 @@ def test_bootstrap_only_accepts_the_declared_postgres_endpoints(tmp_path: Path) 
         encoding="utf-8",
     )
     fake_psql.chmod(0o700)
-    for host, port in (("app-postgres", "5432"), ("127.0.0.1", "12800")):
+    for host, port in (
+        ("app-postgres", "5432"),
+        ("127.0.0.1", "12800"),
+        ("127.0.0.1", "11000"),
+    ):
         result = subprocess.run(  # noqa: S603 -- fixed repository script under test
             [shell, str(ROOT / "infra" / "postgres" / "bootstrap-pinvi-runtime-role.sh")],
             check=False,
