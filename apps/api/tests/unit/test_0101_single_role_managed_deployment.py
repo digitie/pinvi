@@ -39,9 +39,7 @@ _ROLE_ENV_NAMES = (
 
 
 def _migration_module():  # type: ignore[no-untyped-def]
-    spec = importlib.util.spec_from_file_location(
-        "m05_single_role_gate", _MIGRATION_PATH
-    )
+    spec = importlib.util.spec_from_file_location("m05_single_role_gate", _MIGRATION_PATH)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
@@ -103,9 +101,7 @@ def test_legacy_rebaseline_still_requires_full_m05_even_with_app_role(
     monkeypatch.setenv("PINVI_ENVIRONMENT", "production")
     monkeypatch.setenv("PINVI_APP_DB_USER", "pinvi_app")
     monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE", "1")
-    monkeypatch.setenv(
-        "PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE", "n150-production"
-    )
+    monkeypatch.setenv("PINVI_M05_LEGACY_REBASELINE_TARGET_PROFILE", "n150-production")
 
     module = _migration_module()
     with pytest.raises(
