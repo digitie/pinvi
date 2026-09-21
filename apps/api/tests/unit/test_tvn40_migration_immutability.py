@@ -26,8 +26,23 @@ _SEALED_BASELINE_SHA256 = {
     "20260824_0100_app_schema_baseline.py": (
         "8045687ffbb2d8a582ffb9e2121675328947e8514f5472e91a9f306573b32cb7"
     ),
+    # 2026-09-21: ADR-46/070의 공용 control-plane 이전이 M05의 4-role 분리를
+    # 구조적으로 깨뜨렸다 — role-catalog reset이 "target role이 어떤 database도
+    # 소유하면 안 된다"를 요구하는데, 공용 instance에서는 pinvi_dagster를 app
+    # role이 정당하게 소유한다. Manager 쪽(kor-travel-docker-manager PR #382)은
+    # M05를 통째로 폐기하고 geo/concierge/weather와 같은 단일 scoped app role
+    # 패턴으로 접었다. 0101의 `_activate_m05_migration_owner`는 그 patternol에선
+    # migration_owner/migrator_login 없이도 성공해야 하는데, production에서는
+    # `_managed_deployment_requires_migration_owner()`가 무조건 거부했다 — 신선
+    # 설치라도 벗어날 길이 없었다(제어흐름이 raise되면 뒤 migration은 아예 안
+    # 돈다). "새 migration으로 진화" 원칙이 여기서는 적용되지 않는다 — 문제가
+    # 뒤 migration이 손댈 수 없는 0101 자신의 제어흐름이다. 그래서 봉인을
+    # 의도적으로 깬다: single_role(PINVI_APP_DB_USER)이 설정되고 legacy
+    # rebaseline이 아니면 app_role을 그대로 반환해 통과시키되, migration_owner/
+    # migrator_login이 하나라도 설정됐거나 legacy면 여전히 fail-closed다 — 기존
+    # M05 배포를 위한 어느 경로도 약화하지 않았다.
     "20260824_0101_m05_activation_contract.py": (
-        "7ab664705a9a25f11f615a35b34408c231c03a4c09ae38fff5f906ec2e220919"
+        "71fd1adf67a284306bab49dd615bdabe22e50416b8b922bd089585afe0e8018a"
     ),
 }
 

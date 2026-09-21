@@ -1541,14 +1541,29 @@ def _activate_m05_migration_owner(bind: sa.Connection, *, activate: bool = True)
     migrator_login = _configured_migrator_login()
     legacy_rebaseline = _legacy_rebaseline_profile()
     if migration_owner is None or migrator_login is None:
+        # ADR-46/070: the shared control-plane instance drops the M05 owner/migrator
+        # split entirely -- one scoped app role (PINVI_APP_DB_USER) owns the schema
+        # and connects for every step, including this migration. When that role is
+        # configured and no legacy rebaseline is in play, there is no separate owner
+        # to switch into: whoever created the schema already IS the app role, because
+        # the connection never was anyone else. Returning that role instead of None
+        # lets _grant_fresh_runtime_app_privileges receive a real schema owner instead
+        # of raising "app schema owner is unavailable" -- the previous None path was
+        # only ever reachable when app_role was ALSO unset (a bare schema-inspection
+        # fixture), never for a real single-role deployment.
+        #
+        # This does not weaken the production gate for anyone still using M05: a
+        # managed deployment with app_role unset, or with migration_owner/migrator_login
+        # partially set, still fails closed exactly as before.
+        single_role = _configured_app_runtime_role()
         if (
             legacy_rebaseline
-            or _managed_deployment_requires_migration_owner()
             or migration_owner is not None
             or migrator_login is not None
+            or (single_role is None and _managed_deployment_requires_migration_owner())
         ):
             raise RuntimeError("0101 managed migration requires migration and migrator roles")
-        return None
+        return single_role
     legacy_app_schema_owner = (
         _require_legacy_canonical_app_owner(bind) if legacy_rebaseline else None
     )
