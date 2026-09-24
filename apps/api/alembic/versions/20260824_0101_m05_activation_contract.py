@@ -2943,16 +2943,27 @@ def upgrade() -> None:
     if _legacy_rebaseline_profile():
         _grant_legacy_runtime_app_privileges(bind, canonical_app_owner)
     else:
-        # ADR-46/070 단일 role 배포에서는 이 connection의 role(app runtime)이 곧
-        # migrator다 -- alembic 자신이 이 트랜잭션 끝에 내부적으로 이 role로
-        # `alembic_version`을 UPDATE해서 head를 기록하고, 다음 migration도 같은
-        # role로 접속해 같은 테이블을 다시 쓴다. legacy 경로의
-        # `_revoke_runtime_alembic_version_privileges`는 runtime과 migrator가
-        # 분리돼 있던 M05 모델의 방어책이었다 -- 여기서 같은 role에 호출하면
-        # alembic의 자체 head 기록이 "permission denied for table
-        # alembic_version"으로 막힌다(교훈: 마이그레이션은 자신이 쓸 role의
-        # 권한을 트랜잭션 안에서 먼저 거둬가면 안 된다).
         _grant_fresh_runtime_app_privileges(bind, canonical_app_owner)
+        # managed-but-fresh(migration_owner/migrator_login이 설정된 채
+        # legacy_rebaseline만 아닌 배포)에서는 `_configured_app_runtime_role()`이
+        # 이 migration을 실행 중인 connection과 별개 role이므로 그 role의
+        # alembic_version 쓰기 권한을 거둬가도 안전하다 -- 이 호출이 지키는
+        # 성질이다. 하지만 ADR-46/070 단일 scoped role 배포에서는
+        # migration_owner/migrator_login이 둘 다 없고, `_configured_app_runtime_role()`이
+        # 곧 이 connection 자신의 role이다: alembic 자신이 이 트랜잭션 끝에
+        # 내부적으로 그 role로 `alembic_version`을 UPDATE해서 head를 기록하고,
+        # 다음 migration도 같은 role로 접속해 같은 테이블을 다시 쓴다. 그때 이
+        # 호출을 그대로 두면 alembic의 자체 head 기록이 "permission denied for
+        # table alembic_version"으로 막힌다(교훈: 마이그레이션은 자신이 쓸
+        # role의 권한을 트랜잭션 안에서 먼저 거둬가면 안 된다) -- 그래서 그
+        # 경우만 건너뛴다.
+        if (
+            _configured_migration_owner() is not None
+            or _configured_migrator_login() is not None
+        ):
+            _revoke_runtime_alembic_version_privileges(
+                bind, _configured_app_runtime_role()
+            )
     if not _legacy_rebaseline_profile():
         _assert_legacy_rebaseline_ddl_quiescence(bind)
 

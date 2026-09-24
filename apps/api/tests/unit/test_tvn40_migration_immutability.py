@@ -45,18 +45,23 @@ _SEALED_BASELINE_SHA256 = {
     # 2026-09-24: 위 봉인 이후 n150에서 fresh single-role install을 실제로
     # 돌려보니 0101이 자기 transaction 안에서 "permission denied for table
     # alembic_version"으로 롤백됐다 — `upgrade()`의 fresh 분기가
-    # `_grant_fresh_runtime_app_privileges` 직후 같은 connecting role
-    # (app runtime = migrator, 단일 role 모델)의 alembic_version 쓰기 권한을
-    # `_revoke_runtime_alembic_version_privileges`로 곧바로 거둬갔기 때문이다
-    # (legacy 다중 role 모델에서 runtime과 migrator가 분리돼 있을 때만 안전한
-    # 호출). 이 역시 뒤 migration이 손댈 수 없는 0101 자신의 제어흐름이라
-    # 같은 근거로 봉인을 다시 깬다: fresh 분기에서 그 호출 한 줄만 제거했다
-    # (legacy 분기의 내부 호출은 그대로 — 기존 M05 배포 경로는 안 건드렸다).
-    # kor-travel-docker-manager 세션 n150 rebuild(pinset
+    # `_grant_fresh_runtime_app_privileges` 직후 `_revoke_runtime_alembic_version_privileges`를
+    # 무조건 호출했기 때문이다. ADR-46/070 단일 scoped role 배포
+    # (migration_owner/migrator_login 둘 다 미설정)에서는 그 대상 role이 이
+    # migration을 실행 중인 connection 자신이라, 자기 접근 권한을 스스로
+    # 거둬가면 alembic이 트랜잭션 끝에 내부적으로 찍는 head UPDATE까지 막힌다.
+    # 반대로 managed-but-fresh(migration_owner/migrator_login은 설정했지만
+    # legacy_rebaseline은 아닌 배포, `test_0101_can_use_a_separate_nonruntime_migration_owner`가
+    # 검증하는 경로)에서는 그 role이 실행 connection과 분리돼 있어 거둬가는 쪽이
+    # 맞다 — 이 호출을 완전히 지우면 그 테스트가 깨진다(실제로 한 번 그렇게
+    # 깨졌다). 그래서 migration_owner/migrator_login 중 하나라도 설정된 경우에만
+    # 호출하도록 좁혔다. 둘 다 이 역시 뒤 migration이 손댈 수 없는 0101 자신의
+    # 제어흐름이라 같은 근거로 봉인을 다시 깬다. kor-travel-docker-manager 세션
+    # n150 rebuild(pinset
     # 13ebca754f9f2139c4946c0a68c3565bc38bbd1098e6240f901b8738b454bc38)에서
-    # 수정 후 0100→head(20260917_0102)까지 실제로 확인.
+    # 단일 role 경로가 0100→head(20260917_0102)까지 실제로 도달함을 확인.
     "20260824_0101_m05_activation_contract.py": (
-        "914c6dd37bd2947076d5db965b09fae14f85b5ee07619b52cc18464393f07cdf"
+        "7dcd388f562c4a3e72b00390e05d61f8c8859c9b77d01375f098a4f9feabb2a5"
     ),
 }
 
