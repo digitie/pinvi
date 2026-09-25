@@ -11,7 +11,10 @@ dependencies = [
   # 이 패키지가 없으면 Dagster가 조용히 SQLite로 떨어지고, 그 SQLite는
   # DAGSTER_HOME에 볼륨이 없어 컨테이너 재생성마다 사라진다.
   "dagster-postgres>=0.25",
-  "sqlalchemy[asyncio]>=2.0",
+  # 2.1.0은 bare postgresql:// URL의 기본 driver 선택을 psycopg2에서 psycopg(v3)로
+  # 바꿔, psycopg2만 설치된 dagster-postgres 동기 연결(ModuleNotFoundError: psycopg)을
+  # 깬다 — psycopg2는 여전히 설치돼 있지만 더 이상 선택되지 않는다.
+  "sqlalchemy[asyncio]>=2.0,<2.1",
   "asyncpg>=0.30",
   "httpx>=0.27",
   "python-kasi-api @ git+https://github.com/digitie/python-kasi-api.git@bc8fd49349212f840f58fe1a602bf77b2aaa1669",
