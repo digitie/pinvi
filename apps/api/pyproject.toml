@@ -10,7 +10,9 @@ dependencies = [
   "uvicorn[standard]>=0.32",
   "pydantic>=2.9",
   "pydantic-settings>=2.6",
-  "sqlalchemy[asyncio]>=2.0.36",
+  # apps/etl와 같은 이유로 상한을 둔다 — 2.1.0의 driver 기본값 변경이 이 앱에는
+  # 아직 안 터졌지만(전부 +asyncpg 명시), 무상한 핀은 같은 부류의 drift를 반복한다.
+  "sqlalchemy[asyncio]>=2.0.36,<2.1",
   "asyncpg>=0.30",
   "alembic>=1.14",
   "argon2-cffi>=23.1",
