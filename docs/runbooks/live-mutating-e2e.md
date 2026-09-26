@@ -21,16 +21,14 @@ source revision을 함께 결박한다. 검증기는 root EUID에서만 `/usr/bi
 환경으로 실행하므로 호출자 `PATH`·`PYTHON*`은 interpreter·import를 바꾸지 못한다. 직접 Compose,
 임의 root marker, 수동 environment 설정은 이 검증을 대신하지 못한다.
 
-one-shot 전에는 인증된 Manager API `GET /api/v1/runtime-pins`와
-`GET /api/v1/pinned-runtime/generation` 공개 사본을 확인한다. generation의
-`pinset_binding`은 새 pair 회전 직후 완전한 이전 committed generation 또는 Manager registry가
-Map·PinVi revision과 pinset까지 exact로 차단한 unconditional terminal generation의
-`pending_rebuild` 또는 `match`여야 한다. partial·malformed·phase-scoped block·`drift`·`unknown`이면
-이 runbook을 중단한다. 새 launcher가
-끝난 뒤 activation attestation을 승격하려면 반드시 `match`를 다시 확인한다. private
-manifest/journal, raw launcher output, 이전 terminal artifact는 PinVi가 읽거나
-보관하지 않는다. PinVi M05 provenance의 Map `admin`·`full` source revision은 Manager registry
-pair와 정확히 같아야 하며, v6/v8 generation schema 변경은 Map·Manager와 paired PR로만 허용한다.
+one-shot 전에는 인증된 Manager API `GET /api/v1/runtime-pins`로 pair를 확인하고, n150에서
+`sudo ktdctl pin verify`가 exit 0이며 M05 launcher의 source pair preflight가 통과해야 한다 — Manager
+ADR-51 D-1부터 그 preflight는 커밋된 `deploy-status.json`(committed·현재 release pinset·Map application
+head)을 본다. `GET /api/v1/pinned-runtime/generation`과 그 `pinset_binding`은 D-1에서 삭제됐다.
+둘 중 하나라도 실패하면 이 runbook을 중단한다. 직전 배포가 실패해 `in_progress`로 남았으면 한 번
+커밋될 때까지 M05는 거부한다. private deploy-status, raw launcher output, 이전 terminal artifact는
+PinVi가 읽거나 보관하지 않는다. PinVi M05 provenance의 Map `admin`·`full` source revision은 Manager
+registry pair와 정확히 같아야 한다. Manager 내부 파일의 모양은 PinVi와의 paired PR 대상이 아니다.
 
 ## 1. 범위
 
