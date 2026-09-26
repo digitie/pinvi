@@ -3659,3 +3659,47 @@ LOCK/CREATE ROLE 등 superuser급 권한을 갖는다고만 가정하고, 어떤
 - n150에서의 실제 fresh bootstrap 실행과 `DATABASE_URL` cutover는 Manager 쪽
   배포 단계에서 수행한다 — 이 ADR은 PinVi가 제공하는 스크립트 계약만 고정한다.
 - 옛 전용 instance(`pinvi-postgres`)의 데이터·폐기 시점은 이 ADR이 정하지 않는다.
+
+## ADR-071: Alembic 이력은 이제 forward-only로 쌓고 운영 DB를 재기준화하지 않는다 — 배포는 DB를 보존한다
+
+- **상태**: accepted
+- **날짜**: 2026-09-26
+- **결정자**: 사용자("마이그레이션 전진", "PinVi에도 forward-only ADR을 남긴다") + Claude
+- **관련**: `kor-travel-docker-manager` ADR-51, `kor-travel-map` ADR-102, 이 문서의 ADR-065(0100/0101
+  재기준화)·ADR-070("데이터 보존 불필요")
+
+### 컨텍스트
+
+지금까지 Manager의 pinned-runtime 재구축은 새 pinset마다 PinVi DB를 template0으로 지우고 다시
+만들었다. 그래서 PinVi DB는 배포마다 빈 DB에서 `0100 → 0101 → 0102`를 새로 올렸고, ADR-065의
+재기준화나 ADR-070의 "데이터 보존 불필요"가 운영 비용 없이 가능했다.
+
+2026-09-26 사용자가 배포 모델을 바꿨다(Manager ADR-51). 배포는 DB를 보존하고 멱등 one-shot으로
+head까지 올린다. DB를 지우는 길은 명시적 `rebuild-pinned --restart --reason`뿐이다.
+
+### 결정
+
+1. **새 스키마 변경은 `0102` 위에 revision을 더해 쌓는다.** 이미 head에 있는 운영 DB에서
+   `pinvi-admin-bootstrap`의 `alembic upgrade head`가 그대로 올릴 수 있어야 한다. 실데이터 위에서
+   돈다는 전제로 쓴다(잠금 시간, backfill, NOT NULL 추가 순서).
+2. **운영 DB를 재기준화하지 않는다.** ADR-065 같은 baseline 재접기는 **stamp bridge와 함께일
+   때만** 한다 — head `H`에 있는 기존 DB가 새 root로 옮겨 갈 수 있어야 한다. 빈 DB만 올라오는
+   재접기는 이제 운영 DB를 해석하지 못해 배포를 막는다.
+3. **downgrade는 배포 경로에 없다.** Manager는 downgrade를 실행하지 않는다. 더 낮은 head의
+   코드로 되돌리려면 roll-forward(고친 revision을 더함)나 `--restart`(데이터 손실)다.
+4. **0101 fresh-install fence는 빈 DB 전용으로 남는다.** Manager는 `app.alembic_version`이 없을
+   때만 fence를 세운다. 기존 DB에서는 0101이 다시 돌지 않는다.
+
+### 잃는 것
+
+- 배포가 더는 "빈 DB에서 0100 → head가 동작한다"를 증명하지 않는다. 그 경로는 `--restart`,
+  M05 격리 하네스, CI에서만 돈다.
+- `pinvi-admin-bootstrap`이 매 배포 bootstrap admin을 "복구"한다 — 의도적으로 비활성화한 admin을
+  다시 켜고, `.env`와 비밀번호가 다르면 재설정하고 세션을 폐기한다. 전에는 DB가 늘 새것이라
+  문제가 되지 않았다. 이 동작이 운영에서 문제가 되면 bootstrap을 "없을 때만 만든다"로 좁힌다.
+- 손으로 고친 행·객체(drift)를 배포가 지워 주지 않는다.
+
+### 결과
+
+- ADR-070의 "데이터 보존 불필요"는 **이관 시점의 판단**으로 남고, 그 뒤의 배포에는 적용되지
+  않는다.
