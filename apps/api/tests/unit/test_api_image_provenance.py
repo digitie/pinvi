@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -12,6 +15,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[4]
 SCRIPT_PATH = ROOT / "scripts" / "api_image_provenance.py"
@@ -133,6 +137,25 @@ def test_compose_contract_reads_environment_and_optional_revision() -> None:
         )
         == "pinvi-api:latest-main"
     )
+
+
+def test_compose_image_reference_cli_accepts_only_services_in_the_resolved_document(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = _load_script()
+    reference = f"postgis/postgis@sha256:{'a' * 64}"
+    document = json.dumps({"services": {"app-postgres": {"image": reference}}})
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(document))
+    assert script.main(["compose-image-reference", "--service", "app-postgres"]) == 0
+    assert capsys.readouterr().out == f"{reference}\n"
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(document))
+    with pytest.raises(SystemExit) as excinfo:
+        script.main(["compose-image-reference", "--service", "app-rustfs"])
+    assert excinfo.value.code == 2
+    assert "compose app-rustfs service" in capsys.readouterr().err
 
 
 def _build_document(
@@ -981,6 +1004,149 @@ esac
 
     assert result.returncode != 0
     assert "existing Compose project" in result.stderr
+
+
+def _fresh_stack_dependency_services() -> list[str]:
+    """`fresh_stack_dependency_image_proof`가 실제로 증명하는 service — 호출부에서 읽는다."""
+
+    deploy = (ROOT / "scripts/deploy-node.sh").read_text(encoding="utf-8")
+    body = deploy.split("\nfresh_stack_dependency_image_proof() {\n", 1)[1].split("\n}\n", 1)[0]
+    services = re.findall(r"fresh_stack_dependency_image_id (app-[a-z0-9-]+)\)", body)
+    # 하한: 유도가 아무것도 찾지 못하면 아래 검사는 항진명제가 된다.
+    assert {"app-postgres", "app-rustfs", "app-rustfs-init"} <= set(services)
+    return services
+
+
+@pytest.mark.parametrize("mode", ["sealed", "absent", "drift", "init-failed"])
+def test_fresh_stack_dependency_proof_resolves_the_pinned_compose_images(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """fresh deploy 의존성 증명이 checked-in compose의 핀 image로 끝까지 도는지 본다.
+
+    2026-09-28: 이 증명이 부르는 `compose-image-reference --service app-postgres`를
+    provenance CLI가 `invalid choice`(exit 2)로 거부해, fresh deploy가 migration 뒤
+    상태 봉인 단계에서 항상 죽었다. 핀 image는 digest reference다.
+    """
+
+    services = _fresh_stack_dependency_services()
+    compose = yaml.safe_load((ROOT / "infra/docker-compose.app.yml").read_text(encoding="utf-8"))
+    pinned = {service: compose["services"][service]["image"] for service in services}
+    image_ids = {
+        reference: f"sha256:{hashlib.sha256(reference.encode()).hexdigest()}"
+        for reference in pinned.values()
+    }
+    rendered_services = {service: {"image": reference} for service, reference in pinned.items()}
+    if mode == "absent":
+        del rendered_services["app-rustfs"]
+    (tmp_path / "rendered.json").write_text(
+        json.dumps({"services": rendered_services}), encoding="utf-8"
+    )
+    (tmp_path / "images.tsv").write_text(
+        "".join(f"{reference}\t{image_id}\n" for reference, image_id in image_ids.items()),
+        encoding="utf-8",
+    )
+    containers = []
+    for service in services:
+        image_id = image_ids[pinned[service]]
+        if mode == "drift" and service == "app-rustfs":
+            image_id = f"sha256:{'d' * 64}"
+        state = "exited 0" if service == "app-rustfs-init" else "running 0"
+        if mode == "init-failed" and service == "app-rustfs-init":
+            state = "exited 1"
+        containers.append(f"cid-{service}\t{image_id}\t{state}\n")
+    (tmp_path / "containers.tsv").write_text("".join(containers), encoding="utf-8")
+
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    for dependency in (
+        "api-image-provenance.sh",
+        "api_image_provenance.py",
+        "migrator-lifecycle-lock.sh",
+    ):
+        shutil.copy2(ROOT / "scripts" / dependency, scripts_dir / dependency)
+    script = scripts_dir / "deploy-node.sh"
+    script.write_text(
+        (ROOT / "scripts/deploy-node.sh")
+        .read_text(encoding="utf-8")
+        .rsplit('\nmain "$@"', maxsplit=1)[0]
+        + "\n",
+        encoding="utf-8",
+    )
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(fake_bin / "python3", f'#!/bin/sh\nexec "{sys.executable}" "$@"\n')
+    _write_executable(
+        fake_bin / "docker",
+        r"""#!/usr/bin/env bash
+set -euo pipefail
+case "$1 $2" in
+  "compose -p")
+    [[ "$3" == pinvi-test && " $* " == *" config --format json "* ]] || exit 41
+    cat "$PINVI_TEST_DIR/rendered.json"
+    ;;
+  "container ls")
+    [[ "$*" == *"label=com.docker.compose.project=pinvi-test"* ]] || exit 42
+    service=""
+    for arg in "$@"; do
+      if [[ "$arg" == label=com.docker.compose.service=* ]]; then
+        service="${arg#label=com.docker.compose.service=}"
+      fi
+    done
+    awk -F '\t' -v cid="cid-$service" '$1 == cid {print $1}' "$PINVI_TEST_DIR/containers.tsv"
+    ;;
+  "container inspect")
+    case "$4" in
+      '{{.Image}}') column=2 ;;
+      '{{.State.Status}} {{.State.ExitCode}}') column=3 ;;
+      *) exit 43 ;;
+    esac
+    awk -F '\t' -v cid="$5" -v column="$column" \
+      '$1 == cid {print $column; found=1} END {exit !found}' "$PINVI_TEST_DIR/containers.tsv"
+    ;;
+  "image inspect")
+    [[ "$3 $4" == "--format {{.Id}}" ]] || exit 44
+    awk -F '\t' -v ref="$5" \
+      '$1 == ref {print $2; found=1} END {exit !found}' "$PINVI_TEST_DIR/images.tsv"
+    ;;
+  *) exit 45 ;;
+esac
+""",
+    )
+    shell = r"""
+source "$1"
+if ! fresh_stack_dependency_image_proof; then
+  exit 7
+fi
+printf '%s\n' "$FRESH_STACK_POSTGRES_IMAGE_ID" "$FRESH_STACK_RUSTFS_IMAGE_ID" \
+  "$FRESH_STACK_RUSTFS_INIT_IMAGE_ID"
+"""
+    result = subprocess.run(  # noqa: S603 - fixed local shell fixture
+        ["/usr/bin/bash", "-c", shell, "bash", str(script)],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": f"{fake_bin}:/usr/bin:/bin",
+            "PINVI_ROOT_DIR": str(tmp_path),
+            "PINVI_ENV_FILE": str(tmp_path / "missing.env"),
+            "PINVI_DOCKER_PROJECT": "pinvi-test",
+            "PINVI_TEST_DIR": str(tmp_path),
+        },
+    )
+
+    if mode == "sealed":
+        assert result.returncode == 0, result.stderr
+        sealed_order = ("app-postgres", "app-rustfs", "app-rustfs-init")
+        assert result.stdout.splitlines() == [image_ids[pinned[s]] for s in sealed_order]
+        return
+    assert result.returncode == 7
+    expected = {
+        "absent": "could not resolve the pinned app-rustfs image reference",
+        "drift": "fresh deploy app-rustfs image drifted from the pinned Compose image",
+        "init-failed": "fresh deploy RustFS bucket initializer did not exit successfully",
+    }[mode]
+    assert expected in result.stderr, result.stderr
 
 
 @pytest.mark.parametrize("failure_mode", ["archive", "build", "label"])

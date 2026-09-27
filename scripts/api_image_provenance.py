@@ -122,7 +122,12 @@ def compose_requested_revision(document: object) -> str | None:
 
 
 def compose_image_reference(document: object, *, service: str = "app-api") -> str:
-    """resolved compose에서 runtime image reference를 읽는다."""
+    """resolved compose에서 service의 image reference를 읽는다.
+
+    service는 호출자가 넘긴 resolved 문서의 `services`에 있어야 한다 — 없으면 거부한다.
+    runtime attestation(app-api/app-web/app-dagster)과 fresh deploy 의존성 증명
+    (app-postgres/app-rustfs/app-rustfs-init, `deploy-node.sh`)이 같은 명령을 쓴다.
+    """
 
     value = _compose_service(document, service).get("image")
     if not isinstance(value, str) or not value or "\n" in value or "\r" in value:
@@ -287,11 +292,10 @@ def _parser() -> argparse.ArgumentParser:
     subparsers.add_parser("compose-environment")
     subparsers.add_parser("compose-requested-revision")
     image_reference = subparsers.add_parser("compose-image-reference")
-    image_reference.add_argument(
-        "--service",
-        choices=("app-api", "app-web", "app-dagster"),
-        default="app-api",
-    )
+    # 고정 목록으로 좁히지 않는다: 받을 수 있는 service는 stdin의 resolved compose가 정하고,
+    # 없는 service는 _compose_service가 거부한다. 목록이 app-* runtime 셋뿐이던 동안 fresh
+    # deploy 의존성 증명이 app-postgres에서 `invalid choice`(exit 2)로 죽었다.
+    image_reference.add_argument("--service", default="app-api")
 
     provenance_input = subparsers.add_parser("compose-provenance-input")
     provenance_input.add_argument("--name", required=True)
