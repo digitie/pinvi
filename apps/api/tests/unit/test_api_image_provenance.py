@@ -36,6 +36,28 @@ def _write_executable(path: Path, body: str) -> None:
     path.chmod(path.stat().st_mode | 0o111)
 
 
+def _write_n150_host_fakes(fake_bin: Path) -> None:
+    """`require_n150_execution_host`가 보는 arch·hostname·os-release를 N150으로 세운다."""
+
+    _write_executable(fake_bin / "uname", "#!/usr/bin/env bash\nprintf '%s\\n' x86_64\n")
+    _write_executable(fake_bin / "hostname", "#!/usr/bin/env bash\nprintf '%s\\n' n150\n")
+    _write_executable(
+        fake_bin / "sed",
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${@: -1}" == "/etc/os-release" ]]; then
+  case "$*" in
+    *'s/^ID='*) printf 'ubuntu\\n' ;;
+    *'s/^VERSION_ID='*) printf '26.04\\n' ;;
+    *) exit 0 ;;
+  esac
+else
+  exec /usr/bin/sed "$@"
+fi
+""",
+    )
+
+
 def test_local_build_defaults_to_development_without_git_lookup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -958,23 +980,7 @@ def test_deploy_fresh_contract_rejects_existing_compose_resources(tmp_path: Path
     )
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
-    _write_executable(fake_bin / "uname", "#!/usr/bin/env bash\nprintf '%s\\n' x86_64\n")
-    _write_executable(fake_bin / "hostname", "#!/usr/bin/env bash\nprintf '%s\\n' n150\n")
-    _write_executable(
-        fake_bin / "sed",
-        """#!/usr/bin/env bash
-set -euo pipefail
-if [[ "${@: -1}" == "/etc/os-release" ]]; then
-  case "$*" in
-    *'s/^ID='*) printf 'ubuntu\\n' ;;
-    *'s/^VERSION_ID='*) printf '26.04\\n' ;;
-    *) exit 0 ;;
-  esac
-else
-  exec /usr/bin/sed "$@"
-fi
-""",
-    )
+    _write_n150_host_fakes(fake_bin)
     _write_executable(
         fake_bin / "docker",
         """#!/usr/bin/env bash
@@ -1147,6 +1153,322 @@ printf '%s\n' "$FRESH_STACK_POSTGRES_IMAGE_ID" "$FRESH_STACK_RUSTFS_IMAGE_ID" \
         "init-failed": "fresh deploy RustFS bucket initializer did not exit successfully",
     }[mode]
     assert expected in result.stderr, result.stderr
+
+
+_FRESH_STACK_FAKE_DOCKER = r'''
+"""world.json의 컨테이너·image와 checked-in compose로 docker CLI를 흉내 낸다."""
+
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+world = json.loads(Path(os.environ["PINVI_TEST_DIR"], "world.json").read_text(encoding="utf-8"))
+args = sys.argv[1:]
+containers = {container["id"]: container for container in world["containers"]}
+images = world["images"]
+images_by_id = {image["id"]: image for image in images.values()}
+project_filter = f"label=com.docker.compose.project={world['project']}"
+
+
+def fail(code):
+    print(f"fake docker: unexpected {args!r}", file=sys.stderr)
+    raise SystemExit(code)
+
+
+def options(name):
+    return [args[index + 1] for index, arg in enumerate(args[:-1]) if arg == name]
+
+
+def interpolate(value):
+    # Compose처럼 문자열 값만 치환한다: `$$`는 문자 그대로, `${A:-${B:-x}}`는 안쪽부터.
+    if isinstance(value, dict):
+        return {key: interpolate(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [interpolate(item) for item in value]
+    if not isinstance(value, str):
+        return value
+
+    def substitute(match):
+        name, operator, default = match.group(1), match.group(2), match.group(3) or ""
+        current = os.environ.get(name)
+        if operator == ":-":
+            return current or default
+        if operator == "-":
+            return default if current is None else current
+        return current or ""
+
+    text = value.replace("$$", "\0")
+    pattern = r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:?-)([^${}]*))?\}"
+    while (replaced := re.sub(pattern, substitute, text)) != text:
+        text = replaced
+    return text.replace("\0", "$")
+
+
+command = args[:2]
+if command == ["compose", "-p"]:
+    import yaml
+
+    if args[2] != world["project"] or args[-3:] != ["config", "--format", "json"]:
+        fail(41)
+    document = yaml.safe_load(Path(options("-f")[0]).read_text(encoding="utf-8"))
+    active = set(options("--profile"))
+    document["services"] = {
+        name: service
+        for name, service in document["services"].items()
+        if not service.get("profiles") or active & set(service["profiles"])
+    }
+    print(json.dumps(interpolate(document)))
+elif command == ["image", "inspect"] and args[2] == "--format":
+    image = images.get(args[4]) or images_by_id.get(args[4])
+    if image is None:
+        print(f"Error: No such image: {args[4]}", file=sys.stderr)
+        raise SystemExit(1)
+    if args[3] == "{{.Id}}":
+        print(image["id"])
+    elif "org.opencontainers.image.revision" in args[3]:
+        print(image.get("revision", ""))
+    elif "io.pinvi.build.environment" in args[3]:
+        print(image.get("environment", ""))
+    else:
+        fail(42)
+elif command == ["container", "ls"]:
+    filters = options("--filter")
+    if project_filter not in filters:
+        fail(43)
+    prefix = "label=com.docker.compose.service="
+    wanted = [item[len(prefix):] for item in filters if item.startswith(prefix)]
+    for container in world["containers"]:
+        if wanted and container["service"] not in wanted:
+            continue
+        if "--all" not in args and container["status"] != "running":
+            continue
+        row = {
+            "{{.ID}}": container["id"],
+            "{{.ID}} {{.Names}}": f"{container['id']} {container['name']}",
+        }.get(options("--format")[0])
+        print(row if row is not None else fail(44))
+elif command == ["container", "inspect"] and args[2] == "--format":
+    template, container = args[3], containers.get(args[4])
+    if container is None:
+        raise SystemExit(1)
+    if template == "{{.Image}}":
+        print(container["image"])
+    elif template == "{{.State.Status}} {{.State.ExitCode}}":
+        print(f"{container['status']} {container['exit_code']}")
+    elif template == "{{.State.Running}}":
+        print("true" if container["status"] == "running" else "false")
+    elif ".Mounts" in template:
+        destination = re.search(r'eq \.Destination "([^"]+)"', template).group(1)
+        print(container["mounts"].get(destination, ""))
+    elif ".NetworkSettings.Networks" in template:
+        print("".join(f"{network}\n" for network in container["networks"]))
+    elif "com.docker.compose.service" in template:
+        print(container["service"])
+    else:
+        fail(45)
+elif command in (["volume", "ls"], ["network", "ls"]):
+    if project_filter not in options("--filter") or options("--format") != ["{{.Name}}"]:
+        fail(46)
+    for name in world["volumes" if command[0] == "volume" else "networks"]:
+        print(name)
+elif command == ["volume", "inspect"] and args[2:4] == ["--format", "{{json .}}"]:
+    if args[4] not in world["volumes"]:
+        raise SystemExit(1)
+    print(json.dumps({"Driver": "local", "Name": args[4]}))
+elif command == ["network", "inspect"] and args[2:4] == ["--format", "{{.Id}}"]:
+    if args[4] not in world["networks"]:
+        raise SystemExit(1)
+    print(world["networks"][args[4]])
+elif args[0] == "exec" and containers.get(args[1], {}).get("service") == "app-postgres":
+    if "system_identifier" in args[-1]:
+        print(world["system_identifier"])
+    elif "alembic_version" in args[-1]:
+        print(world["alembic_version"])
+    else:
+        fail(47)
+else:
+    fail(49)
+'''
+
+
+def _fresh_stack_alembic_head() -> str:
+    """`capture_fresh_stack_migration_proof`가 받는 canonical head — 스크립트에서 읽는다."""
+
+    deploy = (ROOT / "scripts/deploy-node.sh").read_text(encoding="utf-8")
+    heads = re.findall(r'"\$alembic_version" == "([0-9]{8}_[0-9]{4})"', deploy)
+    assert heads, "deploy-node.sh의 canonical Alembic head 목록을 찾지 못했다"
+    return heads[-1]
+
+
+@pytest.mark.parametrize(
+    "mode", ["migrated", "runtime-started", "image-rebuilt", "foreign-service"]
+)
+def test_standalone_up_reuses_a_stack_sealed_by_another_process(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    """migrate가 봉인한 fresh stack을 **다른 프로세스**의 up/dagster 재사용 검사가 받는지 본다.
+
+    2026-09-28 리뷰가 이 경로의 두 결함을 짚었다.
+
+    - 재사용 검사가 effective compose digest를 runtime image 결박 **전에** 계산했다. 봉인값은
+      결박 뒤에 계산되므로 새 프로세스의 standalone up/dagster는 항상 "does not match"로
+      거부됐다. `deploy`는 한 프로세스 안에서 둘 다 결박 뒤라 가려졌다.
+    - runtime을 띄운 `compose up`이 남기는 `app-db-runtime-role` one-shot을 모양 검사가
+      "unexpected Compose service"로 거부했다.
+
+    fake docker의 `compose config`는 checked-in compose를 이 프로세스의 환경으로 치환해
+    돌려준다 — 결박이 render를 바꾸는 효과를 변수 이름 목록 없이 재현한다. 뒤 두 case는
+    같은 검사가 여전히 실제 변화(다시 빌드된 image, 모르는 service)를 거부하는지 본다.
+    """
+
+    project = "pinvi-test"
+    revision = "c" * 40
+    compose_text = (ROOT / "infra/docker-compose.app.yml").read_text(encoding="utf-8")
+    compose = yaml.safe_load(compose_text)
+
+    def reference(service: str) -> str:
+        image = compose["services"][service]["image"]
+        return re.sub(r"\$\{[A-Za-z0-9_]+:-([^}]*)\}", r"\1", image)
+
+    images: dict[str, dict[str, str]] = {}
+    for service in ("app-postgres", "app-db-runtime-role", "app-rustfs", "app-rustfs-init"):
+        digest = hashlib.sha256(reference(service).encode()).hexdigest()
+        images[reference(service)] = {"id": f"sha256:{digest}"}
+    for service in ("app-api", "app-web"):
+        digest = hashlib.sha256(reference(service).encode()).hexdigest()
+        images[reference(service)] = {
+            "id": f"sha256:{digest}",
+            "revision": revision,
+            "environment": "isolated",
+        }
+
+    def container(service: str, status: str, mounts: dict[str, str] | None = None) -> dict:
+        return {
+            "id": hashlib.sha256(service.encode()).hexdigest()[:12],
+            "name": f"{project}-{service}-1",
+            "service": service,
+            "image": images[reference(service)]["id"],
+            "status": status,
+            "exit_code": 0,
+            "mounts": mounts or {},
+            "networks": [f"{project}_default"],
+        }
+
+    world = {
+        "project": project,
+        "images": images,
+        "containers": [
+            container(
+                "app-postgres",
+                "running",
+                {"/var/lib/postgresql/data": f"{project}_app-postgres"},
+            ),
+            container("app-rustfs", "running", {"/data": f"{project}_app-rustfs"}),
+            container("app-rustfs-init", "exited"),
+        ],
+        "volumes": [f"{project}_app-postgres", f"{project}_app-rustfs"],
+        "networks": {f"{project}_default": "e" * 64},
+        "system_identifier": "7412345678901234567",
+        "alembic_version": _fresh_stack_alembic_head(),
+    }
+
+    (tmp_path / "infra").mkdir()
+    (tmp_path / "infra/docker-compose.app.yml").write_text(compose_text, encoding="utf-8")
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    for dependency in (
+        "api-image-provenance.sh",
+        "api_image_provenance.py",
+        "migrator-lifecycle-lock.sh",
+    ):
+        shutil.copy2(ROOT / "scripts" / dependency, scripts_dir / dependency)
+    script = scripts_dir / "deploy-node.sh"
+    script.write_text(
+        (ROOT / "scripts/deploy-node.sh")
+        .read_text(encoding="utf-8")
+        .rsplit('\nmain "$@"', maxsplit=1)[0]
+        + "\n",
+        encoding="utf-8",
+    )
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    state_dir.chmod(0o700)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_n150_host_fakes(fake_bin)
+    _write_executable(fake_bin / "python3", f'#!/bin/sh\nexec "{sys.executable}" "$@"\n')
+    fake_docker = tmp_path / "fake_docker.py"
+    fake_docker.write_text(_FRESH_STACK_FAKE_DOCKER, encoding="utf-8")
+    _write_executable(
+        fake_bin / "docker", f'#!/bin/sh\nexec "{sys.executable}" "{fake_docker}" "$@"\n'
+    )
+
+    # provenance 준비(git archive·clean HEAD 대조)는 이 검사의 대상이 아니다 — 준비된
+    # 결과만 세우고, 결박(pinvi_verify_runtime_image_provenance)은 실제 코드가 한다.
+    prelude = r"""
+source "$1"
+pinvi_prepare_api_image_provenance() {
+  PINVI_PROVENANCE_PREPARED=1
+  PINVI_PROVENANCE_ENVIRONMENT="$PINVI_ENVIRONMENT"
+}
+pinvi_prepare_api_image_provenance require-immutable
+"""
+    env = {
+        "PATH": f"{fake_bin}:/usr/bin:/bin",
+        "PINVI_ROOT_DIR": str(tmp_path),
+        "PINVI_ENV_FILE": str(tmp_path / "missing.env"),
+        "PINVI_ENVIRONMENT": "isolated",
+        "PINVI_SOURCE_REVISION": revision,
+        "PINVI_DOCKER_MANAGER_UNAVAILABLE": "1",
+        "PINVI_DEPLOY_FRESH_STACK": "1",
+        "PINVI_DOCKER_PROJECT": project,
+        "PINVI_FRESH_STACK_STATE_PATH": str(state_dir / "fresh-stack"),
+        "PINVI_TEST_DIR": str(tmp_path),
+    }
+
+    def run_process(body: str) -> subprocess.CompletedProcess[str]:
+        (tmp_path / "world.json").write_text(json.dumps(world), encoding="utf-8")
+        return subprocess.run(  # noqa: S603 - fixed local shell fixture
+            ["/usr/bin/bash", "-c", prelude + body, "bash", str(script)],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=tmp_path,
+        )
+
+    # 프로세스 1: `migrate`의 마지막 단계 — 결박 뒤 상태를 봉인한다.
+    sealed = run_process("if ! write_fresh_stack_state; then exit 7; fi\n")
+    assert sealed.returncode == 0, sealed.stderr
+    assert (state_dir / "fresh-stack").is_file()
+
+    if mode == "runtime-started":
+        # `deploy`/`up`의 `compose up -d app-api app-web`가 남기는 모양.
+        world["containers"] += [
+            container("app-db-runtime-role", "exited"),
+            container("app-api", "running"),
+            container("app-web", "running"),
+        ]
+    elif mode == "image-rebuilt":
+        images[reference("app-api")]["id"] = f"sha256:{'f' * 64}"
+    elif mode == "foreign-service":
+        world["containers"].append(container("app-migrator", "exited"))
+
+    # 프로세스 2: standalone `up`/`dagster`의 재사용 검사 — 아무것도 결박되지 않은 새 셸.
+    reused = run_process("if ! require_reusable_fresh_stack_contract; then exit 7; fi\n")
+
+    if mode in {"migrated", "runtime-started"}:
+        assert reused.returncode == 0, reused.stderr
+        return
+    assert reused.returncode == 7, reused.stderr
+    expected = {
+        "image-rebuilt": "fresh stack state does not match",
+        "foreign-service": "refuses unexpected Compose service: app-migrator",
+    }[mode]
+    assert expected in reused.stderr, reused.stderr
 
 
 @pytest.mark.parametrize("failure_mode", ["archive", "build", "label"])

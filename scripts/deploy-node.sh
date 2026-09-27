@@ -891,6 +891,14 @@ require_reusable_fresh_stack_contract() {
     return 2
   }
   DAGSTER_PROFILE_OVERRIDE="$state_dagster_profile_enabled"
+  # 봉인된 effective digest는 runtime image를 결박(PINVI_*_IMAGE·PINVI_*_IMAGE_DIGEST export)한
+  # 뒤 계산됐다(capture_fresh_stack_migration_proof). standalone up/dagster는 새 프로세스라
+  # 아직 아무것도 결박되지 않았으므로 같은 순서로 먼저 결박한다 — 그러지 않으면 결박 전
+  # render를 봉인값과 비교해 migrate 뒤의 up/dagster가 항상 거부된다.
+  if ! fresh_stack_runtime_image_proof; then
+    echo "fresh stack runtime image provenance could not be verified" >&2
+    return 1
+  fi
   if ! effective_compose_sha256="$(effective_compose_config_sha256)"; then
     return 1
   fi
@@ -1003,6 +1011,7 @@ require_reusable_fresh_stack_contract() {
 require_reusable_fresh_stack_resource_shape() {
   local project_containers service container_count
   local postgres_count=0 rustfs_count=0 rustfs_init_count=0 api_count=0 web_count=0 dagster_count=0
+  local runtime_role_count=0
   local container_id project_volumes volume project_networks network
   if ! project_containers="$(docker container ls --all \
     --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.ID}}')"; then
@@ -1020,6 +1029,10 @@ require_reusable_fresh_stack_resource_shape() {
       app-postgres) ((postgres_count+=1)) ;;
       app-rustfs) ((rustfs_count+=1)) ;;
       app-rustfs-init) ((rustfs_init_count+=1)) ;;
+      # app-api·app-dagster가 service_completed_successfully로 기다리는 one-shot이라(app-web은
+      # app-api를 거쳐) runtime을 띄운 `compose up`마다 exited 상태로 남는다. 성공 여부는
+      # 다음 `compose up`이 이 one-shot을 다시 돌려 가른다.
+      app-db-runtime-role) ((runtime_role_count+=1)) ;;
       app-api) ((api_count+=1)) ;;
       app-web) ((web_count+=1)) ;;
       app-dagster) ((dagster_count+=1)) ;;
@@ -1030,7 +1043,7 @@ require_reusable_fresh_stack_resource_shape() {
     esac
   done <<< "$project_containers"
   [[ "$postgres_count" == "1" && "$rustfs_count" == "1" \
-    && "$rustfs_init_count" -le 1 \
+    && "$rustfs_init_count" -le 1 && "$runtime_role_count" -le 1 \
     && "$api_count" == "$web_count" \
     && "$api_count" -le 1 && "$dagster_count" -le 1 ]] || {
     echo "reusable fresh deploy requires one database/object store and at most one runtime per service" >&2
