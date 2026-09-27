@@ -180,6 +180,64 @@ def test_compose_image_reference_cli_accepts_only_services_in_the_resolved_docum
     assert "compose app-rustfs service" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize(
+    ("service", "attested"),
+    [
+        ("app-api", True),
+        ("app-web", True),
+        ("app-dagster", True),
+        ("app-postgres", False),
+        ("app-db-runtime-role", False),
+        ("app-rustfs", False),
+        ("app-rustfs-init", False),
+    ],
+)
+def test_runtime_attestation_guard_admits_only_runtime_services(
+    tmp_path: Path,
+    service: str,
+    attested: bool,
+) -> None:
+    """runtime attestation 대상을 app-api/app-web/app-dagster로 묶는 층은 bash guard뿐이다.
+
+    `compose-image-reference --service`가 resolved compose의 어떤 service든 받게 된 뒤로
+    (fresh 의존성 증명), CLI는 이 목록을 강제하지 않는다. guard가 빠지면 의존성 image도
+    runtime으로 attestation·결박된다. runtime service는 guard를 지나 compose render에 닿고
+    (대조군), 나머지는 거기 닿기 전에 exit 2로 거부돼야 한다.
+    """
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(fake_bin / "python3", f'#!/bin/sh\nexec "{sys.executable}" "$@"\n')
+    shell = r"""
+ROOT_DIR="$1"
+COMPOSE_FILE=/dev/null
+source "$ROOT_DIR/scripts/api-image-provenance.sh"
+pinvi_prepare_api_image_provenance() { PINVI_PROVENANCE_PREPARED=1; }
+compose() { echo "compose render reached" >&2; return 99; }
+docker() { echo "docker reached" >&2; return 98; }
+pinvi_verify_runtime_image_provenance "$2"
+"""
+    result = subprocess.run(  # noqa: S603 - fixed local shell fixture
+        ["/usr/bin/bash", "-c", shell, "bash", str(ROOT), service],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={"PATH": f"{fake_bin}:/usr/bin:/bin"},
+    )
+
+    guard = "attestation 대상 runtime service가 아닙니다"
+    if attested:
+        assert "compose render reached" in result.stderr, result.stderr
+        assert guard not in result.stderr
+        # stub compose는 아무것도 render하지 않으므로 reference 해석에서 실패해야 한다.
+        assert result.returncode != 0
+        return
+    assert result.returncode == 2, result.stderr
+    assert guard in result.stderr
+    assert "compose render reached" not in result.stderr
+    assert "docker reached" not in result.stderr
+
+
 def _build_document(
     context_root: Path,
     *,
@@ -1264,6 +1322,10 @@ elif command == ["container", "inspect"] and args[2] == "--format":
         print(container["mounts"].get(destination, ""))
     elif ".NetworkSettings.Networks" in template:
         print("".join(f"{network}\n" for network in container["networks"]))
+    elif template == (
+        '{{ index .Config.Labels "com.docker.compose.oneoff" }} {{.State.Status}} {{.Image}}'
+    ):
+        print(f"{container['oneoff']} {container['status']} {container['image']}")
     elif "com.docker.compose.service" in template:
         print(container["service"])
     else:
@@ -1302,8 +1364,27 @@ def _fresh_stack_alembic_head() -> str:
     return heads[-1]
 
 
+_RUNTIME_STARTED_MODES = {
+    "runtime-started",
+    "runtime-role-running",
+    "runtime-role-one-off",
+    "runtime-role-foreign-image",
+}
+
+
 @pytest.mark.parametrize(
-    "mode", ["migrated", "runtime-started", "image-rebuilt", "foreign-service"]
+    "mode",
+    [
+        "migrated",
+        "runtime-started",
+        "image-rebuilt",
+        "config-drift",
+        "foreign-service",
+        "runtime-role-running",
+        "runtime-role-one-off",
+        "runtime-role-foreign-image",
+        "label-mismatch",
+    ],
 )
 def test_standalone_up_reuses_a_stack_sealed_by_another_process(
     tmp_path: Path,
@@ -1320,8 +1401,18 @@ def test_standalone_up_reuses_a_stack_sealed_by_another_process(
       "unexpected Compose service"로 거부했다.
 
     fake docker의 `compose config`는 checked-in compose를 이 프로세스의 환경으로 치환해
-    돌려준다 — 결박이 render를 바꾸는 효과를 변수 이름 목록 없이 재현한다. 뒤 두 case는
-    같은 검사가 여전히 실제 변화(다시 빌드된 image, 모르는 service)를 거부하는지 본다.
+    돌려준다 — 결박이 render를 바꾸는 효과를 변수 이름 목록 없이 재현한다. 받는 case
+    (migrated, runtime-started)와 짝을 이루는 거부 case가 같은 검사가 실제 변화를 여전히
+    거부하는지 본다.
+
+    - image-rebuilt·config-drift: 프로세스 2가 **결박한 뒤** 비교했다는 것까지 본다(결박한
+      API image ID를 찍게 한다). image-rebuilt는 새 ID를 결박하고, config-drift는 같은 ID를
+      결박하고도 image가 아닌 compose 입력 변화로 거부돼야 한다.
+    - runtime-role-*: 모양 검사가 받는 `app-db-runtime-role`은 핀 image로 만들어져 exited로
+      남은 Compose service 컨테이너 하나뿐이다 — 도는 것, one-off(`compose run`), 다른 image는
+      label이 같아도 거부한다.
+    - label-mismatch: `if !` 아래(errexit 꺼짐)의 label 검증 실패가 삼켜지지 않고 봉인을
+      막는다.
     """
 
     project = "pinvi-test"
@@ -1353,6 +1444,7 @@ def test_standalone_up_reuses_a_stack_sealed_by_another_process(
             "image": images[reference(service)]["id"],
             "status": status,
             "exit_code": 0,
+            "oneoff": "False",
             "mounts": mounts or {},
             "networks": [f"{project}_default"],
         }
@@ -1429,36 +1521,65 @@ pinvi_prepare_api_image_provenance require-immutable
         "PINVI_TEST_DIR": str(tmp_path),
     }
 
-    def run_process(body: str) -> subprocess.CompletedProcess[str]:
+    def run_process(
+        body: str, extra_env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
         (tmp_path / "world.json").write_text(json.dumps(world), encoding="utf-8")
         return subprocess.run(  # noqa: S603 - fixed local shell fixture
             ["/usr/bin/bash", "-c", prelude + body, "bash", str(script)],
             check=False,
             capture_output=True,
             text=True,
-            env=env,
+            env={**env, **(extra_env or {})},
             cwd=tmp_path,
         )
 
+    sealed_api_image_id = images[reference("app-api")]["id"]
+    if mode == "label-mismatch":
+        images[reference("app-web")]["revision"] = "d" * 40
+
     # 프로세스 1: `migrate`의 마지막 단계 — 결박 뒤 상태를 봉인한다.
     sealed = run_process("if ! write_fresh_stack_state; then exit 7; fi\n")
+    if mode == "label-mismatch":
+        assert sealed.returncode == 7, sealed.stderr
+        assert "API image revision label이 build source와 다릅니다" in sealed.stderr
+        assert not (state_dir / "fresh-stack").exists()
+        return
     assert sealed.returncode == 0, sealed.stderr
     assert (state_dir / "fresh-stack").is_file()
 
-    if mode == "runtime-started":
+    extra_env: dict[str, str] = {}
+    if mode in _RUNTIME_STARTED_MODES:
         # `deploy`/`up`의 `compose up -d app-api app-web`가 남기는 모양.
+        runtime_role = container("app-db-runtime-role", "exited")
+        if mode == "runtime-role-running":
+            runtime_role["status"] = "running"
+        elif mode == "runtime-role-one-off":
+            runtime_role["oneoff"] = "True"
+        elif mode == "runtime-role-foreign-image":
+            runtime_role["image"] = f"sha256:{'9' * 64}"
         world["containers"] += [
-            container("app-db-runtime-role", "exited"),
+            runtime_role,
             container("app-api", "running"),
             container("app-web", "running"),
         ]
     elif mode == "image-rebuilt":
         images[reference("app-api")]["id"] = f"sha256:{'f' * 64}"
+    elif mode == "config-drift":
+        extra_env["PINVI_API_WORKERS"] = "2"
     elif mode == "foreign-service":
         world["containers"].append(container("app-migrator", "exited"))
 
     # 프로세스 2: standalone `up`/`dagster`의 재사용 검사 — 아무것도 결박되지 않은 새 셸.
-    reused = run_process("if ! require_reusable_fresh_stack_contract; then exit 7; fi\n")
+    reused = run_process(
+        r"""
+if ! require_reusable_fresh_stack_contract; then
+  printf 'bound-api=%s\n' "$PINVI_ATTESTED_API_IMAGE_ID"
+  exit 7
+fi
+""",
+        extra_env,
+    )
 
     if mode in {"migrated", "runtime-started"}:
         assert reused.returncode == 0, reused.stderr
@@ -1466,9 +1587,17 @@ pinvi_prepare_api_image_provenance require-immutable
     assert reused.returncode == 7, reused.stderr
     expected = {
         "image-rebuilt": "fresh stack state does not match",
+        "config-drift": "fresh stack state does not match",
         "foreign-service": "refuses unexpected Compose service: app-migrator",
+        "runtime-role-running": "refuses an app-db-runtime-role container",
+        "runtime-role-one-off": "refuses an app-db-runtime-role container",
+        "runtime-role-foreign-image": "refuses an app-db-runtime-role container",
     }[mode]
     assert expected in reused.stderr, reused.stderr
+    if mode == "image-rebuilt":
+        assert f"bound-api=sha256:{'f' * 64}" in reused.stdout.splitlines()
+    elif mode == "config-drift":
+        assert f"bound-api={sealed_api_image_id}" in reused.stdout.splitlines()
 
 
 @pytest.mark.parametrize("failure_mode", ["archive", "build", "label"])

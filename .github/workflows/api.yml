@@ -127,6 +127,7 @@ jobs:
             scripts/m05_restore_drill.py \
             scripts/m05_hotswap_forensics.py \
             scripts/alembic_rebaseline.py \
+            scripts/api_image_provenance.py \
             scripts/trusted-hotswap-entrypoint.py
           bash -n \
             scripts/backup-db.sh \

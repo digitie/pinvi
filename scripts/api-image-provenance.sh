@@ -239,7 +239,10 @@ pinvi_bind_attested_runtime_image_id() {
 }
 
 pinvi_verify_runtime_image_provenance() {
-  pinvi_prepare_api_image_provenance
+  # 각 단계를 명시적으로 전파한다. `if ! ...`·`||` 아래에서 불리면(deploy-node.sh의
+  # fresh_stack_runtime_image_proof) errexit이 이 함수 전체에서 꺼져, bare 단계의 실패 —
+  # 예컨대 label 불일치 — 는 메시지만 남기고 삼켜진 채 image ID를 결박하고 0을 반환한다.
+  pinvi_prepare_api_image_provenance || return $?
 
   if (( $# == 0 )); then
     echo "api image provenance preflight failed: runtime service를 지정해야 합니다" >&2
@@ -266,8 +269,8 @@ pinvi_verify_runtime_image_provenance() {
       :
     else
       image_reference="$({ compose "${config_profile_args[@]}" config --format json; } | \
-        python3 "$PINVI_PROVENANCE_PY" compose-image-reference --service "$service")"
-      image_id="$(docker image inspect --format '{{.Id}}' "$image_reference")"
+        python3 "$PINVI_PROVENANCE_PY" compose-image-reference --service "$service")" || return $?
+      image_id="$(docker image inspect --format '{{.Id}}' "$image_reference")" || return $?
       if [[ ! "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]; then
         echo "api image provenance preflight failed: ${service} image ID가 canonical 값이 아닙니다" >&2
         return 2
@@ -277,18 +280,18 @@ pinvi_verify_runtime_image_provenance() {
       docker image inspect \
         --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' \
         "$image_id"
-    )"
+    )" || return $?
     actual_environment="$(
       docker image inspect \
         --format '{{ index .Config.Labels "io.pinvi.build.environment" }}' \
         "$image_id"
-    )"
+    )" || return $?
     python3 "$PINVI_PROVENANCE_PY" verify-label \
       --expected-revision "$PINVI_SOURCE_REVISION" \
       --actual-revision "$actual_revision" \
       --expected-environment "$PINVI_PROVENANCE_ENVIRONMENT" \
-      --actual-environment "$actual_environment"
-    pinvi_bind_attested_runtime_image_id "$service" "$image_id"
+      --actual-environment "$actual_environment" || return $?
+    pinvi_bind_attested_runtime_image_id "$service" "$image_id" || return $?
   done
 }
 
