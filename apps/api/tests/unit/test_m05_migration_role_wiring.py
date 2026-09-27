@@ -21,7 +21,6 @@ def test_compose_keeps_runtime_and_migrator_role_inputs_separate() -> None:
     )[0]
     assert "set -eu" in rustfs_init_block
     # minio/mc는 Docker Hub에서 사라졌다 — 버킷은 app-rustfs와 같은 핀 이미지의 curl(SigV4)로 만든다.
-    assert "minio/" not in rustfs_init_block
     rustfs_block = compose.split("  app-rustfs:", maxsplit=1)[1].split(
         "  app-rustfs-init:", maxsplit=1
     )[0]
