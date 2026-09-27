@@ -2,6 +2,29 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-27 (claude) — rustfs-init이 minio/mc 없이 버킷을 만든다
+
+Manager의 M05 격리 실행(ADR-51 후속, Map ADR-100/101 포팅 뒤 첫 실제 실행)이 Map 쪽
+`rustfs-init`에서 멈췄다: `pull access denied for minio/mc, repository does not exist`.
+Docker Hub의 `minio/mc`·`minio/minio` 저장소가 사라졌다(n150에서 Hub API 404 확인).
+PinVi의 `app-rustfs-init`은 digest로 핀했지만 저장소가 없으면 digest도 받을 수 없다 —
+Map을 고쳐도 M05는 바로 다음 PinVi 단계에서 같은 이유로 멈춘다.
+
+- `app-rustfs-init`(`infra/docker-compose.app.yml`)과 dev `rustfs-init`(`infra/docker-compose.yml`)은
+  이제 **rustfs 서비스와 같은 이미지**(app은 같은 digest)에 든 curl 8.21의 `--aws-sigv4`로
+  `PUT /pinvi-media`를 보낸다. 이미지를 하나 더 끌어오지 않는다.
+- 이미 있는 버킷은 200(RustFS 실측) 또는 409 `BucketAlreadyOwnedByYou`(S3)로 성공이다. 그 밖의
+  응답은 HTTP 코드와 S3 오류 본문을 남기고 실패한다 — dev 쪽의 옛 `|| true`도 없앴다.
+- 접속 실패·5xx만 재시도한다(2초 간격 60회, 요청마다 connect 5초·전체 30초 상한). 적대 리뷰가 n150에서
+  RustFS 기동 중 약 1.7초 동안 health는 200인데 PUT은 `503 waiting for storage_quorum`인 구간을 쟀다 —
+  `service_healthy`만으로는 부족하다(옛 mc는 minio-go가 503을 안에서 재시도했다).
+- **별건(main에서 이미 깨짐, 이 변경과 무관)**: `deploy-node.sh`의 `fresh_stack_dependency_image_proof`는
+  `api_image_provenance.py compose-image-reference --service app-postgres|app-rustfs|app-rustfs-init`을
+  부르는데, 그 스크립트는 `app-api`/`app-web`/`app-dagster`만 받는다(리뷰 실측: exit 2 `invalid choice`).
+  fresh deploy 경로의 이 증명은 지금 첫 서비스(app-postgres)에서 죽는다 — 따로 고쳐야 한다.
+- 실측(n150, 일회용 project): 생성 exit 0, 재실행 exit 0(멱등), 서버와 다른 비밀번호는
+  403 `SignatureDoesNotMatch`로 exit 1.
+
 ## 2026-09-20 (claude) — DB를 공용 제어 평면 PostgreSQL instance로 이전, ADR-070 (2-저장소 작업)
 
 사용자 지시: "kor-travel-shared-postgres로 db를 옮겨놔." 작업 도중 인터럽트로

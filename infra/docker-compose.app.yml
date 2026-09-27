@@ -67,16 +67,34 @@ services:
       retries: 10
 
   app-rustfs-init:
-    image: minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+    # MinIO가 Docker Hub에서 `minio/mc`를 내렸다(2026-09-27 n150 실측: 저장소 404 — digest 핀도 받을 수
+    # 없다). 버킷은 rustfs 서비스와 같은 이미지에 이미 든 curl의 SigV4로 만든다.
+    image: rustfs/rustfs@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21
     depends_on:
       app-rustfs:
         condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      set -eu;
-      mc alias set local http://app-rustfs:9000 rustfsadmin rustfsadmin;
-      mc ls local/pinvi-media >/dev/null 2>&1 || mc mb -p local/pinvi-media;
-      "
+    # 이미 있는 버킷은 200(RustFS) 또는 409 BucketAlreadyOwnedByYou(S3)로 멱등이다. 접속 실패·5xx만
+    # 재시도한다 — RustFS는 health가 200이 된 뒤에도 잠시 `503 waiting for storage_quorum`을 돌려준다
+    # (2026-09-27 n150 실측 약 1.7초). 그 밖의 응답은 실패다 — 자격증명·이름 오류를 성공으로 삼키지 않는다.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        tries=0
+        while :; do
+          rm -f /tmp/rustfs-init.out
+          code=$$(curl -sS --connect-timeout 5 --max-time 30 -o /tmp/rustfs-init.out -w '%{http_code}' \
+            --aws-sigv4 aws:amz:us-east-1:s3 --user rustfsadmin:rustfsadmin \
+            -X PUT http://app-rustfs:9000/pinvi-media) || code=000
+          case "$$code" in
+            200) exit 0 ;;
+            409) grep -q BucketAlreadyOwnedByYou /tmp/rustfs-init.out && exit 0 ;;
+            000|5??) tries=$$((tries + 1)); if [ "$$tries" -lt 60 ]; then sleep 2; continue; fi ;;
+          esac
+          echo "app-rustfs-init: bucket pinvi-media: HTTP $$code" >&2
+          if [ -s /tmp/rustfs-init.out ]; then cat /tmp/rustfs-init.out >&2; fi
+          exit 1
+        done
 
   app-api:
     build:
