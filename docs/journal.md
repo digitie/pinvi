@@ -2,6 +2,36 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-28 (claude) — fresh deploy 의존성 image 증명이 app-postgres에서 죽던 것
+
+2026-09-27 항목의 "별건"을 고쳤다.
+
+- 증상: `deploy-node.sh`의 `fresh_stack_dependency_image_proof`는
+  `api_image_provenance.py compose-image-reference --service app-postgres|app-rustfs|app-rustfs-init`을
+  부르는데, CLI가 `--service`를 argparse `choices`(`app-api`/`app-web`/`app-dagster`)로 묶어
+  exit 2 `invalid choice`로 끝났다. fresh deploy는 migration 뒤 상태 봉인
+  (`write_fresh_stack_state` → `capture_fresh_stack_migration_proof`)에서 항상 멈췄다.
+  n150에서 origin/main `fd07903f`의 rendered compose로 재현했다.
+- 수정: 고정 목록을 없앴다. 받는 service는 stdin의 resolved compose가 정하고, 문서에 없는
+  service는 `_compose_service`가 그대로 거부한다(exit 2). runtime attestation은
+  `api-image-provenance.sh`의 `app-api|app-web|app-dagster` guard를 그대로 쓴다.
+- 핀 image는 digest reference다. n150(Docker 29.6.1, containerd snapshotter)에서
+  `docker image inspect --format '{{.Id}}' <repo>@sha256:<d>`는 `sha256:<d>`를 돌려주고, 같은
+  image로 도는 컨테이너의 `.Image`와 같다 — 뒤 단계(image ID 동등, rustfs-init `exited 0`)는
+  digest reference로 동작한다.
+- 테스트: CLI 단위 1건 + checked-in compose의 핀 image와 fake docker로 실제
+  `fresh_stack_dependency_image_proof`를 도는 shell 테스트 4 case(sealed/absent/drift/init-failed).
+  origin/main 스크립트로는 5건 모두 실패, 이 브랜치로는 통과.
+- 같은 fresh 경로에서 정적으로만 본 잠복 문제(이번에 고치지 않음, 실행 확인 안 함):
+  1. `up_under_lifecycle_lock`의 `compose up -d app-api app-web`는 `app-api`의
+     `depends_on: app-db-runtime-role (service_completed_successfully)` 때문에
+     `app-db-runtime-role` 컨테이너를 만들어 남긴다. 이후 standalone `up`/`dagster`의
+     `require_reusable_fresh_stack_resource_shape`는 그 service를 "unexpected Compose service"로 거부한다.
+  2. `require_reusable_fresh_stack_contract`는 effective compose digest를 runtime image 결박
+     (`PINVI_API_IMAGE`/`PINVI_*_IMAGE_DIGEST` export) **전에** 계산한다. 봉인된 digest는 결박 **뒤**에
+     계산됐으므로, 새 프로세스에서 도는 standalone `up`/`dagster`는 digest가 어긋나 거부될 것으로 보인다.
+     `deploy` 한 프로세스 안에서는 둘 다 결박 뒤라 맞는다.
+
 ## 2026-09-27 (claude) — rustfs-init이 minio/mc 없이 버킷을 만든다
 
 Manager의 M05 격리 실행(ADR-51 후속, Map ADR-100/101 포팅 뒤 첫 실제 실행)이 Map 쪽
