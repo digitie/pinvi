@@ -76,11 +76,24 @@ pinvi_materialize_api_build_context() {
     fi
   done
 
+  # 이 함수와 pinvi_prepare_api_image_provenance는 단계마다 실패를 스스로 전파한다.
+  # pinvi_verify_runtime_image_provenance가 prepare를 `||` 왼쪽에서 부르므로 errexit이
+  # 켜진 bare 호출부(docker-app.sh up 등)에서도 여기는 errexit 없이 돈다. bare 단계는
+  # 실패가 삼켜진다 — mktemp가 실패하면 빈 archive_root로 `/context`를 쓰거나, immutable
+  # archive 없이 live compose로 준비를 마치고 PREPARED=1이 됐다(3차 리뷰 실측).
   local archive_root context_root
   umask 077
-  archive_root="$(mktemp -d "${TMPDIR:-/tmp}/pinvi-api-build.XXXXXXXX")"
+  if ! archive_root="$(mktemp -d "${TMPDIR:-/tmp}/pinvi-api-build.XXXXXXXX")" || \
+    [[ -z "$archive_root" ]]; then
+    echo "api image provenance preflight failed: could not create the immutable archive directory" >&2
+    return 2
+  fi
   context_root="$archive_root/context"
-  mkdir -m 0700 "$context_root"
+  if ! mkdir -m 0700 "$context_root"; then
+    rm -rf -- "$archive_root"
+    echo "api image provenance preflight failed: could not create the immutable archive context" >&2
+    return 2
+  fi
   if ! git -C "$ROOT_DIR" archive --format=tar "$PINVI_SOURCE_REVISION" | \
     tar -xf - -C "$context_root"; then
     rm -rf -- "$archive_root"
@@ -113,7 +126,12 @@ pinvi_materialize_api_build_context() {
 
   PINVI_PROVENANCE_ARCHIVE_ROOT="$archive_root"
   PINVI_PROVENANCE_ARCHIVE_COMPOSE_FILE="$context_root/infra/docker-compose.app.yml"
-  PINVI_PROVENANCE_ARCHIVE_COMPOSE_SHA256="$(sha256sum -- "$PINVI_PROVENANCE_ARCHIVE_COMPOSE_FILE" | awk '{print $1}')"
+  if ! PINVI_PROVENANCE_ARCHIVE_COMPOSE_SHA256="$(sha256sum -- "$PINVI_PROVENANCE_ARCHIVE_COMPOSE_FILE" | awk '{print $1}')" || \
+    [[ ! "$PINVI_PROVENANCE_ARCHIVE_COMPOSE_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+    pinvi_cleanup_api_build_context
+    echo "api image provenance preflight failed: could not hash the immutable compose file" >&2
+    return 2
+  fi
   export PINVI_API_BUILD_CONTEXT="$context_root"
   export PINVI_APP_BUILD_CONTEXT="$context_root"
   COMPOSE_FILE="$context_root/infra/docker-compose.app.yml"
@@ -127,7 +145,11 @@ pinvi_materialize_api_build_context() {
     pinvi_cleanup_api_build_context
     return 2
   fi
-  chmod -R a-w -- "$archive_root"
+  if ! chmod -R a-w -- "$archive_root"; then
+    pinvi_cleanup_api_build_context
+    echo "api image provenance preflight failed: could not seal the immutable archive" >&2
+    return 2
+  fi
 }
 
 pinvi_prepare_api_image_provenance() {
@@ -149,17 +171,18 @@ pinvi_prepare_api_image_provenance() {
     return 0
   fi
 
+  # 단계마다 실패를 스스로 전파한다 — errexit 없이 돌 수 있다(pinvi_materialize_api_build_context 참고).
   local provenance_document compose_environment requested revision
   local -a resolve_args
-  provenance_document="$(pinvi_provenance_input_document)"
+  provenance_document="$(pinvi_provenance_input_document)" || return $?
   compose_environment="$(
     printf '%s\n' "$provenance_document" | \
       python3 "$PINVI_PROVENANCE_PY" compose-provenance-input --name PINVI_ENVIRONMENT
-  )"
+  )" || return $?
   requested="$(
     printf '%s\n' "$provenance_document" | \
       python3 "$PINVI_PROVENANCE_PY" compose-provenance-input --name PINVI_SOURCE_REVISION
-  )"
+  )" || return $?
   if [[ "$requirement" == "require-immutable" ]]; then
     case "$compose_environment" in
       staging|production) ;;
@@ -177,17 +200,21 @@ pinvi_prepare_api_image_provenance() {
   if [[ -n "$requested" ]]; then
     resolve_args+=(--requested "$requested")
   fi
-  revision="$(python3 "$PINVI_PROVENANCE_PY" "${resolve_args[@]}")"
+  revision="$(python3 "$PINVI_PROVENANCE_PY" "${resolve_args[@]}")" || return $?
 
   export PINVI_SOURCE_REVISION="$revision"
   PINVI_PROVENANCE_ENVIRONMENT="$compose_environment"
   export PINVI_ENVIRONMENT="$PINVI_PROVENANCE_ENVIRONMENT"
-  pinvi_materialize_api_build_context
+  pinvi_materialize_api_build_context || return $?
   local resolved_environment resolved_revision
-  resolved_environment="$({ compose config --format json; } | \
-    python3 "$PINVI_PROVENANCE_PY" compose-environment)"
-  resolved_revision="$({ compose config --format json; } | \
-    python3 "$PINVI_PROVENANCE_PY" compose-requested-revision)"
+  if ! resolved_environment="$({ compose config --format json; } | \
+    python3 "$PINVI_PROVENANCE_PY" compose-environment)" || \
+    ! resolved_revision="$({ compose config --format json; } | \
+    python3 "$PINVI_PROVENANCE_PY" compose-requested-revision)"; then
+    echo "api image provenance preflight failed: could not resolve Compose provenance" >&2
+    pinvi_cleanup_api_build_context
+    return 2
+  fi
   if [[ \
     "$resolved_environment" != "$PINVI_PROVENANCE_ENVIRONMENT" || \
     "$resolved_revision" != "$PINVI_SOURCE_REVISION" \
@@ -242,6 +269,8 @@ pinvi_verify_runtime_image_provenance() {
   # 각 단계를 명시적으로 전파한다. `if ! ...`·`||` 아래에서 불리면(deploy-node.sh의
   # fresh_stack_runtime_image_proof) errexit이 이 함수 전체에서 꺼져, bare 단계의 실패 —
   # 예컨대 label 불일치 — 는 메시지만 남기고 삼켜진 채 image ID를 결박하고 0을 반환한다.
+  # prepare를 `||` 왼쪽에 두면 bare 호출부에서도 prepare·materialize가 errexit 없이 돈다 —
+  # 그래서 둘은 단계마다 스스로 전파한다(bare 단계를 더하면 이 전제가 깨진다).
   pinvi_prepare_api_image_provenance || return $?
 
   if (( $# == 0 )); then

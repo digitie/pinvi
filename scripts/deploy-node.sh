@@ -553,8 +553,9 @@ fresh_stack_dependency_image_proof() {
 }
 
 # 재사용 모양 검사가 받는 app-db-runtime-role은 runtime을 띄운 `compose up`이 남긴 one-shot
-# 하나뿐이다: Compose service 컨테이너(one-off `compose run`이 아님)이고, 끝났고(exited — 종료
-# 코드는 보지 않는다, 다음 `compose up`이 다시 돌려 성패를 가른다), 핀 image로 만들어졌다.
+# 하나뿐이다: Compose service 컨테이너(one-off `compose run`이 아님)이고, 끝났거나(exited — 종료
+# 코드는 보지 않는다, 다음 `compose up`이 다시 돌려 성패를 가른다) 한 번도 돌지 않았고(created —
+# `compose up`이 app-postgres healthy를 기다리다 끊기면 이렇게 남는다), 핀 image로 만들어졌다.
 # label만 보면 owner/migrator env를 든 채 도는 `compose run -d` 사본이나 다른 image도 통과한다.
 fresh_stack_runtime_role_container_proof() {
   local container_id="$1" shape expected_image
@@ -567,8 +568,10 @@ fresh_stack_runtime_role_container_proof() {
   if ! expected_image="$(fresh_stack_pinned_image_id app-db-runtime-role)"; then
     return 1
   fi
-  [[ "$expected_image" =~ ^sha256:[0-9a-f]{64}$ && "$shape" == "False exited ${expected_image}" ]] || {
-    echo "reusable fresh deploy refuses an app-db-runtime-role container that is not the exited Compose one-shot of the pinned image" >&2
+  [[ "$expected_image" =~ ^sha256:[0-9a-f]{64}$ \
+    && ( "$shape" == "False exited ${expected_image}" \
+      || "$shape" == "False created ${expected_image}" ) ]] || {
+    echo "reusable fresh deploy refuses an app-db-runtime-role container that is not the exited or never-started Compose one-shot of the pinned image" >&2
     return 2
   }
 }

@@ -14,6 +14,10 @@
   `pinvi_verify_runtime_image_provenance`가 `if !` 아래에서도 label 불일치를 전파한다(전엔 삼켜져
   봉인됐다). 두 프로세스 테스트에 config-drift·runtime-role 3종·label-mismatch를 더하고 image-rebuilt가
   결박 뒤 비교임을 확인하게 했다. attestation guard 테스트와 root ruff lint를 더했다.
+- 3차 리뷰 반영: 2차의 `pinvi_prepare_api_image_provenance || return $?`가 bare 호출부
+  (`docker-app.sh up`)에서도 prepare·materialize의 errexit을 꺼, mktemp 실패가 immutable archive
+  없이 PREPARED=1로 통과했다 — prepare·materialize가 단계마다 스스로 전파한다. 끊긴 `compose up`이
+  남기는 `created` runtime-role one-shot도 받는다.
 - 다음 한 작업: PR을 열고 CI green 후 머지. 실제 n150 fresh deploy·`migrate`+`up`은 실행하지 않았다.
 - 남은 것: fallback 스택의 재부팅 복구(restart policy 부재)는 `T-369`.
 

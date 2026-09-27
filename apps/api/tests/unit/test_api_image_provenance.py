@@ -917,6 +917,134 @@ test "$(pinvi_read_provenance_input PINVI_ENVIRONMENT)" = production
     )
 
 
+@pytest.mark.parametrize("failure", ["resolve", "mktemp"])
+@pytest.mark.parametrize("call_form", ["bare", "if-not"])
+def test_verify_stops_at_a_failing_prepare_step_without_errexit(
+    tmp_path: Path,
+    failure: str,
+    call_form: str,
+) -> None:
+    """prepare 안의 실패는 errexit이 없어도 verify를 멈추고 준비 상태를 남기지 않는다.
+
+    `pinvi_verify_runtime_image_provenance`는 prepare를 `||` 왼쪽에서 부른다. 그러면 errexit이
+    켜진 bare 호출부(`docker-app.sh up` — Manager M05 격리 실행이 build 뒤 따로 띄운다)에서도
+    prepare·materialize는 errexit 없이 돈다. 3차 리뷰 실측: resolve가 실패해도 archive와
+    compose render로 넘어갔고, mktemp가 실패하면 빈 archive root로 준비를 마쳐 PREPARED=1로
+    0을 반환했다(immutable archive 없이 live compose, verify-compose-build 없이).
+    bare(errexit 켜짐)와 `if !`(fresh_stack_runtime_image_proof처럼 전부 꺼짐) 두 형태 모두
+    0이 아닌 값으로 끝나고, PREPARED=0·빈 archive root·원래 COMPOSE_FILE을 남기고,
+    compose render나 image inspect에 닿지 않아야 한다.
+    """
+
+    repo = tmp_path / "repo"
+    for directory in ("apps/api", "apps/web", "apps/etl", "infra", "scripts"):
+        (repo / directory).mkdir(parents=True)
+    for dockerfile in ("apps/api/Dockerfile", "apps/web/Dockerfile", "apps/etl/Dockerfile"):
+        (repo / dockerfile).write_text("FROM scratch\n", encoding="utf-8")
+    (repo / "scripts/api_image_provenance.py").write_bytes(SCRIPT_PATH.read_bytes())
+    (repo / "scripts/validate-image-provenance.sh").write_text(
+        "#!/usr/bin/env sh\n", encoding="utf-8"
+    )
+    (repo / "infra/docker-compose.app.yml").write_text("services: {}\n", encoding="utf-8")
+    for args in (
+        ["init", "-q"],
+        ["config", "user.name", "PinVi Test"],
+        ["config", "user.email", "pinvi-test@example.com"],
+        ["add", "."],
+        ["commit", "-qm", "fixture"],
+    ):
+        subprocess.run(  # noqa: S603
+            ["/usr/bin/git", "-C", str(repo), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    temp_root = tmp_path / "tmp"
+    temp_root.mkdir()
+    if failure == "resolve":
+        # isolated는 clean HEAD를 요구한다 — 추적되지 않은 파일 하나로 resolve가 실패한다.
+        (repo / "untracked.txt").write_text("dirty\n", encoding="utf-8")
+    else:
+        temp_root = tmp_path / "missing-tmp"
+
+    reached = tmp_path / "reached.log"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(fake_bin / "python3", f'#!/bin/sh\nexec "{sys.executable}" "$@"\n')
+    _write_executable(
+        fake_bin / "docker",
+        r"""#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1 $2 $3" == "compose -f -" ]]; then
+  cat >/dev/null
+  printf '{"services":{"provenance":{"environment":{"PINVI_ENVIRONMENT":"%s","PINVI_SOURCE_REVISION":""}}}}\n' \
+    "$PINVI_ENVIRONMENT"
+  exit 0
+fi
+printf 'docker %s\n' "$*" >> "$PINVI_TEST_REACHED"
+exit 1
+""",
+    )
+    shell = r"""
+set -euo pipefail
+ROOT_DIR="$1"
+COMPOSE_FILE="$ROOT_DIR/infra/docker-compose.app.yml"
+ENV_FILE="$ROOT_DIR/missing.env"
+compose() {
+  printf 'compose %s\n' "$*" >> "$PINVI_TEST_REACHED"
+  printf '{"services":{"app-api":{"build":{"args":{"PINVI_BUILD_ENVIRONMENT":"%s","PINVI_SOURCE_REVISION":"%s"},"context":"%s","dockerfile":"apps/api/Dockerfile"},"environment":{"PINVI_ENVIRONMENT":"%s"},"image":"pinvi-api:test"}}}\n' \
+    "$PINVI_ENVIRONMENT" "$PINVI_SOURCE_REVISION" "${PINVI_API_BUILD_CONTEXT:-$ROOT_DIR}" "$PINVI_ENVIRONMENT"
+}
+source "$2"
+trap 'printf "prepared=%s archive=%s compose_file=%s\n" "$PINVI_PROVENANCE_PREPARED" "$PINVI_PROVENANCE_ARCHIVE_ROOT" "$COMPOSE_FILE"' EXIT
+proof() {
+  pinvi_verify_runtime_image_provenance app-api || return $?
+  echo "proof continued"
+}
+case "$3" in
+  bare) pinvi_verify_runtime_image_provenance app-api ;;
+  if-not) if ! proof; then exit 7; fi ;;
+esac
+echo "verify returned 0"
+"""
+    result = subprocess.run(  # noqa: S603 - fixed local shell fixture
+        [
+            "/usr/bin/bash",
+            "-c",
+            shell,
+            "prepare-failure-test",
+            str(repo),
+            str(ROOT / "scripts/api-image-provenance.sh"),
+            call_form,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": f"{fake_bin}:/usr/bin:/bin",
+            "TMPDIR": str(temp_root),
+            "PINVI_ENVIRONMENT": "isolated",
+            "PINVI_TEST_REACHED": str(reached),
+        },
+    )
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    if call_form == "if-not":
+        assert result.returncode == 7, result.stderr
+    assert "verify returned 0" not in result.stdout
+    assert "proof continued" not in result.stdout
+    compose_file = repo / "infra/docker-compose.app.yml"
+    assert f"prepared=0 archive= compose_file={compose_file}" in result.stdout.splitlines()
+    assert not reached.exists(), reached.read_text(encoding="utf-8")
+    expected = {
+        "resolve": "clean Git worktree",
+        "mktemp": "could not create the immutable archive directory",
+    }[failure]
+    assert expected in result.stderr, result.stderr
+    if failure == "mktemp":
+        assert not temp_root.exists()
+
+
 @pytest.mark.parametrize(
     "command",
     ["deploy", "build", "pull", "migrate", "up", "dagster", "smoke"],
@@ -1366,6 +1494,7 @@ def _fresh_stack_alembic_head() -> str:
 
 _RUNTIME_STARTED_MODES = {
     "runtime-started",
+    "runtime-role-created",
     "runtime-role-running",
     "runtime-role-one-off",
     "runtime-role-foreign-image",
@@ -1380,6 +1509,7 @@ _RUNTIME_STARTED_MODES = {
         "image-rebuilt",
         "config-drift",
         "foreign-service",
+        "runtime-role-created",
         "runtime-role-running",
         "runtime-role-one-off",
         "runtime-role-foreign-image",
@@ -1410,7 +1540,9 @@ def test_standalone_up_reuses_a_stack_sealed_by_another_process(
       결박하고도 image가 아닌 compose 입력 변화로 거부돼야 한다.
     - runtime-role-*: 모양 검사가 받는 `app-db-runtime-role`은 핀 image로 만들어져 exited로
       남은 Compose service 컨테이너 하나뿐이다 — 도는 것, one-off(`compose run`), 다른 image는
-      label이 같아도 거부한다.
+      label이 같아도 거부한다. created(한 번도 돌지 않음)는 받는다: `compose up`이
+      app-postgres healthy를 기다리다 끊기면 one-shot과 app-api/app-web이 created로 남는데,
+      그것을 거부하면 standalone up/dagster 재시도가 수동 삭제 전까지 막힌다.
     - label-mismatch: `if !` 아래(errexit 꺼짐)의 label 검증 실패가 삼켜지지 않고 봉인을
       막는다.
     """
@@ -1552,7 +1684,11 @@ pinvi_prepare_api_image_provenance require-immutable
     if mode in _RUNTIME_STARTED_MODES:
         # `deploy`/`up`의 `compose up -d app-api app-web`가 남기는 모양.
         runtime_role = container("app-db-runtime-role", "exited")
-        if mode == "runtime-role-running":
+        runtime_status = "running"
+        if mode == "runtime-role-created":
+            # 끊긴 `compose up`: 전부 만들어졌지만 아무것도 시작되지 않았다.
+            runtime_role["status"] = runtime_status = "created"
+        elif mode == "runtime-role-running":
             runtime_role["status"] = "running"
         elif mode == "runtime-role-one-off":
             runtime_role["oneoff"] = "True"
@@ -1560,8 +1696,8 @@ pinvi_prepare_api_image_provenance require-immutable
             runtime_role["image"] = f"sha256:{'9' * 64}"
         world["containers"] += [
             runtime_role,
-            container("app-api", "running"),
-            container("app-web", "running"),
+            container("app-api", runtime_status),
+            container("app-web", runtime_status),
         ]
     elif mode == "image-rebuilt":
         images[reference("app-api")]["id"] = f"sha256:{'f' * 64}"
@@ -1581,7 +1717,7 @@ fi
         extra_env,
     )
 
-    if mode in {"migrated", "runtime-started"}:
+    if mode in {"migrated", "runtime-started", "runtime-role-created"}:
         assert reused.returncode == 0, reused.stderr
         return
     assert reused.returncode == 7, reused.stderr
