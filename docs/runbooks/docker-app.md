@@ -383,7 +383,7 @@ PINVI_GEOFENCE_BLOCK_UNKNOWN=false
 | ------------------------------------- | -------------------- | --------------------------------------------------------------- |
 | `app-api` 시작 후 즉시 종료           | migration/bootstrap 미실행 | `pinvi-admin-bootstrap` one-shot 먼저                    |
 | `app-web` 빌드 실패                   | `NEXT_PUBLIC_*` 누락 | `.env` 확인 + 재빌드                                            |
-| `app-rustfs-init` 무한 루프           | bucket 이미 존재     | down -v로 볼륨 삭제 후 재시작                                   |
+| `app-rustfs-init` exit 1              | 버킷 생성 요청이 4xx(자격증명·이름) | 로그의 HTTP 코드와 S3 오류 본문 확인(이미 있는 버킷은 성공으로 끝난다) |
 | `12805` / `12101` port already in use | 다른 프로젝트 컨테이너 또는 호스트 listener 점유 | 현재 프로젝트 컨테이너만 `PINVI_DEV_FORCE_KILL=1 scripts/docker-app.sh up`으로 제거할 수 있다. 다른 점유자는 자동 종료하지 않고 `ss -ltn`으로 확인 후 수동 정리한다. |
 | Admin login `pinvi_access` 발급 안 됨 | CORS / Secure cookie | `infra/docker-compose.app.yml`의 CORS 환경변수 확인             |
 

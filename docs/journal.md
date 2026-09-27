@@ -2,6 +2,24 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-27 (claude) — rustfs-init이 minio/mc 없이 버킷을 만든다
+
+Manager의 M05 격리 실행(ADR-51 후속, Map ADR-100/101 포팅 뒤 첫 실제 실행)이 Map 쪽
+`rustfs-init`에서 멈췄다: `pull access denied for minio/mc, repository does not exist`.
+Docker Hub의 `minio/mc`·`minio/minio` 저장소가 사라졌다(n150에서 Hub API 404 확인).
+PinVi의 `app-rustfs-init`은 digest로 핀했지만 저장소가 없으면 digest도 받을 수 없다 —
+Map을 고쳐도 M05는 바로 다음 PinVi 단계에서 같은 이유로 멈춘다.
+
+- `app-rustfs-init`(`infra/docker-compose.app.yml`)과 dev `rustfs-init`(`infra/docker-compose.yml`)은
+  이제 **rustfs 서비스와 같은 이미지**(app은 같은 digest)에 든 curl 8.21의 `--aws-sigv4`로
+  `PUT /pinvi-media`를 보낸다. 이미지를 하나 더 끌어오지 않는다.
+- 이미 있는 버킷은 200(RustFS 실측) 또는 409 `BucketAlreadyOwnedByYou`(S3)로 성공이다. 그 밖의
+  응답은 HTTP 코드와 S3 오류 본문을 남기고 실패한다 — dev 쪽의 옛 `|| true`도 없앴다.
+- `deploy-node.sh`의 fresh stack 증명은 그대로 맞는다: init 이미지가 렌더된 compose 참조와 같은지,
+  `exited 0`인지를 본다(참조가 app-rustfs와 같은 digest가 됐을 뿐).
+- 실측(n150, 일회용 project): 생성 exit 0, 재실행 exit 0(멱등), 서버와 다른 비밀번호는 2초 안에
+  403 `SignatureDoesNotMatch`로 exit 1.
+
 ## 2026-09-20 (claude) — DB를 공용 제어 평면 PostgreSQL instance로 이전, ADR-070 (2-저장소 작업)
 
 사용자 지시: "kor-travel-shared-postgres로 db를 옮겨놔." 작업 도중 인터럽트로

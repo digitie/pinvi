@@ -42,14 +42,15 @@ services:
     # chown -R 10001:10001 /mnt/nvme/rustfs
 
   rustfs-init:
-    image: minio/mc:latest
+    # minio/mc는 Docker Hub에서 사라졌다(2026-09-27) — rustfs 이미지의 curl(SigV4)로 버킷을 만든다.
+    # 실제 정의는 infra/docker-compose.app.yml `app-rustfs-init`이 정본이다.
+    image: rustfs/rustfs:latest
     depends_on: [rustfs]
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://rustfs:9000 rustfsadmin rustfsadmin;
-      mc mb -p local/pinvi-media || true;
-      mc anonymous set download local/pinvi-media || true;
-      "
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        curl -fsS --aws-sigv4 aws:amz:us-east-1:s3 --user rustfsadmin:rustfsadmin \
+          -X PUT http://rustfs:9000/pinvi-media
 ```
 
 ### 2.2 kor-travel-map과 공유
