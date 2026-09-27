@@ -22,15 +22,29 @@
 - 테스트: CLI 단위 1건 + checked-in compose의 핀 image와 fake docker로 실제
   `fresh_stack_dependency_image_proof`를 도는 shell 테스트 4 case(sealed/absent/drift/init-failed).
   origin/main 스크립트로는 5건 모두 실패, 이 브랜치로는 통과.
-- 같은 fresh 경로에서 정적으로만 본 잠복 문제(이번에 고치지 않음, 실행 확인 안 함):
-  1. `up_under_lifecycle_lock`의 `compose up -d app-api app-web`는 `app-api`의
-     `depends_on: app-db-runtime-role (service_completed_successfully)` 때문에
-     `app-db-runtime-role` 컨테이너를 만들어 남긴다. 이후 standalone `up`/`dagster`의
-     `require_reusable_fresh_stack_resource_shape`는 그 service를 "unexpected Compose service"로 거부한다.
-  2. `require_reusable_fresh_stack_contract`는 effective compose digest를 runtime image 결박
-     (`PINVI_API_IMAGE`/`PINVI_*_IMAGE_DIGEST` export) **전에** 계산한다. 봉인된 digest는 결박 **뒤**에
-     계산됐으므로, 새 프로세스에서 도는 standalone `up`/`dagster`는 digest가 어긋나 거부될 것으로 보인다.
-     `deploy` 한 프로세스 안에서는 둘 다 결박 뒤라 맞는다.
+- 리뷰 반영(같은 브랜치). 이 수정으로 한 달 동안 닿지 않던 봉인 뒤 단계가 처음 열린다 —
+  `migrate`는 이제 실패 정리(`compose down --volumes`) 대신 봉인된 스택을 남긴다. 그 다음
+  standalone `up`/`dagster`를 막던 두 결함을 같이 고쳤다.
+  1. `require_reusable_fresh_stack_contract`가 effective compose digest를 runtime image 결박
+     (`PINVI_*_IMAGE`/`PINVI_*_IMAGE_DIGEST` export) **전에** 계산했다. 봉인값은 결박 **뒤**에
+     계산되므로 새 프로세스의 `up`/`dagster`는 항상 "fresh stack state does not match"로 거부됐다
+     (리뷰가 n150에서 같은 compose를 결박 전/후로 render해 hash가 다름을 확인). `deploy`는 한
+     프로세스라 가려졌다. → digest 전에 `fresh_stack_runtime_image_proof`로 같은 순서로 결박한다.
+  2. runtime을 띄운 `compose up`은 `app-db-runtime-role` one-shot(app-api·app-dagster가
+     `service_completed_successfully`로 기다린다)을 exited로 남기는데, 재사용 모양 검사가 그것을
+     "unexpected Compose service"로 거부했다. → 그 service를 최대 1개 허용한다. 상태는 보지 않는다 —
+     다음 `compose up`이 one-shot을 다시 돌려 성패를 가른다. 다른 모르는 service는 여전히 거부한다.
+  - 테스트: 두 프로세스 테스트 4 case — 프로세스 1이 `write_fresh_stack_state`로 봉인하고, 아무것도
+    결박되지 않은 프로세스 2가 `require_reusable_fresh_stack_contract`를 돈다(fake docker의
+    `compose config`는 checked-in compose를 그 프로세스 환경으로 치환). migrate 직후·runtime 기동 뒤는
+    통과, 다시 빌드된 API image·모르는 service는 거부. 결박 수정만 되돌리면 3건, 모양 수정만
+    되돌리면 runtime 기동 뒤 1건이 빨갛다(n150).
+  - CI: `scripts/api_image_provenance.py`가 `api.yml` PR/push paths와 aggregate api 블록에 없어,
+    그 파일만 바꾼 PR은 이 회귀 테스트를 돌리지 않고 머지될 수 있었다. 세 목록에 넣었다.
+  - 남은 것: `app-postgres`·`app-api`·`app-web`에 restart policy가 없어 호스트 재부팅 뒤 fallback
+    스택은 내려간 채 남고, `up`의 재사용 검사는 PostgreSQL이 running이어야 해서 되살리지 못한다.
+    compose restart policy는 Manager 배포와 공유하므로 여기서 바꾸지 않고 `T-369`로 연다.
+    실제 n150 fresh deploy·`migrate`+`up`은 여전히 실행하지 않았다(검증은 fake docker 테스트까지).
 
 ## 2026-09-27 (claude) — rustfs-init이 minio/mc 없이 버킷을 만든다
 

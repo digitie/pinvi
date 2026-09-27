@@ -7,9 +7,11 @@
 죽던 것을 고쳤다 — 받는 service는 resolved compose 문서가 정하고, 없는 service는 여전히 거부한다.
 회귀 테스트는 origin/main 스크립트로 빨갛고 이 브랜치로 초록이다(n150). 상세는 `docs/journal.md`.
 
-- 다음 한 작업: PR을 열고 CI green 후 머지. 실제 n150 fresh deploy는 실행하지 않았다.
-- 같은 경로의 잠복 문제 두 건(standalone `up`/`dagster`의 재사용 검사: 남는
-  `app-db-runtime-role` 컨테이너, 결박 전 effective compose digest)은 정적 판단이며 별도 작업이다.
+- 리뷰 반영: 이 수정으로 열린 `migrate` 뒤 standalone `up`/`dagster` 재사용 검사의 두 결함(결박 전
+  effective compose digest, 남는 `app-db-runtime-role` one-shot)을 고치고 두 프로세스 테스트로
+  확인했다. `scripts/api_image_provenance.py`를 api CI 트리거 세 목록에 넣었다.
+- 다음 한 작업: PR을 열고 CI green 후 머지. 실제 n150 fresh deploy·`migrate`+`up`은 실행하지 않았다.
+- 남은 것: fallback 스택의 재부팅 복구(restart policy 부재)는 `T-369`.
 
 ## 2026-09-20 (claude) — DB를 공용 제어 평면 instance로 이전 완료 (ADR-070, 2-저장소)
 
