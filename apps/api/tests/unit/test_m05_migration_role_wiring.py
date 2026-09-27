@@ -28,6 +28,9 @@ def test_compose_keeps_runtime_and_migrator_role_inputs_separate() -> None:
     assert rustfs_image is not None
     assert f"\n    image: {rustfs_image.group(1)}\n" in rustfs_init_block
     assert "-X PUT http://app-rustfs:9000/pinvi-media" in rustfs_init_block
+    # RustFS는 health 200 뒤에도 잠시 503(storage_quorum)을 준다 — 접속 실패·5xx는 재시도, 4xx는 즉시 실패.
+    assert "000|5??)" in rustfs_init_block
+    assert "--max-time" in rustfs_init_block
     assert "|| true" not in rustfs_init_block
     runtime_block = compose.split("  app-api:", maxsplit=1)[1].split(
         "  # Explicit one-shot only:", maxsplit=1

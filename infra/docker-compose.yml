@@ -51,22 +51,28 @@ services:
     depends_on:
       rustfs:
         condition: service_healthy
-    # 이미 있는 버킷은 200(RustFS) 또는 409 BucketAlreadyOwnedByYou(S3)로 멱등이다. 그 밖의 응답은
-    # 실패다 — 자격증명·이름 오류를 성공으로 삼키지 않는다.
+    # 이미 있는 버킷은 200(RustFS) 또는 409 BucketAlreadyOwnedByYou(S3)로 멱등이다. 접속 실패·5xx만
+    # 재시도한다 — RustFS는 health가 200이 된 뒤에도 잠시 `503 waiting for storage_quorum`을 돌려준다
+    # (2026-09-27 n150 실측 약 1.7초). 그 밖의 응답은 실패다 — 자격증명·이름 오류를 성공으로 삼키지 않는다.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         set -eu
-        rm -f /tmp/rustfs-init.out
-        code=$$(curl -sS -o /tmp/rustfs-init.out -w '%{http_code}' --aws-sigv4 aws:amz:us-east-1:s3 \
-          --user rustfsadmin:rustfsadmin -X PUT http://127.0.0.1:12101/pinvi-media) || code=000
-        case "$$code" in
-          200) exit 0 ;;
-          409) grep -q BucketAlreadyOwnedByYou /tmp/rustfs-init.out && exit 0 ;;
-        esac
-        echo "rustfs-init: bucket pinvi-media: HTTP $$code" >&2
-        if [ -s /tmp/rustfs-init.out ]; then cat /tmp/rustfs-init.out >&2; fi
-        exit 1
+        tries=0
+        while :; do
+          rm -f /tmp/rustfs-init.out
+          code=$$(curl -sS --connect-timeout 5 --max-time 30 -o /tmp/rustfs-init.out -w '%{http_code}' \
+            --aws-sigv4 aws:amz:us-east-1:s3 --user rustfsadmin:rustfsadmin \
+            -X PUT http://127.0.0.1:12101/pinvi-media) || code=000
+          case "$$code" in
+            200) exit 0 ;;
+            409) grep -q BucketAlreadyOwnedByYou /tmp/rustfs-init.out && exit 0 ;;
+            000|5??) tries=$$((tries + 1)); if [ "$$tries" -lt 60 ]; then sleep 2; continue; fi ;;
+          esac
+          echo "rustfs-init: bucket pinvi-media: HTTP $$code" >&2
+          if [ -s /tmp/rustfs-init.out ]; then cat /tmp/rustfs-init.out >&2; fi
+          exit 1
+        done
 
   # Sprint 5에서 활성화. Sprint 1은 컨테이너 정의만.
   dagster:
