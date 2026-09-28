@@ -280,6 +280,12 @@ App 컨테이너는 **자동 마이그레이션 X**. `app-api`가 뜨기 전에 
 `app-migrator`의 `pinvi-admin-bootstrap` one-shot을 명시 실행한다. API/Dagster는
 `app-db-runtime-role`이 만든 non-owner/non-superuser login만 받고, schema/table/trigger owner
 login을 절대 받지 않는다. 이 command가 PinVi Alembic migration과 초기 admin 보장을 함께 소유한다.
+
+Dagster instance storage는 앱 DB가 아니라 별도 database `pinvi_dagster`다(dagster-postgres의
+`alembic_version`이 PinVi 것과 충돌한다). `--profile etl`의 `app-dagster-db-init` one-shot이
+`app-db-runtime-role` 뒤에 그 database와 그것만 소유하는 login을 멱등하게 만들고,
+`app-dagster`는 그 성공을 기다려 `PINVI_DAGSTER_PG_URL`로 붙는다. 이 login은 M05 role이 아니고
+앱 DB에 CONNECT가 없다 — 앱 runtime role도 `pinvi_dagster`에 붙지 못한다(`docs/runbooks/etl.md` §7.2).
 이유:
 
 - 운영에서 새 이미지 배포 시 마이그레이션이 자동 실행되어 의도치 않은 schema 변경 차단

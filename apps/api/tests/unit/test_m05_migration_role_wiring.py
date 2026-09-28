@@ -76,6 +76,28 @@ def test_compose_keeps_runtime_and_migrator_role_inputs_separate() -> None:
     assert "PINVI_M05_LEGACY_REBASELINE_RECEIPT_PATH" in legacy_migrator_block
 
 
+def test_dagster_storage_bootstrap_never_hands_sql_an_m05_role() -> None:
+    """Dagster storage one-shot은 root로 돌지만 M05 role을 SQL에서 이름 붙여 바꿀 수 없다.
+
+    M05 role 이름은 셸 쪽 "Dagster login은 그 role과 달라야 한다" 비교에만 들어온다. psql에
+    넘기는 변수는 Dagster login·password·database와, 읽기 전용 CONNECT 검사가 쓰는 앱 DB
+    이름뿐이다 — 그 밖의 변수가 생기면 이 one-shot이 M05 role을 만질 수 있게 된 것이다.
+    """
+
+    bootstrap = (ROOT / "infra" / "postgres" / "bootstrap-pinvi-dagster-db.sh").read_text(
+        encoding="utf-8"
+    )
+    psql_variables = set(re.findall(r'--set="([a-z_]+)=', bootstrap))
+    assert psql_variables == {"dagster_role", "dagster_password", "dagster_db", "app_db"}
+    assert bootstrap.count(":'app_db'") == 1
+    assert "has_database_privilege((SELECT oid FROM dagster_role), :'app_db', 'CONNECT')" in (
+        bootstrap
+    )
+    # 같은 endpoint 고정·libpq 상속 차단을 role bootstrap과 공유한다.
+    assert 'PINVI_DB_HOST="app-postgres"' in bootstrap
+    assert "PGHOSTADDR" in bootstrap
+
+
 def test_bootstrap_requires_noninheriting_set_role_and_seals_login() -> None:
     bootstrap = (ROOT / "infra" / "postgres" / "bootstrap-pinvi-runtime-role.sh").read_text(
         encoding="utf-8"

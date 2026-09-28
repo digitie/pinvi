@@ -379,6 +379,42 @@ services:
     ports:
       - "127.0.0.1:${PINVI_WEB_PORT:-12805}:3000"
 
+  # Dagster instance storage의 database(`pinvi_dagster`)와 그것만 소유하는 login을 만든다.
+  # 이미지에 구운 apps/etl/dagster.yaml이 storage를 PINVI_DAGSTER_PG_URL에서 읽으므로(#558),
+  # 이것 없이는 instance가 뜨지 않아 app-dagster가 항상 unhealthy였다(Manager M05 격리 실행
+  # p3·p4·p8). 앱 DB와 같은 database는 쓸 수 없다 — dagster-postgres의 `alembic_version`이
+  # PinVi Alembic의 것과 충돌한다. login은 M05 role이 아니고 앱 DB에 CONNECT가 없다
+  # (infra/postgres/bootstrap-pinvi-dagster-db.sh가 만들고 검증한다). 운영은 이 서비스가 아니라
+  # Manager의 `kor-travel-shared-db-init-pinvi`가 같은 database를 만든다.
+  app-dagster-db-init:
+    profiles: ["etl"]
+    image: postgis/postgis@sha256:8b33190b6486ab9905dea999171817c1ac461733a7078dd4c836091c6e6b5d40
+    restart: "no"
+    depends_on:
+      app-postgres:
+        condition: service_healthy
+      # 앱 DB의 PUBLIC CONNECT를 걷는 쪽이 먼저 끝나야 "앱 DB에 닿지 못한다" 검증이 선다.
+      app-db-runtime-role:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_USER: ${PINVI_DB_OWNER_USER:-pinvi_owner}
+      POSTGRES_PASSWORD: ${PINVI_POSTGRES_PASSWORD:-pinvi_app_smoke}
+      POSTGRES_DB: pinvi
+      # 이 이름들과 같은 Dagster login은 거부한다 — M05 role에 새 비밀번호·소유권을 주게 된다.
+      PINVI_APP_DB_USER: ${PINVI_APP_DB_USER:-pinvi_app}
+      PINVI_APP_SCHEMA_OWNER: ${PINVI_APP_SCHEMA_OWNER:-pinvi_app_owner}
+      PINVI_MIGRATION_OWNER: ${PINVI_MIGRATION_OWNER:-pinvi_migration_owner}
+      PINVI_MIGRATOR_DB_USER: ${PINVI_MIGRATOR_DB_USER:-pinvi_migrator}
+      PINVI_DAGSTER_DB: pinvi_dagster
+      PINVI_DAGSTER_DB_USER: ${PINVI_DAGSTER_DB_USER:-pinvi_dagster_app}
+      # 전용 값이 없으면 app login의 비밀번호를 쓴다. 두 값은 어차피 app-dagster 한 컨테이너에
+      # 같이 들어가고, 이렇게 하면 app DB 비밀번호를 무작위로 주는 환경(Manager M05 격리 실행)이
+      # 추가 입력 없이 무작위 비밀번호를 얻는다. smoke는 다른 비밀번호와 같은 기본값이다.
+      PINVI_DAGSTER_DB_PASSWORD: ${PINVI_DAGSTER_DB_PASSWORD:-${PINVI_APP_DB_PASSWORD:-pinvi_app_smoke}}
+    volumes:
+      - ./postgres/bootstrap-pinvi-dagster-db.sh:/bootstrap/bootstrap-pinvi-dagster-db.sh:ro
+    entrypoint: ["/bin/sh", "/bootstrap/bootstrap-pinvi-dagster-db.sh"]
+
   # Dagster webserver — 고정 포트 12802(컨테이너/호스트 동일). profile "etl"로만 기동.
   # reverse proxy: pinvi-dagster.<domain> → host :12802.
   app-dagster:
@@ -397,9 +433,14 @@ services:
         condition: service_healthy
       app-db-runtime-role:
         condition: service_completed_successfully
+      app-dagster-db-init:
+        condition: service_completed_successfully
     environment:
       PINVI_ENVIRONMENT: ${PINVI_ENVIRONMENT:-smoke}
       PINVI_DATABASE_URL: postgresql+asyncpg://${PINVI_APP_DB_USER:-pinvi_app}:${PINVI_APP_DB_PASSWORD:-pinvi_app_smoke}@app-postgres:5432/pinvi
+      # instance storage(run/event log/schedule) — 앱 DB가 아니라 app-dagster-db-init이 만든
+      # `pinvi_dagster`와 그 전용 login. 이름은 apps/etl/dagster.yaml이 읽는 env와 같아야 한다.
+      PINVI_DAGSTER_PG_URL: postgresql://${PINVI_DAGSTER_DB_USER:-pinvi_dagster_app}:${PINVI_DAGSTER_DB_PASSWORD:-${PINVI_APP_DB_PASSWORD:-pinvi_app_smoke}}@app-postgres:5432/pinvi_dagster
       PINVI_RUSTFS_ENDPOINT_URL: http://app-rustfs:9000
       PINVI_RUSTFS_BUCKET: pinvi-media
       PINVI_RUSTFS_ACCESS_KEY_ID: ${PINVI_RUSTFS_ACCESS_KEY_ID:-rustfsadmin}
@@ -408,8 +449,13 @@ services:
       DAGSTER_HOME: /opt/pinvi/.dagster
     ports:
       - "127.0.0.1:${PINVI_DAGSTER_DEV_PORT:-12802}:12802"
+    # DAGSTER_HOME 자체가 아니라 그 아래 storage(compute log·local artifact)에만 볼륨을 붙인다.
+    # DAGSTER_HOME에 붙이면 볼륨이 이미지에 구운 dagster.yaml·workspace.yaml을 가린다 — 볼륨이
+    # 처음 만들어질 때 한 번 복사된 사본이 남아, 그 뒤 이미지의 설정이 바뀌어도 반영되지 않고,
+    # dagster.yaml이 생기기 전(#558 이전)에 만든 볼륨에서는 instance가 PostgreSQL이 아니라
+    # SQLite로 뜬다.
     volumes:
-      - app-dagster:/opt/pinvi/.dagster
+      - app-dagster:/opt/pinvi/.dagster/storage
 
   cadvisor:
     profiles: ["observability"]

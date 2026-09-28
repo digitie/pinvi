@@ -552,26 +552,27 @@ fresh_stack_dependency_image_proof() {
   FRESH_STACK_RUSTFS_INIT_IMAGE_ID="$(fresh_stack_dependency_image_id app-rustfs-init)" || return $?
 }
 
-# 재사용 모양 검사가 받는 app-db-runtime-role은 runtime을 띄운 `compose up`이 남긴 one-shot
-# 하나뿐이다: Compose service 컨테이너(one-off `compose run`이 아님)이고, 끝났거나(exited — 종료
-# 코드는 보지 않는다, 다음 `compose up`이 다시 돌려 성패를 가른다) 한 번도 돌지 않았고(created —
-# `compose up`이 app-postgres healthy를 기다리다 끊기면 이렇게 남는다), 핀 image로 만들어졌다.
-# label만 보면 owner/migrator env를 든 채 도는 `compose run -d` 사본이나 다른 image도 통과한다.
-fresh_stack_runtime_role_container_proof() {
-  local container_id="$1" shape expected_image
+# 재사용 모양 검사가 받는 root one-shot(app-db-runtime-role, app-dagster-db-init)은 runtime을 띄운
+# `compose up`이 남긴 것 하나뿐이다: Compose service 컨테이너(one-off `compose run`이 아님)이고,
+# 끝났거나(exited — 종료 코드는 보지 않는다, 다음 `compose up`이 다시 돌려 성패를 가른다) 한 번도
+# 돌지 않았고(created — `compose up`이 app-postgres healthy를 기다리다 끊기면 이렇게 남는다), 핀
+# image로 만들어졌다. label만 보면 owner/migrator env를 든 채 도는 `compose run -d` 사본이나 다른
+# image도 통과한다.
+fresh_stack_one_shot_container_proof() {
+  local service="$1" container_id="$2" shape expected_image
   if ! shape="$(docker container inspect --format \
     '{{ index .Config.Labels "com.docker.compose.oneoff" }} {{.State.Status}} {{.Image}}' \
     "$container_id")"; then
-    echo "could not inspect the reusable fresh deploy app-db-runtime-role container" >&2
+    echo "could not inspect the reusable fresh deploy ${service} container" >&2
     return 1
   fi
-  if ! expected_image="$(fresh_stack_pinned_image_id app-db-runtime-role)"; then
+  if ! expected_image="$(fresh_stack_pinned_image_id "$service")"; then
     return 1
   fi
   [[ "$expected_image" =~ ^sha256:[0-9a-f]{64}$ \
     && ( "$shape" == "False exited ${expected_image}" \
       || "$shape" == "False created ${expected_image}" ) ]] || {
-    echo "reusable fresh deploy refuses an app-db-runtime-role container that is not the exited or never-started Compose one-shot of the pinned image" >&2
+    echo "reusable fresh deploy refuses an ${service} container that is not the exited or never-started Compose one-shot of the pinned image" >&2
     return 2
   }
 }
@@ -1046,7 +1047,7 @@ require_reusable_fresh_stack_contract() {
 require_reusable_fresh_stack_resource_shape() {
   local project_containers service container_count
   local postgres_count=0 rustfs_count=0 rustfs_init_count=0 api_count=0 web_count=0 dagster_count=0
-  local runtime_role_count=0
+  local runtime_role_count=0 dagster_db_init_count=0
   local container_id project_volumes volume project_networks network
   if ! project_containers="$(docker container ls --all \
     --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.ID}}')"; then
@@ -1069,7 +1070,17 @@ require_reusable_fresh_stack_resource_shape() {
       # 다음 `compose up`이 이 one-shot을 다시 돌려 가른다.
       app-db-runtime-role)
         ((runtime_role_count+=1))
-        fresh_stack_runtime_role_container_proof "$container_id" || return $?
+        fresh_stack_one_shot_container_proof app-db-runtime-role "$container_id" || return $?
+        ;;
+      # app-dagster가 service_completed_successfully로 기다리는 Dagster storage one-shot(etl
+      # profile). Dagster profile을 봉인한 stack에서 app-dagster를 띄운 `compose up`만 남긴다.
+      app-dagster-db-init)
+        ((dagster_db_init_count+=1))
+        if ! dagster_profile_enabled; then
+          echo "reusable fresh deploy refuses an app-dagster-db-init container without a sealed Dagster profile" >&2
+          return 2
+        fi
+        fresh_stack_one_shot_container_proof app-dagster-db-init "$container_id" || return $?
         ;;
       app-api) ((api_count+=1)) ;;
       app-web) ((web_count+=1)) ;;
@@ -1082,6 +1093,7 @@ require_reusable_fresh_stack_resource_shape() {
   done <<< "$project_containers"
   [[ "$postgres_count" == "1" && "$rustfs_count" == "1" \
     && "$rustfs_init_count" -le 1 && "$runtime_role_count" -le 1 \
+    && "$dagster_db_init_count" -le 1 \
     && "$api_count" == "$web_count" \
     && "$api_count" -le 1 && "$dagster_count" -le 1 ]] || {
     echo "reusable fresh deploy requires one database/object store and at most one runtime per service" >&2

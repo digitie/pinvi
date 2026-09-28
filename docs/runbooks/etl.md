@@ -348,7 +348,24 @@ uv run dagster dev --host 0.0.0.0 --port 12802   # UI + daemon http://localhost:
 
 로컬 smoke(`infra/docker-compose.yml`/`infra/docker-compose.app.yml`)는 아직
 webserver 단일 서비스다 — `apps/etl/Dockerfile`을 빌드하고 host network로
-`12802`에 직접 bind한다(ADR-047 dev 운영 모델). 3-역할 분리(§2.0)를 로컬에서도
+`12802`에 직접 bind한다(ADR-047 dev 운영 모델).
+
+instance storage는 두 compose 모두 PostgreSQL의 **별도 database `pinvi_dagster`**다
+(이미지에 구운 `dagster.yaml`이 `PINVI_DAGSTER_PG_URL`을 읽는다 — 이 env가 없으면 webserver가
+`DagsterInvalidConfigError: ... "PINVI_DAGSTER_PG_URL" which is not set`으로 기동 중에 죽는다).
+
+- app compose: `app-dagster`가 `app-dagster-db-init`(profile `etl`, one-shot)의 성공을 기다린다.
+  그 one-shot(`infra/postgres/bootstrap-pinvi-dagster-db.sh`)이 `app-db-runtime-role` 뒤에
+  `pinvi_dagster`와 그것만 소유하는 login `PINVI_DAGSTER_DB_USER`(기본 `pinvi_dagster_app`)를
+  멱등하게 만들고 검증한다 — M05 role이 아니고, 앱 DB에 CONNECT가 없고, 앱 runtime role은
+  `pinvi_dagster`에 붙지 못한다. 비밀번호는 `PINVI_DAGSTER_DB_PASSWORD`, 없으면
+  `PINVI_APP_DB_PASSWORD`(없으면 smoke 기본값)를 쓴다.
+- dev compose: `dagster-db-init`이 dev superuser로 `pinvi_dagster`를 만들고, `dagster`는 이미지의
+  `DAGSTER_HOME`(`/opt/pinvi/.dagster`)을 쓴다.
+- 두 compose 모두 볼륨은 `DAGSTER_HOME`이 아니라 `DAGSTER_HOME/storage`(compute log·local
+  artifact)에만 붙인다 — `DAGSTER_HOME`에 붙이면 볼륨 사본이 구운 `dagster.yaml`을 가린다.
+
+3-역할 분리(§2.0)를 로컬에서도
 재현하려면 `command`를 code-server/daemon 각각으로 override하는 서비스를
 추가한다:
 

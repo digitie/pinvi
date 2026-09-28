@@ -1500,6 +1500,17 @@ _RUNTIME_STARTED_MODES = {
     "runtime-role-foreign-image",
 }
 
+# Dagster profile을 봉인한 stack에서 app-dagster까지 띄운 모양. `compose --profile etl up
+# app-dagster`는 app-db-runtime-role과 함께 Dagster storage one-shot(app-dagster-db-init)을 남긴다.
+_DAGSTER_STORAGE_MODES = {
+    "dagster-storage-exited",
+    "dagster-storage-created",
+    "dagster-storage-running",
+    "dagster-storage-one-off",
+    "dagster-storage-foreign-image",
+    "dagster-storage-without-profile",
+}
+
 
 @pytest.mark.parametrize(
     "mode",
@@ -1514,6 +1525,7 @@ _RUNTIME_STARTED_MODES = {
         "runtime-role-one-off",
         "runtime-role-foreign-image",
         "label-mismatch",
+        *sorted(_DAGSTER_STORAGE_MODES),
     ],
 )
 def test_standalone_up_reuses_a_stack_sealed_by_another_process(
@@ -1545,6 +1557,9 @@ def test_standalone_up_reuses_a_stack_sealed_by_another_process(
       그것을 거부하면 standalone up/dagster 재시도가 수동 삭제 전까지 막힌다.
     - label-mismatch: `if !` 아래(errexit 꺼짐)의 label 검증 실패가 삼켜지지 않고 봉인을
       막는다.
+    - dagster-storage-*: Dagster profile을 봉인한 stack에서 `--profile etl up app-dagster`가
+      남기는 `app-dagster-db-init`도 같은 one-shot 증명(Compose service·exited/created·핀 image)을
+      거친다. profile을 봉인하지 않은 stack의 그 컨테이너는 거부한다.
     """
 
     project = "pinvi-test"
@@ -1557,10 +1572,16 @@ def test_standalone_up_reuses_a_stack_sealed_by_another_process(
         return re.sub(r"\$\{[A-Za-z0-9_]+:-([^}]*)\}", r"\1", image)
 
     images: dict[str, dict[str, str]] = {}
-    for service in ("app-postgres", "app-db-runtime-role", "app-rustfs", "app-rustfs-init"):
+    for service in (
+        "app-postgres",
+        "app-db-runtime-role",
+        "app-dagster-db-init",
+        "app-rustfs",
+        "app-rustfs-init",
+    ):
         digest = hashlib.sha256(reference(service).encode()).hexdigest()
         images[reference(service)] = {"id": f"sha256:{digest}"}
-    for service in ("app-api", "app-web"):
+    for service in ("app-api", "app-web", "app-dagster"):
         digest = hashlib.sha256(reference(service).encode()).hexdigest()
         images[reference(service)] = {
             "id": f"sha256:{digest}",
@@ -1652,6 +1673,9 @@ pinvi_prepare_api_image_provenance require-immutable
         "PINVI_FRESH_STACK_STATE_PATH": str(state_dir / "fresh-stack"),
         "PINVI_TEST_DIR": str(tmp_path),
     }
+    dagster_sealed = mode in _DAGSTER_STORAGE_MODES and mode != "dagster-storage-without-profile"
+    if dagster_sealed:
+        env["PINVI_ENABLE_DAGSTER"] = "1"
 
     def run_process(
         body: str, extra_env: dict[str, str] | None = None
@@ -1699,6 +1723,32 @@ pinvi_prepare_api_image_provenance require-immutable
             container("app-api", runtime_status),
             container("app-web", runtime_status),
         ]
+    elif mode in _DAGSTER_STORAGE_MODES:
+        storage_init = container("app-dagster-db-init", "exited")
+        runtime_status = "running"
+        if mode == "dagster-storage-created":
+            storage_init["status"] = runtime_status = "created"
+        elif mode == "dagster-storage-running":
+            storage_init["status"] = "running"
+        elif mode == "dagster-storage-one-off":
+            storage_init["oneoff"] = "True"
+        elif mode == "dagster-storage-foreign-image":
+            storage_init["image"] = f"sha256:{'9' * 64}"
+        world["containers"] += [
+            container("app-db-runtime-role", "exited"),
+            storage_init,
+            container("app-api", runtime_status),
+            container("app-web", runtime_status),
+        ]
+        if dagster_sealed:
+            world["containers"].append(
+                container(
+                    "app-dagster",
+                    runtime_status,
+                    {"/opt/pinvi/.dagster/storage": f"{project}_app-dagster"},
+                )
+            )
+            world["volumes"].append(f"{project}_app-dagster")
     elif mode == "image-rebuilt":
         images[reference("app-api")]["id"] = f"sha256:{'f' * 64}"
     elif mode == "config-drift":
@@ -1717,7 +1767,13 @@ fi
         extra_env,
     )
 
-    if mode in {"migrated", "runtime-started", "runtime-role-created"}:
+    if mode in {
+        "migrated",
+        "runtime-started",
+        "runtime-role-created",
+        "dagster-storage-exited",
+        "dagster-storage-created",
+    }:
         assert reused.returncode == 0, reused.stderr
         return
     assert reused.returncode == 7, reused.stderr
@@ -1728,6 +1784,12 @@ fi
         "runtime-role-running": "refuses an app-db-runtime-role container",
         "runtime-role-one-off": "refuses an app-db-runtime-role container",
         "runtime-role-foreign-image": "refuses an app-db-runtime-role container",
+        "dagster-storage-running": "refuses an app-dagster-db-init container that is not",
+        "dagster-storage-one-off": "refuses an app-dagster-db-init container that is not",
+        "dagster-storage-foreign-image": "refuses an app-dagster-db-init container that is not",
+        "dagster-storage-without-profile": (
+            "refuses an app-dagster-db-init container without a sealed Dagster profile"
+        ),
     }[mode]
     assert expected in reused.stderr, reused.stderr
     if mode == "image-rebuilt":

@@ -33,6 +33,9 @@
   높다. v2 계약 위에서 `pin rotate-pair → run-pinned-rebuild-once →
   run-m05-isolated-e2e-once → activation attestation`이 재실행된 기록이 세 저장소
   어디에도 없다 — **다음 단계는 여기서 막혀 있다.**
+  2026-09-28: Manager M05 격리 실행 p3·p4·p8이 멈춘 `app-dagster` unhealthy는 PinVi app compose가
+  #558 이후 Dagster instance storage(`PINVI_DAGSTER_PG_URL`/`pinvi_dagster`)를 주지 않던 결함이었다 —
+  `fix/app-dagster-instance-storage`가 고친다. 다음 격리 실행은 그 fix를 포함한 PinVi pin에서 한다.
 - [ ] T-VN-41C — relay, reconciliation, consumer enable paired acceptance를 완료한다.
   **교차 저장소 확인(2026-09-18)**: `kor-travel-map`은 이 ID를 `[ ]`로 유지하되
   "**보류**(오너 지시 2026-09-07)"로 명시한다 — relay/reconciliation 구현은 끝났고,

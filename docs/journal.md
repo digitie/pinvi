@@ -2,6 +2,77 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-28 (claude) — app compose의 `app-dagster`가 instance storage를 받지 못해 항상 unhealthy였던 것
+
+Manager M05 격리 실행이 `--profile etl up --wait app-dagster`에서 `container … dagster is unhealthy`로
+멈췄다(p3·p4·p8). M05가 마지막으로 통과한 것은 2026-09-07, #558 이전이다.
+
+- 원인: #558(839e9984)이 `apps/etl/dagster.yaml`을 이미지 `DAGSTER_HOME`에 구워 instance storage를
+  `PINVI_DAGSTER_PG_URL`의 PostgreSQL로 옮겼다. 운영 Manager compose는 그 env(공용 instance의
+  `pinvi_dagster`)를 주지만 PinVi 자신의 `infra/docker-compose.app.yml` `app-dagster`는 env도
+  database도 없었다.
+- 재현(n150 일회용 project `pinvi-dagster-probe-c1b655b6`, 이미지
+  `m05i-pinvi-ff2c…-dagster:latest`(rev fd07903f, isolated), origin/main compose, Manager와 같은 모양의
+  무작위 owner/app/migrator 비밀번호): webserver가 기동 중
+  `dagster._core.errors.DagsterInvalidConfigError: … Error 1: Post processing at path root:postgres_url of
+  original value {'env': 'PINVI_DAGSTER_PG_URL'} failed: … PostProcessingError: You have attempted to fetch
+  the environment variable "PINVI_DAGSTER_PG_URL" which is not set.`로 죽고 restart loop에 빠진다.
+  compose `--wait`는 105초에 `container … is unhealthy`, exit 1.
+- 수정:
+  1. `app-dagster-db-init`(profile `etl`, app-postgres와 같은 핀 postgis image, `app-db-runtime-role`
+     성공 뒤) — 새 `infra/postgres/bootstrap-pinvi-dagster-db.sh`가 `pinvi_dagster`(template0)와 그것만
+     소유하는 login(`PINVI_DAGSTER_DB_USER`, 기본 `pinvi_dagster_app`)을 멱등하게 만들고 검증한다.
+     입력 단계에서 bootstrap owner·M05 네 role과 같은 login, `pinvi`/`postgres`/template DB 이름을
+     거부한다(exit 2). 다른 role 소유의 기존 database는 **아무것도 바꾸기 전에** 거부한다(exit 3).
+     끝에 login 속성(NOSUPERUSER…NOINHERIT), membership 없음, 다른 database 소유 없음, owner 밖의
+     권한 없음(PUBLIC 회수), 앱 DB CONNECT 없음을 확인한다(exit 3). psql에 넘기는 변수는 Dagster
+     login·password·database와 읽기 전용 CONNECT 검사의 앱 DB 이름뿐이다 — M05 role을 SQL에서
+     이름 붙여 바꿀 수 없다.
+  2. `app-dagster`가 그 one-shot을 `service_completed_successfully`로 기다리고 `PINVI_DAGSTER_PG_URL`을 받는다.
+  3. 비밀번호: `PINVI_DAGSTER_DB_PASSWORD` → 없으면 `PINVI_APP_DB_PASSWORD` → smoke 기본값. 두 값은
+     어차피 app-dagster 한 컨테이너에 같이 들어간다. Manager M05 driver는 app DB 비밀번호를
+     무작위로 주므로 **Manager 변경 없이** 무작위 비밀번호가 된다(owner·migrator 비밀은 app-dagster에
+     풀리지 않는다 — 테스트).
+  4. `app-dagster` 볼륨을 `DAGSTER_HOME` → `DAGSTER_HOME/storage`(compute log·local artifact)로 옮겼다.
+     named volume은 처음 만들어질 때만 이미지 내용을 복사하므로, `DAGSTER_HOME`에 붙이면 구운
+     `dagster.yaml`의 옛 사본이 남고 #558 이전에 만든 볼륨에서는 instance가 SQLite로 뜬다.
+  5. dev compose(`infra/docker-compose.yml`)에도 같은 결함의 다른 모양이 있었다 — `DAGSTER_HOME`이
+     `/opt/pinvi/.tmp/dagster`라 구운 `dagster.yaml`을 읽지 않고 **조용히 SQLite**로 떴다(unhealthy가
+     아니다). `dagster-db-init`(dev superuser로 `pinvi_dagster` 생성) + `PINVI_DAGSTER_PG_URL` +
+     `DAGSTER_HOME=/opt/pinvi/.dagster` + storage 볼륨으로 맞췄다. dev는 host network·고정 포트라
+     n150에서 띄우지 않았다(compose 해석·테스트까지만).
+  6. `deploy-node.sh`: 재사용 모양 검사가 `app-dagster-db-init`을 `app-db-runtime-role`과 같은 one-shot
+     증명(Compose service·exited/created·핀 image)으로 최대 1개 받는다 — Dagster profile을 봉인한
+     stack에서만. 증명 함수를 service 인자로 일반화했다(`fresh_stack_one_shot_container_proof`).
+  7. CI: 새 스크립트·dev compose·`apps/etl/dagster.yaml`·`apps/etl/Dockerfile`(새 테스트의 입력)을
+     `api.yml` PR/push paths·aggregate api 블록·`bash -n` 목록에 넣었다.
+- live(같은 project, 이 브랜치 compose, Dagster 전용 비밀번호 없이): 93초에 healthy.
+  `repositoriesOrError` → `RepositoryConnection`(`pinvi.etl.definitions`), instance info의 run/event
+  log/schedule storage가 `Postgres*Storage`. `pinvi_dagster` owner `pinvi_dagster_app`, ACL
+  `{pinvi_dagster_app=CTc/…}`, Dagster 테이블 22개(`alembic_version` 29b539ebc72a 포함) 전부 그 login
+  소유, 앱 DB `pinvi`에는 `public.alembic_version`이 없다. CONNECT 교차(Dagster→pinvi, app→pinvi_dagster)
+  모두 `f`이고 실제 접속도 `User does not have CONNECT privilege`로 막힌다. M05 sealed verifier는
+  `canonical`. 두 번째 `up`에서 one-shot이 다시 돌아 exit 0(멱등). 거부 case: Dagster login=`pinvi_app` →
+  exit 2, 다른 role 소유 database → exit 3(그 database ACL은 그대로), Dagster login에 앱 DB CONNECT를
+  주면 → exit 3, 회수 뒤 exit 0. teardown 뒤 컨테이너·볼륨·네트워크·/tmp 0건.
+- 테스트: 새 `apps/api/tests/unit/test_compose_dagster_storage.py`(compose를 Compose처럼 보간해 app-dagster
+  DSN과 one-shot의 login·password·database가 같은 값으로 풀리는지, env 이름이 구운 dagster.yaml이 읽는
+  이름인지, 볼륨이 구운 설정을 가리지 않는지, fake psql로 bootstrap 분기), M05 role wiring(Dagster
+  one-shot이 psql에 넘기는 변수 집합), deploy-node 두 프로세스 테스트에 `dagster-storage-*` 6 case.
+  실행(n150 일회용 `python:3.13`, `--network none`, 비root): unit 전체 1473 passed / 9 skipped /
+  3 failed / 1 collection error — 넷 다 origin/main에서도 같다(docker 바이너리·git checkout 부재 등 환경).
+  빨강: 새 파일 26건 전부, `dagster-storage-*` 6건, role wiring 1건이 origin/main compose·스크립트로
+  빨갛다(처음엔 입력 거부 3건이 "스크립트를 못 열어도 sh가 2로 끝나는" 우연으로 초록이어서 메시지까지
+  보게 고쳤다). `apps/etl/tests/test_dagster_topology.py` 5 passed. ruff 0.16.4 check·format(apps/api) 통과,
+  `sh -n`/`bash -n` 통과.
+- 사용자 질문("dagster code server도 프로젝트간 통합하는거 맞지?")에 대한 사실: Manager
+  `docs/platform-topology.md` §7(2026-09-19 결정)의 목표는 **webserver·daemon·instance storage
+  (`dagster_shared`)를 공용**으로 하고 **code-server는 프로젝트별로 분리 유지**하는 것이다(프로젝트마다
+  Python 의존성이 달라 한 gRPC 프로세스에 올릴 수 없다). 지금은 1단계(프로젝트별 code-server 분리)까지만
+  됐고 `dagster_shared`·공용 11001/11002는 없다 — n150에서 PinVi·Map·geo·weather·airport가 각자
+  webserver/daemon/code-server를 돌린다(2026-09-28 `docker ps`). 이 수정은 PinVi 자체 격리 stack의
+  storage만 다룬다.
+
 ## 2026-09-28 (claude) — fresh deploy 의존성 image 증명이 app-postgres에서 죽던 것
 
 2026-09-27 항목의 "별건"을 고쳤다.
