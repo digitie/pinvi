@@ -286,6 +286,19 @@ login을 절대 받지 않는다. 이 command가 PinVi Alembic migration과 초�
 - 두 alembic (Pinvi + kor-travel-map) 순서 명시 가능
 - 실패 시 rollback 명확
 
+### 7.1 Dagster instance storage
+
+Dagster instance storage는 앱 DB가 아니라 별도 database `pinvi_dagster`다. Dagster는 첫 기동에
+자기 테이블을 스스로 만드는데 M05 runtime login은 `pinvi`에 테이블을 만들 수 없고, Dagster
+테이블을 M05의 소유·백업·복원·hotswap 범위 밖에 두며, 운영도 같은 database로 가른다(테이블 이름
+충돌은 아니다 — PinVi Alembic 표는 `app.alembic_version`, Dagster 것은 `public.alembic_version`).
+`--profile etl`의 `app-dagster-db-init` one-shot이 `app-db-runtime-role` 뒤에 그 database와 그것만
+소유하는 login을 멱등하게 만들고, `app-dagster`는 그 성공을 기다려 `PINVI_DAGSTER_PG_URL`로 붙는다.
+이 login은 M05 role이 아니고 앱 DB에 CONNECT가 없다 — 앱 runtime role도 `pinvi_dagster`에 붙지
+못한다. 다만 `PINVI_DAGSTER_DB_PASSWORD`를 주지 않으면 비밀번호는 `PINVI_APP_DB_PASSWORD`라 두
+login은 **권한으로만** 갈린다(자격증명은 같다). 운영은 Manager가 app role 자체를 `pinvi_dagster`
+소유자로 쓴다. 자세히는 `docs/runbooks/etl.md` §7.2.
+
 ## 8. .dockerignore
 
 ```

@@ -495,9 +495,12 @@ fresh_stack_runtime_image_proof() {
 }
 
 # checked-in compose가 service에 핀한 image의 ID(digest reference → `sha256:<id>`).
+# 활성 profile과 상관없이 모델 전체(`--profile '*'`)에서 찾는다 — profile은 image 참조를 바꾸지
+# 않고, Dagster profile 없이 봉인한 stack에 남은 etl one-shot(app-dagster-db-init)의 핀 image도
+# 풀려야 한다. 봉인하는 effective digest는 여전히 profile을 따르는 compose_config로 계산한다.
 fresh_stack_pinned_image_id() {
   local service="$1" image_reference image_id
-  if ! image_reference="$({ compose_config --format json; } | \
+  if ! image_reference="$({ compose --profile '*' config --format json; } | \
     python3 "$PINVI_PROVENANCE_PY" compose-image-reference --service "$service")"; then
     echo "could not resolve the pinned ${service} image reference" >&2
     return 1
@@ -552,26 +555,27 @@ fresh_stack_dependency_image_proof() {
   FRESH_STACK_RUSTFS_INIT_IMAGE_ID="$(fresh_stack_dependency_image_id app-rustfs-init)" || return $?
 }
 
-# 재사용 모양 검사가 받는 app-db-runtime-role은 runtime을 띄운 `compose up`이 남긴 one-shot
-# 하나뿐이다: Compose service 컨테이너(one-off `compose run`이 아님)이고, 끝났거나(exited — 종료
-# 코드는 보지 않는다, 다음 `compose up`이 다시 돌려 성패를 가른다) 한 번도 돌지 않았고(created —
-# `compose up`이 app-postgres healthy를 기다리다 끊기면 이렇게 남는다), 핀 image로 만들어졌다.
-# label만 보면 owner/migrator env를 든 채 도는 `compose run -d` 사본이나 다른 image도 통과한다.
-fresh_stack_runtime_role_container_proof() {
-  local container_id="$1" shape expected_image
+# 재사용 모양 검사가 받는 root one-shot(app-db-runtime-role, app-dagster-db-init)은 runtime을 띄운
+# `compose up`이 남긴 것 하나뿐이다: Compose service 컨테이너(one-off `compose run`이 아님)이고,
+# 끝났거나(exited — 종료 코드는 보지 않는다, 다음 `compose up`이 다시 돌려 성패를 가른다) 한 번도
+# 돌지 않았고(created — `compose up`이 app-postgres healthy를 기다리다 끊기면 이렇게 남는다), 핀
+# image로 만들어졌다. label만 보면 owner/migrator env를 든 채 도는 `compose run -d` 사본이나 다른
+# image도 통과한다.
+fresh_stack_one_shot_container_proof() {
+  local service="$1" container_id="$2" shape expected_image
   if ! shape="$(docker container inspect --format \
     '{{ index .Config.Labels "com.docker.compose.oneoff" }} {{.State.Status}} {{.Image}}' \
     "$container_id")"; then
-    echo "could not inspect the reusable fresh deploy app-db-runtime-role container" >&2
+    echo "could not inspect the reusable fresh deploy ${service} container" >&2
     return 1
   fi
-  if ! expected_image="$(fresh_stack_pinned_image_id app-db-runtime-role)"; then
+  if ! expected_image="$(fresh_stack_pinned_image_id "$service")"; then
     return 1
   fi
   [[ "$expected_image" =~ ^sha256:[0-9a-f]{64}$ \
     && ( "$shape" == "False exited ${expected_image}" \
       || "$shape" == "False created ${expected_image}" ) ]] || {
-    echo "reusable fresh deploy refuses an app-db-runtime-role container that is not the exited or never-started Compose one-shot of the pinned image" >&2
+    echo "reusable fresh deploy refuses an ${service} container that is not the exited or never-started Compose one-shot of the pinned image" >&2
     return 2
   }
 }
@@ -1046,7 +1050,7 @@ require_reusable_fresh_stack_contract() {
 require_reusable_fresh_stack_resource_shape() {
   local project_containers service container_count
   local postgres_count=0 rustfs_count=0 rustfs_init_count=0 api_count=0 web_count=0 dagster_count=0
-  local runtime_role_count=0
+  local runtime_role_count=0 dagster_db_init_count=0
   local container_id project_volumes volume project_networks network
   if ! project_containers="$(docker container ls --all \
     --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.ID}}')"; then
@@ -1069,7 +1073,16 @@ require_reusable_fresh_stack_resource_shape() {
       # 다음 `compose up`이 이 one-shot을 다시 돌려 가른다.
       app-db-runtime-role)
         ((runtime_role_count+=1))
-        fresh_stack_runtime_role_container_proof "$container_id" || return $?
+        fresh_stack_one_shot_container_proof app-db-runtime-role "$container_id" || return $?
+        ;;
+      # app-dagster가 service_completed_successfully로 기다리는 Dagster storage one-shot(etl
+      # profile). 봉인된 Dagster profile과 상관없이 받는다: profile 0으로 봉인한 stack에서
+      # `dagster` 명령이 실패하면 app-dagster는 기록한 ID로 지워지지만 이 one-shot은 남고 재봉인도
+      # 되지 않는다 — 그것을 거부하면 `dagster`/`up` 재시도가 수동 삭제 전까지 막힌다.
+      # app-db-runtime-role과 같이 도는 권한이 없고, 다음 `compose up`이 다시 돌려 성패를 가른다.
+      app-dagster-db-init)
+        ((dagster_db_init_count+=1))
+        fresh_stack_one_shot_container_proof app-dagster-db-init "$container_id" || return $?
         ;;
       app-api) ((api_count+=1)) ;;
       app-web) ((web_count+=1)) ;;
@@ -1082,6 +1095,7 @@ require_reusable_fresh_stack_resource_shape() {
   done <<< "$project_containers"
   [[ "$postgres_count" == "1" && "$rustfs_count" == "1" \
     && "$rustfs_init_count" -le 1 && "$runtime_role_count" -le 1 \
+    && "$dagster_db_init_count" -le 1 \
     && "$api_count" == "$web_count" \
     && "$api_count" -le 1 && "$dagster_count" -le 1 ]] || {
     echo "reusable fresh deploy requires one database/object store and at most one runtime per service" >&2
@@ -1144,7 +1158,11 @@ cleanup_failed_fresh_stack() {
     return 2
   }
   log "cleaning failed fresh stack resources for a safe retry"
-  if ! compose down --volumes --remove-orphans; then
+  # 모든 profile을 켠다. Compose `down`은 켜진 service만 걷고, `--remove-orphans`도 꺼진 profile의
+  # service 컨테이너는 모델에 있는 것으로 보아 지우지 않는다(n150 실측). profile 없이 내리면
+  # etl의 app-dagster-db-init(owner 비밀번호를 env에 든 exited one-shot)이 남아 재시도 `deploy`가
+  # "existing Compose project"로 막힌다. 목록 대신 `*`라 새 profile의 one-shot도 같이 걷힌다.
+  if ! compose --profile '*' down --volumes --remove-orphans; then
     echo "failed fresh stack resources could not be cleaned; refusing retry" >&2
     return 1
   fi

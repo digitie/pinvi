@@ -1,5 +1,28 @@
 # resume.md
 
+## 2026-09-28 (claude) — app compose `app-dagster` Dagster storage (브랜치 `fix/app-dagster-instance-storage`)
+
+Manager M05 격리 실행이 `--profile etl up --wait app-dagster`에서 unhealthy로 멈추던 원인을 고쳤다 —
+#558 이후 이미지의 `dagster.yaml`이 `PINVI_DAGSTER_PG_URL`을 요구하는데 PinVi app compose가 그 env도
+database도 주지 않았다(webserver가 `DagsterInvalidConfigError`로 죽는다, n150 재현). 새 `etl` one-shot
+`app-dagster-db-init`이 `pinvi_dagster`와 그것만 소유하는 login을 만들고 검증하며, `app-dagster`가 그
+성공을 기다려 `PINVI_DAGSTER_PG_URL`을 받는다. dev compose의 조용한 SQLite fallback과 `DAGSTER_HOME`
+볼륨 가림도 같이 고쳤다. 상세·실측은 `docs/journal.md`.
+
+- live(n150 일회용 project): origin/main compose는 105초에 unhealthy, 이 브랜치는 healthy·
+  `RepositoryConnection`·Postgres storage(2차: `up --wait` exit 0, 40초). M05 sealed verifier `canonical`.
+- Manager 변경 불필요: Dagster 비밀번호는 없으면 `PINVI_APP_DB_PASSWORD`(M05 driver가 무작위로 준다)를
+  쓴다 — 그때 Dagster login은 app login과 권한으로만 갈린다(자격증명은 같다, 운영은 app role 자체가
+  소유자). 자격증명까지 가르려면 `PINVI_DAGSTER_DB_PASSWORD`를 따로 준다(Manager라면 `_random_secret()`).
+- 리뷰 반영: deploy-node 실패 경로가 exited `app-dagster-db-init`을 남겨 재시도를 막던 두 MED(profile 0
+  재사용 거부, profile 없는 실패 정리 `down`)와 bootstrap의 기존 role 변경 전 검사, 문구 정정.
+- 다음 한 작업: PR을 열고 CI green 후 머지 → 이 fix를 포함한 PinVi pin으로 Manager M05 격리 실행 재시도
+  (그것이 인수 증거다).
+- 남은 것: dev compose는 host network·고정 포트라 live로 띄우지 않았다(테스트·compose 해석까지).
+  `apps/etl/dagster.yaml` 머리말의 `alembic_version` 충돌 이유는 사실이 아니다(PinVi 표는
+  `app.alembic_version`) — 이미지 입력이라 이 브랜치에서 고치지 않았다. `docker-app.sh down`/`reset`도
+  profile 없이 내려 etl 컨테이너를 남긴다(이 브랜치 전부터, 리뷰 범위 밖).
+
 ## 2026-09-28 (claude) — fresh deploy 의존성 image 증명 수정 (브랜치 `fix/fresh-stack-dependency-proof`)
 
 `api_image_provenance.py compose-image-reference`가 `--service`를 app-api/app-web/app-dagster로만

@@ -75,6 +75,11 @@ jobs:
               equals("scripts/restore-staging-drill.sh"),
               equals("infra/docker-compose.app.yml"),
               equals("infra/postgres/bootstrap-pinvi-runtime-role.sh"),
+              equals("infra/postgres/bootstrap-pinvi-dagster-db.sh"),
+              // test_compose_dagster_storage.py의 입력 — api.yml paths와 같은 집합.
+              equals("infra/docker-compose.yml"),
+              equals("apps/etl/dagster.yaml"),
+              equals("apps/etl/Dockerfile"),
               equals("docs/runbooks/docker-app.md"),
               equals("infra/.env.prod.example"),
               equals(".env.example"),

@@ -74,6 +74,34 @@ services:
           exit 1
         done
 
+  # Dagster instance storage database. 앱 DB(`pinvi`)와 가른다 — app compose·운영과 같은 모양이고,
+  # Dagster 테이블을 앱 DB의 M05 소유·백업·복원 범위 밖에 둔다(이유는
+  # infra/postgres/bootstrap-pinvi-dagster-db.sh 머리말). dev는 앱도 bootstrap superuser로 붙으므로
+  # database만 가른다. 격리 login·검증은 infra/docker-compose.app.yml의 app-dagster-db-init이 맡는다.
+  dagster-db-init:
+    profiles: ["etl"]
+    image: postgis/postgis:16-3.5-alpine
+    network_mode: host
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: pinvi
+      PGPASSWORD: pinvi_dev_password
+      PGDATABASE: pinvi
+    # 존재 확인만 조용히 한다. `createdb ... || true`는 인증 실패·연결 거부까지 성공으로 삼킨다.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        exists=$$(psql --no-psqlrc -tAc "SELECT 1 FROM pg_database WHERE datname = 'pinvi_dagster'")
+        if [ "$$exists" != "1" ]; then
+          createdb --template=template0 pinvi_dagster
+        fi
+
   # Sprint 5에서 활성화. Sprint 1은 컨테이너 정의만.
   dagster:
     profiles: ["etl"]
@@ -85,9 +113,13 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      dagster-db-init:
+        condition: service_completed_successfully
     environment:
       # host net이라 서비스 DNS 대신 127.0.0.1 사용.
       PINVI_DATABASE_URL: postgresql+asyncpg://pinvi:pinvi_dev_password@127.0.0.1:5432/pinvi
+      # instance storage(run/event log/schedule). apps/etl/dagster.yaml이 이 env를 읽는다.
+      PINVI_DAGSTER_PG_URL: postgresql://pinvi:pinvi_dev_password@127.0.0.1:5432/pinvi_dagster
       PINVI_RUSTFS_ENDPOINT_URL: http://127.0.0.1:12101
       PINVI_RUSTFS_BUCKET: pinvi-media
       PINVI_RUSTFS_ACCESS_KEY_ID: rustfsadmin
@@ -95,10 +127,15 @@ services:
       DATA_GO_KR_SERVICE_KEY: ${DATA_GO_KR_SERVICE_KEY:-}
       PINVI_KASI_SPECIAL_DAYS_LOOKBACK_MONTHS: ${PINVI_KASI_SPECIAL_DAYS_LOOKBACK_MONTHS:-6}
       PINVI_KASI_SPECIAL_DAYS_LOOKAHEAD_MONTHS: ${PINVI_KASI_SPECIAL_DAYS_LOOKAHEAD_MONTHS:-18}
-      DAGSTER_HOME: /opt/pinvi/.tmp/dagster
+      # 이미지에 구운 dagster.yaml이 있는 자리다. 종전 값(/opt/pinvi/.tmp/dagster)에는
+      # dagster.yaml이 없어 instance가 PINVI_DAGSTER_PG_URL 없이도 SQLite로 떴다 — #558이 닫은
+      # 경로가 dev에만 열려 있었다.
+      DAGSTER_HOME: /opt/pinvi/.dagster
     volumes:
       - ../apps/etl:/opt/pinvi/apps/etl
-      - pinvi-dagster:/opt/pinvi/.tmp/dagster
+      # DAGSTER_HOME이 아니라 그 아래 storage(compute log·local artifact)에만 붙인다 —
+      # DAGSTER_HOME에 붙이면 구운 dagster.yaml을 볼륨 사본이 가린다.
+      - pinvi-dagster:/opt/pinvi/.dagster/storage
 
   cadvisor:
     profiles: ["observability"]
