@@ -473,6 +473,8 @@ fresh_stack_runtime_image_proof() {
   # bare 호출 금지: 이 함수는 항상 `if ! fresh_stack_runtime_image_proof` 형태로 불려
   # errexit이 꺼진 채 실행된다. provenance 검증이 실패해도 무시하고 넘어가면, 뒤이은
   # 정규식 검사는 검증되지 않은 이미지 ID든 그대로 통과시켜 이 함수가 성공을 반환한다.
+  # 그래서 여기서 `|| return $?`로 전파하고, pinvi_verify_runtime_image_provenance도 안쪽
+  # 단계(label 검증·결박)를 각각 명시적으로 전파한다 — 한 층만으로는 안쪽 실패가 삼켜진다.
   pinvi_verify_runtime_image_provenance app-api app-web || return $?
   FRESH_STACK_API_IMAGE_ID="$(pinvi_attested_runtime_image_id app-api)"
   FRESH_STACK_WEB_IMAGE_ID="$(pinvi_attested_runtime_image_id app-web)"
@@ -492,8 +494,23 @@ fresh_stack_runtime_image_proof() {
       || "$FRESH_STACK_DAGSTER_IMAGE_ID" =~ ^sha256:[0-9a-f]{64}$ ) ]]
 }
 
+# checked-in compose가 service에 핀한 image의 ID(digest reference → `sha256:<id>`).
+fresh_stack_pinned_image_id() {
+  local service="$1" image_reference image_id
+  if ! image_reference="$({ compose_config --format json; } | \
+    python3 "$PINVI_PROVENANCE_PY" compose-image-reference --service "$service")"; then
+    echo "could not resolve the pinned ${service} image reference" >&2
+    return 1
+  fi
+  if ! image_id="$(docker image inspect --format '{{.Id}}' "$image_reference")"; then
+    echo "could not inspect the pinned ${service} image" >&2
+    return 1
+  fi
+  printf '%s\n' "$image_id"
+}
+
 fresh_stack_dependency_image_id() {
-  local service="$1" container_ids container_id actual_image expected_image image_reference state
+  local service="$1" container_ids container_id actual_image expected_image state
   if ! container_ids="$(docker container ls --all \
     --filter "label=com.docker.compose.project=${PROJECT}" \
     --filter "label=com.docker.compose.service=${service}" --format '{{.ID}}')"; then
@@ -509,13 +526,7 @@ fresh_stack_dependency_image_id() {
     echo "could not inspect fresh deploy ${service} image identity" >&2
     return 1
   fi
-  if ! image_reference="$({ compose_config --format json; } | \
-    python3 "$PINVI_PROVENANCE_PY" compose-image-reference --service "$service")"; then
-    echo "could not resolve the pinned ${service} image reference" >&2
-    return 1
-  fi
-  if ! expected_image="$(docker image inspect --format '{{.Id}}' "$image_reference")"; then
-    echo "could not inspect the pinned ${service} image" >&2
+  if ! expected_image="$(fresh_stack_pinned_image_id "$service")"; then
     return 1
   fi
   [[ "$actual_image" == "$expected_image" && "$actual_image" =~ ^sha256:[0-9a-f]{64}$ ]] || {
@@ -539,6 +550,30 @@ fresh_stack_dependency_image_proof() {
   FRESH_STACK_POSTGRES_IMAGE_ID="$(fresh_stack_dependency_image_id app-postgres)" || return $?
   FRESH_STACK_RUSTFS_IMAGE_ID="$(fresh_stack_dependency_image_id app-rustfs)" || return $?
   FRESH_STACK_RUSTFS_INIT_IMAGE_ID="$(fresh_stack_dependency_image_id app-rustfs-init)" || return $?
+}
+
+# 재사용 모양 검사가 받는 app-db-runtime-role은 runtime을 띄운 `compose up`이 남긴 one-shot
+# 하나뿐이다: Compose service 컨테이너(one-off `compose run`이 아님)이고, 끝났거나(exited — 종료
+# 코드는 보지 않는다, 다음 `compose up`이 다시 돌려 성패를 가른다) 한 번도 돌지 않았고(created —
+# `compose up`이 app-postgres healthy를 기다리다 끊기면 이렇게 남는다), 핀 image로 만들어졌다.
+# label만 보면 owner/migrator env를 든 채 도는 `compose run -d` 사본이나 다른 image도 통과한다.
+fresh_stack_runtime_role_container_proof() {
+  local container_id="$1" shape expected_image
+  if ! shape="$(docker container inspect --format \
+    '{{ index .Config.Labels "com.docker.compose.oneoff" }} {{.State.Status}} {{.Image}}' \
+    "$container_id")"; then
+    echo "could not inspect the reusable fresh deploy app-db-runtime-role container" >&2
+    return 1
+  fi
+  if ! expected_image="$(fresh_stack_pinned_image_id app-db-runtime-role)"; then
+    return 1
+  fi
+  [[ "$expected_image" =~ ^sha256:[0-9a-f]{64}$ \
+    && ( "$shape" == "False exited ${expected_image}" \
+      || "$shape" == "False created ${expected_image}" ) ]] || {
+    echo "reusable fresh deploy refuses an app-db-runtime-role container that is not the exited or never-started Compose one-shot of the pinned image" >&2
+    return 2
+  }
 }
 
 fresh_stack_rustfs_resource_proof() {
@@ -891,6 +926,14 @@ require_reusable_fresh_stack_contract() {
     return 2
   }
   DAGSTER_PROFILE_OVERRIDE="$state_dagster_profile_enabled"
+  # 봉인된 effective digest는 runtime image를 결박(PINVI_*_IMAGE·PINVI_*_IMAGE_DIGEST export)한
+  # 뒤 계산됐다(capture_fresh_stack_migration_proof). standalone up/dagster는 새 프로세스라
+  # 아직 아무것도 결박되지 않았으므로 같은 순서로 먼저 결박한다 — 그러지 않으면 결박 전
+  # render를 봉인값과 비교해 migrate 뒤의 up/dagster가 항상 거부된다.
+  if ! fresh_stack_runtime_image_proof; then
+    echo "fresh stack runtime image provenance could not be verified" >&2
+    return 1
+  fi
   if ! effective_compose_sha256="$(effective_compose_config_sha256)"; then
     return 1
   fi
@@ -1003,6 +1046,7 @@ require_reusable_fresh_stack_contract() {
 require_reusable_fresh_stack_resource_shape() {
   local project_containers service container_count
   local postgres_count=0 rustfs_count=0 rustfs_init_count=0 api_count=0 web_count=0 dagster_count=0
+  local runtime_role_count=0
   local container_id project_volumes volume project_networks network
   if ! project_containers="$(docker container ls --all \
     --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.ID}}')"; then
@@ -1020,6 +1064,13 @@ require_reusable_fresh_stack_resource_shape() {
       app-postgres) ((postgres_count+=1)) ;;
       app-rustfs) ((rustfs_count+=1)) ;;
       app-rustfs-init) ((rustfs_init_count+=1)) ;;
+      # app-api·app-dagster가 service_completed_successfully로 기다리는 one-shot이라(app-web은
+      # app-api를 거쳐) runtime을 띄운 `compose up`마다 exited 상태로 남는다. 성공 여부는
+      # 다음 `compose up`이 이 one-shot을 다시 돌려 가른다.
+      app-db-runtime-role)
+        ((runtime_role_count+=1))
+        fresh_stack_runtime_role_container_proof "$container_id" || return $?
+        ;;
       app-api) ((api_count+=1)) ;;
       app-web) ((web_count+=1)) ;;
       app-dagster) ((dagster_count+=1)) ;;
@@ -1030,7 +1081,7 @@ require_reusable_fresh_stack_resource_shape() {
     esac
   done <<< "$project_containers"
   [[ "$postgres_count" == "1" && "$rustfs_count" == "1" \
-    && "$rustfs_init_count" -le 1 \
+    && "$rustfs_init_count" -le 1 && "$runtime_role_count" -le 1 \
     && "$api_count" == "$web_count" \
     && "$api_count" -le 1 && "$dagster_count" -le 1 ]] || {
     echo "reusable fresh deploy requires one database/object store and at most one runtime per service" >&2

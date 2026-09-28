@@ -41,6 +41,7 @@
   전환이 결정되면 이 절을 그대로 다시 세운다"). 기술적 blocker가 아니라 owner
   timing 결정이므로 여기서도 같은 상태로 둔다.
 - [ ] T-VN-H49 — standalone backup의 주기 실행, bounded retention, off-box 증거를 완료한다.
+- [ ] T-369 — `deploy-node.sh` fresh fallback 스택(Manager 부재 시)의 호스트 재부팅 복구. `app-postgres`·`app-api`·`app-web`에 restart policy가 없어 재부팅 뒤 내려간 채 남고, `up`의 재사용 검사는 PostgreSQL이 running이어야 해서 어떤 wrapper 명령도 되살리지 못한다(2026-09-28 리뷰). compose restart policy는 Manager 배포와 공유하므로 따로 판단한다.
 
 ## 모바일
 

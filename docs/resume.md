@@ -1,5 +1,26 @@
 # resume.md
 
+## 2026-09-28 (claude) — fresh deploy 의존성 image 증명 수정 (브랜치 `fix/fresh-stack-dependency-proof`)
+
+`api_image_provenance.py compose-image-reference`가 `--service`를 app-api/app-web/app-dagster로만
+받아 `deploy-node.sh`의 fresh 의존성 증명(app-postgres/app-rustfs/app-rustfs-init)이 exit 2로
+죽던 것을 고쳤다 — 받는 service는 resolved compose 문서가 정하고, 없는 service는 여전히 거부한다.
+회귀 테스트는 origin/main 스크립트로 빨갛고 이 브랜치로 초록이다(n150). 상세는 `docs/journal.md`.
+
+- 리뷰 반영: 이 수정으로 열린 `migrate` 뒤 standalone `up`/`dagster` 재사용 검사의 두 결함(결박 전
+  effective compose digest, 남는 `app-db-runtime-role` one-shot)을 고치고 두 프로세스 테스트로
+  확인했다. `scripts/api_image_provenance.py`를 api CI 트리거 세 목록에 넣었다.
+- 2차 리뷰 반영: 남은 `app-db-runtime-role`은 one-off 아님·exited·핀 image여야 받는다.
+  `pinvi_verify_runtime_image_provenance`가 `if !` 아래에서도 label 불일치를 전파한다(전엔 삼켜져
+  봉인됐다). 두 프로세스 테스트에 config-drift·runtime-role 3종·label-mismatch를 더하고 image-rebuilt가
+  결박 뒤 비교임을 확인하게 했다. attestation guard 테스트와 root ruff lint를 더했다.
+- 3차 리뷰 반영: 2차의 `pinvi_prepare_api_image_provenance || return $?`가 bare 호출부
+  (`docker-app.sh up`)에서도 prepare·materialize의 errexit을 꺼, mktemp 실패가 immutable archive
+  없이 PREPARED=1로 통과했다 — prepare·materialize가 단계마다 스스로 전파한다. 끊긴 `compose up`이
+  남기는 `created` runtime-role one-shot도 받는다.
+- 다음 한 작업: PR을 열고 CI green 후 머지. 실제 n150 fresh deploy·`migrate`+`up`은 실행하지 않았다.
+- 남은 것: fallback 스택의 재부팅 복구(restart policy 부재)는 `T-369`.
+
 ## 2026-09-20 (claude) — DB를 공용 제어 평면 instance로 이전 완료 (ADR-070, 2-저장소)
 
 사용자 지시: "kor-travel-shared-postgres로 db를 옮겨놔" → (중간 인터럽트)

@@ -2,6 +2,102 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-28 (claude) — fresh deploy 의존성 image 증명이 app-postgres에서 죽던 것
+
+2026-09-27 항목의 "별건"을 고쳤다.
+
+- 증상: `deploy-node.sh`의 `fresh_stack_dependency_image_proof`는
+  `api_image_provenance.py compose-image-reference --service app-postgres|app-rustfs|app-rustfs-init`을
+  부르는데, CLI가 `--service`를 argparse `choices`(`app-api`/`app-web`/`app-dagster`)로 묶어
+  exit 2 `invalid choice`로 끝났다. fresh deploy는 migration 뒤 상태 봉인
+  (`write_fresh_stack_state` → `capture_fresh_stack_migration_proof`)에서 항상 멈췄다.
+  n150에서 origin/main `fd07903f`의 rendered compose로 재현했다.
+- 수정: 고정 목록을 없앴다. 받는 service는 stdin의 resolved compose가 정하고, 문서에 없는
+  service는 `_compose_service`가 그대로 거부한다(exit 2). runtime attestation은
+  `api-image-provenance.sh`의 `app-api|app-web|app-dagster` guard를 그대로 쓴다.
+- 핀 image는 digest reference다. n150(Docker 29.6.1, containerd snapshotter)에서
+  `docker image inspect --format '{{.Id}}' <repo>@sha256:<d>`는 `sha256:<d>`를 돌려주고, 같은
+  image로 도는 컨테이너의 `.Image`와 같다 — 뒤 단계(image ID 동등, rustfs-init `exited 0`)는
+  digest reference로 동작한다.
+- 테스트: CLI 단위 1건 + checked-in compose의 핀 image와 fake docker로 실제
+  `fresh_stack_dependency_image_proof`를 도는 shell 테스트 4 case(sealed/absent/drift/init-failed).
+  origin/main 스크립트로는 5건 모두 실패, 이 브랜치로는 통과.
+- 리뷰 반영(같은 브랜치). 이 수정으로 한 달 동안 닿지 않던 봉인 뒤 단계가 처음 열린다 —
+  `migrate`는 이제 실패 정리(`compose down --volumes`) 대신 봉인된 스택을 남긴다. 그 다음
+  standalone `up`/`dagster`를 막던 두 결함을 같이 고쳤다.
+  1. `require_reusable_fresh_stack_contract`가 effective compose digest를 runtime image 결박
+     (`PINVI_*_IMAGE`/`PINVI_*_IMAGE_DIGEST` export) **전에** 계산했다. 봉인값은 결박 **뒤**에
+     계산되므로 새 프로세스의 `up`/`dagster`는 항상 "fresh stack state does not match"로 거부됐다
+     (리뷰가 n150에서 같은 compose를 결박 전/후로 render해 hash가 다름을 확인). `deploy`는 한
+     프로세스라 가려졌다. → digest 전에 `fresh_stack_runtime_image_proof`로 같은 순서로 결박한다.
+  2. runtime을 띄운 `compose up`은 `app-db-runtime-role` one-shot(app-api·app-dagster가
+     `service_completed_successfully`로 기다린다)을 exited로 남기는데, 재사용 모양 검사가 그것을
+     "unexpected Compose service"로 거부했다. → 그 service를 최대 1개 허용한다. 종료 코드는 보지 않는다 —
+     다음 `compose up`이 one-shot을 다시 돌려 성패를 가른다. 다른 모르는 service는 여전히 거부한다.
+     (처음엔 label만 봤다 — 2차 리뷰 반영 1 참고.)
+  - 테스트: 두 프로세스 테스트 4 case — 프로세스 1이 `write_fresh_stack_state`로 봉인하고, 아무것도
+    결박되지 않은 프로세스 2가 `require_reusable_fresh_stack_contract`를 돈다(fake docker의
+    `compose config`는 checked-in compose를 그 프로세스 환경으로 치환). migrate 직후·runtime 기동 뒤는
+    통과, 다시 빌드된 API image·모르는 service는 거부. 결박 수정만 되돌리면 3건, 모양 수정만
+    되돌리면 runtime 기동 뒤 1건이 빨갛다(n150).
+  - CI: `scripts/api_image_provenance.py`가 `api.yml` PR/push paths와 aggregate api 블록에 없어,
+    그 파일만 바꾼 PR은 이 회귀 테스트를 돌리지 않고 머지될 수 있었다. 세 목록에 넣었다.
+  - 남은 것: `app-postgres`·`app-api`·`app-web`에 restart policy가 없어 호스트 재부팅 뒤 fallback
+    스택은 내려간 채 남고, `up`의 재사용 검사는 PostgreSQL이 running이어야 해서 되살리지 못한다.
+    compose restart policy는 Manager 배포와 공유하므로 여기서 바꾸지 않고 `T-369`로 연다.
+    실제 n150 fresh deploy·`migrate`+`up`은 여전히 실행하지 않았다(검증은 fake docker 테스트까지).
+- 2차 리뷰 반영(LOW 4건, 같은 브랜치).
+  1. `app-db-runtime-role` 허용이 service label만 봤다 — 같은 label의 **도는** 컨테이너, one-off
+     (`compose run -d`, owner/migrator env를 든 채), 다른 image가 모두 통과했다(리뷰가 foreign image로
+     실측). → `fresh_stack_runtime_role_container_proof`: `com.docker.compose.oneoff=False`, `exited`,
+     `.Image`가 compose 핀 image ID와 같아야 받는다. 핀 image 해석은 의존성 증명과 같은
+     `fresh_stack_pinned_image_id`로 뽑아 공유한다. (`created`도 받게 됐다 — 3차 리뷰 반영 2.)
+  2. `pinvi_verify_runtime_image_provenance`의 단계가 bare였다. 호출부
+     (`fresh_stack_runtime_image_proof`)가 `if !` 아래라 errexit이 꺼져 있어, label 불일치는 메시지만
+     찍고 삼켜진 채 image ID를 결박하고 0을 반환했다 — `migrate`가 label을 검증하지 않은 web image를
+     봉인했다(리뷰 실측; `compose up` 직전의 bare 재검증이 기동은 막았다). → prepare·reference 해석·
+     label 읽기·`verify-label`·결박을 각각 `|| return $?`로 전파한다. 여기에 "errexit이 켜진 bare
+     호출부(`docker-app.sh` 등)의 동작은 같다"고 적었으나 **틀렸다** — prepare를 `||` 왼쪽에 둔
+     것이 bare 호출부에서도 prepare·materialize 전체의 errexit을 껐다(3차 리뷰 반영 1).
+  3. 두 프로세스 테스트의 image-rebuilt는 결박 수정을 되돌려도 통과했다(모든 재사용이 같은 문구로
+     거부됐으므로). → 프로세스 2가 실패할 때 결박한 API image ID를 찍게 하고, image-rebuilt는 새 ID를,
+     새 config-drift(프로세스 2만 `PINVI_API_WORKERS=2`)는 봉인 때와 같은 ID를 결박하고도 거부됨을 본다.
+  4. `scripts/api_image_provenance.py`를 api CI의 root script ruff 단계(`--select E4,E7,E9,F,I`)에 넣었다.
+     CLI `choices`가 없어진 뒤 attestation을 app-api/app-web/app-dagster로 묶는 층은 bash guard뿐이라
+     guard 테스트를 더했다(runtime 셋은 compose render에 닿는 대조군, 의존성 4개는 exit 2).
+  - 테스트(n150 일회용 `python:3.13`, `--noconftest`): 이 파일 73 passed / 1 failed — 실패는 실제
+    `docker` 바이너리가 필요한 기존 `test_resolved_compose_passes_provenance_to_every_runtime_image`.
+    변이: role proof 호출 제거 → runtime-role 3건, `api-image-provenance.sh`를 b59dba7로 → label-mismatch
+    1건, 재사용 결박 제거 → 8건(image-rebuilt·config-drift 포함), guard 제거 → 4건이 빨갛다. 같은
+    스크립트를 쓰는 다른 테스트 6개 파일은 b59dba7과 결과가 같다(46 passed, 기존 1 failed).
+- 3차 리뷰 반영(MED 1·LOW 1, 같은 브랜치).
+  1. (MED) 2차 반영 2의 `pinvi_prepare_api_image_provenance || return $?`가 함수를 `||` 왼쪽에 둬,
+     errexit이 켜진 bare 호출부에서도 prepare와 그 안의 `pinvi_materialize_api_build_context` 전체가
+     errexit 없이 돌았다. `docker-app.sh up`(Manager M05 격리 실행이 build 뒤 따로 띄우는 프로세스)은
+     prepare 없이 verify를 먼저 부른다. 리뷰 실측: resolve가 실패해도 `git archive ''`·compose render로
+     넘어갔고, isolated에서 mktemp가 실패하면 archive root가 비어 `/context`를 쓰려다 삼켜진 뒤 live
+     worktree compose로 drift 검사를 통과해 PREPARED=1로 0을 반환했다 — immutable archive도
+     verify-compose-build도 없이 `compose up`으로 갈 수 있었다(fail-open, 2차 반영이 만든 것).
+     → `||`는 그대로 두고, prepare(provenance 문서·환경·요청 revision·resolve 캡처, materialize 호출,
+     resolved_* 캡처)와 materialize(mktemp·mkdir·compose sha256·chmod)가 단계마다 스스로 전파한다.
+     실패 시 materialize는 만든 archive를 지우고 2를 반환한다.
+  2. (LOW) runtime-role proof가 `False exited <핀 id>`만 받았다. 끊긴 `up`(app-postgres healthy 대기
+     중 중단)은 one-shot을 `created`로 남기고, 그러면 이후 `up`/`dagster` 재시도가 수동 삭제 전까지
+     막힌다. 한 번도 돌지 않은 컨테이너는 exited만큼 inert하다 → `created`도 받는다. running·
+     restarting·paused, one-off, 다른 image는 여전히 거부한다.
+  - 테스트: `test_verify_stops_at_a_failing_prepare_step_without_errexit` 4 case(resolve/mktemp 실패 ×
+    bare/`if !` 호출) — 0이 아닌 종료, PREPARED=0·빈 archive root·원래 COMPOSE_FILE, compose render·
+    docker 호출 없음. 두 프로세스 테스트에 runtime-role-created(one-shot·app-api·app-web 모두 created)
+    받는 case.
+  - 실행(n150 일회용 `python:3.13`, `--network none`, 비root, `--noconftest`, wheel은 PyPI에서 받아
+    오프라인 설치): 이 파일 78 passed / 1 failed(기존 docker 바이너리 테스트, ec81390과 같은 실패
+    집합), 다른 6개 파일은 ec81390과 같다(46 passed, 기존 `test_tvn40` 1 failed). ruff 0.16.4
+    check·format(test 파일)·root select(provenance.py), `bash -n` 통과.
+  - 빨강: 새 테스트는 ec81390 스크립트로 4/4, b59dba7(bare prepare 호출)로 3/4(`if !` 둘 + bare
+    mktemp는 errexit 종료라 메시지 단언만) 빨갛다. runtime-role-created는 ec81390 deploy-node.sh로
+    빨갛다. 변이: prepare의 materialize 호출만 bare로 → mktemp 2건이 PREPARED=1로 빨갛다; mktemp
+    캡처만 bare로 → 비root에선 뒤의 mkdir 가드가 막아 메시지 단언으로만 빨갛다(root면 `/context`를 만든다).
+
 ## 2026-09-27 (claude) — rustfs-init이 minio/mc 없이 버킷을 만든다
 
 Manager의 M05 격리 실행(ADR-51 후속, Map ADR-100/101 포팅 뒤 첫 실제 실행)이 Map 쪽

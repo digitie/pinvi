@@ -56,6 +56,7 @@ jobs:
               startsWith("apps/api/"),
               startsWith("contracts/"),
               equals("scripts/api-image-provenance.sh"),
+              equals("scripts/api_image_provenance.py"),
               equals("scripts/validate-image-provenance.sh"),
               equals("scripts/trusted-backup-entrypoint.py"),
               equals(".dockerignore"),
