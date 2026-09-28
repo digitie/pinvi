@@ -32,7 +32,10 @@ Manager M05 격리 실행이 `--profile etl up --wait app-dagster`에서 `contai
   3. 비밀번호: `PINVI_DAGSTER_DB_PASSWORD` → 없으면 `PINVI_APP_DB_PASSWORD` → smoke 기본값. 두 값은
      어차피 app-dagster 한 컨테이너에 같이 들어간다. Manager M05 driver는 app DB 비밀번호를
      무작위로 주므로 **Manager 변경 없이** 무작위 비밀번호가 된다(owner·migrator 비밀은 app-dagster에
-     풀리지 않는다 — 테스트).
+     풀리지 않는다 — 테스트). 그 기본값에서 두 login은 **권한으로만** 갈리고 자격증명은 같다 — app
+     비밀번호를 가진 쪽(app-api)은 Dagster login으로도 붙는다. 운영은 아예 app role이
+     `pinvi_dagster`를 소유하므로(Manager `kor-travel-shared-db-init-pinvi`) 운영보다 약해진 것은
+     아니다. 자격증명까지 가르려면 `PINVI_DAGSTER_DB_PASSWORD`를 따로 준다.
   4. `app-dagster` 볼륨을 `DAGSTER_HOME` → `DAGSTER_HOME/storage`(compute log·local artifact)로 옮겼다.
      named volume은 처음 만들어질 때만 이미지 내용을 복사하므로, `DAGSTER_HOME`에 붙이면 구운
      `dagster.yaml`의 옛 사본이 남고 #558 이전에 만든 볼륨에서는 instance가 SQLite로 뜬다.
@@ -42,8 +45,9 @@ Manager M05 격리 실행이 `--profile etl up --wait app-dagster`에서 `contai
      `DAGSTER_HOME=/opt/pinvi/.dagster` + storage 볼륨으로 맞췄다. dev는 host network·고정 포트라
      n150에서 띄우지 않았다(compose 해석·테스트까지만).
   6. `deploy-node.sh`: 재사용 모양 검사가 `app-dagster-db-init`을 `app-db-runtime-role`과 같은 one-shot
-     증명(Compose service·exited/created·핀 image)으로 최대 1개 받는다 — Dagster profile을 봉인한
-     stack에서만. 증명 함수를 service 인자로 일반화했다(`fresh_stack_one_shot_container_proof`).
+     증명(Compose service·exited/created·핀 image)으로 최대 1개 받는다(처음엔 Dagster profile을 봉인한
+     stack에서만 받았다 — 아래 리뷰 반영 1). 증명 함수를 service 인자로 일반화했다
+     (`fresh_stack_one_shot_container_proof`).
   7. CI: 새 스크립트·dev compose·`apps/etl/dagster.yaml`·`apps/etl/Dockerfile`(새 테스트의 입력)을
      `api.yml` PR/push paths·aggregate api 블록·`bash -n` 목록에 넣었다.
 - live(같은 project, 이 브랜치 compose, Dagster 전용 비밀번호 없이): 93초에 healthy.
@@ -65,6 +69,53 @@ Manager M05 격리 실행이 `--profile etl up --wait app-dagster`에서 `contai
   빨갛다(처음엔 입력 거부 3건이 "스크립트를 못 열어도 sh가 2로 끝나는" 우연으로 초록이어서 메시지까지
   보게 고쳤다). `apps/etl/tests/test_dagster_topology.py` 5 passed. ruff 0.16.4 check·format(apps/api) 통과,
   `sh -n`/`bash -n` 통과.
+- 리뷰 반영(같은 브랜치). 두 MED는 모두 `deploy-node.sh`의 실패 경로가 exited `app-dagster-db-init`
+  (owner 비밀번호를 env에 든다)을 남겨 재시도를 수동 `docker rm` 전까지 막는 것이었다.
+  1. 재사용 모양 검사가 profile 0으로 봉인한 stack의 그 one-shot을 거부했다. 그런 stack에서
+     `dagster` 명령이 실패하면 app-dagster는 기록한 ID로 지워지지만 one-shot은 남고 재봉인도 되지 않아
+     `dagster`·`up`이 둘 다 막혔다. → 봉인된 profile과 상관없이 같은 one-shot 증명으로 받는다
+     (`app-db-runtime-role`과 같다). 그 증명의 핀 image는 profile 0의 resolved config에 없으므로
+     `fresh_stack_pinned_image_id`가 모델 전체(`compose --profile '*' config`)에서 찾는다 — 봉인하는
+     effective digest는 그대로 profile을 따른다.
+  2. 실패한 fresh `deploy`의 `cleanup_failed_fresh_stack`이 profile 없이 `down`했다. → `compose
+     --profile '*' down --volumes --remove-orphans`. n150 실측(Compose v5.2.0): app-dagster를 ID로 지운
+     뒤 profile 없는 `down -v --remove-orphans`는 exit 0인데 `app-dagster-db-init`(exited) 컨테이너 1개와
+     `app-dagster` 볼륨 1개를 남겼고(볼륨은 이 브랜치 전에도 남았다), `--profile '*'` down 뒤에는
+     컨테이너·볼륨·네트워크 0건이었다.
+  3. (LOW) bootstrap의 변경 전 검사가 database만 봤다 — 예약 이름 밖의 기존 role(restore·hotswap
+     role 등)을 Dagster login으로 주면 ALTER ROLE이 그 role의 비밀번호·속성을 바꾼 **뒤에야** 끝의
+     격리 검사가 exit 3을 냈다. → 같은 이름의 role이 이미 있으면 끝의 검사와 같은 role 모양(LOGIN,
+     특수 속성·NOINHERIT 위반 없음, membership 없음, 다른 database 소유 없음, 앱 DB CONNECT 없음)일
+     때만 받고, 아니면 아무것도 바꾸기 전에 exit 3.
+  4. (LOW) 문구: 앱 DB와 가르는 이유는 `alembic_version` 이름 충돌이 아니다(PinVi 것은
+     `app.alembic_version` — `version_table_schema="app"`). 실제 이유 — Dagster가 첫 기동에 테이블을
+     스스로 만드는데 M05 runtime login은 `pinvi`에 만들 수 없고(n150 PG 16.9 실측: database·public
+     schema CREATE 모두 `f`), Dagster 테이블을 M05 소유·백업·복원·hotswap 범위 밖에 두며, 운영도 같은
+     `pinvi_dagster`로 가른다 — 로 compose·스크립트·runbook·테스트 문구를 고쳤다. "격리"는 권한
+     분리이고 기본값에서 자격증명은 app과 같다는 것도 적었다(위 3). `docker-app.md`의 Dagster 문단은
+     마이그레이션 정책의 "이유:" 목록 뒤 §7.1로 옮겼다. `apps/etl/dagster.yaml`(#558) 머리말에도 같은
+     `alembic_version` 이유가 남아 있지만, 이미지 입력을 건드리지 않으려고 이 브랜치에서는 고치지 않았다.
+  - live 2차(n150 일회용 project `pinvi-dagster-probe-35b219da`, 같은 m05i 이미지 rev fd07903f — 이
+    브랜치는 이미지 입력을 바꾸지 않는다, Manager와 같은 무작위 owner/app/migrator 비밀번호,
+    Dagster 전용 비밀번호 없음): `--profile etl up --detach --no-build --wait app-dagster` **exit 0**,
+    40초. healthy, `RepositoryConnection`, run/event log/schedule storage `Postgres*Storage`, Dagster
+    테이블 22개 전부 `pinvi_dagster_app` 소유, CONNECT 교차 `f`, M05 sealed verifier `canonical`,
+    두 번째 `up --wait` exit 0. 기존 role 거부: 앱 DB CONNECT를 가진 role·`pinvi_app`의 member·NOLOGIN
+    role·CREATEDB role을 Dagster login으로 주면 전부 exit 3이고 그 role의 비밀번호 hash·속성이 그대로,
+    Dagster database도 만들어지지 않았다. 새 login + 다른 role 소유 database → exit 3(role 미생성,
+    ACL 그대로), 같은 login + 다른 database 이름 → exit 3, 실제 Dagster login에 앱 DB CONNECT →
+    exit 3(비밀번호 그대로), 회수 뒤 exit 0. `app-dagster-db-init`의 핀 image는 실제 Compose의
+    `--profile '*' config`로 풀리고 profile 없는 config로는 풀리지 않는다(`compose-image-reference` exit 2). teardown 뒤 컨테이너·볼륨·네트워크·/tmp 0건.
+    1차 live의 `up --wait` 종료 코드는 기록하지 않았다(healthy 93초만 적었다) — 2차가 그 자리를 채운다.
+    Manager driver의 실제 순서(`docker-app.sh build/up` → `--profile etl up --detach --build --wait
+    app-dagster`)와 deploy-node 경로는 live로 돌리지 않았다(deploy-node는 fake docker 테스트). 인수
+    증거는 이 커밋을 포함한 PinVi pin의 다음 M05 격리 실행이다.
+  - 테스트: 두 프로세스 재사용 테스트의 `dagster-storage-without-profile`을 거부 → 수용으로 바꾸고
+    (profile 0 봉인 + exited one-shot + 남은 `app-dagster` 볼륨), profile 0에서도 증명이 도는지
+    `dagster-storage-without-profile-foreign-image`(거부)를 더했다. 새
+    `test_failed_fresh_stack_cleanup_removes_profile_one_shots` — fake docker의 `down`이 Compose처럼
+    켜진 profile의 service만 걷는다. fake psql로 foreign role 거부(변경 전 멈춤)와 변경 전 probe의
+    role 모양 절, role wiring은 `:'app_db'`의 두 쓰임이 모두 CONNECT 조회인지 본다.
 - 사용자 질문("dagster code server도 프로젝트간 통합하는거 맞지?")에 대한 사실: Manager
   `docs/platform-topology.md` §7(2026-09-19 결정)의 목표는 **webserver·daemon·instance storage
   (`dagster_shared`)를 공용**으로 하고 **code-server는 프로젝트별로 분리 유지**하는 것이다(프로젝트마다

@@ -124,7 +124,8 @@ def test_app_dagster_storage_url_resolves_to_what_the_one_shot_creates(
     assert unquote(storage.password or "") == init_env["PINVI_DAGSTER_DB_PASSWORD"]
     assert storage.password == expected_password
     assert _database(dagster_env[env_name]) == init_env["PINVI_DAGSTER_DB"]
-    # 앱 DB와 다른 database — dagster-postgres의 `alembic_version`이 PinVi 것과 충돌한다.
+    # 앱 DB와 다른 database — Dagster가 첫 기동에 만드는 테이블을 M05 runtime login은 `pinvi`에
+    # 만들 수 없고, 그 테이블을 M05 소유·백업·복원·hotswap 범위 밖에 둔다(운영도 `pinvi_dagster`).
     assert _database(dagster_env[env_name]) != _database(dagster_env["PINVI_DATABASE_URL"])
     assert init_env["PINVI_DAGSTER_DB"] != init_env["POSTGRES_DB"]
     # 앱 runtime login이 아니다 — 그 role은 새 database를 소유하지 않는다.
@@ -325,6 +326,54 @@ def test_storage_bootstrap_refuses_a_foreign_database_before_any_change(tmp_path
     assert result.returncode == 3
     assert "belongs to another role" in result.stderr
     assert "mutation" not in calls
+
+
+def test_storage_bootstrap_refuses_a_foreign_role_before_any_change(tmp_path: Path) -> None:
+    """같은 이름의 기존 role이 평범한 Dagster login이 아니면 ALTER ROLE 전에 멈춘다.
+
+    예약 이름 목록(bootstrap owner·M05 네 role)에 없는 restore·hotswap role을 Dagster login으로
+    잘못 주면, 끝의 격리 검사가 실패하기 **전에** ALTER ROLE이 그 role의 비밀번호와 속성을 이미
+    바꿔 놓았다(2026-09-28 리뷰).
+    """
+
+    result, calls = _run_bootstrap(
+        tmp_path, {"PINVI_DAGSTER_DB_USER": "pinvi_restore_fence"}, existing="foreign-role"
+    )
+    assert result.returncode == 3
+    assert "is not a plain Dagster login" in result.stderr
+    assert calls == ["ready", "owner-probe"]
+
+
+def test_storage_bootstrap_pre_mutation_probe_covers_the_role_shape() -> None:
+    """변경 전 probe가 기존 role을 끝의 격리 검사와 같은 role 모양으로 묻는지 본다.
+
+    효과(실제 PostgreSQL에서 foreign role이 거부되고 그 role의 비밀번호·속성이 그대로인 것)는
+    n150 live run이 봤다 — 여기는 그 질의가 조용히 줄어드는 회귀를 막는다.
+    """
+
+    script = STORAGE_BOOTSTRAP.read_text(encoding="utf-8")
+    probe = script[
+        script.index('existing_database="$(') : script.index('case "${existing_database}" in')
+    ]
+    for clause in (
+        "role_row.rolcanlogin",
+        "NOT role_row.rolsuper",
+        "NOT role_row.rolcreaterole",
+        "NOT role_row.rolcreatedb",
+        "NOT role_row.rolreplication",
+        "NOT role_row.rolbypassrls",
+        "NOT role_row.rolinherit",
+        "existing_membership.member = (SELECT oid FROM existing_role)",
+        "existing_membership.roleid = (SELECT oid FROM existing_role)",
+        "owned_database.datdba = (SELECT oid FROM existing_role)",
+        "owned_database.datname <> :'dagster_db'",
+        "has_database_privilege((SELECT oid FROM existing_role), :'app_db', 'CONNECT')",
+        "THEN 'foreign-role'",
+    ):
+        assert clause in probe, clause
+    # probe는 읽기만 한다.
+    for mutation in ("CREATE", "ALTER", "GRANT", "REVOKE", "\\gexec", "dagster_password"):
+        assert mutation not in probe, mutation
 
 
 def test_storage_bootstrap_fails_closed_when_the_owner_is_unknown(tmp_path: Path) -> None:

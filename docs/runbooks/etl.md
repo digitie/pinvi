@@ -353,13 +353,22 @@ webserver 단일 서비스다 — `apps/etl/Dockerfile`을 빌드하고 host net
 instance storage는 두 compose 모두 PostgreSQL의 **별도 database `pinvi_dagster`**다
 (이미지에 구운 `dagster.yaml`이 `PINVI_DAGSTER_PG_URL`을 읽는다 — 이 env가 없으면 webserver가
 `DagsterInvalidConfigError: ... "PINVI_DAGSTER_PG_URL" which is not set`으로 기동 중에 죽는다).
+앱 DB와 가르는 이유는 테이블 이름 충돌이 아니다(PinVi Alembic 표는 `app.alembic_version`,
+Dagster 것은 `public.alembic_version`): Dagster는 첫 기동에 자기 테이블을 스스로 만드는데 M05
+runtime login은 `pinvi`에 테이블을 만들 수 없는 non-owner이고, Dagster 테이블을 M05의 소유·백업·
+복원·hotswap 범위 밖에 두며, 운영(Manager)도 같은 `pinvi_dagster`로 가른다.
 
 - app compose: `app-dagster`가 `app-dagster-db-init`(profile `etl`, one-shot)의 성공을 기다린다.
   그 one-shot(`infra/postgres/bootstrap-pinvi-dagster-db.sh`)이 `app-db-runtime-role` 뒤에
   `pinvi_dagster`와 그것만 소유하는 login `PINVI_DAGSTER_DB_USER`(기본 `pinvi_dagster_app`)를
   멱등하게 만들고 검증한다 — M05 role이 아니고, 앱 DB에 CONNECT가 없고, 앱 runtime role은
-  `pinvi_dagster`에 붙지 못한다. 비밀번호는 `PINVI_DAGSTER_DB_PASSWORD`, 없으면
-  `PINVI_APP_DB_PASSWORD`(없으면 smoke 기본값)를 쓴다.
+  `pinvi_dagster`에 붙지 못한다. 같은 이름의 role이 이미 있으면 그것이 이미 이 모양(평범한
+  login, membership·다른 database 소유·앱 DB CONNECT 없음)일 때만 받고, 아니면 아무것도 바꾸기
+  전에 exit 3으로 거부한다. 비밀번호는 `PINVI_DAGSTER_DB_PASSWORD`, 없으면
+  `PINVI_APP_DB_PASSWORD`(없으면 smoke 기본값)를 쓴다 — 그때 두 login은 **권한으로만** 갈리고
+  자격증명은 같다(app 비밀번호를 가진 쪽은 Dagster login으로도 붙는다). 자격증명까지 가르려면
+  `PINVI_DAGSTER_DB_PASSWORD`를 따로 준다. 운영은 Manager의 `kor-travel-shared-db-init-pinvi`가
+  app role 자체를 `pinvi_dagster` 소유자로 만든다(`PINVI_DAGSTER_PG_URL`도 app login).
 - dev compose: `dagster-db-init`이 dev superuser로 `pinvi_dagster`를 만들고, `dagster`는 이미지의
   `DAGSTER_HOME`(`/opt/pinvi/.dagster`)을 쓴다.
 - 두 compose 모두 볼륨은 `DAGSTER_HOME`이 아니라 `DAGSTER_HOME/storage`(compute log·local

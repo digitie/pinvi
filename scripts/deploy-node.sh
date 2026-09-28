@@ -495,9 +495,12 @@ fresh_stack_runtime_image_proof() {
 }
 
 # checked-in compose가 service에 핀한 image의 ID(digest reference → `sha256:<id>`).
+# 활성 profile과 상관없이 모델 전체(`--profile '*'`)에서 찾는다 — profile은 image 참조를 바꾸지
+# 않고, Dagster profile 없이 봉인한 stack에 남은 etl one-shot(app-dagster-db-init)의 핀 image도
+# 풀려야 한다. 봉인하는 effective digest는 여전히 profile을 따르는 compose_config로 계산한다.
 fresh_stack_pinned_image_id() {
   local service="$1" image_reference image_id
-  if ! image_reference="$({ compose_config --format json; } | \
+  if ! image_reference="$({ compose --profile '*' config --format json; } | \
     python3 "$PINVI_PROVENANCE_PY" compose-image-reference --service "$service")"; then
     echo "could not resolve the pinned ${service} image reference" >&2
     return 1
@@ -1073,13 +1076,12 @@ require_reusable_fresh_stack_resource_shape() {
         fresh_stack_one_shot_container_proof app-db-runtime-role "$container_id" || return $?
         ;;
       # app-dagster가 service_completed_successfully로 기다리는 Dagster storage one-shot(etl
-      # profile). Dagster profile을 봉인한 stack에서 app-dagster를 띄운 `compose up`만 남긴다.
+      # profile). 봉인된 Dagster profile과 상관없이 받는다: profile 0으로 봉인한 stack에서
+      # `dagster` 명령이 실패하면 app-dagster는 기록한 ID로 지워지지만 이 one-shot은 남고 재봉인도
+      # 되지 않는다 — 그것을 거부하면 `dagster`/`up` 재시도가 수동 삭제 전까지 막힌다.
+      # app-db-runtime-role과 같이 도는 권한이 없고, 다음 `compose up`이 다시 돌려 성패를 가른다.
       app-dagster-db-init)
         ((dagster_db_init_count+=1))
-        if ! dagster_profile_enabled; then
-          echo "reusable fresh deploy refuses an app-dagster-db-init container without a sealed Dagster profile" >&2
-          return 2
-        fi
         fresh_stack_one_shot_container_proof app-dagster-db-init "$container_id" || return $?
         ;;
       app-api) ((api_count+=1)) ;;
@@ -1156,7 +1158,11 @@ cleanup_failed_fresh_stack() {
     return 2
   }
   log "cleaning failed fresh stack resources for a safe retry"
-  if ! compose down --volumes --remove-orphans; then
+  # 모든 profile을 켠다. Compose `down`은 켜진 service만 걷고, `--remove-orphans`도 꺼진 profile의
+  # service 컨테이너는 모델에 있는 것으로 보아 지우지 않는다(n150 실측). profile 없이 내리면
+  # etl의 app-dagster-db-init(owner 비밀번호를 env에 든 exited one-shot)이 남아 재시도 `deploy`가
+  # "existing Compose project"로 막힌다. 목록 대신 `*`라 새 profile의 one-shot도 같이 걷힌다.
+  if ! compose --profile '*' down --volumes --remove-orphans; then
     echo "failed fresh stack resources could not be cleaned; refusing retry" >&2
     return 1
   fi

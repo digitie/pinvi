@@ -74,10 +74,10 @@ services:
           exit 1
         done
 
-  # Dagster instance storage database. 앱 DB(`pinvi`)와 같은 database는 쓸 수 없다 —
-  # dagster-postgres의 `alembic_version`이 PinVi Alembic의 것과 충돌한다(apps/etl/dagster.yaml).
-  # dev는 앱도 bootstrap superuser로 붙으므로 database만 가른다. 격리 login·검증은
-  # infra/docker-compose.app.yml의 app-dagster-db-init이 맡는다.
+  # Dagster instance storage database. 앱 DB(`pinvi`)와 가른다 — app compose·운영과 같은 모양이고,
+  # Dagster 테이블을 앱 DB의 M05 소유·백업·복원 범위 밖에 둔다(이유는
+  # infra/postgres/bootstrap-pinvi-dagster-db.sh 머리말). dev는 앱도 bootstrap superuser로 붙으므로
+  # database만 가른다. 격리 login·검증은 infra/docker-compose.app.yml의 app-dagster-db-init이 맡는다.
   dagster-db-init:
     profiles: ["etl"]
     image: postgis/postgis:16-3.5-alpine

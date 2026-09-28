@@ -89,7 +89,13 @@ def test_dagster_storage_bootstrap_never_hands_sql_an_m05_role() -> None:
     )
     psql_variables = set(re.findall(r'--set="([a-z_]+)=', bootstrap))
     assert psql_variables == {"dagster_role", "dagster_password", "dagster_db", "app_db"}
-    assert bootstrap.count(":'app_db'") == 1
+    # 앱 DB 이름은 CONNECT 여부를 묻는 데만 쓴다 — 변경 전 probe와 끝의 격리 검사, 두 곳.
+    app_db_uses = [line for line in bootstrap.splitlines() if ":'app_db'" in line]
+    assert len(app_db_uses) == 2
+    assert all(
+        re.search(r"has_database_privilege\(\(SELECT oid FROM \w+\), :'app_db', 'CONNECT'\)", line)
+        for line in app_db_uses
+    ), app_db_uses
     assert "has_database_privilege((SELECT oid FROM dagster_role), :'app_db', 'CONNECT')" in (
         bootstrap
     )

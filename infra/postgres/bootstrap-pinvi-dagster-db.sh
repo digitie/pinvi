@@ -1,14 +1,21 @@
 #!/usr/bin/env sh
 # Dagster instance storage: its own database, owned by its own login.
 #
-# apps/etl/dagster.yaml reads the instance storage DSN from PINVI_DAGSTER_PG_URL, and
-# that DSN cannot name the PinVi app database: dagster-postgres keeps its schema
-# history in a table called `alembic_version`, the same name PinVi's Alembic uses.
-# Production gets this database from the Docker Manager
-# (`kor-travel-shared-db-init-pinvi`). This one-shot is the same step for PinVi's own
-# Compose stacks (smoke, the Manager's isolated M05 run, fresh deploy-node stacks).
+# apps/etl/dagster.yaml reads the instance storage DSN from PINVI_DAGSTER_PG_URL. That
+# DSN names a database of its own, not the PinVi app database (`pinvi`), because:
+#   - Dagster creates its tables itself on first start (`should_autocreate_tables`),
+#     and the M05 runtime login is a non-owner that cannot create tables in `pinvi`;
+#   - Dagster's run, event and schedule tables stay out of what M05 owns, backs up,
+#     restores and hot-swaps in `pinvi`;
+#   - production splits it the same way (`pinvi_dagster`).
+# It is not a table-name clash: PinVi's Alembic table is `app.alembic_version`
+# (version_table_schema="app"), Dagster's is `public.alembic_version`.
 #
-# The login is not one of the M05 roles, and none of the M05 roles gains anything:
+# Production gets `pinvi_dagster` from the Docker Manager
+# (`kor-travel-shared-db-init-pinvi`), which makes the PinVi app role itself its owner.
+# This one-shot does that job for PinVi's own Compose stacks (smoke, the Manager's
+# isolated M05 run, fresh deploy-node stacks) with a login of its own, so the app
+# runtime role gains nothing:
 #   - LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT,
 #     not a member of any role and no role is a member of it;
 #   - it owns the Dagster database and nothing else, so Dagster's
@@ -17,10 +24,16 @@
 #     connect to it;
 #   - it has no CONNECT on the app database. app-db-runtime-role revokes PUBLIC
 #     CONNECT there, and Compose runs this one-shot only after that one-shot succeeded.
+# The separation is by privilege. Its password is PINVI_DAGSTER_DB_PASSWORD, and the
+# app compose falls back to PINVI_APP_DB_PASSWORD when that is unset — then whoever
+# holds the app login's password can also log in as this one. Set
+# PINVI_DAGSTER_DB_PASSWORD to separate the credentials too.
 #
-# Idempotent. A re-run re-applies the role attributes and the password. A Dagster
-# database that already exists but belongs to another role is refused before any
-# change, not re-owned: its tables would still belong to the old owner.
+# Idempotent. A re-run re-applies the role attributes and the password. Before any
+# change it refuses (exit 3) a Dagster database that belongs to another role (its
+# tables would still belong to the old owner), and an existing role of that name that
+# is not already a plain Dagster-shaped login: re-applying attributes and a password
+# would otherwise rewrite another principal before the final check noticed.
 
 set -eu
 
@@ -102,24 +115,59 @@ until psql --no-psqlrc --no-password --tuples-only --no-align --host="${PINVI_DB
   sleep 1
 done
 
-# Refuse before any mutation: a Dagster database that exists but belongs to another
-# role is not ours to re-own or to change the ACL of.
+# Refuse before any mutation. An existing role of the Dagster login's name must already
+# be the plain login this script makes (a half-created one from an earlier run is):
+# otherwise the ALTER ROLE below would hand, say, a restore or hotswap role a new
+# password and attributes. A Dagster database that exists but belongs to another role
+# is not ours to re-own or to change the ACL of.
 existing_database="$(
   psql --no-psqlrc --no-password --set=ON_ERROR_STOP=1 --quiet --tuples-only --no-align \
     --host="${PINVI_DB_HOST}" --port="${PINVI_DB_PORT}" \
     --username="${POSTGRES_USER}" --dbname="${POSTGRES_DB}" \
     --set="dagster_role=${PINVI_DAGSTER_DB_USER}" \
-    --set="dagster_db=${PINVI_DAGSTER_DB}" <<'SQL'
+    --set="dagster_db=${PINVI_DAGSTER_DB}" \
+    --set="app_db=${POSTGRES_DB}" <<'SQL'
+WITH existing_role AS (
+    SELECT * FROM pg_roles WHERE rolname = :'dagster_role'
+)
 SELECT CASE
+    WHEN EXISTS (SELECT 1 FROM existing_role) AND (
+        NOT EXISTS (
+            SELECT 1 FROM existing_role role_row
+            WHERE role_row.rolcanlogin
+              AND NOT role_row.rolsuper
+              AND NOT role_row.rolcreaterole
+              AND NOT role_row.rolcreatedb
+              AND NOT role_row.rolreplication
+              AND NOT role_row.rolbypassrls
+              AND NOT role_row.rolinherit
+        )
+        OR EXISTS (
+            SELECT 1 FROM pg_auth_members existing_membership
+            WHERE existing_membership.member = (SELECT oid FROM existing_role)
+               OR existing_membership.roleid = (SELECT oid FROM existing_role)
+        )
+        OR EXISTS (
+            SELECT 1 FROM pg_database owned_database
+            WHERE owned_database.datdba = (SELECT oid FROM existing_role)
+              AND owned_database.datname <> :'dagster_db'
+        )
+        OR has_database_privilege((SELECT oid FROM existing_role), :'app_db', 'CONNECT')
+    ) THEN 'foreign-role'
     WHEN NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'dagster_db') THEN 'absent'
     WHEN (SELECT datdba FROM pg_database WHERE datname = :'dagster_db')
-        = (SELECT oid FROM pg_roles WHERE rolname = :'dagster_role') THEN 'owned'
+        = (SELECT oid FROM existing_role) THEN 'owned'
     ELSE 'foreign'
 END;
 SQL
 )"
 case "${existing_database}" in
   absent|owned ) ;;
+  foreign-role )
+    unset PGPASSWORD
+    echo "a role with the Dagster login's name already exists and is not a plain Dagster login; refusing to change it" >&2
+    exit 3
+    ;;
   foreign )
     unset PGPASSWORD
     echo "the Dagster storage database already exists and belongs to another role; refusing to adopt it" >&2
@@ -127,7 +175,7 @@ case "${existing_database}" in
     ;;
   * )
     unset PGPASSWORD
-    echo "could not determine the Dagster storage database owner" >&2
+    echo "could not inspect the existing Dagster login and storage database" >&2
     exit 1
     ;;
 esac

@@ -1396,16 +1396,35 @@ command = args[:2]
 if command == ["compose", "-p"]:
     import yaml
 
-    if args[2] != world["project"] or args[-3:] != ["config", "--format", "json"]:
+    if args[2] != world["project"]:
         fail(41)
     document = yaml.safe_load(Path(options("-f")[0]).read_text(encoding="utf-8"))
     active = set(options("--profile"))
-    document["services"] = {
-        name: service
+    enabled = {
+        name
         for name, service in document["services"].items()
-        if not service.get("profiles") or active & set(service["profiles"])
+        if not service.get("profiles") or "*" in active or active & set(service["profiles"])
     }
-    print(json.dumps(interpolate(document)))
+    if args[-3:] == ["config", "--format", "json"]:
+        document["services"] = {
+            name: service for name, service in document["services"].items() if name in enabled
+        }
+        print(json.dumps(interpolate(document)))
+    elif args[-3:] == ["down", "--volumes", "--remove-orphans"]:
+        # Compose `down`은 켜진 service의 컨테이너만 걷는다. `--remove-orphans`는 모델에 없는
+        # service만 고아로 보므로, 꺼진 profile의 service 컨테이너는 둘 다에 걸리지 않고 남는다
+        # (pkg/compose/down.go·containers.go isOrphaned, n150 Compose v5.2.0 실측).
+        world["containers"] = [
+            container
+            for container in world["containers"]
+            if container["service"] in document["services"]
+            and container["service"] not in enabled
+        ]
+        Path(os.environ["PINVI_TEST_DIR"], "world.json").write_text(
+            json.dumps(world), encoding="utf-8"
+        )
+    else:
+        fail(41)
 elif command == ["image", "inspect"] and args[2] == "--format":
     image = images.get(args[4]) or images_by_id.get(args[4])
     if image is None:
@@ -1500,15 +1519,20 @@ _RUNTIME_STARTED_MODES = {
     "runtime-role-foreign-image",
 }
 
-# Dagster profile을 봉인한 stack에서 app-dagster까지 띄운 모양. `compose --profile etl up
-# app-dagster`는 app-db-runtime-role과 함께 Dagster storage one-shot(app-dagster-db-init)을 남긴다.
+# `compose --profile etl up app-dagster`가 app-db-runtime-role과 함께 남기는 Dagster storage
+# one-shot(app-dagster-db-init). without-profile은 Dagster profile 없이(0) 봉인한 stack에서
+# `dagster` 명령이 실패한 뒤의 모양이다 — app-dagster는 기록한 ID로 지워졌고 one-shot만 남았다.
+_DAGSTER_STORAGE_WITHOUT_PROFILE_MODES = {
+    "dagster-storage-without-profile",
+    "dagster-storage-without-profile-foreign-image",
+}
 _DAGSTER_STORAGE_MODES = {
     "dagster-storage-exited",
     "dagster-storage-created",
     "dagster-storage-running",
     "dagster-storage-one-off",
     "dagster-storage-foreign-image",
-    "dagster-storage-without-profile",
+    *_DAGSTER_STORAGE_WITHOUT_PROFILE_MODES,
 }
 
 
@@ -1557,9 +1581,12 @@ def test_standalone_up_reuses_a_stack_sealed_by_another_process(
       그것을 거부하면 standalone up/dagster 재시도가 수동 삭제 전까지 막힌다.
     - label-mismatch: `if !` 아래(errexit 꺼짐)의 label 검증 실패가 삼켜지지 않고 봉인을
       막는다.
-    - dagster-storage-*: Dagster profile을 봉인한 stack에서 `--profile etl up app-dagster`가
-      남기는 `app-dagster-db-init`도 같은 one-shot 증명(Compose service·exited/created·핀 image)을
-      거친다. profile을 봉인하지 않은 stack의 그 컨테이너는 거부한다.
+    - dagster-storage-*: `--profile etl up app-dagster`가 남기는 `app-dagster-db-init`도 같은
+      one-shot 증명(Compose service·exited/created·핀 image)을 거친다. 봉인된 Dagster profile과
+      상관없이 받는다 — profile 0으로 봉인한 stack에서 `dagster`가 실패하면 app-dagster는 ID로
+      지워지지만 one-shot은 남고 재봉인도 되지 않는다. 그것을 거부하면 `dagster`/`up` 재시도가
+      수동 삭제 전까지 막혔다(2026-09-28 리뷰). profile 0에서도 증명은 돈다(foreign image 거부 —
+      그 service는 profile 0의 resolved config에 없으므로 핀 image를 모델 전체에서 찾아야 한다).
     """
 
     project = "pinvi-test"
@@ -1673,7 +1700,9 @@ pinvi_prepare_api_image_provenance require-immutable
         "PINVI_FRESH_STACK_STATE_PATH": str(state_dir / "fresh-stack"),
         "PINVI_TEST_DIR": str(tmp_path),
     }
-    dagster_sealed = mode in _DAGSTER_STORAGE_MODES and mode != "dagster-storage-without-profile"
+    dagster_sealed = (
+        mode in _DAGSTER_STORAGE_MODES and mode not in _DAGSTER_STORAGE_WITHOUT_PROFILE_MODES
+    )
     if dagster_sealed:
         env["PINVI_ENABLE_DAGSTER"] = "1"
 
@@ -1732,7 +1761,10 @@ pinvi_prepare_api_image_provenance require-immutable
             storage_init["status"] = "running"
         elif mode == "dagster-storage-one-off":
             storage_init["oneoff"] = "True"
-        elif mode == "dagster-storage-foreign-image":
+        elif mode in {
+            "dagster-storage-foreign-image",
+            "dagster-storage-without-profile-foreign-image",
+        }:
             storage_init["image"] = f"sha256:{'9' * 64}"
         world["containers"] += [
             container("app-db-runtime-role", "exited"),
@@ -1748,7 +1780,8 @@ pinvi_prepare_api_image_provenance require-immutable
                     {"/opt/pinvi/.dagster/storage": f"{project}_app-dagster"},
                 )
             )
-            world["volumes"].append(f"{project}_app-dagster")
+        # `compose up app-dagster`가 만든 named volume은 profile 0에서 실패한 뒤에도 남는다.
+        world["volumes"].append(f"{project}_app-dagster")
     elif mode == "image-rebuilt":
         images[reference("app-api")]["id"] = f"sha256:{'f' * 64}"
     elif mode == "config-drift":
@@ -1773,6 +1806,7 @@ fi
         "runtime-role-created",
         "dagster-storage-exited",
         "dagster-storage-created",
+        "dagster-storage-without-profile",
     }:
         assert reused.returncode == 0, reused.stderr
         return
@@ -1787,8 +1821,8 @@ fi
         "dagster-storage-running": "refuses an app-dagster-db-init container that is not",
         "dagster-storage-one-off": "refuses an app-dagster-db-init container that is not",
         "dagster-storage-foreign-image": "refuses an app-dagster-db-init container that is not",
-        "dagster-storage-without-profile": (
-            "refuses an app-dagster-db-init container without a sealed Dagster profile"
+        "dagster-storage-without-profile-foreign-image": (
+            "refuses an app-dagster-db-init container that is not"
         ),
     }[mode]
     assert expected in reused.stderr, reused.stderr
@@ -1796,6 +1830,105 @@ fi
         assert f"bound-api=sha256:{'f' * 64}" in reused.stdout.splitlines()
     elif mode == "config-drift":
         assert f"bound-api={sealed_api_image_id}" in reused.stdout.splitlines()
+
+
+def test_failed_fresh_stack_cleanup_removes_profile_one_shots(tmp_path: Path) -> None:
+    """실패한 fresh `deploy`의 정리가 etl profile의 one-shot까지 걷는다.
+
+    Dagster를 켠 fresh `deploy`는 `--profile etl up app-dagster`로 app-dagster-db-init을 만든다.
+    뒤 단계가 실패하면 EXIT trap이 기록한 runtime ID(app-api·app-web·app-dagster)를 지우고
+    `cleanup_failed_fresh_stack`이 project를 내린다. profile 없이 내리면 Compose는 그 exited
+    one-shot(owner 비밀번호를 env에 든다)을 남기고, 재시도 `deploy`는 "existing Compose
+    project"로 거부됐다(2026-09-28 리뷰). fake docker의 `down`은 Compose처럼 켜진 profile의
+    service만 걷고, 꺼진 profile의 service를 고아로 보지 않는다.
+    """
+
+    project = "pinvi-test"
+    compose_text = (ROOT / "infra/docker-compose.app.yml").read_text(encoding="utf-8")
+    left_by_deploy = (
+        "app-postgres",
+        "app-rustfs",
+        "app-rustfs-init",
+        "app-db-runtime-role",
+        "app-dagster-db-init",
+    )
+    world = {
+        "project": project,
+        "images": {},
+        "containers": [
+            {
+                "id": hashlib.sha256(service.encode()).hexdigest()[:12],
+                "name": f"{project}-{service}-1",
+                "service": service,
+                "image": f"sha256:{hashlib.sha256(service.encode()).hexdigest()}",
+                "status": "running" if service in {"app-postgres", "app-rustfs"} else "exited",
+                "exit_code": 0,
+                "oneoff": "False",
+                "mounts": {},
+                "networks": [f"{project}_default"],
+            }
+            for service in left_by_deploy
+        ],
+        "volumes": [f"{project}_app-postgres", f"{project}_app-rustfs", f"{project}_app-dagster"],
+        "networks": {f"{project}_default": "e" * 64},
+    }
+    (tmp_path / "world.json").write_text(json.dumps(world), encoding="utf-8")
+    (tmp_path / "infra").mkdir()
+    (tmp_path / "infra/docker-compose.app.yml").write_text(compose_text, encoding="utf-8")
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    for dependency in (
+        "api-image-provenance.sh",
+        "api_image_provenance.py",
+        "migrator-lifecycle-lock.sh",
+    ):
+        shutil.copy2(ROOT / "scripts" / dependency, scripts_dir / dependency)
+    script = scripts_dir / "deploy-node.sh"
+    script.write_text(
+        (ROOT / "scripts/deploy-node.sh")
+        .read_text(encoding="utf-8")
+        .rsplit('\nmain "$@"', maxsplit=1)[0]
+        + "\n",
+        encoding="utf-8",
+    )
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(fake_bin / "python3", f'#!/bin/sh\nexec "{sys.executable}" "$@"\n')
+    fake_docker = tmp_path / "fake_docker.py"
+    fake_docker.write_text(_FRESH_STACK_FAKE_DOCKER, encoding="utf-8")
+    _write_executable(
+        fake_bin / "docker", f'#!/bin/sh\nexec "{sys.executable}" "{fake_docker}" "$@"\n'
+    )
+
+    result = subprocess.run(  # noqa: S603 - fixed local shell fixture
+        [
+            "/usr/bin/bash",
+            "-c",
+            'source "$1"\nFRESH_STACK_RESOURCE_MUTATION_STARTED=1\n'
+            "if ! cleanup_failed_fresh_stack; then exit 7; fi\n",
+            "bash",
+            str(script),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": f"{fake_bin}:/usr/bin:/bin",
+            "PINVI_ROOT_DIR": str(tmp_path),
+            "PINVI_ENV_FILE": str(tmp_path / "missing.env"),
+            "PINVI_DOCKER_PROJECT": project,
+            "PINVI_DOCKER_MANAGER_UNAVAILABLE": "1",
+            "PINVI_DEPLOY_FRESH_STACK": "1",
+            "PINVI_TEST_DIR": str(tmp_path),
+        },
+        cwd=tmp_path,
+    )
+
+    assert result.returncode == 0, result.stderr
+    left = json.loads((tmp_path / "world.json").read_text(encoding="utf-8"))["containers"]
+    assert [container["service"] for container in left] == [], (
+        "실패한 fresh stack 정리 뒤에 project 컨테이너가 남았다 — 재시도 deploy가 거부된다"
+    )
 
 
 @pytest.mark.parametrize("failure_mode", ["archive", "build", "label"])
