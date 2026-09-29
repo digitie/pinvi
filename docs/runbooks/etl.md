@@ -455,10 +455,10 @@ soak config: `config/etl-datasets.soak.json` (12시간 이내 schedule로 압축
 
 - `/server_info`가 `dagster_version`, `dagster_webserver_version`, `dagster_graphql_version`을
   반환한다.
-- GraphQL `repositoriesOrError`에서 `pinvi.etl.definitions` code location, app-owned jobs,
+- GraphQL `repositoryOrError`(`pinvi.etl.definitions` location으로 좁힌 조회)에서 app-owned jobs,
   assets, schedules가 보인다.
 - 모든 schedule의 `execution_timezone`은 `Asia/Seoul`이다.
-- `runsOrError(limit=5)`의 최신 run status를 `/admin/etl` Pinvi job row에 표시한다.
+- `runsOrError(limit=5, filter=.dagster/repository=__repository__@pinvi.etl.definitions)`의 최신 run status를 `/admin/etl` Pinvi job row에 표시한다.
 - run tag 값은 Admin 응답에 싣지 않는다. 최신 run은 `run_id`, `status`, `job_name`,
   timestamp만 노출한다.
 

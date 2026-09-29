@@ -200,8 +200,16 @@ Dagster `run_failure_sensor`(`pinvi/etl/sensors.py`의 `pinvi_run_failure_sensor
 
 T-243 기준 `/admin/etl/summary`는 Pinvi Dagster webserver의 `/server_info`와 `/graphql`을
 읽는다. `/server_info`는 Dagster version과 webserver health를 확인하고, GraphQL
-`repositoriesOrError` / `runsOrError`는 code location repository, job, asset, schedule,
+`repositoryOrError` / `runsOrError`는 code location repository, job, asset, schedule,
 최근 run 상태를 가져온다.
+
+두 조회는 **PinVi code location(`pinvi.etl.definitions`) 하나로 좁힌다** —
+`repositoryOrError(repositorySelector: {repositoryLocationName, repositoryName: "__repository__"})`와
+`runsOrError(filter: {tags: [{key: ".dagster/repository", value: "__repository__@pinvi.etl.definitions"}]})`.
+공유 Dagster plane(webserver 하나가 여러 프로젝트의 code location을 싣는다)에서 필터 없는 조회는
+다른 테넌트의 repository·run을 섞는다. 좁힌 조회는 PinVi 전용 webserver에서도 같은 결과라 이전
+전후 모두 맞다. location 이름의 정본은 `apps/etl/workspace.yaml`이고 API 상수는 테스트로 그 파일에
+묶인다. 공유 webserver에 PinVi location이 아직 없으면 `RepositoryNotFoundError`로 `degraded`가 된다.
 
 이 live snapshot은 운영 관측용이며 mutation을 수행하지 않는다. GraphQL이 실패하면
 `pinvi.status=degraded`로 표시하고 static registry(`assets`, `jobs`, `schedules`)와

@@ -56,6 +56,21 @@ from app.services.kor_travel_map_ops_projection import (
 
 PINVI_DAGSTER_PROBE_TIMEOUT_SECONDS = 2.0
 PINVI_DAGSTER_RECENT_RUN_LIMIT = 5
+
+# PinVi Dagster 조회는 **PinVi code location 하나로만** 좁힌다. 공유 Dagster plane
+# (webserver 하나가 Map·geo·weather 등의 code location을 함께 싣는다)에서
+# `repositoriesOrError`·필터 없는 `runsOrError`는 다른 테넌트의 repository와
+# run까지 돌려준다. 좁힌 조회는 지금의 PinVi 전용 webserver에서도 같은 결과를
+# 내므로 이전 전후 모두에서 맞다.
+#
+# location 이름의 정본은 `apps/etl/workspace.yaml`의 `location_name`이다(=
+# `pyproject.toml [tool.dagster].module_name`). 여기 값은 테스트
+# (`test_admin_etl_dagster_probe.py`)로 그 파일에 묶인다.
+PINVI_DAGSTER_LOCATION_NAME = "pinvi.etl.definitions"
+# `Definitions`로 만든 code location의 repository 이름은 Dagster가 고정한다.
+PINVI_DAGSTER_REPOSITORY_NAME = "__repository__"
+# Dagster가 run 생성 시 모든 run에 다는 tag — 값은 `<repository>@<location>`.
+_DAGSTER_REPOSITORY_TAG = ".dagster/repository"
 EMAIL_OUTBOX_STUCK_THRESHOLD_MINUTES = 15
 EMAIL_OUTBOX_MAX_ATTEMPTS = 5
 EMAIL_OUTBOX_TEMPLATE_WINDOW_HOURS = 24
@@ -173,33 +188,35 @@ PINVI_ETL_SCHEDULES = [
 PINVI_ETL_SENSORS: list[AdminEtlDefinitionSensor] = []
 
 _PINVI_DAGSTER_LIVE_QUERY = """
-query PinviDagsterLive($runLimit: Int!) {
+query PinviDagsterLive(
+  $repositorySelector: RepositorySelector!
+  $runsFilter: RunsFilter
+  $runLimit: Int!
+) {
   version
-  repositoriesOrError {
+  repositoryOrError(repositorySelector: $repositorySelector) {
     __typename
-    ... on RepositoryConnection {
-      nodes {
+    ... on Repository {
+      name
+      location { name }
+      jobs { name isJob }
+      schedules {
         name
-        location { name }
-        jobs { name isJob }
-        schedules {
-          name
-          pipelineName
-          cronSchedule
-          executionTimezone
-          scheduleState { status }
-        }
-        sensors {
-          name
-          sensorState { status }
-        }
-        assetNodes { groupName }
+        pipelineName
+        cronSchedule
+        executionTimezone
+        scheduleState { status }
       }
+      sensors {
+        name
+        sensorState { status }
+      }
+      assetNodes { groupName }
     }
     ... on PythonError { message }
     ... on RepositoryNotFoundError { message }
   }
-  runsOrError(limit: $runLimit) {
+  runsOrError(filter: $runsFilter, limit: $runLimit) {
     __typename
     ... on Runs {
       results {
@@ -216,6 +233,25 @@ query PinviDagsterLive($runLimit: Int!) {
   }
 }
 """
+
+
+def _pinvi_dagster_live_variables() -> dict[str, Any]:
+    """PinVi code location으로 좁힌 live query 변수."""
+    return {
+        "repositorySelector": {
+            "repositoryLocationName": PINVI_DAGSTER_LOCATION_NAME,
+            "repositoryName": PINVI_DAGSTER_REPOSITORY_NAME,
+        },
+        "runsFilter": {
+            "tags": [
+                {
+                    "key": _DAGSTER_REPOSITORY_TAG,
+                    "value": f"{PINVI_DAGSTER_REPOSITORY_NAME}@{PINVI_DAGSTER_LOCATION_NAME}",
+                }
+            ]
+        },
+        "runLimit": PINVI_DAGSTER_RECENT_RUN_LIMIT,
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -534,7 +570,7 @@ async def _fetch_pinvi_dagster_snapshot(
             f"{base_url}/graphql",
             json={
                 "query": _PINVI_DAGSTER_LIVE_QUERY,
-                "variables": {"runLimit": PINVI_DAGSTER_RECENT_RUN_LIMIT},
+                "variables": _pinvi_dagster_live_variables(),
             },
         )
     except httpx.HTTPError:
@@ -581,7 +617,7 @@ async def _fetch_pinvi_dagster_snapshot(
             dagster_graphql_version=dagster_graphql_version,
         )
 
-    repositories_payload = data.get("repositoriesOrError")
+    repositories_payload = data.get("repositoryOrError")
     repositories = _pinvi_repositories_from_graphql(repositories_payload)
     if repositories_payload and not repositories:
         return _PinviDagsterProbeResult(
@@ -628,11 +664,10 @@ async def _fetch_pinvi_dagster_snapshot(
 
 
 def _pinvi_repositories_from_graphql(value: Any) -> list[AdminDagsterRepositorySummary]:
-    if not isinstance(value, dict) or _as_str(value.get("__typename")) != "RepositoryConnection":
+    """`repositoryOrError`(PinVi location 하나로 좁힌 조회)를 요약 목록으로 바꾼다."""
+    if not isinstance(value, dict) or _as_str(value.get("__typename")) != "Repository":
         return []
-    nodes = value.get("nodes")
-    if not isinstance(nodes, list):
-        return []
+    nodes = [value]
     repositories: list[AdminDagsterRepositorySummary] = []
     for item in nodes:
         if not isinstance(item, dict):

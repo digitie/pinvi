@@ -9,6 +9,8 @@ from dagster import Config, OpExecutionContext, job, op
 from sqlalchemy import bindparam, text
 from sqlalchemy.dialects.postgresql import JSONB
 
+from pinvi.etl.run_tags import PINVI_JOB_TAGS
+
 KST = ZoneInfo("Asia/Seoul")
 
 
@@ -100,7 +102,7 @@ async def fetch_trip_poi_rise_set(
         await engine.dispose()
 
 
-@job
+@job(tags=PINVI_JOB_TAGS)
 def kasi_poi_rise_set_job() -> None:
     fetch_trip_poi_rise_set()
 

@@ -2,6 +2,36 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-29 (claude) — 공유 Dagster plane 준비: 이미지가 `uv.lock`의 정확한 버전만 설치, 조회를 PinVi location으로
+
+계획: `F:\dev\handoff\dagster-shared-plan.md`(Stage 0 #0.3, Stage 3 #3.2, D4). 배포 변경 없음.
+
+- **Stage 0 — 버전 고정.** n150 실측으로 `apps/etl/uv.lock`은 dagster 1.13.23인데 운영 이미지는 1.13.24였다
+  — Dockerfile의 `pip install -e .`가 pyproject 하한(`dagster>=1.9`)만 보고 빌드 시점 최신을 받았다. 공유
+  plane에서 code-server가 host보다 새 dagster를 돌리면 Dagster 호환 정책 밖이다.
+  - lock을 목표 세트로 갱신: dagster/-webserver/-graphql/-pipes/-shared 1.13.24, dagster-postgres 0.29.24
+    (그 밖의 목표 패키지 — pydantic 2.13.5, psycopg2-binary 2.9.13, asyncpg 0.31.0, grpcio 1.84.0,
+    SQLAlchemy 2.0.54 — 는 이미 lock에 있던 값).
+  - Dockerfile: 다이제스트 고정 `ghcr.io/astral-sh/uv:0.11.21`에서 `uv` 바이너리만 가져와
+    `uv export --locked --no-dev --no-emit-project`로 설치 목록을 만들고, `pip install --no-deps -r` →
+    `pip install --no-deps -e .` → `pip check`. pyproject와 lock이 어긋나면 export가 실패해 빌드가 선다.
+    hash 모드는 git 의존성(python-kasi-api) 때문에 쓸 수 없다.
+  - 테스트 `apps/etl/tests/test_dagster_version_lock.py`: lock COPY, `export --locked`, 모든 앱 pip
+    install의 `--no-deps`, `pip check`, lock 안 Dagster 코어 패키지가 한 릴리스인지.
+- **Stage 3 #3.2 — 조회 범위.** `apps/api/app/services/admin_etl.py`의 live query가
+  `repositoriesOrError`/필터 없는 `runsOrError`에서
+  `repositoryOrError(repositorySelector)` + `runsOrError(filter: .dagster/repository=__repository__@pinvi.etl.definitions)`로
+  바뀌었다. 지금의 PinVi 전용 webserver에서도 같은 결과(n150 운영 12802에 읽기 전용으로 두 조회를 실행해
+  `Repository`/`Runs` 확인). location 상수는 `apps/etl/workspace.yaml`에 테스트로 묶였다.
+- **job tag.** 모든 PinVi job이 `dagster/max_runtime=3600`을 싣는다(`pinvi/etl/run_tags.py`). 공유 instance의
+  `max_runtime_seconds`는 테넌트 공통값이라 PinVi 상한은 job tag로만 남는다. 자체 instance의
+  `dagster.yaml` 값과 테스트로 같게 묶었다.
+- **D4 — instigator 상태.** n150 운영 webserver 읽기 전용 조회: `pinvi_run_failure_sensor`만 RUNNING
+  (코드 `default_status=RUNNING`), schedule 7개 전부 STOPPED(코드 기본값과 같음). DB에만 있는 override가
+  없으므로 코드 변경은 필요 없었다. 그 상태를 `test_instigator_default_status_is_the_production_state`로
+  고정했다. **참고:** schedule 7개(email/telegram outbox, PII retention 등)는 운영에서 한 번도 켜진 적이
+  없다 — 켤지는 별도 결정이고 이 변경의 범위가 아니다.
+
 ## 2026-09-28 (claude) — app compose의 `app-dagster`가 instance storage를 받지 못해 항상 unhealthy였던 것
 
 Manager M05 격리 실행이 `--profile etl up --wait app-dagster`에서 `container … dagster is unhealthy`로

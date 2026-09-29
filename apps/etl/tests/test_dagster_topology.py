@@ -107,3 +107,15 @@ def test_workspace_yaml_uses_loopback_not_a_service_name() -> None:
         f"workspace.yaml의 host가 127.0.0.1이 아니다: {grpc_server.get('host')!r} — "
         "host network mode에서는 서비스명이 resolve되지 않는다(ADR-069 참조)."
     )
+
+
+def test_own_instance_max_runtime_equals_the_job_tag() -> None:
+    """자체 instance를 쓰는 동안 instance 상한과 job tag 상한은 같은 값이어야 한다.
+
+    공유 plane으로 옮기면 instance 값은 공통값으로 바뀌고 job tag만 남는다 —
+    두 값이 지금 갈라져 있으면 이전이 PinVi의 실제 상한을 바꿔 버린다.
+    """
+    from pinvi.etl.run_tags import PINVI_RUN_MAX_RUNTIME_SECONDS
+
+    config = yaml.safe_load(_DAGSTER_YAML.read_text(encoding="utf-8"))
+    assert config["run_monitoring"]["max_runtime_seconds"] == PINVI_RUN_MAX_RUNTIME_SECONDS

@@ -27,3 +27,52 @@ def test_definitions_load() -> None:
     assert defs.get_schedule_def("pinvi_weather_retention_horizon_schedule") is not None
     # ADR-050: app-owned job 실패 통지 sensor가 등록돼 있어야 한다 (T-291).
     assert defs.get_sensor_def("pinvi_run_failure_sensor") is not None
+
+
+def test_every_job_carries_the_pinvi_max_runtime_tag() -> None:
+    """공유 Dagster plane에서는 instance의 `max_runtime_seconds`가 테넌트 공통이다.
+
+    PinVi의 상한(3600초)은 job tag로만 살아남는다 — 태그 없는 job은 공유
+    instance의 더 긴 상한을 조용히 물려받는다(`pinvi/etl/run_tags.py`).
+    """
+    from pinvi.etl.definitions import defs
+    from pinvi.etl.run_tags import PINVI_JOB_TAGS
+
+    repository = defs.get_repository_def()
+    jobs = [job for job in repository.get_all_jobs() if not job.name.startswith("__")]
+    assert jobs, "등록된 job이 없다"
+    for job in jobs:
+        for key, value in PINVI_JOB_TAGS.items():
+            assert job.tags.get(key) == value, (
+                f"{job.name}의 {key} tag가 {job.tags.get(key)!r}다 — 기대값 {value!r}"
+            )
+
+
+def test_instigator_default_status_is_the_production_state() -> None:
+    """schedule/sensor의 켜짐 상태는 코드가 정본이다(공유 Dagster plane D4).
+
+    DB에서 손으로 켠 상태는 새 `dagster_shared` instance로 옮겨지지 않는다 —
+    코드의 `default_status`만 따라간다. 그래서 운영 상태와 코드 선언이 같아야 한다.
+
+    2026-09-29 n150 운영 webserver(`repositoryOrError` 읽기 전용 조회)에서 본 상태:
+    sensor `pinvi_run_failure_sensor`만 RUNNING, schedule 7개는 전부 STOPPED —
+    코드 선언과 같다(DB에만 있는 override 없음). 이 기대값을 바꾸는 것은 운영
+    상태를 바꾸는 결정이므로, 바꿀 때는 이 테스트와 운영을 함께 맞춘다.
+    """
+    from dagster import DefaultScheduleStatus, DefaultSensorStatus
+
+    from pinvi.etl.definitions import defs
+
+    repository = defs.get_repository_def()
+    running_schedules = {
+        schedule.name
+        for schedule in repository.schedule_defs
+        if schedule.default_status == DefaultScheduleStatus.RUNNING
+    }
+    running_sensors = {
+        sensor.name
+        for sensor in repository.sensor_defs
+        if sensor.default_status == DefaultSensorStatus.RUNNING
+    }
+    assert running_schedules == set()
+    assert running_sensors == {"pinvi_run_failure_sensor"}

@@ -4,6 +4,10 @@ version = "0.1.0"
 description = "Pinvi Dagster code location — Sprint 5에서 본격 활성화 (ADR-006)."
 requires-python = ">=3.12"
 
+# 여기 값은 하한이다. 이미지가 실제로 설치하는 정확한 버전은 `uv.lock`이
+# 정본이다(Dockerfile이 `uv export --locked`로 lock에서만 설치한다). Dagster를
+# 올릴 때는 `uv lock --upgrade-package dagster==<ver> ...`로 lock을 갱신한다 —
+# 공유 Dagster plane에서 code-server는 host보다 새 dagster를 돌리면 안 된다.
 dependencies = [
   "dagster>=1.9",
   "dagster-webserver>=1.9",

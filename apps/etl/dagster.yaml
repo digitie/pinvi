@@ -79,6 +79,10 @@ run_monitoring:
   # **이력이 쌓이면 실측으로 다시 잡을 것.** 지금 값은 "아무 상한도 없는 것보다
   # 낫다"는 뜻이지 "이 job들이 한 시간 걸린다"는 뜻이 아니다. 개별 job은
   # `dagster/max_runtime` 태그로 따로 넘길 수 있다.
+  #
+  # 모든 PinVi job은 같은 값을 `dagster/max_runtime` tag로도 싣는다
+  # (`pinvi/etl/run_tags.py`) — 공유 Dagster plane에서는 이 instance 값이 테넌트
+  # 공통값으로 바뀌기 때문이다. 두 값은 테스트로 같게 묶여 있으니 함께 바꾼다.
   max_runtime_seconds: 3600
 
 # 기본값(10)을 그대로 둔다. 등록된 job이 8개이고 그중 셋만 15~20분 간격이라
