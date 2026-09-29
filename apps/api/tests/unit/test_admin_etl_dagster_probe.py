@@ -184,7 +184,9 @@ def test_the_location_setting_is_read_from_the_environment(
     assert Settings(_env_file=None).pinvi_dagster_location_name == "other.location"
 
 
-@pytest.mark.parametrize("value", ["", " ", "\t", " pinvi.etl.definitions", "pinvi.etl.definitions "])
+@pytest.mark.parametrize(
+    "value", ["", " ", "\t", " pinvi.etl.definitions", "pinvi.etl.definitions "]
+)
 def test_an_empty_or_padded_location_setting_refuses_to_boot(
     monkeypatch: pytest.MonkeyPatch, value: str
 ) -> None:
