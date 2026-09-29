@@ -25,7 +25,13 @@ _ETL_WORKFLOW = _ETL_ROOT.parents[1] / ".github" / "workflows" / "etl.yml"
 
 # 같은 릴리스 번호로 함께 나가는 Dagster 코어 패키지들. `dagster-postgres` 같은
 # 통합 라이브러리는 0.x 계열로 따로 번호가 붙지만 patch는 코어와 같이 움직인다.
-_DAGSTER_CORE = ("dagster", "dagster-graphql", "dagster-pipes", "dagster-shared", "dagster-webserver")
+_DAGSTER_CORE = (
+    "dagster",
+    "dagster-graphql",
+    "dagster-pipes",
+    "dagster-shared",
+    "dagster-webserver",
+)
 _DAGSTER_INTEGRATIONS = ("dagster-postgres",)
 
 
@@ -137,7 +143,11 @@ def test_uv_is_one_version_everywhere() -> None:
 def test_ci_sanity_installs_from_the_lock_like_the_image() -> None:
     """CI가 하한만 보고 최신을 받으면 테스트는 이미지와 다른 버전으로 초록이 된다."""
     workflow = _ETL_WORKFLOW.read_text(encoding="utf-8")
-    sanity = workflow.split("\n  sanity:\n", 1)[1]
+    sanity_block = workflow.split("\n  sanity:\n", 1)[1]
+    # 주석은 명령이 아니다 — 옛 설치 방식을 설명하는 주석이 검사에 걸리지 않게 뺀다.
+    sanity = "\n".join(
+        line for line in sanity_block.splitlines() if not line.lstrip().startswith("#")
+    )
     assert "uv --no-cache export --locked --extra dev" in sanity
     installs = re.findall(r"pip install[^\n]*", sanity)
     app_installs = [cmd for cmd in installs if not cmd.startswith("pip install pip==")]
