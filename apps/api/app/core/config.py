@@ -708,6 +708,13 @@ class Settings(BaseSettings):
     pinvi_email_verification_resend_cooldown_seconds: int = 60
     pinvi_web_base_url: str = "http://localhost:12805"
     pinvi_dagster_base_url: str = "http://localhost:12802"
+    # Admin Dagster 조회(`app/services/admin_etl.py`)를 좁히는 PinVi code location 이름.
+    # 공유 Dagster webserver는 여러 테넌트의 location을 함께 싣는다. 기본값의 정본은
+    # `apps/etl/workspace.yaml`의 `location_name`(= code-server가 싣는 모듈
+    # `pyproject [tool.dagster].module_name`)이고 테스트로 둘에 묶인다. 빈 값·앞뒤 공백은
+    # 부팅에서 거부한다(`_dagster_location_name_is_exact`) — 빈 이름은 조회를 존재하지 않는
+    # location으로 좁혀 Admin을 조용히 빈 화면으로 만든다.
+    pinvi_dagster_location_name: str = "pinvi.etl.definitions"
     pinvi_email_verification_path: str = "/verify-email"
     pinvi_auth_reset_path: str = Field(
         default="/reset-password",
@@ -1284,6 +1291,22 @@ class Settings(BaseSettings):
         raw = value.get_secret_value() if isinstance(value, SecretStr) else value
         if isinstance(raw, str) and raw == "":
             return None
+        return value
+
+    @field_validator("pinvi_dagster_location_name")
+    @classmethod
+    def _dagster_location_name_is_exact(cls, value: str) -> str:
+        """location 이름은 그대로 GraphQL selector·run tag에 들어간다 — 고쳐 쓰지 않고 거부한다.
+
+        빈 값·공백뿐인 값·앞뒤 공백은 어떤 location과도 맞지 않는다. strip으로 조용히 고치면
+        설정과 실제 조회가 갈라지므로 부팅을 막는다.
+        """
+
+        if not value or value != value.strip():
+            raise ValueError(
+                "PINVI_DAGSTER_LOCATION_NAME must be a non-empty location name without "
+                "surrounding whitespace"
+            )
         return value
 
     @field_validator(

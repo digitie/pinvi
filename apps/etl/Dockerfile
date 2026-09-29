@@ -1,5 +1,10 @@
 # syntax=docker/dockerfile:1.7-labs
 # Pinvi Dagster webserver — 고정 포트 12802 (CLAUDE.md 로컬 포트 정책 / ADR-047).
+
+# `uv.lock`을 설치 목록으로 푸는 데만 쓴다(아래 의존성 단계). 런타임 이미지에는
+# 남기지 않는다 — 설치는 여전히 pip가 system python에 한다.
+FROM ghcr.io/astral-sh/uv:0.11.21@sha256:ff07b86af50d4d9391d9daf4ff89ce427bc544f9aae87057e69a1cc0aa369946 AS uv
+
 FROM python:3.12-slim@sha256:7a8b475003c4fe15a2cd4e55e5cfc2f3560bdc9333d624f24cdd6d4340fd7a17 AS base
 
 ARG PINVI_BUILD_ENVIRONMENT=development
@@ -29,9 +34,42 @@ WORKDIR /opt/pinvi/apps/etl
 RUN mkdir -p "$DAGSTER_HOME"
 
 # code location (pinvi.etl.definitions) + 의존성
+#
+# **의존성은 `uv.lock`에서만 온다.** 종전 `pip install -e .`는 pyproject의 하한
+# (`dagster>=1.9`)만 보고 빌드 시점 PyPI 최신을 받았다 — lock은 1.13.23인데
+# 운영 이미지는 1.13.24였다(2026-09-29 n150 실측). 공유 Dagster plane에서는
+# code-server가 host(webserver/daemon)보다 새 dagster를 돌리면 Dagster
+# 호환 정책 밖이고, 그 드리프트는 부주의한 rebuild 한 번으로 조용히 생긴다.
+#
+# - `uv export --locked`: pyproject와 lock이 어긋나면 **빌드가 실패한다**
+#   (lock을 갱신하지 않은 의존성 변경이 이미지로 새지 않는다).
+# - `pip install --no-deps -r`: export는 전이 의존성까지 `==`로 전부 담으므로
+#   pip가 따로 해석할 것이 없다. `--no-deps`가 목록 밖 패키지 유입을 막는다.
+# - 프로젝트 자신은 `--no-deps -e .`로 얹기만 한다.
+# - `pip check`: 목록이 불완전하면 여기서 떨어진다.
+#
+# hash 검사(`--require-hashes`)는 쓰지 않는다 — git 의존성(python-kasi-api,
+# 커밋 고정)은 pip가 hash를 검증할 수 없어 그 모드 자체가 거부된다.
+#
+# 설치 도구도 고정한다. pip 자신은 `==`로, 소스에서 빌드되는 것의 build 환경은
+# `build-constraints.txt`로 — `-e .`의 hatchling·editables와 git 의존성
+# (python-kasi-api)의 setuptools·wheel. `--upgrade pip`와 build isolation은 둘 다
+# 빌드 시점 PyPI 최신을 받으므로 **소스 빌드가 일어나는 두 pip install 모두**에
+# `--build-constraint`를 건다. 이 옵션은 pip 25.3+라 pip 고정이 먼저다. 이 제약은
+# build 환경에만 걸리고 앱 의존성(lock)과 섞이지 않는다.
+COPY --from=uv /uv /usr/local/bin/uv
 COPY apps/etl/pyproject.toml ./pyproject.toml
+COPY apps/etl/uv.lock ./uv.lock
+COPY apps/etl/build-constraints.txt /tmp/build-constraints.txt
 COPY apps/etl/pinvi ./pinvi
-RUN pip install --upgrade pip && pip install -e .
+RUN uv --no-cache export --locked --no-dev --no-emit-project --no-hashes \
+        --format requirements-txt --output-file /tmp/requirements.lock.txt \
+    && rm /usr/local/bin/uv \
+    && pip install pip==26.2.1 \
+    && pip install --no-deps --build-constraint /tmp/build-constraints.txt -r /tmp/requirements.lock.txt \
+    && pip install --no-deps --build-constraint /tmp/build-constraints.txt -e . \
+    && pip check \
+    && rm /tmp/requirements.lock.txt /tmp/build-constraints.txt
 
 # instance 설정을 이미지에 굽는다. 마운트로 주입하지 않는 이유는 이 파일이
 # **어느 storage를 쓰는지**를 정하기 때문이다 — 마운트가 빠지면 Dagster가

@@ -4,39 +4,48 @@ from __future__ import annotations
 
 from dagster import ScheduleDefinition, define_asset_job
 
+from pinvi.etl.run_tags import PINVI_JOB_TAGS
+
 kasi_special_days_job = define_asset_job(
     "kasi_special_days_job",
     selection=["pinvi_kasi_special_days"],
+    tags=PINVI_JOB_TAGS,
 )
 
 pinvi_email_outbox_job = define_asset_job(
     "pinvi_email_outbox_job",
     selection=["pinvi_email_outbox"],
+    tags=PINVI_JOB_TAGS,
 )
 
 pinvi_pii_retention_job = define_asset_job(
     "pinvi_pii_retention_job",
     selection=["pinvi_pii_retention"],
+    tags=PINVI_JOB_TAGS,
 )
 
 pinvi_location_log_archive_job = define_asset_job(
     "pinvi_location_log_archive_job",
     selection=["pinvi_location_log_archive"],
+    tags=PINVI_JOB_TAGS,
 )
 
 pinvi_telegram_system_outbox_job = define_asset_job(
     "pinvi_telegram_system_outbox_job",
     selection=["pinvi_telegram_system_outbox"],
+    tags=PINVI_JOB_TAGS,
 )
 
 pinvi_trip_day_rise_sets_job = define_asset_job(
     "pinvi_trip_day_rise_sets_job",
     selection=["pinvi_trip_day_rise_sets"],
+    tags=PINVI_JOB_TAGS,
 )
 
 pinvi_weather_retention_horizon_job = define_asset_job(
     "pinvi_weather_retention_horizon_job",
     selection=["pinvi_weather_retention_horizon_guard"],
+    tags=PINVI_JOB_TAGS,
 )
 
 schedules = [

@@ -187,6 +187,19 @@ pinvi_telegram_system_outbox_schedule = ScheduleDefinition(
 
 POI 출몰시각은 정기 schedule이 아니라 POI 생성 이벤트에서 run을 enqueue한다.
 
+### 4.1 run 최대 실행 시간(`dagster/max_runtime`)
+
+PinVi가 정의한 모든 job은 `dagster/max_runtime=3600` tag를 싣는다(`pinvi/etl/run_tags.py`).
+공유 Dagster plane에서 instance의 `run_monitoring.max_runtime_seconds`는 테넌트 공통값(21600초,
+Manager 소유)이라, PinVi의 1시간 상한은 job tag로만 남는다.
+
+**알려진 예외 — `__ASSET_JOB`.** asset UI의 Materialize와 backfill은 Dagster가 만드는 암묵 job
+`__ASSET_JOB`으로 돈다. 이 job에는 tag를 실을 자리가 없어, 그 run은 **instance 기본값**을 받는다 —
+자체 instance에서는 3600초, 공유 instance에서는 21600초. 공유 instance 기본값은 Manager 것이라
+PinVi가 바꾸지 않는다. 필요하면 Launchpad에서 그 run에 `dagster/max_runtime` tag를 직접 단다.
+`tests/test_definitions.py`가 tag 없는 job이 정확히 `__ASSET_JOB` 하나인지 고정한다 — 새 암묵 job이
+생기면 테스트가 떨어진다.
+
 ## 5. 실패 알림
 
 Dagster `run_failure_sensor`(`pinvi/etl/sensors.py`의 `pinvi_run_failure_sensor`,
@@ -200,8 +213,18 @@ Dagster `run_failure_sensor`(`pinvi/etl/sensors.py`의 `pinvi_run_failure_sensor
 
 T-243 기준 `/admin/etl/summary`는 Pinvi Dagster webserver의 `/server_info`와 `/graphql`을
 읽는다. `/server_info`는 Dagster version과 webserver health를 확인하고, GraphQL
-`repositoriesOrError` / `runsOrError`는 code location repository, job, asset, schedule,
+`repositoryOrError` / `runsOrError`는 code location repository, job, asset, schedule,
 최근 run 상태를 가져온다.
+
+두 조회는 **PinVi code location(`pinvi.etl.definitions`) 하나로 좁힌다** —
+`repositoryOrError(repositorySelector: {repositoryLocationName, repositoryName: "__repository__"})`와
+`runsOrError(filter: {tags: [{key: ".dagster/repository", value: "__repository__@pinvi.etl.definitions"}]})`.
+공유 Dagster plane(webserver 하나가 여러 프로젝트의 code location을 싣는다)에서 필터 없는 조회는
+다른 테넌트의 repository·run을 섞는다. 좁힌 조회는 PinVi 전용 webserver에서도 같은 결과라 이전
+전후 모두 맞다. location 이름은 API 설정 `PINVI_DAGSTER_LOCATION_NAME`이고, 기본값의 정본은
+`apps/etl/workspace.yaml`이다 — 테스트가 기본값을 그 파일과 code-server 모듈 이름
+(`pyproject [tool.dagster].module_name`, 이미지 CMD `-m`)에 묶는다. 조회 문자열은 ETL 테스트가
+lock의 `dagster_graphql` 스키마로 검증한다(`apps/etl/tests/test_admin_probe_graphql_schema.py`). 공유 webserver에 PinVi location이 아직 없으면 `RepositoryNotFoundError`로 `degraded`가 된다.
 
 이 live snapshot은 운영 관측용이며 mutation을 수행하지 않는다. GraphQL이 실패하면
 `pinvi.status=degraded`로 표시하고 static registry(`assets`, `jobs`, `schedules`)와

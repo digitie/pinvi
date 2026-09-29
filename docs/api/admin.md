@@ -2001,7 +2001,8 @@ upstream 일부가 실패해도 화면은 열 수 있도록
 
 Pinvi 자체 Dagster는 `PINVI_DAGSTER_BASE_URL`의 `/server_info`와 `/graphql`을 읽어
 code location repository/job/asset/schedule, 최근 run 상태를 live snapshot으로 노출한다.
-GraphQL 조회가 실패하면 `pinvi.status = degraded`로 강등하되 static registry
+두 조회는 `PINVI_DAGSTER_LOCATION_NAME`(기본 `pinvi.etl.definitions`) location 하나로 좁힌다 —
+공유 Dagster webserver에서 다른 테넌트의 repository·run이 섞이지 않는다. GraphQL 조회가 실패하면 `pinvi.status = degraded`로 강등하되 static registry
 (`assets` / `jobs` / `schedules`)와 app-owned outbox/retention summary는 계속 반환한다.
 
 권한: `admin` / `operator`

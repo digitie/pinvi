@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "apps/etl/**"
+      # ETL 테스트가 이 파일의 Dagster GraphQL 조회를 dagster_graphql 스키마로 검증한다.
+      - "apps/api/app/services/admin_etl.py"
       - "scripts/validate-image-provenance.sh"
       - ".dockerignore"
       - ".github/workflows/aggregate-ci.yml"
@@ -12,6 +14,8 @@ on:
     branches: [main]
     paths:
       - "apps/etl/**"
+      # ETL 테스트가 이 파일의 Dagster GraphQL 조회를 dagster_graphql 스키마로 검증한다.
+      - "apps/api/app/services/admin_etl.py"
       - "scripts/validate-image-provenance.sh"
       - ".dockerignore"
       - ".github/workflows/aggregate-ci.yml"
@@ -67,11 +71,20 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: apps/etl/uv.lock
 
-      - name: Install dependencies
+      # 이미지(`apps/etl/Dockerfile`)와 같은 경로로 설치한다 — `uv.lock`에서만.
+      # `pip install -e ".[dev]"`는 pyproject 하한만 보고 CI 시점 최신을 받아,
+      # 테스트가 이미지와 다른 dagster로 초록이 될 수 있었다. uv 버전은
+      # `pyproject.toml [tool.uv] required-version`과 같다(테스트로 묶임).
+      - name: Install dependencies (from uv.lock)
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install pip==26.2.1 uv==0.11.21
+          uv --no-cache export --locked --extra dev --no-emit-project --no-hashes \
+            --format requirements-txt --output-file "$RUNNER_TEMP/requirements.lock.txt"
+          pip install --no-deps --build-constraint build-constraints.txt -r "$RUNNER_TEMP/requirements.lock.txt"
+          pip install --no-deps --build-constraint build-constraints.txt -e .
+          pip check
 
       - name: ruff check
         run: ruff check .
