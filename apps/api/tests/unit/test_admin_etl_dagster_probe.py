@@ -12,7 +12,6 @@ import yaml
 
 from app.services import admin_etl
 
-
 _ROOT = Path(__file__).resolve().parents[4]
 _ETL_WORKSPACE = _ROOT / "apps" / "etl" / "workspace.yaml"
 
