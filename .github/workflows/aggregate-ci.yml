@@ -144,7 +144,15 @@ jobs:
               requiredChecks.push("mobile-lint");
             }
             if (hasAny([
+              // etl.yml의 `on.pull_request.paths`를 전부 덮어야 한다 — 덮지 않은 경로만
+              // 바꾼 PR은 `sanity`가 빨개도 머지된다(`apps/etl/tests/
+              // test_ci_path_filters.py`가 둘을 묶는다).
               startsWith("apps/etl/"),
+              // ETL 테스트가 이 파일의 Dagster GraphQL 조회를 스키마로 검증한다.
+              equals("apps/api/app/services/admin_etl.py"),
+              equals("scripts/validate-image-provenance.sh"),
+              equals(".dockerignore"),
+              equals(".github/workflows/aggregate-ci.yml"),
               equals(".github/workflows/etl.yml"),
             ])) {
               requiredChecks.push("sanity");

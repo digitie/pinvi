@@ -51,10 +51,12 @@ RUN mkdir -p "$DAGSTER_HOME"
 # hash 검사(`--require-hashes`)는 쓰지 않는다 — git 의존성(python-kasi-api,
 # 커밋 고정)은 pip가 hash를 검증할 수 없어 그 모드 자체가 거부된다.
 #
-# 설치 도구도 고정한다. pip 자신은 `==`로, `-e .`를 빌드하는 backend(hatchling과
-# 그 의존성)는 `build-constraints.txt`로 — `--upgrade pip`와 build isolation은
-# 둘 다 빌드 시점 PyPI 최신을 받는다. `--build-constraint`는 pip 25.3+ 옵션이라
-# pip 고정이 먼저다. 이 제약은 build 환경에만 걸리고 앱 의존성(lock)과 섞이지 않는다.
+# 설치 도구도 고정한다. pip 자신은 `==`로, 소스에서 빌드되는 것의 build 환경은
+# `build-constraints.txt`로 — `-e .`의 hatchling·editables와 git 의존성
+# (python-kasi-api)의 setuptools·wheel. `--upgrade pip`와 build isolation은 둘 다
+# 빌드 시점 PyPI 최신을 받으므로 **소스 빌드가 일어나는 두 pip install 모두**에
+# `--build-constraint`를 건다. 이 옵션은 pip 25.3+라 pip 고정이 먼저다. 이 제약은
+# build 환경에만 걸리고 앱 의존성(lock)과 섞이지 않는다.
 COPY --from=uv /uv /usr/local/bin/uv
 COPY apps/etl/pyproject.toml ./pyproject.toml
 COPY apps/etl/uv.lock ./uv.lock
@@ -64,7 +66,7 @@ RUN uv --no-cache export --locked --no-dev --no-emit-project --no-hashes \
         --format requirements-txt --output-file /tmp/requirements.lock.txt \
     && rm /usr/local/bin/uv \
     && pip install pip==26.2.1 \
-    && pip install --no-deps -r /tmp/requirements.lock.txt \
+    && pip install --no-deps --build-constraint /tmp/build-constraints.txt -r /tmp/requirements.lock.txt \
     && pip install --no-deps --build-constraint /tmp/build-constraints.txt -e . \
     && pip check \
     && rm /tmp/requirements.lock.txt /tmp/build-constraints.txt

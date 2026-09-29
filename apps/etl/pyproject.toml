@@ -46,7 +46,7 @@ packages = ["pinvi"]
 
 [tool.uv]
 # lock을 만들고 푸는 uv를 하나로 묶는다 — Dockerfile의 `ghcr.io/astral-sh/uv` 태그,
-# CI(`.github/workflows/etl.yml`)의 setup-uv 버전과 같아야 한다
+# CI(`.github/workflows/etl.yml` sanity job)의 `pip install ... uv==<ver>`와 같아야 한다
 # (`tests/test_dagster_version_lock.py`가 셋을 묶는다).
 required-version = "==0.11.21"
 

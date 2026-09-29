@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from app.core.config import Settings
 from app.services import admin_etl
@@ -174,6 +175,23 @@ def test_the_location_name_is_the_module_the_code_server_loads() -> None:
     assert cmd is not None, "ETL Dockerfile에 exec-form CMD가 없다"
     argv = json.loads(cmd.group(1))
     assert argv[argv.index("-m") + 1] == _default_location_name()
+
+
+def test_the_location_setting_is_read_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PINVI_DAGSTER_LOCATION_NAME", "other.location")
+    assert Settings(_env_file=None).pinvi_dagster_location_name == "other.location"
+
+
+@pytest.mark.parametrize("value", ["", " ", "\t", " pinvi.etl.definitions", "pinvi.etl.definitions "])
+def test_an_empty_or_padded_location_setting_refuses_to_boot(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    """compose의 `${VAR:-}`는 미설정을 빈 문자열로 주입한다 — 빈 이름으로 조용히 빈 조회를 하지 않는다."""
+    monkeypatch.setenv("PINVI_DAGSTER_LOCATION_NAME", value)
+    with pytest.raises(ValidationError, match="PINVI_DAGSTER_LOCATION_NAME"):
+        Settings(_env_file=None)
 
 
 def test_the_live_query_follows_the_location_setting(monkeypatch: pytest.MonkeyPatch) -> None:

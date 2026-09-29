@@ -82,7 +82,7 @@ jobs:
           python -m pip install pip==26.2.1 uv==0.11.21
           uv --no-cache export --locked --extra dev --no-emit-project --no-hashes \
             --format requirements-txt --output-file "$RUNNER_TEMP/requirements.lock.txt"
-          pip install --no-deps -r "$RUNNER_TEMP/requirements.lock.txt"
+          pip install --no-deps --build-constraint build-constraints.txt -r "$RUNNER_TEMP/requirements.lock.txt"
           pip install --no-deps --build-constraint build-constraints.txt -e .
           pip check
 
