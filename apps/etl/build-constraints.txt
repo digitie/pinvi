@@ -1,0 +1,10 @@
+# `pip install -e .`의 build isolation 환경 제약(Dockerfile `--build-constraint`).
+# 앱 의존성이 아니다 — 그것은 `uv.lock`이 정본이다. 여기는 build backend
+# (pyproject `[build-system]`의 hatchling)와 그 의존성만 `==`로 고정한다.
+# 올릴 때는 깨끗한 venv에서 `pip install hatchling==<ver>` 후 `pip freeze`로 통째 바꾼다.
+hatchling==1.32.4
+packaging==26.3
+pathspec==1.1.1
+pluggy==1.6.0
+tomlkit==0.15.1
+trove-classifiers==2026.9.21.13

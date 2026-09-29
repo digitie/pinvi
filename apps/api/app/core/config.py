@@ -708,6 +708,11 @@ class Settings(BaseSettings):
     pinvi_email_verification_resend_cooldown_seconds: int = 60
     pinvi_web_base_url: str = "http://localhost:12805"
     pinvi_dagster_base_url: str = "http://localhost:12802"
+    # Admin Dagster 조회(`app/services/admin_etl.py`)를 좁히는 PinVi code location 이름.
+    # 공유 Dagster webserver는 여러 테넌트의 location을 함께 싣는다. 기본값의 정본은
+    # `apps/etl/workspace.yaml`의 `location_name`(= code-server가 싣는 모듈
+    # `pyproject [tool.dagster].module_name`)이고 테스트로 둘에 묶인다.
+    pinvi_dagster_location_name: str = "pinvi.etl.definitions"
     pinvi_email_verification_path: str = "/verify-email"
     pinvi_auth_reset_path: str = Field(
         default="/reset-password",

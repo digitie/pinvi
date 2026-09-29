@@ -3,17 +3,23 @@
 from __future__ import annotations
 
 import json
+import re
+import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
+import pytest
 import yaml
 
+from app.core.config import Settings
 from app.services import admin_etl
 
 _ROOT = Path(__file__).resolve().parents[4]
 _ETL_WORKSPACE = _ROOT / "apps" / "etl" / "workspace.yaml"
+_ETL_PYPROJECT = _ROOT / "apps" / "etl" / "pyproject.toml"
+_ETL_DOCKERFILE = _ROOT / "apps" / "etl" / "Dockerfile"
 
 
 def _client(
@@ -142,11 +148,40 @@ async def test_pinvi_dagster_probe_degrades_when_graphql_fails() -> None:
     assert result.recent_runs == []
 
 
+def _default_location_name() -> str:
+    default = Settings.model_fields["pinvi_dagster_location_name"].default
+    assert isinstance(default, str)
+    return default
+
+
 def test_the_location_name_is_the_one_the_etl_workspace_serves() -> None:
     """location 이름의 정본은 `apps/etl/workspace.yaml`이다 — 둘이 갈라지면 조회가 빈다."""
     workspace = yaml.safe_load(_ETL_WORKSPACE.read_text(encoding="utf-8"))
     locations = [entry["grpc_server"]["location_name"] for entry in workspace["load_from"]]
-    assert locations == [admin_etl.PINVI_DAGSTER_LOCATION_NAME]
+    assert locations == [_default_location_name()]
+
+
+def test_the_location_name_is_the_module_the_code_server_loads() -> None:
+    """location 이름은 code-server가 싣는 모듈 이름과 같다(Dagster `-m` 로드의 기본 이름).
+
+    그 모듈의 정본은 `pyproject.toml [tool.dagster].module_name`이고, 이미지 기본 CMD의
+    `-m`도 같은 모듈을 싣는다. 셋 중 하나만 바뀌면 조회가 빈 repository를 본다.
+    """
+    pyproject = tomllib.loads(_ETL_PYPROJECT.read_text(encoding="utf-8"))
+    assert pyproject["tool"]["dagster"]["module_name"] == _default_location_name()
+
+    cmd = re.search(r"^CMD (\[.*\])$", _ETL_DOCKERFILE.read_text(encoding="utf-8"), re.MULTILINE)
+    assert cmd is not None, "ETL Dockerfile에 exec-form CMD가 없다"
+    argv = json.loads(cmd.group(1))
+    assert argv[argv.index("-m") + 1] == _default_location_name()
+
+
+def test_the_live_query_follows_the_location_setting(monkeypatch: pytest.MonkeyPatch) -> None:
+    """상수가 아니라 설정을 읽는다 — 다른 location으로 옮기면 두 조회가 함께 따라간다."""
+    monkeypatch.setattr(admin_etl.settings, "pinvi_dagster_location_name", "other.location")
+    variables = admin_etl._pinvi_dagster_live_variables()
+    assert variables["repositorySelector"]["repositoryLocationName"] == "other.location"
+    assert variables["runsFilter"]["tags"][0]["value"] == "__repository__@other.location"
 
 
 async def test_pinvi_dagster_probe_scopes_repository_and_runs_to_the_pinvi_location() -> None:

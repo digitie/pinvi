@@ -63,10 +63,10 @@ PINVI_DAGSTER_RECENT_RUN_LIMIT = 5
 # run까지 돌려준다. 좁힌 조회는 지금의 PinVi 전용 webserver에서도 같은 결과를
 # 내므로 이전 전후 모두에서 맞다.
 #
-# location 이름의 정본은 `apps/etl/workspace.yaml`의 `location_name`이다(=
-# `pyproject.toml [tool.dagster].module_name`). 여기 값은 테스트
-# (`test_admin_etl_dagster_probe.py`)로 그 파일에 묶인다.
-PINVI_DAGSTER_LOCATION_NAME = "pinvi.etl.definitions"
+# location 이름은 설정 `pinvi_dagster_location_name`이다. 기본값의 정본은
+# `apps/etl/workspace.yaml`의 `location_name`(= `pyproject.toml
+# [tool.dagster].module_name`, code-server가 싣는 모듈)이고 테스트
+# (`test_admin_etl_dagster_probe.py`)로 그 파일들에 묶인다.
 # `Definitions`로 만든 code location의 repository 이름은 Dagster가 고정한다.
 PINVI_DAGSTER_REPOSITORY_NAME = "__repository__"
 # Dagster가 run 생성 시 모든 run에 다는 tag — 값은 `<repository>@<location>`.
@@ -237,16 +237,17 @@ query PinviDagsterLive(
 
 def _pinvi_dagster_live_variables() -> dict[str, Any]:
     """PinVi code location으로 좁힌 live query 변수."""
+    location_name = settings.pinvi_dagster_location_name
     return {
         "repositorySelector": {
-            "repositoryLocationName": PINVI_DAGSTER_LOCATION_NAME,
+            "repositoryLocationName": location_name,
             "repositoryName": PINVI_DAGSTER_REPOSITORY_NAME,
         },
         "runsFilter": {
             "tags": [
                 {
                     "key": _DAGSTER_REPOSITORY_TAG,
-                    "value": f"{PINVI_DAGSTER_REPOSITORY_NAME}@{PINVI_DAGSTER_LOCATION_NAME}",
+                    "value": f"{PINVI_DAGSTER_REPOSITORY_NAME}@{location_name}",
                 }
             ]
         },

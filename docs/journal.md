@@ -2,6 +2,32 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-30 (claude) — 공유 Dagster plane 준비 리뷰 반영: CI도 lock에서, 설치 도구 고정, `__ASSET_JOB` 예외 명시
+
+적대 리뷰(같은 브랜치 `feat/dagster-shared-stage0`) 반영. 배포 변경 없음.
+
+- **CI sanity가 lock에서 설치.** `etl.yml`의 sanity job이 `pip install -e ".[dev]"`(하한만 보고 CI 시점 최신)
+  대신 이미지와 같은 경로를 탄다 — `uv export --locked --extra dev` → `pip install --no-deps -r` →
+  `pip install --no-deps -e .` → `pip check`. ETL 테스트가 API의 GraphQL 조회를 검증하므로
+  `apps/api/app/services/admin_etl.py`도 이 workflow의 paths에 넣었다.
+- **`__ASSET_JOB`은 instance 기본값을 받는다(알려진 한계).** asset UI Materialize/backfill은 암묵 job
+  `__ASSET_JOB`으로 돌고 tag가 없다 — 공유 instance에서는 3600초가 아니라 Manager의 21600초다. 공유
+  기본값은 Manager 소유라 바꾸지 않았다. `run_tags.py`·`docs/architecture/dagster-etl-bridge.md` §4.1에
+  적고, 테스트는 `__` 이름을 건너뛰던 것을 "tag 없는 job 집합 == {`__ASSET_JOB`}" 단언으로 바꿨다.
+- **설치 도구 고정.** Dockerfile의 `pip install --upgrade pip` → `pip==26.2.1`; `-e .`의 build isolation은
+  `--build-constraint apps/etl/build-constraints.txt`(hatchling 1.32.4와 그 의존성 `==`). `[tool.uv]
+  required-version = "==0.11.21"` — 이미지 uv 태그·CI uv와 테스트로 묶었다.
+- **location 이름은 설정.** `PINVI_DAGSTER_LOCATION_NAME`(기본 `pinvi.etl.definitions`). 기본값은
+  `workspace.yaml`의 `location_name`, `pyproject [tool.dagster].module_name`, 이미지 CMD의 `-m`에 테스트로 묶였다.
+- **GraphQL 스키마 검증.** `apps/etl/tests/test_admin_probe_graphql_schema.py`가 API의 live query를 lock의
+  `dagster_graphql` 스키마로 `validate(parse(query))`한다(API 환경에는 dagster가 없다).
+- **rebuild가 옮기는 전이 패키지(기록).** lock 설치로 바뀐 뒤 다음 rebuild는 dagster 계열 외에 전이 패키지
+  약 10개를 **lock 값으로 되돌린다** — 이전 이미지는 빌드 시점 최신을 받았기 때문이다(리뷰 목록):
+  starlette 1.7.0→1.6.0, uvicorn 0.54.0→0.53.0, multidict 7.0.0→6.9.0, graphql-core 3.2.13→3.2.12,
+  mako 1.4.3→1.4.1, filelock 4.0.4→4.0.1, platformdirs 4.12.0→4.11.11, pytz 2026.4→2026.3.post1,
+  watchfiles 1.3.0→1.2.0. 의도한 결과다(이미지 = lock). `uv lock --upgrade`로 따라 올리지 않았다 — 그건
+  목표 버전 세트 밖 패키지까지 움직이는 별도 변경이다.
+
 ## 2026-09-29 (claude) — 공유 Dagster plane 준비: 이미지가 `uv.lock`의 정확한 버전만 설치, 조회를 PinVi location으로
 
 계획: `F:\dev\handoff\dagster-shared-plan.md`(Stage 0 #0.3, Stage 3 #3.2, D4). 배포 변경 없음.

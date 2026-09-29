@@ -34,18 +34,26 @@ def test_every_job_carries_the_pinvi_max_runtime_tag() -> None:
 
     PinVi의 상한(3600초)은 job tag로만 살아남는다 — 태그 없는 job은 공유
     instance의 더 긴 상한을 조용히 물려받는다(`pinvi/etl/run_tags.py`).
+
+    **알려진 예외는 `__ASSET_JOB` 하나다** — asset UI Materialize/backfill용 암묵 job이라
+    tag를 실을 수 없고 instance 기본값을 받는다(문서화된 한계). 예외는 이름으로 건너뛰지
+    않고 집합으로 단언한다: tag 없는 job이 새로 생기면(암묵 job이든 PinVi job이든) 떨어진다.
     """
     from pinvi.etl.definitions import defs
     from pinvi.etl.run_tags import PINVI_JOB_TAGS
 
     repository = defs.get_repository_def()
-    jobs = [job for job in repository.get_all_jobs() if not job.name.startswith("__")]
-    assert jobs, "등록된 job이 없다"
-    for job in jobs:
-        for key, value in PINVI_JOB_TAGS.items():
-            assert job.tags.get(key) == value, (
-                f"{job.name}의 {key} tag가 {job.tags.get(key)!r}다 — 기대값 {value!r}"
-            )
+    jobs = repository.get_all_jobs()
+    untagged = {
+        job.name
+        for job in jobs
+        if any(job.tags.get(key) != value for key, value in PINVI_JOB_TAGS.items())
+    }
+    assert untagged == {"__ASSET_JOB"}, (
+        f"PinVi max_runtime tag가 없는 job: {sorted(untagged)} — 기대는 암묵 `__ASSET_JOB` 하나"
+    )
+    tagged = [job for job in jobs if job.name not in untagged]
+    assert tagged, "tag를 실은 PinVi job이 없다"
 
 
 def test_instigator_default_status_is_the_production_state() -> None:

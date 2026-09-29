@@ -50,18 +50,24 @@ RUN mkdir -p "$DAGSTER_HOME"
 #
 # hash 검사(`--require-hashes`)는 쓰지 않는다 — git 의존성(python-kasi-api,
 # 커밋 고정)은 pip가 hash를 검증할 수 없어 그 모드 자체가 거부된다.
+#
+# 설치 도구도 고정한다. pip 자신은 `==`로, `-e .`를 빌드하는 backend(hatchling과
+# 그 의존성)는 `build-constraints.txt`로 — `--upgrade pip`와 build isolation은
+# 둘 다 빌드 시점 PyPI 최신을 받는다. `--build-constraint`는 pip 25.3+ 옵션이라
+# pip 고정이 먼저다. 이 제약은 build 환경에만 걸리고 앱 의존성(lock)과 섞이지 않는다.
 COPY --from=uv /uv /usr/local/bin/uv
 COPY apps/etl/pyproject.toml ./pyproject.toml
 COPY apps/etl/uv.lock ./uv.lock
+COPY apps/etl/build-constraints.txt /tmp/build-constraints.txt
 COPY apps/etl/pinvi ./pinvi
 RUN uv --no-cache export --locked --no-dev --no-emit-project --no-hashes \
         --format requirements-txt --output-file /tmp/requirements.lock.txt \
     && rm /usr/local/bin/uv \
-    && pip install --upgrade pip \
+    && pip install pip==26.2.1 \
     && pip install --no-deps -r /tmp/requirements.lock.txt \
-    && pip install --no-deps -e . \
+    && pip install --no-deps --build-constraint /tmp/build-constraints.txt -e . \
     && pip check \
-    && rm /tmp/requirements.lock.txt
+    && rm /tmp/requirements.lock.txt /tmp/build-constraints.txt
 
 # instance 설정을 이미지에 굽는다. 마운트로 주입하지 않는 이유는 이 파일이
 # **어느 storage를 쓰는지**를 정하기 때문이다 — 마운트가 빠지면 Dagster가
