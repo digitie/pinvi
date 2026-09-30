@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from dagster import Backoff, RetryPolicy, asset
+from dagster import Backoff, Field, RetryPolicy, asset
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from pinvi.etl.resources import PinviDatabaseResource
@@ -144,6 +144,16 @@ def telegram_outbox_summary_from_rows(
 @asset(
     group_name="pinvi_telegram",
     retry_policy=RetryPolicy(max_retries=3, delay=60, backoff=Backoff.EXPONENTIAL),
+    # schema가 없으면 run config 없는 launch(스케줄·UI)에서 op_config가 None이 된다.
+    config_schema={
+        "stuck_threshold_minutes": Field(
+            int, default_value=DEFAULT_STUCK_THRESHOLD_MINUTES, is_required=False
+        ),
+        "max_attempts": Field(int, default_value=DEFAULT_MAX_ATTEMPTS, is_required=False),
+        "category_window_hours": Field(
+            int, default_value=DEFAULT_CATEGORY_WINDOW_HOURS, is_required=False
+        ),
+    },
     description="telegram_system_notification_outbox retry/backoff/stuck 상태를 payload 없이 집계",
 )
 async def pinvi_telegram_system_outbox(  # type: ignore[no-untyped-def]

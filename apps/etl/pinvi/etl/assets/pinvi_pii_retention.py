@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from dagster import Backoff, RetryPolicy, asset
+from dagster import Backoff, Field, RetryPolicy, asset
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from pinvi.etl.resources import PinviDatabaseResource
@@ -153,6 +153,15 @@ def pii_retention_summary_from_row(
 @asset(
     group_name="pinvi_retention",
     retry_policy=RetryPolicy(max_retries=3, delay=60, backoff=Backoff.EXPONENTIAL),
+    # schema가 없으면 run config 없는 launch(스케줄·UI)에서 op_config가 None이 된다.
+    config_schema={
+        "user_pii_grace_days": Field(
+            int, default_value=DEFAULT_USER_PII_GRACE_DAYS, is_required=False
+        ),
+        "session_grace_days": Field(
+            int, default_value=DEFAULT_SESSION_GRACE_DAYS, is_required=False
+        ),
+    },
     description="PIPA/LBS 보존 기간 만료 후보를 dry-run metadata로 집계",
 )
 async def pinvi_pii_retention(  # type: ignore[no-untyped-def]

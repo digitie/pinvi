@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime, time
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from dagster import Backoff, RetryPolicy, asset
+from dagster import Backoff, Field, RetryPolicy, asset
 from sqlalchemy import bindparam, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -24,6 +24,10 @@ KST = ZoneInfo("Asia/Seoul")
 @asset(
     group_name="pinvi_kasi",
     retry_policy=RetryPolicy(max_retries=3, delay=60, backoff=Backoff.EXPONENTIAL),
+    # schema가 없으면 run config 없는 launch(스케줄·UI)에서 op_config가 None이 된다.
+    config_schema={
+        "batch_limit": Field(int, default_value=500, is_required=False),
+    },
     description="일자 단위 KASI 해·달 출몰시각을 채운다(pending_fetch/stale 대상, ADR-055 §6)",
 )
 async def pinvi_trip_day_rise_sets(  # type: ignore[no-untyped-def]

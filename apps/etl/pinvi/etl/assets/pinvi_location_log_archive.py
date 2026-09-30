@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from dagster import Backoff, RetryPolicy, asset
+from dagster import Backoff, Field, RetryPolicy, asset
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from pinvi.etl.resources import PinviDatabaseResource
@@ -144,6 +144,12 @@ def location_log_archive_summary_from_rows(
 @asset(
     group_name="pinvi_retention",
     retry_policy=RetryPolicy(max_retries=3, delay=60, backoff=Backoff.EXPONENTIAL),
+    # schema가 없으면 run config 없는 launch(스케줄·UI)에서 op_config가 None이 된다.
+    config_schema={
+        "location_retention_months": Field(
+            int, default_value=DEFAULT_LOCATION_RETENTION_MONTHS, is_required=False
+        ),
+    },
     description="location_access_log archive 후보와 hash-chain bridge 상태를 dry-run으로 집계",
 )
 async def pinvi_location_log_archive(  # type: ignore[no-untyped-def]

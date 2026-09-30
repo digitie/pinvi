@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from dagster import Backoff, RetryPolicy, asset
+from dagster import Backoff, Field, RetryPolicy, asset
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from pinvi.etl.resources import PinviDatabaseResource
@@ -149,6 +149,16 @@ def email_outbox_summary_from_rows(
 @asset(
     group_name="pinvi_email",
     retry_policy=RetryPolicy(max_retries=3, delay=60, backoff=Backoff.EXPONENTIAL),
+    # schema가 없으면 run config 없는 launch(스케줄·UI)에서 op_config가 None이 된다.
+    config_schema={
+        "stuck_threshold_minutes": Field(
+            int, default_value=DEFAULT_STUCK_THRESHOLD_MINUTES, is_required=False
+        ),
+        "max_attempts": Field(int, default_value=DEFAULT_MAX_ATTEMPTS, is_required=False),
+        "template_window_hours": Field(
+            int, default_value=DEFAULT_TEMPLATE_WINDOW_HOURS, is_required=False
+        ),
+    },
     description="email_queue pending/backoff/stuck/failed 상태를 PII 없이 집계",
 )
 async def pinvi_email_outbox(  # type: ignore[no-untyped-def]

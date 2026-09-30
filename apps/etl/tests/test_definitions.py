@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+
+import pytest
+
 
 def test_definitions_load() -> None:
     from pinvi.etl.definitions import defs
@@ -84,3 +88,39 @@ def test_instigator_default_status_is_the_production_state() -> None:
     }
     assert running_schedules == set()
     assert running_sensors == {"pinvi_run_failure_sensor"}
+
+
+def test_every_scheduled_job_resolves_op_config_from_an_empty_run_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """스케줄은 run config 없이 launch한다 — 그때도 모든 op가 dict config를 받아야 한다.
+
+    config schema가 없는 asset은 run config가 비면 `context.op_config`가 None이라
+    `.get()`에서 죽는다. 2026-09-30 prod에서 PinVi schedule job 4개가 이렇게 반복 실패했다
+    (kasi_special_days·trip_day_rise_sets·email_outbox·telegram_system_outbox).
+    """
+    from dagster import validate_run_config
+
+    from pinvi.etl.definitions import defs
+
+    # validate_run_config는 resource의 EnvVar도 해석한다 — 연결은 하지 않으니 자리값이면 된다.
+    for name in (
+        "PINVI_DATABASE_URL",
+        "DATA_GO_KR_SERVICE_KEY",
+        "PINVI_KOR_TRAVEL_WEATHER_BASE_URL",
+    ):
+        if not os.environ.get(name):
+            monkeypatch.setenv(name, "placeholder")
+
+    repository = defs.get_repository_def()
+    schedules = list(repository.schedule_defs)
+    assert schedules, "schedule이 하나도 없다"
+    offenders: list[str] = []
+    for schedule in schedules:
+        job = repository.get_job(schedule.job_name)
+        resolved = validate_run_config(job, {})
+        for node_name in job.graph.node_dict:
+            op_config = resolved.get("ops", {}).get(node_name, {}).get("config")
+            if not isinstance(op_config, dict):
+                offenders.append(f"{schedule.job_name}:{node_name}={op_config!r}")
+    assert offenders == [], f"빈 run config에서 op config가 dict가 아니다: {offenders}"

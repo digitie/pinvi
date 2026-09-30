@@ -25,7 +25,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
-from dagster import Backoff, RetryPolicy, asset
+from dagster import Backoff, Field, RetryPolicy, asset
 
 from pinvi.etl.resources import KorTravelWeatherResource
 
@@ -150,6 +150,15 @@ async def fetch_oldest_surviving_values(
 @asset(
     group_name="pinvi_weather_retention",
     retry_policy=RetryPolicy(max_retries=3, delay=60, backoff=Backoff.EXPONENTIAL),
+    # schema가 없으면 run config 없는 launch(스케줄·UI)에서 op_config가 None이 된다.
+    config_schema={
+        "reference_lat": Field(float, default_value=DEFAULT_REFERENCE_LAT, is_required=False),
+        "reference_lon": Field(float, default_value=DEFAULT_REFERENCE_LON, is_required=False),
+        "min_retention_days": Field(
+            int, default_value=DEFAULT_MIN_RETENTION_DAYS, is_required=False
+        ),
+        "sample_limit": Field(int, default_value=DEFAULT_SAMPLE_LIMIT, is_required=False),
+    },
     description=("kor-travel-weather 실효 보존이 15일 미만이면 실패하는 가드(T-367, ADR-068 G-3)"),
 )
 async def pinvi_weather_retention_horizon_guard(  # type: ignore[no-untyped-def]
