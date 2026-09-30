@@ -2,6 +2,24 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-09-30 (claude) — PinVi schedule 7개를 코드에서 RUNNING으로 선언(D4, 소유자 지시)
+
+소유자 지시("pinvi 스케쥴 켜"). 배포 변경 없음 — 코드 정본만 바꿨다.
+
+- `apps/etl/pinvi/etl/schedules.py`: schedule 7개 전부 `default_status=DefaultScheduleStatus.RUNNING`.
+  공유 `dagster_shared` instance는 이력을 새로 시작하므로 DB에서만 켠 상태는 옮겨지지 않는다(D4).
+- `test_instigator_default_status_is_the_production_state`(schedule 전부 STOPPED 단언)를
+  `test_every_instigator_declares_running_in_code`로 교체: 모든 schedule·sensor가 RUNNING을 선언하고,
+  개수 하한(schedule 7, sensor 1)으로 빈 repository의 항진명제 통과를 막는다. origin/main의
+  `schedules.py`로 돌려 한 번 빨갛게 만든 뒤 초록 확인(n150, CI-parity 설치).
+- **운영 준비 상태(n150 읽기 전용 조회, 2026-09-30).** 운영 code-server(`DefaultRunLauncher`라 run이 이
+  프로세스 자식으로 돈다)의 env에는 `PINVI_DATABASE_URL`만 있고 `DATA_GO_KR_SERVICE_KEY`와
+  `PINVI_KOR_TRAVEL_WEATHER_BASE_URL`이 없다(Manager compose `pinvi-dagster-code-server` environment).
+  그래서 `kasi_special_days`·`trip_day_rise_sets`·`weather_retention_horizon`은 켜는 즉시 resource
+  EnvVar 해석에서 실패한다. 나머지 4개(email/telegram outbox, PII retention, location-log archive)는
+  전부 읽기 전용 집계(dry-run)이며 운영 DB에서 같은 SQL을 READ ONLY로 돌려 통과했다(대상 0건).
+  ETL은 메일·텔레그램을 보내지 않는다 — outbox를 세기만 한다. env 보강은 Manager 쪽 작업이다.
+
 ## 2026-09-30 (claude) — 공유 Dagster plane 준비 리뷰 반영: CI도 lock에서, 설치 도구 고정, `__ASSET_JOB` 예외 명시
 
 적대 리뷰(같은 브랜치 `feat/dagster-shared-stage0`) 반영. 배포 변경 없음.
