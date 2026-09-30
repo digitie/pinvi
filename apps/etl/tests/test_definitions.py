@@ -60,34 +60,31 @@ def test_every_job_carries_the_pinvi_max_runtime_tag() -> None:
     assert tagged, "tag를 실은 PinVi job이 없다"
 
 
-def test_instigator_default_status_is_the_production_state() -> None:
+def test_every_instigator_declares_running_in_code() -> None:
     """schedule/sensor의 켜짐 상태는 코드가 정본이다(공유 Dagster plane D4).
 
     DB에서 손으로 켠 상태는 새 `dagster_shared` instance로 옮겨지지 않는다 —
-    코드의 `default_status`만 따라간다. 그래서 운영 상태와 코드 선언이 같아야 한다.
+    이력을 새로 시작하는 instance는 모든 instigator를 코드의 `default_status`로
+    올린다. 그래서 운영에서 도는 것은 전부 코드에 RUNNING으로 선언한다.
 
-    2026-09-29 n150 운영 webserver(`repositoryOrError` 읽기 전용 조회)에서 본 상태:
-    sensor `pinvi_run_failure_sensor`만 RUNNING, schedule 7개는 전부 STOPPED —
-    코드 선언과 같다(DB에만 있는 override 없음). 이 기대값을 바꾸는 것은 운영
-    상태를 바꾸는 결정이므로, 바꿀 때는 이 테스트와 운영을 함께 맞춘다.
+    2026-09-30 소유자 지시("pinvi 스케쥴 켜")로 schedule 7개를 모두 켰다(이전에는
+    sensor `pinvi_run_failure_sensor`만 RUNNING, schedule은 전부 STOPPED). 하나를
+    끄는 것은 운영 상태를 바꾸는 결정이므로 이 테스트와 운영을 함께 맞춘다.
+    개수 하한은 빈 repository가 항진명제로 통과하지 않게 본 것에 건다.
     """
     from dagster import DefaultScheduleStatus, DefaultSensorStatus
 
     from pinvi.etl.definitions import defs
 
     repository = defs.get_repository_def()
-    running_schedules = {
-        schedule.name
-        for schedule in repository.schedule_defs
-        if schedule.default_status == DefaultScheduleStatus.RUNNING
-    }
-    running_sensors = {
-        sensor.name
-        for sensor in repository.sensor_defs
-        if sensor.default_status == DefaultSensorStatus.RUNNING
-    }
-    assert running_schedules == set()
-    assert running_sensors == {"pinvi_run_failure_sensor"}
+    schedules = list(repository.schedule_defs)
+    sensors = list(repository.sensor_defs)
+    assert len(schedules) >= 7
+    assert len(sensors) >= 1
+    for schedule in schedules:
+        assert schedule.default_status == DefaultScheduleStatus.RUNNING, schedule.name
+    for sensor in sensors:
+        assert sensor.default_status == DefaultSensorStatus.RUNNING, sensor.name
 
 
 def test_every_scheduled_job_resolves_op_config_from_an_empty_run_config(

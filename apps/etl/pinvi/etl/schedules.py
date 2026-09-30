@@ -1,8 +1,13 @@
-"""Dagster schedule 정의."""
+"""Dagster schedule 정의.
+
+켜짐 상태는 코드가 정본이다(공유 Dagster plane D4) — 공유 `dagster_shared` instance는 이력을
+새로 시작하므로 DB에서 손으로 켠 상태는 옮겨지지 않는다. 운영에서 도는 schedule은
+모두 `default_status=RUNNING`을 선언한다(`tests/test_definitions.py`가 고정).
+"""
 
 from __future__ import annotations
 
-from dagster import ScheduleDefinition, define_asset_job
+from dagster import DefaultScheduleStatus, ScheduleDefinition, define_asset_job
 
 from pinvi.etl.run_tags import PINVI_JOB_TAGS
 
@@ -53,30 +58,35 @@ schedules = [
         job=kasi_special_days_job,
         cron_schedule="30 3 * * *",
         execution_timezone="Asia/Seoul",
+        default_status=DefaultScheduleStatus.RUNNING,
     ),
     ScheduleDefinition(
         name="pinvi_email_outbox_schedule",
         job=pinvi_email_outbox_job,
         cron_schedule="*/15 * * * *",
         execution_timezone="Asia/Seoul",
+        default_status=DefaultScheduleStatus.RUNNING,
     ),
     ScheduleDefinition(
         name="pinvi_pii_retention_schedule",
         job=pinvi_pii_retention_job,
         cron_schedule="15 4 * * *",
         execution_timezone="Asia/Seoul",
+        default_status=DefaultScheduleStatus.RUNNING,
     ),
     ScheduleDefinition(
         name="pinvi_location_log_archive_schedule",
         job=pinvi_location_log_archive_job,
         cron_schedule="30 4 * * *",
         execution_timezone="Asia/Seoul",
+        default_status=DefaultScheduleStatus.RUNNING,
     ),
     ScheduleDefinition(
         name="pinvi_telegram_system_outbox_schedule",
         job=pinvi_telegram_system_outbox_job,
         cron_schedule="*/15 * * * *",
         execution_timezone="Asia/Seoul",
+        default_status=DefaultScheduleStatus.RUNNING,
     ),
     # 사용자가 일정 중 POI를 추가/이동하면 pending_fetch 일자 rise/set이 생기므로 자주 채운다.
     ScheduleDefinition(
@@ -84,11 +94,13 @@ schedules = [
         job=pinvi_trip_day_rise_sets_job,
         cron_schedule="*/20 * * * *",
         execution_timezone="Asia/Seoul",
+        default_status=DefaultScheduleStatus.RUNNING,
     ),
     ScheduleDefinition(
         name="pinvi_weather_retention_horizon_schedule",
         job=pinvi_weather_retention_horizon_job,
         cron_schedule="0 5 * * *",
         execution_timezone="Asia/Seoul",
+        default_status=DefaultScheduleStatus.RUNNING,
     ),
 ]
