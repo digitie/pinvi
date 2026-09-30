@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime, time
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from dagster import Backoff, RetryPolicy, asset
+from dagster import Backoff, Config, RetryPolicy, asset
 from sqlalchemy import bindparam, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -21,6 +21,12 @@ from pinvi.etl.resources import KasiResource, PinviDatabaseResource
 KST = ZoneInfo("Asia/Seoul")
 
 
+class TripDayRiseSetsConfig(Config):
+    """run config가 비어도 기본값이 채워진다(schema 없으면 `op_config`가 None)."""
+
+    batch_limit: int = 500
+
+
 @asset(
     group_name="pinvi_kasi",
     retry_policy=RetryPolicy(max_retries=3, delay=60, backoff=Backoff.EXPONENTIAL),
@@ -28,10 +34,11 @@ KST = ZoneInfo("Asia/Seoul")
 )
 async def pinvi_trip_day_rise_sets(  # type: ignore[no-untyped-def]
     context,
+    config: TripDayRiseSetsConfig,
     db: PinviDatabaseResource,
     kasi: KasiResource,
 ) -> dict[str, int]:
-    limit = int(context.op_config.get("batch_limit", 500))
+    limit = config.batch_limit
     engine = db.create_engine()
     client = kasi.create_client()
     filled = 0

@@ -25,7 +25,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
-from dagster import Backoff, RetryPolicy, asset
+from dagster import Backoff, Config, RetryPolicy, asset
 
 from pinvi.etl.resources import KorTravelWeatherResource
 
@@ -147,6 +147,15 @@ async def fetch_oldest_surviving_values(
     return [item for item in data if isinstance(item, Mapping)]
 
 
+class WeatherRetentionHorizonConfig(Config):
+    """run config가 비어도 기본값이 채워진다(schema 없으면 `op_config`가 None)."""
+
+    reference_lat: float = DEFAULT_REFERENCE_LAT
+    reference_lon: float = DEFAULT_REFERENCE_LON
+    min_retention_days: int = DEFAULT_MIN_RETENTION_DAYS
+    sample_limit: int = DEFAULT_SAMPLE_LIMIT
+
+
 @asset(
     group_name="pinvi_weather_retention",
     retry_policy=RetryPolicy(max_retries=3, delay=60, backoff=Backoff.EXPONENTIAL),
@@ -154,14 +163,13 @@ async def fetch_oldest_surviving_values(
 )
 async def pinvi_weather_retention_horizon_guard(  # type: ignore[no-untyped-def]
     context,
+    config: WeatherRetentionHorizonConfig,
     kor_travel_weather: KorTravelWeatherResource,
 ) -> dict[str, Any]:
-    reference_lat = float(context.op_config.get("reference_lat", DEFAULT_REFERENCE_LAT))
-    reference_lon = float(context.op_config.get("reference_lon", DEFAULT_REFERENCE_LON))
-    min_retention_days = int(
-        context.op_config.get("min_retention_days", DEFAULT_MIN_RETENTION_DAYS)
-    )
-    sample_limit = int(context.op_config.get("sample_limit", DEFAULT_SAMPLE_LIMIT))
+    reference_lat = config.reference_lat
+    reference_lon = config.reference_lon
+    min_retention_days = config.min_retention_days
+    sample_limit = config.sample_limit
 
     now = datetime.now(UTC)
     client = kor_travel_weather.create_client()

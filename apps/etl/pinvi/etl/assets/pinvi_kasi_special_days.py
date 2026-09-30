@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any
 
-from dagster import Backoff, RetryPolicy, asset
+from dagster import Backoff, Config, RetryPolicy, asset
 from sqlalchemy import bindparam, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -21,6 +21,17 @@ SPECIAL_DAY_DATASETS: dict[str, str] = {
     "solar_terms_24": "solar_terms_24",
     "sundry_days": "sundry_days",
 }
+
+
+class KasiSpecialDaysConfig(Config):
+    """run config 없이(스케줄·수동 launch) 실행돼도 기본값이 채워진다.
+
+    config schema가 없는 asset은 run config가 비면 `context.op_config`가 None이라
+    `.get()`에서 죽는다(2026-09-30 prod smoke run 8cf775c2).
+    """
+
+    lookback_months: int = 6
+    lookahead_months: int = 18
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,12 +130,13 @@ async def upsert_special_day_records(
 )
 async def pinvi_kasi_special_days(  # type: ignore[no-untyped-def]
     context,
+    config: KasiSpecialDaysConfig,
     db: PinviDatabaseResource,
     kasi: KasiResource,
 ) -> dict[str, int]:
     today = datetime.now(UTC).date()
-    lookback = int(context.op_config.get("lookback_months", 6))
-    lookahead = int(context.op_config.get("lookahead_months", 18))
+    lookback = config.lookback_months
+    lookahead = config.lookahead_months
 
     engine = db.create_engine()
     client = kasi.create_client()

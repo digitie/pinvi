@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from dagster import Backoff, RetryPolicy, asset
+from dagster import Backoff, Config, RetryPolicy, asset
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from pinvi.etl.resources import PinviDatabaseResource
@@ -150,6 +150,13 @@ def pii_retention_summary_from_row(
     )
 
 
+class PiiRetentionConfig(Config):
+    """run config가 비어도 기본값이 채워진다(schema 없으면 `op_config`가 None)."""
+
+    user_pii_grace_days: int = DEFAULT_USER_PII_GRACE_DAYS
+    session_grace_days: int = DEFAULT_SESSION_GRACE_DAYS
+
+
 @asset(
     group_name="pinvi_retention",
     retry_policy=RetryPolicy(max_retries=3, delay=60, backoff=Backoff.EXPONENTIAL),
@@ -157,15 +164,12 @@ def pii_retention_summary_from_row(
 )
 async def pinvi_pii_retention(  # type: ignore[no-untyped-def]
     context,
+    config: PiiRetentionConfig,
     db: PinviDatabaseResource,
 ) -> dict[str, Any]:
     current = datetime.now(UTC)
-    user_pii_grace_days = int(
-        context.op_config.get("user_pii_grace_days", DEFAULT_USER_PII_GRACE_DAYS)
-    )
-    session_grace_days = int(
-        context.op_config.get("session_grace_days", DEFAULT_SESSION_GRACE_DAYS)
-    )
+    user_pii_grace_days = config.user_pii_grace_days
+    session_grace_days = config.session_grace_days
     engine = db.create_engine()
     try:
         async with engine.connect() as conn:

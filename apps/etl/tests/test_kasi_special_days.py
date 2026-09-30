@@ -2,15 +2,23 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from typing import Any
 
 import pytest
+from dagster import materialize
+from kasi.parser import parse_function_response
 
 from pinvi.etl.assets.pinvi_kasi_special_days import (
+    SPECIAL_DAY_DATASETS,
     fetch_special_day_records,
     month_buckets,
+    pinvi_kasi_special_days,
 )
+from pinvi.etl.resources import KasiResource, PinviDatabaseResource
 
 
 @dataclass(frozen=True)
@@ -71,3 +79,135 @@ async def test_fetch_special_day_records_uses_all_datasets_without_network() -> 
     assert records[0].sol_date == date(2026, 5, 5)
     assert records[0].name == "어린이날"
     assert records[0].sequence == "1"
+
+
+# 2026-09-30 n150에서 `getRestDeInfo`(solMonth별, `_type=json`)가 실제로 돌려준 response.body
+# 세 가지 모양 — 특일 없는 달은 `items: ""`, 1건이면 `item`이 dict, 여러 건이면 list다.
+_REAL_EMPTY_MONTH_BODY: dict[str, Any] = {
+    "items": "",
+    "numOfRows": 100,
+    "pageNo": 1,
+    "totalCount": 0,
+}
+_REAL_2026_10_BODY: dict[str, Any] = {
+    "items": {
+        "item": [
+            {"dateKind": "01", "dateName": "개천절", "isHoliday": "Y", "locdate": 20261003, "seq": 1},
+            {
+                "dateKind": "01",
+                "dateName": "대체공휴일(개천절)",
+                "isHoliday": "Y",
+                "locdate": 20261005,
+                "seq": 1,
+            },
+            {"dateKind": "01", "dateName": "한글날", "isHoliday": "Y", "locdate": 20261009, "seq": 1},
+        ]
+    },
+    "numOfRows": 100,
+    "pageNo": 1,
+    "totalCount": 3,
+}
+_REAL_2026_12_BODY: dict[str, Any] = {
+    "items": {
+        "item": {
+            "dateKind": "01",
+            "dateName": "기독탄신일",
+            "isHoliday": "Y",
+            "locdate": 20261225,
+            "seq": 1,
+        }
+    },
+    "numOfRows": 100,
+    "pageNo": 1,
+    "totalCount": 1,
+}
+
+_CALLS: list[tuple[str, int, int]] = []
+_UPSERTED: list[dict[str, Any]] = []
+
+
+class _RealShapeKasiClient:
+    """`python-kasi-api`의 fixture 파서로 실제 응답 body를 `Page`로 만들어 돌려준다."""
+
+    def __getattr__(self, name: str) -> Any:
+        if name not in SPECIAL_DAY_DATASETS.values():
+            raise AttributeError(name)
+
+        async def fetch(*, sol_year: int, sol_month: int, **_kwargs: Any) -> Any:
+            _CALLS.append((name, sol_year, sol_month))
+            body = _REAL_EMPTY_MONTH_BODY
+            if name == "holidays" and sol_month == 10:
+                body = _REAL_2026_10_BODY
+            elif name == "holidays" and sol_month == 12:
+                body = _REAL_2026_12_BODY
+            return parse_function_response(name, body)
+
+        return fetch
+
+    async def aclose(self) -> None:
+        return None
+
+
+class _RecordingConn:
+    async def execute(self, _stmt: Any, params: list[dict[str, Any]] | None = None) -> None:
+        _UPSERTED.extend(params or [])
+
+
+class _RecordingEngine:
+    @asynccontextmanager
+    async def begin(self) -> AsyncIterator[_RecordingConn]:
+        yield _RecordingConn()
+
+    async def dispose(self) -> None:
+        return None
+
+
+class _FakeDb(PinviDatabaseResource):
+    def create_engine(self) -> Any:
+        return _RecordingEngine()
+
+
+class _FakeKasi(KasiResource):
+    def create_client(self) -> Any:
+        return _RealShapeKasiClient()
+
+
+def test_asset_materializes_without_run_config() -> None:
+    """스케줄·smoke launch처럼 run config 없이 돌아도 기본 범위로 적재한다.
+
+    회귀: config schema가 없어 `context.op_config`가 None이었고, 첫 줄
+    `context.op_config.get("lookback_months", 6)`에서 AttributeError로 재시도만 반복했다
+    (2026-09-30 prod smoke run 8cf775c2).
+    """
+    _CALLS.clear()
+    _UPSERTED.clear()
+
+    result = materialize(
+        [pinvi_kasi_special_days],
+        resources={
+            "db": _FakeDb(dsn="postgresql+asyncpg://unused/unused"),
+            "kasi": _FakeKasi(service_key="unused"),
+        },
+        # op config는 비운 채(스케줄과 같다) executor 재시도만 끈다 — RetryPolicy 대기 방지.
+        run_config={"execution": {"config": {"retries": {"disabled": {}}}}},
+        raise_on_error=False,
+    )
+
+    assert result.success
+    today = datetime.now(UTC).date()
+    months = month_buckets(today, lookback_months=6, lookahead_months=18)
+    assert len(months) == 25
+    assert len(_CALLS) == len(months) * len(SPECIAL_DAY_DATASETS)
+    octobers = sum(1 for month in months if month.month == 10)
+    decembers = sum(1 for month in months if month.month == 12)
+    assert len(_UPSERTED) == 3 * octobers + decembers
+    assert {row["dataset"] for row in _UPSERTED} == {"holidays"}
+    assert {row["name"] for row in _UPSERTED} == {
+        "개천절",
+        "대체공휴일(개천절)",
+        "한글날",
+        "기독탄신일",
+    }
+    metadata = result.asset_materializations_for_node("pinvi_kasi_special_days")[0].metadata
+    assert metadata["lookback_months"].value == 6
+    assert metadata["lookahead_months"].value == 18

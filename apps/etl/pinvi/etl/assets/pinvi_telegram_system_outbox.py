@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from dagster import Backoff, RetryPolicy, asset
+from dagster import Backoff, Config, RetryPolicy, asset
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from pinvi.etl.resources import PinviDatabaseResource
@@ -141,6 +141,14 @@ def telegram_outbox_summary_from_rows(
     )
 
 
+class TelegramSystemOutboxConfig(Config):
+    """run config가 비어도 기본값이 채워진다(schema 없으면 `op_config`가 None)."""
+
+    stuck_threshold_minutes: int = DEFAULT_STUCK_THRESHOLD_MINUTES
+    max_attempts: int = DEFAULT_MAX_ATTEMPTS
+    category_window_hours: int = DEFAULT_CATEGORY_WINDOW_HOURS
+
+
 @asset(
     group_name="pinvi_telegram",
     retry_policy=RetryPolicy(max_retries=3, delay=60, backoff=Backoff.EXPONENTIAL),
@@ -148,16 +156,13 @@ def telegram_outbox_summary_from_rows(
 )
 async def pinvi_telegram_system_outbox(  # type: ignore[no-untyped-def]
     context,
+    config: TelegramSystemOutboxConfig,
     db: PinviDatabaseResource,
 ) -> dict[str, int]:
     current = datetime.now(UTC)
-    stuck_threshold_minutes = int(
-        context.op_config.get("stuck_threshold_minutes", DEFAULT_STUCK_THRESHOLD_MINUTES)
-    )
-    max_attempts = int(context.op_config.get("max_attempts", DEFAULT_MAX_ATTEMPTS))
-    category_window_hours = int(
-        context.op_config.get("category_window_hours", DEFAULT_CATEGORY_WINDOW_HOURS)
-    )
+    stuck_threshold_minutes = config.stuck_threshold_minutes
+    max_attempts = config.max_attempts
+    category_window_hours = config.category_window_hours
 
     engine = db.create_engine()
     try:
