@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+
+import pytest
+
 
 def test_definitions_load() -> None:
     from pinvi.etl.definitions import defs
@@ -86,7 +90,9 @@ def test_instigator_default_status_is_the_production_state() -> None:
     assert running_sensors == {"pinvi_run_failure_sensor"}
 
 
-def test_every_scheduled_job_resolves_op_config_from_an_empty_run_config() -> None:
+def test_every_scheduled_job_resolves_op_config_from_an_empty_run_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """스케줄은 run config 없이 launch한다 — 그때도 모든 op가 dict config를 받아야 한다.
 
     config schema가 없는 asset은 run config가 비면 `context.op_config`가 None이라
@@ -96,6 +102,15 @@ def test_every_scheduled_job_resolves_op_config_from_an_empty_run_config() -> No
     from dagster import validate_run_config
 
     from pinvi.etl.definitions import defs
+
+    # validate_run_config는 resource의 EnvVar도 해석한다 — 연결은 하지 않으니 자리값이면 된다.
+    for name in (
+        "PINVI_DATABASE_URL",
+        "DATA_GO_KR_SERVICE_KEY",
+        "PINVI_KOR_TRAVEL_WEATHER_BASE_URL",
+    ):
+        if not os.environ.get(name):
+            monkeypatch.setenv(name, "placeholder")
 
     repository = defs.get_repository_def()
     schedules = list(repository.schedule_defs)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -9,7 +10,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from dagster import materialize
+from dagster import build_asset_context
 from kasi.parser import parse_function_response
 
 from pinvi.etl.assets.pinvi_trip_day_rise_sets import (
@@ -145,7 +146,7 @@ class _FakeKasi(KasiResource):
         return _RealShapeRiseSetClient()
 
 
-def test_asset_materializes_without_run_config() -> None:
+def test_asset_runs_without_run_config() -> None:
     """스케줄·smoke launch처럼 run config 없이 돌아도 기본 batch_limit로 채운다.
 
     회귀: config schema가 없어 `context.op_config`가 None이었고, 첫 줄
@@ -155,18 +156,18 @@ def test_asset_materializes_without_run_config() -> None:
     _SELECT_PARAMS.clear()
     _UPDATES.clear()
 
-    result = materialize(
-        [pinvi_trip_day_rise_sets],
-        resources={
-            "db": _FakeDb(dsn="postgresql+asyncpg://unused/unused"),
-            "kasi": _FakeKasi(service_key="unused"),
-        },
-        # op config는 비운 채(스케줄과 같다) executor 재시도만 끈다 — RetryPolicy 대기 방지.
-        run_config={"execution": {"config": {"retries": {"disabled": {}}}}},
-        raise_on_error=False,
+    # 직접 호출(invocation)로 돌린다 — materialize는 asset RetryPolicy(60s/180s/420s 대기)를
+    # 그대로 따라 실패 시 수 분을 잔다. 스케줄 경로(빈 run config) 자체는
+    # test_definitions의 validate_run_config 검사가 본다.
+    result = asyncio.run(
+        pinvi_trip_day_rise_sets(
+            build_asset_context(),
+            db=_FakeDb(dsn="postgresql+asyncpg://unused/unused"),
+            kasi=_FakeKasi(service_key="unused"),
+        )
     )
 
-    assert result.success
+    assert result == {"filled": 1, "failed": 0}
     assert _SELECT_PARAMS == [{"limit": 500}]
     assert [kind for kind, _params in _UPDATES] == ["success"]
     params = _UPDATES[0][1]
@@ -177,6 +178,3 @@ def test_asset_materializes_without_run_config() -> None:
     assert (params["moonrise_at"].hour, params["moonrise_at"].minute) == (23, 0)
     assert (params["moonset_at"].hour, params["moonset_at"].minute) == (13, 41)
     assert params["raw_payload"]["location"] == "서울"
-    metadata = result.asset_materializations_for_node("pinvi_trip_day_rise_sets")[0].metadata
-    assert metadata["filled"].value == 1
-    assert metadata["failed"].value == 0

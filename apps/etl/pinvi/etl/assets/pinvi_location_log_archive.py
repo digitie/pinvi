@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from dagster import Backoff, Config, RetryPolicy, asset
+from dagster import Backoff, Field, RetryPolicy, asset
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from pinvi.etl.resources import PinviDatabaseResource
@@ -141,24 +141,28 @@ def location_log_archive_summary_from_rows(
     )
 
 
-class LocationLogArchiveConfig(Config):
-    """run config가 비어도 기본값이 채워진다(schema 없으면 `op_config`가 None)."""
-
-    location_retention_months: int = DEFAULT_LOCATION_RETENTION_MONTHS
-
-
 @asset(
     group_name="pinvi_retention",
     retry_policy=RetryPolicy(max_retries=3, delay=60, backoff=Backoff.EXPONENTIAL),
+    # schema가 없으면 run config 없는 launch(스케줄·UI)에서 op_config가 None이 된다.
+    config_schema={
+        "location_retention_months": Field(
+            int, default_value=DEFAULT_LOCATION_RETENTION_MONTHS, is_required=False
+        ),
+    },
     description="location_access_log archive 후보와 hash-chain bridge 상태를 dry-run으로 집계",
 )
 async def pinvi_location_log_archive(  # type: ignore[no-untyped-def]
     context,
-    config: LocationLogArchiveConfig,
     db: PinviDatabaseResource,
 ) -> dict[str, Any]:
     current = datetime.now(UTC)
-    location_retention_months = config.location_retention_months
+    location_retention_months = int(
+        context.op_config.get(
+            "location_retention_months",
+            DEFAULT_LOCATION_RETENTION_MONTHS,
+        )
+    )
 
     engine = db.create_engine()
     try:

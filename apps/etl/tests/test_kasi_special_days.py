@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -9,7 +10,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
-from dagster import materialize
+from dagster import build_asset_context
 from kasi.parser import parse_function_response
 
 from pinvi.etl.assets.pinvi_kasi_special_days import (
@@ -92,7 +93,13 @@ _REAL_EMPTY_MONTH_BODY: dict[str, Any] = {
 _REAL_2026_10_BODY: dict[str, Any] = {
     "items": {
         "item": [
-            {"dateKind": "01", "dateName": "개천절", "isHoliday": "Y", "locdate": 20261003, "seq": 1},
+            {
+                "dateKind": "01",
+                "dateName": "개천절",
+                "isHoliday": "Y",
+                "locdate": 20261003,
+                "seq": 1,
+            },
             {
                 "dateKind": "01",
                 "dateName": "대체공휴일(개천절)",
@@ -100,7 +107,13 @@ _REAL_2026_10_BODY: dict[str, Any] = {
                 "locdate": 20261005,
                 "seq": 1,
             },
-            {"dateKind": "01", "dateName": "한글날", "isHoliday": "Y", "locdate": 20261009, "seq": 1},
+            {
+                "dateKind": "01",
+                "dateName": "한글날",
+                "isHoliday": "Y",
+                "locdate": 20261009,
+                "seq": 1,
+            },
         ]
     },
     "numOfRows": 100,
@@ -172,7 +185,7 @@ class _FakeKasi(KasiResource):
         return _RealShapeKasiClient()
 
 
-def test_asset_materializes_without_run_config() -> None:
+def test_asset_runs_without_run_config() -> None:
     """스케줄·smoke launch처럼 run config 없이 돌아도 기본 범위로 적재한다.
 
     회귀: config schema가 없어 `context.op_config`가 None이었고, 첫 줄
@@ -182,18 +195,17 @@ def test_asset_materializes_without_run_config() -> None:
     _CALLS.clear()
     _UPSERTED.clear()
 
-    result = materialize(
-        [pinvi_kasi_special_days],
-        resources={
-            "db": _FakeDb(dsn="postgresql+asyncpg://unused/unused"),
-            "kasi": _FakeKasi(service_key="unused"),
-        },
-        # op config는 비운 채(스케줄과 같다) executor 재시도만 끈다 — RetryPolicy 대기 방지.
-        run_config={"execution": {"config": {"retries": {"disabled": {}}}}},
-        raise_on_error=False,
+    # 직접 호출(invocation)로 돌린다 — materialize는 asset RetryPolicy(60s/180s/420s 대기)를
+    # 그대로 따라 실패 시 수 분을 잔다. 스케줄 경로(빈 run config) 자체는
+    # test_definitions의 validate_run_config 검사가 본다.
+    result = asyncio.run(
+        pinvi_kasi_special_days(
+            build_asset_context(),
+            db=_FakeDb(dsn="postgresql+asyncpg://unused/unused"),
+            kasi=_FakeKasi(service_key="unused"),
+        )
     )
 
-    assert result.success
     today = datetime.now(UTC).date()
     months = month_buckets(today, lookback_months=6, lookahead_months=18)
     assert len(months) == 25
@@ -208,6 +220,4 @@ def test_asset_materializes_without_run_config() -> None:
         "한글날",
         "기독탄신일",
     }
-    metadata = result.asset_materializations_for_node("pinvi_kasi_special_days")[0].metadata
-    assert metadata["lookback_months"].value == 6
-    assert metadata["lookahead_months"].value == 18
+    assert result == {"records": len(_UPSERTED)}

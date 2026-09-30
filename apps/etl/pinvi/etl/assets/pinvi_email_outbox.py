@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from dagster import Backoff, Config, RetryPolicy, asset
+from dagster import Backoff, Field, RetryPolicy, asset
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from pinvi.etl.resources import PinviDatabaseResource
@@ -146,28 +146,33 @@ def email_outbox_summary_from_rows(
     )
 
 
-class EmailOutboxConfig(Config):
-    """run config가 비어도 기본값이 채워진다(schema 없으면 `op_config`가 None)."""
-
-    stuck_threshold_minutes: int = DEFAULT_STUCK_THRESHOLD_MINUTES
-    max_attempts: int = DEFAULT_MAX_ATTEMPTS
-    template_window_hours: int = DEFAULT_TEMPLATE_WINDOW_HOURS
-
-
 @asset(
     group_name="pinvi_email",
     retry_policy=RetryPolicy(max_retries=3, delay=60, backoff=Backoff.EXPONENTIAL),
+    # schema가 없으면 run config 없는 launch(스케줄·UI)에서 op_config가 None이 된다.
+    config_schema={
+        "stuck_threshold_minutes": Field(
+            int, default_value=DEFAULT_STUCK_THRESHOLD_MINUTES, is_required=False
+        ),
+        "max_attempts": Field(int, default_value=DEFAULT_MAX_ATTEMPTS, is_required=False),
+        "template_window_hours": Field(
+            int, default_value=DEFAULT_TEMPLATE_WINDOW_HOURS, is_required=False
+        ),
+    },
     description="email_queue pending/backoff/stuck/failed 상태를 PII 없이 집계",
 )
 async def pinvi_email_outbox(  # type: ignore[no-untyped-def]
     context,
-    config: EmailOutboxConfig,
     db: PinviDatabaseResource,
 ) -> dict[str, int]:
     current = datetime.now(UTC)
-    stuck_threshold_minutes = config.stuck_threshold_minutes
-    max_attempts = config.max_attempts
-    template_window_hours = config.template_window_hours
+    stuck_threshold_minutes = int(
+        context.op_config.get("stuck_threshold_minutes", DEFAULT_STUCK_THRESHOLD_MINUTES)
+    )
+    max_attempts = int(context.op_config.get("max_attempts", DEFAULT_MAX_ATTEMPTS))
+    template_window_hours = int(
+        context.op_config.get("template_window_hours", DEFAULT_TEMPLATE_WINDOW_HOURS)
+    )
 
     engine = db.create_engine()
     try:
