@@ -4,8 +4,8 @@
 
 ## 2026-10-02 (claude) — Map OpenAPI 재vendor: Map의 weather 표면 삭제(Map ADR-105) 수용
 
-브랜치 `chore/map-drop-weather`. Map `feat/remove-map-kma-dagster` head
-`61d2ee81fbe478d9101054bf8acbc48dd1b8d0e3`의 `openapi.user.json`/`openapi.service.json`/`openapi.json`을
+브랜치 `chore/map-drop-weather`. Map main(#1293 머지 커밋)
+`11b811d91eadf177d2a52319945e6c283b62dbe6`의 `openapi.user.json`/`openapi.service.json`/`openapi.json`을
 byte-exact vendor했다(user `3a847c8a…`, service `6677d41f…`, admin `d2935f46…`).
 
 - Map 의미 diff(Map main 대비): user에서 weather 경로 5개·schema 13개, `BeachPublicView.latest_weather`,

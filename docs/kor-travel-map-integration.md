@@ -197,7 +197,7 @@ T-VN-41 source byte 계약은 Map commit
 leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
 commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
 
-서비스 계약은 Map `61d2ee81fbe478d9101054bf8acbc48dd1b8d0e3`(ADR-105 weather 삭제 브랜치 head —
+서비스 계약은 Map `11b811d91eadf177d2a52319945e6c283b62dbe6`(ADR-105 weather 삭제, #1293 머지 커밋 —
 merge 후 merge commit으로 재핀)의 `packages/kor-travel-map-api/openapi.service.json` exact bytes를
 vendor한다. SHA-256은 `6677d41f572fe53b24269fc7d0a1f6a216ee774ce6744be0590959d8f8f2ddfb`다
 (직전: Map PR #1051 merge `db319a47…`, `99ba6c17…`). artifact owner/functional

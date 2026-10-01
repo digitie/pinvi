@@ -6,7 +6,7 @@
 > 더 이상 "목표/aspirational"이 아니라 **실재하는 계약**이다 — ADR-026/027(DEC-01=B)
 > 의 전제가 충족됨.
 > **2026-10-02 재vendor (Map ADR-105, weather 삭제 — 본문의 옛 핀·weather 서술보다 우선)**:
-> Map `feat/remove-map-kma-dagster` head `61d2ee81fbe478d9101054bf8acbc48dd1b8d0e3`의
+> Map main `11b811d91eadf177d2a52319945e6c283b62dbe6`(#1293 머지 커밋)의
 > user/service/full OpenAPI를 byte-exact vendor했다 — user SHA-256
 > `3a847c8a53f36044080839855d634fbfa2c5b18fa769bcf95bcbbaa614f72da4`, service
 > `6677d41f572fe53b24269fc7d0a1f6a216ee774ce6744be0590959d8f8f2ddfb`, admin(full)
