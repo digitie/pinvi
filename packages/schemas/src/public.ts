@@ -28,7 +28,6 @@ export const PublicBeachViewSchema = z.object({
   marker_color: MarkerColorSchema.nullable().optional(),
   marker_icon: z.string().nullable().optional(),
   latest_water_quality: JsonObjectSchema.nullable().optional(),
-  latest_weather: JsonObjectSchema.nullable().optional(),
   upcoming_index_forecasts: z.array(JsonObjectSchema).optional().default([]),
 });
 export type PublicBeachView = z.infer<typeof PublicBeachViewSchema>;

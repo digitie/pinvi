@@ -1,5 +1,15 @@
 # resume.md
 
+## 2026-10-02 (claude) — Map weather 삭제 OpenAPI 수용 (브랜치 `chore/map-drop-weather`)
+
+Map ADR-105(Map의 weather 표면 전부 삭제)를 받는 Pinvi 쪽 준비. user/service/full 스냅샷을 Map
+`11b811d9`에서 재vendor하고 핀·M05 pair 계약을 갱신했으며 `PublicBeachView.latest_weather`를 공개 계약에서
+뺐다. 상세는 `docs/journal.md`.
+
+- 다음 한 작업: Map PR merge 후 merge commit으로 재핀 → PR 열고 CI green 후 머지. 배포는 weather 삭제 Map과
+  같은 pair로(M05 pair digest 변경). sync/reconciliation을 켠 환경이면 env의
+  `..._EXPECTED_OPENAPI_SHA256`/`..._EXPECTED_SOURCE_REVISION`도 함께 바꾼다.
+
 ## 2026-09-28 (claude) — app compose `app-dagster` Dagster storage (브랜치 `fix/app-dagster-instance-storage`)
 
 Manager M05 격리 실행이 `--profile etl up --wait app-dagster`에서 unhealthy로 멈추던 원인을 고쳤다 —
