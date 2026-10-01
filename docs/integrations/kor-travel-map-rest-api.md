@@ -5,6 +5,17 @@
 > **상태(중대 변화)**: 2026-06-08 기준 **kor-travel-map이 운영급 HTTP API를 이미 구축했다.**
 > 더 이상 "목표/aspirational"이 아니라 **실재하는 계약**이다 — ADR-026/027(DEC-01=B)
 > 의 전제가 충족됨.
+> **2026-10-02 재vendor (Map ADR-105, weather 삭제 — 본문의 옛 핀·weather 서술보다 우선)**:
+> Map `feat/remove-map-kma-dagster` head `61d2ee81fbe478d9101054bf8acbc48dd1b8d0e3`의
+> user/service/full OpenAPI를 byte-exact vendor했다 — user SHA-256
+> `3a847c8a53f36044080839855d634fbfa2c5b18fa769bcf95bcbbaa614f72da4`, service
+> `6677d41f572fe53b24269fc7d0a1f6a216ee774ce6744be0590959d8f8f2ddfb`, admin(full)
+> `d2935f46b308de5c71b00b27777d5a32aefca2b7ed5f0be1558d4ebc1f6f0c3a`. Map은 weather 경로 전부
+> (`/v1/features/weather/{batch,alerts,forecast}`, `/v1/features/{id}/weather{,/snapshot,/forecast}`,
+> `/v1/admin/features/{id}/weather`, `/v1/admin/features/weather/alerts`)와
+> `BeachPublicView.latest_weather`·`FeatureSummary`/`AdminFeatureMapItem.weather_summary`를
+> 지웠다. Pinvi는 T-365에서 이미 그 경로를 호출하지 않으므로 공개 `PublicBeachView.latest_weather`만
+> 함께 걷어냈다. Map이 squash merge하면 핀(`map_release_revision` 등)을 merge commit으로 다시 올린다.
 > **검증 기준선**: `kor-travel-map` `origin/main` `HEAD=f442bd0`
 > (`packages/kor-travel-map-admin/openapi.user.json`, title `kor-travel-map-user` v0.2.0-dev) +
 > Pinvi `origin/main` `HEAD=0485974`(#87 feature_id opaque string 반영)을 2026-06-08 대조.

@@ -38,7 +38,6 @@ class PublicBeachView(BaseModel):
     marker_color: str | None = None
     marker_icon: str | None = None
     latest_water_quality: dict[str, Any] | None = None
-    latest_weather: dict[str, Any] | None = None
     upcoming_index_forecasts: list[dict[str, Any]] = Field(default_factory=list)
 
 

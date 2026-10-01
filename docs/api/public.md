@@ -6,8 +6,9 @@
 > **상태 (2026-06-12): 구현됨(T-130 / kor_travel_map T-222c).** kor-travel-map
 > `openapi.user.json`에 `/v1/public/beaches*`와 `/v1/public/festivals*` 표면이 추가됐고,
 > Pinvi는 `app.clients.kor_travel_map.KorTravelMapClient`로 해당 user OpenAPI를 호출해
-> `/public/*`에 투영한다. 수질/KHOA index/weather는 kor_travel_map 응답의 nullable 필드를 그대로
-> 노출한다.
+> `/public/*`에 투영한다. 수질/KHOA index는 kor_travel_map 응답의 nullable 필드를 그대로
+> 노출한다. 해수욕장 `latest_weather`는 Map ADR-105(Map의 weather 표면 삭제)에 맞춰 Pinvi 공개
+> 계약에서도 제거했다 — 날씨는 `kor-travel-weather`가 소유한다(ADR-068).
 
 ## 1. 정책
 
@@ -68,9 +69,6 @@ GET /public/beaches?sido_code=26&sigungu_code=26110&q=광안리&page_size=50&cur
         "upcoming_index_forecasts": [
           /* KHOA 예보 */
         ],
-        "latest_weather": {
-          /* KMA */
-        },
       },
     ],
   },

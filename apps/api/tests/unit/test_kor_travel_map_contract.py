@@ -16,7 +16,8 @@ schema 계약을 vendored **service** 스냅샷(`tests/contract/kor-travel-map-o
 user 스냅샷에서 검증한다. 두 스냅샷에 모두 있는 schema는 양쪽 모두에서 계약을 고정한다
 (profile 간 silent 분화 차단). 날씨 batch 경로(`/v1/features/weather/batch`)는
 `kor-travel-weather` 이관(T-365, ADR-068)으로 client에서 삭제돼 더는 이 게이트가
-보지 않는다.
+보지 않는다. Map도 ADR-105로 weather 경로 전부와 `BeachPublicView.latest_weather`·
+`FeatureSummary.weather_summary`를 OpenAPI에서 삭제했다(2026-10 재vendor).
 
 운영: kor_travel_map 스펙이 갱신되면 스냅샷을 교체(`docs/integrations/kor-travel-map-rest-api.md`
 "드리프트 게이트" 절)하고 본 테스트를 돌린다. 우리 가정이 깨졌으면 여기서 실패 → client/매핑을
@@ -49,8 +50,8 @@ from app.schemas.public import (
 )
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
-_UPSTREAM_COMMIT = "037e24698f74e2067ea7c8572b044076dc0ac89c"
-_SNAPSHOT_SHA256 = "489b05d3e62e3531233e3e7eb8c97f9ddf92aa1ecf1573b7557a5951e7f6a61b"
+_UPSTREAM_COMMIT = "61d2ee81fbe478d9101054bf8acbc48dd1b8d0e3"
+_SNAPSHOT_SHA256 = "3a847c8a53f36044080839855d634fbfa2c5b18fa769bcf95bcbbaa614f72da4"
 
 # service profile 스냅샷 — byte-핀·재추출 절차는 cache-target 계약 테스트
 # (`test_kor_travel_map_cache_target_contract.py`)가 소유하고 본 파일은 읽기만 한다.
@@ -526,7 +527,6 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "marker_color": {"type": "string", "required": False, "nullable": True},
         "marker_icon": {"type": "string", "required": False, "nullable": True},
         "latest_water_quality": {"type": "object", "required": False, "nullable": True},
-        "latest_weather": {"type": "object", "required": False, "nullable": True},
         "upcoming_index_forecasts": {
             "type": "array",
             "items_type": "object",
