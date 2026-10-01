@@ -2,6 +2,38 @@
 
 가장 위가 가장 최근. 새 엔트리는 위에 append.
 
+## 2026-10-02 (claude) — Map OpenAPI 재vendor: Map의 weather 표면 삭제(Map ADR-105) 수용
+
+브랜치 `chore/map-drop-weather`. Map `feat/remove-map-kma-dagster` head
+`61d2ee81fbe478d9101054bf8acbc48dd1b8d0e3`의 `openapi.user.json`/`openapi.service.json`/`openapi.json`을
+byte-exact vendor했다(user `3a847c8a…`, service `6677d41f…`, admin `d2935f46…`).
+
+- Map 의미 diff(Map main 대비): user에서 weather 경로 5개·schema 13개, `BeachPublicView.latest_weather`,
+  `FeatureSummary.weather_summary` 삭제; service에서 `/v1/features/weather/batch`와 batch schema 10개 삭제;
+  full에서 admin weather 경로 2개와 `AdminFeatureMapItem.weather_summary` 추가 삭제. 추가된 것은 없다.
+- Pinvi는 T-365에서 Map weather 경로 호출을 이미 지웠다(ADR-068). 남은 소비는 공개
+  `PublicBeachView.latest_weather`(pydantic + zod)와 `_CONSUMED_FIELD_CONTRACTS`의 한 줄뿐이라 함께 걷어냈다.
+- 핀: user `_UPSTREAM_COMMIT`/`_SNAPSHOT_SHA256`, service provenance(`map_release_revision`·
+  `service_openapi_sha256`)와 그것을 리터럴로 들고 있는 세 계약 테스트·`api.yml` wheel 단언·`.env.example`,
+  admin `_kor_travel_map_snapshot_pin.py`와 이중 핀 리터럴. M05 pair 계약은
+  `scripts/generate_m05_pair_contract.py --write`로 재생성.
+- **배포 결합**: cache-target sync 또는 feature-reference reconciliation을 켠 환경에서는 env
+  `PINVI_KOR_TRAVEL_MAP_CACHE_TARGET_EXPECTED_OPENAPI_SHA256`/`..._FEATURE_REFERENCE_RECONCILIATION_EXPECTED_OPENAPI_SHA256`
+  (+`EXPECTED_SOURCE_REVISION`)이 vendored service 핀과 같아야 기동한다(둘 다 기본 off, cache-target sync는
+  production 금지). 그 경우 env도 함께 바꾼다. M05 pair 계약 digest가 바뀌었으므로 Manager pair도 weather 삭제
+  Map과 이 Pinvi를 함께 핀해야 한다.
+- 핀은 미머지 Map 브랜치 head다. Map PR이 squash merge되면 merge commit으로 다시 핀한다(bytes가 같으면
+  revision 문자열만 바뀐다).
+- 그대로 둔 것: `apps/web/e2e/trip-feature-resolution-live-mutating.live.ts` 첫 시나리오는 T-365 이후 이미
+  구식(Map weather batch 호출을 기대)이다 — live env 게이트 뒤라 CI에 걸리지 않고, 이번 변경과 무관하다.
+  두 번째 시나리오의 "Map weather 경로 호출 0회" 단언은 회귀 가드로 유지한다.
+- 게이트(n150, 일회용 `python:3.12` 컨테이너, `apps/api` CI api job과 같은 설치·명령, 브랜치 `8b2d33d2` vs
+  main `83f00171`): ruff check·ruff format·`mypy --strict app` 둘 다 통과. `pytest tests/unit`는 둘 다
+  4 failed / 1492 passed / 9 skipped이고 실패 4건이 같다(`test_api_image_provenance` 1, `test_backup_service`
+  hotswap 1, `test_m05_activation_receipt` 1, `test_m05_legacy_rebaseline_receipt` 1 — 컨테이너 환경, 기존).
+  계약 테스트(user/service/admin/M05 pair 파생)는 브랜치에서 전부 초록. web typecheck는 돌리지 않았다 —
+  `latest_weather` 소비처가 `packages/schemas` 정의 외에 없다(grep).
+
 ## 2026-09-30 (claude) — PinVi schedule 7개를 코드에서 RUNNING으로 선언(D4, 소유자 지시)
 
 소유자 지시("pinvi 스케쥴 켜"). 배포 변경 없음 — 코드 정본만 바꿨다.
