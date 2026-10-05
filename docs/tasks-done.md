@@ -1,5 +1,9 @@
 # tasks-done.md — 완료·아카이브
 
+## 2026-10-05
+
+- [x] T-370 — Common Dagster 복구·메모리·공통 Admin UI 구현과 두 독립 post-fix 리뷰, N150 Chromium/Firefox live4+공통 layout24+실제 keyboard2 검증을 완료했다. 이 기록은 [PR #575](https://github.com/digitie/pinvi/pull/575)의 머지 게이트를 통과한 변경에 포함된다. [검증 기록](reviews/common-dagster-2026-10-05/README.md), ADR-072. 운영 배포/worker kill/RSS는 NOT_RUN이며 완료에 포함하지 않는다.
+
 완료된 task와 머지 이력을 보관한다. 열린 작업은 `docs/tasks.md`, 현재 진척과
 "다음 한 작업"은 `docs/resume.md`가 정본이다. 작성 규약은 `docs/tasks-rule.md`를
 따른다.

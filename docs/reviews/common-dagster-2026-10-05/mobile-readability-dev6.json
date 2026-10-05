@@ -1,0 +1,249 @@
+{
+  "sourceRevision": "46305d44dab08ff73b3033443199501fb695eb80",
+  "uiTarballSha256": "e4945d01d9eb89ed505a95b551899fd0ecf41be66c9ee6b76246701350447e6d",
+  "cssSha256": "a2a3c284102aa90df37c2a65222b1acdfd829632e506fd085daa76b2facad324",
+  "pinvi": [
+    {
+      "browser": "chromium",
+      "width": 390,
+      "viewport": 322,
+      "content": 640,
+      "root": 390,
+      "keyboardScrollLeft": 40,
+      "jobButton": {
+        "width": 132.8125,
+        "height": 45
+      }
+    },
+    {
+      "browser": "firefox",
+      "width": 390,
+      "viewport": 322,
+      "content": 640,
+      "root": 390,
+      "keyboardScrollLeft": 7,
+      "jobButton": {
+        "width": 128.6333465576172,
+        "height": 45
+      }
+    }
+  ],
+  "common": [
+    {
+      "browser": "chromium",
+      "showRunDetails": false,
+      "width": 320,
+      "rootWidth": 320,
+      "viewport": 288,
+      "content": 640,
+      "keyboardScrollLeft": 40
+    },
+    {
+      "browser": "chromium",
+      "showRunDetails": false,
+      "width": 390,
+      "rootWidth": 390,
+      "viewport": 358,
+      "content": 640,
+      "keyboardScrollLeft": 39
+    },
+    {
+      "browser": "chromium",
+      "showRunDetails": false,
+      "width": 640,
+      "rootWidth": 640,
+      "viewport": 608,
+      "content": 640,
+      "keyboardScrollLeft": 30
+    },
+    {
+      "browser": "chromium",
+      "showRunDetails": false,
+      "width": 641,
+      "rootWidth": 641,
+      "viewport": 609,
+      "content": 609,
+      "keyboardScrollLeft": null
+    },
+    {
+      "browser": "chromium",
+      "showRunDetails": false,
+      "width": 768,
+      "rootWidth": 768,
+      "viewport": 736,
+      "content": 736,
+      "keyboardScrollLeft": null
+    },
+    {
+      "browser": "chromium",
+      "showRunDetails": false,
+      "width": 1280,
+      "rootWidth": 1280,
+      "viewport": 1248,
+      "content": 1248,
+      "keyboardScrollLeft": null
+    },
+    {
+      "browser": "chromium",
+      "showRunDetails": true,
+      "width": 320,
+      "rootWidth": 320,
+      "viewport": 288,
+      "content": 640,
+      "keyboardScrollLeft": 39
+    },
+    {
+      "browser": "chromium",
+      "showRunDetails": true,
+      "width": 390,
+      "rootWidth": 390,
+      "viewport": 358,
+      "content": 640,
+      "keyboardScrollLeft": 36
+    },
+    {
+      "browser": "chromium",
+      "showRunDetails": true,
+      "width": 640,
+      "rootWidth": 640,
+      "viewport": 608,
+      "content": 640,
+      "keyboardScrollLeft": 27
+    },
+    {
+      "browser": "chromium",
+      "showRunDetails": true,
+      "width": 641,
+      "rootWidth": 641,
+      "viewport": 609,
+      "content": 609,
+      "keyboardScrollLeft": null
+    },
+    {
+      "browser": "chromium",
+      "showRunDetails": true,
+      "width": 768,
+      "rootWidth": 768,
+      "viewport": 736,
+      "content": 736,
+      "keyboardScrollLeft": null
+    },
+    {
+      "browser": "chromium",
+      "showRunDetails": true,
+      "width": 1280,
+      "rootWidth": 1280,
+      "viewport": 719,
+      "content": 719,
+      "keyboardScrollLeft": null
+    },
+    {
+      "browser": "firefox",
+      "showRunDetails": false,
+      "width": 320,
+      "rootWidth": 320,
+      "viewport": 288,
+      "content": 640,
+      "keyboardScrollLeft": 29
+    },
+    {
+      "browser": "firefox",
+      "showRunDetails": false,
+      "width": 390,
+      "rootWidth": 390,
+      "viewport": 358,
+      "content": 640,
+      "keyboardScrollLeft": 44
+    },
+    {
+      "browser": "firefox",
+      "showRunDetails": false,
+      "width": 640,
+      "rootWidth": 640,
+      "viewport": 608,
+      "content": 640,
+      "keyboardScrollLeft": 32
+    },
+    {
+      "browser": "firefox",
+      "showRunDetails": false,
+      "width": 641,
+      "rootWidth": 641,
+      "viewport": 609,
+      "content": 609,
+      "keyboardScrollLeft": null
+    },
+    {
+      "browser": "firefox",
+      "showRunDetails": false,
+      "width": 768,
+      "rootWidth": 768,
+      "viewport": 736,
+      "content": 736,
+      "keyboardScrollLeft": null
+    },
+    {
+      "browser": "firefox",
+      "showRunDetails": false,
+      "width": 1280,
+      "rootWidth": 1280,
+      "viewport": 1248,
+      "content": 1248,
+      "keyboardScrollLeft": null
+    },
+    {
+      "browser": "firefox",
+      "showRunDetails": true,
+      "width": 320,
+      "rootWidth": 320,
+      "viewport": 288,
+      "content": 640,
+      "keyboardScrollLeft": 45
+    },
+    {
+      "browser": "firefox",
+      "showRunDetails": true,
+      "width": 390,
+      "rootWidth": 390,
+      "viewport": 358,
+      "content": 640,
+      "keyboardScrollLeft": 44
+    },
+    {
+      "browser": "firefox",
+      "showRunDetails": true,
+      "width": 640,
+      "rootWidth": 640,
+      "viewport": 608,
+      "content": 640,
+      "keyboardScrollLeft": 32
+    },
+    {
+      "browser": "firefox",
+      "showRunDetails": true,
+      "width": 641,
+      "rootWidth": 641,
+      "viewport": 609,
+      "content": 609,
+      "keyboardScrollLeft": null
+    },
+    {
+      "browser": "firefox",
+      "showRunDetails": true,
+      "width": 768,
+      "rootWidth": 768,
+      "viewport": 736,
+      "content": 736,
+      "keyboardScrollLeft": null
+    },
+    {
+      "browser": "firefox",
+      "showRunDetails": true,
+      "width": 1280,
+      "rootWidth": 1280,
+      "viewport": 719,
+      "content": 719,
+      "keyboardScrollLeft": null
+    }
+  ]
+}

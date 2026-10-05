@@ -3,7 +3,7 @@
 ## 정책과 소유권
 
 Common Python `73e3ff8b9398e533806d2d1a8435292570169de3`를 exact Git dependency로 고정한다.
-Common UI는 `874612052a4f7849074d1775b4a83a8f58a793cf`의 dev.4, tokens는 `426de4fbad35282bb558712d922c06268e9aba62`의 고정 tarball이며
+Common UI는 `e28559803c1ec1134ef7ba7736b9acf4cadb9a32`의 dev.6, tokens는 `426de4fbad35282bb558712d922c06268e9aba62`의 고정 tarball이며
 `apps/web/vendor/kor-travel-common-PROVENANCE.md`에 SHA256·GPL 출처를 남긴다.
 공통 구현 가이드는 [Common runbook](https://github.com/digitie/kor-travel-common/blob/main/docs/runbooks/dagster-adoption.md).
 PinVi는 app 데이터와 JWT/cookie·DB 역할 검사만 소유한다. Map provider 구현은 가져오지 않는다.
@@ -56,3 +56,10 @@ UI는 semantic outage 후 stale 유지/복구, invalid email focus/password clea
 N150 live UI는 고정 dev 포트를 별도 network namespace 안에서 사용하며 운영 host port를 점유하지 않는다.
 운영 서비스·운영 DB는 사용하지 않고 별도 빈 fixture DB와 실제 API/GraphQL을 연결한다.
 최종 review/live/CI 결과와 SHA는 journal/증거 문서에 기록한다.
+
+## Code location 실제 로드 확인
+
+조립용 `Definitions` 객체를 모듈 전역에 남기지 않는다. private 이름도 Dagster 자동 탐색 대상이다.
+최종 `defs`만 노출한 뒤 `dagster job list -m pinvi.etl.definitions -d apps/etl`을 확인한다.
+Python import 성공만으로 gRPC code location 로드가 보장되지는 않는다.
+최종 결과는 [검증 기록](../reviews/common-dagster-2026-10-05/README.md)을 따른다.

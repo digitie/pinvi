@@ -1,0 +1,5 @@
+{
+  "original_filename": "migration.log",
+  "original_sha256": "cf184add976181e88c6326e7484b85d9e2ac06ae3738c3bf5750b239f9845ef2",
+  "original_utf8": "INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.\nINFO  [alembic.runtime.migration] Will assume transactional DDL.\nINFO  [alembic.runtime.migration] Running upgrade  -> 20260824_0100, Pinvi `0061` catalog을 새 설치용 Alembic 기준선으로 고정한다.\nINFO  [alembic.runtime.migration] Running upgrade 20260824_0100 -> 20260824_0101, 현재 main과 M05 계약을 새 Alembic 기준선 위에 한 번에 적용한다.\nINFO  [alembic.runtime.migration] Running upgrade 20260824_0101 -> 20260917_0102, 날씨 소스 이관(ADR-068) feature_id -> location_id 해석 캐시 테이블을 추가한다.\n"
+}
