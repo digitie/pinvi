@@ -121,3 +121,15 @@ def test_every_scheduled_job_resolves_op_config_from_an_empty_run_config(
             if not isinstance(op_config, dict):
                 offenders.append(f"{schedule.job_name}:{node_name}={op_config!r}")
     assert offenders == [], f"빈 run config에서 op config가 dict가 아니다: {offenders}"
+
+
+def test_grpc_module_autodiscovery_exposes_one_definitions() -> None:
+    """gRPC CLI가 사용하는 실제 autodiscovery 경로에서도 후보를 로드한다."""
+    from dagster._core.workspace.autodiscovery import loadable_targets_from_python_module
+
+    from pinvi.etl.definitions import defs
+
+    targets = loadable_targets_from_python_module("pinvi.etl.definitions", working_directory=None)
+    assert len(targets) == 1
+    assert targets[0].attribute == "defs"
+    assert targets[0].target_definition is defs

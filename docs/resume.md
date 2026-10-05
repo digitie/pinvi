@@ -1,5 +1,9 @@
 # resume.md
 
+## 2026-10-05 — T-370 Common Dagster 채택
+
+제품 46305d44의 두 독립 post-fix 리뷰와 N150 실제 UI 4건 PASS. bounded batch/response/동시성, 안전한 retry/coalescing, 공통 로그인·메뉴·대시보드를 적용했다. [검증 기록](reviews/common-dagster-2026-10-05/README.md)과 [가이드](runbooks/common-dagster.md)를 따른다. [Common #27](https://github.com/digitie/kor-travel-common/pull/27)과 [PinVi #575](https://github.com/digitie/pinvi/pull/575)에 최종 CI/ready Aggregate 머지 게이트를 결박했다. 이후 운영 검증은 별도 배포 요청에서 진행한다. 운영 shared daemon 배포·worker kill·RSS는 NOT_RUN이며 다른 기존 task는 보존한다.
+
 ## 2026-10-02 (claude) — Map weather 삭제 OpenAPI 수용 (브랜치 `chore/map-drop-weather`)
 
 Map ADR-105(Map의 weather 표면 전부 삭제)를 받는 Pinvi 쪽 준비. user/service/full 스냅샷을 Map

@@ -17,6 +17,12 @@ function grafanaOrigin() {
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  webpack(config) {
+    // vendored VWorld CJS는 require('maplibre-gl')를 사용한다. MapLibre 6은
+    // root require export가 없으므로 공개 ESM subpath를 bundler에서 사용한다.
+    config.resolve.alias['maplibre-gl$'] = 'maplibre-gl/dist/maplibre-gl.mjs';
+    return config;
+  },
   async headers() {
     return [
       {

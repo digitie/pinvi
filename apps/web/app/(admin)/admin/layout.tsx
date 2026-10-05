@@ -1,5 +1,6 @@
 'use client';
 
+import { AppMenu, type AppMenuGroup, type AppMenuLinkProps } from '@kor-travel/ui';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -111,16 +112,26 @@ const NAV_GROUPS: {
     ],
   },
 ];
-const NAV_HREFS = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.href));
-
 const ADMIN_ROLES = new Set(['admin', 'operator', 'cpo']);
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'pinvi.admin.sidebar.collapsed';
-
-function getActiveNavHref(pathname: string) {
-  const matches = NAV_HREFS.filter((href) =>
-    href === '/admin' ? pathname === href : pathname === href || pathname.startsWith(`${href}/`),
+const COMMON_MENU_GROUPS: AppMenuGroup[] = NAV_GROUPS.map((group) => ({
+  id: group.title,
+  label: group.title,
+  items: group.items.map((item) => ({
+    id: item.href,
+    href: item.href,
+    label: item.label,
+    exact: item.href === '/admin',
+    icon: <item.icon className="h-5 w-5" />,
+    hint: `Sprint ${item.sprint}`,
+  })),
+}));
+function CommonDocumentLink({ href, children, ...props }: AppMenuLinkProps) {
+  return (
+    <a href={href} {...props} data-testid={`admin-nav-${href.replace(/[^a-z0-9]+/gi, '-')}`}>
+      {children}
+    </a>
   );
-  return matches.sort((a, b) => b.length - a.length)[0] ?? null;
 }
 
 /** 권한 가드 + 사이드바 — Query provider 내부에서 me()를 useQuery로 확인한다. */
@@ -130,7 +141,9 @@ function AdminGuard({ children }: { children: ReactNode }) {
   // 최초 렌더에서 lazy initializer로 한 번만 읽는다 — sidebar 마크업은 meQuery가
   // pending인 동안(SSR·hydration 포함) 렌더되지 않으므로 여기서 window 접근이 안전하다.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
-    () => typeof window !== 'undefined' && window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === '1',
+    () =>
+      typeof window !== 'undefined' &&
+      window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === '1',
   );
   // login 페이지 자체는 가드 적용 X (무한 redirect 방지)
   const isLoginPage = pathname === '/admin/login';
@@ -175,10 +188,17 @@ function AdminGuard({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  if (meQuery.isError || !me || !hasAdmin) {
-    return null;
+  if (meQuery.isError) {
+    return (
+      <div className="p-8" role="alert">
+        권한을 확인하지 못했습니다.
+        <button type="button" onClick={() => void meQuery.refetch()} className="ml-3 underline">
+          다시 확인
+        </button>
+      </div>
+    );
   }
-  const activeHref = getActiveNavHref(pathname);
+  if (!me || !hasAdmin) return null;
 
   return (
     <div className="flex min-h-dvh min-w-0 max-w-full flex-col overflow-x-clip bg-surface-soft lg:flex-row">
@@ -237,71 +257,15 @@ function AdminGuard({ children }: { children: ReactNode }) {
             <UserRound className="h-5 w-5" aria-hidden="true" />
           </div>
         </div>
-        <nav
-          className={`w-full min-w-0 max-w-full overflow-x-hidden p-2 text-sm lg:overflow-x-visible ${
-            sidebarCollapsed ? '' : 'lg:p-3'
-          }`}
-          aria-label="Admin navigation"
-        >
-          <div
-            className={`flex w-full min-w-0 max-w-full gap-2 overflow-x-auto overflow-y-hidden overscroll-x-contain [contain:layout_paint] lg:block lg:overflow-visible lg:[contain:none] ${
-              sidebarCollapsed ? 'lg:space-y-3' : 'lg:space-y-5'
-            }`}
-          >
-            {NAV_GROUPS.map((group) => (
-              <div key={group.title} className="flex shrink-0 gap-1 lg:block lg:space-y-1">
-                <h2
-                  className={
-                    sidebarCollapsed
-                      ? 'sr-only'
-                      : 'sr-only lg:not-sr-only lg:mb-2 lg:block lg:px-2 lg:text-xs lg:font-semibold lg:text-muted'
-                  }
-                >
-                  {group.title}
-                </h2>
-                <div
-                  aria-hidden="true"
-                  className={
-                    sidebarCollapsed
-                      ? 'hidden lg:mx-auto lg:mb-2 lg:block lg:h-px lg:w-8 lg:bg-hairline'
-                      : 'hidden'
-                  }
-                />
-                <div className="flex shrink-0 gap-1 lg:grid lg:grid-cols-1">
-                  {group.items.map((item) => {
-                    const active = activeHref === item.href;
-                    const Icon = item.icon;
-                    const linkSize = sidebarCollapsed
-                      ? 'h-11 w-11 items-center justify-center'
-                      : 'h-11 w-11 items-center justify-center lg:h-10 lg:w-full lg:justify-start lg:gap-2 lg:px-3';
-                    const labelClass = sidebarCollapsed
-                      ? 'sr-only'
-                      : 'sr-only lg:not-sr-only lg:block lg:min-w-0 lg:flex-1 lg:truncate';
-                    return (
-                      <DocumentNavLink
-                        key={item.href}
-                        href={item.href}
-                        aria-label={`${item.label} (Sprint ${item.sprint})`}
-                        aria-current={active ? 'page' : undefined}
-                        title={`${item.label} (Sprint ${item.sprint})`}
-                        data-sprint={item.sprint}
-                        className={
-                          active
-                            ? `flex ${linkSize} rounded-sm bg-ink text-canvas focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus`
-                            : `flex ${linkSize} rounded-sm text-ink hover:bg-surface-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`
-                        }
-                        data-testid={`admin-nav-${item.href.replace(/[^a-z0-9]+/gi, '-')}`}
-                      >
-                        <Icon className="h-5 w-5" aria-hidden="true" />
-                        <span className={labelClass}>{item.label}</span>
-                      </DocumentNavLink>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        </nav>
+        <div className="pinvi-common-menu" data-collapsed={sidebarCollapsed}>
+          <AppMenu
+            groups={COMMON_MENU_GROUPS}
+            pathname={pathname}
+            linkComponent={CommonDocumentLink}
+            label="Admin navigation"
+            testId="admin-common-menu"
+          />
+        </div>
       </aside>
       {/* `tabIndex={-1}`이라야 skip link가 실제로 포커스를 옮긴다(그냥 앵커면 스크롤만 되고
           다음 Tab이 nav로 되돌아간다). 링 자체는 이 컨테이너에 필요 없어 끈다. */}

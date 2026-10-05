@@ -393,8 +393,9 @@ export const adminApi = (client: ApiClient) => ({
       schema: AdminSystemDetailSchema,
     }),
 
-  getEtlSummary: () =>
+  getEtlSummary: (options: { signal?: AbortSignal } = {}) =>
     client.request('/admin/etl/summary', {
+      signal: options.signal,
       method: 'GET',
       schema: AdminEtlSummarySchema,
     }),

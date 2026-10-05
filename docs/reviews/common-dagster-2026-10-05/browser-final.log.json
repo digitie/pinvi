@@ -1,0 +1,5 @@
+{
+  "original_filename": "browser-final.log",
+  "original_sha256": "b0508e2812ac23d069f9f1411df8efce63b8bc53aad75c5d914cbc9466bc899e",
+  "original_utf8": "v22.22.2\ncurl: (7) Failed to connect to 127.0.0.1 port 12805 after 0 ms: Couldn't connect to server\n\nRunning 4 tests using 1 worker\n\n  ✓  1 [chromium] › e2e/admin-common-dagster.live.ts:34:5 › real login validation, nonadmin logout and DB-backed ETL roles (5.8s)\n  ✓  2 [chromium] › e2e/admin-common-dagster.live.ts:62:5 › old active run, scope, tick and semantic outage recovery through real UI (19.7s)\n  ✓  3 [firefox] › e2e/admin-common-dagster.live.ts:34:5 › real login validation, nonadmin logout and DB-backed ETL roles (6.9s)\n  ✓  4 [firefox] › e2e/admin-common-dagster.live.ts:62:5 › old active run, scope, tick and semantic outage recovery through real UI (21.1s)\n\n  4 passed (55.8s)\n"
+}

@@ -163,6 +163,7 @@ _EDITABLE_HOOK_REQUIRES = frozenset({"editables"})
 # 빨개져 이 표와 build-constraints.txt를 함께 채우게 한다.
 _GIT_DEPENDENCY_BUILD_REQUIRES = {
     "python-kasi-api": frozenset({"setuptools", "wheel"}),
+    "kor-travel-common": frozenset({"hatchling"}),
 }
 # 위 backend들의 런타임 의존성(pip -v 실측: hatchling → packaging·pathspec·pluggy·
 # tomlkit·trove-classifiers, wheel → packaging). backend만 고정하면 이들이 최신으로 풀린다.

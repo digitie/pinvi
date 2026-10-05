@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ApiClient,
   ApiError,
@@ -9,6 +9,7 @@ import {
   queryKeys,
   type AdminProviderImportJobListParams,
 } from '@pinvi/api-client';
+import { DagsterOperations, type DagsterSnapshot } from '@kor-travel/ui';
 import type {
   AdminDagsterRunSummary,
   AdminEmailOutboxTemplateSummary,
@@ -20,8 +21,8 @@ import {
   Archive,
   Bell,
   Database,
-  GitBranch,
   RefreshCw,
+  GitBranch,
   ScrollText,
   ShieldCheck,
   Workflow,
@@ -129,6 +130,11 @@ function ErrorBox({ message }: { message: string }) {
   );
 }
 
+function runRuntimeLimit(run: AdminDagsterRunSummary): number | null {
+  const value = Number(run.tags['dagster/max_runtime']);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
 export default function AdminEtlPage() {
   const [statusFilter, setStatusFilter] =
     useState<(typeof IMPORT_JOB_STATUS_OPTIONS)[number]['value']>('running');
@@ -143,7 +149,10 @@ export default function AdminEtlPage() {
 
   const summaryQuery = useQuery({
     queryKey: queryKeys.admin.etlSummary(),
-    queryFn: () => adminApi(apiClient).getEtlSummary(),
+    queryFn: ({ signal }) => adminApi(apiClient).getEtlSummary({ signal }),
+    refetchInterval: 30_000,
+    retry: 1,
+    gcTime: 60_000,
   });
 
   const jobsQuery = useQuery({
@@ -152,7 +161,52 @@ export default function AdminEtlPage() {
     placeholderData: keepPreviousData,
   });
 
+  const queryClient = useQueryClient();
+  const snapshotKey = ['admin', 'pinvi-dagster-last-good'];
+  const snapshotQuery = useQuery<DagsterSnapshot>({
+    queryKey: snapshotKey,
+    queryFn: () => {
+      throw new Error('Snapshot is populated by the scoped summary');
+    },
+    enabled: false,
+    gcTime: 60_000,
+  });
   const summary = summaryQuery.data ?? null;
+  useEffect(() => {
+    if (summary?.pinvi.status !== 'ok') return;
+    queryClient.setQueryData<DagsterSnapshot>(['admin', 'pinvi-dagster-last-good'], {
+      checkedAt: summary.pinvi.checked_at ?? summary.generated_at,
+      runs: summary.pinvi.recent_runs.map((run) => ({
+        runId: run.run_id,
+        jobName: run.job_name ?? '미확인',
+        status: run.status ?? 'UNKNOWN',
+        startTime: run.start_time,
+        endTime: run.end_time,
+        errorMessage: null,
+        maxRuntimeSeconds: runRuntimeLimit(run),
+      })),
+      repositories: summary.pinvi.repositories.map((repo) => ({
+        name: repo.name,
+        locationName: repo.location_name ?? '미확인',
+        jobs: repo.jobs.map((job) => job.name),
+        assets: [],
+        assetCount: repo.asset_count,
+        schedules: repo.schedules.map((schedule) => ({
+          name: schedule.name,
+          cron: schedule.cron_schedule,
+          jobName: schedule.job_name,
+          timezone: schedule.execution_timezone,
+          status: schedule.status,
+          lastTick: schedule.last_tick ?? null,
+        })),
+        sensors: repo.sensors.map((sensor) => ({
+          name: sensor.name,
+          status: sensor.status,
+          lastTick: sensor.last_tick ?? null,
+        })),
+      })),
+    });
+  }, [summary, queryClient]);
   const importJobs = jobsQuery.data?.items ?? [];
   const emailOutbox = summary?.pinvi.email_outbox ?? null;
   const telegramOutbox = summary?.pinvi.telegram_outbox ?? null;
@@ -316,7 +370,7 @@ export default function AdminEtlPage() {
 
       {summaryError && <ErrorBox message={summaryError} />}
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-4">
         <Section title="Pinvi Dagster">
           <div className="grid gap-3 text-sm sm:grid-cols-5">
             <div data-testid="admin-etl-pinvi-status">
@@ -403,74 +457,28 @@ export default function AdminEtlPage() {
               </ul>
             </div>
           </div>
-          {pinviRepositories.length ? (
-            <div className="mt-4" data-testid="admin-etl-pinvi-live-repositories">
-              <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase text-muted">
-                <GitBranch className="h-3.5 w-3.5" aria-hidden="true" />
-                Live code locations
-              </h3>
-              <ul className="space-y-2 text-sm">
-                {pinviRepositories.map((repository) => (
-                  <li
-                    key={`${repository.location_name ?? 'unknown'}-${repository.name}`}
-                    className="rounded-sm bg-surface-soft p-2"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-mono text-xs">{repository.name}</span>
-                      <span className="text-xs text-muted">{repository.location_name ?? '—'}</span>
-                    </div>
-                    <div className="mt-1 text-xs text-muted">
-                      jobs {formatMetric(repository.jobs.length)} / assets{' '}
-                      {formatMetric(repository.asset_count)} / schedules{' '}
-                      {formatMetric(repository.schedules.length)}
-                    </div>
-                    {repository.asset_groups.length ? (
-                      <div className="mt-1 text-xs text-muted">
-                        {repository.asset_groups.join(', ')}
-                      </div>
-                    ) : null}
-                    {repository.schedules.length ? (
-                      <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-                        {repository.schedules.map((schedule) => (
-                          <li
-                            key={schedule.name}
-                            className="rounded-sm border border-hairline px-2 py-1 text-xs"
-                            data-testid={`admin-etl-pinvi-live-schedule-${schedule.name}`}
-                          >
-                            <span className="font-mono">{schedule.name}</span>
-                            <span className="ml-2 text-muted">
-                              {schedule.execution_timezone ?? '—'} / {statusLabel(schedule.status)}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {pinviRecentRuns.length ? (
-            <div className="mt-4" data-testid="admin-etl-pinvi-live-runs">
-              <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase text-muted">
-                <Activity className="h-3.5 w-3.5" aria-hidden="true" />
-                Recent Pinvi runs
-              </h3>
-              <ul className="space-y-2 text-sm">
-                {pinviRecentRuns.map((run) => (
-                  <li key={run.run_id} className="rounded-sm bg-surface-soft p-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-mono text-xs">{run.job_name ?? run.run_id}</span>
-                      <span className="text-xs text-muted">{statusLabel(run.status)}</span>
-                    </div>
-                    <div className="mt-1 text-xs text-muted">
-                      {formatUnixTime(run.start_time)} → {formatUnixTime(run.end_time)}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+          <div className="mt-4" data-testid="admin-etl-pinvi-live-runs">
+            <DagsterOperations
+              snapshot={snapshotQuery.data ?? null}
+              showRunDetails
+              showRepositories
+              error={
+                summaryError ??
+                (summary?.pinvi.status !== 'ok'
+                  ? (summary?.pinvi.message ?? 'Dagster 상태를 확인하지 못했습니다.')
+                  : '')
+              }
+              loading={summaryQuery.isFetching}
+              onRefresh={() => void summaryQuery.refetch()}
+              runUrl={(id) =>
+                `${process.env.NEXT_PUBLIC_PINVI_DAGSTER_URL ?? 'http://localhost:12802'}/runs/${encodeURIComponent(id)}`
+              }
+              scheduleUrl={(name, repo) =>
+                `${process.env.NEXT_PUBLIC_PINVI_DAGSTER_URL ?? 'http://localhost:12802'}/locations/${encodeURIComponent(`${repo.name}@${repo.locationName}`)}/schedules/${encodeURIComponent(name)}`
+              }
+              testId="admin-common-dagster"
+            />
+          </div>
           {emailOutbox ? (
             <div
               className="mt-4 rounded-sm border border-hairline p-3"

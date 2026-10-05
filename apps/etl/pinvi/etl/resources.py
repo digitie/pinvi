@@ -13,10 +13,21 @@ class PinviDatabaseResource(ConfigurableResource[Any]):
     """Pinvi `app` schema에 접근하는 async DB resource."""
 
     dsn: str
-    pool_size: int = 10
+    pool_size: int = 1
 
     def create_engine(self) -> AsyncEngine:
-        return create_async_engine(self.dsn, pool_size=self.pool_size, pool_pre_ping=True)
+        return create_async_engine(
+            self.dsn,
+            pool_size=self.pool_size,
+            max_overflow=0,
+            pool_timeout=10,
+            pool_pre_ping=True,
+            connect_args={
+                "timeout": 10,
+                "command_timeout": 60,
+                "server_settings": {"statement_timeout": "60000", "lock_timeout": "5000"},
+            },
+        )
 
 
 class KasiResource(ConfigurableResource[Any]):

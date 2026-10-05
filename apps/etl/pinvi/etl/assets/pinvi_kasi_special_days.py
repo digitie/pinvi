@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -37,6 +39,11 @@ class SpecialDayRecord:
 def month_buckets(today: date, *, lookback_months: int, lookahead_months: int) -> list[date]:
     """실행일 기준 월 bucket 시작일 목록을 inclusive로 생성합니다."""
 
+    if any(
+        type(value) is not int or not 0 <= value <= 36
+        for value in (lookback_months, lookahead_months)
+    ):
+        raise ValueError("월 범위는 각각 0~36 정수이어야 합니다.")
     start = _add_months(date(today.year, today.month, 1), -lookback_months)
     end = _add_months(date(today.year, today.month, 1), lookahead_months)
     buckets: list[date] = []
@@ -47,18 +54,23 @@ def month_buckets(today: date, *, lookback_months: int, lookahead_months: int) -
     return buckets
 
 
-async def fetch_special_day_records(
+async def fetch_special_day_records(**kwargs: Any) -> list[SpecialDayRecord]:
+    """기존 helper 계약. asset은 전체 목록 대신 bounded iterator를 쓴다."""
+    return [record async for record in iter_special_day_records(**kwargs)]
+
+
+async def iter_special_day_records(
     *,
     client: Any,
     today: date,
     lookback_months: int,
     lookahead_months: int,
     fetched_at: datetime | None = None,
-) -> list[SpecialDayRecord]:
+) -> AsyncIterator[SpecialDayRecord]:
     """`python-kasi-api` public helper로 특일 record를 수집합니다."""
 
     collected_at = fetched_at or datetime.now(UTC)
-    records: list[SpecialDayRecord] = []
+    generated = 0
     for month in month_buckets(
         today,
         lookback_months=lookback_months,
@@ -78,8 +90,10 @@ async def fetch_special_day_records(
                         fetched_at=collected_at,
                     )
                     if record is not None:
-                        records.append(record)
-    return records
+                        generated += 1
+                        if generated > 10000:
+                            raise ValueError("특일 생성 예산 10000건을 초과했습니다.")
+                        yield record
 
 
 async def upsert_special_day_records(
@@ -106,6 +120,7 @@ async def upsert_special_day_records(
               raw_payload = EXCLUDED.raw_payload,
               fetched_at = EXCLUDED.fetched_at,
               updated_at = now()
+            WHERE app.kasi_special_days.fetched_at <= EXCLUDED.fetched_at
             """
     ).bindparams(bindparam("raw_payload", type_=JSONB))
     await conn.execute(stmt, [_record_params(record) for record in records])
@@ -134,14 +149,30 @@ async def pinvi_kasi_special_days(  # type: ignore[no-untyped-def]
     engine = db.create_engine()
     client = kasi.create_client()
     try:
-        records = await fetch_special_day_records(
+        batch: list[SpecialDayRecord] = []
+        batch_bytes = 0
+        upserted = 0
+        async for record in iter_special_day_records(
             client=client,
             today=today,
             lookback_months=lookback,
             lookahead_months=lookahead,
-        )
-        async with engine.begin() as conn:
-            upserted = await upsert_special_day_records(conn, records)
+        ):
+            size = len(json.dumps(record.raw_payload, ensure_ascii=False).encode("utf-8"))
+            if size > 65536:
+                raise ValueError("특일 raw payload는 행당 64KiB를 넘을 수 없습니다.")
+            if batch and (len(batch) >= 100 or batch_bytes + size > 1048576):
+                async with engine.begin() as conn:
+                    upserted += await upsert_special_day_records(conn, batch)
+                batch.clear()
+                batch_bytes = 0
+            batch.append(record)
+            batch_bytes += size
+        if batch:
+            async with engine.begin() as conn:
+                upserted += await upsert_special_day_records(conn, batch)
+            batch.clear()
+
     finally:
         await client.aclose()
         await engine.dispose()
@@ -164,20 +195,27 @@ async def _iter_special_day_pages(
     num_of_rows: int = 100,
 ) -> AsyncIterator[Any]:
     page_no = 1
-    while True:
-        page = await fetch_page(
-            sol_year=sol_year,
-            sol_month=sol_month,
-            page_no=page_no,
-            num_of_rows=num_of_rows,
-        )
+    for _ in range(100):
+        async with asyncio.timeout(60):
+            page = await fetch_page(
+                sol_year=sol_year,
+                sol_month=sol_month,
+                page_no=page_no,
+                num_of_rows=num_of_rows,
+            )
+        if len(page.items) > num_of_rows:
+            raise ValueError("KASI 응답이 요청한 페이지 상한을 초과했습니다.")
         if not page.items:
             break
         yield page
         next_page = page.next_page_no
         if next_page is None:
             break
+        if type(next_page) is not int or next_page <= page_no:
+            raise ValueError("KASI 페이지가 앞으로 진행하지 않습니다.")
         page_no = next_page
+    else:
+        raise ValueError("KASI 페이지 예산 100회를 초과했습니다.")
 
 
 def _record_from_item(

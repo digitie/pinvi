@@ -776,6 +776,16 @@ wheels = [
 ]
 
 [[package]]
+name = "kor-travel-common"
+version = "0.1.0.dev0"
+source = { git = "https://github.com/digitie/kor-travel-common.git?subdirectory=packages%2Fpy%2Fkor-travel-common&rev=73e3ff8b9398e533806d2d1a8435292570169de3#73e3ff8b9398e533806d2d1a8435292570169de3" }
+
+[package.optional-dependencies]
+dagster = [
+    { name = "dagster" },
+]
+
+[[package]]
 name = "librt"
 version = "0.15.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1210,6 +1220,7 @@ dependencies = [
     { name = "dagster-postgres" },
     { name = "dagster-webserver" },
     { name = "httpx" },
+    { name = "kor-travel-common", extra = ["dagster"] },
     { name = "python-kasi-api" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "structlog" },
@@ -1231,6 +1242,7 @@ requires-dist = [
     { name = "dagster-postgres", specifier = ">=0.25" },
     { name = "dagster-webserver", specifier = ">=1.9" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "kor-travel-common", extras = ["dagster"], git = "https://github.com/digitie/kor-travel-common.git?subdirectory=packages%2Fpy%2Fkor-travel-common&rev=73e3ff8b9398e533806d2d1a8435292570169de3" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },

@@ -221,3 +221,97 @@ def test_asset_runs_without_run_config() -> None:
         "기독탄신일",
     }
     assert result == {"records": len(_UPSERTED)}
+
+
+def test_month_range_cannot_allocate_unbounded_buckets() -> None:
+    for invalid in [-1, 37, 10000000, True]:
+        with pytest.raises(ValueError):
+            month_buckets(date(2026, 5, 1), lookback_months=invalid, lookahead_months=0)
+
+
+@pytest.mark.asyncio
+async def test_nonadvancing_provider_page_is_rejected() -> None:
+    from pinvi.etl.assets.pinvi_kasi_special_days import iter_special_day_records
+
+    class Loop(_FakeKasiClient):
+        async def holidays(self, **kwargs):
+            return _FakePage((_FakeItem(date(2026, 5, 5), "휴일", 1, True, {}),), next_page_no=1)
+
+    with pytest.raises(ValueError, match="진행"):
+        _ = [
+            record
+            async for record in iter_special_day_records(
+                client=Loop(), today=date(2026, 5, 1), lookback_months=0, lookahead_months=0
+            )
+        ]
+
+
+def test_large_run_flushes_bounded_batches_and_keeps_python_peak_bounded():
+    import tracemalloc
+
+    sizes = []
+
+    class Client:
+        async def holidays(self, **kwargs):
+            number = kwargs["page_no"]
+            items = tuple(
+                _FakeItem(
+                    date(2026, 5, 5),
+                    f"휴일-{number}-{i}",
+                    i,
+                    True,
+                    {"value": str(number * 100 + i) + "x" * 8192},
+                )
+                for i in range(100)
+            )
+            return _FakePage(items, next_page_no=number + 1 if number < 50 else None)
+
+        async def national_holidays(self, **kwargs):
+            return _FakePage(())
+
+        anniversaries = national_holidays
+        solar_terms_24 = national_holidays
+        sundry_days = national_holidays
+
+        async def aclose(self):
+            pass
+
+    class Engine:
+        @asynccontextmanager
+        async def begin(self):
+            yield self
+
+        async def execute(self, statement, rows):
+            sizes.append(len(rows))
+            assert len(rows) <= 100
+
+        async def dispose(self):
+            pass
+
+    engine = Engine()
+
+    class Db(PinviDatabaseResource):
+        def create_engine(self):
+            return engine
+
+    class Kasi(KasiResource):
+        def create_client(self):
+            return Client()
+
+    with build_asset_context(asset_config={"lookback_months": 0, "lookahead_months": 0}) as context:
+        tracemalloc.start()
+        try:
+            result = asyncio.run(
+                pinvi_kasi_special_days(
+                    context,
+                    db=Db(dsn="postgresql+asyncpg://unused/unused"),
+                    kasi=Kasi(service_key="unused"),
+                )
+            )
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+    assert result == {"records": 5000}
+    assert sum(sizes) == 5000 and max(sizes) <= 100
+    assert peak < 8 * 1024 * 1024, peak
+    print(f"bounded 5000-record Python allocation peak: {peak} bytes")

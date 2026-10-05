@@ -22,10 +22,10 @@ async function loginViaUi(page: Page) {
     throw new Error('PINVI_ADMIN_LIVE_EMAIL/PINVI_ADMIN_LIVE_PASSWORD가 필요합니다.');
   }
   await page.goto('/admin/login');
-  await page.getByTestId('admin-login-email').fill(adminEmail);
-  await page.getByTestId('admin-login-password').fill(adminPassword);
+  await page.locator('[data-slot="login-username"]').fill(adminEmail);
+  await page.locator('[data-slot="login-password"]').fill(adminPassword);
   await throttle();
-  await page.getByTestId('admin-login-submit').click();
+  await page.locator('[data-slot="login-submit"]').click();
   await expect(page).toHaveURL(/\/admin(?:[?#].*)?$/);
   await expect(page.getByTestId('admin-me')).toBeVisible();
 }

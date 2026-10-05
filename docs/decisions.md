@@ -3703,3 +3703,15 @@ head까지 올린다. DB를 지우는 길은 명시적 `rebuild-pinned --restart
 
 - ADR-070의 "데이터 보존 불필요"는 **이관 시점의 판단**으로 남고, 그 뒤의 배포에는 적용되지
   않는다.
+
+
+## ADR-072: Common Dagster 정책과 운영 UI를 PinVi에 채택한다
+
+- 상태: accepted
+- 날짜: 2026-10-05
+- 결정자: 사용자(“pinvi 도 반영. 완료 후 pr 머지”) + Codex
+- Common exact SHA와 frozen UI artifact를 사용한다. 복구 allowlist는 읽기 전용 job에 한정한다.
+- KASI는 bounded streaming/배치 commit을 사용한다. 일부 완료분 보존과 upsert 조건을 명시한다.
+- API/JWT/RBAC 및 Map HTTP 소유권을 유지하고 DTO 변경은 OpenAPI·TS/Zod와 함께 한다.
+- consumer YAML이 공유 daemon 설정을 자동 적용한다는 가정을 하지 않는다.
+- 상세: `docs/runbooks/common-dagster.md`, 계획: `docs/execplan/t-370-common-dagster.md`.

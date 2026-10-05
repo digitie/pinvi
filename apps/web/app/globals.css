@@ -8,6 +8,9 @@
 @import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
 
 @import 'tailwindcss';
+@import '@kor-travel/tokens/theme.css';
+@import '@kor-travel/ui/dagster.css';
+@source '../../../node_modules/@kor-travel/ui/dist';
 
 /* Tailwind v4에서도 토큰 정본은 `@pinvi/design-tokens`의 v3 preset 하나다(ADR: 웹만 v4, 모바일은
    NativeWind 4 + Tailwind v3 유지). `@config`로 그 preset을 그대로 읽어 토큰 정의가 웹/모바일로
@@ -232,5 +235,24 @@ body {
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* 공용 표시 컴포넌트는 PinVi의 기존 역할 색을 사용한다. */
+[data-pv-surface='admin'] {
+  --kt-brand: var(--color-cta);
+  --kt-brand-hover: var(--color-cta-hover);
+  --kt-brand-foreground: var(--color-on-primary);
+  --kt-text-primary: var(--color-ink);
+  --kt-text-secondary: var(--color-muted);
+  --kt-surface-page: var(--color-canvas);
+  --kt-control-line: var(--color-admin-control-line);
+}
+.pinvi-common-menu[data-collapsed='true'] [data-slot='app-menu-link'] { justify-content: center; padding-inline: .5rem; }
+@media (min-width: 1024px) {
+  .pinvi-common-menu[data-collapsed='true'] [data-slot='app-menu-group-label'],
+  .pinvi-common-menu[data-collapsed='true'] [data-slot='app-menu-link'] > span:not([aria-hidden='true']),
+  .pinvi-common-menu[data-collapsed='true'] [data-slot='app-menu-link'] > kbd {
+    position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%);
   }
 }

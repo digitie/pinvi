@@ -244,17 +244,17 @@ async function loginViaUi(page: Page) {
 
   for (let attempt = 1; attempt <= loginAttempts; attempt += 1) {
     await page.goto('/admin/login');
-    await page.getByTestId('admin-login-email').fill(adminEmail);
-    await page.getByTestId('admin-login-password').fill(adminPassword);
+    await page.locator('[data-slot="login-username"]').fill(adminEmail);
+    await page.locator('[data-slot="login-password"]').fill(adminPassword);
     await throttle();
-    await page.getByTestId('admin-login-submit').click();
+    await page.locator('[data-slot="login-submit"]').click();
     try {
       await expect(page).toHaveURL(/\/admin(?:[?#].*)?$/);
       await expect(page.getByTestId('admin-me')).toBeVisible();
       return;
     } catch {
       const alertText = await page
-        .getByTestId('admin-login-error')
+        .locator('[data-slot="login-error"]')
         .textContent({ timeout: 1000 })
         .catch(() => null);
       if (attempt < loginAttempts) {
@@ -270,7 +270,7 @@ async function loginViaUi(page: Page) {
 
 async function reloginIfNeeded(page: Page, returnPath: string) {
   const loginVisible = await page
-    .getByTestId('admin-login-submit')
+    .locator('[data-slot="login-submit"]')
     .isVisible({ timeout: 1000 })
     .catch(() => false);
   if (!loginVisible) return;
@@ -1182,11 +1182,11 @@ base.describe('admin live UI login', () => {
 
   base('UI login rejects malformed email before live request', async ({ page }) => {
     await page.goto('/admin/login');
-    await page.getByTestId('admin-login-email').fill('not-an-email');
-    await page.getByTestId('admin-login-password').fill('whatever');
-    await page.getByTestId('admin-login-submit').click();
-    await expect(page.locator('#admin-login-email-error')).toBeVisible();
-    await expect(page.getByTestId('admin-login-email')).toHaveAttribute('aria-invalid', 'true');
+    await page.locator('[data-slot="login-username"]').fill('not-an-email');
+    await page.locator('[data-slot="login-password"]').fill('whatever');
+    await page.locator('[data-slot="login-submit"]').click();
+    await expect(page.locator('[data-slot=login-error]')).toBeVisible();
+    await expect(page.locator('[data-slot="login-username"]')).toHaveAttribute('aria-invalid', 'true');
   });
 
   base('UI login can authenticate against live Admin', async ({ page }) => {
