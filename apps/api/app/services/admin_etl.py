@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from calendar import monthrange
 from collections.abc import Mapping
@@ -58,11 +59,14 @@ from app.services.kor_travel_map_ops_projection import (
     validate_pipeline_overview,
 )
 
+logger = logging.getLogger(__name__)
+
 PINVI_DAGSTER_PROBE_TIMEOUT_SECONDS = 2.0
 PINVI_DAGSTER_RECENT_RUN_LIMIT = 30
 PINVI_DAGSTER_ACTIVE_RUN_LIMIT = 1000
 PINVI_DAGSTER_RESPONSE_LIMIT = 4 * 1024 * 1024
 PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS = 10.0
+PINVI_DAGSTER_CLOSE_TIMEOUT_SECONDS = 0.05
 
 # PinVi Dagster 조회는 **PinVi code location 하나로만** 좁힌다. 공유 Dagster plane
 # (webserver 하나가 Map·geo·weather 등의 code location을 함께 싣는다)에서
@@ -596,11 +600,9 @@ async def _probe_pinvi_dagster() -> _PinviDagsterProbeResult:
             checked_at=checked_at,
         )
     start = time.perf_counter()
+    client = httpx.AsyncClient(timeout=PINVI_DAGSTER_PROBE_TIMEOUT_SECONDS)
     try:
-        async with (
-            asyncio.timeout(PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS),
-            httpx.AsyncClient(timeout=PINVI_DAGSTER_PROBE_TIMEOUT_SECONDS) as client,
-        ):
+        async with asyncio.timeout(PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS):
             return await _fetch_pinvi_dagster_snapshot(
                 client,
                 base_url=base_url.rstrip("/"),
@@ -614,6 +616,12 @@ async def _probe_pinvi_dagster() -> _PinviDagsterProbeResult:
             latency_ms=_elapsed_ms(start),
             checked_at=checked_at,
         )
+    finally:
+        try:
+            await asyncio.wait_for(client.aclose(), PINVI_DAGSTER_CLOSE_TIMEOUT_SECONDS)
+        except Exception:
+            # 정리 실패가 원래 probe 결과/취소를 덮지 않으며 이 client는 재사용하지 않는다.
+            logger.warning("Dagster probe client 정리 실패")
 
 
 async def _fetch_pinvi_dagster_snapshot(

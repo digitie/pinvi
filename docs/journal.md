@@ -2,6 +2,8 @@
 
 [공통 Dagster 가이드](runbooks/common-dagster.md)에 따라 Common bounded HTTP를 PinVi API에 적용했다. JSON 객체 계약과 기존 공통 UI·ETL을 유지한다. Map 신규 관리자 snapshot 재vendor·M05 pair 갱신 후 2인 독립 리뷰·실제 paired 재구축·live·CI·PR merge를 수행한다. [검증 기록](reviews/common-map-rebuild-2026-10-05/README.md)에 실패와 성공을 분리한다.
 
+적대적 리뷰가 발견한 요청 client 정리 지연에 별도 50ms 예산을 적용했다. 결과·원래 예외·취소를 보존하고 요청별 client를 재사용하지 않는다. 정리 실패 로그에는 연결/인증 값을 남기지 않는다. 정상·시간 초과·연결 오류·취소 회귀를 포함한 probe 31건과 strict mypy 247 PASS. 후속 immutable 2인 FULL 리뷰·exact CI·paired 실제 재구축·live gate는 아직 미완료다.
+
 
 ## 2026-10-05 — T-370 Common Dagster 복구·메모리·Admin UI
 

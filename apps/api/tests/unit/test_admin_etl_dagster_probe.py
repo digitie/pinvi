@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
+import time
 import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
@@ -420,3 +422,49 @@ async def test_malformed_active_results_never_claim_healthy(rows) -> None:
         )
     assert result.status == "degraded"
     assert result.job_count is None
+
+
+@pytest.mark.parametrize("outcome", ["ok", "timeout", "error", "cancel"])
+async def test_probe_disposes_client_with_separate_budget_and_preserves_cancel(
+    monkeypatch: pytest.MonkeyPatch, outcome: str
+) -> None:
+    entered = asyncio.Event()
+    close_cancelled = asyncio.Event()
+
+    class SlowCloseTransport(httpx.MockTransport):
+        async def aclose(self) -> None:
+            try:
+                await asyncio.sleep(0.25)
+            except asyncio.CancelledError:
+                close_cancelled.set()
+                raise
+
+    client = httpx.AsyncClient(transport=SlowCloseTransport(lambda _: httpx.Response(200)))
+    monkeypatch.setattr(admin_etl.httpx, "AsyncClient", lambda **_: client)
+    monkeypatch.setattr(admin_etl.settings, "pinvi_dagster_base_url", "http://dagster.test")
+    monkeypatch.setattr(admin_etl, "PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS", 0.02)
+
+    async def fetch(*args: Any, **kwargs: Any) -> admin_etl._PinviDagsterProbeResult:
+        entered.set()
+        if outcome in {"timeout", "cancel"}:
+            await asyncio.sleep(1)
+        if outcome == "error":
+            raise httpx.ConnectError("fixture")
+        return admin_etl._PinviDagsterProbeResult(
+            status="ok", message="fixture", latency_ms=0, checked_at=datetime.now(UTC)
+        )
+
+    monkeypatch.setattr(admin_etl, "_fetch_pinvi_dagster_snapshot", fetch)
+    started = time.perf_counter()
+    task = asyncio.create_task(admin_etl._probe_pinvi_dagster())
+    await entered.wait()
+    if outcome == "cancel":
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    else:
+        result = await task
+        assert result.status == ("ok" if outcome == "ok" else "down")
+    assert time.perf_counter() - started < 0.2
+    assert close_cancelled.is_set()
+    assert client.is_closed
