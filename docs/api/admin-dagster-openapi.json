@@ -1,0 +1,1237 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "PinVi 관리자 Dagster component 계약",
+    "version": "0.1.0"
+  },
+  "paths": {},
+  "components": {
+    "schemas": {
+      "AdminAuditRetentionSummary": {
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": true
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "audit_cutoff": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Audit Cutoff"
+          },
+          "audit_retention_days": {
+            "type": "integer",
+            "title": "Audit Retention Days"
+          },
+          "policy": {
+            "type": "string",
+            "const": "append_only_cold_storage",
+            "title": "Policy",
+            "default": "append_only_cold_storage"
+          },
+          "admin_audit_pii_over_retention": {
+            "type": "integer",
+            "title": "Admin Audit Pii Over Retention",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "generated_at",
+          "audit_cutoff",
+          "audit_retention_days"
+        ],
+        "title": "AdminAuditRetentionSummary"
+      },
+      "AdminDagsterJobSummary": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "is_job": {
+            "type": "boolean",
+            "title": "Is Job",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "AdminDagsterJobSummary"
+      },
+      "AdminDagsterRepositorySummary": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "location_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Name"
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/AdminDagsterJobSummary"
+            },
+            "type": "array",
+            "title": "Jobs"
+          },
+          "schedules": {
+            "items": {
+              "$ref": "#/components/schemas/AdminDagsterScheduleSummary"
+            },
+            "type": "array",
+            "title": "Schedules"
+          },
+          "sensors": {
+            "items": {
+              "$ref": "#/components/schemas/AdminDagsterSensorSummary"
+            },
+            "type": "array",
+            "title": "Sensors"
+          },
+          "asset_count": {
+            "type": "integer",
+            "title": "Asset Count",
+            "default": 0
+          },
+          "asset_groups": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Asset Groups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "AdminDagsterRepositorySummary"
+      },
+      "AdminDagsterRunSummary": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "job_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Name"
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time"
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Time"
+          },
+          "update_time": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Update Time"
+          },
+          "tags": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Tags"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "status"
+        ],
+        "title": "AdminDagsterRunSummary"
+      },
+      "AdminDagsterScheduleSummary": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "job_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Name"
+          },
+          "cron_schedule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cron Schedule"
+          },
+          "execution_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Timezone"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "last_tick": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminDagsterTickSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "AdminDagsterScheduleSummary"
+      },
+      "AdminDagsterSensorSummary": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "last_tick": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminDagsterTickSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "AdminDagsterSensorSummary"
+      },
+      "AdminDagsterTickSummary": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "AdminDagsterTickSummary"
+      },
+      "AdminEmailOutboxSummary": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "pending_total": {
+            "type": "integer",
+            "title": "Pending Total",
+            "default": 0
+          },
+          "pending_due": {
+            "type": "integer",
+            "title": "Pending Due",
+            "default": 0
+          },
+          "pending_backoff": {
+            "type": "integer",
+            "title": "Pending Backoff",
+            "default": 0
+          },
+          "stuck_pending": {
+            "type": "integer",
+            "title": "Stuck Pending",
+            "default": 0
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed",
+            "default": 0
+          },
+          "bounced": {
+            "type": "integer",
+            "title": "Bounced",
+            "default": 0
+          },
+          "complained": {
+            "type": "integer",
+            "title": "Complained",
+            "default": 0
+          },
+          "suppressed": {
+            "type": "integer",
+            "title": "Suppressed",
+            "default": 0
+          },
+          "delivery_delayed": {
+            "type": "integer",
+            "title": "Delivery Delayed",
+            "default": 0
+          },
+          "retry_exhausted": {
+            "type": "integer",
+            "title": "Retry Exhausted",
+            "default": 0
+          },
+          "oldest_pending_scheduled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Pending Scheduled At"
+          },
+          "stuck_threshold_minutes": {
+            "type": "integer",
+            "title": "Stuck Threshold Minutes"
+          },
+          "max_attempts": {
+            "type": "integer",
+            "title": "Max Attempts"
+          },
+          "template_window_hours": {
+            "type": "integer",
+            "title": "Template Window Hours"
+          },
+          "template_stats": {
+            "items": {
+              "$ref": "#/components/schemas/AdminEmailOutboxTemplateSummary"
+            },
+            "type": "array",
+            "title": "Template Stats"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stuck_threshold_minutes",
+          "max_attempts",
+          "template_window_hours"
+        ],
+        "title": "AdminEmailOutboxSummary"
+      },
+      "AdminEmailOutboxTemplateSummary": {
+        "properties": {
+          "template": {
+            "type": "string",
+            "title": "Template"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "pending": {
+            "type": "integer",
+            "title": "Pending",
+            "default": 0
+          },
+          "sent": {
+            "type": "integer",
+            "title": "Sent",
+            "default": 0
+          },
+          "delivered": {
+            "type": "integer",
+            "title": "Delivered",
+            "default": 0
+          },
+          "delivery_delayed": {
+            "type": "integer",
+            "title": "Delivery Delayed",
+            "default": 0
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed",
+            "default": 0
+          },
+          "bounced": {
+            "type": "integer",
+            "title": "Bounced",
+            "default": 0
+          },
+          "complained": {
+            "type": "integer",
+            "title": "Complained",
+            "default": 0
+          },
+          "suppressed": {
+            "type": "integer",
+            "title": "Suppressed",
+            "default": 0
+          },
+          "failure_count": {
+            "type": "integer",
+            "title": "Failure Count",
+            "default": 0
+          },
+          "failure_rate": {
+            "type": "number",
+            "title": "Failure Rate",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "template"
+        ],
+        "title": "AdminEmailOutboxTemplateSummary"
+      },
+      "AdminEtlDefinitionAsset": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "group_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "title": "AdminEtlDefinitionAsset"
+      },
+      "AdminEtlDefinitionJob": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "trigger": {
+            "type": "string",
+            "title": "Trigger"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "asset_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Asset Keys"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "trigger"
+        ],
+        "title": "AdminEtlDefinitionJob"
+      },
+      "AdminEtlDefinitionSchedule": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "job_name": {
+            "type": "string",
+            "title": "Job Name"
+          },
+          "cron_schedule": {
+            "type": "string",
+            "title": "Cron Schedule"
+          },
+          "execution_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Timezone"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "configured"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "job_name",
+          "cron_schedule"
+        ],
+        "title": "AdminEtlDefinitionSchedule"
+      },
+      "AdminEtlDefinitionSensor": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "job_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "configured"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "AdminEtlDefinitionSensor"
+      },
+      "AdminLocationLogArchivePurposeSummary": {
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "title": "Purpose"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "purpose"
+        ],
+        "title": "AdminLocationLogArchivePurposeSummary"
+      },
+      "AdminLocationLogArchiveSummary": {
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": true
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "archive_cutoff": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Archive Cutoff"
+          },
+          "location_retention_months": {
+            "type": "integer",
+            "title": "Location Retention Months"
+          },
+          "total_candidates": {
+            "type": "integer",
+            "title": "Total Candidates",
+            "default": 0
+          },
+          "oldest_candidate_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Candidate At"
+          },
+          "newest_candidate_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newest Candidate At"
+          },
+          "archive_tail_log_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Tail Log Id"
+          },
+          "active_head_log_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Head Log Id"
+          },
+          "active_rows_after_cutoff": {
+            "type": "integer",
+            "title": "Active Rows After Cutoff",
+            "default": 0
+          },
+          "chain_bridge_required": {
+            "type": "boolean",
+            "title": "Chain Bridge Required",
+            "default": false
+          },
+          "bridge_anchor_matches": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bridge Anchor Matches"
+          },
+          "pending_outbox_total": {
+            "type": "integer",
+            "title": "Pending Outbox Total",
+            "default": 0
+          },
+          "pending_outbox_before_cutoff": {
+            "type": "integer",
+            "title": "Pending Outbox Before Cutoff",
+            "default": 0
+          },
+          "archive_blocked_by_pending_outbox": {
+            "type": "boolean",
+            "title": "Archive Blocked By Pending Outbox",
+            "default": false
+          },
+          "oldest_pending_outbox_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Pending Outbox At"
+          },
+          "purpose_stats": {
+            "items": {
+              "$ref": "#/components/schemas/AdminLocationLogArchivePurposeSummary"
+            },
+            "type": "array",
+            "title": "Purpose Stats"
+          }
+        },
+        "type": "object",
+        "required": [
+          "generated_at",
+          "archive_cutoff",
+          "location_retention_months"
+        ],
+        "title": "AdminLocationLogArchiveSummary"
+      },
+      "AdminPiiRetentionSummary": {
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": true
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "user_pii_cutoff": {
+            "type": "string",
+            "format": "date-time",
+            "title": "User Pii Cutoff"
+          },
+          "session_cutoff": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Session Cutoff"
+          },
+          "user_pii_grace_days": {
+            "type": "integer",
+            "title": "User Pii Grace Days"
+          },
+          "session_grace_days": {
+            "type": "integer",
+            "title": "Session Grace Days"
+          },
+          "total_candidates": {
+            "type": "integer",
+            "title": "Total Candidates",
+            "default": 0
+          },
+          "deleted_user_pii_candidates": {
+            "type": "integer",
+            "title": "Deleted User Pii Candidates",
+            "default": 0
+          },
+          "deleted_user_oauth_identity_candidates": {
+            "type": "integer",
+            "title": "Deleted User Oauth Identity Candidates",
+            "default": 0
+          },
+          "excluded_privileged_deleted_users": {
+            "type": "integer",
+            "title": "Excluded Privileged Deleted Users",
+            "default": 0
+          },
+          "expired_signup_verifications": {
+            "type": "integer",
+            "title": "Expired Signup Verifications",
+            "default": 0
+          },
+          "expired_password_reset_tokens": {
+            "type": "integer",
+            "title": "Expired Password Reset Tokens",
+            "default": 0
+          },
+          "old_revoked_sessions": {
+            "type": "integer",
+            "title": "Old Revoked Sessions",
+            "default": 0
+          },
+          "old_expired_sessions": {
+            "type": "integer",
+            "title": "Old Expired Sessions",
+            "default": 0
+          },
+          "expired_oauth_login_states": {
+            "type": "integer",
+            "title": "Expired Oauth Login States",
+            "default": 0
+          },
+          "expired_mobile_oauth_exchanges": {
+            "type": "integer",
+            "title": "Expired Mobile Oauth Exchanges",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "generated_at",
+          "user_pii_cutoff",
+          "session_cutoff",
+          "user_pii_grace_days",
+          "session_grace_days"
+        ],
+        "title": "AdminPiiRetentionSummary"
+      },
+      "AdminPinviEtlSummary": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded",
+              "down",
+              "unknown"
+            ],
+            "title": "Status"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "dagster_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dagster Version"
+          },
+          "dagster_webserver_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dagster Webserver Version"
+          },
+          "dagster_graphql_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dagster Graphql Version"
+          },
+          "repository_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Count"
+          },
+          "job_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Count"
+          },
+          "asset_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Count"
+          },
+          "schedule_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Count"
+          },
+          "sensor_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sensor Count"
+          },
+          "repositories": {
+            "items": {
+              "$ref": "#/components/schemas/AdminDagsterRepositorySummary"
+            },
+            "type": "array",
+            "title": "Repositories"
+          },
+          "recent_runs": {
+            "items": {
+              "$ref": "#/components/schemas/AdminDagsterRunSummary"
+            },
+            "type": "array",
+            "title": "Recent Runs"
+          },
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/AdminEtlDefinitionAsset"
+            },
+            "type": "array",
+            "title": "Assets"
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/AdminEtlDefinitionJob"
+            },
+            "type": "array",
+            "title": "Jobs"
+          },
+          "schedules": {
+            "items": {
+              "$ref": "#/components/schemas/AdminEtlDefinitionSchedule"
+            },
+            "type": "array",
+            "title": "Schedules"
+          },
+          "sensors": {
+            "items": {
+              "$ref": "#/components/schemas/AdminEtlDefinitionSensor"
+            },
+            "type": "array",
+            "title": "Sensors"
+          },
+          "email_outbox": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminEmailOutboxSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "telegram_outbox": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminTelegramOutboxSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pii_retention": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminPiiRetentionSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "audit_retention": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminAuditRetentionSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "location_log_archive": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminLocationLogArchiveSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "AdminPinviEtlSummary"
+      },
+      "AdminTelegramOutboxCategorySummary": {
+        "properties": {
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "pending": {
+            "type": "integer",
+            "title": "Pending",
+            "default": 0
+          },
+          "sent": {
+            "type": "integer",
+            "title": "Sent",
+            "default": 0
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped",
+            "default": 0
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed",
+            "default": 0
+          },
+          "retry_exhausted": {
+            "type": "integer",
+            "title": "Retry Exhausted",
+            "default": 0
+          },
+          "retry_exhausted_rate": {
+            "type": "number",
+            "title": "Retry Exhausted Rate",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "category"
+        ],
+        "title": "AdminTelegramOutboxCategorySummary"
+      },
+      "AdminTelegramOutboxSummary": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "pending_total": {
+            "type": "integer",
+            "title": "Pending Total",
+            "default": 0
+          },
+          "pending_due": {
+            "type": "integer",
+            "title": "Pending Due",
+            "default": 0
+          },
+          "pending_backoff": {
+            "type": "integer",
+            "title": "Pending Backoff",
+            "default": 0
+          },
+          "stuck_pending": {
+            "type": "integer",
+            "title": "Stuck Pending",
+            "default": 0
+          },
+          "sent": {
+            "type": "integer",
+            "title": "Sent",
+            "default": 0
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped",
+            "default": 0
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed",
+            "default": 0
+          },
+          "retry_exhausted": {
+            "type": "integer",
+            "title": "Retry Exhausted",
+            "default": 0
+          },
+          "oldest_pending_scheduled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Pending Scheduled At"
+          },
+          "stuck_threshold_minutes": {
+            "type": "integer",
+            "title": "Stuck Threshold Minutes"
+          },
+          "max_attempts": {
+            "type": "integer",
+            "title": "Max Attempts"
+          },
+          "category_window_hours": {
+            "type": "integer",
+            "title": "Category Window Hours"
+          },
+          "category_stats": {
+            "items": {
+              "$ref": "#/components/schemas/AdminTelegramOutboxCategorySummary"
+            },
+            "type": "array",
+            "title": "Category Stats"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stuck_threshold_minutes",
+          "max_attempts",
+          "category_window_hours"
+        ],
+        "title": "AdminTelegramOutboxSummary"
+      }
+    }
+  }
+}

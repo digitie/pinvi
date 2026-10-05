@@ -6,6 +6,8 @@ kor-travel-map `/v1/ops/*` HTTP 계약을 통해 읽는다.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import time
 from calendar import monthrange
 from collections.abc import Mapping
@@ -27,6 +29,7 @@ from app.schemas.admin import (
     AdminDagsterRunSummary,
     AdminDagsterScheduleSummary,
     AdminDagsterSensorSummary,
+    AdminDagsterTickSummary,
     AdminEmailOutboxSummary,
     AdminEmailOutboxTemplateSummary,
     AdminEtlDefinitionAsset,
@@ -55,7 +58,10 @@ from app.services.kor_travel_map_ops_projection import (
 )
 
 PINVI_DAGSTER_PROBE_TIMEOUT_SECONDS = 2.0
-PINVI_DAGSTER_RECENT_RUN_LIMIT = 5
+PINVI_DAGSTER_RECENT_RUN_LIMIT = 30
+PINVI_DAGSTER_ACTIVE_RUN_LIMIT = 1000
+PINVI_DAGSTER_RESPONSE_LIMIT = 4 * 1024 * 1024
+PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS = 10.0
 
 # PinVi Dagster 조회는 **PinVi code location 하나로만** 좁힌다. 공유 Dagster plane
 # (webserver 하나가 Map·geo·weather 등의 code location을 함께 싣는다)에서
@@ -192,6 +198,8 @@ query PinviDagsterLive(
   $repositorySelector: RepositorySelector!
   $runsFilter: RunsFilter
   $runLimit: Int!
+  $activeRunsFilter: RunsFilter
+  $activeRunLimit: Int!
 ) {
   version
   repositoryOrError(repositorySelector: $repositorySelector) {
@@ -205,11 +213,11 @@ query PinviDagsterLive(
         pipelineName
         cronSchedule
         executionTimezone
-        scheduleState { status }
+        scheduleState { status ticks(limit: 3, statuses: [STARTED, SKIPPED, SUCCESS, FAILURE]) { status timestamp } }
       }
       sensors {
         name
-        sensorState { status }
+        sensorState { status ticks(limit: 3, statuses: [STARTED, SKIPPED, SUCCESS, FAILURE]) { status timestamp } }
       }
       assetNodes { groupName }
     }
@@ -226,6 +234,23 @@ query PinviDagsterLive(
         startTime
         endTime
         updateTime
+        tags { key value }
+      }
+    }
+    ... on PythonError { message }
+    ... on InvalidPipelineRunsFilterError { message }
+  }
+  activeRuns: runsOrError(filter: $activeRunsFilter, limit: $activeRunLimit) {
+    __typename
+    ... on Runs {
+      results {
+        runId
+        status
+        jobName
+        startTime
+        endTime
+        updateTime
+        tags { key value }
       }
     }
     ... on PythonError { message }
@@ -252,6 +277,16 @@ def _pinvi_dagster_live_variables() -> dict[str, Any]:
             ]
         },
         "runLimit": PINVI_DAGSTER_RECENT_RUN_LIMIT,
+        "activeRunLimit": PINVI_DAGSTER_ACTIVE_RUN_LIMIT,
+        "activeRunsFilter": {
+            "tags": [
+                {
+                    "key": _DAGSTER_REPOSITORY_TAG,
+                    "value": f"{PINVI_DAGSTER_REPOSITORY_NAME}@{location_name}",
+                }
+            ],
+            "statuses": ["NOT_STARTED", "QUEUED", "STARTING", "STARTED", "CANCELING"],
+        },
     }
 
 
@@ -268,23 +303,33 @@ class _PinviDagsterProbeResult:
     recent_runs: list[AdminDagsterRunSummary] = field(default_factory=list)
 
     @property
-    def repository_count(self) -> int:
+    def repository_count(self) -> int | None:
+        if self.status != "ok":
+            return None
         return len(self.repositories)
 
     @property
-    def job_count(self) -> int:
+    def job_count(self) -> int | None:
+        if self.status != "ok":
+            return None
         return sum(len(item.jobs) for item in self.repositories)
 
     @property
-    def asset_count(self) -> int:
+    def asset_count(self) -> int | None:
+        if self.status != "ok":
+            return None
         return sum(item.asset_count for item in self.repositories)
 
     @property
-    def schedule_count(self) -> int:
+    def schedule_count(self) -> int | None:
+        if self.status != "ok":
+            return None
         return sum(len(item.schedules) for item in self.repositories)
 
     @property
-    def sensor_count(self) -> int:
+    def sensor_count(self) -> int | None:
+        if self.status != "ok":
+            return None
         return sum(len(item.sensors) for item in self.repositories)
 
 
@@ -517,6 +562,36 @@ def _build_kor_travel_map_summary(
     )
 
 
+async def _bounded_dagster_request(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    **kwargs: Any,
+) -> httpx.Response:
+    """압축은 해제 전에 거부하고 plain 본문을 제한한다. 전체 대기 예산은 probe 소유."""
+    headers = dict(kwargs.pop("headers", {}))
+    headers["Accept-Encoding"] = "identity"
+    async with client.stream(method, url, headers=headers, **kwargs) as response:
+        if response.headers.get("content-encoding", "identity").strip().lower() not in {
+            "",
+            "identity",
+        }:
+            raise ValueError("Dagster 압축 응답은 허용하지 않습니다.")
+        content = bytearray()
+        async for chunk in response.aiter_bytes(chunk_size=64 * 1024):
+            if len(content) + len(chunk) > PINVI_DAGSTER_RESPONSE_LIMIT:
+                raise ValueError("Dagster 응답이 4MiB 상한을 초과했습니다.")
+            content.extend(chunk)
+        result = httpx.Response(
+            response.status_code, content=bytes(content), request=response.request
+        )
+        if 200 <= result.status_code < 400:
+            payload = json.loads(result.content)
+            if not isinstance(payload, dict):
+                raise ValueError("Dagster 응답은 객체이어야 합니다.")
+        return result
+
+
 async def _probe_pinvi_dagster() -> _PinviDagsterProbeResult:
     base_url = settings.pinvi_dagster_base_url.strip()
     checked_at = datetime.now(UTC)
@@ -529,14 +604,17 @@ async def _probe_pinvi_dagster() -> _PinviDagsterProbeResult:
         )
     start = time.perf_counter()
     try:
-        async with httpx.AsyncClient(timeout=PINVI_DAGSTER_PROBE_TIMEOUT_SECONDS) as client:
+        async with (
+            asyncio.timeout(PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS),
+            httpx.AsyncClient(timeout=PINVI_DAGSTER_PROBE_TIMEOUT_SECONDS) as client,
+        ):
             return await _fetch_pinvi_dagster_snapshot(
                 client,
                 base_url=base_url.rstrip("/"),
                 start=start,
                 checked_at=checked_at,
             )
-    except httpx.HTTPError:
+    except (httpx.HTTPError, TimeoutError, ValueError):
         return _PinviDagsterProbeResult(
             status="down",
             message="Dagster 연결 실패",
@@ -552,7 +630,7 @@ async def _fetch_pinvi_dagster_snapshot(
     start: float,
     checked_at: datetime,
 ) -> _PinviDagsterProbeResult:
-    server_response = await client.get(f"{base_url}/server_info")
+    server_response = await _bounded_dagster_request(client, "GET", f"{base_url}/server_info")
     if not 200 <= server_response.status_code < 400:
         return _PinviDagsterProbeResult(
             status="degraded",
@@ -567,14 +645,16 @@ async def _fetch_pinvi_dagster_snapshot(
     dagster_graphql_version = _as_str(server_info.get("dagster_graphql_version"))
 
     try:
-        graph_response = await client.post(
+        graph_response = await _bounded_dagster_request(
+            client,
+            "POST",
             f"{base_url}/graphql",
             json={
                 "query": _PINVI_DAGSTER_LIVE_QUERY,
                 "variables": _pinvi_dagster_live_variables(),
             },
         )
-    except httpx.HTTPError:
+    except (httpx.HTTPError, ValueError):
         return _PinviDagsterProbeResult(
             status="degraded",
             message="Dagster live query 연결 실패",
@@ -633,13 +713,7 @@ async def _fetch_pinvi_dagster_snapshot(
 
     runs_payload = data.get("runsOrError")
     recent_runs = _pinvi_runs_from_graphql(runs_payload)
-    if (
-        runs_payload
-        and not recent_runs
-        and not (
-            isinstance(runs_payload, dict) and _as_str(runs_payload.get("__typename")) == "Runs"
-        )
-    ):
+    if not _valid_run_connection(runs_payload):
         return _PinviDagsterProbeResult(
             status="degraded",
             message=_graphql_error_message(runs_payload, "Dagster run 조회 실패"),
@@ -651,6 +725,36 @@ async def _fetch_pinvi_dagster_snapshot(
             repositories=repositories,
         )
 
+    active_payload = data.get("activeRuns")
+    if not _valid_run_connection(active_payload):
+        return _PinviDagsterProbeResult(
+            status="degraded",
+            message="Dagster active run 조회 실패",
+            latency_ms=latency_ms,
+            checked_at=checked_at,
+            repositories=repositories,
+        )
+    active_runs = _pinvi_runs_from_graphql(active_payload)
+    if len(active_payload["results"]) >= PINVI_DAGSTER_ACTIVE_RUN_LIMIT:
+        return _PinviDagsterProbeResult(
+            status="degraded",
+            message="Dagster active run 조회 상한에 도달했습니다.",
+            latency_ms=latency_ms,
+            checked_at=checked_at,
+            repositories=repositories,
+        )
+    merged_runs = {run.run_id: run for run in recent_runs}
+    merged_runs.update({run.run_id: run for run in active_runs})
+    if (
+        not isinstance(repositories_payload, dict)
+        or repositories_payload.get("__typename") != "Repository"
+    ):
+        return _PinviDagsterProbeResult(
+            status="degraded",
+            message="Dagster repository 조회 실패",
+            latency_ms=latency_ms,
+            checked_at=checked_at,
+        )
     return _PinviDagsterProbeResult(
         status="ok",
         message="Dagster server_info/live snapshot 정상",
@@ -660,7 +764,27 @@ async def _fetch_pinvi_dagster_snapshot(
         dagster_webserver_version=dagster_webserver_version,
         dagster_graphql_version=dagster_graphql_version,
         repositories=repositories,
-        recent_runs=recent_runs,
+        recent_runs=sorted(
+            merged_runs.values(),
+            key=lambda run: run.update_time or run.start_time or 0,
+            reverse=True,
+        ),
+    )
+
+
+def _last_tick(state: Any) -> AdminDagsterTickSummary | None:
+    if not isinstance(state, dict) or not isinstance(state.get("ticks"), list):
+        return None
+    ticks = [
+        tick
+        for tick in state["ticks"]
+        if isinstance(tick, dict) and isinstance(tick.get("status"), str)
+    ]
+    if not ticks:
+        return None
+    latest = max(ticks, key=lambda tick: _optional_float(tick.get("timestamp")) or 0)
+    return AdminDagsterTickSummary(
+        status=latest["status"], timestamp=_optional_float(latest.get("timestamp"))
     )
 
 
@@ -706,6 +830,7 @@ def _pinvi_repositories_from_graphql(value: Any) -> list[AdminDagsterRepositoryS
                             if isinstance(schedule.get("scheduleState"), dict)
                             else None
                         ),
+                        last_tick=_last_tick(schedule.get("scheduleState")),
                     )
                     for schedule in item.get("schedules", [])
                     if isinstance(schedule, dict)
@@ -718,6 +843,7 @@ def _pinvi_repositories_from_graphql(value: Any) -> list[AdminDagsterRepositoryS
                             if isinstance(sensor.get("sensorState"), dict)
                             else None
                         ),
+                        last_tick=_last_tick(sensor.get("sensorState")),
                     )
                     for sensor in item.get("sensors", [])
                     if isinstance(sensor, dict)
@@ -727,6 +853,43 @@ def _pinvi_repositories_from_graphql(value: Any) -> list[AdminDagsterRepositoryS
             )
         )
     return repositories
+
+
+def _valid_run_connection(value: Any) -> bool:
+    if not isinstance(value, dict) or value.get("__typename") != "Runs":
+        return False
+    rows = value.get("results")
+    if not isinstance(rows, list):
+        return False
+    statuses = {
+        "NOT_STARTED",
+        "QUEUED",
+        "STARTING",
+        "STARTED",
+        "CANCELING",
+        "CANCELED",
+        "SUCCESS",
+        "FAILURE",
+    }
+    return all(
+        isinstance(row, dict)
+        and isinstance(row.get("runId"), str)
+        and bool(row["runId"].strip())
+        and row.get("status") in statuses
+        for row in rows
+    )
+
+
+def _runtime_tags(value: Any) -> dict[str, str]:
+    if not isinstance(value, list):
+        return {}
+    return {
+        str(tag["key"]): str(tag["value"])
+        for tag in value
+        if isinstance(tag, dict)
+        and tag.get("key") == "dagster/max_runtime"
+        and isinstance(tag.get("value"), str)
+    }
 
 
 def _pinvi_runs_from_graphql(value: Any) -> list[AdminDagsterRunSummary]:
@@ -743,7 +906,7 @@ def _pinvi_runs_from_graphql(value: Any) -> list[AdminDagsterRunSummary]:
             start_time=_optional_float(item.get("startTime")),
             end_time=_optional_float(item.get("endTime")),
             update_time=_optional_float(item.get("updateTime")),
-            tags={},
+            tags=_runtime_tags(item.get("tags")),
         )
         for item in results
         if isinstance(item, dict) and _as_str(item.get("runId")) and _as_str(item.get("status"))

@@ -66,6 +66,7 @@ def _graphql_payload() -> dict[str, Any]:
                     {"groupName": "pinvi_email"},
                 ],
             },
+            "activeRuns": {"__typename": "Runs", "results": []},
             "runsOrError": {
                 "__typename": "Runs",
                 "results": [
@@ -267,3 +268,141 @@ async def test_pinvi_dagster_probe_degrades_when_the_pinvi_location_is_absent() 
     assert result.status == "degraded"
     assert result.message == "Dagster repository 조회 실패: RepositoryNotFoundError"
     assert result.repositories == []
+
+
+async def test_old_active_run_survives_recent_window_and_duplicates_are_removed() -> None:
+    payload = _graphql_payload()
+    recent = payload["data"]["runsOrError"]["results"][0]
+    active = {
+        **recent,
+        "runId": "old-active",
+        "status": "STARTED",
+        "startTime": 1.0,
+        "updateTime": 1.0,
+        "endTime": None,
+    }
+    payload["data"]["activeRuns"]["results"] = [active, recent]
+    async with _client(
+        {
+            "/server_info": httpx.Response(200, json={}),
+            "/graphql": httpx.Response(200, json=payload),
+        }
+    ) as client:
+        result = await admin_etl._fetch_pinvi_dagster_snapshot(
+            client, base_url="http://dagster.test", start=0.0, checked_at=datetime.now(UTC)
+        )
+    assert result.status == "ok"
+    assert {run.run_id for run in result.recent_runs} == {"run-1", "old-active"}
+    variables = admin_etl._pinvi_dagster_live_variables()
+    assert variables["activeRunsFilter"]["tags"] == variables["runsFilter"]["tags"]
+    assert set(variables["activeRunsFilter"]["statuses"]) == {
+        "NOT_STARTED",
+        "QUEUED",
+        "STARTING",
+        "STARTED",
+        "CANCELING",
+    }
+
+
+async def test_active_query_failure_and_cap_are_not_healthy_empty() -> None:
+    for active in [
+        {"__typename": "PythonError"},
+        {
+            "__typename": "Runs",
+            "results": [{"runId": str(i), "status": "STARTED"} for i in range(1000)],
+        },
+    ]:
+        payload = _graphql_payload()
+        payload["data"]["activeRuns"] = active
+        async with _client(
+            {
+                "/server_info": httpx.Response(200, json={}),
+                "/graphql": httpx.Response(200, json=payload),
+            }
+        ) as client:
+            result = await admin_etl._fetch_pinvi_dagster_snapshot(
+                client, base_url="http://dagster.test", start=0.0, checked_at=datetime.now(UTC)
+            )
+        assert result.status == "degraded"
+        assert result.job_count is None and result.repository_count is None
+
+
+async def test_decoded_response_size_limit_and_nonobject_are_rejected() -> None:
+    for response in [
+        httpx.Response(200, content=b"x" * (admin_etl.PINVI_DAGSTER_RESPONSE_LIMIT + 1)),
+        httpx.Response(200, json=[]),
+    ]:
+        async with _client({"/large": response}) as client:
+            with pytest.raises(ValueError):
+                await admin_etl._bounded_dagster_request(client, "GET", "http://dagster.test/large")
+
+
+def test_last_tick_chooses_timestamp_and_never_exposes_error_payload() -> None:
+    tick = admin_etl._last_tick(
+        {
+            "ticks": [
+                {"status": "STARTED", "timestamp": 1},
+                {"status": "FAILURE", "timestamp": 2, "error": {"message": "secret"}},
+            ]
+        }
+    )
+    assert tick is not None
+    assert tick.model_dump() == {"status": "FAILURE", "timestamp": 2.0}
+
+
+def test_run_runtime_tag_is_allowlisted_without_exposing_other_tags() -> None:
+    from app.services.admin_etl import _pinvi_runs_from_graphql
+
+    result = _pinvi_runs_from_graphql(
+        {
+            "__typename": "Runs",
+            "results": [
+                {
+                    "runId": "run",
+                    "status": "NOT_STARTED",
+                    "tags": [
+                        {"key": "dagster/max_runtime", "value": "120"},
+                        {"key": "secret", "value": "never-export"},
+                    ],
+                }
+            ],
+        }
+    )
+    assert result[0].tags == {"dagster/max_runtime": "120"}
+
+
+@pytest.mark.asyncio
+async def test_compressed_response_is_rejected_before_any_decompression() -> None:
+    class NeverRead(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            raise AssertionError("compressed body must never be consumed")
+            yield b"unreachable"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["accept-encoding"] == "identity"
+        return httpx.Response(200, headers={"content-encoding": "gzip"}, stream=NeverRead())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(ValueError, match="압축"):
+            await admin_etl._bounded_dagster_request(
+                client, "GET", "http://dagster.test/compressed"
+            )
+
+
+@pytest.mark.parametrize(
+    "rows", [None, {}, [{"runId": "", "status": "STARTED"}], [{"runId": "x", "status": "unknown"}]]
+)
+async def test_malformed_active_results_never_claim_healthy(rows) -> None:
+    payload = _graphql_payload()
+    payload["data"]["activeRuns"]["results"] = rows
+    async with _client(
+        {
+            "/server_info": httpx.Response(200, json={}),
+            "/graphql": httpx.Response(200, json=payload),
+        }
+    ) as client:
+        result = await admin_etl._fetch_pinvi_dagster_snapshot(
+            client, base_url="http://dagster.test", start=0.0, checked_at=datetime.now(UTC)
+        )
+    assert result.status == "degraded"
+    assert result.job_count is None

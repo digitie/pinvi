@@ -478,18 +478,25 @@ export const AdminDagsterJobSummarySchema = z.object({
 });
 export type AdminDagsterJobSummary = z.infer<typeof AdminDagsterJobSummarySchema>;
 
+const AdminDagsterTickSummarySchema = z.object({
+  status: z.string(),
+  timestamp: z.number().nullable().default(null),
+});
+
 export const AdminDagsterScheduleSummarySchema = z.object({
   name: z.string(),
   job_name: z.string().nullable().default(null),
   cron_schedule: z.string().nullable().default(null),
   execution_timezone: z.string().nullable().default(null),
   status: z.string().nullable().default(null),
+  last_tick: AdminDagsterTickSummarySchema.nullable().default(null),
 });
 export type AdminDagsterScheduleSummary = z.infer<typeof AdminDagsterScheduleSummarySchema>;
 
 export const AdminDagsterSensorSummarySchema = z.object({
   name: z.string(),
   status: z.string().nullable().default(null),
+  last_tick: AdminDagsterTickSummarySchema.nullable().default(null),
 });
 export type AdminDagsterSensorSummary = z.infer<typeof AdminDagsterSensorSummarySchema>;
 
@@ -523,11 +530,11 @@ export const AdminPinviEtlSummarySchema = z.object({
   dagster_version: z.string().nullable().default(null),
   dagster_webserver_version: z.string().nullable().default(null),
   dagster_graphql_version: z.string().nullable().default(null),
-  repository_count: z.number().int().default(0),
-  job_count: z.number().int().default(0),
-  asset_count: z.number().int().default(0),
-  schedule_count: z.number().int().default(0),
-  sensor_count: z.number().int().default(0),
+  repository_count: z.number().int().nullable().default(null),
+  job_count: z.number().int().nullable().default(null),
+  asset_count: z.number().int().nullable().default(null),
+  schedule_count: z.number().int().nullable().default(null),
+  sensor_count: z.number().int().nullable().default(null),
   repositories: z.array(AdminDagsterRepositorySummarySchema).default([]),
   recent_runs: z.array(AdminDagsterRunSummarySchema).default([]),
   assets: z.array(AdminEtlDefinitionAssetSchema).default([]),
