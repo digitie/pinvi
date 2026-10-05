@@ -46,9 +46,10 @@ run monitoring enabled, start timeout, max runtime, tag concurrency
 중단된 worker는 monitor가 terminal 상태로 확정해야 coalescing이 풀린다. 원인 확인 없이
 실행을 success로 바꾸거나 active worker가 살아 있는데 재실행하지 않는다.
 notification outbox의 기존 best-effort 전달 보장과 trip-day 부분 실패의 metadata 의미는 바꾸지 않았다.
-실제 배포·공유 daemon 재시작·운영 데이터 초기화는 이 PR의 작업이 아니다.
+초기 T-370 검증에는 실제 배포·공유 daemon 재시작·운영 데이터 초기화를 포함하지 않았다.
+이후 Map paired 운영 재구축의 범위와 증거는 아래 후속 절을 따른다.
 
-## 검증
+## 초기 T-370 검증 범위
 
 ETL 실제 Dagster persistent instance의 active coalescing/terminal 해제, definitions 로드,
 retry allowlist 및 KASI bounds/allocation 회귀를 검사한다. API는 scope·older active·cap·tick·stream cap을 검사한다.
@@ -67,3 +68,7 @@ Python import 성공만으로 gRPC code location 로드가 보장되지는 않�
 ## Map paired 재구축 후속 HTTP 채택
 
 API 전송은 Common `1f8e339c7c79f86f8952b0d4c326ab4dae56bee8`의 `[http]` extra를 소비한다. 4 MiB plain 응답/전체 10초·압축 사전 거부·별도 연결 정리 제한을 공유하고, JSON 객체·PinVi 소유권·활성 run·재시도 계약은 앱이 유지한다. Common은 GPL-3.0-or-later이며 API 배포는 공통 의존성의 라이선스·소스 고지를 함께 유지한다. 기존 UI dev.6 산출물과 ETL RecoveryPolicy는 변경하지 않는다. 관리자 Map snapshot 변경은 원천 commit/bytes를 함께 재vendor하고 M05 pair 계약을 재생성한다. 운영 재구축/live 결과는 후속 [검증 기록](../reviews/common-map-rebuild-2026-10-05/README.md)에 따로 보존한다.
+
+## 최신 tick 요약의 저장소 작업 상한
+
+`ticks(limit: 3, statuses: [STARTED, SKIPPED, SUCCESS, FAILURE])`로 Dagster 1.13.24의 전체 이력 batch rank 조회를 피한다. 네 상태를 모두 선택하여 실패 tick을 숨기지 않고 instigation별 최신 최대 3건을 표시한다. 운영 Map의 sensor tick storage statement timeout을 재현하고 같은 query의 정상 응답을 확인했다. Dagster upgrade 때 schema enum과 resolver 경로를 재검증하며 HTTP deadline·응답 cap은 계속 적용한다. 실제 재구축과 브라우저 검증은 해당 [검증 기록](../reviews/common-map-rebuild-2026-10-05/README.md)을 따른다.

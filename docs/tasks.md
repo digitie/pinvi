@@ -24,7 +24,7 @@
   항목을 닫지 않는다.**
 - [/] T-VN-M05-TEMPLATE0-PINSET — `68d99705…`·`285618c0…`·`37932169…`·`31fe73ad…`·`b22bfb8c…`·`89330403…`·`c6c73cdf…` n150 candidate는 terminal로 보존하며 재시도하지 않는다. `c6c73cdf…`은 `foreign_membership` terminal이며 원문 builder 출력·stderr·catalog row는 읽지 않았다. (교차 저장소 감사: Map·Manager 어느 쪽에도 이 ID는 없다 — PinVi 전용 잠긴 이력 기록.)
 - [/] T-VN-M05-NEW-CANDIDATE — PinVi `69a5ac65…`·Map `9c64e862…`의 pinset `030b12fc…`은 `committed` generation(Map application `300`, Map Dagster `29b539ebc72a`, PinVi `20260824_0101`)으로 보존하며 재실행하지 않는다. committed Map runtime provenance를 반영한 PinVi `a90b1f06…`·Map `9c64e862…`의 pinset `87fe2abc…`만 다음 trusted release candidate다. 이 새 pinset에서만 `rebuild-pinned --confirm --json`을 정확히 한 번 실행한다. (교차 저장소 감사: Map·Manager 어느 쪽에도 이 ID는 없다 — PinVi 전용 잠긴 이력 기록.)
-- [ ] T-371 — Map paired 재구축·Common HTTP 채택, 두 독립 적대적 리뷰·live UI·CI 후 PR merge. [검증 기록](reviews/common-map-rebuild-2026-10-05/README.md), [공통 가이드](runbooks/common-dagster.md).
+- [ ] T-371 — Map paired 재구축·Common HTTP 채택·두 독립 적대적 리뷰·live UI/D1/D2 완료. 남은 gate는 문서 포함 exact CI와 PR #576 merge. [검증 기록](reviews/common-map-rebuild-2026-10-05/README.md), [공통 가이드](runbooks/common-dagster.md).
 
 - [ ] T-VN-M05-ACTIVATION — provenance가 재결박된 committed candidate에서만 isolated M04/M05 live mutating E2E와 activation attestation을 통과한다.
   **⚠️ 미해소 교차 저장소 모순**: `kor-travel-map`은 같은 ID를 `[x]` 완료(2026-09-08,
