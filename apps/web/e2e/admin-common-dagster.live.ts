@@ -10,7 +10,7 @@ const evidence = process.env.PINVI_COMMON_LIVE_EVIDENCE_DIR ?? '/evidence';
 const password = process.env.PINVI_COMMON_LIVE_PASSWORD ?? '';
 async function login(page: Page, role = 'admin') {
   await page.goto('/admin/login');
-  await page.locator('[data-slot=login-username]').fill(`${role}@example.test`);
+  await page.locator('[data-slot=login-username]').fill(`${role}@example.com`);
   await page.locator('[data-slot=login-password]').fill(password);
   await page.locator('[data-slot=login-submit]').click();
 }
@@ -52,7 +52,7 @@ test('real login validation, nonadmin logout and DB-backed ETL roles', async ({
   expect(denied.status()).toBe(404);
   // 별도 context의 실제 login API도 role=operator가 허용됨을 확인한다.
   const auth = await request.post('http://127.0.0.1:12801/v1/auth/login', {
-    data: { email: 'operator@example.test', password },
+    data: { email: 'operator@example.com', password },
   });
   expect(auth.status()).toBe(200);
   const permitted = await request.get('http://127.0.0.1:12801/v1/admin/etl/summary');
