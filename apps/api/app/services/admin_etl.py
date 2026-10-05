@@ -875,6 +875,7 @@ def _valid_run_connection(value: Any) -> bool:
         isinstance(row, dict)
         and isinstance(row.get("runId"), str)
         and bool(row["runId"].strip())
+        and isinstance(row.get("status"), str)
         and row.get("status") in statuses
         for row in rows
     )

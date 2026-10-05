@@ -64,13 +64,16 @@ test('old active run, scope, tick and semantic outage recovery through real UI',
 }, info) => {
   await login(page);
   await expect(page).toHaveURL(/\/admin$/);
-  await page.getByTestId('admin-nav-etl').click();
+  await page.getByTestId('admin-nav--admin-etl').click();
   await expect(page).toHaveURL(/\/admin\/etl$/);
   await expect(page.getByTestId('admin-etl-pinvi-status')).toContainText('정상');
   const panel = page.getByTestId('admin-common-dagster');
   await expect(panel).toBeVisible();
   await expect(panel).toContainText('pinvi.etl.definitions');
-  const data = await (await page.request.get('http://127.0.0.1:12801/v1/admin/etl/summary')).json();
+  const envelope = await (
+    await page.request.get('http://127.0.0.1:12801/v1/admin/etl/summary')
+  ).json();
+  const data = envelope.data;
   expect(data.pinvi.repositories).toHaveLength(1);
   expect(data.pinvi.job_count).toBe(9); // 8 named jobs + implicit asset job.
   expect(
@@ -79,14 +82,14 @@ test('old active run, scope, tick and semantic outage recovery through real UI',
   expect(
     data.pinvi.recent_runs.some((run: { run_id: string }) => run.run_id === 'foreign-active'),
   ).toBe(false);
-  const search = panel.getByRole('searchbox');
+  const search = panel.getByRole('textbox', { name: '실행 검색' });
   await search.fill('pinvi_email_outbox_job');
   await expect(panel).toContainText('old-acti');
   await panel.getByRole('button', { name: /old-acti/ }).click();
   await expect(panel).toContainText('old-active-pinvi');
-  const schedule = panel.getByRole('link', { name: /Dagster에서 schedule 보기/ }).first();
-  if (await schedule.count())
-    expect(await schedule.getAttribute('href')).toContain('__repository__%40pinvi.etl.definitions');
+  await panel.getByRole('button', { name: 'pinvi_email_outbox_job', exact: true }).click();
+  const schedule = panel.getByRole('link', { name: /스케줄 열기/ });
+  await expect(schedule).toHaveAttribute('href', /__repository__%40pinvi\.etl\.definitions/);
   await mkdir(evidence, { recursive: true });
   await page.screenshot({
     path: path.join(evidence, `${info.project.name}-desktop.png`),

@@ -390,7 +390,17 @@ async def test_compressed_response_is_rejected_before_any_decompression() -> Non
 
 
 @pytest.mark.parametrize(
-    "rows", [None, {}, [{"runId": "", "status": "STARTED"}], [{"runId": "x", "status": "unknown"}]]
+    "rows",
+    [
+        None,
+        {},
+        [{"runId": "", "status": "STARTED"}],
+        [{"runId": "x", "status": "unknown"}],
+        [{"runId": "x", "status": []}],
+        [{"runId": "x", "status": {}}],
+        [{"runId": "x", "status": True}],
+        [{"runId": "x", "status": 1}],
+    ],
 )
 async def test_malformed_active_results_never_claim_healthy(rows) -> None:
     payload = _graphql_payload()
