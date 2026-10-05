@@ -57,6 +57,9 @@ pinvi-feature-uuid-cutover = "app.commands.feature_uuid_cutover:main"
 requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
 
