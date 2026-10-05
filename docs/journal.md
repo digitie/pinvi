@@ -1,3 +1,7 @@
+## 2026-10-05 — T-371 API·ETL Docker frontend digest 정렬
+
+실제 paired rebuild 첫 시도는 PinVi API, 동일 pair retry1은 PinVi Dagster 이미지에서 `frontend grpc server closed unexpectedly`로 실패했다. 두 파일의 부동 `1.7-labs` frontend 대신 retry1에서 통과한 web의 `1.7.1-labs@sha256:b99fecfe…`와 같은 digest를 채택한다. 이는 parser 재현성을 보강하는 수정이며 gRPC 종료의 단일 근본 원인을 확정한 것으로 집계하지 않는다. 앱·ETL Python 로직·Common 계약·workspace COPY 규칙은 그대로다. [Docker 공식 syntax 계약](https://docs.docker.com/build/buildkit/frontend/)과 기존 web 지시자의 digest를 따르며, 새 고정 후보의 두 FULL 연속 리뷰·CI·실제 재구축으로 확인한다. 기존 실패와 운영 여섯 서비스 보존은 검증 기록에 분리한다. 운영 전환·live·merge는 아직 미완료다.
+
 ## 2026-10-05 — T-371 Map paired 재구축·공통 HTTP (진행 중)
 
 [공통 Dagster 가이드](runbooks/common-dagster.md)에 따라 Common bounded HTTP를 PinVi API에 적용했다. JSON 객체 계약과 기존 공통 UI·ETL을 유지한다. Map 신규 관리자 snapshot 재vendor·M05 pair 갱신 후 2인 독립 리뷰·실제 paired 재구축·live·CI·PR merge를 수행한다. [검증 기록](reviews/common-map-rebuild-2026-10-05/README.md)에 실패와 성공을 분리한다.
