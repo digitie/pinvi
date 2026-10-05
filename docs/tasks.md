@@ -51,3 +51,5 @@
 - [ ] **T-320** — 모바일 위치 동의 gate 런타임 확인. VWorld 키가 있는 환경에서 지도 표면을
       띄우고 "현재 위치로"가 OS 권한 요청 전 동의를 받는지 확인한다(T-310 smoke에서 키 부재로
       미확인). T-353이 풀려 SDK 57 development APK가 나왔으므로(EAS `b3a52da4`, 2026-09-05) 이제 진행 가능하다. VWorld 키가 있는 환경에서 그 APK를 설치해 확인한다.
+
+- [ ] T-370 — Common Dagster 복구·메모리·공통 Admin UI 채택, 2인 적대 리뷰·N150 live UI·CI 후 PR 머지(ADR-072).
