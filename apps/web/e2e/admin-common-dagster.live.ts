@@ -44,18 +44,18 @@ test('real login validation, nonadmin logout and DB-backed ETL roles', async ({
   await expect(page.locator('[data-slot=login-password]')).toHaveValue('');
   await login(page, 'user');
   await expect(page.locator('[data-slot=login-error]')).toContainText('관리자');
-  const anonymous = await page.request.get('http://127.0.0.1:12801/v1/admin/etl/summary');
+  const anonymous = await page.request.get('http://127.0.0.1:12801/admin/etl/summary');
   expect(anonymous.status()).toBe(401);
   await login(page, 'cpo');
   await expect(page).toHaveURL(/\/admin$/);
-  const denied = await page.request.get('http://127.0.0.1:12801/v1/admin/etl/summary');
+  const denied = await page.request.get('http://127.0.0.1:12801/admin/etl/summary');
   expect(denied.status()).toBe(404);
   // 별도 context의 실제 login API도 role=operator가 허용됨을 확인한다.
-  const auth = await request.post('http://127.0.0.1:12801/v1/auth/login', {
+  const auth = await request.post('http://127.0.0.1:12801/auth/login', {
     data: { email: 'operator@example.com', password },
   });
   expect(auth.status()).toBe(200);
-  const permitted = await request.get('http://127.0.0.1:12801/v1/admin/etl/summary');
+  const permitted = await request.get('http://127.0.0.1:12801/admin/etl/summary');
   expect(permitted.status()).toBe(200);
 });
 
@@ -71,7 +71,7 @@ test('old active run, scope, tick and semantic outage recovery through real UI',
   await expect(panel).toBeVisible();
   await expect(panel).toContainText('pinvi.etl.definitions');
   const envelope = await (
-    await page.request.get('http://127.0.0.1:12801/v1/admin/etl/summary')
+    await page.request.get('http://127.0.0.1:12801/admin/etl/summary')
   ).json();
   const data = envelope.data;
   expect(data.pinvi.repositories).toHaveLength(1);
