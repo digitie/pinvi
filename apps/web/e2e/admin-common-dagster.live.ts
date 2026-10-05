@@ -77,16 +77,16 @@ test('old active run, scope, tick and semantic outage recovery through real UI',
   expect(data.pinvi.repositories).toHaveLength(1);
   expect(data.pinvi.job_count).toBe(9); // 8 named jobs + implicit asset job.
   expect(
-    data.pinvi.recent_runs.some((run: { run_id: string }) => run.run_id === 'old-active-pinvi'),
+    data.pinvi.recent_runs.some((run: { run_id: string }) => run.run_id === '042d0b0a-fe62-5a20-8f8d-ee6593395508'),
   ).toBe(true);
   expect(
-    data.pinvi.recent_runs.some((run: { run_id: string }) => run.run_id === 'foreign-active'),
+    data.pinvi.recent_runs.some((run: { run_id: string }) => run.run_id === 'a9339146-a057-557c-8eda-ab7390b1f2a2'),
   ).toBe(false);
   const search = panel.getByRole('textbox', { name: '실행 검색' });
   await search.fill('pinvi_email_outbox_job');
-  await expect(panel).toContainText('old-acti');
-  await panel.getByRole('button', { name: /old-acti/ }).click();
-  await expect(panel).toContainText('old-active-pinvi');
+  await expect(panel).toContainText('042d0b0a');
+  await panel.getByRole('button', { name: /042d0b0a/ }).click();
+  await expect(panel).toContainText('042d0b0a-fe62-5a20-8f8d-ee6593395508');
   await panel.getByRole('button', { name: 'pinvi_email_outbox_job', exact: true }).click();
   const schedule = panel.getByRole('link', { name: /스케줄 열기/ });
   await expect(schedule).toHaveAttribute('href', /__repository__%40pinvi\.etl\.definitions/);
@@ -98,7 +98,7 @@ test('old active run, scope, tick and semantic outage recovery through real UI',
   await control(`${info.project.name}-down`);
   await panel.getByRole('button', { name: /새로고침/ }).click();
   await expect(page.getByTestId('admin-etl-pinvi-status')).toContainText('중단');
-  await expect(panel).toContainText('old-active-pinvi');
+  await expect(panel).toContainText('042d0b0a-fe62-5a20-8f8d-ee6593395508');
   await expect(panel.getByRole('alert')).toBeVisible();
   await control(`${info.project.name}-up`);
   await panel.getByRole('button', { name: /새로고침/ }).click();
