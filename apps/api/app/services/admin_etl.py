@@ -726,7 +726,7 @@ async def _fetch_pinvi_dagster_snapshot(
         )
 
     active_payload = data.get("activeRuns")
-    if not _valid_run_connection(active_payload):
+    if not isinstance(active_payload, dict) or not _valid_run_connection(active_payload):
         return _PinviDagsterProbeResult(
             status="degraded",
             message="Dagster active run 조회 실패",
