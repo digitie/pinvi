@@ -1,5 +1,10 @@
 # resume.md
 
+## 2026-10-05 — T-371 Map paired 재구축·공통 HTTP (진행 중)
+
+[공통 Dagster 가이드](runbooks/common-dagster.md)에 따라 Common bounded HTTP를 PinVi API에 적용했다. JSON 객체 계약과 기존 공통 UI·ETL을 유지한다. Map 신규 관리자 snapshot 재vendor·M05 pair 갱신 후 2인 독립 리뷰·실제 paired 재구축·live·CI·PR merge를 수행한다. [검증 기록](reviews/common-map-rebuild-2026-10-05/README.md)에 실패와 성공을 분리한다.
+
+
 ## 2026-10-05 — T-370 Common Dagster 채택
 
 제품 46305d44의 두 독립 post-fix 리뷰와 N150 실제 UI 4건 PASS. bounded batch/response/동시성, 안전한 retry/coalescing, 공통 로그인·메뉴·대시보드를 적용했다. [검증 기록](reviews/common-dagster-2026-10-05/README.md)과 [가이드](runbooks/common-dagster.md)를 따른다. [Common #27](https://github.com/digitie/kor-travel-common/pull/27)과 [PinVi #575](https://github.com/digitie/pinvi/pull/575)에 최종 CI/ready Aggregate 머지 게이트를 결박했다. 이후 운영 검증은 별도 배포 요청에서 진행한다. 운영 shared daemon 배포·worker kill·RSS는 NOT_RUN이며 다른 기존 task는 보존한다.

@@ -63,3 +63,7 @@ N150 live UI는 고정 dev 포트를 별도 network namespace 안에서 사용�
 최종 `defs`만 노출한 뒤 `dagster job list -m pinvi.etl.definitions -d apps/etl`을 확인한다.
 Python import 성공만으로 gRPC code location 로드가 보장되지는 않는다.
 최종 결과는 [검증 기록](../reviews/common-dagster-2026-10-05/README.md)을 따른다.
+
+## Map paired 재구축 후속 HTTP 채택
+
+API 전송은 Common `1f8e339c7c79f86f8952b0d4c326ab4dae56bee8`의 `[http]` extra를 소비한다. 4 MiB plain 응답/전체 10초·압축 사전 거부·별도 연결 정리 제한을 공유하고, JSON 객체·PinVi 소유권·활성 run·재시도 계약은 앱이 유지한다. Common은 GPL-3.0-or-later이며 API 배포는 공통 의존성의 라이선스·소스 고지를 함께 유지한다. 기존 UI dev.6 산출물과 ETL RecoveryPolicy는 변경하지 않는다. 관리자 Map snapshot 변경은 원천 commit/bytes를 함께 재vendor하고 M05 pair 계약을 재생성한다. 운영 재구축/live 결과는 후속 [검증 기록](../reviews/common-map-rebuild-2026-10-05/README.md)에 따로 보존한다.

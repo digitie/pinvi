@@ -1,16 +1,16 @@
 {
   "map": {
     "admin": {
-      "openapi_sha256": "d2935f46b308de5c71b00b27777d5a32aefca2b7ed5f0be1558d4ebc1f6f0c3a",
-      "runtime_operation_contract_sha256": "0e0f1e2be5161149d771464d9b084fdc3b6bc1894351b85edf22107cdc8ff89d",
-      "source_canonical_sha256": "bb515e556d7f9971de5efaee844cda1fd8b6070dde3ab9680e2bb5a28185f4e6",
-      "source_operation_contract_sha256": "0e0f1e2be5161149d771464d9b084fdc3b6bc1894351b85edf22107cdc8ff89d"
+      "openapi_sha256": "ccec0fd05d2e5fea6ab46192e7ac1a3f08d9b0137cefcd92672be794f4f95294",
+      "runtime_operation_contract_sha256": "8f1f86b87f02bd2ba16cabce5cebe5906f0b7cbe0b58a46ac13de8b34cd06ad0",
+      "source_canonical_sha256": "c9ff3511878bfb6d0cd844e4ec63b6f94d617fa49af30491d220c50cb8df07f1",
+      "source_operation_contract_sha256": "8f1f86b87f02bd2ba16cabce5cebe5906f0b7cbe0b58a46ac13de8b34cd06ad0"
     },
     "full": {
-      "openapi_sha256": "d2935f46b308de5c71b00b27777d5a32aefca2b7ed5f0be1558d4ebc1f6f0c3a",
-      "runtime_operation_contract_sha256": "0e0f1e2be5161149d771464d9b084fdc3b6bc1894351b85edf22107cdc8ff89d",
-      "source_canonical_sha256": "bb515e556d7f9971de5efaee844cda1fd8b6070dde3ab9680e2bb5a28185f4e6",
-      "source_operation_contract_sha256": "0e0f1e2be5161149d771464d9b084fdc3b6bc1894351b85edf22107cdc8ff89d"
+      "openapi_sha256": "ccec0fd05d2e5fea6ab46192e7ac1a3f08d9b0137cefcd92672be794f4f95294",
+      "runtime_operation_contract_sha256": "8f1f86b87f02bd2ba16cabce5cebe5906f0b7cbe0b58a46ac13de8b34cd06ad0",
+      "source_canonical_sha256": "c9ff3511878bfb6d0cd844e4ec63b6f94d617fa49af30491d220c50cb8df07f1",
+      "source_operation_contract_sha256": "8f1f86b87f02bd2ba16cabce5cebe5906f0b7cbe0b58a46ac13de8b34cd06ad0"
     },
     "service": {
       "openapi_sha256": "6677d41f572fe53b24269fc7d0a1f6a216ee774ce6744be0590959d8f8f2ddfb",

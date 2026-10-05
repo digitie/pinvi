@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 import pytest
 import yaml
+from kortravelcommon.http import BoundedResponseError
 from pydantic import ValidationError
 
 from app.core.config import Settings
@@ -328,12 +329,15 @@ async def test_active_query_failure_and_cap_are_not_healthy_empty() -> None:
 
 
 async def test_decoded_response_size_limit_and_nonobject_are_rejected() -> None:
-    for response in [
-        httpx.Response(200, content=b"x" * (admin_etl.PINVI_DAGSTER_RESPONSE_LIMIT + 1)),
-        httpx.Response(200, json=[]),
+    for response, expected_error in [
+        (
+            httpx.Response(200, content=b"x" * (admin_etl.PINVI_DAGSTER_RESPONSE_LIMIT + 1)),
+            BoundedResponseError,
+        ),
+        (httpx.Response(200, json=[]), ValueError),
     ]:
         async with _client({"/large": response}) as client:
-            with pytest.raises(ValueError):
+            with pytest.raises(expected_error):
                 await admin_etl._bounded_dagster_request(client, "GET", "http://dagster.test/large")
 
 
@@ -383,7 +387,7 @@ async def test_compressed_response_is_rejected_before_any_decompression() -> Non
         return httpx.Response(200, headers={"content-encoding": "gzip"}, stream=NeverRead())
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        with pytest.raises(ValueError, match="압축"):
+        with pytest.raises(BoundedResponseError, match="압축"):
             await admin_etl._bounded_dagster_request(
                 client, "GET", "http://dagster.test/compressed"
             )

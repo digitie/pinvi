@@ -16,6 +16,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
+from kortravelcommon.http import bounded_request
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -568,28 +569,20 @@ async def _bounded_dagster_request(
     url: str,
     **kwargs: Any,
 ) -> httpx.Response:
-    """압축은 해제 전에 거부하고 plain 본문을 제한한다. 전체 대기 예산은 probe 소유."""
-    headers = dict(kwargs.pop("headers", {}))
-    headers["Accept-Encoding"] = "identity"
-    async with client.stream(method, url, headers=headers, **kwargs) as response:
-        if response.headers.get("content-encoding", "identity").strip().lower() not in {
-            "",
-            "identity",
-        }:
-            raise ValueError("Dagster 압축 응답은 허용하지 않습니다.")
-        content = bytearray()
-        async for chunk in response.aiter_bytes(chunk_size=64 * 1024):
-            if len(content) + len(chunk) > PINVI_DAGSTER_RESPONSE_LIMIT:
-                raise ValueError("Dagster 응답이 4MiB 상한을 초과했습니다.")
-            content.extend(chunk)
-        result = httpx.Response(
-            response.status_code, content=bytes(content), request=response.request
-        )
-        if 200 <= result.status_code < 400:
-            payload = json.loads(result.content)
-            if not isinstance(payload, dict):
-                raise ValueError("Dagster 응답은 객체이어야 합니다.")
-        return result
+    """전송 상한은 common을 사용하고 PinVi의 JSON 객체 계약은 유지한다."""
+    result = await bounded_request(
+        client,
+        method,
+        url,
+        max_response_bytes=PINVI_DAGSTER_RESPONSE_LIMIT,
+        total_timeout_seconds=PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS,
+        **kwargs,
+    )
+    if 200 <= result.status_code < 400:
+        payload = json.loads(result.content)
+        if not isinstance(payload, dict):
+            raise ValueError("Dagster 응답은 객체이어야 합니다.")
+    return result
 
 
 async def _probe_pinvi_dagster() -> _PinviDagsterProbeResult:

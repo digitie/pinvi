@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 license = { text = "MIT" }
 
 dependencies = [
+  "kor-travel-common[http] @ git+https://github.com/digitie/kor-travel-common.git@1f8e339c7c79f86f8952b0d4c326ab4dae56bee8#subdirectory=packages/py/kor-travel-common",
   "fastapi>=0.115",
   "uvicorn[standard]>=0.32",
   "pydantic>=2.9",

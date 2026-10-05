@@ -779,6 +779,16 @@ wheels = [
 ]
 
 [[package]]
+name = "kor-travel-common"
+version = "0.1.0.dev0"
+source = { git = "https://github.com/digitie/kor-travel-common.git?subdirectory=packages%2Fpy%2Fkor-travel-common&rev=1f8e339c7c79f86f8952b0d4c326ab4dae56bee8#1f8e339c7c79f86f8952b0d4c326ab4dae56bee8" }
+
+[package.optional-dependencies]
+http = [
+    { name = "httpx" },
+]
+
+[[package]]
 name = "librt"
 version = "0.15.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1076,6 +1086,7 @@ dependencies = [
     { name = "email-validator" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "kor-travel-common", extra = ["http"] },
     { name = "passlib", extra = ["argon2"] },
     { name = "prometheus-client" },
     { name = "pydantic" },
@@ -1116,6 +1127,7 @@ requires-dist = [
     { name = "freezegun", marker = "extra == 'dev'", specifier = ">=1.5" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
+    { name = "kor-travel-common", extras = ["http"], git = "https://github.com/digitie/kor-travel-common.git?subdirectory=packages%2Fpy%2Fkor-travel-common&rev=1f8e339c7c79f86f8952b0d4c326ab4dae56bee8" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13" },
     { name = "passlib", extras = ["argon2"], specifier = ">=1.7" },
     { name = "prometheus-client", specifier = ">=0.22" },

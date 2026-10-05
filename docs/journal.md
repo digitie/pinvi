@@ -1,5 +1,10 @@
 ## 2026-10-05 — T-370 Common Dagster 복구·메모리·Admin UI
 
+## 2026-10-05 — T-371 Map paired 재구축·공통 HTTP (진행 중)
+
+[공통 Dagster 가이드](runbooks/common-dagster.md)에 따라 Common bounded HTTP를 PinVi API에 적용했다. JSON 객체 계약과 기존 공통 UI·ETL을 유지한다. Map 신규 관리자 snapshot 재vendor·M05 pair 갱신 후 2인 독립 리뷰·실제 paired 재구축·live·CI·PR merge를 수행한다. [검증 기록](reviews/common-map-rebuild-2026-10-05/README.md)에 실패와 성공을 분리한다.
+
+
 PinVi 46305d44/Common dev.6의 두 독립 post-fix PASS, N150 실제 PostgreSQL16/Alembic0102/API/GraphQL/Chromium·Firefox 4PASS를 [검증 기록](reviews/common-dagster-2026-10-05/README.md)에 보존했다. ETL67/APIfocused28/Web172/CommonUI50 및 strict mypy247·build PASS. API전체의 기존 로컬 Map freshness1실패는 vendor bytes base==candidate로 구분했다. 최초 live 준비 실패와 P1 autodiscovery 수정도 별도 원문으로 보존하며 마지막 성공에 합산하지 않는다.
 
 Linux CodeGraph source impact 조회·최종 sync/status를 실행했다. 별도 namespace로 고정 dev port를 사용하여 host 운영 충돌을 피했다. shared 운영 정책·worker kill·RSS 실측은 NOT_RUN. 인간 trunk 미커밋 파일은 보존했다. 최종 문서/ready gate 이후 Common #27과 PinVi #575를 순서대로 merge한다.
