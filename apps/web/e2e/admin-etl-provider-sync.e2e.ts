@@ -489,13 +489,13 @@ test('ETL 페이지가 Pinvi 실제 Dagster 정의와 upstream import job을 표
   await expect(page.getByTestId('admin-etl-job-pinvi_email_outbox_job-latest-run')).toContainText(
     'SUCCESS',
   );
-  await expect(page.getByTestId('admin-etl-pinvi-live-repositories')).toContainText(
+  await expect(page.locator('[data-slot=dagster-operations-repositories]')).toContainText(
     'pinvi.etl.definitions',
   );
   await expect(
     page.getByTestId('admin-etl-pinvi-live-schedule-pinvi_email_outbox_schedule'),
   ).toContainText('Asia/Seoul');
-  await expect(page.getByTestId('admin-etl-pinvi-live-runs')).toContainText(
+  await expect(page.locator('[data-slot=dagster-operations-run-table]')).toContainText(
     'pinvi_email_outbox_job',
   );
   await expect(page.getByTestId('admin-etl-email-outbox')).toContainText('backoff');
