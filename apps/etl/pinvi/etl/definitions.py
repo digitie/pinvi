@@ -83,3 +83,7 @@ _retry_sensors = [
     for name in sorted(INFRA_RETRY_JOBS)
 ]
 defs = Definitions.merge(_base_defs, Definitions(sensors=_retry_sensors))
+
+# gRPC module autodiscovery는 이름이 private여도 모든 Definitions 객체를 센다.
+# 조립용 임시 정의를 모듈에 남기면 code location 자체가 로드되지 않는다.
+del _base_defs
