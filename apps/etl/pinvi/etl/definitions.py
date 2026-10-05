@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dagster import Definitions, EnvVar
+from dagster import Definitions, EnvVar, multiprocess_executor
+from kortravelcommon.dagster import infrastructure_retry_sensor
 
 from pinvi.etl.assets import (
     pinvi_email_outbox,
@@ -15,6 +16,7 @@ from pinvi.etl.assets import (
 )
 from pinvi.etl.jobs import kasi_poi_rise_set_job
 from pinvi.etl.resources import KasiResource, KorTravelWeatherResource, PinviDatabaseResource
+from pinvi.etl.run_tags import INFRA_RETRY_JOBS, PINVI_LOCATION_NAME, PINVI_PROJECT, recovery_policy
 from pinvi.etl.schedules import (
     kasi_special_days_job,
     pinvi_email_outbox_job,
@@ -52,10 +54,11 @@ defs = Definitions(
     ],
     schedules=schedules,
     sensors=[pinvi_run_failure_sensor],
+    executor=multiprocess_executor.configured({"max_concurrent": 1}),
     resources={
         "db": PinviDatabaseResource(
             dsn=EnvVar("PINVI_DATABASE_URL"),
-            pool_size=10,
+            pool_size=1,
         ),
         "kasi": KasiResource(
             service_key=EnvVar("DATA_GO_KR_SERVICE_KEY"),
@@ -65,3 +68,18 @@ defs = Definitions(
         ),
     },
 )
+
+
+# resolve 후 job을 주입한다. asset job의 config/selection을 그대로 보존한다.
+_base_defs = defs
+_retry_sensors = [
+    infrastructure_retry_sensor(
+        name=f"pinvi_infra_retry_{name}",
+        project=PINVI_PROJECT,
+        location_name=PINVI_LOCATION_NAME,
+        job=_base_defs.resolve_job_def(name),
+        policy=recovery_policy(name),
+    ).with_updated_job(next(job for job in _base_defs.jobs if job.name == name))
+    for name in sorted(INFRA_RETRY_JOBS)
+]
+defs = Definitions.merge(_base_defs, Definitions(sensors=_retry_sensors))

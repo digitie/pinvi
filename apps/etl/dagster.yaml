@@ -34,8 +34,8 @@
 # 그 run은 **성공했는데 STARTED로 남는다.**
 #
 # **앱 DB가 아니라 별도 database(`pinvi_dagster`)를 쓴다.** dagster-postgres는
-# 자기 스키마 이력을 `alembic_version`이라는 이름의 테이블로 관리하므로, PinVi
-# 자신의 `alembic_version`과 같은 database를 쓰면 충돌한다. 인스턴스는 같은
+# Dagster의 public 스키마 이력과 PinVi app 스키마 이력은 직접 충돌하지 않는다.
+# database를 나누어 storage 장애·마이그레이션·권한을 앱 데이터와 분리한다. 인스턴스는 같은
 # `pinvi-postgres`(:12800)를 쓰되 database만 가른다.
 
 # 셋(run / event log / schedule)을 한 블록으로 설정한다. 따로 쓰면 셋 중 하나만
@@ -62,9 +62,9 @@ run_monitoring:
   start_timeout_seconds: 300
   poll_interval_seconds: 60
 
-  # 재개하지 않는다. 여기 job은 대부분 멱등이 아니라 **바깥으로 나가는 것**이다
-  # (email outbox, telegram outbox). 사라진 run을 되살리면 같은 메시지를 두 번
-  # 보낼 수 있다 — 실패로 끝내고 다음 schedule이 집게 한다.
+  # 프로세스 재개는 금지한다. email/telegram job은 실제 발송이 아닌 조회다.
+  # 명시적으로 허용한 읽기 전용 job만 Common 정책에 따라 인프라 실패를 1회 재시도한다.
+  # provider/업무 오류·취소·알 수 없는 실패는 자동 재시도하지 않는다.
   max_resume_run_attempts: 0
 
   # **왜 이 숫자인가.** 위의 liveness 검사는 *프로세스가 사라진* run만 잡는다.
@@ -85,11 +85,22 @@ run_monitoring:
   # 공통값으로 바뀌기 때문이다. 두 값은 테스트로 같게 묶여 있으니 함께 바꾼다.
   max_runtime_seconds: 3600
 
-# 기본값(10)을 그대로 둔다. 등록된 job이 8개이고 그중 셋만 15~20분 간격이라
-# 동시 10개가 좁은 자리가 아니다. 좁아지면 그때 실측으로 조인다.
+# 자체 instance 예산. 공유 plane은 Manager의 같은 tag 제한을 별도로 확인한다.
 run_coordinator:
   module: dagster.core.run_coordinator
   class: QueuedRunCoordinator
+  config:
+    max_concurrent_runs: 2
+    tag_concurrency_limits:
+      - key: kortravelcommon/job
+        value:
+          applyLimitPerUniqueValue: true
+        limit: 1
+
+run_retries:
+  enabled: true
+  max_retries: 0
+  retry_on_asset_or_op_failure: false
 
 telemetry:
   enabled: false

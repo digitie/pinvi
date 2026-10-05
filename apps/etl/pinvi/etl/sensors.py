@@ -25,6 +25,7 @@ from pinvi.etl.schedules import (
     pinvi_location_log_archive_job,
     pinvi_pii_retention_job,
     pinvi_telegram_system_outbox_job,
+    pinvi_trip_day_rise_sets_job,
     pinvi_weather_retention_horizon_job,
 )
 
@@ -38,6 +39,7 @@ _MONITORED_JOBS = [
     pinvi_location_log_archive_job,
     pinvi_telegram_system_outbox_job,
     pinvi_weather_retention_horizon_job,
+    pinvi_trip_day_rise_sets_job,
 ]
 
 OUTBOX_CATEGORY = "etl_run_failure"
@@ -90,7 +92,17 @@ def _error_class_from_context(context: RunFailureSensorContext) -> str | None:
 
 
 async def _insert_outbox(dsn: str, payload: dict[str, Any]) -> None:
-    engine = create_async_engine(dsn)
+    engine = create_async_engine(
+        dsn,
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=5,
+        connect_args={
+            "timeout": 5,
+            "command_timeout": 5,
+            "server_settings": {"statement_timeout": "5000", "lock_timeout": "3000"},
+        },
+    )
     try:
         async with engine.begin() as conn:
             await conn.execute(
@@ -136,8 +148,8 @@ def pinvi_run_failure_sensor(context: RunFailureSensorContext) -> None:
     # Sentry/outbox 둘 다 best-effort — 통지 실패가 daemon tick을 깨지 않게 한다.
     try:
         _capture_sentry(payload)
-    except Exception:  # best-effort: notification failure must not break the daemon tick
-        context.log.exception("sentry capture failed for ETL run failure")
+    except Exception:  # noqa: BLE001 - best-effort: notification failure must not break the daemon tick
+        context.log.error("sentry capture failed for ETL run failure")
 
     dsn = os.getenv("PINVI_DATABASE_URL")
     if not dsn:
@@ -145,5 +157,5 @@ def pinvi_run_failure_sensor(context: RunFailureSensorContext) -> None:
         return
     try:
         asyncio.run(_insert_outbox(dsn, payload))
-    except Exception:  # best-effort: notification failure must not break the daemon tick
-        context.log.exception("failed to enqueue ETL run failure notification to outbox")
+    except Exception:  # noqa: BLE001 - best-effort: notification failure must not break the daemon tick
+        context.log.error("failed to enqueue ETL run failure notification to outbox")

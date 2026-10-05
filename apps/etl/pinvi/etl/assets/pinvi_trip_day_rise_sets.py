@@ -36,6 +36,8 @@ async def pinvi_trip_day_rise_sets(  # type: ignore[no-untyped-def]
     kasi: KasiResource,
 ) -> dict[str, int]:
     limit = int(context.op_config.get("batch_limit", 500))
+    if not 1 <= limit <= 500:
+        raise ValueError("batch_limit은 1~500이어야 합니다.")
     engine = db.create_engine()
     client = kasi.create_client()
     filled = 0

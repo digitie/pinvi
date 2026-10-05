@@ -28,3 +28,30 @@ PINVI_RUN_MAX_RUNTIME_SECONDS = 3600
 PINVI_JOB_TAGS: dict[str, str] = {
     "dagster/max_runtime": str(PINVI_RUN_MAX_RUNTIME_SECONDS),
 }
+
+
+from kortravelcommon.dagster import RecoveryPolicy
+
+PINVI_PROJECT = "pinvi"
+PINVI_LOCATION_NAME = "pinvi.etl.definitions"
+# 실제 발송은 API worker 소유다. 이 다섯 job은 읽기 전용 관측이다.
+INFRA_RETRY_JOBS = frozenset(
+    {
+        "pinvi_email_outbox_job",
+        "pinvi_telegram_system_outbox_job",
+        "pinvi_pii_retention_job",
+        "pinvi_location_log_archive_job",
+        "pinvi_weather_retention_horizon_job",
+    }
+)
+
+
+def recovery_policy(job_name: str) -> RecoveryPolicy:
+    allowed = job_name in INFRA_RETRY_JOBS
+    return RecoveryPolicy(
+        PINVI_RUN_MAX_RUNTIME_SECONDS, idempotent=allowed, infrastructure_retries=int(allowed)
+    )
+
+
+def job_tags(job_name: str) -> dict[str, str]:
+    return recovery_policy(job_name).tags(project=PINVI_PROJECT, job_name=job_name)
