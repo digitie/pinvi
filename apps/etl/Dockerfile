@@ -1,5 +1,5 @@
-# syntax=docker/dockerfile:1.7.1-labs@sha256:b99fecfe00268a8b556fad7d9c37ee25d716ae08a5d7320e6d51c4dd83246894
-# API·ETL·web을 같은 frontend digest로 고정해 재구축의 parser drift를 방지한다.
+# API·ETL은 표준 Dockerfile 명령만 사용하므로 BuildKit 내장 frontend로 빌드한다.
+# 불필요한 외부 labs frontend 실행을 피하며 builder 버전은 실제 빌드 증거에 기록한다.
 # Pinvi Dagster webserver — 고정 포트 12802 (CLAUDE.md 로컬 포트 정책 / ADR-047).
 
 # `uv.lock`을 설치 목록으로 푸는 데만 쓴다(아래 의존성 단계). 런타임 이미지에는

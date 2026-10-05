@@ -1,3 +1,7 @@
+## 2026-10-06 — T-371 표준 API·ETL의 외부 frontend 의존 제거
+
+Map1ba6/PinVi2a36 실제 paired 재구축에서 API·web은 통과했지만 마지막 ETL은 digest 고정된 `1.7.1-labs` frontend의 gRPC 종료로 다시 실패했다. 기존 여섯 서비스와 이전 generation은 정상 보존됐다. API·ETL은 labs 명령을 전혀 쓰지 않으므로 외부 syntax 지시자를 제거하고 BuildKit 내장 frontend로 빌드한다. [Docker 공식 frontend 설명](https://docs.docker.com/build/buildkit/frontend/)은 내장/외부 frontend의 차이를 설명한다. builder 버전은 실제 빌드 증거에 남기며 버전 독립적인 재현성을 주장하지 않는다. `COPY --parents`가 필요한 web은 기존 digest 고정을 유지한다. 설치·프로젝트 COPY·앱/ETL Python·provenance·Common 계약은 그대로다. 새 고정 후보의 두 FULL 연속 리뷰·제품 CI·실제 재구축/live는 후속 gate다. 앞선 세 실제 실패 원문을 성공으로 승격하지 않는다.
+
 ## 2026-10-05 — T-371 API·ETL Docker frontend digest 정렬
 
 실제 paired rebuild 첫 시도는 PinVi API, 동일 pair retry1은 PinVi Dagster 이미지에서 `frontend grpc server closed unexpectedly`로 실패했다. 두 파일의 부동 `1.7-labs` frontend 대신 retry1에서 통과한 web의 `1.7.1-labs@sha256:b99fecfe…`와 같은 digest를 채택한다. 이는 parser 재현성을 보강하는 수정이며 gRPC 종료의 단일 근본 원인을 확정한 것으로 집계하지 않는다. 앱·ETL Python 로직·Common 계약·workspace COPY 규칙은 그대로다. [Docker 공식 syntax 계약](https://docs.docker.com/build/buildkit/frontend/)과 기존 web 지시자의 digest를 따르며, 새 고정 후보의 두 FULL 연속 리뷰·CI·실제 재구축으로 확인한다. 기존 실패와 운영 여섯 서비스 보존은 검증 기록에 분리한다. 운영 전환·live·merge는 아직 미완료다.
