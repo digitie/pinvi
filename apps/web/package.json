@@ -45,7 +45,7 @@
     "vworld-map-web": "file:vendor/vworld-map-web-1.0.0.tgz",
     "zod": "^4.4.3",
     "zustand": "^5.0.0",
-    "@kor-travel/ui": "file:vendor/kor-travel-ui-0.1.0-dev.4.tgz",
+    "@kor-travel/ui": "file:vendor/kor-travel-ui-0.1.0-dev.5.tgz",
     "@kor-travel/tokens": "file:vendor/kor-travel-tokens-0.1.0.tgz"
   },
   "devDependencies": {
