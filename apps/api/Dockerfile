@@ -1,4 +1,5 @@
-# syntax=docker/dockerfile:1.7-labs
+# API·ETL은 표준 Dockerfile 명령만 사용하므로 BuildKit 내장 frontend로 빌드한다.
+# 불필요한 외부 labs frontend 실행을 피하며 builder 버전은 실제 빌드 증거에 기록한다.
 FROM python:3.12-slim@sha256:7a8b475003c4fe15a2cd4e55e5cfc2f3560bdc9333d624f24cdd6d4340fd7a17 AS base
 
 ARG PINVI_BUILD_ENVIRONMENT=development

@@ -1,3 +1,30 @@
+## 2026-10-06 — Map·PinVi 공통 Dagster 실제 재구축·live 수용 완료
+
+Common a960bdb, Map 1a3c467, PinVi 0058369의 제품113파일 두 독립 FULL 리뷰와 가이드 리뷰를 통과했다. 공용 Python은 bounded HTTP·경량 child health·실행 복구 정책을 제공하며 앱의 operation/lease/claim·비멱등 쓰기 계약을 유지한다. 요청별 응답4MiB/10초와 정리50ms, DB pool/step 제한·100개 batch를 적용했다. Map tick 조회의 오래된 batch history 정렬 지연은 상태 조건을 명시하여 native indexed LIMIT 경로로 줄였고 실제 summary/UI 복구를 확인했다.
+
+운영 paired 재구축과 설치 source·관련 Common bytes·실제 이미지 identity·여섯 서비스 healthy를 검증했다. Chromium/Firefox×Map/PinVi 실제 UI4건과 캡처8개를 직접 확인했다. ACL40·D1 11건·D2 정상 수용/validator·소유 fixture purge1/7·잔존0/ACTIVE없음/BLOCKED없음까지 통과했다. Common의 ESM export를 읽기 위한 type=module은 별도 테스트 이미지 package.json에만 추가하고 실제 마지막 layer/semantic delta를 증명했다. 앞선 모든 실패·초기 BLOCK와 수정 후 PASS 원문은 보존한다.
+
+격리 native Dagster에서 실제 raise·worker crash·stall/timeout 뒤 수동 재시도와 동시 정상 job을 확인했다. 최종 Map 운영 Dagster 이미지의 관련 설치 코드와 버전이 이전 격리 이미지와 같은지, 실제 최종 이미지 ID가 배포 기록과 맞는지 독립 검증했다. 이 결과는 해당 불변 코드 범위에 한정해 이어받는다. 공유 운영 DB의 worker 장애 주입이나 운영 RSS 감소율 실측으로 설명하지 않는다. 유한 응답·batch·동시성 구조와 합성 메모리 측정은 운영 RSS와 구분한다. 기존 인간 dirty checkout·외부 transport/HAProxy 후속은 보존한다.
+
+다음 한 작업은 문서 포함 exact HEAD CI 통과 후 Common #28 → Map #1303 → PinVi #576 순서로 merge commit 병합하는 것이다. 제품 Git pin의 ancestry를 보존한다. 이 절이 현재 상태이며 아래의 진행 중/NOT_RUN 문단은 이전 시점의 이력이다.
+
+[실제 검증·리뷰 원문과 실패 이력](reviews/common-map-rebuild-2026-10-05/README.md), [공통 적용 가이드](runbooks/common-dagster.md).
+
+## 2026-10-06 — T-371 표준 API·ETL의 외부 frontend 의존 제거
+
+Map1ba6/PinVi2a36 실제 paired 재구축에서 API·web은 통과했지만 마지막 ETL은 digest 고정된 `1.7.1-labs` frontend의 gRPC 종료로 다시 실패했다. 기존 여섯 서비스와 이전 generation은 정상 보존됐다. API·ETL은 labs 명령을 전혀 쓰지 않으므로 외부 syntax 지시자를 제거하고 BuildKit 내장 frontend로 빌드한다. [Docker 공식 frontend 설명](https://docs.docker.com/build/buildkit/frontend/)은 내장/외부 frontend의 차이를 설명한다. builder 버전은 실제 빌드 증거에 남기며 버전 독립적인 재현성을 주장하지 않는다. `COPY --parents`가 필요한 web은 기존 digest 고정을 유지한다. 설치·프로젝트 COPY·앱/ETL Python·provenance·Common 계약은 그대로다. 새 고정 후보의 두 FULL 연속 리뷰·제품 CI·실제 재구축/live는 후속 gate다. 앞선 세 실제 실패 원문을 성공으로 승격하지 않는다.
+
+## 2026-10-05 — T-371 API·ETL Docker frontend digest 정렬
+
+실제 paired rebuild 첫 시도는 PinVi API, 동일 pair retry1은 PinVi Dagster 이미지에서 `frontend grpc server closed unexpectedly`로 실패했다. 두 파일의 부동 `1.7-labs` frontend 대신 retry1에서 통과한 web의 `1.7.1-labs@sha256:b99fecfe…`와 같은 digest를 채택한다. 이는 parser 재현성을 보강하는 수정이며 gRPC 종료의 단일 근본 원인을 확정한 것으로 집계하지 않는다. 앱·ETL Python 로직·Common 계약·workspace COPY 규칙은 그대로다. [Docker 공식 syntax 계약](https://docs.docker.com/build/buildkit/frontend/)과 기존 web 지시자의 digest를 따르며, 새 고정 후보의 두 FULL 연속 리뷰·CI·실제 재구축으로 확인한다. 기존 실패와 운영 여섯 서비스 보존은 검증 기록에 분리한다. 운영 전환·live·merge는 아직 미완료다.
+
+## 2026-10-05 — T-371 Map paired 재구축·공통 HTTP (진행 중)
+
+[공통 Dagster 가이드](runbooks/common-dagster.md)에 따라 Common bounded HTTP를 PinVi API에 적용했다. JSON 객체 계약과 기존 공통 UI·ETL을 유지한다. Map 신규 관리자 snapshot 재vendor·M05 pair 갱신 후 2인 독립 리뷰·실제 paired 재구축·live·CI·PR merge를 수행한다. [검증 기록](reviews/common-map-rebuild-2026-10-05/README.md)에 실패와 성공을 분리한다.
+
+적대적 리뷰가 발견한 요청 client 정리 지연에 별도 50ms 예산을 적용했다. 결과·원래 예외·취소를 보존하고 요청별 client를 재사용하지 않는다. 정리 실패 로그에는 연결/인증 값을 남기지 않는다. 정상·시간 초과·연결 오류·취소 회귀를 포함한 probe 31건과 strict mypy 247 PASS. 후속 리뷰가 발견한 손상 repository·필수 collection 누락도 fail-closed한다. 응답 name/location을 selector와 비교하고 다른 서비스의 metadata를 반환하지 않는다. 정상 빈 collection은 허용한다. 후속 immutable 2인 FULL 리뷰·exact CI·paired 실제 재구축·live gate는 아직 미완료다.
+
+
 ## 2026-10-05 — T-370 Common Dagster 복구·메모리·Admin UI
 
 PinVi 46305d44/Common dev.6의 두 독립 post-fix PASS, N150 실제 PostgreSQL16/Alembic0102/API/GraphQL/Chromium·Firefox 4PASS를 [검증 기록](reviews/common-dagster-2026-10-05/README.md)에 보존했다. ETL67/APIfocused28/Web172/CommonUI50 및 strict mypy247·build PASS. API전체의 기존 로컬 Map freshness1실패는 vendor bytes base==candidate로 구분했다. 최초 live 준비 실패와 P1 autodiscovery 수정도 별도 원문으로 보존하며 마지막 성공에 합산하지 않는다.

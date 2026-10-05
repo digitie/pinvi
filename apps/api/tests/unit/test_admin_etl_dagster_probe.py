@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
+import time
 import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,6 +14,7 @@ from typing import Any
 import httpx
 import pytest
 import yaml
+from kortravelcommon.http import BoundedResponseError
 from pydantic import ValidationError
 
 from app.core.config import Settings
@@ -328,12 +331,15 @@ async def test_active_query_failure_and_cap_are_not_healthy_empty() -> None:
 
 
 async def test_decoded_response_size_limit_and_nonobject_are_rejected() -> None:
-    for response in [
-        httpx.Response(200, content=b"x" * (admin_etl.PINVI_DAGSTER_RESPONSE_LIMIT + 1)),
-        httpx.Response(200, json=[]),
+    for response, expected_error in [
+        (
+            httpx.Response(200, content=b"x" * (admin_etl.PINVI_DAGSTER_RESPONSE_LIMIT + 1)),
+            BoundedResponseError,
+        ),
+        (httpx.Response(200, json=[]), ValueError),
     ]:
         async with _client({"/large": response}) as client:
-            with pytest.raises(ValueError):
+            with pytest.raises(expected_error):
                 await admin_etl._bounded_dagster_request(client, "GET", "http://dagster.test/large")
 
 
@@ -383,7 +389,7 @@ async def test_compressed_response_is_rejected_before_any_decompression() -> Non
         return httpx.Response(200, headers={"content-encoding": "gzip"}, stream=NeverRead())
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        with pytest.raises(ValueError, match="압축"):
+        with pytest.raises(BoundedResponseError, match="압축"):
             await admin_etl._bounded_dagster_request(
                 client, "GET", "http://dagster.test/compressed"
             )
@@ -416,3 +422,99 @@ async def test_malformed_active_results_never_claim_healthy(rows) -> None:
         )
     assert result.status == "degraded"
     assert result.job_count is None
+
+
+@pytest.mark.parametrize("outcome", ["ok", "timeout", "error", "cancel"])
+async def test_probe_disposes_client_with_separate_budget_and_preserves_cancel(
+    monkeypatch: pytest.MonkeyPatch, outcome: str
+) -> None:
+    entered = asyncio.Event()
+    close_cancelled = asyncio.Event()
+
+    class SlowCloseTransport(httpx.MockTransport):
+        async def aclose(self) -> None:
+            try:
+                await asyncio.sleep(0.25)
+            except asyncio.CancelledError:
+                close_cancelled.set()
+                raise
+
+    client = httpx.AsyncClient(transport=SlowCloseTransport(lambda _: httpx.Response(200)))
+    monkeypatch.setattr(admin_etl.httpx, "AsyncClient", lambda **_: client)
+    monkeypatch.setattr(admin_etl.settings, "pinvi_dagster_base_url", "http://dagster.test")
+    monkeypatch.setattr(admin_etl, "PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS", 0.02)
+
+    async def fetch(*args: Any, **kwargs: Any) -> admin_etl._PinviDagsterProbeResult:
+        entered.set()
+        if outcome in {"timeout", "cancel"}:
+            await asyncio.sleep(1)
+        if outcome == "error":
+            raise httpx.ConnectError("fixture")
+        return admin_etl._PinviDagsterProbeResult(
+            status="ok", message="fixture", latency_ms=0, checked_at=datetime.now(UTC)
+        )
+
+    monkeypatch.setattr(admin_etl, "_fetch_pinvi_dagster_snapshot", fetch)
+    started = time.perf_counter()
+    task = asyncio.create_task(admin_etl._probe_pinvi_dagster())
+    await entered.wait()
+    if outcome == "cancel":
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    else:
+        result = await task
+        assert result.status == ("ok" if outcome == "ok" else "down")
+    assert time.perf_counter() - started < 0.2
+    assert close_cancelled.is_set()
+    assert client.is_closed
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "missing",
+        "collections_missing",
+        "collections_null",
+        "foreign_name",
+        "foreign_location",
+        "bad_row",
+        "valid_empty",
+    ],
+)
+async def test_pinvi_repository_requires_complete_owned_metadata(case: str) -> None:
+    payload = _graphql_payload()
+    repository = payload["data"]["repositoryOrError"]
+    if case == "missing":
+        repository = {"__typename": "Repository"}
+    elif case == "collections_missing":
+        repository = {key: repository[key] for key in ("__typename", "name", "location")}
+    elif case == "collections_null":
+        repository["assetNodes"] = None
+    elif case == "foreign_name":
+        repository["name"] = "geo_repository"
+    elif case == "foreign_location":
+        repository["location"] = {"name": "geo_location"}
+    elif case == "bad_row":
+        repository["jobs"] = [None]
+    else:
+        for key in ("jobs", "schedules", "sensors", "assetNodes"):
+            repository[key] = []
+    payload["data"]["repositoryOrError"] = repository
+    async with _client(
+        {
+            "/server_info": httpx.Response(200, json={"dagster_version": "1.13.24"}),
+            "/graphql": httpx.Response(200, json=payload),
+        }
+    ) as client:
+        result = await admin_etl._fetch_pinvi_dagster_snapshot(
+            client,
+            base_url="http://dagster.test",
+            start=0,
+            checked_at=datetime.now(UTC),
+        )
+    assert result.status == ("ok" if case == "valid_empty" else "degraded")
+    assert result.repository_count == (1 if case == "valid_empty" else None)
+    if case != "valid_empty":
+        assert result.repositories == []
+        assert result.job_count is None

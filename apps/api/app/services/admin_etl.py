@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from calendar import monthrange
 from collections.abc import Mapping
@@ -16,6 +17,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
+from kortravelcommon.http import bounded_request
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,11 +59,14 @@ from app.services.kor_travel_map_ops_projection import (
     validate_pipeline_overview,
 )
 
+logger = logging.getLogger(__name__)
+
 PINVI_DAGSTER_PROBE_TIMEOUT_SECONDS = 2.0
 PINVI_DAGSTER_RECENT_RUN_LIMIT = 30
 PINVI_DAGSTER_ACTIVE_RUN_LIMIT = 1000
 PINVI_DAGSTER_RESPONSE_LIMIT = 4 * 1024 * 1024
 PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS = 10.0
+PINVI_DAGSTER_CLOSE_TIMEOUT_SECONDS = 0.05
 
 # PinVi Dagster 조회는 **PinVi code location 하나로만** 좁힌다. 공유 Dagster plane
 # (webserver 하나가 Map·geo·weather 등의 code location을 함께 싣는다)에서
@@ -568,28 +573,20 @@ async def _bounded_dagster_request(
     url: str,
     **kwargs: Any,
 ) -> httpx.Response:
-    """압축은 해제 전에 거부하고 plain 본문을 제한한다. 전체 대기 예산은 probe 소유."""
-    headers = dict(kwargs.pop("headers", {}))
-    headers["Accept-Encoding"] = "identity"
-    async with client.stream(method, url, headers=headers, **kwargs) as response:
-        if response.headers.get("content-encoding", "identity").strip().lower() not in {
-            "",
-            "identity",
-        }:
-            raise ValueError("Dagster 압축 응답은 허용하지 않습니다.")
-        content = bytearray()
-        async for chunk in response.aiter_bytes(chunk_size=64 * 1024):
-            if len(content) + len(chunk) > PINVI_DAGSTER_RESPONSE_LIMIT:
-                raise ValueError("Dagster 응답이 4MiB 상한을 초과했습니다.")
-            content.extend(chunk)
-        result = httpx.Response(
-            response.status_code, content=bytes(content), request=response.request
-        )
-        if 200 <= result.status_code < 400:
-            payload = json.loads(result.content)
-            if not isinstance(payload, dict):
-                raise ValueError("Dagster 응답은 객체이어야 합니다.")
-        return result
+    """전송 상한은 common을 사용하고 PinVi의 JSON 객체 계약은 유지한다."""
+    result = await bounded_request(
+        client,
+        method,
+        url,
+        max_response_bytes=PINVI_DAGSTER_RESPONSE_LIMIT,
+        total_timeout_seconds=PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS,
+        **kwargs,
+    )
+    if 200 <= result.status_code < 400:
+        payload = json.loads(result.content)
+        if not isinstance(payload, dict):
+            raise ValueError("Dagster 응답은 객체이어야 합니다.")
+    return result
 
 
 async def _probe_pinvi_dagster() -> _PinviDagsterProbeResult:
@@ -603,11 +600,9 @@ async def _probe_pinvi_dagster() -> _PinviDagsterProbeResult:
             checked_at=checked_at,
         )
     start = time.perf_counter()
+    client = httpx.AsyncClient(timeout=PINVI_DAGSTER_PROBE_TIMEOUT_SECONDS)
     try:
-        async with (
-            asyncio.timeout(PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS),
-            httpx.AsyncClient(timeout=PINVI_DAGSTER_PROBE_TIMEOUT_SECONDS) as client,
-        ):
+        async with asyncio.timeout(PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS):
             return await _fetch_pinvi_dagster_snapshot(
                 client,
                 base_url=base_url.rstrip("/"),
@@ -621,6 +616,42 @@ async def _probe_pinvi_dagster() -> _PinviDagsterProbeResult:
             latency_ms=_elapsed_ms(start),
             checked_at=checked_at,
         )
+    finally:
+        try:
+            await asyncio.wait_for(client.aclose(), PINVI_DAGSTER_CLOSE_TIMEOUT_SECONDS)
+        except Exception:
+            # 정리 실패가 원래 probe 결과/취소를 덮지 않으며 이 client는 재사용하지 않는다.
+            logger.warning("Dagster probe client 정리 실패")
+
+
+def _valid_pinvi_repository(raw: Any) -> bool:
+    """요청한 location의 완전한 metadata만 정상 snapshot으로 인정한다."""
+    if not isinstance(raw, dict) or raw.get("__typename") != "Repository":
+        return False
+    location = raw.get("location")
+    if (
+        raw.get("name") != PINVI_DAGSTER_REPOSITORY_NAME
+        or not isinstance(location, dict)
+        or location.get("name") != settings.pinvi_dagster_location_name
+    ):
+        return False
+    for key in ("jobs", "schedules", "sensors", "assetNodes"):
+        rows = raw.get(key)
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            return False
+        for row in rows:
+            if key == "assetNodes":
+                if "groupName" not in row or (
+                    row["groupName"] is not None and not isinstance(row["groupName"], str)
+                ):
+                    return False
+            elif (
+                not isinstance(row.get("name"), str)
+                or not row["name"].strip()
+                or (key == "jobs" and not isinstance(row.get("isJob"), bool))
+            ):
+                return False
+    return True
 
 
 async def _fetch_pinvi_dagster_snapshot(
@@ -699,17 +730,23 @@ async def _fetch_pinvi_dagster_snapshot(
         )
 
     repositories_payload = data.get("repositoryOrError")
-    repositories = _pinvi_repositories_from_graphql(repositories_payload)
-    if repositories_payload and not repositories:
+    if not _valid_pinvi_repository(repositories_payload):
         return _PinviDagsterProbeResult(
             status="degraded",
-            message=_graphql_error_message(repositories_payload, "Dagster repository 조회 실패"),
+            message=(
+                "Dagster repository 응답의 필수 필드·소속 확인 실패"
+                if isinstance(repositories_payload, dict)
+                and repositories_payload.get("__typename") == "Repository"
+                else _graphql_error_message(repositories_payload, "Dagster repository 조회 실패")
+            ),
             latency_ms=latency_ms,
             checked_at=checked_at,
             dagster_version=dagster_version,
             dagster_webserver_version=dagster_webserver_version,
             dagster_graphql_version=dagster_graphql_version,
         )
+
+    repositories = _pinvi_repositories_from_graphql(repositories_payload)
 
     runs_payload = data.get("runsOrError")
     recent_runs = _pinvi_runs_from_graphql(runs_payload)
@@ -745,16 +782,6 @@ async def _fetch_pinvi_dagster_snapshot(
         )
     merged_runs = {run.run_id: run for run in recent_runs}
     merged_runs.update({run.run_id: run for run in active_runs})
-    if (
-        not isinstance(repositories_payload, dict)
-        or repositories_payload.get("__typename") != "Repository"
-    ):
-        return _PinviDagsterProbeResult(
-            status="degraded",
-            message="Dagster repository 조회 실패",
-            latency_ms=latency_ms,
-            checked_at=checked_at,
-        )
     return _PinviDagsterProbeResult(
         status="ok",
         message="Dagster server_info/live snapshot 정상",
