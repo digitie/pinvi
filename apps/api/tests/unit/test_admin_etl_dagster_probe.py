@@ -468,3 +468,53 @@ async def test_probe_disposes_client_with_separate_budget_and_preserves_cancel(
     assert time.perf_counter() - started < 0.2
     assert close_cancelled.is_set()
     assert client.is_closed
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "missing",
+        "collections_missing",
+        "collections_null",
+        "foreign_name",
+        "foreign_location",
+        "bad_row",
+        "valid_empty",
+    ],
+)
+async def test_pinvi_repository_requires_complete_owned_metadata(case: str) -> None:
+    payload = _graphql_payload()
+    repository = payload["data"]["repositoryOrError"]
+    if case == "missing":
+        repository = {"__typename": "Repository"}
+    elif case == "collections_missing":
+        repository = {key: repository[key] for key in ("__typename", "name", "location")}
+    elif case == "collections_null":
+        repository["assetNodes"] = None
+    elif case == "foreign_name":
+        repository["name"] = "geo_repository"
+    elif case == "foreign_location":
+        repository["location"] = {"name": "geo_location"}
+    elif case == "bad_row":
+        repository["jobs"] = [None]
+    else:
+        for key in ("jobs", "schedules", "sensors", "assetNodes"):
+            repository[key] = []
+    payload["data"]["repositoryOrError"] = repository
+    async with _client(
+        {
+            "/server_info": httpx.Response(200, json={"dagster_version": "1.13.24"}),
+            "/graphql": httpx.Response(200, json=payload),
+        }
+    ) as client:
+        result = await admin_etl._fetch_pinvi_dagster_snapshot(
+            client,
+            base_url="http://dagster.test",
+            start=0,
+            checked_at=datetime.now(UTC),
+        )
+    assert result.status == ("ok" if case == "valid_empty" else "degraded")
+    assert result.repository_count == (1 if case == "valid_empty" else None)
+    if case != "valid_empty":
+        assert result.repositories == []
+        assert result.job_count is None
