@@ -67,3 +67,5 @@ scrollLeft가 증가했다. [실행 probe 원문](mobile-readability-probe-dev6.
 informational 실패로 남으며 필수 mobile lint/typecheck와 구분한다. 운영 shared daemon 설정/배포,
 worker kill·실측 RSS·provider 외부 호출은 NOT_RUN이다. notification 전달 보장과 trip-day의 기존
 부분 실패 metadata 의미는 변경하지 않았다. 소비자 YAML만으로 shared Manager 정책이 바뀌지는 않는다.
+
+문서 증거의 원문 해시(`original_sha256`)와 JSON 파일 해시(`file_sha256`)를 구분한 최종 metadata 검토도 [별도 원문 manifest](metadata-manifest.json)에 보존했다. J-DOC-P2-01은 FIXED이며 제품 리뷰 건수에는 추가하지 않는다.

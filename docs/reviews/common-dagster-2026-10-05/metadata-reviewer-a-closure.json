@@ -1,0 +1,5 @@
+{
+  "scope": "docs/evidence metadata closure; not an additional product review",
+  "original_sha256": "f43d51559d13ae70a8232004db4c7b0b902e9e2c38b752bda81de749e775ec17",
+  "original_utf8": "# 최종 staged manifest metadata closure\n판정 PASS. 고정 Common f7d53d21a26c6ee6b4dd66a5f595cf3e55fbd1fd/PinVi5a85e879336d0a4d34f3fe89e5643e08d6adefaf에 대한 staged manifest-only delta를 검토했다.\n두 repo staged path는 각각 docs/reviews/common-dagster-2026-10-05/manifest.json 하나였다. Common9/PinVi22 모든 entry에서 기존 sha256값을 original_sha256으로 단순 rename하고 file_sha256을 추가한 것 외 필드변경없음을assert PASS.\n각 file_sha256은 실제 Git index wrapper bytes의 SHA256과일치 PASS. 원문wrapper index bytes와 고정HEAD bytes 동일assert PASS. original_sha256은 이전 manifest rawdigest 그대로 보존. peer raw content는읽거나파싱하지않고bytes hash만계산했다.\n원문/제품 변경없음. 이전 docsmetadata PASS 및제품 fullPASS유지. 새제품검토/새제품게이트실행으로집계하지않음. 본인 staged SHA/index 검증증거는 /tmp/recovery-final-docs-metadata/staged-manifest-evidence.json, check_staged_manifest.py. staged후commitSHA는이보고서범위아님.\n기존 docs-only원문 /tmp/recovery-final-docs-metadata/review.md SHA2564b215398bda116659e010e0a1e9b2eb21e9508c1ba34cca3bc55718fd5fe04fa는불변보존한다.\n"
+}

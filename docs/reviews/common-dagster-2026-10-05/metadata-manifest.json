@@ -1,0 +1,21 @@
+{
+  "scope": "J-DOC-P2-01 FIXED; original text and JSON file hashes distinguished",
+  "reviewed_manifest_git_blob": "416645e438dd74b185f0904fb7a26882c710f478",
+  "reports": [
+    {
+      "file": "metadata-reviewer-a.json",
+      "original_sha256": "4b215398bda116659e010e0a1e9b2eb21e9508c1ba34cca3bc55718fd5fe04fa",
+      "file_sha256": "588b59fbafdabc770411d5305efbbfc92613fdddef9caa80a8057debf55d5d8c"
+    },
+    {
+      "file": "metadata-reviewer-a-closure.json",
+      "original_sha256": "f43d51559d13ae70a8232004db4c7b0b902e9e2c38b752bda81de749e775ec17",
+      "file_sha256": "868a7e930752697a928753228e2ac371da5fef80a998ec94b9a4147da0aa21c0"
+    },
+    {
+      "file": "metadata-reviewer-b.json",
+      "original_sha256": "0599e75b186961c62fa3e3bb2b956ffc6b283386b38ff8b623033195f3f6297d",
+      "file_sha256": "d6bb163c326afb4d7678de33093ea2225f294282364d62d3c5b49098980e132e"
+    }
+  ]
+}
