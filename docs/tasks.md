@@ -47,6 +47,8 @@
 - [ ] T-VN-H49 — standalone backup의 주기 실행, bounded retention, off-box 증거를 완료한다.
 - [ ] T-369 — `deploy-node.sh` fresh fallback 스택(Manager 부재 시)의 호스트 재부팅 복구. `app-postgres`·`app-api`·`app-web`에 restart policy가 없어 재부팅 뒤 내려간 채 남고, `up`의 재사용 검사는 PostgreSQL이 running이어야 해서 어떤 wrapper 명령도 되살리지 못한다(2026-09-28 리뷰). compose restart policy는 Manager 배포와 공유하므로 따로 판단한다.
 
+- [/] T-372 — `kor-travel-weather` 보존 16일 → 7일(소유자 결정 2026-10-13)에 맞춰 PinVi 요구·게이트 G-3·T-367 가드 임계를 15일 → 7일로 낮춘다(ADR-073). 브랜치 `chore/weather-retention-7-days`에 코드·문서·테스트 완료, PR·머지·배포 남음.
+
 ## 모바일
 
 - [ ] **T-320** — 모바일 위치 동의 gate 런타임 확인. VWorld 키가 있는 환경에서 지도 표면을

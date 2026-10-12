@@ -1,3 +1,11 @@
+## 2026-10-13 (claude) — T-372 weather 보존 요구 7일 (브랜치 `chore/weather-retention-7-days`)
+
+ADR-073: `kor-travel-weather` 보존 16일 → 7일(소유자 결정)에 맞춰 PinVi 요구·G-3·T-367 가드 임계를 15일 → 7일로
+낮췄다. 7일보다 오래된 여행 일자 날씨는 `no_data`다. 상세는 `docs/journal.md`.
+
+- 다음 한 작업: PR을 열고 CI green 후 머지(소유자 지시 시). 배포는 다음 PinVi ETL 배포에 실린다. 그 전까지 운영
+  가드는 15일 임계로 돌므로 `kor-travel-weather` 보존이 7일로 줄면 매일 실패한다.
+
 ## 2026-10-06 — Map·PinVi 공통 Dagster 구현·재구축·live·머지 완료
 
 [Common #28](https://github.com/digitie/kor-travel-common/pull/28) → [Map #1303](https://github.com/digitie/kor-travel-map/pull/1303) → [PinVi #576](https://github.com/digitie/pinvi/pull/576) 순서로 병합했다. Common·Map은 merge commit, PinVi는 main ruleset의 squash-only·linear history 정책에 따라 squash로 병합했다. PinVi 재구축 원본0058369와 검증 HEAD92d0f40는 remote tags codex/pinvi-map-runtime-20261006·codex/pinvi-map-reviewed-20261006 및 유지한 feature branch에 원본 이력을 보존했다. 저장소 설정은 변경하지 않았다. 최종 문서 포함 HEAD의 필수 CI, Common·Map main ancestry와 PinVi 보존 참조, 병합 tree 일치를 확인했다. 실제 paired 재구축, 두 독립 FULL 제품 리뷰·가이드 리뷰·최종 문서 리뷰, Chromium/Firefox×Map/PinVi live UI4건·8캡처, ACL40·D1 11건·D2 normal/attempt0·소유 fixture 정리·잔존0 검증을 완료했다.
