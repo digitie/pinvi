@@ -621,8 +621,9 @@ async def get_feature_weather(
     소관), 실제 weather 조회는 `kor-travel-weather`를 쓴다 —
     `build_feature_weather_card`가 좌표로 location을 해석하고 카드를 조립한다.
 
-    `asof`를 주면 offset 없는 값은 KST로 해석한다(`normalize_asof_query`). 대상
-    서비스 보존 지평(T-367 가드 기준 15일) 밖이면 빈 카드가 된다(§3.1-(1)).
+    `asof`를 주면 offset 없는 값은 KST로 해석한다(`normalize_asof_query`). `asof`가
+    어제(KST) 이전이면 빈 카드가 된다(§3.1-(1)) — 대상 서비스 보존은 7일(ADR-073)이고
+    그 안의 과거 날짜도 이 단건 경로는 지원하지 않는다(`weather_card.py` 참조).
     """
     if weather_client is None:
         raise HTTPException(

@@ -53,7 +53,7 @@ def test_evaluate_retention_horizon_passes_when_above_threshold() -> None:
 
 def test_evaluate_retention_horizon_fails_when_below_threshold() -> None:
     now = datetime(2026, 9, 18, tzinfo=UTC)
-    oldest = datetime(2026, 9, 17, tzinfo=UTC)  # 1일 전 — 현재 실제 보존 2일 시나리오
+    oldest = datetime(2026, 9, 17, tzinfo=UTC)  # 1일 전 — 보존이 기본 2일로 되돌아간 시나리오
 
     result = evaluate_retention_horizon(location_id="e2e-seoul", oldest_known_at=oldest, now=now)
 
@@ -73,15 +73,41 @@ def test_evaluate_retention_horizon_fails_when_no_data_at_all() -> None:
     assert result.oldest_known_at is None
 
 
-def test_evaluate_retention_horizon_honors_custom_threshold() -> None:
-    now = datetime(2026, 9, 18, tzinfo=UTC)
-    oldest = datetime(2026, 9, 10, tzinfo=UTC)  # 8일 전
+def test_default_min_retention_days_matches_owner_decision() -> None:
+    # ADR-073(2026-10-13): kor-travel-weather 보존 16일 → 7일, 가드 임계 15일 → 7일.
+    assert DEFAULT_MIN_RETENTION_DAYS == 7
 
-    result = evaluate_retention_horizon(
-        location_id="e2e-seoul", oldest_known_at=oldest, now=now, min_retention_days=7
-    )
+
+def test_evaluate_retention_horizon_passes_at_exact_threshold() -> None:
+    now = datetime(2026, 10, 13, tzinfo=UTC)
+    oldest = datetime(2026, 10, 6, tzinfo=UTC)  # 정확히 7일 전
+
+    result = evaluate_retention_horizon(location_id="e2e-seoul", oldest_known_at=oldest, now=now)
 
     assert result.passed is True
+    assert result.effective_retention_days == pytest.approx(7.0)
+
+
+def test_evaluate_retention_horizon_fails_just_below_threshold() -> None:
+    now = datetime(2026, 10, 13, tzinfo=UTC)
+    oldest = datetime(2026, 10, 6, 1, tzinfo=UTC)  # 6일 23시간 전
+
+    result = evaluate_retention_horizon(location_id="e2e-seoul", oldest_known_at=oldest, now=now)
+
+    assert result.passed is False
+    assert result.min_retention_days == 7
+
+
+def test_evaluate_retention_horizon_honors_custom_threshold() -> None:
+    now = datetime(2026, 9, 18, tzinfo=UTC)
+    oldest = datetime(2026, 9, 10, tzinfo=UTC)  # 8일 전 — 기본 임계 7일은 통과
+
+    result = evaluate_retention_horizon(
+        location_id="e2e-seoul", oldest_known_at=oldest, now=now, min_retention_days=10
+    )
+
+    assert result.passed is False
+    assert result.min_retention_days == 10
 
 
 @pytest.mark.asyncio

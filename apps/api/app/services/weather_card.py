@@ -23,7 +23,11 @@
    `weather_alert` 도메인으로 온다).
 
 **`asof` 축소** (설계 §3.1-(1)): 대상 서비스에는 시점 재현(snapshot) 엔드포인트가
-없고 보존이 2일이다. `asof`가 어제 이전이면 `no_data`. 그 외(오늘~예보 가능 범위)는
+없고 보존이 7일이다(ADR-073, 2026-10-13). 이 단건 경로는 `asof`가 어제(KST) 이전이면
+보존 지평과 무관하게 `no_data`다 — 7일보다 오래된 날짜는 이미 drop됐고, 7일 이내의
+과거 날짜도 이 경로가 함께 부르는 `latest()`(현재값)를 과거 날짜 카드에 섞을 수 없어
+지원하지 않는다. 지난 여행 일자의 날씨는 trip view(`trip_weather_batch.py`)가 보존
+지평 안에서 보여준다. 그 외(오늘~예보 가능 범위)는
 그 날짜(KST) 하루 구간의 `forecast()`로 좁혀 조회한다. `asof` 없음(기본, 가장 흔한
 경로)은 `latest()` + 가까운 며칠 `forecast()`를 합쳐 "관측+예보"를 모두 담는다 —
 기존 kor-travel-map 카드의 "관측 + 예보 + 특보" 계약을 유지하기 위함이다.
@@ -66,8 +70,9 @@ def _asof_window(asof: datetime | None, *, now: datetime) -> _AsofWindow:
     target_date = asof.astimezone(_SEOUL).date()
     today = now.astimezone(_SEOUL).date()
     if target_date < today:
-        # 대상 서비스 보존 2일 — 어제 이전은 이미 drop됐을 수 있다. 장애로 추측하지
-        # 않고 no_data로 둔다(설계 §3.1-(1), §4.2).
+        # 과거 날짜는 no_data다(장애로 추측하지 않는다, 설계 §3.1-(1), §4.2). 대상 서비스
+        # 보존은 7일(ADR-073)이라 그보다 오래된 날짜는 이미 drop됐고, 7일 이내라도 이
+        # 경로는 `latest()`(현재값)를 함께 합치므로 과거 날짜 카드로 쓸 수 없다.
         return _AsofWindow(no_data=True, from_=None, to=None)
     day_start = datetime(target_date.year, target_date.month, target_date.day, tzinfo=_SEOUL)
     return _AsofWindow(no_data=False, from_=day_start, to=day_start + timedelta(days=1))
