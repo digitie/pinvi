@@ -135,9 +135,11 @@ GET /features/{feature_id}/weather?asof=2026-06-02T14:00:00+09:00
 offset을 붙인 KST 값(`+09:00`)을 권장한다 — offset 없이 보내면 서버가 **KST(Asia/Seoul)로
 해석**하고(`app/api/v1/features.py normalize_asof_query`), offset이 있으면 그대로 존중한다.
 
-`kor-travel-weather`에는 시점 재현(snapshot) 엔드포인트가 없고 보존이 15일이다
-(ADR-068, T-366/G-2). `asof`가 **보존 기간 이전**이면 location 해석조차 시도하지
-않고 빈 카드(`metrics: []`)를 준다 — 404/422가 아니라 조용한 no_data다. 그 외(오늘~예보
+`kor-travel-weather`에는 시점 재현(snapshot) 엔드포인트가 없고 보존이 7일이다
+(ADR-068, 2026-10-13 ADR-073으로 15일 → 7일). `asof`가 **어제(KST) 이전**이면 —
+보존 7일 안이든 밖이든 — location 해석조차 시도하지 않고 빈 카드(`metrics: []`)를
+준다. 404/422가 아니라 조용한 no_data다(이 단건 경로는 현재값을 함께 합치므로 과거
+날짜 카드를 만들지 않는다. 지난 여행 일자 날씨는 trip view가 보존 7일 안에서 준다). 그 외(오늘~예보
 가능 범위)는 그 날짜 하루 구간의 예보로 좁혀 응답한다. `asof` 없음(기본, 가장 흔한
 경로)은 현재값 + 가까운 며칠 예보를 합친다.
 

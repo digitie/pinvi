@@ -3264,7 +3264,8 @@ Odroid M1S는 더 이상 Pinvi의 실행·배포·복구 환경으로 사용하�
 
 ## ADR-068: 날씨 소스를 `kor-travel-map`에서 `kor-travel-weather`로 이관한다 (기상청 커버리지 게이트 조건부)
 
-- **상태**: accepted (설계 확정, cutover는 게이트 G-1 조건부)
+- **상태**: accepted (설계 확정, cutover는 게이트 G-1 조건부). 결정 8의 보존 목표치·G-3 임계는
+  ADR-073이 15일에서 7일로 개정했다
 - **날짜**: 2026-09-17
 - **결정자**: 사용자 + Claude
 - **참조**: T-359(설계) ~ T-367, `docs/integrations/kor-travel-weather.md`,
@@ -3346,6 +3347,9 @@ Admin 1개는 별도 transport인 `apps/api/app/clients/kor_travel_map_admin.py`
    - **외부 설정에 종속된다.** 보존이 되돌아가면(15일 미만으로 후퇴) 과거 여행 날씨가
      조용히 사라진다. Pinvi 측에 보존 지평 가드(**임계 15일** 미만이면 실패하는 점검,
      T-367)를 둔다.
+   - **→ 2026-10-13 개정(ADR-073)**: 목표치 15일과 가드 임계 15일은 **7일**로 내려갔다.
+     `kor-travel-weather` 보존이 16일에서 7일로 줄었기 때문이다. 위 15일 서술은 결정
+     당시 기록으로 남긴다 — 현재 기준은 ADR-073이다.
 9. **`retired` 상태는 선행 feature batch에서 가져온다** — flag off인 구 경로와
    Admin weather-values(T-364)에 적용된다. 날씨 서비스는 feature lifecycle을
    모르므로 판정처를 옮긴다. `suppressed`/`missing`이 이미 그 구조다.
@@ -3465,7 +3469,8 @@ Admin 1개는 별도 transport인 `apps/api/app/clients/kor_travel_map_admin.py`
   더미 feature를 만들어야 하는데 그 생성 토큰이 서버엔 SHA-256 해시로만 있어
   (원문은 admin BFF만 앎) 의도적으로 프로그램적 우회가 막힌 경로였다.
 - **T-367 완료(2026-09-17)**: 보존 지평 가드(`pinvi_weather_retention_horizon_guard`
-  Dagster asset, 매일 KST 05:00) — 실효 보존을 직접 측정해 15일 미만이면 실패한다.
+  Dagster asset, 매일 KST 05:00) — 실효 보존을 직접 측정해 15일 미만이면 실패한다
+  (임계는 ADR-073으로 2026-10-13부터 7일).
   게이트 G-3 자체는 해소하지 않는다(외부 선행 조건은 그대로) — 회귀를 잡는 상시
   감시다.
 - **T-368 완료(2026-09-18)**: 결정 12 참조 — `kor-travel-map`을 전혀 거치지 않는
@@ -3715,3 +3720,51 @@ head까지 올린다. DB를 지우는 길은 명시적 `rebuild-pinned --restart
 - API/JWT/RBAC 및 Map HTTP 소유권을 유지하고 DTO 변경은 OpenAPI·TS/Zod와 함께 한다.
 - consumer YAML이 공유 daemon 설정을 자동 적용한다는 가정을 하지 않는다.
 - 상세: `docs/runbooks/common-dagster.md`, 계획: `docs/execplan/t-370-common-dagster.md`.
+
+## ADR-073: `kor-travel-weather` 보존 요구를 15일에서 7일로 낮춘다 (ADR-068 결정 8·G-3 개정)
+
+- **상태**: accepted
+- **날짜**: 2026-10-13
+- **결정자**: 사용자(소유자)
+- **개정 대상**: ADR-068 결정 8(과거 날씨 = `kor-travel-weather` 보존 연장, 목표치 15일)과
+  게이트 G-3(실효 보존 15일 이상). ADR-068의 나머지 결정은 그대로다.
+- **참조**: T-372, T-367(보존 지평 가드), `docs/integrations/kor-travel-weather.md` §4.2·§6-I·§7-1
+
+### 컨텍스트
+
+ADR-068 결정 8은 과거 여행 날씨를 Pinvi 스냅샷 테이블이 아니라 `kor-travel-weather`의
+보존 연장으로 해결하기로 했고 그 목표치를 15일로 잡았다. 그 서비스는 16일 보존으로
+운영돼 왔다. 2026-10-13 소유자가 `kor-travel-weather`의 보존을 **7일**로 줄이기로
+결정했다. Pinvi의 요구(15일)가 그대로면 T-367 가드가 매일 실패하고, 문서는 사실과 다른
+보존 범위를 약속하게 된다.
+
+### 결정
+
+1. **Pinvi의 보존 요구를 7일로 낮춘다.** 게이트 G-3은 "실효 보존 **7일 이상**"이다.
+2. **T-367 가드 임계를 7일로 맞춘다** — `pinvi_weather_retention_horizon_guard`의
+   `DEFAULT_MIN_RETENTION_DAYS = 7`. 다른 값이 필요하면 코드 상수가 아니라 run config
+   `min_retention_days`로 넘긴다(기존 config schema 그대로).
+3. **스냅샷 테이블은 여전히 만들지 않는다.** ADR-068 결정 8의 선택지 C(보존은 사실을
+   소유한 서비스가 진다)는 유지한다. 보존 범위만 줄어든다.
+
+### 결과
+
+- **7일보다 오래된 여행 일자의 날씨는 볼 수 없다.** trip view는 그 날짜에 대해 대상
+  서비스가 0행을 돌려주므로 `no_data`("이 날짜의 날씨 정보가 없습니다.")로 조용히
+  표시한다 — 오류나 `unavailable`이 아니다. 여행 종료 7일이 지난 뒤 상세를 열람·공유하면
+  지난 일자의 날씨는 모두 비어 있다. 이전(15일)보다 짧아진 이 한계를 "과거 날씨 지원"으로
+  표기하지 않는다.
+- **소급되지 않는다.** 보존을 줄이는 시점에 7일보다 오래된 partition은 drop되며 다시
+  늘려도 돌아오지 않는다.
+- 단건 `GET /features/{id}/weather?asof=`의 동작은 바뀌지 않는다 — 어제(KST) 이전
+  `asof`는 원래부터 `no_data`다(현재값 `latest()`를 함께 합치는 경로라 과거 날짜 카드로
+  쓰지 않는다).
+- 가드는 실효 보존이 7일 아래로 내려갈 때만 실패한다. 16일 → 7일 축소 자체는 이 가드가
+  잡지 않는다(새 임계 이상이므로).
+
+### 후속
+
+- 코드: `apps/etl/pinvi/etl/assets/pinvi_weather_retention_horizon.py`,
+  `apps/etl/tests/test_weather_retention_horizon.py`.
+- 문서: `docs/integrations/kor-travel-weather.md`, `docs/api/features.md`,
+  `docs/architecture/dagster-etl-bridge.md`, `docs/runbooks/etl.md`.
