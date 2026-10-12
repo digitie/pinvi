@@ -209,9 +209,10 @@ anchor `location_id`를 얻고, `GET /v1/weather/locations/{id}/forecast`를 **`
 없이** 호출한다 — 그 endpoint는 `from`을 생략하면 가장 오래된 행부터 열어 주므로
 (`docs/integrations/kor-travel-weather.md` §2), 살아남은 가장 오래된 행의
 `known_at`(없으면 `collected_at`)과 지금 사이 간격이 곧 실효 보존 일수다. 임계
-**7일** 미만이거나 데이터가 아예 없으면 asset이 실패한다 — **의도된 동작**이다.
-임계는 2026-10-13 소유자 결정(ADR-073)으로 15일에서 7일로 내려갔다
-(`kor-travel-weather` 보존 16일 → 7일). 일회성으로 다른 임계가 필요하면 run config
+**6일** 미만이거나 데이터가 아예 없으면 asset이 실패한다 — **의도된 동작**이다.
+임계는 2026-10-13 소유자 결정(ADR-073)으로 15일에서 6일로 내려갔다
+(`kor-travel-weather` 보존 16일 → 7일, 하루 여유 — 05:00 측정값은 보존이 정확히 7일이어도
+대략 7일 + 5시간 − 기준 location의 today−7 첫 행 시각이라 임계 7은 거짓 실패한다). 일회성으로 다른 임계가 필요하면 run config
 `min_retention_days`를 넘긴다.
 
 DB에 쓰지 않고 kor-travel-weather의 이미 정규화된 응답 필드 2개만 읽으므로 provider

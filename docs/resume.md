@@ -1,7 +1,7 @@
 ## 2026-10-13 (claude) — T-372 weather 보존 요구 7일 (브랜치 `chore/weather-retention-7-days`)
 
-ADR-073: `kor-travel-weather` 보존 16일 → 7일(소유자 결정)에 맞춰 PinVi 요구·G-3·T-367 가드 임계를 15일 → 7일로
-낮췄다. 7일보다 오래된 여행 일자 날씨는 `no_data`다. 상세는 `docs/journal.md`.
+ADR-073: `kor-travel-weather` 보존 16일 → 7일(소유자 결정)에 맞춰 PinVi 요구·G-3을 15일 → 7일로,
+T-367 가드 임계를 15일 → 6일(하루 여유)로 낮췄다. 7일보다 오래된 여행 일자 날씨는 `no_data`다. 상세는 `docs/journal.md`.
 
 - 다음 한 작업: PR을 열고 CI green 후 머지(소유자 지시 시). 배포는 다음 PinVi ETL 배포에 실린다. 그 전까지 운영
   가드는 15일 임계로 돌므로 `kor-travel-weather` 보존이 7일로 줄면 매일 실패한다.

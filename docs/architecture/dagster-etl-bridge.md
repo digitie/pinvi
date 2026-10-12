@@ -119,8 +119,8 @@ apps/etl/
 - 매일 KST 05:00 실행.
 - `kor-travel-weather`의 공개 read 표면(인증 불필요)만 호출해 **실효 보존
   일수**를 직접 측정한다 — 그 서비스가 선언하는 설정값을 신뢰하지 않는다.
-- 7일 미만이거나 데이터가 아예 없으면 asset이 실패한다(의도된 동작). 임계는
-  2026-10-13 ADR-073으로 15일 → 7일(`DEFAULT_MIN_RETENTION_DAYS`, run config
+- 6일 미만이거나 데이터가 아예 없으면 asset이 실패한다(의도된 동작). 임계는
+  2026-10-13 ADR-073으로 15일 → 6일 — 보존 7일에 하루 여유(`DEFAULT_MIN_RETENTION_DAYS`, run config
   `min_retention_days`로 덮어쓸 수 있다).
 - DB에 쓰지 않고 이미 정규화된 응답 필드만 읽으므로 provider raw → DTO 변환
   금지룰(ADR-068 관련)에 해당하지 않는다. 상세는

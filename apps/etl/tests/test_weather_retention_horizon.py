@@ -74,33 +74,34 @@ def test_evaluate_retention_horizon_fails_when_no_data_at_all() -> None:
 
 
 def test_default_min_retention_days_matches_owner_decision() -> None:
-    # ADR-073(2026-10-13): kor-travel-weather 보존 16일 → 7일, 가드 임계 15일 → 7일.
-    assert DEFAULT_MIN_RETENTION_DAYS == 7
+    # ADR-073(2026-10-13): kor-travel-weather 보존 16일 → 7일, 가드 임계 15일 → 6일
+    # (보존 7일에 하루 여유 — KST 05:00 측정의 거짓 실패 방지).
+    assert DEFAULT_MIN_RETENTION_DAYS == 6
 
 
 def test_evaluate_retention_horizon_passes_at_exact_threshold() -> None:
     now = datetime(2026, 10, 13, tzinfo=UTC)
-    oldest = datetime(2026, 10, 6, tzinfo=UTC)  # 정확히 7일 전
+    oldest = datetime(2026, 10, 7, tzinfo=UTC)  # 정확히 6일 전
 
     result = evaluate_retention_horizon(location_id="e2e-seoul", oldest_known_at=oldest, now=now)
 
     assert result.passed is True
-    assert result.effective_retention_days == pytest.approx(7.0)
+    assert result.effective_retention_days == pytest.approx(6.0)
 
 
 def test_evaluate_retention_horizon_fails_just_below_threshold() -> None:
     now = datetime(2026, 10, 13, tzinfo=UTC)
-    oldest = datetime(2026, 10, 6, 1, tzinfo=UTC)  # 6일 23시간 전
+    oldest = datetime(2026, 10, 7, 1, tzinfo=UTC)  # 5일 23시간 전
 
     result = evaluate_retention_horizon(location_id="e2e-seoul", oldest_known_at=oldest, now=now)
 
     assert result.passed is False
-    assert result.min_retention_days == 7
+    assert result.min_retention_days == 6
 
 
 def test_evaluate_retention_horizon_honors_custom_threshold() -> None:
     now = datetime(2026, 9, 18, tzinfo=UTC)
-    oldest = datetime(2026, 9, 10, tzinfo=UTC)  # 8일 전 — 기본 임계 7일은 통과
+    oldest = datetime(2026, 9, 10, tzinfo=UTC)  # 8일 전 — 기본 임계 6일은 통과
 
     result = evaluate_retention_horizon(
         location_id="e2e-seoul", oldest_known_at=oldest, now=now, min_retention_days=10
