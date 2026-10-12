@@ -1,6 +1,10 @@
-"""`kor-travel-weather` 보존 지평 가드(T-367, ADR-068 게이트 G-3).
+"""`kor-travel-weather` 보존 지평 가드(T-367, ADR-068 게이트 G-3 — 임계는 ADR-073).
 
-`kor-travel-weather`의 실효 보존이 **15일 미만**이면 실패하는 점검이다. 그 서비스가
+`kor-travel-weather`의 실효 보존이 **6일 미만**이면 실패하는 점검이다. 2026-10-13
+소유자 결정(ADR-073)으로 그 서비스의 보존이 16일에서 7일로 줄었고 Pinvi 요구도 15일에서
+7일로 내려갔다. 임계를 7이 아니라 6으로 두는 것은 하루 여유다 — KST 05:00 측정값은 대략
+"7일 + 5시간 − 기준 location의 today−7 첫 행 시각"이라 임계 7은 여유가 몇 시간뿐이고,
+수집 공백 한 번에 거짓 실패한다. 그 서비스가
 공개하는 설정값(`KOR_TRAVEL_WEATHER_RETENTION_DAYS`)을 신뢰하는 대신, 실제로 아직
 살아 있는 가장 오래된 관측/예보 행의 `known_at`(수신 시각)을 조회해 **실효** 보존을
 직접 측정한다 — 외부 설정 회귀로 과거 여행 날씨가 조용히 사라지는 것을 막는 유일한
@@ -29,7 +33,8 @@ from dagster import Backoff, Field, RetryPolicy, asset
 
 from pinvi.etl.resources import KorTravelWeatherResource
 
-DEFAULT_MIN_RETENTION_DAYS = 15
+# ADR-073(2026-10-13): kor-travel-weather 보존 7일에 하루 여유를 둔 임계. run config로만 바꾼다.
+DEFAULT_MIN_RETENTION_DAYS = 6
 DEFAULT_REFERENCE_LAT = 37.5665  # 서울시청 — 항상 데이터가 쌓이는 안정적 기준점
 DEFAULT_REFERENCE_LON = 126.9780
 DEFAULT_SAMPLE_LIMIT = 50
@@ -159,7 +164,10 @@ async def fetch_oldest_surviving_values(
         ),
         "sample_limit": Field(int, default_value=DEFAULT_SAMPLE_LIMIT, is_required=False),
     },
-    description=("kor-travel-weather 실효 보존이 15일 미만이면 실패하는 가드(T-367, ADR-068 G-3)"),
+    description=(
+        f"kor-travel-weather 실효 보존이 {DEFAULT_MIN_RETENTION_DAYS}일 미만이면 실패하는 가드"
+        "(T-367, ADR-068 G-3, 임계 ADR-073)"
+    ),
 )
 async def pinvi_weather_retention_horizon_guard(  # type: ignore[no-untyped-def]
     context,

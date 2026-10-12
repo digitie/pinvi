@@ -1,3 +1,20 @@
+## 2026-10-13 (claude) — T-372 weather 보존 요구 15일 → 7일 (ADR-073, 브랜치 `chore/weather-retention-7-days`)
+
+소유자가 2026-10-13 `kor-travel-weather` 보존을 16일에서 7일로 줄였다. PinVi 요구도 7일로 낮춘다.
+ADR-073을 추가해 ADR-068 결정 8과 게이트 G-3 임계를 개정했다. `pinvi_weather_retention_horizon_guard`의
+`DEFAULT_MIN_RETENTION_DAYS`를 15에서 6으로 바꾸고(보존 7일에 하루 여유 — 리뷰 MED-1: KST 05:00 측정값은
+보존이 정확히 7일이어도 대략 7일 + 5시간 − today−7 첫 행 시각이라 임계 7은 수집 공백 한 번에 거짓 실패한다)
+경계 테스트(정확히 6일 통과, 5일 23시간 실패, 기본값 고정)를 더했다. 새 테스트 3건은 값을 7 또는 15로 바꾸면 실패하는 것을 확인했다. 결과: 7일보다 오래된 여행 일자의 날씨는 볼
+수 없고 trip view는 그 날짜를 `no_data`로 조용히 표시한다(값을 KST 날짜로 슬라이스하므로 현재값이 옛 날짜에
+섞이지 않는다 — `test_all_success_but_empty_marks_no_data`). 단건 `?asof=`는 동작을 바꾸지 않았다. 어제 이전은
+원래부터 `no_data`다. 옛 "보존 2일" 주석과 API 문서의 "보존 15일", "보존 기간 이전" 서술을 실제 동작에 맞게 고쳤다.
+UI 문구에는 보존 일수가 없다(일반 `no_data` 문구).
+
+검증(로컬 WSL, n150 미사용): ETL `ruff check` + `pytest tests` 70 passed. API `ruff check`, `ruff format --check`(변경
+파일), `mypy --strict app` 247 files clean, weather unit 42 passed, weather integration 5파일 42 passed(testcontainers
+PostGIS). API 전체 unit은 돌리지 않았다(`test_m05_activation_receipt.py` 수집 오류는 이 변경과 무관한 subprocess 환경).
+PR·머지·배포는 하지 않았다.
+
 ## 2026-10-06 — Map·PinVi 공통 Dagster 구현·재구축·live·머지 완료
 
 [Common #28](https://github.com/digitie/kor-travel-common/pull/28) → [Map #1303](https://github.com/digitie/kor-travel-map/pull/1303) → [PinVi #576](https://github.com/digitie/pinvi/pull/576) 순서로 병합했다. Common·Map은 merge commit, PinVi는 main ruleset의 squash-only·linear history 정책에 따라 squash로 병합했다. PinVi 재구축 원본0058369와 검증 HEAD92d0f40는 remote tags codex/pinvi-map-runtime-20261006·codex/pinvi-map-reviewed-20261006 및 유지한 feature branch에 원본 이력을 보존했다. 저장소 설정은 변경하지 않았다. 최종 문서 포함 HEAD의 필수 CI, Common·Map main ancestry와 PinVi 보존 참조, 병합 tree 일치를 확인했다. 실제 paired 재구축, 두 독립 FULL 제품 리뷰·가이드 리뷰·최종 문서 리뷰, Chromium/Firefox×Map/PinVi live UI4건·8캡처, ACL40·D1 11건·D2 normal/attempt0·소유 fixture 정리·잔존0 검증을 완료했다.

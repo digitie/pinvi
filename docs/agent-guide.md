@@ -129,7 +129,7 @@ Sprint 4 PR-B2 — `kor-travel-map` OpenAPI HTTP client + features read 동작 �
 
 ## 다음 ADR 후보
 
-- ADR-027: Sprint 4 프론트엔드 지도 계층 query key / viewport cache 전략
+- ADR-074: (다음 후보 번호 — `docs/decisions.md` 마지막 ADR이 ADR-073)
 
 ## 차단 사유 / 결정 대기
 
