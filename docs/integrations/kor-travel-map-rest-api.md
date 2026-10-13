@@ -16,6 +16,15 @@
 > `BeachPublicView.latest_weather`·`FeatureSummary`/`AdminFeatureMapItem.weather_summary`를
 > 지웠다. Pinvi는 T-365에서 이미 그 경로를 호출하지 않으므로 공개 `PublicBeachView.latest_weather`만
 > 함께 걷어냈다. Map이 squash merge하면 핀(`map_release_revision` 등)을 merge commit으로 다시 올린다.
+> **2026-10-13 재vendor (admin/full만)**: Map `origin/main` head `c4d17343e976fec38196438ad45480fc0cbd9e57`(#1314)의
+> `packages/kor-travel-map-api/openapi.json`을 byte-exact로 다시 vendor했다 — admin(full) SHA-256
+> `54dbc8b1c07cfc80662dd97c550438a5d97fb52d1349841546c236907a1be693`. 바이트를 바꾼 것은 Map #1312(ADR-108,
+> `f81611dc`)의 `POST /v1/ops/pipeline/requests` 409·502·503 description 3건뿐이고 user/service는 불변이라
+> `11b811d9` 핀을 유지한다. 계기: Manager pinned-pair 회전 preflight가 pair contract의
+> `map.admin.openapi_sha256`(옛 `ccec0fd0…`)과 Map blob의 불일치로 회전을 거부했다(2026-10-12 t1013b). 위
+> 2026-10-02 메모의 admin sha `d2935f46…`과 그 뒤 #576의 `ccec0fd0…`은 역사 기록이다 — **admin 핀의 단일 정본은
+> `apps/api/tests/unit/_kor_travel_map_snapshot_pin.py`**이고 pair contract는
+> `scripts/generate_m05_pair_contract.py --write`로 그 핀에서 파생한다(아래 갱신 절차 6).
 > **검증 기준선**: `kor-travel-map` `origin/main` `HEAD=f442bd0`
 > (`packages/kor-travel-map-admin/openapi.user.json`, title `kor-travel-map-user` v0.2.0-dev) +
 > Pinvi `origin/main` `HEAD=0485974`(#87 feature_id opaque string 반영)을 2026-06-08 대조.
@@ -692,9 +701,10 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   해당 경로·batch schema 계약을 vendored `kor-travel-map-openapi-service.json`
   (byte-핀 소유는 `test_kor_travel_map_cache_target_contract.py`) 기준으로 검증하고,
   두 profile에 겹치는 schema(`Meta`/`WeatherMetricOut` 등)는 양쪽 모두에서 고정한다.
-- **Admin/ops 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map `main`
-  merge `2845e14243ae7f342a7dc840e834ddffd3220436`의 전체 `openapi.json` 원본이며
-  SHA-256은 `6419c1332ba95ab03b8ec794d9d2e7c2a6f2e6da012d23118708e4e4bc5343bb`이다.
+- **Admin/ops 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — 핀된 Map 커밋의
+  `packages/kor-travel-map-api/openapi.json` 전체 원본(byte-exact). 커밋·SHA-256의 단일 정본은
+  `apps/api/tests/unit/_kor_travel_map_snapshot_pin.py`(`UPSTREAM_COMMIT`/`SNAPSHOT_SHA256`)이며 이 문서는
+  리터럴 사본을 두지 않는다(변경 이력은 상단 날짜별 메모).
   `test_kor_travel_map_ops_contract.py`는
   provider ETL이 소비하는 ops 경로·인증·query·응답 schema 연결과 폐기 필드 부재를 고정한다.
   Admin feature 소비 필드/query 게이트와 M04 request queue 후보 계약은 같은 source revision을 사용한다.
@@ -725,10 +735,9 @@ total}}`로 일원화. **소비자 관점 endorse**(확장성·일관성↑). + 
   `model_validate`로 객체 전체를 검증하는 `/v1/public/*`는
   `test_public_view_contracts_cover_every_validated_model_field`가 `app/schemas/public.py`
   모델의 `model_fields` ⊆ 계약을 강제한다(모델에 필드를 추가하면 타입 계약도 함께 적어야 통과).
-- **Admin vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — Map `main`
-  merge `2845e14243ae7f342a7dc840e834ddffd3220436`의
-  `packages/kor-travel-map-api/openapi.json` 전체 파일, SHA-256
-  `6419c1332ba95ab03b8ec794d9d2e7c2a6f2e6da012d23118708e4e4bc5343bb`.
+- **Admin vendor 스냅샷**: `apps/api/tests/contract/kor-travel-map-openapi-admin.json` — 핀된 Map 커밋의
+  `packages/kor-travel-map-api/openapi.json` 전체 파일(byte-exact; 커밋·SHA-256은
+  `_kor_travel_map_snapshot_pin.py`가 소유).
   `test_kor_travel_map_admin_contract.py`가 Admin feature 목록/상세/weather의 path·AdminBFF security,
   query exact 집합, 응답 container `$ref`, 3축·state transition·curation·weather 소비 shape를 고정한다.
   feature request service gate는 별도 service vendor의 `ServiceToken`, UUID `Idempotency-Key`, request
@@ -759,5 +768,12 @@ apps/api/tests/contract/kor-travel-map-openapi-user.json`
      `test_kor_travel_map_admin_contract.py`의 이중 핀 리터럴·소비 가정을 함께
      갱신한다. admin/ops 두 게이트 모두 이 핀 모듈에서 import하므로 다른 곳에
      리터럴 사본을 만들지 않는다.
+  6. admin/full·service·user 스냅샷 중 하나라도 바뀌면 `python3 scripts/generate_m05_pair_contract.py --write`로
+     `contracts/kor-travel-map-m05-pair-provenance-v1.json`을 재생성한다. Manager `rotate-pinned-pair`의
+     preflight가 `map.<surface>.openapi_sha256`을 대상 Map revision의 원본 blob과 exact 대조하므로, 이 단계를
+     빠뜨리면 `test_m05_pair_admin_and_full_are_bound_to_the_admin_vendor`·
+     `test_the_generator_reproduces_the_committed_contract_exactly`가 빨갛고 회전도 거부된다
+     (2026-10-12 t1013b 사례). 응답 description도 operation contract 다이제스트에 들어가므로
+     "설명만 바뀐" Map 변경에도 이 단계가 필요하다.
 - **codegen(선택)**: frontend `openapi-typescript` + Zod mirror는 미도입(후속). 백엔드는 본
   스냅샷 게이트로 충분(kor_travel_map 권고: 수기 httpx 유지).

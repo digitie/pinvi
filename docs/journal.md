@@ -1,4 +1,4 @@
-## 2026-10-13 (claude) — Map admin OpenAPI 재vendor: Map `c4d17343`(Map ADR-108) — M05 회전 preflight 거부 해소
+## 2026-10-13 (claude) — Map admin OpenAPI 재vendor: Map main `c4d17343`(#1314; admin 바이트 변경은 #1312/ADR-108 `f81611dc`) — M05 회전 preflight 거부 해소
 
 브랜치 `chore/revendor-map-admin-c4d17343`. Map `c4d17343e976fec38196438ad45480fc0cbd9e57` + PinVi
 `e5c47028`(main) pair 회전이 Manager `rotate-pinned-pair`의 preflight에서 거부됐다:
@@ -34,6 +34,8 @@
   paired live acceptance 뒤 Map 쪽 별도 PR이다.
 - 그대로 둔 것: `docs/integrations/kor-travel-map-rest-api.md`의 admin 스냅샷 서술(`2845e142…`/`6419c133…`)은
   이전 재vendor 때부터 낡아 있다 — 핀 정본은 `_kor_travel_map_snapshot_pin.py`다. PR·머지·배포·회전은 하지 않았다.
+
+- 적대 리뷰(2명 + HIGH/MED 반박 검증): HIGH 0, MED 3 — 모두 `docs/integrations/kor-travel-map-rest-api.md`(상단 2026-10-02 메모와 본문 2곳이 낡은 admin 핀 `d2935f46`/`2845e142·6419c133`을 서술, 갱신 절차에 pair contract 재생성 단계 없음) → 같은 브랜치에서 수정: 2026-10-13 메모 추가, 본문 리터럴을 핀 모듈 포인터로 교체, 갱신 절차 6단계 추가. LOW: CI `contract-pin-consistency`가 admin 스냅샷을 핀 커밋과 대조하지 않는 선재 공백(후속 과제), 헤드라인이 `c4d17343`을 ADR-108로 표기(수정).
 
 ## 2026-10-13 (claude) — T-372 weather 보존 요구 15일 → 7일 (ADR-073, 브랜치 `chore/weather-retention-7-days`)
 
