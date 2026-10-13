@@ -1,3 +1,40 @@
+## 2026-10-13 (claude) — Map admin OpenAPI 재vendor: Map `c4d17343`(Map ADR-108) — M05 회전 preflight 거부 해소
+
+브랜치 `chore/revendor-map-admin-c4d17343`. Map `c4d17343e976fec38196438ad45480fc0cbd9e57` + PinVi
+`e5c47028`(main) pair 회전이 Manager `rotate-pinned-pair`의 preflight에서 거부됐다:
+`rotation pair contract admin digest differs from the Map revision: contract=ccec0fd0… map=54dbc8b1…`.
+
+- 원인: Map #1312(ADR-108, MOIS 청크 적재)가 full/admin `openapi.json`에서 `POST /v1/ops/pipeline/requests`의
+  409·502·503 응답 description 문자열 3개만 바꿨다. 경로·schema·query·security는 그대로다. user·service는
+  `c4d17343`에서 byte 동일(`3a847c8a…`·`6677d41f…`)이라 기존 `11b811d9` 핀을 유지한다.
+- preflight가 대조하는 것(Manager `scripts/m05_isolated_e2e.py` `rotation_preflight` → `_rotation_pair_digests`):
+  대상 PinVi revision의 `contracts/kor-travel-map-m05-pair-provenance-v1.json`의
+  `map.{admin,full,service,user}.openapi_sha256`을 대상 Map revision의 `packages/kor-travel-map-api/openapi.json`
+  (admin·full 공통)·`openapi.service.json`·`openapi.user.json` 원본 blob sha256과 exact 비교한다. 회전 뒤 격리 e2e의
+  `_pair`는 같은 blob에 `source_canonical_sha256`도 대조한다.
+- 갱신(`docs/integrations/kor-travel-map-rest-api.md` 갱신 절차 5 + 생성기): admin 스냅샷을 Map `c4d17343`의
+  `openapi.json`으로 byte-exact 교체(`54dbc8b1…`), `_kor_travel_map_snapshot_pin.py` commit/hash,
+  `test_kor_travel_map_admin_contract.py` 이중 핀 리터럴, `scripts/generate_m05_pair_contract.py --write`로 pair 계약
+  재생성(admin·full: openapi `54dbc8b1…`, canonical `f608ae6b…`, operation contract `c3a4bca1…`; service·user 무변경).
+  description이 operation contract digest에 들어가므로 그 값도 바뀐다 — runtime Map `c4d17343`이 내는 문서와 같다.
+- 검증(n150): 설치된 Manager(`ba35401a`, origin/main과 이 경로 diff 없음) driver `--rotation-preflight`를 읽기
+  전용으로 직접 실행 — Map `c4d17343` + PinVi `e5c47028`은 같은 문구로 exit 1(재현), + 브랜치 head `3b6ea426`은
+  exit 0. `contract-pin-consistency` 에뮬레이션(user·service·cache-target golden·alias golden 핀 커밋 byte 동일,
+  service metadata sha)과 CI에 없는 admin byte 대조(`c4d17343`) 모두 PASS. 로컬에서 Manager `_pair` 식으로
+  네 표면의 openapi·canonical digest를 Map blob과 다시 계산해 일치를 확인했다. CI api job parity(일회용
+  `python:3.12`, `--cpus 1` — 같은 시각 geo `pg_dump`가 돌고 있어 제한했다): `ruff check`·`ruff format --check`·
+  `mypy --strict app`(247 files) 통과, Map 계약 관련 9파일 93 passed/9 skipped. `pytest tests/unit`는 브랜치와
+  main(`e5c47028`) 모두 4 failed/1513 passed/9 skipped/1 error로 실패 집합이 같다(`test_api_image_provenance` 1,
+  `test_backup_service` hotswap 1, `test_m05_legacy_rebaseline_receipt` 1, `test_m05_restore_drill` 1,
+  `test_m05_activation_receipt` 수집 오류 — 컨테이너 환경, 기존).
+- 회전 순서: 이 PR이 PinVi main에 squash되면 **그 squash 커밋**으로 회전한다(미머지 브랜치 head 핀 금지 —
+  squash 뒤 브랜치가 지워지면 이후 materialize가 그 커밋을 못 받는다). 계약 파일 내용이 같으므로 preflight
+  결과도 같다. Map T-VN-40 receipt는 `pending`인 동안 `pinvi_commit`을 가질 수 없어(Map
+  `tests/unit/test_vnext_contract_artifacts.py`) 이 변경으로 Map에 되쓸 것이 없다. `complete` 승격은 회전·재구축·
+  paired live acceptance 뒤 Map 쪽 별도 PR이다.
+- 그대로 둔 것: `docs/integrations/kor-travel-map-rest-api.md`의 admin 스냅샷 서술(`2845e142…`/`6419c133…`)은
+  이전 재vendor 때부터 낡아 있다 — 핀 정본은 `_kor_travel_map_snapshot_pin.py`다. PR·머지·배포·회전은 하지 않았다.
+
 ## 2026-10-13 (claude) — T-372 weather 보존 요구 15일 → 7일 (ADR-073, 브랜치 `chore/weather-retention-7-days`)
 
 소유자가 2026-10-13 `kor-travel-weather` 보존을 16일에서 7일로 줄였다. PinVi 요구도 7일로 낮춘다.

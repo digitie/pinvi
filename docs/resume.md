@@ -1,3 +1,11 @@
+## 2026-10-13 (claude) — Map admin OpenAPI 재vendor `c4d17343` (브랜치 `chore/revendor-map-admin-c4d17343`)
+
+Map #1312(ADR-108)의 admin description 3건 변경으로 M05 pair 회전 preflight가 거부됐다. admin 스냅샷·단일 핀·
+이중 핀 리터럴·M05 pair 계약(생성기)을 Map `c4d17343`으로 맞췄다. user·service는 무변경. 상세는 `docs/journal.md`.
+
+- 다음 한 작업: PR을 열고 CI green 후 squash 머지(소유자 지시 시). 회전은 그 squash 커밋과 Map `c4d17343`으로
+  `rotate-pinned-pair`를 돌린다. 그 뒤 재구축과 paired live acceptance를 거쳐 Map T-VN-40 receipt를 승격한다.
+
 ## 2026-10-13 (claude) — T-372 weather 보존 요구 7일 (브랜치 `chore/weather-retention-7-days`)
 
 ADR-073: `kor-travel-weather` 보존 16일 → 7일(소유자 결정)에 맞춰 PinVi 요구·G-3을 15일 → 7일로,
