@@ -17,6 +17,10 @@ Pinvi 날씨 데이터 소스를 `kor-travel-map`에서 **`kor-travel-weather`**
 > §4.2) — `kor-travel-weather` 보존이 16일에서 7일로 줄었다. T-367의 retention-horizon
 > guard가 6일 임계(보존 7일에 하루 여유)로 계속 감시한다. T-368(지도 마커)은 별도 flag(`..._map_markers_enabled`,
 > 기본 off)로 이 cutover와 독립적으로 존재한다.
+> **운영 호스트(Track 2, 2026-10-13 — 계획·미구현)**: `kor-travel-weather`가 odroid
+> (192.168.1.13, 포트 14101·이름 동일)로 옮기는 계획이 Manager ADR-58(proposed)·Pinvi
+> ADR-074(proposed)로 잡혔다. Pinvi는 base URL을 Manager compose에서 받을 뿐이며 ETL **과
+> pinvi-api** 두 블록이 대상이다 — §8. 오늘 운영은 아직 n150 loopback이다.
 
 ---
 
@@ -755,7 +759,170 @@ G-2(T-366)·G-3(T-367 guard 배포)까지 소유가 명확한 반면 G-1은 Pinv
 
 ---
 
-## 8. 참고
+## 8. 운영 호스트 — `kor-travel-weather`가 odroid(192.168.1.13)로 옮긴다 (Track 2, **계획·미구현**)
+
+> **상태(2026-10-13)**: **proposed, 미구현.** 결정은 Pinvi ADR-074(`docs/decisions.md`)와
+> Manager ADR-58(proposed, `kor-travel-docker-manager` `docs/decisions.md` — Track 2 문서 PR)이
+> 갖는다. 포트·URL·컨테이너명은 n150과 **같고 호스트만 `.14 → .13`**이다. 효력은 Manager
+> T-MGR-01c(pinvi-api 블록에 변수 추가)와 weather 플립 PR(Manager T-MGR-06) 머지·배포 **뒤에만**
+> 생긴다. 오늘 운영은 여전히 n150 loopback `127.0.0.1:14101`이다. 절차·값의 자리·결박의 정본은
+> Manager 쪽(ADR-58 배포 순서·R2, `docs/prod-deployment.md` 플립 절차, `docs/bindings.md` B-6)이며
+> 이 절은 Pinvi 입장의 요약이다. **Manager 쪽 식별자 주의**: ADR-58·registry `hosts:`·`prod-deployment.md`
+> 플립 절·`bindings.md` B-6·T-MGR-01c/06·Prometheus federate는 전부 Track 2 **설계** 항목이라
+> Manager Track 2 문서 PR 머지 전에는 Manager main(2026-10-13 `094d397`: `bindings.md`는 B-1~B-4까지,
+> registry에 `hosts:` 없음, tasks에 T-MGR-* 없음)에 **없다** — 아래에서는 이 주의를 반복하지 않는다.
+> Pinvi 코드 T-374는 플립 **전에** 머지·배포한다(설계 §13 의존 "(PNV) → OPS"; §8.2).
+
+### 8.1 호출 경로는 둘이다 — base URL 값의 자리가 다르다
+
+| 경로 | 코드(worktree head 기준) | base URL 값의 자리(운영 정본) | 지금 값 | 전환 뒤(계획) |
+| --- | --- | --- | --- | --- |
+| **ETL code-server** — `pinvi_weather_retention_horizon_guard`(T-367, 매일 KST 05:00) | `apps/etl/pinvi/etl/definitions.py:66-68` → `KorTravelWeatherResource`(`apps/etl/pinvi/etl/resources.py:58-72`, httpx timeout 10 s — 필드 `:69`·생성 `:72`) | Manager `docker-compose.yml` `pinvi-dagster-code-server` 블록의 **리터럴** `PINVI_KOR_TRAVEL_WEATHER_BASE_URL: http://127.0.0.1:14101`(origin/main@094d397 `:2134`) | `127.0.0.1:14101` | registry `hosts:`의 weather 호스트에서 **파생한 커밋 compose 기본값**(Manager ADR-58 R2, T-MGR-01c; 형식은 Manager 소유) — weather 플립 뒤 렌더 결과 `http://192.168.1.13:14101` |
+| **pinvi-api 런타임** — trip view 날씨(`services/trip_weather_batch.py`), 단건 카드(`services/weather_card.py`), location resolver(`services/weather_location_resolver.py`), Admin weather-values(`services/admin_weather_values.py`), 지도 마커(`services/weather_map_markers.py`, T-368) | `apps/api/app/core/config.py:903-905`(`pinvi_kor_travel_weather_base_url = "http://localhost:14101"`, timeout 10 s, 3회) → `clients/kor_travel_weather.py:649-660`(httpx client 1개) → lifespan `:663-682`(flag와 무관하게 **무조건 생성**, `main.py:75`) | **없음 — 코드 기본값.** Manager `pinvi-api` 블록(094d397 `:1935-2010`)에 `PINVI_KOR_TRAVEL_WEATHER_*`가 한 줄도 없다 | `localhost:14101`(loopback이라 오늘은 우연히 맞다) | ETL과 **같은 변수 이름·같은 파생 기본값**을 pinvi-api 블록에 추가(T-MGR-01c). 이 줄이 빠지면 weather 플립 뒤 여행 날씨가 **오류 없이** `unavailable`/빈 카드가 된다(§8.3) |
+
+- 코드 기본값 `localhost:14101`(`config.py:903`, `.env.example:204`)은 **개발용으로 유지**한다.
+  운영 값의 정본은 코드·`.env.example`이 아니라 Manager registry `hosts:`+`host:`이고, 두 블록이
+  받는 것은 그 파생물인 커밋 compose 기본값이다(ADR-58 R1/R2). root `.env` 재정의가 registry와
+  다르면 Manager `targets validate`가 거부하도록 **예정**이다(Manager T-MGR-01c 산출물, `bindings.md`
+  B-6 — 2026-10-13 Manager main에는 아직 없는 **계획·미구현** 동작; 오늘 validate는 그 불일치를
+  보지 않는다) — Pinvi 저장소에 `192.168.1.13` 리터럴을 박지 않는다(단일 정본). `.env.example:201-203`의 "N150 고정 포트는 14101" 주석은
+  T-373에서 "포트 14101은 불변, 호스트는 Manager registry `hosts:`"로 고친다(이 문서 PR은 문서만
+  바꾼다).
+- 두 경로 모두 공개 read 무인증(§0)이라 전환으로 자격증명이 생기지 않는다.
+- **테스트 하네스(운영 경로 아님, 세 번째 loopback 소비자)**: live-mutating e2e의 weather 프록시가
+  upstream을 `hostname: '127.0.0.1'` 리터럴 + `PINVI_LIVE_WEATHER_UPSTREAM_PORT`(기본 14101)로
+  고정한다(`apps/web/e2e/trip-feature-resolution-live-mutating.live.ts:42,509-513`; runbook
+  `docs/runbooks/live-mutating-e2e.md:218,225`). weather 플립 뒤 n150에는 14101 리스너가 없으므로
+  이 e2e(및 그것을 포함하는 M05 격리 실행)는 프록시 뒤에서 ECONNREFUSED가 된다 — 호스트 변수가
+  없어 env로 우회할 수 없다. **계획(T-375)**: `PINVI_LIVE_WEATHER_UPSTREAM_HOST`(기본 `127.0.0.1`)
+  도입 + runbook 줄 갱신. 운영 compose·Manager와 무관하다.
+
+### 8.2 전환에서 Pinvi가 하는 것·보는 것
+
+플립 절차(n150 Manager 재설치 → n150 weather code-server stop → odroid 재설치·`ensure weather`
+→ n150 `ensure pinvi`)는 Manager ADR-58 배포 순서·`docs/prod-deployment.md`의 소유다. Pinvi 쪽은:
+
+1. **순서**: T-374(코드, §8.3 "대응")를 **먼저** 머지·배포한다 — 설계 §13 의존 그래프는
+   "(MAP, PNV, CNC) → OPS"이고 §11.3 전원 off drill은 회로차단이 들어가 있어야 성립한다. T-374의
+   단위·통합 수용은 SYN-drop mock이라 Manager·odroid 상태와 무관하게 오늘 돌릴 수 있다(의존 없음).
+   그 뒤 Manager T-MGR-01c → weather 플립 PR → odroid `ensure weather` → n150 `ensure pinvi` →
+   아래 게이트 → 전원 off drill. **플립 절차 자체에는 Pinvi 코드 변경이 없다**(T-374는 선행 완료
+   상태; e2e 하네스는 T-375, §8.1). `.env` 편집도 없다 — compose 기본값이 바뀐 **파생물**이라 n150
+   `ensure pinvi`가 **ETL code-server와 pinvi-api 둘 다 재생성**한다.
+2. **게이트(효과 기반, "200이면 통과" 금지)**: n150 weather-api **stop 상태**에서 (a) ETL
+   `pinvi_weather_retention_horizon_guard` 1 run SUCCESS, (b) trip view weather card가 비어 있지
+   않음(`found` ≥ 1), (c) odroid weather-api access log의 peer가 `192.168.1.14`. (b)(c)는 Pinvi가
+   관측한다. 선행: odroid 초기화(Manager ADR-58 §11.1/T-OPS-01 — 2026-10-13 현재 NTP 드롭인·compose
+   v2/buildx·방화벽·fstab bind·swapfile **미완**)와 odroid에서 weather-api가 실제로 도는 것(6b
+   `ensure weather`·migrate·적재 재개) — 절차·값은 Manager 몫, 여기는 포인터만.
+3. **live 수용(T-374 회로차단, 게이트 뒤 같은 자리)**: **odroid 전원 off**(또는 n150에서
+   `.13:14101`행 SYN을 버리는 nft 규칙) 상태에서 trip view p95 < 3 s. **odroid weather-api `stop`은
+   검사가 아니다** — 호스트가 살아 있으면 커널이 LAN 너머로 RST를 돌려주어 T-374 없이도 ≈0.6 s라
+   초록이 난다(§8.3 첫 단락). 단위 테스트로는 잴 수 없는 기준이라 여기 둔다(설계 §11.3 전원 off drill).
+4. Map 핀 bump·M05 pair 회전과 **무관**하다 — pair 계약 파일(`contracts/`)은 바뀌지 않는다.
+
+### 8.3 장애 의미가 바뀐다 — RST에서 타임아웃으로
+
+오늘은 피호출자가 같은 호스트라 weather-api가 죽으면 커널이 RST를 즉시 돌려주고 client는
+3회 시도 + backoff 0.2·0.4 s를 거쳐 **≈0.6 s 안에** `KorTravelWeatherUnavailable`이다
+(`clients/kor_travel_weather.py:480-501`). odroid 전원·링크 장애에서는 SYN이 응답 없이
+**타임아웃까지** 간다. `create_kor_travel_weather_client`는 `httpx.AsyncClient(timeout=10.0)`
+한 값(`:651-653`)이라 connect가 분리돼 있지 않고, 같은 3회 재시도가 붙어 → 호출 하나가 최대
+**≈30.6 s**(3×10 + 0.6).
+
+여기에 **location 캐시(`WeatherLocationLink`) 적중 여부**가 결과를 가른다. resolver
+(`weather_location_resolver.py:74-82`)는 `KorTravelWeatherNotFound`만 잡고 `Unavailable`은
+전파하며, 그 호출은 trip view·단건 카드 모두 **예산·try 밖**에 있다:
+
+| 표면 | 오늘(RST) | odroid 다운(타임아웃) | 사용자 가시 결과 |
+| --- | --- | --- | --- |
+| trip view, **캐시 적중**(모든 POI에 fresh `WeatherLocationLink` 행) | ≈0.6 s 뒤 `unavailable` | 4단계만 감싸는 view 예산 10 s(`trip_view_builder.py:46,280`; `asyncio.timeout` `trip_weather_batch.py:191`)에 잘려 **≈10 s 뒤** 미결 전부 `unavailable`(`:214-222`) | 여행 상세가 ≈10 s 느려지고 날씨 카드 없음(200) |
+| trip view, **캐시 미스**(새 POI·좌표 변경·stale 행) | ≈0.6 s 뒤 **500** | 2단계 `resolve_weather_location`은 feature마다 **순차 `await`이고 예산 밖**(`trip_weather_batch.py:151-157`; try는 `:190`부터 4단계만) → 미스 POI당 ≈30.6 s 블록 뒤 `KorTravelWeatherUnavailable`이 `trip_view_builder.py:271-281`·`api/v1/trips.py:433,787` 어디서도 잡히지 않고 catch-all 500(`main.py:117` → `middleware/security_headers.py:45-55`) | **N×30.6 s 뒤 여행 상세 전체 500** — 설계가 말한 "≈30.6 s 블록"은 이 경로에 맞다(오늘 RST에서도 500이라는 점은 호스트와 무관한 기존 결함) |
+| 단건 `GET /features/{id}/weather`, 캐시 적중 | ≈0.6 s 뒤 빈 카드 | `_fetch_location_values`가 예외를 삼킨다(`weather_card.py:84-93`) → location당 ≈30.6 s 뒤 `[]` | 빈 카드(200) |
+| 단건, 캐시 미스 | ≈0.6 s 뒤 **500** | `weather_card.py:119-121`이 같은 resolver를 try 없이 호출(`features.py:609-655`에도 없음) → ≈30.6 s 뒤 500 | 500 |
+| Admin weather-values(`admin_weather_values.py:58`, 단건과 같은 pipeline) | 단건과 같음 | 단건과 같음(캐시 미스면 500) | |
+| 지도 마커(T-368) | ≈0.6 s 뒤 503 | ≈30.6 s 뒤 503 — 라우트가 `KorTravelWeatherError`를 잡는다(`api/v1/weather_markers.py:61`) | `WEATHER_SERVICE_UNAVAILABLE` |
+| ETL 보존 지평 가드(T-367) | 즉시 예외(resource에 재시도 루프 없음, `resources.py:71-72`) → asset `RetryPolicy(max_retries=3, delay=60, backoff=EXPONENTIAL)`(`assets/pinvi_weather_retention_horizon.py:157`) — 지수 백오프 3회 뒤 FAILURE, 합계 **≈7~14분**(Dagster `calculate_delay` 인자가 0부터면 60·120·240 s, 1부터면 120·240·480 s — 로컬에 dagster가 없어 미확정, plane 1.13.24에서 확인할 것) | attempt당 ≤ 10 s(httpx 단일 timeout `resources.py:72`; 첫 호출 `/resolve`에서 끊긴다) × 4 = **≤ 40 s가 더해진** 같은 FAILURE → `pinvi_run_failure_sensor` 통지(`definitions.py:56`); `pinvi_infra_retry_*` 센서(`definitions.py:74-84`, `run_tags.py:44`)가 failure_kind에 따라 재실행을 더 얹을 수 있다. 두 칸의 차이는 attempt당 대기(0 → ≤10 s)뿐이다 | weather 장애의 **ETL 쪽 첫 신호**(하루 1회라 늦다) |
+
+서비스 코드가 **4단계** 조회의 `KorTravelWeatherError`를 삼켜 빈 날씨로 응답하는 설계(§3.5;
+`trip_weather_batch.py:206`, `weather_card.py:89`)는 그대로다 — 그래서 §8.1의 변수 누락과
+odroid 장애는 캐시 적중 경로에서 "오류 없이 날씨가 없다"로 보인다. 드러내는 장치는 (ⅰ) §8.2
+게이트 (b)(c), (ⅱ) T-367 가드, (ⅲ) Manager Prometheus federate의 weather `up`(Manager 몫,
+T-MGR-04 계획)뿐이다.
+
+**대응(T-374, 코드 — 이 문서 PR 범위 밖; 의존 없음, weather 플립 **전에** 머지·배포, §8.2-1). 이 절이
+T-374 사양의 단일 정본이다 — ADR-074 결정 4와 `tasks.md` T-374는 여기를 가리키고 수치를 복제하지
+않는다.**
+
+- **connect 분리**: settings `pinvi_kor_travel_weather_connect_timeout_seconds`(env
+  `PINVI_KOR_TRAVEL_WEATHER_CONNECT_TIMEOUT_SECONDS`, 기본 2.0; `.env.example` 줄은 T-374가 추가)
+  → `httpx.Timeout(timeout=10.0, connect=2.0)`. attempt당 connect ≤ 2 s, 호출당 ≤
+  3×2 + 0.6 = **6.6 s**(재시도 횟수는 유지). ETL `KorTravelWeatherResource`의 `connect_timeout`
+  필드는 설계 T-PNV-02 범위 밖이라 **선택**(ADR-074 열린 결정 2 — asset `RetryPolicy`가 지배해
+  FAILURE까지 ≤ 40 s 차이뿐).
+- **resolver 예외 투영**: resolver 자체는 사실만 돌려주므로 그대로 두고, 호출자가 잡는다. 두 층이다 —
+  (ⅰ) `trip_weather_batch.py` 2단계의 **resolve 호출마다** `(KorTravelWeatherError, TimeoutError)`를
+  **개별 try**로 잡아 그 feature만 `unavailable`(**`no_data` 아님** — 관측소 없음을 지어내지 않는다)로
+  두고 **계속 진행**한다(미스 1건이 적중 N건의 날씨를 빼앗지 않는다); (ⅱ) 2단계 전체를 4단계와
+  **같은 예산을 공유**하는 바깥 `asyncio.timeout(budget)`에 두되, 그 except 분기는
+  `pending_feature_days` **전체**(found 여부 무관)에 `unavailable`을 찍는다 — 오늘의 except
+  (`:214-222`)는 `found_resolutions`만 돌아 2단계에서 끊기면 미결 feature에 키가 안 찍힌다. 둘 다
+  필요한 이유: 미스 1건 = 6.6 s라 2건이면 13.2 s > 10 s이므로 (ⅰ)만으로는 예산을 못 지키고,
+  (ⅱ)만으로는 피호출자가 살아 있는데 한 feature의 resolve만 실패한 경우(5xx)까지 전부 `unavailable`이
+  된다. resolve는 오늘처럼 **순차**로 둔다(한 `AsyncSession`을 쓰므로 동시 실행 금지). `weather_card.py`
+  `resolve_and_collect_deduped_values`는 `KorTravelWeatherUnavailable` → `([], None)`(빈 카드).
+  수용 기준(둘 다 통합 테스트): **(A) 피호출자 off(SYN drop)** — 캐시 미스 2건 + 적중 1건에서 trip
+  view **200**, 세 POI 모두 `unavailable`(적중 POI도 4단계 값 조회가 같은 피호출자라 `found`가 될 수
+  없다), 미스 feature의 키 누락 없음, 500 없음, 전체 ≤ 예산 10 s; 단건은 **빈 카드**(500 아님).
+  **(B) 피호출자 up, 한 feature의 resolve만 `Unavailable`(5xx mock)** — 그 feature만 `unavailable`,
+  나머지 적중 POI는 `found`, 200. (A)에서 논리 호출 3회가 실패하면 회로가 열려 그 뒤 요청은 즉시
+  `unavailable`이다(아래).
+- **회로차단(기본값, 열린 결정 2는 이 값의 변경 여부)**: 단위는 **논리 호출**(`_send` 1회,
+  attempt 아님); 연속 3회 호출 실패 → 30 s open(즉시 `Unavailable`), half-open 1회; 상태는
+  `KorTravelWeatherClient` 인스턴스에 두어 trip/card/resolver/Admin/마커가 **공유**(client는 1개,
+  `:651-660`); ETL resource는 제외. 회로차단은 `found`를 지어내지 않고 `unavailable`을 더 빨리
+  낸다. 세 값의 자리는 `clients/kor_travel_weather.py` **모듈 상수**(`_CIRCUIT_FAILURE_THRESHOLD = 3`,
+  `_CIRCUIT_OPEN_SECONDS = 30.0`, half-open 1회), env·settings 노출 없음 — 열린 결정 2로 값이
+  바뀌면 그때 settings로 승격한다.
+- **수용 테스트 전제 = SYN을 버리는 호스트**(mock transport로 `httpx.ConnectTimeout`을 지연
+  발생). "연결을 받지 않는 호스트"는 RST라 변경 전에도 0.6 s 안에 예외여서 검사가 되지 않는다.
+  단위 기대: 회로 닫힘 첫 호출 — attempt ≤ 2 s·호출 ≤ 6.6 s; 회로 열림 상태의 호출 — transport
+  호출 **0회**·즉시 `Unavailable`. 통합 기대: 위 (A)(B). 테스트 자리: client는
+  `apps/api/tests/unit/test_kor_travel_weather_client.py`, trip view·단건은
+  `apps/api/tests/integration/test_trip_view_weather_cutover.py`·`test_features_weather_cutover.py`.
+  전부 mock이라 Manager·odroid 상태와 무관하다. "회로 열림 뒤 trip view p95 < 3 s"는 live 기준이라
+  §8.2-3 전원 off drill 자리에 둔다.
+
+### 8.4 바뀌지 않는 것
+
+- 공개 read 무인증(§0, `config.py:898-899`): 인증은 추가되지 않는다(별도 과제). 14101의 소스
+  제한은 odroid 호스트 방화벽의 몫이다(**계획** — Manager ADR-58 방화벽 정책 (가) "우리 포트만
+  제한" 기본, 소유자 결정 대기; 2026-10-13 현재 odroid에 호스트 정책 규칙 **없음** — ufw 미설치·
+  nftables disabled, Docker 자체 iptables-nft 규칙만, Manager ADR-58 실측 절).
+- 보존 7일·가드 임계 6일(ADR-073)은 호스트 이동과 무관하다. 단 odroid 시계가 틀리면
+  `known_at`이 DEFAULT 파티션으로 들어가거나 forward window 밖으로 거부돼 가드 측정이
+  흔들린다(weather 저장소 몫; Manager ADR-58의 NTP·부팅 순서 전제 — 2026-10-13 현재 시계
+  동기화는 완료, 부팅 순서 사이클 영속화(drop-in)는 미완).
+- **Pinvi 자체는 n150에 남는다 — ADR-067(odroid 실행 환경 퇴역) 유지.** odroid는 Pinvi가
+  REST로 부르는 피호출자의 호스트일 뿐이다.
+- `/resolve` 3.1 MB(§1.3)·지도 마커 `/nearby`(T-368)도 같은 base URL이다. LAN RTT 9.7 ms
+  (실측)라 체감 차이는 없을 것으로 본다(가정, 미측정).
+
+### 8.5 같은 모양의 공백 — Pinvi → `kor-travel-geo`
+
+Track 2는 geo도 odroid로 옮긴다(Manager ADR-58 배포 순서의 geo 단계). Pinvi
+`pinvi_kor_travel_geo_base_url`(`config.py:894`, 기본 `localhost:12501`;
+`clients/kor_travel_geo.py:195-206`, lifespan `main.py:71`; 사용자 경로 `api/v1/search.py:110` 등)도
+Manager `pinvi-api` 블록에 **주입되지 않는다**(origin/main@094d397 compose에
+`PINVI_KOR_TRAVEL_GEO_*` 0건). Manager ADR-58의 consumer origin 목록(B-6)에는 이 행이 **없다**
+→ ADR-074 열린 결정 1. geo 플립 전에 같은 변수 주입(T-MGR-01c 범위 확장) 없이는 Pinvi 사용자
+geocoding이 조용히 깨진다. 또 loopback 면제가 사라져 `key=PINVI_VWORLD_API_KEY`(ADR-048,
+`kor-travel-geo.md`)가 실제로 대조된다 — geo 키 정책은 geo ADR-070(proposed)의 키 정책 절
+(VWorld 공용 키 폴백 유지 추천, DB에 키가 하나라도 발급되면 폴백이 꺼지는 all-or-nothing).
+
+---
+
+## 9. 참고
 
 - 서비스 정본 문서: `kor-travel-weather` `docs/weather-api.md`,
   `docs/architecture/rest-api.md`, `docs/integration-map.md`
@@ -763,6 +930,8 @@ G-2(T-366)·G-3(T-367 guard 배포)까지 소유가 명확한 반면 G-1은 Pinv
   062(보존)
 - Pinvi 현재 계약: [`kor-travel-map-rest-api.md`](kor-travel-map-rest-api.md) §2.6/2.6a/2.6b
 - 결정: **Pinvi ADR-068** (`docs/decisions.md`)
+- 운영 호스트 전환(계획·미구현): **Pinvi ADR-074**(proposed) · **Manager ADR-58**(proposed,
+  `kor-travel-docker-manager` `docs/decisions.md`) — §8
 
 > ⚠️ **ADR 번호는 저장소마다 독립이다.** 이 문서에는 세 저장소의 ADR이 등장하며
 > `ADR-062`만 해도 셋이 서로 다르다 — Pinvi 062(동의 이력), `kor-travel-map`
