@@ -1,3 +1,24 @@
+## 2026-10-13 (claude) — Track 2: `kor-travel-weather` odroid 전환 대응 문서 (ADR-074 proposed, 브랜치 `docs/weather-on-odroid-api-runtime`)
+
+`kor-travel-weather`가 odroid(192.168.1.13, 포트·이름 동일)로 옮기는 Track 2에서 Pinvi는 소비자로서만 영향받는다.
+ADR-074(proposed)와 `docs/integrations/kor-travel-weather.md` §8에 호출 경로 둘(ETL = Manager compose 리터럴, pinvi-api =
+코드 기본 `localhost:14101` — Manager `pinvi-api` 블록에 변수 없음), 값의 정본(Manager registry `hosts:`+`host:` → 파생 compose
+기본값; root `.env` 불일치의 validate 거부는 Manager T-MGR-01c **예정·미구현**; Pinvi에 리터럴 금지), 전환 게이트(n150 weather-api stop 상태에서 ETL 가드 1 run + trip view card `found` ≥ 1 + odroid access log peer
+`.14`; live 수용은 odroid **전원 off** drill — weather-api stop은 RST라 검사 아님), 장애 의미 변화(RST → 타임아웃; location 캐시 적중이면 trip view ≈10 s 뒤 `unavailable`·단건 ≈30.6 s 뒤 빈 카드,
+캐시 미스면 resolver가 예산 밖이라 POI당 ≈30.6 s 뒤 **500** — T-374가 투영으로 고친다, 그래서 T-374는 플립 **전에** 선행)를 적었다. 문서만 바꿨고 코드·
+`.env.example`은 T-373·T-374로 백로그에 올렸다. 설계에 없던 공백 둘: Pinvi → geo base URL도 pinvi-api 블록에 주입되지 않는다
+(ADR-074 열린 결정 1); live-mutating e2e weather 프록시의 upstream 호스트가 `127.0.0.1` 리터럴이라 플립 뒤 ECONNREFUSED(T-375).
+ADR 포인터(`agent-guide.md`·`CLAUDE.md`)를 074/다음 075로 동기화했다. 상세는 `docs/journal.md`.
+
+- 다음 한 작업: doc-only PR을 열어 머지(파일 목록 확인, CI 대기 없음). 그 뒤 Pinvi 쪽은 **T-374(connect 분리 + resolver 투영 +
+  회로차단; 의존 없음, 수용은 mock) 머지·배포** → Manager T-MGR-01c(pinvi-api 블록 weather 변수 — geo 변수 포함 여부는 소유자
+  결정) → weather 플립 PR → odroid `ensure weather` → n150 `ensure pinvi` 게이트(§8.2-2) → 전원 off drill(§8.2-3). 설계 §13
+  "(PNV) → OPS". T-373(`.env.example`·`runbooks/etl.md` 주석)·T-375는 선행 조건 없음.
+- 소유자 결정 대기: ADR-074 열린 결정 1(geo base URL 주입을 T-MGR-01c에 포함), 2(회로차단 기본값 3회·30 s 변경 여부, geo
+  client 포함), 3(weather 장애 알람은 Manager federate에 맡김).
+- 선행 권장(이 PR 범위 밖): `docs/decisions.md`가 약 263 KB다 — 읽기 도구·검토 부담을 줄이기 위해 다음 ADR(075)을 쓰기 전에 Manager와 같은 모양으로 ADR-001~040을 `docs/decisions-archive-01.md`로 분리하고 상단에 인덱스를
+  둔다(doc-only). `journal.md`(약 0.93 MB)·`resume.md`(약 0.47 MB)도 2026-07 이전 분리 대상.
+
 ## 2026-10-13 (claude) — Map admin OpenAPI 재vendor `c4d17343` (브랜치 `chore/revendor-map-admin-c4d17343`)
 
 Map #1312(ADR-108)의 admin description 3건 변경으로 M05 pair 회전 preflight가 거부됐다. admin 스냅샷·단일 핀·

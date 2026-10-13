@@ -1,3 +1,71 @@
+## 2026-10-13 (claude) — Track 2: `kor-travel-weather` odroid 전환 대응 문서 (ADR-074 proposed, 브랜치 `docs/weather-on-odroid-api-runtime`)
+
+소유자 지시 "설계와 각 프로젝트 문서 수정해서 코딩을 할 수 있게 준비"의 Pinvi 몫. Track 2(geo·weather·transport를
+n150에서 odroid 192.168.1.13으로 — 포트·URL·이름 동일, 호스트만 `.14 → .13`; 저장소 안 정본은 Manager ADR-58 proposed와
+그 배포 절차 문서)에서 Pinvi는 옮기지 않고 `kor-travel-weather`의 REST 소비자로서 영향만 받는다. **문서만** 바꿨다
+(`docs/decisions.md` ADR-074, `docs/integrations/kor-travel-weather.md` §8 신설·§9 참고 갱신·현재 상태 블록 한 줄,
+`docs/tasks.md` T-373·T-374·T-375, 본 항목, `docs/resume.md`, ADR 포인터 동기 `docs/agent-guide.md:132`·`CLAUDE.md` ADR 현황).
+코드·`.env.example`·contracts·CHANGELOG·scripts는 건드리지 않았다.
+
+- 확인한 사실(worktree head `97f2baf2`; Manager는 로컬 `origin/main@094d397` compose를 읽기 전용으로 대조): weather base URL은
+  ETL code-server에만 Manager compose 리터럴(`:2134`)로 주입되고 **pinvi-api 블록(`:1935-2010`)에는 변수가 없다** — 런타임은 코드
+  기본 `localhost:14101`(`apps/api/app/core/config.py:903`)이다(설계가 인용한 `config.py:896-898`·`definitions.py:63-65`·
+  compose `:2128`/`:1929-2005`는 head에서 `:903-905`·`:66-68`·`:2134`/`:1935-2010`으로 밀렸다 — 문서는 head 번호로 썼다).
+  4단계 조회의 `KorTravelWeatherError`는 삼켜져 빈 날씨가 된다(`trip_weather_batch.py:206`, `weather_card.py:89`)라 변수 누락은
+  플립 뒤 조용한 회귀가 된다.
+- 설계와 다르게 쓴 점: (1) 설계의 "trip 화면 weather card가 ≈30.6 s 블록"은 **location 캐시 적중·미스로 갈린다** — 적중이면
+  view 예산 10 s(`trip_view_builder.py:46,280`, `asyncio.timeout` `trip_weather_batch.py:191`)에 잘려 ≈10 s 뒤 `unavailable`;
+  미스(새 POI·좌표 변경)면 resolver 호출이 예산·try 밖(`trip_weather_batch.py:151-157`, `weather_card.py:119-121`,
+  `weather_location_resolver.py:74-82`는 `NotFound`만 잡음)이라 POI당 ≈30.6 s 순차 블록 뒤 `KorTravelWeatherUnavailable`이
+  catch-all 500(`main.py:117`)으로 끝난다 — 설계의 30.6 s는 이 경로에 맞고, 500은 오늘 RST에서도 나는 기존 결함이다(1차 리뷰
+  HIGH 반영; §8.3 표를 적중/미스로 나눴고 T-374에 resolver 예외 투영을 넣었다). (2) ADR 번호는 plan의 071이 아니라
+  **074**(head의 마지막이 ADR-073). (3) 설계·plan에 없는 공백 하나를 찾았다: **Pinvi → `kor-travel-geo` base URL**(`config.py:894`,
+  기본 `localhost:12501`)도 Manager `pinvi-api` 블록에 주입되지 않는다(compose에 `PINVI_KOR_TRAVEL_GEO_*` 0건) — geo 플립 전에
+  같은 주입이 없으면 사용자 geocoding(`api/v1/search.py:110` 등)이 조용히 깨진다. ADR-074 열린 결정 1·§8.5로 올렸다(Manager
+  ADR-58 consumer origin 목록(B-6)에 행 추가가 필요 — Manager 쪽 후속). (4) 1차 리뷰 반영: 설계 세션 파일·리뷰 식별자(S17·C-6
+  등) 대신 저장소 안 정본(Manager ADR-58·`prod-deployment.md`·`bindings.md` B-6, geo ADR-070)만 가리킨다; T-374는 settings
+  키 `pinvi_kor_travel_weather_connect_timeout_seconds`·SYN-drop 전제·회로차단 기본값(논리 호출 3회 → 30 s, client 공유, ETL
+  제외)·ETL `RetryPolicy`(지수 백오프 3회, FAILURE까지 ≈7~14분 — Dagster `calculate_delay` 인자 기준은 로컬에 dagster가 없어 미확정;
+  odroid 차이는 attempt당 대기 ≤10 s뿐)를 명시; §8.4 방화벽은 "계획·소유자
+  결정 대기·현재 호스트 정책 규칙 없음(Docker 규칙만)"으로. (5) ETL `KorTravelWeatherResource`의 `connect_timeout` 필드는 설계
+  T-PNV-02 범위 밖이라 결정에서 빼고 ADR-074 열린 결정 2(선택)로 내렸다. (6) 설계·plan에 없는 두 번째 공백: live-mutating e2e
+  weather 프록시가 upstream 호스트를 `127.0.0.1` 리터럴로 고정(`apps/web/e2e/trip-feature-resolution-live-mutating.live.ts:509-513`,
+  runbook `docs/runbooks/live-mutating-e2e.md:218,225`) — 플립 뒤 ECONNREFUSED. 운영 경로가 아니라 T-375로 분리, §8.1 테스트
+  하네스 불릿·ADR-074 컨텍스트 1. (7) 적대 리뷰 2명(2차 라운드) 반영: ADR-074 결정 1·§8.1 불릿·resume의 "정본 = compose 기본값 +
+  root `.env` 재정의"를 설계 §7.2 R2·B-6대로 "정본 = Manager registry `hosts:`+`host:`, compose 기본값은 파생물, `.env` 불일치는
+  validate 거부"로 고쳤다; T-374 사양의 삼중 복제(§8.3·ADR 결정 4·tasks.md)를 §8.3 단일 정본 + 포인터로 줄였다(`tasks-rule.md`
+  §2); §8.3에 회로차단 값의 자리(모듈 상수, env 없음)·단위 수용("회로 열림 = transport 호출 0회")·테스트 모듈 이름을 적고
+  "p95 < 3 s"는 live 기준이라 §8.2 게이트로 옮겼다; ADR '관계' 절의 Track 1 한 줄에 두 상호작용(전량 재지오코딩·센서 LAN 폴링)을
+  이름으로 적었다; ADR 다음 후보 포인터(`agent-guide.md:132` 074 → 075, `CLAUDE.md` ADR 현황 071~074 추가·다음 075, AGENTS.md
+  §신규 ADR 작성 시 규약)를 동기화했다. (8) 2차 리뷰(2명, HIGH 1·MED 4·LOW 5) 반영: **순서 뒤집힘(HIGH)** — T-374를
+  T-MGR-01c·플립·게이트 **뒤**에 두었던 것을 설계 §13 "(PNV) → OPS"·§11.3 전원 off drill대로 **플립 전 선행**(의존 없음, 수용은
+  mock)으로 ADR '상태'·결정 4·'결과'·'후속', tasks T-374, §8.2-1, resume 전부 동기화; §8.2 live 수용을 "weather-api stop"(RST라
+  검사 아님)에서 **odroid 전원 off(또는 n150 nft SYN drop)**로(MED); T-374 resolver 투영을 두 층(resolve 호출마다 개별 try →
+  그 feature만 `unavailable` + 바깥 공유 예산의 except는 `pending_feature_days` 전체에 찍기; resolve는 한 `AsyncSession`이라
+  순차 유지)으로 명시하고 수용 (A) 피호출자 off: 미스 2 + 적중 1 → 전부 `unavailable`·200·≤10 s·키 누락 없음, (B) up + 한
+  feature 5xx: 그 feature만 `unavailable`로 확정(MED — 리뷰가 제안한 "off에서 적중 POI `found`"는 4단계가 같은 피호출자라
+  성립하지 않아 (A)(B)로 나눴다); `resources.py:58-73`/`:73`은 유령 줄(파일 72줄) — `:58-72`·필드 `:69`·생성 `:72`로 복구(MED,
+  1차 "드리프트 수정"이 거꾸로였다); Manager `targets validate`의 `.env` 재정의 거부·registry `hosts:`·B-6을 현재 사실처럼 쓴
+  3곳(ADR 결정 1·§8.1·resume)을 "예정(T-MGR-01c, 계획·미구현)"으로(MED); §8 상태 블록·ADR '참조'에 "Manager 쪽 식별자(ADR-58·
+  `hosts:`·플립 절·B-6·T-MGR-01c/06·federate)는 설계 항목, Manager main 094d397에 없음" 주의 한 줄(LOW); ETL FAILURE 시각을
+  산식 미확정으로 완화(LOW); ADR '후속' 순서에 odroid 초기화(T-OPS-01, 미완 항목)·`ensure weather`(6b) 포인터(LOW); tasks T-374
+  수치 재복제 제거·T-373에 `docs/runbooks/etl.md:328` 추가(LOW); resume 크기 수치 갱신(LOW). 기각 없음.
+- ADR-067(odroid 실행 환경 퇴역)은 유지 — supersede가 아니라 "피호출자의 호스트"로 범위를 적었다. 공개 read 무인증·보존 7일·
+  가드 6일(ADR-073)은 불변. Map 핀 bump·M05 pair 회전과 무관(contracts 불변).
+- 검증: 인용 file:line을 head에서 `sed -n`으로 전부 재확인(`config.py:894,898-899,903-905`, `clients/kor_travel_weather.py:
+  480-501,649-660,663-682`, `trip_weather_batch.py:151-157,190-191,206,214-222`, `weather_card.py:84-93,119-121`,
+  `features.py:609-655`, `trip_view_builder.py:46,271-281`, `weather_location_resolver.py:74-82`, `resources.py:58-72`(파일 72줄),
+  `definitions.py:56,66-68,74-84`, `pinvi_weather_retention_horizon.py:145-157,186`, `api/v1/weather_markers.py:61`,
+  `.env.example:201-204`, `main.py:71,75,117`, e2e `…live-mutating.live.ts:42,509-513`, runbook `live-mutating-e2e.md:218,225`,
+  `agent-guide.md:132`, `CLAUDE.md:84,146`, `AGENTS.md:448-453`; 1차 리뷰가 잡은 드리프트 `weather_card.py:116-118`·
+  `features.py:609-657`은 고쳤고, `resources.py:58-72`는 처음부터 맞았는데 1차 반영에서 `:58-73`으로 잘못 "고친" 것을 2차에서
+  되돌렸다). `git status --short`로 문서 7개만 변경 확인. `docs/decisions.md`는
+  약 263 KB — 읽기 도구·검토 부담을 줄이기 위해 다음 ADR 전 아카이브 분리 권장(`resume.md`). n150·odroid 접속 없음, 커밋·푸시 없음.
+- 다음 한 작업: 이 브랜치를 doc-only PR로 열어 머지(파일 목록으로 doc-only 확인, CI 대기 없이 — 메모리 규칙). 그 뒤 Pinvi
+  순서는 **T-374(코드, 의존 없음) 머지·배포** → Manager T-MGR-01c(pinvi-api 블록 변수 + geo 변수 여부 결정) → weather 플립
+  PR → odroid `ensure weather` → n150 `ensure pinvi` 게이트(§8.2-2) → 전원 off drill(§8.2-3). T-373(`.env.example`·
+  `runbooks/etl.md` 주석)·T-375(e2e 프록시 호스트 변수)는 언제든.
+
 ## 2026-10-13 (claude) — Map admin OpenAPI 재vendor: Map main `c4d17343`(#1314; admin 바이트 변경은 #1312/ADR-108 `f81611dc`) — M05 회전 preflight 거부 해소
 
 브랜치 `chore/revendor-map-admin-c4d17343`. Map `c4d17343e976fec38196438ad45480fc0cbd9e57` + PinVi
