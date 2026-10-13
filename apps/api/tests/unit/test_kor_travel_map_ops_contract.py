@@ -10,10 +10,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any
+from types import UnionType
+from typing import Any, Literal, Union, get_args, get_origin
 
 import pytest
+from pydantic import BaseModel
 
+from app.services import kor_travel_map_ops_projection as projection
 from tests.unit._kor_travel_map_snapshot_pin import SNAPSHOT, SNAPSHOT_SHA256
 
 _SNAPSHOT = SNAPSHOT
@@ -127,6 +130,94 @@ _REQUIRED_FIELDS: dict[str, set[str]] = {
     },
 }
 
+# Map ops 응답을 받는 Pinvi 모델은 `extra="forbid"`라, vendored 스냅샷의 property를 모델이
+# 하나라도 모르면 Map이 그 값을 처음 non-null로 내는 순간 응답 전체가 502가 된다
+# (2026-10-13 `ProviderRefreshPolicyRecord.provider_dataset_id`: Map #966이 2026-08-11 추가,
+# PinVi는 #443/#574/#579 재vendor에서 모델을 따라가지 않았다). 그래서 위 `_REQUIRED_FIELDS`
+# (스키마 ⊇ Pinvi가 읽는 필드)와 반대 방향 — 스키마 property ⊆ 모델 필드, 스키마 enum ⊆ 모델
+# Literal, 스키마 nullable ⇒ 모델 nullable — 을 `_CanonicalModel`을 쓰는 모든 소비 스키마에
+# 고정한다. 재vendor가 들어올 때 CI에서 먼저 빨개진다.
+_CONSUMED_MODELS: dict[str, type[BaseModel]] = {
+    "OpsDatasetsGridData": projection._DatasetsGridData,
+    "OpsDatasetGridRow": projection._DatasetGridRow,
+    "ProviderRefreshPolicyRecord": projection._RefreshPolicy,
+    "OpsDatasetCatalogInfo": projection._DatasetCatalog,
+    "OpsDatasetPreviewCapability": projection._DatasetPreviewCapability,
+    "OpsDatasetScopeRefreshCapability": projection._DatasetScopeRefreshCapability,
+    "OpsDatasetScheduleSummary": projection._DatasetSchedule,
+    "OpsDatasetFreshness": projection._DatasetFreshness,
+    "OpsDatasetExecution": projection._DatasetExecution,
+    "OpsDatasetProjectedJob": projection._DatasetProjectedJob,
+    "OpsDatasetProviderDataset": projection._ProviderDatasetIdentity,
+    "OpsIssueSummary": projection._IssueSummary,
+    "PipelineOverviewData": projection._PipelineOverviewData,
+    "PipelineDagsterOverview": projection._PipelineDagsterOverview,
+    "DagsterRunSummary": projection._DagsterRunSummary,
+    "DagsterSensor": projection._DagsterSensor,
+    "DagsterInstigationTick": projection._DagsterInstigationTick,
+    "DagsterGraphqlError": projection._DagsterGraphqlError,
+    "PipelineExecutionsData": projection._PipelineExecutionsData,
+    "PipelineExecutionRootRecord": projection._PipelineExecutionRoot,
+    "PipelineExecutionRecord": projection._PipelineExecutionRecord,
+    "PipelineExecutionDetailData": projection._PipelineExecutionDetailData,
+    "PipelineProjectedJobRecord": projection._ProjectedJob,
+    "PipelineProviderDatasetIdentityRecord": projection._ProviderDatasetIdentity,
+    "PipelineImportJobRecord": projection._PipelineImportJobIdentity,
+    "FeatureUpdateRequestRecord": projection._PipelineUpdateRequestIdentity,
+    "FeatureUpdateDatasetMembership": projection._FeatureUpdateDatasetMembership,
+    "PageMeta": projection._PipelinePageMeta,
+    "PipelineCancellationSummaryRecord": projection._CancellationSummary,
+    "PipelineCancellationDetailRecord": projection._CancellationDetail,
+    "PipelineCancellationRootRecord": projection._CancellationRoot,
+    "PipelineCancellationMemberRecord": projection._CancellationMember,
+    "PipelineCancellationRunRecord": projection._CancellationRun,
+    "PipelineCancellationErrorRecord": projection._CancellationError,
+}
+
+
+def _schema_enum_and_nullable(
+    spec: dict[str, Any], node: dict[str, Any]
+) -> tuple[set[object] | None, bool]:
+    """property 스키마(최상위 anyOf/$ref/enum/const만, items는 보지 않는다)의 enum 집합과 null 허용."""
+
+    enum_values: set[object] | None = None
+    nullable = False
+    pending = [node]
+    while pending:
+        current = pending.pop()
+        if "$ref" in current:
+            pending.append(spec["components"]["schemas"][current["$ref"].rsplit("/", 1)[1]])
+            continue
+        if current.get("type") == "null":
+            nullable = True
+            continue
+        if "enum" in current:
+            enum_values = (enum_values or set()) | set(current["enum"])
+            continue
+        if "const" in current:
+            enum_values = (enum_values or set()) | {current["const"]}
+            continue
+        pending.extend(current.get("anyOf", []))
+        pending.extend(current.get("oneOf", []))
+    return enum_values, nullable
+
+
+def _model_literal_and_nullable(annotation: object) -> tuple[set[object] | None, bool]:
+    literal_values: set[object] | None = None
+    nullable = False
+    pending = [annotation]
+    while pending:
+        current = pending.pop()
+        origin = get_origin(current)
+        if current is type(None):
+            nullable = True
+        elif origin is Literal:
+            literal_values = (literal_values or set()) | set(get_args(current))
+        elif origin is Union or origin is UnionType:
+            pending.extend(get_args(current))
+    return literal_values, nullable
+
+
 _RETIRED_FIELDS: dict[str, set[str]] = {
     "OpsDatasetGridRow": {"provider_issues"},
     "OpsDatasetCatalogInfo": {"is_feature_load"},
@@ -206,6 +297,26 @@ def test_consumed_schema_requires_current_fields(
     assert schema["additionalProperties"] is False
     assert required_fields <= set(schema["required"])
     assert required_fields <= set(schema["properties"])
+
+
+@pytest.mark.parametrize(("schema_name", "model"), _CONSUMED_MODELS.items())
+def test_consumed_model_accepts_every_snapshot_property(
+    spec: dict[str, Any], schema_name: str, model: type[BaseModel]
+) -> None:
+    schema = spec["components"]["schemas"][schema_name]
+
+    assert set(schema["properties"]) <= set(model.model_fields)
+    for name, property_schema in schema["properties"].items():
+        schema_enum, schema_nullable = _schema_enum_and_nullable(spec, property_schema)
+        model_literal, model_nullable = _model_literal_and_nullable(
+            model.model_fields[name].annotation
+        )
+        if schema_enum is not None and model_literal is not None:
+            # Map이 enum member를 더하면 모델 Literal이 그 값을 거부한다 — 이름만 같아서는
+            # 못 잡는 드리프트(2026-10-13 적대 리뷰).
+            assert schema_enum <= model_literal, f"{schema_name}.{name}"
+        if schema_nullable:
+            assert model_nullable, f"{schema_name}.{name} is nullable in the Map contract"
 
 
 @pytest.mark.parametrize(("schema_name", "retired_fields"), _RETIRED_FIELDS.items())
