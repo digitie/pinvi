@@ -66,6 +66,92 @@ n150에서 odroid 192.168.1.13으로 — 포트·URL·이름 동일, 호스트�
   PR → odroid `ensure weather` → n150 `ensure pinvi` 게이트(§8.2-2) → 전원 off drill(§8.2-3). T-373(`.env.example`·
   `runbooks/etl.md` 주석)·T-375(e2e 프록시 호스트 변수)는 언제든.
 
+## 2026-10-13 (claude) — `/admin/etl/summary` 상시 degraded: Dagster tick 조회에 최근 창을 둔다 (브랜치 `fix/admin-etl-dagster-ticks-window`, T-373)
+
+03:13Z `ktdm-rebuild-t1013d`(Map `c4d17343` + PinVi `97f2baf2`) `_deploy_forward`의 C6c
+`run_pinvi_canonical_smoke`가 `C6c pinvi_etl_summary canonical envelope smoke failed`로 섰다. 로그인·`GET
+/admin/etl/summary` 모두 200이었지만 본문이 `pinvi.status=degraded`, `message="Dagster live query 연결 실패"`,
+다섯 count가 `null`이라 Manager `_validate_pinvi_etl_summary`(count는 상태와 무관하게 정수 요구)가 거부했다.
+모든 컨테이너가 healthy인 03:3xZ 이후에도 같았다.
+
+- 원인 1(코드 동일, 데이터 성장 — 지속): `_PINVI_DAGSTER_LIVE_QUERY`의 `scheduleState/sensorState { ticks(limit: 3,
+  statuses: [...]) }`에 시간 경계가 없다. Dagster 1.13.24는 이를 instigator마다
+  `SELECT … FROM job_ticks WHERE (selector_id = X OR selector_id IS NULL AND job_origin_id = Y) AND status IN (…)
+  ORDER BY timestamp DESC LIMIT 3`으로 풀고, PostgreSQL은 OR 때문에 인덱스 순서 탐색 대신 그 instigator의
+  **전체** tick을 Bitmap Heap Scan으로 읽고 top-N 정렬한다(리뷰 EXPLAIN: `job_ticks` 406,018행, 가장 큰
+  instigator 33,990 tick, 추정 33,601행 읽기). 공유 `dagster_shared`의 `job_ticks`는 10-06 03:00Z(공통 Dagster
+  live)부터 하루 1.2k → 58k건(Map 29.5k·PinVi 10.1k·ktc 9.3k·transport 6.3k; 387k건이 sensor SKIPPED, 7일 보존이라
+  404k행/480 MB 정상 상태)으로 늘었다. 같은 문서를 n150에서 직접 보내면 15–37초 뒤 HTTP 500
+  `psycopg2.errors.QueryCanceled … statement timeout`(webserver `--db-statement-timeout` 기본 15초)이고, PinVi의
+  2초 probe timeout은 그보다 먼저 `httpx.ReadTimeout`을 받아 `except (httpx.HTTPError, ValueError)` → "연결 실패"로
+  보고했다. 10-05 pair가 통과한 것은 `job_ticks`가 ~5k행이었을 때다(`git diff 0058369c origin/main --
+  apps/api/app/services/admin_etl.py` 비어 있음). `timestamp > after`를 주면 planner가 `(selector_id, timestamp)`
+  인덱스 범위를 쓴다: 1시간 창 heap 블록 190개/1.3 ms, 34k-tick instigator의 2일 창 8,199개/146 ms.
+- 원인 2(시점 — t1013d 스모크 시각에 겹침): webserver 로그에서 PinVi location이 03:12:15 LOCATION_ERROR →
+  03:13:39 UPDATED → 03:13:57 ERROR(`127.0.0.1:12803 Connection refused`) → 03:14:44 UPDATED로 흔들렸다.
+  `pinvi-dagster-code-server-latest`는 03:13:33 created / 03:14:36 started, `pinvi-api-latest`는 03:13:21 created /
+  03:14:35 started — 둘 다 두 번 기동됐고, 스모크 GET 03:13:47은 그 사이였다. Manager는
+  `_wait_shared_plane_locations`로 location이 `RepositoryLocation`이 될 때까지 기다리지만(300초 cap) 그 뒤의
+  흔들림은 보지 않는다. 흔들리는 동안 `repositoryOrError`는 `RepositoryLocationNotFound`/`PythonError`라
+  "Dagster repository 조회 실패"(count null)가 되어 C6c에 똑같이 terminal이다. 이 PR은 이 모드를 닫지 않는다 —
+  Manager `_retry_safe_smoke_get`의 not-ready 판정(현재 503 `FEATURE_SERVICE_UNAVAILABLE` envelope만)을
+  200/`pinvi.status != ok`(repository·시간 초과 메시지)로 넓히는 것이 그쪽 후속이다(`docs/resume.md`).
+- 수정(`apps/api/app/services/admin_etl.py`): query 변수 `$scheduleTicksAfter`·`$sensorTicksAfter`(`Float!`)를
+  두 `ticks` 선택의 `afterTimestamp`로 실어 읽는 양을 테이블 크기가 아니라 창 안의 tick 수에 비례시킨다. 창은
+  `PINVI_DAGSTER_SCHEDULE_TICK_WINDOW_SECONDS = 172_800`(가장 긴 cron 주기 일 1회의 2배)·
+  `PINVI_DAGSTER_SENSOR_TICK_WINDOW_SECONDS = 3_600`(최소 간격 30/60초의 60배)이고
+  `_pinvi_dagster_live_variables()`가 호출 시각에서 뺀다. `last_tick`의 뜻은 "창 안의 최신 tick"이 된다 — 창보다
+  오래 멈춘 schedule/sensor는 `null`(`AdminDagster{Schedule,Sensor}Summary.last_tick`은 이미 nullable, 공통 UI는
+  `?? null`, Manager 검증기는 `last_tick`을 보지 않는다; 스키마 description은 일부러 손대지 않아 PinVi OpenAPI
+  바이트가 그대로다 — 계약 문구가 낡은 것은 의도). `httpx.TimeoutException`은 "Dagster live query 시간 초과"로,
+  바깥 전체 예산의 `TimeoutError`는 "Dagster probe 전체 예산 초과"(down)로 따로 이름 붙였다(이번 장애가 "연결
+  실패"로 보여 원인 추적이 돌았다; common `bounded_request`는 자기 전체 상한을 `httpx.ReadTimeout`으로 바꿔
+  올리므로 바깥 예산만 builtin `TimeoutError`다). **첫 시도가 시간 초과면 남은 예산으로 한 번 재시도한다**
+  (`_post_pinvi_dagster_live_query`): 끊긴 첫 시도도 webserver·PostgreSQL은 끝까지 실행해 storage 페이지를
+  데우므로 두 번째는 남은 예산 안에 끝날 수 있다(아래 실측 7.96초 → 0.21초). `PINVI_DAGSTER_PROBE_TIMEOUT_SECONDS`
+  는 2.0 그대로다(한때 5.0으로 올렸다가 리뷰에서 되돌림 — 표본 하나로 올린 상수였고, server_info + 재시도까지가
+  전체 예산 10초 = Manager 스모크 GET timeout 10초를 다 쓸 수 있다). PinVi OpenAPI 모양·Map API·Manager는 바꾸지
+  않는다(재vendor 불필요).
+- 테스트(수정 전 빨강 → 후 초록을 실제 확인, `afterTimestamp`만 빼는 변이에서도 빨강):
+  `apps/api/tests/unit/test_admin_etl_dagster_probe.py` — MockTransport로 잡은 `/graphql` 본문에서 모든 `ticks(`
+  선택이 `afterTimestamp: $변수`를 싣고 그 값이 호출 전후 시각 − 창 안에 드는지(`test_every_tick_selection_is_
+  bounded_to_a_recent_window`), 두 번 모두 시간 초과면 "시간 초과"(`/server_info`, `/graphql`, `/graphql` 순),
+  첫 시도만 시간 초과면 같은 본문으로 한 번 더 보내 ok가 되고 재시도의 read timeout이 남은 예산 이하인지, 예산이
+  없으면 재시도하지 않는지, 바깥 예산 초과가 "전체 예산 초과"인지. `apps/etl/tests/test_admin_probe_graphql_
+  schema.py`(dagster 1.13.24 lock 환경) — 창을 이 location의 정의에 묶는다(schedule: cron 연속 실행 간격 최대값
+  × 2 ≤ 창, `dagster._utils.schedules.cron_string_iterator`; sensor: `minimum_interval_seconds` 최대값 × 10 ≤ 창),
+  그리고 `pinvi.etl.definitions`를 in-process code location으로 실은 ephemeral instance에 문서를 실제 실행해
+  storage `get_ticks`가 instigator 13개(schedule 7 + sensor 6)마다 창 안의 `after`를 받는지 단언한다(query
+  문자열이 아니라 SQL 효과에 결박; 약 20초, dagster 비공개 경로 import는 docstring에 적어 두었다). CI `etl`
+  워크플로는 이미 `admin_etl.py` 변경에 트리거된다.
+- 게이트: api(`~/pinvi-fix-1-api`, Python 3.12, `pip install -e ".[dev]"`) `ruff check`·`ruff format --check`
+  (448 files)·`mypy --strict app`(247 files) 통과, `pytest tests/unit` 1534 passed / 1 failed —
+  `test_vendored_snapshot_matches_live_kor_travel_map`는 형제 체크아웃 `/mnt/f/dev/kor-travel-map`이 main `c4d17343`
+  이 아니라 브랜치 `fix/admin-ui-ops-review-polish`(`0213b02e0`)에 있어 vendored 스냅샷과 어긋난 것이며 CI에는
+  형제 체크아웃이 없다. etl(`uv.lock` 동일 venv: dagster 1.13.24·common `73e3ff8b`) `ruff check`·`pytest tests`
+  통과(이 파일 5건 ~43초, 그중 storage 효과 테스트 ~20초).
+- n150 실측(읽기 전용, `docker exec pinvi-api-latest python -`로 새 문서를 `127.0.0.1:11002/graphql`에 전송):
+  04:11Z(iowait 21–28 %) 60초 client 1.921/0.123/0.148초, PinVi 운영 경로(`bounded_request` 2.0/10.0초)
+  0.164/0.183/0.191초; 리뷰 재측정 07:47Z(load 11.5–14.7, iowait 61–65 %) tick 절반 첫 호출 7.955초 → 0.214/0.286초,
+  07:50Z `runsOrError` 절반(시간 경계 없음) 16.291초 → HTTP 500(statement timeout) → 7.333초, 07:52Z 새 문서 warm
+  0.162/0.157/0.118초. 모두 수정 전 같은 자리 15–37초/500. 창은 **읽는 행 수**의 상한이지 벽시계 상한이 아니다 —
+  cold cache + iowait에서는 재시도가 있어도 10초 예산 안을 보장하지 못하며, 재구축 스모크는 정확히 그 상태(location
+  대기 직후, 4시간 동안 `/admin/etl/summary` 호출 0건)에서 돈다. 재시도 경로 실측은 `docs/resume.md`의 커밋 시점
+  기록을 본다.
+- 그대로 둔 것(별도 과제): `/admin/provider-sync` 502(`FEATURE_SERVICE_BAD_GATEWAY`, Map dataset grid 투영,
+  `provider_sync.py:74-84`)와 `kor_travel_map.status=degraded/dagster_status=unavailable`은 이 원인과 다르다 —
+  **이 PR만으로 pair를 회전·재구축하지 않는다**(C6c는 `pinvi_provider_sync`에서 선다). 502는 다른 세션이 형제
+  worktree `pinvi-fix-2`(브랜치 `fix/ops-grid-refresh-policy-provider-dataset-id`, `kor_travel_map_ops_projection.py`)
+  에서 고치는 중이다. Map `c4d17343`의 `packages/kor-travel-map-api/src/kortravelmap/api/dagster_query_service.py:
+  56,73`은 같은 `ticks(limit: 3, statuses: [...])`(statuses 있음, afterTimestamp 없음)라 같은 instigator별
+  `get_ticks` 무경계 경로다 — Map 측 수정은 `openapi.json`을 건드리지 않으므로 PinVi 재vendor 없이 같은 pair에
+  실린다. Manager 검증기가 200/degraded를 실패로 보는 것은 Dagster 건강 게이트 역할이라 유지하되 기록만 남긴다.
+  `job_ticks` 자체의 성장(Map 15–30초 sensor가 절반, 보존 `skipped: 7일`)은 Manager `config/dagster-shared/
+  dagster.yaml`·테넌트 측 조정 사안이고 Dagster UI 자체의 Overview 페이지는 같은 무경계 조회를 한다.
+  `PINVI_ETL_SCHEDULES`(정적 5건)·`PINVI_ETL_SENSORS`(빈 목록)는 정의(schedule 7·sensor 6)보다 낡았다 —
+  `docs/tasks.md` T-374로 뺐다. `runsOrError` 절반은 여전히 시간 경계가 없다(`RunsFilter.createdAfter`가 있지만
+  이번 범위 밖).
+
 ## 2026-10-13 (claude) — Map admin OpenAPI 재vendor: Map main `c4d17343`(#1314; admin 바이트 변경은 #1312/ADR-108 `f81611dc`) — M05 회전 preflight 거부 해소
 
 브랜치 `chore/revendor-map-admin-c4d17343`. Map `c4d17343e976fec38196438ad45480fc0cbd9e57` + PinVi

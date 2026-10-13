@@ -19,6 +19,32 @@ ADR 포인터(`agent-guide.md`·`CLAUDE.md`)를 074/다음 075로 동기화했�
 - 선행 권장(이 PR 범위 밖): `docs/decisions.md`가 약 263 KB다 — 읽기 도구·검토 부담을 줄이기 위해 다음 ADR(075)을 쓰기 전에 Manager와 같은 모양으로 ADR-001~040을 `docs/decisions-archive-01.md`로 분리하고 상단에 인덱스를
   둔다(doc-only). `journal.md`(약 0.93 MB)·`resume.md`(약 0.47 MB)도 2026-07 이전 분리 대상.
 
+## 2026-10-13 (claude) — `/admin/etl/summary` 상시 degraded 수정: tick 조회 창 (브랜치 `fix/admin-etl-dagster-ticks-window`, T-373)
+
+C6c `pinvi_etl_summary` 스모크가 서던 원인은 공유 `job_ticks`(404k행) 위의 무경계 `ticks(limit: 3)` 조회가
+webserver statement timeout(15초)과 PinVi probe timeout(2초)을 넘긴 것이다. 두 `ticks` 선택에 `afterTimestamp`
+창(schedule 2일·sensor 1시간, ETL 정의에 테스트로 결박)을 싣고, 시간 초과를 "시간 초과"/"전체 예산 초과"로
+이름 붙였으며, 첫 시도가 시간 초과면 남은 예산(10초)으로 한 번 재시도한다. n150 warm 0.12–0.19초(이전
+15–37초/500), cold + iowait 61–65 %에서는 첫 호출 7.96초. 상세는 `docs/journal.md`.
+
+- 다음 한 작업: 커밋·푸시는 됐고 PR은 머지 직전에만 연다(CI green 후 squash 머지, 소유자 지시 시).
+  **이 PR만으로 pair를 회전·재구축하지 않는다** — C6c는 같은 루프의 `pinvi_provider_sync`(`/admin/provider-sync`
+  502 `FEATURE_SERVICE_BAD_GATEWAY`, Map dataset grid 투영 `provider_sync.py:74-84`)에서 선다. 순서:
+  1. 502는 형제 브랜치 `fix/ops-grid-refresh-policy-provider-dataset-id`(worktree `pinvi-fix-2`, PinVi 투영
+     `kor_travel_map_ops_projection.py`)가 고친다 — Map 변경·재vendor 없음. 둘 다 머지한 PinVi sha 하나를 쓴다.
+     `kor_travel_map.dagster_status=unavailable`은 Map `c4d17343` `dagster_query_service.py:56,73`의 같은 무경계
+     `ticks(limit: 3, statuses: [...])`가 원인으로 보인다 — Map 측 창 수정은 `openapi.json`을 건드리지 않으므로
+     PinVi 재vendor 없이 Map sha만 바뀐다(C6c 검증기는 Map Dagster 상태를 요구하지 않으니 pair 회전을 막지는 않는다).
+  2. Manager `_retry_safe_smoke_get`의 not-ready 판정을 200/`pinvi.status != ok`(repository 조회 실패·시간 초과
+     메시지)까지 180초 readiness 예산 안에서 넓힌다 — t1013d에서 location이 LOADED → ERROR → LOADED로 흔들린
+     03:13:39–03:14:44 사이에 스모크가 들어갔고, cold cache 첫 호출(7.96초/16.3초 실측)도 같은 모양으로 떨어진다.
+     `~/install-mgr.sh <sha>` → rebind.
+  3. 그 뒤 pair 하나를 회전해 재구축 한 번 — C6c 세 검사(`pinvi_etl_summary`·`pinvi_provider_sync`·나머지)가
+     모두 green이어야 수용이고, 이 PR의 몫은 그 중 `pinvi_etl_summary`의 `pinvi.status=ok`·정수 count다.
+  회전 전에 n150에서 재시도 경로(첫 시도 2초 → 남은 예산 재시도)를 **부하가 있는 cold 상태에서 세 번 이상**
+  읽기 전용으로 측정한다(`docker exec pinvi-api-latest python -`, 운영 상수 그대로). 재시도가 cold에서도 10초
+  안에 못 들면 2번(Manager 판정)이 필수가 된다. 커밋 시점 측정: 08:16Z(swap 4.3 GB 사용, iowait 55–69 %) 첫 시도의 2초 ReadTimeout이 호스트 정지로 10초 예산이 다 지난 뒤에야 올라와 재시도 예산이 0이었다(운영 코드의 `remaining <= 0` 가드가 그대로 "시간 초과"로 보고하는 경우) — 즉 cold + 정지 상태에서 재시도가 구해 주는 것은 아직 실측되지 않았고, 2번이 필수일 가능성이 높다. 08:17:49Z(load 11.2, iowait 33 %, warm) server_info 0.04초 + 새 문서 0.282/0.128/0.103초, 모두 200·errors 없음·sensor tick 18건.
+
 ## 2026-10-13 (claude) — Map admin OpenAPI 재vendor `c4d17343` (브랜치 `chore/revendor-map-admin-c4d17343`)
 
 Map #1312(ADR-108)의 admin description 3건 변경으로 M05 pair 회전 preflight가 거부됐다. admin 스냅샷·단일 핀·
