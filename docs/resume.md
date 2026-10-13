@@ -45,6 +45,30 @@ webserver statement timeout(15초)과 PinVi probe timeout(2초)을 넘긴 것이
   읽기 전용으로 측정한다(`docker exec pinvi-api-latest python -`, 운영 상수 그대로). 재시도가 cold에서도 10초
   안에 못 들면 2번(Manager 판정)이 필수가 된다. 커밋 시점 측정: 08:16Z(swap 4.3 GB 사용, iowait 55–69 %) 첫 시도의 2초 ReadTimeout이 호스트 정지로 10초 예산이 다 지난 뒤에야 올라와 재시도 예산이 0이었다(운영 코드의 `remaining <= 0` 가드가 그대로 "시간 초과"로 보고하는 경우) — 즉 cold + 정지 상태에서 재시도가 구해 주는 것은 아직 실측되지 않았고, 2번이 필수일 가능성이 높다. 08:17:49Z(load 11.2, iowait 33 %, warm) server_info 0.04초 + 새 문서 0.282/0.128/0.103초, 모두 200·errors 없음·sensor tick 18건.
 
+## 2026-10-13 (claude) — `/admin/provider-sync` 502 수정 (브랜치 `fix/ops-grid-refresh-policy-provider-dataset-id`)
+
+Map #1312 migration 405가 첫 refresh policy 행을 심자 PinVi `_RefreshPolicy`(`extra="forbid"`)가 Map #966(`9bbb74d99`,
+2026-08-11, ADR-088)이 required로 추가한 `provider_dataset_id`를 거부해 grid 75행 전체가 502였고 Manager C6c 스모크가
+빨갰다 — 모델은 #387 시점 Map과 같았고 그 뒤 재vendor(#443/#574/#579)가 모델을 따라가지 않은 것이다(게이트가 producer
+방향만 검사). 필드를 스냅샷대로 추가하고(optional·nullable provider/dataset_key 포함), 계약 오류를 만들어지는 자리에서
+loc·규칙 문구와 함께 로그하며, 소비 스키마 34쌍의 property/enum/nullability 반대 방향 게이트와 prod 실응답 픽스처
+(provider-sync·etl summary)를 넣었다. Map 변경·재vendor 없음. 상세는 `docs/journal.md`.
+
+- 다음 한 작업(의존 순서 — 적대 리뷰 B HIGH1 반영):
+  1. 이 브랜치 CI green → squash 머지(소유자 지시 시). CI unit job이 빨가면 main의 기지 환경 실패 4건
+     (`test_api_image_provenance`·`test_backup_service` hotswap·`test_m05_legacy_rebaseline_receipt`·
+     `test_m05_restore_drill`)과 대조한다.
+  2. 머지 sha의 prod 효과는 **chain17 없이** 확인한다 — 격리 스택(live301 레시피) 또는 수동
+     `curl 127.0.0.1:12801/admin/provider-sync`(로그인 쿠키) 200·total=75.
+  3. 과제 1(`/admin/etl/summary` pinvi.status=degraded, "Dagster live query 연결 실패", 카운트 None이 200으로 와서
+     Manager `_validate_pinvi_etl_summary`가 거부 — 재시도 없음)을 PinVi에서 고친다. **그 전의 chain17 pair 재구축은
+     known-red**: 설치된 Manager ba35401a 스모크는 etl_summary → provider-sync 순이라 첫 단계에서 멈추고, `_deploy_forward`는
+     스모크 뒤에야 pinvi-web/pinvi-dagster를 재생성하므로 pinvi-web이 0058369c에 남는다.
+  4. 과제 1 fix 포함 PinVi sha + Map `c4d17343` pair를 chain17로 전진 → C6c `pinvi_etl_summary`·`pinvi_provider_sync` 통과와
+     pinvi-web 재생성을 확인한다.
+  그 전까지 prod `/admin/provider-sync`는 모든 요청이 502다(policy 행 삭제로 우회하지 말 것 — ADR-108 SLA 무력화).
+  열린 소유자 결정: `_CanonicalModel.extra` forbid 유지 vs ignore 전환(journal 결정 기록).
+
 ## 2026-10-13 (claude) — Map admin OpenAPI 재vendor `c4d17343` (브랜치 `chore/revendor-map-admin-c4d17343`)
 
 Map #1312(ADR-108)의 admin description 3건 변경으로 M05 pair 회전 preflight가 거부됐다. admin 스냅샷·단일 핀·

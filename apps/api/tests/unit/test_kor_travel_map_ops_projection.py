@@ -200,6 +200,105 @@ def _dataset_grid() -> dict[str, object]:
     }
 
 
+def _dataset_row_with_refresh_policy() -> dict[str, object]:
+    """prod Map `/v1/ops/datasets` items[68] (2026-10-13, MOIS bulk) — Map #1312 migration
+    405가 심은 첫 non-null refresh_policy 행. 비밀 없음, 값 그대로."""
+
+    return {
+        "provider_dataset_id": 30,
+        "provider": "python-mois-api",
+        "dataset_key": "mois_license_features_bulk",
+        "detail_url": (
+            "/v1/ops/datasets/30?sync_scope=dataset_wide"
+            "&operation_key=feature_place_mois_licenses_job"
+        ),
+        "sync_scope": "dataset_wide",
+        "operation_key": "feature_place_mois_licenses_job",
+        "status": "never_run",
+        "last_success_at": None,
+        "last_failure_at": None,
+        "consecutive_failures": 0,
+        "eligible_after": None,
+        "freshness": {
+            "state": "never_run",
+            "basis": "policy_stale_after",
+            "sla_seconds": 3456000,
+            "due_at": None,
+            "is_overdue": False,
+            "overdue_by_seconds": 0,
+        },
+        "schedule": {
+            "source": "dagster_graphql",
+            "basis": "dagster_operation_key_tag",
+            "status": "STOPPED",
+            "schedule_names": ["feature_place_mois_licenses_monthly_schedule"],
+            "active_schedule_names": [],
+            "next_scheduled_at": None,
+        },
+        "latest_execution": None,
+        "active_execution": None,
+        "catalog_state": "canonical",
+        "orphan_reason": None,
+        "mutable": True,
+        "catalog": {
+            "feature_kind": "place",
+            "provider_state_default_scope": "dataset_wide",
+            "label": "MOIS 지방행정 인허가 bulk (영업중, PROMOTED 42업종)",
+            "is_active": True,
+            "is_refreshable": True,
+            "scope_refresh": {
+                "supported": False,
+                "selector": "none",
+                "effect": "dataset_wide",
+                "default_sync_scope": "dataset_wide",
+                "allowed_sync_scopes": [],
+                "reason": "이 dataset은 전체 dataset 단위로만 갱신합니다.",
+            },
+            "preview": {
+                "supported": False,
+                "sources": [],
+                "input_kind": "none",
+                "default_max_items": 20,
+                "max_items_limit": 100,
+                "timeout_seconds": 5.0,
+                "external_call_budget": 0,
+            },
+        },
+        "refresh_policy": {
+            "provider_dataset_id": 30,
+            "provider": "python-mois-api",
+            "dataset_key": "mois_license_features_bulk",
+            "source_kind": "filedata",
+            "targeted_policy": "follow_system",
+            "system_interval_seconds": None,
+            "optimal_interval_seconds": None,
+            "min_interval_seconds": None,
+            "stale_after_minutes": 57600,
+            "max_requests_per_minute": None,
+            "max_requests_per_hour": None,
+            "max_requests_per_day": None,
+            "max_concurrent": 1,
+            "burst_size": None,
+            "rate_limit_source": {},
+            "config_source": "db",
+            "enabled": True,
+            "revision": "1",
+            "created_at": "2026-10-13T03:12:49.431161Z",
+            "updated_at": "2026-10-13T03:12:49.431161Z",
+        },
+        "dataset_issues": {"open_count": 0, "severity_counts": {}},
+    }
+
+
+def _dataset_grid_with_refresh_policy() -> dict[str, object]:
+    return {
+        "items": [_dataset_row_with_refresh_policy()],
+        "schedule_source_status": "ok",
+        "schedule_source_errors": [],
+        "execution_coverage": "db_recorded_canonical_operations",
+    }
+
+
 def _cancellation() -> dict[str, object]:
     return {
         "cancellation_id": CANCELLATION_ID,
@@ -465,6 +564,75 @@ def test_dataset_grid_keeps_rate_limit_and_schedule_times_separate() -> None:
     assert records[0].sync_scope == "dataset_wide"
     assert records[0].eligible_after.isoformat() == "2026-07-18T01:00:00+09:00"
     assert records[0].schedule_next_scheduled_at.isoformat() == "2026-07-19T03:30:00+09:00"
+
+
+def test_dataset_grid_projects_refresh_policy_record_with_provider_dataset_id() -> None:
+    # 2026-10-13 prod: Map migration 405가 첫 policy 행을 심자 한 행의 거부가 75행 전체
+    # grid를 502로 만들었다. `provider_dataset_id`는 Map #966(9bbb74d99, 2026-08-11, ADR-088)이
+    # required로 추가한 필드인데 PinVi 모델이 재vendor 때 따라가지 않았다 — 그대로 통과해야 한다.
+    snapshot = project_dataset_grid_snapshot(_dataset_grid_with_refresh_policy())
+
+    assert len(snapshot.items) == 1
+    record = snapshot.items[0]
+    assert record.provider_dataset_id == 30
+    assert record.refresh_policy is not None
+    assert record.refresh_policy["provider_dataset_id"] == 30
+    assert record.refresh_policy["stale_after_minutes"] == 57600
+    assert record.refresh_policy["revision"] == "1"
+
+
+def test_dataset_grid_accepts_refresh_policy_without_join_identity() -> None:
+    # Map 계약은 policy의 provider/dataset_key를 nullable(join 표시용)로 선언한다.
+    data = _dataset_grid_with_refresh_policy()
+    row = data["items"][0]  # type: ignore[index]
+    assert isinstance(row, dict)
+    row["refresh_policy"]["provider"] = None  # type: ignore[index]
+    row["refresh_policy"]["dataset_key"] = None  # type: ignore[index]
+
+    record = project_dataset_grid(data)[0]
+    assert record.refresh_policy is not None
+    assert record.refresh_policy["provider"] is None
+    assert record.refresh_policy["provider_dataset_id"] == 30
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("provider_dataset_id", 31),
+        ("provider", "kma"),
+        ("dataset_key", "special_days"),
+    ],
+)
+def test_dataset_grid_rejects_refresh_policy_identity_drift(field: str, value: object) -> None:
+    data = _dataset_grid_with_refresh_policy()
+    row = data["items"][0]  # type: ignore[index]
+    assert isinstance(row, dict)
+    row["refresh_policy"][field] = value  # type: ignore[index]
+
+    # identity 규칙 자체에 결박한다 — extra_forbidden 등 다른 계약 오류도 "dataset grid"로
+    # 시작하므로 label만 보면 규칙이 빠져도 초록이다.
+    with pytest.raises(
+        KorTravelMapOpsContractError,
+        match=r"value_error at items\.0 \(refresh policy identity must match the dataset row\)",
+    ):
+        project_dataset_grid(data)
+
+
+def test_dataset_grid_contract_error_names_location_without_input() -> None:
+    # 어느 필드가 어긋났는지는 남기고(prod 로그에 원문이 없어 진단이 막혔다),
+    # 응답 입력값은 메시지에 싣지 않는다.
+    data = _dataset_grid_with_refresh_policy()
+    row = data["items"][0]  # type: ignore[index]
+    assert isinstance(row, dict)
+    row["refresh_policy"]["future_field"] = "value-that-must-not-leak"  # type: ignore[index]
+
+    with pytest.raises(KorTravelMapOpsContractError) as excinfo:
+        project_dataset_grid(data)
+
+    message = str(excinfo.value)
+    assert message.startswith("dataset grid contract mismatch: ")
+    assert "extra_forbidden at items.0.refresh_policy.future_field" in message
+    assert "value-that-must-not-leak" not in message
 
 
 def test_dataset_grid_catalog_only_row_preserves_required_null_operation_key() -> None:

@@ -13,6 +13,11 @@
 > 근거를 남긴다. `kor-travel-map` 저장소 `docs/tasks-done.md`에도 별도로
 > **line 577에 미해결 git merge conflict marker(`|||||||`, commit `ae547dead7`,
 > 2026-08-31)가 그대로 커밋돼 있다** — Pinvi가 고칠 파일이 아니라 여기 기록만 남긴다.
+- [/] T-VN-OPS-GRID-REFRESH-POLICY — `/admin/provider-sync` 502(Map `ProviderRefreshPolicyRecord.provider_dataset_id`
+  미수용) 수정. 소유자 claude, 브랜치 `fix/ops-grid-refresh-policy-provider-dataset-id`, 충돌 회피 범위
+  `apps/api/app/services/kor_travel_map_ops_projection.py`·`apps/api/tests/unit/test_kor_travel_map_ops_{projection,contract}.py`·
+  `apps/api/tests/integration/test_admin_etl_provider_sync_api.py`. chain17 pair 전진은 과제 1(`/admin/etl/summary`
+  degraded) 뒤 — 그 전 재구축은 Manager C6c `pinvi_etl_summary`에서 known-red(`docs/resume.md`).
 - [/] T-VN-M05-EXECUTION-IDENTITY-V6 — 반복 terminal을 문서 revision/Map·PinVi source 변경으로 우회하지 않도록 Docker Manager `ktdctl`의 v5 source pinset(Map·PinVi materialization identity)은 보존하고, trusted Manager installer revision까지 포함한 v6 execution identity를 execution ledger·terminal block·public generation binding·PinVi isolated admission·activation attestation에 도입한다. Manager revision은 CLI/환경이 아니라 `.ktdm-source-revision`과 `.ktdm-release-manifest.json`의 root no-follow 대조 결과만 수용한다. v5 history/block과 v6/v8 evidence는 immutable legacy audit으로 남기고, 새 v6 execution history/block을 별도 namespace로 관리한다. 기계적 문서는 즉시 병합하며 runtime source tuple을 재결박하지 않는다. terminal raw E2E output은 M05 완주 전까지 gitignored `m05-e2e-analysis.local.md`에만 상세 forensic으로 기록하고 stage·commit·push하지 않는다.
   **⚠️ 미해소 교차 저장소 모순**: `kor-travel-map`은 `docs/tasks-done.md`에 이 정확한 ID를
   `[x]` 완료(2026-08-31, 근거: 2026-08-29~30 같은 pair `3916ebfd`/`b6af59f2` 위에서

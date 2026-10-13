@@ -152,6 +152,95 @@ n150에서 odroid 192.168.1.13으로 — 포트·URL·이름 동일, 호스트�
   `docs/tasks.md` T-374로 뺐다. `runsOrError` 절반은 여전히 시간 경계가 없다(`RunsFilter.createdAfter`가 있지만
   이번 범위 밖).
 
+## 2026-10-13 (claude) — `/admin/provider-sync` 502: dataset grid 투영이 Map `ProviderRefreshPolicyRecord.provider_dataset_id`를 거부 (브랜치 `fix/ops-grid-refresh-policy-provider-dataset-id`)
+
+t1013d 재구축(Map `c4d17343` + PinVi `97f2baf2`, Manager `ba35401a`) `_deploy_forward`의 Manager C6c
+`run_pinvi_canonical_smoke`가 `/admin/provider-sync` → 502 `FEATURE_SERVICE_BAD_GATEWAY`("kor_travel_map dataset grid
+형식이 올바르지 않습니다")로 빨갰다. pinvi-api 로그에는 원문 예외가 없었다.
+
+- 원인(PinVi, persistent — **재vendor가 모델을 따라가지 않았다**): `apps/api/app/services/kor_travel_map_ops_projection.py`
+  `_RefreshPolicy`(`_CanonicalModel`, `extra="forbid"`)에 `provider_dataset_id` 필드가 없다. 이 필드는 Map **#966
+  `9bbb74d99`(2026-08-11, ADR-088, breaking `!`)**가 `ProviderRefreshPolicyRecord`에 required로 추가하면서
+  `provider`/`dataset_key`를 required `str`에서 join 표시용 nullable·optional 필드로 바꾼 것이다 — 파일 생성
+  `c30edc90c`(2026-06-13)에는 없었고(`git log c4d17343 -S provider_dataset_id -- provider_refresh_schema.py`는 9bbb74d99
+  하나), PinVi `_RefreshPolicy`는 #387(`1b833ce8`, 2026-07-18)에서 그 시점 Map과 정확히 같게 만들어졌다. 이후 재vendor
+  #443(2026-08-19, 삼중항 identity)·#574(2026-10-02)·#579(2026-10-13)가 스냅샷 바이트는 갱신했지만 이 모델은 한 번도
+  따라가지 않았다 — 계약 게이트 `_REQUIRED_FIELDS`가 producer 방향(스키마 ⊇ PinVi가 읽는 필드)만 검사해서다. prod
+  `ops.provider_refresh_policies`에 행이 없어 grid의 `refresh_policy`가 늘 null이라 잠복했고, Map #1312(ADR-108) migration
+  `405_mois_freshness_sla`가 2026-10-13T03:12:49Z 배포 중 MOIS bulk(`provider_dataset_id=30`)에 첫 policy 행
+  (`stale_after_minutes=57600`)을 INSERT하자 items[68]이 `extra_forbidden loc=('items', 68, 'refresh_policy',
+  'provider_dataset_id')`로 거부됐다 — 한 행이 75행 grid 전체를 502로 만든다. Map 응답은 자기 OpenAPI와 같으므로 Map
+  `c4d17343` 결함·계약 변경이 아니고 재vendor도 필요 없다(스냅샷 핀 `54dbc8b1…` 불변). 교훈: 재vendor 절차에
+  consumer 방향 게이트가 있어야 하고, ADR-088류 breaking 변경에는 consumer 체크리스트가 필요하다.
+- 수정(코드 1 파일 `kor_travel_map_ops_projection.py`): `_RefreshPolicy`에 `provider_dataset_id: int = Field(ge=1)` 추가,
+  `provider`/`dataset_key`는 스냅샷 required 목록대로 `str | None = None`. `_DatasetGridRow`의 기존 policy identity 검사에
+  `provider_dataset_id` 일치를 넣고 provider/dataset_key는 값이 있을 때만 비교한다(새 규칙 추가 아님). `_contract_error`는
+  ValidationError를 버리지 않고 `type at loc` 요약(`value_error`는 이 모듈의 규칙 문구 포함; 입력값·URL·ctx 제외, 최대
+  5건)을 메시지에 싣고 **만들어지는 자리에서 `logger.warning` 한 줄**을 남긴다 — provider-sync·etl summary·pipeline
+  detail·cancel 네 호출자가 모두 같은 로그를 얻는다(라우터별 로그는 두지 않았다). 502 응답 본문·
+  `AdminProviderDatasetSummary.refresh_policy` passthrough(web 미소비)·PinVi OpenAPI는 그대로. etl summary의
+  `_safe_error_message`는 120자 cap이라 loc이 둘 이상이면 summary `errors`에서는 잘려 보인다 — 전체는 로그에 있다.
+- 테스트(효과 결박, 수정 전 빨강 확인): prod `/v1/ops/datasets` items[68] 실응답(비밀 없음)을
+  `test_kor_travel_map_ops_projection.py` `_dataset_row_with_refresh_policy()`와
+  `test_admin_etl_provider_sync_api.py` `_provider_item_with_refresh_policy()`/`_PolicyOpsClient`로 그대로 넣었다 — 기존
+  픽스처는 둘 다 `refresh_policy: None`뿐이라 이 경로를 한 번도 밟지 않았다. 투영 성공·`provider_dataset_id==30` 보존,
+  nullable provider/dataset_key 수용, identity drift 3종을 **규칙 문구**(`value_error at items.0 (refresh policy identity
+  must match the dataset row)`)로 거부(label만 보면 다른 계약 오류와 구분이 안 된다), 오류 메시지에 loc은 있고 입력값은
+  없음, `/admin/provider-sync` 200에 policy 포함, `/admin/etl/summary`도 같은 픽스처로 `provider_dataset_count==2`·
+  `kor_travel_map.errors`에 contract mismatch 없음. `test_kor_travel_map_ops_contract.py`에 **반대 방향 게이트**
+  `test_consumed_model_accepts_every_snapshot_property`: `_CanonicalModel`을 쓰는 소비 스키마 **34쌍 전부**(dataset grid·
+  pipeline overview/executions/detail·cancellation·Dagster 요약·PageMeta)에 대해 스냅샷 property ⊆ 모델 필드, 스냅샷
+  enum/const ⊆ 모델 Literal, 스냅샷 nullable ⇒ 모델 nullable을 고정한다 — 이름만 같고 enum member나 nullability가 바뀐
+  드리프트(9bbb74d99가 provider/dataset_key에 한 것이 정확히 이것)도 다음 재vendor 때 CI에서 먼저 빨개진다. `extra`
+  단언은 두지 않았다(아래 결정 기록).
+- 검증(n150 격리 스크래치 `~/ci-scratch/pinvi-fix-2`, 97f2baf2 fresh clone + 패치, 일회용 `python:3.12`,
+  `--cpus 1 --memory 3g`, prod 컨테이너·핀·DB 무접촉; **GitHub CI가 머지 게이트**):
+  - 수정 전(97f2baf2 + 첫 cut 테스트 패치만): unit `4 failed, 262 passed` — 새 투영 테스트 3건 + 반대 방향 게이트는
+    `ProviderRefreshPolicyRecord-_RefreshPolicy` 1건만 빨강(나머지 12개 스키마 초록); integration
+    `test_admin_provider_sync_projects_refresh_policy_record`가 prod와 같은 502 `FEATURE_SERVICE_BAD_GATEWAY` 본문으로
+    빨강(`1 failed, 32 passed`).
+  - 수정 후(리뷰 반영본, 2026-10-13 08:09~08:46Z): `ruff check .` 통과, `ruff format --check .` 통과, `mypy --strict app`
+    247 files 통과; unit `test_kor_travel_map_ops_{projection,contract}.py` **287 passed**(반대 방향 게이트 34쌍 전부
+    enum/nullability 포함 초록); integration `test_admin_etl_provider_sync_api.py` **33 passed**(9분 35초, testcontainers
+    잔존 0); **full `pytest tests/unit`** `5 failed, 1557 passed, 9 skipped` — 실패 5건은 기지 환경 4건(아래) +
+    `test_m05_activation_receipt::test_m05_signer_seals_checked_evidence_and_settings_accepts_it`. 다섯째는 main
+    기록의 "1 error" 모듈(import 시 `git rev-parse`가 root 컨테이너의 dubious ownership으로 죽음)이 `safe.directory`로
+    수집된 것이고, **패치 없는 97f2baf2에서도 같은 1건이 같은 사유로 실패**(`1 failed, 4 passed`)한다 — 환경이지
+    회귀가 아니다. 이 변경이 닿는 모듈의 실패는 0.
+  - CI 전체(unit·integration 4-shard·web/mobile/etl·contract-pin-consistency)는 CI만이 돌린다. main의 기지 환경 실패 4건
+    = `test_api_image_provenance` 1, `test_backup_service` hotswap 1, `test_m05_legacy_rebaseline_receipt` 1,
+    `test_m05_restore_drill` 1(2026-10 journal 기록) — CI unit job이 빨가면 이 집합과 대조하고 스크래치 수치만으로
+    머지하지 않는다.
+  - prod 읽기 전용 사전 검증: `docker exec -i pinvi-api-latest python -c`로 패치된 모듈 소스를 실행(컨테이너 파일
+    무변경)해 저장해 둔 prod `/v1/ops/datasets` 응답(75행)을 넣으면 배포본 모듈은 `dataset grid contract mismatch`,
+    패치본은 75행 반환·items[provider_dataset_id=30].refresh_policy.provider_dataset_id==30·stale_after_minutes 57600.
+- cold-start·운영 수치(n150 읽기 전용 실측): Map code-server `kor-travel-map-dagster-code-server-latest` Created
+  03:13:04.843Z → StartedAt 03:14:36.022Z(**92 s**); 웹서버 `127.0.0.1:12703 Connection refused` 창 03:12:10.958Z~
+  03:13:58.400Z(**108 s**). Manager readiness 재시도 예산은 최대 6×(10 s timeout + 1 s) ≈ **66 s**이고 refused/timeout/
+  503-readiness에만 적용된다 — 창이 예산보다 길다. 그래도 provider-sync 경로는 그 창에서 200이다: Map grid는 Dagster
+  실패 시 `schedule_source_status=unavailable/error`로 degrade하고(`ops_dataset_schedule.py`
+  `load_dataset_schedule_index`, c4d17343), PinVi `_DatasetsGridData`와 Manager `_validate_pinvi_provider_sync`가 그
+  집합을 받는다. grid 지연 1.6 s cold / 0.08 s warm(75행, policy 1행) vs PinVi `pinvi_kor_travel_map_timeout_seconds`
+  5 s×3회, Manager 10 s. 이 PR은 timeout·retry 값을 바꾸지 않으며 cold-start에 민감한 단계는 provider-sync가 아니라
+  etl_summary다.
+- 배포 의존성(적대 리뷰 HIGH): 설치된 Manager ba35401a의 `run_pinvi_canonical_smoke`는 `pinvi_etl_summary` →
+  `pinvi_provider_sync` 순으로 돌고 첫 실패에서 raise하며, `_deploy_forward`는 스모크 **뒤에야** `pinvi_web`/`pinvi_dagster`를
+  재생성한다. 과제 1(`/admin/etl/summary` pinvi.status=degraded·카운트 None — 200이라 재시도 없음, 검증기 거부)이
+  PinVi에서 고쳐지기 전에는 이 PR만으로 chain17 pair 재구축은 같은 `C6c pinvi_etl_summary` 단계에서 다시 빨갛고 pinvi-web은
+  0058369c에 남는다(known-red). 이 PR의 prod 효과는 머지 뒤 격리 스택 또는 수동 curl로 확인하고, chain17 전진은 과제 1 뒤다.
+- 결정 기록(소유자, 열림): `_CanonicalModel.extra="forbid"`(#387의 canonical exact 설계 — `_DatasetPreviewCapability`가
+  `Literal[20]`·`timeout 5.0`까지 값으로 고정)는 이 PR에서 바꾸지 않았다. `docs/integrations/kor-travel-map-rest-api.md`
+  "의도적 비대상"(consumer는 exact property 집합·additionalProperties를 고정하지 않는다)과 memory
+  consumer-no-contract-pinning은 `extra="ignore"` 쪽이고, 그러면 이번처럼 OpenAPI 바이트 변경 없이 데이터만 non-null이
+  되는 경로도 막힌다. 반대로 forbid는 34개 모델 전체의 설계라 바꾸면 cancel typed-failure 판정(`_CancellationError`/
+  `_CancellationRoot`)까지 함께 봐야 한다. 그래서 테스트는 `extra`를 단언하지 않는다(어느 쪽으로 정해도 반대 방향 게이트는
+  그대로 선다) — 전환은 소유자 결정 뒤 별도 PR.
+- 적대 리뷰 반영: A-MED1/B-HIGH2(원인 연대 정정 — journal·resume·테스트 주석), B-HIGH1(배포 의존성·resume 재작성),
+  B-MED1(cold-start 수치), B-MED2(enum/nullability 게이트), B-MED3(CI 환경 실패 4건 명명·full unit 실행), A-MED2/B-LOW1
+  (`extra=="forbid"` 단언 제거), A-LOW3(provider/dataset_key 기본값), A-LOW4(34쌍), A-LOW5/6/7(규칙 문구·생성 자리 로그·
+  drift match), A-LOW8(summary 테스트), B-LOW2(tasks.md), B-LOW3(120자 cap). 기각 없음 — 단 A-MED2 (b) `extra="ignore"`
+  전환은 위 결정 기록대로 보류. PR은 열지 않았다(커밋·푸시만).
+
 ## 2026-10-13 (claude) — Map admin OpenAPI 재vendor: Map main `c4d17343`(#1314; admin 바이트 변경은 #1312/ADR-108 `f81611dc`) — M05 회전 preflight 거부 해소
 
 브랜치 `chore/revendor-map-admin-c4d17343`. Map `c4d17343e976fec38196438ad45480fc0cbd9e57` + PinVi

@@ -371,6 +371,96 @@ def _provider_item() -> dict[str, Any]:
     }
 
 
+def _provider_item_with_refresh_policy() -> dict[str, Any]:
+    """prod Map `/v1/ops/datasets` items[68] (2026-10-13, MOIS bulk): Map migration 405가
+    심은 첫 non-null refresh_policy 행. 비밀 없음, 값 그대로."""
+
+    return {
+        "provider_dataset_id": 30,
+        "provider": "python-mois-api",
+        "dataset_key": "mois_license_features_bulk",
+        "sync_scope": "dataset_wide",
+        "operation_key": "feature_place_mois_licenses_job",
+        "status": "never_run",
+        "last_success_at": None,
+        "last_failure_at": None,
+        "consecutive_failures": 0,
+        "eligible_after": None,
+        "detail_url": (
+            "/v1/ops/datasets/30?sync_scope=dataset_wide"
+            "&operation_key=feature_place_mois_licenses_job"
+        ),
+        "freshness": {
+            "state": "never_run",
+            "basis": "policy_stale_after",
+            "sla_seconds": 3456000,
+            "due_at": None,
+            "is_overdue": False,
+            "overdue_by_seconds": 0,
+        },
+        "schedule": {
+            "source": "dagster_graphql",
+            "basis": "dagster_operation_key_tag",
+            "status": "STOPPED",
+            "schedule_names": ["feature_place_mois_licenses_monthly_schedule"],
+            "active_schedule_names": [],
+            "next_scheduled_at": None,
+        },
+        "latest_execution": None,
+        "active_execution": None,
+        "catalog_state": "canonical",
+        "orphan_reason": None,
+        "mutable": True,
+        "catalog": {
+            "feature_kind": "place",
+            "provider_state_default_scope": "dataset_wide",
+            "label": "MOIS 지방행정 인허가 bulk (영업중, PROMOTED 42업종)",
+            "is_active": True,
+            "is_refreshable": True,
+            "scope_refresh": {
+                "supported": False,
+                "selector": "none",
+                "effect": "dataset_wide",
+                "default_sync_scope": "dataset_wide",
+                "allowed_sync_scopes": [],
+                "reason": "이 dataset은 전체 dataset 단위로만 갱신합니다.",
+            },
+            "preview": {
+                "supported": False,
+                "sources": [],
+                "input_kind": "none",
+                "default_max_items": 20,
+                "max_items_limit": 100,
+                "timeout_seconds": 5.0,
+                "external_call_budget": 0,
+            },
+        },
+        "refresh_policy": {
+            "provider_dataset_id": 30,
+            "provider": "python-mois-api",
+            "dataset_key": "mois_license_features_bulk",
+            "source_kind": "filedata",
+            "targeted_policy": "follow_system",
+            "system_interval_seconds": None,
+            "optimal_interval_seconds": None,
+            "min_interval_seconds": None,
+            "stale_after_minutes": 57600,
+            "max_requests_per_minute": None,
+            "max_requests_per_hour": None,
+            "max_requests_per_day": None,
+            "max_concurrent": 1,
+            "burst_size": None,
+            "rate_limit_source": {},
+            "config_source": "db",
+            "enabled": True,
+            "revision": "1",
+            "created_at": "2026-10-13T03:12:49.431161Z",
+            "updated_at": "2026-10-13T03:12:49.431161Z",
+        },
+        "dataset_issues": {"open_count": 0, "severity_counts": {}},
+    }
+
+
 def _import_job() -> dict[str, Any]:
     return {
         "id": "11111111-1111-4111-8111-111111111111",
@@ -729,6 +819,16 @@ def _clear() -> None:
     app.dependency_overrides.pop(get_kor_travel_map_admin_client, None)
 
 
+class _PolicyOpsClient(_FakeOpsClient):
+    """`_FakeOpsClient`는 refresh_policy=None만 낸다 — prod의 첫 non-null policy 행(2026-10-13)을
+    같이 낸다."""
+
+    async def list_ops_datasets(self) -> dict[str, Any]:
+        data = await super().list_ops_datasets()
+        data["items"] = [_provider_item(), _provider_item_with_refresh_policy()]
+        return data
+
+
 async def test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops(
     client: Any,
     session_factory: Any,
@@ -789,7 +889,9 @@ async def test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops(
     await _seed_email_queue(session_factory)
     await _seed_telegram_outbox(session_factory)
     await _seed_pii_retention_candidates(session_factory)
-    fake = _FakeOpsClient()
+    # 2026-10-13 prod: policy 행 하나가 summary의 kor_travel_map.errors에 contract mismatch를
+    # 넣고 provider_dataset_count를 비웠다 — summary 경로도 같은 픽스처로 결박한다.
+    fake = _PolicyOpsClient()
     _override(fake)
     try:
         resp = await client.get("/admin/etl/summary", cookies=auth_cookies(str(admin_id)))
@@ -879,7 +981,10 @@ async def test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops(
     assert data["kor_travel_map"]["operations_by_status"]["running"] == 1
     assert data["kor_travel_map"]["active_operations"] == 1
     assert data["kor_travel_map"]["failed_operations_24h"] == 0
-    assert data["kor_travel_map"]["provider_dataset_count"] == 1
+    assert data["kor_travel_map"]["provider_dataset_count"] == 2
+    assert not [
+        message for message in data["kor_travel_map"]["errors"] if "contract mismatch" in message
+    ], data["kor_travel_map"]["errors"]
     assert data["kor_travel_map"]["recent_import_jobs"][0]["status"] == "running"
     assert data["kor_travel_map"]["recent_import_jobs"][0]["progress"] == 1
     assert (
@@ -979,6 +1084,32 @@ async def test_admin_provider_sync_proxies_key_filter(
     assert data["items"][0]["dataset_key"] == "special_days"
     assert data["items"][0]["eligible_after"] == "2026-06-13T03:30:00+09:00"
     assert data["items"][0]["schedule_next_scheduled_at"] == "2026-06-14T03:30:00+09:00"
+
+
+async def test_admin_provider_sync_projects_refresh_policy_record(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+) -> None:
+    # 2026-10-13 prod: Map migration 405가 첫 policy 행을 심자 `/admin/provider-sync`가
+    # 모든 요청에 502(FEATURE_SERVICE_BAD_GATEWAY)였다. 기존 fake는 refresh_policy=None만 내서
+    # 이 경로를 한 번도 밟지 않았다.
+    admin_id = await _create_user(
+        session_factory, email="admin-provider-policy@example.com", roles=["user", "operator"]
+    )
+    _override(_PolicyOpsClient())
+    try:
+        resp = await client.get("/admin/provider-sync", cookies=auth_cookies(str(admin_id)))
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["total"] == 2
+    by_id = {item["provider_dataset_id"]: item for item in data["items"]}
+    assert by_id[41]["refresh_policy"] is None
+    assert by_id[30]["refresh_policy"]["provider_dataset_id"] == 30
+    assert by_id[30]["refresh_policy"]["stale_after_minutes"] == 57600
 
 
 async def test_admin_provider_import_jobs_proxies_filters_and_cursor(

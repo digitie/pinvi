@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, Self
@@ -16,6 +17,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from pydantic_core import ErrorDetails
 
 from app.schemas.admin import (
     AdminProviderCancellationSummary,
@@ -59,6 +61,9 @@ def _is_canonical_sync_scope(value: str) -> bool:
         and external_system == external_system.strip()
         and len(external_system) <= 112
     )
+
+
+logger = logging.getLogger(__name__)
 
 
 class KorTravelMapOpsContractError(ValueError):
@@ -353,8 +358,11 @@ class _DatasetCatalog(_CanonicalModel):
 
 
 class _RefreshPolicy(_CanonicalModel):
-    provider: str
-    dataset_key: str
+    # Map `ProviderRefreshPolicyRecord`(Map 9bbb74d99, ADR-088): provider_dataset_id만 required,
+    # provider/dataset_key는 provider_datasets join으로 채우는 표시용 optional·nullable 필드다.
+    provider_dataset_id: int = Field(ge=1)
+    provider: str | None = None
+    dataset_key: str | None = None
     source_kind: str
     targeted_policy: str
     system_interval_seconds: int | None = None
@@ -475,8 +483,9 @@ class _DatasetGridRow(_CanonicalModel):
         if self.detail_url != expected_detail_url:
             raise ValueError("dataset detail_url must match the exact row identity")
         if self.refresh_policy is not None and (
-            self.refresh_policy.provider != self.provider
-            or self.refresh_policy.dataset_key != self.dataset_key
+            self.refresh_policy.provider_dataset_id != self.provider_dataset_id
+            or self.refresh_policy.provider not in (None, self.provider)
+            or self.refresh_policy.dataset_key not in (None, self.dataset_key)
         ):
             raise ValueError("refresh policy identity must match the dataset row")
         if self.catalog_state == "canonical" and (
@@ -1264,8 +1273,39 @@ class ProjectedDatasetGrid:
     schedule_source_errors: list[str]
 
 
-def _contract_error(label: str, _exc: ValidationError) -> KorTravelMapOpsContractError:
-    return KorTravelMapOpsContractError(f"{label} contract mismatch")
+_CONTRACT_ERROR_LOCATION_LIMIT = 5
+
+
+def _describe_validation_error(error: ErrorDetails) -> str:
+    location = ".".join(str(part) for part in error["loc"])
+    if error["type"] != "value_error":
+        return f"{error['type']} at {location}"
+    # model/field validator의 ValueError 문구는 이 모듈이 쓴 상수라 입력값이 없다 — 어느
+    # 규칙이 걸렸는지 구분하려면 이것이 필요하다.
+    rule = error["msg"].removeprefix("Value error, ")
+    return f"value_error at {location} ({rule})"
+
+
+def _contract_error(label: str, exc: ValidationError) -> KorTravelMapOpsContractError:
+    """어느 필드가 계약과 어긋났는지 남긴다 — 입력값은 싣지 않는다(응답 원문·토큰 보호).
+
+    2026-10-13 prod에서 이 예외가 502로만 보이고 로그에 원문이 없어 진단이 막혔다. 그래서
+    만들어지는 자리에서 한 번 로그한다 — 모든 호출자(provider-sync·etl summary·pipeline
+    detail·cancel)가 같은 한 줄을 남긴다.
+    """
+
+    locations = sorted(
+        {
+            _describe_validation_error(error)
+            for error in exc.errors(include_url=False, include_context=False, include_input=False)
+        }
+    )
+    shown = locations[:_CONTRACT_ERROR_LOCATION_LIMIT]
+    if len(locations) > len(shown):
+        shown.append(f"+{len(locations) - len(shown)} more")
+    message = f"{label} contract mismatch: {'; '.join(shown)}"
+    logger.warning("kor_travel_map %s", message)
+    return KorTravelMapOpsContractError(message)
 
 
 def pipeline_executions_canonical_url(
