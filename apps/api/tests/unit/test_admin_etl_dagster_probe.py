@@ -247,6 +247,143 @@ async def test_pinvi_dagster_probe_scopes_repository_and_runs_to_the_pinvi_locat
     assert variables["runLimit"] == admin_etl.PINVI_DAGSTER_RECENT_RUN_LIMIT
 
 
+async def test_every_tick_selection_is_bounded_to_a_recent_window() -> None:
+    """`ticks(limit: N)`에 `afterTimestamp`가 없으면 Dagster는 instigator의 **전체** tick 이력을
+    읽고 정렬한 뒤 N건만 남긴다 — 공유 `job_ticks`가 커지자 webserver statement timeout(15초)과
+    probe timeout(당시 2초)을 모두 넘겨 summary가 항상 degraded였다(2026-10-13). 모든 tick 선택은
+    창 변수를 실어야 하고, 그 값은 호출 시각에서 창만큼 뺀 epoch여야 한다.
+    """
+    seen: list[httpx.Request] = []
+    started = time.time()
+    async with _client(
+        {
+            "/server_info": httpx.Response(200, json={"dagster_version": "1.13.24"}),
+            "/graphql": httpx.Response(200, json=_graphql_payload()),
+        },
+        seen,
+    ) as client:
+        await admin_etl._fetch_pinvi_dagster_snapshot(
+            client,
+            base_url="http://dagster.test",
+            start=0.0,
+            checked_at=datetime.now(UTC),
+        )
+    finished = time.time()
+
+    (graphql_request,) = [req for req in seen if req.url.path == "/graphql"]
+    body = json.loads(graphql_request.content)
+    query, variables = body["query"], body["variables"]
+    windows = {
+        "scheduleState": admin_etl.PINVI_DAGSTER_SCHEDULE_TICK_WINDOW_SECONDS,
+        "sensorState": admin_etl.PINVI_DAGSTER_SENSOR_TICK_WINDOW_SECONDS,
+    }
+    selections = re.findall(r"(scheduleState|sensorState)\s*\{\s*status\s*ticks\(([^)]*)\)", query)
+    assert {state for state, _ in selections} == set(windows)
+    assert query.count("ticks(") == len(selections), "창 없는 tick 선택이 남아 있다"
+    for state, arguments in selections:
+        reference = re.search(r"afterTimestamp:\s*\$(\w+)", arguments)
+        assert reference is not None, f"{state}의 ticks에 afterTimestamp 변수가 없다: {arguments}"
+        value = variables[reference.group(1)]
+        assert isinstance(value, float)
+        assert started - windows[state] <= value <= finished - windows[state]
+
+
+async def test_live_query_timeout_is_reported_as_a_timeout() -> None:
+    """2026-10-13의 statement timeout은 '연결 실패'로 보였다 — 시간 초과는 따로 이름 붙인다.
+
+    재시도 한 번까지 넘기면(두 번 모두 시간 초과) 그제야 degraded다.
+    """
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.url.path == "/server_info":
+            return httpx.Response(200, json={"dagster_version": "1.13.24"})
+        raise httpx.ReadTimeout("fixture", request=request)
+
+    async with httpx.AsyncClient(
+        base_url="http://dagster.test", transport=httpx.MockTransport(handler)
+    ) as client:
+        result = await admin_etl._fetch_pinvi_dagster_snapshot(
+            client,
+            base_url="http://dagster.test",
+            start=0.0,
+            checked_at=datetime.now(UTC),
+            deadline=time.perf_counter() + 10.0,
+        )
+
+    assert [req.url.path for req in seen] == ["/server_info", "/graphql", "/graphql"]
+    assert result.status == "degraded"
+    assert result.message == "Dagster live query 시간 초과"
+    assert result.dagster_version == "1.13.24"
+    assert result.job_count is None
+
+
+async def test_a_timed_out_live_query_is_retried_once_within_the_remaining_budget() -> None:
+    """cold cache에서 끊긴 첫 시도가 storage 페이지를 데우므로(n150 7.96초 → 0.21초) 남은 예산으로
+    한 번 더 보낸다. 재시도의 소켓·전체 상한은 남은 예산이고, 변수는 첫 시도와 같다.
+    """
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.url.path == "/server_info":
+            return httpx.Response(200, json={"dagster_version": "1.13.24"})
+        if len([req for req in seen if req.url.path == "/graphql"]) == 1:
+            raise httpx.ReadTimeout("fixture", request=request)
+        return httpx.Response(200, json=_graphql_payload())
+
+    budget = 10.0
+    started = time.perf_counter()
+    async with httpx.AsyncClient(
+        base_url="http://dagster.test",
+        transport=httpx.MockTransport(handler),
+        timeout=admin_etl.PINVI_DAGSTER_PROBE_TIMEOUT_SECONDS,
+    ) as client:
+        result = await admin_etl._fetch_pinvi_dagster_snapshot(
+            client,
+            base_url="http://dagster.test",
+            start=started,
+            checked_at=datetime.now(UTC),
+            deadline=started + budget,
+        )
+    elapsed = time.perf_counter() - started
+
+    assert result.status == "ok", result.message
+    assert result.job_count == 2
+    first, second = [req for req in seen if req.url.path == "/graphql"]
+    assert json.loads(first.content) == json.loads(second.content)
+    retry_timeout = second.extensions["timeout"]
+    assert 0 < retry_timeout["read"] <= budget - elapsed + 0.5
+    assert first.extensions["timeout"]["read"] == admin_etl.PINVI_DAGSTER_PROBE_TIMEOUT_SECONDS
+
+
+async def test_a_timed_out_live_query_is_not_retried_without_budget() -> None:
+    """예산이 남지 않았으면 재시도 없이 첫 시간 초과를 그대로 보고한다."""
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.url.path == "/server_info":
+            return httpx.Response(200, json={"dagster_version": "1.13.24"})
+        raise httpx.ReadTimeout("fixture", request=request)
+
+    async with httpx.AsyncClient(
+        base_url="http://dagster.test", transport=httpx.MockTransport(handler)
+    ) as client:
+        result = await admin_etl._fetch_pinvi_dagster_snapshot(
+            client,
+            base_url="http://dagster.test",
+            start=0.0,
+            checked_at=datetime.now(UTC),
+            deadline=time.perf_counter(),
+        )
+
+    assert [req.url.path for req in seen] == ["/server_info", "/graphql"]
+    assert result.status == "degraded"
+    assert result.message == "Dagster live query 시간 초과"
+
+
 async def test_pinvi_dagster_probe_degrades_when_the_pinvi_location_is_absent() -> None:
     """공유 webserver에 PinVi location이 아직 없으면 다른 테넌트로 채우지 않고 degraded다."""
     payload = _graphql_payload()
@@ -465,6 +602,9 @@ async def test_probe_disposes_client_with_separate_budget_and_preserves_cancel(
     else:
         result = await task
         assert result.status == ("ok" if outcome == "ok" else "down")
+        if outcome == "timeout":
+            # 바깥 전체 예산이 끊은 것은 연결 실패가 아니다 — 시간 초과로 이름 붙인다.
+            assert result.message == "Dagster probe 전체 예산 초과"
     assert time.perf_counter() - started < 0.2
     assert close_cancelled.is_set()
     assert client.is_closed

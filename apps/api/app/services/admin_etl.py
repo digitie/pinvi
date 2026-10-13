@@ -61,12 +61,35 @@ from app.services.kor_travel_map_ops_projection import (
 
 logger = logging.getLogger(__name__)
 
+# 요청 하나(연결·읽기)의 소켓 상한. 전체 예산은 `PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS`(10초)가
+# 따로 막고, live query는 첫 시도가 시간 초과면 남은 예산으로 한 번 더 보낸다
+# (`_post_pinvi_dagster_live_query`). server_info + live query 두 번이 예산 10초를 다 쓸 수 있으며
+# Manager C6c 스모크의 GET timeout도 10초다 — 두 probe를 동시에 돌리지 않는 한 더 올리지 않는다.
 PINVI_DAGSTER_PROBE_TIMEOUT_SECONDS = 2.0
 PINVI_DAGSTER_RECENT_RUN_LIMIT = 30
 PINVI_DAGSTER_ACTIVE_RUN_LIMIT = 1000
 PINVI_DAGSTER_RESPONSE_LIMIT = 4 * 1024 * 1024
 PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS = 10.0
 PINVI_DAGSTER_CLOSE_TIMEOUT_SECONDS = 0.05
+
+# `last_tick` 조회 창. Dagster의 `ticks(limit: N)`은 `afterTimestamp`가 없으면 그 instigator의
+# **전체** tick 이력을 읽고 정렬한 뒤 N건만 남긴다(`job_ticks`의 `selector_id IS NULL` OR 조건이
+# 인덱스 순서 탐색을 막는다). 공유 `dagster_shared`에서 `job_ticks`는 하루 ~58k건씩 쌓여
+# instigator 하나가 heap 블록 18k개를 읽었고, webserver의 statement timeout 15초와 PinVi의
+# probe timeout(2초)을 모두 넘겨 `/admin/etl/summary`가 항상 degraded였다(2026-10-13 C6c 실패).
+# 창을 두면 **읽는 행 수**가 테이블 크기와 무관하게 창 안의 tick 수에 비례한다(n150 EXPLAIN:
+# 1시간 창 heap 블록 190개/1.3 ms, 2일 창 8,199개/146 ms). 벽시계 시간은 그래도 cold cache와 호스트
+# iowait에 따른다 — n150 2026-10-13 실측: 04:11Z(iowait 21-28 %) 새 문서 첫 호출 1.92초 → 0.12초,
+# 07:47Z(load 11.5-14.7, iowait 61-65 %) tick 절반 첫 호출 7.96초 → 0.21초, 07:50Z `runsOrError`
+# 절반(시간 경계 없음) 16.3초 → HTTP 500. 그래서 첫 시도의 시간 초과는 한 번 재시도한다(위 참고).
+#   schedule: 가장 긴 cron 주기(일 1회)의 2배 — 하루 한 번 도는 schedule도 tick 하나는 창 안에 든다.
+#   sensor: 최소 간격 30/60초의 60배 — daemon이 잠시 멈춰도 창이 비지 않는다.
+# 창은 ETL 정의에 묶인다(`apps/etl/tests/test_admin_probe_graphql_schema.py`). 창 밖의 tick은
+# `last_tick=null`이다 — 창보다 오래 멈춘 schedule/sensor는 "최근 tick 없음"으로 보인다.
+# 대안으로 검토한 `dayRange`(서버가 now - N일을 계산, 변수·시계 불필요)는 하루 단위라 30초 sensor에
+# ~2,880 tick을 읽게 돼 버렸다 — 1시간 창이 실질적으로 더 좁아 명시 변수를 택했다.
+PINVI_DAGSTER_SCHEDULE_TICK_WINDOW_SECONDS = 172_800  # 2일
+PINVI_DAGSTER_SENSOR_TICK_WINDOW_SECONDS = 3_600  # 1시간
 
 # PinVi Dagster 조회는 **PinVi code location 하나로만** 좁힌다. 공유 Dagster plane
 # (webserver 하나가 Map·geo·weather 등의 code location을 함께 싣는다)에서
@@ -205,6 +228,8 @@ query PinviDagsterLive(
   $runLimit: Int!
   $activeRunsFilter: RunsFilter
   $activeRunLimit: Int!
+  $scheduleTicksAfter: Float!
+  $sensorTicksAfter: Float!
 ) {
   version
   repositoryOrError(repositorySelector: $repositorySelector) {
@@ -218,11 +243,17 @@ query PinviDagsterLive(
         pipelineName
         cronSchedule
         executionTimezone
-        scheduleState { status ticks(limit: 3, statuses: [STARTED, SKIPPED, SUCCESS, FAILURE]) { status timestamp } }
+        scheduleState {
+          status
+          ticks(limit: 3, statuses: [STARTED, SKIPPED, SUCCESS, FAILURE], afterTimestamp: $scheduleTicksAfter) { status timestamp }
+        }
       }
       sensors {
         name
-        sensorState { status ticks(limit: 3, statuses: [STARTED, SKIPPED, SUCCESS, FAILURE]) { status timestamp } }
+        sensorState {
+          status
+          ticks(limit: 3, statuses: [STARTED, SKIPPED, SUCCESS, FAILURE], afterTimestamp: $sensorTicksAfter) { status timestamp }
+        }
       }
       assetNodes { groupName }
     }
@@ -266,9 +297,12 @@ query PinviDagsterLive(
 
 
 def _pinvi_dagster_live_variables() -> dict[str, Any]:
-    """PinVi code location으로 좁힌 live query 변수."""
+    """PinVi code location으로 좁힌 live query 변수. tick 창은 호출 시각 기준이다."""
     location_name = settings.pinvi_dagster_location_name
+    now = time.time()
     return {
+        "scheduleTicksAfter": now - PINVI_DAGSTER_SCHEDULE_TICK_WINDOW_SECONDS,
+        "sensorTicksAfter": now - PINVI_DAGSTER_SENSOR_TICK_WINDOW_SECONDS,
         "repositorySelector": {
             "repositoryLocationName": location_name,
             "repositoryName": PINVI_DAGSTER_REPOSITORY_NAME,
@@ -571,6 +605,8 @@ async def _bounded_dagster_request(
     client: httpx.AsyncClient,
     method: str,
     url: str,
+    *,
+    total_timeout_seconds: float = PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS,
     **kwargs: Any,
 ) -> httpx.Response:
     """전송 상한은 common을 사용하고 PinVi의 JSON 객체 계약은 유지한다."""
@@ -579,7 +615,7 @@ async def _bounded_dagster_request(
         method,
         url,
         max_response_bytes=PINVI_DAGSTER_RESPONSE_LIMIT,
-        total_timeout_seconds=PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS,
+        total_timeout_seconds=total_timeout_seconds,
         **kwargs,
     )
     if 200 <= result.status_code < 400:
@@ -608,8 +644,18 @@ async def _probe_pinvi_dagster() -> _PinviDagsterProbeResult:
                 base_url=base_url.rstrip("/"),
                 start=start,
                 checked_at=checked_at,
+                deadline=start + PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS,
             )
-    except (httpx.HTTPError, TimeoutError, ValueError):
+    except TimeoutError:
+        # 바깥 전체 예산이 먼저 끊은 경우(요청별 상한은 common이 `httpx.ReadTimeout`으로 바꿔
+        # 아래 `_fetch_pinvi_dagster_snapshot`이 "시간 초과"로 이름 붙인다).
+        return _PinviDagsterProbeResult(
+            status="down",
+            message="Dagster probe 전체 예산 초과",
+            latency_ms=_elapsed_ms(start),
+            checked_at=checked_at,
+        )
+    except (httpx.HTTPError, ValueError):
         return _PinviDagsterProbeResult(
             status="down",
             message="Dagster 연결 실패",
@@ -654,13 +700,39 @@ def _valid_pinvi_repository(raw: Any) -> bool:
     return True
 
 
+async def _post_pinvi_dagster_live_query(
+    client: httpx.AsyncClient, base_url: str, *, deadline: float
+) -> httpx.Response:
+    """live query를 보낸다. 첫 시도가 시간 초과면 남은 예산(`deadline`까지)으로 한 번 더 보낸다.
+
+    끊긴 첫 시도도 webserver·PostgreSQL은 끝까지 실행해 storage 페이지를 데운다 — n150 cold
+    cache(iowait 61-65 %)에서 같은 문서가 7.96초 → 0.21초였다(2026-10-13 07:47Z). 재시도는 같은
+    변수를 다시 보내며 소켓·전체 상한을 모두 남은 예산으로 둔다. 예산이 없으면 첫 예외를 그대로
+    올린다. 재시도는 한 번뿐이다 — 두 번째도 넘기면 cache 문제가 아니라 조회 자체가 무거운 것이다.
+    """
+    url = f"{base_url}/graphql"
+    body = {"query": _PINVI_DAGSTER_LIVE_QUERY, "variables": _pinvi_dagster_live_variables()}
+    try:
+        return await _bounded_dagster_request(client, "POST", url, json=body)
+    except httpx.TimeoutException:
+        remaining = deadline - time.perf_counter()
+        if remaining <= 0:
+            raise
+        return await _bounded_dagster_request(
+            client, "POST", url, json=body, timeout=remaining, total_timeout_seconds=remaining
+        )
+
+
 async def _fetch_pinvi_dagster_snapshot(
     client: httpx.AsyncClient,
     *,
     base_url: str,
     start: float,
     checked_at: datetime,
+    deadline: float | None = None,
 ) -> _PinviDagsterProbeResult:
+    if deadline is None:
+        deadline = time.perf_counter() + PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS
     server_response = await _bounded_dagster_request(client, "GET", f"{base_url}/server_info")
     if not 200 <= server_response.status_code < 400:
         return _PinviDagsterProbeResult(
@@ -676,14 +748,18 @@ async def _fetch_pinvi_dagster_snapshot(
     dagster_graphql_version = _as_str(server_info.get("dagster_graphql_version"))
 
     try:
-        graph_response = await _bounded_dagster_request(
-            client,
-            "POST",
-            f"{base_url}/graphql",
-            json={
-                "query": _PINVI_DAGSTER_LIVE_QUERY,
-                "variables": _pinvi_dagster_live_variables(),
-            },
+        graph_response = await _post_pinvi_dagster_live_query(client, base_url, deadline=deadline)
+    except httpx.TimeoutException:
+        # 연결은 됐지만 webserver가 제한 안에 답하지 못했다(2026-10-13: tick 조회가 statement
+        # timeout에 걸림). 연결 실패와 구분해야 다음 장애에서 원인을 바로 찾는다.
+        return _PinviDagsterProbeResult(
+            status="degraded",
+            message="Dagster live query 시간 초과",
+            latency_ms=latency_ms,
+            checked_at=checked_at,
+            dagster_version=dagster_version,
+            dagster_webserver_version=dagster_webserver_version,
+            dagster_graphql_version=dagster_graphql_version,
         )
     except (httpx.HTTPError, ValueError):
         return _PinviDagsterProbeResult(
