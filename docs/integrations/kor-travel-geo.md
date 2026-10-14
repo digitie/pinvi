@@ -370,8 +370,14 @@ geocoding 실패가 지도/여행 핵심 흐름을 막지 않도록 **graceful d
 PINVI_KOR_TRAVEL_GEO_BASE_URL=http://localhost:12501   # 운영: http://kor-travel-geo:12501
 PINVI_KOR_TRAVEL_GEO_TIMEOUT_SECONDS=3.0
 PINVI_KOR_TRAVEL_GEO_ENABLED=true
-PINVI_VWORLD_API_KEY=                                # kor-travel-geo v2 `key` query와 모바일 token 발급 공용
+PINVI_KOR_TRAVEL_GEO_API_KEY=                        # kor-travel-geo가 발급한 공개 API key(v2 `key`)
+PINVI_VWORLD_API_KEY=                                # 모바일 token 발급; geo key 미설정 시 geo `key` fallback
 ```
+
+**2026-10-14 정정**: kor-travel-geo는 `ops.public_api_keys`에 활성 key가 하나라도 있으면 그 key만 받고,
+`KTG_VWORLD_API_KEY`는 그 표가 비어 있을 때의 기본 key다(`kortravelgeo/api/public_api_key.py`). 운영 geo에는
+발급 key가 있으므로 VWorld key로는 geo를 부를 수 없다 — geo 관리 화면/CLI로 PinVi 전용 key를 발급해
+`PINVI_KOR_TRAVEL_GEO_API_KEY`에 둔다. VWorld key는 브라우저·모바일에 노출되는 값이라 geo key로 등록하지 않는다.
 
 `PINVI_VWORLD_API_KEY`는 서버 전용 secret이다. 웹의 `NEXT_PUBLIC_VWORLD_API_KEY`와
 분리해 관리하고, 모바일 `/mobile/vworld/token` 발급과 `kor-travel-geo` v2 REST

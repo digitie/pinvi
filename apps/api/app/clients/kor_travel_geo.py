@@ -202,7 +202,7 @@ def create_kor_travel_geo_client(app_settings: Settings) -> KorTravelGeoClient:
     )
     return KorTravelGeoClient(
         http,
-        api_key=app_settings.pinvi_vworld_api_key,
+        api_key=app_settings.pinvi_kor_travel_geo_api_key or app_settings.pinvi_vworld_api_key,
         max_attempts=app_settings.pinvi_kor_travel_geo_max_attempts,
     )
 

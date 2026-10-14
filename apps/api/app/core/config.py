@@ -894,6 +894,10 @@ class Settings(BaseSettings):
     pinvi_kor_travel_geo_base_url: str = "http://localhost:12501"
     pinvi_kor_travel_geo_timeout_seconds: float = 5.0
     pinvi_kor_travel_geo_max_attempts: int = 3
+    # kor-travel-geo 공개 API key(v2 `key`). geo는 `ops.public_api_keys`에 등록된 활성 key만 받고,
+    # 그 표가 비어 있을 때만 `KTG_VWORLD_API_KEY`를 기본 key로 쓴다 — 운영 geo에는 발급 key가 있어
+    # VWorld key는 통과하지 못한다. 미설정 시 PINVI_VWORLD_API_KEY를 쓴다(종전 동작).
+    pinvi_kor_travel_geo_api_key: str = ""
 
     # kor-travel-weather 공개 REST (날씨, ADR-068) —
     # `docs/integrations/kor-travel-weather.md`. 공개 read는 인증 헤더가 없다.
