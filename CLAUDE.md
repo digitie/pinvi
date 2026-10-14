@@ -106,8 +106,8 @@ ADR-046 (Web 지도 클라이언트도 `maplibre-vworld-react`의 `vworld-map-we
 vendored tarball 소비로 전환, 기존 `maplibre-vworld`/`maplibre-vworld-js` 의존 삭제),
 ADR-047 (운영 도메인은 공개 repo 비노출 — gitignore `infra/.env.prod`에만 두고
 compose `--env-file`로 주입, 추적 문서는 `*.example.com` placeholder + Dagster webserver는
-12802로 고정), ADR-048 (`kor-travel-geo` v2 공개 API key는 서버 `PINVI_VWORLD_API_KEY`와
-동일하며, hash 저장/검증은 `kor-travel-geo`가 소유), ADR-049 (외부 계약 동기화 2026-06-25 —
+12802로 고정), ADR-048 (**ADR-075로 대체** — `kor-travel-geo` v2 공개 API key는 geo가 발급한
+`PINVI_KOR_TRAVEL_GEO_API_KEY`, VWorld key fallback 없음; hash 저장/검증은 `kor-travel-geo`가 소유), ADR-049 (외부 계약 동기화 2026-06-25 —
 kor-travel-map 큐레이션 import는 admin `detail-snapshot`(`plan`→`content`, 서비스 토큰),
 kor-travel-geo `/v2/regions/within-radius`는 `radius_km`+`levels[]`(`legal_dong`→`emd`) 그룹 응답),
 ADR-050 (Pinvi app-owned Dagster job 표준 — retry/backoff, idempotency, failure notification,

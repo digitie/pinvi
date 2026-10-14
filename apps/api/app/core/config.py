@@ -894,10 +894,10 @@ class Settings(BaseSettings):
     pinvi_kor_travel_geo_base_url: str = "http://localhost:12501"
     pinvi_kor_travel_geo_timeout_seconds: float = 5.0
     pinvi_kor_travel_geo_max_attempts: int = 3
-    # kor-travel-geo 공개 API key(v2 `key`). geo는 `ops.public_api_keys`에 등록된 활성 key만 받고,
-    # 그 표가 비어 있을 때만 `KTG_VWORLD_API_KEY`를 기본 key로 쓴다 — 운영 geo에는 발급 key가 있어
-    # VWorld key는 통과하지 못한다. 미설정 시 PINVI_VWORLD_API_KEY를 쓴다(종전 동작).
-    pinvi_kor_travel_geo_api_key: str = ""
+    # kor-travel-geo가 발급한 공개 API key(v2 `key`, ADR-075 — ADR-048 대체). geo는 `ops.public_api_keys`에
+    # 등록된 활성 key만 받는다. VWorld key로 fallback하지 않는다 — 그 값은 모바일·브라우저에 노출되므로
+    # geo 자격증명이 되면 안 된다. 미설정이면 geo 호출은 KorTravelGeoUnavailable(503 degrade)이다.
+    pinvi_kor_travel_geo_api_key: SecretStr | None = None
 
     # kor-travel-weather 공개 REST (날씨, ADR-068) —
     # `docs/integrations/kor-travel-weather.md`. 공개 read는 인증 헤더가 없다.
@@ -1065,6 +1065,24 @@ class Settings(BaseSettings):
     pinvi_enable_seed: bool = False
 
     @model_validator(mode="after")
+    def _validate_kor_travel_geo_api_key(self) -> Self:
+        """geo key는 VWorld key와 달라야 한다(ADR-075).
+
+        같으면 모바일·브라우저에 노출되는 VWorld key가 geo 자격증명이 된다.
+        """
+        if self.pinvi_kor_travel_geo_api_key is None:
+            return self
+        key = self.pinvi_kor_travel_geo_api_key.get_secret_value()
+        if not key:
+            # compose의 `${PINVI_KOR_TRAVEL_GEO_API_KEY:-}`는 미설정을 빈 문자열로 넘긴다 — 미설정과 같다.
+            return self
+        if any(character.isspace() for character in key):
+            raise ValueError("PINVI_KOR_TRAVEL_GEO_API_KEY must not contain whitespace")
+        if key == self.pinvi_vworld_api_key.strip():
+            raise ValueError("PINVI_KOR_TRAVEL_GEO_API_KEY must differ from PINVI_VWORLD_API_KEY")
+        return self
+
+    @model_validator(mode="after")
     def validate_restore_executor_boundary(self) -> Self:
         """운영 API에는 schema-swap 실행 권한을 주지 않는다."""
 
@@ -1186,6 +1204,9 @@ class Settings(BaseSettings):
                 self.pinvi_kor_travel_map_admin_proxy_secret.strip(),
                 self.pinvi_kor_travel_map_public_api_key.strip(),
                 self.pinvi_vworld_api_key.strip(),
+                self.pinvi_kor_travel_geo_api_key.get_secret_value()
+                if self.pinvi_kor_travel_geo_api_key is not None
+                else "",
                 self.pinvi_kor_travel_map_ops_read_token.get_secret_value()
                 if self.pinvi_kor_travel_map_ops_read_token is not None
                 else "",
@@ -1362,6 +1383,9 @@ class Settings(BaseSettings):
                 self.pinvi_kor_travel_map_admin_proxy_secret.strip(),
                 self.pinvi_kor_travel_map_public_api_key.strip(),
                 self.pinvi_vworld_api_key.strip(),
+                self.pinvi_kor_travel_geo_api_key.get_secret_value()
+                if self.pinvi_kor_travel_geo_api_key is not None
+                else "",
                 self.pinvi_kor_travel_map_ops_read_token.get_secret_value()
                 if self.pinvi_kor_travel_map_ops_read_token is not None
                 else "",

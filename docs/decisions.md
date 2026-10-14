@@ -1894,7 +1894,7 @@ web `pinvi.example.com`, api `pinvi-api.example.com`, dagster
 
 ## ADR-048: kor-travel-geo v2 공개 API key는 VWorld key와 동일하게 사용하고 저장 책임은 kor-travel-geo에 둔다
 
-- **상태**: accepted
+- **상태**: superseded by ADR-075 (2026-10-14)
 - **날짜**: 2026-06-24
 - **결정자**: 사용자 + Codex
 
@@ -2957,7 +2957,7 @@ fixture mutation 전에 fail-close할 수 있다.
 
 ## 다음 ADR 번호
 
-다음 후보는 **ADR-074**다(마지막은 ADR-073). 새 ADR은 이 절이 아니라 파일 끝에 추가한다.
+다음 후보는 **ADR-076**이다(마지막은 ADR-075). 새 ADR은 이 절이 아니라 파일 끝에 추가한다.
 
 ## ADR-062: 동의 이력은 현재 상태 테이블이 아니라 append 전용 이벤트 테이블이 갖는다
 
@@ -3892,3 +3892,34 @@ Track 2 프로그램(소유자 지시 2026-10-13)은 geo·weather·transport를 
   ADR-58 §11.1/T-OPS-01 — 2026-10-13 현재 NTP 드롭인·compose v2/buildx·방화벽·fstab bind·swapfile
   **미완**) → Manager T-MGR-01c(pinvi-api 블록 변수) → weather 플립 PR(T-MGR-06) → odroid `ensure
   weather`(6b) → n150 `ensure pinvi`(7) → 게이트 3(§8.2-2) → 전원 off drill(§8.2-3).
+
+## ADR-075: kor-travel-geo 공개 API key는 geo가 발급한 전용 key이며 VWorld key로 fallback하지 않는다 (ADR-048 대체)
+
+- **상태**: accepted
+- **날짜**: 2026-10-14
+- **결정자**: 사용자(소유자, "pinvi geo 연동해") + Claude
+- **관련**: ADR-048(superseded), ADR-043(모바일 VWorld token), ADR-074(odroid 전환)
+
+### 배경
+
+ADR-048은 geo v2 `key`를 서버 VWorld key와 같은 값으로 쓰고 geo의 `KTG_VWORLD_API_KEY`도 같은 값으로
+두기로 했다. 그러나 kor-travel-geo는 `ops.public_api_keys`에 활성 key가 하나라도 있으면 그 표의 key만
+받고, `KTG_VWORLD_API_KEY`는 그 표가 비었을 때의 기본값이다(`kortravelgeo/api/public_api_key.py`).
+운영 geo에는 Map용 발급 key가 있어 VWorld key는 거부된다. ADR-048 후속 조건("geo가 DB 생성 key만
+허용하면 재검토")이 사실상 충족된 상태였다. 동시에 VWorld key는 모바일(`/mobile/vworld/token`)·
+브라우저(`NEXT_PUBLIC_VWORLD_API_KEY`)에 노출되므로, geo에 등록하면 geo가 사실상 공개된다.
+
+### 결정
+
+1. Pinvi는 geo가 발급한 전용 key `PINVI_KOR_TRAVEL_GEO_API_KEY`(SecretStr)를 geo `key`로 보낸다.
+2. VWorld key로 fallback하지 않는다. 미설정(빈 문자열 포함)이면 geo 호출은 `KorTravelGeoUnavailable`(503 degrade).
+3. geo key가 VWorld key와 같으면 기동 검증이 거부한다. geo key는 Map trust-boundary credential 집합에도 들어가
+   cache target role token과의 재사용을 막는다.
+4. 운영 주입은 Manager compose(pinvi-api 블록)와 저장소 `infra/docker-compose.app.yml` 둘 다 명시 전달한다.
+   key 발급·hash 저장·폐기는 kor-travel-geo가 소유한다(Pinvi는 저장하지 않음).
+
+### 결과
+
+- 2026-10-14 odroid geo에서 label `pinvi-api` key 발급(hint `9SdWbI`), n150 Manager root `.env`에 저장.
+- geo 쪽 `KTG_VWORLD_API_KEY`를 Pinvi key와 맞출 필요가 없어졌다.
+
