@@ -81,7 +81,7 @@ post-v0.1.0 `Unreleased` 보강 진행 단계다. 이후 Sprint 5 (실시간 + E
 6 (MCP 외부 인터페이스 + Backup UI 핫스왑 + Korean geofencing + T108 N150 병행
 배포 + 법무 → **v1.0.0**). 릴리즈 마일스톤 표는 `docs/sprints/README.md`.
 
-ADR 현황: ADR-001 ~ **ADR-074**. 최근 박힘: ADR-024 (ADR-051로 superseded —
+ADR 현황: ADR-001 ~ **ADR-075**. 최근 박힘: ADR-024 (ADR-051로 superseded —
 과거 NTFS/WSL 미러 모델), ADR-025 (geocoding은 kor-travel-geo v2 REST 직접), ADR-026 (kor-travel-map은 OpenAPI
 HTTP 계약), **ADR-027** (그 HTTP 계약은 kor-travel-map이 신규 구축해야 할 목표 — 현재
 미존재, DEC-01=B), ADR-028 (정규 feature_id = kor_travel_map `make_feature_id`),
@@ -149,7 +149,7 @@ ADR-073 (`kor-travel-weather` 보존 요구 15일 → 7일, T-367 가드 임계 
 **ADR-074** (proposed, 미구현 — `kor-travel-weather`가 odroid 192.168.1.13으로 옮기는
 Track 2 대응: base URL은 Manager registry에서 파생한 compose 기본값을 ETL **과 pinvi-api**
 두 블록이 받는다, Pinvi 저장소에 호스트 리터럴 금지; 장애 의미 RST → 타임아웃은 T-374).
-다음 신규 = ADR-075. **TDR(Trip Detail Rewrite)** 마스터 계획 = `docs/execplan/trip-detail-rewrite.md`.
+다음 신규 = ADR-076. **TDR(Trip Detail Rewrite)** 마스터 계획 = `docs/execplan/trip-detail-rewrite.md`.
 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
 

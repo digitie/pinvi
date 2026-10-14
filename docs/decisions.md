@@ -3920,6 +3920,6 @@ ADR-048은 geo v2 `key`를 서버 VWorld key와 같은 값으로 쓰고 geo의 `
 
 ### 결과
 
-- 2026-10-14 odroid geo에서 label `pinvi-api` key 발급(hint `9SdWbI`), n150 Manager root `.env`에 저장.
+- 2026-10-14 odroid geo에서 label `pinvi-api` key를 발급해 n150 Manager root `.env`에 저장했다.
 - geo 쪽 `KTG_VWORLD_API_KEY`를 Pinvi key와 맞출 필요가 없어졌다.
 
