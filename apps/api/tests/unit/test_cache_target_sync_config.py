@@ -205,6 +205,7 @@ def test_cache_target_role_credentials_are_distinct_and_restore_recovery_optiona
     ids=(
         "explicit-public",
         "vworld-fallback",
+        "geo-key",
         "vworld-exposed",
         "admin-proxy",
         "service",
