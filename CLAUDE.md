@@ -81,7 +81,7 @@ post-v0.1.0 `Unreleased` 보강 진행 단계다. 이후 Sprint 5 (실시간 + E
 6 (MCP 외부 인터페이스 + Backup UI 핫스왑 + Korean geofencing + T108 N150 병행
 배포 + 법무 → **v1.0.0**). 릴리즈 마일스톤 표는 `docs/sprints/README.md`.
 
-ADR 현황: ADR-001 ~ **ADR-074**. 최근 박힘: ADR-024 (ADR-051로 superseded —
+ADR 현황: ADR-001 ~ **ADR-075**. 최근 박힘: ADR-024 (ADR-051로 superseded —
 과거 NTFS/WSL 미러 모델), ADR-025 (geocoding은 kor-travel-geo v2 REST 직접), ADR-026 (kor-travel-map은 OpenAPI
 HTTP 계약), **ADR-027** (그 HTTP 계약은 kor-travel-map이 신규 구축해야 할 목표 — 현재
 미존재, DEC-01=B), ADR-028 (정규 feature_id = kor_travel_map `make_feature_id`),
@@ -106,8 +106,8 @@ ADR-046 (Web 지도 클라이언트도 `maplibre-vworld-react`의 `vworld-map-we
 vendored tarball 소비로 전환, 기존 `maplibre-vworld`/`maplibre-vworld-js` 의존 삭제),
 ADR-047 (운영 도메인은 공개 repo 비노출 — gitignore `infra/.env.prod`에만 두고
 compose `--env-file`로 주입, 추적 문서는 `*.example.com` placeholder + Dagster webserver는
-12802로 고정), ADR-048 (`kor-travel-geo` v2 공개 API key는 서버 `PINVI_VWORLD_API_KEY`와
-동일하며, hash 저장/검증은 `kor-travel-geo`가 소유), ADR-049 (외부 계약 동기화 2026-06-25 —
+12802로 고정), ADR-048 (**ADR-075로 대체** — `kor-travel-geo` v2 공개 API key는 geo가 발급한
+`PINVI_KOR_TRAVEL_GEO_API_KEY`, VWorld key fallback 없음; hash 저장/검증은 `kor-travel-geo`가 소유), ADR-049 (외부 계약 동기화 2026-06-25 —
 kor-travel-map 큐레이션 import는 admin `detail-snapshot`(`plan`→`content`, 서비스 토큰),
 kor-travel-geo `/v2/regions/within-radius`는 `radius_km`+`levels[]`(`legal_dong`→`emd`) 그룹 응답),
 ADR-050 (Pinvi app-owned Dagster job 표준 — retry/backoff, idempotency, failure notification,
@@ -149,7 +149,7 @@ ADR-073 (`kor-travel-weather` 보존 요구 15일 → 7일, T-367 가드 임계 
 **ADR-074** (proposed, 미구현 — `kor-travel-weather`가 odroid 192.168.1.13으로 옮기는
 Track 2 대응: base URL은 Manager registry에서 파생한 compose 기본값을 ETL **과 pinvi-api**
 두 블록이 받는다, Pinvi 저장소에 호스트 리터럴 금지; 장애 의미 RST → 타임아웃은 T-374).
-다음 신규 = ADR-075. **TDR(Trip Detail Rewrite)** 마스터 계획 = `docs/execplan/trip-detail-rewrite.md`.
+다음 신규 = ADR-076. **TDR(Trip Detail Rewrite)** 마스터 계획 = `docs/execplan/trip-detail-rewrite.md`.
 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
 

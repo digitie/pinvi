@@ -370,13 +370,18 @@ geocoding 실패가 지도/여행 핵심 흐름을 막지 않도록 **graceful d
 PINVI_KOR_TRAVEL_GEO_BASE_URL=http://localhost:12501   # 운영: http://kor-travel-geo:12501
 PINVI_KOR_TRAVEL_GEO_TIMEOUT_SECONDS=3.0
 PINVI_KOR_TRAVEL_GEO_ENABLED=true
-PINVI_VWORLD_API_KEY=                                # kor-travel-geo v2 `key` query와 모바일 token 발급 공용
+PINVI_KOR_TRAVEL_GEO_API_KEY=                        # kor-travel-geo가 발급한 공개 API key(v2 `key`, ADR-075)
+PINVI_VWORLD_API_KEY=                                # 모바일 token 발급 전용 — geo key로 쓰지 않는다
 ```
 
+**2026-10-14 정정**: kor-travel-geo는 `ops.public_api_keys`에 활성 key가 하나라도 있으면 그 key만 받고,
+`KTG_VWORLD_API_KEY`는 그 표가 비어 있을 때의 기본 key다(`kortravelgeo/api/public_api_key.py`). 운영 geo에는
+발급 key가 있으므로 VWorld key로는 geo를 부를 수 없다 — geo 관리 화면/CLI로 PinVi 전용 key를 발급해
+`PINVI_KOR_TRAVEL_GEO_API_KEY`에 둔다(ADR-075). VWorld key는 브라우저·모바일에 노출되는 값이라 geo
+key로 등록하지 않으며, Pinvi는 VWorld key로 fallback하지 않는다(같은 값이면 기동 검증이 거부한다).
+
 `PINVI_VWORLD_API_KEY`는 서버 전용 secret이다. 웹의 `NEXT_PUBLIC_VWORLD_API_KEY`와
-분리해 관리하고, 모바일 `/mobile/vworld/token` 발급과 `kor-travel-geo` v2 REST
-`key` query에만 쓴다. 운영자는 `kor-travel-geo` 쪽 `KTG_VWORLD_API_KEY`도 같은 값으로
-설정한다. VWorld/juso 외부 fallback 실행, 공개 API key hash 저장/폐기, 포트·재시도는
+분리해 관리하고, 모바일 `/mobile/vworld/token` 발급에만 쓴다. VWorld/juso 외부 fallback 실행, 공개 API key hash 저장/폐기, 포트·재시도는
 **kor-travel-geo 서비스 설정과 DB**가 소유한다(Pinvi가 직접 저장하지 않음).
 
 ## 13. 관련 문서

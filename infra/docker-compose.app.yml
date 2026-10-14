@@ -226,6 +226,8 @@ services:
       # 전달되지 않는다.
       PINVI_API_WORKERS: ${PINVI_API_WORKERS:-1}
       PINVI_VWORLD_API_KEY: ${PINVI_VWORLD_API_KEY:-}
+      # kor-travel-geo 발급 공개 key(ADR-075). VWorld key로 fallback하지 않는다.
+      PINVI_KOR_TRAVEL_GEO_API_KEY: ${PINVI_KOR_TRAVEL_GEO_API_KEY:-}
     # ordinary API는 raw dump·restore key·Docker socket을 받지 않는다. root producer의
     # metadata-only catalog와 M05 trust/lease document만 read-only로 노출한다.
     volumes:
