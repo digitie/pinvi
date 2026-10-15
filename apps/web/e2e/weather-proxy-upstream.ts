@@ -9,7 +9,9 @@ import type { IncomingHttpHeaders, RequestOptions } from 'node:http';
 
 export type WeatherUpstream = { host: string; port: number };
 
-export function weatherUpstreamFromEnv(env: NodeJS.ProcessEnv): WeatherUpstream {
+export function weatherUpstreamFromEnv(
+  env: Readonly<Record<string, string | undefined>>,
+): WeatherUpstream {
   const host = env.PINVI_LIVE_WEATHER_UPSTREAM_HOST?.trim() || '127.0.0.1';
   const rawPort = env.PINVI_LIVE_WEATHER_UPSTREAM_PORT?.trim() || '14101';
   const port = Number(rawPort);

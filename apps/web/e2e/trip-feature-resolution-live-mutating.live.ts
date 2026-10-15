@@ -56,12 +56,7 @@ type TripViewPoi = {
   feature_id: string | null;
   title: string | null;
   feature_resolution_state:
-    | 'not_linked'
-    | 'found'
-    | 'retired'
-    | 'suppressed'
-    | 'missing'
-    | 'unverified';
+    'not_linked' | 'found' | 'retired' | 'suppressed' | 'missing' | 'unverified';
 };
 
 type TripView = {
@@ -823,9 +818,7 @@ test.describe('Trip feature resolution live mutating flow', () => {
     }
   });
 
-  test('weather는 feature batch와 완전히 독립적으로 markers/forecast를 쓴다', async ({
-    page,
-  }) => {
+  test('weather는 feature batch와 완전히 독립적으로 markers/forecast를 쓴다', async ({ page }) => {
     test.skip(
       !weatherTripViewLiveEnabled,
       'PINVI_LIVE_WEATHER_TRIP_VIEW_E2E=1 일 때만 실행합니다(T-363/T-365).',
@@ -854,7 +847,14 @@ test.describe('Trip feature resolution live mutating flow', () => {
 
       // 같은 weather feature를 여러 날에 걸쳐 넣는다 — "날짜 fanout 없음"을 증명하려면
       // 날짜가 여럿이어야 한다(location마다 forecast 1회, 날짜 수와 무관).
-      await addFeaturePoi(page, tripId, realWeatherFeature, realWeatherFeature.feature_id, 'a01', 1);
+      await addFeaturePoi(
+        page,
+        tripId,
+        realWeatherFeature,
+        realWeatherFeature.feature_id,
+        'a01',
+        1,
+      );
       for (let dayIndex = 2; dayIndex <= longTripDayCount; dayIndex += 1) {
         await addFeaturePoi(
           page,
