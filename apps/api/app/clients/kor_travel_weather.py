@@ -57,27 +57,67 @@ _NEARBY_LIMIT_MAX = 100  # 서버 스키마 상한(OpenAPI `nearby` limit maximu
 _CIRCUIT_FAILURE_THRESHOLD = 3
 _CIRCUIT_OPEN_SECONDS = 30.0
 
-# 호출자 deadline(event loop 시각). 설정돼 있으면 attempt마다 timeout을 남은 시간으로 깎는다 —
-# 그래야 연결은 받고 응답하지 않는 피호출자(read 10 s x 3회 ≈ 30.6 s)도 trip view 예산(10 s) 안에서
-# **attempt timeout**으로 끝나 회로차단 실패로 세진다. 바깥 `asyncio.timeout`의 취소는 실패로
-# 세지 않으므로(결과 없음), 이것이 없으면 trip view 트래픽만으로는 회로가 열리지 않는다.
-_call_deadline: ContextVar[float | None] = ContextVar(
-    "kor_travel_weather_call_deadline", default=None
+# 호출자 deadline(event loop 시각) — trip view가 view 예산 안에서 weather를 부를 때 건다.
+# 설정돼 있으면 attempt마다 (a) httpx 단계별 timeout을 남은 시간으로 깎고 (b) attempt 전체를
+# `asyncio.timeout(남은 시간)`으로 묶는다(본문이 찔끔찔끔 와도 deadline을 넘지 않게). 그래야 연결은
+# 받고 응답하지 않는 피호출자(read 10 s x 3회 ≈ 30.6 s)도 예산 안에서 **attempt timeout**으로 끝나
+# 회로차단 실패로 세진다 — 바깥 `asyncio.timeout`의 취소는 실패로 세지 않으므로(결과 없음), 이것이
+# 없으면 trip view 트래픽만으로는 회로가 열리지 않는다.
+#
+# 단, deadline이 깎은 timeout이 "피호출자 장애"의 증거가 되려면 attempt가 의미 있는 시간을 받았어야
+# 한다: attempt 예산이 정상 read timeout의 `_DEADLINE_MEANINGFUL_READ_FRACTION` 이상일 때만 실패로
+# 세고, 그보다 짧은 예산에서 깎인 timeout은 "호출자 예산 소진"(`KorTravelWeatherDeadlineExhausted`,
+# 회로 미집계)이다 — 느리지만 살아 있는 피호출자에서 한 view의 병렬 forecast 10개가 예산 끝에 함께
+# 끊겨 회로를 여는 일을 막는다. 또 한 deadline 범위에서 세는 실패는 **최대 1회**다.
+_DEADLINE_MEANINGFUL_READ_FRACTION = 0.5
+
+
+@dataclass(slots=True)
+class _CallScope:
+    deadline: float
+    failure_counted: bool = False
+
+
+_call_scope: ContextVar[_CallScope | None] = ContextVar(
+    "kor_travel_weather_call_scope", default=None
 )
 
 
 @contextmanager
 def kor_travel_weather_call_deadline(deadline: float) -> Iterator[None]:
-    """이 문맥(과 그 안에서 만든 task)의 weather 호출을 `deadline`(loop 시각)까지로 묶는다."""
-    token = _call_deadline.set(deadline)
+    """이 문맥(과 그 안에서 만든 task)의 weather 호출을 `deadline`(loop 시각)까지로 묶는다.
+
+    중첩되면 더 이른 deadline을 쓴다(안쪽 범위가 예산을 넓히지 못한다).
+    """
+    current = _call_scope.get()
+    effective = deadline if current is None else min(current.deadline, deadline)
+    token = _call_scope.set(_CallScope(deadline=effective))
     try:
         yield
     finally:
-        _call_deadline.reset(token)
+        _call_scope.reset(token)
 
 
 def _cap(value: float | None, remaining: float) -> float:
     return remaining if value is None else min(value, remaining)
+
+
+def _deadline_bound_timeout(
+    exc: BaseException, *, base: httpx.Timeout, applied: httpx.Timeout
+) -> bool:
+    """이 timeout이 deadline이 **깎은** 값에서 났는가(정상 timeout이었다면 False)."""
+    if isinstance(exc, TimeoutError):  # attempt 전체 `asyncio.timeout(남은 시간)`
+        return True
+    pairs: tuple[tuple[type[httpx.TimeoutException], float | None, float | None], ...] = (
+        (httpx.ConnectTimeout, applied.connect, base.connect),
+        (httpx.ReadTimeout, applied.read, base.read),
+        (httpx.WriteTimeout, applied.write, base.write),
+        (httpx.PoolTimeout, applied.pool, base.pool),
+    )
+    for kind, used, normal in pairs:
+        if isinstance(exc, kind):
+            return used is not None and (normal is None or used < normal)
+    return False
 
 
 class KorTravelWeatherError(Exception):
@@ -591,7 +631,14 @@ class KorTravelWeatherClient:
             self._circuit.release(trial=trial)
             raise
         except KorTravelWeatherUnavailable:
-            self._circuit.record_failure(trial=trial)
+            scope = _call_scope.get()
+            if scope is not None and scope.failure_counted and not trial:
+                # 한 deadline 범위(= trip view 1회)는 회로 실패를 한 번만 센다.
+                self._circuit.release(trial=trial)
+            else:
+                if scope is not None:
+                    scope.failure_counted = True
+                self._circuit.record_failure(trial=trial)
             raise
         except BaseException:
             self._circuit.release(trial=trial)
@@ -604,39 +651,65 @@ class KorTravelWeatherClient:
     ) -> httpx.Response:
         """transient(타임아웃/연결/5xx) 시 지수 백오프 재시도.
 
-        호출자 deadline(`kor_travel_weather_call_deadline`)이 있으면 attempt마다 timeout을 남은
-        시간으로 깎고, 남은 시간이 없으면 재시도를 멈춘다.
+        호출자 deadline(`kor_travel_weather_call_deadline`)이 있으면: attempt마다 timeout을 남은
+        시간으로 깎고 attempt 전체를 `asyncio.timeout`으로 묶는다; 재시도는 남은 시간이 의미 있는
+        예산(정상 read의 `_DEADLINE_MEANINGFUL_READ_FRACTION`) 이상이고 backoff보다 길 때만 한다;
+        짧은 예산에서 깎인 timeout은 `KorTravelWeatherDeadlineExhausted`(회로 미집계)다.
         """
         last: KorTravelWeatherUnavailable | None = None
         cleaned = {k: v for k, v in (params or {}).items() if v is not None}
-        deadline = _call_deadline.get()
+        scope = _call_scope.get()
+        base = self._http.timeout
+        floor = 0.0 if base.read is None else base.read * _DEADLINE_MEANINGFUL_READ_FRACTION
+        loop = asyncio.get_running_loop()
+
+        def exhausted() -> KorTravelWeatherDeadlineExhausted:
+            return KorTravelWeatherDeadlineExhausted(f"kor-travel-weather 호출자 예산 소진({path})")
+
         for attempt in range(self._max_attempts):
-            request_timeout: httpx.Timeout | None = None
-            if deadline is not None:
-                remaining = deadline - asyncio.get_running_loop().time()
-                if remaining <= 0:
+            resp: httpx.Response | None = None
+            if scope is None:
+                try:
+                    resp = await self._http.request(method, path, params=cleaned)
+                except (httpx.TimeoutException, httpx.TransportError) as exc:
+                    last = KorTravelWeatherUnavailable(
+                        f"kor-travel-weather 요청 실패({path}): {exc!r}"
+                    )
+            else:
+                remaining = scope.deadline - loop.time()
+                if remaining <= 0 or (attempt > 0 and remaining < floor):
+                    # 첫 attempt는 짧은 예산이라도 보낸다(느린 피호출자도 값을 줄 수 있다).
+                    # 재시도는 그 결과가 회로 실패로 셀 수 없는 짧은 예산이면 하지 않는다.
                     if last is None:
-                        raise KorTravelWeatherDeadlineExhausted(
-                            f"kor-travel-weather 호출자 예산 소진({path}) — 보내지 않음"
-                        )
+                        raise exhausted()
                     break
-                base = self._http.timeout
-                request_timeout = httpx.Timeout(
+                applied = httpx.Timeout(
                     connect=_cap(base.connect, remaining),
                     read=_cap(base.read, remaining),
                     write=_cap(base.write, remaining),
                     pool=_cap(base.pool, remaining),
                 )
-            try:
-                if request_timeout is None:
-                    resp = await self._http.request(method, path, params=cleaned)
-                else:
-                    resp = await self._http.request(
-                        method, path, params=cleaned, timeout=request_timeout
+                try:
+                    async with asyncio.timeout(remaining):
+                        resp = await self._http.request(
+                            method, path, params=cleaned, timeout=applied
+                        )
+                except (httpx.TimeoutException, TimeoutError) as exc:
+                    if remaining < floor and _deadline_bound_timeout(
+                        exc, base=base, applied=applied
+                    ):
+                        # 짧은 예산에서 deadline이 끊었다 — 장애 증거가 아니다. 앞선 attempt의
+                        # 진짜 실패가 있으면 그것을 남긴다.
+                        last = last if last is not None else exhausted()
+                    else:
+                        last = KorTravelWeatherUnavailable(
+                            f"kor-travel-weather 요청 실패({path}): {exc!r}"
+                        )
+                except httpx.TransportError as exc:
+                    last = KorTravelWeatherUnavailable(
+                        f"kor-travel-weather 요청 실패({path}): {exc!r}"
                     )
-            except (httpx.TimeoutException, httpx.TransportError) as exc:
-                last = KorTravelWeatherUnavailable(f"kor-travel-weather 요청 실패({path}): {exc!r}")
-            else:
+            if resp is not None:
                 if resp.status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR:
                     last = KorTravelWeatherUnavailable(
                         f"kor-travel-weather {resp.status_code} ({path})"
@@ -644,7 +717,14 @@ class KorTravelWeatherClient:
                 else:
                     return resp
             if attempt + 1 < self._max_attempts:
-                await asyncio.sleep(self._backoff_base_seconds * (2**attempt))
+                delay = self._backoff_base_seconds * (2**attempt)
+                if scope is not None and scope.deadline - loop.time() <= delay:
+                    # backoff가 deadline을 넘는다 — 자다가 바깥 취소(미집계)를 맞지 않도록
+                    # 여기서 멈추고 마지막 실패를 그대로 올린다.
+                    break
+                await asyncio.sleep(delay)
+        if isinstance(last, KorTravelWeatherDeadlineExhausted):
+            raise last
         logger.warning("kor_travel_weather.unavailable", extra={"path": path})
         raise last or KorTravelWeatherUnavailable(f"kor-travel-weather 요청 실패({path})")
 

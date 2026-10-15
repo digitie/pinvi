@@ -608,11 +608,13 @@ async def test_markers_latest_feeds_the_card(session_factory) -> None:  # type: 
 #
 # (A)의 전제는 **SYN을 버리는 피호출자**다 — 실제 `KorTravelWeatherClient`에 요청의 connect
 # timeout만큼 기다렸다가 `ConnectTimeout`을 내는 transport를 붙인다. 수치는 운영값(connect
-# 2 s·backoff 0.2 s·view 예산 10 s)을 1/10로 줄였다: 호출당 3 x 0.2 + 0.06 = 0.66 s, 예산 1.0 s —
-# "미스 1건 = 6.6 s라 2건이면 13.2 s > 10 s"와 같은 비율이다.
+# 2 s·view 예산 10 s)을 1/10로 줄였다(예산 1.0 s, connect 0.2 s). backoff는 운영값 0.2 s 그대로다 —
+# 운영에서 backoff(0.2 s)가 client deadline 여유(0.1 s)보다 길다는 관계를 유지하기 위해서다.
 
 _SCALED_CONNECT_SECONDS = 0.2
-_SCALED_BACKOFF_SECONDS = 0.02
+# backoff는 축척하지 않는다 — 운영처럼 backoff(0.2 s)가 client deadline 여유(0.1 s)보다 길어야
+# "backoff 중 바깥 취소" 경로가 테스트에 드러난다(2026-10-15 리뷰).
+_SCALED_BACKOFF_SECONDS = 0.2
 _SCALED_BUDGET_SECONDS = 1.0
 
 
@@ -860,5 +862,76 @@ async def test_hanging_upstream_opens_breaker_after_three_views(  # type: ignore
         # 회로 열림 — transport 호출 0회, 즉시.
         assert transport.calls == calls_before
         assert timer.durations[-1] < 0.5
+    finally:
+        await weather_client.aclose()
+
+
+def _slow_healthy_handler(latency: float, calls: dict[str, int]) -> Any:
+    """느리지만 살아 있는 피호출자 — 응답에 `latency`가 걸린다. httpx read timeout을 흉내 낸다
+    (요청의 read timeout이 latency보다 짧으면 그만큼만 기다리고 `ReadTimeout`)."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        calls[request.url.path] = calls.get(request.url.path, 0) + 1
+        read = request.extensions["timeout"]["read"]
+        if read is not None and read < latency:
+            await asyncio.sleep(read)
+            raise httpx.ReadTimeout("slow", request=request)
+        await asyncio.sleep(latency)
+        if request.url.path == "/v1/weather/markers":
+            ids = request.url.params.get_list("location_id")
+            data: Any = [{"location_id": loc, "latest": [], "alerts": []} for loc in ids]
+        else:
+            data = []
+        return httpx.Response(200, json={"data": data, "meta": {}})
+
+    return handler
+
+
+async def test_slow_but_healthy_upstream_keeps_breaker_closed(  # type: ignore[no-untyped-def]
+    session_factory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """느리지만 살아 있는 피호출자(지연 ≈ 예산의 0.6배) + location 4개 — view 예산 끝에서 병렬
+    forecast 4개가 함께 끊겨도 회로는 닫힌 채다. 그것은 "호출자 예산 소진"이지 장애가 아니다."""
+    monkeypatch.setattr(
+        "app.services.trip_view_builder._WEATHER_BATCH_VIEW_BUDGET_SECONDS", _SCALED_BUDGET_SECONDS
+    )
+    eff_date = date(2026, 10, 1)
+    latency = 0.6 * _SCALED_BUDGET_SECONDS
+    calls: dict[str, int] = {}
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=httpx.MockTransport(_slow_healthy_handler(latency, calls)),
+        timeout=kor_travel_weather_timeout(
+            Settings(
+                pinvi_kor_travel_weather_timeout_seconds=_SCALED_BUDGET_SECONDS,
+                pinvi_kor_travel_weather_connect_timeout_seconds=_SCALED_CONNECT_SECONDS,
+            )
+        ),
+    )
+    weather_client = KorTravelWeatherClient(
+        http, max_attempts=3, backoff_base_seconds=_SCALED_BACKOFF_SECONDS
+    )
+    try:
+        for _ in range(3):
+            pois = []
+            for i in range(4):
+                feature_id = f"slow{i}_{uuid.uuid4().hex[:8]}"
+                lat, lon = 37.5 + i * 0.01, 127.0 + i * 0.01
+                await _seed_location_link(
+                    session_factory, feature_id=feature_id, lat=lat, lon=lon, location_id=f"loc-{i}"
+                )
+                pois.append((1, eff_date, feature_id, _snapshot(lon, lat)))
+            view = await _build_view(
+                session_factory, pois=pois, map_client=_MapClient(), weather_client=weather_client
+            )
+            states = _day(view, 1)["weather_by_feature_id"].values()
+            # markers(0.6 s) 뒤 forecast(0.6 s)는 예산 안에 못 끝난다 — 모른다(unavailable).
+            assert all(state == {"state": "unavailable"} for state in states)
+        assert calls.get("/v1/weather/markers") == 3
+        assert sum(n for path, n in calls.items() if path.endswith("/forecast")) == 12
+        # 회로는 닫힌 채다 — deadline 밖의 다음 호출이 transport에 닿고 성공한다.
+        before = sum(calls.values())
+        assert await weather_client.markers(["loc-0"])
+        assert sum(calls.values()) == before + 1
     finally:
         await weather_client.aclose()

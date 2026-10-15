@@ -674,13 +674,14 @@ async def test_call_deadline_caps_attempt_timeout_and_counts_as_failure() -> Non
     """호출자 deadline 안에서는 attempt timeout이 남은 시간으로 깎여 **실패로 끝난다**.
 
     바깥 `asyncio.timeout` 취소는 회로 실패로 세지 않으므로, 이것이 없으면 응답하지 않는
-    피호출자(read 10 s x 3회)는 trip view 예산(10 s)에 늘 취소돼 회로를 열지 못한다.
+    피호출자(read 10 s x 3회)는 trip view 예산(10 s)에 늘 취소돼 회로를 열지 못한다. attempt
+    예산(0.15 s)이 정상 read(0.2 s)의 절반 이상이라 "의미 있는 예산"으로 센다.
     """
     read_waits: list[float] = []
     http = httpx.AsyncClient(
         base_url="http://kor-travel-weather.test",
         transport=httpx.MockTransport(_hanging_handler(read_waits)),
-        timeout=httpx.Timeout(1.0, connect=0.2),
+        timeout=httpx.Timeout(0.2, connect=0.2),
     )
     client = KorTravelWeatherClient(http, max_attempts=3, backoff_base_seconds=0.0)
     loop = asyncio.get_running_loop()
@@ -716,4 +717,134 @@ async def test_exhausted_call_deadline_sends_nothing_and_is_not_a_failure() -> N
     assert attempts["n"] == 0
     # 예산 소진은 피호출자 장애의 증거가 아니다 — 회로는 닫힌 채다.
     assert len(await client.latest("loc-1")) == 1
+    await client.aclose()
+
+
+async def test_short_budget_timeout_is_exhaustion_not_a_failure() -> None:
+    """정상 read의 절반보다 짧은 예산에서 깎인 timeout은 "호출자 예산 소진"이다 — 회로 미집계.
+
+    느리지만 살아 있는 피호출자에서 view 예산 끝의 병렬 forecast가 함께 끊겨도 회로가 열리면 안 된다.
+    """
+    hang = {"on": True}
+    attempts = {"n": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        if hang["on"]:
+            read = request.extensions["timeout"]["read"]
+            await asyncio.sleep(read)
+            raise httpx.ReadTimeout("slow", request=request)
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=httpx.MockTransport(handler),
+        timeout=httpx.Timeout(1.0, connect=0.2),
+    )
+    client = KorTravelWeatherClient(http, max_attempts=3, backoff_base_seconds=0.0)
+    loop = asyncio.get_running_loop()
+    for _ in range(5):
+        with kor_travel_weather_call_deadline(loop.time() + 0.1):
+            with pytest.raises(KorTravelWeatherDeadlineExhausted):
+                await client.latest("loc-1")
+    # 짧은 예산에서는 재시도도 하지 않았다(그 결과도 셀 수 없으므로).
+    assert attempts["n"] == 5
+    hang["on"] = False
+    assert len(await client.latest("loc-1")) == 1
+    await client.aclose()
+
+
+async def test_one_deadline_scope_counts_at_most_one_failure() -> None:
+    """한 deadline 범위(trip view 1회)의 병렬 호출 실패는 회로 실패 1회다."""
+    fail = {"on": True}
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        if fail["on"]:
+            return httpx.Response(503, json={"code": "UPSTREAM"})
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    client = _client(handler, max_attempts=1, clock=_FakeClock())
+    loop = asyncio.get_running_loop()
+    with kor_travel_weather_call_deadline(loop.time() + 5.0):
+        results = await asyncio.gather(
+            *(client.latest(f"loc-{i}") for i in range(10)), return_exceptions=True
+        )
+    assert all(isinstance(r, KorTravelWeatherUnavailable) for r in results)
+    assert attempts["n"] == 10
+    fail["on"] = False
+    # 회로는 닫힌 채다 — 다음 호출이 transport에 닿는다.
+    assert len(await client.latest("loc-1")) == 1
+    await client.aclose()
+
+
+async def test_trickling_body_is_bounded_by_attempt_total_timeout() -> None:
+    """httpx 단계별 timeout은 조각마다 다시 잰다 — 본문이 찔끔찔끔 오면 deadline을 넘는다.
+    attempt 전체를 남은 시간으로 묶어야 한다."""
+
+    async def trickle() -> Any:
+        for _ in range(40):
+            await asyncio.sleep(0.05)
+            yield b" "
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=trickle())
+
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=httpx.MockTransport(handler),
+        timeout=httpx.Timeout(0.2, connect=0.2),
+    )
+    client = KorTravelWeatherClient(http, max_attempts=3, backoff_base_seconds=0.0)
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    with kor_travel_weather_call_deadline(started + 0.3):
+        with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
+            async with asyncio.timeout(3.0):
+                await client.latest("loc-1")
+    assert loop.time() - started < 0.3 + 0.2
+    # 예산 0.3 s는 정상 read(0.2 s)의 절반 이상 — 진짜 실패로 센다.
+    assert not isinstance(exc_info.value, KorTravelWeatherDeadlineExhausted)
+    await client.aclose()
+
+
+async def test_backoff_longer_than_remaining_stops_and_counts() -> None:
+    """backoff가 deadline을 넘으면 자지 않고 멈춘다 — 자다가 바깥 취소(미집계)를 맞지 않게."""
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        return httpx.Response(503, json={"code": "UPSTREAM"})
+
+    clock = _FakeClock()
+    client = _client(handler, max_attempts=3, backoff_base_seconds=0.2, clock=clock)
+    loop = asyncio.get_running_loop()
+    for _ in range(3):
+        started = loop.time()
+        with kor_travel_weather_call_deadline(started + 0.1):
+            with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
+                await client.latest("loc-1")
+        assert loop.time() - started < 0.1
+        assert not isinstance(exc_info.value, KorTravelWeatherDeadlineExhausted)
+    assert attempts["n"] == 3
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        await client.latest("loc-1")
+    await client.aclose()
+
+
+async def test_nested_deadline_cannot_widen_budget() -> None:
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    client = _client(handler, clock=_FakeClock())
+    loop = asyncio.get_running_loop()
+    with kor_travel_weather_call_deadline(loop.time() - 1.0):
+        with kor_travel_weather_call_deadline(loop.time() + 60.0):
+            with pytest.raises(KorTravelWeatherDeadlineExhausted):
+                await client.latest("loc-1")
+    assert attempts["n"] == 0
     await client.aclose()
