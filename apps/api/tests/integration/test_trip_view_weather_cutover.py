@@ -908,8 +908,10 @@ async def test_slow_but_healthy_upstream_keeps_breaker_closed(  # type: ignore[n
             )
         ),
     )
+    # 재시도 1회 — backoff 수면이 끼면 예산 끝의 timeout이 바깥 취소(미집계)로 바뀌어, 짧은 예산
+    # timeout을 실패로 세는 결함(재리뷰 F1)을 가린다. attempt 결과가 곧 호출 결과가 되게 한다.
     weather_client = KorTravelWeatherClient(
-        http, max_attempts=3, backoff_base_seconds=_SCALED_BACKOFF_SECONDS
+        http, max_attempts=1, backoff_base_seconds=_SCALED_BACKOFF_SECONDS
     )
     try:
         for _ in range(3):
