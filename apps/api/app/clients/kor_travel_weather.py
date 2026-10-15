@@ -25,8 +25,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
+from contextlib import asynccontextmanager, contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Annotated, Any
@@ -56,6 +57,28 @@ _NEARBY_LIMIT_MAX = 100  # 서버 스키마 상한(OpenAPI `nearby` limit maximu
 _CIRCUIT_FAILURE_THRESHOLD = 3
 _CIRCUIT_OPEN_SECONDS = 30.0
 
+# 호출자 deadline(event loop 시각). 설정돼 있으면 attempt마다 timeout을 남은 시간으로 깎는다 —
+# 그래야 연결은 받고 응답하지 않는 피호출자(read 10 s x 3회 ≈ 30.6 s)도 trip view 예산(10 s) 안에서
+# **attempt timeout**으로 끝나 회로차단 실패로 세진다. 바깥 `asyncio.timeout`의 취소는 실패로
+# 세지 않으므로(결과 없음), 이것이 없으면 trip view 트래픽만으로는 회로가 열리지 않는다.
+_call_deadline: ContextVar[float | None] = ContextVar(
+    "kor_travel_weather_call_deadline", default=None
+)
+
+
+@contextmanager
+def kor_travel_weather_call_deadline(deadline: float) -> Iterator[None]:
+    """이 문맥(과 그 안에서 만든 task)의 weather 호출을 `deadline`(loop 시각)까지로 묶는다."""
+    token = _call_deadline.set(deadline)
+    try:
+        yield
+    finally:
+        _call_deadline.reset(token)
+
+
+def _cap(value: float | None, remaining: float) -> float:
+    return remaining if value is None else min(value, remaining)
+
 
 class KorTravelWeatherError(Exception):
     """`kor-travel-weather` 호출 일반 오류."""
@@ -67,6 +90,13 @@ class KorTravelWeatherContractError(KorTravelWeatherError):
 
 class KorTravelWeatherUnavailable(KorTravelWeatherError):
     """timeout / 연결 실패 / 5xx — 재시도 후에도 실패(503 매핑 대상)."""
+
+
+class KorTravelWeatherDeadlineExhausted(KorTravelWeatherUnavailable):
+    """호출자 deadline(`kor_travel_weather_call_deadline`)이 이미 지나 attempt를 하나도 보내지 않음.
+
+    피호출자 장애의 증거가 아니므로 회로차단 실패로 세지 않는다.
+    """
 
 
 class KorTravelWeatherBadRequest(KorTravelWeatherError):
@@ -462,7 +492,9 @@ class _CircuitBreaker:
 
     `found`를 지어내지 않는다: 열린 동안 호출자는 평소와 같은 `KorTravelWeatherUnavailable`을
     받을 뿐이고 그것을 `unavailable`/빈 카드로 투영하는 것은 서비스 계층이다. 상태는 client
-    인스턴스 하나에 있어 trip view·단건 카드·resolver·Admin·지도 마커가 공유한다.
+    인스턴스 하나에 있어 trip view·단건 카드·resolver·Admin·지도 마커가 공유한다. client는
+    lifespan마다 하나이므로 **회로는 worker 프로세스마다 따로**다(uvicorn worker N개면 회로 N개 —
+    공유 저장소 없음).
     """
 
     def __init__(
@@ -498,7 +530,10 @@ class _CircuitBreaker:
                     extra={"consecutive_failures": self._consecutive_failures},
                 )
             self._opened_at = self._clock()
-        self._trial_in_flight = False
+        if trial:
+            # 시험 호출 자신의 실패만 시험 자리를 돌려준다. 회로가 열리기 전에 출발한 옛 호출의
+            # 늦은 실패가 진행 중인 시험 자리를 비우면 half-open 시험이 동시에 둘이 된다.
+            self._trial_in_flight = False
 
     def release(self, *, trial: bool) -> None:
         """결과 없이 끝난 호출(취소 등) — 상태는 그대로 두고 시험 호출 자리만 돌려준다."""
@@ -552,6 +587,9 @@ class KorTravelWeatherClient:
         trial = self._circuit.acquire()
         try:
             resp = await self._send_with_retries(method, path, params=params)
+        except KorTravelWeatherDeadlineExhausted:
+            self._circuit.release(trial=trial)
+            raise
         except KorTravelWeatherUnavailable:
             self._circuit.record_failure(trial=trial)
             raise
@@ -564,12 +602,38 @@ class KorTravelWeatherClient:
     async def _send_with_retries(
         self, method: str, path: str, *, params: Mapping[str, Any] | None = None
     ) -> httpx.Response:
-        """transient(타임아웃/연결/5xx) 시 지수 백오프 재시도."""
+        """transient(타임아웃/연결/5xx) 시 지수 백오프 재시도.
+
+        호출자 deadline(`kor_travel_weather_call_deadline`)이 있으면 attempt마다 timeout을 남은
+        시간으로 깎고, 남은 시간이 없으면 재시도를 멈춘다.
+        """
         last: KorTravelWeatherUnavailable | None = None
         cleaned = {k: v for k, v in (params or {}).items() if v is not None}
+        deadline = _call_deadline.get()
         for attempt in range(self._max_attempts):
+            request_timeout: httpx.Timeout | None = None
+            if deadline is not None:
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    if last is None:
+                        raise KorTravelWeatherDeadlineExhausted(
+                            f"kor-travel-weather 호출자 예산 소진({path}) — 보내지 않음"
+                        )
+                    break
+                base = self._http.timeout
+                request_timeout = httpx.Timeout(
+                    connect=_cap(base.connect, remaining),
+                    read=_cap(base.read, remaining),
+                    write=_cap(base.write, remaining),
+                    pool=_cap(base.pool, remaining),
+                )
             try:
-                resp = await self._http.request(method, path, params=cleaned)
+                if request_timeout is None:
+                    resp = await self._http.request(method, path, params=cleaned)
+                else:
+                    resp = await self._http.request(
+                        method, path, params=cleaned, timeout=request_timeout
+                    )
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last = KorTravelWeatherUnavailable(f"kor-travel-weather 요청 실패({path}): {exc!r}")
             else:

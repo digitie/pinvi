@@ -36,6 +36,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -45,7 +46,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.clients.kor_travel_weather import (
     KorTravelWeatherClient,
     KorTravelWeatherError,
-    KorTravelWeatherUnavailable,
     WeatherValueOut,
 )
 from app.schemas.feature import FeatureWeatherCard
@@ -55,6 +55,7 @@ from app.services.weather_location_resolver import (
 )
 from app.services.weather_metrics import dedupe_by_provider_priority, to_weather_metric
 
+logger = logging.getLogger(__name__)
 _SEOUL = ZoneInfo("Asia/Seoul")
 
 
@@ -87,10 +88,13 @@ async def _fetch_location_values(
             client.latest(location_id, limit=200),
             client.forecast(location_id, from_=window.from_, to=window.to, limit=1000),
         )
-    except KorTravelWeatherError:
+    except KorTravelWeatherError as exc:
         # 한 location 실패로 전체를 죽이지 않는다 — 다른 location_id가 있으면 그걸로
         # 채운다. 전부 실패하면 결과가 비어 카드도 비게 된다(장애를 추측해 지어내지
-        # 않는다).
+        # 않는다). 빈 카드가 장애 때문인지는 이 로그로 가린다.
+        logger.warning(
+            "weather_card.location_fetch_failed: %s", exc, extra={"location_id": location_id}
+        )
         return []
     return [*latest, *forecast]
 
@@ -121,9 +125,16 @@ async def resolve_and_collect_deduped_values(
         resolution = await resolve_weather_location(
             db, feature_id=feature_id, lat=lat, lon=lon, client=weather_client
         )
-    except KorTravelWeatherUnavailable:
-        # 피호출자 장애(타임아웃·연결 실패·5xx·회로 열림)는 빈 카드로 투영한다 — 500 금지
-        # (ADR-074 결정 4(b), `kor-travel-weather.md` §8.3 "대응"). 값 조회 실패와 같은 모양이다.
+    except KorTravelWeatherError as exc:
+        # 피호출자 장애(타임아웃·연결 실패·5xx·회로 열림)와 그 밖의 resolve 오류는 빈 카드로
+        # 투영한다 — 500 금지(ADR-074 결정 4(b), `kor-travel-weather.md` §8.3 "대응"; trip view와
+        # 같은 예외 계열). 응답 스키마에는 "장애"와 "데이터 없음"을 가르는 필드가 없으므로 운영
+        # 구분은 이 로그로 한다(단건·Admin weather-values 공통).
+        logger.warning(
+            "weather_card.resolve_failed: %s — 빈 카드(장애, no_data 아님)",
+            exc,
+            extra={"feature_id": feature_id},
+        )
         return [], None
     if not isinstance(resolution, WeatherLocationFound):
         return [], None

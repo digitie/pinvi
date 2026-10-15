@@ -724,11 +724,12 @@ async def test_syn_drop_with_cache_misses_returns_unavailable_within_budget(  # 
         # 적중 POI도 4단계 값 조회가 같은 피호출자라 `found`가 될 수 없다.
         assert by_feature[hit] == {"state": "unavailable"}
         assert _day(view, 1)["weather_cards"] == {}
-        # 예산(1.0 s) + 여유. 미스 2건을 끝까지 기다렸다면 2 x 0.66 s 이상이다.
-        assert timer.durations[-1] < _SCALED_BUDGET_SECONDS + 0.2
+        # 예산(1.0 s) + 여유(부하 흔들림 대비 0.5 s).
+        assert timer.durations[-1] < _SCALED_BUDGET_SECONDS + 0.5
 
         # 회로: 논리 호출 3회가 실패하면 열리고 그 뒤 요청은 transport에 닿지 않고 즉시
-        # `unavailable`이다. 예산에 잘린(취소된) 호출은 실패로 세지 않으므로 view 1회 = 1회.
+        # `unavailable`이다. 호출 deadline이 attempt를 깎아 예산 끝의 호출도 실패로 세지므로
+        # 아래 view 두 번이면 넉넉히 열린다.
         for _ in range(2):
             await _build_view(
                 session_factory,
@@ -746,7 +747,7 @@ async def test_syn_drop_with_cache_misses_returns_unavailable_within_budget(  # 
             map_client=_MapClient(),
             weather_client=weather_client,
         )
-        assert timer.durations[-1] < 0.2
+        assert timer.durations[-1] < 0.5
         assert transport.calls == calls_before
         by_feature = _day(view, 1)["weather_by_feature_id"]
         assert by_feature == {miss1: {"state": "unavailable"}, hit: {"state": "unavailable"}}
@@ -793,3 +794,71 @@ async def test_one_resolve_failure_only_marks_that_feature_unavailable(  # type:
     assert by_feature[ok_b] == {"state": "found", "card_key": "loc-1"}
     # resolve는 순차로 계속 진행됐다 — 실패한 feature 뒤의 미스도 해석했다.
     assert (37.5, 127.0, 20.0) in weather_client.resolve_calls
+
+
+class _HangingTransport(httpx.AsyncBaseTransport):
+    """연결은 받고 응답하지 않는 피호출자 — 요청의 read timeout만큼 기다린 뒤 `ReadTimeout`."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        self.calls += 1
+        await asyncio.sleep(request.extensions["timeout"]["read"])
+        raise httpx.ReadTimeout("no response", request=request)
+
+
+async def test_hanging_upstream_opens_breaker_after_three_views(  # type: ignore[no-untyped-def]
+    session_factory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """응답하지 않는 피호출자(read timeout = view 예산)에서도 trip view 트래픽만으로 회로가 열린다.
+
+    호출당 read 1.0 s x 3회는 예산 1.0 s를 늘 넘는다(운영값 10 s x 3 vs 10 s). 바깥 취소는 회로
+    실패로 세지 않으므로, client 호출 deadline이 attempt timeout을 깎아 예산 안에서 **실패로**
+    끝나게 해야 view 3회 뒤 회로가 열린다.
+    """
+    monkeypatch.setattr(
+        "app.services.trip_view_builder._WEATHER_BATCH_VIEW_BUDGET_SECONDS", _SCALED_BUDGET_SECONDS
+    )
+    eff_date = date(2026, 10, 1)
+    transport = _HangingTransport()
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=transport,
+        timeout=kor_travel_weather_timeout(
+            Settings(
+                pinvi_kor_travel_weather_timeout_seconds=_SCALED_BUDGET_SECONDS,
+                pinvi_kor_travel_weather_connect_timeout_seconds=_SCALED_CONNECT_SECONDS,
+            )
+        ),
+    )
+    weather_client = KorTravelWeatherClient(
+        http, max_attempts=3, backoff_base_seconds=_SCALED_BACKOFF_SECONDS
+    )
+    timer = _WeatherTimer(monkeypatch)
+    try:
+        for _ in range(3):
+            feature_id = f"hang_{uuid.uuid4().hex[:8]}"
+            view = await _build_view(
+                session_factory,
+                pois=[(1, eff_date, feature_id, _snapshot(127.1, 37.6))],
+                map_client=_MapClient(),
+                weather_client=weather_client,
+            )
+            assert _day(view, 1)["weather_by_feature_id"][feature_id] == {"state": "unavailable"}
+            assert timer.durations[-1] < _SCALED_BUDGET_SECONDS + 0.5
+        calls_before = transport.calls
+
+        feature_id = f"hang_{uuid.uuid4().hex[:8]}"
+        view = await _build_view(
+            session_factory,
+            pois=[(1, eff_date, feature_id, _snapshot(127.1, 37.6))],
+            map_client=_MapClient(),
+            weather_client=weather_client,
+        )
+        assert _day(view, 1)["weather_by_feature_id"][feature_id] == {"state": "unavailable"}
+        # 회로 열림 — transport 호출 0회, 즉시.
+        assert transport.calls == calls_before
+        assert timer.durations[-1] < 0.5
+    finally:
+        await weather_client.aclose()

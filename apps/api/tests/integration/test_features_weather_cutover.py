@@ -18,6 +18,7 @@ from app.clients.kor_travel_map import get_kor_travel_map_client
 from app.clients.kor_travel_weather import (
     CoordinateRequestOut,
     KorTravelWeatherClient,
+    KorTravelWeatherContractError,
     KorTravelWeatherNotFound,
     LocationOut,
     MeasurementPointOut,
@@ -450,3 +451,30 @@ async def test_syn_drop_on_cache_miss_returns_empty_card_not_500(
     # 첫 반경의 resolve 1회(3 attempt)에서 끊겼다 — 다음 반경으로 넘어가지 않는다.
     assert transport.calls == 3
     assert loop.time() - started < 3 * 0.2 + 0.06 + 0.5
+
+
+class _ContractBreakingResolveClient(_FakeWeatherClient):
+    async def resolve(
+        self, *, lat: float, lon: float, radius_km: float | None = None
+    ) -> ResolvedWeatherOut:
+        self.calls["resolve"].append({"lat": lat, "lon": lon, "radius_km": radius_km})
+        raise KorTravelWeatherContractError("kor-travel-weather resolve 응답 셰입 위반")
+
+
+async def test_resolve_contract_error_returns_empty_card_not_500(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    """resolve의 `Unavailable` 밖 `KorTravelWeatherError`(계약 위반 등)도 빈 카드다 — trip view와
+    같은 예외 계열을 잡는다(ADR-074 결정 4(b))."""
+    user_id, _email = verified_user
+    map_client = _FakeMapClient(feature_id="f_contract", lon=_FEATURE_LON, lat=_FEATURE_LAT)
+    weather_client = _ContractBreakingResolveClient()
+    _override(map_client, weather_client)
+    try:
+        resp = await client.get("/features/f_contract/weather", cookies=auth_cookies(user_id))
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["data"]["metrics"] == []
+    assert len(weather_client.calls["resolve"]) == 1

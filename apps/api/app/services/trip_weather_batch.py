@@ -66,6 +66,7 @@ from app.clients.kor_travel_weather import (
     KorTravelWeatherClient,
     KorTravelWeatherError,
     WeatherValueOut,
+    kor_travel_weather_call_deadline,
 )
 from app.models.poi import TripDayPoi
 from app.services.weather_location_resolver import (
@@ -82,6 +83,9 @@ _SEOUL = ZoneInfo("Asia/Seoul")
 _MARKERS_CHUNK_SIZE = 500
 # location마다 forecast()를 병렬로 부르되 동시 연결 수를 제한한다(설계 §3.4 "동시성 상한").
 _FORECAST_CONCURRENCY = 10
+# client 호출 deadline은 view deadline보다 이만큼 앞선다(예산의 1/10 이하) — attempt timeout이
+# 바깥 취소보다 먼저 나야 회로차단이 그 실패를 센다(`kor_travel_weather_call_deadline`).
+_CLIENT_DEADLINE_MARGIN_SECONDS = 0.1
 
 
 def _weather_target_at(value: date) -> datetime:
@@ -153,6 +157,7 @@ async def build_trip_weather_via_kor_travel_weather(
 
     # 2)~4)는 view 예산 하나를 공유한다(ADR-074 결정 4(b), `kor-travel-weather.md` §8.3 "대응").
     deadline = asyncio.get_running_loop().time() + budget_seconds
+    client_deadline = deadline - min(_CLIENT_DEADLINE_MARGIN_SECONDS, budget_seconds / 10)
 
     # 2) location 해석(캐시 우선, T-361) — feature마다 1회, **순차**(한 `AsyncSession`을 쓰므로
     #    동시 실행 금지). 실패는 두 층으로 투영한다: (i) resolve 호출마다 개별 try — 그 feature만
@@ -163,20 +168,21 @@ async def build_trip_weather_via_kor_travel_weather(
     resolutions: dict[str, WeatherLocationResolution] = {}
     unavailable_feature_ids: set[str] = set()
     try:
-        async with asyncio.timeout_at(deadline):
-            for feature_id in pending_feature_days:
-                lat, lon = coord_by_feature_id[feature_id]
-                try:
-                    resolutions[feature_id] = await resolve_weather_location(
-                        db, feature_id=feature_id, lat=lat, lon=lon, client=weather_client
-                    )
-                except (KorTravelWeatherError, TimeoutError) as exc:
-                    logger.warning(
-                        "trip_weather_batch.resolve_failed: %s — 이 feature만 unavailable",
-                        exc,
-                        extra={"feature_id": feature_id},
-                    )
-                    unavailable_feature_ids.add(feature_id)
+        with kor_travel_weather_call_deadline(client_deadline):
+            async with asyncio.timeout_at(deadline):
+                for feature_id in pending_feature_days:
+                    lat, lon = coord_by_feature_id[feature_id]
+                    try:
+                        resolutions[feature_id] = await resolve_weather_location(
+                            db, feature_id=feature_id, lat=lat, lon=lon, client=weather_client
+                        )
+                    except (KorTravelWeatherError, TimeoutError) as exc:
+                        logger.warning(
+                            "trip_weather_batch.resolve_failed: %s — 이 feature만 unavailable",
+                            exc,
+                            extra={"feature_id": feature_id},
+                        )
+                        unavailable_feature_ids.add(feature_id)
     except TimeoutError:
         # 예산이 2단계에서 끝났다 — 4단계 값 조회를 할 시간이 없으므로 이미 해석된 feature도
         # 포함해 pending **전체**를 `unavailable`로 찍는다(found 여부 무관, §8.3 "대응" (ii)).
@@ -220,29 +226,30 @@ async def build_trip_weather_via_kor_travel_weather(
     values_by_location: dict[str, list[WeatherValueOut]] = {loc: [] for loc in all_location_ids}
     location_failed: dict[str, bool] = dict.fromkeys(all_location_ids, False)
     try:
-        async with asyncio.timeout_at(deadline):
-            for chunk in _chunked(all_location_ids, _MARKERS_CHUNK_SIZE):
-                markers = await weather_client.markers(chunk)
-                for marker in markers:
-                    values_by_location[marker.location_id].extend(marker.latest)
-                    values_by_location[marker.location_id].extend(marker.alerts)
+        with kor_travel_weather_call_deadline(client_deadline):
+            async with asyncio.timeout_at(deadline):
+                for chunk in _chunked(all_location_ids, _MARKERS_CHUNK_SIZE):
+                    markers = await weather_client.markers(chunk)
+                    for marker in markers:
+                        values_by_location[marker.location_id].extend(marker.latest)
+                        values_by_location[marker.location_id].extend(marker.alerts)
 
-            semaphore = asyncio.Semaphore(_FORECAST_CONCURRENCY)
+                semaphore = asyncio.Semaphore(_FORECAST_CONCURRENCY)
 
-            async def _fetch_forecast(location_id: str) -> None:
-                async with semaphore:
-                    try:
-                        forecast = await weather_client.forecast(
-                            location_id, from_=range_from, to=range_to, limit=1000
-                        )
-                    except KorTravelWeatherError:
-                        # 한 location 실패로 전체를 죽이지 않는다 — 아래 5)에서
-                        # "부분 실패" 규칙으로 처리한다(추측하지 않는다).
-                        location_failed[location_id] = True
-                        return
-                    values_by_location[location_id].extend(forecast)
+                async def _fetch_forecast(location_id: str) -> None:
+                    async with semaphore:
+                        try:
+                            forecast = await weather_client.forecast(
+                                location_id, from_=range_from, to=range_to, limit=1000
+                            )
+                        except KorTravelWeatherError:
+                            # 한 location 실패로 전체를 죽이지 않는다 — 아래 5)에서
+                            # "부분 실패" 규칙으로 처리한다(추측하지 않는다).
+                            location_failed[location_id] = True
+                            return
+                        values_by_location[location_id].extend(forecast)
 
-            await asyncio.gather(*(_fetch_forecast(loc) for loc in all_location_ids))
+                await asyncio.gather(*(_fetch_forecast(loc) for loc in all_location_ids))
     except (KorTravelWeatherError, TimeoutError) as exc:
         logger.error(
             "trip_weather_batch.failed: %s — 전체 미결 weather를 unavailable 처리",

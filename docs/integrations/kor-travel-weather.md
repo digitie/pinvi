@@ -828,7 +828,10 @@ G-2(T-366)·G-3(T-367 guard 배포)까지 소유가 명확한 반면 G-1은 Pinv
    v2/buildx·방화벽·fstab bind·swapfile **미완**)와 odroid에서 weather-api가 실제로 도는 것(6b
    `ensure weather`·migrate·적재 재개) — 절차·값은 Manager 몫, 여기는 포인터만.
 3. **live 수용(T-374 회로차단, 게이트 뒤 같은 자리)**: **odroid 전원 off**(또는 n150에서
-   `.13:14101`행 SYN을 버리는 nft 규칙) 상태에서 trip view p95 < 3 s. **odroid weather-api `stop`은
+   `.13:12201`행 SYN을 버리는 nft 규칙 — 2026-10-15 포트 기준) 상태에서 trip view p95 < 3 s. **부하는
+   꾸준히 건다**(예: 1초에 몇 건씩 30 s 이상) — 회로는 30 s open 뒤 half-open 시험 1회를 내보내므로,
+   요청이 드문드문하면 거의 모든 요청이 시험 호출이 되어 매번 connect 상한(≈6.6 s 이하, trip view는
+   예산 10 s)을 기다리고 p95가 회로 효과를 보여 주지 못한다. **odroid weather-api `stop`은
    검사가 아니다** — 호스트가 살아 있으면 커널이 LAN 너머로 RST를 돌려주어 T-374 없이도 ≈0.6 s라
    초록이 난다(§8.3 첫 단락). 단위 테스트로는 잴 수 없는 기준이라 여기 둔다(설계 §11.3 전원 off drill).
 4. Map 핀 bump·M05 pair 회전과 **무관**하다 — pair 계약 파일(`contracts/`)은 바뀌지 않는다.
@@ -893,6 +896,17 @@ T-374 사양의 단일 정본이다 — ADR-074 결정 4와 `tasks.md` T-374는 
   **(B) 피호출자 up, 한 feature의 resolve만 `Unavailable`(5xx mock)** — 그 feature만 `unavailable`,
   나머지 적중 POI는 `found`, 200. (A)에서 논리 호출 3회가 실패하면 회로가 열려 그 뒤 요청은 즉시
   `unavailable`이다(아래).
+- **구현 보강(2026-10-15 리뷰)**: (1) **호출 deadline** — trip view는 2·4단계를
+  `kor_travel_weather_call_deadline(view deadline − min(0.1 s, 예산/10))` 안에서 부른다. client는 attempt마다
+  timeout을 남은 시간으로 깎고 남은 시간이 없으면 재시도를 멈춘다. 연결은 받고 응답하지 않는 피호출자는
+  호출당 read 10 s x 3회 ≈ 30.6 s라 바깥 예산 취소(결과 없음 → 회로 실패로 세지 않음)로만 끝나 trip
+  view 트래픽으로는 회로가 열리지 않았다 — 이제 예산 안의 attempt timeout으로 끝나 실패로 센다. 이미 지난
+  deadline으로 보내지도 않은 호출(`KorTravelWeatherDeadlineExhausted`)은 실패로 세지 않는다. 대가: 살아
+  있지만 느린 피호출자도 예산 끝에서 read timeout을 맞으면 실패로 세진다(trip view 경로에 한함). (2) half-open
+  시험 자리는 **시험 호출 자신**의 결과만 비운다(옛 호출의 늦은 실패가 비우면 시험이 둘이 된다). (3) 회로는
+  client 인스턴스(lifespan당 1개)에 있으므로 **worker 프로세스마다 따로**다. (4) 단건·Admin은 resolve의
+  `KorTravelWeatherError` 전체를 빈 카드로 투영하고 `weather_card.resolve_failed`/`location_fetch_failed`
+  경고 로그로 장애와 "데이터 없음"을 가른다(응답 스키마에 구분 필드 없음).
 - **회로차단(기본값, 열린 결정 2는 이 값의 변경 여부)**: 단위는 **논리 호출**(`_send` 1회,
   attempt 아님); 연속 3회 호출 실패 → 30 s open(즉시 `Unavailable`), half-open 1회; 상태는
   `KorTravelWeatherClient` 인스턴스에 두어 trip/card/resolver/Admin/마커가 **공유**(client는 1개,

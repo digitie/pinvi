@@ -3858,7 +3858,9 @@ Track 2 프로그램(소유자 지시 2026-10-13)은 geo·weather·transport를 
    Pinvi 코드 기본값 `localhost:14101`(`config.py:903`)과 `.env.example:204`는 **개발용으로
    유지**하고, Pinvi 저장소에 `192.168.1.13` 리터럴을 박지 않는다.
    `.env.example:201-203`의 "N150 고정 포트" 주석은 "포트 14101 불변·호스트는 Manager registry"로
-   고친다(T-373).
+   고친다(T-373). **2026-10-15 대체**: "포트 14101 불변"은 틀렸다 — 운영 포트는 `12201`이다(위
+   "구현 현황"). T-373은 주석을 "운영 값은 Manager compose 기본값(`192.168.1.13:12201`), `localhost:14101`은
+   개발용"으로 고쳤다; 코드 기본값·리터럴 금지 원칙은 그대로다.
 2. **Pinvi 요구: pinvi-api 블록도 ETL과 같은 변수 이름 `PINVI_KOR_TRAVEL_WEATHER_BASE_URL`을
    받는다.** 형식·기본값·결박은 Manager 소유(ADR-58 R2, T-MGR-01c, `bindings.md` B-6). Pinvi는
    변수 이름을 바꾸지 않는다.
