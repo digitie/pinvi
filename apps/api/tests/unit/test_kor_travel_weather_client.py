@@ -530,9 +530,11 @@ async def test_circuit_half_open_admits_only_one_trial_at_a_time() -> None:
     trial = asyncio.create_task(client.latest("loc-1"))
     for _ in range(5):
         await asyncio.sleep(0)
-    # 시험 호출이 진행 중이면 다른 호출은 transport에 닿지 않는다.
+    # 시험 호출이 진행 중이면 다른 호출은 transport에 닿지 않는다(닿으면 handler가 멈추므로
+    # 상한을 둔다 — 회귀가 hang이 아니라 실패로 보이게).
     with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
-        await client.latest("loc-1")
+        async with asyncio.timeout(2.0):
+            await client.latest("loc-1")
     release.set()
     assert len(await trial) == 1
     assert attempts["n"] == 4
@@ -565,7 +567,8 @@ async def test_cancelled_trial_releases_half_open_slot() -> None:
     with pytest.raises(asyncio.CancelledError):
         await trial
     hang["on"] = False
-    assert len(await client.latest("loc-1")) == 1
+    async with asyncio.timeout(2.0):
+        assert len(await client.latest("loc-1")) == 1
     await client.aclose()
 
 
