@@ -898,11 +898,19 @@ T-374 사양의 단일 정본이다 — ADR-074 결정 4와 `tasks.md` T-374는 
   `unavailable`이다(아래).
 - **구현 보강(2026-10-15 리뷰)**: (1) **호출 deadline** — trip view는 2·4단계를
   `kor_travel_weather_call_deadline(view deadline − min(0.1 s, 예산/10))` 안에서 부른다. client는 attempt마다
-  timeout을 남은 시간으로 깎고 남은 시간이 없으면 재시도를 멈춘다. 연결은 받고 응답하지 않는 피호출자는
-  호출당 read 10 s x 3회 ≈ 30.6 s라 바깥 예산 취소(결과 없음 → 회로 실패로 세지 않음)로만 끝나 trip
-  view 트래픽으로는 회로가 열리지 않았다 — 이제 예산 안의 attempt timeout으로 끝나 실패로 센다. 이미 지난
-  deadline으로 보내지도 않은 호출(`KorTravelWeatherDeadlineExhausted`)은 실패로 세지 않는다. 대가: 살아
-  있지만 느린 피호출자도 예산 끝에서 read timeout을 맞으면 실패로 세진다(trip view 경로에 한함). (2) half-open
+  timeout을 남은 시간으로 깎고, attempt 전체를 `asyncio.timeout(남은 시간)`으로 묶는다(찔끔 오는 본문도
+  deadline을 넘지 않게). 연결은 받고 응답하지 않는 피호출자는 호출당 read 10 s x 3회 ≈ 30.6 s라 바깥 예산
+  취소(결과 없음 → 회로 실패로 세지 않음)로만 끝나 trip view 트래픽으로는 회로가 열리지 않았다 — 이제 예산
+  안의 attempt timeout으로 끝나 실패로 센다(첫 호출이 ≈9.9 s를 받는다). **집계 규칙**: (a) deadline이 깎은
+  timeout은 그 attempt 예산이 정상 read의 50%(운영 5 s) 이상일 때만 실패이고, 그보다 짧으면 "호출자 예산
+  소진"(`KorTravelWeatherDeadlineExhausted`, 미집계)이다 — 느리지만 살아 있는 피호출자(odroid 1~9 s)에서 한
+  view의 병렬 forecast 10개가 예산 끝에 함께 끊겨 회로를 여는 일을 막는다; 짧은 예산이면 재시도도 하지
+  않는다(첫 attempt는 보낸다 — 값을 줄 수 있으므로). (b) deadline 범위 하나(= trip view 1회)는 회로 실패를
+  **최대 1회** 센다. (c) **backoff가 남은 시간 이상이면 자지 않고** 마지막 실패를 올린다 — 운영 backoff
+  0.2 s가 client 여유 0.1 s보다 길어, 자다가 바깥 취소(미집계)를 맞으면 회로가 영영 열리지 않는다.
+  (d) 중첩 deadline은 더 이른 쪽. 보내지도 않은 호출(`KorTravelWeatherDeadlineExhausted`)은 세지 않는다.
+  남는 대가: 의미 있는 예산(≥5 s)을 받고도 응답이 없으면 느린 피호출자라도 실패로 센다(trip view 경로, view당
+  1회). (2) half-open
   시험 자리는 **시험 호출 자신**의 결과만 비운다(옛 호출의 늦은 실패가 비우면 시험이 둘이 된다). (3) 회로는
   client 인스턴스(lifespan당 1개)에 있으므로 **worker 프로세스마다 따로**다. (4) 단건·Admin은 resolve의
   `KorTravelWeatherError` 전체를 빈 카드로 투영하고 `weather_card.resolve_failed`/`location_fetch_failed`

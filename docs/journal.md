@@ -29,8 +29,20 @@ pinvi-api → weather `/health` 200, geo reverse 정상. 계획 순서(T-374 →
 - 검증(n150 `~/pinvi-track2-test`, py3.12 venv, CI와 같은 명령): ruff check·ruff format --check·mypy --strict app 통과;
   `tests/unit/test_kor_travel_weather_client.py` 통과; `tests/integration -k weather` 47 passed. red 확인(변이):
   서비스 두 파일을 origin/main으로 되돌리면 새 통합 3건(A·B·단건 A) 실패; 결과는 PR 본문.
-- 수치는 테스트에서 1/10로 줄였다(connect 0.2 s, backoff 0.02 s, view 예산 1.0 s) — 비율(미스 1건 0.66 s, 2건이면 예산 초과)은
-  운영값과 같다. SYN drop은 transport가 요청의 connect timeout만큼 잔 뒤 `ConnectTimeout`을 내는 모양으로 흉내 냈다.
+- 수치는 테스트에서 줄였다(connect 0.2 s, view 예산 1.0 s). **처음 판의 "비율이 운영값과 같다"는 틀렸다** — backoff를
+  0.02 s로 줄여 운영의 "backoff 0.2 s > client deadline 여유 0.1 s" 관계가 뒤집혀 있었고 그 결함(F3)을 테스트가 가렸다.
+  리뷰 뒤 통합 테스트 backoff는 운영값 0.2 s 그대로다. SYN drop은 transport가 요청의 connect timeout만큼 잔 뒤
+  `ConnectTimeout`을 내는 모양으로 흉내 냈다.
+- **리뷰 후속(같은 날, 두 차례)**: (1) `weather_card`는 resolve의 `KorTravelWeatherError` 전체를 빈 카드로 투영하고
+  `weather_card.resolve_failed`/`location_fetch_failed` 경고 로그로 장애와 데이터 없음을 가른다(단건·Admin 공통, 스키마
+  불변). (2) trip view는 2·4단계를 `kor_travel_weather_call_deadline` 범위 하나에서 부른다 — attempt timeout을 남은
+  시간으로 깎고 attempt 전체를 `asyncio.timeout`으로 묶어, 응답 없는 피호출자도 예산 안에서 실패로 끝나 회로가 열린다.
+  (3) 집계 규칙: deadline이 깎은 timeout은 attempt 예산 ≥ 정상 read의 50%일 때만 실패(아니면
+  `KorTravelWeatherDeadlineExhausted`, 미집계, 재시도 없음), 범위당 실패 최대 1회, backoff ≥ 남은 시간이면 멈추고
+  올림, 중첩 deadline은 더 이른 쪽. (4) half-open 시험 자리는 시험 호출 자신만 비운다; 회로는 worker 프로세스마다.
+  (5) `scripts/n150-playwright-runner.sh` env 허용 목록에 weather live 변수 4개. (6) 14101 서술 대체 표기, drill에
+  꾸준한 부하. 새 테스트(느리지만 건강한 피호출자에서 회로 닫힘, 응답 없는 피호출자에서 view 3회 뒤 열림, 찔끔 본문,
+  backoff, 범위당 1회, 중첩, 늦은 실패, 예산 소진, resolve 계약 오류)는 각각 변이로 빨갛게 됨을 n150에서 확인했다.
 
 ## 2026-10-13 (claude) — Track 2: `kor-travel-weather` odroid 전환 대응 문서 (ADR-074 proposed, 브랜치 `docs/weather-on-odroid-api-runtime`)
 

@@ -13,6 +13,9 @@ trip view·단건 카드가 ≈30.6 s 뒤 500이 되는 경로가 운영에 열�
 - 소유자 결정 대기: ADR-074 열린 결정 2의 geo client connect 분리(이 PR은 weather만), 회로 기본값(3회·30 s) 유지 여부.
 - live e2e: T-375는 `PINVI_LIVE_WEATHER_TRIP_VIEW_E2E=1` 별도 run에서만 도는 sub-test라 이 PR에서 live로 돌리지 않았다
   (runbook `live-mutating-e2e.md` "T-363/T-365 weather 호출 모양 게이트 단건"에 n150 값 `192.168.1.13`·`12201` 반영).
+  **격리 13801/13805 stack이 필요하다**(feature cache·rate limit off·Map/weather proxy·Map service token·Map DB fixture
+  ID·live 자격증명 — runbook "Feature resolution 단건") — 배포된 운영 stack에 대고 돌리지 않는다. runner env 허용 목록에는
+  weather 변수 4개를 넣었다.
 
 ## 2026-10-13 (claude) — Track 2: `kor-travel-weather` odroid 전환 대응 문서 (ADR-074 proposed, 브랜치 `docs/weather-on-odroid-api-runtime`)
 
