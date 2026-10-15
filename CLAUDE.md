@@ -146,9 +146,9 @@ role 분리 로직 자체는 불변. Manager 쪽 compose·provisioning·C6c 계�
 ADR-071 (Alembic 이력은 forward-only — 운영 DB 재기준화 없음, 배포는 DB 보존),
 ADR-072 (Common Dagster 정책·운영 UI 채택 — Common exact SHA + frozen UI artifact),
 ADR-073 (`kor-travel-weather` 보존 요구 15일 → 7일, T-367 가드 임계 6일),
-**ADR-074** (proposed, 미구현 — `kor-travel-weather`가 odroid 192.168.1.13으로 옮기는
-Track 2 대응: base URL은 Manager registry에서 파생한 compose 기본값을 ETL **과 pinvi-api**
-두 블록이 받는다, Pinvi 저장소에 호스트 리터럴 금지; 장애 의미 RST → 타임아웃은 T-374).
+**ADR-074** (proposed, 부분 구현 2026-10-15 — `kor-travel-weather`는 odroid
+`192.168.1.13:12201`로 옮겼다: base URL은 Manager compose 기본값을 ETL **과 pinvi-api**
+두 블록이 받는다(Manager #476), Pinvi 코드에 호스트 리터럴 금지; 장애 의미 RST → 타임아웃 대응은 T-374).
 다음 신규 = ADR-076. **TDR(Trip Detail Rewrite)** 마스터 계획 = `docs/execplan/trip-detail-rewrite.md`.
 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.
