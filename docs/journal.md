@@ -38,11 +38,13 @@ pinvi-api → weather `/health` 200, geo reverse 정상. 계획 순서(T-374 →
   불변). (2) trip view는 2·4단계를 `kor_travel_weather_call_deadline` 범위 하나에서 부른다 — attempt timeout을 남은
   시간으로 깎고 attempt 전체를 `asyncio.timeout`으로 묶어, 응답 없는 피호출자도 예산 안에서 실패로 끝나 회로가 열린다.
   (3) 집계 규칙: deadline이 깎은 timeout은 attempt 예산 ≥ 정상 read의 50%일 때만 실패(아니면
-  `KorTravelWeatherDeadlineExhausted`, 미집계, 재시도 없음), 범위당 실패 최대 1회, backoff ≥ 남은 시간이면 멈추고
-  올림, 중첩 deadline은 더 이른 쪽. (4) half-open 시험 자리는 시험 호출 자신만 비운다; 회로는 worker 프로세스마다.
+  `KorTravelWeatherDeadlineExhausted`, 미집계) — 같은 범위에서 성공을 이미 봤으면 예산 길이와 무관하게 소진, 범위당
+  실패 최대 1회, backoff ≥ 남은 시간이면 멈추고 올림, 중첩 deadline은 더 이른 쪽이고 집계 상태는 바깥과 공유. 한때 둔
+  "짧은 예산이면 재시도 안 함" 절은 하한 분류·backoff 정지에 가려 따로 검증할 수 없어 3차 리뷰에서 뺐다. (4) half-open 시험 자리는 시험 호출 자신만 비운다; 회로는 worker 프로세스마다.
   (5) `scripts/n150-playwright-runner.sh` env 허용 목록에 weather live 변수 4개. (6) 14101 서술 대체 표기, drill에
   꾸준한 부하. 새 테스트(느리지만 건강한 피호출자에서 회로 닫힘, 응답 없는 피호출자에서 view 3회 뒤 열림, 찔끔 본문,
-  backoff, 범위당 1회, 중첩, 늦은 실패, 예산 소진, resolve 계약 오류)는 각각 변이로 빨갛게 됨을 n150에서 확인했다.
+  backoff, 범위당 1회, 중첩 deadline·중첩 집계 공유, 동시 view의 성공 관측, 늦은 실패, 예산 소진, resolve 계약 오류)는
+  n150에서 해당 구현을 되돌리거나 변이시켜 빨갛게 됨을 확인했다(뺀 재시도 절은 대상 아님).
 
 ## 2026-10-13 (claude) — Track 2: `kor-travel-weather` odroid 전환 대응 문서 (ADR-074 proposed, 브랜치 `docs/weather-on-odroid-api-runtime`)
 

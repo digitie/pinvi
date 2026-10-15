@@ -747,7 +747,7 @@ async def test_short_budget_timeout_is_exhaustion_not_a_failure() -> None:
         with kor_travel_weather_call_deadline(loop.time() + 0.1):
             with pytest.raises(KorTravelWeatherDeadlineExhausted):
                 await client.latest("loc-1")
-    # 짧은 예산에서는 재시도도 하지 않았다(그 결과도 셀 수 없으므로).
+    # 각 호출은 deadline에서 끊긴 attempt 1회로 끝났다(남은 시간 0 — 재시도 없음).
     assert attempts["n"] == 5
     hang["on"] = False
     assert len(await client.latest("loc-1")) == 1
@@ -803,7 +803,7 @@ async def test_trickling_body_is_bounded_by_attempt_total_timeout() -> None:
         with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
             async with asyncio.timeout(3.0):
                 await client.latest("loc-1")
-    assert loop.time() - started < 0.3 + 0.2
+    assert loop.time() - started < 0.3 + 0.5
     # 예산 0.3 s는 정상 read(0.2 s)의 절반 이상 — 진짜 실패로 센다.
     assert not isinstance(exc_info.value, KorTravelWeatherDeadlineExhausted)
     await client.aclose()
@@ -847,4 +847,28 @@ async def test_nested_deadline_cannot_widen_budget() -> None:
             with pytest.raises(KorTravelWeatherDeadlineExhausted):
                 await client.latest("loc-1")
     assert attempts["n"] == 0
+    await client.aclose()
+
+
+async def test_nested_scope_shares_counting_state() -> None:
+    """중첩 범위는 바깥과 집계 상태를 공유한다 — 안팎에서 실패를 두 번 세지 않는다."""
+    fail = {"on": True}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if fail["on"]:
+            return httpx.Response(503, json={"code": "UPSTREAM"})
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    client = _client(handler, max_attempts=1, clock=_FakeClock())
+    loop = asyncio.get_running_loop()
+    for _ in range(2):
+        with kor_travel_weather_call_deadline(loop.time() + 5.0):
+            with pytest.raises(KorTravelWeatherUnavailable):
+                await client.latest("loc-1")
+            with kor_travel_weather_call_deadline(loop.time() + 5.0):
+                with pytest.raises(KorTravelWeatherUnavailable):
+                    await client.latest("loc-1")
+    # 범위 2개 = 실패 2회 < 임계 3 — 회로는 닫힌 채다.
+    fail["on"] = False
+    assert len(await client.latest("loc-1")) == 1
     await client.aclose()

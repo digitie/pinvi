@@ -866,18 +866,23 @@ async def test_hanging_upstream_opens_breaker_after_three_views(  # type: ignore
         await weather_client.aclose()
 
 
-def _slow_healthy_handler(latency: float, calls: dict[str, int]) -> Any:
-    """느리지만 살아 있는 피호출자 — 응답에 `latency`가 걸린다. httpx read timeout을 흉내 낸다
-    (요청의 read timeout이 latency보다 짧으면 그만큼만 기다리고 `ReadTimeout`)."""
+def _slow_healthy_handler(
+    latency: float, calls: dict[str, int], *, markers_latency: float | None = None
+) -> Any:
+    """느리지만 살아 있는 피호출자 — 응답에 지연이 걸린다(markers는 `markers_latency`, 그 밖은
+    `latency`). httpx read timeout을 흉내 낸다(요청의 read timeout이 지연보다 짧으면 그만큼만
+    기다리고 `ReadTimeout`)."""
 
     async def handler(request: httpx.Request) -> httpx.Response:
         calls[request.url.path] = calls.get(request.url.path, 0) + 1
+        is_markers = request.url.path == "/v1/weather/markers"
+        delay = markers_latency if is_markers and markers_latency is not None else latency
         read = request.extensions["timeout"]["read"]
-        if read is not None and read < latency:
+        if read is not None and read < delay:
             await asyncio.sleep(read)
             raise httpx.ReadTimeout("slow", request=request)
-        await asyncio.sleep(latency)
-        if request.url.path == "/v1/weather/markers":
+        await asyncio.sleep(delay)
+        if is_markers:
             ids = request.url.params.get_list("location_id")
             data: Any = [{"location_id": loc, "latest": [], "alerts": []} for loc in ids]
         else:
@@ -890,13 +895,13 @@ def _slow_healthy_handler(latency: float, calls: dict[str, int]) -> Any:
 async def test_slow_but_healthy_upstream_keeps_breaker_closed(  # type: ignore[no-untyped-def]
     session_factory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """느리지만 살아 있는 피호출자(지연 ≈ 예산의 0.6배) + location 4개 — view 예산 끝에서 병렬
+    """느리지만 살아 있는 피호출자(지연 ≈ 예산의 0.55배) + location 4개 — view 예산 끝에서 병렬
     forecast 4개가 함께 끊겨도 회로는 닫힌 채다. 그것은 "호출자 예산 소진"이지 장애가 아니다."""
     monkeypatch.setattr(
         "app.services.trip_view_builder._WEATHER_BATCH_VIEW_BUDGET_SECONDS", _SCALED_BUDGET_SECONDS
     )
     eff_date = date(2026, 10, 1)
-    latency = 0.6 * _SCALED_BUDGET_SECONDS
+    latency = 0.55 * _SCALED_BUDGET_SECONDS
     calls: dict[str, int] = {}
     http = httpx.AsyncClient(
         base_url="http://kor-travel-weather.test",
@@ -908,10 +913,9 @@ async def test_slow_but_healthy_upstream_keeps_breaker_closed(  # type: ignore[n
             )
         ),
     )
-    # 재시도 1회 — backoff 수면이 끼면 예산 끝의 timeout이 바깥 취소(미집계)로 바뀌어, 짧은 예산
-    # timeout을 실패로 세는 결함(재리뷰 F1)을 가린다. attempt 결과가 곧 호출 결과가 되게 한다.
+    # 운영값(3회·0.2 s). forecast는 deadline에서 끊기고 남은 시간이 0이라 재시도 없이 끝난다.
     weather_client = KorTravelWeatherClient(
-        http, max_attempts=1, backoff_base_seconds=_SCALED_BACKOFF_SECONDS
+        http, max_attempts=3, backoff_base_seconds=_SCALED_BACKOFF_SECONDS
     )
     try:
         for _ in range(3):
@@ -927,13 +931,69 @@ async def test_slow_but_healthy_upstream_keeps_breaker_closed(  # type: ignore[n
                 session_factory, pois=pois, map_client=_MapClient(), weather_client=weather_client
             )
             states = _day(view, 1)["weather_by_feature_id"].values()
-            # markers(0.6 s) 뒤 forecast(0.6 s)는 예산 안에 못 끝난다 — 모른다(unavailable).
+            # markers(0.55 s) 뒤 forecast(0.55 s)는 예산 안에 못 끝난다 — 모른다(unavailable).
             assert all(state == {"state": "unavailable"} for state in states)
         assert calls.get("/v1/weather/markers") == 3
         assert sum(n for path, n in calls.items() if path.endswith("/forecast")) == 12
         # 회로는 닫힌 채다 — deadline 밖의 다음 호출이 transport에 닿고 성공한다.
         before = sum(calls.values())
         assert await weather_client.markers(["loc-0"])
+        assert sum(calls.values()) == before + 1
+    finally:
+        await weather_client.aclose()
+
+
+async def test_concurrent_views_with_live_upstream_keep_breaker_closed(  # type: ignore[no-untyped-def]
+    session_factory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """동시 view 3개 — markers는 즉시 성공, forecast는 예산 끝까지 응답이 없어 **하한 이상의 예산**
+    (0.9 s ≥ 0.5 s)에서 끊긴다. 같은 범위에서 피호출자가 이미 응답했으므로 그 timeout은 장애 증거가
+    아니다 — 회로는 닫힌 채다(view 3개가 각 1회씩 세면 임계 3에 닿아 열렸을 것이다)."""
+    monkeypatch.setattr(
+        "app.services.trip_view_builder._WEATHER_BATCH_VIEW_BUDGET_SECONDS", _SCALED_BUDGET_SECONDS
+    )
+    eff_date = date(2026, 10, 1)
+    calls: dict[str, int] = {}
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=httpx.MockTransport(_slow_healthy_handler(10.0, calls, markers_latency=0.0)),
+        timeout=kor_travel_weather_timeout(
+            Settings(
+                pinvi_kor_travel_weather_timeout_seconds=_SCALED_BUDGET_SECONDS,
+                pinvi_kor_travel_weather_connect_timeout_seconds=_SCALED_CONNECT_SECONDS,
+            )
+        ),
+    )
+    weather_client = KorTravelWeatherClient(
+        http, max_attempts=3, backoff_base_seconds=_SCALED_BACKOFF_SECONDS
+    )
+    try:
+        view_pois = []
+        for i in range(3):
+            feature_id = f"conc{i}_{uuid.uuid4().hex[:8]}"
+            lat, lon = 37.6 + i * 0.01, 127.1 + i * 0.01
+            await _seed_location_link(
+                session_factory, feature_id=feature_id, lat=lat, lon=lon, location_id=f"cloc-{i}"
+            )
+            view_pois.append([(1, eff_date, feature_id, _snapshot(lon, lat))])
+        views = await asyncio.gather(
+            *(
+                _build_view(
+                    session_factory,
+                    pois=pois,
+                    map_client=_MapClient(),
+                    weather_client=weather_client,
+                )
+                for pois in view_pois
+            )
+        )
+        for view in views:
+            states = list(_day(view, 1)["weather_by_feature_id"].values())
+            assert states == [{"state": "unavailable"}]
+        assert calls.get("/v1/weather/markers") == 3
+        # 회로는 닫힌 채다 — 다음 호출이 transport에 닿고 성공한다.
+        before = sum(calls.values())
+        assert await weather_client.markers(["cloc-0"])
         assert sum(calls.values()) == before + 1
     finally:
         await weather_client.aclose()
