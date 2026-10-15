@@ -155,10 +155,10 @@ async def build_trip_weather_via_kor_travel_weather(
     deadline = asyncio.get_running_loop().time() + budget_seconds
 
     # 2) location 해석(캐시 우선, T-361) — feature마다 1회, **순차**(한 `AsyncSession`을 쓰므로
-    #    동시 실행 금지). 실패는 두 층으로 투영한다: (ⅰ) resolve 호출마다 개별 try — 그 feature만
+    #    동시 실행 금지). 실패는 두 층으로 투영한다: (i) resolve 호출마다 개별 try — 그 feature만
     #    `unavailable`(`no_data` 아님 — 관측소 없음을 지어내지 않는다)로 두고 계속 진행해 미스
-    #    1건이 적중 N건의 날씨를 빼앗지 않게 한다. (ⅱ) 바깥 예산 — 피호출자가 SYN을 버리면 미스
-    #    1건이 호출당 connect 상한(≈6.6 s)까지 가므로 (ⅰ)만으로는 예산을 못 지킨다. 예산이 끊기면
+    #    1건이 적중 N건의 날씨를 빼앗지 않게 한다. (ii) 바깥 예산 — 피호출자가 SYN을 버리면 미스
+    #    1건이 호출당 connect 상한(≈6.6 s)까지 가므로 (i)만으로는 예산을 못 지킨다. 예산이 끊기면
     #    아직 결과가 없는 feature 전부를 `unavailable`로 찍는다.
     resolutions: dict[str, WeatherLocationResolution] = {}
     unavailable_feature_ids: set[str] = set()
@@ -179,7 +179,7 @@ async def build_trip_weather_via_kor_travel_weather(
                     unavailable_feature_ids.add(feature_id)
     except TimeoutError:
         # 예산이 2단계에서 끝났다 — 4단계 값 조회를 할 시간이 없으므로 이미 해석된 feature도
-        # 포함해 pending **전체**를 `unavailable`로 찍는다(found 여부 무관, §8.3 "대응" (ⅱ)).
+        # 포함해 pending **전체**를 `unavailable`로 찍는다(found 여부 무관, §8.3 "대응" (ii)).
         logger.error("trip_weather_batch.resolve_budget_exceeded — 미결 feature 전부 unavailable")
         for feature_id, days in pending_feature_days.items():
             for day_index, _effective_date in days:

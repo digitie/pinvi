@@ -420,7 +420,7 @@ async def test_syn_drop_call_is_bounded_by_connect_timeout_not_read() -> None:
     """회로 닫힘 첫 호출: attempt마다 connect 상한만 기다린다(read 상한이 아니다).
 
     실제 수치(connect 2 s, read 10 s)를 1/10로 줄여 잰다 — attempt ≤ connect, 호출 ≤
-    attempts × connect + backoff. 단일 timeout이면 attempt마다 read 값(1.0)을 기다린다.
+    attempts x connect + backoff. 단일 timeout이면 attempt마다 read 값(1.0)을 기다린다.
     """
     calls: list[float] = []
     http = httpx.AsyncClient(

@@ -415,7 +415,7 @@ async def test_syn_drop_on_cache_miss_returns_empty_card_not_500(
 
     ADR-074 결정 4(b), `kor-travel-weather.md` §8.3 "대응". 변경 전에는 resolver의
     `KorTravelWeatherUnavailable`이 try 없이 올라가 catch-all 500이었다. 수치는 운영값의 1/10
-    (connect 0.2 s, backoff 0.02 s) — 호출당 ≤ 3×0.2 + 0.06 s.
+    (connect 0.2 s, backoff 0.02 s) — 호출당 ≤ 3 x 0.2 + 0.06 s.
     """
     user_id, _email = verified_user
     map_client = _FakeMapClient(feature_id="f_syn_drop", lon=_FEATURE_LON, lat=_FEATURE_LAT)

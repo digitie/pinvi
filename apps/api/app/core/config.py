@@ -910,7 +910,7 @@ class Settings(BaseSettings):
     pinvi_kor_travel_weather_timeout_seconds: float = 10.0
     # connect만 따로 짧게 둔다(ADR-074 결정 4(a), `kor-travel-weather.md` §8.3 "대응") — 피호출자가
     # 다른 호스트라 전원·링크 장애는 RST가 아니라 SYN 타임아웃이다. attempt당 connect ≤ 이 값,
-    # 호출당 ≤ max_attempts × 이 값 + backoff(기본 3×2 + 0.6 = 6.6 s). read는 위 timeout 그대로.
+    # 호출당 ≤ max_attempts x 이 값 + backoff(기본 3 x 2 + 0.6 = 6.6 s). read는 위 timeout 그대로.
     pinvi_kor_travel_weather_connect_timeout_seconds: float = Field(default=2.0, gt=0)
     pinvi_kor_travel_weather_max_attempts: int = 3
     # T-368. 기본값 off. on이면 `GET /weather/markers-in-bounds`가 지도 weather
