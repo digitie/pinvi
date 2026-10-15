@@ -1,3 +1,22 @@
+## 2026-10-15 (claude) — Track 2 weather: connect 분리·resolver 투영·회로차단 + 설정 정리 + e2e upstream 호스트 (T-373·T-374·T-375, 브랜치 `feat/track2-weather-odroid`)
+
+현실이 계획을 앞질렀다: `kor-travel-weather`는 이미 odroid `192.168.1.13:12201`(포트도 14101 → 12201, 소유자 통일)로
+옮겼고, Manager #476이 `PINVI_KOR_TRAVEL_WEATHER_BASE_URL`을 ETL·pinvi-api 두 블록에, geo base URL·키를 pinvi-api에
+주입한다. 핀 PinVi `44d8ecc8` 배포가 D1/D2를 통과했다. 그 배포에는 T-374가 없어 odroid 전원·링크 장애 시 캐시 미스
+trip view·단건 카드가 ≈30.6 s 뒤 500이 되는 경로가 운영에 열려 있다 — 이 PR이 닫는다. ADR-074는 "부분 구현"으로
+사실만 갱신했고(본문 보존), `kor-travel-weather.md` §8에 현황 블록을 붙였다. 같은 PR에서 `tasks.md` ID 중복을 정리했다
+(admin-etl 쪽 T-373 → T-376, T-374 → T-377 — weather 항목이 #580에서 먼저 받은 번호라 나중 것(#581)을 옮겼다).
+
+- 다음 한 작업: draft PR 리뷰(적대 리뷰 2인)·CI green 뒤 머지 → PinVi 핀 회전으로 배포 → §8.2-2 게이트(trip view
+  card `found` ≥ 1, odroid access log peer `.14`)와 §8.2-3 전원 off drill(n150에서 `.13:12201`행 SYN drop nft 규칙이
+  덜 파괴적) 기록.
+- 소유자 결정 대기: ADR-074 열린 결정 2의 geo client connect 분리(이 PR은 weather만), 회로 기본값(3회·30 s) 유지 여부.
+- live e2e: T-375는 `PINVI_LIVE_WEATHER_TRIP_VIEW_E2E=1` 별도 run에서만 도는 sub-test라 이 PR에서 live로 돌리지 않았다
+  (runbook `live-mutating-e2e.md` "T-363/T-365 weather 호출 모양 게이트 단건"에 n150 값 `192.168.1.13`·`12201` 반영).
+  **격리 13801/13805 stack이 필요하다**(feature cache·rate limit off·Map/weather proxy·Map service token·Map DB fixture
+  ID·live 자격증명 — runbook "Feature resolution 단건") — 배포된 운영 stack에 대고 돌리지 않는다. runner env 허용 목록에는
+  weather 변수 4개를 넣었다.
+
 ## 2026-10-13 (claude) — Track 2: `kor-travel-weather` odroid 전환 대응 문서 (ADR-074 proposed, 브랜치 `docs/weather-on-odroid-api-runtime`)
 
 `kor-travel-weather`가 odroid(192.168.1.13, 포트·이름 동일)로 옮기는 Track 2에서 Pinvi는 소비자로서만 영향받는다.
@@ -19,7 +38,7 @@ ADR 포인터(`agent-guide.md`·`CLAUDE.md`)를 074/다음 075로 동기화했�
 - 선행 권장(이 PR 범위 밖): `docs/decisions.md`가 약 263 KB다 — 읽기 도구·검토 부담을 줄이기 위해 다음 ADR(075)을 쓰기 전에 Manager와 같은 모양으로 ADR-001~040을 `docs/decisions-archive-01.md`로 분리하고 상단에 인덱스를
   둔다(doc-only). `journal.md`(약 0.93 MB)·`resume.md`(약 0.47 MB)도 2026-07 이전 분리 대상.
 
-## 2026-10-13 (claude) — `/admin/etl/summary` 상시 degraded 수정: tick 조회 창 (브랜치 `fix/admin-etl-dagster-ticks-window`, T-373)
+## 2026-10-13 (claude) — `/admin/etl/summary` 상시 degraded 수정: tick 조회 창 (브랜치 `fix/admin-etl-dagster-ticks-window`, T-376 — 구 T-373, 2026-10-15 ID 중복 정리로 재번호)
 
 C6c `pinvi_etl_summary` 스모크가 서던 원인은 공유 `job_ticks`(404k행) 위의 무경계 `ticks(limit: 3)` 조회가
 webserver statement timeout(15초)과 PinVi probe timeout(2초)을 넘긴 것이다. 두 `ticks` 선택에 `afterTimestamp`

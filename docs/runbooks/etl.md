@@ -325,7 +325,7 @@ KST 강제. import 시점 DB / 네트워크 접근 X.
 | `DATA_GO_KR_SERVICE_KEY`                   | KASI 등 data.go.kr 공통 서비스키                          |
 | `PINVI_KASI_SPECIAL_DAYS_LOOKBACK_MONTHS`  | `6`                                                       |
 | `PINVI_KASI_SPECIAL_DAYS_LOOKAHEAD_MONTHS` | `18`                                                      |
-| `PINVI_KOR_TRAVEL_WEATHER_BASE_URL`        | `http://localhost:14101` (T-367, 인증 불필요 공개 read)  |
+| `PINVI_KOR_TRAVEL_WEATHER_BASE_URL`        | 운영 값은 Manager compose 기본값(2026-10-15 odroid `http://192.168.1.13:12201`, ADR-074), `http://localhost:14101`은 개발 예시 (T-367, 인증 불필요 공개 read) |
 | `PINVI_SENTRY_DSN`                         | (선택)                                                    |
 
 `DATA_GO_KR_SERVICE_KEY`가 없으면 KASI live job은 skip/fail-fast 정책 중 하나를

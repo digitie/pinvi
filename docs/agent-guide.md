@@ -129,7 +129,7 @@ Sprint 4 PR-B2 — `kor-travel-map` OpenAPI HTTP client + features read 동작 �
 
 ## 다음 ADR 후보
 
-- ADR-075: (다음 후보 번호 — `docs/decisions.md` 마지막 ADR이 ADR-074, proposed)
+- ADR-076: (다음 후보 번호 — `docs/decisions.md` 마지막 ADR이 ADR-075, accepted)
 
 ## 차단 사유 / 결정 대기
 

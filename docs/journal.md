@@ -1,3 +1,51 @@
+## 2026-10-15 (claude) — Track 2 weather 코드: connect 분리·resolver 투영·회로차단, 설정 정리, e2e upstream 호스트, task ID 중복 정리 (브랜치 `feat/track2-weather-odroid`, T-373·T-374·T-375)
+
+전제 사실(2026-10-15 운영자 확인): weather는 odroid `192.168.1.13:12201`(14101 아님), Manager #476(merged)이
+`PINVI_KOR_TRAVEL_WEATHER_BASE_URL` 기본값을 `pinvi-dagster-code-server`·`pinvi-api` 두 블록에, `PINVI_KOR_TRAVEL_GEO_BASE_URL`
+(`:12501`)·`PINVI_KOR_TRAVEL_GEO_API_KEY`를 `pinvi-api`에 주입(PinVi #583/ADR-075). 핀 `44d8ecc8` 배포 D1/D2 통과,
+pinvi-api → weather `/health` 200, geo reverse 정상. 계획 순서(T-374 → 플립)는 뒤집혔다 — 플립이 먼저였다.
+
+- **T-374** (`kor-travel-weather.md` §8.3 "대응" 그대로): (a) settings `pinvi_kor_travel_weather_connect_timeout_seconds`
+  (기본 2.0, `gt=0`) → `kor_travel_weather_timeout()` = `httpx.Timeout(10.0, connect=2.0)`. (b) `trip_weather_batch.py`
+  2단계 resolve를 feature마다 `(KorTravelWeatherError, TimeoutError)` 개별 try(그 feature만 `unavailable`, 순차 유지)
+  + 2·4단계가 하나의 deadline(`asyncio.timeout_at`)을 공유; 2단계에서 예산이 끊기면 pending 전체 `unavailable`.
+  `weather_card.py`는 resolver `KorTravelWeatherUnavailable` → `([], None)`(빈 카드; Admin weather-values도 같은 pipeline).
+  (c) `_CircuitBreaker`를 `_send`에 씌웠다 — 논리 호출 단위, 연속 3회 실패 → 30 s open(transport 0회·즉시 `Unavailable`),
+  half-open 시험 1회(동시 호출은 거부), 4xx·계약 오류는 실패로 안 셈, 취소된 호출은 상태 불변·시험 자리만 반환.
+  모듈 상수(`_CIRCUIT_FAILURE_THRESHOLD`/`_CIRCUIT_OPEN_SECONDS`), env 노출 없음, ETL resource 제외. `.env.example`에
+  `PINVI_KOR_TRAVEL_WEATHER_CONNECT_TIMEOUT_SECONDS=2` 줄 추가.
+- **T-373**: `.env.example` 6-2 주석을 "운영 값은 Manager compose 기본값(ETL·pinvi-api 두 블록, 2026-10-15 `192.168.1.13:12201`),
+  `localhost:14101`은 개발용(weather standalone compose가 여전히 14101), 피호출자 다운은 timeout"으로, `runbooks/etl.md` env 표
+  행도 같은 취지로. 코드 기본값은 그대로(task 지시 + weather 저장소 개발 포트가 14101).
+- **T-375**: `apps/web/e2e/weather-proxy-upstream.ts`(`weatherUpstreamFromEnv`·`weatherUpstreamRequestOptions`)로
+  `PINVI_LIVE_WEATHER_UPSTREAM_HOST`(기본 `127.0.0.1`)·`_PORT`(기본 14101, 정수 검증)를 읽어 live-mutating 스펙의 리터럴을
+  대체. vitest `tests/weatherProxyUpstream.test.ts`가 hostname·port·host 헤더를 단언. runbook은 n150 값 `192.168.1.13`·`12201`.
+- **ID 중복 정리**: T-373·T-374가 각각 두 항목에 쓰였다(#580 weather 17:51 KST, #581 admin-etl 18:01 KST). 나중 것을
+  T-376(admin-etl tick 창, PR #581 제목·커밋에는 T-373으로 남음)·T-377(정적 schedule/sensor 목록)로 옮기고
+  `tasks.md`·`journal.md`·`resume.md` 참조를 고쳤다. `tasks-rule.md` §3 "참조된 ID는 재번호하지 않는다"의 예외다 —
+  같은 ID가 둘이면 어느 쪽 참조도 모호하다. T-376은 #581 머지로 사실상 완료지만 상태 정리는 이 PR 범위 밖으로 남겼다.
+- 문서: ADR-074 상태 "부분 구현" + "구현 현황(2026-10-15)" 절(본문 보존), `kor-travel-weather.md` 상단·§8 현황 블록·
+  §8.1·§8.3 구현 자리, `CLAUDE.md` ADR-074 한 줄, `agent-guide.md` 다음 ADR 후보 076(075가 이미 accepted로 존재).
+- 검증(n150 `~/pinvi-track2-test`, py3.12 venv, CI와 같은 명령): ruff check·ruff format --check·mypy --strict app 통과;
+  `tests/unit/test_kor_travel_weather_client.py` 통과; `tests/integration -k weather` 47 passed. red 확인(변이):
+  서비스 두 파일을 origin/main으로 되돌리면 새 통합 3건(A·B·단건 A) 실패; 결과는 PR 본문.
+- 수치는 테스트에서 줄였다(connect 0.2 s, view 예산 1.0 s). **처음 판의 "비율이 운영값과 같다"는 틀렸다** — backoff를
+  0.02 s로 줄여 운영의 "backoff 0.2 s > client deadline 여유 0.1 s" 관계가 뒤집혀 있었고 그 결함(F3)을 테스트가 가렸다.
+  리뷰 뒤 통합 테스트 backoff는 운영값 0.2 s 그대로다. SYN drop은 transport가 요청의 connect timeout만큼 잔 뒤
+  `ConnectTimeout`을 내는 모양으로 흉내 냈다.
+- **리뷰 후속(같은 날, 두 차례)**: (1) `weather_card`는 resolve의 `KorTravelWeatherError` 전체를 빈 카드로 투영하고
+  `weather_card.resolve_failed`/`location_fetch_failed` 경고 로그로 장애와 데이터 없음을 가른다(단건·Admin 공통, 스키마
+  불변). (2) trip view는 2·4단계를 `kor_travel_weather_call_deadline` 범위 하나에서 부른다 — attempt timeout을 남은
+  시간으로 깎고 attempt 전체를 `asyncio.timeout`으로 묶어, 응답 없는 피호출자도 예산 안에서 실패로 끝나 회로가 열린다.
+  (3) 집계 규칙: deadline이 깎은 timeout은 attempt 예산 ≥ 정상 read의 50%일 때만 실패(아니면
+  `KorTravelWeatherDeadlineExhausted`, 미집계) — 같은 범위에서 성공을 이미 봤으면 예산 길이와 무관하게 소진, 범위당
+  실패 최대 1회, backoff ≥ 남은 시간이면 멈추고 올림, 중첩 deadline은 더 이른 쪽이고 집계 상태는 바깥과 공유. 한때 둔
+  "짧은 예산이면 재시도 안 함" 절은 하한 분류·backoff 정지에 가려 따로 검증할 수 없어 3차 리뷰에서 뺐다. (4) half-open 시험 자리는 시험 호출 자신만 비운다; 회로는 worker 프로세스마다.
+  (5) `scripts/n150-playwright-runner.sh` env 허용 목록에 weather live 변수 4개. (6) 14101 서술 대체 표기, drill에
+  꾸준한 부하. 새 테스트(느리지만 건강한 피호출자에서 회로 닫힘, 응답 없는 피호출자에서 view 3회 뒤 열림, 찔끔 본문,
+  backoff, 범위당 1회, 중첩 deadline·중첩 집계 공유, 동시 view의 성공 관측, 늦은 실패, 예산 소진, resolve 계약 오류)는
+  n150에서 해당 구현을 되돌리거나 변이시켜 빨갛게 됨을 확인했다(뺀 재시도 절은 대상 아님).
+
 ## 2026-10-13 (claude) — Track 2: `kor-travel-weather` odroid 전환 대응 문서 (ADR-074 proposed, 브랜치 `docs/weather-on-odroid-api-runtime`)
 
 소유자 지시 "설계와 각 프로젝트 문서 수정해서 코딩을 할 수 있게 준비"의 Pinvi 몫. Track 2(geo·weather·transport를
@@ -66,7 +114,7 @@ n150에서 odroid 192.168.1.13으로 — 포트·URL·이름 동일, 호스트�
   PR → odroid `ensure weather` → n150 `ensure pinvi` 게이트(§8.2-2) → 전원 off drill(§8.2-3). T-373(`.env.example`·
   `runbooks/etl.md` 주석)·T-375(e2e 프록시 호스트 변수)는 언제든.
 
-## 2026-10-13 (claude) — `/admin/etl/summary` 상시 degraded: Dagster tick 조회에 최근 창을 둔다 (브랜치 `fix/admin-etl-dagster-ticks-window`, T-373)
+## 2026-10-13 (claude) — `/admin/etl/summary` 상시 degraded: Dagster tick 조회에 최근 창을 둔다 (브랜치 `fix/admin-etl-dagster-ticks-window`, T-376 — 구 T-373, 2026-10-15 ID 중복 정리로 재번호)
 
 03:13Z `ktdm-rebuild-t1013d`(Map `c4d17343` + PinVi `97f2baf2`) `_deploy_forward`의 C6c
 `run_pinvi_canonical_smoke`가 `C6c pinvi_etl_summary canonical envelope smoke failed`로 섰다. 로그인·`GET
@@ -149,7 +197,7 @@ n150에서 odroid 192.168.1.13으로 — 포트·URL·이름 동일, 호스트�
   `job_ticks` 자체의 성장(Map 15–30초 sensor가 절반, 보존 `skipped: 7일`)은 Manager `config/dagster-shared/
   dagster.yaml`·테넌트 측 조정 사안이고 Dagster UI 자체의 Overview 페이지는 같은 무경계 조회를 한다.
   `PINVI_ETL_SCHEDULES`(정적 5건)·`PINVI_ETL_SENSORS`(빈 목록)는 정의(schedule 7·sensor 6)보다 낡았다 —
-  `docs/tasks.md` T-374로 뺐다. `runsOrError` 절반은 여전히 시간 경계가 없다(`RunsFilter.createdAfter`가 있지만
+  `docs/tasks.md` T-377(구 T-374)로 뺐다. `runsOrError` 절반은 여전히 시간 경계가 없다(`RunsFilter.createdAfter`가 있지만
   이번 범위 밖).
 
 ## 2026-10-13 (claude) — `/admin/provider-sync` 502: dataset grid 투영이 Map `ProviderRefreshPolicyRecord.provider_dataset_id`를 거부 (브랜치 `fix/ops-grid-refresh-policy-provider-dataset-id`)

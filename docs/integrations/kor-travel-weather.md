@@ -17,10 +17,10 @@ Pinvi 날씨 데이터 소스를 `kor-travel-map`에서 **`kor-travel-weather`**
 > §4.2) — `kor-travel-weather` 보존이 16일에서 7일로 줄었다. T-367의 retention-horizon
 > guard가 6일 임계(보존 7일에 하루 여유)로 계속 감시한다. T-368(지도 마커)은 별도 flag(`..._map_markers_enabled`,
 > 기본 off)로 이 cutover와 독립적으로 존재한다.
-> **운영 호스트(Track 2, 2026-10-13 — 계획·미구현)**: `kor-travel-weather`가 odroid
-> (192.168.1.13, 포트 14101·이름 동일)로 옮기는 계획이 Manager ADR-58(proposed)·Pinvi
-> ADR-074(proposed)로 잡혔다. Pinvi는 base URL을 Manager compose에서 받을 뿐이며 ETL **과
-> pinvi-api** 두 블록이 대상이다 — §8. 오늘 운영은 아직 n150 loopback이다.
+> **운영 호스트(Track 2, 2026-10-15 갱신)**: `kor-travel-weather`는 **odroid `192.168.1.13:12201`**에서
+> 돈다(포트는 소유자 통일로 14101 → 12201; n150 `14101`은 없다). Pinvi는 base URL을 Manager compose
+> 기본값으로 받으며 ETL **과 pinvi-api** 두 블록 모두 주입된다(Manager #476) — §8. Pinvi ADR-074는
+> 부분 구현 상태다(T-374 회로차단은 `feat/track2-weather-odroid`).
 
 ---
 
@@ -759,7 +759,17 @@ G-2(T-366)·G-3(T-367 guard 배포)까지 소유가 명확한 반면 G-1은 Pinv
 
 ---
 
-## 8. 운영 호스트 — `kor-travel-weather`가 odroid(192.168.1.13)로 옮긴다 (Track 2, **계획·미구현**)
+## 8. 운영 호스트 — `kor-travel-weather`가 odroid(192.168.1.13)로 옮긴다 (Track 2)
+
+> **현황(2026-10-15, 아래 2026-10-13 본문보다 우선)**: 이전은 끝났다. 운영 weather는 odroid
+> `http://192.168.1.13:12201`이다 — **포트도 바뀌었다**(14101 → 12201, 소유자 통일; 아래 본문의 "포트
+> 동일"·"`.13:14101`"은 `12201`로 읽는다). Manager #476(merged)이 `PINVI_KOR_TRAVEL_WEATHER_BASE_URL`
+> 기본값 `http://192.168.1.13:12201`을 `pinvi-dagster-code-server`와 `pinvi-api` 두 블록에 주입하고, 같은
+> PR이 `PINVI_KOR_TRAVEL_GEO_BASE_URL`(`http://192.168.1.13:12501`)·`PINVI_KOR_TRAVEL_GEO_API_KEY`도
+> `pinvi-api`에 주입한다(§8.5 공백 해소, ADR-075). 핀 PinVi `44d8ecc8` 배포에서 pinvi-api → weather
+> `/health` 200·geo reverse 정상을 확인했다. 순서는 계획과 달리 **플립이 T-374보다 먼저**였다 — §8.3
+> "대응"(T-374)은 `feat/track2-weather-odroid`에서 구현했고 그 배포 전까지는 §8.3 표의 odroid 다운 칸이
+> 운영에 열려 있다. §8.2-2 게이트·§8.2-3 전원 off drill 기록은 아직 없다.
 
 > **상태(2026-10-13)**: **proposed, 미구현.** 결정은 Pinvi ADR-074(`docs/decisions.md`)와
 > Manager ADR-58(proposed, `kor-travel-docker-manager` `docs/decisions.md` — Track 2 문서 PR)이
@@ -785,17 +795,19 @@ G-2(T-366)·G-3(T-367 guard 배포)까지 소유가 명확한 반면 G-1은 Pinv
   받는 것은 그 파생물인 커밋 compose 기본값이다(ADR-58 R1/R2). root `.env` 재정의가 registry와
   다르면 Manager `targets validate`가 거부하도록 **예정**이다(Manager T-MGR-01c 산출물, `bindings.md`
   B-6 — 2026-10-13 Manager main에는 아직 없는 **계획·미구현** 동작; 오늘 validate는 그 불일치를
-  보지 않는다) — Pinvi 저장소에 `192.168.1.13` 리터럴을 박지 않는다(단일 정본). `.env.example:201-203`의 "N150 고정 포트는 14101" 주석은
-  T-373에서 "포트 14101은 불변, 호스트는 Manager registry `hosts:`"로 고친다(이 문서 PR은 문서만
-  바꾼다).
+  보지 않는다) — Pinvi 코드에 `192.168.1.13` 리터럴을 박지 않는다(단일 정본; 문서·`.env.example`
+  주석의 현황 서술은 예외). `.env.example`의 "N150 고정 포트는 14101" 주석은 T-373에서 "운영 값은
+  Manager compose 기본값(2026-10-15 `192.168.1.13:12201`), `localhost:14101`은 개발용"으로 고쳤다.
 - 두 경로 모두 공개 read 무인증(§0)이라 전환으로 자격증명이 생기지 않는다.
 - **테스트 하네스(운영 경로 아님, 세 번째 loopback 소비자)**: live-mutating e2e의 weather 프록시가
   upstream을 `hostname: '127.0.0.1'` 리터럴 + `PINVI_LIVE_WEATHER_UPSTREAM_PORT`(기본 14101)로
   고정한다(`apps/web/e2e/trip-feature-resolution-live-mutating.live.ts:42,509-513`; runbook
   `docs/runbooks/live-mutating-e2e.md:218,225`). weather 플립 뒤 n150에는 14101 리스너가 없으므로
   이 e2e(및 그것을 포함하는 M05 격리 실행)는 프록시 뒤에서 ECONNREFUSED가 된다 — 호스트 변수가
-  없어 env로 우회할 수 없다. **계획(T-375)**: `PINVI_LIVE_WEATHER_UPSTREAM_HOST`(기본 `127.0.0.1`)
-  도입 + runbook 줄 갱신. 운영 compose·Manager와 무관하다.
+  없어 env로 우회할 수 없다. **T-375(구현)**: `PINVI_LIVE_WEATHER_UPSTREAM_HOST`(기본 `127.0.0.1`) +
+  기존 `PINVI_LIVE_WEATHER_UPSTREAM_PORT`(기본 14101)를 `apps/web/e2e/weather-proxy-upstream.ts`가 읽는다;
+  n150에서는 `192.168.1.13`·`12201`을 넘긴다(`docs/runbooks/live-mutating-e2e.md`). 운영 compose·Manager와
+  무관하다.
 
 ### 8.2 전환에서 Pinvi가 하는 것·보는 것
 
@@ -816,7 +828,10 @@ G-2(T-366)·G-3(T-367 guard 배포)까지 소유가 명확한 반면 G-1은 Pinv
    v2/buildx·방화벽·fstab bind·swapfile **미완**)와 odroid에서 weather-api가 실제로 도는 것(6b
    `ensure weather`·migrate·적재 재개) — 절차·값은 Manager 몫, 여기는 포인터만.
 3. **live 수용(T-374 회로차단, 게이트 뒤 같은 자리)**: **odroid 전원 off**(또는 n150에서
-   `.13:14101`행 SYN을 버리는 nft 규칙) 상태에서 trip view p95 < 3 s. **odroid weather-api `stop`은
+   `.13:12201`행 SYN을 버리는 nft 규칙 — 2026-10-15 포트 기준) 상태에서 trip view p95 < 3 s. **부하는
+   꾸준히 건다**(예: 1초에 몇 건씩 30 s 이상) — 회로는 30 s open 뒤 half-open 시험 1회를 내보내므로,
+   요청이 드문드문하면 거의 모든 요청이 시험 호출이 되어 매번 connect 상한(≈6.6 s 이하, trip view는
+   예산 10 s)을 기다리고 p95가 회로 효과를 보여 주지 못한다. **odroid weather-api `stop`은
    검사가 아니다** — 호스트가 살아 있으면 커널이 LAN 너머로 RST를 돌려주어 T-374 없이도 ≈0.6 s라
    초록이 난다(§8.3 첫 단락). 단위 테스트로는 잴 수 없는 기준이라 여기 둔다(설계 §11.3 전원 off drill).
 4. Map 핀 bump·M05 pair 회전과 **무관**하다 — pair 계약 파일(`contracts/`)은 바뀌지 않는다.
@@ -850,7 +865,11 @@ odroid 장애는 캐시 적중 경로에서 "오류 없이 날씨가 없다"로 
 게이트 (b)(c), (ⅱ) T-367 가드, (ⅲ) Manager Prometheus federate의 weather `up`(Manager 몫,
 T-MGR-04 계획)뿐이다.
 
-**대응(T-374, 코드 — 이 문서 PR 범위 밖; 의존 없음, weather 플립 **전에** 머지·배포, §8.2-1). 이 절이
+**대응(T-374, 코드 — 구현 `feat/track2-weather-odroid`, 2026-10-15; 원래 순서는 플립 **전**이었으나 플립이
+먼저 났다, §8 현황). 구현 자리: settings `pinvi_kor_travel_weather_connect_timeout_seconds`,
+`clients/kor_travel_weather.py`의 `kor_travel_weather_timeout()`·`_CircuitBreaker`(`_send` 래핑),
+`trip_weather_batch.py` 2단계 개별 try + 2·4단계 공유 deadline(`asyncio.timeout_at`), `weather_card.py`
+resolver `Unavailable` → 빈 카드. 이 절이
 T-374 사양의 단일 정본이다 — ADR-074 결정 4와 `tasks.md` T-374는 여기를 가리키고 수치를 복제하지
 않는다.**
 
@@ -877,6 +896,29 @@ T-374 사양의 단일 정본이다 — ADR-074 결정 4와 `tasks.md` T-374는 
   **(B) 피호출자 up, 한 feature의 resolve만 `Unavailable`(5xx mock)** — 그 feature만 `unavailable`,
   나머지 적중 POI는 `found`, 200. (A)에서 논리 호출 3회가 실패하면 회로가 열려 그 뒤 요청은 즉시
   `unavailable`이다(아래).
+- **구현 보강(2026-10-15 리뷰)**: (1) **호출 deadline** — trip view는 2·4단계를
+  `kor_travel_weather_call_deadline(view deadline − min(0.1 s, 예산/10))` 안에서 부른다. client는 attempt마다
+  timeout을 남은 시간으로 깎고, attempt 전체를 `asyncio.timeout(남은 시간)`으로 묶는다(찔끔 오는 본문도
+  deadline을 넘지 않게). 연결은 받고 응답하지 않는 피호출자는 호출당 read 10 s x 3회 ≈ 30.6 s라 바깥 예산
+  취소(결과 없음 → 회로 실패로 세지 않음)로만 끝나 trip view 트래픽으로는 회로가 열리지 않았다 — 이제 예산
+  안의 attempt timeout으로 끝나 실패로 센다(첫 호출이 ≈9.9 s를 받는다). **집계 규칙**: (a) deadline이 깎은
+  timeout은 그 attempt 예산이 정상 read의 50%(운영 5 s) 이상일 때만 실패이고, 그보다 짧으면 "호출자 예산
+  소진"(`KorTravelWeatherDeadlineExhausted`, 미집계)이다 — 느리지만 살아 있는 피호출자(odroid 1~9 s)에서 한
+  view의 병렬 forecast 10개가 예산 끝에 함께 끊겨 회로를 여는 일을 막는다. 같은 범위에서 이미 성공한 호출이
+  있으면(피호출자가 살아 있다는 증거, 예: markers 성공 뒤 forecast가 예산 끝에서 끊김) deadline이 깎은 timeout은
+  예산 길이와 무관하게 소진이다 — 느린 view 여러 개가 동시에 돌 때 각 1회씩 세어 회로가 열리는 일을 막는다.
+  (b) deadline 범위 하나(= trip view 1회)는 회로 실패를 **최대 1회** 센다. (c) **backoff가 남은 시간 이상이면 자지 않고** 마지막 실패를 올린다 — 운영 backoff
+  0.2 s가 client 여유 0.1 s보다 길어, 자다가 바깥 취소(미집계)를 맞으면 회로가 영영 열리지 않는다.
+  (d) 중첩 deadline은 더 이른 쪽이고 집계 상태(실패 1회·성공 관측)는 바깥과 공유한다. 보내지도 않은 호출(`KorTravelWeatherDeadlineExhausted`)은 세지 않는다.
+  남는 대가: 의미 있는 예산(≥5 s)을 받고도 응답이 없으면 느린 피호출자라도 실패로 센다(trip view 경로, view당
+  1회). **알려진 공백**: 같은 view 범위에서 한 엔드포인트가 성공하고(예: markers, 캐시 미스 resolve) 다른
+  엔드포인트만 멈추면(예: weather 쪽 forecast 정지) `saw_success` 때문에 trip view 경로는 실패를 하나도 세지
+  않아 회로가 열리지 않는다 — view마다 ≈9.9 s(view 예산이 상한)를 기다린다. 후속 T-378(엔드포인트별
+  `saw_success` 또는 엔드포인트별 hang 집계, #584). (2) half-open
+  시험 자리는 **시험 호출 자신**의 결과만 비운다(옛 호출의 늦은 실패가 비우면 시험이 둘이 된다). (3) 회로는
+  client 인스턴스(lifespan당 1개)에 있으므로 **worker 프로세스마다 따로**다. (4) 단건·Admin은 resolve의
+  `KorTravelWeatherError` 전체를 빈 카드로 투영하고 `weather_card.resolve_failed`/`location_fetch_failed`
+  경고 로그로 장애와 "데이터 없음"을 가른다(응답 스키마에 구분 필드 없음).
 - **회로차단(기본값, 열린 결정 2는 이 값의 변경 여부)**: 단위는 **논리 호출**(`_send` 1회,
   attempt 아님); 연속 3회 호출 실패 → 30 s open(즉시 `Unavailable`), half-open 1회; 상태는
   `KorTravelWeatherClient` 인스턴스에 두어 trip/card/resolver/Admin/마커가 **공유**(client는 1개,

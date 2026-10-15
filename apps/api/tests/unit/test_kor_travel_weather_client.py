@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 import pytest
@@ -12,9 +14,14 @@ from app.clients.kor_travel_weather import (
     KorTravelWeatherBadRequest,
     KorTravelWeatherClient,
     KorTravelWeatherContractError,
+    KorTravelWeatherDeadlineExhausted,
     KorTravelWeatherNotFound,
     KorTravelWeatherUnavailable,
+    create_kor_travel_weather_client,
+    kor_travel_weather_call_deadline,
+    kor_travel_weather_timeout,
 )
+from app.core.config import Settings
 
 Handler = Callable[[httpx.Request], httpx.Response]
 
@@ -362,4 +369,506 @@ async def test_missing_data_key_raises_contract_error() -> None:
     client = _client(handler)
     with pytest.raises(KorTravelWeatherContractError):
         await client.latest("loc-1")
+    await client.aclose()
+
+
+# ── ADR-074 결정 4: connect 분리 + 회로차단 (`kor-travel-weather.md` §8.3 "대응") ──────────
+#
+# 수용 전제는 **SYN을 버리는 호스트**다 — RST 호스트(연결 거부)는 변경 전에도 즉시 예외라
+# 검사가 되지 않는다. 아래 `_syn_drop_handler`는 요청에 실린 connect timeout만큼 기다린 뒤
+# `ConnectTimeout`을 낸다(커널이 SYN 재전송 끝에 포기하는 모양). MockTransport는 timeout을
+# 집행하지 않으므로 handler가 그 몫을 한다.
+
+
+def _syn_drop_handler(calls: list[float]) -> Callable[[httpx.Request], Any]:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        connect = request.extensions["timeout"]["connect"]
+        calls.append(connect)
+        await asyncio.sleep(connect)
+        raise httpx.ConnectTimeout("SYN dropped", request=request)
+
+    return handler
+
+
+class _FakeClock:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def test_settings_timeout_splits_connect_from_read() -> None:
+    """기본 connect 2.0 s·read 10 s — `httpx.Timeout(10.0, connect=2.0)`."""
+    app_settings = Settings()
+    assert app_settings.pinvi_kor_travel_weather_connect_timeout_seconds == 2.0
+    assert kor_travel_weather_timeout(app_settings) == httpx.Timeout(10.0, connect=2.0)
+
+
+async def test_factory_client_carries_split_timeout() -> None:
+    client = create_kor_travel_weather_client(
+        Settings(
+            pinvi_kor_travel_weather_timeout_seconds=10.0,
+            pinvi_kor_travel_weather_connect_timeout_seconds=2.0,
+        )
+    )
+    try:
+        assert client._http.timeout == httpx.Timeout(10.0, connect=2.0)
+    finally:
+        await client.aclose()
+
+
+async def test_syn_drop_call_is_bounded_by_connect_timeout_not_read() -> None:
+    """회로 닫힘 첫 호출: attempt마다 connect 상한만 기다린다(read 상한이 아니다).
+
+    실제 수치(connect 2 s, read 10 s)를 1/10로 줄여 잰다 — attempt ≤ connect, 호출 ≤
+    attempts x connect + backoff. 단일 timeout이면 attempt마다 read 값(1.0)을 기다린다.
+    """
+    calls: list[float] = []
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=httpx.MockTransport(_syn_drop_handler(calls)),
+        timeout=kor_travel_weather_timeout(
+            Settings(
+                pinvi_kor_travel_weather_timeout_seconds=1.0,
+                pinvi_kor_travel_weather_connect_timeout_seconds=0.2,
+            )
+        ),
+    )
+    client = KorTravelWeatherClient(http, max_attempts=3, backoff_base_seconds=0.0)
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    with pytest.raises(KorTravelWeatherUnavailable):
+        await client.latest("loc-1")
+    elapsed = loop.time() - started
+    assert calls == [0.2, 0.2, 0.2]
+    assert elapsed < 3 * 0.2 + 0.3
+    await client.aclose()
+
+
+async def test_circuit_opens_after_three_failed_logical_calls() -> None:
+    """단위는 논리 호출(attempt 아님): 3회 연속 실패 → open 동안 transport 0회·즉시 Unavailable."""
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        return httpx.Response(503, json={"code": "UPSTREAM"})
+
+    clock = _FakeClock()
+    client = _client(handler, max_attempts=2, clock=clock)
+    for _ in range(2):
+        with pytest.raises(KorTravelWeatherUnavailable):
+            await client.latest("loc-1")
+    # 논리 호출 2회 = attempt 4회. attempt 수로 셌다면 이미 열렸을 것이다.
+    assert attempts["n"] == 4
+    with pytest.raises(KorTravelWeatherUnavailable):
+        await client.latest("loc-1")
+    assert attempts["n"] == 6
+
+    # open: transport를 부르지 않고 즉시 실패한다 — 모든 엔드포인트가 같은 회로를 공유한다.
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        await client.latest("loc-1")
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        await client.resolve(lat=37.5, lon=127.0)
+    clock.now += 29.9
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        await client.markers(["loc-1"])
+    assert attempts["n"] == 6
+    await client.aclose()
+
+
+async def test_circuit_half_open_trial_closes_on_success_and_reopens_on_failure() -> None:
+    fail = {"on": True}
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        if fail["on"]:
+            return httpx.Response(503, json={"code": "UPSTREAM"})
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    clock = _FakeClock()
+    client = _client(handler, max_attempts=1, clock=clock)
+    for _ in range(3):
+        with pytest.raises(KorTravelWeatherUnavailable):
+            await client.latest("loc-1")
+    assert attempts["n"] == 3
+
+    # 30 s 뒤 half-open 시험 1회 — 실패면 다시 30 s open.
+    clock.now += 30.0
+    with pytest.raises(KorTravelWeatherUnavailable):
+        await client.latest("loc-1")
+    assert attempts["n"] == 4
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        await client.latest("loc-1")
+    assert attempts["n"] == 4
+
+    # 다시 30 s 뒤 시험이 성공하면 닫히고 이후 호출은 정상이다.
+    clock.now += 30.0
+    fail["on"] = False
+    assert len(await client.latest("loc-1")) == 1
+    assert len(await client.latest("loc-1")) == 1
+    assert attempts["n"] == 6
+    await client.aclose()
+
+
+async def test_circuit_half_open_admits_only_one_trial_at_a_time() -> None:
+    release = asyncio.Event()
+    attempts = {"n": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        if attempts["n"] <= 3:
+            return httpx.Response(503, json={"code": "UPSTREAM"})
+        await release.wait()
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    clock = _FakeClock()
+    client = _client(handler, max_attempts=1, clock=clock)
+    for _ in range(3):
+        with pytest.raises(KorTravelWeatherUnavailable):
+            await client.latest("loc-1")
+    clock.now += 30.0
+    trial = asyncio.create_task(client.latest("loc-1"))
+    for _ in range(5):
+        await asyncio.sleep(0)
+    # 시험 호출이 진행 중이면 다른 호출은 transport에 닿지 않는다(닿으면 handler가 멈추므로
+    # 상한을 둔다 — 회귀가 hang이 아니라 실패로 보이게).
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        async with asyncio.timeout(2.0):
+            await client.latest("loc-1")
+    release.set()
+    assert len(await trial) == 1
+    assert attempts["n"] == 4
+    await client.aclose()
+
+
+async def test_cancelled_trial_releases_half_open_slot() -> None:
+    """결과 없이 취소된 시험 호출은 회로 상태를 바꾸지 않고 시험 자리만 돌려준다."""
+    attempts = {"n": 0}
+    hang = {"on": True}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        if attempts["n"] <= 3:
+            return httpx.Response(503, json={"code": "UPSTREAM"})
+        if hang["on"]:
+            await asyncio.Event().wait()
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    clock = _FakeClock()
+    client = _client(handler, max_attempts=1, clock=clock)
+    for _ in range(3):
+        with pytest.raises(KorTravelWeatherUnavailable):
+            await client.latest("loc-1")
+    clock.now += 30.0
+    trial = asyncio.create_task(client.latest("loc-1"))
+    for _ in range(5):
+        await asyncio.sleep(0)
+    trial.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await trial
+    hang["on"] = False
+    async with asyncio.timeout(2.0):
+        assert len(await client.latest("loc-1")) == 1
+    await client.aclose()
+
+
+async def test_4xx_is_not_a_circuit_failure() -> None:
+    """404/422는 피호출자가 살아 있다는 뜻이다 — 회로 실패로 세지 않는다."""
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        return httpx.Response(404, json={"code": "NOT_FOUND"})
+
+    client = _client(handler, clock=_FakeClock())
+    for _ in range(5):
+        with pytest.raises(KorTravelWeatherNotFound):
+            await client.latest("loc-1")
+    assert attempts["n"] == 5
+    await client.aclose()
+
+
+async def test_success_resets_consecutive_failure_count() -> None:
+    script = iter([503, 503, 200, 503, 503, 200])
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        code = next(script)
+        if code == 200:
+            return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+        return httpx.Response(code, json={"code": "UPSTREAM"})
+
+    client = _client(handler, max_attempts=1, clock=_FakeClock())
+    for expect_ok in (False, False, True, False, False, True):
+        if expect_ok:
+            await client.latest("loc-1")
+        else:
+            with pytest.raises(KorTravelWeatherUnavailable):
+                await client.latest("loc-1")
+    assert attempts["n"] == 6
+    await client.aclose()
+
+
+async def test_late_non_trial_failure_does_not_free_half_open_slot() -> None:
+    """회로가 열리기 전에 출발한 옛 호출의 늦은 실패가 진행 중인 시험 자리를 비우면 안 된다."""
+    release_old = asyncio.Event()
+    attempts = {"n": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        n = attempts["n"]
+        if n == 1:  # 옛 호출 A — 회로가 닫혀 있을 때 출발, 나중에 실패
+            await release_old.wait()
+            return httpx.Response(503, json={"code": "UPSTREAM"})
+        if n <= 4:  # 연속 실패 3회 → open
+            return httpx.Response(503, json={"code": "UPSTREAM"})
+        if n == 5:  # half-open 시험 호출 T — 끝나지 않는다
+            await asyncio.Event().wait()
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    clock = _FakeClock()
+    client = _client(handler, max_attempts=1, clock=clock)
+    old_call = asyncio.create_task(client.latest("loc-1"))
+    for _ in range(5):
+        await asyncio.sleep(0)
+    for _ in range(3):
+        with pytest.raises(KorTravelWeatherUnavailable):
+            await client.latest("loc-1")
+    clock.now += 30.0
+    trial = asyncio.create_task(client.latest("loc-1"))
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert attempts["n"] == 5
+
+    release_old.set()
+    with pytest.raises(KorTravelWeatherUnavailable):
+        await old_call
+    clock.now += 30.0
+    # 시험 T가 아직 진행 중이므로 두 번째 시험은 허가되지 않는다.
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        async with asyncio.timeout(2.0):
+            await client.latest("loc-1")
+    assert attempts["n"] == 5
+    trial.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await trial
+    await client.aclose()
+
+
+def _hanging_handler(read_waits: list[float]) -> Callable[[httpx.Request], Any]:
+    """연결은 받고 응답하지 않는 피호출자 — 요청의 read timeout만큼 기다린 뒤 `ReadTimeout`."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        read = request.extensions["timeout"]["read"]
+        read_waits.append(read)
+        await asyncio.sleep(read)
+        raise httpx.ReadTimeout("no response", request=request)
+
+    return handler
+
+
+async def test_call_deadline_caps_attempt_timeout_and_counts_as_failure() -> None:
+    """호출자 deadline 안에서는 attempt timeout이 남은 시간으로 깎여 **실패로 끝난다**.
+
+    바깥 `asyncio.timeout` 취소는 회로 실패로 세지 않으므로, 이것이 없으면 응답하지 않는
+    피호출자(read 10 s x 3회)는 trip view 예산(10 s)에 늘 취소돼 회로를 열지 못한다. attempt
+    예산(0.15 s)이 정상 read(0.2 s)의 절반 이상이라 "의미 있는 예산"으로 센다.
+    """
+    read_waits: list[float] = []
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=httpx.MockTransport(_hanging_handler(read_waits)),
+        timeout=httpx.Timeout(0.2, connect=0.2),
+    )
+    client = KorTravelWeatherClient(http, max_attempts=3, backoff_base_seconds=0.0)
+    loop = asyncio.get_running_loop()
+    for _ in range(3):
+        started = loop.time()
+        with kor_travel_weather_call_deadline(started + 0.15):
+            with pytest.raises(KorTravelWeatherUnavailable):
+                await client.latest("loc-1")
+        assert loop.time() - started < 0.15 + 0.1
+    # attempt 하나가 남은 시간(≤0.15 s)까지만 기다렸고 재시도 없이 끝났다(남은 시간 0).
+    assert len(read_waits) == 3
+    assert all(wait <= 0.15 for wait in read_waits)
+    # 세 번의 논리 호출 실패로 회로가 열렸다 — 다음 호출은 transport에 닿지 않는다.
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        await client.latest("loc-1")
+    assert len(read_waits) == 3
+    await client.aclose()
+
+
+async def test_exhausted_call_deadline_sends_nothing_and_is_not_a_failure() -> None:
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    client = _client(handler, clock=_FakeClock())
+    past = asyncio.get_running_loop().time() - 1.0
+    for _ in range(5):
+        with kor_travel_weather_call_deadline(past):
+            with pytest.raises(KorTravelWeatherDeadlineExhausted):
+                await client.latest("loc-1")
+    assert attempts["n"] == 0
+    # 예산 소진은 피호출자 장애의 증거가 아니다 — 회로는 닫힌 채다.
+    assert len(await client.latest("loc-1")) == 1
+    await client.aclose()
+
+
+async def test_short_budget_timeout_is_exhaustion_not_a_failure() -> None:
+    """정상 read의 절반보다 짧은 예산에서 깎인 timeout은 "호출자 예산 소진"이다 — 회로 미집계.
+
+    느리지만 살아 있는 피호출자에서 view 예산 끝의 병렬 forecast가 함께 끊겨도 회로가 열리면 안 된다.
+    """
+    hang = {"on": True}
+    attempts = {"n": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        if hang["on"]:
+            read = request.extensions["timeout"]["read"]
+            await asyncio.sleep(read)
+            raise httpx.ReadTimeout("slow", request=request)
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=httpx.MockTransport(handler),
+        timeout=httpx.Timeout(1.0, connect=0.2),
+    )
+    client = KorTravelWeatherClient(http, max_attempts=3, backoff_base_seconds=0.0)
+    loop = asyncio.get_running_loop()
+    for _ in range(5):
+        with kor_travel_weather_call_deadline(loop.time() + 0.1):
+            with pytest.raises(KorTravelWeatherDeadlineExhausted):
+                await client.latest("loc-1")
+    # 각 호출은 deadline에서 끊긴 attempt 1회로 끝났다(남은 시간 0 — 재시도 없음).
+    assert attempts["n"] == 5
+    hang["on"] = False
+    assert len(await client.latest("loc-1")) == 1
+    await client.aclose()
+
+
+async def test_one_deadline_scope_counts_at_most_one_failure() -> None:
+    """한 deadline 범위(trip view 1회)의 병렬 호출 실패는 회로 실패 1회다."""
+    fail = {"on": True}
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        if fail["on"]:
+            return httpx.Response(503, json={"code": "UPSTREAM"})
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    client = _client(handler, max_attempts=1, clock=_FakeClock())
+    loop = asyncio.get_running_loop()
+    with kor_travel_weather_call_deadline(loop.time() + 5.0):
+        results = await asyncio.gather(
+            *(client.latest(f"loc-{i}") for i in range(10)), return_exceptions=True
+        )
+    assert all(isinstance(r, KorTravelWeatherUnavailable) for r in results)
+    assert attempts["n"] == 10
+    fail["on"] = False
+    # 회로는 닫힌 채다 — 다음 호출이 transport에 닿는다.
+    assert len(await client.latest("loc-1")) == 1
+    await client.aclose()
+
+
+async def test_trickling_body_is_bounded_by_attempt_total_timeout() -> None:
+    """httpx 단계별 timeout은 조각마다 다시 잰다 — 본문이 찔끔찔끔 오면 deadline을 넘는다.
+    attempt 전체를 남은 시간으로 묶어야 한다."""
+
+    async def trickle() -> Any:
+        for _ in range(40):
+            await asyncio.sleep(0.05)
+            yield b" "
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=trickle())
+
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=httpx.MockTransport(handler),
+        timeout=httpx.Timeout(0.2, connect=0.2),
+    )
+    client = KorTravelWeatherClient(http, max_attempts=3, backoff_base_seconds=0.0)
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    with kor_travel_weather_call_deadline(started + 0.3):
+        with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
+            async with asyncio.timeout(3.0):
+                await client.latest("loc-1")
+    assert loop.time() - started < 0.3 + 0.5
+    # 예산 0.3 s는 정상 read(0.2 s)의 절반 이상 — 진짜 실패로 센다.
+    assert not isinstance(exc_info.value, KorTravelWeatherDeadlineExhausted)
+    await client.aclose()
+
+
+async def test_backoff_longer_than_remaining_stops_and_counts() -> None:
+    """backoff가 deadline을 넘으면 자지 않고 멈춘다 — 자다가 바깥 취소(미집계)를 맞지 않게."""
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        return httpx.Response(503, json={"code": "UPSTREAM"})
+
+    clock = _FakeClock()
+    client = _client(handler, max_attempts=3, backoff_base_seconds=0.2, clock=clock)
+    loop = asyncio.get_running_loop()
+    for _ in range(3):
+        started = loop.time()
+        with kor_travel_weather_call_deadline(started + 0.1):
+            with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
+                await client.latest("loc-1")
+        assert loop.time() - started < 0.1
+        assert not isinstance(exc_info.value, KorTravelWeatherDeadlineExhausted)
+    assert attempts["n"] == 3
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        await client.latest("loc-1")
+    await client.aclose()
+
+
+async def test_nested_deadline_cannot_widen_budget() -> None:
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    client = _client(handler, clock=_FakeClock())
+    loop = asyncio.get_running_loop()
+    with kor_travel_weather_call_deadline(loop.time() - 1.0):
+        with kor_travel_weather_call_deadline(loop.time() + 60.0):
+            with pytest.raises(KorTravelWeatherDeadlineExhausted):
+                await client.latest("loc-1")
+    assert attempts["n"] == 0
+    await client.aclose()
+
+
+async def test_nested_scope_shares_counting_state() -> None:
+    """중첩 범위는 바깥과 집계 상태를 공유한다 — 안팎에서 실패를 두 번 세지 않는다."""
+    fail = {"on": True}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if fail["on"]:
+            return httpx.Response(503, json={"code": "UPSTREAM"})
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    client = _client(handler, max_attempts=1, clock=_FakeClock())
+    loop = asyncio.get_running_loop()
+    for _ in range(2):
+        with kor_travel_weather_call_deadline(loop.time() + 5.0):
+            with pytest.raises(KorTravelWeatherUnavailable):
+                await client.latest("loc-1")
+            with kor_travel_weather_call_deadline(loop.time() + 5.0):
+                with pytest.raises(KorTravelWeatherUnavailable):
+                    await client.latest("loc-1")
+    # 범위 2개 = 실패 2회 < 임계 3 — 회로는 닫힌 채다.
+    fail["on"] = False
+    assert len(await client.latest("loc-1")) == 1
     await client.aclose()

@@ -37,8 +37,11 @@ batch로 바꾼다:
    파티션 불변식은 day 단위) 같은 card_key라도 날짜별로 다른 카드 내용(그 날짜로
    슬라이스한 metrics)을 가질 수 있다.
 5. 예산 10초(view당, `trip_view_builder`와 공유) 안에 끝내며 타임아웃/전체 실패 시
-   미결 전체를 `unavailable`로 되돌린다(부분 실패를 추측하지 않는다). location fanout
-   은 동시성 상한(`_FORECAST_CONCURRENCY`)을 둔다.
+   미결 전체를 `unavailable`로 되돌린다(부분 실패를 추측하지 않는다). 예산은 location
+   해석(코드 주석 2단계)과 값 조회(4단계)가 **함께** 쓴다 — 해석 실패(`KorTravelWeatherError`)는 그
+   feature만 `unavailable`이고, 예산이 해석 중에 끝나면 pending 전체가 `unavailable`이다
+   (ADR-074 결정 4(b), 500 금지). location fanout은 동시성 상한(`_FORECAST_CONCURRENCY`)을
+   둔다.
 
 **부분 실패 처리**: bundle 안의 한 location만 fetch 실패해도 다른 location이 값을
 줬다면 그 값으로 `found`를 만든다(추측이 아니라 실제로 가진 데이터). bundle 전체가
@@ -63,6 +66,7 @@ from app.clients.kor_travel_weather import (
     KorTravelWeatherClient,
     KorTravelWeatherError,
     WeatherValueOut,
+    kor_travel_weather_call_deadline,
 )
 from app.models.poi import TripDayPoi
 from app.services.weather_location_resolver import (
@@ -79,6 +83,9 @@ _SEOUL = ZoneInfo("Asia/Seoul")
 _MARKERS_CHUNK_SIZE = 500
 # location마다 forecast()를 병렬로 부르되 동시 연결 수를 제한한다(설계 §3.4 "동시성 상한").
 _FORECAST_CONCURRENCY = 10
+# client 호출 deadline은 view deadline보다 이만큼 앞선다(예산의 1/10 이하) — attempt timeout이
+# 바깥 취소보다 먼저 나야 회로차단이 그 실패를 센다(`kor_travel_weather_call_deadline`).
+_CLIENT_DEADLINE_MARGIN_SECONDS = 0.1
 
 
 def _weather_target_at(value: date) -> datetime:
@@ -121,7 +128,31 @@ async def build_trip_weather_via_kor_travel_weather(
 
     feature batch 결과를 전혀 받지 않는다(모듈 docstring 참조) — POI 자신의
     `feature_snapshot.coord`만으로 동작한다.
+
+    view 1회 = client 호출 deadline 범위 1개다 — 회로차단은 이 범위에서 실패를 최대 1회 센다
+    (`kor_travel_weather_call_deadline`).
     """
+    # 2)~4)는 view 예산 하나를 공유한다(ADR-074 결정 4(b), `kor-travel-weather.md` §8.3 "대응").
+    deadline = asyncio.get_running_loop().time() + budget_seconds
+    client_deadline = deadline - min(_CLIENT_DEADLINE_MARGIN_SECONDS, budget_seconds / 10)
+    with kor_travel_weather_call_deadline(client_deadline):
+        return await _build_trip_weather(
+            db,
+            pois=pois,
+            day_effective_date=day_effective_date,
+            weather_client=weather_client,
+            deadline=deadline,
+        )
+
+
+async def _build_trip_weather(
+    db: AsyncSession,
+    *,
+    pois: Sequence[TripDayPoi],
+    day_effective_date: Mapping[int, date | None],
+    weather_client: KorTravelWeatherClient,
+    deadline: float,
+) -> tuple[dict[int, dict[str, dict[str, Any]]], dict[int, dict[str, dict[str, Any]]]]:
     day_indexes = sorted(day_effective_date)
     weather_by_day_index: dict[int, dict[str, dict[str, Any]]] = {di: {} for di in day_indexes}
     weather_cards_by_day_index: dict[int, dict[str, dict[str, Any]]] = {
@@ -148,21 +179,47 @@ async def build_trip_weather_via_kor_travel_weather(
     if not pending_feature_days:
         return weather_by_day_index, weather_cards_by_day_index
 
-    # 2) location 해석(캐시 우선, T-361) — feature마다 1회.
+    # 2) location 해석(캐시 우선, T-361) — feature마다 1회, **순차**(한 `AsyncSession`을 쓰므로
+    #    동시 실행 금지). 실패는 두 층으로 투영한다: (i) resolve 호출마다 개별 try — 그 feature만
+    #    `unavailable`(`no_data` 아님 — 관측소 없음을 지어내지 않는다)로 두고 계속 진행해 미스
+    #    1건이 적중 N건의 날씨를 빼앗지 않게 한다. (ii) 바깥 예산 — 피호출자가 SYN을 버리면 미스
+    #    1건이 호출당 connect 상한(≈6.6 s)까지 가므로 (i)만으로는 예산을 못 지킨다. 예산이 끊기면
+    #    아직 결과가 없는 feature 전부를 `unavailable`로 찍는다.
     resolutions: dict[str, WeatherLocationResolution] = {}
-    for feature_id in pending_feature_days:
-        lat, lon = coord_by_feature_id[feature_id]
-        resolutions[feature_id] = await resolve_weather_location(
-            db, feature_id=feature_id, lat=lat, lon=lon, client=weather_client
-        )
+    unavailable_feature_ids: set[str] = set()
+    try:
+        async with asyncio.timeout_at(deadline):
+            for feature_id in pending_feature_days:
+                lat, lon = coord_by_feature_id[feature_id]
+                try:
+                    resolutions[feature_id] = await resolve_weather_location(
+                        db, feature_id=feature_id, lat=lat, lon=lon, client=weather_client
+                    )
+                except (KorTravelWeatherError, TimeoutError) as exc:
+                    logger.warning(
+                        "trip_weather_batch.resolve_failed: %s — 이 feature만 unavailable",
+                        exc,
+                        extra={"feature_id": feature_id},
+                    )
+                    unavailable_feature_ids.add(feature_id)
+    except TimeoutError:
+        # 예산이 2단계에서 끝났다 — 4단계 값 조회를 할 시간이 없으므로 이미 해석된 feature도
+        # 포함해 pending **전체**를 `unavailable`로 찍는다(found 여부 무관, §8.3 "대응" (ii)).
+        logger.error("trip_weather_batch.resolve_budget_exceeded — 미결 feature 전부 unavailable")
+        for feature_id, days in pending_feature_days.items():
+            for day_index, _effective_date in days:
+                weather_by_day_index[day_index][feature_id] = {"state": "unavailable"}
+        return weather_by_day_index, weather_cards_by_day_index
 
     found_resolutions: dict[str, WeatherLocationFound] = {}
-    for feature_id, resolution in resolutions.items():
+    for feature_id, days in pending_feature_days.items():
+        resolution = resolutions.get(feature_id)
         if isinstance(resolution, WeatherLocationFound):
             found_resolutions[feature_id] = resolution
-        else:
-            for day_index, _effective_date in pending_feature_days[feature_id]:
-                weather_by_day_index[day_index][feature_id] = {"state": "no_data"}
+            continue
+        state = "unavailable" if feature_id in unavailable_feature_ids else "no_data"
+        for day_index, _effective_date in days:
+            weather_by_day_index[day_index][feature_id] = {"state": state}
 
     if not found_resolutions:
         return weather_by_day_index, weather_cards_by_day_index
@@ -188,7 +245,7 @@ async def build_trip_weather_via_kor_travel_weather(
     values_by_location: dict[str, list[WeatherValueOut]] = {loc: [] for loc in all_location_ids}
     location_failed: dict[str, bool] = dict.fromkeys(all_location_ids, False)
     try:
-        async with asyncio.timeout(budget_seconds):
+        async with asyncio.timeout_at(deadline):
             for chunk in _chunked(all_location_ids, _MARKERS_CHUNK_SIZE):
                 markers = await weather_client.markers(chunk)
                 for marker in markers:

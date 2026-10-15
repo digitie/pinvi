@@ -3777,9 +3777,10 @@ ADR-068 결정 8은 과거 여행 날씨를 Pinvi 스냅샷 테이블이 아니�
 
 ## ADR-074: `kor-travel-weather` 호출은 ETL과 API 두 경로이며 base URL은 Manager compose가 두 블록에 주입한다 — odroid(192.168.1.13) 전환 대응
 
-- **상태**: proposed (**미구현** — Pinvi 코드 T-374는 플립 **전에** 선행, 결정 1~3의 효력은 Manager
-  T-MGR-01c·weather 플립 PR 뒤)
-- **날짜**: 2026-10-13
+- **상태**: proposed — **부분 구현(2026-10-15)**: 결정 1·2(Manager 주입)는 Manager #476으로 배포됐고
+  (아래 "구현 현황"), 결정 4(T-374)는 PR `feat/track2-weather-odroid`에서 구현 중이다. 원래 순서
+  "T-374 → 플립"은 지켜지지 않았다 — weather가 먼저 odroid로 옮겼다. accepted 조건은 '결과' 절 그대로.
+- **날짜**: 2026-10-13 (구현 현황 갱신 2026-10-15)
 - **결정자**: 사용자(소유자) + Claude (제안)
 - **관련**: ADR-067(odroid 실행 환경 퇴역) **유지** — Pinvi 실행 노드는 그대로 N150이고
   odroid는 Pinvi가 REST로 부르는 피호출자의 호스트일 뿐이다, supersede 아님. ADR-068(유일 날씨
@@ -3828,6 +3829,26 @@ Track 2 프로그램(소유자 지시 2026-10-13)은 geo·weather·transport를 
    — 상세 표는 `kor-travel-weather.md` §8.3.
 4. 공개 read 무인증(`config.py:898-899`), 보존 7일·가드 6일(ADR-073)은 호스트와 무관하다.
 
+### 구현 현황 (2026-10-15 — 사실 갱신, 아래 컨텍스트·결정 본문은 2026-10-13 작성 그대로)
+
+- **weather 이전 완료**: `kor-travel-weather`는 odroid `192.168.1.13`에서 돈다. **포트는 14101이 아니라
+  `12201`이다**(소유자가 포트 체계를 통일 — 2026-10-13 본문의 "포트·URL·이름 동일"은 포트에 대해서는 더
+  맞지 않는다). n150의 옛 `14101` 리스너는 없다. weather 저장소 standalone compose(개발)는 여전히
+  `14101`이라 Pinvi 코드 기본값 `localhost:14101`은 개발용으로 맞다.
+- **결정 1·2 실현**: Manager #476(T-MGR-06i, merged)이 `PINVI_KOR_TRAVEL_WEATHER_BASE_URL` 기본값
+  `http://192.168.1.13:12201`을 `pinvi-dagster-code-server`**와** `pinvi-api` 두 블록에 주입한다(compose
+  `${PINVI_KOR_TRAVEL_WEATHER_BASE_URL:-…}` 형식 — 값의 정본은 Manager). `.env` 재정의의 validate 거부
+  (B-6)는 이 ADR이 확인하지 않았다 — Manager 쪽 사실로 둔다.
+- **열린 결정 1 해소**: geo도 같은 PR에서 `PINVI_KOR_TRAVEL_GEO_BASE_URL`(`http://192.168.1.13:12501`)·
+  `PINVI_KOR_TRAVEL_GEO_API_KEY`가 `pinvi-api` 블록에 주입된다; 키 정책은 ADR-075(geo 전용 키, VWorld
+  fallback 없음 — ADR-048 대체).
+- **배포 검증**: 핀 PinVi `44d8ecc8` 배포에서 D1/D2 통과, pinvi-api → weather `/health` 200, geo reverse
+  정상(2026-10-15 운영자 확인). 이 배포에는 T-374가 **없다** — odroid 전원·링크 장애 시 §'결과'의 지연·
+  캐시 미스 500이 지금 운영에 열려 있다. 그래서 T-374를 다음 배포에 싣는다.
+- **결정 3(게이트)·전원 off drill**: 기록 없음(미수행). T-374 배포 뒤 §8.2-3대로 한다.
+- 코드 정리: T-373(`.env.example`·`runbooks/etl.md` 서술), T-374(결정 4), T-375(e2e 프록시 upstream 호스트
+  변수) — 한 PR(`feat/track2-weather-odroid`).
+
 ### 결정
 
 1. **운영 base URL의 정본은 Manager registry `hosts:`+`host:`(Manager ADR-58 R1/R2)이며, Pinvi
@@ -3837,7 +3858,9 @@ Track 2 프로그램(소유자 지시 2026-10-13)은 geo·weather·transport를 
    Pinvi 코드 기본값 `localhost:14101`(`config.py:903`)과 `.env.example:204`는 **개발용으로
    유지**하고, Pinvi 저장소에 `192.168.1.13` 리터럴을 박지 않는다.
    `.env.example:201-203`의 "N150 고정 포트" 주석은 "포트 14101 불변·호스트는 Manager registry"로
-   고친다(T-373).
+   고친다(T-373). **2026-10-15 대체**: "포트 14101 불변"은 틀렸다 — 운영 포트는 `12201`이다(위
+   "구현 현황"). T-373은 주석을 "운영 값은 Manager compose 기본값(`192.168.1.13:12201`), `localhost:14101`은
+   개발용"으로 고쳤다; 코드 기본값·리터럴 금지 원칙은 그대로다.
 2. **Pinvi 요구: pinvi-api 블록도 ETL과 같은 변수 이름 `PINVI_KOR_TRAVEL_WEATHER_BASE_URL`을
    받는다.** 형식·기본값·결박은 Manager 소유(ADR-58 R2, T-MGR-01c, `bindings.md` B-6). Pinvi는
    변수 이름을 바꾸지 않는다.

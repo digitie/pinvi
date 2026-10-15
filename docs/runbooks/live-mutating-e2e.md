@@ -211,7 +211,12 @@ mutation을 포함하므로 기본 분당 60회 제한을 그대로 쓰면 본 �
 자체가 삭제됐다** — 더 이상 설정할 필요가 없다(설정해도 무시된다). 이제 이 절차는
 "flag on 경로"가 아니라 **유일한** 운영 경로를 검증한다. `PINVI_KOR_TRAVEL_WEATHER_BASE_URL`은
 weather proxy(`13702`, 기본값)를 가리키게 한다 — 이 proxy가 실제 `kor-travel-weather`
-인스턴스(N150 고정 포트 `14101`)로 포워딩하며 `markers`/`forecast` 호출을 센다.
+인스턴스로 포워딩하며 `markers`/`forecast` 호출을 센다. upstream은
+`PINVI_LIVE_WEATHER_UPSTREAM_HOST`(기본 `127.0.0.1`)·`PINVI_LIVE_WEATHER_UPSTREAM_PORT`(기본 `14101`,
+weather standalone 개발 기준)로 준다(T-375). **n150에는 weather가 없다** — 2026-10-15 현재 운영
+weather는 odroid `192.168.1.13:12201`(값의 정본은 Manager compose의
+`PINVI_KOR_TRAVEL_WEATHER_BASE_URL` 기본값, ADR-074)이므로 n150에서는 그 호스트·포트를 넘긴다.
+호스트를 빼먹으면 proxy가 `127.0.0.1`로 포워딩해 ECONNREFUSED → 502가 된다.
 
 ```bash
 # 격리 API container/server 환경 — 위 Feature resolution 단건의 값에 다음을 더한다
@@ -222,7 +227,8 @@ PINVI_LIVE_FEATURE_RESOLUTION_E2E=1 \
 PINVI_LIVE_WEATHER_TRIP_VIEW_E2E=1 \
 PINVI_LIVE_FEATURE_CACHE_REVALIDATION=1 \
 PINVI_LIVE_WEATHER_PROXY_PORT=13702 \
-PINVI_LIVE_WEATHER_UPSTREAM_PORT=14101 \
+PINVI_LIVE_WEATHER_UPSTREAM_HOST=192.168.1.13 \
+PINVI_LIVE_WEATHER_UPSTREAM_PORT=12201 \
 PINVI_LIVE_FOUND_FEATURE_ID="<fixture-found-id>" \
 PINVI_LIVE_FOUND_FEATURE_NAME="<fixture-found-name>" \
 PINVI_LIVE_FOUND_FEATURE_LON="<fixture-found-lon>" \
