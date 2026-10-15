@@ -45,6 +45,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.clients.kor_travel_weather import (
     KorTravelWeatherClient,
     KorTravelWeatherError,
+    KorTravelWeatherUnavailable,
     WeatherValueOut,
 )
 from app.schemas.feature import FeatureWeatherCard
@@ -104,8 +105,8 @@ async def resolve_and_collect_deduped_values(
     weather_client: KorTravelWeatherClient,
 ) -> tuple[list[WeatherValueOut], datetime | None]:
     """`feature_id`의 좌표로 location을 해석하고 사실을 모아 dedupe한다 — 단건(T-362)과
-    Admin(T-364) weather 카드 조립이 공유하는 pipeline. asof 축소·location 해석 실패·
-    사실 0건은 전부 빈 리스트로 뭉뚱그린다(호출자가 각자의 "빈 카드" 셰입으로 투영).
+    Admin(T-364) weather 카드 조립이 공유하는 pipeline. asof 축소·location 해석 실패
+    (관측소 없음, 피호출자 `Unavailable`)·사실 0건은 전부 빈 리스트로 뭉뚱그린다(호출자가 각자의 "빈 카드" 셰입으로 투영).
 
     반환: `(deduped_values, latest_known_at)`. 빈 값이면 `latest_known_at`도 `None`.
     """
@@ -116,9 +117,14 @@ async def resolve_and_collect_deduped_values(
         # 대상 서비스 보존(2일) 밖이면 어차피 no_data이므로 여기서 먼저 걸러낸다.
         return [], None
 
-    resolution = await resolve_weather_location(
-        db, feature_id=feature_id, lat=lat, lon=lon, client=weather_client
-    )
+    try:
+        resolution = await resolve_weather_location(
+            db, feature_id=feature_id, lat=lat, lon=lon, client=weather_client
+        )
+    except KorTravelWeatherUnavailable:
+        # 피호출자 장애(타임아웃·연결 실패·5xx·회로 열림)는 빈 카드로 투영한다 — 500 금지
+        # (ADR-074 결정 4(b), `kor-travel-weather.md` §8.3 "대응"). 값 조회 실패와 같은 모양이다.
+        return [], None
     if not isinstance(resolution, WeatherLocationFound):
         return [], None
 

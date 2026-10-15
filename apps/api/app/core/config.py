@@ -904,8 +904,14 @@ class Settings(BaseSettings):
     # T-362/T-363/T-364의 flag는 T-365(2026-09-18)에서 기본값 on 검증 후 구
     # kor-travel-map 경로와 함께 완전히 제거됐다 — 이 서비스가 유일한 날씨
     # 소스다(feature 단건/trip view/Admin weather-values 셋 다).
+    # 기본값 `localhost:14101`은 개발용(weather standalone compose)이다. 운영 값은 Manager
+    # compose가 pinvi-api 블록에 주입한다(ADR-074; 2026-10-15 odroid `192.168.1.13:12201`).
     pinvi_kor_travel_weather_base_url: str = "http://localhost:14101"
     pinvi_kor_travel_weather_timeout_seconds: float = 10.0
+    # connect만 따로 짧게 둔다(ADR-074 결정 4(a), `kor-travel-weather.md` §8.3 "대응") — 피호출자가
+    # 다른 호스트라 전원·링크 장애는 RST가 아니라 SYN 타임아웃이다. attempt당 connect ≤ 이 값,
+    # 호출당 ≤ max_attempts × 이 값 + backoff(기본 3×2 + 0.6 = 6.6 s). read는 위 timeout 그대로.
+    pinvi_kor_travel_weather_connect_timeout_seconds: float = Field(default=2.0, gt=0)
     pinvi_kor_travel_weather_max_attempts: int = 3
     # T-368. 기본값 off. on이면 `GET /weather/markers-in-bounds`가 지도 weather
     # marker를 `kor-travel-weather`의 `/nearby`로 직접 조회해 노출한다 — `kor-travel-map`을

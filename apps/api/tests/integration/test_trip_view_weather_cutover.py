@@ -15,24 +15,29 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import httpx
 import pytest
 
 from app.clients.kor_travel_map import KorTravelMapUnavailable, RetiredFeatureBatchItem
 from app.clients.kor_travel_weather import (
     CoordinateRequestOut,
+    KorTravelWeatherClient,
     KorTravelWeatherNotFound,
     KorTravelWeatherUnavailable,
     LocationOut,
     ResolvedWeatherOut,
     WeatherMarkerOut,
     WeatherValueOut,
+    kor_travel_weather_timeout,
 )
+from app.core.config import Settings
 
 pytestmark = pytest.mark.asyncio
 
@@ -140,8 +145,10 @@ class _WeatherClient:
         forecast_values: Mapping[str, tuple[WeatherValueOut, ...]] | None = None,
         marker_values: Mapping[str, tuple[WeatherValueOut, ...]] | None = None,
         failing_locations: frozenset[str] = frozenset(),
+        failing_resolve_coords: frozenset[tuple[float, float]] = frozenset(),
     ) -> None:
         self.resolutions = resolutions or {}
+        self.failing_resolve_coords = failing_resolve_coords
         self.forecast_values = forecast_values or {}
         self.marker_values = marker_values or {}
         self.failing_locations = failing_locations
@@ -153,6 +160,8 @@ class _WeatherClient:
         self, *, lat: float, lon: float, radius_km: float | None = None
     ) -> ResolvedWeatherOut:
         self.resolve_calls.append((lat, lon, radius_km))
+        if (lat, lon) in self.failing_resolve_coords:
+            raise KorTravelWeatherUnavailable(f"kor-travel-weather 503 (resolve {lat},{lon})")
         outcome = self.resolutions.get((lat, lon))
         if outcome is None:
             raise KorTravelWeatherNotFound(
@@ -593,3 +602,174 @@ async def test_markers_latest_feeds_the_card(session_factory) -> None:  # type: 
 
     card = _day(view, 1)["weather_cards"]["loc-a"]
     assert [m["metric_key"] for m in card["metrics"]] == ["T1H"]
+
+
+# ── ADR-074 결정 4(b): resolver 예외 투영 (`kor-travel-weather.md` §8.3 "대응" 수용 (A)(B)) ──
+#
+# (A)의 전제는 **SYN을 버리는 피호출자**다 — 실제 `KorTravelWeatherClient`에 요청의 connect
+# timeout만큼 기다렸다가 `ConnectTimeout`을 내는 transport를 붙인다. 수치는 운영값(connect
+# 2 s·backoff 0.2 s·view 예산 10 s)을 1/10로 줄였다: 호출당 3×0.2 + 0.06 = 0.66 s, 예산 1.0 s —
+# "미스 1건 = 6.6 s라 2건이면 13.2 s > 10 s"와 같은 비율이다.
+
+_SCALED_CONNECT_SECONDS = 0.2
+_SCALED_BACKOFF_SECONDS = 0.02
+_SCALED_BUDGET_SECONDS = 1.0
+
+
+class _SynDropTransport(httpx.AsyncBaseTransport):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        self.calls += 1
+        await asyncio.sleep(request.extensions["timeout"]["connect"])
+        raise httpx.ConnectTimeout("SYN dropped", request=request)
+
+
+def _syn_drop_weather_client(transport: _SynDropTransport) -> KorTravelWeatherClient:
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=transport,
+        timeout=kor_travel_weather_timeout(
+            Settings(
+                pinvi_kor_travel_weather_timeout_seconds=1.0,
+                pinvi_kor_travel_weather_connect_timeout_seconds=_SCALED_CONNECT_SECONDS,
+            )
+        ),
+    )
+    return KorTravelWeatherClient(
+        http, max_attempts=3, backoff_base_seconds=_SCALED_BACKOFF_SECONDS
+    )
+
+
+async def _seed_location_link(  # type: ignore[no-untyped-def]
+    session_factory, *, feature_id: str, lat: float, lon: float, location_id: str
+) -> None:
+    """캐시 적중 POI — fresh `WeatherLocationLink` 행(resolver가 네트워크 없이 돌려준다)."""
+    from app.models.weather_location_link import WeatherLocationLink
+
+    async with session_factory() as db:
+        db.add(
+            WeatherLocationLink(
+                feature_id=feature_id,
+                location_id=location_id,
+                source_location_ids=[location_id],
+                lat=lat,
+                lon=lon,
+                distance_km=0.1,
+                resolved_at=datetime.now(UTC),
+                stale=False,
+            )
+        )
+        await db.commit()
+
+
+async def test_syn_drop_with_cache_misses_returns_unavailable_within_budget(  # type: ignore[no-untyped-def]
+    session_factory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """수용 (A): 피호출자 off(SYN drop) — 캐시 미스 2건 + 적중 1건에서 trip view가 예외 없이
+    끝나고(라우트 200) 세 POI 모두 `unavailable`, 미스 feature의 키 누락 없음, 예산 안.
+
+    변경 전에는 resolve 호출이 예산·try 밖이라 `KorTravelWeatherUnavailable`이 그대로 올라가
+    라우트 catch-all 500이 됐다.
+    """
+    monkeypatch.setattr(
+        "app.services.trip_view_builder._WEATHER_BATCH_VIEW_BUDGET_SECONDS", _SCALED_BUDGET_SECONDS
+    )
+    eff_date = date(2026, 10, 1)
+    hit = f"hit_{uuid.uuid4().hex[:8]}"
+    miss1 = f"miss1_{uuid.uuid4().hex[:8]}"
+    miss2 = f"miss2_{uuid.uuid4().hex[:8]}"
+    await _seed_location_link(session_factory, feature_id=hit, lat=37.5, lon=127.0, location_id="loc-hit")
+    transport = _SynDropTransport()
+    weather_client = _syn_drop_weather_client(transport)
+
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    try:
+        view = await _build_view(
+            session_factory,
+            pois=[
+                (1, eff_date, miss1, _snapshot(127.1, 37.6)),
+                (1, eff_date, hit, _snapshot(127.0, 37.5)),
+                (1, eff_date, miss2, _snapshot(127.2, 37.7)),
+            ],
+            map_client=_MapClient(),
+            weather_client=weather_client,
+        )
+        elapsed = loop.time() - started
+
+        by_feature = _day(view, 1)["weather_by_feature_id"]
+        assert by_feature[miss1] == {"state": "unavailable"}
+        assert by_feature[miss2] == {"state": "unavailable"}
+        # 적중 POI도 4단계 값 조회가 같은 피호출자라 `found`가 될 수 없다.
+        assert by_feature[hit] == {"state": "unavailable"}
+        assert _day(view, 1)["weather_cards"] == {}
+        # 예산(1.0 s) + DB·뷰 조립 여유. 미스 2건을 끝까지 기다렸다면 2×0.66 s 이상이다.
+        assert elapsed < _SCALED_BUDGET_SECONDS + 0.25
+
+        # 회로: 논리 호출 3회가 실패하면 열리고 그 뒤 요청은 transport에 닿지 않고 즉시
+        # `unavailable`이다. 예산에 잘린(취소된) 호출은 실패로 세지 않으므로 view 1회 = 1회.
+        for _ in range(2):
+            await _build_view(
+                session_factory,
+                pois=[(1, eff_date, f"m_{uuid.uuid4().hex[:8]}", _snapshot(127.3, 37.8))],
+                map_client=_MapClient(),
+                weather_client=weather_client,
+            )
+        calls_before = transport.calls
+        started = loop.time()
+        view = await _build_view(
+            session_factory,
+            pois=[
+                (1, eff_date, miss1, _snapshot(127.1, 37.6)),
+                (1, eff_date, hit, _snapshot(127.0, 37.5)),
+            ],
+            map_client=_MapClient(),
+            weather_client=weather_client,
+        )
+        assert loop.time() - started < 0.25
+        assert transport.calls == calls_before
+        by_feature = _day(view, 1)["weather_by_feature_id"]
+        assert by_feature == {miss1: {"state": "unavailable"}, hit: {"state": "unavailable"}}
+    finally:
+        await weather_client.aclose()
+
+
+async def test_one_resolve_failure_only_marks_that_feature_unavailable(  # type: ignore[no-untyped-def]
+    session_factory,
+) -> None:
+    """수용 (B): 피호출자 up, 한 feature의 resolve만 `Unavailable`(5xx) — 그 feature만
+    `unavailable`(`no_data` 아님), 나머지 POI는 `found`. 미스 1건이 적중 N건을 빼앗지 않는다."""
+    eff_date = date(2026, 10, 1)
+    ok_a = f"ok_a_{uuid.uuid4().hex[:8]}"
+    ok_b = f"ok_b_{uuid.uuid4().hex[:8]}"
+    broken = f"broken_{uuid.uuid4().hex[:8]}"
+    await _seed_location_link(session_factory, feature_id=ok_b, lat=37.5, lon=127.0, location_id="loc-1")
+    weather_client = _WeatherClient(
+        resolutions={(37.5, 127.0): _resolved(lat=37.5, lon=127.0, location_id="loc-1")},
+        forecast_values={
+            "loc-1": (
+                _weather_value(location_id="loc-1", metric_key="TEMP", target_at=_at(eff_date)),
+            )
+        },
+        failing_resolve_coords=frozenset({(37.9, 127.9)}),
+    )
+
+    view = await _build_view(
+        session_factory,
+        pois=[
+            (1, eff_date, broken, _snapshot(127.9, 37.9)),
+            (1, eff_date, ok_a, _snapshot(127.0, 37.5)),
+            (1, eff_date, ok_b, _snapshot(127.0, 37.5)),
+        ],
+        map_client=_MapClient(),
+        weather_client=weather_client,
+    )
+
+    by_feature = _day(view, 1)["weather_by_feature_id"]
+    assert by_feature[broken] == {"state": "unavailable"}
+    assert by_feature[ok_a] == {"state": "found", "card_key": "loc-1"}
+    assert by_feature[ok_b] == {"state": "found", "card_key": "loc-1"}
+    # resolve는 순차로 계속 진행됐다 — 실패한 feature 뒤의 미스도 해석했다.
+    assert (37.5, 127.0, 20.0) in weather_client.resolve_calls

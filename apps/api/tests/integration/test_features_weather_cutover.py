@@ -7,21 +7,26 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import httpx
 import pytest
 
 from app.clients.kor_travel_map import get_kor_travel_map_client
 from app.clients.kor_travel_weather import (
     CoordinateRequestOut,
+    KorTravelWeatherClient,
     KorTravelWeatherNotFound,
     LocationOut,
     MeasurementPointOut,
     ResolvedWeatherOut,
     WeatherValueOut,
     get_optional_kor_travel_weather_client,
+    kor_travel_weather_timeout,
 )
+from app.core.config import Settings
 from app.main import app
 
 pytestmark = pytest.mark.asyncio
@@ -389,3 +394,59 @@ async def test_weather_client_unavailable_returns_503(
 
     assert resp.status_code == 503, resp.text
     assert resp.json()["error"]["code"] == "WEATHER_SERVICE_UNAVAILABLE"
+
+
+class _SynDropTransport(httpx.AsyncBaseTransport):
+    """SYN을 버리는 피호출자 — 요청의 connect timeout만큼 기다렸다가 `ConnectTimeout`."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        self.calls += 1
+        await asyncio.sleep(request.extensions["timeout"]["connect"])
+        raise httpx.ConnectTimeout("SYN dropped", request=request)
+
+
+async def test_syn_drop_on_cache_miss_returns_empty_card_not_500(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    """수용 (A) 단건: 피호출자 off(SYN drop) + 캐시 미스 — 빈 카드 200(500 아님).
+
+    ADR-074 결정 4(b), `kor-travel-weather.md` §8.3 "대응". 변경 전에는 resolver의
+    `KorTravelWeatherUnavailable`이 try 없이 올라가 catch-all 500이었다. 수치는 운영값의 1/10
+    (connect 0.2 s, backoff 0.02 s) — 호출당 ≤ 3×0.2 + 0.06 s.
+    """
+    user_id, _email = verified_user
+    map_client = _FakeMapClient(feature_id="f_syn_drop", lon=_FEATURE_LON, lat=_FEATURE_LAT)
+    transport = _SynDropTransport()
+    weather_client = KorTravelWeatherClient(
+        httpx.AsyncClient(
+            base_url="http://kor-travel-weather.test",
+            transport=transport,
+            timeout=kor_travel_weather_timeout(
+                Settings(
+                    pinvi_kor_travel_weather_timeout_seconds=1.0,
+                    pinvi_kor_travel_weather_connect_timeout_seconds=0.2,
+                )
+            ),
+        ),
+        max_attempts=3,
+        backoff_base_seconds=0.02,
+    )
+    _override(map_client, weather_client)
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    try:
+        resp = await client.get("/features/f_syn_drop/weather", cookies=auth_cookies(user_id))
+    finally:
+        _clear()
+        await weather_client.aclose()
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["feature_id"] == "f_syn_drop"
+    assert data["metrics"] == []
+    # 첫 반경의 resolve 1회(3 attempt)에서 끊겼다 — 다음 반경으로 넘어가지 않는다.
+    assert transport.calls == 3
+    assert loop.time() - started < 3 * 0.2 + 0.06 + 0.5

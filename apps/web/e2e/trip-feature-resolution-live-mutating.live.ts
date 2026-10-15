@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import http from 'node:http';
+import { weatherUpstreamFromEnv, weatherUpstreamRequestOptions } from './weather-proxy-upstream';
 
 const liveEnabled = process.env.PINVI_LIVE_FEATURE_RESOLUTION_E2E === '1';
 const webBaseUrl = process.env.PINVI_LIVE_WEB_URL ?? 'http://127.0.0.1:13805';
@@ -39,7 +40,8 @@ const longTripDayCount = 40;
 // docstring).
 const weatherTripViewLiveEnabled = process.env.PINVI_LIVE_WEATHER_TRIP_VIEW_E2E === '1';
 const weatherProxyPort = Number(process.env.PINVI_LIVE_WEATHER_PROXY_PORT ?? '13702');
-const weatherUpstreamPort = Number(process.env.PINVI_LIVE_WEATHER_UPSTREAM_PORT ?? '14101');
+// upstream 호스트·포트는 env에서 받는다(T-375) — n150에서는 weather가 odroid에 있다.
+const weatherUpstream = weatherUpstreamFromEnv(process.env);
 
 type FeatureSummary = {
   feature_id: string;
@@ -506,15 +508,8 @@ async function startWeatherProxy() {
       return;
     }
 
-    const headers = { ...request.headers, host: `127.0.0.1:${weatherUpstreamPort}` };
     const upstream = http.request(
-      {
-        hostname: '127.0.0.1',
-        port: weatherUpstreamPort,
-        method: request.method,
-        path: request.url,
-        headers,
-      },
+      weatherUpstreamRequestOptions(weatherUpstream, request),
       (upstreamResponse) => {
         response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);
         upstreamResponse.pipe(response);
