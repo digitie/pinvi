@@ -59,6 +59,7 @@
 
 - [/] T-376 — (구 ID T-373 — 2026-10-13 weather Track 2 항목과 ID가 겹쳐 2026-10-15 재번호; PR #581 제목·커밋에는 T-373으로 남음) `/admin/etl/summary` 상시 degraded(C6c `pinvi_etl_summary`, 2026-10-13 t1013d): Dagster live query의 두 `ticks(limit: 3)` 선택에 `afterTimestamp` 창(schedule 2일·sensor 1시간)을 싣고 첫 시간 초과를 남은 예산으로 한 번 재시도한다. 브랜치 `fix/admin-etl-dagster-ticks-window`(claude), 충돌 회피 범위 `apps/api/app/services/admin_etl.py`·`apps/api/tests/unit/test_admin_etl_dagster_probe.py`·`apps/etl/tests/test_admin_probe_graphql_schema.py`·`docs/runbooks/common-dagster.md`. 이 PR만으로 pair 회전 금지 — 순서는 `docs/resume.md`.
 - [ ] T-377 — (구 ID T-374, 위와 같은 사유로 재번호) `admin_etl.py`의 정적 `PINVI_ETL_SCHEDULES`(5건)·`PINVI_ETL_SENSORS`(빈 목록)가 live location(schedule 7·sensor 6: `pinvi_trip_day_rise_sets_schedule`, `pinvi_weather_retention_horizon_schedule`, `pinvi_infra_retry_*` 5건, `pinvi_run_failure_sensor`)보다 낡아 같은 payload 안에서 `pinvi.schedules`(5)와 `schedule_count`(7)가 어긋난다. 정의에 묶는 테스트와 함께 고친다(T-376과 분리).
+- [ ] T-378 — (T-374 후속, PR #584 최종 리뷰) weather 회로차단의 `saw_success`가 deadline 범위(trip view 1회) 단위라, 한 엔드포인트(markers·캐시 미스 resolve)는 성공하고 다른 엔드포인트(forecast)만 멈추면 trip view 경로가 실패를 세지 않아 회로가 열리지 않는다(view마다 ≈9.9 s, view 예산이 상한). 엔드포인트별 `saw_success` 또는 엔드포인트별 hang 집계로 고친다. 근거 `docs/integrations/kor-travel-weather.md` §8.3 "구현 보강" 알려진 공백. 규모 S.
 
 ## 모바일
 

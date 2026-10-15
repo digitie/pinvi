@@ -947,8 +947,8 @@ async def test_concurrent_views_with_live_upstream_keep_breaker_closed(  # type:
     session_factory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """동시 view 3개 — markers는 즉시 성공, forecast는 예산 끝까지 응답이 없어 **하한 이상의 예산**
-    (0.9 s ≥ 0.5 s)에서 끊긴다. 같은 범위에서 피호출자가 이미 응답했으므로 그 timeout은 장애 증거가
-    아니다 — 회로는 닫힌 채다(view 3개가 각 1회씩 세면 임계 3에 닿아 열렸을 것이다)."""
+    (view 예산 ≈1.0 s에서 여유 0.1 s를 뺀 ≈0.9 s, 하한 0.5 s 이상)에서 끊긴다. 같은 범위에서
+    피호출자가 이미 응답했으므로 그 timeout은 장애 증거가 아니다 — 회로는 닫힌 채다(view 3개가 각 1회씩 세면 임계 3에 닿아 열렸을 것이다)."""
     monkeypatch.setattr(
         "app.services.trip_view_builder._WEATHER_BATCH_VIEW_BUDGET_SECONDS", _SCALED_BUDGET_SECONDS
     )
@@ -991,6 +991,8 @@ async def test_concurrent_views_with_live_upstream_keep_breaker_closed(  # type:
             states = list(_day(view, 1)["weather_by_feature_id"].values())
             assert states == [{"state": "unavailable"}]
         assert calls.get("/v1/weather/markers") == 3
+        # forecast가 실제로 불렸다(끊긴 것이 forecast다) — view마다 location 1개.
+        assert sum(n for path, n in calls.items() if path.endswith("/forecast")) == 3
         # 회로는 닫힌 채다 — 다음 호출이 transport에 닿고 성공한다.
         before = sum(calls.values())
         assert await weather_client.markers(["cloc-0"])
