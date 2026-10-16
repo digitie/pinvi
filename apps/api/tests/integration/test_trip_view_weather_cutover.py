@@ -729,16 +729,26 @@ async def test_syn_drop_with_cache_misses_returns_unavailable_within_budget(  # 
         # 예산(1.0 s) + 여유(부하 흔들림 대비 0.5 s).
         assert timer.durations[-1] < _SCALED_BUDGET_SECONDS + 0.5
 
-        # 회로: 논리 호출 3회가 실패하면 열리고 그 뒤 요청은 transport에 닿지 않고 즉시
-        # `unavailable`이다. 호출 deadline이 attempt를 깎아 예산 끝의 호출도 실패로 세지므로
-        # 아래 view 두 번이면 넉넉히 열린다.
-        for _ in range(2):
+        # 회로: 엔드포인트마다 논리 호출 3회가 실패하면 그 엔드포인트가 열리고, 그 뒤 요청은 transport에
+        # 닿지 않고 즉시 `unavailable`이다(T-378 — 회로는 엔드포인트별). 전면 장애에서는 resolve가 예산을
+        # 다 쓰는 동안 markers는 소진(미집계)이라, resolve가 열린 뒤에야 markers가 예산을 받아 세진다 —
+        # 공유 회로(view 3개)보다 늦게, 기대값은 resolve 3 + markers 3 = view 6개다(상한 8은 부하 여유).
+        views = 1
+        while True:
+            calls_before = transport.calls
             await _build_view(
                 session_factory,
-                pois=[(1, eff_date, f"m_{uuid.uuid4().hex[:8]}", _snapshot(127.3, 37.8))],
+                pois=[
+                    (1, eff_date, f"m_{uuid.uuid4().hex[:8]}", _snapshot(127.3, 37.8)),
+                    (1, eff_date, hit, _snapshot(127.0, 37.5)),
+                ],
                 map_client=_MapClient(),
                 weather_client=weather_client,
             )
+            if transport.calls == calls_before:
+                break
+            views += 1
+            assert views <= 8, f"엔드포인트별 회로가 view {views}개까지 다 열리지 않았다"
         calls_before = transport.calls
         view = await _build_view(
             session_factory,
