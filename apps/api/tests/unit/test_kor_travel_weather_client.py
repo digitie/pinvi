@@ -872,3 +872,111 @@ async def test_nested_scope_shares_counting_state() -> None:
     fail["on"] = False
     assert len(await client.latest("loc-1")) == 1
     await client.aclose()
+
+
+# ── T-378: 엔드포인트별 성공 관측·연속 실패 ──────────────────────────────────────────────
+
+
+def _split_handler(forecast: str) -> tuple[Callable[[httpx.Request], Any], dict[str, int]]:
+    """`latest`는 늘 응답하고 `forecast`만 `forecast` 방식으로 실패하는 피호출자."""
+    calls = {"latest": 0, "forecast": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/forecast"):
+            calls["forecast"] += 1
+            if forecast == "hang":
+                read = request.extensions["timeout"]["read"]
+                await asyncio.sleep(read)
+                raise httpx.ReadTimeout("no response", request=request)
+            return httpx.Response(503, json={"code": "UPSTREAM"})
+        calls["latest"] += 1
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    return handler, calls
+
+
+async def test_forecast_hang_opens_circuit_although_other_endpoint_answers_in_the_view() -> None:
+    """한 view에서 latest는 응답하고 forecast만 멈춘다 — forecast hang이 view마다 실패로 세져 3 view 뒤 열린다.
+
+    종전에는 범위 전체의 성공 관측(latest)이 forecast의 deadline timeout을 "소진"으로 바꾸고, latest 성공이
+    연속 실패 수를 되돌려 회로가 영영 열리지 않았다(view마다 예산 끝까지 기다림, #584 최종 리뷰).
+    """
+    handler, calls = _split_handler("hang")
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=httpx.MockTransport(handler),
+        timeout=httpx.Timeout(0.2, connect=0.2),
+    )
+    client = KorTravelWeatherClient(http, max_attempts=3, backoff_base_seconds=0.0)
+    loop = asyncio.get_running_loop()
+    for _ in range(3):
+        with kor_travel_weather_call_deadline(loop.time() + 0.15):
+            assert len(await client.latest("loc-1")) == 1
+            with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
+                await client.forecast("loc-1")
+            assert not isinstance(exc_info.value, KorTravelWeatherDeadlineExhausted)
+    assert calls == {"latest": 3, "forecast": 3}
+    # forecast 연속 실패 3회 — 회로가 열려 어느 엔드포인트도 transport에 닿지 않는다.
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        await client.forecast("loc-1")
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        await client.latest("loc-1")
+    assert calls == {"latest": 3, "forecast": 3}
+    await client.aclose()
+
+
+async def test_same_endpoint_success_still_makes_its_deadline_timeout_exhaustion() -> None:
+    """같은 엔드포인트가 그 view에서 이미 응답했으면 그 엔드포인트의 deadline timeout은 소진이다(종전 규칙)."""
+    seen = {"n": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen["n"] += 1
+        if request.url.path.startswith("/v1/weather/locations/slow/"):
+            read = request.extensions["timeout"]["read"]
+            await asyncio.sleep(read)
+            raise httpx.ReadTimeout("slow", request=request)
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=httpx.MockTransport(handler),
+        timeout=httpx.Timeout(0.2, connect=0.2),
+    )
+    client = KorTravelWeatherClient(http, max_attempts=3, backoff_base_seconds=0.0)
+    loop = asyncio.get_running_loop()
+    for _ in range(4):
+        with kor_travel_weather_call_deadline(loop.time() + 0.15):
+            assert len(await client.latest("fast")) == 1
+            with pytest.raises(KorTravelWeatherDeadlineExhausted):
+                await client.latest("slow")
+    # 소진은 세지 않으므로 회로는 닫힌 채다.
+    assert len(await client.latest("fast")) == 1
+    await client.aclose()
+
+
+async def test_other_endpoint_success_does_not_reset_failing_endpoint_count() -> None:
+    """forecast 실패 사이사이 latest가 성공해도 forecast의 연속 실패는 이어진다 — 3회째에 열린다.
+
+    시험 호출이 latest로 성공해 닫혀도 forecast는 여전히 임계 이상이라 다음 실패 한 번에 다시 연다.
+    """
+    handler, calls = _split_handler("503")
+    clock = _FakeClock()
+    client = _client(handler, max_attempts=1, clock=clock)
+    for _ in range(2):
+        with pytest.raises(KorTravelWeatherUnavailable):
+            await client.forecast("loc-1")
+        assert len(await client.latest("loc-1")) == 1
+    with pytest.raises(KorTravelWeatherUnavailable):
+        await client.forecast("loc-1")
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        await client.latest("loc-1")
+    assert calls == {"latest": 2, "forecast": 3}
+
+    clock.now += 30.0
+    assert len(await client.latest("loc-1")) == 1  # half-open 시험 성공 → 닫힘
+    with pytest.raises(KorTravelWeatherUnavailable):
+        await client.forecast("loc-1")
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        await client.latest("loc-1")
+    assert calls == {"latest": 3, "forecast": 4}
+    await client.aclose()

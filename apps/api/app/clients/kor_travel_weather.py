@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from contextlib import asynccontextmanager, contextmanager
@@ -71,7 +72,22 @@ _CIRCUIT_OPEN_SECONDS = 30.0
 # 끊겨 회로를 여는 일을 막는다. 같은 범위에서 이미 성공한 호출이 있으면(피호출자가 살아 있다는
 # 증거) deadline이 깎은 timeout은 예산 길이와 무관하게 소진으로 본다. 또 한 deadline 범위에서 세는
 # 실패는 **최대 1회**다.
+#
+# "성공 관측"과 연속 실패 수는 **엔드포인트별**이다(T-378, #584 최종 리뷰). 한 view에서 markers·resolve는
+# 응답하고 forecast만 멈추면, 범위 전체의 성공 관측이 forecast의 hang을 "소진"으로 바꾸고 markers 성공이
+# 연속 실패 수를 0으로 되돌려 회로가 영영 열리지 않았다(view마다 ≈9.9 s). 이제 같은 엔드포인트의 성공만
+# 그 엔드포인트의 timeout을 소진으로 보고, 연속 실패는 전체 수와 엔드포인트별 수 중 **어느 쪽이든**
+# 임계에 닿으면 회로를 연다(전체 수는 종전 규칙 그대로 — 엔드포인트가 섞여 실패하는 전면 장애). 회로 자체는
+# 여전히 하나다(열리면 모든 엔드포인트가 즉시 `Unavailable`).
 _DEADLINE_MEANINGFUL_READ_FRACTION = 0.5
+
+
+_LOCATION_SEGMENT = re.compile(r"/locations/[^/]+/")
+
+
+def _endpoint_key(path: str) -> str:
+    """요청 경로 → 엔드포인트 이름(경로 변수 `location_id`를 지운 템플릿)."""
+    return _LOCATION_SEGMENT.sub("/locations/{location_id}/", path)
 
 
 @dataclass(slots=True)
@@ -79,7 +95,7 @@ class _ScopeState:
     """deadline 범위의 공유 상태 — 중첩 범위도 같은 객체를 써서 두 번 세지 않는다."""
 
     failure_counted: bool = False
-    saw_success: bool = False
+    succeeded_endpoints: set[str] = field(default_factory=set)
 
 
 @dataclass(slots=True)
@@ -98,7 +114,7 @@ def kor_travel_weather_call_deadline(deadline: float) -> Iterator[None]:
     """이 문맥(과 그 안에서 만든 task)의 weather 호출을 `deadline`(loop 시각)까지로 묶는다.
 
     중첩되면 더 이른 deadline을 쓰고(안쪽 범위가 예산을 넓히지 못한다) 집계 상태(실패 1회·
-    성공 관측)는 바깥 범위와 공유한다.
+    엔드포인트별 성공 관측)는 바깥 범위와 공유한다.
     """
     current = _call_scope.get()
     if current is None:
@@ -558,6 +574,7 @@ class _CircuitBreaker:
         self._open_seconds = open_seconds
         self._clock = clock
         self._consecutive_failures = 0
+        self._endpoint_failures: dict[str, int] = {}
         self._opened_at: float | None = None
         self._trial_in_flight = False
 
@@ -570,18 +587,35 @@ class _CircuitBreaker:
         self._trial_in_flight = True
         return True
 
-    def record_success(self) -> None:
+    def record_success(self, *, endpoint: str) -> None:
+        """성공은 전체 연속 실패와 **그 엔드포인트의** 연속 실패만 되돌린다.
+
+        다른 엔드포인트의 수는 그대로다 — markers가 응답한다고 멈춘 forecast의 실패가 지워지면 회로가
+        열리지 않는다(T-378). 시험 호출이 다른 엔드포인트로 성공해 회로가 닫혀도, 멈춘 엔드포인트는
+        수가 임계 이상이라 다음 실패 한 번에 다시 연다.
+        """
         self._consecutive_failures = 0
+        self._endpoint_failures.pop(endpoint, None)
         self._opened_at = None
         self._trial_in_flight = False
 
-    def record_failure(self, *, trial: bool) -> None:
+    def record_failure(self, *, endpoint: str, trial: bool) -> None:
         self._consecutive_failures += 1
-        if trial or self._consecutive_failures >= self._failure_threshold:
+        endpoint_failures = self._endpoint_failures.get(endpoint, 0) + 1
+        self._endpoint_failures[endpoint] = endpoint_failures
+        if (
+            trial
+            or self._consecutive_failures >= self._failure_threshold
+            or endpoint_failures >= self._failure_threshold
+        ):
             if self._opened_at is None or trial:
                 logger.warning(
                     "kor_travel_weather.circuit_open",
-                    extra={"consecutive_failures": self._consecutive_failures},
+                    extra={
+                        "consecutive_failures": self._consecutive_failures,
+                        "endpoint": endpoint,
+                        "endpoint_consecutive_failures": endpoint_failures,
+                    },
                 )
             self._opened_at = self._clock()
         if trial:
@@ -638,9 +672,10 @@ class KorTravelWeatherClient:
         회로가 열려 있으면 transport를 부르지 않고 즉시 `KorTravelWeatherUnavailable`이다.
         재시도 끝의 `Unavailable`만 실패로 센다(4xx·계약 오류는 피호출자가 살아 있다는 뜻).
         """
+        endpoint = _endpoint_key(path)
         trial = self._circuit.acquire()
         try:
-            resp = await self._send_with_retries(method, path, params=params)
+            resp = await self._send_with_retries(method, path, params=params, endpoint=endpoint)
         except KorTravelWeatherDeadlineExhausted:
             self._circuit.release(trial=trial)
             raise
@@ -652,27 +687,35 @@ class KorTravelWeatherClient:
             else:
                 if scope is not None:
                     scope.state.failure_counted = True
-                self._circuit.record_failure(trial=trial)
+                self._circuit.record_failure(endpoint=endpoint, trial=trial)
             raise
         except BaseException:
             self._circuit.release(trial=trial)
             raise
         scope = _call_scope.get()
         if scope is not None:
-            scope.state.saw_success = True
-        self._circuit.record_success()
+            scope.state.succeeded_endpoints.add(endpoint)
+        self._circuit.record_success(endpoint=endpoint)
         return resp
 
     async def _send_with_retries(
-        self, method: str, path: str, *, params: Mapping[str, Any] | None = None
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        endpoint: str | None = None,
     ) -> httpx.Response:
         """transient(타임아웃/연결/5xx) 시 지수 백오프 재시도.
 
         호출자 deadline(`kor_travel_weather_call_deadline`)이 있으면: attempt마다 timeout을 남은
         시간으로 깎고 attempt 전체를 `asyncio.timeout`으로 묶는다; backoff가 남은 시간 이상이면 자지
         않고 멈춘다; deadline이 깎은 timeout은 예산이 정상 read의 `_DEADLINE_MEANINGFUL_READ_FRACTION`
-        미만이거나 같은 범위에서 성공을 이미 봤으면 `KorTravelWeatherDeadlineExhausted`(회로 미집계)다.
+        미만이거나 같은 범위에서 **같은 엔드포인트의** 성공을 이미 봤으면
+        `KorTravelWeatherDeadlineExhausted`(회로 미집계)다(다른 엔드포인트의 성공은 이 엔드포인트가 살아
+        있다는 증거가 아니다 — T-378).
         """
+        endpoint = endpoint if endpoint is not None else _endpoint_key(path)
         last: KorTravelWeatherUnavailable | None = None
         cleaned = {k: v for k, v in (params or {}).items() if v is not None}
         scope = _call_scope.get()
@@ -709,7 +752,7 @@ class KorTravelWeatherClient:
                     scope is not None
                     and remaining is not None
                     and applied is not None
-                    and (remaining < floor or scope.state.saw_success)
+                    and (remaining < floor or endpoint in scope.state.succeeded_endpoints)
                     and _deadline_bound_timeout(exc, base=base, applied=applied)
                 ):
                     # deadline이 끊었지만 장애 증거가 아니다(짧은 예산이거나 같은 범위에서 피호출자가

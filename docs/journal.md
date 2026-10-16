@@ -1,3 +1,17 @@
+## 2026-10-17 (claude) — weather 회로차단 엔드포인트별 집계 (T-378, 브랜치 `fix/t-378-weather-breaker-per-endpoint`)
+
+#584 최종 리뷰가 남긴 공백: 한 view에서 markers·resolve는 응답하고 forecast만 멈추면 회로가 열리지 않았다. 원인은 둘이었다 —
+(1) deadline 범위의 `saw_success`가 범위 전체 하나라 다른 엔드포인트의 성공이 forecast의 deadline timeout을 "소진"(미집계)으로
+바꿨고, (2) 그것을 고쳐도 markers 성공이 회로의 연속 실패 수를 매 view 0으로 되돌려 forecast 실패가 3에 닿지 못했다.
+
+- `clients/kor_travel_weather.py`: `_ScopeState.saw_success` → `succeeded_endpoints: set[str]`(엔드포인트 = 경로 템플릿,
+  `location_id` 제거). `_CircuitBreaker`는 전체 연속 실패에 더해 엔드포인트별 연속 실패를 세고 어느 쪽이든 임계(3)면 연다;
+  성공은 전체 수와 자기 엔드포인트 수만 되돌린다. 회로는 하나 그대로(열리면 전 엔드포인트 즉시 `Unavailable`).
+- 테스트 3건(`test_kor_travel_weather_client.py`): forecast hang + latest 응답 view 3회 → 열림; 같은 엔드포인트 성공 뒤
+  deadline timeout은 여전히 소진; 다른 엔드포인트 성공이 실패 엔드포인트 수를 되돌리지 않음 + 시험 호출이 다른 엔드포인트로
+  닫혀도 다음 실패 한 번에 다시 열림. 기존 회로·deadline 테스트(전 엔드포인트 공유 회로 포함)는 그대로 초록.
+- 문서: `kor-travel-weather.md` §8.3 알려진 공백 → 구현 기록.
+
 ## 2026-10-15 (claude) — Track 2 weather 코드: connect 분리·resolver 투영·회로차단, 설정 정리, e2e upstream 호스트, task ID 중복 정리 (브랜치 `feat/track2-weather-odroid`, T-373·T-374·T-375)
 
 전제 사실(2026-10-15 운영자 확인): weather는 odroid `192.168.1.13:12201`(14101 아님), Manager #476(merged)이
