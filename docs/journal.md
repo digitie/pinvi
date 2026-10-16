@@ -11,8 +11,8 @@
   열리고 markers·resolve·latest는 산다. coordinator가 옵션 1(T-378 채택)과 엔드포인트별 open을 골랐다.
 - **대가**: view 예산(≈9.9 s) 안에 한 번도 응답하지 않는 엔드포인트는 느릴 뿐이어도 실패로 센다 — 예산보다 느린 forecast는
   실패로 집계되고 3 view 연속이면 forecast 회로가 30 s 열린다(같은 view에서 그 엔드포인트가 응답했으면 보호). 전면 장애에서는
-  엔드포인트마다 3회씩 실패해야 각자 열린다 — 캐시 미스가 섞인 trip view는 resolve가 예산을 다 쓰는 동안 markers가 미집계라
-  view ≈6개(resolve 3 + markers 3) 뒤에야 다 막힌다(공유 회로는 3개). GitHub CI 첫 런에서
+  엔드포인트마다 3회씩 실패해야 각자 열린다 — 캐시 미스가 섞인 trip view는 view 3~6개(최악 resolve 3 + markers 3) 뒤에야 다
+  막힌다(공유 회로는 3개). GitHub CI 첫 런에서
   `test_syn_drop_with_cache_misses_returns_unavailable_within_budget`가 이것으로 빨강(마지막 view 0.60 s > 0.5 s, markers 미개방) —
   view 2개 고정 대신 "transport 호출이 없는 view가 나올 때까지(상한 8)"로 바꿨다.
 - 테스트: 단위 3건 신규(forecast hang + latest 응답 view 3회 → forecast만 열림; 같은 엔드포인트 성공 뒤 deadline timeout은
@@ -25,7 +25,8 @@
 - 리뷰 반영(#587, blocker 없음): §8.3 (a)·코드 주석의 옛 서술("markers 성공 뒤 forecast timeout 미집계")을 "같은 엔드포인트의
   성공만 보호, 예: forecast(loc A) → forecast(loc B)"로 고침. 엔드포인트 key를 경로 regex 대신 호출부 리터럴(`endpoint="forecast"`)로
   — `re`·`_LOCATION_SEGMENT`·`endpoint=None` 기본값 제거. `location_id`를 `quote(..., safe="")`로 감싸 `/`가 든 id마다 회로가
-  늘던 문제도 닫음(단위 2건: id가 달라도 같은 회로, quote 확인). SYN-drop 테스트는 매 view 예산 단언 + `views in (6, 7)`.
+  늘던 문제도 닫음(단위 2건: id가 달라도 같은 회로, quote 확인). SYN-drop 테스트는 매 view 예산 단언 + `3 <= views <= 6`(리뷰 제안 `(6, 7)`은 n150에서 4로 빨강 — SYN drop의
+  ConnectTimeout은 connect 상한이 deadline에 깎이지 않은 값이라 resolve 뒤 짧은 남은 예산에서도 markers가 세진다. 최소 3·최악 6).
   후속 T-379(host-level breaker — connect 실패는 서비스 전체 장애 증거, blackhole을 ≈3 view 안에)를 tasks에 기록.
 
 ## 2026-10-15 (claude) — Track 2 weather 코드: connect 분리·resolver 투영·회로차단, 설정 정리, e2e upstream 호스트, task ID 중복 정리 (브랜치 `feat/track2-weather-odroid`, T-373·T-374·T-375)

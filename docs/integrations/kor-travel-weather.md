@@ -922,9 +922,10 @@ T-374 사양의 단일 정본이다 — ADR-074 결정 4와 `tasks.md` T-374는 
   resolve·latest는 계속 transport에 닿는다. **대가**: view 예산(운영 ≈9.9 s) 안에 **한 번도** 응답하지 않는 엔드포인트는
   죽은 것이 아니라 예산보다 느릴 뿐이어도 실패로 센다 — 예산(≈9.9 s)보다 느린 forecast는 실패로 집계되고 3 view 연속이면
   forecast 회로가 30 s 열린다(같은 view에서 그 엔드포인트가 한 번이라도 응답했으면 보호). 전면 장애(모든 엔드포인트 실패)
-  에서는 엔드포인트마다 3회씩 실패해야 각자 열린다. trip view 경로에서는 캐시 미스 resolve가 예산을 다 쓰는 동안 뒤의
-  markers는 소진(미집계)이라 resolve가 열린 뒤에야 markers가 세진다 — 공유 회로는 view 3개면 다 막혔지만 이제 캐시 미스가
-  섞인 view는 ≈6개(resolve 3 + markers 3) 동안 예산(≈9.9 s)을 쓴다. 이후 open 동안은 엔드포인트마다 30 s에 시험 1회다. (2) half-open
+  에서는 엔드포인트마다 3회씩 실패해야 각자 열린다. trip view 경로에서는 캐시 미스 resolve가 예산 대부분을 쓰고 뒤의
+  markers가 같은 view에서 세질지는 남은 예산·실패 단계에 달렸다(connect 실패는 상한이 깎이지 않아 짧은 예산에서도 세지고,
+  read hang은 깎여 소진이 될 수 있다) — 공유 회로는 view 3개면 다 막혔지만 이제 캐시 미스가 섞인 view는 3~6개(최악
+  resolve 3 + markers 3) 동안 예산(≈9.9 s)을 쓴다. 이후 open 동안은 엔드포인트마다 30 s에 시험 1회다. (2) half-open
   시험 자리는 **시험 호출 자신**의 결과만 비운다(옛 호출의 늦은 실패가 비우면 시험이 둘이 된다). (3) 회로는
   client 인스턴스(lifespan당 1개)에 있으므로 **worker 프로세스마다 따로**다. (4) 단건·Admin은 resolve의
   `KorTravelWeatherError` 전체를 빈 카드로 투영하고 `weather_card.resolve_failed`/`location_fetch_failed`
