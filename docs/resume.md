@@ -1,8 +1,9 @@
 ## 2026-10-17 (claude) — weather 회로차단 엔드포인트별 집계 (T-378, 브랜치 `fix/t-378-weather-breaker-per-endpoint`)
 
 - 다음 한 작업: draft PR CI green → coordinator 리뷰·머지 → 다음 chain에서 배포.
-- 바뀐 것: `apps/api/app/clients/kor_travel_weather.py`(엔드포인트별 성공 관측·연속 실패), 단위 테스트 3건, `kor-travel-weather.md`
-  §8.3. 설정·env·API 변화 없음.
+- 바뀐 것: `apps/api/app/clients/kor_travel_weather.py`(성공 관측·실패 집계·회로 모두 엔드포인트별), 단위 테스트 3건 + 기존 1건
+  수정, 통합 테스트 1건 재작성, `kor-travel-weather.md` §8.3. 설정·env·API 변화 없음.
+- 대가(문서화): 예산(≈9.9 s)보다 느린 forecast는 실패로 집계된다(3 view 연속이면 forecast 회로만 30 s open).
 
 ## 2026-10-15 (claude) — Track 2 weather: connect 분리·resolver 투영·회로차단 + 설정 정리 + e2e upstream 호스트 (T-373·T-374·T-375, 브랜치 `feat/track2-weather-odroid`)
 

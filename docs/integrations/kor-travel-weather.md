@@ -907,18 +907,22 @@ T-374 사양의 단일 정본이다 — ADR-074 결정 4와 `tasks.md` T-374는 
   view의 병렬 forecast 10개가 예산 끝에 함께 끊겨 회로를 여는 일을 막는다. 같은 범위에서 이미 성공한 호출이
   있으면(피호출자가 살아 있다는 증거, 예: markers 성공 뒤 forecast가 예산 끝에서 끊김) deadline이 깎은 timeout은
   예산 길이와 무관하게 소진이다 — 느린 view 여러 개가 동시에 돌 때 각 1회씩 세어 회로가 열리는 일을 막는다.
-  (b) deadline 범위 하나(= trip view 1회)는 회로 실패를 **최대 1회** 센다. (c) **backoff가 남은 시간 이상이면 자지 않고** 마지막 실패를 올린다 — 운영 backoff
+  (b) deadline 범위 하나(= trip view 1회)는 엔드포인트마다 회로 실패를 **최대 1회** 센다. (c) **backoff가 남은 시간 이상이면 자지 않고** 마지막 실패를 올린다 — 운영 backoff
   0.2 s가 client 여유 0.1 s보다 길어, 자다가 바깥 취소(미집계)를 맞으면 회로가 영영 열리지 않는다.
-  (d) 중첩 deadline은 더 이른 쪽이고 집계 상태(실패 1회·성공 관측)는 바깥과 공유한다. 보내지도 않은 호출(`KorTravelWeatherDeadlineExhausted`)은 세지 않는다.
+  (d) 중첩 deadline은 더 이른 쪽이고 집계 상태(엔드포인트별 실패 1회·성공 관측)는 바깥과 공유한다. 보내지도 않은 호출(`KorTravelWeatherDeadlineExhausted`)은 세지 않는다.
   남는 대가: 의미 있는 예산(≥5 s)을 받고도 응답이 없으면 느린 피호출자라도 실패로 센다(trip view 경로, view당
-  1회). **엔드포인트별 집계(T-378, 2026-10-17)**: 종전에는 같은 view 범위에서 한 엔드포인트가 성공하고(예: markers,
+  1회). **엔드포인트별 회로(T-378, 2026-10-17)**: 종전에는 같은 view 범위에서 한 엔드포인트가 성공하고(예: markers,
   캐시 미스 resolve) 다른 엔드포인트만 멈추면(예: forecast 정지) 범위 전체의 성공 관측이 forecast의 deadline timeout을
-  "소진"으로 바꾸고 그 성공이 연속 실패 수를 되돌려 회로가 열리지 않았다(view마다 ≈9.9 s). 이제 (i) "성공 관측"은
-  엔드포인트별(`_ScopeState.succeeded_endpoints` — 같은 엔드포인트의 성공만 그 엔드포인트 timeout을 소진으로 본다),
-  (ii) 연속 실패는 전체 수와 엔드포인트별 수(성공은 자기 엔드포인트 수만 되돌린다) 중 어느 쪽이든 임계 3에 닿으면 연다.
-  엔드포인트 = 경로 템플릿(`/v1/weather/locations/{location_id}/forecast` 등). 회로 자체는 하나라 열리면 모든 엔드포인트가
-  즉시 `Unavailable`이고, 시험 호출이 다른 엔드포인트로 성공해 닫혀도 멈춘 엔드포인트는 수가 임계 이상이라 다음 실패
-  한 번에 다시 연다. (b)의 "범위당 최대 1회"는 그대로라 forecast만 멈추면 3 view 뒤 열린다. (2) half-open
+  "소진"으로 바꾸고 그 성공이 공유 회로의 연속 실패 수를 되돌려 회로가 열리지 않았다(view마다 ≈9.9 s). 이제 성공 관측·
+  실패 집계·회로가 전부 **엔드포인트별**이다(엔드포인트 = 경로 템플릿, `/v1/weather/locations/{location_id}/forecast` 등):
+  (i) 같은 엔드포인트의 성공만 그 엔드포인트 timeout을 소진으로 본다(`_ScopeState.succeeded_endpoints`), (ii) (b)의
+  "범위당 최대 1회"는 엔드포인트마다다(`counted_endpoints`), (iii) 회로(연속 실패 수·open·half-open 시험 자리)도
+  엔드포인트마다 하나다 — forecast가 3 view 연속 예산 안에 응답하지 않으면 **forecast 회로만** 열리고 markers·
+  resolve·latest는 계속 transport에 닿는다. **대가**: view 예산(운영 ≈9.9 s) 안에 **한 번도** 응답하지 않는 엔드포인트는
+  죽은 것이 아니라 예산보다 느릴 뿐이어도 실패로 센다 — 예산(≈9.9 s)보다 느린 forecast는 실패로 집계되고 3 view 연속이면
+  forecast 회로가 30 s 열린다(같은 view에서 그 엔드포인트가 한 번이라도 응답했으면 보호). 전면 장애(모든 엔드포인트 실패)
+  에서는 엔드포인트마다 3회씩 실패해야 각자 열리므로 공유 회로보다 transport 호출이 엔드포인트 수만큼 더 나간다(첫 30 s
+  주기만, 이후는 엔드포인트마다 시험 1회). (2) half-open
   시험 자리는 **시험 호출 자신**의 결과만 비운다(옛 호출의 늦은 실패가 비우면 시험이 둘이 된다). (3) 회로는
   client 인스턴스(lifespan당 1개)에 있으므로 **worker 프로세스마다 따로**다. (4) 단건·Admin은 resolve의
   `KorTravelWeatherError` 전체를 빈 카드로 투영하고 `weather_card.resolve_failed`/`location_fetch_failed`

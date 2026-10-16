@@ -5,12 +5,19 @@
 바꿨고, (2) 그것을 고쳐도 markers 성공이 회로의 연속 실패 수를 매 view 0으로 되돌려 forecast 실패가 3에 닿지 못했다.
 
 - `clients/kor_travel_weather.py`: `_ScopeState.saw_success` → `succeeded_endpoints: set[str]`(엔드포인트 = 경로 템플릿,
-  `location_id` 제거). `_CircuitBreaker`는 전체 연속 실패에 더해 엔드포인트별 연속 실패를 세고 어느 쪽이든 임계(3)면 연다;
-  성공은 전체 수와 자기 엔드포인트 수만 되돌린다. 회로는 하나 그대로(열리면 전 엔드포인트 즉시 `Unavailable`).
-- 테스트 3건(`test_kor_travel_weather_client.py`): forecast hang + latest 응답 view 3회 → 열림; 같은 엔드포인트 성공 뒤
-  deadline timeout은 여전히 소진; 다른 엔드포인트 성공이 실패 엔드포인트 수를 되돌리지 않음 + 시험 호출이 다른 엔드포인트로
-  닫혀도 다음 실패 한 번에 다시 열림. 기존 회로·deadline 테스트(전 엔드포인트 공유 회로 포함)는 그대로 초록.
-- 문서: `kor-travel-weather.md` §8.3 알려진 공백 → 구현 기록.
+  `location_id` 제거). `_ScopeState.failure_counted` → `counted_endpoints`(범위당 실패 1회도 엔드포인트마다).
+  회로 자체도 엔드포인트마다 하나(`KorTravelWeatherClient._circuits`, `_circuit_for`) — forecast만 멈추면 forecast 회로만
+  열리고 markers·resolve·latest는 산다. coordinator가 옵션 1(T-378 채택)과 엔드포인트별 open을 골랐다.
+- **대가**: view 예산(≈9.9 s) 안에 한 번도 응답하지 않는 엔드포인트는 느릴 뿐이어도 실패로 센다 — 예산보다 느린 forecast는
+  실패로 집계되고 3 view 연속이면 forecast 회로가 30 s 열린다(같은 view에서 그 엔드포인트가 응답했으면 보호). 전면 장애에서는
+  엔드포인트마다 3회씩 실패해야 각자 열린다.
+- 테스트: 단위 3건 신규(forecast hang + latest 응답 view 3회 → forecast만 열림; 같은 엔드포인트 성공 뒤 deadline timeout은
+  소진; 다른 엔드포인트 성공이 forecast 수를 되돌리지 않고 forecast 시험 실패는 forecast만 다시 연다), 기존
+  `test_circuit_opens_after_three_failed_logical_calls`를 엔드포인트별 회로로 수정. 통합
+  `test_concurrent_views_with_live_upstream_keep_breaker_closed` → `test_concurrent_views_breaker_counts_per_endpoint`(같은
+  엔드포인트가 view 안에서 응답하면 미집계, 한 번도 응답 안 하면 3 view 뒤 forecast만 열림·markers 생존). 종전 테스트는 "markers
+  성공이면 forecast 끊김은 미집계"를 단언해 새 의도와 충돌했다.
+- 문서: `kor-travel-weather.md` §8.3 알려진 공백 → 구현 기록 + 대가.
 
 ## 2026-10-15 (claude) — Track 2 weather 코드: connect 분리·resolver 투영·회로차단, 설정 정리, e2e upstream 호스트, task ID 중복 정리 (브랜치 `feat/track2-weather-odroid`, T-373·T-374·T-375)
 

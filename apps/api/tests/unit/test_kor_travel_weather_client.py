@@ -465,15 +465,18 @@ async def test_circuit_opens_after_three_failed_logical_calls() -> None:
         await client.latest("loc-1")
     assert attempts["n"] == 6
 
-    # open: transport를 부르지 않고 즉시 실패한다 — 모든 엔드포인트가 같은 회로를 공유한다.
+    # open: transport를 부르지 않고 즉시 실패한다 — 같은 엔드포인트(location_id 무관)는 같은 회로다.
     with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
         await client.latest("loc-1")
-    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
-        await client.resolve(lat=37.5, lon=127.0)
     clock.now += 29.9
     with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
-        await client.markers(["loc-1"])
+        await client.latest("loc-2")
     assert attempts["n"] == 6
+    # 회로는 엔드포인트마다다(T-378) — 다른 엔드포인트는 여전히 transport에 닿는다.
+    with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
+        await client.markers(["loc-1"])
+    assert "회로 열림" not in str(exc_info.value)
+    assert attempts["n"] == 8
     await client.aclose()
 
 
@@ -916,12 +919,11 @@ async def test_forecast_hang_opens_circuit_although_other_endpoint_answers_in_th
                 await client.forecast("loc-1")
             assert not isinstance(exc_info.value, KorTravelWeatherDeadlineExhausted)
     assert calls == {"latest": 3, "forecast": 3}
-    # forecast 연속 실패 3회 — 회로가 열려 어느 엔드포인트도 transport에 닿지 않는다.
+    # forecast 연속 실패 3회 — forecast 회로만 열린다. latest는 계속 transport에 닿는다.
     with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
-        await client.forecast("loc-1")
-    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
-        await client.latest("loc-1")
-    assert calls == {"latest": 3, "forecast": 3}
+        await client.forecast("loc-2")
+    assert len(await client.latest("loc-1")) == 1
+    assert calls == {"latest": 4, "forecast": 3}
     await client.aclose()
 
 
@@ -955,9 +957,10 @@ async def test_same_endpoint_success_still_makes_its_deadline_timeout_exhaustion
 
 
 async def test_other_endpoint_success_does_not_reset_failing_endpoint_count() -> None:
-    """forecast 실패 사이사이 latest가 성공해도 forecast의 연속 실패는 이어진다 — 3회째에 열린다.
+    """forecast 실패 사이사이 latest가 성공해도 forecast의 연속 실패는 이어진다 — 3회째에 forecast만 열린다.
 
-    시험 호출이 latest로 성공해 닫혀도 forecast는 여전히 임계 이상이라 다음 실패 한 번에 다시 연다.
+    half-open 시험도 엔드포인트마다다: 30 s 뒤 forecast 시험이 실패하면 forecast만 다시 열리고, latest는
+    그동안 내내 닫힌 채 응답한다.
     """
     handler, calls = _split_handler("503")
     clock = _FakeClock()
@@ -969,14 +972,16 @@ async def test_other_endpoint_success_does_not_reset_failing_endpoint_count() ->
     with pytest.raises(KorTravelWeatherUnavailable):
         await client.forecast("loc-1")
     with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
-        await client.latest("loc-1")
-    assert calls == {"latest": 2, "forecast": 3}
+        await client.forecast("loc-1")
+    assert len(await client.latest("loc-1")) == 1
+    assert calls == {"latest": 3, "forecast": 3}
 
     clock.now += 30.0
-    assert len(await client.latest("loc-1")) == 1  # half-open 시험 성공 → 닫힘
-    with pytest.raises(KorTravelWeatherUnavailable):
-        await client.forecast("loc-1")
+    with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
+        await client.forecast("loc-1")  # half-open 시험 — 실패해 다시 연다
+    assert "회로 열림" not in str(exc_info.value)
     with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
-        await client.latest("loc-1")
-    assert calls == {"latest": 3, "forecast": 4}
+        await client.forecast("loc-1")
+    assert len(await client.latest("loc-1")) == 1
+    assert calls == {"latest": 4, "forecast": 4}
     await client.aclose()

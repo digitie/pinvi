@@ -51,7 +51,7 @@ _FORECAST_MAX_LIMIT = 5000
 _NEARBY_LIMIT_MAX = 100  # 서버 스키마 상한(OpenAPI `nearby` limit maximum)
 
 # 회로차단 기본값(ADR-074 결정 4(c), `docs/integrations/kor-travel-weather.md` §8.3 "대응").
-# 단위는 **논리 호출**(`_send` 1회 — 재시도 attempt가 아니다). 연속 실패가 임계에 닿으면 open
+# 단위는 **논리 호출**(`_send` 1회 — 재시도 attempt가 아니다), 회로는 엔드포인트마다 하나다(T-378). 연속 실패가 임계에 닿으면 open
 # 동안 transport를 부르지 않고 즉시 `KorTravelWeatherUnavailable`이며, open이 끝나면 half-open
 # 시험 호출 1회만 내보낸다. env·settings로 노출하지 않는다 — 값을 바꾸기로 하면(ADR-074 열린
 # 결정 2) 그때 settings로 승격한다. ETL `KorTravelWeatherResource`에는 적용하지 않는다.
@@ -71,14 +71,14 @@ _CIRCUIT_OPEN_SECONDS = 30.0
 # 회로 미집계)이다 — 느리지만 살아 있는 피호출자에서 한 view의 병렬 forecast 10개가 예산 끝에 함께
 # 끊겨 회로를 여는 일을 막는다. 같은 범위에서 이미 성공한 호출이 있으면(피호출자가 살아 있다는
 # 증거) deadline이 깎은 timeout은 예산 길이와 무관하게 소진으로 본다. 또 한 deadline 범위에서 세는
-# 실패는 **최대 1회**다.
+# 실패는 엔드포인트마다 **최대 1회**다.
 #
-# "성공 관측"과 연속 실패 수는 **엔드포인트별**이다(T-378, #584 최종 리뷰). 한 view에서 markers·resolve는
+# 성공 관측·실패 집계·회로는 전부 **엔드포인트별**이다(T-378, #584 최종 리뷰). 한 view에서 markers·resolve는
 # 응답하고 forecast만 멈추면, 범위 전체의 성공 관측이 forecast의 hang을 "소진"으로 바꾸고 markers 성공이
-# 연속 실패 수를 0으로 되돌려 회로가 영영 열리지 않았다(view마다 ≈9.9 s). 이제 같은 엔드포인트의 성공만
-# 그 엔드포인트의 timeout을 소진으로 보고, 연속 실패는 전체 수와 엔드포인트별 수 중 **어느 쪽이든**
-# 임계에 닿으면 회로를 연다(전체 수는 종전 규칙 그대로 — 엔드포인트가 섞여 실패하는 전면 장애). 회로 자체는
-# 여전히 하나다(열리면 모든 엔드포인트가 즉시 `Unavailable`).
+# 공유 회로의 연속 실패 수를 0으로 되돌려 회로가 영영 열리지 않았다(view마다 ≈9.9 s). 이제 같은 엔드포인트의
+# 성공만 그 엔드포인트의 timeout을 소진으로 보고, 범위당 실패 1회도 엔드포인트마다이며, 회로도 엔드포인트마다
+# 하나라 forecast만 열리고 markers는 계속 산다. 대가: view 예산(≈9.9 s) 안에 한 번도 응답하지 않는 엔드포인트는
+# 느린 것뿐이라도 실패로 센다(같은 view에서 그 엔드포인트가 한 번이라도 응답했으면 보호).
 _DEADLINE_MEANINGFUL_READ_FRACTION = 0.5
 
 
@@ -94,7 +94,7 @@ def _endpoint_key(path: str) -> str:
 class _ScopeState:
     """deadline 범위의 공유 상태 — 중첩 범위도 같은 객체를 써서 두 번 세지 않는다."""
 
-    failure_counted: bool = False
+    counted_endpoints: set[str] = field(default_factory=set)
     succeeded_endpoints: set[str] = field(default_factory=set)
 
 
@@ -113,8 +113,8 @@ _call_scope: ContextVar[_CallScope | None] = ContextVar(
 def kor_travel_weather_call_deadline(deadline: float) -> Iterator[None]:
     """이 문맥(과 그 안에서 만든 task)의 weather 호출을 `deadline`(loop 시각)까지로 묶는다.
 
-    중첩되면 더 이른 deadline을 쓰고(안쪽 범위가 예산을 넓히지 못한다) 집계 상태(실패 1회·
-    엔드포인트별 성공 관측)는 바깥 범위와 공유한다.
+    중첩되면 더 이른 deadline을 쓰고(안쪽 범위가 예산을 넓히지 못한다) 집계 상태(엔드포인트별
+    실패 1회·성공 관측)는 바깥 범위와 공유한다.
     """
     current = _call_scope.get()
     if current is None:
@@ -558,11 +558,12 @@ def _decode_nearby_list(raw: object) -> tuple[NearbyOut, ...]:
 
 
 class _CircuitBreaker:
-    """연속 실패 회로차단 — closed → open(`_CIRCUIT_OPEN_SECONDS`) → half-open(시험 1회).
+    """연속 실패 회로차단 — closed → open(`_CIRCUIT_OPEN_SECONDS`) → half-open(시험 1회). **엔드포인트마다 하나**.
 
     `found`를 지어내지 않는다: 열린 동안 호출자는 평소와 같은 `KorTravelWeatherUnavailable`을
-    받을 뿐이고 그것을 `unavailable`/빈 카드로 투영하는 것은 서비스 계층이다. 상태는 client
-    인스턴스 하나에 있어 trip view·단건 카드·resolver·Admin·지도 마커가 공유한다. client는
+    받을 뿐이고 그것을 `unavailable`/빈 카드로 투영하는 것은 서비스 계층이다. 회로는 client
+    인스턴스 안에 엔드포인트(`_endpoint_key`)마다 하나라 같은 엔드포인트를 부르는 trip view·단건
+    카드·resolver·Admin·지도 마커가 공유하고, forecast가 열려도 markers는 닫힌 채다(T-378). client는
     lifespan마다 하나이므로 **회로는 worker 프로세스마다 따로**다(uvicorn worker N개면 회로 N개 —
     공유 저장소 없음).
     """
@@ -574,7 +575,6 @@ class _CircuitBreaker:
         self._open_seconds = open_seconds
         self._clock = clock
         self._consecutive_failures = 0
-        self._endpoint_failures: dict[str, int] = {}
         self._opened_at: float | None = None
         self._trial_in_flight = False
 
@@ -587,34 +587,20 @@ class _CircuitBreaker:
         self._trial_in_flight = True
         return True
 
-    def record_success(self, *, endpoint: str) -> None:
-        """성공은 전체 연속 실패와 **그 엔드포인트의** 연속 실패만 되돌린다.
-
-        다른 엔드포인트의 수는 그대로다 — markers가 응답한다고 멈춘 forecast의 실패가 지워지면 회로가
-        열리지 않는다(T-378). 시험 호출이 다른 엔드포인트로 성공해 회로가 닫혀도, 멈춘 엔드포인트는
-        수가 임계 이상이라 다음 실패 한 번에 다시 연다.
-        """
+    def record_success(self) -> None:
         self._consecutive_failures = 0
-        self._endpoint_failures.pop(endpoint, None)
         self._opened_at = None
         self._trial_in_flight = False
 
     def record_failure(self, *, endpoint: str, trial: bool) -> None:
         self._consecutive_failures += 1
-        endpoint_failures = self._endpoint_failures.get(endpoint, 0) + 1
-        self._endpoint_failures[endpoint] = endpoint_failures
-        if (
-            trial
-            or self._consecutive_failures >= self._failure_threshold
-            or endpoint_failures >= self._failure_threshold
-        ):
+        if trial or self._consecutive_failures >= self._failure_threshold:
             if self._opened_at is None or trial:
                 logger.warning(
                     "kor_travel_weather.circuit_open",
                     extra={
-                        "consecutive_failures": self._consecutive_failures,
                         "endpoint": endpoint,
-                        "endpoint_consecutive_failures": endpoint_failures,
+                        "consecutive_failures": self._consecutive_failures,
                     },
                 )
             self._opened_at = self._clock()
@@ -653,49 +639,58 @@ class KorTravelWeatherClient:
         self._http = http
         self._max_attempts = max(1, max_attempts)
         self._backoff_base_seconds = backoff_base_seconds
-        self._circuit = _CircuitBreaker(
-            failure_threshold=_CIRCUIT_FAILURE_THRESHOLD,
-            open_seconds=_CIRCUIT_OPEN_SECONDS,
-            clock=clock,
-        )
+        self._clock = clock
+        self._circuits: dict[str, _CircuitBreaker] = {}
 
     async def aclose(self) -> None:
         await self._http.aclose()
 
     # ── 내부 ────────────────────────────────────────────────────────────────
 
+    def _circuit_for(self, endpoint: str) -> _CircuitBreaker:
+        circuit = self._circuits.get(endpoint)
+        if circuit is None:
+            circuit = _CircuitBreaker(
+                failure_threshold=_CIRCUIT_FAILURE_THRESHOLD,
+                open_seconds=_CIRCUIT_OPEN_SECONDS,
+                clock=self._clock,
+            )
+            self._circuits[endpoint] = circuit
+        return circuit
+
     async def _send(
         self, method: str, path: str, *, params: Mapping[str, Any] | None = None
     ) -> httpx.Response:
         """논리 호출 1회 — 회로차단을 거쳐 `_send_with_retries`를 부른다.
 
-        회로가 열려 있으면 transport를 부르지 않고 즉시 `KorTravelWeatherUnavailable`이다.
+        그 엔드포인트의 회로가 열려 있으면 transport를 부르지 않고 즉시 `KorTravelWeatherUnavailable`이다.
         재시도 끝의 `Unavailable`만 실패로 센다(4xx·계약 오류는 피호출자가 살아 있다는 뜻).
         """
         endpoint = _endpoint_key(path)
-        trial = self._circuit.acquire()
+        circuit = self._circuit_for(endpoint)
+        trial = circuit.acquire()
         try:
             resp = await self._send_with_retries(method, path, params=params, endpoint=endpoint)
         except KorTravelWeatherDeadlineExhausted:
-            self._circuit.release(trial=trial)
+            circuit.release(trial=trial)
             raise
         except KorTravelWeatherUnavailable:
             scope = _call_scope.get()
-            if scope is not None and scope.state.failure_counted and not trial:
-                # 한 deadline 범위(= trip view 1회)는 회로 실패를 한 번만 센다.
-                self._circuit.release(trial=trial)
+            if scope is not None and endpoint in scope.state.counted_endpoints and not trial:
+                # 한 deadline 범위(= trip view 1회)는 엔드포인트마다 회로 실패를 한 번만 센다.
+                circuit.release(trial=trial)
             else:
                 if scope is not None:
-                    scope.state.failure_counted = True
-                self._circuit.record_failure(endpoint=endpoint, trial=trial)
+                    scope.state.counted_endpoints.add(endpoint)
+                circuit.record_failure(endpoint=endpoint, trial=trial)
             raise
         except BaseException:
-            self._circuit.release(trial=trial)
+            circuit.release(trial=trial)
             raise
         scope = _call_scope.get()
         if scope is not None:
             scope.state.succeeded_endpoints.add(endpoint)
-        self._circuit.record_success(endpoint=endpoint)
+        circuit.record_success()
         return resp
 
     async def _send_with_retries(
