@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import time
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from contextlib import asynccontextmanager, contextmanager
@@ -32,6 +31,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Annotated, Any
+from urllib.parse import quote
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -69,8 +69,9 @@ _CIRCUIT_OPEN_SECONDS = 30.0
 # 한다: attempt 예산이 정상 read timeout의 `_DEADLINE_MEANINGFUL_READ_FRACTION` 이상일 때만 실패로
 # 세고, 그보다 짧은 예산에서 깎인 timeout은 "호출자 예산 소진"(`KorTravelWeatherDeadlineExhausted`,
 # 회로 미집계)이다 — 느리지만 살아 있는 피호출자에서 한 view의 병렬 forecast 10개가 예산 끝에 함께
-# 끊겨 회로를 여는 일을 막는다. 같은 범위에서 이미 성공한 호출이 있으면(피호출자가 살아 있다는
-# 증거) deadline이 깎은 timeout은 예산 길이와 무관하게 소진으로 본다. 또 한 deadline 범위에서 세는
+# 끊겨 회로를 여는 일을 막는다. 같은 범위에서 **같은 엔드포인트가** 이미 성공했으면(그 엔드포인트가 살아
+# 있다는 증거, 예: forecast(loc A) 성공 뒤 forecast(loc B)가 예산 끝에서 끊김) deadline이 깎은 timeout은
+# 예산 길이와 무관하게 소진으로 본다 — 다른 엔드포인트(markers)의 성공은 보호하지 않는다. 또 한 deadline 범위에서 세는
 # 실패는 엔드포인트마다 **최대 1회**다.
 #
 # 성공 관측·실패 집계·회로는 전부 **엔드포인트별**이다(T-378, #584 최종 리뷰). 한 view에서 markers·resolve는
@@ -82,12 +83,9 @@ _CIRCUIT_OPEN_SECONDS = 30.0
 _DEADLINE_MEANINGFUL_READ_FRACTION = 0.5
 
 
-_LOCATION_SEGMENT = re.compile(r"/locations/[^/]+/")
-
-
-def _endpoint_key(path: str) -> str:
-    """요청 경로 → 엔드포인트 이름(경로 변수 `location_id`를 지운 템플릿)."""
-    return _LOCATION_SEGMENT.sub("/locations/{location_id}/", path)
+def _location_path(location_id: str, leaf: str) -> str:
+    """`/v1/weather/locations/{location_id}/{leaf}` — id를 한 경로 세그먼트로 quote한다(`/`가 경로를 쪼개지 않게)."""
+    return f"/v1/weather/locations/{quote(location_id, safe='')}/{leaf}"
 
 
 @dataclass(slots=True)
@@ -562,7 +560,7 @@ class _CircuitBreaker:
 
     `found`를 지어내지 않는다: 열린 동안 호출자는 평소와 같은 `KorTravelWeatherUnavailable`을
     받을 뿐이고 그것을 `unavailable`/빈 카드로 투영하는 것은 서비스 계층이다. 회로는 client
-    인스턴스 안에 엔드포인트(`_endpoint_key`)마다 하나라 같은 엔드포인트를 부르는 trip view·단건
+    인스턴스 안에 엔드포인트(호출부가 넘기는 리터럴 이름)마다 하나라 같은 엔드포인트를 부르는 trip view·단건
     카드·resolver·Admin·지도 마커가 공유하고, forecast가 열려도 markers는 닫힌 채다(T-378). client는
     lifespan마다 하나이므로 **회로는 worker 프로세스마다 따로**다(uvicorn worker N개면 회로 N개 —
     공유 저장소 없음).
@@ -659,14 +657,18 @@ class KorTravelWeatherClient:
         return circuit
 
     async def _send(
-        self, method: str, path: str, *, params: Mapping[str, Any] | None = None
+        self,
+        method: str,
+        path: str,
+        *,
+        endpoint: str,
+        params: Mapping[str, Any] | None = None,
     ) -> httpx.Response:
         """논리 호출 1회 — 회로차단을 거쳐 `_send_with_retries`를 부른다.
 
         그 엔드포인트의 회로가 열려 있으면 transport를 부르지 않고 즉시 `KorTravelWeatherUnavailable`이다.
         재시도 끝의 `Unavailable`만 실패로 센다(4xx·계약 오류는 피호출자가 살아 있다는 뜻).
         """
-        endpoint = _endpoint_key(path)
         circuit = self._circuit_for(endpoint)
         trial = circuit.acquire()
         try:
@@ -698,8 +700,8 @@ class KorTravelWeatherClient:
         method: str,
         path: str,
         *,
+        endpoint: str,
         params: Mapping[str, Any] | None = None,
-        endpoint: str | None = None,
     ) -> httpx.Response:
         """transient(타임아웃/연결/5xx) 시 지수 백오프 재시도.
 
@@ -710,7 +712,6 @@ class KorTravelWeatherClient:
         `KorTravelWeatherDeadlineExhausted`(회로 미집계)다(다른 엔드포인트의 성공은 이 엔드포인트가 살아
         있다는 증거가 아니다 — T-378).
         """
-        endpoint = endpoint if endpoint is not None else _endpoint_key(path)
         last: KorTravelWeatherUnavailable | None = None
         cleaned = {k: v for k, v in (params or {}).items() if v is not None}
         scope = _call_scope.get()
@@ -837,7 +838,10 @@ class KorTravelWeatherClient:
         if radius_km is not None and not 0 < radius_km <= _RADIUS_KM_MAX:
             raise ValueError(f"radius_km은 0 초과 {_RADIUS_KM_MAX} 이하여야 합니다: {radius_km}")
         resp = await self._send(
-            "GET", "/v1/weather/resolve", params={"lat": lat, "lon": lon, "radius_km": radius_km}
+            "GET",
+            "/v1/weather/resolve",
+            endpoint="resolve",
+            params={"lat": lat, "lon": lon, "radius_km": radius_km},
         )
         return _decode_resolved_weather(self._unwrap_data(resp, path="/v1/weather/resolve"))
 
@@ -850,7 +854,9 @@ class KorTravelWeatherClient:
             raise ValueError(
                 f"location_ids는 최대 {_MARKERS_MAX_LOCATION_IDS}개까지입니다: {len(ids)}개"
             )
-        resp = await self._send("GET", "/v1/weather/markers", params={"location_id": ids})
+        resp = await self._send(
+            "GET", "/v1/weather/markers", endpoint="markers", params={"location_id": ids}
+        )
         return _decode_marker_list(self._unwrap_data(resp, path="/v1/weather/markers"))
 
     async def nearby(
@@ -872,6 +878,7 @@ class KorTravelWeatherClient:
         resp = await self._send(
             "GET",
             "/v1/weather/nearby",
+            endpoint="nearby",
             params={"lat": lat, "lon": lon, "radius_km": radius_km, "limit": limit},
         )
         return _decode_nearby_list(self._unwrap_data(resp, path="/v1/weather/nearby"))
@@ -884,8 +891,8 @@ class KorTravelWeatherClient:
             raise ValueError("location_id가 비어 있습니다.")
         if limit is not None and not 1 <= limit <= _LATEST_MAX_LIMIT:
             raise ValueError(f"limit은 1..{_LATEST_MAX_LIMIT} 범위여야 합니다: {limit}")
-        path = f"/v1/weather/locations/{location_id}/latest"
-        resp = await self._send("GET", path, params={"limit": limit})
+        path = _location_path(location_id, "latest")
+        resp = await self._send("GET", path, endpoint="latest", params={"limit": limit})
         return _decode_weather_value_list(self._unwrap_data(resp, path=path), what="latest")
 
     async def forecast(
@@ -908,10 +915,11 @@ class KorTravelWeatherClient:
             _require_aware_datetime(to, field_name="to")
         if limit is not None and not 1 <= limit <= _FORECAST_MAX_LIMIT:
             raise ValueError(f"limit은 1..{_FORECAST_MAX_LIMIT} 범위여야 합니다: {limit}")
-        path = f"/v1/weather/locations/{location_id}/forecast"
+        path = _location_path(location_id, "forecast")
         resp = await self._send(
             "GET",
             path,
+            endpoint="forecast",
             params={
                 "from": from_.isoformat() if from_ else None,
                 "to": to.isoformat() if to else None,

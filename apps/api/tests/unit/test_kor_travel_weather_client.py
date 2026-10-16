@@ -985,3 +985,43 @@ async def test_other_endpoint_success_does_not_reset_failing_endpoint_count() ->
     assert len(await client.latest("loc-1")) == 1
     assert calls == {"latest": 4, "forecast": 4}
     await client.aclose()
+
+
+async def test_circuit_key_is_the_endpoint_not_the_location_id() -> None:
+    """회로 key는 호출부의 리터럴 엔드포인트 이름이다 — location_id가 매번 달라도(`/` 포함) 같은 회로에 센다."""
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        return httpx.Response(503, json={"code": "UPSTREAM"})
+
+    client = _client(handler, max_attempts=1, clock=_FakeClock())
+    for location_id in ("loc-1", "a/b", "c/d/e"):
+        with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
+            await client.latest(location_id)
+        assert "회로 열림" not in str(exc_info.value)
+    assert attempts["n"] == 3
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        await client.latest("never-seen/before")
+    assert attempts["n"] == 3
+    await client.aclose()
+
+
+async def test_location_id_is_quoted_as_one_path_segment() -> None:
+    """`/`·`?`·`#`가 든 location_id도 경로 세그먼트 하나로 quote돼 나간다(경로를 쪼개거나 바꾸지 않는다)."""
+    seen: list[bytes] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.raw_path.split(b"?", 1)[0])
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    client = _client(handler, clock=_FakeClock())
+    await client.latest("a/b")
+    await client.forecast("x/../y?z#w")
+    await client.latest("plain-id_1.2")
+    assert seen == [
+        b"/v1/weather/locations/a%2Fb/latest",
+        b"/v1/weather/locations/x%2F..%2Fy%3Fz%23w/forecast",
+        b"/v1/weather/locations/plain-id_1.2/latest",
+    ]
+    await client.aclose()
