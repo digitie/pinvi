@@ -16,6 +16,9 @@
 > `BeachPublicView.latest_weather`·`FeatureSummary`/`AdminFeatureMapItem.weather_summary`를
 > 지웠다. Pinvi는 T-365에서 이미 그 경로를 호출하지 않으므로 공개 `PublicBeachView.latest_weather`만
 > 함께 걷어냈다. Map이 squash merge하면 핀(`map_release_revision` 등)을 merge commit으로 다시 올린다.
+> **2026-10-16 재vendor 2 (admin/full만)**: Map `2324d9d275e216fde2943fc87879d36903b8bd62`(#1332, T-GR-05)의 admin(full)
+> SHA-256 `acd3f0b11121f7bd057027203e73ebedd172311e280731cad9feb71c0c9d4814` — geo-release item `state_reason` enum에
+> `superseded`·`canceled` 두 값 추가뿐. user/service 불변, PinVi는 이 ops를 호출하지 않는다.
 > **2026-10-16 재vendor (admin/full만)**: Map `origin/main` `e179dcf1e4f15f146afbecb9f2140e7d3ff85add`(#1331, T-GR-04)의
 > `packages/kor-travel-map-api/openapi.json`을 byte-exact로 다시 vendor했다 — admin(full) SHA-256
 > `ce178a70dc6c6a5c32f1e4abef8b0b6186b39f1dff78317b534fd6647479878b`. 변경은 추가뿐(`/v1/ops/geo-releases` 5 ops·schema 10)이고
