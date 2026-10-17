@@ -1,3 +1,9 @@
+## 2026-10-17 (codex) — Geo 전용 키 문서 정합 착수 (T-380)
+
+- 최신 main `907c86f`의 ADR-075·`clients/kor_travel_geo.py`·전용 키 단위 테스트를 정본으로 확인했다. 통합 가이드 상단·요청 설명·예시·체크리스트에 남은 ADR-048의 VWorld 키 재사용 지침만 정정한다.
+- 소유 범위는 통합 가이드와 journal/tasks 세 문서다. 기존 factory/lifespan/DI를 안내하고 새 클라이언트·설정·토큰 기능은 구현하지 않는다.
+- 검증은 문서 간 키 정책·실제 소스 경로 대조, diff 검사 및 푸시 전 보안 감사로 제한한다. 운영 키 주입·실서비스 수용 여부는 이 문서 작업의 검증 범위가 아니다.
+
 ## 2026-10-17 (claude) — weather 회로차단 엔드포인트별 집계 (T-378, 브랜치 `fix/t-378-weather-breaker-per-endpoint`)
 
 #584 최종 리뷰가 남긴 공백: 한 view에서 markers·resolve는 응답하고 forecast만 멈추면 회로가 열리지 않았다. 원인은 둘이었다 —
