@@ -5,7 +5,7 @@
 [`docs/tasks-done.md`](tasks-done.md), 현재 근거와 다음 한 작업은
 [`docs/resume.md`](resume.md)가 정본이다.
 
-- [/] T-380 — Geo 전용 키 문서를 ADR-075 및 실제 factory에 정합한다. 소유 codex, 브랜치 `docs/geo-dedicated-key-c-20261017`; 충돌 회피 범위 `docs/integrations/kor-travel-geo.md`·`docs/journal.md`·`docs/tasks.md`만. 앱 코드·키 발급·운영 주입 변경 없이 문서 검증과 독립 리뷰 뒤 머지한다.
+- [/] T-380 — (PR #588) Geo 전용 키 문서를 ADR-075 및 실제 factory에 정합한다. 소유 codex, 브랜치 `docs/geo-dedicated-key-c-20261017`; 충돌 회피 범위 `docs/integrations/kor-travel-geo.md`·`docs/journal.md`·`docs/tasks.md`만. 앱 코드·키 발급·운영 주입 변경 없이 문서 검증과 독립 리뷰 뒤 머지한다.
 
 > **M05/T-VN-41 교차 저장소 감사(2026-09-18)**: 이 클러스터는 `kor-travel-map`·
 > `kor-travel-docker-manager`(`ktdctl`)와 공유하는 task ID를 쓴다. 같은 "M05" 라벨이

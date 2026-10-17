@@ -1,8 +1,9 @@
-## 2026-10-17 (codex) — Geo 전용 키 문서 정합 착수 (T-380)
+## 2026-10-17 (codex) — Geo 전용 키 가이드 정합 (T-380, PR #588)
 
-- 최신 main `907c86f`의 ADR-075·`clients/kor_travel_geo.py`·전용 키 단위 테스트를 정본으로 확인했다. 통합 가이드 상단·요청 설명·예시·체크리스트에 남은 ADR-048의 VWorld 키 재사용 지침만 정정한다.
-- 소유 범위는 통합 가이드와 journal/tasks 세 문서다. 기존 factory/lifespan/DI를 안내하고 새 클라이언트·설정·토큰 기능은 구현하지 않는다.
-- 검증은 문서 간 키 정책·실제 소스 경로 대조, diff 검사 및 푸시 전 보안 감사로 제한한다. 운영 키 주입·실서비스 수용 여부는 이 문서 작업의 검증 범위가 아니다.
+- ADR-075·실제 `clients/kor_travel_geo.py` factory·`test_kor_travel_geo_api_key.py`에 맞춰 상단·§3·§5·§11의 VWorld 키 재사용 지침을 제거했다. §5의 별도 adapter 예제는 기존 factory/lifespan/DI 참조로 교체했다.
+- 전용 `SecretStr`, 미설정/빈 문자열의 요청 전 거절과 503 degrade, VWorld fallback 금지, 공백·동일 값 거절을 명시했다. 키 발급·hash 저장·폐기는 Geo 소유다.
+- 로컬 검증: 정책 문구와 실제 소스 경로 대조, 변경 세 문서 한정 및 `git diff --check` 통과. 푸시 전 보안 감사에서 추가된 값은 설정 식별자·문서 경로뿐임을 확인했다. 앱 코드·운영 설정·실서비스 호출은 변경/실행하지 않았다.
+- 독립 리뷰와 머지는 남아 있다. 운영 키 주입·실서비스 수용 성공을 이 문서 변경의 결과로 주장하지 않는다.
 
 ## 2026-10-17 (claude) — weather 회로차단 엔드포인트별 집계 (T-378, 브랜치 `fix/t-378-weather-breaker-per-endpoint`)
 
