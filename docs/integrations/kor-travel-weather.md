@@ -904,17 +904,28 @@ T-374 사양의 단일 정본이다 — ADR-074 결정 4와 `tasks.md` T-374는 
   안의 attempt timeout으로 끝나 실패로 센다(첫 호출이 ≈9.9 s를 받는다). **집계 규칙**: (a) deadline이 깎은
   timeout은 그 attempt 예산이 정상 read의 50%(운영 5 s) 이상일 때만 실패이고, 그보다 짧으면 "호출자 예산
   소진"(`KorTravelWeatherDeadlineExhausted`, 미집계)이다 — 느리지만 살아 있는 피호출자(odroid 1~9 s)에서 한
-  view의 병렬 forecast 10개가 예산 끝에 함께 끊겨 회로를 여는 일을 막는다. 같은 범위에서 이미 성공한 호출이
-  있으면(피호출자가 살아 있다는 증거, 예: markers 성공 뒤 forecast가 예산 끝에서 끊김) deadline이 깎은 timeout은
-  예산 길이와 무관하게 소진이다 — 느린 view 여러 개가 동시에 돌 때 각 1회씩 세어 회로가 열리는 일을 막는다.
-  (b) deadline 범위 하나(= trip view 1회)는 회로 실패를 **최대 1회** 센다. (c) **backoff가 남은 시간 이상이면 자지 않고** 마지막 실패를 올린다 — 운영 backoff
+  view의 병렬 forecast 10개가 예산 끝에 함께 끊겨 회로를 여는 일을 막는다. 같은 범위에서 **같은 엔드포인트의**
+  성공만 보호한다(그 엔드포인트가 살아 있다는 증거, 예: forecast(loc A) 성공 뒤 forecast(loc B)가 예산 끝에서 끊김) —
+  그때 deadline이 깎은 timeout은 예산 길이와 무관하게 소진이다. 다른 엔드포인트(markers 등)의 성공은 보호하지 않는다(T-378).
+  (b) deadline 범위 하나(= trip view 1회)는 엔드포인트마다 회로 실패를 **최대 1회** 센다. (c) **backoff가 남은 시간 이상이면 자지 않고** 마지막 실패를 올린다 — 운영 backoff
   0.2 s가 client 여유 0.1 s보다 길어, 자다가 바깥 취소(미집계)를 맞으면 회로가 영영 열리지 않는다.
-  (d) 중첩 deadline은 더 이른 쪽이고 집계 상태(실패 1회·성공 관측)는 바깥과 공유한다. 보내지도 않은 호출(`KorTravelWeatherDeadlineExhausted`)은 세지 않는다.
+  (d) 중첩 deadline은 더 이른 쪽이고 집계 상태(엔드포인트별 실패 1회·성공 관측)는 바깥과 공유한다. 보내지도 않은 호출(`KorTravelWeatherDeadlineExhausted`)은 세지 않는다.
   남는 대가: 의미 있는 예산(≥5 s)을 받고도 응답이 없으면 느린 피호출자라도 실패로 센다(trip view 경로, view당
-  1회). **알려진 공백**: 같은 view 범위에서 한 엔드포인트가 성공하고(예: markers, 캐시 미스 resolve) 다른
-  엔드포인트만 멈추면(예: weather 쪽 forecast 정지) `saw_success` 때문에 trip view 경로는 실패를 하나도 세지
-  않아 회로가 열리지 않는다 — view마다 ≈9.9 s(view 예산이 상한)를 기다린다. 후속 T-378(엔드포인트별
-  `saw_success` 또는 엔드포인트별 hang 집계, #584). (2) half-open
+  1회). **엔드포인트별 회로(T-378, 2026-10-17)**: 종전에는 같은 view 범위에서 한 엔드포인트가 성공하고(예: markers,
+  캐시 미스 resolve) 다른 엔드포인트만 멈추면(예: forecast 정지) 범위 전체의 성공 관측이 forecast의 deadline timeout을
+  "소진"으로 바꾸고 그 성공이 공유 회로의 연속 실패 수를 되돌려 회로가 열리지 않았다(view마다 ≈9.9 s). 이제 성공 관측·
+  실패 집계·회로가 전부 **엔드포인트별**이다(엔드포인트 = 호출부가 넘기는 리터럴 이름 `resolve`·`markers`·`nearby`·`latest`·`forecast` — `location_id`와 무관하고, id는
+  `quote(location_id, safe="")`로 한 경로 세그먼트가 된다):
+  (i) 같은 엔드포인트의 성공만 그 엔드포인트 timeout을 소진으로 본다(`_ScopeState.succeeded_endpoints`), (ii) (b)의
+  "범위당 최대 1회"는 엔드포인트마다다(`counted_endpoints`), (iii) 회로(연속 실패 수·open·half-open 시험 자리)도
+  엔드포인트마다 하나다 — forecast가 3 view 연속 예산 안에 응답하지 않으면 **forecast 회로만** 열리고 markers·
+  resolve·latest는 계속 transport에 닿는다. **대가**: view 예산(운영 ≈9.9 s) 안에 **한 번도** 응답하지 않는 엔드포인트는
+  죽은 것이 아니라 예산보다 느릴 뿐이어도 실패로 센다 — 예산(≈9.9 s)보다 느린 forecast는 실패로 집계되고 3 view 연속이면
+  forecast 회로가 30 s 열린다(같은 view에서 그 엔드포인트가 한 번이라도 응답했으면 보호). 전면 장애(모든 엔드포인트 실패)
+  에서는 엔드포인트마다 3회씩 실패해야 각자 열린다. trip view 경로에서는 캐시 미스 resolve가 예산 대부분을 쓰고 뒤의
+  markers가 같은 view에서 세질지는 남은 예산·실패 단계에 달렸다(connect 실패는 상한이 깎이지 않아 짧은 예산에서도 세지고,
+  read hang은 깎여 소진이 될 수 있다) — 공유 회로는 view 3개면 다 막혔지만 이제 캐시 미스가 섞인 view는 3~6개(최악
+  resolve 3 + markers 3) 동안 예산(≈9.9 s)을 쓴다. 이후 open 동안은 엔드포인트마다 30 s에 시험 1회다. (2) half-open
   시험 자리는 **시험 호출 자신**의 결과만 비운다(옛 호출의 늦은 실패가 비우면 시험이 둘이 된다). (3) 회로는
   client 인스턴스(lifespan당 1개)에 있으므로 **worker 프로세스마다 따로**다. (4) 단건·Admin은 resolve의
   `KorTravelWeatherError` 전체를 빈 카드로 투영하고 `weather_card.resolve_failed`/`location_fetch_failed`

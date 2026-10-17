@@ -465,15 +465,18 @@ async def test_circuit_opens_after_three_failed_logical_calls() -> None:
         await client.latest("loc-1")
     assert attempts["n"] == 6
 
-    # open: transport를 부르지 않고 즉시 실패한다 — 모든 엔드포인트가 같은 회로를 공유한다.
+    # open: transport를 부르지 않고 즉시 실패한다 — 같은 엔드포인트(location_id 무관)는 같은 회로다.
     with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
         await client.latest("loc-1")
-    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
-        await client.resolve(lat=37.5, lon=127.0)
     clock.now += 29.9
     with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
-        await client.markers(["loc-1"])
+        await client.latest("loc-2")
     assert attempts["n"] == 6
+    # 회로는 엔드포인트마다다(T-378) — 다른 엔드포인트는 여전히 transport에 닿는다.
+    with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
+        await client.markers(["loc-1"])
+    assert "회로 열림" not in str(exc_info.value)
+    assert attempts["n"] == 8
     await client.aclose()
 
 
@@ -871,4 +874,154 @@ async def test_nested_scope_shares_counting_state() -> None:
     # 범위 2개 = 실패 2회 < 임계 3 — 회로는 닫힌 채다.
     fail["on"] = False
     assert len(await client.latest("loc-1")) == 1
+    await client.aclose()
+
+
+# ── T-378: 엔드포인트별 성공 관측·연속 실패 ──────────────────────────────────────────────
+
+
+def _split_handler(forecast: str) -> tuple[Callable[[httpx.Request], Any], dict[str, int]]:
+    """`latest`는 늘 응답하고 `forecast`만 `forecast` 방식으로 실패하는 피호출자."""
+    calls = {"latest": 0, "forecast": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/forecast"):
+            calls["forecast"] += 1
+            if forecast == "hang":
+                read = request.extensions["timeout"]["read"]
+                await asyncio.sleep(read)
+                raise httpx.ReadTimeout("no response", request=request)
+            return httpx.Response(503, json={"code": "UPSTREAM"})
+        calls["latest"] += 1
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    return handler, calls
+
+
+async def test_forecast_hang_opens_circuit_although_other_endpoint_answers_in_the_view() -> None:
+    """한 view에서 latest는 응답하고 forecast만 멈춘다 — forecast hang이 view마다 실패로 세져 3 view 뒤 열린다.
+
+    종전에는 범위 전체의 성공 관측(latest)이 forecast의 deadline timeout을 "소진"으로 바꾸고, latest 성공이
+    연속 실패 수를 되돌려 회로가 영영 열리지 않았다(view마다 예산 끝까지 기다림, #584 최종 리뷰).
+    """
+    handler, calls = _split_handler("hang")
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=httpx.MockTransport(handler),
+        timeout=httpx.Timeout(0.2, connect=0.2),
+    )
+    client = KorTravelWeatherClient(http, max_attempts=3, backoff_base_seconds=0.0)
+    loop = asyncio.get_running_loop()
+    for _ in range(3):
+        with kor_travel_weather_call_deadline(loop.time() + 0.15):
+            assert len(await client.latest("loc-1")) == 1
+            with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
+                await client.forecast("loc-1")
+            assert not isinstance(exc_info.value, KorTravelWeatherDeadlineExhausted)
+    assert calls == {"latest": 3, "forecast": 3}
+    # forecast 연속 실패 3회 — forecast 회로만 열린다. latest는 계속 transport에 닿는다.
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        await client.forecast("loc-2")
+    assert len(await client.latest("loc-1")) == 1
+    assert calls == {"latest": 4, "forecast": 3}
+    await client.aclose()
+
+
+async def test_same_endpoint_success_still_makes_its_deadline_timeout_exhaustion() -> None:
+    """같은 엔드포인트가 그 view에서 이미 응답했으면 그 엔드포인트의 deadline timeout은 소진이다(종전 규칙)."""
+    seen = {"n": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen["n"] += 1
+        if request.url.path.startswith("/v1/weather/locations/slow/"):
+            read = request.extensions["timeout"]["read"]
+            await asyncio.sleep(read)
+            raise httpx.ReadTimeout("slow", request=request)
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=httpx.MockTransport(handler),
+        timeout=httpx.Timeout(0.2, connect=0.2),
+    )
+    client = KorTravelWeatherClient(http, max_attempts=3, backoff_base_seconds=0.0)
+    loop = asyncio.get_running_loop()
+    for _ in range(4):
+        with kor_travel_weather_call_deadline(loop.time() + 0.15):
+            assert len(await client.latest("fast")) == 1
+            with pytest.raises(KorTravelWeatherDeadlineExhausted):
+                await client.latest("slow")
+    # 소진은 세지 않으므로 회로는 닫힌 채다.
+    assert len(await client.latest("fast")) == 1
+    await client.aclose()
+
+
+async def test_other_endpoint_success_does_not_reset_failing_endpoint_count() -> None:
+    """forecast 실패 사이사이 latest가 성공해도 forecast의 연속 실패는 이어진다 — 3회째에 forecast만 열린다.
+
+    half-open 시험도 엔드포인트마다다: 30 s 뒤 forecast 시험이 실패하면 forecast만 다시 열리고, latest는
+    그동안 내내 닫힌 채 응답한다.
+    """
+    handler, calls = _split_handler("503")
+    clock = _FakeClock()
+    client = _client(handler, max_attempts=1, clock=clock)
+    for _ in range(2):
+        with pytest.raises(KorTravelWeatherUnavailable):
+            await client.forecast("loc-1")
+        assert len(await client.latest("loc-1")) == 1
+    with pytest.raises(KorTravelWeatherUnavailable):
+        await client.forecast("loc-1")
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        await client.forecast("loc-1")
+    assert len(await client.latest("loc-1")) == 1
+    assert calls == {"latest": 3, "forecast": 3}
+
+    clock.now += 30.0
+    with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
+        await client.forecast("loc-1")  # half-open 시험 — 실패해 다시 연다
+    assert "회로 열림" not in str(exc_info.value)
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        await client.forecast("loc-1")
+    assert len(await client.latest("loc-1")) == 1
+    assert calls == {"latest": 4, "forecast": 4}
+    await client.aclose()
+
+
+async def test_circuit_key_is_the_endpoint_not_the_location_id() -> None:
+    """회로 key는 호출부의 리터럴 엔드포인트 이름이다 — location_id가 매번 달라도(`/` 포함) 같은 회로에 센다."""
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        return httpx.Response(503, json={"code": "UPSTREAM"})
+
+    client = _client(handler, max_attempts=1, clock=_FakeClock())
+    for location_id in ("loc-1", "a/b", "c/d/e"):
+        with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
+            await client.latest(location_id)
+        assert "회로 열림" not in str(exc_info.value)
+    assert attempts["n"] == 3
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        await client.latest("never-seen/before")
+    assert attempts["n"] == 3
+    await client.aclose()
+
+
+async def test_location_id_is_quoted_as_one_path_segment() -> None:
+    """`/`·`?`·`#`가 든 location_id도 경로 세그먼트 하나로 quote돼 나간다(경로를 쪼개거나 바꾸지 않는다)."""
+    seen: list[bytes] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.raw_path.split(b"?", 1)[0])
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    client = _client(handler, clock=_FakeClock())
+    await client.latest("a/b")
+    await client.forecast("x/../y?z#w")
+    await client.latest("plain-id_1.2")
+    assert seen == [
+        b"/v1/weather/locations/a%2Fb/latest",
+        b"/v1/weather/locations/x%2F..%2Fy%3Fz%23w/forecast",
+        b"/v1/weather/locations/plain-id_1.2/latest",
+    ]
     await client.aclose()

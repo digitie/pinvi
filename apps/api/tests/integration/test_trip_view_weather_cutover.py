@@ -729,16 +729,30 @@ async def test_syn_drop_with_cache_misses_returns_unavailable_within_budget(  # 
         # 예산(1.0 s) + 여유(부하 흔들림 대비 0.5 s).
         assert timer.durations[-1] < _SCALED_BUDGET_SECONDS + 0.5
 
-        # 회로: 논리 호출 3회가 실패하면 열리고 그 뒤 요청은 transport에 닿지 않고 즉시
-        # `unavailable`이다. 호출 deadline이 attempt를 깎아 예산 끝의 호출도 실패로 세지므로
-        # 아래 view 두 번이면 넉넉히 열린다.
-        for _ in range(2):
+        # 회로: 엔드포인트마다 논리 호출 3회가 실패하면 그 엔드포인트가 열리고, 그 뒤 요청은 transport에
+        # 닿지 않고 즉시 `unavailable`이다(T-378 — 회로는 엔드포인트별). resolve·markers가 각자 3회씩
+        # 세져야 다 열린다. SYN drop의 ConnectTimeout은 connect 상한(0.2 s)이 deadline에 깎이지 않은 값이라
+        # 남은 예산이 짧아도 실패로 세진다 — resolve 뒤 markers가 같은 view에서 함께 세질지는 타이밍
+        # 몫이다. 그래서 transport에 닿는 view는 3(매 view 둘 다) ~ 6(resolve 3 + markers 3)개다. 모든 view가
+        # 예산 안에 끝나야 한다.
+        views = 1
+        while True:
+            calls_before = transport.calls
             await _build_view(
                 session_factory,
-                pois=[(1, eff_date, f"m_{uuid.uuid4().hex[:8]}", _snapshot(127.3, 37.8))],
+                pois=[
+                    (1, eff_date, f"m_{uuid.uuid4().hex[:8]}", _snapshot(127.3, 37.8)),
+                    (1, eff_date, hit, _snapshot(127.0, 37.5)),
+                ],
                 map_client=_MapClient(),
                 weather_client=weather_client,
             )
+            assert timer.durations[-1] < _SCALED_BUDGET_SECONDS + 0.5
+            if transport.calls == calls_before:
+                break
+            views += 1
+            assert views <= 8, f"엔드포인트별 회로가 view {views}개까지 다 열리지 않았다"
+        assert 3 <= views <= 6, views
         calls_before = transport.calls
         view = await _build_view(
             session_factory,
@@ -867,16 +881,22 @@ async def test_hanging_upstream_opens_breaker_after_three_views(  # type: ignore
 
 
 def _slow_healthy_handler(
-    latency: float, calls: dict[str, int], *, markers_latency: float | None = None
+    latency: float,
+    calls: dict[str, int],
+    *,
+    markers_latency: float | None = None,
+    instant_paths: frozenset[str] = frozenset(),
 ) -> Any:
-    """느리지만 살아 있는 피호출자 — 응답에 지연이 걸린다(markers는 `markers_latency`, 그 밖은
-    `latency`). httpx read timeout을 흉내 낸다(요청의 read timeout이 지연보다 짧으면 그만큼만
-    기다리고 `ReadTimeout`)."""
+    """느리지만 살아 있는 피호출자 — 응답에 지연이 걸린다(markers는 `markers_latency`, `instant_paths`는
+    지연 없음, 그 밖은 `latency`). httpx read timeout을 흉내 낸다(요청의 read timeout이 지연보다 짧으면
+    그만큼만 기다리고 `ReadTimeout`)."""
 
     async def handler(request: httpx.Request) -> httpx.Response:
         calls[request.url.path] = calls.get(request.url.path, 0) + 1
         is_markers = request.url.path == "/v1/weather/markers"
         delay = markers_latency if is_markers and markers_latency is not None else latency
+        if request.url.path in instant_paths:
+            delay = 0.0
         read = request.extensions["timeout"]["read"]
         if read is not None and read < delay:
             await asyncio.sleep(read)
@@ -943,20 +963,30 @@ async def test_slow_but_healthy_upstream_keeps_breaker_closed(  # type: ignore[n
         await weather_client.aclose()
 
 
-async def test_concurrent_views_with_live_upstream_keep_breaker_closed(  # type: ignore[no-untyped-def]
+async def test_concurrent_views_breaker_counts_per_endpoint(  # type: ignore[no-untyped-def]
     session_factory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """동시 view 3개 — markers는 즉시 성공, forecast는 예산 끝까지 응답이 없어 **하한 이상의 예산**
-    (view 예산 ≈1.0 s에서 여유 0.1 s를 뺀 ≈0.9 s, 하한 0.5 s 이상)에서 끊긴다. 같은 범위에서
-    피호출자가 이미 응답했으므로 그 timeout은 장애 증거가 아니다 — 회로는 닫힌 채다(view 3개가 각 1회씩 세면 임계 3에 닿아 열렸을 것이다)."""
+    (view 예산 ≈1.0 s에서 여유 0.1 s를 뺀 ≈0.9 s, 하한 0.5 s 이상)에서 끊긴다(T-378 — 성공 관측·
+    실패 집계·회로는 엔드포인트별이다).
+
+    1) 같은 view에서 **forecast가** 다른 location으로 응답했으면 끊긴 forecast는 장애 증거가 아니다
+       (소진, 미집계) — view 3개 뒤에도 forecast 회로는 닫힌 채다.
+    2) view 안에서 forecast가 **한 번도** 응답하지 않으면 markers가 응답했어도 view마다 forecast 실패
+       1회다 — view 3개 뒤 forecast 회로만 열리고 markers는 계속 transport에 닿는다. 대가: 예산보다
+       느릴 뿐인 forecast도 이렇게 실패로 센다(`docs/integrations/kor-travel-weather.md` §8.3).
+    """
     monkeypatch.setattr(
         "app.services.trip_view_builder._WEATHER_BATCH_VIEW_BUDGET_SECONDS", _SCALED_BUDGET_SECONDS
     )
     eff_date = date(2026, 10, 1)
     calls: dict[str, int] = {}
+    fast_forecast = frozenset(f"/v1/weather/locations/cfast-{i}/forecast" for i in range(3))
     http = httpx.AsyncClient(
         base_url="http://kor-travel-weather.test",
-        transport=httpx.MockTransport(_slow_healthy_handler(10.0, calls, markers_latency=0.0)),
+        transport=httpx.MockTransport(
+            _slow_healthy_handler(10.0, calls, markers_latency=0.0, instant_paths=fast_forecast)
+        ),
         timeout=kor_travel_weather_timeout(
             Settings(
                 pinvi_kor_travel_weather_timeout_seconds=_SCALED_BUDGET_SECONDS,
@@ -967,35 +997,71 @@ async def test_concurrent_views_with_live_upstream_keep_breaker_closed(  # type:
     weather_client = KorTravelWeatherClient(
         http, max_attempts=3, backoff_base_seconds=_SCALED_BACKOFF_SECONDS
     )
-    try:
-        view_pois = []
-        for i in range(3):
-            feature_id = f"conc{i}_{uuid.uuid4().hex[:8]}"
-            lat, lon = 37.6 + i * 0.01, 127.1 + i * 0.01
-            await _seed_location_link(
-                session_factory, feature_id=feature_id, lat=lat, lon=lon, location_id=f"cloc-{i}"
-            )
-            view_pois.append([(1, eff_date, feature_id, _snapshot(lon, lat))])
-        views = await asyncio.gather(
-            *(
-                _build_view(
-                    session_factory,
-                    pois=pois,
-                    map_client=_MapClient(),
-                    weather_client=weather_client,
+
+    async def seed(prefix: str, i: int, location_id: str) -> tuple[str, Any]:
+        feature_id = f"{prefix}{i}_{uuid.uuid4().hex[:8]}"
+        lat, lon = 37.6 + i * 0.01, 127.1 + i * 0.01
+        await _seed_location_link(
+            session_factory, feature_id=feature_id, lat=lat, lon=lon, location_id=location_id
+        )
+        return feature_id, _snapshot(lon, lat)
+
+    async def build_views(view_pois: list[list[Any]]) -> list[Any]:
+        return list(
+            await asyncio.gather(
+                *(
+                    _build_view(
+                        session_factory,
+                        pois=pois,
+                        map_client=_MapClient(),
+                        weather_client=weather_client,
+                    )
+                    for pois in view_pois
                 )
-                for pois in view_pois
             )
         )
-        for view in views:
-            states = list(_day(view, 1)["weather_by_feature_id"].values())
-            assert states == [{"state": "unavailable"}]
-        assert calls.get("/v1/weather/markers") == 3
-        # forecast가 실제로 불렸다(끊긴 것이 forecast다) — view마다 location 1개.
-        assert sum(n for path, n in calls.items() if path.endswith("/forecast")) == 3
-        # 회로는 닫힌 채다 — 다음 호출이 transport에 닿고 성공한다.
-        before = sum(calls.values())
-        assert await weather_client.markers(["cloc-0"])
-        assert sum(calls.values()) == before + 1
+
+    def forecast_calls() -> int:
+        return sum(n for path, n in calls.items() if path.endswith("/forecast"))
+
+    try:
+        # 1) 같은 엔드포인트가 view 안에서 응답 → 끊긴 forecast는 미집계.
+        protected_pois = []
+        slow_ids = []
+        for i in range(3):
+            fast_id, fast_snap = await seed("cfast", i, f"cfast-{i}")
+            slow_id, slow_snap = await seed("cslow", i, f"cslow-{i}")
+            slow_ids.append(slow_id)
+            protected_pois.append(
+                [(1, eff_date, fast_id, fast_snap), (1, eff_date, slow_id, slow_snap)]
+            )
+        for view, slow_id in zip(await build_views(protected_pois), slow_ids, strict=True):
+            assert _day(view, 1)["weather_by_feature_id"][slow_id] == {"state": "unavailable"}
+        assert forecast_calls() == 6
+        # forecast 회로는 닫힌 채다 — deadline 밖 forecast가 transport에 닿는다.
+        before = forecast_calls()
+        assert await weather_client.forecast("cfast-0") == ()
+        assert forecast_calls() == before + 1
+
+        # 2) forecast가 view 예산 안에 한 번도 응답하지 않음 → view마다 1회, 3 view 뒤 forecast만 열림.
+        hang_pois = []
+        for i in range(3):
+            feature_id, snap = await seed("chang", i, f"chang-{i}")
+            hang_pois.append([(1, eff_date, feature_id, snap)])
+        markers_before = calls.get("/v1/weather/markers", 0)
+        before = forecast_calls()
+        for view in await build_views(hang_pois):
+            assert list(_day(view, 1)["weather_by_feature_id"].values()) == [
+                {"state": "unavailable"}
+            ]
+        assert calls.get("/v1/weather/markers", 0) == markers_before + 3
+        assert forecast_calls() == before + 3
+        with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+            await weather_client.forecast("cfast-0")
+        assert forecast_calls() == before + 3
+        # markers 회로는 닫힌 채다 — 다음 호출이 transport에 닿고 성공한다.
+        total = sum(calls.values())
+        assert await weather_client.markers(["chang-0"])
+        assert sum(calls.values()) == total + 1
     finally:
         await weather_client.aclose()

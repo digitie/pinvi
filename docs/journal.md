@@ -1,3 +1,34 @@
+## 2026-10-17 (claude) — weather 회로차단 엔드포인트별 집계 (T-378, 브랜치 `fix/t-378-weather-breaker-per-endpoint`)
+
+#584 최종 리뷰가 남긴 공백: 한 view에서 markers·resolve는 응답하고 forecast만 멈추면 회로가 열리지 않았다. 원인은 둘이었다 —
+(1) deadline 범위의 `saw_success`가 범위 전체 하나라 다른 엔드포인트의 성공이 forecast의 deadline timeout을 "소진"(미집계)으로
+바꿨고, (2) 그것을 고쳐도 markers 성공이 회로의 연속 실패 수를 매 view 0으로 되돌려 forecast 실패가 3에 닿지 못했다.
+
+- `clients/kor_travel_weather.py`: `_ScopeState.saw_success` → `succeeded_endpoints: set[str]`(엔드포인트 = 호출부가 넘기는
+  리터럴 이름 `resolve`·`markers`·`nearby`·`latest`·`forecast`; 경로 regex 없음, `location_id`는 `quote(..., safe="")`로 감싼다 —
+  `/`가 든 id마다 회로가 새로 생기지 않게). `_ScopeState.failure_counted` → `counted_endpoints`(범위당 실패 1회도 엔드포인트마다).
+  회로 자체도 엔드포인트마다 하나(`KorTravelWeatherClient._circuits`, `_circuit_for`) — forecast만 멈추면 forecast 회로만
+  열리고 markers·resolve·latest는 산다. coordinator가 옵션 1(T-378 채택)과 엔드포인트별 open을 골랐다.
+- **대가**: view 예산(≈9.9 s) 안에 한 번도 응답하지 않는 엔드포인트는 느릴 뿐이어도 실패로 센다 — 예산보다 느린 forecast는
+  실패로 집계되고 3 view 연속이면 forecast 회로가 30 s 열린다(같은 view에서 그 엔드포인트가 응답했으면 보호). 전면 장애에서는
+  엔드포인트마다 3회씩 실패해야 각자 열린다 — 캐시 미스가 섞인 trip view는 view 3~6개(최악 resolve 3 + markers 3) 뒤에야 다
+  막힌다(공유 회로는 3개). GitHub CI 첫 런에서
+  `test_syn_drop_with_cache_misses_returns_unavailable_within_budget`가 이것으로 빨강(마지막 view 0.60 s > 0.5 s, markers 미개방) —
+  view 2개 고정 대신 "transport 호출이 없는 view가 나올 때까지(상한 8)"로 바꿨다.
+- 테스트: 단위 3건 신규(forecast hang + latest 응답 view 3회 → forecast만 열림; 같은 엔드포인트 성공 뒤 deadline timeout은
+  소진; 다른 엔드포인트 성공이 forecast 수를 되돌리지 않고 forecast 시험 실패는 forecast만 다시 연다), 기존
+  `test_circuit_opens_after_three_failed_logical_calls`를 엔드포인트별 회로로 수정. 통합
+  `test_concurrent_views_with_live_upstream_keep_breaker_closed` → `test_concurrent_views_breaker_counts_per_endpoint`(같은
+  엔드포인트가 view 안에서 응답하면 미집계, 한 번도 응답 안 하면 3 view 뒤 forecast만 열림·markers 생존). 종전 테스트는 "markers
+  성공이면 forecast 끊김은 미집계"를 단언해 새 의도와 충돌했다.
+- 문서: `kor-travel-weather.md` §8.3 알려진 공백 → 구현 기록 + 대가.
+- 리뷰 반영(#587, blocker 없음): §8.3 (a)·코드 주석의 옛 서술("markers 성공 뒤 forecast timeout 미집계")을 "같은 엔드포인트의
+  성공만 보호, 예: forecast(loc A) → forecast(loc B)"로 고침. 엔드포인트 key를 경로 regex 대신 호출부 리터럴(`endpoint="forecast"`)로
+  — `re`·`_LOCATION_SEGMENT`·`endpoint=None` 기본값 제거. `location_id`를 `quote(..., safe="")`로 감싸 `/`가 든 id마다 회로가
+  늘던 문제도 닫음(단위 2건: id가 달라도 같은 회로, quote 확인). SYN-drop 테스트는 매 view 예산 단언 + `3 <= views <= 6`(리뷰 제안 `(6, 7)`은 n150에서 4로 빨강 — SYN drop의
+  ConnectTimeout은 connect 상한이 deadline에 깎이지 않은 값이라 resolve 뒤 짧은 남은 예산에서도 markers가 세진다. 최소 3·최악 6).
+  후속 T-379(host-level breaker — connect 실패는 서비스 전체 장애 증거, blackhole을 ≈3 view 안에)를 tasks에 기록.
+
 ## 2026-10-15 (claude) — Track 2 weather 코드: connect 분리·resolver 투영·회로차단, 설정 정리, e2e upstream 호스트, task ID 중복 정리 (브랜치 `feat/track2-weather-odroid`, T-373·T-374·T-375)
 
 전제 사실(2026-10-15 운영자 확인): weather는 odroid `192.168.1.13:12201`(14101 아님), Manager #476(merged)이
