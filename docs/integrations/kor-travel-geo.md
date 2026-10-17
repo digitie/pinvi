@@ -313,7 +313,6 @@ geocoding 실패가 지도/여행 핵심 흐름을 막지 않도록 **graceful d
 ```dotenv
 PINVI_KOR_TRAVEL_GEO_BASE_URL=http://localhost:12501   # 운영: http://kor-travel-geo:12501
 PINVI_KOR_TRAVEL_GEO_TIMEOUT_SECONDS=3.0
-PINVI_KOR_TRAVEL_GEO_ENABLED=true
 PINVI_KOR_TRAVEL_GEO_API_KEY=                        # kor-travel-geo가 발급한 공개 API key(v2 `key`, ADR-075)
 PINVI_VWORLD_API_KEY=                                # 모바일 token 발급 전용 — geo key로 쓰지 않는다
 ```
