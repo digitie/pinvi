@@ -264,10 +264,10 @@ async def geo_reverse(lon: float, lat: float, geo: KorTravelGeoClientDep,
 
 | 상황                                     | Pinvi 응답                                                    |
 | ---------------------------------------- | ------------------------------------------------------------- |
-| kor-travel-geo 5xx / 네트워크 / 타임아웃 | `503 GEOCODING_UNAVAILABLE` (degrade — 지도/검색은 빈 결과로) |
+| kor-travel-geo 5xx / 네트워크 / 타임아웃 | `503 GEOCODING_SERVICE_UNAVAILABLE` (degrade — 지도/검색은 빈 결과로) |
 | v2 `status != "OK"` 또는 candidates 빈   | `200 {data: {candidates: []}}` (정상 빈 결과)                 |
 | 잘못된 좌표/파라미터(한국 범위 밖 등)    | `422 VALIDATION_ERROR` (Pinvi가 먼저 검증)                    |
-| `pinvi_kor_travel_geo_enabled=false`     | `503 GEOCODING_UNAVAILABLE`                                   |
+| 전용 Geo 키 미설정 또는 빈 문자열     | `503 GEOCODING_SERVICE_UNAVAILABLE`                                   |
 
 geocoding 실패가 지도/여행 핵심 흐름을 막지 않도록 **graceful degrade**가 기본
 (검색창은 "검색 일시 불가" 안내, 지도 클릭 label은 좌표만 표시).
