@@ -1,3 +1,8 @@
+## 2026-10-18 (claude) — T-378 머지·배포 완료 (PR #587)
+
+PR #587(엔드포인트별 weather 회로차단, T-378)이 `907c86f7`로 머지됐다. prod 배포는 chain `t1018a`로 전진 — D1
+11/11, D2 exit 0. `docs/tasks.md`에서 T-378을 제거하고 `docs/tasks-done.md`에 완료로 이관(T-379는 열린 후속으로 유지).
+
 ## 2026-10-17 (claude) — weather 회로차단 엔드포인트별 집계 (T-378, 브랜치 `fix/t-378-weather-breaker-per-endpoint`)
 
 #584 최종 리뷰가 남긴 공백: 한 view에서 markers·resolve는 응답하고 forecast만 멈추면 회로가 열리지 않았다. 원인은 둘이었다 —

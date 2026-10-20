@@ -1,5 +1,9 @@
 # tasks-done.md — 완료·아카이브
 
+## 2026-10-18
+
+- [x] T-378 — PR #587 merged 907c86f7, per-endpoint weather circuit breaker; deployed to prod via chain t1018a 2026-10-18, D1 11/11, D2 exit 0.
+
 ## 2026-10-06 — Common Dagster·Map/PinVi paired 완료
 
 - [x] T-371 — 공통 복구·메모리 제한·Admin UI 및 Map/PinVi 실제 paired 재구축·live 수용을 완료했다. [Common #28](https://github.com/digitie/kor-travel-common/pull/28) → [Map #1303](https://github.com/digitie/kor-travel-map/pull/1303) → [PinVi #576](https://github.com/digitie/pinvi/pull/576)의 exact CI와 병합 결과(Common·Map merge commit, PinVi squash)를 확인하고 머지 후 여섯 운영 서비스 healthy/설치 bytes/배포 identity가 유지됨을 재확인했다. [검증·실패·리뷰](reviews/common-map-rebuild-2026-10-05/README.md), [머지 후 증거](reviews/common-map-rebuild-2026-10-05/evidence/final-postmerge-runtime-attestation.json). 공유 운영 worker fault·RSS 실측 및 외부 task 완료는 포함하지 않는다.
