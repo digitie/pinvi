@@ -186,6 +186,9 @@ PINVI_ETL_JOBS = [
     ),
 ]
 
+# `PINVI_ETL_SCHEDULES`·`PINVI_ETL_SENSORS`는 Dagster 정의(`apps/etl/pinvi/etl/definitions.py`)의 사본이다 — Dagster가
+# 죽어 있어도 "무엇이 구성돼 있나"를 보여 주려고 정적으로 둔다. 어긋나면
+# `apps/etl/tests/test_admin_etl_definition_lists.py`가 빨개진다(T-377).
 PINVI_ETL_SCHEDULES = [
     AdminEtlDefinitionSchedule(
         name="kasi_special_days_schedule",
@@ -217,9 +220,44 @@ PINVI_ETL_SCHEDULES = [
         cron_schedule="30 4 * * *",
         execution_timezone="Asia/Seoul",
     ),
+    AdminEtlDefinitionSchedule(
+        name="pinvi_trip_day_rise_sets_schedule",
+        job_name="pinvi_trip_day_rise_sets_job",
+        cron_schedule="*/20 * * * *",
+        execution_timezone="Asia/Seoul",
+    ),
+    AdminEtlDefinitionSchedule(
+        name="pinvi_weather_retention_horizon_schedule",
+        job_name="pinvi_weather_retention_horizon_job",
+        cron_schedule="0 5 * * *",
+        execution_timezone="Asia/Seoul",
+    ),
 ]
 
-PINVI_ETL_SENSORS: list[AdminEtlDefinitionSensor] = []
+# run failure 통지 sensor(대상 job 없음 — monitored_jobs로 전부 본다)와 job마다 하나인 인프라 재시도 sensor.
+PINVI_ETL_SENSORS: list[AdminEtlDefinitionSensor] = [
+    AdminEtlDefinitionSensor(name="pinvi_run_failure_sensor"),
+    AdminEtlDefinitionSensor(
+        name="pinvi_infra_retry_pinvi_email_outbox_job",
+        job_name="pinvi_email_outbox_job",
+    ),
+    AdminEtlDefinitionSensor(
+        name="pinvi_infra_retry_pinvi_location_log_archive_job",
+        job_name="pinvi_location_log_archive_job",
+    ),
+    AdminEtlDefinitionSensor(
+        name="pinvi_infra_retry_pinvi_pii_retention_job",
+        job_name="pinvi_pii_retention_job",
+    ),
+    AdminEtlDefinitionSensor(
+        name="pinvi_infra_retry_pinvi_telegram_system_outbox_job",
+        job_name="pinvi_telegram_system_outbox_job",
+    ),
+    AdminEtlDefinitionSensor(
+        name="pinvi_infra_retry_pinvi_weather_retention_horizon_job",
+        job_name="pinvi_weather_retention_horizon_job",
+    ),
+]
 
 _PINVI_DAGSTER_LIVE_QUERY = """
 query PinviDagsterLive(

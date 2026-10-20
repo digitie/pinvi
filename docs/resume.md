@@ -1,3 +1,11 @@
+## 2026-10-20 (claude) — Admin ETL 정적 schedule·sensor 목록을 정의에 묶음 (T-377, 브랜치 `fix/t377-admin-etl-schedules-from-definitions`)
+
+- 다음 한 작업: draft PR CI green → coordinator 리뷰·머지(머지 뒤 T-377을 `tasks-done.md`로). T-379 PR과 `docs/` 세 파일이 겹치므로 나중에
+  머지되는 쪽을 리베이스한다.
+- 바뀐 것: `apps/api/app/services/admin_etl.py`의 `PINVI_ETL_SCHEDULES` 5 → 7, `PINVI_ETL_SENSORS` 0 → 6, ETL 테스트
+  `apps/etl/tests/test_admin_etl_definition_lists.py`(정의와 집합 비교). 응답 스키마·API 변화 없음.
+- 남은 것: 같은 payload의 정적 `assets`(5, 정의 7)·`jobs`(6, 정의 8)도 낡았다 — 같은 방식으로 묶을 수 있다(별도 항목 후보).
+
 ## 2026-10-20 (claude) — weather host 회로 (T-379, 브랜치 `feat/t379-weather-host-breaker`)
 
 - 다음 한 작업: draft PR CI green → coordinator 리뷰·머지 → 다음 chain에서 배포(머지 뒤 T-379를 `tasks-done.md`로).

@@ -1,3 +1,17 @@
+## 2026-10-20 (claude) — Admin ETL 정적 schedule·sensor 목록을 정의에 묶음 (T-377, 브랜치 `fix/t377-admin-etl-schedules-from-definitions`)
+
+`/admin/etl/summary`의 `pinvi.schedules`(정적 5)·`pinvi.sensors`(빈 목록)가 같은 payload의 live `schedule_count`(7)·`sensor_count`(6)와
+어긋났다. 정의에는 `pinvi_trip_day_rise_sets_schedule`·`pinvi_weather_retention_horizon_schedule`과 sensor
+`pinvi_run_failure_sensor`·`pinvi_infra_retry_*` 5건이 있다.
+
+- 방법 선택: (가) live GraphQL에서 읽기 vs (나) 정적 목록 + 정의 대조 테스트. **(나)**를 골랐다. live 쿼리는 이미
+  `repositories[].schedules/sensors`로 같은 정보를 싣고 있어 (가)는 그 중복이 되고, Dagster가 죽었을 때 "무엇이 구성돼 있나"가
+  비게 된다(정적 목록의 존재 이유). (나)는 상수 두 개를 고치고 테스트 하나를 더할 뿐이며, 원장 본문도 "정의에 묶는 테스트와 함께"였다.
+- 테스트는 ETL 환경(dagster 있음)에서 돈다 — API 패키지가 없으므로 `test_admin_probe_graphql_schema.py`처럼 `admin_etl.py`를 AST로
+  읽어 `(name, job_name, cron, tz)`·`(name, job_name)` 집합을 `defs.get_repository_def()`와 비교한다. 하한(schedule ≥ 7, sensor ≥ 6)은
+  본 것에 건다. `etl.yml` 경로 필터가 이미 `admin_etl.py`를 포함한다.
+- 범위 밖으로 남긴 것: 정적 `assets`(5 vs 7)·`jobs`(6 vs 8)도 낡았다.
+
 ## 2026-10-20 (claude) — weather host 회로: connect 단계 실패는 서비스 전체 장애 (T-379, 브랜치 `feat/t379-weather-host-breaker`)
 
 T-378(#587)은 회로를 엔드포인트별로 나눴는데, 그 대가로 blackhole(SYN drop) 전면 장애에서 캐시 미스가 섞인 trip view가 resolve·markers
