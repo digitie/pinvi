@@ -1,11 +1,11 @@
-"""API Admin ETL 요약의 정적 schedule·sensor 목록을 이 code location의 정의에 묶는다(T-377).
+"""API Admin ETL 요약의 정적 asset·job·schedule·sensor 목록을 이 code location의 정의에 묶는다(T-377).
 
 `apps/api/app/services/admin_etl.py`의 `PINVI_ETL_SCHEDULES`·`PINVI_ETL_SENSORS`는 Dagster가 죽어 있어도
 "무엇이 구성돼 있나"를 보여 주는 정적 사본이다. 정의에 schedule·sensor가 늘었는데 사본을 고치지 않아 같은
 payload 안에서 `pinvi.schedules`(5)와 live `schedule_count`(7), 빈 `sensors`와 `sensor_count`(6)가 어긋났다.
 
 API 패키지는 이 환경에 없으므로 `test_admin_probe_graphql_schema.py`처럼 소스를 AST로 읽는다 — 목록 원소는
-`AdminEtlDefinitionSchedule(...)`/`AdminEtlDefinitionSensor(...)` 호출이고 인자는 전부 키워드 리터럴이어야 한다.
+`AdminEtlDefinition*(...)` 호출이고 인자는 전부 키워드 리터럴이어야 한다.
 """
 
 from __future__ import annotations
@@ -40,10 +40,9 @@ def _static_entries(name: str, call: str) -> list[dict[str, object]]:
         assert not element.args, f"키워드 인자만 쓴다: {ast.unparse(element)}"
         entry: dict[str, object] = {}
         for keyword in element.keywords:
-            assert keyword.arg is not None and isinstance(keyword.value, ast.Constant), (
-                ast.unparse(element)
-            )
-            entry[keyword.arg] = keyword.value.value
+            assert keyword.arg is not None, ast.unparse(element)
+            # 리터럴만 허용한다(문자열·None·문자열 리스트) — 계산식이면 literal_eval이 거부한다.
+            entry[keyword.arg] = ast.literal_eval(keyword.value)
         entries.append(entry)
     return entries
 
@@ -85,5 +84,40 @@ def test_static_sensors_match_definitions() -> None:
         for e in _static_entries("PINVI_ETL_SENSORS", "AdminEtlDefinitionSensor")
     ]
     assert len(defined) >= 6
+    assert len(static) == len(set(static)), "중복 항목"
+    assert set(static) == defined
+
+
+def test_static_assets_match_definitions() -> None:
+    """asset key·group만 대조한다 — description은 사람이 쓴 요약이라 대조하지 않는다."""
+    from pinvi.etl.definitions import defs
+
+    defined = {
+        (node.key.to_user_string(), node.group_name)
+        for node in defs.resolve_asset_graph().asset_nodes
+    }
+    static = [
+        (e["key"], e["group_name"])
+        for e in _static_entries("PINVI_ETL_ASSETS", "AdminEtlDefinitionAsset")
+    ]
+    assert len(defined) >= 7
+    assert len(static) == len(set(static)), "중복 항목"
+    assert set(static) == defined
+
+
+def test_static_jobs_match_definitions() -> None:
+    """job 이름과 그 job이 고르는 asset key를 대조한다 — trigger·description은 대조하지 않는다."""
+    from pinvi.etl.definitions import defs
+
+    defined = {
+        (job.name, frozenset(k.to_user_string() for k in job.asset_layer.selected_asset_keys))
+        for job in defs.get_repository_def().get_all_jobs()
+        if not job.name.startswith("__")  # Dagster가 만드는 암묵 `__ASSET_JOB`
+    }
+    static = [
+        (e["name"], frozenset(e.get("asset_keys") or []))
+        for e in _static_entries("PINVI_ETL_JOBS", "AdminEtlDefinitionJob")
+    ]
+    assert len(defined) >= 8
     assert len(static) == len(set(static)), "중복 항목"
     assert set(static) == defined

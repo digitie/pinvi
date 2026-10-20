@@ -14,7 +14,11 @@
   `kasi_special_days_job_schedule`이다(첫 n150 실행에서 빨강). 정적 항목과 `docs/api/admin.md` 예시를 고쳤다(e2e mock 픽스처·과거 기록은 그대로).
 - 검증: n150 CI-parity — ETL `ruff check`·`pytest tests` 75건, API `ruff check`·`ruff format --check`·`mypy --strict app`·unit
   `-k admin_etl` 42건·integration `-k admin_etl` 33건 green. red-check: main의 `admin_etl.py`로 새 테스트 2건 모두 빨강.
-- 범위 밖으로 남긴 것: 정적 `assets`(5 vs 7)·`jobs`(6 vs 8)도 낡았다.
+- 리뷰 반영(#591, blocker 없음): 같은 payload의 정적 `assets`(5 → 7: `pinvi_trip_day_rise_sets`·`pinvi_weather_retention_horizon_guard`)·
+  `jobs`(6 → 8: `pinvi_trip_day_rise_sets_job`·`pinvi_weather_retention_horizon_job`)도 정의에 맞추고 테스트 2건을 더했다 — asset은
+  (key, group), job은 (name, 고르는 asset key 집합; Dagster 암묵 `__ASSET_JOB` 제외)만 대조하고 description·trigger는 사람이 쓴 요약이라
+  대조하지 않는다. `_static_entries`는 `ast.literal_eval`로 리스트 인자(`asset_keys`)까지 읽는다. e2e mock
+  (`apps/web/e2e/admin-etl-provider-sync.e2e.ts`)의 KASI schedule 이름도 `kasi_special_days_job_schedule`로 맞췄다.
 
 ## 2026-10-20 (claude) — weather host 회로: connect 단계 실패는 서비스 전체 장애 (T-379, 브랜치 `feat/t379-weather-host-breaker`)
 

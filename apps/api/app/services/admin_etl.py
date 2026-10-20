@@ -119,6 +119,10 @@ AUDIT_RETENTION_DAYS = 90
 LOCATION_LOG_ARCHIVE_RETENTION_MONTHS = 6
 LOCATION_LOG_ARCHIVE_PURPOSE_STATS_LIMIT = 10
 
+# `PINVI_ETL_ASSETS`·`PINVI_ETL_JOBS`·`PINVI_ETL_SCHEDULES`·`PINVI_ETL_SENSORS`는 Dagster 정의
+# (`apps/etl/pinvi/etl/definitions.py`)의 사본이다 — Dagster가 죽어 있어도 "무엇이 구성돼 있나"를
+# 보여 주려고 정적으로 둔다. 어긋나면 `apps/etl/tests/test_admin_etl_definition_lists.py`가
+# 빨개진다(T-377; description·trigger는 대조하지 않는다).
 PINVI_ETL_ASSETS = [
     AdminEtlDefinitionAsset(
         key="pinvi_kasi_special_days",
@@ -144,6 +148,16 @@ PINVI_ETL_ASSETS = [
         key="pinvi_location_log_archive",
         group_name="pinvi_retention",
         description="location_access_log archive 후보와 hash-chain bridge 상태를 dry-run으로 집계합니다.",
+    ),
+    AdminEtlDefinitionAsset(
+        key="pinvi_trip_day_rise_sets",
+        group_name="pinvi_kasi",
+        description="여행 일자 단위 KASI 해·달 출몰시각을 채웁니다(pending_fetch/stale 대상).",
+    ),
+    AdminEtlDefinitionAsset(
+        key="pinvi_weather_retention_horizon_guard",
+        group_name="pinvi_weather_retention",
+        description="kor-travel-weather 실효 보존 기간이 임계 미만이면 실패하는 가드입니다.",
     ),
 ]
 
@@ -184,11 +198,20 @@ PINVI_ETL_JOBS = [
         description="매일 KST 04:30 위치 접근 로그 archive 후보와 chain bridge 상태를 점검합니다.",
         asset_keys=["pinvi_location_log_archive"],
     ),
+    AdminEtlDefinitionJob(
+        name="pinvi_trip_day_rise_sets_job",
+        trigger="schedule",
+        description="20분마다 여행 일자 단위 KASI 해·달 출몰시각을 채웁니다.",
+        asset_keys=["pinvi_trip_day_rise_sets"],
+    ),
+    AdminEtlDefinitionJob(
+        name="pinvi_weather_retention_horizon_job",
+        trigger="schedule",
+        description="매일 KST 05:00 kor-travel-weather 보존 기간 가드를 실행합니다.",
+        asset_keys=["pinvi_weather_retention_horizon_guard"],
+    ),
 ]
 
-# `PINVI_ETL_SCHEDULES`·`PINVI_ETL_SENSORS`는 Dagster 정의(`apps/etl/pinvi/etl/definitions.py`)의 사본이다 — Dagster가
-# 죽어 있어도 "무엇이 구성돼 있나"를 보여 주려고 정적으로 둔다. 어긋나면
-# `apps/etl/tests/test_admin_etl_definition_lists.py`가 빨개진다(T-377).
 PINVI_ETL_SCHEDULES = [
     AdminEtlDefinitionSchedule(
         name="kasi_special_days_job_schedule",
