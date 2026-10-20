@@ -729,12 +729,11 @@ async def test_syn_drop_with_cache_misses_returns_unavailable_within_budget(  # 
         # 예산(1.0 s) + 여유(부하 흔들림 대비 0.5 s).
         assert timer.durations[-1] < _SCALED_BUDGET_SECONDS + 0.5
 
-        # 회로: 엔드포인트마다 논리 호출 3회가 실패하면 그 엔드포인트가 열리고, 그 뒤 요청은 transport에
-        # 닿지 않고 즉시 `unavailable`이다(T-378 — 회로는 엔드포인트별). resolve·markers가 각자 3회씩
-        # 세져야 다 열린다. SYN drop의 ConnectTimeout은 connect 상한(0.2 s)이 deadline에 깎이지 않은 값이라
-        # 남은 예산이 짧아도 실패로 세진다 — resolve 뒤 markers가 같은 view에서 함께 세질지는 타이밍
-        # 몫이다. 그래서 transport에 닿는 view는 3(매 view 둘 다) ~ 6(resolve 3 + markers 3)개다. 모든 view가
-        # 예산 안에 끝나야 한다.
+        # 회로: SYN drop의 ConnectTimeout은 connect 상한(0.2 s)이 deadline에 깎이지 않은 값이라 connect 단계
+        # 실패이고, 그것은 host 회로에 view당 1회 세진다(T-379). 그래서 view 3개째에 host 회로가 열려
+        # resolve·markers를 포함한 모든 엔드포인트가 함께 막힌다 — 엔드포인트별 회로만 있던 T-378에서는
+        # resolve·markers가 각자 3회씩 세져야 해 view 3~6개(이 축척에서는 4개)가 transport에 닿았다. 그 뒤
+        # 요청은 transport에 닿지 않고 즉시 `unavailable`이다. 모든 view가 예산 안에 끝나야 한다.
         views = 1
         while True:
             calls_before = transport.calls
@@ -751,8 +750,8 @@ async def test_syn_drop_with_cache_misses_returns_unavailable_within_budget(  # 
             if transport.calls == calls_before:
                 break
             views += 1
-            assert views <= 8, f"엔드포인트별 회로가 view {views}개까지 다 열리지 않았다"
-        assert 3 <= views <= 6, views
+            assert views <= 8, f"회로가 view {views}개까지 다 열리지 않았다"
+        assert views == 3, views
         calls_before = transport.calls
         view = await _build_view(
             session_factory,
