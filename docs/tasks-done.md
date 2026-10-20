@@ -2,6 +2,7 @@
 
 ## 2026-10-20
 
+- [x] T-377 — PR #591 merged 0f1975c3, Admin ETL 정적 asset·job·schedule·sensor 목록을 Dagster 정의에 맞추고 ETL 대조 테스트(`apps/etl/tests/test_admin_etl_definition_lists.py`)로 묶음; KASI schedule 이름 `kasi_special_days_job_schedule` 정정. 배포는 다음 chain.
 - [x] T-379 — PR #590 merged 0a75b257, weather host-level circuit breaker(connect 단계 실패 전용, view 3개째에 모든 엔드포인트 차단; host 시험이 연결되면 닫힘). 배포는 다음 chain.
 
 ## 2026-10-18
