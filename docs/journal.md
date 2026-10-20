@@ -19,6 +19,7 @@
   (key, group), job은 (name, 고르는 asset key 집합; Dagster 암묵 `__ASSET_JOB` 제외)만 대조하고 description·trigger는 사람이 쓴 요약이라
   대조하지 않는다. `_static_entries`는 `ast.literal_eval`로 리스트 인자(`asset_keys`)까지 읽는다. e2e mock
   (`apps/web/e2e/admin-etl-provider-sync.e2e.ts`)의 KASI schedule 이름도 `kasi_special_days_job_schedule`로 맞췄다.
+  통합 `test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops`의 정적 job 이름 집합도 8개로 고쳤다(n150에서 빨강으로 발견).
 
 ## 2026-10-20 (claude) — weather host 회로: connect 단계 실패는 서비스 전체 장애 (T-379, 브랜치 `feat/t379-weather-host-breaker`)
 
