@@ -14,6 +14,11 @@ T-378(#587)은 회로를 엔드포인트별로 나눴는데, 그 대가로 black
   read timeout·5xx는 host 미집계; deadline이 깎은 connect timeout 미집계; 응답이 host 수를 되돌림; host half-open 시험 실패 재개방·
   응답 시 닫힘; 한 범위의 여러 연결 실패는 host 1회). 통합 `test_syn_drop_with_cache_misses_returns_unavailable_within_budget`의
   기대를 `3 <= views <= 6` → `views == 3`으로 조였다.
+- 검증: n150 CI-parity — `ruff check`·`ruff format --check`·`mypy --strict app`·unit `-k weather` 79건·integration `-k weather` 51건
+  green. red-check(main의 client로 교체): 새 단위 5건 빨강(host 열림·SYN drop·응답 리셋·host half-open·범위당 1회), 나머지 2건(read
+  timeout·5xx 미집계, deadline이 깎은 connect 미집계)은 회귀 방지용이라 main에서도 초록. 통합 SYN-drop은 `assert 4 == 3`으로 빨강 —
+  이 축척에서 T-378은 view 4개였다.
+
 ## 2026-10-18 (claude) — T-378 머지·배포 완료 (PR #587)
 
 PR #587(엔드포인트별 weather 회로차단, T-378)이 `907c86f7`로 머지됐다. prod 배포는 chain `t1018a`로 전진 — D1
