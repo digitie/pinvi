@@ -13,6 +13,7 @@ import pytest
 from app.clients.kor_travel_weather import (
     KorTravelWeatherBadRequest,
     KorTravelWeatherClient,
+    KorTravelWeatherConnectFailed,
     KorTravelWeatherContractError,
     KorTravelWeatherDeadlineExhausted,
     KorTravelWeatherNotFound,
@@ -1230,4 +1231,67 @@ async def test_one_deadline_scope_counts_at_most_one_host_failure() -> None:
         with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
             await client.forecast("loc-1")
     assert calls == {"latest": 2, "markers": 3, "resolve": 2, "nearby": 2}
+    await client.aclose()
+
+
+async def test_host_trial_answered_with_5xx_closes_host_circuit() -> None:
+    """host 시험 호출이 연결은 됐는데 5xx면 host 회로는 닫힌다(T-379 리뷰).
+
+    슬롯만 돌려주면 host가 half-open에 머물러, 시험이 진행 중인 동안 다른 엔드포인트 호출이 전부 거부된다
+    (연결은 되지만 오류를 내는 서비스에서 호출이 하나씩 줄 선다). 5xx 자체는 엔드포인트 회로가 센다.
+    """
+    phase = {"v": "refuse"}
+    release = asyncio.Event()
+    calls: dict[str, int] = {}
+    refused = _refused_handler(calls)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if phase["v"] == "refuse":
+            return refused(request)
+        if phase["v"] == "5xx":
+            return httpx.Response(503, json={"code": "UPSTREAM"})
+        if request.url.path.endswith("/latest"):
+            await release.wait()
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    clock = _FakeClock()
+    client = _client(handler, max_attempts=1, clock=clock)
+    await _fail_each_endpoint_once(client)
+    clock.now += 30.0
+    phase["v"] = "5xx"
+    with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
+        await client.forecast("loc-1")  # host 시험 — 연결은 됐다
+    assert "회로 열림" not in str(exc_info.value)
+
+    # host가 닫혔으면 끝나지 않는 latest가 진행 중이어도 다른 엔드포인트는 transport에 닿는다.
+    phase["v"] = "mixed"
+    pending = asyncio.create_task(client.latest("loc-1"))
+    for _ in range(5):
+        await asyncio.sleep(0)
+    async with asyncio.timeout(2.0):
+        assert len(await client.forecast("loc-1")) == 1
+    release.set()
+    assert len(await pending) == 1
+    await client.aclose()
+
+
+async def test_deadline_cut_last_attempt_keeps_earlier_connect_failure() -> None:
+    """앞 attempt가 정상 상한에서 연결 실패했고 마지막 attempt만 deadline에 잘렸으면 결과는 연결 실패다."""
+    waits: list[float] = []
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=httpx.MockTransport(_syn_drop_handler(waits)),
+        # read 0.2 → 의미 있는 예산 하한 0.1 s. 첫 attempt는 connect 0.2 s를 다 받고, 둘째는 남은 ≈0.15 s로
+        # 깎인다(하한 이상이라 소진이 아니다).
+        timeout=httpx.Timeout(0.2, connect=0.2),
+    )
+    client = KorTravelWeatherClient(
+        http, max_attempts=3, backoff_base_seconds=0.0, clock=_FakeClock()
+    )
+    loop = asyncio.get_running_loop()
+    with kor_travel_weather_call_deadline(loop.time() + 0.35):
+        with pytest.raises(KorTravelWeatherConnectFailed):
+            await client.latest("loc-1")
+    # 둘째부터는 deadline에 깎인 attempt다(남은 시간이 0에 가까우면 셋째가 붙을 수도 있다).
+    assert waits[0] == 0.2 and len(waits) >= 2 and all(w < 0.2 for w in waits[1:])
     await client.aclose()

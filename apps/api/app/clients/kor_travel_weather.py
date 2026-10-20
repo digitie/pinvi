@@ -714,7 +714,11 @@ class KorTravelWeatherClient:
                 if scope is not None:
                     scope.state.counted_endpoints.add(endpoint)
                 circuit.record_failure(endpoint=endpoint, trial=trial)
-            if not isinstance(exc, KorTravelWeatherConnectFailed) or (
+            if not isinstance(exc, KorTravelWeatherConnectFailed) and host_trial:
+                # host 시험 호출이 연결은 됐다(read timeout·5xx) — host 회로를 닫는다. 슬롯만 돌려주면
+                # 연결은 되지만 오류를 내는 동안 host가 half-open에 머물러 호출이 하나씩 줄 선다.
+                host.record_success()
+            elif not isinstance(exc, KorTravelWeatherConnectFailed) or (
                 scope is not None and scope.state.host_counted and not host_trial
             ):
                 # 연결은 됐거나(read timeout·5xx — 엔드포인트 회로 몫) 이 범위에서 이미 host 실패를 셌다.
@@ -801,6 +805,11 @@ class KorTravelWeatherClient:
                     last = KorTravelWeatherConnectFailed(
                         f"kor-travel-weather 연결 실패({path}): {exc!r}"
                     )
+                elif isinstance(last, KorTravelWeatherConnectFailed) and (
+                    applied is not None and _deadline_bound_timeout(exc, base=base, applied=applied)
+                ):
+                    # 앞 attempt의 연결 실패가 증거다 — deadline에 잘린 마지막 attempt가 덮어쓰지 않는다.
+                    pass
                 else:
                     last = KorTravelWeatherUnavailable(
                         f"kor-travel-weather 요청 실패({path}): {exc!r}"

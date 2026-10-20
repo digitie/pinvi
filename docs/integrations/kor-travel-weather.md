@@ -937,8 +937,12 @@ T-374 사양의 단일 정본이다 — ADR-074 결정 4와 `tasks.md` T-374는 
   받은 호출(`_send` 성공, 4xx 포함)이 host 연속 수를 0으로 되돌린다. (b)의 "범위당 최대 1회"는 host에도 걸린다
   (`_ScopeState.host_counted`) — 한 view에서 resolve·markers가 함께 연결 실패해도 host 실패는 1회다. 그래서 blackhole·
   연결 거부 전면 장애에서는 캐시 미스가 섞인 trip view도 **view 3개째에** host가 열려 이후 모든 엔드포인트가 막힌다
-  (축척 통합 테스트: T-378 4개 → 3개). host half-open 시험이 연결 실패면 다시 30 s, 응답을 받으면 닫히고, 그 밖의 결과
-  (read timeout·5xx·취소)는 상태를 두고 시험 자리만 돌려준다. (2) half-open
+  (축척 통합 테스트: T-378 4개 → 3개). host half-open 시험이 연결 실패면 다시 30 s, **연결이 된 결과**(응답, read timeout·5xx)면
+  닫힌다 — 연결은 되지만 오류를 내는 서비스에서 슬롯만 돌려주면 host가 half-open에 머물러 호출이 하나씩 줄 섰다(#590 리뷰). 그
+  오류 자체는 엔드포인트 회로가 센다. 결과 없이 끝난 시험(취소·예산 소진)은 시험 자리만 돌려준다. 앞 attempt가 정상 상한에서 연결
+  실패했고 마지막 attempt만 deadline에 잘렸으면 호출 결과는 연결 실패로 남는다(잘린 attempt가 증거를 덮어쓰지 않는다). **한계**:
+  host 회로는 TCP 연결 실패만 본다 — 프록시(HAProxy 등) 뒤의 backend가 죽으면 프록시가 연결을 받고 503을 돌려주므로 host 회로는
+  열리지 않고 엔드포인트 회로만 동작한다(T-378과 같은 view 3~6개). (2) half-open
   시험 자리는 **시험 호출 자신**의 결과만 비운다(옛 호출의 늦은 실패가 비우면 시험이 둘이 된다). (3) 회로는
   client 인스턴스(lifespan당 1개)에 있으므로 **worker 프로세스마다 따로**다. (4) 단건·Admin은 resolve의
   `KorTravelWeatherError` 전체를 빈 카드로 투영하고 `weather_card.resolve_failed`/`location_fetch_failed`

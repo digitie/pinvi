@@ -18,6 +18,10 @@ T-378(#587)은 회로를 엔드포인트별로 나눴는데, 그 대가로 black
   green. red-check(main의 client로 교체): 새 단위 5건 빨강(host 열림·SYN drop·응답 리셋·host half-open·범위당 1회), 나머지 2건(read
   timeout·5xx 미집계, deadline이 깎은 connect 미집계)은 회귀 방지용이라 main에서도 초록. 통합 SYN-drop은 `assert 4 == 3`으로 빨강 —
   이 축척에서 T-378은 view 4개였다.
+- 리뷰 반영(#590, blocker 없음): (1) host half-open 시험이 연결은 됐는데 5xx·read timeout이면 종전에는 슬롯만 돌려줘 host가
+  half-open에 머물렀다(연결은 되지만 오류를 내는 서비스에서 호출이 하나씩 줄 섬) — 이제 `host.record_success()`로 닫는다. (2) 앞
+  attempt의 `ConnectFailed`를 deadline에 잘린 마지막 attempt(남은 시간 ≥ 하한)가 plain `Unavailable`로 덮어쓰지 않는다. (3) §8.3에
+  한계 한 줄: 프록시 뒤 dead backend는 503이라 엔드포인트 회로만 동작한다(view 3~6개). 단위 2건 추가.
 
 ## 2026-10-18 (claude) — T-378 머지·배포 완료 (PR #587)
 
