@@ -806,7 +806,9 @@ class KorTravelWeatherClient:
                         f"kor-travel-weather 요청 실패({path}): {exc!r}"
                     )
             except httpx.ConnectError as exc:
-                last = KorTravelWeatherConnectFailed(f"kor-travel-weather 연결 실패({path}): {exc!r}")
+                last = KorTravelWeatherConnectFailed(
+                    f"kor-travel-weather 연결 실패({path}): {exc!r}"
+                )
             except httpx.TransportError as exc:
                 last = KorTravelWeatherUnavailable(f"kor-travel-weather 요청 실패({path}): {exc!r}")
             if resp is not None:
