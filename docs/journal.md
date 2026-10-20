@@ -1,3 +1,19 @@
+## 2026-10-20 (claude) — weather host 회로: connect 단계 실패는 서비스 전체 장애 (T-379, 브랜치 `feat/t379-weather-host-breaker`)
+
+T-378(#587)은 회로를 엔드포인트별로 나눴는데, 그 대가로 blackhole(SYN drop) 전면 장애에서 캐시 미스가 섞인 trip view가 resolve·markers
+각자 3회씩 실패할 때까지 view 3~6개 동안 예산(≈9.9 s)을 썼다(#587 리뷰). 연결조차 안 되는 것은 엔드포인트가 아니라 서비스 전체의
+증거이므로 host 단위로 센다.
+
+- `clients/kor_travel_weather.py`: `KorTravelWeatherClient._host_circuit`(같은 `_CircuitBreaker`, 임계 3·open 30 s). `_send`는 host →
+  엔드포인트 순으로 acquire하고, 엔드포인트 acquire가 거부되면 host 시험 자리를 돌려준다. `_send_with_retries`는 마지막 attempt가
+  `ConnectError`이거나 deadline이 깎지 않은 상한의 `ConnectTimeout`이면 `KorTravelWeatherConnectFailed`(`Unavailable` 하위)를 올린다.
+  host는 그것만 실패로 세고(범위당 1회, `_ScopeState.host_counted`), `_send` 성공(4xx 포함)이 되돌리며, 그 밖의 실패·소진·취소는
+  release만 한다. 엔드포인트 회로 동작은 그대로다.
+- 단순성(소유자 지시): 새 설정·임계·클래스 없이 기존 `_CircuitBreaker` 인스턴스 하나와 예외 하위 클래스 하나로 끝냈다.
+- 테스트: 단위 7건(엔드포인트 셋의 연결 거부 → host 열림·처음 보는 엔드포인트 transport 0회; SYN-drop `ConnectTimeout`도 같음;
+  read timeout·5xx는 host 미집계; deadline이 깎은 connect timeout 미집계; 응답이 host 수를 되돌림; host half-open 시험 실패 재개방·
+  응답 시 닫힘; 한 범위의 여러 연결 실패는 host 1회). 통합 `test_syn_drop_with_cache_misses_returns_unavailable_within_budget`의
+  기대를 `3 <= views <= 6` → `views == 3`으로 조였다.
 ## 2026-10-18 (claude) — T-378 머지·배포 완료 (PR #587)
 
 PR #587(엔드포인트별 weather 회로차단, T-378)이 `907c86f7`로 머지됐다. prod 배포는 chain `t1018a`로 전진 — D1

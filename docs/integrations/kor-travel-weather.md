@@ -925,14 +925,27 @@ T-374 사양의 단일 정본이다 — ADR-074 결정 4와 `tasks.md` T-374는 
   에서는 엔드포인트마다 3회씩 실패해야 각자 열린다. trip view 경로에서는 캐시 미스 resolve가 예산 대부분을 쓰고 뒤의
   markers가 같은 view에서 세질지는 남은 예산·실패 단계에 달렸다(connect 실패는 상한이 깎이지 않아 짧은 예산에서도 세지고,
   read hang은 깎여 소진이 될 수 있다) — 공유 회로는 view 3개면 다 막혔지만 이제 캐시 미스가 섞인 view는 3~6개(최악
-  resolve 3 + markers 3) 동안 예산(≈9.9 s)을 쓴다. 이후 open 동안은 엔드포인트마다 30 s에 시험 1회다. (2) half-open
+  resolve 3 + markers 3) 동안 예산(≈9.9 s)을 썼다 — 아래 host 회로(T-379)가 이것을 view 3개로 되돌린다. 이후 open 동안은
+  엔드포인트마다 30 s에 시험 1회다. **host 회로(T-379, 2026-10-20)**: 엔드포인트 회로 **앞에** `_CircuitBreaker` 하나를 더
+  둔다(`KorTravelWeatherClient._host_circuit`, 같은 임계 3·open 30 s·half-open 1회). `_send`는 host 회로를 먼저, 그다음
+  엔드포인트 회로를 본다 — host가 열려 있으면 모든 엔드포인트가 transport 0회로 즉시 `Unavailable`이다. host 실패로
+  세는 것은 **connect 단계 실패**뿐이다: 마지막 attempt가 `httpx.ConnectError`(거부)이거나, deadline이 깎지 **않은**
+  connect 상한(운영 2 s)에서 난 `httpx.ConnectTimeout`(SYN drop)이면 client가 `KorTravelWeatherConnectFailed`
+  (`KorTravelWeatherUnavailable`의 하위 — 호출자는 바뀌지 않는다)를 올린다. 연결조차 안 되는 것은 엔드포인트가 아니라
+  서비스 전체 장애의 증거이기 때문이다. read timeout·찔끔 오는 본문·5xx는 연결이 됐다는 뜻이라 host에 세지도 되돌리지도
+  않는다(엔드포인트 회로 몫, 종전 그대로). deadline이 깎은 connect timeout도 세지 않는다(남은 예산이 짧았을 뿐). 응답을
+  받은 호출(`_send` 성공, 4xx 포함)이 host 연속 수를 0으로 되돌린다. (b)의 "범위당 최대 1회"는 host에도 걸린다
+  (`_ScopeState.host_counted`) — 한 view에서 resolve·markers가 함께 연결 실패해도 host 실패는 1회다. 그래서 blackhole·
+  연결 거부 전면 장애에서는 캐시 미스가 섞인 trip view도 **view 3개째에** host가 열려 이후 모든 엔드포인트가 막힌다
+  (축척 통합 테스트: T-378 4개 → 3개). host half-open 시험이 연결 실패면 다시 30 s, 응답을 받으면 닫히고, 그 밖의 결과
+  (read timeout·5xx·취소)는 상태를 두고 시험 자리만 돌려준다. (2) half-open
   시험 자리는 **시험 호출 자신**의 결과만 비운다(옛 호출의 늦은 실패가 비우면 시험이 둘이 된다). (3) 회로는
   client 인스턴스(lifespan당 1개)에 있으므로 **worker 프로세스마다 따로**다. (4) 단건·Admin은 resolve의
   `KorTravelWeatherError` 전체를 빈 카드로 투영하고 `weather_card.resolve_failed`/`location_fetch_failed`
   경고 로그로 장애와 "데이터 없음"을 가른다(응답 스키마에 구분 필드 없음).
 - **회로차단(기본값, 열린 결정 2는 이 값의 변경 여부)**: 단위는 **논리 호출**(`_send` 1회,
   attempt 아님); 연속 3회 호출 실패 → 30 s open(즉시 `Unavailable`), half-open 1회; 상태는
-  `KorTravelWeatherClient` 인스턴스에 두어 trip/card/resolver/Admin/마커가 **공유**(client는 1개,
+  `KorTravelWeatherClient` 인스턴스에 두어(엔드포인트별 + connect 실패 전용 host 회로 1개, T-378·T-379) trip/card/resolver/Admin/마커가 **공유**(client는 1개,
   `:651-660`); ETL resource는 제외. 회로차단은 `found`를 지어내지 않고 `unavailable`을 더 빨리
   낸다. 세 값의 자리는 `clients/kor_travel_weather.py` **모듈 상수**(`_CIRCUIT_FAILURE_THRESHOLD = 3`,
   `_CIRCUIT_OPEN_SECONDS = 30.0`, half-open 1회), env·settings 노출 없음 — 열린 결정 2로 값이

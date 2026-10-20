@@ -58,6 +58,13 @@ _NEARBY_LIMIT_MAX = 100  # 서버 스키마 상한(OpenAPI `nearby` limit maximu
 _CIRCUIT_FAILURE_THRESHOLD = 3
 _CIRCUIT_OPEN_SECONDS = 30.0
 
+# host 회로(T-379) — 엔드포인트 회로 **앞에** 하나 더 둔다. connect 단계 실패(`ConnectError`, 또는 deadline이
+# 깎지 않은 상한에서 난 `ConnectTimeout`)만 세고 같은 임계·open 시간을 쓴다. 연결조차 안 되는 것은 엔드포인트가
+# 아니라 서비스 전체 장애의 증거라, 열리면 모든 엔드포인트가 함께 즉시 `Unavailable`이다. 응답을 받은 호출
+# (`_send` 성공)이 연속 수를 되돌린다. read timeout·5xx는 연결이 됐다는 뜻이라 host 회로에 세지 않는다(그것은
+# 엔드포인트 회로 몫). deadline 범위당 최대 1회 규칙도 같다.
+_HOST_CIRCUIT_NAME = "host"
+
 # 호출자 deadline(event loop 시각) — trip view가 view 예산 안에서 weather를 부를 때 건다.
 # 설정돼 있으면 attempt마다 (a) httpx 단계별 timeout을 남은 시간으로 깎고 (b) attempt 전체를
 # `asyncio.timeout(남은 시간)`으로 묶는다(본문이 찔끔찔끔 와도 deadline을 넘지 않게). 그래야 연결은
@@ -94,6 +101,7 @@ class _ScopeState:
 
     counted_endpoints: set[str] = field(default_factory=set)
     succeeded_endpoints: set[str] = field(default_factory=set)
+    host_counted: bool = False
 
 
 @dataclass(slots=True)
@@ -164,6 +172,13 @@ class KorTravelWeatherDeadlineExhausted(KorTravelWeatherUnavailable):
     """호출자 deadline(`kor_travel_weather_call_deadline`)이 이미 지나 attempt를 하나도 보내지 않음.
 
     피호출자 장애의 증거가 아니므로 회로차단 실패로 세지 않는다.
+    """
+
+
+class KorTravelWeatherConnectFailed(KorTravelWeatherUnavailable):
+    """마지막 attempt가 connect 단계에서 실패함(연결 거부, 또는 deadline이 깎지 않은 상한의 connect timeout).
+
+    서비스 전체 장애의 증거라 엔드포인트 회로와 함께 host 회로에도 센다(T-379).
     """
 
 
@@ -563,7 +578,7 @@ class _CircuitBreaker:
     인스턴스 안에 엔드포인트(호출부가 넘기는 리터럴 이름)마다 하나라 같은 엔드포인트를 부르는 trip view·단건
     카드·resolver·Admin·지도 마커가 공유하고, forecast가 열려도 markers는 닫힌 채다(T-378). client는
     lifespan마다 하나이므로 **회로는 worker 프로세스마다 따로**다(uvicorn worker N개면 회로 N개 —
-    공유 저장소 없음).
+    공유 저장소 없음). 같은 클래스로 connect 단계 실패만 세는 host 회로 하나를 더 둔다(T-379).
     """
 
     def __init__(
@@ -639,6 +654,11 @@ class KorTravelWeatherClient:
         self._backoff_base_seconds = backoff_base_seconds
         self._clock = clock
         self._circuits: dict[str, _CircuitBreaker] = {}
+        self._host_circuit = _CircuitBreaker(
+            failure_threshold=_CIRCUIT_FAILURE_THRESHOLD,
+            open_seconds=_CIRCUIT_OPEN_SECONDS,
+            clock=clock,
+        )
 
     async def aclose(self) -> None:
         await self._http.aclose()
@@ -666,17 +686,26 @@ class KorTravelWeatherClient:
     ) -> httpx.Response:
         """논리 호출 1회 — 회로차단을 거쳐 `_send_with_retries`를 부른다.
 
-        그 엔드포인트의 회로가 열려 있으면 transport를 부르지 않고 즉시 `KorTravelWeatherUnavailable`이다.
-        재시도 끝의 `Unavailable`만 실패로 센다(4xx·계약 오류는 피호출자가 살아 있다는 뜻).
+        host 회로를 먼저, 그다음 그 엔드포인트의 회로를 본다 — 어느 쪽이든 열려 있으면 transport를 부르지
+        않고 즉시 `KorTravelWeatherUnavailable`이다. 재시도 끝의 `Unavailable`만 엔드포인트 실패로 세고
+        (4xx·계약 오류는 피호출자가 살아 있다는 뜻), 그중 connect 단계 실패(`KorTravelWeatherConnectFailed`)만
+        host 실패로도 센다(T-379).
         """
+        host = self._host_circuit
+        host_trial = host.acquire()
         circuit = self._circuit_for(endpoint)
-        trial = circuit.acquire()
+        try:
+            trial = circuit.acquire()
+        except BaseException:
+            host.release(trial=host_trial)
+            raise
         try:
             resp = await self._send_with_retries(method, path, params=params, endpoint=endpoint)
         except KorTravelWeatherDeadlineExhausted:
             circuit.release(trial=trial)
+            host.release(trial=host_trial)
             raise
-        except KorTravelWeatherUnavailable:
+        except KorTravelWeatherUnavailable as exc:
             scope = _call_scope.get()
             if scope is not None and endpoint in scope.state.counted_endpoints and not trial:
                 # 한 deadline 범위(= trip view 1회)는 엔드포인트마다 회로 실패를 한 번만 센다.
@@ -685,14 +714,25 @@ class KorTravelWeatherClient:
                 if scope is not None:
                     scope.state.counted_endpoints.add(endpoint)
                 circuit.record_failure(endpoint=endpoint, trial=trial)
+            if not isinstance(exc, KorTravelWeatherConnectFailed) or (
+                scope is not None and scope.state.host_counted and not host_trial
+            ):
+                # 연결은 됐거나(read timeout·5xx — 엔드포인트 회로 몫) 이 범위에서 이미 host 실패를 셌다.
+                host.release(trial=host_trial)
+            else:
+                if scope is not None:
+                    scope.state.host_counted = True
+                host.record_failure(endpoint=_HOST_CIRCUIT_NAME, trial=host_trial)
             raise
         except BaseException:
             circuit.release(trial=trial)
+            host.release(trial=host_trial)
             raise
         scope = _call_scope.get()
         if scope is not None:
             scope.state.succeeded_endpoints.add(endpoint)
         circuit.record_success()
+        host.record_success()
         return resp
 
     async def _send_with_retries(
@@ -754,10 +794,19 @@ class KorTravelWeatherClient:
                     # deadline이 끊었지만 장애 증거가 아니다(짧은 예산이거나 같은 범위에서 피호출자가
                     # 이미 응답했다). 앞선 attempt의 진짜 실패가 있으면 그것을 남긴다.
                     last = last if last is not None else exhausted()
+                elif isinstance(exc, httpx.ConnectTimeout) and (
+                    applied is None or not _deadline_bound_timeout(exc, base=base, applied=applied)
+                ):
+                    # 정상 connect 상한까지 기다려도 연결이 안 됐다 — host 회로 증거(T-379).
+                    last = KorTravelWeatherConnectFailed(
+                        f"kor-travel-weather 연결 실패({path}): {exc!r}"
+                    )
                 else:
                     last = KorTravelWeatherUnavailable(
                         f"kor-travel-weather 요청 실패({path}): {exc!r}"
                     )
+            except httpx.ConnectError as exc:
+                last = KorTravelWeatherConnectFailed(f"kor-travel-weather 연결 실패({path}): {exc!r}")
             except httpx.TransportError as exc:
                 last = KorTravelWeatherUnavailable(f"kor-travel-weather 요청 실패({path}): {exc!r}")
             if resp is not None:

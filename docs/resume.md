@@ -1,3 +1,10 @@
+## 2026-10-20 (claude) — weather host 회로 (T-379, 브랜치 `feat/t379-weather-host-breaker`)
+
+- 다음 한 작업: draft PR CI green → coordinator 리뷰·머지 → 다음 chain에서 배포(머지 뒤 T-379를 `tasks-done.md`로).
+- 바뀐 것: `apps/api/app/clients/kor_travel_weather.py`(connect 단계 실패 전용 host 회로 + `KorTravelWeatherConnectFailed`),
+  단위 7건 신규, SYN-drop 통합 테스트 기대 view 수 3~6 → 3, `kor-travel-weather.md` §8.3. 설정·env·API 변화 없음.
+- 동작: 연결 거부·SYN drop 전면 장애에서 view 3개째에 모든 엔드포인트가 함께 막힌다. read timeout·5xx는 종전처럼 엔드포인트별.
+
 ## 2026-10-17 (claude) — weather 회로차단 엔드포인트별 집계 (T-378, 브랜치 `fix/t-378-weather-breaker-per-endpoint`)
 
 - 다음 한 작업: draft PR CI green → coordinator 리뷰·머지 → 다음 chain에서 배포.
