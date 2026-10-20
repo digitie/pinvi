@@ -191,7 +191,7 @@ PINVI_ETL_JOBS = [
 # `apps/etl/tests/test_admin_etl_definition_lists.py`가 빨개진다(T-377).
 PINVI_ETL_SCHEDULES = [
     AdminEtlDefinitionSchedule(
-        name="kasi_special_days_schedule",
+        name="kasi_special_days_job_schedule",
         job_name="kasi_special_days_job",
         cron_schedule="30 3 * * *",
         execution_timezone="Asia/Seoul",

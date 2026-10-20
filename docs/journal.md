@@ -10,6 +10,10 @@
 - 테스트는 ETL 환경(dagster 있음)에서 돈다 — API 패키지가 없으므로 `test_admin_probe_graphql_schema.py`처럼 `admin_etl.py`를 AST로
   읽어 `(name, job_name, cron, tz)`·`(name, job_name)` 집합을 `defs.get_repository_def()`와 비교한다. 하한(schedule ≥ 7, sensor ≥ 6)은
   본 것에 건다. `etl.yml` 경로 필터가 이미 `admin_etl.py`를 포함한다.
+- 테스트가 숨은 어긋남 하나를 더 잡았다: 정적 `kasi_special_days_schedule`의 실제 이름은 `coalescing_schedule`가 job 이름에서 만든
+  `kasi_special_days_job_schedule`이다(첫 n150 실행에서 빨강). 정적 항목과 `docs/api/admin.md` 예시를 고쳤다(e2e mock 픽스처·과거 기록은 그대로).
+- 검증: n150 CI-parity — ETL `ruff check`·`pytest tests` 75건, API `ruff check`·`ruff format --check`·`mypy --strict app`·unit
+  `-k admin_etl` 42건·integration `-k admin_etl` 33건 green. red-check: main의 `admin_etl.py`로 새 테스트 2건 모두 빨강.
 - 범위 밖으로 남긴 것: 정적 `assets`(5 vs 7)·`jobs`(6 vs 8)도 낡았다.
 
 ## 2026-10-20 (claude) — weather host 회로: connect 단계 실패는 서비스 전체 장애 (T-379, 브랜치 `feat/t379-weather-host-breaker`)
