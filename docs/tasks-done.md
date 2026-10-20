@@ -1,5 +1,9 @@
 # tasks-done.md — 완료·아카이브
 
+## 2026-10-20
+
+- [x] T-379 — PR #590 merged 0a75b257, weather host-level circuit breaker(connect 단계 실패 전용, view 3개째에 모든 엔드포인트 차단; host 시험이 연결되면 닫힘). 배포는 다음 chain.
+
 ## 2026-10-18
 
 - [x] T-378 — PR #587 merged 907c86f7, per-endpoint weather circuit breaker; deployed to prod via chain t1018a 2026-10-18, D1 11/11, D2 exit 0.
