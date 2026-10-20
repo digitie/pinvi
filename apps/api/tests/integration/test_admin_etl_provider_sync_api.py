@@ -919,6 +919,8 @@ async def test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops(
         "pinvi_telegram_system_outbox_job",
         "pinvi_pii_retention_job",
         "pinvi_location_log_archive_job",
+        "pinvi_trip_day_rise_sets_job",
+        "pinvi_weather_retention_horizon_job",
     }
     assert data["pinvi"]["email_outbox"]["pending_due"] == 1
     assert data["pinvi"]["email_outbox"]["pending_backoff"] == 1
