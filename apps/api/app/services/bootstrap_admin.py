@@ -11,17 +11,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationError, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password, verify_password
 from app.core.time import utc_now
 from app.models.user import User
+from app.schemas.auth import normalize_login_identifier
 from app.services.auth_session import revoke_active_user_sessions
 
 BootstrapAdminAction = Literal["created", "updated", "unchanged"]
 MAX_CREDENTIAL_FILE_BYTES = 4096
+FIXED_TEST_USER_ROLES = ["user"]
 
 
 class BootstrapAdminError(Exception):
@@ -94,8 +96,8 @@ def _validate_credential_file_stat(file_stat: os.stat_result) -> None:
         raise BootstrapAdminError("credential_file_size_invalid", "credential_file")
 
 
-def read_bootstrap_admin_credential_file(path: str | Path) -> BootstrapAdminCredential:
-    """Read a bounded, owner-only credential JSON file without following symlinks."""
+def _read_owner_only_file(path: str | Path) -> bytes:
+    """Read a bounded, owner-only file without following symlinks."""
 
     credential_path = Path(path)
     if not credential_path.is_absolute():
@@ -130,13 +132,22 @@ def read_bootstrap_admin_credential_file(path: str | Path) -> BootstrapAdminCred
 
     if len(data) > MAX_CREDENTIAL_FILE_BYTES:
         raise BootstrapAdminError("credential_file_size_invalid", "credential_file")
+    return data
 
+
+def _parse_credential_json[PayloadT: BaseModel](data: bytes, model: type[PayloadT]) -> PayloadT:
     try:
         raw = data.decode("utf-8")
         payload = json.loads(raw, object_pairs_hook=_reject_duplicate_keys)
-        credential = _CredentialPayload.model_validate(payload)
+        return model.model_validate(payload)
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError, ValidationError):
         raise BootstrapAdminError("credential_file_json_invalid", "credential_file") from None
+
+
+def read_bootstrap_admin_credential_file(path: str | Path) -> BootstrapAdminCredential:
+    """Read a bounded, owner-only credential JSON file without following symlinks."""
+
+    credential = _parse_credential_json(_read_owner_only_file(path), _CredentialPayload)
 
     return BootstrapAdminCredential(
         email=str(credential.email).strip(),
@@ -225,3 +236,172 @@ async def ensure_bootstrap_admin(
         action="unchanged",
         admin_email_sha256=credential.email_sha256,
     )
+
+
+# ---------------------------------------------------------------------------
+# 고정 계정(fixed accounts)
+#
+# 운영자가 호스트에 둔 별도 credential file로, 배포마다 같은 고정 관리자와 테스트 사용자를
+# 다시 맞춘다. 일반 가입·재설정 경로의 비밀번호 정책(8자 이상)은 이 파일로 만든 두 계정에만
+# 적용하지 않는다 — 운영자가 의도적으로 짧은 값을 고정할 수 있게 하기 위함이다.
+# ---------------------------------------------------------------------------
+
+
+class _FixedAdminPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    login: str = Field(min_length=1, max_length=320)
+    # 정책 예외: 고정 계정은 일반 비밀번호 최소 길이(8)를 적용하지 않는다.
+    password: str = Field(min_length=1, max_length=200)
+
+    @field_validator("login")
+    @classmethod
+    def _login_identifier(cls, value: str) -> str:
+        return normalize_login_identifier(value)
+
+
+class _FixedTestUserPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+    # 정책 예외: 고정 계정은 일반 비밀번호 최소 길이(8)를 적용하지 않는다.
+    password: str = Field(min_length=1, max_length=200)
+
+
+class _FixedAccountsPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    admin: _FixedAdminPayload | None = None
+    test_user: _FixedTestUserPayload | None = None
+
+
+@dataclass(frozen=True)
+class FixedAccountsCredential:
+    admin: BootstrapAdminCredential | None
+    test_user: BootstrapAdminCredential | None
+
+    def identities(self) -> list[str]:
+        return [
+            account.email.casefold()
+            for account in (self.admin, self.test_user)
+            if account is not None
+        ]
+
+
+@dataclass(frozen=True)
+class FixedAccountsResult:
+    admin_action: BootstrapAdminAction | None
+    test_user_action: BootstrapAdminAction | None
+
+
+def read_fixed_accounts_file(path: str | Path) -> FixedAccountsCredential:
+    """Read the owner-only fixed admin/test user file with the same file checks."""
+
+    payload = _parse_credential_json(_read_owner_only_file(path), _FixedAccountsPayload)
+    if payload.admin is None and payload.test_user is None:
+        raise BootstrapAdminError("credential_file_json_invalid", "credential_file")
+    credential = FixedAccountsCredential(
+        admin=(
+            BootstrapAdminCredential(email=payload.admin.login, password=payload.admin.password)
+            if payload.admin is not None
+            else None
+        ),
+        test_user=(
+            BootstrapAdminCredential(
+                email=str(payload.test_user.email).strip(),
+                password=payload.test_user.password,
+            )
+            if payload.test_user is not None
+            else None
+        ),
+    )
+    identities = credential.identities()
+    if len(set(identities)) != len(identities):
+        raise BootstrapAdminError("fixed_accounts_conflict", "credential_file")
+    return credential
+
+
+async def ensure_fixed_test_user(
+    db: AsyncSession,
+    *,
+    credential: BootstrapAdminCredential,
+) -> BootstrapAdminAction:
+    """Create or re-assert the fixed, active, verified ordinary test user.
+
+    The test user is always reset to exactly the ``user`` role so a role granted in the
+    admin console does not survive the next deploy.
+    """
+
+    email = credential.email.strip()
+    if not email or not credential.password:
+        raise BootstrapAdminError("credential_file_json_invalid", "credential_file")
+    now = utc_now()
+
+    user = await db.scalar(select(User).where(User.email == email).with_for_update())
+    if user is None:
+        db.add(
+            User(
+                email=email,
+                password_hash=hash_password(credential.password),
+                nickname="Pinvi Test",
+                status="active",
+                roles=list(FIXED_TEST_USER_ROLES),
+                email_verified_at=now,
+                email_status="active",
+                is_active=True,
+                deleted_at=None,
+            )
+        )
+        return "created"
+
+    changed = False
+    revoke_sessions = False
+
+    if not user.password_hash or not verify_password(credential.password, user.password_hash):
+        user.password_hash = hash_password(credential.password)
+        changed = True
+        revoke_sessions = True
+    if list(user.roles or []) != FIXED_TEST_USER_ROLES:
+        user.roles = list(FIXED_TEST_USER_ROLES)
+        changed = True
+        revoke_sessions = True
+    if user.nickname is None:
+        user.nickname = "Pinvi Test"
+        changed = True
+    if user.status != "active":
+        user.status = "active"
+        changed = True
+    if user.email_verified_at is None:
+        user.email_verified_at = now
+        changed = True
+    if user.email_status != "active":
+        user.email_status = "active"
+        changed = True
+    if not user.is_active:
+        user.is_active = True
+        changed = True
+    if user.deleted_at is not None:
+        user.deleted_at = None
+        changed = True
+
+    if revoke_sessions:
+        user.access_token_version = (user.access_token_version or 0) + 1
+        await revoke_active_user_sessions(db, user_id=user.user_id, revoked_at=now)
+
+    return "updated" if changed else "unchanged"
+
+
+async def ensure_fixed_accounts(
+    db: AsyncSession,
+    *,
+    credential: FixedAccountsCredential,
+) -> FixedAccountsResult:
+    """Re-assert the fixed admin and test user inside the caller transaction."""
+
+    admin_action: BootstrapAdminAction | None = None
+    if credential.admin is not None:
+        admin_action = (await ensure_bootstrap_admin(db, credential=credential.admin)).action
+    test_user_action: BootstrapAdminAction | None = None
+    if credential.test_user is not None:
+        test_user_action = await ensure_fixed_test_user(db, credential=credential.test_user)
+    return FixedAccountsResult(admin_action=admin_action, test_user_action=test_user_action)

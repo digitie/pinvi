@@ -63,7 +63,7 @@ function AdminLoginForm() {
       setError(
         err instanceof ApiError
           ? err.code === 'AUTH_INVALID_CREDENTIALS'
-            ? '이메일 또는 비밀번호가 올바르지 않습니다.'
+            ? '아이디(이메일) 또는 비밀번호가 올바르지 않습니다.'
             : err.code === 'EMAIL_NOT_VERIFIED'
               ? '이메일 인증이 필요합니다.'
               : err.message
@@ -79,7 +79,7 @@ function AdminLoginForm() {
     >
       <LoginForm
         brand="Pinvi Admin"
-        usernameLabel="이메일"
+        usernameLabel="이메일 또는 아이디"
         description="관리자/운영자/CPO 계정으로 로그인하세요."
         onSubmit={submit}
         error={error}

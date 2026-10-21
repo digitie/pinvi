@@ -78,9 +78,15 @@ export const VerifyEmailResendResponseSchema = z.object({
 });
 export type VerifyEmailResendResponse = z.infer<typeof VerifyEmailResendResponseSchema>;
 
-/** 로그인 요청. */
+/**
+ * 이메일이 아닌 고정 로그인 ID(`apps/api/app/schemas/auth.py` `LOGIN_ID_PATTERN`과 동기).
+ * 가입은 여전히 이메일만 받으므로 이런 계정은 `pinvi-admin-bootstrap` 고정 계정 파일로만 생긴다.
+ */
+export const LOGIN_ID_PATTERN = /^[a-z][a-z0-9]{2,31}$/;
+
+/** 로그인 요청. `email` 필드는 이메일 또는 고정 로그인 ID를 받는다. */
 export const LoginRequestSchema = z.object({
-  email: z.string().email(),
+  email: z.union([z.string().email(), z.string().regex(LOGIN_ID_PATTERN)]),
   password: z.string().min(1),
 });
 

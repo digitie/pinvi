@@ -22,6 +22,12 @@ describe('validateForm — success', () => {
 });
 
 describe('validateForm — field errors', () => {
+  it('accepts a fixed login id (no @) for login only', () => {
+    const r = validateForm(LoginRequestSchema, { email: 'fixedlogin', password: 'x' });
+    expect(r.success).toBe(true);
+    expect(r.data).toEqual({ email: 'fixedlogin', password: 'x' });
+  });
+
   it('flags an invalid email with a Korean message', () => {
     const r = validateForm(LoginRequestSchema, { email: 'not-an-email', password: 'x' });
     expect(r.success).toBe(false);
