@@ -106,8 +106,10 @@ mode `0600`, hardlink 1, 4 KiB 이하)는 bootstrap credential file과 같다. �
 적어도 하나는 있어야 한다.
 
 ```json
-{"admin":{"login":"<login-id-or-email>","password":"<password>"},
- "test_user":{"email":"<email>","password":"<password>"}}
+{
+  "admin": { "login": "<login-id-or-email>", "password": "<password>" },
+  "test_user": { "email": "<email>", "password": "<password>" }
+}
 ```
 
 - `admin.login`은 이메일 또는 고정 로그인 ID(`^[a-z][a-z0-9]{2,31}$`, `@` 없음)다. 로그인 API

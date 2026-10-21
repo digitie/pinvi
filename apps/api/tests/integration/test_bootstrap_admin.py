@@ -357,8 +357,14 @@ async def test_fixed_accounts_rerun_is_unchanged(session_factory, tmp_path: Path
     )
     async with session_factory() as db:
         rows = (
-            await db.execute(select(User).where(User.email.in_([_FIXED_LOGIN, _FIXED_TEST_EMAIL])))
-        ).scalars().all()
+            (
+                await db.execute(
+                    select(User).where(User.email.in_([_FIXED_LOGIN, _FIXED_TEST_EMAIL]))
+                )
+            )
+            .scalars()
+            .all()
+        )
         assert len(rows) == 2
 
 

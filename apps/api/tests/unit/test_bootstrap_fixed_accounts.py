@@ -69,7 +69,9 @@ def test_registration_still_requires_email_and_eight_character_password() -> Non
         for kind in ("tos", "privacy", "lbs_tos", "location_collection")
     ]
     with pytest.raises(ValidationError):
-        RegisterRequest(email=_FAKE_LOGIN, password="long-enough-pw", nickname="n", consents=consents)
+        RegisterRequest(
+            email=_FAKE_LOGIN, password="long-enough-pw", nickname="n", consents=consents
+        )
     with pytest.raises(ValidationError):
         RegisterRequest(
             email=_FAKE_TEST_EMAIL, password=_FAKE_TEST_PASSWORD, nickname="n", consents=consents
