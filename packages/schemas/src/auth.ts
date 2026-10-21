@@ -86,7 +86,7 @@ export const LOGIN_ID_PATTERN = /^[a-z][a-z0-9]{2,31}$/;
 
 /** 로그인 요청. `email` 필드는 이메일 또는 고정 로그인 ID를 받는다. */
 export const LoginRequestSchema = z.object({
-  email: z.union([z.string().email(), z.string().regex(LOGIN_ID_PATTERN)]),
+  email: z.union([z.string().email().max(320), z.string().regex(LOGIN_ID_PATTERN)]),
   password: z.string().min(1),
 });
 

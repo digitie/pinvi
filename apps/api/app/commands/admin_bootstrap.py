@@ -52,7 +52,17 @@ _ERROR_PHASE_BY_CODE = {
     "credential_file_path_invalid": "credential_file",
     "credential_file_size_invalid": "credential_file",
     "credential_file_unavailable": "credential_file",
-    "fixed_accounts_conflict": "credential_file",
+    "fixed_accounts_conflict": "fixed_accounts_file",
+    "fixed_accounts_file_json_invalid": "fixed_accounts_file",
+    "fixed_accounts_file_link_count_invalid": "fixed_accounts_file",
+    "fixed_accounts_file_missing": "fixed_accounts_file",
+    "fixed_accounts_file_mode_invalid": "fixed_accounts_file",
+    "fixed_accounts_file_not_regular": "fixed_accounts_file",
+    "fixed_accounts_file_owner_mismatch": "fixed_accounts_file",
+    "fixed_accounts_file_path_invalid": "fixed_accounts_file",
+    "fixed_accounts_file_size_invalid": "fixed_accounts_file",
+    "fixed_accounts_file_unavailable": "fixed_accounts_file",
+    "fixed_accounts_file_changed": "fixed_accounts_file",
     "migration_failed": "migration",
     "schema_revision_mismatch": "schema_check",
     "schema_version_invalid": "schema_check",
@@ -232,7 +242,7 @@ def _reject_fixed_account_conflict(
     if fixed_accounts is not None and (
         credential.email.strip().casefold() in fixed_accounts.identities()
     ):
-        raise BootstrapAdminError("fixed_accounts_conflict", "credential_file")
+        raise BootstrapAdminError("fixed_accounts_conflict", "fixed_accounts_file")
 
 
 async def run_admin_bootstrap_transaction(

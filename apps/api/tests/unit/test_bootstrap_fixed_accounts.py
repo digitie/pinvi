@@ -123,7 +123,7 @@ def test_primary_admin_credential_keeps_eight_character_minimum(tmp_path: Path) 
 def test_fixed_accounts_file_rejects_invalid_payloads(tmp_path: Path, payload: object) -> None:
     with pytest.raises(BootstrapAdminError) as exc_info:
         read_fixed_accounts_file(_write(tmp_path, payload))
-    assert exc_info.value.code == "credential_file_json_invalid"
+    assert exc_info.value.code == "fixed_accounts_file_json_invalid"
 
 
 def test_fixed_accounts_file_rejects_same_identity_for_admin_and_test_user(
@@ -143,7 +143,11 @@ def test_fixed_accounts_file_uses_owner_only_file_checks(tmp_path: Path) -> None
     path.chmod(0o644)
     with pytest.raises(BootstrapAdminError) as exc_info:
         read_fixed_accounts_file(path)
-    assert exc_info.value.code == "credential_file_mode_invalid"
+    assert exc_info.value.code == "fixed_accounts_file_mode_invalid"
+    assert admin_bootstrap._typed_error_payload(exc_info.value) == {
+        "error_code": "fixed_accounts_file_mode_invalid",
+        "phase": "fixed_accounts_file",
+    }
 
 
 def test_fixed_account_conflict_with_primary_admin_is_rejected() -> None:
@@ -209,7 +213,7 @@ def test_bootstrap_reads_fixed_accounts_before_migration(
 
     with pytest.raises(BootstrapAdminError) as exc_info:
         admin_bootstrap.run_pinvi_admin_bootstrap()
-    assert exc_info.value.code == "credential_file_json_invalid"
+    assert exc_info.value.code == "fixed_accounts_file_json_invalid"
 
 
 def test_cli_success_output_reports_fixed_actions_without_identities(
@@ -242,5 +246,20 @@ def test_cli_success_output_reports_fixed_actions_without_identities(
 
 def test_fixed_accounts_conflict_has_typed_phase() -> None:
     assert admin_bootstrap._typed_error_payload(
-        BootstrapAdminError("fixed_accounts_conflict", "credential_file")
-    ) == {"error_code": "fixed_accounts_conflict", "phase": "credential_file"}
+        BootstrapAdminError("fixed_accounts_conflict", "fixed_accounts_file")
+    ) == {"error_code": "fixed_accounts_conflict", "phase": "fixed_accounts_file"}
+
+
+def test_every_fixed_accounts_file_code_is_typed() -> None:
+    """Each credential_file_* read error has a fixed_accounts_file_* twin in the CLI map."""
+
+    mapping = admin_bootstrap._ERROR_PHASE_BY_CODE
+    read_codes = [
+        code
+        for code in mapping
+        if code.startswith("credential_file_") and code != "credential_file_env_missing"
+    ]
+    assert read_codes
+    for code in read_codes:
+        twin = "fixed_accounts_file_" + code.removeprefix("credential_file_")
+        assert mapping.get(twin) == "fixed_accounts_file", twin

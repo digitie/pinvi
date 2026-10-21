@@ -122,6 +122,11 @@ mode `0600`, hardlink 1, 4 KiB 이하)는 bootstrap credential file과 같다. �
 - 테스트 사용자: 활성·이메일 인증 완료 상태의 일반 사용자로 생성·복구하며 `roles`를 정확히
   `['user']`로 되돌린다(콘솔에서 준 권한은 다음 배포에 회수, 그때 세션도 폐기). 비밀번호도 파일 값으로
   되돌린다.
+- 두 식별자는 같은 이메일/ID의 **기존 행을 그대로 인수**한다(비밀번호·권한·세션만 다시 맞춘다). 테스트
+  사용자 이메일은 소유자가 통제하는 메일 도메인이어야 한다 — 그 메일함을 가진 사람은 다음 배포 전까지
+  비밀번호 재설정으로 계정을 가져갈 수 있다.
+- 파일 오류는 `fixed_accounts_file_*` 코드(phase `fixed_accounts_file`)로 나와 bootstrap credential
+  file 오류(`credential_file_*`)와 구분된다.
 - bootstrap admin·고정 관리자·테스트 사용자의 식별자가 하나라도 겹치면(대소문자 무시)
   `fixed_accounts_conflict`로 실패한다 — 같은 행을 두 규칙이 번갈아 고치지 않게 하기 위함이다.
 - 파일은 migration 전에 한 번 읽어 검증한다. 잘못된 파일은 schema 변경 없이 typed error로 끝난다.
@@ -129,7 +134,8 @@ mode `0600`, hardlink 1, 4 KiB 이하)는 bootstrap credential file과 같다. �
   식별자·비밀번호는 출력하지 않는다.
 
 운영 배선: Manager의 `pinvi-admin-bootstrap` 실행이 이 파일을 read-only로 mount하고 위 환경변수를
-넘겨야 한다(Manager 저장소 변경). 설정하지 않으면 기존 동작과 같다.
+넘긴다(Manager `.env`의 `KTDM_PINVI_FIXED_ACCOUNTS_FILE`). 설정하지 않으면 기존 동작과 같다. 이 기능이
+없는 옛 PinVi 이미지는 환경변수를 조용히 무시하므로, 이 변경이 들어간 PinVi로 핀을 옮긴 뒤 설정한다.
 
 N150에서 계정 존재 여부만 확인:
 

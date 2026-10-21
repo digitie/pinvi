@@ -295,11 +295,21 @@ class FixedAccountsResult:
 
 
 def read_fixed_accounts_file(path: str | Path) -> FixedAccountsCredential:
-    """Read the owner-only fixed admin/test user file with the same file checks."""
+    """Read the owner-only fixed admin/test user file with the same file checks.
 
-    payload = _parse_credential_json(_read_owner_only_file(path), _FixedAccountsPayload)
+    Errors use the ``fixed_accounts_file_*`` codes so an incident shows which of the two
+    files (Manager-generated bootstrap credential vs operator fixed-accounts file) is broken.
+    """
+
+    try:
+        payload = _parse_credential_json(_read_owner_only_file(path), _FixedAccountsPayload)
+    except BootstrapAdminError as exc:
+        raise BootstrapAdminError(
+            "fixed_accounts_file_" + exc.code.removeprefix("credential_file_"),
+            "fixed_accounts_file",
+        ) from None
     if payload.admin is None and payload.test_user is None:
-        raise BootstrapAdminError("credential_file_json_invalid", "credential_file")
+        raise BootstrapAdminError("fixed_accounts_file_json_invalid", "fixed_accounts_file")
     credential = FixedAccountsCredential(
         admin=(
             BootstrapAdminCredential(email=payload.admin.login, password=payload.admin.password)
@@ -317,7 +327,7 @@ def read_fixed_accounts_file(path: str | Path) -> FixedAccountsCredential:
     )
     identities = credential.identities()
     if len(set(identities)) != len(identities):
-        raise BootstrapAdminError("fixed_accounts_conflict", "credential_file")
+        raise BootstrapAdminError("fixed_accounts_conflict", "fixed_accounts_file")
     return credential
 
 
