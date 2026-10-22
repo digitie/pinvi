@@ -4,6 +4,12 @@
 
 ## Unreleased
 
+- 배포 때마다 **고정 관리자와 테스트 사용자 계정을 다시 맞출 수 있다**. 운영 호스트의 owner-only
+  파일(`PINVI_BOOTSTRAP_FIXED_ACCOUNTS_FILE`)에 둔 값으로 `pinvi-admin-bootstrap`이 두 계정을 생성·복구하고
+  비밀번호를 그 값으로 되돌린다. 테스트 사용자는 항상 일반 사용자 권한으로 돌아간다. 로그인은 이제
+  이메일 외에 고정 로그인 ID(영문 소문자로 시작하는 3~32자 소문자·숫자)도 받는다(Admin 로그인 화면
+  라벨 "이메일 또는 아이디"). 가입·비밀번호 재설정 규칙은 바뀌지 않는다.
+
 - **(fix)** Admin provider sync 화면이 kor-travel-map에 갱신 정책(refresh policy)이 하나라도 등록된 뒤부터
   모든 dataset을 불러오지 못하고 502로 실패하던 문제를 고쳤다. Pinvi가 Map 계약에 있는 정책 식별자
   필드(`provider_dataset_id`)를 받지 않아서였다. 이제 정책이 있는 dataset도 그대로 표시되며, 계약 불일치가

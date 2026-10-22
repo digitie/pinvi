@@ -22,14 +22,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from alembic import command
 from app.db import session as db_session
 from app.services.bootstrap_admin import (
+    BootstrapAdminCredential,
     BootstrapAdminError,
     BootstrapAdminResult,
+    FixedAccountsCredential,
     ensure_bootstrap_admin,
+    ensure_fixed_accounts,
     read_bootstrap_admin_credential_file,
+    read_fixed_accounts_file,
 )
 
 CREDENTIAL_FILE_ENV = "PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE"
 CREDENTIAL_BINDING_ENV = "PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_SHA256"
+# 선택: 고정 관리자/테스트 사용자 credential file. 설정되면 bootstrap마다 두 계정을 다시 맞춘다.
+FIXED_ACCOUNTS_FILE_ENV = "PINVI_BOOTSTRAP_FIXED_ACCOUNTS_FILE"
 CANDIDATE_HEAD_SCHEMA = "pinvi.candidate-head.v1"
 _REVISION_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -46,6 +52,17 @@ _ERROR_PHASE_BY_CODE = {
     "credential_file_path_invalid": "credential_file",
     "credential_file_size_invalid": "credential_file",
     "credential_file_unavailable": "credential_file",
+    "fixed_accounts_conflict": "fixed_accounts_file",
+    "fixed_accounts_file_json_invalid": "fixed_accounts_file",
+    "fixed_accounts_file_link_count_invalid": "fixed_accounts_file",
+    "fixed_accounts_file_missing": "fixed_accounts_file",
+    "fixed_accounts_file_mode_invalid": "fixed_accounts_file",
+    "fixed_accounts_file_not_regular": "fixed_accounts_file",
+    "fixed_accounts_file_owner_mismatch": "fixed_accounts_file",
+    "fixed_accounts_file_path_invalid": "fixed_accounts_file",
+    "fixed_accounts_file_size_invalid": "fixed_accounts_file",
+    "fixed_accounts_file_unavailable": "fixed_accounts_file",
+    "fixed_accounts_file_changed": "fixed_accounts_file",
     "migration_failed": "migration",
     "schema_revision_mismatch": "schema_check",
     "schema_version_invalid": "schema_check",
@@ -59,13 +76,20 @@ class PinviAdminBootstrapResult:
     action: str
     pinvi_head: str
     admin_email_sha256: str
+    fixed_admin_action: str | None = None
+    fixed_test_user_action: str | None = None
 
     def json_object(self) -> dict[str, str]:
-        return {
+        payload = {
             "action": self.action,
             "admin_email_sha256": self.admin_email_sha256,
             "pinvi_head": self.pinvi_head,
         }
+        if self.fixed_admin_action is not None:
+            payload["fixed_admin_action"] = self.fixed_admin_action
+        if self.fixed_test_user_action is not None:
+            payload["fixed_test_user_action"] = self.fixed_test_user_action
+        return payload
 
 
 def _api_project_root() -> Path:
@@ -205,11 +229,28 @@ async def get_database_pinvi_head(db: AsyncSession) -> str:
     return rows[0]
 
 
+def _reject_fixed_account_conflict(
+    credential: BootstrapAdminCredential,
+    fixed_accounts: FixedAccountsCredential | None,
+) -> None:
+    """The primary admin and the fixed accounts must be distinct users.
+
+    Otherwise each deploy would fight over the same row (password flapping, or the test-user
+    role reset stripping the primary admin role).
+    """
+
+    if fixed_accounts is not None and (
+        credential.email.strip().casefold() in fixed_accounts.identities()
+    ):
+        raise BootstrapAdminError("fixed_accounts_conflict", "fixed_accounts_file")
+
+
 async def run_admin_bootstrap_transaction(
     *,
     expected_head: str,
     credential_file: Path,
     expected_binding: str | None = None,
+    fixed_accounts: FixedAccountsCredential | None = None,
 ) -> PinviAdminBootstrapResult:
     if expected_binding is None:
         expected_binding = os.environ.get(CREDENTIAL_BINDING_ENV)
@@ -226,14 +267,23 @@ async def run_admin_bootstrap_transaction(
                 or credential.binding_sha256 != expected_binding
             ):
                 raise BootstrapAdminError("credential_file_changed", "credential_file")
+            _reject_fixed_account_conflict(credential, fixed_accounts)
             result: BootstrapAdminResult = await ensure_bootstrap_admin(
                 db,
                 credential=credential,
             )
+            fixed_admin_action: str | None = None
+            fixed_test_user_action: str | None = None
+            if fixed_accounts is not None:
+                fixed = await ensure_fixed_accounts(db, credential=fixed_accounts)
+                fixed_admin_action = fixed.admin_action
+                fixed_test_user_action = fixed.test_user_action
             return PinviAdminBootstrapResult(
                 action=result.action,
                 pinvi_head=database_head,
                 admin_email_sha256=result.admin_email_sha256,
+                fixed_admin_action=fixed_admin_action,
+                fixed_test_user_action=fixed_test_user_action,
             )
 
 
@@ -241,11 +291,13 @@ async def _run_admin_phase(
     expected_head: str,
     credential_file: Path,
     expected_binding: str | None = None,
+    fixed_accounts: FixedAccountsCredential | None = None,
 ) -> PinviAdminBootstrapResult:
     return await run_admin_bootstrap_transaction(
         expected_head=expected_head,
         credential_file=credential_file,
         expected_binding=expected_binding,
+        fixed_accounts=fixed_accounts,
     )
 
 
@@ -254,6 +306,13 @@ def _credential_file_from_env() -> Path:
     if value is None or not value.strip():
         raise BootstrapAdminError("credential_file_env_missing", "credential_file")
     return Path(value)
+
+
+def _fixed_accounts_from_env() -> FixedAccountsCredential | None:
+    value = os.environ.get(FIXED_ACCOUNTS_FILE_ENV)
+    if value is None or not value.strip():
+        return None
+    return read_fixed_accounts_file(Path(value))
 
 
 def _validated_credential_binding(credential_file: Path) -> str:
@@ -269,10 +328,14 @@ def _validated_credential_binding(credential_file: Path) -> str:
 def run_pinvi_admin_bootstrap() -> PinviAdminBootstrapResult:
     credential_file = _credential_file_from_env()
     expected_binding = _validated_credential_binding(credential_file)
+    # 고정 계정 파일은 migration 전에 한 번만 읽어 검증하고, 같은 값을 transaction에 넘긴다.
+    fixed_accounts = _fixed_accounts_from_env()
     expected_head = get_static_pinvi_head()
     try:
         run_alembic_upgrade_head()
-        return asyncio.run(_run_admin_phase(expected_head, credential_file, expected_binding))
+        return asyncio.run(
+            _run_admin_phase(expected_head, credential_file, expected_binding, fixed_accounts)
+        )
     finally:
         asyncio.run(db_session.engine.dispose())
 

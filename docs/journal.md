@@ -1,3 +1,23 @@
+## 2026-10-22 (claude) — 고정 관리자·테스트 사용자를 배포마다 재적용 (브랜치 `feat/fixed-admin-and-test-account`)
+
+소유자 요청: Admin 기본 로그인을 고정 ID·비밀번호로, 테스트용 일반 사용자 1명을 두고 둘 다 1회성이 아니라 앞으로도 유지.
+저장소가 공개이므로 값은 커밋하지 않고 운영 호스트 파일에만 둔다.
+
+- `pinvi-admin-bootstrap`(Manager가 매 pinned rebuild에서 실행)에 선택 env `PINVI_BOOTSTRAP_FIXED_ACCOUNTS_FILE`을 더했다.
+  owner-only JSON(`admin.login/password`, `test_user.email/password`)을 bootstrap credential file과 같은 파일 검사로 migration
+  전에 한 번 읽고, 같은 transaction에서 고정 관리자(기존 `ensure_bootstrap_admin` 재사용)와 테스트 사용자(활성·인증, roles 정확히
+  `['user']`, 비밀번호·권한이 바뀌면 token version 증가·세션 폐기)를 다시 맞춘다. 식별자 충돌(대소문자 무시)은
+  `fixed_accounts_conflict`, 파일 오류는 `fixed_accounts_file_*`.
+- 비밀번호 최소 길이 예외는 이 파일 모델 두 개에만 있다. bootstrap admin credential·가입·재설정은 8자 유지(테스트로 고정).
+- 로그인 ID: DB의 `users.email`에는 형식 제약이 없고 막던 것은 `LoginRequest`의 `EmailStr`뿐이었다. `email` 필드 이름은 그대로 두고
+  이메일 또는 `^[a-z][a-z0-9]{2,31}$`를 받게 했다(zod 동기, Admin 로그인 라벨 "이메일 또는 아이디"). 가입은 이메일만이라 이런
+  계정은 고정 계정 파일로만 생긴다.
+- Manager 짝 PR: `KTDM_PINVI_FIXED_ACCOUNTS_FILE`(호스트 경로)이 있으면 bootstrap one-shot에 read-only mount + env, 파일 조건은
+  `state_initialization`에서 미리 검사.
+- 적대 리뷰(독립 1인) 반영: Manager 사전 검사 강화(owner/0600/link 1/크기, rebuild 초반), 오류 코드 분리, zod `.max(320)`, runbook에
+  기존 행 인수·테스트 메일 도메인 통제·옛 이미지 무시 주의. 수용한 위험: 고정 관리자 ID가 추측 가능하고 비밀번호가 짧다(테스트
+  배포라 소유자 의도), 옛 PinVi 이미지는 env를 조용히 무시한다(핀 이동 뒤 설정).
+
 ## 2026-10-20 (claude) — Admin ETL 정적 schedule·sensor 목록을 정의에 묶음 (T-377, 브랜치 `fix/t377-admin-etl-schedules-from-definitions`)
 
 `/admin/etl/summary`의 `pinvi.schedules`(정적 5)·`pinvi.sensors`(빈 목록)가 같은 payload의 live `schedule_count`(7)·`sensor_count`(6)와

@@ -97,6 +97,46 @@ PINVI_BOOTSTRAP_ADMIN_CREDENTIAL_FILE=/run/pinvi/bootstrap-admin.json \
 성공/실패 출력은 JSON이며 password 원문과 raw email을 출력하지 않는다. 성공 시 `action`,
 `pinvi_head`, `admin_email_sha256`만 남긴다.
 
+### 고정 관리자·테스트 사용자 (선택, 배포마다 재적용)
+
+`PINVI_BOOTSTRAP_FIXED_ACCOUNTS_FILE`이 설정되면 같은 one-shot이 위 bootstrap admin과 **별개로**
+고정 관리자 1명과 일반 테스트 사용자 1명을 매 실행마다 다시 맞춘다. 값은 저장소에 두지 않고 운영
+호스트의 owner-only 파일에만 둔다. 파일 검사(절대 경로, `O_NOFOLLOW`, regular file, owner=euid,
+mode `0600`, hardlink 1, 4 KiB 이하)는 bootstrap credential file과 같다. 두 항목은 각각 선택이지만
+적어도 하나는 있어야 한다.
+
+```json
+{
+  "admin": { "login": "<login-id-or-email>", "password": "<password>" },
+  "test_user": { "email": "<email>", "password": "<password>" }
+}
+```
+
+- `admin.login`은 이메일 또는 고정 로그인 ID(`^[a-z][a-z0-9]{2,31}$`, `@` 없음)다. 로그인 API
+  (`POST /auth/login`, `/mobile/auth/login`)의 `email` 필드가 같은 두 형식을 받는다. 가입·재설정은
+  여전히 이메일만 받으므로 로그인 ID 계정은 이 파일로만 생긴다.
+- **비밀번호 정책 예외**: 이 파일의 두 계정에만 최소 길이 8자를 적용하지 않는다(1~200자).
+  bootstrap admin credential, 가입, 비밀번호 재설정은 그대로 8자 이상이다.
+- 고정 관리자: bootstrap admin과 같은 규칙으로 생성·복구한다(`roles`에 `user`,`admin` 보장, 활성·인증
+  상태 복구). 비밀번호가 파일 값과 다르면(콘솔에서 바꿨어도) 파일 값으로 되돌리고 세션을 폐기한다.
+- 테스트 사용자: 활성·이메일 인증 완료 상태의 일반 사용자로 생성·복구하며 `roles`를 정확히
+  `['user']`로 되돌린다(콘솔에서 준 권한은 다음 배포에 회수, 그때 세션도 폐기). 비밀번호도 파일 값으로
+  되돌린다.
+- 두 식별자는 같은 이메일/ID의 **기존 행을 그대로 인수**한다(비밀번호·권한·세션만 다시 맞춘다). 테스트
+  사용자 이메일은 소유자가 통제하는 메일 도메인이어야 한다 — 그 메일함을 가진 사람은 다음 배포 전까지
+  비밀번호 재설정으로 계정을 가져갈 수 있다.
+- 파일 오류는 `fixed_accounts_file_*` 코드(phase `fixed_accounts_file`)로 나와 bootstrap credential
+  file 오류(`credential_file_*`)와 구분된다.
+- bootstrap admin·고정 관리자·테스트 사용자의 식별자가 하나라도 겹치면(대소문자 무시)
+  `fixed_accounts_conflict`로 실패한다 — 같은 행을 두 규칙이 번갈아 고치지 않게 하기 위함이다.
+- 파일은 migration 전에 한 번 읽어 검증한다. 잘못된 파일은 schema 변경 없이 typed error로 끝난다.
+- 성공 출력에 `fixed_admin_action`·`fixed_test_user_action`(`created|updated|unchanged`)이 더해진다.
+  식별자·비밀번호는 출력하지 않는다.
+
+운영 배선: Manager의 `pinvi-admin-bootstrap` 실행이 이 파일을 read-only로 mount하고 위 환경변수를
+넘긴다(Manager `.env`의 `KTDM_PINVI_FIXED_ACCOUNTS_FILE`). 설정하지 않으면 기존 동작과 같다. 이 기능이
+없는 옛 PinVi 이미지는 환경변수를 조용히 무시하므로, 이 변경이 들어간 PinVi로 핀을 옮긴 뒤 설정한다.
+
 N150에서 계정 존재 여부만 확인:
 
 ```bash

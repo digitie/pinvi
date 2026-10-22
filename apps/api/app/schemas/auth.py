@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic.networks import validate_email
 
 from app.schemas.consent import REQUIRED_CONSENTS, ConsentItem
 
@@ -62,9 +64,28 @@ class VerifyEmailResendResponse(BaseModel):
     accepted: bool = True
 
 
+# 이메일이 아닌 로그인 ID. 가입 경로(`RegisterRequest`)는 여전히 이메일만 받으므로 이런 ID를
+# 가진 계정은 `pinvi-admin-bootstrap`의 고정 계정 파일로만 생긴다.
+LOGIN_ID_PATTERN = re.compile(r"^[a-z][a-z0-9]{2,31}$")
+
+
+def normalize_login_identifier(value: str) -> str:
+    """이메일이면 `EmailStr`과 같은 정규화를, 아니면 고정 로그인 ID 형식만 허용한다."""
+
+    if "@" not in value and LOGIN_ID_PATTERN.fullmatch(value):
+        return value
+    return validate_email(value)[1]
+
+
 class LoginRequest(BaseModel):
-    email: EmailStr
+    # 필드 이름은 기존 계약(`email`)을 유지한다. 값은 이메일 또는 고정 로그인 ID다.
+    email: str = Field(min_length=1, max_length=320)
     password: str = Field(min_length=1)
+
+    @field_validator("email")
+    @classmethod
+    def _login_identifier(cls, value: str) -> str:
+        return normalize_login_identifier(value)
 
 
 class PasswordResetRequest(BaseModel):
