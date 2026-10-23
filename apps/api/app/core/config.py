@@ -811,6 +811,10 @@ class Settings(BaseSettings):
         ge=1,
         le=200,
     )  # /v1/features/batch cap
+    # ADR-076 — 지도 transport 레이어(주유소·휴게소·고속도로 돌발·공항)를 Map
+    # `/v1/service/transport/*`(service token 필요)로 읽는다. off(기본)면 `/transport/status`가
+    # `enabled=false`를 주고 Map을 부르지 않는다 — 클라이언트는 레이어 컨트롤을 숨긴다.
+    pinvi_kor_travel_map_transport_enabled: bool = False
 
     # cache target generation/outbox paired worker (ADR-058). false여도 DB projection은 계속된다.
     pinvi_kor_travel_map_cache_target_sync_enabled: bool = False
