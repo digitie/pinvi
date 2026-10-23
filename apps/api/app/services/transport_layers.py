@@ -17,10 +17,12 @@ from pydantic import TypeAdapter, ValidationError
 
 from app.clients.kor_travel_map import (
     KorTravelMapBadRequest,
-    KorTravelMapClient,
     KorTravelMapContractError,
     KorTravelMapError,
     KorTravelMapFeatureNotFound,
+)
+from app.clients.kor_travel_map_transport import (
+    KorTravelMapTransportClient,
     KorTravelMapTransportCursorExpired,
     KorTravelMapTransportUnavailable,
     TransportDatasetPath,
@@ -131,7 +133,7 @@ def _optional_freshness(raw: object, what: str) -> TransportFreshness | None:
 
 
 async def _layer_in_bounds(
-    client: KorTravelMapClient,
+    client: KorTravelMapTransportClient,
     layer: TransportLayer,
     bbox: tuple[float, float, float, float] | None,
     limit: int,
@@ -140,7 +142,7 @@ async def _layer_in_bounds(
         return TransportLayerResult(layer=layer, status="ok")
     try:
         data = await asyncio.wait_for(
-            client.transport_list(LAYER_DATASET_PATH[layer], bbox=bbox, limit=limit),
+            client.list_items(LAYER_DATASET_PATH[layer], bbox=bbox, limit=limit),
             timeout=LAYER_DEADLINE_SECONDS,
         )
         raw_items = data.get("items")
@@ -169,7 +171,7 @@ async def _layer_in_bounds(
 
 
 async def markers_in_bounds(
-    client: KorTravelMapClient,
+    client: KorTravelMapTransportClient,
     *,
     bbox: tuple[float, float, float, float],
     layers: Sequence[TransportLayer],
@@ -186,10 +188,10 @@ def disabled_layers(layers: Sequence[TransportLayer]) -> list[TransportLayerResu
     return [TransportLayerResult(layer=layer, status="disabled") for layer in layers]
 
 
-async def layer_status(client: KorTravelMapClient) -> list[TransportLayerStatus]:
+async def layer_status(client: KorTravelMapTransportClient) -> list[TransportLayerStatus]:
     """Map `/status` → 레이어별 가용성. Map 전체 장애도 레이어별 ``available=false``로 강등한다."""
     try:
-        data = await asyncio.wait_for(client.transport_status(), timeout=LAYER_DEADLINE_SECONDS)
+        data = await asyncio.wait_for(client.status(), timeout=LAYER_DEADLINE_SECONDS)
         raw_datasets = data.get("datasets")
         if not isinstance(raw_datasets, list):
             raise TransportContractError("Map transport status datasets가 목록이 아닙니다.")
@@ -239,10 +241,10 @@ async def layer_status(client: KorTravelMapClient) -> list[TransportLayerStatus]
 
 
 async def detail(
-    client: KorTravelMapClient, layer: TransportLayer, feature_id: str
+    client: KorTravelMapTransportClient, layer: TransportLayer, feature_id: str
 ) -> TransportDetailResponse:
     """단건. Map 오류는 그대로 올린다(라우터가 404/503으로 바꾼다)."""
-    data = await client.transport_detail(LAYER_DATASET_PATH[layer], feature_id)
+    data = await client.detail(LAYER_DATASET_PATH[layer], feature_id)
     item = _item(layer, data.get("item"))
     if item.feature_id != feature_id:
         raise TransportContractError("Map transport 상세 feature_id가 요청과 다릅니다.")
@@ -264,7 +266,7 @@ _PRICES_ADAPTER: Final[TypeAdapter[list[FuelPrice]]] = TypeAdapter(list[FuelPric
 
 
 async def fuel_price_history(
-    client: KorTravelMapClient,
+    client: KorTravelMapTransportClient,
     feature_id: str,
     *,
     product_key: str | None,
@@ -272,7 +274,7 @@ async def fuel_price_history(
     now: datetime,
 ) -> FuelPriceHistoryResponse:
     """주유소 가격 추이. 추이가 없으면 ``status=unavailable``(오류 아님)."""
-    data = await client.transport_fuel_price_history(feature_id, since=now - timedelta(days=days))
+    data = await client.fuel_price_history(feature_id, since=now - timedelta(days=days))
     history = data.get("history")
     if not isinstance(history, Mapping) or history.get("status") not in (
         "available",

@@ -22,7 +22,6 @@ import math
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Annotated, Any, Literal
 
 import httpx
@@ -120,26 +119,6 @@ class KorTravelMapRateLimited(KorTravelMapError):
     def __init__(self, message: str, *, retry_after_seconds: int | None = None) -> None:
         super().__init__(message)
         self.retry_after_seconds = retry_after_seconds
-
-
-class KorTravelMapTransportUnavailable(KorTravelMapError):
-    """transport 상태 표면을 지금 읽을 수 없음(ADR-076 D2).
-
-    ``code``는 Map problem ``code``(``TRANSPORT_STATE_NOT_LOADED``·``TRANSPORT_STATE_UNAVAILABLE`` 등),
-    401/403이면 ``UPSTREAM_AUTH``, timeout·연결 실패면 ``None``이다.
-    """
-
-    def __init__(self, message: str, *, code: str | None = None) -> None:
-        super().__init__(message)
-        self.code = code
-
-
-class KorTravelMapTransportCursorExpired(KorTravelMapError):
-    """409 ``TRANSPORT_STATE_GENERATION_EXPIRED`` — cursor의 세대가 사라졌다. 처음부터 다시."""
-
-
-#: Map transport 상태 데이터셋 경로(``/v1/service/transport/{segment}``).
-TransportDatasetPath = Literal["fuel-stations", "rest-areas", "highway-incidents", "airports"]
 
 
 @dataclass(frozen=True)
@@ -806,112 +785,6 @@ class KorTravelMapClient:
         if resp.status_code == status.HTTP_404_NOT_FOUND:
             return None
         return self._data(resp)
-
-    # ── transport 상태 표면 (openapi.service.json, Map ADR-114 / PinVi ADR-076) ──
-
-    def _transport_data(self, resp: httpx.Response) -> tuple[dict[str, Any], dict[str, Any]]:
-        """transport 응답 → ``(data, meta)``. 오류 의미가 feature 경로와 다르다(ADR-076 D2).
-
-        409는 rate limit이 아니라 cursor 세대 만료이고, 5xx는 재시도하지 않은 채 problem ``code``를
-        그대로 실어 올린다(``TRANSPORT_STATE_NOT_LOADED``는 결정적이다).
-        """
-        sc = resp.status_code
-        path = resp.request.url.path
-        if sc >= status.HTTP_500_INTERNAL_SERVER_ERROR:
-            raise KorTravelMapTransportUnavailable(
-                f"kor-travel-map transport {sc} ({path})", code=_error_code(resp)
-            )
-        if sc in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN):
-            # 운영 Map은 service token을 강제한다 — 토큰 미주입(Manager compose)이 가장 흔한 원인.
-            logger.warning("kor_travel_map.transport_auth_rejected", extra={"status": sc})
-            raise KorTravelMapTransportUnavailable(
-                f"kor-travel-map transport {sc} ({path})", code="UPSTREAM_AUTH"
-            )
-        if sc == status.HTTP_404_NOT_FOUND:
-            raise KorTravelMapFeatureNotFound(
-                "transport 항목을 찾을 수 없습니다.", code=_error_code(resp)
-            )
-        if sc == status.HTTP_409_CONFLICT:
-            raise KorTravelMapTransportCursorExpired(f"kor-travel-map transport 409 ({path})")
-        if sc >= status.HTTP_400_BAD_REQUEST:
-            raise KorTravelMapBadRequest(f"kor-travel-map transport {sc}", code=_error_code(resp))
-        return self._decode_envelope(resp)
-
-    async def _transport_get(
-        self, path: str, params: Mapping[str, Any] | None = None
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        try:
-            resp = await self._send("GET", path, params=params, retry=False)
-        except KorTravelMapUnavailable as exc:
-            raise KorTravelMapTransportUnavailable(str(exc)) from exc
-        return self._transport_data(resp)
-
-    async def transport_list(
-        self,
-        dataset: TransportDatasetPath,
-        *,
-        bbox: tuple[float, float, float, float] | None = None,
-        near: tuple[float, float, float] | None = None,
-        limit: int | None = None,
-        cursor: str | None = None,
-    ) -> dict[str, Any]:
-        """transport 목록. data = ``{items, truncated, freshness, ...}`` + threaded ``next_cursor``.
-
-        ``bbox = (min_lon, min_lat, max_lon, max_lat)``, ``near = (lon, lat, radius_m)``. Map은 둘을 함께
-        받지 않고 cursor는 조건 없는 순회에만 받는다(422) — 그 조합을 여기서 먼저 막는다.
-        """
-        if bbox is not None and near is not None:
-            raise ValueError("bbox와 near는 함께 쓸 수 없습니다.")
-        if cursor is not None and (bbox is not None or near is not None):
-            raise ValueError("cursor는 조건 없는 목록 순회에만 씁니다.")
-        params: dict[str, Any] = {}
-        if bbox is not None:
-            params.update(
-                {"min_lon": bbox[0], "min_lat": bbox[1], "max_lon": bbox[2], "max_lat": bbox[3]}
-            )
-        if near is not None:
-            params.update({"lon": near[0], "lat": near[1], "radius_m": near[2]})
-        if limit is not None:
-            params["limit"] = limit
-        if cursor is not None:
-            params["cursor"] = cursor
-        data, meta = await self._transport_get(f"/v1/service/transport/{dataset}", params)
-        return self._thread_page(data, meta)
-
-    async def transport_detail(
-        self, dataset: TransportDatasetPath, feature_id: str
-    ) -> dict[str, Any]:
-        """transport 단건. data = ``{item, freshness, ...}``. 404 → ``KorTravelMapFeatureNotFound``."""
-        data, _meta = await self._transport_get(f"/v1/service/transport/{dataset}/{feature_id}")
-        return data
-
-    async def transport_fuel_price_history(
-        self,
-        feature_id: str,
-        *,
-        since: datetime | None = None,
-        limit: int | None = None,
-    ) -> dict[str, Any]:
-        """주유소 가격 추이. data = ``{feature_id, current_prices, history, freshness, ...}``.
-
-        ``history.status``가 ``unavailable``이어도 200이다(Map이 transport 장애를 흡수한다).
-        """
-        params: dict[str, Any] = {}
-        if since is not None:
-            if since.tzinfo is None:
-                raise ValueError("since는 aware datetime이어야 합니다.")
-            params["since"] = since.isoformat()
-        if limit is not None:
-            params["limit"] = limit
-        data, _meta = await self._transport_get(
-            f"/v1/service/transport/fuel-stations/{feature_id}/price-history", params
-        )
-        return data
-
-    async def transport_status(self) -> dict[str, Any]:
-        """Valkey 연결과 데이터셋별 적재·신선도. data = ``{store, datasets}``."""
-        data, _meta = await self._transport_get("/v1/service/transport/status")
-        return data
 
     async def healthz(self) -> dict[str, Any]:
         """liveness. envelope 없이 raw 객체일 수 있어 그대로 반환."""

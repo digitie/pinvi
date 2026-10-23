@@ -22,6 +22,7 @@ from app.clients.kor_travel_map import (
     KorTravelMapFeatureNotFound,
     OptionalKorTravelMapHttpClientDep,
 )
+from app.clients.kor_travel_map_transport import KorTravelMapTransportClient
 from app.core.bbox import MAX_ZOOM, MIN_ZOOM, parse_bbox
 from app.core.config import settings
 from app.core.deps import CurrentUserId
@@ -62,12 +63,12 @@ def _unavailable(code: str = "TRANSPORT_UNAVAILABLE") -> HTTPException:
     )
 
 
-def _require_client(client: KorTravelMapClient | None) -> KorTravelMapClient:
+def _require_client(client: KorTravelMapClient | None) -> KorTravelMapTransportClient:
     if not settings.pinvi_kor_travel_map_transport_enabled:
         raise _unavailable("TRANSPORT_DISABLED")
     if client is None:
         raise _unavailable()
-    return client
+    return KorTravelMapTransportClient(client)
 
 
 def _raise_for(exc: KorTravelMapError) -> NoReturn:
@@ -120,7 +121,10 @@ async def transport_status(
             )
         )
     return Envelope.of(
-        TransportStatusResponse(enabled=True, layers=await transport_layers.layer_status(client))
+        TransportStatusResponse(
+            enabled=True,
+            layers=await transport_layers.layer_status(KorTravelMapTransportClient(client)),
+        )
     )
 
 
@@ -145,7 +149,10 @@ async def transport_markers_in_bounds(
         ]
     else:
         results = await transport_layers.markers_in_bounds(
-            client, bbox=bbox_obj.as_tuple(), layers=wanted, limit=limit
+            KorTravelMapTransportClient(client),
+            bbox=bbox_obj.as_tuple(),
+            layers=wanted,
+            limit=limit,
         )
     return Envelope.of(TransportMarkersInBoundsResponse(bbox=bbox_obj, zoom=zoom, layers=results))
 

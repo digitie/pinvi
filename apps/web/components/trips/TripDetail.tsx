@@ -1936,6 +1936,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
             selectedPoiId={selectedPoiId}
             showFeatures
             hiddenFeatureIds={plannedFeatureIds}
+            transportLayers
             canAddFeature={selectedDay != null && !busy}
             onSelectPoi={handleSelectPoi}
             onMarkerContextMenu={handleMarkerContextMenu}

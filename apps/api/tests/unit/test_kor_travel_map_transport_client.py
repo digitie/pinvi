@@ -13,9 +13,12 @@ from app.clients.kor_travel_map import (
     KorTravelMapClient,
     KorTravelMapContractError,
     KorTravelMapFeatureNotFound,
+    KorTravelMapUnavailable,
+)
+from app.clients.kor_travel_map_transport import (
+    KorTravelMapTransportClient,
     KorTravelMapTransportCursorExpired,
     KorTravelMapTransportUnavailable,
-    KorTravelMapUnavailable,
 )
 from app.core.time import KST
 from tests import transport_map_fixtures as fx
@@ -23,7 +26,7 @@ from tests import transport_map_fixtures as fx
 Handler = Callable[[httpx.Request], httpx.Response]
 
 
-def _client(handler: Handler, *, token: str = "svc-token") -> KorTravelMapClient:
+def _map(handler: Handler, *, token: str = "svc-token") -> KorTravelMapClient:
     http = httpx.AsyncClient(base_url="http://map.test", transport=httpx.MockTransport(handler))
     return KorTravelMapClient(
         http,
@@ -32,6 +35,10 @@ def _client(handler: Handler, *, token: str = "svc-token") -> KorTravelMapClient
         max_attempts=3,
         backoff_base_seconds=0.0,
     )
+
+
+def _client(handler: Handler, *, token: str = "svc-token") -> KorTravelMapTransportClient:
+    return KorTravelMapTransportClient(_map(handler, token=token))
 
 
 def _recorder(response: httpx.Response) -> tuple[Handler, list[httpx.Request]]:
@@ -48,7 +55,7 @@ async def test_list_bbox_sends_service_token_and_threads_cursor() -> None:
     body = fx.list_body("rest-areas")
     body["meta"]["page"]["next_cursor"] = None
     handler, seen = _recorder(httpx.Response(200, json=body))
-    data = await _client(handler).transport_list(
+    data = await _client(handler).list_items(
         "rest-areas", bbox=(126.9, 37.4, 127.1, 37.6), limit=50
     )
     request = seen[0]
@@ -69,7 +76,7 @@ async def test_list_bbox_sends_service_token_and_threads_cursor() -> None:
 
 async def test_list_without_service_token_sends_no_public_key() -> None:
     handler, seen = _recorder(httpx.Response(200, json=fx.list_body("airports")))
-    await _client(handler, token="").transport_list("airports", near=(126.8, 37.5, 5000.0))
+    await _client(handler, token="").list_items("airports", near=(126.8, 37.5, 5000.0))
     assert "X-Kor-Travel-Map-Api-Key" not in seen[0].headers
     assert "X-Kor-Travel-Map-Service-Token" not in seen[0].headers
     assert dict(seen[0].url.params) == {"lon": "126.8", "lat": "37.5", "radius_m": "5000.0"}
@@ -78,9 +85,9 @@ async def test_list_without_service_token_sends_no_public_key() -> None:
 async def test_list_rejects_combinations_map_would_422() -> None:
     client = _client(_recorder(httpx.Response(200, json={}))[0])
     with pytest.raises(ValueError):
-        await client.transport_list("airports", bbox=(1, 2, 3, 4), near=(1, 2, 3))
+        await client.list_items("airports", bbox=(1, 2, 3, 4), near=(1, 2, 3))
     with pytest.raises(ValueError):
-        await client.transport_list("airports", bbox=(1, 2, 3, 4), cursor="abc")
+        await client.list_items("airports", bbox=(1, 2, 3, 4), cursor="abc")
 
 
 async def test_503_not_loaded_is_not_retried_and_keeps_code() -> None:
@@ -88,7 +95,7 @@ async def test_503_not_loaded_is_not_retried_and_keeps_code() -> None:
         httpx.Response(503, json=fx.problem_body(503, "TRANSPORT_STATE_NOT_LOADED"))
     )
     with pytest.raises(KorTravelMapTransportUnavailable) as caught:
-        await _client(handler).transport_list("fuel-stations", bbox=(126, 37, 127, 38))
+        await _client(handler).list_items("fuel-stations", bbox=(126, 37, 127, 38))
     assert caught.value.code == "TRANSPORT_STATE_NOT_LOADED"
     assert len(seen) == 1
 
@@ -102,7 +109,7 @@ async def test_timeout_is_not_retried() -> None:
         raise httpx.ReadTimeout("slow", request=request)
 
     with pytest.raises(KorTravelMapTransportUnavailable) as caught:
-        await _client(handler).transport_status()
+        await _client(handler).status()
     assert caught.value.code is None
     assert calls == 1
 
@@ -113,22 +120,22 @@ async def test_auth_rejection_is_upstream_auth(status_code: int) -> None:
         httpx.Response(status_code, json=fx.problem_body(status_code, "UNAUTHORIZED"))
     )
     with pytest.raises(KorTravelMapTransportUnavailable) as caught:
-        await _client(handler).transport_status()
+        await _client(handler).status()
     assert caught.value.code == "UPSTREAM_AUTH"
 
 
 async def test_404_409_422_mapping() -> None:
     handler, _ = _recorder(httpx.Response(404, json=fx.problem_body(404, "NOT_FOUND")))
     with pytest.raises(KorTravelMapFeatureNotFound):
-        await _client(handler).transport_detail("airports", fx.AIRPORT_ID)
+        await _client(handler).detail("airports", fx.AIRPORT_ID)
     handler, _ = _recorder(
         httpx.Response(409, json=fx.problem_body(409, "TRANSPORT_STATE_GENERATION_EXPIRED"))
     )
     with pytest.raises(KorTravelMapTransportCursorExpired):
-        await _client(handler).transport_list("airports", cursor="c1")
+        await _client(handler).list_items("airports", cursor="c1")
     handler, _ = _recorder(httpx.Response(422, json=fx.problem_body(422, "VALIDATION_ERROR")))
     with pytest.raises(KorTravelMapBadRequest) as caught:
-        await _client(handler).transport_list("airports", bbox=(126, 37, 127, 38))
+        await _client(handler).list_items("airports", bbox=(126, 37, 127, 38))
     assert caught.value.code == "VALIDATION_ERROR"
 
 
@@ -137,13 +144,13 @@ async def test_success_body_is_parsed_strictly() -> None:
         httpx.Response(200, content=b'{"data": {"items": [], "items": []}, "meta": {}}')
     )
     with pytest.raises(KorTravelMapContractError):
-        await _client(handler).transport_list("airports")
+        await _client(handler).list_items("airports")
 
 
 async def test_price_history_since_is_aware_and_encoded() -> None:
     handler, seen = _recorder(httpx.Response(200, json=fx.history_body(available=False)))
     since = datetime(2026, 10, 1, 9, 0, tzinfo=KST)
-    data = await _client(handler).transport_fuel_price_history(fx.FUEL_STATION_ID, since=since)
+    data = await _client(handler).fuel_price_history(fx.FUEL_STATION_ID, since=since)
     request = seen[0]
     assert (
         request.url.path
@@ -153,9 +160,7 @@ async def test_price_history_since_is_aware_and_encoded() -> None:
     assert b"%2B09%3A00" in request.url.query
     assert data["history"]["status"] == "unavailable"
     with pytest.raises(ValueError):
-        await _client(handler).transport_fuel_price_history(
-            fx.FUEL_STATION_ID, since=datetime(2026, 10, 1)
-        )
+        await _client(handler).fuel_price_history(fx.FUEL_STATION_ID, since=datetime(2026, 10, 1))
 
 
 async def test_feature_paths_keep_retrying_5xx() -> None:
@@ -168,5 +173,5 @@ async def test_feature_paths_keep_retrying_5xx() -> None:
         return httpx.Response(503)
 
     with pytest.raises(KorTravelMapUnavailable):
-        await _client(handler).get_feature("f-1")
+        await _map(handler).get_feature("f-1")
     assert calls == 3

@@ -88,6 +88,14 @@ test('공유 링크로 읽기전용 여행 뷰가 로그인 없이 렌더링된�
     });
   });
 
+  // ADR-076 — 공유 화면은 비로그인이라 /transport/*(로그인 필요)를 부르면 안 된다(401 → 로그인 이동).
+  const transportRequests: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.includes('/transport/')) {
+      transportRequests.push(request.url());
+    }
+  });
+
   await page.goto(`/shared/${tripId}/${token}`);
 
   await expect(page.getByText('공유된 여행')).toBeVisible();
@@ -97,4 +105,5 @@ test('공유 링크로 읽기전용 여행 뷰가 로그인 없이 렌더링된�
 
   // 읽기 전용 — 편집/삭제 버튼이 없다.
   await expect(page.getByRole('button', { name: '마커 편집' })).toHaveCount(0);
+  expect(transportRequests).toEqual([]);
 });

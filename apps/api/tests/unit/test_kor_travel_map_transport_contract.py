@@ -13,7 +13,9 @@ vendored service OpenAPI(`contract/kor-travel-map-openapi-service.json` — byte
 
 from __future__ import annotations
 
+import inspect
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +23,7 @@ import pytest
 from pydantic import BaseModel
 
 from app.api.v1.transport import _MAX_LIMIT
+from app.clients import kor_travel_map_transport
 from app.schemas.transport import (
     AirportItem,
     FuelPrice,
@@ -100,6 +103,14 @@ def test_transport_query_parameters_are_pinned(spec: dict[str, Any]) -> None:
     assert _CLIENT_SENDS["history"] <= _query_names(
         spec, "/v1/service/transport/fuel-stations/{feature_id}/price-history"
     )
+
+
+def test_client_module_requests_exactly_the_transport_paths(spec: dict[str, Any]) -> None:
+    """client 소스의 경로 리터럴 = vendored transport 경로 전체(빠진 경로 = 검사 구멍, 남은 것 = 죽은 핀)."""
+    source = Path(inspect.getsourcefile(kor_travel_map_transport) or "").read_text(encoding="utf-8")
+    requested = set(re.findall(r'"(/v1/[^"]*)"', source))
+    transport_paths = {p for p in spec["paths"] if p.startswith("/v1/service/transport")}
+    assert requested == transport_paths
 
 
 def test_pinvi_limit_matches_map_cap(spec: dict[str, Any]) -> None:

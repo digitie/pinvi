@@ -11,6 +11,7 @@ import httpx
 import pytest
 
 from app.clients.kor_travel_map import KorTravelMapClient, KorTravelMapFeatureNotFound
+from app.clients.kor_travel_map_transport import KorTravelMapTransportClient
 from app.core.time import KST
 from app.schemas.transport import FuelStationItem, RestAreaItem
 from app.services import transport_layers
@@ -19,9 +20,11 @@ from tests import transport_map_fixtures as fx
 Handler = Callable[[httpx.Request], httpx.Response]
 
 
-def _client(handler: Handler) -> KorTravelMapClient:
+def _client(handler: Handler) -> KorTravelMapTransportClient:
     http = httpx.AsyncClient(base_url="http://map.test", transport=httpx.MockTransport(handler))
-    return KorTravelMapClient(http, service_token="t", max_attempts=1, backoff_base_seconds=0.0)
+    return KorTravelMapTransportClient(
+        KorTravelMapClient(http, service_token="t", max_attempts=1, backoff_base_seconds=0.0)
+    )
 
 
 def _by_dataset(responses: dict[str, httpx.Response]) -> tuple[Handler, list[httpx.Request]]:
@@ -84,12 +87,12 @@ async def test_bbox_outside_korea_skips_map() -> None:
 async def test_slow_layer_hits_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(transport_layers, "LAYER_DEADLINE_SECONDS", 0.01)
 
-    class _Slow(KorTravelMapClient):
-        async def transport_list(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    class _Slow(KorTravelMapTransportClient):
+        async def list_items(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
             await asyncio.sleep(1)
             return {}
 
-    slow = _Slow(httpx.AsyncClient())
+    slow = _Slow(KorTravelMapClient(httpx.AsyncClient()))
     results = await transport_layers.markers_in_bounds(
         slow, bbox=(126.0, 37.0, 127.0, 38.0), layers=["airport"], limit=10
     )
