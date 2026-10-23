@@ -21,7 +21,8 @@
 > `14f56255a863d20ea9fc18cc44ea026fe31067ac5b7ffb18717768e61ca11a45`, admin(full)
 > `996e7c9e5ef385f160b1a06836430c3f27d1222122b12b60ded9a9bbb5089bd3`. 변경은 추가뿐(`/v1/service/transport/*` 10 path·schema 32)이고
 > 기존 path·schema는 그대로다. service 핀(`map_release_revision`)을 `e9d0e53c`로 올렸고, user는 불변이라 `11b811d9` 핀을 유지한다.
-> PinVi는 새 transport 경로를 아직 호출하지 않는다.
+> PinVi는 2026-10-23(ADR-076)부터 이 transport 경로를 `app/clients/kor_travel_map_transport.py`로 호출한다 — 계약 게이트는
+> `tests/unit/test_kor_travel_map_transport_contract.py`, PinVi 표면은 `docs/api/transport.md`.
 > **2026-10-16 재vendor 2 (admin/full만)**: Map `2324d9d275e216fde2943fc87879d36903b8bd62`(#1332, T-GR-05)의 admin(full)
 > SHA-256 `acd3f0b11121f7bd057027203e73ebedd172311e280731cad9feb71c0c9d4814` — geo-release item `state_reason` enum에
 > `superseded`·`canceled` 두 값 추가뿐. user/service 불변, PinVi는 이 ops를 호출하지 않는다.

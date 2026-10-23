@@ -310,6 +310,11 @@ class KorTravelMapClient:
     async def aclose(self) -> None:
         await self._http.aclose()
 
+    @property
+    def has_service_token(self) -> bool:
+        """service 표면(transport 등)을 부를 자격이 있는지 — 값은 노출하지 않는다."""
+        return bool(self._service_token)
+
     # ── 내부 ────────────────────────────────────────────────────────────────
 
     def _headers(self, *, allow_public_api_key: bool) -> dict[str, str]:

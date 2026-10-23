@@ -906,7 +906,7 @@ export function FeatureMapView({
             />
             <TransportMarkers
               points={transport.points}
-              selectedId={null}
+              selectedId={transport.selectedId}
               onSelect={openTransportDetail}
             />
             {userLocation && <UserLocationMarker lngLat={userLocation} />}

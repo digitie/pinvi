@@ -186,13 +186,14 @@ bbox·줌·레이어), `markers`에 transport 마커를 더하고 `onFeaturePres
 
 ## 6. 진행
 
-- [ ] 설계 적대 리뷰 1회 반영
-- [ ] API client·서비스·라우터·테스트
-- [ ] packages(schemas·api-client·domain)
-- [ ] web 컨트롤·마커·상세 + 테스트
-- [ ] mobile
-- [ ] 문서(ADR-076, `docs/api/transport.md`, `kor-travel-map-rest-api.md` 현황, journal·resume·tasks, `.env.example`)
-- [ ] 코드 적대 리뷰 2회 반영, PR, CI green
+- [x] 설계 적대 리뷰 1회 반영
+- [x] API client·서비스·라우터·테스트
+- [x] packages(schemas·api-client·domain)
+- [x] web 컨트롤·마커·상세 + 테스트
+- [x] mobile
+- [x] 문서(ADR-076, `docs/api/transport.md`, `kor-travel-map-rest-api.md` 현황, journal·resume·tasks, `.env.example`)
+- [x] 코드 적대 리뷰 2회 반영
+- [ ] PR, CI green
 
 ## 7. 설계 적대 리뷰 반영 (2026-10-23, 1회)
 
@@ -227,3 +228,28 @@ bbox·줌·레이어), `markers`에 transport 마커를 더하고 `onFeaturePres
   않는다. 신선도·줌 게이트·마커 id는 `@pinvi/domain` 단위 테스트가 웹·모바일 공용으로 덮는다.
 - **P2 reason 노출** — 로그인 사용자에게 enum reason(`NOT_LOADED` 등)만 노출하고 Map 원문 메시지는 넘기지 않는다
   (ADR-076에 의도로 적는다).
+
+## 8. 구현 중 바뀐 것
+
+- D2의 "transport 메서드를 `kor_travel_map.py`에" → **별도 모듈 `app/clients/kor_travel_map_transport.py`**. 기존 Map 계약 게이트
+  (`test_kor_travel_map_contract.py`)가 client 모듈의 `"/v1/..."` 리터럴을 user 계약 표와 양방향으로 묶어서, transport 경로를
+  거기 넣으면 그 게이트의 표·probe 전부를 transport로 넓혀야 했다. 별도 모듈은 같은 연결(`KorTravelMapClient` 인스턴스)을 감싸
+  쓰고, 자기 게이트(`test_kor_travel_map_transport_contract.py`)가 경로 리터럴을 vendored transport 경로와 양방향으로 묶는다.
+
+## 9. 코드 적대 리뷰 2회 반영 (2026-10-23)
+
+리뷰 A(API)·B(web/mobile) 각 1회. P0 없음.
+
+- **API**: 범위 밖 bbox가 `BBox` 검증 오류로 500이 되던 경로 → transport 라우터 전용 파서가 국내 범위로 clamp(비숫자만 400).
+  `httpx.DecodingError` 등 `TransportError`가 아닌 httpx 오류도 `unavailable`로. service token이 비어 있으면 Map을 부르지 않고
+  `UPSTREAM_AUTH`. route 404(옛 Map)는 "항목 없음"이 아니라 `UPSTREAM_REJECTED`. 시각 필드는 `AwareDatetime`(naive 거부).
+  상태 freshness 하나·목록 항목 하나가 깨져도 그 레이어/항목만 강등. 가격 추이 `reason`은 Map enum만(모르면
+  `upstream_contract`), 응답 `feature_id` 대조. 계약 게이트: 실제로 나간 query를 MockTransport로 기록, 필드 JSON 타입 포함
+  대조(Map ⊆ PinVi) + 그 대조가 빨개지는지 자기 검사, 데이터셋 이름은 Map 소스 기준 핀(OpenAPI상 자유 문자열).
+- **web**: 요청 실패 시 요청한 레이어를 "불러올 수 없음"으로 표시, 꺼져 있으면 30초 tick 없음, 콜백 identity 고정, 토글 시
+  디바운스 취소, 선택 마커 강조, 컨트롤 터치 타깃 44px·`text-sm`, 가격 추이는 최근 순 정렬 후 자름.
+- **mobile**: 카드 신선도는 카드를 연 시각 기준, `keepPreviousData`·abort signal·레이어당 limit 100, 국내 밖이면 요청 안 함,
+  선택은 id로 들고 현재 결과에서 다시 찾음(레이어를 끄면 카드 닫힘).
+- 남긴 것: e2e로 마커 데이터 흐름(`/transport/markers-in-bounds` → legend)을 보려면 지도 `onLoad`가 필요한데 CI에는 VWorld 키가
+  없다(기존 지도 e2e와 같은 제약). 응답 해석은 `packages/schemas` 단위 테스트(UTC `Z`·null), 표시는 Vitest 컴포넌트 테스트가
+  덮는다. lax 모드 강제 변환(`strict=True`)과 PinVi 쪽 rate limit 추가는 범위 밖으로 둔다(기존 전역 rate limit 미들웨어가 적용).

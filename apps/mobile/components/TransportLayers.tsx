@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { transportApi } from '@pinvi/api-client';
 import type { TransportItem, TransportLayer, TransportLayerResult } from '@pinvi/schemas';
 import {
@@ -27,6 +27,8 @@ export type MapCamera = {
 };
 
 const DEBOUNCE_MS = 400;
+/** 클러스터링이 없는 네이티브 마커라 레이어당 상한을 낮게 둔다. */
+const LIMIT = 100;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -36,7 +38,7 @@ function clamp(value: number, min: number, max: number): number {
  * 카메라 → `lng_min,lat_min,lng_max,lat_max`(국내 범위로 clamp). bounds가 없으면 중심·줌으로 어림한다.
  * 소수 3자리로 반올림해 작은 흔들림이 새 요청이 되지 않게 한다.
  */
-export function cameraBbox(camera: MapCamera): string {
+export function cameraBbox(camera: MapCamera): string | null {
   let west: number;
   let south: number;
   let east: number;
@@ -54,6 +56,8 @@ export function cameraBbox(camera: MapCamera): string {
   const e = clamp(Math.max(west, east), 124, 132);
   const s = clamp(Math.min(south, north), 33, 43);
   const n = clamp(Math.max(south, north), 33, 43);
+  // 화면 전체가 국내 범위 밖이면 clamp 결과가 면적 0이다 — 요청하지 않는다.
+  if (w >= e || s >= n) return null;
   return [w, s, e, n].map((v) => v.toFixed(3)).join(',');
 }
 
@@ -81,9 +85,14 @@ export function useMobileTransport(camera: MapCamera | null) {
 
   const markersQuery = useQuery({
     queryKey: ['transport', 'markers', bbox, zoom, layers.join(',')],
-    queryFn: () =>
-      transportApi(apiClient).markersInBounds({ bbox: bbox ?? '', zoom: zoom ?? 5, layers }),
+    queryFn: ({ signal }) =>
+      transportApi(apiClient).markersInBounds(
+        { bbox: bbox ?? '', zoom: zoom ?? 5, layers, limit: LIMIT },
+        { signal },
+      ),
     enabled: visible && bbox != null && zoom != null && layers.length > 0,
+    // 지도를 옮기는 동안 지난 마커를 유지한다(응답 전 깜빡임 방지).
+    placeholderData: keepPreviousData,
     retry: false,
     staleTime: 60_000,
   });
@@ -118,7 +127,7 @@ export function useMobileTransport(camera: MapCamera | null) {
     [items],
   );
 
-  /** 마커 press id → 항목. transport 마커가 아니면(내 위치 등) null. */
+  /** 마커 press id → 항목. transport 마커가 아니면(내 위치 등)·지금 결과에 없으면 null. */
   const itemForMarker = (id: string): TransportItem | null => {
     const parsed = parseTransportMarkerId(id);
     if (!parsed) return null;
@@ -227,6 +236,8 @@ export function TransportItemCard({
 }) {
   const result = state.results.find((r) => r.layer === item.layer);
   const freshness = result?.freshness;
+  // 카드를 연 시각 — react-query 캐시에서 꺼낸 결과도 받은 뒤 흐른 시간을 더해 센다.
+  const [openedAt] = useState(() => Date.now());
   const prices = pricesOf(item);
   const subtitle = subtitleOf(item);
   return (
@@ -250,7 +261,7 @@ export function TransportItemCard({
       {freshness && state.receivedAt ? (
         <Muted>
           {transportFreshnessLabel(
-            transportFreshnessAgeSeconds(freshness, state.receivedAt, state.receivedAt),
+            transportFreshnessAgeSeconds(freshness, state.receivedAt, openedAt),
           )}
           {freshness.stale ? ' · 오래된 정보' : ''}
         </Muted>

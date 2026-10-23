@@ -12,7 +12,7 @@
 응답은 envelope의 ``data`` dict다(transport-only). PinVi schema 투영은 `services/transport_layers.py`.
 
 **경로는 이 모듈의 문자열 리터럴로만 둔다** — 계약 게이트(`test_kor_travel_map_transport_contract.py`)가
-이 소스의 ``"/v1/..."`` 리터럴을 읽어 vendored OpenAPI와 양방향 대조한다(런타임에 조립하면 게이트가 못 본다).
+이 소스의 v1 경로 문자열 리터럴을 읽어 vendored OpenAPI와 양방향 대조한다(런타임에 조립하면 게이트가 못 본다).
 """
 
 from __future__ import annotations
@@ -90,8 +90,12 @@ class KorTravelMapTransportClient:
                 f"kor-travel-map transport {sc} ({path})", code="UPSTREAM_AUTH"
             )
         if sc == status.HTTP_404_NOT_FOUND:
-            raise KorTravelMapFeatureNotFound(
-                "transport 항목을 찾을 수 없습니다.", code=_error_code(resp)
+            code = _error_code(resp)
+            if code == "NOT_FOUND":
+                raise KorTravelMapFeatureNotFound("transport 항목을 찾을 수 없습니다.", code=code)
+            # transport 라우터가 없는 옛 Map의 라우트 404는 "항목 없음"이 아니라 표면 부재다.
+            raise KorTravelMapTransportUnavailable(
+                f"kor-travel-map transport 404 ({path})", code="UPSTREAM_REJECTED"
             )
         if sc == status.HTTP_409_CONFLICT:
             raise KorTravelMapTransportCursorExpired(f"kor-travel-map transport 409 ({path})")
@@ -102,10 +106,20 @@ class KorTravelMapTransportClient:
     async def _get(
         self, path: str, params: Mapping[str, Any] | None = None
     ) -> tuple[dict[str, Any], dict[str, Any]]:
+        if not self._map.has_service_token:
+            # 운영 Map은 service token 없이는 401이다 — 뷰포트마다 거절당하러 가지 않는다.
+            raise KorTravelMapTransportUnavailable(
+                "kor-travel-map service token 미설정", code="UPSTREAM_AUTH"
+            )
         try:
             resp = await self._map._send("GET", path, params=params, retry=False)
         except KorTravelMapUnavailable as exc:
             raise KorTravelMapTransportUnavailable(str(exc)) from exc
+        except httpx.HTTPError as exc:
+            # DecodingError·TooManyRedirects 등은 TransportError가 아니라 `_send`가 잡지 않는다.
+            raise KorTravelMapTransportUnavailable(
+                f"kor-travel-map 응답 오류({path}): {exc!r}"
+            ) from exc
         return self._data(resp)
 
     async def list_items(

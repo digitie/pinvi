@@ -1,3 +1,10 @@
+## 2026-10-23 (claude) — 지도 교통 정보 레이어 (T-380, ADR-076, 브랜치 `feat/map-transport-integration`)
+
+- 다음 한 작업: PR CI green → 리뷰·머지(머지·배포는 소유자). 운영 활성화는 Manager PR(pinvi-api에
+  `PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN: ${KOR_TRAVEL_MAP_API_SERVICE_TOKEN:-}` + `PINVI_KOR_TRAVEL_MAP_TRANSPORT_ENABLED`) 뒤 플래그 on →
+  로그인 후 `GET /transport/status`로 레이어별 `reason` 확인(execplan §4 순서). 주유소는 Map에서 아직 `NOT_LOADED`(transport fuel export 503).
+- 바뀐 것: API `/transport/*`, packages(schemas·api-client·domain), web(탐색·여행 상세 지도), mobile(지도), 문서 ADR-076·`docs/api/transport.md`.
+
 ## 2026-10-20 (claude) — Admin ETL 정적 schedule·sensor 목록을 정의에 묶음 (T-377, 브랜치 `fix/t377-admin-etl-schedules-from-definitions`)
 
 - 다음 한 작업: draft PR CI green → coordinator 리뷰·머지(머지 뒤 T-377을 `tasks-done.md`로). T-379 PR과 `docs/` 세 파일이 겹치므로 나중에

@@ -36,6 +36,7 @@ function makeState(over: Partial<TransportLayersState>): TransportLayersState {
     receivedAt: 1_000,
     nowMs: 1_000,
     points: [],
+    selectedId: null,
     toggle: vi.fn(),
     onViewportChange: vi.fn(),
     detail: null,

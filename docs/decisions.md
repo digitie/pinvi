@@ -3946,3 +3946,30 @@ ADR-048은 geo v2 `key`를 서버 VWorld key와 같은 값으로 쓰고 geo의 `
 - 2026-10-14 odroid geo에서 label `pinvi-api` key를 발급해 n150 Manager root `.env`에 저장했다.
 - geo 쪽 `KTG_VWORLD_API_KEY`를 Pinvi key와 맞출 필요가 없어졌다.
 
+
+## ADR-076: 지도 교통 정보(transport) 레이어는 kor-travel-map REST로만 읽고, 레이어별로 강등한다
+
+- **상태**: accepted (구현 PR, 운영 활성화는 Manager 배선 뒤)
+- **날짜**: 2026-10-23
+- **결정자**: 사용자(소유자, Map ADR-114 "PinVi는 transport·weather를 Map REST로만", 범위 "화면까지") + Claude
+- **관련**: kor-travel-map ADR-114, ADR-026(Map OpenAPI 계약), ADR-068(weather는 별도 — 이번 범위 밖), ADR-005(transport-only client)
+- **설계·리뷰**: `docs/execplan/map-transport-integration.md`(적대 설계 리뷰 1회 반영 §7)
+
+### 결정
+
+1. 주유소·휴게소(유가 포함)·고속도로 돌발·공항은 Map `/v1/service/transport/*`(service token)로만 읽는다. kor-travel-transport를
+   직접 부르지 않는다. client는 `app/clients/kor_travel_map_transport.py`로 따로 두되 `KorTravelMapClient`의 연결·토큰·로깅·엄격한
+   JSON 해석을 공유한다. 재시도는 0회(503 `NOT_LOADED`는 결정적), 409는 cursor 세대 만료, 401/403은 `UPSTREAM_AUTH`.
+2. PinVi 표면은 `/transport/status`·`/transport/markers-in-bounds`(로그인 필요, **5xx 없음** — 레이어별 `ok|unavailable|disabled`)와
+   상세 4종·주유소 가격 추이(404/503을 그대로 낸다)다. Map 원문 오류는 넘기지 않고 enum reason만 노출한다.
+3. transport `feature_id`(`make_feature_id`)는 POI·feature 상세가 쓰는 Map PG feature UUID와 다른 이름공간이다 — POI 추가·
+   `/features/{id}`로 흘려보내지 않는다(상세는 전용 대화상자).
+4. `PINVI_KOR_TRAVEL_MAP_TRANSPORT_ENABLED`(기본 false)가 꺼져 있으면 Map을 부르지 않고 클라이언트는 컨트롤을 숨긴다. 비로그인
+   공유 여행 화면은 켜지 않는다.
+5. 신선도는 Map `age_seconds` + 응답 이후 경과로 세고(기기 시계 무관), 오래됨은 Map `stale`만 따른다.
+
+### 결과
+
+- 운영에서 켜려면 Manager pinvi-api 블록에 `PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN`(Map `KOR_TRAVEL_MAP_API_SERVICE_TOKEN`과 같은 값)과
+  플래그를 넘겨야 한다 — 지금 운영 pinvi-api에는 Map service token이 없다.
+- 서버 캐시는 두지 않는다(Map이 Valkey에서 읽고, 캐시는 신선도 문구를 거짓으로 만든다). weather의 Map 경유 전환은 Map 2단계 뒤 별도.

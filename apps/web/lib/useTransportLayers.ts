@@ -109,13 +109,15 @@ export function useTransportLayers({ active }: { active: boolean }) {
     return () => controller.abort();
   }, [active]);
 
+  const visible = active && status?.enabled === true;
+  const hasData = fetched != null;
+
+  // 신선도 문구만 다시 그린다 — 기능이 꺼져 있거나 보여 줄 결과가 없으면 지도 화면을 깨우지 않는다.
   useEffect(() => {
-    if (!active) return;
+    if (!visible || !hasData) return;
     const id = setInterval(() => setNowMs(Date.now()), NOW_TICK_MS);
     return () => clearInterval(id);
-  }, [active]);
-
-  const visible = active && status?.enabled === true;
+  }, [visible, hasData]);
 
   const fetchNow = useCallback(
     async (map: MapLibreMap, layersOn: ReadonlySet<TransportLayer>) => {
@@ -157,7 +159,18 @@ export function useTransportLayers({ active }: { active: boolean }) {
         setNowMs(receivedAt);
       } catch (err) {
         if (isAbortError(err) || requestId !== latestRef.current) return;
-        // 조용히 무시 — 다음 지도 이동이 곧 재시도다.
+        // 요청 자체가 실패했다(응답 해석 실패 포함) — 요청한 레이어를 "불러올 수 없음"으로 보인다.
+        // 다음 지도 이동이 곧 재시도다.
+        setFetched({
+          results: layers.map((layer) => ({
+            layer,
+            status: 'unavailable' as const,
+            reason: 'UPSTREAM_UNAVAILABLE' as const,
+            truncated: false,
+            items: [],
+          })),
+          receivedAt: Date.now(),
+        });
       }
     },
     [],
@@ -167,18 +180,23 @@ export function useTransportLayers({ active }: { active: boolean }) {
   useEffect(() => {
     enabledRef.current = enabled;
   }, [enabled]);
+  // 콜백 identity를 고정한다 — 상태 응답이 와도 지도 쪽 콜백들이 다시 만들어지지 않게.
+  const visibleRef = useRef(visible);
+  useEffect(() => {
+    visibleRef.current = visible;
+  }, [visible]);
 
   /** 지도 load·moveend·zoomend에서 부른다(디바운스). 꺼져 있으면 아무것도 하지 않는다. */
   const onViewportChange = useCallback(
     (map: MapLibreMap) => {
       mapRef.current = map;
-      if (!visible) return;
+      if (!visibleRef.current) return;
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         void fetchNow(map, enabledRef.current);
       }, DEBOUNCE_MS);
     },
-    [fetchNow, visible],
+    [fetchNow],
   );
 
   const toggle = useCallback(
@@ -188,6 +206,7 @@ export function useTransportLayers({ active }: { active: boolean }) {
       else next.add(layer);
       enabledRef.current = next;
       setEnabled(next);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
       const map = mapRef.current;
       if (map) void fetchNow(map, next);
     },
@@ -214,6 +233,7 @@ export function useTransportLayers({ active }: { active: boolean }) {
     return fetched.results.filter((result) => enabled.has(result.layer));
   }, [fetched, enabled]);
   const points = useMemo(() => toPoints(results), [results]);
+  const selectedId = detail ? transportMarkerId(detail.layer, detail.featureId) : null;
 
   return {
     visible,
@@ -224,6 +244,7 @@ export function useTransportLayers({ active }: { active: boolean }) {
     receivedAt: fetched?.receivedAt ?? null,
     nowMs,
     points,
+    selectedId,
     toggle,
     onViewportChange,
     detail,

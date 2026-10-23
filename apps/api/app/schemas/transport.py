@@ -10,10 +10,9 @@ PG feature UUID와 **다른 이름공간**이다(ADR-076 D7) — POI 추가·`/f
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from app.schemas.feature import BBox
 
@@ -58,8 +57,8 @@ class TransportAddress(_Upstream):
 class TransportFreshness(_Upstream):
     """데이터셋 세대 하나의 신선도(Map `TransportFreshness`)."""
 
-    source_collected_at: datetime | None
-    loaded_at: datetime
+    source_collected_at: AwareDatetime | None
+    loaded_at: AwareDatetime
     age_seconds: int
     max_age_seconds: int
     stale: bool
@@ -72,8 +71,8 @@ class FuelPrice(_Upstream):
     product_code: str
     product_name: str | None = None
     price: float | None
-    collected_at: datetime
-    provider_updated_at: datetime | None = None
+    collected_at: AwareDatetime
+    provider_updated_at: AwareDatetime | None = None
 
 
 class RestAreaFuelPrices(_Upstream):
@@ -83,7 +82,7 @@ class RestAreaFuelPrices(_Upstream):
     diesel_price: int | None = None
     lpg_price: int | None = None
     oil_company: str | None = None
-    observed_at: datetime
+    observed_at: AwareDatetime
 
 
 class _TransportItem(_Upstream):
@@ -133,7 +132,7 @@ class HighwayIncidentItem(_TransportItem):
     direction: str | None = None
     point_name: str | None = None
     congestion_length: float | None = None
-    occurred_at: datetime | None = None
+    occurred_at: AwareDatetime | None = None
 
 
 class AirportItem(_TransportItem):
@@ -195,11 +194,30 @@ class TransportDetailResponse(BaseModel):
     fuel_price_freshness: TransportFreshness | None = None
 
 
+#: Map `PriceHistoryBlock.reason` enum. 모르는 값은 `upstream_contract`로 접는다(원문 비노출).
+PriceHistoryUnavailableReason = Literal[
+    "disabled",
+    "not_configured",
+    "upstream_not_found",
+    "upstream_unavailable",
+    "upstream_rejected",
+    "upstream_contract",
+]
+PRICE_HISTORY_REASONS: tuple[str, ...] = (
+    "disabled",
+    "not_configured",
+    "upstream_not_found",
+    "upstream_unavailable",
+    "upstream_rejected",
+    "upstream_contract",
+)
+
+
 class FuelPriceHistoryPoint(_Upstream):
     product_key: str
     product_name: str | None = None
     price: float | None
-    observed_at: datetime
+    observed_at: AwareDatetime
 
 
 class FuelPriceHistoryResponse(BaseModel):
@@ -211,7 +229,7 @@ class FuelPriceHistoryResponse(BaseModel):
 
     feature_id: str
     status: Literal["available", "unavailable"]
-    reason: str | None = None
+    reason: PriceHistoryUnavailableReason | None = None
     truncated: bool = False
     items: list[FuelPriceHistoryPoint] = Field(default_factory=list)
     current_prices: list[FuelPrice] = Field(default_factory=list)

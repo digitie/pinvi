@@ -504,7 +504,7 @@ export function TripMapView({
           {transport.visible && (
             <TransportMarkers
               points={transport.points}
-              selectedId={null}
+              selectedId={transport.selectedId}
               onSelect={(target) => {
                 setSelectedFeature(null);
                 transport.openDetail(target);

@@ -83,7 +83,10 @@ export default function MapScreen() {
   // ADR-076 — 교통 정보 레이어. 기능이 꺼져 있으면 칩도 마커도 없다(지금 화면과 같다).
   const [camera, setCamera] = useState<MapCamera | null>(null);
   const transport = useMobileTransport(camera);
-  const [selectedTransport, setSelectedTransport] = useState<TransportItem | null>(null);
+  // 선택은 id로 들고 항목은 지금 결과에서 다시 찾는다 — 레이어를 끄거나 결과에서 빠지면 카드도 닫힌다.
+  const [selectedTransportId, setSelectedTransportId] = useState<string | null>(null);
+  const selectedTransport: TransportItem | null =
+    selectedTransportId != null ? transport.itemForMarker(selectedTransportId) : null;
 
   // 버튼으로 얻은 위치는 지도가 이미 떠 있으므로 명령형으로 옮긴다. 훅 콜백이 아니라 effect에서
   // 부르는 이유는 카메라 API 예외가 측위 실패로 오분류되지 않게 하기 위해서다.
@@ -284,7 +287,9 @@ export default function MapScreen() {
             onFeaturePress={(marker) => {
               const id = (marker as { id?: unknown }).id;
               // transport 마커만 카드로 연다 — 'me'(내 위치) 등은 접두가 없어 null이다.
-              if (typeof id === 'string') setSelectedTransport(transport.itemForMarker(id));
+              if (typeof id === 'string') {
+                setSelectedTransportId(transport.itemForMarker(id) ? id : null);
+              }
             }}
             style={{ flex: 1 }}
           />
@@ -306,7 +311,8 @@ export default function MapScreen() {
             <TransportItemCard
               item={selectedTransport}
               state={transport}
-              onClose={() => setSelectedTransport(null)}
+              key={selectedTransportId ?? ''}
+              onClose={() => setSelectedTransportId(null)}
             />
           ) : null}
           {error ? (

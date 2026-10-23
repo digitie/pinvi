@@ -197,3 +197,29 @@ async def test_rejects_unknown_layer(
         f"/transport/markers-in-bounds?bbox={_BBOX}&zoom=12&layers=parking",
     )
     assert resp.status_code == 400
+
+
+async def test_out_of_range_bbox_is_clamped_not_500(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    settings.pinvi_kor_travel_map_transport_enabled = True
+    fake = _install(_ok)
+    resp = await _get(
+        client,
+        auth_cookies,
+        verified_user,
+        "/transport/markers-in-bounds?bbox=100,10,140,50&zoom=6&layers=airport",
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["data"]["bbox"] == {
+        "lng_min": 124.0,
+        "lat_min": 33.0,
+        "lng_max": 132.0,
+        "lat_max": 43.0,
+    }
+    # Map에는 국내 범위(위도 39 상한)와 교차한 상자가 간다.
+    assert fake.requests[-1].url.params["max_lat"] == "39.0"
+    bad = await _get(
+        client, auth_cookies, verified_user, "/transport/markers-in-bounds?bbox=a,b,c,d&zoom=6"
+    )
+    assert bad.status_code == 400

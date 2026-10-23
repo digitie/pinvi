@@ -107,7 +107,11 @@ function FuelHistory({ featureId }: { featureId: string }) {
     );
   }
   const byProduct = new Map<string, typeof history.items>();
-  for (const point of history.items) {
+  // 응답 순서에 기대지 않는다 — 최근 것부터 자른다.
+  const sorted = [...history.items].sort(
+    (a, b) => Date.parse(b.observed_at) - Date.parse(a.observed_at),
+  );
+  for (const point of sorted) {
     const list = byProduct.get(point.product_key) ?? [];
     list.push(point);
     byProduct.set(point.product_key, list);

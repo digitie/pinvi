@@ -179,3 +179,64 @@ async def test_price_history_unavailable_is_not_an_error() -> None:
     )
     assert out.status == "unavailable" and out.reason == "disabled"
     assert len(out.current_prices) == 2
+
+
+async def test_status_one_broken_freshness_degrades_only_that_layer() -> None:
+    body = fx.status_body(fuel_loaded=True)
+    body["data"]["datasets"][3]["freshness"] = {"broken": True}  # highway_incidents
+    handler, _ = _by_dataset({"status": httpx.Response(200, json=body)})
+    statuses = {s.layer: s for s in await transport_layers.layer_status(_client(handler))}
+    assert statuses["highway_incident"].reason == "UPSTREAM_CONTRACT"
+    assert statuses["airport"].available is True
+    assert statuses["fuel_station"].available is True
+
+
+async def test_one_bad_item_does_not_drop_the_layer() -> None:
+    body = fx.list_body("airports")
+    body["data"]["items"].append({"feature_id": "x" * 200})
+    handler, _ = _by_dataset({"airports": httpx.Response(200, json=body)})
+    [result] = await transport_layers.markers_in_bounds(
+        _client(handler), bbox=(126.0, 37.0, 127.0, 38.0), layers=["airport"], limit=10
+    )
+    assert result.status == "ok"
+    assert [i.feature_id for i in result.items] == [fx.AIRPORT_ID]
+
+
+async def test_utc_and_naive_datetimes() -> None:
+    body = fx.list_body("airports")
+    body["data"]["freshness"]["loaded_at"] = "2026-10-23T00:05:00Z"
+    handler, _ = _by_dataset({"airports": httpx.Response(200, json=body)})
+    [ok] = await transport_layers.markers_in_bounds(
+        _client(handler), bbox=(126.0, 37.0, 127.0, 38.0), layers=["airport"], limit=10
+    )
+    assert ok.status == "ok" and ok.freshness is not None
+    assert ok.freshness.loaded_at.utcoffset() is not None
+
+    body["data"]["freshness"]["loaded_at"] = "2026-10-23T09:05:00"  # naive — 계약 위반
+    handler, _ = _by_dataset({"airports": httpx.Response(200, json=body)})
+    [bad] = await transport_layers.markers_in_bounds(
+        _client(handler), bbox=(126.0, 37.0, 127.0, 38.0), layers=["airport"], limit=10
+    )
+    assert bad.status == "unavailable" and bad.reason == "UPSTREAM_CONTRACT"
+
+
+async def test_price_history_unknown_reason_is_folded_and_id_checked() -> None:
+    body = fx.history_body(available=False)
+    body["data"]["history"]["reason"] = "some new internal reason"
+    handler, _ = _by_dataset({"fuel-stations": httpx.Response(200, json=body)})
+    out = await transport_layers.fuel_price_history(
+        _client(handler),
+        fx.FUEL_STATION_ID,
+        product_key=None,
+        days=7,
+        now=datetime(2026, 10, 23, tzinfo=KST),
+    )
+    assert out.reason == "upstream_contract"
+    with pytest.raises(transport_layers.TransportContractError):
+        await transport_layers.fuel_price_history(
+            _client(handler),
+            "other-id",
+            product_key=None,
+            days=7,
+            now=datetime(2026, 10, 23, tzinfo=KST),
+        )

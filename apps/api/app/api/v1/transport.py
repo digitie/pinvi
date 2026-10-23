@@ -12,6 +12,7 @@ PinVi는 transport 데이터를 kor-travel-map `/v1/service/transport/*`로만 �
 
 from __future__ import annotations
 
+import math
 from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, HTTPException, Path, Query, status
@@ -23,11 +24,12 @@ from app.clients.kor_travel_map import (
     OptionalKorTravelMapHttpClientDep,
 )
 from app.clients.kor_travel_map_transport import KorTravelMapTransportClient
-from app.core.bbox import MAX_ZOOM, MIN_ZOOM, parse_bbox
+from app.core.bbox import MAX_ZOOM, MIN_ZOOM
 from app.core.config import settings
 from app.core.deps import CurrentUserId
 from app.core.time import kst_now
 from app.schemas.envelope import Envelope
+from app.schemas.feature import BBox
 from app.schemas.transport import (
     TRANSPORT_LAYERS,
     FuelPriceHistoryResponse,
@@ -83,6 +85,40 @@ def _raise_for(exc: KorTravelMapError) -> NoReturn:
     raise _unavailable() from exc
 
 
+def _parse_bbox(raw: str) -> BBox:
+    """`lng_min,lat_min,lng_max,lat_max` → 국내 범위(`BBox` 제약)로 clamp한 `BBox`.
+
+    `core.bbox.parse_bbox`는 범위 밖 값에서 `BBox` 검증 오류(500)를 낸다 — 이 표면은 5xx를 내지 않으므로
+    범위 밖은 clamp하고, 숫자가 아니거나 비유한·빈 교차면 400이다.
+    """
+    invalid = HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={
+            "code": "VALIDATION_ERROR",
+            "message": "bbox 는 'lng_min,lat_min,lng_max,lat_max' 형식이어야 합니다.",
+        },
+    )
+    parts = raw.split(",")
+    if len(parts) != 4:
+        raise invalid
+    try:
+        w, s, e, n = (float(p) for p in parts)
+    except ValueError as exc:
+        raise invalid from exc
+    if not all(math.isfinite(v) for v in (w, s, e, n)):
+        raise invalid
+
+    def clamp(value: float, lo: float, hi: float) -> float:
+        return min(hi, max(lo, value))
+
+    return BBox(
+        lng_min=clamp(min(w, e), 124.0, 132.0),
+        lat_min=clamp(min(s, n), 33.0, 43.0),
+        lng_max=clamp(max(w, e), 124.0, 132.0),
+        lat_max=clamp(max(s, n), 33.0, 43.0),
+    )
+
+
 def _parse_layers(raw: list[str] | None) -> list[TransportLayer]:
     """`layers`(반복 또는 쉼표 구분) → 중복 없는 레이어 목록. 생략하면 전부."""
     if not raw:
@@ -134,11 +170,11 @@ async def transport_markers_in_bounds(
     client: OptionalKorTravelMapHttpClientDep,
     bbox: Annotated[str, Query(description="lng_min,lat_min,lng_max,lat_max")],
     zoom: Annotated[int, Query(ge=MIN_ZOOM, le=MAX_ZOOM)],
-    layers: Annotated[list[str] | None, Query()] = None,
+    layers: Annotated[list[str] | None, Query(max_length=8)] = None,
     limit: Annotated[int, Query(ge=1, le=_MAX_LIMIT)] = _DEFAULT_LIMIT,
 ) -> Envelope[TransportMarkersInBoundsResponse]:
     """viewport 안 transport 마커. 레이어마다 ``status``로 강등하고 5xx를 내지 않는다."""
-    bbox_obj = parse_bbox(bbox)
+    bbox_obj = _parse_bbox(bbox)
     wanted = _parse_layers(layers)
     if not settings.pinvi_kor_travel_map_transport_enabled:
         results = transport_layers.disabled_layers(wanted)

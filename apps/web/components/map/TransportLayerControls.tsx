@@ -66,7 +66,7 @@ export function TransportLayerControls({
       className={`rounded-sm bg-canvas/95 p-2 text-xs shadow-card ${className ?? ''}`}
       data-testid="transport-layer-controls"
     >
-      <p className="mb-1 font-semibold text-ink">교통 정보</p>
+      <p className="mb-1 text-sm font-semibold text-ink">교통 정보</p>
       <div className="flex flex-wrap gap-1" role="group" aria-label="교통 정보 레이어">
         {TRANSPORT_LAYER_META.map((meta) => {
           const on = state.enabled.has(meta.layer);
@@ -77,7 +77,7 @@ export function TransportLayerControls({
               aria-pressed={on}
               onClick={() => state.toggle(meta.layer)}
               data-testid={`transport-layer-toggle-${meta.layer}`}
-              className={`focus-ring min-h-8 rounded-full border px-3 font-semibold ${
+              className={`focus-ring min-h-11 rounded-full border px-3 text-sm font-semibold ${
                 on
                   ? 'border-ink bg-ink text-canvas'
                   : 'border-hairline bg-canvas text-body hover:bg-surface-soft'
@@ -113,7 +113,7 @@ export function TransportLayerControls({
               <li key={incident.feature_id}>
                 <button
                   type="button"
-                  className="focus-ring w-full truncate rounded-sm py-0.5 text-left text-body hover:bg-surface-soft"
+                  className="focus-ring min-h-11 w-full truncate rounded-sm px-1 text-left text-sm text-body hover:bg-surface-soft"
                   onClick={() =>
                     onOpenDetail({
                       layer: 'highway_incident',

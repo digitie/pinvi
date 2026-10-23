@@ -74,12 +74,35 @@ async def test_list_bbox_sends_service_token_and_threads_cursor() -> None:
     assert data["next_cursor"] is None
 
 
-async def test_list_without_service_token_sends_no_public_key() -> None:
+async def test_near_query_shape() -> None:
     handler, seen = _recorder(httpx.Response(200, json=fx.list_body("airports")))
-    await _client(handler, token="").list_items("airports", near=(126.8, 37.5, 5000.0))
-    assert "X-Kor-Travel-Map-Api-Key" not in seen[0].headers
-    assert "X-Kor-Travel-Map-Service-Token" not in seen[0].headers
+    await _client(handler).list_items("airports", near=(126.8, 37.5, 5000.0))
     assert dict(seen[0].url.params) == {"lon": "126.8", "lat": "37.5", "radius_m": "5000.0"}
+
+
+async def test_missing_service_token_short_circuits_without_calling_map() -> None:
+    """service token이 없으면 운영 Map은 401이다 — 뷰포트마다 거절당하러 가지 않는다."""
+    handler, seen = _recorder(httpx.Response(200, json=fx.list_body("airports")))
+    with pytest.raises(KorTravelMapTransportUnavailable) as caught:
+        await _client(handler, token="").list_items("airports", near=(126.8, 37.5, 5000.0))
+    assert caught.value.code == "UPSTREAM_AUTH"
+    assert seen == []
+
+
+async def test_non_transport_httpx_errors_become_unavailable() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.DecodingError("bad gzip", request=request)
+
+    with pytest.raises(KorTravelMapTransportUnavailable):
+        await _client(handler).status()
+
+
+async def test_route_404_without_not_found_code_is_not_item_missing() -> None:
+    """transport 라우터가 없는 옛 Map의 404는 "항목 없음"이 아니다."""
+    handler, _ = _recorder(httpx.Response(404, json={"detail": "Not Found"}))
+    with pytest.raises(KorTravelMapTransportUnavailable) as caught:
+        await _client(handler).detail("airports", fx.AIRPORT_ID)
+    assert caught.value.code == "UPSTREAM_REJECTED"
 
 
 async def test_list_rejects_combinations_map_would_422() -> None:

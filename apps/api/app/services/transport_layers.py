@@ -11,7 +11,7 @@ import asyncio
 import logging
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
-from typing import Any, Final
+from typing import Any, Final, cast
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -28,10 +28,12 @@ from app.clients.kor_travel_map_transport import (
     TransportDatasetPath,
 )
 from app.schemas.transport import (
+    PRICE_HISTORY_REASONS,
     TRANSPORT_LAYERS,
     FuelPrice,
     FuelPriceHistoryPoint,
     FuelPriceHistoryResponse,
+    PriceHistoryUnavailableReason,
     TransportDetailResponse,
     TransportFreshness,
     TransportItem,
@@ -124,6 +126,20 @@ def _item(layer: TransportLayer, raw: object) -> TransportItem:
     return _parse(_ITEM_ADAPTER, {**raw, "layer": layer}, f"{layer} item")
 
 
+def _items(layer: TransportLayer, raw_items: list[object]) -> list[TransportItem]:
+    """목록 해석. 계약을 어긴 항목 하나가 레이어 전체를 지우지 않게 그 항목만 건너뛴다."""
+    items: list[TransportItem] = []
+    skipped = 0
+    for raw in raw_items:
+        try:
+            items.append(_item(layer, raw))
+        except TransportContractError:
+            skipped += 1
+    if skipped:
+        logger.warning("transport.items_skipped", extra={"layer": layer, "skipped": skipped})
+    return items
+
+
 def _freshness(raw: object, what: str) -> TransportFreshness:
     return _parse(_FRESHNESS_ADAPTER, raw, what)
 
@@ -159,7 +175,7 @@ async def _layer_in_bounds(
                 else None
             ),
             truncated=truncated,
-            items=[_item(layer, raw) for raw in raw_items],
+            items=_items(layer, raw_items),
         )
     except (KorTravelMapError, TimeoutError) as exc:
         reason = unavailable_reason(exc)
@@ -210,13 +226,19 @@ async def layer_status(client: KorTravelMapTransportClient) -> list[TransportLay
                     TransportLayerStatus(layer=layer, available=False, reason="UPSTREAM_CONTRACT")
                 )
             elif raw_status.get("loaded") is True:
-                statuses.append(
-                    TransportLayerStatus(
-                        layer=layer,
-                        available=True,
-                        freshness=_freshness(raw_status.get("freshness"), f"{layer} freshness"),
+                try:
+                    fresh = _freshness(raw_status.get("freshness"), f"{layer} freshness")
+                except TransportContractError:
+                    # 이 데이터셋만 강등한다 — 나머지 레이어 상태는 그대로 보인다.
+                    statuses.append(
+                        TransportLayerStatus(
+                            layer=layer, available=False, reason="UPSTREAM_CONTRACT"
+                        )
                     )
-                )
+                else:
+                    statuses.append(
+                        TransportLayerStatus(layer=layer, available=True, freshness=fresh)
+                    )
             else:
                 statuses.append(
                     TransportLayerStatus(
@@ -281,10 +303,20 @@ async def fuel_price_history(
         "unavailable",
     ):
         raise TransportContractError("Map 가격 추이 history 셰입이 올바르지 않습니다.")
-    reason = history.get("reason")
+    if data.get("feature_id") != feature_id:
+        raise TransportContractError("Map 가격 추이 feature_id가 요청과 다릅니다.")
+    raw_reason = history.get("reason")
     truncated = history.get("truncated")
-    if not (reason is None or isinstance(reason, str)) or not isinstance(truncated, bool):
+    if not (raw_reason is None or isinstance(raw_reason, str)) or not isinstance(truncated, bool):
         raise TransportContractError("Map 가격 추이 history 셰입이 올바르지 않습니다.")
+    # Map 원문은 넘기지 않는다 — 아는 enum만, 모르면 upstream_contract.
+    reason: PriceHistoryUnavailableReason | None = None
+    if raw_reason is not None:
+        reason = (
+            cast(PriceHistoryUnavailableReason, raw_reason)
+            if raw_reason in PRICE_HISTORY_REASONS
+            else "upstream_contract"
+        )
     points = _parse(_HISTORY_POINTS_ADAPTER, history.get("items"), "가격 추이 items")
     current = _parse(_PRICES_ADAPTER, data.get("current_prices"), "current_prices")
     if product_key is not None:
