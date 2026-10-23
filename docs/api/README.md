@@ -13,6 +13,7 @@
 | [pois.md](./pois.md)                 | POI CRUD + reorder (fractional indexing)                                                | 2      |
 | [features.md](./features.md)         | 라이브러리 feature read (in-bounds / nearby / search / weather; 통합 `/search`는 T-129) | 4      |
 | [weather.md](./weather.md)           | 지도 weather marker(`kor-travel-weather` 직접 조회, feature와 완전 분리, ADR-068 T-368) | 4      |
+| [transport.md](./transport.md)       | 지도 교통 정보 레이어(주유소·휴게소·돌발·공항, Map `/v1/service/transport/*` 경유, ADR-076) | post   |
 | [notice-plans.md](./notice-plans.md) | 추천 plan listing + copy + Admin CRUD                                                   | 2/4/6  |
 | [storage.md](./storage.md)           | presigned PUT + 첨부 등록 + RustFS 관리                                                 | 2      |
 | [admin.md](./admin.md)               | Admin 엔티티 CRUD + dataset 브라우저                                                    | 3      |

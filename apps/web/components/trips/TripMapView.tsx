@@ -32,6 +32,10 @@ import {
 } from '@pinvi/domain';
 import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
+import { useTransportLayers } from '@/lib/useTransportLayers';
+import { TransportLayerControls } from '@/components/map/TransportLayerControls';
+import { TransportMarkerLegend, TransportMarkers } from '@/components/map/TransportMarkers';
+import { TransportDetailDialog } from '@/components/map/TransportDetailDialog';
 
 // 전국이 보이는 기본 시점(POI 가 없을 때).
 const DEFAULT_CENTER: [number, number] = [127.5, 36.5];
@@ -120,6 +124,11 @@ export interface TripMapViewProps {
   className?: string;
   chrome?: 'framed' | 'flush';
   showNavigationControls?: boolean;
+  /**
+   * 교통 정보 레이어(ADR-076). `/transport/*`는 로그인 필요라 **비로그인 공유 화면에서는 켜지 않는다**
+   * (401이 로그인 화면 이동을 부른다). 기본 꺼짐.
+   */
+  transportLayers?: boolean;
 }
 
 export function TripMapView({
@@ -136,6 +145,7 @@ export function TripMapView({
   className,
   chrome = 'framed',
   showNavigationControls = true,
+  transportLayers = false,
 }: TripMapViewProps) {
   const mapRef = useRef<MapLibreMap | null>(null);
   const featureAbortRef = useRef<AbortController | null>(null);
@@ -149,10 +159,12 @@ export function TripMapView({
   // F5: feature 상세 풀스크린 모달(weather 제외).
   const [detailFeatureId, setDetailFeatureId] = useState<string | null>(null);
   const mobileLayout = useMobileWebLayout();
+  const transport = useTransportLayers({ active: transportLayers });
+  const { onViewportChange: transportViewportChange } = transport;
   const surfaceClassName =
     chrome === 'flush'
-      ? 'h-full min-h-[420px] overflow-hidden bg-canvas'
-      : 'h-full min-h-[420px] overflow-hidden rounded-sm border border-hairline bg-canvas';
+      ? 'relative h-full min-h-[420px] overflow-hidden bg-canvas'
+      : 'relative h-full min-h-[420px] overflow-hidden rounded-sm border border-hairline bg-canvas';
 
   const fetchFeaturesInBounds = useCallback(async (map: MapLibreMap) => {
     const requestId = latestFeatureRequestRef.current + 1;
@@ -240,8 +252,17 @@ export function TripMapView({
       mapRef.current = map;
       fitToPoints(map);
       scheduleFeatureFetch(map);
+      transportViewportChange(map);
     },
-    [fitToPoints, scheduleFeatureFetch],
+    [fitToPoints, scheduleFeatureFetch, transportViewportChange],
+  );
+
+  const handleViewportChange = useCallback(
+    (map: MapLibreMap) => {
+      scheduleFeatureFetch(map);
+      transportViewportChange(map);
+    },
+    [scheduleFeatureFetch, transportViewportChange],
   );
 
   // POI 목록이 바뀌면 경계 재조정.
@@ -399,8 +420,8 @@ export function TripMapView({
           geolocate={false}
           animateCameraChanges
           onLoad={handleLoad}
-          onMoveEnd={(event) => scheduleFeatureFetch(event.target as MapLibreMap)}
-          onZoomEnd={(event) => scheduleFeatureFetch(event.target as MapLibreMap)}
+          onMoveEnd={(event) => handleViewportChange(event.target as MapLibreMap)}
+          onZoomEnd={(event) => handleViewportChange(event.target as MapLibreMap)}
           onContextMenu={
             onCreatePoiAtCoordinate
               ? (event, context) => {
@@ -480,6 +501,16 @@ export function TripMapView({
               }}
             />
           )}
+          {transport.visible && (
+            <TransportMarkers
+              points={transport.points}
+              selectedId={transport.selectedId}
+              onSelect={(target) => {
+                setSelectedFeature(null);
+                transport.openDetail(target);
+              }}
+            />
+          )}
           {selected && (
             <Popup lngLat={[selected.lon, selected.lat]} maxWidth="240px" closeButton={false}>
               <div className="space-y-1">
@@ -540,6 +571,20 @@ export function TripMapView({
             </Popup>
           )}
         </VWorldMap>
+        {transport.visible && (
+          <div className="pointer-events-none absolute left-2 top-2 z-10 w-64 max-w-[70%]">
+            <div className="pointer-events-auto">
+              <TransportLayerControls
+                state={transport}
+                onOpenDetail={(target) => {
+                  setSelectedFeature(null);
+                  transport.openDetail(target);
+                }}
+              />
+            </div>
+          </div>
+        )}
+        <TransportMarkerLegend points={transport.points} />
         <div className="sr-only" aria-hidden="true" data-testid="trip-map-marker-legend">
           {points.map((point) => (
             <span
@@ -584,6 +629,7 @@ export function TripMapView({
         fallbackTitle={selectedFeature?.name}
         onClose={() => setDetailFeatureId(null)}
       />
+      <TransportDetailDialog target={transport.detail} onClose={transport.closeDetail} />
     </div>
   );
 }

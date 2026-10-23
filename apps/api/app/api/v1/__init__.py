@@ -15,6 +15,7 @@ from app.api.v1 import (
     search,
     storage,
     telegram_targets,
+    transport,
     trip_telegram_targets,
     trips,
     users,
@@ -40,6 +41,7 @@ api_router.include_router(notice_plans.router)
 api_router.include_router(public.router)
 api_router.include_router(features.router)
 api_router.include_router(weather_markers.router)
+api_router.include_router(transport.router)
 api_router.include_router(geo.geo_router)
 api_router.include_router(geo.regions_router)
 api_router.include_router(search.router)

@@ -310,6 +310,11 @@ class KorTravelMapClient:
     async def aclose(self) -> None:
         await self._http.aclose()
 
+    @property
+    def has_service_token(self) -> bool:
+        """service 표면(transport 등)을 부를 자격이 있는지 — 값은 노출하지 않는다."""
+        return bool(self._service_token)
+
     # ── 내부 ────────────────────────────────────────────────────────────────
 
     def _headers(self, *, allow_public_api_key: bool) -> dict[str, str]:
@@ -327,10 +332,17 @@ class KorTravelMapClient:
         params: Mapping[str, Any] | None = None,
         json: Any | None = None,
         allow_public_api_key: bool = False,
+        retry: bool = True,
     ) -> httpx.Response:
-        """transient(타임아웃/연결/5xx) 시 지수 백오프 재시도."""
+        """transient(타임아웃/연결/5xx) 시 지수 백오프 재시도.
+
+        ``retry=False``면 한 번만 보내고 5xx 응답도 그대로 돌려준다 — 호출자가 problem ``code``를 읽어
+        판단한다(transport 상태 표면: 503 ``NOT_LOADED``는 결정적이고, 지도 요청은 다음 이동이 곧
+        재시도다 — ADR-076 D2).
+        """
+        attempts = self._max_attempts if retry else 1
         last: KorTravelMapUnavailable | None = None
-        for attempt in range(self._max_attempts):
+        for attempt in range(attempts):
             try:
                 resp = await self._http.request(
                     method,
@@ -342,11 +354,11 @@ class KorTravelMapClient:
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last = KorTravelMapUnavailable(f"kor-travel-map 요청 실패({path}): {exc!r}")
             else:
-                if resp.status_code >= 500:
+                if resp.status_code >= 500 and retry:
                     last = KorTravelMapUnavailable(f"kor-travel-map {resp.status_code} ({path})")
                 else:
                     return resp
-            if attempt + 1 < self._max_attempts:
+            if attempt + 1 < attempts:
                 await asyncio.sleep(self._backoff_base_seconds * (2**attempt))
         logger.warning("kor_travel_map.unavailable", extra={"path": path})
         raise last or KorTravelMapUnavailable(f"kor-travel-map 요청 실패({path})")
@@ -376,6 +388,11 @@ class KorTravelMapClient:
             )
         if sc >= status.HTTP_400_BAD_REQUEST:
             raise KorTravelMapBadRequest(f"kor-travel-map {sc}", code=_error_code(resp))
+        return self._decode_envelope(resp)
+
+    @staticmethod
+    def _decode_envelope(resp: httpx.Response) -> tuple[dict[str, Any], dict[str, Any]]:
+        """성공(2xx) 응답 본문을 엄격하게 해석해 ``(data, meta)``를 돌려준다."""
         try:
             payload = json.loads(
                 resp.content,

@@ -797,3 +797,42 @@ export type {
 } from './geo';
 export { TelegramTargetCreateSchema, TelegramTargetSchema } from './telegram';
 export type { TelegramTarget, TelegramTargetCreate } from './telegram';
+export {
+  AirportItemSchema,
+  FuelPriceHistoryPointSchema,
+  FuelPriceHistoryResponseSchema,
+  FuelPriceSchema,
+  FuelStationItemSchema,
+  HighwayIncidentItemSchema,
+  RestAreaFuelPricesSchema,
+  RestAreaItemSchema,
+  TransportDetailResponseSchema,
+  TransportFreshnessSchema,
+  TransportItemSchema,
+  TransportLayerResultSchema,
+  TransportLayerSchema,
+  TransportLayerStatusSchema,
+  TransportMarkersInBoundsResponseSchema,
+  TransportStatusResponseSchema,
+  TransportUnavailableReasonSchema,
+} from './transport';
+export type {
+  AirportItem,
+  FuelPrice,
+  FuelPriceHistoryPoint,
+  FuelPriceHistoryResponse,
+  FuelStationItem,
+  HighwayIncidentItem,
+  RestAreaFuelPrices,
+  RestAreaItem,
+  TransportAddress,
+  TransportDetailResponse,
+  TransportFreshness,
+  TransportItem,
+  TransportLayer,
+  TransportLayerResult,
+  TransportLayerStatus,
+  TransportMarkersInBoundsResponse,
+  TransportStatusResponse,
+  TransportUnavailableReason,
+} from './transport';

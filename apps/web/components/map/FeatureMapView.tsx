@@ -51,6 +51,10 @@ import { LocationConsentDialog } from '@/components/map/LocationConsentDialog';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
+import { useTransportLayers, type TransportDetailTarget } from '@/lib/useTransportLayers';
+import { TransportLayerControls } from '@/components/map/TransportLayerControls';
+import { TransportMarkerLegend, TransportMarkers } from '@/components/map/TransportMarkers';
+import { TransportDetailDialog } from '@/components/map/TransportDetailDialog';
 
 const DEFAULT_CENTER: [number, number] = [...DEFAULT_MAP_CENTER] as [number, number];
 const DEFAULT_ZOOM = DEFAULT_MAP_ZOOM;
@@ -266,6 +270,11 @@ export function FeatureMapView({
     initialSuggestCoord,
   );
   const [notice, setNotice] = useState<string | null>(null);
+  // ADR-076 — transport 레이어(주유소·휴게소·교통 돌발·공항). feature·weather와 별도 경로이고
+  // 실패해도 장소 마커에 영향이 없다. 기능이 꺼져 있으면 컨트롤 자체가 보이지 않는다.
+  const transport = useTransportLayers({ active: true });
+  const { onViewportChange: transportViewportChange, openDetail: openTransportDetailRaw } =
+    transport;
 
   // 카메라는 선언형이다. `VWorldMap`이 center/zoom prop 변화에 반응해 카메라를 옮기고, 사용자가
   // 조작 중이면 moveend까지 적용을 미룬다 — 자동 센터링이 사용자의 손을 가로채지 않는다.
@@ -389,8 +398,9 @@ export function FeatureMapView({
         void fetchInBounds(map);
         void fetchWeatherMarkers(map);
       }, DEBOUNCE_MS);
+      transportViewportChange(map);
     },
-    [fetchInBounds, fetchWeatherMarkers],
+    [fetchInBounds, fetchWeatherMarkers, transportViewportChange],
   );
 
   useEffect(() => {
@@ -421,11 +431,12 @@ export function FeatureMapView({
       if (autoCenterSettledRef.current) {
         void fetchInBounds(map);
         void fetchWeatherMarkers(map);
+        transportViewportChange(map);
       } else {
         pendingFetchRef.current = map;
       }
     },
-    [fetchInBounds, fetchWeatherMarkers, markUserInteracted],
+    [fetchInBounds, fetchWeatherMarkers, markUserInteracted, transportViewportChange],
   );
 
   /** 자동 센터링 결정이 끝났음을 알리고 보류된 in-bounds 조회를 연다. */
@@ -437,8 +448,19 @@ export function FeatureMapView({
     if (map) {
       void fetchInBounds(map);
       void fetchWeatherMarkers(map);
+      transportViewportChange(map);
     }
-  }, [fetchInBounds, fetchWeatherMarkers]);
+  }, [fetchInBounds, fetchWeatherMarkers, transportViewportChange]);
+
+  // transport 상세를 열면 feature·weather 팝업을 닫는다(팝업이 동시에 둘 뜨지 않게).
+  const openTransportDetail = useCallback(
+    (target: TransportDetailTarget) => {
+      setSelected(null);
+      setSelectedWeatherMarker(null);
+      openTransportDetailRaw(target);
+    },
+    [openTransportDetailRaw],
+  );
 
   const handleViewportChange = useCallback(
     (event: MapLibreEvent) => {
@@ -778,6 +800,11 @@ export function FeatureMapView({
                   {notice}
                 </p>
               )}
+              <TransportLayerControls
+                state={transport}
+                onOpenDetail={openTransportDetail}
+                className="mt-1"
+              />
             </div>
             <button
               type="button"
@@ -876,6 +903,11 @@ export function FeatureMapView({
                   />
                 );
               }}
+            />
+            <TransportMarkers
+              points={transport.points}
+              selectedId={transport.selectedId}
+              onSelect={openTransportDetail}
             />
             {userLocation && <UserLocationMarker lngLat={userLocation} />}
             {selected && (
@@ -986,6 +1018,8 @@ export function FeatureMapView({
             ))}
           </div>
 
+          <TransportMarkerLegend points={transport.points} />
+
           {contextMenu && (
             <MapContextMenu
               x={contextMenu.x}
@@ -1047,6 +1081,7 @@ export function FeatureMapView({
         fallbackTitle={selected?.title}
         onClose={() => setDetailFeatureId(null)}
       />
+      <TransportDetailDialog target={transport.detail} onClose={transport.closeDetail} />
     </div>
   );
 }

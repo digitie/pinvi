@@ -21,3 +21,4 @@ export * from './tripEdit';
 export * from './tripFeatureResolution';
 export * from './tripMapPoints';
 export * from './upload';
+export * from './transport';

@@ -13,11 +13,19 @@ import {
   friendlyErrorText,
   resolveMapCenter,
   shouldAutoLocate,
+  transportMarkerId,
 } from '@pinvi/domain';
 import { apiClient } from '../../lib/api';
 import { useLocationConsent } from '../../lib/consents';
 import { expoLocationAdapter } from '../../lib/location';
 import { Body, Button, Card, Heading, Muted, Screen, Subheading } from '../../components/ui';
+import {
+  TransportChips,
+  TransportItemCard,
+  useMobileTransport,
+  type MapCamera,
+} from '../../components/TransportLayers';
+import type { TransportItem } from '@pinvi/schemas';
 
 /**
  * 지도 화면 — VWorld + MapLibre (`vworld-map-rn`). VWorld 키는 앱에 번들하지 않고
@@ -72,6 +80,13 @@ export default function MapScreen() {
   // 동의 안내를 먼저 띄운다. 설정에서 철회하면 같은 query가 갱신돼 다시 잠긴다.
   const consent = useLocationConsent();
   const [granting, setGranting] = useState(false);
+  // ADR-076 — 교통 정보 레이어. 기능이 꺼져 있으면 칩도 마커도 없다(지금 화면과 같다).
+  const [camera, setCamera] = useState<MapCamera | null>(null);
+  const transport = useMobileTransport(camera);
+  // 선택은 id로 들고 항목은 지금 결과에서 다시 찾는다 — 레이어를 끄거나 결과에서 빠지면 카드도 닫힌다.
+  const [selectedTransportId, setSelectedTransportId] = useState<string | null>(null);
+  const selectedTransport: TransportItem | null =
+    selectedTransportId != null ? transport.itemForMarker(selectedTransportId) : null;
 
   // 버튼으로 얻은 위치는 지도가 이미 떠 있으므로 명령형으로 옮긴다. 훅 콜백이 아니라 effect에서
   // 부르는 이유는 카메라 API 예외가 측위 실패로 오분류되지 않게 하기 위해서다.
@@ -235,8 +250,14 @@ export default function MapScreen() {
     );
   }
 
-  const markers =
-    location != null
+  const markers = [
+    ...transport.markers.map((m) => ({
+      ...m,
+      selected:
+        selectedTransport != null &&
+        m.id === transportMarkerId(selectedTransport.layer, selectedTransport.feature_id),
+    })),
+    ...(location != null
       ? [
           {
             id: 'me',
@@ -246,7 +267,8 @@ export default function MapScreen() {
             ariaLabel: '내 위치',
           },
         ]
-      : [];
+      : []),
+  ];
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={['bottom']}>
@@ -259,6 +281,16 @@ export default function MapScreen() {
             initialCenter={autoCenter.center}
             initialZoom={autoCenter.zoom}
             markers={markers}
+            onCameraChanged={(next) =>
+              setCamera({ center: next.center, zoom: next.zoom, bounds: next.bounds })
+            }
+            onFeaturePress={(marker) => {
+              const id = (marker as { id?: unknown }).id;
+              // transport 마커만 카드로 연다 — 'me'(내 위치) 등은 접두가 없어 null이다.
+              if (typeof id === 'string') {
+                setSelectedTransportId(transport.itemForMarker(id) ? id : null);
+              }
+            }}
             style={{ flex: 1 }}
           />
         ) : (
@@ -267,8 +299,22 @@ export default function MapScreen() {
           </View>
         )}
 
+        {transport.visible && autoCenter.resolved ? (
+          <View className="absolute left-3 right-3 top-3">
+            <TransportChips state={transport} />
+          </View>
+        ) : null}
+
         {/* 오버레이 컨트롤 */}
         <View className="absolute bottom-5 left-5 right-5 gap-2">
+          {selectedTransport ? (
+            <TransportItemCard
+              item={selectedTransport}
+              state={transport}
+              key={selectedTransportId ?? ''}
+              onClose={() => setSelectedTransportId(null)}
+            />
+          ) : null}
           {error ? (
             <Card className="gap-1">
               <Body className="text-error-text">

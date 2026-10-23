@@ -1,3 +1,16 @@
+## 2026-10-23 (claude) — 지도 교통 정보 레이어: Map transport 연동 (T-380, ADR-076, 브랜치 `feat/map-transport-integration`)
+
+소유자 결정(Map ADR-114): PinVi는 transport(나중에 weather)를 Map REST로만 읽는다. 범위 "화면까지". weather는 Map 2단계 뒤.
+
+- API: `app/clients/kor_travel_map_transport.py`(Map `/v1/service/transport/*`, 재시도 0, 409=cursor 만료, 401/403=`UPSTREAM_AUTH`),
+  `services/transport_layers.py`(레이어별 강등·3초 기한·국내 bbox 교차), `/transport/{status,markers-in-bounds,…상세 4종,price-history}`.
+  `KorTravelMapClient._send`에 `retry` 인자 하나(기존 호출 동작 불변).
+- 기존 Map 계약 게이트가 client 모듈의 경로 리터럴을 양방향으로 묶어서(경로 폐쇄 단언) transport를 별도 모듈·별도 게이트로 뒀다.
+- web: `useTransportLayers` 훅 + 컨트롤·마커·상세 대화상자, `/map`과 여행 상세 지도. 공유 여행 화면은 비로그인이라 끈다(설계 리뷰 P0).
+  mobile: 칩·마커·하단 카드(현재가·신선도).
+- 설계 적대 리뷰 1회(P0 2: 공유 화면 401 → 로그인 이동, 배포 순서) 반영 — execplan §7.
+- 배포 전제: 운영 pinvi-api에 Map service token이 없다(Manager compose pinvi-api 블록). 켜기 전 Manager PR 필요.
+
 ## 2026-10-22 (claude) — 고정 관리자·테스트 사용자를 배포마다 재적용 (브랜치 `feat/fixed-admin-and-test-account`)
 
 소유자 요청: Admin 기본 로그인을 고정 ID·비밀번호로, 테스트용 일반 사용자 1명을 두고 둘 다 1회성이 아니라 앞으로도 유지.
