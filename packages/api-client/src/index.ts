@@ -28,6 +28,7 @@ export { authApi } from './endpoints/auth';
 export { adminApi } from './endpoints/admin';
 export { featureApi } from './endpoints/feature';
 export { weatherApi } from './endpoints/weather';
+export { transportApi, TRANSPORT_LAYER_PATH } from './endpoints/transport';
 export { geoApi } from './endpoints/geo';
 export { userApi } from './endpoints/users';
 export { tripApi } from './endpoints/trips';

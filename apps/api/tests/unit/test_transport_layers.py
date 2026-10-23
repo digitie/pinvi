@@ -126,7 +126,9 @@ async def test_status_dataset_error_is_store_unavailable_without_message() -> No
 
 
 async def test_detail_and_mismatched_id() -> None:
-    handler, _ = _by_dataset({"fuel-stations": httpx.Response(200, json=fx.detail_body("fuel-stations"))})
+    handler, _ = _by_dataset(
+        {"fuel-stations": httpx.Response(200, json=fx.detail_body("fuel-stations"))}
+    )
     detail = await transport_layers.detail(_client(handler), "fuel_station", fx.FUEL_STATION_ID)
     assert isinstance(detail.item, FuelStationItem)
     assert [p.price for p in detail.item.prices] == [1689.0, None]
@@ -135,7 +137,9 @@ async def test_detail_and_mismatched_id() -> None:
 
 
 async def test_detail_404_propagates() -> None:
-    handler, _ = _by_dataset({"airports": httpx.Response(404, json=fx.problem_body(404, "NOT_FOUND"))})
+    handler, _ = _by_dataset(
+        {"airports": httpx.Response(404, json=fx.problem_body(404, "NOT_FOUND"))}
+    )
     with pytest.raises(KorTravelMapFeatureNotFound):
         await transport_layers.detail(_client(handler), "airport", fx.AIRPORT_ID)
 

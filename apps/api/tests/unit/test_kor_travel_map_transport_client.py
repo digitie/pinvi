@@ -26,7 +26,11 @@ Handler = Callable[[httpx.Request], httpx.Response]
 def _client(handler: Handler, *, token: str = "svc-token") -> KorTravelMapClient:
     http = httpx.AsyncClient(base_url="http://map.test", transport=httpx.MockTransport(handler))
     return KorTravelMapClient(
-        http, service_token=token, public_api_key="public-key", max_attempts=3, backoff_base_seconds=0.0
+        http,
+        service_token=token,
+        public_api_key="public-key",
+        max_attempts=3,
+        backoff_base_seconds=0.0,
     )
 
 
@@ -105,7 +109,9 @@ async def test_timeout_is_not_retried() -> None:
 
 @pytest.mark.parametrize("status_code", [401, 403])
 async def test_auth_rejection_is_upstream_auth(status_code: int) -> None:
-    handler, _ = _recorder(httpx.Response(status_code, json=fx.problem_body(status_code, "UNAUTHORIZED")))
+    handler, _ = _recorder(
+        httpx.Response(status_code, json=fx.problem_body(status_code, "UNAUTHORIZED"))
+    )
     with pytest.raises(KorTravelMapTransportUnavailable) as caught:
         await _client(handler).transport_status()
     assert caught.value.code == "UPSTREAM_AUTH"
@@ -139,7 +145,10 @@ async def test_price_history_since_is_aware_and_encoded() -> None:
     since = datetime(2026, 10, 1, 9, 0, tzinfo=KST)
     data = await _client(handler).transport_fuel_price_history(fx.FUEL_STATION_ID, since=since)
     request = seen[0]
-    assert request.url.path == f"/v1/service/transport/fuel-stations/{fx.FUEL_STATION_ID}/price-history"
+    assert (
+        request.url.path
+        == f"/v1/service/transport/fuel-stations/{fx.FUEL_STATION_ID}/price-history"
+    )
     assert request.url.params["since"] == "2026-10-01T09:00:00+09:00"
     assert b"%2B09%3A00" in request.url.query
     assert data["history"]["status"] == "unavailable"

@@ -47,9 +47,7 @@ _MAX_LIMIT = 500
 #: Map path `feature_id` 패턴(`^[A-Za-z0-9_\-]+$`, 1..128) — Map에 닿기 전에 막는다(경로 주입 차단).
 _FEATURE_ID_PATTERN = r"^[A-Za-z0-9_\-]+$"
 
-FeatureIdPath = Annotated[
-    str, Path(min_length=1, max_length=128, pattern=_FEATURE_ID_PATTERN)
-]
+FeatureIdPath = Annotated[str, Path(min_length=1, max_length=128, pattern=_FEATURE_ID_PATTERN)]
 
 
 def _unavailable(code: str = "TRANSPORT_UNAVAILABLE") -> HTTPException:
@@ -142,9 +140,7 @@ async def transport_markers_in_bounds(
         results = transport_layers.disabled_layers(wanted)
     elif client is None:
         results = [
-            TransportLayerResult(
-                layer=layer, status="unavailable", reason="UPSTREAM_UNAVAILABLE"
-            )
+            TransportLayerResult(layer=layer, status="unavailable", reason="UPSTREAM_UNAVAILABLE")
             for layer in wanted
         ]
     else:

@@ -81,9 +81,7 @@ async def test_flag_off_never_calls_map(
     markers = await _get(
         client, auth_cookies, verified_user, f"/transport/markers-in-bounds?bbox={_BBOX}&zoom=12"
     )
-    detail = await _get(
-        client, auth_cookies, verified_user, f"/transport/airports/{fx.AIRPORT_ID}"
-    )
+    detail = await _get(client, auth_cookies, verified_user, f"/transport/airports/{fx.AIRPORT_ID}")
     assert status_resp.status_code == 200
     assert status_resp.json()["data"] == {"enabled": False, "layers": []}
     assert markers.status_code == 200
@@ -124,7 +122,12 @@ async def test_markers_and_status_when_enabled(
     data = status_resp.json()["data"]
     assert data["enabled"] is True
     fuel = next(layer for layer in data["layers"] if layer["layer"] == "fuel_station")
-    assert fuel == {"layer": "fuel_station", "available": False, "reason": "NOT_LOADED", "freshness": None}
+    assert fuel == {
+        "layer": "fuel_station",
+        "available": False,
+        "reason": "NOT_LOADED",
+        "freshness": None,
+    }
 
 
 async def test_map_down_degrades_without_5xx(
@@ -177,9 +180,7 @@ async def test_detail_history_and_not_found(
     assert missing.json()["error"]["code"] == "TRANSPORT_FEATURE_NOT_FOUND"
 
     before = len(fake.requests)
-    injected = await _get(
-        client, auth_cookies, verified_user, "/transport/airports/..%2Fstatus"
-    )
+    injected = await _get(client, auth_cookies, verified_user, "/transport/airports/..%2Fstatus")
     assert injected.status_code in (404, 422)
     assert len(fake.requests) == before
 

@@ -70,7 +70,17 @@ _EXPECTED_QUERY: dict[str, set[str]] = {
 }
 #: client가 실제로 보내는 query(선언의 부분집합이어야 한다).
 _CLIENT_SENDS: dict[str, set[str]] = {
-    "list": {"min_lon", "min_lat", "max_lon", "max_lat", "lon", "lat", "radius_m", "limit", "cursor"},
+    "list": {
+        "min_lon",
+        "min_lat",
+        "max_lon",
+        "max_lat",
+        "lon",
+        "lat",
+        "radius_m",
+        "limit",
+        "cursor",
+    },
     "history": {"since", "limit"},
 }
 

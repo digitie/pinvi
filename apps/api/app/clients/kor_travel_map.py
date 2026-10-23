@@ -878,7 +878,9 @@ class KorTravelMapClient:
         data, meta = await self._transport_get(f"/v1/service/transport/{dataset}", params)
         return self._thread_page(data, meta)
 
-    async def transport_detail(self, dataset: TransportDatasetPath, feature_id: str) -> dict[str, Any]:
+    async def transport_detail(
+        self, dataset: TransportDatasetPath, feature_id: str
+    ) -> dict[str, Any]:
         """transport 단건. data = ``{item, freshness, ...}``. 404 → ``KorTravelMapFeatureNotFound``."""
         data, _meta = await self._transport_get(f"/v1/service/transport/{dataset}/{feature_id}")
         return data

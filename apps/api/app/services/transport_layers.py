@@ -110,7 +110,9 @@ def _parse[T](adapter: TypeAdapter[T], raw: object, what: str) -> T:
     try:
         return adapter.validate_python(raw)
     except ValidationError as exc:
-        raise TransportContractError(f"Map transport {what} 셰입이 올바르지 않습니다: {exc}") from exc
+        raise TransportContractError(
+            f"Map transport {what} 셰입이 올바르지 않습니다: {exc}"
+        ) from exc
 
 
 def _item(layer: TransportLayer, raw: object) -> TransportItem:
@@ -176,9 +178,7 @@ async def markers_in_bounds(
     """레이어별 viewport 결과. 레이어는 병렬로 부르고 각각 독립으로 강등한다."""
     clipped = clip_to_korea(bbox)
     return list(
-        await asyncio.gather(
-            *(_layer_in_bounds(client, layer, clipped, limit) for layer in layers)
-        )
+        await asyncio.gather(*(_layer_in_bounds(client, layer, clipped, limit) for layer in layers))
     )
 
 
@@ -196,7 +196,9 @@ async def layer_status(client: KorTravelMapClient) -> list[TransportLayerStatus]
         by_name: dict[str, Mapping[str, Any]] = {}
         for raw in raw_datasets:
             if not isinstance(raw, Mapping) or not isinstance(raw.get("dataset"), str):
-                raise TransportContractError("Map transport status dataset 셰입이 올바르지 않습니다.")
+                raise TransportContractError(
+                    "Map transport status dataset 셰입이 올바르지 않습니다."
+                )
             by_name[raw["dataset"]] = raw
         statuses: list[TransportLayerStatus] = []
         for layer in TRANSPORT_LAYERS:
@@ -220,7 +222,9 @@ async def layer_status(client: KorTravelMapClient) -> list[TransportLayerStatus]
                         available=False,
                         # error가 있으면 그 데이터셋만 읽지 못한 것이다(나머지는 정상).
                         reason=(
-                            "STORE_UNAVAILABLE" if raw_status.get("error") is not None else "NOT_LOADED"
+                            "STORE_UNAVAILABLE"
+                            if raw_status.get("error") is not None
+                            else "NOT_LOADED"
                         ),
                     )
                 )
@@ -270,7 +274,10 @@ async def fuel_price_history(
     """주유소 가격 추이. 추이가 없으면 ``status=unavailable``(오류 아님)."""
     data = await client.transport_fuel_price_history(feature_id, since=now - timedelta(days=days))
     history = data.get("history")
-    if not isinstance(history, Mapping) or history.get("status") not in ("available", "unavailable"):
+    if not isinstance(history, Mapping) or history.get("status") not in (
+        "available",
+        "unavailable",
+    ):
         raise TransportContractError("Map 가격 추이 history 셰입이 올바르지 않습니다.")
     reason = history.get("reason")
     truncated = history.get("truncated")
