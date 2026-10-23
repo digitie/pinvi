@@ -114,7 +114,7 @@ async def test_transport_query_parameters_are_pinned(spec: dict[str, Any]) -> No
     sent = await _sent_queries()
     assert sent, "client가 아무 요청도 보내지 않았다"
     for path, keys in sent.items():
-        template = re.sub(r"/f1(/|$)", r"/{feature_id}", path)
+        template = path.replace("/f1", "/{feature_id}")
         assert keys <= _query_names(spec, template), (path, keys)
 
 
