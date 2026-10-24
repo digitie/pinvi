@@ -24,7 +24,10 @@ from collections.abc import Sequence
 
 from pydantic import ValidationError
 
-from app.clients.kor_travel_map_weather import KorTravelMapWeatherClient
+from app.clients.kor_travel_map_weather import (
+    KorTravelMapWeatherClient,
+    KorTravelMapWeatherUnavailable,
+)
 from app.clients.kor_travel_weather import KorTravelWeatherClient, NearbyOut
 from app.schemas.feature import BBox, Coord
 from app.schemas.weather_map import WeatherCondition, WeatherMapMarker
@@ -185,8 +188,9 @@ async def build_weather_markers_in_bounds_via_map(
 
     직접 경로와 같은 줌 게이트·온도 선택·condition 판정이다. Map은 bbox를 그대로 받으므로 center+radius 변환이
     없고, Map의 영역 한 변 1,000 km 상한(422)에 걸리지 않게 국내 범위와 교차해 보낸다(교차가 비면 부르지
-    않는다). 관측 부분을 못 읽은 위치(`observations` 없음)는 온도를 못 구한 위치와 같이 빠진다. Map 장애·계약
-    위반은 `KorTravelMapError`로 올린다(라우터가 직접 경로와 같은 503으로 투영한다).
+    않는다). 관측 값이 없는 위치는 온도를 못 구한 위치와 같이 빠진다. 위치는 있는데 관측 데이터셋 자체를 읽지
+    못했으면(`current_freshness` 없음 — 적재 전·읽기 실패) 빈 목록이 아니라 `KorTravelMapWeatherUnavailable`이다
+    (직접 경로의 weather 장애 503과 같게). Map 장애·계약 위반은 `KorTravelMapError`로 올린다(라우터가 503으로 투영한다).
     """
     if zoom < MIN_WEATHER_MARKER_ZOOM:
         return []
@@ -195,5 +199,9 @@ async def build_weather_markers_in_bounds_via_map(
         return []
     data = await map_client.list_locations(bbox=clipped, include_current=True, limit=limit)
     listing = parse_location_list(data)
+    if listing.items and listing.current_freshness is None:
+        raise KorTravelMapWeatherUnavailable(
+            "Map weather 관측 데이터셋을 읽지 못함", code="WEATHER_STATE_NOT_LOADED"
+        )
     markers = [_marker_from_map_location(item) for item in listing.items]
     return [marker for marker in markers if marker is not None]

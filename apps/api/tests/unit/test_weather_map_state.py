@@ -65,15 +65,54 @@ def test_misaligned_forecast_group_is_a_contract_error() -> None:
         st.parse_bundle(body)
 
 
-def test_external_forecast_becomes_short_and_drops_unitless_wind_speed() -> None:
+def test_external_forecast_becomes_short_with_provider_units() -> None:
     group = st.MapWeatherForecastGroup.model_validate(
-        fx.forecast_group({"TEMP": [14.0], "WIND_SPEED": [36.0]}, provider="openweathermap")
+        fx.forecast_group(
+            {
+                "TEMP": [14.0],
+                "WIND_SPEED": [36.0],
+                "PRECIP": [0.4],
+                "CLOUD_COVER": [80],
+                "VISIBILITY": [10],
+                "NEW_METRIC": [1],
+            },
+            provider="weatherapi",
+        )
     )
-    rows = st.forecast_values(fx.LOC_EXT, "external", [group])
-    assert [(r.metric_key, r.forecast_style, r.unit) for r in rows] == [("TEMP", "short", None)]
-    # 정규화 규칙은 직접 경로와 같다 — TEMP(short) → TMP, 단위 기본값 deg_c.
-    metric = to_weather_metric(rows[0])
-    assert (metric.metric_key, metric.unit, metric.weather_domain) == ("TMP", "deg_c", None)
+    rows = {r.metric_key: r for r in st.forecast_values(fx.LOC_EXT, "external", [group])}
+    assert {k: (r.forecast_style, r.unit) for k, r in rows.items()} == {
+        "TEMP": ("short", "deg_c"),
+        "WIND_SPEED": ("short", "km/h"),
+        "PRECIP": ("short", "mm"),
+        "CLOUD_COVER": ("short", "%"),
+        "VISIBILITY": ("short", "km"),
+        "NEW_METRIC": ("short", None),
+    }
+    # 정규화 규칙은 직접 경로와 같다 — TEMP(short) → TMP, weatherapi 풍속 km/h → m/s.
+    assert to_weather_metric(rows["TEMP"]).metric_key == "TMP"
+    wind = to_weather_metric(rows["WIND_SPEED"])
+    assert (wind.metric_key, wind.unit, wind.value_number) == ("WSD", "m/s", pytest.approx(10.0))
+
+
+def test_wind_speed_unit_comes_from_the_provider_table_or_the_row_is_dropped() -> None:
+    def wind(provider: str) -> list[st.MapWeatherValue]:
+        group = st.MapWeatherForecastGroup.model_validate(
+            fx.forecast_group({"WIND_SPEED": [5.0]}, provider=provider)
+        )
+        return st.forecast_values(fx.LOC_EXT, "external", [group])
+
+    assert [r.unit for r in wind("openweathermap")] == ["m/s"]
+    assert [r.unit for r in wind("open_meteo")] == ["km/h"]
+    assert [r.unit for r in wind("python-khoa-api")] == ["m/s"]
+    assert wind("brand-new-provider") == []
+
+
+def test_khoa_forecast_units_follow_the_khoa_table() -> None:
+    group = st.MapWeatherForecastGroup.model_validate(
+        fx.forecast_group({"TEMP": [21.0], "WAVE_HEIGHT": [0.5]}, provider="python-khoa-api")
+    )
+    rows = {r.metric_key: r.unit for r in st.forecast_values(fx.LOC_EXT, "external", [group])}
+    assert rows == {"TEMP": "℃", "WAVE_HEIGHT": "m"}
 
 
 def test_kma_wind_speed_forecast_keeps_its_fixed_unit() -> None:
@@ -135,9 +174,16 @@ def test_daily_slots_project_only_requested_dates_and_keep_vs_previous_day() -> 
     rows = st.daily_values(fx.LOC_KMA, daily, dates=[yesterday])
     assert {r.target_at.date() for r in rows} == {yesterday}
     keys = [(r.metric_key, r.metric_name) for r in rows]
-    assert keys[:2] == [("TMN", "아침 최저기온"), ("TMX", "아침 최고기온")]
+    # KMA 일 최저/최고(TMN/TMX)와 겹치지 않는 key, 현재·예보와 섞이지 않는 style.
+    assert keys == [
+        ("SLOT_TEMP_MIN", "아침 최저기온"),
+        ("SLOT_TEMP_MAX", "아침 최고기온"),
+        ("SLOT_HUMIDITY_AVG", "아침 평균 습도"),
+        ("SLOT_PRECIP_SUM", "아침 강수량"),
+    ]
     first = rows[0]
-    assert first.forecast_style == "observed"
+    assert first.forecast_style == "daily_summary"
+    assert first.observed_at is None
     assert first.timeline_bucket == "morning"
     assert first.valid_from == datetime(
         yesterday.year, yesterday.month, yesterday.day, 5, tzinfo=KST
@@ -145,6 +191,23 @@ def test_daily_slots_project_only_requested_dates_and_keep_vs_previous_day() -> 
     assert first.valid_until == datetime(
         yesterday.year, yesterday.month, yesterday.day, 11, tzinfo=KST
     )
+
+
+def test_today_only_projects_finished_slots() -> None:
+    today = datetime.now(KST).date()
+    section = st.MapWeatherDailySection.model_validate(
+        fx.daily_section(
+            slots=[
+                fx.daily_slot(today, "morning", partial=False),
+                fx.daily_slot(today, "noon", partial=True),
+            ]
+        )
+    )
+    rows = st.daily_values(fx.LOC_KMA, section, dates=[today], complete_only=[today])
+    assert {r.timeline_bucket for r in rows} == {"morning"}
+    # 지난 일자(complete_only 밖)는 partial이어도 낸다(그 세대 요약이 덜 모였을 뿐 값은 있다).
+    rows = st.daily_values(fx.LOC_KMA, section, dates=[today])
+    assert {r.timeline_bucket for r in rows} == {"morning", "noon"}
 
 
 def test_daily_slots_without_samples_are_skipped() -> None:
@@ -165,6 +228,7 @@ def test_nearest_bundle_sources_and_section_failure() -> None:
         (fx.LOC_AIR, "PM10"),
         (fx.LOC_KMA, "TMP"),
         (fx.LOC_EXT, "TEMP"),
+        (fx.LOC_EXT, "WIND_SPEED"),  # openweathermap 풍속은 m/s로 알려져 있다
     }
 
 
@@ -224,6 +288,20 @@ async def test_contract_violation_marks_chunk_failed() -> None:
     result = await st.fetch_location_bundles(client, [fx.LOC_KMA], sections=("current",))
     assert result.failed == {fx.LOC_KMA}
     assert result.bundles == {}
+
+
+async def test_ids_outside_the_map_location_id_contract_are_not_sent() -> None:
+    client, seen = _map_client(lambda r: httpx.Response(200, json=fx.batch_body([fx.bundle()])))
+    bad = ["bad|id", "x" * 121, "ctl\x01"]
+    result = await st.fetch_location_bundles(client, [fx.LOC_KMA, *bad], sections=("current",))
+    assert [json.loads(r.content)["location_ids"] for r in seen] == [[fx.LOC_KMA]]
+    assert result.missing == set(bad)
+    assert result.failed == set()
+
+    only_bad, seen_bad = _map_client(lambda r: httpx.Response(500))
+    result = await st.fetch_location_bundles(only_bad, bad, sections=("current",))
+    assert seen_bad == []
+    assert result.missing == set(bad)
 
 
 async def test_empty_id_list_makes_no_call() -> None:

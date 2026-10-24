@@ -12,6 +12,11 @@ Map #1367(ADR-114 W0~W8, weather 2단계)이 머지됐고 PinVi #599가 `e0131ec
   `providers/kma.py` 고정 표, 단위 없는 비-KMA `WIND_SPEED`(km/h·m/s 혼재)는 버림, 지난 trip 일자는 세 구간 요약을 관측 행으로.
 - 계약 게이트 `test_kor_travel_map_weather_contract.py`(query exact·배치 본문·소비 필드·닫힌 어휘·fixture). OpenAPI 부분 검증기를
   `tests/openapi_subset.py`로 옮겨 transport 게이트와 공유(`additionalProperties` schema도 검사).
+- 적대 리뷰 2회(플래그 on 전 수정) 반영: 해석 재해석 폭주(부분 명시·핵심 부분만 stale·15분 backoff·trip 동시성 4), 위치 집합을 직접
+  `/resolve` 규칙(가장 가까운 측정소 + 5 km 둘레의 비측정소, 측정소는 location_id 접두어)의 상위 집합으로, 두 경로가 서로의 캐시 행을
+  쓰지 않게 `measurement_point.resolved_via` 표식(migration 없음), 7일 TTL, upsert, 짧은 timeout·요청 예산·회로차단, 지난 일자 요약은
+  `daily_summary` style·`SLOT_*` key로 web "시간대별" 묶음(TripWeatherSummary), 오늘은 끝난 구간 요약, 외부 provider 단위 표·풍속
+  provider별 단위, marker 관측 적재 전 503·token 없음 503·설정 검사, 배치 id 계약 검사, 이중 로그 제거.
 
 ## 2026-10-24 (claude) — Map 계약 재vendor 4: e0131ec1 (브랜치 `chore/revendor-map-e0131ec1`)
 

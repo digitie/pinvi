@@ -170,3 +170,115 @@ async def test_list_query_and_repeated_section_params() -> None:
     assert seen2[0].url.params.get_list("forecast_styles") == ["short"]
     with pytest.raises(ValueError):
         await client2.nearest(lon=126.9, lat=37.5, radius_m=200_000.0)
+
+
+# ── 회로차단·timeout (ADR-077 리뷰 반영) ─────────────────────────────────────────────
+
+
+def _clocked(handler: Handler) -> tuple[KorTravelMapWeatherClient, list[httpx.Request], list[float]]:
+    now = [1000.0]
+    seen: list[httpx.Request] = []
+
+    def record(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return handler(request)
+
+    map_client = KorTravelMapClient(
+        httpx.AsyncClient(base_url="http://map.test", transport=httpx.MockTransport(record)),
+        service_token="svc",
+        max_attempts=1,
+    )
+    client = KorTravelMapWeatherClient(
+        map_client, timeout_seconds=2.0, connect_timeout_seconds=0.5, clock=lambda: now[0]
+    )
+    return client, seen, now
+
+
+async def test_circuit_opens_after_three_failures_and_fails_fast() -> None:
+    client, seen, now = _clocked(
+        lambda r: httpx.Response(503, json=fx.problem_body(503, "WEATHER_STATE_UNAVAILABLE"))
+    )
+    for _ in range(3):
+        with pytest.raises(KorTravelMapWeatherUnavailable):
+            await client.nearest(lon=126.9, lat=37.5)
+    assert len(seen) == 3
+    with pytest.raises(KorTravelMapWeatherUnavailable) as info:
+        await client.nearest(lon=126.9, lat=37.5)
+    assert info.value.code == "CIRCUIT_OPEN"
+    assert len(seen) == 3  # 열린 동안 부르지 않는다
+
+    # 같은 Map client를 감싼 새 래퍼(요청마다 만든다)도 같은 회로를 본다.
+    other = KorTravelMapWeatherClient(client._map, clock=lambda: now[0])
+    with pytest.raises(KorTravelMapWeatherUnavailable) as info:
+        await other.batch(location_ids=[fx.LOC_KMA])
+    assert info.value.code == "CIRCUIT_OPEN"
+
+    # open 시간이 지나면 시험 호출 하나 — 실패하면 다시 열린다.
+    now[0] += 31.0
+    with pytest.raises(KorTravelMapWeatherUnavailable) as info:
+        await client.nearest(lon=126.9, lat=37.5)
+    assert info.value.code == "WEATHER_STATE_UNAVAILABLE"
+    assert len(seen) == 4
+    with pytest.raises(KorTravelMapWeatherUnavailable) as info:
+        await client.nearest(lon=126.9, lat=37.5)
+    assert info.value.code == "CIRCUIT_OPEN"
+
+
+async def test_circuit_closes_after_a_successful_trial() -> None:
+    responses = [httpx.Response(503, json={"code": "X"})] * 3 + [
+        httpx.Response(200, json=fx.bundle_body(fx.kma_bundle()))
+    ] * 2
+    client, seen, now = _clocked(lambda r: responses[len(seen) - 1])
+    for _ in range(3):
+        with pytest.raises(KorTravelMapWeatherUnavailable):
+            await client.nearest(lon=126.9, lat=37.5)
+    now[0] += 31.0
+    await client.nearest(lon=126.9, lat=37.5)
+    await client.nearest(lon=126.9, lat=37.5)
+    assert len(seen) == 5
+
+
+async def test_not_loaded_and_4xx_do_not_open_the_circuit() -> None:
+    client, seen, _ = _clocked(
+        lambda r: httpx.Response(503, json=fx.problem_body(503, "WEATHER_STATE_NOT_LOADED"))
+    )
+    for _ in range(5):
+        with pytest.raises(KorTravelMapWeatherUnavailable) as info:
+            await client.nearest(lon=126.9, lat=37.5)
+        assert info.value.code == "WEATHER_STATE_NOT_LOADED"
+    assert len(seen) == 5
+    client_404, seen_404, _ = _clocked(
+        lambda r: httpx.Response(404, json=fx.problem_body(404, "NOT_FOUND"))
+    )
+    for _ in range(5):
+        with pytest.raises(KorTravelMapFeatureNotFound):
+            await client_404.nearest(lon=126.9, lat=37.5)
+    assert len(seen_404) == 5
+
+
+async def test_per_call_timeout_is_short() -> None:
+    client, seen, _ = _clocked(lambda r: httpx.Response(200, json=fx.bundle_body(fx.kma_bundle())))
+    await client.nearest(lon=126.9, lat=37.5)
+    timeout = seen[0].extensions["timeout"]
+    assert timeout == {"connect": 0.5, "read": 2.0, "write": 2.0, "pool": 2.0}
+
+
+def test_settings_reject_weather_flag_without_service_token() -> None:
+    from pydantic import ValidationError
+
+    from app.core.config import Settings
+
+    with pytest.raises(ValidationError, match="PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN"):
+        Settings(  # type: ignore[call-arg]
+            _env_file=None,
+            pinvi_environment="test",
+            pinvi_kor_travel_map_weather_enabled=True,
+            pinvi_kor_travel_map_service_token=" ",
+        )
+    ok = Settings(  # type: ignore[call-arg]
+        _env_file=None,
+        pinvi_environment="test",
+        pinvi_kor_travel_map_weather_enabled=True,
+        pinvi_kor_travel_map_service_token="svc-token",
+    )
+    assert ok.pinvi_kor_travel_map_weather_enabled is True

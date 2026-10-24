@@ -1003,22 +1003,36 @@ PinVi #599가 Map `e0131ec1` service OpenAPI를 vendor). 플래그(기본 `false
 
 | PinVi 경로 | 플래그 off(지금) | 플래그 on |
 | --- | --- | --- |
-| 위치 해석(`weather_location_resolver`) | `/v1/weather/resolve` 20→50→100 km | Map `GET /nearest` 20→50→100 km(`radius_m`) — 같은 캐시 표 |
+| 위치 해석 | `/v1/weather/resolve` 20→50→100 km | Map `GET /nearest` 20→50→100 km + `GET /locations?near=` — 같은 캐시 표, 서로의 행은 쓰지 않음(§9.1) |
 | 단건 카드 `GET /features/{id}/weather` | `latest` + `forecast` × source 위치 | Map `POST /locations/batch`(`current`·`forecasts`, `asof` 창) + 특보 `/markers` |
-| trip view weather | `/markers` + `forecast` × source 위치 | Map `POST /locations/batch`(`current`·`forecasts`·지난 날짜면 `daily_summaries`) + 특보 `/markers` |
+| trip view weather | `/markers` + `forecast` × source 위치 | Map `POST /locations/batch`(`current`·`forecasts`·지난 일자·오늘이면 `daily_summaries`) + 특보 `/markers` |
 | 지도 marker `GET /weather/markers-in-bounds` | `/nearby`(center+radius) | Map `GET /locations`(bbox ∩ 국내 범위, `include_current=true`) |
 | Admin weather-values | 직접 | **직접 그대로**(provenance 필드 `dataset_key`가 Map에 없다) |
 | 특보 | `/markers`·`latest`의 alert | **직접 그대로** — Map에 특보 데이터셋이 없다(W7 범위 밖) |
 
-### 9.1 해석 — `/nearest`의 부분별 source
+### 9.1 해석 — 직접 `/resolve`와 같은 위치 집합 + 부분별 source (`app/services/weather_map_resolver.py`)
 
-Map `/nearest`는 근처 위치를 가까운 순으로 보고 **부분마다**(관측·예보 style별·요약) 값이 있는 가장 가까운 위치를 고른다
-(`source.location_id`). PinVi는 대표 위치 + 부분별 source 위치를 `source_location_ids`로 저장한다 — §3.3 "source bundle 전체" 규칙과
-같은 효과다(대표 위치가 대기질 측정소여도 KMA 격자 예보가 빠지지 않는다). 캐시 표(`weather_location_links`)는 직접 경로와 같다(둘 다
-weather `location_id`) — 플래그를 바꿔도 캐시가 유효하다. `measurement_point`는 Map 경로에서 `null`이다.
+직접 `/resolve`는 가장 가까운 **측정소**(AirKorea·KHOA·KREX — weather가 `measurement_point` 메타를 붙이는 위치)를 대표로 고르고,
+`max(5 km, d + 5 km)` 안의 **측정소가 아닌** 위치(KMA 격자·외부 provider 앵커)를 함께 묶는다. Map 위치에는 메타가 없어 측정소 여부를
+weather location_id 접두어(`airkorea-`·`khoa-`·`krex-`, weather `providers/*.py`가 만든다)로 가린다. Map 경로는
 
-한 부분이라도 `not_loaded`·`unavailable`이면 그 부분의 source를 모르므로 행을 `stale=True`로 남겨 다음 호출이 다시 해석한다.
-데이터셋 하나가 오래 적재 전이면 요청마다 `/nearest`를 부른다(싸지만 행 갱신이 따른다) — Map schedule 일곱 개를 함께 켠다.
+1. `GET /nearest`(20 → 50 → 100 km, `sections=current,forecasts,daily_summaries`·`forecast_styles` 넷 명시)로 반경과 **부분마다** 값이 있는
+   가장 가까운 위치(`source.location_id`)를 얻고,
+2. 같은 반경의 `GET /locations?near=`(가까운 순, ≤ 500)에 직접 경로와 같은 대표·둘레 규칙을 적용한 뒤,
+3. 둘을 합친다 — 직접 경로 집합의 **상위 집합**이다(대표 측정소의 미세먼지도, 예보 없는 측정소 옆 KMA 격자 예보도 빠지지 않는다).
+
+**캐시** — 표(`weather_location_links`)는 같지만 두 경로는 **서로의 행을 쓰지 않는다**. Map 경로 행은
+`measurement_point = {"resolved_via": "kor_travel_map"}` 표식을 단다(이 열을 읽는 코드는 없다 — 스키마 변경·migration 없이 표식). 플래그를
+끄면 직접 경로가 표식 있는 행을 미스로 보고 `/resolve`로 다시 해석해 덮어쓰고, 켜면 Map 경로가 표식 없는 행을 다시 해석한다(행마다 한 번).
+쓰기는 upsert라 같은 feature의 첫 해석이 동시에 와도 PK 충돌이 없다.
+
+**재해석** — 좌표가 바뀌었거나 `resolved_at`이 7일을 넘었으면 다시 해석한다(해석 때 없던 source가 영영 빠지지 않게). 핵심 부분
+(`current`·`forecasts.ultra_short`·`forecasts.short`)이 `not_loaded`·`unavailable`이면 그 source를 모르므로 `stale=True`로 쓰되, stale 행도
+**15분 동안은 그대로 쓰고** 그 뒤에 다시 해석한다 — 적재 전 데이터셋 하나가 요청마다 재해석(반경 셋 + 쓰기)을 만들지 않게. 중기·외부·요약
+실패는 stale로 치지 않는다(TTL이 거둔다). 반경 안에 위치가 없으면 행을 쓰지 않는다(다음 요청이 다시 묻는다).
+
+**trip view** — 캐시는 한 쿼리로 읽고 미스만 동시성 4로 Map에 묻는다(쓰기는 한 세션에서 순차). 직접 경로처럼 feature마다 순차로 묻지 않아
+10초 예산 안에 끝난다.
 
 ### 9.2 평탄화 — Map 묶음 → 직접 경로와 같은 행
 
@@ -1031,14 +1045,20 @@ weather `location_id`) — 플래그를 바꿔도 캐시가 유효하다. `measu
   trip은 창이 이미 지났으면 예보를 요청하지 않는다).
 - `external` 묶음 → `forecast_style="short"`: weather는 외부 provider(OpenWeatherMap 등)·KHOA 예보를 `short` 사실로 저장하고 직접
   경로도 그 값을 줬다. Map은 export 묶음 이름으로만 나눈다.
-- 단위·이름: Map 예보에는 단위가 없고 관측·예보 모두 `metric_name`이 없다. `python-kma-api` 값은 weather `providers/kma.py`의
-  `KMA_METRIC_UNITS`·`KMA_METRIC_NAMES`(같은 provider의 고정 표)로 채운다. 그 밖 provider의 예보는 단위가 `null`이고, 단위가 provider마다
-  다른 `WIND_SPEED`(km/h·m/s)는 **버린다** — §3.1-(3) "잘못된 값보다 빠지는 편이 안전" 원칙.
+- 단위·이름: Map 예보에는 단위가 없고 관측·예보 모두 `metric_name`이 없다. weather provider 코드의 고정 표로 채운다 —
+  `python-kma-api`는 `providers/kma.py` `KMA_METRIC_UNITS`·`KMA_METRIC_NAMES`, KHOA는 `providers/khoa.py`, 외부 provider는
+  `providers/external.py`의 metric별 단위(전 provider 공통: `TEMP`·`FEELS_LIKE` deg_c, `HUMIDITY`·`PRECIP_PROB`·`CLOUD_COVER` %,
+  `PRECIP` mm, `PRESSURE` hPa, `VISIBILITY` km, `UV_INDEX` index, `WEATHER_CODE` code, `WIND_DIRECTION` deg). `WIND_SPEED`만 provider마다
+  다르다 — km/h(weatherapi·open_meteo·visual_crossing·weatherstack·accuweather·wttr_in), m/s(openweathermap·tomorrow_io·weatherbit·KHOA).
+  이 표에 없는 provider의 풍속 예보는 **버린다**(§3.1-(3) "잘못된 값보다 빠지는 편이 안전"). 그 밖 모르는 key는 단위 `null`.
 - `weather_domain`·`timeline_bucket`·`valid_from/until`은 Map에 없어 `null`이다(지어내지 않는다). web은 이 필드를 표시에 쓰지 않는다
   (`TripWeatherSummary`는 `metric_key`·`metric_name`·`forecast_style`·`unit`과 시각만 본다).
-- 지난 trip 일자: Map에는 과거 timeline이 없다. 대신 세 구간 요약(`daily_summaries`, KST 아침 [05,11)·점심 [11,17)·저녁 [17,23), 기본
-  14일)을 그 날짜만 관측 행으로 편다 — `TMN`/`TMX`/`REH`/`PCP`, `metric_name="아침 최저기온"` 등, `timeline_bucket`=구간,
-  `valid_from/until`=구간 경계. 표본 0인 구간은 건너뛴다. `vs_previous_day`(전날 같은 구간 대비, 어느 쪽이든 partial이면 Map이 null)는
+- 지난 trip 일자·오늘의 지난 시간대: Map에는 과거 timeline이 없고, 지금보다 이른 `from`은 Map이 지금으로 당긴다(지난 예보 시각은 주지
+  않는다, W5 — 직접 경로는 그날의 지난 예보 행도 줬다). 대신 세 구간 요약(`daily_summaries`, KST 아침 [05,11)·점심 [11,17)·저녁 [17,23),
+  기본 14일)을 지난 일자는 전부, 오늘은 끝난 구간(`partial=false`)만 행으로 편다 — `forecast_style="daily_summary"`, key는 KMA 일
+  최저/최고와 겹치지 않는 `SLOT_TEMP_MIN`·`SLOT_TEMP_MAX`·`SLOT_HUMIDITY_AVG`·`SLOT_PRECIP_SUM`, `metric_name="아침 최저기온"` 등,
+  `timeline_bucket`=구간, `valid_from/until`=구간 경계. 표본 0인 구간은 건너뛴다. web `TripWeatherSummary`는 이 style을 현재·예보와
+  섞지 않고 "시간대별" 묶음으로 세 구간(최저~최고·습도·강수)을 모두 보인다. 단건 카드는 요약을 싣지 않는다. `vs_previous_day`(전날 같은 구간 대비, 어느 쪽이든 partial이면 Map이 null)는
   해석 모델이 그대로 보존한다 — 공개 응답에 싣는 것은 별도 결정이다.
 
 ### 9.3 강등
@@ -1048,11 +1068,18 @@ weather `location_id`) — 플래그를 바꿔도 캐시가 유효하다. `measu
 | 부분 하나가 `not_loaded`·`unavailable` | 그 부분만 빠진 카드 | 그 위치를 "실패"로 셈(값 있으면 `found`, 없으면 `unavailable`) | 관측 없는 위치는 빠짐 |
 | 부분이 `no_data` | 그 부분만 빈 카드 | 확인된 없음(`no_data` 가능) | 빠짐 |
 | 배치 청크 호출 실패(503·timeout·계약 위반) | 그 청크 위치 값 없음 | 그 청크 위치 "실패" | — |
-| `/nearest`·Map 전체 장애 | 빈 카드(200) | `unavailable` | 503 `WEATHER_SERVICE_UNAVAILABLE` |
+| `/nearest`·Map 전체 장애·회로 열림·요청 예산 초과 | 빈 카드(200) | `unavailable` | 503 `WEATHER_SERVICE_UNAVAILABLE` |
+| 위치는 있으나 관측 데이터셋을 못 읽음(`current_freshness` 없음) | — | — | 503(빈 목록 아님) |
 | Map `missing`(지금 세대에 없는 위치) | 값 없음 | 확인된 없음 | — |
-| service token 없음 | Map 미호출 → 빈 카드 | `unavailable` | 503 |
+| service token 없음(설정 검사가 기동을 막지만 방어) | 503 `WEATHER_SERVICE_UNAVAILABLE`(직접 경로의 client 없음과 같다) | `unavailable` | 503 |
+| Map location_id 계약 밖 id(`|`·제어 문자·120자 초과) | 보내지 않음(값 없음) | 확인된 없음 | — |
 
-Map client는 재시도 0회다(503 `WEATHER_STATE_NOT_LOADED`는 결정적). trip view는 기존 view 예산(10초)을 그대로 쓴다.
+Map client는 재시도 0회다(503 `WEATHER_STATE_NOT_LOADED`는 결정적). 호출마다 read 3초·connect 1초
+(`PINVI_KOR_TRAVEL_MAP_WEATHER_{TIMEOUT,CONNECT_TIMEOUT}_SECONDS`), 카드·marker 요청 하나는 전체 5초
+(`PINVI_KOR_TRAVEL_MAP_WEATHER_REQUEST_BUDGET_SECONDS`), trip view는 기존 view 예산(10초)이다. **회로차단**: timeout·연결 실패·5xx
+(`NOT_LOADED` 제외)가 연속 3번이면 30초 동안 Map을 부르지 않고 즉시 실패한 뒤 시험 호출 하나만 보낸다(worker 프로세스마다 하나, 직접 경로
+회로와 같은 상태 기계). `PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED=true`인데 `PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN`이 비어 있으면 설정 검사가
+기동을 거부한다.
 
 ### 9.4 켜는 순서
 

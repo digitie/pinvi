@@ -7,12 +7,13 @@ ADR-068, T-368. `kor-travel-map`을 전혀 거치지 않는다 — T-363 trip vi
 
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.clients.kor_travel_map import KorTravelMapError, OptionalKorTravelMapHttpClientDep
-from app.clients.kor_travel_map_weather import KorTravelMapWeatherClient
+from app.clients.kor_travel_map_weather import create_map_weather_client
 from app.clients.kor_travel_weather import KorTravelWeatherError, OptionalKorTravelWeatherClientDep
 from app.core.bbox import MAX_ZOOM, MIN_ZOOM, parse_bbox
 from app.core.config import settings
@@ -67,16 +68,17 @@ async def weather_markers_in_bounds(
         return Envelope.of(WeatherMarkersInBoundsResponse(items=[], zoom=zoom, bbox=bbox_obj))
     if settings.pinvi_kor_travel_map_weather_enabled:
         # ADR-077 — Map `/v1/service/weather/locations`(영역 + 최신 관측). 실패 의미는 직접 경로와 같다.
-        if kor_travel_map_client is None:
+        if kor_travel_map_client is None or not kor_travel_map_client.has_service_token:
             raise _weather_unavailable()
         try:
-            items = await build_weather_markers_in_bounds_via_map(
-                bbox=bbox_obj,
-                zoom=zoom,
-                limit=limit,
-                map_client=KorTravelMapWeatherClient(kor_travel_map_client),
-            )
-        except KorTravelMapError as exc:
+            async with asyncio.timeout(settings.pinvi_kor_travel_map_weather_request_budget_seconds):
+                items = await build_weather_markers_in_bounds_via_map(
+                    bbox=bbox_obj,
+                    zoom=zoom,
+                    limit=limit,
+                    map_client=create_map_weather_client(kor_travel_map_client),
+                )
+        except (KorTravelMapError, TimeoutError) as exc:
             raise _weather_unavailable() from exc
         return Envelope.of(WeatherMarkersInBoundsResponse(items=items, zoom=zoom, bbox=bbox_obj))
     if weather_client is None:

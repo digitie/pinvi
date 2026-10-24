@@ -75,8 +75,8 @@ from app.services.weather_location_resolver import (
     WeatherLocationFound,
     WeatherLocationResolution,
     resolve_weather_location,
-    resolve_weather_location_via_map,
 )
+from app.services.weather_map_resolver import resolve_many_via_map
 from app.services.weather_map_state import bundle_values, fetch_alerts, fetch_location_bundles
 from app.services.weather_metrics import (
     WeatherFact,
@@ -386,6 +386,43 @@ async def _build_trip_weather(
     return pending.result()
 
 
+async def _resolve_all_via_map(
+    pending: _Pending,
+    db: AsyncSession,
+    map_client: KorTravelMapWeatherClient,
+    *,
+    deadline: float,
+) -> dict[str, WeatherLocationFound] | None:
+    """2) Map 경로 해석 — 캐시 한 쿼리, 미스는 상한 있는 동시성(`resolve_many_via_map`), 쓰기는 순차.
+
+    feature별 Map 오류는 그 feature만 `unavailable`, 예산이 끊기면 pending 전체가 `unavailable`이다(직접 경로와 같은 규칙).
+    """
+    coords = {fid: pending.coord_by_feature_id[fid] for fid in pending.feature_days}
+    try:
+        async with asyncio.timeout_at(deadline):
+            results = await resolve_many_via_map(db, coords, client=map_client)
+    except TimeoutError:
+        logger.error("trip_weather_batch.resolve_budget_exceeded — 미결 feature 전부 unavailable")
+        pending.mark(list(pending.feature_days), "unavailable")
+        return None
+    found: dict[str, WeatherLocationFound] = {}
+    failed = [fid for fid, res in results.items() if isinstance(res, KorTravelMapError)]
+    if failed:
+        logger.warning(
+            "trip_weather_batch.map_resolve_failed — 그 feature만 unavailable",
+            extra={"failed": len(failed), "total": len(results)},
+        )
+    for feature_id in pending.feature_days:
+        resolution = results.get(feature_id)
+        if isinstance(resolution, WeatherLocationFound):
+            found[feature_id] = resolution
+        elif isinstance(resolution, KorTravelMapError) or resolution is None:
+            pending.mark([feature_id], "unavailable")
+        else:
+            pending.mark([feature_id], "no_data")
+    return found
+
+
 async def build_trip_weather_via_kor_travel_map(
     db: AsyncSession,
     *,
@@ -397,12 +434,12 @@ async def build_trip_weather_via_kor_travel_map(
 ) -> tuple[_DayMaps, _DayMaps]:
     """Map weather 상태 표면 기반 trip weather 투영(ADR-077, 플래그 on) — 셰입은 직접 경로와 같다.
 
-    1)~3)·5)는 직접 경로와 **같은 함수**다(대상 판정·순차 해석과 예산·bundle 합집합·날짜 슬라이스와 부분
-    실패 규칙). 다른 것은 2) 해석(Map `/nearest`)과 4) 값 조회다: Map `POST /locations/batch`(bundle 위치
-    전체, 50곳씩 청크)로 관측(`current`)·예보(`forecasts`, 이 trip 날짜 창 — 창이 이미 지났으면 요청하지
-    않는다)·지난 날짜의 세 구간 요약(`daily_summaries` — 직접 경로의 과거 timeline 대신,
-    `weather_map_state.daily_values`)을 받고, 특보만 kor-travel-weather `/markers`의 `alerts`로 합친다
-    (weather client가 없으면 특보 없이).
+    1)·3)·5)는 직접 경로와 **같은 함수**다(대상 판정·bundle 합집합·날짜 슬라이스와 부분 실패 규칙). 다른 것은
+    2) 해석 — Map `/nearest` + `/locations?near=`(`weather_map_resolver`), 캐시는 한 쿼리로 읽고 미스만 상한 있는
+    동시성으로 묻는다(직접 경로처럼 순차가 아니다) — 와 4) 값 조회다: Map `POST /locations/batch`(bundle 위치 전체,
+    50곳씩 청크)로 관측(`current`)·예보(`forecasts`, 이 trip 날짜 창 — 창이 이미 지났으면 요청하지 않는다)·세 구간
+    요약(`daily_summaries` — 지난 일자 전부와 오늘의 끝난 구간, 직접 경로의 과거 timeline 대신)을 받고, 특보만
+    kor-travel-weather `/markers`의 `alerts`로 합친다(weather client가 없으면 특보 없이).
 
     부분별 강등: 위치의 요청 부분 중 하나가 `not_loaded`·`unavailable`이거나 그 위치의 청크 호출이 실패하면
     그 위치를 "실패"로 센다 — 직접 경로의 location fetch 실패와 같은 규칙(값이 있으면 `found`, 없으면
@@ -415,12 +452,7 @@ async def build_trip_weather_via_kor_travel_map(
         if not pending.feature_days:
             return pending.result()
 
-        async def resolve(feature_id: str, lat: float, lon: float) -> WeatherLocationResolution:
-            return await resolve_weather_location_via_map(
-                db, feature_id=feature_id, lat=lat, lon=lon, client=map_client
-            )
-
-        found = await _resolve_all(pending, resolve, deadline=deadline, errors=(KorTravelMapError,))
+        found = await _resolve_all_via_map(pending, db, map_client, deadline=deadline)
         if not found:
             return pending.result()
 
@@ -430,10 +462,13 @@ async def build_trip_weather_via_kor_travel_map(
         range_from = _weather_target_at(bundles.needed_dates[0])
         range_to = _weather_target_at(bundles.needed_dates[-1]) + timedelta(days=1)
         past_dates = [d for d in bundles.needed_dates if d < today]
+        # 오늘은 끝난 구간의 요약도 낸다 — Map은 지난 예보 시각을 떼고 주므로(W5) 그날의 지난 시간대는 요약이 채운다.
+        daily_dates = [d for d in bundles.needed_dates if d <= today]
+        today_dates = [d for d in daily_dates if d == today]
         sections: list[WeatherSection] = ["current"]
         if range_to > now:
             sections.append("forecasts")
-        if past_dates:
+        if daily_dates:
             sections.append("daily_summaries")
 
         try:
@@ -443,7 +478,8 @@ async def build_trip_weather_via_kor_travel_map(
                         map_client,
                         bundles.location_ids,
                         sections=sections,
-                        forecast_from=max(range_from, now),
+                        # 지금보다 이른 `from`은 Map이 지금으로 당긴다(지난 예보 시각은 주지 않는다).
+                        forecast_from=range_from,
                         forecast_to=range_to,
                     ),
                     fetch_alerts(weather_client, bundles.location_ids),
@@ -459,7 +495,9 @@ async def build_trip_weather_via_kor_travel_map(
             bundle = batch.bundles.get(location_id)
             values: list[WeatherFact] = []
             if bundle is not None:
-                values += bundle_values(bundle, daily_dates=past_dates)
+                values += bundle_values(
+                    bundle, daily_dates=daily_dates, daily_complete_only=today_dates
+                )
             values += alerts.get(location_id, [])
             values_by_location[location_id] = values
             # Map이 묶음도 missing도 주지 않은 위치는 확인되지 않은 것이다(실패로 센다).

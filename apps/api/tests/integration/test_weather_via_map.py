@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from collections.abc import Callable, Iterator
@@ -36,11 +37,8 @@ from app.core.config import settings
 from app.core.time import KST
 from app.main import app
 from app.models.weather_location_link import WeatherLocationLink
-from app.services.weather_location_resolver import (
-    WeatherLocationFound,
-    WeatherLocationNoData,
-    resolve_weather_location_via_map,
-)
+from app.services.weather_location_resolver import WeatherLocationFound, WeatherLocationNoData
+from app.services.weather_map_resolver import resolve_weather_location_via_map
 from tests import weather_map_fixtures as fx
 
 pytestmark = pytest.mark.asyncio
@@ -135,15 +133,33 @@ class _Weather:
         raise AssertionError(f"플래그 on에서 kor-travel-weather {name} 호출")
 
 
+def _near_body(*pairs: tuple[str, float]) -> dict[str, Any]:
+    return fx.list_body(
+        [fx.location(loc, distance_m=distance) for loc, distance in pairs], with_current=False
+    )
+
+
+_SPLIT_NEAR = (
+    (fx.LOC_AIR, 270.0),
+    (fx.LOC_KMA, 1200.0),
+    ("airkorea-other-station", 2000.0),
+    (fx.LOC_EXT, 3400.0),
+    ("kma-grid-far", 9000.0),
+)
+
+
 def _nearest_then_batch(
     *,
     nearest: dict[str, Any] | None = None,
     batch: Callable[[list[str]], httpx.Response] | None = None,
+    near: tuple[tuple[str, float], ...] = ((fx.LOC_KMA, 100.0),),
 ) -> WeatherHandler:
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if path == "/v1/service/weather/nearest":
             return httpx.Response(200, json=fx.bundle_body(nearest or fx.kma_bundle()))
+        if path == "/v1/service/weather/locations" and request.method == "GET":
+            return httpx.Response(200, json=_near_body(*near))
         if path == "/v1/service/weather/locations/batch":
             ids = json.loads(request.content)["location_ids"]
             if batch is not None:
@@ -182,68 +198,223 @@ def _install(fake: _Map, weather: Any) -> None:
 # ── 해석기 ───────────────────────────────────────────────────────────────────────────
 
 
-async def test_resolver_persists_per_section_sources_and_escalates_radius(
-    session_factory: Any,
-) -> None:
-    radii: list[str] = []
-
+def _resolver_handler(
+    *,
+    nearest: Callable[[], dict[str, Any]] = fx.nearest_split_bundle,
+    near: tuple[tuple[str, float], ...] = _SPLIT_NEAR,
+    min_radius_m: float = 0.0,
+    calls: list[httpx.Request] | None = None,
+) -> WeatherHandler:
     def handler(request: httpx.Request) -> httpx.Response:
-        radii.append(request.url.params["radius_m"])
-        if float(request.url.params["radius_m"]) < 50_000:
-            return httpx.Response(404, json=fx.problem_body(404, "NOT_FOUND"))
-        data = fx.nearest_split_bundle()
-        data["daily_summaries"] = fx.daily_section("no_data")
-        data["forecasts"]["ultra_short"] = fx.forecast_section("ultra_short", "no_data")
-        return httpx.Response(200, json=fx.bundle_body(data))
+        if calls is not None:
+            calls.append(request)
+        path = request.url.path
+        if path == "/v1/service/weather/nearest":
+            if float(request.url.params["radius_m"]) < min_radius_m:
+                return httpx.Response(404, json=fx.problem_body(404, "NOT_FOUND"))
+            return httpx.Response(200, json=fx.bundle_body(nearest()))
+        if path == "/v1/service/weather/locations":
+            return httpx.Response(200, json=_near_body(*near))
+        return httpx.Response(404, json={"detail": "Not Found"})
 
-    fake = _Map(handler)
-    feature_id = f"f_{uuid.uuid4().hex[:8]}"
+    return handler
+
+
+def _resolver_client(fake: _Map) -> KorTravelMapWeatherClient:
+    return KorTravelMapWeatherClient(fake.client)
+
+
+async def _link(session_factory: Any, feature_id: str) -> WeatherLocationLink:
     async with session_factory() as db:
-        result = await resolve_weather_location_via_map(
-            db,
-            feature_id=feature_id,
-            lat=_LAT,
-            lon=_LON,
-            client=KorTravelMapWeatherClient(fake.client),
-        )
-        assert result == WeatherLocationFound(fx.LOC_AIR, (fx.LOC_AIR, fx.LOC_KMA, fx.LOC_EXT))
-        assert radii == ["20000.0", "50000.0"]
         row = (
             await db.execute(
                 select(WeatherLocationLink).where(WeatherLocationLink.feature_id == feature_id)
             )
         ).scalar_one()
-        assert row.stale is False
-        assert row.distance_km == pytest.approx(0.27)
-        assert row.measurement_point is None
-
-        # 캐시 적중 — Map을 다시 부르지 않는다.
-        again = await resolve_weather_location_via_map(
-            db,
-            feature_id=feature_id,
-            lat=_LAT,
-            lon=_LON,
-            client=KorTravelMapWeatherClient(fake.client),
-        )
-        assert again == result
-        assert len(radii) == 2
+        return row
 
 
-async def test_resolver_keeps_row_stale_while_a_section_is_not_loaded(session_factory: Any) -> None:
-    fake = _Map(lambda r: httpx.Response(200, json=fx.bundle_body(fx.nearest_split_bundle())))
+def _no_core_failure() -> dict[str, Any]:
+    data = fx.nearest_split_bundle()
+    data["forecasts"]["ultra_short"] = fx.forecast_section("ultra_short", "no_data")
+    return data
+
+
+async def test_resolver_builds_direct_path_superset_and_escalates_radius(
+    session_factory: Any,
+) -> None:
+    """대표 = 가장 가까운 측정소, + 그 둘레(5.27 km) 안의 측정소 아닌 위치, + 부분별 source(직접 `/resolve` 상위 집합)."""
+    calls: list[httpx.Request] = []
+    fake = _Map(_resolver_handler(nearest=_no_core_failure, min_radius_m=50_000, calls=calls))
     feature_id = f"f_{uuid.uuid4().hex[:8]}"
-    client = KorTravelMapWeatherClient(fake.client)
+    async with session_factory() as db:
+        result = await resolve_weather_location_via_map(
+            db, feature_id=feature_id, lat=_LAT, lon=_LON, client=_resolver_client(fake)
+        )
+    # 다른 측정소(airkorea-other-station)와 둘레 밖(kma-grid-far)은 빠진다 — 직접 경로와 같은 규칙.
+    assert result == WeatherLocationFound(fx.LOC_AIR, (fx.LOC_AIR, fx.LOC_KMA, fx.LOC_EXT))
+    nearest_calls = [r for r in calls if r.url.path.endswith("/nearest")]
+    assert [r.url.params["radius_m"] for r in nearest_calls] == ["20000.0", "50000.0"]
+    # 해석이 쓰는 부분만 명시해서 묻는다.
+    assert nearest_calls[-1].url.params.get_list("sections") == [
+        "current",
+        "forecasts",
+        "daily_summaries",
+    ]
+    [listing] = [r for r in calls if r.url.path == "/v1/service/weather/locations"]
+    assert (listing.url.params["radius_m"], listing.url.params["limit"]) == ("50000.0", "500")
+
+    row = await _link(session_factory, feature_id)
+    assert row.stale is False  # 실패한 부분은 daily_summaries(핵심 아님)뿐
+    assert row.distance_km == pytest.approx(0.27)
+    assert row.measurement_point == {"resolved_via": "kor_travel_map"}
+
+    # 캐시 적중 — Map을 다시 부르지 않는다.
+    async with session_factory() as db:
+        again = await resolve_weather_location_via_map(
+            db, feature_id=feature_id, lat=_LAT, lon=_LON, client=_resolver_client(fake)
+        )
+    assert again == result
+    assert len(calls) == 3
+
+
+async def test_resolver_without_any_station_anchors_on_the_nearest_location(
+    session_factory: Any,
+) -> None:
+    fake = _Map(
+        _resolver_handler(
+            nearest=fx.kma_bundle, near=((fx.LOC_KMA, 800.0), ("kma-grid-61-127", 4000.0))
+        )
+    )
+    feature_id = f"f_{uuid.uuid4().hex[:8]}"
+    async with session_factory() as db:
+        result = await resolve_weather_location_via_map(
+            db, feature_id=feature_id, lat=_LAT, lon=_LON, client=_resolver_client(fake)
+        )
+    assert result == WeatherLocationFound(fx.LOC_KMA, (fx.LOC_KMA, "kma-grid-61-127"))
+
+
+async def test_core_section_failure_marks_stale_with_15_minute_backoff(
+    session_factory: Any,
+) -> None:
+    calls: list[httpx.Request] = []
+    fake = _Map(_resolver_handler(calls=calls))  # ultra_short not_loaded = 핵심 부분 실패
+    feature_id = f"f_{uuid.uuid4().hex[:8]}"
+    client = _resolver_client(fake)
     async with session_factory() as db:
         await resolve_weather_location_via_map(
             db, feature_id=feature_id, lat=_LAT, lon=_LON, client=client
         )
+        # 15분 안에는 stale 행을 그대로 쓴다 — 재해석 폭주 없음.
+        for _ in range(3):
+            await resolve_weather_location_via_map(
+                db, feature_id=feature_id, lat=_LAT, lon=_LON, client=client
+            )
+    assert len(calls) == 2
+    assert (await _link(session_factory, feature_id)).stale is True
+
+    async with session_factory() as db:
+        row = await db.get(WeatherLocationLink, feature_id)
+        assert row is not None
+        row.resolved_at = datetime.now(UTC) - timedelta(minutes=16)
+        await db.commit()
+        await resolve_weather_location_via_map(
+            db, feature_id=feature_id, lat=_LAT, lon=_LON, client=client
+        )
+    assert len(calls) == 4
+
+
+async def test_old_rows_are_re_resolved_after_the_ttl(session_factory: Any) -> None:
+    calls: list[httpx.Request] = []
+    fake = _Map(_resolver_handler(nearest=_no_core_failure, calls=calls))
+    feature_id = f"f_{uuid.uuid4().hex[:8]}"
+    client = _resolver_client(fake)
+    async with session_factory() as db:
         await resolve_weather_location_via_map(
             db, feature_id=feature_id, lat=_LAT, lon=_LON, client=client
         )
         row = await db.get(WeatherLocationLink, feature_id)
-        assert row is not None and row.stale is True
-    # 적재 전 부분의 source를 모르므로 매번 다시 해석한다.
-    assert len(fake.weather_requests()) == 2
+        assert row is not None
+        row.resolved_at = datetime.now(UTC) - timedelta(days=8)
+        await db.commit()
+        await resolve_weather_location_via_map(
+            db, feature_id=feature_id, lat=_LAT, lon=_LON, client=client
+        )
+    assert len(calls) == 4
+    row = await _link(session_factory, feature_id)
+    assert datetime.now(UTC) - row.resolved_at < timedelta(minutes=1)
+
+
+async def test_paths_do_not_reuse_each_others_rows(session_factory: Any) -> None:
+    """플래그를 끄면 직접 경로가 Map 행을 다시 해석하고, 켜면 Map 경로가 직접 경로 행을 다시 해석한다."""
+    from app.clients.kor_travel_weather import (
+        CoordinateRequestOut,
+        LocationOut,
+        ResolvedWeatherOut,
+    )
+    from app.services.weather_location_resolver import resolve_weather_location
+
+    class _Direct:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def resolve(self, *, lat: float, lon: float, radius_km: float | None = None) -> Any:
+            self.calls += 1
+            location = LocationOut(
+                location_id="direct-anchor", name="x", latitude=lat, longitude=lon, enabled=True
+            )
+            return ResolvedWeatherOut(
+                requested=CoordinateRequestOut(latitude=lat, longitude=lon),
+                location=location,
+                distance_km=0.1,
+                source_locations=(location,),
+            )
+
+    calls: list[httpx.Request] = []
+    fake = _Map(_resolver_handler(nearest=_no_core_failure, calls=calls))
+    direct = _Direct()
+    feature_id = f"f_{uuid.uuid4().hex[:8]}"
+    async with session_factory() as db:
+        await resolve_weather_location_via_map(
+            db, feature_id=feature_id, lat=_LAT, lon=_LON, client=_resolver_client(fake)
+        )
+    async with session_factory() as db:
+        found = await resolve_weather_location(
+            db,
+            feature_id=feature_id,
+            lat=_LAT,
+            lon=_LON,
+            client=direct,  # type: ignore[arg-type]
+        )
+    assert found == WeatherLocationFound("direct-anchor", ("direct-anchor",))
+    assert direct.calls == 1
+    assert (await _link(session_factory, feature_id)).measurement_point is None
+    async with session_factory() as db:
+        again = await resolve_weather_location_via_map(
+            db, feature_id=feature_id, lat=_LAT, lon=_LON, client=_resolver_client(fake)
+        )
+    assert again.location_id == fx.LOC_AIR  # type: ignore[union-attr]
+    assert len([r for r in calls if r.url.path.endswith("/nearest")]) == 2
+
+
+async def test_concurrent_first_resolve_does_not_conflict(session_factory: Any) -> None:
+    """같은 feature의 첫 해석이 두 세션에서 동시에 와도 upsert라 IntegrityError가 없다."""
+    fake = _Map(_resolver_handler(nearest=_no_core_failure))
+    feature_id = f"f_{uuid.uuid4().hex[:8]}"
+    client = _resolver_client(fake)
+    async with session_factory() as db_a, session_factory() as db_b:
+        assert await db_a.get(WeatherLocationLink, feature_id) is None
+        assert await db_b.get(WeatherLocationLink, feature_id) is None
+        results = await asyncio.gather(
+            resolve_weather_location_via_map(
+                db_a, feature_id=feature_id, lat=_LAT, lon=_LON, client=client
+            ),
+            resolve_weather_location_via_map(
+                db_b, feature_id=feature_id, lat=_LAT, lon=_LON, client=client
+            ),
+        )
+    assert results[0] == results[1]
+    assert (await _link(session_factory, feature_id)).location_id == fx.LOC_AIR
 
 
 async def test_resolver_no_location_within_100km_is_no_data(session_factory: Any) -> None:
@@ -251,11 +422,7 @@ async def test_resolver_no_location_within_100km_is_no_data(session_factory: Any
     feature_id = f"f_{uuid.uuid4().hex[:8]}"
     async with session_factory() as db:
         result = await resolve_weather_location_via_map(
-            db,
-            feature_id=feature_id,
-            lat=_LAT,
-            lon=_LON,
-            client=KorTravelMapWeatherClient(fake.client),
+            db, feature_id=feature_id, lat=_LAT, lon=_LON, client=_resolver_client(fake)
         )
         assert isinstance(result, WeatherLocationNoData)
         assert await db.get(WeatherLocationLink, feature_id) is None
@@ -264,6 +431,51 @@ async def test_resolver_no_location_within_100km_is_no_data(session_factory: Any
         "50000.0",
         "100000.0",
     ]
+
+
+async def test_resolve_many_runs_misses_concurrently_and_isolates_failures(
+    session_factory: Any,
+) -> None:
+    from app.services.weather_map_resolver import resolve_many_via_map
+
+    in_flight = 0
+    peak = 0
+    lock = asyncio.Lock()
+
+    async def slow_nearest(request: httpx.Request) -> httpx.Response:
+        nonlocal in_flight, peak
+        async with lock:
+            in_flight += 1
+            peak = max(peak, in_flight)
+        await asyncio.sleep(0.05)
+        async with lock:
+            in_flight -= 1
+        if request.url.params["lat"].startswith("35"):
+            return httpx.Response(503, json=fx.problem_body(503, "WEATHER_STATE_NOT_LOADED"))
+        return httpx.Response(200, json=fx.bundle_body(_no_core_failure()))
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/nearest"):
+            return await slow_nearest(request)
+        return httpx.Response(200, json=_near_body(*_SPLIT_NEAR))
+
+    client = KorTravelMapClient(
+        httpx.AsyncClient(base_url="http://map.test", transport=httpx.MockTransport(handler)),
+        service_token="svc",
+        max_attempts=1,
+    )
+    coords = {f"fm_{i}_{uuid.uuid4().hex[:6]}": (37.5 + i / 1000, 126.9) for i in range(6)}
+    bad = f"fm_bad_{uuid.uuid4().hex[:6]}"
+    coords[bad] = (35.1, 129.0)
+    async with session_factory() as db:
+        results = await resolve_many_via_map(
+            db, coords, client=KorTravelMapWeatherClient(client), concurrency=3
+        )
+    assert 1 < peak <= 3
+    assert isinstance(results[bad], Exception)
+    assert all(
+        isinstance(results[fid], WeatherLocationFound) for fid in coords if fid != bad
+    )
 
 
 # ── 단건 카드 ─────────────────────────────────────────────────────────────────────────
@@ -302,7 +514,7 @@ async def test_flag_on_card_reads_map_batch_and_alerts_from_weather(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any
 ) -> None:
     settings.pinvi_kor_travel_map_weather_enabled = True
-    fake = _Map(_nearest_then_batch(nearest=fx.nearest_split_bundle()))
+    fake = _Map(_nearest_then_batch(nearest=fx.nearest_split_bundle(), near=_SPLIT_NEAR))
     weather = _Weather(alerts_for=fx.LOC_KMA)
     _install(fake, weather)
     resp = await client.get(
@@ -509,7 +721,9 @@ async def test_trip_view_flag_on_uses_map_batch_for_today_and_past_days(
     past_card = _day(view, 2)["weather_cards"][past_state["card_key"]]
     past_keys = {(m["metric_key"], m["timeline_bucket"]) for m in past_card["metrics"]}
     # 지난 날짜는 세 구간 요약(아침)으로 채운다.
-    assert ("TMN", "morning") in past_keys and ("TMX", "morning") in past_keys
+    assert ("SLOT_TEMP_MIN", "morning") in past_keys
+    assert ("SLOT_TEMP_MAX", "morning") in past_keys
+    assert {m["forecast_style"] for m in past_card["metrics"]} >= {"daily_summary"}
 
     bodies = [
         json.loads(r.content) for r in fake.weather_requests() if r.url.path.endswith("/batch")
@@ -592,4 +806,53 @@ async def test_trip_view_flag_off_never_calls_map_weather(session_factory: Any) 
         weather_client=_NoAnchor(),
     )
     assert _day(view, 1)["weather_by_feature_id"][feature_id] == {"state": "no_data"}
+    assert fake.weather_requests() == []
+
+
+# ── 실패 의미 일치(ADR-077 리뷰 반영) ─────────────────────────────────────────────────
+
+
+async def test_card_flag_on_without_service_token_is_503_like_missing_weather_client(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    settings.pinvi_kor_travel_map_weather_enabled = True
+    fake = _Map(_nearest_then_batch())
+    fake.client._service_token = ""  # Manager가 token을 넘기지 않은 배포
+    _install(fake, _Weather())
+    resp = await client.get(
+        f"/features/f_tok_{uuid.uuid4().hex[:6]}/weather", cookies=auth_cookies(verified_user[0])
+    )
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "WEATHER_SERVICE_UNAVAILABLE"
+    assert fake.weather_requests() == []
+
+
+async def test_markers_flag_on_current_not_loaded_is_503_not_empty(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    settings.pinvi_kor_travel_weather_map_markers_enabled = True
+    settings.pinvi_kor_travel_map_weather_enabled = True
+    # 위치는 있으나 관측 데이터셋을 읽지 못함 — Map은 current_freshness=null·observations 없음으로 준다.
+    body = fx.list_body([fx.location()], with_current=False)
+    fake = _Map(lambda r: httpx.Response(200, json=body))
+    _install(fake, None)
+    resp = await client.get(
+        f"/weather/markers-in-bounds?bbox={_BBOX}&zoom=10", cookies=auth_cookies(verified_user[0])
+    )
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "WEATHER_SERVICE_UNAVAILABLE"
+
+
+async def test_trip_view_flag_on_without_service_token_is_unavailable(session_factory: Any) -> None:
+    settings.pinvi_kor_travel_map_weather_enabled = True
+    fake = _Map(_nearest_then_batch())
+    fake.client._service_token = ""
+    feature_id = f"ft_{uuid.uuid4().hex[:8]}"
+    view = await _trip_view(
+        session_factory,
+        pois=[(1, datetime.now(KST).date(), feature_id)],
+        map_client=fake.client,
+        weather_client=_Weather(),
+    )
+    assert _day(view, 1)["weather_by_feature_id"][feature_id] == {"state": "unavailable"}
     assert fake.weather_requests() == []

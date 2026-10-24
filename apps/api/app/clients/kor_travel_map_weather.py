@@ -9,7 +9,12 @@
   ``code="UPSTREAM_AUTH"``, weather 라우터가 없는 옛 Map의 라우트 404는 ``code="UPSTREAM_REJECTED"``.
 - 404 ``NOT_FOUND``(위치 없음 — `/nearest`는 반경 안에 위치가 없을 때)는 ``KorTravelMapFeatureNotFound``,
   409는 cursor 세대 만료(``KorTravelMapWeatherCursorExpired``), 그 밖 4xx는 ``KorTravelMapBadRequest``.
-- service 표면이라 public API key로 fallback하지 않는다. token이 없으면 Map을 부르지 않는다.
+- service 표면이라 public API key로 fallback하지 않는다. token이 없으면 Map을 부르지 않는다(경고는 프로세스당 한 번).
+- 호출마다 짧은 timeout(read·connect, 설정)을 쓰고, **회로차단**을 둔다 — timeout·연결 실패·5xx(``NOT_LOADED`` 제외 —
+  Map은 살아 있고 결정적이다)가 연속 ``_CIRCUIT_FAILURE_THRESHOLD``번이면 ``_CIRCUIT_OPEN_SECONDS`` 동안 부르지 않고 즉시
+  ``KorTravelMapWeatherUnavailable(code="CIRCUIT_OPEN")``이다. 그 뒤 시험 호출 하나만 보낸다(half-open). 회로는 감싼
+  ``KorTravelMapClient`` 인스턴스(lifespan당 하나 = worker 프로세스당 하나)마다 하나이고, 이 래퍼는 요청마다 만들어도
+  같은 회로를 본다. 직접 경로 `kor_travel_weather._CircuitBreaker`와 같은 상태 기계다.
 
 응답은 envelope의 ``data`` dict다(transport-only). 해석·투영은 `services/weather_map_state.py`.
 
@@ -20,7 +25,9 @@ v1 경로 리터럴을 읽어 vendored OpenAPI와 대조한다(`/status`는 운�
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
+import time
+import weakref
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from typing import Any, Final, Literal
 
@@ -35,6 +42,7 @@ from app.clients.kor_travel_map import (
     KorTravelMapUnavailable,
     _error_code,
 )
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +61,23 @@ _LOCATION_PATH: Final = "/v1/service/weather/locations/{feature_id}"
 _BATCH_PATH: Final = "/v1/service/weather/locations/batch"
 _NEAREST_PATH: Final = "/v1/service/weather/nearest"
 
+#: Map weather location_id 계약(`WeatherBatchRequest.location_ids` 항목: 1~120자, `|`·제어 문자 없음).
+LOCATION_ID_MAX_LENGTH: Final = 120
+
+_CIRCUIT_FAILURE_THRESHOLD: Final = 3
+_CIRCUIT_OPEN_SECONDS: Final = 30.0
+#: 503이어도 Map은 살아 있다 — 회로 실패로 세지 않는다(적재 전은 결정적이다).
+_ALIVE_UNAVAILABLE_CODES: Final[frozenset[str]] = frozenset({"WEATHER_STATE_NOT_LOADED"})
+
+
+def valid_location_id(value: str) -> bool:
+    """Map이 배치에서 받는 weather location_id인지(아니면 청크 전체가 422다)."""
+    return (
+        0 < len(value) <= LOCATION_ID_MAX_LENGTH
+        and "|" not in value
+        and not any(ord(ch) < 0x20 for ch in value)
+    )
+
 
 class KorTravelMapWeatherUnavailable(KorTravelMapError):
     """weather 상태 표면을 지금 읽을 수 없음.
@@ -68,6 +93,76 @@ class KorTravelMapWeatherUnavailable(KorTravelMapError):
 
 class KorTravelMapWeatherCursorExpired(KorTravelMapError):
     """409 ``WEATHER_STATE_GENERATION_EXPIRED`` — cursor의 세대가 사라졌다. 처음부터 다시."""
+
+
+class _CircuitBreaker:
+    """연속 실패 회로차단 — closed → open(``open_seconds``) → half-open(시험 1회)."""
+
+    def __init__(
+        self, *, failure_threshold: int, open_seconds: float, clock: Callable[[], float]
+    ) -> None:
+        self._failure_threshold = max(1, failure_threshold)
+        self._open_seconds = open_seconds
+        self._clock = clock
+        self._consecutive_failures = 0
+        self._opened_at: float | None = None
+        self._trial_in_flight = False
+
+    @property
+    def is_open(self) -> bool:
+        return self._opened_at is not None
+
+    def acquire(self) -> bool:
+        """호출 허가. 열려 있으면 ``KorTravelMapWeatherUnavailable``. 반환값은 half-open 시험 호출 여부."""
+        if self._opened_at is None:
+            return False
+        if self._clock() - self._opened_at < self._open_seconds or self._trial_in_flight:
+            raise KorTravelMapWeatherUnavailable(
+                "kor-travel-map weather 회로 열림 — 호출하지 않음", code="CIRCUIT_OPEN"
+            )
+        self._trial_in_flight = True
+        return True
+
+    def record_success(self) -> None:
+        if self._opened_at is not None:
+            logger.info("kor_travel_map.weather_circuit_closed")
+        self._consecutive_failures = 0
+        self._opened_at = None
+        self._trial_in_flight = False
+
+    def record_failure(self, *, trial: bool) -> None:
+        self._consecutive_failures += 1
+        if trial or self._consecutive_failures >= self._failure_threshold:
+            if self._opened_at is None:
+                logger.warning(
+                    "kor_travel_map.weather_circuit_open",
+                    extra={"consecutive_failures": self._consecutive_failures},
+                )
+            self._opened_at = self._clock()
+        if trial:
+            self._trial_in_flight = False
+
+    def release(self, *, trial: bool) -> None:
+        if trial:
+            self._trial_in_flight = False
+
+
+_CIRCUITS: weakref.WeakKeyDictionary[KorTravelMapClient, _CircuitBreaker] = (
+    weakref.WeakKeyDictionary()
+)
+_no_token_logged = False
+
+
+def _circuit_for(map_client: KorTravelMapClient, clock: Callable[[], float]) -> _CircuitBreaker:
+    circuit = _CIRCUITS.get(map_client)
+    if circuit is None:
+        circuit = _CircuitBreaker(
+            failure_threshold=_CIRCUIT_FAILURE_THRESHOLD,
+            open_seconds=_CIRCUIT_OPEN_SECONDS,
+            clock=clock,
+        )
+        _CIRCUITS[map_client] = circuit
+    return circuit
 
 
 def _aware(value: datetime, *, field_name: str) -> str:
@@ -98,8 +193,17 @@ def _bundle_params(
 class KorTravelMapWeatherClient:
     """Map `/v1/service/weather/*` 읽기. 감싼 `KorTravelMapClient`의 연결을 공유한다."""
 
-    def __init__(self, map_client: KorTravelMapClient) -> None:
+    def __init__(
+        self,
+        map_client: KorTravelMapClient,
+        *,
+        timeout_seconds: float = 3.0,
+        connect_timeout_seconds: float = 1.0,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self._map = map_client
+        self._timeout = httpx.Timeout(timeout_seconds, connect=connect_timeout_seconds)
+        self._circuit = _circuit_for(map_client, clock)
 
     def _data(self, resp: httpx.Response) -> tuple[dict[str, Any], dict[str, Any]]:
         sc = resp.status_code
@@ -136,20 +240,44 @@ class KorTravelMapWeatherClient:
         params: Mapping[str, Any] | None = None,
         json: Any | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
+        global _no_token_logged
         if not self._map.has_service_token:
             # 운영 Map은 service token 없이는 401이다 — 요청마다 거절당하러 가지 않는다.
+            if not _no_token_logged:
+                _no_token_logged = True
+                logger.warning("kor_travel_map.weather_no_service_token — Map weather를 부르지 않음")
             raise KorTravelMapWeatherUnavailable(
                 "kor-travel-map service token 미설정", code="UPSTREAM_AUTH"
             )
+        trial = self._circuit.acquire()
         try:
-            resp = await self._map._send(method, path, params=params, json=json, retry=False)
+            resp = await self._map._send(
+                method,
+                path,
+                params=params,
+                json=json,
+                retry=False,
+                timeout=self._timeout,
+                log_failure=False,
+            )
         except KorTravelMapUnavailable as exc:
+            self._circuit.record_failure(trial=trial)
             raise KorTravelMapWeatherUnavailable(str(exc)) from exc
         except httpx.HTTPError as exc:
             # DecodingError·TooManyRedirects 등은 TransportError가 아니라 `_send`가 잡지 않는다.
+            self._circuit.record_failure(trial=trial)
             raise KorTravelMapWeatherUnavailable(
                 f"kor-travel-map 응답 오류({path}): {exc!r}"
             ) from exc
+        except BaseException:
+            self._circuit.release(trial=trial)
+            raise
+        if resp.status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR and (
+            _error_code(resp) not in _ALIVE_UNAVAILABLE_CODES
+        ):
+            self._circuit.record_failure(trial=trial)
+        else:
+            self._circuit.record_success()
         return self._data(resp)
 
     async def list_locations(
@@ -268,3 +396,13 @@ class KorTravelMapWeatherClient:
             body["forecast_to"] = _aware(forecast_to, field_name="forecast_to")
         data, _meta = await self._request("POST", _BATCH_PATH, json=body)
         return data
+
+
+
+def create_map_weather_client(map_client: KorTravelMapClient) -> KorTravelMapWeatherClient:
+    """설정의 weather 전용 timeout으로 래퍼를 만든다(라우터·trip view가 요청마다 부른다)."""
+    return KorTravelMapWeatherClient(
+        map_client,
+        timeout_seconds=settings.pinvi_kor_travel_map_weather_timeout_seconds,
+        connect_timeout_seconds=settings.pinvi_kor_travel_map_weather_connect_timeout_seconds,
+    )

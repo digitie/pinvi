@@ -124,4 +124,50 @@ describe('TripWeatherSummary', () => {
 
     expect(screen.getByTestId('trip-weather-status')).toHaveTextContent(message);
   });
+
+  it('ADR-077: 세 구간 요약(daily_summary)은 현재·예보와 섞지 않고 세 구간을 모두 보인다', () => {
+    const cardKey = 'weather-card:daily';
+    const slot = (bucket: string, hour: string, key: string, value: number, unit: string) => ({
+      forecast_style: 'daily_summary',
+      metric_key: key,
+      metric_name: null,
+      timeline_bucket: bucket,
+      provider: 'python-kma-api',
+      valid_at: `2026-10-20T${hour}:00:00+09:00`,
+      value_number: value,
+      unit,
+    });
+    render(
+      <TripWeatherSummary
+        weather={{ state: 'found', card_key: cardKey }}
+        weatherCards={{
+          [cardKey]: {
+            asof: '2026-10-20T00:00:00+09:00',
+            latest_at: '2026-10-21T09:00:00+09:00',
+            is_stale: false,
+            source_styles: ['daily_summary'],
+            metrics: [
+              slot('morning', '05', 'SLOT_TEMP_MIN', 8, 'deg_c'),
+              slot('morning', '05', 'SLOT_TEMP_MAX', 14, 'deg_c'),
+              slot('morning', '05', 'SLOT_HUMIDITY_AVG', 60, '%'),
+              slot('noon', '11', 'SLOT_TEMP_MIN', 15, 'deg_c'),
+              slot('noon', '11', 'SLOT_TEMP_MAX', 19.5, 'deg_c'),
+              slot('noon', '11', 'SLOT_PRECIP_SUM', 1.5, 'mm'),
+              slot('evening', '17', 'SLOT_TEMP_MIN', 11, 'deg_c'),
+              slot('evening', '17', 'SLOT_TEMP_MAX', 16, 'deg_c'),
+            ],
+          },
+        }}
+        date="2026-10-20"
+      />,
+    );
+
+    const summary = screen.getByTestId('trip-weather-summary');
+    expect(summary).toHaveTextContent('시간대별');
+    expect(summary).toHaveTextContent('아침 8~14°C 습도 60%');
+    expect(summary).toHaveTextContent('점심 15~19.5°C 강수 1.5mm');
+    expect(summary).toHaveTextContent('저녁 11~16°C');
+    expect(summary).not.toHaveTextContent('현재');
+    expect(summary).not.toHaveTextContent('예보');
+  });
 });

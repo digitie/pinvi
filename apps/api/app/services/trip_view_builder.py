@@ -29,7 +29,7 @@ from app.clients.kor_travel_map import (
     SuppressedFeatureBatchItem,
     UnchangedFeatureBatchItem,
 )
-from app.clients.kor_travel_map_weather import KorTravelMapWeatherClient
+from app.clients.kor_travel_map_weather import create_map_weather_client
 from app.clients.kor_travel_weather import KorTravelWeatherClient
 from app.core.config import settings
 from app.core.markers import resolve_display_marker_color
@@ -272,7 +272,11 @@ async def build_trip_view(
     # batch 경로 제거). feature batch(resolved_features/resolution_states)는 넘기지 않는다 —
     # weather는 POI 자신의 feature_snapshot.coord만으로 완전히 독립된 경로를 탄다
     # (trip_weather_batch.py 모듈 docstring, T-363의 "완전 분리" 원칙).
-    if settings.pinvi_kor_travel_map_weather_enabled and kor_travel_map_client is not None:
+    if (
+        settings.pinvi_kor_travel_map_weather_enabled
+        and kor_travel_map_client is not None
+        and kor_travel_map_client.has_service_token
+    ):
         # ADR-077 — 관측·예보·지난 날짜 요약은 Map weather 상태 표면, 특보만 weather 직접.
         (
             weather_by_day_index,
@@ -281,7 +285,7 @@ async def build_trip_view(
             db,
             pois=pois,
             day_effective_date=day_effective_date,
-            map_client=KorTravelMapWeatherClient(kor_travel_map_client),
+            map_client=create_map_weather_client(kor_travel_map_client),
             weather_client=weather_client,
             budget_seconds=_WEATHER_BATCH_VIEW_BUDGET_SECONDS,
         )
