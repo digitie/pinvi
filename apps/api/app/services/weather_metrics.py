@@ -64,6 +64,7 @@ class WeatherFact(Protocol):
     @property
     def observed_at(self) -> datetime | None: ...
 
+
 # provider 우선순위 — 왼쪽일수록 우선. 이 목록에 없는 provider는 최하위로 취급한다.
 PROVIDER_PRIORITY: tuple[str, ...] = (
     "python-kma-api",
