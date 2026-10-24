@@ -23,7 +23,9 @@
 > price-history에 `cursor` query·409 `TRANSPORT_PRICE_HISTORY_CURSOR_EXPIRED`, `PriceHistoryBlock`에 필수
 > `source_collected_at`·`source_status`·`has_more`·`next_cursor`와 이유 4개(`upstream_unsupported`·`request_rejected`·
 > `upstream_no_collection`·`upstream_timeout`), `PriceHistoryPoint.collected_at` nullable, `limit`은 유종 합계. user 불변(`11b811d9`).
-> PinVi는 cursor를 보내지 않고(첫 페이지만) 새 이유를 그대로 전한다. weather service REST는 아직 호출하지 않는다(전환은 별도 PR).
+> PinVi는 cursor를 보내지 않고(첫 페이지만) 새 이유를 그대로 전한다. weather service REST는 2026-10-24(ADR-077)부터
+> `app/clients/kor_travel_map_weather.py`로 호출한다(플래그 `PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED`, 기본 off; `/status`는 부르지 않는다) — 계약
+> 게이트 `tests/unit/test_kor_travel_map_weather_contract.py`, 설계 `kor-travel-weather.md` §9.
 > **2026-10-23 재vendor 3 (service·admin/full)**: Map `e9d0e53cfa84a1f9bf5079510da7b9b5b4ae21db`(#1355, ADR-114)의
 > `openapi.service.json`·`openapi.json`을 byte-exact로 vendor했다 — service SHA-256
 > `14f56255a863d20ea9fc18cc44ea026fe31067ac5b7ffb18717768e61ca11a45`, admin(full)

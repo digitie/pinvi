@@ -118,6 +118,9 @@ revision이 같은 캐시를 재사용한 성공 상태이므로 소비자 응�
 > 주입되지 않은 호출 경로(예: MCP 도구)는 조회를 시도하지 않고 모든 feature-linked
 > POI를 균일하게 `unavailable`로 표시한다. 상세 —
 > [`docs/integrations/kor-travel-weather.md`](../integrations/kor-travel-weather.md) §3.4/§3.5.
+> **Map 경유(ADR-077)**: `PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED`가 켜지면 같은 셰입·상태 규칙으로 kor-travel-map
+> `POST /v1/service/weather/locations/batch`(50곳씩)에서 관측·예보·지난 일자 세 구간 요약을 읽는다(특보만
+> `kor-travel-weather`). 이때 kor-travel-map client가 없는 호출 경로는 균일하게 `unavailable`이다 — §9.
 
 응답 shape:
 

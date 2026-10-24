@@ -4,6 +4,9 @@
 
 ## Unreleased
 
+- **(weather)** 장소 날씨 카드·여행 일자 날씨·지도 날씨 표시의 관측·예보를 kor-travel-map에서 읽을 수 있다. 기능 플래그
+  `PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED`(기본 꺼짐)로 켜며, 꺼져 있으면 지금과 같다. 켜도 화면 모양은 그대로이고 기상 특보는
+  계속 kor-travel-weather에서 온다. 지난 여행 일자는 아침·점심·저녁 구간 요약(최저·최고 기온 등)으로 보인다.
 - **(contract)** kor-travel-map 계약을 Map `e0131ec1`로 다시 맞췄다. 주유소 가격 추이를 불러오지 못한 이유가 더 자세히
   구분된다(transport 미지원·요청 거부·수집 기록 없음·시간 초과). 화면 동작은 그대로다.
 - **(security)** 모바일 앱 의존성 체인의 `shell-quote`를 1.10.0에서 1.12.0으로 올렸다(루트 `overrides`). critical 권고

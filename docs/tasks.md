@@ -52,6 +52,9 @@
 - [ ] T-VN-H49 — standalone backup의 주기 실행, bounded retention, off-box 증거를 완료한다.
 - [ ] T-369 — `deploy-node.sh` fresh fallback 스택(Manager 부재 시)의 호스트 재부팅 복구. `app-postgres`·`app-api`·`app-web`에 restart policy가 없어 재부팅 뒤 내려간 채 남고, `up`의 재사용 검사는 PostgreSQL이 running이어야 해서 어떤 wrapper 명령도 되살리지 못한다(2026-09-28 리뷰). compose restart policy는 Manager 배포와 공유하므로 따로 판단한다.
 
+- [/] T-381 — weather 관측·예보를 Map `/v1/service/weather/*`로 읽는 전환(ADR-077, 플래그 기본 off). 브랜치 `feat/weather-via-map-rest`(claude),
+  충돌 회피 범위 `apps/api/app/{clients/kor_travel_map_weather.py,services/weather_map_state.py,services/weather_*.py,services/trip_weather_batch.py}`.
+  PR·머지 남음, 운영 활성화는 Map weather schedule 활성화·Manager pinvi-api 플래그 배선 뒤.
 - [/] T-380 — 지도 교통 정보 레이어(Map `/v1/service/transport/*` 연동, ADR-076). 브랜치 `feat/map-transport-integration`(claude),
   충돌 회피 범위 `apps/api/app/{clients/kor_travel_map_transport.py,services/transport_layers.py,api/v1/transport.py}`·
   `apps/web/components/map/Transport*`·`apps/web/lib/useTransportLayers.ts`·`apps/mobile/components/TransportLayers.tsx`. PR·머지 남음,

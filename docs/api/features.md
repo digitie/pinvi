@@ -146,6 +146,12 @@ offset을 붙인 KST 값(`+09:00`)을 권장한다 — offset 없이 보내면 �
 `kor-travel-weather` client가 (설정 오류 등으로) 주입되지 않은 경우 `503
 WEATHER_SERVICE_UNAVAILABLE`을 반환한다.
 
+**Map 경유(ADR-077)**: `PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED`(기본 off)가 켜지면 관측·예보를 kor-travel-map
+`/v1/service/weather/*`(위치 해석 `/nearest`, 값 `POST /locations/batch`)에서 읽고 특보만 `kor-travel-weather`에서 합친다.
+응답 셰입·`asof` 규칙은 같다. 이때는 `kor-travel-weather` client가 없어도 503이 아니다(특보만 빠진다). Map이 부분을
+못 읽으면 그 부분만 빠지고, Map 전체 장애는 빈 카드다. 상세 —
+[`kor-travel-weather.md`](../integrations/kor-travel-weather.md) §9.
+
 응답 200 — **평탄한 metric 목록 + `forecast_style` 태그**를 준다(KMA 시간축 그룹핑은
 프런트 표현 계층):
 

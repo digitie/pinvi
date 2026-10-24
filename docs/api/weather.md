@@ -84,6 +84,18 @@ marker만 조용히 사라진다.
   돌려준다 — `zoom >= 8` 게이트가 실무에서 이 경로를 막지만, 방어적으로 한 번 더
   잡는다.
 
+## 3a. Map 경유 — `PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED` (ADR-077)
+
+두 flag가 모두 켜지면(`..._map_markers_enabled` + `pinvi_kor_travel_map_weather_enabled`) `kor-travel-weather` `/nearby`
+대신 kor-travel-map `GET /v1/service/weather/locations`(영역 + `include_current=true`, service token)를 읽는다.
+
+- bbox는 center+radius로 바꾸지 않고 국내 범위(`124 ≤ lon ≤ 132`, `33 ≤ lat ≤ 39`)와 교차해 그대로 보낸다(Map 한 변
+  1,000 km 상한 422 회피). 교차가 비면 Map을 부르지 않고 빈 목록.
+- 줌 게이트(8 미만 빈 목록)·온도 선택·`condition` 규칙·응답 셰입은 같다. 관측을 못 읽은 위치·좌표 없는 위치는 빠진다.
+- Map 장애·적재 전(`WEATHER_STATE_*`)·계약 위반·kor-travel-map client 없음은 직접 경로와 같은 503
+  `WEATHER_SERVICE_UNAVAILABLE`이다.
+- 설계: [`kor-travel-weather.md`](../integrations/kor-travel-weather.md) §9.
+
 ## 4. AI agent 작업 가이드
 
 - Pydantic: `app/schemas/weather_map.py`. Zod: `packages/schemas/src/weather-map.ts`.
@@ -91,7 +103,8 @@ marker만 조용히 사라진다.
   분리**돼 있다 — feature 개념을 참조하지 않는다.
 - 서비스: `app/services/weather_map_markers.py`(bbox→center+radius, 온도 추출,
   condition 판정 — 전부 순수 함수, `apps/api/tests/unit/test_weather_map_markers.py`).
-- client: `app/clients/kor_travel_weather.py`의 `nearby()`(T-368 신설).
+- client: `app/clients/kor_travel_weather.py`의 `nearby()`(T-368 신설), Map 경유는
+  `app/clients/kor_travel_map_weather.py`의 `list_locations()` + `services/weather_map_state.py`(ADR-077).
 - 라우터: `app/api/v1/weather_markers.py`.
 - 프런트: `apps/web/components/map/FeatureMapView.tsx`의 `fetchWeatherMarkers`
   (`fetchInBounds`와 독립된 자체 debounce/abort/cache — 실패해도 장소 마커에

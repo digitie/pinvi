@@ -1,3 +1,18 @@
+## 2026-10-24 (claude) — weather 읽기를 Map service REST로 (T-381, ADR-077, 브랜치 `feat/weather-via-map-rest`)
+
+Map #1367(ADR-114 W0~W8, weather 2단계)이 머지됐고 PinVi #599가 `e0131ec1` service OpenAPI를 vendor했다. transport(ADR-076)와 같은
+관례로 플래그 `PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED`(기본 off) 뒤에 전환을 넣었다.
+
+- client `app/clients/kor_travel_map_weather.py`(재시도 0, `KorTravelMapClient` 연결 공유), 해석·평탄화 `services/weather_map_state.py`.
+  해석기는 `/nearest`(부분별 source 위치를 `source_location_ids`로 — 캐시 표 공유), 카드·trip은 `POST /locations/batch` 50곳씩,
+  marker는 `/locations?include_current=true`. 특보·Admin weather-values는 weather 직접.
+- `weather_metrics.py`를 `WeatherFact` 구조 타입으로 일반화해 provider 우선순위·KMA key 정규화를 두 소스가 같은 함수로 탄다. trip
+  batch는 단계 함수(대상·해석·bundle·투영)로 나눠 직접/Map 경로가 공유한다(동작 불변 — 기존 cutover 테스트가 그대로 지킨다).
+- 직접 경로와 같은 화면을 내기 위한 평탄화 결정: `external`→`short`(weather가 외부 예보를 `short`로 저장), KMA 단위·이름은 weather
+  `providers/kma.py` 고정 표, 단위 없는 비-KMA `WIND_SPEED`(km/h·m/s 혼재)는 버림, 지난 trip 일자는 세 구간 요약을 관측 행으로.
+- 계약 게이트 `test_kor_travel_map_weather_contract.py`(query exact·배치 본문·소비 필드·닫힌 어휘·fixture). OpenAPI 부분 검증기를
+  `tests/openapi_subset.py`로 옮겨 transport 게이트와 공유(`additionalProperties` schema도 검사).
+
 ## 2026-10-24 (claude) — Map 계약 재vendor 4: e0131ec1 (브랜치 `chore/revendor-map-e0131ec1`)
 
 Map ADR-114 W8 회전 순서: #1365(transport T4 가격 추이)와 #1367(2단계 weather service REST)이 둘 다 머지된 Map

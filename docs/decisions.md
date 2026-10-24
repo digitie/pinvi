@@ -3973,3 +3973,46 @@ ADR-048은 geo v2 `key`를 서버 VWorld key와 같은 값으로 쓰고 geo의 `
 - 운영에서 켜려면 Manager pinvi-api 블록에 `PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN`(Map `KOR_TRAVEL_MAP_API_SERVICE_TOKEN`과 같은 값)과
   플래그를 넘겨야 한다 — 지금 운영 pinvi-api에는 Map service token이 없다.
 - 서버 캐시는 두지 않는다(Map이 Valkey에서 읽고, 캐시는 신선도 문구를 거짓으로 만든다). weather의 Map 경유 전환은 Map 2단계 뒤 별도.
+
+## ADR-077: weather 관측·예보는 kor-travel-map weather 상태 표면으로 읽는다(플래그), 특보만 kor-travel-weather 직접
+
+- **상태**: accepted (구현 PR, 플래그 기본 off — 운영 활성화는 Map weather 적재·Manager 배선 뒤)
+- **날짜**: 2026-10-24
+- **결정자**: 사용자(소유자, Map ADR-114 "PinVi는 transport·weather를 Map REST로만" — 이행 순서 4) + Claude
+- **관련**: kor-travel-map ADR-114 W0~W8(weather 2단계, Map #1367), ADR-068(weather 소스 이관), ADR-074(weather 호스트·회로차단),
+  ADR-076(transport — 같은 client·강등 관례)
+- **설계 정본**: `docs/integrations/kor-travel-weather.md` §9
+
+### 결정
+
+1. `PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED`(기본 false)가 켜지면 단건 weather 카드(`GET /features/{id}/weather`)·trip view
+   weather·지도 weather marker(`GET /weather/markers-in-bounds`)의 관측·예보를 Map `/v1/service/weather/*`(service token)로 읽는다.
+   꺼져 있으면 지금처럼 kor-travel-weather를 직접 부르고 **Map weather 표면은 부르지 않는다**. Admin weather-values(provenance
+   필드)는 플래그와 무관하게 직접 경로다.
+2. 경로별 Map route: 위치 해석 = `GET /nearest`(20 → 50 → 100 km, 캐시 `weather_location_links`를 직접 경로와 **공유** — 둘 다
+   weather `location_id`를 저장한다), 카드·trip = `POST /locations/batch`(해석이 저장한 source 위치 전체, 50곳씩 청크), marker =
+   `GET /locations`(영역 + `include_current=true`). `/nearest`가 부분마다 고른 source 위치를 `source_location_ids`로 저장해
+   "source bundle 전체" 규칙(KMA 예보 누락 방지)을 지킨다. 한 부분이라도 `not_loaded`·`unavailable`이면 그 행은 `stale=True`로 남겨
+   다음 호출이 다시 해석한다.
+3. **공개 응답 셰입은 바꾸지 않는다.** Map 묶음을 kor-travel-weather 평탄 행과 같은 축(`MapWeatherValue`, `WeatherFact` 구조 타입)으로
+   펴서 기존 provider 우선순위 dedupe·안전 KMA metric key 정규화·`WeatherMetric` 투영을 그대로 태운다. `external` 예보 묶음은
+   `short`로(weather가 외부 provider 예보를 `short`로 저장한다), `python-kma-api` 값의 단위·이름은 weather KMA 고정 표로 채우고,
+   단위를 모르는 비-KMA `WIND_SPEED` 예보는 버린다. 지난 trip 일자는 세 구간 요약(`daily_summaries`)을 관측 행으로 편다(직접 경로의
+   과거 timeline 대신). `vs_previous_day`는 해석 모델이 Map 값 그대로 보존한다(공개 응답에는 아직 싣지 않는다).
+4. 강등은 부분별이다: 못 읽은 부분은 행이 없을 뿐 나머지로 카드를 채우고, trip은 직접 경로의 "location 실패" 규칙(값이 있으면
+   `found`, 없으면 `unavailable`, 전부 확인됐을 때만 `no_data`)을 그대로 쓴다. Map 자체 장애는 카드 = 빈 카드(500 없음), trip =
+   `unavailable`, marker = 직접 경로와 같은 503 `WEATHER_SERVICE_UNAVAILABLE`.
+5. 특보는 Map에 없다(Map ADR-114 W7 범위 밖) — 켜도 kor-travel-weather `/markers`의 `alerts`만 직접 읽어 합친다. weather client가
+   없거나 실패하면 특보 없이 진행한다.
+6. client는 `app/clients/kor_travel_map_weather.py`(transport와 같은 관례 — 재시도 0, 401/403 `UPSTREAM_AUTH`, 409 cursor 만료,
+   token 없으면 Map 미호출), 계약 게이트는 `tests/unit/test_kor_travel_map_weather_contract.py`(query exact 핀·배치 본문·소비 필드·
+   닫힌 어휘·fixture schema 대조).
+
+### 결과
+
+- 운영에서 켜려면 ① Map weather Dagster job·schedule 7개 활성화(기본 STOPPED, Map ADR-114 W8)와 적재 확인(`GET /v1/service/weather/status`)
+  ② Manager pinvi-api 블록에 `PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED` 배선(service token은 ADR-076 때 이미 배선됨) ③ 플래그 on.
+- Map 데이터셋 하나가 오래 `not_loaded`면 해석 캐시가 계속 stale이라 요청마다 `/nearest`를 다시 부른다(Valkey 읽기 + 행 갱신) —
+  일곱 schedule을 함께 켠다.
+- 플래그를 켜도 kor-travel-weather 의존은 특보와 Admin weather-values로 남는다(Map ADR-114 이행 순서 4의 "직접 호출 제거"는 특보
+  경로가 Map에 생긴 뒤).
