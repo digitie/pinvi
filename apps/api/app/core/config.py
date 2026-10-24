@@ -815,6 +815,10 @@ class Settings(BaseSettings):
     # `/v1/service/transport/*`(service token 필요)로 읽는다. off(기본)면 `/transport/status`가
     # `enabled=false`를 주고 Map을 부르지 않는다 — 클라이언트는 레이어 컨트롤을 숨긴다.
     pinvi_kor_travel_map_transport_enabled: bool = False
+    # ADR-077 — weather 카드·trip weather·지도 weather marker의 관측·예보를 Map
+    # `/v1/service/weather/*`(service token 필요, Map ADR-114 W7)로 읽는다. off(기본)면 지금처럼
+    # kor-travel-weather를 직접 부르고 Map weather 표면은 부르지 않는다. 특보는 켜도 weather 직접 경로다.
+    pinvi_kor_travel_map_weather_enabled: bool = False
 
     # cache target generation/outbox paired worker (ADR-058). false여도 DB projection은 계속된다.
     pinvi_kor_travel_map_cache_target_sync_enabled: bool = False

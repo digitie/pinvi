@@ -1,4 +1,4 @@
-"""`kor-travel-weather` `WeatherValueOut` → 정규화된 `WeatherMetric` 공용 변환 (ADR-068).
+"""weather 사실(`WeatherFact`) → 정규화된 `WeatherMetric` 공용 변환 (ADR-068).
 
 T-362(단건 feature weather, `weather_card.py`)와 T-363(trip view batch,
 `trip_weather_batch.py`)가 이 모듈을 공유한다 — provider 우선순위·안전 metric key
@@ -10,15 +10,62 @@ metric key 정규화는 **안전하게 1:1 대응 가능한 것만** 한다(설�
 없는 것(`CLOUD_COVER`/`VISIBILITY`/`UV_INDEX`/`WEATHER_CODE`, AirKorea
 `O3`/`NO2`/`SO2`/`CO`)은 원래 값 그대로 통과한다 — 잘못된 값을 보여주는 것보다
 클라이언트가 인식 못해 카드에서 빠지는 편이 안전하다.
+
+입력은 `WeatherFact` 구조 타입이다 — kor-travel-weather 직접 경로의 `WeatherValueOut`과 Map weather 상태
+표면(ADR-077)을 평탄화한 `MapWeatherValue`(`weather_map_state.py`)가 같은 규칙을 탄다.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Protocol, TypeVar
 
-from app.clients.kor_travel_weather import WeatherValueOut
 from app.schemas.feature import WeatherMetric
+
+
+class WeatherFact(Protocol):
+    """weather 사실 하나 — 이 모듈의 규칙이 읽는 필드만(읽기 전용)."""
+
+    @property
+    def provider(self) -> str: ...
+    @property
+    def weather_domain(self) -> str | None: ...
+    @property
+    def forecast_style(self) -> str: ...
+    @property
+    def metric_key(self) -> str: ...
+    @property
+    def metric_name(self) -> str | None: ...
+    @property
+    def timeline_bucket(self) -> str | None: ...
+    @property
+    def target_at(self) -> datetime: ...
+    @property
+    def known_at(self) -> datetime | None: ...
+    @property
+    def collected_at(self) -> datetime: ...
+    @property
+    def value_number(self) -> float | None: ...
+    @property
+    def value_text(self) -> str | None: ...
+    @property
+    def unit(self) -> str | None: ...
+    @property
+    def severity(self) -> str | None: ...
+    @property
+    def issued_at(self) -> datetime | None: ...
+    @property
+    def valid_at(self) -> datetime | None: ...
+    @property
+    def valid_from(self) -> datetime | None: ...
+    @property
+    def valid_until(self) -> datetime | None: ...
+    @property
+    def observed_at(self) -> datetime | None: ...
+
+
+FactT = TypeVar("FactT", bound=WeatherFact)
 
 # provider 우선순위 — 왼쪽일수록 우선. 이 목록에 없는 provider는 최하위로 취급한다.
 PROVIDER_PRIORITY: tuple[str, ...] = (
@@ -49,7 +96,7 @@ def provider_rank(provider: str) -> int:
         return len(PROVIDER_PRIORITY)
 
 
-def normalize_metric(value: WeatherValueOut) -> tuple[str, float | None, str | None]:
+def normalize_metric(value: WeatherFact) -> tuple[str, float | None, str | None]:
     """`(metric_key, value_number, unit)` — 정규화 가능하면 KMA 코드로, 아니면 원본 그대로.
 
     단위가 provider마다 다를 수 있어(`docs/integrations/kor-travel-weather.md` §2.3)
@@ -80,7 +127,7 @@ def normalize_metric(value: WeatherValueOut) -> tuple[str, float | None, str | N
     return key, number, unit
 
 
-def to_weather_metric(value: WeatherValueOut) -> WeatherMetric:
+def to_weather_metric(value: WeatherFact) -> WeatherMetric:
     is_alert = value.weather_domain == "weather_alert"
     forecast_style = "advisory" if is_alert else value.forecast_style
     if is_alert:
@@ -107,13 +154,13 @@ def to_weather_metric(value: WeatherValueOut) -> WeatherMetric:
     )
 
 
-def dedupe_by_provider_priority(values: Sequence[WeatherValueOut]) -> list[WeatherValueOut]:
+def dedupe_by_provider_priority(values: Sequence[FactT]) -> list[FactT]:
     """같은 `(metric_key, forecast_style, target_at)`는 provider 우선순위로 하나만 남긴다.
 
     동률이면 `known_at`이 더 최신인 쪽. `known_at`이 없으면(nullable) `collected_at`으로
     대신한다.
     """
-    best: dict[tuple[str, str, datetime], WeatherValueOut] = {}
+    best: dict[tuple[str, str, datetime], FactT] = {}
     for value in values:
         key = (value.metric_key, value.forecast_style, value.target_at)
         current = best.get(key)

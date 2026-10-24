@@ -44,6 +44,8 @@ from app.schemas.transport import (
 )
 from app.services.transport_layers import LAYER_DATASET_PATH, LAYER_MAP_DATASET
 from tests import transport_map_fixtures as fx
+from tests.openapi_subset import json_types as _json_types
+from tests.openapi_subset import schema_errors as _errors
 
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-service.json"
@@ -196,75 +198,13 @@ def properties_schema(schema: dict[str, Any], name: str) -> dict[str, Any]:
     return prop
 
 
-def _json_types(root: dict[str, Any], schema: dict[str, Any]) -> set[str]:
-    """schema가 허용하는 JSON 타입 집합. `$ref`는 object, `integer`는 `number`에 포함된다고 본다."""
-    if "$ref" in schema:
-        return {"object"}
-    if "anyOf" in schema:
-        out: set[str] = set()
-        for branch in schema["anyOf"]:
-            out |= _json_types(root, branch)
-        return out
-    if "const" in schema:
-        return {type(schema["const"]).__name__.replace("str", "string")}
-    kind = schema.get("type")
-    if kind is None:
-        return {"string", "number", "integer", "boolean", "object", "array", "null"}
-    return {"integer", "number"} if kind == "number" else {kind}
-
-
 def test_type_check_catches_a_narrowed_field(spec: dict[str, Any]) -> None:
     """타입 대조가 실제로 빨개지는지 — Map이 null을 허용하는데 PinVi가 str만 받는 경우."""
     nullable_map = {"anyOf": [{"type": "string"}, {"type": "null"}]}
     assert not _json_types(spec, nullable_map) <= _json_types(spec, {"type": "string"})
 
 
-# ── fixture 검증기 ──────────────────────────────────────────────────────────
-
-_TYPES: dict[str, tuple[type, ...]] = {
-    "string": (str,),
-    "integer": (int,),
-    "number": (int, float),
-    "boolean": (bool,),
-    "array": (list,),
-    "object": (dict,),
-    "null": (type(None),),
-}
-
-
-def _errors(spec: dict[str, Any], schema: dict[str, Any], value: Any, at: str) -> list[str]:
-    if "$ref" in schema:
-        name = schema["$ref"].rsplit("/", 1)[-1]
-        return _errors(spec, spec["components"]["schemas"][name], value, at)
-    if "anyOf" in schema:
-        branches = [_errors(spec, branch, value, at) for branch in schema["anyOf"]]
-        return [] if any(not b for b in branches) else [f"{at}: anyOf 불일치 {branches}"]
-    if "const" in schema and value != schema["const"]:
-        return [f"{at}: const {schema['const']!r} ≠ {value!r}"]
-    if "enum" in schema and value not in schema["enum"]:
-        return [f"{at}: enum 밖 {value!r}"]
-    kind = schema.get("type")
-    if kind is not None:
-        allowed = _TYPES[kind]
-        if isinstance(value, bool) and kind in ("integer", "number"):
-            return [f"{at}: bool은 {kind}가 아니다"]
-        if not isinstance(value, allowed):
-            return [f"{at}: {kind} 아님 ({type(value).__name__})"]
-    out: list[str] = []
-    if isinstance(value, dict) and (kind == "object" or "properties" in schema):
-        properties = schema.get("properties", {})
-        for name in schema.get("required", []):
-            if name not in value:
-                out.append(f"{at}.{name}: required 누락")
-        for name, item in value.items():
-            if name in properties:
-                out += _errors(spec, properties[name], item, f"{at}.{name}")
-            elif schema.get("additionalProperties") is False:
-                out.append(f"{at}.{name}: 선언되지 않은 필드")
-    if isinstance(value, list) and "items" in schema:
-        for index, item in enumerate(value):
-            out += _errors(spec, schema["items"], item, f"{at}[{index}]")
-    return out
+# ── fixture 검증기(`tests/openapi_subset.py`) ───────────────────────────────
 
 
 def test_validator_rejects_a_broken_fixture(spec: dict[str, Any]) -> None:
