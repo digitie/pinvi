@@ -10,7 +10,7 @@ PG feature UUID와 **다른 이름공간**이다(ADR-076 D7) — POI 추가·`/f
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
@@ -195,22 +195,20 @@ class TransportDetailResponse(BaseModel):
 
 
 #: Map `PriceHistoryBlock.reason` enum. 모르는 값은 `upstream_contract`로 접는다(원문 비노출).
+#: cursor 만료는 이유가 아니라 HTTP 409 ``TRANSPORT_PRICE_HISTORY_CURSOR_EXPIRED``다(PinVi는 cursor를 보내지 않는다).
 PriceHistoryUnavailableReason = Literal[
     "disabled",
     "not_configured",
     "upstream_not_found",
+    "upstream_unsupported",
+    "request_rejected",
+    "upstream_no_collection",
+    "upstream_timeout",
     "upstream_unavailable",
     "upstream_rejected",
     "upstream_contract",
 ]
-PRICE_HISTORY_REASONS: tuple[str, ...] = (
-    "disabled",
-    "not_configured",
-    "upstream_not_found",
-    "upstream_unavailable",
-    "upstream_rejected",
-    "upstream_contract",
-)
+PRICE_HISTORY_REASONS: tuple[str, ...] = get_args(PriceHistoryUnavailableReason)
 
 
 class FuelPriceHistoryPoint(_Upstream):

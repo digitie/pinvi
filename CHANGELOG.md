@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- **(contract)** kor-travel-map 계약을 Map `e0131ec1`로 다시 맞췄다. 주유소 가격 추이를 불러오지 못한 이유가 더 자세히
+  구분된다(transport 미지원·요청 거부·수집 기록 없음·시간 초과). 화면 동작은 그대로다.
 - **(security)** 모바일 앱 의존성 체인의 `shell-quote`를 1.10.0에서 1.12.0으로 올렸다(루트 `overrides`). critical 권고
   GHSA-pqg4-j6r4-53mv(1.8.4 이상 1.11.0 미만)를 해소한다. 화면·동작 변화는 없다.
 - **(security)** 웹 앱의 Next.js를 16.3.3에서 16.4.3으로 올렸다. 이미지 최적화(SVG)·`use cache` 원격 코드 실행

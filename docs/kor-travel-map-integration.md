@@ -197,10 +197,10 @@ T-VN-41 source byte 계약은 Map commit
 leaf/empty/odd-promotion root를 shared vector 전부에 대조한다. 향후 Map artifact를 바꿀 때는 producer
 commit과 artifact hash를 함께 갱신하고 양쪽 vector gate를 먼저 통과해야 한다.
 
-서비스 계약은 Map `e9d0e53cfa84a1f9bf5079510da7b9b5b4ae21db`(ADR-114 `/v1/service/transport/*` 추가, #1355 머지 커밋)의
-`packages/kor-travel-map-api/openapi.service.json` exact bytes를
-vendor한다. SHA-256은 `14f56255a863d20ea9fc18cc44ea026fe31067ac5b7ffb18717768e61ca11a45`다
-(직전: Map #1293 merge `11b811d9…`, `6677d41f…`; 그 전: Map PR #1051 merge `db319a47…`, `99ba6c17…`). artifact owner/functional
+서비스 계약은 Map `e0131ec16547a403e7527e6af369465b5611512b`(ADR-114 transport T4 가격 추이 #1365·2단계 weather
+`/v1/service/weather/*` #1367 머지 커밋)의 `packages/kor-travel-map-api/openapi.service.json` exact bytes를
+vendor한다. SHA-256은 `3b8503a31d725cc1e6d033ac02edaba5c5fe9539ac448fb37dafb6f8fc51c26b`다
+(직전: Map #1355 `e9d0e53c…`, `14f56255…`; 그 전: Map #1293 merge `11b811d9…`, `6677d41f…`; 그 전: Map PR #1051 merge `db319a47…`, `99ba6c17…`). artifact owner/functional
 owner 이중 provenance는 control-plane 정본이 아니다. PinVi의
 `contracts/kor-travel-map-service-provenance-v1.json`은 위 Map release·SHA-256과 capability
 `cache_target=7`, `c6c_cancel_probe=2`를 비밀값 없이 한 번만 기록한다. cache-target runtime 상수와

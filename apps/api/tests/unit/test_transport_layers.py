@@ -220,6 +220,25 @@ async def test_utc_and_naive_datetimes() -> None:
     assert bad.status == "unavailable" and bad.reason == "UPSTREAM_CONTRACT"
 
 
+@pytest.mark.parametrize(
+    "reason",
+    ["upstream_unsupported", "request_rejected", "upstream_no_collection", "upstream_timeout"],
+)
+async def test_price_history_t4_reasons_pass_through(reason: str) -> None:
+    """Map ADR-114 D6 T4 정렬로 늘어난 이유는 `upstream_contract`로 접지 않고 그대로 전한다."""
+    body = fx.history_body(available=False)
+    body["data"]["history"]["reason"] = reason
+    handler, _ = _by_dataset({"fuel-stations": httpx.Response(200, json=body)})
+    out = await transport_layers.fuel_price_history(
+        _client(handler),
+        fx.FUEL_STATION_ID,
+        product_key=None,
+        days=7,
+        now=datetime(2026, 10, 23, tzinfo=KST),
+    )
+    assert out.status == "unavailable" and out.reason == reason
+
+
 async def test_price_history_unknown_reason_is_folded_and_id_checked() -> None:
     body = fx.history_body(available=False)
     body["data"]["history"]["reason"] = "some new internal reason"
