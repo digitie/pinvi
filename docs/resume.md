@@ -1,3 +1,9 @@
+## 2026-10-24 (claude) — Map 계약 재vendor 4: e0131ec1 (브랜치 `chore/revendor-map-e0131ec1`)
+
+- 다음 한 작업: draft PR CI green → 리뷰·머지(머지·배포는 소유자) → Manager pair를 Map `e0131ec1` + 이 PR 머지 commit으로 회전
+  (preflight가 digest를 대조). 그 뒤 weather를 Map `/v1/service/weather/*`로 전환하는 PR(별도).
+- 바뀐 것: Map service·admin 스냅샷과 그 핀 전부, 가격 추이 이유 enum 4개 추가, transport fixture·계약 테스트. API 동작 변화 없음.
+
 ## 2026-10-24 — 여섯 프로젝트 npm 보안·버전 정합
 
 - 현재 상태: npm 보안·공통 버전 소스 정합 및 WSL 검증 완료. [버전과 예외](npm-security-alignment-2026-10-24.md). 최종 CI·UI·머지 상태의 정본은 [PR](https://github.com/digitie/pinvi/pull/598)이다.

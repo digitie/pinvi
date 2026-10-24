@@ -214,6 +214,10 @@ def history_body(*, available: bool) -> dict[str, Any]:
             "status": "available",
             "reason": None,
             "generated_at": "2026-10-23T09:10:00+09:00",
+            "source_collected_at": "2026-10-22T09:00:00+09:00",
+            "source_status": "ok",
+            "has_more": False,
+            "next_cursor": None,
             "truncated": False,
             "items": [
                 {
@@ -221,9 +225,9 @@ def history_body(*, available: bool) -> dict[str, Any]:
                     "product_code": "B027",
                     "product_name": "휘발유",
                     "price": 1689.0,
-                    "provider_updated_at": "2026-10-23T06:00:00+09:00",
+                    "provider_updated_at": None,  # Map ADR-114 D6: 행별 값은 지금 항상 null
                     "observed_at": "2026-10-23T06:00:00+09:00",
-                    "collected_at": "2026-10-23T09:00:00+09:00",
+                    "collected_at": None,
                 },
                 {
                     "product_key": "diesel",
@@ -232,7 +236,7 @@ def history_body(*, available: bool) -> dict[str, Any]:
                     "price": 1570.0,
                     "provider_updated_at": None,
                     "observed_at": "2026-10-22T06:00:00+09:00",
-                    "collected_at": "2026-10-22T09:00:00+09:00",
+                    "collected_at": None,
                 },
             ],
         }
@@ -241,6 +245,10 @@ def history_body(*, available: bool) -> dict[str, Any]:
             "status": "unavailable",
             "reason": "disabled",
             "generated_at": None,
+            "source_collected_at": None,
+            "source_status": None,
+            "has_more": False,
+            "next_cursor": None,
             "truncated": False,
             "items": [],
         }
@@ -253,7 +261,8 @@ def history_body(*, available: bool) -> dict[str, Any]:
             "history": history,
             "freshness": freshness("transport.fuel_stations"),
         },
-        "meta": meta(page=False),
+        # Map은 가격 추이에도 meta.page(page_size=limit, next_cursor=history.next_cursor)를 싣는다.
+        "meta": meta(),
     }
 
 

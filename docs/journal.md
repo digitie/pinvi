@@ -1,3 +1,20 @@
+## 2026-10-24 (claude) — Map 계약 재vendor 4: e0131ec1 (브랜치 `chore/revendor-map-e0131ec1`)
+
+Map ADR-114 W8 회전 순서: #1365(transport T4 가격 추이)와 #1367(2단계 weather service REST)이 둘 다 머지된 Map
+`e0131ec16547a403e7527e6af369465b5611512b`에서 service·admin(full) 스냅샷을 **한 번** 재vendor한다(1단계 대기분 포함).
+
+- 스냅샷: service `14f56255…` → `3b8503a3…`, admin(full) `996e7c9e…` → `24b02107…`(둘 다 `git show e0131ec1:…`로 byte-exact).
+  user `3a847c8a…` 불변(핀 `11b811d9` 유지). 의미 변화: weather 5 path·schema 23 추가, price-history path·`PriceHistoryBlock`·
+  `PriceHistoryPoint` 변경뿐(나머지 path·schema 동일).
+- 핀: `_kor_travel_map_snapshot_pin.py`·admin 이중 핀, cache-target·feature-request·feature-reference-reconciliation 계약 테스트,
+  `.env.example`, service provenance(`map_release_revision`·sha) + `api.yml`의 provenance artifact hash(`d00459ae…` → `af84bce1…`)·
+  wheel 상수, M05 pair provenance(`scripts/generate_m05_pair_contract.py --write`).
+- ADR-114 D6 체크리스트: (1) vendor, (2) `_EXPECTED_QUERY` price-history에 `cursor`, (3) `PriceHistoryUnavailableReason`에 이유 4개
+  (튜플은 `get_args`로 Literal에서 파생 + vendored enum과 exact 대조 테스트 신설), (4) `history_body`에 `source_collected_at`·
+  `source_status`·`has_more`·`next_cursor`, 행 `collected_at`/`provider_updated_at` null, `meta.page` 포함, (5) PinVi는 cursor를
+  보내지 않아 409를 받을 수 없다 — 첫 페이지만 읽는 동작 유지(`docs/api/transport.md`에 한계 기록).
+- 범위 밖: weather를 Map REST로 전환(별도 PR).
+
 ## 2026-10-24 — 여섯 프로젝트 npm 보안·버전 정합
 
 - Docker CI가 Node 이미지 digest의 65자리 전사 오류를 검출했다. registry index를 다시 조회해 검증한 64자리 값으로 세 stage를 교정했다. 실제 web 이미지 빌드·기동을 추가 확인한다.

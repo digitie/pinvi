@@ -30,6 +30,7 @@ from app.clients.kor_travel_map import KorTravelMapClient
 from app.clients.kor_travel_map_transport import KorTravelMapTransportClient
 from app.core.time import KST
 from app.schemas.transport import (
+    PRICE_HISTORY_REASONS,
     AirportItem,
     FuelPrice,
     FuelPriceHistoryPoint,
@@ -73,6 +74,7 @@ _EXPECTED_QUERY: dict[str, set[str]] = {
         "since",
         "until",
         "limit",
+        "cursor",  # Map ADR-114 D6 T4 — PinVi는 보내지 않는다(첫 페이지만 읽는다)
     },
     "/v1/service/transport/status": set(),
 }
@@ -131,6 +133,15 @@ def test_pinvi_limit_matches_map_cap(spec: dict[str, Any]) -> None:
         params = spec["paths"][f"/v1/service/transport/{dataset}"]["get"]["parameters"]
         limit = next(p for p in params if p["name"] == "limit")
         assert limit["schema"]["maximum"] == _MAX_LIMIT
+
+
+def test_price_history_reasons_match_map_enum(spec: dict[str, Any]) -> None:
+    """PinVi가 아는 이유 = Map `PriceHistoryBlock.reason` enum(모르는 값은 `upstream_contract`로 접힌다 — 새 이유가
+    조용히 접히지 않게 exact로 핀한다)."""
+    reason = spec["components"]["schemas"]["PriceHistoryBlock"]["properties"]["reason"]
+    [enum] = [branch["enum"] for branch in reason["anyOf"] if "enum" in branch]
+    assert set(PRICE_HISTORY_REASONS) == set(enum)
+    assert len(PRICE_HISTORY_REASONS) == len(enum)
 
 
 def test_status_dataset_names_are_pinned() -> None:

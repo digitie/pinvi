@@ -64,3 +64,9 @@
 
 응답 `{feature_id, status: available|unavailable, reason, truncated, items[], current_prices[], freshness}`.
 `unavailable`은 오류가 아니다(`reason=disabled`: transport가 아직 추이를 내보내지 않음). 주유소 자체를 못 읽으면 404/503.
+`reason`은 Map `PriceHistoryBlock.reason` enum 그대로다(Map e0131ec1 기준 `disabled`·`not_configured`·`upstream_not_found`·
+`upstream_unsupported`·`request_rejected`·`upstream_no_collection`·`upstream_timeout`·`upstream_unavailable`·`upstream_rejected`·
+`upstream_contract`, 모르는 값은 `upstream_contract`로 접는다). PinVi는 Map에 cursor를 보내지 않고 **첫 페이지만** 읽는다 —
+Map `limit`(기본 200)이 유종 합계라 기간이 길면 `truncated=true`(= Map `has_more`)로 잘린다. 페이지를 이으려면 Map ADR-114 D6
+규칙(같은 `product_code`, `since`/`until` 생략 또는 동일, 409 `TRANSPORT_PRICE_HISTORY_CURSOR_EXPIRED`면 처음부터, unavailable
+페이지에서 멈춤)을 따라야 한다.
