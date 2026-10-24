@@ -71,14 +71,20 @@ async def test_markers_use_bbox_with_include_current() -> None:
 
 async def test_below_min_zoom_or_outside_korea_makes_no_call() -> None:
     client, seen = _client(lambda r: httpx.Response(500))
-    assert await build_weather_markers_in_bounds_via_map(
-        bbox=_SEOUL, zoom=7, limit=100, map_client=client
-    ) == []
+    assert (
+        await build_weather_markers_in_bounds_via_map(
+            bbox=_SEOUL, zoom=7, limit=100, map_client=client
+        )
+        == []
+    )
     # 서비스 범위(위도 39 이하) 밖 — BBox 검증은 통과하지만 국내 범위와 교차가 없다.
     north = BBox(lng_min=126.0, lat_min=40.0, lng_max=127.0, lat_max=41.0)
-    assert await build_weather_markers_in_bounds_via_map(
-        bbox=north, zoom=10, limit=100, map_client=client
-    ) == []
+    assert (
+        await build_weather_markers_in_bounds_via_map(
+            bbox=north, zoom=10, limit=100, map_client=client
+        )
+        == []
+    )
     assert seen == []
 
 

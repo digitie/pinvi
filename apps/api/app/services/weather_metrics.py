@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Protocol, TypeVar
+from typing import Protocol
 
 from app.schemas.feature import WeatherMetric
 
@@ -63,9 +63,6 @@ class WeatherFact(Protocol):
     def valid_until(self) -> datetime | None: ...
     @property
     def observed_at(self) -> datetime | None: ...
-
-
-FactT = TypeVar("FactT", bound=WeatherFact)
 
 # provider 우선순위 — 왼쪽일수록 우선. 이 목록에 없는 provider는 최하위로 취급한다.
 PROVIDER_PRIORITY: tuple[str, ...] = (
@@ -154,7 +151,7 @@ def to_weather_metric(value: WeatherFact) -> WeatherMetric:
     )
 
 
-def dedupe_by_provider_priority(values: Sequence[FactT]) -> list[FactT]:
+def dedupe_by_provider_priority[FactT: WeatherFact](values: Sequence[FactT]) -> list[FactT]:
     """같은 `(metric_key, forecast_style, target_at)`는 provider 우선순위로 하나만 남긴다.
 
     동률이면 `known_at`이 더 최신인 쪽. `known_at`이 없으면(nullable) `collected_at`으로

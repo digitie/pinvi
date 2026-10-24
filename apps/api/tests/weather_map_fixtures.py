@@ -136,7 +136,9 @@ def forecast_group(
     provider: str = "python-kma-api",
     target_at: list[str] | None = None,
 ) -> dict[str, Any]:
-    times = target_at or [hours_from_now(h) for h in range(1, 1 + len(next(iter(metrics.values()))))]
+    times = target_at or [
+        hours_from_now(h) for h in range(1, 1 + len(next(iter(metrics.values()))))
+    ]
     return {
         "provider": provider,
         "known_at": hours_from_now(-2),

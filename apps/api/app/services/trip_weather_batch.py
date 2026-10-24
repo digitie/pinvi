@@ -63,13 +63,13 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.clients.kor_travel_map import KorTravelMapError
+from app.clients.kor_travel_map_weather import KorTravelMapWeatherClient, WeatherSection
 from app.clients.kor_travel_weather import (
     KorTravelWeatherClient,
     KorTravelWeatherError,
     kor_travel_weather_call_deadline,
 )
-from app.clients.kor_travel_map import KorTravelMapError
-from app.clients.kor_travel_map_weather import KorTravelMapWeatherClient, WeatherSection
 from app.models.poi import TripDayPoi
 from app.services.weather_location_resolver import (
     WeatherLocationFound,
@@ -216,7 +216,7 @@ async def _resolve_all(
     (ii) 바깥 예산 — 피호출자가 SYN을 버리면 미스 1건이 호출당 connect 상한(≈6.6 s)까지 가므로 (i)만으로는
     예산을 못 지킨다. 예산이 끊기면 pending **전체**를 `unavailable`로 찍고 `None`을 돌려준다.
     """
-    caught = (*errors, TimeoutError)
+    caught: tuple[type[Exception], ...] = (*errors, TimeoutError)
     resolutions: dict[str, WeatherLocationResolution] = {}
     unavailable_feature_ids: set[str] = set()
     try:
@@ -261,9 +261,7 @@ def _bundles(pending: _Pending, found: Mapping[str, WeatherLocationFound]) -> _B
     """3) card_key(대표 location_id)별 bundle(source_location_ids 합집합)과 이 trip이 필요한 날짜."""
     by_card_key: dict[str, set[str]] = {}
     for resolution in found.values():
-        by_card_key.setdefault(resolution.location_id, set()).update(
-            resolution.source_location_ids
-        )
+        by_card_key.setdefault(resolution.location_id, set()).update(resolution.source_location_ids)
     location_ids = sorted({loc for bundle in by_card_key.values() for loc in bundle})
     needed_dates = sorted(
         {

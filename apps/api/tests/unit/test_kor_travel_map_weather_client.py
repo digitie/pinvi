@@ -27,7 +27,9 @@ pytestmark = pytest.mark.asyncio
 Handler = Callable[[httpx.Request], httpx.Response]
 
 
-def _client(handler: Handler, *, token: str = "svc") -> tuple[KorTravelMapWeatherClient, list[httpx.Request]]:
+def _client(
+    handler: Handler, *, token: str = "svc"
+) -> tuple[KorTravelMapWeatherClient, list[httpx.Request]]:
     seen: list[httpx.Request] = []
 
     def record(request: httpx.Request) -> httpx.Response:
@@ -96,7 +98,9 @@ async def test_409_is_cursor_expired_and_422_is_bad_request() -> None:
     )
     with pytest.raises(KorTravelMapWeatherCursorExpired):
         await expired.list_locations(cursor="c")
-    invalid, _ = _client(lambda r: httpx.Response(422, json=fx.problem_body(422, "VALIDATION_ERROR")))
+    invalid, _ = _client(
+        lambda r: httpx.Response(422, json=fx.problem_body(422, "VALIDATION_ERROR"))
+    )
     with pytest.raises(KorTravelMapBadRequest):
         await invalid.batch(location_ids=[fx.LOC_KMA])
 
@@ -148,7 +152,9 @@ async def test_naive_datetime_is_rejected() -> None:
 
 async def test_list_query_and_repeated_section_params() -> None:
     client, seen = _client(lambda r: httpx.Response(200, json=fx.list_body([fx.location()])))
-    data = await client.list_locations(bbox=(126.0, 37.0, 127.0, 38.0), include_current=True, limit=50)
+    data = await client.list_locations(
+        bbox=(126.0, 37.0, 127.0, 38.0), include_current=True, limit=50
+    )
     assert data["next_cursor"] is None
     params = seen[0].url.params
     assert params["include_current"] == "true"

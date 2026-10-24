@@ -107,7 +107,11 @@ async def _sent() -> tuple[dict[tuple[str, str], set[str]], list[dict[str, Any]]
     await client.list_locations(cursor="c", limit=10)
     await client.location(fx.FID_KMA, sections=("current",), forecast_styles=styles, **window)
     await client.nearest(
-        lon=126.9, lat=37.5, radius_m=20_000.0, sections=("forecasts",), forecast_styles=styles,
+        lon=126.9,
+        lat=37.5,
+        radius_m=20_000.0,
+        sections=("forecasts",),
+        forecast_styles=styles,
         **window,
     )
     await client.batch(
@@ -196,7 +200,9 @@ def test_closed_vocabularies_are_pinned(spec: dict[str, Any]) -> None:
     assert set(schemas["WeatherForecastSections"]["properties"]) == set(
         st.MapWeatherForecastSections.model_fields
     )
-    styles = _enum(schemas["WeatherBatchRequest"]["properties"]["forecast_styles"]["anyOf"][0]["items"])
+    styles = _enum(
+        schemas["WeatherBatchRequest"]["properties"]["forecast_styles"]["anyOf"][0]["items"]
+    )
     assert set(styles) == set(typing.get_args(kor_travel_map_weather.WeatherForecastStyle))
     sections = _enum(schemas["WeatherBatchRequest"]["properties"]["sections"]["anyOf"][0]["items"])
     assert set(sections) == set(typing.get_args(kor_travel_map_weather.WeatherSection))

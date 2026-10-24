@@ -248,10 +248,10 @@ class KorTravelMapWeatherClient:
         """여러 위치(합 ≤ 50)의 묶음. data = ``{items, missing}``. 청크는 호출자 몫이다."""
         total = len(feature_ids) + len(location_ids)
         if not 1 <= total <= MAX_BATCH_IDS:
-            raise ValueError(f"feature_ids·location_ids 합은 1..{MAX_BATCH_IDS}개여야 합니다: {total}")
-        if len(set(feature_ids)) != len(feature_ids) or len(set(location_ids)) != len(
-            location_ids
-        ):
+            raise ValueError(
+                f"feature_ids·location_ids 합은 1..{MAX_BATCH_IDS}개여야 합니다: {total}"
+            )
+        if len(set(feature_ids)) != len(feature_ids) or len(set(location_ids)) != len(location_ids):
             raise ValueError("같은 id가 두 번 있습니다(Map은 422로 거절한다).")
         body: dict[str, Any] = {}
         if feature_ids:

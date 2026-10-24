@@ -17,9 +17,6 @@ from app.services import weather_map_state as st
 from app.services.weather_metrics import dedupe_by_provider_priority, to_weather_metric
 from tests import weather_map_fixtures as fx
 
-pytestmark = pytest.mark.asyncio
-
-
 def _map_client(handler: Any) -> tuple[KorTravelMapWeatherClient, list[httpx.Request]]:
     seen: list[httpx.Request] = []
 
@@ -105,7 +102,9 @@ def test_observations_keep_unit_and_mark_observed_at() -> None:
 
 def test_provider_priority_dedupe_runs_on_flattened_rows() -> None:
     at = fx.hours_from_now(2)
-    kma = st.MapWeatherForecastGroup.model_validate(fx.forecast_group({"TMP": [15.0]}, target_at=[at]))
+    kma = st.MapWeatherForecastGroup.model_validate(
+        fx.forecast_group({"TMP": [15.0]}, target_at=[at])
+    )
     other = st.MapWeatherForecastGroup.model_validate(
         fx.forecast_group({"TMP": [99.0]}, provider="open_meteo", target_at=[at])
     )
@@ -139,8 +138,12 @@ def test_daily_slots_project_only_requested_dates_and_keep_vs_previous_day() -> 
     first = rows[0]
     assert first.forecast_style == "observed"
     assert first.timeline_bucket == "morning"
-    assert first.valid_from == datetime(yesterday.year, yesterday.month, yesterday.day, 5, tzinfo=KST)
-    assert first.valid_until == datetime(yesterday.year, yesterday.month, yesterday.day, 11, tzinfo=KST)
+    assert first.valid_from == datetime(
+        yesterday.year, yesterday.month, yesterday.day, 5, tzinfo=KST
+    )
+    assert first.valid_until == datetime(
+        yesterday.year, yesterday.month, yesterday.day, 11, tzinfo=KST
+    )
 
 
 def test_daily_slots_without_samples_are_skipped() -> None:
@@ -188,7 +191,10 @@ async def test_batch_chunks_over_50_and_isolates_a_failed_chunk() -> None:
     client, seen = _map_client(handler)
     now = datetime.now(UTC)
     result = await st.fetch_location_bundles(
-        client, ids, sections=("current", "forecasts"), forecast_from=now,
+        client,
+        ids,
+        sections=("current", "forecasts"),
+        forecast_from=now,
         forecast_to=now + timedelta(days=1),
     )
     sizes = sorted(len(json.loads(r.content)["location_ids"]) for r in seen)

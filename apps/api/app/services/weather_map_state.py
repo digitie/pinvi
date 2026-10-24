@@ -10,7 +10,7 @@ Map 응답을 같은 모양의 행(`MapWeatherValue`, `WeatherFact` 구조 타�
 
 - 관측: 한 값 = 한 행. `forecast_style`은 Map 값(`observed`·`nowcast`) 그대로, `valid_at = target_at`,
   `observed`면 `observed_at = target_at`.
-- 예보: 묶음의 `target_at[i]` × metric마다 한 행, `null` 자리는 버린다(Map 배열의 정렬용 null이다 — 직접 경로에는
+- 예보: 묶음의 `target_at[i]`와 metric마다 한 행, `null` 자리는 버린다(Map 배열의 정렬용 null이다 — 직접 경로에는
   값 없는 행이 없다). `issued_at = published_at`. Map 예보에는 **단위가 없다**.
 - `external` 예보 묶음은 `forecast_style="short"`로 편다 — weather는 외부 provider(OpenWeatherMap 등)·KHOA 예보를
   `short` 사실로 저장하고 직접 경로가 그 값을 그대로 줬다(Map은 export 묶음 이름 `external`로만 나눈다).
@@ -289,7 +289,9 @@ def _parse[ModelT: BaseModel](model: type[ModelT], data: dict[str, Any]) -> Mode
     try:
         return model.model_validate(data)
     except ValidationError as exc:
-        raise MapWeatherContractError(f"Map weather 응답 해석 실패({model.__name__}): {exc}") from exc
+        raise MapWeatherContractError(
+            f"Map weather 응답 해석 실패({model.__name__}): {exc}"
+        ) from exc
 
 
 def parse_bundle(data: dict[str, Any]) -> MapWeatherBundle:
@@ -382,7 +384,7 @@ def observation_values(
 def forecast_values(
     location_id: str, style: str, groups: Iterable[MapWeatherForecastGroup]
 ) -> list[MapWeatherValue]:
-    """예보 묶음을 행으로 편다(`target_at[i]` × metric, null 자리는 버린다)."""
+    """예보 묶음을 행으로 편다(`target_at[i]`와 metric, null 자리는 버린다)."""
     forecast_style = "short" if style == "external" else style
     out: list[MapWeatherValue] = []
     for group in groups:
