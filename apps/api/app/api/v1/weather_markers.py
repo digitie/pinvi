@@ -71,7 +71,9 @@ async def weather_markers_in_bounds(
         if kor_travel_map_client is None or not kor_travel_map_client.has_service_token:
             raise _weather_unavailable()
         try:
-            async with asyncio.timeout(settings.pinvi_kor_travel_map_weather_request_budget_seconds):
+            async with asyncio.timeout(
+                settings.pinvi_kor_travel_map_weather_request_budget_seconds
+            ):
                 items = await build_weather_markers_in_bounds_via_map(
                     bbox=bbox_obj,
                     zoom=zoom,

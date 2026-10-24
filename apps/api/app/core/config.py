@@ -821,7 +821,9 @@ class Settings(BaseSettings):
     pinvi_kor_travel_map_weather_enabled: bool = False
     # Map weather 호출 한 번의 read·connect 상한과 카드·marker 요청 하나의 전체 예산(초). Map이 죽었을 때 빨리
     # 실패하도록 Map 공용 timeout(5초)보다 짧다. trip view는 기존 view 예산(10초)을 그대로 쓴다.
-    pinvi_kor_travel_map_weather_timeout_seconds: float = Field(default=3.0, gt=0, allow_inf_nan=False)
+    pinvi_kor_travel_map_weather_timeout_seconds: float = Field(
+        default=3.0, gt=0, allow_inf_nan=False
+    )
     pinvi_kor_travel_map_weather_connect_timeout_seconds: float = Field(
         default=1.0, gt=0, allow_inf_nan=False
     )

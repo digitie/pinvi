@@ -245,7 +245,9 @@ class KorTravelMapWeatherClient:
             # 운영 Map은 service token 없이는 401이다 — 요청마다 거절당하러 가지 않는다.
             if not _no_token_logged:
                 _no_token_logged = True
-                logger.warning("kor_travel_map.weather_no_service_token — Map weather를 부르지 않음")
+                logger.warning(
+                    "kor_travel_map.weather_no_service_token — Map weather를 부르지 않음"
+                )
             raise KorTravelMapWeatherUnavailable(
                 "kor-travel-map service token 미설정", code="UPSTREAM_AUTH"
             )
@@ -396,7 +398,6 @@ class KorTravelMapWeatherClient:
             body["forecast_to"] = _aware(forecast_to, field_name="forecast_to")
         data, _meta = await self._request("POST", _BATCH_PATH, json=body)
         return data
-
 
 
 def create_map_weather_client(map_client: KorTravelMapClient) -> KorTravelMapWeatherClient:

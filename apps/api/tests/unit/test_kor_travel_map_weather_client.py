@@ -175,7 +175,9 @@ async def test_list_query_and_repeated_section_params() -> None:
 # ── 회로차단·timeout (ADR-077 리뷰 반영) ─────────────────────────────────────────────
 
 
-def _clocked(handler: Handler) -> tuple[KorTravelMapWeatherClient, list[httpx.Request], list[float]]:
+def _clocked(
+    handler: Handler,
+) -> tuple[KorTravelMapWeatherClient, list[httpx.Request], list[float]]:
     now = [1000.0]
     seen: list[httpx.Request] = []
 

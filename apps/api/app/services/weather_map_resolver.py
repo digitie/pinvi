@@ -263,7 +263,7 @@ async def resolve_many_via_map(
 
     semaphore = asyncio.Semaphore(max(1, concurrency))
 
-    async def network(feature_id: str) -> MapResolved | None | KorTravelMapError:
+    async def network(feature_id: str) -> MapResolved | KorTravelMapError | None:
         lat, lon = coords[feature_id]
         async with semaphore:
             try:

@@ -473,9 +473,7 @@ async def test_resolve_many_runs_misses_concurrently_and_isolates_failures(
         )
     assert 1 < peak <= 3
     assert isinstance(results[bad], Exception)
-    assert all(
-        isinstance(results[fid], WeatherLocationFound) for fid in coords if fid != bad
-    )
+    assert all(isinstance(results[fid], WeatherLocationFound) for fid in coords if fid != bad)
 
 
 # ── 단건 카드 ─────────────────────────────────────────────────────────────────────────
