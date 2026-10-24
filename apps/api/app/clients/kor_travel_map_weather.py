@@ -257,7 +257,7 @@ class KorTravelMapWeatherClient:
                 params=params,
                 json=json,
                 retry=False,
-                timeout=self._timeout,
+                request_timeout=self._timeout,
                 log_failure=False,
             )
         except KorTravelMapUnavailable as exc:

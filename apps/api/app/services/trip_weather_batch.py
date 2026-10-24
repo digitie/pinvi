@@ -461,7 +461,6 @@ async def build_trip_weather_via_kor_travel_map(
         today = now.astimezone(_SEOUL).date()
         range_from = _weather_target_at(bundles.needed_dates[0])
         range_to = _weather_target_at(bundles.needed_dates[-1]) + timedelta(days=1)
-        past_dates = [d for d in bundles.needed_dates if d < today]
         # 오늘은 끝난 구간의 요약도 낸다 — Map은 지난 예보 시각을 떼고 주므로(W5) 그날의 지난 시간대는 요약이 채운다.
         daily_dates = [d for d in bundles.needed_dates if d <= today]
         today_dates = [d for d in daily_dates if d == today]

@@ -101,7 +101,11 @@ def test_bulk_updates_that_set_one_axis_are_enumerated() -> None:
     narrowing 이후에는 무해하지만(UUID가 NULL이면 legacy 축으로 판정) 새 경로가
     말없이 늘어나면 안 된다. 알려진 목록을 못 박아 증가를 눈에 보이게 한다."""
 
-    known = {("feature_request.py", "feature_id")}
+    known = {
+        ("feature_request.py", "feature_id"),
+        # `weather_location_links` upsert(ADR-077) — 이 표에는 UUID 축이 없다(weather 해석 캐시 키일 뿐).
+        ("weather_location_resolver.py", "feature_id"),
+    }
     found: set[tuple[str, str]] = set()
     for filename in sorted(p.name for p in _SERVICES.glob("*.py")):
         for node in ast.walk(_tree(filename)):
