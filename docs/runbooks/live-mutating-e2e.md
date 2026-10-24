@@ -119,7 +119,7 @@ runner가 사용할 Playwright image를 고정한다. image는 공식 registry�
 cd ~/pinvi
 : "${PINVI_LIVE_EXPECTED_REVISION:?export the trusted release-candidate full SHA before running live UI}"
 export PINVI_LIVE_EXPECTED_REVISION
-export PINVI_PLAYWRIGHT_RUNNER_IMAGE="${PINVI_PLAYWRIGHT_RUNNER_IMAGE:-mcr.microsoft.com/playwright@sha256:9bd26ad900bb5e0f4dee75839e957a89ae89c2b7ab1e76050e559790e946b948}"
+export PINVI_PLAYWRIGHT_RUNNER_IMAGE="${PINVI_PLAYWRIGHT_RUNNER_IMAGE:-mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea}"
 ```
 
 ```bash
