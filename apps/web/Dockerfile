@@ -4,7 +4,7 @@
 # 죽는다. `--parents`를 쓰는 이상 이 frontend는 load-bearing이므로, base image가
 # 전부 digest로 고정된 저장소에서 여기만 떠 있는 태그로 두지 않는다 — 같은
 # revision의 pinned rebuild가 Docker가 태그를 다시 밀었다는 이유로 달라진다.
-FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS deps
+FROM node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f55ca4403205b2966bd488f6b3 AS deps
 WORKDIR /repo
 
 # workspace manifest 만 먼저 복사 — install 캐시 layer.
@@ -21,12 +21,12 @@ COPY --parents apps/*/package.json packages/*/package.json ./
 # (`.dockerignore`가 `*.tar.gz`를 제외한다) 여기서 끊긴다.
 COPY --parents apps/*/vendor/ ./
 
-# `npm install`이 아니라 `npm ci`다. manifest와 lockfile이 어긋나면 조용히
+# `npm install`이 아니라 `npx --yes npm@12.0.1 ci`다. manifest와 lockfile이 어긋나면 조용히
 # 다른 트리를 만드는 대신 **실패한다**. 위 누락이 바로 그렇게 숨었다.
-RUN npm ci --no-audit --no-fund
+RUN npx --yes npm@12.0.1 ci --no-audit --no-fund
 
 # ─────────────────────────────────────────────
-FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS build
+FROM node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f55ca4403205b2966bd488f6b3 AS build
 WORKDIR /repo
 # 루트 `node_modules`만이 아니라 deps 스테이지의 트리를 통째로 가져온다.
 # npm은 버전이 충돌하면 hoist 대신 **중첩**한다 — 실제로 루트는
@@ -52,7 +52,7 @@ ENV NEXT_PUBLIC_VWORLD_API_KEY=${NEXT_PUBLIC_VWORLD_API_KEY}
 RUN npm --workspace apps/web run build
 
 # ─────────────────────────────────────────────
-FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS runtime
+FROM node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f55ca4403205b2966bd488f6b3 AS runtime
 WORKDIR /app
 
 ARG PINVI_BUILD_ENVIRONMENT=development
