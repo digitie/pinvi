@@ -68,9 +68,7 @@ async def test_krforest_station_is_the_anchor_when_nearest() -> None:
         ("krforest-dust-0007", 1500.0),
         (fx.LOC_AIR, 2500.0),
     ]
-    resolved = await mr.nearest_location_set(
-        _client(near, fx.kma_bundle()), lat=37.6, lon=127.0
-    )
+    resolved = await mr.nearest_location_set(_client(near, fx.kma_bundle()), lat=37.6, lon=127.0)
     assert resolved is not None
     assert resolved.location_id == "krforest-mt-0042"
     assert resolved.source_location_ids == ("krforest-mt-0042", fx.LOC_KMA)
