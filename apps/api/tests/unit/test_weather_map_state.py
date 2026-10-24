@@ -17,6 +17,7 @@ from app.services import weather_map_state as st
 from app.services.weather_metrics import dedupe_by_provider_priority, to_weather_metric
 from tests import weather_map_fixtures as fx
 
+
 def _map_client(handler: Any) -> tuple[KorTravelMapWeatherClient, list[httpx.Request]]:
     seen: list[httpx.Request] = []
 
