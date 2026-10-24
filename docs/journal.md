@@ -1,3 +1,12 @@
+## 2026-10-24 — 여섯 프로젝트 npm 보안·버전 정합
+
+- Docker CI가 Node 이미지 digest의 65자리 전사 오류를 검출했다. registry index를 다시 조회해 검증한 64자리 값으로 세 stage를 교정했다. 실제 web 이미지 빌드·기동을 추가 확인한다.
+- 이 저장소의 기존 프론트엔드/공용 테스트 344개와 타입·린트·빌드 PASS. [버전·예외·검증 범위](npm-security-alignment-2026-10-24.md).
+- Popper 사전 리뷰 P1: 현재 live-mutating 실행 예시가 이전 Playwright digest를 기본값으로 사용하던 문제를 수정했다. 과거 attestation과 수용 증적은 보존했다. James 사전 리뷰의 추가 결함은 없었다.
+- 직접/전이 npm 의존성과 잠금 파일을 갱신하고 여섯 프로젝트의 공통 버전을 맞췄다.
+- 호환성 예외·미수정 상류 권고·검증 범위는 [정합 기록](npm-security-alignment-2026-10-24.md)을 따른다.
+- 소스·잠금 파일 정합과 WSL 검증을 완료했다. 최종 CI·두 독립 확인·N150 후보 UI 게이트와 머지 상태는 [PR](https://github.com/digitie/pinvi/pull/598)에서 정산하며 통과 확인 전 머지하지 않는다.
+
 ## 2026-10-24 (claude) — `shell-quote` critical 권고 해소: 루트 override (브랜치 `fix/shell-quote-override`)
 
 `apps/mobile`의 `react-native@0.86.3` → `react-devtools-core@6.1.5` → `shell-quote@1.10.0`이 GHSA-pqg4-j6r4-53mv(critical,

@@ -16,7 +16,7 @@ on:
       - 'tsconfig.base.json'
       - '.github/workflows/web.yml'
       - '.github/workflows/aggregate-ci.yml'
-      # deps 스테이지가 **모든** workspace manifest와 vendored tarball로 `npm ci`를
+      # deps 스테이지가 **모든** workspace manifest와 vendored tarball로 `npx --yes npm@12.0.1 ci`를
       # 돈다. 이 둘이 빠져 있으면 이미지 빌드 입력이 바뀌는데 `docker-image`가
       # 돌지 않는다 — 방금 닫은 이중 선언을 CI 트리거로 옮겨 놓는 셈이다.
       - 'apps/mobile/package.json'
@@ -39,7 +39,7 @@ on:
       - 'tsconfig.base.json'
       - '.github/workflows/web.yml'
       - '.github/workflows/aggregate-ci.yml'
-      # deps 스테이지가 **모든** workspace manifest와 vendored tarball로 `npm ci`를
+      # deps 스테이지가 **모든** workspace manifest와 vendored tarball로 `npx --yes npm@12.0.1 ci`를
       # 돈다. 이 둘이 빠져 있으면 이미지 빌드 입력이 바뀌는데 `docker-image`가
       # 돌지 않는다 — 방금 닫은 이중 선언을 CI 트리거로 옮겨 놓는 셈이다.
       - 'apps/mobile/package.json'
@@ -64,13 +64,13 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22.23.1"
           cache: npm
 
       # T-358 — npm 10.9.7은 lockfile 없는 설치에서 arborist 버그(`edgesOut`)로 죽는다.
-      # `npm ci`만 쓰는 job도 로컬(npm 11)과 해석이 갈리지 않도록 같은 버전으로 맞춘다.
-      - name: Pin npm 11.19.1
-        run: npm install -g npm@11.19.1
+      # `npx --yes npm@12.0.1 ci`만 쓰는 job도 로컬(npm 12)과 해석이 갈리지 않도록 같은 버전으로 맞춘다.
+      - name: Pin npm 12.0.1
+        run: npm install -g npm@12.0.1
 
       # T-358 — lockfile을 node_modules가 있는 상태에서 재생성하면 npm이 디스크에서
       # 트리를 읽어 `integrity`를 적지 않는다. T-352에서 실제로 보유율이 100% -> 4.8%로
@@ -79,7 +79,7 @@ jobs:
         run: node scripts/check-lockfile-integrity.mjs
 
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        run: npx --yes npm@12.0.1 ci --no-audit --no-fund
 
       - name: Lint (workspaces)
         run: npm run lint
@@ -101,7 +101,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
-    # `lint-typecheck-build`는 **전체 체크아웃**에서 `npm ci`로 돈다. 이미지 빌드는
+    # `lint-typecheck-build`는 **전체 체크아웃**에서 `npx --yes npm@12.0.1 ci`로 돈다. 이미지 빌드는
     # 그 트리를 쓰지 않는다 — deps 스테이지가 manifest만 복사해 따로 install한다.
     # 그래서 두 트리가 갈라져도 CI는 초록이고, 깨진 main은 1~2시간짜리 pinned
     # rebuild에서야 드러났다(2026-09-02: `Can't resolve 'tailwindcss'`로 회전
@@ -153,16 +153,16 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22.23.1"
           cache: npm
 
       # T-358 — npm 10.9.7은 lockfile 없는 설치에서 arborist 버그(`edgesOut`)로 죽는다.
-      # `npm ci`만 쓰는 job도 로컬(npm 11)과 해석이 갈리지 않도록 같은 버전으로 맞춘다.
-      - name: Pin npm 11.19.1
-        run: npm install -g npm@11.19.1
+      # `npx --yes npm@12.0.1 ci`만 쓰는 job도 로컬(npm 12)과 해석이 갈리지 않도록 같은 버전으로 맞춘다.
+      - name: Pin npm 12.0.1
+        run: npm install -g npm@12.0.1
 
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        run: npx --yes npm@12.0.1 ci --no-audit --no-fund
 
       # 실제 mutation은 N150 격리 stack에서만 허용하지만, 두 pinned suite의 탐색 가능성은 PR CI에서 고정한다.
       - name: Verify M04/M05 live-mutating E2E catalog
