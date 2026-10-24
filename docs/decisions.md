@@ -3973,3 +3973,53 @@ ADR-048은 geo v2 `key`를 서버 VWorld key와 같은 값으로 쓰고 geo의 `
 - 운영에서 켜려면 Manager pinvi-api 블록에 `PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN`(Map `KOR_TRAVEL_MAP_API_SERVICE_TOKEN`과 같은 값)과
   플래그를 넘겨야 한다 — 지금 운영 pinvi-api에는 Map service token이 없다.
 - 서버 캐시는 두지 않는다(Map이 Valkey에서 읽고, 캐시는 신선도 문구를 거짓으로 만든다). weather의 Map 경유 전환은 Map 2단계 뒤 별도.
+
+## ADR-077: weather 관측·예보는 kor-travel-map weather 상태 표면으로 읽는다(플래그), 특보만 kor-travel-weather 직접
+
+- **상태**: accepted (구현 PR, 플래그 기본 off — 운영 활성화는 Map weather 적재·Manager 배선 뒤)
+- **날짜**: 2026-10-24
+- **결정자**: 사용자(소유자, Map ADR-114 "PinVi는 transport·weather를 Map REST로만" — 이행 순서 4) + Claude
+- **관련**: kor-travel-map ADR-114 W0~W8(weather 2단계, Map #1367), ADR-068(weather 소스 이관), ADR-074(weather 호스트·회로차단),
+  ADR-076(transport — 같은 client·강등 관례)
+- **설계 정본**: `docs/integrations/kor-travel-weather.md` §9
+
+### 결정
+
+1. `PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED`(기본 false)가 켜지면 단건 weather 카드(`GET /features/{id}/weather`)·trip view
+   weather·지도 weather marker(`GET /weather/markers-in-bounds`)의 관측·예보를 Map `/v1/service/weather/*`(service token)로 읽는다.
+   꺼져 있으면 지금처럼 kor-travel-weather를 직접 부르고 **Map weather 표면은 부르지 않는다**. Admin weather-values(provenance
+   필드)는 플래그와 무관하게 직접 경로다.
+2. 경로별 Map route: 위치 해석 = `GET /nearest`(20 → 50 → 100 km, 해석이 쓰는 부분을 명시) + `GET /locations?near=`, 카드·trip =
+   `POST /locations/batch`(해석이 저장한 source 위치 전체, 50곳씩 청크), marker = `GET /locations`(영역 + `include_current=true`).
+   위치 집합은 직접 `/resolve`와 같은 규칙(가장 가까운 측정소 + `max(5 km, d + 5 km)` 안의 측정소 아닌 위치 — 측정소는 weather
+   location_id 접두어 `airkorea-`·`khoa-`·`krex-`·`krforest-`(산악기상·산림 미세먼지 포함)로 가린다 — Map·weather export에 측정소 표시가 없다)에 `/nearest`의 부분별 source를 더한 **상위 집합**이다. 캐시 표 `weather_location_links`는 같지만 두
+   경로는 **서로의 행을 쓰지 않는다**(Map 행은 `measurement_point.resolved_via = "kor_travel_map"` 표식 — migration 없음) — 플래그를
+   바꾸면 행마다 한 번 다시 해석한다. 재해석: 좌표 변경·7일 TTL, 핵심 부분(관측·초단기·단기) 실패는 `stale`이되 15분 동안은 stale 값을
+   그대로 쓴다. trip view는 미스만 동시성 4로 해석한다. 쓰기는 upsert.
+3. **공개 응답 셰입은 바꾸지 않는다.** Map 묶음을 kor-travel-weather 평탄 행과 같은 축(`MapWeatherValue`, `WeatherFact` 구조 타입)으로
+   펴서 기존 provider 우선순위 dedupe·안전 KMA metric key 정규화·`WeatherMetric` 투영을 그대로 태운다. `external` 예보 묶음은
+   `short`로(weather가 외부 provider 예보를 `short`로 저장한다), 단위·이름은 weather provider 고정 표(KMA·KHOA·외부 provider
+   metric별, `WIND_SPEED`는 provider별)로 채우고 표에 없는 provider의 풍속 예보만 버린다. 지난 trip 일자와 오늘의 끝난 구간은 세 구간
+   요약을 `forecast_style="daily_summary"`·`SLOT_*` key 행으로 편다(직접 경로의 과거 timeline 대신 — 셰입은 같고 값의 style이
+   하나 늘어난다; web `TripWeatherSummary`가 "시간대별" 묶음으로 보인다). `vs_previous_day`는 해석 모델이 Map 값 그대로 보존한다
+   (공개 응답에는 아직 싣지 않는다).
+4. 강등은 부분별이다: 못 읽은 부분은 행이 없을 뿐 나머지로 카드를 채우고, trip은 직접 경로의 "location 실패" 규칙(값이 있으면
+   `found`, 없으면 `unavailable`, 전부 확인됐을 때만 `no_data`)을 그대로 쓴다. Map 자체 장애는 카드 = 빈 카드(500 없음), trip =
+   `unavailable`, marker = 직접 경로와 같은 503 `WEATHER_SERVICE_UNAVAILABLE`(관측 데이터셋을 못 읽었을 때도 503, 빈 목록 아님).
+   service token이 없으면 카드도 직접 경로의 client 없음과 같은 503이고, 플래그 on + token 없음은 설정 검사가 기동을 거부한다.
+   빠른 실패: 호출 read 3초·connect 1초, 카드·marker 요청 예산 5초, 회로차단(연속 3번 → 30초 열림, `NOT_LOADED`는 세지 않음).
+5. 특보는 Map에 없다(Map ADR-114 W7 범위 밖) — 켜도 kor-travel-weather `/markers`의 `alerts`만 직접 읽어 합친다. weather client가
+   없거나 실패하면 특보 없이 진행한다.
+6. client는 `app/clients/kor_travel_map_weather.py`(transport와 같은 관례 — 재시도 0, 401/403 `UPSTREAM_AUTH`, 409 cursor 만료,
+   token 없으면 Map 미호출), 계약 게이트는 `tests/unit/test_kor_travel_map_weather_contract.py`(query exact 핀·배치 본문·소비 필드·
+   닫힌 어휘·fixture schema 대조).
+
+### 결과
+
+- 운영에서 켜려면 ① Map weather Dagster job·schedule 7개 활성화(기본 STOPPED, Map ADR-114 W8)와 적재 확인(`GET /v1/service/weather/status`)
+  ② Manager pinvi-api 블록에 `PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED` 배선(service token은 ADR-076 때 이미 배선됨) ③ 플래그 on.
+- Map 핵심 데이터셋(관측·초단기·단기)이 오래 `not_loaded`면 해석 행이 stale로 남아 feature마다 15분에 한 번 다시 해석한다(반경
+  최대 셋 + 목록 + upsert) — 폭주는 아니지만 일곱 schedule을 함께 켠다. 반경 안에 위치가 없는 feature는 행을 쓰지 않아 요청마다 다시 묻는다.
+- 단건 카드는 `asof`=오늘이어도 그날의 지난 예보 시각을 잃는다(Map이 `from`을 지금으로 당긴다) — 관측만 남는다.
+- 플래그를 켜도 kor-travel-weather 의존은 특보와 Admin weather-values로 남는다(Map ADR-114 이행 순서 4의 "직접 호출 제거"는 특보
+  경로가 Map에 생긴 뒤).

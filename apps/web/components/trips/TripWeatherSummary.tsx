@@ -104,8 +104,51 @@ function toGroup(metrics: WeatherMetric[]): MetricGroup {
   };
 }
 
+/** 세 구간 요약(ADR-077 Map 경로의 지난 일자) — 아침·점심·저녁 순. */
+const DAILY_SUMMARY_STYLE = 'daily_summary';
+const DAILY_SLOTS: ReadonlyArray<[string, string]> = [
+  ['morning', '아침'],
+  ['noon', '점심'],
+  ['evening', '저녁'],
+];
+
+function slotValue(metrics: WeatherMetric[], key: string): number | null {
+  const metric = metrics.find((item) => item.metric_key === key);
+  return metric?.value_number ?? null;
+}
+
+function toDailyGroup(metrics: WeatherMetric[]): MetricGroup {
+  const items: string[] = [];
+  for (const [slot, slotLabel] of DAILY_SLOTS) {
+    const slotMetrics = metrics.filter((metric) => metric.timeline_bucket === slot);
+    if (slotMetrics.length === 0) continue;
+    const min = slotValue(slotMetrics, 'SLOT_TEMP_MIN');
+    const max = slotValue(slotMetrics, 'SLOT_TEMP_MAX');
+    const humidity = slotValue(slotMetrics, 'SLOT_HUMIDITY_AVG');
+    const precip = slotValue(slotMetrics, 'SLOT_PRECIP_SUM');
+    const parts: string[] = [];
+    if (min != null && max != null) parts.push(`${formatNumber(min)}~${formatNumber(max)}°C`);
+    else if (min != null || max != null) parts.push(`${formatNumber((min ?? max) as number)}°C`);
+    if (humidity != null) parts.push(`습도 ${formatNumber(humidity)}%`);
+    if (precip != null) parts.push(`강수 ${formatNumber(precip)}mm`);
+    if (parts.length > 0) items.push(`${slotLabel} ${parts.join(' ')}`);
+  }
+  return {
+    items,
+    providers: Array.from(
+      new Set(
+        metrics
+          .map((metric) => providerLabel(metric.provider))
+          .filter((value): value is string => value != null),
+      ),
+    ),
+  };
+}
+
 function pickMetrics(metrics: WeatherMetric[], date: string) {
-  const matched = metrics.filter((metric) => metricDate(metric) === date);
+  const sameDate = metrics.filter((metric) => metricDate(metric) === date);
+  const daily = sameDate.filter((metric) => metric.forecast_style === DAILY_SUMMARY_STYLE);
+  const matched = sameDate.filter((metric) => metric.forecast_style !== DAILY_SUMMARY_STYLE);
   const dust = matched.filter((metric) => DUST_RE.test(metricHaystack(metric)));
   const nonDust = matched.filter((metric) => !DUST_RE.test(metricHaystack(metric)));
   const current = nonDust.filter(
@@ -122,6 +165,7 @@ function pickMetrics(metrics: WeatherMetric[], date: string) {
     current: toGroup(current),
     forecast: toGroup(forecast),
     dust: toGroup(dust),
+    daily: toDailyGroup(daily),
   };
 }
 
@@ -149,6 +193,7 @@ export function TripWeatherSummary({
       { key: 'current', label: '현재', icon: CloudSun, ...picked.current },
       { key: 'forecast', label: '예보', icon: CloudSun, ...picked.forecast },
       { key: 'dust', label: '미세먼지', icon: Wind, ...picked.dust },
+      { key: 'daily', label: '시간대별', icon: CloudSun, ...picked.daily },
     ].filter((group) => group.items.length > 0);
   }, [card, date]);
 

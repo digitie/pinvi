@@ -31,9 +31,11 @@ from app.clients.kor_travel_map import (
     KorTravelMapRateLimited,
     KorTravelMapUnavailable,
 )
+from app.clients.kor_travel_map_weather import create_map_weather_client
 from app.clients.kor_travel_weather import OptionalKorTravelWeatherClientDep
 from app.clients.naver_local import NaverLocalClient, NaverLocalClientDep, NaverLocalError
 from app.core.bbox import MAX_ZOOM, MIN_ZOOM, parse_bbox
+from app.core.config import settings
 from app.core.consent_deps import assert_location_consent, require_location_consent
 from app.core.coord_range import (
     COORD_LAT_MAX,
@@ -625,7 +627,15 @@ async def get_feature_weather(
     어제(KST) 이전이면 빈 카드가 된다(§3.1-(1)) — 대상 서비스 보존은 7일(ADR-073)이고
     그 안의 과거 날짜도 이 단건 경로는 지원하지 않는다(`weather_card.py` 참조).
     """
-    if weather_client is None:
+    # ADR-077: 플래그 on이면 관측·예보는 Map `/v1/service/weather/*`, 특보만 weather 직접(없으면 특보 생략).
+    # 소스 client가 없으면(직접: weather client, Map: service token) 같은 503이다.
+    map_weather_client = (
+        create_map_weather_client(client)
+        if settings.pinvi_kor_travel_map_weather_enabled and client.has_service_token
+        else None
+    )
+    map_mode = settings.pinvi_kor_travel_map_weather_enabled
+    if (map_mode and map_weather_client is None) or (not map_mode and weather_client is None):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
@@ -651,6 +661,8 @@ async def get_feature_weather(
         lon=coord.lon,
         asof=normalized_asof,
         weather_client=weather_client,
+        map_weather_client=map_weather_client,
+        map_budget_seconds=settings.pinvi_kor_travel_map_weather_request_budget_seconds,
     )
     return Envelope.of(card)
 

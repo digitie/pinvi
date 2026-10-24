@@ -333,12 +333,17 @@ class KorTravelMapClient:
         json: Any | None = None,
         allow_public_api_key: bool = False,
         retry: bool = True,
+        request_timeout: httpx.Timeout | None = None,
+        log_failure: bool = True,
     ) -> httpx.Response:
         """transient(타임아웃/연결/5xx) 시 지수 백오프 재시도.
 
         ``retry=False``면 한 번만 보내고 5xx 응답도 그대로 돌려준다 — 호출자가 problem ``code``를 읽어
         판단한다(transport 상태 표면: 503 ``NOT_LOADED``는 결정적이고, 지도 요청은 다음 이동이 곧
         재시도다 — ADR-076 D2).
+
+        ``request_timeout``을 주면 그 호출만 client 기본 timeout 대신 쓴다(weather 상태 표면의 짧은 connect —
+        ADR-077). ``log_failure=False``면 실패 경고를 호출자가 남긴다(같은 실패의 이중 로그 방지).
         """
         attempts = self._max_attempts if retry else 1
         last: KorTravelMapUnavailable | None = None
@@ -350,6 +355,9 @@ class KorTravelMapClient:
                     params=params,
                     json=json,
                     headers=self._headers(allow_public_api_key=allow_public_api_key),
+                    timeout=(
+                        request_timeout if request_timeout is not None else httpx.USE_CLIENT_DEFAULT
+                    ),
                 )
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last = KorTravelMapUnavailable(f"kor-travel-map 요청 실패({path}): {exc!r}")
@@ -360,7 +368,8 @@ class KorTravelMapClient:
                     return resp
             if attempt + 1 < attempts:
                 await asyncio.sleep(self._backoff_base_seconds * (2**attempt))
-        logger.warning("kor_travel_map.unavailable", extra={"path": path})
+        if log_failure:
+            logger.warning("kor_travel_map.unavailable", extra={"path": path})
         raise last or KorTravelMapUnavailable(f"kor-travel-map 요청 실패({path})")
 
     @staticmethod

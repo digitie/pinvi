@@ -815,6 +815,21 @@ class Settings(BaseSettings):
     # `/v1/service/transport/*`(service token 필요)로 읽는다. off(기본)면 `/transport/status`가
     # `enabled=false`를 주고 Map을 부르지 않는다 — 클라이언트는 레이어 컨트롤을 숨긴다.
     pinvi_kor_travel_map_transport_enabled: bool = False
+    # ADR-077 — weather 카드·trip weather·지도 weather marker의 관측·예보를 Map
+    # `/v1/service/weather/*`(service token 필요, Map ADR-114 W7)로 읽는다. off(기본)면 지금처럼
+    # kor-travel-weather를 직접 부르고 Map weather 표면은 부르지 않는다. 특보는 켜도 weather 직접 경로다.
+    pinvi_kor_travel_map_weather_enabled: bool = False
+    # Map weather 호출 한 번의 read·connect 상한과 카드·marker 요청 하나의 전체 예산(초). Map이 죽었을 때 빨리
+    # 실패하도록 Map 공용 timeout(5초)보다 짧다. trip view는 기존 view 예산(10초)을 그대로 쓴다.
+    pinvi_kor_travel_map_weather_timeout_seconds: float = Field(
+        default=3.0, gt=0, allow_inf_nan=False
+    )
+    pinvi_kor_travel_map_weather_connect_timeout_seconds: float = Field(
+        default=1.0, gt=0, allow_inf_nan=False
+    )
+    pinvi_kor_travel_map_weather_request_budget_seconds: float = Field(
+        default=5.0, gt=0, allow_inf_nan=False
+    )
 
     # cache target generation/outbox paired worker (ADR-058). false여도 DB projection은 계속된다.
     pinvi_kor_travel_map_cache_target_sync_enabled: bool = False
@@ -1073,6 +1088,17 @@ class Settings(BaseSettings):
 
     # Feature flag
     pinvi_enable_seed: bool = False
+
+    @model_validator(mode="after")
+    def _validate_map_weather_requires_service_token(self) -> Self:
+        """weather Map 경유(ADR-077)는 service token 없이는 동작할 수 없다 — 켜 놓고 조용히 빈 카드가 되지 않게."""
+        if self.pinvi_kor_travel_map_weather_enabled and not (
+            self.pinvi_kor_travel_map_service_token.strip()
+        ):
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED=true requires PINVI_KOR_TRAVEL_MAP_SERVICE_TOKEN"
+            )
+        return self
 
     @model_validator(mode="after")
     def _validate_kor_travel_geo_api_key(self) -> Self:

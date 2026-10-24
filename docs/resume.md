@@ -1,3 +1,12 @@
+## 2026-10-24 (claude) — weather 읽기를 Map service REST로 (T-381, ADR-077, 브랜치 `feat/weather-via-map-rest`)
+
+- 다음 한 작업: draft PR CI green → 리뷰·머지(머지·배포는 소유자). 운영에서 켜려면 ① Map `weather_state_*` job·schedule 7개 활성화와
+  `GET /v1/service/weather/status` 일곱 데이터셋 `loaded` 확인 ② Manager pinvi-api 블록에
+  `PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED: ${PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED:-false}`와 선택 조정값 `..._WEATHER_TIMEOUT_SECONDS:-3`·
+  `..._WEATHER_CONNECT_TIMEOUT_SECONDS:-1`·`..._WEATHER_REQUEST_BUDGET_SECONDS:-5`(+ `.env.example`, `backend/tests/test_docker_service_config.py`
+  의 transport 단언 옆) — Map service token은 이미 배선돼 있다 ③ 플래그 on(`kor-travel-weather.md` §9.4).
+- 바뀐 것: API만(web·mobile 변경 없음, 공개 응답 셰입 불변). 플래그 off면 Map weather 표면을 부르지 않는다.
+
 ## 2026-10-24 (claude) — Map 계약 재vendor 4: e0131ec1 (브랜치 `chore/revendor-map-e0131ec1`)
 
 - 다음 한 작업: draft PR CI green → 리뷰·머지(머지·배포는 소유자) → Manager pair를 Map `e0131ec1` + 이 PR 머지 commit으로 회전
