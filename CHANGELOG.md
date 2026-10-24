@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- **(security)** 모바일 앱 의존성 체인의 `shell-quote`를 1.10.0에서 1.12.0으로 올렸다(루트 `overrides`). critical 권고
+  GHSA-pqg4-j6r4-53mv(1.8.4 이상 1.11.0 미만)를 해소한다. 화면·동작 변화는 없다.
 - **(security)** 웹 앱의 Next.js를 16.3.3에서 16.4.3으로 올렸다. 이미지 최적화(SVG)·`use cache` 원격 코드 실행
   (GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr)과 Server Actions 서비스 거부(GHSA-p3m5-59mp-jv5r) 권고를 해소한다.
   화면·동작 변화는 없다.

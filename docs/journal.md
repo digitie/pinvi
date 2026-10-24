@@ -1,3 +1,13 @@
+## 2026-10-24 (claude) — `shell-quote` critical 권고 해소: 루트 override (브랜치 `fix/shell-quote-override`)
+
+`apps/mobile`의 `react-native@0.86.3` → `react-devtools-core@6.1.5` → `shell-quote@1.10.0`이 GHSA-pqg4-j6r4-53mv(critical,
+`>=1.8.4 <1.11.0`, 수정 1.11.0) 범위였다. `react-devtools-core`가 `^1.6.1`을 요구하므로 상위 bump 없이 루트 `overrides`에
+`"shell-quote": "^1.11.0"`을 더했다(기존 `postcss`·`sharp` override와 같은 방식).
+
+- lockfile은 Node 22 + npm 11.19.1(CI 동일)로 node_modules 없이 `npm install --package-lock-only` 재생성. diff는
+  `node_modules/shell-quote` 한 항목(1.10.0 → 1.12.0)뿐이고 integrity 게이트 100%.
+- `npm audit --omit=dev`: 21건(critical 2 = `next`·`shell-quote`) → 20건(critical 1 = `next`, #596이 처리).
+
 ## 2026-10-24 (claude) — web `next` 16.3.3 → 16.4.3 보안 bump (브랜치 `fix/next-16-4-security`)
 
 `apps/web`의 `next` 16.3.3이 GHSA-2464-fhr4-w9xw(critical, SVG 사용 시 Image Optimization API RCE)·GHSA-673q-mjm6-r5xr

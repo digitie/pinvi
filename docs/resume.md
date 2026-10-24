@@ -1,3 +1,8 @@
+## 2026-10-24 (claude) — `shell-quote` override 보안 수정 (브랜치 `fix/shell-quote-override`)
+
+- 다음 한 작업: draft PR CI green → 리뷰·머지(머지·배포는 소유자). #596(next bump)과 `package-lock.json`·docs가 겹치므로
+  나중에 머지되는 쪽을 리베이스하고 lock을 재생성한다.
+
 ## 2026-10-24 (claude) — web `next` 16.4.3 보안 bump (브랜치 `fix/next-16-4-security`)
 
 - 다음 한 작업: draft PR CI green → 리뷰·머지(머지·배포는 소유자) → 다음 PinVi 핀 회전으로 배포.
