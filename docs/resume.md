@@ -1,3 +1,9 @@
+## 2026-10-24 (claude) — web `next` 16.4.3 보안 bump (브랜치 `fix/next-16-4-security`)
+
+- 다음 한 작업: draft PR CI green → 리뷰·머지(머지·배포는 소유자) → 다음 PinVi 핀 회전으로 배포.
+- 바뀐 것: `apps/web/package.json`(`next`·`eslint-config-next` 16.4.3), `package-lock.json`(Next family + sharp 0.35.5). 코드·설정 변화 없음.
+- 남은 것: `npm audit --omit=dev` 기존 19건(`shell-quote` critical·expo 체인 등)은 별도 작업.
+
 ## 2026-10-23 (claude) — 지도 교통 정보 레이어 (T-380, ADR-076, 브랜치 `feat/map-transport-integration`)
 
 - 다음 한 작업: PR CI green → 리뷰·머지(머지·배포는 소유자). 운영 활성화는 Manager PR(pinvi-api에

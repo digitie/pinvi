@@ -1,3 +1,20 @@
+## 2026-10-24 (claude) — web `next` 16.3.3 → 16.4.3 보안 bump (브랜치 `fix/next-16-4-security`)
+
+`apps/web`의 `next` 16.3.3이 GHSA-2464-fhr4-w9xw(critical, SVG 사용 시 Image Optimization API RCE)·GHSA-673q-mjm6-r5xr
+(critical, typed array를 반환하는 `use cache` RCE)·GHSA-p3m5-59mp-jv5r(high, Server Actions DoS) 범위(16.0.0–16.4.0)였다.
+첫 패치 16.4.1, 16.4 라인 최신 16.4.3으로 올렸다(kor-travel-map #1363과 같은 버전).
+
+- `apps/web/package.json`: `next`·`eslint-config-next` 16.3.3 → 16.4.3(짝 유지). `package-lock.json`은 CI와 같은 Node 22 +
+  npm 11.19.1에서 `npm install --package-lock-only`로 갱신 — 바뀐 것은 Next family(`next`·`@next/env`·`@next/eslint-plugin-next`·
+  `@next/swc-*`)와 next가 끌어오는 `sharp` 0.35.4 → 0.35.5(`@img/*` 동반)뿐이다. integrity 게이트 통과.
+- PinVi 코드에는 `use cache`·Server Actions·`next/image`·`next/dist` 내부 경로 참조가 없다. 16.4.0 릴리스 노트의 제거 항목은
+  실험 옵션·내부 경로라 `next.config.mjs`(webpack alias·headers·transpilePackages)에 영향 없다. Map이 밟은
+  image-optimizer 내부 경로 이동(sharp 검증 스크립트)도 PinVi에는 해당 스크립트가 없다.
+- 새 lint 규칙 `@next/next/no-location-assign-relative-destination`(warn)이 `apps/web/lib/api.ts`에 경고 1건을 낸다. web lint는
+  `--max-warnings`가 없어 실패하지 않는다 — 별도 정리 대상.
+- `npm audit --omit=dev`: main 21건(critical 2 = `next`·`shell-quote`) → 19건. `next`·`sharp`가 사라졌고 남은 것은 모두 기존
+  항목(대부분 mobile expo 체인, `shell-quote` critical 포함) — 이 PR 범위 밖.
+
 ## 2026-10-23 (claude) — 지도 교통 정보 레이어: Map transport 연동 (T-380, ADR-076, 브랜치 `feat/map-transport-integration`)
 
 소유자 결정(Map ADR-114): PinVi는 transport(나중에 weather)를 Map REST로만 읽는다. 범위 "화면까지". weather는 Map 2단계 뒤.
