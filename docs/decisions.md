@@ -3992,7 +3992,7 @@ ADR-048은 geo v2 `key`를 서버 VWorld key와 같은 값으로 쓰고 geo의 `
 2. 경로별 Map route: 위치 해석 = `GET /nearest`(20 → 50 → 100 km, 해석이 쓰는 부분을 명시) + `GET /locations?near=`, 카드·trip =
    `POST /locations/batch`(해석이 저장한 source 위치 전체, 50곳씩 청크), marker = `GET /locations`(영역 + `include_current=true`).
    위치 집합은 직접 `/resolve`와 같은 규칙(가장 가까운 측정소 + `max(5 km, d + 5 km)` 안의 측정소 아닌 위치 — 측정소는 weather
-   location_id 접두어로 가린다)에 `/nearest`의 부분별 source를 더한 **상위 집합**이다. 캐시 표 `weather_location_links`는 같지만 두
+   location_id 접두어 `airkorea-`·`khoa-`·`krex-`·`krforest-`(산악기상·산림 미세먼지 포함)로 가린다 — Map·weather export에 측정소 표시가 없다)에 `/nearest`의 부분별 source를 더한 **상위 집합**이다. 캐시 표 `weather_location_links`는 같지만 두
    경로는 **서로의 행을 쓰지 않는다**(Map 행은 `measurement_point.resolved_via = "kor_travel_map"` 표식 — migration 없음) — 플래그를
    바꾸면 행마다 한 번 다시 해석한다. 재해석: 좌표 변경·7일 TTL, 핵심 부분(관측·초단기·단기) 실패는 `stale`이되 15분 동안은 stale 값을
    그대로 쓴다. trip view는 미스만 동시성 4로 해석한다. 쓰기는 upsert.

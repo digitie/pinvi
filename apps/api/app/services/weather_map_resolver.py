@@ -5,9 +5,10 @@
 (`written_by_map`). 플래그를 끄면 직접 경로가 그 행을 다시 해석해 덮어쓴다.
 
 **위치 집합 — 직접 `/resolve`와 같은 의미 + 부분별 source.** kor-travel-weather `/resolve`는 가장 가까운 **측정소**
-(AirKorea·KHOA·KREX — `measurement_point` 메타가 있는 위치)를 대표로 고르고, 거리 `max(5 km, d + 5 km)` 안의 **측정소가
+(AirKorea·KHOA·KREX·산림청 산악기상/미세먼지 — `measurement_point` 메타가 있는 위치)를 대표로 고르고, 거리 `max(5 km, d + 5 km)` 안의 **측정소가
 아닌** 위치(KMA 격자·외부 provider 앵커)를 함께 묶는다. Map 위치에는 메타가 없어서 측정소 여부를 weather의 location_id
-접두어(`airkorea-`·`khoa-`·`krex-`, weather `providers/*.py`가 만든다)로 가린다. 그 집합을 Map `GET /locations?near=`
+접두어(`airkorea-`·`khoa-`·`krex-`·`krforest-` — `krforest-dust-` 포함, weather `providers/*.py`가 만든다)로
+가린다. Map 위치 payload·weather W1 export 어디에도 측정소 표시가 없어서다. 그 집합을 Map `GET /locations?near=`
 (가까운 순)로 같은 규칙으로 고르고, 거기에 Map `GET /nearest`가 부분마다 고른 source 위치를 더한다 — 직접 경로 집합의
 상위 집합이다(대표 측정소의 미세먼지가 빠지지 않고, 예보 없는 측정소 옆의 KMA 격자 예보도 빠지지 않는다).
 
@@ -80,8 +81,10 @@ RESOLVER_FORECAST_STYLES: Final[tuple[WeatherForecastStyle, ...]] = (
 #: 이 부분의 실패만 stale로 친다(나머지는 TTL이 거둔다).
 _CORE_FORECAST_STYLES: Final = ("ultra_short", "short")
 
-#: weather가 `measurement_point` 메타를 붙이는 provider의 location_id 접두어(`providers/{airkorea,khoa,krex}.py`).
-STATION_LOCATION_PREFIXES: Final = ("airkorea-", "khoa-", "krex-")
+#: weather가 `measurement_point`(station_name) 메타를 붙이는 provider의 location_id 접두어 — weather
+#: `providers/{airkorea,khoa,krex,krforest,krforest_dust}.py`의 `location_id=f"<prefix>-{suffix}"`. `krforest-`가
+#: `krforest-dust-`도 덮는다. 목록은 `tests/unit/test_weather_map_resolver.py`가 provider 집합과 대조해 핀한다.
+STATION_LOCATION_PREFIXES: Final = ("airkorea-", "khoa-", "krex-", "krforest-")
 #: 대표 측정소 주변 source 반경 — weather `/resolve`의 `max(5.0, distance + 5.0)` km.
 _SOURCE_RADIUS_FLOOR_M: Final = 5_000.0
 _SOURCE_RADIUS_MARGIN_M: Final = 5_000.0

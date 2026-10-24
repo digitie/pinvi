@@ -1012,9 +1012,11 @@ PinVi #599가 Map `e0131ec1` service OpenAPI를 vendor). 플래그(기본 `false
 
 ### 9.1 해석 — 직접 `/resolve`와 같은 위치 집합 + 부분별 source (`app/services/weather_map_resolver.py`)
 
-직접 `/resolve`는 가장 가까운 **측정소**(AirKorea·KHOA·KREX — weather가 `measurement_point` 메타를 붙이는 위치)를 대표로 고르고,
+직접 `/resolve`는 가장 가까운 **측정소**(AirKorea·KHOA·KREX·산림청 산악기상·산림 미세먼지 — weather가 `measurement_point` 메타를
+붙이는 위치)를 대표로 고르고,
 `max(5 km, d + 5 km)` 안의 **측정소가 아닌** 위치(KMA 격자·외부 provider 앵커)를 함께 묶는다. Map 위치에는 메타가 없어 측정소 여부를
-weather location_id 접두어(`airkorea-`·`khoa-`·`krex-`, weather `providers/*.py`가 만든다)로 가린다. Map 경로는
+weather location_id 접두어(`airkorea-`·`khoa-`·`krex-`·`krforest-` — `krforest-dust-` 포함, weather `providers/*.py`가 만든다)로
+가린다(Map 위치 payload·weather W1 export 어디에도 측정소 표시가 없다 — weather가 새 측정소 provider를 더하면 이 목록도 고친다). Map 경로는
 
 1. `GET /nearest`(20 → 50 → 100 km, `sections=current,forecasts,daily_summaries`·`forecast_styles` 넷 명시)로 반경과 **부분마다** 값이 있는
    가장 가까운 위치(`source.location_id`)를 얻고,
@@ -1069,7 +1071,7 @@ weather location_id 접두어(`airkorea-`·`khoa-`·`krex-`, weather `providers/
 | 부분이 `no_data` | 그 부분만 빈 카드 | 확인된 없음(`no_data` 가능) | 빠짐 |
 | 배치 청크 호출 실패(503·timeout·계약 위반) | 그 청크 위치 값 없음 | 그 청크 위치 "실패" | — |
 | `/nearest`·Map 전체 장애·회로 열림·요청 예산 초과 | 빈 카드(200) | `unavailable` | 503 `WEATHER_SERVICE_UNAVAILABLE` |
-| 위치는 있으나 관측 데이터셋을 못 읽음(`current_freshness` 없음) | — | — | 503(빈 목록 아님) |
+| 위치는 있으나 관측 데이터셋을 못 읽음(`current_freshness` 없음) | — | — | 503(빈 목록 아님). 영역에 위치가 하나도 없으면 관측 상태와 무관하게 200 빈 목록 |
 | Map `missing`(지금 세대에 없는 위치) | 값 없음 | 확인된 없음 | — |
 | service token 없음(설정 검사가 기동을 막지만 방어) | 503 `WEATHER_SERVICE_UNAVAILABLE`(직접 경로의 client 없음과 같다) | `unavailable` | 503 |
 | Map location_id 계약 밖 id(`|`·제어 문자·120자 초과) | 보내지 않음(값 없음) | 확인된 없음 | — |

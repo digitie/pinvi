@@ -284,3 +284,35 @@ def test_settings_reject_weather_flag_without_service_token() -> None:
         pinvi_kor_travel_map_service_token="svc-token",
     )
     assert ok.pinvi_kor_travel_map_weather_enabled is True
+
+
+def test_breaker_ignores_results_of_calls_started_before_a_state_change() -> None:
+    """열리기 전에 출발한 호출의 늦은 실패는 열린 시간을 늘리지 않고, 늦은 성공은 half-open 시험보다 먼저 닫지 않는다."""
+    from app.clients.kor_travel_map_weather import _CircuitBreaker
+
+    now = [0.0]
+    breaker = _CircuitBreaker(failure_threshold=3, open_seconds=30.0, clock=lambda: now[0])
+    in_flight = [breaker.acquire() for _ in range(5)]  # 모두 닫힌 회로에서 출발
+    for trial, generation in in_flight[:3]:
+        breaker.record_failure(trial=trial, generation=generation)
+    assert breaker.is_open
+
+    # 열린 뒤 25초에 옛 호출이 실패해도 열린 시각은 0초 그대로 — 30초에 시험 호출이 허가된다.
+    now[0] = 25.0
+    trial, generation = in_flight[3]
+    breaker.record_failure(trial=trial, generation=generation)
+    now[0] = 30.5
+    trial_call = breaker.acquire()
+    assert trial_call[0] is True
+
+    # 시험 호출이 진행 중일 때 옛 호출의 성공은 회로를 닫지 않는다.
+    trial, generation = in_flight[4]
+    breaker.record_success(trial=trial, generation=generation)
+    assert breaker.is_open
+    with pytest.raises(KorTravelMapWeatherUnavailable):
+        breaker.acquire()  # 시험 자리는 아직 차 있다
+
+    # 시험 호출 자신의 성공은 닫는다.
+    breaker.record_success(trial=trial_call[0], generation=trial_call[1])
+    assert not breaker.is_open
+    assert breaker.acquire()[0] is False

@@ -93,7 +93,7 @@ marker만 조용히 사라진다.
   1,000 km 상한 422 회피). 교차가 비면 Map을 부르지 않고 빈 목록.
 - 줌 게이트(8 미만 빈 목록)·온도 선택·`condition` 규칙·응답 셰입은 같다. 관측 값이 없는 위치·좌표 없는 위치는 빠진다.
 - 위치는 있는데 관측 데이터셋 자체를 못 읽으면(Map `current_freshness` 없음 — 적재 전·읽기 실패) **빈 목록이 아니라 503**이다
-  (직접 경로의 weather 장애와 같게).
+  (직접 경로의 weather 장애와 같게). 영역에 위치가 하나도 없으면(Map이 관측을 읽지 않는다) 관측 상태와 무관하게 200 빈 목록이다.
 - Map 장애·적재 전(`WEATHER_STATE_*`)·계약 위반·회로 열림·요청 예산(5초) 초과·kor-travel-map client 또는 service token 없음은 직접
   경로와 같은 503 `WEATHER_SERVICE_UNAVAILABLE`이다.
 - 설계: [`kor-travel-weather.md`](../integrations/kor-travel-weather.md) §9.

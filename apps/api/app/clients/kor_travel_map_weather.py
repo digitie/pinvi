@@ -96,7 +96,12 @@ class KorTravelMapWeatherCursorExpired(KorTravelMapError):
 
 
 class _CircuitBreaker:
-    """연속 실패 회로차단 — closed → open(``open_seconds``) → half-open(시험 1회)."""
+    """연속 실패 회로차단 — closed → open(``open_seconds``) → half-open(시험 1회).
+
+    **세대(generation)**: 상태가 바뀔 때마다(열림·닫힘) 세대가 오른다. ``acquire``가 호출 시작 시점의 세대를 주고,
+    결과는 그 세대가 지금과 같을 때만 센다 — 회로가 열리기 전에 출발한 호출의 늦은 실패가 열린 시간을 늘리지 않고,
+    늦은 성공이 half-open 시험보다 먼저 회로를 닫지 않는다. 시험 호출 자신의 결과는 언제나 센다.
+    """
 
     def __init__(
         self, *, failure_threshold: int, open_seconds: float, clock: Callable[[], float]
@@ -107,30 +112,42 @@ class _CircuitBreaker:
         self._consecutive_failures = 0
         self._opened_at: float | None = None
         self._trial_in_flight = False
+        self._generation = 0
 
     @property
     def is_open(self) -> bool:
         return self._opened_at is not None
 
-    def acquire(self) -> bool:
-        """호출 허가. 열려 있으면 ``KorTravelMapWeatherUnavailable``. 반환값은 half-open 시험 호출 여부."""
+    def acquire(self) -> tuple[bool, int]:
+        """호출 허가. 열려 있으면 ``KorTravelMapWeatherUnavailable``.
+
+        반환값은 ``(half-open 시험 호출 여부, 호출 시작 세대)``.
+        """
         if self._opened_at is None:
-            return False
+            return False, self._generation
         if self._clock() - self._opened_at < self._open_seconds or self._trial_in_flight:
             raise KorTravelMapWeatherUnavailable(
                 "kor-travel-map weather 회로 열림 — 호출하지 않음", code="CIRCUIT_OPEN"
             )
         self._trial_in_flight = True
-        return True
+        return True, self._generation
 
-    def record_success(self) -> None:
+    def _stale(self, *, trial: bool, generation: int) -> bool:
+        return not trial and generation != self._generation
+
+    def record_success(self, *, trial: bool, generation: int) -> None:
+        if self._stale(trial=trial, generation=generation):
+            return
         if self._opened_at is not None:
             logger.info("kor_travel_map.weather_circuit_closed")
+            self._generation += 1
         self._consecutive_failures = 0
         self._opened_at = None
         self._trial_in_flight = False
 
-    def record_failure(self, *, trial: bool) -> None:
+    def record_failure(self, *, trial: bool, generation: int) -> None:
+        if self._stale(trial=trial, generation=generation):
+            return
         self._consecutive_failures += 1
         if trial or self._consecutive_failures >= self._failure_threshold:
             if self._opened_at is None:
@@ -139,6 +156,7 @@ class _CircuitBreaker:
                     extra={"consecutive_failures": self._consecutive_failures},
                 )
             self._opened_at = self._clock()
+            self._generation += 1
         if trial:
             self._trial_in_flight = False
 
@@ -251,7 +269,7 @@ class KorTravelMapWeatherClient:
             raise KorTravelMapWeatherUnavailable(
                 "kor-travel-map service token 미설정", code="UPSTREAM_AUTH"
             )
-        trial = self._circuit.acquire()
+        trial, generation = self._circuit.acquire()
         try:
             resp = await self._map._send(
                 method,
@@ -263,11 +281,11 @@ class KorTravelMapWeatherClient:
                 log_failure=False,
             )
         except KorTravelMapUnavailable as exc:
-            self._circuit.record_failure(trial=trial)
+            self._circuit.record_failure(trial=trial, generation=generation)
             raise KorTravelMapWeatherUnavailable(str(exc)) from exc
         except httpx.HTTPError as exc:
             # DecodingError·TooManyRedirects 등은 TransportError가 아니라 `_send`가 잡지 않는다.
-            self._circuit.record_failure(trial=trial)
+            self._circuit.record_failure(trial=trial, generation=generation)
             raise KorTravelMapWeatherUnavailable(
                 f"kor-travel-map 응답 오류({path}): {exc!r}"
             ) from exc
@@ -277,9 +295,9 @@ class KorTravelMapWeatherClient:
         if resp.status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR and (
             _error_code(resp) not in _ALIVE_UNAVAILABLE_CODES
         ):
-            self._circuit.record_failure(trial=trial)
+            self._circuit.record_failure(trial=trial, generation=generation)
         else:
-            self._circuit.record_success()
+            self._circuit.record_success(trial=trial, generation=generation)
         return self._data(resp)
 
     async def list_locations(
