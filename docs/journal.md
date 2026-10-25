@@ -1,3 +1,17 @@
+## 2026-10-26 — 관리자 Feature 읽기 배포·공개 인수·일정 복원 정산
+
+PR #602의8f1b998f와 Map5f3506a를 공식2단계로 배포했고 Map430·PinVi0102·7 healthy를
+새 readback했다. 새 양쪽 백업·격리 복원 리허설 verified와 Map의 비차단 catalog drift 경고는
+별개로 보존한다. 후보 HTTP6단계와 구분하여 최종 공개 TLS R7의 Map7+PinVi6을 통과했다.
+PinVi 로그인·로그아웃은 각1회·보호401, 실제 tile21·오류0·목록4/상세2와 같은 source lineage를
+확인했고 이번 두 세션의 미철회 가능성False·소유 브라우저/profile 제거·원 env/runtime 불변이다.
+
+원 공개3 FAIL과 R4의 미확정 세션은 영구 보존하며 후속 성공으로 합산·대체하지 않는다.
+원 일정은47/RUNNING38→최종51/RUNNING37·STOPPED14로 복원했고 새 항목은 모두OFF다.
+퇴역한 highway incidents ten-minute schedule은 되살리지 않았다. 전용 읽기 자격 분리와
+PinViWeatherOFF는 유지한다. 현재 읽기 연동 task만 종결하며 수집·운영 opt-in은 추가하지 않는다.
+[세대·캐시 예외·한계](map-admin-feature-read.md). 물리 두writer/Rest 영속/전체1commit은 별도다.
+
 ## 2026-10-25 — 관리자 Feature 읽기 코드 CI 수용
 
 정확bbf3 코드의 API7/Web3 총10 CI SUCCESS를 확인했다(SKIP3은 제외). formatter·계약 hash delta도 Root/T 검토를 마쳤다. 후속 문서만 정산하며 실제 새pair/UI·provision·머지·배포는 계속 대기한다. [검증 세대](map-admin-feature-read.md).

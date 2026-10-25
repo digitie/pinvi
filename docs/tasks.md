@@ -1,6 +1,5 @@
 # tasks.md — 활성 작업
 
-- [ ] 관리자 Feature 목록·상세 전용 읽기 자격: Map 계약 재vendor·두 리뷰·CI·실제 UI 후 Manager 정본으로 적용. [범위](map-admin-feature-read.md).
 
 이 문서는 완료되지 않은 작업만 의존 순서대로 한 줄씩 나열한다. lane, 담당자 구분,
 계층형 하위 작업은 사용하지 않는다. 완료·퇴역 이력은

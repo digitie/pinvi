@@ -1,5 +1,15 @@
 # tasks-done.md — 완료·아카이브
 
+## 2026-10-26 — 관리자 Feature 전용 읽기의 구현·배포·공개 인수
+
+- [x] PR #602의 별도 SecretStr·GET2 전용 전달·빈 env fail-closed·계약 vendor·두 제품 리뷰·코드 CI,
+ 8f1b998f 머지와 별도 격리 PinVi6단계를 수용했다. 공식 Map418→430/PinVi0102 배포·7 healthy와
+ 공개 TLS R7 Map7/PinVi6·이번 로그인/logout 각1·보호401·실지도/목록/상세·정확 정리를 확인했다.
+ 원 일정은 현재 존재하는 RUNNING37만 복원하고 새 항목 모두OFF·WeatherOFF를 유지했다.
+ 원 공개3 FAIL/R4 세션 미확정·백업 비차단 catalog drift와 세대별 한계는
+ [기록](map-admin-feature-read.md)에 보존한다. 전체 수집·물리 두writer·Rest 영속·전체1commit/
+ W/T 운영 활성화는 이 task의 완료가 아니다.
+
 ## 2026-10-20
 
 - [x] T-377 — PR #591 merged 0f1975c3, Admin ETL 정적 asset·job·schedule·sensor 목록을 Dagster 정의에 맞추고 ETL 대조 테스트(`apps/etl/tests/test_admin_etl_definition_lists.py`)로 묶음; KASI schedule 이름 `kasi_special_days_job_schedule` 정정. 배포는 다음 chain.
