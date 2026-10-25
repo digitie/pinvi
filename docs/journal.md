@@ -1,3 +1,7 @@
+## 2026-10-25 — 관리자 Feature 전용 읽기 자격 구현 중
+
+관리자 목록·상세만 Map의 전용 service GET과 별도 `SecretStr` token을 사용하도록 변경했다. 일반 service/admin proxy/ops fallback 없이, 자격 오류는 안전한503으로 분리한다. 신규17개와 기존 회귀 포함174개 통과를 확인했다. Map 스펙 재vendor·두 리뷰·CI·실제 UI·운영 적용은 아직 미완이다. [경계와 검증](map-admin-feature-read.md).
+
 ## 2026-10-25 (claude) — 가격 추이 `product_code`·`limit=1000` (브랜치 `fix/price-history-limit-product`)
 
 Map이 가격 추이 `limit`을 페이지 전체 행 수(유종 합계, 기본 200·최대 1000)로 바꿨고 #599가 그 계약을 vendor했다. PinVi는 `since`만

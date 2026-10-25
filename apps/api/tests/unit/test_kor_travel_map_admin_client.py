@@ -48,6 +48,7 @@ def _client(handler: Handler, **kwargs: object) -> KorTravelMapAdminClient:
         "max_attempts": 2,
         "backoff_base_seconds": 0.0,
         "service_token": "svc-tok",
+        "admin_features_read_token": "feature-read-" + "r" * 32,
         "ops_read_token": "ops-read-tok",
         "ops_cancel_token": "ops-cancel-tok",
     }
@@ -275,7 +276,7 @@ async def test_list_features_uses_admin_read_path_filters_and_returns_payload() 
         order="desc",
     )
     assert seen["method"] == "GET"
-    assert seen["path"] == "/v1/admin/features"
+    assert seen["path"] == "/v1/service/admin-features"
     assert ("kind", "place") in seen["query"]
     assert ("kind", "event") in seen["query"]
     assert ("lifecycle_state", "active") in seen["query"]
@@ -388,7 +389,7 @@ async def test_get_feature_detail_uses_admin_detail_path() -> None:
     client = _client(handler)
     data = await client.get_feature_detail("f_1")
     assert seen["method"] == "GET"
-    assert seen["path"] == "/v1/admin/features/f_1"
+    assert seen["path"] == "/v1/service/admin-features/f_1"
     assert data["feature"]["feature_id"] == "f_1"
     assert "status" not in data["feature"]
     await client.aclose()

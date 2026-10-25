@@ -8,6 +8,8 @@ API base는 **:12701 `/v1/admin/*`** 이다. 사용자 토큰을 전달하지 �
 admin proxy gate가 켜진 경우 `X-Kor-Travel-Map-Admin-Proxy-Secret`/actor 헤더를 보낸다.
 `/v1/ops/datasets*`·`/v1/ops/pipeline*`와 consistency/log 관측 read는 별도 server
 principal token/scope만 보내며 frontend BFF 자격은 전송하지 않는다(T-ADM-C6c, T-VN-03).
+관리자 Feature 목록·상세 두 GET은 `/v1/service/admin-features*`와 별도 읽기 token만 사용한다.
+기존 admin 쓰기·revision·ops 자격과 상호 fallback하지 않는다.
 
 §7 합의 5건 **확정** (kor_travel_map T-217c, 2026-06-11):
 - admin 인증 = 인프라 계층(SSO/IP allowlist, ADR-005 모델). 코드 인증은 kor_travel_map 측
@@ -27,6 +29,7 @@ import re
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Annotated, Any, Literal, cast
+from urllib.parse import quote
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -226,6 +229,7 @@ class KorTravelMapAdminClient:
         service_token: str = "",
         admin_proxy_secret: str = "",
         admin_actor: str = "pinvi-admin",
+        admin_features_read_token: str = "",
         ops_read_token: str = "",
         ops_cancel_token: str = "",
         max_attempts: int = 3,
@@ -234,6 +238,17 @@ class KorTravelMapAdminClient:
     ) -> None:
         self._http = http
         self._service_token = service_token.strip()
+        if admin_features_read_token and (
+            len(admin_features_read_token) < 32
+            or any(character.isspace() for character in admin_features_read_token)
+        ):
+            raise ValueError("admin features read token must contain 32+ characters without whitespace")
+        if admin_features_read_token and admin_features_read_token in {
+            service_token.strip(), admin_proxy_secret.strip(),
+            ops_read_token.strip(), ops_cancel_token.strip(),
+        }:
+            raise ValueError("admin features read token must not reuse another trust-boundary credential")
+        self._admin_features_read_token = admin_features_read_token
         self._admin_proxy_secret = admin_proxy_secret.strip()
         self._admin_actor = admin_actor.strip() or "pinvi-admin"
         self._ops_tokens: dict[OpsScope, str] = {
@@ -258,6 +273,15 @@ class KorTravelMapAdminClient:
             headers[_ADMIN_ACTOR_HEADER] = self._admin_actor
         return headers
 
+    def _feature_read_headers(self) -> dict[str, str]:
+        """목록·상세 전용 자격만 보낸다. 다른 인증 경계로 fallback하지 않는다."""
+        if not self._admin_features_read_token:
+            raise KorTravelMapUnavailable("kor-travel-map 관리자 Feature 조회 자격이 설정되지 않았습니다.")
+        headers = {_SERVICE_TOKEN_HEADER: self._admin_features_read_token}
+        if self._request_id:
+            headers[_REQUEST_ID_HEADER] = self._request_id
+        return headers
+
     def _ops_headers(self, scope: OpsScope) -> dict[str, str]:
         """canonical ops용 server principal 헤더만 반환한다.
 
@@ -278,6 +302,7 @@ class KorTravelMapAdminClient:
             service_token=self._service_token,
             admin_proxy_secret=self._admin_proxy_secret,
             admin_actor=self._admin_actor,
+            admin_features_read_token=self._admin_features_read_token,
             ops_read_token=self._ops_tokens["ops:read"],
             ops_cancel_token=self._ops_tokens["ops:cancel"],
             max_attempts=self._max_attempts,
@@ -294,16 +319,28 @@ class KorTravelMapAdminClient:
         params: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         ops_scope: OpsScope | None = None,
+        feature_read: bool = False,
         retry_transient: bool = True,
     ) -> httpx.Response:
         """허용된 요청만 transient(타임아웃/연결/5xx) 지수 백오프로 재시도."""
+        if feature_read and (
+            method != "GET"
+            or ops_scope is not None
+            or re.fullmatch(r"/v1/service/admin-features(?:/[^/?#]+)?", path) is None
+            or path.rsplit("/", 1)[-1] in {".", ".."}
+            or headers is not None
+        ):
+            raise ValueError("등록된 Feature 목록·상세 GET만 전용 읽기 자격을 사용할 수 있습니다.")
         last: KorTravelMapUnavailable | None = None
         max_attempts = self._max_attempts if retry_transient else 1
         for attempt in range(max_attempts):
             try:
-                request_headers = (
-                    self._ops_headers(ops_scope) if ops_scope is not None else self._headers()
-                )
+                if feature_read:
+                    request_headers = self._feature_read_headers()
+                elif ops_scope is not None:
+                    request_headers = self._ops_headers(ops_scope)
+                else:
+                    request_headers = self._headers()
                 if headers is not None:
                     request_headers.update(headers)
                 resp = await self._http.request(
@@ -317,6 +354,9 @@ class KorTravelMapAdminClient:
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last = KorTravelMapUnavailable(f"kor-travel-map admin 요청 실패({path}): {exc!r}")
             else:
+                if feature_read and resp.status_code in {401, 403}:
+                    # upstream 자격 오류를 사용자의 입력 오류로 바꾸거나 재시도하지 않는다.
+                    raise KorTravelMapUnavailable("kor-travel-map 관리자 Feature 조회 권한을 확인할 수 없습니다.")
                 if resp.status_code >= 500:
                     if not retry_transient:
                         return resp
@@ -463,7 +503,7 @@ class KorTravelMapAdminClient:
         sort: str | None = None,
         order: str | None = None,
     ) -> dict[str, Any]:
-        """GET /v1/admin/features — admin feature 목록(read-only) envelope 반환.
+        """GET /v1/service/admin-features — admin feature 목록 envelope 반환.
 
         query 이름은 Map `GET /v1/admin/features`가 실제로 선언한 것만 보낸다:
         `[q, kind, category, lifecycle_state, publication_state, quality_state,
@@ -502,11 +542,17 @@ class KorTravelMapAdminClient:
             params["sort"] = sort
         if order:
             params["order"] = order
-        return self._payload(await self._send("GET", "/v1/admin/features", params=params))
+        return self._payload(
+            await self._send("GET", "/v1/service/admin-features", params=params, feature_read=True)
+        )
 
     async def get_feature_detail(self, feature_id: str) -> dict[str, Any]:
-        """GET /v1/admin/features/{id} — admin feature 상세 data 반환."""
-        return self._data(await self._send("GET", f"/v1/admin/features/{feature_id}"))
+        """GET /v1/service/admin-features/{id} — admin feature 상세 data 반환."""
+        return self._data(
+            await self._send(
+                "GET", f"/v1/service/admin-features/{quote(feature_id, safe='')}", feature_read=True
+            )
+        )
 
     async def _feature_revision_etag(self, feature_id: str) -> str:
         """stable revision GET의 canonical ETag를 mutation precondition으로 보존한다."""
@@ -945,6 +991,11 @@ def create_kor_travel_map_admin_client(app_settings: Settings) -> KorTravelMapAd
         service_token=token,
         admin_proxy_secret=app_settings.pinvi_kor_travel_map_admin_proxy_secret,
         admin_actor=app_settings.pinvi_kor_travel_map_admin_actor,
+        admin_features_read_token=(
+            app_settings.pinvi_kor_travel_map_admin_features_read_token.get_secret_value()
+            if app_settings.pinvi_kor_travel_map_admin_features_read_token is not None
+            else ""
+        ),
         ops_read_token=(
             app_settings.pinvi_kor_travel_map_ops_read_token.get_secret_value()
             if app_settings.pinvi_kor_travel_map_ops_read_token is not None

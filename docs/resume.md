@@ -1,3 +1,7 @@
+## 2026-10-25 — 관리자 Feature 전용 읽기 자격 구현 중
+
+관리자 목록·상세만 Map의 전용 service GET과 별도 `SecretStr` token을 사용하도록 변경했다. 일반 service/admin proxy/ops fallback 없이, 자격 오류는 안전한503으로 분리한다. 신규17개와 기존 회귀 포함174개 통과를 확인했다. Map 스펙 재vendor·두 리뷰·CI·실제 UI·운영 적용은 아직 미완이다. [경계와 검증](map-admin-feature-read.md).
+
 ## 2026-10-25 (claude) — 가격 추이 `product_code`·`limit=1000` (브랜치 `fix/price-history-limit-product`)
 
 - 다음 한 작업: PR CI green → 리뷰·머지(머지·배포는 소유자) → 다음 PinVi 핀 회전으로 배포(OpenAPI 재vendor 불필요 — #599 스냅샷 그대로).
