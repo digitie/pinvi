@@ -291,7 +291,7 @@ geocoding 실패가 지도/여행 핵심 흐름을 막지 않도록 **graceful d
 | 지도 클릭/우클릭 "이 지점 주소"           | `/geo/reverse`                    | 위치 감사                                  |
 | "내 위치" → 현재 행정구역 label           | `/geo/reverse` (`include_region`) | user-location §4.2                         |
 | 행정구역 단위 탐색(시군구 선택)           | `/geo/search?type=district`       | 대표점 = `ST_PointOnSurface`               |
-| 좌표 주변 행정구역 후보                   | `/geo/regions/within-radius`      | kor-travel-geo `/v2/regions/within-radius` |
+| 좌표 주변 행정구역 후보                   | `/regions/within-radius`      | kor-travel-geo `/v2/regions/within-radius` |
 | 공유 링크/딥링크 주소 → 지도 이동         | `/geo/geocode`                    |                                            |
 
 > feature(관광지/주유소/날씨 등) 검색은 geocoding이 아니다 — kor-travel-map
@@ -313,7 +313,7 @@ geocoding 실패가 지도/여행 핵심 흐름을 막지 않도록 **graceful d
 - [ ] `apps/api/app/schemas/geo.py` + `packages/schemas/src/geo.ts` (Zod) —
       candidate / region / response (v2 셰입 → Pinvi 셰입 변환 모델).
 - [ ] `apps/api/app/api/v1/geo.py` — `/geo/{search,reverse,geocode}` + 라우터 등록.
-- [ ] `/geo/regions/within-radius`가 필요하면 kor-travel-geo
+- [ ] `/regions/within-radius`가 필요하면 kor-travel-geo
       `/v2/regions/within-radius`를 래핑한다.
 - [ ] `location_audit.py` `PURPOSE_BY_PATH`에 `/geo/reverse` 등록.
 - [ ] 통합 테스트: `httpx.MockTransport`로 v2 응답 stub → 변환·에러·degrade 검증
