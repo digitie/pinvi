@@ -367,9 +367,7 @@ def test_admin_feature_state_axes_transition_and_curation_shapes_are_pinned() ->
 
 def test_scoped_feature_list_reuses_exact_admin_dto_and_filters() -> None:
     full = _spec()
-    service = json.loads(
-        (SNAPSHOT.parent / "kor-travel-map-openapi-service.json").read_bytes()
-    )
+    service = json.loads((SNAPSHOT.parent / "kor-travel-map-openapi-service.json").read_bytes())
     path = "/v1/service/admin-features"
     assert set(full["paths"][path]) == {"get"}
     assert service["paths"][path] == full["paths"][path]
@@ -379,14 +377,14 @@ def test_scoped_feature_list_reuses_exact_admin_dto_and_filters() -> None:
     assert operation["parameters"] == original["parameters"]
     assert _query_names(operation) == _ADMIN_FEATURE_QUERY_PARAMETERS
     assert _response_ref(operation) == _response_ref(original)
-    assert _schema(service, "AdminFeaturesListResponse") == _schema(full, "AdminFeaturesListResponse")
+    assert _schema(service, "AdminFeaturesListResponse") == _schema(
+        full, "AdminFeaturesListResponse"
+    )
 
 
 def test_scoped_feature_detail_reuses_exact_admin_dto_and_reference_path() -> None:
     full = _spec()
-    service = json.loads(
-        (SNAPSHOT.parent / "kor-travel-map-openapi-service.json").read_bytes()
-    )
+    service = json.loads((SNAPSHOT.parent / "kor-travel-map-openapi-service.json").read_bytes())
     path = "/v1/service/admin-features/{feature_id}"
     assert set(full["paths"][path]) == {"get"}
     assert service["paths"][path] == full["paths"][path]
@@ -395,4 +393,6 @@ def test_scoped_feature_detail_reuses_exact_admin_dto_and_reference_path() -> No
     assert operation["security"] == [{"ServiceToken": []}]
     assert operation["parameters"] == original["parameters"]
     assert _response_ref(operation) == _response_ref(original)
-    assert _schema(service, "AdminFeatureDetailResponse") == _schema(full, "AdminFeatureDetailResponse")
+    assert _schema(service, "AdminFeatureDetailResponse") == _schema(
+        full, "AdminFeatureDetailResponse"
+    )

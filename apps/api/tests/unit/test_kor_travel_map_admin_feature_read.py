@@ -1,4 +1,5 @@
 """관리자 Feature 두 조회의 전용 자격·오류 분류 경계."""
+
 from __future__ import annotations
 
 import httpx
@@ -49,10 +50,15 @@ async def test_feature_reads_use_only_dedicated_credential_and_keep_request_id(d
         assert request.url.path == "/v1/service/admin-features" + ("/f_1" if detail else "")
         assert request.headers["X-Kor-Travel-Map-Service-Token"] == _TOKEN
         assert request.headers["X-Request-Id"] == "request-feature-read"
-        assert not any(k in request.headers for k in (
-            "X-Kor-Travel-Map-Admin-Proxy-Secret", "X-Kor-Travel-Map-Actor",
-            "X-Kor-Travel-Map-Ops-Token", "X-Kor-Travel-Map-Ops-Scope",
-        ))
+        assert not any(
+            k in request.headers
+            for k in (
+                "X-Kor-Travel-Map-Admin-Proxy-Secret",
+                "X-Kor-Travel-Map-Actor",
+                "X-Kor-Travel-Map-Ops-Token",
+                "X-Kor-Travel-Map-Ops-Scope",
+            )
+        )
         assert result
         if not detail:
             assert request.url.params["page_size"] == "25"
@@ -119,7 +125,12 @@ async def test_read_credential_never_reaches_mutation_or_ops():
         assert seen[0].headers["X-Kor-Travel-Map-Admin-Proxy-Secret"] == "admin-proxy"
         assert seen[1].headers["X-Kor-Travel-Map-Ops-Token"] == "ops-read"
         assert all(_TOKEN not in r.headers.values() for r in seen)
-        for method, path in [("POST", "/v1/service/admin-features"), ("GET", "/v1/admin/features"), ("GET", "/v1/service/admin-features/.."), ("GET", "/v1/service/admin-features/.")]:
+        for method, path in [
+            ("POST", "/v1/service/admin-features"),
+            ("GET", "/v1/admin/features"),
+            ("GET", "/v1/service/admin-features/.."),
+            ("GET", "/v1/service/admin-features/."),
+        ]:
             with pytest.raises(ValueError):
                 await client._send(method, path, feature_read=True)
         assert len(seen) == 2
@@ -132,12 +143,19 @@ async def test_factory_preserves_secret_setting_and_clone():
     assert _TOKEN not in repr(config)
     client = create_kor_travel_map_admin_client(config)
     try:
-        assert client.with_request_id("factory")._feature_read_headers()["X-Kor-Travel-Map-Service-Token"] == _TOKEN
+        assert (
+            client.with_request_id("factory")._feature_read_headers()[
+                "X-Kor-Travel-Map-Service-Token"
+            ]
+            == _TOKEN
+        )
     finally:
         await client.aclose()
 
 
-@pytest.mark.parametrize("token", ["short", "r" * 31, "r" * 32 + " ", "r" * 16 + "\u2003" + "r" * 16])
+@pytest.mark.parametrize(
+    "token", ["short", "r" * 31, "r" * 32 + " ", "r" * 16 + "\u2003" + "r" * 16]
+)
 def test_settings_reject_invalid_read_credential(token):
     with pytest.raises(ValidationError, match="ADMIN_FEATURES_READ_TOKEN"):
         Settings(_env_file=None, pinvi_kor_travel_map_admin_features_read_token=token)
@@ -145,8 +163,11 @@ def test_settings_reject_invalid_read_credential(token):
 
 def test_settings_reject_legacy_credential_reuse():
     with pytest.raises(ValidationError, match="must not reuse"):
-        Settings(_env_file=None, pinvi_kor_travel_map_admin_features_read_token=_TOKEN,
-                 pinvi_kor_travel_map_service_token=_TOKEN)
+        Settings(
+            _env_file=None,
+            pinvi_kor_travel_map_admin_features_read_token=_TOKEN,
+            pinvi_kor_travel_map_service_token=_TOKEN,
+        )
 
 
 @pytest.mark.parametrize("token", [None, ""])

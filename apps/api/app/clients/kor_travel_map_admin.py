@@ -242,12 +242,18 @@ class KorTravelMapAdminClient:
             len(admin_features_read_token) < 32
             or any(character.isspace() for character in admin_features_read_token)
         ):
-            raise ValueError("admin features read token must contain 32+ characters without whitespace")
+            raise ValueError(
+                "admin features read token must contain 32+ characters without whitespace"
+            )
         if admin_features_read_token and admin_features_read_token in {
-            service_token.strip(), admin_proxy_secret.strip(),
-            ops_read_token.strip(), ops_cancel_token.strip(),
+            service_token.strip(),
+            admin_proxy_secret.strip(),
+            ops_read_token.strip(),
+            ops_cancel_token.strip(),
         }:
-            raise ValueError("admin features read token must not reuse another trust-boundary credential")
+            raise ValueError(
+                "admin features read token must not reuse another trust-boundary credential"
+            )
         self._admin_features_read_token = admin_features_read_token
         self._admin_proxy_secret = admin_proxy_secret.strip()
         self._admin_actor = admin_actor.strip() or "pinvi-admin"
@@ -276,7 +282,9 @@ class KorTravelMapAdminClient:
     def _feature_read_headers(self) -> dict[str, str]:
         """목록·상세 전용 자격만 보낸다. 다른 인증 경계로 fallback하지 않는다."""
         if not self._admin_features_read_token:
-            raise KorTravelMapUnavailable("kor-travel-map 관리자 Feature 조회 자격이 설정되지 않았습니다.")
+            raise KorTravelMapUnavailable(
+                "kor-travel-map 관리자 Feature 조회 자격이 설정되지 않았습니다."
+            )
         headers = {_SERVICE_TOKEN_HEADER: self._admin_features_read_token}
         if self._request_id:
             headers[_REQUEST_ID_HEADER] = self._request_id
@@ -356,7 +364,9 @@ class KorTravelMapAdminClient:
             else:
                 if feature_read and resp.status_code in {401, 403}:
                     # upstream 자격 오류를 사용자의 입력 오류로 바꾸거나 재시도하지 않는다.
-                    raise KorTravelMapUnavailable("kor-travel-map 관리자 Feature 조회 권한을 확인할 수 없습니다.")
+                    raise KorTravelMapUnavailable(
+                        "kor-travel-map 관리자 Feature 조회 권한을 확인할 수 없습니다."
+                    )
                 if resp.status_code >= 500:
                     if not retry_transient:
                         return resp

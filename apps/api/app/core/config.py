@@ -1182,9 +1182,12 @@ class Settings(BaseSettings):
         )
         if any(
             token == (value.get_secret_value() if isinstance(value, SecretStr) else value.strip())
-            for value in credentials if value is not None
+            for value in credentials
+            if value is not None
         ):
-            raise ValueError("admin features read token must not reuse another trust-boundary credential")
+            raise ValueError(
+                "admin features read token must not reuse another trust-boundary credential"
+            )
         return self
 
     @model_validator(mode="after")
