@@ -137,7 +137,7 @@ async def test_factory_preserves_secret_setting_and_clone():
         await client.aclose()
 
 
-@pytest.mark.parametrize("token", ["", "short", "r" * 31, "r" * 32 + " ", "r" * 16 + "\u2003" + "r" * 16])
+@pytest.mark.parametrize("token", ["short", "r" * 31, "r" * 32 + " ", "r" * 16 + "\u2003" + "r" * 16])
 def test_settings_reject_invalid_read_credential(token):
     with pytest.raises(ValidationError, match="ADMIN_FEATURES_READ_TOKEN"):
         Settings(_env_file=None, pinvi_kor_travel_map_admin_features_read_token=token)
@@ -147,3 +147,21 @@ def test_settings_reject_legacy_credential_reuse():
     with pytest.raises(ValidationError, match="must not reuse"):
         Settings(_env_file=None, pinvi_kor_travel_map_admin_features_read_token=_TOKEN,
                  pinvi_kor_travel_map_service_token=_TOKEN)
+
+
+@pytest.mark.parametrize("token", [None, ""])
+async def test_empty_optional_env_preserves_boot_but_blocks_feature_reads(monkeypatch, token):
+    from unittest.mock import AsyncMock
+
+    config = Settings(_env_file=None, pinvi_kor_travel_map_admin_features_read_token=token)
+    assert config.pinvi_kor_travel_map_admin_features_read_token is None
+    client = create_kor_travel_map_admin_client(config)
+    request = AsyncMock(side_effect=AssertionError("unconfigured read must not issue HTTP"))
+    monkeypatch.setattr(client._http, "request", request)
+    try:
+        with pytest.raises(KorTravelMapUnavailable) as error:
+            await client.list_features()
+        assert error.value.status_code == 503
+        request.assert_not_called()
+    finally:
+        await client.aclose()

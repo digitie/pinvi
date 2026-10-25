@@ -1367,6 +1367,7 @@ class Settings(BaseSettings):
         return self
 
     @field_validator(
+        "pinvi_kor_travel_map_admin_features_read_token",
         "pinvi_kor_travel_map_curation_snapshot_token",
         "pinvi_kor_travel_map_curation_cutover_mapping_token",
         "kor_travel_map_feature_request_token",
