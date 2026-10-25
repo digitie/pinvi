@@ -1,3 +1,8 @@
+## 2026-10-25 (claude) — 가격 추이 `product_code`·`limit=1000` (브랜치 `fix/price-history-limit-product`)
+
+- 다음 한 작업: PR CI green → 리뷰·머지(머지·배포는 소유자) → 다음 PinVi 핀 회전으로 배포(OpenAPI 재vendor 불필요 — #599 스냅샷 그대로).
+- 바뀐 것: API 가격 추이 upstream query(`product_code`·`limit=1000`), web 일시 장애 문구. 공개 응답 셰입 불변.
+
 ## 2026-10-24 (claude) — weather 읽기를 Map service REST로 (T-381, ADR-077, 브랜치 `feat/weather-via-map-rest`)
 
 - 다음 한 작업: draft PR CI green → 리뷰·머지(머지·배포는 소유자). 운영에서 켜려면 ① Map `weather_state_*` job·schedule 7개 활성화와

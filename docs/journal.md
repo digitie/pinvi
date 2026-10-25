@@ -1,3 +1,16 @@
+## 2026-10-25 (claude) — 가격 추이 `product_code`·`limit=1000` (브랜치 `fix/price-history-limit-product`)
+
+Map이 가격 추이 `limit`을 페이지 전체 행 수(유종 합계, 기본 200·최대 1000)로 바꿨고 #599가 그 계약을 vendor했다. PinVi는 `since`만
+보내고 받은 뒤 `product_key`로 걸렀기 때문에, 유종이 여럿인 주유소에서 `days=90` + `product_key`면 200행 상한이 그 유종 추이를
+약 40일로 잘랐다.
+
+- `services/transport_layers.py`: `PRODUCT_CODE_BY_KEY`(Map `OPINET_PRODUCT_KEY_MAP`의 역)로 아는 `product_key`를 Map `product_code`로
+  보내 서버에서 거르게 하고, 항상 `limit=1000`(Map 상한, 90일 × 5유종 수용). 모르는 키는 `product_code` 없이 보내고 사후 필터가 빈
+  목록을 만든다(동작 불변). 응답 셰입·`truncated` 노출 불변.
+- client `fuel_price_history(product_code=...)` 추가. 계약 테스트가 나가는 query에 `product_code`를 포함하고, 표의 코드 집합이 vendored
+  spec `product_code` 설명의 코드 집합과 같은지 검사한다.
+- web: `reason`이 `upstream_timeout`·`upstream_unavailable`이면 "잠시 후 다시 시도해 주세요"로 구분(나머지는 그대로).
+
 ## 2026-10-24 (claude) — weather 읽기를 Map service REST로 (T-381, ADR-077, 브랜치 `feat/weather-via-map-rest`)
 
 Map #1367(ADR-114 W0~W8, weather 2단계)이 머지됐고 PinVi #599가 `e0131ec1` service OpenAPI를 vendor했다. transport(ADR-076)와 같은

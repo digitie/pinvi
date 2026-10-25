@@ -163,11 +163,17 @@ class KorTravelMapTransportClient:
         self,
         feature_id: str,
         *,
+        product_code: str | None = None,
         since: datetime | None = None,
         limit: int | None = None,
     ) -> dict[str, Any]:
-        """주유소 가격 추이. ``history.status``가 ``unavailable``이어도 200이다."""
+        """주유소 가격 추이. ``history.status``가 ``unavailable``이어도 200이다.
+
+        ``limit``은 한 페이지의 **전체 행 수(유종 합계)**다(Map 기본 200, 최대 1000).
+        """
         params: dict[str, Any] = {}
+        if product_code is not None:
+            params["product_code"] = product_code
         if since is not None:
             if since.tzinfo is None:
                 raise ValueError("since는 aware datetime이어야 합니다.")

@@ -286,6 +286,19 @@ _HISTORY_POINTS_ADAPTER: Final[TypeAdapter[list[FuelPriceHistoryPoint]]] = TypeA
 )
 _PRICES_ADAPTER: Final[TypeAdapter[list[FuelPrice]]] = TypeAdapter(list[FuelPrice])
 
+# Map 표준 product_key → 오피넷 원천 product_code(Map ``OPINET_PRODUCT_KEY_MAP``의 역).
+# 가격 추이의 ``limit``은 유종 합계 행 수라, 한 유종만 볼 때는 Map이 서버에서 거르게 해야
+# 다른 유종 행이 상한을 먹지 않는다. 모르는 key는 보내지 않고 아래 사후 필터에 맡긴다.
+PRODUCT_CODE_BY_KEY: Final[Mapping[str, str]] = {
+    "gasoline": "B027",
+    "diesel": "D047",
+    "premium_gasoline": "B034",
+    "kerosene": "C004",
+    "lpg": "K015",
+}
+# Map 상한. 90일 × 유종 5개(하루 1행 기준 450행)가 한 페이지에 들어간다.
+_PRICE_HISTORY_LIMIT: Final = 1000
+
 
 async def fuel_price_history(
     client: KorTravelMapTransportClient,
@@ -296,7 +309,12 @@ async def fuel_price_history(
     now: datetime,
 ) -> FuelPriceHistoryResponse:
     """주유소 가격 추이. 추이가 없으면 ``status=unavailable``(오류 아님)."""
-    data = await client.fuel_price_history(feature_id, since=now - timedelta(days=days))
+    data = await client.fuel_price_history(
+        feature_id,
+        product_code=PRODUCT_CODE_BY_KEY.get(product_key) if product_key is not None else None,
+        since=now - timedelta(days=days),
+        limit=_PRICE_HISTORY_LIMIT,
+    )
     history = data.get("history")
     if not isinstance(history, Mapping) or history.get("status") not in (
         "available",

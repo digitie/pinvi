@@ -24,6 +24,11 @@ import type { TransportDetailTarget } from '@/lib/useTransportLayers';
 
 const HISTORY_DAYS = 30;
 const HISTORY_ROWS_PER_PRODUCT = 7;
+// 일시적인 원천 장애 — 다시 열면 나을 수 있다. 나머지 이유는 "아직 제공되지 않음"이다.
+const TRANSIENT_HISTORY_REASONS: ReadonlySet<string> = new Set([
+  'upstream_timeout',
+  'upstream_unavailable',
+]);
 
 type Loaded = { data: TransportDetailResponse; receivedAt: number };
 
@@ -102,7 +107,9 @@ function FuelHistory({ featureId }: { featureId: string }) {
         data-testid="transport-price-history-unavailable"
         data-reason={history.reason ?? ''}
       >
-        가격 추이는 아직 제공되지 않습니다.
+        {history.reason && TRANSIENT_HISTORY_REASONS.has(history.reason)
+          ? '가격 추이를 잠시 불러올 수 없습니다. 잠시 후 다시 시도해 주세요.'
+          : '가격 추이는 아직 제공되지 않습니다.'}
       </p>
     );
   }

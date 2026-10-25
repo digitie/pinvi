@@ -101,6 +101,21 @@ describe('TransportDetailDialog', () => {
     expect(message).toHaveAttribute('data-reason', 'disabled');
   });
 
+  it('일시 장애 이유면 잠시 후 다시 시도하라고 보인다', async () => {
+    detail.mockResolvedValue(FUEL);
+    fuelPriceHistory.mockResolvedValue({ ...UNAVAILABLE_HISTORY, reason: 'upstream_timeout' });
+    render(
+      <TransportDetailDialog
+        target={{ layer: 'fuel_station', featureId: 'f_fuel', title: '주유소' }}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(await screen.findByTestId('transport-price-history-open'));
+    const message = await screen.findByTestId('transport-price-history-unavailable');
+    expect(message).toHaveTextContent('잠시 후 다시 시도해 주세요.');
+    expect(message).toHaveAttribute('data-reason', 'upstream_timeout');
+  });
+
   it('Map 장애는 대화상자 안의 오류로만 보인다', async () => {
     detail.mockRejectedValue(
       new ApiError('TRANSPORT_UNAVAILABLE', '교통 정보를 일시적으로 불러올 수 없습니다.', 503),

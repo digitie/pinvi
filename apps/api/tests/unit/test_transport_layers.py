@@ -159,11 +159,32 @@ async def test_price_history_filters_product_and_uses_since() -> None:
     assert [p.product_key for p in out.items] == ["diesel"]
     assert [p.product_key for p in out.current_prices] == ["diesel"]
     assert seen[0].url.params["since"] == "2026-10-16T12:00:00+09:00"
+    # limit은 유종 합계 행 수라 한 유종만 볼 때는 Map이 서버에서 거르게 한다(+ 상한 1000).
+    assert seen[0].url.params["product_code"] == "D047"
+    assert seen[0].url.params["limit"] == "1000"
 
     unknown = await transport_layers.fuel_price_history(
         _client(handler), fx.FUEL_STATION_ID, product_key="hydrogen", days=7, now=now
     )
     assert unknown.items == [] and unknown.current_prices == []
+    assert "product_code" not in seen[1].url.params
+    assert seen[1].url.params["limit"] == "1000"
+
+
+async def test_price_history_without_product_sends_no_product_code() -> None:
+    handler, seen = _by_dataset(
+        {"fuel-stations": httpx.Response(200, json=fx.history_body(available=True))}
+    )
+    await transport_layers.fuel_price_history(
+        _client(handler),
+        fx.FUEL_STATION_ID,
+        product_key=None,
+        days=90,
+        now=datetime(2026, 10, 23, 12, 0, tzinfo=KST),
+    )
+    assert "product_code" not in seen[0].url.params
+    assert seen[0].url.params["limit"] == "1000"
+    assert seen[0].url.params["since"] == "2026-07-25T12:00:00+09:00"
 
 
 async def test_price_history_unavailable_is_not_an_error() -> None:
