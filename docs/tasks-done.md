@@ -1,5 +1,11 @@
 # tasks-done.md — 완료·아카이브
 
+## 2026-10-26 — Geo 전용 키 가이드 후속 종결
+
+- [x] [PR #604](https://github.com/digitie/pinvi/pull/604)는 두 독립 문서 리뷰와 정확 head의 Aggregate docs-path gate를 거쳐 e13d95c9로 일반 머지했다. 제품 테스트·빌드는 실행하지 않았다.
+- 원 [PR #588](https://github.com/digitie/pinvi/pull/588)의 세 문서·여덟 정책 의도를 현재 가이드와 대조하고 두 독립 흡수 검토 후 정상 닫았다. 원 브랜치 `docs/geo-dedicated-key-c-20261017`과 b711ac8a는 보존한다.
+- 활성 후속 항목만 이 아카이브로 옮긴다. 기존 가이드·제품·운영 자격·Weather 활성화는 변경하지 않는다.
+
 ## 2026-10-26 — 관리자 Feature 전용 읽기의 구현·배포·공개 인수
 
 - [x] PR #602의 별도 SecretStr·GET2 전용 전달·빈 env fail-closed·계약 vendor·두 제품 리뷰·코드 CI,
