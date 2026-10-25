@@ -65,7 +65,7 @@ def _query_names(operation: dict[str, Any]) -> set[str]:
 
 
 def test_admin_snapshot_is_byte_pinned_to_a_reviewed_map_revision() -> None:
-    assert _UPSTREAM_COMMIT == "e0131ec16547a403e7527e6af369465b5611512b"
+    assert _UPSTREAM_COMMIT == "8555b1f6c65253907fac502b0254492b56b4bb9a"
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
 
 
@@ -363,3 +363,36 @@ def test_admin_feature_state_axes_transition_and_curation_shapes_are_pinned() ->
         "item_summary",
     ):
         assert {"type": "null"} in curation["properties"][name]["anyOf"]
+
+
+def test_scoped_feature_list_reuses_exact_admin_dto_and_filters() -> None:
+    full = _spec()
+    service = json.loads(
+        (SNAPSHOT.parent / "kor-travel-map-openapi-service.json").read_bytes()
+    )
+    path = "/v1/service/admin-features"
+    assert set(full["paths"][path]) == {"get"}
+    assert service["paths"][path] == full["paths"][path]
+    operation = service["paths"][path]["get"]
+    original = full["paths"]["/v1/admin/features"]["get"]
+    assert operation["security"] == [{"ServiceToken": []}]
+    assert operation["parameters"] == original["parameters"]
+    assert _query_names(operation) == _ADMIN_FEATURE_QUERY_PARAMETERS
+    assert _response_ref(operation) == _response_ref(original)
+    assert _schema(service, "AdminFeaturesListResponse") == _schema(full, "AdminFeaturesListResponse")
+
+
+def test_scoped_feature_detail_reuses_exact_admin_dto_and_reference_path() -> None:
+    full = _spec()
+    service = json.loads(
+        (SNAPSHOT.parent / "kor-travel-map-openapi-service.json").read_bytes()
+    )
+    path = "/v1/service/admin-features/{feature_id}"
+    assert set(full["paths"][path]) == {"get"}
+    assert service["paths"][path] == full["paths"][path]
+    operation = service["paths"][path]["get"]
+    original = full["paths"]["/v1/admin/features/{feature_id}"]["get"]
+    assert operation["security"] == [{"ServiceToken": []}]
+    assert operation["parameters"] == original["parameters"]
+    assert _response_ref(operation) == _response_ref(original)
+    assert _schema(service, "AdminFeatureDetailResponse") == _schema(full, "AdminFeatureDetailResponse")
