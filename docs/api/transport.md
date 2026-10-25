@@ -60,13 +60,15 @@
 | query         | 설명                                                   |
 | ------------- | ------------------------------------------------------ |
 | `days`        | 1~90, 기본 30 (`since = 지금(KST) − days`)              |
-| `product_key` | `gasoline` 등. 응답 값으로 거른다 — 모르는 키는 빈 목록 |
+| `product_key` | `gasoline` 등. 아는 키(`gasoline`·`diesel`·`premium_gasoline`·`kerosene`·`lpg`)는 Map `product_code`(`B027`·`D047`·`B034`·`C004`·`K015`)로 바꿔 Map이 서버에서 거르게 하고, 응답 값으로도 한 번 더 거른다 — 모르는 키는 `product_code` 없이 요청하고 빈 목록 |
 
 응답 `{feature_id, status: available|unavailable, reason, truncated, items[], current_prices[], freshness}`.
 `unavailable`은 오류가 아니다(`reason=disabled`: transport가 아직 추이를 내보내지 않음). 주유소 자체를 못 읽으면 404/503.
+web은 `reason`이 `upstream_timeout`·`upstream_unavailable`이면 "잠시 후 다시 시도해 주세요", 그 밖에는 "아직 제공되지 않습니다"를 보인다.
 `reason`은 Map `PriceHistoryBlock.reason` enum 그대로다(Map e0131ec1 기준 `disabled`·`not_configured`·`upstream_not_found`·
 `upstream_unsupported`·`request_rejected`·`upstream_no_collection`·`upstream_timeout`·`upstream_unavailable`·`upstream_rejected`·
 `upstream_contract`, 모르는 값은 `upstream_contract`로 접는다). PinVi는 Map에 cursor를 보내지 않고 **첫 페이지만** 읽는다 —
-Map `limit`(기본 200)이 유종 합계라 기간이 길면 `truncated=true`(= Map `has_more`)로 잘린다. 페이지를 이으려면 Map ADR-114 D6
+Map `limit`은 한 페이지의 유종 합계 행 수(기본 200, 최대 1000)라 PinVi는 항상 `limit=1000`을 보낸다 — 90일 × 유종 5개가 한 페이지에
+들어가고, `product_key`를 주면 다른 유종 행이 상한을 먹지 않는다. 그래도 넘치면 `truncated=true`(= Map `has_more`)로 잘린다. 페이지를 이으려면 Map ADR-114 D6
 규칙(같은 `product_code`, `since`/`until` 생략 또는 동일, 409 `TRANSPORT_PRICE_HISTORY_CURSOR_EXPIRED`면 처음부터, unavailable
 페이지에서 멈춤)을 따라야 한다.

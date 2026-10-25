@@ -42,7 +42,7 @@ from app.schemas.transport import (
     TransportCoord,
     TransportFreshness,
 )
-from app.services.transport_layers import LAYER_DATASET_PATH, LAYER_MAP_DATASET
+from app.services.transport_layers import LAYER_DATASET_PATH, LAYER_MAP_DATASET, PRODUCT_CODE_BY_KEY
 from tests import transport_map_fixtures as fx
 from tests.openapi_subset import json_types as _json_types
 from tests.openapi_subset import schema_errors as _errors
@@ -101,7 +101,9 @@ async def _sent_queries() -> dict[str, set[str]]:
         await client.list_items(dataset, bbox=(126.0, 37.0, 127.0, 38.0), limit=10)
         await client.list_items(dataset, near=(126.5, 37.5, 1000.0), limit=10)
         await client.list_items(dataset, cursor="c", limit=10)
-    await client.fuel_price_history("f1", since=datetime(2026, 10, 1, tzinfo=KST), limit=5)
+    await client.fuel_price_history(
+        "f1", product_code="B027", since=datetime(2026, 10, 1, tzinfo=KST), limit=5
+    )
     return sent
 
 
@@ -120,6 +122,14 @@ async def test_transport_query_parameters_are_pinned(spec: dict[str, Any]) -> No
     for path, keys in sent.items():
         template = path.replace("/f1", "/{feature_id}")
         assert keys <= _query_names(spec, template), (path, keys)
+
+
+def test_product_code_mapping_matches_vendored_spec(spec: dict[str, Any]) -> None:
+    """PinVi의 product_key→product_code 표가 Map이 문서화한 코드 집합과 같다."""
+    op = spec["paths"]["/v1/service/transport/fuel-stations/{feature_id}/price-history"]["get"]
+    (param,) = [p for p in op["parameters"] if p["name"] == "product_code"]
+    documented = set(re.findall(r"[A-Z]\d{3}", param["description"]))
+    assert documented == set(PRODUCT_CODE_BY_KEY.values())
 
 
 def test_client_module_requests_exactly_the_transport_paths(spec: dict[str, Any]) -> None:
