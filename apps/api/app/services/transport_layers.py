@@ -296,7 +296,7 @@ PRODUCT_CODE_BY_KEY: Final[Mapping[str, str]] = {
     "kerosene": "C004",
     "lpg": "K015",
 }
-# Map 상한. 90일 × 유종 5개(하루 1행 기준 450행)가 한 페이지에 들어간다.
+# Map 상한. 90일 x 유종 5개(하루 1행 기준 450행)가 한 페이지에 들어간다.
 _PRICE_HISTORY_LIMIT: Final = 1000
 
 
