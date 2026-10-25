@@ -16,11 +16,27 @@
 권위 출처는 kor-travel-geo 최신 `main`의 `openapi.json` +
 `docs/api-reference/llm-summary.md`다. 본 문서는 Pinvi 입장의 사용 계약이다.
 
-> **v2 공개 API key (ADR-048)**: Pinvi는 `kor-travel-geo` v2 REST 호출마다
-> `key=<PINVI_VWORLD_API_KEY>` query를 붙인다. 별도
-> `PINVI_KOR_TRAVEL_GEO_API_KEY`는 두지 않는다. `kor-travel-geo`는 같은 raw 값을
-> `KTG_VWORLD_API_KEY`로 받아 공개 API key hash 저장/검증(`ops.public_api_keys`)을
-> 소유한다. Pinvi 로그에는 key 원본과 query 포함 upstream URL을 남기지 않는다.
+> **v2 공개 API key ([ADR-075](../decisions.md#adr-075-kor-travel-geo-공개-api-key는-geo가-발급한-전용-key이며-vworld-key로-fallback하지-않는다-adr-048-대체))**:
+> Pinvi는 Geo가 발급한 `PINVI_KOR_TRAVEL_GEO_API_KEY`를 v2 REST의 `key` query로 보낸다.
+> ADR-048의 VWorld 키 재사용 정책은 대체됐다. VWorld 키로 fallback하지 않으며,
+> 전용 키 미설정(빈 문자열 포함)은 `KorTravelGeoUnavailable`로 처리해 503으로 degrade한다.
+> 키 발급·hash 저장·폐기는 Geo가 소유한다. Pinvi 로그에는 키 원본과 query 포함
+> upstream URL을 남기지 않는다.
+
+## 현재 소스와 인증 경계 (2026-10-26)
+
+이 정산은 PinVi main `62e2f294`의 기존 Python HTTP client와
+[Geo main `5dec2981`의 공개 인증 구현](https://github.com/digitie/kor-travel-geo/blob/5dec2981ef3842f1eb4e7942b0c58ff5c1cca6ba/src/kortravelgeo/api/public_api_key.py)을 읽어 확인했다.
+PinVi의 실제 전송은 여전히 전용 Geo 키의 `key` query다. Geo 서버는
+`X-KTG-API-Key` header도 지원하지만 이 문서 수정이 PinVi 전송을 header로 바꾼 것은 아니다.
+Geo SDK 도입이나 새로운 인증 adapter를 추가하지 않는다.
+
+Geo의 공개 키는 관리자 권한을 주지 않는다. Geo의
+[별도 신뢰 proxy 인증](https://github.com/digitie/kor-travel-geo/blob/5dec2981ef3842f1eb4e7942b0c58ff5c1cca6ba/src/kortravelgeo/api/security.py)은
+허용 peer·proxy secret·actor·인식된 role을 검증한다. PinVi의 Geo client는 이 관리자 인증
+header를 생성하지 않으며 Map service token이나 VWorld 키를 Geo 관리자 자격으로 재사용하지 않는다.
+현재 운영 key·DB·접속·활성화 상태를 새로 조회한 결과가 아니며, 키 발급/회전·운영 주입과
+PinVi Weather 설정은 변경하지 않는다.
 
 ## 1. 개관
 
@@ -28,7 +44,7 @@
 ┌───────────────────────────────────────────────────────────┐
 │ Pinvi apps/api (FastAPI)                                │
 │   GET /geo/search · /geo/reverse · /geo/geocode  (사용자)   │
-│   services/geocoding.py — httpx.AsyncClient                │
+│   clients/kor_travel_geo.py — httpx.AsyncClient                │
 └───────────────────────────────────────────────────────────┘
                   │ HTTP  POST /v2/geocode|reverse|search
                   ▼
@@ -62,12 +78,14 @@
 
 ## 3. v2 endpoint 계약 (Pinvi가 호출하는 것)
 
+아래 curl은 요청 body 설명용이다. 실행 시 인증 전달·키 보관은 위 경계와 실제 client를 따른다.
+
 모두 `POST`, `Content-Type: application/json`. v2 성공 응답은 공통 헤더
 `{status, query_id, input}`을 항상 싣는다(search는 `total` 추가). geocode/reverse/search는
 그 위에 `candidates[]`를 노출하지만, `within-radius`는 `candidates[]` 대신
 level별 그룹 배열(`sido[]`/`sigungu[]`/`emd[]`)을 싣는다(§3.4).
-Pinvi의 server-to-server client는 모든 v2 요청에 `?key=<PINVI_VWORLD_API_KEY>`를
-붙인다(ADR-048). 이 key는 사용자 클라이언트에 노출하지 않는다.
+Pinvi의 server-to-server client는 모든 v2 요청에 `?key=<PINVI_KOR_TRAVEL_GEO_API_KEY>`를
+붙인다(ADR-075). 이 key는 사용자 클라이언트에 노출하지 않는다. VWorld 키는 대체 값이 아니다.
 
 ### 3.1 `POST /v2/reverse` — 좌표 → 주소/행정구역
 
@@ -176,122 +194,57 @@ RustFS storage 경로가 포함된다. 특히 RustFS 운영 확인 경로는
 Pinvi는 이 admin 표면을 사용자 API에서 호출하지 않는다. kor-travel-geo 운영 콘솔이나
 별도 runbook이 소유한다.
 
-## 4. Pinvi 노출 endpoint (신설 제안)
+## 4. Pinvi 기존 노출 endpoint
 
 v2 candidate를 Pinvi 표준 응답 `{data, meta}`(`docs/api/common.md`)로 래핑한다.
-라우터: `apps/api/app/api/v1/geo.py`.
+라우터: [`apps/api/app/api/v1/geo.py`](../../apps/api/app/api/v1/geo.py). 아래 경로는 API의 `/v1` prefix를 생략했다.
 
 | Pinvi endpoint                         | 호출               | 용도                                                         |
 | -------------------------------------- | ------------------ | ------------------------------------------------------------ |
-| `GET /geo/search?q=&type=&size=`       | `POST /v2/search`  | 주소/장소 자동완성 (Trip 만들 때 목적지 검색, POI 수동 추가) |
+| `GET /geo/search?query=&type=&size=`       | `POST /v2/search`  | 주소/장소 자동완성 (Trip 만들 때 목적지 검색, POI 수동 추가) |
 | `GET /geo/reverse?lon=&lat=&radius_m=` | `POST /v2/reverse` | 지도 클릭/내 위치 → 주소·행정구역 label                      |
-| `GET /geo/geocode?q=`                  | `POST /v2/geocode` | 주소 문자열 → 좌표 (공유 링크/딥링크 주소 입력)              |
+| `GET /geo/geocode?query=`                  | `POST /v2/geocode` | 주소 문자열 → 좌표 (공유 링크/딥링크 주소 입력)              |
 
 GET 쿼리스트링 → 서비스에서 v2 POST body로 변환한다(클라이언트는 GET이 캐시·
 링크 친화적). 좌표를 받는 `/geo/reverse`는 **위치 감사 대상**(§8).
 
-## 5. httpx client 주입 + lifespan
+## 5. 기존 client factory·lifespan·DI 사용
 
-geocoding은 HTTP 의존이므로 kor-travel-map과 별개의 httpx client를 lifespan에서
-1개 만들어 재사용한다.
+구현 정본은 [`apps/api/app/clients/kor_travel_geo.py`](../../apps/api/app/clients/kor_travel_geo.py)다.
+Geo용 httpx client는 kor-travel-map client와 분리하며 기존 factory와 lifespan을 사용한다.
 
-```python
-# apps/api/app/core/config.py (Settings 발췌)
-pinvi_kor_travel_geo_base_url: str = "http://localhost:12501"   # 운영: http://kor-travel-geo:12501
-pinvi_kor_travel_geo_timeout_seconds: float = 3.0
-pinvi_kor_travel_geo_enabled: bool = True       # False면 geocoding 기능 비활성(503)
-pinvi_vworld_api_key: str = ""                  # ADR-048: kor-travel-geo v2 `key` query
-```
+- `create_kor_travel_geo_client(settings)`가 Geo base URL·timeout·재시도 설정을 받아
+  `KorTravelGeoClient`를 만든다. `pinvi_kor_travel_geo_api_key`의
+  `SecretStr.get_secret_value()`만 전달하며 미설정이면 빈 문자열을 전달한다.
+- `KorTravelGeoClient._auth_params()`는 빈 키를 HTTP 요청 전에
+  `KorTravelGeoUnavailable`로 거절한다. VWorld 키를 읽거나 대신 보내지 않는다.
+- `kor_travel_geo_client_lifespan(app)`은 client를 `app.state.kor_travel_geo_client`에
+  두고 종료 시 닫는다. 라우터는 `get_kor_travel_geo_client` /
+  `KorTravelGeoClientDep`로 같은 client를 주입받는다.
 
-```python
-# apps/api/app/services/geocoding.py
-from __future__ import annotations
-import httpx
-from app.core.config import settings
-
-class GeocodingUnavailableError(Exception):
-    code = "GEOCODING_UNAVAILABLE"
-
-class GeocodingClient:
-    """kor-travel-geo v2 REST 얇은 클라이언트. httpx.AsyncClient 주입."""
-    def __init__(self, http: httpx.AsyncClient, *, api_key: str) -> None:
-        self._http = http
-        self._api_key = api_key
-
-    async def reverse(self, *, lon: float, lat: float, radius_m: int = 200,
-                      include_region: bool = True, include_zipcode: bool = True) -> dict:
-        return await self._post("/v2/reverse", {
-            "lon": lon, "lat": lat, "radius_m": radius_m,
-            "include_region": include_region, "include_zipcode": include_zipcode,
-        })
-
-    async def search(self, *, query: str, type: str = "address", size: int = 10,
-                     page: int = 1, sig_cd: str | None = None) -> dict:
-        body = {"query": query, "type": type, "size": size, "page": page}
-        if sig_cd:
-            body["sig_cd"] = sig_cd
-        return await self._post("/v2/search", body)
-
-    async def geocode(self, *, query: str, limit: int = 10) -> dict:
-        return await self._post("/v2/geocode", {"query": query, "limit": limit})
-
-    async def _post(self, path: str, body: dict) -> dict:
-        try:
-            resp = await self._http.post(path, params={"key": self._api_key}, json=body)
-        except httpx.HTTPError as exc:
-            raise GeocodingUnavailableError(str(exc)) from exc
-        if resp.status_code >= 500:
-            raise GeocodingUnavailableError(f"kor-travel-geo {resp.status_code}")
-        resp.raise_for_status()
-        return resp.json()
-```
+[`Settings`](../../apps/api/app/core/config.py)의 전용 키 필드는 다음과 같다.
 
 ```python
-# apps/api/app/main.py (lifespan 발췌)
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    ...
-    if settings.pinvi_kor_travel_geo_enabled:
-        app.state.kor_travel_geo_http = httpx.AsyncClient(
-            base_url=settings.pinvi_kor_travel_geo_base_url,
-            timeout=settings.pinvi_kor_travel_geo_timeout_seconds,
-        )
-    else:
-        app.state.kor_travel_geo_http = None
-    try:
-        yield
-    finally:
-        if app.state.kor_travel_geo_http is not None:
-            await app.state.kor_travel_geo_http.aclose()
+from pydantic import SecretStr
+
+pinvi_kor_travel_geo_api_key: SecretStr | None = None
 ```
 
-```python
-# apps/api/app/core/deps.py (의존성)
-def get_geocoding_client() -> GeocodingClient:
-    http = getattr(app_state(), "kor_travel_geo_http", None)
-    if http is None:
-        raise HTTPException(503, detail={"code": "GEOCODING_UNAVAILABLE",
-                                         "message": "geocoding 서비스가 비활성입니다."})
-    return GeocodingClient(http)
-GeocodingDep = Annotated[GeocodingClient, Depends(get_geocoding_client)]
-```
+미설정·빈 문자열은 Geo 호출 시 503 degrade, 공백 포함 또는 서버 VWorld 키와 같은 값은
+설정 검증에서 거절한다. 키 원본을 repr·로그·클라이언트 응답에 싣지 않는다.
+검증 정본은 [전용 키 테스트](../../apps/api/tests/unit/test_kor_travel_geo_api_key.py)다.
+별도 `GeocodingClient`나 VWorld fallback adapter를 추가하지 않는다.
 
-## 6. 라우터 예시 (reverse — 위치 감사 대상)
+## 6. 실제 라우터와 위치 감사
 
-```python
-# apps/api/app/api/v1/geo.py
-router = APIRouter(prefix="/geo", tags=["geo"])
+기존 [`geo.py`](../../apps/api/app/api/v1/geo.py)의 `geocode`·`reverse`·`search`가
+`CurrentUserId`와 `KorTravelGeoClientDep`를 주입받아 기존 client를 호출한다.
+응답은 `Envelope[GeoCandidateList]`이며 가상의 별도 `GeocodingClient`나 region 단건 DTO를
+구현하는 예제로 바꾸지 않는다. 실제 입력 이름·범위·응답은 해당 라우터와 OpenAPI가 정본이다.
 
-@router.get("/reverse", response_model=Envelope[GeoReverseResponse])
-async def geo_reverse(lon: float, lat: float, geo: GeocodingDep,
-                      radius_m: int = Query(200, ge=10, le=1000)) -> Envelope[GeoReverseResponse]:
-    raw = await geo.reverse(lon=lon, lat=lat, radius_m=radius_m)
-    region = _pick_region_candidate(raw.get("candidates", []))   # sppn 제외, 최근접 우선
-    return Envelope.of(_to_reverse_response(region))
-```
-
-- `/geo/reverse`는 `reverse_geocode`로 감사하되 좌표 **출처**를 함께 적는다(§8, ADR-063).
-- candidate 정렬/선택은 서비스 레이어. `confidence`는 같은 응답 안에서만 비교.
+`reverse`는 기존 `DbSession`·`coord_source` 경계를 유지한다. `device` 출처의 위치 동의와
+`declare_location_audit`를 통과한 뒤 호출하며, 지도 클릭과 장치 위치를 같은 출처로 취급하지
+않는다. candidate 선택·표시는 기존 서비스/응답 계약을 따른다.
 
 ## 7. 캐싱 / rate-limit
 
@@ -322,10 +275,10 @@ async def geo_reverse(lon: float, lat: float, geo: GeocodingDep,
 
 | 상황                                     | Pinvi 응답                                                    |
 | ---------------------------------------- | ------------------------------------------------------------- |
-| kor-travel-geo 5xx / 네트워크 / 타임아웃 | `503 GEOCODING_UNAVAILABLE` (degrade — 지도/검색은 빈 결과로) |
-| v2 `status != "OK"` 또는 candidates 빈   | `200 {data: {candidates: []}}` (정상 빈 결과)                 |
+| kor-travel-geo 5xx / 네트워크 / 타임아웃 | `503 GEOCODING_SERVICE_UNAVAILABLE` (degrade — 지도/검색은 빈 결과로) |
+| 정상 HTTP 응답의 candidates 빈          | `200` 응답의 빈 candidates (기존 응답 변환)                |
 | 잘못된 좌표/파라미터(한국 범위 밖 등)    | `422 VALIDATION_ERROR` (Pinvi가 먼저 검증)                    |
-| `pinvi_kor_travel_geo_enabled=false`     | `503 GEOCODING_UNAVAILABLE`                                   |
+| 전용 Geo 키 미설정 또는 빈 문자열     | `503 GEOCODING_SERVICE_UNAVAILABLE`                                   |
 
 geocoding 실패가 지도/여행 핵심 흐름을 막지 않도록 **graceful degrade**가 기본
 (검색창은 "검색 일시 불가" 안내, 지도 클릭 label은 좌표만 표시).
@@ -338,25 +291,29 @@ geocoding 실패가 지도/여행 핵심 흐름을 막지 않도록 **graceful d
 | 지도 클릭/우클릭 "이 지점 주소"           | `/geo/reverse`                    | 위치 감사                                  |
 | "내 위치" → 현재 행정구역 label           | `/geo/reverse` (`include_region`) | user-location §4.2                         |
 | 행정구역 단위 탐색(시군구 선택)           | `/geo/search?type=district`       | 대표점 = `ST_PointOnSurface`               |
-| 좌표 주변 행정구역 후보                   | `/geo/regions/within-radius`      | kor-travel-geo `/v2/regions/within-radius` |
+| 좌표 주변 행정구역 후보                   | `/regions/within-radius`      | kor-travel-geo `/v2/regions/within-radius` |
 | 공유 링크/딥링크 주소 → 지도 이동         | `/geo/geocode`                    |                                            |
 
 > feature(관광지/주유소/날씨 등) 검색은 geocoding이 아니다 — kor-travel-map
 > OpenAPI HTTP 계약. 주소·행정구역·장소명만 본 문서 경로.
 
-## 11. AI agent 구현 체크리스트
+## 11. 관련 변경 시 재확인 체크리스트
 
-- [ ] `apps/api/app/core/config.py` — `pinvi_kor_travel_geo_base_url` /
-      `_timeout_seconds` / `_enabled` 추가 (+ `.env.example`). v2 공개 API key는
-      `PINVI_VWORLD_API_KEY`를 재사용하고 별도 `PINVI_KOR_TRAVEL_GEO_API_KEY`를 두지 않는다.
-- [ ] `apps/api/app/services/geocoding.py` — `GeocodingClient` + 예외.
-      모든 v2 POST에 `key=<PINVI_VWORLD_API_KEY>` query를 붙이고, key 원본을 로그에 남기지 않는다.
-- [ ] `apps/api/app/main.py` lifespan — `httpx.AsyncClient` 1개 생성/close.
-- [ ] `apps/api/app/core/deps.py` — `GeocodingDep` (503 fallback).
+아래는 기존 경로를 변경할 때의 확인 목록이며 미구현 기능 목록이나 이번 문서 작업의 테스트 통과 기록이 아니다.
+
+- [ ] `apps/api/app/core/config.py`의 기존 Geo 설정과
+      `pinvi_kor_travel_geo_api_key: SecretStr | None`을 사용한다(ADR-075).
+      VWorld 키 재사용·fallback은 금지한다.
+- [ ] `apps/api/app/clients/kor_travel_geo.py`의 기존 factory를 사용한다.
+      모든 v2 POST의 `key`에는 전용 키만 보내며, 키 원본을 로그에 남기지 않는다.
+- [ ] 기존 `kor_travel_geo_client_lifespan`의 생성/close 경로를 유지한다.
+- [ ] 기존 `KorTravelGeoClientDep`로 주입하고 미설정·장애 시 503 degrade를 유지한다.
+- [ ] `apps/api/tests/unit/test_kor_travel_geo_api_key.py`로 전용 키 전달·
+      미설정/빈 문자열·VWorld fallback 금지·공백/동일 키 거절을 확인한다.
 - [ ] `apps/api/app/schemas/geo.py` + `packages/schemas/src/geo.ts` (Zod) —
       candidate / region / response (v2 셰입 → Pinvi 셰입 변환 모델).
 - [ ] `apps/api/app/api/v1/geo.py` — `/geo/{search,reverse,geocode}` + 라우터 등록.
-- [ ] `/geo/regions/within-radius`가 필요하면 kor-travel-geo
+- [ ] `/regions/within-radius`가 필요하면 kor-travel-geo
       `/v2/regions/within-radius`를 래핑한다.
 - [ ] `location_audit.py` `PURPOSE_BY_PATH`에 `/geo/reverse` 등록.
 - [ ] 통합 테스트: `httpx.MockTransport`로 v2 응답 stub → 변환·에러·degrade 검증
@@ -368,21 +325,24 @@ geocoding 실패가 지도/여행 핵심 흐름을 막지 않도록 **graceful d
 
 ```dotenv
 PINVI_KOR_TRAVEL_GEO_BASE_URL=http://localhost:12501   # 운영: http://kor-travel-geo:12501
-PINVI_KOR_TRAVEL_GEO_TIMEOUT_SECONDS=3.0
-PINVI_KOR_TRAVEL_GEO_ENABLED=true
+PINVI_KOR_TRAVEL_GEO_TIMEOUT_SECONDS=5.0
+PINVI_KOR_TRAVEL_GEO_MAX_ATTEMPTS=3
 PINVI_KOR_TRAVEL_GEO_API_KEY=                        # kor-travel-geo가 발급한 공개 API key(v2 `key`, ADR-075)
 PINVI_VWORLD_API_KEY=                                # 모바일 token 발급 전용 — geo key로 쓰지 않는다
 ```
 
-**2026-10-14 정정**: kor-travel-geo는 `ops.public_api_keys`에 활성 key가 하나라도 있으면 그 key만 받고,
-`KTG_VWORLD_API_KEY`는 그 표가 비어 있을 때의 기본 key다(`kortravelgeo/api/public_api_key.py`). 운영 geo에는
-발급 key가 있으므로 VWorld key로는 geo를 부를 수 없다 — geo 관리 화면/CLI로 PinVi 전용 key를 발급해
-`PINVI_KOR_TRAVEL_GEO_API_KEY`에 둔다(ADR-075). VWorld key는 브라우저·모바일에 노출되는 값이라 geo
-key로 등록하지 않으며, Pinvi는 VWorld key로 fallback하지 않는다(같은 값이면 기동 검증이 거부한다).
+**소유 관계**: Geo 키는 Geo가 발급·hash 저장·폐기하며 PinVi는 전달만 한다.
+Geo 서버는 활성 `ops.public_api_keys`가 있으면 그 집합을 사용하고, 비어 있을 때만
+Geo 자신의 `KTG_VWORLD_API_KEY` 기본값을 사용할 수 있다. 이 서버 측 호환 동작은 PinVi가
+`PINVI_VWORLD_API_KEY`로 fallback한다는 뜻이 아니다. PinVi는 두 값이 같으면 설정 검증에서
+거부한다. ADR-075의 2026-10-14 운영 발급 기록은 당시 이력이며 이번 문서 작업의 새 운영 관측이 아니다.
 
-`PINVI_VWORLD_API_KEY`는 서버 전용 secret이다. 웹의 `NEXT_PUBLIC_VWORLD_API_KEY`와
-분리해 관리하고, 모바일 `/mobile/vworld/token` 발급에만 쓴다. VWorld/juso 외부 fallback 실행, 공개 API key hash 저장/폐기, 포트·재시도는
-**kor-travel-geo 서비스 설정과 DB**가 소유한다(Pinvi가 직접 저장하지 않음).
+`PINVI_VWORLD_API_KEY`는 PinVi 서버가 모바일 `/mobile/vworld/token` 발급에 사용하는 VWorld
+키다. 웹의 `NEXT_PUBLIC_VWORLD_API_KEY`는 별도 빌드 입력이다. 사용자 단말로 전달될 수 있는
+VWorld 키를 Geo 서비스의 전용 인증키로 등록하거나 같은 값으로 맞추지 않는다.
+VWorld/juso 외부 fallback 실행·Geo key 저장/폐기는 Geo 서비스가 소유한다.
+`PINVI_KOR_TRAVEL_GEO_ENABLED`는 현재 `Settings`에 없는 변수이므로 설정 예제로 제공하지 않는다.
+전용 키 미설정/빈 값의 기존 503 degrade는 설정 스위치를 추가하는 방식으로 바꾸지 않는다.
 
 ## 13. 관련 문서
 
