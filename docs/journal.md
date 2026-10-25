@@ -1,3 +1,15 @@
+## 2026-10-25 — 관리자 Feature 읽기 코드 CI 수용
+
+정확bbf3 코드의 API7/Web3 총10 CI SUCCESS를 확인했다(SKIP3은 제외). formatter·계약 hash delta도 Root/T 검토를 마쳤다. 후속 문서만 정산하며 실제 새pair/UI·provision·머지·배포는 계속 대기한다. [검증 세대](map-admin-feature-read.md).
+
+## 2026-10-25 — 관리자 Feature 읽기 계약·검증 정산
+
+Map8555 스펙을 exact bytes로 재vendor하고 빈 env P2를 정정했다. 고정6715의 API unit 전체1809 PASS/9 SKIP, 관련121 PASS다. 원17/174 및 CI 포맷·구 provenance hash 실패를 보존했다. 제품 두 FULL 승계와 문서/CI·Map P2·Manager557·실제 pair/UI/provision은 구분한다. [현재 범위](map-admin-feature-read.md).
+
+## 2026-10-25 — 관리자 Feature 전용 읽기 자격 초기 기록
+
+관리자 목록·상세만 Map의 전용 service GET과 별도 `SecretStr` token을 사용하도록 변경했다. 일반 service/admin proxy/ops fallback 없이, 자격 오류는 안전한503으로 분리한다. 초기 d3c5의 신규17개와 기존 회귀 포함174개 통과를 확인했다(빈 env P2와 재vendor 이전 결과). Map 스펙 재vendor·두 리뷰·CI·실제 UI·운영 적용은 아직 미완이다. [경계와 검증](map-admin-feature-read.md).
+
 ## 2026-10-25 (claude) — 가격 추이 `product_code`·`limit=1000` (브랜치 `fix/price-history-limit-product`)
 
 Map이 가격 추이 `limit`을 페이지 전체 행 수(유종 합계, 기본 200·최대 1000)로 바꿨고 #599가 그 계약을 vendor했다. PinVi는 `since`만

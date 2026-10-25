@@ -57,6 +57,8 @@ PINVI_KOR_TRAVEL_MAP_PUBLIC_API_KEY=
 # kor_travel_map admin proxy gate가 켜진 운영 API용.
 PINVI_KOR_TRAVEL_MAP_ADMIN_PROXY_SECRET=
 PINVI_KOR_TRAVEL_MAP_ADMIN_ACTOR=pinvi-admin
+# 관리자 Feature 목록·상세 GET 전용. 미설정이면 해당 조회는 503으로 차단.
+PINVI_KOR_TRAVEL_MAP_ADMIN_FEATURES_READ_TOKEN=
 # 범용 Feature 요청 큐 writer 전용 service token. admin/public/ops token 재사용 금지.
 KOR_TRAVEL_MAP_FEATURE_REQUEST_TOKEN=
 # /v1/ops/datasets*·/v1/ops/pipeline* scope별 server principal

@@ -788,6 +788,8 @@ class Settings(BaseSettings):
     # kor-travel-map ADR-060: admin proxy gate가 켜진 운영 API에는 secret + actor 헤더가 필요.
     pinvi_kor_travel_map_admin_proxy_secret: str = ""
     pinvi_kor_travel_map_admin_actor: str = "pinvi-admin"
+    # 관리자 Feature 목록·상세 GET만 허용하는 별도 서비스 자격. 다른 token fallback 금지.
+    pinvi_kor_travel_map_admin_features_read_token: SecretStr | None = None
     # 범용 Feature 요청 큐 write 전용 principal. admin/public/general service token fallback 금지.
     kor_travel_map_feature_request_token: SecretStr | None = None
     # canonical /v1/ops/datasets*·/v1/ops/pipeline* 전용 server principal.
@@ -1148,6 +1150,47 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def validate_admin_features_read_token(self) -> Self:
+        """관리자 Feature 읽기 자격은 선택 설정이지만 설정하면 독립된 강한 값이어야 한다."""
+        secret = self.pinvi_kor_travel_map_admin_features_read_token
+        if secret is None:
+            return self
+        token = secret.get_secret_value()
+        if len(token) < 32 or any(character.isspace() for character in token):
+            raise ValueError(
+                "PINVI_KOR_TRAVEL_MAP_ADMIN_FEATURES_READ_TOKEN must contain "
+                "at least 32 characters without whitespace"
+            )
+        credentials = (
+            self.pinvi_kor_travel_map_service_token,
+            self.pinvi_kor_travel_map_admin_service_token,
+            self.pinvi_kor_travel_map_admin_proxy_secret,
+            self.pinvi_kor_travel_map_public_api_key,
+            self.pinvi_vworld_api_key,
+            self.pinvi_kor_travel_geo_api_key,
+            self.pinvi_kor_travel_map_ops_read_token,
+            self.pinvi_kor_travel_map_ops_cancel_token,
+            self.pinvi_kor_travel_map_curation_snapshot_token,
+            self.pinvi_kor_travel_map_curation_cutover_mapping_token,
+            self.kor_travel_map_feature_request_token,
+            self.pinvi_kor_travel_map_feature_reference_reconciliation_read_token,
+            self.pinvi_kor_travel_map_feature_reference_reconciliation_ack_token,
+            self.pinvi_kor_travel_map_cache_target_command_token,
+            self.pinvi_kor_travel_map_cache_target_consumer_token,
+            self.pinvi_kor_travel_map_cache_target_restore_fence_token,
+            self.pinvi_kor_travel_map_cache_target_recovery_token,
+        )
+        if any(
+            token == (value.get_secret_value() if isinstance(value, SecretStr) else value.strip())
+            for value in credentials
+            if value is not None
+        ):
+            raise ValueError(
+                "admin features read token must not reuse another trust-boundary credential"
+            )
+        return self
+
+    @model_validator(mode="after")
     def validate_kor_travel_map_ops(self) -> Self:
         """canonical ops URL과 read/cancel 자격을 fail-closed로 검증한다."""
 
@@ -1327,6 +1370,7 @@ class Settings(BaseSettings):
         return self
 
     @field_validator(
+        "pinvi_kor_travel_map_admin_features_read_token",
         "pinvi_kor_travel_map_curation_snapshot_token",
         "pinvi_kor_travel_map_curation_cutover_mapping_token",
         "kor_travel_map_feature_request_token",
