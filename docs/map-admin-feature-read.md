@@ -56,3 +56,22 @@ Map8555는 수동 생성 token과의 digest 중복 P2를 발견해 HOLD 상태�
 독립 두 리뷰가 필요하다. Manager557은 별도 source 검토/CI 수용 대상이다.
 새 PinVi 최종 CI·compatible pair/UI·명시 provision·머지·배포는 미완이다.
 이 단계에서 credential·DB·운영 설정은 변경하지 않았다.
+
+
+## 코드 checkpoint의 CI 수용
+
+bbf3의 정확 head를 API와 Web checkout 모두 확인했고, CI10개가 SUCCESS다.
+API lint/type/unit·integration4 shard·Docker provenance·contract pin의7개와
+Web type/build·Docker·E2E의3개다. Aggregate CI·review reminder·staleness SKIP3개는
+성공 개수에 포함하지 않는다. CI Python3.12.15 unit은1809 PASS/9 SKIP/6 warnings,
+111.78초이며 실제 wheel·Docker의 packaged provenance 검사도 통과했다.
+
+bbf3 formatter/두 hash/문서 delta는 Root/T 독립 검토를 완료했다. 이 절의 후속
+문서 전용 checkpoint는 제품·계약·workflow를 바꾸지 않으며, 위10개는 bbf3 코드의
+증거다. 새 head의 별도 검사와 혼동하지 않는다. 원6715 CI 실패는 보존한다.
+
+Map read/create P2는488d의 Root/T 독립 source 검토에서 닫혔다. 원8555 HOLD는
+이력으로 유지하며, 이후 Map 동결 baseline/pending receipt의 metadata 정렬과
+새 정확 CI는 별도다. Manager557도 별도 source/CI 수용 대상이다.
+CI Web E2E는 새 운영 pair의 공개 UI 검증을 대신하지 않는다. 실제 pair/UI·명시
+provision·머지·배포는 여전히 미완이며 이번 작업의 운영 변경은 없다.

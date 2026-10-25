@@ -1,3 +1,7 @@
+## 2026-10-25 — 관리자 Feature 읽기 코드 CI 수용
+
+정확bbf3 코드의 API7/Web3 총10 CI SUCCESS를 확인했다(SKIP3은 제외). formatter·계약 hash delta도 Root/T 검토를 마쳤다. 후속 문서만 정산하며 실제 새pair/UI·provision·머지·배포는 계속 대기한다. [검증 세대](map-admin-feature-read.md).
+
 ## 2026-10-25 — 관리자 Feature 읽기 계약·검증 정산
 
 Map8555 스펙을 exact bytes로 재vendor하고 빈 env P2를 정정했다. 고정6715의 API unit 전체1809 PASS/9 SKIP, 관련121 PASS다. 원17/174 및 CI 포맷·구 provenance hash 실패를 보존했다. 제품 두 FULL 승계와 문서/CI·Map P2·Manager557·실제 pair/UI/provision은 구분한다. [현재 범위](map-admin-feature-read.md).
