@@ -1,3 +1,28 @@
+## 2026-10-27 (claude) — Common 최신 main 채택: Python `c289b462`·UI dev.9 (브랜치 `chore/common-latest-pinvi`, PR #606)
+
+소유자 요청 "common 최신코드로 업데이트하고 변경점 반영". API(`[http]`)·ETL(`[dagster]`)의 Common Git 핀을 각각 `1f8e339c`·`73e3ff8b`에서
+main `c289b4624c8640eb918cc915803e72ae754e58fb`로 맞췄다. 두 `uv.lock`은 uv 0.11.21 `uv lock --upgrade-package kor-travel-common`으로
+그 package의 source 두 줄씩만 바뀌었다(기존 lock은 `uv lock --locked` 신선). Web `@kor-travel/ui`는 dev.6에서 정규 dev.9 tarball로 바꿨다.
+
+- **변경점 대조**: Common `packages/py` 31커밋(ETL 기준 35)과 UI dev.6→dev.9를 PinVi 사용처에 대조했다. 쓰는 API는 시그니처·동작이 같아 앱 코드 변경이 없다.
+  multi-job 재시도 센서 등 opt-in 기능은 별도 운영 전환이 필요해 채택하지 않았다 — [채택 판단](runbooks/common-dagster.md#common-최신-main-채택-2026-10-27).
+- **UI 무결성**: N150(Node 22.22.2·npm 11.19.1)에서 Common `docs.yml` 절차(`npm ci` → `npm pack --workspace packages/ui`)로 `aa232ad`의 dev.9를
+  27파일·SHA256 `b738d882…`(Common T-217 기록값)로, 대조군 `e2855980`의 dev.6을 기존 vendored SHA256 `e4945d01…`로 재현했다.
+  새 파일명으로 들여오고 npm 12.0.1 `npm install --package-lock-only`로 lock을 갱신했다(패턴 F 회피). lock integrity는 파일 SHA-512와 같고
+  `check-lockfile-integrity` 1220/1220이다. lock diff는 `@kor-travel/ui` 항목과 중첩 `lucide-react` 1.41.0(dev.7부터 runtime dependency)뿐이다.
+  쓰지 않는 dev.4·5·6 tarball은 지우고 SHA256을 [PROVENANCE](../apps/web/vendor/kor-travel-common-PROVENANCE.md)에 남겼다.
+- **로그인**: dev.9 `LoginForm`은 SSR·hydration 전 입력·제출을 native `disabled`로 둔다. `/admin/login`이 그대로 받고, Playwright `fill`·`click`이
+  enabled를 기다리므로 e2e·단위 테스트는 바꾸지 않았다.
+- **검증(N150 CI-parity, 후보 `af8d16eb`)**: ETL은 uv.lock export 설치·`pip check`·ruff·pytest 77 PASS(설치 Common `c289b462` 확인).
+  API는 ruff·format·`mypy --strict` 254 files·통합 748 PASS/15 SKIP(python:3.12 컨테이너에 PG 클라이언트가 없어 restore-hotswap 12건은 SKIP — GitHub가 대신 실행).
+  Web은 lockfile 1220/1220·vendor 5개 SHA-512 대조·lint 오류 0·typecheck·Vitest 186/137/23·build, Playwright e2e 171 PASS/3 SKIP(admin 로그인 2건 포함).
+  배포·핀 회전은 하지 않는다. 최종 head의 CI는 PR #606이 정본이다.
+- **CI 환경(본 PR과 무관한 선행 장애)**: GitHub `ubuntu-latest`가 10-27부터 ubuntu-26.04로 풀려 `integration-test (3)`의 restore-hotswap 7건(184 PASS)이
+  `unrecognized configuration parameter "transaction_timeout"`로 실패했고 재실행도 같았다(PostgreSQL 18 클라이언트 `pg_restore` → PG16 서버).
+  10-25 main은 24.04에서 통과했다. `api.yml`의 `integration-test`만 `ubuntu-24.04`로 고정했다([패턴 G](agent-failure-patterns.md#10-패턴-g--ci-runner-이미지-교체로-postgresql-클라이언트-major가-서버보다-앞섬)).
+  운영 API 이미지(Debian 13)의 `pg_restore`도 17.11이고 공용 PG는 16.9라 "클라이언트가 서버보다 새 major"인 조합이 운영 restore-hotswap에도
+  있다. 운영 영향 확인과 정리는 후속 T-382로 분리했다(이 PR은 운영 스크립트를 바꾸지 않는다).
+
 ## 2026-10-26 — Geo 가이드 머지·원 draft 종결 정산
 
 PR #604를 두 문서 리뷰·정확 head Aggregate docs-path gate 뒤 e13d95c9로 일반 머지했다.

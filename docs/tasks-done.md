@@ -1,5 +1,11 @@
 # tasks-done.md — 완료·아카이브
 
+## 2026-10-27 — Common 최신 main 채택
+
+- [x] [PR #606](https://github.com/digitie/pinvi/pull/606) — API·ETL의 Common Python 핀을 `c289b462`로, Web `@kor-travel/ui`를 정규 dev.9 tarball로 올렸다.
+  PinVi가 쓰는 Common API는 그대로라 앱 코드 변경은 없고 쓰지 않는 dev.4·5·6 tarball을 정리했다. 다중 job 재시도 센서 등 opt-in 기능은
+  채택하지 않았다([판단](runbooks/common-dagster.md#common-최신-main-채택-2026-10-27)). 운영 반영은 다음 PinVi 핀 회전이다.
+
 ## 2026-10-26 — Geo 전용 키 가이드 후속 종결
 
 - [x] [PR #604](https://github.com/digitie/pinvi/pull/604)는 두 독립 문서 리뷰와 정확 head의 Aggregate docs-path gate를 거쳐 e13d95c9로 일반 머지했다. 제품 테스트·빌드는 실행하지 않았다.

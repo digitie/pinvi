@@ -1,3 +1,14 @@
+## 2026-10-27 (claude) — Common 최신 main 채택 (브랜치 `chore/common-latest-pinvi`, PR #606)
+
+- 바뀐 것: API·ETL Common Python 핀 → `c289b4624c8640eb918cc915803e72ae754e58fb`(두 uv.lock은 그 source만), Web `@kor-travel/ui` dev.6 → 정규 dev.9
+  (SHA256 `b738d882…`, N150 pack 재현 일치), 미사용 dev.4·5·6 tarball 제거. 앱 코드 변경 없음, Admin 로그인은 hydration 전 잠깐 비활성.
+  변경점·미채택 opt-in 기능은 [채택 판단](runbooks/common-dagster.md#common-최신-main-채택-2026-10-27), 산출물 출처는 [PROVENANCE](../apps/web/vendor/kor-travel-common-PROVENANCE.md).
+- 다음 한 작업: PR #606 CI·적대 리뷰 뒤 머지. 운영 반영은 다음 PinVi 핀 회전(chain)에서 하며 이 PR은 배포하지 않는다.
+  다중 job 재시도 센서(`infrastructure_retry_sensor_for_jobs`) 채택은 Common 가이드의 센서 전이 절차와 Admin 정적 sensor 목록 변경을 묶는 별도 작업이다.
+- CI: `ubuntu-latest`가 26.04(PostgreSQL 18 클라이언트)로 바뀌어 restore-hotswap 통합 테스트가 PG16 서버에서 결정적으로 실패했다. `integration-test`만
+  `ubuntu-24.04`로 고정했고([패턴 G](agent-failure-patterns.md#10-패턴-g--ci-runner-이미지-교체로-postgresql-클라이언트-major가-서버보다-앞섬)),
+  운영 API 이미지의 같은 종류 불일치(`pg_restore` 17.11 ↔ PG 16.9)는 T-382로 남겼다.
+
 ## 2026-10-26 — Geo 가이드 머지·원 draft 종결 정산
 
 PR #604를 두 문서 리뷰·정확 head Aggregate docs-path gate 뒤 e13d95c9로 일반 머지했다.
