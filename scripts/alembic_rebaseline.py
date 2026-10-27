@@ -344,7 +344,7 @@ WITH object_lines(line) AS (
       'collation', collation_row.collname, collation_row.collprovider,
       collation_row.collisdeterministic, collation_row.collencoding,
       COALESCE(collation_row.collcollate, ''), COALESCE(collation_row.collctype, ''),
-      COALESCE(collation_row.colliculocale, ''), COALESCE(collation_row.collicurules, ''),
+      COALESCE(to_jsonb(collation_row) ->> 'colllocale', to_jsonb(collation_row) ->> 'colliculocale', ''), COALESCE(collation_row.collicurules, ''),
       COALESCE(collation_row.collversion, ''), pg_get_userbyid(collation_row.collowner)
     )::text
   FROM pg_collation AS collation_row

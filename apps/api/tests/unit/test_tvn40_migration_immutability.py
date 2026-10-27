@@ -60,8 +60,16 @@ _SEALED_BASELINE_SHA256 = {
     # n150 rebuild(pinset
     # 13ebca754f9f2139c4946c0a68c3565bc38bbd1098e6240f901b8738b454bc38)에서
     # 단일 role 경로가 0100→head(20260917_0102)까지 실제로 도달함을 확인.
+    #
+    # 2026-10-27: 공용 PG가 16→18로 올라갔다(Manager #562). PostgreSQL 17이
+    # `pg_collation.colliculocale`을 `colllocale`로 바꿔, 0101의 catalog
+    # fingerprint 질의가 fresh PG18에서 `column collation_row.colliculocale does
+    # not exist`로 0101 자신을 롤백시킨다 — 뒤 migration이 손댈 수 없는 0101의
+    # 질의라 같은 근거로 봉인을 다시 깬다. 그 열을 `to_jsonb(row) ->> 'colllocale'`
+    # (없으면 `'colliculocale'`)로 읽어 두 major에서 같은 값(ICU locale)을 낸다 —
+    # 16에서 만든 fingerprint와 18에서 만든 fingerprint가 같다.
     "20260824_0101_m05_activation_contract.py": (
-        "7dcd388f562c4a3e72b00390e05d61f8c8859c9b77d01375f098a4f9feabb2a5"
+        "c17349836d6ff30738ec135e63bd4dfcb92551a3b742ec59548a4ac4584de2c0"
     ),
 }
 
