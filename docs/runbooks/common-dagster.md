@@ -91,14 +91,15 @@ UI dev.6→dev.9를 PinVi 사용처 기준으로 대조했다. PinVi가 쓰는 �
 - `reconciliation_sensor`의 opt-in `budget_seconds`/`on_stall`, core-only `stall`·`pg_errors`·`scheduling.staggered_cron`·
   `http_health`·`grpc_health`·`dagster_health`, `dagster_recovery`(재시작 뒤 native 정산 센서), `build_bytecode`,
   주소 갱신(`reverse-address`), 공유 plane용 `daemon-pool`·`dagster-webserver` extra는 PinVi가 쓰지 않거나 Manager·공유
-  Dagster 소유라 설치·등록하지 않는다.
+  Dagster 소유라 import·등록하지 않는다(모듈 파일은 wheel에 함께 들어오지만 해당 extra의 의존성은 설치하지 않는다).
 - 새 wheel은 콘솔 스크립트 `kor-travel-dagster-webserver`·`kor-travel-dagster-daemon`과 SQLAlchemy plugin entry point
   `kortravel_daemon_pool`을 등록한다. plugin은 URL `plugin=` 또는 `create_engine(plugins=...)`로 이름을 지정할 때만 로드되므로
   PinVi의 asyncpg·dagster-postgres 연결에는 영향이 없다. 빌드 backend 요구 `hatchling>=1.27`은 ETL `build-constraints.txt`의
   1.32.4가 만족한다.
 - UI dev.7·dev.8은 `@kor-travel/ui/map-controls`(지도 필터·탭·작업면) export만 더했고 PinVi가 쓰는 `DagsterOperations`·
   `AppMenu`·`dagster.css`는 같다. PinVi는 map-controls를 쓰지 않는다. 다만 패키지가 runtime `lucide-react` 1.41.0과 peer
-  `@base-ui/react` ^1.8.0을 선언하므로(PinVi는 1.9.0) lucide 사본 하나가 `node_modules/@kor-travel/ui/node_modules` 아래 더 설치된다.
+  `@base-ui/react` ^1.8.0을 선언하므로(PinVi는 1.9.0) lucide 사본 하나(약 32 MB)가 `node_modules/@kor-travel/ui/node_modules` 아래 더 설치되고 web 런타임 이미지의 `node_modules`에도
+  복사된다. `globals.css`의 `@source …/@kor-travel/ui/dist`가 `map-controls.js`도 훑어 그 유틸리티 class가 전역 CSS에 더해지지만 동작 영향은 없다.
 - UI dev.9의 `LoginForm`은 SSR·최초 hydration 동안 두 입력과 제출 버튼을 native `disabled`로 두고 client effect 뒤에 연다
   (준비 전 기본 POST 제출 차단). `/admin/login`이 이 동작을 그대로 받는다. Playwright `fill`·`click`은 enabled를 기다리므로
   로그인 e2e는 그대로 통과한다.

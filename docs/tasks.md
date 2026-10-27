@@ -67,11 +67,14 @@
 
 - [/] T-376 — (구 ID T-373 — 2026-10-13 weather Track 2 항목과 ID가 겹쳐 2026-10-15 재번호; PR #581 제목·커밋에는 T-373으로 남음) `/admin/etl/summary` 상시 degraded(C6c `pinvi_etl_summary`, 2026-10-13 t1013d): Dagster live query의 두 `ticks(limit: 3)` 선택에 `afterTimestamp` 창(schedule 2일·sensor 1시간)을 싣고 첫 시간 초과를 남은 예산으로 한 번 재시도한다. 브랜치 `fix/admin-etl-dagster-ticks-window`(claude), 충돌 회피 범위 `apps/api/app/services/admin_etl.py`·`apps/api/tests/unit/test_admin_etl_dagster_probe.py`·`apps/etl/tests/test_admin_probe_graphql_schema.py`·`docs/runbooks/common-dagster.md`. 이 PR만으로 pair 회전 금지 — 순서는 `docs/resume.md`.
 
-- [ ] T-382 — restore-hotswap의 PostgreSQL 클라이언트·서버 major 불일치. 운영 API 이미지(Debian 13)의 `pg_restore`는 17.11, 공용 PG는 16.9다.
-  2026-10-27 CI(ubuntu-26.04)에서 PG18 클라이언트 `pg_restore`가 쓴 `SET transaction_timeout = 0;`을 PG16 테스트 서버가 거부해 restore-hotswap 7건이
-  schema-swap에서 실패하고 write fence가 남았다([패턴 G](agent-failure-patterns.md#10-패턴-g--ci-runner-이미지-교체로-postgresql-클라이언트-major가-서버보다-앞섬), PR #606).
-  운영 조합에서 같은 줄이 나오는지 격리 drill로 확인하고, 클라이언트 major를 서버에 맞출지(이미지에 16 클라이언트) 정한다. 정해지면 `api.yml`
-  `integration-test`의 `ubuntu-24.04` 고정을 푼다.
+- [ ] **T-382 (P1, 운영 복원 경로 결함)** — 운영 API 이미지(Debian 13)의 `pg_dump`/`pg_restore`는 17.11, 공용 PG는 16.9다. PG17+ `pg_restore`는
+  출력 머리에 항상 `SET transaction_timeout = 0;`을 쓰고(`pg_backup_archiver.c` `_doSetFixedOutputState`) PG16은 이를 거부한다. 따라서
+  `scripts/restore-hotswap.sh`(SQL 생성 → 보호 세션 재생)는 schema-swap에서 실패하고 write fence가 남으며, `scripts/restore-db.sh`
+  (`pg_restore --exit-on-error --dbname`)도 같은 SET에서 중단될 것으로 본다(소스 근거, 운영 drill 미실행). 2026-10-27 CI(ubuntu-26.04, PG18 클라이언트)가
+  같은 실패를 재현했다([패턴 G](agent-failure-patterns.md#10-패턴-g--ci-runner-이미지-교체로-postgresql-클라이언트-major가-서버보다-앞섬), PR #606).
+  제약: 운영 스냅샷은 `pg_dump` 17이 만든 archive 1.16이라 16 클라이언트로는 읽지 못한다 — 클라이언트를 16으로 내리는 해법은 쓸 수 없다.
+  방향은 서버 측 거부를 피하는 것(생성 SQL의 해당 SET 처리 또는 서버 17+ 이전)이며, 정해지면 `api.yml` `integration-test`의 `ubuntu-24.04` 고정을
+  운영과 같은 클라이언트 조합으로 바꾼다. 그 전까지 운영 복원은 [backup-restore 런북](runbooks/backup-restore.md)의 경고를 따른다.
 
 ## 모바일
 

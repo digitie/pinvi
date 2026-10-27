@@ -20,8 +20,11 @@ main `c289b4624c8640eb918cc915803e72ae754e58fb`로 맞췄다. 두 `uv.lock`은 u
 - **CI 환경(본 PR과 무관한 선행 장애)**: GitHub `ubuntu-latest`가 10-27부터 ubuntu-26.04로 풀려 `integration-test (3)`의 restore-hotswap 7건(184 PASS)이
   `unrecognized configuration parameter "transaction_timeout"`로 실패했고 재실행도 같았다(PostgreSQL 18 클라이언트 `pg_restore` → PG16 서버).
   10-25 main은 24.04에서 통과했다. `api.yml`의 `integration-test`만 `ubuntu-24.04`로 고정했다([패턴 G](agent-failure-patterns.md#10-패턴-g--ci-runner-이미지-교체로-postgresql-클라이언트-major가-서버보다-앞섬)).
-  운영 API 이미지(Debian 13)의 `pg_restore`도 17.11이고 공용 PG는 16.9라 "클라이언트가 서버보다 새 major"인 조합이 운영 restore-hotswap에도
-  있다. 운영 영향 확인과 정리는 후속 T-382로 분리했다(이 PR은 운영 스크립트를 바꾸지 않는다).
+  운영 API 이미지(Debian 13)의 `pg_restore`도 17.11이고 공용 PG는 16.9다. PG17+ `pg_restore`는 그 SET을 항상 쓰므로(PG 소스 확인, 독립 리뷰)
+  운영 restore-hotswap·restore-db도 같은 줄에서 실패할 것으로 본다 — P1 후속 T-382로 올리고 backup-restore 런북 머리에 경고를 달았다.
+  이 PR은 운영 스크립트를 바꾸지 않는다. 16 클라이언트로 내리는 해법은 운영 스냅샷(archive 1.16)을 못 읽어 쓸 수 없다.
+- **독립 적대 리뷰**: dev.9를 별도 clone에서 다시 pack해 vendor bytes·27파일·lock SHA-512 일치, Python 사용 API 불변, 로그인 e2e 영향 없음을 확인했다.
+  지적(T-382 과소 서술·PROVENANCE의 무결성 검사 서술·고지 출처 누락)은 문서로 반영했다.
 
 ## 2026-10-26 — Geo 가이드 머지·원 draft 종결 정산
 

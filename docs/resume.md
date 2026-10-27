@@ -7,7 +7,8 @@
   다중 job 재시도 센서(`infrastructure_retry_sensor_for_jobs`) 채택은 Common 가이드의 센서 전이 절차와 Admin 정적 sensor 목록 변경을 묶는 별도 작업이다.
 - CI: `ubuntu-latest`가 26.04(PostgreSQL 18 클라이언트)로 바뀌어 restore-hotswap 통합 테스트가 PG16 서버에서 결정적으로 실패했다. `integration-test`만
   `ubuntu-24.04`로 고정했고([패턴 G](agent-failure-patterns.md#10-패턴-g--ci-runner-이미지-교체로-postgresql-클라이언트-major가-서버보다-앞섬)),
-  운영 API 이미지의 같은 종류 불일치(`pg_restore` 17.11 ↔ PG 16.9)는 T-382로 남겼다.
+  운영 API 이미지의 같은 종류 불일치(`pg_restore` 17.11 ↔ PG 16.9)로 운영 restore도 실패할 것으로 보여 **T-382(P1)** 로 남기고
+  backup-restore 런북에 경고를 달았다. 다음 작업 후보로 T-382를 먼저 본다.
 
 ## 2026-10-26 — Geo 가이드 머지·원 draft 종결 정산
 

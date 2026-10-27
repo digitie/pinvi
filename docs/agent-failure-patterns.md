@@ -218,8 +218,9 @@ npm ci                                       # EINTEGRITY 없이 통과해야 �
 ### 재발 방지
 
 실패 job 로그의 `Set up job` 단계에서 `Image:`를 먼저 본다. 클라이언트와 서버 major를 맞춘다 — 지금은
-`api.yml`의 `integration-test`를 `runs-on: ubuntu-24.04`(PostgreSQL 16 클라이언트)에 고정했다. 테스트 DB를 17+로
-올리거나 job이 서버와 같은 major의 클라이언트를 설치하면 고정을 푼다. 재실행만 반복하지 않는다.
+`api.yml`의 `integration-test`를 `runs-on: ubuntu-24.04`(PostgreSQL 16 클라이언트)에 고정했다. 이 고정은 CI를 이전 환경으로
+되돌릴 뿐이며, 운영(API 이미지 클라이언트 17 ↔ 서버 16)의 같은 결함은 잡지 못한다 — 운영 쪽 해법과 고정 해제는 T-382가 소유한다
+(16 클라이언트로 내리는 것은 운영 스냅샷 archive 1.16을 못 읽어 해법이 아니다). 재실행만 반복하지 않는다.
 
 ## 11. 표준 fallback 순서
 

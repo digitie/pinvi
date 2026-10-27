@@ -6,16 +6,20 @@
 - Python: API(`[http]`)·ETL(`[dagster]`) 모두 exact `c289b4624c8640eb918cc915803e72ae754e58fb` Git dependency, 각 uv.lock 고정.
 - License: GPL-3.0-or-later. Copyright 2026 Youn-sok Choi (digitie).
 - Original Dagster model/UI: kor-travel-weather GPL-3.0-or-later. Tarball LICENSE/NOTICE/THIRD_PARTY_NOTICES를 보존한다.
+- dev.7+ 지도 작업면(map-controls)은 `digitie/kor-travel-map@974e2d025`의 Feature 지도 레시피(GPL-3.0-or-later)를 재구성했고 Base UI(MIT)·Lucide(ISC)를
+  런타임 의존으로 쓴다(tarball THIRD_PARTY_NOTICES). Common T-217(dev.9)은 Common 쪽에서 아직 IN_PROGRESS이며 Common의 소비자 수용 기록은 Transport만 다룬다.
 - dev.7부터 UI는 지도 작업면(`@kor-travel/ui/map-controls`)용 runtime dependency `lucide-react` 1.41.0과 peer `@base-ui/react` ^1.8.0을 선언한다. PinVi는 `@base-ui/react` 1.9.0을 이미 쓰고 map-controls는 import하지 않는다. lucide는 루트 1.61.0과 달라 `node_modules/@kor-travel/ui/node_modules` 아래에 따로 설치된다.
 
 ## 재현과 무결성
 
-Common `docs.yml`의 pack 절차와 같다. source checkout에서 npm 11.19.1로 `npm ci --no-audit --no-fund` 뒤
+Common `docs.yml`의 pack 명령과 같다(그 CI는 `.nvmrc` Node 22.23.1, 아래 재현은 Node 22.22.2). source checkout에서 npm 11.19.1로 `npm ci --no-audit --no-fund` 뒤
 `npm pack --workspace packages/ui --pack-destination <dir>`를 실행하고, 산출물 SHA256이 위 값(Common T-217 기록값)과 같을 때만 vendor한다.
 2026-10-27 N150(Node 22.22.2)에서 aa232ad의 산출물은 27파일·35441 bytes·위 SHA256으로, 대조군 `e28559803c1ec1134ef7ba7736b9acf4cadb9a32`의 dev.6은
 아래 기록 SHA256으로 재현됐다. 새 버전은 **새 파일명**으로만 들여오고 `apps/web/package.json` specifier를 바꾼 뒤 npm 12.0.1의
 `npm install --package-lock-only`로 lock을 갱신한다(같은 파일명의 내용만 바꾸면 lock `integrity`가 갱신되지 않는다 — `docs/agent-failure-patterns.md` 패턴 F).
-lock `integrity`는 vendor 파일의 SHA-512이며 `node scripts/check-lockfile-integrity.mjs`와 `npm ci`가 확인한다.
+lock `integrity`는 vendor 파일의 SHA-512이며 실제 bytes 대조는 `npm ci`가 한다(`scripts/check-lockfile-integrity.mjs`는 `file:` 항목을
+건너뛰고 registry 항목의 integrity 보유율만 본다). 갱신 직후 `sha512sum`/base64로 파일 해시와 lock 값을 직접 대조한다(패턴 F).
+새 파일명 방식은 기존 lock 항목의 specifier가 바뀌어 재해시되므로 lock을 통째로 다시 만들 필요가 없다 — 같은 파일명의 내용만 바꿀 때만 패턴 F의 전체 재생성을 따른다.
 
 ## 이전 산출물
 
