@@ -124,7 +124,7 @@ WITH object_lines(line) AS (
   FROM pg_constraint AS constraint_row
   JOIN pg_class AS relation ON relation.oid = constraint_row.conrelid
   JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
-  WHERE namespace.nspname IN ('app', 'x_extension')
+  WHERE namespace.nspname IN ('app', 'x_extension') AND constraint_row.contype <> 'n'
   UNION ALL
   SELECT jsonb_build_array(
       'domain_constraint', type_row.typname, constraint_row.conname,
@@ -134,7 +134,7 @@ WITH object_lines(line) AS (
   FROM pg_constraint AS constraint_row
   JOIN pg_type AS type_row ON type_row.oid = constraint_row.contypid
   JOIN pg_namespace AS namespace ON namespace.oid = type_row.typnamespace
-  WHERE namespace.nspname IN ('app', 'x_extension') AND constraint_row.contypid <> 0
+  WHERE namespace.nspname IN ('app', 'x_extension') AND constraint_row.contypid <> 0 AND constraint_row.contype <> 'n'
   UNION ALL
   SELECT jsonb_build_array(
       'index', table_rel.relname, index_rel.relname, index_row.indisunique,

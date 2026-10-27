@@ -232,7 +232,7 @@ WITH object_lines(line) AS (
   FROM pg_constraint AS constraint_row
   JOIN pg_type AS type_row ON type_row.oid = constraint_row.contypid
   JOIN pg_namespace AS n ON n.oid = type_row.typnamespace
-  WHERE n.nspname = 'app' AND constraint_row.contypid <> 0
+  WHERE n.nspname = 'app' AND constraint_row.contypid <> 0 AND constraint_row.contype <> 'n'
   UNION ALL
   SELECT jsonb_build_array(
       'composite_type', type_row.typname, pg_get_userbyid(type_row.typowner),
@@ -277,7 +277,7 @@ WITH object_lines(line) AS (
   FROM pg_constraint AS con
   JOIN pg_class AS c ON c.oid = con.conrelid
   JOIN pg_namespace AS n ON n.oid = c.relnamespace
-  WHERE n.nspname = 'app'
+  WHERE n.nspname = 'app' AND con.contype <> 'n'
   UNION ALL
   SELECT jsonb_build_array('index', table_rel.relname, index_rel.relname,
                            i.indisunique, i.indisprimary, i.indisvalid, i.indisready,
@@ -1736,8 +1736,8 @@ async def _preflight(
         app_data_content_sha256=app_data_content_sha256,
         role_security_sha256=role_security_sha256,
     )
-    if preflight.server_version_num // 10000 != 16:
-        raise RebaselineError("rebaseline requires PostgreSQL 16")
+    if preflight.server_version_num // 10000 not in (16, 18):
+        raise RebaselineError("rebaseline requires PostgreSQL 16 or 18")
     if preflight.version_rows != (expected_revision,):
         raise RebaselineError(
             f"database must have exactly one {expected_revision} alembic version row"

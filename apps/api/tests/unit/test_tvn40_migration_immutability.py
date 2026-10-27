@@ -67,9 +67,11 @@ _SEALED_BASELINE_SHA256 = {
     # not exist`로 0101 자신을 롤백시킨다 — 뒤 migration이 손댈 수 없는 0101의
     # 질의라 같은 근거로 봉인을 다시 깬다. 그 열을 `to_jsonb(row) ->> 'colllocale'`
     # (없으면 `'colliculocale'`)로 읽어 두 major에서 같은 값(ICU locale)을 낸다 —
-    # 16에서 만든 fingerprint와 18에서 만든 fingerprint가 같다.
+    # 16에서 만든 fingerprint와 18에서 만든 fingerprint가 같다. 같은 이유로 PG18이
+    # catalog에 새로 두는 NOT NULL constraint(contype 'n')를 constraint·
+    # domain_constraint 행에서 뺀다(NOT NULL은 column 행이 이미 싣는다).
     "20260824_0101_m05_activation_contract.py": (
-        "c17349836d6ff30738ec135e63bd4dfcb92551a3b742ec59548a4ac4584de2c0"
+        "87871a7394e1afd208403b553132fa34cbcd1904edfa3041bbc6378c596fa62f"
     ),
 }
 
