@@ -3,6 +3,10 @@
 > 아키텍처는 `docs/architecture/backup-restore.md`. 본 runbook은 명령 / 절차 /
 > 트러블슈팅.
 
+> ⚠️ **알려진 결함 T-382 (2026-10-27)**: 운영 API 이미지의 `pg_restore`는 17, 공용 PG는 16이다. PG17+ `pg_restore`가 쓰는
+> `SET transaction_timeout = 0;`을 PG16이 거부하므로 §3 단순 restore와 §4 핫스왑은 실패할 것으로 본다(핫스왑은 write fence가 남아
+> root 복구가 필요하다). T-382가 닫히기 전에는 운영 restore를 실행하지 말고, 불가피하면 격리 대상에서 먼저 재현한다.
+
 ## 1. 자동 backup 점검 (매일)
 
 ```bash

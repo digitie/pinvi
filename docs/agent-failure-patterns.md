@@ -15,6 +15,7 @@
 | PowerShell → WSL → SSH → Docker → Python quote가 반복 실패             | 여러 shell이 따옴표/escape를 재해석                             | Linux 셸에서 stdin script 방식 사용        |
 | 통합 테스트가 "table does not exist" / "another operation in progress" | async alembic commit 또는 pytest-asyncio loop/pool 문제         | env.py commit, 함수 스코프 엔진 + NullPool |
 | `file:` tarball 내용을 바꿔도 `npm install`이 lockfile `integrity`를 그대로 둠 | 기존 lockfile 항목이 "이미 충족됨"으로 판단돼 재해시를 건너뜀 | `package-lock.json` 삭제 후 처음부터 재설치(패턴 F) |
+| CI restore-hotswap 통합 테스트가 `unrecognized configuration parameter "transaction_timeout"`로 매번 실패 | `ubuntu-latest` 이미지 교체로 host PostgreSQL 클라이언트가 PG16 테스트 서버보다 새 major | 재실행 대신 job 로그의 `Image:` 확인, 클라이언트·서버 major를 맞춤(패턴 G) |
 
 ## 2. 패턴 A — worktree 포인터가 Windows 경로로 남음
 
@@ -200,7 +201,28 @@ npm ci                                       # EINTEGRITY 없이 통과해야 �
 바로 확인할 수 있다. `npm view`류 명령이나 `--package-lock-only`만으로는 이 문제를
 발견할 수 없다는 점에 주의 — 그 경로들은 전부 침묵한 채 stale 값을 유지한다.
 
-## 10. 표준 fallback 순서
+## 10. 패턴 G — CI runner 이미지 교체로 PostgreSQL 클라이언트 major가 서버보다 앞섬
+
+### 증상
+
+`integration-test`의 `test_restore_hotswap_preflight.py`가 `RESTORE_PHASE=restoring:failed:schema-swap SQL execution failed`로
+떨어지고, 원문에 `psql:.../lock-session-N.sql:41: ERROR: unrecognized configuration parameter "transaction_timeout"`이 있다.
+`gh run rerun --failed`로 다시 돌려도 같은 줄에서 같은 오류가 난다. 이전 restore-hotswap 간헐 실패(타이밍)와 다르다.
+
+### 원인
+
+이 테스트는 host의 `pg_dump`/`pg_restore`/`psql`을 `shutil.which`로 찾아 PostGIS 16 testcontainer에 그대로 쓴다.
+2026-10-27 GitHub의 `ubuntu-latest`가 ubuntu-26.04 이미지로 풀렸고(10-25 main은 ubuntu-24.04), 그 PostgreSQL 18
+클라이언트의 `pg_restore`는 SQL 머리에 `SET transaction_timeout = 0;`(PG17+ 파라미터)을 쓴다. PG16 서버는 이를 거부한다.
+
+### 재발 방지
+
+실패 job 로그의 `Set up job` 단계에서 `Image:`를 먼저 본다. 클라이언트와 서버 major를 맞춘다 — 지금은
+`api.yml`의 `integration-test`를 `runs-on: ubuntu-24.04`(PostgreSQL 16 클라이언트)에 고정했다. 이 고정은 CI를 이전 환경으로
+되돌릴 뿐이며, 운영(API 이미지 클라이언트 17 ↔ 서버 16)의 같은 결함은 잡지 못한다 — 운영 쪽 해법과 고정 해제는 T-382가 소유한다
+(16 클라이언트로 내리는 것은 운영 스냅샷 archive 1.16을 못 읽어 해법이 아니다). 재실행만 반복하지 않는다.
+
+## 11. 표준 fallback 순서
 
 1. **Git/branch/commit**: Linux git + Linux worktree 포인터.
 2. **탐색**: Linux native `rg`, `sed`, `git`, CodeGraph.

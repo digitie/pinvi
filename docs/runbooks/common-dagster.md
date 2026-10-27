@@ -2,9 +2,10 @@
 
 ## 정책과 소유권
 
-Common Python `73e3ff8b9398e533806d2d1a8435292570169de3`를 exact Git dependency로 고정한다.
-Common UI는 `e28559803c1ec1134ef7ba7736b9acf4cadb9a32`의 dev.6, tokens는 `426de4fbad35282bb558712d922c06268e9aba62`의 고정 tarball이며
-`apps/web/vendor/kor-travel-common-PROVENANCE.md`에 SHA256·GPL 출처를 남긴다.
+Common Python은 API(`[http]`)·ETL(`[dagster]`) 모두 `c289b4624c8640eb918cc915803e72ae754e58fb`를 exact Git dependency로 고정한다.
+Common UI는 `aa232ad5f255233184de80eceaab2e9b6ccb00c9`의 dev.9, tokens는 `426de4fbad35282bb558712d922c06268e9aba62`의 고정 tarball이며
+`apps/web/vendor/kor-travel-common-PROVENANCE.md`에 SHA256·GPL 출처와 재현 절차를 남긴다. 갱신 이력과 채택 판단은
+아래 [Common 최신 main 채택](#common-최신-main-채택-2026-10-27)을 따른다.
 공통 구현 가이드는 [Common runbook](https://github.com/digitie/kor-travel-common/blob/main/docs/runbooks/dagster-adoption.md).
 PinVi는 app 데이터와 JWT/cookie·DB 역할 검사만 소유한다. Map provider 구현은 가져오지 않는다.
 
@@ -67,10 +68,38 @@ Python import 성공만으로 gRPC code location 로드가 보장되지는 않�
 
 ## Map paired 재구축 후속 HTTP 채택
 
-API 전송은 Common `1f8e339c7c79f86f8952b0d4c326ab4dae56bee8`의 `[http]` extra를 소비한다. 4 MiB plain 응답/전체 10초·압축 사전 거부·별도 연결 정리 제한을 공유하고, JSON 객체·PinVi 소유권·활성 run·재시도 계약은 앱이 유지한다. Common은 GPL-3.0-or-later이며 API 배포는 공통 의존성의 라이선스·소스 고지를 함께 유지한다. 기존 UI dev.6 산출물과 ETL RecoveryPolicy는 변경하지 않는다. 관리자 Map snapshot 변경은 원천 commit/bytes를 함께 재vendor하고 M05 pair 계약을 재생성한다. 운영 재구축/live 결과는 후속 [검증 기록](../reviews/common-map-rebuild-2026-10-05/README.md)에 따로 보존한다.
+API 전송은 Common `[http]` extra를 소비한다(도입 당시 `1f8e339c7c79f86f8952b0d4c326ab4dae56bee8`, 현재 핀은 위 §정책과 소유권). 4 MiB plain 응답/전체 10초·압축 사전 거부·별도 연결 정리 제한을 공유하고, JSON 객체·PinVi 소유권·활성 run·재시도 계약은 앱이 유지한다. Common은 GPL-3.0-or-later이며 API 배포는 공통 의존성의 라이선스·소스 고지를 함께 유지한다. 이 채택 당시 기존 UI dev.6 산출물과 ETL RecoveryPolicy는 변경하지 않았다. 관리자 Map snapshot 변경은 원천 commit/bytes를 함께 재vendor하고 M05 pair 계약을 재생성한다. 운영 재구축/live 결과는 후속 [검증 기록](../reviews/common-map-rebuild-2026-10-05/README.md)에 따로 보존한다.
 
 ## 최신 tick 요약의 저장소 작업 상한
 
 `ticks(limit: 3, statuses: [STARTED, SKIPPED, SUCCESS, FAILURE])`로 Dagster 1.13.24의 전체 이력 batch rank 조회를 피한다. 네 상태를 모두 선택하여 실패 tick을 숨기지 않고 instigation별 최신 최대 3건을 표시한다. 운영 Map의 sensor tick storage statement timeout을 재현하고 같은 query의 정상 응답을 확인했다. Dagster upgrade 때 schema enum과 resolver 경로를 재검증하며 HTTP deadline·응답 cap은 계속 적용한다. 실제 재구축과 브라우저 검증은 해당 [검증 기록](../reviews/common-map-rebuild-2026-10-05/README.md)을 따른다.
 
 **statuses만으로는 상한이 아니다(2026-10-13).** `statuses`가 있으면 batch loader 대신 instigator별 `get_ticks(limit)`로 가지만, 그 SQL(`selector_id = X OR selector_id IS NULL AND job_origin_id = Y … ORDER BY timestamp DESC LIMIT 3`)은 PostgreSQL에서 그 instigator의 **전체** tick을 읽고 정렬한다. 공유 `job_ticks`가 하루 ~58k건으로 자라자 instigator 하나가 heap 블록 18k개를 읽어 webserver statement timeout 15초를 넘겼다. 그래서 두 `ticks` 선택에 `afterTimestamp`(PinVi: schedule 2일·sensor 1시간, `PINVI_DAGSTER_*_TICK_WINDOW_SECONDS`)를 실어 읽는 양을 창 안의 tick 수에 비례시킨다. 창은 그 location의 가장 긴 cron 주기·sensor 최소 간격을 덮어야 하며 `apps/etl/tests/test_admin_probe_graphql_schema.py`가 정의에 묶고 실제 storage `get_ticks`의 `after`로 확인한다. `last_tick`은 "창 안의 최신 tick"이고 창 밖은 `null`이다. 창은 **읽는 행 수**의 상한이지 벽시계 상한이 아니다 — cold cache와 호스트 iowait에 따라 같은 창이 n150에서 1.92초(04:11Z, iowait 21–28 %)·7.96초(07:47Z, load 11.5–14.7, iowait 61–65 %)가 걸렸고 warm이면 0.12–0.21초다. 그래서 PinVi probe는 첫 시도(2초)가 시간 초과면 남은 전체 예산(10초)으로 한 번 재시도한다(끊긴 첫 시도가 storage 페이지를 데운다). 문서의 `runsOrError` 절반(run tag 필터, limit 30·1000)은 시간 경계가 없는 남은 부분으로, 같은 부하에서 16.3초 → HTTP 500이 실측됐다. Map `c4d17343`의 `packages/kor-travel-map-api/src/kortravelmap/api/dagster_query_service.py:56,73`도 같은 `ticks(limit: 3, statuses: [...])`(statuses는 있고 `afterTimestamp`가 없다)라 같은 instigator별 `get_ticks` 무경계 경로이며 같은 창이 필요하다 — `statuses` 없이 `afterTimestamp`만 더해도 `not after`가 거짓이 되어 batch loader를 벗어나므로 결과는 같다.
+
+## Common 최신 main 채택 (2026-10-27)
+
+이전 핀(API `1f8e339c`, ETL `73e3ff8b`)부터 Common main `c289b462`까지 `packages/py` 31커밋(ETL 기준 35커밋)과
+UI dev.6→dev.9를 PinVi 사용처 기준으로 대조했다. PinVi가 쓰는 공개 API — `kortravelcommon.dagster`의
+`RecoveryPolicy`·`coalescing_schedule`·`has_active_run`·`infrastructure_retry_sensor`와 `kortravelcommon.http`의
+`bounded_request`·`BoundedResponseError` — 는 시그니처와 동작이 그대로라 앱 코드는 바꾸지 않는다.
+
+- `http.py`는 `1f8e339c` 이후 byte 동일하다. `call_with_deadline`은 선택 `slots` 인자만 늘었다.
+- `infrastructure_retry_sensor`는 단일 job mapping을 넘기는 공통 구현으로 옮겨졌지만 단일 job의 실패 조회 필터·`RunRequest`·skip 판정은 같다.
+  새 `infrastructure_retry_sensor_for_jobs`(여러 job이 실패 page·cursor·tick 예산 공유)는 채택하지 않는다. Common 가이드
+  (`docs/runbooks/dagster-multi-job-retry.md`)가 이전 job별 센서와의 동시 RUNNING 금지와 pending/child/cursor 정산을 요구하는
+  별도 운영 전환이고, Admin 정적 sensor 목록과 ETL 대조 테스트도 함께 바뀌기 때문이다.
+- `reconciliation_sensor`의 opt-in `budget_seconds`/`on_stall`, core-only `stall`·`pg_errors`·`scheduling.staggered_cron`·
+  `http_health`·`grpc_health`·`dagster_health`, `dagster_recovery`(재시작 뒤 native 정산 센서), `build_bytecode`,
+  주소 갱신(`reverse-address`), 공유 plane용 `daemon-pool`·`dagster-webserver` extra는 PinVi가 쓰지 않거나 Manager·공유
+  Dagster 소유라 import·등록하지 않는다(모듈 파일은 wheel에 함께 들어오지만 해당 extra의 의존성은 설치하지 않는다).
+- 새 wheel은 콘솔 스크립트 `kor-travel-dagster-webserver`·`kor-travel-dagster-daemon`과 SQLAlchemy plugin entry point
+  `kortravel_daemon_pool`을 등록한다. plugin은 URL `plugin=` 또는 `create_engine(plugins=...)`로 이름을 지정할 때만 로드되므로
+  PinVi의 asyncpg·dagster-postgres 연결에는 영향이 없다. 빌드 backend 요구 `hatchling>=1.27`은 ETL `build-constraints.txt`의
+  1.32.4가 만족한다.
+- UI dev.7·dev.8은 `@kor-travel/ui/map-controls`(지도 필터·탭·작업면) export만 더했고 PinVi가 쓰는 `DagsterOperations`·
+  `AppMenu`·`dagster.css`는 같다. PinVi는 map-controls를 쓰지 않는다. 다만 패키지가 runtime `lucide-react` 1.41.0과 peer
+  `@base-ui/react` ^1.8.0을 선언하므로(PinVi는 1.9.0) lucide 사본 하나(약 32 MB)가 `node_modules/@kor-travel/ui/node_modules` 아래 더 설치되고 web 런타임 이미지의 `node_modules`에도
+  복사된다. `globals.css`의 `@source …/@kor-travel/ui/dist`가 `map-controls.js`도 훑어 그 유틸리티 class가 전역 CSS에 더해지지만 동작 영향은 없다.
+- UI dev.9의 `LoginForm`은 SSR·최초 hydration 동안 두 입력과 제출 버튼을 native `disabled`로 두고 client effect 뒤에 연다
+  (준비 전 기본 POST 제출 차단). `/admin/login`이 이 동작을 그대로 받는다. Playwright `fill`·`click`은 enabled를 기다리므로
+  로그인 e2e는 그대로 통과한다.
