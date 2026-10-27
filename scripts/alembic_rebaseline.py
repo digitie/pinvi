@@ -1736,8 +1736,8 @@ async def _preflight(
         app_data_content_sha256=app_data_content_sha256,
         role_security_sha256=role_security_sha256,
     )
-    if preflight.server_version_num // 10000 not in (16, 18):
-        raise RebaselineError("rebaseline requires PostgreSQL 16 or 18")
+    if preflight.server_version_num // 10000 != 16:
+        raise RebaselineError("rebaseline requires PostgreSQL 16")
     if preflight.version_rows != (expected_revision,):
         raise RebaselineError(
             f"database must have exactly one {expected_revision} alembic version row"
