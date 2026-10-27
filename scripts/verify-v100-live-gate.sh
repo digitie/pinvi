@@ -43,7 +43,7 @@ Environment:
   PINVI_ADMIN_LIVE_CASE_END           Optional 1-based Admin matrix end for resumed full catalog.
   PINVI_V100_RESTORE_SNAPSHOT         Snapshot path for restore-staging.
   PINVI_V100_RESTORE_DOCKER_RUNNER=1  Run restore-staging inside a PostgreSQL Docker image.
-  PINVI_V100_RESTORE_DOCKER_IMAGE     Default postgres:16-alpine.
+  PINVI_V100_RESTORE_DOCKER_IMAGE     Default postgres:18-alpine.
   PINVI_V100_RESTORE_DOCKER_NETWORK   Optional docker --network value, e.g. container:<postgres>.
   PINVI_V100_PERF_PATHS               Default /health,/health/db.
   PINVI_V100_PERF_REQUESTS            Default 100.
@@ -180,7 +180,7 @@ run_restore_staging() {
   done
 
   run_cmd "restore-staging" docker "${docker_args[@]}" \
-    "${PINVI_V100_RESTORE_DOCKER_IMAGE:-postgres:16-alpine}" \
+    "${PINVI_V100_RESTORE_DOCKER_IMAGE:-postgres:18-alpine}" \
     bash scripts/restore-staging-drill.sh run "/snapshot/${snapshot_file}"
 }
 

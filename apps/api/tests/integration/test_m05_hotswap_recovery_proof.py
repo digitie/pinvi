@@ -150,7 +150,7 @@ def test_trusted_recovery_rejects_authority_surface_drift() -> None:
     secdef_mid = f"m05_secdef_mid_{suffix}"
     helper_schema = f"m05_helper_{suffix}"
     container = PostgresContainer(
-        "postgres:16-alpine",
+        "postgres:18-alpine",
         username="m05_root",
         password=TEST_PASSWORD,
         dbname="m05_root",

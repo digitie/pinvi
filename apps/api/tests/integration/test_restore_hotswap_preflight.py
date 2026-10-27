@@ -752,7 +752,7 @@ def test_restore_hotswap_preflight_rejects_real_noncanonical_topologies_before_m
 
     suffix = uuid.uuid4().hex[:8]
     container = PostgresContainer(
-        "postgres:16-alpine",
+        "postgres:18-alpine",
         username="m05_root",
         password=TEST_PASSWORD,
         dbname="m05_root",
@@ -880,7 +880,7 @@ def test_restore_hotswap_rejects_real_append_only_trigger_drift_before_schema_sw
 
     suffix = uuid.uuid4().hex[:8]
     container = PostgresContainer(
-        "postgres:16-alpine",
+        "postgres:18-alpine",
         username="m05_root",
         password=TEST_PASSWORD,
         dbname="m05_root",
@@ -974,7 +974,7 @@ def test_restore_hotswap_rejects_missing_digest_acl_and_signal_admin_before_muta
 
     suffix = uuid.uuid4().hex[:8]
     container = PostgresContainer(
-        "postgres:16-alpine",
+        "postgres:18-alpine",
         username="m05_root",
         password=TEST_PASSWORD,
         dbname="m05_root",
@@ -1086,7 +1086,7 @@ def test_restore_hotswap_preserves_preexisting_candidate_before_write_fence(
 
     suffix = uuid.uuid4().hex[:8]
     container = PostgresContainer(
-        "postgres:16-alpine",
+        "postgres:18-alpine",
         username="m05_root",
         password=TEST_PASSWORD,
         dbname="m05_root",
@@ -1214,7 +1214,7 @@ def test_restore_hotswap_preserves_candidate_fence_and_marker_after_actual_resto
 
     suffix = uuid.uuid4().hex[:8]
     container = PostgresContainer(
-        "postgres:16-alpine",
+        "postgres:18-alpine",
         username="m05_root",
         password=TEST_PASSWORD,
         dbname="m05_root",
@@ -1381,7 +1381,7 @@ def test_restore_hotswap_refences_after_post_release_forensic_persistence_failur
 
     suffix = uuid.uuid4().hex[:8]
     container = PostgresContainer(
-        "postgres:16-alpine",
+        "postgres:18-alpine",
         username="m05_root",
         password=TEST_PASSWORD,
         dbname="m05_root",
@@ -1566,7 +1566,7 @@ def test_restore_hotswap_real_canonical_topology_completes_and_releases_fence(
 
     suffix = uuid.uuid4().hex[:8]
     container = PostgresContainer(
-        "postgres:16-alpine",
+        "postgres:18-alpine",
         username="m05_root",
         password=TEST_PASSWORD,
         dbname="m05_root",

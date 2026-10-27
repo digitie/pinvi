@@ -71,7 +71,7 @@ def _database_url() -> Iterator[str]:
     from testcontainers.postgres import PostgresContainer
 
     container = PostgresContainer(
-        "postgis/postgis:16-3.5-alpine",
+        "postgis/postgis:18-3.6-alpine",
         username="pinvi",
         password="pinvi_test",
         dbname="pinvi_test",
