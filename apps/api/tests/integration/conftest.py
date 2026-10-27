@@ -71,7 +71,7 @@ def _database_url() -> Iterator[str]:
     from testcontainers.postgres import PostgresContainer
 
     container = PostgresContainer(
-        "postgis/postgis:16-3.5-alpine",
+        "postgis/postgis:18-3.6-alpine",
         username="pinvi",
         password="pinvi_test",
         dbname="pinvi_test",
@@ -96,6 +96,32 @@ def _database_url() -> Iterator[str]:
             raise RuntimeError(f"alembic upgrade 실패:\n{result.stdout}\n{result.stderr}")
 
         yield url
+    finally:
+        container.stop()
+
+
+@pytest.fixture(scope="session")
+def _legacy_pg16_database_url() -> Iterator[str]:
+    """legacy rebaseline(0061→0100) 전용 PostgreSQL 16 서버.
+
+    `scripts/alembic_rebaseline.py`의 target profile은 `fresh-postgresql-16`이고 그 catalog
+    fingerprint는 PG16 catalog의 정본이다 — 공용 PG가 18로 올라간(2026-10-27) 뒤에도 legacy
+    handoff는 PG16에서만 의미가 있으므로 이 테스트들만 16 서버를 따로 띄운다.
+    """
+    _require_docker()
+    from testcontainers.postgres import PostgresContainer
+
+    container = PostgresContainer(
+        "postgis/postgis:16-3.5-alpine",
+        username="pinvi",
+        password="pinvi_test",
+        dbname="pinvi_test",
+    )
+    container.start()
+    try:
+        host = container.get_container_host_ip()
+        port = container.get_exposed_port(5432)
+        yield f"postgresql+asyncpg://pinvi:pinvi_test@{host}:{port}/pinvi_test"
     finally:
         container.stop()
 

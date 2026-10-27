@@ -94,7 +94,7 @@ jobs:
 
     services:
       postgres:
-        image: postgis/postgis:16-3.5-alpine
+        image: postgis/postgis:18-3.6-alpine
         env:
           POSTGRES_USER: pinvi
           POSTGRES_PASSWORD: pinvi_ci_password
@@ -206,13 +206,10 @@ jobs:
   # 테스트를 몰아 받으면 나중에 `pytest --store-durations`로 캐시를 만들어 재분배한다.
   integration-test:
     if: github.event_name != 'schedule'
-    # `ubuntu-latest`가 2026-10-27 실행부터 ubuntu-26.04로 풀린다(10-25 main은 24.04). 그 이미지의
-    # PostgreSQL 18 클라이언트 pg_restore가 SQL에 `SET transaction_timeout = 0;`(PG17+ 파라미터)을 쓰고,
-    # PG16 테스트 서버(postgis/postgis:16-3.5-alpine)가 이를 거부해 restore-hotswap 통합 테스트가
-    # schema-swap에서 결정적으로 실패한다(재실행도 같은 이미지·같은 오류). 이 테스트는 host의
-    # pg_dump/pg_restore/psql(`shutil.which`)을 PG16 서버에 그대로 쓰므로, 서버와 같은 16 클라이언트가
-    # 있는 ubuntu-24.04에 고정한다. 테스트 DB를 17+로 올리거나 클라이언트 major를 맞출 때 푼다.
-    runs-on: ubuntu-24.04
+    # restore-hotswap 통합 테스트는 host의 pg_dump/pg_restore/psql(`shutil.which`)을 테스트 서버에 그대로
+    # 쓰므로 client major가 서버와 같아야 한다. 공용 PG가 18로 올라가면서(2026-10-27) 테스트 서버도 18이고,
+    # PostgreSQL 18 클라이언트가 있는 ubuntu-26.04에 고정한다(24.04의 16 클라이언트는 18 서버를 덤프하지 못한다).
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     strategy:
       fail-fast: false

@@ -465,11 +465,12 @@ async def test_0101_absorbs_current_main_post_0061_contracts_and_backfill(
 
 @pytest.mark.asyncio
 async def test_rebaseline_0061_to_0100_preserves_data_and_seals_legacy_handoff(
-    _database_url: str,
+    _legacy_pg16_database_url: str,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     """N150과 같은 0061 catalog는 data를 보존한 채 receipt-bound 0100으로 전환한다."""
+    _database_url = _legacy_pg16_database_url
 
     target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_rebaseline")
     user_id = uuid.uuid4()
@@ -673,11 +674,12 @@ async def test_0101_fresh_marker_rejects_function_and_operator_owner_drift(
 
 @pytest.mark.asyncio
 async def test_0101_legacy_handoff_revalidates_receipt_data_before_ddl(
-    _database_url: str,
+    _legacy_pg16_database_url: str,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     """0100 stamp 뒤의 app data drift는 root receipt가 있어도 0101 DDL 전에 막는다."""
+    _database_url = _legacy_pg16_database_url
 
     target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_handoff_data")
     user_id = uuid.uuid4()
@@ -932,9 +934,10 @@ async def test_0101_legacy_receipt_rejects_parallel_ddl_capable_session(
 
 @pytest.mark.asyncio
 async def test_rebaseline_connection_fence_rejects_ddl_clients_and_restores_admission(
-    _database_url: str,
+    _legacy_pg16_database_url: str,
 ) -> None:
     """0100 helper는 세션을 강제 종료하지 않고 기존 DDL client가 있으면 fail-close한다."""
+    _database_url = _legacy_pg16_database_url
 
     target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_helper_fence")
     try:
@@ -979,10 +982,11 @@ async def test_rebaseline_connection_fence_rejects_ddl_clients_and_restores_admi
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fence_kind", ("helper", "migration"))
 async def test_rebaseline_connection_fence_rejects_nonsuperuser_database_owner(
-    _database_url: str,
+    _legacy_pg16_database_url: str,
     fence_kind: str,
 ) -> None:
     """다른 DDL owner를 종료할 수 없는 database owner는 lock 전에 fail-close한다."""
+    _database_url = _legacy_pg16_database_url
 
     suffix = uuid.uuid4().hex[:12]
     fence_role = f"m05_nonsuper_fence_{suffix}"
@@ -1092,9 +1096,10 @@ async def test_0101_connection_fence_rejects_ddl_clients_and_restores_admission(
 
 @pytest.mark.asyncio
 async def test_rebaseline_app_table_fence_rejects_open_runtime_writer(
-    _database_url: str,
+    _legacy_pg16_database_url: str,
 ) -> None:
     """0100/0101 app table fence는 진행 중인 runtime DML과 함께 진행하지 않는다."""
+    _database_url = _legacy_pg16_database_url
 
     target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_app_fence")
     writer_engine = create_async_engine(target_url, poolclass=NullPool)
@@ -1144,10 +1149,11 @@ async def test_rebaseline_app_table_fence_rejects_open_runtime_writer(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fence_kind", ("helper", "migration"))
 async def test_rebaseline_connection_fence_fails_closed_when_catalog_lock_is_blocked(
-    _database_url: str,
+    _legacy_pg16_database_url: str,
     fence_kind: str,
 ) -> None:
     """배타 catalog lock이 authority proof도 막아도 0100/0101 fence는 유한 시간에 멈춘다."""
+    _database_url = _legacy_pg16_database_url
 
     target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_fence_timeout")
     try:
@@ -1263,9 +1269,10 @@ async def test_online_alembic_serializes_concurrent_fresh_upgrades(
 
 @pytest.mark.asyncio
 async def test_rebaseline_preflight_rejects_same_shape_constraint_drift(
-    _database_url: str,
+    _legacy_pg16_database_url: str,
 ) -> None:
     """제약 이름·열이 같아도 정의가 달라지면 0061 fingerprint는 fail-close한다."""
+    _database_url = _legacy_pg16_database_url
 
     target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_drift")
     user_id = uuid.uuid4()
@@ -1310,9 +1317,10 @@ async def test_rebaseline_preflight_rejects_same_shape_constraint_drift(
 
 @pytest.mark.asyncio
 async def test_rebaseline_preflight_rejects_data_less_0061_target(
-    _database_url: str,
+    _legacy_pg16_database_url: str,
 ) -> None:
     """alembic row만 있는 empty clone은 production rebaseline 대상이 아니다."""
+    _database_url = _legacy_pg16_database_url
 
     target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_empty")
     try:
@@ -1336,10 +1344,11 @@ async def test_rebaseline_preflight_rejects_data_less_0061_target(
 
 @pytest.mark.asyncio
 async def test_rebaseline_target_manifest_rejects_changed_data_fingerprint(
-    _database_url: str,
+    _legacy_pg16_database_url: str,
     tmp_path: Path,
 ) -> None:
     """target manifest는 database OID·role뿐 아니라 app data content drift도 봉인한다."""
+    _database_url = _legacy_pg16_database_url
 
     target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_target")
     first_user_id = uuid.uuid4()
@@ -1390,11 +1399,12 @@ async def test_rebaseline_target_manifest_rejects_changed_data_fingerprint(
 
 @pytest.mark.asyncio
 async def test_rebaseline_recovers_prepared_receipt_after_version_commit(
-    _database_url: str,
+    _legacy_pg16_database_url: str,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     """commit 뒤 receipt write가 끊겨도 같은 intent로 재실행하면 finalize한다."""
+    _database_url = _legacy_pg16_database_url
 
     target_url, maintenance_url = await _new_database(_database_url, "pinvi_m05_receipt")
     user_id = uuid.uuid4()

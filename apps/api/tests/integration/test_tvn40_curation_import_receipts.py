@@ -396,6 +396,9 @@ async def _assert_0059_cutover_backfill_catalog_contract(db: AsyncSession) -> No
                     "JOIN pg_catalog.pg_namespace AS namespace "
                     "ON namespace.oid = relation.relnamespace "
                     "WHERE namespace.nspname = 'app' "
+                    # PG18은 NOT NULL을 contype 'n' constraint로도 catalog에 둔다 —
+                    # 이 계약은 명시 constraint만 센다(NOT NULL은 컬럼 정의가 정본).
+                    "AND con.contype <> 'n' "
                     "AND relation.relname = 'ktm_curation_cutover_backfill_receipts'"
                 )
             )

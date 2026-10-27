@@ -20,12 +20,20 @@ ENV PYTHONUNBUFFERED=1 \
     PINVI_API_WORKERS=1 \
     PROMETHEUS_MULTIPROC_DIR=/tmp/pinvi-prometheus
 
+# PostgreSQL client는 공용 PG 서버와 같은 major(18)여야 한다 — 낮은 major의 pg_dump는 높은 서버를 덤프하지
+# 않고("server version mismatch"), 높은 major의 pg_restore는 낮은 서버가 모르는 SET을 쓴다(T-382). Debian
+# 기본 `postgresql-client`는 배포판 major(trixie=17)라 PGDG에서 major를 명시해 받는다.
 RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    && . /etc/os-release \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
-        curl \
         git \
         libpq5 \
-        postgresql-client \
+        postgresql-client-18 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
