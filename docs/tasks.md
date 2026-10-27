@@ -67,6 +67,12 @@
 
 - [/] T-376 — (구 ID T-373 — 2026-10-13 weather Track 2 항목과 ID가 겹쳐 2026-10-15 재번호; PR #581 제목·커밋에는 T-373으로 남음) `/admin/etl/summary` 상시 degraded(C6c `pinvi_etl_summary`, 2026-10-13 t1013d): Dagster live query의 두 `ticks(limit: 3)` 선택에 `afterTimestamp` 창(schedule 2일·sensor 1시간)을 싣고 첫 시간 초과를 남은 예산으로 한 번 재시도한다. 브랜치 `fix/admin-etl-dagster-ticks-window`(claude), 충돌 회피 범위 `apps/api/app/services/admin_etl.py`·`apps/api/tests/unit/test_admin_etl_dagster_probe.py`·`apps/etl/tests/test_admin_probe_graphql_schema.py`·`docs/runbooks/common-dagster.md`. 이 PR만으로 pair 회전 금지 — 순서는 `docs/resume.md`.
 
+- [ ] T-382 — restore-hotswap의 PostgreSQL 클라이언트·서버 major 불일치. 운영 API 이미지(Debian 13)의 `pg_restore`는 17.11, 공용 PG는 16.9다.
+  2026-10-27 CI(ubuntu-26.04)에서 PG18 클라이언트 `pg_restore`가 쓴 `SET transaction_timeout = 0;`을 PG16 테스트 서버가 거부해 restore-hotswap 7건이
+  schema-swap에서 실패하고 write fence가 남았다([패턴 G](agent-failure-patterns.md#10-패턴-g--ci-runner-이미지-교체로-postgresql-클라이언트-major가-서버보다-앞섬), PR #606).
+  운영 조합에서 같은 줄이 나오는지 격리 drill로 확인하고, 클라이언트 major를 서버에 맞출지(이미지에 16 클라이언트) 정한다. 정해지면 `api.yml`
+  `integration-test`의 `ubuntu-24.04` 고정을 푼다.
+
 ## 모바일
 
 - [ ] **T-320** — 모바일 위치 동의 gate 런타임 확인. VWorld 키가 있는 환경에서 지도 표면을
