@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 import pytest
 
+from app.clients import kor_travel_weather as kor_travel_weather_module
 from app.clients.kor_travel_weather import (
     KorTravelWeatherBadRequest,
     KorTravelWeatherClient,
@@ -813,25 +814,51 @@ async def test_trickling_body_is_bounded_by_attempt_total_timeout() -> None:
     await client.aclose()
 
 
-async def test_backoff_longer_than_remaining_stops_and_counts() -> None:
-    """backoff가 deadline을 넘으면 자지 않고 멈춘다 — 자다가 바깥 취소(미집계)를 맞지 않게."""
+class _SleepSpyAsyncio:
+    """client 모듈의 `asyncio`만 바꿔 끼우는 대역 — `sleep` 요청을 기록하고 실제로는 자지 않는다.
+
+    나머지 속성(`timeout`, `get_running_loop` …)은 진짜 `asyncio`로 넘긴다. 전역 `asyncio.sleep`을
+    건드리지 않으므로 이벤트 루프·pytest-asyncio에는 영향이 없다.
+    """
+
+    def __init__(self) -> None:
+        self.slept: list[float] = []
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(asyncio, name)
+
+    async def sleep(self, delay: float) -> None:
+        self.slept.append(delay)
+        await asyncio.sleep(0)
+
+
+async def test_backoff_longer_than_remaining_stops_and_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """backoff가 deadline을 넘으면 자지 않고 멈춘다 — 자다가 바깥 취소(미집계)를 맞지 않게.
+
+    벽시계 경과로 판정하지 않는다(CI 러너 부하에 따라 MockTransport 호출 하나가 0.1 s를 넘었다).
+    "자지 않았다"는 sleep 요청 기록으로, "멈췄다"는 호출당 attempt 1회로 단언한다. 예산(30 s)은
+    어떤 러너 지연보다 넉넉하고 첫 backoff(60 s)보다는 짧다.
+    """
     attempts = {"n": 0}
 
     def handler(request: httpx.Request) -> httpx.Response:
         attempts["n"] += 1
         return httpx.Response(503, json={"code": "UPSTREAM"})
 
+    spy = _SleepSpyAsyncio()
+    monkeypatch.setattr(kor_travel_weather_module, "asyncio", spy)
     clock = _FakeClock()
-    client = _client(handler, max_attempts=3, backoff_base_seconds=0.2, clock=clock)
+    client = _client(handler, max_attempts=3, backoff_base_seconds=60.0, clock=clock)
     loop = asyncio.get_running_loop()
-    for _ in range(3):
-        started = loop.time()
-        with kor_travel_weather_call_deadline(started + 0.1):
+    for n in range(1, 4):
+        with kor_travel_weather_call_deadline(loop.time() + 30.0):
             with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
                 await client.latest("loc-1")
-        assert loop.time() - started < 0.1
         assert not isinstance(exc_info.value, KorTravelWeatherDeadlineExhausted)
-    assert attempts["n"] == 3
+        assert attempts["n"] == n  # 재시도 없이 멈췄다
+    assert spy.slept == []  # backoff를 자지 않았다
     with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
         await client.latest("loc-1")
     await client.aclose()
