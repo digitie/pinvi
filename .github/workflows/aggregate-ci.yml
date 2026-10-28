@@ -85,6 +85,8 @@ jobs:
               equals(".env.example"),
               equals(".github/workflows/api.yml"),
               equals(".github/workflows/aggregate-ci.yml"),
+              // test_api_dependency_lock.py가 이 workflow의 uv 버전을 읽는다.
+              equals(".github/workflows/uv-lock-refresh.yml"),
             ])) {
               requiredChecks.push("lint-typecheck-test");
               requiredChecks.push("docker-provenance-image");

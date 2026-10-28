@@ -69,6 +69,12 @@ packages = ["app"]
 "../../contracts/pinvi-m05-activation-receipt-trust-v1.json" = "app/_contract_data/pinvi-m05-activation-receipt-trust-v1.json"
 "../../contracts/pinvi-m05-reviewer-roster-v1.json" = "app/_contract_data/pinvi-m05-reviewer-roster-v1.json"
 
+[tool.uv]
+# lock을 만들고 푸는 uv를 하나로 묶는다 — Dockerfile의 `ghcr.io/astral-sh/uv` 태그,
+# CI(`api.yml`·`uv-lock-refresh.yml`)의 `astral-sh/setup-uv` `version`과 같아야 한다
+# (`tests/unit/test_api_dependency_lock.py`가 묶는다). apps/etl과 같은 버전이다.
+required-version = "==0.11.21"
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

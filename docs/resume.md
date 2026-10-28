@@ -1,3 +1,9 @@
+## 2026-10-28 (claude) — API Python 의존성 uv.lock 전용 설치 (브랜치 `ci/uv-locked`)
+
+- 바뀐 것: `api.yml`이 `uv sync --locked --extra dev`(uv 0.11.21)로, API 이미지가 ETL과 같은 `uv export --locked` → `pip --no-deps` 경로로 설치한다.
+  `apps/api/uv.lock`은 배포 컨테이너 수준으로 한 번 `uv lock --upgrade`했다. 주간 `uv-lock-refresh` workflow가 갱신 브랜치를 민다(PR은 사람이).
+- 다음 한 작업: 머지 뒤 첫 주간 갱신 브랜치를 PR로 열어 CI로 확인. 운영 이미지는 다음 핀 회전에서 같은 버전으로 다시 빌드된다(배포는 이 작업 범위 밖).
+
 ## 2026-10-27 (claude) — Common 최신 main 채택 (브랜치 `chore/common-latest-pinvi`, PR #606)
 
 - 바뀐 것: API·ETL Common Python 핀 → `c289b4624c8640eb918cc915803e72ae754e58fb`(두 uv.lock은 그 source만), Web `@kor-travel/ui` dev.6 → 정규 dev.9

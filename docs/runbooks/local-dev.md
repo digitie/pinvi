@@ -148,10 +148,9 @@ docker buildx ls
 
 ```bash
 cd /mnt/f/dev/pinvi-codex
-uv venv apps/api/.venv --python 3.12
+# uv.lock에서만 설치한다(uv 0.11.21, CI와 같은 명령) — docs/dev-environment.md "Python 의존성 — uv.lock"
+(cd apps/api && UV_PYTHON=3.12 uv sync --locked --extra dev)
 source apps/api/.venv/bin/activate
-uv pip install -e "apps/api[dev]"
-uv pip install "gdal==$(gdal-config --version)"
 
 # kor-travel-map은 별도 sibling 저장소에서 실행 (API/Admin API 12701)
 # Pinvi는 .env의 PINVI_KOR_TRAVEL_MAP_API_BASE_URL로 연결
@@ -274,8 +273,7 @@ psql -h localhost -p 5432 -U pinvi -d pinvi
 
 ```bash
 cd /mnt/f/dev/pinvi-codex/apps/etl
-uv venv .venv --python 3.12
-uv pip install -e .
+UV_PYTHON=3.12 uv sync --locked --extra dev   # uv.lock에서만(uv 0.11.21)
 
 # Dagster dev (UI + daemon)
 uv run dagster dev --host 0.0.0.0 --port 12802   # http://localhost:12802

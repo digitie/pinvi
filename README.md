@@ -107,8 +107,8 @@ cd /mnt/f/dev/pinvi-codex
 # 시스템 의존성
 sudo apt install -y libgdal-dev gdal-bin libpq-dev libgeos-dev libproj-dev
 
-# 백엔드 (uv 권장)
-uv venv && uv pip install -e "apps/api[dev]"
+# 백엔드 — uv 0.11.21로 uv.lock에서만 설치 (CI·이미지와 같은 버전)
+(cd apps/api && uv sync --locked --extra dev)
 # kor-travel-map은 별도 프로그램으로 실행 (API/Admin API 12701)
 
 # 프론트엔드 / API / Dagster dev server

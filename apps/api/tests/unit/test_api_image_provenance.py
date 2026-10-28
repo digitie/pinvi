@@ -500,7 +500,9 @@ def test_api_image_installs_console_scripts_after_copying_app_source() -> None:
     dockerfile = (ROOT / "apps/api/Dockerfile").read_text(encoding="utf-8")
 
     source_copy = dockerfile.index("COPY apps/api/app ./app")
-    project_install = dockerfile.index("RUN pip install --no-deps -e .")
+    project_install = dockerfile.index(
+        "RUN pip install --no-deps --build-constraint /tmp/build-constraints.txt -e ."
+    )
 
     assert source_copy < project_install
 

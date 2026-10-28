@@ -152,17 +152,37 @@ gdal-config --version
 ```bash
 cd /mnt/f/dev/pinvi-codex
 
-# Python
+# Python — uv.lock에서만 설치한다(아래 "Python 의존성 — uv.lock")
 cd apps/api
-uv venv .venv --python 3.12
+UV_PYTHON=3.12 uv sync --locked --extra dev
 . .venv/bin/activate
-uv pip install -e ".[dev]"
-uv pip install "gdal==$(gdal-config --version)"
 
 # Node — npm 11이 필요하다 (아래 참고)
 cd /mnt/f/dev/pinvi-codex
 npm install
 ```
+
+### Python 의존성 — uv.lock
+
+`apps/api`·`apps/etl`의 Python 의존성은 각 `uv.lock`이 정본이다. CI(`api.yml` `uv sync --locked`,
+`etl.yml` `uv export --locked`)와 두 Docker 이미지(`uv export --locked` → `pip install --no-deps`)
+모두 lock에서만 설치하므로, upstream 릴리스가 코드 변경 없이 CI나 이미지를 바꾸지 않는다
+(2026-10-27 pytest 9.2.0이 CI를 깬 일 — #609 — 이 그 반대 경우였다).
+
+- **uv는 0.11.21 하나다.** 두 `pyproject.toml`의 `[tool.uv] required-version`이 다른 버전을
+  거부한다(`uv self update 0.11.21` 또는 `pip install uv==0.11.21`).
+- **pyproject 의존성을 바꾸면 같은 커밋에 lock도 갱신한다** — `uv lock`(필요한 것만 움직인다).
+  잊으면 `--locked`가 CI·이미지 빌드를 실패시킨다.
+- **하나만 올릴 때**: `uv lock --upgrade-package <pkg>[==<ver>]`.
+- **전부 올릴 때(정기)**: `uv-lock-refresh` workflow가 매주 월요일(KST) `uv lock --upgrade`를 돌려
+  `deps/uv-lock-refresh` 브랜치를 민다(수동: Actions → uv-lock-refresh → Run workflow). ETL의
+  Dagster 계열은 공유 Dagster host보다 앞서면 안 되므로 그 workflow가 현재 버전에 붙잡아 둔다.
+  Actions는 이 저장소에서 PR을 만들 수 없으므로 PR은 사람이 연다 —
+  `gh pr create --base main --head deps/uv-lock-refresh --fill`. 사람이 연 PR이라 전체 CI가 돈다.
+  workflow는 이 브랜치를 매번 **강제로** 다시 민다 — 갱신 PR에 손으로 고친 커밋은 다음 실행에서 사라지므로,
+  고칠 것이 있으면 다른 브랜치로 옮겨 낸다. 변경이 없는 주에는 브랜치를 건드리지 않는다(옛 브랜치는 머지 후 지운다).
+  로컬에서 같은 일을 하려면 두 디렉터리에서 `uv lock --upgrade` 후(ETL은 Dagster 계열을
+  `uv lock --upgrade-package dagster==<현재 버전> ...`으로 되돌린다) 브랜치·PR로 낸다.
 
 ### npm은 11 이상이어야 한다 (T-358)
 
