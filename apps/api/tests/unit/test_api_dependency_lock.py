@@ -80,9 +80,7 @@ def test_every_image_pip_install_refuses_unlisted_packages() -> None:
     dockerfile = _uncommented(_DOCKERFILE.read_text(encoding="utf-8"))
     installs = _pip_installs(dockerfile)
     tools = [cmd for cmd in installs if " pip==" in cmd]
-    assert len(tools) == 1 and re.fullmatch(r"pip install pip==\d+\.\d+(?:\.\d+)?", tools[0]), (
-        tools
-    )
+    assert len(tools) == 1 and re.fullmatch(r"pip install pip==\d+\.\d+(?:\.\d+)?", tools[0]), tools
     app_installs = [cmd for cmd in installs if cmd != tools[0]]
     assert any(" -r " in cmd for cmd in app_installs), app_installs
     assert any(cmd.endswith(" -e .") for cmd in app_installs), app_installs

@@ -168,9 +168,7 @@ def test_wheel_build_includes_the_general_service_provenance() -> None:
         "/contracts/kor-travel-map-service-provenance-v1.json"
     )
     assert canonical_copy in dockerfile_text
-    project_install = (
-        "RUN pip install --no-deps --build-constraint /tmp/build-constraints.txt -e ."
-    )
+    project_install = "RUN pip install --no-deps --build-constraint /tmp/build-constraints.txt -e ."
     assert dockerfile_text.count(project_install) == 1
     assert dockerfile_text.index(canonical_copy) < dockerfile_text.index(project_install)
     assert "&& rm -rf /contracts /tmp/build-constraints.txt" in dockerfile_text
