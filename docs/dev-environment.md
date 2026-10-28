@@ -179,6 +179,8 @@ npm install
   Dagster 계열은 공유 Dagster host보다 앞서면 안 되므로 그 workflow가 현재 버전에 붙잡아 둔다.
   Actions는 이 저장소에서 PR을 만들 수 없으므로 PR은 사람이 연다 —
   `gh pr create --base main --head deps/uv-lock-refresh --fill`. 사람이 연 PR이라 전체 CI가 돈다.
+  workflow는 이 브랜치를 매번 **강제로** 다시 민다 — 갱신 PR에 손으로 고친 커밋은 다음 실행에서 사라지므로,
+  고칠 것이 있으면 다른 브랜치로 옮겨 낸다. 변경이 없는 주에는 브랜치를 건드리지 않는다(옛 브랜치는 머지 후 지운다).
   로컬에서 같은 일을 하려면 두 디렉터리에서 `uv lock --upgrade` 후(ETL은 Dagster 계열을
   `uv lock --upgrade-package dagster==<현재 버전> ...`으로 되돌린다) 브랜치·PR로 낸다.
 

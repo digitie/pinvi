@@ -33,8 +33,9 @@ jobs:
           ref: main
 
       # uv 버전은 api.yml·두 Dockerfile·두 pyproject `required-version`과 같다
-      # (apps/api/tests/unit/test_api_dependency_lock.py가 묶는다).
-      - uses: astral-sh/setup-uv@v10
+      # (API 쪽과 이 파일은 apps/api/tests/unit/test_api_dependency_lock.py,
+      #  ETL 쪽은 apps/etl/tests/test_dagster_version_lock.py가 묶는다).
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           version: '0.11.21'
 

@@ -35,6 +35,7 @@ on:
       - '.env.example'
       - '.github/workflows/api.yml'
       - '.github/workflows/aggregate-ci.yml'
+      - '.github/workflows/uv-lock-refresh.yml'
   push:
     branches: [main]
     paths:
@@ -70,6 +71,7 @@ on:
       - '.env.example'
       - '.github/workflows/api.yml'
       - '.github/workflows/aggregate-ci.yml'
+      - '.github/workflows/uv-lock-refresh.yml'
   # T-VN-H07D: vendored 스냅샷이 kor-travel-map main보다 뒤처졌는지 매일 비차단으로 확인한다.
   schedule:
     - cron: '17 20 * * *'
@@ -124,7 +126,7 @@ jobs:
       # (2026-10-27 pytest 9.1.1→9.2.0, #609). `--locked`는 pyproject와 lock이 어긋나면
       # 설치 전에 실패한다. uv 버전은 `pyproject.toml [tool.uv] required-version`·
       # Dockerfile의 uv 이미지 태그와 같다(`tests/unit/test_api_dependency_lock.py`가 묶는다).
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           version: '0.11.21'
           enable-cache: true
@@ -249,7 +251,7 @@ jobs:
           python-version: '3.12'
 
       # lint-typecheck-test와 같은 설치 — `uv.lock`에서만(`--locked`).
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           version: '0.11.21'
           enable-cache: true

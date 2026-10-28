@@ -6,7 +6,7 @@
 - **목록**: Python 설치 지점은 `api.yml` 두 job(lint-typecheck-test·integration-test 4 shard), `apps/api/Dockerfile`,
   `etl.yml` sanity, `apps/etl/Dockerfile`, 로컬 문서(README·SKILL·dev-environment·runbooks/local-dev·runbooks/etl)다.
   ETL은 09-29에 이미 `uv export --locked` 경로로 닫혀 있어 그대로 두었다(이미지와 같은 경로를 일부러 택한 설계). 두 lock 모두 dev extra를 담는다.
-- **CI**: `astral-sh/setup-uv@v10`(uv 0.11.21) + `uv sync --locked --extra dev`, uv 캐시는 `apps/api/uv.lock`로 키. pip 캐시 제거.
+- **CI**: `astral-sh/setup-uv@v10.3.2`(uv 0.11.21; 떠 있는 major 태그 `v10`은 없다) + `uv sync --locked --extra dev`, uv 캐시는 `apps/api/uv.lock`로 키. pip 캐시 제거.
   venv에 pip가 없으므로 wheel 검증 단계는 `uv build --wheel` + lock 런타임 목록(dev 제외)만 든 검증 venv로 바꿨다.
 - **이미지**: ETL과 같은 형태 — 다이제스트 고정 uv 이미지에서 `uv export --locked --no-dev` → `pip==26.2.1` →
   `pip install --no-deps --build-constraint` → 소스 복사 뒤 `-e .` → `pip check`. 새 `apps/api/build-constraints.txt`가 hatchling 계열을 고정한다.
@@ -16,7 +16,9 @@
 - **정기 갱신**: `uv-lock-refresh.yml`(매주 월 06:41 KST + 수동)이 두 lock을 `uv lock --upgrade`하고 ETL Dagster 계열은 현재 버전에 붙잡아
   `deps/uv-lock-refresh` 브랜치를 민다. Actions는 이 저장소에서 PR을 만들 수 없어 PR은 사람이 연다(그래야 CI도 돈다). n150 모의 실행에서 Dagster 고정 확인.
 - **결박**: `tests/unit/test_api_dependency_lock.py`(6건) — 이미지 lock 설치·`--no-deps`/build constraint·CI `uv sync --locked` 두 곳·
-  uv 버전 단일(두 pyproject `required-version`, Dockerfile, api.yml, 갱신 workflow).
+  uv 버전 단일(API pyproject `required-version`, Dockerfile, api.yml, 갱신 workflow — 갱신 workflow는 api.yml 트리거·aggregate 게이트에 추가).
+- **남긴 것**: CI의 `uv sync`가 editable 프로젝트·git 의존성을 빌드하는 hatchling은 고정하지 않았다(이미지·wheel 검증은 `build-constraints.txt`로 고정).
+  고정하려면 `[tool.uv] build-constraint-dependencies`인데 lock manifest가 바뀌므로 별도 작업으로 둔다.
 - **검증(N150)**: lock `--locked` 신선(api·etl). 테스트 수집 unit 1818→1824(+6 신규)·integration 763→763. 잠긴 환경에서 ruff·format·`mypy --strict` 254 files,
   unit 1814 PASS/9 SKIP·1 FAIL — 그 1건은 호스트에 `pg_dump`가 없는 환경 실패(main floating 환경에서도 같음). 이미지 빌드 후 `pip freeze` = lock export(win32 전용 colorama 제외).
 

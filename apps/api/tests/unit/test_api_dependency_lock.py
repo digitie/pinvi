@@ -25,7 +25,6 @@ _BUILD_CONSTRAINTS = _API_ROOT / "build-constraints.txt"
 _WORKFLOWS = _REPO_ROOT / ".github" / "workflows"
 _API_WORKFLOW = _WORKFLOWS / "api.yml"
 _REFRESH_WORKFLOW = _WORKFLOWS / "uv-lock-refresh.yml"
-_ETL_PYPROJECT = _REPO_ROOT / "apps" / "etl" / "pyproject.toml"
 
 
 def _uncommented(text: str) -> str:
@@ -101,8 +100,9 @@ def test_ci_installs_only_with_uv_sync_locked() -> None:
 
 def test_uv_is_one_version_everywhere() -> None:
     """lock을 만들고 푸는 uv가 pyproject·이미지·CI·갱신 workflow에서 같아야 한다."""
+    # apps/etl의 같은 결박은 apps/etl/tests/test_dagster_version_lock.py가 맡는다 — 여기서
+    # ETL 파일을 읽으면 그 파일만 바뀐 PR에서 api.yml이 돌지 않아 결박이 늦게 빨개진다.
     version = _required_uv_version(_PYPROJECT)
-    assert _required_uv_version(_ETL_PYPROJECT) == version
 
     image = re.search(
         r"^FROM ghcr\.io/astral-sh/uv:([^@\s]+)@sha256:",
