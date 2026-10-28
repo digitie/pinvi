@@ -118,12 +118,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: pip
 
-      - name: Install dependencies
+      # 의존성은 `uv.lock`에서만 온다. 종전 `pip install -e ".[dev]"`는 pyproject 하한만 보고
+      # 실행 시점 PyPI 최신을 받아, 코드 변경 없이 upstream 릴리스 하나로 CI가 빨개졌다
+      # (2026-10-27 pytest 9.1.1→9.2.0, #609). `--locked`는 pyproject와 lock이 어긋나면
+      # 설치 전에 실패한다. uv 버전은 `pyproject.toml [tool.uv] required-version`·
+      # Dockerfile의 uv 이미지 태그와 같다(`tests/unit/test_api_dependency_lock.py`가 묶는다).
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: '0.11.21'
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+
+      - name: Install dependencies (uv sync --locked)
+        env:
+          UV_PYTHON: '3.12'
+          UV_PYTHON_DOWNLOADS: never
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          uv sync --locked --extra dev
+          echo "VIRTUAL_ENV=$PWD/.venv" >> "$GITHUB_ENV"
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: ruff check
         run: ruff check .
@@ -175,10 +189,15 @@ jobs:
       - name: wheel install resolves the packaged Map service provenance
         run: |
           rm -rf /tmp/pinvi-api-wheel /tmp/pinvi-api-wheel-verify
-          mkdir -p /tmp/pinvi-api-wheel
-          python -m pip wheel --no-deps --wheel-dir /tmp/pinvi-api-wheel .
-          python -m venv --system-site-packages /tmp/pinvi-api-wheel-verify
-          /tmp/pinvi-api-wheel-verify/bin/pip install --no-deps --force-reinstall /tmp/pinvi-api-wheel/*.whl
+          # uv venv에는 pip가 없다. wheel은 uv build로 만들고, 검증 venv에는 lock의 런타임
+          # 의존성(dev 제외)과 그 wheel만 넣는다 — 이미지와 같은 설치 목록이다.
+          uv build --wheel --build-constraint build-constraints.txt --out-dir /tmp/pinvi-api-wheel .
+          uv export --locked --no-dev --no-emit-project --no-hashes \
+            --format requirements-txt --output-file "$RUNNER_TEMP/requirements.runtime.txt"
+          uv venv --python "$pythonLocation/bin/python" /tmp/pinvi-api-wheel-verify
+          uv pip install --python /tmp/pinvi-api-wheel-verify/bin/python --no-deps \
+            --build-constraint build-constraints.txt \
+            -r "$RUNNER_TEMP/requirements.runtime.txt" /tmp/pinvi-api-wheel/*.whl
           (
             cd /tmp
             /tmp/pinvi-api-wheel-verify/bin/python - <<'PY'
@@ -228,12 +247,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: pip
 
-      - name: Install dependencies
+      # lint-typecheck-test와 같은 설치 — `uv.lock`에서만(`--locked`).
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: '0.11.21'
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+
+      - name: Install dependencies (uv sync --locked)
+        env:
+          UV_PYTHON: '3.12'
+          UV_PYTHON_DOWNLOADS: never
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          uv sync --locked --extra dev
+          echo "VIRTUAL_ENV=$PWD/.venv" >> "$GITHUB_ENV"
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: pytest (integration, shard ${{ matrix.group }}/4)
         env:

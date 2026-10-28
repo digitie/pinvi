@@ -57,8 +57,8 @@
 cd /mnt/f/dev/pinvi-claude                            # Linux git/source-of-truth worktree
 sudo apt install -y libgdal-dev gdal-bin libpq-dev          # 시스템 의존성
 
-# 백엔드 (uv 권장)
-uv venv && uv pip install -e "apps/api[dev]"
+# 백엔드 — uv 0.11.21로 uv.lock에서만 설치 (CI·이미지와 같은 버전)
+(cd apps/api && uv sync --locked --extra dev)
 
 # 프론트
 npm install

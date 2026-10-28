@@ -168,10 +168,12 @@ def test_wheel_build_includes_the_general_service_provenance() -> None:
         "/contracts/kor-travel-map-service-provenance-v1.json"
     )
     assert canonical_copy in dockerfile_text
-    assert dockerfile_text.index(canonical_copy) < dockerfile_text.index(
-        "RUN pip install --upgrade pip && pip install -e ."
+    project_install = (
+        "RUN pip install --no-deps --build-constraint /tmp/build-constraints.txt -e ."
     )
-    assert "RUN pip install --no-deps -e . && rm -rf /contracts" in dockerfile_text
+    assert dockerfile_text.count(project_install) == 1
+    assert dockerfile_text.index(canonical_copy) < dockerfile_text.index(project_install)
+    assert "&& rm -rf /contracts /tmp/build-constraints.txt" in dockerfile_text
 
 
 def test_c6c_fixture_contract_is_pinned_but_not_a_pinvi_runtime_scope() -> None:

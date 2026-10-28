@@ -342,8 +342,7 @@ KST 강제. import 시점 DB / 네트워크 접근 X.
 
 ```bash
 cd ~/pinvi-workspaces/pinvi-codex/apps/etl
-uv venv .venv --python 3.12
-uv pip install -e .
+UV_PYTHON=3.12 uv sync --locked --extra dev   # uv.lock에서만(uv 0.11.21)
 uv run dagster dev --host 0.0.0.0 --port 12802   # UI + daemon http://localhost:12802
 ```
 
@@ -521,7 +520,7 @@ retry 소진된 마지막 시도에서만 발송 (`RetryPolicy(max_retries=3)` �
 
 | 증상                                 | 원인                           | 해결                                        |
 | ------------------------------------ | ------------------------------ | ------------------------------------------- |
-| `dagster dev` 시작 안 됨             | 의존성 누락                    | `uv pip install -e .` 후 pyproject 확인     |
+| `dagster dev` 시작 안 됨             | 의존성 누락                    | `uv sync --locked --extra dev` 후 pyproject 확인 |
 | Schedule이 cron에 안 맞춰 실행       | timezone 미설정                | `execution_timezone="Asia/Seoul"` 명시      |
 | Asset 실패 무한 재시도               | `RetryPolicy` 미설정           | 명시 + Sentry 알림                          |
 | `import time DB/network access` 경고 | `definitions.py`에서 직접 호출 | resource로 분리                             |
