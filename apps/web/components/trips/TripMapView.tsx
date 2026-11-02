@@ -266,6 +266,8 @@ export function TripMapView({
     (map: MapLibreMap) => {
       lastFitPointsRef.current = points;
       lastFitWithPanelRef.current = transportVisibleRef.current;
+      // 맞춤이 시점을 새로 정했다 — 그 전의 사용자 이동은 더는 지킬 시점이 아니다.
+      userMovedRef.current = false;
       const bounds = pointsBounds(points);
       if (!bounds) return;
       // 위쪽 여백은 지도 위 장소 검색 줄 아래로 — 북쪽 핀이 그 밑에 숨지 않게. 여백은 핀
@@ -280,8 +282,11 @@ export function TripMapView({
         // 핀 하나는 가운데에 두되, 위·아래 여백 차이의 절반만큼 내려 검색 줄과 겹치지 않게. 교통
         // 패널이 가운데 열까지 덮으면(모바일) 패널 아래를 기준으로 한다.
         const centerX = container.left + container.width / 2;
+        const half = TRIP_MAP_MARKER_SIZE / 2;
+        const panelCoversCenter =
+          panel != null && panel.left < centerX + half && panel.right > centerX - half;
         const top =
-          panel && panel.left < centerX + TRIP_MAP_MARKER_SIZE / 2
+          panel && panelCoversCenter
             ? Math.max(padding.top, fitPaddingForOverlay(container, panel, TRIP_MAP_PIN_HEIGHT).top)
             : padding.top;
         map.flyTo({
@@ -412,6 +417,8 @@ export function TripMapView({
   // 외부에서 POI 를 선택하면 해당 위치로 이동.
   useEffect(() => {
     if (selected && mapRef.current) {
+      // 사용자가 고른 장소로 가는 이동 — 늦게 나타난 교통 패널의 재맞춤이 되돌리지 않게.
+      userMovedRef.current = true;
       mapRef.current.flyTo({ center: [selected.lon, selected.lat] });
     }
   }, [selected]);
@@ -550,11 +557,11 @@ export function TripMapView({
           onLoad={handleLoad}
           onMoveEnd={(event) => {
             // 사용자가 끌거나 휠로 움직인 것(originalEvent 있음) — 패널이 늦게 나타나도 다시 맞추지 않는다.
-            if ('originalEvent' in event && event.originalEvent) userMovedRef.current = true;
+            if (event.originalEvent) userMovedRef.current = true;
             handleViewportChange(event.target as MapLibreMap);
           }}
           onZoomEnd={(event) => {
-            if ('originalEvent' in event && event.originalEvent) userMovedRef.current = true;
+            if (event.originalEvent) userMovedRef.current = true;
             handleViewportChange(event.target as MapLibreMap);
           }}
           onContextMenu={
