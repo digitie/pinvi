@@ -742,6 +742,27 @@ async def test_read_timeout_is_not_retried() -> None:
     await client.aclose()
 
 
+async def test_card_scope_counts_short_deadline_timeouts_so_the_circuit_opens() -> None:
+    """리뷰: 단건 카드 예산(≈3.9 s)은 read(10 s)의 절반보다 짧아 deadline에 깎인 timeout이 '소진'으로
+    분류됐다 — 응답하지 않는 피호출자를 카드 트래픽으로는 영영 세지 못했다. 카드 범위는 센다."""
+    read_waits: list[float] = []
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=httpx.MockTransport(_hanging_handler(read_waits)),
+        timeout=httpx.Timeout(0.2, connect=0.2),
+    )
+    client = KorTravelWeatherClient(http, max_attempts=3, backoff_base_seconds=0.0)
+    loop = asyncio.get_running_loop()
+    for _ in range(3):
+        with kor_travel_weather_call_deadline(loop.time() + 0.05, count_deadline_timeouts=True):
+            with pytest.raises(KorTravelWeatherUnavailable):
+                await client.latest("loc-1")
+    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+        await client.latest("loc-1")
+    assert len(read_waits) == 3
+    await client.aclose()
+
+
 async def test_connect_failure_and_5xx_are_still_retried() -> None:
     attempts = {"connect": 0, "5xx": 0}
 

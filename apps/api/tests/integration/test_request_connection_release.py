@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -84,6 +85,87 @@ class _TransactionProbeFeatureClient:
                 ),
             )
         }
+
+
+async def test_release_keeps_transaction_when_writes_were_flushed(session_factory) -> None:  # type: ignore[no-untyped-def]
+    """리뷰: flush된 쓰기는 new/dirty로 안 보인다 — 그때 커밋하면 호출자의 커밋 시점을 앞당긴다."""
+    from app.db.session import release_read_connection
+    from app.models.user import User
+
+    user_id = uuid.uuid4()
+    async with session_factory() as db:
+        db.add(
+            User(
+                user_id=user_id,
+                email=f"flushed_{uuid.uuid4().hex[:8]}@pinvi.test",
+                status="active",
+                email_verified_at=datetime.now(UTC),
+            )
+        )
+        await db.flush()
+        await release_read_connection(db)
+        assert db.in_transaction() is True
+        await db.rollback()
+
+    async with session_factory() as db:
+        assert await db.get(User, user_id) is None
+
+
+class _ProbeWeatherClient:
+    """resolve·latest가 불리는 순간 세션이 트랜잭션 안인지 기록한다."""
+
+    def __init__(self, db: AsyncSession) -> None:
+        self._db = db
+        self.in_transaction: dict[str, bool] = {}
+
+    async def resolve(self, *, lat: float, lon: float, radius_km: float | None = None) -> Any:
+        from app.clients.kor_travel_weather import (
+            CoordinateRequestOut,
+            LocationOut,
+            ResolvedWeatherOut,
+        )
+
+        self.in_transaction["resolve"] = self._db.in_transaction()
+        location = LocationOut(
+            location_id="loc-release", name="안동", latitude=lat, longitude=lon, enabled=True
+        )
+        return ResolvedWeatherOut(
+            requested=CoordinateRequestOut(latitude=lat, longitude=lon),
+            location=location,
+            distance_km=0.1,
+            measurement_point=None,
+            source_locations=(location,),
+        )
+
+    async def latest(self, location_id: str, *, limit: int | None = None) -> tuple[Any, ...]:
+        self.in_transaction["latest"] = self._db.in_transaction()
+        return ()
+
+    async def forecast(self, location_id: str, **_: Any) -> tuple[Any, ...]:
+        self.in_transaction["forecast"] = self._db.in_transaction()
+        return ()
+
+
+async def test_weather_card_ends_read_transaction_before_weather_calls(session_factory) -> None:  # type: ignore[no-untyped-def]
+    """리뷰 M1: 캐시 조회(db.get)가 연 트랜잭션이 /resolve·latest·forecast 동안 커넥션을 쥐지 않는다."""
+    from app.services.weather_card import resolve_and_collect_deduped_values
+
+    feature_id = f"place:wx{uuid.uuid4().hex[:8]}@raw"
+    for attempt in ("miss", "hit"):
+        async with session_factory() as db:
+            client = _ProbeWeatherClient(db)
+            await resolve_and_collect_deduped_values(
+                db,
+                feature_id=feature_id,
+                lat=36.728,
+                lon=128.84,
+                asof=None,
+                weather_client=client,  # type: ignore[arg-type]
+            )
+        if attempt == "miss":
+            assert client.in_transaction.get("resolve") is False
+        assert client.in_transaction.get("latest") is False, attempt
+        assert client.in_transaction.get("forecast") is False, attempt
 
 
 async def test_trip_view_ends_read_transaction_before_map_call(session_factory) -> None:  # type: ignore[no-untyped-def]

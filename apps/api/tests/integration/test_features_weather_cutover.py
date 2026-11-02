@@ -499,7 +499,8 @@ async def test_slow_weather_card_is_bounded_and_read_timeout_not_retried(
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["data"]["metrics"] == []
-    assert loop.time() - started < 5.0
+    # 예산 4 s + ASGI·인증·DB 여유(부하 걸린 runner에서도) — 예산이 없던 때는 ≈31 s였다.
+    assert loop.time() - started < 4.0 + 2.0
     assert transport.calls == 1
 
 
