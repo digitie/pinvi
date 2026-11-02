@@ -763,7 +763,8 @@ class KorTravelWeatherClient:
         endpoint: str,
         params: Mapping[str, Any] | None = None,
     ) -> httpx.Response:
-        """transient(타임아웃/연결/5xx) 시 지수 백오프 재시도.
+        """transient 실패 중 **연결 실패(연결 거부·connect timeout)·5xx·그 밖의 전송 오류**만 지수 백오프로
+        재시도한다. 연결 뒤의 timeout(read·write·pool·attempt 전체)은 재시도하지 않는다(2026-11-02).
 
         호출자 deadline(`kor_travel_weather_call_deadline`)이 있으면: attempt마다 timeout을 남은
         시간으로 깎고 attempt 전체를 `asyncio.timeout`으로 묶는다; backoff가 남은 시간 이상이면 자지
@@ -787,6 +788,10 @@ class KorTravelWeatherClient:
             remaining: float | None = None
             applied: httpx.Timeout | None = None
             request_kwargs: dict[str, Any] = {}
+            # 연결은 됐는데 응답이 늦어 난 timeout(read·write·pool·attempt 전체)은 재시도하지 않는다 —
+            # 2026-11-02 점검: 단건 카드가 read 10 s x 3회 + backoff ≈ 31 s를 붙잡았다. 다시 보내도 같은
+            # 피호출자가 같은 만큼 느리다. 연결 실패·5xx는 빨리 끝나므로 계속 재시도한다.
+            retry_allowed = True
             if scope is not None:
                 remaining = scope.deadline - loop.time()
                 if remaining <= 0:
@@ -830,6 +835,7 @@ class KorTravelWeatherClient:
                     last = KorTravelWeatherUnavailable(
                         f"kor-travel-weather 요청 실패({path}): {exc!r}"
                     )
+                retry_allowed = isinstance(exc, httpx.ConnectTimeout)
             except httpx.ConnectError as exc:
                 last = KorTravelWeatherConnectFailed(
                     f"kor-travel-weather 연결 실패({path}): {exc!r}"
@@ -843,6 +849,8 @@ class KorTravelWeatherClient:
                     )
                 else:
                     return resp
+            if not retry_allowed:
+                break
             if attempt + 1 < self._max_attempts:
                 delay = self._backoff_base_seconds * (2**attempt)
                 if scope is not None and scope.deadline - loop.time() <= delay:

@@ -50,6 +50,7 @@ from app.clients.kor_travel_weather import (
     KorTravelWeatherClient,
     KorTravelWeatherError,
     WeatherValueOut,
+    kor_travel_weather_call_deadline,
 )
 from app.schemas.feature import FeatureWeatherCard
 from app.services.weather_location_resolver import (
@@ -70,6 +71,8 @@ from app.services.weather_metrics import (
 
 logger = logging.getLogger(__name__)
 _SEOUL = ZoneInfo("Asia/Seoul")
+#: 직접 경로 단건 카드 예산(Map 경로 기본 5 s보다 짧게 — 사용자가 마커를 고른 뒤 기다리는 시간).
+DIRECT_CARD_BUDGET_SECONDS = 4.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,10 +123,15 @@ async def resolve_and_collect_deduped_values(
     lon: float,
     asof: datetime | None,
     weather_client: KorTravelWeatherClient,
+    budget_seconds: float = DIRECT_CARD_BUDGET_SECONDS,
 ) -> tuple[list[WeatherValueOut], datetime | None]:
     """`feature_id`의 좌표로 location을 해석하고 사실을 모아 dedupe한다 — 단건(T-362)과
     Admin(T-364) weather 카드 조립이 공유하는 pipeline. asof 축소·location 해석 실패
     (관측소 없음, 피호출자 `Unavailable`)·사실 0건은 전부 빈 리스트로 뭉뚱그린다(호출자가 각자의 "빈 카드" 셰입으로 투영).
+
+    요청 하나는 `budget_seconds` 안에 끝난다 — 넘기면 빈 카드다(2026-11-02 점검: 예산이 없어 read
+    10 s x 3회 + backoff ≈ 31 s를 붙잡았다). client 호출 deadline을 같은 예산으로 걸어 attempt
+    timeout이 바깥 취소보다 먼저 나게 한다(회로차단이 그 실패를 센다 — trip view와 같은 방식).
 
     반환: `(deduped_values, latest_known_at)`. 빈 값이면 `latest_known_at`도 `None`.
     """
@@ -134,6 +142,35 @@ async def resolve_and_collect_deduped_values(
         # 대상 서비스 보존(2일) 밖이면 어차피 no_data이므로 여기서 먼저 걸러낸다.
         return [], None
 
+    deadline = asyncio.get_running_loop().time() + budget_seconds
+    try:
+        with kor_travel_weather_call_deadline(deadline - min(0.1, budget_seconds / 10)):
+            async with asyncio.timeout_at(deadline):
+                return await _collect_direct(
+                    db,
+                    feature_id=feature_id,
+                    lat=lat,
+                    lon=lon,
+                    window=window,
+                    weather_client=weather_client,
+                )
+    except TimeoutError:
+        logger.warning(
+            "weather_card.budget_exceeded — 빈 카드(장애, no_data 아님)",
+            extra={"feature_id": feature_id, "budget_seconds": budget_seconds},
+        )
+        return [], None
+
+
+async def _collect_direct(
+    db: AsyncSession,
+    *,
+    feature_id: str,
+    lat: float,
+    lon: float,
+    window: _AsofWindow,
+    weather_client: KorTravelWeatherClient,
+) -> tuple[list[WeatherValueOut], datetime | None]:
     try:
         resolution = await resolve_weather_location(
             db, feature_id=feature_id, lat=lat, lon=lon, client=weather_client
