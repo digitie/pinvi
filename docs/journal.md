@@ -1,3 +1,23 @@
+## 2026-11-02 (claude) — prod live e2e(봉화·영주·안동 3박4일)와 결함 수정 #611–#615
+
+소유자 요청: 운영 웹에서 실제 계정(test 사용자)으로 trip을 만들고 날씨·일출·POI 상세·동선을 화면으로 검증. N150 Playwright(Chromium)로
+로그인→trip 생성(11/05–11/08)→POI 4곳(영월 고씨굴·영주 소수서원·안동 도산서원·안동하회마을)→동선 최적화→일자별 패널→상세 모달→모바일.
+
+- **확인된 정상**: 일출·일몰(일자 ETL 20분 주기 채움)이 NOAA 계산과 ±1분 — 11/05 고씨굴 06:54/17:25 … 11/08 하회마을 06:56/17:23.
+  동선 최적화(2-opt, 일자 내)는 하회→도산→소수→고씨굴 89.1km(기존 148.6km, 40% 단축) — 순서는 타당, 방향(출발지)은 지정 수단이 없다.
+- **고친 결함**(모두 failing-first + 적대 리뷰 + CI 후 머지):
+  - #611 Map batch item `feature_uuid`·weather resolve `alert_scope_unverified`(additive)를 정확-집합 검사가 거부 → 모든 POI `unverified`·날씨 `unavailable`.
+  - #612 웹이 401에서 곧바로 /login — access 10분이라 로그인 10분 뒤 튕김. cookie 갱신 single-flight(탭 간 Web Locks) + 1회 재시도.
+  - #613 trip 지도 첫 화면 핀 0개(vworld-map-web ClusterLayer가 지나간 `load`를 기다림 → upstream #29로 재vendor), 교통 패널이
+    검색창을 덮음, maplibre worker URL이 webpack에서 `file://`로 굳어 "Worker failed to load"(정적 복사 + `setWorkerUrl`).
+  - #614 검색·상세가 카테고리 코드(`02010100`)를 그대로 보임 → `category_label`, geo v2 주소 결과 0건(중첩 셰입), 2글자 검색 16초
+    (geo 504 × 3회 재시도·순차) → 동시·1회·3초, 상세 카드가 `phones[]`·`facility_info`·`legal`을 못 읽음.
+  - #615 장소 검색 지역 편향(여행 범위→지도 화면, 순서만), 장소 없는 날의 일출 안내 문구.
+- **운영·데이터(코드 아님)**: VWorld 키 만료로 바탕지도 공백(당일 교체됨), weather 직접 경로 resolve 12–16초(예산 10초) — Map REST 경로
+  전환 예정, Map 검색 순위·주차장 이름·하회마을 국가유산 누락·별칭 부재는 Map 쪽 작업으로 넘겼다. 남은 envelope 정확-집합 검사 3곳은 #616.
+- **검증 함정**: N150 Playwright로 운영을 칠 때 테스트 계정 비밀번호는 root 0600 파일에서 원격 스크립트 안에서만 읽어 env로 넘겼다(로그·
+  스크린샷 무노출). refresh token은 갱신마다 회전되므로 Playwright storageState를 단계 사이에 재사용하면 세션이 끊긴다 — 매 단계 로그인.
+
 ## 2026-10-28 (claude) — API Python 의존성을 uv.lock에서만 설치 (브랜치 `ci/uv-locked`)
 
 소유자 요청: CI가 매번 `pip install -e ".[dev]"`로 의존성을 새로 풀어 upstream 릴리스 하나로 코드 변경 없이 빨개진다
