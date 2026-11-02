@@ -240,7 +240,10 @@ def test_place_card_falls_back_to_facility_info_tel_and_url() -> None:
         _map_place_dto(
             detail={
                 "phones": [],
-                "facility_info": {"tel": "054-853-0109", "url": "http://www.hahoe.or.kr/coding/main.asp"},
+                "facility_info": {
+                    "tel": "054-853-0109",
+                    "url": "http://www.hahoe.or.kr/coding/main.asp",
+                },
             }
         )
     )
@@ -251,7 +254,9 @@ def test_place_card_falls_back_to_facility_info_tel_and_url() -> None:
 
 def test_homepage_rejects_non_http_values() -> None:
     card = build_detail_card(
-        _map_place_dto(urls={"homepage": "javascript:alert(1)"}, detail={"facility_info": {"url": "ftp://x"}})
+        _map_place_dto(
+            urls={"homepage": "javascript:alert(1)"}, detail={"facility_info": {"url": "ftp://x"}}
+        )
     )
     assert card.homepage_url is None
 

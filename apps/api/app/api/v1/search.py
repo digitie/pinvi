@@ -179,9 +179,7 @@ async def unified_search(
             if isinstance(cand, dict) and (r := address_candidate_to_result(cand)) is not None
         ]
 
-    feature_results, address_results = await asyncio.gather(
-        _feature_results(), _address_results()
-    )
+    feature_results, address_results = await asyncio.gather(_feature_results(), _address_results())
     if feature_results is None:
         degraded.append("features")
     else:

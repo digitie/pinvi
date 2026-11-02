@@ -205,7 +205,9 @@ class _FakeKorTravelMapClient:
         return {"items": items, "next_cursor": None}
 
     async def categories(self, *, include_counts: bool = False) -> dict[str, Any]:
-        return {"items": [{"code": "06010000", "label": "교통 > 주차장", "path": ["교통", "주차장"]}]}
+        return {
+            "items": [{"code": "06010000", "label": "교통 > 주차장", "path": ["교통", "주차장"]}]
+        }
 
 
 class _FakeKakaoLocalClient:

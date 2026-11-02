@@ -116,7 +116,12 @@ def _geo_v2_candidate(**over: object) -> dict[str, object]:
             "road_name": "도산서원길",
         },
         "point": {"lon": 128.840297, "lat": 36.728037},
-        "region": {"sig_cd": "47170", "sido": "경상북도", "sigungu": "안동시", "legal_dong": "토계리"},
+        "region": {
+            "sig_cd": "47170",
+            "sido": "경상북도",
+            "sigungu": "안동시",
+            "legal_dong": "토계리",
+        },
         "source": "local",
         "metadata": {"score": 0.5},
     }

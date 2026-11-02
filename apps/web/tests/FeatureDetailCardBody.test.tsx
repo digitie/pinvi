@@ -37,7 +37,9 @@ describe('FeatureDetailCardBody', () => {
   });
 
   it('category_label이 없으면 카테고리 줄을 숨긴다(코드를 대신 보이지 않는다)', () => {
-    render(<FeatureDetailCardBody card={placeCard({ category: '01070300', category_label: null })} />);
+    render(
+      <FeatureDetailCardBody card={placeCard({ category: '01070300', category_label: null })} />,
+    );
     expect(screen.queryByTestId('feature-detail-card-body-category')).not.toBeInTheDocument();
     expect(screen.queryByText('01070300')).not.toBeInTheDocument();
   });
