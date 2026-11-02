@@ -412,7 +412,7 @@ async def test_get_features_tolerates_additive_upstream_fields() -> None:
                             "feature_uuid": "f_retired",
                             "row_revision": 3,
                         },
-                    ]
+                    ],
                 },
                 "meta": {},
             },
