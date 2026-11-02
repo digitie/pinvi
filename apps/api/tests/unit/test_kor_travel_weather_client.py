@@ -742,9 +742,18 @@ async def test_read_timeout_is_not_retried() -> None:
     await client.aclose()
 
 
-async def test_card_scope_counts_short_deadline_timeouts_so_the_circuit_opens() -> None:
+def _card_scope(loop: asyncio.AbstractEventLoop, budget: float) -> Any:
+    """단건 카드와 같은 범위 — `/resolve`만, 예산 절반 이상 받은 attempt만 센다."""
+    return kor_travel_weather_call_deadline(
+        loop.time() + budget,
+        count_short_timeouts_for=("resolve",),
+        min_counted_remaining=budget / 2,
+    )
+
+
+async def test_card_scope_counts_short_deadline_resolve_timeouts_so_the_circuit_opens() -> None:
     """리뷰: 단건 카드 예산(≈3.9 s)은 read(10 s)의 절반보다 짧아 deadline에 깎인 timeout이 '소진'으로
-    분류됐다 — 응답하지 않는 피호출자를 카드 트래픽으로는 영영 세지 못했다. 카드 범위는 센다."""
+    분류됐다 — 응답하지 않는 `/resolve`를 카드 트래픽으로는 영영 세지 못했다. 카드 범위는 센다."""
     read_waits: list[float] = []
     http = httpx.AsyncClient(
         base_url="http://kor-travel-weather.test",
@@ -754,12 +763,32 @@ async def test_card_scope_counts_short_deadline_timeouts_so_the_circuit_opens() 
     client = KorTravelWeatherClient(http, max_attempts=3, backoff_base_seconds=0.0)
     loop = asyncio.get_running_loop()
     for _ in range(3):
-        with kor_travel_weather_call_deadline(loop.time() + 0.05, count_deadline_timeouts=True):
+        with _card_scope(loop, 0.05):
             with pytest.raises(KorTravelWeatherUnavailable):
-                await client.latest("loc-1")
+                await client.resolve(lat=36.7, lon=128.8)
     with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
-        await client.latest("loc-1")
+        await client.resolve(lat=36.7, lon=128.8)
     assert len(read_waits) == 3
+    await client.aclose()
+
+
+async def test_card_scope_does_not_count_latest_forecast_shared_with_trip_view() -> None:
+    """재리뷰: latest·forecast 회로는 trip view와 공유한다 — 카드의 짧은 예산에서 잘린 것(느리지만 살아
+    있는 4~9 s 응답 포함)으로 그 회로를 열지 않는다."""
+    read_waits: list[float] = []
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=httpx.MockTransport(_hanging_handler(read_waits)),
+        timeout=httpx.Timeout(0.2, connect=0.2),
+    )
+    client = KorTravelWeatherClient(http, max_attempts=3, backoff_base_seconds=0.0)
+    loop = asyncio.get_running_loop()
+    for _ in range(4):
+        with _card_scope(loop, 0.05):
+            with pytest.raises(KorTravelWeatherDeadlineExhausted):
+                await client.latest("loc-1")
+    # 회로가 닫힌 채라 네 번 모두 transport에 닿았다
+    assert len(read_waits) == 4
     await client.aclose()
 
 

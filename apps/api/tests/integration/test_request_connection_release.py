@@ -111,6 +111,73 @@ async def test_release_keeps_transaction_when_writes_were_flushed(session_factor
         assert await db.get(User, user_id) is None
 
 
+async def test_flushed_writes_flag_clears_when_the_transaction_ends(session_factory) -> None:  # type: ignore[no-untyped-def]
+    """flush 표시는 그 트랜잭션에서만 — 커밋 뒤의 읽기 트랜잭션은 다시 닫혀야 한다(소유자 trip view는
+    rise/set 동기화가 flush·커밋한 뒤 view를 만든다)."""
+    from app.db.session import release_read_connection
+    from app.models.user import User
+
+    async with session_factory() as db:
+        db.add(
+            User(
+                user_id=uuid.uuid4(),
+                email=f"flag_{uuid.uuid4().hex[:8]}@pinvi.test",
+                status="active",
+                email_verified_at=datetime.now(UTC),
+            )
+        )
+        await db.flush()
+        await db.commit()
+        await db.get(User, uuid.uuid4())
+        assert db.in_transaction() is True
+        await release_read_connection(db)
+        assert db.in_transaction() is False
+
+
+async def test_weather_card_resolve_hang_opens_the_circuit(session_factory) -> None:  # type: ignore[no-untyped-def]
+    """카드 범위 배선: 예산(0.4 s)이 read(1 s)의 절반보다 짧아도 응답 없는 `/resolve`를 세서, 카드 3회 뒤엔
+    회로가 열려 4번째 카드는 weather에 닿지 않는다."""
+    import asyncio
+
+    import httpx
+
+    from app.clients.kor_travel_weather import KorTravelWeatherClient
+    from app.services.weather_card import resolve_and_collect_deduped_values
+
+    calls = {"n": 0}
+
+    async def hang(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        await asyncio.sleep(request.extensions["timeout"]["read"])
+        raise httpx.ReadTimeout("no response", request=request)
+
+    client = KorTravelWeatherClient(
+        httpx.AsyncClient(
+            base_url="http://kor-travel-weather.test",
+            transport=httpx.MockTransport(hang),
+            timeout=httpx.Timeout(1.0, connect=0.2),
+        ),
+        max_attempts=3,
+        backoff_base_seconds=0.0,
+    )
+    try:
+        for _ in range(4):
+            async with session_factory() as db:
+                values, _known = await resolve_and_collect_deduped_values(
+                    db,
+                    feature_id="place:hang@raw",
+                    lat=36.728,
+                    lon=128.84,
+                    asof=None,
+                    weather_client=client,
+                    budget_seconds=0.4,
+                )
+            assert values == []
+    finally:
+        await client.aclose()
+    assert calls["n"] == 3
+
+
 class _ProbeWeatherClient:
     """resolve·latest가 불리는 순간 세션이 트랜잭션 안인지 기록한다."""
 
