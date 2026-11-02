@@ -11,6 +11,7 @@ from fastapi import Header, HTTPException, Request, status
 
 from app.core.config import settings
 from app.core.deps import DbSession
+from app.core.redaction import sanitize_url
 from app.models.api_call_log import ApiCallLog
 from app.models.mcp_token import McpToken
 from app.services.hash_chain import sha256_hex
@@ -45,7 +46,8 @@ async def require_mcp_read(
     _enforce_rate_limit(principal)
     endpoint = request.url.path
     if request.url.query:
-        endpoint = f"{endpoint}?{request.url.query}"
+        # 외부 호출 기록과 같은 규칙으로 query 비밀값을 가린다(api_call_log는 운영자가 본다).
+        endpoint = sanitize_url(f"{endpoint}?{request.url.query}")
     token_row = await db.get(McpToken, principal.token_id)
     if token_row is not None:
         token_row.last_used_at = datetime.now(UTC)

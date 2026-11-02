@@ -1,6 +1,12 @@
 """structlog 설정 — JSON 출력 + KST timestamp.
 
 `docs/integrations/loki.md` §3.
+
+외부 호출 URL의 비밀값(kor-travel-geo `?key=`, Telegram `/bot<token>/` 등)이 stdout 로그에
+남지 않게 한다(2026-11-02 prod 점검에서 httpx INFO 줄이 geo key를 찍은 것을 확인):
+
+- httpx·httpcore 로거는 WARNING부터만 낸다(요청마다 URL을 찍는 INFO·DEBUG 줄 차단).
+- 방어선 2: root·uvicorn handler와 httpx·uvicorn 로거에 `SecretRedactingFilter`를 단다.
 """
 
 from __future__ import annotations
@@ -10,6 +16,30 @@ import sys
 from typing import cast
 
 import structlog
+
+from app.core.redaction import SecretRedactingFilter
+
+# 요청마다 전체 URL을 INFO/DEBUG로 찍는 HTTP client 로거.
+_QUIET_HTTP_LOGGERS = ("httpx", "httpcore")
+# 레코드를 직접 내는 로거(로거 단위 filter는 자식 로거에서 전파된 레코드에는 걸리지 않는다).
+_FILTERED_LOGGERS = ("httpx", "httpcore", "uvicorn", "uvicorn.access", "uvicorn.error")
+
+
+def _attach_redaction(target: logging.Logger | logging.Handler) -> None:
+    if not any(isinstance(existing, SecretRedactingFilter) for existing in target.filters):
+        target.addFilter(SecretRedactingFilter())
+
+
+def install_secret_redaction() -> None:
+    """root·uvicorn의 현재 handler와 직접 내는 로거에 비밀값 필터를 단다(멱등)."""
+
+    for handler in logging.getLogger().handlers:
+        _attach_redaction(handler)
+    for name in _FILTERED_LOGGERS:
+        named = logging.getLogger(name)
+        _attach_redaction(named)
+        for handler in named.handlers:
+            _attach_redaction(handler)
 
 
 def configure_logging(level: str = "INFO") -> None:
@@ -30,6 +60,9 @@ def configure_logging(level: str = "INFO") -> None:
         format="%(message)s",
         stream=sys.stdout,
     )
+    for name in _QUIET_HTTP_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
+    install_secret_redaction()
 
 
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:

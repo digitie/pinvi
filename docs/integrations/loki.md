@@ -148,6 +148,20 @@ JSON 출력 예시:
 }
 ```
 
+### 3.1 비밀값 가리기 (2026-11-02)
+
+prod 점검에서 httpx의 INFO 줄(`HTTP Request: POST http://…/v2/geocode?key=…`)이 kor-travel-geo 공개 API key를 컨테이너 stdout에 그대로 찍은 것을 확인했다. `api_call_log` 테이블은 이미 가리고 있었지만 stdout 로그는 가리지 않았다. 지금은 두 겹으로 막는다.
+
+- `configure_logging()`이 `httpx`·`httpcore` 로거를 WARNING부터만 내게 둔다. 요청마다 전체 URL을 찍는 줄이 나오지 않는다.
+- `app.core.redaction.SecretRedactingFilter`를 root·uvicorn handler와 `httpx`·`uvicorn.access` 로거에 단다. 가리는 대상:
+  - query 비밀값: `key`, `serviceKey`, `apiKey`, `token`, `access_token` 등. 키 집합은 `SENSITIVE_QUERY_KEYS`가 정한다.
+  - Telegram `/bot<id>:<token>/`.
+  - path 자격 증명: `/trips/{id}/shared/{token}`, `/storage/{uploads,downloads}/{token}`.
+- uvicorn access 줄은 args 튜플 모양을 유지한 채 원소만 바꾼다. `AccessFormatter`가 그 튜플을 풀어 쓰기 때문이다.
+- `api_call_log.endpoint`(`sanitize_api_call_endpoint`)와 MCP 호출 기록도 같은 모듈의 `sanitize_url`을 쓴다. 규칙은 한 곳에서만 정한다.
+
+새 외부 client가 다른 이름의 query 비밀값을 쓰면 `SENSITIVE_QUERY_KEYS`에 추가한다. 비밀값은 가능하면 header로 보낸다.
+
 ## 4. Sentry vs Loki
 
 | 용도             | Sentry         | Loki                    |

@@ -2,36 +2,22 @@
 
 from __future__ import annotations
 
-import re
 import time
 import uuid
 from collections.abc import Callable
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.redaction import sanitize_url
 from app.models.api_call_log import ApiCallLog
 
 log = structlog.get_logger("api_call")
 
 _PROVIDER_EXTENSION = "pinvi_provider"
 _REQUEST_ID_EXTENSION = "request_id"
-_SENSITIVE_QUERY_KEYS = {
-    "access_token",
-    "api_key",
-    "apikey",
-    "client_secret",
-    "key",
-    "password",
-    "secret",
-    "service_key",
-    "servicekey",
-    "token",
-}
-_TELEGRAM_BOT_TOKEN_RE = re.compile(r"/bot(\d+):[A-Za-z0-9_-]+")
 
 
 class ApiCallTracker:
@@ -100,20 +86,12 @@ def api_call_event_hooks(
 
 
 def sanitize_api_call_endpoint(url: httpx.URL | str) -> str:
-    """api_call_log endpoint에서 query secret과 Telegram bot token path를 마스킹한다."""
+    """api_call_log endpoint에서 query secret과 Telegram bot token path를 마스킹한다.
 
-    raw = str(url)
-    parts = urlsplit(raw)
-    path = _TELEGRAM_BOT_TOKEN_RE.sub(r"/bot\1:***", parts.path)
-    query_pairs = parse_qsl(parts.query, keep_blank_values=True)
-    query = urlencode(
-        [
-            (key, "***" if key.lower() in _SENSITIVE_QUERY_KEYS else value)
-            for key, value in query_pairs
-        ],
-        doseq=True,
-    )
-    return urlunsplit((parts.scheme, parts.netloc, path, query, parts.fragment))
+    규칙 정본은 `app.core.redaction`(stdout 로그 필터와 같은 키 집합).
+    """
+
+    return sanitize_url(url)
 
 
 async def _append(
