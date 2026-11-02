@@ -33,6 +33,7 @@ from app.clients.kor_travel_map_weather import create_map_weather_client
 from app.clients.kor_travel_weather import KorTravelWeatherClient
 from app.core.config import settings
 from app.core.markers import resolve_display_marker_color
+from app.db.session import release_read_connection
 from app.models.companion import TripCompanion
 from app.models.kasi import KasiSpecialDay, TripDayRiseSet
 from app.models.poi import TripDayPoi
@@ -215,6 +216,8 @@ async def build_trip_view(
         ]
         if refresh_ids:
             refresh = feature_cache.begin_refresh(refresh_ids) if use_cache else None
+            # 읽기는 끝났다 — Map 호출 동안 풀 커넥션을 쥐지 않는다(읽기 전용 view 경로).
+            await release_read_connection(db)
             try:
                 feature_batch = await kor_travel_map_client.get_features(
                     refresh_ids,

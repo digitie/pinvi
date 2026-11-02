@@ -36,3 +36,19 @@ async_session_factory = async_sessionmaker(
     expire_on_commit=False,
     class_=AsyncSession,
 )
+
+
+async def release_read_connection(db: AsyncSession) -> None:
+    """외부 HTTP 호출 전에 읽기 트랜잭션을 끝내 커넥션을 풀에 돌려준다.
+
+    2026-11-02 점검: 요청 세션은 첫 쿼리(인증 조회)부터 요청이 끝날 때까지 트랜잭션을 연 채
+    커넥션을 쥐었다. 그 사이 Map·weather 호출(수 초~수십 초)이 끼면 풀 커넥션이
+    idle-in-transaction으로 묶여, 동시 요청이 늘면 다른 엔드포인트가 풀 대기(30s)에 걸린다.
+    `expire_on_commit=False`라 이미 읽은 객체는 그대로 쓰고, 다음 쿼리는 새 트랜잭션을 연다.
+
+    ORM에 반영 전 변경(new/dirty/deleted)이 있으면 아무것도 하지 않는다 — 호출자의 커밋 시점을
+    바꾸지 않는다. 이미 flush된 쓰기는 구별할 수 없으므로 **읽기 경로에서만** 부른다.
+    """
+    if not db.in_transaction() or db.new or db.dirty or db.deleted:
+        return
+    await db.commit()
