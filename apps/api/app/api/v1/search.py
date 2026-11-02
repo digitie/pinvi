@@ -164,14 +164,16 @@ async def unified_search(
 
     async def _address_results() -> list[PlaceSearchResult] | None:
         try:
-            address_data = await kor_travel_geo.search(
-                query=q,
-                kind="address",
-                size=limit,
-                max_attempts=1,
-                attempt_timeout_seconds=_ADDRESS_SEARCH_TIMEOUT_SECONDS,
-            )
-        except KorTravelGeoError:
+            # httpx timeout은 단계(connect·read…)별 상한이라 합계가 넘칠 수 있다 — 전체를 한 번 더 묶는다.
+            async with asyncio.timeout(_ADDRESS_SEARCH_TIMEOUT_SECONDS):
+                address_data = await kor_travel_geo.search(
+                    query=q,
+                    kind="address",
+                    size=limit,
+                    max_attempts=1,
+                    attempt_timeout_seconds=_ADDRESS_SEARCH_TIMEOUT_SECONDS,
+                )
+        except (KorTravelGeoError, TimeoutError):
             return None
         return [
             r
@@ -189,11 +191,14 @@ async def unified_search(
     else:
         results.extend(address_results)
 
-    for poi in await _search_my_pois(db, user_id=user_id, q=q):
-        results.append(my_poi_to_result(poi))
+    my_pois = [my_poi_to_result(poi) for poi in await _search_my_pois(db, user_id=user_id, q=q)]
+    results.extend(my_pois)
 
-    # ── internal-first short-circuit: 내부 결과 ≥ K면 provider 미호출(§10) ──
-    if len(results) < settings.pinvi_place_search_internal_threshold:
+    # ── internal-first short-circuit: 내부 **장소** 결과 ≥ K면 provider 미호출(§10) ──
+    # 주소 후보는 세지 않는다 — "하회…길"처럼 도로명만 여러 개 맞는 검색어가 장소 0건인데도
+    # Kakao/Naver 보강을 막지 않게(주소 결과는 예전엔 매퍼 버그로 늘 0건이라 K에 들어간 적이 없다).
+    internal_place_count = len(feature_results or []) + len(my_pois)
+    if internal_place_count < settings.pinvi_place_search_internal_threshold:
         if kakao_local is not None:
             try:
                 if lat is not None and lon is not None:

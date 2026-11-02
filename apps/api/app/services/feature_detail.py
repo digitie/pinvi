@@ -71,15 +71,15 @@ def address_line(address: Any) -> str | None:
     picked = _pick(address, "road", "full", "legal", "jibun", "name")
     if picked:
         return picked
-    composed = " ".join(
-        part
-        for part in (
-            _clean(address.get("sido_name")),
-            _clean(address.get("sigungu_name")),
-            _clean(address.get("admin")),
-        )
-        if part
-    )
+    admin = _clean(address.get("admin"))
+    parts: list[str] = []
+    for region in (_clean(address.get("sido_name")), _clean(address.get("sigungu_name"))):
+        # 일부 provider(KHOA 해수욕장 등)는 `admin`에 이미 "부산광역시 해운대구" 같은 전체 이름을 둔다.
+        if region and not (admin and region in admin):
+            parts.append(region)
+    if admin:
+        parts.append(admin)
+    composed = " ".join(parts)
     if composed:
         return composed
     for key, value in address.items():
@@ -112,13 +112,25 @@ def _http_url(value: str | None) -> str | None:
     return None
 
 
+def _first_http(source: Any, *keys: str) -> str | None:
+    if not isinstance(source, dict):
+        return None
+    for key in keys:
+        url = _http_url(_clean(source.get(key)))
+        if url:
+            return url
+    return None
+
+
 def _homepage(urls: Any, detail: Any) -> str | None:
-    """`urls.homepage`(정본) → place detail `facility_info.url`(반려동반여행 등 출처가 주는 홈페이지)."""
-    picked = _http_url(_pick(urls, "homepage", "website", "url", "home"))
-    if picked:
-        return picked
+    """`urls`(정본) → place detail `facility_info.url`(반려동반여행 등 출처가 주는 홈페이지).
+
+    http(s)가 아닌 값은 키마다 건너뛴다 — 앞 키의 잘못된 값이 뒤 키의 정상 URL을 가리지 않게.
+    """
     facility = detail.get("facility_info") if isinstance(detail, dict) else None
-    return _http_url(_pick(facility, "url", "homepage"))
+    return _first_http(urls, "homepage", "website", "url", "home") or _first_http(
+        facility, "url", "homepage"
+    )
 
 
 def _coord(dto: dict[str, Any]) -> Coord | None:

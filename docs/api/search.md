@@ -61,11 +61,14 @@ GET /search?q=<검색어>&limit=<n>&lat=<위도>&lon=<경도>
 - **address 후보 매핑**: geo v2 후보 `{match_kind, address: {full}, point: {lon, lat}}`에서
   `name`=`address.full`, `match_kind=road`면 `road_address`, 그 밖이면 `address`, 좌표는 `point`.
   `address.full`이 없는 후보(`sppn` 등)는 버린다.
-- **카테고리 이름**: feature `category_label`은 Map `/v1/categories` 카탈로그(프로세스 캐시 1시간,
-  실패 시 1분)로 채운다. 모르는 코드는 상위 계층 이름, 그래도 없으면 `null` — 숫자 코드를 보이지
+- **카테고리 이름**: feature `category_label`은 Map `/v1/categories` 카탈로그로 채운다(프로세스 캐시
+  1시간·조회 예산 2초·single-flight; 만료 뒤에는 직전 값을 바로 쓰고 뒤에서 한 번 갱신, 실패하면
+  직전 정상값 유지·1분 뒤 재시도). 모르는 코드는 상위 계층 이름, 그래도 없으면 `null` — 숫자 코드를 보이지
   않는다.
-- **internal-first short-circuit**: 내부 결과 수 ≥ `PINVI_PLACE_SEARCH_INTERNAL_THRESHOLD`(K, 기본 5)
-  이면 Kakao/Naver를 **호출하지 않는다**(쿼터 방어, §쿼터).
+- **internal-first short-circuit**: 내부 **장소** 결과 수(feature + 내 POI) ≥
+  `PINVI_PLACE_SEARCH_INTERNAL_THRESHOLD`(K, 기본 5)이면 Kakao/Naver를 **호출하지 않는다**(쿼터 방어,
+  §쿼터). 주소 후보는 K에 세지 않는다 — 도로명만 여러 개 맞는 검색어가 장소 0건인데도 provider
+  보강을 막지 않게.
 - **degraded_sources**: 한 소스가 5xx/타임아웃/키 미설정/쿼터/비활성이면 해당 소스명만 담고
   나머지로 `200`을 반환한다. 검색 전체를 실패시키지 않는다. provider 비활성(`*_ENABLED=false`)도
   `kakao`/`naver`를 degraded에 넣는다.

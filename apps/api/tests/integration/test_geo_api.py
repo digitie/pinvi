@@ -521,6 +521,72 @@ async def test_unified_search_asks_geo_once_with_short_budget(
         _clear_search_clients()
 
 
+async def test_unified_search_runs_feature_and_address_sources_concurrently(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    """두 소스가 서로를 기다린다 — 순차로 돌면 둘 다 1초 안에 상대를 못 만나 실패한다."""
+    import asyncio
+
+    both_started = asyncio.Event()
+    started: set[str] = set()
+
+    def _mark(name: str) -> None:
+        started.add(name)
+        if started >= {"feature", "address"}:
+            both_started.set()
+
+    class _WaitingMap(_FakeKorTravelMapClient):
+        async def search_features(self, **kwargs: Any) -> dict[str, Any]:
+            _mark("feature")
+            await asyncio.wait_for(both_started.wait(), timeout=1.0)
+            return await super().search_features(**kwargs)
+
+    class _WaitingGeo(_FakeKorTravelGeoClient):
+        async def search(self, **kwargs: Any) -> dict[str, Any]:
+            _mark("address")
+            await asyncio.wait_for(both_started.wait(), timeout=1.0)
+            return await super().search(**kwargs)
+
+    user_id, _ = verified_user
+    _override_search_clients(_WaitingMap(item_count=5), _WaitingGeo())
+    try:
+        resp = await client.get("/search?q=하회", cookies=auth_cookies(user_id))
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert data["degraded_sources"] == []
+        assert {r["source"] for r in data["results"]} >= {"feature", "address"}
+    finally:
+        _clear_search_clients()
+
+
+async def test_unified_search_address_hits_do_not_suppress_providers(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    """K(provider 생략 기준)는 장소 결과(feature·내 POI)만 센다 — 도로명만 여러 개 맞아도 Kakao는 부른다."""
+
+    class _ManyRoads(_FakeKorTravelGeoClient):
+        async def search(self, **kwargs: Any) -> dict[str, Any]:
+            self.calls.append(("search", kwargs))
+            return {
+                "status": "ok",
+                "total": 8,
+                "candidates": [
+                    {"match_kind": "road", "address": {"full": f"하회길 {i}"}, "point": {"lon": 128.5, "lat": 36.5}}
+                    for i in range(8)
+                ],
+            }
+
+    user_id, _ = verified_user
+    kakao = _FakeKakaoLocalClient()
+    _override_search_clients(_FakeKorTravelMapClient(item_count=0), _ManyRoads(), kakao=kakao)
+    try:
+        resp = await client.get("/search?q=하회길", cookies=auth_cookies(user_id))
+        assert resp.status_code == 200, resp.text
+        assert len(kakao.calls) == 1
+    finally:
+        _clear_search_clients()
+
+
 async def test_unified_search_slow_geo_does_not_hold_feature_results(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any
 ) -> None:

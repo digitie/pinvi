@@ -295,3 +295,26 @@ def test_detail_card_carries_category_label_not_code() -> None:
     card = build_detail_card(_map_place_dto(), labels)
     assert card.category == "06010000"
     assert card.category_label == "주차장"
+
+
+def test_address_line_does_not_repeat_region_already_in_admin() -> None:
+    # KHOA 해수욕장 등은 역지오코딩이 없을 때 admin에 시도·시군구 전체 이름을 둔다.
+    assert (
+        address_line(
+            {
+                "road": None,
+                "legal": None,
+                "admin": "부산광역시 해운대구",
+                "sido_name": "부산광역시",
+                "sigungu_name": "해운대구",
+            }
+        )
+        == "부산광역시 해운대구"
+    )
+
+
+def test_homepage_skips_invalid_key_and_uses_next_http_url() -> None:
+    card = build_detail_card(
+        _map_place_dto(urls={"homepage": "javascript:alert(1)", "website": "https://ok.example"})
+    )
+    assert card.homepage_url == "https://ok.example"
