@@ -826,144 +826,149 @@ export function FeatureMapView({
             />
           </div>
 
-          <VWorldMap
-            apiKey={apiKey}
-            center={camera.center}
-            zoom={camera.zoom}
-            layerType="Base"
-            navigation
-            scale
-            geolocate={false}
-            animateCameraChanges
-            onLoad={handleMapLoad}
-            onMoveEnd={handleViewportChange}
-            onZoomEnd={handleViewportChange}
-            onContextMenu={handleContextMenu}
-            fallback={(info) => <MapFallback info={info} />}
-            loadingSkeleton={<MapLoadingSkeleton />}
-            className="h-full min-h-[360px]"
-            unsupportedTileFallback={{ label: 'VWorld tile' }}
-          >
-            <ClusterLayer
-              points={points}
-              radius={48}
-              maxZoom={15}
-              renderMarker={(point) => {
-                const mapPoint = point as MapPoint;
-                const isSelected =
-                  mapPoint.featureId != null && mapPoint.featureId === selected?.featureId;
-                return (
-                  <MakiMarker
-                    key={mapPoint.id}
-                    lngLat={mapPoint.lngLat}
-                    icon={mapPoint.icon}
-                    color={mapPoint.color}
-                    title={mapPoint.title}
-                    selected={isSelected}
-                    ariaLabel={mapPoint.title}
-                    onClick={() => handlePointClick(mapPoint)}
-                  />
-                );
-              }}
-            />
-            {/* T-368 — kor-travel-weather 직접 조회. feature와 완전히 분리된 별도 layer다. */}
-            <ClusterLayer
-              points={weatherPoints}
-              radius={48}
-              maxZoom={15}
-              renderMarker={(point) => {
-                const weatherPoint = point as WeatherMapPoint;
-                const isSelected = weatherPoint.locationId === selectedWeatherMarker?.locationId;
-                return (
-                  <WeatherMarker
-                    key={weatherPoint.id}
-                    lngLat={weatherPoint.lngLat}
-                    temperature={Math.round(weatherPoint.temperatureC)}
-                    condition={weatherPoint.condition}
-                    title={weatherPoint.title}
-                    selected={isSelected}
-                    ariaLabel={weatherPoint.title}
-                    simplifyAtZoom={isSelected ? 5 : 20}
-                    onClick={() => {
-                      setSelectedWeatherMarker(weatherPoint);
-                      // feature/weather marker 팝업은 동시에 두 개가 뜨면 안 된다(T-368).
-                      setSelected(null);
-                    }}
-                  />
-                );
-              }}
-            />
-            <TransportMarkers
-              points={transport.points}
-              selectedId={transport.selectedId}
-              onSelect={openTransportDetail}
-            />
-            {userLocation && <UserLocationMarker lngLat={userLocation} />}
-            {selected && (
-              <Popup lngLat={selected.lngLat} maxWidth="260px" closeButton={false}>
-                <div className="space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-semibold text-ink">
-                      {detail?.name ?? selected.title}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setSelected(null)}
-                      className="text-xs text-muted hover:text-ink"
-                      aria-label="닫기"
-                    >
-                      닫기
-                    </button>
+          {/* 지도는 상자를 **절대 위치로** 채운다 — 부모 높이가 min-height로만 정해지면 `h-full`이 풀리지
+              않아 360px(min-h)에서 멈췄다(2026-11-02 prod e2e: 데스크톱 지도 아래 절반 이상이 비었다).
+              absolute inset-0은 flex로 정해진 실제 상자 크기를 따른다. */}
+          <div className="absolute inset-0">
+            <VWorldMap
+              apiKey={apiKey}
+              center={camera.center}
+              zoom={camera.zoom}
+              layerType="Base"
+              navigation
+              scale
+              geolocate={false}
+              animateCameraChanges
+              onLoad={handleMapLoad}
+              onMoveEnd={handleViewportChange}
+              onZoomEnd={handleViewportChange}
+              onContextMenu={handleContextMenu}
+              fallback={(info) => <MapFallback info={info} />}
+              loadingSkeleton={<MapLoadingSkeleton />}
+              className="h-full w-full"
+              unsupportedTileFallback={{ label: 'VWorld tile' }}
+            >
+              <ClusterLayer
+                points={points}
+                radius={48}
+                maxZoom={15}
+                renderMarker={(point) => {
+                  const mapPoint = point as MapPoint;
+                  const isSelected =
+                    mapPoint.featureId != null && mapPoint.featureId === selected?.featureId;
+                  return (
+                    <MakiMarker
+                      key={mapPoint.id}
+                      lngLat={mapPoint.lngLat}
+                      icon={mapPoint.icon}
+                      color={mapPoint.color}
+                      title={mapPoint.title}
+                      selected={isSelected}
+                      ariaLabel={mapPoint.title}
+                      onClick={() => handlePointClick(mapPoint)}
+                    />
+                  );
+                }}
+              />
+              {/* T-368 — kor-travel-weather 직접 조회. feature와 완전히 분리된 별도 layer다. */}
+              <ClusterLayer
+                points={weatherPoints}
+                radius={48}
+                maxZoom={15}
+                renderMarker={(point) => {
+                  const weatherPoint = point as WeatherMapPoint;
+                  const isSelected = weatherPoint.locationId === selectedWeatherMarker?.locationId;
+                  return (
+                    <WeatherMarker
+                      key={weatherPoint.id}
+                      lngLat={weatherPoint.lngLat}
+                      temperature={Math.round(weatherPoint.temperatureC)}
+                      condition={weatherPoint.condition}
+                      title={weatherPoint.title}
+                      selected={isSelected}
+                      ariaLabel={weatherPoint.title}
+                      simplifyAtZoom={isSelected ? 5 : 20}
+                      onClick={() => {
+                        setSelectedWeatherMarker(weatherPoint);
+                        // feature/weather marker 팝업은 동시에 두 개가 뜨면 안 된다(T-368).
+                        setSelected(null);
+                      }}
+                    />
+                  );
+                }}
+              />
+              <TransportMarkers
+                points={transport.points}
+                selectedId={transport.selectedId}
+                onSelect={openTransportDetail}
+              />
+              {userLocation && <UserLocationMarker lngLat={userLocation} />}
+              {selected && (
+                <Popup lngLat={selected.lngLat} maxWidth="260px" closeButton={false}>
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-semibold text-ink">
+                        {detail?.name ?? selected.title}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setSelected(null)}
+                        className="text-xs text-muted hover:text-ink"
+                        aria-label="닫기"
+                      >
+                        닫기
+                      </button>
+                    </div>
+                    {detail?.category_label && (
+                      <p className="text-xs text-muted">{detail.category_label}</p>
+                    )}
+                    {detailAddress && <p className="text-xs text-body">{detailAddress}</p>}
+                    {currentTemp != null && (
+                      <p className="text-xs text-body">현재 기온 {currentTemp.toFixed(0)}°C</p>
+                    )}
+                    {!detail && <p className="text-xs text-muted">상세 불러오는 중…</p>}
+                    {selected.featureId && (
+                      <button
+                        type="button"
+                        onClick={() => setDetailFeatureId(selected.featureId ?? null)}
+                        data-testid="feature-map-detail-open"
+                        className="min-h-11 w-full rounded-sm bg-ink px-3 text-sm font-semibold text-canvas hover:bg-ink/90"
+                      >
+                        상세보기
+                      </button>
+                    )}
                   </div>
-                  {detail?.category_label && (
-                    <p className="text-xs text-muted">{detail.category_label}</p>
-                  )}
-                  {detailAddress && <p className="text-xs text-body">{detailAddress}</p>}
-                  {currentTemp != null && (
-                    <p className="text-xs text-body">현재 기온 {currentTemp.toFixed(0)}°C</p>
-                  )}
-                  {!detail && <p className="text-xs text-muted">상세 불러오는 중…</p>}
-                  {selected.featureId && (
-                    <button
-                      type="button"
-                      onClick={() => setDetailFeatureId(selected.featureId ?? null)}
-                      data-testid="feature-map-detail-open"
-                      className="min-h-11 w-full rounded-sm bg-ink px-3 text-sm font-semibold text-canvas hover:bg-ink/90"
-                    >
-                      상세보기
-                    </button>
-                  )}
-                </div>
-              </Popup>
-            )}
-            {/* T-368 — weather marker는 feature가 아니므로 상세보기가 없다. 값은 marker 자체
-                (`selectedWeatherMarker`)에 이미 있어 선택 시 별도 fetch가 필요 없다. */}
-            {selectedWeatherMarker && (
-              <Popup lngLat={selectedWeatherMarker.lngLat} maxWidth="220px" closeButton={false}>
-                <div className="space-y-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-semibold text-ink">{selectedWeatherMarker.title}</p>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedWeatherMarker(null)}
-                      className="text-xs text-muted hover:text-ink"
-                      aria-label="닫기"
-                    >
-                      닫기
-                    </button>
-                  </div>
-                  <p className="text-xs text-body">
-                    현재 기온 {Math.round(selectedWeatherMarker.temperatureC)}°C
-                  </p>
-                  {selectedWeatherMarker.provider && (
-                    <p className="text-xs text-muted">
-                      출처: {providerLabel(selectedWeatherMarker.provider)}
+                </Popup>
+              )}
+              {/* T-368 — weather marker는 feature가 아니므로 상세보기가 없다. 값은 marker 자체
+                  (`selectedWeatherMarker`)에 이미 있어 선택 시 별도 fetch가 필요 없다. */}
+              {selectedWeatherMarker && (
+                <Popup lngLat={selectedWeatherMarker.lngLat} maxWidth="220px" closeButton={false}>
+                  <div className="space-y-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-semibold text-ink">{selectedWeatherMarker.title}</p>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedWeatherMarker(null)}
+                        className="text-xs text-muted hover:text-ink"
+                        aria-label="닫기"
+                      >
+                        닫기
+                      </button>
+                    </div>
+                    <p className="text-xs text-body">
+                      현재 기온 {Math.round(selectedWeatherMarker.temperatureC)}°C
                     </p>
-                  )}
-                </div>
-              </Popup>
-            )}
-          </VWorldMap>
+                    {selectedWeatherMarker.provider && (
+                      <p className="text-xs text-muted">
+                        출처: {providerLabel(selectedWeatherMarker.provider)}
+                      </p>
+                    )}
+                  </div>
+                </Popup>
+              )}
+            </VWorldMap>
+          </div>
           <div className="sr-only" aria-hidden="true" data-testid="feature-map-marker-legend">
             {points.map((point) => (
               <span

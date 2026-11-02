@@ -25,6 +25,7 @@ import type { FeatureSummary } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
+import { fitPaddingForOverlay } from '@/lib/mapFitPadding';
 import { viewportSearchBias } from '@/lib/searchBias';
 import {
   featureResolutionNotice,
@@ -167,6 +168,8 @@ export function TripMapView({
   onViewportBboxChange,
 }: TripMapViewProps) {
   const mapRef = useRef<MapLibreMap | null>(null);
+  const surfaceRef = useRef<HTMLDivElement | null>(null);
+  const overlayStackRef = useRef<HTMLDivElement | null>(null);
   const featureAbortRef = useRef<AbortController | null>(null);
   const featureDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestFeatureRequestRef = useRef(0);
@@ -255,12 +258,17 @@ export function TripMapView({
         map.flyTo({ center: [only.lon, only.lat], zoom: 13 });
         return;
       }
+      // 위쪽 여백은 지도 위 오버레이(장소 검색·교통 정보) 아래로 — 북쪽 핀이 그 밑에 숨지 않게.
+      const padding = fitPaddingForOverlay(
+        surfaceRef.current?.getBoundingClientRect() ?? null,
+        overlayStackRef.current?.getBoundingClientRect() ?? null,
+      );
       map.fitBounds(
         [
           [bounds.west, bounds.south],
           [bounds.east, bounds.north],
         ],
-        { padding: 64, maxZoom: 15, animate: false },
+        { padding, maxZoom: 15, animate: false },
       );
     },
     [points],
@@ -436,6 +444,7 @@ export function TripMapView({
   return (
     <div className={className} data-testid="trip-map">
       <div
+        ref={surfaceRef}
         className={surfaceClassName}
         data-testid="trip-map-surface"
         onMouseDownCapture={handleMouseDown}
@@ -454,6 +463,7 @@ export function TripMapView({
             누르기/우클릭 "여기에 장소 추가" 제스처가 오버레이 위에서 시작되지 않게 한다. */}
         {overlayTopLeft != null ? (
           <div
+            ref={overlayStackRef}
             className={overlayTopLeftClassName}
             data-testid="trip-map-overlay-stack"
             data-map-overlay=""
@@ -466,6 +476,7 @@ export function TripMapView({
         ) : (
           transport.visible && (
             <div
+              ref={overlayStackRef}
               className="pointer-events-none absolute left-2 top-2 z-10 w-64 max-w-[70%]"
               data-map-overlay=""
             >
