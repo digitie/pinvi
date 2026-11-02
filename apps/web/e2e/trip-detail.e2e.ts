@@ -1277,3 +1277,71 @@ test('실시간 rate limit close는 backoff 안내를 보여준다', async ({ pa
     '실시간 연결을 잠시 늦춰 다시 시도합니다.',
   );
 });
+
+// 2026-11-02 prod e2e — 교통 정보 컨트롤(ADR-076)과 지도 장소 검색창이 둘 다 지도 왼쪽 위에
+// 따로 떠서 교통 패널이 검색창을 덮었다(데스크톱·모바일 모두 입력란 왼쪽을 누를 수 없었다).
+// 둘은 한 세로 스택이어야 한다.
+async function mockTransportEnabled(page: Page) {
+  await page.route(/.*\/transport\/status$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.continue();
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          enabled: true,
+          layers: [
+            { layer: 'fuel_station', available: true, reason: null, freshness: null },
+            { layer: 'rest_area', available: true, reason: null, freshness: null },
+            { layer: 'highway_incident', available: true, reason: null, freshness: null },
+            { layer: 'airport', available: true, reason: null, freshness: null },
+          ],
+        },
+      }),
+    });
+  });
+}
+
+type Box = { x: number; y: number; width: number; height: number };
+function boxesOverlap(a: Box, b: Box): boolean {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
+async function expectSearchNotCoveredByTransport(page: Page) {
+  const search = page.getByTestId('trip-map-place-search');
+  const controls = page.getByTestId('transport-layer-controls');
+  await expect(search).toBeVisible();
+  await expect(controls).toBeVisible();
+  const searchBox = await search.boundingBox();
+  const controlsBox = await controls.boundingBox();
+  expect(searchBox).not.toBeNull();
+  expect(controlsBox).not.toBeNull();
+  expect(boxesOverlap(searchBox!, controlsBox!)).toBe(false);
+  // 입력란 왼쪽 끝을 실제로 누를 수 있어야 한다 — 다른 요소가 덮으면 click이 막힌다.
+  const input = search.getByRole('textbox', { name: '장소·주소 검색' });
+  await input.click({ position: { x: 12, y: 12 }, timeout: 5_000 });
+  await expect(input).toBeFocused();
+}
+
+test('교통 정보 컨트롤은 지도 장소 검색창을 덮지 않는다(데스크톱)', async ({ page }) => {
+  await mockTripDetailRoutes(page);
+  await mockTransportEnabled(page);
+
+  await page.goto(`/trips/${tripId}`);
+
+  await expect(page.getByTestId('trip-detail-shell')).toBeVisible();
+  await expectSearchNotCoveredByTransport(page);
+});
+
+test.describe('모바일 지도 오버레이', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+  test('교통 정보 컨트롤은 지도 장소 검색창을 덮지 않는다(모바일)', async ({ page }) => {
+    await mockTripDetailRoutes(page);
+    await mockTransportEnabled(page);
+
+    await page.goto(`/trips/${tripId}`);
+
+    await expect(page.getByTestId('trip-detail-map')).toBeVisible();
+    await expectSearchNotCoveredByTransport(page);
+  });
+});
