@@ -631,7 +631,11 @@ async def test_unified_search_bbox_biases_order_without_filtering(
         async def search_features(self, **kwargs: Any) -> dict[str, Any]:
             self.calls.append(kwargs)
             if kwargs.get("min_lon") is not None:
-                return {"items": [{"feature_id": "andong", "name": "안동하회마을", "lon": 128.5, "lat": 36.5}]}
+                return {
+                    "items": [
+                        {"feature_id": "andong", "name": "안동하회마을", "lon": 128.5, "lat": 36.5}
+                    ]
+                }
             return {
                 "items": [
                     {"feature_id": "seoul", "name": "하회마을", "lon": 126.97, "lat": 37.54},
@@ -647,7 +651,9 @@ async def test_unified_search_bbox_biases_order_without_filtering(
             "/search?q=하회마을&bbox=128.2,36.3,129.1,37.4", cookies=auth_cookies(user_id)
         )
         assert resp.status_code == 200, resp.text
-        features = [r["feature_id"] for r in resp.json()["data"]["results"] if r["source"] == "feature"]
+        features = [
+            r["feature_id"] for r in resp.json()["data"]["results"] if r["source"] == "feature"
+        ]
         assert features == ["andong", "seoul"]
         regional = [c for c in fake_map.calls if c.get("min_lon") is not None]
         assert len(regional) == 1

@@ -37,9 +37,9 @@ from app.services.admin_pois import extract_feature_coord
 from app.services.category_labels import get_category_labels
 from app.services.place_search import (
     address_candidate_to_result,
-    merge_region_biased_items,
     feature_item_to_result,
     kakao_document_to_result,
+    merge_region_biased_items,
     my_poi_to_result,
     naver_item_to_result,
 )

@@ -28,10 +28,19 @@ export function tripSearchBias(
     south = Math.min(south, lat);
     north = Math.max(north, lat);
   }
-  return toBboxParam(west - padDegrees, south - padDegrees, east + padDegrees, north + padDegrees, 4);
+  return toBboxParam(
+    west - padDegrees,
+    south - padDegrees,
+    east + padDegrees,
+    north + padDegrees,
+    4,
+  );
 }
 
 /** 여행 맥락이 있으면 그것, 없으면 지도 화면. */
-export function pickSearchBias(tripBias: string | null, viewportBias: string | null): string | null {
+export function pickSearchBias(
+  tripBias: string | null,
+  viewportBias: string | null,
+): string | null {
   return tripBias ?? viewportBias;
 }
