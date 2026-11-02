@@ -1,3 +1,10 @@
+## 2026-11-02 (claude) — prod live e2e 결함 수정 #611–#615
+
+- 바뀐 것: Map·weather additive 필드 허용(#611), 웹 세션 401 자동 갱신(#612), trip 지도 첫 마커·교통 패널 겹침·maplibre worker(#613),
+  검색·상세 카테고리 이름·geo v2 주소·검색 예산·상세 카드 필드(#614), 장소 검색 지역 편향·일출 안내(#615). 상세는 [journal](journal.md).
+- 다음 한 작업: #611–#614는 Map 644941ed + PinVi 78e86ee3 pair 회전으로 배포 중, #615는 `PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED`를 켜는 다음
+  회전에 실린다. 켜진 뒤 같은 trip으로 날씨 패널(단기 D+3·중기 D+4~6)을 다시 확인하고 테스트 trip을 지운다. #616(envelope 정확-집합 3곳).
+
 ## 2026-10-28 (claude) — API Python 의존성 uv.lock 전용 설치 (브랜치 `ci/uv-locked`)
 
 - 바뀐 것: `api.yml`이 `uv sync --locked --extra dev`(uv 0.11.21)로, API 이미지가 ETL과 같은 `uv export --locked` → `pip --no-deps` 경로로 설치한다.
