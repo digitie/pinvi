@@ -124,6 +124,25 @@ def test_structlog_fields_and_tracebacks_are_redacted(
     assert "serviceKey=***" in out
 
 
+def _call_upstream(api_key: str) -> None:
+    raise RuntimeError(f"upstream failed ({len(api_key)} chars)")
+
+
+def test_structlog_exc_info_does_not_print_frame_locals(prod_stdout: io.StringIO) -> None:
+    """리뷰 #620 M1: structlog `dict_tracebacks`는 프레임 지역 변수를 repr로 찍는다
+    (`"api_key": "'…'"`) — URL 모양이 아니라 정규식이 못 가린다. 지역 변수를 아예 찍지 않는다."""
+
+    try:
+        _call_upstream(SECRET)
+    except RuntimeError:
+        get_logger("app.test").warning("email.outbox_drain_failed", exc_info=True)
+
+    out = prod_stdout.getvalue()
+    assert "email.outbox_drain_failed" in out
+    assert "upstream failed" in out  # traceback은 여전히 남는다
+    assert SECRET not in out
+
+
 @pytest.mark.usefixtures("prod_stdout")
 def test_uvicorn_access_line_keeps_args_shape_and_hides_inbound_token() -> None:
     """uvicorn AccessFormatter는 args를 5-튜플로 풀어 쓴다 — 모양을 지키며 토큰만 가린다."""
