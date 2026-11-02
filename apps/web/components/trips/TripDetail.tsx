@@ -22,9 +22,9 @@ import {
 import {
   ApiError,
   TripRealtimeClient,
-  authApi,
   isVersionConflictError,
   poiApi,
+  refreshCookieSession,
   tripRealtimeInvalidationKeys,
   tripApi,
   type TripRealtimeCloseInfo,
@@ -528,14 +528,9 @@ export function TripDetail({ tripId }: TripDetailProps) {
         if (status === 'open') setRealtimeCloseInfo(null);
       },
       onClose: setRealtimeCloseInfo,
-      onAuthRefresh: async () => {
-        try {
-          await authApi(apiClient).refresh();
-          return true;
-        } catch {
-          return false;
-        }
-      },
+      // REST 401 자동 갱신과 같은 single-flight를 쓴다 — 따로 `/auth/refresh`를 부르면 동시
+      // 갱신이 회전된 refresh token을 두고 경주해 한쪽이 로그아웃된다.
+      onAuthRefresh: () => refreshCookieSession(PINVI_API_URL),
       onError: () => undefined,
     });
     realtimeClientRef.current = client;

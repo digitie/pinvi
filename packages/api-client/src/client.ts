@@ -6,7 +6,16 @@ export interface ApiClientOptions {
   baseUrl: string;
   /** 인증 토큰 fetch (cookie 기반이면 null 반환). */
   getAuthToken?: () => Promise<string | null>;
+  /**
+   * 401(세션 만료·갱신 실패) 최종 처리. cookie 모드에서는 먼저 `/auth/refresh`로 세션을 한 번
+   * 갱신하고 원 요청을 1회 재시도한 **뒤에도** 401일 때만 부른다(`refreshCookieSession`).
+   */
   onUnauthorized?: () => void;
+  /**
+   * cookie 모드(`getAuthToken` 없음)의 401 자동 갱신. 기본 켜짐. 갱신 endpoint가 없는 API를
+   * 부르는 클라이언트만 false로 끈다.
+   */
+  cookieSessionRefresh?: boolean;
   /** fetch override (테스트 / SSR 용도). */
   fetcher?: typeof fetch;
   /**
@@ -174,8 +183,100 @@ function requestTimeoutError(): ApiError {
   );
 }
 
+/**
+ * cookie 세션 갱신 single-flight — **같은 API(baseUrl)를 쓰는 모든 ApiClient 인스턴스와**
+ * 웹소켓 재인증이 진행 중인 갱신 하나를 공유한다.
+ *
+ * refresh token은 갱신마다 회전되고 옛 토큰은 즉시 폐기된다(`refresh_user_session`). 동시 401이
+ * 저마다 `/auth/refresh`를 부르면 첫 호출만 성공하고 나머지는 폐기된 토큰으로 401을 받아 사용자를
+ * 로그인 화면으로 보낸다. 그래서 진행 중 갱신을 모듈 수준에서 공유한다.
+ */
+const cookieRefreshInFlight = new Map<string, Promise<boolean>>();
+
+/** 갱신 요청 자체의 상한 — 매달린 갱신이 원 요청들을 영원히 붙잡지 않게. */
+const COOKIE_REFRESH_TIMEOUT_MS = 15_000;
+
+/**
+ * 401이어도 세션을 갱신하지 않는 경로. 자격 증명을 확인하는 요청(로그인 실패의 401은 "세션 만료"가
+ * 아니다)과 갱신 요청 자신(재귀)이다.
+ */
+const NO_COOKIE_REFRESH_PATHS = [
+  '/auth/login',
+  '/auth/refresh',
+  '/auth/logout',
+  '/auth/register',
+  '/auth/verify-email',
+];
+
+function refreshExemptPath(path: string): boolean {
+  const pathname = path.split('?')[0] ?? path;
+  return NO_COOKIE_REFRESH_PATHS.some(
+    (exempt) => pathname === exempt || pathname.startsWith(`${exempt}/`),
+  );
+}
+
+/**
+ * refresh cookie로 `POST {baseUrl}/auth/refresh`를 부른다. 성공하면 true.
+ * 같은 baseUrl의 동시 호출은 진행 중인 갱신 하나를 기다린다.
+ */
+export function refreshCookieSession(
+  baseUrl: string,
+  fetcher: typeof fetch = fetch,
+): Promise<boolean> {
+  const pending = cookieRefreshInFlight.get(baseUrl);
+  if (pending) return pending;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), COOKIE_REFRESH_TIMEOUT_MS);
+  const refresh = fetcher(`${baseUrl}/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    signal: controller.signal,
+  })
+    .then(
+      (res) => res.ok,
+      () => false,
+    )
+    .finally(() => {
+      clearTimeout(timer);
+      cookieRefreshInFlight.delete(baseUrl);
+    });
+  cookieRefreshInFlight.set(baseUrl, refresh);
+  return refresh;
+}
+
 export class ApiClient {
   constructor(private readonly opts: ApiClientOptions) {}
+
+  /**
+   * 이 401이 cookie 세션 갱신 대상인가. token 모드(`getAuthToken`, 모바일)는 자체 fetcher가 갱신을
+   * 맡으므로 제외하고, 자격 증명 확인 경로와 갱신 경로 자신도 제외한다.
+   */
+  private shouldRefreshCookieSession(path: string, link: ReturnType<typeof linkAbort>): boolean {
+    if (this.opts.getAuthToken || this.opts.cookieSessionRefresh === false) return false;
+    if (link.signal?.aborted) return false;
+    return !refreshExemptPath(path);
+  }
+
+  /**
+   * 요청을 보내고, cookie 세션 만료(401)면 갱신을 기다린 뒤 **1회** 다시 보낸다.
+   *
+   * 갱신이 실패해도 1회는 다시 보낸다 — 다른 탭이 먼저 refresh token을 회전시켰다면 이 탭의 갱신은
+   * 폐기된 토큰으로 실패하지만 cookie jar에는 이미 새 access cookie가 있다. 재시도도 401이면
+   * 그 응답을 그대로 돌려주고 호출부가 `onUnauthorized`를 부른다. 401은 인증 단계에서 거부된
+   * 요청이라 비멱등 요청도 다시 보내도 중복 실행되지 않는다.
+   */
+  private async fetchWithSessionRefresh(
+    path: string,
+    init: RequestInit & RequestTimeoutOption,
+    link: ReturnType<typeof linkAbort>,
+  ): Promise<Response> {
+    const res = await this.fetch(path, init, link);
+    if (res.status !== 401 || !this.shouldRefreshCookieSession(path, link)) return res;
+    await refreshCookieSession(this.opts.baseUrl, this.opts.fetcher ?? fetch);
+    if (link.signal?.aborted) return res;
+    return this.fetch(path, init, link);
+  }
 
   private resolveTimeout(perRequest: number | undefined): number {
     return perRequest ?? this.opts.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
@@ -217,7 +318,7 @@ export class ApiClient {
     let res: Response;
     let text: string;
     try {
-      res = await this.fetch(path, init, link);
+      res = await this.fetchWithSessionRefresh(path, init, link);
 
       if (res.status === 401) {
         this.opts.onUnauthorized?.();
@@ -265,7 +366,7 @@ export class ApiClient {
     let res: Response;
     let text: string;
     try {
-      res = await this.fetch(path, init, link);
+      res = await this.fetchWithSessionRefresh(path, init, link);
 
       if (res.status === 401) {
         this.opts.onUnauthorized?.();

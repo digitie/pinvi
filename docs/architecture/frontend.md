@@ -466,6 +466,21 @@ export const noticePlansApi = (client: ApiClient) => ({
 웹은 `apps/web/lib/api.ts`에서 `ApiClient`를 next-auth 토큰과 wire,
 모바일은 `apps/mobile/lib/api.ts`에서 SecureStore 토큰과 wire.
 
+**401 처리(세션 갱신)** — access 토큰은 10분, refresh 토큰은 7일이다(ADR-032).
+
+- 웹(cookie 모드, `getAuthToken` 없음): `ApiClient`가 401을 받으면 `POST /auth/refresh`로
+  세션을 **한 번** 갱신하고 원 요청을 **1회** 재시도한다. 같은 baseUrl의 동시 401·다른
+  `ApiClient` 인스턴스·웹소켓 재인증(`TripDetail`의 `onAuthRefresh`)은 진행 중 갱신 하나를
+  공유한다(`refreshCookieSession`, single-flight) — refresh token은 갱신마다 회전·폐기되므로
+  따로 부르면 한쪽이 폐기된 토큰으로 실패해 로그아웃된다. 갱신 실패여도 1회는 재시도한다(다른
+  탭이 먼저 회전시킨 경우 cookie jar에 이미 새 access가 있다). 재시도도 401일 때만
+  `onUnauthorized`(→ `/login`). 자격 증명 확인 경로(`/auth/login`·`/auth/register`·
+  `/auth/verify-email`·`/auth/logout`)와 `/auth/refresh` 자신은 갱신하지 않는다.
+  2026-11-02 prod e2e 전에는 이 갱신이 없어 로그인 10분 뒤 작업 중이던 사용자가 튕겼다.
+- 모바일(token 모드): `apps/mobile/lib/api.ts`의 `refreshingFetcher`가 같은 규칙(single-flight
+  + 1회 재시도)을 SecureStore 토큰으로 수행한다. `ApiClient`의 cookie 갱신은 token 모드에서
+  꺼진다.
+
 ### 4.3 TanStack Query (공용)
 
 ```ts
