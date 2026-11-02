@@ -63,9 +63,8 @@ async def test_api_call_event_hooks_tag_provider_and_sanitize_endpoint(session_f
     async with session_factory() as db:
         row = await db.scalar(select(ApiCallLog).where(ApiCallLog.provider == "kor_travel_geo"))
         assert row is not None
-        assert (
-            row.endpoint == "https://geo.example.test/v2/geocode?key=%2A%2A%2A&q=%EC%84%9C%EC%9A%B8"
-        )
+        # 가린 자리만 바꾸고 나머지는 원래 인코딩 그대로(stdout 로그와 같은 모양, #620)
+        assert row.endpoint == "https://geo.example.test/v2/geocode?key=***&q=%EC%84%9C%EC%9A%B8"
         assert "secret-key" not in row.endpoint
 
 

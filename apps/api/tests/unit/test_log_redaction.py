@@ -34,10 +34,52 @@ def test_redact_secrets_review_620_gaps() -> None:
         "?X-Amz-Signature=***&X-Amz-Credential=***"
     )
     # `/bot` 접두가 없는 Telegram bot token
-    assert TG_TOKEN not in redact_secrets(f"telegram error token={TG_TOKEN[:3]} raw {TG_TOKEN}")
+    assert redact_secrets(f"telegram error token={TG_TOKEN[:3]} raw {TG_TOKEN}") == (
+        "telegram error token=*** raw 123456789:***"
+    )
     # JSON 문자열 안의 escape를 먹지 않는다(로그 줄이 JSON으로 남아야 한다)
     assert redact_secrets('{"href": "https://w/reset?token=ABC\\"x"}') == (
         '{"href": "https://w/reset?token=***\\"x"}'
+    )
+
+
+def test_redact_secrets_review_620_round3() -> None:
+    """재리뷰 #620: 비밀이 아닌 쌍의 값이 뒤의 비밀 쌍을 삼키지 않는다, 따옴표 값, JSON escape 뒤."""
+
+    cases = {
+        # 비밀이 아닌 쌍의 값 안에 든 비밀 쌍
+        f"redirect_uri=https://pinvi/cb?token={SECRET}": "redirect_uri=https://pinvi/cb?token=***",
+        f"?url=https://geo.test/v2?key={SECRET}": "?url=https://geo.test/v2?key=***",
+        f"foo=a,key={SECRET}": "foo=a,key=***",
+        f"q=f(key={SECRET})": "q=f(key=***)",
+        # 따옴표 값(repr·kwargs)
+        f"GeoConfig(base_url='http://g', api_key='{SECRET}')": (
+            "GeoConfig(base_url='http://g', api_key='***')"
+        ),
+        f'call(serviceKey="{SECRET}")': 'call(serviceKey="***")',
+        # 이름 앞 문자가 무엇이든(이름 문자만 아니면)
+        f"[key={SECRET}] {{token={SECRET}}} opts:key={SECRET} x|token={SECRET}": (
+            "[key=***] {token=***} opts:key=*** x|token=***"
+        ),
+        # JSON 렌더 뒤: 줄바꿈·탭 escape 다음, escape된 따옴표 값
+        f'{{"exc": "bad\\nkey={SECRET}", "kw": "token=\\"{SECRET}\\""}}': (
+            '{"exc": "bad\\nkey=***", "kw": "token=\\"***\\""}'
+        ),
+        # Telegram: 슬래시 없는 bot 접두, 인코딩된 콜론
+        f"bot{TG_TOKEN}": "bot123456789:***",
+        TG_TOKEN.replace(":", "%3A"): "123456789%3A***",
+        # OAuth callback 끝 슬래시
+        "/api/v1/auth/oauth/google/callback/?code=S1&state=S2": (
+            "/api/v1/auth/oauth/google/callback/?code=***&state=***"
+        ),
+        # URL userinfo의 password
+        f"https://pinvi:{SECRET}@files.test/p": "https://pinvi:***@files.test/p",
+    }
+    for raw, expected in cases.items():
+        assert redact_secrets(raw) == expected, raw
+    # 이름 문자 뒤에 붙은 것은 비밀 이름이 아니다
+    assert redact_secrets("monkey=1 sig_cd=2 sido_code=3 hotkey=4") == (
+        "monkey=1 sig_cd=2 sido_code=3 hotkey=4"
     )
 
 
@@ -84,9 +126,11 @@ def test_filter_redacts_dict_args() -> None:
 def test_filter_redacts_broken_format_string_too() -> None:
     """getMessage가 깨지면 logging이 raw msg를 stderr로 찍는다 — 그 msg도 가린다."""
 
-    record = _record(f"GET %s %s?key={SECRET}", ("only-one",))
+    record = _record(f"GET %s %s?key={SECRET}", (f"?token={SECRET}",))
     assert SecretRedactingFilter().filter(record) is True
+    # handleError가 찍는 `Message: %r`와 `Arguments: %s` 둘 다
     assert SECRET not in str(record.msg)
+    assert SECRET not in str(record.args)
 
 
 def test_filter_never_raises_into_the_caller() -> None:
@@ -94,9 +138,19 @@ def test_filter_never_raises_into_the_caller() -> None:
         def __str__(self) -> str:
             raise RuntimeError("boom")
 
-    record = _record("value %s", (Exploding(),))
+    record = _record(f"value %s ?key={SECRET}", (Exploding(),))
     assert SecretRedactingFilter().filter(record) is True
-    assert isinstance(record.getMessage(), str)
+    message = record.getMessage()
+    assert SECRET not in message
+    assert "redaction failed" in message
+
+
+def test_filter_fails_closed_when_exception_text_cannot_be_formatted() -> None:
+    record = _record("boom")
+    record.exc_info = (ValueError, ValueError(f"?key={SECRET}"), "not-a-traceback")  # type: ignore[assignment]
+    assert SecretRedactingFilter().filter(record) is True
+    assert record.exc_info is None
+    assert SECRET not in str(record.exc_text)
 
 
 def test_filter_leaves_clean_record_untouched() -> None:
@@ -112,9 +166,21 @@ def test_sanitize_url_masks_query_and_telegram_path() -> None:
         sanitize_url(f"https://api.telegram.org/bot42:{SECRET}/sendMessage?chat_id=7")
         == "https://api.telegram.org/bot42:***/sendMessage?chat_id=7"
     )
-    masked = sanitize_url(f"http://geo.test/v2/geocode?key={SECRET}&limit=5")
-    assert SECRET not in masked
-    assert masked.endswith("limit=5")
+    # 가린 URL도 다시 인코딩하지 않는다(stdout과 같은 모양)
+    assert sanitize_url(f"http://geo.test/v2/geocode?key={SECRET}&ids=a,b&flag") == (
+        "http://geo.test/v2/geocode?key=***&ids=a,b&flag"
+    )
+
+
+def test_sanitize_url_covers_what_parse_qsl_misses() -> None:
+    """재리뷰 #620: `;` 구분자, fragment, userinfo password, /bot 밖 Telegram token, 인코딩된 이름."""
+
+    assert SECRET not in sanitize_url(f"http://h/p?a=1;key={SECRET}")
+    assert SECRET not in sanitize_url(f"http://h/p#access_token={SECRET}")
+    assert sanitize_url(f"http://u:{SECRET}@h/p") == "http://u:***@h/p"
+    assert SECRET not in sanitize_url(f"http://h/p?next=/x?token%3D{SECRET}&t={TG_TOKEN}")
+    assert TG_TOKEN not in sanitize_url(f"http://h/p?t={TG_TOKEN}")
+    assert SECRET not in sanitize_url(f"http://h/p?%6Bey={SECRET}")
 
 
 def test_sanitize_url_leaves_clean_url_byte_identical() -> None:
