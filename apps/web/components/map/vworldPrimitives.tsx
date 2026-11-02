@@ -62,10 +62,10 @@ export function MapFallback({ info }: { info: VWorldMapFallbackInfo }) {
  *
  * maplibre 6 ESM은 worker URL을 `import.meta.url`에서 유도하는데, webpack 프로덕션 빌드가 그것을
  * 빌드 머신의 `file:///repo/...` 경로로 굳혀 worker URL이 빈 문자열이 된다("Worker failed to
- * load"). 그러면 style이 `load`에 도달하지 못해 `ClusterLayer`가 viewport를 받지 못하고 trip
- * 지도에 POI 마커가 하나도 그려지지 않았다(2026-11-02 prod e2e — raster 바탕지도는 worker가
- * 필요 없어 멀쩡했다). 지도 인스턴스가 만들어지기 전에 한 번만 설정하면 되므로 지도 엔진을
- * 불러오는 이 동적 import 안에서 부른다 — 저장소에서 지도를 만드는 길은 `VWorldMap` 하나다.
+ * load", 2026-11-02 prod e2e). raster 바탕지도와 HTML 마커는 worker 없이도 그려지지만 worker를
+ * 쓰는 GeoJSON/벡터 source는 tile을 하나도 만들지 못한다(kor-travel-map admin 2026-09-18 실측).
+ * 지도 인스턴스가 만들어지기 전에 한 번만 설정하면 되므로 지도 엔진을 불러오는 이 동적 import
+ * 안에서 부른다 — 저장소에서 지도를 만드는 길은 `VWorldMap` 하나다.
  */
 export const MAPLIBRE_WORKER_URL = '/maplibre/maplibre-gl-worker.mjs';
 

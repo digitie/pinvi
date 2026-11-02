@@ -8,10 +8,11 @@
  * `new Worker("")`가 페이지 HTML을 worker로 띄우려다 실패한다 — 콘솔에
  * "Worker failed to load. Check that the worker URL is correct."가 남는다.
  *
- * prod 실측(2026-11-02 n150 e2e): 그 상태에서 지도 style이 `load`에 도달하지 못해
- * vworld-map-web `ClusterLayer`가 viewport를 한 번도 받지 못했고, **trip 지도에 POI 마커가
- * 한 개도 그려지지 않았다**("장소 4곳"인데 핀 0개). raster(VWorld)는 worker를 쓰지 않아
- * 바탕지도만 멀쩡했다. kor-travel-map admin이 2026-09-18 같은 증상을 같은 처방으로 고쳤다.
+ * prod 실측(2026-11-02 n150 e2e): PinVi 지도마다 콘솔에 그 오류가 남았다. 지금 PinVi 지도는
+ * raster(VWorld) 바탕지도와 HTML 마커만 써서 worker 없이도 그려지지만, worker를 쓰는
+ * GeoJSON/벡터 source(경로선·영역 등)는 worker가 없으면 tile을 하나도 만들지 못한다 —
+ * kor-travel-map admin은 2026-09-18 바로 그 때문에 zoom 14 이상 마커가 0개였고 같은 처방으로
+ * 고쳤다.
  *
  * 처방: worker와 그 형제 파일(`maplibre-gl-shared.mjs`, worker가 상대 경로로 import)을
  * **같은 디렉터리**에 복사해 정적으로 서빙하고 `setWorkerUrl`로 그 경로를 가리킨다

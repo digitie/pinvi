@@ -9,8 +9,8 @@ import { describe, expect, it } from 'vitest';
  * maplibre worker 배선이 **실제로 성립하는지** 센다.
  *
  * 2026-11-02 prod e2e: webpack 빌드가 maplibre의 `import.meta.url`을 빌드 머신 `file://`
- * 경로로 굳혀 worker URL이 빈 문자열이 됐고("Worker failed to load"), style이 `load`에
- * 도달하지 못해 trip 지도에 POI 마커가 하나도 그려지지 않았다. 처방은 worker와 형제
+ * 경로로 굳혀 worker URL이 빈 문자열이 됐다("Worker failed to load"). worker를 쓰는
+ * GeoJSON/벡터 source는 그 상태에서 tile을 하나도 만들지 못한다. 처방은 worker와 형제
  * 파일(`maplibre-gl-shared.mjs`)을 `public/maplibre/`로 복사하고 `setWorkerUrl`로 가리키는 것.
  *
  * 이름을 손으로 맞추지 않고 **세 조각이 서로 맞는지**를 센다: 복사 스크립트가 옮기는 파일 목록,
