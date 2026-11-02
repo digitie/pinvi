@@ -55,9 +55,30 @@ def redact_event_dict(
     """
 
     for key in list(event_dict):
-        if key.lower() in SENSITIVE_QUERY_KEYS and event_dict[key] is not None:
+        value = event_dict[key]
+        if key.lower() in SENSITIVE_QUERY_KEYS and value is not None:
             event_dict[key] = REDACTED
+        elif isinstance(value, dict):
+            event_dict[key] = _redacted_copy(value, depth=1)
     return event_dict
+
+
+def _is_secret_key(key: object) -> bool:
+    return isinstance(key, str) and key.lower() in SENSITIVE_QUERY_KEYS
+
+
+def _redacted_copy(value: dict[Any, Any], *, depth: int) -> dict[Any, Any]:
+    """중첩 dict(`params={"serviceKey": …}`)를 **복사해** 가린다 — 호출자의 dict를 바꾸지 않는다(3단계까지)."""
+
+    redacted: dict[Any, Any] = {}
+    for key, item in value.items():
+        if _is_secret_key(key) and item is not None:
+            redacted[key] = REDACTED
+        elif isinstance(item, dict) and depth < 3:
+            redacted[key] = _redacted_copy(item, depth=depth + 1)
+        else:
+            redacted[key] = item
+    return redacted
 
 
 def configure_logging(level: str = "INFO") -> None:

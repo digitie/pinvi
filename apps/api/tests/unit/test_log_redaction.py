@@ -191,10 +191,11 @@ def test_structlog_event_dict_nested_secret_keys_and_processor_is_installed() ->
 
     from app.core.logging import configure_logging, redact_event_dict
 
-    event = redact_event_dict(
-        None, "info", {"event": "x", "params": {"serviceKey": SECRET, "page": 1}}
-    )
+    params = {"serviceKey": SECRET, "page": 1}
+    event = redact_event_dict(None, "info", {"event": "x", "params": params})
     assert event == {"event": "x", "params": {"serviceKey": "***", "page": 1}}
+    # 호출자의 dict는 바꾸지 않는다(로그를 남긴 뒤에도 그 dict로 요청을 보낼 수 있다)
+    assert params == {"serviceKey": SECRET, "page": 1}
 
     configure_logging("WARNING")
     assert redact_event_dict in structlog.get_config()["processors"]

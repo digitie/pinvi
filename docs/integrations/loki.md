@@ -160,20 +160,23 @@ prod 점검에서 httpx의 INFO 줄(`HTTP Request: POST http://…/v2/geocode?ke
     - 비밀 이름만 찾는다. 비밀이 아닌 쌍의 값이 뒤에 오는 비밀 쌍을 삼키지 않게 하려는 것이다(예: `redirect_uri=…?token=…`).
     - 이름 앞에 올 수 없는 것: 이름 문자, 점, 하이픈. 그래서 `obj.key=`, `Idempotency-Key=`는 가리지 않는다.
     - 이름 앞에 와도 되는 것: JSON escape(`\n`·`\t`·`\uXXXX`), percent-encoding(`%3F`·`%26`). 완전히 인코딩된 중첩 URL도 그래서 잡힌다.
-    - 따옴표로 연 값(`api_key='…'`, `token=\"…\"`)은 닫는 따옴표까지 가린다. 쉼표·공백·괄호가 있어도 꼬리가 새지 않는다.
-    - 따옴표 없는 값은 query 구분자·공백·따옴표·JSON escape까지 가린다. 닫는 괄호·쉼표도 비밀값의 일부일 수 있어 같이 가린다.
-    - 값 안의 `\uXXXX`는 값의 일부로 본다. `%3D`로 인코딩된 `=`도 잡는다.
+    - 따옴표로 연 값(`api_key='…'`, `token=\"…\"`)은 같은 종류의 닫는 따옴표까지 가린다. 쉼표·공백·괄호가 있어도 꼬리가 새지 않는다.
+      - 작은따옴표 값 안의 날 큰따옴표에서는 멈춘다. JSON을 지키기 위한 대가다.
+      - 빈 값 바로 뒤가 JSON 구조(`"serviceKey=", "x"`)이면 따옴표를 열지 않는다.
+    - 따옴표 없는 값은 query 구분자·공백·따옴표·JSON escape 또는 다음 비밀 이름 앞까지 가린다. 닫는 괄호·쉼표는 비밀값의 일부일 수 있어 같이 가린다.
+    - 값 안의 `\uXXXX`·`\\`는 값의 일부로 본다. `%3D`·`%253D`로 인코딩된 `=`도 잡는다.
   - Telegram token: `/bot<id>:<token>/`, 그리고 접두가 없는 `<id>:<35자>` 꼴(대문자를 포함한 것만, uuid 제외).
   - path 자격 증명: `/trips/{id}/shared/{token}`, `/storage/{uploads,downloads}/{token}`.
   - OAuth callback의 `code`·`state`. callback path에서만 가린다.
   - URL userinfo의 password: `scheme://user:***@host`, 빈 사용자 `redis://:***@`.
-  - `Authorization: Bearer|Basic|Token …`.
+  - `Authorization: [Bearer|Basic|Token|KakaoAK] …`. 구분은 공백·`%20`·`+`이고, JSON 안의 escape된 따옴표도 잡는다.
   - 가린 뒤에도 JSON 줄은 JSON이다. 값은 escape를 먹지 않는다.
 - structlog event-dict의 비밀 이름 키(`log.info("x", api_key=…)`)는 렌더 전에 가린다(`redact_event_dict`). JSON에서는 `"api_key": "…"` 꼴이라 문자열 필터가 못 보기 때문이다.
+  - 중첩 dict는 3단계까지 **복사해서** 가린다. 호출자의 dict는 바꾸지 않는다.
 - 남는 한계:
   - `=`가 바로 붙지 않은 꼴은 가리지 못한다. 예: dict repr `{'password': …}`, SQLAlchemy 오류의 parameters, `x-api-key: …`, `key = …`.
   - 접미사가 붙은 이름도 가리지 못한다. 예: `db_password=`, `bot_token=`.
-  - password에 인코딩 안 된 `/`·`'`·`@`가 든 userinfo도 가리지 못한다.
+  - password에 인코딩 안 된 `/`·`'`·`"`·`@`·`?`·`#`이 든 userinfo도 가리지 못한다.
   - 비밀값을 그런 꼴로 로그에 남기지 않는다.
 - uvicorn access 줄은 args 튜플 모양을 유지한 채 원소만 바꾼다. `AccessFormatter`가 그 튜플을 풀어 쓰기 때문이다.
 - 필터는 예외를 밖으로 내지 않는다. logging은 filter 예외를 잡아 주지 않으므로, 가리기에 실패하면 메시지를 고정 문구로 바꾼다.

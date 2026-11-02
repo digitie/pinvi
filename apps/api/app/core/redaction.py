@@ -53,8 +53,11 @@ _TELEGRAM_TOKEN_RE = re.compile(
     r"(?<!\d)(?P<id>\d{6,12})(?P<sep>:|%3[Aa])(?=[A-Za-z0-9_-]*[A-Z])[A-Za-z0-9_-]{30,}"
 )
 # `Authorization: Bearer …`·`{'authorization': 'Basic …'}` 꼴 자격 증명.
+#: 스킴은 선택(`Bearer`·`Basic`·`Token`·PinVi가 보내는 `KakaoAK`), 구분은 공백·`%20`·`+`. 따옴표가 escape돼
+#: 있어도(JSON 안) 잡고, 값은 escape(`\`) 앞에서 끝나 JSON을 깨지 않는다.
 _AUTH_HEADER_RE = re.compile(
-    r"(?P<prefix>authorization[\"']?\s*[:=]\s*[\"']?(?:bearer|basic|token)\s+)[^\s\"',]+",
+    r"(?P<prefix>authorization\\?[\"']?\s*[:=]\s*\\?[\"']?"
+    r"(?:(?:bearer|basic|token|kakaoak)(?:\s+|%20|\+))?)[^\s\"',\\]+",
     re.IGNORECASE,
 )
 # path에 실린 PinVi 자체 자격 증명: 여행 공유 링크, 서명된 업로드·다운로드 토큰(uvicorn access 줄).
@@ -72,23 +75,30 @@ _OAUTH_PARAM_RE = re.compile(rf"(?P<lead>^|&)(?P<name>code|state)=[^{_VALUE_END}
 _USERINFO_RE = re.compile(r"(?P<prefix>://[^/@\s:\"']*):[^/@\s\"'?#]+@")
 # 비밀 **이름만** 맞춘다 — 비밀이 아닌 `이름=값`의 값(`redirect_uri=…?token=…`)이 뒤의 비밀 쌍을
 # 삼키지 않게. 이름 앞: 이름 문자·점·하이픈이 아니거나(`monkey=`·`obj.key=`·`Idempotency-Key=` 제외),
-# JSON escape(`\n`·`\t`·`\r`·`\uXXXX`) 뒤이거나, percent-encoding(`%3F`·`%26`) 뒤다.
-# 값: 따옴표(escape 포함)로 열렸으면 닫는 따옴표까지, 아니면 `_VALUE_END`까지. 값 안의 `\uXXXX`는 값의 일부다.
-# `=`는 `%3D`로 인코딩됐을 수 있다.
+# JSON escape(`\n`·`\t`·`\r`·`\uXXXX`) 뒤이거나, percent-encoding(`%3F`·`%26`, 이중 `%253F`) 뒤다.
+# `=`는 `%3D`·`%253D`로 인코딩됐을 수 있다. 값:
+# - 작은따옴표로 열었으면 작은따옴표까지(값 안의 `\"`·`\\`·`\uXXXX` 허용, 날 큰따옴표에서는 멈춘다 — JSON 보호).
+# - 큰따옴표로 열었으면(`\"` 또는, 바로 뒤가 JSON 구조 `,:}]`가 아닌 날 `"`) 큰따옴표까지. 빈 값 뒤의
+#   JSON 구조(`"serviceKey=", "x"`)에서 따옴표를 열면 JSON이 깨진다.
+# - 따옴표가 없으면 `_VALUE_END` 또는 다음 비밀 이름 앞까지(`key=abc,password='…'`의 뒤 비밀을 삼키지 않게).
 _SENSITIVE_NAMES = "|".join(
     sorted((re.escape(name) for name in SENSITIVE_QUERY_KEYS), key=len, reverse=True)
 )
 _QUERY_SECRET_RE = re.compile(
-    r"(?:(?<![A-Za-z0-9_.-])|(?<=\\[nrt])|(?<=%[0-9A-Fa-f]{2})|(?<=\\u[0-9A-Fa-f]{4}))"
-    rf"(?P<name>{_SENSITIVE_NAMES})(?P<eq>=|%3[Dd])"
-    r"(?:(?P<q>\\?[\"'])(?:\\u[0-9A-Fa-f]{4}|[^\"'\\\n])+"
-    rf"|(?:\\u[0-9A-Fa-f]{{4}}|[^{_VALUE_END}])+)",
+    r"(?:(?<![A-Za-z0-9_.-])|(?<=\\[nrt])|(?<=%[0-9A-Fa-f]{2})|(?<=%25[0-9A-Fa-f]{2})"
+    r"|(?<=\\u[0-9A-Fa-f]{4}))"
+    rf"(?P<name>{_SENSITIVE_NAMES})(?P<eq>=|%3[Dd]|%253[Dd])"
+    r"(?:(?P<q>\\?')(?:\\u[0-9A-Fa-f]{4}|\\\\|\\\"|[^'\"\\\n])+"
+    r"|(?P<q2>\\\"|\"(?![,:}\]]))(?:\\u[0-9A-Fa-f]{4}|\\\\|[^\"\\\n])+"
+    rf"|(?:(?!(?<![A-Za-z0-9_.-])(?:{_SENSITIVE_NAMES})(?:=|%3[Dd]))"
+    rf"(?:\\u[0-9A-Fa-f]{{4}}|\\\\|[^{_VALUE_END}]))+)",
     re.IGNORECASE,
 )
 
 
 def _replace_query_secret(match: re.Match[str]) -> str:
-    return f"{match.group('name')}{match.group('eq')}{match.group('q') or ''}{REDACTED}"
+    quote = match.group("q") or match.group("q2") or ""
+    return f"{match.group('name')}{match.group('eq')}{quote}{REDACTED}"
 
 
 def _replace_oauth_callback(match: re.Match[str]) -> str:
