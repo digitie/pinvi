@@ -847,7 +847,7 @@ export function FeatureMapView({
               // 지도 컨테이너가 상자를 다 채우므로 형제로 붙는 로딩 표시는 지도 위에 겹쳐 둔다
               // (흐름에 두면 상자 밖으로 밀려 보이지 않는다).
               loadingSkeleton={
-                <div className="absolute inset-0">
+                <div className="pointer-events-none absolute inset-0">
                   <MapLoadingSkeleton />
                 </div>
               }

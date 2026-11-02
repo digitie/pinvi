@@ -25,7 +25,12 @@ import type { FeatureSummary } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
-import { fitOverlayRect, fitPaddingForOverlay } from '@/lib/mapFitPadding';
+import {
+  fitOverlayRect,
+  fitPaddingForOverlay,
+  fitPanelRect,
+  pinBoxIntersects,
+} from '@/lib/mapFitPadding';
 import { viewportSearchBias } from '@/lib/searchBias';
 import {
   featureResolutionNotice,
@@ -44,8 +49,8 @@ import { TransportDetailDialog } from '@/components/map/TransportDetailDialog';
 const DEFAULT_CENTER: [number, number] = [127.5, 36.5];
 const DEFAULT_ZOOM = 7;
 const TRIP_MAP_MARKER_SIZE = 27;
-// PinMarker는 너비 size, 높이 size×1.5 물방울을 아래(anchor bottom)에 건다. 실제 마커 상자는
-// 물방울보다 크다(실지도 측정 ≈49px: inline SVG 아래 여백 포함). 그래서 선택 배율(1.18)까지 넣어 잡는다.
+// PinMarker는 너비 size, 높이 size×1.5(40.5px) 물방울을 아래 꼭짓점(anchor bottom)에 건다. 선택된 핀은
+// 1.18배(≈48px)로 커지고, 실지도 확인에서 마커 상자 위쪽이 앵커보다 ≈49px 위에 잡힌 적이 있어 넉넉히 잡는다.
 const TRIP_MAP_PIN_HEIGHT = Math.ceil(TRIP_MAP_MARKER_SIZE * 1.5 * 1.18);
 const FEATURE_MARKER_SIZE = 22;
 const FEATURE_DEBOUNCE_MS = 250;
@@ -184,6 +189,7 @@ export function TripMapView({
   const [detailFeatureId, setDetailFeatureId] = useState<string | null>(null);
   const mobileLayout = useMobileWebLayout();
   const transport = useTransportLayers({ active: transportLayers });
+  const transportVisible = transport.visible;
   const { onViewportChange: transportViewportChange } = transport;
   const surfaceClassName =
     chrome === 'flush'
@@ -258,9 +264,11 @@ export function TripMapView({
       // 위쪽 여백은 지도 위 장소 검색 줄 아래로 — 북쪽 핀이 그 밑에 숨지 않게. 여백은 핀
       // 앵커(아래 꼭짓점) 자리라 핀 머리 높이도 더한다. 기준 높이는 maplibre가 맞춤을 검사하는
       // 지도 컨테이너다.
+      const container = map.getContainer().getBoundingClientRect();
+      const stack = overlayStackRef.current;
       const padding = fitPaddingForOverlay(
-        map.getContainer().getBoundingClientRect(),
-        fitOverlayRect(overlayStackRef.current),
+        container,
+        fitOverlayRect(stack),
         TRIP_MAP_PIN_HEIGHT,
       );
       const only = points[0];
@@ -273,15 +281,36 @@ export function TripMapView({
         });
         return;
       }
-      map.fitBounds(
-        [
-          [bounds.west, bounds.south],
-          [bounds.east, bounds.north],
-        ],
-        { padding, maxZoom: 15, animate: false },
-      );
+      const lngLatBounds: [[number, number], [number, number]] = [
+        [bounds.west, bounds.south],
+        [bounds.east, bounds.north],
+      ];
+      map.fitBounds(lngLatBounds, { padding, maxZoom: 15, animate: false });
+      // 교통 정보 패널(왼쪽 열) 밑에 핀이 들어가면 패널 아래까지 한 번 더 맞춘다. animate:false라
+      // fitBounds가 바로 적용돼 project가 맞춘 뒤 위치를 준다.
+      const panel = transportVisible ? fitPanelRect(stack) : null;
+      const hiddenByPanel =
+        panel != null &&
+        points.some((point) => {
+          const at = map.project([point.lon, point.lat]);
+          return pinBoxIntersects(
+            container.left + at.x,
+            container.top + at.y,
+            TRIP_MAP_MARKER_SIZE,
+            TRIP_MAP_PIN_HEIGHT,
+            panel,
+          );
+        });
+      if (panel && hiddenByPanel) {
+        map.fitBounds(lngLatBounds, {
+          padding: fitPaddingForOverlay(container, panel, TRIP_MAP_PIN_HEIGHT),
+          maxZoom: 15,
+          animate: false,
+        });
+      }
     },
-    [points],
+    // 패널은 상태 조회 뒤에 나타난다 — 보이게 되면 한 번 더 맞춘다.
+    [points, transportVisible],
   );
 
   const onViewportBboxChangeRef = useRef(onViewportBboxChange);
