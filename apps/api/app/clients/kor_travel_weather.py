@@ -372,11 +372,12 @@ def _check_fields(
         raise KorTravelWeatherContractError(
             f"kor-travel-weather {what}에 필수 필드가 없습니다: {sorted(missing)}"
         )
+    # 내부 소비자는 정확한 셰입을 핀하지 않는다(런타임 검증) — 더해진 필드는 무시하고 debug로만
+    # 남긴다. 2026-11-02 prod e2e: weather가 resolve 응답에 `alert_scope_unverified`를 더하자 이
+    # 검사가 모든 trip POI 날씨를 `unavailable`로 만들었다. 필수 필드·타입 검사는 그대로 둔다.
     extra = raw.keys() - allowed
     if extra:
-        raise KorTravelWeatherContractError(
-            f"kor-travel-weather {what}에 알 수 없는 필드가 있습니다: {sorted(extra)}"
-        )
+        logger.debug("kor_travel_weather.%s additive fields ignored: %s", what, sorted(extra))
 
 
 def _decode_datetime(raw: object, *, field_name: str, what: str) -> datetime:

@@ -196,10 +196,8 @@ FeatureBatchItem = (
 )
 
 
-def _decode_feature_trip_card(raw: object, feature_id: str) -> FeatureTripCard:
-    if not isinstance(raw, Mapping):
-        raise KorTravelMapContractError("feature batch found item의 trip_card가 객체가 아닙니다.")
-    required = {
+_TRIP_CARD_FIELDS = frozenset(
+    {
         "feature_id",
         "kind",
         "name",
@@ -210,8 +208,30 @@ def _decode_feature_trip_card(raw: object, feature_id: str) -> FeatureTripCard:
         "marker_icon",
         "marker_color",
     }
-    if set(raw) != required:
+)
+# batch item의 **알려진** 키 어휘. 상태별로 있으면 안 되는 키(missing의 row_revision, found가 아닌
+# 항목의 trip_card)는 여전히 거부한다 — 그건 더해진 필드가 아니라 의미가 어긋난 응답이다.
+_BATCH_ITEM_FIELDS = frozenset({"state", "feature_id", "row_revision", "trip_card"})
+
+
+def _note_additive_fields(raw: Mapping[str, Any], known: frozenset[str], *, what: str) -> None:
+    """내부 소비자는 정확한 셰입을 핀하지 않는다 — 모르는(더해진) 키는 무시하고 debug로만 남긴다.
+
+    2026-11-02 prod e2e: Map이 batch item에 `feature_uuid`를 더하자 정확-집합 검사가 batch 전체를
+    거부해 모든 trip POI가 `unverified`가 됐다. 필수 키와 타입 검사는 그대로 둔다. 더해진 키는
+    decode 결과에 실리지 않으므로(알려진 필드만 복사) snapshot으로 흘러들지 않는다.
+    """
+    extra = set(raw) - known
+    if extra:
+        logger.debug("kor_travel_map.%s additive fields ignored: %s", what, sorted(extra))
+
+
+def _decode_feature_trip_card(raw: object, feature_id: str) -> FeatureTripCard:
+    if not isinstance(raw, Mapping):
+        raise KorTravelMapContractError("feature batch found item의 trip_card가 객체가 아닙니다.")
+    if not _TRIP_CARD_FIELDS <= set(raw):
         raise KorTravelMapContractError("feature batch trip_card 필드 집합이 올바르지 않습니다.")
+    _note_additive_fields(raw, _TRIP_CARD_FIELDS, what="trip_card")
     if raw["feature_id"] != feature_id:
         raise KorTravelMapContractError("feature batch item과 trip_card feature_id가 다릅니다.")
     if not all(isinstance(raw[field], str) for field in ("kind", "name", "category")):
@@ -253,8 +273,11 @@ def _decode_feature_batch_item(raw: object) -> FeatureBatchItem:
     feature_id = raw.get("feature_id")
     if not isinstance(feature_id, str):
         raise KorTravelMapContractError("feature batch item feature_id가 문자열이 아닙니다.")
+    _note_additive_fields(raw, _BATCH_ITEM_FIELDS, what="batch_item")
+    # 상태별로 허용되는 **알려진** 키만 본다(더해진 키는 위에서 무시).
+    known_keys = set(raw) & _BATCH_ITEM_FIELDS
     if state == "missing":
-        if set(raw) != {"state", "feature_id"}:
+        if known_keys != {"state", "feature_id"}:
             raise KorTravelMapContractError("feature batch missing item 셰입이 올바르지 않습니다.")
         return MissingFeatureBatchItem(feature_id=feature_id)
     if state not in {"found", "retired", "suppressed", "unchanged"}:
@@ -269,14 +292,14 @@ def _decode_feature_batch_item(raw: object) -> FeatureBatchItem:
             "feature batch row_revision이 PostgreSQL bigint 범위의 양의 정수가 아닙니다."
         )
     if state == "found":
-        if set(raw) != {"state", "feature_id", "row_revision", "trip_card"}:
+        if known_keys != _BATCH_ITEM_FIELDS:
             raise KorTravelMapContractError("feature batch found item 셰입이 올바르지 않습니다.")
         return FoundFeatureBatchItem(
             feature_id=feature_id,
             row_revision=row_revision,
             trip_card=_decode_feature_trip_card(raw["trip_card"], feature_id),
         )
-    if set(raw) != {"state", "feature_id", "row_revision"}:
+    if known_keys != {"state", "feature_id", "row_revision"}:
         raise KorTravelMapContractError(f"feature batch {state} item 셰입이 올바르지 않습니다.")
     if state == "retired":
         return RetiredFeatureBatchItem(feature_id=feature_id, row_revision=row_revision)
