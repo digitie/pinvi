@@ -56,8 +56,26 @@ export function MapFallback({ info }: { info: VWorldMapFallbackInfo }) {
   );
 }
 
+/**
+ * maplibre worker를 정적 파일에서 띄운다(`scripts/copy-maplibre-worker.mjs`가 `predev`/`prebuild`에서
+ * `public/maplibre/`로 복사).
+ *
+ * maplibre 6 ESM은 worker URL을 `import.meta.url`에서 유도하는데, webpack 프로덕션 빌드가 그것을
+ * 빌드 머신의 `file:///repo/...` 경로로 굳혀 worker URL이 빈 문자열이 된다("Worker failed to
+ * load", 2026-11-02 prod e2e). raster 바탕지도와 HTML 마커는 worker 없이도 그려지지만 worker를
+ * 쓰는 GeoJSON/벡터 source는 tile을 하나도 만들지 못한다(kor-travel-map admin 2026-09-18 실측).
+ * 지도 인스턴스가 만들어지기 전에 한 번만 설정하면 되므로 지도 엔진을 불러오는 이 동적 import
+ * 안에서 부른다 — 저장소에서 지도를 만드는 길은 `VWorldMap` 하나다.
+ */
+export const MAPLIBRE_WORKER_URL = '/maplibre/maplibre-gl-worker.mjs';
+
 export const VWorldMap = dynamic<VWorldMapViewProps>(
-  () => import('vworld-map-web').then((module) => module.VWorldMapView),
+  () =>
+    Promise.all([import('maplibre-gl'), import('vworld-map-web')]).then(([maplibre, module]) => {
+      // maplibre 기본값처럼 버전을 붙인다 — public 파일은 해시가 없어 프록시 캐시가 옛 worker를 줄 수 있다.
+      maplibre.setWorkerUrl(`${MAPLIBRE_WORKER_URL}?v=${maplibre.getVersion()}`);
+      return module.VWorldMapView;
+    }),
   { ssr: false, loading: () => <MapLoadingSkeleton /> },
 );
 

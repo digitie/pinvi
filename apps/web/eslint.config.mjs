@@ -190,4 +190,7 @@ const config = [...nextCoreWebVitals, ...nextTypescript, {
   },
 }];
 
+// prebuild/predev가 복사한 maplibre worker(생성물, 518KB minified) — lint 대상이 아니다.
+config.unshift({ ignores: ['public/maplibre/**'] });
+
 export default config;

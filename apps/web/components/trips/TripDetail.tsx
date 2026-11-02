@@ -1912,25 +1912,26 @@ export function TripDetail({ tripId }: TripDetailProps) {
           aria-label="여행 지도"
           data-testid="trip-detail-map"
         >
-          <div
-            className={
-              mobileWebLayout
-                ? 'pointer-events-none absolute left-2 right-2 top-20 z-10'
-                : 'pointer-events-none absolute left-3 right-3 top-3 z-10 md:left-4 md:right-auto md:w-[min(560px,calc(100%-2rem))]'
-            }
-          >
-            <div
-              className="pointer-events-auto rounded-sm border border-hairline bg-canvas/95 p-2 shadow-card backdrop-blur"
-              data-testid="trip-map-place-search"
-            >
-              {selectedDay ? (
-                <MapSearchBox onSelect={handleAddPlace} />
-              ) : (
-                <p className="px-2 py-1 text-sm text-muted">선택된 일자가 없습니다.</p>
-              )}
-            </div>
-          </div>
           <TripMapView
+            // 장소 검색과 교통 정보 컨트롤을 한 세로 스택에 둔다 — 따로 띄우면 교통 패널이 검색창을
+            // 덮는다(2026-11-02 prod e2e).
+            overlayTopLeft={
+              <div
+                className="rounded-sm border border-hairline bg-canvas/95 p-2 shadow-card backdrop-blur"
+                data-testid="trip-map-place-search"
+              >
+                {selectedDay ? (
+                  <MapSearchBox onSelect={handleAddPlace} />
+                ) : (
+                  <p className="px-2 py-1 text-sm text-muted">선택된 일자가 없습니다.</p>
+                )}
+              </div>
+            }
+            overlayTopLeftClassName={
+              mobileWebLayout
+                ? 'pointer-events-none absolute left-2 right-2 top-20 z-10 max-h-[calc(100%-6rem)] overflow-y-auto'
+                : 'pointer-events-none absolute left-3 right-3 top-3 z-10 max-h-[calc(100%-1.5rem)] overflow-y-auto md:left-4 md:right-auto md:w-[min(560px,calc(100%-2rem))]'
+            }
             apiKey={VWORLD_API_KEY}
             points={mapPoints}
             selectedPoiId={selectedPoiId}
