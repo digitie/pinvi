@@ -109,6 +109,7 @@ describe('FeatureDetailCardBody', () => {
       name: 'OO주유소',
       coord: null,
       category: null,
+      category_label: null,
       address_line: null,
       marker_color: 'P-02',
       marker_icon: 'fuel',
