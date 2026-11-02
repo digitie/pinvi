@@ -970,7 +970,10 @@ T-374 사양의 단일 정본이다 — ADR-074 결정 4와 `tasks.md` T-374는 
   쥐었고, 프론트엔드는 마커를 바꿔 골라도 직전 요청을 취소하지 않았다. 그래서 브라우저 연결 슬롯이 막혀 다른
   요청이 줄을 섰다.
   - **read 무재시도**: 연결 뒤에 난 timeout(read·write·pool·attempt 전체)은 재시도하지 않는다. 연결 실패·5xx는 계속 재시도한다.
-  - **단건 카드 예산**: 직접 경로 4 s. `count_deadline_timeouts=True`라 예산이 read의 절반보다 짧아도 deadline에 깎인 timeout을 실패로 센다. 응답하지 않는 피호출자는 카드 3회 뒤 회로가 열린다.
+  - **단건 카드 예산**: 직접 경로 4 s.
+    - 카드 범위는 `/resolve`만 센다(`count_short_timeouts_for=("resolve",)`). 예산의 절반 이상을 받고도 응답하지 않은 attempt를 **카드 전용 회로**(`resolve@short`)에 실패로 쌓는다. 응답하지 않는 `/resolve`는 카드 3회 뒤 카드 쪽에서 끊긴다.
+    - trip view와 공유하는 `resolve`·latest·forecast 회로는 카드가 열지 않는다. 카드 예산으로는 '느리지만 살아 있음'과 '응답 없음'을 가를 수 없기 때문이다.
+    - httpx 연결 풀 대기(`PoolTimeout`)는 세지 않는다. pool 단계 timeout을 attempt 예산보다 50 ms 짧게 둬서 이 경우가 따로 드러난다.
   - **커넥션 반환**: 다음 자리에서 읽기 트랜잭션을 닫고(`release_read_connection`) 외부 호출 동안 커넥션을 쥐지 않는다. flush된 쓰기가 있으면 닫지 않는다.
     - 인증 의존성 끝
     - trip view의 Map 호출 직전

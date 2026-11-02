@@ -91,9 +91,14 @@ _HOST_CIRCUIT_NAME = "host"
 # 단건 카드(2026-11-02)는 예산(≈3.9 s)이 이 하한(read 10 s의 절반)보다 짧다. 하한을 그대로 두면 연결은 받고
 # 응답하지 않는 `/resolve`를 카드 트래픽으로는 영영 세지 못한다(카드마다 3.9 s를 쓰고 `/resolve`를 하나씩 더
 # 보낸다). 카드는 `count_short_timeouts_for=("resolve",)`와 카드 예산의 절반(`min_counted_remaining`)으로
-# `/resolve`만 센다 — latest·forecast는 trip view와 회로를 공유하므로, 느리지만 살아 있는(4~9 s) 엔드포인트나
-# 카드 예산 끝에서 짧게 받은 attempt로 그 회로를 열지 않는다.
+# `/resolve`만 세고, 그 실패는 **카드 전용 회로**(`resolve@short`)에 쌓는다. 카드 예산으로는 '느리지만 살아
+# 있음(4~9 s)'과 '응답 없음'을 가를 수 없으므로, trip view(≈9.9 s 예산)와 공유하는 `resolve`·latest·forecast
+# 회로는 카드가 열지 않는다.
 _DEADLINE_MEANINGFUL_READ_FRACTION = 0.5
+_SHORT_BUDGET_CIRCUIT_SUFFIX = "@short"
+# attempt 전체 `asyncio.timeout(남은 시간)`보다 httpx의 pool 단계 timeout이 먼저 나게 하는 여유 — 그래야
+# 우리 쪽 연결 풀 경합이 `PoolTimeout`으로 드러나 피호출자 실패로 세지 않는다.
+_POOL_TIMEOUT_GRACE_SECONDS = 0.05
 
 
 def _location_path(location_id: str, leaf: str) -> str:
@@ -142,6 +147,8 @@ def kor_travel_weather_call_deadline(
     `_DEADLINE_MEANINGFUL_READ_FRACTION` 주석). 카드 예산 끝에서 잘린 latest·forecast처럼 짧게 받은 attempt나
     느리지만 살아 있는 엔드포인트는 여전히 소진으로 본다 — trip view와 공유하는 회로를 카드가 열지 않게.
     """
+    if isinstance(count_short_timeouts_for, str):
+        raise TypeError("count_short_timeouts_for는 엔드포인트 이름의 모음이다(문자열 하나가 아니라)")
     current = _call_scope.get()
     if current is None:
         scope = _CallScope(
@@ -740,7 +747,15 @@ class KorTravelWeatherClient:
         """
         host = self._host_circuit
         host_trial = host.acquire()
-        circuit = self._circuit_for(endpoint)
+        # 짧은 예산에서 센 엔드포인트(단건 카드의 `/resolve`)는 **별도 회로**를 쓴다 — trip view와 공유하는
+        # 회로를, 카드 예산으로는 '느리지만 살아 있음'과 '응답 없음'을 가를 수 없는 실패로 열지 않게.
+        call_scope = _call_scope.get()
+        circuit_name = (
+            f"{endpoint}{_SHORT_BUDGET_CIRCUIT_SUFFIX}"
+            if call_scope is not None and endpoint in call_scope.count_short_timeouts_for
+            else endpoint
+        )
+        circuit = self._circuit_for(circuit_name)
         try:
             trial = circuit.acquire()
         except BaseException:
@@ -833,7 +848,7 @@ class KorTravelWeatherClient:
                     connect=_cap(base.connect, remaining),
                     read=_cap(base.read, remaining),
                     write=_cap(base.write, remaining),
-                    pool=_cap(base.pool, remaining),
+                    pool=_cap(base.pool, max(remaining - _POOL_TIMEOUT_GRACE_SECONDS, 0.001)),
                 )
                 request_kwargs["timeout"] = applied
             try:
@@ -843,7 +858,14 @@ class KorTravelWeatherClient:
                 if isinstance(exc, httpx.PoolTimeout):
                     # PinVi 쪽 httpx 연결 풀이 붐볐다 — 연결을 시도조차 못 했으니 피호출자 장애의 증거가
                     # 아니다(회로 미집계). 앞선 attempt의 진짜 실패가 있으면 그것을 남긴다.
-                    last = last if last is not None else exhausted()
+                    logger.warning("kor_travel_weather.pool_timeout", extra={"path": path})
+                    last = (
+                        last
+                        if last is not None
+                        else KorTravelWeatherDeadlineExhausted(
+                            f"kor-travel-weather 연결 풀 대기 초과({path})"
+                        )
+                    )
                 elif (
                     scope is not None
                     and remaining is not None
