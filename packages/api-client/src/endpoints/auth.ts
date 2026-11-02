@@ -53,6 +53,11 @@ export const authApi = (client: ApiClient) => ({
       schema: AuthUserSchema,
     }),
 
+  /**
+   * 원시 `/auth/refresh` 호출. **웹 코드는 쓰지 않는다** — 여러 곳에서 따로 부르면 회전된 refresh
+   * token을 두고 경주해 한쪽이 로그아웃된다. 웹은 `refreshCookieSession(baseUrl)`(single-flight +
+   * 탭 간 Web Locks)을 쓴다. `ApiClient`도 401에서 그것을 자동으로 쓴다.
+   */
   refresh: () =>
     client.request('/auth/refresh', {
       method: 'POST',

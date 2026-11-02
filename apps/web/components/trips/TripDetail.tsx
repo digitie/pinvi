@@ -41,7 +41,7 @@ import type {
   TripView,
   TripViewPoi,
 } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
+import { apiClient, redirectToLogin } from '@/lib/api';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 import { appendRank, paletteHex, reorderMoves, tripDaysToMapPoints } from '@pinvi/domain';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
@@ -529,8 +529,13 @@ export function TripDetail({ tripId }: TripDetailProps) {
       },
       onClose: setRealtimeCloseInfo,
       // REST 401 자동 갱신과 같은 single-flight를 쓴다 — 따로 `/auth/refresh`를 부르면 동시
-      // 갱신이 회전된 refresh token을 두고 경주해 한쪽이 로그아웃된다.
-      onAuthRefresh: () => refreshCookieSession(PINVI_API_URL),
+      // 갱신이 회전된 refresh token을 두고 경주해 한쪽이 로그아웃된다. 갱신이 실패하면 예전처럼
+      // 로그인 화면으로 보낸다(세션을 되살릴 방법이 없다).
+      onAuthRefresh: async () => {
+        const ok = await refreshCookieSession(PINVI_API_URL);
+        if (!ok) redirectToLogin();
+        return ok;
+      },
       onError: () => undefined,
     });
     realtimeClientRef.current = client;

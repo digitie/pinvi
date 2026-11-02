@@ -104,7 +104,7 @@ describe('api-client cookie 세션 자동 갱신', () => {
     expect(server.refreshCalls()).toBe(1);
   });
 
-  it('갱신이 실패하면 1회 재시도 후 onUnauthorized를 부르고 오류를 던진다', async () => {
+  it('갱신이 실패하면 다시 보내지 않고 onUnauthorized를 부르고 오류를 던진다', async () => {
     const server = sessionServer({ refreshOk: false });
     const onUnauthorized = vi.fn();
     const client = new ApiClient({ baseUrl: nextBase(), fetcher: server.fetcher, onUnauthorized });
@@ -114,9 +114,97 @@ describe('api-client cookie 세션 자동 갱신', () => {
       code: 'TOKEN_INVALID',
     });
     expect(server.refreshCalls()).toBe(1);
-    // 다른 탭이 먼저 회전시켰을 수 있으므로 갱신 실패여도 1회는 다시 시도한다.
-    expect(server.calls.filter((c) => c.url.endsWith('/trips'))).toHaveLength(2);
+    // 서버는 실패한 갱신에 두 cookie를 지운다 — 다시 보내 봐야 401이다.
+    expect(server.calls.filter((c) => c.url.endsWith('/trips'))).toHaveLength(1);
     expect(onUnauthorized).toHaveBeenCalledTimes(1);
+  });
+
+  it('갱신을 기다리는 중 취소되면 401이 아니라 AbortError로 끝나고 로그인 화면으로 보내지 않는다', async () => {
+    const server = sessionServer({ refreshDelayMs: 50 });
+    const onUnauthorized = vi.fn();
+    const client = new ApiClient({ baseUrl: nextBase(), fetcher: server.fetcher, onUnauthorized });
+    const controller = new AbortController();
+
+    const pending = client.request('/features/in-bounds', {
+      schema: Item,
+      signal: controller.signal,
+    });
+    setTimeout(() => controller.abort(), 10);
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
+  it('갱신 뒤에 도착한 늦은 401은 다시 갱신하지 않고 그대로 재시도한다', async () => {
+    const calls: Call[] = [];
+    let sessionValid = false;
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, method: init?.method ?? 'GET' });
+      if (url.endsWith('/auth/refresh')) {
+        sessionValid = true;
+        return json(200, { data: { user_id: 'u1' } });
+      }
+      const validAtSend = sessionValid;
+      if (url.endsWith('/slow')) await new Promise((resolve) => setTimeout(resolve, 40));
+      return validAtSend ? json(200, { data: { ok: true } }) : json(401, UNAUTHORIZED);
+    }) as unknown as typeof fetch;
+    const client = new ApiClient({ baseUrl: nextBase(), fetcher });
+
+    const slow = client.request('/slow', { schema: Item });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await expect(client.request('/fast', { schema: Item })).resolves.toEqual({ ok: true });
+    await expect(slow).resolves.toEqual({ ok: true });
+
+    expect(calls.filter((c) => c.url.endsWith('/auth/refresh'))).toHaveLength(1);
+  });
+
+  it('재시도는 같은 메서드·본문·헤더로 다시 보낸다', async () => {
+    const seen: RequestInit[] = [];
+    let sessionValid = false;
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/auth/refresh')) {
+        sessionValid = true;
+        return json(200, { data: {} });
+      }
+      seen.push(init ?? {});
+      return sessionValid ? json(200, { data: { ok: true } }) : json(401, UNAUTHORIZED);
+    }) as unknown as typeof fetch;
+    const client = new ApiClient({ baseUrl: nextBase(), fetcher });
+
+    await client.request('/trips/t1/pois', {
+      method: 'POST',
+      body: JSON.stringify({ title: '하회마을' }),
+      headers: { 'Idempotency-Key': 'k1' },
+      schema: Item,
+    });
+
+    expect(seen).toHaveLength(2);
+    expect(seen[1]!.method).toBe('POST');
+    expect(seen[1]!.body).toBe(seen[0]!.body);
+    expect(seen[1]!.headers).toEqual(seen[0]!.headers);
+  });
+
+  it('여러 탭의 갱신은 Web Locks로 줄 세운다', async () => {
+    const server = sessionServer();
+    const lockNames: string[] = [];
+    const locks = {
+      request: vi.fn(async (name: string, callback: () => Promise<unknown>) => {
+        lockNames.push(name);
+        return callback();
+      }),
+    };
+    Object.defineProperty(globalThis.navigator, 'locks', { value: locks, configurable: true });
+    try {
+      const base = nextBase();
+      const client = new ApiClient({ baseUrl: base, fetcher: server.fetcher });
+      await expect(client.request('/trips', { schema: Item })).resolves.toEqual({ ok: true });
+      expect(lockNames).toEqual([`pinvi-auth-refresh:${base}`]);
+      expect(server.refreshCalls()).toBe(1);
+    } finally {
+      delete (globalThis.navigator as unknown as { locks?: unknown }).locks;
+    }
   });
 
   it('requestNoContent도 같은 규칙을 따른다', async () => {
@@ -131,7 +219,14 @@ describe('api-client cookie 세션 자동 갱신', () => {
     expect(onUnauthorized).not.toHaveBeenCalled();
   });
 
-  it.each(['/auth/login', '/auth/logout', '/auth/register', '/auth/verify-email/resend'])(
+  it.each([
+    '/auth/login',
+    '/auth/login?next=%2Ftrips',
+    '/auth/logout',
+    '/auth/register',
+    '/auth/verify-email',
+    '/auth/verify-email/resend',
+  ])(
     '%s의 401은 갱신하지 않는다(자격 증명 확인 경로)',
     async (path) => {
       const server = sessionServer();

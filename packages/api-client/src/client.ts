@@ -187,11 +187,16 @@ function requestTimeoutError(): ApiError {
  * cookie 세션 갱신 single-flight — **같은 API(baseUrl)를 쓰는 모든 ApiClient 인스턴스와**
  * 웹소켓 재인증이 진행 중인 갱신 하나를 공유한다.
  *
- * refresh token은 갱신마다 회전되고 옛 토큰은 즉시 폐기된다(`refresh_user_session`). 동시 401이
- * 저마다 `/auth/refresh`를 부르면 첫 호출만 성공하고 나머지는 폐기된 토큰으로 401을 받아 사용자를
- * 로그인 화면으로 보낸다. 그래서 진행 중 갱신을 모듈 수준에서 공유한다.
+ * refresh token은 갱신마다 회전되고 옛 토큰은 즉시 폐기된다(`refresh_user_session`). 폐기된 토큰으로
+ * 갱신하면 서버는 401과 함께 **두 cookie를 지운다**(`_auth_error_with_cleared_cookies`) — 늦게 도착한
+ * 그 응답이 먼저 받은 새 cookie까지 지워 사용자를 로그아웃시킨다. 그래서
+ * - 한 탭 안의 동시 갱신은 진행 중 Promise 하나를 공유하고(single-flight),
+ * - 여러 탭의 갱신은 Web Locks(`navigator.locks`)로 줄 세운다. 뒤 탭은 앞 탭이 회전시킨 새 refresh
+ *   cookie로 갱신하므로 성공한다(Web Locks가 없는 런타임은 탭 안 single-flight만 한다).
  */
 const cookieRefreshInFlight = new Map<string, Promise<boolean>>();
+/** baseUrl별 마지막 **성공한** 갱신 완료 시각(ms) — 갱신 전에 보낸 요청의 늦은 401은 갱신 없이 재시도. */
+const cookieRefreshSucceededAt = new Map<string, number>();
 
 /** 갱신 요청 자체의 상한 — 매달린 갱신이 원 요청들을 영원히 붙잡지 않게. */
 const COOKIE_REFRESH_TIMEOUT_MS = 15_000;
@@ -215,8 +220,41 @@ function refreshExemptPath(path: string): boolean {
   );
 }
 
+interface LockManagerLike {
+  request<T>(name: string, callback: () => Promise<T>): Promise<T>;
+}
+
+function webLocks(): LockManagerLike | null {
+  const nav = (globalThis as { navigator?: { locks?: LockManagerLike } }).navigator;
+  return nav?.locks && typeof nav.locks.request === 'function' ? nav.locks : null;
+}
+
+function abortError(): DOMException {
+  return new DOMException('The operation was aborted.', 'AbortError');
+}
+
+/** `promise`를 기다리되 `signal`이 끊기면 즉시 AbortError로 끝낸다(갱신 자체는 다른 대기자를 위해 계속). */
+function untilSettledOrAborted<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(abortError());
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(abortError());
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
 /**
- * refresh cookie로 `POST {baseUrl}/auth/refresh`를 부른다. 성공하면 true.
+ * refresh cookie로 `POST {baseUrl}/auth/refresh`를 부른다. 성공하면 true. 예외를 던지지 않는다.
  * 같은 baseUrl의 동시 호출은 진행 중인 갱신 하나를 기다린다.
  */
 export function refreshCookieSession(
@@ -225,24 +263,41 @@ export function refreshCookieSession(
 ): Promise<boolean> {
   const pending = cookieRefreshInFlight.get(baseUrl);
   if (pending) return pending;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), COOKIE_REFRESH_TIMEOUT_MS);
-  const refresh = fetcher(`${baseUrl}/auth/refresh`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    signal: controller.signal,
-  })
+  const run = async (): Promise<boolean> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), COOKIE_REFRESH_TIMEOUT_MS);
+    try {
+      const res = await fetcher(`${baseUrl}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+      });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const locks = webLocks();
+  const refresh = (locks ? locks.request(`pinvi-auth-refresh:${baseUrl}`, run) : run())
     .then(
-      (res) => res.ok,
+      (ok) => {
+        if (ok) cookieRefreshSucceededAt.set(baseUrl, Date.now());
+        return ok;
+      },
       () => false,
     )
     .finally(() => {
-      clearTimeout(timer);
       cookieRefreshInFlight.delete(baseUrl);
     });
   cookieRefreshInFlight.set(baseUrl, refresh);
   return refresh;
+}
+
+function isStreamBody(body: RequestInit['body']): boolean {
+  return typeof ReadableStream !== 'undefined' && body instanceof ReadableStream;
 }
 
 export class ApiClient {
@@ -250,31 +305,42 @@ export class ApiClient {
 
   /**
    * 이 401이 cookie 세션 갱신 대상인가. token 모드(`getAuthToken`, 모바일)는 자체 fetcher가 갱신을
-   * 맡으므로 제외하고, 자격 증명 확인 경로와 갱신 경로 자신도 제외한다.
+   * 맡으므로 제외하고, 자격 증명 확인 경로와 갱신 경로 자신, 다시 보낼 수 없는 stream body도 제외한다.
    */
-  private shouldRefreshCookieSession(path: string, link: ReturnType<typeof linkAbort>): boolean {
+  private shouldRefreshCookieSession(path: string, init: RequestInit): boolean {
     if (this.opts.getAuthToken || this.opts.cookieSessionRefresh === false) return false;
-    if (link.signal?.aborted) return false;
+    if (isStreamBody(init.body)) return false;
     return !refreshExemptPath(path);
   }
 
   /**
    * 요청을 보내고, cookie 세션 만료(401)면 갱신을 기다린 뒤 **1회** 다시 보낸다.
    *
-   * 갱신이 실패해도 1회는 다시 보낸다 — 다른 탭이 먼저 refresh token을 회전시켰다면 이 탭의 갱신은
-   * 폐기된 토큰으로 실패하지만 cookie jar에는 이미 새 access cookie가 있다. 재시도도 401이면
-   * 그 응답을 그대로 돌려주고 호출부가 `onUnauthorized`를 부른다. 401은 인증 단계에서 거부된
-   * 요청이라 비멱등 요청도 다시 보내도 중복 실행되지 않는다.
+   * - 갱신이 실패하면 다시 보내지 않고 401을 돌려준다 → 호출부가 `onUnauthorized`.
+   * - 이 요청을 보낸 **뒤에** 다른 요청이 이미 갱신에 성공했다면(늦게 도착한 401) 갱신 없이 다시 보낸다.
+   * - 갱신을 기다리는 동안 호출부가 취소했거나 예산이 끝났으면 401이 아니라 AbortError로 끝낸다 —
+   *   취소된 요청 때문에 로그인 화면으로 보내지 않는다(지도 이동마다 in-bounds를 취소한다).
+   * 401은 인증 단계에서 거부된 요청이라 비멱등 요청도 다시 보내도 중복 실행되지 않는다.
    */
   private async fetchWithSessionRefresh(
     path: string,
     init: RequestInit & RequestTimeoutOption,
     link: ReturnType<typeof linkAbort>,
   ): Promise<Response> {
+    const sentAt = Date.now();
     const res = await this.fetch(path, init, link);
-    if (res.status !== 401 || !this.shouldRefreshCookieSession(path, link)) return res;
-    await refreshCookieSession(this.opts.baseUrl, this.opts.fetcher ?? fetch);
-    if (link.signal?.aborted) return res;
+    if (res.status !== 401 || !this.shouldRefreshCookieSession(path, init)) return res;
+    if (link.signal?.aborted) throw abortError();
+    const baseUrl = this.opts.baseUrl;
+    const refreshedAfterSend = (cookieRefreshSucceededAt.get(baseUrl) ?? 0) >= sentAt;
+    if (!refreshedAfterSend) {
+      const ok = await untilSettledOrAborted(
+        refreshCookieSession(baseUrl, this.opts.fetcher ?? fetch),
+        link.signal,
+      );
+      if (!ok) return res;
+    }
+    if (link.signal?.aborted) throw abortError();
     return this.fetch(path, init, link);
   }
 
