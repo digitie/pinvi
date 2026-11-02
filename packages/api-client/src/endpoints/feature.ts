@@ -79,10 +79,11 @@ export const featureApi = (client: ApiClient) => ({
   // `/features/search`는 삭제됐고 feature는 통합 검색의 source=feature 행으로 나온다.
 
   /** feature 1건 상세(raw/debug passthrough). 사용자 표시는 detailCard를 쓴다(ADR-056). */
-  get: (featureId: string) =>
+  get: (featureId: string, opts?: { signal?: AbortSignal }) =>
     client.request(`/features/${featureId}`, {
       method: 'GET',
       schema: FeatureDetailSchema,
+      signal: opts?.signal,
     }),
 
   /**
@@ -105,13 +106,21 @@ export const featureApi = (client: ApiClient) => ({
     });
   },
 
-  /** KMA 시간축 weather card. */
-  weather: (featureId: string, params: { asof?: string | null } = {}) => {
+  /**
+   * KMA 시간축 weather card. 선택이 바뀌면 호출부가 signal로 직전 요청을 취소한다 — 느린
+   * 날씨 응답이 브라우저 연결 슬롯을 붙잡아 다른 요청을 줄 세우지 않게(2026-11-02 prod 점검).
+   */
+  weather: (
+    featureId: string,
+    params: { asof?: string | null } = {},
+    opts?: { signal?: AbortSignal },
+  ) => {
     const qs = new URLSearchParams();
     if (params.asof) qs.set('asof', params.asof);
     return client.request(`/features/${featureId}/weather${qs.toString() ? `?${qs}` : ''}`, {
       method: 'GET',
       schema: FeatureWeatherCardSchema,
+      signal: opts?.signal,
     });
   },
 

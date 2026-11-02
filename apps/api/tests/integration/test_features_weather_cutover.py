@@ -453,6 +453,57 @@ async def test_syn_drop_on_cache_miss_returns_empty_card_not_500(
     assert loop.time() - started < 3 * 0.2 + 0.06 + 0.5
 
 
+class _SlowReadTransport(httpx.AsyncBaseTransport):
+    """연결은 받고 응답하지 않는 피호출자 — 요청의 read timeout만큼 기다렸다가 `ReadTimeout`."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        self.calls += 1
+        await asyncio.sleep(request.extensions["timeout"]["read"])
+        raise httpx.ReadTimeout("no response", request=request)
+
+
+async def test_slow_weather_card_is_bounded_and_read_timeout_not_retried(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    """2026-11-02 prod 점검: 직접 경로 단건 카드에 예산이 없어 read 10 s x 3회 + backoff ≈ 31 s를
+    붙잡았다(브라우저 연결 슬롯 점유 → 다른 요청이 줄 섰다). 운영 수치(read 10 s, 3 attempt)로도 카드는
+    예산(4 s) 안에 빈 카드로 끝나고, read timeout은 다시 보내지 않는다."""
+    user_id, _email = verified_user
+    map_client = _FakeMapClient(feature_id="f_slow_read", lon=_FEATURE_LON, lat=_FEATURE_LAT)
+    transport = _SlowReadTransport()
+    weather_client = KorTravelWeatherClient(
+        httpx.AsyncClient(
+            base_url="http://kor-travel-weather.test",
+            transport=transport,
+            timeout=kor_travel_weather_timeout(
+                Settings(
+                    pinvi_kor_travel_weather_timeout_seconds=10.0,
+                    pinvi_kor_travel_weather_connect_timeout_seconds=1.0,
+                )
+            ),
+        ),
+        max_attempts=3,
+        backoff_base_seconds=0.2,
+    )
+    _override(map_client, weather_client)
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    try:
+        resp = await client.get("/features/f_slow_read/weather", cookies=auth_cookies(user_id))
+    finally:
+        _clear()
+        await weather_client.aclose()
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["data"]["metrics"] == []
+    # 예산 4 s + ASGI·인증·DB 여유(부하 걸린 runner에서도) — 예산이 없던 때는 ≈31 s였다.
+    assert loop.time() - started < 4.0 + 2.0
+    assert transport.calls == 1
+
+
 class _ContractBreakingResolveClient(_FakeWeatherClient):
     async def resolve(
         self, *, lat: float, lon: float, radius_km: float | None = None

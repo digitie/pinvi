@@ -25,7 +25,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Collection, Iterator, Mapping, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -68,7 +68,7 @@ _HOST_CIRCUIT_NAME = "host"
 # 호출자 deadline(event loop 시각) — trip view가 view 예산 안에서 weather를 부를 때 건다.
 # 설정돼 있으면 attempt마다 (a) httpx 단계별 timeout을 남은 시간으로 깎고 (b) attempt 전체를
 # `asyncio.timeout(남은 시간)`으로 묶는다(본문이 찔끔찔끔 와도 deadline을 넘지 않게). 그래야 연결은
-# 받고 응답하지 않는 피호출자(read 10 s x 3회 ≈ 30.6 s)도 예산 안에서 **attempt timeout**으로 끝나
+# 받고 응답하지 않는 피호출자(read 10 s — 2026-11-02부터 read timeout은 재시도하지 않는다)도 예산 안에서 **attempt timeout**으로 끝나
 # 회로차단 실패로 세진다 — 바깥 `asyncio.timeout`의 취소는 실패로 세지 않으므로(결과 없음), 이것이
 # 없으면 trip view 트래픽만으로는 회로가 열리지 않는다.
 #
@@ -87,7 +87,18 @@ _HOST_CIRCUIT_NAME = "host"
 # 성공만 그 엔드포인트의 timeout을 소진으로 보고, 범위당 실패 1회도 엔드포인트마다이며, 회로도 엔드포인트마다
 # 하나라 forecast만 열리고 markers는 계속 산다. 대가: view 예산(≈9.9 s) 안에 한 번도 응답하지 않는 엔드포인트는
 # 느린 것뿐이라도 실패로 센다(같은 view에서 그 엔드포인트가 한 번이라도 응답했으면 보호).
+#
+# 단건 카드(2026-11-02)는 예산(≈3.9 s)이 이 하한(read 10 s의 절반)보다 짧다. 하한을 그대로 두면 연결은 받고
+# 응답하지 않는 `/resolve`를 카드 트래픽으로는 영영 세지 못한다(카드마다 3.9 s를 쓰고 `/resolve`를 하나씩 더
+# 보낸다). 카드는 `count_short_timeouts_for=("resolve",)`와 카드 예산의 절반(`min_counted_remaining`)으로
+# `/resolve`만 세고, 그 실패는 **카드 전용 회로**(`resolve@short`)에 쌓는다. 카드 예산으로는 '느리지만 살아
+# 있음(4~9 s)'과 '응답 없음'을 가를 수 없으므로, trip view(≈9.9 s 예산)와 공유하는 `resolve`·latest·forecast
+# 회로는 카드가 열지 않는다.
 _DEADLINE_MEANINGFUL_READ_FRACTION = 0.5
+_SHORT_BUDGET_CIRCUIT_SUFFIX = "@short"
+# attempt 전체 `asyncio.timeout(남은 시간)`보다 httpx의 pool 단계 timeout이 먼저 나게 하는 여유 — 그래야
+# 우리 쪽 연결 풀 경합이 `PoolTimeout`으로 드러나 피호출자 실패로 세지 않는다.
+_POOL_TIMEOUT_GRACE_SECONDS = 0.05
 
 
 def _location_path(location_id: str, leaf: str) -> str:
@@ -108,6 +119,10 @@ class _ScopeState:
 class _CallScope:
     deadline: float
     state: _ScopeState
+    #: 짧은 예산에서도 deadline이 깎은 timeout을 실패로 세는 엔드포인트와, 그때 attempt가 받았어야 하는
+    #: 최소 남은 시간(`kor_travel_weather_call_deadline` 참조).
+    count_short_timeouts_for: frozenset[str] = frozenset()
+    min_counted_remaining: float = 0.0
 
 
 _call_scope: ContextVar[_CallScope | None] = ContextVar(
@@ -116,17 +131,42 @@ _call_scope: ContextVar[_CallScope | None] = ContextVar(
 
 
 @contextmanager
-def kor_travel_weather_call_deadline(deadline: float) -> Iterator[None]:
+def kor_travel_weather_call_deadline(
+    deadline: float,
+    *,
+    count_short_timeouts_for: Collection[str] = (),
+    min_counted_remaining: float = 0.0,
+) -> Iterator[None]:
     """이 문맥(과 그 안에서 만든 task)의 weather 호출을 `deadline`(loop 시각)까지로 묶는다.
 
     중첩되면 더 이른 deadline을 쓰고(안쪽 범위가 예산을 넓히지 못한다) 집계 상태(엔드포인트별
     실패 1회·성공 관측)는 바깥 범위와 공유한다.
+
+    `count_short_timeouts_for`: 이 엔드포인트들은 예산이 정상 read의 절반보다 짧아도, attempt가
+    `min_counted_remaining` 이상을 받았으면 deadline이 깎은 timeout을 실패로 센다(단건 카드의 `/resolve` —
+    `_DEADLINE_MEANINGFUL_READ_FRACTION` 주석). 카드 예산 끝에서 잘린 latest·forecast처럼 짧게 받은 attempt나
+    느리지만 살아 있는 엔드포인트는 여전히 소진으로 본다 — trip view와 공유하는 회로를 카드가 열지 않게.
     """
+    if isinstance(count_short_timeouts_for, str):
+        raise TypeError(
+            "count_short_timeouts_for는 엔드포인트 이름의 모음이다(문자열 하나가 아니라)"
+        )
     current = _call_scope.get()
     if current is None:
-        scope = _CallScope(deadline=deadline, state=_ScopeState())
+        scope = _CallScope(
+            deadline=deadline,
+            state=_ScopeState(),
+            count_short_timeouts_for=frozenset(count_short_timeouts_for),
+            min_counted_remaining=min_counted_remaining,
+        )
     else:
-        scope = _CallScope(deadline=min(current.deadline, deadline), state=current.state)
+        scope = _CallScope(
+            deadline=min(current.deadline, deadline),
+            state=current.state,
+            count_short_timeouts_for=current.count_short_timeouts_for
+            | frozenset(count_short_timeouts_for),
+            min_counted_remaining=max(current.min_counted_remaining, min_counted_remaining),
+        )
     token = _call_scope.set(scope)
     try:
         yield
@@ -616,6 +656,10 @@ class _CircuitBreaker:
         self._trial_in_flight = True
         return True
 
+    def is_open(self) -> bool:
+        """열린 채 open 시간이 아직 남았는가(읽기 전용 — half-open 시험 자리를 잡지 않는다)."""
+        return self._opened_at is not None and self._clock() - self._opened_at < self._open_seconds
+
     def record_success(self) -> None:
         self._consecutive_failures = 0
         self._opened_at = None
@@ -709,7 +753,18 @@ class KorTravelWeatherClient:
         """
         host = self._host_circuit
         host_trial = host.acquire()
-        circuit = self._circuit_for(endpoint)
+        # 짧은 예산에서 센 엔드포인트(단건 카드의 `/resolve`)는 **별도 회로**를 쓴다 — trip view와 공유하는
+        # 회로를, 카드 예산으로는 '느리지만 살아 있음'과 '응답 없음'을 가를 수 없는 실패로 열지 않게.
+        call_scope = _call_scope.get()
+        short_budget = call_scope is not None and endpoint in call_scope.count_short_timeouts_for
+        circuit_name = f"{endpoint}{_SHORT_BUDGET_CIRCUIT_SUFFIX}" if short_budget else endpoint
+        shared = self._circuits.get(endpoint)
+        if short_budget and shared is not None and shared.is_open():
+            # 긴 예산(trip view)이 이미 연 공유 회로를 존중한다 — 시험 자리는 잡지 않는다(카드 예산으로는
+            # 그 회로의 판정을 내릴 수 없다).
+            host.release(trial=host_trial)
+            raise KorTravelWeatherUnavailable("kor-travel-weather 회로 열림 — 호출하지 않음")
+        circuit = self._circuit_for(circuit_name)
         try:
             trial = circuit.acquire()
         except BaseException:
@@ -729,7 +784,7 @@ class KorTravelWeatherClient:
             else:
                 if scope is not None:
                     scope.state.counted_endpoints.add(endpoint)
-                circuit.record_failure(endpoint=endpoint, trial=trial)
+                circuit.record_failure(endpoint=circuit_name, trial=trial)
             if not isinstance(exc, KorTravelWeatherConnectFailed) and host_trial:
                 # host 시험 호출이 연결은 됐다(read timeout·5xx) — host 회로를 닫는다. 슬롯만 돌려주면
                 # 연결은 되지만 오류를 내는 동안 host가 half-open에 머물러 호출이 하나씩 줄 선다.
@@ -763,7 +818,8 @@ class KorTravelWeatherClient:
         endpoint: str,
         params: Mapping[str, Any] | None = None,
     ) -> httpx.Response:
-        """transient(타임아웃/연결/5xx) 시 지수 백오프 재시도.
+        """transient 실패 중 **연결 실패(연결 거부·connect timeout)·5xx·그 밖의 전송 오류**만 지수 백오프로
+        재시도한다. 연결 뒤의 timeout(read·write·pool·attempt 전체)은 재시도하지 않는다(2026-11-02).
 
         호출자 deadline(`kor_travel_weather_call_deadline`)이 있으면: attempt마다 timeout을 남은
         시간으로 깎고 attempt 전체를 `asyncio.timeout`으로 묶는다; backoff가 남은 시간 이상이면 자지
@@ -787,6 +843,10 @@ class KorTravelWeatherClient:
             remaining: float | None = None
             applied: httpx.Timeout | None = None
             request_kwargs: dict[str, Any] = {}
+            # 연결은 됐는데 응답이 늦어 난 timeout(read·write·pool·attempt 전체)은 재시도하지 않는다 —
+            # 2026-11-02 점검: 단건 카드가 read 10 s x 3회 + backoff ≈ 31 s를 붙잡았다. 다시 보내도 같은
+            # 피호출자가 같은 만큼 느리다. 연결 실패·5xx는 빨리 끝나므로 계속 재시도한다.
+            retry_allowed = True
             if scope is not None:
                 remaining = scope.deadline - loop.time()
                 if remaining <= 0:
@@ -797,18 +857,38 @@ class KorTravelWeatherClient:
                     connect=_cap(base.connect, remaining),
                     read=_cap(base.read, remaining),
                     write=_cap(base.write, remaining),
-                    pool=_cap(base.pool, remaining),
+                    pool=_cap(base.pool, max(remaining - _POOL_TIMEOUT_GRACE_SECONDS, 0.001)),
                 )
                 request_kwargs["timeout"] = applied
             try:
                 async with asyncio.timeout(remaining):  # None이면 상한 없음
                     resp = await self._http.request(method, path, params=cleaned, **request_kwargs)
             except (httpx.TimeoutException, TimeoutError) as exc:
-                if (
+                if isinstance(exc, httpx.PoolTimeout):
+                    # PinVi 쪽 httpx 연결 풀이 붐볐다 — 연결을 시도조차 못 했으니 피호출자 장애의 증거가
+                    # 아니다(회로 미집계). 앞선 attempt의 진짜 실패가 있으면 그것을 남긴다.
+                    logger.warning("kor_travel_weather.pool_timeout", extra={"path": path})
+                    last = (
+                        last
+                        if last is not None
+                        else KorTravelWeatherDeadlineExhausted(
+                            f"kor-travel-weather 연결 풀 대기 초과({path})"
+                        )
+                    )
+                elif (
                     scope is not None
                     and remaining is not None
                     and applied is not None
-                    and (remaining < floor or endpoint in scope.state.succeeded_endpoints)
+                    and (
+                        (
+                            remaining < floor
+                            and not (
+                                endpoint in scope.count_short_timeouts_for
+                                and remaining >= scope.min_counted_remaining
+                            )
+                        )
+                        or endpoint in scope.state.succeeded_endpoints
+                    )
                     and _deadline_bound_timeout(exc, base=base, applied=applied)
                 ):
                     # deadline이 끊었지만 장애 증거가 아니다(짧은 예산이거나 같은 범위에서 피호출자가
@@ -830,6 +910,7 @@ class KorTravelWeatherClient:
                     last = KorTravelWeatherUnavailable(
                         f"kor-travel-weather 요청 실패({path}): {exc!r}"
                     )
+                retry_allowed = isinstance(exc, httpx.ConnectTimeout)
             except httpx.ConnectError as exc:
                 last = KorTravelWeatherConnectFailed(
                     f"kor-travel-weather 연결 실패({path}): {exc!r}"
@@ -843,6 +924,8 @@ class KorTravelWeatherClient:
                     )
                 else:
                     return resp
+            if not retry_allowed:
+                break
             if attempt + 1 < self._max_attempts:
                 delay = self._backoff_base_seconds * (2**attempt)
                 if scope is not None and scope.deadline - loop.time() <= delay:

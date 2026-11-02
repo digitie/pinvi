@@ -108,6 +108,9 @@ async def get_current_user_id(
         )
 
     request.state.user_id = str(user.user_id)
+    # 인증 조회가 연 읽기 트랜잭션을 여기서 닫는다 — 핸들러가 외부 호출(Map·weather)을 하는
+    # 동안 커넥션을 쥐고 있지 않게. 핸들러의 다음 쿼리는 새 트랜잭션을 연다.
+    await db_session.release_read_connection(db)
     return str(user.user_id)
 
 

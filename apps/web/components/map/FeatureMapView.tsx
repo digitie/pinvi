@@ -53,6 +53,7 @@ import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { addressLine } from '@/lib/featureAddress';
 import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
+import { useAbortableLoad } from '@/lib/useAbortableLoad';
 import { useTransportLayers, type TransportDetailTarget } from '@/lib/useTransportLayers';
 import { TransportLayerControls } from '@/components/map/TransportLayerControls';
 import { TransportMarkerLegend, TransportMarkers } from '@/components/map/TransportMarkers';
@@ -478,27 +479,19 @@ export function FeatureMapView({
     setWeather(null);
   }
 
-  // 선택된 feature 의 상세 + 날씨 로드.
-  useEffect(() => {
-    if (!selectedFeatureId) return;
-    let active = true;
-    void (async () => {
-      try {
-        const [d, w] = await Promise.allSettled([
-          featureApi(apiClient).get(selectedFeatureId),
-          featureApi(apiClient).weather(selectedFeatureId),
-        ]);
-        if (!active) return;
-        if (d.status === 'fulfilled') setDetail(d.value);
-        if (w.status === 'fulfilled') setWeather(w.value);
-      } catch {
-        // 상세/날씨 실패는 팝업 제목만으로 degrade.
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [selectedFeatureId]);
+  // 선택된 feature 의 상세·날씨를 **따로** 로드한다 — 상세(~0.1 s)가 느린 날씨(최대 4 s)를 기다리지
+  // 않게. 선택이 바뀌면 직전 요청을 **취소**한다(느린 날씨 응답이 브라우저 연결을 붙잡아 다른 요청을
+  // 줄 세우지 않게). 실패는 팝업 제목만으로 degrade.
+  useAbortableLoad(
+    selectedFeatureId,
+    (featureId, signal) => featureApi(apiClient).get(featureId, { signal }),
+    setDetail,
+  );
+  useAbortableLoad(
+    selectedFeatureId,
+    (featureId, signal) => featureApi(apiClient).weather(featureId, {}, { signal }),
+    setWeather,
+  );
 
   const flyTo = useCallback((lon: number, lat: number, zoom?: number) => {
     mapRef.current?.flyTo(zoom != null ? { center: [lon, lat], zoom } : { center: [lon, lat] });

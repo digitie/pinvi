@@ -44,6 +44,7 @@ from app.clients.kor_travel_map_weather import (
     WeatherForecastStyle,
     WeatherSection,
 )
+from app.db.session import release_read_connection
 from app.models.weather_location_link import WeatherLocationLink
 from app.services.weather_location_resolver import (
     _RESOLVE_RADII_KM,
@@ -220,6 +221,8 @@ async def resolve_weather_location_via_map(
     """한 feature 해석(캐시 우선). Map 장애·계약 위반은 `KorTravelMapError`로 올린다(호출자가 강등한다)."""
     now = datetime.now(UTC)
     row = await db.get(WeatherLocationLink, feature_id)
+    # 이어지는 Map 호출 동안 커넥션을 쥐지 않게 읽기 트랜잭션을 닫는다.
+    await release_read_connection(db)
     hit = cache_hit(row, lat=lat, lon=lon, now=now)
     if hit is not None:
         return hit
@@ -254,6 +257,8 @@ async def resolve_many_via_map(
             select(WeatherLocationLink).where(WeatherLocationLink.feature_id.in_(list(coords)))
         )
         rows = {row.feature_id: row for row in result.scalars()}
+        # 미스의 Map 호출(동시) 동안 커넥션을 쥐지 않게 읽기 트랜잭션을 닫는다.
+        await release_read_connection(db)
 
     out: dict[str, WeatherLocationResolution | KorTravelMapError] = {}
     misses: list[str] = []

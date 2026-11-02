@@ -965,6 +965,21 @@ T-374 사양의 단일 정본이다 — ADR-074 결정 4와 `tasks.md` T-374는 
   `apps/api/tests/integration/test_trip_view_weather_cutover.py`·`test_features_weather_cutover.py`.
   전부 mock이라 Manager·odroid 상태와 무관하다. "회로 열림 뒤 trip view p95 < 3 s"는 live 기준이라
   §8.2-3 전원 off drill 자리에 둔다.
+- **복원력 보강(2026-11-02 prod 점검, issue #621)**: weather `/resolve`가 17~22 s로 느려지자 단건 카드가
+  예산 없이 read 10 s x 3회 + backoff ≈ 31 s를 붙잡았다. 요청 세션은 그동안 커넥션을 idle-in-transaction으로
+  쥐었고, 프론트엔드는 마커를 바꿔 골라도 직전 요청을 취소하지 않았다. 그래서 브라우저 연결 슬롯이 막혀 다른
+  요청이 줄을 섰다.
+  - **read 무재시도**: 연결 뒤에 난 timeout(read·write·pool·attempt 전체)은 재시도하지 않는다. 연결 실패·5xx는 계속 재시도한다.
+  - **단건 카드 예산**: 직접 경로 4 s.
+    - 카드 범위는 `/resolve`만 센다(`count_short_timeouts_for=("resolve",)`). 예산의 절반 이상을 받고도 응답하지 않은 attempt를 **카드 전용 회로**(`resolve@short`)에 실패로 쌓는다. 응답하지 않는 `/resolve`는 카드 3회 뒤 카드 쪽에서 끊긴다.
+    - trip view와 공유하는 `resolve`·latest·forecast 회로는 카드가 열지 않는다. 카드 예산으로는 '느리지만 살아 있음'과 '응답 없음'을 가를 수 없기 때문이다.
+    - httpx 연결 풀 대기(`PoolTimeout`)는 세지 않는다. pool 단계 timeout을 attempt 예산보다 50 ms 짧게 둬서 이 경우가 따로 드러난다.
+  - **커넥션 반환**: 다음 자리에서 읽기 트랜잭션을 닫고(`release_read_connection`) 외부 호출 동안 커넥션을 쥐지 않는다. flush된 쓰기가 있으면 닫지 않는다.
+    - 인증 의존성 끝
+    - trip view의 Map 호출 직전
+    - resolver의 캐시 조회 뒤(직접·Map 경로)
+  - **프론트엔드**: 상세·날씨를 따로 로드하고, 선택이 바뀌면 직전 요청을 abort한다.
+  - **남은 한계**: `/resolve`(17~22 s)는 read timeout(10 s)보다 길어 직접 경로의 캐시 미스는 지금도 채워지지 않는다. 배경 해석(별도 세션·긴 timeout·feature별 single-flight)은 #621에서 다룬다. 플래그를 켜면 해석은 Map 경로가 맡는다.
 
 ### 8.4 바뀌지 않는 것
 

@@ -43,6 +43,7 @@ from app.clients.kor_travel_weather import (
     KorTravelWeatherNotFound,
     ResolvedWeatherOut,
 )
+from app.db.session import release_read_connection
 from app.models.weather_location_link import WeatherLocationLink
 
 logger = logging.getLogger(__name__)
@@ -167,8 +168,12 @@ async def resolve_weather_location(
     """`feature_id`의 좌표를 `kor-travel-weather` location으로 해석(캐시 우선)."""
     row, cached = await _cached_or_mark_stale(db, feature_id=feature_id, lat=lat, lon=lon)
     if cached is not None:
+        # 적중은 트랜잭션을 그대로 둔다 — trip view가 여러 feature를 연달아 읽는 동안 커밋을 반복하지
+        # 않게. 외부 호출 전 반환은 호출자(카드의 `_collect_direct`, trip view의 해석 뒤)가 한다.
         return cached
 
+    # 미스 — `/resolve`(수 초~수십 초) 동안 커넥션을 쥐지 않게 읽기 트랜잭션을 닫는다.
+    await release_read_connection(db)
     resolved = await _resolve_via_client(client, lat=lat, lon=lon, radii_km=radii_km)
     if resolved is None:
         logger.info(
