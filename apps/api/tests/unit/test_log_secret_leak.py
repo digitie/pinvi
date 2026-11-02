@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import logging
+import sys
 from collections.abc import Iterator
 
 import httpx
@@ -23,8 +24,12 @@ _TOUCHED_LOGGERS = ("httpx", "httpcore", "uvicorn", "uvicorn.access", "uvicorn.e
 
 
 @pytest.fixture
-def prod_stdout(capsys: pytest.CaptureFixture[str]) -> Iterator[pytest.CaptureFixture[str]]:
-    """root handler를 비운 뒤 운영처럼 `configure_logging("INFO")`을 부르고, 끝나면 되돌린다."""
+def prod_stdout() -> Iterator[io.StringIO]:
+    """root handler를 비운 뒤 운영처럼 `configure_logging("INFO")`을 부르고, 끝나면 되돌린다.
+
+    운영에서는 root에 handler가 없어 `basicConfig`가 `sys.stdout` handler를 만든다. 그 호출
+    순간에만 `sys.stdout`을 StringIO로 바꿔, 만들어진 handler가 쓰는 내용을 그대로 읽는다.
+    """
 
     root = logging.getLogger()
     saved_handlers = root.handlers[:]
@@ -36,9 +41,15 @@ def prod_stdout(capsys: pytest.CaptureFixture[str]) -> Iterator[pytest.CaptureFi
     for handler in saved_handlers:
         root.removeHandler(handler)
     structlog.reset_defaults()
-    configure_logging("INFO")
+    stream = io.StringIO()
+    real_stdout = sys.stdout
+    sys.stdout = stream
     try:
-        yield capsys
+        configure_logging("INFO")
+    finally:
+        sys.stdout = real_stdout
+    try:
+        yield stream
     finally:
         for handler in root.handlers[:]:
             root.removeHandler(handler)
@@ -62,7 +73,7 @@ def _geo_ok(request: httpx.Request) -> httpx.Response:
 
 
 async def test_geo_client_call_does_not_write_api_key_to_stdout(
-    prod_stdout: pytest.CaptureFixture[str],
+    prod_stdout: io.StringIO,
 ) -> None:
     http = httpx.AsyncClient(transport=httpx.MockTransport(_geo_ok), base_url="http://geo.test")
     client = KorTravelGeoClient(http, api_key=SECRET, max_attempts=1)
@@ -70,26 +81,29 @@ async def test_geo_client_call_does_not_write_api_key_to_stdout(
         await client.geocode(query="안동시 하회마을길 186")
     finally:
         await client.aclose()
+    logging.getLogger("app.test").warning("probe.after_geo_call")
 
-    assert SECRET not in prod_stdout.readouterr().out
+    out = prod_stdout.getvalue()
+    assert "probe.after_geo_call" in out  # stdout handler가 실제로 쓰고 있다
+    assert SECRET not in out
 
 
 def test_httpx_record_that_is_emitted_is_redacted(
-    prod_stdout: pytest.CaptureFixture[str],
+    prod_stdout: io.StringIO,
 ) -> None:
     """WARNING 이상으로 나오는 httpx 줄도 가린다(URL은 `httpx.URL` 객체 인자로 온다)."""
 
     url = httpx.URL(f"http://geo.test/v2/geocode?key={SECRET}&limit=5")
     logging.getLogger("httpx").warning('HTTP Request: %s %s "%s"', "POST", url, "HTTP/1.1 500")
 
-    out = prod_stdout.readouterr().out
+    out = prod_stdout.getvalue()
     assert "HTTP Request: POST" in out  # 줄은 실제로 나왔다
     assert SECRET not in out
     assert "key=***&limit=5" in out
 
 
 def test_structlog_fields_and_tracebacks_are_redacted(
-    prod_stdout: pytest.CaptureFixture[str],
+    prod_stdout: io.StringIO,
 ) -> None:
     get_logger("app.test").warning(
         "weather.failed", url=f"http://weather.test/v1?serviceKey={SECRET}&lat=1"
@@ -103,16 +117,15 @@ def test_structlog_fields_and_tracebacks_are_redacted(
     except httpx.HTTPStatusError:
         logging.getLogger("app.test").exception("geo.failed")
 
-    out = prod_stdout.readouterr().out
+    out = prod_stdout.getvalue()
     assert "weather.failed" in out
     assert "geo.failed" in out
     assert SECRET not in out
     assert "serviceKey=***" in out
 
 
-def test_uvicorn_access_line_keeps_args_shape_and_hides_inbound_token(
-    prod_stdout: pytest.CaptureFixture[str],
-) -> None:
+@pytest.mark.usefixtures("prod_stdout")
+def test_uvicorn_access_line_keeps_args_shape_and_hides_inbound_token() -> None:
     """uvicorn AccessFormatter는 args를 5-튜플로 풀어 쓴다 — 모양을 지키며 토큰만 가린다."""
 
     from uvicorn.logging import AccessFormatter
