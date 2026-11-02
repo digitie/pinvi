@@ -278,10 +278,41 @@ async def test_get_features_chunks_and_merges() -> None:
             {
                 "items": [
                     {
-                        "state": "found",
+                        "state": "retired",
                         "feature_id": "f_1",
                         "row_revision": 1,
-                        "trip_card": {**_trip_card("f_1"), "private_payload": "leak"},
+                        "trip_card": _trip_card("f_1"),
+                    }
+                ]
+            },
+            None,
+        ),
+        (
+            {
+                "items": [
+                    {
+                        "state": "missing",
+                        "feature_id": "f_1",
+                        "feature_uuid": "f_1",
+                        "trip_card": _trip_card("f_1"),
+                    }
+                ]
+            },
+            None,
+        ),
+        (
+            {"items": [{"state": "found", "feature_id": "f_1", "row_revision": 1}]},
+            None,
+        ),
+        (
+            {
+                "items": [
+                    {
+                        "state": "suppressed",
+                        "feature_id": "f_1",
+                        "feature_uuid": "f_1",
+                        "row_revision": 1,
+                        "trip_card": _trip_card("f_1"),
                     }
                 ]
             },
@@ -327,7 +358,10 @@ async def test_get_features_chunks_and_merges() -> None:
         "future-state",
         "incomplete-trip-card",
         "mismatched-trip-card-id",
-        "extra-trip-card-field",
+        "retired-with-trip-card",
+        "missing-with-trip-card-despite-additive-key",
+        "found-without-trip-card",
+        "suppressed-with-trip-card-despite-additive-key",
         "wrong-unchanged-validator",
         "row-revision-outside-bigint",
         "ignored-matching-validator",
@@ -346,6 +380,63 @@ async def test_get_features_rejects_invalid_response_partition(
     client = _client(handler)
     with pytest.raises(KorTravelMapContractError):
         await client.get_features(["f_1"], known_row_revisions=known_row_revisions)
+    await client.aclose()
+
+
+async def test_get_features_tolerates_additive_upstream_fields() -> None:
+    """내부 소비자는 정확한 셰입을 핀하지 않는다 — 필요한 키만 검사하고 모르는 키는 버린다.
+
+    2026-11-02 prod e2e: Map이 batch item에 `feature_uuid`를 더하자 정확-집합 검사가 batch 전체를
+    거부해 모든 trip POI가 `unverified`가 됐다. 더해진 키는 값으로도 저장되지 않아야 한다
+    (`FeatureTripCard`는 알려진 필드만 갖는다).
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "next_hint": "ignored",
+                    "items": [
+                        {
+                            "state": "found",
+                            "feature_id": "f_found",
+                            "feature_uuid": "f_found",
+                            "row_revision": 2,
+                            "trip_card": {**_trip_card("f_found"), "future_field": "x"},
+                        },
+                        {"state": "missing", "feature_id": "f_missing", "feature_uuid": None},
+                        {
+                            "state": "retired",
+                            "feature_id": "f_retired",
+                            "feature_uuid": "f_retired",
+                            "row_revision": 3,
+                        },
+                    ],
+                },
+                "meta": {},
+            },
+        )
+
+    client = _client(handler)
+    data = await client.get_features(["f_found", "f_missing", "f_retired"])
+    found = data["f_found"]
+    assert isinstance(found, FoundFeatureBatchItem)
+    assert found.row_revision == 2
+    assert found.trip_card.name == "f_found 이름"
+    # 저장되는 것은 snapshot이다 — 더해진 키가 끼어들 수 없다.
+    assert set(found.trip_card.as_snapshot()) == {
+        "feature_id",
+        "kind",
+        "name",
+        "category",
+        "coord",
+        "address",
+        "marker_icon",
+        "marker_color",
+    }
+    assert isinstance(data["f_missing"], MissingFeatureBatchItem)
+    assert isinstance(data["f_retired"], RetiredFeatureBatchItem)
     await client.aclose()
 
 

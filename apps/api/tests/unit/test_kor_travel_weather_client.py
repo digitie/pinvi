@@ -352,15 +352,65 @@ async def test_missing_field_raises_contract_error() -> None:
     await client.aclose()
 
 
-async def test_unexpected_extra_field_raises_contract_error() -> None:
+async def test_unexpected_extra_field_is_tolerated() -> None:
+    """내부 소비자는 정확한 셰입을 핀하지 않는다 — 더해진 필드는 무시한다(필수·타입 검사는 유지)."""
+
     def handler(request: httpx.Request) -> httpx.Response:
-        broken = dict(_WEATHER_VALUE)
-        broken["unexpected_new_field"] = "surprise"
-        return httpx.Response(200, json=_envelope([broken]))
+        extended = dict(_WEATHER_VALUE)
+        extended["unexpected_new_field"] = "surprise"
+        return httpx.Response(200, json=_envelope([extended]))
 
     client = _client(handler)
-    with pytest.raises(KorTravelWeatherContractError):
+    values = await client.latest("loc-1")
+    assert values[0].metric_key == "TMP"
+    await client.aclose()
+
+
+async def test_additive_field_is_warned_once_per_key_set(caplog: pytest.LogCaptureFixture) -> None:
+    """더해진 키가 실은 선택 필드의 개명이면 값이 조용히 빈다 — 운영 로그에 한 번은 보여야 한다."""
+    kor_travel_weather_module._WARNED_ADDITIVE.clear()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        extended = dict(_WEATHER_VALUE)
+        extended["renamed_value_field"] = 1.0
+        return httpx.Response(200, json=_envelope([extended]))
+
+    client = _client(handler)
+    with caplog.at_level("DEBUG", logger=kor_travel_weather_module.__name__):
         await client.latest("loc-1")
+        await client.latest("loc-1")
+    warnings = [r for r in caplog.records if r.levelname == "WARNING" and "additive" in r.message]
+    assert len(warnings) == 1
+    assert "renamed_value_field" in warnings[0].message
+    await client.aclose()
+
+
+async def test_resolve_tolerates_additive_top_level_field() -> None:
+    """2026-11-02 prod: weather가 resolve 응답에 `alert_scope_unverified`를 더하자 정확-집합 검사가
+    모든 trip POI 날씨를 `unavailable`로 만들었다."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=_envelope(
+                {
+                    "requested": {"latitude": 37.5665, "longitude": 126.978},
+                    "location": _LOCATION,
+                    "distance_km": 0.27,
+                    "measurement_point": None,
+                    "source_locations": [_LOCATION],
+                    "latest": [_WEATHER_VALUE],
+                    "forecast": [],
+                    "alerts": [],
+                    "alert_scope_unverified": True,
+                }
+            ),
+        )
+
+    client = _client(handler)
+    result = await client.resolve(lat=37.5665, lon=126.978)
+    assert result.location.location_id == "airkorea-station-abc"
+    assert result.latest[0].metric_key == "TMP"
     await client.aclose()
 
 

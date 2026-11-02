@@ -331,8 +331,13 @@ detail(object), updated_at }` (`status` 삭제 — Map `1f2bdc3a`).
   투영하고, 나머지를 `retired|suppressed|missing`으로 보존한다.
   transport/rate-limit/contract 실패는 snapshot을 유지한 `unverified`다.
 - **broken count**: `retired|missing` POI만 포함한다. `suppressed`와 `unverified`는 포함하지 않는다.
-- **fail-closed**: decoder는 union arm의 exact field 집합, 양의 revision, `trip_card`의 고정 필드와
-  유한 좌표, 요청 ID·순서를 검증한다. 알 수 없는 미래 state와 JSON 중복 member를 거부한다.
+- **fail-closed(의미) / additive 허용(셰입)**: decoder는 state별 **필수·금지 키**(missing에는
+  `row_revision`·`trip_card` 없음, found에는 `trip_card` 필수 등), 양의 revision, `trip_card`의 필수
+  필드와 유한 좌표, 요청 ID·순서를 검증하고 알 수 없는 미래 state와 JSON 중복 member를 거부한다.
+  **모르는(더해진) 키는 무시**하고 (위치, 키 집합)당 한 번 warning으로 남긴다 — decode는 알려진
+  필드만 복사하므로 더해진 값은 snapshot에 들어가지 않는다. 2026-11-02 prod e2e에서 Map이 item에
+  `feature_uuid`를 더하자 예전 exact field 집합 검사가 batch 전체를 거부해 모든 trip POI가
+  `unverified`가 됐다(내부 소비자 정책: 정확한 셰입 핀이 아니라 런타임 검증).
 - **주의**: 200개 초과 trip은 **client에서 청크 분할** 호출.
 - **식별자**: `feature_id`는 `@` 같은 문자를 포함할 수 있는 불투명 문자열이다. PinVi는 suffix를
   분리하거나 포맷을 해석하지 않고 저장값과 응답 key를 exact 비교한다.
