@@ -25,7 +25,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Collection, Iterator, Mapping, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -89,9 +89,10 @@ _HOST_CIRCUIT_NAME = "host"
 # 느린 것뿐이라도 실패로 센다(같은 view에서 그 엔드포인트가 한 번이라도 응답했으면 보호).
 #
 # 단건 카드(2026-11-02)는 예산(≈3.9 s)이 이 하한(read 10 s의 절반)보다 짧다. 하한을 그대로 두면 연결은 받고
-# 응답하지 않는 피호출자를 카드 트래픽으로는 영영 세지 못한다(카드마다 3.9 s를 쓰고 `/resolve`를 하나씩 더 보낸다).
-# 카드는 병렬 forecast가 함께 끊기는 view가 아니고 범위당 엔드포인트 1회 규칙이 과집계를 막으므로,
-# `kor_travel_weather_call_deadline(..., count_deadline_timeouts=True)`로 하한을 건너뛴다.
+# 응답하지 않는 `/resolve`를 카드 트래픽으로는 영영 세지 못한다(카드마다 3.9 s를 쓰고 `/resolve`를 하나씩 더
+# 보낸다). 카드는 `count_short_timeouts_for=("resolve",)`와 카드 예산의 절반(`min_counted_remaining`)으로
+# `/resolve`만 센다 — latest·forecast는 trip view와 회로를 공유하므로, 느리지만 살아 있는(4~9 s) 엔드포인트나
+# 카드 예산 끝에서 짧게 받은 attempt로 그 회로를 열지 않는다.
 _DEADLINE_MEANINGFUL_READ_FRACTION = 0.5
 
 
@@ -113,7 +114,10 @@ class _ScopeState:
 class _CallScope:
     deadline: float
     state: _ScopeState
-    count_deadline_timeouts: bool = False
+    #: 짧은 예산에서도 deadline이 깎은 timeout을 실패로 세는 엔드포인트와, 그때 attempt가 받았어야 하는
+    #: 최소 남은 시간(`kor_travel_weather_call_deadline` 참조).
+    count_short_timeouts_for: frozenset[str] = frozenset()
+    min_counted_remaining: float = 0.0
 
 
 _call_scope: ContextVar[_CallScope | None] = ContextVar(
@@ -123,29 +127,36 @@ _call_scope: ContextVar[_CallScope | None] = ContextVar(
 
 @contextmanager
 def kor_travel_weather_call_deadline(
-    deadline: float, *, count_deadline_timeouts: bool = False
+    deadline: float,
+    *,
+    count_short_timeouts_for: Collection[str] = (),
+    min_counted_remaining: float = 0.0,
 ) -> Iterator[None]:
     """이 문맥(과 그 안에서 만든 task)의 weather 호출을 `deadline`(loop 시각)까지로 묶는다.
 
     중첩되면 더 이른 deadline을 쓰고(안쪽 범위가 예산을 넓히지 못한다) 집계 상태(엔드포인트별
     실패 1회·성공 관측)는 바깥 범위와 공유한다.
 
-    `count_deadline_timeouts`: 예산이 정상 read의 절반보다 짧아도 deadline이 깎은 timeout을 실패로 센다
-    (단건 카드 — `_DEADLINE_MEANINGFUL_READ_FRACTION` 주석). 같은 범위에서 그 엔드포인트가 이미 응답했으면
-    여전히 소진으로 본다.
+    `count_short_timeouts_for`: 이 엔드포인트들은 예산이 정상 read의 절반보다 짧아도, attempt가
+    `min_counted_remaining` 이상을 받았으면 deadline이 깎은 timeout을 실패로 센다(단건 카드의 `/resolve` —
+    `_DEADLINE_MEANINGFUL_READ_FRACTION` 주석). 카드 예산 끝에서 잘린 latest·forecast처럼 짧게 받은 attempt나
+    느리지만 살아 있는 엔드포인트는 여전히 소진으로 본다 — trip view와 공유하는 회로를 카드가 열지 않게.
     """
     current = _call_scope.get()
     if current is None:
         scope = _CallScope(
             deadline=deadline,
             state=_ScopeState(),
-            count_deadline_timeouts=count_deadline_timeouts,
+            count_short_timeouts_for=frozenset(count_short_timeouts_for),
+            min_counted_remaining=min_counted_remaining,
         )
     else:
         scope = _CallScope(
             deadline=min(current.deadline, deadline),
             state=current.state,
-            count_deadline_timeouts=current.count_deadline_timeouts or count_deadline_timeouts,
+            count_short_timeouts_for=current.count_short_timeouts_for
+            | frozenset(count_short_timeouts_for),
+            min_counted_remaining=max(current.min_counted_remaining, min_counted_remaining),
         )
     token = _call_scope.set(scope)
     try:
@@ -829,12 +840,22 @@ class KorTravelWeatherClient:
                 async with asyncio.timeout(remaining):  # None이면 상한 없음
                     resp = await self._http.request(method, path, params=cleaned, **request_kwargs)
             except (httpx.TimeoutException, TimeoutError) as exc:
-                if (
+                if isinstance(exc, httpx.PoolTimeout):
+                    # PinVi 쪽 httpx 연결 풀이 붐볐다 — 연결을 시도조차 못 했으니 피호출자 장애의 증거가
+                    # 아니다(회로 미집계). 앞선 attempt의 진짜 실패가 있으면 그것을 남긴다.
+                    last = last if last is not None else exhausted()
+                elif (
                     scope is not None
                     and remaining is not None
                     and applied is not None
                     and (
-                        (remaining < floor and not scope.count_deadline_timeouts)
+                        (
+                            remaining < floor
+                            and not (
+                                endpoint in scope.count_short_timeouts_for
+                                and remaining >= scope.min_counted_remaining
+                            )
+                        )
                         or endpoint in scope.state.succeeded_endpoints
                     )
                     and _deadline_bound_timeout(exc, base=base, applied=applied)

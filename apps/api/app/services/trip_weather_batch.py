@@ -70,6 +70,7 @@ from app.clients.kor_travel_weather import (
     KorTravelWeatherError,
     kor_travel_weather_call_deadline,
 )
+from app.db.session import release_read_connection
 from app.models.poi import TripDayPoi
 from app.services.weather_location_resolver import (
     WeatherLocationFound,
@@ -342,6 +343,8 @@ async def _build_trip_weather(
     found = await _resolve_all(pending, resolve, deadline=deadline, errors=(KorTravelWeatherError,))
     if not found:
         return pending.result()
+    # 4단계(markers·forecast) 동안 커넥션을 쥐지 않게 해석이 연 읽기 트랜잭션을 닫는다.
+    await release_read_connection(db)
 
     bundles = _bundles(pending, found)
     range_from = _weather_target_at(bundles.needed_dates[0])

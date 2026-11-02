@@ -105,12 +105,9 @@ async def _cached_or_mark_stale(
     """
     row = await db.get(WeatherLocationLink, feature_id)
     if row is not None and written_by_map(row):
-        await release_read_connection(db)
         return row, None
 
     if row is not None and not row.stale and row.lat == lat and row.lon == lon:
-        # 캐시 적중 — 이어지는 latest·forecast 호출 동안 커넥션을 쥐지 않게 읽기 트랜잭션을 닫는다.
-        await release_read_connection(db)
         return row, WeatherLocationFound(row.location_id, tuple(row.source_location_ids))
 
     if row is not None and not row.stale and (row.lat != lat or row.lon != lon):
@@ -118,8 +115,6 @@ async def _cached_or_mark_stale(
         # 재시도하도록).
         row.stale = True
         await db.commit()
-    # 미스 — `/resolve`(수 초~수십 초) 동안 커넥션을 쥐지 않게 읽기 트랜잭션을 닫는다.
-    await release_read_connection(db)
     return row, None
 
 
@@ -173,8 +168,12 @@ async def resolve_weather_location(
     """`feature_id`의 좌표를 `kor-travel-weather` location으로 해석(캐시 우선)."""
     row, cached = await _cached_or_mark_stale(db, feature_id=feature_id, lat=lat, lon=lon)
     if cached is not None:
+        # 적중은 트랜잭션을 그대로 둔다 — trip view가 여러 feature를 연달아 읽는 동안 커밋을 반복하지
+        # 않게. 외부 호출 전 반환은 호출자(카드의 `_collect_direct`, trip view의 해석 뒤)가 한다.
         return cached
 
+    # 미스 — `/resolve`(수 초~수십 초) 동안 커넥션을 쥐지 않게 읽기 트랜잭션을 닫는다.
+    await release_read_connection(db)
     resolved = await _resolve_via_client(client, lat=lat, lon=lon, radii_km=radii_km)
     if resolved is None:
         logger.info(

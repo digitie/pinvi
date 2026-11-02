@@ -52,6 +52,7 @@ from app.clients.kor_travel_weather import (
     WeatherValueOut,
     kor_travel_weather_call_deadline,
 )
+from app.db.session import release_read_connection
 from app.schemas.feature import FeatureWeatherCard
 from app.services.weather_location_resolver import (
     WeatherLocationFound,
@@ -131,8 +132,9 @@ async def resolve_and_collect_deduped_values(
 
     요청 하나는 `budget_seconds` 안에 끝난다 — 넘기면 빈 카드다(2026-11-02 점검: 예산이 없어 read
     10 s x 3회 + backoff ≈ 31 s를 붙잡았다). client 호출 deadline을 같은 예산으로 걸어 attempt
-    timeout이 바깥 취소보다 먼저 나게 하고, 예산이 read의 절반보다 짧아도 그 timeout을 회로차단 실패로
-    센다(`count_deadline_timeouts`) — 응답하지 않는 피호출자를 카드 트래픽만으로도 회로로 끊는다.
+    timeout이 바깥 취소보다 먼저 나게 한다. 예산이 read의 절반보다 짧아도 `/resolve`가 예산의 절반 이상을
+    받고도 응답하지 않으면 회로차단 실패로 센다 — 응답하지 않는 `/resolve`를 카드 트래픽만으로도 끊는다
+    (latest·forecast는 trip view와 회로를 공유하므로 세지 않는다, `kor_travel_weather_call_deadline`).
 
     반환: `(deduped_values, latest_known_at)`. 빈 값이면 `latest_known_at`도 `None`.
     """
@@ -146,7 +148,9 @@ async def resolve_and_collect_deduped_values(
     deadline = asyncio.get_running_loop().time() + budget_seconds
     try:
         with kor_travel_weather_call_deadline(
-            deadline - min(0.1, budget_seconds / 10), count_deadline_timeouts=True
+            deadline - min(0.1, budget_seconds / 10),
+            count_short_timeouts_for=("resolve",),
+            min_counted_remaining=budget_seconds / 2,
         ):
             async with asyncio.timeout_at(deadline):
                 return await _collect_direct(
@@ -192,6 +196,8 @@ async def _collect_direct(
     if not isinstance(resolution, WeatherLocationFound):
         return [], None
 
+    # latest·forecast 동안 커넥션을 쥐지 않게 캐시 조회가 연 읽기 트랜잭션을 닫는다.
+    await release_read_connection(db)
     per_location = await asyncio.gather(
         *(
             _fetch_location_values(weather_client, location_id, window=window)
