@@ -812,6 +812,44 @@ async def test_pool_timeout_is_not_a_weather_failure() -> None:
     await client.aclose()
 
 
+async def test_card_scope_respects_a_shared_circuit_opened_by_long_budget_calls() -> None:
+    """trip view(긴 예산)가 연 공유 `resolve` 회로를 카드도 존중한다 — 죽은 `/resolve`에 카드가 더 매달리지
+    않게. 카드는 그 회로의 시험 자리를 잡지 않는다."""
+    attempts = {"n": 0}
+
+    def fail(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        return httpx.Response(503, json={"code": "UPSTREAM"})
+
+    client = _client(fail, max_attempts=1)
+    for _ in range(3):
+        with pytest.raises(KorTravelWeatherUnavailable):
+            await client.resolve(lat=36.7, lon=128.8)
+    assert attempts["n"] == 3
+    loop = asyncio.get_running_loop()
+    with _card_scope(loop, 5.0):
+        with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+            await client.resolve(lat=36.7, lon=128.8)
+    assert attempts["n"] == 3
+    await client.aclose()
+
+
+async def test_pool_phase_timeout_is_capped_below_the_attempt_budget() -> None:
+    """pool 단계 timeout이 attempt 전체 timeout보다 먼저 나야 풀 경합이 `PoolTimeout`으로 드러난다."""
+    seen: dict[str, float] = {}
+
+    def record(request: httpx.Request) -> httpx.Response:
+        seen.update(request.extensions["timeout"])
+        return httpx.Response(200, json=_envelope([_WEATHER_VALUE]))
+
+    client = _client(record)
+    loop = asyncio.get_running_loop()
+    with kor_travel_weather_call_deadline(loop.time() + 0.5):
+        await client.latest("loc-1")
+    assert seen["pool"] < seen["read"]
+    await client.aclose()
+
+
 def test_card_scope_rejects_a_bare_string() -> None:
     with pytest.raises(TypeError):
         with kor_travel_weather_call_deadline(0.0, count_short_timeouts_for="resolve"):
