@@ -1,10 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { MAP_FIT_PADDING, OVERLAY_GAP, fitPaddingForOverlay } from '@/lib/mapFitPadding';
+import {
+  MAP_FIT_PADDING,
+  OVERLAY_GAP,
+  fitOverlayRect,
+  fitPaddingForOverlay,
+} from '@/lib/mapFitPadding';
 
 // 2026-11-02 prod e2e — 여행 지도의 fitBounds가 사방 64px만 띄워, 가장 북쪽 장소(영월 고씨굴) 핀이
 // 왼쪽 위 장소 검색창 밑에 숨었다(데스크톱·모바일). 위쪽 여백은 오버레이 아래로 내려야 한다.
 const rect = (top: number, height: number) => ({ top, bottom: top + height, height });
 const PIN_HEIGHT = 41; // 여행 지도 핀: size 27 × 1.5
+const domBox = (top: number, height: number) => () =>
+  ({
+    x: 0,
+    y: top,
+    top,
+    left: 0,
+    width: 300,
+    right: 300,
+    height,
+    bottom: top + height,
+    toJSON: () => ({}),
+  }) as DOMRect;
 
 describe('fitPaddingForOverlay', () => {
   it('오버레이가 없으면 사방 기본 여백', () => {
@@ -37,6 +54,37 @@ describe('fitPaddingForOverlay', () => {
   it('오버레이가 지도보다 크면 위쪽 여백은 지도 높이의 60%로 묶는다(fitBounds가 실패하지 않게)', () => {
     const padding = fitPaddingForOverlay(rect(0, 400), rect(0, 390), PIN_HEIGHT);
     expect(padding.top).toBe(240);
+  });
+
+  it('피할 영역은 검색 입력 줄 — 교통 패널·검색 결과 목록은 넣지 않는다(리뷰 #619)', () => {
+    // 스택: [검색 카드(form + 펼쳐진 결과 목록)] + [교통 패널]. 스택 전체는 80~420px.
+    const stack = document.createElement('div');
+    const card = document.createElement('div');
+    const form = document.createElement('form');
+    form.setAttribute('data-map-fit-anchor', '');
+    const results = document.createElement('ul');
+    card.append(form, results);
+    const transport = document.createElement('div');
+    stack.append(card, transport);
+    stack.getBoundingClientRect = domBox(80, 340);
+    card.getBoundingClientRect = domBox(80, 300);
+    form.getBoundingClientRect = domBox(88, 44);
+    transport.getBoundingClientRect = domBox(388, 32);
+
+    const overlay = fitOverlayRect(stack);
+    expect(overlay?.bottom).toBe(132);
+    const padding = fitPaddingForOverlay(rect(0, 844), overlay, PIN_HEIGHT);
+    expect(padding.top).toBe(132 + PIN_HEIGHT + OVERLAY_GAP);
+  });
+
+  it('입력 줄 표시가 없으면 스택의 첫 자식(항상 보이는 카드), 스택이 없으면 null', () => {
+    const stack = document.createElement('div');
+    const card = document.createElement('div');
+    stack.append(card, document.createElement('div'));
+    card.getBoundingClientRect = domBox(8, 40);
+    expect(fitOverlayRect(stack)?.bottom).toBe(48);
+    expect(fitOverlayRect(null)).toBeNull();
+    expect(fitOverlayRect(document.createElement('div'))).toBeNull();
   });
 
   it('지도 크기를 아직 모르면 기본 여백', () => {

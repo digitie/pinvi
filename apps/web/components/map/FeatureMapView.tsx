@@ -742,7 +742,7 @@ export function FeatureMapView({
     // 높이는 셸이 흘려보낸다 — 바깥 래퍼까지 flex 사슬을 이어야 `h-full`이 실제로 해소된다
     // (사슬이 끊기면 content 높이로 붕괴한다, T-316 리뷰 P1).
     <div className={`flex min-h-0 flex-col ${className ?? ''}`} data-testid="feature-map">
-      <div className="flex min-h-[320px] flex-1 flex-col overflow-hidden rounded-sm border border-hairline bg-canvas">
+      <div className="flex min-h-[360px] flex-1 flex-col overflow-hidden rounded-sm border border-hairline bg-canvas">
         <div className="relative min-h-0 flex-1">
           <div className="pointer-events-none absolute inset-0 z-10">
             <div className="pointer-events-auto absolute left-3 top-3 w-72 max-w-[80vw]">
@@ -844,7 +844,13 @@ export function FeatureMapView({
               onZoomEnd={handleViewportChange}
               onContextMenu={handleContextMenu}
               fallback={(info) => <MapFallback info={info} />}
-              loadingSkeleton={<MapLoadingSkeleton />}
+              // 지도 컨테이너가 상자를 다 채우므로 형제로 붙는 로딩 표시는 지도 위에 겹쳐 둔다
+              // (흐름에 두면 상자 밖으로 밀려 보이지 않는다).
+              loadingSkeleton={
+                <div className="absolute inset-0">
+                  <MapLoadingSkeleton />
+                </div>
+              }
               className="h-full w-full"
               unsupportedTileFallback={{ label: 'VWorld tile' }}
             >

@@ -13,10 +13,24 @@ export const MAP_FIT_PADDING = 64;
 export const OVERLAY_GAP = 16;
 const MAX_TOP_SHARE = 0.6;
 
-interface VerticalRect {
+export interface VerticalRect {
   top: number;
   bottom: number;
   height: number;
+}
+
+/**
+ * 맞춤 여백이 피할 오버레이 영역. 스택 안 `[data-map-fit-anchor]`(장소 검색 입력 줄)를 쓰고, 없으면
+ * 스택의 첫 자식(항상 보이는 검색 카드)을 쓴다.
+ *
+ * 넣지 않는 것:
+ * - 교통 정보 패널: 왼쪽 좁은 열이다. 넣으면 지도 전체 폭의 위쪽 여백이 패널 높이만큼 커진다.
+ * - 잠깐 펼쳐지는 내용: 검색 결과 목록, 오류, 사건 목록. 펼쳐진 순간에 다시 맞추면 위쪽 60%를 버리게 된다.
+ */
+export function fitOverlayRect(stack: Element | null): VerticalRect | null {
+  if (!stack) return null;
+  const anchor = stack.querySelector('[data-map-fit-anchor]') ?? stack.firstElementChild;
+  return anchor ? anchor.getBoundingClientRect() : null;
 }
 
 export interface FitPadding {

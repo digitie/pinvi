@@ -25,7 +25,7 @@ import type { FeatureSummary } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
-import { fitPaddingForOverlay } from '@/lib/mapFitPadding';
+import { fitOverlayRect, fitPaddingForOverlay } from '@/lib/mapFitPadding';
 import { viewportSearchBias } from '@/lib/searchBias';
 import {
   featureResolutionNotice,
@@ -171,7 +171,6 @@ export function TripMapView({
   onViewportBboxChange,
 }: TripMapViewProps) {
   const mapRef = useRef<MapLibreMap | null>(null);
-  const surfaceRef = useRef<HTMLDivElement | null>(null);
   const overlayStackRef = useRef<HTMLDivElement | null>(null);
   const featureAbortRef = useRef<AbortController | null>(null);
   const featureDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -256,18 +255,24 @@ export function TripMapView({
     (map: MapLibreMap) => {
       const bounds = pointsBounds(points);
       if (!bounds) return;
-      const only = points[0];
-      if (points.length === 1 && only) {
-        map.flyTo({ center: [only.lon, only.lat], zoom: 13 });
-        return;
-      }
-      // 위쪽 여백은 지도 위 오버레이(장소 검색·교통 정보) 아래로 — 북쪽 핀이 그 밑에 숨지 않게.
-      // 여백은 핀 앵커(아래 꼭짓점) 자리라 핀 머리 높이도 더한다.
+      // 위쪽 여백은 지도 위 장소 검색 줄 아래로 — 북쪽 핀이 그 밑에 숨지 않게. 여백은 핀
+      // 앵커(아래 꼭짓점) 자리라 핀 머리 높이도 더한다. 기준 높이는 maplibre가 맞춤을 검사하는
+      // 지도 컨테이너다.
       const padding = fitPaddingForOverlay(
-        surfaceRef.current?.getBoundingClientRect() ?? null,
-        overlayStackRef.current?.getBoundingClientRect() ?? null,
+        map.getContainer().getBoundingClientRect(),
+        fitOverlayRect(overlayStackRef.current),
         TRIP_MAP_PIN_HEIGHT,
       );
+      const only = points[0];
+      if (points.length === 1 && only) {
+        // 핀 하나는 가운데에 두되, 위·아래 여백 차이의 절반만큼 내려 검색 줄과 겹치지 않게.
+        map.flyTo({
+          center: [only.lon, only.lat],
+          zoom: 13,
+          offset: [0, (padding.top - padding.bottom) / 2],
+        });
+        return;
+      }
       map.fitBounds(
         [
           [bounds.west, bounds.south],
@@ -449,7 +454,6 @@ export function TripMapView({
   return (
     <div className={className} data-testid="trip-map">
       <div
-        ref={surfaceRef}
         className={surfaceClassName}
         data-testid="trip-map-surface"
         onMouseDownCapture={handleMouseDown}
@@ -481,7 +485,6 @@ export function TripMapView({
         ) : (
           transport.visible && (
             <div
-              ref={overlayStackRef}
               className="pointer-events-none absolute left-2 top-2 z-10 w-64 max-w-[70%]"
               data-map-overlay=""
             >

@@ -124,9 +124,11 @@ export function MapSearchBox({ onSelect, className, getBias }: MapSearchBoxProps
 
   return (
     <div className={className} data-testid="map-search">
+      {/* data-map-fit-anchor: 여행 지도 맞춤 여백은 이 입력 줄 아래까지만 피한다(결과 목록 제외). */}
       <form
         onSubmit={submit}
         className="flex items-center gap-1.5 rounded-sm border border-hairline bg-canvas px-2 shadow-card"
+        data-map-fit-anchor=""
       >
         <Search className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
         <input
