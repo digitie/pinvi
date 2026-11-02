@@ -1,0 +1,211 @@
+import { useEffect, type ReactNode } from 'react';
+import { render } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { TripMapPoint } from '@pinvi/domain';
+
+// 여행 지도 맞춤의 배선(리뷰 #619): 검색 줄 기준으로 맞춘 뒤, 교통 패널 밑에 핀이 들면 패널 아래까지
+// 다시 맞춘다. 패널이 늦게 나타나면 한 번 더 맞추되, 그 사이 사용자가 지도를 움직였으면 하지 않는다.
+// CI e2e에는 VWorld 키가 없어 이 경로가 돌지 않으므로 지도와 패널을 대역으로 세운다.
+
+const h = vi.hoisted(() => ({
+  transportVisible: false,
+  map: null as unknown,
+  onMoveEnd: null as ((event: unknown) => void) | null,
+}));
+
+vi.mock('@/components/map/vworldPrimitives', () => ({
+  VWorldMap: ({
+    onLoad,
+    onMoveEnd,
+    children,
+  }: {
+    onLoad?: (map: unknown) => void;
+    onMoveEnd?: (event: unknown) => void;
+    children?: ReactNode;
+  }) => {
+    h.onMoveEnd = onMoveEnd ?? null;
+    useEffect(() => {
+      onLoad?.(h.map);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    return <div>{children}</div>;
+  },
+  ClusterLayer: () => null,
+  PinMarker: () => null,
+  Popup: () => null,
+  MapFallback: () => null,
+  MapLoadingSkeleton: () => null,
+}));
+vi.mock('@/lib/useTransportLayers', () => ({
+  useTransportLayers: () => ({
+    visible: h.transportVisible,
+    onViewportChange: () => {},
+    openDetail: () => {},
+    closeDetail: () => {},
+    points: [],
+    selectedId: null,
+    detail: null,
+  }),
+}));
+vi.mock('@/components/map/TransportLayerControls', () => ({
+  TransportLayerControls: () => <div data-map-fit-panel="" data-testid="fit-panel" />,
+}));
+vi.mock('@/components/map/TransportMarkers', () => ({
+  TransportMarkers: () => null,
+  TransportMarkerLegend: () => null,
+}));
+vi.mock('@/components/map/TransportDetailDialog', () => ({ TransportDetailDialog: () => null }));
+vi.mock('@/components/map/FeatureDetailModalController', () => ({
+  FeatureDetailModalController: () => null,
+}));
+vi.mock('@/lib/useMobileWebLayout', () => ({ useMobileWebLayout: () => true }));
+
+import { TripMapView } from '@/components/trips/TripMapView';
+
+const box = (x: number, y: number, width: number, height: number) =>
+  ({
+    x,
+    y,
+    left: x,
+    top: y,
+    width,
+    height,
+    right: x + width,
+    bottom: y + height,
+    toJSON: () => ({}),
+  }) as DOMRect;
+
+// 모바일 재현값(390x700 지도): 검색 입력 줄 88~132, 교통 패널 x 8~264 / y 152~288, 스택 80~680.
+const RECTS: Record<string, DOMRect> = {
+  'fit-container': box(0, 0, 390, 700),
+  'fit-anchor': box(8, 88, 374, 44),
+  'fit-panel': box(8, 152, 256, 136),
+  'trip-map-overlay-stack': box(8, 80, 374, 600),
+};
+
+const point = (poiId: string, lat: number): TripMapPoint =>
+  ({
+    poiId,
+    dayIndex: 1,
+    title: poiId,
+    lon: 128.53,
+    lat,
+    color: '#000',
+    markerColor: 'P-07',
+    labelColor: '#fff',
+    markerSource: 'resolved',
+    icon: 'monument',
+    category: null,
+    kind: null,
+    featureResolutionState: 'found',
+  }) as TripMapPoint;
+const POINTS = [point('north', 37.13), point('south', 36.55)];
+
+function fakeMap(northAnchor: { x: number; y: number }) {
+  const container = document.createElement('div');
+  container.setAttribute('data-testid', 'fit-container');
+  return {
+    getContainer: () => container,
+    fitBounds: vi.fn(),
+    flyTo: vi.fn(),
+    project: vi.fn(([, lat]: [number, number]) => (lat > 37 ? northAnchor : { x: 72, y: 600 })),
+    getBounds: () => ({
+      getWest: () => 128,
+      getSouth: () => 36,
+      getEast: () => 129,
+      getNorth: () => 38,
+    }),
+    getZoom: () => 9,
+    on: () => {},
+    off: () => {},
+  };
+}
+
+const overlay = <form data-map-fit-anchor="" data-testid="fit-anchor" />;
+
+beforeEach(() => {
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    return RECTS[this.getAttribute('data-testid') ?? ''] ?? box(0, 0, 0, 0);
+  });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  h.transportVisible = false;
+  h.onMoveEnd = null;
+});
+
+describe('TripMapView 맞춤 배선', () => {
+  it('교통 패널 밑에 북쪽 핀이 들면 패널 아래까지 한 번 더 맞춘다', () => {
+    h.transportVisible = true;
+    const map = fakeMap({ x: 72, y: 207 });
+    h.map = map;
+    render(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
+
+    expect(map.fitBounds).toHaveBeenCalledTimes(2);
+    // 1차: 검색 줄 아래(132) + 핀 48 + 간격 24
+    expect(map.fitBounds.mock.calls[0]?.[1].padding.top).toBe(132 + 48 + 24);
+    // 2차: 패널 아래(288) + 핀 48 + 간격 24
+    expect(map.fitBounds.mock.calls[1]?.[1].padding.top).toBe(288 + 48 + 24);
+  });
+
+  it('패널 밑에 핀이 없으면 다시 맞추지 않는다', () => {
+    h.transportVisible = true;
+    const map = fakeMap({ x: 300, y: 207 });
+    h.map = map;
+    render(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
+
+    expect(map.fitBounds).toHaveBeenCalledTimes(1);
+  });
+
+  it('장소가 하나면 가운데 열을 덮는 패널 아래를 기준으로 내린다(모바일)', () => {
+    h.transportVisible = true;
+    const map = fakeMap({ x: 195, y: 350 });
+    h.map = map;
+    render(<TripMapView points={[POINTS[0]!]} transportLayers overlayTopLeft={overlay} />);
+
+    expect(map.fitBounds).not.toHaveBeenCalled();
+    expect(map.flyTo).toHaveBeenCalledTimes(1);
+    // (패널 아래 288 + 48 + 24) - 아래 여백 64, 절반
+    expect(map.flyTo.mock.calls[0]?.[0].offset).toEqual([0, (288 + 48 + 24 - 64) / 2]);
+  });
+
+  it('장소가 하나라도 패널이 가운데 열 밖이면(데스크톱) 검색 줄만 기준으로 한다', () => {
+    RECTS['fit-container'] = box(0, 0, 1000, 800);
+    try {
+      h.transportVisible = true;
+      const map = fakeMap({ x: 500, y: 400 });
+      h.map = map;
+      render(<TripMapView points={[POINTS[0]!]} transportLayers overlayTopLeft={overlay} />);
+
+      expect(map.flyTo.mock.calls[0]?.[0].offset).toEqual([0, (132 + 48 + 24 - 64) / 2]);
+    } finally {
+      RECTS['fit-container'] = box(0, 0, 390, 700);
+    }
+  });
+
+  it('패널이 늦게 나타나면 다시 맞추고, 그 사이 사용자가 움직였으면 하지 않는다', () => {
+    const map = fakeMap({ x: 72, y: 207 });
+    h.map = map;
+    const view = render(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
+    expect(map.fitBounds).toHaveBeenCalledTimes(1);
+    // 맞춤 자신이 내는 moveend(originalEvent 없음)는 사용자 이동이 아니다
+    h.onMoveEnd?.({ target: map });
+
+    h.transportVisible = true;
+    view.rerender(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
+    expect(map.fitBounds).toHaveBeenCalledTimes(3);
+    expect(map.fitBounds.mock.calls[2]?.[1].padding.top).toBe(288 + 48 + 24);
+
+    // 새로 마운트: 로드 뒤 사용자가 끌어 옮기고 나서 패널이 나타난다
+    view.unmount();
+    h.transportVisible = false;
+    const moved = fakeMap({ x: 72, y: 207 });
+    h.map = moved;
+    const second = render(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
+    h.onMoveEnd?.({ target: moved, originalEvent: new MouseEvent('mouseup') });
+    h.transportVisible = true;
+    second.rerender(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
+    expect(moved.fitBounds).toHaveBeenCalledTimes(1);
+  });
+});

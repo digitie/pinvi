@@ -25,6 +25,12 @@ import type { FeatureSummary } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
+import {
+  fitOverlayRect,
+  fitPaddingForOverlay,
+  fitPanelRect,
+  pinBoxIntersects,
+} from '@/lib/mapFitPadding';
 import { viewportSearchBias } from '@/lib/searchBias';
 import {
   featureResolutionNotice,
@@ -43,6 +49,9 @@ import { TransportDetailDialog } from '@/components/map/TransportDetailDialog';
 const DEFAULT_CENTER: [number, number] = [127.5, 36.5];
 const DEFAULT_ZOOM = 7;
 const TRIP_MAP_MARKER_SIZE = 27;
+// PinMarker는 너비 size, 높이 size×1.5(40.5px) 물방울을 아래 꼭짓점(anchor bottom)에 건다. 선택된 핀은
+// 1.18배(≈48px)로 커지고, 실지도 확인에서 마커 상자 위쪽이 앵커보다 ≈49px 위에 잡힌 적이 있어 넉넉히 잡는다.
+const TRIP_MAP_PIN_HEIGHT = Math.ceil(TRIP_MAP_MARKER_SIZE * 1.5 * 1.18);
 const FEATURE_MARKER_SIZE = 22;
 const FEATURE_DEBOUNCE_MS = 250;
 const MAKI_ICON_BASE_URL = 'https://unpkg.com/@mapbox/maki@8.0.0/icons';
@@ -167,6 +176,7 @@ export function TripMapView({
   onViewportBboxChange,
 }: TripMapViewProps) {
   const mapRef = useRef<MapLibreMap | null>(null);
+  const overlayStackRef = useRef<HTMLDivElement | null>(null);
   const featureAbortRef = useRef<AbortController | null>(null);
   const featureDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestFeatureRequestRef = useRef(0);
@@ -179,6 +189,12 @@ export function TripMapView({
   const [detailFeatureId, setDetailFeatureId] = useState<string | null>(null);
   const mobileLayout = useMobileWebLayout();
   const transport = useTransportLayers({ active: transportLayers });
+  const transportVisible = transport.visible;
+  // fitToPoints가 읽는 값들 — 맞춤 함수가 바뀌어(=다시 맞춤) 사용자의 시점을 빼앗지 않게 ref로 둔다.
+  const transportVisibleRef = useRef(transportVisible);
+  const userMovedRef = useRef(false);
+  const lastFitPointsRef = useRef<TripMapPoint[] | null>(null);
+  const lastFitWithPanelRef = useRef(false);
   const { onViewportChange: transportViewportChange } = transport;
   const surfaceClassName =
     chrome === 'flush'
@@ -248,20 +264,64 @@ export function TripMapView({
 
   const fitToPoints = useCallback(
     (map: MapLibreMap) => {
+      lastFitPointsRef.current = points;
+      lastFitWithPanelRef.current = transportVisibleRef.current;
+      // 맞춤이 시점을 새로 정했다 — 그 전의 사용자 이동은 더는 지킬 시점이 아니다.
+      userMovedRef.current = false;
       const bounds = pointsBounds(points);
       if (!bounds) return;
+      // 위쪽 여백은 지도 위 장소 검색 줄 아래로 — 북쪽 핀이 그 밑에 숨지 않게. 여백은 핀
+      // 앵커(아래 꼭짓점) 자리라 핀 머리 높이도 더한다. 기준 높이는 maplibre가 맞춤을 검사하는
+      // 지도 컨테이너다.
+      const container = map.getContainer().getBoundingClientRect();
+      const stack = overlayStackRef.current;
+      const padding = fitPaddingForOverlay(container, fitOverlayRect(stack), TRIP_MAP_PIN_HEIGHT);
+      const panel = transportVisibleRef.current ? fitPanelRect(stack) : null;
       const only = points[0];
       if (points.length === 1 && only) {
-        map.flyTo({ center: [only.lon, only.lat], zoom: 13 });
+        // 핀 하나는 가운데에 두되, 위·아래 여백 차이의 절반만큼 내려 검색 줄과 겹치지 않게. 교통
+        // 패널이 가운데 열까지 덮으면(모바일) 패널 아래를 기준으로 한다.
+        const centerX = container.left + container.width / 2;
+        const half = TRIP_MAP_MARKER_SIZE / 2;
+        const panelCoversCenter =
+          panel != null && panel.left < centerX + half && panel.right > centerX - half;
+        const top =
+          panel && panelCoversCenter
+            ? Math.max(padding.top, fitPaddingForOverlay(container, panel, TRIP_MAP_PIN_HEIGHT).top)
+            : padding.top;
+        map.flyTo({
+          center: [only.lon, only.lat],
+          zoom: 13,
+          offset: [0, (top - padding.bottom) / 2],
+        });
         return;
       }
-      map.fitBounds(
-        [
-          [bounds.west, bounds.south],
-          [bounds.east, bounds.north],
-        ],
-        { padding: 64, maxZoom: 15, animate: false },
-      );
+      const lngLatBounds: [[number, number], [number, number]] = [
+        [bounds.west, bounds.south],
+        [bounds.east, bounds.north],
+      ];
+      map.fitBounds(lngLatBounds, { padding, maxZoom: 15, animate: false });
+      // 교통 정보 패널(왼쪽 열) 밑에 핀이 들어가면 패널 아래까지 한 번 더 맞춘다. animate:false라
+      // fitBounds가 바로 적용돼 project가 맞춘 뒤 위치를 준다.
+      const hiddenByPanel =
+        panel != null &&
+        points.some((point) => {
+          const at = map.project([point.lon, point.lat]);
+          return pinBoxIntersects(
+            container.left + at.x,
+            container.top + at.y,
+            TRIP_MAP_MARKER_SIZE,
+            TRIP_MAP_PIN_HEIGHT,
+            panel,
+          );
+        });
+      if (panel && hiddenByPanel) {
+        map.fitBounds(lngLatBounds, {
+          padding: fitPaddingForOverlay(container, panel, TRIP_MAP_PIN_HEIGHT),
+          maxZoom: 15,
+          animate: false,
+        });
+      }
     },
     [points],
   );
@@ -294,10 +354,19 @@ export function TripMapView({
     [scheduleFeatureFetch, transportViewportChange, reportViewport],
   );
 
-  // POI 목록이 바뀌면 경계 재조정.
+  // POI 목록이 바뀌면 경계 재조정. 교통 패널은 상태 조회 뒤에 나타나므로 보이게 되면 한 번 더
+  // 맞추되, 그 사이 사용자가 지도를 움직였으면 시점을 빼앗지 않는다.
   useEffect(() => {
-    if (mapRef.current) fitToPoints(mapRef.current);
-  }, [fitToPoints]);
+    transportVisibleRef.current = transportVisible;
+    const map = mapRef.current;
+    if (!map) return;
+    if (lastFitPointsRef.current !== points) {
+      userMovedRef.current = false;
+      fitToPoints(map);
+    } else if (transportVisible && !lastFitWithPanelRef.current && !userMovedRef.current) {
+      fitToPoints(map);
+    }
+  }, [fitToPoints, points, transportVisible]);
 
   const markerPoints = useMemo<MarkerPoint[]>(
     () => points.map((p) => ({ id: p.poiId, lngLat: [p.lon, p.lat], point: p })),
@@ -348,6 +417,8 @@ export function TripMapView({
   // 외부에서 POI 를 선택하면 해당 위치로 이동.
   useEffect(() => {
     if (selected && mapRef.current) {
+      // 사용자가 고른 장소로 가는 이동 — 늦게 나타난 교통 패널의 재맞춤이 되돌리지 않게.
+      userMovedRef.current = true;
       mapRef.current.flyTo({ center: [selected.lon, selected.lat] });
     }
   }, [selected]);
@@ -454,6 +525,7 @@ export function TripMapView({
             누르기/우클릭 "여기에 장소 추가" 제스처가 오버레이 위에서 시작되지 않게 한다. */}
         {overlayTopLeft != null ? (
           <div
+            ref={overlayStackRef}
             className={overlayTopLeftClassName}
             data-testid="trip-map-overlay-stack"
             data-map-overlay=""
@@ -483,8 +555,15 @@ export function TripMapView({
           geolocate={false}
           animateCameraChanges
           onLoad={handleLoad}
-          onMoveEnd={(event) => handleViewportChange(event.target as MapLibreMap)}
-          onZoomEnd={(event) => handleViewportChange(event.target as MapLibreMap)}
+          onMoveEnd={(event) => {
+            // 사용자가 끌거나 휠로 움직인 것(originalEvent 있음) — 패널이 늦게 나타나도 다시 맞추지 않는다.
+            if (event.originalEvent) userMovedRef.current = true;
+            handleViewportChange(event.target as MapLibreMap);
+          }}
+          onZoomEnd={(event) => {
+            if (event.originalEvent) userMovedRef.current = true;
+            handleViewportChange(event.target as MapLibreMap);
+          }}
           onContextMenu={
             onCreatePoiAtCoordinate
               ? (event, context) => {

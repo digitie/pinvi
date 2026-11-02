@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LoginRequestSchema } from '@pinvi/schemas';
@@ -61,8 +61,23 @@ function readOAuthErrorFromLocation(): string | null {
   return getOAuthErrorMessage(code, parseOAuthProvider(params.get('provider')));
 }
 
+const noopSubscribe = () => () => {};
+
+/**
+ * 하이드레이션 전에는 false — 서버 HTML의 제출 버튼을 비활성으로 둔다. 하이드레이션 전 클릭은 React
+ * 핸들러 없이 폼을 네이티브로 /login에 제출해 입력만 지웠다(2026-11-02 prod e2e).
+ */
+function useHydrated(): boolean {
+  return useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
+  const hydrated = useHydrated();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -267,7 +282,13 @@ export default function LoginPage() {
           </div>
         )}
 
-        <Button type="submit" fullWidth loading={loading} data-testid="login-submit">
+        <Button
+          type="submit"
+          fullWidth
+          loading={loading}
+          disabled={!hydrated}
+          data-testid="login-submit"
+        >
           {loading ? '로그인 중…' : '로그인'}
         </Button>
       </form>

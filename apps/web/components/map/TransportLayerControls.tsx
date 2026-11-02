@@ -62,9 +62,11 @@ export function TransportLayerControls({
   if (!state.visible) return null;
   const incidents = state.enabled.has('highway_incident') ? incidentsOf(state.results) : [];
   return (
+    // data-map-fit-panel: 여행 지도 맞춤이 이 패널 밑에 든 핀을 피한다(사건 목록은 transient로 뺀다).
     <div
       className={`rounded-sm bg-canvas/95 p-2 text-xs shadow-card ${className ?? ''}`}
       data-testid="transport-layer-controls"
+      data-map-fit-panel=""
     >
       <p className="mb-1 text-sm font-semibold text-ink">교통 정보</p>
       <div className="flex flex-wrap gap-1" role="group" aria-label="교통 정보 레이어">
@@ -106,7 +108,11 @@ export function TransportLayerControls({
         })}
       </ul>
       {incidents.length > 0 && (
-        <div className="mt-2 border-t border-hairline pt-1" data-testid="transport-incident-list">
+        <div
+          className="mt-2 border-t border-hairline pt-1"
+          data-testid="transport-incident-list"
+          data-map-fit-transient=""
+        >
           <p className="font-semibold text-body">이 지역 교통 돌발 {incidents.length}건</p>
           <ul>
             {incidents.slice(0, INCIDENT_LIST_MAX).map((incident) => (
