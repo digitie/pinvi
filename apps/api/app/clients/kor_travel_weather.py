@@ -497,17 +497,12 @@ def _decode_weather_value_list(raw: object, *, what: str) -> tuple[WeatherValueO
 def _decode_resolved_weather(raw: object) -> ResolvedWeatherOut:
     obj = _require_mapping(raw, what="resolve 응답")
     required = {"requested", "location", "distance_km"}
-    # `alert_scope_unverified`(weather c712956): weather가 지역을 확인하지 못한 특보를 뺐다는 표시.
-    # 알려진 필드로 두되 지금 PinVi는 쓰지 않는다 — 그런 지점은 "특보 없음"처럼 보인다(weather 자체
-    # UI도 소유자 지시로 이 안내를 숨긴다). 2026-11-02 결정.
-    optional = {
-        "measurement_point",
-        "source_locations",
-        "latest",
-        "forecast",
-        "alerts",
-        "alert_scope_unverified",
-    }
+    # `alert_scope_unverified`(weather c712956, resolve·markers·nearby): weather가 지역을 확인하지
+    # 못한 특보를 뺐다는 표시다. 허용 집합은 vendored weather OpenAPI 스냅샷과 등호로 묶여 있어
+    # (`test_kor_travel_weather_contract.py`) 여기 넣지 않는다 — 재vendor 전까지는 "더해진 필드"로
+    # 무시된다(프로세스당 1회 warning). PinVi는 아직 이 표시를 쓰지 않아 그런 지점은 "특보 없음"처럼
+    # 보인다(weather 자체 UI도 소유자 지시로 숨긴다). 2026-11-02 결정.
+    optional = {"measurement_point", "source_locations", "latest", "forecast", "alerts"}
     _check_fields(obj, required=required, allowed=required | optional, what="resolve 응답")
     source_locations = obj.get("source_locations", [])
     if not isinstance(source_locations, list):
@@ -529,7 +524,7 @@ def _decode_resolved_weather(raw: object) -> ResolvedWeatherOut:
 def _decode_marker(raw: object) -> WeatherMarkerOut:
     obj = _require_mapping(raw, what="marker")
     required = {"location_id"}
-    optional = {"measurement_point", "latest", "alerts", "alert_scope_unverified"}
+    optional = {"measurement_point", "latest", "alerts"}
     _check_fields(obj, required=required, allowed=required | optional, what="marker")
     return WeatherMarkerOut(
         location_id=obj["location_id"],
@@ -555,7 +550,6 @@ _NEARBY_OPTIONAL = {
     "latest",
     "forecast",
     "alerts",
-    "alert_scope_unverified",  # 알려진 필드, 현재 미사용(resolve 주석 참고)
 }
 _NEARBY_FIELDS = _NEARBY_REQUIRED | _NEARBY_OPTIONAL
 
