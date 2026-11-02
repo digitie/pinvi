@@ -10,6 +10,15 @@ import pytest
 pytestmark = pytest.mark.asyncio
 
 
+@pytest.fixture(autouse=True)
+def _fresh_category_labels() -> Iterator[None]:
+    from app.services.category_labels import reset_category_label_cache
+
+    reset_category_label_cache()
+    yield
+    reset_category_label_cache()
+
+
 class _FakeKorTravelGeoClient:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
@@ -28,7 +37,19 @@ class _FakeKorTravelGeoClient:
 
     async def search(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(("search", kwargs))
-        return {"status": "ok", "total": 1, "candidates": [{"address": "테헤란로"}]}
+        # kor-travel-geo v2 `/v2/search` 후보는 중첩 셰입이다(address.full + point).
+        return {
+            "status": "ok",
+            "total": 1,
+            "candidates": [
+                {
+                    "match_kind": "road",
+                    "address": {"full": "테헤란로"},
+                    "point": {"lon": 127.0, "lat": 37.5},
+                    "region": {"sido": "서울특별시"},
+                }
+            ],
+        }
 
     async def regions_within_radius(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(("regions", kwargs))
@@ -172,10 +193,19 @@ class _FakeKorTravelMapClient:
 
             raise KorTravelMapUnavailable("down")
         items = [
-            {"feature_id": f"f_{i}", "name": f"광안 feature {i}", "lon": 129.1, "lat": 35.1}
+            {
+                "feature_id": f"f_{i}",
+                "name": f"광안 feature {i}",
+                "category": "06010000",
+                "lon": 129.1,
+                "lat": 35.1,
+            }
             for i in range(self.item_count)
         ]
         return {"items": items, "next_cursor": None}
+
+    async def categories(self, *, include_counts: bool = False) -> dict[str, Any]:
+        return {"items": [{"code": "06010000", "label": "교통 > 주차장", "path": ["교통", "주차장"]}]}
 
 
 class _FakeKakaoLocalClient:
@@ -271,7 +301,12 @@ async def test_unified_search_merges_all_sources(
         for r in data["results"]:
             by_source.setdefault(r["source"], []).append(r)
         assert by_source["feature"][0]["feature_id"] == "f_0"
+        # 코드는 그대로, 화면용 이름은 category_label(2026-11-02 prod e2e — 숫자 코드가 보였다).
+        assert by_source["feature"][0]["category"] == "06010000"
+        assert by_source["feature"][0]["category_label"] == "주차장"
         assert by_source["address"][0]["name"] == "테헤란로"
+        assert by_source["address"][0]["road_address"] == "테헤란로"
+        assert by_source["address"][0]["coord"] == {"lon": 127.0, "lat": 37.5}
         assert by_source["kakao"][0]["name"] == "카카오 카페"
         assert by_source["naver"][0]["name"] == "네이버 식당"  # <b> strip
         # 정렬: internal(feature/address) → kakao → naver.
@@ -458,5 +493,54 @@ async def test_unified_search_near_me_short_circuit_not_audited(
         assert resp.status_code == 200, resp.text
         assert kakao.calls == []  # 좌표가 Kakao에 전달되지 않음
         assert await _search_audit_rows(session_factory) == []
+    finally:
+        _clear_search_clients()
+
+
+async def test_unified_search_asks_geo_once_with_short_budget(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    """짧은 검색어에서 geo가 504(DB statement timeout)를 내면 재시도해도 같다 — 1회·짧은 예산.
+
+    2026-11-02 prod e2e: "하회"·"고씨" 검색이 5초 × 3회 재시도로 16초 걸렸고 feature 결과까지
+    붙잡혔다.
+    """
+    user_id, _ = verified_user
+    geo = _FakeKorTravelGeoClient()
+    _override_search_clients(_FakeKorTravelMapClient(item_count=5), geo)
+    try:
+        resp = await client.get("/search?q=하회", cookies=auth_cookies(user_id))
+        assert resp.status_code == 200, resp.text
+        search_calls = [kwargs for name, kwargs in geo.calls if name == "search"]
+        assert len(search_calls) == 1
+        assert search_calls[0]["max_attempts"] == 1
+        assert 0 < search_calls[0]["timeout"] <= 3.0
+    finally:
+        _clear_search_clients()
+
+
+async def test_unified_search_slow_geo_does_not_hold_feature_results(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    """feature와 address 소스는 동시에 간다 — geo가 실패해도 feature 결과는 그대로, address만 degrade."""
+    import asyncio
+
+    from app.clients.kor_travel_geo import KorTravelGeoUnavailable
+
+    class _SlowFailingGeo(_FakeKorTravelGeoClient):
+        async def search(self, **kwargs: Any) -> dict[str, Any]:
+            self.calls.append(("search", kwargs))
+            await asyncio.sleep(0.05)
+            raise KorTravelGeoUnavailable("kor-travel-geo 504 (/v2/search)")
+
+    user_id, _ = verified_user
+    _override_search_clients(_FakeKorTravelMapClient(item_count=5), _SlowFailingGeo())
+    try:
+        resp = await client.get("/search?q=하회", cookies=auth_cookies(user_id))
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert [r["source"] for r in data["results"]].count("feature") == 5
+        assert "addresses" in data["degraded_sources"]
+        assert "features" not in data["degraded_sources"]
     finally:
         _clear_search_clients()

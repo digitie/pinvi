@@ -25,6 +25,7 @@ function makeResult(over: Partial<PlaceSearchResult>): PlaceSearchResult {
     address: null,
     road_address: null,
     category: null,
+    category_label: null,
     marker_color: null,
     marker_icon: null,
     provider_url: null,
@@ -38,6 +39,44 @@ beforeEach(() => {
 });
 
 describe('MapSearchBox', () => {
+  it('feature 결과의 둘째 줄은 카테고리 코드가 아니라 이름이다(2026-11-02 prod e2e)', async () => {
+    searchPlaces.mockResolvedValue({
+      results: [
+        makeResult({
+          source: 'feature',
+          name: '하회마을',
+          feature_id: 'f-restaurant',
+          category: '02010100',
+          category_label: '한식',
+        }),
+        makeResult({
+          source: 'feature',
+          name: '도산서원',
+          feature_id: 'f-unknown',
+          category: '99010100',
+          category_label: null,
+        }),
+        makeResult({
+          source: 'kakao',
+          name: '하회마을 카페',
+          external_id: 'k1',
+          category: '음식점 > 카페',
+        }),
+      ],
+      degraded_sources: [],
+    });
+    render(<MapSearchBox onSelect={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('장소·주소 검색'), { target: { value: '하회마을' } });
+
+    const rows = await screen.findAllByTestId('map-search-result-feature');
+    expect(rows[0]).toHaveTextContent('한식');
+    expect(rows[0]).not.toHaveTextContent('02010100');
+    // 이름을 모르는 코드는 숫자로 보이지 않고 비운다.
+    expect(rows[1]).not.toHaveTextContent('99010100');
+    // 외부 provider의 category는 이미 사람이 읽는 이름이다.
+    expect(screen.getByTestId('map-search-result-kakao')).toHaveTextContent('음식점 > 카페');
+  });
+
   it('2자 이상 입력 시 디바운스 후 검색하고 source별 배지/주소로 렌더한다', async () => {
     searchPlaces.mockResolvedValue({
       results: [
