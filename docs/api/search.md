@@ -46,7 +46,8 @@ GET /search?q=<검색어>&limit=<n>&lat=<위도>&lon=<경도>
 | `poi_id`·`trip_id`·`trip_title` | string\|null                             | my_poi                         | 내 POI 역참조                                                    |
 | `external_id`                   | string\|null                             | kakao, naver                   | provider opaque id(Naver는 `link` 정규화). 저장은 external_ref만 |
 | `address`·`road_address`        | string\|null                             | address, kakao, naver          | 지번/도로명                                                      |
-| `category`                      | string\|null                             | feature, kakao, naver          | 표시 전용                                                        |
+| `category`                      | string\|null                             | feature, kakao, naver          | feature는 Map 코드(`01070300`), kakao/naver는 provider 이름      |
+| `category_label`                | string\|null                             | feature                        | 사람이 읽는 이름(코드의 잎 단계, 예 `사적·기념물`). 화면은 이것만 |
 | `marker_color`·`marker_icon`    | string\|null                             | feature                        | 팔레트/maki                                                      |
 | `provider_url`                  | string\|null                             | kakao, naver                   | 카카오맵/네이버 지도 back-link(attribution 필수)                 |
 | `phone`                         | string\|null                             | kakao, naver                   | **표시 전용, 절대 저장 금지**(ADR-054 §7)                        |
@@ -54,6 +55,15 @@ GET /search?q=<검색어>&limit=<n>&lat=<위도>&lon=<경도>
 ## 동작
 
 - **정렬**: internal(feature → address → my_poi) → **kakao** → **naver**. 부분 degrade에도 안정적.
+- **feature·address 동시 조회**: 두 소스는 독립 HTTP라 동시에 보낸다. address(kor-travel-geo
+  `/v2/search`)는 **1회·3초**만 기다린다 — 짧은 검색어에서 geo가 504(DB statement timeout)를 내면
+  재시도해도 같으므로 `addresses`를 degrade로 둔다(2026-11-02 prod e2e: "하회"가 5초×3회로 16초).
+- **address 후보 매핑**: geo v2 후보 `{match_kind, address: {full}, point: {lon, lat}}`에서
+  `name`=`address.full`, `match_kind=road`면 `road_address`, 그 밖이면 `address`, 좌표는 `point`.
+  `address.full`이 없는 후보(`sppn` 등)는 버린다.
+- **카테고리 이름**: feature `category_label`은 Map `/v1/categories` 카탈로그(프로세스 캐시 1시간,
+  실패 시 1분)로 채운다. 모르는 코드는 상위 계층 이름, 그래도 없으면 `null` — 숫자 코드를 보이지
+  않는다.
 - **internal-first short-circuit**: 내부 결과 수 ≥ `PINVI_PLACE_SEARCH_INTERNAL_THRESHOLD`(K, 기본 5)
   이면 Kakao/Naver를 **호출하지 않는다**(쿼터 방어, §쿼터).
 - **degraded_sources**: 한 소스가 5xx/타임아웃/키 미설정/쿼터/비활성이면 해당 소스명만 담고

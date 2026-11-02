@@ -66,6 +66,11 @@ from app.schemas.feature import (
     FeatureWeatherCard,
     PlaceDetailCard,
 )
+from app.services.category_labels import (
+    EMPTY_CATEGORY_LABELS,
+    CategoryLabels,
+    get_category_labels,
+)
 from app.services.feature_detail import best_match_enrichment, build_detail_card
 from app.services.feature_request import find_active_suggestion_by_external_ref
 from app.services.weather_card import build_feature_weather_card
@@ -161,7 +166,9 @@ def _coord_from_kor_travel_map(dto: dict[str, Any]) -> Coord | None:
     return Coord(lon=float(lon), lat=float(lat))
 
 
-def _summary_from_kor_travel_map(dto: dict[str, Any]) -> FeatureSummary:
+def _summary_from_kor_travel_map(
+    dto: dict[str, Any], labels: CategoryLabels = EMPTY_CATEGORY_LABELS
+) -> FeatureSummary:
     """kor_travel_map `FeatureSummary`/`NearbyFeatureSummary` → Pinvi FeatureSummary.
 
     `status`는 매핑하지 않는다 — Map 3축 feature state cutover(`1f2bdc3a feat(api): complete
@@ -175,6 +182,7 @@ def _summary_from_kor_travel_map(dto: dict[str, Any]) -> FeatureSummary:
         name=dto.get("name") or dto.get("title") or "",
         coord=_coord_from_kor_travel_map(dto),
         category=dto.get("category"),
+        category_label=labels.label(dto.get("category")),
         marker_color=dto.get("marker_color") or "P-13",
         marker_icon=dto.get("marker_icon") or "marker",
         distance_m=float(distance) if distance is not None else None,
@@ -190,7 +198,9 @@ def _cluster_from_kor_travel_map(dto: dict[str, Any]) -> FeatureCluster:
     )
 
 
-def _detail_from_kor_travel_map(dto: dict[str, Any]) -> FeatureDetail:
+def _detail_from_kor_travel_map(
+    dto: dict[str, Any], labels: CategoryLabels = EMPTY_CATEGORY_LABELS
+) -> FeatureDetail:
     """kor_travel_map `FeatureDetailResponse` → Pinvi FeatureDetail.
 
     `status`는 매핑하지 않는다 — `_summary_from_kor_travel_map`과 같은 이유로 Map
@@ -203,6 +213,7 @@ def _detail_from_kor_travel_map(dto: dict[str, Any]) -> FeatureDetail:
         name=dto.get("name") or dto.get("title") or "",
         coord=_coord_from_kor_travel_map(dto),
         category=dto.get("category"),
+        category_label=labels.label(dto.get("category")),
         address=address if isinstance(address, dict) else None,
         legal_dong_code=dto.get("legal_dong_code"),
         sido_code=dto.get("sido_code"),
@@ -390,7 +401,12 @@ async def features_in_bounds(
             cluster_unit=cluster_unit,
             max_items=limit,
         )
-    items = [_summary_from_kor_travel_map(x) for x in data.get("items", []) if isinstance(x, dict)]
+    labels = await get_category_labels(client)
+    items = [
+        _summary_from_kor_travel_map(x, labels)
+        for x in data.get("items", [])
+        if isinstance(x, dict)
+    ]
     clusters = [
         _cluster_from_kor_travel_map(x) for x in data.get("clusters", []) if isinstance(x, dict)
     ]
@@ -434,8 +450,13 @@ async def features_nearby(
             category=category,
             page_size=limit,
         )
+    labels = await get_category_labels(client)
     return Envelope.of(
-        [_summary_from_kor_travel_map(x) for x in data.get("items", []) if isinstance(x, dict)]
+        [
+            _summary_from_kor_travel_map(x, labels)
+            for x in data.get("items", [])
+            if isinstance(x, dict)
+        ]
     )
 
 
@@ -514,7 +535,7 @@ async def get_feature(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "RESOURCE_NOT_FOUND", "message": "Feature not found."},
         )
-    return Envelope.of(_detail_from_kor_travel_map(dto))
+    return Envelope.of(_detail_from_kor_travel_map(dto, await get_category_labels(client)))
 
 
 def _parse_providers(raw: str | None) -> list[ExternalRefProvider]:
@@ -598,7 +619,7 @@ async def get_feature_detail_card(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "RESOURCE_NOT_FOUND", "message": "Feature not found."},
         )
-    card = build_detail_card(dto)
+    card = build_detail_card(dto, await get_category_labels(client))
     requested = _parse_providers(providers)
     # enrichment은 place kind + 이름이 있을 때만(다른 kind는 매칭 근거가 약함).
     if requested and isinstance(card, PlaceDetailCard) and card.name:

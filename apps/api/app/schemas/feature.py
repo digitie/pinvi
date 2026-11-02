@@ -82,7 +82,9 @@ class FeatureSummary(BaseModel):
     kind: FeatureKind
     name: str
     coord: Coord | None = None  # kor_travel_map lon/lat nullable (point geometry 없는 kind)
-    category: str | None = None
+    category: str | None = None  # Map 카테고리 코드(필터·마커 계약)
+    # 사람이 읽는 카테고리 이름(코드의 잎 단계). 모르면 None — 화면에 코드를 보이지 않는다.
+    category_label: str | None = None
     marker_color: str = Field(default="P-13", pattern=r"^P-\d{2}$")  # 16색 P-01~P-16
     marker_icon: str = Field(default="marker", max_length=64)  # maki icon name
     # `status`는 없다. Map 3축 feature state cutover(`1f2bdc3a feat(api): complete feature
@@ -121,7 +123,8 @@ class FeatureDetail(BaseModel):
     kind: FeatureKind
     name: str
     coord: Coord | None = None
-    category: str | None = None
+    category: str | None = None  # Map 카테고리 코드
+    category_label: str | None = None  # 표시용 카테고리 이름(잎 단계)
     address: dict[str, Any] | None = None  # 구조화 주소 객체 (kor_travel_map 원본)
     legal_dong_code: str | None = None  # 법정동 코드
     sido_code: str | None = None
@@ -155,7 +158,8 @@ class DetailCardBase(BaseModel):
     feature_id: str = Field(min_length=1, max_length=200)
     name: str
     coord: Coord | None = None
-    category: str | None = None
+    category: str | None = None  # Map 카테고리 코드
+    category_label: str | None = None  # 표시용 카테고리 이름(잎 단계) — 화면은 이것만 쓴다
     address_line: str | None = None  # 서버가 정규화한 한 줄 주소
     marker_color: str = Field(default="P-13", pattern=r"^P-\d{2}$")
     marker_icon: str = Field(default="marker", max_length=64)

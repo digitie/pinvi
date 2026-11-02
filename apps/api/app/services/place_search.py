@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from app.schemas.search import PlaceCoord, PlaceSearchResult
+from app.services.category_labels import EMPTY_CATEGORY_LABELS, CategoryLabels
 
 _TAG_RE = re.compile(r"<[^>]+>")
 
@@ -98,37 +99,56 @@ def naver_item_to_result(item: dict[str, Any]) -> PlaceSearchResult | None:
     )
 
 
-def feature_item_to_result(item: dict[str, Any]) -> PlaceSearchResult | None:
-    """kor-travel-map feature item → PlaceSearchResult(source=feature)."""
+def feature_item_to_result(
+    item: dict[str, Any], labels: CategoryLabels = EMPTY_CATEGORY_LABELS
+) -> PlaceSearchResult | None:
+    """kor-travel-map feature item → PlaceSearchResult(source=feature).
+
+    `category`는 Map 코드 그대로(마커·필터 계약), 화면에 보일 이름은 `category_label`이다.
+    """
     name = _clean(item.get("name")) or _clean(item.get("title"))
     feature_id = _clean(item.get("feature_id"))
     if name is None and feature_id is None:
         return None
+    category = _clean(item.get("category"))
     return PlaceSearchResult(
         source="feature",
         name=name or (feature_id or ""),
         coord=_coord(item.get("lon"), item.get("lat")),
         feature_id=feature_id,
         address=_clean(item.get("address")),
-        category=_clean(item.get("category")),
+        category=category,
+        category_label=labels.label(category),
         marker_color=_clean(item.get("marker_color")),
         marker_icon=_clean(item.get("marker_icon")),
     )
 
 
+# geo v2 `match_kind` 중 도로명 주소 후보. 나머지(parcel=지번, region 등)는 `address`에 둔다.
+_ROAD_MATCH_KINDS = frozenset({"road"})
+
+
 def address_candidate_to_result(cand: dict[str, Any]) -> PlaceSearchResult | None:
-    """kor-travel-geo address candidate → PlaceSearchResult(source=address)."""
-    name = (
-        _clean(cand.get("road_address")) or _clean(cand.get("address")) or _clean(cand.get("name"))
-    )
-    if name is None:
+    """kor-travel-geo v2 `/v2/search` 후보 → PlaceSearchResult(source=address).
+
+    v2 후보는 중첩 셰입이다: `{match_kind, address: {full, ...}, point: {lon, lat}, region, ...}`
+    (`docs/integrations/kor-travel-geo.md` §3.2). 예전 매퍼는 평면 `road_address`/`lon`/`lat`를
+    읽어 **모든 주소 후보를 버렸다**(2026-11-02 prod e2e — 통합 검색에 주소 결과가 한 건도 없었다).
+    `address.full`이 없는 후보(국가지점번호 `sppn` 등)는 이름을 만들 수 없어 버린다.
+    """
+    address = cand.get("address")
+    full = _clean(address.get("full")) if isinstance(address, dict) else None
+    if full is None:
         return None
+    point = cand.get("point")
+    coord = _coord(point.get("lon"), point.get("lat")) if isinstance(point, dict) else None
+    is_road = cand.get("match_kind") in _ROAD_MATCH_KINDS
     return PlaceSearchResult(
         source="address",
-        name=name,
-        coord=_coord(cand.get("lon"), cand.get("lat")),
-        address=_clean(cand.get("address")),
-        road_address=_clean(cand.get("road_address")),
+        name=full,
+        coord=coord,
+        address=None if is_road else full,
+        road_address=full if is_road else None,
     )
 
 

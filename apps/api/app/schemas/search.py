@@ -36,7 +36,10 @@ class PlaceSearchResult(BaseModel):
     external_id: str | None = None
     address: str | None = None
     road_address: str | None = None
+    # Map 카테고리 코드(필터·마커 계약). 화면 표시는 `category_label`을 쓴다.
     category: str | None = None
+    # 사람이 읽는 카테고리 이름(코드의 잎 단계, 예: `사적·기념물`). 모르면 None — 코드를 보이지 않는다.
+    category_label: str | None = None
     marker_color: str | None = None
     marker_icon: str | None = None
     # 카카오맵/네이버 지도 back-link(표시 전용, attribution 필수).

@@ -533,8 +533,8 @@ export function TripMapView({
                     <p className="truncate text-sm font-semibold text-ink">
                       {selectedFeature.name}
                     </p>
-                    {selectedFeature.category && (
-                      <p className="text-xs text-muted">{selectedFeature.category}</p>
+                    {selectedFeature.category_label && (
+                      <p className="text-xs text-muted">{selectedFeature.category_label}</p>
                     )}
                   </div>
                   <button

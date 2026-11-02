@@ -926,7 +926,9 @@ export function FeatureMapView({
                       닫기
                     </button>
                   </div>
-                  {detail?.category && <p className="text-xs text-muted">{detail.category}</p>}
+                  {detail?.category_label && (
+                    <p className="text-xs text-muted">{detail.category_label}</p>
+                  )}
                   {detailAddress && <p className="text-xs text-body">{detailAddress}</p>}
                   {currentTemp != null && (
                     <p className="text-xs text-body">현재 기온 {currentTemp.toFixed(0)}°C</p>

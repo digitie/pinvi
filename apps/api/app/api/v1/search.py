@@ -11,6 +11,7 @@ K(`pinvi_place_search_internal_threshold`) 미만일 때만 Kakao/Naver Local(�
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from decimal import Decimal
 from typing import Annotated, Any
@@ -31,6 +32,7 @@ from app.models.trip import Trip
 from app.schemas.envelope import Envelope
 from app.schemas.search import PlaceSearchResponse, PlaceSearchResult
 from app.services.admin_pois import extract_feature_coord
+from app.services.category_labels import get_category_labels
 from app.services.place_search import (
     address_candidate_to_result,
     feature_item_to_result,
@@ -42,6 +44,10 @@ from app.services.place_search import (
 router = APIRouter(tags=["search"])
 
 _MY_POI_LIMIT = 10
+# 자동완성의 주소 소스(kor-travel-geo `/v2/search`) 예산. 평소 0.3~1초다. 짧은 검색어("하회")에서 geo가
+# DB statement timeout(504 E0504, ~5초)을 내면 재시도해도 같으므로 1회만, 짧게 끊고 `addresses`를
+# degrade로 둔다 — 예전에는 5초 × 3회 재시도가 feature 결과까지 16초 붙잡았다(2026-11-02 prod e2e).
+_ADDRESS_SEARCH_TIMEOUT_SECONDS = 3.0
 
 
 def _escape_like(value: str) -> str:
@@ -140,21 +146,50 @@ async def unified_search(
     results: list[PlaceSearchResult] = []
 
     # ── 내부 소스: feature → address → my_poi ──────────────────────────────
-    try:
-        feature_data = await kor_travel_map.search_features(q=q, page_size=limit)
-        for item in feature_data.get("items") or []:
-            if isinstance(item, dict) and (r := feature_item_to_result(item)) is not None:
-                results.append(r)
-    except KorTravelMapError:
-        degraded.append("features")
+    # feature(Map)와 address(geo)는 서로 독립인 HTTP 호출이라 동시에 보낸다 — 느린 소스 하나가 다른
+    # 소스의 결과를 붙잡지 않는다. 표시 순서는 그대로 feature → address다.
+    async def _feature_results() -> list[PlaceSearchResult] | None:
+        try:
+            feature_data, labels = await asyncio.gather(
+                kor_travel_map.search_features(q=q, page_size=limit),
+                get_category_labels(kor_travel_map),
+            )
+        except KorTravelMapError:
+            return None
+        return [
+            r
+            for item in feature_data.get("items") or []
+            if isinstance(item, dict) and (r := feature_item_to_result(item, labels)) is not None
+        ]
 
-    try:
-        address_data = await kor_travel_geo.search(query=q, kind="address", size=limit)
-        for cand in address_data.get("candidates") or []:
-            if isinstance(cand, dict) and (r := address_candidate_to_result(cand)) is not None:
-                results.append(r)
-    except KorTravelGeoError:
+    async def _address_results() -> list[PlaceSearchResult] | None:
+        try:
+            address_data = await kor_travel_geo.search(
+                query=q,
+                kind="address",
+                size=limit,
+                max_attempts=1,
+                timeout=_ADDRESS_SEARCH_TIMEOUT_SECONDS,
+            )
+        except KorTravelGeoError:
+            return None
+        return [
+            r
+            for cand in address_data.get("candidates") or []
+            if isinstance(cand, dict) and (r := address_candidate_to_result(cand)) is not None
+        ]
+
+    feature_results, address_results = await asyncio.gather(
+        _feature_results(), _address_results()
+    )
+    if feature_results is None:
+        degraded.append("features")
+    else:
+        results.extend(feature_results)
+    if address_results is None:
         degraded.append("addresses")
+    else:
+        results.extend(address_results)
 
     for poi in await _search_my_pois(db, user_id=user_id, q=q):
         results.append(my_poi_to_result(poi))
