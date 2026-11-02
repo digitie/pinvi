@@ -148,7 +148,9 @@ def kor_travel_weather_call_deadline(
     느리지만 살아 있는 엔드포인트는 여전히 소진으로 본다 — trip view와 공유하는 회로를 카드가 열지 않게.
     """
     if isinstance(count_short_timeouts_for, str):
-        raise TypeError("count_short_timeouts_for는 엔드포인트 이름의 모음이다(문자열 하나가 아니라)")
+        raise TypeError(
+            "count_short_timeouts_for는 엔드포인트 이름의 모음이다(문자열 하나가 아니라)"
+        )
     current = _call_scope.get()
     if current is None:
         scope = _CallScope(
