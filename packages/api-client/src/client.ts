@@ -234,7 +234,10 @@ function abortError(): DOMException {
 }
 
 /** `promise`를 기다리되 `signal`이 끊기면 즉시 AbortError로 끝낸다(갱신 자체는 다른 대기자를 위해 계속). */
-function untilSettledOrAborted<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+function untilSettledOrAborted<T>(
+  promise: Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T> {
   if (!signal) return promise;
   if (signal.aborted) return Promise.reject(abortError());
   return new Promise<T>((resolve, reject) => {

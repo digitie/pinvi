@@ -226,24 +226,21 @@ describe('api-client cookie 세션 자동 갱신', () => {
     '/auth/register',
     '/auth/verify-email',
     '/auth/verify-email/resend',
-  ])(
-    '%s의 401은 갱신하지 않는다(자격 증명 확인 경로)',
-    async (path) => {
-      const server = sessionServer();
-      const onUnauthorized = vi.fn();
-      const client = new ApiClient({
-        baseUrl: nextBase(),
-        fetcher: server.fetcher,
-        onUnauthorized,
-      });
+  ])('%s의 401은 갱신하지 않는다(자격 증명 확인 경로)', async (path) => {
+    const server = sessionServer();
+    const onUnauthorized = vi.fn();
+    const client = new ApiClient({
+      baseUrl: nextBase(),
+      fetcher: server.fetcher,
+      onUnauthorized,
+    });
 
-      await expect(client.request(path, { method: 'POST', schema: Item })).rejects.toMatchObject({
-        status: 401,
-      });
-      expect(server.refreshCalls()).toBe(0);
-      expect(onUnauthorized).toHaveBeenCalledTimes(1);
-    },
-  );
+    await expect(client.request(path, { method: 'POST', schema: Item })).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(server.refreshCalls()).toBe(0);
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+  });
 
   it('/auth/refresh 자신의 401은 다시 갱신하지 않는다(재귀 방지)', async () => {
     const server = sessionServer({ refreshOk: false });
