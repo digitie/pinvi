@@ -167,7 +167,9 @@ async def test_search_attempt_override_sends_once_on_504() -> None:
 
     client = _client(handler, max_attempts=3)
     with pytest.raises(KorTravelGeoUnavailable):
-        await client.search(query="하회", kind="address", max_attempts=1, attempt_timeout_seconds=3.0)
+        await client.search(
+            query="하회", kind="address", max_attempts=1, attempt_timeout_seconds=3.0
+        )
     assert attempts["n"] == 1
     assert isinstance(seen_timeouts[0], dict)
     assert seen_timeouts[0]["read"] == 3.0

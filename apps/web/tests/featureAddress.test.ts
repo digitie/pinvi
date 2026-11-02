@@ -38,7 +38,11 @@ describe('addressLine', () => {
   it('admin에 이미 시도·시군구가 있으면 반복하지 않는다', () => {
     expect(
       addressLine({
-        address: { admin: '부산광역시 해운대구', sido_name: '부산광역시', sigungu_name: '해운대구' },
+        address: {
+          admin: '부산광역시 해운대구',
+          sido_name: '부산광역시',
+          sigungu_name: '해운대구',
+        },
       }),
     ).toBe('부산광역시 해운대구');
   });

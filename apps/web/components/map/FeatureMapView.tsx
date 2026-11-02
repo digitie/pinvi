@@ -192,7 +192,6 @@ export function toWeatherPoints(data: WeatherMarkersInBoundsResponse): WeatherMa
   }));
 }
 
-
 /** 평탄 weather metric 중 기온(℃) metric 의 현재값을 찾는다(metric_key 미확정 → 방어적). */
 function currentTempC(card: FeatureWeatherCard | null): number | null {
   const metric = card?.metrics.find(

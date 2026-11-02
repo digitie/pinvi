@@ -571,7 +571,11 @@ async def test_unified_search_address_hits_do_not_suppress_providers(
                 "status": "ok",
                 "total": 8,
                 "candidates": [
-                    {"match_kind": "road", "address": {"full": f"하회길 {i}"}, "point": {"lon": 128.5, "lat": 36.5}}
+                    {
+                        "match_kind": "road",
+                        "address": {"full": f"하회길 {i}"},
+                        "point": {"lon": 128.5, "lat": 36.5},
+                    }
                     for i in range(8)
                 ],
             }
