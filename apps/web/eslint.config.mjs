@@ -79,7 +79,12 @@ const MODAL_STACK_MODULES = [
   'components/trips/TripMapView',
 ];
 
-const config = [...nextCoreWebVitals, ...nextTypescript, {
+const config = [
+  // prebuild/predev가 복사한 maplibre worker(생성물, 518KB minified) — lint 대상이 아니다.
+  { ignores: ['public/maplibre/**'] },
+  ...nextCoreWebVitals,
+  ...nextTypescript,
+  {
   rules: {
     'react/no-unescaped-entities': 'off',
     // Pinvi `(lng, lat)` 좌표 순서 일관 — react-kakao 호환 잔존 코드 방지

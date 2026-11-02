@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -34,8 +34,8 @@ function configuredWorkerUrl(): string {
   const source = readFileSync(MAP_PRIMITIVES, 'utf8');
   const match = source.match(/MAPLIBRE_WORKER_URL\s*=\s*'([^']+)'/);
   if (match === null) throw new Error('vworldPrimitives.tsx에 MAPLIBRE_WORKER_URL이 없다');
-  if (!/setWorkerUrl\(\s*MAPLIBRE_WORKER_URL\s*\)/.test(source)) {
-    throw new Error('vworldPrimitives.tsx가 setWorkerUrl(MAPLIBRE_WORKER_URL)을 부르지 않는다');
+  if (!/setWorkerUrl\(\s*`\$\{MAPLIBRE_WORKER_URL\}/.test(source)) {
+    throw new Error('vworldPrimitives.tsx가 setWorkerUrl(MAPLIBRE_WORKER_URL…)을 부르지 않는다');
   }
   return match[1]!;
 }
@@ -71,9 +71,13 @@ describe('maplibre worker 배선', () => {
     // 선언이 아니라 **효과**를 센다 — 설치된 maplibre가 그 파일들을 더 이상 내보내지 않으면
     // (경로/이름 변경) 여기서 빨개진다. 그때는 배선 전체를 다시 봐야 한다.
     const workdir = mkdtempSync(path.join(tmpdir(), 'maplibre-worker-'));
-    execFileSync(process.execPath, [SCRIPT], { cwd: workdir, stdio: 'pipe' });
-    for (const file of copiedFileNames()) {
-      expect(existsSync(path.join(workdir, 'public', 'maplibre', file))).toBe(true);
+    try {
+      execFileSync(process.execPath, [SCRIPT], { cwd: workdir, stdio: 'pipe' });
+      for (const file of copiedFileNames()) {
+        expect(existsSync(path.join(workdir, 'public', 'maplibre', file))).toBe(true);
+      }
+    } finally {
+      rmSync(workdir, { recursive: true, force: true });
     }
   });
 });

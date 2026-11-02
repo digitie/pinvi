@@ -14,9 +14,12 @@
  * kor-travel-map admin은 2026-09-18 바로 그 때문에 zoom 14 이상 마커가 0개였고 같은 처방으로
  * 고쳤다.
  *
- * 처방: worker와 그 형제 파일(`maplibre-gl-shared.mjs`, worker가 상대 경로로 import)을
- * **같은 디렉터리**에 복사해 정적으로 서빙하고 `setWorkerUrl`로 그 경로를 가리킨다
- * (`components/map/vworldPrimitives.tsx`). 둘을 함께 옮기지 않으면 상대 import가 깨진다.
+ * 처방: worker와 그 형제 파일(`maplibre-gl-shared.mjs`)을 **같은 디렉터리**에 복사해 정적으로
+ * 서빙하고 `setWorkerUrl`로 그 경로를 가리킨다(`components/map/vworldPrimitives.tsx`). maplibre 6.15의
+ * shared 청크는 비어 있고 worker는 자기완결이지만, 버전에 따라 worker가 shared를 상대 경로로
+ * import하므로(kor-travel-map admin 실측) 함께 옮겨 둔다.
+ *
+ * 출력 위치는 실행 디렉터리 기준 `public/maplibre/`다 — npm script로 `apps/web`에서 돈다.
  *
  * `predev`/`prebuild`에서 돈다.
  */

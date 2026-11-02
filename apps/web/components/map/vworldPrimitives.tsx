@@ -72,7 +72,8 @@ export const MAPLIBRE_WORKER_URL = '/maplibre/maplibre-gl-worker.mjs';
 export const VWorldMap = dynamic<VWorldMapViewProps>(
   () =>
     Promise.all([import('maplibre-gl'), import('vworld-map-web')]).then(([maplibre, module]) => {
-      maplibre.setWorkerUrl(MAPLIBRE_WORKER_URL);
+      // maplibre 기본값처럼 버전을 붙인다 — public 파일은 해시가 없어 프록시 캐시가 옛 worker를 줄 수 있다.
+      maplibre.setWorkerUrl(`${MAPLIBRE_WORKER_URL}?v=${maplibre.getVersion()}`);
       return module.VWorldMapView;
     }),
   { ssr: false, loading: () => <MapLoadingSkeleton /> },

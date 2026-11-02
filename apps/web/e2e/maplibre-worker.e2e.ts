@@ -19,3 +19,24 @@ test('worker의 형제 파일도 같은 디렉터리에서 서빙한다', async 
   expect(response.status()).toBe(200);
   expect(response.headers()['content-type'] ?? '').toMatch(/javascript/);
 });
+
+test('복사된 maplibre worker가 브라우저에서 module worker로 실제로 뜬다', async ({ page }) => {
+  // 정적 서빙만 세면 "파일은 있는데 worker로는 못 뜨는" 경우(MIME·상대 import 깨짐)를 놓친다.
+  await page.goto('/legal/terms-of-service');
+  const outcome = await page.evaluate(
+    () =>
+      new Promise<string>((resolve) => {
+        const worker = new Worker('/maplibre/maplibre-gl-worker.mjs', { type: 'module' });
+        const timer = setTimeout(() => {
+          worker.terminate();
+          resolve('loaded');
+        }, 2000);
+        worker.addEventListener('error', (event) => {
+          clearTimeout(timer);
+          worker.terminate();
+          resolve(`error: ${(event as ErrorEvent).message ?? 'unknown'}`);
+        });
+      }),
+  );
+  expect(outcome).toBe('loaded');
+});

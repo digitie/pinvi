@@ -1929,8 +1929,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
             }
             overlayTopLeftClassName={
               mobileWebLayout
-                ? 'pointer-events-none absolute left-2 right-2 top-20 z-10'
-                : 'pointer-events-none absolute left-3 right-3 top-3 z-10 md:left-4 md:right-auto md:w-[min(560px,calc(100%-2rem))]'
+                ? 'pointer-events-none absolute left-2 right-2 top-20 z-10 max-h-[calc(100%-6rem)] overflow-y-auto'
+                : 'pointer-events-none absolute left-3 right-3 top-3 z-10 max-h-[calc(100%-1.5rem)] overflow-y-auto md:left-4 md:right-auto md:w-[min(560px,calc(100%-2rem))]'
             }
             apiKey={VWORLD_API_KEY}
             points={mapPoints}

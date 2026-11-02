@@ -67,7 +67,7 @@ function ignoreLongPressTarget(target: EventTarget | null): boolean {
   return (
     target instanceof Element &&
     target.closest(
-      '.maplibregl-marker, button, a, input, textarea, select, [role="button"], [role="menu"]',
+      '.maplibregl-marker, button, a, input, textarea, select, [role="button"], [role="menu"], [data-map-overlay]',
     ) != null
   );
 }
@@ -137,7 +137,10 @@ export interface TripMapViewProps {
    * 누를 수 없었다). 검색 결과 목록이 펼쳐지면 교통 컨트롤이 그만큼 아래로 밀린다.
    */
   overlayTopLeft?: ReactNode;
-  /** `overlayTopLeft` 스택의 위치·폭 class(호출부 레이아웃이 정한다). */
+  /**
+   * `overlayTopLeft` 스택의 위치·폭 class(호출부 레이아웃이 정한다). 검색 결과·교통 패널이 지도보다
+   * 길어질 수 있으므로 max-height와 세로 스크롤을 함께 준다.
+   */
   overlayTopLeftClassName?: string;
 }
 
@@ -432,6 +435,30 @@ export function TripMapView({
         onTouchEndCapture={clearLongPress}
         onTouchCancelCapture={clearLongPress}
       >
+        {/* 지도 위 오버레이는 DOM에서 지도보다 **먼저** 둔다 — 키보드 Tab이 캔버스와 마커들을 다 지나야
+            검색창에 닿지 않게(위치는 absolute·z-10이라 보이는 모습은 같다). `data-map-overlay`는 길게
+            누르기/우클릭 "여기에 장소 추가" 제스처가 오버레이 위에서 시작되지 않게 한다. */}
+        {overlayTopLeft != null ? (
+          <div
+            className={overlayTopLeftClassName}
+            data-testid="trip-map-overlay-stack"
+            data-map-overlay=""
+          >
+            <div className="pointer-events-auto">{overlayTopLeft}</div>
+            {transport.visible && (
+              <div className="pointer-events-auto mt-2 w-64 max-w-[70%]">{transportControls}</div>
+            )}
+          </div>
+        ) : (
+          transport.visible && (
+            <div
+              className="pointer-events-none absolute left-2 top-2 z-10 w-64 max-w-[70%]"
+              data-map-overlay=""
+            >
+              <div className="pointer-events-auto">{transportControls}</div>
+            </div>
+          )
+        )}
         <VWorldMap
           apiKey={apiKey}
           center={DEFAULT_CENTER}
@@ -593,20 +620,6 @@ export function TripMapView({
             </Popup>
           )}
         </VWorldMap>
-        {overlayTopLeft != null ? (
-          <div className={overlayTopLeftClassName} data-testid="trip-map-overlay-stack">
-            <div className="pointer-events-auto">{overlayTopLeft}</div>
-            {transport.visible && (
-              <div className="pointer-events-auto mt-2 w-64 max-w-[70%]">{transportControls}</div>
-            )}
-          </div>
-        ) : (
-          transport.visible && (
-            <div className="pointer-events-none absolute left-2 top-2 z-10 w-64 max-w-[70%]">
-              <div className="pointer-events-auto">{transportControls}</div>
-            </div>
-          )
-        )}
         <TransportMarkerLegend points={transport.points} />
         <div className="sr-only" aria-hidden="true" data-testid="trip-map-marker-legend">
           {points.map((point) => (
