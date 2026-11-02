@@ -5,6 +5,7 @@ export {
   REQUEST_TIMEOUT_CODE,
   isRequestTimeoutError,
   isVersionConflictError,
+  refreshCookieSession,
 } from './client';
 export type {
   ApiClientOptions,

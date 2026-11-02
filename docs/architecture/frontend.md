@@ -466,6 +466,27 @@ export const noticePlansApi = (client: ApiClient) => ({
 웹은 `apps/web/lib/api.ts`에서 `ApiClient`를 next-auth 토큰과 wire,
 모바일은 `apps/mobile/lib/api.ts`에서 SecureStore 토큰과 wire.
 
+**401 처리(세션 갱신)** — access 토큰은 10분, refresh 토큰은 7일이다(ADR-032).
+
+- 웹(cookie 모드, `getAuthToken` 없음): `ApiClient`가 401을 받으면 `POST /auth/refresh`로
+  세션을 **한 번** 갱신하고 원 요청을 **1회** 재시도한다. 같은 baseUrl의 동시 401·다른
+  `ApiClient` 인스턴스·웹소켓 재인증(`TripDetail`의 `onAuthRefresh`)은 진행 중 갱신 하나를
+  공유한다(`refreshCookieSession`, single-flight). 여러 **탭**의 갱신은 Web Locks
+  (`navigator.locks`, `pinvi-auth-refresh:<baseUrl>`)로 줄 세운다 — refresh token은 갱신마다
+  회전·폐기되고, 폐기된 토큰으로 갱신하면 서버가 401과 함께 **두 cookie를 지워** 먼저 성공한 탭까지
+  로그아웃시키기 때문이다. 뒤 탭은 앞 탭이 회전시킨 새 refresh cookie로 갱신하므로 성공한다.
+  - 갱신이 실패하면 다시 보내지 않고 `onUnauthorized`(→ `/login`).
+  - 이 요청을 보낸 **뒤** 다른 요청이 이미 갱신에 성공했으면(늦은 401) 갱신 없이 1회 재시도.
+  - 갱신을 기다리는 중 호출부가 취소하거나 예산이 끝나면 401이 아니라 AbortError/
+    `REQUEST_TIMEOUT` — 취소된 요청 때문에 로그인 화면으로 보내지 않는다.
+  - 자격 증명 확인 경로(`/auth/login`·`/auth/register`·`/auth/verify-email`·`/auth/logout`),
+    `/auth/refresh` 자신, 다시 보낼 수 없는 stream body는 갱신하지 않는다.
+  - 웹소켓 재인증이 갱신에 실패하면 예전처럼 `/login`으로 보낸다.
+  2026-11-02 prod e2e 전에는 이 갱신이 없어 로그인 10분 뒤 작업 중이던 사용자가 튕겼다.
+- 모바일(token 모드): `apps/mobile/lib/api.ts`의 `refreshingFetcher`가 single-flight 갱신 +
+  성공 시 1회 재시도를 SecureStore 토큰으로 수행한다(갱신 실패면 재시도 없이 401). `ApiClient`의
+  cookie 갱신은 token 모드에서 꺼진다.
+
 ### 4.3 TanStack Query (공용)
 
 ```ts
