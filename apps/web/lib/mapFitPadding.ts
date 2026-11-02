@@ -49,9 +49,11 @@ export function fitPanelRect(stack: Element | null): BoxRect | null {
   const rect = panel.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return null;
   const transient = panel.querySelector('[data-map-fit-transient]');
-  const bottom = transient
-    ? Math.min(rect.bottom, transient.getBoundingClientRect().top)
-    : rect.bottom;
+  let bottom = transient ? Math.min(rect.bottom, transient.getBoundingClientRect().top) : rect.bottom;
+  // 스택은 max-height + 세로 스크롤이다 — 검색 결과가 펼쳐져 패널이 밀려 내려가도 보이는 부분까지만.
+  const stackRect = stack?.getBoundingClientRect();
+  if (stackRect && stackRect.height > 0) bottom = Math.min(bottom, stackRect.bottom);
+  if (bottom <= rect.top) return null;
   return { left: rect.left, right: rect.right, top: rect.top, bottom, height: bottom - rect.top };
 }
 

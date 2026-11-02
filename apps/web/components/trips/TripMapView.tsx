@@ -190,6 +190,11 @@ export function TripMapView({
   const mobileLayout = useMobileWebLayout();
   const transport = useTransportLayers({ active: transportLayers });
   const transportVisible = transport.visible;
+  // fitToPoints가 읽는 값들 — 맞춤 함수가 바뀌어(=다시 맞춤) 사용자의 시점을 빼앗지 않게 ref로 둔다.
+  const transportVisibleRef = useRef(transportVisible);
+  const userMovedRef = useRef(false);
+  const lastFitPointsRef = useRef<TripMapPoint[] | null>(null);
+  const lastFitWithPanelRef = useRef(false);
   const { onViewportChange: transportViewportChange } = transport;
   const surfaceClassName =
     chrome === 'flush'
@@ -259,6 +264,8 @@ export function TripMapView({
 
   const fitToPoints = useCallback(
     (map: MapLibreMap) => {
+      lastFitPointsRef.current = points;
+      lastFitWithPanelRef.current = transportVisibleRef.current;
       const bounds = pointsBounds(points);
       if (!bounds) return;
       // 위쪽 여백은 지도 위 장소 검색 줄 아래로 — 북쪽 핀이 그 밑에 숨지 않게. 여백은 핀
@@ -267,13 +274,23 @@ export function TripMapView({
       const container = map.getContainer().getBoundingClientRect();
       const stack = overlayStackRef.current;
       const padding = fitPaddingForOverlay(container, fitOverlayRect(stack), TRIP_MAP_PIN_HEIGHT);
+      const panel = transportVisibleRef.current ? fitPanelRect(stack) : null;
       const only = points[0];
       if (points.length === 1 && only) {
-        // 핀 하나는 가운데에 두되, 위·아래 여백 차이의 절반만큼 내려 검색 줄과 겹치지 않게.
+        // 핀 하나는 가운데에 두되, 위·아래 여백 차이의 절반만큼 내려 검색 줄과 겹치지 않게. 교통
+        // 패널이 가운데 열까지 덮으면(모바일) 패널 아래를 기준으로 한다.
+        const centerX = container.left + container.width / 2;
+        const top =
+          panel && panel.left < centerX + TRIP_MAP_MARKER_SIZE / 2
+            ? Math.max(
+                padding.top,
+                fitPaddingForOverlay(container, panel, TRIP_MAP_PIN_HEIGHT).top,
+              )
+            : padding.top;
         map.flyTo({
           center: [only.lon, only.lat],
           zoom: 13,
-          offset: [0, (padding.top - padding.bottom) / 2],
+          offset: [0, (top - padding.bottom) / 2],
         });
         return;
       }
@@ -284,7 +301,6 @@ export function TripMapView({
       map.fitBounds(lngLatBounds, { padding, maxZoom: 15, animate: false });
       // 교통 정보 패널(왼쪽 열) 밑에 핀이 들어가면 패널 아래까지 한 번 더 맞춘다. animate:false라
       // fitBounds가 바로 적용돼 project가 맞춘 뒤 위치를 준다.
-      const panel = transportVisible ? fitPanelRect(stack) : null;
       const hiddenByPanel =
         panel != null &&
         points.some((point) => {
@@ -305,8 +321,7 @@ export function TripMapView({
         });
       }
     },
-    // 패널은 상태 조회 뒤에 나타난다 — 보이게 되면 한 번 더 맞춘다.
-    [points, transportVisible],
+    [points],
   );
 
   const onViewportBboxChangeRef = useRef(onViewportBboxChange);
@@ -337,10 +352,19 @@ export function TripMapView({
     [scheduleFeatureFetch, transportViewportChange, reportViewport],
   );
 
-  // POI 목록이 바뀌면 경계 재조정.
+  // POI 목록이 바뀌면 경계 재조정. 교통 패널은 상태 조회 뒤에 나타나므로 보이게 되면 한 번 더
+  // 맞추되, 그 사이 사용자가 지도를 움직였으면 시점을 빼앗지 않는다.
   useEffect(() => {
-    if (mapRef.current) fitToPoints(mapRef.current);
-  }, [fitToPoints]);
+    transportVisibleRef.current = transportVisible;
+    const map = mapRef.current;
+    if (!map) return;
+    if (lastFitPointsRef.current !== points) {
+      userMovedRef.current = false;
+      fitToPoints(map);
+    } else if (transportVisible && !lastFitWithPanelRef.current && !userMovedRef.current) {
+      fitToPoints(map);
+    }
+  }, [fitToPoints, points, transportVisible]);
 
   const markerPoints = useMemo<MarkerPoint[]>(
     () => points.map((p) => ({ id: p.poiId, lngLat: [p.lon, p.lat], point: p })),
@@ -527,8 +551,15 @@ export function TripMapView({
           geolocate={false}
           animateCameraChanges
           onLoad={handleLoad}
-          onMoveEnd={(event) => handleViewportChange(event.target as MapLibreMap)}
-          onZoomEnd={(event) => handleViewportChange(event.target as MapLibreMap)}
+          onMoveEnd={(event) => {
+            // 사용자가 끌거나 휠로 움직인 것(originalEvent 있음) — 패널이 늦게 나타나도 다시 맞추지 않는다.
+            if ('originalEvent' in event && event.originalEvent) userMovedRef.current = true;
+            handleViewportChange(event.target as MapLibreMap);
+          }}
+          onZoomEnd={(event) => {
+            if ('originalEvent' in event && event.originalEvent) userMovedRef.current = true;
+            handleViewportChange(event.target as MapLibreMap);
+          }}
           onContextMenu={
             onCreatePoiAtCoordinate
               ? (event, context) => {
