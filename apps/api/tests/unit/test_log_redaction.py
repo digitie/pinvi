@@ -118,6 +118,45 @@ def test_redact_secrets_review_620_round4() -> None:
         assert redact_secrets(raw) == raw, raw
 
 
+def test_redact_secrets_review_620_round5() -> None:
+    """네 번째 리뷰 #620: 빈 값이 JSON을 깨지 않는다, 따옴표 종류별 끝, 다음 비밀 이름 앞에서 멈춤, 이중 인코딩."""
+
+    cases = {
+        # 빈 값 뒤 JSON 구조 — 따옴표를 열지 않는다(JSON이 깨지지 않게)
+        '{"url": "https://x/?serviceKey=", "event": "e"}': (
+            '{"url": "https://x/?serviceKey=", "event": "e"}'
+        ),
+        '{"detail": "token="}': '{"detail": "token="}',
+        # 메시지 안에서 escape된 따옴표로 감싼 Authorization
+        f'{{"event": "sent \\"Authorization: Bearer {SECRET}\\" upstream"}}': (
+            '{"event": "sent \\"Authorization: Bearer ***\\" upstream"}'
+        ),
+        # 큰따옴표 값 안의 작은따옴표, 값 안의 escape된 백슬래시
+        f"api_key=\"ab'cd{SECRET}\"": 'api_key="***"',
+        f"password='ab\\\\cd{SECRET}'": "password='***'",
+        # 이중 인코딩된 중첩 URL
+        f"?next=https%253A%252F%252Fx%252Fcb%253Ftoken%253D{SECRET}": (
+            "?next=https%253A%252F%252Fx%252Fcb%253Ftoken%253D***"
+        ),
+        # Authorization 변형(PinVi가 직접 보내는 KakaoAK 포함)
+        f"Authorization: KakaoAK {SECRET}": "Authorization: KakaoAK ***",
+        f"authorization=Bearer%20{SECRET}": "authorization=Bearer%20***",
+        # JSON escape 뒤 이름: \uXXXX(비 ASCII), \r
+        f'{{"event": "\\u00e9key={SECRET}", "e2": "bad\\rtoken={SECRET}"}}': (
+            '{"event": "\\u00e9key=***", "e2": "bad\\rtoken=***"}'
+        ),
+        # 따옴표 값 안의 \uXXXX
+        f"token='\\u00e9{SECRET}'": "token='***'",
+    }
+    for raw, expected in cases.items():
+        assert redact_secrets(raw) == expected, raw
+    # 따옴표 없는 값은 다음 비밀 이름 앞에서 멈춘다(그 비밀의 따옴표 값까지 가려진다)
+    for raw in (f"key=abc,password='{SECRET}'", f'f(token=abc)(api_key="{SECRET}")'):
+        redacted = redact_secrets(raw)
+        assert SECRET not in redacted, raw
+        assert "='***'" in redacted or '="***"' in redacted, redacted
+
+
 def test_redacted_json_line_stays_valid_json() -> None:
     """가린 뒤에도 structlog JSON 줄은 JSON이다(escape를 먹지 않는다)."""
 
@@ -125,6 +164,9 @@ def test_redacted_json_line_stays_valid_json() -> None:
         "event": f"token=é{SECRET} key={SECRET}\nnext line",
         "url": f"https://g/?key={SECRET}&q=하회",
         "kw": f'call(api_key="{SECRET}")',
+        "empty": "https://x/?serviceKey=",
+        "empty2": "token=",
+        "auth": f'sent "Authorization: Bearer {SECRET}" upstream',
     }
     for ensure_ascii in (True, False):
         line = json.dumps(payload, ensure_ascii=ensure_ascii)
@@ -142,6 +184,20 @@ def test_structlog_event_dict_secret_keys_are_masked() -> None:
         None, "info", {"event": "x", "api_key": SECRET, "Token": SECRET, "region_key": "11"}
     )
     assert event == {"event": "x", "api_key": "***", "Token": "***", "region_key": "11"}
+
+
+def test_structlog_event_dict_nested_secret_keys_and_processor_is_installed() -> None:
+    import structlog
+
+    from app.core.logging import configure_logging, redact_event_dict
+
+    event = redact_event_dict(
+        None, "info", {"event": "x", "params": {"serviceKey": SECRET, "page": 1}}
+    )
+    assert event == {"event": "x", "params": {"serviceKey": "***", "page": 1}}
+
+    configure_logging("WARNING")
+    assert redact_event_dict in structlog.get_config()["processors"]
 
 
 def test_redact_secrets_path_tokens() -> None:
