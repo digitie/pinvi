@@ -167,6 +167,9 @@ def test_redacted_json_line_stays_valid_json() -> None:
         "empty": "https://x/?serviceKey=",
         "empty2": "token=",
         "auth": f'sent "Authorization: Bearer {SECRET}" upstream',
+        # JSON 비문자열 값의 authorization은 건드리지 않는다(가리면 JSON이 깨진다)
+        "authorization": None,
+        "headers": {"Authorization": None, "Proxy-Authorization": {"k": 1}, "accept": "*/*"},
     }
     for ensure_ascii in (True, False):
         line = json.dumps(payload, ensure_ascii=ensure_ascii)
@@ -196,6 +199,11 @@ def test_structlog_event_dict_nested_secret_keys_and_processor_is_installed() ->
     assert event == {"event": "x", "params": {"serviceKey": "***", "page": 1}}
     # 호출자의 dict는 바꾸지 않는다(로그를 남긴 뒤에도 그 dict로 요청을 보낼 수 있다)
     assert params == {"serviceKey": SECRET, "page": 1}
+    # dict의 list도
+    items = [{"token": SECRET}, "plain"]
+    event = redact_event_dict(None, "info", {"event": "x", "items": items})
+    assert event["items"] == [{"token": "***"}, "plain"]
+    assert items == [{"token": SECRET}, "plain"]
 
     configure_logging("WARNING")
     assert redact_event_dict in structlog.get_config()["processors"]
