@@ -4,6 +4,8 @@ import {
   OVERLAY_GAP,
   fitOverlayRect,
   fitPaddingForOverlay,
+  fitPanelRect,
+  pinBoxIntersects,
 } from '@/lib/mapFitPadding';
 
 // 2026-11-02 prod e2e — 여행 지도의 fitBounds가 사방 64px만 띄워, 가장 북쪽 장소(영월 고씨굴) 핀이
@@ -85,6 +87,32 @@ describe('fitPaddingForOverlay', () => {
     expect(fitOverlayRect(stack)?.bottom).toBe(48);
     expect(fitOverlayRect(null)).toBeNull();
     expect(fitOverlayRect(document.createElement('div'))).toBeNull();
+  });
+
+  it('교통 패널은 상시 부분만(사건 목록 제외), 없으면 null', () => {
+    const stack = document.createElement('div');
+    const panel = document.createElement('div');
+    panel.setAttribute('data-map-fit-panel', '');
+    const incidents = document.createElement('div');
+    incidents.setAttribute('data-map-fit-transient', '');
+    panel.append(incidents);
+    stack.append(document.createElement('div'), panel);
+    panel.getBoundingClientRect = domBox(152, 356);
+    incidents.getBoundingClientRect = domBox(290, 218);
+
+    expect(fitPanelRect(stack)).toEqual({ left: 0, right: 300, top: 152, bottom: 290, height: 138 });
+    expect(fitPanelRect(document.createElement('div'))).toBeNull();
+    expect(fitPanelRect(null)).toBeNull();
+  });
+
+  it('핀 상자(앵커 위로 높이, 좌우로 폭/2)가 패널과 겹치는지', () => {
+    // 모바일 재현(리뷰 #619): 패널 x 8~264, y 152~288. 가장 북쪽 핀 앵커가 (72, 207).
+    const panel = { left: 8, right: 264, top: 152, bottom: 288, height: 136 };
+    expect(pinBoxIntersects(72, 207, 27, PIN_HEIGHT, panel)).toBe(true);
+    // 패널 오른쪽 바깥
+    expect(pinBoxIntersects(300, 207, 27, PIN_HEIGHT, panel)).toBe(false);
+    // 핀 머리까지 패널 아래
+    expect(pinBoxIntersects(72, 288 + PIN_HEIGHT + 1, 27, PIN_HEIGHT, panel)).toBe(false);
   });
 
   it('지도 크기를 아직 모르면 기본 여백', () => {

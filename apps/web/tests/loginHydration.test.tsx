@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { hydrateRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
@@ -14,6 +14,16 @@ import LoginPage from '@/app/(auth)/login/page';
 describe('로그인 제출 버튼', () => {
   let root: Root | null = null;
   let container: HTMLElement | null = null;
+  const actEnv = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+  const previousActEnv = actEnv.IS_REACT_ACT_ENVIRONMENT;
+
+  beforeAll(() => {
+    actEnv.IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  afterAll(() => {
+    actEnv.IS_REACT_ACT_ENVIRONMENT = previousActEnv;
+  });
 
   afterEach(() => {
     act(() => root?.unmount());
@@ -43,14 +53,21 @@ describe('로그인 제출 버튼', () => {
     expect(before?.disabled).toBe(true);
 
     const recoverable: unknown[] = [];
+    // React 19는 속성 불일치를 onRecoverableError가 아니라 console.error로만 알린다.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     await act(async () => {
       root = hydrateRoot(host, <LoginPage />, {
         onRecoverableError: (error) => recoverable.push(error),
       });
     });
+    const mismatches = consoleError.mock.calls.filter((call) =>
+      /hydrat|didn't match|did not match/i.test(String(call[0])),
+    );
+    consoleError.mockRestore();
 
     const after = host.querySelector<HTMLButtonElement>('[data-testid="login-submit"]');
     expect(after?.disabled).toBe(false);
     expect(recoverable).toEqual([]);
+    expect(mismatches).toEqual([]);
   });
 });
